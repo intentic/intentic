@@ -6,14 +6,12 @@ import { peerToolsOf } from "../../peers/peer-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
 
-/* The generic ACP row: any provider id outside the native six is an installed `agent`-kind capability served
- * over the Agent Client Protocol. Beside the runtime it serves rather than in the registry's table file, the
- * same siting rule the native providers follow (provider-module.ts) — but a plain adapter, not a module: ACP
- * agents are capabilities, so their catalog, credentials and packs are the capability system's business. */
+// Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
+// Sited beside the runtime it serves, like the native providers, but a plain adapter, not a module: an ACP agent's
+// catalog, credentials and packs are the capability system's business.
 
-// An ACP provider: the id of an installed `agent`-kind capability, spawned and driven over the Agent Client
-// Protocol. Harness doesn't apply (the agent IS its own loop) and neither do the Claude-only request fields;
-// the adapter passes http MCP tools through when the agent advertises support.
+// Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; MCP tools pass
+// through when the agent advertises support.
 export const planAcpTurn = async (
     services: Services,
     input: AgentTurn,
@@ -42,10 +40,8 @@ export const planAcpTurn = async (
 export const ACP_ADAPTER: AgentAdapter<"acp"> = {
     runtime: "acp",
     preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
-    /* An ACP agent carries its own credentials, installed IS runnable, so the only thing that can be wrong is
-     * that nothing is installed. Per-agent liveness (does its binary still spawn) is deliberately not probed
-     * here: it would mean spawning every installed agent on a timer, and the pool already reports a spawn
-     * failure as the turn's own coded refusal. */
+    // Installed is runnable, since an ACP agent carries its own credentials; the only failure here is nothing
+    // installed. Liveness per agent isn't probed; a spawn failure surfaces as the turn's own refusal instead.
     health: async (services) => {
         const installed = await attemptProbe(() => services.capabilities.list());
         if (installed === undefined) {
@@ -55,9 +51,7 @@ export const ACP_ADAPTER: AgentAdapter<"acp"> = {
             ? healthReady()
             : healthUnavailable("Add an Agent capability to run an ACP agent here.");
     },
-    /* An ACP session lives inside the agent's own process and there is no store to ask from out here, so this
-     * answers for the only case that reaches a turn: the pool spawns the agent, and it either replays the
-     * session or says it cannot (acp-agent.ts asks it directly, at resume time). Answering "gone" from here
-     * would retire every ACP session on a daemon that simply cannot see them. */
+    // Always true: a session lives inside the agent's own process, with no store to ask out here. The pool asks the
+    // agent directly at resume time (acp-agent.ts); answering "gone" here would retire every session blindly.
     holdsSession: async () => true,
 };

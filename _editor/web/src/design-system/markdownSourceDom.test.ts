@@ -1,16 +1,12 @@
 // @vitest-environment jsdom
-//
-// This module builds DOM, so it needs a document. jsdom rather than happy-dom for the same reason the markdown
-// tests next door give: happy-dom's parsing is not faithful enough to assert against.
-//
-// The module itself lives in the design system now (`@intentic/ui/markdown`), with the surface it builds for,
-// and is tested from here beside the block splitter's suite, which tests that package the same way.
+// This module builds DOM, so it needs a document: jsdom rather than happy-dom, since happy-dom's parsing is not
+// faithful enough to assert against. The module lives in `@intentic/ui/markdown` and is tested here beside the block
+// splitter's suite.
 import { describe, expect, test } from "vitest";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "@intentic/ui/markdown";
 
-/* THE INVARIANT: the element's text IS the block's source. Everything the editing surface does rests on it,
- * reading an edit back, turning a caret into an offset, saving the file, so it is asserted for every shape of
- * block rather than spot-checked. A violation here is a corrupted save, not a cosmetic bug. */
+// The invariant: the element's text is the block's source. Reading an edit back, turning a caret into an offset, and
+// saving the file all rest on it, so it is asserted for every shape of block rather than spot-checked.
 const BLOCKS = {
     heading: `## A heading`,
     deepHeading: `###### Six deep`,
@@ -83,8 +79,8 @@ describe(`what it draws`, () => {
 
     test(`a task item's brackets hang in the gutter with its bullet, where its checkbox is drawn`, () => {
         const done = buildBlockElement(`- [x] done`);
-        // All of `- [x] ` is the line's opening markup, so all of it leaves the text and hangs in the margin:
-        // the item's words sit at the same place whether the checkbox or the source is showing.
+        // All of `- [x] ` is the line's opening markup, so all of it leaves the text and hangs in the margin: the
+        // item's words sit at the same place whether the checkbox or the source is showing.
         expect(done.querySelector(`.md-marker-gutter`)?.textContent).toBe(`- [x] `);
         expect(done.querySelector(`li`)?.dataset[`task`]).toBe(`1`);
         expect(buildBlockElement(`- [ ] undone`).querySelector(`li`)?.dataset[`task`]).toBe(`0`);
@@ -110,8 +106,8 @@ describe(`what it draws`, () => {
 });
 
 describe(`caret offsets`, () => {
-    /* A caret position and a source offset are the same number, which is what removed the previous surface's
-     * guesswork about where a click landed. Both directions are checked, and against each other. */
+    // A caret position and a source offset are the same number, which removed the previous surface's guesswork about
+    // where a click landed. Both directions are checked, against each other.
     test(`round-trip through every offset of a block with markup in it`, () => {
         const source = `A **bold** word and a [link](x.md).`;
         const element = buildBlockElement(source);

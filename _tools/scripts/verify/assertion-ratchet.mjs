@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-/* THE ASSERTION RATCHET AT THE PUSH: a test file may get stronger by itself, and weaker only on purpose.
- *
- *   node _tools/scripts/verify/assertion-ratchet.mjs <base> <head>      the test files a range changed, committed content
- *   node _tools/scripts/verify/assertion-ratchet.mjs --worktree          the test files the working tree changed, vs HEAD
- *
- * The measure itself, and why it exists, is @intentic/constants/assertion-measure (the daemon reads the same copy). This file is the gate around it: it pairs each
- * changed test file with its earlier self and REFUSES ONLY AN UNDECLARED WEAKENING. A commit in the range whose
- * subject is `test!:` (any scope) or that carries a `Test-Note:` trailer says "I meant it, and here is why", the
- * same shape the wire-contract gate asks of a shrink (_tools/checks/contract-shrink.mjs). In `--worktree` mode there are no
- * commits to declare with, so a flag is a report rather than a refusal, and the exit code says which.
- *
- * Run from verify-push.mjs in its first tier, over the range the push carries. */
+// Refuses a test file that got weaker between two commits, unless the range declares it (`test!:` subject, any scope,
+// or a `Test-Note:` trailer) — the same shape _tools/checks/contract-shrink.mjs asks of a shrinking wire contract.
+// `--worktree` compares the tree to HEAD and only reports, since there's nothing to declare against.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
@@ -26,12 +17,11 @@ if (!worktree && (base === undefined || head === undefined)) {
     process.exit(2);
 }
 
-// Bound to this checkout once (lib/git.mjs), which is also where the buffer this needs is set: `git log` over
-// the two hundred commits a release tag can span goes past node's 1 MiB default.
+// Bound to this checkout via lib/git.mjs, which also sets the larger buffer a long `git log` needs.
 const git = (...argv) => gitIn(root, ...argv);
 
-// The pairs to compare: `[path, beforeText | undefined, afterText]` for every test file the range (or the tree)
-// changed and still has. A deleted test file is not a weakening of anything; it is a deletion, which review sees.
+// Pairs to compare: `[path, beforeText | undefined, afterText]` for every test file that still exists; a deleted file
+// is a deletion, not a weakening.
 const pairs = () => {
     if (worktree) {
         return (changedPaths(root) ?? [])

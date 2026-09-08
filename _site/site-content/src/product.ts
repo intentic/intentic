@@ -1,25 +1,8 @@
 import type { ShotImage } from "./landing";
 
-/* The feature pages: one page per VERB: what you do with the workspace, not what a surface is called.
- *
- * The shelf used to list surfaces (Fleet board, Chat & plan mode, Review & land, the editor…), and half of
- * those read as table stakes any agentic editor has, so the menu undersold the product. It now names five
- * outcomes: Run, Connect, Automate, Review, Host, and each page folds the relevant surfaces underneath it as
- * proof. See docs/marketing/landing-blueprint.md ("The feature pages") for the mapping.
- *
- * THE SLUG IS THE LABEL, LOWERCASED, AND THAT IS THE RULE. These pages used to be shelved under /product/
- * with latinate slugs (orchestrate, empower, supervise, delegate) while the menu above them said Features,
- * Run, Connect, Review, Host: a visitor clicked one word and the address bar answered with another. A URL is
- * read: in a search result, in a shared link, in the status bar before the click. Two vocabularies for one
- * page means one of them is wrong, and the menu's is the one written for a reader.
- *
- * Every `src` here is still a file the screenshot harness wrote from the demo build
- * (`_tools/e2e/shots/capture.mts`), so a claim on these pages is a screen you can open in the live demo.
- * Where a surface has no honest screenshot yet, the page carries a DIAGRAM instead: never a mockup of a
- * screen that doesn't exist. Automate is the one diagram-led page, and no longer because it has to be: its
- * screen exists and the menu previews it. The drawing stays because that page opens by explaining a machine,
- * and the machine is not what a list of five already-configured automations is a picture of.
- */
+// Feature pages: one page per verb (Run, Connect, Automate, Review, Host), not per surface. Slug is the label
+// lowercased, so the menu word and the URL agree. Every `src` is a real screenshot from `_tools/e2e/shots/capture.mts`;
+// a diagram appears only where no honest screenshot exists.
 
 /** How a shot is framed on the page: a browser window, a phone, or the bare image. */
 export type ShotFrame = "browser" | "phone" | "bare";
@@ -66,41 +49,14 @@ export interface ProductPage {
     icon: string;
     heading: string;
     sub: string;
-    /**
-     * The hero visual. A page leads with a real screenshot (`hero`) OR, where a drawing explains the thing
-     * better than any one screen does, a diagram (`heroFigure`): exactly one is set. Automate is the only
-     * diagram-led page, see the note on its own entry for why the drawing outranks the screen it now has.
-     */
+    /** Exactly one of `hero`/`heroFigure` is set per page; Automate is the only diagram-led one. */
     hero?: ProductShot;
     heroFigure?: ProductFigure;
-    /* THE PICTURE THE MEGA-MENU PREVIEWS, where the hero is the wrong picture for that box.
-     *
-     * The menu previews a row in a 16:10 frame 544px wide; a hero is framed for a page column, so it is a wide
-     * strip of a surface or a tall column of one. Run and Connect survive the difference, their heroes are
-     * near enough to the box that its crop still lands on lanes and tiles. Review and Host did not: one was a
-     * chat shot 1:2 tall, previewing as a blown-up inch of its own header, and the other a 2.5:1 strip that
-     * left a third of the frame empty.
-     *
-     * Automate had no picture at all, being diagram-led, and a row with no picture does not leave the rail
-     * empty, it leaves the LAST row's picture in it, so Automate showed you the capabilities catalog. It gets
-     * a capture of its own screen, which is also what keeps the rail coherent: five rows, five screenshots,
-     * rather than four screenshots and a drawing floating in a box the others fill edge to edge.
-     *
-     * So those three name their own capture, shot to the frame (`_tools/e2e/shots/capture.mts`, "menu-*"). Same
-     * demo, same rule as every other shot here: a real surface, not a mockup.
-     *
-     * Connect was given one too and had it taken away again, which is worth writing down: the narrow window
-     * that makes these frames legible is also the width at which the capabilities catalog folds its category
-     * list into a dropdown, so the tighter shot bought bigger tiles by losing the shelf of kinds that is the
-     * actual point of that screen. Its hero, cropped, says more. */
+    // Dedicated capture for the mega-menu's 16:10 preview box, when the page's `hero` crops badly there.
     menuShot?: ShotImage;
     facts: ProductFact[];
     blocks: ProductBlock[];
-    /* THE GUIDE THIS SURFACE ANSWERS. A feature page presupposes intentic: it says what this product's
-     * Review screen does, to somebody who already knows there is one. The guide shelf answers the question
-     * underneath it ("how do I check what an agent changed"), asked by somebody who does not. The two were
-     * linked in one direction only, so a reader who arrived on the question could reach the product and a
-     * reader who arrived on the product could never get back to the question. */
+    // Links to the guide answering this page's question for someone who doesn't know intentic exists yet.
     guide: { slug: string; question: string };
     meta: { title: string; description: string; datePublished: string };
 }
@@ -238,12 +194,7 @@ export const productPages: ProductPage[] = [
         icon: "zap",
         heading: "Start an agent automatically.",
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
-        /* Diagram-led BY CHOICE, not for want of a screen. This used to say there was no automations screen to
-         * shoot; there is one (`/ext/automations`, and the menu previews it), so what keeps the drawing here is
-         * that the page's first job is explaining a machine nobody has seen yet, six triggers, one optional
-         * check, a fresh session, which a list of five configured automations shows the RESULT of rather than
-         * the shape of. The machine IS the hero; a real screen (the fleet board) carries a block below. It is
-         * the same drawing the home page's Automate stage carries, from the same words in `automate.ts`. */
+        // Explains the mechanism itself; a screenshot of results only shows the result. Same drawing as automate.ts.
         heroFigure: "automate",
         menuShot: {
             name: "menu-automate",
@@ -255,8 +206,7 @@ export const productPages: ProductPage[] = [
             { value: "Fresh session", label: "each run gets its own transcript and isolated checkout" },
         ],
         blocks: [
-            // Jobs before mechanism: a reader arrives asking what they would automate, and a machine answers
-            // "anything". Every trigger named here exists in /docs/automations/ (schedule, webhook, provider events).
+            // Jobs before mechanism: a reader asks what to automate before how. Triggers here match /docs/automations/.
             {
                 title: "Six jobs you could automate today",
                 body: "Each is a trigger, a prompt and the choices about who runs it.",

@@ -15,15 +15,12 @@ import { useRole } from "../../features/sandbox/secrets/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
-/* The live-status extension: the outcome half of the infrastructure story, a plan-vs-reality board. LEFT is
- * Planned: the resolved desired-state dependency graph (desired-state.json, each node colored by its last
- * reconcile status). RIGHT is Running now, the realized world: live Komodo deployments (snapshot) plus an
- * on-demand "live check" that streams the in-sandbox `intentic deploy plan` to re-read live infrastructure and report
- * per-resource drift. Read-only; everything is relayed THROUGH the sandbox. */
+// Plan-vs-reality board. Left: Planned, the resolved desired-state dependency graph, nodes colored by last
+// reconcile status. Right: Running now, live Komodo deployments plus an on-demand live check that streams
+// `intentic deploy plan` to report per-resource drift. Read-only.
 
 const { state, error: wsError, isLoading: wsLoading, refetch: refetchState } = useWorkspaceState();
-// The two queries below report bare messages. This page knows what each was for, so it writes the sentence
-// and keeps their message as evidence underneath.
+// Bare messages from the two queries below; this page knows what each was for and writes the sentence.
 const wsNotice = computed<NoticeModel | undefined>(() =>
     wsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read this workspace's state.`, detail: wsError.value },
 );
@@ -47,8 +44,8 @@ const loading = computed(() => wsLoading.value || appsLoading.value || checking.
 
 const convergence = computed(() => convergedBadge(state.value?.converged));
 
-// Stream the in-sandbox `intentic deploy plan` (read+diff, no apply) and collect per-resource verdicts + orphans via
-// the shared reducer. A failed run throws a kind:"error" out of readPlanSteps, caught here as liveError.
+// Streams the in-sandbox `intentic deploy plan` (read+diff, no apply); a failed run throws kind:"error",
+// caught here as liveError.
 const runLiveCheck = async (): Promise<void> => {
     if (checking.value) {
         return;
@@ -82,9 +79,8 @@ const refresh = async (): Promise<void> => {
 const envList = (deployment: Deployment): { key: string; label: string }[] =>
     Object.entries(deployment.env).map(([key, value]) => ({ key, label: value === `` ? key : `${key}=${value}` }));
 
-// Provisioned-services access: URLs + admin logins from the last apply (status.json, value-free), the "how do
-// I log into what's live" companion to the deployments board. A generated password's value is fetched on click
-// through the daemon's operating-tier reveal; lower roles see the secret's name instead.
+// Provisioned-services access: URLs + admin logins from the last apply. A generated password's value is
+// fetched on click via the daemon's operating-tier reveal; lower roles see the secret's name.
 const { canShip: canOperate } = useRole();
 const access = computed(() => state.value?.access ?? []);
 const revealedAccess = reactive(new Map<string, string>());
@@ -124,8 +120,10 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
             <Notice v-if="wsNotice" :of="wsNotice" class="mb-4" />
 
-            <!-- The deployment engine is DECLARED but down, on a previously-applied setup: every "Not deployed"
-                 below is meaningless until it's back. Never shown on services-only or never-applied setups. -->
+            <!--
+                Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's
+                back.
+            -->
             <div
                 v-if="komodoReachable === false && state?.converged !== undefined"
                 class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
@@ -166,7 +164,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     />
                 </section>
 
-                <!-- BOTTOM, actual state: live Komodo deployments + an on-demand live "intentic deploy plan" read. -->
+                <!-- BOTTOM, actual state: live Komodo deployments plus an on-demand live `intentic deploy plan` read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
 
@@ -234,7 +232,10 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                         </p>
                     </div>
 
-                    <!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
+                    <!--
+                        Live check: streams "intentic deploy plan" to diff the desired graph against live
+                        infrastructure.
+                    -->
                     <div class="mt-4 border-t border-line-subtle pt-3">
                         <div class="mb-2 flex items-center gap-2">
                             <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">Live check</h3>
@@ -255,8 +256,10 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     </div>
                 </section>
 
-                <!-- Access: the URLs + admin logins for what's provisioned (from the last apply's status.json).
-                     A generated password reveals on click through the daemon (owner only); members see its name. -->
+                <!--
+                    Access: URLs + admin logins for what's provisioned. Generated passwords reveal on click (owner
+                    only).
+                -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3')">Access</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />

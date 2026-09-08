@@ -19,10 +19,8 @@ import {
 import { ExtensionReadinessSchema } from "../schemas/maintenance.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// Installed extensions resolved to their approved manifests, what the web extension host boots from. The
-// bundle itself is a plain Hono route (GET /extensions/{id}/bundle): raw ESM bytes are not an oRPC payload.
-// `settings`/`setSettings` carry the extension's own contributes.settings values; keys the manifest never
-// declared are refused, the same honesty rule the host applies to runtime view/command registrations.
+// Installed extensions resolved to their approved manifests. The bundle itself is a plain Hono route, `GET
+// /extensions/{id}/bundle`, not part of this oRPC contract: raw ESM bytes aren't a JSON payload.
 export const extensionsContract = {
     list: oc
         .route({
@@ -33,9 +31,7 @@ export const extensionsContract = {
                 "Every extension installed here, resolved to the manifest the owner approved, which is what the app boots its extension host from. The code itself is served separately, because raw script bytes are not a JSON answer.",
         })
         .output(ExtensionsListSchema),
-    // Author a new extension in place: writes a running one into .intentic/config/workspace-extensions/<name>/. The only
-    // creating route here, and it exists because that directory is otherwise reachable exclusively through an
-    // agent's file tools, which is a fine way to CHANGE an extension and a poor way to meet the idea of one.
+    // Writes into `.intentic/config/workspace-extensions/<name>/`.
     create: oc
         .route({
             method: "POST",
@@ -65,9 +61,7 @@ export const extensionsContract = {
         })
         .input(ExtensionSettingsInputSchema)
         .output(OkSchema),
-    // The owner's on/off switch. Disabling stops the extension's declared processes here and now; its agent
-    // plugin dir and PATH entry are rebuilt per turn, and an `environment` fragment only at the next image
-    // rebuild, the Extensions tab states which of those an extension actually has.
+    // The Extensions tab states which of these apply to a given extension.
     setEnabled: oc
         .route({
             method: "POST",
@@ -78,10 +72,7 @@ export const extensionsContract = {
         })
         .input(ExtensionEnabledInputSchema)
         .output(OkSchema),
-    // The host reporting which declared routes it just let through. Written by the browser because that is where
-    // the permission gate runs (apiImpl.ts), the daemon sees an extension's traffic as ordinary authenticated
-    // requests and cannot tell which extension, or which declared entry, any of it belongs to. Every extension's
-    // accumulated counts ride together so the bookkeeping is one request rather than a burst of them.
+    // The permission gate that produces these counts runs in the browser (apiImpl.ts).
     recordUsage: oc
         .route({
             method: "POST",
@@ -92,9 +83,6 @@ export const extensionsContract = {
         })
         .input(ExtensionUsageBatchSchema)
         .output(OkSchema),
-    /* Whether this extension is fit for somebody else to run, the checks answerable from its files alone. Read
-     * on demand rather than carried on the list: it reads the bundle off disk per extension, and it is looked at
-     * when an author is about to publish, not every time the tab renders. */
     readiness: oc
         .route({
             method: "GET",
@@ -105,14 +93,8 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionReadinessSchema),
-    /* The update lifecycle for a GIT-INSTALLED extension. The list carries what the periodic registry check
-     * found (update/advisory/health per row); these are the verbs around it. `checkUpdates` runs the comparison
-     * now (the tab's "check now"). `updatePreview` stages the offered sha and answers with the version story +
-     * the mechanical powers diff, the read BEFORE the click, costing one throwaway clone like a registry
-     * browse. `applyUpdate` is the transaction: re-clone, validate, quiesce, swap (keeping the outgoing
-     * checkout one back), restart, health-watch, on the EXISTING capability config, so a private-source token
-     * survives what a bare re-add would lose. `revert` swaps the kept-previous checkout back. Update and revert
-     * change the code that runs, so like install they are owner-only. */
+    // The extensions list itself carries what the periodic registry check found (update/advisory/health per row); these
+    // routes are the verbs around it.
     checkUpdates: oc
         .route({
             method: "POST",
@@ -151,8 +133,6 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionUpdateAppliedSchema),
-    // The owner's standing answer per extension (notify / agent / auto, and the advisory opt-out), see
-    // ExtensionUpdatePolicySchema for what each rung means.
     setUpdatePolicy: oc
         .route({
             method: "POST",
@@ -163,9 +143,7 @@ export const extensionsContract = {
         })
         .input(ExtensionUpdatePolicyInputSchema)
         .output(OkSchema),
-    // Declared background processes (contributes.processes): supervised children of the daemon (respawned
-    // with backoff, PORT-assigned, one log file each — the terminals list carries their `svc-ext-<id>-<name>`
-    // log-view rows), with an optional tunneled preview route.
+    // Declared via `contributes.processes`; the terminals list shows each one's log as `svc-ext-<id>-<name>`.
     processStatus: oc
         .route({
             method: "GET",

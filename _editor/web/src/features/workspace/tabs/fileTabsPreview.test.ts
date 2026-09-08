@@ -1,15 +1,13 @@
 // @vitest-environment jsdom
-//
-// The italic tab is the ONLY thing on screen that says a tab is a peek: that the next file looked at will take
-// its place. Nothing else in the strip distinguishes it, so if the italic stops being drawn the behaviour becomes
-// tabs disappearing for no visible reason. Asserted here on the real strip, along with the gesture that ends it.
+// Pins the peeked tab's only visual signal, italic, and the double-click that promotes it, asserted on the real
+// rendered strip.
 import { beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import FileTabs from "./FileTabs.vue";
 import type { WorkspaceTab } from "./workspaceTabs";
 import { IconStub } from "@intentic/ui/testing";
 
-// The globals a mounted workspace component reads at import time; jsdom has none of them.
+// scrollIntoView: FileTabs reads it at import; jsdom doesn't implement it.
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
@@ -52,10 +50,8 @@ beforeEach(() => {
     kept.length = 0;
 });
 
-/* The whole class list, not a substring of it. `italic` is six characters that `not-italic` also contains, and
- * the slant is only readable because `pr-[0.2em]` gives the last glyph the room `truncate` would otherwise clip
- * (FileTabs.vue says the same beside the span). Pinning the list is what makes a restyle that drops either one
- * fail here instead of passing on a match inside some other utility. */
+// Checks the whole class list, not a substring: `not-italic` contains `italic`, so a substring match would pass
+// a dropped class silently.
 it(`draws the peeked tab in italic and leaves the kept ones upright`, async () => {
     preview.value = `src/peeked.ts`;
 
@@ -65,7 +61,6 @@ it(`draws the peeked tab in italic and leaves the kept ones upright`, async () =
     expect(labelOf(`kept.ts`).className).toBe(`max-w-40 truncate`);
 });
 
-// The italic says the tab is going away; the tooltip is the only room the strip has to say what stops that.
 it(`tells the reader how to keep the tab it is about to replace`, async () => {
     preview.value = `src/peeked.ts`;
 

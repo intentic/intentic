@@ -1,26 +1,19 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import type { PowChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
 
-/* The bot ceiling for an ANONYMOUS endpoint, in two flavours, shared by the Front Desk widget and the bug
- * intake because both face the same caller: a browser with no credential on a page we do not control. It lives
- * under auth/ rather than beside either of them for exactly that reason, it is what stands in for authentication
- * when there is none to have. The reason it is a ceiling rather than a wall: neither of these stops a determined human, and the automation's tool allowlist
- * and budget caps are what bound the damage if one gets through. What these buy is that a scraper pointed at
- * a Front Desk does not get to spend an agent turn per request. */
+// The bot ceiling for an anonymous endpoint (two flavours), shared by the Front Desk widget and the bug intake: both
+// face a browser with no credential.
+// A ceiling, not a wall: neither stops a determined human, the automation's tool allowlist and budget caps bound the
+// damage if one gets through.
+// What it buys: a scraper doesn't get to spend an agent turn per request.
 
-// A challenge is spent on the FIRST message of a visitor thread (an existing session record is the admission
-// mark), so this window only has to cover "opened the panel, then typed".
+// A challenge is spent on a thread's first message; the window only needs to cover open-then-type.
 const CHALLENGE_TTL_MS = 15 * 60 * 1000;
 
-/* Enough work to make a per-request bot uneconomic, little enough that a phone spends about a second on it.
- * 16 bits ⇒ ~65k SHA-256s expected; the widget solves it in yielding batches so the page keeps painting. */
+// Enough work to make a bot request uneconomic, little enough for a phone (~65k SHA-256s at 16 bits).
 const POW_DIFFICULTY = 16;
 
-/* The salt is SELF-VERIFYING: `<issuedAt>.<nonce>.<hmac>` over the daemon's per-boot secret and the
- * conversation it was minted for. That binding is the whole design, it means the daemon stores nothing
- * per outstanding challenge (no table to grow, no cleanup to get wrong), a solution can't be moved to another
- * visitor's thread, and a restart simply invalidates every challenge in flight rather than admitting them all.
- * Per-boot, because a challenge outliving a restart buys nothing: the visitor just solves another. */
+// Per-boot secret: the salt self-verifies via HMAC, so nothing is stored per outstanding challenge.
 const secret = randomBytes(32);
 
 const sign = (issuedAt: number, nonce: string, conversationId: string): string =>
@@ -57,8 +50,8 @@ const leadingZeroBits = (digest: Buffer): number => {
     return bits;
 };
 
-/* The widget sends back `<salt>:<nonce>`, the salt so the daemon can re-derive what it issued without having
- * kept it, the nonce as the answer. Verifying is one HMAC and one hash. */
+// The widget sends `<salt>:<nonce>`; the daemon re-derives the salt's HMAC rather than storing it, so verifying is one
+// HMAC and one hash.
 const verifyProofOfWork = (answer: string, conversationId: string, now: number): boolean => {
     const separator = answer.lastIndexOf(":");
     if (separator <= 0) {
@@ -88,9 +81,9 @@ const verifyTurnstile = async (secretKey: string, token: string, remoteIp: strin
 // Whichever answer the widget sent, the contract's own fields, so the two can't drift apart.
 export type AntiBotAnswer = Pick<WebchatMessage, "turnstileToken" | "powNonce">;
 
-/* Whether this message clears the configured gate. `kind` is the ENFORCED mechanism (webchat-config's
- * usableAntiBot), never the raw stored setting, so a half-configured check can't become a gate nobody can
- * pass, and can't become a gate that silently isn't there either. */
+// Whether this message clears the configured gate.
+// `kind` is the enforced mechanism (webchat-config's usableAntiBot), not the raw stored setting, so a half-configured
+// check can't silently vanish or become impossible.
 export const antiBotAccepted = async (
     kind: "turnstile" | "pow" | "off",
     config: WebchatConfig,

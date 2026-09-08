@@ -9,20 +9,12 @@ import { type AskInstance, createCapabilityGate } from "./capability-offer.js";
 import { connectableCards } from "./connectable.js";
 import { registry } from "./registry.js";
 
-/* The `capabilities` CLI's two routes, the agent-facing half of the setup gate (capability-offer.ts).
- *
- * `connectable` is discovery: every card this sandbox could connect (the same merge the web's "+" grid
- * renders), each with whether it already is, what lets the agent name a real card instead of guessing, and
- * makes "is X available?" a read instead of a question for the owner. Card ids and names only, never config:
- * the agent grant may reach this precisely because nothing credential-shaped is in the answer.
- *
- * `ask` parks the calling agent on an in-chat card the owner decides, see the gate module for the whole
- * consent story. Both are reached with the per-boot agent token (auth/grants.ts), like `services`. */
+// The `capabilities` CLI's two routes: `connectable` lists cards this sandbox could connect (ids and names only, no
+// config); `ask` parks the calling agent on an in-chat card for the owner to decide (capability-offer.ts).
 
 export const createCapabilityAskRoutes = (services: Services) => {
     const ctx = capabilityCtx(services);
-    // One instance's live status, looked up fresh so a probe never runs against a stale config, and answered
-    // `inactive` for an instance deleted mid-watch, which reads correctly as "not connected".
+    // Looks up an instance's status fresh each call; a deleted instance answers `inactive`.
     const statusOf = async (instance: AskInstance): Promise<CapabilityStatus> => {
         const entry = (await services.capabilities.list()).find((capability) => capability.id === instance.id);
         if (entry === undefined) {
@@ -40,8 +32,7 @@ export const createCapabilityAskRoutes = (services: Services) => {
     return {
         connectable: async (c: Context<AppEnv>): Promise<Response> => {
             const [cards, capabilities] = await Promise.all([connectableCards(services), services.capabilities.list()]);
-            // Statuses probed once for the whole manifest (the Capabilities page pays the same on every load),
-            // so "connected" means live, not merely added, the difference the agent acts on.
+            // Statuses are probed once for the whole manifest; `connected` means live, not merely added.
             const statuses = new Map(
                 await Promise.all(
                     capabilities.map(

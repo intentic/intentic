@@ -1,13 +1,8 @@
 import { type IndexDb, openIndex } from "../store/db.js";
 
-// The resolved import graph, shared by every engine that needs to know which file reaches which. This is not a
-// verb, nothing here answers a query. It is the one place the raw specifier rows become edges, because
-// resolution needs the whole file set and the indexer only ever sees one file at a time.
-//
-// Both directions are built together and returned together. `imports` (A → what A pulls in) is what ranking
-// wants: importance flows from importers to the modules they depend on. `importedBy` is the same edges reversed,
-// and it is what impact wants: a change lands in a file, and the question is who reaches it. Reversing on demand
-// would mean walking every edge again per query, and the reversal is the cheap half of building this.
+// The resolved import graph shared by every engine that needs which file reaches which; not a verb itself. Built once
+// because resolution needs the whole file set while the indexer sees one file at a time. Both directions (`imports`,
+// `importedBy`) are built together rather than reversed per query.
 
 const CANDIDATE_SUFFIXES = [".ts", ".tsx", ".mts", ".js", ".jsx", ".mjs", ".vue", ".py", ".go", ".rs", ".java"];
 const INDEX_BASES = ["/index", "/main", "/mod"];
@@ -21,8 +16,7 @@ export interface ImportGraph {
     readonly importedBy: ReadonlyMap<number, ReadonlySet<number>>;
 }
 
-// First chunk per file, where a generated banner sits, and where a package.json's "name" is. Callers that need
-// heads for their own reasons pass the same map back in, so one scan serves both.
+// First chunk per file, a generated banner or package.json name; passed in so callers share one scan.
 export const fileHeads = (db: IndexDb): Map<number, string> =>
     new Map(
         db
@@ -48,9 +42,8 @@ const normalize = (path: string): string => {
     return parts.join("/");
 };
 
-// TypeScript's ESM rule means source imports the EMITTED name: `./widget.js` is written in a file whose real
-// neighbour is `widget.ts`. Missing that maps a TS monorepo to an empty graph, so the .js→.ts rewrites come
-// first, ahead of the extensionless and directory-index forms.
+// TypeScript's ESM rule means source imports the emitted name, so `./widget.js` resolves to a real neighbour
+// `widget.ts`; the .js→.ts rewrites are tried before extensionless and directory-index forms.
 const candidatesFor = (base: string): string[] => {
     const candidates = [base];
     const jsLike = /\.(js|jsx|mjs|cjs)$/.exec(base);
@@ -69,9 +62,8 @@ const candidatesFor = (base: string): string[] => {
     return candidates;
 };
 
-// Workspace package name → its directory, read from each package.json's "name". Lets a cross-package import
-// (`@intentic/sdk`) resolve to that package's entry file, without it the graph fragments into one island per
-// package, which in a monorepo loses exactly the structure this exists to show.
+// Workspace package name → its directory, from each package.json's "name"; lets a cross-package import
+// (`@intentic/sdk`) resolve to that package's entry file instead of leaving the graph fragmented into islands.
 const packageDirs = (db: IndexDb, heads: ReadonlyMap<number, string>): Map<string, string> => {
     const dirs = new Map<string, string>();
     for (const row of db.all("SELECT id, path FROM files WHERE path LIKE '%package.json'")) {
@@ -135,9 +127,8 @@ export const buildImportGraph = (db: IndexDb, allowed: ReadonlySet<string>, head
     return { pathsById, idByPath, imports, importedBy };
 };
 
-// The whole indexed corpus as one graph, for callers that hold an index directory rather than a db handle.
-// Scope filtering is the query layer's job; impact is asked about a change, and a change reaches what it
-// reaches regardless of what the asker was looking at.
+// The whole indexed corpus as one graph, for callers holding an index directory rather than a db handle. Scope
+// filtering is the query layer's job; impact reaches what it reaches regardless of what was in view.
 export const loadImportGraph = (indexDir: string): ImportGraph => {
     const db = openIndex(indexDir, "read");
     try {

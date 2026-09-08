@@ -3,33 +3,15 @@ import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract";
 import { queryClient } from "../../../lib/queryPersistence";
 import { workspaceAgent } from "../health/workspaceScope";
 
-/* What a file reference looks like in agent and tool output, `src/foo.ts`, `./src/foo.ts:12:3`,
- * `/work/src/foo.ts(12,4)`, and how one maps onto the workspace-relative path the editor opens.
- *
- * A reference is a SUFFIX of that path, not the path itself: an agent that has been working in `_editor/web/src`
- * writes `pages/workspace/Foo.vue`, and read literally that opens nothing. So `resolveInTree` matches it
- * against the tree the explorer already fetched (the daemon's /workspace/resolve covers what the capped tree
- * left out, see resolveFileRef), using the tail + ranking rules both sides share (@intentic/sandbox-contract).
- *
- * Three surfaces speak this language: terminal output (terminalFileLinks), the assistant's markdown prose
- * (markdownFileLinks), and a tool card's location chip. They share the grammar so the same path opens the same
- * file, at the same line, wherever the user clicks it.
- *
- * Deliberately free of the router and the tab singleton: markdown RENDERING pulls this in (see
- * markdownFileLinks), and that path must not drag the app graph, navigation lives one module over, in
- * openFileRef. */
+// A file reference is a suffix of the real path, matched against the fetched tree via tail + ranking rules shared with
+// the daemon (@intentic/sandbox-contract). Shared grammar across terminal, markdown and tool-card links; free of the
+// router and tab singleton, so markdown rendering stays decoupled.
 
-// A file reference: an optional /, ./, ../ or ~/ lead, one or more directory segments (so a bare word is never a
-// link, a reference needs a slash), a filename with an extension, and an optional line[:col] or (line,col) tail
-// (the forms tsc / eslint / vitest / node stack traces emit). The leading boundary lookbehind keeps the match
-// from starting mid-token, e.g. inside a URL's `example.com/foo.ts` tail, which the URL addon already owns.
+// Needs a dir segment plus extension (bare words never match), optional line[:col] tail; avoids mid-URL match.
 export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+\.[A-Za-z0-9]+(?::\d+(?::\d+)?|\(\d+,\d+\))?/;
 
-// The workspace tree the file explorer has already fetched, the client's own copy of what exists, and what
-// both the container root and the reference matcher below read. Undefined until the first fetch lands.
-// getQueriesData prefix-matches, so the sandbox-id suffix on the key doesn't matter, but the SCOPE does: with
-// more than one tree cached (the shared one and a conversation's own, see workspaceScope), taking whichever
-// came back first would match references against a workspace nobody is looking at.
+// Workspace tree already fetched by the explorer, read by containerRoot and resolveInTree; undefined until the first
+// fetch lands. Filters by scope, since more than one tree can be cached at once (workspaceScope).
 const cachedTree = (): WorkspaceTreeResponse | undefined => {
     const prefix = [`workspace`, `tree`, workspaceAgent.value ?? `shared`];
     for (const [, data] of queryClient.getQueriesData<WorkspaceTreeResponse>({ queryKey: prefix })) {
@@ -40,17 +22,12 @@ const cachedTree = (): WorkspaceTreeResponse | undefined => {
     return undefined;
 };
 
-// The container workspace root (e.g. /work). Empty until the tree has been fetched once, until then an
-// absolute reference simply isn't opened (relative ones still are).
+// Container workspace root (e.g. /work); empty until the tree fetches once, so absolute references don't open yet
+// (relative ones still do).
 const containerRoot = (): string => cachedTree()?.root ?? ``;
 
-/* Every file in that tree, as a path set plus a basename → paths map, the index `resolveInTree` matches a
- * reference against. Memoized on the response OBJECT, so it is rebuilt exactly when the query refetches into a
- * new one and never on a click.
- *
- * Files only: a reference names a file, and the dirs are half the entries. Ignored entries (node_modules, …)
- * ARE indexed, the tree lists them, the editor opens them, and a stack frame through a dependency is a
- * reference worth following. */
+// Path set + basename→paths map resolveInTree matches against; memoized on the tree object, rebuilt only on refetch.
+// Files only, but ignored dirs (node_modules) are indexed too: a dependency's stack frame is worth following.
 interface FileIndex {
     readonly paths: ReadonlySet<string>;
     readonly byName: ReadonlyMap<string, string[]>;
@@ -88,13 +65,8 @@ const fileIndex = (tree: WorkspaceTreeResponse): FileIndex => {
     return index;
 };
 
-/* The workspace file a reference names, matched against the tree the client already holds, no round trip.
- * Undefined means "not answered here", not "no such file": the tree walk is capped (5000 entries) and doesn't
- * descend ignored dirs, so a miss is handed to the daemon's /workspace/resolve (see resolveFileRef), which
- * matches the same way against the full sweep.
- *
- * All tails share the reference's filename, only leading segments are dropped, so the candidate pool is
- * whatever the basename map holds, never the whole index. */
+// Matches a reference against the already-held tree, no round trip. undefined means "not answered here" (the walk is
+// capped; misses fall to the daemon's /workspace/resolve), not "no such file".
 export const resolveInTree = (path: string): string | undefined => {
     const tree = cachedTree();
     if (tree === undefined) {
@@ -117,18 +89,11 @@ export const resolveInTree = (path: string): string | undefined => {
     return undefined;
 };
 
-// Git diff output prefixes each side of a file with a one-segment marker: `a/` `b/` by default, `i/` (index)
-// `w/` (working tree) `c/` (commit) `o/` (object) under `diff.mnemonicPrefix`, and `1/` `2/` from
-// `git diff --no-index`. A real workspace path effectively never starts with one of these bare single-char
-// segments, so a copied `a/src/foo.ts` diff path should open the actual src/foo.ts (VS Code 1.130 parity, the
-// prior code opened the literal a/… path and landed on the not-found state).
+// Git diff side prefixes: a/b default, i/w/c/o mnemonicPrefix, 1/2 --no-index; real paths never start this way.
 const DIFF_PREFIX = /^[abiwco12]\//;
 
-/* Split a reference into its path and 1-based line. Every notation a line arrives in is accepted, because
- * which one shows up is not ours to decide: `foo.ts:12:3` (tsc, eslint, ripgrep, stack traces), `foo.ts(12,3)`
- * (MSBuild-style tsc output), and `foo.ts#L12` / `foo.ts#L12-L20`, the GitHub anchor, which is what a model
- * writes when it reaches for the markdown-link form IDE surfaces ask for. Left unparsed, that last one takes
- * the fragment into the path and opens nothing. */
+// Splits a reference into path and 1-based line: `:12:3` (tsc/eslint/traces), `(12,3)` (MSBuild-style), or
+// `#L12`/`#L12-L20` (GitHub anchor). Unparsed, the anchor form takes the fragment into the path and opens nothing.
 export const parseRef = (ref: string): { readonly path: string; readonly line?: number } => {
     const anchor = /^(.*?)#L(\d+)(?:-L?\d+)?$/.exec(ref);
     if (anchor?.[1] !== undefined) {
@@ -145,21 +110,17 @@ export const parseRef = (ref: string): { readonly path: string; readonly line?: 
     return { path: ref };
 };
 
-// Map a matched path to the root-relative path the editor opens, or undefined if it points outside the workspace
-// (a system path like /usr/lib/…, or an absolute path under some other root the client can't map).
+// Maps a matched path to the root-relative path the editor opens; undefined if it's outside the workspace (a system
+// path, or an unmappable root).
 export const toWorkspacePath = (rawPath: string): string | undefined => {
     if (!rawPath.startsWith(`/`)) {
-        // An explicit `./` lead is a tool-emitted relative path, never a diff side, strip only the `./`.
-        // Anything else may carry a git-diff prefix (a/ b/ i/ w/ …), which is stripped to the real path.
+        // Explicit `./` is tool-relative, not a diff side: strip only the `./`; anything else may carry a diff prefix.
         return rawPath.startsWith(`./`) ? rawPath.slice(2) : rawPath.replace(DIFF_PREFIX, ``);
     }
     const root = containerRoot();
     if (root !== `` && rawPath.startsWith(`${root}/`)) {
         return rawPath.slice(root.length + 1);
     }
-    // An absolute path under SOME OTHER root: an isolated turn's worktree (/history/worktrees/<id>/…, which
-    // mirrors the workspace layout below its own lead) or a machine path from a pasted log. It maps only if the
-    // workspace really holds a file that path ends in: /usr/lib/… never will, which is what keeps a system
-    // path plain prose instead of a link to nothing.
+    // Absolute path under another root (a worktree, a log): maps only if the workspace holds a matching file.
     return resolveInTree(rawPath);
 };

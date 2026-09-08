@@ -1,16 +1,12 @@
 // @vitest-environment jsdom
-//
-// The gesture end to end: markdown the agent wrote → rendered anchors → a real click on one → the editor tab
-// that opens. Every piece in between (the link markup, the delegated listener, the modifier gating) only means
-// anything joined up, and this is the only test that joins them.
+// The full gesture: a rendered markdown link, a real click on it, and the editor tab that opens.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope } from "vue";
 
 const openFile = vi.fn();
 const openAtLine = vi.fn();
 const push = vi.fn();
-// The daemon's reference resolver. Nothing is cached client-side here (the tree query is stubbed empty), so
-// every click asks it; by default it matches nothing and the reference opens as written.
+// Daemon's reference resolver; unmatched by default so a click opens the path as written.
 const resolved = vi.fn<() => { path?: string }>(() => ({}));
 
 vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
@@ -24,8 +20,7 @@ const { openFileRefFromEvent } = await import("./openFileRef");
 const { workspaceAgent } = await import("../health/workspaceScope");
 const { claimFloating } = await import("../../../shell/window/floating");
 
-// A prose surface bound exactly as ChatMessageView and MarkdownViewer bind it: one delegated listener on the
-// root, the rendered markdown injected beneath it.
+// Binds a click listener the way ChatMessageView and MarkdownViewer do, then renders markdown into it.
 const surface = (markdown: string): HTMLDivElement => {
     const root = document.createElement(`div`);
     root.addEventListener(`click`, openFileRefFromEvent);
@@ -58,7 +53,6 @@ describe(`clicking a file the agent mentioned`, () => {
         const event = clickFileLink(surface(`Fixed in src/foo.ts:42.`));
         await vi.waitFor(() => expect(openAtLine).toHaveBeenCalledWith(`src/foo.ts`, 42));
         expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} });
-        // Not prevented, the browser would follow the href and reload the whole SPA.
         expect(event.defaultPrevented).toBe(true);
     });
 
@@ -68,12 +62,10 @@ describe(`clicking a file the agent mentioned`, () => {
         expect(openAtLine).not.toHaveBeenCalled();
     });
 
-    // The whole point of resolving on click: the model writes the tail of a path once the area is established.
     it(`opens the file an abbreviated mention resolves to, not the path as written`, async () => {
         resolved.mockReturnValue({ path: `_editor/web/src/pages/Foo.vue` });
         clickFileLink(surface("Gone from `pages/Foo.vue`."));
         await vi.waitFor(() => expect(openFile).toHaveBeenCalledWith(`_editor/web/src/pages/Foo.vue`));
-        // No conversation on the link ⇒ the shared workspace, and the query says so by carrying nothing.
         expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`_editor`, `web`, `src`, `pages`, `Foo.vue`] }, query: {} });
     });
 
@@ -91,8 +83,7 @@ describe(`clicking a file the agent mentioned`, () => {
     });
 });
 
-/* A link written inside an isolated conversation opens that conversation's own copy of the file: the whole
- * point of the scope, and the thing a path alone could never say. */
+// A link inside an isolated conversation opens that conversation's own copy of the file, not the shared one.
 describe(`clicking a file an isolated conversation mentioned`, () => {
     const scopedSurface = (markdown: string): HTMLDivElement => {
         const root = document.createElement(`div`);
@@ -108,8 +99,7 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
         expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`docs`, `plan.md`] }, query: { agent: `c-1` } });
     });
 
-    // The scope is set BEFORE the daemon is asked, because a file this conversation has not landed exists in no
-    // other tree: resolved against the shared one it comes back unmatched.
+    // Scope is set before the daemon is asked; resolving against the shared tree returns unmatched.
     it(`asks the daemon within that conversation's tree`, async () => {
         resolved.mockImplementation(() => ({ path: workspaceAgent.value === `c-1` ? `docs/plan.md` : undefined }));
         clickFileLink(scopedSurface("Wrote `plan.md/notes.md` just now."));
@@ -124,9 +114,7 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
     });
 });
 
-/* THE PANEL IS IN A WINDOW OF ITS OWN, and there is no app around it to put a file in: routing it would take
- * away the chat the reader is reading. So the reference leaves for the app's own window and this one does not
- * move (composables/mainWindow.ts). */
+// A popped-out panel has no app window to open a file in, so the click goes to the app's own window instead.
 describe(`clicking a file in a popped-out panel`, () => {
     it(`sends it to the app's own window rather than routing this one`, () => {
         const open = vi.fn(() => null);
@@ -136,11 +124,9 @@ describe(`clicking a file in a popped-out panel`, () => {
 
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
 
-        // Nothing was asked of this window: no editor tab, no navigation, nothing resolved against its tree.
         expect(openAtLine).not.toHaveBeenCalled();
         expect(openFile).not.toHaveBeenCalled();
         expect(push).not.toHaveBeenCalled();
-        // No window of the app is up, so the click opens one; with one already up it would simply be told.
         expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
         scope.stop();
     });

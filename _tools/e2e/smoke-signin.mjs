@@ -1,40 +1,19 @@
 #!/usr/bin/env node
-/* CAN A STRANGER ACTUALLY SIGN IN TO THE DEPLOYED SITE?: the one question no other check in this repo asks.
- *
- * The browser e2e tier covers the login journey with a SEEDED session and no real Google ("no real Google" is
- * the first line of its config, and it is the right call for a suite that must run offline and hermetically).
- * Every unit test around sign-in mocks Google too. So the whole pipeline could be green while the front door
- * was shut, and it was: Google began refusing the deployed origin for the OAuth client, every in-page Google
- * button on the site went dead, and nothing anywhere went red. That is the gap this closes.
- *
- * WHY A REAL BROWSER, when a curl would be a hundred times cheaper. It was tried. Requesting Google's button
- * endpoint with the right origin, referer, user-agent, fetch-metadata headers and even the page's own `cas`
- * value answers 200 while a real Chromium loading the real page is answered 400 for the identical URL. A curl
- * check would therefore have been GREEN through the whole outage: worse than no check, because it would have
- * been believed. Google decides this inside the browser, so it has to be asked inside one.
- *
- * WHAT IT ASSERTS, and why it is these two things:
- *   1. Google's button reaches a real size. A rejected button still exists in the DOM at 0×0: "is it there"
- *      is not the question, "can it be pressed" is.
- *   2. The escape link is on the page. Some ways that button can fail are invisible to the page itself, so
- *      the way in that depends on none of Google's frame machinery must never quietly disappear.
- *
- * Run after a deploy (ci.yml), against the origin that was just deployed:
- *   pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
- */
+// The only check that signs in against Google for real: everything else runs seeded or mocked, so the pipeline can stay
+// green while the button is dead. A curl to the button endpoint answers 200 where a real browser gets 400, so this must
+// run inside one. Asserts:
+// 1. Google's button reaches a real size; a refused button stays 0×0 in the DOM.
+// 2. The fallback sign-in link is present, for failures invisible to the button itself.
 
 import { chromium } from "@playwright/test";
 
 const origin = (process.argv[2] ?? process.env.WEB_ORIGIN ?? "https://app.intentic.dev").replace(/\/+$/, "");
 const loginUrl = `${origin}/login`;
 
-// Google's script, its frame and the app's own bundle all have to land. Generous because this runs seconds
-// after a deploy, against a container that has served almost nothing yet.
+// Generous: this runs seconds after deploy, before the container, Google's script and its frame have warmed up.
 const BUTTON_DEADLINE_MS = 30_000;
 
-// The exact string Google Identity Services logs when the client will not accept this page's origin. Matched
-// because it names the cause precisely, and a failure that names its cause is repaired in minutes rather than
-// bisected for a day.
+// Exact string Google Identity Services logs when the OAuth client refuses this page's origin.
 const ORIGIN_REFUSED = /origin is not allowed for the given client/i;
 
 const fail = (message, detail) => {
@@ -46,9 +25,7 @@ const fail = (message, detail) => {
     process.exitCode = 1;
 };
 
-// The full chromium, headless, rather than Playwright's headless shell (playwright.config.ts says why the shell
-// is not on disk here). This check exists because the same request is answered 200 to curl and 400 to a real
-// Chromium, so the browser it drives should be the one a person gets, not the stripped shell.
+// Full chromium, not the headless shell: must be the browser a real visitor gets.
 const browser = await chromium.launch({ channel: "chromium" });
 const page = await browser.newPage();
 const consoleErrors = [];
@@ -61,9 +38,7 @@ page.on("console", (message) => {
 try {
     await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
 
-    /* A pressable button, not merely a present one. Google renders its button into a cross-origin iframe; when
-     * the client refuses the origin that iframe is created and then stays 0×0 forever, which is exactly what a
-     * user sees as "the button does nothing". Waiting on the SIZE is what tells the two apart. */
+    // Checks size, not presence: a refused origin still renders the iframe, just stuck at 0×0.
     const pressable = await page
         .waitForFunction(
             () => {
@@ -106,9 +81,7 @@ try {
         ]);
     }
 
-    /* The way in that survives everything above. Whichever way Google's own button fails, some of those ways
-     * cannot be detected from the page, so this link is the difference between a sign-in page that is having
-     * a bad day and one that is simply a wall. It is not allowed to go missing quietly. */
+    // Must never go missing: some ways the Google button fails are invisible to the page itself.
     const escape = await page.getByText(/Google's own page/i).count();
     if (escape === 0) {
         fail("The sign-in page offers no fallback way in.", [

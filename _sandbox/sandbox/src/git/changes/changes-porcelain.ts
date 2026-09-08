@@ -1,39 +1,22 @@
 import type { GitChange } from "@intentic/sandbox-contract";
 
-/* THE PARSERS BEHIND THE CHANGES REVIEW: git's `-z` porcelain listings (`--name-status`, `--numstat`,
- * `status --porcelain=v2`) read into the GitChange rows the panel renders. Pure string work, nothing is spawned
- * here; the readers that spawn git are changes.ts (the working tree), changes-commits.ts (one commit) and
- * stash.ts (one entry), and they share these so a rename or a conflict reads the same whichever listing it
- * came from. */
+// Parsers behind the Changes review: git's -z porcelain listings into the GitChange rows the panel renders.
+// Pure string work, nothing spawned; changes.ts, changes-commits.ts and stash.ts spawn git and share these readers.
+// So a rename or a conflict reads the same whichever listing it came from.
 
-// `U` is git's unmerged marker, a path the merge could not resolve, which is neither staged nor unstaged but
-// its own third state (there is no stage 0 for it at all; the index holds stages 1/2/3 instead).
+// `U` is git's unmerged marker: neither staged nor unstaged, its own third state (no stage 0; index holds 1/2/3).
 const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed", U: "conflicted" };
 
-/* The paths in one `-z` git listing, each COPIED OUT of the string it arrived in, for callers that CACHE
- * what this returns.
- *
- * `split` answers with V8 sliced strings: views into the parent, which therefore pin the ENTIRE stdout, a
- * fleet-wide `--name-only` span runs to megabytes, for as long as ONE cached path lives. That was most of the
- * daemon's heap: the attribution caches (agents/origins.ts, agents/landed-presence.ts) held path lists whose
- * every element secretly retained a quarter-megabyte diff listing, ~180 MB per pass over the fleet's landings,
- * repinned at every new HEAD, never released. The Buffer round-trip allocates each path as its own flat string,
- * so the parent dies with this call frame. Callers that consume paths transiently can keep plain split(). */
+// Copies each path out of the `-z` listing's string, for callers that cache what this returns.
+// `split` gives V8 sliced views that pin the whole stdout alive per cached path; the Buffer round-trip avoids that.
 export const materializedPaths = (stdout: string): string[] =>
     stdout
         .split("\0")
         .filter((path) => path !== "")
         .map((path) => Buffer.from(path, "utf8").toString("utf8"));
 
-// Parse `--name-status -z` output (from `git diff` or `git diff-tree`) into GitChanges. NUL-separated records
-// are `STATUS\0path\0`, except renames/copies which span three fields (`R<score>\0old\0new\0`), a cursor walk,
-// not a fixed stride. Keyed by the (new) path so a later record for the same path wins. EXCEPT that
-// "conflicted" is sticky: `git diff` emits an unmerged path twice (`U` then `M`), and letting the second record
-// win is what used to make a conflict render as an ordinary modification.
-//
-// Exported because land.ts classifies a delta by CHANGE rather than by path, and `status` + `from` is what says
-// a change spans two of them (agents/land.ts DeltaChange). Reading the delta with `--name-only` instead is what
-// made renames land half-applied: that output names a rename's destination and nothing else.
+// Parses `--name-status -z` into GitChanges; records are STATUS\0path\0, except renames/copies (R<score>\0old\0new\0).
+// Keyed by the new path, last record wins, except conflicted is sticky (git emits an unmerged path as U then M).
 export const parseNameStatusZ = (stdout: string): GitChange[] => {
     const parts = stdout.split("\0");
     const changes = new Map<string, GitChange>();
@@ -62,9 +45,8 @@ export const parseNameStatusZ = (stdout: string): GitChange[] => {
     return [...changes.values()];
 };
 
-// Parse `--numstat -z` into a path → {additions, deletions} map, keyed by the (new) path so it merges onto the
-// name-status list. NUL-separated: a normal record is `add\tdel\tpath\0`; a rename is `add\tdel\t\0old\0new\0`
-// (the counts, an empty path, then the two names). Binary files report `-\t-`, left undefined here.
+// Parses `--numstat -z` into path → {additions, deletions}, keyed by the new path to merge onto the name-status list.
+// A rename record has an empty path then old/new NUL fields; binary files report `-\t-`, left undefined here.
 export const parseNumstatZ = (stdout: string): Map<string, { additions?: number; deletions?: number }> => {
     const parts = stdout.split("\0");
     const stats = new Map<string, { additions?: number; deletions?: number }>();
@@ -101,20 +83,10 @@ export const parseNumstatZ = (stdout: string): Map<string, { additions?: number;
     return stats;
 };
 
-/* THE ONE READ THE WHOLE REVIEW IS BUILT FROM, `git status --porcelain=v2 -z --branch`, parsed into the three
- * lists the panel renders plus the two header facts (the checked-out branch, and HEAD's sha).
- *
- * v2 is what lets ONE spawn answer what five used to (the branch, HEAD, both `--name-status` passes and the
- * untracked walk): every record carries BOTH staging columns, so `XY` splits into an index-vs-HEAD change and a
- * worktree-vs-index change independently. That is not the collapse changedFiles' note (changes.ts) warns about, collapsing
- * is picking ONE status per path, which loses the `MM` case; reading two columns as two changes is what the two
- * diffs did, said once. Line counts still come from the real per-side diffs, so a row's stat still describes the
- * diff it is displayed under.
- *
- * Records are NUL-terminated: `1` an ordinary change, `2` a rename/copy (whose ORIGIN PATH is the next NUL field,
- * not part of the record), `u` an unmerged path, `?` untracked, `!` ignored. Their leading fields are fixed in
- * COUNT but not in width, and a path may contain spaces, so the path is taken as the whole remainder after
- * skipping that many spaces, never by splitting the record. */
+// The one read the whole review is built from: `git status --porcelain=v2 -z --branch`, into three lists plus HEAD.
+// Both staging columns (`XY`) read as independent staged/unstaged changes, not collapsed, so the `MM` case isn't lost.
+// Record kinds: `1` ordinary, `2` rename (origin is the next NUL field), `u` unmerged, `?` untracked, `!` ignored.
+// Leading fields are fixed in count, not width; a path may hold spaces.
 const LEADING_FIELDS: Record<string, number> = { "1": 8, "2": 9, u: 10 };
 
 const recordPath = (record: string, fields: number): string => {
@@ -129,8 +101,7 @@ const recordPath = (record: string, fields: number): string => {
     return record.slice(cursor);
 };
 
-// One side's letter, in the vocabulary parseNameStatusZ already established: `R` carries its origin, `C` (a copy)
-// reads as a plain addition, and anything unrecognised degrades to "modified" rather than dropping the row.
+// One side's letter, in parseNameStatusZ's vocabulary: `R` carries its origin, `C` reads as an addition, else modified.
 const changeAt = (letter: string, path: string, from: string | undefined): GitChange =>
     letter === "R" && from !== undefined
         ? { path, status: "renamed", from }
@@ -143,15 +114,11 @@ export interface StatusV2 {
     staged: GitChange[];
     unstaged: GitChange[];
     untracked: string[];
-    /* THE OBJECT NAMES THE STATUS RECORD ALREADY CARRIES, per path: HEAD's blob and the index's. Read out
-     * because they are free here and expensive anywhere else, and because they are what the code-only counts are
-     * cached on (code-counts.ts): the same object name means the same bytes, so a scan whose files have not
-     * moved re-reads none of them. A rename keys on the NEW path, like every other reading in this file. */
+    // HEAD's and the index's object names per path, free here; code-counts.ts caches on them (same name, same bytes).
     blobs: Map<string, { head?: string; index?: string }>;
 }
 
-// One space-separated field of a porcelain-v2 record, by position. The path is never read this way (it may hold
-// spaces, see recordPath); the fixed-width leading fields are.
+// One space-separated field of a v2 record, by position; the path (may hold spaces) is read via recordPath instead.
 const recordField = (record: string, index: number): string | undefined => {
     let cursor = 0;
     for (let field = 0; field < index; field += 1) {
@@ -165,8 +132,7 @@ const recordField = (record: string, index: number): string | undefined => {
     return end === -1 ? undefined : record.slice(cursor, end);
 };
 
-// `1`/`2` records are `<kind> <XY> <sub> <mH> <mI> <mW> <hH> <hI> …`, so the two object names sit at 6 and 7
-// whichever of the two kinds this is. All-zero means "no blob on that side" (an addition has no HEAD blob).
+// `1`/`2` records place the two object names at fields 6 and 7 either way; all-zero means no blob on that side.
 const ZERO_OID = /^0+$/;
 const blobsOf = (record: string): { head?: string; index?: string } => {
     const head = recordField(record, 6);
@@ -193,8 +159,7 @@ export const parseStatusV2 = (stdout: string): StatusV2 => {
         const kind = record[0] ?? "";
         if (kind === "#") {
             const [, key, value] = record.split(" ");
-            // `(initial)` on an unborn HEAD and `(detached)` off a branch both mean "no answer", the same thing
-            // the empty output of the two commands this replaces meant.
+            // `(initial)` (unborn HEAD) and `(detached)` (no branch) both mean no answer, as before.
             if (key === "branch.oid" && value !== undefined && value !== "(initial)") {
                 head = value;
             }
@@ -216,8 +181,7 @@ export const parseStatusV2 = (stdout: string): StatusV2 => {
             continue;
         }
         const path = recordPath(record, fields);
-        // A rename's origin is its own NUL field, so it must be consumed whether or not the record parsed,
-        // leaving it would be read as the next record.
+        // A rename's origin is its own NUL field; consumed even if the record didn't parse, or it reads as the next.
         const from = kind === "2" ? (records[cursor] ?? "") : undefined;
         if (kind === "2") {
             cursor += 1;
@@ -226,8 +190,7 @@ export const parseStatusV2 = (stdout: string): StatusV2 => {
             continue;
         }
         if (kind === "u") {
-            // An unmerged path has no stage 0, so it is neither side's, see changedFiles' note (changes.ts). v2 gives it its
-            // own record kind, so it never has to be filtered back out of the two lists.
+            // An unmerged path has no stage 0 (changes.ts); its record kind alone keeps it out of the two lists.
             conflicted.push({ path, status: "conflicted" });
             continue;
         }

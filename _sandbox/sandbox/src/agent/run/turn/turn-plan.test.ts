@@ -10,14 +10,8 @@ import type { AgentRequest } from "../agent.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
-/* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
- * only through app.test.ts booting the whole daemon, which is why the four provider arms drifted apart in the
- * first place: each learned the same lessons separately (resolve a concrete model, or the SDK's own retired
- * default gets used). Which session a turn may resume is NOT among them: it is one rule for all four runtimes
- * and lives with the route that acts on it (app.integration.test.ts covers it end to end).
- *
- * A refusal is a VALUE here, so the gates are assertable without a stream: `ok: false` plus the machine-readable
- * code the composer's connect gate keys off. */
+// What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
+// (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
 
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
@@ -46,7 +40,7 @@ beforeEach(() => {
     browserServers.mockResolvedValue({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
 });
 
-// --- the gates: each refuses for an ordinary state of a sandbox, and says which one -----------------------
+// the gates: each refuses for an ordinary state of a sandbox, and says which one
 
 test("Codex with neither a translator subscription nor an api key names which of the two is missing", async () => {
     const noImage = await planTurn(servicesWith({ codexThreadExists: async () => true }), turn({ agent: "codex" }), context);
@@ -85,9 +79,8 @@ test("an ACP provider whose capability is gone is refused by name", async () => 
     expect((plan as { message: string }).message).toContain(`Unknown agent provider "gemini-cli"`);
 });
 
-/* A MODEL TOO SMALL TO HOLD THE LOOP is refused here rather than by the server, which is the one gate that reads
- * the composed prompt instead of what is connected (context-budget.ts). The credential resolver is mocked to
- * SUCCEED, so a refusal can only have come from the context check. */
+// Refused by the context check (context-budget.ts), the one gate that reads the composed prompt rather than what's
+// connected; the credential resolver is mocked to succeed here.
 test("a local model whose served window cannot hold the loop is refused before anything is sent", async () => {
     const tiny = {
         id: "tiny",
@@ -133,12 +126,10 @@ test("a harness refusal rides through with the credential resolver's own code", 
     expect(plan).toMatchObject({ ok: false, code: "claude-reauth", message });
 });
 
-// --- what a permitted turn is handed ----------------------------------------------------------------------
+// what a permitted turn is handed
 
-/* Both native arms resolve a CONCRETE model rather than letting their runtime pick, and for the same reason
- * twice over: the Codex CLI defaults to gpt-5-codex (which a subscription can reject) and OpenCode defaults to
- * a retired models.dev id xAI rejects outright. An omitted model is the common case: the client drops an
- * empty selection from the wire so the daemon resolves its own catalog default. */
+// Both native arms resolve a concrete model rather than trusting their runtime's default: Codex's own default can be
+// rejected by a subscription, OpenCode's is a retired model id xAI rejects outright.
 
 test("Codex resolves the catalog default when the turn pins no model", async () => {
     const services = servicesWith({
@@ -247,26 +238,15 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
     expect(wire(grok)).not.toContain("iq def createIgnoreScope");
 });
 
-/* WHO IS TOLD THAT THE CHECKS AT THE END OF A TURN RUN THEMSELVES, which is a question about REPETITION rather
- * than about the note: its text has its own suite (rules/turn-ending-note.test.ts).
- *
- * The note is a standing instruction the model has to act on, don't run the verify yourself, the daemon runs it
- * when you stop, and for most of its life it rode EVERY turn in a conversation. That is the repetition the
- * dependency notice and the rebase note were each walked back from: invisible in any single message, and paid
- * again on every message forever. By the second turn the note is above the follow-up in the session's own
- * history, where the model can read it.
- *
- * Compaction is the one event that makes that false, so it is the one event that earns the note again. These
- * four cases are the whole gate: said once, not said twice, said again after the window was thrown away, and
- * not said forever after because a compaction happened at some point. */
+// The turn-ending note only needs to be said once per conversation: by the second turn it is already in the session's
+// own history. Compaction erases that history, so it is the one event that re-earns the note.
 const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
     get: async () =>
         SandboxSettingsSchema.parse({
             rules: [{ id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } }],
         }),
 });
-// A conversation as the registry has it: how many turns have run, and the turn a compaction happened under
-// (PersistedAgent.compactedTurn). Every other field of the entry is unread by these gates.
+// A conversation as the registry has it: turns run, and the turn a compaction happened under (compactedTurn).
 const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number }): Services["agents"] =>
     unstubbed<Services["agents"]>("agents", { entry: () => fields as ReturnType<Services["agents"]["entry"]> });
 
@@ -282,8 +262,7 @@ test("a follow-up is not charged for them again: the note stands in the session'
 
     const plan = await planTurn(services, turn({ conversationId: "conv-1" }), context);
 
-    // Nothing in front of the user's words at all, which is what a turn that has already been told everything
-    // should cost.
+    // Nothing in front of the user's words: a turn already told everything costs nothing extra.
     expect(wire(plan)).toBe("do the thing");
 });
 
@@ -312,9 +291,8 @@ test("a holdout assigns one balanced arm deterministically per conversation", ()
     expect(arms).toEqual(new Set([true, false]));
 });
 
-/* THE PROPERTY TWO EXPERIMENTS RUNNING AT ONCE DEPEND ON. With the experiment's name baked into the hash rather
- * than passed in, both would have drawn the same bucket for a conversation, so every conversation taught to
- * search would also have been mapped, and no reading of either could have separated them. */
+// With the experiment name baked into the hash, two experiments running at once draw independent buckets per
+// conversation instead of always agreeing.
 test("two experiments draw independent arms for the same conversation", () => {
     const together = Array.from({ length: 200 }, (_, index) => {
         const id = `conversation-${index}`;
@@ -331,10 +309,10 @@ test("the account the credential resolver answered with becomes the turn's attri
     expect(plan).toMatchObject({ ok: true, account: "acc-1" });
 });
 
-// --- what the runtime's declared record takes off the request ---------------------------------------------
+// what the runtime's declared record takes off the request
 
-// The route has already folded the turn's posture into the request by the time an arm is picked, so these are
-// context edits rather than turn edits: the same shape planTurn sees in production.
+// The route already folds the turn's posture into the request before an arm is picked, so this edits context, not the
+// turn.
 const asking = (overrides: Partial<AgentRequest>): TurnContext => ({ ...context, base: { ...base, ...overrides } });
 
 test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
@@ -351,7 +329,7 @@ test("the Claude Code loop keeps every mode: it is the runtime that honours them
     expect((plan as { request: AgentRequest }).request.permissionMode).toBe("acceptEdits");
 });
 
-// --- the JS execution backend: planned with the request, only where the runtime hosts it ------------------
+// the JS execution backend: planned with the request, only where the runtime hosts it
 
 test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside its shell", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
@@ -364,8 +342,8 @@ test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside i
     });
 });
 
-/* The user's own three-card sketch, as a test: code without bash is a real posture (the backend mounts, Bash
- * goes), and a card that switches code off keeps its shell: two switches, not one under two names. */
+// Code-only and shell-only are independent switches, not one control under two names: turning off shell still mounts
+// the JS backend, and turning off code still keeps Bash.
 test("a card decides each backend on its own: code-only, and shell-only, both plan exactly what they say", async () => {
     const cards: Persona[] = [
         { id: "code-only", capabilities: [], powers: PersonaPowersSchema.parse({ shell: false }) },
@@ -388,8 +366,8 @@ test("a runtime that hosts no js backend is handed no plan for it, whatever the 
     expect((plan as { request: AgentRequest }).request.jsExecution).toBeUndefined();
 });
 
-// Codex forwards reasoning effort (modelReasoningEffort); OpenCode takes a model id and a prompt and nothing
-// else, so an effort riding a Grok request is a value nobody reads.
+// Codex forwards reasoning effort (modelReasoningEffort); OpenCode only takes a model id and a prompt, so an effort
+// riding a Grok request is read by nobody.
 test("effort reaches the runtimes that forward it and no others", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ effort: "high" }));
     expect((codex as { request: AgentRequest }).request.effort).toBe("high");
@@ -404,14 +382,8 @@ test("effort reaches the runtimes that forward it and no others", async () => {
     expect((grok as { request: AgentRequest }).request.effort).toBeUndefined();
 });
 
-/* FAST SPEED PASSES TWO GATES, and the second one is the whole reason this test exists.
- *
- * The first is the runtime's declared record, like every other control here. The second is the ROUTE: a
- * codex/grok/endpoint turn on the claude-code harness reads the FULL Claude Code record: same loop, same
- * ceiling, `fastMode: true`, and is then pointed at the sandbox's translator, which the harness refuses fast
- * mode for because it is not Anthropic's own endpoint. A capability check alone therefore says yes to a turn
- * that cannot possibly go fast, and the user would be left reading `not_first_party` on a control the composer
- * offered them. */
+// Fast speed passes two gates: the runtime's declared capability, and the route — a codex/grok/endpoint turn riding the
+// Claude Code harness inherits its record, which the harness refuses fast mode for on a non-Anthropic endpoint.
 test("fast speed reaches a native Claude turn", async () => {
     const plan = await planTurn(harnessServices(), turn(), asking({ fast: true }));
 
@@ -419,8 +391,8 @@ test("fast speed reaches a native Claude turn", async () => {
 });
 
 test("fast speed is withheld from a routed turn, whose endpoint the harness would refuse", async () => {
-    // What makes a turn routed is the credential resolver handing back an endpoint instead of an OAuth token:
-    // the same shape a codex/grok/kimi/gemini turn on this harness gets in production.
+    // Routed means the resolver returns an endpoint, not an OAuth token, as a codex/grok/kimi/gemini turn does in
+    // production.
     credentials.mockResolvedValue({
         ok: true,
         credentials: { endpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gpt-5.6-codex" }, account: "sub" },
@@ -452,14 +424,13 @@ test("fast speed is withheld from every runtime that isn't the Claude Code loop"
     expect((codex as { request: AgentRequest }).request.fast).toBeUndefined();
 });
 
-/* A runtime that can't enter the turn's mount namespace is cwd'd into its worktree and nothing more, so an
- * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
- * left that can keep it inside its own branch: the full explanation opens the provider session, then a compact
- * reminder preserves the invariant without accumulating the paragraph on every turn. */
+// A runtime that can't enter the turn's mount namespace is only cwd'd into its worktree, so an absolute /work path
+// would otherwise reach the shared checkout; the note keeps it inside its own branch, in full once then as compact
+// reminders.
 test("a cwd-isolated runtime gets one worktree explanation, then compact reminders; a namespaced one gets neither", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
-    // OpenCode is its own loop with no spawn seam of ours, so it stays on the cwd side of the axis. Codex is on
-    // the namespace side with the Claude Code loop: its app-server is a child process nsenter can place.
+    // OpenCode has no spawn seam of ours, so it stays on the cwd side; Codex runs under the Claude Code loop, whose
+    // app-server is a child process nsenter can place in the namespace.
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
             connected: async () => true,
@@ -517,9 +488,8 @@ test("a Claude Code turn is told which automatic check runs at Stop", async () =
     expect(wire(await planTurn(harnessServices(), turn(), context))).toBe("do the thing");
 });
 
-/* The pre-turn rebase is SILENT to the model: it moved the tree, and telling the agent so only ever bought a
- * verification sweep it then reported as green (turn-preamble.ts). The human still sees it in the transcript's
- * worktree frame; this is what keeps it out of the words any of the four runtimes read. */
+// The pre-turn rebase says nothing to the model: telling it only bought a verification sweep reported green. The human
+// still sees it in the transcript's worktree frame.
 test("a rebased branch says nothing to any runtime", async () => {
     const isolated: TurnContext = {
         ...context,
@@ -532,15 +502,10 @@ test("a rebased branch says nothing to any runtime", async () => {
     }
 });
 
-// --- the turn's standing instructions, on every runtime that will take them --------------------------------
+// the turn's standing instructions, on every runtime that will take them
 
-/* THE SETTING WAS A CLAUDE CODE SETTING WEARING A SANDBOX SETTING'S NAME. The composer offers Codex, Grok and
- * Gemini on their own runtimes, and a turn on any of them ran without the owner's system prompt, and without
- * the persona note, which says which accounts a session may speak through, while nothing on screen said so.
- * The failure is silent by construction: a dropped prompt errors nowhere.
- *
- * So the assertions here are about WHICH FIELD each runtime gets, per its declared answer (capabilitiesOf's
- * `instructions`), rather than about the words: the composition itself is system-prompt.test.ts's subject. */
+// A turn on Codex, Grok or Gemini could silently run without the owner's system prompt or persona note, with nothing on
+// screen saying so. Asserts which field each runtime gets, not the wording (system-prompt.test.ts's subject).
 const CUSTOM_PROMPT = "You write release notes.";
 const customSettings = (): SandboxSettings => SandboxSettingsSchema.parse({ systemPromptMode: "custom", systemPrompt: CUSTOM_PROMPT });
 
@@ -557,8 +522,8 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
     const codex = await planTurn(withSettings(codexServices(), customSettings()), turn({ agent: "codex" }), context);
     expect((codex as { request: AgentRequest }).request.systemPrompt).toBe(CUSTOM_PROMPT);
 
-    /* OpenCode has no seam for replacing its own base, so the owner's text arrives as an addition, which the
-     * settings page says out loud rather than promising a replacement two providers cannot perform. */
+    // OpenCode has no seam to replace its own base prompt, so the owner's text arrives as an addition instead, matching
+    // what the settings page promises rather than a replacement it can't perform.
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
             connected: async () => true,
@@ -570,10 +535,8 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
     expect((grok as { request: AgentRequest }).request.systemAppend).toBe(CUSTOM_PROMPT);
 });
 
-/* THE WORKSPACE CONVENTIONS TRAVEL TO THE RUNTIMES THAT HAVE NO OTHER WAY TO HEAR THEM. `refs/` and `public/`
- * are facts about the filesystem: one is excluded from every scanner, the other is served on the open
- * internet, so a Codex turn that has never been told is one that will eventually commit a clone or publish a
- * log. The Claude Code loop composes them itself (sdkSystemPrompt), which is why it must NOT get them twice. */
+// `refs/` (excluded from scanners) and `public/` (served on the open internet) must reach a runtime with no other way
+// to learn them, like Codex; the Claude Code loop composes them itself and must not be told twice.
 test("a native runtime is told the workspace conventions; the Claude Code loop is not told twice", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), context);
     expect((codex as { request: AgentRequest }).request.systemAppend).toContain("`refs/`");
@@ -582,24 +545,15 @@ test("a native runtime is told the workspace conventions; the Claude Code loop i
     expect((claude as { request: AgentRequest }).request.systemAppend).toBeUndefined();
 });
 
-/* A RULE'S TURN-ENDING COMMAND HAS TO RUN INSIDE THE TURN, and for a long time it ran beside it.
- *
- * The check is spawned into a tmux pane, and the tmux server lives in the DAEMON's namespace, cwd'd at the
- * worktree. A git worktree carries tracked files only, so every dependency tree there is an EMPTY directory —
- * they exist solely as overlay mounts inside the turn's namespace (agents/isolation.ts). So the workspace's own
- * `cd intentic && pnpm lint && pnpm verify` came back `sh: 1: oxlint: not found` on every isolated turn, and
- * the model was told to repair a diff that was fine.
- *
- * `bash -c` with the whole line quoted is the other half: a rule's command is a shell line and nsenter takes an
- * argv, so handed over bare, everything after the first `&&` would run outside the namespace again. */
+// A rule's command must run inside the turn's namespace, not the daemon's: the daemon-side worktree has empty
+// dependency directories (isolation.ts), so an unqualified command fails. `bash -c` with the whole line quoted keeps a
+// shell line as nsenter's single argv.
 test("a rule's command enters the turn's namespace, and only when there is one", () => {
     const anchored = ruleCommandIn(`cd intentic && pnpm lint`, { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined });
     expect(anchored).toContain(`nsenter --mount=/proc/4242/ns/mnt`);
     expect(anchored).toContain(`--wdns=/work`);
-    /* And it does not carry the daemon's own `PWD` in with it, which is what decides where this very command's
-     * relative `cd intentic` lands: with the stale one inherited it resolved under the worktree's own path,
-     * outside every mirror mount, and the check reported a red tree over a missing workspace binary
-     * (agents/isolation.ts explains why bash keeps that value). */
+    // Strips the daemon's PWD/OLDPWD so the command's relative cd resolves against nsenter's cwd, not an inherited
+    // stale one.
     expect(anchored).toContain(`env -u PWD -u OLDPWD`);
     // The whole line is one argument, so the `&&` is the inner shell's rather than the outer one's.
     expect(anchored).toMatch(/bash -c '.*pnpm lint.*'/u);

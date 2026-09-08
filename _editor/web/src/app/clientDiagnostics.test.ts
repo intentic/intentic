@@ -1,9 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-/* THE RULES, not the plumbing. A diagnostic channel that misbehaves is worse than none, so what these pin is the
- * three promises the module makes to its callers, which are an error handler, an unload hook and a perf recorder:
- * it never throws, it never blocks, and it never grows without bound while the thing it is describing is still
- * going wrong. */
+// Pins the module's three promises to its callers (an error handler, an unload hook, a perf recorder): it never
+// throws, never blocks, and never grows unbounded while the thing it's describing is still going wrong.
 
 const target = { base: `https://sandbox.example`, connectToken: undefined };
 const fetched: { body: unknown; keepalive: boolean | undefined }[] = [];
@@ -55,8 +53,8 @@ test("the post is keepalive, which is what makes a report survive the reload it 
     flushClientDiagnostics();
     await vi.advanceTimersByTimeAsync(0);
 
-    // An ordinary fetch issued before location.reload() is cancelled with the page. This is the whole reason the
-    // self-heal report is not lost exactly when it matters.
+    // An ordinary fetch issued before `location.reload()` would be cancelled with the page; keepalive is why the
+    // self-heal report survives.
     expect(fetched[0]?.keepalive).toBe(true);
 });
 
@@ -102,10 +100,8 @@ test("reporting cannot throw, whatever it is handed", async () => {
     // Called from an error handler: a reporter that throws turns one bug into two.
     expect(() => reportClient(`window.error`, `x`, { fields: circular as never })).not.toThrow();
     await vi.advanceTimersByTimeAsync(5_000);
-    /* AND THE REPORT IS DROPPED, not sent half-formed. `resolves.not.toThrow` never said which of those
-     * happened — it was satisfied by the flush settling at all — so what the reporter actually does with an
-     * unserialisable payload was untested either way. It discards it: the queue drains, nothing is posted, and
-     * the caller's own error is still the only one anybody has to deal with. */
+    // The report is dropped, not sent half-formed: not-throwing alone wouldn't prove that, since the flush settling
+    // either way satisfies it. The queue drains and nothing posts, so the caller's error stays the only one to handle.
     expect(fetched).toHaveLength(0);
 });
 

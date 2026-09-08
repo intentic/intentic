@@ -1,23 +1,11 @@
 import { type CommandRun, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
-// Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
-// of those pulled the unmocked half of the graph (the agent-run model resolver and the contract it resolves
-// against) inside the first test's 20s budget: ~1s idle, but several times that on a runner where every core is
-// busy, which is how this file failed with the first test timing out. The second failure was the same one: a
-// timed-out test keeps running, so this file's push landed on the NEXT test's mocks. Collection is bounded by
-// the run rather than by a test, so paying it here costs the same and can't time anything out. Nothing is
-// bound: `load()` resets the module registry and re-executes the (already transformed) graph fresh per test.
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./usePushFlow";
 import { checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "../health/fixProposal";
 
-/* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
- * situation the flow exists for: the user starts a push, walks off to another view, which destroys the panel
- * they started it in, and the run has to finish, send, and raise its question anyway. The old flow lived in
- * that panel's setup, so leaving lost the verdict, the fix proposal, and any sign the push had happened.
- *
- * The seams are the two things that talk to the daemon (the check and git) plus the two the composed fix reads.
- * Each mock owns its state so `vi.resetModules` gives every case a clean flow AND clean seams. */
+// No case here mounts a component: a push must finish, send, and raise its question even after the panel that
+// started it is gone. Each mock owns its state, so `vi.resetModules` gives every case a clean flow and clean seams.
 
 vi.mock(`./usePrepush`, async () => {
     const { computed, ref } = await import(`vue`);
@@ -43,8 +31,8 @@ vi.mock(`./usePrepush`, async () => {
             run.value = settled;
             settle?.(settled);
         },
-        // Vitest keeps a mock factory's result across `resetModules`, so the seam has to be walked back by hand
-        // or each case would open on the last one's verdict.
+        // Vitest keeps a mock factory's result across `resetModules`, so this seam must be walked back by hand or a
+        // case opens on the last one's verdict.
         reset: (): void => {
             run.value = { status: `idle`, command: `pnpm check`, output: `` };
             settle = undefined;
@@ -54,23 +42,23 @@ vi.mock(`./usePrepush`, async () => {
 
 vi.mock(`../changes/useChanges`, async () => {
     const { ref } = await import(`vue`);
-    // ONE of each, shared by every caller: as in the real module, where these are module-level singletons. A
-    // fresh spy per call would have handed the flow a different `syncAll` than the one under assertion.
+    // One of each, shared like the real module's singletons; a fresh spy per call would give the flow a different
+    // `syncAll` than the one under assertion.
     const actionBusy = ref(false);
     const failures = ref(new Map<string, { action: string; detail: string }>());
     const syncAll = vi.fn(async () => {});
     return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
 });
 
-/* The push runs themselves are behind useChanges (which is mocked whole above), so what the flow reaches for
- * here is only the terminal a refused push ran in. The seam names one per repo, the way the daemon does. */
+// Push runs live behind useChanges (mocked above); this seam only tracks the terminal a refused push ran in,
+// one per repo, like the daemon.
 vi.mock(`./usePushRun`, async () => {
     const { computed } = await import(`vue`);
     const sessions = new Map<string, string>();
     return {
         usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: vi.fn() }),
         resetPushRuns: () => sessions.clear(),
-        // The test's own: where a repo's push is running, as the daemon would have named it.
+        // Sets where a repo's push is running, as the daemon would name it.
         pushTerminal: (repo: string, session: string | undefined): void => {
             if (session === undefined) {
                 sessions.delete(repo);
@@ -81,8 +69,8 @@ vi.mock(`./usePushRun`, async () => {
     };
 });
 
-// The check this flow gates on is a `push.starting` rule, so the settings the flow reads carry a rule table
-// rather than a command field: the real shape, so the real reader (prepushCommandOf) runs against it.
+// The flow gates on a `push.starting` rule, so this carries a real rule table, not a bare command field, and
+// exercises the real reader (prepushCommandOf).
 vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
     const { ref } = await import(`vue`);
     const rules = [
@@ -94,11 +82,8 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
             enabled: true,
         },
     ];
-    /* The pinned entry carries its own effort (ModelPinSchema), so the tier the proposal names comes off the
-     * entry being proposed rather than from a setting shared with every other one.
-     *
-     * Filed under `pre-push-fix`, which is this flow's own job: the model lists are per job now, so a pin
-     * written for a documentation sweep must not name the model this proposal spends. */
+    // The pinned entry carries its own effort, so the tier the proposal names comes off the entry, not a shared
+    // setting. Filed under `pre-push-fix`, this flow's own job.
     return {
         useSandboxSettings: () => ({
             settings: ref({ rules, modelRoles: { "pre-push-fix": [{ provider: `claude`, model: `claude-sonnet-4-5`, effort: `high` }] } }),
@@ -106,9 +91,8 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
     };
 });
 
-// The role's list resolves against what this sandbox can actually reach, so the flow's proposal names a model
-// that can be sent. Everything is connected here; which provider is ready is the resolver's own suite's
-// business, not this one's.
+// Resolves against what this sandbox can reach, so the proposal names a model that can actually be sent;
+// provider readiness is a different suite's business.
 vi.mock(`../../chat/session/access`, () => ({ providerReady: () => true }));
 
 vi.mock(`../../sandbox/client/useSandbox`, async () => {
@@ -131,10 +115,8 @@ const PUSH = [{ repo: `intentic`, pull: false, push: true }];
 const load = async () => {
     vi.clearAllMocks();
     vi.resetModules();
-    /* Sequentially, and the seams BEFORE the flow, not a style preference. Imported concurrently, the test's
-     * own `import` of a mocked module raced the flow's, each evaluating the factory, and the two ended up
-     * holding different copies of its state: `finish` resolved a promise the flow was not waiting on, and the
-     * check appeared to hang forever. Warming the registry first makes both sides the same instance. */
+    // Sequential, and seams before the flow, not style: importing concurrently raced the factories into different
+    // instances of their state, so warming the registry first keeps both sides the same.
     const prepush = await import(`./usePrepush`);
     const changes = await import(`../changes/useChanges`);
     const pushRuns = (await import(`./usePushRun`)) as unknown as { pushTerminal: (repo: string, session: string | undefined) => void; resetPushRuns: () => void };
@@ -143,20 +125,19 @@ const load = async () => {
     const module = await import(`./usePushFlow`);
     const seam = prepush as unknown as { finish: (fields: Partial<CommandRun>) => void; reset: () => void };
     seam.reset();
-    // The flow captures useChanges on its first call, so this is the same object it acts through, and the same
-    // singletons the last case left behind, which is why they are put back here.
+    // The flow captures useChanges on its first call; singletons carry over from the last case.
     const git = changes.useChanges();
     git.actionBusy.value = false;
     git.failures.value = new Map();
     return { finish: seam.finish, git, suggestion, pushTerminal: pushRuns.pushTerminal, flow: module.usePushFlow() };
 };
 
-// The seams all resolve immediately, so the flow settles entirely in microtasks: a macrotask boundary drains
-// however many of them a path happens to take, rather than counting ticks that change whenever the code does.
+// The seams resolve immediately, so a macrotask boundary drains however many microtasks a path takes, rather
+// than counting ticks that shift with the code.
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-// This package's suites run on `node`, which has no storage. The remembered duration is the one thing here that
-// uses it, so it gets the smallest possible stand-in rather than the whole of jsdom.
+// This suite runs on `node`, with no storage; the remembered duration is the only thing that touches it, so
+// it gets a minimal stand-in instead of jsdom.
 const stored = new Map<string, string>();
 vi.stubGlobal(`localStorage`, {
     getItem: (key: string) => stored.get(key) ?? null,
@@ -180,12 +161,12 @@ test(`a green check sends the push with nobody watching`, async () => {
     expect(git.syncAll).toHaveBeenCalledWith(PUSH);
     expect(flow.question.value).toBeUndefined();
     expect(flow.stage.value).toBeUndefined();
-    // The only thing a success ever says, and it says it where the click was.
+    // The only thing a success says, and it says it where the click was.
     expect(flow.pushed.value?.what).toBe(`3 commits`);
 });
 
-/* The case the rewrite is for: the verdict lands on a flow whose panel is long gone. Nothing here mounts
- * anything, and a second caller (the notice, the rail) sees the same question rather than a fresh empty one. */
+// The case the rewrite is for: a verdict lands on a flow whose panel is long gone, and a second caller
+// (notice, rail) sees the same question, not a fresh empty one.
 test(`a red check raises a question that outlives the surface that asked`, async () => {
     const { flow, git, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -196,12 +177,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     const settled: CommandRun = { status: `failed`, command: `pnpm check`, output: `2 tests failed`, exitCode: 1 };
     expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: outcomeSummary(settled) });
     expect(flow.question.value?.title).not.toBe(checkOutcome({ ...settled, status: `cancelled` }));
-    /* Composed once, from the failure: text, model and effort, and waiting to be edited whenever the user
-     * gets back to it.
-     *
-     * The MODEL is the head of the sandbox's agent-run list, resolved rather than copied out of the setting:
-     * the proposal is a draft the user can see and send, so naming an entry whose account is gone would put a
-     * model in front of them that cannot run. Same answer every other surface-started run gets. */
+    // Model is resolved from the sandbox's live list, not copied from settings, since a gone account can't run.
     expect(suggestion.composeSession).toHaveBeenCalledTimes(1);
     expect(suggestion.composeSession).toHaveBeenCalledWith(
         expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true }),
@@ -212,7 +188,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     expect(usePushFlow().question.value).toEqual(flow.question.value);
 });
 
-// Push anyway never asks twice, and the verdict it outran has nobody left to interrupt.
+// Push anyway never asks twice; the verdict it outran has nobody left to interrupt.
 test(`pushing anyway mid-run sends at once and the late verdict says nothing`, async () => {
     const { flow, git, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -226,8 +202,8 @@ test(`pushing anyway mid-run sends at once and the late verdict says nothing`, a
     expect(git.syncAll).toHaveBeenCalledTimes(1);
 });
 
-// Stopping the suite is not abandoning the push: the decision it was raised for is still open, and no agent is
-// proposed for a run that was never allowed to find anything.
+// Stopping the suite doesn't abandon the push: the decision is still open, but no fix is proposed for a run
+// that never got to find anything.
 test(`stopping the checks leaves the push waiting and proposes no fix`, async () => {
     const { flow, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -245,7 +221,7 @@ test(`stopping the checks leaves the push waiting and proposes no fix`, async ()
     expect(flow.proposedFix.value).toBeUndefined();
 });
 
-// A command that could not run says nothing about the code, so there is nothing to send an agent after.
+// A command that couldn't run says nothing about the code, so there's nothing to send an agent after.
 test(`a check that could not run asks, but proposes no fix`, async () => {
     const { flow, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -258,8 +234,8 @@ test(`a check that could not run asks, but proposes no fix`, async () => {
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
 
-// "Did my push go" is the question the user actually asked. A refused send has to answer it as loudly as a
-// refused check, or the flow reports success over work still sitting on this disk.
+// "Did my push go" is the real question; a refused send must answer it as loudly as a refused check, or work
+// on disk reads as sent.
 test(`a refused push asks again instead of reporting success`, async () => {
     const { flow, git, finish } = await load();
     git.failures.value = new Map([[`intentic`, { action: `Push failed`, detail: `rejected: non-fast-forward` }]]);
@@ -273,9 +249,8 @@ test(`a refused push asks again instead of reporting success`, async () => {
     expect(flow.question.value?.detail).toContain(`non-fast-forward`);
 });
 
-/* The invitation this design makes (keep working while the suite runs) is exactly what breaks a push fired
- * blind: useChanges refuses a batch while another is in flight, so a green check landing mid-commit would have
- * been dropped and reported as sent. */
+// Keeping working while the suite runs is exactly what breaks a blind push: useChanges refuses a second batch
+// while one's in flight, so a check landing mid-commit must wait, not drop.
 test(`a push waits for a git action the user started while the suite ran`, async () => {
     const { flow, git, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -291,8 +266,7 @@ test(`a push waits for a git action the user started while the suite ran`, async
     expect(flow.pushed.value).toEqual(expect.any(Object));
 });
 
-// Nothing leaves the machine on a pull-only sync, so there is nothing to check, and the outcome is still
-// reported, because "did it go" is asked whether or not a suite was involved.
+// A pull-only sync sends nothing, so there's no check to run, but the outcome is still reported either way.
 test(`a pull-only sync skips the check entirely`, async () => {
     const { flow, git } = await load();
     flow.askSync(`Sync`, `2 commits`, [{ repo: `intentic`, pull: true, push: false }]);
@@ -303,8 +277,8 @@ test(`a pull-only sync skips the check entirely`, async () => {
     expect(flow.pushed.value?.what).toBe(`2 commits`);
 });
 
-// Accepting the proposal is a statement that THIS tree is not the one to push: the agent gets the work, the
-// push does not go, and the question is answered rather than left hanging.
+// Accepting the proposal hands the tree to the agent instead of pushing, answering the question rather than
+// leaving it open.
 test(`handing the failure to an agent starts the session and drops the push`, async () => {
     const { flow, git, suggestion, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -333,8 +307,7 @@ test(`starting a fix with a picked model re-points the session before starting`,
     expect(flow.pending.value).toBeUndefined();
 });
 
-// How long this suite usually takes, so the readout can say more than "it is running": the difference between
-// watching a progress line and being able to walk away from one.
+// How long this suite usually takes, so the readout can say more than "it is running".
 test(`a completed run is remembered as how long the suite takes`, async () => {
     const { flow, finish } = await load();
     expect(flow.typicalMs.value).toBeUndefined();
@@ -346,8 +319,7 @@ test(`a completed run is remembered as how long the suite takes`, async () => {
     expect(localStorage.getItem(`intentic.prepushDuration.sb-1`)).toBe(`120000`);
 });
 
-// A killed run measures nothing: the clock was cut short, and remembering it would teach the readout a duration
-// no suite ever takes.
+// A killed run measures nothing; remembering its cut-short clock would teach the readout a duration no suite takes.
 test(`a timed-out run is not remembered as a duration`, async () => {
     const { flow, finish } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
@@ -358,8 +330,8 @@ test(`a timed-out run is not remembered as a duration`, async () => {
     expect(localStorage.getItem(`intentic.prepushDuration.sb-1`)).toBeNull();
 });
 
-/* A PUSH IS A RUN, and a refused one is filed with it, so the question it raises is built from the same
- * material as a red check's: the command, one line on how it ended, the terminal it ran in, and the fix. */
+// A push is a run, and a refused one is filed with it: the question is built from the same material as a red
+// check's (command, one line on how it ended, the terminal, the fix).
 const refusedBy = (by: PushRun["refusedBy"], over: Partial<PushRun> = {}): PushRun => ({
     status: `failed`,
     repo: `intentic`,
@@ -398,22 +370,17 @@ test(`a push the repository's own hook refused asks with the run, and proposes a
         model: `claude:claude-sonnet-4-5`,
         effort: `high`,
         isolated: true,
-        // Derived the same way the flow derives it, rather than transcribed: a name spelled twice is a join
-        // that can drift, which is the whole reason the id is computed from the failure instead of recorded.
+        // Derived the same way the flow derives it, not transcribed, since spelling a name twice invites drift.
         conversationId: pushFixConversationId(run.repo, fixSignature(run.output)),
     });
     expect(flow.proposedFix.value).toEqual(expect.any(Object));
 });
 
-/* THE DEDUPE. The check runs again on every press of Push, so one broken tree raises this question two and
- * three times over; each press used to mint a fresh conversation, and two frontier agents on the same gates is
- * two worktrees, two branches and a land conflict between them. The id derived from the failure is what makes
- * the second press CONTINUE the first agent (composeSession reuses an open conversation with that name), so
- * what this holds is that the same failure derives the same name and a different one does not. */
+// One broken tree raises this question on every press of Push; the id derived from the failure lets a second
+// press continue the same agent instead of minting a new one.
 test(`two runs of the same failure propose the same conversation, and a different failure does not`, async () => {
-    /* The name proposed for one red run. Read back before the next `load()`, which resets every mock: the
-     * suggestion module's fn survives `resetModules`, so a call captured after the next load is the next
-     * load's call wearing the first one's name. */
+    // Read back before the next `load()`: the suggestion module's mock survives `resetModules`, so a call read
+    // after the next load would wear that load's name.
     const proposedFor = async (output: string): Promise<string | undefined> => {
         const { flow, finish, suggestion } = await load();
         flow.askSync(`Push`, `3 commits`, PUSH);
@@ -425,7 +392,7 @@ test(`two runs of the same failure propose the same conversation, and a differen
         [`verify-push: ${count} of 6 steps failed in ${seconds}s: ${steps}`, ...steps.split(`, `).map((step) => `  ✗ ${step}  exit 1`)].join(`\n`);
 
     const first = await proposedFor(digest(2, 12, `checkout gates, lint`));
-    // The same two gates, a slower run, listed the other way round: the same breakage, so the same agent.
+    // The same two gates, a slower run, listed the other way round: still the same breakage, so the same agent.
     expect(await proposedFor(digest(2, 340, `lint, checkout gates`))).toBe(first);
     expect(first).toBe(pushFixConversationId(`intentic`, `checkout gates,lint`));
 
@@ -433,8 +400,8 @@ test(`two runs of the same failure propose the same conversation, and a differen
     expect(await proposedFor(digest(1, 12, `typecheck`))).not.toBe(first);
 });
 
-// A rejected ref or a dead host says nothing about the code, so there is nothing to send an agent after: the
-// card carries git's own reason and the retry, exactly as a check that could not run proposes no fix.
+// A rejected ref or a dead host says nothing about the code, so there's nothing to send an agent after; the
+// card carries git's reason instead.
 test(`a push the remote rejected asks with git's reason and proposes no fix`, async () => {
     const { flow, git, suggestion, finish } = await load();
     const run = refusedBy(`remote`, { reason: `! [rejected] main -> main (fetch first)` });
@@ -470,8 +437,8 @@ test(`a push that hit its ceiling is named as timed out, in the verb the user cl
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
 
-// No check configured still means a push that can be refused by the repository's own hook, and the fix it
-// proposes reads the same model settings the check's would have.
+// No check configured still leaves a push the hook can refuse, and the fix reads the same model settings a
+// check's would.
 test(`a push with no check configured is still handed to an agent when the hook refuses it`, async () => {
     const { flow, git, suggestion, finish } = await load();
     const run = refusedBy(`hook`);
@@ -479,7 +446,6 @@ test(`a push with no check configured is still handed to an agent when the hook 
     flow.askSync(`Push`, `3 commits`, PUSH);
     finish({ status: `passed` });
     await flush();
-    // The check ran here; the same expectation with the rule removed is what the settings mock cannot vary
-    // per test, so the model carried into the proposal is the assertion that matters: it was read.
+    // The rule is removed here since the mock can't vary per test; the model reaching the proposal is the assertion.
     expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high` }));
 });

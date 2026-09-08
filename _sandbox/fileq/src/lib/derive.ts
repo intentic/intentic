@@ -18,8 +18,8 @@ import { xlsxDeriver } from "./derivers/xlsx.js";
 import { isFresh, readSidecar, removeSidecar, sidecarBody, sidecarPathFor, sha256OfFile, writeSidecar } from "./sidecar.js";
 import { tokensOf } from "./env.js";
 
-/* The pipeline both commands and the daemon's sweep run: place the file, recognize it, route it, keep its
- * shadow honest. One module so `read` and `derive` cannot disagree about what a file's markdown is. */
+// Pipeline both commands and the daemon's sweep run: place the file, recognize it, route it, keep its shadow honest.
+// One module, so `read` and `derive` cannot disagree about a file's markdown.
 
 export const DERIVERS: Record<Format, Deriver> = {
     docx: docxDeriver,
@@ -34,8 +34,7 @@ export const DERIVERS: Record<Format, Deriver> = {
     epub: epubDeriver,
 };
 
-/* Above this a derivation stops being background-cheap (hashing alone reads every byte) and a file this size
- * is data to process programmatically, not a document to shadow. Skipped loudly, per the no-silent-caps rule. */
+// Above this, a derivation isn't background-cheap and the file is data to process, not shadow; skipped loudly.
 export const MAX_SOURCE_BYTES = 200 * 1024 * 1024;
 
 /** Workspace-relative path when `abs` sits under `root`; undefined outside it (no sidecar can exist there). */
@@ -44,9 +43,7 @@ export const relPathIn = (root: string, abs: string): string | undefined => {
     return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? undefined : rel.split(sep).join("/");
 };
 
-/* What the shadow tree refuses to shadow, the CLI's own floor rather than trust in its callers: machine
- * subtrees (node_modules and friends), the daemon's state (a sidecar of a sidecar), the root-level reference
- * shelf (excluded from workspace attention on purpose), and agent worktrees (transient whole checkouts). */
+// What the shadow tree refuses: machine subtrees, the daemon's own state, the reference shelf, agent worktrees.
 export const isDeriveIgnored = (relPath: string): boolean => {
     const segments = relPath.split("/");
     return segments.some((segment) => IGNORED_DIRS.has(segment) || segment === STATE_DIR) || isReferencePath(relPath) || isAgentWorktreePath(relPath);
@@ -73,8 +70,10 @@ export type Outcome =
     | { readonly kind: "removed"; readonly relPath: string; readonly sidecarPath: string }
     | { readonly kind: "skipped"; readonly relPath: string; readonly reason: string };
 
-/** Converge one workspace file's sidecar with its source: derive when stale, reuse when fresh, remove when
- * the source is gone. The daemon's eager path and the CLI's lazy path are both exactly this call. */
+/**
+ * Converges a workspace file's sidecar with its source: derive when stale, reuse fresh, remove when gone.
+ * Both the daemon's eager path and the CLI's lazy path call exactly this.
+ */
 export const ensureSidecar = async (workspaceRoot: string, absPath: string, now: () => Date = () => new Date()): Promise<Outcome> => {
     const relPath = relPathIn(workspaceRoot, absPath);
     if (relPath === undefined) {
@@ -104,10 +103,7 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
         const body = sidecarBody(existing ?? "");
         return { kind: "fresh", relPath, format, sidecarPath, body, tokens: tokensOf(body) };
     }
-    // Neutralized here at the pipeline boundary so every consumer — the capsule on stdout as much as the
-    // sidecar — gets folded text; a forged marker in a pdf's Title must not reach a transcript either.
-    // A parser dying on one corrupt file is that FILE's outcome, never the sweep's: a 500-document pass must
-    // not be killed by the one docx that lies about what it is, so the failure reads as a loud skip.
+    // Neutralized once here so every consumer gets folded text; a corrupt file's failure is a loud skip, not fatal.
     let doc: DerivedDoc;
     try {
         doc = neutralizeDoc(await deriver.derive(absPath));

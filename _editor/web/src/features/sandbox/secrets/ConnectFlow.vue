@@ -5,42 +5,18 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { useChat } from "../../chat/run/useChat";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 
-/* THE sign-in panel: one component for every provider and both mechanisms (a provider's own account and a
- * translator subscription), because a user signing in does the same three things every time: go to the
- * provider, deal with the one thing it hands back, come back. There were two of these, and they had quietly
- * drifted apart (one waited with a spinner, the other didn't; one could name the account, the other couldn't;
- * the same "Cancel" sat in two different places), which is exactly the drift a user reads as "these providers
- * work differently" when the only real difference is the shape of the token.
- *
- * That real difference is the ONE branch here: a device flow means the provider polls itself and the panel is
- * read-only; a redirect flow hands the user something to paste back (Anthropic's authorization code, or the
- * address Google and BigModel dead-end on).
- *
- * THERE IS NO THIRD SHAPE ANY MORE. Meta and Z.ai used to render a password field here — the one connect flow
- * in this app that asked a user to go and find a credential, when both vendors' own CLIs sign in and mint the
- * key themselves. They are sign-ins now, of the two shapes above, so this panel branches on the handshake and
- * never on the provider.
- *
- * ONE SIZE, since there is one kind of place this stands: inside the row or the strip that started the
- * sign-in. It used to have a `prominent` variant for the first screen of a fresh sandbox, back when that screen
- * was a sign-in card taking the middle of the agents board. That card is gone (a new user lands on a chat that
- * can already send, and the free channel is discovered in the model picker), and with it the only caller that
- * ever asked for the big version.
- *
- * Cancel deliberately does NOT live here: it belongs in the single action slot of whatever started this
- * sign-in: see AiAccountSection's row and ChatAccountPanel's strip. useChat is a module singleton, so this
- * reads the live handshake with nothing threaded through props but which row it is unfolding under. */
+// One sign-in panel for every provider and mechanism (own account or translator subscription); branches only on
+// the handshake shape (device: read-only poll; redirect: paste back a code or address), never on the provider. Lives
+// inside whatever row or strip started the sign-in; Cancel belongs to that caller, not here.
 
 const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
 
 const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
 
-// This flow's own key in the account-write ledger: the two mechanisms of one provider (Grok's xAI account and
-// its SuperGrok subscription) are separate connections, so "Finish" must spin for one and not the other.
+// Own key in the busy ledger: a provider's native account and its subscription are separate connections.
 const busyKey = computed(() => (kind === `native` ? provider : translatorKey(provider)));
 
-// The live handshake belonging to THIS row, or nothing: the flows carry their provider, so a sign-in started
-// on one row can never paint itself under another.
+// This row's own live handshake, or nothing; a sign-in started elsewhere never paints under the wrong row.
 const flow = computed(() =>
     kind === `native`
         ? nativeConnectFlow.value?.provider === provider
@@ -51,28 +27,18 @@ const flow = computed(() =>
           : undefined,
 );
 
-// Where the sign-in actually happens, the destination, not the provider's product name: a user about to leave
-// this page wants to recognize the site they land on. The provider's own spec row says which
-// (ProviderSpec.destination), so a provider added to the contract cannot end up with a button reading "Open
-// zai" — which is what the fallback below is, and it should only ever be reached by an id that names no
-// provider at all.
+// Destination site, not the product name (`ProviderSpec.destination`); the fallback should never be reached.
 const destination = computed(() => providerSpec(provider)?.destination ?? provider);
 
-/* Whether this is a NO-PASTE sign-in: the provider (or the daemon) finishes it out of band and this panel is
- * read-only, as against one that hands the user something to bring back. The wire says which shape it is,
- * and for a minted provider it is a fact about the ESTATE rather than about the provider (Z.ai polls
- * internationally and dead-ends on the mainland), so it could not be read off a name here anyway. */
+// No-paste sign-in: finishes out of band, panel stays read-only. Wire-reported, not inferred from the provider
+// name; for a minted provider it depends on the estate (e.g. z.ai polls, the mainland dead-ends).
 const deviceFlow = computed(() => flow.value?.flow === `device`);
 
-/* Whether the thing coming back is a whole ADDRESS rather than a code the provider showed on screen, which
- * decides both the placeholder and whether the dead-end picture is drawn. Every routed redirect is one, and so
- * is a minted redirect (BigModel's), for the same reason: the vendor sends the browser to a loopback port only
- * this container binds, so the page never loads and the grant is in the address bar. Anthropic's paste-back is
- * NOT one — it lands on a real page that shows a code. */
+// Whether the return value is a whole address, not a shown code: true for every routed redirect and BigModel's
+// minted one (both dead-end on a loopback port), false for Anthropic's paste-back (a real page shows the code).
 const redirectFlow = computed(() => flow.value !== undefined && !deviceFlow.value && (kind === `routed` || flow.value.flow === `redirect`));
 
-// Only the mechanics a user cannot infer from the button they just pressed and the field in front of them.
-// Anthropic's flow says everything it needs to in "Open Anthropic" + "Paste code…", so it gets no line at all.
+// Only mechanics not inferable from the button and field already shown; Anthropic's flow needs no extra line.
 const hint = computed<string | undefined>(() => {
     if (!deviceFlow.value) {
         return undefined;
@@ -80,11 +46,8 @@ const hint = computed<string | undefined>(() => {
     if (kind === `routed`) {
         return flow.value?.code ? `Sign in and approve: enter this code if the page asks for it.` : `Approve the sign-in on the page that opens.`;
     }
-    /* Three native no-paste flows now, and the reassurance each needs is different: Grok's is "the code is
-     * already in the page", Cursor's and a minted device sign-in's is "there is no code, and nothing comes back
-     * here" — except that Meta's device flow DOES show a code, which the card above already displays, so what
-     * that one needs is where to type it. Read off the flow's own fields rather than off the provider, so a
-     * fourth sign-in of an existing shape needs no new branch. */
+    // Reassurance differs per no-paste flow (Grok: code's already there; others: nothing comes back; Meta: where to
+    // type its shown code). Read off the flow's own fields, not the provider, so a new sign-in needs no new branch.
     if (provider === `grok`) {
         return `Already filled in at x.ai: approve on any device.`;
     }
@@ -95,55 +58,32 @@ const hint = computed<string | undefined>(() => {
 
 const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address you landed on…` : `Paste code…`));
 
-/* WHAT THE DEAD-END ADDRESS ACTUALLY LOOKS LIKE, per flow, because the picture below exists for exactly one
- * purpose: the user is two tabs away staring at a browser error, and this is what they have to RECOGNIZE. An
- * address drawn with the wrong parameter name is worse than no picture, and the two redirects that reach here
- * genuinely differ — Google's grant is `code`, BigModel's is `authCode`, and they land on different paths.
- * Truncated the way a real one is, since the point is the shape rather than the value. */
+// Fake dead-end address per flow, for the user to recognize against the real error page. Google's grant param is
+// `code`, BigModel's is `authCode`; truncated like a real one since only the shape matters.
 const deadEndAddress = computed(() =>
     kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`,
 );
 
-/* Whether a name typed here would ACTUALLY travel with the sign-in: `connectLabel` is read by completeConnect's
- * paste-back exchange and by no other ending. Every flow that finishes out of band (Grok's device code,
- * Cursor's poll, a minted sign-in, a translator subscription) lands its account minutes later through a route
- * that never saw the field, so offering it there would be a control that silently does nothing — and in all of
- * those cases the name is a rename, on the row the account lands as. */
+// True only for the paste-back flow: `connectLabel` is read solely by `completeConnect`. Every out-of-band flow
+// lands its account through a route that never sees the field; naming there happens as a rename afterward.
 const namesTheAccount = computed(() => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.flow === `paste`);
 
-// Whether this panel is waiting on something the user has to bring back: the state both helpers below arm on,
-// and the only one in which a window listener or a clipboard read is any of our business.
+// Waiting for something to be brought back; the only state the paste listener or clipboard read applies in.
 const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.value);
 
-/* --- The dead end, and getting past it without the user having to think ----------------------------------
- * Google's sign-in ends on a loopback address only the sandbox container binds, so the page NEVER loads for the
- * user. That is not a failure, but it looks exactly like one, and it is the single step of this whole flow that
- * people abandon on. Two things answer it, and they are different kinds of answer:
- *
- *   · the picture in the template, which spends the one moment BEFORE they go showing them the page they are
- *     about to meet, with the part that matters ringed. A sentence saying "the page won't load" is read,
- *     believed, and forgotten by the time the browser is actually showing it;
- *   · this, which means most people never have to act on the picture at all. The grant is in the address they
- *     copied, so the moment they come back with it we take it: from a paste anywhere on the panel, or off the
- *     clipboard by ourselves when the browser lets us read it. */
+// The redirect dead-ends on a loopback address the page can never load; handled two ways: the picture below
+// (recognize it) and this section, which grabs the grant from a paste anywhere or the clipboard so most people never
+// act on the picture at all.
 
-// The pending handshake's `state`, for whichever flow has one. A routed session's lives on the translator flow;
-// a minted redirect's lives on the native one. A paste sign-in's is blank, because it is not a redirect: nothing
-// to recognise off the clipboard.
+// Handshake `state`: the translator flow if routed, else the native one; blank for a non-redirect sign-in.
 const redirectState = computed(() => (kind === `routed` ? (translatorConnectFlow.value?.state ?? ``) : (nativeConnectFlow.value?.state ?? ``)));
 
-/* Whether a string is the address THIS handshake is waiting for. The grant is the query parameter, and the
- * state is what makes it ours: it is matched against the attempt that issued it, so anything else that happens
- * to be in the clipboard (a link, a snippet, another sandbox's sign-in) fails this and is left alone.
- *
- * `authCode=` as well as `code=`, because BigModel names it the first way and everything else names it the
- * second. Reading only `code=` would leave the one flow that most needs this help — the one whose page does not
- * load at all — with nothing recognised off the clipboard and no auto-finish. */
+// Matches this handshake's own grant: the query param plus its issuing `state`, so an unrelated clipboard string
+// is ignored. Checks both `code=` and `authCode=` (BigModel names it the second way).
 const isOurRedirect = (text: string): boolean =>
     (text.includes(`code=`) || text.includes(`authCode=`)) && (redirectState.value === `` || text.includes(redirectState.value));
 
-// The one field the paste flows share: an authorization code or redirect URL, the panel takes
-// the string and hands it to whichever half of the handshake is live.
+// Shared field for the paste flows: a code or a redirect URL, handed to whichever handshake is live.
 const pasted = ref(``);
 const finish = async (): Promise<void> => {
     const value = pasted.value.trim();
@@ -160,20 +100,16 @@ const finish = async (): Promise<void> => {
     }
 };
 
-/* THE FIELD FILLING IS THE WHOLE INTERACTION: there is no second press. Watching the value rather than the
- * paste event catches every way it can arrive (a paste into the field, a paste anywhere on the window, the
- * clipboard read below) with one rule instead of three, and it can only fire on an address carrying this
- * handshake's own state, so a half-typed or wrong-tab string just sits there to be looked at. */
+// Filling the field is the whole interaction, no second press. Watches the value, not the paste event, so every
+// arrival path (field, window, clipboard) shares one rule, firing only once it carries this handshake's own state.
 watch(pasted, (value) => {
     if (redirectFlow.value && awaitingPaste.value && isOurRedirect(value.trim())) {
         void finish();
     }
 });
 
-/* A paste ANYWHERE while this panel is waiting, because "click the field first" is a step that exists only to
- * serve the form. Window-level, so it catches someone who came back to the tab and pressed Ctrl+V at whatever
- * the browser happened to have focused, but never a paste aimed at a field, which includes our own (v-model
- * has that one) and every other input on a settings page this panel may be sitting in. */
+// Catches a paste anywhere on the window while waiting, so the user needn't click the field first; ignores any
+// paste aimed at an actual input (ours included, v-model already handles that).
 const onWindowPaste = (event: ClipboardEvent): void => {
     const target = event.target as HTMLElement | null;
     if (target?.closest(`input, textarea, [contenteditable="true"]`) != null) {
@@ -186,14 +122,9 @@ const onWindowPaste = (event: ClipboardEvent): void => {
     }
 };
 
-/* ONE clipboard read, on the first return after they actually left for the provider, and the narrowness is the
- * design, not caution. Reading on every focus would re-ask Chrome for permission each time the user clicked
- * back into the window, which is a prompt storm in exchange for a convenience; reading once, at the only moment
- * the answer could possibly be the address, costs a single prompt at the moment it makes sense of itself.
- *
- * Best-effort throughout: Firefox refuses page script the clipboard outright, Safari wants a gesture, Chrome
- * may ask and be told no. Every one of those is a silent no-op, because this is an optimization ON TOP of the
- * paste path, never a replacement for it. */
+// One clipboard read, only on the first return from the provider, to avoid re-prompting on every window focus.
+// Best-effort (Firefox/Safari/a declined Chrome prompt all silently no-op); an optimization on top of the paste path,
+// never a replacement.
 const wentToProvider = ref(false);
 const onReturn = (): void => {
     if (!wentToProvider.value || !awaitingPaste.value || document.visibilityState !== `visible` || accountBusy.value !== undefined) {
@@ -211,8 +142,7 @@ const onReturn = (): void => {
         .catch(() => undefined);
 };
 
-// Armed only while there is a handshake to finish: a panel sitting idle in a settings list has no business
-// watching the window's pastes or anybody's clipboard.
+// Armed only while a handshake is live; an idle panel shouldn't watch window pastes or the clipboard.
 let armed = false;
 const arm = (on: boolean): void => {
     if (on === armed) {
@@ -232,10 +162,8 @@ const arm = (on: boolean): void => {
 watch(awaitingPaste, arm, { immediate: true });
 onUnmounted(() => arm(false));
 
-// The display name is a rename, not a step: the daemon derives one from the sign-in identity when it's blank.
-// Leading the flow with that field made every connect look like a form to fill in before anything would happen,
-// so it stays folded away until asked for, and re-folds with the handshake, never carrying a stale open state
-// into the next one. Native only: a translator subscription is named by the account it signs in as.
+// Naming is a rename, not a required step (the daemon derives one when blank); folded away until asked for, and
+// re-folds with each new handshake. Native only, a subscription is named by the account it signs in as.
 const namingAccount = ref(false);
 watch(flow, (live) => {
     if (live === undefined) {
@@ -248,29 +176,23 @@ watch(flow, (live) => {
 
 <template>
     <div v-if="flow" class="flex flex-col gap-2.5">
-        <!-- `self-start`: in a column the button would stretch edge to edge, which reads as a banner rather than
-             as the first step of three. -->
+        <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
         <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">
             <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
         </Button>
-        <!-- Above what it describes, never below: this line is the instruction for the code or the field that
-             follows it, and an instruction read afterwards is read too late. -->
+        <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
         <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
-        <!-- A device code is read, not typed: one line, at a size you can read off a second screen, with copy as
-             an icon rather than a chip competing with the real action. -->
+        <!-- Device code is read, not typed: sized for a second screen, with copy as an icon, not a competing chip. -->
         <div v-if="deviceFlow && flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
             <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
             <CopyButton :text="flow.code" />
         </div>
         <p v-else-if="deviceFlow" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
         <template v-else>
-            <!-- THE PAGE THEY ARE ABOUT TO MEET, drawn before they meet it. This is the step people abandon on:
-                 the provider finishes on an address only the sandbox can serve, so the browser shows a plain
-                 error and every instinct says the sign-in broke. A picture rather than a sentence because the
-                 sentence is on the screen they are LEAVING: by the time it matters they are two tabs away
-                 looking at the real thing, and what they need then is to RECOGNIZE it. Only for the redirects
-                 that actually dead-end (Google's, BigModel's); Anthropic's paste-back lands on a real page and
-                 needs none of this. -->
+            <!--
+                Shows the dead-end page before they meet it, so they recognize rather than read about it once two tabs away.
+                Only for redirects that actually dead-end (Google, BigModel); Anthropic's paste-back needs none of this.
+            -->
             <template v-if="redirectFlow">
                 <p class="text-2xs text-muted">
                     After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back inside

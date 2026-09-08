@@ -63,28 +63,12 @@ import {
 import { conversationView } from "../panel/useChat-view";
 import { openConversation } from "../panel/useChat-reveal";
 
-/* Manages the shared Claude Code chat as a module-level singleton: a set of concurrent conversations (the
- * tabs), plus the global account connection and turn preferences. A singleton
- * so the open conversations survive navigation between workspace areas (the chat panel lives in the
- * persistent shell). Each Conversation owns its own stream, so a background tab keeps generating while the
- * user views another.
- *
- * A singleton PER WINDOW: every browser window runs a full copy of the app with its own tab set (windowStore
- * has why), and only daemon-backed state converges between them on its own. What does cross windows is the
- * SUMMONS, a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
- * in every window, so a click made in any of them is followed by all of them, the chat's own floating window
- * included.
- *
- * WHILE THE CHAT IS DRAWN BY ANOTHER WINDOW, this window's tab list is a SHADOW: the tabs it built before the
- * panel left plus every summons since, with composers frozen at whatever they last heard. It is kept for the
- * actions that need a Conversation to act on from here (a resolve prompt sent from the board, a stop, a rename),
- * and it is replaced wholesale from the seed the moment the panel returns (restoreTabs). Nothing reads it for
- * DISPLAY: what the chat is showing is asked of `chatStrip` (useChat-strip.ts), which answers from this list only
- * while this window draws the chat and from the drawing window's published strip otherwise (chatEcho.ts). Every
- * defect the popped-out chat has had was a reader mixing the two. */
+// Module-level singleton: the shared chat's open conversations (tabs), account connections, and turn
+// preferences. One per window; while another window draws the chat, this window's tabs are a frozen shadow, and
+// display goes through chatStrip (useChat-strip.ts), not this list directly.
 
-// The focused conversation's view, what the store itself binds, and what every surface outside the chat panel
-// reads through `useChat()`.
+// The focused conversation's view: what the store binds and what every surface outside the chat panel reads
+// via useChat().
 const activeView = conversationView(active);
 const {
     messages,
@@ -125,26 +109,18 @@ const {
     decidePermission,
 } = activeView;
 
-// Reset the whole chat singleton when the active sandbox changes (see sandboxScope). Conversations, history,
-// and the account-connection state all belong to the sandbox they were loaded from, carrying them onto a
-// different sandbox would stream against the wrong daemon and show its "connected" status falsely.
+// Resets the chat singleton when the active sandbox changes (see sandboxScope): conversations, history, and
+// account-connection state all belong to the sandbox they loaded from.
 export const resetChat = (): void => {
     for (const conversation of conversations.value) {
         conversation.abort();
     }
-    /* Dropped BEFORE the tabs are rebuilt, not with the rest of the sandbox-scoped state below: restoring a tab
-     * resolves its account against these, and the outgoing sandbox's list is not an answer about the incoming
-     * one, it would validate the new sandbox's remembered pick against credentials from the old, and hand every
-     * restored tab a foreign account id as the "first" one.
-     *
-     * Cleared rather than emptied-and-declared: the incoming sandbox's connections are unknown until ITS daemon
-     * answers, and every surface shows that as a wait rather than as "you have nothing connected". */
+    // Cleared before restoreTabs, or it validates new picks against the old sandbox's accounts.
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
     accountsLoaded.value = false;
-    // Rebuilds the tabs AND re-seeds the account pick from the incoming sandbox's own remembered one.
+    // Rebuilds tabs and re-seeds the account pick from the incoming sandbox's own remembered one.
     restoreTabs();
-    // The new sandbox's tabs get the same instant paint a reload does; the mirror is keyed by conversation, so
-    // a switch reads that sandbox's transcripts, never the one just left.
+    // Mirror is keyed by conversation, so new tabs paint from this sandbox's own cache, not the old one's.
     paintCachedTranscripts(conversations.value);
     sessions.value = [];
     providerModels.value = perProvider<ModelOption[]>(() => []);
@@ -152,8 +128,7 @@ export const resetChat = (): void => {
     retireCommandReads();
     providerDefaultModel.value = perProvider(() => ``);
     providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
-    // Which endpoints the INCOMING sandbox has, the free trial among them, is unknown until its own daemon
-    // answers: the same wait `accountsLoaded` above declares, for the other half of the same picture.
+    // Which endpoints (the free trial included) this sandbox has is unknown until its own daemon answers.
     endpointProviders.value = [];
     endpointsLoaded.value = false;
     /* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can
@@ -168,9 +143,9 @@ export const resetChat = (): void => {
     cancelTranslatorConnect();
     accountBusy.value = undefined;
     translatorAccounts.value = noTranslatorAccounts();
-    // Nor its headroom: the map is keyed by ids the outgoing daemon minted.
+    // Keyed by ids the outgoing daemon minted, so it can't answer for the incoming sandbox either.
     usageByAccount.value = {};
-    // The outgoing sandbox's totals are not an answer about the incoming one, so its rows wait again.
+    // Outgoing sandbox's totals aren't an answer for the incoming one, so these wait again too.
     accountUsage.value = {};
     usageLoaded.value = false;
     providerRefusals.value = {};
@@ -261,6 +236,5 @@ export function useChat() {
     };
 }
 
-// One tab store per window: a hot update that re-ran this module would hand the panel a second, empty strip while
-// the channel's readers went on writing to the first (hotReload.ts).
+// Singleton per window: a hot update re-running this module would hand the panel a second, empty tab store.
 reloadOnHotUpdate(import.meta);

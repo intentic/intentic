@@ -28,21 +28,10 @@ import {
 } from "./runs";
 import { criteriaOf, type Story, targetKeyOf, titleOf } from "./stories";
 
-/* Runs, and the fleet sessions that produce them.
- *
- * A test session is an ISOLATED fleet agent: `POST /agent` with a conversationId and `isolated: true` is what
- * creates one (agent.routes.ts registers a fleet entry for exactly that shape and no other). That is the whole
- * reason this extension owns no session machinery, the worktree, the live status, the cost, the transcript and
- * the /agents/<id> page all already exist, and a run is just N of them started at once with a derived id.
- *
- * `bypassPermissions` because a test that parks on a permission card is a test that never finishes: nobody is
- * watching a fan-out of ten. The scope is bounded the way the fleet bounds it (each session is in its
- * own worktree) and the brief's first paragraph is "you are a tester, do not modify the source".
- *
- * Live status is JOINED, never stored: the conversation ids are derived from the run id, so `GET /agents`
- * filtered by prefix IS the state of every registered session. A refusal before registration is the one fact
- * the fleet cannot carry, so the manifest keeps it until Retry succeeds. The same roster join reaches one step
- * further for the live BROWSER, see `browsers` below. */
+// A test session is an isolated fleet agent (POST /agent, a derived conversationId, isolated:true); this extension owns
+// no session machinery, since the fleet's worktree, status, cost and transcript already exist. `bypassPermissions`,
+// since an unattended fan-out can't answer a permission card. Live status joins GET /agents by conversation id prefix,
+// never stored.
 
 const POLL_MS = 3000;
 
@@ -57,8 +46,8 @@ export interface RunRow {
     readonly running: boolean;
 }
 
-// A persisted refusal means "not started" only while the fleet has no session. This one rule also covers the
-// narrow success-before-manifest-write window of Retry: the live session is the stronger fact.
+// A persisted refusal means "not started" only while the fleet has no matching session; this also covers Retry's narrow
+// success-before-write window, since a live session is the stronger fact.
 export const launchFailureOf = (run: Pick<RunRow, "manifest" | "agents">, slug: string): string | undefined => {
     const failure = run.manifest.launchFailures[slug];
     if (failure === undefined) {
@@ -74,18 +63,18 @@ export interface StoryOutcome {
     readonly invalidResult?: boolean;
 }
 
-// The live Chromium one test session is driving, when there is one to watch.
+// The live Chromium a test session is driving, when there is one to watch.
 export interface LiveBrowser {
-    // The tmux-listed session name, what `api.terminal.open` is handed.
+    // The tmux-listed session name, what api.terminal.open is handed.
     readonly session: string;
-    // The page it is on right now, straight off the daemon's listing.
+    // The page it's on right now, straight off the daemon's listing.
     readonly url?: string | undefined;
 }
 
 export interface StartRunInput {
     readonly stories: readonly Story[];
-    // The app under test per story GROUP, keyed by stories.ts targetKeyOf, so a repo serving a marketing site
-    // and a web app points each of their groups at its own server.
+    // The app under test per story group (targetKeyOf), so a repo serving several apps points each group at its own
+    // server.
     readonly targets: Readonly<Record<string, string>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     readonly notes: Readonly<Record<string, string>>;
@@ -115,8 +104,8 @@ export function useRuns() {
         },
     });
 
-    // The fleet roster, polled only while some run still has work in flight. `GET /agents` is the whole fleet;
-    // the per-run join happens below.
+    // The fleet roster, polled only while some run has work in flight; GET /agents is the whole fleet, the per-run join
+    // happens below.
     const conversationIds = computed(() => new Set((runsQuery.data.value ?? []).flatMap((run) => run.stories.map((story) => story.conversationId))));
     const agentsQuery = useQuery({
         queryKey: agentsKey,
@@ -143,18 +132,9 @@ export function useRuns() {
 
     const live = computed<boolean>(() => runs.value.some((run) => run.running));
 
-    /* THE SUPERVISION SEAM. A test session drives a real Chromium that the daemon already attaches to over CDP
-     * and streams into the Browsers area, with a tab per page and a Take control button. Nothing had to be
-     * built here for that; what was missing was the pointer.
-     *
-     * The join is two hops and neither may be guessed: the fleet roster gives a conversation's `sessionId`, and
-     * `browserSessionName` (the contract's, shared with the daemon that NAMES the session) turns that into the
-     * listed name. It is checked against the live listing rather than derived and offered blind, a browser
-     * session exists only once the agent has made its first browser call, and a button that opens an empty view
-     * teaches the user the feature is broken.
-     *
-     * Polled only while a run is live: a finished run's Chromium is gone, and this is the third request in a
-     * three-request view. */
+    // The supervision seam: a session's Chromium already streams into the Browsers area over CDP. The join (roster to
+    // sessionId to browserSessionName to live listing) is checked against the listing, not derived blind, since a
+    // session exists only after the first browser call.
     const browsersQuery = useQuery({
         queryKey: computed(() => api.sandbox.key(`acceptance`, `browsers`)),
         enabled: computed(() => api.sandbox.reachable() && live.value),
@@ -163,7 +143,7 @@ export function useRuns() {
             Object.fromEntries(
                 BrowsersListSchema.parse(await api.sandbox.json(`/system/browsers`))
                     .sessions.filter((session) => session.running)
-                    // The page the agent is on right now, the same one its view opens onto.
+                    // The page the agent is on right now, the same one its own view opens onto.
                     .map((session) => [session.name, session.pages.find((page) => page.active)?.url] as const),
             ),
     });
@@ -178,14 +158,8 @@ export function useRuns() {
         );
     });
 
-    /* WHAT EVERY RECENT RUN FOUND, the verdict of each story of the newest SCAN_RUNS runs, and nothing else.
-     *
-     * The list needs this, and so does every story row: "3 stories, 2 hours ago" does not say whether anything is
-     * broken, and a stories list that cannot show where each promise currently stands is a list of intentions.
-     * Reading only the verdict (not the report, not the steps) is what makes that affordable, one small file per
-     * story, and the SCAN_RUNS bound is the same one the rail badge scans under, so the tile and the list can
-     * never disagree. Runs older than that carry no verdict here until one is opened, which is a read of exactly
-     * the run someone is looking at. */
+    // Verdicts only (not the report or steps) for the newest SCAN_RUNS runs, the same bound the rail badge scans under,
+    // so the tile and the list can never disagree. A run past that bound shows no verdict here until it's opened.
     const scanned = computed<readonly RunManifest[]>(() => (runsQuery.data.value ?? []).slice(0, SCAN_RUNS));
     const verdictsQuery = useQuery({
         queryKey: computed(() => api.sandbox.key(`acceptance`, `verdicts`, scanned.value.map((run) => run.runId).join(`,`))),
@@ -204,8 +178,8 @@ export function useRuns() {
                                     ] as const,
                             ),
                         );
-                        // The run's own key exists even when every story is still walking: "scanned, nothing
-                        // written yet" and "too old to have been read" are different answers to the list.
+                        // The run's own key exists even with no results yet, so "nothing written" and "too old to read"
+                        // stay distinct answers.
                         return [
                             run.runId,
                             Object.fromEntries(results.flatMap(([slug, verdict]) => (verdict === undefined ? [] : [[slug, verdict] as const]))),
@@ -215,9 +189,8 @@ export function useRuns() {
             ),
     });
 
-    /* One run's per-story artifacts. Separate from the run list on purpose: results and reports are only read
-     * for the run being LOOKED at, so a workspace with fifty runs costs fifty reads to list and none to browse.
-     * Re-read on the same interval as the roster while the run is live, so a report appears as it is written. */
+    // One run's artifacts, read only for the run being looked at, so a workspace with fifty runs costs nothing to
+    // browse until one is opened; re-read on the same interval as the roster while live.
     const useRunOutcomes = (runId: Ref<string | undefined>) =>
         useQuery({
             queryKey: computed(() => api.sandbox.key(`acceptance`, `outcomes`, runId.value ?? ``)),
@@ -250,11 +223,8 @@ export function useRuns() {
             },
         });
 
-    /* Start a run: write the manifest FIRST, then fan out the turns.
-     *
-     * Order matters. The manifest is what makes a run discoverable, if a turn started before it existed and the
-     * browser closed in between, there would be a fleet agent with a derived id and nothing on disk saying which
-     * stories it belonged to. A manifest with no turns behind it is the recoverable failure; the reverse is not. */
+    // Writes the manifest before fanning out turns: a turn started with nothing on disk describing it is unrecoverable,
+    // while a manifest with no turns behind it just needs a retry.
     const launch = async (manifest: RunManifest, story: RunManifest["stories"][number]): Promise<void> => {
         const brief = briefFor({
             story,
@@ -268,11 +238,10 @@ export function useRuns() {
             conversationId: story.conversationId,
             isolated: true,
             permissionMode: `bypassPermissions`,
-            // Unattended like every surface-started run, but this one keeps a picker, because a run
-            // fans a whole session out PER STORY and the tier is therefore a per-run decision about
-            // spend. An explicit model wins over the setting; an empty one lets it answer.
+            // Unattended like every surface-started run, but the tier is a per-run spend decision here, since one run
+            // fans a session out per story.
             unattended: true,
-            // Which of the owner's model lists pays for it (Sandbox ▸ Agent ▸ Models).
+            // Which of the owner's model lists pays for it (Sandbox / Agent / Models).
             runRole: `acceptance-run`,
             // Spread verbatim: the pick's fields ARE the turn's (contract AgentRunPickSchema).
             ...manifest.pick,
@@ -285,8 +254,8 @@ export function useRuns() {
     const start = async (input: StartRunInput): Promise<string> => {
         const createdAt = Date.now();
         const runId = runIdAt(createdAt);
-        // The list prefetch is deliberately bounded, but a run is not: every selected file is read HERE, at the
-        // point-in-time the run records. Missing text refuses before a manifest or any paid turn is created.
+        // Every selected story is read here, at the run's own point in time, unlike the list's bounded prefetch;
+        // missing text refuses before any turn is created.
         const snapshots = await Promise.all(
             input.stories.map(async (story) => {
                 const content = await api.workspace.file(story.path);
@@ -305,9 +274,8 @@ export function useRuns() {
             stories: snapshots,
         });
         await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));
-        // Fired together rather than in sequence: the fleet runs them in parallel anyway, and awaiting each ack
-        // in turn would make the last story's card appear seconds after the first's for no reason. The manifest's
-        // own story entries are what the turns are built from, so the conversation id on disk is the one started.
+        // Fired together, not in sequence, since the fleet runs them in parallel anyway and sequential awaits would
+        // stagger the cards for no reason.
         const launched = await Promise.allSettled(manifest.stories.map(async (story) => await launch(manifest, story)));
         const launchFailures = Object.fromEntries(
             launched.flatMap((result, index) =>
@@ -328,8 +296,8 @@ export function useRuns() {
             return;
         }
         try {
-            // This catch ends with the provider call. If clearing the manifest fails after the launch was
-            // acknowledged, that storage error must not be rewritten as though the provider refused a session.
+            // Scoped to the provider call alone, so a storage failure after a successful launch isn't rewritten as a
+            // refused session.
             try {
                 await launch(manifest, story);
             } catch (error) {
@@ -360,11 +328,10 @@ export function useRuns() {
 
     return {
         runs,
-        // Keyed by conversationId, the row asks `browsers[story.conversationId]` and shows a Watch button when
-        // there is something to watch.
+        // Keyed by conversationId; a row checks `browsers[story.conversationId]` to show its Watch button.
         browsers,
-        // runId → slug → verdict, for the newest SCAN_RUNS runs. A runId that is absent was never read; a runId
-        // present with no entry for a slug has no result written yet.
+        // runId -> slug -> verdict for the newest SCAN_RUNS runs; an absent runId was never read, a present one with no
+        // slug entry has no result yet.
         verdicts: computed<Readonly<Record<string, Readonly<Record<string, Verdict>>>>>(() => verdictsQuery.data.value ?? {}),
         error: computed(
             () =>

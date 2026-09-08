@@ -2,9 +2,7 @@ import { expect, test } from "vitest";
 import { identifyPort, type PortAttribution } from "./port-identity.js";
 import type { ListeningPort } from "./port-scan.js";
 
-/* What each row of the Ports view SAYS, which is the whole point of this module: the numbers were never the
- * confusing part. Each case below is a listener a stock sandbox actually has, so the assertions double as the
- * inventory of what a reader sees on a box where they have started nothing themselves. */
+// What each row of the Ports view says, not the port numbers; each case is a listener a stock sandbox actually has.
 
 const attribution = (
     extensions: Record<string, { extensionId: string; processName: string }> = {},
@@ -18,8 +16,7 @@ const attribution = (
 const listener = (over: Partial<ListeningPort>): ListeningPort => ({ port: 3000, host: "127.0.0.1", forwardable: true, ...over });
 
 test("the sandbox's own processes are named, not left as argv, and file under system wherever they run", () => {
-    // The row that motivated this: the daemon's cwd is the workspace root, so it used to file under the user's
-    // own ports carrying a Preview button for the service rendering the page.
+    // The daemon's own cwd is the workspace root, which could misfile it as a user's own port.
     expect(
         identifyPort(
             listener({ command: "node --report-on-fatalerror --report-directory=/history/logs /opt/sandbox/dist/main.js", cwd: "/work" }),
@@ -31,7 +28,7 @@ test("the sandbox's own processes are named, not left as argv, and file under sy
         origin: "sandbox",
         kind: "system",
     });
-    // The backend host is also a script under the install dir and must beat the catch-all above it.
+    // Must beat the catch-all above it: also a script under the install dir.
     expect(
         identifyPort(
             listener({ command: "/usr/local/bin/node /opt/sandbox/dist/extensions/backend/backend-host-main.js", cwd: "/work" }),
@@ -42,7 +39,7 @@ test("the sandbox's own processes are named, not left as argv, and file under sy
         "Model request router",
     );
     expect(identifyPort(listener({ command: "opencode serve --hostname=127.0.0.1 --port=4096", cwd: "/work" }), attribution()).kind).toBe("system");
-    // Named by the scan itself (no process in this namespace owns the socket), and named for people here.
+    // No process in this namespace owns the socket; named by the scan itself.
     const dns = identifyPort(listener({ command: "Docker embedded DNS" }), attribution());
     expect(dns.title).not.toBe("Sandbox service");
     expect(dns.kind).toBe("system");
@@ -71,14 +68,13 @@ test("a published container port says which port answers inside the container", 
         title: "Container port",
         purpose: "A container running in this sandbox publishes its port 5432 here.",
         origin: "container",
-        // The user's, deliberately: the sandbox only provides the plumbing, the container is theirs to preview.
+        // The container is the user's to preview; the sandbox only provides the plumbing.
         kind: "workspace",
     });
 });
 
 test("an extension's background service is named after the extension, not after its command", () => {
-    // Supervised services descend from the daemon, not from any tmux pane, so the row is recognised by the
-    // PORT the supervisor assigned rather than by a session it does not have.
+    // Supervised services descend from the daemon, not a tmux pane; recognized by port, not session.
     expect(
         identifyPort(
             listener({ port: 40085, command: "node dist/gateway.js", cwd: "/opt/extensions/discord" }),
@@ -90,7 +86,7 @@ test("an extension's background service is named after the extension, not after 
         origin: "extension",
         kind: "system",
     });
-    // A service whose extension index entry is gone (uninstalled mid-scan) still reads as what it is.
+    // An extension index entry that's gone (uninstalled mid-scan) still reads as what it is.
     expect(identifyPort(listener({ port: 40086, command: "node dist/gateway.js" }), attribution({}, { 40086: "ext-gone-thing" })).title).toBe(
         "Extension service",
     );
@@ -113,14 +109,14 @@ test("a dev server is named by its tool and attributed to the terminal it was st
         origin: "terminal",
         kind: "workspace",
     });
-    // An agent's terminal is the other common owner, and the distinction is the point: the user did not do this.
+    // An agent's terminal is the other common owner; the user did not start this one.
     expect(identifyPort(listener({ command: "python -m http.server 8000", cwd: "/work", session: "agent-1a2b3c4d" }), attribution())).toEqual({
         title: "Static file server",
         purpose: "Started by an agent in its terminal.",
         origin: "agent",
         kind: "workspace",
     });
-    // A repo's panel names the repo it serves; the `--` in a panel key is the nested repo's slash.
+    // A repo's panel names the repo it serves; `--` in a panel key is the nested repo's slash.
     expect(identifyPort(listener({ command: "node .bin/astro dev", cwd: "/work/site", session: "panel-site" }), attribution()).purpose).toBe(
         "The dev server this app runs for site.",
     );

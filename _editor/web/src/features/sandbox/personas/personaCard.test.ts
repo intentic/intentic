@@ -2,9 +2,8 @@ import type { Persona } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { FULL_POWERS, personaSlug, personaStartDirs, personasStartingIn, powersDraftOf, storedPowers } from "./personaCard";
 
-/* The rules two surfaces now share. Each of these is a thing that silently does the WRONG thing when the copies
- * drift rather than failing loudly: an id that differs by a hyphen upserts a different card, and a powers block
- * written where none was needed puts ten fields meaning "yes" into a tracked file. */
+// Rules shared by both persona-card surfaces: an id differing by a hyphen upserts a different card, and a powers
+// block should only be written once some shelf is off.
 
 describe(`personaSlug`, () => {
     it(`turns a typed name into the id it will be committed under`, () => {
@@ -12,16 +11,12 @@ describe(`personaSlug`, () => {
         expect(personaSlug(`  Docs & notes  `)).toBe(`docs-notes`);
     });
 
-    // A name made only of punctuation has no id, which is what makes the form's "use letters or digits" the
-    // check that stops a save rather than a warning beside one.
     it(`has no id for a name with nothing to slug`, () => {
         expect(personaSlug(`!!!`)).toBe(``);
     });
 });
 
 describe(`storedPowers`, () => {
-    /* THE COMMITTED FILE IS A RECORD OF DECISIONS. A card nobody has bounded must store no powers at all:
-     * otherwise the diff on a card someone DID bound is buried in noise on every other card. */
     it(`stores nothing for a card that grants everything`, () => {
         expect(storedPowers(FULL_POWERS)).toBeUndefined();
     });
@@ -30,15 +25,13 @@ describe(`storedPowers`, () => {
         expect(storedPowers({ ...FULL_POWERS, shell: false })).toMatchObject({ files: `write`, shell: false, web: true });
     });
 
-    /* The tri-state is the reason these are optional rather than defaulted arrays: "all of them, including new
-     * ones" and "none of them" are both real answers, and only the second is a list. */
+    // An empty array grants none; a present list bounds it; only an absent field means "all, including new ones".
     it(`treats a materialised grant list as a bound, and keeps an empty one`, () => {
         expect(storedPowers({ ...FULL_POWERS, devices: [] })).toMatchObject({ devices: [] });
         expect(storedPowers({ ...FULL_POWERS, connectors: [`github`] })).toMatchObject({ connectors: [`github`] });
     });
 
-    // An untouched group must not appear at all: a written-out list of today's ids would silently drop whatever
-    // is connected tomorrow.
+    // Omit an all-granted group rather than listing today's ids; a written-out list would exclude anything added later.
     it(`leaves an all-granted group off the stored block`, () => {
         const stored = storedPowers({ ...FULL_POWERS, web: false });
         expect(stored).not.toHaveProperty(`connectors`);
@@ -47,7 +40,6 @@ describe(`storedPowers`, () => {
 });
 
 describe(`powersDraftOf`, () => {
-    // A card written before powers existed opens as the full toolbox, so the form reads the same either way.
     it(`opens a card with no powers as everything on`, () => {
         expect(powersDraftOf({ id: `work`, capabilities: [] })).toEqual(FULL_POWERS);
     });
@@ -71,14 +63,12 @@ describe(`personasStartingIn`, () => {
         { id: `anywhere`, capabilities: [] },
     ];
 
-    // The whole reason the icon opens a list: one folder, several cards with different bounds.
     it(`finds every card that starts in the folder`, () => {
         expect(personasStartingIn(cards, `intentic/_editor`).map((persona) => persona.id)).toEqual([`docs`, `refactor`]);
     });
 
-    /* Matched exactly. A card starting in a subfolder is not this folder's, and a card that merely CARRIES this
-     * repo (the part of the workspace its tree holds) has not been told to start here: claiming either would
-     * make the row assert work the card does not do. */
+    // Exact match only: a subfolder's card, or one that only carries this repo via `context.repos`, is not this
+    // folder's.
     it(`claims neither a subfolder's card nor one that only carries the repo`, () => {
         const found = personasStartingIn(cards, `intentic/_editor`).map((persona) => persona.id);
         expect(found).not.toContain(`deep`);

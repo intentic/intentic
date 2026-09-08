@@ -2,8 +2,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths, settleBarren, sweepableDirs } from "./emptyDirs";
 
-// What the daemon sends: every folder holding nothing but empty folders, root-relative, in tree order. Which of
-// them the explorer OFFERS is what this file decides.
+// Daemon sends every folder holding only empty folders, root-relative, tree order; this file
+// decides which the explorer offers.
 const chain = (paths: readonly string[]): ReadonlyMap<string, readonly string[]> => barrenChildren(paths);
 const all = (paths: readonly string[]): ReadonlySet<string> => new Set(paths);
 
@@ -18,26 +18,22 @@ describe(`sweepableDirs`, () => {
     });
 
     it(`leaves the daemon's own folders alone: its state dir and the skill projections`, () => {
-        // Each is remade on the daemon's next converge, so an offer to sweep one is a loop the owner cannot win.
+        // Remade on the daemon's next converge: sweeping one would be a loop.
         const barren = [STATE_DIR, `${STATE_DIR}/local/cache`, `.agents/skills`, `.claude/skills`];
         expect(sweepableDirs(barren)).toEqual([]);
     });
 
     it(`leaves the folder a fixture sits IN alone: sweeping it would take the fixture with it`, () => {
-        // `.claude` holding nothing but its empty `skills` projection is barren as a fact about the filesystem,
-        // which is what the daemon reports; deleting it would delete the projection the daemon remakes.
+        // The daemon reports `.claude` as barren too, but deleting it would delete the skills projection it remakes.
         expect(sweepableDirs([`.claude`, `.claude/skills`])).toEqual([]);
     });
 
-    // What a brand-new workspace IS: the daemon's furniture and nothing else. Nobody's first minute in the
-    // product should open on a cleanup chore for folders they never made.
     it(`finds nothing to sweep in a fresh workspace`, () => {
         const barren = [`.agents`, `.agents/skills`, `.claude`, `.claude/skills`, `refs`];
         expect(barrenRoots(sweepableDirs(barren), all(barren))).toEqual([]);
     });
 
-    // A repo of the owner's that happens to carry these names is ordinary content: the rule is root-relative,
-    // like every other path rule here.
+    // Rule is root-relative: `app/.claude/skills` isn't the daemon's own folder, so it can still be swept.
     it(`still sweeps a repo's own .claude/skills`, () => {
         const barren = [`app`, `app/.claude`, `app/.claude/skills`];
         expect(sweepableDirs(barren)).toEqual(barren);
@@ -51,14 +47,13 @@ describe(`barrenRoots`, () => {
     });
 
     it(`heads a branch at the deepest folder that has settled, not above it`, () => {
-        // `a` is still inside its settle window (an agent may be scaffolding into it); the branch below it has
-        // held long enough, so that is what the sweep offers.
+        // `a` is still inside its settle window; `a/b` has held long enough to be offered instead.
         const barren = [`a`, `a/b`, `a/b/c`];
         expect(barrenRoots(barren, new Set([`a/b`, `a/b/c`]))).toEqual([`a/b`]);
     });
 
     it(`offers a branch the tree listing never reached: the whole point of asking the daemon`, () => {
-        // Nothing here is in the explorer's tree, which stops at its entry budget around the fourth level.
+        // Sits beyond the tree's entry budget: never in the explorer's own listing.
         const barren = [`repo/src/composables/workspace/old`];
         expect(barrenRoots(barren, all(barren))).toEqual([`repo/src/composables/workspace/old`]);
     });
@@ -102,8 +97,6 @@ describe(`branchDirPaths`, () => {
     });
 
     it(`records what the delete will take, settled or not: the way back has to rebuild all of it`, () => {
-        // The delete removes the root and everything under it, including a folder that emptied a second ago,
-        // so Undo is recorded against the full list rather than the settled subset.
         expect(branchDirPaths(`a`, [`a`, `a/fresh`])).toEqual([`a`, `a/fresh`]);
     });
 });

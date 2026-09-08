@@ -13,18 +13,9 @@ import { useChanges } from "../features/workspace/changes/useChanges";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 
-/* The mobile shell's bottom navigation: four fixed thumb-size tabs. Agents is the primary on-the-go surface:
- * glance at the fleet, tap in to drive one, and carries the "agents need you" badge; Review carries the
- * things-to-act-on badge (agent drafts + uncommitted changes); Menu carries what the sandbox needs from its
- * owner, standing in for the desktop rail's sandbox chip, which a phone has nowhere to put. Everything the
- * desktop rail holds beyond these lives on the Menu page. Navigation stays live while the sandbox catches up:
- * cached files, reviews and transcripts remain useful, while actions inside them still require reachability.
- *
- * REVIEW IS THE APPROVALS EXTENSION'S TILE, PROMOTED. The queue moved out of the app, so the tab reads its route
- * and its owed-count off the same registry entry the desktop rail and the mobile menu render: naming the id
- * for PLACEMENT, exactly as RAIL_GROUPS ranks extension ids, never reaching into the extension's data. With
- * the pack off the tab keeps its place and falls back to the changes half alone: the workspace's own
- * uncommitted work is shell business whatever the queue is. */
+// Four fixed tabs: Agents (fleet, "needs you" badge), Review (drafts plus uncommitted changes owed),
+// Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else lives on
+// the Menu page. Review's tab reads the approvals extension's registry entry by id, for placement only.
 
 interface Tab {
     readonly id: string;
@@ -33,13 +24,9 @@ interface Tab {
     // What the tab says without being opened: the same shape the desktop rail badges with, so one renderer
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
-    /* WHICH WORKSPACE PANEL THIS TAB OWNS, for the two tabs that can share the workspace path. Files is the
-     * bare address and Review (with the approvals pack off) is the Changes panel of the same view, so path
-     * matching alone lit both of them at once and neither tab answered "where am I". Absent on a tab whose
-     * path is its own. */
+    // Which workspace panel this tab owns, for Files and Review sharing the workspace path; absent otherwise.
     readonly panel?: "files" | "changes";
-    // A standing fact about what the tab is currently ABOUT, drawn as a corner glyph and spelled out in the
-    // tab's label: the desktop rail's AreaTile.note, on a bar that badges by exactly the same rules.
+    // A standing fact drawn as a corner glyph and spelled out in the label, like AreaTile.note.
     readonly note?: { readonly icon: IconName; readonly text: string };
 }
 
@@ -47,26 +34,12 @@ const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
 
-/* The approvals extension's activation, when the pack is on: its path is the tab's target and its badge count is
- * the queue's own `owed`: the identical number the desktop rail shows, because it is the same badge() call.
- *
- * MATCHED ON THE VIEW ID, which is what `detectActivations` returns. It used to look for the PACKAGE id
- * (`intentic.approvals`, the publisher-and-name pair the sandbox's extension routes speak) against a list that
- * only ever carries view ids, so nothing ever matched, the tab never once reached the queue it is named for,
- * and its count was the changes half alone. TAB_BAR_IDS is the shared statement of that promotion, so the
- * mobile menu drops the same row rather than listing it a second time under its own name.
- *
- * Resolved in mobileTabs.ts rather than here, because ShellMobile needs the same answer to decide which routes
- * are already one thumb press from home and therefore must NOT grow a back arrow. */
+// Matched by view id (detectActivations); TAB_BAR_IDS is the shared promotion list ShellMobile also reads.
 const approvalsTile = useApprovalsTile();
 
-// Things to act on: the approvals that owe a decision plus uncommitted changes. Once that total is zero but the
-// workspace still owes its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over:
-// so the fact looks the same on a phone as on a desk, and the tab never reads as empty over work that is still
-// waiting.
+// Falls back to the same push-owed glyph as the desktop rail when nothing else needs review.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
-    // A push in flight, or one standing unsent, comes first: it is the thing happening now, and on a phone the
-    // panel that shows it is two taps away (pushBadge.ts).
+    // A push in flight or unsent comes first: it's happening now, and its panel is two taps away.
     const push = pushBadge(pushFlow.stage.value, pushFlow.question.value);
     if (push !== undefined) {
         return push;
@@ -103,18 +76,12 @@ const tabs = computed<readonly Tab[]>(() => [
     { id: `menu`, to: `/menu`, label: `Menu`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
 
-// ONE label per tab, badge and note included: the rail's tileLabel rule, in the order it uses (news, then the
-// standing fact). A badge is a glyph or a bare number and the note is a 10px glyph, so on a form factor with no
-// hover this label is the ONLY place either of them is written out, which is what a screen reader gets.
+// Same order as the rail's tileLabel; the only spot badge and note are spelled out for a screen reader.
 const tabLabel = (tab: Tab): string => [tab.label, tab.badge?.tooltip, tab.note?.text].filter((part) => part !== undefined).join(` · `);
 
 const route = useRoute();
-/* A tab is active for its route AND any sub-path (a file open on /workspace): `active-class` compares params
- * and drops the highlight once the splat param is set, so match by path prefix instead.
- *
- * EXACTLY ONE TAB WINS. A tab declaring a `panel` shares the workspace path with its neighbour, so the path
- * alone cannot separate them: it must also be the panel on screen (absent query ⇒ `files`, the bare address).
- * Without this both Files and Review lit up on every workspace route and the bar stopped saying where you were. */
+// Matches by path prefix, not active-class (it drops on a splat param). When a tab declares `panel`,
+// that must also match the query (absent means files), or both Files and Review would light up together.
 const isNavActive = (tab: Tab): boolean => {
     const path = tab.to.split(`?`)[0] ?? tab.to;
     if (!(route.path === path || route.path.startsWith(`${path}/`))) {
@@ -138,8 +105,7 @@ const isNavActive = (tab: Tab): boolean => {
             :class="{ 'text-link': isNavActive(tab) }"
             :aria-label="tabLabel(tab)"
         >
-            <!-- One badge for every tab: a `mark` replaces the number where the amount isn't what you act on.
-                 aria-hidden: the link's own label above already says it in words. -->
+            <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
             <span class="relative">
                 <RailIcon :area="tab.id" class="text-xl" />
                 <span
@@ -151,8 +117,7 @@ const isNavActive = (tab: Tab): boolean => {
                     <Icon v-if="tab.badge.mark !== undefined" :name="tab.badge.mark as IconName" />
                     <template v-else>{{ badgeText(tab.badge) }}</template>
                 </span>
-                <!-- The standing note, in the corner the badge does not use and in the muted ink: same rule as
-                     the rail's tile, same reason it is aria-hidden (the label above already carries it). -->
+                <!-- Sits in the corner the badge doesn't use; aria-hidden like the badge, since the label already carries it. -->
                 <span v-if="tab.note" class="absolute -bottom-1 -left-2 flex leading-none text-subtle" aria-hidden="true">
                     <Icon :name="tab.note.icon" class="text-[0.6rem]" />
                 </span>

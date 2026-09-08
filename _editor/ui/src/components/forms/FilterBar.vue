@@ -1,18 +1,7 @@
-<!-- THE INSTRUMENT ABOVE A LIST: free text on the left, the controls that narrow the same list on the right,
-     and any bare action furthest right. Six views had written this row by hand and no two agreed: three
-     different field treatments (a shrunken `ui.input`, a framed <SearchBar>, and a bare `relative` +
-     absolutely-positioned icon at three different paddings), two different heights, and two different ideas
-     about whether the field grows.
-
-     THE FIELD TAKES THE ROW'S SLACK. That is the one layout decision here worth stating: the bar then spans the
-     same width as the list under it (one left edge and one right edge down the whole view) instead of a
-     control cluster huddled in a corner above a full-width list. `#controls` sits in its own matched track so
-     the two read as one instrument; `#actions` stays chromeless beside them because reloading or clearing is
-     not a narrowing of anything.
-
-     The field is <SearchBar> rather than a fresh input, so the one line of hard-won CSS in it: `text-base`
-     below `md`, the threshold under which iOS Safari zooms the whole page on focus: keeps having exactly one
-     home. The border SearchBar deliberately lacks (it is normally a panel's first row) is this wrapper's. -->
+<!--
+    The instrument above a list: free text on the left, narrowing controls on the right, a bare action furthest right. The field takes the row's
+    slack so the bar spans the list's full width.
+-->
 <script setup lang="ts">
 import SearchBar from "./SearchBar.vue";
 

@@ -51,11 +51,9 @@ import { type RowAction, rowActionsFor } from "../explorer/rowActions";
 import { paneOf } from "../tabs/workspaceTabs";
 import { HOISTED_CONTEXT } from "../files/viewerChrome";
 
-/* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
- * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
- * file tree on the left, open-file tabs + a syntax-highlighted / image / PDF / markdown viewer on the right, and
- * Read-only: editing happens via the agent in chat. The terminal panel below is the SHELL's (sandbox-global),
- * toggled from the rail: this view owns no control for it. */
+// Full-height explorer + viewer of the /work filesystem the agent sees, read directly from the sandbox daemon.
+// Read-only: editing happens via the agent in chat. The bottom terminal panel belongs to the shell
+// (sandbox-global); this view owns no control for it.
 
 const layout = useLayout();
 const {
@@ -77,45 +75,32 @@ const {
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
-// Every git repo under /work (root + nested). Marks the tree rows that get a git-history affordance, and feeds
-// the graph's repo switcher: the multi-repo axis of the workspace ("root is a repo; it may contain repos").
+// Every git repo under /work; marks tree rows with a git-history affordance and feeds the graph's repo switcher.
 const { repoDirs } = useRepos();
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
 
-/* THIS VIEW'S BAR CARRIES THE OPEN FILE'S CONTEXT, so the breadcrumb rides the tab row instead of opening a
- * band under it, and the markdown surface's controls ride the breadcrumb (see viewerChrome). The phone provides
- * nothing and gets the bands, which is right there: it has no tab strip to hang them on. */
+// This view's bar carries the file's context, so breadcrumb and viewer ride the tab row, not their own band.
 provide(HOISTED_CONTEXT, true);
 
-/* THE SCOPE IS POINTED AT A CHECKOUT THAT ISN'T THERE. An archived agent keeps its work on its branch but
- * loses its working copy, so there is no tree to read and no file to open: every pane in this view is about to
- * fail for the same one reason. Said once, in the pane, rather than three times in three error slots. */
+// An archived agent's checkout is gone; every pane fails for the same reason, said once here, not three times.
 const scopeBroken = computed(() => workspaceAgent.value !== undefined && error.value !== undefined);
 
-// The Changes tab's chip when there is no count to show: committed work still on this disk. Gated on a zero
-// count because the chip states ONE thing: with files to review, how many is the more urgent of the two.
+// Chip for committed work still on disk with nothing to count; gated on zero for the more urgent of the two.
 const changesMark = computed(() => {
     const work = changes.outgoing.value;
     return changes.count.value > 0 || work === undefined ? {} : { mark: outgoingMark(work), markTitle: outgoingSummary(work) };
 });
 
-// The sidebar's primary mode switch lives ON the sidebar (proximity: the control sits with what it changes).
-// Files and Changes are the everyday views; restore history is the quieter icon beside them. The Changes tab
-// carries the uncommitted count so pending work is visible from any mode, and, once that count is zero, the
-// outgoing mark, so the tab does not read as "nothing here" over a panel holding a Push button.
+// Mode switch lives on the sidebar; Changes shows its count, then the outgoing mark once zero, never empty.
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
-    // No hint on Files/Changes: "Browse the workspace files" under a pill reading "Files" is the label again in
-    // a smaller font. Changes gets one only while the mark is up: there the chip is a glyph, and the amount has
-    // nowhere else to go.
+    // No hint on Files/Changes, the label already says it; Changes gets one only while the mark shows.
     { label: `Files`, value: `files` as const },
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
-/* The search box's state (useExplorerSearch documents the three scopes and what each searches). The funnel
- * beside the scopes holds what the list on screen leaves out: the tree's under Name, the search's under
- * Text/Smart, all off by default; the match switches sit inside the field, where they belong to Text alone. */
+// State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
 const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
 const {
     groups: searchGroups,
@@ -130,8 +115,7 @@ const {
     error: searchError,
     note: searchNote,
 } = results;
-// The open tabs live in the useWorkspaceTabs singleton so they survive navigation; this component owns closing
-//: the dirty-confirm dialog and edit-buffer forget.
+// Tabs live in the useWorkspaceTabs singleton to survive navigation; this component owns closing and cleanup.
 const {
     tabs,
     activeId,
@@ -154,35 +138,17 @@ const {
     openToSide,
     collapseSplit,
 } = useWorkspaceTabs();
-// Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
+// Mirrors the active file into the URL so a reload or shared link reopens it.
 useWorkspaceRoute();
 
-/* THE EXPLORER STOPS BEING A COLUMN WHEN THERE IS NO ROOM FOR TWO. This view renders into the workspace pane,
- * not the window, so a reader with the chat panel open gets ~500px, and the explorer's own floor is 272px, which
- * left the file they opened about 190px to be read in: "Drop your work here" came out one word per line. Below
- * ~40rem the tree becomes a DRAWER over the viewer instead: the same rows, the same actions, opened and closed by
- * the same control, but the file always has the pane.
- *
- * The drawer's open state is local and starts closed, deliberately: `sidebarCollapsed` is a preference the reader
- * set for a docked column on a wide pane, and writing "collapsed" into it because a chat panel is open would hand
- * them a hidden explorer on their next full-width session. Two situations, two pieces of state, and the toggle,
- * the command and the tooltip all route through here so there is still ONE control. */
+// Below ~40rem the tree becomes a drawer over the viewer instead of a column. `drawerOpen` is separate from the
+// persisted `sidebarCollapsed`, so a chat-narrowed session can't leave the explorer hidden on a later wide one.
 const workspaceBody = ref<HTMLElement | undefined>(undefined);
 const narrowBody = useNarrow(workspaceBody, 40);
 const drawerOpen = ref(false);
-/* THE EXPLORER STANDS ASIDE FOR A SPLIT, and says so on the control that brings it back.
- *
- * Two panes and a docked tree are three columns in a pane that often has room for two, and the tree is the one
- * of the three the reader is NOT looking at: they are reading a document and the file it names. So opening a
- * split hides it, and closing the split gives it back.
- *
- * It is its own piece of state, never the stored preference: `sidebarCollapsed` is what this reader chose for a
- * docked column, and writing "collapsed" into it because a split is open would hand them a hidden explorer in
- * every later session. Same two-pieces-of-state rule as the narrow drawer above. The hamburger carries a dot
- * while this is true, because a panel that vanishes without a trace is indistinguishable from one that broke. */
+// True while a split has stood the explorer aside, not the persisted `sidebarCollapsed`; clears when it closes.
 const autoHidden = ref(false);
-// The dot's one-shot pulse, at the moment of hiding: an indicator that appears silently on a control nobody was
-// looking at is the same as no indicator. It stops on its own, so it never becomes furniture.
+// One-shot pulse at the moment of hiding; a silent appearance on an unwatched control goes unseen, then clears.
 const justHidden = ref(false);
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 const PULSE_MS = 2600;
@@ -193,8 +159,7 @@ const toggleSidebar = (): void => {
         drawerOpen.value = !drawerOpen.value;
         return;
     }
-    // The press answers the dot first: the reader is asking for the panel the split took away, and it then stays
-    // for the rest of that split. A second press collapses it as it always did.
+    // A press first answers the dot, restoring the panel for the rest of the split; the next press collapses it.
     if (autoHidden.value) {
         autoHidden.value = false;
         justHidden.value = false;
@@ -202,7 +167,7 @@ const toggleSidebar = (): void => {
     }
     layout.toggleSidebar();
 };
-// Opening a file is the drawer's whole purpose, so it gets out of the way the moment one lands.
+// Opening a file is the drawer's whole purpose, so it closes the moment one lands.
 watch(
     () => activeId.value,
     () => (drawerOpen.value = false),
@@ -223,37 +188,28 @@ watch(splitOpen, (open) => {
     pulseTimer = setTimeout(() => (justHidden.value = false), PULSE_MS);
 });
 
-/* HOW WIDE THE PANE IS, in one measurement that answers both of the split's geometry questions: whether there is
- * room for two panes at all, and how far the seam between them may travel. Measured rather than inferred from
- * the window, this view renders into the workspace column, which the chat panel and the rail have already taken
- * their share of. */
+// Measured, not inferred from the window: the rail and chat panel have already taken their share of it.
 const bodyWidth = ref(0);
 let bodyObserver: ResizeObserver | undefined;
-// Both panes have to stay readable, and a diff's floor is the chat's: two gutters, two sets of line numbers and
-// something like eighty characters between them (see MIN_PANE_PX).
+// Both panes need room for a diff (two gutters, ~80 characters each); see MIN_PANE_PX.
 const canSplit = computed(() => toAppPx(bodyWidth.value) >= MIN_PANE_PX * 2);
-// What the seam may not cross: the companion never squeezes the pane it was opened from below that same floor,
-// and the docked explorer's column is not the editor's to spend.
+// The companion never squeezes its own pane below that floor; the explorer isn't the editor's to spend.
 const maxSideWidth = computed(() =>
     Math.max(MIN_PANE_PX, toAppPx(bodyWidth.value) - MIN_PANE_PX - (sidebarOpen.value && !narrowBody.value ? layout.sidebarWidth.value : 0)),
 );
 const sideWidth = computed(() => Math.min(layout.sidePaneWidth.value, maxSideWidth.value));
-// The seam speaks in pointer coordinates; every width above is in app pixels (see uiScale).
+// The seam speaks in pointer coordinates; widths above are app pixels (see uiScale).
 const seamWidth = computed<number>({
     get: () => toScreenPx(sideWidth.value),
     set: (px) => layout.setSidePaneWidth(toAppPx(px)),
 });
 
-// The store never asks the layout anything; the surface that draws the panes tells it whether a split can be
-// drawn at all. A pane that has just become too narrow folds its companion back in rather than leaving tabs in
-// a column nobody can read.
+// The store never asks the layout; this view says whether a split fits, folding the companion back if not.
 watch(
     canSplit,
     (allowed) => {
         splitAllowed.value = allowed;
-        // Only once the pane has actually been MEASURED: before the first observer callback the width is zero,
-        // which is not "too narrow", and folding on it would collapse a split restored from the last session
-        // one tick before the real width arrived.
+        // Only once measured: zero width isn't "too narrow", or a restored split collapses before the real width lands.
         if (!allowed && bodyWidth.value > 0) {
             collapseSplit();
         }
@@ -261,8 +217,7 @@ watch(
     { immediate: true },
 );
 
-// Repository directories that a directory-surface extension serves (Apps, UI): selecting one in the tree
-// opens its management surface as a tab. Rail-surface repos (intent/desired-state) are absent by design.
+// Repos a directory-surface extension serves (Apps, UI); selecting one opens its management tab, not an editor.
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const manageableDirs = computed(
@@ -273,23 +228,17 @@ const manageableDirs = computed(
             ),
         ),
 );
-// …and the ones the Preview area can show live: a runnable repo, or a monorepo whose apps preview. The row's
-// eye selects that repo's target and walks to /preview (the rail panel), rather than opening an editor tab.
+// Repos the Preview area can show live; the row's eye walks to /preview instead of opening an editor tab.
 const router = useRouter();
 const previewableDirs = computed(() => new Set(panels.value.filter((panel) => panel.hasPanel || panel.monorepo).map((panel) => panel.repo)));
-/* WHO WORKS IN EACH FOLDER: the personas whose sessions start there, counted once per render rather than
- * re-filtered on every visible row. The folder a card starts in is set from the row itself (see
- * <DirectoryPersonas>), so this is also what makes that icon light up the moment one is saved. */
+// Personas whose sessions start in each folder, computed once per render rather than re-filtered per row.
 const { personas } = usePersonas();
 const personaDirs = computed(() => personaStartDirs(personas.value));
-// The folder whose personas are open in the quick panel; undefined = closed.
+// Folder whose personas are open in the quick panel; undefined means closed.
 const personaDir = ref<string | undefined>(undefined);
 
-/* What each directory row offers beside its name: its documents, its health, its history, its personas, its
- * management panel. Composed here because this is where the openers live; the tree just draws them (see
- * rowActions.ts). Passed as a function so only the rows actually on screen are asked, and read inside the tree's
- * render, so an extension registering a document provider lights up the rows it serves without anything having to
- * invalidate. */
+// What each directory row offers beside its name (documents, health, history, personas, management). Composed
+// here, where the openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
         repoDirs: repoDirs.value,
@@ -305,50 +254,31 @@ const rowActions = (dir: string): readonly RowAction[] =>
         openDocument,
     });
 
-// The file the reader is IN, which with two panes means the focused one's: the tree's selection mark and the
-// presence report are both about where the person is, not about everything on screen.
+// The file the reader is in; with two panes, the focused one's. Feeds the tree's selection mark and presence.
 const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));
-// Presence: announce which file this tab has open. Component-scoped is right here, the open file genuinely
-// ceases to exist when the Workspace area unmounts, and the unmount below clears it.
+// Presence: announces the open file; component-scoped since it stops existing when this view unmounts.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
 onBeforeUnmount(() => reportOpenPath(undefined));
 
 const fileInput = ref<HTMLInputElement>();
-// Root drop zone highlight, tracked with an enter/leave depth so bubbling over child rows doesn't flicker it off.
+// Root drop zone highlight; an enter/leave depth stops bubbling over child rows from flickering it off.
 const rootDragging = ref(false);
-// True while the drag carries OS files (vs an internal tree-row move): gates the viewer's "drop to add" overlay.
+// True while the drag carries OS files (not an internal tree-row move); gates the viewer's drop overlay.
 const externalDrag = ref(false);
 let dragDepth = 0;
-// Whether a drag is an upload at all, and whether it started in this document, which is the half of that
-// question a drag store can't answer. Shared with the tree's rows (dragSource.ts): a drop this background
-// would decline must not be accepted by a row just because the pointer was over one.
+// Whether a drag is an upload from this document; shared with tree rows so a row can't accept a rejected drop.
 let unwatchDragSource: (() => void) | undefined;
 
-// The explorer column's seam. Like the split's below, it speaks in pointer coordinates while the stored width
-// is in app pixels (see uiScale). <ResizeSeam> reports a SIZE rather than a position, which is what retires the
-// left-offset this used to capture at drag start: the sidebar is not flush to the viewport edge (the shell's
-// rail sits to its left), so a width read from a raw clientX was the rail's width too wide on every drag.
+// Pointer coordinates here, while the stored width is app pixels; <ResizeSeam> reports a size, not a position.
 const sidebarSeamWidth = computed<number>({
     get: () => toScreenPx(layout.sidebarWidth.value),
     set: (px) => layout.setSidebarWidth(toAppPx(px)),
 });
 
-/* The explorer's filters, behind one funnel. They used to be a single "Ignored" chip that swapped meaning with
- * the scope; a menu takes that pair of long labels off a 256px-wide toolbar and gives the second filter: tests
- *: somewhere to live that isn't another chip competing for the same row.
- *
- * The rows follow the scope, because each one has to change what is on screen when it is clicked: under Name
- * that is the tree (both filters apply), under Text/Smart it is the daemon's match list, which the tree's own
- * switches don't reach: the search widens over ignored paths or it doesn't, and tests come back either way.
- * A row that changed nothing visible would be worse than no row. */
-/* VIEWING AS A PERSONA: the fence on a card, checked against the real tree instead of read back as the words
- * somebody typed. Under the funnel with the other two because it is the same kind of thing: it changes what the
- * list on screen is SAYING without changing what the workspace holds. Absent entirely on a box with no personas
- *: a submenu offering nothing is a worse answer than no submenu.
- *
- * A radio group, not checkboxes: two personas at once would need two dimmings, and "what would BOTH of them be
- * refused" is not a question anybody has. "Nobody" is listed rather than left to a second gesture, so turning the
- * lens off is where turning it on was. */
+// Explorer filters live behind one funnel menu instead of competing toolbar chips. Rows follow the active
+// scope, since Name filters the tree while Text/Smart reach the daemon's own match list.
+// The persona lens filters the list to what a persona's own reach would show, checked against the real tree
+// rather than the card's text. A radio group (one at a time); "Nobody" is the off state.
 const personaLensItems = computed<MenuItem[]>(() =>
     personas.value.length === 0
         ? []
@@ -383,44 +313,34 @@ const filterMenuItems = computed<MenuItem[]>(() =>
               ...personaLensItems.value,
           ],
 );
-// Lit whenever the list on screen is NOT the default one, so a tree missing its specs, or a search that walked
-// node_modules: never reads as the workspace itself having changed.
+// Lit whenever the list isn't the default one, so a missing spec or a search into node_modules never reads as
+// the workspace itself changing.
 const filtersActive = computed(() =>
     contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value || lensPersonaId.value !== undefined,
 );
 
-/* WHOSE REACH THE TREE IS BEING DIMMED BY, on the funnel that is already lit for it rather than in a stripe of
- * its own above the tree. The stripe was a second indicator for a state this button ALREADY reports (see
- * `filtersActive`, which counts the lens), and it was the more expensive of the two by the width of the
- * sidebar: its payload is a folder list, which is exactly what a 256px strip has to truncate, so it wrapped to
- * two lines and took them from the tree.
- *
- * A tooltip is where a long answer belongs on a lit control: the lens is visible without it, and the reader who
- * wants to know WHICH folders is the reader whose pointer is already on the funnel, going for the menu. */
+// The lens's folder list rides a tooltip on the already-lit funnel, not a separate stripe (whose folder names
+// wrapped to two lines).
 const lensCard = computed(() => personas.value.find((persona) => persona.id === lensPersonaId.value));
 const lensLine = computed(() =>
     lensCard.value === undefined ? undefined : reachSentence(lensCard.value.label ?? lensCard.value.id, reachOf(lensCard.value)),
 );
 
-// Right-click tab menu (VSCode-style). It acts on the right-clicked tab (`menuTabId`), which "Close Others"/"Close to
-// the Right" keep. `pendingClose` holds the set awaiting the unsaved-changes confirm; its dirty paths feed the dialog.
-// This view's root: the element a clipboard write is reached through, so it lands in the window the user is
-// looking at rather than the opener's (see clipboardOf).
+// This view's root, where a clipboard write targets the visible window, not the opener's (see clipboardOf).
 const rootEl = ref<HTMLElement>();
 const tabMenu = ref<{ show: (event: Event) => void }>();
 const menuTabId = ref<string>();
 const pendingClose = ref<ReadonlySet<string>>();
 
-// Every open tab, both panes: what a close CONFIRM has to look through (unsaved work in the companion pane is
-// exactly the kind that is easy to miss) and what the strip-wide "Close All" means.
+// Every open tab across both panes: what a close confirm must check (a companion pane's unsaved work is easy
+// to miss) and what "Close All" means.
 const allTabs = computed(() => [...strip.value.main.tabs, ...strip.value.side.tabs]);
 
-// The store drops the tabs (and remembers them for Reopen Closed Tab); this layer forgets their edit buffers.
+// The store drops the tabs (kept for Reopen Closed Tab); this layer also forgets their edit buffers.
 const applyClose = (ids: ReadonlySet<string>): void => {
     closeTabIds(ids).forEach(forget); // drop unsaved edit buffers for the closed files
 };
-// The single × (and the menu's "Close") stay silent: the dirty dot is right there on the tab. Bulk closes confirm
-// first when any of the tabs going away has unsaved edits (a background tab's dirt is easy to miss).
+// A lone close stays silent (the dirty dot already shows); a bulk close confirms first if any tab going away is dirty.
 const closeTab = (id: string): void => applyClose(new Set([id]));
 const requestClose = (ids: ReadonlySet<string>): void => {
     const hasDirty = allTabs.value.some((tab) => ids.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path));
@@ -443,10 +363,8 @@ const pendingCloseDirty = computed(() =>
               pendingClose.value?.has(tab.id) === true && tab.kind === `file` && dirtyPaths.value.has(tab.path) ? [tab.path] : [],
           ),
 );
-// The row that names no particular tab: it tails a tab's menu and it IS the menu a right-click on the strip's
-// empty space opens (the chat and terminal strips carry the same pair of entry points).
-// Reopen is here too, and it is the one row that survives an EMPTY strip: closing the last tab is exactly when
-// a mis-close leaves nothing to right-click but the empty space.
+// The strip-wide rows (shared with chat/terminal menus); Reopen survives an empty strip, since a mis-close
+// leaves nothing else to right-click.
 const stripItems = computed<MenuItem[]>(() => [
     ...(allTabs.value.length === 0
         ? []
@@ -467,7 +385,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     if (id === undefined) {
         return stripItems.value;
     }
-    // The menu acts on the tab that was right-clicked, in whichever pane holds it: a strip is a strip.
+    // Acts on the tab that was right-clicked, in whichever pane holds it: a strip is a strip.
     const home = paneOf(strip.value, id) ?? `main`;
     const paneTabs = strip.value[home].tabs;
     const index = paneTabs.findIndex((tab) => tab.id === id);
@@ -478,11 +396,9 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const others = new Set(paneTabs.filter((tab) => tab.id !== id).map((tab) => tab.id));
     const toRight = new Set(paneTabs.slice(index + 1).map((tab) => tab.id));
     return [
-        // Promoting the preview tab, beside the double-click that does the same thing: the gesture is invisible,
-        // and a menu is where someone goes to find out what a tab can do.
+        // Promotes the preview tab, mirroring the double-click that does the same thing.
         ...(id === strip.value[home].preview ? [{ label: `Keep Open`, command: () => keepTab(id) }, { separator: true }] : []),
-        // The way into a split for the pairings nothing can guess: a README beside the code it describes, a test
-        // beside its subject. A diff opened from a document tab already lands beside it without being asked.
+        // The way into a split for pairings nothing can guess: a README beside its code, a test beside its subject.
         ...(canSplit.value
             ? [
                   {
@@ -509,9 +425,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         },
         { separator: true },
         ...stripItems.value, // Close All: the one row the empty-space menu shows on its own
-        // Only file/diff tabs have a filesystem path to copy (directory and generated panels don't).
-        // Reached through this view's root so a floating panel writes to the focused window (see clipboardOf);
-        // the clipboard may still be unavailable (insecure context): swallow, matching CopyButton.
+        // Only file/diff tabs have a path to copy; clipboard write goes through this view's root (see clipboardOf).
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
             ? [
                   { separator: true },
@@ -527,8 +441,8 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             : []),
     ];
 });
-// `id` is undefined for a right-click on the strip's empty space: the menu then holds only the strip-wide rows.
-// An empty strip has none, so the browser's own menu is left alone there.
+// `id` is undefined for a right-click on empty strip space; an empty strip has no rows, so the browser's own
+// menu is left alone.
 const openTabMenu = (id: string | undefined, event: Event): void => {
     if (id === undefined && stripItems.value.length === 0) {
         return;
@@ -538,26 +452,17 @@ const openTabMenu = (id: string | undefined, event: Event): void => {
     tabMenu.value?.show(event);
 };
 
-// Every workspace action as a registered command: palette-searchable (Ctrl+P `>`), on a default chord where
-// one earns its keys, all rebindable in Settings → Keybindings and shown as hints in the tab menu above.
-// Registered while the Workspace is mounted (scoped to /workspace) and disposed on unmount. Keyboard/palette
-// close commands act on the ACTIVE tab (the context menu keeps acting on the right-clicked one) and no-op on
-// an empty strip. The close + cycle chords below are the shell-wide tab family: the chat and terminal strips
-// register the SAME chords for their own tabs, and focus decides which one a press reaches (tabSurface.ts).
+// Every workspace action as a registered command, palette-searchable and rebindable; hints show in the tab
+// menu. Close/cycle chords are shared with the chat and terminal strips (tabSurface.ts resolves by focus).
 //
-// Chord choices dodge three owners of the keyboard. The BROWSER: Ctrl+W / Ctrl+Shift+W / Ctrl+Tab AND
-// Ctrl+PageUp/PageDown (VSCode's editor-cycling pair) are un-interceptable tab chords, so Close is
-// Ctrl+Shift+X (the × glyph), "," and "." (reads ">") aim Close Others / Close to the Right (physical-key
-// matched, see keybindings' CODE_TO_KEY), Close All is Ctrl+Shift+Backspace, and tab cycling sits on
-// Alt+PageUp/PageDown: free in every browser, and unlike Ctrl+Shift+[/] not a Monaco fold chord, so it
-// still works while editing. Mod+F is deliberately left UNBOUND: it belongs to the browser's own find-in-page
-// (and, with the editor focused, to Monaco's find widget): workspace search lives on Mod+Shift+F alone, so
-// nothing has to guess whether a Ctrl+F was meant for us. The SHELL: a bound chord is FORWARDED off a focused
-// terminal (terminalSession's key hook), so a bare-Ctrl chord would steal a readline/tmux key; Mod+B (VSCode's
-// sidebar toggle) IS the tmux prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else
-// stays in the Ctrl+Shift family the terminal panel's commands established. Changes opens on Ctrl+Shift+D
-// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Restore Points / Refresh / the two
-// explorer filters ship unbound (palette-only), as VSCode leaves rarely-chorded views.
+// Chord picks dodge three owners of the keyboard:
+// - browser: Ctrl+W/Shift+W/Tab and Ctrl+PageUp/Down are un-interceptable, so Close is Ctrl+Shift+X, Close
+//   Others/Right are Ctrl+Shift+,/., Close All is Ctrl+Shift+Backspace, cycling is Alt+PageUp/Down.
+// - Mod+F stays unbound (it's the browser's find-in-page, and Monaco's own find widget); search uses
+//   Mod+Shift+F instead.
+// - shell: a bound chord is forwarded off a focused terminal, so Mod+B (the tmux prefix) is avoided; the
+//   explorer toggles on Ctrl+Shift+B instead.
+// - rarely-used views (Show Files, Restore Points, Refresh, the two filters) ship unbound, palette-only.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
         closeTab(activeId.value);
@@ -583,17 +488,15 @@ const closeTabsToRight = (): void => {
         requestClose(toRight);
     }
 };
-// The one close verb that is not about a pane: "Close All" means the editor, so it takes the companion pane's
-// tabs with it and the split ends.
+// The one close verb not about a single pane: "Close All" takes the companion pane's tabs too, ending the split.
 const closeAllTabs = (): void => {
     if (allTabs.value.length > 0) {
         requestClose(new Set(allTabs.value.map((tab) => tab.id)));
     }
 };
 const filterInput = ref<HTMLInputElement>();
-// Reveal the Files sidebar with the cursor in its search input, selecting any previous query (VSCode's find
-// flow). Plain find keeps the scope the user last chose; Search in Files forces the text scope. The nextTick
-// waits out the v-if that mounts the input when the sidebar mode flips.
+// Reveals the Files sidebar with focus in the search input, selecting any previous query. Plain find keeps
+// the last scope; Search in Files forces text scope.
 const focusSearch = (scope?: "name" | SearchScope): void => {
     layout.setSidebarCollapsed(false);
     autoHidden.value = false; // asked for the explorer by name: a split must not swallow the answer
@@ -606,7 +509,7 @@ const focusSearch = (scope?: "name" | SearchScope): void => {
         filterInput.value?.select();
     });
 };
-// Alt+PageDown/PageUp cycle the strip with wrap-around (Next/Previous Editor).
+// Alt+PageDown/PageUp cycle the strip with wrap-around.
 const cycleTab = (delta: number): void => {
     const count = tabs.value.length;
     if (count < 2) {
@@ -633,11 +536,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
-    /* The split, both directions on one chord, because it is one toggle: the active tab goes to the companion
-     * pane, and a tab already there comes back. `Ctrl+Shift+\` rather than VSCode's bare `Ctrl+\`, which is
-     * SIGQUIT in a focused terminal (a bound chord is forwarded there, see the note above), and it keeps the
-     * editor's verbs in the one Ctrl+Shift family. Unsplitting the whole pane is palette-only: it is the button
-     * on the companion pane's own bar, where a reader who opened a split looks for it. */
+    // One chord toggles both directions; Ctrl+Shift+\ avoids bare Ctrl+\, which is SIGQUIT in a focused terminal.
     {
         command: `workspace.splitEditor`,
         title: `Open Tab to the Side`,
@@ -647,14 +546,10 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
         handler: () => openToSide(),
     },
     { command: `workspace.unsplitEditor`, title: `Close Split`, icon: `split-columns`, handler: () => collapseSplit() },
-    // The explorer's two filters, reachable from the palette, and from anywhere the sidebar is collapsed, where
-    // the toolbar's funnel isn't on screen to click.
+    // The explorer's two filters, reachable from the palette when the sidebar is collapsed and off-screen.
     { command: `workspace.toggleIgnored`, title: `Toggle Ignored Files`, icon: `eye`, handler: () => layout.toggleShowIgnored() },
     { command: `workspace.toggleTests`, title: `Toggle Test Files`, icon: `filter`, handler: () => layout.toggleHideTests() },
-    // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
-    // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two":
-    // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
-    // exactly as it did before the family was shared.
+    // Shared tab family with chat/terminal (tabSurface.ts resolves by focus); workspace is the fallback surface.
     { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, when: `tabSurface == 'workspace'`, handler: () => cycleTab(1) },
     {
         command: `workspace.previousTab`,
@@ -695,13 +590,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
         when: `tabSurface == 'workspace'`,
         handler: closeAllTabs,
     },
-    // The close family's undo. VSCode puts it on Ctrl+Shift+T, which is the one chord a browser will never hand
-    // over: it reopens the BROWSER's closed tab and, like Ctrl+W, isn't cancellable, so this takes
-    // Ctrl+Shift+O ("reOpen") and stays inside the Ctrl+Shift family the rest of the tab verbs live in. An
-    // Alt+letter chord was the other candidate and is worse: Option+Shift+letter composes a glyph on Apple
-    // layouts ("ˇ" for T), which the letter half of matchesChord deliberately matches by produced character.
-    // Surface-gated like the rest of the family, so a press in a terminal or the chat is left to its owner
-    // rather than resurrecting an editor tab behind it.
+    // Ctrl+Shift+O ("reOpen"), not VSCode's Ctrl+Shift+T: that reopens the browser's own tab and isn't cancellable.
     {
         command: `workspace.reopenClosedTab`,
         title: `Reopen Closed Tab`,
@@ -714,8 +603,8 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
 ];
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
-// Root-level upload: files dropped on the explorer background (a folder row handles its own drop) or picked via
-// the empty state's browse button land at the /work root. Directories recurse through collectDroppedFiles.
+// Root-level upload: drops on the explorer background or the browse button land at /work root; directories
+// recurse via collectDroppedFiles.
 const resetRootDrag = (): void => {
     dragDepth = 0;
     rootDragging.value = false;
@@ -739,15 +628,12 @@ const onRootDragLeave = (): void => {
 const onRootDrop = (event: DragEvent): void => {
     const offer = dragOffer(event);
     resetRootDrag();
-    // A read-only member's drop says the tier rather than dropping the files into a refusal one request later
-    // (useWorkspaceTree refuseWrite): the whole gesture is "put this in the workspace", which is a write.
+    // A read-only member sees the tier immediately, not a refusal after the files are dropped.
     if (event.dataTransfer === null || refuseWrite()) {
         return;
     }
     const dataTransfer = event.dataTransfer;
-    // Tree rows dragged in from within the explorer (one or a multi-selection, newline-joined) → move to root;
-    // otherwise OS files → upload to root. A drag that started in this document is neither: the outer @drop.prevent
-    // still swallows it so the browser doesn't navigate away to the image, and nothing is written.
+    // An internal tree-row drag moves rows to root; OS files upload to root; a drag from this document is neither.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
         void run(() => moveIntoMany(internal.split(`\n`), ``), `Couldn't move those files.`);
@@ -756,17 +642,14 @@ const onRootDrop = (event: DragEvent): void => {
     if (!offer.files) {
         return;
     }
-    // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the drop's items are
-    // alive) and shows the "scanning" panel instantly, before the walk finishes.
+    // Runs the capture synchronously (webkitGetAsEntry needs the drop's items alive) and shows scanning instantly.
     enqueueFromDataTransfer(``, dataTransfer);
 };
-// A row-targeted drop calls stopPropagation (so it doesn't also upload to root), so the aside never sees that
-// drop to clear its hint. Reset from the window in the CAPTURE phase: it runs before any stopPropagation, so
-// the drop hint can never stick on. (Ctrl+` and the terminal panel itself live in the shell: sandbox-global.)
+// A row's own drop stops propagation; the window resets in the capture phase, before that, so the drop hint
+// can never stick.
 onMounted(() => {
     unwatchDragSource = watchDragSource();
-    // The pane's own width, which is what decides whether two panes fit in it and how far their seam may travel
-    // (the window's width is not it: the rail and the chat column have already taken their share).
+    // The pane's own width decides split geometry; the window's width already went partly to the rail and chat.
     bodyObserver = new ResizeObserver((entries) => {
         bodyWidth.value = entries[0]?.contentRect.width ?? 0;
     });
@@ -775,7 +658,7 @@ onMounted(() => {
     }
     window.addEventListener(`drop`, resetRootDrag, true);
     window.addEventListener(`dragend`, resetRootDrag, true);
-    // Load Monaco (+ Shiki bridge) while the user browses the tree, so the first file open isn't cold.
+    // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
 });
@@ -800,13 +683,12 @@ const onPick = (event: Event): void => {
     input.value = ``;
 };
 
-// Toolbar tooltips teach their command's key: live through commandShortcut, so a remap re-renders the hint.
+// Tooltips teach their command's key via commandShortcut, so a remap re-renders the hint.
 const tooltipWithChord = (label: string, command: string): string => {
     const chord = commandShortcut(command);
     return chord === undefined ? label : `${label} (${chord})`;
 };
-// The auto-hidden state says WHY as well as what, because the reader did not close this panel and should not
-// have to work out what happened to it.
+// States why as well as what: the reader didn't close this panel and shouldn't have to guess what happened to it.
 const explorerTooltip = computed(() =>
     tooltipWithChord(
         autoHidden.value ? `Show explorer · hidden to make room for the split` : sidebarOpen.value ? `Hide explorer` : `Show explorer`,
@@ -817,8 +699,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
 </script>
 
 <template>
-    <!-- Swallow drops that miss the explorer so the browser doesn't navigate to the file (which would wipe
-         unsaved editor buffers). The explorer/rows still handle their own drops before this bubbles up. -->
+    <!-- Swallows drops that miss the explorer, so the browser doesn't navigate to the file (wiping unsaved buffers). -->
     <div
         ref="rootEl"
         class="ws flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
@@ -826,9 +707,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
         @dragover.prevent
         @drop.prevent
     >
-        <!-- Body: sidebar + viewer; only the leaf panes scroll. The whole body is the root drop target (sidebar
-             background, viewer, and empty state all upload to /work root); a folder row captures its own drop
-             (stopPropagation) so hovering a folder targets that folder instead. -->
+        <!-- Sidebar + viewer, only the leaf panes scroll. The whole body is the root drop target; a row captures its own. -->
         <div
             ref="workspaceBody"
             class="relative flex min-h-0 flex-1"
@@ -837,25 +716,15 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
             @dragleave="onRootDragLeave"
             @drop.prevent="onRootDrop"
         >
-            <!-- A column while there is room for two, a drawer over the viewer once there is not (see narrowBody).
-                 The drawer keeps a right-hand margin so the viewer it covers is still visibly there, and the
-                 stored column width is ignored: it was chosen against a pane this one is not. -->
+            <!-- A column when there's room for two, a drawer over the viewer otherwise; the drawer ignores the stored column width. -->
             <aside
                 v-if="sidebarOpen"
                 class="relative flex min-h-0 flex-col border-r border-line bg-card"
                 :class="narrowBody ? `absolute inset-y-0 left-0 z-20 w-[min(20rem,85%)] shadow-xl` : `shrink-0`"
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
-                <!-- Files and Changes are the primary modes; automatic restore history is deliberately quieter.
-                     One column, one resize handle: review/history never steal width from the diff view in the
-                     main area. The controls sit ON the sidebar they switch. -->
-                <!-- `border-b border-line` because every other bar in this app has it (the main area's below,
-                     the chat's tab strip, an agent's detail header) and this one did not: the class fixes the
-                     HEIGHT so the line runs unbroken across the window, and the border is each bar's to draw.
-                     Without it this column's bar had no bottom edge at all in the stock theme, and under a skin
-                     it showed only the drop shadow meant to sit UNDER that edge — half the weight of every
-                     other rule on screen, which is what made the panel's own line below look like it belonged
-                     to a different design. -->
+                <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
+                <!-- `border-b border-line` matches every other bar in the app, so the header line runs unbroken across the window. -->
                 <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
@@ -869,9 +738,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     >
                         <Icon name="history" class="text-xs" />
                     </button>
-                    <!-- Changes' panel-wide actions ride the switch's row rather than a header row of their own:
-                         the switch's "Changes" tab already titles the panel and carries its count, so a second
-                         line below it spent height restating both before a single file was named. -->
+                    <!-- Changes' panel-wide actions ride the switch's row, since the tab already titles the panel and shows its count. -->
                     <template v-if="layout.sidebarPanel.value === 'changes'">
                         <button
                             type="button"
@@ -887,12 +754,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 </div>
                 <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" @fill-diff="fillDiff" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" @fill-diff="fillDiff" />
-                <!-- Search header: input hero on row 1; the files-to-include field under it while a content search
-                     is on; scope switch + the filter funnel on the last row. One `filter` ref, three scopes
-                     (name = instant client-side tree filter, text/smart = debounced daemon search).
-                     The leading icon doubles as the content-search spinner; the ✕ (and Esc) clear text AND snap scope
-                     back to name. The Aa/ab/.* switches sit INSIDE the field, where every editor puts them, and only
-                     in the text scope: they change what the pattern means, and the other scopes have no pattern. -->
+                <!-- One `filter` ref across three scopes; the Aa/ab/.* switches apply only to the text scope, which has a pattern. -->
                 <div v-if="layout.sidebarPanel.value === 'files'" class="flex shrink-0 flex-col gap-1 p-1.5">
                     <div class="relative">
                         <Icon
@@ -911,11 +773,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             @keydown.esc="clearFilter"
                         />
                         <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                            <!-- Aa / ab / .*: the same three switches, in the same order, as the editor this
-                                 panel is modelled on. Glyphs, not icons: they ARE the notation. `mousedown` is
-                                 suppressed so a press leaves the caret in the field it sits inside: the query is
-                                 half typed and the next keystroke belongs to it. The click still fires, so
-                                 keyboard activation is untouched. -->
+                            <!-- Same three switches, same order, as the editor this models. `mousedown` keeps the caret in place on press. -->
                             <template v-if="textMode">
                                 <button
                                     v-for="toggle in MATCH_TOGGLES"
@@ -948,10 +806,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             </button>
                         </div>
                     </div>
-                    <!-- Which files the search is asked of, in VSCode's files-to-include grammar. Its own field
-                         under the query rather than another switch beside it: a glob is typed, not toggled, and
-                         seeing `*.test.ts` sitting there is what keeps a narrowed search from reading as an empty
-                         workspace. Only under a content search: the Name scope already matches paths. -->
+                    <!-- Files-to-include glob (VSCode grammar), its own field since it's typed, not toggled; content search only. -->
                     <div v-if="contentMode" class="relative">
                         <Icon
                             class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
@@ -981,9 +836,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             ]"
                         />
                         <span class="flex-1"></span>
-                        <!-- What this list leaves out. Dark is the default set (the project alone: node_modules,
-                             dist and .turbo out of the way, specs where their sources are); lit says a switch is
-                             on, and the menu says which. -->
+                        <!-- What the list leaves out. Dark is the default (node_modules, dist, .turbo, specs); lit means a switch is on. -->
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
@@ -995,11 +848,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         >
                             <Icon name="filter" class="text-xs" />
                         </button>
-                        <!-- The root repo's codebase health. Root IS a repo (ensureRootRepo versions the whole
-                             workspace), but the tree draws no row for it, so this affordance can't ride a row the
-                             way a nested repo's does: it belongs on the explorer's own root-scoped toolbar. Not
-                             tree-scoped like Collapse All, so it stays in both search scopes. Root's git history
-                             is reached the equivalent way, from the palette: see ext-git-history's command. -->
+                        <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
@@ -1009,8 +858,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         >
                             <Icon name="wave-pulse" class="text-xs" />
                         </button>
-                        <!-- Collapse every open folder. Tree scope only (content search shows a flat match list);
-                             inert while a name filter is active (a filter force-expands matches) or nothing is open. -->
+                        <!-- Collapse every open folder; tree scope only, inert while a filter forces matches open or nothing is open. -->
                         <button
                             v-if="!contentMode"
                             type="button"
@@ -1024,8 +872,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         </button>
                     </div>
                 </div>
-                <!-- The match list owns its own scroller (it virtualizes against it); the tree scrolls in the
-                     wrapper the way it always has. -->
+                <!-- The match list virtualizes against its own scroller; the tree scrolls in the wrapper as it always has. -->
                 <div v-if="layout.sidebarPanel.value === 'files' && contentMode" class="min-h-0 flex-1">
                     <WorkspaceSearchResults
                         :groups="searchGroups"
@@ -1043,9 +890,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         @load-more="searchLoadMore"
                     />
                 </div>
-                <!-- Bottom padding belongs to the TREE, not this scrollport: the explorer's empty-folder line
-                     pins itself to the bottom, and a scrollport that reserved space below it would leave a
-                     sliver of scrolled rows showing under the pinned line. -->
+                <!-- Bottom padding belongs to the tree, not this scrollport, or scrolled rows peek under the pinned empty line. -->
                 <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto pt-1">
                     <WorkspaceTree
                         :tree="tree"
@@ -1059,20 +904,15 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         @open-directory="openDirectory"
                     />
                 </div>
-                <!-- Root drop hint over the whole panel (files mode only: review/history aren't drop targets);
-                     pointer-events-none so drops still reach the rows/aside. -->
-                <!-- Root drop-zone hint (a folder row shows its own inset ring instead). -->
+                <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
+                <!-- A folder row shows its own inset ring instead of this one. -->
                 <div
                     v-if="rootDragging && layout.sidebarPanel.value === 'files'"
                     class="pointer-events-none absolute inset-1 z-10 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6"
                 ></div>
             </aside>
 
-            <!-- The seam sizes the explorer, so it stands OUTSIDE the column it drags: in flow between the
-                 sidebar and the editor, straddling their shared border on negative margins. Inside the aside it
-                 would have to be an overlay, and an overlay over a scroller scrolls away with the rows.
-                 No seam on the drawer: at that width the column's size is the pane's to decide, not the
-                 reader's to drag. -->
+            <!-- The seam sizes the explorer and sits outside its column; an inside overlay would scroll away with the rows. -->
             <ResizeSeam
                 v-if="sidebarOpen && !narrowBody"
                 v-model="sidebarSeamWidth"
@@ -1082,14 +922,10 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 title="Drag to resize · double-click to reset"
             />
 
-            <!-- Dismisses the drawer by clicking the file it is covering: the way every drawer works, and the
-                 only affordance the toggle button does not already provide. -->
+            <!-- Dismisses the drawer by clicking the file it covers, the only affordance the toggle doesn't already provide. -->
             <div v-if="narrowBody && sidebarOpen" class="absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
 
-            <!-- THE EDITOR: one pane, or two with a seam between them (see EditorStrip). The panes are alike,
-                 so they are one component rendered twice; what belongs to the WORKSPACE rather than to a pane,
-                 the explorer toggle on the left, the tree's status and the scope chip on the right, is handed
-                 to the main pane's bar as slots. -->
+            <!-- The editor: one pane, or two with a seam (EditorStrip). Workspace chrome rides the main pane's bar as slots. -->
             <div class="relative flex min-h-0 min-w-0 flex-1">
                 <EditorPane
                     pane="main"
@@ -1102,9 +938,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     @pick="canEditFiles ? fileInput?.click() : refuseWrite()"
                 >
                     <template #lead>
-                        <!-- The explorer's one control, and, while a split has stood the explorer aside, the one
-                             thing on screen that says so: a dot, pulsing once as it happens. Without it a panel
-                             that vanished on its own is indistinguishable from one that broke. -->
+                        <!-- The explorer's one control, and, while a split has stood it aside, the only sign of that: a dot, pulsing once. -->
                         <button
                             type="button"
                             :class="ui.iconButton(`relative mx-1 h-7 w-7 self-center`)"
@@ -1129,23 +963,19 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                                 v-tooltip.bottom="actionError.detail ?? actionError.title"
                                 >{{ actionError.title }}</span
                             >
-                            <!-- The lone remaining status: one spinner for both a running file action and a tree
-                                 (re)load: the Refresh button that used to spin is now only the command. -->
+                            <!-- The one remaining status: a single spinner for both a running file action and a tree (re)load. -->
                             <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
-                            <!-- Suppressed while the scope is what failed: the pane below is already saying it at
-                                 full size, and the same sentence twice on one screen reads as two problems. -->
+                            <!-- Suppressed while the scope itself is broken, since the pane below already says so at full size. -->
                             <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
                                 error
                             }}</span>
-                            <!-- Which copy of the workspace all of the above is about. Absent on the shared tree:
-                                 the default needs no marker (see WorkspaceScopeChip). -->
+                            <!-- Which workspace copy this is about; absent on the shared tree, which needs no marker. -->
                             <WorkspaceScopeChip />
                             <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                         </div>
                     </template>
                 </EditorPane>
-                <!-- The seam sizes the COMPANION, so it is dragged left to make the diff bigger; double-click
-                     puts it back to the width the split opens at. -->
+                <!-- The seam sizes the companion pane, dragged left to grow the diff; double-click resets its opening width. -->
                 <ResizeSeam
                     v-if="splitOpen && !scopeBroken"
                     v-model="seamWidth"
@@ -1161,9 +991,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 >
                     <EditorPane pane="side" @select="selectTab" @keep="keepTab" @close="closeTab" @contextmenu="openTabMenu" />
                 </div>
-                <!-- Drop-to-root hint over the editor, shown only for external file drags (an internal move is
-                     guided by the row rings instead). pointer-events-none so the drop still reaches the body.
-                     Withheld from a read-only member: an invitation to drop is a promise to keep the file. -->
+                <!-- Drop-to-root hint for external drags only; an internal move uses row rings instead of this. -->
                 <div
                     v-if="rootDragging && externalDrag && canEditFiles"
                     class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-primary-500"
@@ -1174,13 +1002,11 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
             </div>
         </div>
 
-        <!-- Bottom terminal panel. v-if unmounts it when closed, but the tabs live in a module-level Map in
-             useTerminal (each a tmux session): detach only removes the host element, so the shells and scrollback
-             survive close, navigation, and page reload. -->
+        <!-- Bottom terminal panel; v-if unmounts only the host element, so its tmux session survives in useTerminal's map. -->
 
-        <!-- Right-click tab menu + the confirm shown before a bulk close discards unsaved edits. -->
+        <!-- Right-click tab menu, plus the confirm shown before a bulk close discards unsaved edits. -->
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
-        <!-- The explorer toolbar's funnel, opened by a left click on it rather than by a right click on a row. -->
+        <!-- The explorer toolbar's funnel, opened by a left click rather than a row's right click. -->
         <ContextMenu ref="filterMenu" :model="filterMenuItems" :min-width="11" />
         <ConfirmDialog
             :open="pendingClose !== undefined"
@@ -1197,32 +1023,17 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
             </template>
             <p class="mt-3 text-xs text-muted">Closing these tabs discards their unsaved edits. This can't be undone.</p>
         </ConfirmDialog>
-        <!-- Opened by a directory row's person icon: who works in that folder, and the one field it takes to add
-             somebody. Mounted here rather than in the tree because the tree draws icons and knows nothing about
-             what they mean. -->
+        <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
     </div>
 </template>
 
 <style scoped>
-/* `.ws-scoped` (the tint that says this is not the shared tree) lives in styles.css beside .view-header: it has
- * to reach the bars inside child components, and the phone's workspace wears the same one. */
+/* `.ws-scoped` (the not-shared-tree tint) sits in styles.css beside .view-header, reaching child bars too. */
 
-/* (The context seat's own rule travels with the markup, in EditorPane: there are two of those seats now.) */
+/* The context seat's own rule travels with the markup, in EditorPane, which now has two such seats. */
 
-/* SOMETHING OF YOURS IS PUT AWAY HERE. The dot on the explorer toggle while a split has the tree stood aside:
- * six pixels, the accent colour, on the control that brings it back, which is the only place it can be read as
- * an instruction rather than as an alert.
- *
- * It PULSES ONCE, at the moment of hiding, and then stops. A panel that disappears while the reader is looking
- * at the file they just opened is a change nobody sees happen, and a badge that keeps pulsing for as long as the
- * state lasts is a thing people learn to ignore. The ring is a separate element scaling out from under the dot,
- * so the dot itself never moves. `prefers-reduced-motion` keeps the dot and drops the ring: the information is
- * in the dot, the animation is only what draws the eye to it.
- *
- * THE DOT ITSELF IS UTILITIES, on the element (`absolute right-1 top-1 h-1.5 w-1.5 rounded-full
- * bg-primary-500`). What is left here is only what a class attribute cannot hold: a pseudo-element, its
- * keyframes, and the media query that drops them. */
+/* The dot pulses once via a separate scaling ring, so the dot itself never moves; reduced motion drops the ring. */
 .ws-stashed-new::after {
     content: "";
     position: absolute;

@@ -8,9 +8,8 @@ import { expect, test } from "vitest";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
 import { fileSecretVault, type SecretVault } from "./secret-vault.js";
 
-/* THE POINT OF THE SPLIT, pinned: the file the agent can open holds the shape of a connection and never the
- * credential in it, while every reader of the store still gets a whole Capability. Both halves matter: the
- * first is the exposure this closes, the second is why no call site had to change. */
+// Pins the split: the manifest on disk holds a connection's shape but never its credential, while every store reader
+// still gets a whole Capability.
 
 const vaulted = (): { store: CapabilitiesStore; manifest: string; vaultPath: string } => {
     const root = mkdtempSync(join(tmpdir(), "vault-"));
@@ -31,7 +30,6 @@ test("the manifest on disk carries a marker, never the credential", async () => 
     const written = await onDisk(manifest);
     expect(written).not.toContain("mcp_tok_9f2b1c7e4a0d");
     expect(written).toContain(VAULTED);
-    // The non-secret half is untouched, which is what keeps the manifest worth reading and editing.
     expect(written).toContain("https://a/mcp");
     expect(await onDisk(vaultPath)).toContain("mcp_tok_9f2b1c7e4a0d");
 });
@@ -40,7 +38,7 @@ test("a browser account's password, the credential the model is promised it neve
     const { store, manifest } = vaulted();
     await store.upsert(browser("reddit", "Xk4!mQ2pRt7@wZ9aBc1_"));
     expect(await onDisk(manifest)).not.toContain("Xk4!mQ2pRt7@wZ9aBc1_");
-    // And type_credential's read still resolves it, because reads rehydrate.
+    // Reads rehydrate: the get() below resolves the real password from the vault.
     expect((await store.get("reddit"))?.config).toMatchObject({ platform: "reddit", password: "Xk4!mQ2pRt7@wZ9aBc1_" });
 });
 
@@ -55,8 +53,6 @@ test("reads rehydrate, so every existing caller still gets a whole capability", 
 test("re-upserting a capability read WITHOUT rehydration keeps the stored value instead of vaulting the marker", async () => {
     const { store, vaultPath } = vaulted();
     await store.upsert(mcp("linear", "mcp_tok_9f2b1c7e4a0d"));
-    // What a caller holding the raw manifest entry would write back: the marker where the value was. Vaulting
-    // that would destroy the credential silently, which is the one way this decorator could lose data.
     await store.upsert(mcp("linear", VAULTED));
     expect((await store.get("linear"))?.config).toMatchObject({ token: "mcp_tok_9f2b1c7e4a0d" });
     expect(await onDisk(vaultPath)).toContain("mcp_tok_9f2b1c7e4a0d");
@@ -77,13 +73,8 @@ test("editing a capability to drop a credential drops it from the vault too", as
     expect(await onDisk(vaultPath)).not.toContain("Xk4!mQ2pRt7@wZ9aBc1_");
 });
 
-/* THE SWEEP: the split as an invariant, not a habit of the write path.
- *
- * `upsert` is the only thing that vaults, so it only ever covered entries saved SINCE it existed. A service
- * connected before the split, an entry the agent pasted a real token back into with its own file tools, or one
- * restored from an export all sit in a readable file with the credential in them, and nothing re-saves a
- * service that is working. These pin the boot sweep that answers for them.
- */
+// upsert only vaults what it saves; a service connected before the split, hand-edited, or restored keeps its credential
+// in the readable file until swept.
 
 const swept = (): { inner: CapabilitiesStore; vault: SecretVault; manifest: string; sweep: () => Promise<readonly string[]> } => {
     const root = mkdtempSync(join(tmpdir(), "sweep-"));
@@ -95,7 +86,7 @@ const swept = (): { inner: CapabilitiesStore; vault: SecretVault; manifest: stri
 
 test("a credential sitting in the manifest is moved into the vault and named in the answer", async () => {
     const { inner, vault, manifest, sweep } = swept();
-    // Written through the RAW store: exactly the state a pre-split save (or a hand-edit) leaves behind.
+    // Written through the raw store, the shape a pre-split save or hand-edit leaves behind.
     await inner.upsert(mcp("linear", "mcp_tok_9f2b1c7e4a0d"));
     expect(await onDisk(manifest)).toContain("mcp_tok_9f2b1c7e4a0d");
 
@@ -103,7 +94,7 @@ test("a credential sitting in the manifest is moved into the vault and named in 
     expect(await onDisk(manifest)).not.toContain("mcp_tok_9f2b1c7e4a0d");
     expect(await onDisk(manifest)).toContain(VAULTED);
     expect(await vault.get("linear")).toEqual({ token: "mcp_tok_9f2b1c7e4a0d" });
-    // The connection still works: a rehydrating read hands back the whole capability.
+    // A rehydrating read still hands back the whole capability afterward.
     expect((await withSecretVault(inner, vault, async () => new Map()).get("linear"))?.config).toMatchObject({
         url: "https://a/mcp",
         token: "mcp_tok_9f2b1c7e4a0d",
@@ -115,14 +106,11 @@ test("an already-correct manifest is not rewritten: no churn on every restart", 
     await withSecretVault(inner, vault, async () => new Map()).upsert(browser("reddit", "Xk4!mQ2pRt7@wZ9aBc1_"));
     const before = await onDisk(manifest);
 
-    // Nothing to move, so nothing is named and the file (and its watchers) are left alone.
     expect(await sweep()).toEqual([]);
     expect(await onDisk(manifest)).toBe(before);
 });
 
 test("a value in BOTH places keeps the vault's, the one a working service authenticates with", async () => {
-    // `hydrate` gives the vault priority, so this is already the credential in use. Moving the manifest's stale
-    // copy in would silently swap it and break a connection that was working.
     const { inner, vault, sweep } = swept();
     await inner.upsert(mcp("linear", "mcp_tok_stale00000000"));
     await vault.set("linear", { token: "mcp_tok_9f2b1c7e4a0d" });
@@ -163,20 +151,14 @@ test("the sweep is idempotent: a second boot moves nothing", async () => {
 });
 
 test("a secret pasted back into the manifest is swept out again: the state is re-enterable", async () => {
-    // The manifest is meant to be editable, so "a credential is in there" is not a leftover of one version: the
-    // agent can put one back at any time with its own file tools. A conversion that ran once would miss this
-    // second arrival; a sweep every boot does not.
     const { inner, vault, manifest, sweep } = swept();
     await inner.upsert(mcp("linear", "mcp_tok_9f2b1c7e4a0d"));
     await sweep();
     await inner.upsert(mcp("linear", "mcp_tok_pasted_back01"));
 
     expect(await sweep()).toEqual(["linear"]);
-    // Out of the readable file, which is the whole exposure.
     expect(await onDisk(manifest)).not.toContain("mcp_tok_pasted_back01");
-    /* And the working credential is NOT swapped for the pasted one. That edit was already inert before the
-     * sweep ran: reads rehydrate, so the vault's value is what every caller has been authenticating with, so
-     * adopting it here would be the sweep CHANGING a live connection rather than tidying a file. */
+    // The pasted value never overwrites the vault: the original credential is what's already in use.
     expect(await vault.get("linear")).toEqual({ token: "mcp_tok_9f2b1c7e4a0d" });
 });
 

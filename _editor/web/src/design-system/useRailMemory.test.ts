@@ -3,16 +3,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { effectScope, nextTick, ref } from "vue";
 import { useRailMemory } from "@intentic/ui";
 
-/* The rules a remembered rail choice has to keep, and each of them is a way of getting this wrong that would be
- * worse than not remembering at all: overriding a link somebody sent, opening a view on a repository that no
- * longer exists, or quietly re-narrowing a scope the reader had deliberately widened.
- *
- * The barrel reaches window.matchMedia (useDevice) at import: hence jsdom. */
+// The rules a remembered rail choice must keep, each a way of getting this wrong that is worse than not remembering at
+// all: overriding a link somebody sent, opening a view on a repository that no longer exists, or quietly re-narrowing a
+// scope the reader had deliberately widened.
+//
+// The barrel reaches window.matchMedia (useDevice) at import: hence jsdom.
 
 const KEY = `intentic.rail.test.scope`;
 
-// A rail lives inside a component, so the watchers have to live inside a scope that can dispose them; running
-// them loose would leak one pair of watchers per test into every test after it.
+// A rail lives inside a component, so its watchers need a scope that can dispose them; running them loose would leak a
+// pair of watchers into every later test.
 const mount = (choice: ReturnType<typeof ref<string | undefined>>, options: () => readonly string[]) => {
     const scope = effectScope();
     scope.run(() => useRailMemory(`test.scope`, choice, options));
@@ -50,8 +50,8 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // The check that lets one remembered value sit behind every workspace: a name that is not on offer here
-    // cannot select an empty list.
+    // The check that lets one remembered value sit behind every workspace: a name not on offer here cannot select an
+    // empty list.
     it(`ignores a remembered value the rail no longer offers`, async () => {
         localStorage.setItem(KEY, `deleted-repo`);
         const choice = ref<string | undefined>(undefined);
@@ -62,7 +62,7 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // "All" is a choice too. Someone who widened the scope on purpose should find it wide when they come back.
+    // "All" is a choice too: someone who widened the scope on purpose should find it wide when they come back.
     it(`remembers all, and restoring it is a no-op`, async () => {
         const choice = ref<string | undefined>(`intentic`);
         const stop = mount(choice, () => [`registry`, `intentic`]);
@@ -80,7 +80,7 @@ describe(`useRailMemory`, () => {
         stopNext();
     });
 
-    // Once the rail has rows the reader is driving, and a second restore would fight them.
+    // Once the rail has rows the reader is driving, a second restore would fight them.
     it(`restores once, then stays out of the way`, async () => {
         localStorage.setItem(KEY, `intentic`);
         const choice = ref<string | undefined>(undefined);
@@ -99,8 +99,8 @@ describe(`useRailMemory`, () => {
         stop();
     });
 
-    // A rail modelled on a plain string spells "all" as ``: a <Picker> has no undefined to offer, so both
-    // shapes have to read as "nothing has been narrowed to".
+    // A rail modelled on a plain string spells "all" as ``: a <Picker> has no undefined to offer, so both shapes must
+    // read as "nothing has been narrowed to".
     it(`treats an empty string as no choice`, async () => {
         localStorage.setItem(KEY, `intentic`);
         const choice = ref<string | undefined>(``);

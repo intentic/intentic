@@ -9,15 +9,11 @@ import { hostedUsedMinutes, usageMonth, usageResetsAt } from "./hosted-usage.js"
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-// Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and the words for
-// every state the subscription can be in.
+// Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and every state's words.
 const billingUrl = (context: OrpcContext, query = ``): string => `${context.config.webOrigin}/settings/billing${query}`;
 
-/* THE LANE AS IT APPLIES TO ONE ACCOUNT: slots, the machines in them, this month's meter and what a slot is.
- * One read for the whole Billing page, and the same read the avatar row and the Overview card make, so they
- * cannot disagree about a number. `usedMinutes` is live (an awake machine counts its open stretch) and read for
- * subscribers too: their page shows awake hours with nothing beside them, the free lane's shows them against
- * the ceiling. */
+// The lane as it applies to one account: slots, machines, this month's meter, shared by the Billing page, avatar row
+// and Overview card so they can't disagree. usedMinutes is live, shown to subscribers too.
 const hostedFor = async (context: OrpcContext, userId: string, onPlan: boolean): Promise<HostedPlanHosted> => {
     const { prisma, config } = context;
     const now = new Date();
@@ -49,12 +45,11 @@ const hostedFor = async (context: OrpcContext, userId: string, onPlan: boolean):
     };
 };
 
-/* The whole answer, for `state` and for every write that ends by re-reading it. The plan half comes from the
- * mirror row and the comp list (hosted-plan.ts owns the rule); the hosted half is above. */
+// The whole answer, for `state` and every write that ends by re-reading it. Plan half from the mirror row and comp list
+// (hosted-plan.ts owns the rule); hosted half from hostedFor above.
 const hostedPlanStateOf = async (context: OrpcContext): Promise<HostedPlanState> => {
     const { config, prisma } = context;
-    // The price rides on every answer, including the disabled one: it describes the offer, not the caller,
-    // and the page that renders the offer is talking to someone who has not bought it.
+    // The price rides on every answer, even disabled: it describes the offer to someone who hasn't bought it.
     const base: HostedPlanState = { enabled: hostedPlanEnabled(config), onPlan: false, priceUsd: config.hostedPlan.priceUsd };
     // Signed out: the page renders the offer; buying starts with the ordinary sign-in.
     if (context.user === null) {
@@ -62,8 +57,7 @@ const hostedPlanStateOf = async (context: OrpcContext): Promise<HostedPlanState>
     }
     const plan = base.enabled ? await prisma.hostedPlan.findUnique({ where: { userId: context.user.id } }) : null;
     const paid = isOnPlan(plan);
-    // The comp list answers only when no paid row does, the same order onHostedPlan reads in, so a comped
-    // account that later pays is a subscriber first.
+    // The comp list answers only when no paid row does; a comped account that later pays becomes a subscriber first.
     const comped = !paid && base.enabled && (await isComped(prisma, config, context.user.id));
     const onPlan = paid || comped;
     return {
@@ -83,10 +77,8 @@ const requirePlanEnabled = (context: OrpcContext): void => {
     }
 };
 
-/* The browser half of the hosted plan: the Billing page's state, its Stripe-hosted doors, and the one write
- * the platform makes itself (slots). Checkout carries the user id as client_reference_id; the webhook
- * (hosted-plan.routes.ts) is what turns the completed payment into a plan row, so a checkout the user abandons
- * leaves nothing behind. */
+// The browser half of the plan: Billing page state, Stripe-hosted doors, and the one write the platform makes itself
+// (slots). Checkout carries the user id as client_reference_id; the webhook turns a completed payment into a plan row.
 export const hostedPlanRoutes = (gateway?: StripeGateway) => {
     const stripe = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.hostedPlan);
     return {
@@ -96,9 +88,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             const user = requireUser(context);
             requirePlanEnabled(context);
             const plan = await prisma.hostedPlan.findUnique({ where: { userId: user.id }, select: { status: true, stripeCustomerId: true } });
-            /* A second checkout for an account already on the plan would be a second subscription: the
-             * upsert-by-user keeps one row and the other charges invisibly. Two tabs on the offer, or a stale
-             * page after the webhook landed, both end here rather than in Stripe. */
+            // A second checkout on the plan would be a second subscription; upsert-by-user keeps one row instead.
             if (isOnPlan(plan)) {
                 throw new ORPCError(`CONFLICT`, { message: `you are already on the hosted plan` });
             }
@@ -122,11 +112,9 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             }
             return stripe(context).portalSession(plan.stripeCustomerId, billingUrl(context));
         }),
-        /* HOW MANY HOSTED SANDBOXES THE PLAN COVERS. Refused below the number the account already has: a slot
-         * that is a machine cannot be sold back while the machine stands, which is the provision gate's own
-         * rule read the other way. The subscription is written on Stripe with proration, mirrored from the
-         * answer at once rather than waiting on the webhook, and the page re-read so the button's next state
-         * is the truth. */
+        // How many hosted sandboxes the plan covers; refused below the count already in use, since a slot with a
+        // machine on it can't be sold back. Written on Stripe with proration, mirrored at once rather than waiting on
+        // the webhook.
         setSlots: os.hostedPlan.setSlots.handler(async ({ context, input }) => {
             const { prisma } = context;
             const user = requireUser(context);

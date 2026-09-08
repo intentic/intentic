@@ -2,11 +2,9 @@ import { WebExtScopesSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { decide, needsConfirm, originPattern, sandboxOwnOrigin, siteOf } from "./policy.js";
 
-/* The decisions this extension makes on its own, tested away from the browser that supplies the inputs.
- *
- * Every one of these is a refusal somebody will read in a chat window, so the assertions are on the SENTENCE
- * as much as on the verdict: "not allowed on github.com — call ask_access" is the difference between an agent
- * that tells its user which switch to flip and one that reports a broken sandbox. */
+// The decisions this extension makes on its own, tested away from the browser that supplies the inputs.
+// Assertions check the refusal sentence as much as the verdict: "not allowed on github.com — call ask_access"
+// tells the user which switch to flip instead of reporting a broken sandbox.
 
 const scopes = WebExtScopesSchema.parse({});
 
@@ -59,13 +57,12 @@ test("confirmation follows the switch, and 'sensitive' is what the page said", (
     expect(needsConfirm({ ...scopes, confirm: "sensitive" }, true)).toBe(true);
     expect(needsConfirm({ ...scopes, confirm: "sensitive" }, false)).toBe(false);
     expect(needsConfirm({ ...scopes, confirm: "always" }, false)).toBe(true);
-    // "never" is the owner saying they will watch instead — which they can, because they are looking at the tab.
+    // "never" is the owner saying they'll watch instead, since they're looking at the tab.
     expect(needsConfirm({ ...scopes, confirm: "never" }, true)).toBe(false);
 });
 
-/* The permission that exists so the extension can REACH its sandbox must not double as permission to browse
- * the sandbox's own app — which would let an agent click its own approval dialogs and read other
- * conversations. It is the one origin that is granted and still refused. */
+// The permission to reach the sandbox must not double as permission to browse its app, or an agent could click
+// its own approval dialogs and read other conversations. The one origin that's granted yet still refused.
 test("the sandbox's own app is never a site the agent may work on", () => {
     const own = sandboxOwnOrigin("https://sandbox-abc123.intentic.dev");
     expect(own).toBe("https://sandbox-abc123.intentic.dev/*");
@@ -80,7 +77,7 @@ test("the sandbox's own app is never a site the agent may work on", () => {
     });
     expect(verdict.allowed).toBe(false);
     expect(verdict.allowed === false && verdict.message).toContain("sandbox's own app");
-    // A different sandbox-shaped host is an ordinary site: only THIS browser's own sandbox is subtracted.
+    // A different sandbox-shaped host is an ordinary site: only this browser's own sandbox is subtracted.
     expect(
         decide({ url: "https://sandbox-other.intentic.dev/x", granted: true, mode: "act", need: "read", scopes, paused: false, own }).allowed,
     ).toBe(true);

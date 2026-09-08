@@ -5,61 +5,28 @@ import { guard } from "../guard/guard.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
 import type { CredentialGrants } from "./credential-grants.js";
 
-/* THE RELEASE GATE: the one place a gated credential's "not yet" becomes "yes, released by Bob".
- *
- * Every exit that can spend a stored value comes through here — the shell and JS reference resolvers, the
- * browser's type_secret, the per-call account exits, the OTP route, and the mount filter's own door
- * (`secrets request`). One consult, so the rule cannot be enforced at three doors and forgotten at the
- * fourth, and one set of refusal sentences, so the model reads the same explanation whichever door it hit.
- *
- * MODELLED ON THE PAYMENT GATE (wallet/payment-offer.ts) down to the frame pushing, because the shape of the
- * problem is identical: a decision that must be a person's, reached from code running deep inside a turn
- * rather than from the turn generator. So the card is pushed into the LIVE RUN's frame log and mirrored to
- * the registry by hand, and it is deliberately not journalled for restore — its waiter is a held PreToolUse
- * hook or a held CLI connection, both of which die with the daemon, and a restored card would offer buttons
- * with nothing behind them. After a restart the next use simply asks again.
- *
- * WHERE IT DIFFERS, and it is the whole point of the feature: the payment card is addressed to THE OWNER, and
- * this one is addressed to a NAMED LIST. So the card carries its approvers, the waiter carries a `mayAnswer`
- * that the reply route consults against the verified identity on the request (agent/agent-requests.ts), and a
- * click from anybody else is refused with the card left standing. The owner is on that list only if the owner
- * put themselves on it.
- *
- * IT FAILS CLOSED, FOUR WAYS, and each is a refusal rather than a hold because each means there is nobody to
- * ask rather than nobody who has answered yet: an unreadable policy (a gate we cannot read is a gate we must
- * assume), an unattended turn, a turn with no live conversation to draw the card in, and a released reply
- * that somehow carries no verified approver. Every refusal names who could have released it and tells the
- * model not to retry, the command gate's own wording (guard/command-gate.ts cannotAsk), because a turn that
- * works around a refusal it was just given is the failure these sentences exist to prevent.
- *
- * WHAT IT IS NOT. Not a second lock on the vault: the value was always readable by this container, and a
- * shell here runs as the owner of both the vault and the policy (SECURITY.md). It is a wall against the
- * AGENT's own judgment being the last word on WHEN a credential is spent. */
+// The single choke point every credential-spending exit routes through, so the rule and its refusal wording exist once.
+// Addressed to a named, verified approver list, not the owner, and fails closed rather than holds when nobody can be
+// asked. Not a lock on the vault: a wall on when an agent's own judgment may decide to spend.
 
-// The card's "where it would go" line. Long enough to recognize a command or a host, short enough that the
-// card stays a card; the use ledger's own DETAIL_MAX, for the same reason.
+// Max length of the card's location line: enough to recognize a command or host, short enough to stay a card.
 const DETAIL_MAX = 80;
 
 export interface CredentialGateDeps extends CardDeps {
     readonly gates: CredentialGatesStore;
     readonly grants: CredentialGrants;
-    /* Buzz the owner's devices when the card goes up, the one offer card that does (push/notifications.ts
-     * argues why: this one waits for somebody who may not know a turn is running). Optional so the gate's
-     * tests need no push stack, and fire-and-forget for the observer's reason — a notification that fails
-     * must never fail the release. */
+    // Notifies the owner's devices when the card goes up; optional (tests need no push stack) and fire-and-forget.
     readonly notify?: (conversationId: string) => void;
     readonly deadlineMs?: number;
     readonly now?: () => number;
 }
 
 export interface CredentialCheck {
-    // The gate's subject: an env/generated key, or a capability id. Derived from a registry name by
-    // `gateTargetOf` (credential-gates.ts), which is the one place the name→subject rule lives.
+    // An env/generated key or capability id; derived from a registry name by `gateTargetOf` (credential-gates.ts).
     readonly subject: string;
     readonly kind: CredentialGateKind;
     readonly lane: CredentialLane;
-    // Where it would go, in the reader's terms. Reference-form by construction on the secret lanes: the value
-    // has not been substituted at the moment this is called, which is what makes the card safe to show.
+    // Where it would go, in reader's terms; reference-form on secret lanes since the value is not substituted yet.
     readonly detail?: string;
     // The agent's own line of rationale, where a door collects one (`secrets request --why`).
     readonly why?: string;
@@ -74,8 +41,8 @@ export interface CredentialGate {
     readonly check: (input: CredentialCheck) => Promise<CredentialVerdict>;
 }
 
-// "alice@corp.com or bob@corp.com", the way every refusal here names who could have said yes. Written out
-// rather than counted, because "one of 2 approvers" tells the model nothing it can act on.
+// Formats approvers as "alice@corp.com or bob@corp.com", written out rather than counted, since "one of 2 approvers"
+// gives the model nothing to act on.
 const nameApprovers = (approvers: readonly string[]): string => {
     if (approvers.length === 1) {
         return approvers[0] ?? "";
@@ -94,10 +61,8 @@ const clipped = (text: string | undefined): string | undefined => {
 export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate => ({
     check: async (input) => {
         const now = deps.now ?? Date.now;
-        /* THE POLICY READ, and the one place this module's fail-closed posture is visible as code. The store
-         * throws on a policy that exists and cannot be read rather than answering "nothing is gated"
-         * (credential-gates.ts says why), so this catch is the difference between a corrupt byte unlocking
-         * every gated credential in the sandbox and a corrupt byte refusing them. */
+        // The store throws for a policy that exists but cannot be read rather than answering "nothing is gated"; this
+        // catch keeps a corrupt policy file closed instead of open.
         let gate;
         try {
             const gates = await deps.gates.list();
@@ -115,9 +80,7 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
         }
         const approvers = nameApprovers(gate.approvers);
 
-        /* A RELEASE THIS CONVERSATION ALREADY HOLDS. Only ever recorded for a gate whose owner said "the rest
-         * of this conversation" (the per-use gate never writes one), so consulting it unconditionally is
-         * safe and says the rule once: a grant is a grant. */
+        // A release this conversation already holds; only a conversation-scoped gate ever records one.
         const held = input.conversationId === undefined ? undefined : deps.grants.has(input.conversationId, gate.subject);
 
         const card = cardRun(deps, input.conversationId);
@@ -131,10 +94,8 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
             return held === undefined ? { allow: true } : { allow: true, approvedBy: held.approvedBy };
         }
         if (verdict.effect === "deny" || card === undefined) {
-            /* THE TWO "NOBODY TO ASK" REFUSALS, worded from the verdict's own reason so the model is told
-             * which wall it hit: an unattended turn is a scheduling problem the owner can fix by running the
-             * work in a chat, and no live conversation is a detached CLI. `card === undefined` is re-checked
-             * only to narrow the type; the guard already denied on it. */
+            // Reuses the verdict's own reason so the model knows which wall it hit: unattended turn, or no live
+            // conversation. `card === undefined` here only narrows the type; the guard already denied on it.
             return {
                 allow: false,
                 reason:
@@ -143,8 +104,7 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
             };
         }
 
-        // THE CARD. `approve: false` in the abort stand-in is what makes an aborted turn read as "not released"
-        // rather than as a release nobody gave.
+        // `approve: false` in the abort stand-in reads an aborted turn as "not released", not as a release nobody gave.
         const offer: CredentialOffer = {
             subject: gate.subject,
             kind: gate.kind,
@@ -158,10 +118,8 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
             kind: "credential_offer",
             onAbort: { kind: "credential_offer", requestId: "", approve: false },
             raised: (requestId) => ({ kind: "credential_offer", requestId, offer }),
-            /* WHO MAY CLICK, checked server-side against the identity the daemon verified on the reply's own
-             * request. Lowercased both sides for the roster's own reason (auth/auth.ts): a Google `email`
-             * claim is not guaranteed lowercase and every write to the roster normalizes, so an exact match
-             * would refuse a Workspace domain that preserves case. */
+            // Checked against the identity verified server-side on the reply. Lowercased both sides: a Google `email`
+            // claim is not guaranteed lowercase, and the roster normalizes on write.
             mayAnswer: (caller) => {
                 if (caller === undefined) {
                     return `Only ${approvers} can release "${gate.subject}", and this request carries no signed-in identity.`;
@@ -178,9 +136,8 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
         const receipt = (outcome: "released" | "refused", approvedBy?: string): void =>
             raised.say({ kind: "credential_receipt", requestId: raised.requestId, outcome, ...(approvedBy !== undefined ? { approvedBy } : {}) });
         if (!reply.approve) {
-            /* TWO DIFFERENT NO'S, told apart by whether a person answered (offer-card.ts), which matters more
-             * here than anywhere else, because the whole feature is about attributing a decision to a person.
-             * So only a real decline writes a receipt. */
+            // Told apart by whether a person answered; only a real decline writes a receipt, since the feature is about
+            // attributing a decision to a person.
             if (!raised.answered) {
                 return {
                     allow: false,
@@ -195,9 +152,8 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
                 reason: `${caller?.email ?? "The approver"} declined to release "${gate.subject}": it was not used. Do not retry: continue without it and say what you left undone.`,
             };
         }
-        /* AN APPROVAL WITH NOBODY BEHIND IT cannot happen — `mayAnswer` refuses a reply with no identity, so
-         * a settled `approve` came from a verified approver — but the audit row and the receipt frame are
-         * built from this name, and a row that says "released by undefined" is worse than a refusal. */
+        // Cannot happen in practice (`mayAnswer` refuses an unidentified reply), but guards the receipt: a row reading
+        // "released by undefined" is worse than a refusal.
         if (caller === undefined) {
             return {
                 allow: false,
@@ -206,8 +162,7 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
                     `Do not retry: only ${approvers} can release it, from a signed-in session.`,
             };
         }
-        // A conversation-scoped release is remembered for the conversation the card went up in, never for the
-        // one the caller claimed: `card.conversationId` is the live run's own id.
+        // Grants against the conversation the card went up in (`card.conversationId`), never the caller's claimed one.
         if (gate.scope === "conversation") {
             deps.grants.grant(card.conversationId, gate.subject, { approvedBy: caller.email, at: now() });
         }

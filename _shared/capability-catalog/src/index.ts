@@ -1,5 +1,5 @@
-// Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract,
-// moved out of @intentic/api-contract so the contract holds only schemas. Daemon enums are imported.
+// Platform UI/product catalogs: add-form descriptors and card data the web renders. Not wire contract; the contract
+// holds only schemas, daemon enums are imported here.
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import {
     type CapabilityKind,
@@ -12,13 +12,7 @@ import {
     VPNGATE_EXIT_COUNTRIES,
 } from "@intentic/sandbox-contract";
 
-/* WHAT EACH CONVERSATION-WINDOW RUNG COSTS, in the units the model options next to it are quoted in, because a
- * bare "32k" is not a choice anybody can make: the whole reason this is a decision is the memory behind it.
- *
- * The figures are the quantized (q8_0) cache llama-server reserves for one slot at that width, measured off the
- * GGUF metadata of the models on the curated list: they land between 50 and 60 KB per token across it, so ~1 GB
- * per 16k rounds up honestly for all of them. Typed against the rung list so adding a rung fails to compile
- * rather than shipping a segment with no price on it. */
+// GB cost per rung (~1 GB/16k, q8_0 cache); typed against the rung list so a new one must price itself.
 const WINDOW_LABELS: Record<LocalModelWindow, string> = {
     "16384": "16k · 1 GB",
     "32768": "32k · 2 GB",
@@ -26,9 +20,7 @@ const WINDOW_LABELS: Record<LocalModelWindow, string> = {
     "131072": "128k · 8 GB",
 };
 
-/* THE WEIGHTS FIGURES BEHIND THE MODEL LABELS, as data, so the form can do the sum the card used to ask its
- * reader to do ("add the two memory figures"). Keyed by the option values above; a custom GGUF has no figure,
- * which is honest: whoever pasted the URL chose the memory. */
+// Weights (GB) behind each model label; a custom GGUF has none, since its memory was the user's own choice.
 const LOCAL_MODEL_WEIGHTS_GB: Readonly<Record<string, number>> = {
     "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf": 3,
     "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf": 6,
@@ -36,9 +28,8 @@ const LOCAL_MODEL_WEIGHTS_GB: Readonly<Record<string, number>> = {
     "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf": 22,
 };
 
-/* The local model card's RAM ask, computed from the form's answers: ~1 GB of cache per 16k of window (the same
- * rate the rung labels quote) on top of the chosen weights. Any half missing (a custom GGUF, an unparsed
- * window) leaves its figure undefined and the total with it: a wrong number is worse than none. */
+// RAM ask computed from the form: ~1 GB cache per 16k window, on top of the chosen weights. Either half missing (custom
+// GGUF, unparsed window) leaves its figure and the total undefined; wrong is worse than none.
 export interface LocalModelMemory {
     readonly weightsGb: number | undefined;
     readonly windowGb: number | undefined;
@@ -51,25 +42,22 @@ export const localModelMemory = (config: Readonly<Record<string, string | undefi
     return { weightsGb, windowGb, totalGb: weightsGb !== undefined && windowGb !== undefined ? weightsGb + windowGb : undefined };
 };
 
-/* One country in the geo-exit card's picker. The capacity share rides in the LABEL rather than being dropped,
- * because a bare country list is misleading here: a third of Tor's countries are one overloaded relay, and
- * picking one of those looks like a broken exit rather than a thin one. Seeing "30% of capacity" next to the
- * Netherlands and "0.2%" next to the United Kingdom is what makes the menu honest. */
+// One country in the geo-exit picker; the capacity share rides in the label so a thin exit doesn't look identical to a
+// healthy one in the list.
 const countryOption = (point: ExitPoint): { value: string; label: string } => ({
     value: point.country,
     label: `${point.countryName}${point.share === undefined ? "" : ` — ${point.share >= 0.01 ? Math.round(point.share * 100) : "<1"}% of capacity`}`,
 });
 
-// Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.
-// Backends are never added through a bare form: servers register themselves via the connect-host command
-// (ConnectHost), Cloudflare through the CloudflareConnect step.
+// Catalog the web renders add forms from; only user-provided, non-secret fields appear. Servers and Cloudflare register
+// through their own connect steps, never a bare form.
 export interface InventoryFieldDescriptor {
     readonly key: string;
     readonly label: string;
     readonly kind: "text" | "number";
 }
-// The self-hosted service catalog the infra operator panel's "Add service" dialog renders: one card per deployable service
-// (logo is a simple-icons slug, like CapabilityCatalogEntry.logo), then the per-service fields form.
+// Self-hosted service catalog for the infra operator panel's "Add service" dialog: one card per deployable service,
+// then its fields form.
 export interface InventoryServiceDescriptor {
     readonly service: ServiceKind;
     readonly label: string;
@@ -116,7 +104,7 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
     {
-        // No infisical slug in simple-icons, render the semantic lock glyph instead.
+        // No infisical slug in simple-icons; uses the semantic lock glyph instead.
         service: "infisical",
         label: "Infisical",
         icon: "lock",
@@ -125,23 +113,22 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
     },
 ];
 
-// POST /capabilities body: id + kind + kind-specific config (built from the catalog form; the daemon validates
-// the discriminated shape). Values are the form's strings; empty optional fields are omitted by the dialog.
+// POST /capabilities body: id, kind, and kind-specific config built from the form; the daemon validates the
+// discriminated shape. Values are strings; empty optional fields are omitted.
 export interface AddCapabilityInput {
     readonly id: string;
     readonly kind: CapabilityKind;
     readonly config: Record<string, string>;
 }
 
-/* The form field shape is `CapabilityField` from @intentic/extension-api. ONE definition for the fields a
- * static card authors here and the fields an extension declares in its manifest, because the dialog renders
- * them with the same code and a second copy is a second thing to keep in step. `secret` withholds the value
- * from every echo, `value` pins a field the user never sees (a discriminator), `when` gates one field on the
- * answers already given (a condition string, see @intentic/base/when), and `multiline` matters: a single-line
- * input strips the newlines out of a pasted PEM key. */
+// CapabilityField (from @intentic/extension-api) is shared by static cards and extension manifests.
+// secret: withholds the value from every echo.
+// value: pins a field the user never sees (a discriminator).
+// when: gates a field on the answers already given.
+// multiline: keeps the newlines a pasted PEM needs.
 
-// The logical section a card sits under in the "+" grid, a display grouping (by what it's for), not the
-// technical `kind`. `platform` cards unlock a new workspace area; the rest are connectors to existing tools.
+// Display grouping in the "+" grid, by what a card is for, not its technical `kind`. `platform` cards unlock a new
+// workspace area; the rest connect existing tools.
 export type CapabilityCategory =
     "platform" | "code" | "observability" | "data" | "communication" | "business" | "devices" | "servers" | "deploy" | "extend";
 
@@ -153,24 +140,15 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "data", label: "Data", hint: "Let the agent query your SQL databases." },
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
-    // Distinct from Servers on purpose: a server is something the sandbox DIALS, a device of yours is
-    // something that dials the sandbox, and the difference the user feels is that one of them is the machine
-    // they are sitting at.
+    // Distinct from Servers: a server is something the sandbox dials, a device is something that dials the sandbox.
     { id: "devices", label: "Your devices", hint: "Let the agent work on your own device, run commands, handle files, see the screen." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH and private networks over VPN." },
     { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments, stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
 ];
 
-// How to obtain the credential a card needs, surfaced beside the config form as a permanently open panel: the
-// required-scopes line, the step-by-step, and a deep "Create a token ↗" link. A hosted provider uses an
-// absolute `url`; a self-hostable one builds the link from a config field's live value (`urlFromField` +
-// `path`), so it points at github.com or the user's own instance, and simply hides until that field holds an
-// http(s) URL.
-//
-// WRAP LITERALS IN `BACKTICKS` in `scopes` and `steps`, a scope name, a menu item, a hostname, a port, a
-// command. They render as chips, which is what lets a reader pick the value out of the sentence instead of
-// parsing it. Nothing else is markup, and unmatched backticks stay as typed.
+// How to get a card's credential, shown as an always-open panel (scopes, steps, a token link); hosted uses `url`,
+// self-hostable builds the link from `urlFromField` + `path`. Backtick a literal in `scopes`/`steps` for a chip.
 export interface CapabilityGuide {
     readonly url?: string | undefined;
     readonly urlFromField?: string | undefined;
@@ -183,47 +161,32 @@ export interface CapabilityGuide {
     readonly steps?: readonly string[] | undefined;
 }
 
-/* A kind's user-facing story is this package: the cards below declare what a user picks and fills in, and
- * effects.ts declares what adding it does to their sandbox. Re-exported here so consumers import one module. */
+// This package is a kind's whole story: cards declare the form, effects.ts declares the consequence.
 export * from "./effects.js";
 
-// The grid the rail's "+" renders. Every card is a capability *type*; the user names each instance (→ its id,
-// defaulted to `id`), so a provider can have N instances (two Discord bots, two databases). `requires` cards are
-// shown but gated until the prereq is active.
+// The grid the rail's "+" renders; a card is a capability type; the user names each instance, so a provider can have N.
+// `requires` cards show but stay gated until the prereq is active.
 export interface CapabilityCatalogEntry {
     readonly id: string;
     readonly name: string;
     readonly kind: CapabilityKind;
     readonly category: CapabilityCategory;
-    // A simple-icons slug (https://cdn.simpleicons.org/<logo>). A "/<hex>" suffix forces a color for icons
-    // invisible on the dark canvas (e.g. github's near-black). Undefined → the `icon` glyph, else per-kind.
+    // A simple-icons slug; a "/<hex>" suffix forces a color for icons invisible on the dark canvas.
     readonly logo?: string | undefined;
-    // An @intentic/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
-    // fallback). undefined → the generic per-kind icon.
+    // An @intentic/ui IconName shown when no simple-icons `logo` fits; undefined falls to the generic per-kind icon.
     readonly icon?: string | undefined;
-    // ONE LINE: 60 characters or fewer. Three or four tiles sit across the grid and a row is as tall as its
-    // tallest one, so a second clause here costs height on the cards beside it too. The grid clamps it at two
-    // lines regardless. Anything longer belongs in `hint`.
+    // One line, 60 characters or fewer; the grid clamps to two lines and a longer story belongs in `hint`.
     readonly description: string;
     readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
-    // The paragraph, printed under the add-form, and searched from the catalog, so a card stays findable by
-    // words its one-line description no longer has room for.
+    // Paragraph under the add-form, also searched, so a card stays findable by words `description` had no room for.
     readonly hint?: string | undefined;
     readonly guide?: CapabilityGuide | undefined;
-    /* ONE PER SANDBOX, there is nothing to name and nothing to have two of (the Docker Engine is the machine's
-     * engine; a second entry would just be a second opinion about the same dockerd). Such a card drops the name
-     * field, keeps the entry id, and opens PRE-FILLED FROM THE LIVE INSTANCE, so picking it again is editing
-     * what is there rather than adding beside it.
-     *
-     * Without this the default "add another connection" behaviour, right for two Discord bots, two databases,
-     * turns the obvious way to change an option into minting `docker-2`: two entries, two fragments, both baked
-     * into one overlay, and a GPU switch that reads off on the card the user just set to on. */
+    // True when there's nothing to name or duplicate (e.g. Docker Engine); opens pre-filled from the live instance.
     readonly singleton?: boolean | undefined;
 }
 
-// The permission switches every connected-device card carries, identical across platforms, the grant is about
-// what the agent may DO, which does not vary by OS. Shared so the two cards can't drift into different defaults.
+// Permission switches every device card carries; shared so platforms can't drift into different defaults.
 const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
     {
         key: "shell",
@@ -338,12 +301,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         logo: "docker",
         description: "Run containers, its own Engine + Compose.",
         singleton: true,
-        /* The engine itself takes no configuring; these are the things a user chooses about it, in the two
-         * families DockerConfigSchema defines, and the `rebuild` chip is what tells them apart on sight,
-         * because the first costs a rebuild and the rest cost a dockerd restart.
-         *
-         * `--privileged` is deliberately NOT a field: dockerd does not run without it, so a switch would offer
-         * a broken sandbox as an option. It stays disclosed by the effects panel and the hint below. */
+        // These fields are choices about the engine, not its config; the `rebuild` chip marks which ones need a rebuild
+        // vs a dockerd restart. `--privileged` isn't a field: dockerd requires it, so it's disclosed by the effects
+        // panel instead.
         fields: [
             {
                 key: "gpu",
@@ -421,8 +381,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         icon: "shield",
         description: "WireGuard, FortiGate or IPsec.",
         fields: [
-            // The discriminator: every field below is gated on it, so one card serves all three protocols and
-            // the daemon receives exactly one arm of the config union.
+            // The discriminator: every field below gates on it, so one card serves three protocols as one config union.
             {
                 key: "provider",
                 label: "Type",
@@ -476,8 +435,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             },
             { key: "username", label: "XAuth username", optional: true, when: "provider == 'ipsec'" },
             { key: "password", label: "XAuth password", secret: true, optional: true, when: "provider == 'ipsec'" },
-            // The phase-1/phase-2 knobs, folded: the defaults match a stock FortiGate, and a FortiClient
-            // import sets them all anyway.
+            // Phase-1/phase-2 knobs, folded: defaults match a stock FortiGate, and import sets them all anyway.
             {
                 key: "ikeVersion",
                 label: "IKE version",
@@ -527,10 +485,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
                 when: "provider == 'ipsec'",
             },
-            // The split-vs-full tunnel decision, and the one ipsec setting whose wrong value has no symptom the
-            // user can attribute: a gateway that doesn't route the internet accepts 0.0.0.0/0 and then drops
-            // everything else, so the sandbox, the agent's own connection included, goes quiet. Which is why
-            // the hint states the consequence rather than the syntax.
+            // That one ipsec setting whose wrong value has no symptom: a gateway that won't route 0.0.0.0/0 just goes
+            // quiet.
             {
                 key: "routedNetworks",
                 label: "Routed networks",
@@ -540,7 +496,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "provider == 'ipsec'",
             },
 
-            // Shared: the only persisted connection intent. Connecting itself is a live action on this card.
+            // The only persisted connection intent; connecting itself is a live action on this card.
             {
                 key: "autoConnect",
                 label: "Connect automatically",
@@ -570,9 +526,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         icon: "globe",
         description: "Browse and fetch as if from another country.",
         fields: [
-            /* The discriminator, ordered by what it costs the reader. Tor first because it is the one that
-             * needs no account, no credentials and no container privilege at all; the paste-your-own arm last
-             * because it is the only one that asks for anything. */
+            // Discriminator ordered by reader cost: tor first, nothing needed; paste-your-own last, the only one that
+            // asks.
             {
                 key: "provider",
                 label: "Provider",
@@ -584,11 +539,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "wireguard", label: "Paste WireGuard configs" },
                 ],
             },
-            /* THE COUNTRY IS A PICKER, NOT A TEXT BOX, and per provider, because that is the whole "known
-             * addresses are filled in for you" half of this card. The lists are the measured capacity tables
-             * from the contract, sorted best-supplied first, so the top of each menu is the part that works
-             * and nobody types a code that turns out to have one overloaded relay behind it. Servers are
-             * never asked for at all: the driver picks one out of the provider's live catalog. */
+            // Per-provider picker, sorted best-supplied first; the server itself is never asked for, the driver picks
+            // one.
             {
                 key: "country",
                 label: "Come out in",
@@ -625,10 +577,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 hint: "Empty means the first file above.",
                 when: "provider == 'wireguard'",
             },
-            /* Off by default, the opposite of the VPN card's auto-connect, and deliberately. A VPN is dialled
-             * because something behind it is unreachable otherwise; an exit costs volunteer bandwidth and buys
-             * nothing until a task actually wants another country. A browser account bound to this exit starts
-             * it on demand anyway, so "on" is for an exit something long-running depends on. */
+            // Off by default, opposite of the VPN card: an exit costs bandwidth, starts on demand when something needs
+            // it.
             {
                 key: "autoStart",
                 label: "Start automatically",
@@ -697,8 +647,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "An intentic extension from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
-            // A full sha, not a branch: extension code runs trusted in your browser, so installs pin exactly
-            // the reviewed commit, updating is re-adding at a new sha.
+            // A full sha, not a branch: extension code runs trusted, so installs pin exactly the reviewed commit.
             { key: "ref", label: "Commit sha (full 40 characters)" },
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
@@ -712,20 +661,12 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE, the setup question asked once instead of twelve times.
-     * The identity owns a browser; you sign its email provider in yourself, once, in the live window (Google
-     * blocks automated logins, that one step staying human is what makes everything after it work), and the
-     * platform accounts opened through it share that browser, which is what turns "Continue with Google" into
-     * one click. The open-accounts switch is the consent that matters, so it is a field here with the warning
-     * on its face, off by default, per identity, never global. */
-    /* THE WALLET, the agent's ability to buy things on the open web, and the card that bounds it.
-     *
-     * One per sandbox (there is one owner and one balance; a second entry would be a second opinion about
-     * the same money), and every field on it is a LIMIT rather than a credential: the signing key lives with
-     * the platform's custody provider and never enters the container, so what the owner is deciding here is
-     * exactly how much of their money an agent may move and how often it has to ask. Defaults are the
-     * conservative ones, every payment carded, small ceilings, because the safe posture must be the one a
-     * user gets by clicking through. */
+    // One email identity the sandbox acts as online, set up once instead of per platform. The user signs its email
+    // provider in once, live; accounts opened through it share that browser. The open-accounts switch is the real
+    // consent.
+    // The wallet: what lets the agent spend money online. One per sandbox; every field is a limit, not a credential,
+    // since the signing key stays with the custody provider. Defaults are conservative: every payment carded, ceilings
+    // small.
     {
         id: "wallet",
         name: "Wallet",
@@ -821,10 +762,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 default: "off",
                 hint: "Automated signup is against many platforms' terms: your call to make.",
             },
-            /* WHERE THIS IDENTITY LIVES. Set here rather than on each account because an identity IS one
-             * browser: every account born from it shares the profile, so they share the country too. One
-             * signed-in session appearing from two places at once is a much louder signal than any address,
-             * and this card is the only place that can be decided coherently. */
+            // Set here, not per account: an identity is one browser, so every account born from it shares its country
+            // too.
             {
                 key: "exit",
                 label: "Browse through",
@@ -843,11 +782,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    /* ONE CARD FOR EVERY MODEL API, wherever it runs. An Ollama on this machine, a vLLM on the GPU box, a
-     * LiteLLM gateway and OpenRouter are the same thing, a URL that serves models, and the only axis that
-     * actually changes anything is which wire the server speaks. Splitting it into "local" and "remote" cards
-     * would be two forms, two sets of copy and two ways to be wrong about one concept; the placeholder carries
-     * the local case instead, because that is the one people don't realise already works. */
+    // One card for every model API, local or remote: all are just a URL that serves models, the wire protocol is the
+    // only real axis. The placeholder shows the local case, the one people don't expect already works.
     {
         id: "endpoint",
         name: "Model endpoint",
@@ -878,20 +814,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
-    /* THE MANAGED HALF of the concept above: the endpoint card points at a server the user operates, this one
-     * runs the server inside the sandbox. Two decisions (which weights, how much conversation) and everything
-     * else is the daemon's: the download, the loopback llama-server, the provider registration. The GPU switch
-     * is the single field that costs a rebuild, and it wears the chip that says so; on the published image
-     * everything else is add-and-chat. Model options carry Hugging Face paths so shipping a new recommendation
-     * is an edit here, never a daemon release, and every label states the real cost (free memory) because that
-     * is the one fact a person needs before choosing.
-     *
-     * MEMORY IS QUOTED IN TWO PARTS, and that is the fix for the version of this card that quoted one. A single
-     * "needs ~8 GB" figure has to assume a conversation window, so the two were pinned to each other and the
-     * window could not be offered as a choice without making every label wrong. It also hid the cheapest lever
-     * on the card: the cache is gigabytes, it scales linearly with a number nobody was allowed to see, and the
-     * flat window the labels assumed was too small to run one agent turn. Split, each half is checkable on its
-     * own, the sum is the ask, and the window becomes what it always was: the owner's call, priced. */
+    // Runs the server inside the sandbox instead of pointing at one; only two real choices (model, window), the rest is
+    // the daemon's. Memory is quoted in two parts (weights + cache) since one figure hides the window as a free lever.
     {
         id: "localmodel",
         name: "Local model",
@@ -904,10 +828,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "model",
                 label: "Model",
                 default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
-                /* THESE FIGURES ARE THE WEIGHTS ALONE. The conversation cache is the other half and it is not a
-                 * rounding error next to them (a gigabyte per 16k of window, quantized), so it is priced on the
-                 * window field below where the choice that sizes it is made. Add the two to get what the machine
-                 * has to have free. */
+                // Weights alone; the cache (~1 GB/16k) is priced on the window field below. Add both for the real RAM
+                // ask.
                 options: [
                     { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, weights ~3 GB" },
                     { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, weights ~6 GB" },
@@ -927,18 +849,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: "model == 'custom'",
                 hint: "A direct link to a .gguf file.",
             },
-            /* THE CHOICE THIS CARD USED TO MAKE FOR PEOPLE, AND THE ONE IT GOT WRONG. Every entry served a flat
-             * 32k window, which is under what a turn of the agent loop costs before the user has typed a word:
-             * the loop's instructions plus one schema per tool it can reach, times every connected capability.
-             * A 27B model, seventeen gigabytes downloaded, first message refused. The number is on the card now
-             * because it is the owner's trade to make (their machine, their memory) and nobody else can make it.
-             *
-             * The second figure in each label is the cache that rung reserves, which is the whole reason this is
-             * a decision rather than a default: it is the one line on this card that costs gigabytes. Priced per
-             * rung rather than per model even though the true per-token cost varies about 2x across the list,
-             * because one honest rate a person can check beats four columns of arithmetic somebody has to redo
-             * whenever a model is added. Options and default both come from the contract, so the daemon that
-             * validates the value and the card that offers it cannot drift. */
+            // Used to serve a flat 32k window, under one turn's own cost; it's on the card now since it's the owner's
+            // memory to spend. Each rung's price is its cache cost; options and default come from the contract so
+            // daemon and card can't drift.
             {
                 key: "context",
                 label: "Conversation window",
@@ -978,39 +891,20 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);
 
-/* Fields the CORE contributes to a kind's form rather than the card declaring them. The connected-device
- * switches are the whole example, and they are here rather than in the manifest on purpose: the grant is about
- * what the agent may DO, which does not vary by OS, so a card that could restate them is a card that could
- * quietly weaken them. Two platform packs therefore cannot drift, and neither can a third-party one.
- *
- * The browser credentials are core for the sibling reason: which box a login form wants filled is the same
- * fact on every site, and they are what lets the AGENT connect the account itself, the daemon types the
- * stored values into the page (never showing the agent the password), so a site card that forgot to declare
- * them would be a site the agent cannot sign in to. Both optional: a profile signed in by hand needs neither. */
+// Fields the core contributes instead of the card declaring them, so no card can weaken them: device switches (grant
+// doesn't vary by OS) and browser credentials (same login fact everywhere, needed for the agent to sign in).
 const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
-    // Folded behind the form's disclosure ("Let the agent sign in for you"): the primary flow is add → sign in
-    // yourself in the live window, and two optional credential boxes standing open read as questions to answer.
+    // Folded behind "Let the agent sign in for you": the primary flow is adding, then signing in yourself.
     { key: "username", label: "Username / email", optional: true, advanced: true },
     { key: "password", label: "Password", secret: true, optional: true, advanced: true },
-    /* Which identity this account is born from, core for the same reason the credentials are: whose browser an
-     * account lives in is a fact about the sandbox, not about any site, and it is what makes "Continue with
-     * Google" one click (the identity's session is right there in the shared profile). Declared without
-     * `options`; the web narrows it to a picker over the identities that actually exist and hides it when none
-     * do, so the manifest stays ignorant of instance state. */
+    // Which identity this account is born from; no `options`, the web narrows it to identities that exist.
     {
         key: "identity",
         label: "Belongs to identity",
         optional: true,
         hint: "Shares that identity's browser, so 'Continue with' its provider is one click.",
     },
-    /* WHERE THIS ACCOUNT BROWSES FROM, core for the same reason again: which country a session appears to come
-     * from is a fact about the sandbox's manifest, not about any site, so a site card cannot be allowed to
-     * forget it or to mean something different by it.
-     *
-     * Only shown for an account that owns its OWN profile. An account belonging to an identity browses from
-     * that identity's exit, because it browses in that identity's Chromium profile: the cookies are shared, so
-     * the country has to be. One signed-in session appearing from two countries is a much louder signal than a
-     * datacenter address, and the `when` here is what stops the form offering that mistake. */
+    // Shown only for an account with its own profile; one under an identity shares that identity's exit instead.
     {
         key: "exit",
         label: "Browse through",
@@ -1023,12 +917,8 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };
 
-/* A contributed capability rendered as a catalog card, the "+" grid derives one card per entry from the
- * ENABLED installed extensions (GET /extensions), so a card exists iff its capability is actually addable, and
- * the manifest is the single source of the card's name/logo/fields/guide (no static duplicate to drift). The
- * contribution's id becomes both the card id (the /capabilities/<id> slug) and the pinned discriminator the
- * daemon's handler resolves. A third-party entry declaring a category outside CAPABILITY_CATEGORIES lands under
- * "extend" (the catch-all section). */
+// A contribution rendered as a catalog card; the manifest is the single source of name/logo/fields/guide. The
+// contribution's id becomes the card id and the pinned discriminator; an unknown category lands under "extend".
 export const contributionCard = (contribution: CapabilityContribution): CapabilityCatalogEntry => {
     const discriminator = contributionDiscriminator(contribution.kind);
     return {
@@ -1042,8 +932,7 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
         fields: [
             ...(discriminator === undefined ? [] : [{ key: discriminator, label: "", value: contribution.id }]),
             ...contribution.fields,
-            // A card that declares one of the core keys itself keeps its own version, a duplicate key would
-            // render the same input twice and let the two answers race for one config slot.
+            // A card declaring a core key keeps its own version; a duplicate key would render the input twice.
             ...(CORE_FIELDS[contribution.kind] ?? []).filter((core) => !contribution.fields.some((field) => field.key === core.key)),
         ],
         hint: contribution.catalog.hint,
@@ -1051,20 +940,11 @@ export const contributionCard = (contribution: CapabilityContribution): Capabili
     };
 };
 
-/* THE JOIN BETWEEN A CARD AND THE CONNECTIONS THAT CAME FROM IT, here rather than in the web because both
- * sides ask it: the Capabilities grid joins each card to the live instances it is answerable for, and the
- * daemon's capability ask gate joins the card an agent requested to whatever is already connected. One
- * definition, or the two joins drift on exactly the multi-provider cards the discriminator exists for.
- *
- * Cards that share a `kind` are told apart by a discriminator field the card fixes, `provider` for the cli
- * cards, `platform` for the browser cards (both map straight to the capability's config). The value is a
- * single fixed value, or the options for a multi-provider card (the SQL card owns postgres + mysql).
- * Single-card kinds (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. */
+// The join between a card and its live connections, shared by the grid and the daemon's ask gate. A discriminator field
+// (`provider`, `platform`) tells same-`kind` cards apart; none means every instance matches.
 
-// The structural slice of a live connection the join reads, the daemon's manifest `Capability` and the
-// wire's `CapabilitySummary` both carry it, so one signature serves both sides. `undefined` is admitted in
-// the values because the manifest's per-kind config shapes carry optional fields, and the join only ever
-// reads the discriminator key.
+// The structural slice of a live connection the join reads; both the daemon's `Capability` and the wire's
+// `CapabilitySummary` satisfy it. `undefined` is admitted since per-kind config shapes carry optional fields.
 export interface CapabilityInstanceLike {
     readonly kind: string;
     readonly config: Record<string, string | number | boolean | undefined>;
@@ -1086,6 +966,3 @@ export const instancesOf = <T extends CapabilityInstanceLike>(entry: CapabilityC
     }
     return capabilities.filter((capability) => capability.kind === entry.kind && disc.values.includes(String(capability.config[disc.key])));
 };
-
-// Automation "start from" recipes moved to the automations extension (@intentic/ext-automations): they are
-// automation-UI prefill data, so they live with that extension rather than the platform product catalog.

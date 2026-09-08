@@ -6,27 +6,24 @@ import { usePanels } from "../../extensions/usePanels";
 import { detectActivations } from "../../../core-views/registry";
 import ExtensionView from "../../../core-views/ExtensionView.vue";
 
-/* The in-tree management surface for one repository directory: renders the directory-surface extension views the
- * repo activates (Apps, its own UI). With more than one, a segmented switch: the same control the sidebar uses
- * for Files/Changes/History: picks which. Empty (the repo lost its markers) renders nothing; the tree only
- * opens this for a manageable directory anyway. The dev-server preview is NOT here: that is the rail's Preview
- * area, which the row's eye opens. */
+// In-tree management surface for a repo directory: renders whichever directory-surface extension views the
+// repo activates, switching between them when there's more than one. Empty when the repo has no such markers.
+// The dev-server preview lives in the rail's Preview area, not here.
 
 const { dir } = defineProps<{ dir: string }>();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 
-// One activation per directory-surface VIEW for this repo: an extension may register several views (ext-apps
-// contributes Apps + Dependencies), so the view id uniquely selects among them (activation.key is the repo
-// name and collides across views).
+// One activation per directory-surface view, not per extension: an extension can register several (e.g. Apps +
+// Dependencies).
 const activations = computed(() =>
     detectActivations(panels.value, capabilities.value).filter(
         ({ extension, activation }) => extension.surface === `directory` && activation.repo === dir,
     ),
 );
 
-// The selected extension, falling back to the first, so a directory with one panel needs no interaction, and a
-// selection that vanishes (its marker removed) lands on whatever remains.
+// Falls back to the first activation, so a single-panel directory needs no selection, and a vanished choice lands on
+// what remains.
 const activeId = ref<string>();
 const active = computed(() => activations.value.find(({ extension }) => extension.id === activeId.value) ?? activations.value[0]);
 const options = computed(() => activations.value.map(({ extension }) => ({ label: extension.label, value: extension.id })));

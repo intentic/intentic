@@ -1,24 +1,10 @@
 import { promises as dns } from "node:dns";
 
-/* WHO ELSE IS THIS EDGE, the question every other file in the cluster leans on and none of them answers.
- *
- * A peer is an address and two ports: the public one, where a forwarded request goes so the peer routes it by
- * Host exactly like one that arrived from the internet (forward.ts), and the internal one, where the holds
- * protocol lives (cluster.ts). Two sources produce the list and both hand back the same shape, so nothing
- * downstream knows which it is running on:
- *
- *   • A STATIC LIST, for a deployment that is not on Fly and for tests. Parsed once; never changes.
- *   • FLY'S INTERNAL DNS, for the deployment that actually runs this. `<app>.internal` answers an AAAA record
- *     per machine, so the list IS the app's machine set, and polling it is how a machine added by `fly scale`
- *     is known to every other within one interval and a machine that was stopped drops out within one too —
- *     which is what lets cluster.ts drop a vanished peer's holdings instead of waiting them out.
- *
- * SELF-EXCLUSION IS BY ADDRESS, not by id: the DNS answer carries addresses and nothing else, and the address
- * this instance was given (FLY_PRIVATE_IP) is the one fact it can match against that answer. A static list is
- * assumed not to name its own host.
- *
- * Split into a refresh and a clock the way heartbeat.ts is, so the tests drive `refresh()` against an injected
- * resolver rather than waiting out real seconds. */
+// A peer is an address and two ports: public (forward.ts routes by Host) and internal (cluster.ts's holds protocol); a
+// static list and Fly's internal DNS both produce the same shape.
+// Self-exclusion is by address (FLY_PRIVATE_IP), not id, since that's the one fact this instance can match against a
+// DNS answer.
+// Split into a refresh and a clock, so tests drive `refresh()` against an injected resolver.
 
 export interface Peer {
     readonly host: string;
@@ -28,17 +14,15 @@ export interface Peer {
 
 export interface PeerDiscovery {
     readonly current: () => readonly Peer[];
-    // Fires with the full new list whenever it differs from the last one. Returns the unsubscribe.
+    // Fires with the full new list when it differs from the last; returns the unsubscribe.
     readonly onChange: (listener: (peers: readonly Peer[]) => void) => () => void;
     readonly close: () => void;
 }
 
-// How often Fly's DNS is asked. Short, because it bounds how long a request can be forwarded to a machine
-// that is gone and how long a new machine goes unknown; cheap, because the answer is one local lookup.
+// How often Fly's DNS is polled; short since it bounds staleness, cheap since it's one local lookup.
 export const FLY_POLL_INTERVAL_MS = 10_000;
 
-// The peer's identity for map keys and change detection: the address and both ports, since two entries
-// naming one host on different ports are two peers (which is exactly what a loopback test runs).
+// Peer identity for map keys: address plus both ports, since one host on two ports is two peers.
 export const peerKey = (peer: Peer): string => `${peer.host}|${peer.port}|${peer.internalPort}`;
 
 const sameList = (a: readonly Peer[], b: readonly Peer[]): boolean =>
@@ -46,9 +30,9 @@ const sameList = (a: readonly Peer[], b: readonly Peer[]): boolean =>
 
 const bySortedKey = (peers: readonly Peer[]): readonly Peer[] => [...peers].sort((a, b) => peerKey(a).localeCompare(peerKey(b)));
 
-/* Parse `host[:port[:internalPort]]`. An IPv6 literal is bracketed, `[fdaa::1]:8080:8081`, since its own
- * colons would otherwise be read as ports. Malformed entries are refused rather than skipped: a peer list with
- * a typo in it is a cluster that silently forwards to nobody, and the boot log is where that should surface. */
+// Parses `host[:port[:internalPort]]`; an IPv6 literal is bracketed, `[fdaa::1]:8080:8081`.
+// Malformed entries throw rather than get skipped, so a typo surfaces in the boot log instead of silently dropping a
+// peer.
 export const parsePeerList = (list: string, defaults: { readonly port: number; readonly internalPort: number }): readonly Peer[] => {
     const entries = list
         .split(`,`)
@@ -72,7 +56,7 @@ export const parsePeerList = (list: string, defaults: { readonly port: number; r
     });
 };
 
-// A list that is what it was told and nothing else. `close` and `onChange` exist so the shape is one shape.
+// A list that is what it was told; `close`/`onChange` exist only to match the PeerDiscovery shape.
 export const createStaticPeers = (peers: readonly Peer[]): PeerDiscovery => {
     const fixed = bySortedKey(peers);
     return {
@@ -117,8 +101,7 @@ export const createFlyPeers = (options: FlyPeersOptions): FlyPeers => {
             try {
                 addresses = await resolve(`${options.appName}.internal`);
             } catch (error) {
-                /* A failed lookup is not an empty app. Keeping the last answer means a DNS blip cannot make
-                 * every machine forget every other and 502 the requests it was forwarding a second ago. */
+                // A failed lookup keeps the last answer, so a DNS blip doesn't 502 requests it was already forwarding.
                 options.log?.(`peer discovery: ${options.appName}.internal did not resolve; keeping the last answer`, error instanceof Error ? error : undefined);
                 return;
             }
@@ -142,8 +125,7 @@ export const createFlyPeers = (options: FlyPeersOptions): FlyPeers => {
     };
 };
 
-// The same thing wired to a real clock, first poll immediately. Unrefed: discovery can never be the reason the
-// process stays up.
+// Wired to a real clock, first poll immediate; unrefed so discovery never keeps the process alive.
 export const startFlyPeers = (options: FlyPeersOptions & { readonly intervalMs?: number }): FlyPeers => {
     const peers = createFlyPeers(options);
     void peers.refresh();

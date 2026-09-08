@@ -1,19 +1,7 @@
-<!-- RENAME ONE CONNECTION.
-     A dialog rather than an edit-in-place on the row, because the name is not a caption: it is the handle the
-     agent holds this connection by: the skill it loads, the prefix on its tools, the variable its credential
-     arrives in, the alias `ssh <name>` resolves. A field that changes all of that under a single click deserves
-     a sentence saying so and a button to press, which is exactly what a dialog is.
-
-     WHAT IT PROMISES IS THAT NOTHING IS LOST. The daemon carries the state the old name keyed: a signed-in
-     browser profile, a paired device's enrollment, an extension's checkout, and repoints whatever named it.
-     That promise is the whole reason this is a route and not an add-then-remove, so the dialog says it plainly:
-     the alternative people would otherwise reach for silently signs accounts out.
-
-     IT REPAIRS WHAT THE ADD FORM REPAIRS, by the same rule (cleanName), so a name typed here behaves exactly as
-     one typed there: "Ops Box" becomes `Ops-Box`, said out loud under the field rather than refused. The only
-     name left to refuse is one with nothing usable in it. What this cannot know is which kinds refuse a rename
-     outright and which names are already taken elsewhere: those are the daemon's answers, and arrive as its
-     sentence. -->
+<!--
+    Renames one capability connection. A dialog, not an inline edit, since the name is load-bearing (skill id, tool prefix, credential variable, ssh
+    alias) and the daemon repoints all of it rather than losing state. Applies the same cleanName rule as the add form.
+-->
 <script setup lang="ts">
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";

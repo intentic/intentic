@@ -1,16 +1,9 @@
 import { onMounted, ref } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
 
-/* EVERY OTHER WAY INTO THIS SANDBOX THAT IS NOT A PERSON OR A CONTROL TOKEN, counted for the Access tab.
- *
- * The daemon has several doors a machine can knock on, each minted and shown where it is configured: an event
- * automation's webhook on its row, a workflow's release gate in the designer, the CI hook on the Pipelines
- * view. Each is right where it is; what none of them gives is the answer to the question the Access tab asks,
- * "what is still holding a way in", in one place. This reads the three lists and counts, nothing more, so the
- * tab can name each door and send the reader to where it is managed.
- *
- * Best-effort per list: a daemon without the workflows store, or a viewer whom a route refuses, leaves that
- * count unknown rather than failing the tab. */
+// Counts every machine door into the sandbox besides a person or control token (webhooks, workflow gates, CI hooks),
+// for the Access tab's "what still has a way in" question. Reads and counts only; each list is best-effort, unknown
+// rather than failing the tab.
 
 export interface AccessInventory {
     // Event automations, each reachable at /automations/{id}/fire with its own token.

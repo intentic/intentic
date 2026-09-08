@@ -1,24 +1,19 @@
 import type { ResourceType } from "./resource-types.js";
 
-// The single runtime authority for which outputs each resource type produces, keyed exhaustively by
-// the closed ResourceType union (a missing type is a compile error). Values mirror the Ref<string>
-// output props declared on the handle interfaces in @intentic/sdk; the core outputs test asserts
-// the two never drift. The engine reads this to know which produced/observed values to expose as
-// {$ref:"id.output"} targets, providers never declare their own outputs.
+// Runtime authority for which outputs each resource type produces, keyed exhaustively over ResourceType (a missing
+// type is a compile error). Mirrors the Ref<string> output props on the handle interfaces in @intentic/sdk; keep in
+// sync.
 export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object.freeze({
     host: ["internalIp", "publicIp"],
     cloudflare: ["zoneId", "accountId"],
-    // The Discord guild (server) + the webhook URL for the #reconcile channel. Per-app webhook URLs are
-    // dynamic (one per app that wires notify: discord), declared as a prefix pattern "appWebhook:".
+    // Per-app webhook URLs are dynamic (one per app with notify: discord), declared as the prefix "appWebhook:".
     discord: ["guildId", "reconcileWebhook", "appWebhook:"],
-    // An external SaaS integration (e.g. Stripe). A pure sink in v1: the provider validates the API key on
-    // read/apply but exposes no refs, the apiKey is injected into consuming apps as a $secret env, not a $ref.
+    // Pure sink: apiKey reaches consuming apps as a $secret env, not a $ref; no outputs to expose.
     stripe: [],
     "cf-route": ["url"],
     tunnel: ["tunnelId", "cname"],
     forgejo: ["url", "internalUrl", "runnerToken", "gitToken", "packagesToken"],
-    // Identity nodes are pure sinks: usernames/org names are authored or deterministic literals the resolver
-    // passes around directly, so nothing refs an output off them (like ci/forgejo-notify/komodo-notify).
+    // Identity nodes are pure sinks; usernames/org names are literals the resolver passes around directly.
     "forgejo-user": [],
     "forgejo-org": [],
     "forgejo-team": [],
@@ -26,9 +21,9 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     "control-repo": ["cloneUrl", "sshUrl"],
     "forgejo-runner": [],
     komodo: ["url", "internalUrl"],
-    // Komodo Periphery deployed on a worker host (outbound to Core), a pure side-effect like the runner.
+    // Komodo Periphery on a worker host (outbound to Core); pure side-effect, no outputs.
     "komodo-periphery": [],
-    // A worker host registered as a Komodo Server, exposes the server name the deployment provider targets.
+    // Worker host registered as a Komodo Server; exposes the server name deployments target.
     "komodo-server": ["serverName"],
     "komodo-user": [],
     ci: [],
@@ -36,28 +31,23 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     "forgejo-notify": [],
     "komodo-notify": [],
     signoz: ["url", "internalUrl", "otlpEndpoint"],
-    // Self-hosted catalog services: one compose stack on the host + a Cloudflare route, like signoz but
-    // without an ingest endpoint apps ref, so just the two URL outputs.
+    // Self-hosted catalog services: compose stack plus Cloudflare route; unlike signoz, no ingest endpoint output.
     outline: ["url", "internalUrl"],
     paperless: ["url", "internalUrl"],
     openproject: ["url", "internalUrl"],
     invoiceninja: ["url", "internalUrl"],
     infisical: ["url", "internalUrl"],
-    // The per-host workspace sandbox: its host-internal daemon url, the daemon's /health url for readiness,
-    // and the `<zone>` base its dev-server previews sit under.
+    // previewBase is the `<zone>` base dev-server previews sit under.
     workspace: ["internalUrl", "healthUrl", "previewBase"],
-    // A scheduled backup job, a pure sink (nothing refs an output off it), like ci/forgejo-runner.
+    // Pure sink; nothing refs an output off a backup job.
     backup: [],
-    // Backing instances: the host-internal coordinates a consuming app's binding node connects with. The
-    // per-app credentials live on the binding node below, not here (apps never ref the instance directly).
+    // Host-internal coordinates a binding node connects with; credentials live on the binding node, not here.
     postgres: ["internalHost", "port"],
     valkey: ["internalHost", "port"],
-    // Per-app binding nodes: the connection URL injected into the consuming app's deployments. Carries the
-    // app-scoped credential (provider-generated, embedded in the URL), so it is a credentialed output sink.
+    // Connection URL injected into the app's deployment; embeds the app-scoped, provider-generated credential.
     "postgres-database": ["url"],
     "valkey-namespace": ["url"],
-    // Phase 2 backing vocabulary (Authentik auth + Garage object-storage). Declared here so the resolver/emit
-    // and the OUTPUTS authority stay exhaustive; the providers + emit routing land in Phase 2.
+    // Authentik auth + Garage object-storage vocabulary; declared for exhaustiveness, providers land later.
     authentik: ["url", "issuerUrl", "internalUrl"],
     "authentik-client": ["issuer", "clientId", "clientSecret"],
     garage: ["internalEndpoint", "endpoint"],

@@ -5,13 +5,11 @@ import { extensionUiNames } from "@intentic/extension-ui/names";
 import * as vueQuery from "@tanstack/vue-query";
 import * as vue from "vue";
 
-/* Publishes the app's OWN module instances for extension bundles. Bundles are built with these packages as
- * externals; the import map in index.html resolves the bare specifiers (blob-URL modules included) to the
- * static shims in public/ext-shims/, which re-export from this global, so a bundle's `import { ref } from
- * "vue"` lands on the same vue instance the shell runs on, extension-ui renders the shell's own themed
- * components, and vue-query joins the app's ONE QueryClient (shared cache + invalidation). Two copies of any
- * of these would silently fork reactivity/caching, which is why the shims never bundle their own. Imported for
- * its side effect from main.ts, ahead of any extension load. */
+// Publishes the app's own module instances (vue, extension-ui, vue-query, etc.) for extension bundles to import through
+// the ext-shims in public/ext-shims/.
+// Ensures a bundle's `import { ref } from "vue"` shares the shell's vue instance, extension-ui components, and
+// QueryClient; two copies would fork reactivity/caching.
+// Imported for its side effect from main.ts, before any extension loads.
 
 declare global {
     // oxlint-disable-next-line no-var, no-underscore-dangle -- ambient global declarations require `var`; the generated ext-shims read exactly this dunder name
@@ -29,8 +27,7 @@ globalThis.__intenticHost = {
     },
 };
 
-// names.mjs is the shim generator's source of export names (it cannot import the kit's .vue graph in node),
-// catch drift between the list and the real module the moment the app boots in dev.
+// names.mjs hand-lists exports (can't import the .vue graph in node); this catches drift in dev.
 if (import.meta.env.DEV) {
     const actual = new Set(Object.keys(extensionUi));
     const missing = extensionUiNames.filter((name) => !actual.has(name));

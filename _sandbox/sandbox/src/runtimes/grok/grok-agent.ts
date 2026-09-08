@@ -16,70 +16,40 @@ import { createTurnGate } from "../../guard/turn-gate.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
 import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
-/* The xAI Grok provider adapter: same seam as agent.ts's runAgent. AgentRequest in, AgentEvent frames out,
- * backed by OpenCode (`@opencode-ai/sdk`) pointed at xAI Grok. OpenCode is itself the agentic runtime
- * (sessions, tools, file edits) and holds the OAuth credential; Grok is the model backend (providerID "xai").
- * Provider differences stay inside this file; the wire contract, routes, and UI are shared.
- *
- * Auth is subscription OAuth (SuperGrok / X Premium), driven by the Grok routes and persisted by OpenCode, no
- * per-turn key. The turn just resolves a session and streams. Permissions run allow-all because the container
- * is the isolation boundary (same posture as the Claude/Codex paths). */
+// xAI Grok provider adapter (same seam as agent.ts's runAgent): AgentRequest in, AgentEvent frames out, backed by
+// OpenCode, which owns sessions, tools, file edits and the OAuth credential (providerID "xai"). Auth is subscription
+// OAuth, persisted by OpenCode; no per-turn key. Permissions run allow-all: the container is the isolation boundary.
 
 // The xAI provider id in OpenCode / models.dev, and the default backend for a turn that names none.
 const XAI = "xai";
 
-// One Grok turn. Injected so tests drive a fake Event stream, no server, no network (the QueryFn/CodexRunner
-// pattern). The runner creates/resumes the session and yields the OpenCode events for it.
+// One Grok turn; the runner creates/resumes the session and yields its OpenCode events. Injected so tests drive a fake
+// Event stream with no server.
 export interface GrokTurn {
     readonly prompt: string;
     readonly sessionId?: string;
     readonly cwd: string;
     readonly model?: string;
-    /* WHICH MODEL BACKEND OpenCode drives for this turn, its provider id, not ours. Absent ⇒ xAI, which is
-     * what every Grok turn means and what this runtime served alone until Gemini arrived.
-     *
-     * It is per-TURN rather than per-runner because there is exactly one warm `opencode serve` per container and
-     * both providers are registered on it (opencode.ts): the server is shared, the backend is a property of the
-     * prompt. The xAI self-heal below is gated on this for the same reason, "Did you mean" is xAI's wording,
-     * and its correction is recorded into xAI's catalog. */
+    // OpenCode's provider id to drive this turn on; absent means xAI. Per-turn: one shared opencode serve carries both
+    // providers.
     readonly provider?: string;
     // The built-in OpenCode agent: "plan" is read-only (proposes), "build" executes.
     readonly agent: "plan" | "build";
-    /* This turn's command-rulebook gate, registered against the OpenCode session id the moment it exists so the
-     * daemon-wide permission watcher can find it (opencode.ts sessionGates). Absent ⇒ nothing is registered and
-     * every permission gets the standing yes, exactly as before.
-     *
-     * Registration happens in the RUNNER rather than in the adapter because the session id is born here: a new
-     * session's id comes back from `session.create`, and a permission can arrive before the `session.created`
-     * event the adapter reads. */
+    // Command-rulebook gate for this turn, registered against the session id once it exists; absent means every
+    // permission gets the standing yes.
     readonly gate?: CommandGate;
-    /* THIS SANDBOX'S STANDING INSTRUCTIONS, as much of them as OpenCode will take, the whole of what makes
-     * this runtime `instructions: "append"` rather than one that drops the setting silently.
-     *
-     * It rides `system` on the prompt body, which OpenCode ADDS to its own prompt: there is no seam for
-     * replacing that base, so a custom system prompt arrives here as extra instructions and the settings page
-     * says exactly that instead of promising a replacement two providers cannot perform.
-     *
-     * PER MESSAGE, not per session, because that is the only place the field exists, and it is why this is a
-     * property of the turn like the model rather than of the runner. */
+    // Standing instructions appended via OpenCode's `system` field (added to, not replacing, OpenCode's own prompt);
+    // per message, not per session.
     readonly system?: string;
-    /* THE PICTURES THIS TURN CAME WITH, already read off disk, sent beside the prompt text as native image
-     * parts rather than named in it as paths.
-     *
-     * Attached files reach an adapter as paths and each one decides what to do with them (attachment-note.ts).
-     * This runtime used to put ALL of them in the prompt as a path list and leave the read tool to fetch them,
-     * which is one hop more than a screenshot needs and, on the Google backend, one hop that did not work at
-     * all. Codex, Pi and ACP all split images out already; this is that same split, arriving late.
-     *
-     * Read in the adapter rather than here so an unreadable path can fall back into the same prompt note the
-     * non-image attachments ride: a deleted attachment then costs a line of text rather than the turn. */
+    // Images already read off disk, sent as native parts rather than named as paths in the prompt; read in the adapter
+    // so an unreadable one falls back to a prompt note.
     readonly images?: readonly FilePartInput[];
     readonly signal: AbortSignal;
 }
 export type GrokRunner = (turn: GrokTurn) => AsyncIterable<Event>;
 
-// Native image parts for OpenCode's prompt, base64 data URLs rather than file:// because the server is reached
-// over HTTP and need not share this process's view of the filesystem. Unreadable files come back as `unread`.
+// Builds native image parts as base64 data URLs (the server is reached over HTTP, not a shared filesystem); unreadable
+// files come back as `unread`.
 const imageParts = async (paths: readonly string[]): Promise<{ parts: FilePartInput[]; unread: string[] }> => {
     const parts: FilePartInput[] = [];
     const unread: string[] = [];
@@ -104,9 +74,8 @@ const eventSessionId = (event: Event): string | undefined => {
         case "session.error":
         case "todo.updated":
         case "permission.updated":
-        // The watchdog counts this as life, a model that thinks for minutes before its first token emits
-        // nothing else, and killing that turn at two minutes is the same false timeout this file already paid
-        // for once. It is also where a retry (and with it a rate limit) announces itself; see streamTurn.
+        // Counts as watchdog liveness; a model can think for minutes before its first token. Also where a retry
+        // announces itself (see streamTurn).
         case "session.status":
             return event.properties.sessionID;
         case "message.part.updated":
@@ -118,32 +87,18 @@ const eventSessionId = (event: Event): string | undefined => {
     }
 };
 
-// A turn with no OpenCode event for OUR session for this long is treated as stuck and aborted. OpenCode can
-// stall silently (e.g. while building a multimodal request) and emit neither session.idle nor session.error,
-// which would otherwise hang the turn (no `done`) and spin the UI forever.
+// No OpenCode event for this session within this window means the turn is stuck and gets aborted.
 const GROK_INACTIVITY_MS = 120_000;
 
-// Hard overall backstop: even if our session keeps dribbling events, one turn must not run forever.
+// Hard overall backstop: even if the session keeps dribbling events, one turn must not run forever.
 const GROK_MAX_TURN_MS = 30 * 60_000;
 
-// How long the event stream gets to say hello before the turn goes ahead without proof it is listening (see the
-// connect handshake in the runner). Generous against a loaded host, but far short of the inactivity watchdog:
-// waiting here costs latency on every turn, and going ahead early costs at most the session id.
+// How long the stream gets to say hello before the turn proceeds without proof it's listening; short compared to the
+// inactivity watchdog.
 const CONNECT_MS = 5_000;
 
-/* THE STREAM ENDED WITHOUT ENDING THE TURN, which is the server going away underneath it: one `opencode serve`
- * drives every turn in this container, and a restart, a crash or a dropped socket closes the shared SSE for
- * whoever happens to be mid-turn on it.
- *
- * The loop used to `return` here, which reads downstream as a clean finish. `session.idle` and `session.error`
- * are the only two endings a turn on this runtime has, and neither of them happened: so the adapter emitted no
- * error, the daemon recorded `outcome: "ok"`, and the agent's card settled into the board's Finished lane over
- * a turn that had been cut off mid-tool-call. Thrown instead, exactly like the inactivity timeout beside it,
- * which is this same fact arriving as silence rather than as a closed stream.
- *
- * A STOPPED TURN IS THE ONE EXCEPTION, and it returns quietly: the abort closes this stream by design
- * (whenAborted, in the runner), so throwing there would report the user's own press as a provider failure. The
- * daemon drops error frames on an aborted turn anyway, which makes this belt and braces, and it costs a read. */
+// A closed stream without session.idle/session.error means the shared opencode serve went away, not a finished turn;
+// throws, except when this turn's own abort is what closed it (returns quietly).
 const refuseEarlyClose = (turn: GrokTurn): void => {
     if (turn.signal.aborted) {
         return;
@@ -151,31 +106,20 @@ const refuseEarlyClose = (turn: GrokTurn): void => {
     throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} stopped sending events before the turn ended.`);
 };
 
-// The production runner: use the shared OpenCode client to create/resume the session, fire the prompt on the
-// xAI provider, and yield the session's events off the global SSE stream. `inactivityMs` is injectable for tests.
+// Production runner: creates/resumes the session on the shared OpenCode client, fires the prompt, and yields the
+// session's events off the global SSE stream. `inactivityMs` is injectable for tests.
 export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number = GROK_INACTIVITY_MS): GrokRunner =>
     async function* (turn) {
         const c = await openCode.client();
-        // Subscribe BEFORE creating/prompting so the session.created + early part events aren't missed. Scoped
-        // to this turn's directory because an unscoped stream carries no session events whatsoever, the whole
-        // story is on subscribeEvents in opencode.ts.
+        // Subscribes before creating/prompting so session.created and early events aren't missed; scoped to this turn's
+        // directory, since an unscoped stream carries no session events (see subscribeEvents in opencode.ts).
         const sse = await openCode.events(turn.cwd);
-        // A delegation this turn starts runs in this same directory, and its watcher is scoped the same way, so
-        // register it here: the boot only knows the workspace root, and an isolated turn works in a worktree.
-        // Idempotent, so every turn paying for it costs a Set lookup after the first.
+        // Registers this turn's directory for delegation watching (idempotent); an isolated turn works in a worktree
+        // the boot doesn't know about.
         await openCode.watch(turn.cwd);
-        /* SUBSCRIBING IS NOT CONNECTING, and the difference is a dropped session id.
-         *
-         * `subscribe()` builds a lazy generator, the HTTP request is not made until something READS it. So the
-         * "subscribe first" above bought nothing on its own: the read used to start after the prompt, by which
-         * time `session.created` had already been broadcast, and a brand-new session's id never reached the
-         * client. That id is how the next message resumes this conversation instead of starting a fresh one.
-         *
-         * The first read is therefore issued and AWAITED here, before anything exists to miss: the server opens
-         * every stream with `server.connected`, so that arriving is the proof the subscription is live. Whatever
-         * it turns out to be is kept for the loop rather than dropped, this is a shared stream and a sibling
-         * session's event can legitimately win the race. Bounded, because a server that never says hello must
-         * cost this turn a couple of seconds rather than the turn. */
+        // `subscribe()` is lazy; the HTTP request fires only on first read, so it must happen before the session is
+        // created or `session.created` is missed. The first read is awaited here, bounded by CONNECT_MS, and its result
+        // is kept for the loop rather than dropped.
         const iterator: AsyncIterator<Event> = sse.stream[Symbol.asyncIterator]();
         let pending = iterator.next();
         const hello = await Promise.race([pending, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
@@ -186,28 +130,22 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         }
         let sessionId = turn.sessionId;
         if (sessionId === undefined) {
-            /* NAMED ON CREATION, and for once the string itself does not matter: what matters is that OpenCode
-             * does not auto-title it. An unnamed session gets one extra model call on the turn's own provider
-             * ("You are a title generator…", carrying the user's prompt as material) whose answer is written to a
-             * field nothing here reads, because intentic names its own conversations (agent/title-namer.ts).
-             * Measured on a recording upstream: two requests for the first message of an unnamed session, one for
-             * a named one. Same reason the Gemini helper does it (gemini/gemini-one-shot.ts). */
+            // Named on creation so OpenCode skips auto-titling (an extra model call per unnamed session); the title
+            // string itself is unused.
             const created = await c.session.create({ query: { directory: turn.cwd }, body: { title: `intentic conversation` } });
             sessionId = created.data?.id;
             if (sessionId === undefined) {
                 throw new Error("OpenCode did not return a session id");
             }
         }
-        /* Registered only now, because until the session exists there is no id to abort — and everything above
-         * is slow: booting the OpenCode server, opening the stream, and up to CONNECT_MS waiting for it to say
-         * hello. A Stop clicked anywhere in that window reaches a signal that has ALREADY aborted, which a bare
-         * listener never hears; the session would then run to completion, spending, with the turn shown stopped. */
+        // Registered only once the session id exists: a signal already aborted before this point never fires a listener
+        // added later, so the session would run to completion while the UI shows it stopped.
         whenAborted(turn.signal, () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}));
         if (turn.gate !== undefined) {
             registerSessionGate(sessionId, turn.gate);
         }
-        // Fire the turn's prompt on the resolved session for a given model id (empty ⇒ let OpenCode choose). Reused
-        // by the self-heal below to re-prompt with a corrected model after a "model not found" rejection.
+        // Fires the prompt on the resolved session for a model id (empty means let OpenCode choose); reused by the
+        // self-heal to re-prompt with a corrected model.
         const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
             c.session.promptAsync({
                 path: { id: sessionId },
@@ -216,25 +154,21 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     agent: turn.agent,
                     ...(modelId !== undefined && modelId !== "" ? { model: { providerID: turn.provider ?? XAI, modelID: modelId } } : {}),
                     ...(turn.system !== undefined ? { system: turn.system } : {}),
-                    // Images first, the way a person hands over a screenshot before saying what to do with it.
+                    // Images precede the text part.
                     parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
                 },
             });
         // One self-heal attempt per turn: xAI names the account's valid models when it rejects a stale/renamed id.
         let retried = false;
-        // After a self-heal re-prompt, a lingering session.idle from the FAILED prompt could end the turn before
-        // the corrected one streams. While true, ignore idle until the retry's first real event proves it started.
+        // After a self-heal re-prompt, a lingering idle from the failed prompt is ignored until the retry's first real
+        // event proves it started.
         let awaitingRetryStart = false;
-        /* THE SELF-HEAL IS xAI'S, both halves of it: "Did you mean: …" is xAI's own wording, and the correction is
-         * recorded into xAI's catalog. A Gemini turn that tripped it would rewrite Grok's model list from a
-         * sentence Google never wrote, so the whole mechanism is scoped to the backend it was built for. Gemini's
-         * catalog comes off the translator and needs no rescue: a model it does not serve is not in it. */
+        // The self-heal is xAI-specific: the rejection wording and the corrected catalog both come from xAI. Gemini's
+        // catalog comes off the translator and needs no rescue.
         const selfHeals = (turn.provider ?? XAI) === XAI;
-        // Fire the initial prompt. xAI rejects a stale/renamed (or seed) model id by REJECTING promptAsync (a thrown
-        // ProviderModelNotFoundError) rather than via a session.error event, so the in-loop self-heal below never
-        // sees it, heal it here the same way (record xAI's named models, re-prompt once with a valid one) so a
-        // stale pinned/default model self-corrects silently instead of surfacing raw. A rejected prompt streamed no
-        // events, so there's no stale idle to skip (no awaitingRetryStart needed).
+        // xAI rejects a stale/renamed model id by rejecting promptAsync (thrown), not via a session.error event, so the
+        // in-loop self-heal below never sees it; healed here the same way. No events stream on rejection, so no stale
+        // idle to skip.
         try {
             await sendPrompt(turn.model);
         } catch (error) {
@@ -247,13 +181,9 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             await openCode.recordModels(suggestions);
             await sendPrompt(suggestions[0]);
         }
-        // Drive the shared SSE iterator manually so each read can race an inactivity timeout (a `for await` can't),
-        // and close it on exit (it's a per-turn subscription). Both session.idle and session.error are terminal,
-        // OpenCode may not send idle after an error. The iterator and its first read were opened above, before
-        // the session existed, so nothing this turn broadcast can have been missed.
-        // Two independent bounds, measured against wall-clock deadlines rather than a fresh per-read timer: the
-        // inactivity deadline advances only on OUR session's events (a busy sibling session on the shared stream
-        // must not keep a wedged target turn's watchdog from firing), and the turn deadline is a hard backstop.
+        // Drives the iterator manually so each read can race an inactivity timeout (`for await` can't); closed on exit
+        // since it's per-turn. Two wall-clock deadlines: inactivity advances only on this session's events, turn
+        // deadline is a hard backstop.
         const turnDeadline = Date.now() + GROK_MAX_TURN_MS;
         let inactivityDeadline = Date.now() + inactivityMs;
         // The event the connect handshake already pulled off the stream, replayed as this loop's first read.
@@ -278,8 +208,8 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                         throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode.`);
                     }
                     if (result.done) {
-                        // The stream closed without the turn ending. Throws, unless this turn's own abort is
-                        // what closed it: refuseEarlyClose has the whole story.
+                        // Stream closed without the turn ending; refuseEarlyClose throws unless this turn's own abort
+                        // caused it.
                         refuseEarlyClose(turn);
                         return;
                     }
@@ -290,21 +220,15 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     continue;
                 }
                 inactivityDeadline = Date.now() + inactivityMs;
-                /* A RETRY IS A WAIT OPENCODE HAS ALREADY NAMED THE END OF, and the watchdog must respect it.
-                 *
-                 * OpenCode rides out a refused request (a 429 above all) inside the turn on its own escalating
-                 * backoff, and announces each wait ONCE with the instant it will try again. Left at the ordinary
-                 * two minutes, any backoff longer than that would be read as silence and the turn killed while it
-                 * was doing exactly what it said it would, so the deadline moves out past the promised instant,
-                 * still under the hard turn cap that bounds everything here. */
+                // OpenCode announces an in-turn retry wait once, with the instant of the next attempt; the inactivity
+                // deadline moves past that instant so a long backoff isn't read as a hang, still bounded by the hard
+                // turn cap.
                 if (event.type === "session.status" && event.properties.status.type === "retry") {
                     inactivityDeadline = Math.max(inactivityDeadline, event.properties.status.next + inactivityMs);
                 }
-                // Self-heal a stale/renamed model in-place, instead of surfacing the error and making the user
-                // re-send: xAI's rejection NAMES the account's valid models (the authoritative catalog). Record
-                // them (fixes the picker + every future turn) and re-prompt this same session once with a valid
-                // one. Model-not-found is rejected before any content streams, so nothing is duplicated. A second
-                // failure (retried already true) falls through and surfaces as a real error.
+                // Self-heals a stale/renamed model by recording xAI's named alternatives and re-prompting the same
+                // session once; nothing streams before a model-not-found rejection, so nothing is duplicated. A second
+                // failure falls through as a real error.
                 if (event.type === "session.error" && !retried && selfHeals) {
                     const message = errorText(event.properties.error);
                     const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
@@ -317,8 +241,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     }
                 }
                 if (awaitingRetryStart) {
-                    // Drop a stale idle from the failed prompt; any other event (content, or the retry's own error)
-                    // means the corrected turn is under way, so resume normal processing.
+                    // Drops a stale idle from the failed prompt; any other event means the corrected turn is under way.
                     if (event.type === "session.idle") {
                         continue;
                     }
@@ -331,63 +254,47 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             }
         } finally {
             await iterator.return?.().catch(() => {});
-            // The gate dies with the phase that registered it: a permission arriving later belongs to a session
-            // nothing is judging any more, and gets the standing yes (opencode.ts answerPermission).
+            // The gate dies with its phase; a later permission belongs to no session judging it and gets the standing
+            // yes (opencode.ts answerPermission).
             releaseSessionGate(sessionId);
         }
     };
 
-// Flatten an OpenCode session error onto a message (every NamedError carries data.message).
+// Flattens an OpenCode session error onto a message (every NamedError carries data.message).
 const errorText = (error: unknown): string => {
     const named = error as { data?: { message?: string }; name?: string } | undefined;
     return named?.data?.message ?? named?.name ?? "agent error";
 };
 
-// xAI surfaces an unknown/retired model id as a "model not found" session error (listing valid alternatives).
-// Tag it so the client reloads the live catalog and drops the bad pinned model, mirroring the session-not-found
-// self-heal, any other error stays uncoded (e.g. an auth rejection).
+// xAI surfaces an unknown/retired model id as a "model not found" error naming valid alternatives; tagged so the client
+// reloads the catalog and drops the bad pinned model.
 const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
 
-/* THE PROVIDER SAID NO BECAUSE OF HOW MUCH HAS BEEN ASKED OF IT, an allowance, a quota, a rate.
- *
- * Worth telling apart from every other failure because the recovery is nothing but time: coded, the chat shows
- * it as a muted "wait and retry" notice with the reset instant, and, the part that matters more, it stops
- * offering Continue, which on a spent allowance re-fails on the press by construction.
- *
- * Google is the wording this is written from: an Antigravity account with no weekly headroom left refuses with
- * `RESOURCE_EXHAUSTED` / "You exceeded your current quota", and CLIProxyAPI hands that back once its own walk
- * across the account fleet has run out of credentials to try (translator.ts).
- *
- * It reads MORE wordings than the shared mentionsSpentAllowance does, that helper deliberately keeps "rate
- * limit" out, because on the Claude harness the phrase also appears in retries the CLI is still working
- * through, and reading one of those as a spent plan would park a turn that was about to succeed. Here it cannot:
- * OpenCode's own in-turn retries (the session.status waits above) are spent by the time a session.error is
- * emitted, so a refusal reaching this line is the last word rather than a stage of one. */
+// A refusal driven by quota/allowance, not a real error; coded so the chat offers a retry-later notice instead of a
+// Continue that would just re-fail.
 const RATE_LIMITED = /rate.?limit|resource.?exhausted|too many requests|\b429\b/i;
 
 const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
 
-// Plan phase holds back the assistant text (it becomes the plan) instead of streaming it; `sessionId` is the
-// session to resume for the execute phase, captured from session.created (or the resumed id).
+// Plan phase holds back the assistant text (it becomes the plan) instead of streaming it; `sessionId` is captured from
+// session.created (or the resumed id) for the execute phase to resume.
 interface TurnCapture {
     sessionId?: string;
     planText?: string;
-    // Set when the plan phase hit a session.error, so runGrokPlanTurn suppresses the plan frame, a failed turn
-    // must not surface a "plan" (the error already streamed), even if partial/echoed text reached planText.
+    // Set on a session.error during the plan phase, so a failed turn never surfaces a bogus plan frame.
     errored?: boolean;
 }
 
-// What a call's settled input says it is about, as the two optional fields its card carries. Read in one place
-// because the opening frame and an already-finished call want exactly the same pair.
+// Target/locations a tool call's input implies, read once since the opening frame and an already-finished call need the
+// same pair.
 const toolCallDetails = (input: unknown, cwd: string): { target?: string; locations?: ToolCallLocation[] } => {
     const target = toolTarget(input);
     const locations = toolLocations(input, cwd);
     return { ...(target !== undefined ? { target } : {}), ...(locations !== undefined ? { locations } : {}) };
 };
 
-// completed | error. An edit/write completion derives its diff from the (now-final) input, the
-// authoritative content; otherwise the tool's text output/error is. A call first seen here (the
-// stream skipped running) arrives as one whole tool_call carrying its final status.
+// completed | error: an edit/write derives its diff from the final input; otherwise the tool's own output/error is
+// used. A call first seen here arrives as one whole tool_call with its final status.
 const finishedToolCall = (
     part: ToolPart,
     name: string,
@@ -412,14 +319,12 @@ const finishedToolCall = (
         : { kind: "tool_call_update", id: part.callID, status, content };
 };
 
-// What one tool part has to say, kept out of streamTurn's event walk so its branches read at one level. `started`
-// is the caller's set of callIDs that have already opened a card: a call announces itself once and then rides
-// updates, and this is what tells the two apart across parts.
+// Frames for one tool part, kept out of streamTurn's event walk. `started` is the set of callIDs that already opened a
+// card, telling a first announcement from a later update.
 async function* toolPartFrames(part: ToolPart, cwd: string, started: Set<string>): AsyncGenerator<AgentEvent> {
     const name = displayNameOf(part.tool);
     const state = part.state;
-    // `pending` is skipped: OpenCode is still streaming the input args, so a target/locations read
-    // now could be partial. The first useful state is `running` (input settled).
+    // `pending` is skipped: OpenCode is still streaming input args, so target/locations would read as partial.
     if (state.status === "pending") {
         return;
     }
@@ -443,12 +348,9 @@ async function* toolPartFrames(part: ToolPart, cwd: string, started: Set<string>
     yield finishedToolCall(part, name, state, cwd, first);
 }
 
-// Normalize one Grok turn's OpenCode Event stream onto AgentEvents, RETURNING what the turn captured, the plan
-// phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary turn
-// discards it. `holdText` is the plan phase's one behavioural difference: text is accumulated rather than
-// streamed, so the whole plan surfaces as one `plan` frame. `resumedSessionId` seeds the capture, because a
-// resumed session emits no session.created and the execute phase still needs a session to continue.
-// Ends on session.idle; does NOT emit the terminal `done` (the caller does once the whole turn settles).
+// Normalizes one turn's OpenCode Event stream onto AgentEvents, returning what it captured (the plan phase reads this
+// off `yield*`). `holdText` accumulates text into one `plan` frame instead of streaming deltas; ends on session.idle
+// without emitting the terminal `done`.
 async function* streamTurn(
     events: AsyncIterable<Event>,
     cwd: string,
@@ -456,20 +358,19 @@ async function* streamTurn(
     resumedSessionId?: string,
 ): AsyncGenerator<AgentEvent, TurnCapture> {
     const capture: TurnCapture = resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {};
-    // Per-part emitted text length, so each message.part.updated yields only the new suffix (works whether the
-    // server sends incremental deltas or full snapshots).
+    // Per-part emitted text length, so each message.part.updated yields only the new suffix.
     const emitted = new Map<string, number>();
-    // callIDs that have already emitted their opening tool_call frame, so later states ride tool_call_update
-    // instead of repeating it.
+    // callIDs that have already emitted their opening tool_call frame, so later states ride tool_call_update instead of
+    // repeating it.
     const started = new Set<string>();
-    // Token/cost accounting per assistant message: OpenCode carries it on the message info (not its parts) and an
-    // agentic turn has several assistant messages, so key by id (latest snapshot wins) and sum once at idle.
+    // Token/cost per assistant message, keyed by id (an agentic turn has several); latest snapshot wins, summed once at
+    // idle.
     const usage = new Map<
         string,
         { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUsd: number }
     >();
-    // Message id → role, so a text part is attributed to its owner. OpenCode broadcasts the USER message's parts on
-    // this same session stream, and a text Part carries no role, without this, the prompt echoes into planText/delta.
+    // Message id to role, since a text part carries no role itself; OpenCode broadcasts the user's echoed prompt on the
+    // same stream, so without this it would leak into planText/delta.
     const roleOf = new Map<string, "user" | "assistant">();
 
     for await (const event of events) {
@@ -478,11 +379,11 @@ async function* streamTurn(
             yield { kind: "session", sessionId: event.properties.info.id };
         } else if (event.type === "message.part.updated") {
             const part = event.properties.part;
-            // Only the ASSISTANT's text is the answer/plan. A part whose message is the user's (the echoed prompt)
-            // is skipped; unknown (role not yet seen) is treated as assistant so early assistant text isn't dropped.
+            // Only assistant text is the answer/plan; a user part (the echoed prompt) is skipped, and an unknown role
+            // is treated as assistant so early text isn't dropped.
             if (part.type === "text" && roleOf.get(part.messageID) !== "user") {
                 const prev = emitted.get(part.id) ?? 0;
-                // A snapshot that repeats what was already emitted carries no new suffix, so there is nothing to say.
+                // A snapshot no longer than what's already emitted carries no new suffix.
                 if (part.text.length <= prev) {
                     continue;
                 }
@@ -517,7 +418,7 @@ async function* streamTurn(
             };
         } else if (event.type === "message.updated") {
             const info = event.properties.info;
-            // Attribute this message's role so its text parts are captured (assistant) or skipped (user) above.
+            // Attributes this message's role so its text parts are captured (assistant) or skipped (user) above.
             roleOf.set(info.id, info.role);
             if (info.role === "assistant") {
                 usage.set(info.id, {
@@ -529,17 +430,9 @@ async function* streamTurn(
                 });
             }
         } else if (event.type === "session.status" && event.properties.status.type === "retry") {
-            /* THE TURN IS ALIVE AND WAITING ON THE PROVIDER, which is otherwise indistinguishable from a hang.
-             *
-             * OpenCode retries a refused request inside the turn and says so once per wait, carrying the
-             * provider's own sentence and the instant of the next attempt. Nothing else is emitted meanwhile, so
-             * without this the chat sits on a cycling "Thinking…" for the whole backoff, and the one move a
-             * user makes against an apparent hang is Stop, the only move that throws the work away.
-             *
-             * `status: 429` is how the chat's line says WHY: a wait it can name as rate-limiting is a wait the
-             * user can act on (come back later, or pick a model on another allowance), where "not responding"
-             * sends them looking for a fault that isn't there. No maxAttempts. OpenCode publishes which attempt
-             * it is on and no bound for it, and inventing one would be a promise the retry never made. */
+            // Surfaces an in-turn provider retry so the chat shows a wait rather than an apparent hang; `status: 429`
+            // lets the UI say it's rate-limiting rather than a dead turn. No maxAttempts: OpenCode names none, so none
+            // is invented.
             const status = event.properties.status;
             yield {
                 kind: "provider_retry",
@@ -549,10 +442,9 @@ async function* streamTurn(
             };
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
-            /* A parameter this sandbox never sent, refused above us, reads FIRST for the reason codex-agent.ts
-             * spells out: the sentence ends in "on this model", so the model-invalid branch would otherwise
-             * throw away the user's pinned model over a fault that was never theirs. Every routed provider
-             * shares the proxy that can produce it, so every adapter that codes failures reads it. */
+            // Checked first: the refusal ends in "on this model", which would otherwise trip the model-invalid branch
+            // and drop a pinned model that was never at fault. Every routed provider shares the proxy that can produce
+            // it.
             yield isUnsentParameterRefusalText(message)
                 ? unsentParameterFrame(message)
                 : {
@@ -565,8 +457,8 @@ async function* streamTurn(
                             : {}),
                   };
             capture.errored = true;
-            // Terminal: OpenCode does not reliably emit session.idle after an error, so ending here (rather than
-            // waiting for an idle that never comes) is what lets runGrokAgent reach its `done`.
+            // Terminal: OpenCode doesn't reliably emit session.idle after an error, so ending here is what lets the
+            // caller reach `done`.
             return capture;
         } else if (event.type === "session.idle") {
             if (usage.size > 0) {
@@ -586,11 +478,9 @@ async function* streamTurn(
     return capture;
 }
 
-// Always-plan flow over the shared skeleton: a read-only planning turn on the `plan` agent whose assistant
-// text becomes the plan, then an execution turn on the `build` agent resumed on the same session.
-// No `question` frames. OpenCode's permission channel maps to per-tool approvals, not multiple-choice
-// clarifying questions; a dedicated ask-tool is the upgrade path. Declared as `questions: false` in this
-// runtime's capability row, which is what the composer says out loud.
+// Plan flow over the shared skeleton: a read-only turn on the `plan` agent whose text becomes the plan, then execution
+// on `build` resumed on the same session. No `question` frames: OpenCode's permission channel maps to per-tool
+// approvals only, declared as `questions: false` in this runtime's capability row.
 async function* runGrokPlanTurn(
     request: AgentRequest,
     runner: GrokRunner,
@@ -598,13 +488,11 @@ async function* runGrokPlanTurn(
     gate: CommandGate,
     firstTurnImages: readonly FilePartInput[],
 ): AsyncGenerator<AgentEvent> {
-    // Both phases of the emulation carry the same standing instructions: they are two messages of ONE turn, and
-    // a plan proposed under the owner's prompt that is then executed without it would be a different agent
-    // doing the work than the one that agreed to it.
+    // Both phases carry the same standing instructions; they're two messages of one turn, so the execute phase must not
+    // drop them.
     const system = request.systemAppend;
-    // The pictures ride the FIRST planning message only. Every later message of this turn (a revision, then the
-    // execution phase) resumes the same session, whose history already holds them; re-sending would pay for the
-    // same screenshot two or three times.
+    // Images ride the first planning message only; every later message resumes the same session, whose history already
+    // holds them.
     let images = firstTurnImages;
     const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture = yield* streamTurn(
@@ -645,27 +533,19 @@ async function* runGrokPlanTurn(
     yield* runPlanEmulation(request.signal, PLAN_PREAMBLE + request.prompt, request.sessionId, planPhase, executePhase);
 }
 
-// Build the Grok provider for the Services seam: AgentRequest in, AgentEvent frames out. The agent route has
-// already gated that xAI is connected and that OpenCode still holds the session. What this runtime does NOT do
-// is declared as `capabilitiesOf(…).runtime === "opencode"` in the contract's agent-catalog.ts rather than
-// silently dropped here: OpenCode owns its own tools, permissions and reasoning settings, so a request reaching
-// this file carries no permission mode but `plan`, and no effort at all.
+// Builds the Grok provider for the Services seam. The agent route has already gated that xAI is connected; capability
+// limits (no permission mode but `plan`, no effort) are declared in the contract's agent-catalog.ts, not enforced here.
 export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
-        /* Pictures go to the model as pictures; everything else is named in the prompt for the read tool to
-         * fetch, and so is any picture that would not open. See GrokTurn.images. */
+        // Pictures go to the model as pictures; everything else, including an unreadable picture, is named in the
+        // prompt for the read tool.
         const { images: attachedImages, others } = splitAttachments(request.attachments);
         const { parts: images, unread } = await imageParts(attachedImages);
         const prompt = withFileNote(request.prompt, [...others, ...unread]);
-        /* THE TURN'S SAFETY WIRING (guard/turn-gate.ts): the owner's command rulebook, answered over OpenCode's
-         * permission channel, and this conversation's outside-content bit, published so the wallet's payment gate
-         * can read it from outside this generator.
-         *
-         * `canPark: false` is the one thing that makes this runtime's rulebook weaker than the Claude path's, and
-         * it is this runtime's watchdog rather than its protocol: a turn is aborted after two minutes with no
-         * event for its session, and a permission paused on a person is exactly that silence. So a hold is
-         * delivered as a refusal naming the rule, `deny` works in full, and the capability record says
-         * `rulebook: "refuse-only"` so the composer tells the owner before they rely on it. */
+        // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel. `canPark:
+        // false`: the watchdog aborts a turn with no session event in two minutes, so a paused permission would be read
+        // as a hang; a hold is delivered as a refusal instead, and the capability record says `rulebook:
+        // "refuse-only"`.
         const { gate, release } = createTurnGate(request);
         const turn =
             request.permissionMode === "plan"
@@ -696,9 +576,8 @@ export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
         } catch (error) {
             if (!surfacedError) {
                 const message = error instanceof Error ? error.message : `${openCodeBackendLabel(provider)} agent failed`;
-                // A thrown model-not-found (promptAsync rejected and the runner couldn't self-heal it, no named
-                // alternatives) gets the same code as the event path, so the client reloads the catalog and drops
-                // the bad pinned model rather than showing the raw error.
+                // A thrown model-not-found (self-heal found no alternatives) gets the same code as the event path, so
+                // the client reloads the catalog and drops the bad pinned model.
                 yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
             }
         } finally {

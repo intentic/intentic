@@ -1,21 +1,8 @@
 import { DEMO_MODES, demoMode, setDemoMode } from "./mode";
 
-/* THE SWITCHER, the demo's own chrome, and the only pixels on this page the product did not draw.
- *
- * It answers the question a recording cannot: "is this what it looks like, or is this what you filled it with?"
- * Three buttons, one per state (mode.ts), so the visitor sees the same workspace bare, curated and at full
- * tilt, and knows which of the three they are looking at.
- *
- * Built in plain DOM against document.body rather than as a component of the app, for two reasons that are the
- * same reason: the app owns #app and knows nothing about the demo, and this bar has to be on screen before the
- * app has booted, it is mounted first, so the first frame of a cold load already carries it.
- *
- * Its CSS is UNLAYERED, which beats every @layer the app's stylesheet declares, so Tailwind's preflight cannot
- * reset a button out from under it. Colours are the design system's own role tokens, so the bar follows the
- * theme and the light/dark flip like everything else; the fallbacks are dark Ember, for the moment before the
- * app's stylesheet has loaded. Above the app's whole stack (PrimeVue overlays 1000, modals 1100, tooltips
- * 1200): this is the frame around the recording, so it stays reachable from inside anything the recording
- * opens. */
+// The demo's own chrome: three buttons, one per mode (mode.ts), so a visitor can tell bare, curated and full apart.
+// Built in plain DOM, mounted before the app boots, so the first frame already carries it. CSS is unlayered and above
+// the app's whole stack (1300), using the design system's own tokens.
 
 const STYLE = `
 #demo-switcher {
@@ -119,8 +106,7 @@ export const installSwitcher = (): void => {
         button.textContent = mode.label;
         button.ariaPressed = String(mode.id === demoMode.id);
         button.title = mode.note;
-        // The active one is inert: it is already what the page is showing, and reloading into the same state
-        // reads as a broken button rather than as a no-op.
+        // Active button is inert: reloading into the same state would look like a broken button.
         button.addEventListener(`click`, () => {
             if (mode.id !== demoMode.id) {
                 setDemoMode(mode.id);

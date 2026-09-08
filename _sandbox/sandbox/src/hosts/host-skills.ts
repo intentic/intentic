@@ -1,22 +1,6 @@
-/* Substituted for the `${tools}` slot in a host pack's SKILL.md: what a connected device's tools ARE, and the
- * rules for working on somebody else's machine. Core, not per-OS data, the tool surface, the scope refusals and
- * the browser/pointer loops are identical on every platform. `${id}` is the instance name (renderSkill).
- *
- * The OS-SPECIFIC half is one pack per platform, contributed by an extension, and it is separate because context
- * is not free: teaching an agent PowerShell quoting on a turn where the only connected machine runs Ubuntu costs
- * tokens and invites `osascript`-shaped nonsense. That is also why this capability is one PER MACHINE rather
- * than one "devices" capability with a list, each machine installs exactly its own pack, with the tool names
- * already namespaced to its id, so the examples are copy-pasteable rather than illustrative.
- *
- * What goes in a pack is chosen by what the model gets WRONG unaided, not by what is documentable:
- *   - which shell it is actually talking to (the single biggest source of failed first commands),
- *   - how to do a job in ONE call instead of ten (every call is a round trip through a tunnel to a laptop),
- *   - the platform's non-obvious spellings (utf8 encoding on Windows, Wayland vs X11 clipboards on Linux),
- *   - and what to do when a call is REFUSED, which is a scope decision the user made, not an error to retry.
- *
- * The note opens by saying how to LOAD the tools, because the server is deferred behind tool search
- * (agent/agent-tools.ts: pinned, its 25 schemas rode every call and were reached in 5% of sessions). A deferred
- * tool is a name in a list until something says to go and get it; the skill is that something. */
+// Substituted for `${tools}` in a host pack's SKILL.md: the core, cross-platform tool surface and rules; `${id}` is the
+// instance name. The OS-specific half is a separate pack per platform; one capability per machine namespaces tool names
+// so examples are copy-pasteable. Tools are deferred behind tool search, so the note opens by saying how to load them.
 export const HOST_TOOLS_NOTE = `# Connected device "\${id}"
 
 This is a real device belonging to the person you are working for. It is not the sandbox: the sandbox is where

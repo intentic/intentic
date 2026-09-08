@@ -1,9 +1,7 @@
-<!-- Centered, width-constrained page shell. Replaces the repeated `mx-auto max-w-* p-6` wrappers; padding
-     comes from the `--ui-page-*` tokens via the `.ui-page` class, and `width` selects the max-width tier:
-     `content` (reading / forms, the default), `wide` (dense data-list panels), or `full` (canvas surfaces
-     that need every pixel). The tier is a data attribute resolved in the design-system stylesheet, so
-     extension bundles, which Tailwind's `@source` globs don't scan: still get the right width without
-     depending on a utility class being generated. -->
+<!--
+    Centered, width-constrained page shell. `width` selects the max-width tier (`content`, `wide`, `full`) via a data attribute resolved in the
+    stylesheet, so extension bundles get the right width without Tailwind scanning them.
+-->
 <script setup lang="ts">
 withDefaults(defineProps<{ width?: `content` | `wide` | `full` }>(), { width: `content` });
 </script>

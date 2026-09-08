@@ -5,18 +5,16 @@ import { repoRoot } from "@intentic/constants/node";
 import { compile } from "tailwindcss";
 import { expect, test } from "vitest";
 
-/* CI GUARD FOR THE PROMISE: that every class a first-party extension screen uses is one core has DECLARED
- * (styles/extension-surface.css), not one it happens to emit because that screen's source sits in this repo.
- *
- * This is the invariant the whole "extensions can live in their own repository" plan rests on, and it is
- * invisible without a test. The app builds fine either way: a class the surface forgot still works today,
- * because Tailwind sees it while scanning something else, and fails only later: silently, in somebody else's
- * sandbox, after the extension has moved out and its markup is no longer being read by anything. There is no
- * error, no 404 and no console warning; the screen simply renders as a near-miss of itself.
- *
- * HOW IT ASKS THE QUESTION. It compiles the design system with source scanning switched OFF, so the only
- * classes it can possibly emit are the promised ones, and then feeds it every token the extension sources
- * contain. If the output grows, something in those screens was reachable only by being read. */
+// CI guard for the promise that every class a first-party extension screen uses is one core has declared
+// (styles/extension-surface.css), not one it happens to emit because that screen's source sits in this repo.
+//
+// This is the invariant the "extensions can live in their own repository" plan rests on. A class the surface forgot
+// still works today, since Tailwind sees it while scanning something else, and fails only later, silently, once the
+// extension has moved out: no error, no 404, the screen just renders as a near-miss of itself.
+//
+// It compiles the design system with source scanning switched off, so the only classes it can emit are the promised
+// ones, then feeds it every token the extension sources contain; if the output grows, something was reachable only by
+// being read.
 
 const ROOT = repoRoot(import.meta.url);
 const require = createRequire(import.meta.url);
@@ -28,9 +26,8 @@ const SURFACE = `
 @import "./_editor/ui/src/styles/opt-in/extension-surface.css";
 `;
 
-// Tailwind's compiler does not touch the filesystem itself; `@import` is resolved by whatever the caller
-// supplies. Relative ids resolve against the importing sheet's directory, and the one bare id is the framework
-// itself, whose own entry then imports its parts relatively through this same function.
+// Tailwind's compiler does not touch the filesystem itself; `@import` is resolved by whatever the caller supplies.
+// Relative ids resolve against the importing sheet's directory; the one bare id is the framework itself.
 const loadStylesheet = async (id: string, base: string): Promise<{ path: string; base: string; content: string }> => {
     const path = id.startsWith(`.`) ? join(base, id) : require.resolve(join(id, `index.css`));
     return { path, base: dirname(path), content: readFileSync(path, `utf8`) };
@@ -42,15 +39,10 @@ const sourceFiles = (dir: string): string[] =>
         return entry.isDirectory() ? sourceFiles(path) : path.endsWith(`.vue`) || path.endsWith(`.ts`) ? [path] : [];
     });
 
-/* Every token an extension source contains that could be a class, erring hard towards MORE.
- *
- * Deliberately crude, and deliberately over-greedy: a candidate that is not a real utility compiles to nothing
- * and costs this test nothing, whereas a real class it failed to notice would let exactly the defect above
- * through. Each token is offered twice, once as it sits between delimiters and once with its surrounding
- * punctuation trimmed, because a class can end a sentence of markup or a CSS declaration can end in a colon:
- * and the trimmed form is what Tailwind's own scanner sees. Asserted equivalent to that scanner's answer on
- * this tree at the time of writing; it is not a reimplementation of it, only a wider net feeding the same
- * compiler, which is the half that actually decides what a class is. */
+// Every token an extension source contains that could be a class, erring hard towards more: a false positive compiles
+// to nothing and costs nothing, while a missed real class would let the defect above through. Each token is offered
+// both as delimited and with surrounding punctuation trimmed, since Tailwind's own scanner sees the trimmed form.
+// Asserted equivalent to that scanner's answer on this tree, not a reimplementation of it.
 const candidatesIn = (files: readonly string[]): string[] => {
     const found = new Set<string>();
     for (const file of files) {
@@ -68,27 +60,17 @@ const candidatesIn = (files: readonly string[]): string[] => {
     return [...found];
 };
 
-/* Tokens that compile to a utility but are not one anybody wrote. `flex-shrink` is a real Tailwind class AND a
- * real CSS property, so neither the net above nor the compiler can tell that this one came out of a `<style>`
- * block in MediaViewer.vue. `antialiased` is the same coincidence one step further out: it is a real utility
- * and an ordinary English word about how edges are drawn, and the one in this tree is PROSE: a sentence in
- * WorkflowNodeCard.vue explaining why a status stripe stops short of the card's corner. Naming both here says
- * "we looked", which is more honest than widening the promise to cover a class no markup contains, and than
- * editing the sentence, which would only leave the next person to write the word tripping the same wire.
- *
- * `top-11` is the third of the same kind, and the sentence containing it is an argument AGAINST writing it:
- * KnowledgeView explains that the offset its lower pinned things clear is measured and published as
- * `--pinned-top` "rather than written down as a `top-11` that is correct at one width". Naming a class in prose
- * is ordinary here — the comment two lines above the markup names `pb-3`, `-mb-3` and `gap-3` — and those pass
- * only because they happen to be promised. Rewording this one would leave the argument weaker and the wire in
- * the same place, and 11 is not a rung the pinned stack wants: it wants a measurement. */
+// Tokens that compile to a utility but are not one anybody wrote: `flex-shrink` is a real Tailwind class and a real CSS
+// property used in a `<style>` block; `antialiased` is a real utility and an ordinary English word used in prose;
+// `top-11` appears in prose arguing against ever writing it literally. Named here rather than worked around, since
+// editing the prose would only move the coincidence to the next person who writes the word.
 const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`, `top-11`]);
 
 const classesOf = (css: string): Set<string> =>
     new Set([...css.matchAll(/\.(-?(?:[A-Za-z_]|\\.)(?:[\w-]|\\.)*)/gu)].map((match) => (match[1] ?? ``).replaceAll(/\\(.)/gu, `$1`)));
 
-// A fresh compiler per build: `build()` accumulates the candidates it has been given, so two calls on one
-// instance would measure the union rather than each set.
+// A fresh compiler per build: `build()` accumulates the candidates it has been given, so two calls on one instance
+// would measure the union rather than each set.
 const surfaceBuild = async (): Promise<(candidates: string[]) => string> => (await compile(SURFACE, { base: ROOT, loadStylesheet })).build;
 
 test("every class the first-party extensions use is one the surface promises", async () => {
@@ -101,18 +83,14 @@ test("every class the first-party extensions use is one the surface promises", a
     const reached = classesOf((await surfaceBuild())(candidatesIn(screens.flatMap(sourceFiles))));
     const offSurface = [...reached].filter((name) => !promised.has(name) && !NOT_CLASSES.has(name)).toSorted();
 
-    /* Read the failure like this: each name is a class that works ONLY while its extension is built here. An
-     * arbitrary value (`w-[37px]`, `max-w-[64ch]`) can never be promised: put it on the scale, give it a name
-     * in tokens.css if it deserves one, or move the rule into the extension's own stylesheet. Anything else is
-     * a rung the surface is missing and should grow. */
+    // Read the failure like this: each name is a class that works only while its extension is built here. Put it on the
+    // scale, give it a name in tokens.css, or move the rule into the extension's own stylesheet.
     expect(offSurface).toEqual([]);
 }, 60_000);
 
-/* The bill for the promise, asserted rather than admired. Declaring a family whole emits utilities nobody is
- * using yet, which is what a promise costs and why the number belongs in front of whoever widens it next: this
- * is the file that turns "add one more variant" from a shrug into a decision. The ceiling is generous enough
- * that ordinary additions do not trip it and tight enough that a multiplied family: a breakpoint laid over
- * the colour matrix, say: cannot land unnoticed. Raise it on purpose, with the new figure in the commit. */
+// The bill for the promise, asserted rather than admired: declaring a family whole emits utilities nobody is using yet.
+// The ceiling is generous enough that ordinary additions do not trip it and tight enough that a multiplied family
+// cannot land unnoticed. Raise it on purpose, with the new figure in the commit.
 test("the promise stays within its size budget", async () => {
     const css = (await surfaceBuild())([]);
     expect({ bytes: css.length > 900_000, classes: classesOf(css).size > 8_000 }).toEqual({ bytes: false, classes: false });

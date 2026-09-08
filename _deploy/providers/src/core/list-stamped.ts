@@ -2,23 +2,19 @@ import type { ListedResource, ScanSource } from "@intentic/engine";
 import { parseInputs, sshSchema, sshTarget } from "./inputs.js";
 import type { SshExecutor } from "./ssh.js";
 
-// One stamped container row: which provider family stamped it, its resource id, and protection.
+// One stamped container row: provider family, resource id, and protection.
 interface StampedRow {
     readonly type: string;
     readonly id: string;
     readonly protected: boolean;
 }
 
-// The whole scan's per-host stamped-container table, fetched ONCE and shared by every list-bearing provider,
-// keyed on the scan's shared `sources` array (collectOrphans builds it once and hands the same array to every
-// provider's list). A dozen-plus providers each opening their own SSH connection serially is the single
-// longest silent stretch of a plan (~1s per connect over cloudflared); one connect + one `docker ps` serves
-// them all. The promise itself is cached, so a host is dialed exactly once per scan, success or failure.
+// Per-host stamped-container cache for one scan, keyed by the scan's `sources` array; dials each host once.
 const tablesByScan = new WeakMap<readonly ScanSource[], Map<string, Promise<readonly StampedRow[]>>>();
 
-// Fetch every intentic-stamped container on one host in a single exec: `-a` includes stopped containers (a
-// stopped orphan still holds volumes/state). Best-effort: an unreachable host is logged once and reads as
-// empty, a scan must not fail the run.
+// Fetches every intentic-stamped container on one host in a single exec; `-a` includes stopped containers, since an
+// orphan can still hold volumes. Best-effort: an unreachable host logs once and reads as empty rather than failing the
+// scan.
 const fetchHostTable = async (executor: SshExecutor, source: ScanSource, log: (message: string) => void): Promise<readonly StampedRow[]> => {
     let session;
     try {
@@ -45,10 +41,8 @@ const fetchHostTable = async (executor: SshExecutor, source: ScanSource, log: (m
     }
 };
 
-// The docker family's shared `list`: enumerate the intentic.type=<kind> stamped containers across every
-// host source, served from the per-scan table above. Each entry pairs the container's intentic.id stamp with
-// the host's SSH block, exactly what the family's `delete` parses, so whatever `list` finds, `delete` can
-// tear down (the collection contract).
+// Docker family's shared `list`: enumerates intentic.type=<kind> stamped containers across every host source. Each
+// entry pairs the intentic.id stamp with the host's SSH block, exactly what `delete` parses.
 export const listStampedContainers = async (
     executor: SshExecutor,
     kind: string,
@@ -60,8 +54,7 @@ export const listStampedContainers = async (
         tables = new Map();
         tablesByScan.set(sources, tables);
     }
-    // Kick off every host's fetch before awaiting any, so the connects (the plan's longest silent stretch,
-    // ~1s each over cloudflared) run concurrently across hosts instead of serially.
+    // Kicks off every host's fetch before awaiting any, so connects run concurrently rather than serially.
     const hostSources = sources.filter((source) => source.type === "host");
     for (const source of hostSources) {
         if (!tables.has(source.id)) {
@@ -71,7 +64,7 @@ export const listStampedContainers = async (
     const fetched = await Promise.all(hostSources.map((source) => tables.get(source.id) ?? []));
     const entries: ListedResource[] = [];
     for (const [index, source] of hostSources.entries()) {
-        // One entry per (stamp, host): the same stamp on two hosts is two resources to tear down.
+        // One entry per (stamp, host); the same stamp on two hosts is two resources to tear down.
         const seen = new Set<string>();
         for (const row of fetched[index] ?? []) {
             if (row.type !== kind || seen.has(row.id)) {

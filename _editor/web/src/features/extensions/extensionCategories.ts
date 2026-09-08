@@ -1,21 +1,8 @@
 import type { ExtensionEntry } from "./useExtensionList";
 
-/* WHAT AN EXTENSION IS FOR, the Extensions tab's sections.
- *
- * The one fact about an extension that its manifest's `contributes` cannot supply. Grouping by contribution was
- * the obvious move and it does not work: nine of the first-party extensions contribute a rail tile, so the
- * derived grouping puts more than half the list under one heading that says nothing about any row in it. What
- * the reader is actually looking for, "where's the thing that watches CI?", "what can the agent reach outside
- * this box?", is a purpose, so purpose is declared (manifest.category) and this file is the vocabulary.
- *
- * ORDER IS FIXED AND EDITORIAL, not alphabetical and not by size: the sections a reader opens this tab for come
- * first. Alphabetical would lead with "Connections" every time, and by-size would reshuffle the whole tab the
- * moment an extension is installed, a list whose headings move is a list that has to be re-read.
- *
- * The vocabulary lives HERE rather than in the manifest schema, mirroring a connector's `catalog.category`
- * against CAPABILITY_CATEGORIES: an extension is installed by pinning a commit, and a third-party one written
- * against a section this build has never heard of must still install, still render and still be switchable.
- * It lands in `Other`. */
+// Extensions tab's sections, grouped by declared purpose (manifest.category) rather than by contribution kind, which
+// clusters most extensions under one heading. Order is fixed and editorial, not alphabetical or by size. An unknown or
+// undeclared category lands in `Other`.
 
 export interface ExtensionSection {
     readonly id: string;
@@ -33,12 +20,13 @@ const CATEGORIES: readonly { readonly id: string; readonly label: string; readon
     { id: `sandbox`, label: `The sandbox` },
 ];
 
-// Declared nothing, or something this build doesn't know. A real section rather than a silent drop: an
-// extension the tab doesn't render is an extension its owner cannot switch off.
+// Declared nothing, or a category this build doesn't know; a real section, not a silent drop.
 const OTHER: { readonly id: string; readonly label: string; readonly caption?: string } = { id: `other`, label: `Other` };
 
-/** The tab's sections in render order, each holding its rows, empty ones omitted, so a filter that empties a
- *  section removes the heading with it rather than leaving a label over nothing. */
+/**
+ * Tab's sections in render order, holding their rows; empty sections are omitted so a filter doesn't leave a bare
+ * heading.
+ */
 export const sectionsOf = (entries: readonly ExtensionEntry[]): ExtensionSection[] => {
     const known = new Set(CATEGORIES.map((category) => category.id));
     const buckets = new Map<string, ExtensionEntry[]>();
@@ -52,7 +40,7 @@ export const sectionsOf = (entries: readonly ExtensionEntry[]): ExtensionSection
         }
         bucket.push(entry);
     }
-    // A bucket exists only where a row landed in it, so "has a bucket" IS "is non-empty".
+    // A bucket exists only if a row landed in it: presence means non-empty.
     const sections: ExtensionSection[] = [];
     for (const category of [...CATEGORIES, OTHER]) {
         const held = buckets.get(category.id);

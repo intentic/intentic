@@ -8,37 +8,20 @@ import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contrac
 
 const execFileAsync = promisify(execFile);
 
-/* ENVIRONMENT DRIFT: what the live container has that the image did not put there.
- *
- * Everything here is OBSERVATION — the ground truth the runtime-install ledger's command parsing can never be.
- * A `curl | sh` installer, a tool a script pulled in, an install phrased in a way no regex anticipated: all of
- * them leave marks on the filesystem, and the filesystem does not depend on how the command was spelled. The
- * ledger says why something was installed; this module says whether it is actually THERE, and the auto-drafter
- * (auto-drafts.ts) refuses to propose anything the two do not agree on.
- *
- * Two channels, disjoint by construction:
- *
- *   - apt reads /var/log/dpkg.log. dpkg unpacks files with their ARCHIVE mtimes — days or years old — so an
- *     mtime sweep is structurally blind to apt, and dpkg's own log is exact: package names, timestamps, and
- *     nothing to parse out of a command line. Entries logged during the image build predate the container's
- *     birth and filter out on the timestamp alone.
- *
- *   - everything else is an mtime sweep over the prefixes hand-installed software lands in (`find -newer` a
- *     sentinel file stamped with the container's birth). Anything a session installs at runtime — a cargo
- *     binary, a rustup target, a browser download, a curl|sh script's droppings — is newer than the container
- *     by definition, and anything the image baked is older by the same definition.
- *
- * The container's birth is PID 1's start time, computed from /proc/1/stat rather than stat'ed off some file a
- * boot script happens to touch: field 22 is start time in clock ticks since the (host) boot /proc/uptime also
- * counts from, so the two subtract cleanly whether or not this is a container. */
+// What the live container has that the image did not, observed rather than parsed from a command: the ledger says why
+// something was installed, this module says whether it is actually there, and the auto-drafter only acts when both
+// agree.
+// - apt: read from dpkg.log's exact package names and timestamps, since dpkg's own archive mtimes are useless for a
+//   time comparison.
+// - everything else: an mtime sweep over known install prefixes against a sentinel stamped with the container's birth
+//   (PID 1's start time, from /proc/1/stat).
 
-// USER_HZ, the unit of /proc/<pid>/stat's starttime. 100 on every Linux the sandbox image ships on (x86-64 and
-// arm64 both); reading it via getconf would spend a process spawn to learn the number 100.
+// USER_HZ for /proc's starttime; always 100 on this image's Linux, cheaper than spawning getconf for it.
 const CLOCK_TICKS_PER_SECOND = 100;
 
 export const containerBornAtMs = async (): Promise<number> => {
     const statLine = await readFile("/proc/1/stat", "utf8");
-    // The comm field is parenthesised and may itself contain spaces; everything after the LAST ')' is fixed.
+    // comm field is parenthesised and may contain spaces; everything after the last ')' is fixed-format.
     const fields = statLine
         .slice(statLine.lastIndexOf(")") + 2)
         .trim()
@@ -52,12 +35,7 @@ export const containerBornAtMs = async (): Promise<number> => {
     return Date.now() - Math.round((uptimeSeconds - startTicks / CLOCK_TICKS_PER_SECOND) * 1000);
 };
 
-/* Debian packages installed since `sinceMs`, from dpkg's log content. The `install` action is a NEW package
- * being unpacked (an upgrade logs `upgrade`, configure passes log `configure`), which is exactly the set that
- * would need a Dockerfile step. A later `remove`/`purge` cancels the entry: a package tried and taken back is
- * not drift, and reporting it would draft a step for something the session decided against. dpkg logs local
- * time with no zone marker; parsed the same way, against the same clock, so the comparison is consistent
- * whatever TZ the container runs. */
+// Matches dpkg install/remove/purge lines; a later remove or purge cancels an earlier install entry.
 const DPKG_ACTION = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (install|remove|purge) (\S+?)(?::\S+)? /;
 
 export const dpkgInstallsSince = (log: string, sinceMs: number): string[] => {
@@ -77,11 +55,7 @@ export const dpkgInstallsSince = (log: string, sinceMs: number): string[] => {
     return [...packages];
 };
 
-/* Where hand-installed software lands. Deliberately NOT the whole filesystem: /work is the workspace (persists,
- * not drift), /tmp is scratch by design, /var and /usr/{bin,lib,share} belong to apt (the dpkg channel), and
- * caches churn without meaning. Cargo and rustup appear twice because the overlay's rust block installs to
- * /usr/local/{cargo,rustup} while the stock `curl sh.rustup.rs` route lands in /root — and only their
- * meaningful corners: a `cargo build` churns $CARGO_HOME/registry with no drift to report. */
+// Hand-install landing spots only; cargo/rustup appear twice for two different install routes.
 const DRIFT_ROOTS = [
     "/usr/local/bin",
     "/usr/local/sbin",
@@ -101,18 +75,12 @@ const DRIFT_ROOTS = [
     "/opt",
 ];
 
-/* The daemon's own runtime writes inside the watched roots, observed on a live sandbox: its state dir, the
- * certificate store its browser sessions maintain, and the browser-session markers playwright files next to
- * its cache. Drift is what SESSIONS installed; the daemon reporting its own bookkeeping would put a permanent
- * false entry on every card. Substrings, applied after the walk, so the find stays one plain command. */
+// Daemon's own runtime writes; excluded so its own bookkeeping never reports as session-caused drift.
 const DRIFT_IGNORES = ["/.local/share/intentic/", "/.local/share/pki/", "/ms-playwright/b/"];
 
-// Entries kept after collapsing; a paragraph, not an inventory — the card shows drift, corroboration reads the
-// targeted probes below, and nothing needs the ten-thousandth browser file by name.
+// Entries kept after collapsing; the card shows drift as a paragraph, not a full file inventory.
 const MAX_PATHS = 40;
-// A directory this deep that holds this many new files becomes one entry. Depth 4 keeps /usr/local/bin (depth
-// 3) itemized — new binaries are the signal, their names ARE the finding — while a browser download or an
-// unpacked toolchain collapses to the directory that names it.
+// A dir this deep with this many new files collapses to one entry; depth 4 keeps /usr/local/bin itemized.
 const COLLAPSE_DEPTH = 4;
 const COLLAPSE_AT = 4;
 
@@ -132,7 +100,7 @@ export const collapseDriftPaths = (paths: readonly string[], limit = MAX_PATHS):
     for (const path of [...paths].toSorted()) {
         const segments = segmentsOf(path);
         let entry = path;
-        // The SHALLOWEST qualifying ancestor, so one download is one entry rather than one per subdirectory.
+        // The shallowest qualifying ancestor, so one download is one entry rather than one per subdirectory.
         for (let depth = COLLAPSE_DEPTH; depth < segments.length; depth += 1) {
             const dir = `/${segments.slice(0, depth).join("/")}`;
             const count = counts.get(dir) ?? 0;
@@ -149,8 +117,8 @@ export const collapseDriftPaths = (paths: readonly string[], limit = MAX_PATHS):
     return out.length > limit ? [...out.slice(0, limit), `… and ${out.length - limit} more`] : out;
 };
 
-// The sentinel `find -newer` compares against, stamped with the container's birth. Under tmpdir so it dies with
-// the container, exactly like the moment it encodes.
+// Sentinel `find -newer` compares against, stamped with the container's birth; lives under tmpdir, dies with the
+// container.
 const sentinelPath = (): string => join(tmpdir(), ".intentic-drift-born");
 
 const pathDrift = async (bornAtMs: number): Promise<string[]> => {
@@ -161,16 +129,14 @@ const pathDrift = async (bornAtMs: number): Promise<string[]> => {
     if (roots.length === 0) {
         return [];
     }
-    // Through sh so traversal errors (a permission, a vanished file) do not turn partial output into no output;
-    // find's own exit code is deliberately discarded. Roots are module constants: nothing user-held is spliced.
+    // Through sh so one bad path doesn't blank the output; roots are fixed constants, not user input.
     const command = `find ${roots.join(" ")} -xdev -newer ${sentinel} -not -type d -print 2>/dev/null || true`;
     const { stdout } = await execFileAsync("sh", ["-c", command], { timeout: 60_000, maxBuffer: 32 * 1024 * 1024 });
     const paths = stdout.split("\n").filter((line) => line !== "" && !DRIFT_IGNORES.some((ignore) => line.includes(ignore)));
     return collapseDriftPaths(paths);
 };
 
-/* One probe of the whole container. Cached briefly because the refresh path recomputes on a click while the
- * sweep recomputes on a timer, and two `find` walks a few seconds apart answer identically. */
+// Cached briefly so the click-triggered refresh and the timed sweep don't repeat the same find walk.
 const CACHE_TTL_MS = 5 * 60_000;
 let cached: { drift: EnvironmentDrift; at: number } | undefined;
 
@@ -194,11 +160,9 @@ export const computeDrift = async (): Promise<EnvironmentDrift> => {
     return drift;
 };
 
-/* Whether one ledger entry's install is PRESENT in the live container — the corroboration gate that keeps a
- * one-off `docker run` experiment, a failed install, or a stale ledger line from ever becoming a draft. Kind
- * by kind because each ecosystem leaves its mark in a known place, and a targeted stat is both cheaper and
- * sharper than searching the collapsed display paths: a rustup target's rlibs collapse into "toolchains/
- * (500 files)", but the directory NAMED after the target is one stat away. */
+// Whether a ledger entry is actually present in the container, the gate against a one-off experiment, a failed install,
+// or a stale line. Checked kind by kind: a targeted stat is cheaper and sharper than searching the collapsed display
+// paths.
 
 const newerThan = async (path: string, bornAtMs: number): Promise<boolean> => {
     const info = await stat(path).catch(() => undefined);
@@ -252,8 +216,7 @@ export const installLive = async (entry: Pick<RuntimeInstall, "tool" | "kind">, 
             );
         }
         default: {
-            // No known landing spot: the display sweep is the only witness. Normalised because pip spells
-            // `code-review-graph` and site-packages spells `code_review_graph`.
+            // No known landing spot: falls back to the display sweep, normalised for pip's `-` vs site-packages' `_`.
             const needle = tool.toLowerCase().replaceAll("_", "-");
             return drift.paths.some((path) => path.toLowerCase().replaceAll("_", "-").includes(needle));
         }

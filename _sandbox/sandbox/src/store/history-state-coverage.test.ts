@@ -4,20 +4,10 @@ import { packageRoot } from "@intentic/constants/node";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
-/* THE SAME GUARD AS workspace-state-coverage, pointed at the other volume.
- *
- * `/history` had no manifest at all until an environment export needed one, which is precisely how it came to
- * hold the most load-bearing state in the sandbox: every repo's real git dir, the fleet registry, the
- * checkpoint scopes: with nothing anywhere saying so. A hand-written list would rot the same way the
- * browser's invalidation table did, so this recognizes violations by their SHAPE: it reads the daemon's own
- * source, finds every path built under `historyRoot`, and fails when one is absent from HISTORY_STATE_FILES.
- *
- * Adding a store on this volume is therefore a change to one visible list: including the question that list
- * exists to force, which is whether the new state travels in a bundle, is a credential, or is regenerated.
- */
+// Same guard as workspace-state-coverage but for /history: scans daemon source for every historyRoot-based path and
+// fails if it is not declared in HISTORY_STATE_FILES.
 
-// The identifiers the daemon builds historyRoot paths from. Matching on the EXPRESSION rather than on a string
-// keeps a `join(someOtherRoot, …)` out by construction, the same way the workspace guard does.
+// Matched by expression, not string, so a `join(someOtherRoot, …)` call is excluded by construction.
 const ROOT_EXPRESSIONS = new Set(["historyRoot", "config.historyRoot"]);
 
 const SOURCE_ROOT = join(packageRoot(import.meta.url), "src");
@@ -36,12 +26,7 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
     return found.flat();
 };
 
-/* `join(<root>, "a", "b")` → the quoted segments.
- *
- * The trailing lookahead (rather than a literal `)`) is what lets a call with a COMPUTED final segment still
- * contribute its literal prefix: `join(historyRoot, "gits", encodeURIComponent(name))` matches up to "gits" and
- * stops, which is the declared entry (the directory), not the generated leaf under it.
- */
+// Matches `join(<root>, "a", "b")`; the lookahead lets a computed final segment still contribute its literal prefix.
 const HISTORY_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*((?:"[^"]+"\s*,\s*)*"[^"]+"\s*)(?=[,)])/g;
 
 const declaredPaths = async (): Promise<{ path: string; source: string }[]> => {
@@ -68,7 +53,7 @@ const covers = (path: string, entry: string): boolean => path === entry || path.
 
 test("every /history path the daemon builds is declared in HISTORY_STATE_FILES", async () => {
     const used = await declaredPaths();
-    // Sanity: if the pattern ever stops matching, this test would pass vacuously and guard nothing.
+    // Guards against the regex matching nothing, which would make this test pass vacuously.
     expect(used.length).toBeGreaterThan(10);
 
     const undeclared = used
@@ -82,8 +67,7 @@ test("every /history path the daemon builds is declared in HISTORY_STATE_FILES",
 });
 
 test("every declared entry is actually built somewhere in the daemon", async () => {
-    // The other direction: an entry left behind after its store was deleted would keep claiming bundle space
-    // (or a warning in the import report) for a file that can no longer exist.
+    // Catches an entry left behind after its store was deleted.
     const used = await declaredPaths();
     const unused = HISTORY_STATE_FILES.filter((file) => !used.some(({ path }) => covers(path, file.path))).map((file) => file.path);
 

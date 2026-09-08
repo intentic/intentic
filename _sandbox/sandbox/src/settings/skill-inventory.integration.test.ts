@@ -11,14 +11,9 @@ import { readSkillText, skillInventory } from "./skill-inventory.js";
 import { writePersonaSkill } from "../personas/persona-kit.js";
 import { reconcileSkills, writeOwnSkill } from "./skills.js";
 
-/* THE ATTRIBUTION IS THE FEATURE. A row's origin decides whether it gets a switch, whether it can be edited and
- * whether it can be deleted, so getting the origin wrong is not a cosmetic bug: it is a control that appears to
- * work and is undone by the next reconcile, or a skill the reader cannot get rid of.
- *
- * These tests build the four directory shapes the real thing reads: the loaded folder, the owner's store, a plugin
- * checkout and an extension checkout: on a temp root, and assert what each one becomes. The extension half goes
- * through the git-installed path (an `extension`-kind capability whose checkout holds a manifest), because that is
- * the one an integration test can create without an image to bake into. */
+// A row's origin decides its switch, edit, and delete controls; getting it wrong is a functional bug, not cosmetic.
+// Tests build the four directory shapes the inventory reads: loaded folder, owner's store, plugin and extension
+// checkouts.
 const stubServices = (root: string, capabilities: readonly Capability[], settings: SandboxSettings, personas: readonly Persona[] = []): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -28,15 +23,15 @@ const stubServices = (root: string, capabilities: readonly Capability[], setting
                 await mkdir(dirname(path), { recursive: true });
                 await writeFile(path, content);
             },
-            // Reconcile removes every baked skill the enabled list omits, so any test that reconciles a
-            // partial list exercises the remove path for the other baked tools (fileq, since it joined lsp).
+            // Reconcile removes every baked skill omitted from the enabled list, so a partial list here also exercises
+            // removal for other baked tools like fileq.
             remove: (path) => rm(path, { recursive: true, force: true }),
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
         config: unstubbed<Services["config"]>("config", { extensionsDir: "" }),
-        // Read on every listing, because a persona's kit skills are part of what the agent knows: see the
-        // `persona` origin. No cards is the ordinary shape here and the one most of these cases want.
+        // Read on every listing: a persona's kit skills are part of what the agent knows (the `persona` origin). Empty
+        // is the default most cases here want.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [...personas] }),
     });
 
@@ -58,7 +53,6 @@ const rowFor = (rows: readonly SkillSummary[], id: string): SkillSummary => {
 test("a baked tool lists whether or not it is switched on, and only ever offers the switch", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const off = await skillInventory(stubServices(root, [], settingsWith([])));
-    // The one row in this list that is NOT currently loaded. Hiding it is what once made `lsp` undiscoverable.
     expect(rowFor(off, "lsp")).toMatchObject({ origin: "builtin", enabled: false, switchable: true, editable: false, removable: false });
     expect(rowFor(off, "lsp").description).toContain("Rename a TypeScript");
 
@@ -80,7 +74,7 @@ test("an own skill is the only origin that is editable, and reads its enabled st
         editable: true,
         removable: true,
     });
-    // The owner's own come first: the list opens on the half that answers to them.
+    // Own skills sort first; the list opens on the half that answers to the owner.
     expect(rows[0]?.id).toBe("release-notes");
 });
 
@@ -101,8 +95,7 @@ test("a plugin's skills are attributed to that plugin and offer no control of th
     });
 });
 
-// A plugin hosted inside a marketplace repo: its skills sit under the configured subdirectory, and reading the
-// checkout root instead would list nothing at all.
+// A marketplace-hosted plugin's skills sit under its configured subdirectory, not the checkout root.
 test("a plugin's subdirectory is honoured", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "market", kind: "plugin", config: { url: "https://example.com/m.git", path: "plugins/beta" } };
@@ -112,13 +105,11 @@ test("a plugin's subdirectory is honoured", async () => {
     expect(rowFor(rows, "plugin:market:beta").owner).toBe("market");
 });
 
-/* An extension's skills are attributed to the extension by the name its MANIFEST declares, not by the capability
- * entry id: the id is a routing handle the owner never chose, and "Extension · knowledge" is what tells them which
- * of six extensions to go and look at. Its `contributes.agent.path` is honoured for the same reason a plugin's
- * subdirectory is: reading the checkout root instead would find nothing. */
+// An extension's skills attribute to the name its manifest declares, not the capability entry id, since the id is a
+// routing handle the owner never chose. `contributes.agent.path` is honoured the same way a plugin's subdirectory is.
 test("an extension's skills are attributed by its manifest name", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
-    // An extension entry pins a full commit sha: the owner approves exactly the code that runs in their browser.
+    // An extension entry pins a full commit sha: exactly the code the owner approved runs in their browser.
     const entry: Capability = { id: "ext-1", kind: "extension", config: { url: "https://example.com/ext.git", ref: "a".repeat(40) } };
     const checkout = join(root, ".intentic", "local", "extensions", "ext-1");
     await mkdir(checkout, { recursive: true });
@@ -147,14 +138,13 @@ test("an extension's skills are attributed by its manifest name", async () => {
     });
 });
 
-/* THE LOADED FOLDER'S LEFTOVERS: the three-way fallback that decides what an unclaimed directory is. Together in
- * one test because what matters is that they are told APART: a connection's cheatsheet must not read as a loose
- * file the reader is invited to delete, and a loose file must not read as something with an owner to go to. */
+// The three-way fallback for an unclaimed directory in the loaded folder: a connection's skill and a loose file must
+// not be confused with each other or with an owned one.
 test("a connection's skill, a core feature's and a loose file are told apart", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const loaded = join(root, ".agents", "skills");
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github" } };
-    // Shared across every instance of its kind, so its directory is named for the KIND, not for any one entry.
+    // Shared across every instance of its kind, so its directory is named for the kind, not one entry.
     const vpn: Capability = { id: "office", kind: "vpn", config: { provider: "wireguard", config: "[Interface]", autoConnect: "off" } };
     await writeSkill(loaded, "github", "Use for GitHub repos.");
     await writeSkill(loaded, "vpn", "Use to reach the office network.");
@@ -165,16 +155,14 @@ test("a connection's skill, a core feature's and a loose file are told apart", a
     expect(rowFor(rows, "github")).toMatchObject({ origin: "capability", owner: "github", removable: false });
     expect(rowFor(rows, "vpn")).toMatchObject({ origin: "capability", owner: "office", removable: false });
     expect(rowFor(rows, "approvals")).toMatchObject({ origin: "builtin", owner: "Approvals", removable: false });
-    // The only origin that is removable without being editable: its home is the folder, not the owner's store.
+    // The `dropped` origin's home is the loaded folder itself, not the owner's store: removable but not editable.
     expect(rowFor(rows, "scratch")).toMatchObject({ origin: "dropped", removable: true, editable: false, switchable: false });
-    // And the only one with nobody to send the reader to, which is what its row has to say instead of an owner.
+    // The `dropped` origin has no owner to send the reader to.
     expect(rowFor(rows, "scratch").owner).toBeUndefined();
 });
 
-/* THE SHARED ACCOUNT SKILLS attribute to the entries they are derived from: the `identities` roster to an
- * identity, a site group's skill to a browser account whose group resolves to that name: the platform slug
- * for a carded site, the home page's host for the generic card. Without this, every one of them would list as
- * a loose file the reader is invited to delete, and the converge would just write it back. */
+// Shared-account skills attribute to the capability they're derived from: `identities` to an identity, a site group's
+// skill to the browser account its group resolves to (platform slug for a carded site, home host for a generic one).
 test("the identities skill and a site group's skill attribute to the accounts behind them", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const loaded = join(root, ".agents", "skills");
@@ -191,8 +179,8 @@ test("the identities skill and a site group's skill attribute to the accounts be
     expect(rowFor(rows, "producthunt-com")).toMatchObject({ origin: "capability", owner: "hunt", removable: false });
 });
 
-// A switched-on baked tool and a switched-on own skill are both present in the loaded folder too. Listing them
-// twice (once as themselves and once as a loose file) would double every row the owner actually controls.
+// A switched-on baked tool or own skill also sits in the loaded folder; without dedup every controlled row would
+// double.
 test("a skill already accounted for is not listed a second time from the loaded folder", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const services = stubServices(root, [], settingsWith(["lsp", "notes"]));
@@ -205,9 +193,9 @@ test("a skill already accounted for is not listed a second time from the loaded 
     expect(rowFor(rows, "notes").origin).toBe("own");
 });
 
-/* READING RESOLVES THE SAME ID THE LIST MINTED. This is the pairing that makes the surface trustworthy: a row that
- * opened someone else's text would be worse than a row that failed to open. Includes the switched-off own skill,
- * whose text lives only in the store, and the switched-off baked tool, whose text lives only in the registry. */
+// Every id `skillInventory` mints must read back the same skill via `readSkillText`; opening the wrong text is worse
+// than failing to open. Covers a switched-off own skill (text lives in the store) and a switched-off baked tool (text
+// lives in the registry).
 test("every id the list mints reads back the right skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
@@ -221,17 +209,16 @@ test("every id the list mints reads back the right skill", async () => {
         const found = await readSkillText(services, row.id);
         expect(found?.name, `reading ${row.id}`).toBe(row.name);
     }
-    // Switched off, so there is no loaded copy: the text has to come out of the store and the registry.
+    // Both switched off; no loaded copy, so the text has to come from the store and the registry.
     expect((await readSkillText(services, "notes"))?.text).toContain("Stored body.");
     expect((await readSkillText(services, "lsp"))?.text).toContain("Rename a TypeScript");
     expect((await readSkillText(services, "plugin:my-pack:review"))?.text).toContain("Plugin body.");
-    // A kit skill's id carries the persona ID; its row shows the LABEL, which is not a key.
+    // A kit skill's id carries the persona id; its row shows the label instead, which is not a key.
     expect((await readSkillText(services, "persona:studio:voice"))?.text).toContain("Kit body.");
 });
 
-/* A KIT SKILL IS LISTED, AND LISTED AS THE NARROW THING IT IS. The promise of this surface is that it shows
- * everything the agent knows, but a skill only some turns reach must not read as one every chat has, and it
- * must offer no switch, because nothing here can turn it off: it is on exactly when its persona is worn. */
+// A kit skill lists, but narrowly: it must not read as available to every chat, and offers no switch since nothing here
+// can turn it off, only the persona can.
 test("a persona's own skill lists under its card, with no switch", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
@@ -242,7 +229,7 @@ test("a persona's own skill lists under its card, with no switch", async () => {
 
     expect(row).toMatchObject({ name: "voice", description: "How we write.", origin: "persona", owner: "Studio", enabled: true });
     expect(row.switchable).toBe(false);
-    // Edited on the card, like a plugin's skill is edited where it lives, not from this list.
+    // Edited on the persona's card, like a plugin's skill is edited where it lives, not from this list.
     expect(row.editable).toBe(false);
     expect(row.removable).toBe(false);
 });

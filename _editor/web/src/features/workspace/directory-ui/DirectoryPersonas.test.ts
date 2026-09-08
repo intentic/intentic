@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because the two things that can go wrong here are things the surface DOES, and both are silent. The panel
-// writes cards through a whole-card upsert, so an edit that forgets a field it never showed does not fail: it
-// quietly strips the accounts off somebody's persona. And a folder holds several cards, so a panel that listed the
-// wrong ones would send an edit to a persona belonging somewhere else.
+// jsdom: pins that a whole-card-upsert edit doesn't silently drop untouched fields, and that a folder's persona
+// list matches exactly, not more or fewer.
 import type { Persona } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -25,14 +22,13 @@ vi.mock(`../../sandbox/personas/usePersonas`, () => ({
     }),
 }));
 
-// Mocked rather than left real because the composable behind it reaches the sandbox client at import time, which
-// has no environment under jsdom.
+// Mocked since the real composable reaches the sandbox client at import time, unavailable under jsdom.
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
 
 const { default: DirectoryPersonas } = await import("./DirectoryPersonas.vue");
 
 let app: App | undefined;
-// The dialog teleports to the body, so everything is asserted against the document rather than the mount point.
+// The dialog teleports to the body, so assertions target the document, not the mount point.
 const mount = (dir: string | undefined): void => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -82,7 +78,6 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// THE WHOLE POINT: the folder comes from the row, not from a field somebody retypes.
 it(`saves a new persona that starts in the clicked folder`, async () => {
     mount(`intentic/_editor`);
     await nextTick();
@@ -97,8 +92,6 @@ it(`saves a new persona that starts in the clicked folder`, async () => {
     });
 });
 
-// Permissions are behind Advanced, so an untouched panel must commit no powers block at all: otherwise every
-// card added from the tree writes ten fields meaning "yes" into a tracked file.
 it(`asks for a name and nothing else, and commits no powers`, async () => {
     mount(`docs`);
     await nextTick();
@@ -120,8 +113,8 @@ it(`reveals the permissions under Advanced`, async () => {
     expect(shown).toContain(`Change the sandbox`);
 });
 
-/* A FOLDER HOLDS SEVERAL. Both cards that start here are listed, and neither the card of a subfolder nor one that
- * merely prefers the repo is: an edit sent to the wrong card is invisible until something stops posting. */
+// A subfolder's card (`_editor/web`) doesn't count as starting in `_editor`, and a persona with no `startIn` doesn't
+// either.
 it(`lists every persona starting in this folder and no others`, async () => {
     personas.value = [
         { id: `docs-bot`, capabilities: [], workspace: { startIn: `intentic/_editor` } },
@@ -137,9 +130,6 @@ it(`lists every persona starting in this folder and no others`, async () => {
     expect(byAriaLabel(`Edit elsewhere`)).toBeUndefined();
 });
 
-/* THE SAVE IS AN UPSERT OF THE WHOLE CARD. Editing a name from the tree must carry over everything this panel
- * never shows: the accounts it speaks through, the projects that prefer it, the folders it is fenced to:
- * because a field left out of the payload is a field taken off the card. */
 it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     personas.value = [
         {
@@ -160,7 +150,6 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     buttonLabelled(`Save`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
-        // The id is frozen: automations pin to it, so a rename changes the label only.
         id: `docs-bot`,
         label: `Docs crew`,
         capabilities: [`reddit-work`, `x-company`],
@@ -171,7 +160,7 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     });
 });
 
-// A bounded card opens with its bounds on screen rather than folded away, and they survive a save from here.
+// Editing a bounded card opens Advanced automatically, so its powers show before the save that must preserve them.
 it(`keeps the powers of a bounded card`, async () => {
     personas.value = [
         {
@@ -199,19 +188,13 @@ it(`keeps the powers of a bounded card`, async () => {
     });
 });
 
-/* THE HEADER IS THE FOLDER'S QUESTION. "Personas in docs" claimed a list on a folder that has none, which is
- * every folder somebody opens this from the first time, and read as cards stored in that folder besides. */
 it(`asks who works in the folder rather than announcing a list`, async () => {
     mount(`docs`);
     await nextTick();
     expect(text()).toContain(`Who works in docs`);
 });
 
-/* ── Pointing a card you already have at this folder ───────────────────────────────────────────────────────
- *
- * The second reason anyone opens this panel: "Docs bot" exists, and it should work HERE. Before this the only
- * route was the Personas page plus retyping the path, and the likelier outcome was a second card named
- * "Docs bot 2" doing the same job. */
+// The second route into this panel: point an existing card at this folder instead of creating a new one.
 it(`points an existing persona at this folder, keeping everything else about it`, async () => {
     personas.value = [
         {
@@ -241,12 +224,10 @@ it(`points an existing persona at this folder, keeping everything else about it`
         context: { repos: [`intentic`] },
         models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
         powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: true },
-        // The one field the mode is about. The fence it was given stays the fence it was given.
         workspace: { startIn: `knowledge`, folders: [`docs`] },
     });
 });
 
-// A card with no starting folder at all is the likeliest thing to point at one, so it has to be offered.
 it(`offers a persona that starts nowhere, and says so`, async () => {
     personas.value = [{ id: `free-agent`, capabilities: [] }];
     mount(`docs`);
@@ -256,15 +237,12 @@ it(`offers a persona that starts nowhere, and says so`, async () => {
     expect(text()).toContain(`no starting folder`);
     byAriaLabel(`Start free-agent here`)!.click();
     await nextTick();
-    // Nothing is being taken away, so there is no move to warn about.
     expect(text()).not.toContain(`This moves it`);
     buttonLabelled(`Start here`)!.click();
     await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `free-agent`, capabilities: [], workspace: { startIn: `docs` } });
 });
 
-/* A PERSONA HAS ONE STARTING FOLDER, so this MOVES it, and the folder losing it is not on this screen, which
- * is the only place the change would otherwise be noticed. */
 it(`warns that pointing a card here takes it off the folder it starts in`, async () => {
     personas.value = [{ id: `docs-bot`, label: `Docs bot`, capabilities: [], workspace: { startIn: `docs` } }];
     mount(`knowledge`);
@@ -278,8 +256,6 @@ it(`warns that pointing a card here takes it off the folder it starts in`, async
     expect(shown).toContain(`docs`);
 });
 
-/* The cards already starting here are the list at the top of the panel. Offering them again would be an action
- * that changes nothing, and there is nothing to point at a folder it already starts in. */
 it(`does not offer a persona that already starts here`, async () => {
     personas.value = [
         { id: `docs-bot`, capabilities: [], workspace: { startIn: `docs` } },
@@ -293,8 +269,6 @@ it(`does not offer a persona that already starts here`, async () => {
     expect(byAriaLabel(`Start docs-bot here`)).toBeUndefined();
 });
 
-// With no other card in the sandbox there is nothing to borrow, so the offer is absent rather than opening an
-// empty picker.
 it(`does not offer to reuse a persona when there is none to reuse`, async () => {
     personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `docs` } }];
     mount(`docs`);
@@ -302,7 +276,6 @@ it(`does not offer to reuse a persona when there is none to reuse`, async () => 
     expect(buttonLabelled(`Use one I already have`)).toBeUndefined();
 });
 
-// The name and the picked card are answers to different questions, and only one of them is being asked.
 it(`switches cleanly between naming a new persona and picking an existing one`, async () => {
     personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `knowledge` } }];
     mount(`docs`);
@@ -316,8 +289,7 @@ it(`switches cleanly between naming a new persona and picking an existing one`, 
     expect(nameField().value).toBe(``);
 });
 
-/* A new card landing on a name already taken would upsert that card instead: including one belonging to a
- * different folder, which is the case this panel makes easy to hit. */
+// A taken name would silently upsert that other persona instead, even one from a different folder.
 it(`refuses a name another persona already has`, async () => {
     personas.value = [{ id: `docs-bot`, capabilities: [], workspace: { startIn: `elsewhere` } }];
     mount(`docs`);

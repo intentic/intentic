@@ -10,23 +10,16 @@ import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { exportsDir } from "./exports.js";
 
-/* The bundle ROUTES, driven over the daemon's HTTP surface.
- *
- * Two properties live here rather than in the round-trip suite next door. The GATE, because both directions
- * read or overwrite everything the sandbox holds. And the fact that starting an export ANSWERS IMMEDIATELY:
- * the whole point of making it an artifact is that the request does not wait for the pack, so a browser is free
- * to navigate away the moment it has the name.
- */
+// Bundle routes over HTTP: the owner gate (both directions touch everything the sandbox holds), and that starting an
+// export answers immediately, without waiting for the pack.
 
-// `Response.json()` is untyped on this Hono version, so the shape is asserted once here rather than at each
-// call site. Test-local: the daemon's own answers are schema-checked where they are produced.
+// Response.json() is untyped on this Hono version; asserted once here rather than at each call site.
 const jsonOf = async <T>(response: Response): Promise<T> => (await response.json()) as T;
 
 type ExportRow = { name: string; status: string };
 
 const dirs: string[] = [];
-// Each app hands back its OWN history root. Looking it up by index instead made one failing test cascade into
-// the next two: the failure skipped the cleanup, so the following test read the previous test's directory.
+// Each app gets its own history root, so a failing test's skipped cleanup can't leak into the next test's.
 const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: ReturnType<typeof createApp>; history: string }> => {
     const dir = await mkdtemp(join(tmpdir(), "bundle-routes-"));
     dirs.push(dir);
@@ -34,20 +27,14 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
         services({
             workspace: workspacePaths(join(dir, "work")),
             config: { ...testConfig, workspaceRoot: join(dir, "work"), historyRoot: join(dir, "history") },
-            /* Most tests run in loopback shape (no auth at all); the ticket test needs a daemon that actually
-             * checks one, because the download route skips the check when there is no auth: same as
-             * /workspace/media, and for the same reason.
-             *
-             * The bearer is checked the way the real one is: no header, no caller. A stub that authorized the
-             * headerless request too made the download test pass while the browser's own navigation, which
-             * cannot send a header: was being refused by the bearer middleware before the route ever ran.
-             */
+            // Most tests run without auth; the ticket test needs a real check, since download skips auth when it's off
+            // (like /workspace/media). A header-less request is refused exactly as the real bearer refuses it.
             ...(options.authed === true
                 ? {
                       auth: {
                           authorize: async (presented: string) => {
-                              // "" is what a request with no Authorization header presents (auth/auth.ts
-                              // bearerFrom), and the real authorize refuses it in exactly these words.
+                              // "" is what a header-less request presents (bearerFrom); refused in the real authorize's
+                              // own words.
                               if (presented === "") {
                                   throw new Error("missing bearer token");
                               }
@@ -94,7 +81,7 @@ test("starting an export answers with its name at once, and the list carries it 
     const { name } = await jsonOf<{ name: string }>(started);
     expect(name).toMatch(/\.tar\.gz$/);
 
-    // The row is visible immediately: this is what a browser that navigates away and comes back will read.
+    // Visible immediately: what a browser that navigates away and comes back would read.
     const listed = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
     expect(listed.exports.map((entry) => entry.name)).toContain(name);
 
@@ -111,10 +98,8 @@ test("a second start while one is packing is a 409, not a race", async () => {
     expect((await app.request("/bundles", { method: "POST" })).status).toBe(409);
 });
 
-/* The download is the one bundle route a BROWSER reaches by navigating to it, so every request below is made
- * the way that navigation makes it: no Authorization header, ticket only. The owner-gated calls that set it up
- * carry the bearer, as the web app's own fetches do.
- */
+// Download is the one bundle route a browser reaches by navigating, so these requests carry no Authorization header,
+// ticket only; the owner-gated setup calls carry the bearer, as the web app's fetches do.
 const owner = { authorization: "Bearer owner-token" } as const;
 
 test("download needs a ticket for THAT bundle, and serves it with a real length", async () => {
@@ -132,13 +117,12 @@ test("download needs a ticket for THAT bundle, and serves it with a real length"
     );
     expect((await app.request(`/bundles/download?name=other.tar.gz&ticket=${ticket}`)).status).toBe(401);
 
-    // The ticket ALONE opens it: the bearer middleware exempts this path, exactly as it does /workspace/media.
+    // The ticket alone opens it: the bearer middleware exempts this path, as it does /workspace/media.
     const response = await app.request(`/bundles/download?name=${encodeURIComponent(name)}&ticket=${ticket}`);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/gzip");
     expect(response.headers.get("content-disposition")).toBe(`attachment; filename="${name}"`);
-    // A length the browser's download manager can show progress against: impossible while the bundle was
-    // packed straight into the response.
+    // A length to show progress against; impossible when a bundle streamed straight into the response.
     expect(Number(response.headers.get("content-length"))).toBeGreaterThan(0);
     await response.arrayBuffer();
 });
@@ -153,12 +137,12 @@ test("deleting an unknown export is a 404 rather than a silent success", async (
     expect((await app.request("/bundles?name=nope.tar.gz", { method: "DELETE" })).status).toBe(404);
 });
 
-/* THE INBOUND HALF IS /arrivals NOW, one route for all four sources, so these two guards moved with it. They
- * still belong in this file: taking a bundle in is the other direction of the export beside it, and what they
- * assert is that a body which is not readable is refused at the READ, before anything is written. */
+// Inbound arrivals now live at /arrivals, one route for all four sources, but these guards stayed: taking a bundle in
+// is the export's other direction, and both assert an unreadable body is refused at the read, before anything is
+// written.
 test("a body that is not any arrival this daemon reads is a 400, not a half-written workspace", async () => {
     const { app } = await appOn();
-    // Four bytes of nothing: not gzip, so it is read as a definition, and it is not one.
+    // Four bytes of nothing: not gzip, so read as a definition, and not a valid one.
     expect((await app.request("/arrivals/plan", { method: "POST", body: new Uint8Array([1, 2, 3, 4]) })).status).toBe(400);
 });
 
@@ -167,8 +151,7 @@ test("an empty arrival body is refused before anything is touched", async () => 
     expect((await app.request("/arrivals/plan", { method: "POST" })).status).toBe(400);
 });
 
-// A plan the daemon never minted, or minted and consumed: the FILE was fine and the preview went stale, which
-// is a different answer from "that is not a bundle" and the card reacts to it differently.
+// Never minted, or already consumed: the file was fine but the preview went stale, unlike "not a bundle".
 test("applying against a token nothing holds is a 409, not a 400", async () => {
     const { app } = await appOn();
     const response = await app.request("/arrivals/apply", {

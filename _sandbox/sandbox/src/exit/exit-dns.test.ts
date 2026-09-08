@@ -1,9 +1,8 @@
 import { expect, test } from "vitest";
 import { decodeAnswers, encodeName, encodeQuery, skipName } from "./exit-dns.js";
 
-// A hand-rolled DNS codec exists here for one reason (queries must leave from the exit's address, and Node's
-// resolver cannot be told a source address), so it is tested as a codec: encode what the wire expects, and
-// decode what a real resolver sends back, including the parts that are easy to get subtly wrong.
+// Codec tests for the hand-rolled DNS encoder/decoder, needed since Node's resolver can't be told a source address.
+// Encodes what the wire expects; decodes what a real resolver sends back, compression pointers and CNAMEs included.
 
 const header = (flags: number, answers: number): Buffer => {
     const buffer = Buffer.alloc(12);
@@ -15,8 +14,7 @@ const header = (flags: number, answers: number): Buffer => {
 };
 
 const answerRecord = (type: number, data: Buffer): Buffer => {
-    // A compression pointer for the name (0xc00c → back to the question), which is what real servers send and
-    // therefore the case the parser has to survive.
+    // 0xc00c is a compression pointer back to the question name, which real servers send.
     const record = Buffer.alloc(12 + data.length);
     record.writeUInt16BE(0xc00c, 0);
     record.writeUInt16BE(type, 2);
@@ -37,7 +35,7 @@ const question = (host: string, type: number): Buffer => {
 
 test("a hostname encodes as length-prefixed labels", () => {
     expect([...encodeName("a.bc")]).toEqual([1, 0x61, 2, 0x62, 0x63, 0]);
-    // A trailing dot is the same name, not a zero-length label (which is illegal and would corrupt the query).
+    // A trailing dot names the same host; encoding it as a label would be an illegal zero-length label.
     expect(encodeName("example.com.")).toEqual(encodeName("example.com"));
 });
 
@@ -49,7 +47,6 @@ test("an unencodable hostname is rejected rather than silently mangled", () => {
 test("a query asks for recursion and exactly one name", () => {
     const query = encodeQuery(0x1234, "example.com", 1);
     expect(query.readUInt16BE(0)).toBe(0x1234);
-    // RD set: without it a recursive resolver answers with a referral instead of an address.
     expect(query.readUInt16BE(2)).toBe(0x0100);
     expect(query.readUInt16BE(4)).toBe(1);
     expect(query.subarray(12, 12 + encodeName("example.com").length)).toEqual(encodeName("example.com"));
@@ -67,16 +64,14 @@ test("A and AAAA records decode, past a compressed name", () => {
 });
 
 test("a CNAME in front of the address is stepped over, not tripped on", () => {
-    // What every resolver actually returns for a CDN-fronted host, and the shape a naive parser reads as
-    // "no addresses" because the first answer is not an A record.
+    // Real resolvers put the CNAME before the address for a CDN-fronted host; a parser reads that as no addresses.
     const cname = answerRecord(5, encodeName("cdn.example.net"));
     const message = Buffer.concat([header(0x8180, 2), question("example.com", 1), cname, answerRecord(1, Buffer.from([1, 2, 3, 4]))]);
     expect(decodeAnswers(message)).toEqual(["1.2.3.4"]);
 });
 
 test("a server error is reported as itself, and NXDOMAIN is named", () => {
-    // NXDOMAIN is a fact about the destination, not a fault in the exit. Confusing the two sends whoever is
-    // debugging after the wrong thing, and makes resolveThroughExit retry three resolvers for nothing.
+    // NXDOMAIN is a fact about the destination, not a fault in the exit.
     expect(() => decodeAnswers(Buffer.concat([header(0x8183, 0), question("nope.example", 1)]))).toThrow("no such host");
     expect(() => decodeAnswers(Buffer.concat([header(0x8182, 0), question("x.example", 1)]))).toThrow(/error 2/);
     expect(() => decodeAnswers(Buffer.alloc(4))).toThrow(/short DNS response/);
@@ -85,7 +80,7 @@ test("a server error is reported as itself, and NXDOMAIN is named", () => {
 test("names are skipped by their real length, pointers included", () => {
     const message = Buffer.concat([Buffer.alloc(12), encodeName("a.bc")]);
     expect(skipName(message, 12)).toBe(12 + 6);
-    // A pointer is two bytes and ends the name wherever it appears.
+    // A pointer is two bytes total, wherever it appears.
     const pointer = Buffer.from([0xc0, 0x0c, 0xff]);
     expect(skipName(pointer, 0)).toBe(2);
     expect(() => skipName(Buffer.from([5, 1, 2]), 0)).toThrow(/truncated/);

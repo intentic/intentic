@@ -3,25 +3,9 @@ import { Button, Modal, Row } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { ref, watch } from "vue";
 
-/* THE ONE DECISION AN EXPORT ASKS FOR, ASKED WHEN SOMEBODY ASKS FOR AN EXPORT.
- *
- * It used to be a switch standing on the card: "Put secrets in the bundle", lit whether or not anyone was
- * exporting anything, sitting under the button rather than behind it. Read cold that is a SETTING — a property
- * of this sandbox, like a preference — and it is nothing of the kind: it is one argument to one POST,
- * remembered by no one, meaning nothing at all between clicks. So the switch was wrong twice over. A reader who
- * flipped it and walked away had changed no state and would never learn that; a reader who pressed Export
- * without looking below it had answered a question they never saw, and the answer decides whether the file that
- * lands is safe to hand to anybody.
- *
- * A MODAL IS THE HONEST SHAPE FOR A PER-EXPORT ARGUMENT. It exists for the length of the decision, it cannot be
- * missed by the person taking it, and it puts the consequence next to the button that commits it. The old card
- * had to spell the danger out in standing prose precisely BECAUSE the control was standing prose's neighbour;
- * here the sentence appears when the lock opens and goes away when it shuts.
- *
- * IT STARTS LOCKED EVERY TIME, and that is the reason the state lives here rather than on the card. A bundle
- * with credentials in it is the exception, so the exception is re-consented to per export instead of inherited
- * from whatever the last one did. Watching `open` rather than resetting on close: a dialog dismissed mid-thought
- * (Esc, the mask) has to come back the same as a fresh one. */
+// Whether to include secrets is a per-export argument, not a sandbox setting, so it lives in this modal next to the
+// button that commits it rather than as a standing switch on the card. Starts locked every time; watches `open`, not
+// `close`, so a mid-dismiss (Esc, mask) comes back the same as fresh.
 
 const { open, busy = false } = defineProps<{
     open: boolean;
@@ -45,21 +29,17 @@ watch(
 <template>
     <Modal :open="open" size="sm" header="Export environment" @update:open="emit(`cancel`)">
         <div class="flex flex-col gap-4">
-            <!-- WHAT THE BUTTON IS ABOUT TO DO, in the two facts a reader needs before answering the question
-                 below: what goes in, and that the answer arrives later rather than now. Packing a real
-                 workspace takes minutes, and a dialog that closes onto an apparently idle card is how "did my
-                 export start?" gets asked. -->
+            <!-- What goes in, and that the result arrives later: packing takes minutes, so closing this dialog must not read as nothing happened. -->
             <p class="text-xs text-subtle">
                 Packs this sandbox's definition together with the bytes nothing can reference: transcripts, checkpoints, unpushed branches. It is
                 built on the sandbox and appears under <span class="font-medium text-content">Exports</span> when it is done, so you can close this
                 tab while it runs.
             </p>
 
-            <!-- The lock is the state at a glance: it opens and goes warning-coloured the moment the bundle
-                 stops being safe to hand over, so the danger is legible before the sentence is read.
-                 A bordered box rather than a full-bleed band — a modal's body padding is PrimeVue's, not a
-                 number this file may assume, and a negative margin guessed against it is how a control ends up
-                 two pixels past the edge it was aiming for. -->
+            <!--
+                Lock opens and turns warning-colored exactly when the bundle becomes unsafe to hand over. Bordered box, not a negative margin against
+                the modal's padding (PrimeVue's, not a number to assume).
+            -->
             <div class="overflow-hidden rounded-lg border border-line">
                 <Row
                     flush
@@ -77,8 +57,7 @@ watch(
                     <template #control>
                         <ToggleSwitch v-model="secrets" />
                     </template>
-                    <!-- `v-if` ON THE SLOT, not on a <p> inside it: a slot that is passed is a slot the row
-                         renders, margin and all. -->
+                    <!-- `v-if` on the slot itself, not a `<p>` inside it: a passed slot is one the row renders, margin included. -->
                     <template v-if="secrets" #below>
                         <p class="text-2xs text-warning">Store the file like a password, and delete it once it has landed on the other side.</p>
                     </template>
@@ -88,10 +67,10 @@ watch(
 
         <template #footer>
             <Button label="Cancel" severity="secondary" :text="true" @click="emit(`cancel`)" />
-            <!-- THE BUTTON SAYS WHICH EXPORT IT IS. A confirm whose label does not change with the switch above
-                 it leaves the switch as the only record of the choice, which is the failure this dialog exists
-                 to fix — one step closer to the commit. `warn` rather than `danger`: it destroys nothing, it
-                 writes a file that has to be handled like a key. -->
+            <!--
+                Label mirrors the switch, so the confirm carries the choice too, not just the switch. `warn`, not `danger`: it destroys nothing, just
+                writes a file to handle like a key.
+            -->
             <Button
                 :label="secrets ? `Export with secrets` : `Export`"
                 :severity="secrets ? `warn` : undefined"

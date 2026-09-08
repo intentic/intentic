@@ -1,19 +1,15 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* WHAT THIS PINS IS THE DEFECT THE PRIMITIVE EXISTS FOR: a popped-out panel is a whole other window of the app,
- * with its own modules and its own <html>, so a setting changed on /settings/appearance repainted the window the
- * reader was in and nothing else. There was no shared notion of "an account preference" at all, each composable
- * owned its own read, its own write and its own apply, and cross-window propagation had been solved once, by
- * hand, for one key.
- *
- * So the tests speak in the two things that cross a window boundary:
- *   · a note ARRIVING (`receivePreferenceChange`), which is what the popped-out window sees. The seam is the same
- *     one the channel and the browser's `storage` event both come through, so what a test hands over and what a
- *     real second window sends travel the identical path.
- *   · a CHOICE made here, which must persist and must NOT be re-persisted when it was somebody else's choice
- *     being adopted. That last one is the whole reason the two directions are told apart: `read` normalizes, so a
- *     window echoing its own reading back would overwrite the answer it was just given. */
+// Pins the defect this primitive exists for: a popped-out panel is a whole other window with its own modules and
+// `<html>`, so a setting change on one window used to repaint only that window. There was no shared "account
+// preference": each composable owned its own read, write and apply, and cross-window propagation had been solved once,
+// by hand, for one key.
+//
+// Tests speak in the two things that cross a window boundary: a note arriving (`receivePreferenceChange`, the same seam
+// the channel and the browser's `storage` event both use), and a choice made here, which must persist but must not be
+// re-persisted when it was somebody else's choice being adopted (since `read` normalizes, and echoing a reading back
+// would overwrite the value a window was just given).
 
 const load = () => import("@intentic/ui/preference");
 
@@ -93,9 +89,9 @@ describe(`a change made in another window`, () => {
 
     it(`is adopted rather than written back, so this window cannot overwrite what it was told`, async () => {
         const { definePreference, receivePreferenceChange } = await load();
-        /* The clamp stands in for every `read` that NORMALIZES: a column width bounded by this window's own
-         * viewport, an unknown value falling back to a default. A window that echoed its reading back would
-         * ratchet the wide window's column down to fit a screen it isn't on. */
+        // The clamp stands in for every `read` that normalizes, such as a column width bounded by this window's own
+        // viewport. A window that echoed its reading back would ratchet a wide window's column down to fit a screen it
+        // isn't on.
         const width = definePreference<number>({
             key: `ui-width`,
             read: (raw) => Math.min(400, Number.parseInt(raw ?? `400`, 10)),
@@ -104,16 +100,16 @@ describe(`a change made in another window`, () => {
 
         receivePreferenceChange({ key: `ui-width`, raw: `2000` });
 
-        expect(width.value).toBe(400); // this window shows what it can hold…
-        expect(localStorage.getItem(`ui-width`)).toBeNull(); // …and did not write its own reading over the stored 2000
+        expect(width.value).toBe(400); // This window shows what it can hold…
+        expect(localStorage.getItem(`ui-width`)).toBeNull(); // …and did not write its own reading over the stored value.
     });
 
     it(`ignores a key no preference here holds`, async () => {
         const { definePreference, receivePreferenceChange } = await load();
         const nesting = definePreference<boolean>({ key: `ui-file-nesting`, read: (raw) => raw !== `off`, write: (v) => (v ? `on` : `off`) });
 
-        // A window's own view state, which windowStore.ts namespaces away from preferences precisely so that
-        // syncing the one can never move the other.
+        // A window's own view state, namespaced away from preferences (windowStore.ts) precisely so that syncing one
+        // can never move the other.
         receivePreferenceChange({ key: `intentic.terminalOpen.local`, raw: `1` });
 
         expect(nesting.value).toBe(true);

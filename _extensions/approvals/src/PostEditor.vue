@@ -1,24 +1,8 @@
-<!-- THE POST, OPEN FOR CHANGES, and deliberately the same object it was a moment ago.
-
-     IT REPLACES THE POST WITHOUT MOVING IT. Same measure, same size, same leading, same left edge as
-     <PostBody> beside it, so clicking the pencil does not redraw the row: the words stay exactly where your
-     eye left them and simply become typeable. The first version put a bordered `ui.input()` textarea here,
-     which is the FORM field: a boxed control of a fixed height, right for a name or a shell command and wrong
-     for the only thing on this page that is read in sentences. <ProseField> is the writing field: no border
-     and no fill until the caret is in it, and it grows with the text through a hidden replica rather than a
-     measure-and-set that the webfont swap would leave one line short.
-
-     THE PADDING IS CANCELLED BY THE MARGIN, on both axes. ProseField insets its text so the focus fill has
-     room to breathe; `-mx-2 -my-1` pulls exactly that inset back off the column, so the fill still bleeds
-     around the words while the words themselves keep the pixel they occupied while being read: measured, not
-     assumed: without the vertical half the first line dropped 4.4px, which is small, visible, and precisely
-     what makes an in-place editor feel like a different screen.
-
-     NO SAVE, NO CANCEL, and their absence is what fixed this row. They used to appear under the post while the
-     row's own Approve and Reject disappeared, so one click on the pencil moved four controls at once. Typing
-     writes the file (usePostEdit.ts): the file is the post, unpublished until a separate decision, which is
-     the same argument the acceptance panel makes for stories. Escape closes the editor; the last words are
-     written on the way out, never dropped. -->
+<!--
+    In-place editor that replaces <PostBody> at the same size and position, so editing does not shift the row. Uses <ProseField>, not a bordered
+    textarea: no border until focused, grows against a hidden replica. No Save or Cancel — every keystroke writes the file directly (usePostEdit.ts);
+    Escape closes without discarding.
+-->
 <script setup lang="ts">
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { ProseField } from "@intentic/extension-ui";

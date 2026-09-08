@@ -15,8 +15,7 @@ const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
     ...over,
 });
 
-// Only the three fields the join reads. The daemon's real summary is much wider; widening this fixture would
-// be asserting things about the contract rather than about the join.
+// Only the three fields the join reads; the daemon's real summary is much wider.
 const installedAs = (id: string, commit: string, source: ExtensionSummary[`source`] = `installed`): ExtensionSummary => {
     const [publisher = ``, name = ``] = id.split(`.`);
     return { manifest: { publisher, name }, commit, source } as unknown as ExtensionSummary;
@@ -28,8 +27,6 @@ describe(`what a registry row becomes against this sandbox`, () => {
     });
 
     test(`matches on the manifest identity, not on what the installer happened to name it`, () => {
-        // The whole point of the key: this sandbox called it "paperwork" in the capability box, and the
-        // listing is keyed radarsu.paperwork. Matching the typed name would offer to install it again.
         const installed = [installedAs(`radarsu.paperwork`, SHA)];
         expect(listingState(entry(), installed).kind).toBe(`installed`);
     });
@@ -40,15 +37,12 @@ describe(`what a registry row becomes against this sandbox`, () => {
     });
 
     test(`an image-baked or workspace extension of the same name is installed, never updatable`, () => {
-        // Replacing either with a registry commit would be offering to delete somebody's work: one ships with
-        // the image, the other is a directory being edited in place.
         for (const source of [`builtin`, `workspace`] as const) {
             expect(listingState(entry(), [installedAs(`radarsu.paperwork`, OTHER_SHA, source)]).kind).toBe(`installed`);
         }
     });
 
     test(`blocked wins over everything, including already having it`, () => {
-        // The person who installed it before it was blocked is exactly the reader who has to be told.
         const blocked = entry({ trust: `blocked`, trustReason: `Exfiltrates workspace files.` });
         const state = listingState(blocked, [installedAs(`radarsu.paperwork`, SHA)]);
         expect(state).toEqual({ kind: `blocked`, reason: `Exfiltrates workspace files.` });
@@ -68,12 +62,12 @@ describe(`what a registry row becomes against this sandbox`, () => {
         const branch = entry({ install: { url: `https://github.com/o/e.git`, ref: `main` } });
         const state = listingState(branch, []);
         expect(state.kind).toBe(`unavailable`);
-        // Two ways to be unavailable, and the reader has to be able to tell which one they are looking at.
+        // Two distinct "unavailable" reasons must read differently to the user.
         expect(state.reason).not.toBe(listingState(entry({ admitted: false }), []).reason);
     });
 
     test(`a source this daemon cannot clone is unavailable rather than absent`, () => {
-        // An entry that exists and can't be installed is information; a missing row is a bug report.
+        // An entry that can't be installed is still information; a missing row would read as a bug.
         expect(listingState(entry({ install: undefined }), []).kind).toBe(`unavailable`);
     });
 
@@ -127,7 +121,6 @@ describe(`how the list is grouped and searched`, () => {
     });
 
     test(`the filter reaches the description, not just the name`, () => {
-        // Somebody looking for "invoices" is looking for paperwork and does not know it is called that.
         expect(listings[0]?.search).toContain(`invoices`);
         expect(listings.filter((listing) => listing.search.includes(`radarsu`))).toHaveLength(2);
     });

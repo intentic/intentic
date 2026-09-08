@@ -1,17 +1,7 @@
-<!-- Everything about the install command that is worth KNOWING rather than doing: what it creates, and the
-     one line that removes all of it again. The run step's reference material.
-
-     It is a component because it renders in two places and must not be written twice. Above `xl` the setup page
-     docks it in a column of its own beside the steps, where it is simply always visible; below `xl` there is no
-     room for a second column, so the same content hangs off step 3's (i) hint. Only one of the two is ever
-     visible: the other is display:none, and the hint's card is inside a v-if that a hidden trigger can never
-     open, so nothing renders twice.
-
-     The docked column is the whole point. As a hover card teleported to <body> this content landed ON the
-     command it described: 288px of explanation over the one thing the step exists to hand you, on exactly the
-     wide screens with room to spare. InfoHint's own header comment already names this failure mode and the
-     remedy: put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
-     forms). This is the third time, so the content moved out to where both surfaces can share it. -->
+<!--
+    Reference for what the install command creates, and the line that removes it again. Renders in two places (a docked column above `xl`, or under
+    step 3's hint below it); only one is ever visible, via `display:none`, so nothing renders twice.
+-->
 <script setup lang="ts">
 import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";

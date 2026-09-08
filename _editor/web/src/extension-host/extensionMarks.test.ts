@@ -6,25 +6,16 @@ import { artSrc } from "@intentic/ui/brand-mark";
 import { isIconName } from "@intentic/ui/icons";
 import { describe, expect, it } from "vitest";
 
-/* EVERY FIRST-PARTY EXTENSION'S MARK NAMES A GLYPH THAT EXISTS.
- *
- * `icon` is an open string in the manifest, because a third-party extension is written against a build that has
- * not shipped and must install anyway, so a typo in one of OURS is not a schema error, not a compile error and
- * not a runtime error either. <BrandMark> falls through to the extension's initials, which looks deliberate and
- * is how the same class of typo already shipped once as a blank rail tile (`book`).
- *
- * Read off DISK rather than off builtins.ts, and that is the point: nine of these extensions contribute no
- * code to this bundle at all (connectors, social, computers, acp-agents, discord, slack, telegram, whatsapp, imap), so a test over
- * the compiled-in modules would check two thirds of the list and quietly skip the third that has nowhere else
- * to be checked. The vocabulary lives in @intentic/ui, which only the browser depends on, so this is the only
- * package that can ask the question.
- *
- * `logo` is deliberately NOT checked: a simple-icons slug can only be confirmed by fetching it, and a test that
- * reaches a CDN fails on a train. A dead slug is the one tier that degrades on its own: the mark underneath is
- * already painted.
- *
- * `art` IS checked, and for the mirror-image reason: it is the one tier whose whole document is already here, so
- * asking whether it will draw costs nothing and reaches nowhere. */
+// Every first-party extension's mark names a glyph that exists. `icon` is an open string in the manifest, so a typo in
+// one of ours is not a schema, compile, or runtime error; <BrandMark> falls through to initials, which looks
+// deliberate.
+//
+// Read off disk rather than off builtins.ts: many of these extensions contribute no code to this bundle at all, so a
+// test over the compiled-in modules would silently skip the third of the list with nowhere else to be checked.
+//
+// `logo` is not checked, since a simple-icons slug can only be confirmed by fetching it and a test that reaches a CDN
+// fails on a train; a dead slug degrades on its own. `art` is checked, since its whole document is already here and
+// costs nothing to verify.
 
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
@@ -35,8 +26,8 @@ const manifests = readdirSync(EXTENSIONS_DIR, { withFileTypes: true })
         try {
             return [{ dir: entry.name, manifest: ExtensionManifestSchema.parse(JSON.parse(readFileSync(path, "utf8"))) }];
         } catch {
-            // A directory here that carries no manifest is not an extension (the docs and test-only packages),
-            // and one whose manifest does not parse is a failure the daemon's own suite owns.
+            // A directory here with no manifest is not an extension (docs and test-only packages); one whose manifest
+            // doesn't parse is a failure the daemon's own suite owns.
             return [];
         }
     });
@@ -57,18 +48,15 @@ describe(`first-party extension marks`, () => {
             expect(declared.filter((icon) => !isIconName(icon))).toEqual([]);
         });
 
-        /* Something to draw, without exception. An extension that declares no tier at all still renders: its
-         * initials are the floor, but a FIRST-PARTY one arriving with no mark is an oversight rather than a
-         * choice, and the Extensions tab is where it shows: one row in a column of marks wearing two grey
-         * letters reads as the one that failed to load. */
+        // An extension declaring no tier still renders on its initials as the floor, but a first-party one arriving
+        // with no mark at all is an oversight, not a choice, and the Extensions tab is where it shows.
         it(`declares a mark: ${dir}`, () => {
             expect(manifest.art ?? manifest.logo ?? manifest.icon).toEqual(expect.any(String));
         });
 
-        /* Artwork that would not survive the gate is worse than none: it falls back silently, so the author sees
-         * the glyph they also declared and never learns the drawing they shipped is not being drawn. Checked
-         * here rather than in the schema because "is an SVG document" is not a thing zod can say about a string,
-         * and because the answer has to be the RENDERER's: this calls the same function <BrandMark> calls. */
+        // Artwork that would not survive the gate is worse than none, since it falls back silently and the author never
+        // learns the drawing they shipped isn't being drawn. Checked here, calling the same function <BrandMark> calls,
+        // since "is a drawable SVG" is not something zod can say about a string.
         it(`declares artwork this build will actually paint: ${dir}`, () => {
             if (manifest.art === undefined) {
                 return;

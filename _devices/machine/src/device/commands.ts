@@ -7,32 +7,19 @@ import { prepareSetup } from "../install.js";
 import { reconcileResidency } from "../resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readPrepareUpdates, removeLinks, upsertLink, writePrepareUpdates } from "./config.js";
 
-/* `intentic-machine device`, the half of the agent that lets an intentic sandbox work on this device.
- *
- *   setup      redeem the sandbox's one-time pairing, then connect and stay connected at every login.
- *   uninstall  disconnect, forget the credential. Leaves the audit log behind, on purpose.
- *   updates    the background-download switch: whether this machine keeps its sandboxes' next update
- *              downloaded so applying one is a short restart (on by default; auto-prepare.ts).
- *
- * The connection loop itself is the shared resident loop (`intentic-machine run`, ../resident.ts), which also
- * serves the sync half. There is no OAuth here and no browser: everything trusts the pairing token the owner
- * minted in the sandbox's UI, which is worth exactly one enrollment and expires in minutes. */
+// device: setup (redeem a pairing, connect and stay connected), uninstall (disconnect, keep the audit log), and updates
+// (the background-download switch). The connection loop is the shared resident loop (../resident.ts); there's no OAuth,
+// only the short-lived pairing token minted in the sandbox's UI.
 
-// Redeem the pairing for this machine's durable token. Retried through a tunnel that may still be warming (the
-// sync half's lesson: Cloudflare's edge answers before the origin registers), but never through a 401, an
-// expired pairing is a definitive answer, and retrying it only delays the "click Connect again" the user needs.
+// Retries through a tunnel that may still be warming, but never through a 401: an expired pairing is definitive, and
+// retrying only delays the reconnect the user needs.
 const enroll = async (
     sandboxUrl: string,
     pairToken: string,
     { attempts = 10, delayMs = 3000 }: { attempts?: number; delayMs?: number } = {},
 ): Promise<{ id: string; token: string }> => {
     for (let attempt = 1; ; attempt++) {
-        /* Redeemed wherever the daemon answers, by the same resolution every later dial makes (../daemon-base.ts):
-         * the container on this machine's loopback when it proves to be this sandbox, the public URL otherwise.
-         * Per attempt rather than once, because the retry loop below exists for a sandbox that is still coming
-         * up, and the address that comes up may be the loopback one. A pairing minted for a sandbox whose tunnel
-         * is down would otherwise retry its own edge ten times and fail — for a container that is running one
-         * hop away, on the machine typing the command. */
+        // Resolved per attempt (daemon-base.ts), since loopback may only appear partway through the retries.
         const { base } = await resolveDaemonBase(sandboxUrl);
         const url = `${base}/system/hosts/enroll`;
         let response: Response;
@@ -75,14 +62,9 @@ const setup = buildCommand<SetupFlags>({
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
-        /* Self-update, PATH, the Windows launcher — everything the install scripts used to decide — runs
-         * first (install.ts), in plain lines BEFORE the renderer opens: on an actual update this process
-         * re-execs the new agent with the same argv, and a UI opened here would be a second banner there. */
+        // Self-update and PATH setup run first, in plain lines, since an update re-execs before any UI opens.
         await prepareSetup((message) => void this.process.stdout.write(`${message}\n`), process.argv.slice(2));
-        /* Rendered through the shared renderer (@intentic/local-agent), the same one `ic` and the sync half
-         * render through, so a person meeting both in one install meets one program. `ic` runs this command
-         * inside its own checklist and sets INTENTIC_UI=nested, which turns everything below into detail under
-         * ITS step rather than a second banner in the middle of somebody's setup. */
+        // Shared renderer with ic and sync; ic sets INTENTIC_UI=nested so this becomes detail under its own step.
         const ui = createUi(this.process);
         const out: Log = ui.note;
         ui.begin("intentic · connect this device", SETUP_PLAN);
@@ -94,10 +76,7 @@ const setup = buildCommand<SetupFlags>({
     },
 });
 
-/* Two steps, and the second is the one that can be slow, registering an autostart entry touches systemd,
- * launchd or the Windows registry, and starting the resident agent waits on a detached process. Phases are this
- * agent's own vocabulary and deliberately absent from the desktop app's plan (setupPlan.ts), where an unknown
- * phase reads as narration under whichever step is running. */
+// Phase ids are this agent's own vocabulary; unnamed elsewhere reads as narration under the running step.
 const SETUP_PLAN: readonly PlanStep[] = [
     { phase: "device-enrolling", label: "Enrol this device", weight: 10 },
     { phase: "device-starting", label: "Start the agent", weight: 15 },
@@ -106,31 +85,19 @@ const SETUP_PLAN: readonly PlanStep[] = [
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("device-enrolling", "enrolling this device with your sandbox…");
     const { id, token } = await enroll(flags.url, flags.pair);
-    /* The cached grant starts at NOTHING. The sandbox pushes the real scopes within a second of connecting,
-     * so this only governs the window before that, and an agent that assumed "allowed" for that window
-     * would be deciding on somebody's device using a default nobody chose. Refusing until told is the only
-     * defensible starting state. */
+    // The cached grant starts at nothing; the sandbox pushes real scopes within a second of connecting.
     const link: HostLink = {
         sandboxUrl: flags.url,
         id,
         token,
         scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off", destructive: "off" },
     };
-    /* ADDED TO THE LIST, NOT WRITTEN OVER IT. This line used to be `writeHostConfig(link)` against a
-     * single-link file, which made connecting a second sandbox a silent disconnection of the first — and the
-     * caller that does it most is not a person typing a command, it is the last step of onboarding
-     * (`connect.ps1` → `device.ps1`). Setting up a new sandbox on a device that already had one took the
-     * device off the old one, said nothing about it on any screen, and handed the new owner a machine with
-     * every scope off. See config.ts. */
+    // Added to the link list, not written over it, or connecting a second sandbox silently disconnects the first.
     const links = await upsertLink(link);
     ui.step("device-starting", "starting the agent on this device…");
-    /* Stop whatever is resident, register autostart, start against the config as it now is (resident.ts): a
-     * process started from an older binary would otherwise quietly keep serving the old link list, and every
-     * fix since would stay inert. The restart picks up every link AND every sync pairing this machine holds,
-     * so the sandboxes that were already connected come straight back. */
+    // Restarts against the config as it now is, so an older running binary doesn't keep serving a stale link list.
     await reconcileResidency(out);
-    // Naming the count is how the owner of a device that was already connected can see that it still is:
-    // silence here is what made the old behaviour invisible.
+    // Naming the count shows an already-connected device that it's still connected.
     const others = links.length - 1;
     ui.finished(
         "This device is connected.",
@@ -153,8 +120,7 @@ const uninstall = buildCommand<UninstallFlags>({
     docs: { brief: "Disconnect this device from one sandbox, or from all of them" },
     parameters: {
         flags: {
-            // Named rather than positional because leaving it out is the destructive answer, and a bare word
-            // that means "all of them" is the wrong thing to be able to type by accident.
+            // Named, not positional: omitting it is the destructive default; a bare 'all' shouldn't be an accident.
             sandbox: { kind: "parsed", parse: String, brief: "Disconnect only this sandbox URL (default: every one)", optional: true },
         },
     },
@@ -164,11 +130,8 @@ const uninstall = buildCommand<UninstallFlags>({
     },
 });
 
-/* The device half's teardown, callable from the top-level `uninstall` too. Drops the named link (or all of
- * them) and reconciles the resident loop against what is left — which keeps it running for the remaining links
- * AND for any sync pairings, and retires it (with the login entry) only when this machine holds nothing at all.
- * Tearing residency down because ONE sandbox was disconnected is the same wholesale-overwrite mistake the link
- * list exists to prevent, in reverse. */
+// Drops the named link (or all), then reconciles the resident loop so it keeps running for what's left and retires only
+// when nothing remains.
 export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void> => {
     const only = sandbox === undefined || sandbox === "" ? undefined : sandbox;
     const dropped = await removeLinks(only);
@@ -178,9 +141,7 @@ export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void>
         return;
     }
     if (left.length === 0) {
-        // The credential goes; the audit log stays. It is the user's record of what was done to their machine,
-        // and deleting it as part of "uninstall" would erase the evidence at exactly the moment somebody might
-        // be uninstalling BECAUSE they want to know what happened.
+        // Credential goes; the audit log stays, since it's the user's own record of what happened on their machine.
         await rm(configPath, { force: true });
     }
     await reconcileResidency(out);
@@ -198,10 +159,8 @@ export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void>
     out(`Your record of what this agent did stays at ${auditPath}.`);
 };
 
-/* The background-download switch. Flags rather than a positional, the group's own precedent (`uninstall
- * --sandbox`): a bare word that flips a machine-wide behaviour is the wrong thing to be able to type by
- * accident, and `--off` states its direction. With neither flag it reports, which is also how the owner of a
- * machine they didn't configure finds out what it is doing. */
+// Flags, not a positional: a bare word flipping machine-wide behavior shouldn't be an accident; with neither flag, it
+// just reports the current state.
 interface UpdatesFlags {
     readonly on: boolean;
     readonly off: boolean;
@@ -229,9 +188,7 @@ const updates = buildCommand<UpdatesFlags>({
             return;
         }
         await writePrepareUpdates(flags.on);
-        /* Restart the loop rather than waiting for its next tick to notice: "off" typed on a metered
-         * connection means NOW, and the fresh loop re-reads the switch before it touches anything. The same
-         * reconcile every setup runs, so it also repairs a stale login entry while it is at it. */
+        // Restarts the loop now, not at its next tick: 'off' on a metered connection must take effect immediately.
         await reconcileResidency(out);
         out(
             flags.on

@@ -2,10 +2,8 @@ import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
 import { describe, expect, it } from "vitest";
 import { acquireApplyLock } from "./apply-lock.js";
 
-// A fake host fleet that simulates the lock dir per host, driven by the `#APPLYLOCK <op> <nonce> <ttl>` header
-// every lock script starts with: the same line a real host shell treats as a no-op comment. A shared mutable
-// clock lets tests age locks past their TTL to exercise stale takeover. `commands` records the order ops hit
-// each host so we can assert deterministic acquisition ordering.
+// Fake host fleet driven by the `#APPLYLOCK <op> <nonce> <ttl>` header each lock script starts with (a real shell reads
+// it as a no-op comment). Clock ages locks past TTL for stale-takeover tests; `commands` records per-host op order.
 interface FakeHost {
     nonce: string;
     expiresAt: number;
@@ -92,12 +90,12 @@ describe("acquireApplyLock", () => {
 
     it("aborts and releases already-held locks when a later host is held by another run", async () => {
         const fleet = createFakeFleet();
-        // Pre-seed host 2 as held by another live run.
+        // Host 2 is pre-seeded as held by another live run.
         fleet.locks.set("10.0.0.2:22", { nonce: "other", expiresAt: 999_999 });
         await expect(acquireApplyLock(fleet.executor, [target("10.0.0.1"), target("10.0.0.2")])).rejects.toThrow(
             /another intentic run holds the apply lock on 10\.0\.0\.2:22/,
         );
-        // The lock we took on host 1 must have been released on abort.
+        // Host 1's lock is released after the abort.
         expect(fleet.locks.has("10.0.0.1:22")).toBe(false);
         // Host 2's foreign lock is untouched.
         expect(fleet.locks.get("10.0.0.2:22")?.nonce).toBe("other");
@@ -108,7 +106,7 @@ describe("acquireApplyLock", () => {
         await expect(acquireApplyLock(fleet.executor, [target("10.0.0.1"), target("10.0.0.2")])).rejects.toThrow(
             /cannot create \/opt\/intentic on 10\.0\.0\.2:22/,
         );
-        // All-or-abort: the lock taken on the writable host 1 must be released.
+        // All-or-abort: host 1's lock is released when host 2 fails.
         expect(fleet.locks.has("10.0.0.1:22")).toBe(false);
     });
 
@@ -131,7 +129,7 @@ describe("acquireApplyLock", () => {
     it("verify throws when our lock was taken over (nonce no longer ours)", async () => {
         const fleet = createFakeFleet();
         const lock = await acquireApplyLock(fleet.executor, [target("10.0.0.1")]);
-        // Simulate another run stealing the lock (e.g. after our TTL elapsed).
+        // Another run steals the lock (TTL elapsed).
         fleet.locks.set("10.0.0.1:22", { nonce: "stolen", expiresAt: 999_999 });
         await expect(lock.verify()).rejects.toThrow(/was taken over by another run/);
     });

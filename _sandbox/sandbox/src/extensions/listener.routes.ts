@@ -15,23 +15,16 @@ import type { AppEnv } from "../app-env.js";
 import { listenerState } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 
-// The control surface for an extension's realtime-listener gateway process (e.g. ext-discord). The daemon holds
-// no provider connection itself, the gateway does, so these four routes are the seam: the gateway reconciles
-// via /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),
-// and reports fatal failures + live status. All are reached with the per-boot panel token (app.ts's
-// x-intentic-panel branch), server-side only, so /state returning connector secrets is not a new exposure.
+// Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
+// Four routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), and failure/status reports.
+// Reached only with the per-boot panel token, server-side; /state returning connector secrets is not a new exposure.
 
 export const createListenerRoutes = (services: Services, wake: WakeFn = streamAgent) => ({
-    // The reconcile feed: the enabled listener automations for this provider + its connector capabilities WITH
-    // full config (secret bot tokens included, the gateway needs them to connect). The gateway polls this on
-    // its interval and connects/disconnects to match.
+    // Reconcile feed: enabled listener automations plus connector configs (bot tokens included); polled to connect.
     state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => c.json(await listenerState(services, c.req.param("provider"))),
 
-    // One inbound event → the matching listener automations. Plain (voice events, or a source painting its own
-    // reply): fire-and-return. `?stream=1`: hold an ndjson response, one frame stream per matched automation
-    // tagged by automationId ({automationId, delta} … {automationId, end}), so the gateway paints each reply into
-    // its channel; the response closes once every matched turn has ended (the batcher's end-on-replace and the
-    // disabled-automation end() above guarantee each sink terminates).
+    // One inbound event routed to matching listener automations; plain calls fire-and-return.
+    // `?stream=1` holds an ndjson response, one frame stream per matched automation, closed once every turn ends.
     dispatch: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const provider = c.req.param("provider");
         const declared = Number(c.req.header("content-length"));
@@ -67,9 +60,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
                             write({ automationId, delta: text });
                         }
                     },
-                    // Forwarded VERBATIM, unlike the Front Desk's: a gateway delivers into the owner's own
-                    // channel, so the provider's actual sentence is the useful thing to put there rather than
-                    // something neutral. What a source does with the frame is the source's own call.
+                    // Forwarded verbatim, unlike the Front Desk's: it lands in the owner's channel, sentence intact.
                     failed: (reason) => write({ automationId, failed: reason }),
                     end: () => {
                         write({ automationId, end: true });
@@ -82,8 +73,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
         });
     },
 
-    // A fatal source failure (bad credential, missing portal intent): surface it on the provider's automations +
-    // the activity feed, exactly as the in-process source's own reporting did.
+    // Fatal source failure (bad credential, missing intent), surfaced on the provider's automations and activity feed.
     failure: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const provider = c.req.param("provider");
         const body = (await c.req.json().catch(() => undefined)) as { detail?: unknown } | undefined;
@@ -91,8 +81,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
         return c.json({ ok: true });
     },
 
-    // The gateway's periodic live status → the map the /activity/status probe reads (the daemon no longer holds
-    // the connection to probe directly).
+    // Gateway's periodic live status, into the map /activity/status reads; the daemon can't probe it directly.
     status: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const provider = c.req.param("provider");
         let body: ListenerStatus;

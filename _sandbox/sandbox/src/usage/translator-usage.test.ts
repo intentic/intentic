@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import { authFileCooling, codexUsageFromPayload, codexUsageFromRateLimits, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
 
-// The two upstream payload shapes, pinned. These are private endpoints rather than published contracts, so what
-// these tests really defend is the mapping INTO AccountUsage: every pool the provider names arrives as its own
-// window, utilization is always utilization (never "remaining"), and a missing field costs that one window
-// rather than the whole reading.
+// Pins the mapping into AccountUsage: every named pool becomes its own window, utilization is always utilization, never
+// remaining, and a missing field costs only that window.
 
 test("maps every ChatGPT limit window to utilized percentages and reset instants", () => {
     const measuredAt = 1_800_000_000_000;
@@ -39,8 +37,8 @@ test("maps every ChatGPT limit window to utilized percentages and reset instants
     });
 });
 
-// The shape a spent team plan really returns (captured from the live endpoint): one window, `limit_reached`,
-// and a null secondary. The null is the point: it must be skipped, not read as a second pool at 0%.
+// A spent plan returns one window, `limit_reached`, and a null secondary; the null must be skipped, not read as a
+// second pool at 0%.
 test("reads a fully spent ChatGPT plan from its single live window", () => {
     const measuredAt = 1_800_000_000_000;
     expect(
@@ -97,10 +95,7 @@ test("inverts Google's remaining fractions and preserves each named quota bucket
     });
 });
 
-/* A bucket at `remainingFraction: 0` is the whole reason this feature exists, it is what an exhausted free
- * Google account reports, and reading that 0 as "no data" instead of "100% used" is precisely how a spent
- * account keeps rendering as a healthy green dot. Guarded because `0` is falsy and every `??`/`||` in the parse
- * path is one keystroke away from discarding it. */
+// `remainingFraction: 0` is a real reading (fully exhausted), not missing data; guard against `??`/`||` discarding it.
 test("treats an exhausted Google bucket as fully utilized rather than unmeasured", () => {
     expect(
         geminiUsageFromPayload({
@@ -110,17 +105,14 @@ test("treats an exhausted Google bucket as fully utilized rather than unmeasured
             ],
         })?.windows,
     ).toEqual([
-        // Each group gates its own family, which is the whole reason the two are read as two pools.
+        // Each group gates its own family.
         { kind: "google:gemini-weekly", label: "Gemini Models · Weekly Limit", utilization: 100, gates: { models: ["gemini"] } },
         { kind: "google:3p-weekly", label: "Third Party · Weekly Limit", utilization: 100, gates: { models: ["claude", "gpt"] } },
     ]);
 });
 
-/* The live Kimi Code payload, captured from `/coding/v1/usages` on the account whose 5-hour window had just
- * refused a turn: the exact reading the "You've reached your usage limit for this billing cycle" 403 is the
- * prose version of. Counts, not percentages, and decimal STRINGS at that, so the division is the mapping's job:
- * 100/100 is the spent throttle and 40/100 the plan pool it sits inside, and reporting either as the other is
- * how a spent account keeps its green dot. */
+// Kimi sends used/limit as decimal-string counts, not percentages, so the mapping divides; the throttle (100/100) sits
+// inside the plan pool (40/100).
 test("maps a Kimi Code reading to its plan pool and its throttle", () => {
     const measuredAt = 1_800_000_000_000;
     expect(
@@ -146,8 +138,7 @@ test("maps a Kimi Code reading to its plan pool and its throttle", () => {
     });
 });
 
-// A throttle whose length is neither of the two shared kinds keeps its own namespaced kind and says how long it
-// is: an unnamed pool is still one this account will be gated by.
+// An unnamed throttle length keeps its own namespaced kind and states its length rather than being dropped.
 test("names a Kimi throttle this vocabulary has no shared kind for", () => {
     expect(
         kimiUsageFromPayload({
@@ -156,9 +147,7 @@ test("names a Kimi throttle this vocabulary has no shared kind for", () => {
     ).toEqual([{ kind: "kimi:43200s", label: "12-hour window", utilization: 20, gates: "all" }]);
 });
 
-// No quota in the payload is not a reading of zero: the account must come back unmeasured so the row keeps its
-// dot instead of claiming headroom nobody measured. A Kimi pool with a ZERO limit is the same claim: the plan
-// does not meter it, and dividing by it would report every such account as permanently spent.
+// No usable window returns undefined, not zero; a Kimi pool with a zero limit is unmetered, not exhausted.
 test("returns nothing when a payload carries no usable window", () => {
     expect(codexUsageFromPayload({ rate_limit: null })).toBeUndefined();
     expect(geminiUsageFromPayload({ groups: [] })).toBeUndefined();
@@ -167,10 +156,8 @@ test("returns nothing when a payload carries no usable window", () => {
     expect(kimiUsageFromPayload("not json")).toBeUndefined();
 });
 
-/* The same two ChatGPT windows as Codex's own runtime pushes them mid-turn (app-server's
- * `account/rateLimits/updated`): camelCase, `primary`/`secondary`, minutes rather than seconds. The mapping
- * lands them on the same kinds the pulled reading uses, so the ring a native Codex turn updates is the ring
- * the pull would have drawn. */
+// App-server pushes the same two windows as camelCase `primary`/`secondary` in minutes, mapped onto the same kinds a
+// pulled reading uses.
 test("maps an app-server rate-limit snapshot onto the same windows as the pulled reading", () => {
     const measuredAt = 1_800_000_000_000;
     expect(

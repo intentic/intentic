@@ -78,9 +78,8 @@ describe(`storiesOf`, () => {
     });
 });
 
-/* The cross-repo half of the same guard. storiesOf only ever sees one repo, so two repos that both ship
- * `checkout.md` derive the same conversation id and the same run directory: two agents overwriting each other's
- * report, which is precisely what the within-repo renumbering above exists to prevent. */
+// Pins the cross-repo half of slug uniqueness: two repos both shipping checkout.md must not collide on the same
+// conversation id or run directory.
 describe(`uniqueOf`, () => {
     const story = (repo: string, slug: string): Story => ({ repo, path: `${repo}/docs/user-stories/${slug}.md`, slug, title: slug, group: `` });
 
@@ -93,7 +92,7 @@ describe(`uniqueOf`, () => {
     });
 });
 
-/* ---- the criteria section: what a run is graded against ---- */
+// Pins what counts as a criterion: a checklist item under the Acceptance criteria heading, checked or not.
 
 describe(`criteriaOf`, () => {
     const story = [
@@ -125,21 +124,17 @@ describe(`criteriaOf`, () => {
     });
 });
 
-/* A story the composer mints has to be one the parsers read back: a story started here and a story hand-written
- * in an editor are the same artifact, or the format has forked. */
+// Pins that a fresh story round-trips through the same parsers as a hand-written one, or the format has forked.
 describe(`newStoryMarkdown`, () => {
     const written = newStoryMarkdown(`  Sign in  `);
 
-    /* The whole document to the byte, because every part of it is load-bearing and the parsers below only read
-     * the parts they name. The empty bullet is where the caret lands and where Enter then keeps going, so it
-     * has to be a LIST LINE the editor's continuation recognises rather than a bare dash, and the blank line
-     * above the heading is what keeps that section a heading rather than a paragraph's second line. */
+    // Exact bytes matter: the empty bullet must be a real list line for the editor's continuation, and the blank line
+    // above the heading keeps it a heading, not a paragraph.
     it(`is the trimmed title, the section the run grades against, and an empty bullet to type into`, () => {
         expect(written).toBe(`# Sign in\n\n## Acceptance criteria\n\n- \n`);
     });
 
-    /* And it has to read back as the story it looks like: a fresh story promises nothing, so the row's tally
-     * says "no criteria" until somebody types one, and the empty bullet must not count as the first. */
+    // The empty bullet must not itself count as a criterion, or a fresh story would show one already.
     it(`round-trips through the parsers as a titled story with no criteria yet`, () => {
         expect(titleOf(`x.md`, written)).toBe(`Sign in`);
         expect(criteriaOf(written)).toEqual([]);
@@ -156,8 +151,8 @@ describe(`storyPath`, () => {
     });
 });
 
-/* One repository can serve several applications: a monorepo's marketing site and its web app are two dev
- * servers on two ports, and the group is the only thing in a stories tree that already says which is which. */
+// Pins that one repo can serve multiple apps by group, since the group is the only thing in a stories tree that says
+// which port a story belongs to.
 describe(`targetKeyOf`, () => {
     it(`aims a grouped story at its own address`, () => {
         expect(targetKeyOf({ repo: `intentic`, group: `01-arrive` })).toBe(`intentic/01-arrive`);

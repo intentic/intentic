@@ -42,25 +42,8 @@ import {
     startConversationTurn,
 } from "./turn-resume.js";
 
-// The scheduler touches settings/push/logger; the fake stays that small, plus the transcript record every
-// started turn writes its settled frames to (startConversationTurn).
-//
-// `abandoned` collects the cards the pass gave up on: the fleet's half of a resume that never fires. It is
-// worth a parameter rather than a stub each test writes, because the property it pins is the one nobody sees
-// happen: a card holds itself out of the Finished lane from the moment its turn dies, so a pass that decides
-// nothing is coming back and says nothing to the registry leaves a "Resuming…" spinner turning forever.
-//
-// `takes` is the registry's answer to each attempt: false means a turn was still unwinding and the abandon was
-// not applied, which the pass has to come back from rather than treat as done (see abandonResume). Read per
-// call so a test can flip it between passes, which is the whole shape of that race.
-//
-// `armed` is each conversation's OWN answer about outage resumes: the override the chat's offer writes. An id
-// missing from the map is the ordinary state (no opinion, follow the sandbox setting), which is why the default
-// is an empty one.
-//
-// `limitArmed` is the same thing for the OTHER gated resume, kept apart rather than folded into `armed`
-// because the two postures are independent by design: a conversation that retries through outages has said
-// nothing about whether it may spend the user's allowance the moment it reopens.
+// `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
+// overrides for outage/limit resume, a missing id follows the sandbox default.
 const fakeServices = (
     root: string,
     abandoned: string[] = [],
@@ -85,15 +68,13 @@ const fakeServices = (
                       } as PersistedAgent)
                     : undefined,
         }),
-        // No device subscribed, which is what a workspace that has never granted push reports.
+        // No device subscribed.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => record.append(agent.id, messages),
-            // Read as a settled turn is written down, to place any message steered into it (sessions/
-            // turn-transcript.ts). Real here rather than stubbed away, so this suite exercises the same order of
-            // reads the daemon does.
+            // Real record, not stubbed, so this suite reads transcripts in the same order the daemon does.
             count: (agent: TranscriptAgent) => record.count(agent.id),
         }),
     });
@@ -105,19 +86,11 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
         yield* events;
     };
 
-/* A fire starts a DETACHED run, and startConversationTurn opens the conversation's transcript record before it
- * lets the provider start (turn-runs' `before`), so the wake is reached one I/O round-trip after tick() returns
- * and the run stays live until the turn unwinds. Settling on it is what the minutes between real outage windows
- * do, and it makes every assertion below exact in both directions: a fire that happened is counted, and one that
- * should never have happened is caught here rather than raced past and mistaken for a later window's. */
+// Waits for a fire's detached run to finish; its wake lands after tick() returns, one I/O round-trip later.
 const settle = async (conversationId: string): Promise<void> => {
     await turnRunOf(conversationId)?.waitUntilFinished();
 };
 
-/* startConversationTurn is THE one way a conversation's turn starts, which is why the transcript hangs off it:
- * every provider goes through here, so every provider's conversation is readable afterwards. Run on codex/native
- * on purpose: the pair with no Claude Code session store behind it, whose chats opened blank for exactly as
- * long as the transcript was something the daemon read back out of a provider instead of writing down. */
 test("a started turn records its settled transcript, whatever provider ran it", async () => {
     const root = mkdtempSync(join(tmpdir(), "turn-resume-"));
     const record = fileTranscriptRecord(join(root, "transcripts"));
@@ -129,22 +102,14 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     });
     expect(started).toEqual(expect.any(Object));
     await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
-    // The user row is stamped with when it was sent; this suite is about which rows a settled turn records, so
-    // it asserts the shape and lets the clock be a number.
     expect(await record.read("tr-record")).toEqual([
         { role: "user", text: "ship it", sentAt: expect.any(Number) },
         { role: "assistant", text: "shipped" },
     ]);
 });
 
-/* WHAT AN UNATTENDED TURN RUNS ON. Every surface that starts an agent for the user: Fix with agent, a
- * Maintenance chore, a Documentation or Acceptance run: comes through here naming no model, because nobody
- * touched the caret on the button that started it. These cases are the whole rule, and the reason it lives at
- * this boundary rather than at each of those five call sites.
- *
- * `connected` is which providers this sandbox can reach, because the setting is an ORDERED LIST and the whole
- * point of the second entry is to answer when the first one's account is gone. Codex and Claude are routed
- * through the translator here, which is the cheapest fake that makes `harnessReadyProviders` say yes. */
+// `connected` names which providers are reachable, ordered (first entry is the head of the list); `routed` is the
+// cheapest fake for `harnessReadyProviders`.
 const routed = (provider: string, connected: readonly string[]): { name: string; label: string }[] =>
     connected.includes(provider) ? [{ name: "acct", label: "Account" }] : [];
 
@@ -166,23 +131,17 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
         list: async () => (connected.includes("claude") ? [{ id: "acct", label: "Claude", connectedAt: 0 }] : []),
     }),
-    // Cursor answers from a stored key rather than from the translator's account map, so it needs its own
-    // entry in this fixture's `connected` list rather than riding `routed` with the four above.
+    // Cursor answers from a stored key, not the translator's map, so it can't ride `routed` like the others.
     cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
         credentials: async () => (connected.includes("cursor") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
     }),
-    // No model endpoints configured: the sandbox's own providers are the whole picture here.
+    // No model endpoints configured.
     capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
-    /* The minted providers, with nobody signed in. Present rather than omitted because the readiness sweep this
-     * fixture drives iterates EVERY provider module (that is the point of the registry), so a missing slice is
-     * a thrown TypeError rather than a provider that reads as unavailable. Nothing here connects one: this
-     * fixture's `connected` list is about which subscriptions answer, and a minted provider has none. */
+    // Present with nobody signed in: the sweep iterates every provider module, so a missing slice throws.
     minted: testMintedSlices(),
 });
 
-/* THE JOB THESE TURNS ARE, and therefore which of the owner's lists fills their model in. `pipeline-fix`
- * throughout: what is under test is the FILL, which is one rule for every role, so the role here only has to be
- * a real one that the turn and the settings agree on — the disagreement is the failure worth catching. */
+// Shared role id for every agent-run test below; what's under test is the fill, so any real role name works.
 const ROLE = "pipeline-fix" as const;
 
 const ranWith = async (
@@ -210,14 +169,10 @@ test("an unattended turn takes the agent-run model, provider and effort", async 
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] } },
         { prompt: "fix CI", conversationId: "ar-fill", unattended: true, runRole: ROLE },
     );
-    // The provider rides along with the id and has to: a model id is only meaningful to the provider that vends
-    // it, so honouring one without the other would send a Codex id to Claude.
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
 });
 
 test("every knob the pin carries rides onto the turn, and the ones it doesn't stay absent", async () => {
-    // The point of the pins being objects: the entry that runs says how it runs. A field the user never pinned
-    // must stay OFF the turn rather than becoming an invented default, so the provider's own answer stands.
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" }] } },
         { prompt: "fix CI", conversationId: "ar-knobs", unattended: true, runRole: ROLE },
@@ -227,9 +182,6 @@ test("every knob the pin carries rides onto the turn, and the ones it doesn't st
 });
 
 test("a knob the turn already carries is not overwritten by the pin's", async () => {
-    // The model guard only proves nobody named a MODEL. A surface may still have sent an effort for a run whose
-    // model it left to the setting (the push flow's proposed fix does exactly that), and that is a choice the
-    // user made a second ago.
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
         { prompt: "fix CI", conversationId: "ar-knob-kept", unattended: true, runRole: ROLE, effort: "max" },
@@ -253,9 +205,6 @@ test("the head of the list wins while its account is connected", async () => {
 });
 
 test("a disconnected head is stepped over, and the entry that answers brings its own knobs", async () => {
-    // The whole reason the setting is a list. Without this the user's Codex account going away takes every
-    // surface-started run in the sandbox down, and the row they pressed cannot tell them why. What the fallback
-    // runs AT is its own entry's business: the head's effort is not a property of the list.
     const ran = await ranWith(
         {
             modelRoles: {
@@ -272,8 +221,6 @@ test("a disconnected head is stepped over, and the entry that answers brings its
 });
 
 test("a list with nothing reachable left leaves the turn unset: it does not reach for a connected account", async () => {
-    // An agent run is billed in whole sessions, so a list that has stopped saying anything about this sandbox
-    // hands the choice back to the composer's own pick rather than spending Gemini because it happens to be there.
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
         { prompt: "fix CI", conversationId: "ar-none", unattended: true, runRole: ROLE },
@@ -284,8 +231,6 @@ test("a list with nothing reachable left leaves the turn unset: it does not reac
 });
 
 test("an unattended turn that names its own model keeps it", async () => {
-    // The shared run button's caret, and Acceptance's per-run pick: a choice the user made a second ago
-    // outranks the standing list.
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
         { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, runRole: ROLE, agent: "claude", model: "claude-opus-4-5" },
@@ -293,9 +238,7 @@ test("an unattended turn that names its own model keeps it", async () => {
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
 });
 
-/* THE PERSONA'S LADDER, asked before the role's. A card is the more specific answer: the role says what kind of
- * job this is, the card says who is doing it. The fixture's services carry no persona store, so these hand one
- * in; a turn that names no persona never reaches it. */
+// Injects a persona store the base fixture lacks; a turn that names no persona never reaches it.
 const withPersonas = (services: Services, cards: readonly Persona[]): Services => ({
     ...services,
     personas: unstubbed<Services["personas"]>("personas", { get: async (id) => cards.find((card) => card.id === id) }),
@@ -330,7 +273,7 @@ test("a persona with no ladder, or none reachable, leaves the question to the ro
     const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } };
     const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, { prompt: "fix CI", conversationId: "ar-persona-silent", unattended: true, runRole: ROLE, actsAs: "quiet" });
     expect(silent).toMatchObject({ agent: "codex", model: "gpt-5.6" });
-    // Kimi is not connected in this fixture, so the card's ladder reaches nothing and the role answers.
+    // Kimi isn't connected in this fixture.
     const unreachable = await ranAs([{ id: "far", capabilities: [], models: [{ provider: "kimi", model: "k2" }] }], roles, {
         prompt: "fix CI",
         conversationId: "ar-persona-far",
@@ -339,7 +282,7 @@ test("a persona with no ladder, or none reachable, leaves the question to the ro
         actsAs: "far",
     });
     expect(unreachable).toMatchObject({ agent: "codex", model: "gpt-5.6" });
-    // A card nobody has (the resolver denies that turn everything anyway) is the same silence.
+    // A persona nobody has behaves like an empty ladder.
     const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-persona-missing", unattended: true, runRole: ROLE, actsAs: "gone" });
     expect(missing).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
@@ -354,9 +297,7 @@ test("a turn that names its own model keeps it over the persona's ladder too", a
 });
 
 test("a turn nobody flagged unattended is left alone", async () => {
-    // The chat sends no model whenever its live catalog has not loaded yet. That must still resolve to the
-    // PROVIDER's catalog default, not to the agent-run list: the two look identical on the wire without the
-    // flag, which is exactly why the flag exists rather than being inferred from a missing model.
+    // The flag, not a missing model, gates this: an unloaded chat catalog also sends no model.
     const ran = await ranWith({ modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } }, { prompt: "hello", conversationId: "ar-chat" });
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
@@ -367,13 +308,11 @@ test("an empty agent-run list leaves the turn unset rather than inventing one", 
     expect(ran.model).toBeUndefined();
 });
 
-/* THE AUTH RESUME: the failure a rotation causes and the recovery the user should never have to perform.
- * A rotation retires the token every in-flight turn snapshotted at spawn, so they all die at once with
- * "401 OAuth access token has been revoked"; the fix is to re-mint and re-run, not to wait for a human. */
+// A token rotation retires every in-flight turn's snapshotted credential at once, failing them with `401 OAuth access
+// token has been revoked`; the fix is an automatic re-mint and re-run.
 
-/* The store as it stands AFTER the rotation that refused the turn: it already holds the successor token, so
- * the resume adopts it without a second refresh. That is the shape of the real failure: the proactive timer
- * rotates, the store moves on, and the in-flight turns are left holding the retired token. */
+// Represents the store after rotation already succeeded: it holds the successor token, so resume adopts it without
+// refreshing again.
 const fakeStore = (stored: { accessToken: string; revokedAt?: number }): Services["claudeStore"] =>
     unstubbed<Services["claudeStore"]>("claudeStore", {
         read: async () => ({ id: "acct", label: "Claude", connectedAt: 0, refreshToken: "rt", ...stored }),
@@ -384,9 +323,8 @@ const fakeStore = (stored: { accessToken: string; revokedAt?: number }): Service
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} }),
     });
 
-/* A store that cannot answer at all: the token endpoint unreachable, the request timing out, the disk refusing
- * the write. Distinct from the revoked account above and the distinction is the point: that one is an ANSWER
- * ("this credential is dead"), and this one is the question never being asked. */
+// A store that fails outright (endpoint unreachable, timeout, disk write refused): the question is never answered,
+// unlike a revoked account's clear no.
 const brokenStore = (): Services["claudeStore"] =>
     unstubbed<Services["claudeStore"]>("claudeStore", {
         read: async () => {
@@ -409,30 +347,25 @@ test("a turn the API refused mid-flight is re-minted and re-run on the next pass
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
     await settle("auth-1");
     expect(prompts).toHaveLength(1);
-    // The original request rides again in full, behind a note saying why: a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
     expect(prompts[0]).toMatch(/renew/i);
 });
 
 test("no resume when the credential is genuinely dead, the error frame's reconnect prompt is the real fix", async () => {
-    // An account already marked revoked (its refresh token was rejected): rotate answers undefined.
+    // revokedAt marks it: rotate answers undefined for an already-revoked account.
     const abandoned: string[] = [];
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }), abandoned);
     const prompts: string[] = [];
     recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
     expect(prompts).toHaveLength(0);
-    // And the card is told, because it has been saying "coming back" since the turn died. This is the one auth
-    // failure a person really does have to act on, so it has to end up in front of them.
     expect(abandoned).toEqual(["auth-2"]);
 });
 
 test("a resume that is itself refused is not resumed again: a dead credential must not respawn forever", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    // The prompt a fired resume carries, built the way the resume builds it: the note verbatim, ahead of the
-    // words it interrupted. Recording it again is the loop this refuses to start, and spelling a shortened copy
-    // of the note here would be a prompt no resume ever sends, which the guard is right not to recognise.
+    // The recorded prompt must match exactly what a fired resume builds, or the loop guard won't recognise it.
     recordAuthFailure({
         input: {
             prompt: withResumeNote("finish the report", RESUME_NOTES.auth),
@@ -455,11 +388,6 @@ test("the next turn on the conversation supersedes a pending auth resume", async
     expect(prompts).toHaveLength(0);
 });
 
-/* THE PROMISE HAS A DEADLINE ON IT, and this is the case that says why it needs one. A re-mint that cannot even
- * be attempted is not an answer about the credential, so it buys another pass rather than a reconnect notice
- * the user cannot act on. What it must not buy is silence: the card has been showing a spinner and an elapsed
- * counter since the turn died, and nothing but this pass can ever end that. Two live sessions sat like that for
- * hours because one attempt consumed its pending entry and then quietly achieved nothing. */
 test("a re-mint that cannot be attempted keeps its place, then gives the card up once the minute is out", async () => {
     const abandoned: string[] = [];
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), brokenStore(), abandoned);
@@ -470,24 +398,18 @@ test("a re-mint that cannot be attempted keeps its place, then gives the card up
         1_000,
     );
     await scheduler.tick(1_000);
-    // Neither resumed nor given up on: the store said nothing about the credential, so nothing is decided yet.
     expect(prompts).toHaveLength(0);
     expect(abandoned).toEqual([]);
-    // And the entry is still here, which is the whole repair: the pass comes back to it.
     await scheduler.tick(30_000);
     expect(abandoned).toEqual([]);
-    // Past the minute the promise is withdrawn rather than left hanging: the card settles into Attention.
     await scheduler.tick(61_002);
     expect(abandoned).toEqual(["auth-5"]);
-    // Once, not on every pass for the life of the daemon.
+    // Idempotent: a later tick must not abandon it again.
     await scheduler.tick(90_000);
     expect(abandoned).toEqual(["auth-5"]);
     expect(prompts).toHaveLength(0);
 });
 
-/* The narrow race that produced the same spinner: the pass fires within a few seconds of the refusal, which can
- * be before the failed turn has finished unwinding, and a card written in that window is overwritten by the
- * finish that follows. The registry says so, and the entry stays until the answer changes. */
 test("an abandon lost to a turn still unwinding is made good on the next pass", async () => {
     const abandoned: string[] = [];
     let unwound = false;
@@ -508,16 +430,14 @@ test("an abandon lost to a turn still unwinding is made good on the next pass", 
     unwound = true;
     await scheduler.tick(2_000);
     expect(abandoned).toEqual(["auth-6", "auth-6"]);
-    // Landed, so consumed: the pass stops asking.
+    // Consumed once landed; a further tick doesn't re-abandon.
     await scheduler.tick(3_000);
     expect(abandoned).toEqual(["auth-6", "auth-6"]);
     expect(prompts).toHaveLength(0);
 });
 
-/* THE OUTAGE RESUME: the one whose whole job is restraint. The provider is failing intermittently, so the
- * question is never "can we retry" (always yes) but "how little can we spend finding out", and the answers live
- * across two modules: the wait is the breaker's (provider-health.ts), the choice of which stranded turn spends it
- * is this one's. Each test invents its own provider name, because the breaker is process-wide state. */
+// The breaker's wait lives in provider-health.ts; this module only picks which stranded turn spends it. Each test uses
+// its own provider name since the breaker is process-wide.
 
 const OUT_NOW = 5_000_000;
 
@@ -527,8 +447,7 @@ const outage = (conversationId: string, provider: string, extra: Record<string, 
     ...extra,
 });
 
-// `resumeAfterOutage` here is the SANDBOX DEFAULT: the standing policy in settings. `armed` is what individual
-// conversations said for themselves, which is what the chat's own offer writes and what overrides the default.
+// resumeAfterOutage is the sandbox default; armed is the per-conversation override that takes precedence.
 const outageServices = async (
     root: string,
     resumeAfterOutage = true,
@@ -548,7 +467,6 @@ test("a stranded turn resumes once the provider's wait elapses, under a note say
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
 
-    // Nothing while the wait runs: this is the anti-spam contract, and it is the default state of an outage.
     await scheduler.tick(retryAt - 1);
     await settle("out-1");
     expect(prompts).toEqual([]);
@@ -556,8 +474,6 @@ test("a stranded turn resumes once the provider's wait elapses, under a note say
     await scheduler.tick(retryAt);
     await settle("out-1");
     expect(prompts).toHaveLength(1);
-    // The original request rides again IN FULL behind the note: a bare "continue" would lose it, and the note is
-    // what stops the model from starting over on work its session already holds.
     expect(prompts[0]).toContain("finish the report");
     expect(prompts[0]).toMatch(/unavailable|outage/i);
     expect(pendingOutageFailure("out-1")).toBeUndefined();
@@ -573,11 +489,9 @@ test("an outage costs ONE turn per window however many conversations are strande
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
     await settle("herd-1");
 
-    // Firing moves the breaker's clock, so the other three are refused inside this same pass. Four stranded
-    // agents cost exactly what one costs: the whole reason the wait lives per provider and not per conversation.
+    // Firing moves the breaker's clock, so the other three are refused within this same pass.
     expect(prompts).toHaveLength(1);
     expect(pendingOutageFailure("herd-1")).toBeUndefined();
-    // And the ones that did not go are still remembered, in order, for the windows after this.
     expect(pendingOutageFailure("herd-2")).toEqual(expect.any(Object));
     expect(pendingOutageFailure("herd-4")).toEqual(expect.any(Object));
     for (const id of ["herd-2", "herd-3", "herd-4"]) {
@@ -595,9 +509,6 @@ test("evidence that the provider is back releases the stranded set without waiti
     await settle("back-1");
     expect(prompts).toEqual([]);
 
-    // Any turn's first content clears the outage (agent.routes.ts calls this): a user's own message going
-    // through, an automation waking, another agent entirely. The stranded turn goes on the very next pass rather
-    // than sitting out a wait the provider has already disproved.
     recordProviderSuccess("out-back");
     await scheduler.tick(OUT_NOW + 1);
     await settle("back-1");
@@ -622,10 +533,6 @@ test("with the toggle off the turn is remembered, not resumed: turning it on arm
     expect(prompts).toHaveLength(1);
 });
 
-/* THE TWO LEVELS, and the property the whole split exists for: a press inside ONE chat speaks for that chat.
- * The sandbox default is off: as it is for a fresh sandbox, and one conversation has answered for itself, so
- * exactly one of the two stranded turns comes back. Before the override existed the only way to get this turn
- * back was to switch the default on, which armed the other one too. */
 test("a conversation armed on its own resumes while the sandbox default leaves the rest alone", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false, [], new Map([["own-armed", true]]));
     const { retryAt } = recordProviderFailure("out-own", OUT_NOW);
@@ -637,17 +544,12 @@ test("a conversation armed on its own resumes while the sandbox default leaves t
     await scheduler.tick(retryAt);
     await settle("own-armed");
     expect(prompts).toHaveLength(1);
-    // The unarmed conversation is still remembered: its own offer still arms it, but nothing fired for it,
-    // and, just as importantly, it never spent the breaker's window on its way to not firing.
+    // Remembered without ever spending the breaker's window.
     expect(pendingOutageFailure("own-quiet")).toEqual(expect.any(Object));
-    // The pending map is process-wide, so a turn left stranded here would be picked up by the next test's pass.
+    // Process-wide map: an uncleared entry here would leak into the next test's pass.
     clearPendingResume("own-quiet");
 });
 
-/* …and the same asymmetry pointing the other way, which is the half the notice's opt-out relies on. The
- * sandbox says resume; this one conversation said no. `false` rather than a cleared override is the whole
- * point: somebody stopping a countdown they can see means THIS chat, not "put me back on a default that says
- * the opposite". */
 test("a conversation that opted out stays stopped even though the sandbox default resumes", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, [], new Map([["own-off", false]]));
     const { retryAt } = recordProviderFailure("out-opt", OUT_NOW);
@@ -670,7 +572,6 @@ test("a stranded turn nobody resumed within the hour is dropped rather than spru
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
     expect(prompts).toEqual([]);
     expect(pendingOutageFailure("stale-1")).toBeUndefined();
-    // Dropped from the board's point of view too: the card stops promising a turn that is no longer coming.
     expect(abandoned).toEqual(["stale-1"]);
 });
 
@@ -679,16 +580,13 @@ test("once the attempt budget is spent the failure stands: the retrying is finit
     const prompts: string[] = [];
     const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
     let now = OUT_NOW;
-    // Walk the whole outage: each window releases one attempt, that attempt dies on the provider too, and its
-    // turn is re-recorded by its own failure, which is what a resume that fails again really does.
+    // Each iteration: a window releases one attempt, the attempt fails again, and the failure re-records the turn.
     for (let i = 0; i < OUTAGE_MAX_ATTEMPTS + 2; i += 1) {
         const { retryAt } = recordProviderFailure("out-spent", now);
         recordOutageFailure(outage("spent-1", "out-spent"), now);
         now = retryAt;
         await scheduler.tick(now);
-        // The windows are half an hour apart in the world this simulates, so the probe they released is long
-        // over by the next one. Settling here says that; without it the loop would race its own last resume and
-        // lose a window to turn-runs' one-live-turn-per-conversation rule, which is not what is being measured.
+        // Settles to avoid racing the next window's resume under the one-turn-per-conversation rule.
         await settle("spent-1");
     }
     expect(prompts).toHaveLength(OUTAGE_MAX_ATTEMPTS);
@@ -713,20 +611,17 @@ test("one provider's outage never gates a conversation on another", async () => 
     const prompts: string[] = [];
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
     await settle("iso-codex");
-    // The Codex conversation has nothing to wait for: its provider never failed.
     expect(prompts).toHaveLength(1);
     expect(pendingOutageFailure("iso-codex")).toBeUndefined();
     expect(pendingOutageFailure("iso-claude")).toEqual(expect.any(Object));
     clearPendingResume("iso-claude");
 });
 
-/* THE RESTART RESUME: the boot pass over the turn journal. Every entry that survived to boot is a turn or a
- * fire the daemon stopped existing under, so the whole condition is "there is an entry"; what the tests below
- * pin down is what it takes to be re-run, and that each entry is consumed exactly once whatever happens. */
+// Boot pass over the turn journal: every surviving entry is a turn or fire cut off by the daemon dying; each is
+// consumed exactly once.
 
-/* The journal is a real one on a temp dir: what the pass leaves on disk is half of what these assert. The
- * setting is written explicitly, like the outage helper above, because the restart resume is opt-in: a fresh
- * sandbox re-runs nothing, so every test that expects a re-run has to say it turned this on. */
+// Real journal on a temp dir. autoResumeOnRestart is opt-in and off by default, so a test expecting a re-run must set
+// it explicitly.
 const journalServices = async (root: string, autoResumeOnRestart = true): Promise<Services> => {
     const services = unstubbed<Services>("services", {
         ...fakeServices(root),
@@ -749,7 +644,7 @@ const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {})
     ...extra,
 });
 
-// Just inside the six-hour staleness cap, measured from the entry's own startedAt.
+// Just inside the six-hour staleness cap, measured from the entry's startedAt.
 const BOOT_AT = 10_000 + 60_000;
 
 test("an interrupted chat turn is re-run under the restart note, on the session holding its partial work", async () => {
@@ -766,9 +661,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
 
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/restarted/i);
-    // The request rides again IN FULL: a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
-    // On the session the dying turn last reported, which is what makes this a continuation and not a restart.
     expect(inputs[0]?.sessionId).toBe("s-partial");
 });
 
@@ -776,8 +669,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
     const root = mkdtempSync(join(tmpdir(), "restart-"));
     const real = fileTurnJournal(join(root, "turns"));
     await real.recordTurn(journalled("rs-spend"));
-    // The order log is the assertion: this is a happens-before, and a test that read the file from inside the
-    // wake would be racing the resumed run's own (deliberately fire-and-forget) write of a fresh entry.
+    // The order log avoids a race with the resumed run's own fire-and-forget journal write.
     const order: string[] = [];
     const services = unstubbed<Services>("services", {
         ...(await journalServices(root)),
@@ -796,7 +688,6 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
     await resumeInterruptedTurns(services, wake, BOOT_AT);
     await vi.waitFor(() => expect(order).toContain(`wake`), SETTLES);
 
-    // The spent attempt lands first; the resumed run's own entry (carrying the same spent count) follows.
     expect(order[0]).toBe(`record:attempts=1`);
     expect(order.indexOf(`record:attempts=1`)).toBeLessThan(order.indexOf(`wake`));
 });
@@ -820,8 +711,7 @@ test("an entry older than the staleness cap is dropped: a sandbox off for the we
 });
 
 test("autoResumeOnRestart off records the interruption and re-runs nothing", async () => {
-    // Off is the shipped default (SandboxSettingsSchema), so this is what an owner who never opened the setting
-    // gets: the journal is drained and the interruption stands on the record, but nothing spends a turn.
+    // Off is the SandboxSettingsSchema default: the journal drains and records the interruption, but nothing runs.
     const root = mkdtempSync(join(tmpdir(), "restart-"));
     const services = await journalServices(root, false);
 
@@ -839,8 +729,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
-    // The journal was the only durable copy of a first turn's prompt. It becomes a readable transcript before
-    // the entry is removed, with an explicit ending instead of an apparently unanswered message.
+    // Written to the transcript with an explicit notice before the journal entry drains.
     expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-off")).toEqual([
         { role: "user", text: "finish the report", sentAt: 10_000 },
         {
@@ -848,14 +737,11 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
             text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
         },
     ]);
-    // Nothing re-ran, but nothing is silently lost either: the row still says the fire was cut off.
     expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
 });
 
-/* THE WORK ITSELF, not just the words that asked for it. An interrupted turn is typically a LONG one, that is
- * the shape of thing a rebuild or an OOM lands in the middle of, and none of it reached the record: nothing
- * settled, and the record is appended per settled turn. The provider wrote it down as it streamed, so the boot
- * pass reads that back before it consumes the entry naming it, which is the last moment anything can. */
+// The transcript record is appended per settled turn, so an interrupted turn recorded nothing; boot reads the session's
+// streamed tail before consuming its journal entry, the last moment it can.
 test("an interrupted turn is recorded from the work it did, not from its prompt alone", async () => {
     const root = mkdtempSync(join(tmpdir(), "restart-"));
     const base = await journalServices(root, false);
@@ -874,11 +760,9 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
     await resumeInterruptedTurns(services, fakeWake([]), BOOT_AT);
 
     expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-work")).toEqual([
-        // Stamped with when the TURN started, not when the provider store happened to file it: every other user
-        // row in this record carries the daemon's clock, and a recovered one must not be the exception.
+        // sentAt is the turn's own start time, not the provider's, matching every other user row.
         { role: "user", text: "finish the report", sentAt: 10_000 },
-        // Read off the session the DYING TURN reported, which the journal carries because the daemon may have
-        // been killed before that id reached the registry entry.
+        // Reads the session the journal recorded; the registry entry may predate it if the daemon died early.
         { role: "assistant", text: "two chapters in, on s-partial" },
         {
             role: "notice",
@@ -928,11 +812,10 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
     await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), SETTLES);
 
     const runs = (await services.automations.get("hook"))?.runs ?? [];
-    // Newest first: the completed re-fire sits above the interrupted record of the fire it replaced.
+    // runs sorts newest first: the completed re-fire sits above the interrupted record it replaced.
     expect(runs[0]?.outcome).toBe("completed");
     expect(runs[1]?.outcome).toBe("interrupted");
     expect(runs.map((run) => run.conversationId)).toEqual(["a-hook-1", "a-hook-1"]);
-    // The re-fire re-reads the automation's own prompt and carries the payload the entry snapshotted.
     expect(prompts).toEqual(["handle it\n\n--- Event payload ---\nping"]);
 });
 
@@ -974,12 +857,8 @@ test("an empty journal is a no-op: a clean shutdown reads the settings for nothi
     expect(prompts).toEqual([]);
 });
 
-/* THE REHYDRATION: a turn that was PARKED ON THE USER when the daemon died. Nothing about it is a re-run:
- * the cards go back up as they stood, under their original request ids, and the first token spent after the
- * boot is the user's answer starting the real resumed turn. The registry stub is the placeholder's whole
- * surface area: begin/observe/finish, so what these tests read from `observed` is exactly what the fleet
- * and every attached window would have been shown. autoResumeOnRestart stays OFF here on purpose: it gates
- * unattended re-runs that spend tokens, and rehydration must not answer to it. */
+// Rehydration is not a re-run: parked cards restore verbatim under their original request ids, and nothing spends a
+// token until the user answers. autoResumeOnRestart (kept off here) gates unattended re-runs only, not this.
 const parkedServices = async (root: string): Promise<{ services: Services; observed: AgentEvent[]; resuming: string[] }> => {
     const observed: AgentEvent[] = [];
     const resuming: string[] = [];
@@ -1026,8 +905,8 @@ const permissionCard = (requestId: string): ParkedCard => ({
 const parkedEntry = (conversationId: string, cards: ParkedCard[], extra: Partial<JournalledTurn> = {}): JournalledTurn =>
     journalled(conversationId, { sessionId: "s-parked", parked: cards, ...extra });
 
-// The rehydrated cards are up once their frames have folded through registry observe: the same moment the
-// fleet lights `awaiting` and an attached window renders them live.
+// True once the cards' frames have folded through registry observe, the same moment the fleet and any attached window
+// render them.
 const cardsUp = async (observed: AgentEvent[], kind: ParkedCard["kind"]): Promise<void> => {
     await vi.waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind), SETTLES);
 };
@@ -1039,20 +918,18 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "plan");
 
-    // The session first (it re-binds the conversation to the partial work the answer will continue) then the
-    // card VERBATIM: same request id, same text, so a replayed frame and a saved answer draft still match.
+    // Session frame comes first, then the card verbatim: same id and text, so a saved answer draft still matches.
     expect(observed[0]).toEqual({ kind: "session", sessionId: "s-parked" });
     expect(observed[1]).toEqual(planCard("r-up"));
-    // No provider ran and nothing was spent: the boot's whole cost is the frames above.
     expect(prompts).toEqual([]);
-    // And the park re-journals through the ordinary frame loop, so a SECOND restart rehydrates it again.
+    // Re-journals through the ordinary frame loop, so a second restart rehydrates it again.
     await vi.waitFor(async () => {
         const [entry] = await services.turnJournal.list();
         expect(entry?.kind === "turn" ? (entry.parked ?? []).map((card) => card.requestId) : []).toEqual(["r-up"]);
     }, SETTLES);
 
-    // Stop works on the rehydrated park like on any live turn: the cards freeze cancelled, resolved WITHOUT a
-    // reply, and nothing resumes. The journal entry drains with the settled turn, as any settled turn's does.
+    // Stopping a rehydrated park behaves like stopping a live turn: cards resolve without a reply and the journal entry
+    // drains.
     expect(stopTurn("pk-up")).toBe(true);
     await settle("pk-up");
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-up" });
@@ -1076,16 +953,12 @@ test("approving the restored plan resumes the session in the posture a live appr
 
     expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    // The answer is the prompt, behind the note that says the words are the user's response, not a repeat of
-    // the original request, which the session already holds.
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/approved.*plan/i);
-    // On the journalled session, in POST_PLAN_MODE: "the sandbox restarted in between" must not cost the user
-    // a permission prompt per tool that a live approval would have spared them.
+    // bypassPermissions is POST_PLAN_MODE; a restart must not re-add per-tool prompts a live approval already spared.
     expect(inputs[0]).toMatchObject({ conversationId: "pk-plan", sessionId: "s-parked", permissionMode: "bypassPermissions" });
-    // The mode frame moved any attached window's chip out of planning, as the live gate does...
     expect(observed.map((event) => event.kind)).toContain("mode");
-    // ...and `resuming` held the card out of Finished for the blink between placeholder and resumed turn.
+    // `resuming` holds the card out of Finished for the blink between placeholder and resumed turn.
     expect(resuming).toEqual(["pk-plan"]);
     await settle("pk-plan");
 });
@@ -1120,7 +993,7 @@ test("answering the restored question resumes with the picks, worded as a live a
 
     expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    // formatAnswers' own wording: the model reads ONE shape of answer whichever side of a restart it lands on.
+    // formatAnswers' own wording, so a restart reads identically to a live answer.
     expect(prompts[0]).toMatch(/user answered/i);
     expect(prompts[0]).toContain("Yes");
     await settle("pk-q");
@@ -1166,7 +1039,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     expect(prompts[0]).toContain(feedback);
     await settle("pk-redir");
 
-    // The bare deny is the user pulling the plug (the client stops the turn on it, as live): nothing resumes.
+    // A bare deny is the user pulling the plug, as live: nothing resumes.
     const bare = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await bare.services.turnJournal.recordTurn(parkedEntry("pk-bare", [permissionCard("r-bare")]));
     const barePrompts: string[] = [];
@@ -1188,16 +1061,13 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe("settled");
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/allowed Bash/i);
-    // The question the user did not answer froze cancelled: no reply on its resolved frame, and the resumed
-    // turn re-asks what it still needs.
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-mq" });
     await settle("pk-multi");
 });
 
 test("rehydration answers to none of the resume gates: spent, stale and toggle-off all still restore the card", async () => {
-    // The entry is far past the staleness cap AND its attempt budget is spent AND autoResumeOnRestart is off
-    // (parkedServices' default): every gate that stops a re-RUN. An unanswered question does not go stale, and
-    // restoring it spends nothing: the card comes back anyway.
+    // Every gate that stops a re-run (stale, spent, toggle off) is set here; rehydrating a parked card answers to none
+    // of them.
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-gates", [questionCard("r-gates")], { attempts: 1, startedAt: 0 }));
     const prompts: string[] = [];
@@ -1209,17 +1079,10 @@ test("rehydration answers to none of the resume gates: spent, stale and toggle-o
     await settle("pk-gates");
 });
 
-/* THE HELD TURN AND THE PRESS THAT RUNS IT AGAIN, which is the one resume in this module with no poll behind it.
- *
- * A spent allowance is still not auto-resumed and the argument for that is untouched: the budget is the user's.
- * What these pin is the sentence that argument ends on, "sending again is the user's call to make", which for as
- * long as re-running was daemon-only the user had no way to act on. All they could do was send a NEW message
- * after the refused turn, and since the only honest content for one is "carry on", the harness supplied the word
- * itself: one user row per press in the record, and underneath, one CLI-materialized "Continue from where you
- * left off." and one SYNTHETIC "No response requested." per press in the provider session the model reads back. */
+// A spent allowance is never auto-resumed; only a user press re-runs the held turn, and each press builds a fresh
+// prompt rather than replaying provider filler messages.
 
-// A wake that keeps whole turns rather than prompts alone: which SESSION a re-run lands on is half of what
-// these assert, and it is the half that decides whether the model reads an unanswered message of its own.
+// Captures whole turns, not just prompts: which session a re-run lands on is half of what these tests assert.
 const heldWake = (turns: AgentTurn[]): WakeFn =>
     async function* (_services, input) {
         turns.push(input);
@@ -1235,18 +1098,12 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
     await settle("lim-1");
 
     expect(turns).toHaveLength(1);
-    // The words ride again IN FULL: a bare "continue" is what this replaces, and it loses the request.
     expect(turns[0]!.prompt).toContain("ship the parser");
-    // Told plainly that nothing happened. The three notes above it all say "part of it was already completed in
-    // this session, continue from that point", which over a turn that never ran is an instruction to continue
-    // from work that does not exist, and a model handed that instruction answers it by inventing some.
+    // The alternative notes ("continue from that point") would instruct a model to resume work that never happened.
     expect(turns[0]!.prompt).toMatch(/no part of the request below/i);
     expect(turns[0]!.prompt).not.toMatch(/continue from that point/i);
-    /* AND THE VOID SESSION IS DROPPED, which is the change that actually empties the model's context. What is on
-     * disk under s-void is one unanswered message, and resuming a turn that never answered makes the CLI
-     * materialize the resume by writing a "Continue from where you left off." and a synthetic assistant reply
-     * saying "No response requested." Every press against a spent allowance left one more of those. Starting
-     * fresh costs a record-seeded handoff instead, which is what a provider switch already gets. */
+    // Dropping s-void avoids the CLI materializing a "Continue from where you left off." / "No response requested."
+    // pair per press; a fresh session gets the same seeded handoff a provider switch does.
     expect(turns[0]!.sessionId).toBeUndefined();
 
     clearPendingResume("lim-1");
@@ -1260,8 +1117,6 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
     await fireLimitResume(services, heldWake(turns), "lim-2");
     await settle("lim-2");
 
-    // The opposite call on both counts, and for one reason: this session's tail is real work, so throwing it
-    // away would make the press cost more than it saves, and the model should carry on from it rather than redo.
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/allowance ran out/i);
     expect(turns[0]!.prompt).toMatch(/continue from that point/i);
@@ -1269,10 +1124,6 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
     clearPendingResume("lim-2");
 });
 
-/* THE PRESS THAT FOLLOWS AN ACCOUNT SWITCH, which is the shape the press is actually made in: a spent allowance
- * is ONE account's refusal, the composer's switcher is what a person reaches for on reading it, and a re-run that
- * replayed the pinned account bounced off the same limit and reported it in the same words. The only way through
- * was to type "Continue" by hand, because a send reads the composer's selection and this route did not. */
 test("a press on a switched account runs on it, and cannot take the old account's session with it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1286,22 +1137,18 @@ test("a press on a switched account runs on it, and cannot take the old account'
     await settle("lim-moved");
 
     expect(turns[0]!.account).toBe("with-room");
-    /* AND THE SESSION GOES, which is not a detail: a provider session belongs to the credential that minted it,
-     * so the work behind s-real cannot be picked up on another account at all. The re-run opens a fresh one seeded
-     * from the daemon's record, exactly as a mid-chat account switch does on an ordinary send. */
+    // A session belongs to the credential that minted it: switching accounts can't reuse it, so the re-run opens a
+    // fresh one seeded from the record.
     expect(turns[0]!.sessionId).toBeUndefined();
-    // So the note may not be the mid-flight one: "continue from that point in this session" points at a session
-    // this turn does not have, and a model that goes looking finds nothing and starts over without saying so.
+    // Not the mid-flight note: it points at a session this turn no longer has.
     expect(turns[0]!.prompt).toMatch(/sent again on a different account/i);
     expect(turns[0]!.prompt).toContain("ship the parser");
 
     clearPendingResume("lim-moved");
 });
 
-// The other half of that rule, and the one that keeps the press cheap: a press naming the SAME routing is not a
-// switch, so the session holding the turn's work survives it. The held turn leaves provider and harness implicit
-// (absent ⇒ claude/native, the wire's own defaults) while the press spells both out, which is the ordinary case
-// and must not read as a move.
+// Same routing isn't a switch: the session survives. The held turn leaves provider/harness implicit (absent means
+// claude/native); the press spells them out, and that alone must not read as a move.
 test("a press that names the routing the turn already had resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1312,15 +1159,12 @@ test("a press that names the routing the turn already had resumes its session", 
 
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/continue from that point/i);
-    // A same-provider model swap rides along without retiring anything, the rule an ordinary send follows
-    // (`resumes` in turnRequest.ts): the session outlives the model it was minted under.
+    // A same-provider model swap doesn't retire the session: the session outlives the model it was minted under.
     expect(turns[0]!.model).toBe("claude-sonnet-4-5");
 
     clearPendingResume("lim-same");
 });
 
-// A turn refused AT THE DOOR moves account the same way, and keeps its own note: nothing ran, so there is no work
-// to carry across and nothing for the switched note's "continue from that point" to point at.
 test("a press on a switched account still says nothing ran, when nothing ran", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1335,14 +1179,12 @@ test("a press on a switched account still says nothing ran, when nothing ran", a
 
     expect(turns[0]!.account).toBe("with-room");
     expect(turns[0]!.prompt).toMatch(/no part of the request below/i);
-    // The press named no model (an unloaded catalog has no pick to send), so the refused turn's own stands rather
-    // than being blanked into the provider's default.
+    // No model in the press (unloaded catalog) leaves the refused turn's own model standing.
     expect(turns[0]!.model).toBe("claude-opus-4-1");
 
     clearPendingResume("lim-door");
 });
 
-// A press with nothing to say about routing is still the old press: every field comes off the held turn.
 test("a press that names no routing runs the turn exactly as it was", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1375,15 +1217,12 @@ test("pressing again after a re-run was refused too states the note once, not on
 
     await fireLimitResume(services, wake, "lim-3");
     await settle("lim-3");
-    // The re-run was refused as well, so the turn is held again, carrying the prompt the last fire built.
+    // Re-held using the prompt the last fire built, simulating a second refusal.
     recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
     await fireLimitResume(services, wake, "lim-3");
     await settle("lim-3");
 
     expect(turns).toHaveLength(2);
-    // ONE note, and the same prompt both times. This is the property the whole design turns on: the fourth press
-    // hands the model exactly what the first did, so a chat that bounces off an allowance ten times reads like a
-    // chat that bounced once, and the request that finally lands is the request that was made.
     expect(turns[1]!.prompt).toBe(turns[0]!.prompt);
     expect(turns[1]!.prompt.match(/no part of the request below/gu)).toHaveLength(1);
 
@@ -1398,15 +1237,13 @@ test("a turn that ran before it was refused stops claiming nothing had been done
     await fireLimitResume(services, wake, "lim-4");
     await settle("lim-4");
 
-    // The re-run got somewhere this time and was then cut off mid-flight, which crosses it to the other arm.
+    // This retry got partway before failing again, crossing to the ran:true arm.
     recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
     await fireLimitResume(services, wake, "lim-4");
     await settle("lim-4");
 
-    /* The note is RESTATED rather than kept. withResumeNote is idempotent, which is what stops a note stacking
-     * per press and is the wrong answer when the reason has changed underneath: a prompt still saying "nothing
-     * has been done towards it" over a session that now holds work is the same class of lie as the pile it
-     * replaced, told to the same reader. */
+    // withResumeNote is idempotent: it replaces the note rather than stacking, so a changed reason still gets the right
+    // one.
     expect(turns[1]!.prompt).toMatch(/allowance ran out/i);
     expect(turns[1]!.prompt).not.toMatch(/no part of the request below/i);
     expect(turns[1]!.prompt).toContain("ship the parser");
@@ -1422,21 +1259,14 @@ test("nothing held answers with nothing, so the press falls back to saying carry
 test("the next turn on the conversation supersedes the held one, whatever started it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
-    // What a user TYPING something instead of pressing looks like from here: they have decided against re-running
-    // the old turn, and a press left armed behind their message would start a turn on top of it.
+    // Simulates the user typing instead of pressing: the pending hold must not survive their new message.
     clearPendingResume("lim-5");
 
     expect(await fireLimitResume(services, heldWake([]), "lim-5")).toBeUndefined();
 });
 
-/* THE ALLOWANCE'S OWN PASS: the one automatic resume in this module with an appointment to keep rather than a
- * backoff to guess at, and the one that does nothing at all unless the user armed it.
- *
- * Every test below is about a gate. The pass fires a turn that costs real money, at an hour nobody is watching,
- * on an allowance the user may have been saving — so what is worth pinning is not that it fires but exactly
- * when it refuses to. `RECORDED` is the instant the refusal happened and `REOPENS` the window it named, stated
- * as a pair because the relationship between them is what half of these assert.
- */
+// RECORDED is when the refusal happened; REOPENS is the window it named. Every test below pins some gate around that
+// pair.
 const RECORDED = 1_700_000_000_000;
 const REOPENS = Math.round((RECORDED + 4 * 60 * 60 * 1000) / 1000);
 
@@ -1449,22 +1279,19 @@ test("an armed conversation sends the held turn again once the window reopens, a
         RECORDED,
     );
 
-    // An hour in, with three to go: the window is shut, and a fire here would be a request the provider refuses
-    // for exactly the reason it refused the last one.
+    // An hour into a four-hour window: still shut, so firing here would repeat the same refusal.
     await scheduler.tick(RECORDED + 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
 
     await scheduler.tick(REOPENS * 1000 + 1);
     await settle("lim-auto-1");
     expect(turns).toHaveLength(1);
-    // The same request again, in full, behind the note that says why it is being repeated.
     expect(turns[0]!.prompt).toContain("ship the parser");
     clearPendingResume("lim-auto-1");
 });
 
-/* ONCE. The entry survives its own fire so a press keeps working, which is the opposite of the outage pass's
- * delete-then-fire, and it is what would otherwise make this a loop: every tick after the window opened would
- * start another turn on the same conversation, on the user's allowance, for as long as the daemon lived. */
+// The entry survives its own fire, unlike the outage pass's delete-then-fire, so a press still works after the
+// automatic one.
 test("an armed conversation fires exactly once per hold", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
     const turns: AgentTurn[] = [];
@@ -1484,8 +1311,7 @@ test("an armed conversation fires exactly once per hold", async () => {
     clearPendingResume("lim-auto-2");
 });
 
-// THE DEFAULT, which is the whole product decision: the allowance is the user's budget, so an unarmed
-// conversation waits for them however long the window has been open. The turn stays held, for the press.
+// Unarmed waits indefinitely; the turn stays held, so a press still works.
 test("an unarmed conversation is never fired for, however long the window has been open", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
@@ -1497,14 +1323,11 @@ test("an unarmed conversation is never fired for, however long the window has be
 
     await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-    // …and the press still answers, which is what "not fired for" has to mean: the hold is intact.
     expect(await fireLimitResume(services, heldWake(turns), "lim-auto-3")).toEqual(expect.any(Object));
     await settle("lim-auto-3");
     clearPendingResume("lim-auto-3");
 });
 
-// The sandbox-wide default answers for a conversation that never expressed one, which is what makes the
-// setting worth having: a board of unattended agents is armed by one switch rather than card by card.
 test("the sandbox setting arms a conversation that has said nothing itself", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const settings = await services.sandboxSettings.get();
@@ -1521,9 +1344,8 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
     clearPendingResume("lim-auto-4");
 });
 
-/* NOTHING TO AIM AT, NOTHING FIRES. Grok publishes no readable quota and Cursor is not routed through the
- * translator, so their refusals carry no instant: an armed conversation on one of those keeps the press and
- * nothing else, because the alternative is guessing an hour and spending the user's money to find out. */
+// Grok and Cursor publish no readable quota reset, so their refusals carry no instant to schedule against; armed or
+// not, only the press remains.
 test("a limit that named no reset instant is never fired for, armed or not", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-5", true]]));
     const turns: AgentTurn[] = [];
@@ -1534,10 +1356,8 @@ test("a limit that named no reset instant is never fired for, armed or not", asy
     clearPendingResume("lim-auto-5");
 });
 
-/* AN INSTANT ALREADY IN THE PAST IS NOT A SCHEDULE, and this is the gate whose absence would be expensive. A
- * provider answering with a stale reset would otherwise read as "the window is open now": the fire would go
- * immediately, be refused for the same reason, re-record with the same stale instant, and do it again on every
- * tick for the life of the daemon, spending the user's allowance on the arithmetic. */
+// A stale reset instant must not read as "open now": firing on it would re-refuse, re-record the same instant, and loop
+// forever.
 test("a reset instant that had already passed when the refusal happened is never fired for", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
     const turns: AgentTurn[] = [];
@@ -1552,10 +1372,8 @@ test("a reset instant that had already passed when the refusal happened is never
     clearPendingResume("lim-auto-6");
 });
 
-/* THE ACCOUNT IS A CHOICE, NOT A RULE: a session is a file this daemon keeps and a credential is an env it passes
- * per turn, so a press that says `carry` keeps the session across the account change. What the model is told
- * differs from the fresh arm in the one fact it cannot see, that its context is about to be read cold on
- * somebody else's allowance. */
+// A session is a file the daemon keeps; a credential is per-turn env. `carry` keeps the session across an account
+// change; the model isn't told its context is read on another allowance.
 test("a press that carries keeps the session across the account change, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1576,8 +1394,8 @@ test("a press that carries keeps the session across the account change, and says
     clearPendingResume("lim-carry");
 });
 
-// A carry the provider would not take is tried once, and the fallback is the fresh session the press could have
-// chosen: the entry re-recorded with `carryRefused` and a move to where the turn already is.
+// A refused carry is tried once, then falls back fresh via `carryRefused` and a move to the account the turn's already
+// on.
 test("a carry the other account refused re-runs fresh on that account, once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
@@ -1605,9 +1423,8 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     clearPendingResume("lim-refused-carry");
 });
 
-/* THE OWNER'S POLICY, PERFORMED. A move booked at the failure (LimitFailure.move) goes on the next pass, with no
- * instant to wait for and no posture to re-read, and goes ONCE: the entry keeps its `fired` stamp exactly as the
- * appointment does, so a second pass finds nothing to do and a press still works. */
+// A booked move (LimitFailure.move) fires on the very next pass, no instant needed, and only once: the entry keeps a
+// `fired` stamp like the appointment does.
 test("a booked move fires on the next pass, with the session the policy said to carry, and only once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
@@ -1630,7 +1447,7 @@ test("a booked move fires on the next pass, with the session the policy said to 
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/in this same session/i);
 
-    // Neither the next pass nor the reset fires it again: one hold, one fire.
+    // One hold, one fire: neither the next pass nor the reset fires it again.
     await scheduler.tick(RECORDED + 10_000);
     await scheduler.tick(REOPENS * 1000 + 1);
     await settle("lim-move");
@@ -1638,7 +1455,6 @@ test("a booked move fires on the next pass, with the session the policy said to 
     clearPendingResume("lim-move");
 });
 
-// Without a booking the pass does what it always did: nothing, for a conversation nobody armed.
 test("a held turn with no booked move and no arming stays held", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];

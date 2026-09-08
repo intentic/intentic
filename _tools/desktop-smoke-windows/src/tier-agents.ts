@@ -1,34 +1,6 @@
-/* TIER 3, from this Windows machine, is the sandbox REACHABLE, is its gate real, and does one /agents turn
- * complete?
- *
- * The three questions tier 2 deliberately stops short of. Tier 2 asks the daemon whether it is alive from
- * INSIDE its own container, which is the right question for "did setup work" and the wrong one for "can this
- * machine use it", the address a browser dials, the credential it presents and the answer it gets back are
- * all outside that container.
- *
- * HOW A BROWSER FINDS IT. A sandbox on the same machine as the browser does not go through Cloudflare: the
- * container publishes its loopback listener on a host port DERIVED from the sandbox id, and the browser
- * computes that address rather than being told it. So this tier derives it the same way, from the same
- * function, `localDaemonPort` in `@intentic/sandbox-run`, never a copy of the arithmetic. If the publish is
- * broken on Windows, every local user's workspace silently falls back to the tunnel and nobody finds out here.
- *
- * HOW A PROGRAM AUTHENTICATES. Not by pretending to be a browser. The daemon verifies a real Google ID token
- * on every route but /health, which no CI job can mint, so this uses the credential the product provides for
- * exactly this case: a CONTROL TOKEN, the thing "anything outside the browser presents to drive this sandbox",
- * at `drive` scope, which reaches `POST /agent` and the fleet reads and stops short of landing anything.
- *
- * The token is SEEDED rather than minted, because minting is owner-gated and the owner is a person with a
- * Google account. Seeding writes the store the daemon reads, inside the container, as root, the same shape of
- * move the browser tier makes when it seeds a signed session cookie instead of signing in to Google. Both are
- * the harness standing in for the one step a machine cannot take, and both are worth naming as such.
- *
- * HOW AN ACCOUNT IS CONNECTED. This is the one thing CI cannot fake, and the tier does not try: connecting an
- * AI account is a subscription OAuth flow through a browser. What it uses instead is the product's own answer
- * to "several sandboxes, one set of credentials", a shared agent-auth VOLUME. Connect an account once, by
- * hand, in the runner's snapshot; every sandbox this tier creates mounts that volume and comes up already
- * connected. Absent the volume the turn stands down NAMING it, exactly as the repo's other gated tiers do:
- * a tier that cannot reach its credential has nothing to say, and must not fail.
- */
+// Tier 3: from this machine, is the sandbox reachable at the browser's derived loopback address, is its gate real, and
+// does one /agents turn complete. The control token is seeded, not minted (minting needs a person's Google login); a
+// missing shared agent-auth volume stands the turn down instead of failing it.
 
 import { randomUUID } from "node:crypto";
 import { LOCAL_PORT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
@@ -42,30 +14,22 @@ import { containersPublishing, publishedHostPort } from "./probe.js";
 import { run } from "./run.js";
 
 export interface AgentsTierOptions {
-    /** The container tier 2 brought up. */
+    /** Container tier 2 brought up. */
     readonly container: string;
-    /**
-     * A Docker volume holding an already-connected AI account, mounted at /agent-auth by the setup. Absent ⇒
-     * the turn stands down naming it, and everything up to the turn still runs.
-     */
+    /** Docker volume with an already-connected AI account; absent, the turn stands down naming it. */
     readonly agentAuthVolume: string | undefined;
     /** How long one turn may take before this gives up on it. */
     readonly turnSeconds: number;
 }
 
-/* The prompt. Deliberately the smallest thing that can only be answered by a model actually running: no tools,
- * no files, one word back. A turn that "worked" because the harness short-circuited it would prove nothing, and
- * a long prompt buys nothing but a slower nightly and more ways to be flaky. */
+// Smallest prompt only a running model can answer; a short-circuit or a longer prompt proves nothing extra.
 const PROMPT = `Reply with exactly the word: ready`;
 const EXPECTED = `ready`;
 
 const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/identity/control-tokens.json`;
 
-/* sha256, computed by the container so the digest is the one that container's own code would compute.
- *
- * Returns what went wrong rather than a bare false: the two steps here fail for entirely different reasons,
- * a container that is gone, and a store the daemon has never written a directory for, and a tier that
- * reported both as "could not seed" once cost a Windows build the one line that would have explained it. */
+// sha256 computed inside the container, matching its own code. Reports which step failed (hashing vs writing) rather
+// than a bare false, since the two fail for different reasons.
 const seedControlToken = async (container: string, token: string): Promise<string | undefined> => {
     const digest = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf %s ${shellQuote(token)} | sha256sum | cut -d" " -f1`]);
     if (digest.code !== 0) {
@@ -76,11 +40,7 @@ const seedControlToken = async (container: string, token: string): Promise<strin
     if (write.code !== 0) {
         return `writing ${STORE_PATH} exited ${write.code}: ${write.stderr.trim()}`;
     }
-    /* READ IT BACK, because a shell writes an empty file on a heredoc it never saw the end of and calls it a
-     * success. The seed's whole payload is one multi-line argument crossing two argument parsers and a shell,
-     * and every way that can go wrong lands here as exit 0 with a store the daemon then reads as nothing —
-     * which reaches the transcript as `/agents answered 401`, a sentence about the credential rather than about
-     * the write. What went in has to come back out, or this says which of the two it was. */
+    // Reads it back: a shell can write an empty file on a heredoc it never saw the end of and still exit 0.
     const back = await run(`docker`, [`exec`, container, `cat`, STORE_PATH]);
     if (back.code !== 0) {
         return `reading ${STORE_PATH} back exited ${back.code}: ${back.stderr.trim()}`;
@@ -93,9 +53,8 @@ interface DaemonCall {
     readonly body: string;
 }
 
-/* Spoken from the Windows host over the derived loopback address, the whole point of the tier. `fetch` rather
- * than a curl inside the container: a call made from inside would go through neither the publish nor the host's
- * own network stack, which is exactly the half tier 2 already covered. */
+// Called from the Windows host over the derived loopback address, not from inside the container: that's the half tier 2
+// doesn't cover.
 const callDaemon = async (port: number, path: string, token: string | undefined, body?: unknown): Promise<DaemonCall> => {
     const headers: Record<string, string> = { "content-type": `application/json` };
     if (token !== undefined) {
@@ -104,27 +63,15 @@ const callDaemon = async (port: number, path: string, token: string | undefined,
     const response = await fetch(`http://127.0.0.1:${port}${path}`, {
         method: body === undefined ? `GET` : `POST`,
         headers,
-        // Spread rather than an explicit `undefined`: a GET with a `body` key present at all is a different
-        // request to fetch, whatever the value is.
+        // Spread, not an explicit undefined: a GET with a body key present is a different request to fetch.
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(60_000),
     });
     return { status: response.status, body: await response.text() };
 };
 
-/* WHOSE DAEMON ANSWERS THERE, asked before anything is asked OF it.
- *
- * Every assertion in this tier is about the sandbox tier 2 created, and every one of them up to the credential
- * is satisfied just as well by SOMEBODY ELSE'S sandbox: another one is reachable, correctly gated, and refuses
- * an uncredentialed call in exactly the same words. Only the seeded control token can tell the two apart,
- * because that one is seeded into a container BY NAME — and its refusal then reads as a broken credential
- * rather than as a wrong daemon, which is a sentence about the product where the truth is about the machine.
- *
- * Not hypothetical: the port is derived from the connect token, which this tier holds constant, so every
- * sandbox it has ever created wants this one port. Docker refuses a whole `run` whose `-p` is taken and `ic`
- * answers that by retrying WITHOUT the shortcut (sandbox/connect.rs) rather than failing the setup, so a
- * leftover from an older run answers here while the container under test publishes nothing at all. `docker
- * port` is the question that separates them; teardown removes such a leftover before the tiers begin. */
+// Confirms which sandbox answers before asking anything of it: another correctly-gated one would pass every check up to
+// the credential. A derived port can be squatted by an older leftover, since ic retries without it rather than failing.
 const publishesTheShortcut = async (harness: Harness, container: string, port: number): Promise<boolean> => {
     const published = await publishedHostPort(container, LOCAL_PORT);
     if (published === port) {
@@ -142,9 +89,8 @@ const publishesTheShortcut = async (harness: Harness, container: string, port: n
     return false;
 };
 
-// The gate, asserted before the credential is used, and worth asserting because the failure it guards is
-// silent: a daemon that answers everything to everyone looks identical, from every other assertion here, to
-// one that is correctly gated. The daemon refuses to boot at all in that state; this proves it did not.
+// Asserted before the credential is used: an ungated daemon that answers everything looks identical otherwise, and a
+// mis-gated one refuses to boot at all.
 const gateIsReal = async (harness: Harness, port: number): Promise<void> => {
     const unauthenticated = await callDaemon(port, `/agents`, undefined);
     if (unauthenticated.status === 401 || unauthenticated.status === 403) {
@@ -162,7 +108,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     }
     const port = localDaemonPort(sandboxId);
 
-    // ── reachable from the host, at the address the browser derives ──────────────────────────────────────
+    // reachable from the host, at the address the browser derives
     harness.section(`the loopback shortcut (port ${port}, derived from sandbox ${sandboxId})`);
 
     if (!(await publishesTheShortcut(harness, options.container, port))) {
@@ -181,10 +127,10 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
         return;
     }
 
-    // ── the gate is real ─────────────────────────────────────────────────────────────────────────────────
+    // the gate is real
     await gateIsReal(harness, port);
 
-    // ── the credential a program is meant to use ─────────────────────────────────────────────────────────
+    // the credential a program is meant to use
     harness.section(`driving it with a control token`);
     const token = `ict_windows_smoke_${sandboxId}`;
     const unseeded = await seedControlToken(options.container, token);
@@ -202,7 +148,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
         return;
     }
 
-    // ── one turn ─────────────────────────────────────────────────────────────────────────────────────────
+    // one turn
     if (options.agentAuthVolume === undefined) {
         harness.section(`one /agents turn: stood down, no INTENTIC_AGENT_AUTH_VOLUME`);
         harness.pass(`everything up to the turn passed. Connect an AI account once on this machine and name its volume to run the turn too.`);
@@ -210,8 +156,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     }
 
     harness.section(`one /agents turn`);
-    // Client-minted once, then used for every operation on this conversation. A timestamp or a route response
-    // is not the identity: the same stable id keys the turn, registry card, polling read and transcript.
+    // Client-minted once; the same stable id ties turn, registry card, poll and transcript together.
     const conversationId = `windows-smoke-${randomUUID()}`;
     const started = await callDaemon(port, `/agent`, token, { conversationId, prompt: PROMPT, title: `windows smoke` });
     if (started.status !== 200) {
@@ -220,10 +165,8 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     }
     harness.pass(`the turn started`);
 
-    /* Poll the conversation's own transcript rather than the fleet roster. The roster is a list of summaries
-     * and cannot prove which reply belongs to this turn; the transcript route is keyed by the same identity the
-     * POST carried. Require an ASSISTANT bubble equal to the expected answer so the prompt's own word "ready"
-     * cannot satisfy the assertion before the model replies. */
+    // Polls the transcript, not the roster (summaries can't prove which reply is this turn's); requires an assistant
+    // bubble so the prompt's own word can't satisfy it early.
     let transcript = await callDaemon(port, `/agents/${encodeURIComponent(conversationId)}/transcript`, token);
     const done = await harness.untilTrue(options.turnSeconds, `the turn completed`, async () => {
         transcript = await callDaemon(port, `/agents/${encodeURIComponent(conversationId)}/transcript`, token);

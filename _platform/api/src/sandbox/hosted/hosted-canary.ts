@@ -12,58 +12,34 @@ import { HostedAtCapacity, hostedCapacity } from "./hosted-capacity.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
 import { HOUR_MS } from "../../durations.js";
 
-/* DOES SIGNING UP STILL GET YOU A WORKING MACHINE? Asked by doing it, on a timer, rather than by waiting for
- * somebody to report that it doesn't.
- *
- * The health sweep beside this one compares rows against Fly, which catches a fleet going missing but cannot
- * catch a lane that quietly stopped WORKING: an image that no longer boots, a tunnel grant the hub refuses, a
- * region out of capacity, an env key that stopped being passed. Every one of those looks perfect from the
- * platform's side, the row exists, the machine is `started`, and the only symptom is that the daemon never
- * checks in, which is indistinguishable from "a user opened the page and wandered off" unless something is
- * deliberately watching. Production had six such sandboxes in a row and nothing said a word.
- *
- * So this runs the REAL path, the same `provisionHosted` a signup runs, on a sandbox of its own, and waits for
- * the same announce a person waits for. It proves the whole chain in one assertion: Fly built (or the pool
- * handed over) a machine, the image booted, the daemon came up, the tunnel bound, and the platform accepted
- * the check-in. Then it destroys everything it made.
- *
- * It costs a machine's few minutes each run, which is why it is OFF unless `HOSTED_CANARY_MINUTES` says
- * otherwise, and why the teardown runs in a `finally` even when the wait fails: a canary that leaks machines
- * would cost more than the outage it watches for. */
+// Runs the real provisioning path on its own sandbox and waits for the daemon's announce: the health sweep catches a
+// fleet going missing, not a lane that's intact but stopped working. Off unless HOSTED_CANARY_MINUTES is set; teardown
+// always runs, since a leaked machine costs more than the outage this watches for.
 
 const POLL_MS = 15_000;
-// Generous on purpose: a cold build pulls the image (minutes), and a canary that cries at four is a canary
-// nobody reads. Past this, a real signup would have given up long ago.
+// Generous: a cold build pulls the image (minutes); past this, a real signup would already have given up.
 const DEADLINE_MS = 12 * 60 * 1000;
-/* How long after the check-in the STARTER SITE gets to answer at its preview address. The check-in proves the
- * machine and the tunnel; this proves what the person was brought here to see, through the same edge a
- * browser uses, and it is the number Phase 1 of the onboarding work is measured by (a prewarmed volume should
- * make this seconds). Past it the run is red even though the daemon is up: a sandbox whose first screen says
- * "isn't running" is the failure this canary exists to catch, however healthy the platform's rows look. */
+// How long after check-in the starter site gets to answer at its preview address; past it, the run is red.
 const STARTER_DEADLINE_MS = 3 * 60 * 1000;
-// The daemon's reserved probe path (its panels/preview-proxy.ts PREVIEW_PROBE_PATH), answered with CORS open and
-// a JSON body naming what the hostname serves; `serving` is the only answer that counts.
+// The daemon's reserved probe path (preview-proxy.ts PREVIEW_PROBE_PATH); `serving` is the only answer that counts.
 const PREVIEW_PROBE_PATH = `/__intentic/preview-probe`;
-// One alert per this window, the same latch shape as the health sweep: a standing fault should be a reminder,
-// not a mailbox.
+// One alert per window (same latch shape as the health sweep): a standing fault is a reminder, not a mailbox.
 const ALERT_EVERY_MS = 6 * HOUR_MS;
 
 export interface CanaryResult {
     readonly ok: boolean;
-    // How long from "provision" to the daemon's first announce. Undefined when it never came.
+    // Time from provision to the daemon's first announce; undefined when it never came.
     readonly announcedInMs: number | undefined;
-    // How long from "provision" until the starter site answered at its preview address. Undefined when it did
-    // not within its deadline, or when the announce never came.
+    // Time to the starter answering at its preview address; undefined if late or the announce never came.
     readonly starterServingInMs: number | undefined;
-    // Where the machine came from, so a slow run can be read against the promise its origin makes.
+    // Where the machine came from, so a slow run can be read against its origin's own promise.
     readonly warm: boolean;
     readonly detail: string;
 }
 
 const canarySandboxName = `hosted canary`;
 
-// The account the canary's sandbox belongs to. Deliberately a real row rather than a null owner: the whole
-// point is to walk the path a person walks, and every gate on it (the hour meter, the per-user ceiling,
+// The canary's own account, a real row rather than a null owner: every gate on the path (hour meter, per-user ceiling,
 // membership) reads an owner.
 const ensureCanaryUser = async (prisma: PrismaClient, email: string): Promise<string> => {
     const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -77,10 +53,8 @@ const ensureCanaryUser = async (prisma: PrismaClient, email: string): Promise<st
     return created.id;
 };
 
-/* Everything this run made, taken back down in the order the delete route uses: the row, then the machine.
- * Releasing reachability is not a step any more — deleting the row IS the revocation (reachability.ts), so the
- * canary cannot leak a grant even if it dies here. Best-effort throughout: a teardown that throws would strand
- * the machine it was cleaning up. */
+// Tears down everything this run made, row then machine, in delete-route order. Deleting the row is itself the
+// reachability revocation, so a canary that dies here cannot leak a grant.
 const teardown = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<void> => {
     const hosted = await prisma.hostedMachine.findUnique({ where: { sandboxId } }).catch(() => null);
     await prisma.sandbox
@@ -93,8 +67,7 @@ const teardown = async (prisma: PrismaClient, config: Config, logger: Logger, sa
     }
 };
 
-// Anything a previous run left behind (a crash between provision and teardown), collected before this one
-// starts, so the canary can never accumulate machines.
+// Collects anything a previous run left behind (a crash between provision and teardown) before this run starts.
 const collectPreviousRuns = async (prisma: PrismaClient, config: Config, logger: Logger, ownerId: string): Promise<void> => {
     const leftovers = await prisma.sandbox.findMany({ where: { ownerId }, select: { id: true } });
     for (const leftover of leftovers) {
@@ -104,10 +77,8 @@ const collectPreviousRuns = async (prisma: PrismaClient, config: Config, logger:
     }
 };
 
-/* The wait a person makes, made by a machine: poll the row the daemon's announce writes until it appears or
- * the attempts run out. Bounded by a COUNT rather than by the clock, so the loop terminates on its own terms
- * whatever the clock is doing, which is what keeps a stubbed sleep (tests) from spinning until the process
- * dies and a suspended event loop from silently extending the deadline. */
+// Polls the row the daemon's announce writes until it appears or attempts run out. Bounded by a count, not the clock,
+// so a stubbed sleep in tests can't spin forever.
 const waitForAnnounce = async (
     prisma: PrismaClient,
     sandboxId: string,
@@ -126,8 +97,8 @@ const waitForAnnounce = async (
     return false;
 };
 
-/* The wait a person's BROWSER makes next: the starter's preview address, through the edge, until its proxy says
- * it is serving. Bounded by a count like the announce wait, for the same reasons. */
+// The browser's next wait: the starter's preview address through the edge, until its proxy says serving. Bounded by a
+// count, like the announce wait.
 const waitForStarter = async (url: string, deadlineMs: number, sleep: (ms: number) => Promise<void>): Promise<boolean> => {
     for (let attempt = 0; attempt < Math.ceil(deadlineMs / POLL_MS); attempt += 1) {
         try {
@@ -141,7 +112,7 @@ const waitForStarter = async (url: string, deadlineMs: number, sleep: (ms: numbe
                 }
             }
         } catch {
-            // Not answering yet is the ordinary state of a name whose tunnel is still binding.
+            // Not answering yet is ordinary while the tunnel is still binding.
         }
         // oxlint-disable-next-line eslint/no-await-in-loop
         await sleep(POLL_MS);
@@ -149,17 +120,11 @@ const waitForStarter = async (url: string, deadlineMs: number, sleep: (ms: numbe
     return false;
 };
 
-// Nothing was proved and nothing failed: the answer for a run that should not happen at all.
+// Nothing proved, nothing failed: the answer for a run that should not happen.
 const skipped = (detail: string): CanaryResult => ({ ok: true, announcedInMs: undefined, starterServingInMs: undefined, warm: false, detail });
 
-/* WHEN THIS RUN MUST NOT HAPPEN, answered before anything is minted or spent.
- *
- * The lane being OFF is the ordinary one. The lane being FULL is the interesting one: this check spends a real
- * machine to prove a real sign-up would get one, and on a full fleet those are the same machine — so a canary
- * that ran anyway would either take the slot the next person needs, or (far more likely) fail to get one and
- * mail the admins that provisioning is broken, which is a false sentence about a platform that is merely at
- * its ceiling. Capacity has its own alarm, in the watch that can say the true thing about it
- * (hosted-health.ts); this one stands down and says why. */
+// The lane being off is ordinary; the lane being full is not: this canary spends a real machine, and on a full fleet
+// that's the same machine a signup needs. Capacity has its own alarm (hosted-health.ts); this one just stands down.
 const standDown = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<CanaryResult | undefined> => {
     if (!hostedEnabled(config) || config.hosted.canaryEmail === ``) {
         return skipped(`canary off`);
@@ -171,8 +136,7 @@ const standDown = async (prisma: PrismaClient, config: Config, logger: Logger): 
     return undefined;
 };
 
-/* One run, start to finish, answering what it proved. Never throws: a canary that can take the process down
- * with it is a liability rather than a check. */
+// One run start to finish. Never throws: a canary that can take the process down is a liability, not a check.
 export const runHostedCanary = async (
     prisma: PrismaClient,
     config: Config,
@@ -193,8 +157,7 @@ export const runHostedCanary = async (
             sandboxId: sandbox.id,
             connectToken: token,
             ownerEmail: email,
-            // The default region: the canary proves the lane, and a per-region proof is what the pool's own
-            // stock check (hosted-health.ts) is for.
+            // Default region: proves the lane; per-region proof is hosted-health.ts's job.
             region: config.hosted.region,
         });
         const announced = await waitForAnnounce(prisma, sandbox.id, DEADLINE_MS, sleep);
@@ -208,7 +171,7 @@ export const runHostedCanary = async (
                 detail: `a ${warm ? `warm` : `cold`} machine was provisioned but never checked in within ${DEADLINE_MS / 60_000} minutes`,
             };
         }
-        // What the person sees next, at the address their browser opens: the starter site, or "isn't running".
+        // What the person sees next at the address their browser opens: the starter site, or isn't running.
         const starterUrl = previewUrl(`${STARTER_REPO}--${STARTER_APP}`, config.ingress.zone, sandboxIdFromToken(token));
         const serving = starterUrl === undefined ? false : await waitForStarter(starterUrl, STARTER_DEADLINE_MS, sleep);
         const starterServingInMs = Date.now() - startedAt;
@@ -233,11 +196,7 @@ export const runHostedCanary = async (
             announcedInMs: undefined,
             starterServingInMs: undefined,
             warm: false,
-            /* A FULL LANE IS SAID IN THE OPERATOR'S WORDS, not in the reader's. The refusal this run met
-             * carries the sentence the setup page shows somebody who wanted a sandbox ("set it up on your own
-             * computer in the meantime"), which is the wrong half of the story to put in a mail to the person
-             * who can raise the allowance. The next run stands down before provisioning at all: this refusal
-             * is what teaches the platform it is full (hosted-capacity.ts). */
+            // Operator's words for a full lane, not the reader's; this failure also teaches the platform it's full.
             detail:
                 error instanceof HostedAtCapacity
                     ? `the provider has no machines left for this platform, so a new sandbox cannot be created at all`
@@ -263,7 +222,7 @@ const failureMail = (config: Config, result: CanaryResult) => ({
 
 let lastAlertAt = 0;
 
-// Tests reset the latch; nothing else has any business touching it.
+// Tests reset this latch; nothing else should touch it.
 export const forgetHostedCanaryAlert = (): void => {
     lastAlertAt = 0;
 };
@@ -294,9 +253,8 @@ export const sweepHostedCanary = async (
     return result;
 };
 
-/* Boot wiring (main.ts). OFF by default: this one spends real money on every run, so a self-hoster gets it
- * only by asking, and the first run is deliberately not at boot, a deploy restarts every replica at once and
- * the canary has nothing useful to say about a platform that is still coming up. */
+// Boot wiring (main.ts), off by default since every run spends money. First run is not at boot: a deploy restarts every
+// replica at once, and the canary has nothing useful to say about a platform still coming up.
 export const startHostedCanary = (prisma: PrismaClient, config: Config, logger: Logger): void => {
     if (!hostedEnabled(config) || config.hosted.canaryMinutes === 0 || config.hosted.canaryEmail === ``) {
         return;

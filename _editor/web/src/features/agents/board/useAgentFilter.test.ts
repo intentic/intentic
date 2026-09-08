@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls useChat -> the app shell, and
-// the router / analytics / sandbox modules all read environment.ts's `window.env` at import time. Nothing here
-// touches them.
+// Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls in the router, analytics and sandbox
+// modules, which read environment.ts's `window.env` at import time.
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-// The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, which is one
-// more of those import-time reads.
+// The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, another of those
+// import-time reads.
 vi.mock("../../../app/clientDiagnostics", () => ({ reportClient: vi.fn() }));
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
@@ -15,10 +14,8 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
-// These cases run on fake timers, so useChat's hydrate watch, which the sibling suites never advance far
-// enough to reach: actually runs here. The registered placeholder has an empty transcript; other requests
-// answer NOT FOUND. What it hydrates is irrelevant to the filter, but a named transcript 404 would correctly
-// unlatch `registered` and turn the placeholder into the workspace draft this suite is trying to exclude.
+// These cases run on fake timers, so useChat's hydrate watch actually runs here; the registered placeholder has an
+// empty transcript and other requests answer 404, irrelevant to the filter but must not unlatch `registered`.
 vi.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxJson: vi.fn(async () => ({})),
     sandboxRequest: vi.fn(async (path: string) =>
@@ -28,16 +25,10 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
     ),
 }));
 
-/* The daemon tier, stubbed at the useQuery seam.
- *
- * What is under test is the MERGE, which tier answers for which agent, and what evidence each produces, not
- * TanStack's fetching. Driving it through a real query would mean a client, a provider and fake timers for the
- * debounce, all to observe the same two refs this hands over directly. `fleetAnswer` / `sessionAnswer` are set
- * per test and routed by the query key's first segment.
- */
+// The daemon tier, stubbed at the useQuery seam: what's under test is the merge, which tier answers and what evidence
+// it produces, not TanStack's fetching.
 const answers = { agents: undefined as unknown, sessions: undefined as unknown };
-// The keys the composable asked under, kept live: what the daemon is being asked is half of what the filter
-// does, and the match switches ride in the key exactly so a flip re-asks (see useAgentFilter's `params`).
+// The keys the composable asked under, kept live, since re-asking on a match-case flip is part of what's tested.
 const keys: Ref<unknown[]>[] = [];
 vi.mock("@tanstack/vue-query", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@tanstack/vue-query")>();
@@ -74,21 +65,15 @@ const agent = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => (
     ...extra,
 });
 
-// The composable debounces its daemon tier by 150ms; the local tier answers on the tick. `settle` waits out
-// the timer so the stubbed answer is considered current (the composable ignores a reply for an older query).
+// The composable debounces its daemon tier by 150ms; the local tier answers on the tick. Waits out the timer so the
+// stubbed answer is considered current.
 const settle = async (): Promise<void> => {
     await vi.advanceTimersByTimeAsync(200);
     await nextTick();
 };
 
-/* The tab list is never EMPTIED: useChat guarantees an active conversation at all times and its computeds
- * read straight through that guarantee (`active` falls back to list[0]). Each case gets one non-isolated
- * placeholder to stand in for it: isolated is the default, and an isolated conversation with no registry entry
- * IS a draft card in the fleet, which would skew every count here.
- *
- * `activeId` is deliberately left alone: `active` resolving to the placeholder by its list[0] floor is all
- * these tests need, and pointing it at a tab only buys a hydrate none of them asked for.
- */
+// useChat always has an active conversation; each case gets one non-isolated placeholder to stand in for it, since an
+// isolated one with no registry entry would be a draft card and skew every count here.
 const placeholder = (): Conversation => {
     const blank = new Conversation(`blank`);
     blank.isolated.value = false;
@@ -96,9 +81,8 @@ const placeholder = (): Conversation => {
     return blank;
 };
 
-/* The composable inside an effect scope, the way a component's setup runs it. Not ceremony: it registers a
- * debounce watcher and an onScopeDispose, so a bare call would both warn and leak one watcher per case onto
- * computeds derived from module singletons every other suite in this file shares. */
+// The composable runs inside an effect scope, as a component's setup would: it registers a debounce watcher and
+// onScopeDispose, which a bare call would warn about and leak.
 let scope: EffectScope | undefined;
 let current: ReturnType<typeof useAgentFilter> | undefined;
 const filterIn = (): ReturnType<typeof useAgentFilter> => {
@@ -108,8 +92,8 @@ const filterIn = (): ReturnType<typeof useAgentFilter> => {
 };
 
 afterEach(() => {
-    // `matchCase` is ONE preference behind every field (and written through to storage), so a case that turns
-    // it on hands it back: the next case would otherwise silently run under a rule it never asked for.
+    // `matchCase` is one preference behind every field, written through to storage, so a case left on leaks into the
+    // next test.
     if (current !== undefined) {
         current.matchCase.value = false;
     }
@@ -147,11 +131,11 @@ describe(`useAgentFilter`, () => {
         const [first, second] = useAgents().fleet.value as FleetAgent[];
         expect(filter.matches(first as FleetAgent)).toBe(true);
         expect(filter.matches(second as FleetAgent)).toBe(false);
-        // The card already shows the title it matched on; a line repeating it is noise, not evidence.
+        // The card already shows the title it matched on; repeating it as a snippet would be noise.
         expect(filter.snippetOf(first as FleetAgent)).toBeUndefined();
     });
 
-    // The point of the local tier: a tab this browser holds needs no round trip, and answers on the keystroke.
+    // The point of the local tier: an open tab needs no round trip and answers on the keystroke.
     it(`matches a later prompt of an OPEN tab without the daemon, and quotes the line`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
@@ -167,13 +151,12 @@ describe(`useAgentFilter`, () => {
         await nextTick();
         const target = useAgents().fleet.value[0] as FleetAgent;
         expect(filter.matches(target)).toBe(true);
-        // Both sides said "landAgent" here, and the line shown is the user's own: their phrasing is what a
-        // query is typed from.
+        // Both sides said "landAgent" here, and the line shown is the user's own, since a query is typed from memory of
+        // one's own phrasing.
         expect(filter.snippetOf(target)).toEqual({ text: `actually make it use landAgent instead`, speaker: `user` });
     });
 
-    // The agent's half of an open tab matches too, and reports itself as the agent's: a reply quoted under a
-    // card reads as something the user wrote unless the row says whose words they were.
+    // A reply quoted under a card reads as the user's unless the row says whose words they were.
     it(`matches the agent's own reply in an open tab and names the speaker`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
@@ -191,7 +174,7 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(target)).toEqual({ text: `landAgent is defined in laneDrop.ts`, speaker: `agent` });
     });
 
-    // A notice is neither side speaking: it is something that happened to the turn, so it is not searchable.
+    // A notice is neither side speaking: something happened to the turn, so it's not searchable.
     it(`never matches a notice line`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
@@ -218,8 +201,7 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(target)).toEqual({ text: `…use landAgent instead`, speaker: `user` });
     });
 
-    // The tiers are a union over one agent, so a card can never be listed twice or wear two snippets: the
-    // local answer, which is the one this browser can prove, wins.
+    // The tiers are a union over one agent, never two rows or two snippets: the local answer, being provable, wins.
     it(`prefers the local answer when both tiers hit the same agent`, async () => {
         setAgents([agent(`a1`, { title: `whatever` })], 1);
         const conversation = new Conversation(`a1`);
@@ -233,8 +215,8 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(useAgents().fleet.value[0] as FleetAgent)).toEqual({ text: `the landAgent bug`, speaker: `user` });
     });
 
-    /* THE Aa SWITCH, on the tier that answers first. Off, the letters do not matter and both cards stay; on,
-     * the query stands as typed, which is the whole reason someone reaches for it, to tell FROM from from. */
+    // The Aa switch, on the tier that answers first: off, letters don't matter and both cards stay; on, the query
+    // stands as typed.
     it(`keeps both casings by default and separates them under match case`, async () => {
         setAgents([agent(`a1`, { title: `FROM the top` }), agent(`a2`, { title: `from the top` })], 1);
         const filter = filterIn();
@@ -250,8 +232,8 @@ describe(`useAgentFilter`, () => {
         expect(filter.matches(lower as FleetAgent)).toBe(false);
     });
 
-    // …and the daemon tier is asked under the same rule, or the half of the fleet this browser never opened
-    // would come back matched by the other one.
+    // The daemon tier is asked under the same case rule, or the half of the fleet this browser never opened would be
+    // matched under the other one.
     it(`carries the case rule to the daemon, and re-asks the moment it is flipped`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme` })], 1);
         const filter = filterIn();
@@ -259,20 +241,17 @@ describe(`useAgentFilter`, () => {
         await settle();
         expect(keys.every((key) => !String(unref(key)).includes(`caseSensitive`))).toBe(true);
 
-        // Flipping the switch re-folds the term as well as changing the rule, so the ask settles with the
-        // query as TYPED. Until it does, the composable's own guard (`settled !== needle`) holds the daemon's
-        // older answer back rather than showing hits found under the other rule.
+        // Flipping the switch re-folds the term and re-asks; until it settles, the composable's own guard holds back
+        // the daemon's older answer.
         filter.matchCase.value = true;
         await settle();
-        // Both tiers' keys: the fleet's and the never-carded sessions', or the board would list rows found
-        // under a rule its cards were not.
+        // Both tiers' keys, the fleet's and the never-carded sessions', or rows found under the old rule would still be
+        // listed.
         expect(keys.map((key) => String(unref(key))).filter((key) => key.includes(`query=FROM&caseSensitive=true`))).toHaveLength(2);
     });
 
-    /* THE BOARD MEMOISES A CARD ON THIS SNIPPET (AgentsView hands it to `v-memo`), so an equal-but-new object
-     * every time it is asked IS a reported change: every matched card would redraw on every roster frame, which
-     * is the exact cost that memo was added to remove. The evidence therefore keeps its identity for as long as
-     * it says the same thing. */
+    // The board memoises a card on this snippet (`v-memo`); an equal-but-new object every call would read as a change
+    // and redraw every matched card on every roster frame.
     it(`reports one unchanged hit as the same object every time it is asked`, async () => {
         setAgents([agent(`a1`, { title: `whatever` })], 1);
         const conversation = new Conversation(`a1`);
@@ -286,12 +265,11 @@ describe(`useAgentFilter`, () => {
         const first = filter.snippetOf(target);
         expect(first).toEqual({ text: `the landAgent bug`, speaker: `user` });
 
-        // The board asks about seven times per render (cardsFor runs five times over, then the card reads its
-        // own match twice), and every one of them has to be the same answer rather than a new one.
+        // The board asks about seven times per render; every one has to get the same answer, not a new object.
         expect(filter.snippetOf(target)).toBe(first);
 
-        // ...and across a rebuild of the local index, which every frame of every streaming turn causes: the
-        // line this hit quotes is untouched, so the hit is still the same hit.
+        // ...and across a rebuild of the local index, which every streaming frame causes: the quoted line is untouched,
+        // so the hit is the same hit.
         conversation.restoreMessages([
             { role: `user`, text: `the landAgent bug` },
             { role: `assistant`, text: `looking at it now` },
@@ -300,7 +278,7 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(target)).toBe(first);
     });
 
-    // ...but a rename is a real change of input, and the memo must not answer for the name it cached under.
+    // ...but a rename is a real change of input, and the memo must not keep answering for the name it cached under.
     it(`stops matching a title the user has renamed away from the query`, async () => {
         setAgents([agent(`a1`, { title: `the landAgent rewrite` })], 1);
         const filter = filterIn();
@@ -325,8 +303,8 @@ describe(`useAgentFilter`, () => {
         expect(filter.archivedMatches.value.map((match) => match.id)).toEqual([`old`]);
     });
 
-    // A conversation a fleet agent owns must not be reported twice: once as its card and once as an
-    // anonymous history row that opens the very same tab.
+    // A conversation a fleet agent already carries must not be reported twice, once as its card and once as an
+    // anonymous history row.
     it(`drops session matches that a fleet agent already carries`, async () => {
         setAgents([agent(`a1`, { title: `tidy the readme`, sessionId: `sess-1` })], 1);
         answers.sessions = {

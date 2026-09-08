@@ -24,11 +24,9 @@ import {
 } from "../schemas/terminal.js";
 import { UsageSummarySchema } from "../schemas/usage.js";
 
-// Sandbox status + identity, the long-lived liveness stream, and the connect-token-relayed host tunnel.
-// `events` interleaves heartbeat frames (browser holds it open to detect the sandbox dying instantly) with
-// workspaceChanged batches (live file tree/viewer refresh) and presence roster snapshots until the request
-// aborts. `clientId` is the tab's per-connection presence key; absent (an older web client) means the
-// connection simply never joins the roster.
+// Sandbox status/identity, the long-lived liveness stream, and the connect-token-relayed host tunnel. `events`
+// interleaves heartbeats, workspaceChanged batches and presence snapshots until the request aborts. `clientId` is this
+// tab's presence key; omitting it means never joining the roster.
 export const systemContract = {
     info: oc
         .route({
@@ -39,9 +37,7 @@ export const systemContract = {
                 "The sandbox's own identity and state: which workspace it holds, which image it runs, what it is called, and the list of calls it actually implements. Start here, because a browser is routinely newer than the sandbox it is talking to and this is how it finds out what is there.",
         })
         .output(InfoSchema),
-    // What the daemon could not read in its own `.intentic/` manifests, a file it fell back on, a key it did
-    // not recognise, an entry it skipped. Its own route rather than a field on /info because it is invalidated
-    // by a different thing: a manifest changing on disk, which the workspace-state table already broadcasts.
+    // Own route, not a field on /info: it goes stale on a manifest changing on disk, not on identity changing.
     manifestProblems: oc
         .route({
             method: "GET",
@@ -51,18 +47,7 @@ export const systemContract = {
                 "Anything the daemon tripped over in its own configuration on disk: a file it had to fall back from, a key it did not recognise, an entry it skipped. Separate from the identity call because it goes stale for a different reason, namely a file changing.",
         })
         .output(ManifestProblemsSchema),
-    /* Take one stray key out of a manifest, or rename it to the one it was meant to be — the button behind the
-     * notice above, rather than a sentence telling somebody to go and edit a line.
-     *
-     * It exists because the diagnosis was already complete: the daemon named the key and guessed the spelling,
-     * so everything a person would do next is known, and what is left is a two-second edit of a JSON file. The
-     * alternatives were both worse. A sentence ("did you mean skills?") makes the reader do work the daemon has
-     * already done. An agent makes it a worktree, a turn and a landing decision — and settings.json is written
-     * live by the settings page, so a branched edit landed later would revert whatever was toggled in between.
-     *
-     * The write goes through the owning store's own queue (store/manifest-repair.ts), which is the reason this
-     * is a route at all rather than the file API: these files have a daemon writing them, and a repair that
-     * raced a save would lose one of the two. */
+    // Removes or renames only a key, never a value; writes queue through the owning store, not racing a live save.
     repairManifest: oc
         .route({
             method: "POST",
@@ -73,8 +58,7 @@ export const systemContract = {
         })
         .input(ManifestRepairSchema)
         .output(OkSchema),
-    // Exchange the request's verified bearer (a Google ID token, or a still-valid session, which makes this
-    // route sliding renewal) for a daemon-minted session, the credential every steady-state call presents.
+    // Trades a verified bearer or unexpired session for a fresh daemon session; calling it again renews it.
     session: oc
         .route({
             method: "POST",
@@ -114,10 +98,7 @@ export const systemContract = {
             description: "Token and cost totals per account, added up from the record of every finished turn.",
         })
         .output(UsageSummarySchema),
-    // The web-owned tmux sessions behind the terminal tabs. `terminals` enumerates them (the panel rebuilds a tab
-    // per name on load/reload); `killTerminal` destroys one when its tab's close button is clicked. The live I/O
-    // is the separate /system/terminal WebSocket, these are just the control plane. Bearer-authed like the rest
-    // (browser fetch sends the header), unlike the header-less WS route which app.ts exempts.
+    // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
     terminals: oc
         .route({
             method: "GET",
@@ -136,9 +117,7 @@ export const systemContract = {
         })
         .input(TerminalNameParamSchema)
         .output(OkSchema),
-    // One session's pane history as selectable text, the answer to "scroll back and copy that" in a surface
-    // whose live view is a tmux client on the alternate screen, where the scrollback is on the far side of the
-    // socket and the page has nothing to select. See TerminalScrollbackSchema.
+    // Scrollback as selectable text; the live view is a tmux alternate screen, with nothing in the page to select.
     terminalScrollback: oc
         .route({
             method: "GET",
@@ -149,11 +128,7 @@ export const systemContract = {
         })
         .input(TerminalScrollbackQuerySchema)
         .output(TerminalScrollbackSchema),
-    // The agent's live Chromiums and the pages each has open, the Browsers view's roster, polled while it is on
-    // screen and by the rail so its tile can appear the moment a turn starts browsing. The frames are the
-    // separate /system/browser-view WebSocket; this is the control plane, exactly as `terminals` is for tmux.
-    // `closeBrowser` shuts one Chromium down: the agent's next browser tool call then fails as if it had crashed,
-    // which is the honest account of the owner pulling the plug.
+    // Control plane like `terminals`; frames stream separately. `closeBrowser` fails the next call as crashed.
     browsers: oc
         .route({
             method: "GET",
@@ -173,13 +148,7 @@ export const systemContract = {
         })
         .input(BrowserNameParamSchema)
         .output(OkSchema),
-    // The agents this sandbox's agents started. SDK subagents and delegated Codex/Grok runs alike (see
-    // SubagentSessionSchema). Same two-route shape as the browsers above, and same division of labour: the list
-    // is polled by the Subagents area while it is on screen and loosely by the rail, so its tile can appear the
-    // moment a turn delegates. There is no third WebSocket here, because a subagent has no byte stream to watch,
-    // what you watch it through is its TRANSCRIPT, which `subagentTranscript` serves in the one shape every
-    // other transcript route already answers in: live from the parent turn's frame log while it runs, off the
-    // provider's own store once it has finished.
+    // SDK subagents and delegated runs alike; watched via transcript, not a socket, live then from stored history.
     subagents: oc
         .route({
             method: "GET",
@@ -199,13 +168,7 @@ export const systemContract = {
         })
         .input(SubagentIdParamSchema)
         .output(SessionTranscriptSchema),
-    /* Start, stop, restart, update, rebuild, roll back or remove a sandbox on one of the user's own devices,
-     * the Devices view's buttons, relayed to the machine over the socket it holds open to us.
-     *
-     * Streamed because the slowest of these takes minutes, and it is the same stream whatever the op: one door
-     * for one decision, so the view has one shape to render rather than one per duration. The daemon adds no
-     * judgement, the machine enforces its own switches and its refusal arrives as the terminal `error` line,
-     * in its own words, naming the control to flip. */
+    // One stream for every op; the daemon adds no judgment, a refusal is the machine's own `error` line.
     manageDeviceSandbox: oc
         .route({
             method: "POST",
@@ -216,12 +179,7 @@ export const systemContract = {
         })
         .input(DeviceSandboxFlowInputSchema)
         .output(eventIterator(DeviceFlowLineSchema)),
-    /* Run one of this product's own CLI actions on a connected device, from a button rather than through an
-     * agent. A closed set of names, and the daemon builds the command line from the name (see the schema): the
-     * browser never sends one, because the socket underneath also carries `run_command`.
-     *
-     * Not a stream, unlike the sandbox ops beside it: these are seconds-long CLI calls whose whole answer is the
-     * sentence they print at the end, and a stream for that is a shape with nothing to put in it. */
+    // Closed set of actions; the daemon builds the command line, not the caller. One sentence is the whole answer.
     runDeviceCommand: oc
         .route({
             method: "POST",
@@ -232,14 +190,7 @@ export const systemContract = {
         })
         .input(DeviceCommandInputSchema)
         .output(DeviceCommandResultSchema),
-    /* Update or restart the agent on one of the user's own devices — the remedy the Devices view used to print
-     * as a command to go and type, on the view built to replace that terminal.
-     *
-     * Streamed like the sandbox ops, and for a reason of its own: this is the one call whose transport the work
-     * destroys. Both ops stop the resident process holding the socket, so the stream ends WITHOUT a terminal
-     * frame in the ordinary, successful case, and callers must read that as "it started" rather than as a
-     * failure (DeviceAgentFlowSchema has the whole argument). The confirmation is the device's agent version
-     * moving on the next read of the fleet. */
+    // The stream usually ends without a frame; a bare stop means success, the device's version confirms it later.
     runDeviceAgentFlow: oc
         .route({
             method: "POST",

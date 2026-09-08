@@ -1,34 +1,10 @@
 import type { Ref } from "vue";
-// The scheme singleton and the preference primitive off their own entry points rather than the barrel: this file
-// is plain state on two attributes, and reaching them through @intentic/ui would drag the whole component graph
-// (and mermaid, shiki and vue-flow behind it) into every module and unit test that only wants to know which skin
-// is on.
 import { definePreference } from "@intentic/ui/preference";
 import { useTheme } from "@intentic/ui/theme";
 
-/* THE SKIN, which whole-interface look the workspace wears, as opposed to which COLOUR it is painted in.
- *
- * The accent picker and the light/dark switch both answer "what colour"; a skin answers "what is this thing made
- * of". `none` is the app as designed. `sanctum` is skins/sanctum.css, the SITE'S design system worn by
- * the app: warm ash stone with a whisper of tooth in it, a gold rule round everything, a flat unlit shadow for
- * the rail and the overlays, stone and bronze plaques for the two filled button tiers, and every edge eased.
- *
- * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
- * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone, it is the
- * skin's rules never matching at all. `none` therefore writes no attribute, which is how someone who picks Light
- * or Dark opts back out of a skin, and makes "is a skin on?" answerable by looking at the element.
- *
- * A SKIN IMPLIES A SCHEME. The skin is dark by construction: its grounds, its materials and its light
- * are built for a near-black canvas, and PrimeVue's own component preset keys its dark treatment off `data-mode`
- * rather than off anything this file controls. So turning a skin on turns the scheme dark with it, one call,
- * here, rather than a stylesheet trying to out-shout a component library. The scheme the user had is not
- * remembered across that: leaving the skin leaves them in dark, which is where they can see they are.
- *
- * THE DISPLAY FACE IS FETCHED ON DEMAND. A look's typography is part of the look, Sanctum wants the site's own
- * two, and an app that downloads them for a skin nobody has selected is an app charging everyone for one
- * person's taste. The <link> is swapped when the
- * skin changes and removed when there is none; if it never arrives, the skin's own font variables fall through
- * to the app's stack and everything still reads. */
+// A skin (`sanctum` or `none`) is the workspace's whole look, applied as one `data-skin` attribute on <html>; a skin's
+// CSS is scoped to `[data-skin=...]`, so `none` writes no attribute. Turning a skin on forces the dark scheme and
+// leaves it dark when turned off. Its webfont <link> loads only while that skin is active.
 
 export type Skin = "none" | "sanctum";
 
@@ -36,10 +12,7 @@ const STORAGE_KEY = `ui-skin`;
 const ATTRIBUTE = `data-skin`;
 const FONT_ELEMENT_ID = `ui-skin-font`;
 
-/* One entry per skin that wants a face of its own. Sanctum
- * takes the SITE'S two faces: Baloo 2 for every heading and label in the chrome, Playfair Display for the one
- * heading in the app drawn at display size, so the workspace and the marketing pages are set in the same type.
- * A skin absent from this map simply loads nothing. */
+// One entry per skin with its own webfont: Baloo 2 for headings, Playfair Display for the display heading.
 const FONT_HREF: Partial<Record<Skin, string>> = {
     sanctum: `https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Playfair+Display:wght@600&display=swap`,
 };
@@ -54,8 +27,7 @@ const applyFont = (value: Skin): void => {
         existing?.remove();
         return;
     }
-    // Re-pointed rather than replaced, so switching between two skins that both want a face never leaves two
-    // <link>s behind, and re-applying the same skin costs nothing at all.
+    // Re-pointed rather than replaced, so switching skins never leaves two links, and reapplying costs nothing.
     if (existing instanceof HTMLLinkElement) {
         if (existing.href !== href) {
             existing.href = href;
@@ -78,10 +50,8 @@ const apply = (value: Skin): void => {
     applyFont(value);
 };
 
-/* The skin the app opens in: whatever index.html's anti-flash script left on <html>, read ONCE before anything
- * here writes it. That script reads this same key; nothing stored leaves the shipped default on the element.
- * Captured rather than consulted on demand, for the reason useTheme's own boot value gives: after the first
- * change the attribute states what this window is WEARING, not what is stored. */
+// The skin index.html's anti-flash script already set on <html>, read once before this module writes anything; captured
+// rather than re-read, since the attribute reflects what's applied, not what's stored.
 const bootAttribute = document.documentElement.getAttribute(ATTRIBUTE);
 const BOOT_SKIN: Skin = isSkin(bootAttribute) ? bootAttribute : `sanctum`;
 
@@ -94,11 +64,8 @@ const skin: Ref<Skin> = definePreference<Skin>({
 
 const setSkin = (value: Skin): void => {
     skin.value = value;
-    /* THE SCHEME GOES DARK WITH THE SKIN, in the window the skin was CHOSEN in, and only there. Every other
-     * window learns the scheme the same way it learns the skin: `useTheme().set` is itself a preference write, so
-     * the note that carries "the skin is now sanctum" is followed by the note that carries "the scheme is now dark",
-     * and a window adopting them needs no rule of its own to connect the two. Putting the rule in `apply` above
-     * would have every window that hears about a skin re-decide the scheme and write it back. */
+    // Dark is forced only in the window that made the change; other windows learn the scheme via useTheme's own
+    // preference write, not by re-deriving it in `apply`, or every window would redundantly rewrite it.
     if (value !== `none`) {
         useTheme().set(`dark`);
     }

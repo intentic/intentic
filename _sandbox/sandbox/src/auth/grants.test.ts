@@ -2,13 +2,12 @@ import { expect, test } from "vitest";
 import type { ControlTokens } from "./control-tokens.js";
 import { type Grant, grantsOf } from "./grants.js";
 
-// The verdict alone, for the assertions below: what a grant admits or refuses is the subject here, the
-// principal it may hand back is the last test's.
+// The verdict alone: what a grant admits or refuses is the subject here, not the principal it may hand back.
 const verdict = async (grant: Grant, presented: string, method: string, path: string) => (await grant.authorize(presented, method, path)).verdict;
 
-// The agent token's reach is the security boundary the vpn/otp CLIs stand on: dialling tunnels and minting
-// expiring codes are IN, and every route that would reveal the credentials behind them is OUT. Pinned here
-// because widening it is a one-line change that must never happen by accident.
+// The agent token's reach is the security boundary the vpn/otp CLIs stand on: dialing tunnels and minting codes are in.
+// Every route that would reveal the credentials behind them is out; pinned since widening it must never happen by
+// accident.
 test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a credential", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -34,11 +33,10 @@ test("the agent grant reaches /vpn and the otp mint, and nothing that reveals a 
     expect(await verdict(agent, "intruder", "GET", "/capabilities/npm/otp")).toBe("unauthorized");
 });
 
-/* The fleet READ surface (agents/fleet.routes.ts) is the one place this token reaches the conversation record,
- * and it is the shape of the grant that keeps it honest: two GETs answering about what the workspace has run,
- * nothing that writes, and nothing on `/agents`, whose neighbours land, discard, archive, rename and place
- * words in an agent's mouth. Pinned because the whole argument for admitting it — "these can only read" —
- * stops being true the first time a verb is added without anyone re-reading this. */
+// The fleet READ surface is the one place this token reaches the conversation record, and the grant's shape keeps it
+// honest: two GETs, nothing that writes, nothing on /agents.
+// Pinned because the whole argument for admitting it stops being true the moment a verb is added without this being
+// re-read.
 test("the agent grant reaches the fleet reads and never the board's presses", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -65,10 +63,10 @@ test("the agent grant reaches the fleet reads and never the board's presses", as
     expect(await verdict(agent, "agent", "POST", "/agents/fair-sage-ey2r/land")).toBe("out-of-scope");
 });
 
-/* The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a
- * laptop, so what it can reach is what a stolen laptop can reach. Three things and nothing else: the port
- * listing, the machine's own report, and the SSH byte pipe desktop sync runs on. The pipe is pinned to the GET
- * that opens it: every other shape of that path, and every neighbouring sync route, must stay out of scope. */
+// The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a laptop,
+// so what it can reach is what a stolen laptop can reach.
+// Three things and nothing else: the port listing, the machine's own report, and the SSH pipe, pinned to the one GET
+// that opens it.
 test("the sync grant reaches ports, its own report and the ssh transport, and nothing else", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -84,8 +82,9 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await verdict(sync, "sync", "GET", "/ports")).toBe("ok");
     expect(await verdict(sync, "sync", "POST", "/system/sync/report")).toBe("ok");
     expect(await verdict(sync, "sync", "GET", "/system/sync/ssh")).toBe("ok");
-    // The enrollment surface itself is never in reach of the credential it hands out: a machine cannot enroll
-    // another, nor read who else syncs, nor open the transport by any verb but the one that upgrades.
+    // The enrollment surface is never in reach of the credential it hands out: no enrolling another machine, no reading
+    // the roster.
+    // No other verb on the transport but the one that upgrades it.
     expect(await verdict(sync, "sync", "POST", "/system/sync/ssh")).toBe("out-of-scope");
     expect(await verdict(sync, "sync", "GET", "/system/sync")).toBe("out-of-scope");
     expect(await verdict(sync, "sync", "POST", "/system/authorized-key")).toBe("out-of-scope");
@@ -94,12 +93,10 @@ test("the sync grant reaches ports, its own report and the ssh transport, and no
     expect(await verdict(sync, "intruder", "GET", "/system/sync/ssh")).toBe("unauthorized");
 });
 
-/* The panel grant is broad on purpose (a panel is an app somebody else wrote) with exactly one route carved
- * out of it. `/capabilities/<id>/connection` returns a capability's config SECRETS INCLUDED and gates only on
- * "no signed-in identity", which the panel token satisfies as surely as the extension token it was written
- * for. Since that token is injected into every panel and connector process in the container, leaving it in
- * reach made a browser account's password and a TOTP seed readable by anything that can read /proc: the two
- * credentials the product states the model is never given. Pinned so re-widening has to be deliberate. */
+// The panel grant is broad on purpose (a panel is an app somebody else wrote), with exactly one route carved out:
+// `/capabilities/<id>/connection`, which returns a capability's config with secrets included.
+// That token is injected into every panel/connector process, so leaving it in reach would make stored passwords and
+// TOTP seeds readable by anything that can read /proc.
 test("the panel grant reaches the daemon broadly but never the capability connection read", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -117,12 +114,11 @@ test("the panel grant reaches the daemon broadly but never the capability connec
     expect(await verdict(panel, "panel", "POST", "/listeners/discord/dispatch")).toBe("ok");
     expect(await verdict(panel, "panel", "GET", "/capabilities")).toBe("ok");
     expect(await verdict(panel, "panel", "GET", "/capabilities/reddit/status")).toBe("ok");
-    // The doors that were never meant for it: the one that hands a stored credential back…
+    // The doors that were never meant for it: the one that hands a stored credential back.
     expect(await verdict(panel, "panel", "GET", "/capabilities/reddit/connection")).toBe("out-of-scope");
     expect(await verdict(panel, "panel", "GET", "/capabilities/npm/connection")).toBe("out-of-scope");
-    /* …and the one that SENDS it. `probe` rehydrates a VAULTED marker from storage and dials a URL the caller
-     * supplied, so a panel token could make the daemon present any stored key to an address of its choosing —
-     * the same disclosure as the connection read, with nothing in the response to show for it. */
+    // And the one that sends it: `probe` rehydrates a stored credential and dials a caller-supplied URL.
+    // The same disclosure as the connection read, but with nothing in the response to show for it.
     expect(await verdict(panel, "panel", "POST", "/capabilities/probe")).toBe("out-of-scope");
     // And the carve-out stays narrow: a connection named "probe" is not the probe route.
     expect(await verdict(panel, "panel", "GET", "/capabilities/probe/status")).toBe("ok");
@@ -131,8 +127,8 @@ test("the panel grant reaches the daemon broadly but never the capability connec
 });
 
 // The extension grant is the backend half's whole reach into the daemon: resolve the minted token to its
-// manifest-declared permissions.daemon, then the same glob check the UI half's gate runs. Pinned like the
-// agent grant above: an extension backend must never inherit the panel token's everything.
+// manifest-declared permissions.daemon, then the same glob check the UI half's gate runs.
+// Pinned like the agent grant above: an extension backend must never inherit the panel token's everything.
 test("the extension grant reaches exactly the declared daemon routes", async () => {
     const grants = grantsOf({
         panelToken: "panel",
@@ -155,9 +151,9 @@ test("the extension grant reaches exactly the declared daemon routes", async () 
     expect(await verdict(extension, "intruder", "GET", "/workspace/file")).toBe("unauthorized");
 });
 
-/* THE CONTROL GRANT NAMES ITS HOLDER. A per-boot secret admits a process; a control token was minted by a person
- * with a label, so an admission hands back the principal the turn will be attributed to, and touches the token's
- * last-use mark. Pinned because both are the audit trail's only road to "which token started this". */
+// The control grant names its holder: a per-boot secret admits a process, but a control token was minted by a person
+// with a label, so an admission hands back the principal and touches its last-use mark.
+// Pinned because both are the audit trail's only road to "which token started this".
 test("the control grant admits with a principal and touches the token; the fixed-secret grants admit nameless", async () => {
     const touched: string[] = [];
     const grants = grantsOf({
@@ -182,7 +178,7 @@ test("the control grant admits with a principal and touches the token; the fixed
         principal: { kind: "control", id: "ct-1", label: "nightly CI", scope: "read" },
     });
     expect(touched).toEqual(["ct-1"]);
-    // Out of scope is refused BEFORE the touch: a token that never got in was not used.
+    // Out of scope is refused before the touch: a token that never got in was not used.
     expect(await control.authorize("ict_ci", "POST", "/agent")).toEqual({ verdict: "out-of-scope" });
     expect(touched).toEqual(["ct-1"]);
     expect(await control.authorize("ict_stranger", "GET", "/agents")).toEqual({ verdict: "unauthorized" });

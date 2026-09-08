@@ -15,12 +15,11 @@ import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.handler.js";
 
-// The real first-party `social` extension provides every platform's data (card, login URL, skill).
+// Real first-party `social` extension: every platform's card, login URL and skill come from here.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
-/* A ctx exposing only what browserHandler touches (files + workspace.root + extensionsDir + the store), over a
- * fresh temp workspace. The store is a mutable array the tests push applied entries onto, the way the routes
- * upsert after apply: the converge derives every SITE GROUP's skill from it plus the entry mid-apply. */
+// Ctx exposing only what browserHandler touches, over a fresh temp workspace; `capabilities` is a mutable array tests
+// push onto after apply, mirroring the route's upsert.
 const tempCtx = (): { ctx: CapabilityCtx; root: string; capabilities: Capability[] } => {
     const root = mkdtempSync(join(tmpdir(), "browser-cap-"));
     const capabilities: Capability[] = [];
@@ -36,15 +35,14 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string; capabilities: Capability
     return { ctx, root, capabilities };
 };
 
-// Apply + the route's upsert, as one move: what a real add does.
+// Runs apply then the route's post-apply upsert, together: what a real add does.
 const applied = async (harness: { ctx: CapabilityCtx; capabilities: Capability[] }, entry: Capability): Promise<void> => {
     for await (const _ of browserHandler.apply(harness.ctx, entry.id, entry.config)) {
-        // consume the apply frames
     }
     harness.capabilities.push(entry);
 };
 
-// The route's remove: the handler hook first, then the store delete.
+// Runs the handler's remove hook, then the store's delete, in the route's order.
 const removed = async (harness: { ctx: CapabilityCtx; capabilities: Capability[] }, entry: Capability): Promise<void> => {
     await browserHandler.remove!(harness.ctx, entry.id, entry.config);
     harness.capabilities.splice(
@@ -61,10 +59,10 @@ const host: ExtensionHost = {
 } as unknown as ExtensionHost;
 
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
-// The site group's skill: named for the PLATFORM, shared by every account on it.
+// Site-group skill, named for the platform; shared by every account on it.
 const skillPath = (root: string): string => join(root, ".agents", "skills", "reddit", "SKILL.md");
 
-// A generic session: the `website` card, with the answers a user would type on its form.
+// Builds a generic `website` session with the answers a user would type on its form.
 const session = (id: string, homeUrl: string): Capability => ({
     id,
     kind: "browser",
@@ -73,7 +71,6 @@ const session = (id: string, homeUrl: string): Capability => ({
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
-        // consume the apply frames
     }
 };
 
@@ -87,32 +84,25 @@ test("apply writes the platform SKILL.md; status is pending until logged in / re
     expect(skill).toContain("name: reddit");
     expect(skill).toContain("https://www.reddit.com");
     expect(skill).toContain("browser_snapshot");
-    // The account is a roster line, and the catalog line names it.
     expect(skill).toContain("- `reddit`");
     expect(skill).toMatch(/^description: .*Connected accounts: reddit\./m);
-    // Not yet usable: whether or not the test env has Xvfb, there's no session, either way, pending.
+    // Pending regardless of Xvfb: there is no session yet, either way.
     expect((await browserHandler.status(harness.ctx, "reddit", reddit.config)).state).toBe("pending");
 });
 
 test("the fragment is the browser pack: Chromium, its display and the tools that make it watchable, as one unit", async () => {
-    // The pack rides whole on a core image and composes to nothing on a standard image (stamped base), so
-    // WHAT the fragment says is pinned on the pack itself and WHETHER it rides on what the base already
-    // bakes: the alternative asserts whichever of the two images the suite happens to run in.
+    // Checks the pack's own content, not which image the suite happens to run on.
     const pack = (await readPack("browser"))!;
     expect(pack.content).toContain("xvfb");
     expect(pack.content).toContain("install --with-deps chromium");
-    /* The picture and the hands, held here because they are the half of "a browser you can watch" that is easy
-     * to drop. A pack with Chromium and a display but no ffmpeg launches a browser that streams nothing, and no
-     * test of the streaming code would catch it: the failure is an absent binary in an image, not a bug in a
-     * function. browserPackInstalled refuses the whole pack without them for the same reason. */
+    // ffmpeg and xdotool make the browser watchable; missing either fails silently, not as a test.
     expect(pack.content).toContain("ffmpeg");
     expect(pack.content).toContain("xdotool");
-    // Into playwright's default cache path: a PLAYWRIGHT_BROWSERS_PATH override here would put a second
-    // Chromium beside the one chromium.executablePath() resolves.
+    // No PLAYWRIGHT_BROWSERS_PATH override: it would install a second Chromium beside executablePath()'s.
     expect(pack.content).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
-    // App-level --no-sandbox, not a container privilege: the fragment carries no intentic:runtime line.
+    // No `intentic:runtime` line: --no-sandbox here is app-level, not a container privilege.
     expect(pack.content).not.toContain("intentic:runtime");
-    // And the handler adds NOTHING of its own: the browser fragment IS the pack, whichever image composes it.
+    // Handler adds nothing of its own: the browser fragment is exactly the pack.
     expect(await browserHandler.fragment!(reddit.config)).toBe(await packFragment("browser"));
 });
 
@@ -124,10 +114,6 @@ test("removing the site's last account deletes the group skill; status returns t
     expect(await browserHandler.status(harness.ctx, "reddit", reddit.config)).toEqual({ state: "inactive" });
 });
 
-/* AN IDENTITY-BORN ACCOUNT'S ROSTER LINE NAMES THE IDENTITY: the account lives in the shared profile, and the
- * one fact the old per-account skill existed to carry (WHOSE browser) is now a line beside the account's id.
- * The SSO-first playbook rides the shared tools note, and a dangling reference is caught at add-time rather
- * than surfacing as browser tools over an empty profile. */
 test("an identity-born account's roster line names its identity, and its removal keeps the shared profile", async () => {
     const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
     const harness = tempCtx();
@@ -136,26 +122,19 @@ test("an identity-born account's roster line names its identity, and its removal
 
     await applied(harness, born);
     const skill = await readWorkspaceFile(skillPath(harness.root));
-    // The roster line says whose browser this account lives in, and the playbook leads with the SSO door.
     expect(skill).toContain("- `reddit`: born of the identity `main` (studio@gmail.com)");
     expect(skill).toContain("SSO FIRST");
 
-    // Removing the account takes its own marker and roster line; the identity's profile marker survives.
     await markConnected(harness.root, "main");
     await markConnected(harness.root, "reddit");
     await removed(harness, born);
     expect(hasSession(harness.root, "reddit")).toBe(false);
     expect(hasSession(harness.root, "main")).toBe(true);
 
-    // A card naming an identity nobody added fails on the form, not turns later.
     const dangling: Capability = { id: "x", kind: "browser", config: { platform: "x", identity: "ghost" } };
     await expect(drain(browserHandler.apply(harness.ctx, "x", dangling.config))).rejects.toThrow(/no identity "ghost"/);
 });
 
-/* EVERY BROWSER CARD CAN SAY WHERE IT OPENS: pinned, or asked for. A site card pins both pages; the generic
- * session card pins neither and declares the fields that supply them. What no card may be is silent about both,
- * because that is a card whose login window opens on nothing, and the failure would land on the user, in the
- * one place they cannot fix it. */
 test("every contributed browser card can resolve a page to open, and has a skill that leaves room for the core notes", async () => {
     const registry = await contributionRegistry(host);
     const browsers = [...registry.values()].filter((entry) => entry.spec.kind === "browser");
@@ -166,16 +145,12 @@ test("every contributed browser card can resolve a page to open, and has a skill
         }
         const asks = new Set(spec.fields.map((field) => field.key));
         if (spec.loginUrl === undefined && spec.homeUrl === undefined) {
-            // The generic card: it must ASK for the home page (the one answer it cannot do without) and offer the
-            // sign-in page as the optional second, which is exactly what browserUrls falls back through.
             expect(asks.has("homeUrl"), spec.id).toBe(true);
             expect(spec.fields.find((field) => field.key === "homeUrl")?.optional, spec.id).not.toBe(true);
             expect(asks.has("loginUrl"), spec.id).toBe(true);
         } else {
             expect(spec.loginUrl, spec.id).toMatch(/^https:\/\//);
-            // Where the OWNER's own window opens once the account is connected. Its own field rather than the login
-            // page, which signed in only redirects, and rather than the login URL's origin, which for YouTube is
-            // accounts.google.com.
+            // homeUrl is its own field: login only redirects; its origin can differ (YouTube's is accounts.google.com).
             expect(spec.homeUrl, spec.id).toMatch(/^https:\/\//);
             expect(spec.homeUrl, spec.id).not.toBe(spec.loginUrl);
         }
@@ -187,8 +162,7 @@ test("apply substitutes the core tools note and the roster into the contributed 
     const harness = tempCtx();
     await applied(harness, reddit);
     const skill = await readWorkspaceFile(skillPath(harness.root));
-    // The `${tools}` and `${accounts}` slots are core content: the pack declares WHERE they go, the daemon
-    // supplies them, so N platform packs can't drift on either.
+    // `${tools}`/`${accounts}` are core: the pack marks where they go, the daemon fills them in.
     expect(skill).not.toContain("${tools}");
     expect(skill).not.toContain("${accounts}");
     expect(skill).toContain("browser_snapshot");
@@ -196,8 +170,7 @@ test("apply substitutes the core tools note and the roster into the contributed 
     expect(skill).toContain("Accounts on this skill");
 });
 
-// npmjs is declared by `connectors`, not `social`: the first browser card outside the social pack, and the
-// proof that the handler is generic over WHICH extension contributes a platform rather than over that one.
+// npmjs is declared by `connectors`, not `social`: the one browser card outside the social pack.
 test("a browser platform contributed by another extension applies the same way", async () => {
     const harness = tempCtx();
     const npmjs: Capability = { id: "npmjs", kind: "browser", config: { platform: "npmjs" } };
@@ -205,15 +178,11 @@ test("a browser platform contributed by another extension applies the same way",
     const skill = await readWorkspaceFile(join(harness.root, ".agents", "skills", "npmjs", "SKILL.md"));
     expect(skill).toContain("name: npmjs");
     expect(skill).toContain("https://www.npmjs.com");
-    // The passkey is the reason this card exists: the skill has to tell the agent the 2FA prompt self-answers,
-    // or it will stop and ask the user for a code that no longer exists.
+    // Skill must mention the passkey: without it the agent waits on a 2FA code that no longer exists.
     expect(skill).toContain("passkey");
     expect(skill).toContain("browser_snapshot");
 });
 
-// Everything echoes EXCEPT the password: masked to hasPassword (the mcp-token precedent), because it is the
-// one part of a browser config the browser must never see; a generic session's row still has to be able to
-// say which site it points at. The password doubles as the entry's secret, driving the /secrets inventory.
 test("echoConfig masks the stored password; it is the browser entry's one secret", () => {
     expect(echoConfig(reddit, new Map())).toEqual({ platform: "reddit" });
     expect(echoConfig(session("acme", "https://admin.acme.com/dashboard"), new Map())).toEqual({
@@ -227,15 +196,10 @@ test("echoConfig masks the stored password; it is the browser entry's one secret
         config: { platform: "reddit", username: "workbot", password: "s3cret!" },
     };
     expect(echoConfig(credentialed, new Map())).toEqual({ platform: "reddit", username: "workbot", hasPassword: true });
-    // No password stored ⇒ no secret to inventory; stored ⇒ "password" is the rotatable field.
     expect(secretField(reddit, new Map())).toBeUndefined();
     expect(secretField(credentialed, new Map())).toBe("password");
 });
 
-/* THE GENERIC SESSION: a site nobody shipped a card for. Everything the site cards get from their manifest,
- * this one gets from the form, and the accounts GROUP BY THE SITE'S HOST, so the skill's name and catalog
- * line say which site it is (the agent routes on that line, and a generic skill silent about its site would
- * never be picked for it). The purpose lands on the roster line. */
 test("a generic browser session connects a site that has no card of its own, grouped by its host", async () => {
     const harness = tempCtx();
     const acme = session("acme", "https://admin.acme.com/dashboard");
@@ -244,21 +208,15 @@ test("a generic browser session connects a site that has no card of its own, gro
 
     const skill = await readWorkspaceFile(join(harness.root, ".agents", "skills", "admin-acme-com", "SKILL.md"));
     expect(skill).toContain("name: admin-acme-com");
-    // The routing line: the site, and the account on it.
     expect(skill).toMatch(/^description: .*admin\.acme\.com.*Connected accounts: acme\./m);
     expect(skill).toContain("https://admin.acme.com/dashboard");
     expect(skill).toContain("supplier tickets");
-    // Nothing left unsubstituted, and the shared browser instructions landed.
     expect(skill).not.toContain("${");
     expect(skill).toContain("browser_snapshot");
     expect(skill).toContain("- `acme`");
-    // And it is a connection like any other: pending on its own login.
     expect((await browserHandler.status(harness.ctx, "acme", acme.config)).state).toBe("pending");
 });
 
-// The sign-in page is the optional second answer: given, it is where the login window goes; omitted, the page the
-// account lives on serves as both, because most sites sign in where they live, and asking for the same URL twice
-// to prove it would read as a broken form.
 test("a session's sign-in page falls back to the page it opens on", () => {
     const card = { kind: "browser", id: "website", fields: [], skill: "s" } as unknown as CapabilityContribution;
     expect(browserUrls(card, { platform: "website", homeUrl: "https://admin.acme.com/dashboard" })).toEqual({
@@ -269,8 +227,7 @@ test("a session's sign-in page falls back to the page it opens on", () => {
         homeUrl: "https://admin.acme.com/",
         loginUrl: "https://id.acme.com/signin",
     });
-    // A site card's pinned pages still win where the form says nothing, and the form still overrides them: a
-    // preset pointed at a self-hosted instance of the same software.
+    // Manifest pins the default; config still overrides it (a preset pointed at a self-hosted instance).
     const pinned = {
         kind: "browser",
         id: "npmjs",
@@ -281,11 +238,9 @@ test("a session's sign-in page falls back to the page it opens on", () => {
     } as unknown as CapabilityContribution;
     expect(browserUrls(pinned, { platform: "npmjs" })).toEqual({ loginUrl: "https://a/login", homeUrl: "https://a/" });
     expect(browserUrls(pinned, { platform: "npmjs", homeUrl: "https://mine/" })?.homeUrl).toBe("https://mine/");
-    // Neither answered is the one case that cannot be papered over.
     expect(browserUrls(card, { platform: "website" })).toBeUndefined();
 });
 
-// …and the add is where that surfaces, while the reader is still on the form that can fix it.
 test("a session with no page to open, or a page that is not a web address, fails the add", async () => {
     const { ctx } = tempCtx();
     await expect(drain(browserHandler.apply(ctx, "acme", { platform: "website", purpose: "x" }))).rejects.toThrow(/needs a page to open/);
@@ -294,9 +249,6 @@ test("a session with no page to open, or a page that is not a web address, fails
     );
 });
 
-/* SEVERAL ACCOUNTS OF ONE SITE. Two entries, one platform, ONE skill: each account its own roster line and
- * its own login, so the second is not born connected off the first one's session, and: the one that would
- * hurt most silently: does not take the first account's session with it when disconnected. */
 test("a second account of the same site is its own connection on the shared site skill", async () => {
     const harness = tempCtx();
     const work: Capability = { id: "reddit-work", kind: "browser", config: { platform: "reddit" } };
@@ -305,15 +257,12 @@ test("a second account of the same site is its own connection on the shared site
     await applied(harness, work);
     await applied(harness, personal);
 
-    // One skill for the site, both accounts on its roster and its catalog line: the agent tells them apart
-    // by the `account` value, not by which toolset it is holding.
     const skill = await readWorkspaceFile(skillPath(harness.root));
     expect(skill).toContain("- `reddit-work`");
     expect(skill).toContain("- `reddit-personal`");
     expect(skill).toMatch(/^description: .*Connected accounts: reddit-personal, reddit-work\./m);
 
-    // Signing one in leaves the other waiting for its own login. Only observable where the browser pack is
-    // installed: without it BOTH accounts pend on the rebuild first, as the status test above allows for.
+    // Skipped when the browser pack isn't installed: both accounts then pend on the rebuild instead.
     await markConnected(harness.root, "reddit-work");
     const status = await browserHandler.status(harness.ctx, "reddit-work", work.config);
     if (!String(status.detail ?? "").includes("rebuild")) {
@@ -321,7 +270,6 @@ test("a second account of the same site is its own connection on the shared site
         expect((await browserHandler.status(harness.ctx, "reddit-personal", personal.config)).detail).toContain("log in");
     }
 
-    // And disconnecting it takes only its own session and roster line.
     await markConnected(harness.root, "reddit-personal");
     await removed(harness, work);
     const remaining = await readWorkspaceFile(skillPath(harness.root));
@@ -331,8 +279,6 @@ test("a second account of the same site is its own connection on the shared site
     expect(hasSession(harness.root, "reddit-personal")).toBe(true);
 });
 
-// The same guarantee for generic sessions, which is where a user is MOST likely to want two: one site, two
-// accounts, and only the form to tell them apart. Two sessions on one site are two roster lines on ITS skill.
 test("two generic sessions on one site stay separate accounts on one host-grouped skill", async () => {
     const harness = tempCtx();
     const support = session("acme-support", "https://admin.acme.com/tickets");
@@ -354,8 +300,7 @@ test("two generic sessions on one site stay separate accounts on one host-groupe
     expect(remaining).toContain("- `acme-billing`");
 });
 
-// The sweep is scoped by the MARKER, not by memory: a skill somebody dropped into the loaded folder by hand
-// carries no marker and is never the converge's to delete, however the accounts churn around it.
+// Scoped by marker, not memory: a hand-written skill with no marker is never converge's to delete.
 test("converging the account skills never touches an unmarked skill", async () => {
     const harness = tempCtx();
     const dropped = join(harness.root, ".agents", "skills", "my-notes", "SKILL.md");
@@ -368,8 +313,6 @@ test("converging the account skills never touches an unmarked skill", async () =
     expect(await readWorkspaceFile(skillPath(harness.root))).toBeUndefined();
 });
 
-// Two generic sessions on DIFFERENT sites are two skills: one site's cheatsheet must not claim another's
-// accounts, which is the whole reason the generic card groups by host rather than by its own slug.
 test("generic sessions on different sites get different skills", async () => {
     const harness = tempCtx();
     await applied(harness, session("acme", "https://admin.acme.com/dashboard"));

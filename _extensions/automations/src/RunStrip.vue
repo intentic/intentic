@@ -1,23 +1,7 @@
-<!-- HOW THIS AUTOMATION HAS BEEN GOING, as one glyph-width mark per run.
-
-     The list's whole claim is that it can be read as a COLUMN OF STATES, and until this existed the column was
-     one word wide: "ran 7h ago". That word says the last outcome and nothing about the shape behind it, so the
-     two questions a standing job actually raises — is it flapping, and has it ever worked — were both one
-     disclosure away, on every row, forever. A row that failed once after forty clean nights and a row that has
-     failed every night since it was written rendered the identical red word.
-
-     OLDEST LEFT, NEWEST RIGHT, which is the direction time is read in and the opposite of the order the ledger
-     arrives in (newest first, see automations-store). Reversed here rather than at the caller because every
-     caller would reverse it the same way and one of them would eventually not.
-
-     A SKIP IS NOT A DENT. A guard that checked and found nothing is the DESIGNED outcome of a chore — it cost
-     nothing and it is why the chore is cheap to leave on — so it draws as the quietest mark on the strip rather
-     than as a gap in a run of green. Same argument the row's health dot makes about `idle`; an `interrupted`
-     run is the sandbox going away under a wake, which is not the automation's failure either.
-
-     NOT A SPARKLINE, and not a per-pip control. There is no quantity here to plot, only a sequence of verdicts,
-     and a 3px-wide button is a target nobody can hit: the whole strip is one tooltip and the row it sits in
-     opens onto the same runs as a list with real hit areas and links into each transcript. -->
+<!--
+    One glyph-width mark per automation run, oldest left to newest right — reversed from the ledger's newest-first order. A skipped run (a guard that
+    found nothing to do) draws as its own quiet mark, not a gap or a failure, the same distinction the row's health dot makes for `idle`.
+-->
 <script setup lang="ts">
 import type { AutomationRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";

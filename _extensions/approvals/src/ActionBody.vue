@@ -1,16 +1,8 @@
-<!-- AN ACTION, set to be judged. What the agent says it will do (`summary`, the headline), the specifics a yes
-     is being asked for (`details`, Markdown), and, folded, the brief it left for the turn that will do it
-     (`instructions`).
-
-     THE SUMMARY IS THE HEADLINE AND THE DETAILS ARE THE POST, deliberately the same column, measure and type as
-     <PostBody>, because the reviewer's job is the same: read what will happen in the owner's name and decide.
-     A booking and a tweet are judged by the same eye.
-
-     THE INSTRUCTIONS ARE FOLDED, NOT HIDDEN. They are the agent talking to its later self ("open booking.com as
-     travel, pick the double room…"), which the owner rarely needs and occasionally must see: an instruction
-     that quietly reaches past what the summary said is exactly the thing this page exists to catch, so they
-     are one click away rather than a file away. Drawn as code because that is what they are, a brief to be
-     executed literally, and because the monospace box keeps them from reading as part of the proposal. -->
+<!--
+    Body of an action awaiting approval: `summary` (headline), `details` (Markdown), and the executing turn's own `instructions`, folded. Summary and
+    details share <PostBody>'s column and type, since reviewing an action is the same judgment as reviewing a post. Instructions render as code and
+    stay one click away, never hidden.
+-->
 <script setup lang="ts">
 import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
 import { ui, Code, Markdown } from "@intentic/extension-ui";

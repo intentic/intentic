@@ -8,25 +8,9 @@ import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
 
-/* NEW automation, IN the list rather than over it.
- *
- * This was a 44rem modal, and the modal had been losing for a while: its width had already gone 32rem → 44rem
- * to stop the Front Desk branch wrapping into a column you scrolled twice, and its template gallery had already
- * been demoted to a fold-away disclosure because one card per connected capability pushed Name below the fold.
- * Both are symptoms of the same thing: an automation is the biggest form in the app, and a dialog is the
- * smallest surface in it.
- *
- * Editing had already drawn that conclusion: it happens in the row, at page width (see AutomationRow). So one
- * form was rendering at two measures, the folds tuned for the narrow one, and every field added had to be
- * checked twice. Creating now uses the same panel, at the same width, and there is one layout again.
- *
- * MOUNTED ONLY WHILE OPEN, so every field, the pick and the error start empty: the dialog stayed mounted
- * between openings and had to hand-reset all three on @hide.
- *
- * The one thing it keeps from the dialog is the HANDOFF: a webhook and a Front Desk are not finished when they
- * are saved, because a URL or a snippet still has to be pasted into some other system. That belongs where the
- * act happened, so the panel stays in place and swaps its body for what to paste: the list is above and below
- * it the whole time, never covered. */
+// Composes inline in the list, at page width, matching how editing already works (AutomationRow) rather than in a
+// modal. Mounted only while open, so fields, pick and error always start empty. Keeps the dialog's handoff: a webhook
+// or Front Desk isn't finished at save, so the panel swaps to what to paste instead of closing.
 
 const { prefill, listenerSources, templates } = defineProps<{
     prefill?: AutomationTemplate;
@@ -44,25 +28,12 @@ const { form, valid, touchAll, build, loadTemplate } = state;
 
 const capabilities = computed(() => host().workspace.capabilities());
 const picked = ref<AutomationTemplate | undefined>(prefill);
-/* The template the form is actually holding: the pick, for as long as the trigger is still the one it prefilled.
- * Choosing another trigger rewrites the prompt for whatever fires now (useAutomationForm), so a chip still naming
- * the template would be naming text that is gone. Derived rather than cleared by hand because the chip is a claim
- * ABOUT the form: read from the form, it cannot disagree with it. */
+// The pick, held only while its trigger still matches the form's current one.
 const template = computed(() =>
     picked.value !== undefined && triggerKey(picked.value.trigger) === state.triggerKey.value ? picked.value : undefined,
 );
-/* SHUT until asked for, which the dialog had right for a reason that outlived it: ten cards is a wall, and a
- * panel that opens on one has buried the form it exists to show. Collapsed it is one line naming what is behind
- * it, which is all an offer needs to be. What CHANGED with the width is the thing it opens: a grid of cards with
- * room for each template's description, where the dialog could only afford a scroll-capped list of truncated
- * single lines.
- *
- * IT OPENS OVER THE FORM, NOT ABOVE IT. Inline, the collapsed bar was a full-width slab sitting between the
- * panel's title and the Name field: the loudest thing in the panel, in the position that belongs to the first
- * question, and opening it pushed Name 470px down the page, which is the same displacement that got the
- * gallery folded away in the dialog. Both go away by giving it the geometry it always wanted: a control in the
- * panel's own header, and a popover that covers the form for as long as it is being read. Nothing under it
- * moves, so the answer to "what was I filling in?" is still exactly where it was. */
+// Collapsed until opened, so ten template cards don't bury the form; a popover over the form, not inline, so opening it
+// doesn't push the fields down the page.
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
 const recipeFilterInput = ref<HTMLInputElement>();
@@ -75,14 +46,11 @@ const fields = ref<InstanceType<typeof AutomationFields>>();
 const CARD_SELECTED = `bg-primary-600/15 text-link ring-1 ring-inset ring-primary-500/40`;
 const CARD_IDLE = `bg-overlay text-muted hover:text-content`;
 
-// "Start from" suggestions: templates needing nothing connected always show; the rest once one of the
-// capabilities they name is. The list itself comes from the daemon's catalogue, so a pack installed a minute
-// ago is offered here without this file knowing it exists.
+// Templates needing nothing show always; others once a capability they name is connected.
 const recipes = computed(() => availableTemplates(templates, capabilities.value));
 
-// The open gallery, filtered and split in two: chores watch this workspace, everything else is fired from
-// outside it. Two short labelled runs stay scannable where one flat pile of near-identical cards would not:
-// "Push to repo" is two different templates once GitHub and GitLab are both connected.
+// Filtered gallery split in two, chores (watch this workspace) vs the rest (fired from outside it), so near-identical
+// cards like two "Push to repo" templates stay scannable.
 const recipeGroups = computed(() => {
     const needle = recipeFilter.value.trim().toLowerCase();
     const matches = recipes.value.filter((recipe) =>
@@ -137,8 +105,7 @@ const submit = async (): Promise<void> => {
     try {
         const id = form.id.trim();
         await save.mutateAsync(build());
-        // The two triggers that are not finished by saving hold the panel on their handoff; everything else is
-        // done, so the panel closes and the new row opens to show what was made.
+        // Event and Front Desk aren't finished by saving; everything else closes the panel right away.
         if (form.kind === `event` || state.isFrontDesk.value) {
             savedId.value = id;
             return;
@@ -149,10 +116,8 @@ const submit = async (): Promise<void> => {
     }
 };
 
-/* Open the new row, then go. Deferred to HERE rather than fired the moment the save lands, because the handoff
- * and the row it describes would otherwise be on screen together showing the same webhook URL twice: a thing
- * that could not happen while this was a modal covering the list, and reads as two answers to one question.
- * Whichever of the two the user is looking at, it is the only one. */
+// Deferred until Done, not fired at save, or the handoff and the new row would both show the same webhook URL at once:
+// two answers to one question.
 const finish = (id: string): void => {
     emit(`created`, id);
     emit(`close`);
@@ -163,21 +128,18 @@ const finish = (id: string): void => {
     <section class="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">
         <div class="flex items-center gap-2">
             <Icon name="plus" class="shrink-0 text-2xs text-subtle" />
-            <!-- The panel's own name, at the size of the rail labels inside it rather than a notch under them:
-                 it is the heading of everything below, and at `text-xs` it was the quietest thing in its own
-                 header. -->
+            <!-- Sized like the rail labels inside the panel, not smaller: it's the heading for everything below it. -->
             <h2 class="flex-1 text-sm font-semibold text-content">New automation</h2>
 
-            <!-- The offer, at the size of an offer: one control in the panel's chrome, beside the close button,
-                 where a starting point belongs. Once something is picked it becomes the pick's name, so the
-                 header states what the fields below were prefilled from without spending a row on saying it.
-                 THE KIT'S CHIP, because that is what this is: one of a set, lit when it is the one. -->
+            <!--
+                One control in the header, beside close; once picked it shows the template's name, stating what prefilled the fields without a row of
+                its own. The kit's chip: one of a set, lit when chosen.
+            -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
-                <!-- Clearing the template lives INSIDE the chip, on its tint, because outside it was a bare ✕
-                     eight pixels from the panel's own bare ✕: two identical glyphs side by side, one of which
-                     throws away everything typed so far. On the tint it reads as part of the thing it clears.
-                     The wrapper wears the chip and the two buttons inside it are bare, so the pair is one
-                     object: `ui-chip`'s own padding is dropped for the buttons to carry instead. -->
+                <!--
+                    The clear button sits inside the chip's own tint, not beside it as a second bare ✕ next to the panel's, which read as two
+                    identical, easily confused glyphs.
+                -->
                 <div class="ui-chip gap-0 px-0" :class="template ? `ui-chip-on` : ``">
                     <button
                         type="button"
@@ -203,13 +165,12 @@ const finish = (id: string): void => {
                     </button>
                 </div>
 
-                <!-- Clicking anywhere else puts it away. A popover with no way out but its own trigger is the
-                     one thing worse than the inline bar it replaced. -->
+                <!-- Click-outside closes it; a popover with no way out but its own trigger would be worse than the bar it replaced. -->
                 <div v-if="recipesOpen" class="fixed inset-0 z-10" @click="recipesOpen = false"></div>
-                <!-- A WELL, not another card: the panel it floats over is `bg-card`, so a `bg-card` popover read
-                     as the panel having grown rather than as a layer above it, and the cards inside it
-                     (`bg-overlay`) had nothing to sit against. Canvas is the one surface darker than both, which
-                     is what the inline gallery used for the same reason. -->
+                <!--
+                    `bg-canvas`, not `bg-card`: over a `bg-card` panel, a same-toned popover reads as the panel growing, not a layer above it, and
+                    its own `bg-overlay` cards need something darker to sit against.
+                -->
                 <div
                     v-if="recipesOpen"
                     class="absolute right-0 top-full z-20 mt-1.5 flex w-pop-lg flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
@@ -242,17 +203,16 @@ const finish = (id: string): void => {
                                         alt=""
                                     />
                                     <Icon v-else :name="glyph(recipe.icon) ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
-                                    <!-- STACKED, not a row. The note beside the title is what the dialog's one-line
-                                         rows did, and at a third of this popover's width it took so much of the
-                                         card that the title truncated to "Patch security ad…" and the description
-                                         wrapped a word per line. Title, then what it does, then when it runs:
-                                         each on its own line, each with the whole card to use. -->
+                                    <!--
+                                        Stacked, not a row: at this width a note beside the title crowded it into truncating. Title, description,
+                                        then note, each on its own line with the whole card's width.
+                                    -->
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                        <!-- Chores carry a description and now have room to show it: in the
-                                             dialog's one-line rows it lived in a tooltip. An integration has none
-                                             by design (see AutomationTemplate.description): title and note say
-                                             enough. -->
+                                        <!--
+                                            Chores show their description directly now, instead of a tooltip; an integration has none by design
+                                            (AutomationTemplate.description) since title and note already say enough.
+                                        -->
                                         <span v-if="recipe.description" class="mt-0.5 line-clamp-2 block text-2xs text-subtle">
                                             {{ recipe.description }}
                                         </span>
@@ -266,8 +226,7 @@ const finish = (id: string): void => {
                 </div>
             </div>
 
-            <!-- The kit's icon button rather than a bare glyph: the same 24px of ink, but with a thumb-sized hit
-                 area on a coarse pointer and the hover plate every other dismiss in the app has. -->
+            <!-- The kit's icon button, not a bare glyph: same ink, but a thumb-sized hit area and the hover plate every other dismiss has. -->
             <button type="button" :class="ui.iconButton()" aria-label="Close" @click="emit(`close`)">
                 <Icon name="times" class="text-xs" />
             </button>
@@ -286,8 +245,7 @@ const finish = (id: string): void => {
             </div>
         </form>
 
-        <!-- The handoff: the one thing creating an automation does NOT finish. Same shape for both, a copyable
-             line and what to do with it. -->
+        <!-- The handoff: what creating an automation doesn't finish by itself. Same shape either way, a copyable line and what to do with it. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
             <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created: drop this into your site:</p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">

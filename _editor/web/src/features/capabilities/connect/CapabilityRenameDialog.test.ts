@@ -1,10 +1,6 @@
 // @vitest-environment jsdom
-//
-// The name is the agent's handle for a connection, and this dialog is the only place it can be changed. What is
-// pinned is the part a user can get wrong: the field starts from the name they are looking at, the button stays
-// down until the name is actually different, and what leaves is the name the daemon will take: typed spaces and
-// punctuation are repaired into it (the add form's own rule), shown under the field first, so nobody is refused
-// for spelling a name the way people spell things.
+// Renaming is this dialog's only path: the field starts from the current name, the button stays disabled until it
+// actually differs, and typed spaces/punctuation are repaired the same way the add form does, shown before submit.
 import PrimeVue from "primevue/config";
 import { expect, it } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
@@ -65,8 +61,8 @@ it(`starts from the current name, repairs what is typed, and refuses only an unc
     await nextTick();
     expect(renameButton().disabled).toBe(true);
 
-    // Spaces and punctuation are REPAIRED rather than refused, and the line under the field says what will
-    // actually be used before the button is pressed.
+    // Spaces/punctuation are repaired, not refused; the line under the field shows what will actually be used before
+    // submit.
     await type(`Reddit Personal`);
     expect(renameButton().disabled).toBe(false);
     expect(document.body.textContent).toContain(`Reddit-Personal`);

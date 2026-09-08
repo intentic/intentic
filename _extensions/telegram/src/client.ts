@@ -1,23 +1,15 @@
 import { createBackoff, sleep } from "@intentic/base/async";
-/* The gateway's Telegram connections, one long-polling loop plus one Bot API caller per configured bot, alive
- * only while the daemon says an enabled telegram listener automation exists. A module singleton map, like
- * ext-slack's and ext-discord's: the reconcile loop and the listener both reach it directly.
- *
- * There is no SDK here on purpose. The Bot API is HTTPS + JSON with one envelope shape, and the whole
- * connection is `getUpdates` in a loop, an OUTBOUND call, so Telegram needs no public URL to reach the agent
- * and there is no request signature to verify. A dependency would buy us a thin wrapper over `fetch` and cost a
- * deploy tree; what this file adds instead is the pool, the identity probe, the poll loop's error taxonomy, and
- * turning a rejection into a sentence the owner can act on. */
+// One long-poll loop + Bot API caller per configured bot, alive while the daemon reports an enabled listener
+// automation; a module singleton for the reconcile loop and the listener. No SDK: the Bot API is HTTPS+JSON, an
+// outbound `getUpdates` loop needing no public URL; this file adds the pool, identity probe, and error taxonomy.
 
 const API_BASE = "https://api.telegram.org";
-// The long-poll hold. Telegram caps it at ~50s; a held request that finds nothing simply returns empty, so this
-// is idle cost, not latency.
+// Long-poll hold, capped by Telegram at ~50s; an empty result after that is idle cost, not latency.
 const POLL_TIMEOUT_S = 50;
 // Backoff after a transient poll failure (network blip, 5xx, a 429 with no retry_after), doubling to the cap.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
-// Only the update kinds this gateway turns into agent turns, asking for fewer keeps edits, reactions, join
-// notices and inline queries out of the loop entirely rather than filtering them after the fact.
+// Only kinds this gateway turns into turns; fewer keeps the rest out of the loop, not filtered after.
 const ALLOWED_UPDATES = ["message", "channel_post"];
 
 // The bits of a Telegram user this gateway reads. `is_bot` is what keeps a room of bots from waking each other.
@@ -66,19 +58,15 @@ export interface TelegramConnection {
     readonly botToken: string;
     // The Bot API caller: `call("sendMessage", { chat_id, text })`. Rejects with TelegramApiError on `ok: false`.
     readonly call: <T>(method: string, body?: object) => Promise<T>;
-    // The bot's own numeric id and @username. Needed on every inbound message: they are how the listener
-    // recognizes a mention (`@thebot`, or a reply to one of its own posts) and how it drops its own messages
-    // instead of waking on them.
+    // Bot's own id and @username: how the listener recognizes a mention or self-reply and ignores its own messages.
     readonly selfId: number;
     readonly username: string;
-    // Start the long-poll loop. `onFatal` fires once, for the failures a retry can never fix, the connection
-    // has already removed itself from the pool by then, so the caller's job is to report, not to clean up.
+    // Starts the poll loop; `onFatal` fires once, after the connection has already left the pool.
     readonly listen: (onUpdate: (update: TelegramUpdate) => void, onFatal: (error: Error) => void) => void;
 }
 
 const connections = new Map<string, TelegramConnection>();
-// Per-token teardown, kept beside the pool rather than on the connection: closing is the reconcile loop's move,
-// and it addresses a bot by the token it reconciled, not by an object it may no longer hold.
+// Per-token teardown beside the pool, since closing addresses a bot by its token, not a connection object.
 const closers = new Map<string, () => void>();
 
 export const telegramConnection = (botToken: string): TelegramConnection | undefined => connections.get(botToken);
@@ -90,12 +78,11 @@ export const closeTelegramConnection = (botToken: string): void => {
     closers.delete(botToken);
 };
 
-// Fatal: retrying with the same token and BotFather state can never succeed, so the caller pauses this token
-// instead of hammering Telegram. The message names what the owner has to fix.
+// Fatal: retrying the same token can never succeed; the caller should pause it. Message names what to fix.
 export class FatalTelegramError extends Error {}
 
-// Telegram answers `{ ok: false, error_code, description }` with a matching HTTP status. The description is the
-// only human-readable part, so it rides the error rather than being flattened into a status number.
+// Telegram's `{ ok: false, error_code, description }`; description is the only human-readable part, so it rides on the
+// error.
 export class TelegramApiError extends Error {
     constructor(
         readonly code: number,
@@ -133,10 +120,8 @@ const callWith = async <T>(botToken: string, method: string, body: object | unde
     return envelope.result as T;
 };
 
-/* Which API rejections are worth pausing the token for. 401/403/404 are a dead or wrong token. 409 is the one
- * that is a CONFIGURATION clash rather than a credential: Telegram allows exactly one reader per bot, so either
- * a webhook is registered (someone wired this bot to a server) or a second poller is running. We refuse to
- * `deleteWebhook` our way out of that, it would silently break whatever else the owner pointed this bot at. */
+// 401/403/404 mean a dead or wrong token; 409 is a configuration clash, Telegram allows only one reader per bot. Never
+// auto-clears a webhook: it could break whatever else the owner pointed the bot at.
 const fatalMessage = (error: TelegramApiError): string | undefined => {
     if (error.code === 401 || error.code === 404) {
         return `Telegram rejected the bot token (${error.description}): paste a fresh token from @BotFather on the Telegram capability`;
@@ -151,8 +136,7 @@ const fatalMessage = (error: TelegramApiError): string | undefined => {
 };
 
 export const openTelegramConnection = async (botToken: string): Promise<TelegramConnection> => {
-    // The two calls that make a connection. Both reject on failure, a transient one leaves the gateway to
-    // retry on its next reconcile, and a fatal one names what the owner has to fix.
+    // The two calls that make a connection: a transient failure retries next reconcile, a fatal one names the fix.
     const connectCall = async <T>(method: string, body?: object): Promise<T> =>
         callWith<T>(botToken, method, body, undefined).catch((error: unknown) => {
             const message = error instanceof TelegramApiError ? fatalMessage(error) : undefined;
@@ -164,18 +148,14 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
         throw new FatalTelegramError("Telegram accepted the token but the bot has no username: give it one with @BotFather");
     }
 
-    /* Start from NOW, not from the backlog. Telegram queues undelivered updates for 24 hours, so a gateway that
-     * simply polled from zero after a restart would wake an agent for every message sent while the sandbox was
-     * asleep, a day of chatter answered at once, hours late. Reading the queue's tail (`offset: -1`) tells us
-     * where the end is; the next poll confirms everything up to it, which discards the rest. Discord and Slack
-     * behave this way because their sockets have no backlog at all; here it has to be chosen, which is why a
-     * failure here fails the whole connect rather than falling through to a poll that would replay the day. */
+    // Starts from now, not the backlog: Telegram queues updates 24h, and replaying them after a restart would wake the
+    // agent on stale chatter. The tail read (`offset: -1`) marks where to resume; a failure here fails the whole
+    // connect.
     const tail = await connectCall<TelegramUpdate[]>("getUpdates", { offset: -1, timeout: 0 });
     const last = tail.at(-1);
     let offset = last === undefined ? undefined : last.update_id + 1;
 
-    // Aborts the in-flight long poll on close. Without it a 50s held request outlives the connection it belongs
-    // to, and the reconnect that follows a token edit collides with it, which Telegram answers as a 409.
+    // Aborts the in-flight poll on close, so it can't outlive its connection and collide with the next (409).
     const aborter = new AbortController();
     let closed = false;
 
@@ -188,8 +168,8 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
             const ladder = createBackoff({ floorMs: RETRY_MIN_MS, capMs: RETRY_MAX_MS });
             const loop = async (): Promise<void> => {
                 for (;;) {
-                    // `closed` flips from the closer registered below, which is another task's turn to run,
-                    // hence the re-read each pass rather than a loop condition.
+                    // `closed` flips from the closer below on another task's turn, hence a re-read each pass, not a
+                    // loop condition.
                     if (closed) {
                         return;
                     }
@@ -202,8 +182,8 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
                         );
                         ladder.reset();
                         for (const update of updates) {
-                            // Advance BEFORE handling: the offset is an acknowledgement, and an update that
-                            // makes the listener throw must not be redelivered forever.
+                            // Advances before handling: the offset acknowledges it, so a throwing listener isn't
+                            // redelivered forever.
                             offset = update.update_id + 1;
                             onUpdate(update);
                         }
@@ -213,8 +193,8 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
                         }
                         const fatal = error instanceof TelegramApiError ? fatalMessage(error) : undefined;
                         if (fatal !== undefined) {
-                            // Leave the pool before reporting: the reconcile loop reads the pool to decide what
-                            // is really connected, and a dead entry there reads as healthy.
+                            // Leaves the pool before reporting, or the reconcile loop would still read this dead entry
+                            // as healthy.
                             closeTelegramConnection(botToken);
                             onFatal(new FatalTelegramError(fatal));
                             return;

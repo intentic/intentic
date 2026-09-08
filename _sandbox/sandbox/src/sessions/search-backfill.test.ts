@@ -23,7 +23,6 @@ test("indexes what is behind, and skips what is already current", async () => {
     expect(first).toMatchObject({ indexed: 2, skipped: 0, failed: 0 });
     expect(index.search("login", "conversation", false).has("c1")).toBe(true);
 
-    // Same versions ⇒ nothing is read again. This is what makes the standing patrol free.
     const second = await backfillSearchIndex(
         index,
         {
@@ -39,8 +38,6 @@ test("indexes what is behind, and skips what is already current", async () => {
     expect(second).toMatchObject({ indexed: 0, skipped: 2 });
 });
 
-// A record that grew (a turn settled while this daemon was not running) moves its version, and that is the
-// only signal the backfill gets that it has to look again.
 test("a moved version re-reads the source and replaces its lines", async () => {
     const index = openSearchIndex(IN_MEMORY);
     await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "10", "first words")] }, logger);
@@ -50,8 +47,7 @@ test("a moved version re-reads the source and replaces its lines", async () => {
     expect(index.search("first words", "conversation", false).has("c1")).toBe(false);
 });
 
-/* A source with nothing stored behind it is SEEN, not skipped-forever-unseen: it pins as a version of its own
- * so an empty conversation is not re-read on every pass. */
+// Pins an empty source as version "none" so it counts as seen and is not re-read every pass.
 test("a source with nothing stored is recorded as seen", async () => {
     const index = openSearchIndex(IN_MEMORY);
     await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", undefined, "")] }, logger);
@@ -61,8 +57,6 @@ test("a source with nothing stored is recorded as seen", async () => {
     expect(again).toMatchObject({ indexed: 0, skipped: 1 });
 });
 
-/* ONE BAD SOURCE COSTS ITSELF AND NOT THE PASS. A transcript that cannot be read leaves its own words out of
- * the filter, which is the honest outcome; taking the rest of the workspace down with it is not. */
 test("a source that throws is skipped and the pass continues", async () => {
     const index = openSearchIndex(IN_MEMORY);
     const outcome = await backfillSearchIndex(
@@ -82,13 +76,11 @@ test("a source that throws is skipped and the pass continues", async () => {
 
     expect(outcome).toMatchObject({ indexed: 1, failed: 1 });
     expect(index.search("still indexed", "conversation", false).has("good")).toBe(true);
-    // Un-versioned, so the next pass retries it rather than treating the failure as the answer.
     expect(index.versions("conversation").has("bad")).toBe(false);
 });
 
-/* PRUNING IS THE SESSION HALF'S RULE ONLY. The history list is a window, so a session outside it can never be
- * answered with and its rows are dead weight. The roster is not a window, and a conversation missing from one
- * pass (a registry reload mid-sweep) must not lose its index. */
+// Sessions prune because the history list is a window (an out-of-window session's rows are dead weight); conversations
+// never do, since a missing one might just be a mid-sweep reload gap, not a deletion.
 test("pruning drops unlisted sources for sessions and never for conversations", async () => {
     const index = openSearchIndex(IN_MEMORY);
     await backfillSearchIndex(
@@ -112,8 +104,7 @@ test("pruning drops unlisted sources for sessions and never for conversations", 
     expect(index.search("also kept", "conversation", false).has("c2")).toBe(true);
 });
 
-// The pass is detached from a boot, so it has to stop when the daemon is going down rather than hold shutdown
-// open reading half a gigabyte of transcripts nobody is waiting for.
+// Detached from any single boot, so it must honor abort rather than hold shutdown open mid-sweep.
 test("an aborted pass stops where it is", async () => {
     const index = openSearchIndex(IN_MEMORY);
     const controller = new AbortController();

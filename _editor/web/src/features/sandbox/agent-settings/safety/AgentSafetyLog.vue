@@ -20,33 +20,14 @@ import { computed, ref } from "vue";
 import { useSafetyLog } from "../../environment/useSafetyPolicy";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 
-/* WHAT THE POLICY ABOVE ACTUALLY DID, and the half of this page that makes the other half writable.
- *
- * The page this replaced was six switches and no evidence. You could see that "delete files recursively" was
- * set to ask, and you could not see that it had asked you eleven times that week, nine of them about a search
- * whose pattern happened to look like a deletion. That is precisely the information needed to write a better
- * rule, and it existed nowhere.
- *
- * Prose makes that worse before it makes it better — a policy can say anything, and an owner who cannot see
- * what their words did has no way to discover that "be strict about deletes" is being read more strictly than
- * they meant. So every verdict is here, INCLUDING the allowed ones, which are most of them and are the entries
- * that matter: a card you answered is something you already know about, and a command waved through on your
- * policy's say-so is not. "Why wasn't I asked about that" is the question this list exists to answer.
- *
- * COLLAPSED IS THE CLAIM; EXPANDED IS THE EVIDENCE.
- * What used to be fifty raw paragraphs and multiline pre blocks stacked in a single unfilterable column is now
- * structured as disclosure rows:
- *   · Collapsed: an at-a-glance scannable timeline of commands, their gate verdict, and relative timing.
- *   · Expanded: the safety judge's full assessment, the syntax-highlighted command with copy affordance, and
- *     triage metadata.
- *   · Instrument: full-text search across commands and reasoning, paired with outcome filters and live tally badges.
- */
+// Every judged command, including allowed ones: what the policy actually did, not just what it says. Collapsed rows are
+// a scannable timeline; expanded shows the judge's full assessment, the command, and triage metadata.
 
 type OutcomeFilter = "all" | "ran" | "asked" | "refused";
 
 const { entries, isLoading, error } = useSafetyLog();
 const { settings } = useSandboxSettings();
-// Only read for the empty state, which is the one line this list can get outright wrong when nothing is judging.
+// Only used to pick the correct empty-state message: judge off differs from an empty judged history.
 const judgeOff = computed(() => settings.value?.commandJudge === `off`);
 
 interface DecisionStatus {
@@ -64,10 +45,8 @@ const statusOf = (entry: SafetyLogEntry): DecisionStatus => {
     if (entry.answer === `declined`) {
         return { label: `You declined it`, variant: `danger`, dot: true, icon: `times`, iconTone: `text-danger` };
     }
-    /* THE ROW THE WATCH STATE EXISTS TO PRODUCE, and the whole reason the log carries the judge's decision
-     * separately from what the gate did. A verdict of `ask` or `refuse` beside an outcome of `allowed` means the
-     * judge would have stopped this and was not allowed to, so the row has to say both halves — "Ran" alone
-     * would hide exactly the disagreement somebody switched to Watch to go looking for. */
+    // Outcome allowed with decision not allow means watch mode: the judge would have stopped it and couldn't, so the
+    // label must say both halves, not just "Ran".
     if (entry.outcome === `allowed` && entry.decision !== `allow`) {
         return {
             label: entry.decision === `refuse` ? `Ran · would refuse` : `Ran · would ask`,
@@ -186,7 +165,6 @@ const groupCount = computed(() => {
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- The filter and search instrument above recent decisions, rendered only when there are entries to search -->
         <FilterBar
             v-if="entries.length > 0"
             v-model="query"
@@ -206,10 +184,7 @@ const groupCount = computed(() => {
                 <Notice tone="danger">{{ error }}</Notice>
             </RowNote>
 
-            <!-- An empty list is a real and common state (nothing the assistant ran matched anything worth judging),
-                 and it needs saying, or the group reads as broken. With the judge off it is not that state at all:
-                 nothing is being judged, so nothing will ever appear here, and saying "nothing has needed judging"
-                 would be the page quietly agreeing that its own switch had no effect. -->
+            <!-- Off and "nothing judged yet" are different empty states; the message must not blur them. -->
             <RowNote v-else-if="entries.length === 0" variant="empty">
                 <template v-if="judgeOff">The safety judge is off, so nothing is being judged and nothing is recorded here.</template>
                 <template v-else>

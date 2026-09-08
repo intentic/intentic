@@ -1,36 +1,32 @@
-/* The last line of defence against poisoned local state: a crash in the app's first moments is, in practice,
- * almost always something this browser REMEMBERED, a persisted blob whose shape an update outgrew, written by
- * a build that no longer exists. Every known cause has a targeted guard (the query buster and mirror drop in
- * buildEpoch, the hello identities in systemEventRouting); this module is for the causes nobody has met yet,
- * whose user-visible alternative is a workspace that stays broken until its owner is told to find "clear site
- * data" in the browser's application tab.
- *
- * Mechanism: a script or render error inside the startup window wipes everything this origin stored and
- * reloads. ONCE, marked in sessionStorage, so a crash that survives a clean slate (a real bug, no storage
- * involved) surfaces on the second pass instead of looping. The wipe itself is split across the reload:
- * localStorage/sessionStorage clear synchronously here, but a database delete issued by a page with live
- * connections sits blocked until those connections die WITH the page, so this page only marks the intent, and
- * the next boot (purgeIfMarked, awaited in main.ts before anything opens a mirror) performs the deletes while
- * it is still the only party at the table.
- *
- * Unhandled REJECTIONS are deliberately not a trigger: the first seconds of a session legitimately reject
- * promises, a daemon asleep behind its tunnel, a lost loopback probe, and none of that is storage's fault. */
+// Last line of defence against poisoned local state: a crash in the app's first moments is almost always a
+// persisted blob whose shape an update outgrew. Known causes get a targeted guard elsewhere (buildEpoch's cache
+// buster, systemEventRouting's hello identities); this catches the rest, whose alternative is a workspace stuck
+// broken until someone finds "clear site data".
+//
+// A script or render error inside the startup window wipes this origin's storage and reloads once, marked in
+// sessionStorage so a crash that survives the clean slate (a real bug) surfaces instead of looping. The wipe is
+// split across the reload: storage clears synchronously here, but a database delete blocks on live connections, so
+// this page only marks the intent and the next boot (purgeIfMarked, awaited in main.ts before any mirror opens)
+// performs the deletes while it's the only party at the table.
+//
+// Unhandled rejections are deliberately not a trigger: the first seconds of a session legitimately reject promises
+// (a sleeping daemon, a lost loopback probe), none of it storage's fault.
 
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
 
-// How long after boot an error still reads as "the app failed to start" rather than "the app hit a bug".
-// Generous on purpose: hydration paints from mirrors well within this, and a false positive costs one wipe of
-// caches that refetch plus one reload, cheap next to a workspace stuck broken.
+// How long after boot an error still counts as a failed start rather than an ordinary bug; generous, since a false
+// positive only costs one wipe and reload.
 const STARTUP_WINDOW_MS = 15_000;
 
-// sessionStorage: survives the recovery reload, dies with the tab, the scope a "we already tried" claim has.
+// sessionStorage: survives the recovery reload but dies with the tab, matching the scope of a "we already tried"
+// claim.
 const HEALED_MARKER = `intentic.selfHealed`;
 // localStorage: the one key that must outlive the reload that acts on it (everything else was just cleared).
 const WIPE_KEY = `intentic.wipeOnBoot`;
 
-// What the next boot deletes when indexedDB.databases() is unavailable: idb-keyval's default store (the
-// vue-query mirror) and the transcript mirror.
+// Fallback list when `indexedDB.databases()` is unavailable: the vue-query mirror's default store and the
+// transcript mirror.
 const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`];
 
 const startedAt = performance.now();
@@ -47,14 +43,9 @@ const marked = (): boolean => {
 const heal = (error: unknown): void => {
     healing = true;
     console.error(`[self-heal] startup crashed, wiping this origin's stored state and reloading once:`, error);
-    /* SAY IT BEFORE DESTROYING IT. This recovery is correct and it was also the app's most effective piece of
-     * evidence destruction: the bug class likeliest to need investigating is the one that fixes itself here, and
-     * every trace of it went into a console the reload then cleared. The user's account of it afterwards is "it
-     * flashed and reloaded", which is not something anybody can act on.
-     *
-     * Reported and flushed synchronously, ahead of the clear and the reload, and the post is `keepalive` so it
-     * outlives the navigation (clientDiagnostics.ts). Best-effort by construction: reporting cannot throw, and a
-     * report that does not make it costs a diagnostic, not the recovery. */
+    // Reported and flushed before the wipe, since the reload would otherwise destroy the only evidence of what
+    // crashed. `keepalive` outlives the navigation; best-effort, since a failed report must cost a diagnostic, not the
+    // recovery.
     const { message, fields } = describeError(error);
     reportClient(`self-heal.wipe`, message, { fields });
     flushClientDiagnostics();
@@ -64,14 +55,17 @@ const heal = (error: unknown): void => {
         sessionStorage.setItem(HEALED_MARKER, `1`);
         localStorage.setItem(WIPE_KEY, `1`);
     } catch {
-        // Storage unavailable, then storage cannot be what crashed us either; fall through to the reload,
-        // which at worst repeats the crash and surfaces it (the marker branch is unreachable without storage).
+        // Storage unavailable means storage isn't what crashed us; fall through to the reload, which at worst repeats
+        // and
+        // surfaces the crash.
     }
     location.reload();
 };
 
-/** Route an error that MAY mean "this browser's stored state is poisoned", called by the global handlers
- *  below and by Vue's errorHandler (main.ts), whose render errors are where a bad hydrated blob first bites. */
+/**
+ * Routes an error that may mean this browser's stored state is poisoned; called by the handlers below and by
+ * Vue's errorHandler (main.ts), where a bad hydrated blob first bites.
+ */
 export const reportStartupError = (error: unknown): void => {
     if (healing || performance.now() - startedAt > STARTUP_WINDOW_MS) {
         return;
@@ -91,8 +85,8 @@ export const installSelfHeal = (): void => {
             reportStartupError(event.error);
         }
     });
-    // A healthy startup retires the marker, so a crash in some LATER session of this tab may heal again. While
-    // the window is still open the marker stands, which is exactly the once-per-attempt guarantee.
+    // A healthy startup retires the marker, so a later crash in this tab may heal again; while the window stays open,
+    // the marker enforces once-per-attempt.
     setTimeout(() => {
         try {
             sessionStorage.removeItem(HEALED_MARKER);
@@ -106,8 +100,9 @@ const deleteDatabase = (name: string): Promise<void> =>
     new Promise((resolve) => {
         try {
             const request = indexedDB.deleteDatabase(name);
-            // `blocked` cannot happen on a boot that has opened nothing, but resolving on it keeps a surprise
-            // from stalling the app forever; the race in purgeIfMarked is the second net under the same wire.
+            // `blocked` shouldn't happen on a boot that's opened nothing, but resolving on it anyway avoids stalling
+            // forever;
+            // purgeIfMarked's race is the second safety net.
             request.onsuccess = () => resolve();
             request.addEventListener(`error`, () => resolve());
             request.onblocked = () => resolve();
@@ -124,8 +119,10 @@ const deleteAllDatabases = async (): Promise<void> => {
     await Promise.all(names.map(deleteDatabase));
 };
 
-/** The reload's half of the wipe, awaited at the very top of main.ts, before any module opens a mirror, so
- *  every delete runs against a database nothing holds open. A no-op (one storage read) on every normal boot. */
+/**
+ * The reload's half of the wipe; awaited at the top of main.ts before any mirror opens, so every delete runs
+ * against a database nothing holds open. A no-op on a normal boot.
+ */
 export const purgeIfMarked = async (): Promise<void> => {
     try {
         if (localStorage.getItem(WIPE_KEY) === null) {

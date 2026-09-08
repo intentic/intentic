@@ -1,12 +1,10 @@
 import type { InviteRecord } from "@intentic/api-contract";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 
-// How long an emailed invite link stays valid. Long enough for the invitee to get around to it; short enough
-// that a stale link in an inbox goes dead. Resend mints a fresh token + expiry.
+// Long enough for the invitee to get to it; short enough that a stale link in an inbox goes dead.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// The invite/grant row's derived state, the only place the pending/accepted/expired rules live, so the roster
-// and the accept gate agree. Pure (no DB): unit-tested in invites.test.ts.
+// The invite row's derived state; the only place pending/accepted/expired rules live, so roster and accept gate agree.
 interface InviteRow {
     email: string;
     role: string;
@@ -27,18 +25,15 @@ export const inviteStatus = (member: Pick<InviteRow, "acceptedAt" | "inviteExpir
 
 export const toInviteRecord = (member: InviteRow, now: Date): InviteRecord => ({
     email: member.email,
-    // Parsed rather than cast: the column is a bare string, and a row written by a build with a different
-    // vocabulary must degrade to the safest tier instead of leaking an unknown word onto the wire.
+    // Parsed rather than cast: a role this build does not know degrades to the safest tier, not onto the wire.
     role: GrantedRoleSchema.catch(`viewer`).parse(member.role),
     status: inviteStatus(member, now),
     invitedAt: member.createdAt.toISOString(),
     expiresAt: member.inviteExpiresAt?.toISOString(),
 });
 
-// The accept gate for a found invite row: whether this caller can accept, and if so whether it's a fresh accept
-// (needs the acceptedAt write) or already done (idempotent). email-locked, the caller's Google email must equal
-// the invited address, since the daemon authorizes by that exact email. Pure so the expiry/lock rules are tested
-// without a DB; the handler maps each rejection to an ORPCError and the null-row (invalid token) case itself.
+// Whether this caller can accept, and if a fresh accept or already done; email-locked to the invited address, since the
+// daemon authorizes by that exact email.
 export type InviteAcceptDecision = "accept" | "already-accepted" | "expired" | "wrong-email";
 
 export const inviteAcceptDecision = (

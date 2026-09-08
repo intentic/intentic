@@ -1,16 +1,12 @@
-// Shared CI-provider helpers used by every git-forge CI provider (forgejo/ci.ts, github/gh-ci.ts,
-// gitlab/gl-ci.ts): the placeholder Dockerfile seeded into a fresh repo, and the whitespace-normalizer the
-// diff uses so trailing-space drift in a committed CI file doesn't read as a change.
+// Shared CI-provider helpers used by every git-forge CI provider: the placeholder Dockerfile seeded into a fresh
+// repo, and the whitespace-normalizer the diff uses.
 
-/* THE CI SECRET NAMES, which are a contract in two directions and so cannot be spelled twice. Each is written
- * into the repo's secret store by the provider AND referenced by name inside the workflow YAML the same
- * provider commits, so a rename that reached one and not the other produces a pipeline that builds fine and
- * fails at push time with an empty credential. */
+// The CI secret names, a contract in two directions: each is written into the repo's secret store and referenced
+// by name inside the workflow YAML the same provider commits.
 export const SECRET_KOMODO = "KOMODO_PASSWORD";
 
-// A minimal, immediately-buildable starter committed ONLY when the repo has no Dockerfile, so a fresh repo is
-// live with a placeholder until the author pushes their real Dockerfile (busybox httpd on $PORT, matching the
-// deterministic PORT the deployment injects).
+// A minimal, immediately-buildable starter committed only when the repo has no Dockerfile, matching the
+// deterministic PORT the deployment injects.
 export const starterDockerfile = (): string =>
     [
         "# intentic starter Dockerfile: replace with your app's real build.",
@@ -22,8 +18,7 @@ export const starterDockerfile = (): string =>
         "",
     ].join("\n");
 
-// Strip trailing whitespace per line + trim, so a diff of a committed CI file against the desired content
-// ignores incidental whitespace drift.
+// Strip trailing whitespace per line + trim, so a diff against desired content ignores incidental drift.
 export const normalize = (yaml: string): string =>
     yaml
         .split("\n")

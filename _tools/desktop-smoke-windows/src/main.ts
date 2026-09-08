@@ -1,19 +1,6 @@
-/* The entry point the Windows job calls, one command per tier.
- *
- *   node dist/main.js doctor    [--needs-docker]
- *   node dist/main.js install   --installer <path> [--expected-version <version>] [--app-url <url>] [--keep-installed]
- *   node dist/main.js setup     [--sandbox-image <ref>] [--ic-bin <path>] [--web-origin <url>]
- *   node dist/main.js agents    [--turn-seconds <n>]
- *   node dist/main.js teardown
- *
- * Separate commands rather than one run with flags, because they have genuinely different requirements and a
- * CI file should be able to say so: `install` needs no Docker and no credentials and can gate every release;
- * `setup` needs a Docker daemon; `agents` needs a connected account. Collapsing them would mean the cheapest
- * and most valuable tier could only run where the most expensive one can.
- *
- * The exit code is the harness's count and nothing else, a tier that threw is a failure of this file, and one
- * that failed an assertion is a failure of the product; keeping those apart is why nothing here catches.
- */
+// One command per tier (doctor, install, setup, agents, teardown), separate rather than flags since each needs
+// different things (install needs no Docker; agents needs a connected account). The exit code is only the harness's
+// failure count; nothing here catches, so a thrown error and a failed assertion stay distinguishable.
 
 import { SANDBOX_HOSTNAME } from "./constants.js";
 import { runDoctor } from "./doctor.js";
@@ -67,8 +54,7 @@ const main = async (): Promise<number> => {
     }
 
     if (command === `agents`) {
-        // The container's name is DERIVED here rather than threaded from the setup tier through a file: both
-        // tiers read it from the one hostname constant, so a rename cannot leave the two disagreeing.
+        // Container name derived here, not threaded from the setup tier: both tiers read the same hostname constant.
         await runAgentsTier(harness, {
             container: sandboxContainerName(SANDBOX_HOSTNAME),
             agentAuthVolume: nonEmpty(process.env[`INTENTIC_AGENT_AUTH_VOLUME`]),
@@ -79,8 +65,7 @@ const main = async (): Promise<number> => {
 
     if (command === `teardown`) {
         await runTeardown(harness);
-        // Always zero: nothing here is news, and a teardown that can go red gives a green run a way to fail
-        // for something that already worked.
+        // Always zero: nothing here is news, and a red teardown would fail a green run for something already working.
         harness.report(`the machine is back`);
         return 0;
     }

@@ -1,16 +1,14 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 
-// The chat tabs agentActions sends through, swappable per test. Hoisted because the module factory below is.
+// The chat tabs agentActions sends through, swappable per test; hoisted because the module factory below is.
 const chat = vi.hoisted(() => ({
     conversations: { value: [] as { conversationId: string; isolated: { value: boolean }; enqueue: (prompt: string) => void }[] },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
     enqueued: [] as string[],
 }));
-// A registered tab: `isolated: false` keeps the fleet's draft join from carding it (see useAgents.fleet), which
-// is what this suite wants: the roster is empty here, so askAgentToResolve finds no agent to open and goes
-// straight to the part under test. `unsent` is read of EVERY tab whatever the latch says, so it is part of
-// looking like a conversation at all rather than part of the draft half.
+// A registered tab: `isolated: false` keeps the fleet's draft join from carding it, so the empty roster here leaves
+// askAgentToResolve nothing to open. `unsent` is read of every tab regardless of the latch.
 const tab = (id: string) => ({
     conversationId: id,
     isolated: { value: false },
@@ -19,33 +17,25 @@ const tab = (id: string) => ({
     enqueue: (prompt: string) => chat.enqueued.push(prompt),
 });
 
-// sandboxClient is the one thing left REAL here: the bug under test lived in the gap between agentActions and
-// the request that actually goes out, so a mock at that seam would assert the very thing that was wrong. What is
-// mocked is only what agentActions imports for its OTHER actions (startAgent's tab/caret/route, the post-land
-// cache invalidation) and whose module scope wants a browser: ui's useDevice reads window.matchMedia at import,
-// the router builds a history, and useSandbox reaches environment.ts's window.env. The useSandbox stub serves
-// both consumers: agentActions reads `sandboxKey`, and sandboxClient reads its base through the real
-// useEndpoint, whose daemonBase falls through to `daemonUrl` when no loopback shortcut is resolved.
+// sandboxClient stays real: the bug under test lived in the gap between agentActions and the actual request. Everything
+// else mocked here is what agentActions's other actions need for a browser (device, router, sandbox).
 vi.mock("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 vi.mock("../../chat/run/useChat", () => ({
-    // `active` is read by a module-scope watcher in useAgents (the "seen while you watch it" rule), which
-    // evaluates the moment that module loads.
+    // `active` is read by a module-scope watcher in useAgents the moment that module loads.
     useChat: () => ({
         conversations: chat.conversations,
         active: { value: { conversationId: undefined } },
     }),
 }));
-// The strip the fleet reads (useAgents.fleet evaluates it the moment that module loads): nothing open, so
-// no draft card competes with the registry rows these cases act on.
+// The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
 vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
 vi.mock("../../chat/panel/useChat-reveal", () => ({
-    // `actsAs` is on the stub because startAgent PINS the draft before summoning it: including to `undefined`,
-    // which is how pressing Anyone un-pins a draft that was aimed at a persona a moment ago.
+    // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
+    // pressing Anyone un-pins a persona.
     draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
 }));
-// The summons channel is the seam startAgent shows the new tab through: a broadcast this suite has no second
-// window to receive; what it asserts is the prompt spend, which stays local by design.
+// The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it.
 vi.mock("../../chat/run/summon", () => ({ summonChat: () => {} }));
 vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
@@ -82,30 +72,21 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-/* THE LAND REQUEST'S CONTENT-TYPE, pinned because its absence was invisible from this side and fatal on the
- * other. `fetch` labels a bare string body `text/plain`; the daemon's oRPC handler then parses the body as a
- * STRING rather than an object, and its compact-input codec hands that string to the route schema as the whole
- * input: dropping the `{id}` it took from the path. So every land came back 400 "Input validation failed",
- * which took out the review panel's Land/Merge AND the only route an errored or conflicted card had to the
- * Finished lane. Asserted on the Request rather than on the init object, because sandboxRequest rebuilds the
- * headers on the way out and it is the wire that has to be right. */
+// Pinned because a missing content-type is invisible from this side and fatal on the daemon's: a string body is
+// labelled text/plain, and its oRPC handler drops the `{id}` it took from the path.
 it("sends the land body as JSON, so the daemon parses an object and keeps the agent id from the path", async () => {
     stubFetch();
     await expect(landAgent(`a1`)).resolves.toEqual({ landed: true });
     const [request] = sent;
     expect(request?.url).toBe(`https://daemon.test/agents/a1/land`);
     expect(request?.headers.get(`content-type`)).toBe(`application/json`);
-    // The drag-to-Finished drop and the panel's Land button both take the defaults: check-only, so a refusal
-    // leaves the workspace byte-identical, and the outstanding span, so a land carries only what has not
-    // landed yet. The cumulative span is asked for by name and by one surface alone ("Land again").
-    // `force: false` rides along on every ordinary land: it is the turn guard, and the default is to respect it.
+    // Both the drag-drop and the panel's Land button take the defaults: check-only, the outstanding span, and `force:
+    // false` respecting the turn guard.
     expect(await request?.json()).toEqual({ mode: `check`, span: `outstanding`, force: false });
 });
 
-/* THE MID-WRITE LAND, and the reason it is a flag rather than a mode: it changes WHEN a land may run, not what
- * it carries. The daemon refuses a land while the agent is writing unless this says the user was warned and
- * said yes anyway (agents.routes.ts landable), so it must reach the wire from the confirm dialog's press and
- * from nowhere else. A land on a PARKED turn needs none of this and sends false like any other. */
+// The force flag changes WHEN a land may run, not what it carries: the daemon refuses a land mid-write unless this says
+// the user was warned. A land on a parked turn sends false like any other.
 it("carries the force flag, so a warned user can land while the agent is still writing", async () => {
     stubFetch();
     await landAgent(`a1`, `check`, `outstanding`, true);
@@ -119,23 +100,20 @@ it("carries an explicit mode, so the conflict report's Merge is a different requ
     expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding`, force: false });
 });
 
-/* WHO THE ASK IS FOR, decided against the report and not against the card. The board arms its "Have the agent
- * resolve it" button on `status: "conflict"` alone, the roster carries no blockers, so the surface offering
- * the ask is structurally unable to know whether a rebase could reach the conflict. Only this function, holding
- * the freshly-read report, can; every caller (the card's button, the drag-to-Finished drop, the review panel's
- * own button) therefore has to be able to be told no. */
+// Decided against the freshly-read report, not the card: the board arms "resolve" on `status: "conflict"` alone and
+// can't know whether a rebase could reach it, so every caller must be told no.
 it("refuses the ask when every blocked path is the user's own uncommitted work, a rebase cannot reach it", async () => {
     chat.conversations.value = [tab(`a1`)];
     stubConflicts([{ repo: `root`, clean: 4, paths: [{ path: `src/app.ts`, reason: `workspace` }] }]);
     const ask = await askAgentToResolve(`a1`);
-    // The failure this prevents: a turn spent on a prompt whose "What blocked the land:" section is empty,
-    // ending in a land that refuses identically: the agent cannot see the user's checkout, let alone stage it.
+    // The failure this prevents: a turn spent on a prompt whose "What blocked the land:" section is empty, ending in an
+    // identical refusal.
     expect(chat.enqueued).toEqual([]);
     expect(ask).toEqual({ sent: false, why: expect.stringContaining(`Commit or stash them`) });
 });
 
-// The repo-unavailable refusal (empty `paths`, `clean: 0`) reads as a conflict on the card and names nothing a
-// rebase could act on, so it is the same refusal wearing different copy: never a silently successful send.
+// The repo-unavailable refusal reads as a conflict on the card and names nothing a rebase could act on, so it's the
+// same refusal wearing different copy.
 it("refuses the ask when the report names no blocked path at all", async () => {
     chat.conversations.value = [tab(`a1`)];
     stubConflicts([{ repo: `root`, clean: 0, paths: [] }]);
@@ -157,18 +135,16 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
         { repo: `docs`, clean: 0, paths: [{ path: `README.md`, reason: `workspace` }] },
     ]);
     expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
-    // One turn, carrying the agent's half as work and the user's half as hands-off: the split resolvePrompt
-    // exists to draw, asserted here because this is the call that decides a turn is worth spending at all.
+    // One turn carrying the agent's half as work and the user's half as hands-off, the split resolvePrompt exists to
+    // draw.
     expect(chat.enqueued).toHaveLength(1);
     expect(chat.enqueued[0]).toContain(`src/app.ts`);
     expect(chat.enqueued[0]).toContain(`logo.png`);
     expect(chat.enqueued[0]).toContain(`Leave these alone`);
 });
 
-/* "NEW AGENT" AND "NEW AGENT, ON THIS" ARE ONE ACTION. A surface holding a composed task (the codebase-health
- * panel's per-row refactor) must not assemble the three steps itself: an opened tab whose prompt never went
- * reads as a press that did nothing, and a prompt sent to a conversation nobody focused reads as an agent that
- * started on its own. The prompt goes as an ordinary message, so the transcript shows what was asked. */
+// "New agent" and a composed-task press are one action: a caller must not assemble the three steps itself, or an opened
+// tab whose prompt never went reads as a press that did nothing.
 it("starts a fresh agent already running the task it was handed", () => {
     startAgent(`Refactor src/app.ts.`);
     expect(chat.enqueued).toEqual([`Refactor src/app.ts.`]);
@@ -179,8 +155,7 @@ it("still starts an empty one when there is nothing to say", () => {
     expect(chat.enqueued).toEqual([]);
 });
 
-// A card whose conversation is gone (discarded, purged) has nothing to send to, and inventing one would start a
-// turn on the wrong agent. It reports rather than resolving quietly, like every other refusal here.
+// A card whose conversation is gone has nothing to send to; inventing one would start a turn on the wrong agent.
 it("refuses the ask when the agent has no conversation left", async () => {
     stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
     expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`no conversation`) });
@@ -188,10 +163,9 @@ it("refuses the ask when the agent has no conversation left", async () => {
     expect(sent).toEqual([]);
 });
 
-/* THE WAY BACK AFTER A DISCARD, and it has to be a different request from every other land: otherwise it is
- * the same one twice and does nothing. Landing is measured from the last landed tip, so once the user discards
- * a land's work from the workspace the default span is EMPTY: every sha still says the work went in, because
- * it did. Only a reading from the branch's base can still see that it is gone. */
+// A re-land after a discard must be a different request from any other land, or it's the same one twice. The default
+// span is measured from the last landed tip, which sees nothing once discarded; only the cumulative span reads from the
+// branch's base.
 it("asks for the cumulative span by name, so a re-land carries work the default span can no longer see", async () => {
     stubFetch();
     await landAgent(`a1`, `check`, `cumulative`);

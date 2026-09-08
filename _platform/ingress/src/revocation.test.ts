@@ -13,8 +13,6 @@ describe(`createRevocation`, () => {
         expect(fetchImpl).toHaveBeenCalledWith(`https://api.example.test/api/reachability/abcdef012345`, expect.anything());
     });
 
-    // A trailing slash on PLATFORM_URL must not produce a double slash the platform answers 404 to — which
-    // would read as "this sandbox is revoked" and refuse every tunnel on the deployment.
     test(`tolerates a trailing slash on the platform address`, async () => {
         const fetchImpl = answering(200);
         const revocation = createRevocation({ platformUrl: `https://api.example.test/`, fetchImpl });
@@ -23,14 +21,11 @@ describe(`createRevocation`, () => {
         expect(fetchImpl).toHaveBeenCalledWith(`https://api.example.test/api/reachability/abcdef012345`, expect.anything());
     });
 
-    // 404 is the ONLY refusal: it is what deleting the sandbox row looks like from here.
     test(`refuses a sandbox the platform says is gone`, async () => {
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answering(404) });
         await expect(revocation.allows(`abcdef012345`)).resolves.toBe(false);
     });
 
-    /* FAILING OPEN IS THE POINT. Reachability must not depend on the platform being up — otherwise a platform
-     * outage becomes a total outage as every container's backoff brings it round to a refusal. */
     test(`registers the tunnel when the platform errors`, async () => {
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answering(500) });
         await expect(revocation.allows(`abcdef012345`)).resolves.toBe(true);
@@ -42,8 +37,6 @@ describe(`createRevocation`, () => {
         await expect(revocation.allows(`abcdef012345`)).resolves.toBe(true);
     });
 
-    // A redial storm (an edge restart, a deploy) would otherwise ask the platform once per container within a
-    // few seconds.
     test(`caches an answer for the ttl`, async () => {
         let clock = 0;
         const fetchImpl = answering(200);
@@ -58,8 +51,6 @@ describe(`createRevocation`, () => {
         expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
-    // Fail-open is a decision to DEFER, so caching it would defer for the whole window and turn a one-second
-    // platform blip into a minute of unchecked registrations.
     test(`never caches a failure`, async () => {
         const fetchImpl = answering(503);
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl, ttlMs: 60_000 });
@@ -69,7 +60,6 @@ describe(`createRevocation`, () => {
         expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
-    // The right shape for a local run, and for an edge stood up before the platform knows about it.
     test(`is off entirely without a platform address`, async () => {
         const fetchImpl = answering(404);
         const revocation = createRevocation({ platformUrl: ``, fetchImpl });
@@ -79,8 +69,7 @@ describe(`createRevocation`, () => {
     });
 });
 
-/* THE LANE, for a hostname no tunnel holds: the same question asked for the replay decision (server.ts), so it
- * rides the same cache and the same fail-open. */
+// The lane lookup used for replay decisions (server.ts); shares the cache and fail-open with `allows`.
 describe(`createRevocation lookup`, () => {
     const answeringWith = (body: unknown, status = 200): typeof fetch =>
         vi.fn(() =>
@@ -100,7 +89,7 @@ describe(`createRevocation lookup`, () => {
         await expect(revocation.lookup(`abcdef012345`)).resolves.toEqual({ exists: true, lane: `tunnel` });
     });
 
-    // An older platform answers `{ ok: true }` and nothing else: the sandbox exists, on a lane it will not name.
+    // An older platform answers `{ ok: true }` alone; the sandbox exists on an unnamed lane.
     test(`treats an answer that names no lane as existing on an unknown lane`, async () => {
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answeringWith({ ok: true }) });
         await expect(revocation.lookup(`abcdef012345`)).resolves.toEqual({ exists: true });
@@ -116,7 +105,6 @@ describe(`createRevocation lookup`, () => {
         });
     });
 
-    // One answer serves both callers: a registration and a replay decision inside the TTL cost one request.
     test(`shares its cache with the registration gate`, async () => {
         const fetchImpl = answeringWith({ ok: true, lane: `hosted` });
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl });

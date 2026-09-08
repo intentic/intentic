@@ -4,28 +4,15 @@ import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 import { tokenEquals } from "./auth.js";
 
-/* DOOR TOKENS: the credentials behind the daemon's public doors, the routes an OUTSIDE system knocks on with
- * no Google identity and no control token, because it is a webhook sender or a pipeline runner that can carry
- * exactly one thing, a string it was handed once.
- *
- *   automation  POST /automations/{id}/fire       an event automation's webhook
- *   gate        POST /workflows/{id}/gate         a workflow's release gate
- *   intake      POST /intake/{id}/report          a bug intake's key, for a client with no Origin
- *
- * They used to live INSIDE the manifests that declare those doors (`trigger.token` in automations.json,
- * `gate.token` in workflows.json, `issues.ingestKey`), and those manifests are versioned: tracked in git, landed
- * into the owner's tree on every turn, readable by every agent turn and every viewer-tier member, carried in
- * exports. A credential has no business in a file with that audience. So they live here, in the secrets class
- * beside the CI webhook secret (workspace-state.ts), plaintext like it and for the same reason: the URL a
- * caller was taught has to be re-displayable to the maintainer who comes back for it months later, and a hash
- * would make every re-copy a rotation. What bounds the exposure is the audience: this file is locked from the
- * file API, and the routes attach a token to a listed automation or workflow for a maintainer or the owner
- * only, never for a viewer and never for a program's control token.
- *
- * `ensure` is the mint: called on save and, lazily, on the first list that needs the value, so a door declared
- * before this store existed gets its credential the first time somebody looks, and an owner who copies the URL
- * a second time gets the same one. `rotate` is the answer to a leaked URL that does not involve deleting the
- * automation and re-teaching every caller its id. */
+// Door tokens: credentials behind the daemon's public doors, for an outside caller with no Google identity or control
+// token.
+// - automation POST /automations/{id}/fire
+// - gate POST /workflows/{id}/gate
+// - intake POST /intake/{id}/report
+// Stored plaintext in the secrets class, since a maintainer must be able to re-display a taught URL; locked from the
+// file API to bound exposure.
+// `ensure` mints on first look and returns the same value until rotated; `rotate` invalidates a leaked URL without
+// re-teaching the caller its id.
 
 export const DOOR_KINDS = ["automation", "gate", "intake"] as const;
 export type DoorKind = (typeof DOOR_KINDS)[number];
@@ -42,7 +29,7 @@ export interface DoorTokens {
     readonly ensure: (kind: DoorKind, id: string) => Promise<string>;
     // The credential if the door has one; never mints. For a check that must not create a door as a side effect.
     readonly peek: (kind: DoorKind, id: string) => Promise<string | undefined>;
-    // Is this what the door was issued? Constant-time; false for a door with no credential and for the empty string.
+    // Is this what the door was issued? Constant-time; false for no credential and for the empty string.
     readonly verify: (kind: DoorKind, id: string, presented: string) => Promise<boolean>;
     // A fresh credential, the previous one retired in the same write.
     readonly rotate: (kind: DoorKind, id: string) => Promise<string>;
@@ -50,8 +37,8 @@ export interface DoorTokens {
     readonly remove: (kind: DoorKind, id: string) => Promise<void>;
 }
 
-// An intake key ships inside somebody's app binary and is read by people in a crash log; the prefix says what
-// it is. The other two are only ever pasted into a secret store, and stay the bare value they always were.
+// An intake key ships inside an app binary and shows up in crash logs, so the prefix says what it is.
+// The other two only ever get pasted into a secret store and stay a bare value.
 const mintFor = (kind: DoorKind): string => (kind === "intake" ? `ik_${randomBytes(18).toString("base64url")}` : randomBytes(24).toString("base64url"));
 
 const EMPTY: StoredDoors = { automation: {}, gate: {}, intake: {} };
@@ -131,14 +118,10 @@ export const memoryDoorTokens = (): DoorTokens => {
     };
 };
 
-/* THE CREDENTIAL A DOOR'S CALLER PRESENTED, from either of the two places one can ride.
- *
- * A webhook sender (GitHub, Sentry, a monitor) can carry exactly one thing, a URL, so `?token=` stays the form
- * every door accepts. A caller that CAN set a header, the gate CLI, the Marketplace action, a curl, sends the
- * same value as `authorization: Bearer …` instead, and the URL it dials carries nothing: a query string is the
- * least private part of a request (edge logs, the tunnel's logs, any proxy between), which is the whole reason
- * the browser's own credentials never travel there (ws-tickets.ts). The header wins when both are present, so
- * a stale token left in a pasted URL cannot override the one the caller meant. */
+// The credential a door's caller presented: a webhook sender can only carry a URL, so `?token=` stays accepted
+// everywhere.
+// A caller that can set a header sends a bearer instead, safer than a query string (edge/tunnel logs); the header wins
+// when both are present.
 export const presentedDoorToken = (headers: { get: (name: string) => string | null | undefined }, query: string | undefined): string => {
     const authorization = headers.get("authorization") ?? "";
     if (authorization.startsWith("Bearer ")) {

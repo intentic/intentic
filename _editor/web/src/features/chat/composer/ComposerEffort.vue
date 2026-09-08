@@ -1,14 +1,7 @@
-<!-- THE COMPOSER'S BINDING OF THE EFFORT METER (EffortMeter.vue holds the control itself): which rungs THIS
-     conversation's model offers, the one it is on, and where a click writes.
-
-     A binding rather than the control, because the meter is asked the same question by something that has no
-     conversation at all: the pinned models in Sandbox ▸ Agent ▸ Models, where each entry carries its own effort.
-     The two composers that draw this one (the chat's, and the suggested-session box's) keep passing a
-     Conversation and nothing about them changes.
-
-     THE SCALE IS READ, NEVER STORED. `effortsFor` is a property of the MODEL and of whether thinking is on, so
-     the segments follow a model switch by themselves, and Conversation.effort clamps the pick for the send
-     rather than ratcheting the user's choice down behind their back (see effortScale.ts). -->
+<!--
+    Binds <EffortMeter> to a Conversation: which effort rungs the current model offers, which one is set, and where a click writes. The scale is read
+    live from the model (effortScale.ts's effortsFor), never stored; Conversation.effort only clamps the choice at send.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../session/conversation";

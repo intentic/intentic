@@ -6,12 +6,8 @@ import type { Connection } from "./accounts.js";
 import { runtimeDir } from "./paths.js";
 import { openSession } from "./session.js";
 
-/* THE ACCESS-TOKEN CACHE, on a real filesystem. `gw` is a fresh process per command and an agent runs a lot of
- * them, so the question this suite answers is whether the second command pays for a token round trip, and
- * whether a rotated credential can ever be answered from the cache of the one it replaced.
- *
- * Only `fetch` is stubbed. The cache is a file, its mode is a file's mode, and the whole point of the
- * fingerprint is what happens between two separate processes reading the same path. */
+// The access-token cache, on a real filesystem: whether a second `gw` process reuses the token the first minted, and
+// whether a rotated credential can answer from the old cache.
 
 const connection = (refreshToken: string): Connection => ({
     name: "google",
@@ -48,7 +44,6 @@ describe("openSession", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    // The reason the cache exists: the NEXT `gw` process must not pay for a token it already has.
     it("answers a second process from the file the first one wrote", async () => {
         await openSession(connection("refresh-1"), env, root, clock).token();
         fetchMock.mockClear();
@@ -56,8 +51,6 @@ describe("openSession", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    /* Rotation with no invalidation step. A cache keyed by account name would hand back a token minted from
-     * the refresh token the owner has just replaced, which looks exactly like the rotation not working. */
     it("ignores the cached token once the credential behind it has changed", async () => {
         await openSession(connection("refresh-1"), env, root, clock).token();
         fetchMock.mockClear();
@@ -66,7 +59,6 @@ describe("openSession", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    // A token about to expire will 401 mid-request, so it is treated as absent a minute early.
     it("mints again for a token inside its expiry skew", async () => {
         await openSession(connection("refresh-1"), env, root, clock).token();
         fetchMock.mockClear();

@@ -2,15 +2,12 @@ import { expect, test } from "vitest";
 import { type DeviceSandboxResources, resourcesSummary } from "@intentic/ui/device";
 import { askFrom, capFromField, cpuBounds, formFrom, formProblems, gpuDropped, locksOf, memoryBounds } from "@intentic/ui/sandbox-resources";
 
-/* THE RESOURCES FORM'S ARITHMETIC, pinned from this side for the reason SandboxDevices.test.ts pins the verb
- * vocabulary: the kit has no test runner, this package is the one that renders the form, and the form's whole
- * contract is what it starts from, what it refuses, and what leaves when Apply is pressed. Through the deep path,
- * not the barrel: adding two GiB should not have to boot the component graph. */
+// Pins the resources form's arithmetic here (the kit that owns it has no test runner): what it starts from,
+// refuses, and sends on Apply. Imported via the deep path, not the barrel, so this doesn't boot the component graph.
 
 const GIB = 1024 ** 3;
 
-// A container as the machine reads it: a 12 GiB cap, four cores, privileged because the approved environment
-// (the Docker capability) demands it, no GPU anywhere.
+// A container as the machine reports it: 12 GiB, 4 cores, privileged (the Docker capability demands it), no GPU.
 const share = (overrides: Partial<DeviceSandboxResources> = {}): DeviceSandboxResources => ({
     memoryBytes: 12 * GIB,
     cpus: 4,
@@ -21,10 +18,8 @@ const share = (overrides: Partial<DeviceSandboxResources> = {}): DeviceSandboxRe
     ...overrides,
 });
 
-/* THE RAILS MIRROR THE RUN CONTRACT: whole GiB from a 4 GiB floor to the engine minus the 3 GiB the host keeps,
- * whole cores from one to the engine's count. A machine too small to grant the floor still offers the floor (the
- * contract gives it the floor anyway), and a machine that could not be measured leaves the ceiling open rather
- * than inventing one. */
+// Whole GiB from a 4 GiB floor to engine-minus-3GiB; whole cores from 1 to the engine's count. A too-small
+// machine still offers the floor; an unmeasured one leaves the ceiling open.
 test(`bounds a cap by the engine, minus what the host keeps`, () => {
     expect(memoryBounds({ memoryBytes: 20 * GIB, cpus: 12 })).toEqual({ min: 4, max: 17 });
     expect(memoryBounds({ memoryBytes: 6 * GIB, cpus: 2 })).toEqual({ min: 4, max: 4 });
@@ -33,23 +28,20 @@ test(`bounds a cap by the engine, minus what the host keeps`, () => {
     expect(cpuBounds(undefined)).toEqual({ min: 1 });
 });
 
-/* WHERE THE FORM STARTS: the container as it runs. Caps round down to whole units, the contract's own direction;
- * an absent cap is the default (empty field). The switches hold the ASK, so a privilege docker granted and one
- * somebody asked for both read as on. */
+// Caps round down to whole units; absent means the default (empty field). Switches hold the ask, so a
+// docker-granted privilege and an owner-asked one both read as on.
 test(`opens on the container's own share`, () => {
     expect(formFrom(share())).toEqual({ memoryGib: 12, cpus: 4, privileged: true, gpu: false });
-    // A cap set by hand at 12.5 GiB is offered as 12: the field is whole GiB, and rounding up would offer bytes
-    // the machine does not grant.
+    // 12.5 GiB rounds down to 12: rounding up would offer bytes the machine doesn't grant.
     expect(formFrom(share({ memoryBytes: 12.5 * GIB, cpus: 1.5 })).memoryGib).toBe(12);
     expect(formFrom(share({ cpus: 1.5 })).cpus).toBe(1);
     // Unbounded is the default, not zero: the hosted shape's container carries no cap at all.
     expect(formFrom(share({ memoryBytes: undefined, cpus: undefined }))).toMatchObject({ memoryGib: null, cpus: null });
 });
 
-/* THE ONE SWITCH WHOSE ASK AND ANSWER CAN DISAGREE. A host without the NVIDIA runtime drops `--gpus`, so the
- * container reports no GPU while the owner's list still asks for one. The switch stays where the owner left it
- * and the row says what became of the ask; drawing it off and letting Apply re-request it would re-state a wish
- * nobody withdrew. */
+// The one switch where ask and answer can disagree: a host without NVIDIA drops `--gpus`, so the container
+// reports no GPU though it's still asked for. Stays on (not silently reset), so Apply doesn't restate an unwithdrawn
+// wish.
 test(`keeps a dropped GPU asked for, and says so`, () => {
     const dropped = share({ gpu: false, hostRuntime: [`--gpus=all`] });
     expect(formFrom(dropped).gpu).toBe(true);
@@ -59,9 +51,8 @@ test(`keeps a dropped GPU asked for, and says so`, () => {
     expect(gpuDropped(share())).toBe(false);
 });
 
-/* WHICH SWITCHES ARE NOT THE OWNER'S: a directive the approved environment demands rides on the container
- * whatever the owner's own list says, so the form draws it locked with the reason, rather than live and silently
- * ignored on Apply. The owner's own ask is theirs to withdraw and locks nothing. */
+// Switches the approved environment demands are locked with a reason, not live and silently ignored on Apply;
+// the owner's own asks stay unlocked.
 test(`locks a privilege the approved environment demands, and only that one`, () => {
     expect(locksOf(share())).toEqual({ privileged: expect.stringContaining(`approved environment`) });
     expect(locksOf(share({ overlayRuntime: [`--privileged`, `--gpus=all`] }))).toEqual({
@@ -71,9 +62,8 @@ test(`locks a privilege the approved environment demands, and only that one`, ()
     expect(locksOf(share({ privileged: true, hostRuntime: [`--privileged`], overlayRuntime: [] }))).toEqual({});
 });
 
-/* WHAT LEAVES IS A DIFF, in the contract's own ask shape: absent means "leave it", `null` on a cap means "back to
- * the default". Nothing changed is nothing to send, and the dialog's Apply is disabled on it, so the machine's
- * refusal of an empty reshape is unreachable from the form. */
+// A diff in the contract's own ask shape: absent means leave it, `null` on a cap means back to default. Nothing
+// changed sends nothing (and Apply is disabled on it).
 test(`sends only what changed, and nothing when nothing did`, () => {
     const initial = formFrom(share());
     expect(askFrom(initial, { ...initial })).toBeUndefined();
@@ -86,8 +76,7 @@ test(`sends only what changed, and nothing when nothing did`, () => {
     expect(askFrom(unbounded, { ...unbounded, memoryGib: 8 })).toEqual({ memoryGib: 8 });
 });
 
-/* WHY A FORM CANNOT BE APPLIED, said under the field it is about: a fraction, or a cap outside the rails. An
- * empty field is never a problem, it is the default; an unmeasured engine has no ceiling to exceed. */
+// Errors show under their own field (fraction or out-of-rails); empty is never a problem, it's the default.
 test(`names the field that is outside the rails`, () => {
     const engine = { memoryBytes: 20 * GIB, cpus: 12 };
     const fine = formFrom(share());
@@ -104,8 +93,8 @@ test(`names the field that is outside the rails`, () => {
     expect(formProblems({ ...fine, memoryGib: null, cpus: null }, engine)).toEqual({});
 });
 
-/* A NUMBER FIELD READ BACK: empty is the default, a number is a number (including the ones the browser's own
- * min/max merely advise against, which formProblems judges), and not-a-number mid-edit changes nothing. */
+// Empty is the default; any number passes here (min/max are formProblems' job, advisory only in the browser),
+// and not-a-number mid-edit changes nothing.
 test(`reads an empty field as the default and leaves a half-typed one alone`, () => {
     expect(capFromField(``)).toBeNull();
     expect(capFromField(`  `)).toBeNull();
@@ -115,8 +104,7 @@ test(`reads an empty field as the default and leaves a half-typed one alone`, ()
     expect(capFromField(`1e`)).toBeUndefined();
 });
 
-/* THE ROW'S OWN LINE, from the same share: only what was set, in the order a reader scans it. Every core is the
- * resting state and gets no words; a cap is a decision and gets the width. */
+// Only what was set, in scan order; the resting core count gets no words, a set cap gets the width.
 test(`says a sandbox's share as one line, and only the parts somebody set`, () => {
     const row = { slug: `work`, running: true, image: `img` };
     expect(resourcesSummary({ ...row, resources: share({ gpu: true }) })).toBe(`12 GiB · 4 CPUs · privileged · GPU`);

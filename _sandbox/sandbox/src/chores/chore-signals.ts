@@ -5,29 +5,15 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
 import type { Services } from "../composition.js";
 
-/* THE CHEAP HALF of a repository's chore evidence: everything the daemon can answer without starting a
- * subprocess. It is recomputed on every GET /chores rather than cached, which is only defensible because of what
- * is in it, a directory read of package manifests the daemon already parses for the dependency graph, one stat
- * per package, and a call into the RESIDENT iq index that is answering search queries anyway. Nothing here shells
- * out, and nothing here waits on the network. Everything that would is a probe.
- *
- * The line between this and probes.ts is cost, not subject: `outdated` and `packages` are both facts about
- * dependencies, and they are on opposite sides of it because one needs the registry and the other needs a file
- * the daemon has already read. */
+// The cheap half of chore evidence: everything answerable without a subprocess or network call, recomputed on every GET
+// /chores since the ingredients (manifest reads, stats, the resident iq index) are already free. probes.ts holds a fact
+// only when it costs a registry call or a shell-out.
 
-// How many hotspots and key modules a chore ever needs. The complexity chore asks whether a file is an OUTLIER in
-// its own ranking, which a leaderboard answers and a full report only makes more expensive, and this list is
-// carried per repo on a route the rail badge polls.
+// Hotspots and key modules a chore ever needs; the complexity chore only asks if a file outranks this list.
 const RANKING_LIMIT = 12;
 
-/* The architecture document a package is expected to have, its own README. Named here rather than imported from
- * the documentation extension: that extension owns generating and publishing them, this only asks whether one
- * EXISTS, and a daemon route reaching into a browser extension's module for a path constant would be the wrong
- * direction entirely.
- *
- * It used to be `docs/architecture/<dir>/doc.md`, a page in a tree mirroring the repo. That layout rotted, the
- * page was never open when the code it described changed, so a package's document is now the README beside its
- * code, and this is a stat on the package directory itself. */
+// The architecture doc a package is expected to have: its own README, checked for existence only, not imported from the
+// docs extension.
 const docPath = (repoDir: string, packageDir: string): string => join(repoDir, packageDir, "README.md");
 
 const dependencyNames = (manifest: Record<string, unknown>, block: string): string[] => {
@@ -44,12 +30,8 @@ const enginesOf = (manifest: Record<string, unknown>): Record<string, string> | 
     return pairs.length === 0 ? undefined : Object.fromEntries(pairs);
 };
 
-/* A repo that is not a pnpm workspace has no packages, and that is a true answer rather than a gap: the chores
- * that read `packages` (documentation, libraries, runtime pins) then find nothing to say, which is right, a
- * single-package repo has no package to be undocumented and no second library to collide with the first.
- *
- * The ROOT manifest is deliberately not folded in as a pseudo-package. It would make every non-monorepo report
- * exactly one undocumented "package", which is a finding about our own modelling rather than about the code. */
+// A repo with no pnpm workspace has no packages; that's a true answer, not a gap. The root manifest is deliberately not
+// folded in as a pseudo-package.
 export const packageSignals = (repoDir: string): ChorePackage[] =>
     readWorkspaceManifests(repoDir).map(({ dir, name, manifest }) => {
         const entry: ChorePackage = {
@@ -59,20 +41,16 @@ export const packageSignals = (repoDir: string): ChorePackage[] =>
             devDependencies: dependencyNames(manifest, "devDependencies"),
             documented: existsSync(docPath(repoDir, dir)),
         };
-        // `engines` is absent rather than undefined for a package that declares none, the wire schema makes it
-        // optional, and exactOptionalPropertyTypes means the two are different values.
+        // `engines` is omitted, not undefined, when absent; exactOptionalPropertyTypes treats them differently.
         const engines = enginesOf(manifest);
         return engines === undefined ? entry : Object.assign(entry, { engines });
     });
 
-// How deep the Dockerfile and document sweeps look, and how many paths they carry. A bound on the walk, not on
-// what exists: the question every applicability gate asks is "is there ANY", and a repo with forty Dockerfiles
-// answers that as clearly as one with three, while a route the rail badge polls must not walk a whole tree.
+// Bounds the Dockerfile/doc walk's depth and count; a route the rail badge polls must not walk a whole tree.
 const SHAPE_DEPTH = 3;
 const SHAPE_LIMIT = 20;
 
-// CI pipeline definitions, by the conventions that are a single known path. `.github/workflows` is a directory
-// (any file in it counts); the rest are files at the repo root.
+// CI files by convention; `.github/workflows` is a directory, the rest are single files at the repo root.
 const CI_FILES = [".gitlab-ci.yml", ".circleci/config.yml", "azure-pipelines.yml", "Jenkinsfile", ".drone.yml", "bitbucket-pipelines.yml"];
 const WORKFLOWS_DIR = join(".github", "workflows");
 
@@ -86,11 +64,7 @@ const listDir = (dir: string): string[] => {
     }
 };
 
-/* Repo-relative paths matching a predicate, breadth-first to a fixed depth. Deliberately not a glob library and
- * deliberately not recursive-without-bound: this runs per repo on every GET /chores, and the honest failure mode
- * of a bounded walk (a Dockerfile four directories deep goes unseen, so its chore stays hidden) is far better
- * than an unbounded one (a poll that walks node_modules). Ignored directories are skipped by name, the same
- * shortlist the workspace tree walk uses. */
+// Not a glob library, not unbounded recursion: a bounded walk may miss a file, which beats an unbounded poll.
 const IGNORED = new Set(["node_modules", ".git", "dist", "build", ".cache", "coverage", ".venv", "target", "vendor"]);
 
 const findFiles = (root: string, matches: (name: string) => boolean, skipRootReference = false): string[] => {
@@ -120,20 +94,13 @@ const findFiles = (root: string, matches: (name: string) => boolean, skipRootRef
     return found;
 };
 
-// A Dockerfile by either convention, `Dockerfile`, `Dockerfile.prod`, `web.Dockerfile`. Compose files are
-// deliberately not counted: they orchestrate images, they are not one to make smaller.
+// Matches `Dockerfile`, `Dockerfile.prod`, `web.Dockerfile`; compose files are not counted, they orchestrate images.
 const isDockerfile = (name: string): boolean => name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
 
 const DEP_BLOCKS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
-/* Every dependency name declared anywhere in the repo, sorted and deduplicated. The ROOT manifest is read
- * directly here even though `packageSignals` already walks the workspace packages, and that is the entire point:
- * a repository with no pnpm-workspace.yaml has no workspace packages, so a single-package Vite or Angular app
- * would otherwise declare no dependencies at all and every gate reading them would be silently dark.
- *
- * All four blocks, peer and optional included. A UI framework arrives as a peerDependency in every component
- * library in the ecosystem, and a gate that only read `dependencies` would decide such a package is not a React
- * package while every file in it imports React. */
+// Reads the root manifest directly, since a single-package repo has no workspace packages to read otherwise. All four
+// dependency blocks count, since peerDependencies is how a UI framework or component library is declared.
 const declaredDeps = (repoDir: string): string[] => {
     const names = new Set<string>();
     const collect = (manifest: Record<string, unknown>): void => {
@@ -146,8 +113,7 @@ const declaredDeps = (repoDir: string): string[] => {
     try {
         collect(JSON.parse(readFileSync(join(repoDir, "package.json"), "utf8")) as Record<string, unknown>);
     } catch {
-        // No root manifest, or one that does not parse. The workspace packages below are still worth reading, and
-        // an unparseable manifest is the repo's problem to report, not a reason for every gate here to throw.
+        // No root manifest, or one that fails to parse; workspace packages below are still read.
     }
     for (const { manifest } of readWorkspaceManifests(repoDir)) {
         collect(manifest);
@@ -155,13 +121,8 @@ const declaredDeps = (repoDir: string): string[] => {
     return [...names].toSorted();
 };
 
-/* What this repository is MADE OF, for the applicability gates. Every check here is a stat or a shallow readdir,
- * which is what lets it sit on a route the rail badge polls, anything that needed a subprocess would be a probe.
- *
- * `docs` looks for the repository MAP rather than for the directory: an empty `docs/architecture/` is a directory
- * somebody made and never filled, and gating the drift survey on it would put the chore back exactly where a repo
- * with nothing to re-read cannot use it. Package pages are READMEs and are counted per package by
- * `packageSignals`; a repo with a map is a repo that has been documented at all, which is what this gate asks. */
+// Every check is a stat or shallow readdir, cheap enough for a route the rail badge polls. `docs` looks for the
+// repository map itself, not just the directory, since an empty `docs/architecture/` has nothing to gate on.
 export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape => ({
     docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
     dockerfiles: findFiles(repoDir, isDockerfile, workspaceRoot),
@@ -185,11 +146,7 @@ export const choreSignals = async (services: Services, repo: string): Promise<Ch
         hotspots: health.hotspots,
         keyModules: health.modules,
         totals: health.totals,
-        /* Only a FRESH index may drive a verdict. A build in progress has ranked whatever it has finished reading,
-         * which is not the repository, and the complexity chore acting on that would send a turn at whichever
-         * file happened to be indexed first. "stale" (the index is behind by some files) is fine: the ranking is
-         * still over the whole repo, just missing the last few edits, which cannot promote a file into being an
-         * outlier by three times its ranking's median. */
+        // Only a fresh index may drive a verdict; "stale" (behind by a few files) is fine, "building" is not.
         indexed: health.freshness.state !== "building",
     };
 };

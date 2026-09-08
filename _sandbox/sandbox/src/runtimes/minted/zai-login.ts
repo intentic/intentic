@@ -2,37 +2,19 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { MintedCredential, MintedLoginAttempt, MintedLoginContext, MintedLoginDriver } from "./minted-login.js";
 
-/* Z.AI'S SIGN-IN: the ZCode flow on either estate, then the provisioning that turns its token into a
- * coding-plan key.
- *
- * Like Meta's, the token the sign-in issues is not an inference credential (Z.ai's model endpoint answers it
- * with `1004`), and the official ZCode client's answer is to provision the plan's own API key through the
- * business API. That is `mintKey` below, and it is the longest thing in this file for a reason worth stating:
- * it walks four calls (whose organisation, whose project, does the key exist, copy its secret) and every one of
- * them is a step a user could be told about. So each failure names the step, because "sign-in failed" after a
- * successful sign-in is the least useful sentence available — the person approved a page and something on OUR
- * side of the approval did not work.
- *
- * TWO ESTATES, TWO SHAPES OF ARRIVAL, one provisioning.
- *
- *   international , zcode.z.ai mediates the whole thing: init hands back an authorize URL and a flow id, and
- *                   the callback lands on the vendor's own server, so we poll it. Nothing dead-ends and there
- *                   is nothing to paste.
- *   BigModel      , refuses that mediated callback and takes a LOOPBACK redirect instead. Nothing here binds
- *                   that port and nothing needs to: the address is unreachable from the user's browser, so the
- *                   page dead-ends with the grant in the address bar and they bring it back. Google's flow
- *                   exactly, which is why it renders through the panel already built for that.
- *
- * The estate also decides who authorizes the business API: internationally an extra login call swaps the OAuth
- * token for a business one, while BigModel's OAuth token is accepted directly. */
+// Z.ai's sign-in: the ZCode flow on either estate, then provisioning (mintKey) that turns its token, not an inference
+// credential, into a coding-plan key via the business API. Two estates, two arrivals: international is mediated and
+// polled to completion (zcode.z.ai); BigModel uses a loopback redirect the user pastes back instead. The estate also
+// decides who authorizes the business API: a login call swaps the OAuth token internationally, BigModel's is accepted
+// directly.
 
 export interface ZaiLoginHosts {
     // The ZCode CLI OAuth root (init, poll, token), which serves both estates.
     readonly oauthBase: string;
     // Where the international estate's business API and its Anthropic endpoint live.
     readonly zaiBiz: string;
-    // The mainland estate's business API. Its inference host is a different name again
-    // (open.bigmodel.cn), which is why the endpoint bases live on the provider table and not here.
+    // The mainland estate's business API; its inference host (open.bigmodel.cn) is a different name, kept on the
+    // provider table instead.
     readonly bigModelBiz: string;
     // The mainland sign-in page the browser is sent to.
     readonly bigModelLogin: string;
@@ -45,48 +27,41 @@ export const ZAI_LOGIN_HOSTS: ZaiLoginHosts = {
     bigModelLogin: "https://bigmodel.cn/login",
 };
 
-/* THE REDIRECT NOBODY BINDS. BigModel needs a loopback redirect_uri, and it has to be the SAME string at the
- * authorize and the exchange, which is all it has to be: the browser that lands there is on somebody's laptop,
- * this daemon is in a container, and no port either of them could open would connect the two. So the page
- * dead-ends, which is the state the connect panel draws a picture of, and the grant travels back as a paste.
- * A fixed port rather than an allocated one, because allocating one would imply something is listening. */
+// BigModel's redirect_uri needs to be the same string at authorize and exchange, nothing more; nobody binds this port,
+// so the page dead-ends and the grant comes back as a paste. Fixed, not allocated, since allocating would imply
+// something is listening.
 const LOOPBACK_REDIRECT = "http://127.0.0.1:8317/callback";
-// ZCode's own app id on the mainland sign-in page: the estate's login only issues a grant for a client it
-// knows, and this is the client that terminal sign-ins are for.
+// ZCode's own app id: the mainland login only issues a grant to a client it recognizes.
 const BIGMODEL_APP_ID = "zcode";
 
-// The client-generated bearer that a ZCode flow is polled with. 32 random bytes, hex, which is what the
-// official client sends: the endpoint refuses a token of another shape outright (`3004 invalid_flow`), so the
-// size is a wire fact and not a taste.
+// 32 random bytes, hex: the endpoint refuses a token of another shape outright (`3004 invalid_flow`), so the size is a
+// wire fact, not a preference.
 const POLL_TOKEN_BYTES = 32;
 
 // The floor for polling the mediated flow, used when the server advertises nothing. It advertises 2 seconds.
 const MIN_POLL_INTERVAL_MS = 2_000;
-// How many consecutive transient poll failures are tolerated before the sign-in is given up on. The
-// authorization window is minutes long, so a blip in the middle of it is likely and is not an answer.
+// Consecutive transient poll failures tolerated before giving up; the authorization window is minutes long, so a blip
+// is likely.
 const MAX_CONSECUTIVE_POLL_ERRORS = 5;
 // How long to wait for a mainland grant to be pasted back, when the vendor publishes no deadline of its own.
 const REDIRECT_WINDOW_MS = 10 * 60_000;
-// One control request. Same reasoning as Meta's: generous for a cold edge, bounded so a hung socket cannot hold
-// a poll tick open past the next one.
+// One control request; generous for a cold edge, bounded so a hung socket cannot hold a poll tick open past the next
+// one.
 const REQUEST_TIMEOUT_MS = 30_000;
-// The exchange the mainland estate answers with a transient `2007 http error` while it validates a code with
-// BigModel. Worth retrying a few times rather than failing a sign-in the user completed correctly.
+// The mainland exchange can answer with a transient `2007 http error` while it validates the code; worth retrying.
 const EXCHANGE_ATTEMPTS = 3;
 
-// The name the provisioned key carries in the vendor's own dashboard. The official client uses this exact name,
-// so signing in again reuses the key it already made instead of littering the account with new ones.
+// The name the provisioned key carries in the vendor's own dashboard; the official client reuses this exact name
+// instead of littering the account with new ones.
 const MINT_KEY_NAME = "zcode-api-key";
-/* WHICH ORGANISATION AND PROJECT the key is made in. An account can hold several, and the vendor's own default
- * pair is named this in both estates' UIs — so a name match wins, and the first entry that actually has a
- * project is the fallback. Matching on a vendor's display string is not lovely, and it is what the official
- * client does; the alternative is minting into whichever organisation an API happened to list first, which is
- * the kind of choice a user finds out about from a bill. */
+// The vendor's own default org/project name in both estates' UIs; a name match wins, else the first entry with a
+// project. Matching a display string isn't lovely, but the alternative is a silent pick a user finds out about from a
+// bill.
 const DEFAULT_ORG_NAME = "默认机构";
 const DEFAULT_PROJECT_NAME = "默认项目";
 
-// The `{code, msg, data}` envelope every ZCode and business call answers in. `0` and `200` both mean success:
-// the two roots disagree and both are in use.
+// The {code, msg, data} envelope every ZCode and business call answers in. 0 and 200 both mean success: the two roots
+// disagree and both are in use.
 const EnvelopeSchema = z.object({ code: z.number().default(0), msg: z.string().default(""), data: z.unknown().optional() });
 
 const InitSchema = z.object({
@@ -144,9 +119,8 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
         }, { once: true });
     });
 
-/* One call, envelope unwrapped, with the vendor's own `msg` carried into the error. Both roots answer business
- * errors with HTTP 200 and a non-zero code, so a caller that only checked the status would read a refusal as
- * data. */
+// Unwraps the envelope, carrying the vendor's own `msg` into the error: both roots answer business errors with HTTP 200
+// and a non-zero code, so a status check alone would read a refusal as data.
 const envelope = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly url: string;
@@ -179,10 +153,9 @@ const envelope = async (input: {
     return parsed.data.data;
 };
 
-/* WHAT ONE POLL ANSWER MEANT. Pulled out of the loop for the same reason Meta's is: the loop is then about
- * waiting, and this is about the vendor's vocabulary — `pending` and a blank status are the same thing (keep
- * waiting), `failed` is the person declining on the page, a `ready` without a token is the vendor contradicting
- * itself, and an unknown status is worth saying out loud rather than treating as either. */
+// One poll answer's meaning, pulled out of the loop so the loop is only about waiting. `pending`/blank means keep
+// waiting, `failed` is a decline, `ready` with no token is the vendor contradicting itself, and an unknown status is
+// surfaced rather than guessed at.
 type ZaiPollVerdict = { readonly kind: "pending" } | { readonly kind: "ready"; readonly identity: ZaiIdentity } | { readonly kind: "failed"; readonly message: string };
 
 const verdictOf = (poll: z.infer<typeof PollSchema> | undefined): ZaiPollVerdict => {
@@ -206,8 +179,8 @@ export const zaiLoginDriver =
     async (context: MintedLoginContext): Promise<MintedLoginAttempt> =>
         context.variant.flow === "redirect" ? startBigModel(context, hosts) : startMediated(context, hosts);
 
-/* THE INTERNATIONAL FLOW. The poll token is minted here and sent as the bearer on both calls: it is what ties a
- * poll to the flow that issued it, and the server answers with its own copy, which is the authoritative one. */
+// International flow: the poll token is minted here and sent as bearer on both calls, tying a poll to the flow that
+// issued it; the server's own copy, when it sends one, is authoritative.
 const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts): Promise<MintedLoginAttempt> => {
     const { fetchImpl, signal, variant } = context;
     const pollToken = randomBytes(POLL_TOKEN_BYTES).toString("hex");
@@ -248,9 +221,8 @@ const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
                 );
                 poll = parsed.success ? parsed.data : undefined;
             } catch (error) {
-                /* A REFUSAL MID-WINDOW IS USUALLY A BLIP, not an answer: the user has minutes to approve a page
-                 * and the network has that long to hiccup. Five in a row is a flow that is genuinely gone, and
-                 * the last error is the one worth reporting. */
+                // A refusal mid-window is usually a network blip, not an answer, since the user has minutes to approve;
+                // five in a row means the flow is genuinely gone.
                 consecutiveErrors += 1;
                 if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
                     throw error;
@@ -270,8 +242,8 @@ const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
                 host: hosts.zaiBiz,
                 estate: variant.label,
                 identity: verdict.identity,
-                // Internationally the OAuth token has to be swapped for a business one first; the swap lives
-                // with the estate that needs it.
+                // Internationally the OAuth token has to be swapped for a business one first; the swap lives with the
+                // estate that needs it.
                 exchangeForBusinessToken: true,
                 oauthBase: hosts.oauthBase,
             });
@@ -282,9 +254,9 @@ const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
     return { url: authorize_url, code: "", state: "", expiresAt, settle };
 };
 
-/* THE MAINLAND FLOW. No init call: the sign-in page takes the redirect, the app id and a state we generate, and
- * the grant comes back through the user's clipboard. The state is what makes a pasted address identifiable as
- * this attempt's — checked against our own copy, in minted-login.ts, never against a value the caller sends. */
+// Mainland flow: no init call, the sign-in page takes the redirect/app id/a generated state, and the grant comes back
+// through the user's clipboard. The state makes a pasted address identifiable as this attempt's, checked against our
+// own copy in minted-login.ts.
 const startBigModel = async (context: MintedLoginContext, hosts: ZaiLoginHosts): Promise<MintedLoginAttempt> => {
     const { fetchImpl, variant } = context;
     const state = randomBytes(POLL_TOKEN_BYTES).toString("hex");
@@ -307,8 +279,8 @@ const startBigModel = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
     return { url, code: "", state, expiresAt: Date.now() + REDIRECT_WINDOW_MS, settle };
 };
 
-// Swap a pasted mainland grant for the estate's access token. Retried, because this endpoint answers with a
-// transient error of its own while it validates the code upstream, and the user has already done their part.
+// Swaps a pasted mainland grant for the estate's access token; retried, since this endpoint can answer with its own
+// transient error while validating the code upstream.
 const exchangeBigModelCode = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly hosts: ZaiLoginHosts;
@@ -342,13 +314,9 @@ const exchangeBigModelCode = async (input: {
     throw lastError instanceof Error ? lastError : new Error("Z.ai would not redeem that sign-in.");
 };
 
-/* PROVISION THE PLAN'S OWN KEY. Four calls, each named in its own failure, and the whole reason the sign-in can
- * end with something a turn can use.
- *
- * The final credential is `"<apiKey>.<secretKey>"` on the international estate, which is the form its Anthropic
- * endpoint expects. The mainland estate hands back a usable bare key when it will not copy a secret, so the
- * secret is required on one and optional on the other — the one asymmetry in this file that is genuinely the
- * vendors' and not ours. */
+// Four calls, each named in its own failure. The final credential is `<apiKey>.<secretKey>` internationally (what its
+// Anthropic endpoint expects); the mainland estate's bare key is usable alone, the one asymmetry that's the vendors',
+// not ours.
 const mintKey = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly host: string;
@@ -367,10 +335,9 @@ const mintKey = async (input: {
     };
 };
 
-/* WHERE THIS ACCOUNT'S KEYS LIVE, as a URL, which takes two facts nobody signing in was asked for: an
- * organisation and a project. Both failures are worth their own sentence — no organisation at all is what an
- * account with no active plan looks like, and an organisation with no project is a shape the vendor's console
- * can produce and this cannot fix. */
+// Resolves the account's keys URL from an organisation and project nobody signing in was asked for. No organisation
+// means no active plan; an organisation with no project is a console-made shape this can't fix, so both get their own
+// error.
 const resolveKeysUrl = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly host: string;
@@ -398,9 +365,8 @@ const resolveKeysUrl = async (input: {
     return `${input.host}/api/biz/v1/organization/${organizationPath}/projects/${encodeURIComponent(project.projectId)}/api_keys`;
 };
 
-// Who the business API takes its orders from on this estate: a swapped business token internationally, the
-// OAuth token itself on the mainland. Sent verbatim, which is why the two shapes are built here rather than at
-// each call.
+// Who the business API takes orders from on this estate: a swapped business token internationally, the OAuth token
+// itself on the mainland, sent verbatim.
 const businessAuthorization = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly host: string;
@@ -428,17 +394,15 @@ const businessAuthorization = async (input: {
     return `Bearer ${parsed.data.access_token}`;
 };
 
-// The organisation to provision in: the vendor's default among those that have a project, else the first that
-// has one, else the first at all — so the "no project" failure above reports the account's real state rather
-// than an empty organisation that happened to be listed first.
+// The vendor's default org among those with a project, else the first with one, else the first at all, so the "no
+// project" failure reports the account's real state.
 const pickOrganization = <T extends { organizationName: string; projects: readonly unknown[] }>(organizations: readonly T[]): T | undefined => {
     const withProjects = organizations.filter((entry) => entry.projects.length > 0);
     return withProjects.find((entry) => entry.organizationName.includes(DEFAULT_ORG_NAME)) ?? withProjects[0] ?? organizations[0];
 };
 
-/* The key the official client would have made, or a new one. Finding it first is what stops a sandbox that
- * signs in twice from leaving a trail of identical keys in somebody's dashboard — and it is why the name
- * matters: it is the handle both clients agree on. */
+// Finds the key the official client would have made before minting a new one, so signing in twice doesn't litter the
+// dashboard; the fixed name is the handle both clients agree on.
 const findOrCreateKey = async (input: { readonly fetchImpl: typeof fetch; readonly keysUrl: string; readonly authorization: string }): Promise<string> => {
     const listed = await envelope({
         fetchImpl: input.fetchImpl,
@@ -468,8 +432,8 @@ const findOrCreateKey = async (input: { readonly fetchImpl: typeof fetch; readon
     return created.data.apiKey;
 };
 
-// The secret half. Absent is tolerated here and refused by the caller's estate rule, because only the
-// international endpoint requires the pair.
+// The secret half. Absent is tolerated here and refused by the caller's estate rule, since only the international
+// endpoint requires the pair.
 const copySecret = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly keysUrl: string;

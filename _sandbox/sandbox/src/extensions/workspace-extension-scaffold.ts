@@ -2,29 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { extensionApiVersion } from "@intentic/extension-api/protocol";
 
-/* THE FILES A NEW WORKSPACE EXTENSION IS BORN WITH, and the two decisions that shape all of them.
- *
- * NO BUILD STEP. The scaffold is one hand-written ESM file, not a vite project, because a workspace extension is
- * loaded by its BYTES: the daemon serves `entry` verbatim and the host imports it from a blob URL whose bare
- * specifiers resolve through the shell's import map (hostModules.ts). `import { h } from "vue"` therefore lands
- * on the shell's own vue with nothing compiled and nothing installed, so the extension is running the moment the
- * directory exists, and an edit to it is live on the next host reload. Scaffolding a project with a `dist/` the
- * author must first `npm install && npm run build` to fill would mean the opposite: a listed, un-runnable
- * extension until they got the toolchain right. The published templates build because they must ship a bundle to
- * a stranger; a workspace draft ships to nobody.
- *
- * Hence `h()` rather than an SFC: Vue's runtime in the shell has no template compiler, and a vite lib build emits
- * an SFC's <style> as a separate asset nothing would fetch. Styling is the design system's authored `.ui-*`
- * classes and role tokens, the same constraint a published extension lives under.
- *
- * NO PERMISSIONS. The manifest has no `permissions` block at all, which is the strongest thing a starting point
- * can say: this extension may reach no daemon route whatsoever, and `api.sandbox` throws if it tries. Every route
- * it eventually reaches has to be added deliberately, by someone who knows why, which is the same review the
- * owner performs at install, moved to the moment the need appears instead of the moment before publication. The
- * alternative (scaffold the permissions a demo happens to use) trains authors to inherit reach they never chose.
- *
- * The engines range is derived from the host's own extensionApiVersion rather than written down, so a draft
- * created today is compatible with the app that created it and nothing has to remember to bump it. */
+// No build step: the daemon serves `entry` verbatim via a blob URL through the import map, live the moment it exists.
+// No permissions block: the strongest starting point, `api.sandbox` throws until a route is added deliberately.
+// engines is derived from the host's own extensionApiVersion, so a draft stays compatible with what created it.
 
 // Title Case for the label a tile carries, derived from the slug so the author names the thing once.
 const labelOf = (name: string): string =>
@@ -130,12 +110,10 @@ a bundle if it has grown past one file, and listing the commit in a registry: at
 directory, is what people run.
 `;
 
-/* Write a new workspace extension's directory. Refuses to overwrite: an existing directory is somebody else's
- * extension (or an earlier attempt worth looking at), and silently replacing it would destroy work the author
- * cannot get back, there is no install moment and no checkout to re-clone from. */
+// Writes a new workspace extension's directory; refuses to overwrite, since an existing one may be someone else's work.
+// There's no install moment or checkout to recover from, so silently replacing it would destroy work for good.
 export const writeWorkspaceExtension = async (dir: string, publisher: string, name: string): Promise<void> => {
-    // The root is created on demand (a workspace has none until its first extension); the extension's own
-    // directory is NOT recursive, so an existing one raises EEXIST instead of being written into.
+    // Root created on demand; the extension's own dir is non-recursive, so an existing one raises EEXIST.
     await mkdir(dirname(dir), { recursive: true });
     await mkdir(dir, { recursive: false });
     await writeFile(join(dir, `intentic-extension.json`), manifestOf(publisher, name), `utf8`);

@@ -1,31 +1,23 @@
 // @vitest-environment jsdom
-//
-// jsdom because the whole point of this viewer is what it RENDERS. The bug it exists to fix was a review
-// surface that said "Binary file: no text diff to show." over a PNG, so the assertion that matters is that an
-// <img> reaches the DOM with the fetched bytes behind it, which only a mounted render can show.
+// Pins that a binary diff renders an <img> with its fetched bytes in the DOM; needs jsdom since that's exactly
+// what's asserted.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The component's import chain pulls in app-wide singletons that read browser/runtime globals at import time
-// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env), stood up for the
-// package by vitest.setup.ts before this file is loaded: what the real page has in place by then.
+// Import chain reads browser globals at import time (useDevice: matchMedia; environment.ts: window.env), stubbed
+// package-wide by vitest.setup.ts.
 vi.hoisted(() => {
-    // jsdom's own object URLs are opaque uuids, so nothing downstream could tell which blob an <img> is
-    // showing. Named by byte length instead: that is the assertion each pane is holding ITS OWN side's bytes.
+    // jsdom's object URLs are opaque; naming them by byte length lets a test tell which blob an <img> holds.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
-    // Each pane's ImageView watches its own size to keep a fitted image fitted; jsdom ships no ResizeObserver,
-    // and it never lays anything out to report anyway. A no-op leaves the render, which is what is asserted.
-    // jsdom decodes nothing either, so the caption's dimensions are stubbed from the byte length: each side
-    // then reports its OWN size, which is what the assertions are about.
+    // No ResizeObserver/decode in jsdom; size stubbed from byte length so each side's dimensions stay distinct.
     globalThis.createImageBitmap = ((blob: Blob) =>
         Promise.resolve({ width: blob.size * 10, height: blob.size, close: () => {} })) as unknown as typeof createImageBitmap;
 });
 
-// The daemon fetch, stubbed at the seam the viewer uses: the test is about rendering bytes, not about auth.
-// `same` hands both sides one identical body, the shape a reviewer reads as "it shows me the same picture
-// twice" and the one case this viewer must name out loud rather than leave to the eye.
+// Daemon fetch stubbed at the viewer's seam (bytes only, not auth). `same` returns one identical body for both
+// sides, the case this viewer must call out explicitly.
 const fetched: string[] = [];
 vi.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
@@ -47,8 +39,7 @@ const mount = (props: { path: string; before?: string; after?: string }): HTMLEl
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(BinaryDiffView, props) });
-    // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
-    // off the whole UI plugin.
+    // Icon/v-tooltip are usually installed app-wide; stand-ins keep the test off the whole UI plugin.
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -62,8 +53,8 @@ const settle = async (): Promise<void> => {
     await nextTick();
 };
 
-// …and the answers that come AFTER the picture is on screen (its decoded size, and whether the two sides are
-// one file) run their own chains of promises behind it. A turn of the macrotask queue drains all of them.
+// Decoded size and same-file comparison run their own promise chains after the picture is on screen; a macrotask
+// turn drains them.
 const settleComparison = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await settle();
@@ -120,14 +111,11 @@ describe(`BinaryDiffView`, () => {
         await settle();
 
         expect(element.textContent).toContain(`Request failed (404).`);
-        // The half that DID load still renders: one dead side must not blank the comparison.
         expect(element.querySelectorAll(`img`)).toHaveLength(1);
     });
 
-    /* The report this pair of tests exists for: "it always displays the same picture in both". Two captures of
-     * one screen ARE two pictures, but fitted into half a pane they read as one, and the caption's only fact,
-     * a size rounded to two figures, agreed with that reading. So each side states the size of the PICTURE,
-     * and the after side states what the file gained or lost. */
+    // Guards against two distinct captures reading as "the same picture" due to rounding: each side states its own
+    // picture size; the after side also states the delta.
     it(`states each side's dimensions and what the file gained or lost`, async () => {
         const element = mount({
             path: `shots/board.png`,
@@ -139,7 +127,7 @@ describe(`BinaryDiffView`, () => {
         // 3 bytes → 30 × 3, 4 bytes → 40 × 4 (the decode stub), so the two sides cannot be confused.
         expect(element.textContent).toContain(`30 × 3`);
         expect(element.textContent).toContain(`40 × 4`);
-        // One byte gained, stated as a delta, because "3 B" beside "4 B" is where the rounding hid the change.
+        // Delta stated explicitly: "3 B" beside "4 B" is exactly where rounding would hide the +1 change.
         expect(element.textContent).toContain(`+1 B`);
         expect(element.textContent).not.toContain(`same file`);
     });

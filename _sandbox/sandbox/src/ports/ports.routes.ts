@@ -7,15 +7,11 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 
-// The /ports routes: `list` scans procfs on demand (no background poller, the Ports view polls while open),
-// `forward`/`unforward` drive the slot table. Forwarding is the explicit exposure gesture: previews are
-// public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it,
-// and the daemon's own surfaces are never listed or forwardable at all.
+// list scans procfs on demand, no background poller; forward/unforward drive the slot table. Forwarding is the explicit
+// exposure gesture: a preview is public once forwarded; the daemon's own surfaces are never listed.
 
-// The `ExtensionHost` half is for the extension process index alone: it is what turns the supervised
-// service on port 40085 into "the discord extension's gateway" instead of leaving the row to describe
-// somebody's background service as `node dist/gateway.js`. Taken as the narrow host interface rather than as
-// more of `Services`, so this file's blast radius stays what the type says it is.
+// ExtensionHost is only for naming a supervised service by its extension (port 40085 becomes "the discord extension's
+// gateway", not `node dist/gateway.js`); narrowed rather than pulling in more of Services.
 export type PortsRoutesDeps = Pick<Services, "config" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost;
 
@@ -23,20 +19,15 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    // The daemon's own listeners: the oRPC server, the preview proxy, and the container sshd. Everything else,
-    // including docker-proxy ports for containers the workspace published, is the user's to forward.
+    // The daemon's own listeners (oRPC server, preview proxy, sshd); everything else is the user's to forward.
     const reserved = new Set([services.config.sandbox.port, services.config.preview.port, 22]);
 
     return {
         list: i.list.handler(async () => {
             const listeners = await services.scanPorts();
-            /* One index for the whole list (it reads every installed manifest), the same way the scan itself is
-             * taken once: a per-row lookup would re-read the extensions directory once per listening port.
-             *
-             * Its failure costs a NAME, never the list: this route is also what the desktop mirror reconciles
-             * against on a loop, and a route that answered 500 because one manifest was unreadable would stop
-             * mirroring every port on somebody's machine over a cosmetic lookup. Those rows just read as the
-             * generic extension service. */
+            // Read once for the whole list, not per row, to avoid re-reading the extensions directory per port. A
+            // failure here costs one row's name, never the list, since the desktop mirror reconciles against this route
+            // on a loop.
             const extensionProcesses = await extensionProcessIndex(services).catch(() => new Map());
             const servicePorts = new Map(services.serviceProcesses.list().map((service) => [service.port, service.key]));
             const attribution = { workspaceRoot: services.workspace.root, extensionProcesses, servicePorts };
@@ -62,7 +53,7 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             if (!listener.forwardable) {
                 throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} is bound to a loopback address the preview proxy can't reach` });
             }
-            // The listener's dial host rides into the forward: a `localhost` bind can be ::1-only (Vite).
+            // The listener's dial host rides into the forward; a `localhost` bind can be ::1-only (Vite).
             const slot = await services.portForwards.forward(input.port, listener.host);
             const url = portUrl(slot, zone, sandboxId);
             return url === undefined ? {} : { previewUrl: url };

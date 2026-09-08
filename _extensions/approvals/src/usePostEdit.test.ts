@@ -2,12 +2,10 @@ import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePostEdit } from "./usePostEdit";
 
-/* Save-as-you-type, tested where losing a keystroke costs something. The debounce is real time, so it is faked
- *: what matters is not how long it waits but that nothing leaves the editor without the last words going with
- * it, and that reading a post never writes it. */
+// Save-as-you-type; the debounce is faked. What matters: nothing leaves without the last keystroke, and reading a post
+// never writes it.
 
-// A reply, which is what this queue is almost entirely made of: a URL target means no published headline, so
-// `title` is the agent's note and the editor draws one box, not two.
+// A reply (URL target): no published headline, so `title` is the agent's note and the editor draws one box, not two.
 const post = (overrides: Partial<PostApprovalSummary> = {}): PostApprovalSummary => ({
     id: `d`,
     kind: `post`,
@@ -37,7 +35,7 @@ describe("usePostEdit", () => {
         edit.touch();
         expect(write).not.toHaveBeenCalled();
         await vi.runAllTimersAsync();
-        // One write, carrying the last thing typed rather than the first.
+        // One write, the last value typed, not the first.
         expect(written).toHaveLength(1);
         expect(written[0]?.changes).toEqual({ content: `rewritten` });
     });
@@ -68,8 +66,8 @@ describe("usePostEdit", () => {
         expect(written[1]?.post.id).toBe(`two`);
     });
 
-    // Opening a post to re-read it before approving must not dirty the file: that is what makes a short
-    // debounce safe, and what stops the queue flashing under someone who only looked.
+    // Opening a post to read it must not dirty the file, or a short debounce would flash the queue under someone who
+    // only looked.
     it("never writes when nothing changed", async () => {
         const edit = usePostEdit(write);
         await edit.open(post());
@@ -89,8 +87,7 @@ describe("usePostEdit", () => {
         expect(written).toHaveLength(1);
     });
 
-    /* The count in the row's footer reads the FIELD while one is open: it is the fact that decides whether the
-     * post can go out at all, so it has to move with the words rather than with the last save. */
+    // The footer's count reads the live field, not the last save, since it decides whether the post can go out at all.
     it("counts the words being typed, not the ones on disk", async () => {
         const edit = usePostEdit(write);
         const target = post();
@@ -103,7 +100,7 @@ describe("usePostEdit", () => {
     });
 
     it("leaves a note the platform does not publish alone", async () => {
-        // On a reply, `title` is the agent's note to the owner (postText.ts) and the editor draws no box for it.
+        // On a reply, `title` is the agent's own note (postText.ts), not a headline.
         const edit = usePostEdit(write);
         await edit.open(post({ title: `why this reply` }));
         edit.content.value = `rewritten`;
@@ -112,7 +109,7 @@ describe("usePostEdit", () => {
     });
 
     it("carries a published headline, and never blanks one", async () => {
-        // A post with a real title, not a reply: the one shape where the editor draws a second box.
+        // A titled, non-reply post: the shape where the editor draws a second box.
         const article = post({ target: `r/webdev`, title: `Ship it on Friday` });
         const edit = usePostEdit(write);
         await edit.open(article);
@@ -120,16 +117,15 @@ describe("usePostEdit", () => {
         await edit.flush();
         expect(written[0]?.changes).toMatchObject({ title: `Ship it on Monday` });
 
-        // Selecting the headline to retype it empties the field for a moment. Saving THAT would leave a post
-        // that cannot go out at all, so an emptied headline means unchanged.
+        // Selecting the headline to retype it empties the field for a moment; saving that would leave a post that can't
+        // go out, so an emptied headline means unchanged.
         edit.title.value = ``;
         edit.content.value = `body moved on`;
         await edit.flush();
         expect(written[1]?.changes).toEqual({ content: `body moved on` });
     });
 
-    // An action row has no pencil, but the page asks every row whether it is the one open: the answer for a
-    // row that can never be opened is simply no.
+    // An action row has no pencil, but the page still asks if it's the one open; the answer is always no.
     it("is never editing an action", async () => {
         const edit = usePostEdit(write);
         await edit.open(post());

@@ -5,18 +5,8 @@ import { metaLoginDriver } from "./meta-login.js";
 import { cancelAllMintedLogins, cancelMintedLogin, completeMintedLogin, startMintedLogin } from "./minted-login.js";
 import { zaiLoginDriver } from "./zai-login.js";
 
-/* THE THREE SIGN-INS, END TO END, against a vendor that is not there.
- *
- * WHY THIS FILE EXISTS AT ALL. Nobody here holds a Muse Code subscription, a GLM Coding Plan or a BigModel
- * account, so the one thing that cannot be proved on this machine is the click on the vendor's approval page.
- * Everything on THIS side of that click can be, and all of it is wire detail that compiles either way: which URL
- * is asked, in what encoding, with which token in which header, what a `slow_down` does to the interval, which
- * failure is a refusal and which is a blip, and — the assertion this whole change turns on — that the key a mint
- * produced reaches the store and never reaches a caller.
- *
- * The fake vendor is a `fetch` that routes on URL and RECORDS every call, so the assertions are about the
- * conversation rather than about a mocked return value. Time is faked, because both flows poll on the vendor's
- * own interval and a real test that waited would take a minute to say nothing extra. */
+// All three sign-ins end to end against a fake vendor `fetch` that routes on URL and records every call, since nobody
+// here holds a real subscription to click approve on. Time is faked; both flows poll on the vendor's own interval.
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
@@ -40,8 +30,8 @@ interface Call {
     readonly body: string;
 }
 
-// A vendor that answers by URL. Handlers are consumed in order per URL where a route answers differently on
-// successive calls (a poll that is pending and then ready), which is the whole shape of a device flow.
+// Answers by URL; handlers are consumed in order per URL where a route answers differently across calls (a poll:
+// pending, then ready).
 const fakeVendor = (routes: Record<string, (call: Call) => unknown>) => {
     const calls: Call[] = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
@@ -65,8 +55,8 @@ const fakeVendor = (routes: Record<string, (call: Call) => unknown>) => {
     return { fetchImpl, calls };
 };
 
-// The `{code, data}` envelope both Z.ai roots answer in. Business errors ride an HTTP 200, which is exactly why
-// the driver unwraps rather than trusting a status.
+// The {code, data} envelope both Z.ai roots answer in. Business errors ride an HTTP 200, which is why the driver
+// unwraps rather than trusting a status.
 const envelope = (data: unknown) => ({ code: 0, msg: "", data });
 
 const connected = (store: ReturnType<typeof memoryMintedStore>) => store.credentials();
@@ -118,8 +108,8 @@ test("Meta's sign-in hands back the vendor's page and code before anybody has ap
     const vendor = metaVendor({ tokenAnswers: [() => ({ error: "authorization_pending" })] });
     const { started, store } = await startMeta(vendor);
 
-    // The complete URL, not the bare one: it carries the code, so the page the user lands on is already filled
-    // in and the code on the card is a confirmation rather than something to type.
+    // The complete URL, not the bare one: the code is already filled in, so the card's code is confirmation, not
+    // something to type.
     expect(started.url).toBe("https://meta.test/device?user_code=WDJB-MJHT");
     expect(started.code).toBe("WDJB-MJHT");
     expect(started.flow).toBe("device");
@@ -131,8 +121,7 @@ test("Meta's sign-in hands back the vendor's page and code before anybody has ap
     expect(JSON.stringify(started)).not.toContain("LLM|");
     expect(await connected(store)).toEqual([]);
 
-    // Form-encoded with the vendor's own client id: this endpoint is the terminal sign-in road, and it answers
-    // a request that looks like one.
+    // Form-encoded with the vendor's own client id: the endpoint answers a request that looks like its own CLI's.
     const [begin] = vendor.calls;
     expect(begin?.method).toBe("POST");
     expect(begin?.headers.get("content-type")).toBe("application/x-www-form-urlencoded");
@@ -153,25 +142,21 @@ test("Meta's approval mints the vendor's own key and stores it, and only it", as
     const stored = await connected(store);
     expect(stored).toHaveLength(1);
     expect(stored[0]?.apiKey).toBe("LLM|minted-key");
-    // Whose it is, from the mint rather than from anything the user typed: a minted key says nothing about
-    // itself, so this is the only thing that can name the row.
+    // From the mint, not anything the user typed: a minted key says nothing about whose it is.
     expect(stored[0]?.email).toBe("someone@example.com");
     expect(stored[0]?.variant).toBe("meta");
     // The catalog is read with a connected account's key, so a connect has to drop the cached answer.
     expect(forgotten).toHaveBeenCalledTimes(1);
 
-    /* THE DEVICE TOKEN IS NOT THE CREDENTIAL, which is the fact this whole mechanism exists for: Meta's model
-     * endpoint refuses `dca:` tokens, so a sign-in that stored one would connect a row whose every turn is a
-     * 401. The mint is what turns it into a key, and it is addressed with the device token as a bearer. */
+    // The device token is not the credential: Meta's model endpoint refuses `dca:` tokens outright, so the mint turns
+    // it into a real key, addressed with the device token as bearer.
     const mint = vendor.calls.find((call) => call.url === META_HOSTS.mint);
     expect(mint?.headers.get("authorization")).toBe("Bearer dca:device-token");
     expect(JSON.parse(mint?.body ?? "{}")).toEqual({ dca_token: "dca:device-token" });
     expect(stored[0]?.apiKey).not.toBe("dca:device-token");
 });
 
-/* A `slow_down` IS AN INSTRUCTION, not an error. RFC 8628 says the client widens its interval and keeps going;
- * a client that treated it as a failure would abandon a sign-in the user is still completing, and one that
- * ignored it would keep being told off. */
+// RFC 8628 says the client widens its interval and keeps going, rather than treating it as a failure or ignoring it.
 test("Meta's slow_down widens the poll interval instead of ending the sign-in", async () => {
     const vendor = metaVendor({
         tokenAnswers: [() => ({ error: "slow_down" }), () => ({ access_token: "dca:device-token" })],
@@ -195,14 +180,14 @@ test("a Meta sign-in declined on the page connects nothing", async () => {
     const { store } = await startMeta(vendor);
     await vi.advanceTimersByTimeAsync(6_000);
     expect(await connected(store)).toEqual([]);
-    // And the poll STOPS: a declined sign-in that kept asking would spend the next ten minutes being declined.
+    // The poll stops: a declined sign-in that kept asking would spend ten more minutes being declined.
     const asked = vendor.calls.filter((call) => call.url === META_HOSTS.token).length;
     await vi.advanceTimersByTimeAsync(20_000);
     expect(vendor.calls.filter((call) => call.url === META_HOSTS.token).length).toBe(asked);
 });
 
-/* AN ACCOUNT WITH NO LIVE PLAN IS NOT A CONNECTION. Meta issues a key and says `require_payment`; storing it
- * would draw a connected row whose every turn is refused, with the reason living only in the refusal. */
+// Meta issues a key alongside `require_payment`; storing it would draw a connected row whose every turn is refused, the
+// reason visible only there.
 test("a Meta account with no active plan is refused rather than stored", async () => {
     const vendor = metaVendor({
         tokenAnswers: [() => ({ access_token: "dca:device-token" })],
@@ -271,14 +256,13 @@ test("Z.ai's international sign-in polls to completion and provisions the plan's
     await vi.advanceTimersByTimeAsync(5_000);
 
     const stored = await connected(store);
-    /* THE CREDENTIAL IS THE PAIR, and that is a fact about this endpoint rather than a formatting choice: the
-     * international Anthropic surface wants `<apiKey>.<secretKey>` and refuses either half alone. */
+    // The credential is the pair: the international Anthropic surface wants `<apiKey>.<secretKey>` and refuses either
+    // half alone.
     expect(stored[0]?.apiKey).toBe("ak-made.sk-secret");
     expect(stored[0]?.email).toBe("plan@example.com");
     expect(stored[0]?.variant).toBe("zai");
 
-    // The poll is bearer'd with the SERVER's copy of the poll token, not the one this client generated: the
-    // server's is authoritative where it sends one.
+    // Bearer'd with the server's own copy of the poll token, not the client's; the server's is authoritative.
     const poll = vendor.calls.find((call) => call.url.includes("/oauth/cli/poll/"));
     expect(poll?.headers.get("authorization")).toBe("Bearer server-poll-token");
     // Internationally the OAuth token is swapped for a console session before anything is provisioned.
@@ -317,11 +301,11 @@ test("Z.ai's mainland sign-in sends the browser somewhere it can identify the an
     expect(started.variant).toBe("bigmodel");
     const url = new URL(started.url);
     expect(url.origin + url.pathname).toBe(ZAI_HOSTS.bigModelLogin);
-    // The state on the card is the one in the address the vendor will send back, which is what lets the panel
-    // recognise a pasted address as this attempt's before sending it anywhere.
+    // The state on the card is what the vendor's returned address carries, letting the panel recognise a pasted address
+    // as this attempt's.
     expect(url.searchParams.get("state")).toBe(started.state);
     expect(started.state).not.toBe("");
-    // A loopback redirect nothing binds: the page dead-ends by design, which is the state the panel draws.
+    // A loopback redirect nothing binds: the page dead-ends by design.
     expect(url.searchParams.get("redirect")).toContain("127.0.0.1");
     // Nothing has been asked of the vendor yet: this flow's first call happens when the grant comes back.
     expect(vendor.calls).toEqual([]);
@@ -346,14 +330,13 @@ test("the pasted address finishes a mainland sign-in and provisions its key", as
 
     const exchanged = vendor.calls.find((call) => call.url === `${ZAI_HOSTS.oauthBase}/oauth/token`);
     expect(JSON.parse(exchanged?.body ?? "{}")).toMatchObject({ provider: "bigmodel", code: "grant-abc", state: started.state });
-    // The mainland OAuth token authorizes the business API directly: no console swap, and the token rides
-    // verbatim rather than under a Bearer this side invented.
+    // The mainland token authorizes the business API directly, verbatim, with no console swap and no invented Bearer
+    // prefix.
     expect(vendor.calls.some((call) => call.url.endsWith("/api/auth/z/login"))).toBe(false);
     expect(vendor.calls.find((call) => call.url.endsWith(KEYS_PATH))?.headers.get("authorization")).toBe("bm-access");
 });
 
-/* THE STATE IS CHECKED AGAINST OUR OWN COPY. An address from a second tab or an old paste carries somebody
- * else's grant, and redeeming it would attach that grant to this attempt. */
+// Checked against our own copy: a second tab or old paste carries somebody else's grant.
 test("an address from a different sign-in is refused and redeems nothing", async () => {
     const vendor = bigModelVendor();
     const { store, started } = await startBigModel(vendor);
@@ -394,8 +377,7 @@ test("an address with no grant in it is refused before anything is sent", async 
     expect(vendor.calls).toEqual([]);
 });
 
-/* A DEVICE SIGN-IN HAS NOTHING TO PASTE BACK, and saying so is better than silence: a caller doing this has
- * confused two flows, and without the refusal they would be told nothing while the poll carried on regardless. */
+// Silence would leave a confused caller believing nothing happened while the poll carried on regardless.
 test("pasting an address at a device sign-in says so rather than being ignored", async () => {
     const vendor = metaVendor({ tokenAnswers: [() => ({ error: "authorization_pending" })] });
     const { started } = await startMeta(vendor);
@@ -418,13 +400,12 @@ test("an estate the provider does not have is refused rather than defaulted", as
             fetchImpl: vendor.fetchImpl,
         }),
     ).rejects.toThrow(/no "not-an-estate" sign-in/);
-    // Refused before the vendor is touched: signing somebody into the wrong estate mints a key their turns
-    // cannot use, and the failure would arrive as an authentication error they cannot act on.
+    // Refused before the vendor is touched: the wrong estate mints a key whose turns fail as an unactionable auth
+    // error.
     expect(vendor.calls).toEqual([]);
 });
 
-// A handshake that has already landed or expired is a no-op, not an error: both are the state the caller was
-// asking for, and a 500 on "stop waiting" would be the card reporting a problem that is not one.
+// Landed or expired, both are the state the caller wanted; a 500 here would report a problem that isn't one.
 test("cancelling a sign-in nobody is waiting on is a no-op", () => {
     expect(() => cancelMintedLogin("meta", "never-existed")).not.toThrow();
 });

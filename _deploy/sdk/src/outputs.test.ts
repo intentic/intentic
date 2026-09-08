@@ -7,10 +7,8 @@ import { expect, test } from "vitest";
 import { graph } from "./__fixtures__/deploy.config.js";
 import { defineStack } from "./index.js";
 
-// The Ref<string> output props on a handle are the author-facing source of truth; OUTPUTS is the runtime
-// mirror the engine reads. Walk one real handle of every author-facing type and assert the two agree.
-// Output props carry an `output` (id.output refs); bare resource refs nested on a handle (app.repo, the
-// deployments under app.environments) point at a resource, not an output, so they are excluded.
+// Output props on a handle are the author-facing source of truth; OUTPUTS is the runtime mirror. Only refs carrying
+// `output` count; bare resource refs (app.repo, app.environments) are excluded.
 const outputPropsOf = (handle: object): string[] =>
     Object.entries(handle)
         .filter(([, value]) => isRef(value) && value.output !== undefined)
@@ -33,22 +31,17 @@ test("public handles' output refs match OUTPUTS exactly", () => {
         handles["workspace"] = i.want.workspace("workspace", { on: host, expose: cf });
     }, "example.com");
 
-    // The App handle is the author's composite (repo + environments), not a resource type, so it is not walked
-    // here. host/cloudflare are author-facing handles (i.have.*); repo/deployment are nested on the app handle;
-    // postgres/valkey are the backing-instance handles (i.want.database / cache).
+    // App is a composite (repo + environments), not a resource type; walked via its nested repo/deployment instead.
     for (const type of ["host", "cloudflare", "deployment", "repo", "postgres", "valkey", "workspace"] as const) {
         const handle = handles[type];
-        // Which types WERE captured, printed against the one that is missing. The custom message said only
-        // that one was absent; this says what the walk actually found instead, which is the thing a reader
-        // needs to tell "the type was renamed" from "the walk stopped early".
+        // Asserts which types were captured, not just that one is missing, to tell a rename from an early stop.
         expect(Object.keys(handles)).toContain(type);
         expect(outputPropsOf(handle as object)).toEqual([...OUTPUTS[type]].toSorted());
     }
 });
 
-// Every {$ref} the compiled graph carries must point at an output OUTPUTS declares for the target node's
-// type. This covers the derived node types (forgejo/komodo/repo/deployment) as actually wired by the
-// resolver, and guarantees the engine can resolve every reference.
+// Extracts every $ref target from a value; every ref in the graph must point at an output OUTPUTS declares for its
+// type.
 const refKeysOf = (value: SerializedValue): string[] => {
     if (typeof value !== "object" || value === null) {
         return [];

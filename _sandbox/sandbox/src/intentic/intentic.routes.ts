@@ -7,12 +7,9 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "./apply-eve
 import { runCheckCommand } from "./check-run.js";
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "./infra-apply.js";
 
-// Run the in-sandbox intentic CLI over the workspace root (where intent/desired-state/app live), streaming
-// structured lines as they arrive. resolve/plan (the check flow, real shell actions) run VISIBLY in the
-// job-infra-check tmux session with their events tailed from a per-run file; anything else (`deployments`, a
-// polled read) stays on the invisible streamed child, never run polled reads in terminals. A non-zero exit
-// throws with the real output; surface that as a terminal `error` line the UI renders, THEN fail the RPC,
-// otherwise oRPC masks it behind INTERNAL_SERVER_ERROR.
+// Runs the CLI over the workspace root, streaming its lines. resolve/plan run visibly in the job-infra-check tmux
+// session; other calls use the invisible streamed child. A non-zero exit yields a terminal error line first, or oRPC
+// masks it as INTERNAL_SERVER_ERROR.
 export const createIntenticRoutes = (services: Services) => {
     const i = implement(intenticContract).$context<OrpcContext>();
     return {
@@ -30,16 +27,14 @@ export const createIntenticRoutes = (services: Services) => {
                 throw new ORPCError("INTERNAL_SERVER_ERROR", { message });
             }
         }),
-        // One-shot infra reconcile in tmux session panel-infra-apply (startInfraApplyJob, shared with the
-        // service capability): survives refresh/navigation, attachable via the global terminal panel, output
-        // readable in scrollback above a live prompt after it finishes. Already-running is idempotent-OK.
+        // One-shot infra reconcile in the panel-infra-apply tmux session (shared with the service capability), so it
+        // survives navigation and stays attachable via the terminal panel. Already running is idempotent-OK.
         apply: i.apply.handler(async () => {
             await startInfraApplyJob(services);
             return { ok: true } as const;
         }),
-        // Tail the durable apply events file as an SSE event-iterator (same wire shape as `run`, so the web reuses
-        // readIntenticLines unchanged): replays from the run's start then follows live, closing on the terminal
-        // {kind:"exit"} line or when the tmux job is gone. Idle when no apply has run (empty stream).
+        // Tails the durable apply events file as an SSE stream (same wire shape as `run`); replays from the start,
+        // follows live, and closes on the terminal exit line or when the job is gone. Empty stream if no apply has run.
         applyEvents: i.applyEvents.handler(async function* ({ signal }) {
             yield* tailIntenticEvents(
                 applyEventsPath(services.config.historyRoot),

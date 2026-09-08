@@ -2,29 +2,23 @@ import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { detectScheme, type PortScheme } from "./port-probe.js";
 import type { LoopbackHost } from "./port-scan.js";
 
-// The forward table behind the port-<slot>-<sandboxId>.<zone> hostnames: a fixed pool of slots mapped to
-// whatever ports the owner currently forwards. Slots, not port numbers, appear in hostnames so the
-// intentic-provided path mints at most one route per slot per sandbox lifetime while dev servers churn
-// ephemeral ports; own-Cloudflare rides its wildcard either way. In-memory only: forwards are user gestures,
-// and after a daemon restart a click simply re-forwards (usually landing the same, already-minted slot).
-//
-// The slot NAMES are injected rather than imported: they are derived from the connect token
-// (portSlotsFromToken), so this table has no opinion about them beyond their count and their order.
+// Forward table behind port-<slot>-<sandboxId>.<zone> hostnames: fixed slots mapped to whatever ports the owner
+// forwards, so a route stays stable per slot while dev-server ports churn. In-memory only; a restart just re-forwards.
+// Slot names are injected here, derived from the connect token.
 
 export interface PortTarget {
     readonly port: number;
-    // The loopback address the listener is actually dialable at (a `localhost` bind can be ::1-only. Vite).
+    // Loopback address the listener actually dials at; a `localhost` bind can be ::1-only (Vite).
     readonly host: LoopbackHost;
     readonly scheme: PortScheme;
 }
 
 export interface PortForwards {
-    // Map a port onto a slot (reusing its existing slot, else the first free one, else evicting the
-    // least-recently-used) and (re)detect the upstream scheme at the listener's dial host. Returns the slot.
+    // Maps a port to a slot (its own, else free, else LRU-evicted) and redetects the scheme; returns the slot.
     readonly forward: (port: number, host: LoopbackHost) => Promise<string>;
     readonly unforward: (port: number) => void;
     readonly slotOf: (port: number) => string | undefined;
-    // The proxy's resolver, also the LRU touch, so live preview traffic keeps its forward warm.
+    // The proxy's resolver; also the LRU touch that keeps live preview traffic's forward warm.
     readonly targetOf: (slot: string) => PortTarget | undefined;
 }
 
@@ -45,9 +39,7 @@ export const createPortForwards = (
 
     return {
         forward: async (port, host) => {
-            // Allocate synchronously (before the probe awaits) so concurrent forwards of one port can't both
-            // claim a slot. Re-forwarding re-probes: a dev server restarted on the same port may have flipped
-            // between http and https (or moved loopback families).
+            // Allocated before the probe awaits, so concurrent forwards of one port can't both claim a slot.
             const slot =
                 slotOf(port) ??
                 slots.find((candidate) => !assigned.has(candidate)) ??
@@ -58,17 +50,12 @@ export const createPortForwards = (
                 scheme: assigned.get(slot)?.port === port ? assigned.get(slot)!.scheme : "http",
                 lastUsedAt: Date.now(),
             });
-            /* A forwarded port is reachable by anyone with the hostname until it is stopped, which is why the
-             * shell rail shows it from every view. The forwarder's own tab learns this from the response; every
-             * OTHER tab, and every other member, used to wait out a 15s poll for a fact about who can reach
-             * this sandbox. Published here, at the table, so an eviction (the slot pool is fixed, so forwarding
-             * can un-forward someone else's port) is announced by the same line that causes it. */
+            // Published here so an eviction (freeing another port's slot) is announced by the same call that causes it.
             publishRuntimeChange("ports");
-            // Nothing answering, a server still booting, or WebSocket-only, forwards as http; the proxy 502s
-            // until the server responds anyway, and the next forward re-probes.
+            // An unresponsive, still-booting, or WebSocket-only port forwards as http; the next forward re-probes.
             const scheme = (await probe(port, host)) ?? "http";
             const entry = assigned.get(slot);
-            // Only apply if the slot still maps this port, an eviction/re-forward may have won meanwhile.
+            // Applies only if the slot still maps this port; an eviction or re-forward may have won meanwhile.
             if (entry?.port === port) {
                 assigned.set(slot, { ...entry, scheme });
             }

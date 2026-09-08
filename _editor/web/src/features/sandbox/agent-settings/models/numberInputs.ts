@@ -1,13 +1,8 @@
-/* The Agent tab's numeric boxes, committed the same way, because the trap they share is the EMPTY FIELD.
- * `Number("")` is 0, so a user who selects the contents and pauses before typing has silently saved "measure
- * nothing" or "one subagent". Both committers therefore read the ELEMENT, not a bound number, and fall back to
- * what is saved when the box holds nothing usable.
- *
- * The clamped value is written back into the input because the bound value may not have changed (typing 200
- * over 100), and with nothing for Vue to patch the box would keep showing the number that was refused. */
+// Both commit functions read the input element, not a bound number, and fall back to `saved` when the field is empty or
+// unparsable, since `Number("")` is 0 and would silently commit a false zero. The clamped value is written back to the
+// input, since Vue won't repaint the box if the bound value didn't change.
 
-// A percentage [0,100] on screen over a fraction [0,1] in settings, the output holdout and the two turn-level
-// experiments' controls.
+// Percent on screen, fraction [0,1] in settings; used by the output holdout and the two turn-level experiment controls.
 export const commitPercent = (event: Event, saved: number, apply: (fraction: number) => void): void => {
     const input = event.target as HTMLInputElement;
     const typed = Number(input.value);
@@ -19,9 +14,8 @@ export const commitPercent = (event: Event, saved: number, apply: (fraction: num
 // The saved fraction as the whole percent the box shows.
 export const asPercent = (fraction: number | undefined): number => Math.round((fraction ?? 0) * 100);
 
-// A plain whole number with its own floor and ceiling, the subagent caps. The bounds are the schema's, passed
-// in rather than looked up here: the daemon rejects anything outside them, and a box that lets you type a number
-// the save will refuse is a box that appears to have taken your answer.
+// Whole number with caller-supplied bounds (the subagent caps); the daemon owns the schema and rejects anything outside
+// them, so this box must not accept what a save would refuse.
 export const commitCount = (
     event: Event,
     saved: number,

@@ -1,22 +1,8 @@
 import { parseStep, type RunEvent } from "./desktop";
 
-/* WHAT AN INSTALL IS GOING TO DO, SAID BEFORE IT DOES IT.
- *
- * The window used to show one line, whatever the script last said, and nothing else: no idea how many
- * steps there were, which one this was, or whether the four silent minutes in the middle were a download or
- * a hang. That is the shape people abandon, and they abandon it during the image pull, which is the one
- * stretch where nothing prints and everything is fine.
- *
- * So the run is modelled as a PLAN the screen can draw in full at t=0, every step, in order, with the ones
- * that will not happen on this machine left out, and the script's own `intentic: [phase] …` markers move a
- * cursor down it. The scripts name the phase rather than the screen recognising the sentence (see
- * ic's util::step): copy is reworded all the time, and a progress bar that moves when someone fixes a typo
- * is worse than no progress bar.
- *
- * WEIGHTS ARE SECONDS, AND THEY ARE GUESSES. They exist to keep the bar honest about how much is LEFT rather
- * than how many steps are left, "9 of 10 steps" on the far side of a four-minute pull is a lie a step
- * counter tells and a weighted bar does not. They are compared to each other and to observed pace, never
- * shown, so being wrong about one costs a slightly-off estimate and nothing more. */
+// Models the run as a full plan drawn up front, with steps that won't happen on this machine left out; the
+// script's own `intentic: [phase]` markers move a cursor down it. Weights are seconds, only ever compared to each
+// other and to observed pace — never shown — so a wrong one just skews the estimate.
 
 export interface PlanStep {
     /** The phase id the scripts print. */
@@ -32,18 +18,12 @@ export interface PlanInput {
     readonly dockerReady: boolean;
     /** This setup also enrols desktop sync (the setup link carried a folder). */
     readonly syncing: boolean;
-    /** `windows` swaps the first two steps and renames them, see below. */
+    /** `windows` swaps the first two steps and renames them. */
     readonly os: string;
 }
 
-/* The steps that always happen, in the order the flow takes them: the shim checks Docker and fetches the
- * installer, then it preflights, redeems the code, pulls, starts, waits, verifies and connects the machine.
- *
- * WINDOWS TAKES THE FIRST TWO IN THE OTHER ORDER, and that is a real difference rather than a cosmetic one.
- * "Does this machine have Docker" is one question on Linux and a dozen on Windows, virtualization,
- * WSL2, the two Windows features behind it, a pending restart, the package manager this PC may not have,
- * and that examination lives in the installer binary, so the binary has to be here before it can happen.
- * Drawing the steps in the order they will actually run is the entire contract of this screen. */
+// Steps in the order the flow actually runs them; Windows checks Docker before fetching the installer since that
+// check needs the installer binary. Drawing them in real order is this screen's whole contract.
 export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
     const windows = input.os === `windows`;
     const fetch: PlanStep = { phase: `fetching-ic`, label: `Fetch the installer`, weight: 15 };
@@ -52,9 +32,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         label: windows ? `Check what Docker needs` : `Check Docker`,
         weight: windows ? 12 : 5,
     };
-    // The only step that can dominate the whole install, a ~600 MB download, an installer, a first-run
-    // dialog, and on Windows possibly turning on WSL2 as well. Its weight is the reason the bar crawls
-    // honestly on a machine that needs it instead of sitting at 90% for ten minutes.
+    // Can dominate the whole install (download, installer, maybe WSL2); weighted heavily so the bar doesn't stall.
     const install: PlanStep[] = input.dockerReady
         ? []
         : [{ phase: `installing-docker`, label: windows ? `Set up Docker` : `Install Docker`, weight: windows ? 600 : 420 }];
@@ -62,41 +40,21 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
         { phase: `preflight`, label: `Check this device`, weight: 10 },
         { phase: `claiming-code`, label: `Redeem your setup code`, weight: 5 },
-        // The second long one, and the one people meet on every first install. It reports real progress (docker
-        // names each layer as it lands), so this weight only has to be right about its share of the whole.
+        // Reports real progress via docker's layer names, so this weight only needs to be right about its share.
         { phase: `pulling-image`, label: `Download the sandbox image`, weight: 240 },
         { phase: `starting-sandbox`, label: `Start your sandbox`, weight: 25 },
         { phase: `waiting-health`, label: `Wait for it to come up`, weight: 40 },
         { phase: `verifying`, label: `Check it answers`, weight: 20 },
         ...(input.syncing ? [{ phase: `desktop-sync`, label: `Set up folder sync`, weight: 45 }] : []),
-        /* THE THIRD DOWNLOAD, and it was weighted as if it were a handshake. This step fetches the host agent,
-         * a ~100 MB single-file binary, and it prints one line before it ("Downloading the intentic machine
-         * agent…") and nothing at all until it lands. At weight 20 the bar reached 99% and the estimate read
-         * "less than a minute left" before the download had started, so the last thing a first install showed
-         * was a full bar not moving — the exact "is it stuck?" this plan exists to answer, arriving at the one
-         * moment the user is most ready to believe the install had finished and something else had gone wrong.
-         * Sized against `pulling-image` (240) by what each actually transfers.
-         *
-         * Still sized for the download, because a first install is what this plan draws: the installers now
-         * skip it entirely when the machine already has the published agent, so on a RE-RUN this step lands in
-         * about a second and the bar simply arrives early — which is the harmless direction. */
+        // Covers a silent ~100 MB agent download; sized against pulling-image so the bar doesn't stall near 99%.
         { phase: `connecting-machine`, label: `Connect this device`, weight: 75 },
     ];
 };
 
-/* --- docker's own account of the pull ---
- *
- * Spawned without a terminal, `docker pull` cannot draw its bars, so it prints one line per layer per state
- * change instead, which is better for us than the bars would be: no cursor tricks to undo, and a layer's
- * last word is its state. Counting them is REAL progress through the biggest download in the install, and it
- * is the difference between a bar that creeps on a timer and one that means something.
- *
- * The total grows as docker announces layers, so early fractions are over-optimistic; `percent` below is
- * clamped monotonic, which is what keeps that from ever reading as the bar going backwards. */
+// One line per layer per state change; counted for real progress, clamped monotonic against growing totals.
 const LAYER = /^([0-9a-f]{6,}): (Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)/;
 
-// How far through one layer each state is. Downloading and extracting are the two that take time; the rest
-// are announcements either side of them.
+// Fraction complete per layer state; only Downloading and Extracting actually take time.
 const LAYER_DONE: Record<string, number> = {
     "Pulling fs layer": 0,
     Waiting: 0,
@@ -118,7 +76,7 @@ export interface Progress {
     readonly layers: Readonly<Record<string, number>>;
     readonly startedAt: number;
     readonly stepStartedAt: number;
-    /** Never allowed to fall, see LAYER above for the one thing that would otherwise make it. */
+    /** Never allowed to fall, since docker's reported totals can grow mid-pull. */
     readonly percent: number;
     /** Set once the run ends, so the bar stops moving and the estimate disappears. */
     readonly ended: `ok` | `failed` | undefined;
@@ -137,9 +95,8 @@ export const startProgress = (plan: readonly PlanStep[], now: number): Progress 
 
 const total = (plan: readonly PlanStep[]): number => plan.reduce((sum, step) => sum + step.weight, 0);
 
-/* HOW FAR INTO THE RUNNING STEP WE ARE, 0..1. Docker's layers when there are any; otherwise the clock,
- * against this step's own weight and capped short of the end, a timer that reaches 100% is a bar claiming a
- * step is finished when the only thing that knows is the script, which has not said so yet. */
+// Fraction (0..1) through the running step: docker's layers if any, else elapsed time against the step's weight,
+// capped short of 100% since only the script's own line marks a step done.
 const stepFraction = (state: Progress, now: number): number => {
     const layers = Object.values(state.layers);
     if (layers.length > 0) {
@@ -162,8 +119,7 @@ const percentOf = (state: Progress, now: number): number => {
     }
     const behind = state.plan.slice(0, state.index).reduce((sum, step) => sum + step.weight, 0);
     const inside = (state.plan[state.index]?.weight ?? 0) * stepFraction(state, now);
-    // Capped below 100: only the exit says a run is finished, and a bar that fills while the last step is
-    // still working is the same lie as a timer that reaches the end.
+    // Capped below 100: only the exit event says a run is actually finished.
     return Math.min(99, ((behind + inside) / whole) * 100);
 };
 
@@ -179,9 +135,7 @@ export const advance = (state: Progress, event: RunEvent, now: number): Progress
     const step = parseStep(event.text);
     if (step !== undefined) {
         const at = state.plan.findIndex((planned) => planned.phase === step.phase);
-        // A phase this plan does not carry (SELF_HOST's host tunnel, say) is narration, not a step: it says
-        // what is happening under the step that is running rather than moving the cursor somewhere the
-        // checklist cannot draw. So is a phase we have already passed, the cursor only ever goes forward.
+        // An unknown phase is narration, not a step; neither is one already passed — the cursor only moves forward.
         const index = at > state.index ? at : state.index;
         const moved = index !== state.index;
         const next: Progress = {
@@ -225,14 +179,8 @@ export interface ProgressView {
     readonly remaining: string | undefined;
 }
 
-/* WHAT THE ESTIMATE IS MADE OF. The plan's weights are a guess about a normal machine; the run itself is the
- * correction. Pace is how long this machine has actually taken per unit of weight so far, and the estimate is
- * the remaining weight at that pace, so a slow disk or a throttled connection stretches the number instead
- * of being contradicted by it.
- *
- * Clamped either side of the nominal second-per-unit, because the first seconds of a run measure almost
- * nothing: without it, one quick step at the start reports "less than a minute" for an install that is about
- * to spend four of them downloading. */
+// Pace is this machine's actual seconds-per-weight-unit so far; the estimate is remaining weight at that pace.
+// Clamped near the nominal rate, since the first seconds of a run barely measure anything.
 const NOMINAL_MS = 1000;
 const paceOf = (state: Progress, now: number): number => {
     const consumed = (state.percent / 100) * total(state.plan);
@@ -263,9 +211,8 @@ export const progressView = (state: Progress, now: number): ProgressView => ({
             state.ended === `ok` || at < state.index
                 ? `done`
                 : at > state.index
-                  ? // A run that stopped leaves the steps it never reached as neither done nor pending: they
-                    // are not waiting for anything any more, and drawing them as if they were is how a failed
-                    // install reads as one that is still going.
+                  ? // Unreached steps after a stopped run are neither done nor pending.
+                    // Marked `stopped`, not `waiting`, so a failed install doesn't look like it's still going.
                     state.ended === `failed`
                       ? `stopped`
                       : `waiting`

@@ -8,19 +8,13 @@ import { isDevBuild, version } from "../version.js";
 
 const require = createRequire(import.meta.url);
 
-// The sandbox's own version, the intent repo pins @intentic/{graph,sdk} to it (published in the release image).
-// It is the same value surfaced by /info as the exact release behind the moving stable image tag.
+// The sandbox's own version; the intent repo pins @intentic/{graph,sdk} to it, the same value /info reports.
 
-// The package root of an installed @intentic/* package (the dir holding its package.json), for `link:`. Resolve
-// its main entry (its exports don't expose ./package.json), then walk up to the package root. graph + sdk are
-// direct deps of @intentic/sandbox exactly so this resolves, in the image from /opt/sandbox/node_modules, in
-// local `pnpm dev` from the _libs symlinks.
+// Package root of an installed @intentic/* package (dir holding its package.json), for `link:`. Resolves the main
+// entry, then walks up, since the package's exports do not expose ./package.json directly.
 const packageRoot = (pkg: string): string => {
     const entry = require.resolve(pkg);
-    // Walk up from the resolved entry to its package root, stopping at the filesystem root. The resolve→root
-    // invariant holds for a normally-installed package, but a broken/partial dev symlink could otherwise send
-    // this synchronous loop past the root forever (dirname("/") === "/") and peg the daemon event loop, so
-    // fail loudly at the root instead of spinning.
+    // Walks up to the package root; throws at the filesystem root instead of looping forever on a broken symlink.
     for (let dir = dirname(entry); ;) {
         if (existsSync(join(dir, "package.json"))) {
             return dir;
@@ -33,19 +27,12 @@ const packageRoot = (pkg: string): string => {
     }
 };
 
-// The dependency spec for an @intentic/* package the intent repo needs. A released image carries a published
-// version, so pin the `~<version>` range and resolve from the registry (portable, reviewable). A dev/:latest
-// image carries the unpublished 0.0.0 sentinel, its packages aren't on npm, so `~0.0.0` can't resolve; link
-// instead to the copy bundled in THIS image. The linked packages' own deps resolve from their bundled store
-// siblings, so the intent repo's deploy.config.ts imports load under `resolve`.
+// A released image pins `~<version>` from the registry. A dev build's unpublished 0.0.0 packages aren't on npm, so it
+// links to the copy bundled in this image instead.
 export const dependencySpec = (pkg: string): string => (isDevBuild ? `link:${packageRoot(pkg)}` : `~${version}`);
 
-// Make the intent repo provisionable. `resolve` dynamically imports deploy.config.ts, which needs @intentic/graph
-// and @intentic/sdk installed in /work/intent. The neutral first-boot ledger deliberately skips the skeleton +
-// install so a reachability-only sandbox stays minimal and offline; a sandbox wired as a deploy target
-// (SELF_HOST=1) calls this so `resolve`/`apply` work. Unconditional idempotent install (pnpm no-ops fast on a
-// complete node_modules), a presence gate would bless a half-install left by a mid-add restart. The install and
-// the git bookkeeping run in the caller's visible job session.
+// Installs @intentic/graph and @intentic/sdk into /work/intent so `resolve`/`apply` can import deploy.config.ts. Runs
+// unconditionally: a presence gate would accept a half-finished install.
 export const ensureIntentInstallable = async (services: Services, session: string): Promise<void> => {
     const intent = services.workspace.repos.intent;
     services.logger.info("wiring the intent repo for provisioning (pnpm install)…");

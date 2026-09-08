@@ -3,26 +3,13 @@ import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 
-/* WHO PICKS A TURN BACK UP WHEN IT DIES THROUGH NO FAULT OF ITS OWN, and, at the end, who stops one that is
- * only ever going to die again. Every resume here is off until the owner asks for it, for one reason said three
- * times: a re-run spends their allowance on a turn they sent once, and only they can say whether it was worth
- * paying for twice.
- *
- * THE SPENT-ALLOWANCE ROW IS THE ODD ONE and worth the row it takes. The other two are guesses, a backoff at a
- * provider nobody can predict, a boot that may or may not have been the turn's fault; this one waits for an
- * hour the provider itself published and fires once, at it. It used to be absent from this group on the
- * grounds that the budget is the user's, which is an argument for the DEFAULT and was quietly serving as an
- * argument against the choice: the case it left unanswered is the 2am wall on a board nobody is watching, where
- * the alternative was a card that waited eight hours for a press that was always going to come. */
+// Who resumes a turn that died through no fault of its own, and who stops one that will only die again.
+// Every resume defaults to off: a re-run spends the owner's allowance on a turn already sent once.
 
 const { settings, patch } = useSandboxSettings();
 
-// The spin-loop guard's threshold, as a count in the box. 0 is a real value here: it means "never quarantine"
-//, so unlike the holdout boxes an emptied field cannot fall back to the saved number without making 0
-// unreachable; it clamps to the bound instead, and the input is written back so a refused number doesn't stay
-// on screen.
-// The carry line, in tokens. 0 is a real value (never carry), so an emptied field clamps rather than falling
-// back to the saved number, and the input is written back so a refused value doesn't stay on screen.
+// 0 is a real value (never carry); an emptied field clamps to the bound rather than falling back to the saved
+// number, and the input is written back so a refused value doesn't linger.
 const setLimitMoveCarryUnder = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
@@ -46,13 +33,10 @@ const setAutomationFailureLimit = (event: Event): void => {
 
 <template>
     <RowGroup label="When a turn breaks">
-        <!-- THE DEFAULT, and the row says so in its own title. A single chat can answer this for itself from
-             the banner under the turn that died, and that press deliberately does NOT reach this switch: what
-             a person means inside one conversation is \"finish this\", and what they mean here is \"this is how
-             the board behaves\". Conflating the two is how one midnight click used to sign every agent up.
-
-             So the row states the two things a default owes its reader: what it governs (everything that has
-             not answered for itself), and that some chats may have. -->
+        <!--
+            The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how
+            the board behaves" are different questions. Governs everything that hasn't answered for itself.
+        -->
         <Row
             icon="refresh"
             title="Resume after provider outages, by default"
@@ -67,9 +51,10 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- The allowance, which is the one wait in this group with an appointment rather than a guess: the
-             provider says when the window reopens, and the turn goes again then, once. The description leads
-             with that, because "retry" is what the row above does and would be the wrong word here. -->
+        <!--
+            The one wait here with a known reopen time (the provider names it) rather than a guess; described as "send
+            again", not "retry", to keep the distinction.
+        -->
         <Row
             icon="clock"
             title="Send again when the allowance comes back, by default"
@@ -84,10 +69,10 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- The other answer to the same wall, and the one that does not wait: another connected account of the
-             same provider that still has room, now. A policy rather than a reflex, for the reason the group's
-             header gives, it spends a second account on the owner's behalf, so it is theirs to switch on. With
-             no account that has room the turn waits exactly as the row above says. -->
+        <!--
+            The non-waiting answer to the same limit: moves to another connected account of the same provider with room.
+            Opt-in since it spends a second account on the owner's behalf; with none available, it waits as the row above.
+        -->
         <Row
             icon="user"
             title="Continue on another account when the allowance is spent, by default"
@@ -102,11 +87,10 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- What a move may carry. Both ways cost tokens and the row says which: carrying re-reads the whole
-             context once on the other account, and keeps everything the model knew; starting fresh costs the
-             sandbox's measured brief plus a capped copy of the record, and loses whatever never reached it.
-             The owner draws the line by size; 0 never carries. Same clamp-and-write-back as the failure
-             limit below: a refused number must not stay on screen. -->
+        <!--
+            Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured
+            brief plus a capped copy and loses the rest. Threshold in tokens; 0 always starts fresh.
+        -->
         <Row
             icon="clock"
             title="Carry the session when its context is under"
@@ -126,9 +110,10 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- Restart auto-resume, for the last thing that kills a turn nobody chose to kill: this sandbox
-             restarting under it. Every update, environment approval and image rebuild recreates the container,
-             so the common case is the user's OWN approval taking down the run that asked for it. -->
+        <!--
+            Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild.
+            The common case is the user's own approval taking down the run that asked for it.
+        -->
         <Row
             icon="refresh"
             title="Resume turns after a restart"
@@ -143,11 +128,10 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!-- The spin-loop guard, and the one row here that STOPS something rather than resuming it. A job that
-             fails every time is misconfigured, and the scheduler will keep spending a turn on it every tick
-             until somebody looks. 0 = never, and it is the default: an hourly poll against an API having a bad
-             afternoon is broken for three fires and fine on the fourth, and an automation disabled at 3 a.m. is
-             one nobody re-enables until they notice. -->
+        <!--
+            The one row here that stops rather than resumes: a job failing every run is misconfigured, and the scheduler
+            would otherwise spend a turn on it every tick. 0 (never) is the default.
+        -->
         <Row
             icon="stop"
             title="Stop a failing automation"

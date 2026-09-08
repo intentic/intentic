@@ -3,13 +3,11 @@ import { expect, test, vi } from "vitest";
 import type { Services } from "../../composition.js";
 import { claudeOneShot } from "./claude-one-shot.js";
 
-/* Only `query` is faked: the rest of the SDK is the real module, because USAGE_LIMIT_ERROR_PREFIXES behind
- * failure-sentences.ts is precisely the part worth not inventing here. The fake yields a generator rather than
- * a plain async iterable: the finally block closes the session through `.return()`. */
+// Only query is faked; the rest of the SDK is real, since failure-sentences.ts's own logic is what's under test. The
+// fake yields a generator (not a plain iterable), since the finally block closes it via .return().
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => ({ ...(await importOriginal<object>()), query }));
-// The credential resolution is the harness's own (harness-credentials.test.ts); here it answers with nothing to
-// withhold, so what is under test is the run and how it reads the CLI's frames.
+// Credential resolution is covered elsewhere; here it returns ok, so only the run is under test.
 vi.mock("../../agent/providers/harness-credentials.js", async (importOriginal) => ({
     ...(await importOriginal<object>()),
     resolveHarnessCredentials: async () => ({ ok: true, credentials: {} }),
@@ -37,10 +35,8 @@ test("returns the model's answer", async () => {
     await expect(ask()).resolves.toBe("Wire the fleet board broadcast");
 });
 
-/* A SUCCESS SUBTYPE IS NOT A SUCCESS: the CLI files an API failure as a success-subtype result carrying
- * `is_error` and the provider's sentence. Every caller here uses the reply AS DATA, so a failure has to arrive
- * as one: returning it is what named four fleet cards after a revoked token (failure-sentences.ts). The
- * sentence rides along on the throw because it names the credential (or the reset) a caller's UI can act on. */
+// The CLI files an API failure as a success-subtype result carrying is_error, not a thrown error; every caller here
+// treats the reply as data, so it must be converted to a thrown failure.
 test("a result that reports an error is a failure, not an answer", async () => {
     answering({ result: "Failed to authenticate. API Error: 401 OAuth access token has been revoked", is_error: true });
     await expect(ask()).rejects.toThrow(/401/);
@@ -51,7 +47,7 @@ test("an errored result with nothing in it still fails rather than answering emp
     await expect(ask()).rejects.toThrow("the model did not answer");
 });
 
-// The backstop for a condition reported as prose without the flag: a spent allowance arrives exactly that way.
+// Backstop for a failure reported as prose without the flag; a spent allowance arrives exactly that way.
 test("a failure sentence is refused even in an unflagged result", async () => {
     answering({ result: "You've hit your session limit · resets 11:50pm (UTC)" });
     await expect(ask()).rejects.toThrow("You've hit your session limit · resets 11:50pm (UTC)");
@@ -66,12 +62,10 @@ test("a non-success subtype names the subtype it failed with", async () => {
     await expect(ask()).rejects.toThrow(/error_during_execution/);
 });
 
-/* THE RETRY THAT NEVER ENDS. The CLI's retry budget is sized for a TURN riding out a rate limit: 300 attempts,
- * and on a spent allowance a delay set to the closed window's remaining lifetime. A helper skipping those frames
- * waits the whole six hours: measured on a live sandbox, 14 CLI processes were resident, the oldest an hour old,
- * and not one session title had ever been written. Both tests below hang forever against the old loop. */
+// The CLI's retry budget is sized for a live turn riding out a rate limit (up to 300 attempts, long delays); a one-shot
+// helper must not wait it out the same way.
 
-// A retry that yields no result afterwards: exactly what the CLI does while it waits out the window.
+// Yields a retry frame then nothing, matching what the CLI does while it waits out the window.
 const retrying = (retry: { readonly error: string; readonly retry_delay_ms: number }): void => {
     query.mockReturnValue(
         (async function* () {

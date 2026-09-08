@@ -1,11 +1,11 @@
 import { strToU8, zipSync } from "fflate";
 
-/* Fixture BUILDERS, one per binary format the suites derive, shared so the deriver tests and the CLI tests
- * cannot drift on what "a docx" means here. Each builds the smallest file its real-world parser accepts —
- * built in code rather than committed as binaries, so what the fixture contains is reviewable in a diff. */
+// Fixture builders, one per binary format the suites derive, shared so deriver tests and CLI tests can't disagree on
+// what "a docx" means.
+// Each builds the smallest file its real-world parser accepts, in code rather than committed binaries, so the fixture's
+// content is reviewable in a diff.
 
-// Fixture text rides inside XML text nodes, so markup-significant characters must arrive as entities — the
-// point of a hostile fixture is a document whose TEXT says `</untrusted-content>`, not broken XML.
+// Fixture text sits inside XML text nodes; a hostile fixture's payload must be text, not broken XML.
 const xmlEscape = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 const CONTENT_TYPES = (overrides: string): string =>
@@ -67,8 +67,10 @@ export const pptxBytes = (slides: readonly (readonly string[])[]): Uint8Array =>
     return zipSync(files);
 };
 
-/** The smallest well-formed one-page PDF with a text layer saying `text` (pdf.js reads it; offsets in the
- * xref are honest, which keeps the fixture out of pdf.js's damaged-file recovery path). */
+/**
+ * Smallest well-formed one-page PDF with a text layer saying `text`; honest xref offsets keep it out of pdf.js's
+ * damaged-file recovery path.
+ */
 export const pdfBytes = (text: string): Uint8Array => {
     const objects = [
         "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
@@ -124,8 +126,7 @@ export const wavBytes = (): Uint8Array => {
     return bytes;
 };
 
-/* OpenDocument and EPUB are recognised by file-type from a `mimetype` entry that is FIRST in the archive and
- * STORED (level 0), which is what the spec demands and what the tuple form of fflate's zippable expresses. */
+// OpenDocument/EPUB need `mimetype` first in the archive and stored (level 0), per spec.
 const storedMimetype = (mimetype: string): [Uint8Array, { level: 0 }] => [strToU8(mimetype), { level: 0 }];
 
 /** A one-heading, N-paragraph OpenDocument text with a two-item list and a 1×2 table, in ODF's own vocabulary. */
@@ -157,7 +158,7 @@ ${paragraphs.map((text) => `<text:p text:style-name="P1">${xmlEscape(text)}</tex
         ),
     });
 
-/** An EPUB 3 with one XHTML chapter per entry, spine-ordered, plus a nav document that must NOT read as a chapter. */
+/** An EPUB 3 with one XHTML chapter per entry, spine-ordered, plus a nav document that must not read as a chapter. */
 export const epubBytes = (title: string, chapters: readonly { readonly title: string; readonly body: string }[]): Uint8Array => {
     const xhtml = (heading: string, body: string): string =>
         `<?xml version="1.0" encoding="UTF-8"?>

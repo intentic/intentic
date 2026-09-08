@@ -5,25 +5,18 @@ import { renderGoogleSignIn, resetConversation, storeDisplayName, storedDisplayN
 import { styles } from "./styles.js";
 import { fetchChallenge, sendMessage } from "./transport.js";
 
-/* <intentic-front-desk>, the whole visible widget: a launcher in a corner, and a panel holding the thread.
- *
- * Everything renders into a shadow root so the host page's CSS cannot reach it and ours cannot leak out. The
- * ONE exception is the gate area (Google's sign-in button, Turnstile's checkbox): those are third-party iframes
- * that expect a document-connected container, so they are created in the LIGHT DOM as children of this element
- * and projected back into the panel through a <slot>. They render where they look like they belong, without
- * either of them having to work inside a shadow root. */
+// <intentic-front-desk>: a launcher and a panel, rendered into a shadow root so host and widget CSS can't cross. The
+// gate area (Google sign-in, Turnstile) is the one exception, created in the light DOM and projected via <slot>.
 
 const LAUNCHER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
 const CLOSE_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 const RESET_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`;
 const SEND_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>`;
 
-// How much client-held transcript rides the FIRST message of a thread. After that the sandbox conversation
-// resumes and carries its own context, so this only matters when a visitor returns to a thread the daemon has
-// since expired.
+// Client-held transcript on a thread's first message only; matters after the daemon has expired the thread.
 const HISTORY_MAX = 20;
 
-// Where the "powered by" link goes. The widget is often the only Intentic surface a visitor ever sees.
+// Target of the "powered by" link; often the only Intentic surface a visitor sees.
 const INTENTIC_URL = "https://intentic.dev";
 
 interface Turn {
@@ -32,7 +25,7 @@ interface Turn {
 }
 
 export class FrontDeskElement extends HTMLElement {
-    // Assigned in connectedCallback, which the host calls immediately after `open()` sets these.
+    // Set by connectedCallback, which the host calls immediately after open() sets these.
     private config!: WebchatPublicConfig;
     private endpoint!: EmbedEndpoint;
 
@@ -44,7 +37,7 @@ export class FrontDeskElement extends HTMLElement {
     private sendButton!: HTMLButtonElement;
     private gate!: HTMLElement;
     private gateNote!: HTMLParagraphElement;
-    // The light-DOM host for third-party frames, slotted into `gate`.
+    // Light-DOM host for third-party frames, slotted into `gate`.
     private gateSlotTarget!: HTMLElement;
 
     private turns: Turn[] = [];
@@ -120,13 +113,13 @@ export class FrontDeskElement extends HTMLElement {
             this.refreshSendState();
         });
         this.composer.addEventListener("keydown", (event) => {
-            // Enter sends, Shift+Enter breaks the line, the convention every chat on the web shares.
+            // Enter sends; Shift+Enter breaks the line.
             if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void this.submit();
             }
         });
-        // Escape closes from anywhere inside the panel, matching every other dialog on the page.
+        // Escape closes from anywhere inside the panel.
         this.panel.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
                 this.toggle(false);
@@ -148,9 +141,8 @@ export class FrontDeskElement extends HTMLElement {
         this.composer.focus();
     }
 
-    /* The two things that can stand between a visitor and the composer, resolved in the order they make sense:
-     * sign in (who are you), then the bot check (are you a person). Each renders into the slotted light-DOM
-     * container and, once satisfied, hands back a token the first message spends. */
+    // Sign-in, then the bot check, in that order; each renders into the slotted light-DOM container and hands back a
+    // token the first message spends.
     private async openGates(): Promise<void> {
         if (this.config.access === "google" && this.idToken === undefined) {
             if (this.config.googleClientId === undefined) {
@@ -254,8 +246,7 @@ export class FrontDeskElement extends HTMLElement {
         this.log.scrollTop = this.log.scrollHeight;
     }
 
-    /* Ask for a name once, inline, before the first message goes out, a modal would be a bigger interruption
-     * than the question deserves, and the answer is cosmetic anyway. */
+    // Asks for a name inline, once, before the first message; a modal would overstate a cosmetic question.
     private captureName(): void {
         if (!this.config.requireName || this.displayName !== undefined) {
             return;
@@ -279,8 +270,7 @@ export class FrontDeskElement extends HTMLElement {
         this.refreshSendState();
         this.appendTurn("visitor", content);
 
-        // A placeholder that becomes the agent's bubble on the first delta, so the panel shows something is
-        // happening from the moment the message leaves.
+        // Placeholder that becomes the agent's bubble on the first delta.
         const bubble = document.createElement("div");
         bubble.className = "msg agent";
         bubble.innerHTML = `<span class="typing"><span></span><span></span><span></span></span>`;
@@ -310,9 +300,8 @@ export class FrontDeskElement extends HTMLElement {
                     bubble.remove();
                     this.notice(notice, "notice");
                 },
-                // The turn answered with nothing. Said out loud, in the same place a transport failure is said,
-                // silently dropping the bubble (which is what happened before there was a frame for this) leaves
-                // the visitor staring at their own message wondering whether it sent.
+                // Empty replies surface here too; a silently dropped bubble would leave the visitor wondering if it
+                // sent.
                 failed: (notice) => {
                     bubble.remove();
                     this.notice(notice, "failed");
@@ -326,8 +315,8 @@ export class FrontDeskElement extends HTMLElement {
         } catch (error) {
             bubble.remove();
             this.notice(messageOf(error), "failed");
-            // A spent challenge can't be replayed: make the visitor re-clear the gate rather than letting every
-            // retry fail the same way.
+            // A spent challenge can't be replayed; the visitor must re-clear the gate rather than retry the same
+            // failure.
             if (error instanceof EmbedError && error.status === 403) {
                 this.antiBotToken = undefined;
                 void this.openGates();
@@ -340,8 +329,7 @@ export class FrontDeskElement extends HTMLElement {
     }
 
     private recentHistory(): WebchatMessage["history"] {
-        // The visitor's own turns are attributed when they gave a name; the agent's need no author (the daemon
-        // knows who wrote them), so an entry is either two fields or one.
+        // Visitor turns get an author when named; agent turns never do, so an entry is one or two fields.
         return this.turns.slice(-HISTORY_MAX).map((turn) => {
             if (turn.author === "visitor" && this.displayName !== undefined) {
                 return { author: this.displayName, content: turn.text };

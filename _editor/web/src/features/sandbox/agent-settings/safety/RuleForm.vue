@@ -4,26 +4,8 @@ import { Button, ui, Icon, Picker, ProseField, SegmentedControl } from "@intenti
 import { computed, ref } from "vue";
 import { ACTIONS, type Choice, globsOf, MOMENTS, momentOf, nameOf, type RuleDraft } from "./ruleWords";
 
-/* WRITING ONE RULE: the same form for a new one and for one already in the list, because "change the
- * command" should never have meant "delete it and type the whole thing again".
- *
- * IT IS THE SENTENCE, LAID OUT. A rule is "at this moment, if this is true, do this", and this form is read in
- * exactly that order with the connective words as its labels, when · only if · then. The version before it
- * made the same claim in a comment and then presented five identical boxes in a different order, with the
- * labels hidden inside placeholders that vanished on the first keystroke.
- *
- * THE FIRST QUESTION IS NOT THE NAME. It used to be, and it is the one question nobody can answer before they
- * have said what the rule does, so it got a bad answer, or it was the reason the button stayed grey. The rule
- * names itself from what was typed (ruleWords.nameOf) and the box at the bottom is a footnote you may
- * overwrite.
- *
- * NARROWING IS A CLAUSE, NOT A FIELD. Most rules apply to everything, so the shut state SAYS that: "Applies
- * to every change": instead of showing an empty box under a caption explaining that empty means always. Open
- * it and the globs become chips, which is the only way to see that a box splitting on commas understood you.
- *
- * A COMMAND KEEPS ITS BOX AND AN INSTRUCTION DOES NOT. The rule the workflows step inspector is typeset on,
- * and it holds for the same reason: a shell line is a VALUE, and what you tell an assistant is a paragraph
- * somebody writes. */
+// One form for creating a rule and for editing one already saved, ordered as the sentence it writes: when, only if,
+// then. The name is derived from what's typed (see nameOf) unless overwritten below.
 
 const { rule, disabled = false } = defineProps<{
     /** The rule being changed. Absent ⇒ writing a new one. */
@@ -33,8 +15,7 @@ const { rule, disabled = false } = defineProps<{
 
 const emit = defineEmits<{ save: [RuleDraft]; cancel: [] }>();
 
-// `builtin` never reaches here: the only rules that carry one are the three with a row of their own further up
-// the tab, and those are filtered out of the list this form edits.
+// `builtin` never reaches this form; the three built-in rows are filtered out of the list it edits.
 const choiceOf = (from: Rule | undefined): Choice => {
     if (from?.action.kind === `command`) {
         return `command`;
@@ -52,7 +33,7 @@ const text = ref(rule?.action.kind === `instruct` ? rule.action.text : ``);
 const label = ref(rule?.label ?? ``);
 const globs = ref<string[]>([...(rule?.when?.paths ?? [])]);
 const globDraft = ref(``);
-// A rule that already narrows opens showing it; a new one starts on the sentence it will actually be.
+// Starts open if the rule already has globs; a new rule starts collapsed.
 const narrowing = ref(globs.value.length > 0);
 
 const chosenMoment = computed(() => momentOf(moment.value));
@@ -60,10 +41,7 @@ const momentOptions = computed(() => MOMENTS.map(({ value, label: name, icon, co
 const actionOptions = computed(() => ACTIONS[moment.value].map(({ value, label: name }) => ({ value, label: name })));
 const chosenAction = computed(() => ACTIONS[moment.value].find((entry) => entry.value === action.value));
 
-/* A moment change can strand an action that moment does not take, so the action follows, but only when it has
- * to. Switching "run a command" from the end of a turn to before a push used to throw the command away and
- * land on the first option; both moments run commands, and the one thing the user had typed was the thing that
- * did not survive. */
+// If the new moment doesn't offer the current action, switch to its first action rather than leave an invalid pair.
 const pickMoment = (next: RuleMoment | undefined): void => {
     if (next === undefined) {
         return;
@@ -88,13 +66,8 @@ const commitDraft = (): void => {
     globDraft.value = ``;
 };
 
-/* Everything before the last separator is finished; what follows it is still being typed. So a pasted
- * "docs/**, src/**" arrives as one chip and one half-typed path rather than as two chips the user never saw
- * form, and typing a comma ends a path the way pressing Enter does.
- *
- * The box is driven from here rather than by `v-model`, because both would be listening for the same `input`
- * and the one that ran second would win: v-model writing back the whole string this just split, or this
- * splitting a string v-model had not yet handed it. One listener, and the element is told what it holds. */
+// Splits on the last comma or space: text before it becomes chips, the rest stays in the box. Input-driven, not
+// v-model, to avoid both writing the same value on the same event.
 const onGlobInput = (event: Event): void => {
     const box = event.target as HTMLInputElement;
     const typed = box.value;
@@ -106,8 +79,7 @@ const onGlobInput = (event: Event): void => {
     globDraft.value = box.value;
 };
 
-// Backspace on an empty box takes the chip before it: the gesture every token field has, and the reason the
-// chips need no hover-only affordance to be removable.
+// Backspace on an empty box removes the last chip.
 const backspaceGlob = (): void => {
     if (globDraft.value === ``) {
         globs.value.pop();
@@ -124,15 +96,11 @@ const stopNarrowing = (): void => {
     narrowing.value = false;
 };
 
-/* The name the rule gives itself, shown as the box's placeholder so leaving it alone is a real choice rather
- * than a blank. Before anything has been typed there is nothing to derive, and a box with no placeholder at all
- * reads as broken, so the empty case says where the name will come from instead. */
+// autoName shows a hint instead of a blank placeholder until something is typed.
 const derived = computed(() => nameOf(action.value, command.value, text.value, globs.value));
 const autoName = computed(() => (derived.value === `` ? `Named after what you typed above` : derived.value));
 
-/* WHY THE BUTTON IS GREY, said next to the button. The old form's own comment claimed the disabled button was
- * the explanation; a disabled button explains nothing, and the field it is waiting on is the one thing this
- * can name. The name is deliberately not in here: it can no longer be missing. */
+// Names the field blocking save, shown next to the button instead of just disabling it.
 const missing = computed<string | undefined>(() => {
     if (action.value === `command` && command.value.trim() === ``) {
         return `Type the command it runs.`;
@@ -145,7 +113,7 @@ const missing = computed<string | undefined>(() => {
 
 const actionOf = (): Rule["action"] => {
     if (action.value === `command`) {
-        // The ceiling is the schema's own default for a new rule, and whatever an edited one already carried.
+        // timeoutMs keeps the edited rule's value, or the schema default when creating a new one.
         return {
             kind: `command`,
             command: command.value.trim(),
@@ -159,8 +127,7 @@ const actionOf = (): Rule["action"] => {
 };
 
 const save = (): void => {
-    // A path still in the box is a path the user typed and would expect to count: committing it here is what
-    // makes "type a glob, press Add" behave the way it reads.
+    // Commits any glob left in the input box before checking for missing fields.
     commitDraft();
     if (missing.value !== undefined) {
         return;
@@ -176,8 +143,7 @@ const save = (): void => {
 
 <template>
     <div class="flex flex-col gap-4">
-        <!-- WHEN. Three moments, and the differences between them are not arbitrary, so each option carries
-             what it costs, where the choice is actually made, rather than in a caption under the shut box. -->
+        <!-- Each option shows what it costs, since the moments aren't interchangeable. -->
         <div class="flex flex-col gap-1.5">
             <span :class="ui.sectionLabel(`text-2xs`)">When</span>
             <Picker
@@ -191,7 +157,7 @@ const save = (): void => {
             />
         </div>
 
-        <!-- ONLY IF. Shut, it states the default in words; open, it is a list of globs you can see. -->
+        <!-- Collapsed states the default in words; expanded shows the paths as removable chips. -->
         <div v-if="!narrowing" class="flex flex-wrap items-center gap-x-2 text-2xs text-subtle">
             <span>Applies to every change.</span>
             <button type="button" :class="ui.linkButton(`text-2xs`)" :disabled="disabled" @click="narrowing = true">Only when it touches…</button>
@@ -240,13 +206,10 @@ const save = (): void => {
             </div>
         </div>
 
-        <!-- THEN. One control where there is a choice and none where there isn't: a push runs a command and
-             only a command, and a picker with one option is a question with no answer to give. -->
+        <!-- Shown only when the moment offers more than one action to choose from. -->
         <div class="flex flex-col gap-1.5">
             <span :class="ui.sectionLabel(`text-2xs`)">Then</span>
-            <!-- Compact rather than the full-width `stretch` track: two short options are a choice inside the
-                 sentence, and at nine millimetres tall they shouted louder than the moment above them, which is
-                 the bigger decision by far. -->
+            <!-- Compact rather than full width, so it doesn't outweigh the moment picker above it. -->
             <SegmentedControl v-if="actionOptions.length > 1" v-model="action" :options="actionOptions" class="-mt-0.5 mb-0.5" />
 
             <div
@@ -267,12 +230,7 @@ const save = (): void => {
                     class="field-bare min-w-0 flex-1 font-mono md:text-xs"
                 />
             </div>
-            <!-- The instruction keeps a box even though it is prose, and this is the one place the kit's
-                 "a paragraph does not get a border" rule is overridden on purpose: on a document surface the
-                 page says "write here", but in a form, beside a bordered command box and a bordered name box, a
-                 borderless field reads as the caption of the control above it. It is still a ProseField and
-                 still grows with what is typed: an instruction is sentences, and an <input> would scroll them
-                 sideways out of sight. -->
+            <!-- Kept boxed like the command field beside it, unlike a bare ProseField elsewhere; it grows with the text. -->
             <div
                 v-else-if="action === `instruct`"
                 class="ui-field-shell px-0.5 py-1"
@@ -290,8 +248,7 @@ const save = (): void => {
             <p v-if="chosenAction !== undefined" class="text-2xs text-muted">{{ chosenAction.outcome }}</p>
         </div>
 
-        <!-- The name, and the two buttons. Below the hairline because it is no longer part of writing the rule
-            : it is what the activity feed will call this one when it fires, and it has already been written. -->
+        <!-- Name and save controls sit below the hairline, entered after the rule itself is decided. -->
         <div class="mt-3 flex flex-col gap-2">
             <label class="flex items-center gap-2">
                 <span :class="ui.sectionLabel(`shrink-0 text-2xs`)">Called</span>

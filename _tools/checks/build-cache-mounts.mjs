@@ -1,52 +1,19 @@
 #!/usr/bin/env node
-/* THE GATE BEHIND THE SANDBOX IMAGE'S BUILD-CACHE CONTRACT.
- *
- *   node _tools/checks/build-cache-mounts.mjs      # checks every sandbox image fragment, exits 1 on a breach
- *
- * WHY A GATE AND NOT A CONVENTION. An environment overlay is `FROM` the sandbox image, so publishing a new
- * sandbox image changes that image's digest and invalidates EVERY overlay layer above it. A sandbox therefore
- * re-installs its whole environment on every update, and the bill grows with each capability the owner adds —
- * one measured rebuild spent 19 minutes recompiling a CUDA llama.cpp and 14 more downloading 175MB of Debian
- * packages, none of whose recipes had changed. The layer miss itself is honest (the parent chain really did
- * change). Paying for the same bytes and the same object files again is not, and BuildKit cache mounts are how
- * a fragment stops doing it.
- *
- * That only works if EVERY fragment does it, which is why this is a check rather than advice in a README:
- * fragments are written months apart, by different people, in different repositories (a pack here, a connector
- * in an extension, a custom section written by an agent), and one that forgets the mounts silently reintroduces
- * the full download for everyone who enables it.
- *
- * The rules, and the failure each prevents:
- *
- *   1. A RUN that installs with apt MUST mount both /var/cache/apt and /var/lib/apt/lists.
- *      Without them the packages and the index are re-fetched on every rebuild.
- *   2. NOTHING may delete /var/lib/apt/lists.
- *      The classic `&& rm -rf /var/lib/apt/lists/*` is what keeps an unmounted image small, but against a cache
- *      mount it empties the cache the next build was going to read. It is also now pointless: a cache mount is
- *      not committed to the image, so the lists never reach a layer in the first place.
- *   3. A RUN that compiles with cmake MUST mount ccache AND route the compilers through it.
- *      A cache mount with no COMPILER_LAUNCHER is a mounted directory nothing writes to, which reads as
- *      covered and is the more expensive half of the bill: the CUDA pack is ~900 translation units.
- *   4. A RUN that fetches from npm MUST mount ~/.npm, and NOTHING may clear it.
- *      Same shape as apt, with the same twist: `npm cache clean --force` used to be mandatory here because
- *      cacache keeps the registry's already-gzipped tarballs, 420 MiB of them in the published image, for a
- *      cache nothing reads at runtime. A mount is never committed, so it keeps the image just as small AND
- *      keeps the tarballs for the next build; cleaning it now would only empty the mount.
- *   5. A cmake build MUST NOT use bare `-j` or `--parallel`.
- *      CMake forwards that to GNU Make as unlimited concurrency. The CUDA pack demonstrated the failure:
- *      hundreds of compiler processes exhausted a 20GB WSL guest plus 8GB swap and crashed the distro.
- *
- * Deliberately NOT checked: the core `Dockerfile`s of the platform's own services (api, web, ci-base, …). They
- * are separate images with separate bases and no overlay above them; the contract here is specifically about
- * what gets rebuilt when a SANDBOX image moves. See the build-cache header in _sandbox/sandbox/Dockerfile.
- */
+// Checks that every sandbox image fragment (the core Dockerfile, its packs, any extension's *.Dockerfile) uses BuildKit
+// cache mounts, since every overlay layer above the sandbox image rebuilds whenever it is published. Usage: node
+// _tools/checks/build-cache-mounts.mjs.
+// 1. A RUN that installs with apt must mount /var/cache/apt and /var/lib/apt/lists.
+// 2. Nothing may delete /var/lib/apt/lists; a cache mount is never committed to the image anyway.
+// 3. A RUN that compiles with cmake must mount ccache and route compilers through it via COMPILER_LAUNCHER.
+// 4. A RUN that fetches from npm must mount ~/.npm, and nothing may clear it.
+// 5. A cmake build must not use bare -j or --parallel: unbounded concurrency can exhaust the host.
+// Not checked: the platform's own service Dockerfiles (api, web, ci-base), separate images with no overlay above them.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 
-// Resolved, not counted back from this file, so moving this script does not silently point the check at the
-// wrong tree — the same helper its sibling compose-image-dockerfile.mjs uses to find the packs it splices.
+// Resolved via repoRoot, not counted back from this file, so moving the script cannot silently repoint it.
 const root = repoRoot(import.meta.url);
 
 const APT_CACHE = /--mount=type=cache,target=\/var\/cache\/apt\b/;
@@ -61,10 +28,8 @@ const NPM_FETCH = /\b(?:npm\s+(?:-\S+\s+)*install\b|npx\s)/;
 const DELETES_LISTS = /rm\s+(?:-\S+\s+)*[^\n]*\/var\/lib\/apt\/lists/;
 const DELETES_NPM_CACHE = /(?:rm\s+(?:-\S+\s+)*[^\n]*\/root\/\.npm\b|npm\s+cache\s+clean\b)/;
 
-/* THE ENFORCED SURFACE: everything that ends up in a sandbox image or in an overlay on top of one. The core
- * Dockerfile and its feature packs by path (they are one image), and every `*.Dockerfile` under _extensions,
- * which is the fragment-file convention an extension's `contributes.environment.fragment` points at. Discovered
- * rather than listed, so a NEW extension's fragment is covered on the commit that adds it. */
+// Every Dockerfile fragment in a sandbox image or overlay: the core Dockerfile, its packs, and any *.Dockerfile under
+// _extensions, discovered rather than listed so a new extension is covered automatically.
 const fragmentFiles = () => {
     const files = [join(root, "_sandbox/sandbox/Dockerfile")];
     const packs = join(root, "_sandbox/sandbox/image-packs");
@@ -93,9 +58,8 @@ const fragmentFiles = () => {
     return files;
 };
 
-/* Logical instructions, not lines: a `\`-continued RUN is one instruction, and the mount flags sit on its FIRST
- * line while the `apt-get install` this checks for is usually several lines down. Returns the joined text plus
- * the 1-based line the instruction started on, which is where a reader needs to be sent. */
+// Logical instructions, not lines: a backslash-continued RUN is one instruction, since the mount flags sit on its first
+// line while the command they cover may be several lines down.
 const instructions = (content) => {
     const lines = content.split("\n");
     const found = [];

@@ -1,50 +1,26 @@
 #!/usr/bin/env node
-/* EVERY TEST IS IN A PROGRAM, UNDER A BUDGET, AGAINST A WHOLE MOCK, IN THE RIGHT EMIT ORDER: the four facts
- * about a package's tests that no test run can report, read from the manifests and the sources.
- *
- * 1. COVERAGE: every test file sits inside some type-check program. A package that emits to dist excludes
- *    `*.test.ts` from its build config, so the test code stays out of the published tree. That exclusion is
- *    correct and also took the tests out of the only type check the repo ran: 458 type errors had accumulated
- *    in them unseen, almost always a hand-built fake that no longer matched the seam it stood in for.
- *
- *    And a suite that reaches for the machine says so in its NAME. Those run under a budget of their own
- *    (`@intentic/testing/vitest`), selected by the file name, so a suite that opens temp trees, spawns
- *    processes or drives real git under a plain `*.test.ts` name silently gets the 5s hang detector. A suite
- *    can also reach the machine THROUGH a fixture module it imports, so the helpers a suite imports are read as
- *    part of it, found by the convention for where fixtures live (a package's `testing.ts`, or a sibling's
- *    `/testing` subpath) rather than by a list of names, which a new helper obeys for free.
- *
- * 2. BUDGETS: no package inherits vitest's 5s ceiling by accident. That default is a HANG DETECTOR, right for a
- *    test that composes objects in memory and nonsense for one that indexes a workspace. A package that names
- *    no ceiling is not choosing the default, it is unaware of it (docs/ci-failure-audit.md, class E).
- *
- * 3. MOCK COVERAGE: an allow-list mock of a workspace package provides every name the code under test imports.
- *    `vi.mock("@intentic/ui", () => ({ useDevice: … }))` replaces the whole package with the object the factory
- *    returns; the module under test imports from it too, and what IT reaches for is whatever the package grew
- *    last week (class B). A factory that spreads `importOriginal()` cannot drift that way and is not read.
- *
- * 4. REFERENCES: the emit order is the dependency order. `tsgo -b` orders the emit from the tsconfig
- *    `references` and nothing else: a package whose tsconfig names no reference to a workspace dependency is
- *    built wherever the command line puts it, against whatever that dependency's dist holds at the time. On
- *    the self-hosted runners, which keep their workspace between jobs, that is the PREVIOUS build (TS2305, "has
- *    no exported member", about an export that exists in source).
- *
- * All four are recognized by SHAPE rather than listed (AGENTS.md: "guard invariants by discovery, not
- * enumeration"): a list repeats the miss the first time somebody adds the 43rd package. */
+// Checks four facts about a package's tests no test run reports: coverage, budgets, mock coverage, and build-reference
+// order. All four are recognized by shape, not a list, so a new package needs no addition here.
+// 1. every test file sits inside some type-check program; a suite reaching the machine is named as one
+//    (`.integration.`/`.e2e.`), even through an imported fixture module
+// 2. every package running vitest sets its own budget (UNIT_SUITE/INTEGRATION_SUITE or testTimeout), instead of
+//    inheriting vitest's 5s hang detector
+// 3. an allow-list `vi.mock` of a workspace package provides every name the code under test imports from it
+// 4. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
 
-/* ---- 1. coverage, and the integration name ------------------------------------------------------------- */
+// Coverage, and the integration name.
 
 const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
 const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
-// `vi.mock` lines are cut first: naming a module in order to REPLACE it is the opposite of reaching for it.
+// Cuts `vi.mock` lines first: naming a module to replace it isn't reaching for it.
 const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
 
-// The named bindings of each import this checkout can resolve, as `{ names, file }`.
+// Named bindings of each import this checkout can resolve, as `{ names, file }`.
 const IMPORTS = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
 const importsOf = (file, source) =>
     [...source.matchAll(IMPORTS)].flatMap(([, clause, specifier]) => {
@@ -70,8 +46,7 @@ const declarationsOf = (source) => {
     return new Map(heads.map((head, index) => [head[1], source.slice(head.index, heads[index + 1]?.index)]));
 };
 
-// What reading those helpers means: their own bodies plus every declaration in the module they reach, so a
-// helper that delegates the real work to a private function still counts as doing it.
+// A helper's body plus everything it reaches; delegating to a private function still counts as doing it.
 const closureOf = (declarations, names, seen) =>
     names.flatMap((name) => {
         const body = declarations.get(name);
@@ -83,9 +58,8 @@ const closureOf = (declarations, names, seen) =>
         return [body, closureOf(declarations, referenced, seen)];
     });
 
-/* Whether a suite does real work. `wanted` is which helpers of the file to read: every one, for the suite
- * itself; the imported ones, for a fixture module it pulls them from. Production modules are not followed at
- * all: they reach the machine by definition, and one import of the daemon would mark every suite in it. */
+// Whether a suite does real work. `wanted` selects which helpers to read: every one for the suite itself, only the
+// imported ones for a fixture module; production modules aren't followed, or one daemon import would mark every suite.
 const reachesTheMachine = (file, wanted, seen = new Set()) => {
     const source = mocked(readFileSync(file, "utf8"));
     const text = wanted === undefined ? source : closureOf(declarationsOf(source), wanted, seen).flat(Infinity).join("\n");
@@ -102,8 +76,7 @@ const reachesTheMachine = (file, wanted, seen = new Set()) => {
 
 const problems = [];
 for (const { name, dir, pkg } of packages) {
-    // Only where the budget exists: vitest selects it by file name. A package driven by Playwright (_tools/e2e)
-    // has one budget for the whole run and its specs reach for the machine by definition.
+    // Only where the budget exists: vitest picks it by file name; Playwright specs reach the machine by definition.
     const runsVitest = /vitest/.test(pkg.scripts?.test ?? "");
     for (const file of runsVitest ? walk(dir) : []) {
         if (INTEGRATION_NAME.test(file) || !reachesTheMachine(file, undefined)) {
@@ -137,7 +110,7 @@ for (const { name, dir, pkg } of packages) {
     }
 }
 
-/* ---- 2. budgets ---------------------------------------------------------------------------------------- */
+// Budgets.
 
 const VITEST_CONFIG = "vitest.config.ts";
 const budgetless = [];
@@ -154,8 +127,7 @@ for (const { name, dir, pkg } of packages) {
         continue;
     }
     const source = readFileSync(config, "utf8");
-    // Matched on the suite names rather than the import specifier, because `_tools/testing` imports them from
-    // its own source: it is the package. Either the shared pair, or a number said out loud.
+    // Matched on the suite names, not the import specifier: _tools/testing imports them from its own source.
     if (!/\bUNIT_SUITE\b|\bINTEGRATION_SUITE\b/.test(source) && !/\btestTimeout\b/.test(source)) {
         budgetless.push(
             `${name}: ${VITEST_CONFIG} spreads neither UNIT_SUITE nor INTEGRATION_SUITE and sets no testTimeout, ` +
@@ -165,11 +137,11 @@ for (const { name, dir, pkg } of packages) {
     }
 }
 
-/* ---- 3. mock coverage ---------------------------------------------------------------------------------- */
+// Mock coverage.
 
 const MOCK = /vi\.mock\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
 const RELATIVE_IMPORT = /import\s+(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}\s*)?from\s*["'](\.[^"']+)["']/g;
-// The object literal that opens at `from`, by brace depth.
+// The object literal that opens at `from`, found by brace depth.
 const literalAt = (source, from) => {
     let depth = 0;
     for (let i = from; i < source.length; i += 1) {
@@ -184,14 +156,14 @@ const literalAt = (source, from) => {
     }
     return source.slice(from);
 };
-// The keys an object literal states: `name:`, `name(`, a shorthand `name,`/`name }`, or a quoted key.
+// Keys an object literal states: `name:`, `name(`, a shorthand, or a quoted key.
 const keysOf = (literal) =>
     new Set(
         [...literal.matchAll(/(?:^|[,{]\s*)(?:async\s+)?(?:["']([^"']+)["']|([A-Za-z_$][\w$]*))\s*(?=[:(,}])/gm)].map(
             (match) => match[1] ?? match[2],
         ),
     );
-// The runtime names `source` imports from `specifier`: default as "default", named by their exported name.
+// Runtime names `source` imports from `specifier`: default as "default", named by their exported name.
 const namedImportsOf = (source, specifier) => {
     const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const names = new Set();
@@ -224,7 +196,7 @@ const readersOf = (file, source) => {
     }
     return readers;
 };
-// What one mock leaves unprovided: a line per reader that imports a name the factory's object lacks.
+// What one mock leaves unprovided: a line per reader importing a name the factory's object lacks.
 const mockGaps = (file, source, match, readers) => {
     const [, specifier] = match;
     const provided = keysOf(literalAt(source, source.indexOf("{", match.index + match[0].length - 1)));
@@ -254,10 +226,9 @@ for (const { dir, pkg } of packages) {
     }
 }
 
-/* ---- 4. references ------------------------------------------------------------------------------------- */
+// References.
 
-// Read from the two manifests alone: a dependency (or peer) that is itself emitted has to appear in the
-// dependent's `references`. Dev dependencies are left out because the emit does not read them.
+// An emitted dependency or peer must appear in `references`; a dev dependency doesn't count.
 const referencesOf = (configPath, dir) =>
     [...readFileSync(configPath, "utf8").matchAll(/"path"\s*:\s*"([^"]+)"/g)].map((match) => join(dir, match[1]));
 const unreferenced = [];

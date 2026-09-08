@@ -1,20 +1,9 @@
 import type { IssueBreadcrumb } from "@intentic/sandbox-contract";
 
-/* WHAT HAPPENED IN THE SECONDS BEFORE, which is usually how a crash turns into steps to reproduce. A stack says
- * where it broke; breadcrumbs say what the person did to get there, and only one of those can be worked out
- * from the source afterwards.
- *
- * A RING BUFFER, NOT A LOG. Bounded at both ends: how many are kept and how long each may be. This runs on
- * somebody else's product, in front of every click, so unbounded memory here is a leak in a customer's page.
- *
- * WHAT IS DELIBERATELY NOT INSTRUMENTED, since the omissions are the interesting part:
- *   - request BODIES. A failed request records its method, its path and its status, never what was in it. That
- *     is where the passwords and the personal data are, and a bug reporter that quietly shipped them off the
- *     page would be the worst thing in this repository.
- *   - keystrokes. The same argument, one step more obviously.
- *   - console.log. Only warnings and errors: a chatty app would otherwise fill the whole ring with noise before
- *     the crash it is supposed to explain.
- */
+// What happened before a crash, kept as a bounded ring buffer (count and per-message length capped) since this patches
+// globals on someone else's page. Not instrumented:
+// - request bodies and keystrokes (passwords, personal data)
+// - console.log (only warn/error are recorded)
 
 const MAX = 40;
 const MESSAGE_MAX = 300;
@@ -22,16 +11,14 @@ const MESSAGE_MAX = 300;
 export interface Breadcrumbs {
     readonly add: (kind: string, message: string) => void;
     readonly all: () => IssueBreadcrumb[];
-    // Undo every patch this made to the page's globals. What `stop()` on the client calls, and what a test
-    // needs so one case's console patch is not still live in the next.
+    // Undoes every patch to the page's globals, so a test's console patch is not still live in the next.
     readonly detach: () => void;
 }
 
 const trim = (message: string): string => (message.length > MESSAGE_MAX ? `${message.slice(0, MESSAGE_MAX - 1)}…` : message);
 
-// One argument of a console call, as a short string. Errors keep their message, objects their shape; anything
-// that will not stringify (a proxy, a cyclic graph) becomes its type rather than throwing inside a console call
-// the page made for its own reasons.
+// A console argument as a short string; errors keep their message, and anything that won't stringify becomes its type
+// instead of throwing.
 const readable = (value: unknown): string => {
     if (typeof value === "string") {
         return value;
@@ -57,11 +44,8 @@ export const createBreadcrumbs = (): Breadcrumbs => {
         }
     };
 
-    /* ---- console.warn / console.error ----
-     *
-     * Patched by WRAPPING rather than replacing: the original is called first and its return value passed
-     * through, so a page that has its own console instrumentation (most analytics products do) keeps working,
-     * and ours can be removed later without stranding theirs. */
+    // Wraps rather than replaces: the original runs first and its return value passes through, so a page with its own
+    // console instrumentation keeps working.
     for (const level of ["warn", "error"] as const) {
         const original = console[level];
         console[level] = (...args: unknown[]) => {
@@ -73,12 +57,8 @@ export const createBreadcrumbs = (): Breadcrumbs => {
         });
     }
 
-    /* ---- failed requests ----
-     *
-     * Only the failures. A working app makes hundreds of successful requests a minute and every one of them
-     * would push the click that actually mattered out of the ring; a 500 twelve seconds before a crash is the
-     * whole story. A network error (offline, CORS, DNS) is recorded and then RE-THROWN untouched: the page's own
-     * error handling must see exactly what it would have seen. */
+    // Only failures are recorded, since a working app's successes would push the meaningful event out of the ring. A
+    // network error is recorded and re-thrown untouched.
     const originalFetch = window.fetch;
     if (typeof originalFetch === "function") {
         window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -100,10 +80,8 @@ export const createBreadcrumbs = (): Breadcrumbs => {
         });
     }
 
-    /* ---- navigation ----
-     *
-     * `popstate` covers back/forward. `pushState`/`replaceState` are wrapped because a single-page app changes
-     * route without firing any event at all, and "which screen were they on" is the first thing anybody asks. */
+    // `popstate` covers back/forward; `pushState`/`replaceState` are wrapped since an SPA route change fires no event
+    // of its own.
     const onPop = (): void => add("navigation", location.pathname + location.search);
     window.addEventListener("popstate", onPop);
     undo.push(() => window.removeEventListener("popstate", onPop));
@@ -120,11 +98,8 @@ export const createBreadcrumbs = (): Breadcrumbs => {
         });
     }
 
-    /* ---- clicks ----
-     *
-     * The element, never its contents: a selector-ish label built from the tag, its id and its accessible name.
-     * `capture: true` so a click is recorded even when the app's own handler stops propagation, which is exactly
-     * the handler most likely to be the one that then threw. */
+    // The element only, as a short label (tag, id, accessible name), never its contents. Captured in the capture phase
+    // so it's recorded even if the app's handler stops propagation.
     const onClick = (event: MouseEvent): void => {
         const target = event.target;
         if (target instanceof Element) {
@@ -138,8 +113,7 @@ export const createBreadcrumbs = (): Breadcrumbs => {
         add,
         all: () => [...ring],
         detach: () => {
-            // Unwound in reverse, so a global we wrapped over somebody else's wrapper is unwrapped from the
-            // outside in and the page's own instrumentation is left exactly as we found it.
+            // Unwound in reverse, so a wrap over another wrap is removed from the outside in.
             for (const step of undo.toReversed()) {
                 step();
             }
@@ -148,7 +122,7 @@ export const createBreadcrumbs = (): Breadcrumbs => {
     };
 };
 
-// A URL as its path: the host is on every line already and the query is where the ids and the tokens live.
+// A URL as its path only; the query is where ids and tokens live.
 const pathOnly = (target: string): string => {
     try {
         return new URL(target, location.href).pathname;
@@ -157,9 +131,8 @@ const pathOnly = (target: string): string => {
     }
 };
 
-/* An element as something a developer can find again: `button#checkout "Pay now"`. The accessible name is
- * bounded hard and taken from the element's own label rather than its subtree text, since a click on a card
- * would otherwise drag a paragraph of the page's content into a breadcrumb. */
+// An element as a short label: `button#checkout "Pay now"`. The name comes from the element's own label, bounded, not
+// its subtree text.
 const LABEL_MAX = 40;
 const describe = (element: Element): string => {
     const tag = element.tagName.toLowerCase();

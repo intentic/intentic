@@ -1,13 +1,6 @@
 import { z } from "zod";
 
-/* CONTROL-TOKEN SCOPES, the ladder a program's credential to a sandbox is minted on, shared by everything that
- * names one: the daemon (auth/control-tokens.ts decides what each reaches), the generated OpenAPI document
- * (its security scheme), the site's authorisation page, and the app's mint form. One list, so a scope added
- * here appears in the picker, the document and the daemon's reach table together, and a sentence about what a
- * rung reaches cannot be one thing on the site and another on the card.
- *
- * The ladder widens downward EXCEPT `editor`, which is its own narrow slice rather than a rung: an editor
- * bridge drives one conversation and has no business reading the fleet, and saying so costs one row. */
+// One shared list (daemon, OpenAPI, site, mint form); widens downward except editor, its own narrow slice.
 export const CONTROL_SCOPES = ["editor", "read", "drive", "land"] as const;
 export type ControlScope = (typeof CONTROL_SCOPES)[number];
 export const ControlScopeSchema = z.enum(CONTROL_SCOPES);
@@ -20,9 +13,7 @@ export interface ControlScopeReach {
     readonly note: string;
 }
 
-/* The sentences, in ladder order. The reach itself is DERIVED in the daemon from the same role floors a member
- * is held to (a `read` token sees what a viewer sees, a `drive` token does what a collaborator does), so these
- * describe the tiers rather than enumerate routes, and the tiers are what the Access tab already teaches. */
+// Derived in the daemon from the same role floors a member holds (read=viewer, drive=collaborator).
 export const CONTROL_SCOPE_REACH: readonly ControlScopeReach[] = [
     {
         scope: "editor",

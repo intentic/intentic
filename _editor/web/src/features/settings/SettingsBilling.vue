@@ -10,15 +10,9 @@ import { formatDay, formatMinutes, hoursLeftLine, RECOVERABLE } from "./hosted-p
 import { hasReturned, subscribeLabel, useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { apiClient } from "../../lib/useApi";
 
-/* BILLING: the one page in the product about money (docs/design/billing-view.md). What plan this account is
- * on and the one thing to do about it; this month's hours; the hosted sandboxes the plan covers and how many
- * it could; what a slot is; and the door to Stripe for invoices, the card and cancelling.
- *
- * Bought and managed on Stripe's pages, but the CONSEQUENCES are said here, because Stripe's portal cannot say
- * them: what cancelling does to the machine, why "ends" and not "renews" after a cancel, that a plan with no
- * machine under it is paying for nothing. A subscriber arrives to check a date or add a slot; a non-subscriber
- * arrives to decide, and the decision is the whole event: nothing else in the app asks anyone for twenty
- * dollars a month. */
+// The one page about money: what plan this account is on and the one action to take, this month's hours, the hosted
+// sandboxes the plan covers, what a slot is, and the door to Stripe. Managed on Stripe, but consequences are said here
+// (what cancelling does, why "ends" not "renews", a plan with no machine).
 
 const { state: plan, error, refetch, meter, setSlots, slotsWorking } = useHostedPlan();
 
@@ -32,10 +26,8 @@ const outline = useLoadingReveal(
     computed(() => `hosted-plan`),
 );
 
-/* THE POST-CHECKOUT GAP. Stripe sends the browser back with ?plan=welcome, but the webhook that makes the plan
- * real can land seconds later, so the first read after a completed payment often still says "not on the
- * plan". It polls instead of asking the reader to reload, and gives up after a bounded wait rather than
- * spinning forever: a webhook that has not arrived in half a minute is a problem a refresh will not fix. */
+// Stripe's webhook can land seconds after redirect, so the first read after checkout may still say not-on-plan. Polls
+// instead of asking for a reload, and gives up after a bounded wait.
 const route = useRoute();
 const justJoined = computed(() => route.query[`plan`] === `welcome`);
 const activating = ref(false);
@@ -71,9 +63,7 @@ onMounted(() => {
 
 const periodEnd = computed(() => (plan.value?.renewsAt === undefined ? undefined : formatDay(plan.value.renewsAt)));
 
-/* LAPSED IS NOT THE SAME AS NEVER (hostedHours.ts). `past_due`, `unpaid` and `incomplete` are Stripe retrying
- * a live subscription: they want the card fixed, not the product sold. Anything else that is not on the plan
- * really is over, and its reader is a prospect again, greeted rather than lectured. */
+// past_due/unpaid/incomplete mean Stripe is retrying a live subscription, not that it ended (hostedHours.ts).
 const lapsed = computed(() => {
     const status = plan.value?.status;
     return plan.value?.onPlan === false && status !== undefined && RECOVERABLE.has(status) ? status : undefined;
@@ -81,9 +71,7 @@ const lapsed = computed(() => {
 
 const returning = computed(() => hasReturned(plan.value) && lapsed.value === undefined);
 
-// A trial is a plan with an end date rather than a renewal date, and calling it "renews" would be the one
-// word that costs somebody money they didn't expect to spend. A cancelled plan ENDS; saying "renews" to
-// somebody who just cancelled is the other word that costs them, in the other direction.
+// Trial and cancelled plans both end, not renew; the wrong word implies a charge that isn't coming.
 const onTrial = computed(() => plan.value?.status === `trialing`);
 const cancelling = computed(() => plan.value?.cancelAtPeriodEnd === true);
 const comped = computed(() => plan.value?.comped === true);
@@ -106,7 +94,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
     }
 };
 
-/* THE HOSTED HALF: the lane as it applies to this account, present wherever the platform runs machines. */
+// The hosted lane as it applies to this account; present only where the platform runs machines.
 const hosted = computed(() => plan.value?.hosted);
 const machines = computed(() => hosted.value?.machines ?? []);
 const slots = computed(() => hosted.value?.slots ?? 0);
@@ -119,12 +107,10 @@ const shape = computed(() => {
 const resetsOn = computed(() => (hosted.value === undefined ? undefined : formatDay(hosted.value.usage.resetsAt)));
 const awakeThisMonth = computed(() => (hosted.value === undefined ? undefined : formatMinutes(hosted.value.usage.usedMinutes)));
 
-// A machine's standing this minute, off the row's own stamp: no provider call, and honest about what it knows.
+// A machine's standing this minute, off the row's own stamp: no provider call, honest about what it knows.
 const machineState = (wokeAt: string | null): string => (wokeAt === null ? `asleep` : `awake since ${timeAgo(new Date(wokeAt).getTime())}`);
 
-/* SLOTS: a subscriber's (never a comped account's: the comp is "always on", not "any number of machines") and
- * bounded both ways. Up to the contract's cap; down only to what is standing, because a slot that is a machine
- * cannot be sold back while the machine is (the provision gate's rule, read the other way). */
+// Slots are a subscriber's only (not comped); bounded up by the plan's cap, down by machines still standing.
 const paying = computed(() => plan.value?.onPlan === true && !comped.value);
 const canAddSlot = computed(() => paying.value && slots.value < HOSTED_PLAN_MAX_SLOTS);
 const canRemoveSlot = computed(() => paying.value && slots.value > 1 && machines.value.length < slots.value);
@@ -153,9 +139,9 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
         </RowGroup>
 
         <template v-else-if="plan">
-            <!-- 1. THE PLAN. One line for where things stand, one door. -->
+            <!-- The plan: one line for where things stand, one door. -->
 
-            <!-- COMPLIMENTARY: the operator's comp list. Nothing to manage, nothing to buy. -->
+            <!-- Complimentary: the operator's comp list; nothing to manage or buy. -->
             <RowGroup v-if="plan.onPlan && comped" label="Hosted plan">
                 <RowNote variant="block">
                     <p class="text-sm font-medium text-content">Complimentary</p>
@@ -163,7 +149,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- ON THE PLAN: the date, the consequence if it is ending, and the one door. -->
+            <!-- On the plan: the date, the consequence if ending, and the one door. -->
             <RowGroup v-else-if="plan.onPlan" label="Hosted plan">
                 <template v-if="periodEnd" #actions>
                     <span class="text-2xs" :class="cancelling ? `text-warning` : `text-subtle`">{{ dateWord }} {{ periodEnd }}</span>
@@ -194,7 +180,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- LAPSED: a subscriber whose card stopped working. One thing to do, said without a sales pitch. -->
+            <!-- Lapsed: a subscriber whose card stopped working; one thing to do, no sales pitch. -->
             <RowGroup v-else-if="lapsed" label="Hosted plan">
                 <RowNote variant="block">
                     <div class="flex flex-col gap-3">
@@ -208,7 +194,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- ACTIVATING: the webhook's few seconds, owned by the app rather than handed back to the person who just paid. -->
+            <!-- Activating: the webhook's few seconds, owned by the app instead of handed back to the payer. -->
             <RowGroup v-else-if="justJoined && activating" label="Hosted plan">
                 <RowNote variant="block">
                     <div class="flex flex-col gap-2">
@@ -218,7 +204,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- THE OFFER: the one buying surface in the product. -->
+            <!-- The offer: the one buying surface in the product. -->
             <template v-else>
                 <Notice
                     v-if="justJoined && !activating"
@@ -239,7 +225,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
             </template>
 
-            <!-- 2. THIS MONTH. The free lane's meter, live; a subscriber's awake hours with nothing beside them. -->
+            <!-- This month: the free lane's meter, live, or a subscriber's awake hours with nothing beside them. -->
             <RowGroup v-if="hosted" label="This month">
                 <template v-if="resetsOn" #actions>
                     <span class="text-2xs text-subtle">resets {{ resetsOn }}</span>
@@ -250,7 +236,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                             <p class="text-sm font-medium" :class="meter.remainingMinutes === 0 ? `text-warning` : `text-content`">{{ hoursLeftLine(meter) }}</p>
                             <span class="text-2xs text-subtle">{{ formatMinutes(meter.usedMinutes) }} awake</span>
                         </div>
-                        <!-- What is LEFT, as a bar: the same number the words carry, so colour never carries it alone. -->
+                        <!-- What's left, as a bar: the same number the words state, so colour never carries it alone. -->
                         <div class="h-1.5 w-full overflow-hidden rounded-full bg-content/10" role="presentation">
                             <div
                                 class="h-full rounded-full transition-[width]"
@@ -267,9 +253,9 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- 3. THE HOSTED SANDBOXES the plan covers, and how many it could. -->
+            <!-- The hosted sandboxes the plan covers, and how many it could. -->
             <RowGroup v-if="hosted" label="Hosted sandboxes" :count="`${machines.length} of ${slots} ${slots === 1 ? `slot` : `slots`}`">
-                <!-- A plan with nothing under it: the one state where cancelling is the advice. -->
+                <!-- The one state where cancelling is the advice, not the door. -->
                 <RowNote v-if="planWithoutMachine" variant="block">
                     <div class="flex flex-col gap-3">
                         <p class="text-sm font-medium text-warning">Your plan covers a hosted sandbox, and you don't have one</p>
@@ -293,7 +279,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                         </li>
                     </ul>
                 </RowNote>
-                <!-- SLOTS, a subscriber's control. Each is another machine at the same price, so the button says the money. -->
+                <!-- A subscriber's control: each slot is another machine at the same price, so the button states it. -->
                 <RowNote v-if="paying" variant="block">
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <Button
@@ -321,7 +307,7 @@ const planWithoutMachine = computed(() => paying.value && hosted.value !== undef
                 </RowNote>
             </RowGroup>
 
-            <!-- 4. WHAT A SLOT IS. The buyer should know what the money is a machine of. -->
+            <!-- What a slot is: what the money is a machine of. -->
             <RowGroup v-if="hosted && shape" label="What a slot is">
                 <RowNote variant="block">
                     <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">

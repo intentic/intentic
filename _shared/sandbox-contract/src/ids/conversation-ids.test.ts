@@ -20,9 +20,6 @@ const mockRandomValues = (values: readonly number[]) => {
 
 afterEach(() => vi.restoreAllMocks());
 
-// The one property that is not a matter of taste: this string becomes a git branch and a filesystem path, and
-// the id guard is what stands between those and an injection. Held over a large sample rather than one draw,
-// because the generator picks from three independent spaces and any of them could produce the bad character.
 test("every generated id passes the conversation-id guard", () => {
     for (let index = 0; index < 2_000; index += 1) {
         expect(ConversationIdSchema.safeParse(newConversationId()).success).toBe(true);
@@ -32,7 +29,6 @@ test("every generated id passes the conversation-id guard", () => {
 test("an id reads as a word pair with a short tail, and stays short", () => {
     const id = newConversationId();
     expect(id).toMatch(/^[a-z]+-[a-z]+-[0-9a-z]{4}$/);
-    // Comfortably under a UUID's 36, which is the whole reason this exists.
     expect(id.length).toBeLessThan(24);
 });
 
@@ -54,26 +50,21 @@ test("maps complete random buckets to equal-width base36 characters", () => {
     expect(remaining).toEqual([]);
 });
 
-// The tail is what makes the readable half safe to repeat: names may rhyme, ids may not.
 test("ids are unique across a burst", () => {
     const ids = new Set(Array.from({ length: 5_000 }, newConversationId));
     expect(ids.size).toBe(5_000);
 });
 
-// The whole point of the derived id: the same failure names the same conversation, forever, from any browser.
 test("a CI fix id is the same string every time it is derived", () => {
     expect(ciFixConversationId(`web`, 4213)).toBe(`ci-fix-web-4213`);
     expect(ciFixConversationId(`web`, 4213)).toBe(ciFixConversationId(`web`, 4213));
 });
 
-// A run id belongs to one forge project, not to the workspace: without the repo, two repos' run 42 would share
-// an agent, and the second failure would be answered by the first one's conversation.
 test("two repos with the same run number get different conversations", () => {
     expect(ciFixConversationId(`web`, 42)).not.toBe(ciFixConversationId(`api`, 42));
 });
 
-// The id becomes a branch and a path, so the guard is not a matter of taste. Held over the repo names a
-// workspace can actually produce: nested dirs, dots, spaces, punctuation, and something that slugs to nothing.
+// Repo names cover what a workspace can produce: nested dirs, dots, spaces, punctuation, a name slugging empty.
 test("every derived id passes the conversation-id guard", () => {
     const repos = [`root`, `web`, `apps/web`, `my repo`, `.dotted`, `UPPER_Case`, `___`, `x`.repeat(80)];
     for (const repo of repos) {
@@ -85,25 +76,21 @@ test("every derived id passes the conversation-id guard", () => {
     }
 });
 
-// The join is a prefix scan over the fleet, so the prefix has to survive a repo name that starts with one.
 test("the prefix is carried by every fix id", () => {
     expect(ciFixConversationId(`ci-fix`, 7)).toBe(`ci-fix-ci-fix-7`);
 });
 
-// The whole point of the derived push id: the second press about the same failure reaches the first agent.
 test("a push fix id is the same string every time the same failure derives it", () => {
     expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toBe(pushFixConversationId(`intentic`, `checkout gates,lint`));
     expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toMatch(/^push-fix-intentic-[0-9a-z]{7}$/);
 });
 
-// And the other half: a different failure, or the same failure in a different workspace, is different work.
 test("a push fix id separates failures and scopes", () => {
     expect(pushFixConversationId(`intentic`, `lint`)).not.toBe(pushFixConversationId(`intentic`, `checkout gates`));
     expect(pushFixConversationId(`web`, `lint`)).not.toBe(pushFixConversationId(`api`, `lint`));
 });
 
-// The id becomes a branch and a path, so the guard is not a matter of taste — and the signature it is derived
-// from is raw gate output, which carries whatever the failing steps were called.
+// Signatures cover raw gate output: control characters, unicode, path-like strings, and pathological lengths.
 test("every derived push fix id passes the conversation-id guard", () => {
     const signatures = [``, `checkout gates`, `✗ lint · pnpm lint`, `a`.repeat(4_000), `../../etc/passwd`, `a\nb\tc`, `résumé`];
     for (const scope of [`root`, `apps/web`, `my repo`, `___`, `x`.repeat(80)]) {

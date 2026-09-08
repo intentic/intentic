@@ -6,15 +6,9 @@ import { isWayland } from "./screen.js";
 import { DesktopError, type WindowInfo } from "./types.js";
 import { XDOTOOL_INSTALL } from "./input-linux.js";
 
-/* Linux: what is open, and how to open more of it.
- *
- * X11 answers all of this through `wmctrl` and `xdotool`, which every desktop has or can install in one line.
- *
- * WAYLAND MOSTLY CANNOT, and that is a design decision rather than a gap: a compositor does not let one client
- * enumerate another's windows, which is the same protection that stops it synthesising input. The exception is
- * the wlroots family (sway, Hyprland) whose i3-style IPC will answer `get_tree` to anyone who can reach the
- * socket. So sway is supported and everything else gets a sentence explaining why, rather than an empty list
- * that reads as "nothing is open". */
+// Linux window listing/control. X11 uses wmctrl/xdotool. Wayland mostly refuses by design (a compositor won't let
+// one client enumerate another's windows); the wlroots family (sway, Hyprland) exposes an i3-style `get_tree` IPC
+// instead, so only sway is supported and everything else gets an explanatory error rather than an empty list.
 
 const WMCTRL_INSTALL = "sudo apt install wmctrl  (or your distro's package)";
 const CLIP_INSTALL_X11 = "sudo apt install xclip";
@@ -48,17 +42,12 @@ export const linuxApps = {
                 "This Wayland session does not let a program focus another window. Click it with the pointer instead, or use an X11 session.",
             );
         }
-        // windowactivate rather than windowfocus: it also raises the window and switches desktop if needed,
-        // which is what a person means by "bring it up".
+        // windowactivate, not windowfocus: it also raises the window and switches desktop, matching "bring it up".
         await run("xdotool", ["windowactivate", "--sync", id], XDOTOOL_INSTALL);
     },
 
-    /* Two different things wear one verb. A URL or an existing file goes to the desktop's handler (`xdg-open`);
-     * anything else is a program to start. Getting that backwards is the difference between the user's browser
-     * opening and a "command not found", so it is decided by looking rather than by guessing.
-     *
-     * Detached and with its streams discarded: this agent should not become the parent that a text editor's
-     * lifetime depends on, and a launched app writing to a pipe nobody reads eventually blocks. */
+    // A URL or existing file goes to xdg-open; anything else is a program to start, decided by looking rather than
+    // guessing. Detached with streams discarded, so this agent isn't the parent a launched app's lifetime depends on.
     launch: async (target: string): Promise<void> => {
         const viaOpener = looksLikeUrl(target) || existsSync(target);
         if (viaOpener && !(await has("xdg-open"))) {
@@ -69,8 +58,7 @@ export const linuxApps = {
             : ([target.split(/\s+/)[0] ?? target, target.split(/\s+/).slice(1)] as const);
         const child = spawn(command, [...args], { detached: true, stdio: "ignore" });
         child.unref();
-        // An immediate spawn error (no such program) arrives asynchronously, so give it the tick it needs to be
-        // reported as a refusal rather than as silence.
+        // Immediate spawn errors arrive asynchronously; wait one tick so they surface as a refusal, not silence.
         await new Promise<void>((resolvePromise, reject) => {
             child.once("error", (error) => reject(new DesktopError(`Could not start "${target}": ${error.message}`)));
             setTimeout(resolvePromise, 50);

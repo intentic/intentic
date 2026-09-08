@@ -1,29 +1,14 @@
 import { randomBytes } from "node:crypto";
 
-/* THE x402 WIRE, parsing a 402 challenge into one normalized quote, and building the payment the retry
- * carries. Pure protocol logic: no network, no policy, no keys, the gate (payment-offer.ts) owns consent
- * and the platform owns the signature, so everything here is testable with strings.
- *
- * TWO WIRE VERSIONS, ONE INTERNAL SHAPE. The protocol's current revision (v2) carries the challenge in a
- * `PAYMENT-REQUIRED` response header and takes payment back in `PAYMENT-SIGNATURE`; the original (v1) put
- * the challenge in the 402's JSON body and took `X-PAYMENT`. Both are live on the open web, so the CLIENT
- * speaks both, but as parsers in and one builder out of the same PaymentQuote, per this repo's no-legacy
- * rule: internal types are v2-native, v1 is a wire adapter, and dropping it one day deletes a parser and
- * nothing else. A third 402 dialect exists (MPP's `WWW-Authenticate: Payment` scheme, the Stripe-backed
- * rail WunderCorp's gateways speak), recognized and refused by name, because a wrong-protocol refusal the
- * agent can read beats a parse failure it cannot.
- *
- * ONLY THE "EXACT" SCHEME, ONLY USDC. The exact scheme is an EIP-3009 transferWithAuthorization: an OFFLINE
- * authorization for one transfer of one exact amount, signed as EIP-712 typed data and settled by the
- * MERCHANT's side (they pay the gas; the wallet needs no ETH and never submits a transaction). That shape is
- * what makes agent payments safe to automate at all, the signature is a bearer instrument for exactly that
- * transfer and nothing else, and an unused one simply expires. USDC-only is what keeps the policy math
- * honest: the owner's caps are written in dollars, and only a dollar-pegged token makes "amount ≤ cap" a
- * fact rather than an exchange-rate guess. */
+// Parses a 402 challenge into one normalized quote and builds the retry's payment; pure protocol logic, no network,
+// policy or keys.
+// Two wire versions, one internal shape: v2 rides PAYMENT-REQUIRED/PAYMENT-SIGNATURE headers, v1 rides a JSON body and
+// X-PAYMENT; internal types are v2-native, v1 is an adapter. A third dialect (MPP) is recognized and refused by name.
+// Only the exact scheme, only USDC: an EIP-3009 transferWithAuthorization settled by the merchant, so "amount ≤ cap"
+// stays a fact, never an exchange-rate guess.
 
-// USDC per supported network: the token contract, its EIP-712 domain defaults, and the explorer that renders
-// a settlement hash. This table is the compliance surface, an asset not on it is refused, which is the
-// USDC-only rule enforced as a lookup rather than a judgment.
+// USDC per supported network: token contract, EIP-712 domain defaults, explorer. The compliance surface: an asset not
+// on this list is refused.
 export interface UsdcNetwork {
     // CAIP-2 ("eip155:8453"), the v2 vocabulary and the wallet config's.
     readonly network: string;
@@ -31,8 +16,7 @@ export interface UsdcNetwork {
     readonly v1Network: string;
     readonly chainId: number;
     readonly asset: string;
-    // EIP-712 domain fallbacks, a challenge's `extra.{name,version}` wins when present, because the domain
-    // must match what the token contract itself hashes and the server publishing the price knows its token.
+    // EIP-712 domain fallbacks; `extra.{name,version}` on the challenge wins when present.
     readonly domainName: string;
     readonly domainVersion: string;
     readonly label: string;
@@ -67,9 +51,8 @@ export const USDC_NETWORKS: readonly UsdcNetwork[] = [
 
 export const usdcNetworkOf = (network: string): UsdcNetwork | undefined => USDC_NETWORKS.find((entry) => entry.network === network);
 
-// USDC has six decimals, and every amount in this module is a bigint of its atomic units, floats never
-// touch money. The USD string forms ("1.50") are the display and policy vocabulary; these two are the only
-// crossings between the vocabularies, so a rounding bug has one place to not exist.
+// USDC has six decimals; every amount here is a bigint of atomic units, never a float. USD strings ("1.50") are the
+// display/policy vocabulary; usdToAtomic/atomicToUsd are the only crossing.
 export const USDC_DECIMALS = 6n;
 const ATOMIC_PER_USD = 10n ** USDC_DECIMALS;
 
@@ -84,10 +67,9 @@ export const atomicToUsd = (atomic: bigint): string => {
     return fraction === "" ? `${whole}.00` : `${whole}.${fraction.padEnd(2, "0")}`;
 };
 
-/* One payable price off a challenge, normalized: everything the policy check, the card, and the retry
- * builder need, in one vocabulary regardless of which wire version said it. `requirement` and `resource`
- * keep the server's own objects verbatim, the v2 retry must echo the accepted requirement exactly as
- * offered (the server matches on it), and a normalized copy would be a second spelling to drift. */
+// One payable price normalized across wire versions, for the policy check, the card and the retry builder.
+// `requirement` and `resource` keep the server's objects verbatim, since the v2 retry must echo the accepted
+// requirement exactly.
 export interface PaymentQuote {
     readonly x402Version: 1 | 2;
     readonly url: string;
@@ -158,9 +140,8 @@ const v2Quote = (resource: unknown, entry: unknown): PaymentQuote | undefined =>
     };
 };
 
-// One v1 `accepts` entry → the same quote. v1 spells things differently on purpose-preserving fields only:
-// `maxAmountRequired` for the price (the exact scheme makes it exact), `resource` as a bare URL string, and
-// the network as a name ("base") rather than CAIP-2.
+// One v1 `accepts` entry → the same quote; v1 spells the same fields differently: `maxAmountRequired` for price,
+// `resource` as a bare URL, network as a name ("base") not CAIP-2.
 const v1Quote = (entry: unknown): PaymentQuote | undefined => {
     const requirement = entry as {
         scheme?: unknown;
@@ -216,8 +197,7 @@ export const parseChallenge = (url: string, headers: Headers, body: string): Cha
             return quotes.length > 0 ? { kind: "quotes", quotes } : { kind: "unsupported", reason: "the endpoint's x402 challenge offers no exact-scheme price" };
         }
     }
-    // MPP: a different machine-payments protocol (the `Payment` HTTP auth scheme; Stripe SPT and payment
-    // channels). Named honestly instead of parsed badly.
+    // MPP: a different machine-payments protocol (`Payment` auth scheme); named honestly, not parsed badly.
     const authenticate = headers.get("www-authenticate");
     if (authenticate !== null && /^payment[ ,]/i.test(authenticate.trim())) {
         return {
@@ -239,11 +219,9 @@ export const parseChallenge = (url: string, headers: Headers, body: string): Cha
     return { kind: "none" };
 };
 
-/* The EIP-3009 authorization the platform signs: one transfer of exactly `value`, from the wallet, to the
- * challenge's payTo, valid for a window bounded by the challenge's own timeout (and 300s regardless, a
- * longer-lived bearer instrument helps nobody). The nonce is 32 random bytes, the standard's replay guard:
- * the token contract burns it on settlement, so the same authorization can never move money twice. Times as
- * decimal-string seconds and value as decimal-string atomic units, the x402 payload's own spelling. */
+// The EIP-3009 authorization the platform signs: one transfer of `value` to the challenge's payTo, capped at a 300s
+// window. The 32-byte nonce is the replay guard the token contract burns on settlement. Times and value are decimal
+// strings.
 export interface TransferAuthorization {
     readonly from: string;
     readonly to: string;
@@ -269,8 +247,8 @@ export const mintAuthorization = (quote: PaymentQuote, from: string, nowMs: numb
     };
 };
 
-// The retry's payment header, in the challenge's own wire version: v2 echoes the accepted requirement and
-// resource verbatim inside PAYMENT-SIGNATURE; v1 wraps the same payload in X-PAYMENT with its network name.
+// The retry's payment header in the challenge's own wire version: v2 echoes the requirement/resource verbatim in
+// PAYMENT-SIGNATURE; v1 wraps the payload in X-PAYMENT.
 export const paymentHeader = (
     quote: PaymentQuote,
     authorization: TransferAuthorization,
@@ -285,9 +263,8 @@ export const paymentHeader = (
     return { name: "X-PAYMENT", value: Buffer.from(JSON.stringify(body)).toString("base64") };
 };
 
-// The settlement the server reports back (v2 PAYMENT-RESPONSE / v1 X-PAYMENT-RESPONSE): success, the onchain
-// transaction hash, and, on failure, the server's own reason. Absent header ⇒ undefined, and the caller
-// falls back to what the HTTP status proves.
+// The settlement the server reports (v2 PAYMENT-RESPONSE / v1 X-PAYMENT-RESPONSE): success, the transaction hash, and a
+// failure reason. Absent header means undefined; the caller falls back to the HTTP status.
 export interface Settlement {
     readonly success: boolean;
     readonly transaction: string | undefined;
@@ -312,9 +289,8 @@ export const parseSettlement = (headers: Headers): Settlement | undefined => {
     };
 };
 
-// The wallet's live USDC balance, read straight off the chain's public RPC, balanceOf(address) is one
-// eth_call with a hand-built selector, which is what keeps chain SDKs out of the daemon entirely. Undefined
-// on any failure: a balance is a nicety on a status card, never something a payment path waits on.
+// Live USDC balance off the chain's public RPC: balanceOf(address) as one hand-built eth_call, keeping chain SDKs out
+// of the daemon. Undefined on any failure; a nicety for a status card, never something a payment path waits on.
 export const usdcBalance = async (network: UsdcNetwork, address: string, fetchFn: typeof fetch = fetch): Promise<bigint | undefined> => {
     try {
         const data = `0x70a08231${address.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;

@@ -2,10 +2,8 @@
 import { beforeEach, expect, it } from "vitest";
 import { useRailPins } from "./railPins";
 
-/* The reader's overrule of the seat table. Exercised through the composable rather than a helper, for
- * railMemory.test.ts's reason: what is worth pinning here is that a toggle is VISIBLE to the rail immediately
- * (localStorage is not reactive, so this is the part that can silently not work) and that it survives a reload.
- * No sandbox is selected in this environment, so the pins land under the no-sandbox key. */
+// Pins the reader's overrule of the seat table: a toggle is visible to the rail immediately (localStorage isn't
+// reactive) and survives a reload.
 
 const KEY = `intentic.railPins.local`;
 
@@ -16,8 +14,6 @@ it(`pins and unpins a route, and the ref moves with it`, () => {
     expect(pins.isPinned(`/ext/deployments/production`)).toBe(false);
 
     pins.toggle(`/ext/deployments/production`);
-    // The computed, not just the reader: the rail seats tiles off `pinned`, so a toggle nothing recomputes is a
-    // menu row that appears to do nothing until the next reload.
     expect([...pins.pinned.value]).toEqual([`/ext/deployments/production`]);
     expect(pins.isPinned(`/ext/deployments/production`)).toBe(true);
 
@@ -26,8 +22,7 @@ it(`pins and unpins a route, and the ref moves with it`, () => {
 });
 
 it(`pins one route of an extension without dragging its siblings on`, () => {
-    // Two Komodo connections are two Deployments tiles sharing one view id: the route is the only thing that
-    // tells them apart, which is why pins are kept by route.
+    // Pins are kept by route, not id: two Komodo connections share one view id but differ by route.
     const pins = useRailPins();
     pins.toggle(`/ext/deployments/staging`);
 

@@ -4,73 +4,36 @@ import { stateRelPath } from "../../workspace/layout/state-paths.js";
 import type { Services } from "../../composition.js";
 import type { AgentAdapter } from "./adapter.js";
 
-/* WHAT A NATIVE PROVIDER OWES THE DAEMON, said once, so the shared surfaces can ITERATE providers instead of
- * each keeping its own hand-maintained list of them.
- *
- * It exists because adding Cursor touched eleven shared files, and one of them was missed: the secrets
- * inventory kept listing four providers' account rows while six were connectable, and nothing failed, because
- * the inventory was an enumeration and enumerations do not know what they are missing. That is the repo's own
- * rule ("guard invariants by discovery, not enumeration") violated in six separate places at once — the
- * adapter table, the catalog table, the readiness record, the boot blocks, the pack predicates, the secrets
- * rows — each a private list of the same six names.
- *
- * The module is the discovery unit. Each provider directory exports one; provider-registry.ts aggregates them;
- * the six consumers derive their answer from the aggregation. Adding a provider is then: the contract row (the
- * wire vocabulary, compiler-enforced), the provider directory with its module, and one import line in the
- * registry. A consumer a module forgets to serve fails the registry's own test rather than shipping silently.
- *
- * WHAT DELIBERATELY STAYS ENUMERATED, and why each:
- *   - the ROUTER's per-provider mounts: implement(sandboxContract) type-checks each mount against the contract,
- *     and that forcing function (a contract without an implementation does not compile) is worth one line.
- *   - the route harness's doubles (route-services.testing.ts): a test double is a claim about behaviour, and
- *     deriving claims would test the derivation.
- *   - the web app's surfaces: a different program on the other side of the wire; the contract is its registry.
- *
- * The methods take the full Services on purpose. A provider arm genuinely reads across the daemon (its own
- * slice, the workspace, the browser stack, the persona), and a narrowed parameter type per method would be six
- * hand-kept Pick<> lists that rot exactly the way the enumerations did. The type is imported type-only, so no
- * runtime cycle exists: composition imports the registry's values, modules import only composition's types. */
+// What a native provider owes the daemon, so shared surfaces (adapters, catalogs, readiness, boot, packs, secrets)
+// iterate providers instead of each keeping its own list; each provider directory exports one module,
+// provider-registry.ts aggregates them. Stays enumerated only where deriving would defeat the point:
+// - the router's per-provider mounts (type-checked against the contract)
+// - the route harness's test doubles (a claim about behaviour, not derivable)
+// - the web app's surfaces (a different program; the contract is its registry)
 
-// A provider's model catalog: its models (+ default id), NEVER empty, in the provider's own preference order.
-// The one question every provider answers identically, which is why it is the one method the record every
-// consumer reads (services.providerCatalogs) is built from.
+// A provider's model catalog: models plus a default id, never empty, in the provider's own preference order.
 export interface ProviderCatalog {
     readonly models: () => Promise<{ models: Model[]; default: string }>;
 }
 
-// The two facts main.ts resolves about this daemon before anything boots, and the only ones a provider's boot
-// tasks have ever branched on: `roots` = this daemon owns the workspace-root state files; `container` = it owns
-// the container-wide furniture (sockets, watchers, spawned helpers).
+// Two facts main.ts resolves before boot: `roots` (this daemon owns the workspace-root state files) and `container` (it
+// owns the container-wide furniture).
 export interface BootRole {
     readonly container: boolean;
     readonly roots: boolean;
 }
 
-/* Reads that several modules would otherwise repeat per sweep, handed in memoized so iterating six modules
- * costs the same round trips the hand-written code paid. The translator's account map is THE case: four
- * providers authenticate through it, and four independent management-API calls per readiness sweep is the
- * regression a derived list must not smuggle in.
- *
- * Always answerable, even with no translator configured: the client falls back to reading the auth files on
- * disk, which is exactly what the secrets inventory has always shown on such a sandbox. A READINESS rung that
- * must not even ask without a translator URL checks that gate itself, before touching this (see the codex
- * module) — the gate is the rung's fact, not the read's. */
+// Reads shared across provider modules per sweep, memoized so iterating them costs one round trip, not one per
+// provider. Answerable even with no translator configured (falls back to on-disk auth files).
 export interface SharedProviderReads {
     readonly translatorAccounts: () => Promise<TranslatorAccounts>;
 }
 
-/* THE ACCOUNT DOOR: how this provider's OWN accounts are connected, listed, renamed and dropped, for a provider
- * whose credential the sandbox holds itself (the translator's subscriptions are the other road, translator/).
- * One shape behind /accounts/{provider} (accounts.routes.ts), so a provider's mechanism — Anthropic's paste-back,
- * Cursor's held verifier, xAI's device code through OpenCode, a sign-in that mints the vendor's key — is its
- * module's business and the route family is written once. Nothing redeemable crosses this seam: a start hands
- * back a page and a handshake, and the proof that finishes the attempt stays in the door. */
+// Connects, lists, renames and drops this provider's own accounts (not the translator's subscriptions), behind the one
+// shape at /accounts/{provider}. Nothing redeemable crosses the seam: a start returns only a page and a handshake.
 export interface AccountDoor {
     readonly start: (variant: string | undefined) => Promise<LoginStart>;
-    /* Finish an attempt with what the page handed back: the code it showed (a paste), or the address a redirect
-     * landed on. Answers with the account where the exchange ends here; undefined where the door still has a
-     * mint to do behind the answer and the row lands in the list minutes later. Absent for a door whose every
-     * attempt finishes on its own (a device flow), which the route says in so many words. */
+    // Finishes with the page's code or redirect; undefined if minting continues, absent if self-finishing.
     readonly complete?: (input: {
         readonly handshake: string;
         readonly code?: string | undefined;
@@ -80,43 +43,30 @@ export interface AccountDoor {
     readonly cancel: (handshake: string) => void;
     // `force` re-measures the plan limits before answering, for the doors that have any to measure.
     readonly list: (force: boolean) => Promise<OauthAccount[]>;
-    // Undefined ⇒ no such account, the route's 404: a rename that matched nothing is the caller addressing a
-    // row that another device just disconnected, and the card has to learn its list is stale.
+    // Undefined means no such account (404): the row may have just been disconnected by another device.
     readonly rename: (id: string, label: string) => Promise<OauthAccount | undefined>;
     readonly disconnect: (id: string) => Promise<void>;
 }
 
 export interface ProviderModule {
     readonly id: NativeProvider;
-    /* The adapter rows this provider's runtimes contribute (adapter-registry assembles them). Usually one;
-     * EMPTY for a provider served entirely by another module's runtime — Kimi runs under the Claude Code loop,
-     * so its module contributes no adapter and the registry's test asserts that absence is backed by
-     * capabilitiesOf naming a runtime some other module provides. */
+    // Adapter rows this provider contributes; empty when another module's runtime serves it instead.
     readonly adapters: readonly AgentAdapter[];
-    // This provider's catalog read, against the built services. The registry projects it into the
-    // Record<NativeProvider, ProviderCatalog> every picker/route/validator reads.
+    // This provider's catalog read; the registry projects it into the record every consumer reads.
     readonly catalog: (services: Services) => Promise<{ models: Model[]; default: string }>;
-    // Whether a turn on this provider could be served right now: the harnessReadyProviders rung. Cheap facts
-    // only (a store listing, a config string, the shared translator read) — never a probe that costs a turn.
+    // Whether a turn could be served now, from cheap facts only; never a probe that costs a turn.
     readonly ready: (services: Services, shared: SharedProviderReads) => Promise<boolean>;
-    /* Boot tasks: config writes, gate sockets, refresh timers, warm-ups. Fire-and-forget and BEST-EFFORT by
-     * contract: a boot that throws is the module's own log line, never a failed daemon. Absent ⇒ nothing to
-     * start. */
+    // Fire-and-forget and best-effort: a throw is logged, not a failed daemon. Absent means nothing to start.
     readonly boot?: (services: Services, role: BootRole, logger: Logger) => void;
-    // The feature packs a CONNECTED account of this provider wants baked into the next rebuild, by pack name.
-    // Read from disk, never from a live helper (see provider-packs.ts for why). Absent ⇒ none.
+    // Feature packs a connected account wants in the next rebuild, read from disk, not a live helper.
     readonly packs?: (services: Services) => Promise<readonly string[]>;
-    // This provider's rows in the secrets inventory: one entry per connected account, saying where the
-    // credential lives on disk. Absent ⇒ the provider stores nothing here (none today; absence is legal so a
-    // future keyless provider does not have to fake an empty list).
+    // This provider's rows in the secrets inventory, one per connected account; absent means none stored.
     readonly secretEntries?: (services: Services, shared: SharedProviderReads) => Promise<SecretInventoryEntry[]>;
-    // This provider's account door, built once per daemon (a door holds the attempts still open). Absent ⇒ the
-    // provider holds no account of its own here, and /accounts/{provider} answers 404 for it.
+    // This provider's account door, built once per daemon; absent means /accounts/{provider} 404s for it.
     readonly accounts?: (services: Services) => AccountDoor;
 }
 
-// One connected account's row in the secrets inventory, in the one shape that page renders. Moved here from
-// secrets.routes.ts because the modules author the rows now and the route only concatenates them.
+// One connected account's row in the secrets inventory, in the shape that page renders.
 export const providerAccountEntry = (provider: string, providerName: string, id: string, label: string, storedAt: string): SecretInventoryEntry => ({
     key: `${provider}:${id}`,
     kind: "provider",
@@ -127,6 +77,6 @@ export const providerAccountEntry = (provider: string, providerName: string, id:
     revealable: false,
 });
 
-// The auth tree every provider's credential lives under, spelled through the same helper the stores use, so a
-// module's `storedAt` and the store's actual path cannot drift.
+// Auth tree every provider's credential lives under; uses the same helper the stores use so `storedAt` can't drift from
+// the real path.
 export const authStateRelPath = (...segments: string[]): string => stateRelPath(".intentic/secrets/auth/", ...segments);

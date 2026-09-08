@@ -1,22 +1,8 @@
 import { MAX_ELEMENTS } from "./page.js";
 
-/* What the page is showing, as a list of things that can be acted on — the CDP half of it.
- *
- * THIS IS THE POINT OF THE PACKAGE. A screenshot tells a model where pixels are; this tells it what they MEAN:
- * that the grey rectangle is a button called "Send", that the box under it is a textbox currently holding
- * "invoice". Acting by reference then survives everything that breaks coordinates: a scroll, a resize, a
- * re-render, a different machine with a different screen.
- *
- * The refs are deliberately short-lived. They index an array parked on the page, and the next snapshot replaces
- * it, so a ref taken before a click that navigated cannot silently address whatever now sits in that slot. A
- * stale ref fails loudly, which is the behaviour worth having.
- *
- * The SHAPE this produces, and the rendering an agent reads it as, live in page.ts — shared with the browser
- * extension, which walks the DOM through Chrome's own APIs and must answer in the same language.
- *
- * The script below runs in the page, so it is written in plain ES5-ish JavaScript with no template literals: it
- * is embedded in a template literal here, and nesting them is how this kind of code acquires bugs that only
- * appear on somebody else's website. */
+// CDP half of page content as actionable refs; a ref indexes an array the next snapshot replaces, so a stale one
+// fails loudly rather than silently retargeting. Shape and rendering live in page.ts, shared with the browser
+// extension. Written without template literals since it's embedded in one here.
 
 export const SNAPSHOT_SCRIPT = `(function () {
   var MAX = ${MAX_ELEMENTS};

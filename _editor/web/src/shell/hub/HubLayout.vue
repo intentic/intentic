@@ -1,25 +1,7 @@
-<!-- A HUB PAGE: a title, an index of the hub's sections, and the active section's body. The sandbox hub and the
-     settings hub were the same page twice: each carried its own TABS tuple, its own route↔slug resolution, its
-     own "unknown slug goes home" watcher and its own copy of the strip markup, and the two had already drifted
-     on whether the redirect waits for anything. All of that is here now; a hub declares its groups and renders
-     its body.
-
-     THE INDEX IS A COLUMN, NOT A STRIP, and that is the whole point of this component. A <SegmentedControl> is a row of
-     toggle pills for a few exclusive views of ONE thing: Preview/Source, Linux/Windows, and the sandbox hub
-     had grown twelve destinations in it, nine built-in and one per extension that registers a `sandbox` view.
-     Measured, the strip came to ~740px inside a 720px content column, so it scrolled: the pills that were still
-     legible were the ones that happened to fit, and the rest were behind a horizontal scrollbar nobody looks
-     for. Growing the page wider only moves that number. Three things follow from switching axis:
-
-      1. VERTICAL IS WHERE THE ROOM IS. Twelve rows is a short column and a broken strip.
-      2. GROUPS BECOME POSSIBLE, and they are the actual repair: "This box / Configuration / Reach / Added by
-         extensions" is four things to choose between, where twelve equal-weight words in a row is a search.
-      3. ROWS BECOME LINKS. The strip was <button> + router.push, so twelve URL-addressable destinations: three
-         of which the shell itself deep-links into: had no href, no middle-click and no copyable address.
-
-     Mobile keeps the strip, unchanged. At phone width there is no column to put beside anything, and a
-     scrolling row of pills is the idiom every mobile tab bar already uses; the failure above is a desktop
-     failure, caused by a 56rem content cap that does not apply once the page is the whole screen. -->
+<!--
+    Shared shell for a hub page — title, section index, and the active section's body — used by the sandbox hub and settings hub. The index is a
+    column of grouped links, not a tab strip; each row is a real `<a>` (href, middle-click, copyable). Mobile shows a horizontal strip instead.
+-->
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
 import { areaIcon } from "@intentic/ui/icons";

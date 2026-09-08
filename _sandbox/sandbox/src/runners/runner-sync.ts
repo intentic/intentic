@@ -7,19 +7,10 @@ import type { AgentWorktrees } from "../agents/worktrees/worktrees.js";
 import { repoGitDir } from "../history/history.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
-/* THE RUNNER'S HALF OF THE WORKSPACE, git both ways and nothing else (docs/remote-runners-plan.md §6 at the
- * workspace root). The runner's /work is a MIRROR of the parent's: before a turn, each repo's main line and
- * the conversation's branch are fetched from the parent's git door and the checkouts moved onto them; after
- * one, the branch is pushed back to refs/runner-incoming/<id>, from which the parent advances its own copy.
- *
- * Everything here is stock `git` against smart HTTP, authenticated by the runner's durable token as a bearer.
- * The token rides in as GIT_CONFIG_* environment rather than argv, argv is world-readable in /proc on the
- * very machine whose other sandboxes this runner shares.
- *
- * The fetched refs land under refs/runner-parent/ first and the local refs are moved FROM them, rather than
- * fetching straight into refs/heads/: the conversation's branch may be checked out in this runner's own
- * worktree, and moving a checked-out ref behind git's back is how a checkout and its branch end up telling
- * two stories. An attached worktree is hard-reset (the sanctioned move); a detached branch is `branch -f`d. */
+// The runner's /work mirrors the parent's: fetched before a turn, pushed to refs/runner-incoming/<id> after. The token
+// rides in as GIT_CONFIG_* env, not argv (readable in /proc on a shared machine). Fetched refs land in
+// refs/runner-parent/ first, since moving a checked-out branch straight into refs/heads/ would desync it from its
+// worktree.
 
 const execFileAsync = promisify(execFile);
 
@@ -47,12 +38,11 @@ const git = async (identity: RunnerIdentity, cwd: string, args: string[]): Promi
     return stdout.trim();
 };
 
-// The working dir a composition entry means on THIS machine: "" is the workspace root itself.
+// The working dir a composition entry means locally; "" is the workspace root itself.
 const workingDirOf = (deps: RunnerSyncDeps, dir: string): string => (dir === "" ? deps.workspaceRoot : join(deps.workspaceRoot, dir));
 
-/* Make one repo exist here in the daemon's canonical shape: working dir in /work, real git dir on /history
- * (`--separate-git-dir`, the shape every boot converges toward, git/repo-git-dirs.ts). A repo that already
- * has the pointer is left exactly as it is, which is the steady state and the root repo always. */
+// Puts a repo in the daemon's canonical shape: working dir in /work, real git dir on /history. Already-shaped repos are
+// left alone.
 const ensureRepo = async (deps: RunnerSyncDeps, identity: RunnerIdentity, repo: string, dir: string): Promise<string> => {
     const workingDir = workingDirOf(deps, dir);
     const gitDir = repoGitDir(deps.historyRoot, repo);
@@ -60,7 +50,7 @@ const ensureRepo = async (deps: RunnerSyncDeps, identity: RunnerIdentity, repo: 
     try {
         await git(identity, workingDir, ["rev-parse", "--resolve-git-dir", gitDir]);
     } catch {
-        // init writes INTO gits/ but will not create it; the daemon's own boot makes it, a fresh mirror must too.
+        // git init writes into gits/ but will not create the directory; a fresh mirror has to make it too.
         await mkdir(dirname(gitDir), { recursive: true });
         await git(identity, workingDir, ["init", "--separate-git-dir", gitDir]);
     }
@@ -73,14 +63,9 @@ export const syncFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdent
         const url = runnerGitUrl(identity.parentUrl, repo);
         onLine(`${repo}: fetching from the parent…`);
         await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${mainBranch}:${PARENT_MAIN_REF}`]);
-        /* The main line first: `checkout -B` moves this mirror's checked-out branch onto the parent's, under
-         * the parent's own branch NAME, so a runner initialized with a different default is converged rather
-         * than accumulating a second history. Tracked content only; untracked files (state, junk from an
-         * interrupted turn) are deliberately left, .intentic is excluded on both ends. */
+        // Moves this mirror onto the parent's own branch name, converging rather than growing a second history.
         await git(identity, workingDir, ["checkout", "-B", mainBranch, PARENT_MAIN_REF]);
-        /* Then the conversation's branch. It exists on the parent from the first turn (the mirror worktree's
-         * ensure creates it), but tolerate its absence rather than failing the whole sync: a branch the
-         * parent has not created yet simply starts here at main, which is where ensure would put it. */
+        // Tolerates a branch the parent hasn't created yet: this repo just starts at main instead of failing.
         const fetched = await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${input.branch}:${PARENT_TURN_REF}`])
             .then(() => true)
             .catch(() => false);

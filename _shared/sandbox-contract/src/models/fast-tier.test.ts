@@ -1,13 +1,8 @@
 import { expect, test } from "vitest";
 import { fastTierModel } from "./fast-tier.js";
 
-/* WHERE A DOWNGRADED TURN ACTUALLY LANDS. The judge (prompt-complexity.ts) says a turn could be cheaper; this
- * says whether there is anywhere cheaper to put it, on the provider it is already on.
- *
- * Two properties carry the whole feature, and everything below is one of them: a downgrade is only ever to a
- * genuinely CHEAPER rung of the same catalog (so "cheaper" can never quietly become "older", or "the same model
- * with less thinking"), and it never crosses PROVIDER (because that retires the conversation's session, which
- * throws away the context that made the follow-up cheap to answer in the first place). */
+// Whether a downgraded turn has anywhere cheaper to land on its current provider; a downgrade must be a genuinely
+// cheaper rung of the same catalog and never cross provider, since that retires the session.
 
 const CLAUDE = [`claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`];
 const GOOGLE = [`gemini-3-pro`, `gemini-3-flash`, `gemini-3-flash-lite`];
@@ -28,20 +23,16 @@ test("reads the cheap end the same way the quick model does, on every vendor's v
 // --- the ceiling: the user's own pick -------------------------------------------------------------------
 
 test("a user already on the cheap rung has nowhere to be sent", () => {
-    // The common case worth being exact about rather than an edge case. Undefined means "run what they asked
-    // for", which is the honest answer and the one that costs nothing to be wrong about.
+    // undefined means run the original pick: the safe default when nothing is cheaper.
     expect(fastFor(`claude-haiku-4-5-20251001`)).toBeUndefined();
 });
 
 test("never swaps a model for an older build of the same tier", () => {
-    // A downgrade has to be legible AS a downgrade. Last year's Sonnet under this year's Sonnet is not a
-    // saving the feature promised, it is a different turn wearing the user's own model name.
     expect(fastFor(`claude-sonnet-5`, { models: [`claude-sonnet-5`, `claude-sonnet-4`] })).toBeUndefined();
 });
 
 test("never downgrades a model whose family this build does not recognise", () => {
-    // An id carrying no tier word is a provider's base line or a family nobody here has heard of, and betting
-    // a user's turn on the guess that an unknown id is the budget one is the wrong direction to be wrong in.
+    // An id with no tier word is either the provider's own baseline or an unrecognised family.
     expect(fastFor(`claude-opus-5`, { models: [`some-new-thing`] })).toBeUndefined();
     expect(fastFor(`some-new-thing`, { models: CLAUDE })).toBeUndefined();
 });
@@ -61,19 +52,17 @@ test("a pin on this provider wins over the catalog's own cheap end", () => {
 });
 
 test("takes a pinned id verbatim, so a model the static catalog has not caught up with is still pinnable", () => {
-    // The same call readyChain makes, and for the same reason: the picker offers a custom-id escape
-    // hatch, and second-guessing the id here would run a different model than the settings row names.
+    // Takes a pinned id verbatim: second-guessing it would run a different model than the settings row names.
     expect(fastFor(`claude-opus-5`, { pinned: [`claude:claude-haiku-9`] })).toBe(`claude-haiku-9`);
 });
 
 test("drops a pin naming another provider rather than crossing to it", () => {
-    // Switching provider retires the conversation's session (turnRequest.ts `resumes`). Starting the
-    // conversation over to save a fraction of a cent is not a saving, so the pin is ignored and Auto answers.
+    // Crossing provider retires the session (turnRequest.ts's resumes); the pin is ignored instead.
     expect(fastFor(`claude-opus-5`, { pinned: [`gemini:gemini-3-flash-lite`] })).toBe(`claude-haiku-4-5-20251001`);
 });
 
 test("skips a pin that is not actually cheaper than what the user picked", () => {
-    // A pin is a preference about WHICH cheap rung, never a licence to swap a model for its equal or better.
+    // A pin picks which cheap rung, never licence to swap to an equal or better model.
     expect(fastFor(`claude-sonnet-5`, { pinned: [`claude:claude-opus-5`] })).toBe(`claude-haiku-4-5-20251001`);
 });
 

@@ -12,10 +12,8 @@ import {
 } from "./autostart.js";
 import type { CliLauncher } from "./launcher.js";
 
-/* The three OS autostart entries are string/argv builders: the side-effecting register/unregister spawn the OS
- * tools and are exercised in the field. What is pinned here is that each launches the spec's command at login
- * with the launcher it was handed, VERBATIM. Both launcher shapes are covered because the released install is
- * the compiled one, and it is exactly the shape a hardcoded `execPath + argv[1]` used to corrupt. */
+// Tests the string/argv builders only; register/unregister side effects are exercised in the field. Pins that each
+// launches the spec's command verbatim, covering both launcher shapes (script, compiled binary).
 const NODE: CliLauncher = ["/usr/bin/node", `${HOST_STATE_ROOT}/sync/dist/cli.js`];
 const BINARY: CliLauncher = ["/home/dev/.intentic/sync/bin/intentic-sync"];
 
@@ -50,14 +48,13 @@ describe("macLaunchAgentXml", () => {
         const plist = macLaunchAgentXml(SPEC, LAUNCH_AGENT, BINARY);
         expect(plist).toContain("<string>/home/dev/.intentic/sync/bin/intentic-sync</string>");
         expect(plist).not.toContain("cli.js");
-        // The command must be the FIRST argument after the executable, or stricli reads the wrong token.
+        // Command must be the first arg after the executable, or stricli reads the wrong token.
         expect(plist.indexOf("<string>mirror</string>")).toBeGreaterThan(plist.indexOf("intentic-sync</string>"));
     });
 });
 
-/* The mechanism that actually works on the machines that need autostart most. An XDG entry is started by the
- * desktop session at graphical login, so on a headless box (a server, a container, every WSL distro) it can
- * never fire; a user unit is what systemd is for. */
+// An XDG autostart entry needs a graphical login and never fires on a headless box (server, container, WSL); a
+// systemd user unit does.
 describe("systemdUserUnit", () => {
     it("runs the launcher with the FOREGROUND args, since systemd supervises what it starts", () => {
         const unit = systemdUserUnit(SPEC, NODE);
@@ -73,45 +70,35 @@ describe("systemdUserUnit", () => {
         expect(systemdUserUnit(SPEC, BINARY)).toContain("WantedBy=default.target");
     });
 
-    // A deliberate `systemctl --user stop` must stay stopped: the same call the macOS LaunchAgent makes by
-    // omitting KeepAlive. `always` would fight the user. What the agent owes in return is a non-zero exit on a
-    // signal, or `on-failure` reads every kill it did not choose as a clean stop (see systemdUserUnit).
+    // Restart=on-failure, not always, so a deliberate stop stays stopped; the agent must exit non-zero on a signal, or
+    // the stop looks clean.
     it("restarts on failure but not on a clean stop", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain("Restart=on-failure");
         expect(unit).not.toContain("Restart=always");
     });
 
-    /* The start limit is the same silent death reached slowly: systemd's default gives up after a few restarts
-     * and parks the unit in `failed`, so an agent that cannot start stops being retried AND stops being
-     * mentioned. A resident agent should keep trying, and keep saying so in its own log. */
+    // Without StartLimitIntervalSec=0, systemd gives up after a few restarts and silently parks the unit in `failed`.
     it("never gives up on a unit that keeps restarting", () => {
         expect(systemdUserUnit(SPEC, BINARY)).toContain("StartLimitIntervalSec=0");
     });
 
-    /* THE KILL `on-failure` WOULD OTHERWISE CALL CLEAN. systemd counts SIGHUP/SIGINT/SIGTERM/SIGPIPE as a
-     * successful termination, so an agent killed by one before its own handler is installed — which is where a
-     * machine under memory pressure kills things — is left for dead by the very setting meant to revive it. The
-     * agent's non-zero exit only covers the kills it was alive enough to handle; this covers the rest. */
+    // systemd treats SIGHUP/SIGINT/SIGTERM/SIGPIPE as a clean exit; RestartForceExitStatus overrides that so a
+    // signal-killed agent still restarts.
     it("forces a restart after the signals systemd would call a clean exit", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain("RestartForceExitStatus=SIGHUP SIGINT SIGTERM SIGPIPE");
     });
 
-    /* A user unit does NOT inherit a login shell's environment. Both agents shell out to `git` and `ssh` on every
-     * tick (the git bridge) and Mutagen's transport needs ssh too, so a unit that starts from systemd's minimal
-     * PATH is one whose bridge silently fails every pass. */
+    // A systemd user unit does not inherit a login shell's PATH; both agents shell out to git/ssh, so PATH must include
+    // those tools explicitly.
     it("sets a PATH that includes the shells-out targets", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain(`Environment=PATH=${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin`);
     });
 
-    /* THE LOG THE AGENT ADVERTISES, not the journal. A unit without these lines sends the loop's output to
-     * journald while `intentic-sync status`, every failure note and the docs all name the agent's own file, so on
-     * a systemd machine (most Linux desktops, every WSL distro with systemd on) that file stopped growing the day
-     * autostart started working, and a watcher whose loop had died was diagnosable only by someone who already
-     * knew to reach for journalctl. `append:` and not `file:`, or each restart truncates the pass that explains
-     * why it restarted. */
+    // Routes loop output to the agent's own log, not journald, matching what `status` and the docs point to. `append:`,
+    // not `file:`, keeps the log across restarts.
     it("writes the loop's output to the agent's own log, appending across restarts", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain(`StandardOutput=append:${LOG}`);
@@ -133,17 +120,14 @@ describe("linuxDesktopEntry", () => {
     });
 });
 
-// Windows registers through the CURRENT USER's Run key: the same mechanism Mutagen's `daemon register` uses,
-// and the reason it kept succeeding where a schtasks call could not: `/SC ONLOGON` triggers for any user on the
-// machine (elevation), and schtasks always wants a password it has no stdin to read.
+// HKCU Run key, like Mutagen's daemon register; schtasks needs a password with no stdin to give it.
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
 const STUB = "C:\\Users\\dev\\.intentic\\sync\\bin\\intentic-launch.exe";
 
 describe("windowsRunAddArgs", () => {
-    /* THE SHAPE THAT PUTS NOTHING ON THE DESKTOP. The stub is a GUI-subsystem program, so the loader never
-     * gives it a console, and it starts the loop with CREATE_NO_WINDOW — one process at logon, no window at
-     * any point, and the loop's output going straight into the log the agent already advertises. */
+    // The stub is a GUI-subsystem binary launched with CREATE_NO_WINDOW: no console flashes at logon, and loop output
+    // goes to the log.
     it("starts the FOREGROUND loop through the stub, logging where the spec says", () => {
         expect(windowsRunAddArgs(SPEC, BINARY, STUB)).toEqual([
             "add",
@@ -164,10 +148,8 @@ describe("windowsRunAddArgs", () => {
         );
     });
 
-    /* No stub — a developer's checkout, where there is no compiled binary to install one beside. Autostart is
-     * still worth having, and it is the DETACHED command that gets registered: Explorer starts a Run value in
-     * the interactive session, so registering the foreground loop without a stub would leave a console window
-     * on screen for the whole session rather than flashing for two seconds. */
+    // No stub (dev checkout, no compiled binary): falls back to the detached command, since a foreground loop without
+    // a stub would leave a console window open for the session.
     it("falls back to the detached command when no stub is installed", () => {
         expect(windowsRunAddArgs(SPEC, NODE).at(-2)).toBe('"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror"');
         expect(windowsRunAddArgs(SPEC, BINARY).at(-2)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror"');

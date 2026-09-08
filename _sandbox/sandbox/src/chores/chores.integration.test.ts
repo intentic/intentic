@@ -23,13 +23,10 @@ afterEach(async () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/* The runner's contract is that EVERY outcome is a recorded result, the panel showing "jscpd failed: out of
- * memory" is strictly better than a probe that vanishes and leaves a chore reading "not measured yet" forever.
- * The three states are tested against real commands rather than mocks, because the thing being verified is
- * exactly the shell behaviour: what an absent tool does, what a non-zero exit does, and what unrecognisable
- * output does. */
+// Every outcome from runProbe is a recorded result, never a silent gap. Tested against real commands, not mocks, since
+// what's verified is actual shell behavior: a missing tool, a non-zero exit, unreadable output.
 describe(`runProbe`, () => {
-    // A spec whose shape is real but whose commands are trivial, so the test measures the runner rather than pnpm.
+    // Real spec shape, trivial commands, so the test measures the runner, not pnpm.
     const fakeSpec = (over: Partial<ReturnType<typeof probeSpec>>) => ({ ...probeSpec(`outdated`), ...over });
 
     test(`a tool this repository does not have is unavailable, not a clean result`, async () => {
@@ -39,9 +36,6 @@ describe(`runProbe`, () => {
         expect(result.facts).toBeUndefined();
     });
 
-    /* And it names what is MISSING rather than describing itself. The reason a probe could not run is the only
-     * sentence the panel has for that repository, and one built from the probe's own title: "this repository has
-     * no security advisories to measure": says the exact thing an unmeasured probe is never allowed to say. */
     test(`an unavailable probe's reason is what is missing, never a restatement of the probe`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const result = await runProbe(fakeSpec({ available: `exit 1` }), dir, 1000);
@@ -56,7 +50,6 @@ describe(`runProbe`, () => {
         expect(result.reason).toContain(`ERR_PNPM_NO_LOCKFILE`);
     });
 
-    // The case that matters most: a tool whose JSON shape moved must read as failed, never as measured-and-clean.
     test(`output the parser cannot recognise is a failure`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const garbage = `not json at all`;
@@ -65,9 +58,8 @@ describe(`runProbe`, () => {
         expect(result.reason).toContain(garbage);
     });
 
-    /* And it quotes the FRONT of what it got. These tools print JSON by the megabyte, so the last 400 characters
-     * are a fragment from the middle of an array: near-identical whatever went wrong, while the first line is
-     * the tool's own error message. Bounded either way, because the reason renders in a one-line strip. */
+    // The front is quoted since these tools print megabytes of JSON; the tail is usually mid-array noise, not the
+    // error.
     test(`an unrecognisable output is quoted from its start, and bounded`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
         const command = `echo "ERR_KNIP_CONFIG unresolved entry"; echo '{"issues":[${`x`.repeat(500)}'`;
@@ -99,16 +91,8 @@ describe(`runProbe`, () => {
     });
 });
 
-/* THE LANE: one measurement at a time, and every request eventually served.
- *
- * The bug these cover is the one a reader meets rather than reads: `refresh` used to return immediately when the
- * runner was busy, while the route above it still answered `{ ok: true }`. So pressing Re-measure during a
- * background sweep, which is the likeliest moment to press it, since a sweep is what makes the numbers look
- * stale: acknowledged the request and then dropped it on the floor, forever.
- *
- * The probes here resolve as `unavailable` in milliseconds: the temp repo has no package.json and no lockfile, so
- * each spec's `available` gate fails at once. That is a REAL run through the real code path, which is what makes
- * these worth having: the alternative is asserting against a fake and learning nothing about the queue. */
+// One measurement at a time, every request eventually served, exercised through the real run path: probes resolve
+// `unavailable` in ms since the temp repo has no manifest.
 describe(`the runner's lane`, () => {
     const runner = async () => {
         const dir = await scaffold({});
@@ -118,24 +102,21 @@ describe(`the runner's lane`, () => {
             runner: createProbeRunner({
                 workspace: { root: dir },
                 chores,
-                // Nothing live: a background sweep defers to the owner's turns, but a probe somebody pressed a
-                // button for is the owner's work and runs regardless. That distinction is asserted below.
+                // A background sweep defers to live turns; a manually requested probe runs regardless, asserted below.
                 agents: { liveSessionIds: () => [] },
                 logger: createLogger({ logLevel: `silent`, logPretty: false, historyRoot: `` }),
             }),
         };
     };
 
-    // THE REGRESSION. Both calls are made before either resolves, which is exactly the collision that used to
-    // lose one, and losing it silently, with the panel told the measurement had been asked for.
+    // Both calls are made before either resolves, the exact race that could silently drop one.
     test(`a second request made while one is running is queued, not dropped`, async () => {
         const { chores, runner: probes } = await runner();
         await Promise.all([probes.refresh(``, `outdated`), probes.refresh(``, `audit`)]);
         expect((await chores.probesFor(``)).map((probe) => probe.id).toSorted()).toEqual([`audit`, `outdated`]);
     });
 
-    // What the panel draws its spinner on. Read synchronously after the call, because the entry has to be visible
-    // from the moment it is asked for: a lane that only admits work once it starts cannot explain a queue.
+    // Read synchronously right after the call, since the entry must be visible before the probe resolves.
     test(`what is waiting is visible before it runs, and gone once it has`, async () => {
         const { runner: probes } = await runner();
         const running = probes.refresh(``, `outdated`);
@@ -144,8 +125,6 @@ describe(`the runner's lane`, () => {
         expect(probes.running()).toEqual([]);
     });
 
-    // Pressing twice is one measurement. The row's button disables itself, but a second panel, or a sweep that
-    // already queued this probe: is the same work under a different name.
     test(`the same probe asked for twice joins the request already in the lane`, async () => {
         const { runner: probes } = await runner();
         const first = probes.refresh(``, `outdated`);
@@ -154,8 +133,6 @@ describe(`the runner's lane`, () => {
         expect(probes.running()).toEqual([]);
     });
 
-    // An id this build has never heard of is not a lane entry that never clears: the panel would show it
-    // measuring forever, which is the same failure as the dropped request wearing the opposite costume.
     test(`an unknown probe id does not park in the lane`, async () => {
         const { runner: probes } = await runner();
         await probes.refresh(``, `nonsense` as ProbeResult["id"]);
@@ -203,7 +180,6 @@ describe(`the store`, () => {
         expect(await chores.probesFor(`never-existed`)).toEqual([]);
     });
 
-    // A deleted clone's measurements must not outlive it: they would render as a repository nobody can open.
     test(`prune drops repos that no longer exist and leaves the rest`, async () => {
         const chores = await store();
         await chores.recordProbe(`app`, result({ id: `outdated` }));
@@ -219,9 +195,6 @@ describe(`the store`, () => {
         expect(isStale(result({ id: `audit`, ranAt: 900 }), 100, 1000)).toBe(true);
     });
 
-    /* A result that is not a MEASUREMENT must not hold a measurement's lease. Tier 2's TTL is a week, and leasing
-     * a failed knip run for a week is how the panel kept reporting a parse error long after the parser that could
-     * not read that output had been fixed. */
     test(`a probe that did not measure is retried on the hour, whatever its TTL`, () => {
         const week = 7 * 86_400_000;
         const hour = 3_600_000;
@@ -229,7 +202,7 @@ describe(`the store`, () => {
             expect(isStale(result({ id: `knip`, state, ranAt: 0 }), week, hour - 1)).toBe(false);
             expect(isStale(result({ id: `knip`, state, ranAt: 0 }), week, hour)).toBe(true);
         }
-        // While a real measurement still gets the whole week it was promised.
+        // A real measurement (state ok) still gets the full week, not the hourly retry.
         expect(isStale(result({ id: `knip`, ranAt: 0 }), week, hour)).toBe(false);
     });
 });
@@ -245,7 +218,7 @@ describe(`package signals`, () => {
                 devDependencies: { vitest: `^2` },
             }),
             "_libs/two/package.json": JSON.stringify({ name: `@x/two` }),
-            // A package's architecture document is its own README, so `documented` is a stat on the package dir.
+            // A package's doc is its README; `documented` is just a stat on the package dir.
             "_libs/one/README.md": `# one`,
         });
         expect(packageSignals(dir)).toEqual([
@@ -254,19 +227,16 @@ describe(`package signals`, () => {
         ]);
     });
 
-    /* A repo that is not a pnpm workspace has no packages, and that is a true answer rather than a gap: the root
-     * manifest is deliberately NOT folded in as a pseudo-package, which would make every ordinary repo report
-     * exactly one undocumented "package": a finding about our modelling rather than about the code. */
+    // The root manifest is deliberately not counted as a pseudo-package; a plain repo would otherwise report one
+    // undocumented package.
     test(`a repo that is not a workspace reports no packages at all`, async () => {
         const dir = await scaffold({ "package.json": JSON.stringify({ name: `plain` }) });
         expect(packageSignals(dir)).toEqual([]);
     });
 });
 
-/* WHAT THE REPOSITORY IS MADE OF: the facts the applicability gates read. Presence of a FILE, deliberately:
- * checkable, cheap, and not arguable, which is the same evidence-over-identity rule extension activation follows.
- * Every case below decides whether a whole chore appears, so a false negative here is a chore that silently never
- * shows up and a false positive is one that can never be acted on. */
+// Checks presence of files only: cheap, checkable, and not arguable. A false negative hides a chore forever; a false
+// positive shows one that can never be acted on.
 describe(`repo shape`, () => {
     test(`finds documents, Dockerfiles by either convention, workflows and the lockfile`, async () => {
         const dir = await scaffold({
@@ -276,7 +246,7 @@ describe(`repo shape`, () => {
             "_apps/web/web.Dockerfile": `FROM nginx`,
             ".github/workflows/ci.yml": `on: push`,
             ".github/workflows/release.yaml": `on: tag`,
-            // The MAP is what `docs` counts. Package pages are READMEs, counted per package by `packageSignals`.
+            // `docs` counts the map (docs/architecture); package READMEs are counted separately by packageSignals.
             "docs/architecture/repo.md": `# repo`,
         });
         const found = choreShape(dir);
@@ -292,10 +262,6 @@ describe(`repo shape`, () => {
         expect(found).toEqual({ docs: [], dockerfiles: [], ci: [], lockfile: false, packageManifest: false, deps: [] });
     });
 
-    /* THE CASE THE FRONT-END GATES LIVE OR DIE ON. `packages` comes from pnpm-workspace.yaml, so it is empty for
-     * a repository that is not a monorepo, which every Vite, Next and Angular CLI project is. Reading the root
-     * manifest here is what stops a framework gate being permanently and silently dark in exactly the
-     * repositories it exists for. */
     test(`a single-package app declares its dependencies even though it has no workspace packages`, async () => {
         const dir = await scaffold({
             "package.json": JSON.stringify({ dependencies: { react: `^19.0.0` }, devDependencies: { tailwindcss: `^4.0.0`, vite: `^6.0.0` } }),
@@ -304,8 +270,6 @@ describe(`repo shape`, () => {
         expect(choreShape(dir).deps).toEqual([`react`, `tailwindcss`, `vite`]);
     });
 
-    // A monorepo keeps its framework in the app package while the root manifest holds build tools, so the union
-    // is the only reading that recognises either shape.
     test(`a workspace unions the root manifest with every package's`, async () => {
         const dir = await scaffold({
             "package.json": JSON.stringify({ devDependencies: { turbo: `^2.0.0` } }),
@@ -315,8 +279,6 @@ describe(`repo shape`, () => {
         expect(choreShape(dir).deps).toEqual([`turbo`, `vue`]);
     });
 
-    // Peer dependencies count: every component library in the ecosystem takes its framework as one, and a gate
-    // that skipped them would decide such a package is not a React package while every file in it imports React.
     test(`peer and optional dependencies count, and a name is never repeated`, async () => {
         const dir = await scaffold({
             "package.json": JSON.stringify({
@@ -327,16 +289,12 @@ describe(`repo shape`, () => {
         expect(choreShape(dir).deps).toEqual([`@angular/core`, `react`]);
     });
 
-    // An unparseable manifest is the repository's problem to report; every other gate here still has an answer.
     test(`a manifest that does not parse leaves the rest of the shape intact`, async () => {
         const found = choreShape(await scaffold({ "package.json": `{ not json`, Dockerfile: `FROM node` }));
         expect(found.deps).toEqual([]);
         expect(found.dockerfiles).toEqual([`Dockerfile`]);
     });
 
-    /* An empty `docs/architecture/` is a directory somebody made and never filled. Gating the drift survey on the
-     * DIRECTORY would put the chore back exactly where a repository with nothing to re-read cannot use it, so the
-     * gate reads the documents themselves. */
     test(`an empty docs directory is not documentation`, async () => {
         const dir = await scaffold({ "docs/architecture/.gitkeep": `` });
         expect(choreShape(dir).docs).toEqual([]);
@@ -347,8 +305,7 @@ describe(`repo shape`, () => {
         expect(choreShape(await scaffold({ Jenkinsfile: `pipeline {}` })).ci).toEqual([`Jenkinsfile`]);
     });
 
-    // The walk is bounded so a poll cannot wander into a dependency tree; node_modules is the one that would hurt
-    // most, since half of npm ships a Dockerfile.
+    // node_modules is the ignored dir most likely to hide a Dockerfile, since many packages ship one.
     test(`the sweep does not descend into ignored directories`, async () => {
         const dir = await scaffold({ "node_modules/some-dep/Dockerfile": `FROM node`, "dist/Dockerfile": `FROM node` });
         expect(choreShape(dir).dockerfiles).toEqual([]);

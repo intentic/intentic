@@ -9,20 +9,17 @@ import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs
 import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshSession, SshExecutor } from "../core/ssh.js";
 
-// The inputs every catalog service shares (see state-resolver's resolveService): the host SSH block, the
-// host-internal ip, and the routed domain. Per-service schemas extend this with their pinned image inputs.
+// Inputs every catalog service shares: host SSH block, host-internal ip, and routed domain; services extend this with
+// their own image pins.
 export const serviceSchema = sshSchema.extend({
     internalIp: z.string(),
     domain: z.string(),
 });
 
-// Everything that distinguishes one compose-stack service from another. The provider skeleton around it
-// (read = ssh + running + healthy, diff = image pins, apply = write files + `up -d` + wait, delete = down -v)
-// is identical across the catalog, and its per-instance twin (a backing: one container, keyed by node id
-// rather than by kind) is backing-provider.ts. The two share their file writing and their stamp.
+// Everything that distinguishes one compose-stack service from another; the surrounding provider skeleton
+// (read/diff/apply/delete) is identical across the catalog. backing-provider.ts is the per-instance twin.
 export interface ComposeServiceSpec<S extends z.ZodType> {
-    // Compose project + /opt/intentic/<kind> state dir; the dashboard container carries the node's
-    // intentic.id stamp + intentic.type=<kind>.
+    // Compose project + /opt/intentic/<kind> state dir; the container carries intentic.id + intentic.type=<kind>.
     readonly kind: string;
     readonly schema: S;
     // The host port the dashboard publishes (the resolver catalog's port, tunnel-routed to <domain>).
@@ -30,28 +27,20 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     // Appended to the internal url for the readiness probe ("" probes the root).
     readonly healthPath: string;
     readonly readyTimeoutMs?: number;
-    // filename -> content, written on every apply; must include compose.yaml (its dashboard service
-    // stamped with `id` + the intentic.hash drift-stamp).
+    // filename -> content, written every apply; must include compose.yaml, stamped with `id` + intentic.hash.
     readonly files: (parsed: z.infer<S>, id: string, hash: string) => Record<string, string | HostFile>;
     readonly env?: (parsed: z.infer<S>) => readonly EnvEntry[];
-    /* Outputs beyond the `url`/`internalUrl` every service publishes, merged over them. One service has any:
-     * signoz's `otlpEndpoint`, a second published port that apps send telemetry to directly rather than
-     * through the tunnel. Derived from the inputs alone, like the two it joins, so a noop reconcile
-     * re-derives them without touching the host. */
+    // Extra outputs merged over url/internalUrl, derived from inputs alone; e.g. signoz's `otlpEndpoint`.
     readonly extraOutputs?: (parsed: z.infer<S>) => Record<string, unknown>;
-    // The long-running compose services' desired images by compose service name; diff drives an update on a
-    // pin bump, which `up -d` turns into an in-place recreate of just the changed service.
+    // Desired images by compose service name; a pin bump drives diff, and `up -d` recreates just that service.
     readonly images: (parsed: z.infer<S>) => Record<string, string>;
-    // Runs after the stack reports healthy on apply, the seam for signoz-style admin seeding via the
-    // service's own API from the host. Must tolerate an already-seeded instance (apply re-runs).
+    // Runs after the stack is healthy; the seam for admin seeding. Must tolerate an already-seeded instance.
     readonly seed?: (session: SshSession, parsed: z.infer<S>, log: (message: string) => void) => Promise<void>;
 }
 
 const READY_INTERVAL_MS = 4_000;
 
-// Bounded json-file logs for every long-running compose service, docker's default json-file log is
-// unbounded and would grow with the host's uptime; `intentic deploy logs` tails these back over SSH. One line per
-// service in each template, right under its `restart:`.
+// Bounded json-file logs (docker's default is unbounded); `intentic deploy logs` tails these over SSH.
 export const SERVICE_LOGGING = `    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }`;
 
 const running = async (session: SshSession, id: string): Promise<boolean> => {
@@ -85,8 +74,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         return images;
     };
 
-    // Probe FROM THE HOST over SSH (the port is host-published), so the check works regardless of whether
-    // the engine's own network can reach the host's internal ip.
+    // Probes from the host over SSH, since the engine's own network may not reach the host's internal ip.
     const healthy = async (session: SshSession, parsed: z.infer<S>): Promise<boolean> => {
         const result = await session.exec(`wget -q -T 10 -O /dev/null ${internalUrl(parsed)}${spec.healthPath}`);
         return result.code === 0;
@@ -99,9 +87,8 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         }
     };
 
-    // Config files are rewritten every apply; the .env is write-once (its secrets must survive restarts,
-    // re-keying would invalidate sessions / database credentials). Randoms are generated host-side.
-    // Both halves are host-files.ts, shared with the per-instance backings.
+    // Config files are rewritten every apply; the .env is write-once, since re-keying would invalidate sessions and
+    // database credentials. Both come from host-files.ts.
     const ensureFiles = async (session: SshSession, parsed: z.infer<S>, id: string, hash: string): Promise<void> => {
         await writeHostFiles(session, spec.kind, stateDir, spec.files(parsed, id, hash));
         await writeEnvOnce(session, spec.kind, stateDir, spec.env?.(parsed) ?? []);
@@ -109,8 +96,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
 
     return {
         read: async (inputs, ctx) => {
-            // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-            // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
+            // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
             if (hasPendingRef(inputs, "internalIp")) {
                 return undefined;
             }
@@ -150,8 +136,8 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
             const session = await executor.connect(sshTarget(parsed));
             try {
                 await ensureFiles(session, parsed, ctx.id, ctx.inputsHash ?? "");
-                // Stream compose's own progress (image pulls take minutes on first apply) line-by-line through
-                // the provider log, so the operator's terminal shows it live instead of one blob at the end.
+                // Streams compose's progress line-by-line, so a slow first pull shows live instead of one blob at the
+                // end.
                 let pending = "";
                 const streamLines = (chunk: string): void => {
                     pending += chunk;
@@ -179,7 +165,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
                 await session.dispose();
             }
         },
-        // Parses only the SSH block, so it works from a removed node's inputs AND a ListedResource's (a host's).
+        // Parses only the SSH block, so it works from a removed node's inputs or a ListedResource's.
         delete: async (inputs) => {
             const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, spec.kind)));
             try {

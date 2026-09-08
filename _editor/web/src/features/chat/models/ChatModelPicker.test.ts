@@ -1,28 +1,13 @@
 // @vitest-environment jsdom
-//
-/* WHAT THIS RUNTIME CANNOT DO, and the two things that have to be true of it at once.
- *
- * It has to be SAID: picking a routed runtime gives up per-tool approvals, mid-turn steering, plugins and the
- * rest, and the picker is the only place in the app that says so. Nothing else warns: the controls simply stop
- * working once the turn is running.
- *
- * And it has to COST ALMOST NOTHING TO SAY: the same list drawn as a wall of chips is a dozen of them under the
- * footer's four controls, which pushed the model list this panel exists for into a third of its own height. So
- * the row is one line with a count, and the sentences live on the hover card behind it.
- *
- * Both halves are load-bearing and they pull against each other, which is why they are pinned together here: a
- * later "let's just show them" restores the wall, and a later trim of the card drops the disclosure entirely.
- *
- * The limitations are read from the CONTRACT (limitationsOf), never re-typed here: this is a test about whether
- * the panel discloses the record, not about which words the record chose. */
+// Tests that the picker discloses what a runtime can't do (from the record, limitationsOf) without spending
+// permanent space: one row with a count, full text on hover. Not about which words the record chose.
 import { type AgentHarness, type AgentProvider, capabilitiesOf, limitationsOf } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { IconStub } from "@intentic/ui/testing";
 
-// The model list is ModelPicker's own component and its own test (ModelPicker.test.ts): stubbed to its footer
-// slot, so what mounts here is the footer and nothing else.
+// ModelPicker is tested on its own; stubbed to its footer slot so only the footer mounts here.
 vi.mock(`./ModelPicker.vue`, () => ({
     default: defineComponent({
         setup:
@@ -31,8 +16,7 @@ vi.mock(`./ModelPicker.vue`, () => ({
                 h(`div`, slots[`footer`]?.()),
     }),
 }));
-// Who serves the next turn is the shared block's business, and it reads the account catalogs to answer. Both
-// halves are stubbed silent: an empty accounts block is what leaves the footer to the runtime's own rows.
+// Account catalogs live in the shared block; stubbed empty so the footer shows only the runtime's own rows.
 vi.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
 vi.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
 // The sandbox-wide tier mode, off here so the footer holds exactly the rows under test.
@@ -40,15 +24,12 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings
 
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 
-/* Grok on its own loop, the weakest runtime the picker offers and therefore the one with something to disclose,
- * against the Claude Code loop, which is the ceiling the list measures against. Both come from the contract, so
- * these stay true when the record changes. */
+// Grok native, the weakest runtime (something to disclose); Claude Code, the ceiling; both from the contract.
 const ROUTED = { provider: `grok`, harness: `native` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
 const CEILING = { provider: `claude`, harness: `claude-code` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
 const limitsOf = (pair: { provider: AgentProvider; harness: AgentHarness }): string[] => limitationsOf(capabilitiesOf(pair.provider, pair.harness));
 
-// The conversation as this panel reads it: the refs it binds and the writes it makes, and none of the transcript
-// machinery behind them. A real Conversation would drag a daemon connection into a test about a footer row.
+// The conversation as this panel reads it: just the refs it binds and the writes it makes, no transcript machinery.
 const conversation = (pair: { provider: AgentProvider; harness: AgentHarness }): Conversation =>
     ({
         provider: ref(pair.provider),
@@ -83,7 +64,7 @@ const mount = (pair: { provider: AgentProvider; harness: AgentHarness } = ROUTED
     return element;
 };
 
-// The hint's trigger: the element the hover is on, which is the parent of the focusable span the icon sits in.
+// The hint's trigger: the parent of the focusable span the icon sits in.
 const hint = (element: HTMLElement): HTMLElement => element.querySelector<HTMLElement>(`[tabindex="0"]`)!.parentElement!;
 
 afterEach(() => {
@@ -111,8 +92,7 @@ it(`hands over every limitation the contract declares, on hover, and takes it ba
 
     hint(element).dispatchEvent(new MouseEvent(`mouseenter`));
     await nextTick();
-    // The card is teleported out of the panel (it has to escape the overlay's clipping), so it is read off the
-    // document rather than the mount.
+    // The card teleports out of the panel (escapes overlay clipping), so read it off the document.
     for (const limit of limits) {
         expect(document.body.textContent).toContain(limit);
     }
@@ -122,9 +102,8 @@ it(`hands over every limitation the contract declares, on hover, and takes it ba
     expect(document.body.textContent).not.toContain(limits[0]);
 });
 
-// The ceiling has nothing to disclose, and a row reading "0" would be the picker inventing a caveat where the
-// record has none. The footer is still drawn (extended thinking is a Claude knob), which is what makes this an
-// assertion about the row rather than about the footer being empty.
+// The ceiling has nothing to disclose; a row reading 0 would invent a caveat the record doesn't have. The
+// footer still draws (extended thinking), so this tests the row, not an empty footer.
 it(`says nothing at all when the runtime is the ceiling`, () => {
     expect(limitsOf(CEILING)).toEqual([]);
 

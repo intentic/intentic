@@ -4,48 +4,32 @@ import { pipeline } from "node:stream";
 import { interstitial } from "../panels/interstitial.js";
 import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 
-/* THE OUTBOX'S HTTP SURFACE, how a published file answers, once public-files.ts has decided it may.
- *
- * Mounted on the preview proxy, so it inherits that proxy's one property: no auth in front of it. Everything
- * about the response is therefore written for a stranger holding a link, not for the owner:
- *
- *   • GET and HEAD only. There is no write path to the outbox from the internet, files get there through the
- *     workspace, which is authenticated.
- *   • `X-Robots-Tag: noindex`. The hostname is unguessable, so crawlers cannot find the outbox on their own,
- *     but a link pasted into a public issue can be followed, and "I sent this to one person" should not become
- *     a search result. A user publishing a real site rather than an artifact is the case this costs, and the
- *     link-sharing case is overwhelmingly the common one.
- *   • `X-Content-Type-Options: nosniff`, always, so the allowlist in public-files.ts is the last word on how a
- *     response is interpreted rather than a suggestion the browser may re-derive from the bytes.
- *   • Range requests, because publishing a screen recording is a normal thing to do and a video element that
- *     cannot seek reads as broken.
- *
- * Every refusal, missing, blocked, or simply not published, renders the same branded 404 page the proxy uses,
- * for the same reason it says so little: a stranger is not owed the difference, and the publisher reads the
- * real reason off the Public view. */
+// The outbox's HTTP surface, mounted on the preview proxy with no auth in front: every response is written for a
+// stranger holding a link, not the owner.
+// 1. GET and HEAD only; there is no write path to the outbox from the internet.
+// 2. X-Robots-Tag: noindex, since a link pasted publicly can be followed even though the hostname is unguessable.
+// 3. X-Content-Type-Options: nosniff, so public-files.ts's allowlist is the last word on how a response is interpreted.
+// 4. Range requests, since a published screen recording needs to seek.
+// Every refusal renders the same branded 404, whatever the reason; the publisher reads the real one off the Public
+// view.
 
-// A published file changes in place (a rebuilt site overwrites index.html), so nothing is cached hard. The
-// validator makes the repeat visit cheap without ever letting a viewer hold a stale copy.
+// A rebuilt file overwrites in place, so nothing is cached hard; the etag keeps repeat visits cheap.
 const etagOf = (resolution: Extract<PublicResolution, { kind: "file" }>): string => `W/"${resolution.size}-${Math.floor(resolution.mtimeMs)}"`;
 
-// A single `bytes=` range against a known length, undefined when absent, malformed, or multi-range (all of
-// which are answered with the whole file, which is always a valid response to a Range request).
+// A single `bytes=` range; undefined for absent/malformed/multi-range, all answered with the whole file.
 const parseRange = (header: string | undefined, size: number): { readonly start: number; readonly end: number } | undefined => {
     const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
     if (match === null) {
         return undefined;
     }
     const [, rawStart, rawEnd] = match;
-    // "bytes=-500" is the LAST 500 bytes, not a range starting at 0, the one part of the grammar that reads
-    // backwards.
+    // `bytes=-500` means the last 500 bytes, not a range starting at 0.
     const start = rawStart === "" ? size - Number(rawEnd) : Number(rawStart);
     const end = rawStart === "" || rawEnd === "" ? size - 1 : Number(rawEnd);
     return start < 0 || end < start || start >= size ? undefined : { start, end: Math.min(end, size - 1) };
 };
 
-// The Content-Security-Policy an SVG document is served under: presentation intact, scripting gone. Applied to
-// SVG alone, an HTML page in the outbox is a site the user published and needs its own scripts, whereas an SVG
-// is a diagram whose ability to execute is never the reason it was shared.
+// CSP for SVG only: presentation intact, scripting gone. HTML pages keep scripts; that's the point of one.
 const SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
 const serveRefusal = (res: http.ServerResponse, status: number, title: string, message: string): void => {
@@ -53,8 +37,7 @@ const serveRefusal = (res: http.ServerResponse, status: number, title: string, m
     res.end(interstitial(title, message));
 };
 
-/* Serve one request against the outbox at `root`. Bound to a workspace root at construction so the proxy can
- * hand it a request without knowing anything about the filesystem. */
+// Serves one request against the outbox at `root`, bound so the proxy needn't know the filesystem.
 export const createPublicHandler =
     (root: string) =>
     async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
@@ -102,13 +85,7 @@ export const createPublicHandler =
                       createReadStream(resolution.absPath, { start: range.start, end: range.end }),
                   ];
         res.writeHead(status, { ...headers, ...extra });
-        /* `pipeline`, not `pipe`: it destroys BOTH ends whichever one fails, where `pipe` only ever wires up the
-         * destination and leaves the open descriptor behind every time a viewer walks away mid-download. On a
-         * route with no auth in front of it and a 512 MB ceiling, that is a file table anyone holding the link
-         * can exhaust by aborting the same request in a loop, and an exhausted table breaks every other thing in
-         * the container that opens a file. A read that fails after the head is written (the file was deleted
-         * mid-stream) still has no way left to say so, so dropping the socket remains the only honest signal,
-         * and the viewer's client reports a truncated transfer rather than a silently short file. */
+        // pipeline, not pipe, destroys both ends on failure, so an aborted download can't leak the read descriptor.
         pipeline(stream, res, () => undefined);
     };
 

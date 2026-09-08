@@ -63,31 +63,31 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 warn: true,
             };
         case "profile":
-            // Names the passkey as well as the profile, because a security key the sandbox holds is a stronger
-            // thing to store than a session cookie and the row is where the user decides. Both are torn down
-            // together when the connection is removed.
+            // Names the passkey as well as the profile, since a stored security key is a bigger thing to hold than a
+            // session
+            // cookie; both are removed together.
             return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile, and any passkey you enroll, in your sandbox` };
         case "machine":
-            // The one effect that reaches OUTSIDE the sandbox, so it is warned and spelled out: the row names
-            // the verbs the agent gets on a device of the user's, not the mechanism that carries them.
+            // The one effect reaching outside the sandbox: warned, and states the actual verbs granted on the user's
+            // device.
             return {
                 icon: `desktop`,
                 label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} device`,
                 warn: true,
             };
         case "own-browser":
-            // Warned like `machine`, and bounded in the same sentence that grants it: the sites are the
-            // person's own decision, made in their browser, which is the half a reader has to be told about
-            // before they agree to the half stated here.
+            // Warned like `machine`; the allowed sites are the user's own choice in the extension, which the reader
+            // must know
+            // before agreeing to this.
             return {
                 icon: `globe`,
                 label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
                 warn: true,
             };
         case "endpoint":
-            // Named, not warned: pointing turns at a server is the POINT of this capability, and it is as often
-            // the private choice (a local model) as the exposing one. The row states the
-            // destination and what leaves for it, and lets the reader judge their own URL.
+            // Named, not warned: pointing at a server is the point of this capability (as often a private choice, like
+            // a local
+            // model); the row states the destination.
             return {
                 icon: `cloud-upload`,
                 label:
@@ -96,9 +96,9 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                         : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
             };
         case "spend":
-            // Warned like `machine`, and for the same reason: the consequence leaves the sandbox and cannot be
-            // undone by removing the card. The row leads with the ceiling and says plainly whether the agent
-            // has to ask each time, because that is the sentence the reader is actually deciding about.
+            // Warned like `machine`: the spend leaves the sandbox and can't be undone by removing the card; the row
+            // leads with
+            // the ceiling and whether it asks each time.
             return {
                 icon: `credit-card`,
                 label: effect.carded
@@ -113,17 +113,16 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
 </script>
 
 <template>
-    <!-- `shrink-0`: the strip sits on one line beside a name that truncates, and squashing fixed-width glyphs to
-         buy that name three more pixels loses the state the glyphs are there to show. -->
+    <!-- `shrink-0`: fixed-width glyphs must not be squashed to buy the truncating name a few more pixels. -->
     <div v-if="compact && rows.length > 0" class="flex shrink-0 items-center gap-1.5 text-2xs text-subtle">
         <span v-for="(row, index) in rows" :key="index" v-tooltip.top="row.label" :class="row.warn ? 'text-warning' : ''">
             <Icon :name="row.icon" />
         </span>
     </div>
-    <!-- The full panel stands beside <CredentialGuide> in the same reference column, so it is built out of the
-         same parts: the app's own card (not a hand-rolled near-copy of it, which is what this was, one step of
-         padding off) and a heading in the same tier as "How to get it". The rows stay at the chrome size, like
-         the guide's steps: this column is read beside the form, not instead of it. -->
+    <!--
+        Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference
+        column read beside the form.
+    -->
     <div v-else-if="rows.length > 0" class="ui-card">
         <div class="mb-3 text-sm font-semibold text-content">This will add to your sandbox</div>
         <ul class="flex flex-col gap-2">

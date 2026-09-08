@@ -18,51 +18,22 @@ import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDe
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 
-/* RECREATING THE SANDBOX, which the browser cannot do itself, but no longer has to hand to a terminal.
- *
- * The daemon holds no HOST Docker socket (its own engine is nested), so it can never recreate its own
- * container. Both moments that need one: an update to a newer image, and building an owner-approved
- * environment overlay: therefore end here, on the machine the container runs on. Two cards used to state
- * that separately and hand out a bash-only one-liner each; this is the one place that says it.
- *
- * Four renderings of the same operation, in the order of how little work they ask for:
- *   • the machine is a CONNECTED DEVICE: a button, from any browser on any device, with the machine's own
- *     output streaming in beneath it. Nothing about this needs the user to be at that device.
- *   • inside the desktop app: a button, because the app IS a process on that machine (intentic://recreate)
- *   • in a browser on Windows/Linux/macOS: the command, for the shell that machine actually has
- *   • in a browser with no app: the same command, plus where to get the app so the next one is a button
- *
- * The first is preferred over the second even inside the app: the deep link hands the window over to the
- * launcher face, and staying on the page you were reading is worth more than that handoff.
- *
- * All three modes work on all four, which they did not: rollback had no deep link and no Windows command, so
- * the one card that offers it was two renderings short of the two that do not.
- *
- * The mode rides the ARGUMENT SHAPE, not a flag, exactly as recreate.sh has always read it: a hash means
- * "build the approved overlay pinned to this digest", no hash means "pull the fresh :stable base".
- *
- * --- AND ONE ACTION THAT IS NOT A RECREATE AT ALL ---
- *
- * `Download` runs the same flow up to the point where the container would be touched, and stops: it pulls the
- * new image and rebuilds the environment recipe, leaving the sandbox running exactly what it was running.
- * Nothing restarts, nothing is interrupted, and an abandoned one costs nothing.
- *
- * It is here rather than on a component of its own because it needs all four renderings for the same reasons
- * the others do, and because splitting it out would be the second implementation of "ask this machine to run
- * `ic`". What it changes is the sentence underneath: with the download already done, an update stops being an
- * unbounded wait and becomes a restart of about half a minute, which is the whole point of offering it. */
+// Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders
+// across four surfaces: a button on a connected device or the desktop app, else a copyable per-OS command. Mode
+// rides the argument shape (a hash rebuilds that pinned overlay, no hash pulls :stable), not a flag. `Download` runs
+// the same flow but stops before the container is touched.
 
 type Action = `Download` | `Update` | `Rebuild` | `Roll back`;
 
 const props = defineProps<{
     slug: string;
-    /// The approved overlay's sha256: present for a rebuild, absent for everything else.
+    // The approved overlay's sha256; present for a rebuild, absent otherwise.
     hash?: string;
-    /// What the button says. The command block is labelled from the same word, and: for the three modes that
-    /// share the update script: it is also what selects between them.
+    // What the button says; the command block's label and, for the three modes sharing the update script, which one
+    // runs.
     action: Action;
-    /// Whether the image this action needs is already on that machine, so the wait it describes is the restart
-    /// alone. Supplied by the update card, which is where the fact lives.
+    // Whether the needed image is already on that machine, so the wait is just the restart; supplied by the update
+    // card.
     ready?: boolean;
 }>();
 
@@ -73,12 +44,8 @@ const desktop = computed(() => desktopVersion() !== undefined);
 const hostId = useHostRunning(() => props.slug);
 const OP: Record<Action, DeviceSandboxOp> = { Download: `prepare`, Update: `update`, Rebuild: `rebuild`, "Roll back": `rollback` };
 
-/* WHAT IT COSTS, said in the one place all four renderings read from, and said accurately, which it was not.
- *
- * This used to promise "a few minutes and this page loses the sandbox" for every mode. That is the download's
- * duration attached to the restart's description: the sandbox is up and serving through the pull and the
- * rebuild, and only the cutover at the end interrupts anything. Someone deciding whether to update mid-work
- * was being quoted an outage several times longer than the one that actually happens. */
+// What this action costs, read by all four renderings: the sandbox stays up through the download and rebuild, and
+// only the final restart interrupts anything.
 const cost = computed(() => {
     if (props.action === `Download`) {
         return `It downloads and builds the update in the background. Nothing restarts and nothing is interrupted: your sandbox keeps working throughout.`;
@@ -94,16 +61,8 @@ const lines = ref<string[]>([]);
 const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 
-/* Recreating THIS sandbox ends this page's connection to it, every time: that is what recreating means, and it
- * is why the command this replaces was always run somewhere else. Said before it starts rather than discovered
- * when the page goes quiet — in the app's own ConfirmDialog, not the browser's confirm(): a native popup
- * captioned "localhost says" is the wrong voice for a question this product is asking, and its text cannot be
- * shaped (see below for why the shape matters).
- *
- * `Download` is asked nothing, because it takes nothing: it never touches the container, so there is no
- * interruption to warn about and an abandoned one costs only bandwidth. A confirmation on it would be a dialog
- * whose honest text is "this changes nothing, proceed?", and it would make the safe option feel like the
- * dangerous one, which is the exact opposite of why it is offered. */
+// Recreating always drops this page's connection, confirmed in-app (not the browser's confirm()) before it starts.
+// `Download` skips confirmation since it never touches the container and costs nothing to abandon.
 const confirming = ref(false);
 
 const runOnMachine = (): void => {
@@ -117,10 +76,8 @@ const runOnMachine = (): void => {
     confirming.value = true;
 };
 
-/* WHAT THE DIALOG SAYS. The confirm() this replaces opened with "It restarts on that device" — which real
- * readers parsed as "that device restarts", a far bigger thing to be asked to agree to than what happens.
- * So every sentence here keeps the SANDBOX as its subject, and the device appears exactly once, in the
- * fixed line underneath, to say it is left alone. */
+// Every sentence keeps the sandbox as the subject, not the device (a bare "it restarts on that device" reads as the
+// device restarting); the device is named once, to say it's left alone.
 const confirmHeader = computed(() => (props.action === `Roll back` ? `Roll this sandbox back?` : `${props.action} this sandbox?`));
 const confirmBody = computed(() => {
     if (props.action === `Roll back`) {
@@ -155,10 +112,8 @@ const execute = async (): Promise<void> => {
     }
 };
 
-/* Rollback rides the update script with a flag: one script, three ways in, exactly as rebuild does with its
- * hash (see recreate.sh's argument-shape dispatch, and recreate.ps1's `-Rollback` switch beside its `-Hash`).
- * Windows used to fall through to the plain update command here, which is the one spelling where "Roll back"
- * printed a command that would have moved the sandbox the other way. */
+// Rollback rides the update script with a flag, exactly as rebuild does with its hash (recreate.sh/recreate.ps1's
+// `-Rollback` switch).
 const command = computed(() => {
     const key = props.hash === undefined ? `update` : `rebuild`;
     const rollback = props.action === `Roll back`;
@@ -185,8 +140,7 @@ const command = computed(() => {
 
 <template>
     <div class="flex flex-col gap-2">
-        <!-- The machine is reachable from here, so this is a button wherever you are reading it: a phone on
-             another continent included. -->
+        <!-- Machine is reachable from here, so this is a button wherever you're reading it, even a phone elsewhere. -->
         <template v-if="hostId">
             <Button
                 :label="running ? `${action} running…` : `${action} now`"
@@ -209,8 +163,7 @@ const command = computed(() => {
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
 
-            <!-- Not destructive: every one of these commits the sandbox to another image and keeps its files,
-                 and a red button here would say "this deletes something", which is the one thing it does not. -->
+            <!-- Not destructive: every action here keeps the sandbox's files and just moves it to another image. -->
             <ConfirmDialog
                 :open="confirming"
                 :header="confirmHeader"
@@ -227,13 +180,11 @@ const command = computed(() => {
             </ConfirmDialog>
         </template>
 
-        <!-- The desktop deep link carries all three swaps, rollback included: the app's own manager row offers
-             the verb now, so the link that hands one over no longer has a mode it cannot express.
-
-             Downloading is the one it cannot, because `intentic://recreate` has no parameter for "stop before
-             the container is touched", so that action falls through to the command below, which the app's own
-             machine can run as it stands. A button that quietly performed the whole update instead would be
-             the worst possible outcome of clicking the safe option. -->
+        <!--
+            Desktop deep link covers all three swaps including rollback. Download can't, since `intentic://recreate`
+            has no
+            parameter to stop before the container is touched, so it falls through to the command below instead.
+        -->
         <template v-else-if="desktop && action !== `Download`">
             <Button
                 :label="`${action} now`"
@@ -261,8 +212,10 @@ const command = computed(() => {
                 ]"
             />
             <Code :code="command" :lang="commandLang(cmdOs)" :label="`${action} command`" :wrap="true" />
-            <!-- Offered here rather than only at setup: this is the card someone reaches for the third time,
-                 which is the moment "there is an app that does this" is worth reading. -->
+            <!--
+                Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay
+                off.
+            -->
             <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
                 <span>Skip the terminal next time:</span>
                 <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Intentic for Windows</a>

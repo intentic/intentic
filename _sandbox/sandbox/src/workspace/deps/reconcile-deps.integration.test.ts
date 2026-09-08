@@ -77,8 +77,7 @@ test("a queued first-time setup survives until a later coordinator starts it", a
     const root = await workspace();
     await write(root, "app/package.json", `{"dependencies":{"left-pad":"^1.0.0"}}`);
     await write(root, "app/pnpm-lock.yaml", "");
-    // The first daemon cannot open a panel at all, so the request outlives it on disk: the case a restart
-    // mid-setup leaves behind.
+    // The first daemon can't open a panel; the request outlives it on disk, what a mid-setup restart leaves.
     const failing = {
         start: async () => {
             throw new Error("tmux unavailable");
@@ -147,8 +146,8 @@ test("a manifest burst installs only once the writes around it have gone quiet",
     await drifted(root);
     changes.emit(["app/package.json"]);
     await new Promise((resolve) => setTimeout(resolve, 15));
-    // A checkout commonly writes the manifest early and ordinary source for much longer. Once the manifest
-    // arms the window, that later source traffic must keep extending it.
+    // A checkout writes the manifest early and ordinary source much longer after; once the manifest arms the window,
+    // later source traffic must keep extending it.
     changes.emit(["app/src/main.ts"]);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(started).toEqual([]);
@@ -188,14 +187,8 @@ test("an install that outruns its watch window is stopped rather than left going
     expect(running).toBe(false);
 });
 
-/* A panel that refuses to open once and then does what an install does: the refusal leaves the install owed,
- * which is what keeps a cause on the books long enough for a later observation to try to overwrite it, and the
- * attempt that succeeds puts the missing dependency on disk so the project reads `ready` afterwards.
- *
- * The repair is the part that makes the case honest. A fake that only reported success left the project as
- * stale as it found it, so every later pass rediscovered the same drift and announced the same install again:
- * and a case that asserted one announcement was really asserting that it got its assertion in before the second
- * pass, which is a race it loses on a loaded machine. */
+// A panel that fails once, then actually writes the dependency so the project reads `ready` afterwards; a fake that
+// only reported success would leave every later pass re-discovering the same drift and racing the same assertion.
 const startsOnSecondTry = (root: string, dir = "app", name = "left-pad"): ManagedProcesses => {
     let attempts = 0;
     return {
@@ -234,8 +227,7 @@ test("the watcher cannot erase the land that caused a deferred install", async (
         repos: [{ repo: "app", from: "abc", dir: "app" }],
     });
     await settle(() => failed.length > 0);
-    // The watcher sees the same manifest a moment later: an ordinary background observation of a project the
-    // land is still on the hook for.
+    // The watcher later sees the same manifest: routine background traffic for a project the land still owns.
     const stop = deps.watch(changes.subscribe);
     changes.emit(["app/package.json"]);
     await settle(() => origins.length > 0);

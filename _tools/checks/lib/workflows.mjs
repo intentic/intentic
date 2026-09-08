@@ -1,8 +1,5 @@
-/* THE WORKFLOW FILES, read by a line scanner for the same reason the lockfile is: these checks run before any
- * install, so a YAML parser is not a dependency they may take. Jobs sit at 2 spaces and their keys at 4; a
- * block scalar (`if: |`) or a block sequence (`needs:` over several lines) is folded back to one line, which is
- * all any of them is read for. actionlint and zizmor (lint-workflows.sh) read the same files with real parsers;
- * what lives here is repository policy neither of those tools encodes. */
+// Reads workflow YAML with a line scanner, not a parser, since checks run before any install. Jobs sit at 2 spaces,
+// keys at 4; block scalars and sequences fold to one line. Encodes repository policy that actionlint and zizmor don't.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "./repo.mjs";
@@ -65,9 +62,8 @@ export const SCOPES = [
     "statuses",
 ];
 
-/* The `permissions:` blocks of one workflow, keyed by the job that owns each, "" for the workflow's own.
- * `permissions:` sits at column 0 (the workflow's own, inherited by every job that names none) or column 4
- * (one job's, replacing it outright: a scope the block omits is `none`, not inherited). */
+// `permissions:` blocks per job, keyed by job name ("" for the workflow's own). Column 0 is the workflow default,
+// inherited by jobs naming none; column 4 replaces it outright, so an omitted scope there is `none`, not inherited.
 export const permissionsOf = (text) => {
     const lines = text.split("\n");
     const blocks = new Map();
@@ -89,8 +85,8 @@ export const permissionsOf = (text) => {
             blocks.set(owner, Object.fromEntries(SCOPES.map((scope) => [scope, SHORTHAND[declared[2]] ?? "none"])));
             continue;
         }
-        // The scopes under the key, to the first line that is not indented past it. A comment among them is a
-        // line to step over, not a scope: several of these blocks explain themselves scope by scope.
+        // Scopes under the key, stopping before the first less-indented line; a comment there is stepped over, not a
+        // scope.
         const scopes = {};
         const under = new RegExp(`^ {${declared[1].length + 2},}(?:#|([a-z-]+):[ \\t]*(\\S+))`);
         for (let scope; (scope = (lines[i + 1] ?? "").match(under)); i++) {
@@ -103,7 +99,7 @@ export const permissionsOf = (text) => {
     return blocks;
 };
 
-// The step block of each job of one workflow, keyed by job: everything below a job's header until the next one.
+// The step block of each job, keyed by job: everything below its header until the next one.
 export const stepsOf = (text) => {
     const lines = text.split("\n");
     const blocks = new Map();

@@ -1,13 +1,13 @@
 import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { Feature } from "./features.js";
 
-// No separate natural-language verb: a bare `q` whose words are not a symbol, path or regex IS the semantic
-// pipeline, and an exact query that finds nothing escalates into it.
+// A bare `q` whose words are not a symbol, path or regex is the semantic pipeline; an exact query that finds nothing
+// escalates into it.
 export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "outline" | "context" | "recent" | "log" | "who" | "hotspots" | "map" | "impact";
 
 export type FileClass = "tests" | "src" | "docs" | "config";
 
-// Scope narrowing shared by every verb. `ignored` lifts the junk/.gitignore layers only, never the security floor.
+// Scope narrowing shared by every verb; `ignored` lifts only the junk/.gitignore layers, never the security floor.
 export interface Scope {
     readonly paths?: readonly string[];
     readonly repo?: string;
@@ -26,22 +26,17 @@ export interface RenderOptions {
     readonly count?: boolean;
     readonly full?: boolean;
     readonly after?: string;
-    /* Set by a caller that renders its OWN result list (the workspace panel) instead of the text capsule, and
-     * sizes the page for it: rows, not tokens. Everything the capsule needs is then skipped, because all of it
-     * was being built and thrown away, the text itself, the `pack` stage (whose non-matching body lines would
-     * be listed as if they were hits), the symbol-context enrichment (a list shows the line, not its enclosing
-     * symbol), and the continuation spool (megabytes of groups written to disk on every keystroke). A `--after`
-     * page re-runs the search instead of replaying that spool; for a list caller the search is the cheap part. */
+    // Set when a caller renders its own list, not the text capsule; skips pack, symctx enrichment, and the spool.
     readonly list?: ListPage;
 }
 
-// The page a rendered list wants: whole files, up to these two ceilings, whichever binds first.
+// Page size for a rendered list: whole files, bounded by whichever of these two ceilings binds first.
 export interface ListPage {
     readonly hits: number;
     readonly files: number;
 }
 
-// Verb-specific knobs, flattened, each verb reads only its own.
+// Verb-specific knobs, flattened; each verb reads only its own.
 export interface VerbOptions {
     readonly literal?: boolean;
     readonly word?: boolean;
@@ -63,16 +58,9 @@ export interface QueryRequest {
     readonly scope: Scope;
     readonly render: RenderOptions;
     readonly options: VerbOptions;
-    // The verb + args as the user typed them (minus output flags), echoed in the truncation footer's
-    // continuation command.
+    // The verb and args as typed (minus output flags), echoed in the continuation footer's command.
     readonly echo: string;
-    /* THIS QUERY'S PIPELINE, when it is not the engine's. A resident engine serves several callers off one
-     * index, and they do not all want the same trade: a human's `iq` call wants the best ranking the box can
-     * produce, while a caller answering under a deadline would rather drop the cross-encoder than drop the
-     * answer. One engine, one index, per-call stages.
-     *
-     * Absent ⇒ the engine's own set, which is every stage unless the host disabled some. The disabled list
-     * travels out in WorkspaceSearchResult.features either way, so a cheaper run says so. */
+    // Per-call pipeline override; absent uses the engine's own stage set, reported via features either way.
     readonly features?: ReadonlySet<Feature>;
 }
 
@@ -82,7 +70,7 @@ export interface QueryOutcome {
     readonly exitCode: 0 | 1;
 }
 
-// One file the sweep admitted: root-relative forward-slash path plus the stat facts the index diffs on.
+// One file the sweep admitted: root-relative, forward-slash path, plus the stat facts the index diffs on.
 export interface FileEntry {
     readonly path: string;
     readonly abs: string;
@@ -92,29 +80,24 @@ export interface FileEntry {
     readonly repo?: string;
 }
 
-// A raw hit as produced by one engine, before fusion. Engines return hits in their own ranked order.
+// A raw hit from one engine, before fusion; engines return hits in their own ranked order.
 export interface EngineHit {
     readonly path: string;
     readonly line: number;
     readonly text: string;
-    // Char spans of `text` that matched, in order. Absent for every engine that matches a LINE rather than a
-    // span of one (bm25, semantic, symbols, git), only the lexical engine can say where in the line it hit.
+    // Matched char spans of `text`, in order; only the lexical engine sets this, others match a whole line.
     readonly spans?: readonly WorkspaceSearchSpan[];
     readonly tags: readonly WorkspaceSearchTag[];
     // Enclosing symbol ("createWidget (fn)"), filled by the symctx enrichment stage.
     context?: string;
-    // The line that symbol is DECLARED on, filled beside `context`. Line scores peak inside a symbol rather than
-    // at its head, so the best-scoring line in a long function is routinely a `continue;`, a brace or a comment:
-    // transcript mining (2026-09) found 31% of answer anchors pointing at one. The anchor a reader wants is the
-    // declaration; the hit line stays beside it as the evidence.
+    // Declaration line of the enclosing symbol; the scoring line is often mid-body, so this is the reader's anchor.
     contextLine?: number;
 }
 
 export interface EngineResult {
     readonly engine: string;
     readonly hits: readonly EngineHit[];
-    // Files this engine stopped reading before it ran out of matches. Only the lexical engine truncates (it caps
-    // what one file may contribute); the group it lands in says so, so a total over these hits is a floor.
+    // Files this engine stopped reading early; only the lexical engine truncates, so these totals are a floor.
     readonly capped?: ReadonlySet<string>;
 }
 
@@ -126,7 +109,7 @@ export interface RankedGroup {
     readonly path: string;
     readonly score: number;
     readonly hits: readonly RankedHit[];
-    // This file had more matches than the engine kept, its hit count, and any total built from it, is a floor.
+    // True when this file had more matches than kept; any hit count or total built from it is a floor.
     readonly capped?: boolean;
 }
 

@@ -19,41 +19,14 @@ import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds, type RuleFacts } from "./rules.js";
 import { EDIT_TOOLS, editedPath } from "./edit-tools.js";
 
-/* THE MOMENT A TURN TRIES TO END, every rule standing there, driven by one hook set.
- *
- * This is the only one of the three moments that can send work BACK. A push that fails is a push that does not
- * happen and finished work that is held is finished work sitting on a branch, but a turn that is told something
- * at its Stop keeps going and acts on it. That is worth the whole mechanism: it is the difference between
- * finding out afterwards and not shipping the mistake.
- *
- * CONDITIONS ARE READ HERE, NOT AT PLANNING TIME, and that is the reason this file exists rather than a filtered
- * list being handed to a dumb runner. A turn is planned before it runs, so nothing yet knows which files it will
- * touch, resolving `when: { paths: [...] }` up front would turn every path condition on this moment into
- * "never". The ledger below is what makes the late reading possible: by the Stop it knows what was edited.
- *
- * THE LEDGER IS KEPT WHENEVER ANY RULE STANDS HERE, not only for the `verify-edits` built-in, because the
- * conditions need it too. A workspace with no rules at this moment wires no hooks at all and pays nothing,
- * not even the bookkeeping.
- *
- * ONE BUDGET FOR THE WHOLE MOMENT. The cap below counts asks, not rules: three rules that each want a word are
- * one follow-up carrying three things, and a turn that could be sent back once per rule is a turn that can be
- * sent back forever. */
+// The only one of turn.ending, push.starting and agent.finished that can send work back: a Stop that says something
+// keeps the turn going. Conditions are read here, not at planning time, since nothing knows what a turn touched until
+// it runs; the ledger below makes that possible, wired and paid for only when a rule actually stands here.
 
-/* At most this many follow-ups per turn, across every rule here. The model gets a second round only because
- * the first is sometimes answered with a check that fails, one more to repair it is the point. A third is a
- * loop.
- *
- * THE COUNTER IS THE WHOLE LOOP GUARD, and it has to be, because the SDK's own re-entry flag would end the loop
- * one Stop too early. `stop_hook_active` is true on the Stop that FOLLOWS a hook-driven continuation, which is
- * exactly the Stop after the model repaired the failure the first one reported. Bailing on that flag meant the
- * repair was never re-measured: the check ran once, went red, the model edited, and the turn ended on a tree
- * nothing had looked at since. The second round below is the one that re-runs the check on the repaired tree, and
- * a passing run is silent, so the turn ends there; a still-failing one is reported once more, and the third Stop
- * is silent whatever the tree says. */
+// The loop's guard; `stop_hook_active` isn't it, that flag is true one Stop too early.
 const MAX_FOLLOW_UPS = 2;
 
-// How much of a failed rule command's own words ride back to the model. Enough to act on, not enough to
-// re-paste a suite.
+// Enough of a failed command's output to act on, not enough to re-paste a whole suite.
 const COMMAND_OUTPUT_BYTES = 4_000;
 
 const bashCommand = (input: unknown): string | undefined => {
@@ -61,14 +34,8 @@ const bashCommand = (input: unknown): string | undefined => {
     return typeof command === "string" && command.trim() !== "" ? command : undefined;
 };
 
-/* The agent names files absolutely; a rule is written the way the owner reads their own tree. A path OUTSIDE
- * the turn's cwd is left alone rather than expressed as a pile of `../`, it is genuinely not a workspace path,
- * and no workspace-shaped glob should match it.
- *
- * Exported for the runtimes that get their follow-up as a fresh turn rather than through this hook set
- * (agent/verify-nudge.ts). Both readers have to relativise identically or the same glob means two things
- * depending on which provider ran the turn, which is the one inconsistency that would make path conditions
- * untrustworthy everywhere. */
+// A path outside the turn's cwd is left alone, not rewritten as `../` noise: it isn't a workspace path. Exported since
+// other runtimes (agent/verify-nudge.ts) must relativise identically, or the same glob would mean two things.
 export const workspaceRelative = (path: string, cwd: string | undefined): string => {
     if (cwd === undefined || !isAbsolute(path)) {
         return path;
@@ -77,78 +44,43 @@ export const workspaceRelative = (path: string, cwd: string | undefined): string
     return path.startsWith(rooted) ? path.slice(rooted.length) : path;
 };
 
-// Run one rule's command at this moment. Injected rather than imported so the hook set stays testable without
-// a tmux server, and because only turn-plan is standing where the daemon's services are.
+// Injected rather than imported, so the hook set is testable without a tmux server and usable where turn-plan stands,
+// not the daemon's services.
 export type TurnRuleCommand = (command: string, timeoutMs: number) => Promise<RuleCommandRun>;
 
 export interface TurnEndingDeps {
     readonly isolation?: IsolationPlan | undefined;
     readonly runCommand?: TurnRuleCommand | undefined;
-    /* The turn's own tree, so the paths a condition reads are spelled the way the owner spells them. The agent
-     * names files absolutely; a rule says `docs/**`. Relativising here is what stops the SAME glob matching at
-     * the landing moment and missing at this one, the one inconsistency that would make path conditions
-     * untrustworthy everywhere. Absent ⇒ paths are left as the agent gave them. */
+    // Relativises paths to the turn's tree, so a glob matches equally here and at landing; absent leaves it as-is.
     readonly cwd?: string | undefined;
     // Told when a rule actually said something, so the settings list can show what has been earning its place.
     readonly onFired?: ((rule: Rule) => void) | undefined;
     readonly checks?: ChecksProbe | undefined;
-    // How `verify-removals` reads a file and asks git about a line. Injected together because a test that
-    // supplies one and not the other is a test half against a real workspace.
+    // Injected together: supplying one without the other is testing half against a real workspace.
     readonly read?: FileReader | undefined;
     readonly git?: GitRunner | undefined;
     readonly now?: number | undefined;
-    /* WHICH PROJECTS THE DAEMON IS INSTALLING RIGHT NOW, asked only when a command has already failed.
-     *
-     * agent-deps.ts says in as many words that "no install runs while a turn is live", and builds its own
-     * caching on that premise. It does not hold: the daemon queues a reinstall when a lockfile moves under it,
-     * and one of those ran from end to end of a live turn while this check reported its tree as red. So the
-     * question is asked HERE, after the fact, where the answer is still true, rather than assumed anywhere. */
+    // Asked only after a command fails: agent-deps.ts's premise that no install runs during a turn isn't true.
     readonly installing?: (() => Promise<readonly string[]>) | undefined;
-    /* WHAT THE TREE SAYS THE TURN CHANGED, read at the Stop beside the edit ledger, as paths relative to `cwd`.
-     *
-     * The ledger hears the edit TOOLS (Edit, Write, the hashline pair) and nothing else. A model that reaches for
-     * `sed -i`, a heredoc or a script rewrites files the ledger never hears of, and a path condition read from
-     * the ledger alone then says "this turn touched nothing under intentic/**" about a turn that rewrote half of
-     * it. The command rule standing on that condition, the one check between the edit and the land, does not run,
-     * and the first thing to read the change is CI. The tree cannot be fooled that way: whatever wrote the file,
-     * git sees it. Absent ⇒ the ledger is the only reader, which is what a test without a tree wants. */
+    // Misses what the edit ledger can't hear: a shell rewrite (sed -i, a heredoc). Absent uses the ledger alone.
     readonly changedPaths?: (() => Promise<readonly string[]>) | undefined;
-    /* Told about every command rule's run, whatever it said. The one reader is the land at the end of this turn
-     * (agent/turn-checks.ts): a turn whose check went red and whose model answered "cannot be repaired here"
-     * ends clean, and the land has to know that before it decides. The last run wins there, which is what
-     * makes the second round above matter: a repair the check confirmed is a turn that passed. */
+    // Every command run, whatever it said; the land step (agent/turn-checks.ts) reads the last one to decide.
     readonly onCheckRun?: ((rule: Rule, run: RuleCommandRun) => void) | undefined;
-    /* The `verify-tests` built-in's whole answer (agent/agent-tests.ts verifyTestsMessage), bound by the planner
-     * because only it knows the turn's tree and how to run a package's suite in it. Absent ⇒ the built-in has
-     * nothing to read and says nothing, which is what a test without a tree wants. */
+    // The verify-tests built-in's whole answer, bound by the planner; absent means it has nothing to say.
     readonly tests?: (() => Promise<string | undefined>) | undefined;
 }
 
-// The two records this moment keeps. `removal` exists only when a rule standing here reads it: it snapshots
-// file contents before every edit, which is the one piece of bookkeeping expensive enough to be worth skipping.
+// `removal` exists only when a rule standing here reads it: snapshotting file contents before every edit is the one
+// expensive piece worth skipping.
 interface Ledgers {
     readonly verification: VerificationLedger;
     readonly removal: RemovalLedger | undefined;
-    // What was DRAWN against whether anything looked at it. Kept unconditionally beside the proof ledger:
-    // both are two counters and a path filter over hooks that are already firing, and the branch to skip one
-    // would cost more than the one it saves. (`removal` is the exception because it READS FILES.)
+    // Unconditional like the proof ledger: cheap counters over hooks already firing; only `removal` reads files.
     readonly view: ViewLedger;
 }
 
-/* WHETHER A FAILING COMMAND MEASURED ANYTHING AT ALL, and this moment used to report the two identically.
- *
- * rule-command.ts already draws half the line: `error` means the command never ran, and so "has said nothing
- * anyone should be sent to fix". It arrived here anyway and went back as "Repair that before finishing".
- *
- * The other half is a command that DID run and could only fail. While the daemon reinstalls a project,
- * `node_modules` is being rewritten underneath it: a linter's own binary comes and goes, a package that landed
- * on main minutes ago has no install yet, and a bumped one's types no longer match its sources. `pnpm lint`
- * then exits 1 saying `oxlint: not found` — a fact about the tree, not about the diff. Reported as a verdict it
- * cost four turns of hunting for a fault in work that was fine, while the daemon's own `deps status` said
- * "installing right now" the whole time.
- *
- * Undefined ⇒ the failure is a real verdict and is reported as one. Asked ONLY of a failure, so a healthy turn
- * never pays for the question, and only of a run that actually happened. */
+// Whether a failing command measured the diff at all: `error` (rule-command.ts) never ran, and a run that failed only
+// because node_modules was mid-rewrite measured the tree, not the diff. Undefined means the failure is a real verdict.
 type Unmeasured =
     | { readonly why: "error" }
     | { readonly why: "installing"; readonly projects: readonly string[] }
@@ -158,25 +90,12 @@ const measuredNothing = async (run: RuleCommandRun, deps: TurnEndingDeps): Promi
     if (run.status === "error") {
         return { why: "error" };
     }
-    // A question that cannot be answered leaves the verdict standing: silence here would excuse a genuine
-    // failure, which is the same mistake made from the other side. Asked FIRST because a named install is the
-    // more useful sentence when both readings are available: it says when the tree will settle.
+    // An unanswerable question defaults to no install, so the verdict stands rather than being excused by a shrug.
     const installing = deps.installing === undefined ? [] : await deps.installing().catch(() => []);
     if (installing.length > 0) {
         return { why: "installing", projects: installing };
     }
-    /* The check's own toolchain missing from the tree, read off the output when the clock has nothing to say.
-     *
-     * `installing` above answers "is an install running RIGHT NOW", and that question is asked one moment too
-     * late: the daemon's dep repair runs beside the turn and lands between the check failing and this probe, so
-     * the window it was written for is exactly the window it misses. Over one day of this workspace's sessions
-     * that verdict went back 37 times out of 58 — `pnpm lint` reporting `sh: 1: oxlint: not found` while
-     * `oxlint` sat in node_modules/.bin — and turns spent themselves hunting a fault in work that was fine.
-     *
-     * Asked of a CHECK, the raw shell report is the right probe and the command-position guard that protects
-     * the PostToolUse notice would be wrong here: a check reaches its tools THROUGH a package script by design,
-     * and `oxlint` is never going to appear in `pnpm lint`. The re-run in settledRun is what keeps this honest
-     * — nothing is excused on the strength of this pattern alone. */
+    // Catches what `installing` above misses: an install that finished between the check running and this probe.
     const binary = notFoundBinary(run.output);
     return binary === undefined ? undefined : { why: "missing-tool", binary };
 };
@@ -191,8 +110,8 @@ const unmeasuredReason = (run: RuleCommandRun, unmeasured: Unmeasured): string =
     return run.output.slice(-COMMAND_OUTPUT_BYTES);
 };
 
-// Said instead of a verdict, and worded so nobody goes looking for a fault in the diff. It still continues the
-// turn: one more round is exactly what this needs, since the tree usually settles inside it.
+// Said instead of a verdict, worded so nobody hunts the diff for a fault; still counts as a round, since the tree
+// usually settles by the next one.
 const nothingMeasured = (label: string, command: string, run: RuleCommandRun, unmeasured: Unmeasured): string =>
     [
         `Before finishing, "${label}" could not measure anything:`,
@@ -203,9 +122,7 @@ const nothingMeasured = (label: string, command: string, run: RuleCommandRun, un
         .filter((line) => line !== "")
         .join("\n");
 
-/* WHAT EACH BUILT-IN ASKS OF THE TURN, as a total table over the name rather than a chain of ifs: a built-in
- * added to the contract is a compile error here until it is answered, which is the only thing that keeps a rule
- * from saving cleanly in the settings screen and then quietly doing nothing. */
+// A total table over the builtin name: adding one to the contract is a compile error here until answered.
 const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => Promise<string | undefined>> = {
     "verify-edits": (deps, ledgers) => verifyEditsMessage(ledgers.verification, deps.isolation, deps.checks),
     "verify-removals": async (deps, ledgers) =>
@@ -222,19 +139,8 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
     "verify-tests": async (deps) => (deps.tests === undefined ? undefined : deps.tests()),
 };
 
-/* RUN THE CHECK, AND RUN IT AGAIN IF ITS OWN TOOL WAS MISSING, which is the only thing that can tell a tree
- * mid-rewrite from a diff that really fails.
- *
- * The daemon reinstalls a project beside the turn (agent-deps.ts's "no install runs while a turn is live" is
- * not true), so `node_modules/.bin` empties and refills underneath this moment. Reading the failure alone
- * cannot separate the two cases and no probe of the clock can either — the repair lands between the check and
- * the question. A second run can: by the time it happens the tree has usually settled, and if it has not, the
- * check still could not start and saying so is the honest answer.
- *
- * Costs one extra command ONLY on a failure whose output names a missing binary, so a healthy turn and an
- * ordinarily-failing one both pay nothing. Deliberately not a retry loop: two runs answer the question, and a
- * check that keeps losing its toolchain is a workspace problem the owner should see rather than one this
- * moment should paper over. */
+// Re-runs a failing check only when its output names a missing binary, the sign of a mid-install tree. Not a retry
+// loop: two runs answer it, and a tool still missing on the second is a workspace problem to report, not hide.
 const settledRun = async (runCommand: TurnRuleCommand, command: string, timeoutMs: number): Promise<RuleCommandRun> => {
     const first = await runCommand(command, timeoutMs);
     if (first.status === "passed" || first.status === "cancelled" || notFoundBinary(first.output) === undefined) {
@@ -253,7 +159,7 @@ const commandContribution = async (
     const { command, timeoutMs } = action;
     const run = await settledRun(runCommand, command, timeoutMs);
     deps.onCheckRun?.(rule, run);
-    // A command that PASSED has nothing to say, the turn is free to end, which is what it was asked.
+    // Cancelled counts as nothing to say too, same as a pass: the turn is free to end either way.
     if (run.status === "passed" || run.status === "cancelled") {
         return undefined;
     }
@@ -281,26 +187,19 @@ const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers
         return rule.action.text;
     }
     if (rule.action.kind === "command") {
-        // No runner ⇒ this turn has nowhere to run a command (an ACP or translator turn). Saying nothing is the
-        // honest answer: inventing a follow-up about a command that never ran would be the check reporting a
-        // result it does not have.
+        // No runner: this turn (ACP, a translator) has nowhere to run a command; nothing beats inventing a result.
         return deps.runCommand === undefined ? undefined : commandContribution(rule, rule.action, deps.runCommand, deps);
     }
     return undefined;
 };
 
-/* The hooks. Edits and Bash results feed the ledger; Stop reads it, and the rules, once the turn tries to end.
- *
- * The SDK's `stop_hook_active` flag is deliberately NOT read: it is true on the Stop after a continuation, which
- * is the Stop that has to re-measure the repair (see MAX_FOLLOW_UPS). The count is the guard. */
+// The hooks: edits and Bash results feed the ledger, Stop reads it against the rules once the turn tries to end.
+// `stop_hook_active` is deliberately not read, since it's true on the very Stop that must re-measure a repair.
 export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {}): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     if (rules.length === 0) {
         return {};
     }
-    /* The deletion record is kept ONLY when a rule standing here reads it, and it is the one ledger worth
-     * asking that question about: it reads every file the turn is about to edit, before each first edit. That
-     * is cheap next to the edit itself and it is not free, so a workspace that has not asked for the check does
-     * not pay for the snapshot. The proof ledger stays unconditional because the CONDITIONS need it. */
+    // Kept only when a rule reads it: it reads every file before its first edit, not free enough for everyone.
     const wantsRemovals = rules.some(
         (rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals",
     );
@@ -322,9 +221,8 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
     const contributionsAt = async (facts: RuleFacts): Promise<string[]> => {
         const parts: string[] = [];
         for (const rule of rules) {
-            // The moment check is redundant with `standing` at the one call site and kept anyway: the failure
-            // it prevents is a rule firing at a moment it was not written for, which is silent, wrong, and
-            // exactly what a table like this must never do.
+            // Redundant with `standing` at its call site, kept since a wrong-moment rule firing would be silent and
+            // wrong.
             if (rule.moment !== "turn.ending" || !conditionHolds(rule.when, facts)) {
                 continue;
             }
@@ -340,10 +238,8 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
         ...(removal === undefined
             ? {}
             : {
-                  /* BEFORE the edit, because after it the bytes are gone and no hook input carries them: `Edit`
-                   * has `old_string`, `Write` and the hashline tools have nothing at all. Reading the file here
-                   * is the only way to know what a turn removed, and the ledger keeps just the first read per
-                   * path, so a file edited five times is one snapshot. */
+                  // Read before the edit; the edit tools carry no old content after, and only the first read per path
+                  // is kept.
                   PreToolUse: [
                       {
                           matcher: EDIT_TOOLS,
@@ -370,13 +266,11 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                             const path = editedPath(input.tool_input);
                             if (path !== undefined) {
                                 ledgers.verification.noteEdit(path);
-                                // The view ledger keeps only the rendered surfaces, and filters at its own
-                                // door rather than here: one edit, two records, each with its own idea of
-                                // what is worth asking about.
+                                // The view ledger filters at its own door: one edit feeds two records, each with its
+                                // own idea of what matters.
                                 ledgers.view.noteEdit(path);
-                                /* THE FIRST TEST FILE THIS TURN EDITS gets the two rules that apply to it, at the
-                                 * moment they apply (agent-tests.ts TEST_WRITING_NOTE). Once per turn: the model
-                                 * needs them once, and the Stop reads the result whatever it remembered. */
+                                // Sent once, on the first test file edited: the model needs it once, and the Stop reads
+                                // the result regardless.
                                 if (wantsTests && !testNoted && TEST_FILE.test(path)) {
                                     testNoted = true;
                                     return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: TEST_WRITING_NOTE } };
@@ -388,11 +282,8 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                 ],
             },
             {
-                /* WHAT THE TURN LOOKED AT. The same matcher the browser session manager stands on
-                 * (browser/browser-sessions.ts), because it is the same population of calls: every browser
-                 * tool this sandbox offers arrives from an MCP server under that shape. Which of them COUNT
-                 * as looking is the ledger's own question (agent-viewing.ts isObservingCall), not the
-                 * matcher's: a close or a resize fires this hook and clears nothing. */
+                // Matches every browser MCP call; whether one counts as looking is the ledger's question, not the
+                // matcher's.
                 matcher: "mcp__.+__browser_.+",
                 hooks: [
                     async (input) => {
@@ -445,10 +336,8 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         if (input.hook_event_name !== "Stop" || followUps >= MAX_FOLLOW_UPS) {
                             return {};
                         }
-                        // What the turn touched, which is the only fact a condition can narrow on here: what the
-                        // edit tools reported, and what the tree itself shows changed (see `changedPaths`). A turn
-                        // that edited nothing still reaches rules with no path condition, "always say this
-                        // before you finish" is a legitimate thing to want.
+                        // Edited paths plus what the tree shows changed; a turn with nothing edited still fires
+                        // unconditioned rules.
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
                         const changed = deps.changedPaths === undefined ? [] : await deps.changedPaths().catch(() => []);
                         const facts = { paths: [...new Set([...edited, ...changed])] };

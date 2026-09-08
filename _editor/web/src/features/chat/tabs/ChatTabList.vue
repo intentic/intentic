@@ -54,28 +54,13 @@ import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
 
-/* THE OPEN CHATS, as the fleet board's three lanes in miniature: the switcher for every conversation this
- * window holds. It has two hosts and is the same list in both: the sheet the docked panel's header drops
- * (ChatTabs), and the rail down the left edge of every wide surface. It used to be rail-only, while the
- * docked panel wore a row of pill tabs that wrapped to a second line: a strictly worse switcher (a dot and
- * ~28 characters of a title, in rows that reflowed on every open and close) built out of a second set of
- * components. One list, two frames.
- *
- * IT IS THE BOARD'S CARD IN A COLUMN ONE CARD WIDE, and that is a design rule rather than a resemblance:
- * /agents and this list are read minutes apart by the same eye, so anything they draw differently reads as
- * two different products. The card and the lane it lies on are therefore not this file's to draw: they are
- * RailCard and RailLane, which the Subagents area lists its rows with too, and which is where the reasoning
- * about the card's rows, its two selection channels and the lane slab now lives. What "in miniature" costs is
- * only the facts that need width the rail lacks (the branch, the token counters).
- *
- * This file's job is which lanes exist, what goes in them, and what each card knows: below.
- *
- * The list reads the stores and emits verbs rather than writing them: the panel that hosts it is what hands
- * each verb to useChat, exactly as the strip always did. */
+// Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
+// lane shell come from RailCard/RailLane; this file only decides which lanes exist, what goes in them, and what
+// each card shows, and emits verbs rather than writing state directly.
 
 const emit = defineEmits<{
     select: [id: string];
-    // A SET, not an id: a card's × closes one, the right-click menu's Close Others / to the Right / All close many.
+    // A set, not an id: a card's × closes one, the context menu's Close Others/Right/All close many.
     close: [ids: ReadonlySet<string>];
     open: [id: string];
 }>();
@@ -85,27 +70,15 @@ const { agentById, fleet, loadArchived, rename } = useAgents();
 
 const { floats } = useChatFloating();
 const router = useRouter();
-/* WHICH LIST THIS IS RIGHT NOW: the open chats in their lanes, or the personas you can talk to
- * (ChatPersonaRail). Two answers to "what goes in the left column", not two views of one set, so the switch
- * swaps the whole list rather than regrouping it. */
+// Switches between open chats (lanes) and personas (ChatPersonaRail); swaps the whole list, not a regroup.
 const { grouping, set: setGrouping } = useChatGrouping();
-// "Agents", not "Chats": these rows are the fleet board's cards at the rail's width, and the product calls
-// them agents everywhere the user meets them: the rail tile, the board, the "New agent" button.
+// Labelled "Agents", matching the fleet board's cards and how the product names them elsewhere.
 const GROUPINGS: readonly { label: string; value: ChatGrouping; title: string }[] = [
     { label: `Agents`, value: `lane`, title: `Every conversation this window holds, by what needs you` },
     { label: `Personas`, value: `persona`, title: `The people this sandbox can be, pick one and talk to them` },
 ];
 
-/* THE CHAT THE AGENTS CUT WAS READING, held while the column is showing people.
- *
- * The two cuts share one transcript, so talking to a persona necessarily moves it, and without this, coming
- * back landed you in that persona's conversation rather than the one you had been working in, so a trip to see
- * who you can send as cost you your place. Going over to look at something and finding your desk rearranged on
- * the way back is the failure; this is the undo for it.
- *
- * Per-INSTANCE, so each window parks its own. Restored only if the conversation is still open (it can be
- * closed from anywhere while the rail is up) and only when it actually moved, so a visit that picked nobody
- * ends in no reveal at all. */
+// The chat the Agents list was showing, parked while Personas is up and restored on return if it still exists.
 let parked: string | undefined;
 watch(grouping, (next, previous) => {
     if (next === `persona`) {
@@ -125,21 +98,7 @@ interface OpenChat {
 }
 const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
 
-/* --- The filter -------------------------------------------------------------------------------
- * The same field, the same rule and the same evidence as the fleet board's (useAgentFilter): match what the
- * USER wrote: the title, which is their sanitized first prompt, and every later prompt in the transcript.
- * Two search boxes in one product that disagree about what "matches" means is worse than one of them not
- * existing, so both mount the one composable rather than each rolling its own.
- *
- * What differs is the SET. The board filters the fleet; this list holds the OPEN chats, which is a much
- * smaller thing to be looking through: a user asking "where did I say X" is almost never asking only about
- * the eight chats they happen to have open. So the query reaches the whole fleet here too, and everything it
- * finds that ISN'T open lands in a group below the lanes that opens on click. The History popover keeps its
- * own box for browsing; this one is for finding.
- *
- * Its state is per-INSTANCE, which means per-window and per-opening: a query typed on the board must not
- * narrow a floating window the user isn't looking at.
- */
+// Same match rule as the board's filter (useAgentFilter); state is per-window, not shared.
 const {
     query: filterQuery,
     needle,
@@ -152,30 +111,13 @@ const {
     searching,
 } = useAgentFilter();
 
-/* THE WORKFLOW RUNS, IN THE LANES, exactly as the board draws them, which is this list's founding rule and
- * not a convenience: /agents and this rail are read minutes apart by the same eye, so a thing that appears on
- * one and not the other reads as two different products.
- *
- * IT USED TO BE ONE ROW FOR THE RUN THE PANEL HAPPENED TO BE SHOWING, which made a workflow the only entry
- * here that was a property of the current view rather than of the workspace: it appeared when you opened it
- * and vanished the moment you clicked any other chat. Nothing else in this list behaves that way, and it left
- * a run you had stepped away from with no way back into it short of the board.
- *
- * So they are listed by the run's own lane (laneOfRun: running is active, a failed or overspent one is
- * attention, the rest finished), for as long as the ledger holds them. `chatRun` decides only which row reads
- * as SELECTED, which is the same job the active conversation does for the rows below. */
+// Runs are grouped by lane as long as the ledger holds them; chatRun marks only which row is selected.
 const { runs: workflowRuns } = useWorkflowRuns();
-/* The Finished lane's cap, declared here because the RUNS obey it too: see the long note on the window below,
- * which is where the rest of the reasoning lives. Lifted by a filter and by the row's own expand. */
+// Finished lane's cap; runs obey it too. Lifted by a filter or the row's own expand.
 const showAllFinished = ref(false);
 const windowed = computed(() => !filtering.value && !showAllFinished.value);
-/* The same lane rule the board uses, including a step's question putting its RUN in Attention: two lists that
- * disagreed about where a run belongs would be the resemblance breaking exactly where it matters.
- *
- * A QUERY NARROWS THE RUNS, it no longer drops them: a run answers for its steps now (runMatches), so dropping
- * the rows would take the whole workflow off a filtered rail with nothing left standing for it. An ARCHIVED
- * run is off this list outright: the rail lists what is open, and the archive is the board's column.
- */
+// Same lane rule as the board, including a step's question putting the run in Attention. A query narrows runs
+// (via runMatches) rather than dropping them; an archived run is excluded entirely.
 const runsIn = (lane: FleetLane): WorkflowRun[] =>
     runsInLane(
         workflowRuns.value.filter(
@@ -185,15 +127,12 @@ const runsIn = (lane: FleetLane): WorkflowRun[] =>
         windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY,
         runsNeedingYou(fleet.value),
     );
-// A run's row reads as selected only while its DIAGRAM is the thing on screen. In the run's sessions the
-// focused chat's own row wears that, and two rows claiming it would be the list contradicting itself. The
-// panel's own predicate rather than a second reading of the mode: a run being FOLLOWED draws its diagram too,
-// for as long as it has nothing live to put in the panes, and this row has to say so during that window.
+// Selected only while the run's diagram is the thing on screen; a followed run keeps drawing its diagram with
+// nothing live in the panes.
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
 
-// A chat with no fleet entry (a plain conversation, or the roster briefly down) has no transcript the daemon
-// can search under an agent id, so it is matched on what this browser holds: its title and its own messages:
-// both sides of them, which is the rule everywhere else (see useAgentFilter). A `notice` row is neither side.
+// A chat with no fleet entry matches on its title and messages (both roles), the same rule as useAgentFilter; a
+// notice-role message never counts.
 const tabMatches = (entry: OpenChat): boolean => {
     if (!filtering.value) {
         return true;
@@ -208,18 +147,8 @@ const tabMatches = (entry: OpenChat): boolean => {
     );
 };
 
-/* A RUN'S STEPS ARE INSIDE ITS ROW, not beside it: the same rule the fleet board follows, for the reason this
- * list exists at all: it IS the board one card wide, and a workflow that collapsed into one row there while
- * spilling five chats here would be two answers to "what am I looking at".
- *
- * The steps are still OPEN (the run's own row put them on screen, and the panes are showing them); what they
- * are not is separately listed. The run's row is how you get back to them, through its diagram.
- *
- * Gated on the LEDGER, exactly as the board gates it (insideRun says why): a run's row is somewhere for as
- * long as the ledger holds it, and every other reading ("is it drawn", "did the query keep it") turned a
- * filtered rail back into five loose chats. Only a run that has rolled off the ledger releases them, because
- * then nothing stands for them and hiding a chat nothing else shows is worse than showing it twice.
- */
+// A run's steps live inside its row, not listed separately, though they're still open in the panes. Excluded
+// here only while the run is on the ledger (insideRun); once it rolls off, its chats reappear as normal rows.
 const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     const grouped: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
     const ledger = runIdsInLedger(workflowRuns.value);
@@ -230,16 +159,14 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
         }
         grouped[laneOfTab(conversation, agent)].push({ conversation, agent });
     }
-    // The board's own orderings (useAgents.lanes): fresh drafts lead Active, then turn start, fixed for the
-    // turn's life, so a running card holds its slot; the other two lanes read newest-first.
+    // Same order as the board (useAgents.lanes): drafts lead Active, then turn start, fixed for the turn.
     grouped.active.sort(
         (a, b) =>
             Number(b.agent?.status === `draft`) - Number(a.agent?.status === `draft`) ||
             (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
     );
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    // ...and Finished leads with the chats holding words that never went out, for the board's own reason: this
-    // lane windows too (below), and a half-written message must not be what falls behind the fold.
+    // Finished sorts unsent-draft chats first, so a half-written message can't fall behind the window's fold.
     grouped.finished.sort((a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a));
     return grouped;
 });
@@ -249,47 +176,17 @@ const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
     { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
 ];
 
-/* WHICH LANES ARE DRAWN AT ALL: a projection, never a `v-show` on all three, and that is a correctness rule
- * rather than a preference. `LANES` is a compile-time constant, so `v-for` over it compiles to a STABLE
- * fragment whose <section>s carry no patch flag: Vue patches their CHILDREN through the block tree and never
- * patches the sections themselves. A directive on one: `v-show`, which writes `display` from its `updated`
- * hook: is therefore applied once at mount and never again, and the lane's visibility freezes in whatever
- * shape it had then.
- *
- * That is invisible docked, where this list is a sheet that mounts on every open. The floating rail is
- * mounted once and lives for hours, and it is where the bug landed: the lanes froze as they were when the
- * window opened, so a chat opened from the fleet board arrived in a section that was still `display:none` and
- * the rail sat there looking empty while the panel beside it had the conversation open: the "the floating
- * chat stopped reacting to what I select" report. For the same reason a lane section must not grow a
- * directive, a `ref` or a dynamic prop: it would be stale out there in exactly the same way. */
-// A lane holding only a workflow run is not empty. Without the second half, a run in a lane with no chats in
-// it was listed into a section that is never drawn.
+// Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
+// and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
+// A lane holding only a run still counts as occupied, or it's filtered into a section that's never drawn.
 const occupiedLanes = computed(() => LANES.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
 
-/* --- The Finished window ------------------------------------------------------------------------
- * THE BOARD'S CAP, ON THE BOARD'S OWN LANE: windowFinished, the same function /agents runs (see the note on
- * it). Attention and Active are self-emptying: a card leaves them the moment its turn settles. Finished is the
- * terminal shelf, so without a cap it is the one lane that only ever grows, and this list is the surface where
- * that hurts most: the docked sheet is dismissed between uses, but the rail in a floating window is mounted once and
- * read for hours, so its Finished lane was a column of a hundred landed agents by the end of a working day
- * while the board beside it stayed seven deep.
- *
- * The window is a cap on BROWSING, not a close: every chat is still open, still cycled by Alt+PageUp/Down and
- * still one click away behind the row. What actually keeps the list short is the retention sweep now closing
- * what it retires (useChat.closeRetired) and "Clear" below; this is what keeps the lane readable in between.
- *
- * Lifted by a FILTER (a result set is not a browsing list: hiding four of a query's six hits behind a row
- * would be the list deciding which of the user's own matches they meant) and by the row's own expand. The
- * ACTIVE chat is pinned in whatever its age, exactly as the board pins the card it has selected: this list is
- * the switcher for the panel beside it, and a switcher that drops the row for the thing it is showing reads as
- * having lost the conversation. The two refs it is made of are declared up beside the runs, which cap on the
- * same switch. */
+// Caps Finished at windowFinished (the board's own cap): a browsing limit, not a close, everything stays open
+// and reachable. The active chat is always pinned in; a filter or the row's own expand lifts the cap.
 const finishedWindow = computed(() =>
     windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
 );
-// The runs the same window capped are part of this number, because a hidden run now takes its chats into
-// hiding with it: leaving a whole workflow behind a row that does not count it is the one thing a browsing
-// cap must never do.
+// Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
 const hiddenRuns = computed(
     () =>
         runsInLane(
@@ -301,15 +198,14 @@ const hiddenRuns = computed(
 );
 const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
 
-// A lane's visible chats, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
-// for the same reason: a lane that silently shrinks is a lane that has stopped saying anything. The denominator
-// is the LANE, not the window: the row beneath the cards is what accounts for the difference.
+// A lane's visible chats. The `n of m` denominator is the lane's total, not the windowed count; the row below
+// the cards explains the difference.
 const cardsIn = (lane: FleetLane): OpenChat[] => {
     const source = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
     return source.filter(tabMatches);
 };
-// A run counts as the one ROW it is, on both sides: its steps are inside that row, not beside it, and a lane
-// reading "0 of 3" with a workflow drawn under the header is the count calling the row beneath it a mistake.
+// A run counts as its one row on both sides: `heldIn` and `cardsIn` must agree, or the lane header would
+// contradict the row drawn beneath it.
 const heldIn = (lane: FleetLane): number =>
     lanes.value[lane].length +
     runsInLane(
@@ -321,12 +217,8 @@ const heldIn = (lane: FleetLane): number =>
 const countIn = (lane: FleetLane): string =>
     filtering.value ? `${cardsIn(lane).length + runsIn(lane).length} of ${heldIn(lane)}` : String(heldIn(lane));
 
-/* The card's status glyph, in the trailing slot of the title row: AgentCard's slot for it, at AgentCard's
- * size. Fleet-carded chats read the agent's own status (the richer machine: landed, conflict…); a plain chat
- * degrades to what its conversation is doing right now, through the same statusIcon the panel's header draws.
- *
- * Returned ready to `v-bind` onto the Icon, because the template needs the whole of it at once and a card that
- * asked for its status four times (name, spin, class, label) recomputed it four times. */
+// Status glyph for the trailing slot: agent status when fleet-carded, else the conversation's own status.
+// Returned pre-bound as one object so the template computes it once, not per-field.
 const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: string; "aria-label": string } => {
     if (entry.agent !== undefined) {
         const meta = agentStatusMeta(entry.agent.status);
@@ -337,30 +229,11 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
-/* --- What the card knows ------------------------------------------------------------------------------
- * THE FLEET ENTRY IS THE BEST SOURCE, NOT THE ONLY ONE. Every number on this card used to be read straight
- * off the FleetAgent behind one `v-if="agent !== undefined"`, which made the card all-or-nothing: a chat the
- * roster could not resolve collapsed to a bare title over a grey dot: no model, no cost, no count, nothing:
- * and a rail of them read as a list of dead links.
- *
- * And "cannot resolve" is a NORMAL state, not a broken one. The roster carries live agents only: the daemon's
- * retention sweep files finished ones away (archive.ts), the archive half is pull-only, and a conversation
- * opened from History may have outlived its registry entry altogether. Meanwhile the browser is holding a
- * Conversation for every one of these tabs, and that object knows what it is running on, what it has spent
- * here and how much has been said, so the card asks the agent first and the conversation second, and only
- * the facts NEITHER of them holds (the daemon's cross-device age, unread) are agent-only.
- *
- * WHAT THIS CARD DELIBERATELY DOES NOT KNOW: the spend, the diff and the turn count. They are the board's, and
- * the argument is what each surface is READ FOR — the board is scanned to pick an agent out of forty, the rail
- * to switch between the dozen you have open. Nothing here was ever decided by a dollar figure, and the line
- * they filled is the one the live readout needs (see the meta template). */
+// Prefers the fleet agent, falls back to the conversation: an unresolved agent (archived, unregistered) still
+// has a conversation with real facts. Omits spend, diff and turn count on purpose; those belong to the board.
 
-// The model, as the label the pickers use: worth a word the moment a fleet stops being one model deep (an
-// Opus session next to a Codex one is a real difference in what the card will cost and how it behaves). The
-// card says WHO RUNS IT exactly once, AgentCard's rule: while the tile wears the provider mark (no category
-// yet) this line needs no floor, and once the category glyph takes the tile, a card with no recorded model
-// says the provider here instead. `activeModel` is what the last turn actually ran on; `model` is what the
-// composer would send next, which is the honest answer for a chat that has not run one here.
+// Model label as the pickers show it; falls back to the provider name when no model is recorded yet.
+// `activeModel` is what last ran; `model` is what the composer would send next.
 const modelOf = (entry: OpenChat): string | undefined => {
     const { agent, conversation } = entry;
     const provider = agent?.provider ?? conversation.provider.value;
@@ -371,10 +244,8 @@ const modelOf = (entry: OpenChat): string | undefined => {
     return sessionCategory(tabLabel(conversation)) === undefined ? undefined : providerLabel(provider);
 };
 
-/* THE LIVE LINE'S CONTENT, from whichever half is watching the turn. The registry's activity frames say what
- * the tool is doing and are the richer reading; a conversation streaming a turn the roster hasn't caught up
- * with (or has retired) still knows that it is streaming and when it started, which is the whole point of the
- * line: a working card must be findable in a column of stopped ones even when the join is cold. */
+// Live-line text prefers the registry's activity frames (richer); falls back to the conversation's own
+// streaming state so a working card stays findable even when the fleet join is cold.
 const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number | undefined } | undefined => {
     const { agent, conversation } = entry;
     if (agent !== undefined && turnInFlight(agent)) {
@@ -390,9 +261,8 @@ const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number 
     return undefined;
 };
 
-/* HAS THE CARD'S SECOND LINE ANYTHING TO SAY? A fresh draft has no numbers, no age, no marks and no model, so
- * the row would render as an empty strip under its title, which is exactly what the old card did, leaving a
- * lone provider glyph floating on a line of its own. Asked per card rather than assumed from the join. */
+// Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per
+// card rather than assumed.
 const hasMeta = (entry: OpenChat): boolean =>
     (entry.agent !== undefined &&
         (attentionReason(entry.agent) !== undefined || unreadBadge(entry.agent) !== undefined || entry.agent.updatedAt > 0)) ||
@@ -401,14 +271,8 @@ const hasMeta = (entry: OpenChat): boolean =>
     isArchived(entry.conversation) ||
     modelOf(entry) !== undefined;
 
-/* What the query found that ISN'T open in this window: the whole point of the filter reaching past its own
- * list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens the
- * conversation. Conversations no agent owns come from `sessionMatches` and open the same way.
- *
- * The archive is off the live roster, so its contents have to be asked for; the board does that at mount, but
- * a user who never opened /agents has no reason to have paid for it. Asked for once, the first time a query
- * is typed here.
- */
+// Matches outside this window: fleet agents, then archived agents, then agent-less conversations
+// (sessionMatches); each opens the conversation. Archive loads lazily on first query, not at mount.
 const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
 const notOpen = computed<FleetAgent[]>(() => {
     if (!filtering.value) {
@@ -418,15 +282,7 @@ const notOpen = computed<FleetAgent[]>(() => {
 });
 const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
 
-/* THE ARCHIVE IS ASKED FOR WHENEVER A CHAT NEEDS IT, not once at mount. The open chats a long session
- * accumulates are mostly agents the daemon's retention sweep has already ARCHIVED: off the live roster,
- * findable by agentById only once loadArchived has run. A mount-time load only covers what was already filed
- * away when the window opened: this list stays up for hours while the sweep keeps running underneath it, and
- * every agent it retires after that turned its card into a bare title over a grey dot.
- *
- * So the trigger is the SYMPTOM: a conversation the fleet has registered (`registered` latches, so this is
- * never a draft) that neither half of the join can resolve. Probed once per id: the set below is the memory
- * that keeps a genuinely gone agent, which no fetch will ever produce, from asking again on every frame. */
+// Re-fetches the archive when a registered conversation has no agent; `probed` skips ones already confirmed gone.
 const probed = new Set<string>();
 watch(
     () => conversations.value.filter((conversation) => conversation.registered.value && agentById(conversation.conversationId) === undefined),
@@ -442,29 +298,18 @@ watch(
     },
     { immediate: true },
 );
-// And once more whenever a search STARTS, because the query reaches past the open chats into the archive
-// (archivedMatches): a hit sitting one click away that the filter reports as "no matches" is the failure a
-// search is least forgiven for, and no card being unresolved is exactly when the probe above stays quiet.
+// Also probes the archive when a search starts, since the query reaches into it (`archivedMatches`) too.
 watch(filtering, (on) => {
     if (on) {
         void loadArchived();
     }
 });
 
-// The shared clock ticks every running card's elapsed readout together: armed while this list is on screen,
-// which for the docked sheet means only while it is open.
+// Shared clock for every running card's elapsed readout; ticks only while this list is mounted.
 const now = useNow();
 
-/* --- Keeping the active card in view ------------------------------------------------------------
- * The list scrolls, and the chat it is pointing at is almost always selected from somewhere else: a card on
- * the fleet board, a history row, Alt+PageUp/Down, a brand-new agent appended to the end. A list that opens
- * scrolled past the card it is highlighting reads as one that lost your place. `nearest` moves the least it
- * can and no-ops on a card already visible, so clicking a card in the list never shifts it under the pointer.
- *
- * Two triggers, because the id is not the whole story: activeId covers a focus that MOVED, and the store's
- * tabReveal counter covers a focus asked for again (the board card of the chat you are already in, clicked
- * while this list is scrolled elsewhere). `immediate` covers the third case, which is the docked one: the
- * sheet mounts on open, and the card it must show is whichever was already active. */
+// Scrolls the active card into view (`nearest`) on activeId or tabReveal changes, and immediately at mount for
+// the docked sheet.
 const scroller = ref<HTMLElement | null>(null);
 watch(
     [activeId, tabReveal],
@@ -475,11 +320,8 @@ watch(
     { immediate: true },
 );
 
-/* --- Inline rename ------------------------------------------------------------------------------
- * One edit state for the whole list (only one card renames at a time), pointed at a card by `renamingId`. The
- * write goes through the same createInlineRename the fleet cards use, so a chat renamed here renames the agent
- * registry entry too: the card here and the card on /agents are one thing under two skins. Reached by
- * double-clicking a card or through its menu; F2 is the panel header's, and renames the ACTIVE chat there. */
+// Single rename state for the list, via the same createInlineRename the fleet cards use (renames the registry
+// entry). Reached by double-click or the row menu; F2 is the panel header's own.
 const renamingId = ref<string | undefined>(undefined);
 const renaming = computed(() => conversations.value.find((conversation) => conversation.conversationId === renamingId.value));
 const edit = createInlineRename(
@@ -491,27 +333,11 @@ const beginRename = (id: string): void => {
     renamingId.value = id;
     edit.begin();
 };
-// F2 in a POPPED-OUT window has no header to rename in: the rail is the whole surface out there, so the host
-// hands the press down to the card it names. Docked, the header renames itself and never calls this.
+// F2 in a floating window has no header, so the host forwards it here; docked, the header renames itself.
 defineExpose({ beginRename });
 
-/* --- Hover preview --------------------------------------------------------------------------------
- * A card clamps its title to two lines, on top of the 40-char derivation, so hovering reveals the FULL derived
- * title and, under it, WHAT THE USER ASKED: their first message, and their last one when the conversation has
- * moved on since. The card itself is the shared HoverCard; the Changes panel's agent chips raise the same one.
- *
- * The two ends, rather than the first message alone, because that is the question a rail of a dozen open chats
- * actually poses: the first message says what this conversation was FOR, and after an hour of it the title
- * derived from that first message no longer says what it is ABOUT. The last prompt is the only line that does.
- *
- * The hover used to spend its widest line on the card's state instead: the tile's category, the model, and the
- * agent's untruncated live activity, in accent ink, which meant a hover over a working chat was mostly a raw
- * shell command wrapped over ten lines. Every part of that was already on the card the pointer was sitting on:
- * the model on its meta line, the activity on its live line, the category in its tint. So the card's one wide
- * surface goes to the thing that appears nowhere else instead.
- *
- * Their PICTURES ride along (HoverCard draws them full-bleed): a prompt is often a screenshot with "fix this"
- * under it, and among a dozen open chats the image is the fastest thing there is to recognise one by. */
+// Hover shows the full title plus the first prompt (what the chat was for) and the last one if different (what
+// it's about now); images ride along since a prompt is often a screenshot.
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 const showPreview = (event: MouseEvent, entry: OpenChat): void => {
     const prompts = entry.conversation.messages.value.filter((message) => message.role === `user`);
@@ -519,9 +345,7 @@ const showPreview = (event: MouseEvent, entry: OpenChat): void => {
     const last = prompts.at(-1);
     hoverCard.value?.show(event, {
         title: entry.conversation.title.value ?? undefined,
-        // Labelled only when there are two, since "Latest" over the single prompt of a one-turn chat names a
-        // distinction that isn't there. A fresh "New chat" card has no prompts at all and no title either, and
-        // the card declines to open on that rather than floating an empty box.
+        // Labelled "Latest" only when two prompts differ; a fresh draft with neither shows no preview.
         messages: [
             ...(first === undefined ? [] : [{ text: first.text, attachments: first.attachments }]),
             ...(last === undefined || last === first ? [] : [{ label: `Latest`, text: last.text, attachments: last.attachments }]),
@@ -532,51 +356,28 @@ const hidePreview = (): void => {
     hoverCard.value?.hide();
 };
 
-/* --- Picking chats into panes -------------------------------------------------------------------
- * The terminal strip's gesture, on the surface that is this panel's equivalent of it (TerminalPanel's
- * onSegmentClick): a plain click SWITCHES TO THAT ROW ALONE, Ctrl/Cmd+click toggles a chat into a column of
- * its own beside the others, and Shift+click takes the run between the anchor and the row: all four landing
- * on the pane verbs in useChat. Learning it once on either strip is learning it for both, which is the whole
- * reason the gestures are the same to the letter rather than merely similar.
- *
- * The plain click is the RESET, as it is in every list that multi-selects: the modifiers build the set, and
- * the click without one replaces it. That is the only way out of a split that costs the same as the way in.
- *
- * The MENU is what makes it discoverable; the modifiers are the accelerator for whoever already knows. */
-/* Which rows are ON SCREEN, and the whole of what the card wears, since a column is a column: the ringed
- * cards ARE the pane set, at one weight, whichever of them the keyboard happens to be in (RailCard.selected).
- * The focused chat is always a member, so a single-pane panel rings exactly the one card it always did. */
+// Plain click switches to just that row; Ctrl/Cmd+click toggles a column beside it; Shift+click ranges from the
+// anchor — the same gestures and verbs as the terminal strip's onSegmentClick.
+// Rows on screen mirror the pane set at one ring weight (RailCard.selected); the focused chat is always included.
 const showing = (id: string): boolean => panes.value.includes(id);
-// Whether there is a column to GIVE BACK: the last pane is the panel itself, so "Close Pane" and the Ctrl+click
-// that toggles one off are offered only past the first.
+// Whether a pane can be given back: the last one is the panel itself, so Close Pane needs at least two.
 const split = computed(() => panes.value.length > 1);
-// Panes exist on WIDE surfaces only (the floating window, the full-window /chat area): the docked column is
-// ~22rem, and a second chat in it would be two unusable slivers (ChatPanel holds that rule). So the gestures
-// and the rows that teach them are offered where they do something, rather than sitting in the docked sheet
-// quietly doing nothing.
+// Panes exist only on wide surfaces; the docked column is too narrow for a second chat (see ChatPanel).
 const paneable = computed(() => chatWide.value);
 
-// The rows as the eye reads them, top to bottom, across the lanes that are drawn: what a Shift+range means.
-// The lanes SORT (by status, then recency), so this is the list's own order rather than the tab order; a range
-// is "these rows", which is what the user is pointing at.
+// Reading order across the drawn lanes (status, then recency), used to resolve what a Shift+range selects.
 const rowOrder = computed<string[]>(() => occupiedLanes.value.flatMap((lane) => cardsIn(lane.key).map((entry) => entry.conversation.conversationId)));
 const anchor = ref<string>();
 
-/* ...AND THE BOARD IS TOLD WHAT THE RAIL POINTED AT. The gesture acts here, on the panel it was made in (the
- * calls below are unchanged); this is the same reveal SAID OUT LOUD, so every other window's fleet board rings
- * the conversation the chat is actually showing (summon.ts's relaySummons has the argument). It matters most in
- * the arrangement the rail is built for: the chat in a window of its own, the board on the other screen, and
- * nothing else out there able to see this click.
- *
- * The rows carry live conversations, which fold into their portable form on the wire, so a window that has
- * never opened one of them rebuilds the tab exactly as a reload would. */
+// Broadcasts the same reveal to other windows (relaySummons) so their fleet boards ring the conversation this
+// rail is showing. Conversations fold to their wire form, so a window that never opened one can rebuild the tab.
 const relayRows = (verb: RevealVerb, ids: readonly string[], focus: string): void => {
     const entries = ids.flatMap((id) => conversations.value.filter((conversation) => conversation.conversationId === id));
     relaySummons({ kind: `reveal`, verb, entries, focus, caret: false });
 };
 
-// The other list in this column raises the same selection (ChatPersonaRail), so it is told the same way: which
-// list the reader happened to be looking at is no reason for the board to fall out of step with the chat.
+// ChatPersonaRail raises the same selection, told the same way so the board stays in step regardless of which
+// list was used.
 const onPersonaSelect = (id: string): void => {
     emit(`select`, id);
     relayRows(`focus`, [id], id);
@@ -586,8 +387,7 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     if (!paneable.value) {
         anchor.value = id;
         emit(`select`, id);
-        // `focus`, not `show`: this surface offers no panes, so it has no split of its own to collapse and no
-        // business collapsing anyone else's.
+        // `focus`, not `show`: this surface has no panes, so no split of its own to collapse.
         relayRows(`focus`, [id], id);
         return;
     }
@@ -604,7 +404,7 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     }
     if (event.ctrlKey || event.metaKey) {
         anchor.value = id;
-        // Toggle: a chat that already has a column gives it back, one that doesn't takes one beside the focus.
+        // Toggle: a chat with a column gives it back; one without takes a new column beside the focus.
         if (showing(id) && split.value) {
             closePane(id);
             relayRows(`unpane`, [id], id);
@@ -616,18 +416,13 @@ const onRowClick = (event: MouseEvent, id: string): void => {
     }
     anchor.value = id;
     emit(`select`, id);
-    // The reset half of the same gesture set: a click carrying no modifier means "just this row", here as in
-    // any list that also multi-selects. Only where panes are offered: docked, the split is stored but not
-    // drawn, and collapsing one the reader cannot see would quietly lose the arrangement the floating window returns
-    // to. The select above has already moved the focus, so this keeps the row that was clicked.
+    // Resets any split to just this row; matters only where panes are drawn (docked keeps but hides the split).
     collapsePanes();
-    // `show` is that pair as one verb, which is exactly what the other windows have to apply.
+    // `show` bundles select + collapse into the one verb other windows apply.
     relayRows(`show`, [id], id);
 };
 
-/* The share dialog's target, held here rather than on the card: the menu acts on the RIGHT-CLICKED chat, and
- * by the time the dialog is answered that card may not be the one on screen any more. One dialog for the whole
- * list, told which conversation it is about. */
+// Target for the share dialog: the right-clicked chat may no longer be on screen by the time it's answered.
 const shareTarget = ref<{ id: string; title: string }>();
 const openShare = (id: string): void => {
     const conversation = conversations.value.find((entry) => entry.conversationId === id);
@@ -636,10 +431,8 @@ const openShare = (id: string): void => {
     }
 };
 
-/* --- Right-click menu -----------------------------------------------------------------------------
- * The same close set the workspace's file tabs carry, plus this list's own rename and the pop-out toggle. It
- * acts on the RIGHT-CLICKED card (`menuTabId`), never on the active one: the split the workspace makes, and
- * the reason the keyboard commands (which act on the active chat) live with the header rather than here. */
+// Same close actions as the workspace's file tabs, plus rename and the pop-out toggle. Acts on the right-clicked
+// card (menuTabId), never the active one — its keyboard commands live with the panel header instead.
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
 
@@ -653,26 +446,17 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const finished = finishedTabs();
     const peeked = conversations.value.find((conversation) => conversation.conversationId === id)?.peek.value === true;
     return [
-        /* KEEP OPEN, above everything else and only on a card that would otherwise go: the discoverable half of
-         * the pin in the card's own corner, the way "Open Beside" is the discoverable half of Ctrl+click. It is
-         * the workspace editor's row for a preview tab, word for word (WorkspaceDesktop), because it is the same
-         * act on the same kind of tab. */
+        // Keep Open leads the menu, shown only on a preview tab: same convention and wording as WorkspaceDesktop.
         ...(peeked ? [{ label: `Keep Open`, icon: `pin` as IconName, command: () => keepChat(id) }, { separator: true }] : []),
         { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
-        /* SHARE: the one row here that reaches outside this machine, so it sits apart from the pane and close
-         * rows rather than among them, and it opens a dialog rather than acting on the press. Nothing about the
-         * conversation changes: a share is a rendering of it, taken now and frozen (see the share routes). */
+        // Share opens a dialog rather than acting directly; it renders a frozen snapshot, the conversation is
+        // unchanged.
         { label: `Share…`, icon: `globe`, command: () => openShare(id) },
         { separator: true },
-        /* The pane pair. "Open Beside" is the discoverable half of Ctrl/Cmd+click, and it names the result
-         * rather than the mechanism: a column of its own next to the one you are in. Its opposite takes the
-         * column back WITHOUT closing the chat, which is the distinction the two rows have to carry between
-         * them: the Close block below ends the conversation's place in this window, this one only ends its
-         * share of the screen. Offered only where there is room to use it (see `paneable`). */
+        // Open Beside/Close Pane mirror Ctrl+click; unlike Close, they give back the column without ending the chat.
         ...(paneable.value
             ? [
-                  // No glyph on either, like the terminal's own Split row, and pointedly not the × the Close
-                  // block wears, which would say this ends the chat.
+                  // No glyph, like the terminal's Split row; not the ×, which would suggest this ends the chat.
                   showing(id) && split.value
                       ? { label: `Close Pane`, shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
                       : { label: `Open Beside`, shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
@@ -710,22 +494,20 @@ const tabMenuItems = computed<MenuItem[]>(() => {
 });
 
 const openTabMenu = (id: string, event: Event): void => {
-    // The pointer stays on the card, so the hover preview would never leave on its own, and it floats exactly
-    // where the menu is about to open.
+    // Pointer stays on the card, so the hover preview would otherwise never leave on its own.
     hidePreview();
     menuTabId.value = id;
     tabMenu.value?.show(event);
 };
 
-// Close a chat without selecting it (the × sits inside the card button, so stop the bubble).
+// The × sits inside the card's click target; stop propagation or it also selects the row.
 const closeTab = (event: Event, id: string): void => {
     event.stopPropagation();
     emit(`close`, new Set([id]));
 };
 
-/* Keep a chat that is only being LOOKED at (Conversation.peek), the press the italic title is asking about.
- * Local, unlike the board's version of it (summon.ts's `keep`): this rail only ever renders in the window
- * drawing the chat, and every other window reads the mark off the published strip, so there is nothing to say. */
+// Keeps a peeked chat open (Conversation.peek); local only, since other windows read the peek mark off the
+// published strip.
 const keepTab = (event: Event, id: string): void => {
     event.stopPropagation();
     keepChat(id);
@@ -734,15 +516,18 @@ const keepTab = (event: Event, id: string): void => {
 
 <template>
     <div class="flex min-h-0 flex-col gap-1.5">
-        <!-- Pinned above the list: narrow it (filter) → pick one (the lanes) → and, when the query reaches
-             past what is open, the "Not open" group at the foot. -->
-        <!-- `Aa` is here as well as on the board because the two fields run ONE filter and one case rule: a
-             switch visible on only one of them would be a mode acting where it cannot be seen or undone. -->
-        <!-- WHAT THE COLUMN IS, above the controls that act on it. Full width, because the switch is not a
-             filter on the list below: it decides what the list IS, and a control that owns the column reads
-             as the column's own header rather than as one more knob in a toolbar. At `xs` the track keeps that
-             shape at a pointer's height, so it costs the rail a line rather than a thumb-sized band (see
-             SegmentedControl: the stretched track honours the density prop). -->
+        <!--
+            Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's
+            open, the "Not open" group at the foot.
+        -->
+        <!--
+            The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would
+            be confusing.
+        -->
+        <!--
+            Full-width because this switch decides what the column IS, not a filter on it — it reads as the column's own
+            header. `stretch` keeps a pointer-sized track at `xs` (SegmentedControl honours the density prop).
+        -->
         <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
@@ -751,8 +536,7 @@ const keepTab = (event: Event, id: string): void => {
             class="shrink-0"
             @update:model-value="(next: ChatGrouping) => setGrouping(next)"
         />
-        <!-- The filter searches MESSAGES, so it belongs to the chats and goes away with them: a box promising
-             to find what you wrote, over a list of people, would answer every query with nothing. -->
+        <!-- Shown only for the chats grouping: the filter searches messages, which personas don't have. -->
         <SearchBar
             v-if="grouping === `lane`"
             v-model="filterQuery"
@@ -764,24 +548,21 @@ const keepTab = (event: Event, id: string): void => {
             placeholder="Filter by your messages…"
             class="shrink-0"
         />
-        <!-- THE PEOPLE, in place of the chats: its own component because it is a different list, not this one
-             regrouped (ChatPersonaRail carries the argument). It emits the same `select` this file does, so the
-             host focuses a chat the same way whichever list raised it. -->
+        <!--
+            A different list, not this one regrouped — its own component (see ChatPersonaRail). Emits the same `select`
+            this file does, so the host focuses a chat the same way from either list.
+        -->
         <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
         <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
-            <!-- A lane with nothing in it is not drawn at all (occupiedLanes, and see the note there before
-                 reaching for `v-show` here); a lane the FILTER emptied keeps its header and says so, so the
-                 list doesn't reshuffle under the cursor mid-keystroke. -->
+            <!--
+                An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header, so the
+                list doesn't reshuffle under the cursor mid-keystroke.
+            -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
-                <!-- "CLEAR", in the slot and the word the board's Finished lane uses: the same act on the
-                     same lane, at the scale the lane is at: there it archives the agents, here it closes
-                     their chats. Both are lossless and neither asks, which is what earns the one-press
-                     treatment; the tooltip names where the chats go. It was reachable only through a card's
-                     right-click menu before, which is a hunt for a target to perform an action that has no
-                     target: the lane is the target, so the lane's header is where it belongs.
-                     Gone while filtering, exactly as the board's is: this closes the WHOLE lane, and
-                     offering it above a lane reading "1 of 12" is offering a bulk action whose scope is not
-                     the one on screen. -->
+                <!--
+                    Same act and wording as the board's Finished lane (there it archives, here it closes the chats); both are
+                    lossless and need no confirmation. Hidden while filtering, since it would close more than the query matched.
+                -->
                 <template #actions>
                     <Button
                         v-if="lane.key === 'finished' && !filtering"
@@ -796,10 +577,11 @@ const keepTab = (event: Event, id: string): void => {
                         Clear
                     </Button>
                 </template>
-                <!-- THE LANE'S WORKFLOW RUNS, above its chats and dashed like their card on the board: a run
-                     is the container of several of the rows beneath it, not one of them. Clicking one is the
-                     board card's own press (openRunInChat): its live sessions into the panes, or its diagram
-                     when nothing is live, so the two doors into a run cannot behave differently. -->
+                <!--
+                    Dashed like the board's run card: a run is the container for the rows below it, not one of them. Click opens
+                    it the same way the board does (openRunInChat) — live sessions into the panes, or the diagram when nothing
+                    is live.
+                -->
                 <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
@@ -825,10 +607,10 @@ const keepTab = (event: Event, id: string): void => {
                 <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">No matches</p>
                 <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
-                        <!-- Renaming REPLACES the card rather than nesting a field inside it: an input in a
-                             button is neither valid markup nor a usable caret. Enter commits, Esc cancels, blur
-                             commits, an empty or unchanged name silently cancels: the WorkspaceTree
-                             convention, via createInlineRename. -->
+                        <!--
+                            Replaces the card rather than nesting a field in it (a button can't host a usable input). Enter/blur commit,
+                            Esc cancels, an empty or unchanged name silently cancels — the WorkspaceTree convention (createInlineRename).
+                        -->
                         <input
                             v-if="edit.editing && renamingId === c.conversationId"
                             v-model="edit.draft"
@@ -869,18 +651,14 @@ const keepTab = (event: Event, id: string): void => {
                                     :members="viewersOfSession(c.session.value.id)"
                                     label="in this chat"
                                 />
-                                <!-- The × is a HIT TARGET carrying the glyph, not the glyph itself: at text-2xs
-                                     the svg is an 11px square, and a click that misses it lands on the card:
-                                     which, on the card it is closing, selects an already-selected chat and so
-                                     reads as a close that did nothing. It takes the slot BESIDE the status
-                                     glyph on hover (AgentCard's rename/archive pattern) rather than the
-                                     status glyph's own, so nothing about the card moves as the pointer
-                                     crosses it. -->
-                                <!-- A CARD BEING LOOKED AT OFFERS THE PIN WHERE EVERY OTHER CARD OFFERS ITS ×,
-                                     in the same slot so nothing moves as the pointer crosses it. On a tab that
-                                     leaves by itself the × is a press for what happens anyway; the gesture
-                                     worth putting under the pointer is the one that stops it going, and it is
-                                     the only visible teaching of a state whose other mark is a font style. -->
+                                <!--
+                                    The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. Sits beside the
+                                    status glyph on hover (AgentCard's pattern), so nothing shifts as the pointer crosses.
+                                -->
+                                <!--
+                                    A peeked card offers the pin in the same slot every other card offers its ×, so nothing shifts on hover. It's
+                                    the only visible cue for peek besides the italic title.
+                                -->
                                 <span
                                     v-if="c.peek.value"
                                     role="button"
@@ -901,21 +679,17 @@ const keepTab = (event: Event, id: string): void => {
                                     <Icon name="times" class="text-2xs" />
                                 </span>
                             </template>
-                            <!-- The crucial facts, one wrapping line: what the turn is doing and for how long
-                                 (the card's `tight` form ends this line with the live readout rather than
-                                 spending a row of its own on it), why it needs you or that it's unread, where
-                                 it came from, the model, and the age of a settled chat, right-aligned. Drawn from the
-                                 fleet entry where there is one and from the conversation where there isn't
-                                 (see "What the card knows"), so an off-roster chat keeps a populated card. -->
+                            <!--
+                                One line: why it needs attention or is unread, where it came from, the model, and (settled only) its age,
+                                right-aligned. Reads from the fleet entry when there is one, else the conversation.
+                            -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
                                 <span
                                     v-if="agent !== undefined && attentionReason(agent) !== undefined"
                                     class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                     >{{ attentionReason(agent) }}</span
                                 >
-                                <!-- The board's unread chip, in the attention chip's slot: both answer "why
-                                     should I look at this one", and a card never needs both ("needs you"
-                                     outranks "you haven't looked"). -->
+                                <!-- Same slot as the attention chip: never both at once, "needs you" outranks "unread". -->
                                 <span
                                     v-else-if="agent !== undefined && unreadBadge(agent) !== undefined"
                                     v-tooltip.top="
@@ -926,28 +700,18 @@ const keepTab = (event: Event, id: string): void => {
                                     class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
                                     >{{ unreadBadge(agent)!.label }}</span
                                 >
-                                <!-- WORDS OF THE USER'S STILL IN THIS CHAT'S COMPOSER. It sits with the two
-                                     chips above rather than off among the marks, because it answers their
-                                     question ("why should I look at this one") and answers it about the
-                                     reader's own unfinished business, the one thing on this row that nobody
-                                     else can clear. The board's card draws the very same component, which is
-                                     what keeps the two surfaces from drifting into two marks again.
-                                     Read from the CONVERSATION and not from the fleet entry: this rail only
-                                     ever renders in the window drawing the chat, so the composer beside it is
-                                     the truth, and an off-roster chat keeps a populated mark. -->
+                                <!--
+                                    Grouped with the attention/unread chips: same question, answered by the reader's own unfinished draft. Read
+                                    from the conversation, not the fleet entry — this rail only renders in the window holding that composer.
+                                -->
                                 <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
-                                <!-- Came in from outside (a Discord mention, a visitor, a webhook), and
-                                     off the board, still open: both are marks about the card's PROVENANCE
-                                     rather than its name, so they ride the meta line the way the board
-                                     puts its OriginMark in the card body. -->
+                                <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />
-                                <!-- WHICH SANDBOX IT LIVES IN, when that is not this one (Conversation.box). A
-                                     provenance mark like the two beside it, and the one fact about a row here
-                                     that the composer cannot be relied on to carry: the strip is what a reader
-                                     scans to pick a chat, and two rows that look identical can be running on
-                                     two different machines. Named in the tooltip, since the glyph can only say
-                                     "somewhere else". -->
+                                <!--
+                                    Which sandbox the chat runs in, when not this one (Conversation.box): two identical-looking rows can be on
+                                    different machines. Named in the tooltip, since the glyph alone can only say "somewhere else".
+                                -->
                                 <span
                                     v-if="c.box.value !== undefined"
                                     v-tooltip.top="`Runs in “${boxNameOf.get(c.box.value!) ?? `another sandbox`}”`"
@@ -959,21 +723,11 @@ const keepTab = (event: Event, id: string): void => {
                                 <span v-if="isArchived(c)" class="flex shrink-0 items-center" aria-label="Archived">
                                     <Icon name="box" class="text-2xs text-subtle" />
                                 </span>
-                                <!-- WHAT THIS LINE NO LONGER CARRIES, AND WHY. The spend, the diff and the turn
-                                     count used to sit here beside the model, and a rail is a SWITCHER: it is
-                                     read to answer "which chat do I go to", and not one of those three ever
-                                     decided that. What they did do was fill the line the running readout needs
-                                     (Bash · 4m 12s), pushing it onto a row of its own and buying every card a
-                                     third more height in the one place height is scarcest — a column of a
-                                     dozen open chats down the edge of a window. All three are still read where
-                                     they are read on purpose: the spend and the diff on the board's card and in
-                                     the Usage tab, the turn count in the conversation itself. -->
+                                <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
                                 <span v-if="modelOf({ conversation: c, agent }) !== undefined" class="max-w-24 truncate">{{
                                     modelOf({ conversation: c, agent })
                                 }}</span>
-                                <!-- The age keeps to the settled cards: a running card's clock is the live
-                                     line's ticking elapsed below, and two clocks on one card disagree by
-                                     construction. -->
+                                <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
                                 <span v-if="agent !== undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
                                     relativeTime(agent.updatedAt)
                                 }}</span>
@@ -981,9 +735,10 @@ const keepTab = (event: Event, id: string): void => {
                         </RailCard>
                     </template>
                 </div>
-                <!-- The lane's tail, not a pager: the count is the point ("there are 12 more open"), and the
-                     row is what keeps them one press away instead of gone. The board's own row, at the rail's
-                     width. Gone while filtering: the window is lifted there, so there is nothing behind it. -->
+                <!--
+                    Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. Same row as
+                    the board's, at rail width; hidden while filtering since the window is lifted then.
+                -->
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
@@ -995,19 +750,13 @@ const keepTab = (event: Event, id: string): void => {
                 </button>
             </RailLane>
 
-            <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. This list holds the chats of this window, which is
-                 almost never the set the question "where did I say X" is about, so the filter reaches the
-                 whole fleet (live agents, the archive) and the conversations no agent owns, and puts them here.
-                 A row opens the conversation, which is exactly the act the History menu performs; the
-                 difference is that this list was found rather than browsed.
-                 A lane of the same shape as the three above it, down to the card skin: these are destinations,
-                 not footnotes, and the board makes the same call with its own off-board hits (real cards, in a
-                 group with a header). Only the ink is dropped a step: a muted title, no status glyph, since
-                 nothing here is a session you are currently in. -->
+            <!--
+                Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the
+                conversation, same as History. Same card shape as the lanes above, just muted.
+            -->
             <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-2">
-                    <!-- The same identity tile as the lanes above: a hit here is a destination, and the
-                         category tint says what kind of work it will turn out to be. -->
+                    <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <RailCard
                         v-for="agent in notOpen"
                         :key="agent.id"
@@ -1020,15 +769,12 @@ const keepTab = (event: Event, id: string): void => {
                         @click="emit('open', agent.id)"
                     >
                         <template #meta>
-                            <!-- Off the board but not gone: the branch, the diff and the transcript all survive an
-                                 archive, so a hit here is a real destination rather than a tombstone. -->
+                            <!-- Archived, not gone: the branch, diff and transcript all survive, so this is a real destination. -->
                             <Icon v-if="agent.archivedAt !== undefined" name="box" class="shrink-0 text-2xs" aria-label="Archived" />
                             <span v-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
                         </template>
                     </RailCard>
-                    <!-- Conversations no agent entry owns: a plain chat, or one whose entry is long gone. Nothing
-                         to draw a provider mark or a status for; the title and the matched line are the whole of
-                         what is known about them. -->
+                    <!-- Conversations no agent owns; only the title and matched line are known, so no provider mark or status. -->
                     <RailCard
                         v-for="session in sessionMatches"
                         :key="session.id"
@@ -1047,14 +793,15 @@ const keepTab = (event: Event, id: string): void => {
                 </div>
             </RailLane>
         </div>
-        <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
+        <!-- A failed rename already reverted the title; this explains why, cleared by the next rename. -->
         <span v-if="edit.error !== undefined" class="shrink-0 truncate px-1 text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
             edit.error
         }}</span>
 
-        <!-- Both of these teleport out (the hover card to the overlay target, the menu to `append-to`), so
-             they sit inside the root only to keep this component single-rooted: a fragment root would drop
-             the sizing classes its two hosts hand it. Into the floating window while the chat floats there. -->
+        <!--
+            Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component
+            stays single-rooted, since a fragment root would drop the sizing classes its hosts pass in.
+        -->
         <HoverCard ref="hoverCard" />
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <ChatShareDialog

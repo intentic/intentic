@@ -3,12 +3,9 @@ import type { IntenticApi } from "@intentic/extension-api";
 import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* The background pair (extension-api/src/background.ts), tested from here because the SDK ships no test harness
- * of its own: the same reason scope.test.ts and surface-guard.test.ts live in this directory.
- *
- * What is under test is the set of rules seven hand-written copies of this had to remember, and six of them got
- * one of wrong. Each rule below is invisible in the code that breaks it: the tile simply says something untrue,
- * or the console fills with unhandled rejections, or a file lands in the wrong workspace. */
+// The background pair (extension-api/src/background.ts), tested from here since the SDK ships no test harness of its
+// own. Each rule below is invisible in the code that breaks it: a tile says something untrue, the console fills with
+// unhandled rejections, or a file lands in the wrong workspace.
 
 const flush = async (): Promise<void> => {
     await Promise.resolve();
@@ -16,11 +13,9 @@ const flush = async (): Promise<void> => {
     await Promise.resolve();
 };
 
-/* The smallest api a poll or a ledger touches. `reachable` is a field so a test can take the daemon away.
- *
- * `onDidChangeFiles` is present only when a test asks for it (`watching: true`), which is deliberate: an older
- * host does not have it, and every test that leaves it out is therefore also checking that a poll on such a host
- * still runs on its timer instead of failing to start. */
+// The smallest api a poll or a ledger touches. `reachable` is a field so a test can take the daemon away.
+// `onDidChangeFiles` is present only when a test asks for it (`watching: true`): an older host lacks it, so a test that
+// omits it also checks that a poll still runs on its timer.
 const fakeApi = (over: { reachable?: boolean; file?: unknown; watching?: boolean; write?: (path: string, body: string) => void } = {}) => {
     const written: { path: string; body: string }[] = [];
     const listeners = new Set<(paths: readonly string[]) => void>();
@@ -190,9 +185,8 @@ describe(`sandboxPoll`, () => {
         expect(poll.state.value).toBe(`answer-2`);
     });
 
-    /* The rule that makes this safe to call from module scope: `host()` throws until activate() binds one, and
-     * this runs detached on a timer, so a throw here is an unhandled rejection in the console of an app that is
-     * otherwise fine. */
+    // `host()` throws until activate() binds one, and this runs detached on a timer, so a throw here would be an
+    // unhandled rejection in an otherwise fine app.
     it(`survives a host that is not bound yet`, async () => {
         const poll = sandboxPoll({
             host: () => {
@@ -233,8 +227,8 @@ describe(`sandboxPoll`, () => {
         expect(poll.state.value).toBe(`answer`);
     });
 
-    // The reported bug's shape, at the primitive: an answer for the box the reader has left must not become the
-    // box they are on.
+    // The reported bug's shape, at the primitive: an answer for the box the reader has left must not become the box
+    // they are on.
     it(`drops an answer that arrives after a sandbox switch`, async () => {
         const { api } = fakeApi();
         let answer = (): void => {};
@@ -274,9 +268,9 @@ describe(`sandboxPoll`, () => {
         expect(poll.state.value).toEqual([`round`, `round`]);
     });
 
-    /* THE BUG THIS PAIR WAS SUPPOSED TO PREVENT AND DID NOT: the badge said six after the queue was emptied.
-     * Every input to a drafts count is a write under a path the manifest declares, and the host was already
-     * pushing that write, so a whole minute of a wrong number was a minute nobody had to pay for. */
+    // The bug this pair was supposed to prevent and did not: the badge said six after the queue was emptied. Every
+    // input to a drafts count is a write under a path the manifest declares, and the host was already pushing that
+    // write.
     it(`re-reads when one of the extension's declared files is written, without waiting out the interval`, async () => {
         vi.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
@@ -294,8 +288,8 @@ describe(`sandboxPoll`, () => {
         running.dispose();
     });
 
-    // A run writing a result file per story, a publish rewriting a staging tree: one logical event, many frames.
-    // The widest badge scan in the workspace must not be re-run per frame.
+    // A run writing a result file per story, a publish rewriting a staging tree: one logical event, many frames. The
+    // widest badge scan in the workspace must not be re-run per frame.
     it(`coalesces a burst of writes into one read`, async () => {
         vi.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
@@ -327,9 +321,8 @@ describe(`sandboxPoll`, () => {
         expect(read).not.toHaveBeenCalled();
     });
 
-    /* An extension may declare `engines.intentic` wider than the release that added the channel, so the SDK can
-     * find itself on a host without it. A slower badge is the right degradation; a poll that fails to start is
-     * not, and that is what an uncaught call on `undefined` inside start() would be. */
+    // An extension may declare `engines.intentic` wider than the release that added the channel, so the SDK can find
+    // itself on a host without it. A slower badge is the right degradation; a poll that fails to start is not.
     it(`still runs on its timer on a host that cannot announce file writes`, async () => {
         vi.useFakeTimers();
         const { api } = fakeApi();
@@ -362,8 +355,8 @@ describe(`sandboxLedger`, () => {
         expect(await sandboxLedger(() => api, `seen.json`).read()).toEqual({});
     });
 
-    /* The safe direction, and the reason it is the safe one: bad bookkeeping may light a badge that should have
-     * been quiet, and must never hide one that should have been lit. */
+    // The safe direction: bad bookkeeping may light a badge that should have been quiet, and must never hide one that
+    // should have been lit.
     it(`drops entries that are not marks rather than trusting them`, async () => {
         const { api } = fakeApi({ file: { good: `digest`, count: 7, nested: { a: 1 }, missing: null } });
 
@@ -386,8 +379,8 @@ describe(`sandboxLedger`, () => {
         expect(JSON.parse(written[0]?.body ?? `{}`)).toEqual({ kept: `run` });
     });
 
-    /* No write when nothing moved. The daemon pushes a workspace write to every connected browser as a change,
-     * so a ledger that rewrote itself on every open would cost all of them a refetch for identical content. */
+    // No write when nothing moved: the daemon pushes every workspace write to every connected browser as a change, so a
+    // ledger rewriting itself on every open would cost all of them a refetch for identical content.
     it(`writes nothing when the mark is already recorded`, async () => {
         const { api, written } = fakeApi({ file: { first: `one` } });
 
@@ -404,8 +397,8 @@ describe(`sandboxLedger`, () => {
         expect(written).toEqual([]);
     });
 
-    /* The one place in an extension's background work that damages state on DISK across a switch: reading one
-     * workspace's acknowledgements and writing them into the tree of the workspace the owner has moved to. */
+    // The one place in an extension's background work that damages state on disk across a switch: reading one
+    // workspace's acknowledgements and writing them into the tree of the workspace the owner has moved to.
     it(`says whether the acknowledgement landed, which is what the caller's local fold depends on`, async () => {
         const { api } = fakeApi({ file: { first: `one` } });
         const ledger = sandboxLedger(() => api, `seen.json`);

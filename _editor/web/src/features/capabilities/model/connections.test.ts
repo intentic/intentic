@@ -3,15 +3,15 @@ import type { VpnLink } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { awaitingLogin, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";
 
-/* The reader's question is not what the daemon calls a state but whether they still have something to do, and
- * for two kinds the status field is not the truest answer available. Both surfaces that list connections read
- * through here, so an account cannot be "needs sign-in" in the inventory and "pending" on its own card. */
+// Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds
+// status alone isn't the truest answer. Both listing surfaces read through here, so an account can't be "needs
+// sign-in" in the inventory and "pending" on its card.
 
 const instance = (status: CapabilityStatus, config: Record<string, string> = {}): CapabilitySummary =>
     ({ id: `reddit`, kind: `browser`, status, config }) as CapabilitySummary;
 
-// The daemon's wording is what tells the two pending browsers apart, and they lead to opposite places: a login
-// window right here, or a rebuild on another screen.
+// Daemon's wording tells the two pending browsers apart, leading to opposite places: a login window here, or a
+// rebuild elsewhere.
 test(`tells a browser waiting on a login from one waiting on a rebuild`, () => {
     const login = instance({ state: `pending`, detail: `log in to connect your account` });
     const build = instance({ state: `pending`, detail: `rebuild the sandbox to install the browser` });
@@ -28,8 +28,8 @@ test(`tells a browser waiting on a login from one waiting on a rebuild`, () => {
     expect(rebuildStep(`host`, build)).toBe(false);
 });
 
-/* A machine that is simply asleep is not a machine with something to do, and no stored status can say which it
- * is: only the roster can. */
+// A sleeping machine isn't a machine with something to do, and only the roster (not stored status) can tell which
+// it is.
 test(`reads a connected machine's liveness from the roster rather than its status`, () => {
     const machine = instance({ state: `active` });
 
@@ -49,17 +49,15 @@ test(`sorts what is unfinished or broken above what merely works`, () => {
     expect(connectionState(`mcp`, instance({ state: `active` }), undefined).label).toBe(`ready`);
 });
 
-/* Two facts at most, in the order somebody would say them. A third is what pushes the state badge off the end of
- * the line, and `provider`/`platform` are deliberately not among them: they are the card, which the row already
- * names, so printing one would spend the line on "github · github". */
+// Two facts at most, in the order somebody would say them; a third would push the state badge off the line.
+// `provider`/`platform` are deliberately excluded since they're already the card's own name.
 test(`names a connection by what tells it apart, two facts at most`, () => {
     expect(connectionFacts(instance({ state: `active` }, { host: `ops.acme.dev`, user: `ada`, database: `shop`, platform: `reddit` }))).toBe(
         `ops.acme.dev · shop`,
     );
     expect(connectionFacts(instance({ state: `active` }, { platform: `reddit` }))).toBe(``);
     expect(connectionFacts(instance({ state: `active` }, { host: `  ` }))).toBe(``);
-    // An account filed under an identity: the card names the site, so who it belongs to and what it is for are
-    // the whole line, and the date it was opened never takes a slot from either.
+    // An identity-filed account: the card names the site, so who it belongs to and its purpose fill the whole line.
     expect(
         connectionFacts(
             instance({ state: `active` }, { platform: `reddit`, identity: `radarsuspam2`, purpose: `community research`, openedAt: `2026-08-11` }),
@@ -67,8 +65,8 @@ test(`names a connection by what tells it apart, two facts at most`, () => {
     ).toBe(`radarsuspam2 · community research`);
 });
 
-/* A tunnel's address and what it routes are read off the live link, never off the stored config, and a tunnel
- * that is down says nothing here, because the row's own status already says it. */
+// Tunnel address/routes come from the live link, never stored config; a down tunnel says nothing here since the
+// row's status already does.
 test(`reports a tunnel's live address only while it is up`, () => {
     const link = (overrides: Partial<VpnLink>): VpnLink => ({ id: `hq`, state: `connected`, routes: [], ...overrides }) as VpnLink;
 

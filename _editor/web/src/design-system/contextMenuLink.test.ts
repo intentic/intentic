@@ -6,18 +6,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-/* A MENU ROW THAT GOES SOMEWHERE IS A LINK, and this is the file that keeps it one.
- *
- * Pinned here rather than beside the component because @intentic/ui carries no test runner, and every surface
- * that would break lives in this app: the file tree's menu, the terminal pill bar's, the chat tab strip's, the
- * capability row's "Connect / disconnect".
- *
- * PrimeVue's own markup is the reason this can regress silently. Its click handler sits on the row's WRAPPER,
- * not on the anchor inside it, so the natural way to write this (an `<a href>` and nothing else) yields a row
- * where a Ctrl/⌘-click opens a tab AND runs the command that navigates the tab you were reading. Both halves
- * below are that bug: the address has to be on the anchor, and the command has to stand down when the browser
- * has taken the click.
- */
+// A menu row that goes somewhere must be a real link: pinned here since @intentic/ui has no test runner and the
+// breaking surfaces (file tree menu, terminal pill bar, chat tab strip, capability row) live in this app.
+// PrimeVue's click handler sits on the row's wrapper, not the anchor, so the address must be on the anchor and the
+// command must stand down when the browser has taken the click.
 
 const item = (over: Partial<MenuItem> = {}): MenuItem => ({ label: `Sandbox settings`, url: `/sandbox`, ...over });
 
@@ -60,7 +52,7 @@ it(`lets the command own a plain click, without the anchor also loading the page
     await nextTick();
 
     expect(command).toHaveBeenCalledTimes(1);
-    // The command navigates in-app; letting the anchor through as well would reload the whole application.
+    // The command navigates in-app; letting the anchor through too would reload the whole application.
     expect(event.defaultPrevented).toBe(true);
 });
 
@@ -72,8 +64,7 @@ it(`hands a modified click to the browser and holds the command back`, async () 
     rowNamed(`Sandbox settings`).dispatchEvent(event);
     await nextTick();
 
-    // A tab is opening elsewhere. Running the command too would move THIS tab underneath it, which is the
-    // whole failure: the row would both open the page and leave the one you were reading.
+    // A tab is opening elsewhere; running the command too would move this tab underneath it.
     expect(command).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
 });

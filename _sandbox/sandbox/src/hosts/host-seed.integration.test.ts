@@ -9,21 +9,15 @@ import type { Services } from "../composition.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { seedSetupHost } from "./host-seed.js";
 
-/* DELETING THE SETUP DEVICE'S CARD HAS TO STICK.
- *
- * A seeded pairing is only burned when a machine agent REDEEMS it, so a setup token whose machine never enrolls
- * — it came up under a different id, it was never started — stays armable for the life of the sandbox. That is
- * deliberate: the pairing lives in memory with a ten-minute TTL, and a machine that boots after the daemon
- * restarts still needs a live token. What it must not do is re-offer the CARD, which is how a device the owner
- * deleted reappeared at every restart with a dead MCP server attached. */
+// A setup card, once deleted, must never reappear on a later boot, even though the seeded pairing itself stays armed
+// until redeemed (so a late-booting machine can still enroll).
 
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 const seed = { token: "from-the-installer", platform: "linux", label: "ada-laptop" };
 
-// A Services exposing only what seedSetupHost and the host handler's apply touch. `seedPairing` always answers
-// true, which is exactly the unredeemed-token case this file is about; the entries list is mutable so a test
-// can delete the card between boots the way the owner would.
+// Services stub covering only what seedSetupHost touches; seedPairing always answers true (the unredeemed-token case),
+// entries stays mutable so a test can delete the card between boots.
 const tempServices = (): { services: Services; entries: Capability[]; historyRoot: string; upserts: string[] } => {
     const root = mkdtempSync(join(tmpdir(), "host-seed-work-"));
     const historyRoot = mkdtempSync(join(tmpdir(), "host-seed-history-"));
@@ -57,25 +51,22 @@ test("the setup device's card is written once and never offered again", async ()
     expect(upserts).toEqual(["ada-laptop"]);
     expect(await seededIds(historyRoot)).toEqual(["ada-laptop"]);
 
-    // The owner reads the card, decides they did not want it, and removes it.
+    // Owner deletes the card.
     entries.length = 0;
 
-    // The next boot. The pairing is still armed — a machine agent that comes up late can still enroll — and the
-    // card stays deleted, which is the whole point, so nothing is offered and the boot log says nothing.
+    // Next boot: the pairing is still armed, but the deleted card is not re-offered.
     expect(await seedSetupHost(services, seed)).toEqual({ offered: false, id: "ada-laptop" });
     expect(upserts).toEqual(["ada-laptop"]);
     expect(entries).toEqual([]);
 });
 
-/* THE SANDBOX SET UP BEFORE ANY OF THIS EXISTED, which is every sandbox that already carries a setup card. Its
- * id was never recorded, so the first boot on this build has to record the card it FINDS, or the owner's next
- * delete would be undone exactly once more — the one restart that would teach them the delete does not work. */
+// Simulates a sandbox from before id-tracking existed: the card is already there but never recorded, so this boot must
+// adopt it rather than rewrite it.
 test("a card left by an earlier build is remembered without being rewritten", async () => {
     const { services, entries, historyRoot, upserts } = tempServices();
     entries.push({ id: "ada-laptop", kind: "host", config: { platform: "linux" } } as unknown as Capability);
 
     expect(await seedSetupHost(services, seed)).toEqual({ offered: false, id: "ada-laptop" });
-    // Left exactly as it was: the owner may have widened or narrowed it since setup.
     expect(upserts).toEqual([]);
     expect(await seededIds(historyRoot)).toEqual(["ada-laptop"]);
 
@@ -84,8 +75,7 @@ test("a card left by an earlier build is remembered without being rewritten", as
     expect(entries).toEqual([]);
 });
 
-// A setup on an OS the bundled devices extension has no pack for connects nothing, and must not record an id
-// either: the card it would have written was never offered, so a later build that grows that pack still can.
+// Records no id either: a later build that adds a device pack for this platform must still be able to offer the card.
 test("a platform with no device pack seeds nothing at all", async () => {
     const { services, historyRoot, upserts } = tempServices();
 

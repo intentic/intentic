@@ -15,9 +15,8 @@ import { services, withTranslator } from "../../harness/route-services.testing.j
 import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
 import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
-/* What a harness process is told about models, and the reason it matters beyond the turn's own `--model`: a
- * routed turn reaches a translator that serves ONE model, and every other model name the harness can resolve
- * (a subagent's "sonnet", the Task tool's default, the cheap tier) has to land on it or come back 502. */
+// A routed turn's translator serves exactly one model; every other name the harness might resolve (a subagent tier,
+// Task's default) must collapse onto it or come back 502.
 
 test("a routed endpoint collapses every model tier onto the endpoint's own model", () => {
     const env = harnessEnv({ baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gpt-5.6-sol" });
@@ -43,9 +42,8 @@ test("a native Claude turn keeps the real alias table: sonnet and opus are diffe
 });
 
 test("every harness TURN is told to ride out a provider outage rather than give up on it", () => {
-    // Whichever credential shape serves the turn: the retry budget is about the provider being down, which has
-    // nothing to do with whose token is in play. A turn that gives up here is one turn-resume.ts has to rebuild
-    // from scratch, at full context cost.
+    // Retry budget is about the provider being down, unrelated to which credential is in play; giving up here means
+    // turn-resume.ts rebuilds from scratch at full context cost.
     for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
         expect(harnessEnv(credentials)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
     }
@@ -58,9 +56,8 @@ test("a free-trial turn uses the platform's bounded key walk instead of the long
 });
 
 test("a free-trial turn resolves from constants: the synthetic model id, no catalog fetch, bounded policy", async () => {
-    // `endpointModels` deliberately unstubbed: the trial's model is a known constant, so a resolution that
-    // reaches for a catalog would throw here, which is the regression this pins. The fetch used to refuse
-    // turns whenever the platform blipped, as "its model catalog could not be read".
+    // `endpointModels` deliberately unstubbed: the trial's model is a known constant, so reaching for a catalog here
+    // would throw, which is the regression this pins.
     const sandbox = services({ config: withTranslator });
     await sandbox.capabilities.upsert({
         id: TRIAL_ENDPOINT_ID,
@@ -75,9 +72,8 @@ test("a free-trial turn resolves from constants: the synthetic model id, no cata
 });
 
 test("a trial turn on a cold availability cache re-probes once instead of refusing on an unanswered question", async () => {
-    // Boot fires the availability probe without awaiting it, so a turn can arrive first. The capability layer
-    // then hides the trial (available() false): the resolver must ask the platform on the turn's own clock
-    // rather than turn the user away with "no longer available".
+    // Boot fires the availability probe without awaiting it, so a turn can arrive first; the resolver must then ask the
+    // platform itself rather than trust a stale "unavailable".
     let probed = 0;
     const store = memoryCapabilitiesStore();
     const sandbox = services({
@@ -105,9 +101,8 @@ test("a trial turn on a cold availability cache re-probes once instead of refusi
 });
 
 test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {
-    // The regression this pins: a one-shot inherited the turn's watchdog and therefore its three hundred
-    // attempts, so the commit-message draft ground through a refusing rung for the better part of a minute
-    // instead of failing over to the next model in the chain: the one thing the chain exists to do.
+    // The regression this pins: a one-shot inheriting the turn's watchdog ground through a refusing rung instead of
+    // failing over to the next model in the chain.
     for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
         expect(harnessEnv({ ...credentials, helper: true })["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
     }
@@ -123,17 +118,13 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });
 
-/* WHICH ACCOUNT AN UNNAMED TURN LANDS ON: every unattended run in the sandbox, since only a composer names one.
- *
- * The pick is by headroom, and headroom alone is exactly what an entitlement refusal defeats: an account the
- * organization has switched Claude Code off for is turned away before it spends a token, so its meter stays the
- * best-looking one on file and it wins every pick, forever. This is the layer that knows the turn's provider, so
- * it is the layer that reads the refusal and hands it down. */
+// Which account an unnamed turn lands on (every unattended run, since only a composer names one), picked by headroom —
+// which an entitlement refusal alone can defeat: an untouched, refused account has the best-looking meter and would win
+// forever without this.
 const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string, SeatRefusal> = {}): Services =>
     services({
         claudeStore: {
-            // No refresh token ⇒ ensureFreshToken answers with what is stored, so this test resolves a
-            // credential without a network round trip.
+            // No refresh token ⇒ ensureFreshToken returns what's stored, so this resolves without a network round trip.
             read: async (id: string) => ({ id, label: id, connectedAt: 0, accessToken: `token-${id}` }),
             list: async () => [
                 { id: "refused", label: "refused", connectedAt: 0 },
@@ -166,18 +157,16 @@ test("an unnamed turn skips the account whose organization has refused it", asyn
     expect(result.ok && result.credentials.account).toBe("working");
 });
 
-/* AND KEEPS SKIPPING IT once the refusal store has moved on, which is the case that costs real turns. That store
- * keeps ONE refusal per provider, so the next spent allowance on any Claude account overwrites the entitlement
- * one, and the seat is still off. The durable record is what benches the account; the refusal above is only the
- * hint that ranks it. */
+// The refusal store keeps only one refusal per provider, so a later spent-allowance refusal on any account overwrites
+// the entitlement one — but the durable seat record, not that hint, is what actually benches an account.
 test("a benched seat stays benched after the provider's last refusal is some other account's", async () => {
     const seats = { refused: { at: Date.now(), reason: "organization has disabled Claude Code" } };
     const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "working" }, undefined, seats);
     expect(result.ok && result.credentials.account).toBe("working");
 });
 
-// And with nothing left to fall back to, the benched account runs anyway: a turn that fails saying why beats
-// "no Claude account connected", which would be a lie about a sandbox that has one.
+// With nothing left to fall back to, the benched account runs anyway: a turn that fails saying why beats falsely
+// claiming no account is connected.
 test("a sandbox whose every seat is refused still resolves a credential", async () => {
     const seats = {
         refused: { at: Date.now(), reason: "organization has disabled Claude Code" },
@@ -188,15 +177,14 @@ test("a sandbox whose every seat is refused still resolves a credential", async 
 });
 
 test("a spent allowance does not bench an account: the meters already describe that", async () => {
-    // A `limit` refusal is the one kind a later reading CAN contradict, and the windows above already rank the
-    // two accounts. Benching on it as well would retire an account for a window that has since reopened.
+    // A `limit` refusal is the one kind a later reading can contradict; benching on it too would retire an account for
+    // a window that's since reopened.
     const result = await resolved({ at: Date.now(), kind: "limit", message: "usage limit reached", account: "refused" });
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
 test("a named account is still the account that runs, refused or not", async () => {
-    // The composer's own pick, which is a person choosing with the refusal on screen beside it: this gate is
-    // for the callers that name nobody.
+    // A composer's own pick is made with the refusal visible; this gate is only for callers that name nobody.
     const result = await resolved(
         { at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" },
         "refused",
@@ -204,14 +192,10 @@ test("a named account is still the account that runs, refused or not", async () 
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
-/* A MINTED PROVIDER'S TURN, on the wire, for every minted provider in the spec table.
- *
- * This is the assertion the conformance tests cannot make: a spec row that names the general Z.ai entitlement
- * instead of the Coding Plan one, or a base URL carrying a version segment the harness then doubles, is
- * type-correct and passes every table walk. What it is not is a turn that reaches a model. */
+// The assertion the spec-table conformance tests can't make: a wrong entitlement or a doubled version segment in a base
+// URL is type-correct and passes every table walk without ever reaching a model.
 describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider turn", ({ provider }) => {
-    // The estate a sign-in that offered no choice would have used, which is what a single-estate provider always
-    // mints on and what the default connect row sends.
+    // The estate a choice-less sign-in would use: what a single-estate provider always mints.
     const defaultVariant = mintedVariant(provider)!;
     const withKey = async (variant: string = defaultVariant.id) => {
         const sandbox = services({});
@@ -225,11 +209,10 @@ describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider t
         const endpoint = result.ok ? result.credentials.endpoint : undefined;
         expect(endpoint?.baseUrl).toBe(defaultVariant.anthropicBase);
         expect(endpoint?.authToken).toBe("vendor-key");
-        // The harness appends `/v1/messages` itself, so a base that already carried one would be a 404 the
-        // user only meets mid-conversation.
+        // The harness appends `/v1/messages` itself; a base URL that already has one 404s mid-conversation.
         expect(endpoint?.baseUrl).not.toMatch(/\/v\d+$/);
-        // The vendor is named so a 429 from these hosts does not report itself as Claude's; no `limit`,
-        // because neither publishes a quota surface a stored key can read.
+        // Vendor is named so a 429 here doesn't report as Claude's; no `limit`, since neither vendor publishes a quota
+        // surface a stored key can read.
         expect(result.ok && result.credentials.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
         expect(result.ok && result.credentials.allowance?.limit).toBeUndefined();
     });
@@ -249,17 +232,15 @@ describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider t
         expect(result.ok && result.credentials.endpoint?.model).toBe(catalog.default);
     });
 
-    /* THE ACCOUNT'S OWN ESTATE IS WHAT GETS DIALLED, one case per estate the provider sells through, which is
-     * the assertion Z.ai's two hosts exist for: a mainland key sent to api.z.ai is simply unknown there, and the
-     * refusal reads like a bad credential rather than like the wrong host. */
+    // One case per estate the provider sells through: Z.ai's two hosts exist because a mainland key sent to api.z.ai
+    // reads as a bad credential, not as the wrong host.
     test.each((mintedVariants(provider) ?? []).map((variant) => ({ variant })))("on $variant.id dials that estate's host", async ({ variant }) => {
         const result = await resolveHarnessCredentials(await withKey(variant.id), { agent: provider });
         expect(result.ok && result.credentials.endpoint?.baseUrl).toBe(variant.anthropicBase);
     });
 
-    /* An account stored against an estate the provider no longer sells through. Refused rather than defaulted:
-     * silently dialling the default host would spend the turn to arrive at an authentication error about a key
-     * that is perfectly good, and send the user looking at their credential instead of at their connection. */
+    // Refused rather than silently defaulted to another host: that would spend the turn on an auth error about a
+    // perfectly good key, pointing the user at their credential instead of their connection.
     test("an account from an estate this sandbox no longer offers is refused rather than defaulted", async () => {
         const result = await resolveHarnessCredentials(await withKey("an-estate-that-was-retired"), { agent: provider });
         expect(result.ok).toBe(false);

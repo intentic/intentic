@@ -6,9 +6,8 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { defaultBranchOf, publishFile } from "./publish-file.js";
 
-/* THE ONE-CLICK CLAIM, AGAINST REAL GIT. Everything pinned here is something a creator would experience as the
- * button lying to them: a commit that swept up work they were staging, a push to a branch the proof can never
- * be read from, a second press that fails because the first one worked. */
+// Against real git: what's pinned is what a creator would experience as the button lying (a swept-up staged file, an
+// unreadable push, a failing second press).
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -60,12 +59,10 @@ test("writes, commits and pushes the file to the default branch", async () => {
     const result = await publish(clone);
 
     expect(result).toMatchObject({ ok: true, wrote: true, committed: true, pushed: true, branch: "main", defaultBranch: "main" });
-    // The proof is on the remote's default branch: the only place a public HEAD read would find it.
     expect(await sh(origin, "show", "main:.intentic-claim")).toBe("intentic-claim-abc");
 });
 
-/* THE MOST IMPORTANT ONE. This runs beside a creator's own work, and a button that quietly commits whatever
- * they had staged would be the single worst thing on the screen. `commit --only` is what keeps it to one path. */
+// Runs beside a creator's own work; `commit --only` is what keeps the commit to this one path.
 test("commits that file alone, leaving staged and unstaged work exactly where it was", async () => {
     const { clone } = await cloned();
     await writeFile(join(clone, "staged.txt"), "mine\n");
@@ -74,16 +71,13 @@ test("commits that file alone, leaving staged and unstaged work exactly where it
 
     expect(await publish(clone)).toMatchObject({ ok: true });
 
-    // Still staged, still not committed.
     expect(await sh(clone, "diff", "--cached", "--name-only")).toBe("staged.txt");
-    // Still an unstaged edit.
     expect(await sh(clone, "diff", "--name-only")).toBe("a.txt");
-    // And the commit that WAS made touched one path.
     expect(await sh(clone, "show", "--name-only", "--format=", "HEAD")).toBe(".intentic-claim");
 });
 
-/* A push to a side branch produces a real commit that can never verify, and leaves the creator a file to clean
- * up. Refused before anything is written, which is why `wrote` is false here. */
+// Refused before anything is written (hence `wrote: false`): a push from a side branch would leave an unverifiable
+// commit.
 test("refuses to publish from a branch that is not the default one, without touching the worktree", async () => {
     const { clone } = await cloned();
     await sh(clone, "checkout", "-q", "-b", "fix/thing");
@@ -96,7 +90,6 @@ test("refuses to publish from a branch that is not the default one, without touc
     expect(await sh(clone, "status", "--porcelain")).toBe("");
 });
 
-// Pressing it twice is the ordinary thing a person does when they are not sure the first press worked.
 test("a second run is a no-op that still reports success", async () => {
     const { clone } = await cloned();
     await publish(clone);
@@ -105,11 +98,9 @@ test("a second run is a no-op that still reports success", async () => {
     const again = await publish(clone);
 
     expect(again).toMatchObject({ ok: true, committed: false, pushed: true });
-    // No empty commit piled on top.
     expect(await sh(clone, "rev-parse", "HEAD")).toBe(before);
 });
 
-// A file that is there but carries somebody else's line has to be replaced, not left alone.
 test("replaces a claim file that carries different content", async () => {
     const { clone, origin } = await cloned();
     await publish(clone, ".intentic-claim", "someone-elses-line\n");
@@ -134,8 +125,8 @@ test("a repo with no remote is refused rather than half-published", async () => 
     expect(await sh(dir, "status", "--porcelain")).toBe("");
 });
 
-/* Mid-merge is checked FIRST and refused: git rejects a partial commit while MERGE_HEAD exists, and it rejects
- * it only after staging, so attempting it would cost the creator a moved index for nothing. */
+// Checked before staging: git only rejects a partial commit mid-merge after staging, which would cost a moved index for
+// nothing.
 test("refuses while the repo is part-way through a merge", async () => {
     const { clone } = await cloned();
     await sh(clone, "checkout", "-q", "-b", "side");
@@ -156,7 +147,7 @@ test("reads the default branch from the clone, and from the remote when the clon
     const { clone } = await cloned();
     expect(await defaultBranchOf(clone, "origin")).toBe("main");
 
-    // A repo that was pushed rather than cloned has no `origin/HEAD` ref; the remote is asked instead.
+    // A repo pushed rather than cloned has no `origin/HEAD` ref; the remote is asked instead.
     await sh(clone, "remote", "set-head", "origin", "--delete");
     expect(await defaultBranchOf(clone, "origin")).toBe("main");
 });

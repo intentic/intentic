@@ -1,28 +1,13 @@
-/* WHAT EVERY PROVIDER'S MODEL DISCOVERY DOES THE SAME WAY.
- *
- * Four of the five providers ask an OpenAI-compatible `/v1/models` (or the bundled translator's re-serving of
- * one) what this account can drive, and each had written the same four helpers beside its own filters: a
- * bearer header, a GET that answers `undefined` rather than throwing, the `{ data: [{ id }] }` unwrap, and a
- * label derived from the id. Three copies of the humanizer had already drifted, one uppercasing `gpt` and two
- * not, which is a difference a user sees in the picker.
- *
- * What is NOT here is the part that is genuinely per-provider: which ids count as chat models (each vendor
- * ships a different set of image/audio/embedding endpoints alongside them), and which endpoints to ask in
- * what order. Those stay next to the provider that knows them.
- */
+// Shared helpers for the OpenAI-compatible `/v1/models` shape four of the five providers use: a bearer header, a GET
+// that returns undefined instead of throwing, the `{ data: [{ id }] }` unwrap, and id-to-label humanizing. Per-provider
+// concerns (which ids are chat models, which endpoints in what order) stay with the provider.
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 
 // Ids whose case is the vendor's, not English's. Title-casing these reads as a typo in a picker row.
 const ACRONYMS = new Set(["gpt", "oss", "api"]);
 
-/* A raw model id → a display label: `gpt-5-codex` → "GPT 5 Codex", `grok-4-fast` → "Grok 4 Fast". Dotted and
- * dated segments pass through untouched (`grok-4.20-0309-reasoning` → "Grok 4.20 0309 Reasoning").
- *
- * Used only where the vendor publishes no name of its own. A provider that does publish one (Cursor, and the
- * translator's Gemini channel) uses it, because no rule over an id can recover "Gemini 3.1 Pro (High)" from
- * `gemini-pro-agent`, and inventing a plausible-looking name for a model that does not exist under it is
- * worse than showing the id.
- */
+// Raw model id → display label (`gpt-5-codex` → "GPT 5 Codex"); dotted/dated segments pass through untouched. Used only
+// when the vendor publishes no name of its own.
 export const humanizeModelId = (id: string): string =>
     id
         .split("-")
@@ -34,15 +19,8 @@ export const humanizeModelId = (id: string): string =>
         })
         .join(" ");
 
-/* Bare ids → the wire shape ({ models, default }), for the providers whose discovery answers nothing but ids.
- * Neither xAI's REST catalog nor the Codex translator's `/v1/models` publishes a ranking (see model-order.ts),
- * so the app imposes the order, which is what makes `default` the frontier newest rather than whichever id the
- * endpoint happened to name first. Unranked, so same-tier same-release siblings break their tie on the id: an
- * endpoint reorders its rows between requests, and this catalog's head is the model a fresh conversation opens
- * on. `ids` must be non-empty, which every caller's ladder guarantees, so `default` is always defined.
- *
- * The providers that get more than ids back (Cursor's names, Gemini's, the minted seeds) order their own: the
- * shape they carry is richer than this, and which field to sort on is theirs to know. */
+// Bare ids → the wire shape, for providers whose discovery returns nothing but ids. Neither publishes a ranking, so the
+// app orders them (compareUnrankedModelIds) and takes the head as `default`; callers with richer data order their own.
 export const idCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
     const ordered = ids.toSorted(compareUnrankedModelIds);
     return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
@@ -50,9 +28,8 @@ export const idCatalog = (ids: readonly string[]): { models: { id: string; label
 
 export const authHeader = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
-// GET a JSON endpoint with a bearer token, answering `undefined` for every way it can fail to produce a body
-// (unreachable, non-2xx, not JSON). Discovery is a ladder: a rung that cannot answer must let the caller fall
-// to the next one, so nothing here throws.
+// GETs a JSON endpoint, returning undefined for every way it can fail (unreachable, non-2xx, not JSON) rather than
+// throwing, so a ladder rung that can't answer lets the caller fall to the next one.
 export const getJson = async <T>(url: string, token: string, fetchImpl: typeof fetch): Promise<T | undefined> => {
     const response = await fetchImpl(url, { headers: authHeader(token) }).catch(() => undefined);
     if (response === undefined || !response.ok) {
@@ -61,29 +38,23 @@ export const getJson = async <T>(url: string, token: string, fetchImpl: typeof f
     return (await response.json().catch(() => undefined)) as T | undefined;
 };
 
-// One row of an OpenAI-compatible model list. `owner` is `owned_by`, which is the only field separating one
-// vendor's models from another's when a multiplexing translator serves several subscriptions on one endpoint.
+// One row of an OpenAI-compatible model list. `owner` (`owned_by`) is the only field separating vendors when a
+// multiplexing translator serves several subscriptions on one endpoint.
 export interface ListedModel {
     readonly id: string;
     readonly owner?: string;
 }
 
-// An OpenAI-compatible model list, unwrapped. `data` is the standard key; xAI's native endpoint says `models`
-// instead, and answering both here is cheaper than a second helper. [] on any failure.
+// Unwraps an OpenAI-compatible model list; `data` is the standard key, xAI's native endpoint says `models` instead,
+// handled here rather than in a second helper. [] on any failure.
 export const listModels = async (url: string, token: string, fetchImpl: typeof fetch): Promise<readonly ListedModel[]> => {
     const json = await getJson<{ data?: { id: string; owned_by?: string }[]; models?: { id: string; owned_by?: string }[] }>(url, token, fetchImpl);
     return (json?.data ?? json?.models ?? []).map((model) => ({ id: model.id, ...(model.owned_by === undefined ? {} : { owner: model.owned_by }) }));
 };
 
-/* The ids a vendor names when it rejects a model: "Model not found … Did you mean: a, b, c?". This is the
- * authoritative catalog for an account whose token cannot enumerate the REST endpoints, so it is worth
- * reading out of an error message.
- *
- * ONLY the part after "did you mean" is scanned, so the rejected id, which appears BEFORE it and is by
- * definition invalid, is never mistaken for a valid one. `pattern` is the caller's because the risk here is
- * over-matching the prose around the ids ("or", "instead"): a vendor whose ids all share a prefix should say
- * so rather than take every word in the clause.
- */
+// Ids a vendor names in "Model not found … Did you mean: a, b, c?": the only catalog available when a token can't
+// enumerate the REST endpoint. Only text after "did you mean" is scanned, so the rejected id itself is never mistaken
+// for a valid one.
 export const suggestedModels = (message: string, pattern: RegExp): string[] => {
     const hint = message.split(/did you mean:?/i)[1];
     if (hint === undefined) {

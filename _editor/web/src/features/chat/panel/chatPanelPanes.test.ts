@@ -1,19 +1,6 @@
 // @vitest-environment jsdom
-//
-// WHAT THE PANEL PUTS ON SCREEN IS THE CHAT THAT WAS PICKED: asserted through the real panel and read back
-// off the DOM, because the store has never been the half that was wrong. `chat panes` in useChat.test.ts
-// already pins the pane set; every failure this file is about had a correct pane set behind it and the wrong
-// columns in front of it.
-//
-// The report it comes from is "the chat window is stuck on one session": clicking down the rail or the board
-// moves the highlight and leaves the transcript where it was, for the rest of the session, until the window is
-// reloaded. Two independent ways to get there, both here:
-//   · A RUN THAT WAS NEVER LET GO OF. Following a workflow moves the panes by itself on every ledger push, and
-//     the rule that ends it (the reader picking a chat outside the run) used to be skipped whenever the
-//     ledger had no reading for the run. The ledger is emptied and refetched on a daemon rebuild, so the
-//     release was dropped on exactly the beat it mattered and the run went on reseating the panel forever.
-//   · A COLUMN CLAIMED FOR A CHAT THAT NEVER ARRIVED, which used to be drawn as a second copy of the focused
-//     chat: two columns under one key, which is a duplicate key in a keyed list.
+// Pins what the panel draws against the real DOM, not the store: a correctly picked chat, a run that releases cleanly,
+// and no column drawn for a chat that never arrived.
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -21,8 +8,8 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 import { chatRun, showRun } from "../run/chatRun";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "./useChat-reveal";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// The store half of "New agent", as summons applies it (agentActions.startAgent); the fixture these suites use to open
+// extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -35,9 +22,8 @@ import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat surface needs (see startAgent.test.ts): useDevice reads matchMedia at
-// module scope (matches:false keeps the device DESKTOP, the only form factor with panes), environment.ts reads
-// window.env, and jsdom implements neither observer nor scrollIntoView.
+// useDevice reads matchMedia at module load (matches:false keeps it desktop, the only form factor with panes); jsdom
+// implements neither IntersectionObserver nor scrollIntoView.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -47,12 +33,10 @@ vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
-// The workflow ledger, as the panel sees it: a ref this file drives, because the whole subject is what the
-// panel does while it is EMPTY and what it does when the reading comes back.
+// The workflow ledger as the panel sees it, driven directly by these tests.
 const runs = ref<WorkflowRun[]>([]);
-/* The fork line at the head of a transcript asks the fleet where this chat came from, which would otherwise
- * start the whole roster (queries, polling, the lot) inside a test about which chat the PANEL shows. An empty
- * roster is the honest answer for these fixtures anyway: none of them is a fork. */
+// An empty roster avoids driving the real fleet queries in a test about which chat the panel shows; none of these
+// fixtures fork.
 vi.mock(`../../agents/fleet/useAgents`, async () => {
     const { computed } = await import(`vue`);
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
@@ -82,12 +66,11 @@ const mountPanel = async (): Promise<void> => {
     await settle();
 };
 
-// Which chats the panel drew, in column order. Each conversation carries one message naming itself, so the
-// columns read out as the chats they are showing, which is the question, and the only one the DOM answers.
+// Chats the panel drew, in column order, read from each conversation's self-naming message.
 const onScreen = (): string[] =>
     [...document.querySelectorAll(`.chat-pane`)].map((pane) => /shows-[a-z]+/.exec(pane.textContent ?? ``)?.[0] ?? `<empty>`);
 
-// A conversation the panel can be asked to show, named so the DOM says which one it is.
+// A conversation the panel can show, named so the DOM says which one is on screen.
 const namedChat = (name: string, id?: string) => {
     const chat = useChat();
     const conversation = id === undefined ? newChat() : chat.active.value;
@@ -95,7 +78,7 @@ const namedChat = (name: string, id?: string) => {
     return conversation;
 };
 
-// A run with one step, on one conversation. `running` is the state that makes the panel follow it.
+// A one-step run on one conversation; `running` is what makes the panel follow it.
 const runWithStep = (state: "running" | "done", conversationId: string): WorkflowRun =>
     ({
         runId: `run-1`,
@@ -111,8 +94,7 @@ beforeEach(async () => {
     resetChat();
     chatRun.value = undefined;
     runs.value = [];
-    // Wide enough that the docked panel draws its whole pane set: the shape in which a claimed column is
-    // visible at all.
+    // Wide enough for the docked panel to draw its whole pane set.
     useLayout().setChatWidth(2000);
     await nextTick();
 });
@@ -122,10 +104,7 @@ afterEach(() => {
     app = undefined;
 });
 
-/* THE COLUMN MAY NOT BE DRAGGED NARROWER THAN THE PANE IN IT. The two floors were different numbers: 288 for
- * the column, 352 for the pane, so the bottom 64px of the drag scrolled the panel sideways instead of
- * narrowing it: the composer's right-hand controls and the send button sat past the edge behind a horizontal
- * scrollbar. jsdom lays nothing out, so what is pinned here is the arithmetic that produced it. */
+// jsdom does not lay anything out; this pins the floor arithmetic (MIN_PANE_PX), not an actual measured collision.
 it(`never lets the column stop narrower than one pane`, () => {
     const layout = useLayout();
     layout.setChatWidth(0);
@@ -146,10 +125,8 @@ it(`draws the chat that was picked`, async () => {
     expect(onScreen()).toEqual([`shows-other`]);
 });
 
-/* THE LATCH. The panel follows the run, the ledger blinks (a daemon rebuild resets the query, an answer has
- * not landed), and the reader picks their own chat during that beat. The pick has to end the follow even
- * though nothing can be looked up about the run: otherwise the next push drags them back, and the one after
- * that, and the reader is left clicking at a window that will not stay where it is put. */
+// The pick must end the follow even though nothing can be looked up about the run yet, since the ledger just went empty
+// mid-push.
 it(`lets go of a run picked away from while the ledger has no reading for it`, async () => {
     const chat = useChat();
     const mine = namedChat(`mine`, chat.activeId.value);
@@ -158,16 +135,15 @@ it(`lets go of a run picked away from while the ledger has no reading for it`, a
     runs.value = [runWithStep(`running`, `step-1`)];
     showRun(`run-1`, `live`);
     await settle();
-    // The panel is following: the step's own conversation took the column.
     expect(chat.panes.value).toEqual([`step-1`]);
 
-    runs.value = []; // the ledger blinks
+    runs.value = []; // the ledger blinks (goes empty)
     await settle();
-    chat.setActive(mine.conversationId); // ...and the reader picks their own chat during it
+    chat.setActive(mine.conversationId); // the reader picks their own chat during the blink
     await settle();
     expect(onScreen()).toEqual([`shows-mine`]);
 
-    runs.value = [runWithStep(`running`, `step-1`)]; // the ledger comes back, the run still going
+    runs.value = [runWithStep(`running`, `step-1`)]; // the ledger returns, run still going
 
     await settle();
 
@@ -175,8 +151,6 @@ it(`lets go of a run picked away from while the ledger has no reading for it`, a
     expect(onScreen()).toEqual([`shows-mine`]);
 });
 
-// The same pick with the ledger in hand: the case that always worked, kept so the release cannot be traded
-// for the latch a second time.
 it(`lets go of a run picked away from while the ledger holds it`, async () => {
     const chat = useChat();
     const mine = namedChat(`mine`, chat.activeId.value);
@@ -195,9 +169,6 @@ it(`lets go of a run picked away from while the ledger holds it`, async () => {
     expect(onScreen()).toEqual([`shows-mine`]);
 });
 
-/* A run drives the panes wherever the panel is, so it says so wherever it does: the × is the only thing that
- * ends a follow the reader did not ask to keep, and a docked panel used to draw neither it nor the bar it
- * lives in. */
 it(`names the run that is driving it, docked, with the way out`, async () => {
     namedChat(`mine`, useChat().activeId.value);
     await mountPanel();
@@ -210,9 +181,7 @@ it(`names the run that is driving it, docked, with the way out`, async () => {
     expect(document.body.textContent).toContain(`Six phases`);
 });
 
-/* A COLUMN CLAIMED FOR A CHAT THAT NEVER ARRIVES. openBeside reserves the column before the chat exists (the
- * board's cards open second), so between the claim and the open the id names nothing, and the panel used to
- * fill that column with the focused chat, drawing it twice under one key. */
+// openBeside reserves the column before the chat exists; between the claim and the open, the id names nothing yet.
 it(`draws no column for a chat that never arrived`, async () => {
     const chat = useChat();
     namedChat(`mine`, chat.activeId.value);

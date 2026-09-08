@@ -4,18 +4,9 @@ import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-f
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
-/* THE TURN THE VISITOR WATCHES, a recorded `AgentEvent` sequence played back on a timer through the daemon's
- * own fold.
- *
- * `/agent/attach` is an event iterator over AttachFrame: the run's rows on the head, then every change to them
- * and every fact about the turn as each lands. The daemon makes those rows out of the frames its agents
- * produce with one function (sandbox-contract's transcript-fold.ts), and this demo runs the same function
- * over a script of those frames, so the streaming transcript is the real chat panel reacting to the real
- * protocol, and the only fiction is where the frames came from.
- *
- * The two INTERACTIVE frames are why this is a demo rather than a video. A `plan` or `question` frame parks the
- * turn until `POST /agent/reply` resolves its requestId, exactly as the daemon parks a real one, so the script
- * stops, the card waits, and the visitor's click is what starts it moving again. */
+// `/agent/attach`: rows on the head, then every patch and fact as it lands, folded by the same function the daemon uses
+// (transcript-fold.ts) over a scripted `AgentEvent` sequence instead of a real agent. `plan` and `question` frames park
+// the turn until `POST /agent/reply` resolves, same as the daemon.
 
 /** One recorded beat: wait, then emit. `park` holds the script until the app replies to that requestId. */
 interface Beat {
@@ -38,9 +29,7 @@ const todos = (done: number, running: number): AgentEvent => ({
     ),
 });
 
-/* The featured run: the Stripe-checkout agent, mid-turn. It opens on a plan card (so the very first thing the
- * visitor is asked to do is approve a plan), works through four todos, and ends on a question, the two moments
- * that prove an agent here is co-piloted rather than watched. */
+// Featured run: opens on a plan card, works through four todos, ends on a question.
 const FEATURED: Beat[] = [
     { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
     { after: 200, event: { kind: `mode`, mode: `plan` } },
@@ -194,8 +183,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
     { after: 200, event: { kind: `done` } },
 ];
 
-/* The reply to anything the VISITOR sends. Short on purpose: the point of the composer in a demo is that it
- * answers at all, and a long canned monologue is the moment the illusion turns into an advert. */
+// Reply to anything the visitor sends; kept short, since a long canned monologue would read as an advert.
 const replyScript = (prompt: string): Beat[] => [
     { after: 250, event: { kind: `init`, model: `claude-sonnet-5` } },
     {
@@ -237,22 +225,15 @@ const replyScript = (prompt: string): Beat[] => [
     { after: 200, event: { kind: `done` } },
 ];
 
-/* One playing run.
- *
- * It holds ROWS, folded from the script's frames as they play, because that is the contract `/agent/attach` has
- * with the client: the head carries the rows so far, and everything after it is a change to them or a fact about
- * the turn. Any client can therefore join a turn already in progress, which in the demo is not an edge case but
- * the common one: a reload, a second tab, or the panel remounting when the visitor navigates.
- *
- * Parks are promises the reply route resolves, so the script's own `await` is the same suspension the daemon's
- * turn goes through when a card is raised. */
+// One playing run: holds rows folded live, so any client (reload, second tab, remount) can join mid-turn via the head +
+// patches/facts contract. Parks are promises the reply route resolves, same suspension the daemon uses.
 export interface Run {
     readonly id: string;
     readonly conversationId: string;
     readonly prompt: string;
     readonly startedAt: number;
     resolve: (requestId: string, reply: AgentReply) => void;
-    /** Attach one consumer: the rows so far, then follow live until the run ends or the consumer goes away. */
+    /** Attach a consumer: rows so far, then live until the run ends or it goes away. */
     attach: (sink: StreamSink) => void;
     stop: () => void;
 }
@@ -273,8 +254,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     const parks = new Map<string, (reply: AgentReply | undefined) => void>();
     const signal = { stopped: false };
     const fold = new TranscriptFold(prompt.length > 0 ? [userRow(prompt, now, [])] : []);
-    // The facts so far, replayed to every attach, exactly as the daemon replays them: a window joining late still
-    // has to learn which model the turn runs on and what it has spent.
+    // Facts replayed to every attach, so a late-joining window still learns model and spend.
     const facts: Entry[] = [];
     let seq = 0;
     const sinks = new Set<StreamSink>();
@@ -316,8 +296,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
         sinks.clear();
     };
 
-    // Runs the script ONCE, from the moment the run is created, not per attach, or every consumer would start
-    // its own copy of the same turn.
+    // Runs once, from creation, not per attach, or each consumer would replay its own copy.
     void (async () => {
         for (const beat of beats) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- a recorded stream is sequential by definition
@@ -362,7 +341,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
             finish(`stopped`);
         },
         attach: (sink) => {
-            // The head's rows are the run's story so far; the facts replay behind it, then the live entries.
+            // Head carries the story so far; facts replay next, then live entries.
             const rows: TranscriptRow[] = structuredClone(fold.rows);
             sink.emit({ kind: `attached`, run: id, startedAt: now, seq, rows });
             for (const fact of facts) {

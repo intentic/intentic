@@ -10,6 +10,9 @@
   places, extract one source of truth and make every consumer import it (or execute what it emits).
 - Guard invariants by discovery, not enumeration – a test that recognizes violations by their SHAPE anywhere
   in the repo; a hardcoded file list repeats the miss it exists to prevent.
+- Comments state what the code cannot – an invariant, a unit, a rule that would tempt a "fix". One line for a
+  member or statement, two for a function or type, three for a module header. No history, no restating the
+  code, no rhetoric; the reasoning behind a decision goes in `docs/design/`, not in the file.
 
 ## Documentation
 

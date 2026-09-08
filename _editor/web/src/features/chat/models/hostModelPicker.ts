@@ -32,11 +32,9 @@ import { modelLabelFor } from "../accounts/providerCatalog";
 export interface ModelChoice {
     readonly provider: AgentProvider;
     readonly model: string;
-    // What the app calls this pair (modelLabelFor), so a caller's own trigger can name the choice without
-    // holding a catalog of its own.
+    // What the app calls this pair; lets a caller's trigger name the choice without its own catalog.
     readonly label: string;
-    // The pins the footer adds to the list's own answer, absent unless the caller is holding one. See
-    // PickedModel (extension-api) for why an unattended run is the surface that needs them.
+    // The pins the footer adds to the list's answer; absent unless the caller already holds one.
     readonly account?: string;
     readonly harness?: AgentHarness;
     /* HOW THE MODEL ITSELF IS RUN: the tier it thinks at, whether it reasons first, and whether the work is
@@ -83,8 +81,7 @@ interface ModelRequest extends StagedPick {
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 
-// The open request, or undefined. HostModelPicker mounts the picker body from this, so the body is created and
-// destroyed per open, which is what resets the search query and refreshes the catalogs (see ModelPicker).
+// The open request, or undefined; the body mounts from this, so it is fresh (search, catalogs) on every open.
 export const modelRequest = shallowRef<ModelRequest | undefined>(undefined);
 
 /* EVERY ROW IN THE PANEL WRITES HERE, the model list included. Staging rather than settling is what lets the

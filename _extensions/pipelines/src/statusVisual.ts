@@ -1,10 +1,9 @@
 import type { IconName, StatusVariant } from "@intentic/extension-ui";
 import type { PipelineStatus } from "@intentic/sandbox-contract";
 
-/* Every way a pipeline status is drawn, in one table. Runs, stages and jobs share the status enum, so they
- * share these tones, a failed job's card, its stage circle and its run's edge stripe are the same red by
- * construction rather than by three matching ternary chains. Class strings are spelled out in full because
- * Tailwind scans source text: `text-${tone}` would never reach the stylesheet. */
+// Every way a pipeline status is drawn, in one table shared by runs, stages and jobs, so the same status is always the
+// same tone. Classes are spelled out in full since Tailwind scans source text; `text-${tone}` would never reach the
+// stylesheet.
 
 export interface StatusTone {
     readonly icon: IconName;
@@ -25,13 +24,8 @@ export interface StatusTone {
 }
 
 export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
-    /* WAITING FOR A RUNNER, and drawn as waiting: a static clock, muted ink, a dashed ring. It used to be the
-     * `running` tone, spinner and all, which is the one reading a queued pipeline must never get, a board that
-     * animates over work nothing is doing says "nearly there" for as long as the runner stays offline.
-     *
-     * Dashed rather than a fourth colour. Colour on this board already means an outcome, and queued is the
-     * absence of one; the dash is the standard "not filled in yet" and separates it at a glance from `canceled`
-     * and `skipped`, which share its muted palette but are over. */
+    // Static clock, muted, dashed ring, not the `running` spinner: a spinning wait misleadingly says work is happening.
+    // Dashed rather than a new colour, since colour here always means an outcome and queued has none yet.
     queued: {
         icon: `clock`,
         spin: false,
@@ -40,9 +34,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
         text: `text-muted`,
         circle: `border-dashed border-muted/60 bg-transparent text-muted`,
         tint: `bg-transparent`,
-        // At FULL opacity, unlike canceled and skipped: a stripe is how this board is scanned, and the /40 those
-        // two carry disappears into the canvas. They can afford it, they are over; a run somebody is waiting on
-        // has to be findable down the left edge.
+        // Full opacity, unlike canceled/skipped's /40: a queued run must stay findable down the left edge.
         rowBorder: `border-l-muted`,
         bar: `bg-muted`,
     },
@@ -103,9 +95,8 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     },
 };
 
-// A run's trigger, humanized. Push is every repo's overwhelming default, so it earns no chip, only the
-// unusual origins are worth a reader's attention. Unknown vendor words pass through as-is rather than being
-// dropped: a trigger we haven't seen is exactly the one worth showing.
+// Trigger label, humanized; `push` (the overwhelming default) gets no chip. Unknown vendor words pass through as-is
+// rather than being dropped.
 const TRIGGER_LABEL: Record<string, string> = {
     schedule: `Scheduled`,
     merge_request_event: `Merge request`,

@@ -1,12 +1,10 @@
 import { type AccessEntry, AccessEntrySchema, groupOf, type ResourceView, type WorkspaceState } from "@intentic/api-contract";
 
-/* Shapes the infrastructure read-model from the sandbox's desired-state graph (desired-state.json, the
- * compiled deploy.config.ts) joined with the last reconcile result (status.json), read directly from the
- * daemon's git file routes and projected locally. Shared by the infrastructure + live-status extensions
- * (ported from the retired infra operator panel). */
+// Infra read-model built from the desired-state graph (desired-state.json) joined with the last reconcile result
+// (status.json), read via the daemon's git file routes. Shared by the infrastructure and live-status extensions.
 
-// The slice of @intentic/graph's DesiredStateGraph this projection reads, inlined so the web app needs no
-// dependency on the graph package (the compiled desired-state.json matches this shape).
+// Slice of @intentic/graph's DesiredStateGraph this projection reads, inlined so the web app needs no dependency on the
+// graph package.
 interface ResourceNode {
     readonly id: string;
     readonly type: string;
@@ -48,8 +46,8 @@ const urlOf = (inputs: Record<string, unknown>): string | undefined => {
     return typeof domain === `string` && domain !== `` ? `https://${domain}` : undefined;
 };
 
-// Build the render model from the parsed graph + status (either may be absent / not resolved yet → empty
-// state, which the UI shows as a "provision your infrastructure" prompt).
+// Builds the render model from the parsed graph and status; either absent renders empty state (the UI's
+// provision-your-infrastructure prompt).
 export const projectWorkspaceState = (graphRaw: unknown, statusRaw: unknown): WorkspaceState => {
     const graph = graphRaw as DesiredStateGraph | undefined;
     if (graph === undefined || graph.version !== 1 || typeof graph.resources !== `object`) {

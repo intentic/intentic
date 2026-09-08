@@ -1,19 +1,9 @@
 import type { IssueClient } from "./client.js";
 import { dialogStyles } from "./styles.js";
 
-/* THE BOX A PERSON TYPES INTO, and the only part of this SDK that renders anything.
- *
- * OPTIONAL BY CONSTRUCTION. Crash capture never touches it, and a host with its own design system calls
- * `report()` from their own form instead. What this exists for is the majority case: somebody who wants a
- * "report a problem" box on their site this afternoon and should not have to build one.
- *
- * NO LAUNCHER BUTTON, which is the deliberate difference from the Front Desk widget. A floating bubble is a
- * standing claim on a corner of somebody's page, and a bug reporter has not earned one: it is wanted when a
- * person is already annoyed, from the site's own "something went wrong" link. So the host opens it, from
- * whatever they already have, with one call.
- *
- * SHADOW DOM, for the widget's reason: the host page's stylesheet cannot reach in, and `all: initial` in
- * styles.ts stops inherited properties reaching in either. */
+// The only part of this SDK that renders anything, and optional: crash capture never touches it, and a host can call
+// `report()` directly from its own UI instead. No launcher button, unlike the Front Desk widget: the host opens it from
+// its own link. Shadow DOM keeps the host page's styles out and this widget's styles from leaking in.
 
 const TAG = "intentic-issue-dialog";
 
@@ -64,8 +54,7 @@ export class IssueDialogElement extends HTMLElement {
         const sendButton = this.#pick<HTMLButtonElement>(".send");
 
         this.#pick<HTMLButtonElement>(".cancel")?.addEventListener("click", () => this.#close());
-        // Escape closes, the one keyboard affordance a modal cannot do without. Bound on the element rather than
-        // the document so a page with its own key handling is not fighting us for the key.
+        // Escape closes; bound on the element, not the document, so the page's own key handling doesn't fight it.
         this.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
                 this.#close();
@@ -80,20 +69,15 @@ export class IssueDialogElement extends HTMLElement {
                 what?.focus();
                 return;
             }
-            /* Disabled for the whole send, because the anti-bot puzzle takes about a second and an enabled
-             * button during it is a double-send. The status line says what is happening, since a second of
-             * nothing on a button somebody just pressed reads as broken. */
+            // Disabled for the whole send: the anti-bot puzzle takes about a second, and the status line says why.
             sendButton.disabled = true;
             if (status !== undefined && status !== null) {
                 status.textContent = client.config.antiBot === "pow" ? "Checking…" : "Sending…";
             }
             void client
                 .report({ description, ...(email?.value.trim() ? { email: email.value.trim() } : {}) })
-                /* The SAME wording whether it landed or not, and the reason is worth stating: `report` resolves
-                 * to undefined for a refusal, an offline browser or a sandbox that is asleep, and none of those
-                 * is something the person typing can do anything about. Telling them their report failed would
-                 * ask them to retype it into the same broken pipe. The site owner learns about it from the
-                 * install panel, which is where that news belongs. */
+                // Same thanks either way: a resolved failure isn't the person's to fix; the owner sees it in the
+                // install panel.
                 .then(() => this.#thanks(client.config.thanks));
         });
     }
@@ -111,15 +95,13 @@ export class IssueDialogElement extends HTMLElement {
     }
 }
 
-/* Everything interpolated above is either the owner's own configured text or something a person just typed into
- * this box. Neither is trusted with markup: the config travels through a daemon a site owner controls, and the
- * typed value is a stranger's, so both go through here. Attribute-safe as well as text-safe, since `title` is
- * interpolated into aria-label. */
+// Neither the config text nor what a person typed is trusted with markup; escaped for both text and attributes, since
+// `title` lands in aria-label too.
 const escaped = (value: string): string =>
     value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 
-// Opens the dialog, defining the element on first use. Idempotent: a second call while one is open focuses the
-// one that is there rather than stacking a second modal on top of it.
+// Opens the dialog, defining the element on first use; idempotent, so a second call focuses the existing dialog instead
+// of stacking another one.
 export const openDialog = (client: IssueClient): void => {
     if (customElements.get(TAG) === undefined) {
         customElements.define(TAG, IssueDialogElement);
@@ -130,7 +112,7 @@ export const openDialog = (client: IssueClient): void => {
         return;
     }
     const element = document.createElement(TAG) as IssueDialogElement;
-    // Focusable so the Escape handler above has somewhere to be heard from.
+    // Focusable, so the Escape handler above has somewhere to be heard from.
     element.tabIndex = -1;
     document.body.append(element);
     element.open(client);

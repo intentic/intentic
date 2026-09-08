@@ -1,47 +1,13 @@
-/* EVERY BYTE A LOCAL AGENT SHOWS A PERSON, IN ONE PLACE, and the reason it can be pretty at all.
- *
- * The shapes below are a CONTRACT, not house style, docs/cli-output-protocol.md writes down the line format,
- * the three modes and the row vocabulary, and both implementations answer to it.
- *
- * This is the TypeScript twin of `ic`'s `_sandbox/ic/src/ui.rs`, and it exists for the same reason `text.ts`
- * beside it does: three agents ship to a user's machine, each grew its own `out()` closure writing straight to
- * stdout, and every improvement to how one of them reads landed in exactly one of them. The install the user
- * actually experiences is `ic` and these agents in sequence, so "three voices" is not an abstraction problem,
- * it is what setup looks like on the screen.
- *
- * THE SPLIT IS THE WHOLE DESIGN. Output here is read by two audiences that want opposite things:
- *
- *   • a PIPE, the desktop app spawns the install with redirected stdio and turns `intentic: [phase] message`
- *     markers into a progress bar; CI redirects it into a log. These need output that never changes shape.
- *   • a TERMINAL, a person, who needs hierarchy, colour, and a sense of how much is left.
- *
- * So `plain` emits the marker stream and nothing else, and `rich` is free to redraw. A third mode, `nested`,
- * is what makes the install read as ONE program: these agents are also spawned BY `ic` in the middle of its
- * own checklist, and a second banner with a second plan inside somebody else's install is exactly the "these
- * are different programs" seam this was written to remove. Nested renders as indented detail under whichever
- * step the parent is running, no banner, no live line, no spinner.
- *
- * THE LIVE REGION IS EXACTLY ONE LINE, for the reason ui.rs gives at length: redrawing a checklist in place
- * needs the cursor moved up N lines, which needs to know when a line wrapped, and these run under `curl | sh`
- * on terminals of unknown width. A carriage return plus a truncation needs none of that.
- *
- * Consequence, and the one rule callers follow: anything that writes to the same stdout WITHOUT going through
- * this (a spawned child, a downloader's own output) is bracketed by `suspend()` / `resume()`.
- *
- * No dependencies, like everything else in this package, these agents ship as single-file compiled binaries
- * and a rendering library is not worth bytes in one.
- */
+// Wire contract for what a local agent shows: `plain` emits only the marker stream a pipe/CI parses, `rich` redraws for
+// a terminal, `nested` folds into a parent's own checklist. The live line never wraps (width is unknown under curl|sh);
+// anything else writing to stdout must be bracketed by suspend()/resume().
 
-/** How a run renders. Chosen once, from the environment, see [`createUi`]. */
+/** How a run renders, chosen once from the environment (see createUi). */
 export type UiMode = "rich" | "plain" | "nested";
 
 /**
- * One step of a flow as the reader meets it: the phase id the wire carries, the words a person reads, and
- * roughly how long it takes.
- *
- * Weights are seconds and they are guesses. They exist so the estimate is about TIME left rather than STEPS
- * left, "4 of 5" on the near side of a ninety-second download is a lie a step counter tells and a weighted
- * estimate does not. They are only ever compared, never shown.
+ * One step of a flow: phase id, label, and a rough weight (seconds) used only to compare, for a time estimate rather
+ * than a step count.
  */
 export interface PlanStep {
     readonly phase: string;
@@ -49,7 +15,7 @@ export interface PlanStep {
     readonly weight: number;
 }
 
-/** A settled verdict about one thing. Same vocabulary as `ic`'s rows, so a user meeting both learns one. */
+/** A settled verdict about one thing; same vocabulary as ic's rows. */
 export type RowOutcome = "pass" | "warn" | "fail" | "skip";
 
 /** A footnote on a finished run: what it does, and the command that does it. */
@@ -57,35 +23,35 @@ export type Footnote = readonly [what: string, command: string];
 
 export interface Ui {
     readonly mode: UiMode;
-    /** Banner plus the promise about scope and time. No-op outside `rich`. */
+    /** Banner plus the scope/time promise; no-op outside `rich`. */
     begin: (title: string, plan?: readonly PlanStep[]) => void;
-    /** A phase of the flow, announced once, the marker on the wire, a checklist row on a screen. */
+    /** One phase of the flow: a marker on the wire, a checklist row on screen. */
     step: (phase: string, message: string) => void;
-    /** Replace the running step's sub-detail. Rich only: in `plain` this is narration nobody asked for. */
+    /** Replaces the running step's sub-detail; rich only, ignored in plain. */
     detail: (text: string) => void;
-    /** A changing measurement (bytes downloaded). A pipe gets every reading; a screen gets the newest. */
+    /** A changing measurement (e.g. bytes downloaded); a pipe gets every reading, a screen only the newest. */
     progress: (text: string) => void;
     row: (outcome: RowOutcome, name: string, note?: string) => void;
-    /** Narration under the running step. The `intentic: ` prefix is part of the plain contract and added here. */
+    /** Narration under the running step; the `intentic: ` prefix is part of the plain contract, added here. */
     note: (text: string) => void;
-    /** A caution, degraded, not broken. Goes to stderr in `plain`, as these agents' notes always have. */
+    /** A caution, not a failure; goes to stderr in `plain`. */
     warn: (text: string) => void;
-    /** The end of a successful run: one address, one instruction, then footnotes. */
+    /** End of a successful run: one address, one instruction, then footnotes. */
     finished: (verdict: string, address: string | undefined, instruction: string, footnotes?: readonly Footnote[]) => void;
-    /** The frame around a stopped run. The words are the caller's; this supplies only that it STOPPED. */
+    /** Frame around a stopped run; the caller supplies the words, this only marks it as stopped. */
     fail: (message: string) => void;
-    /** Hand the terminal to a child process that writes its own output. */
+    /** Hands the terminal to a child process that writes its own output. */
     suspend: () => void;
     resume: () => void;
-    /** Settle the running step and stop repainting. Safe to call twice; every entry point ends in one. */
+    /** Settles the running step and stops repainting; safe to call twice. */
     close: () => void;
 }
 
-// ── what the renderer needs from the outside ────────────────────────────────
+// What the renderer needs from the outside.
 
 /**
- * The process seams this reads. Matches the shape stricli injects as `this.process`, so a command passes its
- * own context straight in and a test passes a fake, nothing here reaches for the global `process`.
+ * Process seams this reads, matching what stricli injects as `this.process`; a command passes its context, a test
+ * passes a fake.
  */
 export interface UiProcess {
     readonly stdout: { write: (chunk: string) => unknown; isTTY?: boolean | undefined; columns?: number | undefined };
@@ -102,11 +68,10 @@ interface Glyphs {
 }
 
 const UNICODE: Glyphs = { ok: "✓", fail: "✗", warn: "!", skip: "·", spinner: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] };
-// Windows consoles that never got virtual-terminal processing print the set above as mojibake.
+// Windows consoles without virtual-terminal processing print the Unicode set as mojibake.
 const ASCII: Glyphs = { ok: "+", fail: "x", warn: "!", skip: "-", spinner: ["|", "/", "-", "\\"] };
 
-// Written as \u001b escapes, never the literal byte: a control character in a source file makes git, grep
-// and every diff viewer treat it as binary (_tools/checks/control-chars.mjs enforces this repo-wide).
+// \u001b escapes, never a literal control byte, or git/grep/diff treat the file as binary.
 const DIM = "\u001b[2m";
 const BOLD = "\u001b[1m";
 const GREEN = "\u001b[32m";
@@ -115,20 +80,16 @@ const YELLOW = "\u001b[33m";
 const CYAN = "\u001b[36m";
 const RESET = "\u001b[0m";
 
-/** How often the spinner repaints. Fast enough to read as motion, slow enough to be free. */
+/** How often the spinner repaints: fast enough to read as motion, cheap enough to ignore. */
 const TICK_MS = 110;
-/** Below this, a countdown stops helping and starts being wrong on every repaint. */
+/** Below this, a countdown is more wrong than helpful on every repaint. */
 const ESTIMATE_FLOOR_SECONDS = 20;
 
-// ── pure helpers, exported for their tests ──────────────────────────────────
+// Pure helpers, exported for their own tests.
 
 /**
- * Fold `text` onto lines of at most `width`. Everything that SETTLES on the screen wraps, a caution, a
- * check's note, a diagnosis, because truncating those loses the words that make them worth printing. Only
- * the live line truncates, and only because it is repainted and must never wrap.
- *
- * A single word longer than the width is left to overflow: it is a URL or a container name, and breaking one
- * mid-token to protect a margin makes it useless for the copy-paste it exists for.
+ * Wraps text to at most `width`; only the live line truncates instead. A word longer than width is left to overflow
+ * rather than broken (a URL, meant to be copied).
  */
 export const wrap = (text: string, width: number): string[] => {
     if (width < 20) {
@@ -152,7 +113,7 @@ export const wrap = (text: string, width: number): string[] => {
     return lines.length === 0 ? [""] : lines;
 };
 
-/** Clip to `limit`, marking the cut. Only ever used on the repainted line, which must not wrap. */
+/** Clips to `limit`, marking the cut; used only on the repainted line, which must not wrap. */
 export const truncate = (text: string, limit: number): string => {
     const characters = [...text];
     if (characters.length <= limit) {
@@ -164,7 +125,7 @@ export const truncate = (text: string, limit: number): string => {
     return `${characters.slice(0, limit - 1).join("")}…`;
 };
 
-/** A duration as a person would say it. Precise while that is interesting, round once it is not. */
+/** A duration as a person would say it: precise while that's interesting, rounded once it isn't. */
 export const humanDuration = (milliseconds: number): string => {
     const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
     if (seconds >= 90) {
@@ -177,11 +138,8 @@ export const humanDuration = (milliseconds: number): string => {
 };
 
 /**
- * Time left, from the plan's remaining weight and the pace this run has actually kept.
- *
- * Clamped, because one slow step on a fast machine (or the reverse) should nudge the estimate rather than
- * replace it, an estimate that swings is worse than a rough one that holds still. `undefined` while there is
- * not yet enough evidence to say anything, and below the floor where a countdown stops helping.
+ * Time left, from remaining plan weight and this run's pace so far; clamped, since a swinging estimate is worse than a
+ * stable rough one. Undefined below the floor or without enough evidence yet.
  */
 export const estimate = (totalWeight: number, consumed: number, elapsedSeconds: number): string | undefined => {
     if (totalWeight <= 0 || consumed < 1) {
@@ -192,27 +150,24 @@ export const estimate = (totalWeight: number, consumed: number, elapsedSeconds: 
     return left < ESTIMATE_FLOOR_SECONDS ? undefined : humanDuration(left * 1000);
 };
 
-/** Sentence-case a step's own prose, for flows whose phase the plan does not carry. */
+/** Sentence-cases a step's own prose, for phases the plan doesn't label. */
 export const asLabel = (message: string): string => {
     const trimmed = message.replace(/[…. ]+$/u, "");
     return trimmed === "" ? "" : trimmed[0]!.toUpperCase() + trimmed.slice(1);
 };
 
-// ── the renderer ────────────────────────────────────────────────────────────
+// The renderer.
 
 /**
- * Decide how this run renders, once.
- *
- * `INTENTIC_UI` forces a mode outright, which is what `ic` sets to `nested` when it spawns one of these
- * agents mid-install. Otherwise a terminal is `rich` and anything else is `plain`, the same single question
- * (`isTTY`) that `ic` asks, and the reason a pipe can never reach the redrawing path.
+ * INTENTIC_UI forces a mode outright (`ic` sets `nested` when it spawns one of these mid-install); otherwise isTTY
+ * decides rich vs plain, so a pipe never reaches the redrawing path.
  */
 const detectMode = (process: UiProcess): UiMode => {
     const forced = process.env?.["INTENTIC_UI"];
     if (forced === "plain" || forced === "rich" || forced === "nested") {
         return forced;
     }
-    // The historical escape hatch ic also honours, kept spelled the same.
+    // Historical escape hatch ic also honours, kept spelled the same.
     if (process.env?.["INTENTIC_PLAIN"] === "1") {
         return "plain";
     }
@@ -223,8 +178,7 @@ export const createUi = (process: UiProcess): Ui => {
     const mode = detectMode(process);
     const env = process.env ?? {};
     const colour = mode !== "plain" && (env["FORCE_COLOR"] !== undefined || env["NO_COLOR"] === undefined);
-    // A terminal that reports a width is believed; 80 is the floor every terminal has agreed on since 1978.
-    // Being wrong low costs a shorter line; being wrong high wraps the one line we repaint and corrupts it.
+    // A reported width is trusted (80 is the floor); too low shortens a line, too high corrupts the repaint.
     const width = Math.min(120, Math.max(40, process.stdout.columns ?? 80));
     const glyphs = colour ? UNICODE : ASCII;
 
@@ -246,8 +200,9 @@ export const createUi = (process: UiProcess): Ui => {
 
     const totalWeight = (): number => plan.reduce((sum, step) => sum + step.weight, 0);
 
-    /** How far into the running step we are, 0..1, the clock against this step's own weight, capped short of
-     * the end, because a timer that reaches 100% claims a step is finished when only the flow knows that. */
+    /**
+     * Progress through the running step, 0..1, capped short of 1 since only the flow knows when a step is truly done.
+     */
     const stepFraction = (): number => {
         if (index === undefined) {
             return 0;
@@ -267,8 +222,7 @@ export const createUi = (process: UiProcess): Ui => {
         if (!live) {
             return;
         }
-        // Spaces rather than an erase-to-end-of-line escape: this is the one repaint that has to work on a
-        // console with no virtual-terminal processing, where an escape would print as literal text.
+        // Spaces, not an erase-to-end escape: this must work on a console with no virtual-terminal processing.
         out(`\r${" ".repeat(width)}\r`);
         live = false;
     };
@@ -282,8 +236,7 @@ export const createUi = (process: UiProcess): Ui => {
         const left = remaining();
         const right = left === undefined || Date.now() - stepStarted < 5000 ? elapsed : `${elapsed} · ~${left} left`;
         const head = `  ${spinner}  ${String(ordinal).padStart(2)}  ${label}`;
-        // The line must never reach the last column, or the terminal wraps it and the carriage return above
-        // no longer returns to its start.
+        // The line must never reach the last column, or the terminal wraps it and the next carriage return lands wrong.
         const budget = width - 1;
         const fixed = [...head].length + [...right].length + 1;
         const middle = detailText === "" ? "" : truncate(`  ·  ${detailText}`, Math.max(0, budget - fixed));
@@ -295,15 +248,14 @@ export const createUi = (process: UiProcess): Ui => {
         live = true;
     };
 
-    /** Print something ABOVE the live line: erase, write, redraw. */
+    /** Prints above the live line: erase, write, redraw. */
     const above = (text: string): void => {
         erase();
         out(`${text}\n`);
         repaint();
     };
 
-    /** Repaint on a timer so a wait is never mistaken for a hang. Unref'd: a spinner must never be the reason
-     * a CLI does not exit. */
+    /** Repaints on a timer so a wait isn't mistaken for a hang; unref'd so a spinner never blocks exit. */
     const startTicker = (): void => {
         if (mode !== "rich" || ticker !== undefined) {
             return;
@@ -316,9 +268,8 @@ export const createUi = (process: UiProcess): Ui => {
     };
 
     /**
-     * Turn the running step into a settled line. Its duration is the point: afterwards a ninety-second
-     * download and a half-second check look identical, and neither the user nor whoever reads their pasted
-     * transcript can tell which part was slow.
+     * Turns the running step into a settled line with its duration, so a slow step and a fast one still read
+     * differently afterward.
      */
     const settle = (): void => {
         if (label === "") {
@@ -329,8 +280,7 @@ export const createUi = (process: UiProcess): Ui => {
             behind += plan[index]?.weight ?? 0;
         }
         const took = humanDuration(Date.now() - stepStarted);
-        // Padding is measured on the UNPAINTED line, colour escapes are zero-width on screen and would
-        // otherwise push the duration off the right edge by however many bytes they happen to be.
+        // Padding is measured unpainted: colour escapes are zero-width but would miscount toward the margin.
         const bare = `  x  ${String(ordinal).padStart(2)}  ${label}`;
         const pad = " ".repeat(Math.max(0, width - 1 - [...bare].length - [...took].length));
         out(`  ${paint(glyphs.ok, GREEN)}  ${paint(String(ordinal).padStart(2), DIM)}  ${label}${pad}${paint(took, DIM)}\n`);
@@ -338,7 +288,7 @@ export const createUi = (process: UiProcess): Ui => {
         detailText = "";
     };
 
-    /** Indented dim narration, how everything reads in `nested`, and how detail reads in `rich`. */
+    /** Indented dim narration: how everything reads in `nested`, and how detail reads in `rich`. */
     const nestedLine = (text: string, marker?: string): void => {
         for (const [at, part] of wrap(text, width - 10).entries()) {
             const lead = at === 0 && marker !== undefined ? `     ${marker}  ` : "        ";
@@ -372,13 +322,13 @@ export const createUi = (process: UiProcess): Ui => {
                 return;
             }
             if (mode === "nested") {
-                // Inside somebody else's checklist a step is not a step, it is detail under theirs.
+                // Inside a parent's checklist, a step is detail under theirs, not a step of its own.
                 nestedLine(asLabel(message));
                 return;
             }
             settle();
             const found = plan.findIndex((planned) => planned.phase === phase);
-            // The cursor only ever goes forward: a phase already passed is narration, not a step.
+            // Cursor only moves forward: a phase already passed is narration, not a step.
             const at = found >= 0 && (index === undefined || found >= index) ? found : undefined;
             index = at;
             label = at === undefined ? asLabel(message) : (plan[at]?.label ?? asLabel(message));
@@ -468,7 +418,7 @@ export const createUi = (process: UiProcess): Ui => {
                 return;
             }
             if (mode === "nested") {
-                // The parent owns the ending. All this contributes is the one fact worth carrying up.
+                // The parent owns the ending; this only carries up the one fact worth keeping.
                 nestedLine(verdict, paint(glyphs.ok, GREEN));
                 if (address !== undefined) {
                     nestedLine(address);

@@ -1,20 +1,15 @@
 // @vitest-environment jsdom
-//
-// The usage circle and the card it opens. Driven through the real component, because the two things worth
-// pinning are the two the old tooltip got wrong: that the breakdown arrives as a READABLE structure (a line and
-// a meter per pool, each with its reset) rather than one run-on label, and that it lands BESIDE the ring: every
-// surface that draws one is a column of rows, so a box over or under the ring covers the rows being compared.
+// Tests the usage ring and its card: the breakdown renders as a per-pool line and meter with its own reset, not
+// one run-on label, and the card opens beside the ring rather than over the column of rows being compared.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
 import UsageRing from "./UsageRing.vue";
 
-// The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
-// import time, through useDevice, and jsdom ships no such thing.
+// The @intentic/ui barrel calls window.matchMedia at import time (via useDevice), which jsdom doesn't provide.
 
 const CARD = { width: 240, height: 180 };
-// jsdom lays nothing out, so both boxes are handed the rects they would have had on screen: the ring where the
-// test puts it, the card at the size its content gives it.
+// jsdom lays out nothing; rects are supplied manually: the ring where the test puts it, the card at its size.
 let ring = { left: 40, top: 100, width: 14, height: 14 };
 const originalMeasure = Element.prototype.getBoundingClientRect;
 
@@ -48,7 +43,7 @@ const hover = async (anchor: HTMLElement): Promise<HTMLElement | null> => {
     anchor.dispatchEvent(new MouseEvent(`mouseenter`));
     vi.advanceTimersByTime(200); // past the open delay a pass-by sweep is meant to fall inside
     await nextTick();
-    await nextTick(); // the card is measured and placed on the render after the one that created it
+    await nextTick(); // measured and placed on the render after the one that created it
     return document.body.querySelector<HTMLElement>(`.ui-anchored`);
 };
 
@@ -75,9 +70,9 @@ it(`lists every pool with its own figure and reset, and says how old the reading
         expect(panel.textContent).toContain(pool.label);
         expect(panel.textContent).toContain(`${pool.percent}%`);
     }
-    // A pool with no reset instant simply doesn't claim one: the other's is still named.
+    // A pool with no reset simply claims none; the other pool's reset is still named.
     expect(panel.textContent).toContain(formatReset(RESETS_AT));
-    // One meter per pool, so which allowance is about to bite is seen rather than parsed.
+    // One meter per pool: which allowance is about to bite is seen, not parsed.
     expect(panel.querySelectorAll(`.bg-current`)).toHaveLength(pools.length);
 });
 
@@ -99,8 +94,7 @@ it(`opens on the ring's right flank, clear of the rows it is being compared agai
 });
 
 it(`spills left when the ring OPENS its row, so the card misses the row's own name and buttons`, async () => {
-    // The Agent tab's connection rows: the ring stands in for the status dot, at the row's left edge, with the
-    // page gutter on its left and everything the row says on its right.
+    // Agent tab connection rows: the ring stands in for the status dot at the row's edge, gutter on its left.
     ring = { left: 400, top: 100, width: 14, height: 14 };
     const panel = (await hover(await mount({}, `left`))) as HTMLElement;
     expect(panel.className).toContain(`ui-anchored-left`);
@@ -115,7 +109,7 @@ it(`mirrors to the left flank for a ring against the window's right edge`, async
 });
 
 it(`falls back to above the ring only when neither flank can hold the card`, async () => {
-    // A pop-out window narrower than the card plus its gaps: the one case where sideways is impossible.
+    // Pop-out narrower than the card plus its gaps: the one case sideways placement is impossible.
     Object.defineProperty(window, `innerWidth`, { value: 300, configurable: true });
     ring = { left: 100, top: 400, width: 14, height: 14 };
     const panel = await card();

@@ -15,14 +15,7 @@ import { landAgent } from "./land.js";
 import { commitsCarrying, historySpanStart } from "./landed-history.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../worktrees/worktrees.js";
 
-/* WHERE A LANDING ENDED UP ONCE THE USER COMMITTED IT, against real git, because every fact this module reads
- * is one that lives in a commit graph and nowhere else. The span it measures over is pinned by a sha the land
- * recorded, the attribution rule is "the newest commit that left this content", and both are claims about what
- * `git log` actually answers over a real history: stub it and the test proves the stub agrees with itself.
- *
- * This is the dead end in test form. Committing an agent's work retires its rows (agent-changes.integration
- * proves that reading, and it is the right one), which left the review with nothing to show and one sentence
- * saying the work was "in your workspace's history" over an empty panel. It always WAS findable. */
+// Against real git: every fact this module reads lives in a commit graph, not a stub that would only agree with itself.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -63,10 +56,8 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-/* The route's own two steps, in one call: read the review, keep the half history has taken, and ask where it
- * went. Deliberately the SAME reading the review takes (agentRepoReview → presentInMain) rather than a set of
- * paths written out by hand, because "absorbed" is exactly the input this module's soundness argument rests
- * on: it is the set whose committed content already equals the branch's. */
+// Same reading agentRepoReview -> presentInMain, not hand-picked paths: 'absorbed' is exactly the input this module's
+// soundness rests on.
 const placed = async (
     work: string,
     worktrees: AgentWorktrees,
@@ -89,8 +80,7 @@ const placed = async (
         throw new Error("main has no head");
     }
     const landedHead = composed.landedHead;
-    // Exactly the fallback ladder the route walks: the recorded head while it is still on the main line, and
-    // the merge-base anchor for a landing that recorded none (see the route's own note).
+    // Same fallback ladder the route walks: the recorded head while still on the main line, else the merge-base anchor.
     const from =
         (landedHead === undefined ? undefined : await historySpanStart(work, landedHead, head)) ?? (await sh(work, "merge-base", head, entry.branch));
     const carried = await commitsCarrying(work, from, head, absorbed);
@@ -100,8 +90,7 @@ const placed = async (
 test("the commit the user took a landing in is the one it is found under", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
-    // An untracked add beside a tracked edit: a landed-but-uncommitted new file is in no commit and no index,
-    // so it is the path a span read off shas alone loses, and it has to come back with the rest.
+    // Untracked add beside a tracked edit: an uncommitted new file is in no commit, so a sha-only span would lose it.
     await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
@@ -122,8 +111,6 @@ test("work committed in two sittings comes back as two commits, each holding onl
     await sh(work, "add", "-A", "--", "other.ts");
     await commit(work, "second: other");
 
-    // Newest first, and the two sets are disjoint: a file belongs to exactly one commit, which is what lets a
-    // panel add these counts up without over-counting anything history touched twice.
     expect(await placed(work, worktrees, isolatedAgent(landed.repos))).toEqual([
         { subject: "second: other", paths: ["other.ts"] },
         { subject: "first: app", paths: ["app.ts"] },
@@ -137,9 +124,7 @@ test("a file history touched again is attributed to the newest commit that left 
 
     await sh(work, "add", "-A");
     await commit(work, "take it");
-    // Away and back: the file is still absorbed at the end (its content equals the branch's again), and THREE
-    // commits in the span name it. Only the last one left the content a reader would be sent to read, so
-    // naming the first would send them to a commit whose result no longer exists anywhere.
+    // Away and back: three commits name this file, but only the last leaves content worth reading.
     await writeFile(join(work, "app.ts"), `${edited(1)}scratch\n`);
     await sh(work, "add", "-A");
     await commit(work, "an unrelated edit on top");
@@ -155,9 +140,7 @@ test("a landing absorbed through a merge is found at the merge, not lost with it
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    /* The user takes the landing on a branch of their own and merges it back with a merge commit. `git log`
-     * shows NO diff for a merge by default, so without --diff-merges=first-parent this landing reports as
-     * absorbed and unattributable at once: the panel would say the work is in history and name nothing. */
+    // `git log` shows no diff for a merge by default; without --diff-merges=first-parent this lands unattributable.
     const main = await sh(work, "rev-parse", "--abbrev-ref", "HEAD");
     await sh(work, "checkout", "-q", "-b", "user-side");
     await sh(work, "add", "-A");
@@ -171,8 +154,7 @@ test("a landing absorbed through a merge is found at the merge, not lost with it
 
 test("a main line rewritten under the landing falls back to the newest commit both still agree on", async () => {
     const { work, worktrees, conversation } = await setup();
-    // A commit of the user's own BEFORE the land, so the rewrite below has somewhere behind the landing to
-    // reset to. Without it the landing sits on the root commit and there is no divergence to construct.
+    // A commit before the land gives the rewrite below something to reset behind the landing.
     await writeFile(join(work, "notes.md"), "before the agent\n");
     await sh(work, "add", "-A");
     await commit(work, "the user's own commit");
@@ -183,17 +165,13 @@ test("a main line rewritten under the landing falls back to the newest commit bo
     if (landedHead === undefined) {
         throw new Error("main has no head");
     }
-    // While the recorded head is still on the main line it is the span's start, unchanged: the tightest span
-    // there is, and the ordinary case.
+    // Ordinary case: the recorded head is still on the main line, so it stays the span's start unchanged.
     await sh(work, "add", "-A");
     await commit(work, "take it");
     const takenHead = await headSha(work);
     expect(await historySpanStart(work, landedHead, takenHead!)).toBe(landedHead);
 
-    /* Now the user rewrites their own history behind the land, an amend, a rebase, a reset: all ordinary
-     * things to do between committing an agent's work and coming back to look at it. The recorded head is no
-     * longer reachable, so a span measured from it would range over both sides of the divergence and name
-     * commits that were never in this history. The merge-base is the tightest span that is certainly ours. */
+    // An amend/rebase/reset makes the recorded head unreachable; the merge-base is the tightest span still ours.
     await sh(work, "reset", "-q", "--hard", `${landedHead}~1`);
     await writeFile(join(work, "unrelated.ts"), "rewritten\n");
     await sh(work, "add", "-A");
@@ -206,7 +184,5 @@ test("a main line rewritten under the landing falls back to the newest commit bo
 
 test("nothing to place costs no git at all", async () => {
     const { work } = await setup();
-    // The overwhelmingly common call: a conversation whose work is still a difference has no absorbed paths,
-    // and the guard is what keeps the panel's read free in that case rather than a spawn that returns nothing.
     expect(await commitsCarrying(work, "HEAD", "HEAD", [], () => Promise.reject(new Error("git must not run")))).toEqual([]);
 });

@@ -1,41 +1,8 @@
-<!-- One row inside a <RowGroup> or a <NavRail>: an optional #lead, a title + description, a #meta cluster of
-     trailing FACTS, and a #control cluster of trailing ACTIONS. #below drops full-width content beneath the
-     header on the SAME row: a live preview, an expanded sub-form, so it stays inside the row's hairline
-     boundary instead of spawning its own boxed inset. Set `as="label"` so a wrapped control toggles on a
-     full-row click; set `interactive` (+ `chevron`) or `href` for navigational rows. Purely presentational:
-     no router dependency, so internal-nav rows wrap this in the app's <RouterLink class="block">.
-
-     #meta AND #control, not one trailing slot, because facts and actions obey different rules and every list
-     that hand-wrote its rows re-derived both: a fact is muted, tabular and never focusable; an action carries
-     its own hit area and tint. Splitting them is what lets this component state "facts are text-2xs text-subtle"
-     once, instead of eleven callers spelling it out and drifting a shade apart.
-
-     DENSITY IS A TIER, NOT A CLASS OVERRIDE, AND NOT A QUESTION THIS ROW ANSWERS. A caller reaching for `py-2`
-     by hand is the failure the tiers replace — and the reason record lists hand-rolled their rows even where
-     this component was importable. But the tiers were also, for a while, three labels a call site had to choose
-     between, and that produced its own drift: see <RowGroup>, which now answers it once for a whole list. What
-     is left here is the fallback for a row that is NOT in a list, which in practice means a card's masthead.
-
-     `flush` DROPS THE PADDING, for the row whose container already owns it: the exact counterpart of
-     <RowGroup>'s `flat`, and it is what lets a CARD'S MASTHEAD be this component. That masthead (an icon, an
-     h2, a line of explanation, sometimes a badge or a switch on the right) is the same anatomy as a settings
-     row and was hand-written on fourteen cards, which is how it ended up with five different icon treatments:
-     `text-lg text-muted`, `mt-0.5 text-lg text-muted`, `mt-0.5 shrink-0 text-lg text-warning`, `text-lg
-     text-success`, `text-base text-link`, and disagreed with itself about whether the icon centres on the
-     block (`items-center`) or hangs off its first line (`items-start` + `mt-0.5`). The second spelling is the
-     one that reads as broken: a lock nudged half a line down the left of a three-line paragraph is aligned to
-     nothing, which is what "the icon looks off" turns out to mean every time it is reported.
-
-     ONE RULE, AND IT IS `items-center`: the icon centres against the whole title-and-description block, at
-     every density, padded or flush. A caller writing `mt-0.5` on a lead icon is re-opening the bug.
-
-     A ROW THAT OPENS IS `<DisclosureRow>`, NOT THIS. It wraps this component and owns the chevron, the ARIA,
-     the tint and the indent of the block below, which are the five things fourteen expandable rows had each
-     answered on their own. `headerButton` below is the one hook it needed from here. Reach for this component
-     directly only for a row that does not expand.
-
-     Rounding is deliberately NOT a prop: it is the container's business, and Vue's fallthrough puts it one
-     `class="rounded-md"` away for the rails that want it. -->
+<!--
+    One row inside a <RowGroup> or <NavRail>: `#lead`, title + description, a `#meta` cluster of facts, and a `#control` cluster of actions; `#below`
+    drops full-width content on the same row. `#meta` and `#control` stay separate because facts and actions render differently. Purely
+    presentational, no router dependency.
+-->
 <script setup lang="ts">
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
@@ -57,120 +24,48 @@ const {
     title?: string;
     description?: string;
     href?: string;
-    /** `button` for a row that is PICKED (rails, selectable lists): it is what puts the row on the tab order. */
+    /** `button` for a row that is PICKED (rails, selectable lists): it's what puts the row on the tab order. */
     as?: `div` | `label` | `button`;
     interactive?: boolean;
     chevron?: boolean;
     tone?: RowTone;
-    /* LEAVE IT UNSET. Inside a <RowGroup> the group publishes the tier and this row reads it, which is what
-     * stops a list drifting a row at a time; the group's own default is `compact`, because a group is a list.
-     *
-     * Outside a group it falls back to `comfortable`, and that is the masthead's case: a `flush :heading="2"`
-     * <Row> on a card is not in a list, has to outrank the rows under it, and wants a glyph sized for an h2.
-     * Set it explicitly only for a row that genuinely disagrees with the surface it is on. */
+    // Leave unset inside a <RowGroup> (it publishes the tier); outside one this falls back to `comfortable`,
+    // the masthead's tier.
     density?: RowDensity;
-    /** Paints the app-wide selected tint. Implies `interactive`: a row you can pick is a row you can hover. */
+    /** Paints the app-wide selected tint; implies `interactive`, since a row you can pick is a row you can hover. */
     selected?: boolean;
-    /* Renders the title as a real heading, one step up in size. A card's masthead is an `h2` in the document,
-     * not a styled div, and it has to outrank the rows UNDER it on the same surface, which is the one thing
-     * unifying the two costs if the size is left to the tier: masthead and option row both land on
-     * `font-semibold` at the SAME size and the card reads as two titles.
-     *
-     * `text-lg`, not `text-base`: this app scales its type off a 17.6px root, so `text-base` IS the body size
-     * and setting it changes nothing (it was written that way first, and measured as a no-op). Only the
-     * `comfortable` tier leaves the size unset, and a masthead is always comfortable, so nothing collides. It
-     * lands between <PageHeader>'s `text-2xl` h1 and the rows beneath it, which is the rank an h2 should read
-     * at anyway. */
+    // Renders the title as a real heading, one step up in size (`text-lg`, since this app's `text-base` IS body size).
     heading?: 2 | 3;
-    /** Turns the lead icon, for the row that IS a wait ("activating your membership"). Kept as a prop rather
-     *  than left to `#lead` so a spinning row still gets the tier's size and the tone's colour for free. */
+    /** Spins the lead icon, for a row that IS a wait; kept as a prop so it still gets the tier's size and tone. */
     spin?: boolean;
-    /** Drops the tier's padding, for a row whose container already provides it: see the note above. */
+    /** Drops the tier's padding, for a row whose container already provides it. */
     flush?: boolean;
-    /* LETS THE TRAILING CLUSTER GIVE UP WIDTH, for the row whose control is a SET rather than a button.
-     *
-     * The cluster is `shrink-0` for everything else, and has to be: a size, a time or a badge squeezed to fit
-     * is unreadable, and a button squeezed is unclickable, so a row with one of those in it stays as wide as
-     * that fact needs and the title truncates instead. A dozen colour swatches obey the opposite rule. They
-     * are one control drawn as a row of parts, each part already the size it must be, and the way it fits a
-     * narrow pane is by taking a second line: the alternative is a control that pushes the row wider than the
-     * pane it sits in, which is what sent it under the title in the first place.
-     *
-     * So the cluster takes the space LEFT OVER by the title (`basis-0 grow`) rather than claiming its own
-     * width and then arguing about the shortfall. That distinction is the whole of it: made to shrink from its
-     * natural width instead, flexbox divides the shortfall in proportion to base widths, so a dozen swatches
-     * against one word still clip the word by a few pixels before they have wrapped once. From a zero basis
-     * there is no shortfall to divide, and the title keeps its width until it is the thing that cannot fit.
-     *
-     * The control inside still has to be a wrapping one (`flex-wrap`) for the second line to happen. */
+    // Lets the trailing cluster take the title's leftover space (`basis-0 grow`) instead of claiming its own
+    // width, so a wrapping control (many swatches) takes a second line rather than squeezing the title.
     wideControl?: boolean;
-    /* THE LEFT REGION BECOMES ONE `<button>`: the lead, the title and the description together, with #meta and
-     * #control left outside it as the separate controls they are. It exists for <DisclosureRow>, and it exists
-     * because SIX files had already hand-rolled exactly this shape — the extension list, the skill list, the
-     * secrets list, the machine report, the deployments board and the pipelines board — every one of them
-     * because <Row> could make the WHOLE row a button (`as="button"`) or none of it, and a record row that
-     * expands has trailing verbs that must not toggle it. Nesting those verbs inside a row-wide <button> is
-     * invalid markup and gives the keyboard one stop where there are three actions.
-     *
-     * It stays PRESENTATIONAL: the button emits `headerClick` and the ARIA comes in as props. <Row> holds no
-     * open/closed state and should not learn any. */
+    // Makes the left region (lead, title, description) one `<button>`, with `#meta`/`#control` outside it as
+    // separate controls; for <DisclosureRow>, so trailing verbs don't nest inside the toggle.
     headerButton?: boolean;
-    /** `aria-expanded` for the header button. Leave unset on a header button that is not a disclosure. */
+    /** `aria-expanded` for the header button; leave unset on a header button that isn't a disclosure. */
     headerExpanded?: boolean;
     /** `aria-controls` for the header button: the id of the block it opens. */
     headerControls?: string;
-    /* THE HEADLINE'S CONTROLS SWALLOW THEIR OWN CLICKS — the headline BLOCK does not. For the row whose
-     * headline carries a control — a turn whose label opens its transcript, a port whose sentence links to its
-     * terminal, a run whose title leaves for the vendor — so that <DisclosureRow> can make the REST of the row
-     * pressable without "open this" and "go somewhere else" becoming one press.
-     *
-     * IT USED TO SWALLOW THE WHOLE BLOCK, and that is the bug it was reported as: on the activity feed only a
-     * turn WITH a transcript has a link for a title, so on every message and every loose event the biggest,
-     * most obvious target on the row — its name — did nothing, and the row opened only from a 10px chevron.
-     * The `pair` rows that DO carry a link were no better off: the link is a few words, and the facts line
-     * under it, the preview beside it and the empty space after it were all dead on the same rule. Worse, the
-     * row still painted `ui-row-select` over all of it, so the cursor and the hover wash promised a press the
-     * headline had no intention of honouring — which is what "clunky" means when someone reports it.
-     *
-     * So the guard asks the only question that was ever being asked: DID THIS PRESS LAND ON A CONTROL. It is a
-     * fact about the click, not about the block, so it cannot go stale when a caller's title stops being a
-     * link — which is the exact drift the block-wide version was built to survive and did not. */
+    // The headline's own controls (a link, a button) swallow their clicks; the rest of the headline stays
+    // part of the row's press target. Judged by what the click landed on, so a title that stops being a
+    // link can't leave this stale.
     headlineGuard?: boolean;
-    /* HANGS `#below` OFF THE ROW'S NAME, on a spine under the row's own mark.
-     *
-     * `#below` is full-width by this component's contract, so a sub-block drawn at the row's edge starts to the
-     * LEFT of the title it belongs to and reads as the GROUP's content rather than this row's. That is the same
-     * observation <DisclosureRow> makes about its rail, and the same one <PlanLimitsPanel> arrived at
-     * independently: it had a bordered card per provider, threw it away for exactly the reasons a fill under a
-     * row is wrong ("the panel is already one bordered surface, so a card per provider is a second frame inside
-     * it", and its tint was invisible in the light scheme), and replaced it with a mark, a spine under the mark,
-     * and the content one step in. Whitespace and a left edge cost no ink and work in both schemes.
-     *
-     * THE SPINE GOES UNDER THE MARK, NOT DOWN THE TEXT COLUMN, and that is the whole of getting it right. Drawn
-     * at the text's left edge it aligns to nothing — measured against a compact row it lands 13px short of the
-     * title, and a rail plus its own indent overshoots by 11px and eats 37px of width, which at 390px is enough
-     * to break a verdict away from its unit. Under the mark, the content lands exactly on the title.
-     *
-     * THE WIDTH IS DERIVED, never typed: the lead cluster is drawn a second time and hidden, which is
-     * <DisclosureRow>'s device and for its reason — a number here is `pl-8` in one file and `pl-9` in two more,
-     * each of them stale the first time an icon changes size.
-     *
-     * NOT FOR EVERY `#below`. A sentence continuing the description, or a grid that wants the full width, is not
-     * a sub-block and gains nothing from a spine. This is for `#below` that is a BLOCK BELONGING TO THIS ROW: a
-     * sub-setting with its own title, a reading, a report. */
+    // Hangs `#below` off a spine under the row's own lead mark, not the text column, so a sub-block reads as
+    // belonging to this row. Width comes from a hidden second copy of the lead, never a typed number.
     spine?: boolean;
 }>();
 
 const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
 
-/* The tier actually in force: this row's own answer if it gave one, otherwise the <RowGroup> it sits on. Every
- * `TIERS[...]` read below goes through this, so a group's density reaches the padding, the gap, the icon size,
- * the title's weight and the description's size in one move. */
+// The tier in force: this row's own `density` if given, else the enclosing <RowGroup>'s.
 const tier = useRowDensity(() => density);
 
-/* THE HEADER BUTTON EATS ITS OWN CLICK. <DisclosureRow> makes the whole row pressable (the tier's padding is
- * ~40% of a comfortable row's height, and a target that stops at the text leaves a dead strip above and below
- * it), so without this the button's press and the row's press both fire and the row toggles straight back. */
+// The header button eats its own click, or its press and the row's outer press (<DisclosureRow>) would
+// both fire and the row would toggle straight back.
 const onHeaderClick = (event: MouseEvent): void => {
     if (!headerButton) {
         return;
@@ -179,19 +74,11 @@ const onHeaderClick = (event: MouseEvent): void => {
     emit(`headerClick`, event);
 };
 
-/* WHAT COUNTS AS A CONTROL, for `headlineGuard`. Everything a press can mean something else on: the native
- * interactives, plus the ARIA spellings of them, because a headline's "link" is regularly a <button> and its
- * chip is regularly a <span role="button"> with a handler. A bare `[tabindex]` is deliberately NOT here — a
- * focusable text block is not a control, and a caller who wants one guarded says so with `@click.stop`. */
+// What counts as a control for `headlineGuard`: the native interactives plus their ARIA-role equivalents.
 const HEADLINE_CONTROLS = `a[href], button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [contenteditable="true"]`;
 
-/* See `headlineGuard`. Written out rather than as a `.stop` modifier for two reasons now: it must apply only
- * when asked, AND it must apply only to the presses that landed on a control.
- *
- * SCOPED TO THIS BLOCK with `contains`, not left to `closest` alone: `closest` walks the whole ancestor chain,
- * so in a row whose header IS a button (`hit="header"`, where this guard is off anyway) it would match that
- * button and stop the press the button itself is waiting for. The guard is about controls INSIDE the headline;
- * anything above it is the row's business. */
+// See `headlineGuard`. Scoped with `contains`, not `closest` alone, so it can't match a control outside
+// the headline (e.g. a `hit="header"` button that owns the whole row).
 const onHeadlineClick = (event: MouseEvent): void => {
     if (!headlineGuard) {
         return;
@@ -206,13 +93,8 @@ const onHeadlineClick = (event: MouseEvent): void => {
     }
 };
 
-/* A ROW YOU PICK FROM IS MUTED UNTIL YOU REACH FOR IT. All four selectable lists in the app had this rule and
- * all four spelled it themselves: the source rail, the knowledge index, the documentation contents and the log
- * file list, so a list of forty names reads as one quiet block with exactly one name lit, rather than forty
- * equally loud ones distinguished by a background wash alone.
- *
- * It keys on `as="button"` because that is already the signal for "this row is PICKED": a settings row is
- * interactive too, but its title is the thing you came to read, not one candidate among many. */
+// A row you pick from stays muted until reached for; keyed on `as="button"`, the signal that this row
+// is one of a set.
 const picked = as === `button`;
 </script>
 
@@ -233,27 +115,19 @@ const picked = as === `button`;
             selected ? `ui-row-select-on` : ``,
         ]"
     >
-        <!-- `#before` IS THE SELECTION COLUMN, and it leads the HEADLINE rather than the whole row. Both halves
-             of that are load-bearing.
-             NOT IN `#lead`: a mark there pushes the title right while `#below` stays where it was, so every
-             one-line state under a row starts two marks left of the name it belongs to and reads as a footnote
-             on the group. Turning `spine` on to compensate is worse — the spine centres on the WHOLE lead
-             cluster, so with two marks in it the rule lands in the gap between them, under neither.
-             AND NOT BESIDE THE WHOLE ROW EITHER, which is the shape <DisclosureRow> uses (a checkbox may not
-             nest in the button that toggles a row, so its column sits outside the component). Centred against
-             a row that also carries `#below`, the box drifts down by half of whatever is under the title: on a
-             row with three lines beneath it, the tick that selects the row sits level with a sentence about
-             its state. Here the column is centred on the headline, and `#below` is given a column of the same
-             width so it keeps landing exactly where it did before there was a checkbox at all.
-             It rides INSIDE the row's padding and tint, so the whole line still lights up as one row. -->
+        <!--
+            The selection column leads the HEADLINE, not the whole row or `#lead`, so it stays aligned even when
+            `#below` adds lines beneath the row.
+        -->
         <div :class="$slots[`before`] ? `flex items-center ${TIERS[tier].gap}` : `contents`">
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
                 <div class="flex items-center justify-between gap-4">
-                    <!-- The left region. As a `div` it is layout; as a `button` (see `headerButton`) it is the row's
-                 one hit area, and it TAKES THE FREE SPACE (`flex-1`) rather than shrink-wrapping the title:
-                 the gap between a short name and the trailing verbs is the easiest part of the row to aim at,
-                 and a hit area that stops at the last letter of the name throws it away. -->
+                    <!--
+                        The left region takes the free space (`flex-1`) rather than shrink-wrapping the title, so the
+                        gap
+                        after a short name is still part of the hit area.
+                    -->
                     <component
                         :is="headerButton ? `button` : `div`"
                         :type="headerButton ? `button` : undefined"
@@ -268,11 +142,10 @@ const picked = as === `button`;
                         ]"
                         @click="onHeaderClick"
                     >
-                        <!-- THE MARK'S SIZE IS THE TIER'S, HANDED OUT RATHER THAN LOOKED UP. `#lead` content lives in
-                     the caller's file, so before this the number was typed there: 22 on three record lists, 20
-                     on two, 24 on another and 32 on a seventh, all of them meaning "a row's mark". A slot prop
-                     leaves the call site with nothing to get wrong — `<template #lead="{ mark }">` — and it
-                     tracks the group's density for free, which a constant read at the call site would not. -->
+                        <!--
+                            The lead mark's size, handed to the slot so callers don't look up or restate the tier's
+                            number.
+                        -->
                         <slot name="lead" :mark="TIERS[tier].mark" />
                         <Icon
                             v-if="icon !== undefined"
@@ -304,17 +177,20 @@ const picked = as === `button`;
                         class="flex items-center gap-2"
                         :class="wideControl ? `grow basis-0 flex-wrap justify-end` : `shrink-0`"
                     >
-                        <!-- Facts, not controls: tabular so a column of sizes or times lines up down the list, and muted
-                     so the row's name stays the thing the eye lands on. -->
+                        <!--
+                            Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name
+                            still leads.
+                        -->
                         <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
                             <slot name="meta" />
                         </div>
-                        <!-- ACTIONS NEVER TOGGLE THE ROW. `display: contents` so the cluster's layout is untouched: the
-                     wrapper draws no box, but it is still in the tree, so a press on a Stop button or a switch
-                     stops here instead of reaching the row-wide handler <DisclosureRow> puts on this component.
-                     Owned here rather than left to call sites, because "remember `@click.stop` on every control"
-                     is a rule that gets remembered until it doesn't. #meta is deliberately NOT wrapped: facts
-                     are not controls, and a press on one may as well open the row. -->
+                        <!--
+                            `display: contents` keeps the cluster's layout invisible while still catching clicks
+                            (`.stop`), so a
+                            control here never also toggles the row. `#meta` is deliberately not wrapped: a press on a
+                            fact may
+                            as well open the row.
+                        -->
                         <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
                         <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
                     </div>
@@ -322,24 +198,17 @@ const picked = as === `button`;
             </div>
         </div>
         <div v-if="$slots[`below`]" class="mt-3" :class="$slots[`before`] ? `flex ${TIERS[tier].gap}` : ``">
-            <!-- `#before`'s COLUMN, HELD OPEN UNDER THE HEADLINE. Drawn again and hidden, so it measures
-                 whatever the caller's mark actually measures rather than a number typed here that goes stale
-                 the first time that control changes size — the same device the spine uses one line down, and
-                 for the same reason. `inert` as well as `aria-hidden`: a mirrored checkbox is a second focus
-                 stop and a second labelled input, which is what makes this different from mirroring an icon. -->
+            <!--
+                The `#before` column, mirrored and hidden, so `#below` aligns under the headline instead of a typed
+                number going stale. `inert` as well as `aria-hidden`: a mirrored checkbox would be a second focus stop.
+            -->
             <span v-if="$slots[`before`]" class="invisible flex shrink-0 items-center" inert aria-hidden="true"><slot name="before" /></span>
             <div :class="$slots[`before`] ? `min-w-0 flex-1` : `contents`">
-                <!-- THE SPINE. See `spine` above. The first column is the lead cluster drawn again and hidden, so it
-                     measures whatever the mark and the icon actually measure at this tier; the rule is absolutely
-                     positioned inside it so it centres on that column and runs the block's full height without
-                     adding to it. `aria-hidden` on both: the mirror is a duplicate of content already read out, and
-                     a rule is not content.
-                     `inert` FOR THE SAME REASON `#before`'s MIRROR CARRIES IT: `#lead` is the caller's, and a
-                     caller may legitimately put a CONTROL there — the model settings put each job's tick in that
-                     column, so the glyph and the box it becomes share one slot instead of sitting side by side.
-                     Mirrored without this, that tick is a second focus stop and a second labelled input, invisible
-                     and a tab away from the real one. Mirroring a bare icon never showed the bug; the slot is what
-                     makes it possible, so the guard belongs on the mirror rather than on the callers. -->
+                <!--
+                    The spine's own lead mirror, absolutely positioned to centre on that column without adding to its
+                    height. `inert` because `#lead` may hold a real control, and a mirror of it would be a second,
+                    unreachable copy.
+                -->
                 <div v-if="spine" class="flex" :class="TIERS[tier].gap">
                     <div class="relative flex shrink-0 justify-center">
                         <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">

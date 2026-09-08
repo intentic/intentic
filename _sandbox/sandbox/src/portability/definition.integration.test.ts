@@ -19,13 +19,10 @@ import { rootExcludes } from "../history/history.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { workspaceRemoteUrl } from "./workspace-repo.js";
 
-/* THE DEFINITION ROUND TRIP ON REAL DISK AND REAL GIT: derive a sandbox.toml from a workspace with live
- * repos, land it in an empty one, and check that what the target holds is what the document said — plus the
- * two refusals the surface promises (a remoteless repo never becomes a reference; an occupied id is never
- * overwritten). The pure format halves live in definition.test.ts; this suite is the seams: git remotes,
- * the daemon-shaped clone (separate git dir), the stores the apply writes through. */
+// Round-trips sandbox.toml through real git and disk: derive, apply to an empty workspace, check the two refusals
+// (remoteless repo, occupied id). Pure-format cases live in definition.test.ts.
 
-// A definition arrives as an upload like every other source now, so the tests hand it one.
+// Definitions arrive as an upload; this turns a toml string into that stream shape for tests.
 const LIMIT = 64 * 1024 * 1024;
 const streamOf = (toml: string): ReadableStream<Uint8Array> => new Blob([toml]).stream();
 
@@ -46,7 +43,7 @@ const cleanup = async (): Promise<void> => {
     }
 };
 
-// A real repo with one commit, so branches and remotes answer as they do in production.
+// Real git repo with one commit; branches and remotes behave as they do live.
 const makeRepo = async (parent: string, name: string, remote?: string): Promise<string> => {
     const dir = join(parent, name);
     await mkdir(dir, { recursive: true });
@@ -74,8 +71,7 @@ const filesOnDisk = (): Services["files"] =>
 
 const AUTHOR = ["-c", "user.email=test@example.com", "-c", "user.name=test"];
 
-// A workspace that is a REPO, the shape every real /work has: the daemon's own baseline commit and nothing
-// else, unless the test asks for a history somebody has worked in.
+// A workspace repo shaped like real /work: only the daemon's baseline commit, plus any commits the test asks for.
 const makeWorkspaceRepo = async (work: string, commits = 1): Promise<void> => {
     await defaultGit(work, ["init", "-b", "main"]);
     await writeFile(join(work, ".git/info/exclude"), `${rootExcludes([]).join("\n")}\n`);
@@ -90,9 +86,8 @@ const makeWorkspaceRepo = async (work: string, commits = 1): Promise<void> => {
     }
 };
 
-/* A PUBLISHED workspace: a bare repo standing in for the host, holding one sandbox's own content — a note, a
- * skill, an enabled automation, a workspace extension and an approved overlay. The last three are the ones
- * that act by themselves, which is what the arrival has to switch off. */
+// A bare repo standing in for the host, carrying content that acts by itself (an automation, a workspace extension, an
+// overlay) that arrival must switch off, plus plain content (a note, a skill).
 const publishedWorkspace = async (mutate?: (work: string) => Promise<void>): Promise<string> => {
     const dirs = await makeRoots();
     const bare = join(dirs.history, "workspace.git");
@@ -110,7 +105,7 @@ const publishedWorkspace = async (mutate?: (work: string) => Promise<void>): Pro
                     id: "nightly",
                     trigger: { kind: "schedule", cron: "0 9 * * *" },
                     prompt: "sweep the inbox",
-                    // Required: an automation names the models it may spend, so a stored one always carries a ladder.
+                    // An automation always names the models it may spend.
                     models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
                     enabled: true,
                 },
@@ -167,14 +162,14 @@ test("derive reads the live stores: remotes become references, a remoteless repo
     expect(omitted.map((entry) => entry.subject)).toContain("Repository scratch");
     expect(definition.capabilities.map((capability) => capability.id)).toEqual(["linear"]);
     expect(definition.secrets).toEqual(["OPENAI_API_KEY"]);
-    // Only the non-default settings, so a definition never freezes today's defaults into future applies.
+    // Definition settings include only non-default values.
     expect(definition.settings).toEqual({ workspaceMap: true });
     expect(definition.environment.dockerfile).toBe("RUN apt-get install -y ffmpeg\n");
     await cleanup();
 });
 
 test("plan → apply lands every piece through the native paths, and a re-plan marks them inapplicable", async () => {
-    // The clone source is a real local repo, standing in for the remote a published definition would name.
+    // Local repo standing in for the remote a definition would name.
     const upstream = await makeRoots();
     const upstreamDir = await makeRepo(upstream.work, "app");
 
@@ -222,7 +217,6 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
         ["capability:linear", true],
         ["settings", true],
     ]);
-    // The preview already says what no apply can do: the approval gate and the credentials.
     expect(plan.needsAction.map((action) => action.subject)).toEqual([
         "Approve and rebuild the environment",
         "Reconnect capabilities",
@@ -233,18 +227,18 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
     expect(report.failed).toEqual([]);
     expect(report.applied.map((entry) => entry.id)).toEqual(["repo:app", "environment", "capability:linear", "settings"]);
 
-    // The repo arrived in the daemon's own shape: a checkout whose real git dir lives on /history.
+    // Checkout uses the daemon's shape: its real git dir lives under history, not work.
     expect(await readFile(join(target.work, "app/README.md"), "utf8")).toBe("# app\n");
     expect((await readFile(join(target.work, "app/.git"), "utf8")).trim().startsWith("gitdir:")).toBe(true);
     expect(existsSync(join(target.history, "gits/app"))).toBe(true);
-    // The overlay landed as a DRAFT for the approval gate, never as the approved custom section.
+    // The overlay lands as a draft for the approval gate, not as an approved custom section.
     expect(await readFile(join(target.work, ".intentic/config/environment.d/definition.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
     expect(existsSync(join(target.work, ".intentic/config/environment.custom.Dockerfile"))).toBe(false);
-    // The capability is the manifest entry, present and unauthenticated; settings merged over the defaults.
+    // A landed capability is the manifest entry only, unauthenticated; settings merge over the defaults.
     expect((await targetServices.capabilities.get("linear"))?.kind).toBe("mcp");
     expect(settings.workspaceMap).toBe(true);
 
-    // Landing beside, never over: the same document again plans everything already-there as inapplicable.
+    // Re-planning the same document marks already-landed items inapplicable; it never lands over them.
     const replan = await arrivals.plan(streamOf(toml), LIMIT);
     expect(replan.items.find((item) => item.id === "repo:app")?.applicable).toBe(false);
     expect(replan.items.find((item) => item.id === "capability:linear")?.applicable).toBe(false);
@@ -262,10 +256,10 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
 
     const plan = await arrivals.plan(streamOf(toml), LIMIT);
     await arrivals.apply({ token: plan.token, items: [], includeSecrets: false });
-    // Consumed on apply, the migration surface's rule: the second apply must re-plan.
+    // A token is consumed on apply; reusing it must re-plan.
     await expect(arrivals.apply({ token: plan.token, items: [], includeSecrets: false })).rejects.toThrow(/no held arrival/);
 
-    // The seed door: no browser, no token, everything applicable lands (main.ts's definitionSeed step).
+    // The seed path: no browser, no token; everything applicable lands (main.ts's definitionSeed step).
     const seeded = await makeRoots();
     const seededServices = servicesFor(seeded, { git: { clone: gitClone } });
     const report = await applyDefinitionItems(seededServices, parseDefinitionToml(toml), () => true);
@@ -274,7 +268,7 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
     await cleanup();
 });
 
-/* ---- the workspace repo: the section that carries a sandbox's own way of working ---- */
+// Workspace repo: carries a sandbox's own way of working.
 
 const workspaceToml = (remote: string, ref?: string): string =>
     [
@@ -303,25 +297,23 @@ test("the workspace travels by reference: its content arrives, and everything in
 
     const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
     expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([["workspace", true]]);
-    // Said before anything is fetched, because at preview time nobody can know WHICH things the tree carries.
+    // Preview says only that things arrive switched off; it cannot know which things the tree carries yet.
     expect(plan.needsAction.map((action) => action.subject)).toEqual(["What the workspace brings arrives switched off"]);
 
     const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
     expect(report.failed).toEqual([]);
 
-    // The sandbox's own content, the half no definition could carry before this section existed.
     expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("workspace notes\n");
     expect(existsSync(join(target.work, ".intentic/config/skills/mine/SKILL.md"))).toBe(true);
-    // These files have typed checklist sections of their own. Selecting only the workspace cannot smuggle
-    // their remote copies around those checkboxes.
+    // Settings and capabilities are their own checklist items; selecting workspace can't smuggle their copies in.
     expect(existsSync(join(target.work, ".intentic/config/settings.json"))).toBe(false);
     expect(existsSync(join(target.work, ".intentic/config/capabilities.json"))).toBe(false);
 
-    // The automation the tree carried is OFF: the scheduler fires enabled ones unattended.
+    // The automation the tree carried lands off; the scheduler fires enabled ones unattended.
     expect((await targetServices.automations.list()).map((automation) => [automation.id, automation.enabled])).toEqual([["nightly", false]]);
-    // The workspace extension is OFF: an absent entry means enabled, so arriving quietly is arriving on.
+    // Workspace extension lands off: an absent enablement entry means enabled by default.
     expect(JSON.parse(await readFile(join(target.work, ".intentic/config/extension-enablement.json"), "utf8"))).toEqual({ "acme.hello": false });
-    // The overlay went to the approval gate rather than arriving pre-approved.
+    // The overlay lands as a draft for the approval gate, not pre-approved.
     expect(existsSync(join(target.work, ".intentic/config/environment.custom.Dockerfile"))).toBe(false);
     expect(await readFile(join(target.work, ".intentic/config/environment.d/workspace.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
     expect(report.needsAction.map((action) => action.subject)).toEqual([
@@ -331,7 +323,7 @@ test("the workspace travels by reference: its content arrives, and everything in
         "Enable the workspace extensions you trust",
     ]);
 
-    // And a definition derived HERE now names the same remote, which is what makes drift a real comparison.
+    // A definition derived here now names the same remote.
     const { definition, omitted } = await deriveDefinition(targetServices);
     expect(definition.workspace).toEqual({ remote, ref: "main" });
     expect(omitted).toEqual([]);
@@ -353,14 +345,14 @@ test("an unpublished workspace is named as the export's first omission, with wha
 test("a workspace with a history of its own, or one already published, is never taken over", async () => {
     const remote = await publishedWorkspace();
 
-    // Two commits: somebody has worked here, so this is no longer a fresh sandbox.
+    // Two commits mark this workspace as already worked in, not fresh.
     const worked = await makeRoots();
     await makeWorkspaceRepo(worked.work, 2);
     const workedPlan = await createArrivals(servicesFor(worked)).plan(streamOf(workspaceToml(remote)), LIMIT);
     expect(workedPlan.items[0]?.applicable).toBe(false);
     expect(workedPlan.items[0]?.reason?.length).toBeGreaterThan(0);
 
-    // Already published: this workspace is somebody's clone already, and a definition lands beside, never over.
+    // Already published: a definition lands beside an existing clone, never over it.
     const published = await makeRoots();
     await makeWorkspaceRepo(published.work);
     await defaultGit(published.work, ["remote", "add", "origin", remote]);
@@ -425,8 +417,7 @@ test("workspace selection preserves the target files owned by unticked definitio
     expect(await readFile(join(target.work, ".intentic/config/settings.json"), "utf8")).toBe(settings);
     expect(await readFile(join(target.work, ".intentic/config/capabilities.json"), "utf8")).toBe(capabilities);
     expect(await readFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), "utf8")).toBe(overlay);
-    // The source workspace's overlay is still untrusted; because its own checklist item was unticked, the
-    // workspace half can only carry it as a proposal.
+    // An unticked workspace item still lands its overlay only as a draft proposal, never trusted.
     expect(await readFile(join(target.work, ".intentic/config/environment.d/workspace.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
     await cleanup();
 });
@@ -443,7 +434,7 @@ test("private ignored state in a remote is refused before checkout and the targe
 
     const arrivals = createArrivals(servicesFor(target));
     const plan = await arrivals.plan(streamOf(workspaceToml(remote, "main")), LIMIT);
-    expect(plan.items[0]?.applicable).toBe(true); // the private file is ignored, so the marked baseline stays clean
+    expect(plan.items[0]?.applicable).toBe(true); // the private file is ignored; the marked baseline stays clean
     const report = await arrivals.apply({ token: plan.token, items: ["workspace"], includeSecrets: false });
 
     expect(report.applied).toEqual([]);

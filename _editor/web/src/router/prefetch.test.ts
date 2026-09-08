@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-//
-// The background half of "navigation never waits": once invoked, the prefetcher walks every view registered
-// through asyncView and pulls its chunk: through the SAME loader the wrapper uses, so nothing is ever fetched
-// twice, and it walks once per window no matter how often the shell remounts. A failing chunk costs the walk
-// nothing: the views after it still arrive.
+// Background half of 'navigation never waits': walks every view registered through asyncView and pulls its chunk via
+// the same loader, once per window no matter how often the shell remounts. A failing chunk does not stop the rest.
 import { expect, it, vi } from "vitest";
 import { h } from "vue";
 import { asyncView } from "../components/asyncView";
@@ -26,7 +23,6 @@ it(`pulls every registered view once, at idle, and survives a loader that fails`
     await vi.advanceTimersByTimeAsync(2_000);
     expect(first).toHaveBeenCalledTimes(1);
     expect(failing).toHaveBeenCalledTimes(1);
-    // The failure above did not end the walk.
     expect(last).toHaveBeenCalledTimes(1);
 
     // A shell remount calls again; the walk is once per window and the loaders stay fetched-once.

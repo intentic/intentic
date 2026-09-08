@@ -1,15 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
 
-/* The two things this platform still asks Cloudflare for: the user's own zone list, and the DNS behind the
- * loopback certificate. Tunnel provisioning, teardown, ingress and the tunnel reaper had suites here and are
- * gone with the machinery, the fabric is the platform's own edge. */
+// The two things this platform still asks Cloudflare for: the zone list, and the DNS behind the loopback cert.
 
 // Canned Cloudflare success envelope.
 const ok = (result: unknown, resultInfo?: { total_pages: number }) =>
     new Response(JSON.stringify({ success: true, errors: [], result, ...(resultInfo ? { result_info: resultInfo } : {}) }));
 
-// Route the stubbed fetch by method + URL substring, recording calls for order/payload assertions.
+// Routes the stubbed fetch by method + URL substring, recording calls for order/payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
@@ -55,11 +53,7 @@ describe(`listZoneNames`, () => {
 
 describe(`reapOrphanDnsRecords`, () => {
     const zone = `example.com`;
-    /* The zone as a churned deployment leaves it: a tunnel CNAME for a sandbox that still exists and one for a
-     * sandbox that does not, a per-sandbox loopback A in each of the two spellings the platform has used, the
-     * ACME TXT of a live sandbox and of a deleted one, the wildcard every loopback name now resolves under,
-     * and the operator's own records. The first two are the pair that matters: they are indistinguishable by
-     * content and opposite in meaning. */
+    // A churned zone's records; the two tunnel CNAMEs matter most: same shape, opposite in meaning.
     const records = [
         {
             id: `r-tunnel-a`,
@@ -99,23 +93,14 @@ describe(`reapOrphanDnsRecords`, () => {
             log: () => {},
             onError: () => {},
         });
-        /* THE ASSERTION THIS FILE EXISTS FOR, and it is about `r-tunnel-a`: a live sandbox's tunnel CNAME.
-         * Deleting those was an outage. The reasoning that licensed it was "the fabric moved off Cloudflare,
-         * so nothing mints these any more" — true of new sandboxes, silent about the ones created before it,
-         * which are reachable through exactly these records and nothing else. A dozen each (daemon, ssh, the
-         * port-slot pool), so the sweep took whole sandboxes off the internet and left their owners on a
-         * loopback address with no public name at all.
-         *
-         * "Nothing creates them" is not "nothing depends on them". Only the second licenses a delete, and the
-         * name carries the sandbox id, so the second is answerable without asking Cloudflare anything. */
+        // Only nothing depends on it licenses a delete, not nothing mints it anymore; the id in the name answers this.
         const deleted = calls.filter((call) => call.method === `DELETE`).map((call) => call.url.split(`/dns_records/`)[1]);
         expect(deleted.toSorted()).toEqual([`r-acme-gone`, `r-local-live`, `r-local-old`, `r-tunnel-b`]);
         expect(result).toEqual({ total: 9, orphaned: 4, reaped: 4, failed: 0 });
     });
 
     it(`leaves a record it cannot attribute to any sandbox alone`, async () => {
-        // A tunnel CNAME whose name carries no sandbox id was not minted by this platform under a sandbox, so
-        // nothing here knows whether anyone is using it. Unknown is not the same as unused.
+        // Unknown is not the same as unused: a name with no sandbox id in it cannot be attributed either way.
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1` }]) },
             {
@@ -145,11 +130,7 @@ describe(`reapOrphanDnsRecords`, () => {
     });
 
     it(`asks Cloudflare for nothing but DNS: the sweep must survive a DNS-only token`, async () => {
-        /* It used to list the account's tunnels first, to tell a dangling CNAME from a live one. That call
-         * needs the Cloudflare Tunnel scope, which this token lost when the fabric moved off Cloudflare, so
-         * the listing threw and took the whole sweep with it, every day, silently. Nothing was collected, the
-         * zone reached its record quota, and the loopback certificate that quota pays for stopped being
-         * issuable, which is how a permission on an API token ended up freezing workspaces. */
+        // A tunnel-listing call needs a scope this token no longer has; asking for it would break the sweep silently.
         const calls = stubRecords();
         await reapOrphanDnsRecords({ apiToken: `api`, zone, liveSandboxIds: new Set(), dryRun: true, log: () => {}, onError: () => {} });
         expect(calls.some((call) => call.url.includes(`cfd_tunnel`))).toBe(false);

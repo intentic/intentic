@@ -1,34 +1,20 @@
-/* WHICH RUNNER RAISED THIS CARD, the one fact a parent needs to answer a question it did not ask.
- *
- * A remote turn's question, permission prompt or plan approval is minted in the RUNNER's request registry
- * (agent/agent-requests.ts, over there), and the frame carrying its id travels to the parent, which persists
- * it and draws the card. The answer comes back to the parent as `POST /agent/reply` with a `requestId` and
- * nothing else: no conversation, no machine. The parent's own registry has never heard of that id, so
- * without this table the answer is a 404 and the remote turn waits forever, which is exactly what the
- * feature's first real run showed.
- *
- * So the parent watches the frames it is already relaying (runner-dispatch.ts) and writes down where each id
- * came from. In memory, deliberately: an id belongs to a turn that is parked RIGHT NOW, and a daemon restart
- * ends every turn it could have belonged to (the runner's own abort settles the card as cancelled).
- *
- * BOUNDED, because this is fed by a stream a remote agent controls: a turn that raised thousands of cards
- * must not grow the parent's memory without limit. Oldest-first eviction, and every id is dropped the moment
- * its `resolved` frame passes by, which is the ordinary end of a card's life. */
+// Which runner raised this card: a remote question, permission or plan approval is minted in the runner's registry, but
+// its reply comes back as just a requestId, nothing the parent's registry recognizes. Watches the frames it already
+// relays and records each id's origin, in memory (a restart ends every parked turn) and bounded (oldest-first
+// eviction).
 
 interface RemoteRequest {
     readonly runnerId: string;
     readonly conversationId: string;
 }
 
-// Roughly a hundred conversations' worth of simultaneously-parked cards. Far above any real fleet, low
-// enough that a runaway stream costs nothing worth measuring.
+// About a hundred conversations' worth of parked cards: far above any real fleet, cheap even runaway.
 const MAX_TRACKED = 2_000;
 
 const raised = new Map<string, RemoteRequest>();
 
 export const noteRemoteRequest = (requestId: string, request: RemoteRequest): void => {
-    // Re-noting an id keeps its ORIGINAL position: a card re-announced on reconnect is the same card, and
-    // refreshing its place would let one chatty turn hold the table against everyone else's.
+    // Re-noting keeps the original position: refreshing it would let one chatty turn crowd out everyone else.
     if (raised.has(requestId)) {
         return;
     }
@@ -45,8 +31,7 @@ export const remoteRequestOf = (requestId: string): RemoteRequest | undefined =>
 
 export const forgetRemoteRequest = (requestId: string): void => void raised.delete(requestId);
 
-// Every card a conversation still has parked, dropped together: its turn ended, so nothing it raised can be
-// answered any more. Called when a remote dispatch unwinds, however it ended.
+// Drops every card still parked for a conversation whose turn ended; called whenever a remote dispatch unwinds.
 export const forgetRemoteRequestsOf = (conversationId: string): void => {
     for (const [id, request] of raised) {
         if (request.conversationId === conversationId) {

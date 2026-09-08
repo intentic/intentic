@@ -2,30 +2,23 @@ import { embedEndpointOf, embedScript } from "@intentic/sandbox-contract/embed";
 import { FrontDeskElement } from "./element.js";
 import { fetchConfig } from "./transport.js";
 
-/* The embed's entry point. One <script> on a customer's page:
- *
- *   <script src="https://sandbox-<id>.<zone>/webchat/widget.js" data-automation="support" defer></script>
- *
- * Everything else is derived by the contract's embed helpers: the daemon to talk to is the origin this script
- * came from, `data-base` overrides it for a site fronting the sandbox behind its own proxy. */
+// Embed entry point, loaded via a single <script data-automation> tag on the customer's page; origin comes from the
+// script's own src, `data-base` overrides it behind a proxy.
 
 const TAG = "intentic-front-desk";
 
-// Read at module scope, while the script body is executing (embedScript says why).
+// Read at module scope, while this script's body is still executing.
 const ownScript = embedScript("/webchat/widget.js");
 
 const boot = async (script: HTMLScriptElement): Promise<void> => {
     const endpoint = embedEndpointOf(script);
     if (endpoint === undefined) {
-        // The one mistake worth a console line: without it the widget is silently absent and the site owner has
-        // nothing to go on. Every other failure surfaces inside the panel, where the visitor can see it.
+        // Only failure logged to console; every other failure surfaces inside the panel instead.
         console.error(`[intentic] the Front Desk embed needs data-automation="<automation id>"`);
         return;
     }
 
-    // The config fetch is also the reachability probe: a sandbox that is asleep, an automation that was
-    // deleted, or an origin that isn't on the allowlist all land here, and in every one of those cases the
-    // right thing is to render NOTHING. A launcher that opens onto an error is worse than no launcher.
+    // Doubles as the reachability probe: a sleeping sandbox or disallowed origin lands here, rendering nothing.
     const config = await fetchConfig(endpoint).catch((error: unknown) => {
         console.error(`[intentic] Front Desk is unavailable:`, error);
         return undefined;

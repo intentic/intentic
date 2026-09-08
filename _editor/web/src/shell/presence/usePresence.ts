@@ -3,34 +3,30 @@ import { computed, ref } from "vue";
 import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
 import { useAuth } from "../../features/auth/useAuth";
 
-/* Live presence: who else is connected to the active sandbox and what they're looking at. Module-level
- * singleton with two halves. The ROSTER is fed by useSandboxLiveness from the daemon's /events presence
- * frames (full snapshots, last frame wins, nothing to reconcile). The REPORTER pushes this tab's own
- * activity (view / chat session / open file / idle) to the daemon, debounced and fire-and-forget; the
- * triggers live in WorkspaceShell (route, chat, visibility) and Workspace (open file), presence only exists
- * while the shell holds the liveness stream open, so shell-scoped watches match its lifetime exactly. */
+// Live presence: who else is on the active sandbox and what they're doing. Module-level singleton with two
+// halves: the roster (fed by useSandboxLiveness's /events frames, last frame wins) and the reporter (this tab's
+// activity, debounced, fire-and-forget). Lives only while the shell holds the liveness stream open.
 
 const { user } = useAuth();
 
-// --- Roster (inbound) ---------------------------------------------------------------------------
+// Roster (inbound).
 
 const users = ref<readonly PresenceUser[]>([]);
 
-// One OTHER member of the sandbox, aggregated across their open tabs.
+// One other member of the sandbox, aggregated across their open tabs.
 export interface PresenceMember {
     readonly email: string;
     readonly name?: string;
     readonly picture?: string;
-    // The member's trust tier, resolved by the daemon at connection time, every tab of a member carries the
-    // same one, so the first tab's answer is the member's.
+    // Trust tier resolved by the daemon per connection; every tab of a member carries the same one.
     readonly role: MemberRole;
-    // Idle only when EVERY tab is hidden, one visible tab means they're here.
+    // Idle only when every tab is hidden; one visible tab means they're here.
     readonly idle: boolean;
     readonly tabs: readonly PresenceUser[];
 }
 
-// Everyone but me, one entry per member: active members first, alphabetical within, so the rail stack stays
-// stable while the roster churns.
+// Everyone but me, one entry per member: active first, alphabetical within, so the stack stays stable while the
+// roster churns.
 export const presenceOthers = computed<readonly PresenceMember[]>(() => {
     const self = user.value?.email.toLowerCase();
     const byEmail = new Map<string, PresenceUser[]>();
@@ -86,19 +82,18 @@ export const resetPresence = (): void => {
     users.value = [];
 };
 
-// --- Reporter (outbound) ------------------------------------------------------------------------
+// Reporter (outbound).
 
 const DEBOUNCE_MS = 300;
 
-// This tab's CURRENT /events connection id (set by the liveness loop per attempt) and its activity state.
+// This tab's current /events connection id, set by the liveness loop per attempt, plus its activity state.
 let clientId: string | undefined;
 const report: { idle: boolean; view?: string; sessionId?: string; path?: string } = { idle: false };
 let lastSent: string | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-// One send fires DEBOUNCE_MS after the FIRST change of a window (not reset per change), reading the state at
-// fire time, a navigation that flips view + file + session coalesces into one report with bounded latency.
-// Fire-and-forget: a lost/rejected report self-heals on the next change or the reconnect's re-send.
+// Fires DEBOUNCE_MS after the first change in a window, coalescing a burst into one report read at fire time.
+// Fire-and-forget: a lost or rejected report self-heals on the next change or reconnect resend.
 const send = (): void => {
     timer ??= setTimeout(() => {
         timer = undefined;
@@ -134,16 +129,16 @@ export const reportIdle = (idle: boolean): void => {
     send();
 };
 
-// Called by the liveness loop right after each successful /events open, with that CONNECTION's fresh id: the
-// daemon just registered a blank entry for it, so re-announce the current activity unconditionally.
+// Called after each successful /events open with that connection's fresh id; the daemon's entry for it starts
+// blank, so this re-announces activity unconditionally.
 export const presenceStreamOpened = (id: string): void => {
     clientId = id;
     lastSent = undefined;
     send();
 };
 
-// Roster frames land here (from useSandboxLiveness). Self-heal: our own entry arriving blank while we have
-// activity means the initial report raced the registration (POST landed first, was dropped), re-send.
+// Roster frames land here. Self-heals a race: our own entry appearing blank while we have activity means the
+// initial report beat the registration, so re-send.
 export const setPresenceUsers = (next: readonly PresenceUser[]): void => {
     users.value = next;
     const own = clientId !== undefined ? next.find((entry) => entry.clientId === clientId) : undefined;

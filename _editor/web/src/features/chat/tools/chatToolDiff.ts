@@ -1,6 +1,6 @@
-/* Line-level diff rows for the chat's inline tool cards, a lightweight render of a tool_call's structured
- * diff content. Monaco stays the full-screen reviewer; mounting a diff editor per transcript card is far too
- * heavy. Common prefix/suffix trim + an LCS walk over the middle keeps the usual Edit snippet cheap. */
+// Line-level diff rows for chat's inline tool cards, a lightweight render of a tool_call's structured diff.
+// Monaco stays the full-screen reviewer; a diff editor per card would be too heavy. Common prefix/suffix trim
+// plus an LCS walk over the middle keeps an ordinary Edit snippet cheap.
 
 export interface DiffRow {
     readonly type: "context" | "add" | "del" | "skip";
@@ -9,7 +9,7 @@ export interface DiffRow {
 
 // Rendered row cap: a whole-file Write stays a bounded card (the full file is one click away).
 const MAX_ROWS = 160;
-// LCS cell budget; beyond it (two huge dissimilar sides) fall back to plain del-all/add-all.
+// LCS cell budget; beyond it (two huge dissimilar sides), falls back to plain del-all/add-all.
 const MAX_LCS_CELLS = 250_000;
 // Context runs longer than this collapse to their edges around a skip row.
 const CONTEXT_EDGE = 3;
@@ -20,7 +20,7 @@ const add = (text: string): DiffRow => ({ type: "add", text });
 const context = (text: string): DiffRow => ({ type: "context", text });
 const skip = (count: number): DiffRow => ({ type: "skip", text: `⋯ ${count} unchanged lines` });
 
-// Interleave the trimmed middle by longest common subsequence (bottom-up table, then a walk).
+// Interleaves the trimmed middle by longest common subsequence: a bottom-up table, then a walk back through it.
 const lcsRows = (dels: string[], adds: string[]): DiffRow[] => {
     if (dels.length * adds.length > MAX_LCS_CELLS) {
         return [...dels.map(del), ...adds.map(add)];
@@ -58,7 +58,7 @@ const lcsRows = (dels: string[], adds: string[]): DiffRow[] => {
     return rows;
 };
 
-// Collapse long unchanged runs to their edges so the changed lines stay in view.
+// Collapses long unchanged runs to their edges so the changed lines stay in view.
 const collapse = (rows: DiffRow[]): DiffRow[] => {
     const out: DiffRow[] = [];
     let run: DiffRow[] = [];
@@ -87,9 +87,8 @@ const collapse = (rows: DiffRow[]): DiffRow[] => {
 
 const cap = (rows: DiffRow[]): DiffRow[] => (rows.length <= MAX_ROWS ? rows : [...rows.slice(0, MAX_ROWS), skip(rows.length - MAX_ROWS)]);
 
-// The full add/del/context rows before display collapse + cap, every changed line is present, so the line
-// counts are exact even for a whole-file Write or a diff the render caps. collapse() only folds context runs,
-// never add/del, so applying it for display never drops a counted line.
+// Full add/del/context rows before collapse/cap: every changed line is present, so counts stay exact.
+// collapse() only folds context, so display never drops a counted line.
 const rawRows = (oldText: string | undefined, newText: string): DiffRow[] => {
     const oldLines = splitLines(oldText ?? "");
     const newLines = splitLines(newText);
@@ -115,7 +114,7 @@ const rawRows = (oldText: string | undefined, newText: string): DiffRow[] => {
 
 export const diffRows = (oldText: string | undefined, newText: string): DiffRow[] => cap(collapse(rawRows(oldText, newText)));
 
-// Exact +additions / −deletions for the card header, counted from the uncollapsed/uncapped rows.
+// Exact +additions/-deletions for the card header, counted from the uncollapsed, uncapped rows.
 export const diffStat = (oldText: string | undefined, newText: string): { additions: number; deletions: number } => {
     let additions = 0;
     let deletions = 0;

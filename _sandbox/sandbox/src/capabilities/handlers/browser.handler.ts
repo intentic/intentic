@@ -7,38 +7,12 @@ import { accountGroupOf, accountSkillNames, convergeAccountSkills } from "../acc
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-// A browser-automation connector: give the AGENT a real, logged-in browser for one platform whose API can't
-// cover "all the actions". The PLATFORM is data in an installed extension's `contributes.capabilities` (its card,
-// its login URL, its cheatsheet); this handler is the generic plumbing over it. `apply` converges the platform's
-// SKILL.md, rendered ONCE per site group, this account a roster line on it (capabilities/account-skills.ts;
-// loaded-skills.ts projects it to every runtime), and its `fragment` is the
-// browser feature pack. Chromium + Xvfb as one unit (image-packs/browser.Dockerfile), nothing when the running base
-// image already bakes it (the standard image does; a core image rides it through an owner rebuild).
-// The login lands in a Chromium profile under .intentic/local/browser/<id> by either of two hands: the owner's own,
-// over the /system/browser-profile WebSocket, or the AGENT's, its @playwright/mcp mounts over the same profile
-// while the account is still pending, signs in (or up) using the stored credentials the daemon types for it
-// (browser/accounts-tools.ts), and marks the account connected. Either way the owner can reopen that same
-// profile by hand on the same route. Distinct from `cli` (env credential + curl), here the credential is the
-// browser session itself, plus the optional stored password the accounts tools type but never reveal.
-//
-// ONE ENTRY IS ONE ACCOUNT, not one site: several entries may name the same platform (reddit-work and
-// reddit-personal), and everything that carries identity, the profile, the login, the passkey, is keyed by the
-// entry's ID (session-store.ts), as this handler's skill file and the agent's tool prefix already are. So the
-// status below asks whether THIS account signed in, and the removal takes only this account's session with it.
+// Browser-automation connector: platform data (card, login, skill) comes from an installed extension's manifest; this
+// is generic plumbing over it. One entry is one account, not one site: several entries may share a platform, and
+// profile/login/passkeys key off the entry's id. Login lands in a Chromium profile at .intentic/local/browser/<id>.
 
-/* Is the browser pack actually present. The probe for the "rebuild pending" state between "add" and "rebuild"
- * (on a core image the pack rides the overlay). EVERY piece is checked, because the pack installs them as one
- * unit and a half-present browser is unusable rather than merely reduced:
- *
- *   - Chromium without Xvfb can only run headless, which is fingerprinted and turned away by the WAFs these
- *     accounts exist to get past; Xvfb without Chromium has nothing to display.
- *   - Without ffmpeg and xdotool the browser runs and NOBODY CAN SEE IT. Watching one is x11grab off its
- *     display (browser/videocast.ts) and taking the wheel is XTEST driving that display (browser/xinput.ts),
- *     so a pack missing either is a connected account the owner cannot sign in to by hand — which is the one
- *     thing the guided login exists to do. Reading as "rebuild pending" says that in the place the owner can
- *     act on it, where launching anyway would be a black window and a line in a log.
- *
- * Exported for the identity handler, whose browser is this same machinery. */
+// True only if the whole browser pack (Chromium, Xvfb, ffmpeg, xdotool) is present: a half-present pack is unusable,
+// not merely reduced. Exported for the identity handler, which shares this machinery.
 export const browserPackInstalled = (): boolean => {
     if (!["/usr/bin/Xvfb", "/usr/bin/ffmpeg", "/usr/bin/xdotool"].every((tool) => existsSync(tool))) {
         return false;
@@ -50,10 +24,8 @@ export const browserPackInstalled = (): boolean => {
     }
 };
 
-// The site an account is on, as a person would say it, the host of wherever its browser opens. Used in the
-// messages the reader sees, because for a GENERIC session the `platform` slug is the card ("website") and says
-// nothing about which site was actually connected. Undefined for a value that isn't an http(s) URL at all, which
-// is what the add rejects rather than storing.
+// The site an account is on, for messages: a generic session's `platform` is just "website" and names nothing.
+// Undefined for anything that is not an http(s) URL.
 const siteOf = (url: string): string | undefined => {
     try {
         const parsed = new URL(url);
@@ -64,11 +36,11 @@ const siteOf = (url: string): string | undefined => {
 };
 
 export const browserHandler: CapabilityHandler = {
-    // The account's stored password, what the daemon types into the site on the agent's behalf (the accounts
-    // tools) and what the /secrets inventory rotates. Unset for a profile that signed in by hand.
+    // The stored password: what the daemon types into the site for the agent, and what /secrets rotates. Unset if the
+    // profile was signed in by hand.
     secret: (config) => ((config as BrowserConfig).password !== undefined ? "password" : undefined),
-    // The whole config MINUS the password (masked to hasPassword, the mcp-token precedent): a generic session's
-    // page and purpose are exactly what the card's row has to be able to show, its credential is not.
+    // The config minus the password (masked to `hasPassword`): a card's row shows the page and purpose, never the
+    // credential.
     echo: (config) => {
         const { password, ...rest } = config as BrowserConfig;
         return {
@@ -77,10 +49,8 @@ export const browserHandler: CapabilityHandler = {
         };
     },
     fragment: () => packFragment("browser"),
-    /* The connected marker is per ENTRY and always moves; the profile and its passkeys move only for a
-     * standalone account, which is the one that OWNS them, an identity-born account renamed out from under its
-     * identity must leave the shared browser (and its siblings' logins) exactly where they are. Same division
-     * `remove` already draws, for the same reason. */
+    // The marker always moves with the entry; the profile and its passkeys move only for a standalone account, the one
+    // that owns them. Same split as `remove`.
     rename: {
         carry: async (ctx, from, to, config) => {
             await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
@@ -92,18 +62,12 @@ export const browserHandler: CapabilityHandler = {
         if (contribution === undefined) {
             throw new Error(`no browser platform "${platform}": install the extension that declares it`);
         }
-        /* WHOSE BROWSER THIS ACCOUNT LIVES IN, resolved at add-time for the same reason the URLs are: a card
-         * naming an identity that isn't there would otherwise surface later as browser tools over an empty
-         * profile nobody signed in. The identity's email lands on the skill's roster line so the agent knows
-         * which address the signup forms get, a fact the platform pack cannot know. */
+        // Which identity owns this browser, resolved now rather than surfacing later as tools over an empty profile.
         const born = identity === undefined ? undefined : await ctx.capabilities.get(identity);
         if (identity !== undefined && born?.kind !== "identity") {
             throw new Error(`no identity "${identity}": add the identity first, or leave the field empty for a standalone account`);
         }
-        /* WHERE THIS ACCOUNT'S BROWSER OPENS, settled HERE rather than when the login window is opened. A card
-         * pins it or the form answers it, and "neither" is a real possibility for the generic session, so it is
-         * caught at add-time, where the reader is still on the form that could fix it, instead of surfacing later
-         * as a sign-in window that comes up blank. */
+        // Where this account opens, resolved at add-time, not when the login window opens, so it fails here.
         const urls = browserUrls(contribution.spec, config as Record<string, string>);
         if (urls === undefined) {
             throw new Error(`"${platform}" needs a page to open: fill in the site's address`);
@@ -115,8 +79,7 @@ export const browserHandler: CapabilityHandler = {
         if (!("skill" in contribution.spec)) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file: reinstall it`);
         }
-        // The route upserts AFTER apply, so this entry rides in as the delta. The converge failing to render
-        // this group's skill afterwards is the same rotted-install fact the spec check above fronts.
+        // The route upserts after apply; this entry rides in as the delta before the store records it.
         await convergeAccountSkills(ctx, { upsert: { id, kind: "browser", config: config as BrowserConfig } });
         yield {
             kind: "log",
@@ -126,9 +89,8 @@ export const browserHandler: CapabilityHandler = {
                     : `Filed "${id}" on ${site} under the identity "${born.id}", it shares that identity's browser. Ask the agent to sign in (or sign up) through it, or open "Log in" to do it yourself.`,
         };
     },
-    // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
-    // and the login one to the guided-login window, it distinguishes them by the word "rebuild" in the detail,
-    // so keep that word in the rebuild detail (and out of the login detail).
+    // Two pending states, told apart by the word "rebuild" in `detail`: the UI routes on it to the Environment card or
+    // the login window. Keep the word in one, out of the other.
     status: async (ctx, id, config) => {
         const group = accountGroupOf(config as BrowserConfig);
         if (!accountSkillNames(await ctx.files.read(loadedSkillFile(ctx.workspace.root, group.name)), id)) {
@@ -142,11 +104,10 @@ export const browserHandler: CapabilityHandler = {
         }
         return { state: "active" };
     },
-    // A standalone account's removal takes its whole profile with it; an identity-born account's takes only its
-    // own marker and roster line, the shared browser (and every sibling signed in beside it) belongs to the
-    // identity and outlives any one account.
+    // A standalone account's removal takes its whole profile; an identity-born account's takes only its marker and
+    // roster line. The shared browser outlives any one account.
     remove: async (ctx, id, config) => {
-        // The route deletes the entry AFTER this hook, so the converge is told to leave it out.
+        // The route deletes the entry after this hook runs; told here to omit it up front.
         await convergeAccountSkills(ctx, { omit: id });
         if ((config as BrowserConfig).identity === undefined) {
             await clearSession(ctx.workspace.root, id);

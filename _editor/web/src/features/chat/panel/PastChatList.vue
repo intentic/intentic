@@ -5,22 +5,10 @@ import MatchLine from "../../../components/MatchLine.vue";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 
-/* THE PAST-CHATS LIST, the sandbox's stored sessions, as rows you can reopen. One body, two hosts: the
- * desktop strip raises it in an <AnchoredOverlay> under the history button, the mobile strip in a
- * <BottomSheet>. That split is the pattern the design system's own Picker already uses (one PickerPanel,
- * a Popover on desktop and a sheet on touch); these two strips had instead each written the list out.
- *
- * Which mattered, because the row is not trivial: it carries the derived title, who else has the session open
- * right now, the SNIPPET explaining why a search matched: the line the query hit and who said it, shown only
- * when the title isn't the match, and the relative time. Two copies meant two places for the
- * snippet rule to drift, and both files carried a comment insisting the two boxes must not come to mean
- * different things. Now they cannot.
- *
- * `touch` is the only difference left, and it is a real one rather than a style preference: a thumb needs a
- * 48px row and a `:active` tint (there is no hover to give it), where a pointer wants a dense row that
- * responds on hover. It is a prop rather than a `useDevice` read because the HOST already knows: the two
- * strips are mutually exclusive by device, and a list that consulted a global could disagree with the
- * component that mounted it. */
+// The past-chats list, stored sessions as reopenable rows. One body, two hosts (desktop AnchoredOverlay, mobile
+// BottomSheet), so the title/presence/snippet/time rule lives once instead of drifting between two copies. `touch`
+// is a real difference (a 48px row with an `:active` tint vs. a dense hover row), passed as a prop since the
+// mounting strip already knows its own device.
 
 defineProps<{ sessions: readonly ChatSession[]; query: string; touch?: boolean }>();
 const emit = defineEmits<{ open: [id: string] }>();
@@ -41,9 +29,10 @@ const emit = defineEmits<{ open: [id: string] }>();
                 <!-- Members with this session open right now. -->
                 <PresenceAvatars :members="viewersOfSession(session.id)" label="in this chat" />
             </span>
-            <!-- Why this row matched, when it wasn't the title: the line the query hit, and which side of the
-                 chat said it. Absent on an unfiltered list and on a title match, so it never repeats the row
-                 above it. -->
+            <!--
+                Why this row matched, when it wasn't the title: the line the query hit and which side said it. Absent on an
+                unfiltered list or a title match, so it never repeats the row above.
+            -->
             <MatchLine
                 v-if="session.snippet !== undefined"
                 :snippet="session.snippet"

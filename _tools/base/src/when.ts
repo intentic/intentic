@@ -1,38 +1,14 @@
-/* ONE CONDITION LANGUAGE, WRITTEN AS A STRING, the thing a surface can put in a manifest and a different
- * tier can evaluate.
- *
- * Every conditional affordance in this product used to invent its own shape. Capability fields gated on
- * `{ key, value }`, a single equality, and the check was written TWICE, once in the web form and once in the
- * daemon's install validation, which is two copies of one rule with nothing holding them together. Commands
- * gated on a `(event) => boolean` closure, which cannot be written down: an extension declares its
- * contributions in JSON, so a predicate that only exists as JavaScript in the shell meant extension commands
- * could have no condition at all, and the keybindings page had nothing to show a user about when a chord
- * applies.
- *
- * A parsed string fixes all three at once. It serializes, so a manifest can carry it and the install dialog
- * can print it. It parses to a tree, so a malformed condition is a manifest error at parse time rather than a
- * gate that is quietly false forever. And it is evaluated by one function, so the web and the daemon cannot
- * disagree about what a card's form is asking for.
- *
- * WHAT IT DELIBERATELY IS NOT is a general expression language. There is no arithmetic, no function call, no
- * property access on a value, and no way to reach anything the caller did not put in the context object. The
- * grammar below is the whole of it, and the reason to keep it there is that these strings arrive from
- * installed extensions: a condition that cannot compute cannot be a way in.
- *
- *   expr    := or
- *   or      := and ( '||' and )*
- *   and     := unary ( '&&' unary )*
- *   unary   := '!' unary | '(' expr ')' | comparison | key
- *   comparison := key ( '==' | '!=' | '>' | '>=' | '<' | '<=' ) literal
- *               | key ( 'in' | 'not in' ) '[' literal ( ',' literal )* ']'
- *   key     := [A-Za-z_][A-Za-z0-9_.-]*
- *   literal := 'single-quoted' | "double-quoted" | number | true | false
- *
- * A bare `key` is a truthiness test, which is what makes the common case short: `chatFocused` rather than
- * `chatFocused == true`. `in` takes a LITERAL list rather than VS Code's second context key, because every
- * condition this product actually needs is "is the value one of these few" and a list says that at the site
- * where it is read.
- */
+// One condition language, a string a manifest can carry and any tier can evaluate identically. Deliberately not a
+// general expression language: no arithmetic, no function calls, no property access, only what the grammar below
+// allows, since these strings arrive from installed extensions.
+// expr := or
+// or := and ( '||' and )*
+// and := unary ( '&&' unary )*
+// unary := '!' unary | '(' expr ')' | comparison | key
+// comparison := key ( '==' | '!=' | '>' | '>=' | '<' | '<=' ) literal
+//             | key ( 'in' | 'not in' ) '[' literal ( ',' literal )* ']'
+// key := [A-Za-z_][A-Za-z0-9_.-]*
+// literal := 'single-quoted' | "double-quoted" | number | true | false
 
 export type WhenValue = string | number | boolean;
 
@@ -46,10 +22,8 @@ export type WhenExpression =
 
 export type CompareOp = "==" | "!=" | ">" | ">=" | "<" | "<=";
 
-/* Why a named error rather than a bare `Error`: the two callers want different things from a bad condition.
- * The manifest schema turns it into a field-level validation message an extension author reads; the shell's
- * command registry lets it throw, because a builtin with an unparseable condition is a bug in this repo and
- * failing loudly at registration is how it gets found before anyone ships it. */
+// A named error, not a bare `Error`: the manifest schema turns it into a field-level validation message; the command
+// registry lets it throw, since an unparseable builtin condition is a bug to catch at registration.
 export class WhenSyntaxError extends Error {
     constructor(
         message: string,
@@ -110,8 +84,7 @@ const scan = (source: string): Token[] => {
                 end += 1;
             }
             const word = source.slice(at, end);
-            // `true`/`false` are values wherever they appear, and `in`/`not` are operators, a key may not be
-            // spelled any of them, which is why they are decided here rather than by the parser peeking.
+            // `true`/`false` and `in`/`not` are reserved words; a key cannot be spelled any of them.
             if (word === "true" || word === "false") {
                 tokens.push({ kind: "literal", value: word === "true", at });
             } else if (word === "in" || word === "not") {
@@ -185,8 +158,8 @@ class Parser {
         return this.tail(token.text);
     }
 
-    // What follows a key decides which of the three shapes it is: a comparison, a membership test, or, when
-    // nothing follows that belongs to it, the bare truthiness test.
+    // What follows a key decides its shape: a comparison, a membership test, or, with nothing after it, bare
+    // truthiness.
     private tail(key: string): WhenExpression {
         for (const op of ["==", "!=", ">=", "<=", ">", "<"] as const) {
             if (this.eat(op)) {
@@ -243,29 +216,21 @@ class Parser {
     }
 }
 
-/* Parse once, hold the result. Every caller here registers its conditions (a command at registration, a
- * capability field when its manifest is read) rather than re-parsing per evaluation, so there is no cache in
- * this module to grow: the parsed trees live exactly as long as the things that declared them. */
+// Parses once; every caller registers its condition (a command, a capability field) rather than re-parsing per
+// evaluation, so there is no cache to grow here.
 export const parseWhen = (source: string): WhenExpression => new Parser(scan(source), source).parse();
 
-/* Truthiness for a context key, spelled out because the interesting cases are the falsy ones. An ABSENT key is
- * false, a condition naming a key nobody publishes is a condition that does not hold, never a crash, which is
- * what lets an extension name a key a newer host would have. Empty string and 0 are false for the same reason
- * they are in JavaScript: a surface publishing `selectionSize: 0` means "nothing selected", and having to
- * write `selectionSize > 0` for that would be a trap rather than a distinction. */
+// An absent key is false, never a throw, so an extension can name a key a newer host has not published yet. Empty
+// string and 0 are false too, as in JavaScript, so `selectionSize: 0` needs no `> 0`.
 const truthy = (value: unknown): boolean => value !== undefined && value !== null && value !== false && value !== "" && value !== 0;
 
-/* Comparison across the type boundary, because context values are whatever a surface publishes and literals
- * are whatever an author typed. `mode == 'strict'` must hold for the string, and `enabled == true` for the
- * boolean, but so must `count == 3` when a surface publishes the number and the author wrote the number.
- * Same type compares directly; mixed types compare their string forms, which is the only reading of
- * `enabled == 'true'` that isn't a silent no. */
+// Compares across the type boundary: same type compares directly, mixed types compare string forms, the only reading of
+// `enabled == 'true'` that is not a silent no.
 const equal = (actual: unknown, expected: WhenValue): boolean =>
     typeof actual === typeof expected ? actual === expected : String(actual) === String(expected);
 
-// Ordering only means something between two numbers. A `>` against anything else (an absent key, a string) is
-// false rather than a coercion, `version > 3` on a missing key must not read as `NaN > 3` throwing, nor as
-// JavaScript's `'10' > '9' === false`, which is the bug this refuses to have.
+// Ordering only means something between two numbers; anything else is false rather than a coercion, avoiding both a
+// `NaN` throw and JavaScript's `'10' > '9' === false`.
 const ordered = (actual: unknown, expected: WhenValue, op: CompareOp): boolean => {
     if (typeof actual !== "number" || typeof expected !== "number") {
         return false;
@@ -310,9 +275,8 @@ export const evaluateWhen = (expression: WhenExpression, context: WhenContext): 
     return ordered(context[expression.key], expression.value, expression.op);
 };
 
-/* Whether a string is a condition this module can evaluate, the shape a schema wants, where the parse error
- * itself is not the message to show. Used by the manifest schemas so an extension declaring a broken
- * condition is refused at install with the field named, rather than installed with a gate that never opens. */
+// Whether a string is a condition this module can evaluate; used by the manifest schemas to refuse a broken condition
+// at install, field named, rather than install a gate that never opens.
 export const isWhenExpression = (source: string): boolean => {
     try {
         parseWhen(source);
@@ -322,9 +286,8 @@ export const isWhenExpression = (source: string): boolean => {
     }
 };
 
-/* Every context key a condition reads. The keybindings page uses it to explain a chord that is not firing
- * ("waiting on: chatFocused"), and it is what a test can use to hold a surface's published keys and its
- * declared conditions to each other without either side keeping a list. */
+// Every context key a condition reads; used to explain a chord that is not firing ("waiting on: chatFocused") and to
+// check a surface's published keys against its declared conditions.
 export const whenKeys = (expression: WhenExpression): readonly string[] => {
     if (expression.kind === "has" || expression.kind === "compare" || expression.kind === "member") {
         return [expression.key];

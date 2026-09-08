@@ -5,22 +5,17 @@ import { hasManagedEntry, removeManagedEntry, upsertManagedEntry } from "../../i
 import { panelSession } from "../../processes/managed-processes.js";
 import type { CapabilityHandler } from "../capability.js";
 
-// A self-hosted service (e.g. SigNoz): declare it as i.want.service in deploy.config.ts, then provision it via
-// the ONE infra apply pipeline, the shared panel-infra-apply one-shot job (`intentic deploy resolve && intentic deploy apply
-// --yes && intentic deploy adopt` with the durable events file), the same job InfraDeclare's Apply launches. That
-// buys the visible terminal, serialization with a concurrent InfraDeclare apply, restart adoption, and the
-// ApplyProgress tail, this handler just relays the job's events into the add stream and fails on its terminal
-// non-zero exit. Requires DevOps (the intent repo). SigNoz's MCP is auto-wired by the resolver's service
-// catalog, so the agent gets its tools with no extra work here.
+// A self-hosted service, declared as i.want.service in deploy.config.ts, provisioned through the shared
+// panel-infra-apply job. This handler relays its events into the add stream and fails on a non-zero terminal exit.
+// Requires DevOps; a service's MCP is auto-wired by the resolver's catalog.
 export const serviceHandler: CapabilityHandler = {
     echo: (config) => {
         const service = config as ServiceConfig;
         return { service: service.service, domain: service.domain, on: service.on, expose: service.expose };
     },
     requires: ["devops"],
-    // A provisioned service's name is not a label on a row: it names the running thing, its container, its
-    // volumes, the domain pointed at it, and moving that is a deployment, not an edit. Declaring the new one
-    // and retiring the old is the honest way to do it, and it goes through the same apply as any other change.
+    // A service's name isn't a label: it names the running container, volumes and domain. Renaming means declaring a
+    // new one and retiring this, through the same apply as any other change.
     rename: {
         refuse: "A provisioned service is named in your infrastructure, where its containers and volumes carry that name, declare the new one and retire this, rather than renaming it here.",
     },
@@ -33,9 +28,7 @@ export const serviceHandler: CapabilityHandler = {
             throw new Error("an infrastructure apply is already running: wait for it to finish, then retry");
         }
         yield { kind: "terminal", session: panelSession(INFRA_APPLY_KEY) };
-        // Relay the job's structured events (the dialog renders their messages; heartbeats keep the stream
-        // alive). The tail ends on the chain's terminal exit, adopt's clean one, or any command's failure,
-        // or when the job died without one (SIGKILL); only adopt's clean exit is success.
+        // Ends on any terminal exit or a silent kill; only adopt's own clean exit counts as success.
         let outcome: "running" | "ok" | "failed" = "running";
         for await (const line of ctx.infraApply.events()) {
             yield line;

@@ -2,14 +2,8 @@
 import { type CodeToken, useHighlighter } from "@intentic/ui";
 import { ref, watch } from "vue";
 
-/* A single-line command fragment styled as code with Shiki syntax highlighting.
- *
- * It uses `useHighlighter().tokenizeLine` to break single-line shell commands into
- * colored tokens, flipping light/dark themes via `--shiki-dark` CSS variable identically
- * to ChatCommandBlock and the design system's code styles.
- *
- * Keeps layout inline and handles trailing truncation gracefully so chips don't overflow
- * their container or push layout boundaries. */
+// Single-line shell command rendered as syntax-highlighted code (Shiki), matching ChatCommandBlock's light/dark
+// handling via `--shiki-dark`. Truncates rather than wrapping, so a long command can't push its container's layout.
 
 const { command } = defineProps<{
     command: string;
@@ -45,8 +39,7 @@ watch(
 </template>
 
 <style scoped>
-/* Shiki tokens deliver light theme inline colors and a --shiki-dark property.
- * When data-mode is dark, flip to the dark color variant. */
+/* Shiki inlines the light color and a `--shiki-dark` var; dark mode swaps to the latter. */
 [data-mode="dark"] .rule-command-code span {
     color: var(--shiki-dark) !important;
 }

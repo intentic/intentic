@@ -9,10 +9,8 @@ import { logsRoot } from "../../logs/log-files.js";
 import { parsePressure, type PressureSnapshot } from "./loop-watchdog.js";
 import { parseProcStat } from "./proc-stat.js";
 
-/* A regular, durable account of the sandbox's resources. The stall watchdog answers only after the event loop
- * has already disappeared; this series answers what was growing BEFORE that point, including healthy periods
- * where no warning happened. One compact JSON object per minute makes it easy to diff with jq or load into a
- * dataframe, while keeping the file under the logs tree's existing retention and /logs/file access policy. */
+// Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,
+// including healthy periods with no warning. Stored under the logs tree's retention and /logs/file access policy.
 
 const SAMPLE_INTERVAL_MS = 60_000;
 export const RESOURCE_METRICS_FILE = "resource-metrics.jsonl";
@@ -57,9 +55,8 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
     threads: statusNumber(text, "Threads"),
 });
 
-/* Only the aggregate is persisted, never argv. Provider prompts, paths and tokens can ride in a command
- * line, and none of them are needed to answer which class of workload owns the memory. Ordering matters where
- * names overlap: Playwright's node MCP belongs with its browser, and the git fork broker belongs with git. */
+// Aggregate only, never argv, which can carry a provider prompt or a path. Order matters: Playwright's node MCP must
+// match before its browser, the git fork broker before git.
 export const classifyProcess = (command: string): ProcessRole => {
     const value = command.toLowerCase();
     if (/chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u.test(value)) {
@@ -395,13 +392,7 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
                     ),
                 },
                 handles: { openFds, threads: selfStatus?.threads, activeResources: activeResources() },
-                /* AGENT-SIDE GIT AS A QUEUE, which is what it becomes under a fleet: the bulk cap
-                 * (scaffold/exec.ts) holds a fixed number of turn-start checkouts and parks the rest.
-                 * `queuedBulk` standing above zero across samples is the difference between "git is slow" and
-                 * "git was never started", and it is what decides whether a slow turn start means the
-                 * repositories or the number of conversations that began together. Nothing else in this series
-                 * can see it: `processes.byRole.git` counts what is RUNNING, and a queue is precisely what is
-                 * not. Interactive git is absent because nothing queues it. */
+                // queuedBulk > 0 means checkouts are queued, not slow; byRole.git only counts running processes.
                 gitSpawn: gitSpawnStats(),
             },
             system,
@@ -433,22 +424,8 @@ export interface ResourceMetricsOptions {
     readonly sampler?: ResourceSampler;
 }
 
-/* THE KERNEL KILLED SOMETHING, said out loud.
- *
- * The cgroup's OOM counters have always been in every sample, and being in a 4KB line in a file nobody reads is
- * indistinguishable from not being recorded: "agents spawn too many subagents and some of them get killed" was
- * answered over 185 tool calls, including a 111-call stretch with no code change, against data that was sitting
- * on disk the whole time. An OOM kill is not a data point to be found later, it is the loudest thing that can
- * happen to this process tree, so it logs at `error` the minute it is observed.
- *
- * Reported as a DELTA against the previous sample, because the counters are cumulative for the container's life:
- * their absolute value says a kill happened at some point, which is true forever after the first one and
- * therefore useless as an alarm. The first sample after a daemon start has nothing to diff against and is
- * skipped rather than compared against zero, which would re-announce every historical kill on every restart.
- *
- * The roles come along because "something was killed" is not actionable and "the browser lost 4 of 17 processes"
- * is. A role whose count merely dropped may have exited normally; named beside a confirmed kill it is the
- * shortlist, which is what the reader needs and all this can honestly claim. */
+// OOM alarm: logged at error the moment a kill is observed. Reported as a delta since the raw counter is cumulative;
+// the first sample after a restart has nothing to diff and is skipped.
 const OOM_EVENTS = ["event_oom_kill", "event_oom_group_kill"] as const;
 
 const numberAt = (source: unknown, path: readonly string[]): number | undefined => {
@@ -469,8 +446,7 @@ const roleCounts = (snapshot: ResourceSnapshot): Record<string, number> => {
     );
 };
 
-// The kills observed between two samples, and which roles shrank across the same window. Undefined when nothing
-// was killed, so the caller's check is one comparison and the quiet path costs nothing.
+// Kills between two samples, with which roles shrank; undefined when nothing was killed.
 export const oomSinceSample = (
     previous: ResourceSnapshot,
     current: ResourceSnapshot,
@@ -511,8 +487,7 @@ export const startResourceMetrics = ({
     const sampler = suppliedSampler ?? createResourceSampler(owners);
     let inFlight: Promise<void> | undefined;
     let persistenceFailed = false;
-    // The sample this one is diffed against, for the OOM alarm. Held in memory rather than read back off the
-    // file: the alarm is about the window that just passed, and a restart deliberately has nothing to compare.
+    // Previous sample for the OOM diff, held in memory: a restart has nothing to compare against, on purpose.
     let previous: ResourceSnapshot | undefined;
     const path = resourceMetricsPath(historyRoot);
     const sample = (): Promise<void> => {
@@ -524,8 +499,7 @@ export const startResourceMetrics = ({
             await mkdir(logsRoot(historyRoot), { recursive: true });
             await appendFile(path, `${JSON.stringify(snapshot)}\n`, "utf8");
             persistenceFailed = false;
-            // Persisted first: the line on disk is the record, and an alarm about a sample nobody can go and
-            // read afterwards is half an answer. See oomSinceSample for why this is a delta and not a level.
+            // Persisted before diffing, so the record on disk doesn't depend on the alarm firing.
             const killed = previous === undefined ? undefined : oomSinceSample(previous, snapshot);
             previous = snapshot;
             if (killed !== undefined) {
@@ -536,8 +510,7 @@ export const startResourceMetrics = ({
             }
         })()
             .catch((error: unknown) => {
-                // One warning per uninterrupted failure spell. A read-only/missing history volume should be
-                // visible, but repeating the same warning every minute would evict the useful daemon log.
+                // One warning per failure spell, so a dead history volume doesn't spam the daemon log every minute.
                 if (!persistenceFailed) {
                     persistenceFailed = true;
                     logger.warn({ err: error, path }, "resource metrics could not be collected or persisted");

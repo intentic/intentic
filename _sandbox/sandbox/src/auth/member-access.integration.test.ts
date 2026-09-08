@@ -7,13 +7,9 @@ import type { AppEnv } from "../app-env.js";
 import { services } from "../harness/route-services.testing.js";
 import { rejectForbidden } from "../harness/route-client.testing.js";
 
-/* WHAT AN INVITED MEMBER CAN ACTUALLY DO, driven over the daemon's HTTP surface at each granted tier.
- *
- * role-floor.test.ts asserts the TABLE; this asserts the SURFACE the browser drives, which is where the two
- * drifted apart: the editor's file explorer writes bytes through /workspace/upload and everything else through
- * the oRPC workspace routes, so a tier that has one and not the other can create a file it then cannot rename,
- * move or delete. That asymmetry is what a member meets first, so it is pinned here per-tier rather than
- * inferred from the floors. */
+// role-floor.test.ts asserts the table; this asserts the surface the browser drives, where the two can drift apart.
+// An editor's explorer writes through /workspace/upload but everything else through oRPC, so a tier missing one route
+// can create a file it can't then rename or delete.
 
 const appAs = (role: MemberRole): Hono<AppEnv> =>
     createApp(
@@ -27,8 +23,7 @@ const bearer = { authorization: `Bearer member` };
 // The status of one call made as `role`, over the same routes the browser uses.
 const statusAs = async (role: MemberRole, method: string, path: string, body?: unknown): Promise<number> => {
     const app = appAs(role);
-    // A GET carries no body, whatever the caller passed: fetch rejects the request outright rather than the app
-    // answering it, which would read here as a route that could not be reached at all.
+    // A GET carries no body regardless: fetch rejects the request outright, reading as an unreachable route.
     const init: RequestInit =
         body === undefined || method === `GET` || method === `HEAD`
             ? { method, headers: bearer }
@@ -58,9 +53,7 @@ test("a collaborator's file surface is coherent: what it can create it can also 
     const collaborator = await surfaceFor(`collaborator`);
     // Reading the tree is the viewer grant and stays open.
     expect(collaborator[`read tree`]).toBe(200);
-    // Every WRITE to the shared workspace answers the same way. The bug this pins: `create/overwrite file` used
-    // to be 200 (the /workspace/upload path floor) while every sibling was 403, so a member could drop a file
-    // into the shared tree and then find delete, rename, move and copy all refused on the file they just made.
+    // Every write must answer the same way, or a member's own file gets refused on rename or delete afterward.
     const writes = [`create/overwrite file`, `create folder`, `rename/move`, `copy`, `delete`];
     const answers = new Set(writes.map((name) => collaborator[name]));
     expect([...answers]).toEqual([403]);
@@ -84,29 +77,24 @@ test("a maintainer holds the whole file surface", async () => {
 });
 
 test("the bulk upload routes carry the same floor as the single-file write", async () => {
-    // upload-diff and upload-archive are the same act as upload (bytes into the shared tree) and must not be
-    // reachable at a different tier than it: an unlisted mutation defaults to maintainer, so the three agreeing
-    // is what keeps a member from finding one door open and two shut.
+    // upload-diff/upload-archive are the same act as upload and must share its floor, not open one door, shut two.
     for (const url of [`/workspace/upload?path=a.txt`, `/workspace/upload-diff`, `/workspace/upload-archive`]) {
         expect(await statusAs(`collaborator`, `POST`, url, {}), url).toBe(403);
     }
 });
 
 test("chat attachments stay reachable for the tier that drives agents", async () => {
-    // The collaborator grant is driving agents, and an attachment is part of a message: it is the one write
-    // that has to survive the floor above, so it is pinned by the ADDRESS it lands at rather than by the route.
+    // An attachment is part of a message, the write that must survive the floor above; pinned by address.
     const attachment = `${ATTACHMENTS_DIR}/${`u1`}/note.txt`;
     expect(await statusAs(`collaborator`, `POST`, `/workspace/upload?path=${encodeURIComponent(attachment)}`)).not.toBe(403);
     // A viewer sends no messages, so it carries no attachments either.
     expect(await statusAs(`viewer`, `POST`, `/workspace/upload?path=${encodeURIComponent(attachment)}`)).toBe(403);
 });
 
-/* THE CO-WORKING SURFACE AS A WHOLE, one row per thing an invited member comes to a shared sandbox to do, and
- * the lowest tier that may do it. Statuses are read as permission only (403 or not): whether a route then 404s
- * on a conversation that does not exist in this harness is that route's business, not this table's.
- *
- * Kept as one table because the tiers only mean anything TOGETHER: "a viewer may watch" is a claim about the
- * viewer row and about the absence of the viewer from every row below it. */
+// The co-working surface as a whole: one row per thing an invited member comes to do, and the lowest tier that may do
+// it. Statuses are read as permission only.
+// Kept as one table since the tiers only mean anything together: "a viewer may watch" is also a claim about every row
+// below it.
 const SURFACE: readonly { readonly does: string; readonly method: string; readonly url: string; readonly needs: MemberRole }[] = [
     // Watching. All of it is reading, POST or not.
     { does: `list the conversations`, method: `GET`, url: `/agents`, needs: `viewer` },
@@ -148,9 +136,9 @@ test("every co-working act answers at its own tier, and at none below it", async
 });
 
 test("the attachment carve-out cannot be walked out of", async () => {
-    // The floor reads a client-supplied query, so it normalizes before matching: a path that merely STARTS with
-    // the attachments dir and then climbs out of it lands in the workspace proper and is refused there. Without
-    // the normalize, this is a collaborator writing any file in the tree through the attachment door.
+    // The floor normalizes a client-supplied path before matching: one that starts under the attachments dir but climbs
+    // out lands in the workspace proper.
+    // Without that, this is a collaborator writing any file in the tree through the attachment door.
     const escape = `${ATTACHMENTS_DIR}/u1/../../../../../hooks/lint-edit.mjs`;
     expect(await statusAs(`collaborator`, `POST`, `/workspace/upload?path=${encodeURIComponent(escape)}`)).toBe(403);
 });

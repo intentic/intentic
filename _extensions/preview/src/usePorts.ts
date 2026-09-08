@@ -3,15 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The sandbox's listening TCP ports, via the daemon's /ports routes, the generic complement to panels:
- * anything run in a terminal (a turbo TUI's dev servers, an ad-hoc `python -m http.server`) shows up here,
- * and `forward` exposes one at its port-<slot> preview hostname. All daemon access goes through the host api.
- *
- * Unpolled: the daemon watches its own listening sockets and pushes the `ports` domain when the set changes, and
- * this query asks under the key that push names (api.sandbox.key("ports") IS the core shell's key), so the open
- * view and the shell's forwarded-port indicator refresh together off one frame. A port appearing as a dev server
- * boots now shows up in about two seconds instead of up to four, while a view left open on a quiet sandbox costs
- * nothing at all. */
+// Sandbox's listening TCP ports via the daemon's /ports routes, the generic complement to panels; `forward` exposes one
+// at its port-<slot> hostname. Unpolled: shares the daemon's push key (`ports`) with the shell's own indicator, so both
+// refresh off one frame.
 
 const jsonPost = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -29,8 +23,7 @@ export function usePorts() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     const forward = async (port: number): Promise<string | undefined> => {
         const result = await api.sandbox.json<PortForwardResult>(`/ports/forward`, jsonPost({ port }));
-        // The caller navigates on the returned previewUrl, the list refresh must not gate it (the poll
-        // reconverges anyway), so fire-and-forget.
+        // Fire-and-forget: the caller navigates on previewUrl immediately, so refresh must not gate it.
         void invalidate();
         return result.previewUrl;
     };

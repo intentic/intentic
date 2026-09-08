@@ -1,40 +1,15 @@
-/* THE ONE LIST OF CHECKS THAT READ THE CHECKOUT, and where each one runs. Every gate that was ever "right but
- * unrun" in this repository was right in a script nothing listed: `pnpm check` chained eleven of them by hand
- * and could not run in a worktree, so five of them were red for weeks with nothing to say so. This list is what
- * CI's preflight and tidy jobs, the pre-push hook, the turn-ending check and `pnpm checks` all read, so a check
- * exists exactly once and runs everywhere the list is read.
- *
- * `needs` says what a check has to have under it:
- *   checkout      the tracked files and nothing else; no install, no network. Every one of these runs from a
- *                 clone that has never installed, which is what CI's preflight and the pre-push hook are.
- *   git           the checkout plus its history (a merge-base, a range); still no install.
- *   node_modules  optional: the check attempts what needs an install and vouches for less when it is absent.
- *
- * `gate` says WHAT A FAILURE MEANS, and that decides where it may refuse:
- *   code          the tree does not work or CI cannot build it: a lockfile that does not record the manifests, a
- *                 test file no program type-checks, a workflow that opens the fork boundary, an alias pointing
- *                 at nothing. Refused everywhere it is read: the push, CI's preflight (which the verify groups
- *                 hang off), and the turn when the turn introduced it.
- *   tidy          the tree costs its readers more than it should: a directory of 35 files, a dead link in a
- *                 README, a hand-spelled root, a UI element off the design system, a subsystem with no
- *                 invariant. Real rules with measured costs (docs/audits/), and NOT reasons to stop a push or
- *                 hold a turn that did not cause them. On the day this field was added, 9 of the 11 pushes the
- *                 gate refused were refused by tidy checks in under five seconds, for state (ghost
- *                 directories, a baseline one count too high, a link another agent's land had broken) that no
- *                 one actor had produced and that the agent then sent to fix could not see from its worktree.
- *                 So a tidy failure is a WARNING at the push and at `pnpm verify`, a refusal at the turn only
- *                 for lines the turn itself introduced (verify-turn.mjs judges against HEAD), and a refusal in
- *                 CI's `tidy` job, which reads one commit and gates nothing else in the pipeline.
- *
- * A NEW CHECK ENTERS AS `tidy`. That is the on-ramp: it runs everywhere at once, says what it would refuse, and
- * nobody's push or turn is stopped by a rule that has not yet met every environment it will run in (the day the
- * layout check landed it was green on a fresh clone, red on every persistent CI workspace and red in the owner's
- * tree, for directories git had never heard of). Promote it to `code` once a week of runs has said only true
- * things, in a change of its own, never in the same push as a large rename.
- *
- * Every check is its own process with one contract (lib/report.mjs): problems to stderr and exit 1, or what it
- * vouched for to stdout and exit 0. That is what lets run.mjs run them side by side, and lets any one be run
- * alone by hand: `node _tools/checks/<file>`. */
+// The one list of checks that read the checkout; CI, the pre-push hook, the turn-ending check and `pnpm checks` all
+// read it, so a check exists once and runs everywhere. Each check is its own process (lib/report.mjs): problems to
+// stderr and exit 1, else what it vouched for to stdout and exit 0.
+// `needs`:
+// checkout tracked files only, no install, no network
+// git checkout plus history (a merge-base, a range), still no install
+// node_modules optional: the check attempts what needs an install, vouches for less without it
+// `gate`:
+// code the tree is broken or unbuildable; refused wherever this list is read
+// tidy a cost to readers, not a break; a warning at the push, a refusal only for a turn's own new lines, a refusal in
+// CI's tidy job
+// A new check enters as tidy and is promoted to code once a run record shows only true failures.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },

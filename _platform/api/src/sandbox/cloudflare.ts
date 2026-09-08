@@ -1,40 +1,18 @@
 import { LOCAL_ADDRESS, LOCAL_LABEL, localWildcardHostname } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
-/* WHAT THIS PLATFORM STILL ASKS CLOUDFLARE FOR, which is two unrelated things and no longer a tunnel.
- *
- *   • The setup screen's ZONE PICKER, against the USER's own token. Request-scoped: the token lists the zones
- *     it can see and is then dropped with the request, never persisted, logged or stored. The browser cannot
- *     call Cloudflare directly (its API returns no CORS headers for a token'd request), so this minimal
- *     server-side proxy stands in.
- *   • The DNS behind the LOOPBACK CERTIFICATE, against intentic's own token: one wildcard record for the whole
- *     zone, and one transient ACME challenge per order.
- *
- * The tunnel fabric is the platform's own edge (sandbox/reachability.ts). Provisioning, teardown, ingress,
- * per-route CNAMEs, the connector token and the tunnel reaper all lived here and are gone: nothing creates a
- * Cloudflare tunnel here any more.
- *
- * WHICH IS NOT THE SAME AS NOTHING NEEDING ONE. Sandboxes created before the tunnel migration are still
- * reachable only through the records it left: `sandbox-<id>` and its siblings, a dozen per sandbox, pointing at
- * a cfargotunnel target. They have no outbound tunnel to fall back on. So the sweep below treats those as
- * a live sandbox's property, not as residue, and the difference between the two questions — "does anything
- * still CREATE this?" and "does anything still DEPEND on it?" — is the difference between a tidy zone and
- * sandboxes with no public address.
- *
- * Deliberately standalone: the platform must not depend on the sandbox's @intentic/providers, the secret-free
- * architecture keeps platform and sandbox code apart. */
+// Cloudflare zone listing for the setup screen (user's token) and DNS for sandboxes' loopback certs (intentic's token);
+// tunnels are provisioned in sandbox/reachability.ts. Pre-migration sandboxes are still reachable only through old
+// tunnel DNS records, which the sweep below treats as live. No dependency on @intentic/providers.
 
 const BASE = "https://api.cloudflare.com/client/v4";
 
-// Cloudflare rejected the token, invalid/inactive, or missing the Zone:Read scope. The router maps this to a
-// user-facing BAD_REQUEST so the setup screen can tell the user to fix the token. Any other failure (network,
-// unexpected response shape) propagates unchanged.
+// Cloudflare rejected the token (invalid, inactive, or missing Zone:Read); the router maps this to a user-facing
+// BAD_REQUEST.
 export class CloudflareTokenError extends Error {}
 
-// A non-2xx Cloudflare response (other than the 401/403 token case, which is CloudflareTokenError). `codes` are
-// the numeric error codes from the response envelope (e.g. 1022 = tunnel has active connections) so callers can
-// branch on the code rather than the human message, which Cloudflare rewords. Extends Error so the existing
-// `instanceof Error` → BAD_GATEWAY catchers keep mapping it.
+// A non-2xx Cloudflare response other than the token case (see CloudflareTokenError). `codes` are the numeric error
+// codes from the response envelope, since Cloudflare rewords messages.
 class CloudflareApiError extends Error {
     constructor(
         message: string,
@@ -44,8 +22,7 @@ class CloudflareApiError extends Error {
     }
 }
 
-// `result` is left unknown so an error envelope (success:false, result:null) surfaces its `errors` rather than
-// failing the result-shape check first, validated as a zone array only after the success check passes.
+// `result` stays unknown so an error envelope's `errors` surface before the result-shape check runs.
 const envelopeSchema = z.object({
     success: z.boolean(),
     errors: z.array(z.object({ code: z.number(), message: z.string() })),
@@ -54,13 +31,7 @@ const envelopeSchema = z.object({
 });
 const zonesResultSchema = z.array(z.object({ name: z.string() }));
 
-// Every zone name the token can see, paginated (50/page). A 401/403 becomes a CloudflareTokenError so the
-// caller can present "fix your token" rather than a generic failure.
-// The platform keeps a self-contained Cloudflare REST client (zone listing here + tunnel provisioning below)
-// rather than importing @intentic/providers, so the thin platform API never pulls the engine's SSH/Docker deps.
-// The one thing that MUST agree with the CLI/daemon, the tunnel-id digest, is shared via
-// @intentic/sandbox-contract/tunnel-ids (imported above), so only Cloudflare's own stable GET /zones shape is
-// duplicated, and only that needs keeping in step.
+// Every zone name the token can see, paginated at 50/page. A 401/403 becomes a CloudflareTokenError.
 export const listZoneNames = async (token: string): Promise<string[]> => {
     const names: string[] = [];
     let page = 1;
@@ -89,9 +60,8 @@ export const listZoneNames = async (token: string): Promise<string[]> => {
     return names;
 };
 
-// Fetch + validate a Cloudflare success envelope, returning the parsed `result`. A 401/403 becomes a
-// CloudflareTokenError (a misconfigured intentic token surfaces the same way an under-scoped user token does);
-// any other transport/API failure propagates unchanged.
+// Fetches and validates a Cloudflare success envelope, returning the parsed `result`. A 401/403 becomes a
+// CloudflareTokenError; any other failure propagates unchanged.
 const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>, init?: RequestInit): Promise<T> => {
     const response = await fetch(`${BASE}${path}`, {
         ...init,
@@ -99,7 +69,7 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
             Authorization: `Bearer ${token}`,
             ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
         },
-        // A stalled Cloudflare API must reject (surfacing a 502 upstream) rather than hang the caller forever.
+        // A stalled Cloudflare API must fail rather than hang the caller forever.
         signal: AbortSignal.timeout(30_000),
     });
     if (response.status === 401 || response.status === 403) {
@@ -109,23 +79,10 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
     if (!response.ok || !envelope.success) {
         const detail = envelope.errors.map((error) => `${error.code} ${error.message}`).join("; ");
         const codes = envelope.errors.map((error) => error.code);
-        /* THE ONE REFUSAL THAT IS THE OPERATOR'S TO FIX, NOT A MYSTERY. A zone has a hard record cap (a few
-         * hundred on the smaller plans), and a full one refuses the ACME challenge every loopback certificate
-         * needs, so issuance stops for every sandbox at once, the certified h2 shortcut resolves nowhere, and
-         * browsers fall back to a plain HTTP/1.1 loopback with six connections per origin. That surfaces as
-         * workspaces freezing, which names neither DNS nor a quota.
-         *
-         * Nothing per-sandbox is minted here any more (one wildcard, one transient challenge), so a zone that
-         * fills now is carrying records from before that. Some of them are genuinely dead and the sweep
-         * collects them; the rest belong to sandboxes still using them. Left as Cloudflare's own words this
-         * reads as an intentic bug ("POST /zones/44823fc.../dns_records failed (HTTP 400): 81045 Record quota
-         * exceeded") and the person who can actually fix it is never told what to do. */
+        // 81045 means the zone is out of DNS records, which blocks ACME issuance for every sandbox, not just one.
         if (codes.includes(81045)) {
-            /* WHAT NOT TO SAY HERE, learned expensively. This used to name `sandbox-*`/`ssh-*` as "the usual
-             * culprit" and invite the operator to delete them in the dashboard. Those are the records a
-             * pre-migration sandbox is REACHABLE through — a dozen per sandbox, daemon, ssh and the port-slot pool
-             * — so the advice took working sandboxes off the internet. A quota message may say what is safe to
-             * remove or it may say nothing; it may not guess. */
+            // Do not suggest deleting sandbox-*/ssh-* records: pre-migration sandboxes are reachable only through
+            // those.
             throw new CloudflareApiError(
                 `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the tunnel migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
                 codes,
@@ -136,33 +93,8 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
     return resultSchema.parse(envelope.result);
 };
 
-/* The DNS half of every sandbox's LOOPBACK CERTIFICATE (see @intentic/sandbox-contract localHostname).
- *
- * ONE record for the whole platform: `*.local.<zone>` A → 127.0.0.1, UNPROXIED. Proxying would send it to
- * Cloudflare, which is the round trip this whole path exists to avoid, and Cloudflare will not proxy a loopback
- * origin anyway. Every `<id>.local.<zone>` a sandbox ever asks for resolves under it, so a sandbox costs the
- * zone NOTHING permanent, and no sandbox has to be told about a record before its name works.
- *
- * That is a correction, not a tidy-up. Each sandbox used to get its own `local-<id>` A record, and after the
- * tunnels moved off Cloudflare those were the last per-sandbox records left in this zone. They accumulated
- * until it hit the per-record quota (81045), and a full zone cannot take the ACME challenge either, so
- * issuance stopped for everyone: the certified shortcut resolved nowhere, every browser fell back to the plain
- * http loopback, and that transport is HTTP/1.1 with six connections per origin. Sandboxes froze, and the zone
- * that caused it was not something any sandbox could see.
- *
- * Asserted on every relay rather than at setup: it is idempotent and costs one call, it is the only way a
- * fresh deployment gets the record at all, and a record deleted by hand comes back on the next renewal check
- * rather than at the next quarter's reissue.
- *
- * The one thing still minted per sandbox is `_acme-challenge.<id>.local.<zone>` TXT, published for the length
- * of one ACME order and removed after, which the quota only ever sees a handful of at a time. The daemon
- * drives its own issuance and holds the key; it relays here for these records ONLY, because on the
- * intentic-provided path the sandbox has no token for this zone. The platform lends its zone, never the
- * private material.
- *
- * A TXT upsert must REPLACE rather than append: a retried order mints a fresh challenge value, and leaving the
- * previous one behind is how a DNS-01 validation starts passing against a stale token.
- */
+// One wildcard A record (`*.local.<zone>` to 127.0.0.1, unproxied) answers every sandbox's loopback hostname. Asserted
+// on every relay; ACME challenge TXTs are still minted per sandbox since it has no token for this zone.
 export const ensureLocalDnsRecord = async (apiToken: string, zone: string): Promise<void> => {
     const { zoneId } = await resolveZone(apiToken, zone);
     const hostname = localWildcardHostname(zone);
@@ -171,12 +103,7 @@ export const ensureLocalDnsRecord = async (apiToken: string, zone: string): Prom
         `/zones/${encodeURIComponent(zoneId)}/dns_records?type=A&name=${encodeURIComponent(hostname)}`,
         z.array(z.object({ id: z.string() })),
     );
-    /* A DAY, against Cloudflare's 300s default, and the TTL is doing real work here rather than saving
-     * lookups. This record says 127.0.0.1 and will say 127.0.0.1 forever, so nothing is risked by caching it —
-     * and what it buys is the outage. A browser that has this name cached keeps reaching the daemon over the
-     * certified h2 address after the machine goes offline; one that does not falls through to plain http, which
-     * is HTTP/1.1 with six connections per origin for the whole app. The cache is the difference between a
-     * dropped wifi being invisible and a workspace that starts lagging a few minutes later. */
+    // A day: the content never changes, so a long TTL only helps caching, never risks staleness.
     const body = JSON.stringify({
         type: "A",
         name: hostname,
@@ -215,14 +142,11 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
     }
     await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records`, z.unknown(), {
         method: "POST",
-        // 60s TTL: the record lives for one validation and is then withdrawn, so a long TTL only delays the
-        // next order's fresh value becoming visible.
+        // 60s: the record is withdrawn right after validation, so nothing needs a longer TTL.
         body: JSON.stringify({ type: "TXT", name: recordName, content: value, ttl: 60, comment: "intentic sandbox acme" }),
     });
 };
 
-// Resolve an intentic-owned zone name to its zone id. The owning account id came back here too while tunnels
-// were provisioned per sandbox; nothing outside a zone's own records is asked for any more.
 const resolveZone = async (apiToken: string, zone: string): Promise<{ zoneId: string }> => {
     const zones = await cfCall(apiToken, `/zones?name=${encodeURIComponent(zone)}`, z.array(z.object({ id: z.string() })));
     const found = zones[0];
@@ -232,99 +156,56 @@ const resolveZone = async (apiToken: string, zone: string): Promise<{ zoneId: st
     return { zoneId: found.id };
 };
 
-// Provision (idempotently) an intentic-owned remotely-managed tunnel + proxied DNS: find-or-create the tunnel
-/* THE RECORD-LEVEL SWEEP: what this zone still holds that nothing is using, and the only thing standing
- * between a deployment and Cloudflare's per-zone record cap (81045). Hitting that cap is not a cosmetic
- * problem. A full zone cannot take the loopback certificate's ACME challenge either, so issuance stops for
- * every sandbox at once, the certified shortcut resolves nowhere, and every browser falls back to the plain
- * HTTP/1.1 loopback, six connections per origin, which is how a DNS quota surfaces as a frozen workspace.
- *
- * Three shapes, all of them residue by construction rather than by inspection:
- *
- *   • tunnel CNAMEs, the sandbox-, ssh-, port-slot, preview and public records pointing at
- *     `<tunnelId>.cfargotunnel.com`. The fabric moved off Cloudflare and nothing has minted one since, so
- *     every one of them is left over from before that migration;
- *   • per-sandbox loopback A records in either spelling, `<id>.local.<zone>` and the older `local-<id>.<zone>`.
- *     One wildcard now answers for all of them, so not one is needed, and no tunnel teardown ever cleaned one;
- *   • `_acme-challenge.<id>.local.<zone>` TXTs, meant to live for one ACME order, left behind by a crashed one.
- *     The only shape here a LIVE sandbox may own right now, so the only one keyed to liveness.
- *
- * The verdicts come from the caller's DB truth (liveSandboxIds, every 12-hex id derivable from the rows' token
- * digests) plus the zone listing itself, in one sweep and no other API surface: asking Cloudflare about
- * tunnels needs a scope this token no longer has, and when that call threw it took the entire sweep with it,
- * every day, silently, which is how the zone filled up in the first place. Only name shapes this
- * platform mints are ever touched: anything else in the zone, the apex, mail, a hand-made record, is
- * invisible to the filter by construction. `total` reports the zone's record count either way, because the
- * operator watching quota pressure needs the number before 81045 says it for them. */
+// Removes DNS residue that risks the zone's per-record quota (81045): stale tunnel CNAMEs, per-sandbox loopback A
+// records now replaced by the wildcard, and abandoned `_acme-challenge` TXTs. Verdicts come from the caller's
+// liveSandboxIds plus this same zone listing; only name shapes this platform mints are touched.
 const RECORD_PAGE = 100;
 const MAX_RECORD_PAGES = 200;
 const zoneRecordSchema = z.object({ id: z.string(), type: z.string(), name: z.string(), content: z.string() });
 
-/* WHICH SANDBOX A TUNNEL RECORD BELONGS TO, or undefined when the name does not say.
- *
- * Every tunnel name this platform ever minted is one label ending in the sandbox's 12-hex id: `sandbox-<id>`,
- * `ssh-<id>`, `<slot>-<id>`, `preview-<panel>-<id>`, `public-<slot>-<id>`. So ownership is legible from the
- * NAME alone, with no API call and no token scope, which is what lets the sweep answer "is anyone still using
- * this?" about a record whose content it cannot otherwise attribute. */
+// Extracts the trailing 12-hex sandbox id from a tunnel record's name (`sandbox-<id>`, `ssh-<id>`, `<slot>-<id>`, ...),
+// or undefined if absent.
 const recordSandboxId = (record: z.infer<typeof zoneRecordSchema>): string | undefined => /^[^.]*-([0-9a-f]{12})\./.exec(record.name)?.[1];
 
-/* Whether one record in intentic's zone belongs to nothing. Pure, and separated from the sweep that deletes,
- * because "what is garbage" is the part that has to be RIGHT: a false positive here deletes a name a live
- * sandbox is reachable under, and the sweep runs unattended every day.
- *
- * A CNAME onto a Cloudflare tunnel, whose SANDBOX no longer exists. The liveness check is the whole rule and
- * removing it was an outage: the reasoning was that the fabric had moved off Cloudflare so nothing mints
- * these any more, which is true of new sandboxes and says nothing about old ones. Every sandbox created before
- * that migration is still reachable through exactly these records — a dozen of them each, the daemon, ssh, and
- * the port-slot pool — and deleting them took working sandboxes off the internet, leaving their owners on the
- * plain-HTTP loopback with no public address at all.
- *
- * "Nothing creates them any more" is not the same claim as "nothing depends on them", and only the second one
- * licenses a delete. */
+// A CNAME onto a Cloudflare tunnel whose sandbox no longer exists. Not tied to whether anything still creates these:
+// sandboxes from before the tunnel migration are still reachable only through them.
 const danglingTunnelCname = (record: z.infer<typeof zoneRecordSchema>, context: Reapable): boolean => {
     if (record.type !== `CNAME` || !/^[0-9a-f-]{36}\.cfargotunnel\.com$/.test(record.content)) {
         return false;
     }
     const owner = recordSandboxId(record);
-    // A name carrying no id is one this platform did not mint under a sandbox: not ours to collect.
+    // A name with no id wasn't minted by this platform, so it isn't collected.
     return owner !== undefined && !context.liveSandboxIds.has(owner);
 };
 
 interface Reapable {
     readonly zone: string;
     readonly liveSandboxIds: Set<string>;
-    /* Whether `*.local.<zone>` is actually in this zone right now, read off the same listing rather than
-     * assumed. It is the PROOF that a per-sandbox loopback record is redundant: without it, deleting one takes
-     * a live sandbox's certified shortcut off the internet, and the sweep runs unattended. Absent, the loopback
-     * records are left alone and only the tunnel residue is collected. */
+    // Whether `*.local.<zone>` is present in this zone; proves a per-sandbox loopback record is redundant.
     readonly wildcardPresent: boolean;
 }
 
 const orphanLoopbackRecord = (record: z.infer<typeof zoneRecordSchema>, context: Reapable): boolean => {
     const { zone, liveSandboxIds, wildcardPresent } = context;
-    // The one record every loopback name resolves under, and the reason none of them needs its own.
+    // The record every loopback name resolves under; never itself orphaned.
     if (record.name === localWildcardHostname(zone)) {
         return false;
     }
-    /* A per-sandbox loopback record. Both spellings, the current `<id>.local.<zone>` and the
-     * `local-<id>.<zone>` the wildcard replaced, since the zone is still carrying one of those for every
-     * sandbox that ever asked for a certificate, and that accumulation is what exhausted the quota. */
+    // Either spelling: the current `<id>.local.<zone>` or the `local-<id>.<zone>` the wildcard replaced.
     const perSandbox = record.name.endsWith(`.${LOCAL_LABEL}.${zone}`) || /^local-[0-9a-f]{12}\./.test(record.name);
     if (!perSandbox || !wildcardPresent) {
         return false;
     }
-    /* The A is NOT keyed to liveness: with the wildcard up there is no sandbox, live or dead, that wants one of
-     * its own. */
+    // Not keyed to liveness: with the wildcard up, no sandbox needs its own A record.
     if (record.type === `A`) {
         return true;
     }
-    /* An ACME challenge, which lives for the length of one order and is withdrawn after. This is the one
-     * loopback record a live sandbox may legitimately own right now, so it is the one that still asks. */
+    // An ACME challenge lives for one order; the only loopback record a live sandbox may still legitimately own.
     const challenge = /^_acme-challenge\.(?:local-)?([0-9a-f]{12})\./.exec(record.name);
     return record.type === `TXT` && challenge !== null && !liveSandboxIds.has(challenge[1] ?? ``);
 };
 
-// Garbage is either kind, and both are scoped to intentic's own zone before anything else is asked.
+// Garbage is either kind, scoped to intentic's own zone first.
 const orphanRecord = (record: z.infer<typeof zoneRecordSchema>, context: Reapable): boolean =>
     record.name.endsWith(`.${context.zone}`) && (danglingTunnelCname(record, context) || orphanLoopbackRecord(record, context));
 
@@ -351,8 +232,7 @@ export const reapOrphanDnsRecords = async (args: {
             break;
         }
     }
-    // Read off the listing we already have rather than asked for separately: one request, and the answer is
-    // about the same snapshot the verdicts below are made against.
+    // Reuses the listing already fetched, so it matches the same snapshot as the verdicts below.
     const wildcardPresent = records.some((record) => record.type === `A` && record.name === localWildcardHostname(zone));
     const orphaned = records.filter((record) => orphanRecord(record, { zone, liveSandboxIds, wildcardPresent }));
     let reaped = 0;

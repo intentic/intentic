@@ -5,33 +5,17 @@ import type { AgentRequest } from "../../agent/run/agent.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import { waitForSubagent, type SubagentWaitUntil } from "../../agent/subagents/subagents.js";
 
-/* WHAT THE TURN'S TOOLS BECOME ON CURSOR'S RUNTIME. Three seams, and between them they are the whole reason
- * this provider's `mcp` axis reads "tools" rather than "browser":
- *
- *   · the turn's remote MCP tools (connected accounts, the platform's integrations) → Cursor's `http` servers;
- *   · the browser stack, which this repo already produces as stdio process specs → Cursor's `stdio` servers;
- *   · the daemon's own in-process tools → `customTools`, host callbacks Cursor calls back into this process.
- *
- * The third is the one that does not exist on any other foreign runtime here, and it is what makes a real
- * question card possible: a tool whose handler runs in the daemon can park on a person, which a tool running
- * inside a vendor's own loop can never do. */
+// Turn tools on Cursor's runtime, three seams: remote MCP tools become http servers, the browser stack (already stdio
+// process specs) becomes stdio servers, and the daemon's own in-process tools become customTools. The third seam is
+// unique here: a tool whose handler runs in the daemon can park on a person, unlike one inside a vendor's own loop.
 
-/* THE ASK TOOL, and the reason Cursor's own is switched off beside it.
- *
- * Cursor ships an `askQuestion` built-in, and in a headless run it has been reported to answer itself — the
- * model receives a fabricated "Questions skipped by the user" for a question no person ever saw, and then acts
- * on the consent that implies. That is the worst failure mode available to an agent that can run commands, so
- * the built-in goes in `disallowedTools` (see `TOOLS_WITHHELD`) and this replaces it.
- *
- * This one cannot fabricate anything, because it is not a model-side simulation of asking: the handler runs
- * here, raises the same card every other provider raises, and returns only once a person or the turn's abort
- * has settled it. The schema is deliberately identical to the Claude path's `ask` (agent.ts askServer), so a
- * model trained on that call site writes a valid call here and the answers come back phrased the same way. */
+// Cursor's own askQuestion can self-answer in a headless run (a fabricated "skipped by user"), so it's withheld
+// (TOOLS_WITHHELD). This handler runs here and settles only on a real person or abort, same schema as the Claude path's
+// ask.
 const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKCustomTool => ({
     description:
         'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
-    // JSON Schema rather than zod: Cursor takes the schema as data and hands it to the model, where the Claude
-    // SDK's `tool()` helper compiles one from a zod object. Same shape, one layer lower.
+    // JSON Schema, not zod: Cursor takes the schema as data, same shape the Claude SDK's tool() compiles from zod.
     inputSchema: {
         type: "object",
         properties: {
@@ -67,32 +51,21 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
         if (questions.length === 0) {
             return "No questions were supplied, so nothing was asked.";
         }
-        // Named with its conversation, like the Claude path's: dismissing this card ends the turn, and the
-        // route that takes the dismissal has to be able to name the turn it ends.
+        // Named with its conversation, like the Claude path: dismissing the card must name the turn it ends.
         const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
         push({ kind: "question", requestId: id, questions });
         const { reply, resolved } = await wait(request.signal);
-        // The picks belong in the frame log and not only in this tool's result: they are what a replayed or
-        // second-window transcript freezes the card with.
+        // Picks belong in the frame log too, not just the result: what a replayed transcript freezes the card with.
         push(resolved);
         return formatAnswers(questions, reply);
     },
 });
 
-/* THE BUILT-INS THIS RUNTIME DOES NOT GET, and why each one goes.
- *
- * `askQuestion` is replaced by the tool above, for the fabricated-consent reason it documents.
- *
- * Nothing else is withheld. It is tempting to also drop `task` (Cursor's subagent tool) on the grounds that the
- * daemon cannot see inside a subagent's turn — but a subagent that runs is better than a capability removed,
- * its tool calls still arrive on the same delta stream, and the model plans around having it. */
+// Only askQuestion; task stays, a subagent the daemon can't see inside beats one removed.
 export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 
-/* THE SUPERVISION SET — spawn, wait, send, answer — the same calls the Claude Code loop mounts as an SDK MCP
- * server (agent/subagent-wait.ts), through the seam Cursor actually has. The engine arrives on the request
- * (planCursorTurn sets it under the full-agency predicate), so this module never re-derives the gate; the
- * wait reads the same roster primitive the harness's tool does, which is what makes a child spawned from a
- * Cursor turn and one spawned from a Claude turn indistinguishable to everything that watches. */
+// Same supervision calls the Claude Code loop mounts as an SDK MCP server (agent/subagent-wait.ts), through Cursor's
+// own seam. The gate arrives already set on the request, so children are indistinguishable across runtimes.
 const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
     description:
         "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
@@ -130,10 +103,7 @@ const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTo
         if (prompt === undefined) {
             return JSON.stringify({ ok: false, message: "A child needs a task: pass `prompt`." });
         }
-        /* The refusal carries the CATALOGUE rather than only the rule, the same answer every other spawn door
-         * gives (children.routes.ts): a model told "provider and model are required" still does not know which
-         * ones this sandbox can reach or which still have allowance, and the cheapest way for it to find out
-         * must not be a guess. */
+        // Refusal carries the catalogue too (children.routes.ts): finding what's reachable must not be a guess.
         if (provider === undefined || model === undefined) {
             return JSON.stringify({
                 ok: false,
@@ -154,8 +124,7 @@ const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTo
     },
 });
 
-/* The catalogue as its own tool, beside spawn, for the reason the Claude loop has one: `provider` and `model`
- * are required there, and a requirement is only fair if its answer is one call away. */
+// Catalogue as its own tool, beside spawn: a required field is only fair if its answer is one call away.
 const providersTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
     description:
         "What a child agent could be started on right now: every provider this sandbox has connected, its " +
@@ -165,8 +134,7 @@ const providersTool = (children: NonNullable<AgentRequest["children"]>): SDKCust
     execute: async () => JSON.stringify({ ok: true, providers: await children.providers() }),
 });
 
-// One wait's ceiling and default, the harness tool's numbers (subagent-wait.ts): long enough for a real child,
-// short enough that a forgotten wait returns within the turn; a parent that wants longer calls again.
+// Wait ceiling/default match the harness tool's; long enough for a real child, short enough within the turn.
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 1800;
 
@@ -255,8 +223,7 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
             timeoutMs: Math.round(seconds * 1000),
             signal: request.signal,
         });
-        // A blocked child's whole question rides along, options included: the difference between a parent
-        // that can answer and one that can only report.
+        // Blocked child's whole question rides along, options included: lets a parent answer, not just report.
         const question = result.outcome === "blocked" && result.matched !== undefined ? request.children?.pendingQuestion(result.matched.id) : undefined;
         return JSON.stringify({
             outcome: result.outcome,
@@ -266,12 +233,8 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
     },
 });
 
-/* The daemon-side tools a turn hands Cursor. `unattended` is the one condition that changes the ASK's answer,
- * and it is the same rule the Claude Code loop and the Codex adapter both apply: a benchmark, a schedule or
- * another program started this turn, so a card is not merely useless but a DEADLOCK — it parks the turn on an
- * answer that can never arrive and burns until something aborts it. A turn nobody is watching decides for
- * itself. The supervision set is NOT card-shaped and rides unattended turns too: a child of a loop iteration
- * settles on its own clock, deadlocking nothing. */
+// unattended is the one condition that changes ask's answer: a card on an unwatched turn would deadlock, not just go
+// unused. The supervision set isn't card-shaped and rides unattended turns too; a child settles on its own clock.
 export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
     ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
     ...(request.children !== undefined
@@ -285,20 +248,8 @@ export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEven
         : {}),
 });
 
-/* The turn's MCP servers, in Cursor's own spelling.
- *
- * REMOTE TOOLS pass through almost unchanged: both sides model an http MCP endpoint with headers, so the only
- * translation is where the bearer goes.
- *
- * STDIO SERVERS are the browser stack, which this repo builds as Claude-SDK process specs. Only the process
- * fields cross over, and the environment is passed WHOLE rather than as a delta: unlike Codex's per-thread
- * config (which app-server merges over an environment it has already inherited), Cursor spawns these itself
- * from what is given, so trimming to a delta would start the browser with no environment at all.
- *
- * In-process SDK server INSTANCES are skipped, and that is the one gap behind the `mcp: "tools"` axis rather
- * than "full": they are live objects in this daemon, not processes anything can spawn. What the daemon most
- * needs from them (the ask tool) is supplied as a custom tool above, which is the same capability through a
- * seam Cursor actually has. */
+// stdio servers are the browser stack; environment passes whole, not a delta, since Cursor spawns them itself, not
+// merging over an inherited one. In-process SDK instances are skipped: the gap behind mcp:"tools", not "full".
 export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> => {
     const servers: Record<string, CursorMcpServer> = {};
     for (const tool of request.tools ?? []) {
@@ -312,8 +263,7 @@ export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMc
         if (server.type !== undefined && server.type !== "stdio") {
             continue;
         }
-        // An SDK server config that is an instance rather than a process spec has no `command`; the type
-        // narrowing above does not catch that on its own, so it is tested for what it must have.
+        // An instance, not a process spec, has no command; tested directly since the type narrowing above misses it.
         const spec = server as { command?: unknown; args?: unknown; env?: unknown; cwd?: unknown };
         if (typeof spec.command !== "string") {
             continue;
@@ -329,6 +279,5 @@ export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMc
     return servers;
 };
 
-// Cursor's custom-tool results are JSON values; nothing here needs the richer content shape, so this is the
-// one narrowing the callers above share.
+// Cursor's custom-tool results are JSON values; nothing here needs the richer content shape.
 export type CursorToolResult = SDKJsonValue;

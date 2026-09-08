@@ -1,15 +1,14 @@
 import { describe, expect, it, test } from "vitest";
 import { blockAtOffset, type MarkdownBlock, offsetOfLine, splitMarkdownBlocks } from "@intentic/ui/markdown";
 
-/* The block splitter behind the file viewer's pretty-editing surface. No DOM here: this is the lexer's view of
- * a document, not the renderer's, so the suite stays on the default `node` environment. */
+// The block splitter behind the file viewer's pretty-editing surface. No DOM here: this is the lexer's view of a
+// document, not the renderer's, so the suite stays on the default `node` environment.
 
-// The document, reassembled from its blocks. Every assertion about correctness in this file is ultimately this
-// one: what the surface splices back together has to be what it was handed.
+// The document, reassembled from its blocks; what the surface splices back together must equal what it was handed.
 const rejoin = (source: string, blocks: readonly MarkdownBlock[]): string => blocks.map((block) => source.slice(block.start, block.end)).join(``);
 
-// Whether the spans TILE the document: they start at 0, end at the end, and each begins exactly where the last
-// one stopped. A gap would be text an edit could drop; an overlap, text an edit could duplicate.
+// Whether the spans tile the document: start at 0, end at the end, each begins where the last stopped. A gap is text an
+// edit could drop; an overlap, text an edit could duplicate.
 const tiles = (source: string, blocks: readonly MarkdownBlock[]): boolean =>
     blocks.length > 0 &&
     blocks[0]?.start === 0 &&
@@ -38,9 +37,8 @@ const DOCUMENTS = {
     emphasisHeavy: `Some **bold**, _italic_ and \`code\` in one line.\n\n> A quote with **bold**.\n`,
 };
 
-/* THE INVARIANT, on every document above. A splitter that reports the wrong span corrupts a file the first time
- * somebody edits a paragraph, so this is checked against everything rather than spot-checked: the tiling holds,
- * and the pieces put the document back exactly. */
+// The invariant, on every document above: a splitter that reports the wrong span corrupts a file the first time
+// somebody edits a paragraph.
 describe(`splitMarkdownBlocks tiles every document`, () => {
     for (const [name, source] of Object.entries(DOCUMENTS)) {
         it(name, () => {
@@ -65,8 +63,8 @@ test(`blank lines belong to the block above them, so a paragraph's span reaches 
     const source = `# Title\n\nBody.\n`;
     const { blocks } = splitMarkdownBlocks(source);
     expect(blocks).toHaveLength(2);
-    // The heading owns its own trailing blank line: deleting it is an edit to the heading's block, which is
-    // where a writer would look for it.
+    // The heading owns its own trailing blank line: deleting it is an edit to the heading's block, which is where a
+    // writer would look for it.
     expect(source.slice(blocks[0]?.start, blocks[0]?.end)).toBe(`# Title\n\n`);
     expect(source.slice(blocks[1]?.start, blocks[1]?.end)).toBe(`Body.\n`);
 });
@@ -74,8 +72,7 @@ test(`blank lines belong to the block above them, so a paragraph's span reaches 
 test(`a document opening with blank lines hands them to the first block that renders`, () => {
     const source = DOCUMENTS.leadingBlankLines;
     const { blocks } = splitMarkdownBlocks(source);
-    // Not a leading block of pure whitespace: that would be a span of the document with nothing on screen to
-    // click, i.e. text the reader could never reach.
+    // Not a leading block of pure whitespace: that would be a span of the document with nothing on screen to click.
     expect(blocks[0]?.start).toBe(0);
     expect(source.slice(blocks[0]?.start, blocks[0]?.end)).toBe(`\n\n\n# After the gap\n\n`);
 });
@@ -86,8 +83,8 @@ describe(`link reference definitions`, () => {
         const { blocks, defs } = splitMarkdownBlocks(source);
         expect(defs).toContain(`[badge]: https://img.example/b.svg`);
         expect(defs).toContain(`[ci]: https://ci.example/`);
-        // They render to nothing, so they are never a block of their own: the last block is the body paragraph
-        // plus the definitions that follow it.
+        // Reference definitions render to nothing, so they are never a block of their own: they join the block above
+        // them.
         expect(source.slice(blocks.at(-1)?.start, blocks.at(-1)?.end)).toBe(
             `Body.\n\n[badge]: https://img.example/b.svg\n[ci]: https://ci.example/\n`,
         );

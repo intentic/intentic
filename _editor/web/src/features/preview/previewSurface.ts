@@ -4,25 +4,16 @@ import { storedValue, storeValue } from "../../lib/browserStorage";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import { ADDRESS_TARGET_ID } from "./previewModel";
 
-/* THE ONE PREVIEW PANEL'S OWN STATE, which target it shows and whether it exists at all, as a module-level
- * singleton like useChat/useLayout, because the panel is mounted above the router (shell/PoppablePanels) and
- * has no route to keep state in: the same panel serves the /preview area and a window of its own.
- *
- * `opened` IS THE PANEL'S EXISTENCE. Nothing mounts until the user first looks (the /preview area, a window,
- * a tree row's eye), an iframe quietly loading a dev server nobody asked to see would be requests into the
- * user's app from a surface they never opened. Once opened it STAYS mounted, parked offscreen behind the rail
- * tile while other areas are up (PoppablePanels' stage): moving back and forth between the code and the app is
- * the whole workflow on one screen, and an iframe rebuilt on every trip would lose the app's own state, the
- * route its SPA is on, a form half filled, to every glance at a file. */
+// The preview panel's own state (target, whether it exists), module-level like useChat/useLayout since the panel mounts
+// above the router. `opened` is the panel's existence: nothing mounts until the user first looks, and once opened it
+// stays mounted so the app's own state survives switching away.
 
 const opened = ref(false);
 const selectedId = ref<string | undefined>(undefined);
 const address = ref<string | undefined>(undefined);
 
-/* Which target this SANDBOX was left showing, and the address it was last pointed at by hand, facts about the
- * box (its repos, its apps, the staging URL its owner keeps checking), so both are keyed by sandbox and come
- * back on a reload. The id is re-validated against the live target list on every read (previewModel.pickTarget),
- * so a stored id naming a deleted repo simply falls back to the best evidence. */
+// Last-shown target and typed address, keyed by sandbox so they return on reload; the id is re-validated against the
+// live target list on read (previewModel.pickTarget).
 const targetKey = (sandboxId: string | undefined): string => `intentic-preview-target:${sandboxId ?? ``}`;
 const addressKey = (sandboxId: string | undefined): string => `intentic-preview-address:${sandboxId ?? ``}`;
 
@@ -33,9 +24,8 @@ const restore = (): void => {
 };
 restore();
 
-// Re-scope to the incoming sandbox (called from sandboxScope): its own last target comes back, and the parked
-// panel goes away rather than keeping the outgoing sandbox's app loaded. A floating preview window marks itself
-// opened on arrival (pages/FloatingArea.vue), so it survives the switch on its own.
+// Re-scopes to the incoming sandbox: its own last target comes back, and the parked panel closes rather than keep the
+// outgoing sandbox's app loaded. A floating window re-marks itself opened on arrival (pages/FloatingArea.vue).
 export const resetPreviewSurface = (): void => {
     opened.value = false;
     restore();
@@ -51,10 +41,8 @@ export const selectPreviewTarget = (id: string): void => {
     storeValue(targetKey(useSandbox().activeSandboxId.value), id);
 };
 
-/* POINT THE PREVIEW SOMEWHERE OF YOUR OWN, a staging URL, another route of the app, a page on a different
- * box. Storing the raw text rather than a parsed URL keeps what the user typed in the field they typed it in;
- * whether it names anything is addressTarget's judgement, and an empty box simply retires the row. Selecting
- * it here too, because typing an address IS asking to see it. */
+// Points the preview at a typed address. Stores raw text, not a parsed URL; whether it names anything is
+// addressTarget's judgement, and typing one also selects it.
 export const setPreviewAddress = (typed: string): void => {
     const trimmed = typed.trim();
     address.value = trimmed === `` ? undefined : trimmed;
@@ -68,9 +56,8 @@ export const markPreviewOpened = (): void => {
     opened.value = true;
 };
 
-/* The one move behind every door into the preview, the rail tile leads to the route anyway, but the tree
- * row's eye and the palette command land here: name a target (or a repo, whose first target pickTarget
- * resolves), make the panel exist, and go where it shows. */
+// Entry point for the tree row's eye and the palette command (the rail tile just routes): selects a target (or a repo,
+// resolved via pickTarget), opens the panel, and navigates to it.
 export const openPreview = (router: Router, targetId?: string): void => {
     if (targetId !== undefined) {
         selectPreviewTarget(targetId);
@@ -79,17 +66,8 @@ export const openPreview = (router: Router, targetId?: string): void => {
     void router.push(`/preview`);
 };
 
-/* THE ONE PREVIEW A SANDBOX OPENS BY ITSELF, and it is only ever the first one.
- *
- * A new sandbox arrives with a starter site already running (the daemon copies it out of the image on its first
- * boot), and a running site nobody has been shown is the same as no site at all: the product's claim is "say
- * what you want changed and watch it change", which needs the thing on screen. So the first arrival opens the
- * preview, once, and never again for that box, the reader's own last choice (or their decision to keep it shut)
- * outranks anything this could offer them later.
- *
- * Keyed by sandbox and stored, not held in memory: the flag has to survive the reload the user does five
- * seconds later, or the panel reopens over whatever they went to look at instead. Answers whether it opened,
- * for the caller that wants to log or test it. */
+// Opens the preview once per sandbox, on first visit only; the user's later choice (open or closed) always wins after
+// that. Stored, not in-memory, so the flag survives a reload; returns whether it opened.
 const autoShownKey = (sandboxId: string | undefined): string => `intentic-preview-autoshown:${sandboxId ?? ``}`;
 
 export const openPreviewOnFirstVisit = (router: Router, targetId: string): boolean => {
@@ -102,5 +80,5 @@ export const openPreviewOnFirstVisit = (router: Router, targetId: string): boole
     return true;
 };
 
-/* The window toggle lives in previewFloating.ts rather than here: this module is imported by sandboxScope,
- * whose tests run without a DOM, and the floating surface reaches for the window at module scope. */
+// Toggle lives in previewFloating.ts, not here: this module is imported by sandboxScope, whose tests run without a DOM,
+// and the floating surface touches `window` at module scope.

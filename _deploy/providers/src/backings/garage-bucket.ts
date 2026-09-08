@@ -24,8 +24,8 @@ const garage = async (session: SshSession, cid: string, args: string): Promise<s
     return result.stdout.trim();
 };
 
-// The access key id + secret of the named key, read back from `garage key info --show-secret` (Garage owns
-// them, it generates the pair on `key create`; the binding never sets them). Returns "" for a field not found.
+// The access key id + secret of the named key, read back from `garage key info --show-secret` (Garage generates
+// the pair on `key create`). Returns "" for a field not found.
 const readKey = async (session: SshSession, cid: string, keyName: string): Promise<{ accessKey: string; secretKey: string }> => {
     const info = (await session.exec(`docker exec ${cid} ${BIN} key info --show-secret ${keyName}`)).stdout;
     const field = (label: string): string => info.match(new RegExp(`${label}:\\s*(\\S+)`))?.[1] ?? "";
@@ -39,10 +39,8 @@ const outputsFor = (parsed: BucketInputs, key: { accessKey: string; secretKey: s
     bucket: parsed.bucket,
 });
 
-// A per-app Garage bucket + access key (the binding for an app that uses an object-storage capability). read
-// reports it present once the bucket exists (so the noop re-derives the credentials from `key info`); apply
-// create-or-updates the bucket + key idempotently and grants the key read+write on the bucket; delete drops
-// both. Garage generates + persists the key pair, so the access key/secret are stable across applies.
+// A per-app Garage bucket + access key. Garage generates + persists the key pair, so the access key/secret are
+// stable across applies.
 export const createGarageBucketProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createInstanceBindingProvider(
         {
@@ -56,7 +54,7 @@ export const createGarageBucketProvider = (executor: SshExecutor = sshExecutor):
             },
             create: async (session, cid, parsed) => {
                 // bucket create + key create error if the resource already exists, so tolerate that; the grant is
-                // idempotent. Then read the (Garage-generated) key pair back for the outputs.
+                // idempotent.
                 await session.exec(`docker exec ${cid} ${BIN} bucket create ${parsed.bucket} 2>/dev/null || true`);
                 await session.exec(`docker exec ${cid} ${BIN} key create ${parsed.keyName} 2>/dev/null || true`);
                 await garage(session, cid, `bucket allow --read --write ${parsed.bucket} --key ${parsed.keyName}`);

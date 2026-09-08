@@ -1,32 +1,8 @@
-<!-- THE PROGRAM ON A PERMISSION CARD: syntax-highlighted, with the fragment that held it carrying the emphasis
-     and everything else stepped back.
-
-     THE HIERARCHY IS THE POINT, and it is two decisions rather than one.
-
-     Colour comes first, because a held command is regularly a hundred-plus characters of pipeline and flat
-     monospace is the shape in which a reader cannot tell a path from a flag from a redirect without parsing it
-     themselves. Every other code surface in this app is coloured; this one, the one attached to a decision,
-     was the exception.
-
-     Then the MARK, because colour alone cannot answer the question this card exists to ask. Syntax
-     highlighting is about grammar, so `.env` is painted exactly like every other path in the line, and the
-     four characters that caused the hold are invisible among the two hundred that did not. The gate's own
-     offsets say which they are (commandPieces merges the two rulers), and here they get a tinted ground and an
-     underline.
-
-     The rest is DIMMED rather than recoloured: it keeps its real Shiki colour at reduced opacity, so the
-     grammar still reads while the eye lands on the mark. Deliberately not a semantic guess at which arguments
-     are "unimportant", there is no honest way to know that from a shell string, and a second colour system
-     invented for it would fight the grammar it is drawn over. Flagged-versus-not is the split the daemon can
-     actually defend, so it is the only one drawn.
-
-     UNDERLINE AS WELL AS TINT, because the mark is the one thing on this card that must survive being read in
-     greyscale, by someone who cannot distinguish the amber, or on a screen in sunlight.
-
-     AND THE COLOUR HAS TO BE THE RIGHT SCHEME'S. Shiki hands each piece BOTH themes at once — an inline `color`
-     holding the light one and a `--shiki-dark` custom property holding the dark — and swapping between them is
-     a stylesheet's job, not this component's (`.chat-command-block` in chat.css, the same flip `.chat-code` and
-     the design system's `.ui-code` carry). That is why the <pre> wears a class it never styles itself with. -->
+<!--
+    Syntax-highlighted command on a permission card. The gate's flagged span gets a tinted, underlined mark; everything else keeps its normal Shiki
+    colour at reduced opacity — no guessing at which arguments matter beyond what the gate flagged. Light/dark swap is handled by
+    `.chat-command-block` in chat.css, not by this component.
+-->
 <script setup lang="ts">
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { type CodeToken, CopyButton, Icon, ui, useHighlighter } from "@intentic/ui";
@@ -35,21 +11,14 @@ import { commandLines } from "./commandPieces.js";
 
 const { program } = defineProps<{ program: ProgramAsk }>();
 
-/* HOW MANY LINES BEFORE THE BLOCK CLAMPS ITSELF. A card is answered in a couple of seconds by someone who was
- * doing something else; a heredoc that runs to forty lines turns the card into the whole panel and pushes the
- * buttons off screen, which is worse than a fold for exactly the readers who are in a hurry. Six is enough for
- * every ordinary pipeline plus a wrap or two. */
+// Lines before the block clamps; six covers an ordinary pipeline without crowding the card's buttons.
 const CLAMP_LINES = 6;
 
 const { tokenizeLine } = useHighlighter();
-// One entry per line, in order. Undefined until the grammar lands, and permanently for a language we ship none
-// for; commandLines renders plain-but-marked from that, so the command is legible from the first frame.
+// One entry per line; undefined until the grammar loads (permanently, if none ships for this language).
 const tokens = ref<readonly (readonly CodeToken[] | undefined)[] | undefined>(undefined);
 
-/* Tokenizing is asynchronous (grammars are dynamically imported) and this card can be on screen before the
- * chunk resolves, so a stale result must never overwrite a newer one: `seq` is the guard, the same one <Code>
- * and ChatCodeBody use. A failed load leaves `tokens` undefined and the block plain, which is a colour we did
- * not get rather than a card we did not draw. */
+// Tokenizing is async; `seq` guards against a stale result overwriting a newer one (same pattern as `<Code>`).
 let seq = 0;
 watch(
     () => [program.text, program.language] as const,
@@ -66,9 +35,7 @@ watch(
 
 const lines = computed(() => commandLines(program.text, program.spans, tokens.value));
 
-// Whether there is anything behind the clamp. Counted in LINES rather than measured in pixels: unlike the
-// design system's <Code>, every line here wraps rather than scrolling, so a long command's height depends on
-// the pane width, and the honest promise a toggle can make is about the lines it is hiding.
+// Counted in lines, not pixels: every line here wraps, so height depends on the pane's width.
 const expanded = ref(false);
 const clamped = computed(() => !expanded.value && lines.value.length > CLAMP_LINES);
 const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) : lines.value));
@@ -77,29 +44,30 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
 <template>
     <div class="flex flex-col gap-1.5">
         <div class="relative">
-            <!-- `pre-wrap` and not a scroller: a command is read to be judged, and a card that hides the tail of
-                 the line off its right edge hides exactly the part people put the interesting arguments in.
-                 `break-all` so an unbreakable 200-character URL wraps instead of setting the card's width.
-                 THE BODY TIER, not the meta tier the transcript's other code chips take. This is the text the
-                 card is asking about, and at 2xs under a dim it stopped being something anyone would actually
-                 read before clicking Allow — which makes the whole card ceremony. -->
-            <!-- `pr-16` is the copy button's own room, reserved by the block rather than left to chance: the
-                 button floats over the top-right corner, and a wrapped first line ran straight under it. Same
-                 trick the design system's <Code> uses (code.css, keyed off `ui-code-copyable`). -->
+            <!--
+                `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge.
+                `break-all` wraps an unbreakable URL instead of widening the card; this is body-tier text, not the
+                transcript's dimmer meta tier.
+            -->
+            <!--
+                `pr-16` reserves room for the copy button, which floats over the top-right corner and would sit on top of a
+                wrapped first line otherwise (same trick as `<Code>`, code.css's `ui-code-copyable`).
+            -->
             <pre
                 class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
-            <!-- The copy carries the whole program the daemon sent, never the clamped rendering: someone
-                 copying a command off this card is taking it somewhere to read, and half of one is worse than
-                 none. On a shortened card that text is the excerpt, elision marker and all, which is visibly
-                 partial rather than quietly so; the full program is in the transcript with the tool call. -->
-            <!-- Positioned by a box of its own: the button's root wears `relative` for its press spinner, and
-                 an `absolute` handed to it from here is settled by Tailwind's utility order rather than by
-                 this call site. -->
+            <!--
+                Copies the whole program, never the clamped rendering: half a command is worse than none. A shortened
+                card's excerpt already marks itself as partial; the full program is in the transcript.
+            -->
+            <!--
+                Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to
+                come from here instead.
+            -->
             <div class="absolute top-1.5 right-1.5 flex">
                 <CopyButton :text="program.text" label="Copy" class="bg-canvas" />
             </div>
-            <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering fault. -->
+            <!-- The fade signals more content; a hard cut mid-command would read as a rendering fault. -->
             <div
                 v-if="clamped"
                 class="pointer-events-none absolute inset-x-px bottom-px h-6 rounded-b-md bg-linear-to-t from-canvas to-transparent"
@@ -115,12 +83,10 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                 {{ expanded ? `Show less` : `Show all ${lines.length} lines` }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
-            <!-- The daemon spent 400 characters on this program and says so rather than letting the card end
-                 mid-word: a reader who cannot see the tail should know there IS a tail. There is nothing to
-                 expand to here, the rest was never sent; it is in the transcript with the tool call. What the
-                 excerpt DOES guarantee is the flagged fragment — the daemon keeps the head and a window around
-                 the mark, with the skipped middle written in as `[… N characters not shown …]` — so the thing
-                 the title is about is never the thing the shortening removed. -->
+            <!--
+                Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see
+                the transcript). The excerpt always keeps the flagged fragment, so the title's subject is never what got cut.
+            -->
             <span v-if="program.truncated" class="text-2xs text-subtle">{{
                 program.spans.length > 0 ? `Shortened for this card, kept around the flagged part.` : `Shortened for this card.`
             }}</span>

@@ -7,12 +7,9 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-/* ---- what "behind" means, which is the whole correctness of the feature ------------------------------ */
+// what "behind" means
 
-/* THE PROPERTY THIS RESTS ON. `"vite": "^7.1.7"` against a latest of 7.4.0 is NOT behind — the manifest
- * already says yes to it and an install picks it up with nobody editing anything. Against 8.2.1 it IS, because
- * the caret stops at the major. A check that could not tell those apart would fire on most of a healthy
- * lockfile and be switched off within a day. */
+// A pin is 'behind' only when the range wouldn't already resolve to latest on its own (^7.1.7 admits 7.4.0, not 8.2.1).
 test.each([
     ["^", "7.1.7", "7.4.0", true],
     ["^", "7.1.7", "8.2.1", false],
@@ -25,8 +22,8 @@ test.each([
     expect(admits(pin(version, range), parseVersion(candidate)!)).toBe(expected);
 });
 
-// Below 1.0.0 npm's caret locks the minor instead of the major, and a check that got this backwards would be
-// wrong about every pre-1.0 package in a tree — which, for a workspace on early SDKs, is a lot of them.
+// Below 1.0.0, npm's caret locks the minor instead of the major; getting this backwards misjudges every pre-1.0
+// package.
 test.each([
     ["0.147.0", "0.147.3", true],
     ["0.147.0", "0.151.0", false],
@@ -54,7 +51,7 @@ test.each(["latest", "*", "", "vNext"])("something that is not a version reads a
     expect(parseVersion(version)).toBeUndefined();
 });
 
-/* ---- the resolver, against a stubbed registry -------------------------------------------------------- */
+// the resolver, against a stubbed registry
 
 const npmStub = (latest: string, deprecated?: string, calls: { count: number } = { count: 0 }) => {
     const fetcher = vi.fn(async (url: string | URL) => {
@@ -77,8 +74,7 @@ test("a pin the range already reaches has nothing to report", async () => {
     expect(await createFreshnessResolver()(pin("7.1.7", "^", "vite"))).toBeUndefined();
 });
 
-// Deprecation is worth saying whatever the numbers are: a package can be on its newest version and still be
-// one its own author has told you to stop using.
+// Deprecation is reported regardless of version currency: a package can be current and still deprecated by its author.
 test("a deprecated package is reported even when it is on the newest version", async () => {
     const deprecation = "request has been deprecated";
     const { fetcher } = npmStub("2.88.2", deprecation);
@@ -112,7 +108,7 @@ test("a specifier with no readable version is never looked up", async () => {
     expect(calls.count).toBe(0);
 });
 
-/* ---- the two clocks, and the memory behind them ------------------------------------------------------ */
+// the two clocks, and the memory behind them
 
 test("the same package asked twice costs one round of requests", async () => {
     const { fetcher, calls } = npmStub("2.0.0");
@@ -129,13 +125,12 @@ test("twenty simultaneous asks for one package are one lookup, which a manifest 
     vi.stubGlobal("fetch", fetcher);
     const resolve = createFreshnessResolver();
     await Promise.all(Array.from({ length: 20 }, () => resolve(pin("1.0.0"))));
-    // Two documents per package (dist-tags and the pinned version), and no more.
+    // Two documents per package: dist-tags and the pinned version, no more.
     expect(calls.count).toBe(2);
 });
 
-/* THE ANSWER OUTLIVES ITS CALLER, which is the point of splitting the clocks. A lookup too slow for the grace
- * is not cancelled — it lands in the cache, so the pass after it finds the answer waiting rather than paying
- * for it again. Without this, the very first lookup of every session would be silently lost. */
+// A lookup slower than the grace isn't cancelled; it lands in the cache so the next call finds the answer instead of
+// repaying for it.
 test("a lookup that overruns the caller's grace still answers the next caller", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -156,7 +151,7 @@ test("a lookup that overruns the caller's grace still answers the next caller", 
     });
 });
 
-// An unreachable registry is asked once, not on every edit of every file that names the package.
+// An unreachable registry is asked once, not on every edit that names the package.
 test("silence is remembered too", async () => {
     const fetcher = vi.fn(async () => ({ ok: false, text: async () => "" }) as unknown as Response);
     vi.stubGlobal("fetch", fetcher);
@@ -167,6 +162,5 @@ test("silence is remembered too", async () => {
     expect(fetcher.mock.calls.length).toBe(after);
 });
 
-// The cache that spans turns needs a real directory, which puts it in the integration budget: it lives in
-// registry-freshness.integration.test.ts. Everything above is pure and belongs here, where it runs in
-// milliseconds.
+// The cache spanning turns needs a real directory, so it lives in registry-freshness.integration.test.ts; everything
+// above is pure and runs here in milliseconds.

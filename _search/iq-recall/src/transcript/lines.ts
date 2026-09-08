@@ -1,6 +1,6 @@
-// Tolerant readers over transcript JSONL lines. The format is undocumented and drifts across claude-code
-// versions (typed prompts were plain strings before v2.x, arrays now), every accessor returns undefined on
-// unexpected shape instead of throwing, so unknown line types and future fields pass through ingestion.
+// Tolerant readers over transcript JSONL lines: undocumented and drifting across claude-code versions (prompts were
+// plain strings before v2.x, arrays now). Every accessor returns undefined on an unexpected shape, so unknown line
+// types and future fields pass through.
 
 export type Line = Record<string, unknown>;
 
@@ -33,11 +33,11 @@ export const timestampOf = (line: Line): number | undefined => {
     return Number.isNaN(ms) ? undefined : ms;
 };
 
-// Slash-command echoes and harness caveats, user lines, but not something the user typed as a prompt.
+// Slash-command echoes and harness caveats: user lines that are not something the user typed.
 const isCommandText = (text: string): boolean => text.startsWith("<command-") || text.startsWith("<local-command-");
 
-// The prompt the user actually typed, or undefined for tool results, command echoes, and meta lines.
-// Accepts both content shapes: plain string (older claude-code) and array of text blocks (v2.x).
+// The prompt the user actually typed; undefined for tool results, command echoes, and meta lines. Accepts both content
+// shapes: a plain string (older claude-code) or an array of text blocks (v2.x).
 export const typedPromptOf = (line: Line): string | undefined => {
     if (typeOf(line) !== "user" || line["isMeta"] === true) {
         return undefined;
@@ -67,8 +67,8 @@ export const typedPromptOf = (line: Line): string | undefined => {
     return prompt === "" || isCommandText(prompt) ? undefined : prompt;
 };
 
-// The assistant text of this line, or undefined for tool-use-only lines, sidechains, and non-assistant lines.
-// Sidechains (subagent threads) are excluded, their text answers the subagent's prompt, not the user's turn.
+// The assistant text of this line; undefined for tool-use-only, sidechain, and non-assistant lines. Sidechains
+// (subagent threads) answer the subagent's prompt, not the user's turn.
 export const assistantTextOf = (line: Line): string | undefined => {
     if (typeOf(line) !== "assistant" || line["isSidechain"] === true) {
         return undefined;
@@ -96,8 +96,8 @@ export interface FileTouch {
 
 const MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
-// Files this line pulled into (or wrote from) the session's context, from all three places the transcript
-// records them: assistant tool_use inputs, user toolUseResult payloads, and file-history snapshots.
+// Files this line pulled into or wrote from context, from the three places the transcript records them: assistant
+// tool_use inputs, user toolUseResult payloads, and file-history snapshots.
 export const fileTouchesOf = (line: Line): FileTouch[] => {
     const touches: FileTouch[] = [];
     const type = typeOf(line);

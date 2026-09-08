@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-//
-// The rules the rail and the most-added-first order rest on. `readingOf` is a thin binding of `shownStat` to the
-// showComments preference and is exercised through the panels. jsdom for the module, not for these assertions:
-// the file also declares a stored preference and reaches useLayout, both of which read the document as they load.
+// Pins the rules the rail and most-added-first order rest on.
+// Needs jsdom: the module reads a stored preference and calls useLayout at import.
 import { describe, expect, it } from "vitest";
 import { addedIn, bigger, shownStat, sumCode, sumShown, weightFill } from "./changeWeight";
 
@@ -15,23 +13,16 @@ describe(`shownStat`, () => {
         expect(shownStat(false, { additions: 4, deletions: 1 }, 26, 9)).toEqual({ additions: 26, deletions: 9 });
     });
 
-    // A file the daemon could not read as code (bytes, no grammar, one side too large) carries no `code` at all:
-    // git's numbers ARE its reading, and its rail has to be scaled the same way.
     it(`falls back to git's for a file there was no code reading of`, () => {
         expect(shownStat(true, undefined, 26, 9)).toEqual({ additions: 26, deletions: 9 });
     });
 
-    // A binary file or a conflict: no count on either side. The caller draws no rail rather than an empty one,
-    // which would claim a size of zero for something whose size is unknown.
     it(`keeps "no answer" distinguishable from zero`, () => {
         expect(shownStat(true, undefined, undefined, undefined)).toEqual({ additions: undefined, deletions: undefined });
     });
 });
 
 describe(`addedIn`, () => {
-    /* THE DECISION THE WHOLE FILE TURNS ON. Deletions are cheap to review and, measured as size, hand the scale
-     * to whatever the changeset happened to delete: one removed 1,353-line bundle is enough to rank a 131-line
-     * rewrite below a deleted Dockerfile. Added lines are what has to be read. */
     it(`measures the lines that have to be read, not total churn`, () => {
         expect(addedIn({ additions: 131, deletions: 35 })).toBe(131);
         expect(addedIn({ additions: 0, deletions: 1353 })).toBe(0);
@@ -48,8 +39,6 @@ describe(`bigger`, () => {
         expect(bigger({ additions: 131, deletions: 0 }, { additions: 12, deletions: 900 })).toBeLessThan(0);
     });
 
-    // Which is what keeps a changeset of pure deletions from collapsing into an arbitrary order under a control
-    // the user just asked to sort it.
     it(`falls back to deletions when nothing was added`, () => {
         expect(bigger({ additions: 0, deletions: 900 }, { additions: 0, deletions: 12 })).toBeLessThan(0);
     });
@@ -67,9 +56,6 @@ describe(`sumCode`, () => {
         });
     });
 
-    /* A row there is no code reading OF contributes git's own, which is what its badge shows too: a heading that
-     * left it out would disagree with the rows under it, and one that counted it as zero would say a 400-line
-     * vendored bundle changed nothing. */
     it(`takes git's numbers for a row that could not be read as code`, () => {
         expect(sumCode([{ code: { additions: 4, deletions: 1 } }, { additions: 40, deletions: 2 }])).toEqual({ additions: 44, deletions: 3 });
     });
@@ -94,8 +80,6 @@ describe(`weightFill`, () => {
         expect(weightFill(200, 200)).toBe(1);
     });
 
-    // The whole point of the compressive scale: on a linear one a 20-line file beside a 2,000-line one draws 1%
-    // of 20px, which is nothing, and the list is back to being unrankable.
     it(`keeps a small change against a huge one visible and ordered`, () => {
         const small = weightFill(20, 2000);
         const middling = weightFill(200, 2000);

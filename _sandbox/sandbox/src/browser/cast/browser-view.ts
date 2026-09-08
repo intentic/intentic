@@ -9,23 +9,9 @@ import { redeemTicket } from "../../auth/ws-tickets.js";
 // The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
 type Socket = WSContext;
 
-/* The /system/browser-view route: WATCH THE AGENT BROWSE, and take the wheel if you want to.
- *
- * Same wire as /system/browser-profile (a header-less WebSocket authorizing token+connect from the query string;
- * app.ts exempts it from the bearer middleware) and the same pictures, because it is the same thing pointed at a
- * different browser: there, the platform's own profile with the owner at the wheel; here, the Chromium the agent
- * is driving through its tools. WHAT the picture is — video off the browser's own X display, or CDP frames of
- * one page — is live-view.ts's decision, made once for both surfaces.
- *
- * The stream is READ-ONLY BY DEFAULT, not by refusing input, but because the client sends none until the user
- * asks. That distinction matters: this is the owner's own browser inside the owner's own sandbox, so there is
- * nothing to forbid; what there is, is a default that keeps a click meant for the transcript from landing on the
- * page the agent is mid-way through filling in. When the user does take over (the view's Take control), the
- * input starts flowing and lands here unremarked.
- *
- * Closing this socket stops the picture and nothing else. The browser belongs to the turn, not to the viewer,
- * walking away from the window must not end the work being watched, which is the same contract the terminal
- * panel's attach has with tmux. */
+// /system/browser-view: watches the agent's browser, and lets the user take the wheel. Same wire and pictures as
+// /system/browser-profile, pointed at a different browser. Read-only only because the client sends no input until the
+// user takes over; closing the socket stops the picture, not the turn's browser.
 export const createBrowserViewRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         let view: LiveView | undefined;
@@ -45,13 +31,9 @@ export const createBrowserViewRoute = (services: Services) =>
             view = undefined;
         };
 
-        /* THE TAB STRIP, which only the frames path has and only the frames path needs. A screencast shows ONE
-         * page, so choosing which is a real question; the video path shows the window, and the window already
-         * has Chromium's own tab strip in it, which the owner clicks directly. `bind` is answered either way so
-         * the client never has to know which it is looking at — on video it simply lands on nothing.
-         *
-         * A page id the session doesn't know is a tab that closed between the relist and the click: say so
-         * rather than leaving the strip lying about it. */
+        // Tab strip only the frames path needs: a screencast shows one page, so picking matters, while video shows the
+        // whole window with its own strip. `bind` answers either way; an unknown page id means the tab closed since the
+        // relist.
         const onBind = async (pageId: string, ws: Socket): Promise<void> => {
             const page = browserSessionPage(session, pageId);
             if (page === undefined) {
@@ -61,30 +43,25 @@ export const createBrowserViewRoute = (services: Services) =>
             await view?.bind(page);
         };
 
-        // Ctrl+C over the picture: hand back what the page has selected so the client can put it on the
-        // clipboard of the machine the person is actually sitting at. Answered even when empty, because the
-        // client is waiting on it before it lets the keystroke go.
+        // Ctrl+C over the picture: returns what the page selected so the client can put it on the local clipboard.
+        // Answered even when empty, since the client waits on it before releasing the keystroke.
         const onSelection = async (ws: Socket): Promise<void> => {
             ws.send(JSON.stringify({ type: "selection", text: (await view?.selection()) ?? "" }));
         };
 
-        /* THE CONVERSATION-LEVEL HALF of this socket: keepalive, what to stream, what is selected, whether
-         * anyone is looking. Split from the input half because the two answer different questions — this one is
-         * about the VIEW, the other is about the BROWSER. Answers whether it handled the frame. */
+        // Conversation-level half of this socket (keepalive, streaming, selection, visibility), split from the input
+        // half: this one answers for the view, not the browser. Returns whether it handled the frame.
         const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
             switch (message.type) {
                 case "ping":
-                    // The client's keepalive against tunnel idle-reaping; the pong is its read-side liveness
-                    // signal, exactly as on the terminal socket (a picture of a STILL page may send nothing at
-                    // all, so silence here would be indistinguishable from a half-open connection). Answered
-                    // before anything is attached, or a slow Chromium start would read as a dead socket and the
-                    // client would tear down the very connection it is waiting on.
+                    // Keepalive against tunnel idle-reaping, answered before attach so a slow start isn't read as a
+                    // dead socket.
                     ws.send(JSON.stringify({ type: "pong" }));
                     return true;
                 case "pause":
                 case "resume":
-                    // Nobody is looking (hidden tab, another route). On video this kills the encoder outright,
-                    // which is a core given back; on frames it holds the binding and sends nothing.
+                    // Nobody is looking: video kills the encoder outright; frames just holds the binding, sending
+                    // nothing.
                     await view?.setPaused(message.type === "pause");
                     return true;
                 case "bind":
@@ -106,8 +83,7 @@ export const createBrowserViewRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    // The agent's browser may sit signed in as the owner, taking its wheel is operating,
-                    // not watching (a collaborator still sees the agent's own screenshots in the chat).
+                    // The agent's browser may be signed in as the owner; taking the wheel is operating, not watching.
                     const caller = redeemTicket(services, url, "maintainer");
                     if (caller !== undefined) {
                         unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
@@ -118,8 +94,8 @@ export const createBrowserViewRoute = (services: Services) =>
                     return;
                 }
                 session = url.searchParams.get("session") ?? "";
-                // Awaited, not polled: the user clicks Watch the instant the first tool card appears, which can
-                // be ahead of Chromium's first paint, browserSessionContext resolves when the attach lands.
+                // Awaited, not polled: a click can arrive before Chromium's first paint; this resolves once the attach
+                // lands.
                 const context = await browserSessionContext(session);
                 if (closed) {
                     return;
@@ -130,8 +106,7 @@ export const createBrowserViewRoute = (services: Services) =>
                     return;
                 }
                 try {
-                    // The key the session's display was allocated under, which is what decides video or frames.
-                    // A session whose browser ended up headless has none, and the frames path answers instead.
+                    // Display key decides video vs frames; a headless session has none, so frames answers instead.
                     view = await startLiveView(context, browserSessionDisplayKey(session) ?? "", { send: (data) => ws.send(data) }, (reason) => {
                         services.logger.warn({ reason }, "browser-view stream failed");
                     });

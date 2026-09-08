@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because these assertions are about rendered GEOMETRY: the percentages, the stack order, the rounded
-// data-end, which is exactly the class of thing a chart gets wrong silently. A NaN width or an inverted stack
-// throws nothing and fails no type check; it just draws a lie.
+// needs jsdom: pins rendered geometry (percentages, stack order, rounded data-end) that a NaN width or inverted
+// stack would get wrong silently, with no thrown error or type failure.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, h } from "vue";
 import { BarChart } from "@intentic/ui";
@@ -10,9 +8,8 @@ import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
 import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";
 
-// The ranked bars render through the design system's <BarChart>, so importing it brings the barrel, and with
-// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method:
-// vitest.setup.ts does, for every suite in the package.
+// Importing `<BarChart>` pulls in `useDevice`, which reads `window.matchMedia` at module scope; jsdom doesn't
+// ship it, vitest.setup.ts polyfills it package-wide.
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
     costUsd: 0,
@@ -39,8 +36,8 @@ const host = (): HTMLElement => {
     return element;
 };
 
-// The charts carry `v-tooltip` (installed app-wide by installUi). A no-op stand-in
-// keeps these tests off the whole UI plugin: the tooltip's CONTENT is not what is under test here.
+// Charts carry `v-tooltip` (installed app-wide); a no-op stand-in avoids pulling in the whole UI plugin, since
+// tooltip content isn't under test here.
 const mount = (component: unknown, props: Record<string, unknown>): HTMLElement => {
     const element = host();
     app = createApp({ render: () => h(component as never, props) });
@@ -76,7 +73,7 @@ describe(`UsageColumnChart`, () => {
     it(`scales columns against the axis top, never against the tallest column`, () => {
         const element = mount(UsageColumnChart, { series, providers: [`claude`, `codex`] });
         const columns = [...element.querySelectorAll(`[style*="height"]`)].filter((node) => node.classList.contains(`max-w-6`));
-        // niceMax(8) is 10, so the $8 column is 80% tall, not 100%, which is what scaling to the leader would give.
+        // niceMax(8) = 10, so $8 is 80% tall, not 100% (which scaling to the leader would give).
         expect(columns.map((node) => percent(node.getAttribute(`style`) ?? ``, `height`))).toEqual([0, 40, 80]);
     });
 
@@ -120,9 +117,8 @@ describe(`UsageColumnChart`, () => {
     });
 });
 
-// The ranked cost bars render through the design system's shared <BarChart>; what is asserted here is the
-// projection into it (rankedBars) plus the geometry the figure owes: the same four claims the app-local copy
-// of this chart used to make on its own.
+// Asserts the projection into `<BarChart>` (`rankedBars`) plus the geometry the figure owes: scaling, colour,
+// labeling, zero-safety.
 describe(`ranked cost bars`, () => {
     const entry = (label: string, value: number, providers: string[]): RankedEntry => ({ key: label, kind: `value`, label, value, providers });
 

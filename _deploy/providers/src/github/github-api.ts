@@ -2,8 +2,8 @@ import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 import { restClient } from "../core/rest-client.js";
 
-// Thin wrapper over the GitHub REST API. Each function takes a token + the minimum inputs, returns only the
-// fields the providers consume. Like forgejo-api.ts: pure HTTP, no state, injectable for tests.
+// Thin wrapper over the GitHub REST API: each function takes a token + minimal inputs, returns only the fields
+// consumed. Pure HTTP, no state, injectable for tests.
 
 const headers = (token: string): Record<string, string> => ({
     Authorization: `Bearer ${token}`,
@@ -116,13 +116,12 @@ export const githubApi: GitHubApi = {
     },
 
     setRepoSecret: async ({ token, owner, repo, secretName, value }) => {
-        // GitHub Actions secrets require libsodium sealed-box encryption. The repo's public key is fetched
-        // first, then the value is encrypted against it.
+        // GitHub Actions secrets require libsodium sealed-box encryption against the repo's fetched public key.
         const keyData = await json(`${BASE}/repos/${owner}/${repo}/actions/secrets/public-key`, { headers: headers(token) });
         const parsed = parseResponse(publicKeySchema, keyData, "GitHub /actions/secrets/public-key");
 
         // Dynamic import of libsodium-wrappers (optional peer dep). The eslint-disable is intentional:
-        // this is a runtime-optional dependency that may not have type declarations installed.
+        // Runtime-optional dependency; may not have type declarations installed.
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         // oxlint-disable-next-line typescript/no-explicit-any -- the module has no types (see core/libsodium-wrappers.d.ts); the `any` is the library, not a shortcut.
         const sodium: any = await import(/* webpackIgnore: true */ "libsodium-wrappers").then(

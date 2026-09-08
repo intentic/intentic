@@ -1,29 +1,8 @@
-<!-- WHAT ONE DEVICE IS DOING FOR A SANDBOX: the folders it syncs, the ports it put on localhost, the
-     containers it runs, and whether the agent behind the first two is alive.
-
-     This is the BODY only, deliberately. The desktop app frames it as a section of its manager window and the web
-     app frames it as an expanded row on the Devices tab; the chrome differs, and every fact inside it does not.
-     Before this existed the same facts had exactly one rendering: the agent's printed status, on a terminal that the
-     desktop app's whole premise is not needing.
-
-     ONE ROW PER SANDBOX, which is the redesign. The report's own shape: a flat list of folders and a flat list
-     of ports, each row carrying the sandbox it belongs to: was rendered straight through, so a machine serving
-     two sandboxes drew six rows that each repeated a thirty-character id beside the path or the port the reader
-     actually came for, at the same size and nearly the same grey.
-
-     THE CONTAINER JOINS THAT ROW rather than getting a list of its own, which is the second half of the same
-     idea. A machine's sandboxes were printed twice on the Devices tab: once as folders and ports under one
-     heading, once as containers with buttons under another: under two different names for the same box, with
-     nothing on screen relating them. One sandbox, one row, in reading order: what it is, where its files are,
-     what you can open, what you can do to it.
-
-     NO BOX INSIDE THE BOX. Each block used to be a filled, bordered card sitting inside the caller's own card,
-     two deep, which is what made a page of small facts feel like a page of containers. Rows are separated by a
-     hairline and aligned to one label column instead: alignment is what makes a list scannable, not an outline
-     around every item in it.
-
-     Derivations live in deviceDetail.ts, including the prop shapes: they are STRUCTURAL rather than the sandbox
-     contract's own types (`@intentic/ui` carries no domain dependency) and a DeviceReport satisfies them. -->
+<!--
+    What one device is doing for a sandbox: synced folders, forwarded ports, containers, and whether the agent behind them is alive. Body only; the
+    caller frames it (a manager window section, an expanded row). One row per sandbox, container included, hairline-separated rather than boxed.
+    Shapes live in deviceDetail.ts, structurally typed rather than importing the sandbox contract.
+-->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
@@ -60,87 +39,48 @@ const {
 } = defineProps<{
     pairings?: readonly DeviceFolderRow[];
     ports?: readonly DevicePortRow[];
-    /* The containers on the machine, when the caller knows them: the desktop app from its own `docker ps`, the
-     * daemon from a `host`-capability one. Absent, every row below is a folder and its ports, which is exactly
-     * what this component drew before a container was ever passed to it. */
+    // Containers on the machine, when known (desktop's own `docker ps`, or a `host`-capability daemon read);
+    // absent, every row is just a folder and its ports.
     sandboxes?: readonly DeviceSandboxRow[];
-    /* THE DEVICE'S AGENT, for a caller with nowhere else to put it. The web app's Devices tab has a device row
-     * above this list and states it there, in a block with its update and restart buttons, so it passes none:
-     * this used to draw "Agent running · pid …" as the right-hand half of a heading over a list of
-     * CONTAINERS, one tier below the row whose own badge already said the same thing. The desktop app's window
-     * has no such row over it and does pass it. */
+    // The device's agent, for a caller with nowhere else to show it; the web Devices tab states this itself
+    // above the list, so it passes none.
     agent?: DeviceAgentState | undefined;
-    /* Sandbox ids the CALLER wants unfolded on arrival: the sandbox this page is being read from, a row a
-     * search just matched. Everything the component can work out for itself (a port that never reached
-     * localhost, a file conflict, a dead tunnel) it unfolds without being told; this is for the facts it cannot
-     * know. Reactive: a filter that narrows to one row opens it as it lands. */
+    // Sandbox ids the caller wants unfolded on arrival; the component unfolds anything needing attention on
+    // its own, this is only for what it can't know.
     open?: readonly string[];
-    /* `undivided` DROPS THE HAIRLINES BETWEEN SANDBOXES, for a caller that is itself a list.
-     *
-     * ONE SEPARATOR PER TIER, or the tiers stop being readable. The desktop app frames this as the one list on
-     * a window about one device, so its hairlines are the strongest line on screen and mean exactly what they
-     * look like. The Devices tab nests it under a MACHINE, whose own rows are parted by the card's hairline
-     * (RowGroup) at the same width and the same token: two tiers drawn with one stroke, so the line ending
-     * `radarsu-rog` and the line between two of its sandboxes were the same mark, and a reader scrolling had
-     * nothing to tell them apart with but a 44px inset.
-     *
-     * Set there, the hairline is left to mean "the next DEVICE" and nothing else, and the rhythm of the rows
-     * parts the sandboxes under one, the way whitespace parts the providers on the Plan limits panel. */
+    // Drops the hairlines between sandboxes, for a caller that already separates rows itself, so two tiers
+    // of hairline aren't drawn at the same weight.
     undivided?: boolean;
 }>();
 
 defineSlots<{
-    /** What the caller calls this list, set on the same line as the agent's own state, when the caller passes one. */
+    /** What the caller calls this list, on the same line as the agent's own state, when passed. */
     heading?: () => unknown;
     /** Anything else worth saying about one sandbox, beside its name. */
     badges?: (props: { group: DeviceSandboxGroup }) => unknown;
-    /** What can be DONE to it, right-aligned on the same line. The caller owns the verbs. */
+    /** What can be done to it, right-aligned on the same line; the caller owns the verbs. */
     actions?: (props: { group: DeviceSandboxGroup }) => unknown;
-    /* What can be done about this row's FILE SYNC, under the folder it is about: the twin of `ports` below, and
-     * for the same reason. Pausing a sync and stopping a container are different enough acts that they must not
-     * share a cluster of buttons; each belongs under the line that describes what it changes.
-     *
-     * It exists because the two halves of one pairing had grown two different affordances: the ports line got a
-     * button, and the folder line got a paragraph naming a command to go and type in a terminal, on the very
-     * view built to replace that terminal. The caller owns it, because this package knows what a file sync IS
-     * and nothing about the door to the machine that pauses one. */
+    // Verbs for this row's file sync, under the folder line (the twin of `ports` below): pausing a sync and
+    // stopping a container are different acts and must not share one button cluster.
     folder?: (props: { group: DeviceSandboxGroup }) => unknown;
-    /* What can be done about this row's PORTS, at the end of the ports line rather than up in `actions`.
-     *
-     * Its own slot because the row's verbs are its CONTAINER's: a "Stop mirroring" sitting beside the Stop that
-     * stops the sandbox is two different stops a pixel apart, and the one that only clears a localhost would be
-     * read as the one that kills the box. Down here it is attached to the thing it changes, which is the same
-     * argument the "show it" link in the port notes already makes.
-     *
-     * The caller owns it for the usual reason: this package knows what mirroring IS and nothing about the door
-     * to the machine that turns it off. */
+    // Verbs for this row's ports, at the end of the ports line rather than in `actions`: a mirroring toggle
+    // beside the container's own Stop would read as the same stop.
     ports?: (props: { group: DeviceSandboxGroup }) => unknown;
-    /** What follows the row while it is working: a run log, the result of the last action. */
+    /** What follows the row while it's working: a run log, the result of the last action. */
     footer?: (props: { group: DeviceSandboxGroup }) => unknown;
 }>();
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
 
-/* The conflict block of every row, derived ONCE per render and looked up by sandbox, rather than recomputed at
- * each of the five places the template needs a piece of it. Keyed by sandbox id, which is what a group is
- * addressed by everywhere else on this card (portHolder, the flash target). */
+// Every row's conflict block, derived once and keyed by sandbox id rather than recomputed per template read.
 const conflicts = computed(() => new Map(groups.value.map((group) => [group.sandboxId, folderConflicts(group.folder)])));
 
-/* WHICH ROWS ARE UNFOLDED: the change this view most needed.
- *
- * Every fact about every sandbox used to be on screen at once: a machine running four of them drew four folders,
- * four port stacks and four image lines, and three machines was a page nobody could scan. So a row is a LINE
- * until it is asked for, and the line still carries what a reader is checking (`groupSummary`).
- *
- * What opens itself is what somebody has to act on (a port that never reached localhost, a file conflict, a dead
- * tunnel) plus whatever the caller named. Deliberately not "stopped": plenty of sandboxes are stopped on
- * purpose, and unfolding every one of them hands back the wall this is folding away. */
+// Which rows unfold on their own: whatever needs attention, plus what the caller named. Not "stopped":
+// plenty of sandboxes are stopped on purpose.
 const autoOpen = computed(() => new Set([...open, ...groups.value.filter(groupNeedsAttention).map((group) => group.sandboxId)]));
 
-/* TWO SETS, NOT ONE, and the pair is what keeps this list still under the pointer. A single "open" set has to be
- * re-seeded from the rule on every poll, which either re-opens a row the reader just folded or freezes the rule
- * out entirely. Recording the reader's own GESTURES instead lets the rule decide only where they made none, and
- * this list re-derives itself every ten seconds, so anything less is a page that moves while it is read. */
+// Two sets, not one: a single "open" set re-seeded from the rule on every poll would re-open a row the
+// reader just folded. These record the reader's own gestures, so the rule only decides where they made none.
 const opened = ref(new Set<string>());
 const folded = ref(new Set<string>());
 const isOpen = (group: DeviceSandboxGroup): boolean =>
@@ -153,55 +93,25 @@ const toggle = (group: DeviceSandboxGroup): void => {
     const target = shutting ? folded : opened;
     target.value = new Set([...target.value, id]);
 };
-/* A row the caller newly named (a search hit) must OPEN, not flip. Without this, a row the reader had folded
- * by hand stays folded when the filter narrows to it alone, which reads as a filter that found nothing. */
+// A row the caller newly names (e.g. a search hit) must open, not flip, even if the reader had folded
+// it by hand.
 watch(
     () => [...open].join(`|`),
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
-/* A PORT IS AN ADDRESS, NOT A STATUS, which is why it no longer wears a chip.
- *
- * Each one used to be a tinted, rounded pill: green for reachable, amber for contested, grey for busy. On a
- * sandbox serving three ports that is three filled shapes in a four-line block that also holds a path, a
- * program name, a sentence and an image, and the green was on the RESTING state, so a healthy card was mostly
- * green and green had stopped carrying a signal. Ink says it instead, and the block has no backgrounds left.
- *
- * Only a port that MADE IT says "localhost". Every port used to, including the ones the row went on to explain
- * had never reached it, which is the one thing a reader must not skim past. `group.ports` is already sorted
- * outcome-first (deviceDetail.ts), so the ones you can open lead the list without a second pass over it.
- *
- * `held-by-sandbox` and `busy` differ in their SENTENCE, not their treatment: both are a number that is not on
- * localhost, and what to do about each is what the note says. */
+// A port shows no fill or colour: with a chip on every port plus a green running dot, colour had stopped
+// signalling anything. Only a port that reached localhost is shown as `localhost:<port>`.
 
-/* A HEALTHY SYNC SAYS NOTHING IN COLOUR. Mutagen's resting word is "watching", and it was drawn as a green pill
- * beside the path on every row of every healthy machine: next to a green agent badge, green port chips and a
- * green liveness badge, which is four greens for four different things and therefore no signal at all. The word
- * stays (it is the session's own state, and this view exists to replace the CLI that prints it); only the states
- * worth looking at keep the pill. */
+// A healthy sync says nothing in colour: Mutagen's resting word stays, but only a state worth noticing keeps a badge.
 const restingSync = (folder: DeviceFolderRow): boolean => folderTone(folderState(folder)) === `success`;
 
-/* And the same rule for the state BACKUP, which is a second session with a second word and no reason to be
- * louder about being fine. Its first draft printed "backup on" beside every healthy row, on the argument that
- * an absent backup is invisible until the day it matters, but that argues for the FAILING case being loud,
- * which it is, not for the resting one being present. A grey word next to a grey path, saying what the machine's
- * own "agent running" line already says, is exactly the noise the rule above deletes. */
+// Same rule for backup: silent when healthy, since another quiet grey word here would be noise.
 const restingBackup = (folder: DeviceFolderRow): boolean => backupTone(backupState(folder)) === `success`;
 
-/* GOING TO WHOEVER TOOK THE PORT.
- *
- * The note names the sandbox that won; the row that names it again is somewhere above or below on this same
- * card, and it is the row with the Stop button on it, so the note has a destination and, until now, no way to
- * say so. This scrolls to that block and flashes it, which is the whole gesture: a card can hold four sandboxes
- * and the eye has no idea which line to look for.
- *
- * Scoped by `uid` rather than by sandbox id alone because a page renders one of these per DEVICE, and two
- * machines pairing the same sandbox would otherwise both answer to the same element id: the first in the
- * document wins, and the reader is scrolled to a different device's copy of the row.
- *
- * The flash is a class the block wears for a beat, not a permanent selection: nothing was chosen, and a row left
- * highlighted reads as state the reader now has to clear. */
-// Long enough to find the row after the scroll settles, short enough that it is over before it is furniture.
+// Scrolls to and flashes the block of the sandbox holding a contested port; scoped by `uid` since a page
+// can render one of these per device and ids would otherwise collide.
+// Long enough to find the row after the scroll settles, short enough to be gone before it's furniture.
 const FLASH_MS = 1600;
 
 const uid = useId();
@@ -211,8 +121,7 @@ let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
 const showHolder = (holder: DeviceSandboxGroup): void => {
     const id = blockId(holder);
-    // Opened before it is jumped to: the holder's row is folded like every other, and scrolling somebody to a
-    // closed line is the same dead end the note had before it became a link.
+    // Opened before it's jumped to, or scrolling to a closed row is the same dead end the link exists to fix.
     if (!isOpen(holder)) {
         toggle(holder);
     }
@@ -226,17 +135,18 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- The agent first, where a caller passes one: it decides whether everything below it is still true. A healthy folder list under
-             a dead loop means new ports stop appearing and commits stop arriving, with every other row here
-             reading exactly as it did the moment before. Running is the resting state and reads as one quiet
-             line; stopped is the one that has to be seen, and keeps the badge. -->
+        <!--
+            Agent first: it decides whether everything below is still true (a dead loop means new ports and commits
+            stop appearing, with no other change on screen).
+        -->
         <div v-if="agent || $slots[`heading`]" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <slot name="heading" />
             <div v-if="agent" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <!-- Alive but not working: the process is up and its loop is not, so the rows below are a
-                     photograph of whenever it last ran. Amber like "stopped", because the errand is the same one
-                     and the difference (that a restart is needed even though nothing looks dead) is exactly
-                     what a reader cannot infer from a green line. -->
+                <!--
+                    Alive but not working: amber like stopped, since it's the same errand and the difference (a restart
+                    is
+                    owed despite nothing looking dead) isn't otherwise visible.
+                -->
                 <template v-if="agent.stalled === true">
                     <StatusBadge variant="warning" :dot="true" size="xs" label="agent stalled" />
                     <span class="text-xs text-warning">
@@ -250,23 +160,24 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         Agent running
                     </span>
                     <span v-if="agent.pid !== undefined" class="font-mono text-2xs text-subtle">pid {{ agent.pid }}</span>
-                    <!-- Working, and working from an agent this machine has already replaced. Not a badge: nothing
-                         is broken, every row below is true, and the only thing owed is a restart. But it is said
-                         on the same line as the version people read off this block, because "I updated the agent
-                         and the number never moved" is where this ends up otherwise. -->
+                    <!--
+                        Working on a build this machine has already replaced; not a badge, since nothing is broken and
+                        only a
+                        restart is owed.
+                    -->
                     <span v-if="agent.staleBuild !== undefined" class="text-xs text-warning">
                         <template v-if="agent.staleBuild.running">
                             on <span class="font-mono">{{ agent.staleBuild.running }}</span>, while
                             <span class="font-mono">{{ agent.staleBuild.installed }}</span> is installed here
                         </template>
-                        <!-- The loop is too old to say which build it is, which is not a gap in the answer: it
-                             is the answer, and the furthest-behind a machine gets. -->
+                        <!-- Too old to report which build it's running; that absence is itself the answer. -->
                         <template v-else>
                             on a build older than the <span class="font-mono">{{ agent.staleBuild.installed }}</span> installed here
                         </template>
-                        <!-- The two commands stay whole across a wrap. This sentence is long enough to break
-                             on any real width, and it broke mid-command ("intentic-" / "machine run"), which is
-                             the one part of it a reader has to retype. -->
+                        <!--
+                            The two commands stay whole across a wrap; this sentence is long enough to break
+                            mid-command otherwise.
+                        -->
                         — it keeps the build it started with, so restart it with
                         <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
                         <span class="font-mono whitespace-nowrap">intentic-machine run</span>
@@ -293,32 +204,15 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     flashing === blockId(group) ? `bg-warning/10` : ``,
                 ]"
             >
-                <!-- WHICH SANDBOX THIS IS, WHETHER IT IS FINE, and what can be done to it: all on the one line
-                     that is the whole row until somebody asks for more.
-                     The chevron and the name are ONE button. A disclosure whose only hit area is a 12px glyph is
-                     a disclosure nobody finds; the verbs keep their own hit areas outside it, so opening a row
-                     and acting on one are never the same click.
-
-                     NOT A <DisclosureRow>, AND ON PURPOSE — but the reason is the TIER, not the spelling.
-                     Fourteen expandable rows across the app moved onto that component, the Devices tab's
-                     machine rows among them. These did not, because a block here is a REPORT ENTRY INSIDE one
-                     of those rows rather than an entry in a list: it is set at `py-0.5` against the
-                     component's tightest tier, and the surface under it is already an open row's.
-
-                     WHICH IS ALSO WHY IT TAKES NO OPEN WASH, and that is the one question this file gets
-                     asked. Every list in the hub lights an opened row `bg-content/6`, and the tier ABOVE this
-                     one does too, so an open sandbox here is already sitting on that wash — a second one
-                     inside it is a tint on a tint, and by the time a reader has a machine and two of its
-                     sandboxes unfolded, most of the card is washed and the wash has stopped meaning "open".
-                     These rows also unfold THEMSELVES (a contested port, a dead tunnel, the sandbox you are
-                     reading this in), so the state a wash would mark is the one they arrive in. What says a
-                     row is open is what a report can afford: the chevron's angle, the block indented to its
-                     column, and the folded line's summary giving way to the facts in full.
-
-                     What this DOES take from <DisclosureRow> is the spelling: `chevron-right` + `rotate-90`
-                     at `text-2xs text-subtle`, `aria-expanded` + `aria-controls`, the chevron and the row's
-                     own mark as ONE hit area, and the opened block indented to the chevron's own column.
-                     Change those here only by changing them there first. -->
+                <!--
+                    The chevron and name are one button; verbs keep their own hit areas outside it. Not a
+                    <DisclosureRow>:
+                    this is a report entry inside an already-open row, so it takes no open-row wash of its own — only
+                    the
+                    chevron's angle and the block's indent show it's open. Matches <DisclosureRow>'s own spelling
+                    (rotation,
+                    aria-expanded/controls, indent) so the two read as one convention.
+                -->
                 <div class="flex min-w-0 items-center gap-x-2">
                     <button
                         type="button"
@@ -333,9 +227,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             :class="isOpen(group) ? `rotate-90` : undefined"
                             aria-hidden="true"
                         />
-                        <!-- Running is a dot and nothing else: it is the resting state of every row on a healthy
-                             machine, and a word for it on all of them is a word that stops being read. The state
-                             still reaches a screen reader, and stopped keeps its word beside it. -->
+                        <!--
+                            Running is a dot alone, the resting state of a healthy row; stopped keeps its word beside
+                            it.
+                        -->
                         <span
                             v-if="group.sandbox"
                             class="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -346,23 +241,29 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         ></span>
                         <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
                         <span class="min-w-0 truncate text-xs font-semibold text-content">{{ group.title }}</span>
-                        <!-- THE EXACT ID, kept and demoted. The title is now the most human name this sandbox
-                             has (deviceDetail.ts), and this is the string somebody types into a terminal: a
-                             view that showed only the friendly one would make it unfindable. -->
+                        <!--
+                            The exact id, kept and demoted: the title is the friendliest name available, and this is
+                            what gets
+                            typed into a terminal.
+                        -->
                         <span v-if="group.subtitle" class="hidden shrink-0 truncate font-mono text-2xs text-subtle sm:inline">
                             {{ group.subtitle }}
                         </span>
-                        <!-- Running is said by the dot; stopped is said in words, because it is the state
-                             somebody has to notice and a grey dot is what "nothing to see" looks like. -->
+                        <!--
+                            Running is said by the dot; stopped needs the word, since a grey dot alone reads as nothing
+                            to see.
+                        -->
                         <span v-if="group.sandbox && !group.sandbox.running" class="shrink-0 text-2xs text-muted">stopped</span>
-                        <!-- A PAIRING WITH NO CONTAINER. It rendered as a row with a different glyph, no state
-                             and no verbs, and nothing said why, so it read as a sandbox the view had failed to
-                             finish drawing. -->
+                        <!--
+                            A pairing with no container: says so explicitly, rather than rendering a bare row with no
+                            state and no verbs.
+                        -->
                         <span v-else-if="!group.sandbox" class="shrink-0 text-2xs text-muted">not running here</span>
                         <slot name="badges" :group="group" />
-                        <!-- WHAT THE CLOSED LINE STILL ANSWERS. Facts are counted and uncoloured; a warning is
-                             the reason this row unfolded itself, in the ink that says so. Hidden while the row
-                             is open, where every one of them is stated in full a few pixels below. -->
+                        <!--
+                            What the closed line still answers: facts are counted and uncoloured, a warning is why the
+                            row unfolded itself.
+                        -->
                         <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
                             <span v-for="fact in groupSummary(group).facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
                             <span v-for="warning in groupSummary(group).warnings" :key="warning" class="truncate text-2xs text-warning">
@@ -373,11 +274,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
                 </div>
 
-                <!-- The label column is what the old rows never had: facts of three kinds, each starting at the
-                     same x, so a folder, a stack of ports and an image read as one block rather than as loose
-                     lines that happen to sit near each other.
-                     Indented to the chevron's own column, so an open row reads as belonging to the line above
-                     it rather than as the next thing in the list. -->
+                <!-- Facts start at one x, so a folder, ports and an image read as one block rather than loose lines. -->
                 <div
                     v-if="isOpen(group)"
                     :id="`${blockId(group)}-detail`"
@@ -386,47 +283,45 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <template v-if="group.folder">
                         <span class="text-2xs text-subtle">Folder</span>
                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            <!-- The answer to the question this whole view was built for: WHICH folder on that
-                                 device is this sandbox's /work. The daemon never learns it (SYNC_DIR is the
-                                 agent's own state), so before the machine report there was nowhere in the product
-                                 it could be read, which is why it is copyable: the reason to look it up is
-                                 almost always to go there. -->
-                            <!-- WRAPS RATHER THAN TRUNCATES. The end of a path is the part that identifies it, and
-                                 an ellipsis eats exactly that: on a narrow window every row read
-                                 "/home/radarsu/intentic/radarsu-web…", which is the same sentence for every
-                                 sandbox on the machine. Two lines of a path a reader can finish beats one line
-                                 they cannot. -->
+                            <!--
+                                The answer this whole view exists for: which folder on this device is this sandbox's
+                                /work.
+                            -->
+                            <!--
+                                Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis
+                                would eat first.
+                            -->
                             <span v-if="group.folder.localDir" class="break-all font-mono text-xs text-content">{{ group.folder.localDir }}</span>
                             <span v-else-if="group.folder.mode === `mirror`" class="text-xs text-subtle">
                                 no folder: this device only mirrors ports
                             </span>
                             <span v-else class="text-xs text-subtle">no folder synced</span>
                             <CopyButton v-if="group.folder.localDir" :text="group.folder.localDir" v-tooltip.top="`Copy path`" />
-                            <!-- A HEALTHY SYNC SAYS NOTHING AT ALL NOW. Mutagen's resting word is "watching", and
-                                 it was printed beside every path on every healthy machine: one more small grey
-                                 word in a block already full of them, saying what the machine's own "agent
-                                 running" line says once for all of them. Only the states worth looking at speak. -->
+                            <!--
+                                Silent when healthy (`watching`): the machine's own "agent running" line already says
+                                the sync is alive.
+                            -->
                             <StatusBadge
                                 v-if="folderState(group.folder) && !restingSync(group.folder)"
                                 :variant="folderTone(folderState(group.folder))"
                                 size="xs"
                                 :label="folderState(group.folder) ?? ``"
                             />
-                            <!-- Whether anything off this sandbox holds a copy of its own state, and SILENT while
-                                 the answer is yes: the same bargain the sync word above just made. The failing
-                                 case is the one that matters here and it is the one that speaks: a backup that
-                                 stopped costs nothing at all until the sandbox is gone, so it is named rather
-                                 than left to be noticed. Labelled, because "halted-on-root-emptied" beside a
-                                 folder path would otherwise read as the folder's own trouble. -->
+                            <!--
+                                Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox
+                                is gone, so
+                                it's named rather than left to be noticed.
+                            -->
                             <StatusBadge
                                 v-if="backupState(group.folder) && !restingBackup(group.folder)"
                                 :variant="backupTone(backupState(group.folder))"
                                 size="xs"
                                 :label="`backup: ${backupState(group.folder)}`"
                             />
-                            <!-- Two-way-safe flags conflicts instead of clobbering, and nothing else in the
-                                 product has ever said one was waiting, so a file edited on both ends sat stuck
-                                 with no way to find out. -->
+                            <!--
+                                Two-way-safe flags conflicts rather than clobbering; nothing else in the product has
+                                ever surfaced one waiting.
+                            -->
                             <StatusBadge
                                 v-if="group.folder.conflicts"
                                 variant="warning"
@@ -434,20 +329,19 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 :label="`${group.folder.conflicts} ${group.folder.conflicts === 1 ? `conflict` : `conflicts`}`"
                             />
                         </div>
-                        <!-- AND WHAT THOSE CONFLICTS ARE, which the badge could never say.
-                             A count is not a finding: it names no file, no cause and no remedy, and the only
-                             other surface that has ever printed the word is Mutagen's CLI on the machine this
-                             card is ABOUT. So the sentence says what happened and what ends it, and the paths
-                             say where, one line each, with what happened on each side (folderConflicts).
-                             Under the path rather than beside it: this is prose about the folder, and the
-                             badge row is already three chips wide on a bad day. -->
+                        <!--
+                            What a bare count can't say: what happened, what it costs (nothing overwritten, those paths
+                            just
+                            stopped syncing), and what ends it (make both copies agree). Placed under the path, since
+                            this is
+                            prose about the folder.
+                        -->
                         <div v-if="conflicts.get(group.sandboxId)" class="col-start-2 flex min-w-0 flex-col gap-1">
                             <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
-                            <!-- `gap-1`, the ports list's own rhythm below, and for the reason that list gives:
-                                 each entry here is a PAIR (the path, then what happened to it), and on a narrow
-                                 card the second half wraps onto its own line. At a tighter gap the next path
-                                 then sits as close to the previous note as that note does to its own path, and
-                                 six entries read as twelve loose lines. -->
+                            <!--
+                                Each entry is a path plus what happened to it; a tight gap on a narrow card would run
+                                one entry into the next.
+                            -->
                             <ul class="flex min-w-0 flex-col gap-1">
                                 <li
                                     v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
@@ -458,11 +352,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
                                 </li>
                             </ul>
-                            <!-- The remainder is counted against the machine's own total, so a card showing six
-                                 rows of forty conflicts says so rather than implying six is the number. Only
-                                 UNDER a list, though: "and 10 more" over an empty one is a sentence about
-                                 nothing, and an agent too old to report paths draws exactly that row. What it
-                                 gets instead is the note, which names why the list is missing. -->
+                            <!--
+                                Counted against the machine's own total, shown only under a real list; a too-old agent
+                                gets a note instead.
+                            -->
                             <p
                                 v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
                                 class="text-2xs text-subtle"
@@ -473,14 +366,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 {{ conflicts.get(group.sandboxId)?.note }}
                             </p>
                         </div>
-                        <!-- WHAT TO DO ABOUT THIS FOLDER, under it rather than up in the row's verbs, which act
-                             on the CONTAINER. A "Pause" beside the Stop that stops the sandbox is two very
-                             different pauses a pixel apart, and this one stops nothing in the sandbox at all:
-                             the box keeps running, the ports keep being mirrored, the files stop moving. The
-                             same argument the ports switch below already makes from its own side.
-                             Spans both columns so its controls start under the path rather than in the label
-                             gutter; `-ml-2.5` cancels a small text button's own padding, exactly as the ports
-                             cluster does, so the words land in the block's one value column. -->
+                        <!--
+                            What to do about this folder, under it rather than in the row's own verbs, which act on the
+                            container.
+                        -->
                         <span
                             v-if="$slots[`folder`]"
                             class="empty:hidden col-start-2 -ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1"
@@ -489,48 +378,43 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         </span>
                     </template>
 
-                    <!-- The ports line survives having NO PORTS, which is the one case it used to render as
-                         nothing at all. An empty list has two opposite causes, this sandbox is serving nothing,
-                         or this device was told to keep its localhost clear, and the row that draws neither
-                         sends whoever came asking "why is localhost empty" away with the question intact. So the
-                         second one keeps the line and says so; the first is still silence, because there is
-                         genuinely nothing to report and a "no ports" on every quiet row is the noise this view
-                         spends its whole design deleting. -->
+                    <!--
+                        Survives having no ports: an empty list has two causes (nothing served, or mirroring off), and
+                        only
+                        the second is worth a line explaining why localhost looks empty.
+                    -->
                     <template v-if="group.ports.length > 0 || mirroringOff(group.folder)">
                         <span class="text-2xs text-subtle">Ports</span>
                         <div class="flex min-w-0 flex-col gap-1">
-                            <!-- SAID AS A STATE, NOT AS A FAULT: quiet ink, no badge, no colour. Somebody threw
-                                 this switch on purpose and the row's job is to remember it out loud, which is
-                                 exactly what the sandbox could not do for itself, the flag lives on the device
-                                 (that is where the localhost is) and this is the only place it surfaces. -->
+                            <!--
+                                Said as a state, not a fault: quiet ink, no badge, since somebody threw this switch on
+                                purpose.
+                            -->
                             <p v-if="mirroringOff(group.folder)" class="text-xs text-muted">
                                 Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.
                             </p>
-                            <!-- ONE PORT PER LINE, IN TWO ALIGNED COLUMNS: the address, then what is on it or why
-                             it never arrived.
-                             It used to be a wrapping row of tinted chips, each trailed by a program name in a
-                             smaller mono: three addresses and three programs ran together as one string, and
-                             the eye had no edge to work from. Alignment is what makes a list of pairs readable,
-                             which is the same argument the label column beside it already makes.
-                             AND NO FILLS. Every healthy port wore a green wash, so on a card with three of them
-                             plus a green running dot, green had stopped meaning anything at all: it was just
-                             the colour ports are. The ink carries it now: content for one you can open, warning
-                             for one you cannot, and nothing in this block has a background any more. -->
-                            <!-- Suppressed while the switch is off, rather than printed under the sentence that
-                                 contradicts it. The machine tears its forwards down on the same tick it reads
-                                 the flag, so a row here could only ever be a reading from BEFORE that, and
-                                 `localhost:5173` against a localhost that no longer has it is the one thing this
-                                 block must never hand anybody (the same rule as "only a port that MADE IT says
-                                 localhost", one tick further on). -->
+                            <!--
+                                One port per line in two aligned columns (address, then what's on it or why it never
+                                arrived); no
+                                fills, colour is reserved for a port that can't be reached.
+                            -->
+                            <!--
+                                Suppressed while mirroring is off: a stale `localhost:` reading here would contradict
+                                the sentence above it.
+                            -->
                             <div v-else class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
                                 <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
-                                    <!-- Only a port that MADE IT says "localhost". One that never reached it is a
-                                     bare number, not an address nobody can open. -->
+                                    <!--
+                                        Only a port that reached localhost is prefixed with it; one that didn't is a
+                                        bare number.
+                                    -->
                                     <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
                                         >{{ port.state === `mirrored` ? `localhost:` : `` }}{{ port.port }}</span
                                     >
-                                    <!-- What is listening on the sandbox side, named rather than quoted: the whole
-                                     command line is on the hover, where its width costs nothing. -->
+                                    <!--
+                                        What's listening, named rather than quoted in full; the whole command line is
+                                        one hover away.
+                                    -->
                                     <span
                                         v-if="port.state === `mirrored`"
                                         class="min-w-0 truncate font-mono text-xs text-subtle"
@@ -539,17 +423,11 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     >
                                     <span v-else class="min-w-0 text-xs text-muted">
                                         {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
-                                        <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence names the winner and
-                                         used to stop there, which left a reader who wanted their port back with a
-                                         name and no idea it was a row on this very card. This goes to the
-                                         holder's block, where its Stop button is, and stopping it hands the
-                                         number back on the next sync tick.
-
-                                         Inline and underlined rather than a button, because it belongs to the
-                                         sentence: a button here would sit in the column of verbs that act on THIS
-                                         sandbox and read as one of them. Absent when the holder is not on this
-                                         report: there is nothing to scroll to, and a dead link is worse than the
-                                         sentence alone. -->
+                                        <!--
+                                            Goes to the holder's own block, where its Stop button lives, rather than
+                                            naming a winner with nowhere
+                                            to go. Absent when the holder isn't on this report.
+                                        -->
                                         <button
                                             v-if="portHolder(groups, port)"
                                             type="button"
@@ -561,49 +439,33 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     </span>
                                 </template>
                             </div>
-                            <!-- THE ONE THING TO DO ABOUT ALL OF THEM, under the list rather than beside any
-                                 single line: mirroring is a per-pairing switch, not a per-port one. Empty for
-                                 every caller that has no door to the machine, and `empty:hidden` keeps a caller
-                                 that renders nothing from paying a gap for the privilege.
-
-                                 `-ml-2.5` PUTS THE LABEL BACK IN THE COLUMN, and it is the whole reason this
-                                 wrapper has a class at all. Every value in this block starts at one x, the path,
-                                 the port numbers, the sentence, the image, because alignment is what makes a
-                                 block of small facts scannable rather than a pile. A small text button carries
-                                 10px of its own padding, so left-aligning its BOX indents its WORDS out of that
-                                 column by exactly that much, which is visible the moment it sits under a list of
-                                 monospaced addresses. The offset cancels the app's own `size="small"` text-button
-                                 padding; a caller putting something else here (a plain link, an icon) should
-                                 expect to want its own. -->
+                            <!--
+                                Cancels the small text button's own padding, so its words land back in the block's one
+                                value column.
+                            -->
                             <span v-if="$slots[`ports`]" class="-ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1 empty:hidden">
                                 <slot name="ports" :group="group" />
                             </span>
                         </div>
                     </template>
 
-                    <!-- WHICH IMAGE it is on: the fact an Update is about, and the only way to see that one
-                         sandbox on this machine runs something older than its neighbour. Last, and in the
-                         quietest ink here: it is the longest string in the block and the least often read.
-                         At the block's one value size rather than a fourth of its own: this block had six type
-                         treatments in four lines, and half of them differed by a pixel nobody could name. -->
+                    <!--
+                        Last, and quietest: the least-often-read fact, at the block's one value size rather than its
+                        own.
+                    -->
                     <template v-if="group.sandbox">
                         <span class="text-2xs text-subtle">Image</span>
                         <span class="truncate font-mono text-xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>
                     </template>
 
-                    <!-- WHAT IT GETS OF THIS MACHINE: the caps and privileges docker enforces on it, which the
-                         Resources… verb changes. Only when the caller inspected the container for them, and
-                         only the parts somebody set (deviceDetail.ts). Under the image rather than above it:
-                         it is the second-least-read line here, and the one an Update leaves alone. -->
+                    <!-- The caps and privileges docker enforces, only when the caller inspected the container for them. -->
                     <template v-if="group.sandbox && resourcesSummary(group.sandbox)">
                         <span class="text-2xs text-subtle">Share</span>
                         <span class="truncate text-xs text-subtle">{{ resourcesSummary(group.sandbox) }}</span>
                     </template>
                 </div>
 
-                <!-- The machine's own output, and whatever else the caller says about this row. Outside the
-                     disclosure on purpose: a verb pressed on a folded row must show what it is doing, and a
-                     reader who folds a row mid-update is not asking for the update to go quiet. -->
+                <!-- Outside the disclosure: a verb pressed on a folded row must still show what it's doing. -->
                 <div v-if="$slots[`footer`]" class="empty:hidden pl-5"><slot name="footer" :group="group" /></div>
             </div>
         </div>

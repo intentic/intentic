@@ -5,11 +5,8 @@ import { beforeEach, expect, test } from "vitest";
 import { activateVersion, engineVersionDir, forgetEngineStates, quarantineVersion } from "./engine-store.js";
 import { forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 
-/* THE ONE PROPERTY THAT MAKES TRACKING UPSTREAM SAFE TO SWITCH ON: every doubt resolves to the image's copy.
- *
- * This read sits directly in the turn path, so its failure mode is not a wrong answer on a card — it is a
- * sandbox that cannot start a turn. Each case below is a way the store can be wrong (never used, pointed at a
- * directory that is gone, pointed at a version this daemon has refused), and each has the same answer. */
+// Every doubt resolves to the image's copy: an unused, missing, or quarantined store entry all fall back the same way,
+// since this read sits in the turn path.
 
 const CURSOR_ENTRY = "dist/esm/index.js";
 
@@ -42,8 +39,6 @@ test("an active version answers with its own installed prefix", async () => {
     expect(resolved.paths.jsEntry).toBe(join(engineVersionDir("cursor", "1.0.28"), "node_modules", "@cursor", "sdk", CURSOR_ENTRY));
 });
 
-/* The pointer can outlive the directory: a GC on another daemon, an owner clearing space, a volume restored
- * from a snapshot older than the state file. Trusting it would fail every turn until somebody noticed. */
 test("a pointer at a directory that is gone answers with the image", async () => {
     installFixture("1.0.28");
     await activateVersion("cursor", "1.0.28");
@@ -62,18 +57,14 @@ test("a version this daemon has refused is not served, whatever the pointer says
     expect((await resolveEngine("cursor")).source).toBe("image");
 });
 
-/* The answer is cached for seconds, not for the process's life: an owner pressing Update has to reach the NEXT
- * turn. Within the window a burst of consumers costs one read, which is what the cache is for. */
+// resolveEngine takes an explicit clock argument so the cache TTL can be crossed without a real wait.
 test("the cached answer expires, so an update reaches the next turn", async () => {
     const start = 1_000_000;
-    // Read once with an empty store, which is what a turn does before the owner presses anything.
     expect((await resolveEngine("cursor", start)).source).toBe("image");
 
     installFixture("1.0.28");
     await activateVersion("cursor", "1.0.28");
 
-    // Inside the window the earlier answer stands: a burst of consumers within one turn costs one read.
     expect((await resolveEngine("cursor", start + 1_000)).source).toBe("image");
-    // Past it, the pointer is re-read and the new version is what the next turn gets.
     expect((await resolveEngine("cursor", start + 6_000)).source).toBe("store");
 });

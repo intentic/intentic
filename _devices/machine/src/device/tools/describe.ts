@@ -5,16 +5,9 @@ import type { HostFacts, HostScopes } from "@intentic/sandbox-contract";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
 
-/* What this device IS, the single highest-leverage thing for the quality of the agent's work here.
- *
- * An agent without this guesses: it writes `apt-get` on Fedora, assumes bash on Windows, invents a home
- * directory, and reaches for paths outside its own boundary and then reports the refusal as a bug. One call
- * removes all of that, which is why it is also sent unprompted in the hello frame, the sandbox's capability
- * card shows it, so the machine is legible before the agent asks anything.
- *
- * The OS name is read from the OS itself rather than from node's `release()`, which on Windows says "10.0.26100"
- * (a build number nobody can act on) and on Linux says the kernel version rather than the distribution, and the
- * distribution is what decides the package manager. */
+// What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
+// boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
+// capability card.
 
 const exec = promisify(execFile);
 
@@ -23,8 +16,8 @@ const osName = async (): Promise<string> => {
         const { stdout } = await exec(
             "powershell.exe",
             ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
-            // The loop that calls this has no console (tools/sandboxes.ts says why), so this asks for its own
-            // windowless one rather than being given a visible console by Windows.
+            // The loop that calls this has no console (see tools/sandboxes.ts), so this asks for its own windowless one
+            // rather than being given a visible console by Windows.
             { windowsHide: true },
         ).catch(() => ({ stdout: "" }));
         const caption = stdout.trim();
@@ -36,11 +29,9 @@ const osName = async (): Promise<string> => {
     return pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`;
 };
 
-/* HOW BIG THE DOCKER ENGINE IS, which is the ceiling every sandbox here is bounded by: the WSL guest on
- * Windows, the Desktop VM on macOS, the host on Linux. `docker info` rather than this machine's own /proc,
- * because on two of the three those are different computers — a 64 GiB laptop whose WSL guest was given 20.
- * Bounded by a short timeout: `docker info` aggregates CLI plugins and has been seen to hang on them, and a
- * machine that will not say its size is still a machine worth describing. Absent, never guessed. */
+// How big the Docker engine is, the ceiling every sandbox is bounded by (the WSL guest, the Desktop VM, or the
+// host). Read via `docker info` since on two of the three platforms that's a different computer from this
+// one's own /proc. Bounded by a short timeout; absent, never guessed.
 const engineFacts = async (): Promise<HostFacts["engine"]> => {
     const { stdout } = await exec("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeout: 5_000, windowsHide: true }).catch(() => ({
         stdout: "",
@@ -61,8 +52,8 @@ export const hostFacts = async (scopes: HostScopes): Promise<HostFacts> => {
     };
 };
 
-// The agent-facing rendering. Includes the session type on Linux (Wayland vs X11 decides every clipboard,
-// screenshot and input idiom) and the machine's own name, which is how the user refers to it out loud.
+// The agent-facing rendering. Includes the session type on Linux (Wayland vs X11 decides clipboard, screenshot
+// and input idioms) and the machine's own name.
 export const describeText = async (scopes: HostScopes): Promise<string> => {
     const facts = await hostFacts(scopes);
     const session = platform() === "linux" ? `\nGraphical session: ${process.env["XDG_SESSION_TYPE"] ?? "none detected (headless)"}` : "";

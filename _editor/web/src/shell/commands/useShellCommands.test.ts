@@ -2,20 +2,13 @@
 import { expect, it } from "vitest";
 import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-// The import-time globals this graph reads at module scope: environment.ts's window.env and ui's useDevice
-// media queries, are in place before this file loads: vitest.setup.ts installs them for the whole package.
+// vitest.setup.ts installs window.env and ui's useDevice media queries at module scope before this file loads.
 import { receiveFloatingNote } from "../window/floating";
 import { boundCommand, commands, commandShortcut } from "./useCommands";
 import { useShellCommands } from "./useShellCommands";
 
-/* MOVING THE CHAT INTO ITS OWN WINDOW: the one command in this set that a user reaches for many times a day,
- * and the one that had neither a chord nor a name anyone could search for: the palette said "Toggle Chat
- * Pop-Out" while the tab strip's menu row said "Move chat into new window", so the words the user actually
- * types ("window", "new window") matched nothing (QuickOpen matches title and id, as substrings).
- *
- * What is pinned here is what makes it findable AND repeatable: one wording, a bare F9 that every surface can
- * then teach, and a title that keeps reading the state: the palette renders `title` inside a computed, so a
- * registration that froze the string would offer "Move Chat into New Window" for a press that docks. */
+// Pins the chat pop-out command: one findable wording across the palette and menu, a shared F9 chord, and a title
+// that re-renders live rather than freezing at registration.
 
 const mountShell = (): { unmount: () => void } => {
     const app = createApp({
@@ -24,7 +17,7 @@ const mountShell = (): { unmount: () => void } => {
             return () => h(`div`);
         },
     });
-    // Only ever used inside handlers (router.push), so an empty memory router is the whole dependency.
+    // Only used inside handlers (router.push), so an empty memory router covers the whole dependency.
     app.use(createRouter({ history: createMemoryHistory(), routes: [] }));
     app.mount(document.createElement(`div`));
     return app;
@@ -35,12 +28,10 @@ it(`binds the chat pop-out to F9 and names it for the direction the press will t
     const entry = commands.value.find((candidate) => candidate.command === `chat.toggleFloating`);
 
     expect(entry).toMatchObject({ command: `chat.toggleFloating` });
-    // The same words the strip's menu row and the button's tooltip use, and the chord all three now teach.
     expect(commandShortcut(`chat.toggleFloating`)).toBe(`F9`);
 
     const titleWhenLocal = entry!.title;
-    // Another window announcing that it holds the chat, which is the only thing that makes it float as far as
-    // this window is concerned (composables/floating.ts).
+    // Announces another window holds the chat; that's what makes it read as floating from this window's side.
     receiveFloatingNote({ kind: `here`, panel: `chat`, id: `other-window`, since: 1 });
     expect(entry!.title).not.toBe(titleWhenLocal);
 
@@ -52,9 +43,7 @@ it(`binds the chat pop-out to F9 and names it for the direction the press will t
 it(`leaves F9 to whatever is running in a terminal`, () => {
     const app = mountShell();
 
-    // A bare function key is the cheapest chord there is, which is why it can't be taken globally: inside the
-    // terminal panel F9 belongs to the program on the other end (mc's menu, an editor's key). The gate returns
-    // the keystroke to it: the button and the palette are the way out from there.
+    // F9 stays reachable via the button and palette when a terminal claims the key itself.
     const terminal = document.createElement(`div`);
     terminal.className = `term`;
     const inTerminal = terminal.appendChild(document.createElement(`textarea`));
@@ -62,8 +51,8 @@ it(`leaves F9 to whatever is running in a terminal`, () => {
     chatPanel.className = `chat-panel`;
     const inChat = chatPanel.appendChild(document.createElement(`textarea`));
 
-    // Asserted through the dispatcher rather than against the gate directly: what matters is which command a
-    // real F9 resolves to, and the condition only means anything against the context one keydown builds.
+    // Goes through boundCommand, not the gate directly: the condition only means something against a real keydown's
+    // context.
     const from = (target: Element): KeyboardEvent => {
         const event = new KeyboardEvent(`keydown`, { key: `F9`, code: `F9` });
         Object.defineProperty(event, `target`, { value: target });

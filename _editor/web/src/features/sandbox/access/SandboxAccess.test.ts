@@ -1,19 +1,12 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is WHAT THE TAB SAYS AFTER AN INVITE, and that sentence was the bug.
-//
-// Inviting is two writes: the daemon's enforced list, then the platform's record + email, and they used to
-// share one catch, with one sentence: "Couldn't send the invite, is the sandbox online?". So a platform-side
-// failure accused a sandbox that had just answered, and a REFUSED EMAIL (the whole request 500'd on it) read as
-// an invite that never happened, over a roster already showing the person pending. Nothing on screen could tell
-// those three apart, which is why they are three tests.
+// Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
+// refusal vs silence, must all read differently on screen.
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// What this component's import chain reads at module eval: the app's environment (the API client) and a media
-// query (the UI barrel's useDevice), exactly as DesktopSyncCard.test.ts cuts the same edge.
+// Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
 const sandboxJson = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
 vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
@@ -33,8 +26,7 @@ vi.mock(`../client/useSandbox`, () => ({
 }));
 vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
-// The session module reaches Google Identity Services and localStorage at module eval; the tab only needs the
-// one fact it exports, this browser's pass expiry. Fixed so the rendered date is the same in every timezone.
+// Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
 vi.mock(`../client/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
@@ -53,7 +45,6 @@ const mount = (): void => {
 
 const shown = (): string => document.body.textContent ?? ``;
 
-// Fill the address and submit the form the way the owner does.
 const inviteEmail = async (address: string): Promise<void> => {
     const field = document.body.querySelector(`input[type=email]`) as HTMLInputElement;
     field.value = address;
@@ -81,18 +72,15 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// The sandbox is the ONLY one of the two writes that can be offline, and it is the one that failed here.
 it(`blames the sandbox only when the sandbox is what failed`, async () => {
     sandboxJson.mockRejectedValue(new Error(`Request failed (500).`));
     mount();
     await inviteEmail(`guest@example.com`);
 
     expect(shown()).toContain(`Couldn't grant access on the sandbox`);
-    // Nothing was recorded, because the enforcer never took the grant.
     expect(create).not.toHaveBeenCalled();
 });
 
-// The mirror image, and the one the owner reported: the sandbox answered, the platform did not.
 it(`does not ask whether the sandbox is online when the platform is what failed`, async () => {
     create.mockRejectedValue(new Error(`Internal server error`));
     mount();
@@ -102,8 +90,6 @@ it(`does not ask whether the sandbox is online when the platform is what failed`
     expect(shown()).toContain(`recording the invite failed`);
 });
 
-/* An invite whose mail could not travel is still an invite. The link comes back with the roster, so the owner
- * can hand it over, which is the only way this works at all on a platform served at localhost. */
 it(`hands the owner the link when the email did not carry it`, async () => {
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(globalThis.navigator, `clipboard`, { value: { writeText }, configurable: true });
@@ -124,8 +110,6 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     expect(writeText).toHaveBeenCalledWith(`https://localhost:47145/invite/tok`);
 });
 
-/* And when the provider REFUSED it, what it said is on the card. The owner's platform is the owner's to fix:
- * a quota, a key, an unverified domain, and none of that is actionable from "internal server error". */
 it(`shows what the mail provider said when it refused`, async () => {
     create.mockResolvedValue({
         members: [],
@@ -141,10 +125,6 @@ it(`shows what the mail provider said when it refused`, async () => {
     expect(shown()).toContain(`https://app.test/invite/tok`);
 });
 
-/* "Signed-in browsers" was a plural heading over a lone red button, so it read as a roster with nothing in it,
- * and the honest reading of an empty roster is that no browser is signed in and the button is pointless. No
- * roster can exist (sessions are verified, not stored), so the group has to say what IS true: this browser,
- * which it can name because it is running in it, and why the rest are unlistable. */
 it(`names this browser and says why the others cannot be listed`, async () => {
     mount();
     await nextTick();
@@ -155,8 +135,7 @@ it(`names this browser and says why the others cannot be listed`, async () => {
     expect(shown()).toMatch(/doesn't track devices/);
 });
 
-// A daemon predating the session exchange hands out no pass to quote an expiry for. Still signed in, and the
-// row must not invent a date or render "until undefined".
+// undefined pass expiry means a daemon predating the session exchange, not merely absent.
 it(`says only that this browser is signed in when there is no pass to date`, async () => {
     sessionExpiresAt.value = undefined;
     mount();
@@ -166,15 +145,12 @@ it(`says only that this browser is signed in when there is no pass to date`, asy
     expect(shown()).not.toMatch(/signed in until/);
 });
 
-/* One click used to sign every person in the sandbox out, with no undo and no aim. It is armed first now, the
- * same two-step inline confirm as account deletion, and the arming step must not fire the request. */
 it(`arms sign-out-everywhere before firing it, and says who it hits`, async () => {
     mount();
     await nextTick();
 
     buttonLabelled(`Sign out all browsers`)?.click();
     await nextTick();
-    // The tab READS on mount (tokens, the other doors); arming must not WRITE.
     expect((sandboxJson.mock.calls as unknown[][]).some(([, init]) => (init as { method?: string } | undefined)?.method === `POST`)).toBe(false);
     expect(shown()).toContain(`has to sign in again`);
 
@@ -189,7 +165,7 @@ it(`revokes only on the confirming click, then reports it`, async () => {
 
     buttonLabelled(`Sign out all browsers`)?.click();
     await nextTick();
-    // Two buttons carry the label once armed (the row's, now hidden, and the confirm's): the live one is last.
+    // Two buttons share this label once armed; the confirm's is last.
     const confirm = [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Sign out all browsers`);
     confirm?.click();
     await nextTick();
@@ -199,8 +175,6 @@ it(`revokes only on the confirming click, then reports it`, async () => {
     expect(shown()).toContain(`Every browser has been signed out`);
 });
 
-/* THE API TOKENS SECTION, the one credential surface on this tab that is not about a person. Owner-only, mints
- * with a scope and an expiry, and shows the raw value exactly once, with the shell snippet a program needs. */
 it(`mints an API token as the owner and shows it once with its snippet`, async () => {
     sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
         if (path === `/system/control/tokens` && (init as { method?: string } | undefined)?.method === `POST`) {
@@ -230,8 +204,6 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
         throw new Error(`no mint request reached the sandbox`);
     }
     const body = JSON.parse((mintCall[1] as { body: string }).body) as { scope: string; expiresAt?: number };
-    // The default rung is the narrow one and the default life is bounded, so a token minted without thought
-    // is the safe one; the daemon never sees an expiry when the form says never.
     expect(body.scope).toBe(`read`);
     expect(body.expiresAt).toBeGreaterThan(Date.now());
 });

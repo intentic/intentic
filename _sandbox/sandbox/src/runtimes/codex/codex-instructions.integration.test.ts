@@ -5,16 +5,11 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { codexInstructionConfig, instructionsPath } from "./codex-instructions.js";
 
-/* WHAT CODEX IS ACTUALLY SENT when this sandbox has a system prompt, and the file that has to exist for the
- * replacement half of it to mean anything.
- *
- * Integration rather than unit because the replacement is a PATH: Codex reads the prompt out of a file, so a
- * test against an in-memory seam would assert the config key and prove nothing about whether the model would
- * ever see the text. */
+// What Codex is actually sent when this sandbox has a system prompt. Integration, not unit: the replacement is a path,
+// so an in-memory seam would prove nothing about whether the model ever sees the file.
 
 test("nothing to say sends no config at all", async () => {
-    // The ordinary turn: no custom prompt, nothing to add. Codex must be left exactly as it was, which means an
-    // EMPTY object rather than keys carrying undefined: those would reach thread/start as real overrides.
+    // An empty object, not undefined-valued keys, which would reach thread/start as real overrides.
     expect(await codexInstructionConfig({}, mkdtempSync(join(tmpdir(), "codex-instr-")))).toEqual({});
 });
 
@@ -30,10 +25,8 @@ test("a replacement is written to disk and named by path; an addition rides as t
     expect(config["developer_instructions"]).toBe("Be brief.");
 });
 
-/* CONTENT-ADDRESSED, which is the whole reason the file is safe to write. Several turns plan concurrently
- * against one CODEX_HOME; a fixed filename would have them overwriting each other between the write and the
- * read, and the loser would run on the winner's prompt. Same text ⇒ same path (so the write is idempotent and
- * the steady state is one file per distinct prompt); different text ⇒ different path, so they cannot collide. */
+// Content-addressed, so concurrent turns sharing one CODEX_HOME can't overwrite each other's prompt file between write
+// and read; same text same path, different text different path.
 test("the same prompt is the same file, a different prompt a different one", async () => {
     const home = mkdtempSync(join(tmpdir(), "codex-instr-"));
 
@@ -46,8 +39,8 @@ test("the same prompt is the same file, a different prompt a different one", asy
     expect(first["model_instructions_file"]).toBe(instructionsPath(home, "One."));
 });
 
-// "" is a legal custom prompt: the owner emptied the box, and it means no base prompt at all. That is a
-// different turn from one that never asked for a replacement, so it is written and sent like any other.
+// Empty string is a legal prompt (the owner emptied the box), different from never asking for a replacement at all;
+// it's written and sent like any other.
 test("an emptied prompt still replaces, with nothing", async () => {
     const home = mkdtempSync(join(tmpdir(), "codex-instr-"));
 

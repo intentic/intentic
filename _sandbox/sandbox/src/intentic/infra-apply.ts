@@ -1,15 +1,11 @@
 import type { Services } from "../composition.js";
 import { applyEventsPath, resetEventsFile } from "./apply-events.js";
 
-// The ONE way an infra apply runs: a one-shot tmux job in panel-infra-apply (human-readable pane, attachable
-// via the global terminal panel, restart-adopted by main.ts) that mirrors its structured events to the durable
-// apply events file. Shared by the /intentic/apply route and the service capability, so both surface in the
-// same terminal, serialize on the same job, and feed the same ApplyProgress tail.
+// The one way an infra apply runs; shared by the apply route and service capability, so both serialize on it.
 export const INFRA_APPLY_KEY = "infra-apply";
 
-// Launch the apply → adopt job (the service capability prefixes `resolve`, its declared entry must be
-// resolved into the artifact first). False when a job is already running: the live run (and its events file)
-// is left untouched, resetting would truncate a file being tailed.
+// Launches the apply → adopt job (service capability prefixes resolve first). Returns false if already running, leaving
+// the live run and its events file untouched rather than truncating a file being tailed.
 export const startInfraApplyJob = async (
     services: Pick<Services, "processes" | "config" | "workspace">,
     options?: { readonly resolveFirst?: true },
@@ -18,8 +14,7 @@ export const startInfraApplyJob = async (
         return false;
     }
     const eventsPath = applyEventsPath(services.config.historyRoot);
-    // Truncate + write {kind:"start"} before launching so a tail opened right after the caller returns sees a
-    // fresh file, never the previous run's events.
+    // Resets the file before launching so a tail opened right after sees a fresh file, not the previous run's.
     await resetEventsFile(eventsPath);
     await services.processes.start(INFRA_APPLY_KEY, {
         command:
@@ -27,11 +22,9 @@ export const startInfraApplyJob = async (
                 ? "intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt"
                 : "intentic deploy apply && intentic deploy adopt",
         cwd: services.workspace.root,
-        // Every command in the chain mirrors its events (and its {kind:"exit"}) to the same durable file,
-        // adopt's exit (or a failed earlier command's) is the whole-job completion signal.
+        // Every chained command mirrors events to the same file; adopt's exit, or an earlier failure, is completion.
         env: { INTENTIC_EVENTS_FILE: eventsPath },
-        // The shell returning to its prompt flips `running` → false, which is how InfraDeclare's poll
-        // observes completion of the whole chain.
+        // Shell returning to prompt flips `running` false; that's how InfraDeclare's poll sees the chain finish.
         oneShot: true,
     });
     return true;

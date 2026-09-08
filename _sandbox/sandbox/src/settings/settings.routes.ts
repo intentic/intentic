@@ -9,20 +9,15 @@ import { readTierReport } from "../usage/tier-report.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { reconcileSkills } from "./skills.js";
 
-// The per-sandbox agent-settings routes. `get` applies defaults when the manifest is absent; `set` overwrites it;
-// `savings` reports what each token-reduction mechanism was worth over the requested window, the cleaners from
-// the ledger of whichever backend is currently doing the compressing (so the setting that decides which cleaner
-// runs also decides which ledger is read), the iq search teaching and the project map from the spend ledger's
-// experiment arms, and automatic tier selection's tally from the same ledger's tier fields (tier-report.ts);
-// `defaultPrompt` reads Claude Code's own system prompt out of the installed CLI (preset-prompt.ts).
+// `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
+// is currently compressing: the setting picking the cleaner also picks the ledger read here.
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
     return {
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
             await services.sandboxSettings.set(input);
-            // Converge the baked-tool skills with the new `skills` list so the next turn sees them (a failed write
-            // only warns, the setting is still saved, the skill files just lag until the next save/boot).
+            // Converges skills with the new list for the next turn; a failed write only warns, the save still succeeds.
             await reconcileSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
             return { ok: true } as const;
         }),
@@ -34,14 +29,13 @@ export const createSettingsRoutes = (services: Services) => {
             ]);
             return { input: inputSavings, ...experiments, ...(tier !== undefined ? { tier } : {}) };
         }),
-        // Intentic's prompt is text this app ships, so it answers instantly and has no version of its own to
-        // report. Claude's has to be read out of the installed CLI: the workspace root is only where that probe
-        // is spawned, it reads nothing from it (no tools, no setting sources), it just has to exist.
+        // Intentic's prompt is shipped text: instant, no version of its own. Claude's is read from the installed CLI;
+        // the workspace root only says where to spawn that probe, nothing is read from it.
         builtinPrompt: i.builtinPrompt.handler(({ input }) =>
             input.base === "intentic" ? { text: INTENTIC_PROMPT, version: "" } : presetSystemPrompt(services.workspace.root),
         ),
-        // When each rule last did something, what the settings list shows beside a rule so one that has been
-        // silent for three weeks is visible as such rather than merely present.
+        // When each rule last fired, so the settings list can show a rule that's gone quiet as quiet rather than merely
+        // present.
         firings: i.firings.handler(() => services.ruleFirings.get()),
     };
 };

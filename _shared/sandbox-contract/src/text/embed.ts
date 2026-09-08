@@ -1,12 +1,6 @@
-/* THE ZOD-FREE HALF OF AN EMBED'S WIRE: what every script a customer drops on their own page does before it
- * does anything of its own. Two embeds exist, the Front Desk chat bubble (_sandbox/webchat-widget) and the bug
- * reporter (_sandbox/issue-sdk), and each used to carry its own copy of this: the same three requests
- * against a public door, the same proof-of-work solver, the same localStorage-backed id, the same
- * read-my-own-script-tag boot. The daemon's side of the same doors is one module too (automations/public-door.ts).
- *
- * THE RULE FOR WHAT MAY LIVE HERE: no imports, ever. This module is bundled INTO a page that belongs to someone
- * else, so it must cost that page nothing it did not ask for; the contract's barrel would bring zod with it
- * (webext-links.ts measured that at 1.1 MB for two strings). Types are declared here for the same reason. */
+// The zod-free half of an embed's wire, shared by the two embeds (webchat-widget, issue-sdk) and the daemon's
+// public-door.ts. No imports, ever: this bundles into someone else's page, and the contract's barrel would drag in zod
+// (measured at 1.1 MB for two strings).
 
 // Where an embed talks to: the daemon it came from, and the automation it is the public face of.
 export interface EmbedEndpoint {
@@ -14,9 +8,8 @@ export interface EmbedEndpoint {
     readonly automationId: string;
 }
 
-// What the server said when it refused. The daemon answers every refusal as {"error": "..."}, and that sentence
-// is shown verbatim where a person can see it: "origin not allowed" tells a site owner exactly what to fix and
-// anything invented here would not.
+// The server's own refusal sentence ({"error": ...}), shown verbatim: it names exactly what to fix (e.g. "origin not
+// allowed").
 export class EmbedError extends Error {
     constructor(
         message: string,
@@ -45,17 +38,8 @@ export const fetchEmbedJson = async <T>(url: string): Promise<T> => {
     return (await response.json()) as T;
 };
 
-/* ---- proof of work ----
- *
- * The daemon issues a challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` begins with `difficulty` zero
- * BITS. It costs the person a second or so and costs a script the same per identity it wants to burn, with no
- * third-party account anywhere. The challenge is minted FOR one caller (the daemon signs the caller's own id
- * into the salt), so a solution cannot be carried to another thread or another reporter; hence the id in the
- * challenge request rather than a bare GET.
- *
- * Solved on the main thread in yielding batches rather than in a Worker: a Worker would have to come from a
- * blob: URL, which a host page's Content-Security-Policy is entitled to forbid, and being unable to chat or send
- * feedback because of the SITE's CSP is a worse failure than a busy second. */
+// Find a nonce whose SHA-256 of `salt:nonce` has `difficulty` leading zero bits, signed to one caller's id so it can't
+// be replayed elsewhere. Solved on the main thread, not a Worker: a host's CSP may forbid the blob: URL a Worker needs.
 export interface PowChallenge {
     readonly salt: string;
     readonly difficulty: number;
@@ -71,7 +55,7 @@ const leadingZeroBits = (digest: Uint8Array, wanted: number): number => {
     let bits = 0;
     for (const byte of digest) {
         if (byte !== 0) {
-            // Math.clz32 counts 32-bit leading zeros; the byte sits in the low 8, so 24 of them are structural.
+            // Math.clz32 counts 32-bit leading zeros; the byte sits in the low 8, so 24 are structural.
             return bits + Math.clz32(byte) - 24;
         }
         bits += 8;
@@ -82,10 +66,8 @@ const leadingZeroBits = (digest: Uint8Array, wanted: number): number => {
     return bits;
 };
 
-/* Resolves to the ANSWER the daemon expects, `<salt>:<nonce>`, carrying back the salt it signed so it can
- * re-derive the challenge it issued without having stored one. `insecure` is what to say on an http:// page:
- * `crypto.subtle` is only available in a secure context, and the fix is the site's TLS, not anything the
- * person can do, so the sentence names the thing they were trying to do. */
+// Resolves to `<salt>:<nonce>`, so the daemon can re-derive the challenge without storing one. insecure is for an
+// http:// page: crypto.subtle needs a secure context, and the fix is the site's TLS.
 export const solveProofOfWork = async (challenge: PowChallenge, insecure: string, onProgress?: (attempts: number) => void): Promise<string> => {
     if (crypto.subtle === undefined) {
         throw new Error(insecure);
@@ -98,18 +80,14 @@ export const solveProofOfWork = async (challenge: PowChallenge, insecure: string
         }
         if (nonce % BATCH === BATCH - 1) {
             onProgress?.(nonce + 1);
-            // Hand the main thread back so the page (and the embed's own "checking…" line) keeps painting.
+            // Hands the main thread back so the page (and the "checking..." line) keeps painting.
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
     }
 };
 
-/* ---- what an embed keeps in the visitor's browser ----
- *
- * localStorage throws in Safari's private mode and anywhere the site blocks storage. An embed with no storage
- * still works; it just mints a fresh id per page load, which costs only a slightly less useful thread or
- * rate-limit key. Silence here is deliberate: an embed must never be the thing that puts an error in the
- * console. */
+// localStorage can throw (Safari private mode, blocked storage); the embed still works, just minting a fresh id per
+// load. Silent by design: an embed must never put an error in the console.
 export const readStored = (name: string): string | undefined => {
     try {
         return window.localStorage.getItem(name) ?? undefined;
@@ -122,13 +100,12 @@ export const writeStored = (name: string, value: string): void => {
     try {
         window.localStorage.setItem(name, value);
     } catch {
-        /* no storage: this page load keeps the value in memory and the next one mints another */
+        // No storage: this load keeps the value in memory, the next one mints another.
     }
 };
 
-/* A per-browser id under `name`, minted once and kept. NOT identity and NOT a secret: anyone can mint one, and
- * the daemon treats it as exactly what it is, the key that threads a visitor's messages into one conversation,
- * or that a rate window counts against so one runaway tab cannot spend the whole day's budget. */
+// A per-browser id, not identity and not a secret: it threads a visitor's messages into one conversation, or bounds a
+// rate window per tab.
 export const storedId = (name: string): string => {
     const existing = readStored(name);
     if (existing !== undefined && existing !== "") {
@@ -139,22 +116,13 @@ export const storedId = (name: string): string => {
     return minted;
 };
 
-/* ---- the <script> tag an embed boots from ----
- *
- *   <script src="https://sandbox-<id>.<zone>/<slug>/…js" data-automation="support" defer></script>
- *
- * Everything else is derived: the daemon to talk to is the ORIGIN THIS SCRIPT CAME FROM, which is the one thing
- * a copy-pasted snippet can't get wrong. `data-base` overrides it for a site fronting the sandbox behind its
- * own proxy, the only case where the two legitimately differ.
- *
- * `document.currentScript` is only valid while the script body is executing, so it is read at module scope by
- * the caller rather than inside an async boot. The querySelector is the fallback for a bundler or tag manager
- * that re-executes the entry in a context where currentScript is null. */
+// The daemon to talk to is this script's own origin, the one thing a copy-paste can't get wrong; data-base overrides it
+// behind a reverse proxy. currentScript is read at module scope, valid only synchronously; querySelector is the
+// fallback.
 export const embedScript = (srcMatch: string): HTMLScriptElement | null =>
     (document.currentScript as HTMLScriptElement | null) ?? document.querySelector<HTMLScriptElement>(`script[src*="${srcMatch}"]`);
 
-// The endpoint a script tag names, or undefined when it carries no automation id, the one mistake worth a
-// console line: without it the embed is silently absent and the site owner has nothing to go on.
+// Undefined with no automation id, the one mistake worth flagging: otherwise the embed is silently absent.
 export const embedEndpointOf = (script: HTMLScriptElement): EmbedEndpoint | undefined => {
     const automationId = script.dataset["automation"];
     if (automationId === undefined || automationId === "") {

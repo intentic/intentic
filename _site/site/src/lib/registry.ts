@@ -10,20 +10,15 @@ import {
 } from "@intentic/registry";
 import fallback from "./registry.fallback.json";
 
-/* The gallery's data, read at BUILD time from the registry repository. So `/extensions/` is a static page
- * cut from a JSON file, exactly like `/features/` and `/compare/`, with no backend, no database and no admin
- * panel behind it. Curation happens as pull requests over there; a deploy is how it reaches the web.
- *
- * The build fetches raw from GitHub and falls back to the vendored copy imported above when that fails. A
- * site deploy must not be hostage to GitHub being up, and a gallery a fortnight stale is a far better outcome
- * than a red pipeline on an unrelated change. It is an import rather than a read so it rides into the bundle
- * and works wherever the prerender runs from. Refresh it with `pnpm -C _site/site sync:registry`. */
+// Gallery data, read at build from the registry repo; a static page like `/features/`, no backend. Falls back to the
+// vendored copy (registry.fallback.json) if the live fetch fails, so a deploy is never hostage to GitHub being up.
+// Refresh with `pnpm -C _site/site sync:registry`.
 
 const RAW_BASE = `${OFFICIAL_REGISTRY_URL.replace("https://github.com/", "https://raw.githubusercontent.com/")}/HEAD`;
 
 export interface Gallery {
     entries: RegistryEntry[];
-    /** When the scanner last read the source hosts: the page dates its star counts rather than implying they're live. */
+    /** When the scanner last read the source hosts: it dates the star counts rather than implying they're live. */
     scannedAt: string | undefined;
     /** True when the vendored copy was used, so a preview build can say so instead of looking current. */
     stale: boolean;
@@ -68,23 +63,8 @@ export const loadGallery = async (): Promise<Gallery> => {
 // github.com/owner/repo for the card's "source" link: the resolved pointer minus git's .git suffix.
 export const sourceHref = (entry: RegistryEntry): string | undefined => entry.install?.url.replace(/\.git$/, "");
 
-/* THE CARD'S MARK, and what this page can and cannot draw of it.
- *
- * A registry row carries the three tiers the manifest declares: the author's own `art`, a simple-icons `logo`,
- * and an `icon` from the app's own set. This page can honour the first two and not the third. The glyph is a
- * name in a vocabulary that exists as bundled Iconify data inside @intentic/ui, a Vue design system; a static
- * marketing page has no dependency on it and should not grow one to draw ~90 glyphs it would then ship to every
- * visitor. So the glyph tier DEGRADES here to the tier below it, and every card with neither art nor a logo
- * wears its initials.
- *
- * ART IS THE EASIEST TIER FOR THIS PAGE, not the hardest, the one place where the site is better off than the
- * app. The document is already in the row, so drawing it costs no dependency, no CDN and no request: it inlines
- * into the built HTML and is correct for a visitor whose network blocks the icon CDN. That it arrived last is
- * an accident of when it was added, not an order of preference.
- *
- * The initials rule matches `initialsOf` in @intentic/ui and remains a second copy of
- * it: there is no dependency edge from this site to that package, and one shouldn't be added for eight lines
- * of string handling. Keep them in step by hand: "acme.jira" → AJ on both sides. */
+// Fallback mark tier: the site can draw `art`/`logo` but not the app's icon vocabulary, so an unmatched card gets
+// initials. Duplicates `initialsOf` in @intentic/ui with no dependency edge; keep both in step by hand.
 export const markInitials = (name: string): string => {
     const words = name.split(/[\s._@-]+/).filter((word) => word !== "");
     const [first, second] = words;
@@ -98,16 +78,8 @@ export const markInitials = (name: string): string => {
 export const markLogoUrl = (entry: RegistryEntry): string | undefined =>
     entry.logo === undefined ? undefined : `https://cdn.simpleicons.org/${entry.logo}`;
 
-/* A row's own artwork as a data URI, or undefined for a row that shipped none or shipped something undrawable.
- *
- * The same gate and the same encoding the app applies (<BrandMark>'s artSrc), deliberately kept as a second
- * copy for the reason markInitials is one: there is no dependency edge from this site to @intentic/ui and one
- * should not be added for a few lines of string handling. Both halves matter, the `#` in every fill has to be
- * escaped or the URI ends at the first colour, and a truncated document has to answer `undefined` or the card
- * paints a broken image where a mark should be. Keep them in step by hand.
- *
- * Drawn through an <img> here exactly as it is in the app, and for exactly the same reason: this page renders
- * documents out of a registry anybody can open a pull request against, and an <img> is what makes them inert. */
+// Same validation and encoding as the app's `<BrandMark>` artSrc, kept in step by hand (no dependency edge to
+// @intentic/ui). Rendered through an `<img>` so a registry-supplied SVG cannot run script.
 export const markArtUrl = (entry: RegistryEntry): string | undefined => {
     const svg = entry.art?.trim();
     if (svg === undefined || !svg.startsWith("<") || !/<svg[\s>]/iu.test(svg) || !svg.endsWith("</svg>") || /<script[\s>]/iu.test(svg)) {

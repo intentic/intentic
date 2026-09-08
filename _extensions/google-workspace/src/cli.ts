@@ -11,12 +11,9 @@ import { driveGroup } from "./services/drive.js";
 import { mailGroup } from "./services/mail.js";
 import { sheetsGroup } from "./services/sheets.js";
 
-/* `gw`, one command for the whole of Google Workspace, reached through bin/gw on the agent's PATH.
- *
- * The router is thin on purpose. Every decision that could be spread across commands is made once here:
- * which account (there may be several connected, and guessing is not acceptable), whether the account is
- * allowed to change anything, and what a failure looks like. A command below is then only the API call and
- * how to print it. */
+// `gw`: one command for the whole of Google Workspace, reached through bin/gw on the agent's PATH. The router decides
+// once what a switch elsewhere would repeat: which account, whether it may write, and what a failure looks like; a
+// command below is only the API call and how to print it.
 
 const GROUPS: readonly CommandGroup[] = [mailGroup, calendarGroup, driveGroup, docsGroup, sheetsGroup, contactsGroup, authGroup];
 const ROOT_COMMANDS: readonly RootCommand[] = [accountsCommand];
@@ -49,8 +46,8 @@ const groupUsage = (group: CommandGroup, out: (line: string) => void): void => {
     }
 };
 
-// `--as` retargets a company connection at another person in the domain; on a personal grant there is nobody
-// else it could act as, and pretending otherwise would produce a token for the wrong mailbox.
+// `--as` retargets a company connection at another person in the domain; a personal grant has nobody else it could act
+// as.
 const retarget = (connection: Connection, as: string | undefined): Connection => {
     if (as === undefined) {
         return connection;
@@ -80,8 +77,8 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
         return 0;
     }
 
-    // The account this run acts as, chosen once, resolved lazily so a group's own help and its connectionless
-    // subcommands still work with nothing connected.
+    // The account this run acts as, resolved lazily so a group's help and its connectionless subcommands work with
+    // nothing connected.
     const chosen = (): Connection => retarget(selectConnection(connections, flag(args, "account")), flag(args, "as"));
 
     const sessionCommand = SESSION_COMMANDS.find((command) => command.name === head);
@@ -118,9 +115,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
     }
 
     const connection = chosen();
-    /* THE READ-ONLY REFUSAL, in one place. A read-only connection also holds narrower scopes, so Google would
-     * refuse this too, but it would refuse it as an authentication error, which reads like something broken
-     * rather than like the setting the owner chose. */
+    // Google would refuse this too (narrower scopes), but as an auth error, not the setting the owner chose.
     if (command.writes === true && connection.access === "read") {
         out(`"${describe(connection)}" is connected read-only, so ${head} ${second} is not available.`);
         out("Change it to Read & write on the Google Workspace card if that is what you want.");
@@ -130,9 +125,7 @@ const run = async (args: Args, out: (line: string) => void): Promise<number> => 
     return 0;
 };
 
-/* `gw … | head` closes the pipe under us, and node's default for a write to a closed pipe is an unhandled
- * 'error' event, a stack trace where the answer should be. Piping a listing into `head` is a completely
- * ordinary thing to do to this tool, so a broken pipe ends the command quietly instead. */
+// `gw ... | head` closes the pipe under us; EPIPE ends the command quietly, not with node's default stack trace.
 let piped = false;
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EPIPE") {

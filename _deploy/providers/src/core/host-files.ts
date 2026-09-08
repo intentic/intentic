@@ -1,36 +1,19 @@
 import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import type { SshSession } from "./ssh.js";
 
-/* WRITING A COMPOSE STACK'S FILES ONTO A HOST, ONCE, for both provider skeletons that do it: the singleton
- * catalog services (compose-service.ts) and the per-instance backings (backing-provider.ts).
- *
- * Every provider that deploys a stack wrote this same pair of steps by hand, `cat > file <<'EOF'` for the
- * config and a `test -f` guarded `.env` for the secrets, and the copies disagreed on all three things that
- * decide whether the stack comes up:
- *
- * QUOTING. The .env line and the host shell escape different characters, and each layer needs the value
- * unmangled by the other: envLine picks a delimiter the value does not contain, shellQuote carries the whole
- * rendered line to the host as one argv word. Copies that quoted only one layer stored a secret that was not
- * the one the resolver generated, silently, for values containing an apostrophe or a `$`.
- *
- * FAILURE. A `cat >` that fails (permission on /opt/intentic, a full disk) left the stack unbootable and said
- * nothing; the error surfaced one step later as compose's "compose.yaml: no such file", which names the wrong
- * thing entirely. Every write here is checked at its origin.
- *
- * WRITE-ONCE VS REWRITTEN. Config files are rewritten on every apply, that is how an image-pin bump reaches
- * the host. The .env is written ONCE and never again: its secrets are baked into the data on first init (a
- * Postgres superuser password, a JWT signing key), so re-keying it locks the deployment out of its own state.
- */
+// Writes a compose stack's config and secrets onto a host; shared by compose-service.ts and backing-provider.ts.
+// envLine and shellQuote must both quote each .env value, one for the file, one for the host shell. Config is
+// rewritten every apply; the .env is written once, since its secrets are baked into the instance's first-init data.
 
-// One line of the write-once .env: a literal `value`, or omitted to have the host generate a
-// `openssl rand -hex 32` for it, so a secret nobody needs to see never passes through this process at all.
+// One line of the write-once .env: a literal `value`, or omitted to have the host generate one with `openssl rand -hex
+// 32`.
 export interface EnvEntry {
     readonly key: string;
     readonly value?: string;
 }
 
-// A config file's content, and whether it carries a secret (chmod 600 after the write). A plain string is
-// the same thing with no secret in it, which is most of them.
+// A config file's content and whether it carries a secret (chmod 600 after write); a plain string is the same with no
+// secret.
 export interface HostFile {
     readonly content: string;
     readonly secret?: boolean;
@@ -43,9 +26,8 @@ const exec = async (session: SshSession, kind: string, command: string, what: st
     }
 };
 
-/* The state dir and its config files, rewritten every apply. The heredoc is quoted (`<<'MARKER'`) so the host
- * shell expands nothing inside it: these files are full of `$VARIABLE` references that compose, not the shell,
- * is meant to resolve. */
+// Writes the state dir and its config files, rewritten every apply. The heredoc is quoted (`<<'MARKER'`) so the
+// host shell does not expand the `$VARIABLE` references meant for compose.
 export const writeHostFiles = async (
     session: SshSession,
     kind: string,
@@ -65,31 +47,17 @@ export const writeHostFiles = async (
     }
 };
 
-/* One .env line as a single shell WORD, ready to be a `printf '%s\n'` argument. Two layers, one call each:
- * envLine renders the line the .env parser reads back (picking a delimiter the value does not contain),
- * shellQuote carries that line to the host intact.
- *
- * The newline envLine appends is dropped, because printf's format supplies exactly one per argument. Sliced
- * rather than trimmed: a value that itself ends in a newline keeps it, and only the appended one goes.
- */
+// One .env line as a single shell word for a `printf '%s\n'` argument: envLine renders it, shellQuote quotes it
+// for the host. Sliced, not trimmed, to drop only envLine's own trailing newline.
 export const envArg = (key: string, value: string): string => shellQuote(envLine(key, value).slice(0, -1));
 
-/* The write-once .env, chmod 600 whether or not this stack's entries include a secret: it costs nothing on the
- * ones that don't, and it is one rule instead of a per-provider judgement about which values are sensitive.
- *
- * `entries` may be empty and the file is still created. That is not a formality: composeUp passes `--env-file`
- * unconditionally, and compose fails outright on an env file that is not there. The inert `TZ` line is the
- * garage precedent, and its absence is what left the valkey provider unable to bring up a fresh instance.
- *
- * ONE printf for the whole file, with every line as an argument, so the emitted command is a single
- * expression a reader (and authentik's test, which runs it through a real shell) can evaluate on its own.
- */
+// Write-once .env, chmod 600 regardless of whether any entry is a secret. Created even with no entries, since
+// composeUp always passes `--env-file`; written as one printf so the whole file is a single shell expression.
 export const writeEnvOnce = async (session: SshSession, kind: string, dir: string, entries: readonly EnvEntry[]): Promise<void> => {
     const args = (entries.length > 0 ? entries : [{ key: "TZ", value: "Etc/UTC" }]).map((entry) =>
         entry.value === undefined
-            ? // Generated on the host and never seen here. Hex, so it holds no character either layer would
-              // have to escape, and it rides inside the double quotes rather than through envLine because the
-              // substitution has to survive to the host to run there.
+            ? // Generated on the host, never seen here; hex needs no escaping in either layer.
+              // Rides in double quotes rather than envLine, so the substitution runs on the host.
               `"${entry.key}='$(openssl rand -hex 32)'"`
             : envArg(entry.key, entry.value),
     );

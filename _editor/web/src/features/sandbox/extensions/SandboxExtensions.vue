@@ -15,27 +15,9 @@ import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 
-/* THE SANDBOX HUB'S "EXTENSIONS" SECTION: what this box has, and what other people have published, as two
- * pills over one search box.
- *
- * THEY USED TO BE TWO ROWS in the hub's index, Extensions and Discover, adjacent and described as adjacent on
- * purpose. Adjacency was the weaker form of the true thing: finding an extension, installing it, managing it
- * and switching it off are ONE subject, and splitting them across two index rows cost three specific things.
- *
- *  1. THE UPDATE STORY WAS CUT IN HALF. The badge (how many installed extensions the registry has a newer
- *     commit for) hung on Discover, while the "updates checked …" line and the host reload that finishes an
- *     update lived on Extensions. Following the badge landed the reader in a grid of OTHER people's extensions
- *     to resolve a fact about their own. Both are here now, on one surface, stated once.
- *  2. EACH HALF'S EMPTY STATE HAD TO POINT AT THE OTHER ROW. A surface for extensions that sends you elsewhere
- *     for extensions is exactly what the Discover work set out to end; it ended it for the Capabilities page
- *     and left one seam behind. Now the way out is the pill above, and the two halves cannot drift apart.
- *  3. ONE SEARCH, TWO LISTS. `query` lives HERE and is shared, so typing "invoices", finding nothing installed
- *     and switching to Browse keeps the word: "do I have it" and "has anyone published it" are one gesture.
- *
- * WHAT THE SECTION OWNS is the instrument: the pills, the search box, creating and reloading, and the
- * registry's freshness line. What each half owns is its own list, its own states and its own actions. The
- * mode rides the URL (`?view=browse`) rather than component state, next to Browse's own `?ext=` deep link,
- * so a reload and a pasted link both land where the reader was. */
+// The sandbox hub's Extensions section: installed and published listings as two pills over one shared search box,
+// previously two separate index rows. The mode rides the URL (`?view=browse`) rather than component state, so a
+// reload or pasted link lands on the same view.
 
 const VIEWS = [`installed`, `browse`] as const;
 type View = (typeof VIEWS)[number];
@@ -43,41 +25,32 @@ type View = (typeof VIEWS)[number];
 const route = useRoute();
 const router = useRouter();
 
-// `installed` is the param-less URL: the recurring visit is "what do I have", and browsing is the errand.
+// `installed` is the param-less URL: the recurring visit is what's installed; browsing is the errand.
 const view = computed<View>(() => (route.query[`view`] === `browse` ? `browse` : `installed`));
-/* Switching halves drops `ext` with it: a listing panel is Browse's own state, and leaving its name in the
- * address while the installed list is on screen is a query param that silently does nothing. */
+// Switching views drops `ext`: it's Browse's own deep-link state, useless while the installed list is shown.
 const show = (next: View): void => {
     void router.replace({ query: { ...route.query, view: next === `installed` ? undefined : next, ext: undefined } });
 };
 
 const { entries, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded } = useExtensionList();
 const { extensions } = useExtensions();
-/* The registry read follows the pills: enabled while Browse is on screen, observed-but-not-caused otherwise,
- * so the update count below costs nothing on the installed half (see useRegistry's note on `read`). Reading
- * it here rather than only inside Browse is what lets the pill wear the count and the refresh button work. */
+// Reads the registry only while Browse is shown; the update count then costs nothing on the installed view.
 const { entries: listed, isFetching, refetch } = useRegistry({ read: computed(() => view.value === `browse`) });
 const listings = computed(() => listed.value.map((entry) => toListing(entry, extensions.value)));
 const updatable = computed(() => updateCount(listings.value));
 
-// Below this many rows the list IS the overview: a filter box and a state switcher would be more chrome than
-// the thing they filter. Per half, because a catalogue of six cards is already a wall and eight rows are not.
+// Below this many rows a filter box would be more chrome than the list itself; the threshold differs per view.
 const FILTERABLE_FROM: Record<View, number> = { installed: 8, browse: 6 };
 
 const query = ref(``);
 const mode = ref<`all` | `on` | `off`>(`all`);
 const trust = ref<`all` | `verified`>(`all`);
-// What the half the reader is looking at left after the query: drawn on the field that did the narrowing.
+// How many rows the current view's filter left, drawn on the field that did the narrowing.
 const matched = ref(0);
-// Whichever half is mounted raises its own failures here, so the section keeps ONE notice region.
+// Whichever view is mounted raises its failures here, keeping one notice region for the section.
 const viewNotice = ref<NoticeModel | undefined>(undefined);
 
-/* THE ONE FACT NEITHER HALF CAN STATE ALONE, and the clearest thing a shared search box buys: how many
- * PUBLISHED extensions match what the reader typed while looking at what they have. "Nothing matches that
- * filter" over an installed list is true and useless when somebody has published exactly that thing, and
- * before the merge there was no surface that knew both numbers. Deliberately ignoring the trust pills: the
- * offer is about the catalogue, and narrowing it here would make the offer disappear on a setting the reader
- * changed on the other half. Zero while the registry cache is cold, which is honest, nothing is known yet. */
+// How many published listings match the query, ignoring the trust pills; zero while the registry cache is cold.
 const publishedMatches = computed(() => {
     const needle = query.value.trim().toLowerCase();
     return needle === `` ? 0 : listings.value.filter((listing) => listing.search.includes(needle)).length;
@@ -94,10 +67,7 @@ const clearFilters = (): void => {
     trust.value = `all`;
 };
 
-/* THE PILLS. Both badges are inventories, "how many things are here", so they mean the same thing on both
- * pills; the update count is a MARK instead, because it is not the size of the list behind the pill and a
- * second number in the same chip shape would read as one. Its tooltip is the sentence, and the freshness line
- * at the foot of the section is the same fact in full. */
+// Both counts are inventories; the update count is a mark instead, since it isn't the size of either list.
 const viewOptions = computed(() => [
     { label: `Installed`, value: `installed` as View, badge: entries.value.length },
     {
@@ -113,8 +83,7 @@ const viewOptions = computed(() => [
     },
 ]);
 
-// The way out of "reload to load": an extension installed after the host booted has no status until the host
-// runs again, and re-running it is cheaper and less destructive than the page reload it used to take.
+// Re-runs the extension host so a newly installed extension gets picked up, cheaper than a full page reload.
 const reloading = ref(false);
 const reload = async (): Promise<void> => {
     reloading.value = true;
@@ -128,10 +97,8 @@ const reload = async (): Promise<void> => {
     }
 };
 
-/* An update landed while this browser kept running the old bundle: applied by the auto rung, another member,
- * or another tab. The daemon is already wholly on the new version; the prompt's button is the host reload this
- * section already owns, which is what finishes the update HERE. A notice rather than an auto-reload: yanking a
- * view out from under someone mid-use is the one part of "seamless" that isn't. */
+// An update landed elsewhere while this tab still runs the old bundle; the button here is the same host reload,
+// shown as a notice rather than auto-reloading since replacing the view mid-use is unwanted.
 const staleNotice = computed<NoticeModel | undefined>(() => {
     if (updatedSinceLoaded.value.length === 0) {
         return undefined;
@@ -146,8 +113,7 @@ const staleNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-// The comparison's honesty line: when it last ran, and the way to run it now, re-rendered with every refetch,
-// which is exactly as fresh as the fact it states.
+// States when updates were last checked, re-rendered on every refetch so it stays as fresh as the check.
 const checking = ref(false);
 const checkNow = async (): Promise<void> => {
     checking.value = true;
@@ -162,20 +128,12 @@ const checkNow = async (): Promise<void> => {
 };
 
 const creating = ref(false);
-// The row a just-created extension opens on: passed down rather than reached into, so the dialog can live up
-// here beside the button that opens it while the row it names belongs to the installed half.
+// The row a newly created extension opens on, passed down to the installed half rather than reached into.
 const focused = ref<string | undefined>(undefined);
-/* The new extension's row exists the moment the daemon answers, but nothing is RUNNING until the host runs
- * again, so creating it ends in the same reload this section already offers, and the row opens on arrival,
- * naming the directory its two files are in.
- *
- * If the author said what they wanted, that hands off to an agent as an ordinary chat: a new conversation with
- * the brief enqueued as a user message, so it lands in the transcript to be read, corrected and continued.
- * Deliberately not an isolated unattended run like the acceptance and maintenance surfaces start: those check
- * something against a rubric and report, while this is the first minute of authoring, where the author's own
- * "no, more like…" is the most valuable input there is and an isolated worktree would put it behind a landing. */
+// Reloads the extension host so the new extension actually runs, then opens on its row; a wish hands off to an
+// ordinary agent chat, not an isolated run, since a first draft benefits from the author's corrections.
 const created = async (extension: { id: string; dir: string; wish: string }): Promise<void> => {
-    // Authoring is about what this box HAS, so the created row must not land behind the other pill.
+    // Switches to the installed view so the newly created row isn't hidden behind the other pill.
     if (view.value !== `installed`) {
         show(`installed`);
     }
@@ -191,13 +149,10 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[viewNotice, staleNotice]" />
 
-        <!-- THE SECTION'S INSTRUMENT, not either half's. The pills lead because they say which list is being
-             looked at; the search box takes the row's slack after them (one left edge and one right edge down
-             the whole view), and each half's own narrowing rides `#controls` so the two read as one thing.
-             Acting on the list, creating, reloading, re-reading the registry, stays chromeless beside them.
-
-             Below the filterable threshold there is no field to grow, so a spacer keeps the buttons at the
-             right edge rather than letting them slide in beside the pills. -->
+        <!--
+            The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride
+            #controls. Below the filterable threshold a spacer keeps the buttons at the right edge.
+        -->
         <div class="flex flex-wrap items-center gap-2">
             <SegmentedControl :model-value="view" :options="viewOptions" @update:model-value="show" />
 
@@ -219,8 +174,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                         ]"
                     />
                 </template>
-                <!-- Suppressed while nothing is verified: a filter that can only ever empty the page is a
-                     control that lies about the catalogue. -->
+                <!-- Hidden while nothing is verified: a filter that could only empty the page misrepresents the catalogue. -->
                 <template v-else-if="verifiedCount > 0" #controls>
                     <SegmentedControl
                         v-model="trust"
@@ -233,10 +187,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             </FilterBar>
             <div v-else class="flex-1"></div>
 
-            <!-- Authoring sits beside reloading rather than in a section header for the same reason the filter
-                 does: it acts on the whole surface, not on any one group. It is a labelled button and not a
-                 third icon because it is the only control here that CREATES something: the others narrow or
-                 refresh a list that already exists, and none of them leaves a directory behind. -->
+            <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
             <template v-if="view === `installed`">
                 <Button label="New extension" size="small" @click="creating = true">
                     <template #icon><Icon name="plus" /></template>
@@ -272,10 +223,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         />
         <ExtensionsBrowse v-else :query="query" :trust="trust" @notice="viewNotice = $event" @matched="matched = $event" @clear="clearFilters" />
 
-        <!-- THE REGISTRY COMPARISON'S HONESTY LINE, and the one row of this section that used to be split
-             across two index rows: how many installed extensions have a newer listed commit, when that was
-             last checked, and the two ways to act on it, all in the same sentence. Absent until the first
-             check has run: a blank claim is worse than none. -->
+        <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
         <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
             <template v-if="updatable > 0">
                 <button v-if="view === `installed`" type="button" :class="ui.linkButton(`text-2xs`)" @click="show(`browse`)">

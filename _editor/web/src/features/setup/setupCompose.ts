@@ -1,14 +1,6 @@
-/* The docker-compose variant of the setup one-liner: instead of `curl … | sh` (connect.sh) imperatively
- * starting containers, the user adds two services to their own compose file and a one-time bootstrap creates
- * the `.env` beside it. The claim endpoint already answers KEY=value lines, exactly compose's .env format,
- * so the path needs no script at all: claim → .env, `docker compose up -d`. Nothing mints a tunnel on the way
- * in any more — the claim's own KEY=value lines carry the reachability pair (INGRESS_URL + SANDBOX_GRANT) and
- * SANDBOX_HOSTNAME, and the daemon dials the edge itself once the container is up.
- *
- * Everything here mirrors connect.sh's `docker run`, image, env set, volumes, network alias, dns, logging,
- * and uses the SAME container/volume/network names (intentic-*-<slug>), so cleanup.sh, the coexistence check,
- * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
- * without losing /work. Keep the two in lockstep. */
+// Compose variant of the setup one-liner: a one-time bootstrap writes `.env` beside the user's compose file,
+// then `docker compose up -d`; no tunnel is minted separately. Mirrors connect.sh's image, env, volumes, network
+// alias and names, so a sandbox can move between script-managed and compose-managed without losing /work.
 
 import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
@@ -18,50 +10,44 @@ export interface ComposeArgs {
     readonly code: string;
     // The sandbox's public hostname (<slug>.<zone>) the chosen target resolved to.
     readonly hostname: string;
-    // The Cloudflare API token (own path only), appended to .env, never sent to the platform.
+    // Cloudflare API token (own path only): appended to .env, never sent to the platform.
     readonly image: string;
     readonly googleClientId: string;
-    // The origin the setup page is being served from, the browser the daemon's CORS has to answer. Mirrors
-    // connect.sh's WEB_ORIGIN; rendered only when it differs from the hosted default the daemon already assumes.
+    // Origin the setup page is served from; mirrors WEB_ORIGIN, shown only when it differs from the hosted default.
     readonly webOrigin: string;
-    // LOCAL DEV ONLY: the localhost platform origin; production leaves it undefined (api.intentic.dev).
+    // Local dev only: the localhost platform origin; production leaves it undefined (api.intentic.dev).
     readonly platformUrl?: string;
 }
 
-// The platform's API origin, where the claim (POST /setup/claim) and the daemon's announce land. NOT the
-// web-app origin (app.*), which serves only static files and 405s a POST. Mirrors connect.sh's PLATFORM_URL.
+// Platform API origin (claim, announce); not the web-app origin, which 405s a POST. Mirrors PLATFORM_URL.
 const PLATFORM_DEFAULT = `https://api.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE; the alias and per-sandbox names come from the run contract.
 
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
 
-// True when the image reference carries an explicit registry host (the part before the first `/` looks like a
-// hostname). Mirrors connect.sh's image_has_registry: a bare `intentic-sandbox:dev` has none, so it can only
-// resolve to Docker Hub, where it does not exist. Drives pull_policy so an orchestrator's `docker compose
-// pull` stage (Komodo Stacks run one before `up`) SKIPS a local-only image instead of failing on it.
+// True when the image reference has an explicit registry host. Mirrors connect.sh's image_has_registry; drives
+// pull_policy so a `compose pull` stage skips a local-only image instead of failing.
 const imageHasRegistry = (image: string): boolean => {
     const firstSegment = image.split(`/`)[0];
     return image.includes(`/`) && firstSegment !== undefined && /[.:]/.test(firstSegment);
 };
 
-// The one-time bootstrap, run in the folder holding the compose file: the claim consumes the setup code and
-// writes the per-sandbox values (connect token, the reachability grant, the address) as .env lines, and
-// compose starts the sandbox with them. Two commands, because nothing has to be provisioned here any more,
-// the box enables against the platform's hub itself.
+// One-time bootstrap run beside the compose file: the claim consumes the setup code and writes per-sandbox
+// values as .env lines, then compose starts the sandbox with them.
 export const composeBootstrap = (args: ComposeArgs): string => {
     const platform = args.platformUrl ?? PLATFORM_DEFAULT;
-    // LOCAL DEV ONLY: the dev platform's cert is a repo CA the system doesn't trust (same as connect.sh).
+    // Local dev only: the dev platform's cert is a repo CA the system doesn't trust (same as connect.sh).
     const claim = `curl -fsS${isLocal(platform) ? `k` : ``} ${platform}/setup/claim -d code=${args.code} > .env`;
     return `${claim}\ndocker compose up -d`;
 };
 
-// The compose services/volumes/networks to add to the user's docker-compose.yml. Secrets stay in the .env
-// (compose interpolates them); non-secret identity (names, hostname, platform) is rendered concretely.
+// Compose services/volumes/networks to add to the user's docker-compose.yml. Secrets stay in .env; non-secret
+// identity is rendered concretely.
 export const composeFile = (args: ComposeArgs): string => {
     const names = sandboxNames(slugOf(args.hostname));
     const dev = args.platformUrl !== undefined;
-    // The platform as seen FROM the container (connect.sh's PLATFORM_URL_CONTAINER rewrite).
+    // The platform as seen from the container (connect.sh's PLATFORM_URL_CONTAINER rewrite).
     const platform = (args.platformUrl ?? PLATFORM_DEFAULT)
         .replace(`//localhost`, `//host.docker.internal`)
         .replace(`//127.0.0.1`, `//host.docker.internal`);
@@ -69,22 +55,15 @@ export const composeFile = (args: ComposeArgs): string => {
         `services:`,
         `    intentic-sandbox:`,
         `        image: ${args.image}`,
-        // A registry-less local tag (intentic-sandbox:dev, built by connect.sh from the checkout) must NEVER
-        // be pulled, a `compose pull` would get "denied" from Docker Hub. The moving `:stable` release IS
-        // pulled every time so the sandbox tracks the newest release (matching connect.sh's always-pull).
+        // A registry-less local tag must never be pulled (Docker Hub denies it); the moving `:stable` release always
+        // is.
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: ${names.container}`,
         `        init: true`,
-        // Unprivileged, matching connect.sh's default run, with the same capability posture that run
-        // carries, spliced from the one shared definition (@intentic/sandbox-run SANDBOX_CAPABILITIES; see
-        // there for what each grant is for). Without it agents' absolute workspace paths reach the shared
-        // checkout, so a compose-started sandbox would quietly be the weaker kind. The docker capability's
-        // `privileged: true` (its isolated nested engine; the host's Docker socket is never mounted) stays
-        // the user's own compose edit, the rebuild flow recreates containers with `docker run`, which
-        // would fight a compose-managed one.
+        // Capabilities come from SANDBOX_CAPABILITIES; `privileged` stays a user edit since rebuild uses `docker run`.
         `        cap_add: [${SANDBOX_CAPABILITIES.join(", ")}]`,
         `        restart: unless-stopped`,
-        // Fresh public resolvers, so just-minted ssh-<id> tunnel hostnames don't hit a stale NXDOMAIN cache.
+        // Fresh public resolvers: a just-minted tunnel hostname must not hit a stale NXDOMAIN cache.
         `        dns: [1.1.1.1, 1.0.0.1]`,
         `        extra_hosts: [host.docker.internal:host-gateway]`,
         `        networks:`,
@@ -94,50 +73,25 @@ export const composeFile = (args: ComposeArgs): string => {
         `        logging:`,
         `            driver: json-file`,
         `            options: { max-size: 10m, max-file: "3" }`,
-        // The loopback shortcut: a browser on THIS machine reaches the daemon here instead of going out to
-        // Cloudflare and back. Every other flow asks the image for its run command and the run contract derives
-        // this port from the connect token; a compose file is written before that token exists, so the .env
-        // bootstrap carries it as LOCAL_PORT. The browser derives the identical port from the token it holds.
-        // Delete this line if something else on the machine already holds the port, compose refuses to start
-        // the service rather than falling back, and the sandbox works over its tunnel without it.
+        // Loopback shortcut skipping the tunnel; .env carries LOCAL_PORT since the token is unknown; delete if taken.
         `        ports: ["127.0.0.1:\${LOCAL_PORT}:${LOCAL_PORT}"]`,
         `        volumes:`,
         `            - work:/work`,
         `            - history:/history`,
         `            - docker-engine:/var/lib/docker`,
         ...(dev ? [`            - agent-auth:/agent-auth`] : []),
-        // Ports, roots, and the bind host all ride the daemon's own defaults (see env.config.ts), only
-        // identity, reachability, and secrets appear here.
+        // Ports, roots, and bind host ride the daemon's defaults; only identity, reachability, and secrets appear here.
         `        environment:`,
         `            CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`,
         `            OWNER_EMAIL: \${OWNER_EMAIL:-}`,
         `            SANDBOX_PUBLIC_URL: https://${args.hostname}`,
         `            PLATFORM_URL: ${platform}`,
-        // Interpolated, not a compose variable, the id is public and known here. But it is also the switch that
-        // builds the daemon's authorizer: empty, and the sandbox serves every route to anyone who reaches the
-        // tunnel. A build whose env.js substitution didn't land would emit a bare `GOOGLE_CLIENT_ID:` and start
-        // exactly that daemon, so an empty value becomes a compose var that refuses to start instead. (The daemon
-        // refuses too, see requireAuthWhenReachable, this just fails one layer earlier, with the fix named.)
+        // Interpolated: empty here builds an authorizer serving every route; becomes a var that refuses to start.
         `            GOOGLE_CLIENT_ID: ${args.googleClientId === `` ? `\${GOOGLE_CLIENT_ID:?the web app did not supply a Google client id, reload the setup page}` : args.googleClientId}`,
-        // The SPA origin the daemon emits CORS for. Omitted when it is the hosted app, which env.config already
-        // defaults to, but a self-hosted or localhost-dev SPA is a browser the daemon has never heard of, and
-        // without this line every call it makes is blocked before the bearer is ever looked at.
+        // SPA origin for CORS; omitted for the hosted app, required for self-hosted or local-dev, else blocked.
         ...(args.webOrigin === PLATFORM_WEB_ORIGIN ? [] : [`            WEB_ORIGIN: ${args.webOrigin}`]),
-        /* HOW THIS SANDBOX IS REACHED: the platform's own ingress edge, named by INGRESS_URL, dialled with the
-         * signed grant that says which sandbox the bearer is. The claim writes both into the .env and the
-         * daemon opens one outbound WebSocket with them; the canonical spelling of the pair is
-         * @intentic/sandbox-contract's ingress-contract.ts (ENV_INGRESS_URL / ENV_SANDBOX_GRANT), which every
-         * lane — this file, the connect one-liner, the hosted machine env — has to agree with, because the
-         * entrypoint and the daemon read exactly these names.
-         *
-         * The grant is required and the URL is not: a sandbox with no grant cannot prove who it is and would
-         * serve nothing, so it fails here with the fix named, while a missing URL falls to the daemon's own
-         * default for the edge. That is the same split the zrok-era pair had (token required, API optional),
-         * and it replaces it outright — reachability is no longer an account and a claimed name on a hub, it is
-         * a signature the edge verifies offline, so there is nothing per-sandbox left to provision or reap.
-         *
-         * There is still no tunnel SERVICE: the client is the daemon itself, which is why this file is one
-         * container shorter than it was. */
+        // Ingress edge (INGRESS_URL) dialled with signed SANDBOX_GRANT; names must match ingress-contract.ts. Grant is
+        // required, URL is optional (falls back to the daemon's default).
         `            INGRESS_URL: \${INGRESS_URL:-}`,
         `            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`,
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),

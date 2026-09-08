@@ -27,17 +27,14 @@ const context: DependencyLandOrigin = {
     repos: [{ repo: "app", from: "abc", dir: "app" }],
 };
 
-// An installed project whose manifest declares the given scripts: the state the reconciler's install leaves
-// behind when it succeeds.
+// An installed project with the given scripts: the state a successful reconciler install leaves behind.
 const ready = async (root: string, scripts: Record<string, string>): Promise<void> => {
     await write(root, "app/package.json", JSON.stringify({ name: "app", dependencies: { "left-pad": "^1.3.0" }, scripts }));
     await write(root, "app/pnpm-lock.yaml", "");
     await write(root, "app/node_modules/left-pad/package.json");
 };
 
-/* A fake process manager that "runs" each started panel by executing its wrapper's OBSERVABLE effect: the
- * daemon only ever reads the status and log files back, so the fake writes them the way the real zsh line
- * would, with the exit code the test chose. */
+// Simulates a panel by writing the status/log files the daemon reads back, with the exit code the test picks.
 const fakeProcesses = (root: string, exitCode: number | undefined, started: string[]): ManagedProcesses => {
     const live = new Set<string>();
     return {
@@ -56,8 +53,7 @@ const fakeProcesses = (root: string, exitCode: number | undefined, started: stri
     } as unknown as ManagedProcesses;
 };
 
-// The single-flight queue is process-wide because there is one daemon; each case takes a fresh module so one
-// test's unfinished chain cannot leak into another.
+// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests.
 const freshQueue = async (): Promise<typeof import("./verify-deps.js")> => {
     vi.resetModules();
     return import("./verify-deps.js");
@@ -119,7 +115,6 @@ test("a green check after a red one announces deps.fixed; green after green anno
     await settle(() => events.length > 0);
     expect(events.map((event) => event.event)).toEqual(["deps.fixed"]);
     expect(events[0]?.deps?.attempt).toBe(0);
-    // Same tree, still green: a tree doing its job announces nothing, and the feed still records the verdict.
     const { queueVerify: again } = await freshQueue();
     const laterEvents: WorkspaceEvent[] = [];
     const laterFeed: string[] = [];
@@ -159,7 +154,7 @@ test("a project with no verify or test script is reported, not guessed at", asyn
 test("an install that left the project unready stops at telling the owner: no check, no wake", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
-    // Installed marker present but the declared dependency still missing: the install failed.
+    // Installed marker present, but the declared dependency is still missing: the install failed.
     await write(root, "app/package.json", JSON.stringify({ name: "app", dependencies: { "left-pad": "^1.3.0" }, scripts: { test: "vitest run" } }));
     await write(root, "app/pnpm-lock.yaml", "");
     await mkdir(join(root, "app/node_modules"), { recursive: true });
@@ -178,19 +173,13 @@ test("a pane that dies before reporting reads as red, never green", async () => 
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
-    // No status file written: the owner Ctrl+C'd the pane, or the shell died.
+    // No status file: the pane died before writing one.
     queueVerify(deps(root, fakeProcesses(root, undefined, []), events, []), context, ["app"]);
     await settle(() => events.length > 0);
     expect(events[0]?.event).toBe("deps.broken");
     expect(events[0]?.deps?.exitCode).toBe(-1);
 });
 
-/* THE CAUSELESS RUN: the reconciler's own install, off a pull or a hand-edited manifest rather than a land.
- *
- * It gets the same checks and the same feed rows, because the feed is the ONLY trace it has: nobody's
- * conversation is going to mention it. What it does not get is the wake, and that is the point of the case: a
- * chore reads the payload's `repos` as a git span to work, so firing one with a made-up agent and an empty span
- * sends an automation to look at a change that never happened. */
 test("an install nobody caused records its verdict and wakes nobody", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
@@ -205,8 +194,6 @@ test("an install nobody caused records its verdict and wakes nobody", async () =
     expect(events).toEqual([]);
 });
 
-// The daemon has no wake to bind when nothing caused the install, so it is not asked for one, and a chain
-// without a sink must still be a chain that runs rather than one that throws on its way to the verdict.
 test("a chain with no event sink at all still checks and still records", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
@@ -234,7 +221,7 @@ test("the verify store remembers red across restarts: its list is the closure re
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
     await store.record("lib", "green", 2);
-    // A fresh store over the same file: the daemon restarted.
+    // A fresh store over the same file simulates a daemon restart.
     expect(await fileVerifyStore(join(root, ".intentic/records/verify.json")).red()).toEqual(["app"]);
     const status = JSON.parse(await readFile(join(root, ".intentic/records/verify.json"), "utf8")) as {
         projects: Record<string, { attempt: number }>;

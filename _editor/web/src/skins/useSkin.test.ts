@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
-//
-// jsdom because the whole subject is what the composable does to the DOCUMENT: the attribute every rule in
-// sanctum.css hangs off, and the webfont <link> that must not be there when no skin is on.
+// Pins that turning a skin on or off sets and clears data-skin and its webfont link together. jsdom: the composable
+// writes directly to the document.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Eight `await import()` calls, one per test, because the subject is a module-scope singleton that reads
-// storage and the document as it evaluates: `vi.resetModules()` plus a fresh import IS the reset. That only
-// stays cheap because `useSkin` reaches `useTheme` through @intentic/ui/theme rather than the design system's
-// barrel; off the barrel each of these re-entered the component graph inside a test body, on the same clock as
-// the assertions, and lost the 20s budget to a busy machine.
+// Each test re-imports fresh via vi.resetModules(), since the subject is a module-scope singleton; useSkin must keep
+// reaching useTheme through @intentic/ui/theme, not the barrel, or each reset drags in the whole component graph.
 
 const load = () => import("./useSkin");
 const root = () => document.documentElement;
@@ -58,7 +54,7 @@ describe(`useSkin`, () => {
     });
 
     it(`turns the skin on: attribute, storage, webfont, and the dark scheme it is built for`, async () => {
-        // Seeded OFF first: sanctum is the boot default, so setting it over nothing is a no-op write.
+        // Seeded to `none` first, since sanctum is already the boot default and wouldn't exercise the write.
         localStorage.setItem(`ui-skin`, `none`);
         const { useSkin } = await load();
 
@@ -70,8 +66,6 @@ describe(`useSkin`, () => {
         expect(fontLink()).not.toBeNull();
     });
 
-    // The detach, asserted: leaving the skin has to leave NOTHING, no attribute for a rule to match, no font
-    // being paid for. Anything left behind here is the app not actually coming back to normal.
     it(`turns it off completely: no attribute left, no webfont left`, async () => {
         localStorage.setItem(`ui-skin`, `sanctum`);
         const { useSkin } = await load();
@@ -92,8 +86,6 @@ describe(`useSkin`, () => {
         expect(document.querySelectorAll(`#ui-skin-font`)).toHaveLength(1);
     });
 
-    // The one <link> must be REMOVED rather than left behind when the skin comes off, which is the bug the id
-    // and the drop in applyFont exist to prevent.
     it(`drops the webfont when the skin comes off`, async () => {
         const { useSkin } = await load();
 

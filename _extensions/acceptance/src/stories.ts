@@ -1,29 +1,20 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
 
-/* A repo's user stories, read off `docs/user-stories`. One FILE is one story, one test session, one agent, one
- * report. Not a section-level split: an acceptance run is a walkthrough with setup and state, and cutting a
- * file into fragments would hand each agent a scenario whose preconditions live in a sibling fragment. A repo
- * that wants finer tests writes finer files.
- *
- * Subdirectories are groups, not stories, and they nest one level in the UI (`auth/01-sign-in.md` shows under
- * "auth"), deeper trees still work, the group is just the first segment.
- *
- * Stories stay MARKDOWN FILES IN THE REPO even though the view that edits them is workspace-wide. A story is
- * product documentation: it belongs beside the code that implements it, in the diff that changes it, and in the
- * worktree an agent tests from. The editor writes this format; nothing about the format requires the editor. */
+// A repo's user stories, read from docs/user-stories: one file is one story, one session, one report, never split by
+// section, since a walkthrough's setup and state live in the whole file. Subdirectories are groups, shown one level
+// deep by first path segment. Stories stay markdown files in the repo, beside the code and in the diff that changes it.
 
 export const STORIES_DIR = "docs/user-stories";
 
-// A repo may tune the brief without forking the extension, see brief.ts. Lives beside the stories, dot-prefixed
-// so it never reads as one.
+// Lets a repo tune the brief without forking the extension; dot-prefixed so it never reads as a story.
 export const BRIEF_OVERRIDE = `${STORIES_DIR}/.acceptance.md`;
 
-// What counts as a story file. Markdown is the norm; .feature (Gherkin) and .txt are accepted because the brief
-// hands the text to a model verbatim, it never parses the story, so the format is the author's business.
+// Markdown is the norm; .feature and .txt are accepted too, since the brief hands the text to a model verbatim and
+// never parses it.
 const STORY_EXTENSIONS = [".md", ".markdown", ".feature", ".txt"];
 
 export interface Story {
-    // The repo this story belongs to, which app it is walked through, and how the view groups it.
+    // Which repo this story belongs to; see `group` for which app within it.
     readonly repo: string;
     // Root-relative path, what /workspace/file is asked for.
     readonly path: string;
@@ -40,10 +31,9 @@ const isStoryFile = (entry: WorkspaceTreeEntry): boolean =>
 
 const withoutExtension = (name: string): string => name.replace(/\.[^.]+$/, ``);
 
-/* A conversation id is `xt-<runId>-<slug>` against `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`, and the slug is also a
- * directory name, so it is reduced to lowercase alphanumerics and dashes here rather than trusted. A file named
- * only in non-Latin script would reduce to nothing, so an empty result falls back to `story` and the caller's
- * uniqueness pass numbers the collisions. */
+// A conversation id is `xt-<runId>-<slug>` against a strict pattern, and the slug also becomes a directory name, so
+// it's reduced to lowercase alphanumerics and dashes rather than trusted; nothing Latin in the name falls back to
+// `story`.
 export const slugOf = (path: string): string => {
     const base = withoutExtension(path.split(`/`).pop() ?? path);
     const slug = base
@@ -54,8 +44,7 @@ export const slugOf = (path: string): string => {
     return slug === `` ? `story` : slug;
 };
 
-// The leading `# Heading` of a story file, ignoring front matter and Gherkin's `Feature:` prefix. Bounded to the
-// first handful of lines: a heading further down is a section, not the document's name.
+// How far into a file to look for its title heading; further down is a section, not the document's name.
 const HEADING_SCAN_LINES = 20;
 
 export const titleOf = (path: string, content: string | undefined): string => {
@@ -74,19 +63,12 @@ export const titleOf = (path: string, content: string | undefined): string => {
     return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
-/* WHERE A STORY'S APP ANSWERS is a property of its GROUP, not of its repo. One repository can serve several
- * applications, a monorepo's marketing site and its web app are two dev servers on two ports, and the group is
- * the only thing in a stories tree that already says which is which. So a run resolves one address per
- * (repo, group) pair, and an ungrouped story simply targets its repo, which is what every run did before groups
- * could be aimed. The key is `<repo>/<group>` so it reads as the directory it names. */
+// An app's address is a property of the group, not the repo, since one repo can serve several apps on different ports;
+// an ungrouped story simply targets its repo. Key is `<repo>/<group>`, matching the directory it names.
 export const targetKeyOf = (story: Pick<Story, "repo" | "group">): string => (story.group === `` ? story.repo : `${story.repo}/${story.group}`);
 
-/* Fold a listing into stories. `entries` is what /workspace/children returned for `docs/user-stories` and each
- * of its subdirectories, flattened by the caller, this stays pure so it is testable without a daemon.
- *
- * Slugs are made unique by suffixing `-2`, `-3`, … because two groups may legitimately hold `overview.md`, and a
- * collision would otherwise put two agents in one run directory, silently overwriting each other's report. This
- * pass only sees ONE repo; uniqueOf() below settles the collisions only a cross-repo merge can produce. */
+// Folds a workspace listing (already flattened by the caller) into stories; pure, so it's testable without a daemon.
+// Slugs are uniqued with `-2`, `-3`, within one repo; uniqueOf below settles cross-repo collisions.
 export const storiesOf = (repo: string, entries: readonly WorkspaceTreeEntry[], titles: Readonly<Record<string, string>> = {}): Story[] => {
     const prefix = `${repo}/${STORIES_DIR}/`;
     const taken = new Map<string, number>();
@@ -110,10 +92,8 @@ export const storiesOf = (repo: string, entries: readonly WorkspaceTreeEntry[], 
         });
 };
 
-/* Merge several repos' stories into the one list the workspace-wide view shows, renumbering any slug two REPOS
- * both produced. Without this, `site/docs/user-stories/checkout.md` and `api/docs/user-stories/checkout.md`
- * derive the same conversation id and the same run directory, two agents overwriting each other's report, which
- * is the exact failure storiesOf() already prevents inside one repo. */
+// Renumbers a slug two repos both produced, since site/checkout.md and api/checkout.md would otherwise derive the same
+// conversation id and run directory, the same failure storiesOf already prevents within one repo.
 export const uniqueOf = (stories: readonly Story[]): Story[] => {
     const taken = new Map<string, number>();
     return stories.map((story) => {
@@ -123,19 +103,13 @@ export const uniqueOf = (stories: readonly Story[]): Story[] => {
     });
 };
 
-/* ---- The acceptance criteria a story declares -------------------------------------------------------------
- *
- * Criteria are a CHECKLIST SECTION of the story file, not a sidecar: the file stays the one thing a human reads
- * and a PR reviews, and the brief inlines it whole either way. Authoring them structurally is what buys the
- * report its matrix, the agent is told to return one verdict per authored criterion, in order, so a run's
- * findings line up with what someone actually promised rather than with the agent's paraphrase of the prose.
- *
- * A story with no such section is still a story. The brief falls back to "read the criteria out of the text
- * yourself", which is what every story did before the section existed. */
+// Criteria are a checklist section of the story file, not a sidecar, so a PR reviewing the file sees them and the brief
+// can inline the whole thing. Authoring them structurally is what lets the agent return one verdict per criterion, in
+// order; a story with none still works, falling back to reading criteria out of the prose.
 
 const CRITERIA_HEADING = "## Acceptance criteria";
-// `- [ ] text`, `- [x] text`, or a plain `- text`, authors write all three, and the box state carries no meaning
-// here: a criterion is verified by a run, never by someone ticking it in an editor.
+// Matches `- [ ] text`, `- [x] text` or a bare `- text`; the box state carries no meaning, since a criterion is
+// verified by a run, never by ticking it in an editor.
 const CRITERION_LINE = /^\s*[-*]\s+(?:\[[ xX]?\]\s*)?(.+?)\s*$/;
 const HEADING_LINE = /^\s{0,3}#{1,6}\s/;
 
@@ -148,7 +122,7 @@ export const criteriaOf = (content: string | undefined): string[] => {
         return [];
     }
     const rest = lines.slice(start + 1);
-    // The section runs to the next heading of ANY level, a criteria list followed by "## Notes" must not eat it.
+    // Stops at the next heading of any level, so a criteria list isn't eaten by a later `## Notes`.
     const end = rest.findIndex((line) => HEADING_LINE.test(line));
     return (end === -1 ? rest : rest.slice(0, end)).flatMap((line) => {
         const match = CRITERION_LINE.exec(line);
@@ -156,17 +130,10 @@ export const criteriaOf = (content: string | undefined): string[] => {
     });
 };
 
-/* THE FILE A NEW STORY STARTS AS: the title somebody typed into the composer, and the section the run grades
- * against, empty and waiting.
- *
- * IT USED TO ASSEMBLE THE WHOLE STORY from a title, a narrative and a list of criteria, because the panel used
- * to take a story apart into those three and put it back together on every keystroke. That editor is gone (see
- * StoryRow) — a story is now edited as the markdown file it is — so what is left of this is the one thing it
- * was always also doing: minting a file. The heading is here because the composer asks for a title and it has
- * to land somewhere; the criteria heading is here because a blank file gives an author nothing to aim at, and
- * this is the one section the tooling reads by name. */
+// The file a new story starts as: the typed title, and an empty Acceptance criteria section to type into. The former
+// assemble-from-parts editor is gone (StoryRow edits the raw file); this keeps only what was always also minting a
+// file.
 export const newStoryMarkdown = (title: string): string => `# ${title.trim()}\n\n${CRITERIA_HEADING}\n\n- \n`;
 
-// Where a newly authored story lands. The slug is the filename, so the title someone typed is what they later
-// find in the tree; the group is the subdirectory it lands in, `""` for the top level.
+// Where a newly authored story lands: the slug becomes the filename, the group its subdirectory ("" for the top level).
 export const storyPath = (repo: string, group: string, slug: string): string => `${repo}/${STORIES_DIR}/${group === `` ? `` : `${group}/`}${slug}.md`;

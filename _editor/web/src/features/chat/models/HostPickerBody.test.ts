@@ -47,9 +47,7 @@ vi.mock(`../accounts/PickerAccounts.vue`, () => ({
                 h(`button`, { onClick: () => emit(`selectAccount`, `second-account`) }, `Switch account`),
     }),
 }));
-/* The meter's own drawing is the composer's control and is tested there; this stub keeps the one thing this file
- * is about — WHICH rungs the panel hands it, and what the panel does with the one it emits — by drawing a button
- * per rung under the tier's own name. */
+// The meter itself is tested elsewhere; this stub checks which rungs the panel hands it and what it emits.
 vi.mock(`../composer/EffortMeter.vue`, () => ({
     default: defineComponent({
         props: { efforts: { type: Array, default: () => [] } },
@@ -205,10 +203,8 @@ it(`carries the tier into the answer`, async () => {
     });
 });
 
-/* THE TOP RUNG IS REACHABLE HERE, which is the whole reason this panel draws the row: a run started from a red
- * pipeline has no composer beside it to switch extended thinking on with. It used to read this selection's
- * absent thinking as thinking switched OFF, which is the one pair Anthropic refuses, so Max was missing from
- * every "Fix with agent" caret while the model's own catalog published it. */
+// The top rung is reachable here because a run started from a red pipeline has no composer beside it to
+// switch thinking on.
 it(`offers the model's top tier to a run that pinned no thinking to refuse it`, async () => {
     providerModels.value = {
         ...providerModels.value,

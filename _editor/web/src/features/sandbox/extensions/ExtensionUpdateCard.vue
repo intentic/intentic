@@ -12,18 +12,9 @@ import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { router } from "../../../router";
 import { updateBrief } from "./extensionBrief";
 
-/* THE UPDATE STORY of one git-installed extension, below its row's fold: everything between "the registry
- * lists a newer commit" and "this browser runs it".
- *
- * The card leads with whatever demands the most: an advisory (its registry blocked it), then an unhealthy
- * update (came up wrong after a swap), then the update offer itself. The offer is a TWO-CLICK shape on
- * purpose: the first click stages the offered commit and renders the powers diff, the mechanical answer to
- * "what would I be approving", and only the second click, now labelled by what the diff found ("Update" when
- * nothing grew, "Approve new powers & update" when something did), performs the transaction. Nothing here
- * auto-applies; the unattended rungs live in the policy control at the bottom, per extension, owner-set.
- *
- * Reverting is ordinary and visible whenever a previous version is kept, not only when something is on fire:
- * "the last update made it worse" needs no failing health probe to be true. */
+// The update lifecycle of one git-installed extension, below its row's fold: advisory, then unhealthy update, then the
+// offer, in that priority. The offer is two clicks on purpose: stage the diff, then confirm, labelled by what it found.
+// Nothing auto-applies outside the owner-set policy; revert stays visible whenever a previous version exists.
 
 const { extension } = defineProps<{ extension: ExtensionSummary }>();
 
@@ -36,7 +27,7 @@ const short = (ref_: string): string => ref_.slice(0, 7);
 const busy = ref(false);
 const failure = ref<string>();
 
-// The staged read behind the first click. Cleared whenever the offer it describes changes.
+// The staged read behind the first click; cleared whenever the offer it describes changes.
 const preview = ref<Awaited<ReturnType<typeof previewUpdate>>>();
 watch(
     () => update.value?.ref,
@@ -66,8 +57,8 @@ const stage = (): Promise<void> =>
         preview.value = await previewUpdate(extension.id);
     });
 
-// Applied, then the host runs again so THIS browser finishes on the new code: the same reconcile the tab's
-// toggle performs. A pending image rebuild is reported, not implied away.
+// After applying, the host reloads so this browser runs the new code, the same reconcile the row's toggle performs. A
+// pending image rebuild is reported, not implied away.
 const rebuildNote = ref(false);
 const apply = (): Promise<void> =>
     act(async () => {
@@ -83,8 +74,8 @@ const revert = (): Promise<void> =>
         await reloadExtensions();
     });
 
-// The agent's diff-read: link the finished one when the agent-prepared policy already ran it, offer to start
-// it otherwise. An unregistered conversation still has a route: the chat screen resolves it by id.
+// Links a finished agent diff-read when the policy already ran one, offers to start one otherwise; an unregistered
+// conversation still resolves by id through the chat route.
 const reviewAt = (conversationId: string): string => `/agents/${encodeURIComponent(conversationId)}`;
 const openReview = (conversationId: string): void => {
     const { agentById, open } = useAgents();
@@ -111,7 +102,7 @@ const readDiff = (): void => {
     );
 };
 
-// The confirm button says what the click now means: an update whose powers grew is an approval, not a refresh.
+// Labels the confirm click by what it means: growing powers makes it an approval, not a refresh.
 const confirmLabel = computed(() =>
     preview.value !== undefined && preview.value.powers.added.length > 0 ? `Approve new powers & update` : `Update`,
 );
@@ -129,8 +120,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- The alarm, when there is one. It stays until the registry unblocks the listing: an advisory is a
-             standing fact about the code, not a notification to swipe away. -->
+        <!-- Stays until the registry unblocks the listing: an advisory is a standing fact, not a notice to dismiss. -->
         <div v-if="extension.advisory" class="rounded border border-danger/40 bg-danger/5 p-2.5">
             <p class="text-xs font-medium text-danger">Blocked by its registry</p>
             <p class="mt-0.5 text-2xs text-muted">{{ extension.advisory.reason }}</p>
@@ -145,7 +135,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             </p>
         </div>
 
-        <!-- The after-the-click watch. Healthy is silent; only a verdict worth acting on takes space. -->
+        <!-- Healthy is silent; only a verdict worth acting on takes space here. -->
         <div v-if="extension.health?.state === `unhealthy`" class="rounded border border-warning/40 bg-warning/5 p-2.5">
             <p class="text-xs font-medium text-warning">
                 {{ extension.health?.autoReverted ? `An update came up wrong and was rolled back` : `This update isn't healthy` }}
@@ -227,7 +217,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             </button>
         </p>
 
-        <!-- The standing answer: what happens the next time the registry lists a release of THIS extension. -->
+        <!-- The standing answer: what happens next time the registry lists a release of this extension. -->
         <div>
             <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">When a new release is listed</p>
             <SegmentedControl

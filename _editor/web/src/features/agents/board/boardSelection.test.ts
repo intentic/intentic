@@ -1,18 +1,7 @@
 // @vitest-environment jsdom
-//
-// THE SELECTED CARD, when the board's own Finished window would have dropped it. The ring the board draws is a
-// cross-reference between two panes: this card is what the docked chat is pointing at, so a lane that culls
-// it leaves the ring nowhere, and the board reads as "this chat is not an agent" rather than "that card is
-// further down". Neither half of the fix can be seen from the store: whether the card is in the DOM at all, and
-// whether the board scrolls to a selection it did not make itself.
-//
-// Driven through the real surfaces, like the chat strip's own reveal test (chatTabsReveal.test.ts): a chat
-// opened from outside stands for a tab click, a history row and a deep link alike, since all three land on the
-// same write. jsdom lays nothing out, so the scroll is asserted as the CALL, which card, and the cheapest
-// scroll (`nearest`, a no-op on a card already on screen).
-//
-// The board's OTHER selection is at the foot of the file: the several cards a split rings at once, and what a
-// click carrying no modifier does to them.
+// The card the docked chat points at stays visible even when the Finished window would drop it, or the ring has nowhere
+// to land. Driven through real surfaces (a tab click, a history row, a link) since they all land on the same write. The
+// board's other selection (multi-pane splits) is tested at the foot of the file.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -26,11 +15,8 @@ import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted board needs (see startAgent.test.ts, which mounts this same view):
-// useDevice reads matchMedia at module scope: matches:false keeps the device DESKTOP, the only form factor
-// with a dock for "selected" to be about, and environment.ts reads window.env. The unreported ResizeObserver
-// leaves the board on its unmeasured default of three columns. scrollIntoView is jsdom's biggest hole and this
-// file's subject, so it is installed as the recorder the assertions read.
+// Same import-time globals as startAgent.test.ts; scrollIntoView is jsdom's biggest gap and this file's subject,
+// recorded here for the assertions.
 const { reveals } = vi.hoisted(() => {
     const recorded: { card: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
@@ -43,9 +29,8 @@ const { reveals } = vi.hoisted(() => {
 });
 
 let app: App | undefined;
-// Mounted per test, with the app-level registrations main.ts makes: the global Icon component, PrimeVue's
-// v-tooltip, the router, and vue-query for the filter field's daemon tier. Unmounted between tests because the
-// board CLAIMS COMMANDS on mount (Mod+Z, the filter accelerator) and the registry refuses a second claim.
+// Mounted per test with main.ts's app-level registrations; unmounted between tests since the board claims global
+// commands (Mod+Z, the filter accelerator) that refuse a second claim.
 const mountBoard = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
@@ -59,7 +44,7 @@ const mountBoard = async (): Promise<HTMLElement> => {
     return el;
 };
 
-// The board reveals on the tick AFTER the selection, so the card it scrolls to is one the DOM already holds.
+// The board reveals a tick after the selection, so the card it scrolls to is already in the DOM.
 const settle = async (): Promise<void> => {
     await nextTick();
     await nextTick();
@@ -78,12 +63,8 @@ afterEach(() => {
     app = undefined;
 });
 
-// A lane of ten finished agents, newest first: the order the board itself sorts them into, so `a0` heads the
-// lane and `a8` sits two below the window's edge. Built per call: the store stamps its entries in place (seenAt
-// on open), so a shared fixture would carry one test's reads into the next.
-//
-// Seeded at a high revision, so the board's own refresh() at mount, which reaches a daemon that is not there
-// and answers nothing: cannot be mistaken for a newer roster.
+// Ten finished agents, newest first, matching the board's own sort; built fresh per call since the store stamps entries
+// in place. Seeded at a high revision so the board's own no-op refresh() can't be mistaken for a newer roster.
 const roster = (): AgentSummary[] =>
     Array.from({ length: 10 }, (_unused, at): AgentSummary => ({
         id: `a${at}`,
@@ -96,14 +77,13 @@ const roster = (): AgentSummary[] =>
     }));
 const seed = (): void => setAgents(roster(), 100);
 
-// Reading a chat the board did not open: a tab click, a History row, a link. All of them land here.
+// Reading a chat the board did not open: a tab click, a history row, a link. All land here.
 const openFromOutside = (id: string): void => {
     openAgentConversation({ id, provider: `claude`, harness: `native`, title: `agent ${id.slice(1)}` });
 };
 
-// The Finished lane is the board's third section, and a card is the only thing in it that offers a focus. Cards
-// on their way OUT are excluded: the card animates its departure, and jsdom fires no
-// transitionend, so a card the board has already dropped would otherwise sit in the DOM for the rest of the run.
+// The Finished lane is the board's third section; a card is its only focusable item. Cards mid-leave-transition are
+// excluded, since jsdom never fires transitionend.
 const finishedCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
         card.getAttribute(`aria-label`)!.replace(`Focus agent: `, ``),
@@ -114,15 +94,15 @@ const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.
 it(`keeps the card the docked chat is reading, however far down the lane it is`, async () => {
     seed();
     const board = await mountBoard();
-    // Without the pin this is the whole failure: seven cards, and the ring on none of them.
+    // Without the pin, this is the whole failure: seven cards and no ring on any of them.
     expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`]);
 
     openFromOutside(`a8`);
     await settle();
 
-    // Pinned at the TAIL, so the lane's own recency order is otherwise untouched.
+    // Pinned at the tail, so the lane's own recency order is otherwise untouched.
     expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`, `agent 8`]);
-    // And counted OUT of the row that collapses the rest: eight cards on screen out of ten leaves two behind.
+    // Counted out of the row that collapses the rest: eight cards on screen out of ten leaves two behind.
     expect(tailRow(board)).toBe(`2 earlier`);
 });
 
@@ -158,8 +138,7 @@ it(`stays put when the selection was made ON the board: the card is already unde
     await settle();
     reveals.length = 0;
 
-    // Clicking down the lane to skim is the board's cheapest gesture; scrolling the grid under each press
-    // would fight it.
+    // Clicking down the lane to skim is the board's cheapest gesture; scrolling under each press would fight it.
     board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent 0"]`)!.click();
     await settle();
 
@@ -182,10 +161,7 @@ it(`scrolls again to a card the board once selected itself: the mark is one sele
     expect(reveals.at(-1)).toEqual({ card: `Focus agent: agent 0`, block: `nearest` });
 });
 
-/* A ROSTER FRAME IS NOT A LIST MOVE. Vue's TransitionGroup used to append and immediately remove a shallow
- * clone of the first card after every parent update to probe whether its move class contained a transform.
- * DevTools treats those real DOM mutations as a reason to rebuild the selected node's whole Styles pane, so
- * every request that refreshed an agent made its CSS editor flash and discarded an edit in progress. */
+// A roster frame update must not insert transient probe nodes into the DOM for an unchanged lane.
 it(`does not insert probe cards when a roster frame updates an unchanged lane`, async () => {
     seed();
     const board = await mountBoard();
@@ -210,14 +186,8 @@ it(`does not insert probe cards when a roster frame updates an unchanged lane`, 
     expect(inserted).toEqual([]);
 });
 
-/* --- The split, and the click that ends it ------------------------------------------------------
- * Alt/Ctrl/Shift on a card build the set of chats on screen, which makes the cards a multi-selection, and a
- * selection you cannot replace by pointing at something else is not one. Before this, every later click merely
- * swapped the column it landed in: the split outlived the comparison that wanted it and had to be taken apart
- * one × at a time, with actions scoped to "what is on screen" (Synthesize) still counting the leftover.
- *
- * Asserted on the PANE SET rather than on the rings, because the rings are drawn from it, and driven as real
- * clicks with real modifier flags, since the whole question is which of them the board tells apart. */
+// Alt/Ctrl/Shift-click builds a multi-pane selection; a plain click on a card collapses it back to one pane. Asserted
+// on the pane set, since the rings are drawn from it.
 const cardEl = (board: HTMLElement, at: number): HTMLElement => board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent ${at}"]`)!;
 
 it(`collapses a split back to the one card clicked without a modifier`, async () => {
@@ -234,7 +204,7 @@ it(`collapses a split back to the one card clicked without a modifier`, async ()
     await settle();
 
     expect(useChat().panes.value).toEqual([`a2`]);
-    // The two that left the screen are still open: one click in the rail brings either back.
+    // The two cards that left the screen stay open; one click in the rail brings either back.
     expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(expect.arrayContaining([`a0`, `a1`, `a2`]));
 });
 

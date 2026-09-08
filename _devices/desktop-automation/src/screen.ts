@@ -5,16 +5,9 @@ import { join } from "node:path";
 import { run } from "./run.js";
 import { DesktopError, type ScreenFrame } from "./types.js";
 
-/* Seeing the screen, and knowing how big it is.
- *
- * Every platform does this with a DIFFERENT program that may or may not be installed, so capture is a list of
- * candidates tried in order rather than one command. Windows is the easy case: .NET is always there, so a few
- * lines of PowerShell always work. Linux is the hard one, the right tool depends on whether the session is
- * Wayland or X11 and on which desktop shipped which utility, so a total failure names the one-line install for
- * what is missing instead of reporting that nothing worked.
- *
- * PNG via a temp file rather than a pipe: several of these tools only write to a path, and a base64 payload of a
- * 4K screen is large enough that streaming it through stdout buffers is not worth the saving. */
+// Screen capture and geometry across platforms. Capture tries a list of candidate tools in order, since each
+// platform's screenshot program varies; a total failure names what to install. PNG goes to a temp file rather than
+// a pipe, since several tools only write to a path.
 
 const pngPath = (): string => join(tmpdir(), `intentic-desktop-${process.pid}-${Date.now()}.png`);
 
@@ -41,8 +34,7 @@ const grabbers = (out: string): Grabber[] => {
     if (process.platform === "win32") {
         return [{ command: "powershell.exe", args: () => ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_CAPTURE(out)], install: "" }];
     }
-    // Wayland first when the session says Wayland: grim is the standard there and an X11 tool would capture a
-    // black frame (or nothing) under it.
+    // Wayland tools first when the session is Wayland; an X11 tool captures a black or empty frame under it.
     const waylandTools: Grabber[] = [
         { command: "grim", args: (path) => [path], install: "sudo apt install grim  (or your distro's package)" },
         { command: "gnome-screenshot", args: (path) => ["-f", path], install: "sudo apt install gnome-screenshot" },
@@ -93,10 +85,8 @@ export const capture = async (): Promise<Buffer> => {
     }
 };
 
-/* A PNG's own dimensions, read from its IHDR, the header is fixed-layout, so this is two big-endian reads at
- * known offsets rather than a decoder. It is the fallback for the one case with no cheap way to ask the OS
- * (Wayland deliberately hides screen geometry from unprivileged clients), and it has the property the others
- * lack: it describes exactly the image the caller is looking at, which is the frame its coordinates are in. */
+// Reads width/height from the PNG IHDR at fixed offsets: the fallback when the OS cannot report geometry (Wayland
+// hides it from unprivileged clients).
 export const pngSize = (png: Buffer): { width: number; height: number } => {
     if (png.length < 24 || png.readUInt32BE(0) !== 0x89504e47) {
         throw new DesktopError("That is not a PNG, so its size cannot be read.");
@@ -111,8 +101,7 @@ const WINDOWS_FRAME =
 
 export const frame = async (): Promise<ScreenFrame> => {
     if (process.platform === "win32") {
-        // Windows answers with the VIRTUAL desktop, which is what CopyFromScreen captured, including a negative
-        // left edge when a second monitor sits to the left of the primary one.
+        // The virtual desktop, same as CopyFromScreen; left edge can be negative for a monitor left of primary.
         const out = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_FRAME]);
         const [width, height, left, top] = out.trim().split(/\s+/).map(Number);
         if (width === undefined || height === undefined || Number.isNaN(width) || Number.isNaN(height)) {
@@ -121,13 +110,13 @@ export const frame = async (): Promise<ScreenFrame> => {
         return { width, height, origin: { x: left ?? 0, y: top ?? 0 } };
     }
     if (!isWayland()) {
-        // X11 will simply tell us, and far faster than a screenshot would.
+        // X11 answers directly, faster than a screenshot.
         const out = await run("xdotool", ["getdisplaygeometry"], "sudo apt install xdotool");
         const [width, height] = out.trim().split(/\s+/).map(Number);
         if (width !== undefined && height !== undefined && !Number.isNaN(width) && !Number.isNaN(height)) {
             return { width, height, origin: { x: 0, y: 0 } };
         }
     }
-    // Wayland (and an X11 session whose xdotool answered oddly): the screenshot is the only honest source.
+    // Wayland, or X11 with a bad xdotool answer: the screenshot is the only honest source.
     return { ...pngSize(await capture()), origin: { x: 0, y: 0 } };
 };

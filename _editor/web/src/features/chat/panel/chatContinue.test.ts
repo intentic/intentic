@@ -1,13 +1,6 @@
 // @vitest-environment jsdom
-//
-// THE WAY BACK FROM A TURN THAT STOPPED, asserted through the real composer and read off the DOM, because the
-// whole feature is an affordance, and a flag on the conversation that no surface offers is worth nothing.
-//
-// It comes from the report behind it: a turn ends ("agent did not complete"), or the user declines a tool and
-// the agent halts waiting to be told what to do, and the only way on is to type the word "Continue" into the
-// box. Every time. The three things that have to be true for that to stop are all here: the strip appears with
-// its button, Enter on an empty composer does the same thing, and neither of them shows up on a chat where
-// continuing would be wrong.
+// Pins the way back from a turn that stopped, through the real composer and the DOM: the strip and its button,
+// Enter-to-continue, and their absence where continuing would be wrong.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -22,7 +15,7 @@ import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
+// Import-time globals a mounted chat surface needs.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -32,8 +25,7 @@ vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
-// The fleet roster and the workflow ledger, which the pane asks about on mount and neither of which this file
-// is about: an empty answer costs nothing and keeps the polling out of it.
+// Fleet roster and workflow ledger the pane queries on mount; irrelevant here, so answered empty.
 vi.mock(`../../agents/fleet/useAgents`, async () => {
     const { computed } = await import(`vue`);
     return {
@@ -52,13 +44,10 @@ vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
-/* THE COMPOSER ONLY EXISTS WHEN THE SANDBOX DOES: unreachable, the whole footer yields to "Chat is available
- * once your sandbox is connected", and every assertion below would pass against a pane with no controls in it
- * at all. So this one is mocked ONLINE: the state the feature lives in. */
+// The composer only renders once the sandbox is reachable; mocked online here, the state this file tests.
 const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await vi.hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
-    // The steady state this file runs in, and the shape the status row reads: `reachable` alone cannot express
-    // "briefly retrying" versus "down for a while", which is exactly the distinction that row now draws.
+    // Steady state for this file: `reachable` alone can't distinguish briefly retrying from down for a while.
     const online = { phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0, everOnline: true, unavailableSince: undefined, generation: 0 };
     return { sandboxReachable: vueRef(true), sandboxConnection: vueRef({ ...online }), ONLINE_CONNECTION: online };
 });
@@ -86,14 +75,11 @@ vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
     };
 });
 
-/* THE PROVIDER'S ANSWER ABOUT A SESSION-LIMIT RESET, stubbed at the composable rather than at the transport,
- * because whether the offer EXISTS is the provider's judgement and this file is about what the strip does with
- * it. limitReset.test.ts pins the asking (once per account, never on a timer, a failure is not an answer);
- * `limitResetNote` stays real, since the sentence a failed claim shows is part of the affordance. */
+// Stubbed at the composable, not the transport: whether the offer exists is the provider's judgement, and this file is
+// about what the strip does with it.
 const { resetOffer, claimReset } = await vi.hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
-    // A ref, not a plain box: a claim that retires the offer has to repaint the strip, which is half of what
-    // the failure cases below assert.
+    // A ref, since a claim retiring the offer must repaint the strip.
     return { resetOffer: vueRef<unknown>(undefined), claimReset: vi.fn() };
 });
 vi.mock(`../session/limitReset`, async (importOriginal) => ({
@@ -123,21 +109,13 @@ const mountPanel = async (): Promise<void> => {
     await settle();
 };
 
-// A button by the words on it, or nothing: how every affordance here is read off the DOM.
+// Matches a button by its visible text prefix.
 const button = (label: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
-// The offer, as the DOM has it: the button that carries the word, or nothing.
 const continueButton = (): HTMLButtonElement | undefined => button(`Continue`);
-/* The caret beside the press, and the panel it opens. The press's VARIANTS (another account's allowance, the
- * standing version of the press) live behind it rather than in the row, so a test that wants one opens it the
- * way a reader does. Its absence is an assertion in its own right: no caret means the menu would have been
- * empty, which is the commonest ending of all. */
+// Caret opening the press's variants; absent when the menu would have nothing in it.
 const waysButton = (): HTMLButtonElement | undefined => document.querySelector<HTMLButtonElement>(`button[aria-label="Other ways on"]`) ?? undefined;
-/* jsdom measures every element as 0×0, and AnchoredOverlay reads a 0×0 anchor as one that has gone away and
- * closes itself on the tick it opened (its own reposition guard, which is what keeps a panel from parking over
- * a pill that has since been hidden). So the press's own row is given a box before the caret is pressed. Scoped
- * to that one element rather than to the prototype: the pane around it measures for its own reasons, and a
- * document where everything suddenly has a size is a different test than the one the rest of this file runs. */
+// jsdom rects are 0x0; AnchoredOverlay treats that as gone and self-closes, so give the anchor a box first.
 const ANCHOR_BOX = { x: 0, y: 0, top: 0, left: 0, bottom: 24, right: 160, width: 160, height: 24, toJSON: () => ({}) } as DOMRect;
 const openWays = async (): Promise<void> => {
     const caret = waysButton()!;
@@ -145,13 +123,11 @@ const openWays = async (): Promise<void> => {
     caret.click();
     await settle();
 };
-// The one hint slot under the box: how anyone learns the key exists.
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
 
-/* A chat whose last turn stopped before it finished, without going near the network to get there: the pick-up
- * is the state a failed turn LEAVES, and conversation.test.ts is where the failures that leave it are pinned.
- * Here it is a starting position, so this file can be about what the composer does with it. */
+// A chat whose last turn stopped, built directly rather than through a failure path, as a starting position for these
+// tests.
 const stoppedChat = (): Conversation => {
     const chat = useChat();
     const conversation = chat.active.value;
@@ -166,20 +142,16 @@ const stoppedChat = (): Conversation => {
 beforeEach(async () => {
     app?.unmount();
     app = undefined;
-    // BOTH stores, because a window's tabs live in sessionStorage and only seed from localStorage
-    // (windowStore). A stopped turn is persisted with its tab now, so one test's pick-up would otherwise be
-    // restored into the next one's chat and every "offers nothing" assertion here would pass or fail on
-    // whichever test ran before it.
+    // Clears both: tabs live in sessionStorage, seeded from localStorage; else a pick-up leaks into the next test.
     localStorage.clear();
     sessionStorage.clear();
     resetChat();
     sandboxReachable.value = true;
     sandboxConnection.value = { ...ONLINE_CONNECTION };
-    // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
+    // `connected` is the composer's own gate; with no account the box goes inert.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
-    // No grant on offer is the state every test but the reset's own runs in, and the state a sandbox is in
-    // ~51 weeks of the year: the strip must be its old self whenever the provider is not granting anything.
+    // Baseline: no grant offered, the state every test but the reset tests itself runs in.
     resetOffer.value = undefined;
     claimReset.mockReset();
     await nextTick();
@@ -196,9 +168,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
-    // A status, not a paragraph: what happened, and what survived it.
     expect(composerText()).toContain(`Turn stopped short · work kept`);
-    // Continue button is present without "Enter" in its button text
     expect(continueButton()?.textContent?.trim()).toBe(`Continue`);
 
     continueButton()!.click();
@@ -207,9 +177,6 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
-/* THE WHOLE POINT, in one keystroke. Enter on an empty box did nothing at all before this, so there is no habit
- * being broken, and the hint slot has to say so, because a shortcut nothing advertises is a shortcut only its
- * author uses. */
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -222,9 +189,6 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
     expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
-/* WHAT THE OFFER MUST NOT DO. Typing is the user saying what happens next in their own words, so the strip goes
- * and the key goes back to sending the draft: a Continue that fired over a half-written message, or an Enter
- * that sent "continue" instead of what was in the box, would be worse than the typing it replaced. */
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -241,9 +205,7 @@ it(`stands down the moment the user types something of their own`, async () => {
     expect(enqueue).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
 });
 
-/* THE STANDING VERSION OF THE PRESS, offered at the moment anyone wishes for it: reading "this turn stopped
- * before it finished" again. When only Continue and Auto-continue exist, Auto-continue is shown directly as a button.
- * Arming it is one click, and the strip then says what the chat is doing about itself. */
+// When only Continue and Auto-continue exist, Auto-continue shows directly as a button, not behind the caret.
 it(`offers to keep continuing by itself, and says so once it is on`, async () => {
     const conversation = stoppedChat();
     await mountPanel();
@@ -254,7 +216,6 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
 
     expect(conversation.autoContinue.value).toBe(true);
     expect(composerText()).toContain(`Auto-continue is on`);
-    // The offer is not repeated once taken: the armed strip is where the state and the way out of it live now.
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(waysButton()).toBeUndefined();
     expect(continueButton()).toEqual(expect.any(Object));
@@ -265,8 +226,6 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
     expect(composerText()).not.toContain(`Auto-continue is on`);
 });
 
-// The armed line outlives the stop that armed it: switching it on and losing the switch the moment the chat
-// moves on would leave an automation nobody can reach.
 it(`keeps the armed line up on a chat with nothing to continue`, async () => {
     const chat = useChat();
     const conversation = chat.active.value;
@@ -282,11 +241,7 @@ it(`keeps the armed line up on a chat with nothing to continue`, async () => {
     expect(button(`Turn off`)).toEqual(expect.any(Object));
 });
 
-/* A SPENT ALLOWANCE WITH NOTHING HELD: the daemon has no copy of the refused turn (it restarted, or the refusal
- * reached this window without one), so the only way on really is to say something, and saying it before the
- * reset really would just append a message to a chat that cannot answer it. That is the one case the wait still
- * gates, and it is asserted in both halves because either alone is a different bug: the strip has to be UP (so
- * the work is visibly still there and the wait has a length) and the press has to be INERT, key included. */
+// An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -296,22 +251,12 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
     expect(composerText()).toContain(`Limit reached`);
     expect(composerText()).toContain(`about 60 min`);
     expect(continueButton()?.disabled).toBe(true);
-    // The key stays what it was: a shortcut that fires into a refusal is worse than no shortcut.
     expect(composerText()).not.toContain(`Enter to continue`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
     expect(enqueue).not.toHaveBeenCalled();
 });
 
-/* THE HELD TURN, WHICH IS WHAT A SPENT ALLOWANCE ORDINARILY LEAVES, and the case that turns the rule above on
- * its head: the press is live with the reset eight hours out, because pressing it re-runs the turn the daemon
- * kept rather than appending anything to the chat.
- *
- * This is the bug's own shape, read back off the DOM. A user looking at a dead button and a countdown does not
- * wait for the countdown; the composer is right there, so they type the word, four times in sixty-five seconds in
- * the transcript this came from, and the fifth got through eight hours before the reset the notice promised. The
- * gate never prevented a request. So the gate is gone where there is nothing left to protect, and the strip says
- * the honest thing instead of the confident one: this never ran, and the reset is a due date rather than a wall. */
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -319,7 +264,6 @@ it(`offers a held allowance the press straight away, and re-runs the turn instea
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
     await mountPanel();
 
-    // No claim that work survives a turn that never started, and no wall in front of the press.
     expect(composerText()).toContain(`Limit reached · nothing ran · back`);
     expect(composerText()).not.toContain(`work kept`);
     expect(continueButton()?.disabled).toBe(false);
@@ -329,13 +273,11 @@ it(`offers a held allowance the press straight away, and re-runs the turn instea
     await settle();
 
     expect(rerun).toHaveBeenCalledTimes(1);
-    // The whole point: nothing was said. A message here is the pile this replaces, one row per press.
     expect(enqueue).not.toHaveBeenCalled();
 });
 
-/* A limit reached IN FLIGHT is held too, and it is the one that may honestly claim the work. Same press, same
- * lack of a gate, different sentence, because a model told to carry on from work that never happened invents
- * some (RESUME_NOTES.refused vs .limit), and a reader told the same is simply misinformed. */
+// Held vs. refused picks the resume note (RESUME_NOTES.refused vs .limit): the wrong one either invents context for the
+// model or misinforms the reader.
 it(`tells a mid-turn allowance failure apart from one that refused the turn outright`, async () => {
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: true } };
@@ -345,7 +287,6 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
     expect(continueButton()?.disabled).toBe(false);
 });
 
-// ...and on the far side of the reset it is an ordinary stopped turn, with the ordinary press and the key back.
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -360,11 +301,6 @@ it(`hands the press over once the allowance has reset`, async () => {
     expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
-/* THE OUTAGE, IN THE SAME STRIP. It used to be a banner of its own in another component, which is how one
- * situation, a turn that stopped with work behind it, came to look like three unrelated things depending on
- * what stopped it. What it keeps that the others don't is the second party: the daemon's breaker is already
- * retrying, so the strip reports that wait and offers the way out of it, and the manual press stays live for
- * anyone who won't wait. */
 it(`carries the outage in the same strip, with the way out of its automatic retry`, async () => {
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `outage`, automatic: { at: Date.now() + 120_000 } };
@@ -372,15 +308,11 @@ it(`carries the outage in the same strip, with the way out of its automatic retr
 
     expect(composerText()).toContain(`Provider failed · retrying in about 2 min`);
     expect(composerText()).toContain(`Stop`);
-    // Nothing offers to arm a SECOND automation over a turn something is already bringing back, so the menu has
-    // nothing in it and does not appear.
     expect(waysButton()).toBeUndefined();
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(continueButton()?.disabled).toBe(false);
 });
 
-// The same outage with nothing retrying it: the strip becomes the offer to arm the daemon's own resume, beside
-// the press that does it now.
 it(`offers to keep the chat going when nothing is retrying the outage`, async () => {
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `outage` };
@@ -390,8 +322,6 @@ it(`offers to keep the chat going when nothing is retrying the outage`, async ()
     expect(continueButton()?.disabled).toBe(false);
 });
 
-// A chat that ended cleanly is not offered anything: the strip is for work left hanging, and one that showed up
-// after every finished answer would be noise the reader learns to look past: including on the turns it matters.
 it(`says nothing on a chat whose turn finished`, async () => {
     const chat = useChat();
     chat.active.value.restoreMessages([
@@ -406,8 +336,7 @@ it(`says nothing on a chat whose turn finished`, async () => {
 
 const statusRow = (): string => document.querySelector<HTMLAnchorElement>(`a[href="/sandbox/agent"]`)?.textContent ?? ``;
 const sendButton = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`)!;
-// A stream that just broke and is about to be retried: the reconnect ladder's first rung is one second, so this
-// is the state a healthy workspace passes through several times an hour.
+// State a healthy workspace passes through often: the reconnect ladder's first rung is about a second.
 const retrying = (sinceMsAgo: number): void => {
     sandboxReachable.value = false;
     sandboxConnection.value = {
@@ -420,12 +349,8 @@ const retrying = (sinceMsAgo: number): void => {
     } as never;
 };
 
-/* A ONE-SECOND RECONNECT IS NOT AN OUTAGE, and the composer must not say it is.
- *
- * The liveness stream is always on and reopens for ordinary reasons; rendered off `reachable`, this row blinked
- * "The sandbox is busy" under the composer every minute or two of a session with nothing wrong with it. Send
- * still goes inert — that IS instant transport truth, and a press has nowhere to go — but the words stay put
- * until the wait has lasted long enough to mean something (availability.ts's SANDBOX_BUSY_AFTER_MS). */
+// Send goes inert immediately, since transport truth is instant, but the busy wording waits for SANDBOX_BUSY_AFTER_MS
+// so a routine reconnect doesn't read as an outage.
 it(`says nothing about a reconnect short enough to heal itself`, async () => {
     useChat().active.value.draft.value = `hello`;
     await mountPanel();
@@ -441,8 +366,6 @@ it(`says nothing about a reconnect short enough to heal itself`, async () => {
     expect(sendButton().disabled).toBe(true);
 });
 
-// And the other half of the same rule: a wait that has become real is named, in the vocabulary every other
-// sandbox readout in the app uses.
 it(`names a wait that has outlasted the busy threshold`, async () => {
     useChat().active.value.draft.value = `hello`;
     await mountPanel();
@@ -454,16 +377,10 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
     expect(sendButton().disabled).toBe(true);
 });
 
-/* ---- the spent allowance that does not have to be waited out -------------------------------------------
- * Every other control this strip carries answers "when": arm the appointment, count down, press once it opens.
- * A sandbox with a second subscription connected has a better answer, and the two gestures that used to be it
- * (pick another account in the switcher, then press Continue) had nothing on screen relating them. These pin
- * the one press, and the case where it must not be offered at all.
- *
- * limitFallback.test.ts pins WHICH account may be offered; these are about the affordance existing and the
- * press actually moving the held turn onto it. */
+// A second connected subscription lets a spent allowance's held turn move there in one press, instead of switching
+// accounts and pressing Continue separately.
 
-// Two connections, the second measured with room: the state the offer exists for.
+// Two connections: the first spent, the second with room, the state this offer exists for.
 const twoAccounts = (spentPercent: number, roomPercent: number): void => {
     providerAccounts.value = {
         ...providerAccounts.value,
@@ -487,13 +404,9 @@ const limitChat = (): Conversation => {
 it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
-    // The daemon half is conversation.ts's to pin; here the only question is that the press reaches it, and
-    // reaches it with the switch already made.
     const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
-    // Named, not just "another account": one row has to identify which subscription is about to be spent, and
-    // by the part of the address a person reads rather than the account id.
     await openWays();
     const offer = button(`Continue on`);
     expect(offer?.textContent).toContain(`Continue on second`);
@@ -502,31 +415,21 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
     await settle();
 
     expect(conversation.account.value).toBe(`acc-2`);
-    // Once: the switch and the re-run are one press, not a press that also re-sends whatever it displaced.
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
-// The common sandbox has one subscription and no second pool to move to.
-// When only Continue and Auto-continue exist, Auto-continue is shown directly.
+// The common case: one subscription, no second pool to move to.
 it(`offers no second account when the only other connection is spent too`, async () => {
     twoAccounts(99, 99);
     limitChat();
     await mountPanel();
 
-    /* Read as the whole set of labels on offer, so this says what the strip DOES carry as well as what it does
-     * not: the wait's own control survives in the row, and only the second-account offer is gone. Asserted on
-     * the buttons rather than on the line, which is worded from the live reading. */
     const labels = [...document.querySelectorAll<HTMLButtonElement>(`button`)].map((element) => element.textContent?.trim() ?? ``);
     expect(labels).toContainEqual(expect.stringContaining(`Send it when it's back`));
     expect(button(`Continue on`)).toBeUndefined();
     expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });
 
-/* THE ROW IS RANKED, NOT A PILE, which is this strip's own invariant and the thing another button would quietly
- * undo. A spent allowance with somewhere else to go used to carry four controls of equal weight under two lines
- * of prose, in front of someone who had just been refused mid-thought. What the row may hold is the state, this
- * ending's wait, and the press; the press's VARIANTS sit behind the caret, one click away, where they read as
- * what they are — the same verb with one thing changed. */
 it(`keeps the press's variants behind the caret rather than in the row`, async () => {
     twoAccounts(99, 10);
     limitChat();
@@ -543,13 +446,8 @@ it(`keeps the press's variants behind the caret rather than in the row`, async (
     expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });
 
-/* ---- the wall that does not have to be waited out at all -------------------------------------------------
- * Anthropic reopens a spent session window on demand, once a week per account, leaving the WEEKLY allowance
- * where it is. So the commonest refusal in this app — a five-hour pool at 100% beside a weekly pool a third
- * full — has an answer that costs nothing the user is not already paying for, and the strip carried a
- * countdown and nothing else. These pin the offer appearing only on the provider's own say-so, the press
- * reaching the held turn, and what a claim that changed nothing says instead.
- */
+// Anthropic can reopen a spent 5-hour session on demand, once a week, leaving the weekly pool untouched. The offer must
+// reflect the provider's own say-so, not a client-side read of the meters.
 
 it(`shows one copy of a checklist restored by failed retries in an older transcript`, async () => {
     const conversation = limitChat();
@@ -576,10 +474,6 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
     const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
-    /* IN THE ROW, not behind the caret, which is the one place this differs from every other way on. The menu
-     * holds variants of the press — the same verb somewhere else, or standing — and this is not one: it is the
-     * only control here that changes whether a press can work at all, and it exists for at most one moment a
-     * week. The variants step aside for it, so the row stays three things long. */
     const reset = button(`Reset limit now`);
     expect(reset).toEqual(expect.any(Object));
     expect(button(`Auto-continue`)).toBeUndefined();
@@ -587,32 +481,25 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
     reset?.click();
     await settle();
 
-    // One press: the grant is spent and the turn goes again, rather than a press that spends it and then asks
-    // the user to press Continue with what they just bought.
     expect(claimReset).toHaveBeenCalledTimes(1);
     expect(claimReset.mock.calls[0]?.[0]).toBe(`acc-1`);
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
 it(`offers no reset when the provider is not granting one, whatever the meters say`, async () => {
-    // Spent on both accounts and past the wall: everything a client could infer an offer from, and the answer
-    // is still no, because eligibility turns on the plan, the account's age and the week's grant — none of it
-    // visible from a reading.
     resetOffer.value = { available: false, reason: `already_used` };
     twoAccounts(100, 100);
     limitChat();
     await mountPanel();
 
     expect(button(`Reset limit now`)).toBeUndefined();
-    // And the strip is exactly its old self: the wait's control and the press, with auto-continue back inline.
     expect(button(`Send it when it's back`)).toEqual(expect.any(Object));
     expect(button(`Auto-continue`)).toEqual(expect.any(Object));
 });
 
 it(`says why nothing happened when a claim changes nothing, and does not re-run the turn`, async () => {
     resetOffer.value = { available: true };
-    // An answer ABOUT the account retires the offer, which is limitReset.ts's own rule and is modelled here
-    // because it is half of what this test is about: the sentence has to end up standing where the button was.
+    // Models limitReset.ts's own rule: an answer about the account retires the offer.
     claimReset.mockImplementation(async () => {
         resetOffer.value = undefined;
         return { result: `already_used` };
@@ -625,7 +512,6 @@ it(`says why nothing happened when a claim changes nothing, and does not re-run 
     button(`Reset limit now`)?.click();
     await settle();
 
-    // Leaving the button up beside the reason it did not work would invite the same press again.
     expect(button(`Reset limit now`)).toBeUndefined();
     expect(document.querySelector(`.chat-pane`)?.textContent).toContain(`already spent`);
     expect(resume).not.toHaveBeenCalled();
@@ -633,8 +519,7 @@ it(`says why nothing happened when a claim changes nothing, and does not re-run 
 
 it(`keeps the press when the claim never landed, since nothing was spent and nothing was proved`, async () => {
     resetOffer.value = { available: true };
-    // The offer survives a claim that got no answer (limitReset.ts keeps it), so the row has to carry both the
-    // reason and the retry: an error that takes away the only way to try again is the worse of the two.
+    // Survives an error response too: limitReset.ts keeps the offer when the claim got no real answer.
     claimReset.mockResolvedValue({ result: `error`, detail: `The provider answered 503.` });
     twoAccounts(99, 10);
     limitChat();
@@ -647,9 +532,7 @@ it(`keeps the press when the claim never landed, since nothing was spent and not
     expect(document.querySelector(`.chat-pane`)?.textContent).toContain(`503`);
 });
 
-/* THE OTHER ACCOUNT AT TWO PRICES. A turn that RAN has a session worth carrying, so the menu names both ways
- * across with what each spends: keeping the session re-reads the whole context on their allowance, a fresh one
- * pays the hand-off and loses what never reached the record. The press carries the choice to the daemon. */
+// Keeping the session re-reads the whole context on the new account's allowance; a fresh one pays only the hand-off.
 it(`offers the other account twice when the session is worth carrying, each with its price, and carries on request`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
@@ -675,7 +558,6 @@ it(`offers the other account twice when the session is worth carrying, each with
     expect(resume).toHaveBeenCalledWith({ carry: true });
 });
 
-// A turn refused at the door has nothing worth carrying: one row, the fresh one, and the press says so.
 it(`offers only the fresh session when nothing ran`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
@@ -692,9 +574,7 @@ it(`offers only the fresh session when nothing ran`, async () => {
     expect(resume).toHaveBeenCalledWith({ carry: false });
 });
 
-/* A BOOKED MOVE IS REPORTED, NOT OFFERED. The owner's policy is already taking the turn to the other account, so
- * the line names where, and the appointment's own control stays out of the row: a Stop there would disarm the
- * wrong thing. */
+// The appointment's own Stop stays out of this row; showing it here would look like it cancels the wrong thing.
 it(`reports a booked move by name and keeps the appointment's control out of the row`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();

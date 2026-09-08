@@ -2,16 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
-/* The cross-sandbox reader, exercised through its pure half: the reading it makes of one box's roster and the
- * one thing it must never do, which is turn a failed read into a zero.
- *
- * The store's own polling is not simulated here. What is worth pinning is the DERIVATION, because it is the
- * number that ends up on a switcher row and on the rail's badge after a switch, and those two disagreeing is
- * the failure this shares its predicates with useAgents to avoid. */
+// Exercises the pure derivation only, not the store's polling: a failed read must never become a zero, since this
+// number ends up on both the switcher row and the rail badge, and disagreeing between them is the failure to avoid.
 
-// Cut the edges that want a browser at module-eval, the way useAgents.test.ts does: this module reaches the
-// shared query client (for the entry it files each read under) and the sandbox client, neither of which the
-// derivation under test touches.
+// Mocks the query client and sandbox client, neither of which the derivation under test touches.
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 vi.mock("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
@@ -30,16 +24,13 @@ const box = (over: Partial<BoxFleet>): BoxFleet =>
     ({ sandbox: { id: `sbx-other`, name: `Laptop` }, state: `ready`, agents: [], held: [], readAt: 1000, ...over }) as BoxFleet;
 
 describe("what one other box is holding for its owner", () => {
-    /* THE ONE THAT MATTERS MOST. A box that has never answered has no count, and rendering that as `0` would
-     * say "nothing is waiting for you here" on the strength of a request that failed. Every surface reading
-     * this draws a dash instead, which is the same mistake `live: true` made in the deployments design. */
+    // Rendering a never-answered box as `0` would falsely claim nothing's waiting; surfaces draw a dash instead.
     it("has no answer at all for a box that has never been read", () => {
         expect(boxAttention(box({ readAt: undefined, state: `reading` }))).toBeUndefined();
         expect(boxAttention(box({ readAt: undefined, state: `unreachable` }))).toBeUndefined();
     });
 
-    // ...and a box that HAS answered and is now unreachable keeps its last count rather than falling back to
-    // unknown: it was true when it was read, and forgetting it is not more honest than reporting it stale.
+    // A box that has answered and gone quiet keeps its last count rather than falling back to unknown.
     it("keeps the last real count for a box that has since gone quiet", () => {
         const blocked = agent({ attention: { ...none, question: true } });
         expect(boxAttention(box({ state: `unreachable`, agents: [blocked] }))).toBe(1);
@@ -49,25 +40,22 @@ describe("what one other box is holding for its owner", () => {
         expect(boxAttention(box({ agents: [agent({ attention: { ...none, permission: true } })] }))).toBe(1);
     });
 
-    // The daemon holds the read marker (seenAt), not this browser, so "worked since you last opened it" means
-    // the same thing at a distance as it does up close.
+    // The daemon holds the read marker (seenAt), meaning the same thing at a distance as up close.
     it("counts an agent that has worked since it was last opened", () => {
         expect(boxAttention(box({ agents: [agent({ updatedAt: 500, seenAt: 100 })] }))).toBe(1);
     });
 
-    // A turn in flight is not news: the reading is "finished with something unread", so a running agent whose
-    // updatedAt ticks every second must not light up the count for as long as it runs.
+    // A running agent's ticking updatedAt must not light the count; the reading is "finished, unread."
     it("does not count a turn that is still running", () => {
         expect(boxAttention(box({ agents: [agent({ status: `running`, updatedAt: 500, seenAt: 100 })] }))).toBe(0);
     });
 
-    // One agent that is both blocked AND unread badges once, the same as the local reading.
+    // One agent that is both blocked and unread badges once, same as the local reading.
     it("counts an agent once when it is both blocked and unread", () => {
         expect(boxAttention(box({ agents: [agent({ attention: { ...none, plan: true }, updatedAt: 500, seenAt: 100 })] }))).toBe(1);
     });
 
-    // A wake held at the door needs the owner exactly as much as a parked agent does, and nothing else in this
-    // browser can learn about one in a box it is not pointed at.
+    // A held wake needs the owner as much as a parked agent does; nothing else here can see one in another box.
     it("adds the automation wakes waiting for a yes", () => {
         expect(boxAttention(box({ agents: [], held: [{ id: `hold-1` }] as never }))).toBe(1);
     });
@@ -77,10 +65,8 @@ describe("what one other box is holding for its owner", () => {
     });
 });
 
-/* READING ONE OF THOSE AGENTS FROM HERE. `useAgents.markSeen` writes the roster this browser streams and so is
- * a no-op for an agent in another box, which was fine while a distant agent could only be looked at on a card
- * and stopped being fine when a conversation could be held here and run there (Conversation.box): the chat in
- * front of the user would have gone on counting toward "needs you" for good. */
+// `useAgents.markSeen` is a no-op for an agent in another box, since it only writes the roster this browser streams;
+// that stopped being safe once a conversation could be held here and run there.
 describe("marking an agent in another box as read", () => {
     const roster = (over: Partial<AgentSummary> = {}): { agents: AgentSummary[]; rev: number } => ({
         agents: [agent({ id: `a1`, updatedAt: 500, seenAt: 100, ...over })],
@@ -99,15 +85,13 @@ describe("marking an agent in another box as read", () => {
 
         markSeenAcross(`sbx-other`, `a1`);
 
-        // The optimistic half: the next poll is up to 45 seconds out, and a count still lit that long after the
-        // user read the thing is indistinguishable from one that is stuck.
+        // The next poll is up to 45 seconds out; a count still lit that long looks indistinguishable from stuck.
         expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
         expect(sandboxJsonQuietly).toHaveBeenCalledWith(`sbx-other`, `/agents/a1/seen`, { method: `POST` });
         release();
     });
 
-    // A box this store has never read has no copy to stamp, and writing to it would be a claim about a roster
-    // nothing here has seen.
+    // A box never read has no copy to stamp; writing to it would claim a roster nothing here has seen.
     it("says nothing to a box it has never read", () => {
         sandboxJsonQuietly.mockClear();
         markSeenAcross(`sbx-unknown`, `a1`);

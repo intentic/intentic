@@ -13,8 +13,9 @@ import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { fireAutomation, runHeldWake } from "./scheduler.js";
 
-// An invalid cron can only come from a hand-edited manifest (upsert rejects it), surface "no next run"
-// rather than failing the whole list. Event automations have no next run; they fire on their webhook.
+// An invalid cron can only come from a hand-edited manifest (upsert rejects it); surfaced as "no next run" rather than
+// failing the whole list.
+// Event automations have no next run; they fire on their webhook.
 const nextRunOf = (automation: AutomationRecord): number | undefined => {
     if (!automation.enabled || automation.trigger.kind !== "schedule") {
         return undefined;
@@ -26,9 +27,9 @@ const nextRunOf = (automation: AutomationRecord): number | undefined => {
     }
 };
 
-/* WHICH DOOR AN AUTOMATION OPENS, if any: the kind its credential is filed under in the door store
- * (auth/door-tokens.ts). An event trigger is a webhook; a bug intake takes a key from clients with no origin.
- * Everything else is reached by nothing outside the sandbox and has no credential to mint, rotate or show. */
+// Which door an automation opens, if any: the kind its credential is filed under (auth/door-tokens.ts).
+// An event trigger is a webhook; a bug intake takes a key from clients with no origin; everything else has no
+// credential to mint.
 const doorOf = (automation: Automation): DoorKind | undefined => {
     if (automation.trigger.kind === "event") {
         return "automation";
@@ -36,10 +37,10 @@ const doorOf = (automation: Automation): DoorKind | undefined => {
     return automation.trigger.kind === "listener" && automation.trigger.provider === ISSUES_PROVIDER ? "intake" : undefined;
 };
 
-/* THE LISTED RECORD, with its door's credential attached for an OPERATOR and for nobody else. A viewer may read
- * the list (it is what the Automations view is), and so may a program holding a `read` control token, and
- * neither may walk away with the string that fires the door. The credential is minted here if the door has
- * none yet, so an automation declared before the store existed gets its URL the first time an operator looks. */
+// The listed record, with its door's credential attached for an operator only; a viewer or a `read` control token sees
+// the list but never the firing string.
+// Minted here if the door has none yet, so an automation declared before the store existed gets its URL the first time
+// an operator looks.
 const listed = async (services: Services, automation: AutomationRecord, operator: boolean): Promise<AutomationSummary> => {
     const nextRun = nextRunOf(automation);
     const door = doorOf(automation);
@@ -51,8 +52,8 @@ const listed = async (services: Services, automation: AutomationRecord, operator
     return door === "automation" ? { ...summary, webhookToken: token } : { ...summary, ingestKey: token };
 };
 
-// The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's
-// accepted here is exactly what will fire.
+// The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's accepted here
+// is exactly what will fire.
 export const createAutomationsRoutes = (services: Services) => {
     const i = implement(automationsContract).$context<OrpcContext>();
     return {
@@ -69,13 +70,10 @@ export const createAutomationsRoutes = (services: Services) => {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
                 }
             }
-            /* A listener trigger's provider/eventType are open strings in the schema, validated here against the
-             * SAME catalogue the composer draws from, so what the editor can offer and what this will accept
-             * cannot disagree. They used to be two hand-written lists in two packages, which is a disagreement
-             * waiting for whichever one was edited second.
-             *
-             * A source with no event types narrows to none (webchat's single kind needs no picker), so the
-             * provider is checked first and the event type only when one was named. */
+            // A listener trigger's provider/eventType are open strings in the schema, validated here against the same
+            // catalogue the composer draws from.
+            // A source with no event types narrows to none, so the provider is checked first and the event type only
+            // when one was named.
             if (input.trigger.kind === "listener") {
                 const { provider, eventType } = input.trigger;
                 const events = triggerSourceEvents(await automationCatalog(services)).get(provider);
@@ -90,22 +88,19 @@ export const createAutomationsRoutes = (services: Services) => {
             }
             const automation = input;
             await services.automations.upsert(automation);
-            /* The door's credential is minted with the door, never stored in the manifest that declares it. A
-             * re-post of the same record (the enabled toggle, an edit to the wording) finds it already minted and
-             * keeps it, which is what stops an edit from rotating a live credential out from under a shipped
-             * caller; a trigger that changed KIND drops the credential the old door held. */
+            // The door's credential is minted with the door, never stored in the manifest; a re-post of the same record
+            // keeps it, so an edit can't rotate a live credential out from under a shipped caller.
+            // A trigger that changed kind drops the credential the old door held.
             const door = doorOf(automation);
             await Promise.all(
                 (["automation", "intake"] as const).map((kind) =>
                     kind === door ? services.doorTokens.ensure(kind, automation.id) : services.doorTokens.remove(kind, automation.id),
                 ),
             );
-            /* A FRONT DESK PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
-             * the card this wake names may not exist yet, and turnPersona answers a named-but-missing card by
-             * denying everything, which would make a freshly installed public chat one that cannot even read.
-             * Written here rather than by the surface that installed it, so a Front Desk arriving through any
-             * route, the composer, a hand-edited manifest, an extension, lands with its bound present and
-             * visible on the Personas page. Awaited: the wake it bounds can fire the moment this returns. */
+            // A Front Desk pinned to the Front Desk persona brings that card into being: turnPersona denies everything
+            // to a named-but-missing card, which would leave a fresh public chat unable to read.
+            // Written here so a Front Desk arriving through any route lands with its persona already present; awaited
+            // since the wake it bounds can fire the moment this returns.
             if (automation.actsAs === FRONT_DESK_PERSONA) {
                 await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
                     services.logger.warn(
@@ -114,8 +109,7 @@ export const createAutomationsRoutes = (services: Services) => {
                     ),
                 );
             }
-            // The first enabled listener automation is what materializes its provider's gateway process (and the
-            // last one's removal below stops it), detached, the gateway's own poll handles the rest.
+            // The first enabled listener automation materializes its gateway process; the last one's removal stops it.
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
@@ -147,8 +141,7 @@ export const createAutomationsRoutes = (services: Services) => {
             }
             return { token: await services.doorTokens.rotate(door, automation.id) };
         }),
-        // Run now, see the contract for why this fires the real path, runs the guard, skips only the approval
-        // gate, and fires even when the automation is switched off.
+        // Run now: fires the real path and runs the guard, skips only approval, and works even when switched off.
         run: i.run.handler(async ({ input }) => {
             const automation = await services.automations.get(input.id);
             if (automation === undefined) {
@@ -165,9 +158,9 @@ export const createAutomationsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         pendingList: i.pendingList.handler(async () => ({ approvals: await services.heldWakes.list() })),
-        // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"`, its guard ran when the
-        // wake was held and the owner has now approved it), then drop the queue entry. Detached like the /fire
-        // webhook, the turn outlives this request.
+        // Approve a held wake: run it now with its snapshotted payload (the guard already ran when it was held); then
+        // drop the queue entry.
+        // Detached like the /fire webhook: the turn outlives this request.
         approve: i.approve.handler(async ({ input }) => {
             const pending = await services.heldWakes.get(input.id);
             if (pending === undefined) {
@@ -178,8 +171,8 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
-            // Everything the hold snapshotted, payload, provenance, thread, rides runHeldWake, the same
-            // release the scheduler's countdown scan uses, so the two ways out of the queue cannot drift.
+            // Everything the hold snapshotted rides runHeldWake, the same release the scheduler's countdown scan uses.
+            // So the two paths out of the queue cannot drift.
             void runHeldWake(services, automation, pending, streamAgent).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"),
             );

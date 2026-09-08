@@ -18,12 +18,10 @@ import {
     webView2Version,
 } from "./parse.js";
 
-/* These are the only assertions in this package that can be made without a Windows machine, which is exactly
- * why every decision the tiers make was pushed into a pure function to begin with. What is left unasserted here
- * is real IO: an installer running, a window mapping, and no unit test was ever going to reach it. */
+// Pins the pure parsing/decision functions, the only assertions here that don't need a Windows machine; the IO
+// (install, window mapping) isn't tested.
 
 test("ConvertTo-Json's three shapes all read as a list", () => {
-    // The footgun that fails on the machine with ONE match and passes on the developer's with two.
     expect(asList(``)).toEqual([]);
     expect(asList(`   \n `)).toEqual([]);
     expect(asList(`{"DisplayName":"Intentic"}`)).toEqual([{ DisplayName: `Intentic` }]);
@@ -63,9 +61,6 @@ test("the installed app is found by display name, across hives", () => {
 });
 
 test("the quotes Windows stores around InstallLocation are stripped, and the ones around UninstallString are not", () => {
-    // What the real registry holds, and the install tier reads the location with readdir, which treats a
-    // leading quote as an ordinary path character and resolves the lot relative to the working directory.
-    // The uninstall string keeps its quotes: that one goes to a shell, which needs them to survive a space.
     const entries = [
         {
             DisplayName: `Intentic`,
@@ -87,8 +82,6 @@ test("an entry whose InstallLocation is only quotes is no location at all", () =
 });
 
 test("an entry with no InstallLocation is not the install: a guessed path would name the wrong cause", () => {
-    // Windows lists plenty of rows with no location. Treating one as the install turns a bundler regression
-    // into a set of "file not found" failures that point at the app instead of at the package.
     expect(installedApp([{ DisplayName: `Intentic` }], `Intentic`)).toBeUndefined();
     expect(installedApp([{ DisplayName: `Intentic`, InstallLocation: `` }], `Intentic`)).toBeUndefined();
 });
@@ -106,19 +99,14 @@ test("the container OS is read as the daemon spells it", () => {
 });
 
 test("the container name follows the slug rule every later flow addresses", () => {
-    // recreate, cleanup and the launcher's docker reads all key off this name; the Linux setup tier asserts
-    // the identical derivation.
     expect(sandboxSlug(`winsmoke.e2e.test`)).toBe(`winsmoke`);
     expect(sandboxContainerName(`winsmoke.e2e.test`)).toBe(`intentic-sandbox-winsmoke`);
     expect(sandboxContainerName(`work`)).toBe(`intentic-sandbox-work`);
 });
 
 test("a published host port is read off docker port, and its absence is not a port", () => {
-    /* The distinction this whole probe exists for: a container that publishes the loopback listener and one
-     * that does not both answer `docker port` with exit 0, and the second says nothing at all. Reading that
-     * silence as "no port" is what lets tier 3 tell its own sandbox from whoever else holds the address. */
     expect(publishedPort(`127.0.0.1:28122\n`)).toBe(28122);
-    // Both families, for a publish that was not scoped to loopback: the port is the same on either line.
+    // Dual-stack publish (0.0.0.0 and [::]): same port either line.
     expect(publishedPort(`0.0.0.0:28122\n[::]:28122\n`)).toBe(28122);
     expect(publishedPort(`127.0.0.1:28122\r\n`)).toBe(28122);
     expect(publishedPort(``)).toBeUndefined();
@@ -134,11 +122,10 @@ test("container names come back one per line, whatever the shell's line endings"
 test("the seeded store is compared as the daemon reads it, not as bytes", () => {
     const store = controlTokenStore(`deadbeef`);
     expect(sameStore(store, `${store}\n`)).toBe(true);
-    // The seed is a multi-line heredoc crossing two argument parsers on Windows: CRLF is a store the daemon
-    // still accepts, and a truncated one is not.
+    // CRLF variant: what a heredoc crossing two argument parsers can do, and the daemon still accepts it.
     expect(sameStore(store, store.replace(`{"tokens"`, `{\r\n"tokens"`))).toBe(true);
     expect(sameStore(store, controlTokenStore(`cafebabe`))).toBe(false);
-    // The failure this catches: a shell that never saw the end of the heredoc writes an empty file and exits 0.
+    // Empty/truncated JSON: what a heredoc that never saw its terminator would leave behind.
     expect(sameStore(store, ``)).toBe(false);
     expect(sameStore(store, `{"tokens":[`)).toBe(false);
 });
@@ -158,14 +145,11 @@ test("the WebView2 version is the first client key that carries one", () => {
 });
 
 test("a runner nobody supervises is told apart from the logon task's", () => {
-    // The doctor runs INSIDE the listener, so a task that is not `Running` did not start this process — which
-    // makes "no such task" and "a task sitting at Ready" the same answer, and the answer that matters: this
-    // runner is a console window somebody opened, and it is gone at the next reboot.
+    // No task and a task at Ready are the same answer: this process wasn't started by it.
     expect(runnerSupervision([]).kind).toBe(`hand-started`);
     expect(runnerSupervision([{ State: `Ready`, Repetition: `PT3M` }]).kind).toBe(`hand-started`);
 
-    // A machine provisioned before the watchdog existed: the task is what is running, but a crash still needs a
-    // person, so it must not read as fully unattended.
+    // Provisioned before the watchdog existed: running, but a crash still needs a person.
     expect(runnerSupervision([{ State: `Running` }]).kind).toBe(`no-watchdog`);
     expect(runnerSupervision([{ State: `Running`, Repetition: `` }]).kind).toBe(`no-watchdog`);
     expect(runnerSupervision([{ State: `Running`, Repetition: `  ` }]).kind).toBe(`no-watchdog`);
@@ -174,30 +158,25 @@ test("a runner nobody supervises is told apart from the logon task's", () => {
     expect(runnerSupervision([{ State: `running`, Repetition: `PT3M` }])).toEqual({ kind: `supervised`, repetition: `PT3M` });
 });
 
-/* THE READ-BACK THAT WOULD HAVE CAUGHT A SHIPPED REGRESSION. Tier 2 hands connect.ps1 a grant and an edge and
- * every other assertion it makes passes on a container that was given neither: the box runs, and its daemon
- * answers /health on its own port. Only the environment on the container says whether the setup carried them
- * in — which is why an empty value must read as missing, since that is precisely what a dropped value leaves
- * behind and what the daemon itself treats as "dial no tunnel". */
 test("a container's environment answers which names arrived, and an empty value never counts as one", () => {
     const inspected = `PATH=/usr/bin\nSANDBOX_GRANT=ig1.abc\nINGRESS_URL=https://ingress.e2e.test\n`;
     expect(missingEnvNames(inspected, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([]);
 
-    // The shape of the bug: the names are absent entirely, which is what ic passing them nowhere looks like.
+    // Names absent entirely: what passing them nowhere upstream looks like.
     expect(missingEnvNames(`PATH=/usr/bin\nCONNECT_TOKEN=tok\n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
         `SANDBOX_GRANT`,
         `INGRESS_URL`,
     ]);
 
-    // Set-but-empty is the same fact wearing a name, and reporting it as present would report the bug fixed.
+    // Set-but-empty must count as missing, or the bug would read as fixed.
     expect(missingEnvNames(`SANDBOX_GRANT=\nINGRESS_URL=   \n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
         `SANDBOX_GRANT`,
         `INGRESS_URL`,
     ]);
 
-    // A value with an `=` in it is one value: base64 and signed grants both end in padding.
+    // A value containing `=` is still one value (base64/signed grants end in padding).
     expect(missingEnvNames(`SANDBOX_GRANT=ig1.YWJj==\n`, [`SANDBOX_GRANT`])).toEqual([]);
-    // Docker's own line endings are Docker's business, and an empty dump names everything asked for.
+    // CRLF passes through; an empty dump names everything asked for as missing.
     expect(missingEnvNames(`SANDBOX_GRANT=ig1.abc\r\n`, [`SANDBOX_GRANT`])).toEqual([]);
     expect(missingEnvNames(``, [`SANDBOX_GRANT`])).toEqual([`SANDBOX_GRANT`]);
 });
@@ -208,8 +187,7 @@ test("a repetition interval is reported in the units a person reads", () => {
     expect(humanDuration(`PT1H`)).toBe(`1 hour`);
     expect(humanDuration(`PT1H30M`)).toBe(`1 hour 30 minutes`);
     expect(humanDuration(`PT30S`)).toBe(`30 seconds`);
-    // Anything else is passed through rather than guessed at: a wrong number here would be a confident lie
-    // about how long this machine takes to heal itself.
+    // Unrecognized shapes pass through rather than being guessed at.
     expect(humanDuration(`P99999999DT23H59M59S`)).toBe(`P99999999DT23H59M59S`);
     expect(humanDuration(`  PT5M  `)).toBe(`5 minutes`);
     expect(humanDuration(``)).toBe(``);

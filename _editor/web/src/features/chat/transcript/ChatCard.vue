@@ -1,32 +1,12 @@
-<!-- ONE SHELL FOR EVERY CARD THAT ASKS THE USER SOMETHING: the surface, the header, and the divided row of
-     answers under it. Eight cards use it — a plan, a question, a permission prompt, the browser and terminal
-     help asks, and the service, payment and capability offers.
-
-     IT EXISTS BECAUSE THEY HAD DRIFTED. Each one was written out by hand in ChatMessageView, four lines of
-     identical Tailwind apiece, and identical-by-copy is a thing that stops being true: the question card ended
-     up with a wrapping prose header at the body tier and no divider, the other seven with a truncated header a
-     size up and a rule beneath it, and the permission card carried a comment saying it followed the question
-     card's tier while its markup did the opposite. Three ways for one card, so a user answering two of them in
-     one turn was reading two different components.
-
-     THE QUESTION CARD'S CONVENTIONS ARE THE ONES KEPT, because they are the ones that were reasoned about
-     rather than inherited: no divider under the header (the icon and the tier already separate it, and a rule
-     under a two-line sentence reads as a banner), and the title at the BODY tier when it is a sentence. What
-     is left of the old split is the `prose` prop below, which is a real difference between these cards rather
-     than an accident of who wrote them.
-
-     WHAT IT DOES NOT OWN, BUT NO LONGER LEAVES TO EACH CALLER: the body's spacing. Every card's body is
-     different — markdown, a column of options, a program, a price — so the shell still does not wrap it, but
-     the padding is one class (`chat-card-body` in chat.css, which explains the three numbers) rather than the
-     `px-3.5 py-3` each card used to spell out for itself. That copy is exactly how the band under the header
-     ended up wider on some cards than others. Rows of their own — the answers strip here, a running service's
-     status line, a receipt — take `chat-card-row`, which carries its own band for the same reason. -->
+<!--
+    Shared shell (surface, header, divided answer row) for every card that asks the user something — plan, question, permission, browser/terminal
+    help, service/payment/capability offers. No divider under the header; the title renders at the body tier when it is a sentence (`prose` prop).
+    Body padding is `chat-card-body` or `chat-card-row` in chat.css; the shell does not otherwise lay out the body.
+-->
 <script lang="ts">
-/* HOW A SETTLED CARD SAYS SO, and the only two shapes it may take. Every one of the eight ends either in
- * something happening (`done`, a check, the success colour) or in nothing happening (`gone`, a cross, muted) —
- * approved/answered/allowed/helped/connected against dismissed/denied/skipped/stopped/not-answered. Passing
- * the pair rather than markup is what keeps the chip one chip: it used to be a chain of four `v-if` spans per
- * card, restating the same two classes eight times over, which is exactly how one of them drifts. */
+// Shared shell for every card that asks the user something: header, slot, and a divided row of answers below. No
+// divider under the header; a prose title sits at the body tier. Body and row padding come from
+// `chat-card-body`/`chat-card-row` in chat.css, not from each card.
 export interface CardStatus {
     readonly label: string;
     readonly tone: "done" | "gone";
@@ -44,17 +24,12 @@ const {
     prose = false,
 } = defineProps<{
     icon: IconName;
-    // The icon's tone. Not an enum: these are one Tailwind class and the set is small and legible at each site
-    // (`text-link` for a plan, `text-warning` for the two help asks, primary for the rest).
+    // Icon's tone as a single Tailwind class; the set is small enough not to need an enum.
     iconClass?: string;
     title: string;
     // Absent while the card is still live; present freezes it.
     status?: CardStatus;
-    /* Whether the title is a SENTENCE rather than a name. A question ("Which library should we use?") and a
-     * permission prompt ("This command would read credential material") are prose: they wrap in full, and they
-     * sit at the body tier, because prose held a size above the thing it is asking about reads as a banner
-     * shouted at the reader rather than as a question being asked. A plan's heading and an offer's "Run X?"
-     * are names: one line, truncated, a size up. */
+    // Whether the title is a sentence (wraps, body tier) rather than a name (truncates, one size up).
     prose?: boolean;
 }>();
 </script>
@@ -63,9 +38,7 @@ const {
     <div class="chat-surface chat-card w-full overflow-hidden rounded-xl">
         <div class="chat-card-header flex gap-2 px-3.5 py-2" :class="prose ? `items-start` : `items-center`">
             <Icon :name="icon" class="text-sm" :class="[iconClass, { 'mt-0.5': prose }]" />
-            <!-- A prose title wraps in full: it is the question, and truncating a question behind a tooltip
-                 asks the reader to hover to find out what they are answering. A name truncates, with the full
-                 text on hover, because a name that does not fit is still recognisable from its head. -->
+            <!-- A prose title wraps in full; a name truncates, with the full text on hover. -->
             <span v-if="prose" class="chat-card-title min-w-0 flex-1 text-xs font-medium text-content">{{ title }}</span>
             <span v-else class="chat-card-title min-w-0 flex-1 truncate text-sm font-medium text-content" v-tooltip.left.overflow="title">{{
                 title
@@ -80,8 +53,7 @@ const {
 
         <slot />
 
-        <!-- The answers. A divided row, and only when there are any: a settled card has none, and an empty
-             bordered strip under it would read as a control that has stopped working. -->
+        <!-- Divided answers row, shown only when there are any; an empty bordered strip would look broken. -->
         <div v-if="$slots[`actions`]" class="chat-card-row flex flex-wrap items-center gap-2">
             <slot name="actions" />
         </div>

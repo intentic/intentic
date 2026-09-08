@@ -4,22 +4,13 @@ import { listAppNames } from "./fly/fly.js";
 import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedEnabled } from "./hosted.js";
 
-/* WHAT IS ACTUALLY ON FLY, said in one screen, the operator's view the Fly console cannot give.
- *
- * The console lists apps by name, and every hosted app is named `<prefix>-<sandbox id>` — warm stock included,
- * since its id is minted at build (hosted-pool.ts) and Fly never renames an app — so the org's app list says
- * nothing about which apps are anybody's. The platform's own rows do. HostedPoolMachine IS the standing stock,
- * HostedMachine IS a person's machine, so this joins Fly's list of what exists against them and names every
- * app.
- *
- * Four things an app can be, and each is worth telling apart:
- *   warm    , built ahead of demand, nobody's, safe to destroy.
- *   claiming, a hand-off in flight (seconds) or a claim that crashed (the pool's reconcile collects it).
- *   taken   , a person's sandbox, with the owner and whether the hour meter is currently open.
- *   orphan  , on Fly with no row behind it: a failed build or a teardown that lost its race. The daily
- *              reaper destroys these; seeing them here is how an operator learns it has work to do.
- * A row whose app is gone from Fly is listed too (`missing`), the mirror image, and the one case where the
- * platform believes in a machine that is not there. */
+// What is actually on Fly, in one screen: joins Fly's app list against the platform's own rows (HostedPoolMachine is
+// stock, HostedMachine is a person's machine) to name every app. Four roles:
+// - warm: built ahead of demand, nobody's, safe to destroy
+// - claiming: a hand-off in flight, or a crashed claim the pool's reconcile collects
+// - taken: a person's sandbox
+// - orphan: on Fly with no row behind it; the daily reaper destroys these
+// A row whose app is gone from Fly is `missing`, the mirror case.
 
 export type HostedFleetRole = `warm` | `claiming` | `taken` | `orphan`;
 
@@ -27,8 +18,7 @@ export interface HostedFleetEntry {
     readonly appName: string;
     readonly role: HostedFleetRole;
     readonly region: string;
-    // Present for `taken` only, who the machine belongs to, and whether it is awake right now (an open
-    // `wokeAt` is the hour meter's running stretch, which is the closest thing to "somebody is using it").
+    // Present for `taken` only: owner, and whether awake (an open `wokeAt` is the meter's running stretch).
     readonly owner?: string;
     readonly sandboxId?: string;
     readonly awake?: boolean;
@@ -36,8 +26,7 @@ export interface HostedFleetEntry {
     readonly missing: boolean;
 }
 
-// The whole fleet, one entry per app the platform knows or Fly reports. Sorted so the two things an operator
-// looks for, what is standing by, and what needs cleaning up, do not need hunting for.
+// Sort order: taken and claiming first, then warm stock, then orphans.
 const ORDER: Record<HostedFleetRole, number> = { taken: 0, claiming: 1, warm: 2, orphan: 3 };
 
 export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise<HostedFleetEntry[]> => {
@@ -59,8 +48,8 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
             missing: !onFly.has(row.appName),
         })),
         ...pooled.map((row) => ({
-            // `claimed` is the instant between a claim winning the row and the hand-off committing, never
-            // stock, and never the platform's to destroy while it lasts.
+            // The instant between winning the row and the hand-off committing; never stock, never ours to destroy
+            // meanwhile.
             appName: row.appName,
             role: (row.state === `claimed` ? `claiming` : `warm`) as HostedFleetRole,
             region: row.region,
@@ -74,15 +63,8 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
     return entries.toSorted((left, right) => ORDER[left.role] - ORDER[right.role] || left.appName.localeCompare(right.appName));
 };
 
-// The same answer as text. `awake`/`asleep` is the hour meter's stretch, not a probe, the platform performs
-// every wake but never witnesses the machine putting itself to sleep, so a machine that idled out reads
-// `awake` until the usage sweep closes its stretch (hosted-usage.ts). Good enough for a glance, and the one
-// number that is exact is the tally.
-//
-// `capacity` puts the fleet against its ceiling on the same line, because "12 taken · 2 warm" answers how many
-// there are and never how many more there may be — which is the number an operator is actually looking for
-// when they run this at all (hosted-capacity.ts). Omitted where no ceiling is configured: a made-up limit
-// under a real count would be worse than none.
+// awake/asleep reflects the hour meter's stretch, not a live probe: an idled-out machine still reads `awake` until the
+// usage sweep closes it. `capacity` adds headroom against the ceiling, omitted when none is configured.
 export const renderHostedFleet = (entries: HostedFleetEntry[], capacity?: { used: number | undefined; cap: number; full: boolean }): string => {
     const rows = entries.map((entry) => [
         entry.role.toUpperCase(),
@@ -100,8 +82,7 @@ export const renderHostedFleet = (entries: HostedFleetEntry[], capacity?: { used
             .join(`  `)
             .trimEnd();
     const tally = (role: HostedFleetRole) => entries.filter((entry) => entry.role === role).length;
-    // Only where there is a ceiling to be against: `used` is counted for exactly that question, so with no
-    // ceiling configured there is no number here and no honest denominator to put it over.
+    // Shown only when there's a ceiling to measure against: `used` only means something there.
     const room =
         capacity === undefined || capacity.cap === 0 || capacity.used === undefined
             ? ``
@@ -114,9 +95,8 @@ export const renderHostedFleet = (entries: HostedFleetEntry[], capacity?: { used
     ].join(`\n`);
 };
 
-/* Run it: `pnpm --filter @intentic/api fleet`. A read-only script against the live platform's config and
- * database, it starts nothing, changes nothing, and is safe to point at production, which is the whole
- * reason it exists rather than a set of remembered curl commands. */
+// Run via `pnpm --filter @intentic/api fleet`: read-only against the live config and database, safe to point at
+// production.
 export const printHostedFleet = async (prisma: PrismaClient, config: Config): Promise<string> => {
     if (!hostedEnabled(config)) {
         return `The hosted lane is off, no Fly credential configured.`;

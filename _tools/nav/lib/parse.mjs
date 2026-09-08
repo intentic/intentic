@@ -1,26 +1,5 @@
-/* THE SHAPE OF ONE FILE, READ SYNTACTICALLY.
- *
- * WHY NO TYPE CHECKER. A full `ts.Program` over 78 packages needs every tsconfig to resolve and every
- * dependency to be installed, takes minutes, and dies on a tree that does not currently build — which is
- * exactly the tree you most want to measure, halfway through a refactor. `ts.createSourceFile` needs none of
- * that: it parses one file in isolation, in milliseconds, and answers every question this harness asks. The
- * one thing a checker would add is following an imported name to its definition across a re-export, and
- * `resolve.mjs` does that from the export tables instead, deterministically and without a build.
- *
- * WHAT IS MEASURED, and why each one is here rather than being a metric somebody liked the sound of:
- *
- *   declaration spans   the size of the thing an agent came to read, as against the size of the file it has
- *                       to open to reach it. The gap between those two IS the navigability problem.
- *   siblings            how many unrelated top-level declarations share the file. This is what makes a lookup
- *                       expensive even when the symbol itself is small.
- *   function length     the p95 is the number that moves when a god function is decomposed; the max is the
- *                       one that shames a codebase.
- *   cyclomatic          a proxy for how much of a function you must hold in your head at once. Counted the
- *                       standard way: one per decision point, one per short-circuit operator.
- *   nesting             depth of the deepest block. Correlates with complexity but is not the same: a flat
- *                       switch with 40 cases is complex and shallow, and reads fine.
- *   if/else-if chains   the specific shape a dispatch table replaces. Counting them is how you tell whether a
- *                       refactor actually did that or just moved the ladder somewhere else. */
+// Parses one file syntactically (`ts.createSourceFile`), not a full `ts.Program`, so it runs in milliseconds on a tree
+// that does not currently build; `resolve.mjs` follows re-exports across files instead.
 import ts from "typescript";
 import { vueScript } from "./files.mjs";
 
@@ -57,8 +36,7 @@ const DECISION_KINDS = new Set([
 
 const SHORT_CIRCUIT = new Set([ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken]);
 
-// Cyclomatic complexity of one subtree. One for the entry, one per decision point, one per short-circuit —
-// the standard count, so the numbers mean the same thing they mean everywhere else.
+// Cyclomatic complexity of one subtree: one for entry, one per decision point, one per short-circuit operator.
 export const complexityOf = (node) => {
     let score = 1;
     const walk = (current) => {
@@ -76,8 +54,8 @@ export const complexityOf = (node) => {
 
 const BLOCK_KINDS = new Set([ts.SyntaxKind.Block, ts.SyntaxKind.CaseBlock, ts.SyntaxKind.ModuleBlock]);
 
-// Depth of the deepest nested block in a subtree. Counted on blocks rather than on every node, so an object
-// literal three levels deep does not read as pyramid code.
+// Depth of the deepest nested block; counts blocks only, not every node, so a deeply nested object literal doesn't
+// inflate it.
 export const nestingOf = (node) => {
     let deepest = 0;
     const walk = (current, depth) => {
@@ -91,10 +69,8 @@ export const nestingOf = (node) => {
     return deepest;
 };
 
-/* Length of the longest `if / else if / else if …` chain in a subtree, counting branches. An `if` with a
- * plain `else` is two; a five-way ladder is five. Only chains keyed on the same subject are worth replacing
- * with a table, but distinguishing those needs types, so this counts them all and the number is read as an
- * upper bound. */
+// Length of an `if`/`else if`/… chain, a plain `else` counts as one more branch. Not type-aware, so it is an upper
+// bound on what a dispatch table could replace.
 export const longestChain = (node) => {
     let longest = 0;
     const walk = (current, insideChain) => {
@@ -148,9 +124,8 @@ const lineSpan = (source, node) => {
     return { startLine: start + 1, endLine: end + 1, lines: end - start + 1 };
 };
 
-/* Every function in a file, however it was spelled. Nested functions are reported separately from their
- * parent rather than being folded into it, so a 600-line function holding six 90-line closures reads as what
- * it is: one very long function AND six long ones. */
+// Every function in a file, however spelled; nested functions are reported separately from their parent, not folded
+// into it.
 export const functionsOf = (source) => {
     const found = [];
     const walk = (node) => {
@@ -169,8 +144,6 @@ export const functionsOf = (source) => {
     return found;
 };
 
-// A table rather than an if-ladder, which is the shape this harness exists to encourage and would be
-// embarrassing to violate in the harness itself.
 const DECLARATION_KINDS = new Map([
     [ts.SyntaxKind.FunctionDeclaration, "function"],
     [ts.SyntaxKind.ClassDeclaration, "class"],
@@ -185,9 +158,8 @@ const declarationKind = (node) => DECLARATION_KINDS.get(node.kind) ?? "";
 const hasExportModifier = (node) =>
     (ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []) : []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 
-/* Top-level declarations, which are the things an import can name. A `const` statement declaring three names
- * yields three entries sharing one span: that is honest, because reading any of them costs the whole
- * statement. */
+// Top-level declarations an import can name; a `const` statement with three names yields three entries sharing one
+// span.
 export const declarationsOf = (source) => {
     const found = [];
     for (const node of source.statements) {
@@ -214,9 +186,8 @@ export const declarationsOf = (source) => {
     return found;
 };
 
-/* The module graph edges this file contributes, and the export table `resolve.mjs` needs to follow a name to
- * the file that actually defines it. `export * from` and `export { x } from` are the two shapes that make a
- * naive "the import path is where it lives" assumption wrong. */
+// Module graph edges `resolve.mjs` follows a name through: `export * from` and `export { x } from` mean the defining
+// file isn't always the import path.
 const importedNames = (clause) => {
     const names = [];
     if (clause?.name) {
@@ -230,8 +201,8 @@ const importedNames = (clause) => {
     return names;
 };
 
-// `export { a, b as c } from "./x"` and `export { d }` in one shape: the presence of `from` is what decides
-// whether each element is a re-export edge to follow or a local name this file owns.
+// Handles `export { a, b as c } from "./x"` and local `export { d }` together; presence of `from` decides re-export vs.
+// local name.
 const collectExportClause = (node, from, reexports, localExports) => {
     if (!node.exportClause || !ts.isNamedExports(node.exportClause)) {
         return;
@@ -246,7 +217,7 @@ const collectExportClause = (node, from, reexports, localExports) => {
     }
 };
 
-// `export const a = 1, b = 2` declares two names on one statement; `export function f` declares one.
+// A `const` export statement can declare multiple names in one statement; a function or class export declares one.
 const collectExportedDeclaration = (node, localExports) => {
     if (ts.isVariableStatement(node)) {
         const named = node.declarationList.declarations.filter((declaration) => ts.isIdentifier(declaration.name));

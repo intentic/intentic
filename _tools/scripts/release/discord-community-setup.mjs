@@ -1,29 +1,13 @@
 #!/usr/bin/env node
-/* One-time setup for the community Discord: an `info` category, a member-read-only `#announcements`
- * channel, the `intentic-releases` webhook CI posts through, and a pinned channel guide.
- *
- *   DISCORD_BOT_TOKEN=… node _tools/scripts/release/discord-community-setup.mjs [guild-name-substring]
- *
- * The guild substring defaults to "intentic" and is matched case-insensitively against the guilds the bot
- * is a member of. Every step is idempotent: re-running finds what exists instead of creating a duplicate.
- *
- * Prints the webhook URL to store as GitHub secret DISCORD_RELEASE_WEBHOOK. That URL is a credential —
- * anyone holding it can post to the channel — so it is printed, never written into the repository.
- *
- * PERMISSIONS the bot's role needs, and what each one is actually for:
- *   Manage Channels   create the category and the channel, and order them
- *   Manage Webhooks   create the webhook CI posts through
- *   Manage Roles      deny @everyone Send Messages, which is what "read-only" means here
- *   Pin Messages      pin the guide — NOT Manage Messages. Discord split pinning into its own permission
- *                     (1 << 51), so a bot holding Manage Messages still gets 403 Missing Permissions on the
- *                     pin routes, which is a confusing way to learn the two came apart.
- *   Send Messages     post the guide in the first place
- * The last two steps are reported as warnings rather than failing the run: the channel, the webhook and the
- * guide all still land without them, and the release pipeline only needs the webhook.
- *
- * Invite covering all of it: permissions=2251800620117072
- * https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=2251800620117072
- */
+// One-time, idempotent setup for the community Discord: an `info` category, a read-only `#announcements` channel, the
+// `intentic-releases` webhook CI posts through, and a pinned guide. Prints the webhook URL (a credential) to store as
+// GitHub secret `DISCORD_RELEASE_WEBHOOK`, never writes it into the repo. The read-only-role and pin steps warn rather
+// than fail.
+// Manage Channels create and order the category and channel
+// Manage Webhooks create the webhook CI posts through
+// Manage Roles deny @everyone Send Messages
+// Pin Messages pin the guide (separate from Manage Messages)
+// Send Messages post the guide
 
 const API = "https://discord.com/api/v10";
 const token = process.env.DISCORD_BOT_TOKEN ?? process.env.DISCORD_BOT_TOKEN_DISCORD ?? "";
@@ -34,7 +18,7 @@ if (!token) {
     process.exit(1);
 }
 
-/* Permission bits used below. Discord serialises these as decimal strings of a 64-bit field. */
+// Discord permission bits; serialised as decimal strings of a 64-bit field.
 const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const READ_MESSAGE_HISTORY = 1n << 16n;
@@ -47,7 +31,7 @@ const CHANNEL_TYPE = { text: 0, category: 4 };
 
 const warnings = [];
 
-/** One Discord REST call. Throws with the API's own error text so a 403 says which permission is missing. */
+/** One Discord REST call; throws with the API's own error text so a 403 names the missing permission. */
 async function discord(method, path, body) {
     const init = { method, headers: { authorization: `Bot ${token}` } };
     if (body !== undefined) {
@@ -100,11 +84,8 @@ const announcements = await ensureChannel("announcements", CHANNEL_TYPE.text, {
     topic: "Release notes and product news for intentic. Read-only — questions go to #general, bugs to GitHub Issues.",
 });
 
-/* `position: 0` on create is not enough, and neither is patching this one category to 0: a server that never
- * reordered anything has EVERY category at 0, and Discord breaks that tie by age, so the newest sinks to the
- * bottom no matter what number it carries. Renumbering only works if every sibling is given a distinct
- * position, so send the whole list — `info` first, the rest in the order they already appear. Announcements
- * under the ops categories is a channel nobody scrolls to. */
+// `position: 0` alone doesn't work: Discord breaks a tie among same-position categories by age, so a fresh category
+// still sinks last. Reorders by sending every sibling's position, `info` first, in place.
 const categories = channels.filter((channel) => channel.type === CHANNEL_TYPE.category);
 const ordered = [
     category,
@@ -121,12 +102,8 @@ if (ordered.some((channel, index) => channel.position !== index)) {
     console.log(`    ordered  info above ${ordered.length - 1} other categor${ordered.length === 2 ? "y" : "ies"}`);
 }
 
-/* Members read, react and follow along; only the webhook and the bot write. Needs Manage Roles.
- *
- * The bot's own role gets an overwrite FIRST, and it is not optional: an @everyone deny applies to every
- * member, the bot included, so denying Send Messages here without re-allowing it for the bot locks the bot
- * out of the channel it just made — and the guide below would 403 on a fresh server. Webhook posts are
- * unaffected either way, which is why the release pipeline keeps working regardless. */
+// Bot's own role gets an allow overwrite first: an @everyone deny for Send Messages applies to the bot too, and
+// skipping this would lock the bot (and the guide post below) out of the channel it just made.
 const botRole = (await discord("GET", `/guilds/${guild.id}/roles`)).find((role) => role.tags?.bot_id === bot.id);
 try {
     if (botRole) {
@@ -150,7 +127,7 @@ try {
     );
 }
 
-/* The webhook CI posts through. A webhook needs no bot presence at post time and carries no other rights. */
+// Webhook CI posts through; needs no bot presence at post time and carries no other rights.
 const webhooks = await discord("GET", `/channels/${announcements.id}/webhooks`);
 let webhook = webhooks.find((candidate) => candidate.name === "intentic-releases" && candidate.token);
 if (webhook) {
@@ -161,7 +138,7 @@ if (webhook) {
 }
 const webhookUrl = `https://discord.com/api/webhooks/${webhook.id}/${webhook.token}`;
 
-/* A pinned guide so someone arriving at an empty channel knows what it carries and where to ask instead. */
+// Pinned guide for an empty channel: what it carries, and where to ask instead.
 const guide = [
     "**What lands here**",
     "",
@@ -176,15 +153,8 @@ const guide = [
 const general = channels.find((channel) => channel.name === "general" && channel.type === CHANNEL_TYPE.text);
 const content = general ? guide.replace("<#GENERAL_ID>", `<#${general.id}>`) : guide.replace(" → <#GENERAL_ID>", "");
 
-/* Re-run safety: ask whether the guide is already POSTED, not whether anything is pinned. Pinning needs a
- * permission the bot may not have, and gating on the pin list would post a second copy on every re-run for
- * exactly as long as that permission is missing. The bot's own messages are the honest marker — CI posts
- * through the webhook, so a message authored by the bot user itself is this guide and nothing else.
- *
- * `type === 0` is load-bearing. Pinning emits a "<bot> pinned a message to this channel" SYSTEM message
- * (type 6) attributed to the same bot user, so the run right after a successful pin would find that instead
- * of the guide and try to pin it — `400 Cannot execute action on a system message`. Only DEFAULT messages
- * are things this script wrote. */
+// Checks for an already-posted guide by author, not by what's pinned (pin permission may be missing). `type === 0`
+// excludes the system message pinning emits under the same bot, which the next run would mistake for the guide.
 const recent = await discord("GET", `/channels/${announcements.id}/messages?limit=50`);
 let guideMessage = recent.find((message) => message.type === 0 && message.author?.id === bot.id && !message.webhook_id);
 if (guideMessage) {

@@ -32,9 +32,7 @@ export interface RecallOptions {
     // Override ~/.claude (tests point this at a fixture dir).
     readonly claudeDir?: string;
     readonly dbPath?: string;
-    // Override the daemon's history volume, where the fleet registry that names these sessions' conversations
-    // lives (fleet/conversations.ts). Absent ⇒ the sandbox's own; absent FILE ⇒ no conversations, which is
-    // every run of iq outside a sandbox.
+    // Override the daemon's history volume holding the fleet registry; absent means no sandbox, no conversations.
     readonly historyRoot?: string;
 }
 
@@ -43,22 +41,19 @@ export interface SessionSummary {
     readonly title: string | undefined;
     readonly lastTs: number;
     readonly promptCount: number;
-    /* WHICH CONVERSATION RAN THIS SESSION, when a fleet registry says so. Present for a session an agent turn
-     * produced (the ordinary case inside a sandbox), absent for one a person ran in a terminal and for every
-     * run of iq outside a sandbox. It is what turns a column of uuids into something a reader can act on:
-     * the id here is the handle `agents show` takes. */
+    // Set when a fleet registry names this session's conversation; absent for a terminal or non-sandbox run.
     readonly conversation?: Conversation;
 }
 
 export interface Recall {
-    // `budgetMs` caps how long indexing may take; what it does not reach keeps its byte offset for next time.
-    // Omitted ⇒ index everything, which is what a run started for its own sake wants.
+    // `budgetMs` caps how long indexing may take; unreached input keeps its byte offset for next time. Omitted means
+    // index everything.
     ingest(options?: { budgetMs?: number }): Promise<IngestStats>;
     filesForTopic(query: string, options?: TopicOptions): TopicFile[];
     match(prompt: string, options?: MatchOptions): SessionMatch[];
     grab(query: string, options?: GrabOptions): TurnExcerpt[];
     forkPoint(sessionId: string, prompt?: string): ForkPoint | undefined;
-    // `at` is a turn uuid or a turn ordinal (digits); omitted = fork the whole session.
+    // `at` is a turn uuid or a turn ordinal (digits); omitted forks the whole session.
     fork(sessionId: string, options?: { at?: string; dryRun?: boolean }): Promise<ForkResult>;
     sessions(options?: { query?: string; days?: number; limit?: number }): SessionSummary[];
     transcriptPathOf(sessionId: string): string;
@@ -69,13 +64,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const createRecall = (options: RecallOptions): Recall => {
     const projectsDir = projectsDirOf(options.root, options.claudeDir);
-    // Mirrors iq-engine's IQ_DIR ("<root>/.intentic/local/cache/iq") without dragging its heavy dependency tree in for
-    // one constant, recall.db sits next to index.db, inside the dir iq already excludes from search.
+    // Mirrors iq-engine's IQ_DIR, no dependency import; recall.db sits beside index.db in a dir iq excludes.
     const dbPath = options.dbPath ?? join(options.root, `${STATE_DIR}/local/cache/iq/recall.db`);
     let opened: RecallDb | undefined;
     const db = (): RecallDb => (opened ??= openRecallDb(dbPath));
-    // Read once per Recall, on the one path that needs it: a listing joins every row against it, and the
-    // registry is a single file whose absence is the answer for every run outside a sandbox.
+    // Read once per Recall, lazily, only by the listing path that joins rows against it.
     let fleet: Map<string, Conversation> | undefined;
     const conversations = (): Map<string, Conversation> => (fleet ??= conversationsBySession(options.historyRoot));
     return {
@@ -131,8 +124,8 @@ export const createRecall = (options: RecallOptions): Recall => {
                         sinceTs,
                     )
                     .filter((row) => filter === undefined || filter.has(Number(row["id"])))
-                    // Sliced after the FTS filter, not in SQL: the filter is applied in JS, so a SQL LIMIT would
-                    // cut the candidates rather than the answers.
+                    // Sliced after the FTS filter: the filter runs in JS, so a SQL LIMIT would cut candidates, not
+                    // answers.
                     .slice(0, listOptions.limit ?? Number.POSITIVE_INFINITY)
                     .map((row): SessionSummary => {
                         const sessionId = row["sid"] as string;

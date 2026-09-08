@@ -10,16 +10,9 @@ export { SNAPSHOT_SCRIPT } from "./snapshot.js";
 export { renderPage, refIndex, toPageState, type RawSnapshot, type PageElement, type PageState } from "./page.js";
 export { BrowserError, type Browser } from "./types.js";
 
-/* The browser, as one object a caller holds.
- *
- * It keeps at most one CDP session open, to the tab it is working on, and re-attaches when asked for a
- * different one. Holding a session per tab would be tidier in a diagram and worse in practice: the sessions
- * outlive the tabs, the user closes things while an agent is mid-task, and the failure arrives later as a socket
- * error nobody can place. One session, re-established on demand, fails at the moment of the request instead.
- *
- * Actions go through the PAGE (a click is `element.click()`, typing is a real focus plus an input event) rather
- * than through synthesised mouse coordinates. Both reach the same handlers, but only one of them survives the
- * page scrolling between the snapshot and the click. */
+// Browser as one object a caller holds; keeps at most one CDP session, re-attached on demand so failures surface
+// at the request, not later as a stray socket error. Actions go through the page (real click/focus+input events),
+// not synthesized mouse coordinates, since only that survives scrolling between snapshot and click.
 
 const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> => {
     const result = await session.send<{ result?: { value?: T }; exceptionDetails?: { text?: string } }>("Runtime.evaluate", {
@@ -33,8 +26,7 @@ const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> 
     return result.result?.value as T;
 };
 
-// Acting on a ref is always "find it again, then do the thing", so the not-found case is written once, here,
-// with the sentence that tells the caller what to do about it.
+// Acting on a ref is always "find it again, then do the thing"; the not-found case is written once, here.
 const withElement = (ref: string, body: string): string => {
     const index = refIndex(ref);
     return `(function () {
@@ -73,8 +65,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
         open: async (url) => {
             await ensureBrowser(port, url);
             if (url !== undefined) {
-                // A fresh tab rather than navigating whatever happened to be in front: the agent's page and the
-                // user's page should not be the same page, and "open" reads as "open", not "replace".
+                // Fresh tab rather than navigating what's in front: the agent's page and the user's page must differ.
                 const target = await newTab(port, url);
                 targetId = target.id;
                 session?.close();
@@ -109,8 +100,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
             );
         },
 
-        // Key events go through CDP rather than the page, because a page cannot be made to believe a synthetic
-        // KeyboardEvent it did not receive from the browser. Enter in particular.
+        // Key events go through CDP; a page won't believe a synthetic KeyboardEvent it didn't get from the browser.
         press: async (combo) => {
             const live = await connect(targetId);
             const key = combo.split("+").pop() ?? combo;

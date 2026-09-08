@@ -1,19 +1,6 @@
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE DESKTOP ICON LADDER: every icon the Tauri bundle hands an OS, drawn from the same lotus as the site.
- *
- * Run: `node scripts/icons.mjs`  (from _editor/desktop-app). Its output is committed.
- *
- * ONE DRAWING, NOT A SECOND LOGO. The lotus here is not redrawn: the petals, the crop and the ember come
- * from `_site/site/scripts/lotus.mjs`, which reads them out of the ornament kit the bar, every bullet and
- * every frame finial render from. A desktop icon that is a hand-copy of the logo is a logo that will one
- * day be two logos — which is what the old letterform bitmaps in src-tauri/icons/ were.
- *
- * The petal-only crop and the ember fill are therefore not decided here: they are the same object the
- * favicon ladder and the browser extension's PNGs are drawn from, and lotus.mjs carries the reasoning.
- * What is left in this file is the OS's own answer: which containers a desktop bundle needs, at which sizes.
- *
- * Output lands in src-tauri/icons/, the directory tauri.conf.json already names.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+// Builds every icon container the Tauri bundle needs, from the shared lotus drawing in
+// _site/site/scripts/lotus.mjs — not a redrawn logo. Run `node scripts/icons.mjs` from _editor/desktop-app; output
+// goes to src-tauri/icons/ and is committed.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

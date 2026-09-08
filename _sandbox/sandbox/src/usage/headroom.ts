@@ -2,47 +2,21 @@ import type { AccountUsage, AgentProvider, UsageWindow } from "@intentic/sandbox
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
 
-/* KEEPING EVERY ACCOUNT'S HEADROOM CURRENT, one service for every provider, and the one place a reading is
- * asked for, coalesced, backed off and announced.
- *
- * This used to be two copies of the same loop: a Claude refresher with a freshness bound, a stay-away map and
- * a queued forced sweep, and a translator client with an attempt map, a concurrency bound and a stale-check
- * fired from its own account list, each on its own five-minute timer that ran whether or not anything had
- * changed or anyone was looking. Between them they read thirty-odd upstream endpoints every five minutes to
- * refresh numbers nobody was reading, and still had no reading at the moments a number actually decides
- * something: the routed rings were up to five minutes old right after the turn that changed them, and a
- * refusal, the strongest live signal a plan gives, recorded itself and re-measured nothing.
- *
- * So the readings are taken WHEN SOMETHING HAPPENED rather than on a clock: a turn settled, a plan refused, a
- * screen opened, a person pressed re-measure, a proxy came up. Every trigger comes through `refresh` with a
- * scope (which provider, which account) and a freshness it will accept, so a screen that opens twice in a
- * minute costs one round-trip and a refusal re-reads the account that refused and nothing else. One long idle
- * floor remains (`start`), for the sandbox where nothing has happened for a quarter of an hour: an unattended
- * turn about to pick an account still wants a reading younger than the morning.
- *
- * WHAT A SOURCE IS. A provider contributes targets, one per account it can read, each knowing its own store
- * key and how to take its reading (usage/claude-usage.ts reads Anthropic's OAuth usage endpoint on the
- * account's own token; agent/translator.ts reads ChatGPT's, Google's and Kimi's through CLIProxyAPI's
- * credential-scoped call). Nothing here knows a provider's payload; it knows when to ask and what to do with
- * an answer, which is the half the two copies had duplicated.
- *
- * ANNOUNCED ON WRITE. Every reading that lands, from a sweep, a turn's own stream or a provider's push, goes
- * out to `onChange`, which the /events stream forwards to every connected browser (system.routes.ts). That is
- * what lets the rings stop refetching on mount and still agree across windows. */
+// One headroom service for every provider: readings are triggered by what happened (a turn settling, a refusal, a
+// screen opening, a re-measure press) via `refresh(scope, maxAge)`, not on a timer, with an idle floor (`start`) for a
+// quiet sandbox. A source contributes targets (account + reader); every landed reading is announced via `onChange`.
 
 export interface HeadroomReading {
     readonly windows: readonly UsageWindow[];
-    // The endpoint's own stay-away on a 429, in ms. The one failure that must not be retried on the next
-    // trigger: inside this window every read is a guaranteed 429 that keeps the window alive.
+    // Endpoint's own stay-away on a 429, in ms; must not be retried on the next trigger while it holds.
     readonly retryAfterMs?: number;
 }
 
 export interface HeadroomTarget {
-    // The account's key in the shared store: a Claude account id, or `${provider}:${authFile}` for a routed one.
+    // Account's key in the shared store: a Claude account id, or `${provider}:${authFile}` for a routed one.
     readonly key: string;
     readonly provider: AgentProvider;
-    // Take the reading. Never throws for an ordinary failure; an empty window list is "could not read" and
-    // leaves the last good snapshot standing.
+    // Never throws for an ordinary failure; an empty window list means "could not read", keeps the last snapshot.
     readonly read: () => Promise<HeadroomReading>;
 }
 
@@ -51,50 +25,43 @@ export interface HeadroomSource {
 }
 
 export interface RefreshScope {
-    // Only these providers' targets. Absent ⇒ every provider.
+    // Only these providers' targets; absent means every provider.
     readonly providers?: readonly AgentProvider[];
-    // Only this account (its store key). Absent ⇒ every account in scope.
+    // Only this account's target; absent means every account in scope.
     readonly account?: string;
 }
 
 export interface RefreshOptions {
     readonly scope?: RefreshScope;
-    /* How old a reading may be before it is worth another round-trip. Pools move with spend, not with the
-     * clock, so a reading from the last minute is what the provider would answer again; the default is right
-     * for a screen opening. A turn that just settled or a plan that just refused wants 0: something DID happen. */
+    // How old a reading may be before another round-trip is worth it; 0 means something just happened.
     readonly maxAgeMs?: number;
-    // Resolve after this long even if the reads have not landed: a page waiting on a list must get the rows
-    // it has, and the readings it started still land for the next read. Absent ⇒ wait for the sweep.
+    // Resolve after this long even without a landed read; a waiting page gets what it has, else the sweep.
     readonly withinMs?: number;
 }
 
 export interface HeadroomService {
     readonly refresh: (options?: RefreshOptions) => Promise<void>;
-    // A reading obtained elsewhere (a turn's own stream, a provider's push), recorded and announced exactly as
-    // a swept one is. The provider rides along because the announcement carries it: the store's key alone (a
-    // bare Claude id, a `${provider}:${file}` for a routed one) does not say which provider's row it belongs to,
-    // and the browser files every reading under the provider whose row draws it.
+    // Records a reading obtained elsewhere (a turn's stream, a provider's push) exactly as a swept one; provider rides
+    // along since the store key alone doesn't say whose row it is.
     readonly record: (provider: AgentProvider, account: string, usage: AccountUsage) => Promise<void>;
     readonly clear: (provider: AgentProvider, account: string) => Promise<void>;
     readonly read: AccountUsageStore["read"];
-    // Every write, with the account's new snapshot, or undefined when it was cleared.
+    // Fires on every write, with the account's new snapshot, or undefined when cleared.
     readonly onChange: (listener: (provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void) => () => void;
-    // The idle floor: one sweep now, then one whenever a reading has gone `idleMs` without a trigger.
+    // Idle floor: one sweep now, then one whenever a reading has gone `idleMs` without a trigger.
     readonly start: (idleMs?: number) => () => void;
 }
 
-// Under this, a reading is current enough that another round-trip would tell us nothing new.
+// Under this, a reading is current enough that another round-trip tells us nothing new.
 export const FRESH_MS = 60_000;
-// The idle floor. Long, because everything that changes a reading now triggers its own read; this covers the
-// sandbox where nothing has happened and an unattended pick is about to read the file.
+// Idle floor: long, since anything that changes a reading already triggers its own read.
 const IDLE_MS = 15 * 60_000;
-// A sandbox can hold dozens of Google accounts, and firing every request at once is how a refresh becomes a
-// self-inflicted rate limit.
+// Bounds parallel reads so a refresh across dozens of accounts doesn't self-inflict a rate limit.
 const CONCURRENCY = 4;
 
 const deadline = (ms: number): Promise<void> =>
     new Promise((resolve) => {
-        // Unref'd: a caller that stopped waiting must not hold the process open until its deadline.
+        // Unref'd: a caller that stopped waiting must not hold the process open until this fires.
         setTimeout(resolve, ms).unref();
     });
 
@@ -103,14 +70,11 @@ export const createHeadroomService = (deps: {
     readonly sources: readonly HeadroomSource[];
     readonly logger: Logger;
 }): HeadroomService => {
-    /* When each target was last ASKED, not what it answered. The store caches the successes; this is what bounds
-     * the failures, an upstream that is down or a plan that publishes nothing would otherwise be retried on
-     * every trigger. */
+    // When each target was last asked, not answered; bounds retries of a failing read the store can't cache.
     const attemptedAt = new Map<string, number>();
-    // The endpoint's stay-away, per target. Honoured by every trigger, forced ones included: inside it the
-    // endpoint has already said what it will answer.
+    // Endpoint's stay-away per target, honoured even by a forced trigger.
     const blockedUntil = new Map<string, number>();
-    // The read in flight per target, so two triggers landing together cost one round-trip and both wait on it.
+    // Read in flight per target, so concurrent triggers share one round-trip.
     const inFlight = new Map<string, Promise<void>>();
     const listeners = new Set<(provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void>();
 
@@ -141,8 +105,7 @@ export const createHeadroomService = (deps: {
                 blockedUntil.set(target.key, Date.now() + reading.retryAfterMs);
                 return;
             }
-            // A read that failed or found no pool at all leaves the last good snapshot standing: an empty window
-            // list would read as "measured, and this account has no limits", the opposite of what happened.
+            // A failed or poolless read leaves the last snapshot standing; an empty list would misread as "no limits".
             if (reading.windows.length > 0) {
                 await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
             }
@@ -167,7 +130,7 @@ export const createHeadroomService = (deps: {
             (target) =>
                 inScope(target, options.scope) &&
                 (blockedUntil.get(target.key) ?? 0) <= now &&
-                // `>=`, so a bound of zero means what the caller meant: read it, whatever the clock says.
+                // `>=`, so a bound of zero reads it regardless of the clock, as the caller meant.
                 now - Math.max(stored[target.key]?.measuredAt ?? 0, attemptedAt.get(target.key) ?? 0) >= maxAgeMs,
         );
         const pending = [...due];
@@ -179,7 +142,7 @@ export const createHeadroomService = (deps: {
         await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
     };
 
-    // Never rejects: an account list must not fail because a quota read did, the rings are an enhancement to it.
+    // Never rejects: an account list must not fail because a quota read did.
     const refresh = (options: RefreshOptions = {}): Promise<void> => {
         const pending = sweep(options).catch((error: unknown) => deps.logger.warn({ err: error }, "headroom: sweep failed, the next trigger retries"));
         return options.withinMs === undefined ? pending : Promise.race([pending, deadline(options.withinMs)]);
@@ -201,7 +164,7 @@ export const createHeadroomService = (deps: {
         },
         start: (idleMs = IDLE_MS) => {
             const timer = setInterval(() => void refresh({ maxAgeMs: idleMs }), idleMs);
-            // The daemon's other loops do the same: a background refresh must never hold the process open.
+            // Unref'd like the daemon's other loops: a background refresh must never hold the process open.
             timer.unref();
             void refresh();
             return () => clearInterval(timer);

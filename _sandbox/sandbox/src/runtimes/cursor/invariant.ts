@@ -3,20 +3,9 @@ import { request } from "node:http";
 import type { InvariantCheck } from "../../invariants/invariants.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 
-/* THE HOOK STILL LEADS TO THIS DAEMON, or Cursor's turns run with the rulebook off while saying it is on.
- *
- * cursor-hooks.ts earns the `rulebook: "hooks"` tier with a chain of three links, each written once at boot:
- * Cursor's machine-global hooks file names a gate script, the script names a Unix socket, and this daemon
- * listens on the socket. Every link is a path another daemon can rewrite after this one has said `ready`, and
- * a dev sandbox swapped in beside this one does exactly that, on the same /etc and the same auth root. From
- * then on every consult Cursor makes about this daemon's turns reaches a daemon that has no such turn
- * registered, and the script's failure posture, which is right for an owner's hand-run Cursor, answers
- * `allow`. Nothing notices: the server is still up, `ready()` is still true, the turn still reports its rules
- * in force, and the owner's command rulebook applies to nothing.
- *
- * The third link cannot be read off the filesystem: a re-bound socket path looks identical to the one this
- * process opened. So the socket is ASKED who is listening, over the one route the gate server carries for
- * exactly this question. A local socket this daemon created, costing nothing anyone would meter. */
+// Checks that the boot-time chain (hooks file names the gate script, script names a socket, daemon listens on it) still
+// holds: another daemon on the same /etc and auth root can rewrite any link after ready(). The listener can't be read
+// off disk (a re-bound socket looks identical), so it's asked directly over /identity.
 
 export interface CommandGateDeps {
     readonly cursorHooks: CursorHookService;
@@ -28,7 +17,7 @@ export interface CommandGateDeps {
 
 const readOrAbsent = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
 
-// Who answers on the socket. Any failure is `undefined`: nobody listening, or something that is not the gate.
+// Who answers on the socket; any failure (nobody listening, or not the gate) resolves undefined.
 const askListener = (socketPath: string): Promise<number | undefined> =>
     new Promise((resolve) => {
         const call = request({ socketPath, path: "/identity", method: "POST" }, (response) => {
@@ -60,7 +49,7 @@ export const checks = ({
 }: CommandGateDeps): readonly InvariantCheck[] => [
     {
         name: "command-gate-leads-to-this-daemon",
-        // Not boot: the gate starts as a best-effort boot job of its own, after the boot moment has passed.
+        // Not boot: the gate starts as its own best-effort boot job, after the boot moment has passed.
         on: ["sweep"],
         run: async ({ fail }) => {
             if (!cursorHooks.ready()) {
@@ -69,8 +58,8 @@ export const checks = ({
             const { socket, script, hooks } = cursorHooks.paths();
             const hooksBody = await readText(hooks);
             if (hooksBody === undefined) {
-                // Never installed: a container without write access to /etc, which start() reported once. There
-                // is no chain to walk, and the turn already says its rules are unenforced.
+                // Never installed (no /etc write access, already reported by start()); no chain to walk, already
+                // unenforced.
                 return;
             }
             if (!hooksBody.includes(script)) {

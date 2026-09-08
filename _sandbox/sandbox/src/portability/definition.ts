@@ -19,53 +19,27 @@ import { remoteState } from "../git/remote/remote.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { stateRelPath } from "../workspace/layout/state-paths.js";
 
-/* THE DEFINITION SIDE OF PORTABILITY: a sandbox's declarable shape derived from its live manifests, emitted
- * as `sandbox.toml`, and read back for apply/diff (apply-definition.ts drives the writes).
- *
- * DERIVED, NEVER STORED. There is no definition file the daemon keeps in sync; every export walks the same
- * stores the product itself runs on (the capability manifest, the settings store, the custom overlay file, the
- * repos' own git config), so the emitted document cannot disagree with the sandbox it describes. That is also
- * what makes drift (definitionDiff) a computation instead of a bookkeeping duty.
- *
- * TOML, hand-rolled on the way OUT and library-parsed on the way IN. The emitter is ~80 lines of this file
- * because determinism and comments are the point: a definition is reviewed, diffed and committed, so two
- * exports of the same sandbox must be byte-identical and the file must explain itself. Parsing is smol-toml,
- * a strict TOML 1.0 reader, followed by the contract schema, so a hand-edited file fails with a message
- * naming the field rather than half-applying.
- */
+// Derives a sandbox's declarable shape from its live manifests, emits it as sandbox.toml, and parses it back for
+// apply/diff (apply-definition.ts writes it). Never stored: every export reads the same stores the sandbox runs on.
+// Emission is hand-rolled TOML for byte-identical, commented output; parsing is smol-toml plus the contract schema.
 
-// What the emitted file is called wherever one lands (downloads, a repo, the boot seed's description).
+// Filename used wherever this lands: a download, a repo, the boot-seed description.
 export const DEFINITION_FILE = "sandbox.toml";
 
 export class DefinitionFormatError extends ArrivalFormatError {}
 
-/* ---- the coverage lists: every versioned config manifest is placed, or the guard fails ----
- *
- * definition-coverage.test.ts holds these against WORKSPACE_STATE_FILES: every `.intentic/config/` entry
- * marked `versioned` must appear in exactly one of the three lists below. Adding a config surface to the daemon
- * therefore forces the question this module exists to ask, "how does this travel?", the same discipline the
- * portability classes enforce one level down.
- *
- * TWO DOORS, NOT TWO CATEGORIES OF WORTH. `versioned` means "tracked in the workspace repo", so once that repo
- * can be named by remote (`[workspace]`), EVERY versioned manifest travels — the only question left is HOW.
- * A SOURCE is read into a typed section of the document, which is what lets it travel without a workspace
- * remote at all and, more importantly, lets it land through a native write path with the consent that path
- * enforces. Everything else RIDES the workspace repo as the file it already is. The second list used to be
- * spelled "bundle territory" on every row; that stopped being true the moment a workspace could be published,
- * and the notes now say what each one actually does on arrival. */
+// Every versioned .intentic/config/ entry appears in exactly one of DEFINITION_SOURCES or DEFINITION_WORKSPACE, checked
+// against WORKSPACE_STATE_FILES by definition-coverage.test.ts. A source travels as a typed document section through a
+// native write path; everything else rides the workspace repo as the file it already is.
 
-// The manifests deriveDefinition reads. Each is a source of one section of the emitted document, and each is
-// therefore also the section that WINS over whatever a workspace checkout delivered for it.
+// Each entry sources one document section and wins over whatever the workspace checkout delivered for it.
 export const DEFINITION_SOURCES: readonly string[] = [
     ".intentic/config/capabilities.json",
     ".intentic/config/environment.custom.Dockerfile",
     ".intentic/config/settings.json",
 ];
 
-/* The manifests that travel inside the workspace repo rather than as sections. Authored content, all of it: it
- * has no source anywhere but this workspace, which is exactly what a git remote gives it. A definition with no
- * `[workspace]` section carries none of this, and the export says so in `omitted` rather than leaving the owner
- * to find out. Where arrival needs a caveat, the note is that caveat. */
+// Manifests riding the workspace repo, not a section; a workspaceless definition omits them all.
 export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly note: string }[] = [
     {
         path: ".intentic/config/personas.json",
@@ -73,10 +47,7 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
     {
-        /* Through `stateRelPath` rather than spelled out, unlike the entries around it: those predate the
-         * path-literals rule and are held by a baseline that may shrink and not grow, and this way the state
-         * table's own union checks the name. It drops the trailing slash a directory entry carries, which the
-         * comparison against WORKSPACE_STATE_FILES needs, so that goes back on. */
+        // Via stateRelPath so the state union type checks this name; the trailing slash is re-added after trimming.
         path: `${stateRelPath(".intentic/config/hooks/")}/`,
         note: "The scripts a file.edited rule runs, beside the settings that name them; one that finds nothing it recognises on the target stays silent rather than failing every edit.",
     },
@@ -106,8 +77,7 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
     { path: ".intentic/config/templates.json", note: "Scaffold template choices; they point at repos the definition's own sections name." },
     {
-        // Through the table's own type, for the reason the safety row below spells out: a row added after the
-        // rule landed is one the compiler can hold against WORKSPACE_STATE_FILES, so it costs nothing to.
+        // Via the state table's type so a row added after the rule lands is checked against WORKSPACE_STATE_FILES.
         path: stateRelPath(".intentic/config/autostart.json"),
         note: "Which apps the daemon starts at boot, by repo and app folder; an entry whose folder the target lacks is one skipped log line per boot, nothing more.",
     },
@@ -125,37 +95,26 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         path: ".intentic/config/heavy-commands.json",
         note: "Learned from this workspace's runs; harmless where it is wrong, and relearned against the target's repos.",
     },
-    /* The safety policy, and the one row here that USED to be a section: it was `commandRules` inside
-     * settings.json, which is a source, so the posture travelled with a definition that named no workspace at
-     * all. It is a prose document now, read by a model rather than parsed, and a section would have to carry it
-     * as an opaque blob nothing on the way in could check. Riding the workspace repo is also the safer door:
-     * how much a sandbox does unasked is the target owner's call, and this way it arrives only where they chose
-     * to clone the workspace it belongs to. */
+    // A prose policy read by a model, not parsed; rides the workspace so it only arrives via an owner's clone.
     {
-        // Spelled through the table's own type rather than as a literal like its neighbours: this row is new,
-        // and a path the compiler checks against WORKSPACE_STATE_FILES cannot drift out of the coverage guard.
+        // Via the state table's type; a compiler-checked path cannot drift from WORKSPACE_STATE_FILES.
         path: stateRelPath(".intentic/config/safety.md"),
         note: "Arrives as the file it is, and governs the target from its first turn: read what it says before cloning a workspace you did not write.",
     },
 ];
 
-/* ---- derivation ---- */
-
-// The bundle's own sweep discipline (bundle.ts says why): fill the vaults before reading the manifests, so a
-// token an agent hand-wrote back into a config can never ride out inside a definition. Best-effort in both
-// directions, a manifest the daemon cannot rewrite must not fail an export.
+// Sweeps vaults before manifests are read, so a hand-written secret cannot ride out in a definition; best-effort, never
+// fails the export.
 const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> => {
     try {
         await run();
     } catch {
-        // Deliberately silent; the classification of what is read next is the second line of defense.
+        // Silent; the classification of what's read next is the second line of defense.
     }
 };
 
-/* The remote a definition can reference for ONE checkout, or the reason there is none. Every git read is
- * total: a checkout whose git dir is broken (a dangling pointer mid-restore) reports as unreferenceable rather
- * than failing the export. Shared by the nested repositories and by the workspace repo itself, which differ
- * only in how the refusal has to read to the owner. */
+// The remote a checkout can be referenced by, or why not; a broken git dir reports unreferenceable rather than failing.
+// Shared by repos and the workspace, which differ only in how the refusal reads.
 type Unreferenceable = { readonly problem: "none" | "unreadable"; readonly remoteName?: string };
 const referenceOf = async (dir: string): Promise<{ remote: string; ref?: string } | Unreferenceable> => {
     const state = await remoteState(dir).catch(() => ({ ahead: 0, behind: 0 }) as Awaited<ReturnType<typeof remoteState>>);
@@ -188,9 +147,8 @@ const repositoryOf = async (root: string, id: string): Promise<{ repo?: Definiti
     };
 };
 
-/* The workspace repo itself. Its refusal is the discoverability of the whole `[workspace]` feature: an owner
- * who has never published /work reads, on the card, exactly what publishing would buy them and what the
- * document is missing without it. */
+// Refusal here is how an owner discovers the [workspace] feature: unpublished /work reads what publishing would buy and
+// what's missing without it.
 const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorkspace; omitted?: NeedsAction }> => {
     const found = await referenceOf(root);
     if (!unreferenceable(found)) {
@@ -209,22 +167,17 @@ const workspaceOf = async (root: string): Promise<{ workspace?: DefinitionWorksp
 
 const canon = (value: unknown): string => JSON.stringify(value) ?? "null";
 
-// The settings that differ from their schema defaults, which is all a definition states: a flag it does not
-// mention keeps the target's own default, so exporting the whole surface would freeze today's defaults into
-// every future apply.
+// Only settings differing from schema defaults; an unmentioned flag keeps the target's own default.
 const settledSettings = (current: Record<string, unknown>): Record<string, unknown> => {
     const defaults = SandboxSettingsSchema.parse({}) as Record<string, unknown>;
     return Object.fromEntries(Object.entries(current).filter(([key, value]) => canon(value) !== canon(defaults[key])));
 };
 
-/* Derive the definition from the live stores, plus the list of what could not be expressed. The `omitted`
- * list is the definition's version of the bundle manifest's `excluded`: what turns "the export skipped
- * things" from a silence into lines the owner can act on. */
+// Derives the definition from live stores, plus omitted: what could not be expressed, as lines the owner can act on.
 export const deriveDefinition = async (services: Services): Promise<{ definition: SandboxDefinition; omitted: NeedsAction[] }> => {
     await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
     const omitted: NeedsAction[] = [];
-    // The workspace first, in the document and in the omissions: it is the section that decides whether the
-    // sandbox's own way of working travels at all, so an owner reading the export's refusals reads it first.
+    // Read first: this section decides whether the sandbox's own content travels at all.
     const { workspace, omitted: workspaceSkip } = await workspaceOf(services.workspace.root);
     if (workspaceSkip !== undefined) {
         omitted.push(workspaceSkip);
@@ -240,8 +193,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
         }
     }
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
-    // Each entry re-validated on its own, so one corrupt or hand-edited manifest row costs ITS line plus a
-    // note, never the whole export: the same totality the repo reads above hold to.
+    // Each entry is validated on its own; one bad row costs just its line, never the whole export.
     const capabilities: Capability[] = [];
     for (const entry of (await services.capabilities.list()).toSorted((left, right) => left.id.localeCompare(right.id))) {
         const parsed = CapabilitySchema.safeParse(entry);
@@ -275,13 +227,8 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     };
 };
 
-/* ---- the runner-scoped definition: settings only, the shape a runner declares and is held to ----
- *
- * Runners speak the definition format on three surfaces (the hello's parity claim, the parent's drift lines,
- * the sync push down the link), and on all three the document is a full SandboxDefinition whose only populated
- * section is settings: capabilities and secrets never travel to a runner, its repos are a git mirror rather
- * than clones with remotes, and its overlay parity rides the hash the run contract stamped. One helper, so the
- * three surfaces cannot disagree about what "a runner's definition" contains. */
+// The settings-only definition a runner declares: capabilities and secrets never travel to it; repos are a git mirror,
+// not clones. Shared by the hello, drift lines, and sync push, so all three agree.
 export const settingsDefinition = async (services: Services): Promise<SandboxDefinition> =>
     SandboxDefinitionSchema.parse({
         schemaVersion: 1,
@@ -292,10 +239,8 @@ export const settingsDefinition = async (services: Services): Promise<SandboxDef
         settings: settledSettings((await services.sandboxSettings.get()) as unknown as Record<string, unknown>),
     });
 
-/* Where a runner's settings stand against its parent's, one line per differing key. Pure, and separate from
- * definitionDiff for its wording alone: that surface speaks of "the definition" a person uploaded, while these
- * lines sit on a runner's card where the two sides are the parent and the runner. Same defaults rule — a key
- * absent on either side means that side runs the default, so omission never reads as drift against a default. */
+// One line per settings key differing between a runner and its parent; separate from definitionDiff only for wording
+// (parent/runner, not upload). A key absent on either side runs the default.
 export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefinition): NeedsAction[] => {
     const defaults = SandboxSettingsSchema.parse({}) as Record<string, unknown>;
     const parentSettings = parent.settings as Record<string, unknown>;
@@ -311,19 +256,14 @@ export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefiniti
     return differences;
 };
 
-/* ---- the emitter: deterministic TOML with the comments a reviewed file owes its reader ----
- *
- * Hand-rolled rather than a library's stringify for two properties no library promises together: byte-identical
- * output for equal input (fixed section order, sorted keys, one spelling per value shape), and comment lines,
- * which are most of why the format is TOML at all. Scope is exactly what the definition schema can hold:
- * strings, numbers, booleans, arrays, and plain objects (inline tables), plus one multi-line literal for the
- * Dockerfile. Anything else in a value is a bug upstream and throws rather than emitting a file that will not
- * parse back. */
+// Hand-rolled TOML, not a library stringify: byte-identical output (fixed order, sorted keys) plus comment lines.
+// Handles only what the schema can hold (strings, numbers, booleans, arrays, plain objects, one Dockerfile literal);
+// anything else throws rather than emitting a file that will not parse back.
 
 const BARE_KEY = /^[A-Za-z0-9_-]+$/;
 const tomlKey = (name: string): string => (BARE_KEY.test(name) ? name : JSON.stringify(name));
 
-// JSON string escaping is a strict subset of TOML basic-string escaping, so one spelling serves both.
+// JSON string escaping is a strict subset of TOML basic-string escaping.
 const tomlValue = (value: unknown): string => {
     if (typeof value === "string") {
         return JSON.stringify(value);
@@ -347,11 +287,10 @@ const tomlValue = (value: unknown): string => {
     throw new DefinitionFormatError(`a definition cannot express a ${value === null ? "null" : typeof value} value`);
 };
 
-// The Dockerfile block, as a multi-line LITERAL so its backslashes and quotes read exactly as written. The
-// escaped fallback covers the one content a literal cannot hold (a ''' inside), rather than refusing it.
+// Multi-line literal so backslashes and quotes read as written; falls back to an escaped string only when the value
+// contains '''.
 const tomlBlock = (value: string): string => {
-    // TOML's opening newline is trimmed from a multi-line literal, but its closing newline is content. A
-    // value without one therefore cannot use the readable block spelling without silently gaining a byte.
+    // A literal block trims its opening newline but keeps the closing one; a value lacking one would gain a byte.
     if (!value.endsWith("\n")) {
         return JSON.stringify(value);
     }
@@ -362,9 +301,8 @@ const tomlBlock = (value: string): string => {
     return `'''\n${value}'''`;
 };
 
-/* Every emitted document is the READER'S file: they commit it, hand-edit it, apply it somewhere else. Nothing
- * here is ever written back into this sandbox, so no copy carries a "managed, your edits will be overwritten"
- * header — there is no copy that would be true of. */
+// The emitted file is the reader's to commit and hand-edit elsewhere; nothing here writes back, so no copy needs a
+// managed-file header.
 export const emitDefinitionToml = (definition: SandboxDefinition, omitted: readonly NeedsAction[] = []): string => {
     const lines: string[] = [
         "# Intentic sandbox definition: the declarable shape of a sandbox, safe to publish.",
@@ -441,14 +379,12 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
     return `${lines.join("\n")}\n`;
 };
 
-/* ---- parsing: strict TOML, then the contract schema, each failure named ---- */
+// Strict TOML, then the contract schema; each failure is named.
 
 const recordLike = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// Shared capability schemas also serve JSON APIs where accepting a newer producer's extra field can be a
-// useful compatibility posture. A reviewed definition wants the opposite: no TOML key may disappear during
-// parsing and leave the owner believing it applied. Compare only keys the input actually supplied, so schema
-// defaults added to the parsed side are harmless while every stripped key, at any depth, is named.
+// Compares only keys the input supplied: schema defaults added during parsing are harmless, but any key TOML held and
+// parsing dropped is named, unlike a JSON API schema that tolerates an unknown newer field.
 const strippedDefinitionKeys = (raw: unknown, parsed: unknown, path = ""): string[] => {
     if (Array.isArray(raw) && Array.isArray(parsed)) {
         return raw.flatMap((entry, index) => strippedDefinitionKeys(entry, parsed[index], `${path}[${index}]`));
@@ -489,11 +425,8 @@ export const parseDefinitionToml = (text: string): SandboxDefinition => {
     return parsed.data;
 };
 
-/* ---- drift: one line per difference between a definition and this sandbox's derived one ----
- *
- * Pure over two definitions, so it needs no services and answers identically wherever it runs. Settings
- * compare through the schema defaults, a key absent on either side means "the default", so a definition that
- * omits a flag never reads as drift against a sandbox that also runs the default. */
+// One line per difference between a definition and this sandbox's derived one; pure over two definitions. Settings
+// compare through schema defaults, so a flag absent on either side runs the default, never reading as drift.
 
 const shortValue = (value: unknown): string => {
     const spelled = canon(value);
@@ -502,8 +435,7 @@ const shortValue = (value: unknown): string => {
 
 const trimmed = (value: string | undefined): string => (value ?? "").trim();
 
-// One checkout reference as a person reads it, the spelling both the repository lines and the workspace lines
-// below use, so "where is it and on what branch" reads the same wherever it is answered.
+// Shared spelling for a checkout reference; repository and workspace lines both format through this.
 const reference = (found: { readonly remote: string; readonly ref?: string | undefined }): string =>
     `${found.remote}${found.ref === undefined ? "" : ` @ ${found.ref}`}`;
 
@@ -520,9 +452,7 @@ export const definitionDiff = (current: SandboxDefinition, target: SandboxDefini
                       : "The overlay section differs from the definition's.",
         });
     }
-    /* The workspace repo, before the repositories, for the reason it is emitted first: it decides whether the
-     * sandbox's own content is part of the comparison at all. A definition with no `[workspace]` against a
-     * published workspace is a real difference and says so, rather than reading as agreement by omission. */
+    // Checked first: an absent [workspace] against a published one is real drift, not agreement by omission.
     const hereWorkspace = current.workspace;
     const thereWorkspace = target.workspace;
     if (hereWorkspace !== undefined && thereWorkspace === undefined) {

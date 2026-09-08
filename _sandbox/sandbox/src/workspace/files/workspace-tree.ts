@@ -12,31 +12,16 @@ import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/worksp
 import { scanBarrenDirs } from "./empty-dirs.js";
 import { isUnder, realPathOf, realWithin, resolveWithin } from "./workspace-files-paths.js";
 
-// WorkspaceTree / WorkspaceTreeEntry (the full /work tree the agent sees, untracked files, generated
-// artifacts, and .intentic/ included, distinct from the git-tracked listing) are the /workspace/tree wire
-// shape, so they live in @intentic/sandbox-contract. `path` is root-relative with forward slashes so it feeds
-// straight back to the file route. What's "ignored" (junk dirs, .gitignore, browser profiles) lives in
-// @intentic/workspace-ignore, shared with the content-search walk so both views agree. Ignored entries are still
-// listed (`ignored: true` → the client grays them); ignored DIRECTORIES aren't descended into, their children
-// lazy-load via listWorkspaceChildren so a giant node_modules can't blow the entry cap.
-//
-// SYMLINKS are listed, as what they point AT (see Entry below). They used to be filtered out of every listing,
-// which meant a folder holding only links drew as an empty folder, `/work/.claude/skills`, thirty of them,
-// looked like nothing was there.
+// WorkspaceTree/WorkspaceTreeEntry is the /workspace/tree wire shape (sandbox-contract); `path` is root-relative with
+// forward slashes.
+// Ignore rules come from @intentic/workspace-ignore, shared with the content-search walk; ignored dirs list but aren't
+// descended (lazy-load via listWorkspaceChildren).
+// Symlinks are listed as what they point at.
 
 const MAX_ENTRIES = 5000;
 
-/* ONE DIRECTORY ENTRY, WITH ITS SYMLINKS ALREADY FOLLOWED.
- *
- * A symlink used to be dropped from every listing, which is why `/work/.claude/skills`, thirty links and
- * nothing else, drew as an empty folder. It is listed now, and it is listed AS WHAT IT POINTS AT: `isDir` is
- * the TARGET's kind, so a link to a folder expands and a link to a file opens, with `link` carried alongside as
- * decoration. That is VSCode's model exactly (FileType.SymbolicLink is a bit ORed onto File/Directory, so every
- * consumer can keep asking the same "file or folder?" question), and it is why nothing downstream of here, the
- * ignore rules, the nesting, the viewer, the tabs, needed to learn a third kind of entry.
- *
- * `real` is where the entry's bytes actually are, and it exists for two jobs neither of which the link's own
- * path can do: containment (a link out of the workspace is listed but never followed) and the cycle guard. */
+// One directory entry with its symlink followed; isDir is the TARGET's kind, so a folder link expands like one.
+// real is where the entry's bytes actually live; used for containment (link outside workspace) and the cycle guard.
 interface Entry {
     readonly name: string;
     readonly isDir: boolean;
@@ -44,11 +29,9 @@ interface Entry {
     readonly link?: WorkspaceLink;
 }
 
-/* Follow one directory's entries. A plain entry answers from the dirent alone, no syscall, which is what keeps
- * an ordinary tree exactly as cheap to walk as before. A LINK costs three: stat for the target's kind (failure
- * ⇒ dangling, and dangling is listed rather than hidden, a broken link is a fact about the workspace worth
- * seeing), readlink for the text to show on hover, and realpath for containment and the cycle guard.
- * `realDir` is the containing directory's own real path, so a plain child's real path is free. */
+// Resolves one directory's entries; a plain entry costs no syscall (dirent alone).
+// A symlink costs stat (kind; failure marks it dangling, still listed), readlink (display text), realpath (cycle
+// guard).
 const followEntries = async (dirAbs: string, realDir: string, realRoot: string, dirents: readonly Dirent[]): Promise<Entry[]> =>
     Promise.all(
         dirents.map(async (dirent): Promise<Entry> => {
@@ -66,43 +49,26 @@ const followEntries = async (dirAbs: string, realDir: string, realRoot: string, 
         }),
     );
 
-// Dirs before files, then alphabetical, on the FOLLOWED kind, so a link to a folder sorts with the folders.
+// Dirs before files, then alphabetical, on the followed kind.
 const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
 
-/* Is this entry one the walk may descend into? A link is where the two new answers live:
- *   - it goes nowhere, or it goes outside the workspace ⇒ there is nothing here the daemon will serve;
- *   - its target IS this directory or one above it ⇒ descending would walk the same tree forever.
- * The ancestor test is the whole cycle guard, and it costs nothing: every job already carries its real path,
- * so `a/link -> a` is caught before the first bogus level rather than after it. (Two links to the same subtree
- * are NOT a cycle, they are two real places to look, and both are listed, exactly as VSCode does.) */
+// Whether this entry may be descended into: a link that goes nowhere or leaves the workspace has nothing to serve.
+// A link whose target is this dir or an ancestor is a cycle; two links to the same subtree are not, both are listed.
 const descendable = (entry: Entry, realDir: string): boolean =>
     entry.link === undefined || (entry.link.state === undefined && realDir !== entry.real && !realDir.startsWith(entry.real + sep));
 
-// Walk the real working tree under `root`, bounded by a total-entry budget so a pathological tree can't blow up
-// the response. The walk is LEVEL-ORDER (breadth-first), which is what makes the budget honest: a single deep
-// branch can no longer eat it and leave the user's top-level folders missing. Shallow levels, the ones the
-// collapsed explorer actually shows, always complete; the budget runs out at depth, and a directory the walk
-// never reached is returned WITHOUT `children`, exactly like an ignored dir, so the client lazy-loads it via
-// listWorkspaceChildren on expand, and a dir that doesn't fit what's left of the budget is deferred whole
-// rather than half-listed, so every listing the client receives is COMPLETE. That leaves exactly one way for
-// entries to go missing, a single directory holding more than the entire cap, and the response reports that
-// as a count (`hidden`), so the UI can name the number instead of vaguely hinting at one.
-// Depth is unbounded, symlinks are listed as what they point at (see Entry above), dirs sort before files
-// alphabetically.
+// Breadth-first, bounded by an entry budget: shallow levels complete; a dir that won't fit defers whole, not
+// half-listed.
+// Only the root drops entries past budget, counted as `hidden`. Depth is unbounded; symlinks list as their target.
 export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: number }): Promise<WorkspaceTree> => {
     const base = resolve(root);
-    /* WHICH FOLDERS ARE EMPTY is asked separately, and started here so it runs alongside the listing rather than
-     * after it (both are I/O, neither is the other's input). It cannot be read off the listing: the budget below
-     * leaves everything under its cut unlisted, and an unlisted directory is unknown rather than empty, so the
-     * answer would stop wherever the budget did. A scan that fails answers with nothing, which under-reports the
-     * chore rather than inventing one. */
+    // Runs alongside the listing; can't be derived from it since budget-cut dirs are unknown, not empty.
     const barren = scanBarrenDirs(base).catch((): string[] => []);
-    // The root resolved ONCE, on the hosted VM /work is itself a link onto the persistent volume, so every
-    // containment test below has to be made against where the workspace really is.
+    // Resolved once: /work may itself be a symlink, so containment below compares against the real root.
     const realRoot = await realPathOf(base);
     let budget = options?.maxEntries ?? MAX_ENTRIES;
 
-    // Built mutably (`children` is filled in when the level below is listed), returned as the readonly shape.
+    // Built mutably (children filled in once its level lists); returned as the readonly WorkspaceTree shape.
     type Draft = {
         name: string;
         path: string;
@@ -112,9 +78,9 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
         link?: WorkspaceLink;
         children?: Draft[];
     };
-    // One directory still to list. `parentScope` is the ignore state of the dir CONTAINING it; `owner` is the
-    // entry whose `children` this listing fills (absent for the root itself); `real` is where this directory
-    // actually is, which is what the cycle guard compares a link's target against.
+    // One dir still to list; parentScope is the container's ignore state, owner the draft entry this fills (absent for
+    // root).
+    // real is where this directory actually is, compared against a link's target by the cycle guard.
     type Job = {
         abs: string;
         real: string;
@@ -133,7 +99,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
             if (budget <= 0) {
                 break;
             }
-            // Pick up this directory's own .gitignore before testing its entries.
+            // Layers this directory's own .gitignore before its entries are tested.
             const scope = await job.parentScope.descend(job.abs, job.rel);
             const dirents = await readdir(job.abs, { withFileTypes: true }).catch(() => undefined);
             if (dirents === undefined) {
@@ -142,11 +108,7 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                 }
                 continue;
             }
-            // A dir that doesn't fit what's left is left UNLISTED rather than half-listed: every listing the
-            // client gets is then complete, and this one arrives whole on expand. (The root has no such out,
-            // it has nowhere to lazy-load from, so it lists what fits and reports the rest as `hidden`.)
-            // Asked of the raw count, BEFORE following anything: a directory the walk is about to defer should
-            // not first pay a stat for each of its links.
+            // Defers a dir that won't fit the remaining budget instead of half-listing it.
             if (job.owner !== undefined && dirents.length > budget) {
                 continue;
             }
@@ -177,13 +139,8 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                 }
                 const draft: Draft = { name: entry.name, path, type: "dir", ...(ignored ? { ignored: true } : {}), ...link };
                 children.push(draft);
-                // Ignored dirs are never descended; neither are the daemon's own (auth/, sessions/, browser/,
-                // the root .git, isLockedWorkspacePath), whose every file the file API refuses anyway: the
-                // explorer draws them as one locked row, so listing what is inside would spend the walk's
-                // budget, thousands of entries, in the browser-profile case, on rows nobody can open. Nor
-                // is a link that leaves the workspace or loops back on itself (descendable). The rest queue
-                // for the next level and stay unlisted (no `children`) if the budget runs out first, either
-                // way the client lazy-loads them.
+                // Not queued for the next level: ignored dirs, locked paths, and non-descendable links (cycle or
+                // outside).
                 if (!ignored && !isLockedWorkspacePath(path) && descendable(entry, job.real)) {
                     next.push({ abs, real: entry.real, rel: path, parentScope: scope, owner: draft });
                 }
@@ -201,17 +158,8 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
     return { root: base, tree, hidden: rootHidden, barren: await barren };
 };
 
-// Lazy-load one directory's children, a dir the tree walk listed but didn't descend into (ignored, or beyond
-// the walk's entry budget). One level is the default; a caller may ask for a bounded-depth subtree, returned as
-// the same FLAT entry list, so it does not have to fan one browser request out per discovered directory. Ignore
-// state is rebuilt by descending from the root so a lazily-listed dir agrees with the eager walk: entries under
-// an ignored subtree stay ignored, entries under a normal one are graded by the real .gitignore layers.
-// Bounded by the same total entry cap → `hidden`. Symlinks are listed as what they point at, dirs first, and the
-// eager walk's real-path ancestor guard prevents a recursive request from following a link cycle.
-//
-// `relPath` is contained twice: lexically (resolveWithin, a path climbing out of /work) and on disk
-// (realWithin, a path that gets out through a LINK), the second is what stops an expand on a link pointing
-// outside the workspace from listing what is behind it.
+// Lazily lists one directory's children (ignored, or past budget); depth 1 by default, as one flat list.
+// Ignore state is rebuilt from the root; relPath is checked lexically and on disk (realWithin catches a link escape).
 export const listWorkspaceChildren = async (
     root: string,
     relPath: string,
@@ -226,14 +174,11 @@ export const listWorkspaceChildren = async (
     if (realDir === undefined) {
         return { entries: [], hidden: 0 };
     }
-    // The eager walk stops at a locked dir and the explorer never offers to expand one, so an ask for its
-    // contents is either a stale client or a probe. Empty, like the walk's own answer, the file API refuses
-    // every path inside it regardless, so a listing would only be an index of what cannot be opened.
+    // The explorer never offers to expand a locked dir; an ask here is a stale client or a probe.
     if (isLockedWorkspacePath(relPath)) {
         return { entries: [], hidden: 0 };
     }
-    // Replay the ancestor chain: each descend() layers that directory's .gitignore, and an ancestor that is
-    // itself ignored makes the whole branch ignored no matter what the local rules say.
+    // Replays the ancestor chain: each descend() layers a .gitignore; an ignored ancestor ignores the whole branch.
     let parentScope = createIgnoreScope();
     let branchIgnored = false;
     let walked = base;

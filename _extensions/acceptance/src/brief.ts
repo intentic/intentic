@@ -1,41 +1,18 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import { reportPath, resultPath, type RunStory, storyDir } from "./runs";
 
-/* THE BRIEF, what makes a test session a test session.
- *
- * The daemon has exactly one per-conversation specialization seam: the turn's PROMPT. The system prompt is a
- * sandbox-wide setting (three bases, one owner-chosen), so "a slightly specialized acceptance-testing session"
- * cannot be a different system prompt without changing what every other conversation in the sandbox runs on.
- * That is fine, everything this needs to say is task instruction, which is what a prompt is for.
- *
- * Five things it has to get right, each of which cost something real when it was missing:
- *
- * 1. THE STORY IS INLINED, not referenced. Handing the agent a path spends a Read, and worse, invites it to go
- *    read the implementation next, at which point it is testing the code it just read rather than the app a
- *    user meets. The story text and the base URL are the whole world it needs.
- *
- * 2. THE AUTHORED CRITERIA ARE ENUMERATED AND NUMBERED. They are already in the inlined story, but as prose in a
- *    checklist an agent is free to paraphrase, merge or reorder, and a report whose criteria are the agent's
- *    paraphrase cannot be read against what someone promised. Repeating them as a numbered list with "return
- *    exactly these, in this order" is what turns the result file into a matrix the view can line up.
- *
- * 3. THE BROWSER MUST BE NAMED. Its ~20 tools are DEFERRED (isolatedBrowserSpec keeps them out of every turn's
- *    prompt), so an agent that is not told to ToolSearch for them reaches for curl, gives up on anything
- *    client-rendered, or installs its own Playwright.
- *
- * 4. SCREENSHOTS DO NOT GO WHERE THE MODEL ASKS. The daemon's PreToolUse hook rewrites every screenshot's
- *    filename into the shared, FLAT `.intentic/records/artifacts/browser`, model-chosen names and all, and every agent in
- *    a run shares that directory. So names must be namespaced by story, and each shot copied into the story's
- *    own `shots/` immediately: copying at the end means reconstructing which step each file belonged to, and
- *    that is exactly the information a report exists to carry.
- *
- * 5. IT IS A TESTER, NOT A DEVELOPER. Left unsaid, a coding agent that finds a bug fixes it, which is the one
- *    outcome that makes the run worthless, because the report then describes an app that no longer exists.
- */
+// The brief is the daemon's only per-conversation specialization seam (the system prompt is sandbox-wide); this is
+// where an acceptance session's rules live, and each was a real failure mode when missing.
+// 1. The story is inlined, not referenced, so the agent tests the app rather than the code it just read.
+// 2. Authored criteria are enumerated and numbered, so the result's positional criteria array lines up against what was
+//    promised.
+// 3. The browser must be named explicitly, since its tools are deferred and an untold agent reaches for curl instead.
+// 4. Screenshots are copied into the story's own shots/ immediately, since the daemon's hook flattens every run's shots
+//    into one shared, model-named directory.
+// 5. It is a tester, not a developer: fixing a bug it finds makes the report describe an app that no longer exists.
 
 export interface BriefInput {
-    // The MANIFEST's entry, not the story as listed: the brief is built from what was written to disk, so the
-    // conversation the turn is started on and the directory it writes into are the ones the run recorded.
+    // The manifest's own entry, not the listed story, since the run recorded this exact conversation and directory.
     readonly story: RunStory;
     readonly runId: string;
     // Where the app under test answers, from the extension's perspective at run time.
@@ -52,12 +29,8 @@ const HEADER = [
         `files you write are your own report and screenshots, in the run directory named below.`,
 ].join(`\n`);
 
-/* The criteria, restated as the contract the result file is judged against. Numbered because the result's
- * `criteria` array is positional, "criterion 3 failed" has to mean the same thing to the agent, the report and
- * the person who wrote the story.
- *
- * A story that authored none is not an error: the brief asks the agent to derive them from the prose instead,
- * which is what every story did before the section existed. */
+// Criteria restated as the contract the result is judged against, numbered since the result's criteria array is
+// positional. An unauthored list isn't an error: the agent derives criteria from the prose instead.
 const criteria = (list: readonly string[]): string =>
     list.length === 0
         ? [
@@ -191,8 +164,8 @@ export const briefFor = (input: BriefInput): string => {
             criteria: input.story.criteria,
         }),
     ];
-    // The repo's own notes go LAST so they read as amendments to the brief (a login to use, a seeded fixture, a
-    // flow to avoid) rather than as context the instructions above then contradict.
+    // Project notes go last, so they read as amendments (a login to use, a fixture, a flow to avoid) rather than
+    // context the instructions above then contradict.
     const notes = input.projectNotes?.trim();
     return (notes === undefined || notes === `` ? sections : [...sections, [`## Project-specific testing notes`, ``, notes].join(`\n`)]).join(`\n\n`);
 };

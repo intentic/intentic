@@ -1,8 +1,6 @@
-// Stream a set of dropped files into a single tar archive as a ReadableStream, so a large directory drop uploads
-// over ONE request (the daemon's /workspace/upload-archive extracts it) instead of a round-trip per file. Pure and
-// framework-free (unit-checkable, see scripts/tarStream.check.mjs). The stream is pull-based, pulling each file's
-// own .stream() one chunk at a time, so a multi-GB tree is never buffered in memory and honors network backpressure.
-// USTAR format; paths over 100 bytes get a pax extended header (which tar-stream reads on the daemon side).
+// Streams dropped files into one tar archive (ReadableStream) so a directory drop uploads in a single request
+// (/workspace/upload-archive extracts it). Pull-based, one file chunk at a time, so a multi-GB tree is never buffered
+// in memory. USTAR format; paths over 100 bytes get a pax extended header.
 
 export interface TarEntry {
     readonly file: File;
@@ -10,7 +8,7 @@ export interface TarEntry {
 }
 
 export interface PackHooks {
-    // Fired as each entry begins streaming, drives the "currently landing" line, since we control pack order.
+    // Fired as each entry begins streaming; drives the "currently landing" line.
     readonly onFileStart?: (path: string) => void;
     // Fired per content chunk with the byte delta, drives the aggregate byte progress + throughput.
     readonly onBytes?: (delta: number) => void;
@@ -24,9 +22,8 @@ const writeStr = (block: Uint8Array, value: string, offset: number, width: numbe
     block.set(bytes.subarray(0, width), offset);
 };
 
-// A numeric header field: octal string left-padded with '0' to width-1 chars + a NUL. Falls back to GNU base-256
-// (high bit set on the first byte, big-endian value) when the value overflows the octal digits, needed for
-// entries larger than ~8 GB, which the plain octal size field can't represent.
+// Numeric header field: octal, left-padded with '0', NUL-terminated. Falls back to GNU base-256 (high bit set,
+// big-endian) past ~8 GB, where octal can't represent the size.
 const writeNumeric = (block: Uint8Array, value: number, offset: number, width: number): void => {
     if (value < 8 ** (width - 1)) {
         const octal = value.toString(8).padStart(width - 1, "0");
@@ -99,10 +96,8 @@ async function* tarChunks(entries: readonly TarEntry[], hooks: PackHooks): Async
                 yield new Uint8Array(pad);
             }
         }
-        // The header declares file.size, captured at scan time; the body is streamed later, at upload time. If the
-        // backing file changed in between (a rebuilt build artifact, or a replaced/unreadable file), emit EXACTLY
-        // file.size content bytes anyway, truncate an overrun, zero-fill a shortfall, so the 512-byte framing
-        // stays aligned and one racing file can't desync the whole archive (daemon: "Unexpected end of data").
+        // file.size is captured at scan time; if the file changed by upload time, the body is truncated or zero-filled
+        // to match exactly, keeping 512-byte framing aligned.
         yield header(path, file.size, mtimeSec, "0");
         let sent = 0;
         try {

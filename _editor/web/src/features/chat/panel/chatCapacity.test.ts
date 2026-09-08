@@ -3,21 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
 
-/* The rail's whole argument is what it LEAVES OUT, so that is what this pins: an offer list is only worth
- * reading if everything on it can actually serve a turn, and only trustworthy if everything it drops is still
- * accounted for somewhere.
- *
- * These are the four ways the list can lie, and each has a test:
- *   · offering an account whose pool is spent;
- *   · offering one that publishes full pools and refuses everything (a dead credential, a withdrawn seat);
- *   · dropping a provider silently, so "spent until Sunday" and "never connected" render identically;
- *   · spending the column on thirty-one gmail addresses nobody chooses between.
- */
+// The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
+// dropped, or pooled.
 
 const NOW = 1_700_000_000_000;
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 
-// A fresh reading, so nothing here is judged stale: staleness is usageStatus's subject, not this one.
+// Always a fresh reading; staleness is usageStatus's concern, not this helper's.
 const usage = (percent: number, resetsAt = 1_700_003_600): AccountUsage => ({
     measuredAt: NOW - 60_000,
     windows: [{ kind: `seven_day`, utilization: percent, resetsAt, gates: `all` }],
@@ -52,20 +44,9 @@ describe(`what the rail offers`, () => {
         const [entry] = chatCapacity(NOW).providers;
         expect(entry?.rows.map((row) => row.label)).toEqual([`fresh@example.com`, `busy@example.com`]);
         expect([entry?.ready, entry?.total]).toEqual([2, 3]);
-        // The count is what carries the spent one: 2 of 3 says a third exists without giving it a row.
         expect(chatCapacity(NOW).out).toEqual([]);
     });
 
-    /* THE LINE IS EXHAUSTION, NOT THE APP'S RED. 90% (usageStatus' SPENT_PERCENT) is where every surface here
-     * turns a percentage red, and it is the right place for a warning and the wrong place to hide a row: an
-     * account with a tenth of its week left runs the next task, and a column headed "Ready to run" that has
-     * dropped it has answered a different question than the one it is titled with. So the offer survives to
-     * SPENT_UTILIZATION — the daemon's own line, past which a call is certain to be refused — and the red tone
-     * does the steering in the meantime.
-     *
-     * By VALUE at both ends, because that is the whole content of the rule: a relational assertion ("21 is
-     * offered and 100 is not") holds with the threshold anywhere between, including back at the 90 that started
-     * this. */
     it(`keeps offering an account until its pool is exhausted, not from the moment it turns red`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `edge`, usage: usage(99) })] };
         expect(chatCapacity(NOW).providers[0]?.rows[0]?.percent).toBe(99);
@@ -74,12 +55,6 @@ describe(`what the rail offers`, () => {
         expect(chatCapacity(NOW).providers).toEqual([]);
     });
 
-    /* A PER-MODEL SLICE IS NOT THE ACCOUNT. This is the defect the openPercent rule exists for: a plan that
-     * meters a model separately runs that slice out on its own, and the row's headline percentage is its
-     * TIGHTEST pool, so a full weekly Fable allowance read as a spent account and took a sign-in with an open
-     * 5-hour session and two thirds of its all-models week off a list of offers. Nothing was wrong with the
-     * reading — the Usage tab showed all three pools correctly the whole time — the offer list was asking the
-     * wrong pool whether it had anything to offer. */
     it(`keeps an account whose per-model slice is spent, and ranks it by what still gates every turn`, () => {
         providerAccounts.value = {
             claude: [
@@ -99,11 +74,7 @@ describe(`what the rail offers`, () => {
         };
 
         const [entry] = chatCapacity(NOW).providers;
-        // Ranked by the 5-hour session, the tightest pool that stands in front of EVERY model — not by the 100%
-        // slice, which stands in front of one.
         expect(entry?.rows[0]?.percent).toBe(73);
-        // And the spent slice is still drawn, in full: the account is offered and the reader can see which model
-        // the offer does not extend to.
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.short, lane.scope, lane.percent])).toEqual([
             [`5h`, undefined, 58],
             [`wk`, `Fable`, 100],
@@ -112,8 +83,6 @@ describe(`what the rail offers`, () => {
         expect(chatCapacity(NOW).out).toEqual([]);
     });
 
-    // And the floor is still a floor: an exhausted 5-hour session stops every turn there is, whatever room the
-    // per-model slices report, so that account is off the list and the footnote dates its return.
     it(`drops an account whose all-models pool is exhausted, however much room its slices have`, () => {
         providerAccounts.value = {
             claude: [
@@ -136,11 +105,6 @@ describe(`what the rail offers`, () => {
         expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
     });
 
-    /* A PLAN WHOSE POOLS ARE ALL SCOPED has no floor to read, and Google is it: Gemini and the Claude/GPT
-     * models are two separate weekly allowances off one sign-in, with no undivided pool anywhere on the
-     * reading. There the roomiest scope is the answer, because every model that sign-in serves sits inside one
-     * of them and which one is the reader's to pick — so one spent family is not a spent account, and both
-     * spent is. */
     it(`reads a plan with no all-models pool by its roomiest family`, () => {
         const families = (gemini: number, thirdParty: number): AccountUsage => ({
             measuredAt: NOW - 60_000,
@@ -163,9 +127,6 @@ describe(`what the rail offers`, () => {
         expect(chatCapacity(NOW).providers).toEqual([]);
     });
 
-    /* A plan that publishes no limits and one nobody has measured yet are both UNKNOWN, and unknown is not
-     * exhausted: on a week where everything measurable is spent, these are the only accounts left, and a rail
-     * that hid them would report a fleet with nothing in it. */
     it(`offers an account with no reading, and says which kind of nothing it has`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `unread` })] };
         const [entry] = chatCapacity(NOW).providers;
@@ -174,10 +135,6 @@ describe(`what the rail offers`, () => {
 });
 
 describe(`what cannot serve a turn, whatever its pools say`, () => {
-    /* THE DEFECT THIS EXISTS TO PREVENT. An organization that switches the harness off for a seat changes
-     * nothing else about the account: the token still authenticates and the usage endpoint still publishes
-     * roomy pools, so the naive reading draws a confident 5% bar over the one account in the fleet that turns
-     * every turn away. */
     it(`holds back the account a standing refusal names, however much room it reports`, () => {
         providerAccounts.value = {
             claude: [claude({ id: `a`, label: `turned-away`, usage: usage(5) }), claude({ id: `b`, label: `fine`, usage: usage(40) })],
@@ -190,17 +147,8 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         expect(entry?.rows.map((row) => row.label)).toEqual([`fine`]);
     });
 
-    /* A ROUTED refusal names nobody, and the silence is informative rather than missing: CLIProxyAPI picks the
-     * auth file itself and only refuses once every credential it holds is cooling down. Read the other way
-     * ("nobody named ⇒ nobody affected") this drew thirty-one green bars under a provider that had just
-     * refused the reader's last turn.
-     *
-     * A WITHDRAWN PROJECT is the fixture because it is the case that needs this rule, and the only one that
-     * isolates it. A spent-quota refusal already reads its own pool as full everywhere in the app
-     * (usageStatus' spentByRefusal), so that pool drops off the list whether or not anything here understands
-     * refusals at all — it would pass this test with the whole judgement deleted. An entitlement refusal pins
-     * nothing: the pools stay roomy and go on being published forever, so the refusal is the only thing that
-     * knows, which is exactly the state this guards. */
+    // A routed refusal without an account name drops the whole pool. Entitlement is used here since a spent-quota
+    // refusal already reads that pool as full elsewhere.
     it(`takes a whole routed pool off the list when its refusal names no account`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4), google(2, 11)] };
         providerRefusals.value = {
@@ -212,10 +160,8 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         expect(capacity.out.map((entry) => entry.reason)).toEqual([`refused your last turn`]);
     });
 
-    /* And a SPENT-QUOTA refusal reads as SPENT rather than as a refusal, which is not a near-miss on the word:
-     * the plan said the pool was full, so the footnote gets to date its return instead of leaving the reader a
-     * verb and no instant. The pin behind it is usageStatus', shared with every surface that draws one of these
-     * numbers, so this rail cannot disagree with the composer about what "quota exceeded" meant. */
+    // Reads as spent rather than as a refusal; the pin is shared with usageStatus so this cannot disagree with the
+    // composer.
     it(`dates the return of a routed pool whose refusal was a spent quota`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4)] };
         providerRefusals.value = { gemini: { at: NOW - 60_000, kind: `limit`, message: `Quota exceeded for this project.` } };
@@ -225,14 +171,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         expect(capacity.out[0]).toMatchObject({ reason: `spent`, reopensAt: 1_700_003_600 });
     });
 
-    /* A SPENT ALLOWANCE IS A STATEMENT ABOUT ONE POOL, and the app already reads it as one: usageStatus'
-     * spentByRefusal pins the pool binding the model the refused turn ran to a full 100, which is how a weekly
-     * pool that has stopped being polled still reads as spent. So the refusal needs no second effect here — and
-     * giving it one cost the reader an account: a Fable turn refused an hour ago hid a sign-in whose 5-hour
-     * session and all-models week were both wide open, on a rail whose whole subject is what is still runnable.
-     *
-     * WHICH POOL IT PINNED IS THE WHOLE ANSWER, and the second half of this is the other side of it: the same
-     * refusal landing on a pool that gates every model takes the account off the list exactly as before. */
+    // The refusal pins to spent only the pool whose model matches; other pools on the account are unaffected.
     it(`keeps an account whose standing limit refusal pinned a per-model slice`, () => {
         providerAccounts.value = {
             claude: [
@@ -261,8 +200,6 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         };
 
         const [entry] = chatCapacity(NOW).providers;
-        // The pin is visible where it belongs, on the lane for the pool that ran out, and the row is ranked by
-        // the week that has not.
         expect(entry?.rows[0]).toMatchObject({ percent: 40 });
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.scope, lane.percent])).toEqual([
             [undefined, 20],
@@ -305,9 +242,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
 });
 
 describe(`what the rail says about what it is not offering`, () => {
-    /* An absent provider means two opposite things — spent until Sunday, or never connected — and the reader
-     * cannot tell them apart from a list of offers alone. In a popped-out window there is no shell to go and
-     * check in, which is exactly why the footnote exists. */
+    // An absent provider could mean spent-until-later or never-connected; the footnote is what tells those apart.
     it(`names a spent provider and the instant it comes back`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, 1_700_090_000) })] };
         expect(chatCapacity(NOW).out).toEqual([
@@ -315,9 +250,6 @@ describe(`what the rail says about what it is not offering`, () => {
         ]);
     });
 
-    /* THE 5-HOUR WINDOW IS NOT THE ANSWER TO "WHEN IS MY WEEK BACK". Every account publishes both, and the
-     * short one reopens within the hour whether or not it is the pool that ran out — so reporting the soonest
-     * reset of ALL pools promises a return the plan will not honour. Only a FULL pool's reset is a reopen. */
     it(`dates the return from the pool that is actually spent, not the soonest one on the account`, () => {
         providerAccounts.value = {
             claude: [
@@ -337,19 +269,14 @@ describe(`what the rail says about what it is not offering`, () => {
         expect(chatCapacity(NOW).out[0]?.reopensAt).toBe(1_700_400_000);
     });
 
-    // A reset already in the past describes a pool that has reopened: sending someone to wait for it is worse
-    // than saying nothing, because it is a wait that will never end.
     it(`offers no reopen instant when every spent pool's reset has already passed`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, Math.floor(NOW / 1000) - 60) })] };
-        // The provider is on the footnote — this asserts the missing instant, not a missing line.
         expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: `spent`, reopensAt: undefined });
     });
 });
 
 describe(`a pool nobody picks among`, () => {
-    /* 31 Google sign-ins the translator balances turns across are ONE offer to a reader who cannot act on any
-     * of them individually. Listing them would spend the whole column restating one fact per gmail address —
-     * and it is the exact shape that made the flat account list on the Usage tab unreadable. */
+    // Many routed sign-ins are one offer to a reader who cannot act on any of them individually.
     it(`stands a routed provider's whole pool in for by its roomiest reading`, () => {
         translatorAccounts.value = {
             ...NO_ROUTED,
@@ -359,14 +286,10 @@ describe(`a pool nobody picks among`, () => {
         const [entry] = chatCapacity(NOW).providers;
         expect(entry?.pooled).toBe(true);
         expect(entry?.rows).toHaveLength(1);
-        // No name on the row: the address is not a choice, so printing one reads as "this account is what you
-        // have". The count beside the heading is what says how deep the pool is.
         expect(entry?.rows[0]).toMatchObject({ label: undefined, percent: 4 });
         expect([entry?.ready, entry?.total, entry?.hidden]).toEqual([4, 5, 0]);
     });
 
-    // Accounts the reader picks between by name get a row each, capped, and the cap says so rather than
-    // trimming in silence.
     it(`caps a choosable list at three rows and counts the rest`, () => {
         providerAccounts.value = {
             claude: [1, 2, 3, 4, 5].map((index) => claude({ id: `a${index}`, label: `a${index}@example.com`, usage: usage(index * 5) })),
@@ -376,8 +299,6 @@ describe(`a pool nobody picks among`, () => {
         expect(entry?.hidden).toBe(2);
     });
 
-    // A lone account is already named by the heading above it, and its lanes name the allowances they measure,
-    // so the row itself has nothing left to be called: a name line there is the provider's name a second time.
     it(`leaves a lone account's row unnamed and lets its lanes carry the pools`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `only@example.com`, usage: usage(30) })] };
         const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
@@ -386,10 +307,7 @@ describe(`a pool nobody picks among`, () => {
     });
 });
 
-/* WHAT THE READER IS ACTUALLY DECIDING, and the reason one number could not answer it. A subscription is not
- * one allowance: the 5-hour session and the week run out separately and come back days apart, so "87%" is two
- * completely different situations — an hour's wait, or the rest of the week rationed — and the rail used to
- * print the same bar for both. */
+// A subscription's 5-hour session and week run out and reset separately, so one percentage cannot represent both.
 describe(`the allowances behind one account`, () => {
     const pools = (
         ...windows: { kind: string; label?: string; utilization: number; gates?: `all` | `none` | { models: string[] } }[]
@@ -403,8 +321,6 @@ describe(`the allowances behind one account`, () => {
             claude: [claude({ id: `a`, usage: pools({ kind: `seven_day`, utilization: 87 }, { kind: `five_hour`, utilization: 12 }) })],
         };
 
-        // The week is the binding pool and still ranks the row; what changed is that the reader can now see
-        // WHICH pool the 87% belongs to, and that the next hour is wide open.
         const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
         expect(row?.percent).toBe(87);
         expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([
@@ -413,10 +329,6 @@ describe(`the allowances behind one account`, () => {
         ]);
     });
 
-    /* Two pools of the same LENGTH are two different allowances, and a plan that meters a model separately
-     * publishes exactly that. Both lanes would read "wk" with nothing to tell them apart, so the one metered
-     * for less than everything says what it is metered for — the same conflation WINDOW_NAMES exists to stop,
-     * one level shorter. */
     it(`says what a scoped pool is scoped to, and leaves an all-models pool to its period alone`, () => {
         providerAccounts.value = {
             claude: [
@@ -432,7 +344,6 @@ describe(`the allowances behind one account`, () => {
         };
 
         const [row] = chatCapacity(NOW).providers[0]?.rows ?? [];
-        // Same window, tightest first: the one about to gate a turn is the one read without hunting.
         expect(row?.lanes.map((lane) => [lane.short, lane.scope])).toEqual([
             [`wk`, `Opus`],
             [`wk`, `Fable`],
@@ -440,9 +351,6 @@ describe(`the allowances behind one account`, () => {
         ]);
     });
 
-    /* A pool that gates nothing a turn here runs (ChatGPT's code-review limit, Claude's Cowork slice) is the
-     * account's to reconcile on the Usage tab and never an answer to "what can I run on": a lane for one is a
-     * bar in a column of offers, measuring an allowance no offer spends. */
     it(`draws no lane for a pool that cannot gate a turn`, () => {
         providerAccounts.value = {
             claude: [
@@ -457,8 +365,7 @@ describe(`the allowances behind one account`, () => {
         expect(row?.lanes.map((lane) => lane.label)).toEqual([`5-hour session`]);
     });
 
-    // A provider that states its window only in the display name still gets a lane, sorted by the length it
-    // named: an unrecognised period would sink to the end, and 12 hours is not the end of anything.
+    // An unrecognised period sorts last; a window named only in words still sorts by the length it states.
     it(`reads a window the provider spells out in words`, () => {
         translatorAccounts.value = {
             ...NO_ROUTED,
@@ -486,20 +393,18 @@ describe(`the order the providers are read in`, () => {
         translatorAccounts.value = {
             ...NO_ROUTED,
             gemini: [google(1, 12)],
-            // Grok publishes no limits at all: usable, unmeasurable, and not headroom.
+            // Grok publishes no usage data: unmeasurable, not the same as roomy.
             grok: [{ name: `grok-1`, label: `grok@example.com` }],
         };
         expect(chatCapacity(NOW).providers.map((entry) => entry.provider)).toEqual([`gemini`, `claude`, `grok`]);
     });
 });
 
-/* THE RAIL IS SPARE WIDTH OR IT IS NOTHING. The transcript stops widening at its reading measure, so past that
- * point a pane spends every extra pixel on centring — and that surplus, and only that surplus, is what the rail
- * is allowed to take. Asserted at the boundary by value: a relational test ("2000 fits and 900 does not") holds
- * with the threshold anywhere between, which is the whole thing worth pinning. */
+// The rail claims width only once every open pane already has its full reading measure; thresholds are asserted by
+// value at the boundary.
 describe(`when there is room for the rail`, () => {
     const LIST_RAIL = 320;
-    // One pane's comfort width plus both rails: the narrowest panel that has anything to spare.
+    // One pane's comfort width plus both rails: the narrowest panel with anything to spare.
     const FITS = 872 + LIST_RAIL + CAPACITY_RAIL_PX;
 
     it(`yields the column only once no pane pays for it`, () => {
@@ -507,32 +412,21 @@ describe(`when there is room for the rail`, () => {
         expect(railFitsBeside(FITS - 1, LIST_RAIL, 1)).toBe(false);
     });
 
-    // The chat list beside it is draggable, and a rule that assumed its default would hand the panes 160px less
-    // than it promised to anyone who had widened it.
     it(`measures against the chat list's current width, not its default`, () => {
         expect(railFitsBeside(FITS, LIST_RAIL + 1, 1)).toBe(false);
     });
 
-    // Two transcripts side by side want the width twice: a split that has only just fitted is not a window with
-    // room to spare.
     it(`asks for the comfort width once per pane`, () => {
         expect(railFitsBeside(FITS + 872, LIST_RAIL, 2)).toBe(true);
         expect(railFitsBeside(FITS + 871, LIST_RAIL, 2)).toBe(false);
     });
 
-    // The panel is measured, and until it has been the rail must not flash onto a window whose width is unread.
     it(`draws nothing before the panel has been measured`, () => {
         expect(railFitsBeside(0, LIST_RAIL, 1)).toBe(false);
     });
 
-    /* WIDTH IS NOT THE ONLY QUESTION THE PANEL ASKS. It reserves the strip the rail stands in (--capacity-rail)
-     * before anything is laid out, so an empty fleet has to be knowable up here: otherwise a sandbox with
-     * nothing connected holds a rail's width of padding open down the side of a transcript for a column that
-     * draws nothing at all.
-     *
-     * ROUTED CONNECTIONS COUNT. The obvious reading of "is anything connected" is the OAuth list, and this
-     * sandbox's Gemini pool lives entirely in the other one — that reading reserves nothing for the fleet this
-     * rail was built to report on. */
+    // hasCapacity() gates the width reserved for the rail before layout runs, so it must count routed connections (e.g.
+    // Gemini) too, not only OAuth accounts.
     it(`knows an empty fleet from one whose connections are all routed`, () => {
         expect(hasCapacity()).toBe(false);
 

@@ -8,69 +8,28 @@ import { watchPromptSignals } from "../terminal/prompt-signal.js";
 
 const execFileAsync = promisify(execFile);
 
-/* THE PUSH FOR EVERYTHING THAT IS RUNNING RATHER THAN WRITTEN, the fourth change feed, beside the workspace
- * watcher, the repo scan and the ref watch.
- *
- * Those three all start from a file. This one covers the state that has no file at all: tmux sessions, panel
- * dev servers, listening sockets, the agent's browsers, the children its turns spawn. Nothing on disk moves
- * when a dev server binds its port, so no `workspaceChanged` batch could ever say so, and for want of that
- * frame, every view of a running thing carried its own timer. Six of them, in every open tab, forever.
- *
- * The state is in THIS process, so the daemon is the right place to notice. Three sources, because they
- * genuinely differ:
- *
- *   ANNOUNCED, the daemon does the thing itself (starts the panel, mints the browser, opens the child), so the
- *   code that changes the state calls `publishRuntimeChange` on its way past. Instant, exact, free.
- *
- *   ANNOUNCED FROM THE SHELL, the one thing that happens in the container without the daemon touching it and
- *   still has an exact moment: a person's command starting and finishing in a terminal tab. Our zsh's
- *   preexec/precmd hooks touch a file, and terminal/prompt-signal.ts turns that into a `terminals` frame. It
- *   is here because the alternative is a poll that is always either too slow to feel live or too expensive to
- *   leave running.
- *
- *   SAMPLED, nothing tells anyone. A pane dies when its command exits; a dev server binds its port seconds
- *   after launch. Both are only knowable by looking, so the sampler looks. ONCE, here, on the connection the
- *   browsers already hold, instead of once per browser per interval over the tunnel. It runs only while a
- *   browser is subscribed and publishes only when what it sees has changed, so an idle sandbox with a tab open
- *   costs two file reads and one `tmux list-panes` every couple of seconds, and pushes nothing at all.
- *
- * All three land in the same throttle, and the throttle is the thing that keeps this cheaper than what it
- * replaces rather than merely faster. */
+// Push feed for state with no file on disk: tmux sessions, panel servers, sockets, browsers, child turns.
+// - announced: the daemon calls publishRuntimeChange itself when it changes something
+// - announced from the shell: zsh hooks report a command starting or finishing via prompt-signal.ts
+// - sampled: nothing announces a pane dying or a port opening, so a sampler polls and diffs
+// All three land in the same throttle.
 
-// How often the sampled half looks. Matches the managed-process sweep, which is the clock a panel's
-// start → healthy transition already moves on.
+// How often the sampled half polls; matches the managed-process sweep panel start→healthy already moves on.
 const SAMPLE_MS = 2000;
 
-/* The floor between two frames for one domain, a rate limit, not a debounce: the first change fires
- * immediately and the rest of the burst coalesces into one frame at the end of the window.
- *
- * The numbers are the polls these domains replace, which is the promise being kept: no view refreshes LESS
- * often than it used to, and no domain can ever cost more requests than its poll did. `subagents` is the one
- * that needs the ceiling, a working child reports a tool use and a token count continuously, and without this
- * an unlucky turn would bill every connected browser several roster reads a second to move a number on a card.
- * The discrete domains sit at a quarter-second, which is a burst-coalescing window rather than a real limit:
- * starting a panel touches panels and terminals at once and should arrive as one frame.
- */
+// Rate limit per domain: the first change fires at once, the rest of a burst coalesces at the window's end.
 const THROTTLE_MS: Record<RuntimeDomain, number> = {
     terminals: 1000,
     panels: 250,
     ports: 250,
     browsers: 1000,
     subagents: 2000,
-    // An executor pass settles a whole batch in a burst of file writes; one frame at the end of it is the whole
-    // news. Nothing here changes more often than a post going out.
+    // An executor pass writes a batch in a burst; one frame at the end of it is the whole news.
     approvals: 250,
-    // One frame per landing, and a landing is minutes of work, so this window only ever coalesces the burst a
-    // multi-repo land makes while writing ONE sentence, which is exactly one frame's worth of news.
+    // A landing is minutes of work; this window only coalesces the multi-repo burst writing one sentence.
     landings: 250,
-    /* A SOCKET OPENING OR CLOSING, three domains at the discrete window, and they belong there for the reason
-     * `panels` does rather than by analogy: connecting is one event, and a person is watching for it. A machine
-     * coming up fires attach, then its hello's announce, then its describe, three publishes for one arrival,
-     * which is exactly the burst this window exists to fold into a single frame.
-     *
-     * The ceiling matters more than the floor here. These publish from a hub whose heartbeat drops a silent
-     * connection, so a laptop flapping on bad wifi reconnects on its own backoff, and the window is what keeps
-     * that from billing every open tab a capability read per flap. */
+    // A connecting machine fires attach, hello, and describe as three publishes for one arrival; the window folds that
+    // burst, and a flapping connection's own reconnect backoff into one frame.
     hosts: 250,
     webext: 250,
     runners: 250,
@@ -84,9 +43,8 @@ const nextAllowedAt = new Map<RuntimeDomain, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let timerDueAt = 0;
 
-// Arm the flush for `at`, pulling an already-armed timer EARLIER when a newly-pending domain may go out sooner.
-// Without the pull, a frame waiting out a chatty domain's window would drag a discrete one (a panel starting)
-// along with it, and a click would feel as slow as the slowest thing in the sandbox.
+// Arms the flush for `at`, pulling an already-armed timer earlier if a new domain may go out sooner; otherwise a
+// discrete change would wait out a chattier domain's window.
 const arm = (at: number): void => {
     if (timer !== undefined) {
         if (timerDueAt <= at) {
@@ -125,12 +83,10 @@ const flush = (): void => {
     }
 };
 
-/** Say that a runtime domain moved. Coalesced and rate-limited per domain, so a caller may report every
- *  mutation it makes without weighing what that costs, which is the only way a publish site stays a one-liner
- *  next to the line that did the work.
- *
- *  A publish with nobody connected is DROPPED rather than queued: there is no browser to be stale, and a new
- *  connection re-asks every runtime-bound key anyway (the hello frame, see runtimeBoundQueryKeys). */
+/**
+ * Reports a runtime domain moved; coalesced and rate-limited per domain, so a caller can publish on every mutation
+ * without weighing the cost. Dropped, not queued, when nobody's connected, since a new connection re-asks everything.
+ */
 export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void => {
     if (subscribers.size === 0) {
         return;
@@ -143,39 +99,18 @@ export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void
 
 /* ---- the sampled half ---- */
 
-/* What the sampler compares. A fingerprint, never the answer: knowing that the ports changed costs two file
- * reads, while knowing WHICH process owns each one walks every /proc fd table, far too much to do on a timer,
- * and pure waste when the view that renders it may not even be open. So the cheap half runs on the clock and
- * the expensive half runs when a browser asks. */
+// A cheap fingerprint, not the answer: knowing a port changed costs two file reads, knowing who owns it walks every
+// /proc fd table. The cheap half runs on a timer; the expensive half runs only when a browser asks.
 export interface RuntimeProbes {
     readonly terminals: () => Promise<string>;
     readonly ports: () => Promise<string>;
 }
 
-/* How coarsely a session's activity clock counts as "changed".
- *
- * The terminals list carries each session's last-activity stamp, which the work popover renders as "running ·
- * 2m ago". A session producing output moves that stamp continuously, so an exact fingerprint would push on
- * every sample, a live tail would be the most expensive thing in the sandbox. Bucketing to the interval the
- * old poll ran at keeps that line exactly as fresh as it was, while a session that is merely OPEN moves
- * nothing. Membership, liveness and exit status stay exact: those are what the strip and the badge are. */
+// Bucket size for the activity stamp; output alone won't push every sample.
 const ACTIVITY_BUCKET_MS = 10_000;
 
-/* THE FINGERPRINT IS THE TERMINALS LIST, MINUS THE PARTS THAT ARE NOT TMUX'S, so the sampler pushes exactly
- * when what the browser would draw has changed. Same format string, same fold (terminal/pane-state.ts), one
- * line per session: membership, liveness, the last window's exit status, the activity clock bucketed, and
- * WHETHER A FOREGROUND COMMAND IS RUNNING IN THERE.
- *
- * That last field is why this reads through `foreground` rather than counting panes. A command ending in a
- * `web-*` shell kills nothing and starts nothing: the pane lives, its exit status is tmux's not the command's,
- * and the activity stamp stops moving at the instant the prompt is drawn. Every field the old fingerprint
- * watched therefore looked IDENTICAL before and after, and the strip's busy dot stayed lit until the coarse
- * activity bucket happened to roll under it, up to ten seconds later and, when the prompt landed in the same
- * bucket as the last push, not until something unrelated moved.
- *
- * Busy is folded to a flag, not the command word, on purpose: a build whose foreground process churns
- * (`pnpm` → `node` → `git`) would otherwise push on every sample, the live-tail cost this whole module is
- * shaped to avoid. The word itself still reaches the browser, in the list it re-reads when the flag flips. */
+// Terminals list minus tmux-external fields, plus whether a foreground command is running, so a shell prompt alone
+// doesn't look unchanged. Busy is a flag, not the command word, so process churn doesn't push every sample.
 export const paneFingerprint = (stdout: string): string =>
     [...paneStates(stdout)]
         .map(([name, { live, exitCode, activityAt, liveCommand }]) =>
@@ -200,9 +135,8 @@ const tmuxFingerprint = async (): Promise<string> => {
     }
 };
 
-// The set of listening TCP ports, straight out of procfs, st 0A is LISTEN, and the port is the second half of
-// the local address (hex). Deliberately blind to WHO is listening: the attribution is what costs, and a port
-// changing hands without changing number is not something any of these views draw differently.
+// Listening TCP ports from procfs (st 0A is LISTEN; port is the local address's hex second half). Blind to who holds a
+// port, since no view here draws that differently.
 const listeningPortsFingerprint = async (procRoot = "/proc"): Promise<string> => {
     const tables = await Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
     const ports = new Set<string>();
@@ -223,12 +157,8 @@ const defaultRuntimeProbes: RuntimeProbes = {
     ports: () => listeningPortsFingerprint(),
 };
 
-/* The loop, as a factory so a test can drive it with its own probes and clock. Each probe's previous reading is
- * the baseline; a first reading establishes it and publishes nothing, because "different from nothing" is not a
- * change and a browser that just connected has already re-asked.
- *
- * A slow probe never overlaps itself, the tick is skipped rather than queued, so a tmux server wedged for ten
- * seconds costs one late sample instead of five concurrent execs. */
+// Factory so a test can supply its own probes and clock. A first reading only establishes the baseline and publishes
+// nothing; a slow probe's tick is skipped rather than queued, never overlapping itself.
 export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbes, intervalMs = SAMPLE_MS) => {
     const seen = new Map<string, string>();
     let sampling = false;
@@ -249,8 +179,8 @@ export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbe
             if (changed("terminals", terminals)) {
                 publishRuntimeChange("terminals");
             }
-            // One reading, two domains: a repo's panel reports healthy when a socket appears under its directory
-            // (panels.ts reads health off the listening sockets), so a port arriving IS a panel settling.
+            // One reading, two domains: a panel reports healthy off its listening socket, so a port arriving is a panel
+            // settling too.
             if (changed("ports", ports)) {
                 publishRuntimeChange("ports", "panels");
             }
@@ -274,8 +204,8 @@ export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbe
                 clearInterval(interval);
                 interval = undefined;
             }
-            // Drop the baselines with the loop: whatever changes while nothing is connected is covered by the
-            // wholesale re-ask on the next hello, and a stale baseline would only produce one phantom frame.
+            // Dropped with the loop: changes while nothing's connected are covered by the next hello's re-ask; a stale
+            // baseline would produce a phantom frame.
             seen.clear();
         },
         sample,
@@ -284,13 +214,14 @@ export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbe
 
 const sampler = createRuntimeSampler();
 
-// The shell's own half of the announced side, from outside this process: our zsh tells us the moment a command
-// starts and the moment its prompt comes back (terminal/prompt-signal.ts), which is the one transition tmux
-// keeps to itself. Held for as long as anything is subscribed, on the same terms as the sampler.
+// zsh hooks report a command's start and prompt-return, the one transition tmux itself doesn't expose; held for as long
+// as anything is subscribed.
 let unwatchPrompts: (() => void) | undefined;
 
-/** Subscribe a /events connection to the runtime feed. The sampled half runs only while at least one connection
- *  holds a subscription, no browser, no looking. */
+/**
+ * Subscribes a /events connection to the runtime feed. The sampled half runs only while at least one subscriber holds
+ * it: no browser, no looking.
+ */
 export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void): (() => void) => {
     subscribers.add(listener);
     sampler.start();

@@ -1,9 +1,7 @@
-<!-- Choosing a run's SCOPE, which is the only decision a generation run really needs from the user.
-
-     The default is deliberately not "everything". A package is one isolated agent, so documenting a 50-package
-     monorepo is fifty sessions and real money, and after the first run, the packages worth revisiting are the ones
-     that changed. So the presets are "what has no document" and "what the tool says is stale", with everything as
-     an explicit choice rather than the path of least resistance. -->
+<!--
+    Chooses a documentation run's scope. Defaults to 'undocumented' or 'stale' packages, never 'everything' — each package is a separate agent run,
+    so documenting a whole monorepo at once must be an explicit choice.
+-->
 <script setup lang="ts">
 import { AgentRunButton, type AgentRunChoice, Button, Checkbox, Icon, Modal, useAgentRunPick } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";

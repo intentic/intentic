@@ -8,24 +8,13 @@ import type { CapabilityHandler } from "../capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
 import { checkoutInto, previousDir } from "../git-checkout.js";
 
-// An intentic extension: a git checkout at .intentic/local/extensions/<id>, sha-pinned by construction (the config
-// schema requires a full commit sha, so the owner approves EXACTLY the code that runs; an update is an explicit
-// re-add at a new sha). Install validates the manifest and the prebuilt entry bundle BEFORE the staged checkout
-// goes live, so a broken extension never replaces a working one; an update stops the outgoing checkout's
-// declared processes at the swap (they'd otherwise keep executing the replaced code until a reboot) and sets
-// that checkout aside one version deep, which is what the extensions revert route swaps back. The extensions
-// routes serve the manifest list + bundle; agent contributions ride extensionAgentDirsOf into the SDK's plugin
-// loader.
+// A git checkout at .intentic/local/extensions/<id>, sha-pinned by the schema (a full commit sha). Install validates
+// the manifest and entry bundle before the checkout goes live, so a broken extension never replaces a working one. An
+// update stops the outgoing processes at the swap, kept one version deep for revert.
 export const extensionHandler: CapabilityHandler = {
     secret: (config) => ((config as ExtensionConfig).token !== undefined ? "token" : undefined),
-    /* `registry` is echoed because it is not a credential and never was: the address of a public catalogue.
-     * Withholding it cost far more than a missing label: secret-fields.ts derives the credential keys as the
-     * COMPLEMENT of this echo, so an unechoed field is vaulted and the manifest keeps the marker in its place,
-     * and the marker is not a url, so every install from the registry catalogue (which always attaches the
-     * registry it browsed) wrote an entry that failed CapabilitySchema on the very next read and was skipped as
-     * unreadable. The extension then had no capability entry to be enumerated from: no row, no switch, no
-     * views, no bin, no agent plugin. An echo is a claim about what the browser may see, and here it is also
-     * the claim that decides what leaves the file, so a field that is merely uninteresting must still be named. */
+    // `registry` is echoed though harmless: secret-fields.ts vaults whatever this doesn't echo, and a vaulted
+    // `registry` (not a url) fails CapabilitySchema on the next read, deleting the whole entry.
     echo: (config) => {
         const extension = config as ExtensionConfig;
         return {
@@ -36,10 +25,9 @@ export const extensionHandler: CapabilityHandler = {
             hasToken: extension.token !== undefined,
         };
     },
-    /* `reapply: false` for the plugin handler's reason and one more: this kind's apply re-clones, so re-running
-     * it to change a label would fetch code the owner already has. The checkout moves instead, with the version
-     * kept aside for a revert; the processes declared by the old name are stopped, since their keys carry it
-     * and the reconcile that follows starts them under the new one. */
+    // `reapply: false`: apply re-clones, so re-running it just to rename would refetch code already present. The
+    // checkout moves instead; old-name processes stop since their keys carry it, reconcile restarts them under the new
+    // name.
     rename: {
         reapply: false,
         carry: async (ctx, from, to, config) => {
@@ -63,14 +51,11 @@ export const extensionHandler: CapabilityHandler = {
             url,
             ref,
             token,
-            // An update keeps the outgoing checkout one version deep (the revert route's subject); on a first
-            // install there is nothing to keep and this is a no-op.
+            // Keeps the outgoing checkout one version deep, for revert; a no-op on a first install.
             keepPrevious: true,
-            /* The quiesce step: stop the OUTGOING checkout's declared processes before its directory is
-             * replaced. Without this an updated extension's gateway keeps executing the previous release until
-             * a reboot, `processes.start` is a no-op against a running session, so the post-apply autoStart
-             * seam alone cannot cycle them. The old manifest is read at the old config's `path` (the update may
-             * move it), via the store because the route upserts the new config only after apply succeeds. */
+            // Quiesce: stops the outgoing checkout's processes before its directory is replaced (a no-op restart can't
+            // cycle a still-running one). Reads the old manifest at the stored config's `path`, before the route's
+            // upsert lands.
             beforeSwap: async () => {
                 const current = await ctx.capabilities.get(id);
                 const livePath = current?.kind === "extension" ? current.config.path : path;
@@ -86,12 +71,12 @@ export const extensionHandler: CapabilityHandler = {
                     throw new Error("not an intentic extension: no intentic-extension.json at the extension root");
                 }
                 const manifest = ExtensionManifestSchema.parse(JSON.parse(raw));
-                // Prebuilt-dist rule: the sha the owner approved must BE the code that runs, no install-time build.
+                // Prebuilt-dist rule: the sha the owner approved must be the code that runs, no install-time build.
                 if (manifest.entry !== undefined && (await ctx.files.read(join(dir, manifest.entry))) === undefined) {
                     throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file: commit the prebuilt bundle`);
                 }
-                // An image fragment must exist and be RUN/ENV-only: extensions can install tools but not claim
-                // container privileges (those stay daemon-owned) or swap the base image.
+                // Fragment must be RUN/ENV only: extensions install tools, never claim privileges or swap the base
+                // image.
                 const fragmentPath = manifest.contributes?.environment?.fragment;
                 if (fragmentPath !== undefined) {
                     const fragment = await ctx.files.read(join(dir, fragmentPath));
@@ -122,13 +107,13 @@ export const extensionHandler: CapabilityHandler = {
     remove: async (ctx, id, config) => {
         const { path } = config as ExtensionConfig;
         const dir = extensionDir(ctx.workspace.root, id);
-        // Stop declared background processes before the checkout (and with it the manifest) disappears.
+        // Stops declared background processes before the checkout, and its manifest, disappear.
         const manifest = await readExtensionManifest(extensionRootOf(dir, path));
         for (const process of manifest?.contributes?.processes ?? []) {
             ctx.serviceProcesses.stop(extensionProcessKey(id, process.name));
         }
         await ctx.files.remove(dir);
-        // The kept-aside previous version goes with it, a removed extension has nothing to revert to.
+        // The kept-aside previous version goes too: a removed extension has nothing left to revert to.
         await ctx.files.remove(previousDir(extensionsRoot(ctx.workspace.root), id));
     },
 };

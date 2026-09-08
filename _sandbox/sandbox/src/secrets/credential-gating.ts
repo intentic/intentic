@@ -1,52 +1,27 @@
 import type { Capability, CredentialGate, TurnNote } from "@intentic/sandbox-contract";
 import type { CredentialGrants } from "./credential-grants.js";
 
-/* ENFORCEMENT BY ABSENCE, the half of this feature that never raises a card.
- *
- * A stored secret can be gated at the exit it resolves at, because there IS an exit: the model writes a
- * reference, the resolver stops, a person is asked. A CONNECTED ACCOUNT has no such moment. A browser profile
- * is signed in before the turn starts; a connector's token is an environment variable the shell already has;
- * an MCP server is a process already running with its credential inside. By the time the agent "uses" any of
- * them there is nothing left to intercept — the use is a click on an already-authenticated page. So a gated
- * one is simply NOT THERE: its profile is not mounted, its variables are not exported, its server is not
- * started. That is the house pattern already (personas.ts withholds exactly this way, and says why), and this
- * module is the same filter driven by the gate policy instead of by a persona card.
- *
- * WHICH MEANS A NOTE IS OWED, and it is the reason this module also writes prose. Absence is invisible: a turn
- * whose Reddit account was withheld does not see a refusal, it sees a sandbox with no Reddit account, concludes
- * the thing is not connected, and either gives up or goes looking for another road — which is the exact
- * failure `deniedSkills` was written against one door over. The note tells the model the door exists and who
- * opens it, so "I need approval from Bob" is a sentence it can say to the user instead of "Reddit isn't set
- * up".
- *
- * A GRANT MAKES IT PRESENT AGAIN, from the NEXT turn. There is no way to mount a browser profile into a turn
- * that is already running, so `secrets request` is honest about it: the release covers the conversation, and
- * the account arrives when the next turn starts. A `cli` connector is the one exception worth telling the
- * model about, because its credential is also a named secret, so a reference reaches it through the shell
- * exit, which asks per use — a connector can be used inside the very turn that asked for it. */
+// Gates mounted capabilities (browser/identity/mcp) by absence: nothing here can stop a profile already signed in, a
+// token exported, or a server running. The note exists because absence alone reads as "not connected". A release only
+// takes effect from the next turn; `cli` is the exception, gated per use like a secret.
 
-// The kinds whose credential is a MOUNT rather than a value: signed in, exported or running before the turn
-// begins. These are the ones withheld here; a gated secret is stopped at its exit instead.
+// Kinds whose credential is a mount (signed in/exported/running before the turn), not a value at an exit.
 const MOUNTED_KINDS = new Set<Capability["kind"]>(["browser", "identity", "mcp"]);
 
 export interface GatedCapabilities {
-    // The manifest as this turn may see it, gated mounts removed. Mutable like personaCapabilities' own
-    // answer, because it stands in the same place: the list every arm's preflight is handed.
+    // The manifest with gated mounts removed; mutable, the list every arm's preflight gets.
     readonly capabilities: Capability[];
-    // The gates that did the removing, for the note. One entry per withheld capability, in manifest order.
+    // The gates that did the removing, for the note; one entry per withheld capability, in manifest order.
     readonly withheld: readonly CredentialGate[];
 }
 
-// Whether this conversation already holds a release for a subject: the "rest of the conversation" grant, which
-// is the only scope a mounted credential can be gated with (the route forces it, and credential-grants.ts
-// argues why a session cannot be released for one use).
+// Whether this conversation already holds a release for a subject; the only scope a mounted credential can be gated
+// with, since a mount cannot be released for one use.
 const released = (grants: CredentialGrants, conversationId: string | undefined, subject: string): boolean =>
     conversationId !== undefined && grants.has(conversationId, subject) !== undefined;
 
-/* Which mounted capabilities this turn does NOT get, applied after the persona's own filter and for the same
- * reason it exists: the arms build browser profiles and MCP servers from the list they are handed, so a
- * capability that is not in it cannot be reached by any road. A conversation that already holds a release
- * keeps its capability, which is what "for the rest of this conversation" means. */
+// Removes mounted capabilities this turn does not get: arms build profiles and servers only from this list, so an
+// absent capability is unreachable. A conversation already holding a release keeps it.
 export const gatedCapabilities = (
     capabilities: readonly Capability[],
     gates: readonly CredentialGate[],
@@ -71,12 +46,8 @@ export const gatedCapabilities = (
     return { capabilities: kept, withheld };
 };
 
-/* THE SHELL ENVIRONMENT WITHOUT THE GATED CONNECTORS' CREDENTIALS, the suffix-removal shape personaCliEnv
- * uses, applied to the gate policy's own list.
- *
- * Driven by the DENIED set rather than by a granted allowlist for personaCliEnv's reason, verbatim: this
- * environment carries more than connector credentials (the PATH that makes extension CLIs resolve, an
- * extension's own settings), and filtering to an allowlist would take those with it. */
+// The shell environment with gated connectors' variables removed by suffix, mirroring personaCliEnv. Driven by a denied
+// set, not an allowlist, since the environment also carries PATH and other settings an allowlist would strip.
 export const gatedCliEnv = (
     cliEnv: Record<string, string>,
     capabilities: readonly Capability[],
@@ -110,36 +81,22 @@ export const gatedCliEnv = (
     };
 };
 
-/* THE SKILLS THAT CAME WITH WHAT WE WITHHELD, as the tool names a runtime knows them by, so a gated
- * capability's cheatsheet leaves the turn with its credential.
- *
- * The persona filter already learned this lesson and wrote it down (personas.ts `deniedSkills`): a skill whose
- * tools are not there reads to the model as an OFFER, so it follows the cheatsheet, calls a tool that does not
- * exist, and reports the sandbox as broken. A connector's cheatsheet without its token fails exactly the same
- * way as an account's skill without its browser, which is why both halves of the withholding feed this.
- *
- * The turn NOTE is what replaces them: "this needs Bob, here is how to ask" is the one thing the model should
- * read about a gated credential, and a skill still sitting in its context would be a second, contradictory
- * answer to the same question. */
+// Skill names for withheld capabilities, removed alongside their credential: a cheatsheet with no matching tool reads
+// to the model as an offer it will follow and fail. The turn note replaces it as the one thing the model should read
+// instead.
 export const gatedSkills = (withheld: readonly CredentialGate[]): string[] => [
     ...new Set(withheld.map((gate) => `Skill(${gate.subject})`)),
 ];
 
 export const GATED_CREDENTIALS_TITLE = "Some connected accounts need a person's approval";
 
-/* THE ONE NOTE, over everything withheld from this turn, mount and connector together. One note rather than
- * one per capability, because the model reads notes as a list of conditions and three of them saying the same
- * thing in different words is three chances to act on only the first.
- *
- * It names the CLI door rather than describing the feature, for the reason every note in this sandbox names a
- * command: a model told "this needs approval" says so to the user and stops, and a model told what to run
- * asks. Undefined when nothing was withheld, which is nearly every turn. */
+// One note over everything withheld, not one per capability, so the model doesn't see one condition three times. Names
+// the `secrets request` command instead of describing the feature, so the model asks rather than reports.
 export const gatedCredentialsNote = (withheld: readonly CredentialGate[]): TurnNote | undefined => {
     if (withheld.length === 0) {
         return undefined;
     }
-    // One line per subject, deduplicated: a capability can be withheld from the mount list and the environment
-    // both (nothing is, today, but the two filters are independent and the note must not say it twice).
+    // Deduplicated by subject: the mount and environment filters are independent and could both report one.
     const bySubject = new Map<string, CredentialGate>();
     for (const gate of withheld) {
         bySubject.set(gate.subject, gate);

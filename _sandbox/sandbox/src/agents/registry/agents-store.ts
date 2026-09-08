@@ -11,73 +11,26 @@ import {
 import { z } from "zod";
 import { writeJsonFile } from "../../store/json-file.js";
 
-// The persisted half of the fleet registry (<historyRoot>/agents.json, on the /history volume so a
-// conversation's identity survives container rebuilds alongside any worktree it owns). One entry per
-// conversation. Runtime-only state (running/awaiting, attention, activity, context fill) lives in the
-// registry's memory and is rebuilt from turn frames; only what must survive a restart is here.
+// Persisted half of the fleet registry (<historyRoot>/agents.json, on /history so identity survives container
+// rebuilds); one entry per conversation. Runtime-only state (status, attention, activity) lives in the registry's
+// memory, rebuilt from turn frames; only what must survive a restart is here.
 
-/* THE TURN LIFECYCLE, and nothing else. Every value here is an EVENT, how the last turn ended, which is
- * exactly the class of fact nothing but this entry remembers. running/awaiting are excluded because they are
- * rebuilt from the live turn's frames (a daemon restart mid-turn must rehydrate to a state the user can act
- * on), and ready/landed/conflict because they are not facts about the turn at all: they answer "does this
- * branch hold work the main line does not", which git answers live and correctly at any moment. Storing that
- * answer made a cache with no invalidation, and a card that outlived what it described, see standing.ts.
- *
- * `interrupted` is what a LIVE turn leaves here, written by registry.begin, overwritten by registry.finish.
- * The value on disk while a turn runs is therefore the one that should stand if the daemon never comes back,
- * which is the only way to get this right: the daemon does not get to write a parting state. Its container is
- * recreated with `docker rm -f` on every rebuild (dev-sandbox.sh) and it is equally free to be OOM-killed, so
- * anything that depended on a graceful shutdown, or on a boot pass repairing a "running" marker, would be
- * skipped in exactly the cases it exists for.
- *
- * Writing `idle` here instead is what filed a killed agent under Finished: `idle` is the resting status of a
- * turn that ended CLEANLY, so an agent whose turn was parked on a question, and whose park died with the
- * process holding it, came back indistinguishable from one that had nothing left to do.
- *
- * `stopped` is the same class of fact for the turn a PERSON ended, and it is separate from `interrupted` for a
- * reason that outlives the label: only `interrupted` is a candidate for the boot resume pass. A turn somebody
- * chose to stop must never come back on its own.
- *
- * It is narrower than "the user ended it", though, and deliberately: a turn ended by DISMISSING its question
- * writes the resting `idle` here instead. Both endings are the user's, but pressing Stop reaches in to halt
- * work they still wanted, the card waits in Attention to be picked up, while waving a question away says
- * they are done with it, and nothing is owed. What the turn wrote is still on its branch either way.
- *
- * `.catch` rather than a bare enum, and the only field here that carries one: agents.json is user data on a
- * volume that outlives every image, so this field's vocabulary shrinking must cost the VALUE, not the row. The
- * per-entry parse below already treats losing a row as a cost to be minimised; a status that no longer exists
- * reads as the resting one, which is what every retired value meant, the turn ended and the land question is
- * now asked of git. */
+// How the last turn ended, not a live state (running/awaiting, rebuilt live) or a derived land verdict (git answers
+// that live). `interrupted` is what a daemon killed mid-turn leaves; only it triggers the boot resume.
 const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "stopped", "error"]).catch("idle");
 
-/* Where a title came from, which is the whole of what decides whether a better one may replace it. The ladder
- * is one question asked four times, how much authority does whoever wrote this name have over the job?
- *
- * `derived` is the opening prompt CUT to a line by a rule with no model behind it (deriveTitle), which is the
- * best that can be done before the first frame comes back. `model` is the naming helper's name for the same
- * prompt (agent/title-namer.ts): it writes rather than cuts, so it beats the guess. `plan` is the heading of a
- * plan the agent wrote, its own name for the whole job, better than any reading of the ask alone. `user` is a
- * rename, which outranks everything: an agent that renames a tab the user just named is a bug.
- *
- * `.catch`, for the reason PersistedAgentStatusSchema carries one: agents.json is user data on a volume that
- * outlives every image, so a value retired from this vocabulary must cost the FIELD and not the row. Reading a
- * retired source as `derived` says exactly what losing it means, the name that is there stands until anything
- * better arrives, which is the resting state of every title. */
+// Authority ladder over the title: `derived` (prompt cut to a line), `model` (naming helper wrote it), `plan` (the
+// agent's own heading), `user` (a rename, outranks all). Unknown values fall back to `derived`.
 const AgentTitleSourceSchema = z.enum(["derived", "model", "plan", "user"]).catch("derived");
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 
-/* HAS THE WINDOW BEEN THROWN AWAY SINCE THE LAST TURN, the second of the two moments a standing preamble note has
- * to be said again (the first is the opening turn). `>=` rather than `===` because the read is one turn behind
- * the write: a compaction is filed under the turn it happened in (agents-registry's `compact` case), and it is
- * the NEXT turn that has to say the note again, so a turn whose count did not advance (an ending that ran no
- * turn at all) errs toward telling the model twice rather than never. */
+// Whether a compaction happened since the last turn, so its preamble note must repeat. `>=`, not `===`: the read is one
+// turn behind the write, so a turn whose count did not advance errs toward telling twice.
 export const compactedSinceLastTurn = (entry: { readonly compactedTurn?: number | undefined } | undefined, conversationTurns: number): boolean =>
     entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1;
 
-/* WHICH PART OF THE WORKSPACE A CONVERSATION CARRIES: the nested repositories its checkout holds (root always,
- * never listed), and the persona card the answer was read off (contract schemas/personas.ts `context`), kept
- * so the preamble can name it. Daemon-local rather than in the contract: nothing outside this process reads
- * it, and the card it was copied from is the owner's own record of the decision. */
+// Nested repos a conversation's checkout holds (root is always included, never listed) plus the persona card it was
+// read off, so the preamble can name it. Daemon-local; nothing outside this process reads it.
 export const CompositionSchema = z.object({
     persona: z.string().optional(),
     repos: z.array(z.string()),
@@ -85,96 +38,41 @@ export const CompositionSchema = z.object({
 export type Composition = z.infer<typeof CompositionSchema>;
 
 export const PersistedAgentSchema = z.object({
-    // The conversationId. `branch` is the placement discriminator: present for an isolated conversation,
-    // absent for one that works directly in the shared workspace.
+    // `id` is the conversationId; `branch` is present only for an isolated conversation.
     id: z.string(),
     branch: z.string().optional(),
-    /* WHERE THE CONVERSATION EXECUTES: the paired runner's id, absent for one that runs here. Latched with
-     * the identity exactly as `branch` is (registry.begin): the first turn's request chooses, every later
-     * turn follows the entry, so a stale tab cannot move a conversation between machines mid-life. Always
-     * beside a `branch`: a remote conversation is isolated by construction, its branch being the unit that
-     * moves between machines (runners/, docs/remote-runners-plan.md at the workspace root). */
+    // The paired runner's id, absent for one that runs here; latched with the identity like `branch`, so a stale tab
+    // cannot move it between machines. A remote conversation is isolated by construction.
     runner: z.string().optional(),
-    // The display name, sanitized to one bounded line, derived from the opening prompt, promoted to a plan's
-    // heading, or chosen outright by a rename. `titleSource` says which, and gates the next promotion.
+    // Display name, one sanitized line; `titleSource` says how it got there and gates the next promotion.
     title: z.string().optional(),
     titleSource: AgentTitleSourceSchema.optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
-    // The turn settings this conversation last ran under, see AgentSummarySchema. Persisted because a client
-    // that opens the agent tomorrow, on another device, has nowhere else to learn them from.
+    // Turn settings last run under; persisted since a client on another device has nowhere else to learn them.
     model: z.string().optional(),
     effort: z.string().optional(),
     thinking: z.boolean().optional(),
     fast: z.boolean().optional(),
-    /* WHAT THE COMPLEXITY JUDGE MADE OF THE LAST TURN HERE, the one piece of state automatic tier selection
-     * keeps, and the only thing that lets it see past the words of a follow-up (prompt-complexity.ts
-     * `afterHardTurn`).
-     *
-     * Persisted with the four settings above and for the same reason: the next turn's judgement reads it, and
-     * that turn may be sent tomorrow from another device. Mirrored onto AgentSummary too, because a surface now
-     * reads it: the composer's pre-send preview runs the same judge over the draft, and this is the one input a
-     * draft cannot contain.
-     *
-     * The JUDGEMENT, never what ran. A turn judged fast that ran standard anyway (nothing cheaper published, or
-     * the feature switched off) is a fact about this sandbox's configuration, while the next turn is asking
-     * about the difficulty of the work. Absent ⇒ nothing judged yet, which an opening message and a
-     * conversation older than the feature both are, and "no reason to be suspicious of these words" is the
-     * right reading for both. */
+    // What the complexity judge made of the last turn, feeding the next turn's `afterHardTurn` signal; may be read
+    // tomorrow, from another device. The judgement itself, never what ran; absent means nothing judged yet.
     tier: z.enum(["fast", "standard"]).optional(),
-    /* THE CONVERSATION'S STANDING VETO over automatic tier selection (AgentTurn.tierHold), persisted with the
-     * four turn settings above and for the same reason: the composer restores it on open, and the turn that
-     * needs it honoured may be sent tomorrow from another device. Unlike `tier` it IS mirrored onto
-     * AgentSummary, because a surface draws it: the composer's own toggle. */
+    // Standing veto over automatic tier selection; mirrored onto AgentSummary, since the composer's own toggle draws
+    // it.
     tierHold: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
-    /* WHICH TURN THIS CONVERSATION'S CONTEXT WINDOW WAS LAST THROWN AWAY IN, as the turn index the compaction
-     * happened under (the value `turns` held while that turn was running). Absent ⇒ never compacted, which is
-     * every conversation that has stayed inside one window.
-     *
-     * What it is FOR: the standing notes a turn preamble carries are said once and then stand in the session's
-     * own history (turn-plan.ts). Compaction is the one event that takes them back out, it summarizes the
-     * messages they rode in on, so the turn AFTER one has to say them again, and no other turn does. Recorded
-     * per turn rather than per event: a loop that compacts three times inside one turn has thrown the window
-     * away once as far as the next turn's preamble is concerned.
-     *
-     * Persisted rather than kept in the runtime state beside the turn's other counters, because the window is
-     * regularly compacted in a turn's last minutes and the daemon is regularly restarted between turns; an
-     * in-memory latch would drop exactly the compaction whose re-telling matters most. */
+    // Turn index the context window was last compacted under; absent means never compacted. The next turn after that
+    // index has to restate its preamble notes, since compaction summarized away the messages they rode in on.
     compactedTurn: z.number().optional(),
-    // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat
-    // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
+    // Set when an automation (a mention, a webhook) opened this conversation; absent means the user started it.
     origin: AgentOriginSchema.optional(),
-    // Who asked for the first turn (a member's email, or `token:<label>`), latched like `origin`. Absent when
-    // the request carried no verified identity or principal.
+    // Who asked for the first turn, latched like `origin`; absent when the request carried no verified identity.
     startedBy: z.string().optional(),
-    // Where this conversation was cut from, when it is a fork of another (ForkedFromSchema). Written from the
-    // fork's first turn and never cleared, both ends of the relationship read it from here.
+    // Where this conversation was forked from; written once at the fork's first turn and never cleared.
     forkedFrom: ForkedFromSchema.optional(),
-    // The worktree composition: each workspace repo ("root" or a repo id, its root-relative dir) with the full
-    // sha its worktree sits on the main line at, and the branch tip whose delta has already LANDED into the main
-    // tree (absent ⇒ nothing landed yet, the base is the reference). Land applies `landedTip → tip`, so each
-    // land carries only the new delta; the review reads `base` and flags each file against `landedTip`.
-    //
-    // `base` MOVES: the pre-turn rebase advances it whenever the main line has run ahead of the branch
-    // (agents/sync.ts), so it is where the branch stands rather than where it started. `landedTip` does not
-    // follow it, that sha is the provenance of a land that really happened, and a rewrite that orphans it is
-    // exactly the case anchorOf falls through to the merge-base for (agents/agent-changes.ts).
-    //
-    // `landedHead`/`landedAt` are that land's provenance in the MAIN tree: the commit HEAD stood on and when.
-    // They are what lets the Changes panel say which agent an uncommitted file came from, `base → landedTip`
-    // names the paths, and a HEAD that has since moved retires the claim (see agents/origins.ts).
-    //
-    // `absorbed` records the landing's one terminal fact: history has taken every path this land put in the
-    // tree (the user committed all of it), at which point no later act of theirs can make the work missing,
-    // an edit-and-discard returns to the commit that holds it. Its value is the landing's SIZE (the count of
-    // paths it actually applied), because the presence reading is a fraction and a settled repo still belongs
-    // in the denominator. Written once, by the attribution scan that observes the absorption (agents/origins.ts
-    // via registry.markLandingAbsorbed), and cleared for free by the next land, which writes a fresh row. It
-    // is what keeps the per-scan attribution cost proportional to the ACTIVE landings rather than to everything
-    // the fleet has ever landed, the in-memory memos it replaces (`spent`/`settled`) re-derived the same
-    // one-way fact from hundreds of git spawns on the first scan after every restart.
+    // Per-repo worktree state. `base` is the main-line sha the branch stands on, moved by the pre-turn rebase;
+    // `landedTip`/`landedHead`/`landedAt` are the last land's provenance; `absorbed` marks it fully committed.
     repos: z.array(
         z.object({
             repo: z.string(),
@@ -185,139 +83,75 @@ export const PersistedAgentSchema = z.object({
             absorbed: z.number().optional(),
         }),
     ),
-    /* WHICH PART OF THE WORKSPACE THIS CONVERSATION CARRIES, copied off the persona card the opening turn wore
-     * (context/conversation-context.ts). It is what `repos` above is brought to on every later turn
-     * (worktrees.ts ensure's selection), so the two are read together: this says what SHOULD be checked out,
-     * that says what IS and where it stands.
-     *
-     * Absent means everything the workspace has, which is every conversation opened with no persona, or with a
-     * card that says nothing about its context. Decided ONCE, with the worktrees: a card edited afterwards
-     * changes what the next conversation carries and never what this one does, for the same reason a card
-     * edited mid-life does not move a running turn's account. */
+    // What the checkout should carry, copied from the opening turn's persona card; `repos` above is brought to this
+    // each later turn. Absent means everything; a later persona edit never moves an existing conversation.
     composition: CompositionSchema.optional(),
-    /* WHAT THE LANDED WORK DID, as a commit subject, drafted from the diff the moment it reached the main tree
-     * (agents/landed-subject.ts), for the Changes panel's "From" chip to file into the commit box.
-     *
-     * Kept HERE rather than derived on demand for two reasons. It is written from a MODEL call, so deriving it
-     * when the panel asks would put a second of latency and a quota charge behind a click that is meant to be
-     * free and instant. And the moment it is cheapest to know is the moment the work arrives: the diff is
-     * already in hand and nobody is waiting on it.
-     *
-     * Persisted alongside the landed shas because it describes the same thing they do, a claim on the main
-     * tree that outlives the card. Archiving the agent does not commit its lines, and land-archive-commit-later
-     * is the ordinary flow, so a subject held only in memory would be gone exactly when the chip needs it.
-     * Overwritten by the next land (the claim grows; so does the sentence about it) and left alone otherwise,
-     * a commit expires the claim, and the entry going quiet is what retires this with it. */
+    // What the landed work did, as a commit subject drafted the moment it lands, for the Changes panel's chip. Kept
+    // here rather than derived on demand, since deriving it would put model latency behind a click meant to be instant.
     landedSubject: z.string().optional(),
-    // The user-facing sentence for the same landing, when this repo keeps a changelog, see OriginAgent.note for
-    // why it is stored apart from the subject rather than as a second line of it. Persisted for the same reason
-    // the subject is: the commit that carries it is usually made long after the land that wrote it.
+    // User-facing sentence for the same landing (a changelog entry); persisted since the commit often comes long after.
     landedNote: z.string().optional(),
-    // The breaking sentence for the same landing, what this change TAKES AWAY from users, destined for the
-    // Release's "Breaking changes" section via the `Breaking-Note:` trailer. Almost always absent.
+    // Breaking-change sentence for the Release's trailer; almost always absent.
     landedBreaking: z.string().optional(),
     status: PersistedAgentStatusSchema,
-    // Why the last turn failed, the EVIDENCE behind an errored card, the same role `conflicts` below plays for
-    // a refused land (see AgentSummarySchema). Persisted rather than held in the turn's runtime state because
-    // the reader who needs it most arrives hours later, at a card nobody watched fail; a fresh turn rebuilds the
-    // entry without it, which is what clears it.
+    // Why the last turn failed; persisted since the reader who needs it arrives hours later, and a fresh turn clears
+    // it.
     failure: z.string().optional(),
-    // Which kind of failure it was, the error frame's own code (see AgentSummarySchema.failureCode). Persisted
-    // beside the sentence and cleared with it, for the same reason: the reader who needs to know a wall from a
-    // crash is the one arriving hours later at a card nobody watched fail.
+    // Which kind of failure, the frame's own code; persisted and cleared alongside `failure`.
     failureCode: z.string().optional(),
-    // A refused turn's three limit facts: when the window reopens (epoch seconds), whether the turn is held
-    // whole for a press, and whether a fire is already booked for it. Persisted because the card that has to
-    // say them outlives the browser that saw the frame; the last two deliberately do NOT survive a daemon
-    // restart in substance (pendingLimit is in memory), which is why both are dropped at init.
+    // A refused turn's limit facts: when it reopens, whether held for a press, whether a fire is booked. The latter two
+    // are dropped on load; that memory does not survive a restart.
     limitResetsAt: z.number().optional(),
     limitHeld: z.boolean().optional(),
     limitScheduled: z.boolean().optional(),
-    // Where the booked move was taking it (AgentSummarySchema.limitMoving); stripped on load with its two
-    // neighbours, since the booking did not survive the process either.
+    // Where a booked move was taking it; stripped on load along with `limitHeld`/`limitScheduled`.
     limitMoving: z.string().optional(),
-    // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit, see AgentSummarySchema.
-    // Persisted because it must govern turns that finish with no browser attached (automations included).
+    // Override of the sandbox-wide autoLand default (absent inherits); must govern turns that finish unattended.
     autoLand: z.boolean().optional(),
-    // Per-agent override of the sandbox-wide resumeAfterOutage setting, absent ⇒ inherit, see
-    // AgentSummarySchema. Persisted for a sharper reason than autoLand's: the whole point of arming a
-    // conversation is that the resume happens with nobody watching, and an outage regularly outlives the
-    // browser tab that answered the offer.
+    // Same override for outages; the whole point of arming it is a resume with nobody watching.
     resumeAfterOutage: z.boolean().optional(),
-    // Per-agent override of the sandbox-wide resumeAfterLimit setting, absent ⇒ inherit. Persisted for the
-    // reason its neighbour is, only more so: an allowance reopens hours out, long past the life of the tab
-    // that armed it, which is the whole case for arming it at all.
+    // Same override for limits, more so: the reopening is often hours past the tab that armed it.
     resumeAfterLimit: z.boolean().optional(),
-    // Per-agent override of the sandbox-wide moveAfterLimit setting, absent ⇒ inherit. Persisted for the reason
-    // its neighbour is: the refusal it answers lands with nobody watching as often as not.
+    // Same override for moving accounts on a spent limit.
     moveAfterLimit: z.boolean().optional(),
-    // A collaborator's standing ask for this work to be landed (see AgentSummarySchema.landRequested).
-    // Persisted so the ask survives a daemon restart, the maintainer it waits for may arrive tomorrow.
+    // A collaborator's standing ask to land; persisted so it survives a restart.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
-    // Why the last land refused, the EVIDENCE behind a conflicted card, which is a different thing from the
-    // card's state: standing.ts reads this only to explain an outstanding delta, never to create one, so a
-    // report whose delta has since gone stops being rendered without needing to be rewritten. Written and
-    // cleared by the same recordLanded that advances the tips, but its per-path CONTENT is a snapshot of
-    // land time (a `workspace` row names uncommitted edits the user clears by committing, which no land
-    // observes), so what surfaces read is re-derived from it, never replayed (land.ts outstandingConflicts).
+    // Why the last land refused; evidence, not state, standing.ts reads it to explain a delta and never to invent one.
+    // A land-time snapshot: surfaces re-derive from it rather than replay its per-path content.
     conflicts: z.array(LandConflictSchema).optional(),
-    /* What the last turn left open (see UnfinishedWorkSchema), written by the finish that measured it.
-     *
-     * Persisted for the reason `failure` above it is, and more sharply: the reader this exists for is the one
-     * who comes back TOMORROW to a board of settled cards, having long since closed the tab that watched the
-     * turn end. A fact held only in the turn's runtime state would be gone by then, which is exactly when it
-     * is worth anything.
-     *
-     * Rewritten only by a finish that OBSERVED the checklist, never cleared for want of evidence: a resumed
-     * conversation whose daemon restarted emits no `todos` until it touches the list again, and treating that
-     * silence as an empty list would wipe the mark off every card the restart passed under. */
+    // What the last turn left open, written by the finish that measured it; persisted for a reader who returns tomorrow
+    // to a settled card. Rewritten only when a finish actually observed the checklist, never cleared for silence.
     unfinished: UnfinishedWorkSchema.optional(),
     costUsd: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),
-    // Completed turns + lifetime tool calls (optional: entries predating the counters read as absent).
+    // Completed turns and lifetime tool calls; optional, since entries older than these counters read as absent.
     turns: z.number().optional(),
     toolUses: z.number().optional(),
-    /* How many agents this one has STARTED, for its whole life. Counted here rather than read off the subagent
-     * registry, which is where the card's live half still comes from: that registry sweeps a finished child
-     * five minutes after it reports (agent/subagents.ts) and holds nothing across a daemon restart, so a card
-     * asked half an hour later said the agent had never delegated at all, for work that may have been most of
-     * what the turn did. What is live is a fact about right now and belongs in memory; what an agent HAS DONE
-     * belongs on the entry, beside its turns and its tool calls. */
+    // Agents started, for this conversation's whole life. Counted here rather than off the live subagent registry,
+    // which forgets a child minutes after it settles and everything across a restart.
     subagents: z.number().optional(),
-    // Cumulative base→tip output across the composition, refreshed on each land, the card's diffstat.
+    // Cumulative base-to-tip diffstat across the composition, refreshed on each land.
     diffFiles: z.number().optional(),
     diffInsertions: z.number().optional(),
     diffDeletions: z.number().optional(),
     createdAt: z.number(),
     updatedAt: z.number(),
-    // When the agent was last opened (ms epoch), the unread badge's reference point, kept HERE rather than in
-    // a browser so it survives a cache wipe and holds across every device the fleet is driven from. Absent ⇒
-    // never opened.
+    // When last opened, the unread badge's reference point; kept here, not in a browser, so it holds across devices.
     seenAt: z.number().optional(),
-    // When the agent was archived (ms epoch), off the board, checkout retired, branch kept. Absent ⇒ live.
-    // The entry survives archiving in full: this is a presentation state plus a disk reclaim, not a deletion,
-    // so cost/usage/attribution keep answering for it and a new turn clears the stamp (see registry.begin).
+    // When archived: off the board, checkout retired, branch kept. Absent means live; the entry itself survives
+    // untouched.
     archivedAt: z.number().optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 
-/* A conversation that owns a worktree, as a TYPE rather than a runtime re-test. `branch` is the placement
- * discriminator, so every branch-only path (the diff/land/discard routes, land.ts, the land standings) takes
- * this and the compiler carries the guarantee, rather than each of them re-checking `branch !== undefined` and
- * inventing its own answer for a workspace conversation that could never reach it. */
+// A conversation that owns a worktree, as a type rather than a runtime re-check: branch-only code paths take this so
+// the compiler carries the guarantee instead of each one re-testing `branch !== undefined`.
 export type IsolatedAgent = PersistedAgent & { branch: string };
 export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.branch !== undefined;
 
-/* THE DRAFTED COMMIT MESSAGE THIS ENTRY HOLDS, as the one shape both of its readers hand out, the agent's own
- * card (live, dropped when the agent is archived) and the review's origin record (a rescan, outliving the
- * card). Stored as three flat columns because that is what a record of a claim looks like; handed out as one
- * value because that is what a commit message is, and because a reader that gets it from either road must not
- * have to know which.
- *
- * Undefined when no sentence has been written for this agent's landing, the ordinary state before the first
- * land, in the seconds while the model is still writing, and forever after a draft that failed. The notes only
- * ever ride WITH a subject: a release note over no subject would be a trailer with nothing to trail. */
+// The drafted commit message as one value, whether read off the live card or the review's own record; stored as three
+// flat columns. `undefined` before any sentence is written, and notes never ride without a subject.
 export const landedMessageOf = (entry: PersistedAgent): LandedMessage | undefined =>
     entry.landedSubject === undefined
         ? undefined
@@ -329,34 +163,28 @@ export const landedMessageOf = (entry: PersistedAgent): LandedMessage | undefine
 
 export interface AgentsStore {
     readonly load: () => Promise<PersistedAgent[]>;
-    // Full-replace write (the registry owns the authoritative in-memory array after init).
+    // Full-replace write; the registry owns the authoritative array after init.
     readonly save: (agents: readonly PersistedAgent[]) => Promise<void>;
 }
 
-/* This file is the fleet's ONLY record of which conversations exist, archived ones included, whose whole
- * promise is "nothing is lost". The registry write-through persists the in-memory array on every mutation, so
- * a load that answers a bad file with `[]` doesn't merely start one boot empty: the first mutation after it
- * WRITES that emptiness back, and every agent the sandbox ever ran is gone for good. Both halves below exist
- * to make that impossible:
- *   · save is atomic (tmp + rename), a daemon killed mid-write (a container rebuild deploys one on every
- *     update here) leaves the previous file intact instead of a truncated one
- *   · load never lets what it couldn't read be overwritten, an unparseable file is set ASIDE, an invalid
- *     entry is dropped alone. Only a file that is genuinely absent reads as a fresh sandbox. */
+// The fleet's only record of which conversations exist; a load that answers a bad file with `[]` would have the next
+// write-through persist that emptiness forever. Both guard against it:
+// - save is atomic (tmp + rename), so a daemon killed mid-write leaves the previous file intact
+// - load never lets unreadable content be overwritten: a bad file is set aside, a bad entry dropped alone
 export const fileAgentsStore = (path: string): AgentsStore => ({
     load: async () => {
         let raw: string;
         try {
             raw = await readFile(path, "utf8");
         } catch {
-            return []; // Absent ⇒ a fresh sandbox: the one case where an empty fleet is the truth.
+            return []; // Absent means a fresh sandbox; the one case where an empty fleet is the truth.
         }
         let parsed: unknown;
         try {
             parsed = JSON.parse(raw);
         } catch {
-            // The file exists but isn't JSON (a torn write from before saves were atomic, a stray editor).
-            // Returning [] here with the file still in place is how one bad boot used to erase the fleet: move
-            // the bytes out of the write path so the next persist cannot overwrite the only copy of them.
+            // Not valid JSON (a torn write, a stray edit). Renamed out of the write path first, since returning `[]`
+            // with the bad file still there is how one bad boot used to erase the fleet on the next persist.
             await rename(path, `${path}.corrupt`).catch(() => undefined);
             return [];
         }
@@ -364,16 +192,13 @@ export const fileAgentsStore = (path: string): AgentsStore => ({
             await rename(path, `${path}.corrupt`).catch(() => undefined);
             return [];
         }
-        // Per entry, not the array at once: one row a schema change no longer accepts must cost that row, not
-        // the whole roster it sits in.
+        // Per entry, not the whole array: one row a schema no longer accepts costs that row, not the whole roster.
         return parsed.flatMap((entry) => {
             const result = PersistedAgentSchema.safeParse(entry);
             return result.success ? [result.data] : [];
         });
     },
-    // Write-then-rename so the file is always one COMPLETE roster or the previous one, never a prefix. Through
-    // the shared writer because agents.json sits ON /history, the volume a second daemon (a dev sandbox pointed
-    // at the same one) shares: the temp has to be tagged with the writing daemon's pid, and the plain
-    // "<path>.tmp" this hand-rolled was the one temp name in the daemon that wasn't.
+    // Write-then-rename, so the file is always one complete roster or the previous one, never a prefix. Through the
+    // shared writer since /history can be shared by a second daemon, whose temp file needs its own pid tag.
     save: (agents) => writeJsonFile(path, agents),
 });

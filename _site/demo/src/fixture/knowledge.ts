@@ -1,21 +1,9 @@
 import type { Graph, Note, NoteSummary, Overview, SearchHit } from "@intentic/ext-knowledge";
 import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "@intentic/ext-knowledge/notes";
 
-/* THE KNOWLEDGE BASE for acme-shop, the things around the code that no file in the repository records: who
- * the people are, what the projects are for, and what was decided and why.
- *
- * It is the demo's argument for the surface. Every note here is the kind of fact a colleague picks up in a
- * first month and nobody writes down, and the notes are DELIBERATELY INTERCONNECTED: the point of the section
- * is not that it holds notes but that following one gets you to the next. One link points at a note nobody has
- * written, because that is the ordinary state of a real knowledge base and the panel is meant to show it as an
- * invitation rather than as damage.
- *
- * Written as raw markdown and indexed by the extension's own engine, so the demo's backlinks, graph and counts
- * are computed exactly as the product computes them, a fixture that hand-authored those answers would be
- * showing visitors behaviour the product does not have.
- *
- * MUTABLE: save, delete and starting it off really writes here, so the red pen works and the list
- * updates. It resets on reload, like every other piece of demo state. */
+// Knowledge base for acme-shop: people, projects and decisions no file in the repo records. Notes are interconnected,
+// including one link to a note that doesn't exist yet, and indexed by the extension's own engine so backlinks and the
+// graph are real. Mutable: saves and deletes persist until reload.
 
 const md = (path: string, content: string, minutesAgo: number, now: number): NoteFile => ({
     path,
@@ -171,8 +159,7 @@ const noteFiles = (now: number): NoteFile[] => {
     return seeded;
 };
 
-// Save (and create). Returns false for a path the real backend would refuse, so the demo's error state is the
-// product's error state rather than an optimistic success.
+// Save or create; returns false for a path the real backend would refuse too.
 export const saveKnowledgeNote = (now: number, path: string, content: string): boolean => {
     if (path.split(`/`).includes(`..`) || path.startsWith(`/`) || !path.toLowerCase().endsWith(`.md`)) {
         return false;
@@ -198,13 +185,11 @@ export const deleteKnowledgeNote = (now: number, path: string): boolean => {
     return true;
 };
 
-// Where the demo's notes "are", the folder the panel names, and the same default a real sandbox uses.
+// Folder the panel names; same default a real sandbox uses.
 const KNOWLEDGE_DIR = `knowledge`;
 
-/* THE ANSWERS, computed by the extension's own engine over the notes above, not hand-authored. The backlinks,
- * the map and the drift report a visitor sees are the ones the product computes; a fixture that wrote them out
- * by hand would be showing behaviour the product does not have, and would go quietly wrong the first time the
- * engine improved. Everything below is one index build and one shaping call, exactly as the backend does it. */
+// Backlinks, map and drift are computed by the extension's own engine over the notes above, not hand-authored. Every
+// export below is one index build plus one shaping call, same as the backend.
 const index = (now: number) => buildIndex(noteFiles(now));
 
 export const knowledgeOverview = (): Overview => overviewFor(index(Date.now()), KNOWLEDGE_DIR);
@@ -227,8 +212,7 @@ export const knowledgeSearch = (params: URLSearchParams): SearchHit[] => {
     );
 };
 
-// Undefined is a 404 at the route, the same as the real backend's, a note the visitor deleted a moment ago
-// should read as gone, not as empty.
+// Undefined means 404 at the route, same as the real backend: a just-deleted note reads as gone, not empty.
 export const knowledgeNoteAt = (path: string): Note | undefined => {
     const built = index(Date.now());
     const note = built.byPath.get(path) ?? built.resolve(path);

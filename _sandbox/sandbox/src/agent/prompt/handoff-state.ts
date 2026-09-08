@@ -6,48 +6,27 @@ import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { readTaskStore, type StoredTask, taskStoreDir } from "../run/task-store.js";
 import type { VerificationStanding } from "../verification/agent-verification.js";
 
-/* WHERE THE WORK STANDS, MEASURED, for the session that has to pick it up without having been there.
- *
- * A turn seeded from the record (a provider or account switch, a forgotten session, a spent allowance moved to
- * another account) gets the conversation's transcript folded into its opening message (runtime-history.ts). That
- * envelope carries what was SAID. It cannot carry what is TRUE: whether the files the last turn said it edited are
- * on the branch, whether anything proved them, and which of the steps the agent listed for itself it crossed
- * off. A model handed only the words fills those gaps by recall, and recall across a hand-off is where an agent
- * announces a finished task with three items still open, or re-does the two it had already done.
- *
- * So this note says those three things from the sandbox's own readings, never from the model's account of
- * itself: git for the branch, the turn's proof ledger for the verification, the CLI's own task store for the
- * checklist. Pointers rather than pastes throughout (the paths, the check's name, the item's words), since the
- * next session can read any of them itself and a brief that quotes a diff has stopped being a brief. Capped
- * at roughly the size of a sub-agent's report, which is the size this kind of hand-off is known to work at:
- * the newest turns in the envelope carry the decisions, this carries the state, and neither is an archive.
- *
- * Rides the turn as a preamble note (turn-preamble.ts): verbatim to the model, collapsed in the chat, in the
- * record. The history envelope is left untouched, because it is parsed back apart when the session file is
- * read, and a section inside it would be read back as somebody's message. */
+// The transcript fold carries what a hand-off turn was told, not what is true; this note supplies that from the
+// sandbox's own readings (git, the proof ledger, the task store), as pointers rather than pastes. Capped near a
+// sub-agent report's size, and rides as a preamble note (turn-preamble.ts) without touching the history envelope.
 
 export const HANDOFF_STATE_NOTE_TITLE = "Where the work stands";
 const HEADER = "## Where the work stands";
 
-// How many paths a repository's line may name before the rest are counted. Forty is a screen of paths, which
-// is more than a reader scans and enough that the model can grep the branch for the ones it wants.
+// Paths named per repository before the rest are just counted; more than a screen is not worth scanning.
 const PATHS_PER_REPO = 40;
-// How many checklist items are worth carrying whole. A list longer than this is a plan, not a checklist, and
-// the model re-reads its own plan from the envelope.
+// Checklist items carried whole; past this it is a plan, not a checklist, and belongs in the envelope instead.
 const CHECKLIST_ITEMS = 40;
-// The whole note's ceiling, in characters, about 1,500 tokens. Paths are what is dropped first when it is hit:
-// the counts and the verdicts are the facts, the paths are where to look for them.
+// Whole note's ceiling, in characters (~1,500 tokens); paths are dropped first, counts and verdicts stay.
 const NOTE_CHAR_CAP = 6_000;
 
 export interface HandoffState {
     readonly conversationId: string;
-    /* The proof ledger of the turn that is being handed off, when it is THIS turn's death that hands it off
-     * (a spent allowance keeps it on the held entry). Absent on a switch between turns, where the last turn's
-     * ledger is gone and only the registry's failed-check name survives. */
+    // Retiring turn's own proof ledger; absent on a turn switch, where only the registry's failed-check name survives.
     readonly standing?: VerificationStanding | undefined;
-    // The fold's last snapshot of the checklist, the fallback when no session store is readable.
+    // Fold's last checklist snapshot, the fallback when no session store is readable.
     readonly checklist?: readonly TodoItem[] | undefined;
-    // The provider session being retired, whose task store is the authoritative checklist.
+    // Provider session being retired, whose task store is the authoritative checklist.
     readonly retiredSessionId?: string | undefined;
     readonly now?: number;
 }
@@ -65,8 +44,8 @@ interface RepoReading {
     readonly conflicted: number;
 }
 
-// One repository's changes, optionally only the paths a scope names (the main tree, where everything else
-// on the tree is other people's work). A repository git cannot read answers nothing rather than failing the note.
+// One repository's changes, optionally limited to a scope's paths (the main tree, where the rest is somebody else's
+// work). A repository git cannot read answers undefined rather than failing the note.
 const readRepo = async (dir: string, repo: string, scope: ReadonlySet<string> | undefined): Promise<RepoReading | undefined> => {
     try {
         const state = await changedFiles(dir);
@@ -90,9 +69,8 @@ const readRepo = async (dir: string, repo: string, scope: ReadonlySet<string> | 
     }
 };
 
-/* Which repository each edited path belongs to, on the MAIN tree: the longest repository id that prefixes it,
- * else the root. Edited paths arrive as the tools saw them, absolute or workspace-relative, so they are made
- * relative to the workspace first and to their repository second. */
+// Groups edited paths by the longest repository id that prefixes them, else `root`; paths are made workspace-relative
+// first since tools report them in various shapes.
 const groupByRepo = (paths: readonly string[], repos: readonly string[], root: string): Map<string, Set<string>> => {
     const grouped = new Map<string, Set<string>>();
     const byLength = [...repos].sort((a, b) => b.length - a.length);
@@ -111,8 +89,8 @@ interface TreeReading {
     readonly retired: readonly string[];
 }
 
-// An isolated conversation's own checkouts, every repository in its composition; a retired checkout is named
-// rather than read, the branch holds its work and the next turn re-attaches it.
+// Every repository in an isolated conversation's own composition; a retired checkout is named rather than read, since
+// its branch holds the work until the next turn re-attaches it.
 const readBranch = async (deps: HandoffStateDeps, id: string, composition: readonly { readonly repo: string }[]): Promise<TreeReading> => {
     const repos: RepoReading[] = [];
     const retired: string[] = [];
@@ -129,8 +107,8 @@ const readBranch = async (deps: HandoffStateDeps, id: string, composition: reado
     return { isolated: true, repos, retired };
 };
 
-// The main tree: only what the last turn touched is this conversation's, and only a ledger can say what that
-// was. With none, the tree is everybody's and the note says nothing about it.
+// On the main tree, only the paths the last turn's ledger names are this conversation's; with no ledger, the note says
+// nothing about the tree.
 const readMainTree = async (deps: HandoffStateDeps, edited: readonly string[]): Promise<TreeReading> => {
     const root = deps.workspace.root;
     const repos: RepoReading[] = [];
@@ -151,8 +129,8 @@ const readTree = async (deps: HandoffStateDeps, state: HandoffState): Promise<Tr
     return entry?.branch !== undefined ? readBranch(deps, entry.id, entry.repos) : readMainTree(deps, state.standing?.paths ?? []);
 };
 
-// The checklist as the CLI's own store has it for the retired session, else as the fold last saw it. The
-// store wins because the fold cannot see an update to a task made in an earlier turn (task-store.ts).
+// Prefers the CLI's own task store for the retired session over the fold's last checklist, since the fold cannot see a
+// task updated in an earlier turn.
 const readChecklist = async (deps: HandoffStateDeps, state: HandoffState): Promise<readonly { readonly text: string; readonly status: StoredTask["status"] }[]> => {
     if (state.retiredSessionId !== undefined && /^[\w-]+$/.test(state.retiredSessionId)) {
         const stored = await readTaskStore(taskStoreDir(deps.workspace.root, state.retiredSessionId));
@@ -256,20 +234,19 @@ const render = (tree: TreeReading, edited: readonly string[], verification: stri
         .filter((section): section is string => section !== undefined)
         .join("\n\n");
 
-// Whether the readings add up to anything worth a note: a tree with changes on it, a retired checkout to
-// name, a turn that edited or proved something, or a list with items on it.
+// Whether any reading is worth a note: tree changes, a retired checkout, an edited or verified turn, or a non-empty
+// checklist.
 const measured = (tree: TreeReading, edited: readonly string[], verification: string | undefined, checklist: readonly ChecklistRow[]): boolean =>
     tree.repos.some((reading) => reading.paths.length > 0) || tree.retired.length > 0 || edited.length > 0 || verification !== undefined || checklist.length > 0;
 
-// The note at the cap: paths go first, and a note still over it after that is cut where it stands.
+// Drops paths first when over the cap; text still over the cap after that is simply cut where it stands.
 const capped = (full: () => string, terse: () => string): string => {
     const text = full().length > NOTE_CHAR_CAP ? terse() : full();
     return text.length > NOTE_CHAR_CAP ? `${text.slice(0, NOTE_CHAR_CAP)}\n…` : text;
 };
 
-/* The note, or nothing when there is nothing measured to say: a first hand-off on a conversation that edited
- * nothing, kept no list and stands under no check. Never rejects: a reading that fails costs the note a line,
- * not the turn its start. */
+// Undefined when nothing was measured (a fresh hand-off with nothing edited, no list, no check). Never throws: a failed
+// reading costs the note a line, not the turn its start.
 export const handoffStateNote = async (deps: HandoffStateDeps, state: HandoffState): Promise<TurnNote | undefined> => {
     const now = state.now ?? Date.now();
     try {

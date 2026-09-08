@@ -1,20 +1,7 @@
-<!-- A ranked horizontal bar figure: one measure across a handful of named things (package sizes, churn, test
-     counts, cost by model, cost by agent). Horizontal because the labels are package paths, component names,
-     model ids and agent titles: long, and unreadable rotated under a column.
-
-     Scaled against the LEADER, not an axis: a ranked list is read by comparing bars to each other, and there is
-     no gridline here to round up to. Every bar is directly labelled with its value, so nothing is hidden behind
-     a hover, which is also why this figure carries no value tooltip. The label's tooltip is for truncation
-     only.
-
-     ONE MEASURE PER FIGURE. Two measures of different scale are two figures; a second axis here would be the
-     dual-axis mistake wearing a bar chart's clothes.
-
-     It serves both an authored document figure and the Usage tab's cost rankings, which had been a separate
-     component with the same body: the same `|| 1` guard, the same three-column grid, the same 10px bar with a
-     rounded data end, and the same reasoning copied into its header comment. What actually differed was three
-     things, and each is a prop here rather than a fork: what the value PRINTS as (`display`), which rows name a
-     bucket rather than a thing (`muted`), and how much of the width the label column may take. -->
+<!--
+    A ranked horizontal bar figure for one measure across named things (package sizes, churn, costs); horizontal because the labels are long. Bars
+    scale against the leader, not an axis, and each carries its own value label. One measure per figure.
+-->
 
 <script setup lang="ts">
 import { computed } from "vue";

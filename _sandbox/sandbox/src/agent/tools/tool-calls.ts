@@ -2,14 +2,11 @@ import { isAbsolute, relative } from "node:path";
 import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
 import { claudeStatePath } from "../../sessions/session-store.js";
 
-/* The cross-provider tool-call vocabulary: one home for deriving a tool_call frame's display name, ACP
- * category, target, locations, and structured diff content from whatever a backend's native stream carries.
- * Every adapter (Claude SDK blocks, Codex ThreadItems, OpenCode parts, and later ACP sessionUpdates) maps
- * through these instead of keeping its own copy, so the taxonomy can't drift per backend. */
+// Cross-provider tool-call vocabulary: derives display name, category, target, locations and diff content from any
+// backend's native stream. Every adapter maps through these instead of keeping its own copy.
 
-// Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text, the
-// edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type. Shared by
-// the live Claude stream and the session restore, so a replayed card reads exactly like the one it replaces.
+// Flattens a tool_result block's content (string or array of text/other blocks) to plain text; non-text blocks
+// summarize by type. Shared by the live stream and session restore so a replayed card matches the original.
 export const resultText = (content: unknown): string => {
     if (typeof content === "string") {
         return content;
@@ -25,9 +22,7 @@ export const resultText = (content: unknown): string => {
         .join("");
 };
 
-// Native tool ids → the display names the UI styles. Covers OpenCode's lowercase ids (bash/edit/patch/…);
-// Claude SDK names are already display names and pass through. `todowrite` is intentionally absent, its
-// checklist renders from the todos frame, never as a tool card.
+// Native tool ids to display names; OpenCode's lowercase ids map over, Claude SDK names pass through.
 const DISPLAY_NAMES: Record<string, string> = {
     bash: "Bash",
     edit: "Edit",
@@ -42,17 +37,9 @@ const DISPLAY_NAMES: Record<string, string> = {
     patch: "Edit",
 };
 
-/* THE BROWSER TOOLS, SPELLED AS SOMETHING A PERSON READS.
- *
- * @playwright/mcp's tools arrive as `mcp__web__browser_navigate` / `mcp__browser__browser_click`, and a card
- * headed with that string tells the user nothing they came for. Which SERVER it was is the one part that
- * doesn't earn its place: the credential-free browser and the routed logged-in one do the same things, and
- * where an account matters the call's own `account` argument on the card already names it. What is left,
- * "Browser navigate", "Browser click", groups on sight in a scrolling transcript and says exactly what
- * happened.
- *
- * `take_screenshot` is the one verb that reads badly transliterated ("Browser take screenshot"), so it loses
- * its verb; every other name is the tool's own, underscores opened out. */
+// Browser tool names spelled out for a reader (`Browser navigate`, `Browser click`); which server handled it is
+// dropped, since the call's own `account` argument already names that. `take_screenshot` loses its verb; other names
+// keep their own.
 const BROWSER_TOOL = /^mcp__.+__browser_(.+)$/;
 const BROWSER_VERB_NAMES: Record<string, string> = { take_screenshot: "screenshot" };
 const browserDisplayName = (raw: string): string | undefined => {
@@ -62,7 +49,7 @@ const browserDisplayName = (raw: string): string | undefined => {
 
 export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? browserDisplayName(raw) ?? raw;
 
-// The ONE display-name → ACP ToolKind table (case-insensitive), driving card icons and live-writes.
+// Display name to ACP ToolKind (case-insensitive), the one table driving card icons and live-writes.
 const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
     ["read", "read"],
     ["edit", "edit"],
@@ -81,7 +68,7 @@ const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
 ];
 const CATEGORY_BY_NAME = new Map<string, ToolKind>(CATEGORIES);
 
-// MCP tool-segment verbs → kind, matched as a suffix so `hashline_edit` / `db_read` style names categorize.
+// MCP tool-segment verb to kind, matched as a suffix so names like `hashline_edit`/`db_read` categorize.
 const MCP_VERBS: ReadonlyArray<readonly [string, ToolKind]> = [
     ["edit", "edit"],
     ["write", "edit"],
@@ -94,12 +81,11 @@ const MCP_VERBS: ReadonlyArray<readonly [string, ToolKind]> = [
     ["exec", "execute"],
 ];
 
-/* Browsing splits into three acts, and the suffix rule above gets all three wrong (`browser_click` ends in no
- * known verb at all, so every one of them landed on `other` and drew the generic cog).
- *   · going somewhere        → fetch   (the globe: same act as WebFetch, done in a real page)
- *   · doing something there  → execute (a click, a keystroke, a form, the browser's side effects)
- *   · looking at the result  → read    (a snapshot, a screenshot, the console, the network log)
- * Anything not listed is an act on the page, so `execute` is the floor rather than `other`. */
+// Browsing splits into three acts the suffix rule gets wrong:
+// - going somewhere → fetch
+// - doing something there → execute
+// - looking at the result → read
+// Unlisted verbs default to execute, not other.
 const BROWSER_VERB_KINDS: Record<string, ToolKind> = {
     navigate: "fetch",
     navigate_back: "fetch",
@@ -111,8 +97,8 @@ const BROWSER_VERB_KINDS: Record<string, ToolKind> = {
     tabs: "read",
 };
 
-// What a tool call *does*, from its (display) name. MCP names (`mcp__server__tool`, `server.tool`) categorize
-// by their tool segment's trailing verb; anything unrecognized is `other`.
+// What a tool call does, from its display name. MCP names (`mcp__server__tool`, `server.tool`) categorize by their tool
+// segment's trailing verb; anything unrecognized is `other`.
 export const toolCategoryOf = (name: string): ToolKind => {
     const exact = CATEGORY_BY_NAME.get(name.toLowerCase());
     if (exact !== undefined) {
@@ -135,24 +121,16 @@ export const toolCategoryOf = (name: string): ToolKind => {
     return "other";
 };
 
-/* The programs that go looking for code. `ls`/`tree` are in because the LS TOOL already categorizes as
- * `search` above, and a taxonomy that counts one spelling of a directory listing and not the other is one that
- * reports whichever spelling the model happened to reach for. */
+// Programs that go looking for code; `ls`/`tree` included since the LS tool itself categorizes as `search`.
 const SEARCH_COMMANDS = new Set(["iq", "grep", "rg", "ag", "ack", "find", "fd", "fdfind", "locate", "ls", "tree"]);
 
-/* Shell programs that directly open file contents. They arrive as `execute`, even though they mark the same
- * transition as the native Read/Edit tools: the model has stopped orienting and reached the work. Pipes are
- * deliberately not split by commandHeads, so `rg needle | head` remains a search and does not pretend that
- * truncating its stdout opened a file. */
+// Shell programs that open file contents directly; arrive as `execute`, the same transition as Read/Edit.
 const FILE_WORK_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "bat", "awk"]);
 
-/* One shell line's statements, split on the separators that start a new command and NEVER on a pipe: `git log
- * | grep fix` filters a command's own output, which is not the model looking for code, and counting it would
- * put ordinary shell plumbing in a search figure. */
+// Splits a shell line on statement separators, never on a pipe: `git log | grep fix` filters output, not a search.
 const statementsOf = (command: string): string[] => command.split(/&&|\|\||;|\n/);
 
-/* Each statement's leading program, past an env prefix and a path, `cd /work && iq q "…"` runs two and the
- * second is the one that matters, and `/usr/bin/rg` is `rg`. */
+// Each statement's leading program, past an env prefix and a path: `cd /work && iq q ...` runs two, the second matters.
 const commandHeads = (command: string): string[] =>
     statementsOf(command).map((statement) => {
         const head =
@@ -163,13 +141,8 @@ const commandHeads = (command: string): string[] =>
         return head.split("/").pop() ?? head;
     });
 
-/* DID THIS TOOL CALL GO LOOKING FOR CODE, what the search-teaching experiment is judged on, and a question the
- * category alone cannot answer.
- *
- * `toolCategoryOf` reads a tool's NAME, and this workspace's own search tool is a CLI: `iq q "…"` arrives as
- * Bash and categorizes as `execute`, next to every `grep`/`rg`/`find` the model runs by hand. Counting only the
- * `search` category would miss every iq search, precisely backwards on a sandbox with iq turned on, which is
- * the sandbox the teaching is measured against. */
+// Whether a call went looking for code: category alone misses this workspace's search tool, a CLI (`iq q ...`) that
+// arrives as Bash and categorizes as `execute`.
 export const isSearchCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "search") {
         return true;
@@ -180,15 +153,14 @@ export const isSearchCall = (call: { readonly category: ToolKind; readonly targe
     return commandHeads(call.target).some((head) => SEARCH_COMMANDS.has(head));
 };
 
-/* THE PROGRAMS THAT LIST A DIRECTORY, as opposed to searching inside one. A subset of SEARCH_COMMANDS, kept
- * apart because the project map answers exactly these and answers none of the others. */
+// Programs that list a directory, as opposed to searching inside one; a subset of SEARCH_COMMANDS.
 const LISTING_COMMANDS = new Set(["ls", "tree"]);
 
-// Native tool names that list a directory, lowercased. `list` is OpenCode's id for what Claude Code calls LS.
+// Native tool names that list a directory, lowercased; `list` is OpenCode's id for Claude Code's LS.
 const LISTING_TOOLS = new Set(["ls", "list"]);
 
-/* How far below `root` a listing's target sits, or undefined when it is not a path under the root at all.
- * `~` is the sandbox's home rather than the workspace, so it is a listing of somewhere else and scores as one. */
+// How far below `root` a listing's target sits, or undefined off-root; `~` is the sandbox home, not the workspace, so
+// it scores as elsewhere.
 const depthBelow = (raw: string, root: string): number | undefined => {
     const path = raw.replace(/^["']|["']$/g, "").replace(/\/+$/, "");
     if (path === "" || path === "." || path === "./") {
@@ -201,19 +173,8 @@ const depthBelow = (raw: string, root: string): number | undefined => {
     return rel === ".." || rel.startsWith("../") ? undefined : rel.split("/").length;
 };
 
-/* A LISTING THE PROJECT MAP CLAIMS TO REPLACE: `ls`, `ls /work`, `tree intentic`, and the LS tool aimed at the
- * same places. The note the map rides in on tells a turn in so many words not to do this, so this is the
- * behaviour the map has to be judged on, and the one the ledger could not see: `isSearchCall` counts a listing
- * and a ripgrep as the same event, on purpose, so a turn that swaps one for the other scores identically.
- *
- * SHALLOW IS THE WHOLE RULE. `ls src/components/forms` is a turn looking into a directory it has already
- * chosen; `ls` and `ls /work/intentic` are a turn working out what the project is. The cut sits one level
- * below the root because that is where the map's own answer stops (it names areas, not what is inside them),
- * so a listing this counts is a listing the map could have answered.
- *
- * `root` is the tree as the AGENT sees it (an isolated turn's namespace root), because these paths are the
- * agent's. A glob argument is not a directory listing and is left alone: `ls *.test.ts` is a question about
- * files, which no map answers. */
+// A listing one level below `root` or shallower is orientation; deeper is a turn already looking at something it chose.
+// `root` is the agent's own namespace root; a glob argument is a question about files, not a listing.
 export const isRootListing = (
     call: { readonly name?: string | undefined; readonly category: ToolKind; readonly target?: string | undefined },
     root: string,
@@ -242,10 +203,8 @@ export const isRootListing = (
     });
 };
 
-/* DID THIS CALL REACH FILE CONTENT. Search counting and this transition are independent: one compound Bash
- * call can do both (`rg …; sed -n …`). The route counts that call's search as opening work first, then closes
- * orientation for later calls. That preserves the tool-call granularity of the ledger without losing the read
- * just because the same shell invocation also searched. */
+// Whether a call reached file content. Independent of search counting: one compound call can do both (`rg ...; sed -n
+// ...`).
 export const isFileWorkCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "read" || call.category === "edit") {
         return true;
@@ -256,9 +215,8 @@ export const isFileWorkCall = (call: { readonly category: ToolKind; readonly tar
     return commandHeads(call.target).some((head) => FILE_WORK_COMMANDS.has(head));
 };
 
-/* If a compound shell call both searches and reaches a file, which happened first? The turn ledger counts tool
- * calls, but ordering inside one call still decides whether its search was orientation. A search-only native
- * tool is opening by definition; `cat file; rg term` is not, while `rg term; sed -n …` is. */
+// Whether a compound call's search happened before its file work; a search-only native tool always opens by definition.
+// `cat file; rg term` is not opening; `rg term; sed -n ...` is.
 export const searchPrecedesFileWork = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "search") {
         return true;
@@ -272,10 +230,7 @@ export const searchPrecedesFileWork = (call: { readonly category: ToolKind; read
     return searchAt !== -1 && (workAt === -1 || searchAt < workAt);
 };
 
-// The file path / command / query a tool acts on, for the tool_call frame's target (the raw mono string on
-// the card). Key order matters: the most specific spelling wins. `element` is @playwright/mcp's own
-// human-readable description of what a click/type/hover is aimed at ("Submit button"), the only thing those
-// calls carry that means anything to a reader, since their `ref` is a snapshot-local handle like `e12`.
+// Key order matters, most specific wins; `element` is @playwright/mcp's own readable click/type target.
 const TARGET_KEYS = ["file_path", "filePath", "notebook_path", "command", "pattern", "url", "element", "path", "query"] as const;
 export const toolTarget = (input: unknown): string | undefined => {
     if (typeof input !== "object" || input === null) {
@@ -291,14 +246,10 @@ export const toolTarget = (input: unknown): string | undefined => {
     return undefined;
 };
 
-// Normalize a tool path onto the workspace-root-relative forward-slash route space, or undefined when it
-// escapes the workspace (the tree/file routes can't address it). Relative inputs are cwd-relative, which
-// IS the route space, worktree cwds mirror the /work layout.
+// Normalizes a tool path onto the workspace-root-relative, forward-slash route space; undefined if it escapes the
+// workspace. Relative inputs are cwd-relative, which is already the route space.
 export const workspacePath = (raw: string, cwd: string): string | undefined => {
-    /* A `~/.claude/…` path is not the escape it looks like: the SDK's conversation stores are symlinked onto
-     * the workspace volume, so the plan the CLI just wrote to `~/.claude/plans/…` IS a workspace file
-     * (sessions/session-store.ts). Resolved before the cwd test, which would otherwise throw it away as
-     * "outside the workspace" and leave the card holding an unopenable absolute path into a home directory. */
+    // A `~/.claude/...` path is not an escape: it symlinks onto the workspace, resolved before the cwd test.
     const state = claudeStatePath(raw);
     if (state !== undefined) {
         return state;
@@ -312,8 +263,8 @@ export const workspacePath = (raw: string, cwd: string): string | undefined => {
 
 const PATH_KEYS = ["file_path", "filePath", "notebook_path", "path"] as const;
 
-// The workspace files a tool call touches, for clickable cards and live-writes. `line` comes from Read's
-// 1-based `offset` when present. Undefined when the input names no workspace-addressable file.
+// Workspace files a tool call touches, for clickable cards and live-writes; `line` comes from Read's 1-based `offset`.
+// Undefined when the input names no workspace-addressable file.
 export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] | undefined => {
     if (typeof input !== "object" || input === null) {
         return undefined;
@@ -334,13 +285,13 @@ export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] |
     return undefined;
 };
 
-// One side of a diff can be a whole written file, cap it so a giant Write can't flood the event stream.
+// Caps one side of a diff so a giant Write can't flood the event stream.
 const DIFF_SIDE_CAP = 32_000;
 const capSide = (text: string): { text: string; clipped: boolean } =>
     text.length > DIFF_SIDE_CAP ? { text: text.slice(0, DIFF_SIDE_CAP), clipped: true } : { text, clipped: false };
 
-// A capped structured diff content entry, the one constructor every diff on the wire goes through, whether
-// derived from an Edit/Write input (below) or arriving ready-made from an ACP agent.
+// The one constructor every diff on the wire goes through, whether derived from an Edit/Write input or arriving
+// ready-made from an ACP agent.
 export const diffContent = (path: string, oldText: string | undefined, newText: string): ToolCallContent => {
     const oldCapped = oldText !== undefined ? capSide(oldText) : undefined;
     const newCapped = capSide(newText);
@@ -353,10 +304,8 @@ export const diffContent = (path: string, oldText: string | undefined, newText: 
     };
 };
 
-// Structured diff content derived from an Edit/Write-style tool INPUT, known at call time, no result needed.
-// Handles both spelling families (Claude old_string / OpenCode oldString). Unrecognized shapes degrade to
-// undefined (the card falls back to target-only), never throw. The diff keeps a workspace-escaping path
-// as-is for display; only locations enforce the route space.
+// Structured diff content derived from an Edit/Write-style input, known at call time; handles both spelling families.
+// Unrecognized shapes degrade to undefined, never throw; a workspace-escaping path is kept as-is for display.
 export const editDiffContent = (name: string, input: unknown, cwd: string): ToolCallContent | undefined => {
     if (typeof input !== "object" || input === null) {
         return undefined;

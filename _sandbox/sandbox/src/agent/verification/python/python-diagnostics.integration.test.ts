@@ -5,16 +5,9 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { interpreterNear, runPythonDiag } from "./python-diagnostics.js";
 
-/* THE REAL TOOLS, WHERE THERE ARE ANY. Everything here spawns ruff or pyright over a file on disk, which is the
- * only way to answer the question the unit tests next door cannot: whether what those binaries actually print
- * is what the parsers were written for. A pin bump that changes ruff's concise format or pyright's JSON is a
- * skew nothing else in this repository can see.
- *
- * ABSENT IS NOT A FAILURE, WRONG IS — the judgement packs.integration.test.ts makes about provider CLIs, for the
- * same reason. Both binaries ride the `python` feature pack, so a core image and a developer checkout have
- * neither and have nothing to check; a standard image has both and is held to them. What happens when they are
- * missing is a contract of its own ("unavailable", never a clean file) and is tested where it can be forced,
- * against the hook in agent-diagnostics.test.ts. */
+// Spawns ruff or pyright on real files, since only that proves the parsers match what the binaries actually print.
+// Absent is not a failure, wrong is: missing binaries are their own tested contract (agent-diagnostics.test.ts), not
+// this file's job.
 
 const installed = (binary: string): boolean => {
     try {
@@ -50,8 +43,7 @@ test("the nearest .venv above a file is what the type check is pointed at, and a
     const file = join(root, "src", "deep", "main.py");
     await writeFile(file, "x = 1\n");
 
-    // A `.venv` directory with no interpreter in it resolves nothing, so it must not read as an environment:
-    // pointing pyright at one would report every import as missing while claiming an environment was in use.
+    // A `.venv` with no interpreter resolves nothing and must not read as an environment.
     await mkdir(join(root, ".venv", "bin"), { recursive: true });
     expect(await interpreterNear(file)).toBeUndefined();
 
@@ -73,8 +65,7 @@ test.skipIf(!hasRuff)("a file that does not parse comes back as a syntax error",
 test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wrong with it has nothing said about it", async () => {
     const dir = await project({
         "undefined.py": "def f():\n    return missing_helper(1)\n",
-        // Every shape that would make a naive undefined-name check unusable: a star import, a global defined
-        // after its use, and a name that exists only for the type checker.
+        // Every shape that breaks a naive undefined-name check: a star import, a late global, a type-only name.
         "fine.py": 'from os.path import *\nimport typing\n\nif typing.TYPE_CHECKING:\n    from foo import Bar\n\ndef f(p, b: "Bar"):\n    return join(p, LATER)\n\nLATER = "x"\n',
     });
 
@@ -87,7 +78,7 @@ test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wr
 
 test.skipIf(!hasPyright)("with no environment, the file's own type errors are reported and its unresolved imports are not", async () => {
     const dir = await project({
-        // `httpx` is not installed anywhere near this file; `.upper()` on an int is wrong whatever is installed.
+        // `httpx` isn't installed near this file; `.upper()` on an int is wrong regardless.
         "typed.py": "import httpx\n\ndef f() -> str:\n    return (1).upper()\n",
     });
     const answer = await check(join(dir, "typed.py"));

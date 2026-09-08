@@ -7,17 +7,15 @@ import { heldStream } from "../tunnel/tunnel-route.js";
 import { exitDrivers } from "./exit-drivers.js";
 import { checkExit, type ExitEntry, exitLink, exitLinks, rotateExit, startExit, stopExit } from "./exit-links.js";
 
-// The live geo-exit routes. Adding an exit is a capability add; STARTING, MOVING and ROTATING one is here,
-// because switching country is a runtime operation performed many times over one stored pool, by the operator
-// from the capability card and by the agent through the `exit` CLI, which calls these same routes. Both therefore
-// observe one implementation, and neither can move an exit without the other seeing it.
+// Adding an exit is a capability add; starting, moving and rotating one lives here, since switching country is a
+// runtime operation the operator (card) and the agent (`exit` CLI) both perform through these same routes, so neither
+// can move an exit without the other seeing it.
 
 export type ExitRoutesDeps = Pick<Services, "capabilities">;
 
 export const createExitRoutes = (services: ExitRoutesDeps) => {
     const i = implement(exitContract).$context<OrpcContext>();
-    // One move per exit at a time (tunnel-route.ts): here the loser's verification would additionally observe
-    // the winner's country and report a switch that never happened.
+    // One move per exit at a time, or a losing verification could report a switch that never happened.
     const moving = new Set<string>();
 
     const entryOf = async (id: string): Promise<ExitEntry> => {
@@ -46,9 +44,8 @@ export const createExitRoutes = (services: ExitRoutesDeps) => {
 
     return {
         list: i.list.handler(async () => ({ links: await exitLinks(services.capabilities) })),
-        // What auto-fills the country picker. Live off the provider when it answers, from the baked fallback
-        // when it does not, and `live` is passed through so the UI can say which rather than presenting a
-        // stale list as current.
+        // Fills the country picker: live from the provider when it answers, the baked fallback when it doesn't; `live`
+        // says which so the UI doesn't present a stale list as current.
         countries: i.countries.handler(async ({ input }) => {
             const entry = await entryOf(input.id);
             const { countries, live } = await exitDrivers[entry.config.provider].catalog(entry.id, entry.config);
@@ -57,8 +54,7 @@ export const createExitRoutes = (services: ExitRoutesDeps) => {
         start: i.start.handler(async function* ({ input }) {
             yield* move(input.id, (entry) => startExit(entry, entry.config.country));
         }),
-        // The country the caller asked for, not the stored one. An absent country is meaningful, it means
-        // "let the provider choose", so clearing a country is expressible rather than only setting one.
+        // The country the caller asked for, not the stored one; absent means "let the provider choose".
         use: i.use.handler(async function* ({ input }) {
             yield* move(input.id, (entry) => startExit(entry, input.country));
         }),

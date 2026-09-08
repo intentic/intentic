@@ -15,33 +15,18 @@ import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 
-// Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
-// rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown, a
-// failed daemon call (denylist 404, escape 400, oversize 413) shouldn't blow up the DOM handler that fired it.
-// Drag-drop uploads are NOT routed here; they go through useUploadQueue so a slow upload never blocks this line.
+// Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
 const { busy, notice: actionError, run } = useAsyncAction();
 
-// Lazily-loaded children of the dirs the tree walk listed but didn't descend into, ignored ones (node_modules,
-// .git, …) and any that sat below the walk's breadth-first entry budget, keyed by the dir's root-relative path.
-// Kept OUTSIDE the tree query so a tree refetch (the file watcher fires on any change) doesn't collapse an
-// expanded lazy dir. `lazyHidden` counts entries the cap cut from a lazy listing; `lazyLoading` drives the
-// per-row spinner.
+// Lazy children for dirs the walk skipped, keyed by path; kept outside the tree query to survive a refetch.
 const lazyChildren = ref<Map<string, readonly WorkspaceTreeEntry[]>>(new Map());
 const lazyHidden = ref<Map<string, number>>(new Map());
 const lazyLoading = ref<Set<string>>(new Set());
-/* The notice a lazy load raised, and the dir it was raised for. A failed dir is simply absent from
- * lazyChildren, so the expansion watch below RE-ASKS for it on the next tree change, and when that succeeds the
- * notice has to go with it: otherwise one network failure that childrenOf's own retry didn't catch pins
- * "Couldn't open …" across the whole explorer (the desktop's header line has no dismiss), over a tree that has
- * long since recovered, reading as if whatever the user is looking at is what failed.
- * The NOTICE OBJECT is held, not just the path, so the clear is identity-checked, a recovered background read
- * must not erase an unrelated file action's error that replaced it in the meantime (a rename that failed a
- * second ago). */
+// The notice from a failed lazy load, and its dir; held by identity so it can't erase an unrelated later error.
 let loadNotice: { readonly path: string; readonly notice: NoticeModel } | undefined;
 
-// Retire a lazy-load notice that is still the one on screen. Called when its own dir loads, and when the
-// ground it referred to goes away (scope switch, sandbox switch) — a path in one scope's tree names nothing
-// in the next one's, so its complaint can't be left standing there.
+// Retires a lazy-load notice if it's still the one showing. Called when its dir loads, or when the scope it named goes
+// away.
 const clearLoadNotice = (): void => {
     if (loadNotice !== undefined && actionError.value === loadNotice.notice) {
         actionError.value = undefined;
@@ -49,15 +34,9 @@ const clearLoadNotice = (): void => {
     loadNotice = undefined;
 };
 
-// Expanded directory paths (also the nest parents that fold sibling files, keyed by path). Module-level, next to
-// the lazy subtrees above, so the explorer's toolbar (WorkspaceDesktop) and its context menu can Collapse All
-// against the same set the tree rows toggle. Only consulted when not filtering, a filter force-expands matches.
-// PERSISTED per sandbox (workspaceSnapshot): which folders are open is where the user is working, and a reload
-// that collapsed the tree threw away every step they took to get there.
+// Expanded directory paths (also folded nest-parents); ignored while filtering, persisted per sandbox.
 const expanded = ref<ReadonlySet<string>>(new Set());
-// Which sandbox the open folders belong to, recorded at restore rather than read live at write time, the same
-// hazard useChat's tab snapshot documents: activeSandboxId flips one flush before sandboxScope re-scopes this
-// state, so a write during that window would file the OUTGOING sandbox's folders under the incoming one's key.
+// Sandbox the open folders belong to, captured at restore rather than read live, to avoid a rescope race.
 let scopedSandboxId: string | undefined;
 const { activeSandboxId } = useSandbox();
 
@@ -72,21 +51,15 @@ watch(expanded, (dirs) => {
         writeExpandedDirs(scopedSandboxId, [...dirs]);
     }
 });
-// The explorer's cut/copy clipboard, paths staged by Ctrl+X/Ctrl+C, consumed by the next paste. Module-level for
-// the same reason `expanded` is: the tree component unmounts whenever the sidebar flips to Changes/Checkpoints or
-// the search scope flips to Content, and a clipboard that died with it would make "copy here, look there, paste
-// back" silently do nothing. Cleared on paste of a cut (the move consumed it) and on a sandbox switch below.
+// Cut/copy clipboard; module-level so it survives the tree component unmounting on sidebar/search switches.
 const clipboard = ref<{ readonly mode: "copy" | "cut"; readonly paths: readonly string[] } | undefined>(undefined);
-// Collapse every open directory back to the roots (clears the whole set); nothing to reload since the tree data
-// is untouched. No-op when already empty.
+// Collapses every open directory; no-op when already empty.
 const collapseAll = (): void => {
     expanded.value = new Set();
 };
 
-// Clear the shared file-action feedback when the active sandbox changes (see sandboxScope), a spinner or error
-// from the previous sandbox must not bleed onto the next, and the upload queue + lazy-loaded subtrees are reset
-// alongside it. The open folders are RE-SCOPED rather than cleared: each sandbox is its own tree, and coming
-// back to one should land on the folders it was left open at, exactly as a reload does.
+// Resets file-action feedback and lazy state when the active sandbox changes. Open folders are re-scoped, not cleared:
+// each one restores where it was left open.
 export const resetWorkspaceTreeState = (): void => {
     busy.value = false;
     actionError.value = undefined;
@@ -100,27 +73,20 @@ export const resetWorkspaceTreeState = (): void => {
     resetEmptyDirsState();
 };
 
-// The lazy subtrees are keyed by path alone, so they mean a different directory in a different scope
-// (workspaceScope), `intentic/docs` in a conversation's checkout is not the one in the shared tree. The tree
-// query re-keys itself; these have to be dropped by hand, or an expanded folder would keep showing the
-// listing it had before the switch. The open folders are kept: the same paths are the right ones to be at.
+// Lazy subtrees are keyed by path alone, so a scope switch must drop them (the tree query re-keys itself). Expanded
+// folders are kept: the same paths are still correct.
 watch(workspaceAgent, () => {
     lazyChildren.value = new Map();
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
-    // …and so does a complaint about one of them. "Couldn't open intentic/_sandbox/…" names a directory in the
-    // tree that was just dropped, so leaving it up puts a conversation's failure on the shared workspace view,
-    // where it reads as a fault in whatever is open there.
+    // Also clears any load notice: it could still be naming a directory from the scope just dropped.
     clearLoadNotice();
 });
 
-/* The read-only "what the LLM sees" tree: the full /work filesystem the agent operates on, read DIRECTLY from
- * the sandbox daemon (GET /workspace/tree + /file, no platform-held state). The sandbox owns the ignore rules
- * and the secret denylist. Backed by vue-query so the tree is cached and refetchable; file reads stay
- * imperative (the viewer opens one on demand and manages its own object-URL lifecycle). */
+// Read-only tree of the full /work filesystem, read directly from the sandbox daemon (GET /workspace/tree), which owns
+// the ignore rules and secret denylist. Backed by vue-query for caching; file reads stay imperative.
 
-// Flatten the nested tree to a path → entry map so the viewer can read a file's size/type in O(1) (to pick a
-// render mode and gate large reads) without re-walking the nested tree on every open.
+// Flattens the tree to a path → entry map so a file's size/type resolves in O(1) without re-walking the tree.
 const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTreeEntry> => {
     const map = new Map<string, WorkspaceTreeEntry>();
     const walk = (list: readonly WorkspaceTreeEntry[]): void => {
@@ -142,14 +108,8 @@ const canMoveInto = (source: string, targetDir: string): boolean =>
 
 const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> => sandboxJson<{ ok: true }>(path, jsonBody(`POST`, data));
 
-/* One directory's listing, RETRIED ONCE if the request never reached the daemon.
- *
- * This is a background read the user did not ask for by name, they opened a folder, and the daemon answers it
- * in milliseconds. What fails here is the connection under it (a reconnect, a tunnel hiccup, a sleeping
- * laptop's first request), and failing that on the first attempt puts a red "Couldn't open …" on the workspace
- * header for a folder that would have listed fine 300ms later. A refused read is a different thing entirely,
- * a denylisted path, an escape, a directory that isn't there, so a SandboxHttpError (the daemon answered, with
- * a no) is passed straight out: retrying it would only ask the same question and get the same answer. */
+// One directory's listing, retried once if the request never reached the daemon. A SandboxHttpError (the daemon refused
+// it) is rethrown immediately, not retried.
 const childrenOf = async (path: string): Promise<WorkspaceChildrenResponse> => {
     const request = (): Promise<WorkspaceChildrenResponse> =>
         sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`);
@@ -167,14 +127,11 @@ const childrenOf = async (path: string): Promise<WorkspaceChildrenResponse> => {
 // Raw single-path daemon calls (no invalidate), the shared core for the single + batch mutations below.
 const moveRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/move`, { from, to });
 const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/copy`, { from, to });
-// oRPC's OpenAPI handler reads non-GET input from the request BODY (only GET reads the query), so a DELETE
-// must carry {path} as a JSON body, a query param deserializes to undefined ("expected object").
+// oRPC's OpenAPI handler reads non-GET input from the body, not the query; DELETE must send {path} as JSON.
 const removeRaw = (path: string): Promise<unknown> => sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path }));
 
-// The file's contents, undefined when there is nothing at that path, or throws with a user-facing message when
-// the read was refused (e.g. the daemon's denylist). One window's worth, the callers here read small managed
-// files (an agent's instructions file), and the route serves text in windows so that no reader can be the one
-// that pulls a log into memory (see readFileWindow).
+// File contents, or undefined if nothing is there; throws with a user-facing message if the read was refused. One
+// window's worth, not the whole file (readFileWindow).
 const readFile = async (path: string): Promise<string | undefined> => {
     const window = await readFileWindow(path);
     return window.present ? window.content : undefined;
@@ -183,12 +140,8 @@ const readFile = async (path: string): Promise<string | undefined> => {
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
-/* The scope is part of the KEY, not just the request: two trees genuinely differ, and one cached under the
- * other's key is a file explorer listing a workspace nobody is looking at. Switching scope is therefore an
- * ordinary query switch, cached, instant on the way back, refetched when stale.
- *
- * Named out here for the background loader (composables/prefetch), which warms the tree into the entry the
- * explorer reads, and which must read the scope live, since a scope switch is a different tree entirely. */
+// Scope is part of the query key, not just the request: different scopes are different trees, cached independently.
+// Exported for the prefetch loader, which must read the scope live.
 export const workspaceTreeKey = (): unknown[] => WORKSPACE_TREE.of(workspaceAgent.value ?? `shared`);
 
 export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
@@ -196,18 +149,8 @@ export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
-    /* WHETHER THIS MEMBER MAY EDIT THE SHARED TREE, and the refusal every gesture that cannot be withdrawn
-     * reports through.
-     *
-     * Editing the workspace is the operating tier's: the daemon floors every file write at maintainer
-     * (auth/role-floor.ts), so for a viewer or a collaborator this explorer is a reading surface. The views used
-     * to offer the whole menu to everyone and let the daemon answer, which is the worst of both — the refusal
-     * arrived as a truncated line in a toolbar nobody looks at, so Delete read as a button that does nothing.
-     * Menus withdraw their write items; a keystroke or a dropped file has no item to withdraw, so it says the
-     * tier instead, on the SAME line every other file failure uses.
-     *
-     * It lives here rather than in each view so the explorer, its toolbar and the mobile sheet cannot disagree
-     * about who may write, and so the sentence is written once. */
+    // Whether this member may edit the shared tree; the daemon floors writes at maintainer, so others get read-only
+    // access. Menus withdraw write items for them; refuseWrite reports the tier for actions with none to withdraw.
     const { canShip: canEditFiles } = useRole();
     const refuseWrite = (): boolean => {
         if (canEditFiles.value) {
@@ -220,26 +163,15 @@ export function useWorkspaceTree() {
     const { query, error } = useSandboxQuery({
         queryKey: computed(() => workspaceTreeKey()),
         queryFn: fetchWorkspaceTree,
-        // Fallback only: live freshness is pushed (the daemon's file watcher → /events SSE → markWorkspaceChanged
-        // invalidates this query), so this poll is a backstop for a broken push chain, not the freshness path, a
-        // slow 2min cap keeps steady-state traffic low while still self-healing if any link ever breaks.
+        // Fallback only: freshness is normally pushed (file-watch → SSE); this self-heals if that chain breaks.
         refetchInterval: 120_000,
     });
 
-    // Every user file mutation below refreshes the tree immediately (no waiting on the file-watch push); the
-    // shared query key means any open explorer repaints. targetDir/paths are root-relative, the same space the
-    // tree and file routes speak. `.every`, not `.of()`: a tree key carries the focused scope before the
-    // appended sandbox id, so only the family-wide prefix reaches every cached variant (see queryKeys).
+    // Invalidates the whole WORKSPACE_TREE family (`.every`, not `.of()`), so every scoped tree variant refetches, not
+    // just the current one.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
-    // The editor's text save persists verbatim through the same upload route drag-drop uses (bulk drag-drop
-    // uploads go through useUploadQueue). An emptied buffer writes an empty file. The tree refetch is fired but
-    // NOT awaited: the caller must markSaved before the daemon's ~250ms file-watch echo re-reads the file, and a
-    // slow tree walk here loses that race, the echo then compares against a stale baseline and raises a false
-    // "changed on disk" warning. The echo's own push invalidates the tree anyway (markWorkspaceChanged), so this
-    // kick is latency-only.
-    // `baseHash` (sha256Hex of the text last read from disk) makes the save GUARDED: the daemon refuses it with
-    // a 409 when the file changed since that read, so a save can't clobber a concurrent agent/terminal write.
-    // Omitted for creates (no baseline exists yet), those overwrite as before.
+    // Fires the tree refetch without awaiting it, so callers can markSaved before the file-watch echo races it into a
+    // false "changed on disk". `baseHash` 409s the save if the file changed since it was read; omitted for creates.
     const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
         await sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, {
             method: `POST`,
@@ -252,8 +184,7 @@ export function useWorkspaceTree() {
         await jsonPost(`/workspace/dir`, { path });
         await invalidate();
     };
-    // Rename is the only genuinely single move (same parent, new name); every other delete/move/copy goes through a
-    // batch variant so a multi-select mass action is one loop + a single trailing invalidate.
+    // Rename is the only single move (same parent, new name); every other op goes through a batch variant below.
     const moveEntry = async (from: string, to: string): Promise<void> => {
         await moveRaw(from, to);
         await invalidate();
@@ -270,8 +201,8 @@ export function useWorkspaceTree() {
         }
         await invalidate();
     };
-    // Move each source INTO targetDir (drag-drop / cut-paste), skipping ones already there or that would nest a
-    // folder inside itself; refetch once at the end.
+    // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself; refetches
+    // once at the end.
     const moveIntoMany = async (sources: readonly string[], targetDir: string): Promise<void> => {
         for (const source of sources) {
             if (canMoveInto(source, targetDir)) {
@@ -282,24 +213,16 @@ export function useWorkspaceTree() {
     };
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);
-    // A successful empty workspace is still a snapshot. Consumers that need to distinguish "nothing has been
-    // read" from "the root is empty" must use this rather than tree.length, an empty workspace is exactly the
-    // place where replacing the editor with a reconnect screen would be most misleading.
+    // True once a snapshot has loaded, even an empty one; use this, not tree.length, to detect "not yet loaded".
     const hasSnapshot = computed(() => query.data.value !== undefined);
     const root = computed(() => query.data.value?.root ?? ``);
-    // How many of the ROOT's own entries the daemon's entry budget cut (0 = the root listing is complete).
+    // How many of the root's own entries the daemon's entry budget cut (0 = listing is complete).
     const rootHidden = computed(() => query.data.value?.hidden ?? 0);
-    /* Every folder holding nothing but empty folders, workspace-wide, from the daemon's own walk for it. Not
-     * derived from `tree` above and it cannot be: the budget that cut the listing leaves a directory below it
-     * with no `children`, which reads as "never looked at", so an emptiness computed here would only ever cover
-     * the handful of levels the budget reached, the workspace root and nothing inside any repository in it. */
+    // Folders containing only empty folders, workspace-wide; not derivable from `tree` since budget cuts hide it.
     const barren = computed<readonly string[]>(() => query.data.value?.barren ?? []);
-    // The eager walk, cached against the tree alone. Split out because the map below is rebuilt every time a
-    // lazy subtree lands, and re-walking every node the daemon already listed, recursively, allocating as it
-    // goes, to add one directory's children is the bulk of that cost for nothing.
+    // Eager tree walk, cached separately so a lazy subtree landing doesn't re-walk the whole eager tree each time.
     const eagerByPath = computed(() => buildMap(tree.value));
-    // The path → entry map spans the eager tree AND every lazily-loaded subtree, so the viewer can resolve
-    // a lazily-shown file's size/type by path.
+    // Path → entry map spanning the eager tree and every lazy subtree, so a lazily-shown file resolves by path.
     const entriesByPath = computed(() => {
         const map = new Map(eagerByPath.value);
         for (const entries of lazyChildren.value.values()) {
@@ -313,11 +236,8 @@ export function useWorkspaceTree() {
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
 
-    // Load the children of a dir the walk left unlisted, ignored, or below the entry budget (no-op once loaded
-    // or already in flight). Expansion drives this on its own (the watch below); this is the direct route for
-    // the callers that need a dir's real contents WITHOUT showing it, the mobile browser drilling into a
-    // folder, and the paste that checks which names are already taken. Errors surface on the shared actionError
-    // line, like the file mutations above.
+    // Loads a dir's children if the walk left it unlisted (no-op once loaded or in flight). Used directly by callers
+    // that need real contents without expanding the row (mobile drill-in, paste's name check).
     const loadChildren = async (path: string): Promise<void> => {
         if (lazyChildren.value.has(path) || lazyLoading.value.has(path)) {
             return;
@@ -325,9 +245,7 @@ export function useWorkspaceTree() {
         await fetchChildren(path);
     };
     const fetchChildren = async (path: string): Promise<void> => {
-        // Which tree the answer will be ABOUT, read before the request rather than when it lands: a scope switch
-        // mid-flight empties the lazy maps (the watch above), and a late answer written in after that would file
-        // one conversation's listing under the shared tree's identical path.
+        // Captures the scope before the request: a late answer must not land under a different scope's identical path.
         const asked = workspaceAgent.value;
         lazyLoading.value.add(path);
         try {
@@ -341,13 +259,12 @@ export function useWorkspaceTree() {
             } else {
                 lazyHidden.value.delete(path);
             }
-            // A recovered retry retires the notice its own failure raised (see loadNotice above).
+            // Retires the notice this same path's own failure raised, once it recovers.
             if (loadNotice?.path === path) {
                 clearLoadNotice();
             }
         } catch (loadError) {
-            // Same reason as the write above: a read the user has already navigated away from doesn't get to
-            // complain about the tree they are looking at now.
+            // A read the user has already navigated away from doesn't get to raise an error for the tree shown now.
             if (workspaceAgent.value !== asked) {
                 return;
             }
@@ -359,16 +276,9 @@ export function useWorkspaceTree() {
         }
     };
 
-    // An expanded dir the walk never listed (ignored, or below its entry budget) fetches its children here,
-    // ONE rule covering both ways a dir comes to be open: the user clicked its chevron, or a reload restored it
-    // from the snapshot. Restored expansion is why this can't live in the toggle: a folder that came back open
-    // would have drawn its chevron down over nothing, since only a click ever fetched it.
-    // Re-runs on `entriesByPath`, which spans the eager tree AND every lazy subtree, so a restored chain
-    // (node_modules → .bin) resolves one level per pass as each parent's children land, and stops when nothing
-    // new is loadable, loadChildren itself no-ops for anything loaded or in flight.
-    // Immediate, because the tree can already be in hand when this mounts (a cached query, or a second explorer
-    // opening over the first): waiting for the next change would leave a restored folder empty until something
-    // else happened to move.
+    // Loads children for any expanded dir the walk left unlisted, whether opened by a click or restored from the
+    // snapshot. Runs immediately: the tree can already be cached on mount, so waiting for the next change would leave
+    // it empty.
     watch(
         [expanded, entriesByPath],
         () => {
@@ -382,27 +292,16 @@ export function useWorkspaceTree() {
         { immediate: true },
     );
 
-    // Closing the folder that failed retires its complaint: the retry above only runs while a dir is open, so
-    // a notice left behind a collapsed folder is one nothing will ever clear, and the desktop's status line
-    // has no dismiss. Only a CLOSE does this (the path was open and no longer is), never an unrelated toggle,
-    // so a failed drill-in that never expanded anything keeps its notice.
+    // Closing the dir that failed retires its notice: the retry runs only while a dir is open, so a collapsed one would
+    // never clear it.
     watch(expanded, (dirs, before) => {
         if (loadNotice !== undefined && before.has(loadNotice.path) && !dirs.has(loadNotice.path)) {
             clearLoadNotice();
         }
     });
 
-    /* A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
-     * file-watch push) would leave it frozen at whatever it held when it was expanded, a file created inside an
-     * open deep folder would simply never appear. Re-fetch every loaded lazy dir whenever the tree data CHANGES,
-     * so the eager and lazy halves of the explorer are always the same age. In-flight paths are skipped, and this
-     * never re-enters: /workspace/children doesn't touch the tree query.
-     *
-     * Keyed on the data, not on `dataUpdatedAt`: that timestamp moves on every successful fetch, answered or
-     * unchanged, so the two-minute backstop poll alone fired one request per expanded lazy directory, plus a
-     * rebuilt path map and a repaint per answer, for a tree nothing had touched. vue-query's structural sharing
-     * holds the reference steady across a refetch that changed nothing, which makes the identity the question
-     * this actually wants to ask. */
+    // Lazy subtrees sit outside the tree query; refetch each loaded one whenever the tree data changes, or new files
+    // never appear. Keyed on `query.data`, stable via structural sharing when unchanged, not `dataUpdatedAt`.
     watch(query.data, () => {
         // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
         for (const path of lazyChildren.value.keys()) {

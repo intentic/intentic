@@ -42,12 +42,8 @@ import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
 
-// Long-lived events stream the browser holds open: heartbeat frames every ~2s (detect the sandbox dying, the
-// tunnel drops the proxied response when the origin goes away, and trip a client watchdog) INTERLEAVED with
-// workspaceChanged batches from the filesystem watcher (live tree/viewer refresh) and presence roster
-// snapshots. One connection carries all three: a change is forwarded the instant it lands, and the heartbeat
-// only fires when the stream is otherwise idle. `member` joins this connection to the roster for its lifetime;
-// undefined (no identity, loopback mode, or an old client sending no clientId) observes without joining.
+// Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
+// `member` joins the roster for this connection's lifetime; undefined observes without joining.
 async function* systemEvents(
     services: Services,
     signal: AbortSignal | undefined,
@@ -66,22 +62,8 @@ async function* systemEvents(
         signal.removeEventListener("abort", abortFromCaller);
         return;
     }
-    /* First frame: the workspace's identity, so the browser can drop its persisted cache for a workspace that
-     * was wiped and recreated under the same sandbox id (see workspace-identity.ts), plus the route surface
-     * THIS daemon build implements. A browser newer than the daemon reads the difference and explains the gap
-     * instead of 404-ing blind; see the contract's routes.ts.
-     *
-     * `shapes` is that same idea one level finer, a fingerprint per route, so a route both builds HAVE but
-     * shape differently is named too, instead of answering a payload the browser silently reads as empty.
-     * Both are module constants, computed once at load rather than per connection.
-     *
-     * `build` is the cache guard on the other axis, a rebuilt daemon may shape its answers differently, so
-     * the browser drops what it cached from the previous build rather than hydrating it (see version.ts).
-     *
-     * And `boot` is where the daemon is in its own convergence. This frame is the only thing the browser has
-     * to tell "up and serving" from "up and still parking every read"; without it a hydrated cache painted an
-     * operable workspace over a boot, and the user's first click went into the readiness gate. Sent BEFORE the
-     * subscription below so the wait is visible from the stream's very first frame. */
+    // First frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build implements,
+    // the build id for cache invalidation, and boot progress; sent before subscribing so it appears before any wait.
     yield {
         kind: "hello",
         workspaceId: await workspaceIdentity(services),
@@ -90,40 +72,31 @@ async function* systemEvents(
         build: buildId(),
         boot: services.boot.progress(),
     };
-    /* Frames waiting to go out, each stamped with when it was produced. The stamp is what makes the browser's
-     * half of a "the UI felt stale" report answerable: a roster snapshot that sat in this array for two seconds
-     * was late leaving the daemon, and no amount of looking at the browser would ever have shown that. Queue
-     * DEPTH rides along because the two causes look identical from one frame's latency alone, a burst of
-     * workspaceChanged batches (deep queue, each frame fine) versus a consumer that stopped pulling (shallow
-     * queue, one very late frame). */
+    // Frames waiting to go out, stamped with production time; queue depth distinguishes a burst from a stalled
+    // consumer.
     const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
     const enqueue = (event: SystemEvent): void => {
         queue.push({ event, at: process.hrtime.bigint() });
     };
-    // Resolver of the current idle wait, so a change (or an abort) ends it immediately instead of stalling until
-    // the next heartbeat tick.
+    // Resolves the current idle wait immediately on a change or abort, instead of stalling for the next heartbeat.
     let wake: (() => void) | undefined;
     const onWake = (): void => {
         const resolve = wake;
         wake = undefined;
         resolve?.();
     };
-    // Register BEFORE subscribing: the register broadcast reaches the already-connected members, and the
-    // subscribe's immediate snapshot then paints the full roster (self included) onto this connection.
+    // Registers before subscribing, so the broadcast reaches existing members before the snapshot paints back.
     const unregisterPresence = identity !== undefined && clientId !== undefined ? registerPresence(clientId, identity) : undefined;
     const unsubscribePresence = subscribePresence((users) => {
         enqueue({ kind: "presence", users });
         onWake();
     });
-    // The fleet roster rides the same stream, same snapshot-not-diff contract: an immediate frame on
-    // subscribe paints the fleet, then every registry change (turn lifecycle, usage, land, discard) re-frames.
+    // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry change.
     const unsubscribeAgents = services.agents.subscribe((agents, rev) => {
         enqueue({ kind: "agents", agents, rev });
         onWake();
     });
-    // Boot transitions, for a stream opened DURING one: the hello above carried the snapshot at connect, and
-    // each step then re-frames it until the gate opens. Snapshot-not-diff like the rosters, so a browser that
-    // reconnects mid-boot is consistent from its first frame.
+    // Boot transitions re-frame the hello snapshot, so a mid-boot reconnect is consistent from its first frame.
     const unsubscribeBoot = services.boot.subscribe((progress) => {
         enqueue({ kind: "boot", ...progress });
         onWake();
@@ -132,29 +105,22 @@ async function* systemEvents(
         enqueue({ kind: "workspaceChanged", paths });
         onWake();
     });
-    // Repo-set snapshots: a clone/scaffold/delete anywhere under /work re-frames the discovered repo list
-    // (the .git-blind watcher can't surface this, see repo-watch.ts).
+    // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.
     const unsubscribeRepos = subscribeRepoChanges((repos) => {
         enqueue({ kind: "reposChanged", repos });
         onWake();
     });
-    // Which repos' refs just moved, a commit, a checkout, a branch or tag, a rebase started or aborted. The
-    // agent does most of these out-of-band, so without this frame every commit-graph surface stays as fresh as
-    // the last thing the user clicked (see git/ref-watch.ts).
+    // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click.
     const unsubscribeRefs = subscribeRefChanges((repos) => {
         enqueue({ kind: "refsChanged", repos });
         onWake();
     });
-    // Which RUNNING things just moved, a session opened or exited, a dev server bound its port, a browser
-    // closed, a subagent reported in. None of it is on disk, so none of the three feeds above can carry it, and
-    // every view of it used to poll. Subscribing here is also what starts the daemon's sampler: no browser
-    // connected, nothing looked at (see runtime-watch.ts).
+    // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler.
     const unsubscribeRuntime = subscribeRuntimeChanges((domains) => {
         enqueue({ kind: "runtimeChanged", domains });
         onWake();
     });
-    // An account's plan limits moved, or a provider refused / was answered. What lets the rings in every open
-    // window agree without a single one of them polling (usage/headroom.ts, usage/provider-refusals.ts).
+    // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
     const unsubscribeHeadroom = services.headroom.onChange((provider, account, usage) => {
         enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
         onWake();
@@ -163,17 +129,15 @@ async function* systemEvents(
         enqueue({ kind: "providerRefusal", provider, ...(refusal === undefined ? {} : { refusal }) });
         onWake();
     });
-    // Authentication middleware ran only for the opening request. Register after every setup step that could
-    // throw and immediately before the protected loop, so a failed/closed iterator cannot leak a dead entry.
+    // Registered after every step that could throw, right before the loop, so a dead entry can't leak.
     const unregisterAccess = identity === undefined ? undefined : services.auth?.connections.register(identity, () => controller.abort());
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
             const framed = queue.shift();
             if (framed !== undefined) {
-                // Measured at the hand-off, not after: what follows is the consumer's serialization and the
-                // socket write, and the number this line is about is how long the frame sat here waiting for
-                // its turn. `depth` is what was still behind it.
+                // Measures how long the frame sat queued, not the serialization or write after; depth is what was
+                // behind it.
                 services.perf.record("events.frame", Number(process.hrtime.bigint() - framed.at) / 1e6, {
                     frame: framed.event.kind,
                     depth: queue.length,
@@ -181,7 +145,7 @@ async function* systemEvents(
                 yield framed.event;
                 continue;
             }
-            // Idle: wait for a change (wake) or the heartbeat interval; a timeout means "nothing changed, beat".
+            // Idle: wait for a change (wake) or the heartbeat interval; a timeout means nothing changed, beat.
             const timedOut = await new Promise<boolean>((resolve) => {
                 const timer = setTimeout(() => {
                     wake = undefined;
@@ -193,10 +157,8 @@ async function* systemEvents(
                 };
             });
             if (!abort.aborted && timedOut) {
-                /* WITH THE FLEET REVISION ON IT, which is only honest because of where this line sits: the
-                 * queue is empty, so everything this connection was ever going to be told has been yielded.
-                 * The number is therefore "what you should be holding", and a browser holding anything else
-                 * has demonstrably missed a snapshot rather than merely raced one (see HeartbeatSchema). */
+                // Carries the fleet revision honestly only because the queue is empty here; a mismatch means a missed
+                // snapshot.
                 yield { kind: "heartbeat", rev: services.agents.revision() };
             }
         }
@@ -225,24 +187,16 @@ export const createSystemRoutes = (services: Services) => {
             if (info === undefined) {
                 return {};
             }
-            // Read the background-warmed caches synchronously, no fetch or credential read on the request
-            // path. A cold cache (tests, first-boot instant) omits the field entirely; the browser's shared
-            // /info query refetches. Same shape for both, for the same reason, see adapter-health.ts.
+            // Reads background-warmed caches synchronously; a cold cache omits the field and the browser's query
+            // refetches.
             const latest = latestVersion();
             const runtimes = runtimeHealth();
-            /* Whether the machine that runs this container has ALREADY downloaded and built the next update,
-             * the one fact on this route the daemon cannot work out for itself, and the one that decides
-             * whether taking an update costs minutes or costs a restart. Read from the /history volume rather
-             * than cached: it is written from outside this process, and a card minutes behind the download it
-             * describes is the exact problem the marker exists to fix (see platform/staged-update.ts). */
+            // The host machine's own build status, unknowable to the daemon; read fresh from /history, never cached.
             const staged = await stagedUpdate(services.config.historyRoot);
-            // What the update actually contains, capped so a long-neglected sandbox gets a card rather than a
-            // scroll. The remainder travels as a count: "and 9 more" is what sends someone to the changelog,
-            // where an unbounded list on a hub card would just bury everything under it.
+            // Capped so a long-neglected sandbox gets a card, not a scroll; the remainder travels as a count.
             const notes = updateNotes(info.version);
             const shown = notes.slice(0, MAX_UPDATE_NOTES);
-            // Breaking sentences ride uncapped, unlike the notes above: the cap keeps a card readable, but a
-            // warning cut off by it is a breaking update taken unwarned, see release-notes.ts.
+            // Uncapped unlike the notes above: a warning cut off by the cap would be a breaking update taken unwarned.
             const breaking = breakingNotes(info.version);
             return {
                 ...info,
@@ -254,37 +208,14 @@ export const createSystemRoutes = (services: Services) => {
                 ...(staged !== undefined ? { staged } : {}),
             };
         }),
-        /* What the daemon could not read in its own `.intentic/` manifests.
-         *
-         * The registry it reports from is written by the store substrate as a side effect of READING a file
-         * (store/manifest-problems.ts), which makes the freshness question real: a file edited by hand a second
-         * ago has a stale entry until something reads it again. So this route reads the three manifests a
-         * PERSON edits before answering, rather than trusting whatever the last unrelated read happened to
-         * leave behind. Three small files, on a route asked only when one of them changes or a browser
-         * connects, and the alternative is a notice that is right one refetch later, which for "did my typo
-         * get fixed?" is the same as being wrong.
-         *
-         * The other twenty-odd manifests are daemon-written and still fully covered: they report whenever
-         * anything reads them, which is what any feature touching them already does. What they do not get is
-         * this pre-emptive re-read, because nobody hand-edits them and the reads are not free.
-         *
-         * Paths come back workspace-relative, so the browser shows `.intentic/config/settings.json` rather than a
-         * container path nobody can act on. */
+        // What the daemon couldn't read in `.intentic/` manifests. The three hand-edited ones are re-read here before
+        // answering, since a registry entry is only as fresh as its last read; daemon-written manifests skip this step.
         manifestProblems: i.manifestProblems.handler(async () => {
             await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.personas.list()]);
             return manifestProblems(services.workspace.root);
         }),
-        /* Take one stray key back out of a manifest, the button on the notice above.
-         *
-         * NOTHING TO INVALIDATE AFTERWARDS, which is worth saying because it looks like an omission: the write
-         * lands through the store's own queue, the workspace watcher sees the file change and broadcasts the
-         * `manifests` key (workspace-state.ts), and the refetch that triggers re-reads the three hand-edited
-         * manifests on its way past the route above. The notice clears itself for the same reason it clears
-         * when the file is fixed by hand, which is the property the whole design was chosen for.
-         *
-         * THE REFUSALS ARE RACES, NOT FAULTS, and each gets the status that says so. Somebody hand-editing the
-         * file while the notice was on screen is the ordinary way to reach two of these, and reporting that as
-         * a server error would blame the user's own fix. The message is what the browser shows. */
+        // Removes one stray key from a manifest. Nothing to invalidate afterward: the write goes through the store's
+        // queue and the workspace watcher's own refetch re-reads it. Each refusal is an ordinary race, not a fault.
         repairManifest: i.repairManifest.handler(async ({ input }) => {
             const refusal = await repairManifest({ root: services.workspace.root, ...input });
             if (refusal === "unknown file") {
@@ -306,10 +237,7 @@ export const createSystemRoutes = (services: Services) => {
             }
             return { ok: true };
         }),
-        // Exchange the request's verified bearer for a daemon-minted session (the steady-state browser
-        // credential, see auth/session.ts). The bearer middleware already verified WHO is asking (a Google ID
-        // token, or a still-valid session, which makes this same route sliding renewal); loopback mode and
-        // token-scoped callers (panel/bridge/sync) carry no member identity and have no session to mint.
+        // Exchanges a verified bearer for a daemon session; loopback and token-scoped callers mint nothing.
         session: i.session.handler(async ({ context }) => {
             if (services.auth === undefined || context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to mint a session for" });
@@ -318,19 +246,14 @@ export const createSystemRoutes = (services: Services) => {
             return { token, expiresAt, email: context.identity.email };
         }),
         events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input.clientId)),
-        // A tab's activity self-report. Accepted only for the caller's own live connection (see updatePresence);
-        // identity-less callers (loopback) have no roster entry to update, still ok, the report is just moot.
+        // A tab's self-report, accepted only for its own live connection; identity-less callers update nothing.
         presence: i.presence.handler(({ input, context }) => {
             if (context.identity !== undefined) {
                 updatePresence(context.identity, input);
             }
             return { ok: true } as const;
         }),
-        // Per-account token/cost totals, folded from the spend ledger (usage/usage-store.ts). ALL-TIME, because
-        // that ledger is never pruned. This used to aggregate the activity log's turn.completed events, so the
-        // totals covered only that log's retained window: a busy week evicted the older turns and the number a
-        // user reads as "what this account has cost me" silently went DOWN. Unattributed turns (an env-token turn
-        // has no account) are skipped rather than pooled under a blank id, they belong to no account's total.
+        // Per-account totals folded from the all-time ledger; unattributed turns are skipped, not pooled blank.
         usage: i.usage.handler(async () => {
             const totals = new Map<string, UsageAccount>();
             for (const row of await services.usage.rollup({})) {
@@ -361,28 +284,14 @@ export const createSystemRoutes = (services: Services) => {
             }
             return { accounts: [...totals.values()] };
         }),
-        // Every attachable session, the ONE list behind the web app's global terminal panel: the tmux
-        // sessions (same server the /system/terminal PTYs spawn, queried by shelling out) plus the supervised
-        // services' svc-* rows. web-* sessions are the user's shells; panel-* sessions are dev servers
-        // (labeled by panel key, `running` from the process manager, false = untracked, e.g. a finished
-        // oneShot's lingering shell). EXCEPT dockerd's and the local models', which read as kind "process":
-        // the panel surfaces those in its processes popover, not as killable tabs, and their `running` is the
-        // actual process, pane_current_command back at the shell means it crashed, however the manager still
-        // tracks the session. agent-* sessions are the Claude agent's Bash terminals
-        // (tmux-run): they are `running` while their agent has a turn in flight (the fleet registry's
-        // liveSessionIds, an agent between two commands is still working) or any pane in them is alive (see
-        // paneStates, a turn nothing tracks, e.g. the CLI's own, still reads honestly). Once neither holds,
-        // every window is a finished command's dead pane and nothing will ever write to that session again,
-        // which is what retires it from the panel's strip and hands it to the retention sweep
-        // (terminal-session.ts reapFinishedSessions). job-* sessions are the terminal
-        // runner's user-triggered flows (capability adds, infra check, `running` from its in-flight count).
-        // Sessions matching no prefix stay hidden. No tmux server yet makes `list-panes` exit non-zero,
-        // that's an empty list, not an error.
+        // Every attachable session behind the terminal panel.
+        // - web-*: the user's own shells
+        // - panel-*: dev servers, labeled by panel key; dockerd and local-model panels read as kind "process" instead
+        // - agent-*: the agent's own Bash terminals, running while a turn is in flight or any pane is alive
+        // - job-*: the terminal runner's user-triggered flows
+        // Anything else stays hidden; no tmux server yet reads as an empty list, not an error.
         terminals: i.terminals.handler(async () => {
-            /* The supervised services (extension gateways and kin) are not tmux sessions: their rows come from
-             * the supervisor itself, honest by construction — `running` is a live child, `exitCode` a real
-             * exit — and the `svc-*` name is the log view the terminal socket serves with `tail -F`. Appended
-             * outside the tmux try/catch so a sandbox with no tmux server still lists its services. */
+            // Supervised services aren't tmux sessions; their rows come from the supervisor, so `running` is exact.
             const extensionProcesses = await extensionProcessIndex(services);
             const serviceRows = services.serviceProcesses.list().map((service) => ({
                 name: serviceSession(service.key),
@@ -403,9 +312,8 @@ export const createSystemRoutes = (services: Services) => {
                     }),
                 );
                 const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
-                    // Every row carries the session's clock, its last window's status, and, when its live pane is
-                    // off doing something rather than sitting at a prompt, what that something is. What differs
-                    // per kind is only what `running` means.
+                    // Every row carries its activity clock, exit status, and a command if busy; `running` differs per
+                    // kind.
                     const busy = foreground(liveCommand);
                     const seen = {
                         activityAt,
@@ -417,9 +325,8 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     if (name.startsWith(PANEL_SESSION_PREFIX)) {
                         const key = name.slice(PANEL_SESSION_PREFIX.length);
-                        // The tmux-riding background processes: dockerd and the local model servers, the two
-                        // that deliberately outlive a daemon restart (main.ts adopts them at boot). Extension
-                        // processes are supervised daemon children now, their rows are appended below.
+                        // dockerd and local-model servers outlive a restart, adopted at boot; extension processes are
+                        // listed apart.
                         if (key === DOCKER_PANEL_KEY || key.startsWith(LOCAL_MODEL_PREFIX)) {
                             return [
                                 {
@@ -434,11 +341,8 @@ export const createSystemRoutes = (services: Services) => {
                         return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key), ...seen }];
                     }
                     if (name.startsWith(AGENT_SESSION_PREFIX)) {
-                        // `help` is the one thing on this row that is not tmux's own account of the session:
-                        // the agent has parked on a prompt in here and is waiting for the owner to type
-                        // (terminal/terminal-help.ts). It rides the list rather than a route of its own for
-                        // the reason the browser's does, the panel already polls this, and the banner belongs
-                        // over the tab it is about.
+                        // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the
+                        // panel polls it.
                         const help = terminalHelpFor(name);
                         return [
                             {
@@ -470,16 +374,13 @@ export const createSystemRoutes = (services: Services) => {
                 return { sessions: serviceRows };
             }
         }),
-        // The agent's Chromiums and the pages each holds open. Nothing to shell out to: these are records this
-        // daemon keeps itself, from the hooks that see the browser tool calls (browser/browser-sessions.ts).
+        // The agent's Chromiums and open pages; records this daemon keeps itself, not shelled out for.
         browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),
         closeBrowser: i.closeBrowser.handler(async ({ input }) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
-        // The agents this sandbox's agents started, and one of their transcripts. Both are daemon-held records
-        // like the browsers above, the list from the registry the turn stream feeds (agent/subagents.ts), the
-        // transcript from whichever store actually ran the child (sessions/subagent-transcript.ts).
+        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's store.
         subagents: i.subagents.handler(() => ({ sessions: listSubagentSessions() })),
         subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
             messages: await readSubagentTranscript(
@@ -487,12 +388,9 @@ export const createSystemRoutes = (services: Services) => {
                 input.id,
             ),
         })),
-        /* Act on a sandbox running on one of the user's own devices, streaming what the machine says as it says
-         * it. Operating-tier only, and this is the door that can also DELETE one of them.
-         *
-         * Everything past the gate belongs to the machine, including whether it will do this at all. Its refusal
-         * ("Remove sandboxes from this device is switched off") arrives as the stream's terminal error line, in
-         * its own words, because the machine is the only place a scope is ever checked. */
+        // Acts on a sandbox on one of the user's devices, streaming the machine's own output; this door can also delete
+        // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own
+        // terminal error.
         manageDeviceSandbox: i.manageDeviceSandbox.handler(async function* ({ input, context }) {
             if (services.auth !== undefined) {
                 try {
@@ -509,10 +407,8 @@ export const createSystemRoutes = (services: Services) => {
                 ...(input.resources === undefined ? {} : { resources: input.resources }),
             });
         }),
-        /* One named CLI action on one connected device — the Devices tab's Stop-mirroring button, and the
-         * door every button like it should take (hosts/device-commands.ts). Maintainer-floored like the sandbox
-         * ops above: acting on somebody's own machine is operator territory, and the same check is written here
-         * rather than inferred from the method so the two routes refuse identically. */
+        // One named CLI action on a connected device (e.g. the Devices tab's Stop-mirroring button). Maintainer-floored
+        // like the sandbox ops above, checked explicitly here so both routes refuse identically.
         runDeviceCommand: i.runDeviceCommand.handler(async ({ input, context }) => {
             if (services.auth !== undefined) {
                 try {
@@ -523,10 +419,8 @@ export const createSystemRoutes = (services: Services) => {
             }
             return await runDeviceCommand(services, input);
         }),
-        /* Update or restart the agent on one connected device. Maintainer-floored like the two routes above, and
-         * for a stronger reason than either: this replaces the binary that everything else on that machine runs
-         * through, so it is squarely operator territory. Everything past the gate is the machine's, including
-         * whether "Run commands" lets it happen at all. */
+        // Updates or restarts the agent on a connected device; maintainer-floored, since this replaces the binary
+        // everything else on that machine runs through.
         runDeviceAgentFlow: i.runDeviceAgentFlow.handler(async function* ({ input, context }) {
             if (services.auth !== undefined) {
                 try {
@@ -537,15 +431,14 @@ export const createSystemRoutes = (services: Services) => {
             }
             yield* runDeviceAgentFlow(services, input.id, { op: input.op });
         }),
-        // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
-        // argv, the security guard against a name like `-C` being read as a flag. Killing a session that already
-        // vanished is idempotent-OK (tmux exits non-zero; we don't surface it).
+        // Destroys one session. The name is validated before it reaches the `kill-session` argv, guarding against
+        // something like `-C` being read as a flag; killing an already-gone session is a silent no-op.
         killTerminal: i.killTerminal.handler(async ({ input }) => {
             if (!isValidSessionName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: `invalid session name: ${input.name}` });
             }
-            // A panel session belongs to the process manager, stop through it so `current` unmaps NOW (a Start
-            // right after × must not no-op for the sweep interval). stop() kills lingering sessions too.
+            // Stopped through the process manager so `current` unmaps at once, not after the sweep; stop() kills
+            // lingering.
             if (input.name.startsWith(PANEL_SESSION_PREFIX)) {
                 services.processes.stop(input.name.slice(PANEL_SESSION_PREFIX.length));
                 return { ok: true };
@@ -557,18 +450,14 @@ export const createSystemRoutes = (services: Services) => {
             }
             // `=` forces an exact target match, a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.
             await execFileAsync("tmux", ["kill-session", "-t", `=${input.name}`]).catch(() => undefined);
-            // An agent parked on a prompt in there is waiting on a PERSON, so killing the session is the one
-            // event that would otherwise leave it waiting forever, the banner it was parked on went down with
-            // the tab. Told plainly that the terminal is gone, it can carry on with what it can.
+            // An agent parked on a prompt is waiting on a person; killing the session must tell it the terminal is
+            // gone.
             settleTerminalHelpFor(input.name);
-            // Announced rather than left to the sampler, which would find it within a couple of seconds anyway:
-            // this is somebody deliberately destroying a session, and the OTHER tabs (and the other members)
-            // should stop showing a tab that no longer exists at the moment it stops existing.
+            // Announced rather than left to the sampler: a deliberate close should vanish from every tab at once.
             publishRuntimeChange("terminals");
             return { ok: true };
         }),
-        // The pane's whole history as text (the panel's "Full scrollback"). Same name guard as the kill above,
-        // and for the same reason, it reaches a `capture-pane -t` argv.
+        // The pane's history as text; same name guard as kill above, since this also reaches a `capture-pane -t` argv.
         terminalScrollback: i.terminalScrollback.handler(async ({ input }) => {
             if (!isValidSessionName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: `invalid session name: ${input.name}` });

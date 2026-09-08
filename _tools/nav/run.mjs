@@ -1,21 +1,9 @@
 #!/usr/bin/env node
-/* `node _tools/nav/run.mjs` — WHAT THIS CODEBASE COSTS AN AGENT TO WORK IN, as opposed to what it costs the CPU.
- *
- * Four verbs:
- *
- *   measure [--ref R]     the full picture of one tree, written to JSON and printed. `--ref` measures any git
- *                         ref without checking it out, which is how a baseline is captured while you keep
- *                         working in the tree.
- *   targets [--top N]     the ranked list a decomposition round should actually attack, ordered by the tokens
- *                         the whole tree burns on each file rather than by file size. A 40k-token module
- *                         nobody imports from is not a problem; a 9k-token one imported 300 times is.
- *   compare A B           two measurements, as a delta table. Prints the counter-movers next to the wins and
- *                         refuses to compare runs made with different tokenizers.
- *   calibrate             sanity-checks the token estimator against the band real code BPE lands in.
- *
- * WHY IT IS BUILT THIS WAY. A refactor campaign needs a number that cannot be argued with afterwards, captured
- * BEFORE anything moves. Everything here is offline, deterministic, and makes no model calls, so the same tree
- * always produces the same file and two people get the same answer. */
+// What this costs an agent to work in, not the CPU; deterministic and offline, so results are reproducible.
+// - measure [--ref R]: full picture of one tree, written to JSON.
+// - targets [--top N]: files ranked by tokens the tree burns on each, not by size.
+// - compare A B: delta table between two measurements; refuses to mix tokenizers.
+// - calibrate: checks the token estimator's chars/token band.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -174,10 +162,8 @@ const compare = () => {
         console.log(`  ${good} ${label.padEnd(40)} ${n(a).padStart(12)} → ${n(b).padStart(12)}  ${pct(a, b).padStart(8)}`);
     };
 
-    /* A price, not a score, and therefore printed WITHOUT a verdict glyph. Module count and import edges going
-     * up is what buying a decomposition costs; marking that growth ✓ would read as "we did well" and marking it
-     * ✗ as "we did badly", and neither is true. The number is the whole message: it is here so the reader can
-     * decide whether the price was worth the win above it. */
+    // A price, not a score: printed without a check/cross glyph, since module count and import edges rising is the cost
+    // of a decomposition, not a win or a loss.
     const costRow = (label, a, b) => {
         console.log(`  · ${label.padEnd(40)} ${n(a).padStart(12)} → ${n(b).padStart(12)}  ${pct(a, b).padStart(8)}`);
     };
@@ -219,14 +205,8 @@ const compare = () => {
     console.log("");
 };
 
-/* HOW MANY COMMITS THIS DELTA IS ACTUALLY MEASURING.
- *
- * A comparison silently attributes every change between the two refs to whoever is reading it. Re-use a
- * baseline captured last month and the campaign gets credited with a month of everyone else's work — the exact
- * flavour of dishonesty this harness exists to make hard, and the easiest one to commit by accident, because
- * nothing looks wrong. So say the number out loud: how many commits separate the two, and how many of them
- * touched source. If that count is much larger than the number of slices in the round, the delta is not the
- * round's. */
+// How many commits (and how many touching source) separate the two refs; a delta from a stale baseline gets credited
+// with everyone else's work in between.
 const provenance = (before, after) => {
     const span = (args) => {
         try {
@@ -247,8 +227,8 @@ const provenance = (before, after) => {
     console.log(`    ${commits} commit(s) between these refs, ${touching || "?"} touching source. Everything below is ALL of them, not just yours.`);
 };
 
-/* The genuinely paired number: only symbols present in BOTH samples, compared to themselves. Two independent
- * random draws differ by a few percent on their own, which is more than enough to manufacture a result. */
+// Only symbols present in both samples, compared to themselves; two independent random draws differ enough on their own
+// to manufacture a result.
 const pairedLookup = (before, after) => {
     const shared = Object.keys(before.lookup.perSymbol).filter((name) => name in after.lookup.perSymbol);
     if (shared.length < 50) {
@@ -260,12 +240,8 @@ const pairedLookup = (before, after) => {
     console.log(`    → paired on ${n(shared.length)} symbols present in both: ${b.toFixed(0)} → ${a.toFixed(0)} tokens (${pct(b, a)})`);
 };
 
-/* THE ONLY CALIBRATION THAT MEANS ANYTHING is the whole-tree ratio. Individual lines legitimately range from
- * about 1.8 characters per token (punctuation soup, where nearly every character is its own token in a real
- * vocabulary too) to about 4.8 (English prose in a comment). Asserting a narrow band per line would fail on
- * correct output, which is worse than not checking: a check that cries wolf gets switched off. Averaged over a
- * few hundred thousand lines of real source, code BPE reliably lands at 3.2–4.2, so that is the assertion, and
- * the per-shape rows below are printed as information with the range each one is actually expected in. */
+// The whole-tree ratio is the only real assertion; per-shape rows are printed as information only, since honest
+// per-line ranges vary too widely to bound narrowly.
 const calibrate = async () => {
     const shapes = [
         [

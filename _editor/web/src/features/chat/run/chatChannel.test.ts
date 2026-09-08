@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEnvelope, ChatNote } from "./chatChannel";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
-// The sandbox id is the envelope's own scope: every case below is about whether a note is BELIEVED, and half
-// of that is which sandbox it names. useSandbox itself reaches window.env through useApi, which no test has.
+// The sandbox id scopes every note here; useSandbox reaches window.env through useApi, which no test has.
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
     const activeSandboxId = ref<string | undefined>(`sb1`);
@@ -14,9 +13,8 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
 
 const posted: ChatEnvelope[] = [];
 
-// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global. It copies
-// what it is handed the way the browser does, by structured clone, which is the one thing about a BroadcastChannel
-// a fake that merely kept the reference could never fail on: a Vue proxy in a note is a DataCloneError out there.
+// Mimics BroadcastChannel's structured clone: a Vue reactive proxy in a note is a DataCloneError there, but not with a
+// fake that just kept the reference.
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(envelope: ChatEnvelope): void {
@@ -25,7 +23,7 @@ class FakeChannel {
         }
     }
     addEventListener(): void {
-        // Notes arrive through receiveChatNote, the same door the channel listener uses.
+        // Real notes arrive through receiveChatNote instead, not this listener.
     }
 }
 
@@ -37,9 +35,8 @@ beforeEach(() => {
     posted.length = 0;
 });
 
-/* ONE CHANNEL FOR EVERYTHING THE CHAT SAYS ACROSS WINDOWS, so what is pinned here is the envelope: every note
- * goes out stamped with this window's sandbox, and a note about another sandbox's chats is dropped before any
- * reader sees it, whatever kind it is. */
+// One channel for everything the chat says across windows: every note is stamped with this window's sandbox, and one
+// for another sandbox is dropped before any reader sees it.
 describe(`the chat channel`, () => {
     it(`stamps every note with the sandbox this window is pointed at`, () => {
         postChatNote({ kind: `roll` });
@@ -66,8 +63,6 @@ describe(`the chat channel`, () => {
         expect(heard).toEqual([]);
     });
 
-    // A window that has not resolved its sandbox yet matches only another such window: `undefined` is a
-    // value here, not a wildcard, or a booting window would take the first note from any box at all.
     it(`treats an unresolved sandbox as its own scope rather than as a wildcard`, () => {
         const heard: ChatNote[] = [];
         onChatNote(`roll`, (note) => heard.push(note));
@@ -77,10 +72,7 @@ describe(`the chat channel`, () => {
         expect(heard).toEqual([]);
     });
 
-    /* THE WIRE FORM IS JSON. A tab's snapshot carries the conversation's session, its displaced pick and its
-     * stopped turn as the refs hold them, which is as reactive proxies, and structured clone refuses a proxy: a
-     * summons for any chat with a session in it threw out of the click that made it, after the local apply and
-     * before any other window heard. Posted as JSON, the note arrives plain, and its absent fields arrive absent. */
+    // JSON drops undefined fields; that's why `title` doesn't appear in the posted note below.
     it(`carries a note holding Vue-reactive state as the plain data a structured clone will take`, () => {
         const tab: StoredTab = reactive({
             conversationId: `cnv-1`,

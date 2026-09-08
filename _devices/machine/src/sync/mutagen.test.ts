@@ -9,9 +9,8 @@ import {
     sessionName,
 } from "./mutagen.js";
 
-// What `forward list` hands back decides what gets terminated, so this filter is the line between "retire the
-// forwards this agent left behind" and "terminate the user's own Mutagen sessions". Names are whitespace-free
-// by construction (a sanitized sandbox id plus a port), which is what makes splitting on whitespace safe.
+// The line between retiring this agent's forwards and terminating the user's own Mutagen sessions. Names are
+// whitespace-free by construction, which is what makes splitting on whitespace safe.
 describe("parseForwardNames", () => {
     it("keeps every session under this agent's prefix and nothing else", () => {
         expect(parseForwardNames("intentic-fwd-sandbox-a-5173 someone-elses-forward intentic-fwd-sandbox-b-6480\n")).toEqual([
@@ -30,8 +29,7 @@ describe("parseForwardNames", () => {
         expect(parseForwardNames(`${names.join(" ")} mutagen-something-else`)).toEqual(names);
     });
 
-    // Tearing down ONE pairing must leave every other paired sandbox's forwards holding their ports: the whole
-    // reason a machine can now sync a fleet.
+    // Tearing down one pairing must leave every other sandbox's forwards holding their ports.
     it("narrows to one sandbox when asked", () => {
         const listed = `${forwardSessionName("sandbox-a.example.dev", 5173)} ${forwardSessionName("sandbox-b.example.dev", 5173)} ${forwardSessionName("sandbox-a.example.dev", 6480)}`;
         expect(parseForwardNames(listed, "sandbox-a.example.dev")).toEqual([
@@ -40,8 +38,7 @@ describe("parseForwardNames", () => {
         ]);
     });
 
-    // A prefix test would sweep sandbox-a-b's forwards while tearing down sandbox-a's, because the first name is
-    // a prefix of the second. The port is parsed off the end instead.
+    // A prefix test would sweep sandbox-a-b when tearing down sandbox-a; the port is parsed off the end instead.
     it("does not mistake one sandbox id for the prefix of another", () => {
         const listed = `${forwardSessionName("sandbox-a", 5173)} ${forwardSessionName("sandbox-a-b", 5173)}`;
         expect(parseForwardNames(listed, "sandbox-a")).toEqual([forwardSessionName("sandbox-a", 5173)]);
@@ -49,8 +46,8 @@ describe("parseForwardNames", () => {
     });
 });
 
-// Mutagen keeps a forward's localhost listener bound after its sandbox is gone, so a session no pairing can name
-// is a port nothing will ever mirror again.
+// Mutagen keeps a forward's listener bound after its sandbox is gone; a session no pairing can name is a port
+// nothing will ever mirror again.
 describe("parseOrphanForwardNames", () => {
     const held = forwardSessionName("sandbox-held.example.dev", 5173);
     const gone = forwardSessionName("sandbox-gone.example.dev", 6480);
@@ -68,9 +65,7 @@ describe("parseOrphanForwardNames", () => {
     });
 });
 
-/* A file-sync session is retired because NOTHING claims it any more: never because another pairing arrived.
- * Retiring on arrival is precisely what evicted a live sandbox: pairing a second one terminated the first's
- * session, so the folder the user was working in silently stopped syncing while `status` still called it healthy. */
+// A file-sync session is retired only because nothing claims it, never because another pairing arrived.
 describe("parseOrphanSyncNames", () => {
     const first = sessionName("sandbox-first.example.dev");
     const second = sessionName("sandbox-second.example.dev");
@@ -94,12 +89,8 @@ describe("parseOrphanSyncNames", () => {
     });
 });
 
-/* WHAT IS ACTUALLY STUCK, off Mutagen's own state.
- *
- * Every assertion here is a way the device card lied. It said "10 conflicts" and named no file, and the number
- * itself was the length of a list Mutagen truncates, so the badge on a session holding forty said ten forever.
- * The shape is protobuf JSON through Go's encoding/json: absent means absent, and `old`/`new` missing is the
- * whole message about which way the change went. */
+// Protobuf JSON via Go's encoding/json: an absent field means absent, and which of `old`/`new` is present says
+// which way the change went.
 describe("conflictsFrom", () => {
     const entry = { kind: 1 };
 
@@ -133,8 +124,7 @@ describe("conflictsFrom", () => {
         ]);
     });
 
-    // A conflict rooted at a directory carries the changes UNDER it, so the word describes the nearest change
-    // there is rather than nothing at all: the path is the finding either way.
+    // A conflict rooted at a directory describes the nearest change under it, not nothing.
     it("takes the change that is about the conflicted path, and falls back to the first one", () => {
         const read = conflictsFrom({
             conflicts: [
@@ -148,9 +138,8 @@ describe("conflictsFrom", () => {
         expect(read?.paths).toEqual([{ path: "src", local: "modified", sandbox: "deleted" }]);
     });
 
-    /* An empty root is the SYNCED FOLDER itself, which Mutagen reports for a root-level collision. It travels as
-     * "" and is said in words by whatever prints it: a reader that dropped it would lose the loudest conflict
-     * there is. */
+    // An empty root is the synced folder itself, Mutagen's report for a root-level collision; dropping it would lose
+    // the loudest conflict there is.
     it("keeps a root-level conflict, which has no path to name", () => {
         expect(conflictsFrom({ conflicts: [{ root: "" }] })?.paths).toEqual([{ path: "" }]);
     });
@@ -159,8 +148,7 @@ describe("conflictsFrom", () => {
         expect(conflictsFrom({ conflicts: [{ root: "a.ts", alphaChanges: [{ path: "a.ts" }] }] })?.paths).toEqual([{ path: "a.ts" }]);
     });
 
-    // The report is re-read every few seconds by every device card, so the list it carries is capped here as
-    // well as by Mutagen. The COUNT is never capped.
+    // Re-read every few seconds by every device card, so the path list is capped here too; the count never is.
     it("carries at most CONFLICT_PATHS_MAX of them, and still counts them all", () => {
         const conflicts = Array.from({ length: CONFLICT_PATHS_MAX + 12 }, (_, at) => ({ root: `f-${at}` }));
         const read = conflictsFrom({ conflicts });

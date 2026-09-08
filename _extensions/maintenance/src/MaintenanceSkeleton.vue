@@ -1,34 +1,14 @@
 <script setup lang="ts">
 import { RowGroup } from "@intentic/extension-ui";
 
-/* What Maintenance shows before its first /chores response: the SHAPE of the chore book, not a line of text. The
- * geometry is a deliberate copy of the real thing: a kind heading with its count and its caption, then chore rows
- * with a chevron, a chore icon, a title, a headline and a state badge, so the page does not jump when the report
- * lands, and so the wait already says what is being waited for.
- *
- * TWO KIND GROUPS, not four. The default filter is "Needs attention", and a repository with something due in every
- * one of the four kinds is not the case to size for; two is what a workspace with anything to do usually has.
- * Erring short means the list grows downward: the direction reading already goes, while guessing four would
- * shrink the page the moment the report answers.
- *
- * Nothing here stands in for the rail or the scope note under the list. Both are DERIVED from the same report:
- * until it lands there is no list of repositories to index and nothing known to be ruled out, and drawing a
- * placeholder for either would be inventing the one thing this surface must never invent.
- *
- * The group is the board's own <RowGroup>, drawn with bars in its heading slot rather than re-typed here: the
- * surface, the dividers and the heading's spacing then cannot drift from the groups this stands in for.
- *
- * The heights are the real ones, not approximations: every box below states the padding and the line box it is
- * copying, and those were measured against ChoreRow/RowGroup in a browser rather than guessed. Widths vary per row
- * and are fixed, not random: a column of identical bars reads as a rendering artifact rather than as a list of
- * chore names, and a placeholder that reshuffles on every re-render is worse than one that repeats. */
+// Mirrors the real chore book's shape (heading + count/caption, rows with icon, title, headline, badge) so the page
+// doesn't jump when data lands. Two groups, not four, matching the default 'needs attention' filter. Heights and widths
+// are measured against ChoreRow/RowGroup, not guessed.
 
-// Per row: the chore title (the book's run from "Update dependencies" at ~133px to "Find duplication worth
-// collapsing" at ~199px), the headline the evidence produced, and the state badge, whose width is its word:
-// `due` is 34px, `carrying` 53px, `unmeasured` 72px.
+// Widths approximate real content; badge width matches its label's own word length.
 const GROUPS = [
     {
-        // The caption beside the heading ("a risk this repository is running today) …" is the longest of them.
+        // Widest caption in the set; the real heading caption it approximates is the longest one.
         caption: `w-96`,
         rows: [
             { title: `w-40`, headline: `w-64`, badge: `w-14` },
@@ -46,13 +26,10 @@ const GROUPS = [
 </script>
 
 <template>
-    <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
-         indistinguishable from a workspace with no chores due. The bars carry no text, so there is nothing to
-         read out of them. -->
+    <!-- aria-busy, not aria-hidden: silence here reads as no chores due, not as loading. -->
     <div class="flex flex-col gap-6" role="status" aria-busy="true" aria-label="Reading the evidence">
         <RowGroup v-for="(group, index) in GROUPS" :key="index">
-            <!-- The group's heading: the kind, its due count, and the caption arguing for the grouping. h-4 is
-                 the one text-xs line the real heading is. -->
+            <!-- Kind, due count, and caption; h-4 matches the real heading's single text-xs line. -->
             <template #label>
                 <span class="flex h-4 items-center gap-x-2">
                     <span class="skeleton h-3 w-20"></span>
@@ -61,8 +38,7 @@ const GROUPS = [
                 </span>
             </template>
 
-            <!-- Chore rows: px-4 py-2.5 around a 20px line box, which is what the text-sm title and the xs
-                 badge both measure: 41px with the hairline, exactly what ChoreRow collapses to. -->
+            <!-- Padding and line-box height copy ChoreRow's collapsed row exactly, not approximated. -->
             <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="border-t border-line/60 px-4 py-2.5 first:border-t-0">
                 <div class="flex h-5 items-center gap-3">
                     <span class="skeleton h-3 w-3 shrink-0"></span>

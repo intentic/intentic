@@ -8,19 +8,9 @@ import { GoogleApiError, call } from "../google/request.js";
 import type { Session } from "../google/session.js";
 import { type Watermark, pruneAnnounced, readWatermark, watermarkPath, writeWatermark } from "./watermark.js";
 
-/* WATCHING A GOOGLE ACCOUNT, by polling.
- *
- * Gmail's push notifications go through Cloud Pub/Sub to a public HTTPS endpoint, which a sandbox does not
- * have and should not need one for. Polling is therefore not a shortcut here, it is the only mechanism
- * available to a box that only makes outbound connections, and it is the same choice the Telegram gateway
- * makes for the same reason.
- *
- * MAIL RIDES GMAIL'S OWN CURSOR rather than a timestamp. `history.list` answers "what changed since this
- * historyId", so a gateway that was down for an hour asks one question and gets the hour back; a
- * last-seen-timestamp would need a search, which is eventually consistent and would both miss and repeat.
- *
- * CALENDAR HAS NO CURSOR, nothing changes when a meeting starts, which is the moment worth waking for. So it
- * is a window: list what starts in the next few minutes, and remember what has already been announced. */
+// Watches a Google account by polling, since Gmail's push notifications need a public HTTPS endpoint a sandbox lacks.
+// Mail rides Gmail's own `history.list` cursor, so any length of downtime is answered in one call. Calendar has no such
+// cursor, so it's a window instead: list what starts soon, remember what's already announced.
 
 export interface WatcherOptions {
     readonly mailIntervalMs?: number;
@@ -30,11 +20,9 @@ export interface WatcherOptions {
 
 const MAIL_INTERVAL_MS = 60_000;
 const CALENDAR_INTERVAL_MS = 120_000;
-// How far ahead a meeting is announced. Long enough to be useful, short enough that the answer arrives while
-// it is still actionable.
+// How far ahead a meeting is announced: long enough to be useful, short enough to still be actionable.
 const LOOKAHEAD_MS = 10 * 60_000;
-// Announced events are remembered for an hour past their start, comfortably longer than any window that
-// could surface them again.
+// Announced events are kept an hour past their start, comfortably longer than any window that could resurface them.
 const ANNOUNCED_KEEP_MS = 60 * 60_000;
 const EXCERPT = 600;
 
@@ -60,8 +48,8 @@ interface WatchedEvent {
     readonly attendees?: readonly { readonly email?: string; readonly responseStatus?: string }[];
 }
 
-// The new INBOX messages since a cursor, and the cursor to store next. A 404 means Gmail has aged the cursor
-// out (it keeps roughly a week), the only correct move is to re-baseline, which the caller does.
+// New INBOX message ids since a cursor, plus the cursor to store next. A 404 means Gmail aged the cursor out; the
+// caller re-baselines.
 export const newMessageIds = (pages: readonly HistoryPage[]): string[] => {
     const ids = new Set<string>();
     for (const page of pages) {
@@ -77,8 +65,7 @@ export const newMessageIds = (pages: readonly HistoryPage[]): string[] => {
     return [...ids];
 };
 
-// Whether this account is an actual addressee rather than one of fifty on a list, the "addressed directly to
-// you" filter the automation editor offers.
+// Whether this account is an actual addressee rather than one of fifty on a list.
 export const addressedTo = (email: string, to: string): boolean =>
     to
         .split(",")
@@ -107,9 +94,8 @@ export const startWatcher = (
         await writeWatermark(path, mark);
     };
 
-    /* An auth failure is not a poll that will come right on its own: the refresh token is dead, the delegation
-     * was withdrawn, the scopes were narrowed. Reporting it fatal is what stops this connection from asking
-     * Google the same rejected question every minute for the life of the container. */
+    // An auth failure won't come right on its own (dead refresh token, withdrawn delegation, narrowed scopes);
+    // reporting it fatal stops this connection from repeating the same rejected question every minute.
     const guard = async (what: string, work: () => Promise<void>): Promise<void> => {
         try {
             await work();
@@ -159,8 +145,7 @@ export const startWatcher = (
 
     const pollMail = async (): Promise<void> => {
         if (mark.historyId === undefined) {
-            // First run, or a cursor Gmail has aged out: baseline here and announce nothing. Everything older
-            // than this moment is mail the owner has already had every chance to see.
+            // First run, or an aged-out cursor: baseline and announce nothing, since older mail already had its chance.
             const profile = await call<{ historyId?: string }>(session, { url: `${GMAIL}/profile` });
             await save({ ...mark, ...(profile.historyId === undefined ? {} : { historyId: profile.historyId }) });
             return;
@@ -180,8 +165,7 @@ export const startWatcher = (
             });
             if (page === undefined) {
                 ctx.log.info({ account: connection.name }, "gmail history cursor expired, re-baselining");
-                // The cursor is dropped, not blanked: the next tick's "no cursor" branch takes a fresh
-                // baseline from the account itself.
+                // Dropped, not blanked: the next tick's no-cursor branch takes a fresh baseline from the account.
                 await save(mark.announced === undefined ? {} : { announced: mark.announced });
                 return;
             }
@@ -190,9 +174,7 @@ export const startWatcher = (
             pageToken = page.nextPageToken;
         } while (pageToken !== undefined);
         const ids = newMessageIds(pages);
-        // The cursor advances BEFORE dispatching, deliberately: a dispatch that throws must not make the next
-        // tick replay the same mail. A wake that failed to reach an agent is visible in the activity feed; the
-        // same mail arriving every minute for an hour is not something anyone can switch off.
+        // Advances before dispatching: a throw here must not replay the same mail next tick.
         await save({ ...mark, historyId: cursor });
         if (ids.length > 0) {
             await dispatchMail(ids);
@@ -215,7 +197,7 @@ export const startWatcher = (
         const announced = pruneAnnounced(mark.announced ?? {}, now, ANNOUNCED_KEEP_MS);
         for (const event of found.items ?? []) {
             const start = event.start?.dateTime;
-            // All-day entries have no dateTime and never "start" at a moment worth waking for.
+            // All-day entries have no `dateTime` and never "start" at a moment worth waking for.
             if (start === undefined || announced[event.id] !== undefined) {
                 continue;
             }
@@ -264,8 +246,7 @@ export const startWatcher = (
         setInterval(() => void tick("mail", pollMail), options.mailIntervalMs ?? MAIL_INTERVAL_MS),
         setInterval(() => void tick("calendar", pollCalendar), options.calendarIntervalMs ?? CALENDAR_INTERVAL_MS),
     ];
-    // The first pass runs at once rather than after a minute, a connection added mid-conversation should
-    // start watching now, and the baseline it takes is what makes the first real tick meaningful.
+    // Runs once immediately rather than waiting a minute, so a connection added mid-conversation starts watching now.
     void tick("mail", pollMail);
     void tick("calendar", pollCalendar);
 

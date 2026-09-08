@@ -6,25 +6,9 @@ import type { DependencyRequestOrigin } from "./dependency-origin.js";
 import type { DependencyCoordinator } from "./reconcile-deps.js";
 import { INSTALLABLE, missingCount, type ProjectSetupStatus } from "../layout/workspace-setup.js";
 
-/* THE DEPENDENCY TOOLS, readiness asked for, instead of announced.
- *
- * The same three facts used to ride the front of every user message: which projects are behind, that an
- * unresolved import there is the install rather than the code, and that a turn must not run the install itself.
- * Pushing them cost a paragraph per turn whether or not the turn ever went near a drifted project, and it was
- * re-pushed identically for as long as the drift lasted, which, before the reconciler learned to watch for the
- * manifest writes it was missing, could be days. Nothing about the paragraph was wrong; it was just addressed to
- * every turn rather than to the one that needed it.
- *
- * So the split is: the RULE lives in these descriptions, which are part of the cached tool prefix and are paid
- * for once per session, and the STATE is fetched by whoever wants it. What remains for the turn that never asks
- * is the post-edit and post-command notices, which speak only after something has actually failed.
- *
- * WHY `install` REQUESTS RATHER THAN INSTALLS. An install from inside a turn writes to a scratch layer that dies
- * with the conversation, and, worse, it rewrites the dependency tree every other live turn has mounted
- * beneath it, which the kernel does not define an answer for. That is a fact about where the turn stands, not
- * about who asked, so the tool cannot honour a request by running one: it hands the request to the reconciler,
- * which owns the one rule that makes an install safe (workspace/reconcile-deps.ts). The reply says so plainly,
- * because a tool that returned "installed" and meant "queued" would be the most expensive lie in the system. */
+// Dependency readiness, asked for rather than pushed on every turn: the rule lives in these tool descriptions (paid
+// once, cached), the state is fetched by whoever wants it. `install` requests rather than installs: a turn-side install
+// would corrupt the shared tree, so the reconciler (reconcile-deps.ts) owns the one rule that makes it safe.
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 
@@ -34,21 +18,17 @@ export interface DepsToolDeps {
     readonly origin: DependencyRequestOrigin;
 }
 
-// A project names itself by its directory; the root owns the manifest under a name rather than an empty string.
-// The same wording the notices use, so an agent reading both is reading one vocabulary.
+// A project names itself by its directory; the root's manifest is "the workspace root", not empty string, matching the
+// notices' own wording.
 const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the workspace root" : status.dir);
 
-// One project's readiness as a sentence the model can act on. `ready` is stated rather than omitted: half the
-// value of asking is being told that the project you are about to test is fine, so a failure there is yours.
+// One project's readiness as a sentence the model can act on; `ready` is stated explicitly: half the value of asking is
+// confirming a project is fine, so a failure there is the model's own.
 const line = (status: ProjectSetupStatus, canInstall: boolean): string => {
     switch (status.state) {
         case "ready":
-            /* WHAT `ready` MEASURED IS NOT THE SAME IN EVERY ECOSYSTEM, and the sentence has to carry the
-             * difference or it is the most expensive kind of wrong: a model told its tooling can be trusted
-             * spends the next hour looking for the bug in its own code. Node's marker is walked against the
-             * manifest (dependency-drift.ts), so the strong claim is earned. Python's is the `.venv` existing
-             * and nothing else (workspace-setup.ts's setupStateOf), which answers "has this ever been set up"
-             * and says nothing about whether it holds what the project declares. */
+            // `ready` differs per ecosystem: Node's is walked against the manifest, Python's `.venv` only confirms
+            // setup happened, not that it matches what's declared.
             return status.recipe.ecosystem === "node"
                 ? `${where(status)}: ready. Its type-checks, linters and tests mean what they say.`
                 : `${where(status)}: ready — \`${status.recipe.marker}\` is there, which is the whole measurement. ` +
@@ -94,10 +74,8 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                     }
                     const behind = projects.filter((project) => project.state !== "ready" && project.state !== "installing");
                     const stale = projects.some((project) => project.state === "stale");
-                    // The closing verdict has to survive the weakest measurement it covers: one project whose
-                    // marker was only looked FOR is enough to make "a failing import is your code" a claim
-                    // nothing here checked. Same distinction `line` draws, drawn once more for the summary
-                    // because that is the sentence a model reads when it skims.
+                    // The summary must reflect the weakest measurement: one project only checked for presence keeps "a
+                    // failing import is your code" from being a claim nothing here verified.
                     const unwalked = projects.some((project) => project.state === "ready" && project.recipe.ecosystem !== "node");
                     return ok(
                         [

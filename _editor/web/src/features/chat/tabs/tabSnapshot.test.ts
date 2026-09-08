@@ -1,11 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import { beforeEach, describe, expect, it } from "vitest";
 
-/* The reader's contract: whatever is on disk, what comes back is a strip that can actually be rendered, every
- * tab named once, a focus that names one of them, and nothing dropped that was still readable. The strip keys
- * its v-for on the conversationId, so a duplicate would be two tabs sharing a key: Vue then patches the wrong
- * node, which reads as the wrong name on a tab, a click that surfaces someone else's chat, and a × that
- * removes neither. */
+// Pins the reader's contract: every tab named once, a focus naming one of them, nothing readable dropped. A
+// duplicate conversationId would collide on Vue's v-for key, scrambling names and closes.
 
 // The node test environment has neither storage.
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
@@ -70,8 +67,7 @@ describe(`reading a tab snapshot`, () => {
     });
 
     it(`skips an unreadable entry and keeps the rest`, () => {
-        // No conversationId names nothing; a missing draft is not a tab the composer can bind to. Losing the
-        // whole strip over one of them is the harsher failure, so only the entry goes.
+        // No conversationId names nothing; a missing draft isn't bindable either.
         session.set(KEY, blob(`b`, [{ draft: `` }, tab(`b`), { conversationId: `c` }]));
 
         expect(readTabSnapshot(`sb1`)?.tabs.map((entry) => entry.conversationId)).toEqual([`b`]);
@@ -100,9 +96,6 @@ describe(`reading a tab snapshot`, () => {
                     {
                         conversationId: `a`,
                         draft: `half a sentence`,
-                        // When the composer first held it, which is the whole reason this is persisted rather
-                        // than kept in memory: an age that restarts at "just now" on every reload makes a
-                        // sentence abandoned days ago look like live work.
                         draftAt: 1_700,
                         provider: `codex`,
                         harness: `claude-code`,
@@ -130,10 +123,6 @@ describe(`reading a tab snapshot`, () => {
         });
     });
 
-    /* The fork linkage is the one field whose loss is invisible until the first send: a rebuilt fork keeps its
-     * draft and bubbles either way, but without `forkOf` that send opens an ordinary empty conversation
-     * daemon-side and the "continued" chat answers from nothing. Read back whole or not at all: a partial one
-     * would have the daemon copy the wrong prefix of the wrong source, which is worse than the fresh start. */
     it(`restores a fork's linkage whole, and drops one that reads back partial`, () => {
         session.set(
             KEY,
@@ -150,8 +139,7 @@ describe(`reading a tab snapshot`, () => {
         expect(tabs?.[2]?.forkOf).toBeUndefined();
     });
 
-    // Which account a chat runs on is the user's pick, and per TAB: the tab's own and its session's are stored
-    // apart because a mid-chat switch is exactly the state where the two legitimately differ.
+    // The tab's own pick and the session's can differ mid-switch; both are stored separately.
     it(`restores the tab's account pin and the session's separately`, () => {
         session.set(
             KEY,
@@ -176,8 +164,6 @@ describe(`reading a tab snapshot`, () => {
         expect(restored?.session?.account).toBe(`acct-personal`);
     });
 
-    // The composer's pills describe the tab they sit under. The remembered picks seed a NEW chat; storing them
-    // with the tab is what keeps a reload from rewriting every open chat's model to whatever was picked last.
     it(`restores the tab's own model, effort and thinking picks`, () => {
         session.set(
             KEY,
@@ -202,10 +188,6 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
-    /* The persona has more riding on this store than the picks above it: it is deliberately never a remembered
-     * default (a narrowing must not follow someone into their next chat), so this blob is the ONLY thing
-     * standing between a picked persona and a page reload. Dropped when it isn't a usable id, which restores as
-     * the ordinary chat rather than as a pin to a card named "". */
     it(`restores the persona the tab acts as, and drops one that names nothing`, () => {
         const stored = (actsAs: unknown): unknown =>
             JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [], queued: [] }] });
@@ -232,8 +214,6 @@ describe(`reading a tab snapshot`, () => {
         expect(restored).not.toHaveProperty(`thinking`);
     });
 
-    // The mark that reads this stamp is true without it, and an age computed from a NaN renders as garbage on the
-    // card, so an unusable one is dropped rather than carried.
     it(`drops a draft stamp that isn't a finite instant`, () => {
         session.set(
             KEY,
@@ -270,11 +250,6 @@ describe(`reading a tab snapshot`, () => {
         expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native` });
     });
 
-    /* A session is read back with the WHOLE of what minted it or not at all, the fork linkage's rule and for a
-     * sharper reason: the trio is what the next send compares its picks against, so an entry missing its
-     * runtime would be completed from the tab, and a tab's picks are what its NEXT turn would use. That
-     * forgery is what made switching back to the account holding a session announce, and then spend, a fresh
-     * one. Dropped, the tab simply has no session to resume, which the daemon's own record then supplies. */
     it(`drops a session that reads back without what minted it, rather than completing it from the tab`, () => {
         session.set(
             KEY,

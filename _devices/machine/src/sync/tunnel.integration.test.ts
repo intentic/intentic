@@ -5,13 +5,9 @@ import type { Dialed } from "../daemon-base.js";
 import type { Pairing } from "./config.js";
 import { bridgeConnection, createTunnelPool, sshSocketUrl, startSshTunnel, syncSshPort, tunnelReady, tunnelTargets } from "./tunnel.js";
 
-/* THE TRANSPORT DESKTOP SYNC RUNS ON, exercised without a sandbox at the other end.
- *
- * What these cover is the contract Mutagen depends on and nothing about how it is framed: ssh's bytes reach the
- * socket, the sandbox's bytes reach ssh, either side closing closes the other, and the enrolled machine's
- * credential is on the request. The one thing worth stubbing is the WebSocket itself: a real one needs a
- * server, and what is being tested here is this side of it.
- */
+// The transport desktop sync runs on, exercised without a sandbox at the other end. Covers Mutagen's contract:
+// bytes flow both ways, either side closing closes the other, and the credential is on the request. Only the
+// WebSocket itself is stubbed.
 
 // A stand-in for the sandbox end: records what was sent, and lets a test push bytes back or close.
 class FakeSocket {
@@ -66,9 +62,8 @@ class FakeSocket {
     }
 }
 
-// `base` rather than a public URL: the transport dials whatever this pass resolved for the pairing
-// (daemon-base.ts), which is the sandbox's public address or, when its daemon proved to be on this machine, the
-// loopback shortcut.
+// `base` is whatever this pass resolved for the pairing (daemon-base.ts): the public address, or a loopback
+// shortcut when the daemon is on this machine.
 const target = { sandboxId: "sandbox-0738cd6b5027", base: "https://sandbox-0738cd6b5027.intentic.dev", syncToken: "ist_secret" };
 
 // A local pair of connected TCP sockets: one end stands in for ssh, the other is what the bridge is handed.
@@ -85,8 +80,8 @@ const socketPair = async (): Promise<{ ssh: Socket; accepted: Socket; server: Se
     return { ssh, accepted, server };
 };
 
-// Sockets are destroyed, servers are closed; both kinds get parked here so a failing assertion still releases
-// the ports the next test derives from the same ids.
+// Sockets are destroyed, servers closed; parked here so a failing assertion still releases the ports the next
+// test reuses.
 const open: (Socket | Server)[] = [];
 afterEach(() => {
     for (const item of open.splice(0)) {
@@ -100,15 +95,15 @@ afterEach(() => {
 });
 
 describe("syncSshPort", () => {
-    // Stable, because the ssh config written at setup names the port and the watcher binds it in a different
-    // process, at a different time: they agree only by deriving the same number from the same id.
+    // Stable because the ssh config (written at setup) and the watcher (a different process, later) must derive the
+    // same port from the same id.
     it("is stable for one sandbox and different for another", () => {
         expect(syncSshPort("sandbox-0738cd6b5027")).toBe(syncSshPort("sandbox-0738cd6b5027"));
         expect(syncSshPort("sandbox-0738cd6b5027")).not.toBe(syncSshPort("sandbox-bce57bb9fe3b"));
     });
 
-    // Above the range dev servers claim and below Linux's ephemeral floor, so the kernel never hands the same
-    // number out from under us, and clear of the band the sandbox's own loopback listener derives.
+    // Above the dev-server port range and below Linux's ephemeral floor, so the kernel never hands out the same
+    // number, clear of the sandbox's own loopback band.
     it("lands in its own quiet band", () => {
         for (const id of ["sandbox-0738cd6b5027", "sandbox-bce57bb9fe3b", "ffffff", "000000"]) {
             expect(syncSshPort(id)).toBeGreaterThanOrEqual(24000);
@@ -118,10 +113,8 @@ describe("syncSshPort", () => {
 });
 
 describe("sshSocketUrl", () => {
-    /* BOTH SCHEMES, because the base is no longer always a public https address: the loopback shortcut is plain
-     * http (a same-machine hop, and the daemon's loopback listener speaks HTTP/1.1 there), and a stream sent to
-     * `wss://127.0.0.1:29293` would fail a TLS handshake against a server that never offered one. The flip is
-     * one prefix swap that has to get both right, so both are pinned by value. */
+    // Both schemes, since base isn't always public https: the loopback shortcut is plain http, and `wss://` there
+    // would fail a TLS handshake against a server that never offered one.
     it("is the resolved base, ws-scheme, at the transport route", () => {
         expect(sshSocketUrl("https://sandbox-abc.intentic.dev")).toBe("wss://sandbox-abc.intentic.dev/system/sync/ssh");
         expect(sshSocketUrl("https://sandbox-abc.intentic.dev/")).toBe("wss://sandbox-abc.intentic.dev/system/sync/ssh");
@@ -131,24 +124,23 @@ describe("sshSocketUrl", () => {
 });
 
 describe("tunnelTargets", () => {
-    // The key is OMITTED rather than set to undefined for a pairing with no credential: `syncToken` is an
-    // optional property, so spelling it `undefined` is a different type from not having it, and the pairing this
-    // suite is about is the one that genuinely lacks one.
+    // The key is omitted, not set to undefined: `syncToken` is optional, and spelling it undefined is a different
+    // type from lacking it.
     const dialed = (sandboxId: string, base: string, syncToken?: string): Dialed<Pairing> => ({
         pairing: { sandboxId, sandboxUrl: base, mode: "sync", ...(syncToken === undefined ? {} : { syncToken }) },
         base,
     });
 
-    // A listener that accepts ssh and then fails every connection is worse than no listener: ssh reports a
-    // transport that died mid-handshake instead of a port that isn't there.
+    // A listener that accepts and then fails every connection is worse than none: ssh reports a mid-handshake death
+    // instead of a missing port.
     it("skips a pairing with no credential to present", () => {
         expect(tunnelTargets([dialed("a", "https://a.dev", "tok"), dialed("b", "https://b.dev")])).toEqual([
             { sandboxId: "a", base: "https://a.dev", syncToken: "tok" },
         ]);
     });
 
-    // The target carries the RESOLVED base, not the pairing's public address: that is the whole of how the
-    // shortcut reaches the stream Mutagen pushes a workspace through.
+    // The target carries the resolved base, not the pairing's public address; that's how the loopback shortcut
+    // reaches Mutagen's stream.
     it("carries the base this pass resolved rather than the pairing's public address", () => {
         const pairing = { sandboxId: "a", sandboxUrl: "https://a.dev", mode: "sync" as const, syncToken: "tok" };
         expect(tunnelTargets([{ pairing, base: "http://127.0.0.1:29293" }])).toEqual([
@@ -189,8 +181,8 @@ describe("bridgeConnection", () => {
         expect(await back).toBe("SSH-2.0-sandbox\r\n");
     });
 
-    // The credential is the whole of what authorizes this stream, and it belongs on the request rather than in
-    // the URL: a query string is the half of a request that gets logged.
+    // The credential authorizes this stream and belongs on the request, not the URL: a query string is the half of a
+    // request that gets logged.
     it("presents the enrolled machine's sync token as a header", () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const socket = connect({ port: 1, host: "127.0.0.1" });
@@ -203,8 +195,8 @@ describe("bridgeConnection", () => {
         expect(FakeSocket.last?.options?.headers).toEqual({ "x-intentic-sync": "ist_secret" });
     });
 
-    // Mutagen treats a dropped transport as a reconnect, so the honest thing on a failed socket is to end the
-    // TCP connection: leaving ssh hanging on a socket nothing will answer is what looks like a wedged sync.
+    // Mutagen treats a dropped transport as a reconnect, so a failed socket ends the TCP connection rather than
+    // leaving ssh hanging, which would look like a wedged sync.
     it("closes ssh's connection when the socket fails", async () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const { ssh, accepted, server } = await socketPair();
@@ -217,11 +209,8 @@ describe("bridgeConnection", () => {
         await expect(ended).resolves.toBeUndefined();
     });
 
-    /* THE FAILURE SSH CANNOT SEE. The listener is local, so the TCP connect always succeeds and a sandbox that is
-     * asleep, 502-ing or retired shows up only as a WebSocket that never opens, and never errors either. ssh
-     * then sits in banner exchange, and everything waiting on ssh sits with it: the git bridge's own cap is two
-     * MINUTES, which one unreachable pairing was adding to every watcher pass, serially, ahead of every healthy
-     * pairing's ports and commits. Ending the connection here is what turns that back into seconds. */
+    // The listener is local, so TCP connect always succeeds; an unreachable sandbox shows only as a WebSocket that
+    // never opens or errors, leaving ssh stuck in banner exchange and stalling every pairing behind it.
     it("ends a connection whose socket never opens, instead of holding ssh in the handshake", async () => {
         vi.useFakeTimers();
         vi.stubGlobal("WebSocket", FakeSocket);
@@ -253,8 +242,8 @@ describe("startSshTunnel and the pool", () => {
         expect(await tunnelReady(syncSshPort(target.sandboxId), 200)).toBe(false);
     });
 
-    /* A port somebody else holds must cost that ONE pairing its transport, not the machine's whole watcher: a
-     * fleet syncs several sandboxes, and the loop that binds them runs in a single process. */
+    // A port somebody else holds must cost only that pairing's transport, not the whole watcher, since one process
+    // binds a fleet of sandboxes.
     it("reports a port it cannot have instead of throwing", async () => {
         const blocker = createServer();
         await new Promise<void>((resolve) => blocker.listen(syncSshPort(target.sandboxId), "127.0.0.1", resolve));
@@ -267,8 +256,7 @@ describe("startSshTunnel and the pool", () => {
         expect(said.join("\n")).toMatch(/already taken/);
     });
 
-    // How a `setup` in another terminal gets served, and how an `uninstall` stops being served, without this
-    // process being restarted.
+    // How a concurrent `setup` or `uninstall` takes effect without restarting this process.
     it("starts a transport for a new pairing and drops one that went away", async () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const pool = createTunnelPool(() => {});
@@ -282,10 +270,8 @@ describe("startSshTunnel and the pool", () => {
         await pool.stopAll();
     });
 
-    /* A BASE THAT MOVED IS A REBIND, and without it the resolution would be decided once and then ignored for
-     * the life of the login: the listener closes over the address it dials, so a pairing promoted onto loopback
-     * would keep opening streams to the public URL from a listener bound before the promotion. Read off where
-     * the next connection actually goes, which is the only thing that proves the new target took. */
+    // A moved base needs a rebind: the listener closes over the address it dials, so without one a promoted-to-loopback
+    // pairing would keep opening streams to its old public URL. Proven by where the next connection actually goes.
     it("rebinds a pairing whose resolved base moved, so later streams use the new address", async () => {
         vi.stubGlobal("WebSocket", FakeSocket);
         const pool = createTunnelPool(() => {});
@@ -300,8 +286,9 @@ describe("startSshTunnel and the pool", () => {
 
         // The same pairing, now resolved to the loopback shortcut.
         await pool.reconcile([{ ...target, base: "http://127.0.0.1:29293" }]);
-        // Still serving on the same local port: the port is derived from the sandbox id and does not move with
-        // the base, which is what keeps the ssh config written at setup valid across a promotion.
+        // Still the same local port: derived from the sandbox id, not the base, so the ssh config written at setup
+        // stays
+        // valid across a promotion.
         expect(await tunnelReady(port, 2000)).toBe(true);
         const second = connect(port, "127.0.0.1");
         open.push(second);
@@ -309,7 +296,7 @@ describe("startSshTunnel and the pool", () => {
         await sleep(50);
         expect(FakeSocket.last?.url).toBe("ws://127.0.0.1:29293/system/sync/ssh");
 
-        // An unchanged base is NOT a rebind: it would drop every live ssh connection on every watcher tick.
+        // An unchanged base is not a rebind; that would drop every live ssh connection on every tick.
         const before = FakeSocket.last;
         await pool.reconcile([{ ...target, base: "http://127.0.0.1:29293" }]);
         const third = connect(port, "127.0.0.1");

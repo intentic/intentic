@@ -3,26 +3,18 @@ import { ORPCError } from "@orpc/client";
 import { pushPlugin, type PushNotificationsPlugin } from "../shell/window/capacitor.js";
 import type { Minted, PushDriver } from "./driver.js";
 
-// Loaded on use, not at module load: the platform client evaluates window.env on import, which only exists in
-// a real page, and this module rides the composable's import graph into every environment, shell or not.
+// Loaded on use, not at module load: the platform client reads window.env on import, which exists only in a real page,
+// and this module rides the composable's import graph into every environment.
 const platformApi = async () => (await import("../lib/useApi.js")).apiClient;
 
-/* Push inside the native iOS shell. WKWebView has no web push, so the transport is APNs, and Apple only
- * accepts sends from the app's vendor, which is why this driver registers with the PLATFORM's push relay
- * rather than handing the daemon anything it could post to directly. The handshake:
- *
- *   shell → APNs token → relay register (signed-in) → {deviceId, secret, url} → stored on the DAEMON
- *
- * The channel the daemon stores is the relay's grant, verbatim. This device's id is the deviceId the relay
- * minted; it is remembered locally so the settings toggle can answer "is THIS phone registered" without a
- * platform round-trip on every refresh. */
+// Push inside the native iOS shell: WKWebView has no web push, so this driver registers with the platform's push relay,
+// since Apple only accepts sends from the app's vendor. The stored channel is the relay's grant verbatim; the deviceId
+// is remembered locally so the toggle can check registration without a round trip.
 
-// Rotates on every successful registration; holds only an id (never the secret, that goes to the daemon
-// and exists nowhere else on this device).
+// Rotates on every registration; holds only an id, never the secret (that lives only on the daemon).
 const DEVICE_KEY = `intentic:push-device`;
 
-// APNs answers a register() through a delayed event, not the call. Ten seconds is APNs being unreachable,
-// not slow, surface it rather than leaving the toggle spinning forever.
+// APNs answers register() via a delayed event; 10s means unreachable, not slow, so the toggle stops spinning.
 const TOKEN_TIMEOUT_MS = 10_000;
 
 const apnsToken = async (plugin: PushNotificationsPlugin): Promise<string> =>
@@ -50,8 +42,7 @@ const mint = async (_publicKey: () => Promise<string>): Promise<Minted> => {
     }
     const permission = await plugin.requestPermissions();
     if (permission.receive !== `granted`) {
-        // iOS asks once: a decline IS the terminal denied state (there is no "dismissed" on the native
-        // prompt. Settings is the only way back).
+        // iOS asks once; a decline is the terminal denied state, only Settings gets you back.
         return { outcome: `denied` };
     }
     const token = await apnsToken(plugin);
@@ -71,8 +62,7 @@ const mint = async (_publicKey: () => Promise<string>): Promise<Minted> => {
 export const nativePushDriver: PushDriver = {
     supported: () => pushPlugin() !== undefined,
     denied: async () => (await pushPlugin()?.checkPermissions())?.receive === `denied`,
-    // The relay grant is this device's registration; a cleared app storage reads as "off", and re-enabling
-    // re-registers, the relay's (user, token) upsert makes that a replace, not a duplicate.
+    // Cleared storage reads as off; re-enabling re-registers, and the relay's upsert replaces it, not a dup.
     localId: async () => localStorage.getItem(DEVICE_KEY),
     // No key in this transport (VAPID binding is a web-push concern): a remembered registration is sendable.
     bound: async () => localStorage.getItem(DEVICE_KEY) !== null,
@@ -81,8 +71,7 @@ export const nativePushDriver: PushDriver = {
         const deviceId = localStorage.getItem(DEVICE_KEY);
         localStorage.removeItem(DEVICE_KEY);
         if (deviceId !== null) {
-            // Best-effort: the daemon row is already gone (the composable removes it first), so a relay row
-            // left behind can send to nobody and the next register would replace it anyway.
+            // Best-effort: the daemon row is gone; a leftover relay row reaches nobody and gets replaced anyway.
             await (await platformApi()).push.unregister({ deviceId }).catch(() => undefined);
         }
     },

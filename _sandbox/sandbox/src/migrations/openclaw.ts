@@ -17,26 +17,9 @@ import {
 } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
 
-/* THE OPENCLAW ADAPTER, `~/.openclaw` read into a migration plan; pure, like the Hermes one beside it, and
- * shaped by the same rule: translate judgment-free, refuse by name, never throw.
- *
- * The layout it reads (their configuration reference and their own `migrate` command's inventory):
- *
- *   openclaw.json            JSON5, agents.defaults (model/workspace/heartbeat/skills), channels, mcp, env
- *   .env                     the global env fallback
- *   workspace/               SOUL.md, IDENTITY.md, USER.md, AGENTS.md, MEMORY.md, memory/YYYY-MM-DD.md,
- *                            HEARTBEAT.md, BOOTSTRAP.md (first-run ritual, skipped), skills/ (highest
- *                            precedence for name collisions)
- *   skills/                  managed/installed skills at the state root
- *   cron/jobs.json           gateway cron jobs ({name, schedule:{kind,expr|everyMs,tz}, payload:{message}})
- *   agents/<id>/agent/auth-profiles.json   model credentials (api keys taken with consent; OAuth refused)
- *   credentials/             channel state, never even held (the archive reader skips the segment; WhatsApp
- *                            ratchets DESYNC when copied, per their own migration guide)
- *
- * The one wrinkle Hermes does not have: the workspace is relocatable (`agents.defaults.workspace`). A packed
- * `~/.openclaw` only contains it when it lives at the default path, so a config naming somewhere else gets a
- * needs-action telling the owner to pack it in, guessing at sibling directories in the tar would mean
- * importing whichever lookalike folder happened to ride along. */
+// Reads `~/.openclaw` into a migration plan: pure, translate judgment-free, refuse by name, never throw. The workspace
+// path is relocatable (`agents.defaults.workspace`); an archive missing it gets a needs-action rather than guessing at
+// a sibling folder.
 
 const WS = "workspace/";
 
@@ -54,9 +37,7 @@ const durationMs = (raw: string): number | undefined => {
     return Number(match[1]) * scale;
 };
 
-/* An interval into a cron line, only where cron can say it cleanly. "Every 90 minutes" has no honest cron
- * spelling, and approximating one would fire the owner's job on a rhythm they never chose, refusing with the
- * reason is the better answer. */
+// Converts ms to a cron line only where cron expresses it; refuses instead of approximating an odd interval.
 const everyCron = (ms: number): string | undefined => {
     if (ms < 60_000 || ms % 60_000 !== 0) {
         return undefined;
@@ -94,7 +75,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
     })();
     const defaults = asRecord(asRecord(config["agents"])?.["defaults"]) ?? {};
 
-    // -- memory: the bootstrap files, each its own fence; daily logs tail-merged and fully kept as files --
+    // Memory: bootstrap files each get their own fence; daily logs are tail-merged and kept as files too.
     const fenced = (id: string, label: string, heading: string, body: string, detail?: string): void => {
         planned.push({
             item: { id: `memory:${id}`, group: "memory", label, ...(detail === undefined ? {} : { detail }), recommended: true, secrets: [] },
@@ -119,9 +100,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
     if (agentsNotes !== undefined && agentsNotes.trim() !== "") {
         fenced("agents", "Operating notes: AGENTS.md", "Imported operating notes (OpenClaw AGENTS.md)", agentsNotes);
     }
-    /* USER.md and MEMORY.md are the curated stores; the daily logs are an append-only diary that can run to
-     * hundreds of files. The memory files every turn reads get the curated stores plus the newest two weeks;
-     * the WHOLE diary rides to imports/ where the agent can search it without it costing every turn. */
+    // USER.md, MEMORY.md and the newest 14 daily logs load every turn; the rest lands in imports/ only.
     const dailies = [...files.keys()]
         .filter((path) => path.startsWith(`${WS}memory/`) && path.endsWith(".md"))
         .toSorted((left, right) => right.localeCompare(left));
@@ -163,12 +142,12 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         });
     }
 
-    // -- skills: the workspace folder outranks the managed one, exactly as it does at the source --
+    // Workspace skills outrank managed skills, matching the source's precedence.
     const takenSkills = new Set<string>();
     planned.push(...planSkillFiles(files, `${WS}skills/`, "OpenClaw", takenSkills, refused));
     planned.push(...planSkillFiles(files, "skills/", "OpenClaw", takenSkills, refused));
 
-    // -- secrets: .env, the config's env section, inline channel tokens, auth-profile api keys --
+    // Secrets come from .env, the config's env section, inline channel tokens, and auth-profile API keys.
     const secrets = secretPlanner(planned, refused, ["OPENCLAW_"]);
     const envRaw = text(files, ".env");
     if (envRaw !== undefined) {
@@ -209,7 +188,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
                 return {};
             }
         })();
-        // Tolerant of one nesting level ({profiles: {...}}) and of either key spelling for the api key.
+        // Accepts a nested `{profiles: {...}}` shape or a flat one, and either `apiKey` or `api_key`.
         for (const [profile, entry] of Object.entries(asRecord(profiles["profiles"]) ?? profiles).toSorted(([left], [right]) =>
             left.localeCompare(right),
         )) {
@@ -228,7 +207,6 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         }
     }
 
-    // -- MCP servers --
     const capabilityId = idPool();
     const mcpSection = asRecord(config["mcp"]) ?? {};
     for (const [name, entry] of Object.entries(asRecord(mcpSection["servers"]) ?? mcpSection).toSorted(([left], [right]) =>
@@ -240,7 +218,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         }
     }
 
-    // -- cron jobs, plus the heartbeat file as one more scheduled prompt --
+    // Cron jobs, plus the heartbeat file as one more scheduled prompt.
     const planCron = automationPlanner("openclaw", planned, refused);
     const timezones = new Set<string>();
     for (const path of [...files.keys()].filter((candidate) => candidate.startsWith("cron/") && candidate.endsWith(".json")).toSorted()) {
@@ -301,7 +279,7 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         planCron("heartbeat", { name: "heartbeat" }, `${WS}HEARTBEAT.md`, { cron, prompt: heartbeat.trim() });
     }
 
-    // -- loose workspace notes: kept under imports/, minus the one-time bootstrap ritual --
+    // Loose workspace notes land under imports/; BOOTSTRAP.md is skipped as a one-time ritual.
     const HANDLED = new Set(["SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md", "AGENTS.md", "HEARTBEAT.md", "BOOTSTRAP.md"]);
     for (const path of [...files.keys()]
         .filter((candidate) => candidate.startsWith(WS) && candidate.endsWith(".md") && !candidate.slice(WS.length).includes("/"))
@@ -324,7 +302,6 @@ export const planOpenclaw = (files: Files): SourcePlan => {
         });
     }
 
-    // -- what is already known not to move --
     for (const [channel, entry] of Object.entries(channels).toSorted(([left], [right]) => left.localeCompare(right))) {
         if (asRecord(entry)?.["enabled"] !== true) {
             continue;

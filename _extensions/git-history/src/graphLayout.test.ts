@@ -39,17 +39,13 @@ describe(`computeGraphLayout`, () => {
         // B lives in lane 1 (the second-parent lane), A in lane 0.
         expect(bySha.get(`a`)?.col).toBe(0);
         expect(bySha.get(`b`)?.col).toBe(1);
-        // C absorbs both lanes: a straight edge from lane 0 and a merge edge bending from lane 1 → col 0. The
-        // bending edge keeps lane 1's OWN colour rather than adopting the target's, which is what lets a reader
-        // follow the merged-in branch all the way to where it forked.
+        // C absorbs both lanes: lane 0 flows straight in, lane 1 bends in keeping its own colour, not lane 0's.
         expect(bySha.get(`c`)?.col).toBe(0);
         expect(bySha.get(`c`)?.up).toContainEqual({ from: 1, to: 0, color: 1 });
     });
 
     it(`reuses a freed column instead of growing wider`, () => {
-        // Component 1 opens lane 1 (d's second parent b) and closes it by row `c`/`a`; a later disconnected
-        // tip `e` should REUSE the freed column rather than widening the gutter. Valid topo order throughout
-        // (every child precedes its parent).
+        // Lane 1 (d's second parent b) closes by row c/a; tip e should reuse that freed column, not widen the gutter.
         const layout = computeGraphLayout([
             commit(`d`, [`a`, `b`]),
             commit(`b`, [`c`]),
@@ -63,12 +59,10 @@ describe(`computeGraphLayout`, () => {
         expect(layout.rows.find((row) => row.sha === `e`)?.col).toBe(0);
     });
 
-    /* COLOUR IS A PROPERTY OF THE BRANCH, NOT OF THE COLUMN: the whole point of the lane model carrying a
-     * colour at all. These two are the failures that made the earlier column-keyed version misleading, and
-     * neither is visible in a structural assertion about `col`. */
+    // Colour belongs to the branch, not the column; a structural `col`-only assertion can't catch a colour mistake.
     it(`keeps one branch's colour constant even where it changes column`, () => {
-        // `b` opens lane 1 as the merge's second parent, then lane 0 frees up and later work reuses it: the
-        // colour must track the branch across that move rather than flipping with the column.
+        // `b` opens lane 1 as the second parent; once lane 0 frees and reuses, colour tracks the branch, not the
+        // column.
         const layout = computeGraphLayout([commit(`m`, [`a`, `b`]), commit(`a`, [`c`]), commit(`b`, [`c`]), commit(`c`, [])]);
         const bySha = new Map(layout.rows.map((row) => [row.sha, row]));
         // `b` sits in lane 1 with its own colour; `c`, which lane 0's branch flows into, keeps lane 0's.
@@ -77,9 +71,8 @@ describe(`computeGraphLayout`, () => {
     });
 
     it(`gives a later, unrelated branch a different colour from the one whose column it reuses`, () => {
-        // Same shape as the column-reuse case above: `e` takes the column `b`'s branch vacated. Sharing a column
-        // with a finished branch must not mean sharing its colour: that is exactly the "two unrelated branches
-        // look like one" failure.
+        // `e` reuses the column `b` vacated; a shared column must not mean shared colour, or two branches look like
+        // one.
         const layout = computeGraphLayout([
             commit(`d`, [`a`, `b`]),
             commit(`b`, [`c`]),
@@ -90,15 +83,13 @@ describe(`computeGraphLayout`, () => {
         ]);
         const bySha = new Map(layout.rows.map((row) => [row.sha, row]));
         expect(bySha.get(`e`)?.col).toBe(0);
-        // ...and its colour is the lowest one no LIVE branch holds, which is what keeps the palette small
-        // without ever colliding on screen.
+        // Its colour is the lowest one no live branch currently holds.
         expect(bySha.get(`e`)?.color).toBe(0);
         expect(bySha.get(`b`)?.color).not.toBe(bySha.get(`d`)?.color);
     });
 
     it(`releases a colour once its branch has ended, so a long history stays inside a small palette`, () => {
-        // Three disconnected single-commit tips in a row: each begins after the last has ended, so all three
-        // should land on colour 0 rather than climbing 0, 1, 2 and running the palette off its end.
+        // Three disconnected tips, each starting after the last ends; all three land on colour 0, not climbing to 1, 2.
         const layout = computeGraphLayout([commit(`a`, []), commit(`b`, []), commit(`c`, [])]);
         expect(layout.rows.map((row) => row.color)).toEqual([0, 0, 0]);
         expect(layout.laneCount).toBe(1);

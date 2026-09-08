@@ -9,9 +9,7 @@ import type { RuleCommandRun } from "./rule-command.js";
 import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
 import { type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
 
-// The commands a project offers, already chosen: which manifest entries become which command, and what is
-// never offered (a `dev` script, a suite a python project never mentions), is the probe's own business and is
-// held to it in agent-verification.integration.test.ts.
+// Which commands a project offers is the probe's business; covered by agent-verification.integration.test.ts.
 const CHECKS: ChecksProbe = async () => ["pnpm test", "pnpm lint"];
 const NO_PROJECT: ChecksProbe = async () => undefined;
 
@@ -30,13 +28,8 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "action">): Rule => ({
     ...over,
 });
 
-/* Drive a hook set the way the SDK does. Each helper fires one event at the set built for a single turn, so a
- * test can interleave edits, commands and stops against ONE ledger, which is the whole thing under test.
- *
- * The matcher is found BY TOOL NAME rather than by position, the same way the SDK dispatches. These helpers
- * used to index the array, which meant every hook added to a moment silently re-pointed some other helper at
- * the wrong matcher: adding the browser hook sent `bash` at it, and three tests failed claiming the proof
- * ledger had stopped recording commands. */
+// Drives the hook set the way the SDK does: finds a hook by matcher/tool name, not position, so tests can interleave
+// edits, commands and stops against one ledger.
 const pick = (hooks: ReturnType<typeof turnEndingHooks>, event: "PostToolUse" | "PostToolUseFailure", toolName: string) => {
     const found = hooks[event]?.find((entry) => entry.matcher !== undefined && new RegExp(`^(?:${entry.matcher})$`).test(toolName));
     if (found === undefined) {
@@ -51,7 +44,7 @@ const edit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string
     return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
 };
 
-// One browser call, by the name the MCP server gives it: whether it COUNTS as looking is the ledger's call.
+// Named the way the MCP server names it; whether it counts as looking is the ledger's call.
 const browse = async (hooks: ReturnType<typeof turnEndingHooks>, tool_name: string) => {
     const matcher = pick(hooks, "PostToolUse", tool_name);
     const input = { hook_event_name: "PostToolUse", tool_name, tool_input: {}, tool_use_id: "t" } as unknown as HookInput;
@@ -95,14 +88,10 @@ const PASSED = "all good\n--- [exit 0, 2s] 40 lines filtered to 12\n";
 const FAILED = "1 failed\n--- [exit 1, 2s] 40 lines filtered to 12\n";
 
 describe("no rules", () => {
-    // The economy the whole design rests on: a workspace that has never opened this pays nothing, not even the
-    // per-edit bookkeeping that would otherwise run on every tool call of every turn.
     test("wires no hooks at all", () => {
         expect(turnEndingHooks([])).toEqual({});
     });
 
-    // `standing` filters by moment before this is ever called, so what is under test is that a rule slipping
-    // through anyway is inert rather than producing a follow-up at the wrong moment.
     test("and a rule for another moment says nothing at a stop", async () => {
         const elsewhere = rule({ id: "x", moment: "push.starting", action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 } });
         expect(await stop(armed([elsewhere], { runCommand: async () => ({ status: "failed", exitCode: 1, output: "no" }) }))).toBeUndefined();
@@ -135,9 +124,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toBeUndefined();
     });
 
-    /* ORDER IS THE WHOLE POINT, the same property the proof ledger is built on. A screenshot taken before the
-     * last three CSS edits is not evidence about them, and a scheme that only asked "did this turn use a
-     * browser at all" would read this turn as verified. */
     test("but a look BEFORE the last surface edit does not", async () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
@@ -146,8 +132,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toContain("Other.vue");
     });
 
-    // Opening a browser and closing it is not looking at anything, and a gate any browser call could clear
-    // would be cleared by exactly the turn it exists to catch.
     test("a browser call that observes nothing does not clear it", async () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
@@ -156,8 +140,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toContain("App.vue");
     });
 
-    // The allowlist is the deliberate half: a spurious ask here costs a whole model turn, so anything that is
-    // not unambiguously a rendered surface is somebody else's question.
     test("a turn that touched no rendered surface says nothing", async () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/parser.ts`);
@@ -165,8 +147,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toBeUndefined();
     });
 
-    // The two turn.ending builtins read different halves of the same turn, and neither may answer for the
-    // other: a green suite says nothing about a clipped label.
     test("a passing check does not stand in for looking", async () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
@@ -174,7 +154,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toContain("App.vue");
     });
 
-    // Both standing is two things to say and one follow-up to say them in, the moment's one budget.
     test("stands beside verify-edits in a single follow-up", async () => {
         const verify: Rule = { ...VIEWING, id: "verify-edits", label: "Verify", action: { kind: "builtin", name: "verify-edits" } };
         const hooks = armed([verify, VIEWING]);
@@ -185,7 +164,6 @@ describe("the verify-ui-edits built-in", () => {
         expect(asked?.split("\n").length).toBeGreaterThan(1);
     });
 
-    // A path condition narrows this moment like any other, and it reads the paths the turn really touched.
     test("honours a path condition", async () => {
         const scoped = { ...VIEWING, when: { paths: ["src/legacy/**"] } };
         const hooks = armed([scoped]);
@@ -205,9 +183,7 @@ describe("the verify-removals built-in", () => {
 
     const SLEEP = `await sleep(2000); // let the replica catch up`;
 
-    /* The snapshot hook, driven as the SDK drives it. It is a PRE hook, so what it reads is the file as the
-     * turn found it: these tests hand it a reader over a tree the test then changes, which is exactly the
-     * sequence a real edit produces. */
+    // A PRE hook: reads the file as the turn found it, before this test's own edit changes the tracked tree.
     const beforeEdit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string) => {
         const matcher = hooks.PreToolUse![0]!;
         const input = { hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
@@ -226,7 +202,7 @@ describe("the verify-removals built-in", () => {
             stderr: "",
         });
 
-    // 400 days before the fixed clock the deps carry, so "untouched for a long time" is stated, not waited for.
+    // 400 days before the fixed clock, so "untouched for a long time" is a stated fact, not a real wait.
     const NOW = Date.UTC(2026, 7, 28);
     const OLD = Math.floor((NOW - 400 * 86_400_000) / 1000);
 
@@ -263,7 +239,6 @@ describe("the verify-removals built-in", () => {
         expect(await stop(hooks)).toBeUndefined();
     });
 
-    // Both built-ins stand at this moment and read different halves of the same turn; one budget, one follow-up.
     test("it rides the same follow-up as the proof ledger", async () => {
         const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\n` });
         const hooks = armed([VERIFY, REMOVALS], {
@@ -340,9 +315,6 @@ describe("the follow-up budget", () => {
         expect(await stop(hooks)).toBeUndefined();
     });
 
-    /* The SDK sets its re-entry flag on the Stop AFTER a continuation, which is the Stop that has to re-measure
-     * the repair. Honouring the flag meant the check ran once, went red, the model edited, and the turn ended on
-     * a tree nothing had looked at since. The budget is the guard; the flag is not read. */
     test("the SDK's re-entry flag does not suppress the second round: the repair is re-measured", async () => {
         const runs: string[] = [];
         const check = rule({ id: "check", action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 } });
@@ -375,8 +347,6 @@ describe("the follow-up budget", () => {
         expect(verdicts).toEqual(["check:failed", "check:passed"]);
     });
 
-    // The budget counts ASKS, not rules: three rules that each want a word are one follow-up carrying three
-    // things. Counting per rule would let a turn be sent back once per rule, forever.
     test("several rules speaking at one stop spend one ask between them", async () => {
         const hooks = armed([VERIFY, rule({ id: "changelog", action: { kind: "instruct", text: "Update the changelog." } })]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
@@ -397,7 +367,7 @@ describe("the verify-tests built-in", () => {
         enabled: true,
     };
 
-    // The answer is the planner's (agent-tests.ts, bound to the turn's tree); this moment only carries it.
+    // The answer comes from the planner (agent-tests.ts); this moment only relays it.
     test("says what the tree said about the turn's tests, and nothing without a tree to read", async () => {
         const hooks = armed([TESTS], { tests: async () => "src/a.test.ts got weaker than at HEAD" });
         expect(await stop(hooks)).toContain("src/a.test.ts got weaker than at HEAD");
@@ -416,8 +386,7 @@ describe("the verify-tests built-in", () => {
 });
 
 describe("conditions", () => {
-    // The reason conditions are read HERE and not when the turn was planned: at planning time nothing knows
-    // which files the turn will touch, so a path condition resolved then could never hold.
+    // Read at the Stop, not at planning time, since nothing yet knows which files a turn will touch when planned.
     test("a path condition is read against what the turn actually edited", async () => {
         const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
         const touched = armed([sql], { cwd: WORKSPACE_ROOT });
@@ -429,9 +398,8 @@ describe("conditions", () => {
         expect(await stop(untouched)).toBeUndefined();
     });
 
-    // The ledger hears the edit tools and nothing else. A file rewritten by `sed -i` or a heredoc is an edit git
-    // can see and the ledger cannot, so the tree's own answer is read beside it: a check standing on
-    // `intentic/**` has to run for a turn that rewrote half of it from the shell.
+    // The edit ledger only hears Edit/Write; a shell rewrite (sed -i, a heredoc) is invisible to it, so the tree's own
+    // diff is read too.
     test("a path condition also sees what the tree changed, however it was edited", async () => {
         const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
         const hooks = armed([sql], { cwd: WORKSPACE_ROOT, changedPaths: async () => ["db/0001.sql"] });
@@ -439,8 +407,6 @@ describe("conditions", () => {
         expect(await stop(hooks)).toContain("Mention the migration.");
     });
 
-    // The agent names files absolutely and a rule is written the way the owner reads their tree, so one glob
-    // has to mean the same thing here as it does at the landing moment.
     test("paths are relativised to the turn's tree before a glob sees them", async () => {
         const docs = rule({ id: "docs", when: { paths: ["docs/**"] }, action: { kind: "instruct", text: "Check the docs build." } });
         const hooks = armed([docs], { cwd: `${WORKSPACE_ROOT}/repo` });
@@ -476,16 +442,12 @@ describe("a command rule", () => {
         expect(await stop(hooks)).toContain("timed out after 60s");
     });
 
-    // A turn with nowhere to run a command (ACP, the translator) must not invent a result: claiming a check
-    // ran is exactly the failure this whole area exists to prevent.
     test("on a turn with no runner says nothing at all", async () => {
         expect(await stop(armed([failing]))).toBeUndefined();
     });
 
-    /* A CHECK RUN AGAINST A TREE BEING REWRITTEN HAS MEASURED NOTHING. Mid-install the linter's own binary comes
-     * and goes, so `pnpm lint` exits 1 on `oxlint: not found` — a fact about node_modules, not about the diff.
-     * Reported as a verdict it sends the model hunting through work that is fine, which is what happened for
-     * four turns before this existed. */
+    // A check run mid-install has measured nothing: its binary can vanish and return, so "not found" is a fact about
+    // node_modules, not the diff.
     test("that failed while an install was running is not reported as a verdict", async () => {
         const hooks = armed([failing], {
             runCommand: async () => ({ status: "failed", exitCode: 1, output: "sh: 1: oxlint: not found" }),
@@ -498,11 +460,8 @@ describe("a command rule", () => {
         expect(nudge).not.toContain("Repair that before finishing");
     });
 
-    /* THE SAME FACT ONE MOMENT LATER, which is the case `installing` alone could never catch. The daemon's dep
-     * repair lands BETWEEN the check failing and the probe, so by the time anyone asks, nothing is installing
-     * and the tree is fine — and the check's `oxlint: not found` went back as a verdict on the diff. Over one
-     * day of this workspace's sessions that happened in 37 of 58 turns. The re-run is the whole answer: the
-     * tree has settled by then, so the second run is the true one. */
+    // Catches what `installing` alone misses: the install can finish between the failing run and the read, so the check
+    // is re-run before being believed.
     test("that lost its own toolchain mid-run is re-run rather than believed", async () => {
         const outputs = ["sh: 1: oxlint: not found", ""];
         let runs = 0;
@@ -518,8 +477,8 @@ describe("a command rule", () => {
         expect(runs).toBe(2);
     });
 
-    // And when the tool is still gone on the re-run, the check genuinely never started: that is a fact about
-    // the install and saying "repair your diff" about it is the original mistake in the other direction.
+    // Still gone on the re-run is a real toolchain gap, not a diff problem, so it's reported as such rather than as a
+    // repair request.
     test("that still has no toolchain on the re-run says so instead of blaming the diff", async () => {
         let runs = 0;
         const hooks = armed([failing], {
@@ -536,7 +495,6 @@ describe("a command rule", () => {
         expect(nudge).not.toContain("Repair that before finishing");
     });
 
-    // An ordinary failure must not pay for any of this: one run, and the verdict it earned.
     test("that failed on its own merits is run once and reported as a verdict", async () => {
         let runs = 0;
         const hooks = armed([failing], {
@@ -562,8 +520,7 @@ describe("a command rule", () => {
         expect(nudge).toContain("Repair that before finishing");
     });
 
-    // rule-command.ts's own contract: `error` means the command never ran, and so "has said nothing anyone
-    // should be sent to fix". This moment used to send them to fix it anyway.
+    // `error` (rule-command.ts) means the command never ran; no repair is asked for it.
     test("that never ran at all asks for no repair", async () => {
         const hooks = armed([failing], run({ status: "error", output: "no such cwd" }));
         const nudge = await stop(hooks);
@@ -579,7 +536,7 @@ describe("reporting", () => {
         const quiet = rule({ id: "quiet", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "unreachable" } });
         const loud = rule({ id: "loud", action: { kind: "instruct", text: "Say what you did." } });
         const hooks = armed([VERIFY, quiet, loud], { onFired: (r) => fired.push(r.id) });
-        // No edits ⇒ verify-edits has nothing to ask for, and the sql rule's condition cannot hold.
+        // No edits: verify-edits has nothing to ask for, and the sql rule's condition cannot hold.
         await stop(hooks);
         expect(fired).toEqual(["loud"]);
     });

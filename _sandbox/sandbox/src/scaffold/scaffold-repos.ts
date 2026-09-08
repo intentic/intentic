@@ -6,14 +6,11 @@ import { repoGitDir } from "../history/history.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { readTemplatesConfig } from "./templates-config.js";
 
-// Capability-triggered repo scaffolding (devops / monorepo adds). The repos' UIs live in the web app's
-// extensions, no operator panel is scaffolded into them here. All shell (git bookkeeping, the monorepo CLI)
-// runs through the caller's visible job session so the user watches the actual commands.
+// Capability-triggered repo scaffolding for devops/monorepo adds; UIs live in the web app's extensions, not an operator
+// panel here. Shell (git bookkeeping, the monorepo CLI) runs in the caller's visible job session.
 
-// Scaffold an empty pnpm+turbo monorepo as its OWN repo at /work/<name> by running the `intentic scaffold monorepo`
-// CLI (the same @intentic/scaffold path, add-apps style, one visible command doing the template fetch +
-// shell layout + git init). Its UI is the web app's apps extension, no operator panel is scaffolded.
-// The caller (the monorepo capability) gates on existence for idempotency.
+// Scaffolds an empty pnpm+turbo monorepo as its own repo at /work/<name> via the `intentic scaffold monorepo` CLI. UI
+// is the web app's apps extension; the caller gates on existence for idempotency.
 export const scaffoldAppMonorepo = async (services: Services, name: string, session: string): Promise<void> => {
     const { source, ref } = await readTemplatesConfig(services);
     await services.terminalRun.run(
@@ -23,11 +20,9 @@ export const scaffoldAppMonorepo = async (services: Services, name: string, sess
     );
 };
 
-// Scaffold of a NEUTRAL ledger: the intent + desired-state git repos with an empty deploy.config.ts (only the
-// managed `// <intentic>` region) and NO app repo, the sandbox is reachable and its inventory / source-control
-// have something to read, but nothing is provisioned. No host, no app, no `intentic deploy init`. Provisioning
-// readiness (the intent repo's @intentic deps + install, and an app) is added later by the "Deploy on this
-// machine" flow. Idempotent via the caller's `existsSync(intent)` gate.
+// Scaffolds a neutral ledger: intent + desired-state repos with an empty deploy.config.ts and no app repo, so the
+// sandbox is reachable with something to read but nothing provisioned. Idempotent via the caller's existsSync(intent)
+// gate.
 export const scaffoldNeutralLedger = async (services: Services, session: string): Promise<void> => {
     const intent = services.workspace.repos.intent;
     const desiredState = services.workspace.repos["desired-state"];

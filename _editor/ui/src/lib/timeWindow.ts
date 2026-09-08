@@ -1,13 +1,6 @@
-/* THE APP'S ONE "HOW FAR BACK" VOCABULARY, the 1h / 24h / 7d / All control, the cutoff it means, and the words
- * a caller says about it in prose.
- *
- * Activity and Logs had each written all three: the same four presets, the same three millisecond constants, and
- * two different spellings of the sentence under them ("262 entries in the last 24 hours" vs a bare count). They
- * are the same question asked of two feeds, and a user who learns the control on one surface should not find it
- * shaped differently on the next.
- *
- * `all` is the ABSENCE of a bound, not a very large one: -Infinity compares correctly against any timestamp,
- * including the ones a clock skew puts in the future, where `now - 100 years` quietly does not. */
+// Shared "how far back" vocabulary (1h/24h/7d/All): the millisecond cutoffs and the words to describe them. `all`
+// is the absence of a bound (-Infinity), not a very large one, so it still compares correctly against a
+// clock-skewed future timestamp.
 
 export type TimeWindow = `1h` | `24h` | `7d` | `all`;
 

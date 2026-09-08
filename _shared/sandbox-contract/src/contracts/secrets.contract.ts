@@ -13,11 +13,9 @@ import {
 } from "../schemas/secrets.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// User-supplied env-var secrets, written to the sandbox's gitignored desired-state/.env (which
-// `apply` reloads each run, no restart). `set` upserts one KEY=value, `remove` deletes it; `list` returns the
-// keys present. `inventory` aggregates every secret store into one view (keys + status + provenance, never
-// values). `reveal` is the single value-returning route, owner-only, POST so the key never sits in a URL.
-// set/remove/list/reveal refuse until DevOps has scaffolded the desired-state repo; inventory always answers.
+// User-supplied secrets, in the gitignored desired-state/.env; `apply` reloads them, no restart. `inventory` aggregates
+// every store (never values) and always answers; the rest refuse until desired-state is scaffolded. `reveal` alone
+// returns a value, owner-only, POST so the key avoids the URL.
 export const secretsContract = {
     set: oc
         .route({
@@ -65,23 +63,7 @@ export const secretsContract = {
         })
         .input(SecretKeyParamSchema)
         .output(SecretRevealSchema),
-    /* THE APPROVAL GATES, four routes with three different audiences, which is why they are worth reading as a
-     * group.
-     *
-     * `gates` is READ BY EVERYONE who needs to explain the sandbox to itself: the Secrets view draws a badge
-     * from it, and the AGENT is allowed it too (auth/grants.ts), because a model that cannot see which
-     * credentials are gated cannot tell "not connected" from "needs Bob", and the difference decides whether
-     * its next move is to ask a person or to go looking for another road. It answers names, subjects and
-     * approver addresses; there is nothing else in it to leak.
-     *
-     * `setGate` and `removeGate` are the OWNER's alone, enforced in-route with authorizeOwner rather than by
-     * the /secrets role floor, because the floor is maintainer and a maintainer is exactly who a gate is
-     * sometimes written about. The policy lives off the workspace beside the credential vault for the same
-     * reason the vault does: `.intentic/config/` is tracked and agent-editable, so a gate stored there would
-     * be a lock whose key is in the room with the agent.
-     *
-     * `request` is the AGENT's door, and the only one of the four that can park a turn: it raises the release
-     * card and waits, so a gated account can be asked for rather than merely discovered to be absent. */
+    // Gate policy lives off the workspace, not in agent-editable `.intentic/config/`, so agents can't hold the key.
     gates: oc
         .route({
             method: "GET",

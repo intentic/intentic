@@ -34,13 +34,11 @@ import {
     WorkspaceTreeSchema,
 } from "../schemas/workspace-tree.js";
 
-// The full /work view + extra-repo cloning. The binary preview (/workspace/raw) is intentionally NOT here, it
-// stays a plain Hono route serving raw bytes with a Content-Type header (oRPC's request/response shape doesn't
-// fit a streamed binary body). External MCP tools moved to the unified capabilities manifest (mcp kind).
+// The full /work view plus extra-repo cloning. /workspace/raw stays a plain Hono route (a streamed binary body doesn't
+// fit oRPC's request/response shape).
+// External MCP tools live in the capabilities manifest (mcp kind), not here.
 export const workspaceContract = {
-    // `agent` names whose copy of the workspace to read (WorkspaceScopeSchema); omitted is the shared /work
-    // tree. Every read route below takes it, so a link into a conversation's own checkout browses as one tree
-    // rather than as one openable file surrounded by the shared one.
+    // `agent` picks whose workspace copy to read (WorkspaceScopeSchema); omitted means the shared /work tree.
     tree: oc
         .route({
             method: "GET",
@@ -51,9 +49,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceScopeSchema)
         .output(WorkspaceTreeSchema),
-    // Lazy-load one directory's children, the tree returns ignored dirs (node_modules, .git, …) without children,
-    // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
-    // Bounded depth is for consumers that need a small subtree as data rather than one explorer row at a time.
+    // Lazy-loads a folder's children the tree walk skipped (node_modules, .git…) to bound its entry budget.
     children: oc
         .route({
             method: "GET",
@@ -64,8 +60,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceChildrenQuerySchema)
         .output(WorkspaceChildrenSchema),
-    // One WINDOW of a file's text (plus the file's total size), never the whole file: the browser reads text
-    // through here, and an unbounded read on an HTTP route is a way for any open log to stall the daemon.
+    // One window of a file's text plus its size, never the whole file: an unbounded read can stall the daemon.
     file: oc
         .route({
             method: "GET",
@@ -76,10 +71,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceFileReadQuerySchema)
         .output(WorkspaceFileSchema),
-    /* The ticket a media element presents to GET /workspace/media (a plain Hono route, like /workspace/raw,
-     * it answers a streamed byte RANGE, which oRPC has no shape for). Minting is here rather than beside it so
-     * it rides the bearer middleware and the contract's route advertisement: a browser can tell whether the
-     * sandbox in front of it can stream video at all, instead of learning it from a 404 mid-playback. */
+    // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
     mediaTicket: oc
         .route({
             method: "POST",
@@ -90,9 +82,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceMediaTicketQuerySchema)
         .output(WorkspaceMediaTicketSchema),
-    // Which file a NAMED reference means, the lookup behind every clickable path in the UI. A path an agent
-    // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
-    // than trusted as root-relative.
+    // Matches a prose-written path, often just a suffix, against the tree rather than trusting it as root-relative.
     resolve: oc
         .route({
             method: "GET",
@@ -103,8 +93,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceResolveQuerySchema)
         .output(WorkspaceResolveSchema),
-    // Ranked groups, match-reason tags, freshness, resumable cursor. `mode` narrows to one verb; default is
-    // auto-mode fusion. (Implementation detail: the daemon backs this with a resident in-process iq engine.)
+    // `mode` narrows the search to one kind; default fuses text, structure, meaning and history in one pass.
     search: oc
         .route({
             method: "GET",
@@ -115,9 +104,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceSearchQuerySchema)
         .output(WorkspaceSearchResultSchema),
-    // One repository's health in numbers: churn × complexity per file, index totals, and the import graph's
-    // top modules, the `hotspots` and `map` rankings the CLI prints, shaped for a panel. Repo-scoped, because
-    // "the codebase" is a repo, not the whole /work drop.
+    // Per-file churn × complexity, index totals, top modules; scoped to a repo, not the whole /work drop.
     health: oc
         .route({
             method: "GET",
@@ -128,9 +115,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceHealthQuerySchema)
         .output(WorkspaceHealthSchema),
-    // Deterministic, no-LLM classification of the dropped workspace into coarse buckets (repositories / documents
-    // / media / archives / other). Read-only proposal: the browser renders it and applies accepted moves via the
-    // existing /workspace/move route, this route never touches the tree.
+    // Deterministic, no-LLM classification into coarse buckets; read-only, applied only via the move route.
     classify: oc
         .route({
             method: "GET",
@@ -140,9 +125,7 @@ export const workspaceContract = {
                 "Proposes which of the loose things in the workspace are code, documents, media or archives. A read-only suggestion by fixed rules, with no model involved: nothing moves until a caller applies the moves it likes through the move call.",
         })
         .output(WorkspaceClassificationSchema),
-    // Direct file management the browser drives against the /work tree (byte writes go through POST
-    // /workspace/upload). oRPC's OpenAPI codec reads non-GET input from the JSON body, so delete sends {path}
-    // in the body too (not the query), same as the POST routes.
+    // Delete sends `{path}` in the body, not the query: oRPC's OpenAPI codec reads non-GET input from the body.
     mkdir: oc
         .route({
             method: "POST",
@@ -180,10 +163,7 @@ export const workspaceContract = {
         })
         .input(WorkspaceMoveSchema)
         .output(OkSchema),
-    // Dependency readiness for every project under /work, and the install that fixes it. An imported project
-    // arrives without node_modules/.venv (the drop omits them), so "the files landed" is not "this works":
-    // until setup says ready, its type-checks and tests can only lie. The install runs as a one-shot tmux panel
-    // like a dev server or add-app, attachable, survives a reload, output kept in the terminal logs.
+    // An imported project lacks node_modules/.venv; until this says ready, its type checks and tests can mislead.
     setup: oc
         .route({
             method: "GET",
@@ -220,8 +200,7 @@ export const workspaceContract = {
         })
         .input(CloneRepoSchema)
         .output(CloneResultSchema),
-    // Force-fetch + guarded fast-forward every repo with a remote (mutates the tree ⇒ POST). The turn hook syncs
-    // automatically each turn; this is the on-demand refresh (and how you re-sync a dirty/diverged repo after committing).
+    // Mutates the tree (fetch + fast-forward), which is why this is POST rather than GET.
     sync: oc
         .route({
             method: "POST",
@@ -231,8 +210,7 @@ export const workspaceContract = {
                 "Fetches every repo that has a remote and fast-forwards the ones that can move safely, reporting what happened to each. This runs by itself at the start of a turn; call it directly to refresh on demand, or to re-sync a repo that had drifted.",
         })
         .output(WorkspaceSyncSchema),
-    // The addable app types the configured source repo offers (its templates.json), drives the apps
-    // extension's Add-app picker.
+    // The source repo's templates.json app types; drives the apps extension's Add-app picker.
     templates: oc
         .route({
             method: "GET",
@@ -241,11 +219,7 @@ export const workspaceContract = {
             description: "The kinds of app the configured source repo knows how to scaffold, which is what an add-app picker lists.",
         })
         .output(TemplatesListSchema),
-    // Per-monorepo apps, driven by the web app's apps extension (owner-authed; {repo} is validated in the
-    // handler): add one or more apps into an existing monorepo, list them with per-app preview URL + status,
-    // and start/stop each app's preview dev server. `addApps` kicks off a one-shot tmux job (session
-    // panel-<repo>--add_apps) that runs `intentic scaffold add-app`, the attachable terminal is the progress/error
-    // surface; the extension polls the session's `running` for completion. It returns immediately (an ack).
+    // Runs as a one-shot tmux job named `panel-<repo>--add_apps`, executing `intentic scaffold add-app`.
     addApps: oc
         .route({
             method: "POST",
@@ -265,8 +239,7 @@ export const workspaceContract = {
         })
         .input(RepoAppsParamSchema)
         .output(AppsListSchema),
-    // The monorepo's workspace package dependency graph (pnpm-workspace.yaml globs + per-package package.json
-    // workspace deps), drives the apps extension's Dependencies view.
+    // The monorepo's package dependency graph, from pnpm-workspace.yaml globs and each package.json's deps.
     packageGraph: oc
         .route({
             method: "GET",
@@ -276,9 +249,7 @@ export const workspaceContract = {
         })
         .input(RepoAppsParamSchema)
         .output(WorkspaceGraphSchema),
-    // Every repo's modules (the dirs owning a named package.json), what the review panels group changed files
-    // under when the reader has asked for modules instead of paths. Whole-workspace rather than per-repo: a
-    // review list spans repos, and one request per repo group would be a fan-out the panel pays on every open.
+    // Every repo's package dirs in one call, since a review spans repos and per-repo would fan out per open.
     modules: oc
         .route({
             method: "GET",
@@ -306,9 +277,7 @@ export const workspaceContract = {
         })
         .input(AppParamSchema)
         .output(OkSchema),
-    // Run vitest for the given repo-relative project dirs in a one-shot tmux panel session
-    // (panel-<repo>--<session>), drives the apps extension's per-app / per-package / library Run-tests actions.
-    // Mirrors addApps: it returns an ack; the attachable terminal is the result surface.
+    // Runs tests for the named dirs in a one-shot tmux panel; mirrors addApps: an ack, terminal as result surface.
     runTests: oc
         .route({
             method: "POST",

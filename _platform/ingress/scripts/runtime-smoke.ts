@@ -1,22 +1,12 @@
-/* THE EDGE, EXERCISED ON THE RUNTIME IT ACTUALLY SHIPS ON. `pnpm test` runs this under bun after vitest,
- * because vitest runs under node and the image runs `bun src/main.ts` — and that gap is not theoretical:
- * `ws`'s `createWebSocketStream`, which the tunnel used to be built on, throws "Not supported yet in Bun"
- * from its own constructor. Every unit test passed, the image built, and the FIRST sandbox to register a
- * tunnel killed the process — then again on its retry, so the whole fabric stayed down while every test in
- * the repository was green. ci.yml's own words for this shape are "a package shipped by a pipeline it is not
- * verified by is a package that can ship broken".
- *
- * So this asserts nothing clever. It stands up both halves of a real tunnel over a real WebSocket, sends one
- * request through it, and fails loudly if the runtime cannot do that — which is the single thing the unit
- * tests cannot tell us, because they are not running where it matters. */
+// Exercises the edge under bun, the runtime it actually ships on: vitest runs under node, and a node-only pass can hide
+// a real bun failure (e.g. `ws`'s createWebSocketStream, unsupported in bun). Stands up both halves of a real tunnel
+// over a real WebSocket and sends one request through; fails loudly if the runtime cannot do that.
 import { openIngressSession, serveIngressSession, webSocketDuplex, type TunnelWebSocket } from "@intentic/sandbox-contract/ingress-protocol";
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
 const BODY = `ingress-runtime-smoke`;
-/* A RUNTIME THAT CANNOT UPGRADE DOES NOT ALWAYS CRASH — on some builds the handshake simply never completes
- * and the tunnel hangs, which in CI is a job that runs until the runner's own timeout kills it and says
- * nothing useful. A watchdog turns that into a named failure. */
+// A stuck handshake hangs rather than crashing; without this, CI just times out with no useful message.
 const watchdog = setTimeout(() => {
     console.error(
         `ingress runtime smoke FAILED: the tunnel never came up within 30s on ` +
@@ -36,23 +26,19 @@ const fail = (why: string): never => {
 const listen = async (server: ReturnType<typeof createServer>): Promise<number> =>
     new Promise((resolve) => server.listen(0, `127.0.0.1`, () => resolve((server.address() as { port: number }).port)));
 
-// The sandbox's own app, at the far end of the tunnel.
+// Stand-in for the sandbox's app, at the far end of the tunnel.
 const target = createServer((_request, response) => {
     response.writeHead(200, { "content-type": `text/plain` });
     response.end(BODY);
 });
 const targetPort = await listen(target);
 
-// One WebSocket, both halves bridged by the duplex this exists to prove.
+// One WebSocket, both halves bridged by the duplex under test.
 const host = createServer();
 const sockets = new WebSocketServer({ noServer: true });
 host.on(`upgrade`, (request, socket, head) => {
-    /* THE AWAIT IS THE POINT, not incidental setup. server.ts asks the platform whether the sandbox still
-     * exists BEFORE it upgrades — that round trip is the whole of revocation — so the upgrade always
-     * completes one or more ticks after the `upgrade` event. bun 1.4.0 cannot do that: the handshake is
-     * aborted and its abort path then dies on `STATUS_CODES` being undefined, killing the edge. A smoke that
-     * upgraded synchronously passed on the exact build that was crash-looping in production, so it has to
-     * wait here or it is testing a code path the edge does not have. */
+    // Delayed on purpose: the real server awaits a revocation check before upgrading, so a smoke that upgrades
+    // synchronously wouldn't catch a runtime that breaks only on a delayed upgrade.
     void (async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
         sockets.handleUpgrade(request, socket, head, (ws) => sockets.emit(`connection`, ws));
@@ -70,7 +56,7 @@ await new Promise<void>((resolve, reject) => {
 const served = await serveIngressSession(webSocketDuplex(daemonSide as unknown as TunnelWebSocket), { targetPort });
 const session = await openIngressSession(webSocketDuplex((await edgeSide) as unknown as TunnelWebSocket));
 
-// The edge's public face: every request is forwarded down the tunnel.
+// Edge's public face: every request is forwarded down the tunnel.
 const edge = createServer((request, response) => {
     session.forwardRequest(request, response).catch(() => {
         if (!response.headersSent) {

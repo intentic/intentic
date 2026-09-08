@@ -1,40 +1,14 @@
-// devices: what ONE of the user's own machines is running
+// What one of the user's own machines is running.
 import { z } from "zod";
 import { HostFactsSchema } from "./hosts.js";
-// The one sentinel every non-release build carries, so a locally compiled agent is never told it is behind.
 import { DEV_VERSION } from "../state/versions.js";
-/* The other end of desktop sync, stated as a fact instead of a claim.
- *
- * Everything here already existed, as the machine agent's printed status on a terminal nobody running the desktop app
- * has open, and as `docker ps` rows only the desktop app could see. Three surfaces each held a third of it: the
- * desktop app knew the containers and nothing about sync, the Desktop sync card knew an enrollment record and
- * printed the status command for the rest, and the folder a machine syncs into was known to neither
- * (SYNC_DIR is local agent state; the daemon is never told it). This is that one shape, so the same report can
- * be produced by the agent, read by the daemon, and rendered by one component in both apps.
- *
- * The producer is `intentic-machine status --json` in every carrier (this report rides as its `sync` half), the desktop app spawns it, the mirror watcher
- * posts it, a `host` capability runs it over run_command. One producer is what keeps the three from drifting,
- * the same argument as the desktop app spawning connect.sh rather than reimplementing it.
- *
- * WHO FILLS WHAT is the disclosure rule, made structural. The agent reports only what it uniquely knows, its
- * own pairings, folders, ports, watcher, and NEVER `sandboxes`: enumerating a machine's other containers to one
- * of them is the leak this design exists to avoid, and a sync agent has no business doing it anyway. The docker
- * half is supplied by whoever is READING (the desktop app from its own `docker ps`, the daemon from a
- * `host`-capability one), which is also the only side that has a reason to be trusted with it.
- *
- * What remains is scoping: a report reaching a sandbox carries that sandbox's pairing, not its siblings', and a
- * `mirror` enrollment, a collaborator's own laptop, drops `localDir` with it. So a member who mirrors one
- * dev-server port does not hand the sandbox's owner a map of their machine. */
+// Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
+// The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
+// own pairing.
 
-/* ONE SANDBOX'S SHARE OF ITS MACHINE, as docker enforces it right now: read off the container's HostConfig
- * and env by the machine agent, never asked of the sandbox (which cannot see its own cgroup ceiling as a
- * docker flag, only as a number in /sys/fs/cgroup).
- *
- * The two `*Runtime` lists are the same directive vocabulary the run contract allowlists
- * (@intentic/sandbox-run RUNTIME_DIRECTIVES), split by WHO asked: `overlayRuntime` is what the approved
- * environment demands (a view draws those locked — "required by the Docker capability"), `hostRuntime` is
- * what the owner asked for on top and may withdraw. `privileged` and `gpu` are the docker-side truth of the
- * union: what the container actually got, after a host without the nvidia runtime dropped the GPU. */
+// One sandbox's resource share as docker currently enforces it, read off the container by the machine agent.
+// `overlayRuntime` is the environment's locked demand; `hostRuntime` is the owner's addition; `privileged`/`gpu` are
+// docker's enforced truth.
 export const SandboxResourcesSchema = z.object({
     // The cgroup memory ceiling in bytes; absent when docker imposes none (the hosted shape).
     memoryBytes: z.number().optional(),
@@ -47,19 +21,15 @@ export const SandboxResourcesSchema = z.object({
 });
 export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
 
-/* WHAT A RESHAPE ASKS FOR: the Resources dialog's answer, the `reshape` op's payload, and the shape the
- * machine turns into `ic sandbox reshape` flags. Every key is "leave it" when absent; the two caps take
- * `null` for "back to the default" (the machine-derived memory share; every core), which `ic` spells as
- * `default` and the run contract as an empty seed. At least one key, because a reshape with nothing to change
- * is a restart for nothing, and the machine refuses it before anything is spawned. */
+// Reshape request, turned into `ic sandbox reshape` flags: absent means leave it, `null` on the two caps means back to
+// the default; at least one key must be set.
 export const SandboxResourcesAskFieldsSchema = z.object({
     memoryGib: z.int().positive().nullable().optional(),
     cpus: z.int().positive().nullable().optional(),
     privileged: z.boolean().optional(),
     gpu: z.boolean().optional(),
 });
-// The fields alone are exported too, for a caller that composes them into a wider object (the machine's MCP
-// tool adds the slug beside them) and applies the at-least-one rule itself.
+// Fields also exported separately for callers that compose them and enforce the at-least-one rule themselves.
 export const SandboxResourcesAskSchema = SandboxResourcesAskFieldsSchema.refine((ask) => Object.values(ask).some((value) => value !== undefined), {
     message: "a reshape must change at least one thing",
 });
@@ -73,44 +43,16 @@ export const DeviceSandboxSchema = z.object({
     name: z.string().optional(),
     running: z.boolean(),
     image: z.string(),
-    // Absent when the sandbox has no cloudflared sidecar AT ALL (reached over the user's own proxy), which is
-    // not the same fact as a sidecar that is down, and must not render as one.
+    // Absent when there is no cloudflared sidecar at all; that is not the same as a sidecar that is down.
     tunnelRunning: z.boolean().optional(),
-    // Its share of the machine (above). Absent from a reader that did not inspect the container: the cheap
-    // `docker ps` listing the machine's own fleet reads use carries none of it.
+    // Absent when the reader only ran a cheap `docker ps` listing without inspecting the container.
     resources: SandboxResourcesSchema.optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
-/* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE, the Devices view's buttons, and the only thing that changes a
- * machine's fleet from a browser.
- *
- * All nine ops travel one route because they are one decision to the person clicking, however differently they
- * behave underneath: three are a docker call that returns in a second, four run the `ic` flow for minutes, one
- * deletes, and one only reads. Splitting them by duration would put the same button on two doors and give the
- * view two shapes to render. So every op answers as a STREAM of lines ending in a result, the fast ones simply
- * have little to say, and `logs` is the case where the lines ARE the answer.
- *
- * `prepare` is the one that changes nothing on purpose: it downloads and builds the next update and stops
- * there, leaving the container running the image it was already running. It is what turns `update` from a wait
- * of minutes into a restart of seconds, and it is safe to offer at any moment for exactly that reason.
- *
- * `logs` is here rather than on a route of its own for the same reason the rest share it: it is a button in the
- * same row as the others, on a container that may be too broken to answer any other way, and the stream shape
- * already carries "many lines, then an outcome" exactly as a log tail wants to arrive.
- *
- * `reshape` is the one that changes the CONTAINER without changing its image: its share of the machine (memory
- * and CPU caps) and its privileges (privileged, the host's GPU), recreated onto the same image so the values
- * live on the container and outlive every later swap. It carries `resources`, the only op with a payload of
- * its own besides `rebuild`'s hash.
- *
- * The machine enforces which of them it will do: `sandboxes` covers everything but removal, which takes its own
- * switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
-/* `runner-up` / `runner-remove` are the same door for a container that belongs to THIS SANDBOX rather than to
- * a person: a runner (runners/, docs/remote-runners-plan.md at the workspace root). They ride here because to
- * the machine they are the same act it already does, run and remove a sandbox container, and to the person
- * clicking they are the same row of buttons. Both take the `sandboxes` switch and neither takes the removal
- * one: a runner holds no workspace of its own, only a mirror of the parent's git, so removing it destroys
- * nothing the parent does not still have. */
+// One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending
+// update without touching the container; `reshape` changes only its resources and privileges, not the image.
+// `runner-up`/`runner-remove` act on a runner (this sandbox's own container), not a person's sandbox; gated by the
+// `sandboxes` switch, not removal, since a runner holds no separate workspace to lose.
 export const DeviceSandboxOpSchema = z.enum([
     "start",
     "stop",
@@ -128,108 +70,49 @@ export const DeviceSandboxOpSchema = z.enum([
 export type DeviceSandboxOp = z.infer<typeof DeviceSandboxOpSchema>;
 export const DeviceSandboxFlowSchema = z.object({
     op: DeviceSandboxOpSchema,
-    // Which sandbox, or, for the two runner ops, which RUNNER: the name it is known by at both ends, the
-    // parent's `/system/runners` list and the machine's `ic runner list`.
+    // Sandbox slug, or the runner's name for the runner ops (as `/system/runners`/`ic runner list` know it).
     slug: z.string().min(1),
-    // The approved overlay's sha256, required by `rebuild` and meaningless to the rest. It is the trust anchor:
-    // only content that still hashes to what the owner reviewed is ever built.
+    // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
     // What `reshape` should change, required by it and meaningless to the rest.
     resources: SandboxResourcesAskSchema.optional(),
-    /* `runner-up` only, and both are filled in by the DAEMON, never by the caller: where the runner dials
-     * (this sandbox's public URL) and the single-use pairing it redeems there. The browser asks for a runner
-     * on a machine; it never holds the credential that makes one, which is what keeps a pairing out of every
-     * surface between here and that machine. */
+    // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
     parentUrl: z.string().optional(),
     pair: z.string().optional().meta({ secret: true }),
-    /* `runner-up` only, daemon-filled like the pair: the parent's SHAPE, riding to the machine so the runner
-     * starts as this sandbox's twin instead of a bare base image.
-     *
-     * `definition` is a settings-only sandbox.toml the container boots with as SANDBOX_DEFINITION_SEED (the
-     * fleet door in @intentic/sandbox-run); the daemon scopes it before sending, capabilities and secret
-     * names deliberately never ride to a runner. `overlay`/`overlayHash` are the parent's APPROVED composed
-     * overlay, byte-exact with its sha256: the parent's owner already approved those bytes, so `ic runner up`
-     * re-checks the hash and builds them at creation — approval by provenance, the same byte-exact check
-     * `ic sandbox rebuild` runs, where a definition handed to a STRANGER must park at an approval gate. */
+    // `runner-up` only, daemon-filled: `definition` carries no capabilities or secrets; `overlay`/`overlayHash` are
+    // re-verified by hash before build.
     definition: z.string().optional(),
     overlay: z.string().optional(),
     overlayHash: z.string().optional(),
 });
 export type DeviceSandboxFlow = z.infer<typeof DeviceSandboxFlowSchema>;
-// The same input plus which machine it is for, the browser's half, since the daemon reaches the machine by id.
+// Adds the device id to the flow input; the daemon looks up machines by id.
 export const DeviceSandboxFlowInputSchema = DeviceSandboxFlowSchema.extend({ id: z.string().min(1) });
 export type DeviceSandboxFlowInput = z.infer<typeof DeviceSandboxFlowInputSchema>;
-/* What a running operation says, in the one line shape every streamed flow in this product already uses
- * (IntenticLineSchema, which the browser's reader parses): `line` as the machine prints it, then exactly one
- * terminal frame, `result` when it worked, `error` when it did not, carrying the machine's own words either
- * way rather than a code this side invented. */
+// Streamed operation output, matching `IntenticLineSchema`: `line` frames as printed, then one terminal frame, `result`
+// or `error`, carrying the machine's own message rather than a code.
 export const DeviceFlowLineSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("line"), text: z.string() }),
     z.object({ kind: z.literal("result"), message: z.string() }),
     z.object({ kind: z.literal("error"), message: z.string() }),
 ]);
 export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
-/* UPDATING OR RESTARTING THE AGENT ITSELF, from the row that reports its version.
- *
- * THE OPERATION THAT KILLS ITS OWN TRANSPORT, and that is the whole reason it is a flow of its own rather than
- * another entry in the DeviceCommand set below. `run_command` runs as a child of the resident process, and both
- * of these stop that process: `upgrade` calls stopResident() before it swaps the binary, and `run` stops before
- * it starts. So the socket carrying the request dies mid-command, and the child's stdout pipe dies with it —
- * an EPIPE on `process.stdout` is an uncaught exception in Node. An upgrade killed between
- * `swap(agentPath, previous)` and `swap(staged, agentPath)` leaves a device with NO `intentic-machine` binary
- * and a login entry pointing at a missing file, which is the one outcome worse than being out of date.
- *
- * The agent therefore runs the work DETACHED (spawnDetached, exactly as it launches its own loop) and streams
- * its log while it can. The stream ending with no terminal frame is the NORMAL case here, not a failure, and
- * confirmation is the version moving on the view's next poll — which is also the only honest confirmation: the
- * CLI's own `loop-behind` outcome exists because "a process came up" does not mean the new build is serving.
- *
- * `restart` needs no new CLI verb: bare `intentic-machine run` is a restart (reconcileResidency stops before it
- * starts), and it is the remedy for both a stalled loop and one serving an older build than the file beside it. */
+// Both ops stop the resident process mid-command; a stream ending with no terminal frame is normal, not a failure, and
+// confirmation is the version moving on the next poll. `restart` is just a bare `intentic-machine run`.
 export const DeviceAgentOpSchema = z.enum(["upgrade", "restart"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
 export const DeviceAgentFlowSchema = z.object({ op: DeviceAgentOpSchema });
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;
-// The same input plus which device it is for, the browser's half.
+// Adds the device id to the flow input.
 export const DeviceAgentFlowInputSchema = DeviceAgentFlowSchema.extend({ id: z.string().min(1) });
 export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
-/* RUNNING ONE OF THIS PRODUCT'S OWN CLIs ON A CONNECTED DEVICE, FROM A BUTTON, with no agent in the loop.
- *
- * A machine that is connected as a device can already be told things: the ops above drive its docker, and an
- * agent with the `host` capability can run whatever it likes through `run_command`. What had no door was the
- * ordinary case in between — the user wants the thing the CLI on their machine already does, and the sandbox is
- * where they are looking. Their alternatives were to go and find a terminal, or to ask an agent to do it, which
- * spends a turn and a model's judgement on a decision that has none in it.
- *
- * So: a CLOSED SET OF NAMES, and the argv is built on the daemon from the name alone (hosts/device-commands.ts).
- * The browser sends `mirror-off`, never a command line. That is the whole security property, and it is the
- * reason this is an enum rather than a string: the same socket carries `run_command`, so a route that forwarded
- * caller-supplied text would hand every browser session a shell on the user's laptop, which is a grant the
- * capability card never made.
- *
- * The machine still enforces its own switches. "Run commands" being off comes back as its own refusal, in its
- * own words, naming the control to flip — exactly as it does for the sandbox ops. */
-/* THE SET, and why the file-sync half of it is here beside the mirroring half.
- *
- * Both are the same gesture to the person clicking: something this device is doing for this sandbox, turned
- * off or on from the row that describes it. They were split for a while by nothing but which one had been built
- * — mirroring had a button and pausing a file sync had a paragraph telling you to go and find a terminal — and
- * that is exactly the gap this door exists to close.
- *
- * `sync-unpair` is the one that DESTROYS something, and it is deliberately the machine's `sync uninstall
- * --sandbox`, not this side's idea of unpairing: the agent terminates both Mutagen sessions, drops the local
- * pairing and self-revokes its enrollment on the way out, so the machine cleans up after itself rather than
- * leaving a sandbox to guess what it managed to do. Revoking from the SANDBOX side (an unreachable machine, a
- * laptop that is never coming back) is a different act and a different route, see the enrollment revoke. */
+// Closed set of command names; the daemon builds argv from the name alone (hosts/device-commands.ts). Never a free-text
+// command: the same socket carries `run_command`, which would grant a shell on the user's machine.
+// `sync-unpair` runs the machine's own `sync uninstall --sandbox` (terminates both Mutagen sessions, drops the pairing,
+// self-revokes enrollment); revoking from the sandbox side is a different route.
 export const DeviceCommandSchema = z.enum(["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair"]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
-/* Which paired sandbox the command acts on: the machine's own id for it, as it appears in that machine's report,
- * so nothing here has to re-derive the sanitizing the agent applied. Absent means every sandbox that machine
- * pairs, which is what the CLI does when it is run bare.
- *
- * Pattern-bound because it becomes an argv token. It must start with an alphanumeric, not merely consist of id
- * characters: a value like `--takeover` is made only of legal id characters and is a FLAG by the time the CLI on
- * the machine parses it. Real ids are `sandbox-<hex>-<zone>`-shaped, so nothing legitimate leads with a dash. */
+// Machine's sandbox id (absent = every paired sandbox); must start alphanumeric, else it parses as a CLI flag.
 export const DeviceSandboxIdSchema = z
     .string()
     .max(200)
@@ -240,12 +123,8 @@ export const DeviceCommandInputSchema = z.object({
     sandboxId: DeviceSandboxIdSchema.optional(),
 });
 export type DeviceCommandInput = z.infer<typeof DeviceCommandInputSchema>;
-/* What came back. `ok` is the command's own exit status, not this route's: a machine that refused the call, or a
- * CLI that exited non-zero, is a real answer to show the person who clicked, not an exception to convert into
- * one. Only an unreachable machine throws, because then there is nothing to report at all.
- *
- * `output` is what the command printed, kept because the CLI's own sentences ("Port mirroring OFF for: …") are
- * better than anything this side would write over them. */
+// `ok` is the command's own exit status, not this route's: a refusal or non-zero exit is a real answer, not a thrown
+// error. Only an unreachable machine throws. `output` is the command's own printed text.
 export const DeviceCommandResultSchema = z.object({
     ok: z.boolean(),
     message: z.string(),
@@ -253,84 +132,48 @@ export const DeviceCommandResultSchema = z.object({
 });
 export type DeviceCommandResult = z.infer<typeof DeviceCommandResultSchema>;
 
-/* WHICH FILES ARE STUCK, and what happened to each of them on both sides.
- *
- * A count on its own was a dead end. "10 conflicts" beside a folder path names no file, no cause and no
- * remedy, and the one surface that could name them (Mutagen's `sync list` on that machine) is on the computer
- * the reader is being TOLD about rather than sitting at. So the paths travel with the count, and with the one
- * fact that decides which copy a person keeps: what happened to that path here versus in the sandbox.
- *
- * The words are Mutagen's three change kinds read off each side of the conflict. Either side may be absent:
- * absent means "Mutagen did not say which", never "untouched", so a reader falls back to "changed" rather than
- * being told something the report does not know. */
+// Mutagen's three change kinds, read per side of a conflict; a count alone named no file, cause or remedy. Absent means
+// Mutagen did not say, not that a side is untouched.
 export const DeviceConflictChangeSchema = z.enum(["created", "modified", "deleted"]);
 export type DeviceConflictChange = z.infer<typeof DeviceConflictChangeSchema>;
 
 export const DeviceConflictSchema = z.object({
-    /** Relative to the synced folder, so it reads the same against `localDir` and against /work. Empty is the
-     *  folder ITSELF, which Mutagen reports for a root-level conflict and every reader has to say in words. */
+    /** Relative to the synced folder (matches both `localDir` and /work); empty means the root itself. */
     path: z.string(),
-    /** What happened on the DEVICE, in that machine's own folder (Mutagen's alpha, see mutagen.ts workspaceSpec). */
+    /** What happened on the device (Mutagen's alpha). */
     local: DeviceConflictChangeSchema.optional(),
     /** And in the sandbox's /work (its beta). */
     sandbox: DeviceConflictChangeSchema.optional(),
 });
 export type DeviceConflict = z.infer<typeof DeviceConflictSchema>;
 
-// One paired sandbox as the local agent holds it. `localDir` is the answer to the question the Desktop sync card
-// has never been able to answer: which folder on that device this sandbox's /work actually is.
+// One paired sandbox as the local agent holds it; `localDir` is which folder on that device holds this sandbox's /work.
 export const DevicePairingSchema = z.object({
     sandboxId: z.string(),
     mode: z.enum(["sync", "mirror"]),
-    // Set only for mode "sync", and only for the sandbox being reported to, see the redaction note above.
+    // Set only for mode "sync", and only for the sandbox being reported to.
     localDir: z.string().optional(),
-    /* Whether that device is putting this sandbox's ports on its own localhost, which is a switch its owner
-     * holds and not a state this sandbox can read off anything else. An empty port list means two opposite
-     * things — nothing is listening in the sandbox, or the machine was told to keep them off — and only the
-     * second is worth a word on screen or a button to undo.
-     *
-     * The MACHINE owns the flag (the agent's `sync mirror off`), because the localhost being written to is
-     * there: a device told to keep ports off must keep them off while this sandbox is asleep, unreachable, or
-     * arguing. A browser asks for it by running that same command over the machine's `host` capability, so the
-     * button and the CLI are one gesture rather than two mechanisms that can disagree.
-     *
-     * Optional because it is a fact only an agent new enough to have the switch reports; absent is read as "on",
-     * which is what mirroring has always been. */
+    // Machine-owned switch (agent's own `sync mirror off`); absent reads as "on", not merely unknown.
     mirroring: z.enum(["on", "off"]).optional(),
-    // Mutagen's own word for what the session is doing ("watching", "scanning", "transitioning", "halted-…").
-    // Carried verbatim rather than mapped to a traffic light: the halted states name their own cause, and a UI
-    // that reduces them to "problem" sends the user back to the terminal this report exists to replace.
+    // Mutagen's own status word, kept verbatim rather than reduced to a traffic light.
     mutagenStatus: z.string().optional(),
-    /* How many paths Mutagen is holding rather than clobbering (the sync mode is two-way-SAFE): the WHOLE
-     * number, including the conflicts its own state truncates away (state.proto's `excludedConflicts`), because
-     * a badge that reads "10" while the session is holding forty is worse than no badge. */
+    // Whole conflict count, including any Mutagen's own state truncates (`excludedConflicts`).
     conflicts: z.number().int().nonnegative().optional(),
-    /* The conflicted paths themselves, capped by the agent that reads them (CONFLICT_PATHS_MAX): the count
-     * above is the whole truth, this is as much of it as belongs in a report re-read every few seconds.
-     * Optional because only an agent new enough to read them off Mutagen sends any, and a card holding just the
-     * count still renders exactly what it always did. */
+    // Conflicted paths, capped at `CONFLICT_PATHS_MAX`; `conflicts` above is the true, uncapped count.
     conflictedPaths: z.array(DeviceConflictSchema).optional(),
     paused: z.boolean().optional(),
-    /* The SECOND session's word, the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
-     * Reported separately rather than folded into the status above, because the two fail independently and mean
-     * different things: the first going quiet stops the owner's edits moving, the second going quiet stops their
-     * personas, skills, automations, approvals and transcripts from surviving the sandbox. A backup that is not
-     * running is only dangerous while nobody knows, so it gets its own word on the line. */
+    // Second session's status (the state-dir backup mirror), reported separately: the two fail independently.
     backupStatus: z.string().optional(),
 });
 export type DevicePairing = z.infer<typeof DevicePairingSchema>;
-/* One sandbox port and what became of it on this machine's localhost. The rows that did NOT make it are the
- * reason this carries a state rather than being a list of live forwards: two sandboxes on one device routinely
- * serve the same dev-server port and only one can own localhost:6480, so the loser's port is simply missing from
- * localhost with nothing anywhere saying why. Today that fact exists only as a line in mirror.log. */
+// One sandbox port and what became of it on this machine's localhost; carries a state rather than just live forwards,
+// since two sandboxes can claim the same port and the loser needs a reason shown.
 export const DevicePortStateSchema = z.enum([
     // Forwarded: the sandbox's listener answers on this machine's localhost at the same number.
     "mirrored",
-    // Another PAIRED SANDBOX got there first (first paired wins), `heldBy` names it, because "busy on this
-    // machine" sends people hunting for a process that does not exist.
+    // Another paired sandbox already holds the port (first paired wins); `heldBy` names it.
     "held-by-sandbox",
-    // Something else on this device already binds the port, a local dev server, another tool. Not ours to
-    // name, and not ours to take.
+    // Something outside this product already binds the port; not ours to name or take.
     "busy",
 ]);
 export const DevicePortSchema = z.object({
@@ -341,93 +184,44 @@ export const DevicePortSchema = z.object({
     state: DevicePortStateSchema,
     // Set only for "held-by-sandbox": the sandbox id that owns the local bind instead.
     heldBy: z.string().optional(),
-    // What is listening on the sandbox side ("node …/vite"), for a row the user has to recognise to act on.
+    // What is listening on the sandbox side (e.g. `node …/vite`), so the user can recognise it.
     command: z.string().optional(),
 });
 export type DevicePort = z.infer<typeof DevicePortSchema>;
-/* THE AGENT ON THIS DEVICE, AS ONE BLOCK, because it is one binary and one process.
- *
- * It used to be two: `agents: { sync, host }` up in the report, and a `watcher` beside it. That split was a
- * fiction two merges out of date — `resident.ts` runs a SINGLE process serving the outbound socket per linked
- * sandbox and the mirror watcher together, from a single `intentic-machine` on disk — and it cost the Devices
- * view its version chip. The chip read `agents.sync` and labelled it with the ENROLLMENT MODE ("desktop sync
- * 1.243.0", or the same number as "ports only 1.243.0" on a mirror), so one binary's version wore two product
- * names and appeared on no row that had never been paired for sync. `agents.host` was never filled by the
- * report at all: the daemon fills `Device.agentVersion` from the hello frame it already holds.
- *
- * So: one block, and every version question about a device is answered inside it.
- *
- * `running` also decides whether everything ELSE in the report is still true — a healthy session list under a
- * dead loop means new dev-server ports stop appearing on localhost and commits stop arriving in the local
- * clones, while every other row reads exactly as it did the moment before. */
+// The device's one agent process as a single block; `running` also gates whether the rest of the report is still
+// current, a dead loop leaves every other row reading as it did before it died.
 export const DeviceAgentSchema = z.object({
     running: z.boolean(),
     pid: z.number().int().optional(),
-    /* THE BUILD ON DISK: the file at `~/.intentic/bin/intentic-machine`, asked what it is rather than assumed
-     * (the agent's own installed.ts). Absent on a device with no installed agent at all — a dev run, an `npx`
-     * one, a binary somebody put elsewhere on their PATH — which is "not known", never a version. */
+    // Build on disk at `~/.intentic/bin/intentic-machine`; absent means no installed agent at all.
     installed: z.string().optional(),
-    /* THE BUILD ACTUALLY SERVING, stamped into the pidfile by the loop that claimed it, which is the only place
-     * the fact exists: replacing the binary does not touch the running process, so a device can hold a current
-     * agent and go on serving a months-old one indefinitely. The two differing is a restart somebody is owed
-     * (see agentBuildSkew). Absent when no loop is running, and when the one running predates the stamp. */
+    // Build actually serving, stamped in the pidfile; can lag `installed` indefinitely (see `agentBuildSkew`).
     build: z.string().optional(),
-    /* When the loop last FINISHED a pass, the field that makes `running` mean something. The agent holds its
-     * SSH transport listeners on its own event loop, so a failure that escapes the loop leaves a process that is
-     * alive and a loop that is gone: pid present, unit "active", mirroring and the git bridge stopped. Absent
-     * means the agent has not reported one (too old to stamp, or its first pass has not landed), which is not
-     * the same as stalled, and readers must not treat it as either state. */
+    // When the loop last finished a pass; a live process can have a dead loop (see `agentStalled`).
     lastTickAt: z.number().optional(),
 });
 export type DeviceAgent = z.infer<typeof DeviceAgentSchema>;
-/* How long the loop may go without finishing a pass before "running" stops being the honest word for it. It
- * polls every 5s and its slowest step is bounded by two 10s network timeouts per pairing, so a minute is
- * several passes of slack, the same yardstick the Devices view already ages a whole report by.
- *
- * The rule lives HERE, next to the field, because the terminal and the browser both answer this question and a
- * device that is "running" in one and "stalled" in the other is worse than either answer alone. */
+// Loop polls every 5s with two 10s network timeouts per pairing; a minute is several passes of slack.
 export const AGENT_STALL_AFTER_MS = 60_000;
 export const agentStalled = (agent: DeviceAgent, now: number): boolean =>
     agent.running && agent.lastTickAt !== undefined && now - agent.lastTickAt > AGENT_STALL_AFTER_MS;
 export const DeviceReportSchema = z.object({
-    /* The OS hostname, and the JOIN KEY. A machine can arrive here two ways at once, volunteered by its sync
-     * agent, and read through its `host` capability, and those two know it by different names (the enrolled
-     * key's comment vs. the capability id the user typed). The hostname is the one thing both can state about
-     * the same box, so it is what dedupes them into a single row. */
+    // OS hostname; the join key that dedupes a machine seen via sync and via its `host` capability.
     hostname: z.string(),
     os: z.string(),
-    // Filled by the READER, never the agent (see above). Empty is the resting state: no Docker on the machine,
-    // or nothing has looked. Neither is an error, and neither means "no sandboxes exist".
+    // Filled by the reader, never the agent; empty means no Docker or nothing looked, not that none exist.
     sandboxes: z.array(DeviceSandboxSchema),
     pairings: z.array(DevicePairingSchema),
     ports: z.array(DevicePortSchema),
-    // The one agent this device runs, on disk and in flight, in one block (see DeviceAgentSchema for why it is
-    // one and not the `agents` map plus a `watcher` it replaced).
+    // The one agent this device runs, on disk and in flight, in one block.
     agent: DeviceAgentSchema,
-    // When the machine took this reading. NOT when the daemon received it. A report is a snapshot from a box
-    // that may since have gone to sleep, and the UI ages it against this rather than presenting it as now.
+    // When the machine took this reading, not when the daemon received it; the UI ages the report against this.
     capturedAt: z.number(),
 });
 export type DeviceReport = z.infer<typeof DeviceReportSchema>;
 
-/* THE AGENT THIS MACHINE INSTALLED AND THE ONE IT IS RUNNING, when they are not the same build — the whole of
- * "you updated the agent and nothing changed", as a value.
- *
- * It is one comparison, and it lives HERE for the same reason agentStalled does: the terminal (`intentic-machine
- * status`) and the browser (the Devices row) both answer this question, and a machine that is behind in one and
- * fine in the other is worse than either answer alone. The remedy is the same in both: restart the loop.
- *
- * AN UNSTAMPED LOOP IS THE LOUDEST CASE, not a missing one, and reading it as "nothing to say" is what let this
- * whole check miss the machines it was written for. `agent.build` is stamped into the pidfile by the loop that
- * claimed it, so a loop old enough to predate the stamp reports none — and it is running, and something newer is
- * installed beside it, which is a skew by definition and a wider one than any it could have named. Every surface
- * therefore went quiet on precisely the machines furthest behind: upgrade, see the new number everywhere, watch
- * nothing change, and have no screen anywhere say why.
- *
- * So the running build is OPTIONAL in the answer and the question is asked of the installed one. Still silent
- * whenever the honest answer is "no idea": a loop that is stopped (nothing is serving, and every surface already
- * says so in louder words), a device with no installed agent to compare against, and a working-tree build, which
- * is not a version and must not be told it is behind. */
+// Compares running build against installed; silent when the loop is stopped, nothing installed, or installed is a dev
+// build. An unstamped `running` still counts as skew.
 export const agentBuildSkew = (agent: DeviceAgent): { readonly running: string | undefined; readonly installed: string } | undefined => {
     const { build: running, installed } = agent;
     if (!agent.running || installed === undefined || installed === DEV_VERSION || running === installed) {
@@ -436,50 +230,27 @@ export const agentBuildSkew = (agent: DeviceAgent): { readonly running: string |
     return { running, installed };
 };
 
-// Why a device that is plainly THERE has no report to show. Each is a different errand for the reader, which is
-// the whole reason they are not collapsed into one "unavailable".
+// Why a device that is present has no report; each value is a distinct thing for the reader to do about it.
 export const DeviceGapSchema = z.enum([
     // A host capability that is enrolled but has no socket right now. Laptops sleep; this is not a fault.
     "offline",
-    // Connected, but "Run commands" is switched off on its capability card, so the daemon may not ask it
-    // anything. The one gap the user can close in a single click, and the UI says which switch.
+    // Connected, but "Run commands" is off on its capability card; the daemon may not ask it anything.
     "scope-off",
-    // Reachable, asked, but has no `intentic-machine` on it, so nothing knows about folders or mirrored ports there.
+    // Reachable and asked, but has no `intentic-machine` installed, so nothing knows its folders or ports.
     "no-agent",
-    // A sync-enrolled machine that has not posted a report yet: either it just enrolled, or its agent predates
-    // machine reports. Distinct from "no-agent" because the agent IS there and the folders ARE syncing.
+    // Sync-enrolled but has not posted a report yet; unlike `no-agent`, the agent is there and syncing.
     "unreported",
 ]);
 export type DeviceGap = z.infer<typeof DeviceGapSchema>;
-/* ONE DEVICE, however the sandbox happens to be able to see it, and it may be both ways at once.
- *
- * A machine reaches a sandbox through two independent doors: a desktop-sync enrollment (which volunteers its own
- * report) and a `host` capability (which the daemon can ask). They know the same box by different names, the
- * enrolled ssh key's comment vs. the capability id the user typed, so the two are reconciled on the `hostname`
- * their reports agree on, and left as separate rows when there is nothing to reconcile them by. Guessing that two
- * differently-named machines are the same one would merge two people's laptops on a shared sandbox. */
-/* THE DESKTOP-SYNC ENROLLMENT BEHIND A ROW, which used to be a boolean and could not be.
- *
- * `syncEnrolled: true` answered "is this machine paired" and nothing a reader standing in front of the row
- * actually asks next: WHICH half of desktop sync it holds (files and ports, or ports alone), whether it has
- * ever used the enrollment, and how to name it when they want it gone. Those three lived on /system/sync
- * instead, as one machine's worth of `syncingFrom` plus a list of `mirroredBy` names, which is the sandbox-level
- * shape this view exists to stop being: one card claiming a sandbox has A desktop sync, over a list of the
- * several devices that actually do.
- *
- * `machine` is the enrollment's own name for the box (the ssh key's comment). It is what the reports are filed
- * under, and it is the id the revoke route takes — the same string, so a row can revoke exactly the enrollment
- * it is drawn from. Two machines that present the same comment share one enrollment identity throughout the
- * daemon (reports included); that is a pre-existing property of naming machines by their key comment, and this
- * field inherits it rather than inventing a second identity that would disagree with the first. */
+// A machine may be reachable via desktop sync and a host capability at once; the two are reconciled on `hostname`, and
+// left as separate rows when there is nothing to reconcile them by.
+// `machine` is the enrollment's name for the box (the ssh key's comment): what reports are filed under and what the
+// revoke route takes. Two machines sharing a key comment share one enrollment identity.
 export const DeviceSyncSchema = z.object({
     machine: z.string(),
-    /* Which half. "sync" is files AND ports and is SINGLE-HOLDER for the sandbox; "mirror" is ports only and any
-     * number of machines may hold one. The row says which, because "your laptop is paired" is read as the first
-     * by somebody who has the second, and then their files are not where they expect them. */
+    // "sync" is files+ports, single-holder per sandbox; "mirror" is ports only, any number of machines.
     mode: z.enum(["sync", "mirror"]),
-    // When this machine last USED its enrollment (its watcher's own polls stamp it). Absent on one that never
-    // has, which is exactly what a setup that did not finish leaves behind, and must not read as healthy.
+    // When this machine last used its enrollment; absent means never, not merely unknown, and is not healthy.
     seenAt: z.number().optional(),
 });
 export type DeviceSync = z.infer<typeof DeviceSyncSchema>;
@@ -488,34 +259,17 @@ export const DeviceSchema = z.object({
     key: z.string(),
     // What to call it on screen, the user's own name for the machine wherever one exists.
     label: z.string(),
-    // The desktop-sync enrollment this machine holds with this sandbox, absent when it has none (a device
-    // reached only through its `host` capability).
+    // Desktop-sync enrollment with this sandbox; absent when reached only via a host capability.
     sync: DeviceSyncSchema.optional(),
     // The host capability's id, when this machine is also a connected device. Absent otherwise.
     hostId: z.string().optional(),
-    // Host-capability liveness. Absent when there is no host capability, which is NOT the same as offline.
+    // Host-capability liveness; absent when there is no host capability, not the same as offline.
     online: z.boolean().optional(),
-    /* WHAT THE DEVICE IS, as distinct from how it is reachable, the half a row used to leave out entirely,
-     * so a Windows laptop and a Linux desktop were two identical lines of text with different names on them.
-     *
-     * It is carried BESIDE the report rather than inside it because the rows that need it most are the ones with
-     * no report: a connected device with no sync agent, or one that is asleep, still knows its own OS. Nothing
-     * here depends on an agent being installed, and the daemon has held all of it since the machine connected.
-     *
-     * `platform` is the slug this side classifies the machine by, the host capability's own card ("windows",
-     * "linux"), or the platform token a sync report carries, normalised to the same words. `facts` is the
-     * machine's connect-time description of ITSELF, which is what says which Windows and which shell. */
+    // Carried beside the report so a device with no report still has an OS; `platform` is the normalised slug, `facts`
+    // its connect-time self-description.
     platform: z.string().optional(),
     facts: HostFactsSchema.optional(),
-    /* The agent version the socket ANNOUNCED at connect, and when the device last held one: how a connected
-     * device AGES. An old agent explains a row that lacks something newer devices have, and "last seen" is the
-     * one honest thing an offline row can still say about itself.
-     *
-     * It is the same number as `report.agent.build` whenever both are known — one resident process stamps its
-     * `MACHINE_VERSION` into the pidfile and sends it in the hello frame — and it is kept because it is the
-     * ONLY version a row with no report has: a device whose "Run commands" switch is off, or which has no
-     * agent to answer `status --json`, still told us what it was when it dialled. That is what stops the
-     * Devices view's agent chip going blank on exactly the rows that need explaining. */
+    // Announced at connect; matches `report.agent.build` when known, the only version a report-less device has.
     agentVersion: z.string().optional(),
     lastSeen: z.number().optional(),
     report: DeviceReportSchema.optional(),
@@ -523,23 +277,11 @@ export const DeviceSchema = z.object({
 });
 export type Device = z.infer<typeof DeviceSchema>;
 export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
-/* GET /system/sync: what desktop sync is doing for this sandbox, WITHOUT naming any one machine as the answer.
- *
- * It used to carry `syncingFrom` + `syncSeenAt` + `mirroredBy`, which is the enrollment list flattened into one
- * holder and a list of everybody else — the shape a card that believed a sandbox has A desktop sync needed, and
- * the reason that card kept restating facts the Devices list beside it already had per machine. Every one of
- * those now rides on the machine's own row (DeviceSync), where a reader can act on it.
- *
- * What is left is what is genuinely about the SANDBOX rather than about any device: whether sync is possible
- * here at all, whether anything at all is enrolled, and the raw reports, which is the cheap ambient read the
- * rail's badge lives on (it must never fan out to somebody's laptop just to decide whether to draw a chip). */
+// GET /system/sync: sandbox-level facts only, whether sync is possible, whether anything is enrolled, and raw device
+// reports. Cheap: the sidebar badge reads this and must never fan out to a device.
 export const SyncStatusSchema = z.object({
     enrolled: z.boolean(),
-    /* Whether this sandbox can do desktop sync at all. It used to be the SSH hostname the laptop would dial, and
-     * its absence meant "this sandbox's reachability can't carry SSH", true of every sandbox on the platform's
-     * own fabric, which is what made sync fail on the default path. The transport rides the daemon's own HTTPS
-     * surface now, so a sandbox that can answer this read can also sync. Kept as a field rather than assumed,
-     * because the card branches on it and a daemon too old to say is one that should not be offered sync. */
+    // Whether this sandbox can do desktop sync at all; absent means a daemon too old to say, so don't offer it.
     available: z.boolean().optional(),
     machines: z.array(DeviceReportSchema).optional(),
 });

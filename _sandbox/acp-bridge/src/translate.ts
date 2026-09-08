@@ -3,24 +3,14 @@ import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLoca
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AttachFrame, ToolCallContent, ToolCallLocation, TranscriptTool } from "@intentic/sandbox-contract";
 
-/* The attach stream → ACP session/update, the mechanical reverse of the sandbox's acp-events.ts, mechanical
- * because the tool-call vocabulary (kind/status/locations/diff) was adopted from ACP verbatim. The daemon
- * hands over ROWS and changes to them (the fold ran on the daemon), so a tool arrives whole each time it moves
- * and the translator remembers which ids it has announced: the first sighting is ACP's `tool_call`, every
- * later one its `tool_call_update`.
- *
- * The one real transformation is paths: the wire carries workspace-root-relative paths; the editor's world is
- * the session cwd (the user's synced mirror of /work), so relative paths JOIN onto cwd and stray
- * sandbox-absolute /work paths are stripped first. A path outside the workspace passes through unchanged,
- * the diff text still renders inline; only jump-to-file misses.
- *
- * Documented drops (no ACP slot): the terminal and browser facts (the tmux panel has no local projection), init,
- * usage/rate_limit_info (account-level accounting), commands (the daemon relays ACP agents' commands,
- * advertising them back out would loop). Cards, errors and the session fact are control flow, handled in
- * bridge.ts, not here. */
+// Attach stream to ACP session/update, the mechanical reverse of acp-events.ts; a tool's first sighting is `tool_call`,
+// every later one `tool_call_update`.
+// Paths: workspace-root-relative joins onto the session cwd, a stray sandbox-absolute /work path is stripped first;
+// anything else passes through unchanged.
+// Drops terminal/browser facts, init, usage/rate-limit, and commands (no ACP slot); cards, errors and the session fact
+// are handled in bridge.ts.
 
-// The container root every path in an ACP message is expressed against. Named once in @intentic/constants
-// rather than spelled here, so a rename of the container's workspace dir moves this with it.
+// Container root every path in an ACP message is expressed against; named once in @intentic/constants.
 const SANDBOX_ROOT = WORKSPACE_ROOT;
 
 export const editorPath = (path: string, cwd: string): string => {
@@ -43,8 +33,7 @@ const mapContentEntry = (entry: ToolCallContent, cwd: string): AcpToolCallConten
         return { type: "content", content: { type: "text", text: entry.text } };
     }
     if (entry.type === "image") {
-        // ACP's image content block wants base64 bytes; we only carry a path (see ToolCallContentSchema on
-        // why). A resource_link points the editor at the synced mirror copy, which it can open itself.
+        // ACP's image block wants base64; a resource_link instead points the editor at the synced mirror copy.
         const path = editorPath(entry.path, cwd);
         return { type: "content", content: { type: "resource_link", uri: `file://${path}`, name: basename(path) } };
     }
@@ -85,11 +74,10 @@ const toolCallUpdate = (tool: TranscriptTool, cwd: string): SessionUpdate => {
     };
 };
 
-// A helper's nested calls arrive on the same patch as their parent card, whole: every card in the tree is
-// announced, so a delegation's own calls reach the editor too.
+// A helper's nested calls ride the same patch as their parent, whole, so every card in the tree gets announced.
 const cardsOf = (tool: TranscriptTool): TranscriptTool[] => [tool, ...(tool.children ?? []).flatMap(cardsOf)];
 
-/** One session's translator: attach frames in, ACP updates out, remembering which tool calls it has announced. */
+/** One session's translator: attach frames in, ACP updates out, tracking which tool calls it has announced. */
 export const createTranslator = (cwd: string): ((frame: AttachFrame) => SessionUpdate[]) => {
     const announced = new Set<string>();
     return (frame) => {
@@ -114,12 +102,11 @@ export const createTranslator = (cwd: string): ((frame: AttachFrame) => SessionU
                     return toolCall(tool, cwd);
                 });
             case "append":
-                // A notice is something that happened to the turn (a landed delta, a compaction, a stop): one
-                // line beats silence. Prose and cards arrive through the patches that fill their rows.
+                // A notice becomes one line; prose and cards arrive through their own patches instead.
                 return patch.row.role === "notice" ? [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: patch.row.text } }] : [];
             case "replace":
-                // Our todos ARE ACP's plan checklist (the reverse of acp-events.ts's plan→todos); priority is
-                // synthesized, the checklist carries none.
+                // Todos are ACP's plan checklist, reversed from acp-events.ts; priority is synthesized, unlike the
+                // checklist.
                 return patch.row.todos === undefined
                     ? []
                     : [{ sessionUpdate: "plan", entries: patch.row.todos.map((item) => ({ content: item.content, priority: "medium", status: item.status })) }];

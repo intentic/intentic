@@ -1,35 +1,16 @@
 import { createPrivateKey, createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
 import { SANDBOX_ID } from "../ids/tunnel-ids.js";
 
-/* THE OWNER TICKET: the platform's signed word for who owns a HOSTED sandbox, so the browser that just signed in
- * to the platform can sign in to that sandbox's daemon without being asked for Google a second time.
- *
- * THE RULE IT BENDS, AND WHY THAT IS ALLOWED HERE. Every sandbox authenticates its owner against Google itself
- * (the daemon's auth/auth.ts): the platform never holds or forges a daemon credential, so a platform breach can
- * read a sandbox's address and drive nothing. That rule stands for every lane but one. On the HOSTED lane the
- * platform already creates the machine, holds its power and its disk, and injects its owner's email into its
- * env before the daemon ever runs (ARCHITECTURE.md names this the stated exception). A platform that can already
- * open the machine gains no new power from being able to say "this browser is the owner" to it, and the user
- * gains the one thing the second Google prompt was costing: a sign-in that is one sign-in.
- *
- * So a hosted daemon, and only a hosted daemon, accepts a ticket the platform signs with the SAME Ed25519 key
- * that signs reachability grants (ingress-contract.ts), verified offline against the public half the machine's
- * env carries (ENV_PLATFORM_PUBLIC_KEY, set by the provisioner and by nothing else). The ticket names the
- * sandbox (its 12-hex id, which the daemon checks against its own) and the owner's email (which the daemon
- * checks against OWNER_EMAIL on first-bind, exactly as it checks a Google proof), and it expires in minutes:
- * it is spent once, on the daemon's /system/session, for the same daemon-minted session a Google proof buys.
- *
- * A different prefix from the grant's, so neither can ever be presented as the other: a grant verifies only as
- * a grant, a ticket only as a ticket, under one key. */
+// The platform's signed word for who owns a HOSTED sandbox, so a signed-in browser skips a second Google prompt. A
+// hosted-only exception: the platform already controls the machine, so gains no new power by vouching for its owner
+// too. Signed with the grant's own Ed25519 key but a different prefix; short-lived, spent once.
 
 const TICKET_PREFIX = "ot1";
 
-// Long enough for the exchange it exists for (one round trip to the daemon after the platform answers), short
-// enough that a ticket lifted from a network log is worthless by the time anyone reads it.
+// Long enough for one round trip to the daemon; short enough a ticket lifted from a log is worthless when read.
 export const OWNER_TICKET_TTL_MS = 5 * 60_000;
 
-// The env var a hosted machine carries the platform's public key in (PEM, SPKI). Absent on every other lane,
-// which is what keeps the ticket a hosted-only credential: a daemon with no key verifies no ticket.
+// The env var carrying the platform's key on a hosted machine; absent elsewhere, keeping this hosted-only.
 export const ENV_PLATFORM_PUBLIC_KEY = "PLATFORM_PUBLIC_KEY";
 
 const base64url = (bytes: Buffer): string => bytes.toString("base64url");
@@ -61,10 +42,8 @@ export const mintOwnerTicket = (
     return `${TICKET_PREFIX}.${base64url(payload)}.${base64url(signature)}`;
 };
 
-/* Verify a ticket against the platform's public key, at `nowMs`. Undefined for every way of not being a valid
- * ticket: the wrong prefix, a bad signature, a malformed claim, or one past its expiry. The CALLER checks that
- * `sandboxId` is its own and that `email` is the owner it expects: those are the daemon's facts, not this
- * function's. */
+// Verifies a ticket against the platform's public key at nowMs; undefined for any way of being invalid (wrong prefix,
+// bad signature, malformed claim, expired). The caller checks sandboxId and email against its own facts.
 export const verifyOwnerTicket = (publicKeyPem: string, token: string, nowMs: number): OwnerTicket | undefined => {
     const parts = token.split(".");
     if (parts.length !== 3 || parts[0] !== TICKET_PREFIX) {
@@ -96,7 +75,6 @@ export const verifyOwnerTicket = (publicKeyPem: string, token: string, nowMs: nu
     }
 };
 
-// The public half of the platform's signing key, in the PEM the daemon's env carries. Derived rather than
-// configured: one key, two readers (the ingress and every hosted daemon), no second value to keep in step.
+// The platform's public signing key, derived not configured: one key, two readers, nothing to keep in sync.
 export const publicKeyPemOf = (privateKeyPem: string): string =>
     createPublicKey(createPrivateKey(privateKeyPem)).export({ type: "spki", format: "pem" }) as string;

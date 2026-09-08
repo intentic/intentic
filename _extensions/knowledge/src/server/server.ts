@@ -7,25 +7,15 @@ import type { ParsedNote } from "../notes/note.js";
 import { neighbourhood, search } from "../notes/query.js";
 import { configuredFolder, deleteNote, indexNotes, knowledgeRoot, writeNote } from "../notes/read-notes.js";
 import { starterNotes } from "../notes/starter.js";
-// The engine's answers, in the shapes the contract declares, shared with the demo fixture, which serves this
-// same namespace with no sandbox behind it. See notes/wire.ts for why that sharing is the point.
 import { graphOf, hitsOf, noteOf, overviewFor, summaryOf } from "../notes/wire.js";
 import { knowledgeContract } from "./contract.js";
 
-/* ext-knowledge's backend half, the knowledge base, read and resolved on the daemon's side of the wire.
- *
- * THE INDEX IS BUILT PER REQUEST, and that is a decision rather than an omission. Everything the panel shows is
- * derived from the notes: the graph, the backlinks, the counts, the drift. Caching any of it means a second
- * source of truth that can disagree with the folder, and the folder is edited out of band constantly, by the
- * agent's own file tools, by the `kb` CLI, by an editor, by whatever syncs the owner's knowledge base in. A few hundred
- * short markdown files parse in a few milliseconds; a stale panel costs the feature its credibility. If a knowledge base
- * ever grows past what a scan can carry, the thing to add is a watcher, not a cache with a guess for a lifetime.
- *
- * WHICH FOLDER is re-read per request too, for the same reason: the owner can change it in Settings, and the
- * next call should simply be about the other knowledge base. */
+// Backend half of ext-knowledge: notes read and resolved on the daemon's side. The index and the configured folder are
+// rebuilt per request, not cached, since notes are edited out of band and a scan of a few hundred files is cheap; add a
+// watcher, not a cache, if that stops being true.
 
-// A note by path, or by anything else that names it, a panel deep-link is a path, but a hand-built URL and a
-// link followed out of prose may be a title. Absent means 404, not an empty note.
+// Resolves a note by path or any other name (a deep-link is a path, prose links may be a title); absent throws 404, not
+// an empty note.
 const noteAt = (index: KnowledgeIndex, path: string): ParsedNote => {
     const note = index.byPath.get(path) ?? index.resolve(path);
     if (note === undefined) {
@@ -78,8 +68,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         }),
         seed: i.seed.handler(async () => {
             const { root, index } = await openKnowledge();
-            // Nothing is ever overwritten. A knowledge base that already has a vocabulary, or a note where the starter
-            // one would go, has already been started, and the honest answer is that this wrote nothing.
+            // Never overwrites; a vocabulary or a note already at a starter's path counts as already started.
             const written: string[] = [];
             for (const note of starterNotes()) {
                 if (index.vocabulary.path !== undefined || index.byPath.has(note.path)) {

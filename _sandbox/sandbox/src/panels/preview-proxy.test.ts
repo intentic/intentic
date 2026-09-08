@@ -18,14 +18,14 @@ const listen = async (server: http.Server | https.Server): Promise<number> => {
 };
 
 const noSlots: SlotResolver = () => undefined;
-// A panel resolver over a fixed table: anything not in it is a repo with nothing running.
+// Anything not in the table is a repo with nothing running.
 const panelsOf =
     (table: Record<string, PanelUpstream>): PanelUpstreamResolver =>
     (key) =>
         Promise.resolve(table[key] ?? { state: "stopped" });
 const noPanels: PanelUpstreamResolver = panelsOf({});
 
-// One upstream panel echoing which Host it saw; the proxy resolves "app" to it and everything else to nothing.
+// One upstream panel echoing the Host it saw; resolves "app" to it, everything else to nothing.
 const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxyPort: number; appPort: number }> => {
     const appPort = await listen(
         http.createServer((req, res) => {
@@ -38,7 +38,7 @@ const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxy
     return { proxyPort, appPort };
 };
 
-// The same call keeping the response headers, for the probe (whose CORS header IS the thing under test).
+// Same call, but keeps response headers; the probe test needs the CORS header.
 const raw = (proxyPort: number, host: string, path: string): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> =>
     new Promise((resolve, reject) => {
         const request = http.request({ host: "127.0.0.1", port: proxyPort, path, headers: { host } }, (response) => {
@@ -52,7 +52,7 @@ const raw = (proxyPort: number, host: string, path: string): Promise<{ status: n
         request.end();
     });
 
-// fetch (undici) refuses to override the Host header, so drive the proxy with a raw http.request.
+// fetch refuses to override the Host header; use a raw http.request instead.
 const get = (proxyPort: number, host: string, path = "/", extra: Record<string, string> = {}): Promise<{ status: number; body: string }> =>
     new Promise((resolve, reject) => {
         const request = http.request({ host: "127.0.0.1", port: proxyPort, path, headers: { host, ...extra } }, (response) => {
@@ -86,8 +86,6 @@ test("a repo whose panel isn't running is a 502 pointing at the sidebar", async 
     expect(response.body).toContain(`panel "desired-state" is not running`);
 });
 
-// Forwarded-port slots: `port-<slot>` routes through the slot table, and (unlike panels) Host and Origin are
-// rewritten to localhost:<port>, because arbitrary dev servers' host checks only allow localhost.
 test("a port- host resolves through the slot table and rewrites Host to localhost:<port>", async () => {
     const { proxyPort, appPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
     const response = await get(proxyPort, "port-a.example.com", "/page");
@@ -95,8 +93,6 @@ test("a port- host resolves through the slot table and rewrites Host to localhos
     expect(response.body).toBe(`hello from localhost:${appPort}/page`);
 });
 
-// The field failure behind this test: Vite binds `localhost`, which can land on IPv6 loopback ONLY, a
-// 127.0.0.1 dial gets connection-refused. The forward table records the dialable host; the proxy must honor it.
 test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not 127.0.0.1", async () => {
     const v6Server = http.createServer((req, res) => {
         res.writeHead(200, { "content-type": "text/plain" });
@@ -140,8 +136,7 @@ test("a port target rewrites Origin alongside Host", async () => {
     expect(response.body).toBe(`origin=http://localhost:${echoPort}`);
 });
 
-// The vite in a scaffolded app serves https with a self-signed cert on its random port: the proxy must dial
-// TLS (verification off) when the forward probe detected https. Static throwaway cert, generated for this test.
+// Throwaway self-signed cert generated for this test only.
 const TLS_KEY = `-----BEGIN PRIVATE KEY-----
 MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCY2dCWIBg49fK7
 gXa5sGPU0Fj2oHrznWU9wNKjGnWrts/wl9qSrvbBGQ29wcB0lAvRo06/Ikdw7MY2
@@ -204,8 +199,8 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
     expect(response.body).toBe(`secure hello from localhost:${tlsPort}`);
 });
 
-// A proxy configured with the sandbox id: hosts must carry the exact `-<id>` suffix (the shared-zone scheme:
-// see hostnames.ts); the suffix is stripped before the lookup and (for panels) Host is forwarded unchanged.
+// Sandbox-scoped proxy: hosts need the exact `-<id>` suffix, stripped before lookup; panel Host still forwards
+// unchanged.
 const ID = "abc123def456";
 const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {
     const appPort = await listen(
@@ -241,9 +236,8 @@ test("with a sandbox id, a port slot host routes and rewrites like the id-less f
     expect(response.body).toBe(`hello from localhost:${appPort}`);
 });
 
-/* --- What the hostname resolves to, when it isn't simply "the assigned port" -----------------------------
- * The proxy routes on what the repo is SERVING (panel-upstream.ts owns that rule); these are the three
- * answers that are not a plain forward, and each has a page a person can act on. */
+// Hostname resolution beyond a plain forward: the three non-forward answers panel-upstream.ts can return, each with its
+// own page.
 
 test("a panel serving on a port it pinned itself is dialed there, with Host rewritten to localhost", async () => {
     const appPort = await listen(
@@ -252,8 +246,7 @@ test("a panel serving on a port it pinned itself is dialed there, with Host rewr
             res.end(`hello from ${req.headers.host ?? "?"}`);
         }),
     );
-    // `assigned: false` ⇒ nothing agreed to answer at the preview hostname, so the app's own host check
-    // (vite/webpack allow localhost and nothing else) must see localhost, exactly as a forwarded port does.
+    // `assigned: false`: the app's own host check must see localhost, as with a forwarded port.
     const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: false } });
     const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
     const response = await get(proxyPort, "preview-app.example.com");
@@ -285,9 +278,8 @@ test("a panel the daemon runs that hasn't opened a port yet reads as starting, n
     expect(response.body).toContain("hasn't opened a port yet");
 });
 
-/* --- The probe, which is how a BROWSER can tell "this name doesn't reach the sandbox" from "it does, and the
- * server is down". Cross-origin it can read nothing else: a no-cors fetch settles on any answer, including the
- * edge's 502 for an unrouted name, which is what used to get framed. */
+// The probe: how a browser distinguishes a name that doesn't reach the sandbox from one whose server is down.
+// Cross-origin, a no-cors fetch can read nothing else about the response.
 
 test("the probe path answers with CORS open and the panel's live state, without touching the upstream", async () => {
     const { proxyPort, appPort } = await setup();
@@ -295,7 +287,6 @@ test("the probe path answers with CORS open and the panel's live state, without 
     expect(response.status).toBe(200);
     expect(response.headers["access-control-allow-origin"]).toBe("*");
     expect(JSON.parse(response.body)).toEqual({ proxy: "intentic-preview", target: "panel", name: "app", state: "serving" });
-    // The upstream never saw it: it echoes its own greeting for anything it does receive.
     expect(response.body).not.toContain(`${appPort}`);
 });
 
@@ -330,12 +321,8 @@ test("the probe answers for an unforwarded slot too, which is a live address wit
     });
 });
 
-/* THE DAEMON'S OWN ADDRESS, which is not a preview and arrives here anyway.
- *
- * The edge carries every hostname this sandbox answers to down ONE tunnel, and that tunnel forwards to ONE
- * port, so this proxy is the container's front door: it is what tells `sandbox-<id>` apart from a preview. The
- * fabrics before this one held a rule per hostname and could route the daemon's address to a different port
- * out there; one tunnel cannot, so the dispatch moved in here. */
+// The daemon's own hostname arrives through the same one tunnel as every preview; this proxy is what tells
+// `sandbox-<id>` apart from a preview.
 test("the sandbox's own hostname reaches the daemon, with its Host intact", async () => {
     const daemonPort = await listen(
         http.createServer((req, res) => {
@@ -348,7 +335,7 @@ test("the sandbox's own hostname reaches the daemon, with its Host intact", asyn
     const response = await raw(proxyPort, "sandbox-abcdef012345.sbx.example.test", "/health");
 
     expect(response.status).toBe(200);
-    // Host passes through untouched, unlike a panel's: the daemon derives its own origin from it and gates on it.
+    // Unlike a panel: the daemon derives its own origin from Host and gates on it.
     expect(response.body).toBe("daemon saw sandbox-abcdef012345.sbx.example.test/health");
 });
 
@@ -359,8 +346,7 @@ test("another sandbox's daemon hostname is not this sandbox's to serve", async (
     expect((await raw(proxyPort, "sandbox-0123456789ab.sbx.example.test", "/health")).status).toBe(404);
 });
 
-// The loopback lanes pass no daemon port: the browser reaches that port directly there, and this proxy only
-// ever sees previews.
+// Loopback lanes omit daemonPort; the browser reaches it directly, so this proxy only ever sees previews.
 test("with no daemon port there is no daemon route", async () => {
     const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345" }));
 

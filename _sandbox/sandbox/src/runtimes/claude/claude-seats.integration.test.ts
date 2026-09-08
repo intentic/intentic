@@ -7,8 +7,7 @@ import { expect, test } from "vitest";
 import { ensureFreshToken, fileClaudeStore } from "./claude-credentials.js";
 import { fileClaudeSeatStore } from "./claude-seats.js";
 
-/* THE SEAT AN ORGANIZATION SWITCHED OFF, and the one property that matters more than any of its behaviour:
- * nothing but this store may write it. */
+// Seat store for an account an org switched off; the one property that matters is that nothing else may write it.
 
 const silent = pino({ level: "silent" });
 
@@ -30,8 +29,8 @@ test("a refused seat is remembered, and clearing it puts the account back", asyn
     expect(await seats.read()).toEqual({});
 });
 
-// Every turn on a benched account refuses again, and each refusal calls this. The first one is the one that
-// dates the outage; a later one re-stating it must not reset the clock.
+// Every turn on a benched account calls refuse again; the first call dates the outage, and a later one restating it
+// must not reset the clock.
 test("a second refusal keeps the timestamp the first one earned", async () => {
     const seats = seatsIn(storeDir());
     await seats.refuse("a", REFUSAL);
@@ -48,16 +47,8 @@ test("one account's refusal says nothing about the others", async () => {
     expect(Object.keys(await seats.read())).toEqual(["personal"]);
 });
 
-/* THE INCIDENT THIS FILE EXISTS FOR: the mark used to live on the account's own record, which is the one place
- * it could not survive.
- *
- * That record is a CREDENTIAL, rewritten whole every time a token rotates, and the auth dir is shared between
- * sandboxes: the writer is often another daemon, on another build, whose idea of an account has never included
- * this mark. One such rotation wrote the account back without it four hours after a seat was benched, the
- * account rejoined the rotation looking like the freest one on the list (nothing can spend on it), and the next
- * unpinned turn (a CI fix nobody was watching) went straight to it and died on the organization's refusal.
- *
- * So: rotate the token, exactly as that daemon did, and the seat must still be refused afterwards. */
+// The account record is a credential rewritten whole on every rotation, sometimes by another daemon that has never
+// heard of a seat mark; that's why the mark can't live there. Rotating must not erase it.
 test("a token rotation cannot erase a refused seat", async () => {
     const dir = storeDir();
     const [accounts, seats] = [fileClaudeStore(dir, silent), seatsIn(dir)];
@@ -68,19 +59,15 @@ test("a token rotation cannot erase a refused seat", async () => {
     expect((await seats.read())["a"]?.reason).toBe(REFUSAL);
 });
 
-// The same guarantee stated at the file level, because that is where it actually holds: a writer that has never
-// heard of a seat refusal cannot drop one, however it rewrites the account beside it.
 test("a writer that rewrites the whole account record leaves the seats file alone", async () => {
     const dir = storeDir();
     const seats = seatsIn(dir);
     await seats.refuse("a", REFUSAL);
-    // Whole-record write, no read first: the shape a daemon of another vintage would produce.
+    // Whole-record write, no read first: mimics a daemon of another vintage.
     await writeFile(join(dir, "a.json"), JSON.stringify({ id: "a", label: "Work", connectedAt: 1, accessToken: "rotated" }));
     expect((await seats.read())["a"]?.reason).toBe(REFUSAL);
 });
 
-// The account store scans this directory for accounts, and a stray file it cannot parse used to surface as a
-// blank row in the picker: the same hazard models.json is already held to.
 test("the seats file is not mistaken for an account", async () => {
     const dir = storeDir();
     const [accounts, seats] = [fileClaudeStore(dir, silent), seatsIn(dir)];

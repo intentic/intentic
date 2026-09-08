@@ -26,22 +26,14 @@ import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 import { parsableMessage } from "./ops/commit-message.js";
 import { createPushRuns } from "./ops/push-run.js";
 
-// How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
-// per-batch refetch storm, short enough that a save still shows up in the panel as it happens.
+// How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
 const COALESCE_MS = 500;
 
-// The most changes ONE repo ships per scan. A cloned monorepo or a mass delete reports six-figure lists, and
-// every one of those rows would be zod-validated on this event loop, serialized to every connected browser up
-// to once a second, and rendered as real DOM, which is how a big clone used to take the whole UI down. The
-// panel is a review surface, not a pager: past the budget the remainder is a COUNT (`truncated`), and whole-repo
-// actions (commit all, discard repo) still cover it because they never enumerate paths. Conflicts are exempt,
-// they block every commit in the repo, so all of them must reach the user, and staged outranks unstaged for
-// what's left because it is what a commit is about to record.
+// Cap on changes shipped per repo per scan; the remainder is a count (`truncated`), not enumerated rows.
 export const MAX_REPO_CHANGES = 500;
 
-// Apply the budget across the two cuttable sides; `truncated` is what fell off each (0/0 ⇒ shipped whole).
-// Per side because the panel's readouts are per side: "how much would a commit record" is the staged list plus
-// its own share, and a single total cannot be split back out (see RepoChanges.truncated).
+// Splits MAX_REPO_CHANGES across staged/unstaged (conflicts always pass through); `truncated` per side is what fell off
+// each (0/0 = shipped whole).
 export const capRepoChanges = (
     conflicted: GitChange[],
     staged: GitChange[],
@@ -60,26 +52,11 @@ export const capRepoChanges = (
     };
 };
 
-/* HOW MANY REPOS ARE SCANNED AT ONCE, and it is a FAIRNESS bound, not a throughput one.
- *
- * One repo's row of the review is ~11 git spawns. `Promise.all` over every candidate starts all of them at
- * once, which on a workstation is free — the spawns are mostly waiting on a disk, and there are cores to spare
- * — and on the two shared vCPUs a hosted sandbox is given it is the thing that stalls the daemon. A five-repo
- * workspace becomes ~55 child processes competing for two vCPUs with the event loop that has to read their
- * output, so every OTHER request in flight (the save the editor just issued, the tree, the /events stream)
- * waits behind work nobody asked to prioritise. Measured against a hosted box from a browser, that is the
- * difference between a 300ms read and a four-second one, and it is why a single empty file took ten seconds
- * to create: the write itself was never slow, it was queued behind this.
- *
- * Bounding it costs the panel close to nothing. The scans were never completing faster than the machine could
- * actually run them, so the scan's own wall clock is roughly what it was; what changes is that the daemon
- * stays answerable while it works. Sized FROM the machine rather than fixed, because the same daemon runs on a
- * sixteen-core laptop and on a 2-vCPU VM and no single number is right for both. */
+// Fairness bound on concurrent repo scans, not a throughput cap; sized from the machine's own core count.
 const SCAN_CONCURRENCY = Math.max(2, Math.min(8, availableParallelism()));
 
-/* `Promise.all` with a ceiling. Workers pull from one shared cursor, so a slow repo delays only itself rather
- * than a whole wave, and results keep the INPUT's order — the panel's rows are ordered by repo, never by which
- * scan happened to finish first. */
+// `Promise.all` with a ceiling; workers pull from one shared cursor so a slow item delays only itself, and results keep
+// input order.
 const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> => {
     const results = Array.from({ length: items.length }) as R[];
     let cursor = 0;
@@ -94,14 +71,12 @@ const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: 
     return results;
 };
 
-// Per-repo git ops over "root" (the /work repo) and every discovered repo under it ({repo} is the repo's
-// root-relative dir). An unknown {repo} is NOT_FOUND; a path that escapes the repo dir is BAD_REQUEST; a
-// missing file is NOT_FOUND. `changes` is the Changes panel's aggregated review set; commit/discard take
-// optional `paths` for the per-file actions.
+// Per-repo git ops over `root` (the /work repo) and every discovered repo; unknown repo is NOT_FOUND, an escaping path
+// BAD_REQUEST, missing file NOT_FOUND.
 export const createGitRoutes = (services: Services) => {
     const i = implement(gitContract).$context<OrpcContext>();
-    // Rewrite the --separate-git-dir pointer file if the agent deleted it, so every git route self-heals
-    // (same convention as history's healGitPointer: /history/gits/<name>, "root" included).
+    // Rewrites the --separate-git-dir pointer if deleted, mirroring history's healGitPointer convention
+    // (/history/gits/<name>).
     const healPointer = async (repo: string, dir: string): Promise<void> => {
         if (await pathExists(join(dir, ".git"))) {
             return;
@@ -125,10 +100,8 @@ export const createGitRoutes = (services: Services) => {
         }
         throw new ORPCError("NOT_FOUND", { message: "unknown repo" });
     };
-    // Resolve a repo-relative path inside an already-resolved repo dir, with the two floors every file surface
-    // applies: it may not climb out of the repo, and it may not reach the daemon's control plane, for repo
-    // "root" that dir IS the workspace, so without this the repo file API would be the way around
-    // isControlPlanePath. NOT_FOUND for the latter, matching the workspace routes.
+    // Bars a path from leaving the repo dir or reaching the control plane (for `root`, that dir is the workspace);
+    // control-plane hits 404, matching the workspace routes.
     const guardRepoPath = (dir: string, path: string): string => {
         const target = resolveWithin(dir, path);
         if (target === undefined) {
@@ -139,17 +112,8 @@ export const createGitRoutes = (services: Services) => {
         }
         return target;
     };
-    /* The same two floors for the DIFF routes, with the one carve-out a review earns: a control-plane entry the
-     * root repo TRACKS is diffable (isReviewableStatePath, capabilities.json, and only because it is
-     * `versioned`). Without it the panel contradicted itself. `changes` lists whatever git reports, and git
-     * reports a tracked file, so the row was there; opening it asked this guard, which refused it as
-     * control-plane, and the review the tracking exists for 404'd. The two other diff sources, an agent's
-     * worktree, a checkpoint scope, never had the problem, because both read from a repo whose exclude list
-     * already decided what may be tracked. This makes the working tree agree with them.
-     *
-     * The file API's own read and write keep asking `guardRepoPath` and keep refusing: the write is the thing
-     * the lock is actually for (a PUT here grants a capability nobody approved), and the explorer answers a
-     * click with the Capabilities screen, which is a better door than a JSON buffer. */
+    // Same two floors as guardRepoPath, plus a carve-out for a tracked, `versioned` control-plane entry
+    // (capabilities.json) so its diff isn't 404'd; the write path still refuses it.
     const guardDiffPath = (dir: string, path: string): string => {
         const target = resolveWithin(dir, path);
         if (target === undefined) {
@@ -160,48 +124,21 @@ export const createGitRoutes = (services: Services) => {
         }
         return target;
     };
-    /* THE MAIN TREE HAS TWO WRITERS, and this is the seam where they meet. The user commits, stages and
-     * discards through this router; an agent's finished turn lands through agents/land.ts, which patches its
-     * delta into the same repo's worktree and index. Interleave the two and the user records half a patch,
-     * the one genuinely unsafe thing about working while an agent works.
-     *
-     * `land` already serializes on the repo's op chain (worktrees.withRepoLock). This side simply takes the
-     * same lock, and the race stops existing. That is why the panel does not gate committing on "is an agent
-     * running": a UI gate could only ever be a guess about a race, it cannot prevent one, the terminal commits
-     * straight past it, and it blocked the ninety-nine turns that touch a worktree to catch the one that
-     * touches this tree.
-     *
-     * `repoDir` runs INSIDE the lock: it self-heals the .git pointer, which is itself a write. Never call one
-     * `onRepo` from inside another, the chain is a queue, not a reentrant mutex. Read-only routes stay out of
-     * it entirely; git's own locking covers them, and queueing a diff behind a push would be a stall the user
-     * feels for nothing. */
+    // Serializes user writes here with an agent's land (agents/land.ts) on the same repo lock (worktrees.withRepoLock);
+    // never nest calls, the chain is a queue, not reentrant. Read-only routes stay outside it.
     const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
         services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
 
-    /* WHAT A SCOPE COVERS IN THIS REPO, read from the repo instead of from the request.
-     *
-     * One `git status` answers it at any size, which is the property the whole shape exists for: the review has
-     * to stop shipping rows at MAX_REPO_CHANGES, and a verb defined over the shipped rows can only ever act on
-     * the first five hundred. Defined over the repo, "stage everything under this filter" means the same thing
-     * whether the panel drew all of it or a twentieth of it.
-     *
-     * Attribution is fetched only when a scope asks for it, and its failure is NOT swallowed here, unlike in the
-     * scan. There a missing origin costs a badge; here it would silently narrow a write to nothing, and an
-     * action that quietly does less than it said is worse than one that reports it could not run. */
+    // Resolves a scope from a live `git status`, not the truncated review, so it acts past MAX_REPO_CHANGES. Origin
+    // failures here throw (unlike the scan): a silent miss would quietly narrow a write.
     const scopeToPaths = async (repo: string, dir: string, scope: GitScope, sides: readonly GitDiffSide[]): Promise<readonly string[]> => {
         const { head, conflicted, staged, unstaged } = await services.git.changedFiles(dir);
         const origins = scope.origin === undefined ? {} : await services.agentOrigins.forRepo(repo, dir, head);
         return scopedPaths({ conflicted, staged, unstaged }, sides, scope, origins);
     };
 
-    /* THE THREE WRITE VERBS' TARGETS, each spelled in the git that says it best.
-     *
-     * Staging and discarding the WHOLE repo have single-command spellings that name nothing (`git add -A`;
-     * `reset --hard` + `clean`), so those never build a list at all — which is what keeps the panel's two
-     * biggest buttons flat in cost no matter how many files are pending. Unstaging has no such spelling that is
-     * safe: a bare `git reset` also clears MERGE_HEAD (see changes-index.ts), so it always resolves and chunks.
-     *
-     * Callers must already hold the repo lock: each of these writes the index. */
+    // Stage-all/discard-all use single-command spellings that never enumerate paths; unstage has none (a bare `reset`
+    // also clears MERGE_HEAD) so it always resolves to paths. Callers must hold the repo lock.
     const stageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
         if (target.paths !== undefined) {
             await services.git.stagePaths(dir, target.paths);
@@ -226,20 +163,11 @@ export const createGitRoutes = (services: Services) => {
             return;
         }
         const scope = target.scope ?? {};
-        // `undefined` is discardPaths' own word for the whole repo: `reset --hard` plus a repo-wide `clean -fd`,
-        // which also removes the now-empty directories a path list has no way to name.
+        // `undefined` means the whole repo: `reset --hard` + `clean -fd`, which also removes now-empty dirs.
         await services.git.discardPaths(dir, isWholeRepo(scope) ? undefined : await scopeToPaths(repo, dir, scope, DISCARDABLE_SIDES));
     };
 
-    /* WHICH REPOS ARE MID-COMMIT, the one piece of panel state that cannot live in the browser.
-     *
-     * The commit request outlives the tab: reload while one is running and that tab's own busy flag went with
-     * the page, so the button re-armed over rows the commit was already recording. Held here instead, and put
-     * on every /git/changes response, so a reload, a second tab and a phone all say the same thing. Per repo
-     * because a commit is per repo, and the panel blocks only the box whose target overlaps.
-     *
-     * In memory on purpose: a daemon that restarts mid-commit has no commit running any more, and an empty set
-     * is exactly the right answer for the browser that reconnects to it. */
+    // Repos mid-commit; held here (not per-tab) so a reload or second tab agrees; empty again on restart.
     const committing = new Set<string>();
     const whileCommitting = async <T>(repo: string, run: () => Promise<T>): Promise<T> => {
         committing.add(repo);
@@ -250,20 +178,17 @@ export const createGitRoutes = (services: Services) => {
         }
     };
 
-    // The coalesced Changes scan's memo (built below). Every mutation this router performs is one the user just
-    // asked for and expects to see at once, so it drops the memo: the panel's own post-action refetch must never
-    // be answered from a scan that predates the action it is refetching for.
+    // Memoized scan (see coalescedScan); every mutation drops it so a refetch isn't answered by a stale one.
     let scan: Promise<GitChanges> | undefined;
     let reusableUntil = 0;
     const invalidateScan = (): void => {
         scan = undefined;
         reusableUntil = 0;
     };
-    // One set of push runs per router, which is one per daemon: the routes are the only thing that reaches
-    // them, so unlike the check there is no shutdown hook to share an instance with.
+    // One push-run set per router (one per daemon); nothing else reaches it, so it needs no shutdown hook.
     const pushRuns = createPushRuns(services, invalidateScan);
-    // A sequence/HEAD-moving op: checkpoint the pre-action tree FIRST (so even a rewrite stays reversible from
-    // the Checkpoints timeline), run it, and record the resulting tree on the timeline on a clean apply.
+    // A sequence/HEAD-moving op: checkpoints the tree first (so even a rewrite stays reversible), runs it, and records
+    // the result on a clean apply.
     const guarded = (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> =>
         onRepo(repo, async (dir) => {
             await services.history.snapshot("user", label);
@@ -274,61 +199,33 @@ export const createGitRoutes = (services: Services) => {
             }
             return result;
         });
-    // How many repo dirs the last scan actually walked, the scan's real cost driver, and the number that makes
-    // "the review got slow" legible when the answer is "you cloned four more repos into the workspace".
+    // Repo dirs the last scan walked; the real driver behind scan latency.
     let scannedRepos = 0;
-    /* ONE REPO'S ROW OF THE REVIEW, the unit both readers of this file need.
-     *
-     * The workspace scan below runs it once per discovered repo, concurrently. The commit route runs it for the
-     * ONE repo it just wrote, inside the lock it already holds, so the panel can replace that repo's rows from
-     * the commit's own answer instead of asking for a fresh workspace-wide scan afterwards (which is ~11 git
-     * spawns per repo it did not touch, on the daemon's most contended path, while the user waits to see the
-     * rows they just committed disappear).
-     *
-     * `undefined` is the INCLUSION RULE's answer, not an error: this repo has nothing the panel would show. It
-     * lives here rather than at either call site because both must agree about it, the commit route splices its
-     * answer into a list the scan built, and a repo the scan would have dropped has to drop there too. */
+    // One repo's review row, used both by the workspace scan and by the commit route re-reading the repo it just wrote
+    // (inside its own lock, no rescan needed). `undefined` means the inclusion rule found nothing to show.
     const scanRepo = async (repo: string, dir: string): Promise<RepoChanges | undefined> =>
-        // Per repo, not just per scan: the repos run concurrently, so the scan's own duration is the
-        // SLOWEST repo's and says nothing about which one that was. With a row each, "the review takes
-        // four seconds" resolves to the one repo responsible, usually the biggest tree or the one whose
-        // remote is being consulted, instead of an indictment of the whole workspace.
+        // Tracked per repo: repos run concurrently, so overall scan duration alone can't say which one is slow.
         services.perf.track("git.scan.repo", { repo }, async (): Promise<RepoChanges | undefined> => {
             try {
                 await healPointer(repo, dir);
-                /* TWO WAVES, and which read is in which is chosen by what it costs.
-                 *
-                 * The status pass is the long pole and it already parses two facts the other readers would
-                 * otherwise re-ask git for: the checked-out branch and HEAD's sha. So the reads that WANT
-                 * those wait for it and spend a spawn less each (remoteState: 3 → 1; attribution: no
-                 * rev-parse), which on a scan that runs for every repo several times a second is the better
-                 * trade than starting them a few milliseconds earlier and paying the spawns forever.
-                 *
-                 * The halted-operation read spawns nothing at all, it stat()s marker files, so it rides
-                 * beside the status pass for free rather than queueing behind it. */
+                // Status runs first since it's the long pole and already yields branch/HEAD sha, saving a spawn for
+                // remoteState and attribution; the halted-op check spawns nothing (stat only) and runs alongside it.
                 const [{ branch, head, conflicted, staged, unstaged, blobs }, operation] = await Promise.all([
                     services.git.changedFiles(dir),
-                    // The read that turns "these files are conflicted" into "a rebase stopped here".
+                    // Turns "these files are conflicted" into "a rebase stopped here".
                     services.git.operationInProgress(dir),
                 ]);
-                // `remote` is what the panel's sync bar renders per repo; `landed` is which agent landed each
-                // path this repo has ever received. Independent of each other, neither touches the index.
+                // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
-                    // Attribution is the only part of this scan the panel can do without: it decorates the
-                    // rows, it isn't the rows. A failure here degrades to "nobody landed anything" rather
-                    // than joining the catch below and reporting the whole repo as unreadable.
+                    // Attribution only decorates rows; a failure here degrades to none, not a whole-repo error.
                     services.agentOrigins.forRepo(repo, dir, head).catch((error: unknown) => {
                         services.logger.debug({ err: error, repo }, "git changes: origins unavailable");
                         return {};
                     }),
                 ]);
-                // A repo with a clean tree still belongs in the response whenever there is remote work to
-                // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no
-                // upstream yet (which the panel offers to Publish). Whatever the sync controls can act on
-                // they must be able to SEE, a repo that drops out the instant its tree goes clean is exactly
-                // the push/publish dead-end this avoids, and the reason committing everything felt like it
-                // took the sync affordance with it.
+                // A clean repo still appears if there's remote work to do: ahead/behind upstream, or publishable
+                // (remote but no upstream yet); the sync controls must be able to see it.
                 const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
                 if (
                     conflicted.length > 0 ||
@@ -337,26 +234,20 @@ export const createGitRoutes = (services: Services) => {
                     remote.ahead > 0 ||
                     remote.behind > 0 ||
                     publishable ||
-                    // A halted repo with a clean tree is rare but real (every conflict resolved, nothing
-                    // committed yet) and it is the one repo the panel most needs to show: it is the only
-                    // place the Abort lives.
+                    // A halted, clean-tree repo is rare but real; it's the only place Abort lives, so it must still
+                    // show.
                     operation !== undefined
                 ) {
                     const capped = capRepoChanges(conflicted, staged, unstaged);
-                    /* The code-only +/− each row shows, worked out HERE rather than by the panel drawing it
-                     * (code-counts.ts): the panel's diffs open on code alone, and a number that arrived after
-                     * its row was drawn moved that row under the reader. Counted after the cap, since a row
-                     * this scan is not shipping is one nobody is going to read, and per side, because a
-                     * partially staged file's two rows are two different diffs. */
+                    // Code-only +/- per row (code-counts.ts), computed here so a badge never moves after it's drawn.
+                    // Done after the cap (uncounted rows aren't shipped) and per side (a partial file has two diffs).
                     const [countedConflicted, countedStaged, countedUnstaged] = await Promise.all([
                         withCodeCounts(dir, capped.conflicted, conflictedSides(dir, head)),
                         withCodeCounts(dir, capped.staged, stagedSides(head, blobs)),
                         withCodeCounts(dir, capped.unstaged, unstagedSides(dir, blobs)),
                     ]);
-                    // Narrowed to the paths this scan actually reports (the capped lists, attribution
-                    // decorates rows, and a cut row isn't one): an agent's landed delta outlives the
-                    // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
-                    // whole would attribute files that are no longer changed at all.
+                    // Limited to paths this scan actually reports (capped lists): an agent's landed delta outlives the
+                    // review, so the full set would attribute files no longer changed.
                     const dirty = new Set(
                         [...capped.conflicted, ...capped.staged, ...capped.unstaged].flatMap((change) =>
                             change.from === undefined ? [change.path] : [change.path, change.from],
@@ -377,10 +268,8 @@ export const createGitRoutes = (services: Services) => {
                 }
                 return undefined;
             } catch (error) {
-                // One broken repo (a deleted .git with no heal source, a repo whose .git is still uploading)
-                // must not 500 the panel, but it must not disappear from it either, so the reason rides back
-                // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
-                // and the client is already being told.
+                // A broken repo must not 500 the panel or vanish from it; the reason rides back in the response. Logged
+                // at debug, since the client is already told and this can fire every poll.
                 services.logger.debug({ err: error, repo }, "git changes: repo unscannable");
                 return {
                     repo,
@@ -392,46 +281,31 @@ export const createGitRoutes = (services: Services) => {
             }
         });
 
-    // The identity of every agent named by a scanned set, resolved against the FULL registry, the client's
-    // roster holds only live agents, and an archived one's landed lines are still sitting in the tree (see
-    // OriginAgentSchema). Ids only ever come from `origins`, so a repo with no attribution adds nothing. Shared
-    // with the commit route, whose one-repo answer has to name its agents on the same terms the scan did.
+    // Resolves agent identities against the full registry, not just live agents (an archived one's landed lines still
+    // sit in the tree). Shared with the commit route so both answer on the same terms.
     const identifyOrigins = (repos: readonly RepoChanges[]): Record<string, OriginAgent> =>
         services.agentOrigins.identify(new Set(repos.flatMap((scanned) => Object.values(scanned.origins ?? {}).flat())));
 
     const scanAll = async (): Promise<GitChanges> => {
         const repoIds = await services.perf.track("git.discover", {}, () => currentRepos(services.workspace.root));
-        // A Changes review right after a clone must not sweep the new repo's files into the root scope,
-        // converge the root excludes on the repo set we're about to scan.
+        // Converges root excludes on the repo set first, so a fresh clone isn't swept into the root scope.
         await syncRootExcludes(services.config.historyRoot, repoIds);
         const candidates = [
             { repo: "root", dir: services.workspace.root },
             ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
         ];
         scannedRepos = candidates.length;
-        // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run concurrently
-        // and the panel waits for the slowest repo rather than the sum of all of them — up to SCAN_CONCURRENCY
-        // at a time, which is what keeps the rest of the daemon answerable while this runs.
+        // Each candidate has its own .git, so scans run concurrently, up to SCAN_CONCURRENCY at once.
         const scanned = await mapBounded(candidates, SCAN_CONCURRENCY, (candidate) => scanRepo(candidate.repo, candidate.dir));
         const repos = scanned.filter((repo) => repo !== undefined);
         const originAgents = identifyOrigins(repos);
         return { repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
     };
 
-    // The panel refetches on every workspace-change batch, several times a second while a drop or a build lands,
-    // from every connected browser, and each scan is ~11 git spawns per repo (the walk that used to sit in front
-    // of them is repo-watch.ts's memo now, shared with every other reader of the repo set).
-    // Collapse them: callers arriving while a scan runs share it, and its result is reused for COALESCE_MS after it
-    // settles, so a burst costs one scan instead of one per observer per batch. `reusableUntil` is 0 for the whole
-    // time a scan is in flight, which is what makes the sharing (not just the caching) work.
-    /* How many callers this in-flight scan has been handed to, and how many repos it walked. Both are only
-     * final once the scan settles, so this is timed by hand rather than through `perf.track`, that helper
-     * evaluates its fields up front, which would have frozen the share count at 1 and reported the exact
-     * opposite of what happened.
-     *
-     * The ratio is the point. A 3s review shared by six observers and a 3s review one browser asked for alone
-     * are the same line in every other log, and they need opposite fixes: make the scan cheaper, or make the
-     * client stop asking. */
+    // Refetches arrive in bursts across browsers; callers mid-scan share the in-flight promise, and the result is
+    // reused for COALESCE_MS after — `reusableUntil` at 0 is what marks a scan still in flight.
+    // Callers sharing this in-flight scan, timed by hand (not `perf.track`, which evaluates fields up front and would
+    // freeze this at 1); the ratio distinguishes a shared slow scan from a lone one.
     let shared = 0;
     const coalescedScan = (): Promise<GitChanges> => {
         if (scan !== undefined && (reusableUntil === 0 || Date.now() < reusableUntil)) {
@@ -450,7 +324,7 @@ export const createGitRoutes = (services: Services) => {
             },
             (error: unknown) => {
                 services.perf.record("git.scan", elapsed(), { repos: scannedRepos, coalesced: shared }, true);
-                // A whole-scan failure is never worth serving to the next caller, drop it so they rescan.
+                // A failed scan is dropped, not cached, so the next caller retries fresh.
                 scan = undefined;
                 throw error;
             },
@@ -459,35 +333,28 @@ export const createGitRoutes = (services: Services) => {
     };
 
     return {
-        /* The review set, plus what is happening to it right now. `committing` is read AFTER the scan settles,
-         * never inside it: the scan is shared and memoized for half a second, and a commit that started or
-         * finished inside that window has to reach the browser on this response rather than the next one. */
+        // Review set plus `committing`, read after the scan settles (not merged into the memoized result), so a commit
+        // that starts or ends during the coalesce window still shows on this response.
         changes: i.changes.handler(async () => {
             const scanned = await coalescedScan();
             return { ...scanned, ...(committing.size > 0 ? { committing: [...committing] } : {}) };
         }),
-        // One row's own diff. The side is the row's side, not a convenience: for a partially staged file
-        // HEAD↔worktree matches neither list, so opening it from either row would show a diff the panel never
-        // claimed. The agents review keeps its own ref-vs-worktree route, a worktree has no index to split.
+        // `side` is the clicked row's own comparison, not a convenience: for a partially staged file, HEAD↔worktree
+        // matches neither list. Agent reviews use their own ref-vs-worktree route (no index to split).
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             guardDiffPath(dir, input.path);
             if (input.side === "staged") {
                 return services.git.stagedFileDiff(dir, input.path);
             }
-            // An unmerged path is diffed against HEAD, not the index, it has no stage 0 to compare with.
+            // An unmerged path diffs against HEAD, not the index: it has no stage 0.
             return input.side === "conflicted" ? services.git.conflictedFileDiff(dir, input.path) : services.git.unstagedFileDiff(dir, input.path);
         }),
-        // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
-        // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; the repo set
-        // holds only the nested repos (the same set the Changes panel and history scopes use).
+        // Repo set for the tree affordance and the graph's switcher; `root` is implicit, so this holds only the nested
+        // repos (same set as the Changes panel and history scopes).
         repos: i.repos.handler(async () => ({ repos: await currentRepos(services.workspace.root) })),
-        /* The same repos with the host + project their remote names. The workspace repo ("root") is deliberately
-         * absent: it is the sandbox's own shadow repo over /work, not a project anybody publishes, and offering
-         * it as somewhere to push a file would be offering to push the whole workspace.
-         *
-         * A repo whose remote cannot be read at all is skipped rather than reported as remote-less, the caller's
-         * question is "which of these do I recognise", and a repo it cannot answer for does not belong in it. */
+        // Excludes `root`: it's the sandbox's own shadow repo, not a publishable project. A repo whose remote can't be
+        // read is skipped, not reported as remote-less.
         remoteRepos: i.remoteRepos.handler(async () => {
             const ids = await currentRepos(services.workspace.root);
             const entries = await Promise.all(
@@ -499,8 +366,7 @@ export const createGitRoutes = (services: Services) => {
             return { repos: entries.filter((entry): entry is { repo: string; host: string; project: string } => entry !== undefined) };
         }),
         log: i.log.handler(async ({ input }) => {
-            // 300 is the page size a caller gets if it asks for none, big enough that a small repo arrives whole
-            // on the first request, small enough that a large one does not pay for what nobody scrolls to.
+            // Default page size when none is given: a small repo arrives whole, a large one isn't fully paid for.
             const { branch, commits, hasMore } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300, input.skip ?? 0);
             return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits, hasMore };
         }),
@@ -510,21 +376,16 @@ export const createGitRoutes = (services: Services) => {
             guardDiffPath(dir, input.path);
             return services.git.commitFileDiff(dir, input.sha, input.path);
         }),
-        // Write actions from the commit context menu (VSCode "Git Graph" parity). Branch/tag are
-        // non-destructive (git rejects a duplicate name, that error propagates). Checkout/reset and every
-        // sequence op (cherry-pick/revert/drop/merge/rebase) are bracketed by an auto-checkpoint via `guarded`
-        // / an inline snapshot, so even a history rewrite or a hard reset stays reversible from Checkpoints.
-        /* What the worktree is halted in the middle of, if anything. A plain read, and deliberately outside
-         * `onRepo`'s lock: a surface asks this to EXPLAIN a repo that is stuck, and making that explanation
-         * queue behind whatever is holding the lock is how a stuck repo becomes a stuck panel. */
+        // Commit-context-menu write actions. Branch/tag are non-destructive (a duplicate name's error just propagates);
+        // checkout/reset/sequence ops auto-checkpoint via `guarded` or an inline snapshot.
+        // What the worktree is halted in, if anything; a plain read kept outside `onRepo`'s lock, so explaining a stuck
+        // repo never queues behind what's stuck it.
         operation: i.operation.handler(async ({ input }) => {
             const operation = await services.git.operationInProgress(await repoDir(input.repo));
             return { repo: input.repo, ...(operation !== undefined ? { operation } : {}) };
         }),
-        /* The way out. Checkpointed first like every other destructive verb, an abort throws away the
-         * conflict resolution done so far, which is real work the user may not have meant to lose. Answers
-         * `ok: false` rather than throwing when nothing is in progress: two people looking at the same repo is
-         * ordinary, and the second Abort landing on a clean worktree is not an error worth a stack trace. */
+        // Checkpoints first since an abort throws away real conflict-resolution work; returns `ok: false` (not a throw)
+        // when nothing is in progress, since a second Abort is ordinary.
         abort: i.abort.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 const operation = await services.git.operationInProgress(dir);
@@ -538,16 +399,13 @@ export const createGitRoutes = (services: Services) => {
                 return { ok: true };
             }),
         ),
-        // Read-only, and outside the lock for the same reason `operation` is: this is what a toolbar renders to
-        // decide whether to offer an Undo at all, and it must not queue behind a running git write.
+        // Read-only and outside the lock, like `operation`: a toolbar uses this to decide whether to offer Undo.
         undoable: i.undoable.handler(async ({ input }) => {
             const action = await services.git.undoableAction(await repoDir(input.repo));
             return { repo: input.repo, ...(action !== undefined ? { action } : {}) };
         }),
-        /* The undo itself. Checkpointed first like every other destructive verb, a hard reset throws away the
-         * worktree, and even a soft one moves the branch, so this stays reversible from the Checkpoints
-         * timeline in turn. Refusals (nothing to undo, the repo moved since) come back as `ok: false`: both are
-         * ordinary outcomes of two people working in one workspace, not faults. */
+        // Checkpoints first: a hard undo discards the worktree, a soft one still moves the branch. Refusals (nothing to
+        // undo, repo moved) come back as `ok: false`, not a throw.
         undo: i.undo.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await services.history.snapshot("user", `before undo in ${input.repo}`);
@@ -560,12 +418,11 @@ export const createGitRoutes = (services: Services) => {
                 return { ok: true };
             }),
         ),
-        // Reads: the entry list, and one entry's files against the commit it was taken on.
+        // The stash list, and one entry's files diffed against the commit it was taken on.
         stashes: i.stashes.handler(async ({ input }) => ({ repo: input.repo, stashes: await services.git.stashList(await repoDir(input.repo)) })),
         stashDiff: i.stashDiff.handler(async ({ input }) => ({ files: await services.git.stashChanges(await repoDir(input.repo), input.ref) })),
-        /* Setting work aside moves the worktree, so it takes the repo lock like every other worktree write, and
-         * records the result on the timeline. "Nothing to stash" comes back as a value rather than a throw, it
-         * is what an already-clean tree answers, not a fault. */
+        // Moves the worktree, so it takes the repo lock and records on the timeline; "nothing to stash" is a value, not
+        // a throw.
         stashPush: i.stashPush.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 const result = await services.git.stashPush(dir, {
@@ -579,16 +436,14 @@ export const createGitRoutes = (services: Services) => {
                 return result;
             }),
         ),
-        // Putting one back can conflict, which git reports by leaving markers in the tree and (for pop) keeping
-        // the entry, the work is never lost, so this is `ok: false`, not an error.
+        // A conflict leaves markers (pop keeps the entry too); nothing lost, so this is `ok: false`, not an error.
         stashApply: i.stashApply.handler(({ input }) =>
             guarded(input.repo, `before stash ${input.pop === true ? "pop" : "apply"} in ${input.repo}`, (dir) =>
                 services.git.stashApply(dir, input.ref, input.pop === true),
             ),
         ),
-        /* The only unrecoverable verb in the stash set: dropping an entry makes its commit unreachable, and
-         * unlike a reset there is no ref left anywhere pointing at it. So it checkpoints first, which is what
-         * makes it reversible from the Checkpoints timeline even though git cannot walk it back. */
+        // The only unrecoverable stash verb: dropping leaves no ref pointing at the entry's commit, so this checkpoints
+        // first to stay reversible from Checkpoints.
         stashDrop: i.stashDrop.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await services.history.snapshot("user", `before dropping ${input.ref} in ${input.repo}`);
@@ -597,17 +452,15 @@ export const createGitRoutes = (services: Services) => {
                 return { ok: true } as const;
             }),
         ),
-        /* Deleting a tag is a ref op, so it needs no checkpoint, but it CAN reach a remote, which nothing else
-         * in this router does on the user's behalf without saying so. The remote half is opt-in per call and
-         * best-effort inside the service; the local half is what the caller is told about. */
+        // A ref op, so no checkpoint; the remote half is opt-in per call and best-effort, and only the local half is
+        // what the caller is told about.
         deleteTag: i.deleteTag.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await services.git.deleteTag(dir, input.name, input.remote);
                 return { ok: true } as const;
             }),
         ),
-        // Publishing one tag. A GitActionResult rather than Ok: a rejected push (no permission, a tag that moved
-        // on the remote) is an ordinary outcome the pill reports, not a 500.
+        // A GitActionResult, not Ok: a rejected push is a reported outcome, not a 500.
         pushTag: i.pushTag.handler(({ input }) => onRepo(input.repo, (dir) => services.git.pushTag(dir, input.name, input.remote))),
         createBranch: i.createBranch.handler(async ({ input }) => {
             await services.git.createBranchAt(await repoDir(input.repo), input.name, input.sha);
@@ -651,76 +504,45 @@ export const createGitRoutes = (services: Services) => {
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
-        /* One commit shape (see CommitSchema): the index is recorded, and `stage` optionally says what to put
-         * in it first — a whole repo, a scope, or named paths. There is no path-scoped `commit --only`: staging
-         * is how the user chooses, and a second selection channel could only ever contradict the index.
-         *
-         * `stage` runs INSIDE the repo lock rather than as a separate request the panel makes first, because a
-         * land slipping between the add and the commit is the half-a-patch race the lock exists to close.
-         */
-        // Marked as committing from the moment the request arrives, OUTSIDE the lock rather than inside it: a
-        // commit queued behind an agent's land has not started and is absolutely running as far as the user is
-        // concerned, and that wait is the longest part of the slow case the panel most needs to narrate.
+        // One commit shape: `stage` (whole repo, scope, or paths) decides what enters the index; there is no
+        // path-scoped `commit --only`. `stage` runs inside the repo lock so a land can't slip in between.
+        // Marked committing before the lock: queued behind a land still counts as running to the user.
         commit: i.commit.handler(({ input }) =>
             whileCommitting(input.repo, () =>
                 onRepo(input.repo, async (dir) => {
-                    // git's own refusals are the useful ones here, "Committing is not possible because you have
-                    // unmerged files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with
-                    // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
-                    // opaque 500 and the user would read "Commit failed." with nothing to act on.
+                    // Carries git's own refusal text back as a CONFLICT, not an opaque 500 with nothing to act on.
                     try {
-                        /* The caller has said what to stage, so this commit stages first, then records the whole
-                         * index, never a partial commit (see CommitSchema).
-                         *
-                         * ONE COMMIT SPELLING for both shapes, where "stage everything" used to have its own
-                         * (`gitCommitAll`). That one commits with `--no-verify`, which is right for the
-                         * provenance commits the daemon makes on an agent's behalf and wrong here: it meant the
-                         * panel's "Commit all" quietly skipped the repository's own commit hooks while its plain
-                         * "Commit" ran them, so which of the user's rules applied depended on whether they had
-                         * staged first. */
+                        // Stages first, then always commits the whole index (never a partial commit); one spelling
+                        // avoids a --no-verify path that would skip hooks inconsistently.
                         if (input.stage !== undefined) {
                             await stageTarget(input.repo, dir, input.stage);
                         }
-                        /* THE MESSAGE AS A HOOK CAN AT LEAST READ IT (ops/commit-message.ts, parsableMessage).
-                         * Only the spellings that stop a conventional parser finding a header at all are put
-                         * right here — a `!` ahead of the scope, a colon with no space after it — because those
-                         * are the ones whose refusal says "subject may not be empty; type may not be empty"
-                         * about a line that visibly has both, and no amount of retrying gets a user past a
-                         * verdict that describes nothing they can see. Every other rule this repo (or any other)
-                         * enforces earns an accurate verdict and reaches the panel unchanged: the message is the
-                         * user's, and this is the one class of defect where refusing it teaches them nothing. */
+                        // Repairs only spellings a conventional parser can't find a header in at all (`!` before the
+                        // scope, no space after `:`); every other rule's verdict reaches the panel unchanged.
                         const committed = await services.git.commitIndex(dir, parsableMessage(input.message), AGENT_GIT_AUTHOR);
                         invalidateScan();
-                        /* AND WHAT THE REPO LOOKS LIKE NOW, still inside the lock, the panel's replacement for
-                         * the workspace-wide rescan it used to fire the moment this returned. One repo's rows
-                         * re-read here beats six repos' re-read there, and the rows the user just committed
-                         * disappear with the response rather than one contended scan later (see
-                         * CommitResultSchema).
-                         *
-                         * Inside the lock is what makes it worth carrying at all: a land landing between the
-                         * commit and the read would make this answer describe a tree the commit did not produce,
-                         * which is a worse lie than the staleness it replaces. `scanRepo` takes no lock of its
-                         * own, it is all reads, so this is not the reentrancy `onRepo` forbids. */
+                        // Re-reads only the just-committed repo, inside the lock, instead of a full rescan: a land
+                        // landing between commit and read would describe a tree the commit didn't make. `scanRepo`
+                        // takes no lock, so this isn't reentrant.
                         const changes = await scanRepo(input.repo, dir);
                         if (changes === undefined) {
-                            // Nothing left for the panel to show in this repo, the scan's own inclusion rule, so
-                            // the client drops the row exactly as the next scan would have.
+                            // Nothing left to show for this repo (the scan's own inclusion rule); the client drops the
+                            // row.
                             return { committed };
                         }
                         const originAgents = identifyOrigins([changes]);
                         return { committed, changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
                     } catch (error) {
-                        // The index may have moved even on a failure (`commit -a` stages before it commits), so
-                        // the panel's view is stale either way.
+                        // The index can move even on failure (staging happens before the commit), so the view is stale
+                        // regardless.
                         invalidateScan();
                         throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
                     }
                 }),
             ),
         ),
-        // Index-only moves: the worktree is untouched, so no checkpoint and no history notification, only the
-        // panel's view of what's staged changes. Both take a target, so "stage all" means the whole side and not
-        // the part of it that fitted in a response (stageTarget).
+        // Index-only: no checkpoint or history notification, since the worktree is untouched. A target means the whole
+        // side, not just the rows a response could fit.
         stage: i.stage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
                 await stageTarget(input.repo, dir, input);
@@ -737,13 +559,12 @@ export const createGitRoutes = (services: Services) => {
         ),
         branches: i.branches.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            // Two independent read-only for-each-ref sweeps, one round trip for both, since the switcher draws
-            // them paired and a half-populated first render would be worse than a marginally later one.
+            // Two independent read-only sweeps, fetched together since the switcher renders them as a pair.
             const [branches, remotes] = await Promise.all([services.git.listBranches(dir), services.git.listRemoteBranches(dir)]);
             return { branches, remotes };
         }),
-        // Creating a branch is non-destructive UNLESS it also checks out, that moves HEAD and the worktree,
-        // so it takes the same pre-action checkpoint every HEAD-mover does.
+        // Non-destructive unless it also checks out; checking out moves HEAD and the worktree, so it checkpoints first
+        // like any HEAD-mover.
         createBranchAt: i.createBranchAt.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             if (input.checkout === true) {
@@ -756,20 +577,18 @@ export const createGitRoutes = (services: Services) => {
             }
             return { ok: true } as const;
         }),
-        // Deleting a branch touches no file. git refuses an unmerged branch without `force`; that error
-        // propagates so the UI can offer the deliberate retry rather than the daemon deciding for the user.
+        // Touches no file; git's unmerged-branch refusal propagates so the UI can offer a forced retry.
         deleteBranch: i.deleteBranch.handler(async ({ input }) => {
             await services.git.deleteBranch(await repoDir(input.repo), input.name, input.force === true);
             return { ok: true } as const;
         }),
-        // Remote sync. Each returns a GitActionResult, so "no remote" / "no upstream" / "won't fast-forward"
-        // arrive as reasons the panel renders instead of 500s. Only pull can change the worktree, so only pull
-        // checkpoints and refreshes.
+        // Each returns a GitActionResult, so "no remote"/"no upstream"/"won't fast-forward" render as reasons, not
+        // 500s; only pull touches the worktree, so only pull checkpoints.
         remote: i.remote.handler(async ({ input }) => services.git.remoteState(await repoDir(input.repo))),
         fetch: i.fetch.handler(async ({ input }) => {
             const result = await services.git.fetchRemote(await repoDir(input.repo));
             if (result.ok) {
-                // Fetch moves no file, but it does move ahead/behind, which the Changes response carries.
+                // Fetch moves no file, but does move ahead/behind, which the Changes response carries.
                 invalidateScan();
             }
             return result;
@@ -787,30 +606,23 @@ export const createGitRoutes = (services: Services) => {
         ),
         discard: i.discard.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                // The checkpoint goes BEFORE the destruction. Discard is the one verb in this router git itself
-                // cannot walk back, untracked files are deleted outright, and a tracked file's worktree state
-                // was never in the object store to reflog back to, so the snapshot that makes it recoverable
-                // has to record the tree that is about to go. `notifyUserWrite` below records the RESULT, which
-                // is the timeline's other half and no safety net at all; the sequence verbs get this via
-                // `guarded`, and discard sat outside it purely because it reports no ActionResult.
+                // Snapshot before discard: git can't walk this back (untracked deleted, no reflog for worktree state).
                 await services.history.snapshot("user", `before discard in ${input.repo}`);
                 await discardTarget(input.repo, dir, input);
                 invalidateScan();
-                // The worktree changed under the user's feet, record it on the timeline like any user write.
+                // Worktree changed, so record it like any other user write.
                 services.history.notifyUserWrite();
                 return { ok: true } as const;
             }),
         ),
-        /* The push, as a run (git/push-run.ts): started here, watched in its terminal, polled for below. Not
-         * under the repo lock, as the inline push never was: a push writes nothing in the worktree, and
-         * queueing a diff behind the hook's suite would be a stall the user feels for nothing. */
+        // A push run (git/push-run.ts): started here, watched in its terminal, polled below. Not under the repo lock,
+        // since it writes nothing in the worktree.
         push: i.push.handler(async ({ input }) => {
             await pushRuns.start(input.repo, await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
             return { ok: true as const };
         }),
         pushState: i.pushState.handler(({ input }) => pushRuns.state(input.repo)),
-        // Cancelling a push that has already settled is not an error, the kill finds no pid and does nothing,
-        // which is what makes a stale click on a card the user has since resolved harmless.
+        // Cancelling a settled push is harmless: the kill just finds no pid to act on.
         pushCancel: i.pushCancel.handler(({ input }) => {
             pushRuns.cancel(input.repo);
             return { ok: true as const };
@@ -829,12 +641,8 @@ export const createGitRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
-        /* Write + commit-that-path-only + push. Under the repo lock and the committing flag for the same reason
-         * the commit route is: it records a commit, and an agent landing a patch in the middle of one is the
-         * half-a-patch race the lock exists to close.
-         *
-         * The path is guarded BEFORE the lock is taken, an invalid path is a bad request, not a queue slot,
-         * and the write itself stays `services.files.write` so this surface resolves paths exactly once. */
+        // Write + single-path commit + push, under the repo lock and committing flag like the commit route (a land
+        // mid-commit is the same race). Path is guarded before the lock, so a bad path never takes a queue slot.
         publishFile: i.publishFile.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             const target = guardRepoPath(dir, input.path);

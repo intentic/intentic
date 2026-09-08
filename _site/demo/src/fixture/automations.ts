@@ -1,19 +1,8 @@
 import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary } from "@intentic/sandbox-contract";
 
-/* THE AUTOMATIONS acme-shop runs while nobody is watching, the surface that turns a sandbox from a place you
- * open into a colleague that works overnight. One of each kind the trigger union can be, because the page's
- * whole claim is that they are the same machine:
- *
- *   schedule , the nightly dependency audit (a code CHORE: maintenance of this codebase), and its runs are
- *               the fleet card the board shows as an automation's overnight pass.
- *   listener . Discord: @mention the agent in #eng-alerts and it answers there, as a participant.
- *   listener , the Front Desk webchat on the marketing site, held for approval because it is driven by strangers.
- *   workspace, a land into the main tree wakes the doc-check chore.
- *   event    . CI: a red pipeline wakes an agent with the failed job's log already in hand.
- *
- * `runs` are what make a row honest: an automation with no history is a promise, and one with a `skipped` and an
- * `error` in its last five is what running unattended actually looks like. The approvals queue holds one wake,
- * so the page's "held for you" half is not an empty affordance either. */
+// Automations acme-shop runs unattended: one of each trigger kind (schedule, listener, workspace, event) so the page's
+// claim that they share one machine holds. `runs` give each row a real history; the approvals queue holds one held
+// wake.
 
 const minutes = (count: number): number => count * 60_000;
 const hours = (count: number): number => count * 3_600_000;
@@ -98,14 +87,7 @@ const seedApprovals = (now: number): AutomationApproval[] => [
     },
 ];
 
-/* WHAT COULD WAKE AN AGENT HERE, which is the other half of this page and was simply missing: the demo served
- * `/automations` and no `/automations/catalog`, so the composer's source picker was empty, its template gallery
- * counted zero, and the offers at the foot of the page, the whole discovery half of the surface, never drew at
- * all. A visitor met a list of five rows and no way to see what else the product does.
- *
- * A FAITHFUL SUBSET of what a real sandbox merges (its own webchat/CI/issues sources plus every installed
- * pack's), trimmed to what acme-shop has connected: github and discord. Prompts are shortened here on purpose,
- * the demo shows the SHAPE of a starter, and the daemon's real ones run to a screen each. */
+// Subset of what a real sandbox merges, trimmed to what acme-shop has connected (github, discord).
 const catalog: AutomationCatalog = {
     sources: [
         {
@@ -290,9 +272,8 @@ const heldState = (now: number): AutomationApproval[] => (approvals ??= seedAppr
 export const automationsList = (now: number): AutomationSummary[] => state(now);
 export const automationApprovals = (now: number): AutomationApproval[] => heldState(now);
 
-/* A save is real, which is what makes the page's switch and its New automation dialog worth clicking: the row
- * flips (or appears) and stays that way. Everything a save cannot fake, the cron that fires it, the Discord
- * bot that hears it, is the sandbox's half, and the demo says so in the refusals below. */
+// A save is real: the row updates and stays. What a save can't fake, cron firing, Discord hearing, is the sandbox's
+// job, not this demo's.
 export const saveAutomation = (now: number, automation: Automation): void => {
     const all = state(now);
     const index = all.findIndex((candidate) => candidate.id === automation.id);
@@ -301,7 +282,7 @@ export const saveAutomation = (now: number, automation: Automation): void => {
         all.unshift({ ...automation, runs: [] });
         return;
     }
-    // The history and the next fire belong to the row, not to the form that just edited it.
+    // Existing spreads first, so runs/nextRun survive fields the form doesn't send.
     all[index] = { ...existing, ...automation };
 };
 
@@ -309,7 +290,7 @@ export const deleteAutomation = (now: number, id: string): void => {
     automations = state(now).filter((automation) => automation.id !== id);
 };
 
-/** Approving or rejecting a held wake empties the queue row, the one thing the approvals list is for. */
+/** Approve and reject both just remove the row from the queue. */
 export const resolveApproval = (now: number, id: string): void => {
     approvals = heldState(now).filter((approval) => approval.id !== id);
 };

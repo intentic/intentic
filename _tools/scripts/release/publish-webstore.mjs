@@ -2,29 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 
-/* Upload the built extension and submit it through Chrome Web Store API V2.
- *
- * Runs from webstore-publish.yml at the release tag, after set-versions.sh, build and package:
- *
- *   1. exchange the publisher's refresh token for a short-lived access token;
- *   2. inspect the published and submitted revisions (the idempotency check);
- *   3. upload dist.zip, polling when Google processes it asynchronously;
- *   4. submit the draft for review and require an affirmative item state.
- *
- * V2, NOT V1. V1 disappears on 15 October 2026 and its HTTP-200 response carried failures in a separate
- * status list. V2 has durable resource states, a publisher id in every path, and one fetchStatus call that can
- * distinguish "already published", "under review" and "uploaded but not submitted".
- *
- * A RE-RUN IS RECOVERY, not merely a no-op. If upload landed and the publish request or runner then died, the
- * next run sees no submitted revision, tolerates ALREADY_EXISTS from upload, and calls publish again. If the
- * version is already submitted or live it exits green before uploading. That closes the gap where the old
- * script called an uploaded draft "nothing to do" and left it stranded forever.
- *
- * Distribution is dashboard state in V2. Public, unlisted and trusted-testers visibility is configured there;
- * the API submits to the item's current channel and cannot silently widen it.
- *
- *   node _tools/scripts/release/publish-webstore.mjs 1.209.1
- */
+// Uploads the built extension and submits it through Chrome Web Store API V2 (V1 retires 15 October 2026), from
+// webstore-publish.yml at the release tag. A re-run is recovery: it picks up an already-uploaded draft or
+// already-submitted revision rather than leaving it stranded. Distribution channel is dashboard state; the API cannot
+// widen it.
+// 1. exchange the refresh token for an access token
+// 2. inspect published/submitted revisions (idempotency check)
+// 3. upload dist.zip, polling if the store processes it asynchronously
+// 4. submit the draft for review, requiring a success state
 
 const version = process.argv[2];
 if (version === undefined) {
@@ -53,8 +38,7 @@ if (missing.length > 0) {
     process.exit(0);
 }
 
-// Found rather than counted: `new URL("../../…")` was right only while this file sat directly in
-// `_tools/scripts`, and a wrong answer here reads a manifest that is not there rather than failing usefully.
+// Resolved via repoRoot's search, not a counted `../../`, so moving this file can't misresolve the manifest.
 const webext = join(repoRoot(import.meta.url), "_devices/webext");
 const packedVersion = JSON.parse(readFileSync(join(webext, "dist", "manifest.json"), "utf8")).version;
 if (packedVersion !== version) {
@@ -141,10 +125,8 @@ const finishIfSettled = (status) => {
     return true;
 };
 
-/* A duplicate upload is only evidence of a recoverable draft when this release is newer than everything
- * currently live and no different revision is already submitted. Without these checks, rerunning an OLD tag
- * could receive ALREADY_EXISTS for its historical version and then submit an unrelated draft from the
- * dashboard. Likewise, a release must never trample a different version that is already under review. */
+// Guards a stale rerun: a duplicate-upload response is only recoverable when this release is the newest and no
+// different revision is already submitted, or an old tag could submit somebody else's draft.
 const assertReleaseCanProceed = (status) => {
     const submitted = revisionVersions(status.submittedItemRevisionStatus);
     if (submitted.length > 0 && !submitted.includes(version)) {
@@ -171,8 +153,7 @@ const upload = await fetch(`https://chromewebstore.googleapis.com/upload/v2/${it
 });
 const uploaded = await json(upload);
 if (!upload.ok) {
-    // An upload can have committed even when the runner never received its successful response. V2 reports a
-    // second attempt as ALREADY_EXISTS; that means "publish the draft", not "the release is complete".
+    // A repeat upload reports ALREADY_EXISTS if the first committed; publish the draft, don't treat it as done.
     const duplicate = uploaded?.error?.status === "ALREADY_EXISTS" || /already (?:exists|uploaded)/i.test(detail(uploaded));
     if (!duplicate) {
         throw new Error(`upload refused (${upload.status}): ${detail(uploaded)}`);
@@ -210,7 +191,7 @@ const publish = await fetch(`${api}:publish`, {
 });
 const published = await json(publish);
 if (!publish.ok) {
-    // If the server committed before the response was lost, status is authoritative and makes the run green.
+    // If the server committed before the response was lost, the status check is authoritative and the run stays green.
     if (finishIfSettled(await fetchStatus())) {
         process.exit(0);
     }

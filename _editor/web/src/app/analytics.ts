@@ -4,24 +4,17 @@ import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { useAuth } from "../features/auth/useAuth";
 
-/* PostHog Cloud US launch instrumentation: autocapture, session replay, SPA pageviews (History API, via the
- * config defaults snapshot), plus the few funnel milestones autocapture can't see, those call track() at their
- * source. In deployment posthogHost is our own origin's /wire, reverse-proxied by nginx.conf, because privacy
- * blockers match PostHog's hostnames and the recorder's filename and would otherwise drop replay entirely.
- * persistence: "sessionStorage" scopes the session id to the browser tab: it survives reloads and in-tab
- * navigation, under "memory" every load minted a new id, so one visit fragmented into unrelated one-page
- * recordings, while still leaving no cookie and nothing that outlives the tab to track a return visit by.
- *
- * WHAT THIS FILE CAPTURES IS WHAT THE PRIVACY POLICY SAYS IT CAPTURES. The policy and the sub-processor list
- * (_site/site-content/src/legal.ts) are written from this configuration, and LEGAL_VERSION is the clickwrap
- * users re-accept: a change here that alters what leaves the browser moves all three in the same commit.
- *
- * REPLAY IS UNSCOPED ON PURPOSE, FOR NOW. `maskAllInputs` covers typed values and nothing else, so a recording
- * reconstructs whatever the workspace had on screen — the editor's rendered file contents, diffs, transcripts,
- * file and branch names. That is a launch-period bet on full-fidelity replay while the funnel is being learned,
- * not an oversight, and the policy states it rather than glossing it. Narrowing it is configuration, not a
- * project: `session_recording.maskTextSelector: "*"` keeps the shape of every page and the text of none, and
- * `posthog.stopSessionRecording()` on entering a workspace keeps full fidelity only ahead of it. */
+// PostHog instrumentation: autocapture, session replay, SPA pageviews, plus funnel milestones via `track()`.
+// `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames;
+// `sessionStorage` scopes the session id to the tab so a reload doesn't fragment one visit into unrelated
+// recordings.
+//
+// What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
+// captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
+//
+// Replay is unscoped on purpose: `maskAllInputs` covers only typed values, so a recording reconstructs whatever the
+// workspace had on screen. Narrow it via `maskTextSelector` or `stopSessionRecording()`, not by changing this
+// default quietly.
 let enabled = false;
 
 export const initAnalytics = (): void => {
@@ -33,18 +26,16 @@ export const initAnalytics = (): void => {
     enabled = true;
     posthog.init(posthogKey, {
         api_host: posthogHost,
-        // Proxying makes api_host a host posthog-js doesn't recognise as a cloud region, and it derives the
-        // dashboard origin from that, so the replay deep-links get_session_replay_url() builds only resolve
-        // if the real UI host is named outright.
+        // Proxying makes `api_host` a host posthog-js can't map to a cloud region, so `ui_host` must be named outright
+        // or
+        // replay deep-links won't resolve.
         ui_host: `https://us.posthog.com`,
         defaults: `2026-06-25`,
         persistence: `sessionStorage`,
         session_recording: { maskAllInputs: true },
-        // Serving the SDK from our own origin isn't enough on its own: the blocker lists also carry rules
-        // that match a bare filename on any host, and two of the bundles posthog-js pulls are on them
-        // (`/posthog-recorder.js`, `/dead-clicks-autocapture.js`). Those rules are anchored on the slash that
-        // precedes the filename, so a prefix breaks the match; nginx strips it back off. Applied to every SDK
-        // script rather than the two known names, so a bundle added in a later posthog-js needs nothing here.
+        // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
+        // (posthog-recorder.js, dead-clicks-autocapture.js). Prefixing every SDK script, not just those two, breaks the
+        // match; nginx.conf strips the prefix back off.
         prepare_external_dependency_script: (script) => {
             const url = new URL(script.src);
             url.pathname = url.pathname.replace(/[^/]+$/, (file) => `sdk.${file}`);
@@ -64,18 +55,16 @@ export const initAnalytics = (): void => {
         }
         if (previous) {
             posthog.reset();
-            // reset() empties the whole store, super properties included, so which client this is has to be
-            // said again, or every event after a sign-out reports as coming from nowhere in particular.
+            // `reset()` clears super properties too, so the client tag must be re-registered or later events report
+            // from
+            // nowhere in particular.
             registerClient();
         }
     });
 };
 
-/* WHICH CLIENT THIS IS, ON EVERY EVENT, the desktop app loads this very SPA, so without it an app user is
- * indistinguishable from a browser one and reports break them down by the webview's user agent instead
- * (Safari on Linux, Edge on Windows). Registered as super properties rather than passed per call, because the
- * question "was this the app" applies to autocapture and pageviews too, not just our own milestones. The
- * install id is what joins these to what the app's own screens report about the same install (desktop.ts). */
+// Which client sent this event, as a super property (not a per-call field) so it also tags autocapture and
+// pageviews. The install id joins this to what the app's own screens report (desktop.ts).
 const registerClient = (): void => {
     const app = desktopApp();
     posthog.register(
@@ -83,8 +72,8 @@ const registerClient = (): void => {
     );
 };
 
-// Funnel milestone events from action call sites. No-op until initAnalytics has run (dev has no key),
-// uninitialized posthog.capture would log a console error per call otherwise.
+// Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise
+// uninitialized `posthog.capture` logs a console error per call.
 export const track = (event: string, properties?: Record<string, unknown>): void => {
     if (!enabled) {
         return;

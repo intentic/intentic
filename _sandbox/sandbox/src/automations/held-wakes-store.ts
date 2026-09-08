@@ -2,16 +2,12 @@ import { randomUUID } from "node:crypto";
 import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract";
 import { jsonDir } from "../store/json-dir.js";
 
-// The held-wakes queue (<workspace>/.intentic/records/approvals/<id>.json, one file per held wake): a
-// `requireApproval` automation enqueues here instead of waking; the owner approves/rejects via the /automations
-// routes, and the Approvals page is where those buttons live. Not the approvals STORE (approvals/approvals-store.ts,
-// agent-authored, versioned): a held wake is daemon-minted, consumed on release and snapshots a trigger payload
-// that may be anything a webhook sent, none of which belongs in the root repo's history. Per-file, never a shared manifest, because concurrent fires from different automations would race a
-// read-modify-write (see json-dir.ts, which owns that cycle). The item snapshots the trigger payload so an
-// approved run replays exactly what fired, even across a daemon restart. The daemon mints the id; no secrets
-// live here.
+// Held-wakes queue (<workspace>/.intentic/records/approvals/<id>.json, one file per wake): a requireApproval automation
+// enqueues here instead of firing; the owner approves or rejects via the /automations routes. Distinct from the
+// approvals store: daemon-minted, consumed on release, and snapshots the payload so an approved run replays exactly
+// what fired.
 
-// The id is the FILENAME, so it is not in the body, the store grafts it back on read.
+// Id is the filename, not part of the body; the store grafts it back on read.
 const ApprovalBodySchema = AutomationApprovalSchema.omit({ id: true });
 
 export interface HeldWakesStore {
@@ -28,8 +24,7 @@ export interface HeldWakesStore {
 export const fileHeldWakesStore = (dir: string): HeldWakesStore => {
     const files = jsonDir(dir, (raw) => ApprovalBodySchema.safeParse(raw).data);
     return {
-        // A held wake whose file no longer parses is dropped rather than reported: unlike approvals, nothing
-        // outside this daemon writes here, so an unreadable one is a bug to fix and not a typo to surface.
+        // A file that fails to parse is dropped, not reported: nothing outside this daemon writes here.
         list: async () => (await files.list()).entries.toSorted((a, b) => a.createdAt - b.createdAt),
         get: files.read,
         add: async (approval) => {

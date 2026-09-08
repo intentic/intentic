@@ -2,16 +2,10 @@ import { renderPage, toPageState } from "@intentic/browser/page";
 import { beforeEach, expect, test } from "vitest";
 import { clickRef, collectPage, describeRef, fillRef, readPageText, selectRef } from "./driver.js";
 
-/* THE PAGE WALK, against real DOM. jsdom is enough for every judgement these functions make — what is
- * clickable, what an element is called, whether a form deals in passwords or money — and those judgements are
- * where the bugs live: an extension that mislabels a button sends an agent to click the wrong one.
- *
- * What jsdom cannot test is the part that needs a rendering engine (`getBoundingClientRect` is always zero
- * there, so the visibility filter is stubbed per test) and the part that needs a real page's own JavaScript
- * (whether React noticed the typing). Those need a browser and a person. */
+// Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
+// what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.
 
-// jsdom lays nothing out, so every element measures 0×0 and the visibility filter would drop the page. Giving
-// the prototype a non-zero box is the smallest lie that lets the rest be tested honestly.
+// jsdom lays out nothing (0×0 elements); stub a non-zero box so the visibility filter doesn't drop everything.
 beforeEach(() => {
     Element.prototype.getBoundingClientRect = () => ({
         width: 100,
@@ -40,7 +34,7 @@ test("the walk answers in the same language the CDP driver speaks", () => {
     expect(rendered).toContain(`[e0] link "Invoice 2291"`);
     expect(rendered).toContain(`[e1] textbox "q" = "unpaid"`);
     expect(rendered).toContain(`[e3] button "Send"`);
-    // The password FIELD is listed — an agent has to know the form has one — and what it holds never is.
+    // The password field is listed; its value never is.
     expect(rendered).toContain(`[e2] password`);
     expect(rendered).not.toContain(`hunter2`);
 });
@@ -60,7 +54,7 @@ test("a reference from a previous page is refused rather than clicking whatever 
     const result = clickRef("e0");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("fresh snapshot");
-    // And a ref that was never minted at all.
+    // A ref that was never minted at all.
     expect(clickRef("e99").ok).toBe(false);
     expect(clickRef("button.submit").ok).toBe(false);
 });
@@ -94,14 +88,14 @@ test("a dropdown can be chosen by the label a snapshot actually shows", () => {
     expect((document.querySelector("select") as HTMLSelectElement).value).toBe("de");
     const missed = selectRef("e0", ["Atlantis"]);
     expect(missed.ok).toBe(false);
-    // The refusal lists what it could have picked, so the next call is right rather than another guess.
+    // The refusal lists the valid options.
     expect(missed.message).toContain("United Kingdom");
 });
 
 test("reading a page prefers its main content to its chrome", () => {
     document.title = "Docs";
     document.body.innerHTML = `<nav>Home About</nav><main>The answer is 42.</main>`;
-    // jsdom implements innerText as textContent, which is close enough for the selection this asserts.
+    // jsdom implements innerText as textContent, close enough for this assertion.
     const page = readPageText();
     expect(page.text).toContain("42");
     expect(page.text).not.toContain("About");

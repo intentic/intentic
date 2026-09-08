@@ -32,13 +32,10 @@ import { registerFileBindings } from "./fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
 import { uuid } from "../lib/uuid";
 
-/* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
- * the APPROVED manifest's declarations (views/commands/settings/processes), the manifest the owner saw at
- * install is the contract; a bundle can't quietly grow surface beyond it. All registrations are tracked on
- * context.subscriptions so deactivation can unwind them. */
+// The host's implementation of IntenticApi, one instance per activated extension. Every registration is gated on the
+// approved manifest's declarations; all are tracked on context.subscriptions so deactivation can unwind them.
 
-// The live workspace facts, bound by useExtensionHost from the panels/capabilities composables (accessor
-// functions, so apiImpl needs no vue-query context of its own).
+// The live workspace facts, bound by useExtensionHost from the panels/capabilities composables as accessor functions.
 export interface HostBindings {
     readonly repos: () => readonly RepoFacts[];
     readonly capabilities: () => readonly CapabilityFacts[];
@@ -80,9 +77,7 @@ const named = (selection: {
     return {
         provider,
         model,
-        // The app's ONE naming rule for a (provider, model) pair, shared with the composer's pill and the shell's
-        // own run buttons: an UNPINNED model has no catalog row to name it, and the rule's last rung is the
-        // provider's display name, which is right because the provider is what resolves a model at run time.
+        // The one naming rule for a (provider, model) pair, shared with the composer pill and the shell's run buttons.
         label: modelLabelFor(provider, model),
         ...namedAccount(provider, account),
         ...(harness !== undefined ? { harness } : {}),
@@ -93,18 +88,11 @@ const named = (selection: {
     };
 };
 
-// The live activation of each extension id. An extension is activated ONCE per app load; a second
-// createExtensionApi for the same id therefore means the previous activation is being superseded (the dev
-// server hot-reloading the host chain, a reload after install/settings change). Retiring it here is what makes
-// `context.subscriptions` the deactivation path this file's header promises: without it the old activation's
-// views, viewers, commands and settings/workspace/theme watchers all stay live alongside the new ones, a
-// second copy of every rail icon, and a listener per re-activation firing on stale state.
+// Live activation per extension id; a second createExtensionApi for the same id retires the prior one.
 const activations = new Map<string, readonly Disposable[]>();
 
-// Retire an extension's live activation. The disposables `track()` collected ARE its whole registration
-// surface, views, viewers, commands, file bindings, and the settings/workspace/theme watchers, so this
-// unwinds exactly what activate() put in place. Used both to supersede a re-activation and to switch an
-// extension off from the Extensions tab without a page reload.
+// Retires an extension's live activation: disposes everything `track()` collected (views, viewers, commands, bindings,
+// watchers). Used to supersede a re-activation and to switch an extension off without a reload.
 export const deactivateExtension = (extensionId: string): void => {
     for (const disposable of activations.get(extensionId) ?? []) {
         disposable.dispose();
@@ -112,16 +100,11 @@ export const deactivateExtension = (extensionId: string): void => {
     activations.delete(extensionId);
 };
 
-/* Retire ALL of them, for the one event that invalidates every activation at once: the active sandbox changing.
- *
- * Not the same thing as the loader's reconcile, which retires whatever is no longer `active` AFTER a load pass
- * has decided what runs. This runs BEFORE one, and it has to: the extensions a sandbox has installed, and which
- * of them its owner left switched on, are that sandbox's answer. Until the new box has been asked, every tile on
- * screen is the previous box's claim, and every timer still running is polling on its behalf. */
+// Retires every activation for the one event that invalidates them all: the active sandbox changing. Runs before a load
+// pass decides what to activate, since until then every tile on screen still belongs to the old sandbox.
 export const deactivateAllExtensions = (): void => {
-    // Iterating the live keys while `deactivateExtension` deletes from underneath is safe by specification,
-    // a Map iterator visits in insertion order and dropping the entry it is ON skips nothing after it, so
-    // there is no snapshot to take, and each id goes out through the one door that unwinds it.
+    // Safe to delete from the map while iterating its keys: a Map iterator visits in insertion order and dropping the
+    // current entry skips nothing after it.
     for (const extensionId of activations.keys()) {
         deactivateExtension(extensionId);
     }
@@ -148,19 +131,16 @@ export const createExtensionApi = (
     const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
 
-    // The file→view bindings are DECLARATIVE, like settings and processes, there is no runtime register() call
-    // for the extension to make. Registering them here means they go live exactly when the host accepts the
-    // extension and unwind with its other subscriptions, so the daemon's change push reaches precisely the
-    // extensions that are actually running. See fileBindings.ts.
+    // Declarative, like settings and processes: unwinds along with the extension's other subscriptions.
     if (contributes?.files !== undefined) {
         track(registerFileBindings(extensionId, contributes.files));
     }
-    // The same declaration, as the prefixes `onDidChangeFiles` scopes a listener to. Read once here rather than
-    // per subscription: it is the approved manifest's, so an extension cannot widen what it is woken by.
+    // The prefixes `onDidChangeFiles` scopes listeners to, from the approved manifest, so an extension cannot widen
+    // what wakes it.
     const declaredFilePaths = (contributes?.files ?? []).map((file) => file.path);
 
-    // Manifest defaults under the persisted values; the shared store keeps this api and the Sandbox hub's
-    // Extensions tab looking at the same record.
+    // Manifest defaults under persisted values; the shared store keeps this and the Extensions tab looking at the same
+    // record.
     const settingDefaults = Object.fromEntries(
         declaredSettings.flatMap((setting) => (setting.default === undefined ? [] : [[setting.key, setting.default] as const])),
     );
@@ -174,14 +154,11 @@ export const createExtensionApi = (
         return `/extensions/${encodeURIComponent(summary.id)}/processes/${encodeURIComponent(name)}`;
     };
 
-    // The manifest's declared sandbox-route allowlist gates every door in api.sandbox: an undeclared
-    // method+path throws, so a bundle can only reach the daemon routes the owner approved at install, not the
-    // whole daemon.
+    // The manifest's declared sandbox-route allowlist: an undeclared method+path throws, so a bundle can only reach
+    // approved daemon routes.
     const sandboxPermissions = summary.manifest.permissions?.sandbox ?? [];
-    /* The extension's OWN backend namespace (/x/<its id>/…) passes with no declaration and no usage record:
-     * its backend is its own code from the same approved checkout, so "may this extension talk to itself" is
-     * not a grant the owner needs to weigh, and the usage ledger exists to test DECLARED reach. Any other
-     * extension's namespace is exactly as foreign as a core route and stays declared. */
+    // The extension's own namespace (`/x/<id>/`) passes ungated, since that is its own code; every other extension's
+    // namespace still needs a declaration.
     const ownNamespace = `/x/${summary.id}/`;
     const guardSandbox = (path: string, init?: RequestInit): void => {
         if (path.startsWith(ownNamespace) || path.split(`?`)[0] === ownNamespace.slice(0, -1)) {
@@ -193,18 +170,14 @@ export const createExtensionApi = (
                 `extension "${extensionId}" called undeclared sandbox route ${method.toUpperCase()} ${path}: declare it in permissions.sandbox in the manifest`,
             );
         }
-        // The gate has just decided which of the declared entries covers this call, and that answer is the only
-        // evidence anywhere about whether a permission is earned. Kept rather than discarded, see sandboxUsage.
+        // The gate just decided which declared entry covers this call; kept as the only evidence anywhere that a
+        // permission is earned.
         recordSandboxCall(summary.id, sandboxPermissions, method, path);
     };
 
-    /* The same gate for a TYPED call. The contract turns the procedure the extension named into the method and
-     * concrete path it is about to request, and from there this is the check above, verbatim, one allowlist,
-     * one usage record, whichever door the extension used.
-     *
-     * A procedure this build's contract does not declare is refused rather than waved through. It cannot happen
-     * through the typed client (there would be nothing to call), so reaching it means the client was handed a
-     * hand-built path array, which is precisely the case that must not bypass the manifest. */
+    // The same gate for a typed call: turns the named procedure into its method and path, then applies the identical
+    // allowlist and usage record. A procedure the contract doesn't declare is refused, since reaching it means a
+    // hand-built path bypassed the manifest.
     const rpc = gatedSandboxRpc((procedure, input) => {
         const request = sandboxRequestFor(procedure, input);
         if (request === undefined) {
@@ -225,10 +198,8 @@ export const createExtensionApi = (
                 if (declared === undefined || declared.surface !== view.surface) {
                     throw new Error(`view "${view.id}" (${view.surface}) is not declared in the manifest's contributes.views`);
                 }
-                // The manifest's label is what the install dialog showed, it wins over the runtime value. So
-                // does its badge permission: a view the owner never approved to badge simply loses the
-                // function, rather than the registration failing, the view itself was approved and still
-                // works, it just cannot interrupt from the rail.
+                // The manifest's label and badge permission win over the runtime value; a view never approved to badge
+                // loses only that function, not the registration.
                 const { badge, ...rest } = view;
                 return track(
                     registerView(extensionId, {
@@ -245,7 +216,8 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`viewer "${viewer.id}" is not declared in the manifest's contributes.viewers`);
                 }
-                // File extensions + fetch kind come from the approved manifest; the extension supplies only the component.
+                // File extensions and fetch kind come from the approved manifest; the extension supplies only the
+                // component.
                 return track(
                     registerViewer({
                         owner: extensionId,
@@ -263,8 +235,8 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`document provider "${provider.id}" is not declared in the manifest's contributes.documents`);
                 }
-                // The family label is the manifest's, like a view's, it is what the install dialog showed. The
-                // per-row wording stays with the provider, which is the only thing that knows what it found.
+                // The family label is the manifest's, like a view's; the per-row wording stays with the provider, which
+                // is the only thing that knows what it found.
                 return track(
                     registerDocumentProvider({
                         owner: extensionId,
@@ -275,9 +247,8 @@ export const createExtensionApi = (
                     }),
                 );
             },
-            // Scoped to this extension's OWN providers, and to a path the provider actually has an offer for,
-            // the tab then carries the same title and glyph the tree row would have opened it with, rather than
-            // a caller's second guess at them.
+            // Scoped to this extension's own providers and to a path it has an offer for; the tab carries the title and
+            // glyph the tree row would have used, not the caller's guess.
             open: (id, path) => {
                 const provider = documentProvider(extensionId, id);
                 const offer = provider?.detect(path);
@@ -293,9 +264,8 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`command "${command}" is not declared in the manifest's contributes.commands`);
                 }
-                // Title/icon/keybinding/when all come from the approved manifest, never the runtime call, the
-                // install dialog is what the user consented to, so the global shortcut is bound only as
-                // declared, and only in the context the declaration named.
+                // Title/icon/keybinding/when all come from the approved manifest, never the runtime call, so the
+                // shortcut is bound only as declared and only in the context named.
                 return track(
                     registerCommand({
                         owner: extensionId,
@@ -343,8 +313,8 @@ export const createExtensionApi = (
                 guardSandbox(path, init);
                 return sandboxJson(path, init);
             },
-            // No guard of its own: `queryFn` is the extension's, and whatever it reaches for goes through
-            // `request`/`json`/`rpc` above, each of which checks the manifest. This is cache plumbing.
+            // No guard of its own: whatever `queryFn` reaches for goes through `request`/`json`/`rpc`, which each check
+            // the manifest.
             fetch: (query) => queryClient.fetchQuery({ ...query, queryKey: [...query.queryKey] }),
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
@@ -352,8 +322,8 @@ export const createExtensionApi = (
                 const base = useSandbox().daemonUrl.value;
                 return base === undefined || base === `` ? undefined : base;
             },
-            // The same optimistic default useRole makes (`owner` until the platform summary loads, loopback
-            // sandboxes never carry one), and for the same reason: this gates affordances, the daemon gates acts.
+            // The same optimistic default useRole makes (`owner` until the platform summary loads); this gates
+            // affordances, the daemon gates acts.
             role: () => useSandbox().active.value?.role ?? `owner`,
         },
         workspace: {
@@ -364,19 +334,14 @@ export const createExtensionApi = (
                 return track({ dispose: () => stop() });
             },
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
-            // Scoped to the APPROVED manifest's paths, so an extension that declared nothing is never woken and
-            // one that declared a directory hears about that directory only. An empty declaration still yields a
-            // live Disposable: `sandboxPoll` subscribes unconditionally, and a poll with no file binding behind
-            // it should degrade to its timer rather than have to ask whether it has one.
+            // Scoped to the approved manifest's paths, so an extension declaring nothing is never woken. An empty
+            // declaration still returns a live Disposable, since sandboxPoll subscribes unconditionally.
             onDidChangeFiles: (listener) => track(onFilesChanged(declaredFilePaths, listener)),
-            /* Opens the tab, then, on mobile only, navigates to it, because the mobile workspace has no tab
-             * strip and renders whichever diff `?diff=` names. Same two steps as WorkspaceMobile's own
-             * openDiffNav, which is what the app's Changes and History panels go through; an extension must not
-             * end up with a diff that exists but is unreachable on a phone. */
+            // Opens the tab, then on mobile only navigates to it, since the mobile workspace has no tab strip and
+            // renders whichever diff `?diff=` names (same as WorkspaceMobile's openDiffNav).
             openDiff: (payload) => {
-                // The gesture the extension is reporting, not this layer's guess: a peek takes the strip's
-                // transient slot and is replaced by the next one (a reader going down a commit's file list), a
-                // plain open keeps its tab. See DiffPayload.preview.
+                // The gesture the extension reports, not a guess: a peek takes the strip's transient slot, a plain open
+                // keeps its own tab.
                 useWorkspaceTabs().openDiff(payload, payload.preview === true ? `preview` : `keep`);
                 if (!useDevice().mobile.value) {
                     return;
@@ -384,21 +349,20 @@ export const createExtensionApi = (
                 const id = diffTabId(payload.key, payload.scope, payload.path);
                 void router.push({ name: `workspace`, params: { path: [] }, query: { ...router.currentRoute.value.query, diff: id } });
             },
-            // No navigation and no focus change, on either device: filling a tab is not a gesture the user made.
+            // No navigation or focus change on either device: filling a tab is not a gesture the user made.
             fillDiff: (payload) => useWorkspaceTabs().fillDiff(payload),
-            // Through guardSandbox and the daemon's own schema, so the manifest grant still applies and the
-            // envelope is validated once here instead of in every extension that reads a file.
+            // Through guardSandbox and the daemon's schema, so the manifest grant still applies and the envelope is
+            // validated once.
             file: async (path) => {
                 const route = `/workspace/file?path=${encodeURIComponent(path)}`;
                 guardSandbox(route);
                 try {
                     const answer = WorkspaceFileSchema.parse(await sandboxJson(route));
-                    // Absent is the ordinary first state, not an error, see IntenticApi.workspace.file. The
-                    // daemon says so in the body now, so most of what extensions read never reaches the catch.
+                    // Absent is the ordinary first state, not an error (see IntenticApi.workspace.file).
                     return answer.present ? answer.content : undefined;
                 } catch {
-                    // A refused or unreachable read. Still undefined here: an extension polling a file it may not
-                    // be granted must not take its own view down over it.
+                    // A refused or unreachable read; still undefined, since an extension polling a file it lacks a
+                    // grant for must not crash its own view.
                     return undefined;
                 }
             },
@@ -410,8 +374,8 @@ export const createExtensionApi = (
                 try {
                     const parsed: unknown = JSON.parse(text);
                     // Asserted, not validated, same contract as `sandbox.json<T>`: the caller names the shape it
-                    // expects. What IS checked is that it is a record at all, since a bare array or scalar would
-                    // make every property read on it undefined rather than obviously wrong.
+                    // expects. Checked only that it is a record, since a bare array or scalar would make every property
+                    // read undefined silently.
                     return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as T) : undefined;
                 } catch {
                     return undefined;
@@ -437,10 +401,9 @@ export const createExtensionApi = (
             setOpen: (open) => useTerminalPanel().setOpen(open),
         },
         chat: {
-            // Automation runs now carry stable conversation ids. Prefer the unified registry transcript and
-            // retain the history-session fallback for extension callers opening an actual provider session.
-            // Both roads are a SUMMONS (an extension panel is a surface outside the chat), so the chat showing
-            // the result may be any window's, agents.open broadcasts itself, the fallback broadcasts here.
+            // Prefers the unified registry transcript, falling back to a history-session lookup for callers opening an
+            // actual provider session. Both are a summons, so any window may show the result; each path broadcasts its
+            // own way.
             openSession: (id) =>
                 void (async () => {
                     const agents = useAgents();
@@ -483,24 +446,19 @@ export const createExtensionApi = (
                 startAgent();
                 useChat().active.value.workflowId.value = workflowId;
             },
-            // The loop badge's half of the same handover, a new chat with the loop picked, waiting for the
-            // sentence that becomes its goal.
+            // The loop badge's half of the same handover: a new chat with the loop picked, waiting for the sentence
+            // that becomes its goal.
             composeLoop: (loopId) => {
                 startAgent();
                 useChat().active.value.loopId.value = loopId;
             },
         },
-        /* The shell's own model picker, the default it opens on, and what to call a pin already saved. Nothing
-         * here is gated on a manifest permission: the extension never learns a credential, never reaches a
-         * provider route, and cannot observe a catalog it wasn't shown, all it gets back is the selection the
-         * user pointed at, plus the words for it. An account arrives as its opaque daemon id for the same reason,
-         * which is also all the daemon needs to run on it. */
+        // Nothing here is gated on a manifest permission: the extension never learns a credential or reaches a provider
+        // route, only the selection the user made and the words for it.
         models: {
-            /* Both halves are the SHELL's own (composables/chat/shellModelPicking.ts), not a second reading of
-             * the same settings. An extension's Fix button and one the shell draws are the same button, so the
-             * day these two disagreed about which model a click spends, one of them would be lying to the user
-             * about money. `named` still wraps the answer here because PickedModel carries one field the kit's
-             * structural AgentRunChoice does not, accountLabel, which only this side can look up. */
+            // Both paths read the shell's own selection (shellModelPicking.ts), so an extension's Fix button and the
+            // shell's own button always agree on what a click spends. `named` adds `accountLabel`, the field
+            // PickedModel carries that AgentRunChoice does not.
             agentRun: (role) => {
                 const choice = agentRunChoice(role);
                 return named({
@@ -540,11 +498,10 @@ export const createExtensionApi = (
         navigate: (path) => {
             void router.push(path);
         },
-        // The address behind the same path, for the views whose rows are links rather than buttons.
+        // The address behind the same path, for views whose rows are links rather than buttons.
         href: (path) => router.resolve(path).href,
-        /* `router.currentRoute` rather than `useRoute()`: an extension reads this from a composable that may run
-         * outside any component's setup (module state, a lazily-created query), and useRoute() needs injection
-         * context. currentRoute is a ref, so reading it inside a computed is reactive either way. */
+        // `router.currentRoute` rather than `useRoute()`: an extension may read this outside any component's setup,
+        // where `useRoute()` needs injection context; the ref stays reactive inside a computed either way.
         route: {
             query: () => flattenQuery(router.currentRoute.value.query),
             setQuery: (patch, options) => {

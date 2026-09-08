@@ -2,32 +2,19 @@ import { chatRings, createBufferedPainter, failureNotice, framePainter, type Gat
 import type { WhatsAppConnection } from "./client.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
 
-/* WhatsApp's reply is deliberately NOT streamed (createBufferedPainter): the other chat gateways grow a
- * message with edits as the model types, but here a message being rewritten twice a second is exactly the
- * automation fingerprint that gets numbers flagged, and every edit wears a visible "edited" label. The reply
- * buffers and lands once on turn end; the ceiling is a safety net, not a pagination scheme (WhatsApp takes
- * 65,536 chars). */
+// Safety ceiling far under WhatsApp's real 65,536-char limit, not a message-splitting boundary.
 export const WHATSAPP_MAX = 60_000;
 
-/* The inbound half of the gateway: every live message a paired session receives becomes a normalized listener
- * message POSTed to the daemon's dispatch route. On a mention we hold the streaming response, show "typing…"
- * for the length of the turn, and send the reply once it is complete (stream.ts says why it is not painted
- * live here).
- *
- * LIKE TELEGRAM, THERE IS NO HISTORY API, worse, actually: WhatsApp is end-to-end encrypted, so not even
- * WhatsApp could hand us a chat's past. The context the model gets when it is addressed is what THIS PROCESS
- * watched go by, kept in a small per-chat ring. A gateway restart starts the ring empty, and our own replies
- * are not in it (a linked device does not receive its own sends as live traffic), they do not need to be,
- * because a chat is one continuing conversation (thread-sessions) and the agent remembers what it said. */
+// Normalizes each live message into a dispatch to the daemon; a mention holds a typing indicator until the reply lands
+// complete. With no history API, mention context comes from a small per-chat ring of what this process has observed,
+// empty after a restart and never including this device's own sends.
 
-// Recent `chat:id` keys, to drop a redelivered message. ponytail: best-effort in-memory cap; a restart forgets
-// it, at worst one duplicate wake.
+// Recent `chat:id` keys, to drop a redelivered message; best-effort, a restart risks one duplicate wake.
 const RECENT_MAX = 500;
-// Prior messages handed to the model when the bot is addressed, per chat, and how many chats we keep rings for.
+// Prior messages given to the model per chat when addressed, and how many chats keep a ring.
 const HISTORY_LIMIT = 20;
 const HISTORY_CHATS_MAX = 200;
-// WhatsApp's "typing…" presence expires after ~10s; re-send on this cadence so it shows for the whole turn.
-// Capped so a turn that never replies can't leak the interval forever.
+// Typing indicator expires ~10s; resent on this interval, capped so a stuck turn can't leak it forever.
 const TYPING_INTERVAL_MS = 8_000;
 const TYPING_MAX_MS = 300_000;
 
@@ -37,8 +24,7 @@ interface HistoryEntry {
     timestamp: string;
 }
 
-// The real content, out of WhatsApp's protocol envelopes (disappearing chats, view-once, captioned documents).
-// Exported for tests.
+// Unwraps WhatsApp's protocol envelopes (disappearing chats, view-once, captioned documents) to the real content.
 export const unwrap = (content: WaMessageContent | null | undefined): WaMessageContent | undefined => {
     if (content === null || content === undefined) {
         return undefined;
@@ -51,13 +37,11 @@ export const unwrap = (content: WaMessageContent | null | undefined): WaMessageC
     return inner === undefined ? content : unwrap(inner);
 };
 
-// The user half of a JID ("4915112345678@s.whatsapp.net" → "4915112345678", device suffixes stripped): the
-// stable identity mentions and reply-authors are compared by, whatever domain or device they arrived with.
+// User portion of a JID, with device suffix stripped; the stable identity used to compare mentions and authors.
 export const jidUser = (jid: string | null | undefined): string => jid?.split("@")[0]?.split(":")[0]?.split("/")[0] ?? "";
 
-/* What the message says, when it carries no words. A voice note or a photo without a caption reaches the model
- * as an empty string otherwise, which reads as "someone sent nothing", the medium itself is in
- * `extra.attachments` for an agent that wants to fetch it. Exported for tests. */
+// Text summary for a message with no words (a voice note, an uncaptioned photo), so it doesn't read as empty; the
+// medium itself travels via `extra.attachments`.
 export const contentOf = (content: WaMessageContent | undefined): string => {
     if (content === undefined) {
         return "";
@@ -96,8 +80,7 @@ export const contentOf = (content: WaMessageContent | undefined): string => {
 const mediaCaption = (content: WaMessageContent): string | undefined =>
     content.imageMessage?.caption ?? content.videoMessage?.caption ?? content.documentMessage?.caption;
 
-// Whether the (unwrapped) content carries a downloadable medium, what puts the message id into
-// `extra.attachments` for `whatsapp download`.
+// Whether the unwrapped content carries a downloadable medium, for `extra.attachments` and `whatsapp download`.
 export const hasMedia = (content: WaMessageContent | undefined): boolean =>
     content !== undefined &&
     (content.imageMessage !== undefined ||
@@ -106,8 +89,8 @@ export const hasMedia = (content: WaMessageContent | undefined): boolean =>
         content.audioMessage !== undefined ||
         content.stickerMessage !== undefined);
 
-// Does this message address us? A DM always does; in a group it is an @mention of any of our identities
-// (phone JID or hidden-number @lid) or a reply to something we sent. Exported for tests.
+// Whether this message addresses us: always true in a DM, in a group only via an @mention of our identities or a reply
+// to our own message.
 export const addressesUs = (chat: string, content: WaMessageContent | undefined, selves: ReadonlySet<string>): boolean => {
     if (!chat.endsWith("@g.us")) {
         return true;
@@ -127,7 +110,7 @@ export const addressesUs = (chat: string, content: WaMessageContent | undefined,
     return context.participant !== undefined && selves.has(jidUser(context.participant));
 };
 
-// A raw timestamp is seconds since epoch, sometimes as a protobuf Long-like object.
+// Raw timestamp is epoch seconds, sometimes delivered as a protobuf Long-like object.
 export const timestampOf = (raw: WaRawMessage): string => {
     const value = raw.messageTimestamp;
     const seconds = typeof value === "number" ? value : (value?.toNumber() ?? 0);
@@ -141,9 +124,9 @@ export interface WhatsAppListener {
 
 export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, WhatsAppConnection>): WhatsAppListener => {
     const recent = recentKeys(RECENT_MAX);
-    // The stand-in for a history API: what this process has watched go by, per chat (listener-memory.ts).
+    // Stand-in for a history API: what this process has itself watched go by, per chat.
     const seen = chatRings<HistoryEntry>({ perChat: HISTORY_LIMIT, chats: HISTORY_CHATS_MAX });
-    // Live "typing…" indicators keyed by chat JID; stopping one says "paused", which is what WhatsApp shows.
+    // Typing indicators keyed by chat JID; stopping one sends WhatsApp's "paused" presence.
     const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS, maxMs: TYPING_MAX_MS });
 
     const startTyping = (connection: WhatsAppConnection, chat: string): void => {
@@ -160,7 +143,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         if (chat === undefined || chat === null || id === undefined || id === null) {
             return;
         }
-        // Our own sends and our own linked devices' sends must never wake us.
+        // Own sends, including from other linked devices, must never trigger a wake.
         if (raw.key.fromMe === true) {
             return;
         }
@@ -172,8 +155,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         const content = unwrap(raw.message);
         const text = contentOf(content);
         const media = hasMedia(content);
-        // Receipts, edits, reaction notices, key changes, bookkeeping arrives on the same stream as speech,
-        // and only speech (or something fetchable) is worth an agent's attention.
+        // Bookkeeping events (receipts, edits, key changes) share this stream with real messages; skip them.
         if (text === "" && !media) {
             return;
         }
@@ -181,7 +163,7 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
         const senderJid = chat.endsWith("@g.us") ? (raw.key.participant ?? "") : chat;
         const author = { id: jidUser(senderJid), name: raw.pushName ?? jidUser(senderJid) };
         const timestamp = timestampOf(raw);
-        // The ring is context for the NEXT mention, so this message goes in whether or not it wakes anything.
+        // Stored regardless of whether this message wakes anything; it's context for the next mention.
         const history = seen.of(chat);
         seen.remember(chat, { author, content: text, timestamp });
 
@@ -211,19 +193,18 @@ export const createWhatsAppListener = (ctx: GatewayCtx, connections: () => Reado
             await ctx.daemon.dispatch(payload);
             return;
         }
-        // Immediate feedback: "typing…" the moment we're addressed, held for the whole (debounced) turn. The
-        // reply itself lands once, complete, when the turn ends, see stream.ts for why.
+        // Typing starts immediately on being addressed and holds until the turn's single, complete reply lands.
         startTyping(connection, chat);
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "whatsapp reply send failed");
-        // In a group the answer points at what it answers; in a DM that is just noise.
+        // Quotes the triggering message in a group reply; a DM reply doesn't need to point at anything.
         const send = (body: string): Promise<void> => connection.sendText(chat, body, chat.endsWith("@g.us") ? id : undefined);
         try {
             await ctx.daemon.dispatchStreaming(
                 payload,
                 framePainter(
                     () => createBufferedPainter(send, onError, WHATSAPP_MAX),
-                    // Its own message rather than through the painter: the painter owns the reply text, and a
-                    // turn that failed usually has none to send.
+                    // Sent directly, not through the painter: a failed turn usually has no reply text for the painter
+                    // to own.
                     (reason) => void send(failureNotice(reason, WHATSAPP_MAX)).catch(onError),
                 ),
             );

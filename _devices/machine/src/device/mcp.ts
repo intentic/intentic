@@ -26,18 +26,14 @@ import {
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { MACHINE_VERSION } from "../version.js";
 
-/* THE TOOL SURFACE of a connected device, served by the peer MCP server (sandbox-contract's peer-mcp-server.ts:
- * the dispatch, the "a failed tool is not a failed call" rule and the schema-once `tool()` builder are there).
- * What is here is what this machine can DO, written for a reader who has never seen it: descriptions carry
- * the judgement calls the schema cannot, that writes are off by default, that there is no delete, that one
- * big command beats ten small ones over a link like this. Every tool takes the live grant beside its
- * arguments, read per call, so a switch the owner turns off is in force on the very next call. */
+// The tool surface of a connected device, served by sandbox-contract's peer-mcp-server (dispatch, schema-once
+// `tool()`, "a failed tool is not a failed call"). Descriptions here carry the judgement calls the schema
+// can't; every tool reads the live grant per call.
 
 const NO_ARGS = z.object({});
 
-/* The screen, plus the size of it. The dimensions ride along because they are the frame every coordinate the
- * agent sends back is in, a model that can see the image but not its bounds guesses at the edges, and a click
- * outside them is refused rather than clamped (tools/device.ts). */
+// The screen plus its size: the frame every coordinate the agent sends back is in. A click outside the bounds
+// is refused rather than clamped (tools/device.ts).
 const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unknown>> => {
     assertScope(scopes, "screen");
     const screen = desktop();
@@ -52,23 +48,20 @@ const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unkn
     };
 };
 
-/* ONE browser handle for the life of this process. The handle is cheap, it holds no socket until something is
- * asked of it, but it remembers WHICH TAB the agent is working on, and that continuity is the whole reason a
- * sequence of calls reads as one session rather than as several strangers arriving at the same browser. */
+// One browser handle for the process's life: cheap, holds no socket until used, but remembers which tab the
+// agent is working on so a sequence of calls reads as one session.
 let webHandle: ReturnType<typeof browser> | undefined;
 const web = (): ReturnType<typeof browser> => (webHandle ??= browser());
 
-// A pixel pair, as the model is shown it and as the desktop takes it. Exactly two numbers, so a three-element
-// array is refused here instead of being half-read downstream.
+// A pixel pair, as the model is shown it and as the desktop takes it. Exactly two numbers.
 const point = z.tuple([z.number(), z.number()]);
 
-// The path-shaped and reference-shaped arguments: a non-empty string, because "" reaches the filesystem or the
-// page as a lookup that cannot succeed and whose failure says nothing about what went wrong.
+// A non-empty string: "" would reach the filesystem or the page as a lookup that cannot succeed, and whose
+// failure says nothing about what went wrong.
 const required = z.string().min(1);
 
-/* The tool list, written for a reader who has never seen this machine. Descriptions carry the judgement calls
- * the schema cannot: that writes are off by default, that there is no delete, that one big command beats ten
- * small ones over a link like this. */
+// The tool list. Descriptions carry the judgement calls the schema cannot: writes are off by default, there is
+// no delete, one big command beats ten small ones over a link like this.
 const TOOLS: readonly McpTool<HostScopes>[] = [
     tool({
         name: "describe",
@@ -93,8 +86,9 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
         }),
         run: async ({ command, cwd, timeoutMs }, scopes) => {
             const result = await runCommand({ command, ...(cwd === undefined ? {} : { cwd }), timeoutMs }, scopes);
-            // A non-zero exit is a real answer, not a tool failure, the model reads the code and the streams and
-            // decides. Only a command that could not be RUN comes back as an error.
+            // A non-zero exit is a real answer, not a tool failure; the model reads the code and the streams and
+            // decides.
+            // Only a command that could not be run comes back as an error.
             return textResult(describeResult(result, timeoutMs));
         },
     }),
@@ -149,10 +143,9 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
         name: "clipboard",
         description:
             "Read or replace this device's clipboard: the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
-        /* `text` is required BY the write and meaningless to the read, which is a pairing rather than a shape,
-         * so it rides as a rule on the object instead of splitting the tool into two schemas. A union would say
-         * it more precisely and publish `anyOf` at the root, which is not the `type: "object"` an MCP client
-         * expects an inputSchema to be. */
+        // `text` is required by the write and meaningless to the read, so it rides as a rule on the object rather than
+        // splitting into two schemas: a union would publish `anyOf` at the root, not the `type: "object"` an MCP
+        // client expects.
         input: z
             .object({
                 action: z.enum(["read", "write"]),
@@ -244,13 +237,12 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
             amount: z.number().optional().describe("Wheel notches to scroll. Default 3."),
             ms: z.number().optional().describe('How long to wait (action "wait"). Default 400, maximum 10000.'),
         }),
-        // Which coordinate an action NEEDS, and whether it is on the screen, is act()'s to answer, it is the only
-        // caller that knows how big the screen is.
+        // Which coordinate an action needs, and whether it's on the screen, is act()'s to answer: it's the only caller
+        // that knows the screen's size.
         run: async (input, scopes) => {
             await act(desktop(), input, scopes);
-            // The confirming frame is the point of a GUI tool: without it the agent is typing blind and has to
-            // ask for a screenshot after every action. It needs the `screen` grant too, so a machine that may be
-            // driven but not watched gets the sentence instead, which is a coherent setting, not an error.
+            // The confirming frame needs the `screen` grant too; a device driven but not watched gets this sentence
+            // instead.
             if (scopes.screen !== "on") {
                 return textResult(`${describeAction(input)} (No screenshot: "See the screen" is off for this device.)`);
             }
@@ -280,10 +272,8 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
     }),
-    /* The three flows that run `ic`. As an MCP call they answer once, at the end, with everything the flow
-     * printed, a model has nothing to do with a line as it arrives. The BROWSER does, which is why the same
-     * functions take a line callback and the streaming route (host.contract's `runSandboxFlow`) passes one
-     * that forwards each line as it happens. One implementation, two ways of watching it. */
+    // The three flows that run `ic`, as an MCP call answer once at the end with everything printed. The browser
+    // route (`runSandboxFlow`) passes a line callback instead so it can stream, same functions either way.
     tool({
         name: "swap_sandbox",
         description:
@@ -315,8 +305,8 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
             "The tail of one Intentic sandbox's container log on this device: how you find out why it will not start or what it did before it stopped. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         input: z.object({
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
-            // The prose and the rule come off the same two numbers, so the sentence the model reads cannot
-            // promise a ceiling other than the one it will be held to.
+            // The prose and the rule come off the same two numbers, so the sentence the model reads cannot promise a
+            // ceiling other than the one it is held to.
             lines: z
                 .int()
                 .positive()
@@ -328,11 +318,9 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
     }),
 ];
 
-/* What the audit log records about a call. Arguments verbatim, EXCEPT typed text: `device` with action "type"
- * carries whatever the user asked to be entered, which is routinely a password or a message, and writing it to a
- * file on their disk is the one thing an audit trail must not do to earn its place. Its LENGTH still tells the
- * story a reader needs, "typed 24 characters into the focused window", without becoming a second copy of the
- * secret. A key combination is not redacted: "ctrl+c" is the fact, and there is nothing in it to leak. */
+// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` "type" or
+// `clipboard` "write" call routinely carries a password. A key combination is not redacted; there is nothing
+// in it to leak.
 const auditDetail = (name: string, args: Record<string, unknown>): string => {
     const redact =
         (name === "device" && args["action"] === "type") || (name === "clipboard" && args["action"] === "write") || name === "browser_fill";
@@ -340,7 +328,7 @@ const auditDetail = (name: string, args: Record<string, unknown>): string => {
     return JSON.stringify(safe).slice(0, 500);
 };
 
-// Handle one JSON-RPC message against the grant as it stands at that moment (the router reads it per call).
+// Handle one JSON-RPC message against the grant as it stands at that moment.
 export const handleMcpMessage = createMcpServer<HostScopes>({
     serverInfo: () => ({ name: "intentic-machine", version: MACHINE_VERSION }),
     tools: TOOLS,

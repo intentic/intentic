@@ -14,24 +14,18 @@ import {
     writePersonaSkill,
 } from "./persona-kit.js";
 
-// The sandbox's named personas. No apply step and no teardown: saving a card connects nothing and removing one
-// disconnects nothing (personas.contract.ts says why at length), the accounts themselves are capabilities and
-// keep their own lifecycle. What a card DOES own is its kit folder, which the routes below write and `remove`
-// takes with it.
-/* WHICH CARD A NEW CHAT BELONGS TO, answered by the helper ask in agent/persona-router.ts and handed in from
- * router.ts rather than imported here: agent/ already reads this subsystem's cards for every turn, and a value
- * import back the other way would make the two a cycle. A function is the whole of what these routes need. */
+// Sandbox's named personas: saving or removing a card connects or disconnects nothing, since accounts are capabilities
+// with their own lifecycle. What a card owns is its kit folder, written by the routes below and removed with `remove`.
+// Which card a new chat belongs to; passed in rather than imported, since agent/ already reads this subsystem and
+// importing back would cycle.
 export type PersonaRouter = (ask: PersonaRouteAsk, signal?: AbortSignal) => Promise<PersonaRoute>;
 
 export const createPersonasRoutes = (services: Services, route: PersonaRouter) => {
     const i = implement(personasContract).$context<OrpcContext>();
     const root = services.workspace.root;
 
-    /* Every kit write goes through the card first, for two reasons that are really one: a kit belonging to no
-     * persona is unreachable, nothing can wear it, so writing one would put the owner's prose somewhere no
-     * list shows it; and the manifest the plugin loader needs carries the card's label, which only the card can
-     * supply. Answering a missing card with a 404 rather than creating one keeps this surface unable to mint a
-     * persona by side effect. */
+    // Every kit write goes through the card first: an orphaned kit is unreachable, and its manifest needs the card's
+    // label. A missing card 404s rather than being created, so this surface can't mint a persona by side effect.
     const card = async (id: string) => {
         const found = await services.personas.get(id);
         if (found === undefined) {
@@ -43,11 +37,7 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
     return {
         list: i.list.handler(async () => {
             const [personas, capabilities] = await Promise.all([services.personas.list(), services.capabilities.list()]);
-            /* Which of the accounts these cards name can actually act right now. `hasSession` rather than mere
-             * presence in the manifest: a browser capability exists from the moment it is added, and is only
-             * usable once the owner has finished its guided login, which is exactly the state a cloned
-             * workspace's whole roster sits in, so conflating the two would show every persona as ready on the one
-             * occasion none of them are. */
+            // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state.
             const connected = capabilities
                 .filter((capability) => capability.kind === "browser" && hasSession(services.workspace.root, capability.id))
                 .map((capability) => capability.id);
@@ -62,12 +52,8 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
             await removePersonaKit(root, input.id);
             return { ok: true as const };
         }),
-        // Which card a new chat belongs to (agent/persona-router.ts). Never throws: no cards, no model and a
-        // deadline are all "none" with a reason, because the composer's chip is waiting on this and the chat
-        // must open.
+        // Never throws: no cards, no model, a deadline are all "none" with a reason; the composer's chip is waiting.
         route: i.route.handler(({ input, signal }) => route(input, signal)),
-
-        // ---- the kit ----
 
         kit: i.kit.handler(async ({ input }) => {
             const [prompt, skills] = await Promise.all([readPersonaPrompt(root, input.id), listPersonaSkills(root, input.id)]);
@@ -75,8 +61,7 @@ export const createPersonasRoutes = (services: Services, route: PersonaRouter) =
         }),
         savePrompt: i.savePrompt.handler(async ({ input }) => {
             const persona = await card(input.id);
-            // An emptied box deletes the file. Storing "" instead would leave a card claiming a custom prompt and
-            // running on a blank one, which is the state personaPrompt deliberately reads as "not written yet".
+            // Emptying deletes the file; storing "" would leave it on a blank custom prompt, not "not written yet".
             if (input.prompt.trim() === "") {
                 await removePersonaPrompt(root, input.id);
                 return { ok: true as const };

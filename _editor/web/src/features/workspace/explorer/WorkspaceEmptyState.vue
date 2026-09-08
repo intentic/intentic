@@ -5,30 +5,18 @@ import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAddRepo } from "./useAddRepo";
 
-/* TWO DIFFERENT SILENCES SHARE THIS PANE, and they used to get the same screen. A workspace with code in it and
- * no file open is a reader between files: they know what this place is, and the drop target is a footnote. A
- * workspace with NOTHING in it is somebody who has come here to get their work in and has not done it yet:
- * this is where setup lands them, and for them this pane is the entire product: whatever it offers is what
- * they will believe the options are.
- *
- * It offered one, and the wrong one. "Drop your work here" is a file upload, and most people's code is on a
- * host, so the screen that greets an empty workspace asked them to drag their repository into a browser and
- * mentioned no alternative. The three ways code actually gets in are all here now, repository first because it
- * is the common one.
- *
- * `empty` is read off the tree by the view that owns it: this pane never fetches. */
+// An empty workspace spells out every way to get code in; a workspace with files needs only the drop target.
+// `empty` is read off the tree by the view that owns it: this pane never fetches.
 const props = defineProps<{ empty: boolean }>();
 const emit = defineEmits<{ pick: [] }>();
 
 const { addRepo, cloning, error } = useAddRepo();
-// The clone form opens in place rather than on its own screen: it is one field, and a route change to collect
-// one URL is a heavier promise than the action behind it.
+// Clone form opens inline instead of on its own route.
 const cloneOpen = ref(false);
 const cloneUrl = ref(``);
 const cloneField = ref<HTMLInputElement | undefined>(undefined);
 const canClone = computed(() => cloneUrl.value.trim().length > 0 && !cloning.value);
-// The daemon's sentence is the DETAIL, under a title that says which action failed: the app's one failure
-// shape (see Notice), rather than a bare string in a red box.
+// Notice built from the daemon's error: title names the failure, detail is the daemon's message.
 const cloneNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't clone that repository.`, detail: error.value },
 );
@@ -42,15 +30,14 @@ const submitClone = async (): Promise<void> => {
     if (!canClone.value) {
         return;
     }
-    // Keep the typed URL on failure: the error is usually about credentials or a typo, and both are edits to
-    // what is already in the box rather than reasons to retype it.
+    // On failure, keep the typed URL: the fix is usually an edit, not a retype.
     if (await addRepo(cloneUrl.value)) {
         cloneUrl.value = ``;
         cloneOpen.value = false;
     }
 };
-// The door for code that is neither on a host nor on this machine: a private host needing setup, a tarball, a
-// checkout on a server. The agent has the shell and the credentials, so the honest answer is to ask it.
+// Catch-all for code not on a host or this machine: private host setup, tarball, remote checkout.
+// The agent has shell and credentials to fetch it.
 const askAgent = (): void => {
     startAgent(`Help me get my code into this workspace. Ask me where it currently lives before you do anything.`);
 };
@@ -58,7 +45,7 @@ const askAgent = (): void => {
 
 <template>
     <div class="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
-        <!-- THE FULL WORKSPACE'S VERSION: a reader between files needs the drop target and nothing else. -->
+        <!-- Non-empty workspace: just the drop target. -->
         <template v-if="!props.empty">
             <button
                 type="button"
@@ -71,7 +58,7 @@ const askAgent = (): void => {
             </button>
         </template>
 
-        <!-- THE EMPTY WORKSPACE'S VERSION: every way in, most common first. -->
+        <!-- Empty workspace: every way in, most common first. -->
         <template v-else>
             <div class="flex max-w-md flex-col gap-1">
                 <p class="text-base font-semibold text-content">Get your code in</p>
@@ -81,7 +68,7 @@ const askAgent = (): void => {
             </div>
 
             <div class="flex w-full max-w-md flex-col gap-2 text-left">
-                <!-- 1: A REPOSITORY. The common case, so it leads and it is the one that is spelled out. -->
+                <!-- 1: repository, the common case. -->
                 <div class="rounded-xl border border-line bg-card p-3">
                     <button v-if="!cloneOpen" type="button" class="flex w-full items-center gap-3 text-left" v-action="openClone">
                         <Icon name="code" class="shrink-0 text-lg text-link" />
@@ -107,15 +94,13 @@ const askAgent = (): void => {
                                 <Icon :name="cloning ? `spinner` : `arrow-down-left`" :spin="cloning" />{{ cloning ? "Cloning…" : "Clone" }}
                             </Button>
                         </div>
-                        <!-- Private repositories need the host connected first; the daemon's refusal says so,
-                             so the message is passed through rather than guessed at ahead of it. -->
+                        <!-- Message comes from the daemon's refusal, not guessed ahead of it. -->
                         <Notice v-if="cloneNotice !== undefined" :of="cloneNotice" />
                         <p class="text-2xs text-subtle">A private repository needs its host connected under Capabilities first.</p>
                     </form>
                 </div>
 
-                <!-- 2: FILES FROM THIS MACHINE. The original door, kept whole (drag-and-drop still works over
-                     the whole pane; this is its button). -->
+                <!-- 2: local files; drag-and-drop still works over the whole pane, this is just its button. -->
                 <button
                     type="button"
                     class="flex items-center gap-3 rounded-xl border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
@@ -128,7 +113,7 @@ const askAgent = (): void => {
                     </span>
                 </button>
 
-                <!-- 3: ANYTHING ELSE. The agent has a shell and the credentials, so it is the general case. -->
+                <!-- 3: anything else; the agent has shell and credentials to fetch it. -->
                 <button
                     type="button"
                     class="flex items-center gap-3 rounded-xl border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"

@@ -9,19 +9,12 @@ import { fakeServiceProcesses } from "../harness/route-fakes.testing.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 
-/* The ports routes, over their own five seams.
- *
- * Split out of app.integration.test.ts: 116 tests over every route in the daemon, in one file that two agents
- * working on unrelated features collided in every time, and then stood up on `PortsRoutesDeps` rather than on
- * the whole daemon. Everything these routes can reach is in `deps` below and the compiler checks all of it, so
- * a service the daemon grows tomorrow cannot land in this file's blast radius: it is not in the type.
- *
- * The middleware the app wraps around these (bearer auth, CORS, the boot gate) is the app's, and is tested
- * there. */
+// The ports routes over PortsRoutesDeps; anything the routes can reach is in `deps` below, compiler-checked. Middleware
+// (auth, CORS, boot gate) is the app's and is tested there.
 
 const SLOT = portSlotsFromToken("tok")[0]!;
 
-// Zone + connect token ⇒ this sandbox has a public hostname, which is what makes a forward resolvable.
+// Zone plus connect token gives this sandbox a public hostname, which makes a forward resolvable.
 const routedConfig = { ...testConfig, zone: "example.com", connectToken: "tok" };
 
 const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps => ({
@@ -29,8 +22,7 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     workspace: workspacePaths(WORKSPACE_ROOT),
     portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
     scanPorts: async () => [],
-    // The extension-process index behind each row's name: nothing installed here, so every listener is named
-    // from its own command and session (port-identity.ts owns that reasoning and is tested beside it).
+    // Nothing installed here, so every listener is named from its own command and session alone.
     files: { read: async () => undefined },
     capabilities: { list: async () => [] },
     serviceProcesses: fakeServiceProcesses(),
@@ -50,7 +42,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
     });
     const client = routesClient(portsContract, createPortsRoutes(deps));
 
-    // Every row carries what it IS beside where it runs: the view renders the name and the sentence, not argv.
+    // Every row carries its name and purpose beside where it runs; the view never renders raw argv.
     const named = {
         title: "Vite dev server",
         purpose: "Running in app, outside any terminal this app can show.",
@@ -89,14 +81,14 @@ test("ports.forward maps a listener onto a slot and refuses reserved/dead ports"
         ),
     );
 
-    // The slot's hostname needs no arranging: the edge routes it by parsing the id out of the name.
+    // The slot's hostname needs no setup; the edge routes it by parsing the id out of the name.
     expect(await client.forward({ port: 3000 })).toEqual({ previewUrl: portUrl(SLOT, "example.com", sandboxIdFromToken("tok")) });
-    // The daemon's own surfaces are never forwardable; a port nothing listens on is NOT_FOUND.
+    // The daemon's own surfaces are never forwardable; an unlistened port is NOT_FOUND.
     expect(await errorCode(client.forward({ port: 8787 }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.forward({ port: 4000 }))).toBe("NOT_FOUND");
     // Unforward frees the slot; the port reads unforwarded again.
     expect(await client.unforward({ port: 3000 })).toEqual({ ok: true });
-    // No cwd and no session -> nothing to attribute it to, so the row says exactly that and files under system.
+    // No cwd and no session to attribute it to; the row says so and files under system.
     expect((await client.list()).ports).toEqual([
         {
             port: 3000,

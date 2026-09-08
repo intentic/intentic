@@ -10,8 +10,8 @@ import { createPaperlessProvider } from "./paperless.js";
 
 const res = (stdout: string, code = 0, stderr = ""): SshResult => ({ stdout, stderr, code });
 
-// Drives a compose-service provider entirely over SSH: docker ps reports the labelled container, the
-// project inspect reports each service's image, the wget reports liveness, docker compose up can fail.
+// Fake SSH session driving a compose-service provider: docker ps reports the container, project inspect reports each
+// service's image, wget reports liveness, docker compose up can fail.
 const fakeSsh = (
     opts: { running?: boolean; upFails?: boolean; healthy?: boolean; images?: Record<string, string>; writeFails?: boolean } = {},
 ): { executor: SshExecutor; commands: string[] } => {
@@ -19,9 +19,9 @@ const fakeSsh = (
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            // Simulate an unwritable state dir (e.g. non-root user on root-owned /opt): the mkdir/cat writes exit non-zero.
+            // Simulates an unwritable state dir: the mkdir/cat writes exit non-zero.
             if (opts.writeFails && (command.startsWith("mkdir -p /opt/intentic") || command.startsWith("cat > /opt/intentic"))) {
-                // path-literals: content, the stderr a real mkdir would print, quoted as the kernel spells it.
+                // path-literals: content, the stderr a real mkdir would print.
                 return res("", 1, "mkdir: cannot create directory '/opt/intentic': Permission denied");
             }
             if (command.includes("com.docker.compose.project")) {
@@ -74,8 +74,7 @@ const base = {
     adminPassword: "pw",
 };
 
-// One row per catalog service: its provider factory, the inputs the resolver feeds it, the deterministic
-// outputs, the desired image-by-compose-service map, and the .env keys the write-once guard must carry.
+// One row per catalog service, driving the shared test suite below.
 const cases: {
     kind: string;
     make: (executor: SshExecutor) => Provider;
@@ -182,8 +181,7 @@ for (const svc of cases) {
         const ssh = fakeSsh({ healthy: true });
         expect(await svc.make(ssh.executor).apply(svc.inputs, undefined, ctx())).toEqual(svc.outputs);
         const compose = ssh.commands.find((c) => c.includes(`cat > /opt/intentic/${svc.kind}/compose.yaml`));
-        // A command, as text. The loop below is a no-op for a service that declares no images, so without this
-        // the whole compose write could be missing and the test would still pass.
+        // Guards a service with no images from silently skipping the compose write entirely.
         expect(compose).toEqual(expect.any(String));
         for (const image of Object.values(svc.images)) {
             expect(compose).toContain(image);
@@ -192,7 +190,7 @@ for (const svc of cases) {
             expect(ssh.commands.some((c) => c.includes(`cat > /opt/intentic/${svc.kind}/${file}`))).toBe(true);
         }
         const env = ssh.commands.find((c) => c.includes(`test -f /opt/intentic/${svc.kind}/.env`));
-        // Same reason as the compose write above: a service with no declared env keys skips the loop entirely.
+        // Guards a service with no env keys from silently skipping the env write entirely.
         expect(env).toEqual(expect.any(String));
         for (const key of svc.envKeys) {
             expect(env).toContain(key);
@@ -210,7 +208,7 @@ for (const svc of cases) {
         await expect(svc.make(ssh.executor).apply(svc.inputs, undefined, ctx())).rejects.toThrow(
             new RegExp(`${svc.kind}: create /opt/intentic/${svc.kind} failed \\(exit 1\\): mkdir: cannot create`),
         );
-        // The real error must not be masked as "compose.yaml: no such file", we never reach `up -d`.
+        // Confirms the write failure surfaces before docker compose ever runs.
         expect(ssh.commands.some((c) => c.includes("docker compose") && c.includes("up -d"))).toBe(false);
     });
 
@@ -237,13 +235,12 @@ test("outline: the dex config wires the auth domain, the outline callback, the e
     expect(dex).toContain("https://wiki.example.com/auth/oidc.callback");
     expect(dex).toContain("secretEnv: OIDC_CLIENT_SECRET");
     expect(dex).toContain("email: intentic@example.com");
-    // The admin password's bcrypt hash is inlined into the (per-apply) dex config, not routed through .env,
-    // so it always matches the current password and no compose ${…} round-trip can mangle its `$`.
+    // Bcrypt hash is inlined per apply, not routed through .env or compose ${…}.
     expect(dex).toMatch(/hash: "\$2[aby]\$/);
     expect(dex).not.toContain('"pw"'); // the plaintext never lands in a file
     const env = ssh.commands.find((c) => c.includes("test -f /opt/intentic/outline/.env"));
     expect(env).not.toContain("DEX_ADMIN_PASSWORD_HASH");
-    // dex is force-recreated after the stack is healthy so it reloads the freshly-written config.
+    // Confirms dex force-recreates after the stack is healthy to reload the fresh config.
     expect(ssh.commands.some((c) => c.includes("up -d --force-recreate dex"))).toBe(true);
 });
 
@@ -252,11 +249,9 @@ test("invoiceninja: the .env carries a Laravel base64: APP_KEY and the admin see
     const ssh = fakeSsh({ healthy: true });
     await svc.make(ssh.executor).apply(svc.inputs, undefined, ctx());
     const env = ssh.commands.find((c) => c.includes("test -f /opt/intentic/invoiceninja/.env"));
-    // Derived from the quoter rather than transcribed: a known value's line is exactly what envArg renders,
-    // one .env line as one shell word. Pinning the emitted escapes instead is what made these assertions
-    // outlive the format they described.
+    // Uses envArg to derive the expected line rather than transcribing it, so escaping stays independent of format.
     expect(env).toContain(envArg("IN_PASSWORD", "pw"));
-    // APP_KEY's value is minted per apply, so only its shape is knowable here.
+    // APP_KEY is minted per apply; only its shape is checked here.
     expect(env).toContain("APP_KEY");
     expect(env).toMatch(/base64:[A-Za-z0-9+/=]+/);
     const compose = ssh.commands.find((c) => c.includes("cat > /opt/intentic/invoiceninja/compose.yaml"));
@@ -275,6 +270,6 @@ test("infisical: apply bootstraps the instance admin via the one-shot API and to
     const seed = ssh.commands.find((c) => c.includes("/api/v1/admin/bootstrap"));
     expect(seed).toContain("http://10.0.0.5:8084/api/v1/admin/bootstrap");
     expect(seed).toContain('"email":"intentic@example.com"');
-    // The fake answers the curl with no status: the seed logs and the apply still succeeds.
+    // Fake curl response has no status; apply still succeeds and logs a fallback message.
     expect(logs.some((message) => message.includes("bootstrap returned"))).toBe(true);
 });

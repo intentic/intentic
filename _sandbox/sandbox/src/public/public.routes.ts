@@ -10,19 +10,13 @@ import type { OrpcContext } from "../app-env.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public-files.js";
 
-/* The /public routes: the owner's side of the outbox, and the only authenticated view of it.
- *
- * `list` is the honest inventory, every file with its URL, and for the ones a guard refuses, the reason. That
- * pairing is the whole point: the serve path tells a stranger nothing (every refusal is the same 404, so the
- * outbox can't be probed), which only works because the publisher has a screen that tells them everything.
- *
- * `publish` COPIES. Moving would mean sharing a build output silently removed it from the repo that built it,
- * and the one gesture users repeat most is republishing the same path after a rebuild, which overwrites, by
- * design, so a link that was handed out keeps pointing at the current version. */
+// The /public routes: the owner's authenticated view of the outbox; `list` reports every file with its URL or its
+// refusal reason, while the serve path answers every refusal with the same 404. `publish` copies rather than moves, so
+// republishing a path overwrites and existing links keep working.
 
 export type PublicRoutesDeps = Pick<Services, "config" | "workspace">;
 
-// Percent-encode per segment, so a published "Q3 report.pdf" yields a URL that survives being pasted anywhere.
+// Percent-encodes each path segment separately, not the whole path.
 const fileUrl = (base: string | undefined, path: string): string | undefined =>
     base === undefined ? undefined : `${base}/${path.split("/").map(encodeURIComponent).join("/")}`;
 
@@ -37,17 +31,12 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
     return {
         list: i.list.handler(async () => ({
             ...(base === undefined ? {} : { url: base }),
-            /* Shared conversations are in the outbox but not in this list. They are published by a different
-             * gesture, listed with their own titles and dates by the /share routes, and withdrawn by their own
-             * action, so a row here would be a second, worse handle on the same thing. And there would be
-             * hundreds: the page's assets are one syntax grammar per file, and a file list that is nine parts
-             * machinery is a file list nobody reads. */
+            // Shared conversations live in the outbox but are listed and withdrawn through the /share routes, not here.
             files: (await listPublicFiles(root))
                 .filter((entry) => !entry.path.startsWith(`${SHARE_DIR}/`))
                 .map((entry) => {
                     const file = { path: entry.path, size: entry.size, modifiedAt: entry.modifiedAt };
-                    // A blocked file gets no URL: handing out a link that is guaranteed to 404 would read as
-                    // the guard's failure rather than its verdict.
+                    // A blocked file omits its URL rather than link to a guaranteed 404.
                     if (entry.blocked !== undefined) {
                         return Object.assign(file, { blocked: BLOCK_REASON[entry.blocked] });
                     }
@@ -61,9 +50,7 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             if (source === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a path inside the workspace` });
             }
-            // The control plane holds identity, provider tokens, private conversations, and logged-in browser
-            // sessions. Publishing is the one gesture that would put them on the open internet, so it is refused
-            // here as flatly as the generic file API refuses to read them.
+            // The control plane holds identity, provider tokens and private state and can never be published.
             if (isControlPlanePath(services.workspace.root, source)) {
                 throw new ORPCError("FORBIDDEN", { message: `"${input.path}" is sandbox-private state and can never be published` });
             }
@@ -75,14 +62,12 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
                 throw new ORPCError("NOT_FOUND", { message: `"${input.path}" does not exist` });
             }
             const name = basename(source);
-            // The outbox's one reserved name. A file published here would land among the shared conversations
-            // (or, publishing a directory, on top of them) and be invisible in the list above, and the /share
-            // routes would then be maintaining a tree somebody else is writing into.
+            // SHARE_DIR is reserved for shared conversations; publishing over it would hide files from this list.
             if (name === SHARE_DIR) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${SHARE_DIR}" is where shared conversations are published, rename it first` });
             }
-            // Refuse the shapes the serve path would refuse anyway, at the gesture, where there is someone to
-            // read the reason, instead of silently later when a recipient reports a dead link.
+            // Rejects up front what the serve path would refuse anyway, instead of failing silently for a later
+            // recipient.
             const blocked = blockByName(name);
             if (blocked !== undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${name}" can't be published, ${BLOCK_REASON[blocked]}` });
@@ -97,20 +82,14 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             if (target === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a published path` });
             }
-            /* A shared conversation is withdrawn by its own action, which also drops it from the list the app
-             * shows. Removing its page through here would leave a row promising a link that answers nothing.
-             * Compared on the RESOLVED path, because that is the one the rm below takes: `./conversations` and
-             * `x/../conversations` address the share root just as plainly as `conversations` does, and a guard
-             * reading the raw input agrees with none of them, so either spelling would take out every published
-             * page while the /share rows survive to promise links that answer nothing. */
+            // Compares the resolved path, matching what rm takes below; shared conversations are withdrawn via their
+            // own action, not here.
             const shares = join(root, SHARE_DIR);
             if (target === shares || target.startsWith(shares + sep)) {
                 throw new ORPCError("BAD_REQUEST", { message: "shared conversations are withdrawn from the Shared conversations list" });
             }
             await rm(target, { recursive: true, force: true });
-            // Withdrawing the last file turns publishing off, because the outbox's existence is what "on" means.
-            // Failure is not an error worth raising: nothing is published either way, and an outbox that lingers
-            // empty is corrected by the next unpublish.
+            // Emptying the outbox turns publishing off; a failed cleanup self-heals on the next unpublish.
             const remaining = await readdir(root).catch(() => ["keep"]);
             if (remaining.length === 0) {
                 await rmdir(root).catch(() => undefined);

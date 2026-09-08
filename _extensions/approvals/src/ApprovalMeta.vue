@@ -1,25 +1,8 @@
-<!-- The muted line under an approval's mark: what it is (which platform, or that it is an action), where on
-     that platform, whose name it acts under, and one trailing note. It is deliberately the QUIET half of the
-     row: the post's own words, or the action's summary, are the subject, and four sections of this page were
-     each spelling it out identically before it was one component.
-
-     A PLACE, NOT AN ADDRESS. A reply's target is the URL of the thread it attaches to, and rendered in full
-     that is 90 characters of slug in link colour: the loudest, least readable thing on the row, and it answers
-     "which thread" no better than its own subreddit does. destinationOf (postText.ts) reduces it to the place
-     and the relationship: "reply in r/ClaudeAI", and the address survives as the link and the tooltip, so the
-     piece worth recovering is one hover or one click away. Targets that were already readable (`r/webdev`,
-     `#releases`, `@ada@hachyderm.io`) are passed through untouched.
-
-     IT TRUNCATES AS ONE LINE, not part by part. The first version made only the target shrinkable, on the
-     reasoning that a target is the part that can be enormous. On a phone that is exactly wrong: the target is
-     then the only thing that CAN give, so it collapses to nothing: the line read "Discord · · proposed 1h
-     ago", while the note it was protecting kept its full width and ran under the Approve button beside it.
-     One overflowing line with one ellipsis at the end degrades in the order the reader cares about: platform,
-     then place, then when.
-
-     The full line rides the tooltip whenever there is a target, since that is the piece worth recovering. The
-     link deliberately carries no tooltip of its own: a tooltip inside a tooltipped element opens a second box
-     on top of the first (see tooltip.ts, rule 5). -->
+<!--
+    Muted meta line under an approval: what it is, where, whose name, and a trailing note. A reply target renders through destinationOf (postText.ts)
+    as place plus relationship ('reply in r/ClaudeAI'), not the raw URL; already-short targets pass through unchanged. Truncates as one line, not per
+    segment, so the note is never crowded out.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import { destinationOf } from "./postText";

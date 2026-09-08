@@ -11,64 +11,27 @@ const {
     stretch = false,
     wrap = false,
 } = defineProps<{
-    // badge: a small count chip after the label (e.g. unreviewed changes on a tab); hidden at 0/undefined.
-    // mark: an icon in that same chip INSTEAD of a number, for a pending action whose size is not what the user
-    // acts on (committed work still to push). Takes precedence: one chip states one thing.
-    // title / markTitle: the pill's hover label, raised through `v-tooltip` like every other hint in the app, a
-    // native `title=` looked nothing like the rest and sat behind the browser's ~1s delay. BOTH ride the PILL,
-    // never the chip inside it: a tooltip on a descendant of a tooltipped element opens a second box on top of
-    // the first (see tooltip.ts, rule 5). markTitle wins while there is a mark, on the same "one chip states one
-    // thing" reasoning. Leave title out where the label already says it: a segmented control's whole point is
-    // that its options are readable.
-    // The array is `readonly` so a shared preset can be declared `as const` / `readonly` at its source and
-    // spread straight in (TIME_WINDOWS is, and every feed that shows it would otherwise need a copy).
-    // icon: a glyph BEFORE the label, for a set whose options are also drawn somewhere else by that glyph — the
-    // automation trigger kinds are a clock, a bolt, a live connection and an eye in every row of the list, and a
-    // picker that dropped them would be teaching the vocabulary twice. Never instead of the label: an icon-only
-    // segmented control is a toolbar, and this is a set of named choices.
+    // - badge: chip with a count after the label; hidden at 0/undefined
+    // - mark: an icon in that chip instead of a number, for a pending action not sized by count; wins over badge
+    // - title/markTitle: hover label via v-tooltip, always on the pill, never the chip; markTitle wins with a mark
+    // - icon: glyph before the label, for options with a glyph vocabulary defined elsewhere; never replaces it
+    // - readonly: lets a shared preset (`as const`) spread straight into `options` without copying
     options: readonly { label: string; value: T; icon?: IconName; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
-    /* The control OWNS its row rather than trailing a toolbar: equal-width pills across the full width, in a
-     * framed track, at a height a thumb can hit. Reach for it when the choice is a step of the task on a
-     * narrow screen (setup's Linux / Windows / Compose), not when it is a viewer toggle sitting in a header.
-     * The compact default is deliberate everywhere else: at ~20px tall it is a mouse control, and on a phone
-     * its labels wrap to two lines each and the row stops reading as one control at all. */
+    // Full-width, thumb-height track for a task step on a narrow screen; compact is a mouse control elsewhere.
     stretch?: boolean;
-    /* Lets the ROW break between pills when the options outrun the container: the pill itself stays one line
-     * either way. Off by default because the compact control mostly rides fixed-height toolbar rows, where a
-     * second line would stand taller than the bar holding it; on for pickers sitting in a form column, where
-     * the option list is data-driven (a sandbox's identities) and an unwrapping row would run off the edge
-     * with its later options unreachable. */
+    // Lets the row, not a pill, break when options overflow; off by default since a toolbar row is fixed-height.
     wrap?: boolean;
 }>();
 
 const model = defineModel<T>({ required: true });
 
-/* THE COMPACT PILL IS A MOUSE CONTROL, and this component has said so in prose since it was written: "at ~20px
- * tall it is a mouse control". What it did not do was act on it. Every compact call site: the mobile
- * workspace's Files|Changes switch, its Name|Text|Smart scope switch, the sandbox and settings sub-navs:
- * rendered 22px pills on a phone, which a sweep at 390px found to be most of that form factor's undersized
- * targets in one component.
- *
- * The `stretch` variant was already built for the other answer (a full-width track at a thumb's height) and is
- * right where the choice is a STEP OF THE TASK. It is wrong for a switch riding a fixed-height toolbar row,
- * which is where the compact one is used and where a full-width track cannot fit. So the pill keeps its ink
- * and takes the hit area instead: `touch-target` grows the tappable box to 44px on a coarse pointer without
- * moving the pill or the bar around it.
- *
- * DERIVED, NOT A PROP. A call site cannot know which pointer is reading it, and asking 40 of them to pass a
- * flag is how the prose above came to be true and unenforced. */
+// Derived from the device, not a prop, so `touch-target` applies automatically to a coarse pointer everywhere.
 const { coarse } = useDevice();
 
-/* ONE NAME PER PILL, BADGE INCLUDED — the tab bar's `tabLabel` rule, for the tab bar's reason. `title` and
- * `markTitle` reach a pointer through the tooltip and reach NOTHING on a phone, where the chip beside the
- * label is a bare glyph or a bare number and the sentence saying what it counts has nowhere else to go. Folded
- * into the accessible name, it is at least readable by the one reader who can still ask for it.
- *
- * PREFIXED WITH THE LABEL, never replacing it: an `aria-label` overrides the visible text, so a name that did
- * not start with the word on the pill would leave "activate what you see" untrue. Absent where there is no
- * hint, so the visible text stays the name and nothing is restated. */
+// Accessible name folds the hover hint in, since a phone never sees the tooltip; always prefixed with the visible
+// label, absent when there's no hint.
 const nameOf = (option: { label: string; title?: string; markTitle?: string; mark?: unknown }): string | undefined => {
     const hint = (option.mark === undefined ? option.title : (option.markTitle ?? option.title))?.trim();
     return hint === undefined || hint === `` ? undefined : `${option.label} · ${hint}`;

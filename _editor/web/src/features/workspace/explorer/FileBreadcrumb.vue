@@ -6,35 +6,20 @@ import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { formatBytes } from "@intentic/ui";
 import { CHROME_SCOPE, contextTarget, HOISTED_CONTEXT, viewerActionsTarget } from "../files/viewerChrome";
 
-/* The open file's context: where it sits, who else is reading it, and whatever its viewer and the host want to
- * offer about it. The trailing slot hosts the host's actions (FileViewer puts its edit controls there); the
- * viewer's own controls arrive by teleport (see viewerChrome).
- *
- * IT IS A BAND ONLY WHERE NOTHING ELSE WILL CARRY IT. Hoisted into a view's existing bar (the desktop tab row)
- * it is a run of segments on that row; standalone (the phone, which has no tab strip) it draws the bar it
- * always drew.
- *
- * AND HOISTED, IT DROPS THE FILENAME. The tab two centimetres to its left already says `across-sandboxes-
- * design.md`; repeating it was the clearest thing wrong with the old stack, and the folders are the half that
- * was actually adding something. The whole path is still one hover away, with the file's size, which is where
- * the last segment's tooltip went.
- *
- * It also CLIPS rather than scrolls up there. A scrollbar is a promise that the rest is worth going to get, and
- * in a 36px bar shared with the tab strip it is three pixels of furniture under a path whose full text is
- * already in the tooltip. Standalone it keeps the scroller: that bar has nothing else in it, and on a phone
- * dragging the path is the only way to read the end of a deep one. */
+// Open file's path, presence avatars, and the host's/viewer's own actions (via teleport); drawn as its own bar
+// only where nothing else carries it (hoisted into an existing tab row otherwise).
+// Hoisted, it drops the filename (the tab already shows it) and clips instead of scrolling; standalone it keeps both.
 
 const { path, meta } = defineProps<{ path: string; meta?: WorkspaceTreeEntry }>();
 
 const hoisted = inject(HOISTED_CONTEXT, false);
-// Which pane's bar this belongs to (see CHROME_SCOPE). The phone provides none and never teleports anyway.
+// Which pane's bar this belongs to; the phone provides none and never teleports.
 const scope = inject(CHROME_SCOPE, `main`);
 
 const segments = computed(() => path.split(`/`));
-// Hoisted: the folders alone, and nothing at all for a file at the root, where there is no folder context to
-// give and a lone `›` would be punctuation pretending to be information.
+// Hoisted shows folders only, nothing for a root-level file, where a lone `›` would say nothing.
 const crumbs = computed(() => (hoisted ? segments.value.slice(0, -1) : segments.value));
-// Empty when there's no size: PrimeVue's tooltip directive unbinds on a falsy value, so no tooltip shows.
+// Empty when there's no size, so PrimeVue's tooltip directive unbinds rather than showing a blank tooltip.
 const sizeLabel = computed(() => formatBytes(meta?.size));
 const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${sizeLabel.value}`));
 </script>
@@ -49,8 +34,7 @@ const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${
                 v-tooltip.bottom="fullTitle"
             >
                 <template v-for="(seg, index) in crumbs" :key="index">
-                    <!-- Standalone, the last segment IS the file and wears the weight. Hoisted, every segment
-                         is a folder, so none of them does: the emphasis belongs on the tab. -->
+                    <!-- Standalone, the last segment is the file and gets the emphasis; hoisted, every segment is just a folder. -->
                     <span v-if="!hoisted && index === crumbs.length - 1" class="font-medium text-content">{{ seg }}</span>
                     <template v-else>
                         <span>{{ seg }}</span>
@@ -60,7 +44,7 @@ const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${
             </div>
             <!-- Members looking at the same file as you, live. -->
             <PresenceAvatars :members="viewersOfPath(path)" label="also viewing this file" />
-            <!-- The viewer's own controls, teleported in rather than opening a toolbar under this one. -->
+            <!-- Viewer's own controls, teleported in here. -->
             <div :id="viewerActionsTarget(scope)" class="flex shrink-0 items-center gap-1"></div>
             <slot />
         </div>

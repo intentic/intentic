@@ -23,22 +23,9 @@ import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, 
 import { togglePreviewFloating, usePreviewFloating } from "./previewFloating";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
-/* THE ONE PREVIEW PANEL: the live, clickable app, full-bleed under one slim strip of chrome. Mounted once per
- * window (shell/PoppablePanels) and teleported between the /preview area, a floating window's whole canvas and
- * the parking stage, so the iframe, and the previewed app's own state inside it, survives every move in a
- * window. Moving it to a window of its OWN is a fresh instance, which is the one place the app under preview
- * reloads (composables/floating.ts states that trade).
- *
- * DESIGNED FOR ONE SCREEN WITH NO ROOM TO SPARE. The app under preview gets everything below a single h-10
- * bar; nothing floats over it (hover-revealed chrome steals the exact pixels the previewed app's own header
- * sits under, and an overlay that appears on the way to a button in the app is chrome fighting content). The
- * bar holds the whole vocabulary: WHICH app (the switcher), whether it is UP (the badge), and the verbs:
- * start/stop, reload, phone width, its terminal, its public link, a window of its own.
- *
- * A REAL IFRAME, NOT A STREAMED BROWSER. The dev server already answers at a public preview hostname, so the
- * page here is the app itself: clickable at native latency, hot-reloading as the agent edits, where
- * /browsers shows screenshots of a browser the AGENT is driving. The two surfaces answer different questions
- * ("what is my app like" vs "what is the agent doing"), which is why this is not that view. */
+// Real iframe onto the dev server's own public hostname, not a streamed screenshot. Teleported between the /preview
+// area, a floating window and the parking stage; state survives every move except into its own window, which is a fresh
+// instance. Everything below one h-10 strip belongs to the app under preview.
 
 const router = useRouter();
 // Mounted ⇔ opened (PoppablePanels), so the panel's own lifetime gates the per-monorepo apps fan-out.
@@ -48,10 +35,9 @@ const target = computed(() => pickTarget(targets.value, previewSelectedId.value)
 const { floats } = usePreviewFloating();
 const terminal = useTerminalPanel();
 
-// --- The switcher -------------------------------------------------------------------------------
-/* Grouped by where a row comes FROM: one heading per repo (an app wears its own name under its repo's), then
- * the forwarded ports, then the workspace's page, then the address the user typed. The row's annotation is its
- * live state, so the list answers "what is up?" before anything is clicked. */
+// The switcher
+// Grouped by where a row comes from: one heading per repo, then forwarded ports, the workspace page, the address. Each
+// row's annotation is its live state, so the list answers "what is up?" unclicked.
 const stateOf = (entry: PreviewTarget): string =>
     entry.kind === `repo` || entry.kind === `app` ? (entry.healthy ? `running` : entry.running ? `starting` : `stopped`) : `live`;
 const rowOf = (entry: PreviewTarget) => ({
@@ -88,20 +74,11 @@ const selected = computed<string | undefined>({
 });
 
 const statusVariant = computed<StatusVariant>(() => (target.value?.healthy ? `success` : target.value?.running ? `info` : `neutral`));
-// What copying this target's URL actually gets you. Everything the sandbox serves answers at a public preview
-// hostname, so "public link" is the truth there, and a typed address is somebody else's page, where claiming
-// anything about who can open it would be a guess.
+// Everything the sandbox serves has a public link; a typed address isn't claimed as shareable.
 const copyHint = computed(() => (target.value?.kind === `address` ? `Copy the address` : `Copy the public link`));
 
-/* --- THE ADDRESS BAR, which is a bar only while it is wanted -----------------------------------------
- * Everything the switcher lists was discovered, and a discovered list is a closed one, so the panel takes a
- * typed address too (a staging URL, another route of the app, a page on another box). It is a TOGGLE rather
- * than a permanent field because this panel's whole design is that the app under preview owns every pixel
- * below one 40px strip, and an always-open URL box would spend a third of that strip on a control most looks
- * never touch. Opened by the link button, by picking the Address row, and by nothing else.
- *
- * The field starts on whatever is on screen, so "the same page one path deeper" is an edit rather than a
- * retype. Enter commits; Escape leaves what was showing alone. */
+// Toggle, not a permanent field, so the previewed app keeps every pixel below the bar; opened by the link button or the
+// Address row. Starts prefilled with the current URL; Enter commits, Escape cancels.
 const addressOpen = ref(false);
 const addressDraft = ref(``);
 const addressField = ref<HTMLInputElement | undefined>(undefined);
@@ -125,7 +102,7 @@ watch(
     },
 );
 
-// --- Start / stop -------------------------------------------------------------------------------
+// Start / stop
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
 const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<void> => {
@@ -144,9 +121,8 @@ const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<voi
     }
 };
 
-/* Preview ONE of the servers a fanned-out repo is really running: forward that port and land on the target it
- * becomes. The forward is a publish (that address is open to anyone holding it), which the screen says next to
- * the button rather than here, and the Ports view is where one is taken back. */
+// Forwards one server of a fanned-out repo and lands on the target it becomes. Forwarding publishes the port; the Ports
+// view is where it's taken back.
 const forwarding = ref<number | undefined>(undefined);
 const previewServer = async (port: number): Promise<void> => {
     actionError.value = undefined;
@@ -165,18 +141,10 @@ const previewServer = async (port: number): Promise<void> => {
     }
 };
 
-// --- The iframe, probe-gated --------------------------------------------------------------------
-/* NOTHING IS FRAMED UNTIL THE ADDRESS HAS ANSWERED FOR ITSELF. An iframe that error-pages never retries, a
- * freshly-minted name lags at the user's resolver, and, worst of the three, an address that reaches no sandbox
- * at all still gets an answer: the edge's own 502, whose error page carries X-Frame-Options, which the browser
- * renders as a bare "<host> refused to connect" inside the frame. So the kit's probe (@intentic/ui
- * portPreview) asks the preview proxy about ITSELF over a CORS-open path, and this panel shows the answer it
- * gives instead of guessing from a request that settled. What is local here is the generation counter, which is
- * how a superseded probe stops being allowed to write this panel's state.
- *
- * Everything the sandbox serves is probed, panels, forwarded ports and the outbox alike; only a typed address
- * is not, because it is somebody else's site, it has no probe to answer, and a wrong one deserves the browser's
- * own plain "this didn't load" rather than a three-minute spinner. */
+// The iframe, probe-gated
+// Nothing is framed until the address probes itself as reachable (an iframe never retries a DNS/502 error page); a
+// generation counter drops a superseded probe. Only sandbox-served targets are probed; a typed address gets the
+// browser's own error.
 const previewSrc = ref<string | undefined>(undefined);
 const probeSlow = ref(false);
 const probing = ref(false);
@@ -205,9 +173,8 @@ const probeThenShow = async (url: string): Promise<void> => {
     }
 };
 
-/* Resolved when the daemon has published an address for this target: `url` is present exactly while the
- * sandbox's own preview proxy resolves it to something serving, so its absence is one of the explained states
- * below (starting, several servers, nothing running) rather than a wait. */
+// Resolves once the daemon has published an address for the target; url's absence is one of the explained states below
+// (starting, fanned out, not running), not a wait.
 const resolvePreview = (): void => {
     const entry = target.value;
     probeGeneration += 1;
@@ -225,9 +192,8 @@ const resolvePreview = (): void => {
     void probeThenShow(entry.url);
 };
 
-// (Re)resolve on the facts that matter: primitive deps, so the poll's object churn doesn't re-fire it, and
-// re-key the iframe when the target changes or its address comes back (a restarted server keeps its src, and
-// Vue would otherwise leave the stale error frame in place instead of re-navigating).
+// Re-resolves on primitive deps only, so the poll's object churn doesn't re-fire it; re-keys the iframe when the target
+// or its address changes, since a restarted server would otherwise keep the stale frame.
 const previewEpoch = ref(0);
 watch(
     () => [target.value?.id, target.value?.url] as const,
@@ -245,24 +211,16 @@ onUnmounted(() => {
     probeGeneration += 1;
 });
 
-// The bar's own reload: the previewed app navigated somewhere, or the user wants a clean load after an edit
-// hot reload went wrong. Re-keying is the only reliable cross-origin reload.
+// Reloads by re-keying the iframe, the only reliable reload across origins.
 const reload = (): void => {
     previewEpoch.value += 1;
 };
 
-/* Phone width. The one responsive question a builder asks constantly ("does this survive a phone?") answered
- * in place instead of through devtools on a cross-origin frame. Full is the default and the panel's whole
- * width; phone centres a 390px column (a current iPhone's CSS width) on the canvas. */
+// Full is the panel's whole width; phone centers a 390px column (current iPhone CSS width) in place of devtools.
 const fit = ref<`full` | `phone`>(`full`);
 
-/* --- WHAT START IS ABOUT TO DO -------------------------------------------------------------------
- * A button labelled "Start" in a workspace of several repositories says nothing about WHICH thing starts,
- * WHAT it runs, or where the output goes, and it is not a small action: it installs dependencies on first use
- * and then runs the repository's own dev command, which can take minutes and can bring up whatever that
- * command brings up. So the sentence next to it names all three, and the terminal it names is real, the
- * daemon's own convention (`panel-<repo>` / `panel-<repo>--<app>`), which is where the output, and any failure,
- * actually lands. */
+// Names what Start will run and where its output lands (`panel-<repo>` / `panel-<repo>--<app>`), since a bare "Start"
+// names neither the target nor the command it's about to run.
 const startSession = computed<string | undefined>(() => {
     const entry = target.value;
     if (entry?.repo === undefined || !entry.startable) {
@@ -277,8 +235,7 @@ const startHint = computed<string | undefined>(() => {
     }
     const what =
         entry.app === undefined ? `${entry.repo}'s own dev server (its operator/ panel, or its dev script)` : `the ${entry.app} app's dev server`;
-    // What it COSTS is read off the tree, not assumed: the starter site arrives installed, and "a few minutes"
-    // over it was the sentence that made a two-second start read as something to go and wait out.
+    // Cost is read off the tree's install state, not assumed.
     const cost = entry.installed
         ? `Its dependencies are installed, so it's up in a few seconds.`
         : `Its dependencies aren't installed yet, so they install first, which can take a few minutes.`;
@@ -381,8 +338,7 @@ onUnmounted(stopStartingPoll);
 
 <template>
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
-        <!-- The strip. One row, h-10: switcher + status on the left, verbs on the right, or, while an address
-             is being typed, the field takes the left half and the verbs stay put. -->
+        <!-- One h-10 row: switcher and status on the left, verbs on the right; typing an address swaps the left half for the field. -->
         <div class="flex h-10 shrink-0 items-center gap-1 border-b border-line bg-card px-1.5">
             <template v-if="addressOpen">
                 <input
@@ -411,16 +367,17 @@ onUnmounted(stopStartingPoll);
                     aria-label="Which app to preview"
                     header="Preview"
                 />
-                <!-- Up or down, for the things that can be either. On kind, not on `startable`: a monorepo with
-                     no root `dev` script can't be started from here and is still plainly running or not. -->
+                <!--
+                    Shown for repo/app kinds regardless of startable; a monorepo with no root `dev` can't be started here but is still running or
+                    not.
+                -->
                 <StatusBadge
                     v-if="target && (target.kind === `repo` || target.kind === `app`)"
                     :variant="statusVariant"
                     :label="stateOf(target)"
                     size="xs"
                 />
-                <!-- Point it somewhere of your own. Always offered, including with nothing discovered at all:
-                     that is exactly the state where a typed address is the only preview there can be. -->
+                <!-- Always offered, even with nothing discovered: a typed address is the only preview possible then. -->
                 <button
                     type="button"
                     :class="ui.iconButton(`h-8 w-8`)"
@@ -435,8 +392,7 @@ onUnmounted(stopStartingPoll);
             <span class="flex-1"></span>
 
             <template v-if="target">
-                <!-- The verb carries what it will do: in a workspace of several repositories the button alone
-                     names neither the target nor the command, and this one installs and runs things. -->
+                <!-- Tooltip names target and command, since "Start" alone says neither in a multi-repo workspace. -->
                 <Button
                     v-if="target.startable && !target.running"
                     label="Start"
@@ -480,11 +436,10 @@ onUnmounted(stopStartingPoll);
                 >
                     <Icon name="code" />
                 </button>
-                <!-- A dev server's link is public the moment it answers: a live demo anyone can open, so the
-                     copy says so; a typed address is just an address and must not be described as shareable.
-                     Offered only while something is actually up, so a copied link never 502s on arrival.
-                     `arrow-up-right` for the new tab, because `external-link` belongs to the pop-out below and
-                     one bar may not spell two different verbs with one glyph. -->
+                <!--
+                    Shown only once the target answers, so a copied link never 502s; `arrow-up-right` here since `external-link` is reserved for the
+                    window pop-out below.
+                -->
                 <template v-if="target.url && target.healthy">
                     <CopyButton :text="target.url" :aria-label="copyHint" v-tooltip.bottom="copyHint" />
                     <a
@@ -500,9 +455,7 @@ onUnmounted(stopStartingPoll);
                 </template>
             </template>
 
-            <!-- `external-link`, the glyph the chat's own pop-out button wears (ChatTabs.vue): one gesture,
-                 one icon. `window-maximize` was here first and read as fullscreen, which is a different
-                 promise entirely: the press opens a separate OS window, it does not grow this one. -->
+            <!-- external-link, matching the chat's pop-out button; opens a separate OS window, not fullscreen. -->
             <button
                 type="button"
                 :class="ui.iconButton(`h-8 w-8`)"
@@ -514,16 +467,14 @@ onUnmounted(stopStartingPoll);
             </button>
         </div>
 
-        <!-- An action that failed reports IN FLOW, at the top of the panel it failed in. It used to float over
-             the preview's top edge on an absolute offset of its own, which is the shape this app now reserves
-             for one thing only — the notification lane — and this is not one of its three kinds: it is a
-             view-local failure, it belongs beside the controls that raised it, and pushing the preview down by
-             two lines is a smaller imposition than covering the top of the page being previewed. -->
+        <!--
+            Reports in flow, not through the notification lane: a view-local failure belongs beside the controls that raised it, pushing the preview
+            down rather than covering it.
+        -->
         <div class="flex min-h-0 flex-1 flex-col">
             <Notice v-if="actionError" :of="noticeOf(actionError)" class="mx-3 mt-3" />
 
-            <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered, and it always offers
-                 the one preview that needs nothing discovered, which is an address the user knows themselves. -->
+            <!-- Claimed only once the lists have answered; always offers a typed address, the one preview needing nothing discovered. -->
             <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="eye" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing to preview yet.</p>
@@ -539,12 +490,10 @@ onUnmounted(stopStartingPoll);
                 <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
             </div>
 
-            <!-- The app itself: the real dev server through the tunnel, hot reload works; apps that forbid
-                 framing (X-Frame-Options) stay blank here, and the new-tab link is the escape hatch. Mounted
-                 only after the hostname probe succeeds, so the browser's DNS error page can never appear.
-
-                 A SERVER GETS ITS OWN ORIGIN: see frameSandbox, which owns that rule and why the previous
-                 blanket sandbox left a dev server's own images 403ing inside its own preview. -->
+            <!--
+                Real dev server through the tunnel; a server that forbids framing (X-Frame-Options) stays blank, with the new-tab link as the escape
+                hatch. Mounted only once the hostname probe succeeds, so no DNS error page ever appears.
+            -->
             <div v-else-if="previewSrc" class="flex min-h-0 flex-1 justify-center overflow-hidden">
                 <iframe
                     :key="`${previewEpoch}-${previewSrc}`"
@@ -556,12 +505,10 @@ onUnmounted(stopStartingPoll);
                 ></iframe>
             </div>
 
-            <!-- THE ADDRESS REACHES NO SANDBOX. The name resolved and something answered, and it was not this
-                 sandbox's preview proxy: no route was ever attached for it (a box with no tunnel grant
-                 publishes none), or the record is still propagating. This is the state the panel used to have
-                 no words for, because the probe called any answer a success and framed it, leaving the user
-                 with the browser's own "refused to connect" and nowhere to go. Forwarded ports are the way out
-                 that does not depend on a per-panel name. -->
+            <!--
+                Something answered, but not this sandbox's preview proxy: no route was ever attached, or the record is still propagating. Forwarded
+                ports don't depend on a per-panel name.
+            -->
             <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">This preview address doesn't reach your sandbox.</p>
@@ -580,10 +527,10 @@ onUnmounted(stopStartingPoll);
                 </div>
             </div>
 
-            <!-- ANSWERING ON PORTS NO ONE HOSTNAME CAN STAND FOR. The ordinary monorepo: `dev` fans a turbo run
-                 out across packages that each pin their own port, so the repo is plainly up and its repo-level
-                 preview address means nothing. Naming what it IS serving is the whole answer, and picking one
-                 finishes it right here: forwarding is what makes a port previewable, and it is one press. -->
+            <!--
+                Ordinary monorepo shape: `dev` fans out across packages on their own ports, so no single preview address applies. Forwarding one, in
+                one press, is what makes it previewable.
+            -->
             <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">
@@ -649,8 +596,7 @@ onUnmounted(stopStartingPoll);
                 </div>
             </div>
 
-            <!-- NOT RUNNING, and the one screen where a button is about to do something substantial: it says
-                 what, where, and how long, because "Start" alone answers none of the three. -->
+            <!-- Not running, the one screen where the button is about to do something substantial, so it says what, where, and how long. -->
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <p class="text-sm text-muted">
                     <span class="font-mono">{{ target.label }}</span> isn't running.

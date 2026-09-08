@@ -2,9 +2,8 @@ import { expect, test } from "vitest";
 import { bindingWindow, gatesModel, gatingWindows, scopedWindow } from "./plan-pools.js";
 import type { AccountUsage, UsageWindow } from "../schemas/plan-limits.js";
 
-/* ONE RULE FOR "WHICH POOL STANDS IN THE WAY OF THIS MODEL", shared by the daemon's picker and the browser's
- * rings. What these pin is the case the six rules it replaced disagreed on: a plan that meters models
- * separately, where the account's fullest pool and the pool a given model spends are different allowances. */
+// One rule for which pool blocks a given model, shared by the daemon and the browser: a plan can meter models
+// separately, so the account's fullest pool need not be the model's own.
 
 const window = (over: Partial<UsageWindow> & Pick<UsageWindow, "kind">): UsageWindow => ({ utilization: 10, gates: "all", ...over });
 const usage = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: 0 });
@@ -24,7 +23,6 @@ const CLAUDE = usage(
 test("matches a pool's names as runs of whole words against the id and the label alike", () => {
     expect(gatesModel({ models: ["opus"] }, { id: "claude-opus-4-6" })).toBe(true);
     expect(gatesModel({ models: ["Opus"] }, { id: "some-id", label: "Claude Opus 4.6" })).toBe(true);
-    // "Sonnet" is not in "claude-opus-4-6", and a substring test is what would have said "son" was.
     expect(gatesModel({ models: ["son"] }, { id: "claude-sonnet-4-6" })).toBe(false);
     expect(gatesModel({ models: ["claude opus"] }, { id: "claude-opus-4-6" })).toBe(true);
     expect(gatesModel({ models: ["opus claude"] }, { id: "claude-opus-4-6" })).toBe(false);
@@ -33,12 +31,11 @@ test("matches a pool's names as runs of whole words against the id and the label
 });
 
 test("a Google account spent for Gemini still has room for Claude Opus, and the other way round", () => {
-    // The Antigravity case: one sign-in, two allowances on two clocks. Reading the account's fullest pool put a
-    // red ring over Claude Opus while its own pool sat at 27%.
+    // One account, two independently metered pools (Gemini vs Claude/GPT), each on its own clock.
     expect(bindingWindow(GOOGLE, { id: "claude-opus-4-6-thinking" })?.kind).toBe("google:3p-weekly");
     expect(bindingWindow(GOOGLE, { id: "gpt-oss-120b" })?.kind).toBe("google:3p-weekly");
     expect(bindingWindow(GOOGLE, { id: "gemini-3-pro" })?.kind).toBe("google:gemini-weekly");
-    // A family the channel has not published a pool for is gated by nothing: unmeasured, never blocked.
+    // A model family with no published pool is unmeasured, not blocked.
     expect(bindingWindow(GOOGLE, { id: "kimi-k2" })).toBeUndefined();
 });
 
@@ -49,8 +46,6 @@ test("a Claude account's spent Opus slice does not bind a Haiku call, and its ow
 });
 
 test("with no model named, the account's tightest pool is the answer, and a pool gating nothing is never it", () => {
-    // The Cowork surface pool is at 99% and gates none of this sandbox's turns: shown on the roster, never the
-    // account's headroom.
     expect(bindingWindow(CLAUDE)?.kind).toBe("model:Opus");
     expect(gatingWindows(CLAUDE).map((entry) => entry.kind)).toEqual(["five_hour", "seven_day", "model:Opus"]);
     expect(bindingWindow(undefined)).toBeUndefined();
@@ -59,7 +54,7 @@ test("with no model named, the account's tightest pool is the answer, and a pool
 
 test("names the pool a plan meters this model by on its own, preferring the more specific and refusing a tie", () => {
     expect(scopedWindow(CLAUDE, { id: "claude-opus-4-6" })?.kind).toBe("model:Opus");
-    // The all-models weekly is not this model's own allowance, so a plan with no slice for it says nothing.
+    // five_hour and seven_day meter all models, not just this one; scopedWindow needs a model-specific pool.
     expect(scopedWindow(CLAUDE, { id: "claude-haiku-4-5" })).toBeUndefined();
     const layered = usage(
         window({ kind: "model:Opus", gates: { models: ["Opus"] } }),

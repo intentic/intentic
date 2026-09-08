@@ -52,15 +52,10 @@ test("sessions list shows recent sessions and filters by query", async () => {
     const filtered = await invoke(["sessions", "list", "jwt"]);
     expect(filtered.out).toContain("Fix JWT refresh rotation");
     expect(filtered.out).not.toContain("Unify workspace file icons");
-    // With no fleet registry in reach — every run of iq outside a sandbox — a row is named by its own
-    // transcript and the conversation breadcrumb is not offered at all.
+    // With no fleet registry in reach, a row is named by its own transcript; no conversation breadcrumb.
     expect(all.out).not.toContain("agents show");
 });
 
-/* THE CONVERSATION BEHIND A SESSION. Inside a sandbox almost every session was produced by an agent turn, and
- * the daemon's registry is the only thing that knows which: without the join a listing is a column of uuids
- * and the word "(untitled)", which is precisely how one spelling of a conversation stopped leading to the
- * other. The breadcrumb rides along because the reader of this list is one step from wanting the whole thing. */
 test("sessions list names the conversation behind each session when a fleet registry is in reach", async () => {
     process.env["IQ_HISTORY_ROOT"] = historyRoot;
     try {
@@ -68,7 +63,7 @@ test("sessions list names the conversation behind each session when a fleet regi
         expect(exitCode).toBe(0);
         expect(out).toContain("fixture-agent-1 · Fixture conversation 1");
         expect(out).toContain("fixture-agent-2 · Fixture conversation 2");
-        // The conversation's title replaces the transcript's own, which is the one a reader cannot act on.
+        // The conversation's title replaces the transcript's own title.
         expect(out).not.toContain("Fix JWT refresh rotation");
         expect(out).toContain("agents show <id>");
     } finally {
@@ -132,13 +127,10 @@ test("hook mode emits additionalContext JSON only on a strong first-prompt match
     const output = JSON.parse(out) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } };
     expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(output.hookSpecificOutput.additionalContext).toContain(`iq sessions fork ${SESSION_A}`);
-    // The context carries the matched turns' asked→answered excerpts, not just the fork pointer.
+    // additionalContext carries the matched turns' asked→answered excerpts, not just the fork pointer.
     expect(output.hookSpecificOutput.additionalContext).toContain("asked: Fix the JWT refresh token rotation");
     expect(output.hookSpecificOutput.additionalContext).toContain("answered: The rotation bug is in token refresh.");
-    /* The recall leads and the fork is an aside, which is the other way round from how this was worded. Told to
-     * "suggest they fork it instead of rebuilding context", the model was being given an instruction about an
-     * action only the user can take: offered on 22 prompts in one day and acted on zero times. The excerpts
-     * underneath were what actually got read, so they are what the lead now hands over to. */
+    // Excerpts lead and the fork mention is secondary now; the old "suggest they fork it" phrasing is gone.
     expect(output.hookSpecificOutput.additionalContext).toContain("Use what follows as background");
     expect(output.hookSpecificOutput.additionalContext).not.toMatch(/suggest they fork it instead/i);
 });
@@ -146,7 +138,7 @@ test("hook mode emits additionalContext JSON only on a strong first-prompt match
 test("hook mode stays silent on non-first prompts, weak matches, and garbage input", async () => {
     let out = "";
     const write = (chunk: string): void => void (out += chunk);
-    // The fixture transcript has two typed prompts, not a session start.
+    // The fixture transcript already has two typed prompts, not a session start.
     await runHookMatch(
         JSON.stringify({
             session_id: "x",
@@ -186,8 +178,7 @@ test("sessions fork --dry-run reports without writing; real fork materializes a 
     const real = await invoke(["sessions", "fork", SESSION_A, "--at", "0"]);
     expect(real.exitCode).toBe(0);
     const forkedId = /claude --resume (\S+)/.exec(real.out)?.[1];
-    // A NEW id, which is the whole of what forking means. Merely having captured something would hold just as
-    // well for a command that printed the original session back and wrote nothing.
+    // Must be a new id: forking that returned the original session unchanged would pass a weaker check.
     expect(forkedId).not.toBe(SESSION_A);
     expect(forkedId).toMatch(/^\S+$/);
     expect(existsSync(`${projectsDir}/${forkedId}.jsonl`)).toBe(true);

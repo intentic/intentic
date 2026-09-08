@@ -1,23 +1,5 @@
-/* PLAUSIBLE VALUES FOR A JSON SCHEMA, so the reference shows payloads that read like a real sandbox's.
- *
- * WHY NOT JUST PRINT THE SCHEMA. A schema says `{ branch: string, ahead: integer }`, and a reader has to
- * imagine the answer. What they want to see is `{ branch: "main", ahead: 2 }` — the shape AND what it looks
- * like full. Every reference that feels good does this, and the ones that feel like a type dump do not.
- *
- * VALUES ARE CHOSEN BY FIELD NAME FIRST, and that is the whole trick. `"string"` everywhere is worse than no
- * example at all: it teaches nothing and reads as a placeholder, which is what makes generated documentation
- * feel generated. A field called `branch` gets `main`, `path` gets a real-looking source path, anything ending
- * in `At` gets a timestamp. The dictionary below is the vocabulary of this particular API, so it is worth its
- * length: it is what turns 255 schema dumps into 255 examples.
- *
- * DETERMINISTIC, WITH NO CLOCK AND NO RANDOMNESS. The pages are static HTML built from this, so a value that
- * moved would churn every one of them on every build, and a screenshot taken from one would be describing a
- * page the next build does not have. Every timestamp below is the same fixed instant.
- *
- * IT RUNS AT BUILD TIME, ONCE PER OPERATION, and only the finished JSON is shipped. The alternative was to
- * send each group's schemas to the browser and generate there, which for the git group alone is a few hundred
- * kilobytes of schema so a reader can watch a value be invented. The playground ships the answer instead.
- */
+// Plausible example values for a JSON Schema, keyed by field name; deterministic (fixed instant, no randomness) so the
+// generated pages don't churn. Runs at build time; only the finished JSON ships.
 
 /** A JSON Schema node, as much of one as this file needs to look at. */
 export interface SchemaNode {
@@ -43,15 +25,12 @@ export interface SchemaNode {
     nullable?: boolean;
 }
 
-/* THE ONE INSTANT THIS WHOLE REFERENCE HAPPENS AT. A single stamp rather than a spread of them: two fields on
- * one object showing times three days apart invite a reader to infer a relationship that is not there. */
+// One fixed instant, not several: timestamps apart on one object would imply a relationship that isn't there.
 const WHEN = "2026-08-21T09:14:02.000Z";
 const EARLIER = "2026-08-21T08:47:11.000Z";
 const SHA = "9f2c1ab3d4e5f60718293a4b5c6d7e8f90a1b2c3";
 
-/* THE VOCABULARY, matched on the field's own name, lower-cased. Exact names first (below), then the suffix
- * rules in `byShape`, then the schema's own type. Ordered by how specific the match is, so `filePath` is a
- * path and `pathPrefix` is not silently one too. */
+// Matched by lower-cased name: exact names here, then `byShape` suffixes, then schema type; most specific wins.
 const BY_NAME: Record<string, unknown> = {
     // ── the workspace ──
     path: "src/app.ts",
@@ -170,10 +149,7 @@ const BY_NAME: Record<string, unknown> = {
     offset: 0,
 };
 
-/* THE SECOND ENTRY IN A LIST. A list rendered as the same object twice reads as a rendering bug, and the
- * question a reader actually has about a list — do these vary, and how — is answered by the differences. So
- * the common leaves get an alternate, and everything without one repeats, which is honest: a field whose
- * value this file cannot vary meaningfully is one where a second guess would be noise. */
+// A second, different value per field; a list of two identical entries would read as a rendering bug.
 const ALTERNATE: Record<string, unknown> = {
     path: "README.md",
     filepath: "README.md",
@@ -224,8 +200,7 @@ const ALTERNATE: Record<string, unknown> = {
     scope: "drive",
 };
 
-/* Suffix and substring rules, applied when the exact name is unknown. These carry most of the timestamps and
- * ids, which between them are a good third of every payload in this API. */
+// Suffix and substring rules, applied when the exact field name isn't in `BY_NAME`.
 const byShape = (name: string): unknown | undefined => {
     if (name.endsWith("at") && name.length > 2) {
         return WHEN;
@@ -260,15 +235,8 @@ const byShape = (name: string): unknown | undefined => {
     return undefined;
 };
 
-/* THE FIELD'S OWN WORDS BEAT THE DICTIONARY, and this rule exists because of one real collision. `from` and
- * `to` are a renamed file's two paths on half a dozen git routes and the two ends of a day range on the usage
- * and settings routes. No global guess can be right for both, and the schema's `type` is `string` in every
- * case, so the only thing that can tell them apart is what the contract says the field is — which is exactly
- * what a `.describe()` is for.
- *
- * Kept to shapes a description states OUTRIGHT rather than anything inferred: a description that says
- * YYYY-MM-DD means a date, and one that says ISO timestamp means an instant. Guessing from prose beyond that
- * would make every reworded sentence in the contract a silent change to these pages. */
+// Falls back to what a field's `.describe()` states outright (YYYY-MM-DD, ISO timestamp); a name-based guess can't tell
+// `from`/`to` on a git diff from `from`/`to` on a date range.
 const fromDescription = (description: string | undefined): unknown | undefined => {
     if (description === undefined) {
         return undefined;
@@ -298,10 +266,8 @@ const BY_FORMAT: Record<string, unknown> = {
 const firstType = (schema: SchemaNode): string | undefined =>
     Array.isArray(schema.type) ? schema.type.find((entry) => entry !== "null") : schema.type;
 
-/* Resolve `#/$defs/x` against the schema the walk started from. The generator emits exactly one shape of
- * reference — a local definition, for the handful of recursive types (a file tree, a transcript) — so this
- * deliberately understands that one and nothing else, and returns undefined rather than guessing at a form
- * it has never seen. */
+// Resolves `#/$defs/x` against the schema root. The generator only emits local-definition refs (recursive types like
+// file trees or transcripts); anything else returns undefined.
 const resolve = (schema: SchemaNode, root: SchemaNode): SchemaNode | undefined => {
     if (schema.$ref === undefined) {
         return schema;
@@ -310,9 +276,8 @@ const resolve = (schema: SchemaNode, root: SchemaNode): SchemaNode | undefined =
     return name === undefined ? undefined : root.$defs?.[name];
 };
 
-/* THE WALK. `depth` is what stops a recursive type — a directory whose children are directories — from
- * expanding for ever; at the limit it stops rather than emitting a truncated object, so what comes out is
- * always a value the schema would accept. */
+// Builds an example value from a schema node; `depth` bounds recursion on self-referential types so it stops instead of
+// emitting a value the schema wouldn't accept.
 const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, depth: number, variant = 0): unknown => {
     if (raw === undefined || depth > 5) {
         return undefined;
@@ -326,15 +291,12 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
     if (schema.const !== undefined) {
         return schema.const;
     }
-    // The second entry in a list takes the second choice where the schema offers one, for the same reason it
-    // takes an alternate value: a list of two identical enums says nothing about what the field varies over.
+    // Second array entry takes the enum's second value, if any; identical entries say nothing about what varies.
     if (schema.enum !== undefined && schema.enum.length > 0) {
         return schema.enum[Math.min(variant, schema.enum.length - 1)];
     }
 
-    /* A union takes its first branch, minus the `null` one. Zod emits an optional as `anyOf: [T, null]` and a
-     * discriminated union as a list of object branches; in both cases the first non-null branch is the case a
-     * reader wants to see, and showing `null` for an optional field teaches nothing. */
+    // First non-null branch of `anyOf`/`oneOf`; Zod encodes an optional as `[T, null]`, and null teaches nothing.
     const branches = schema.anyOf ?? schema.oneOf;
     if (branches !== undefined) {
         const branch = branches.find((entry) => firstType(entry) !== "null");
@@ -358,8 +320,7 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
                 out[key] = value;
             }
         }
-        /* A record — an object with no named properties but a shape for its values — gets two entries rather
-         * than one, because one entry reads like a fixed field and two read like a map. */
+        // A record (object with no named properties) gets two entries; one would read as a fixed field, not a map.
         if (Object.keys(properties).length === 0 && typeof schema.additionalProperties === "object") {
             const first = build(schema.additionalProperties, name, root, depth + 1, 0);
             const second = build(schema.additionalProperties, name, root, depth + 1, 1);
@@ -375,9 +336,7 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
         if (Array.isArray(named)) {
             return named;
         }
-        /* Two entries, not one, and the second one DIFFERENT. A list rendered with a single element reads as
-         * an object with a stray bracket round it; a list rendered as the same element twice reads as a
-         * rendering bug. What a reader wants to know about a list is what varies between its entries. */
+        // Two different entries, not a repeat: a single or duplicated element reads as a bug rather than real data.
         const singular = lower.replace(/s$/u, "");
         const first = build(schema.items, singular, root, depth + 1, 0);
         if (first === undefined) {
@@ -399,8 +358,7 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
     const alternate = variant > 0 ? ALTERNATE[lower] : undefined;
     const named = alternate ?? BY_NAME[lower] ?? byShape(lower);
     if (named !== undefined && (typeof named !== "object" || type === undefined)) {
-        // Type-check the dictionary hit against the schema, so a field called `count` declared as a string
-        // does not come out as a number the daemon would refuse.
+        // Type-checks the dictionary hit against the schema so a string-typed `count` can't come back as a number.
         if (type === undefined) {
             return named;
         }
@@ -434,7 +392,7 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
     if (type === "null") {
         return null;
     }
-    // `unknown` in the contract, which is a real shape a few routes have: an opaque payload forwarded whole.
+    // Fallback for `unknown` in the contract: an opaque payload forwarded whole.
     return {};
 };
 

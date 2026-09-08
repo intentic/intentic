@@ -2,12 +2,9 @@ import { runConnectorGateway } from "@intentic/connector-runtime";
 import { closeTelegramConnection, FatalTelegramError, openTelegramConnection, telegramConnection, telegramConnections } from "./client.js";
 import { createTelegramListener, deliverToChat } from "./listener.js";
 
-// The Telegram gateway process: a baked extension's autoStart process (contributes.processes). It reconciles one
-// long-polling connection per configured bot against the daemon's /listeners/telegram/state, dispatches every
-// inbound message (painting mention replies back into the chat), and reports its liveness. The daemon holds no
-// Telegram connection, this does. The reconcile/status/health/shutdown shell is the shared connector runtime;
-// what's here is only what Telegram IS: a bot token is a connection, and a webhook conflict or revoked token is
-// fatal until fixed on the BotFather side.
+// Telegram gateway process (autoStart, contributes.processes): reconciles one long-poll connection per bot against
+// /listeners/telegram/state; the daemon itself holds none. Shared connector runtime handles
+// reconcile/status/health/shutdown; here is Telegram-specific: a token is a connection, revoked or conflicted is fatal.
 
 export interface TelegramConnectorConfig {
     readonly provider: string;
@@ -27,9 +24,8 @@ void runConnectorGateway<TelegramConnectorConfig, string>({
                 connection.listen(
                     (update) => listener.onUpdate(connection, update),
                     (error) => {
-                        // The poll loop died mid-life (revoked token, a webhook claiming this bot's updates):
-                        // the connection took itself out of the pool, so `alive` below lets the reconcile drop
-                        // the slot, and the fatal mark keeps it from reopening until the backoff expires.
+                        // Poll loop died mid-life; the connection already left the pool (so `alive` reflects it), and
+                        // the fatal mark blocks reopening until backoff expires.
                         ctx.log.error({ err: error, capabilityId: id }, "telegram poll stopped");
                         control.markFatal(config.botToken, error.message);
                     },
@@ -39,8 +35,7 @@ void runConnectorGateway<TelegramConnectorConfig, string>({
             close: (id, botToken) => closeTelegramConnection(botToken),
             alive: (id, botToken) => telegramConnection(botToken) !== undefined,
             fatal: (error) => (error instanceof FatalTelegramError ? error.message : undefined),
-            // The daemon's outbound door: a message the owner placed in a channel conversation, posted through
-            // whichever connected bot the chat accepts (shell route /deliver).
+            // Outbound door: a channel message posted through whichever connected bot accepts that chat.
             deliver: (channelId, text) => deliverToChat(telegramConnections(), channelId, text),
             shutdown: (wired) => {
                 for (const botToken of wired.values()) {

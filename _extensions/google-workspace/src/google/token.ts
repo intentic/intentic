@@ -3,19 +3,13 @@ import type { Connection, Credential } from "./accounts.js";
 import { describe } from "./accounts.js";
 import { scopesFor } from "./scopes.js";
 
-/* MINTING THE ONE-HOUR ACCESS TOKEN every request rides, from whichever durable credential the card holds.
- *
- * Two grants, one endpoint. A `user` card exchanges its refresh token; a `domain` card signs a short JWT with
- * the service account's private key, naming the person to act as in `sub`, which is the whole of domain-wide
- * delegation, and the reason a company card needs no per-person approval.
- *
- * THE ERROR THAT MATTERS IS `invalid_grant`. It is what this integration dies of: a consent screen left in
- * Testing status hands out refresh tokens that stop working after seven days, and Google's own message for it
- * ("Bad Request") tells the owner nothing. So it gets a sentence naming the actual cause and the actual fix. */
+// Mints the one-hour access token every request rides: a `user` card exchanges its refresh token, a `domain` card signs
+// a JWT naming the person to act as in `sub`. `invalid_grant` gets a real explanation, since a Testing-status consent
+// screen issues refresh tokens that die after 7 days.
 
 export interface AccessToken {
     readonly token: string;
-    // Epoch seconds. Trusted as far as the cache: requests do not consult it, they react to a 401.
+    // Epoch seconds; trusted only for the cache, not consulted per-request (that reacts to a 401 instead).
     readonly expiresAt: number;
 }
 
@@ -24,7 +18,7 @@ const ASSERTION_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
 const b64url = (input: Buffer | string): string => Buffer.from(input).toString("base64url");
 
-// A signed JWT bearer assertion: the service account asks to become `subject`, for one hour, with these scopes.
+// A signed JWT bearer assertion: the service account asks to become `subject` for one hour, with these scopes.
 export const assertionFor = (credential: Extract<Credential, { mode: "domain" }>, subject: string, scopes: string[], now: number): string => {
     const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
     const claims = b64url(
@@ -56,8 +50,8 @@ const grantBody = (connection: Connection, credential: Credential, now: number):
     });
 };
 
-// Google's token endpoint answers failures as {error, error_description}. Each of these is something the owner
-// does about the CARD, so each is said as that rather than relayed.
+// Google's token endpoint answers failures as `{error, error_description}`; each case here is something the owner does
+// about the card, said as that rather than relayed raw.
 export const tokenFailure = (connection: Connection, mode: Credential["mode"], error: string, description: string | undefined): string => {
     const who = describe(connection);
     if (error === "invalid_grant" && mode === "user") {
@@ -105,8 +99,8 @@ export const mintToken = async (connection: Connection, credential: Credential, 
     return { token, expiresAt: now + lifetime };
 };
 
-// Exchange an authorization code from the consent flow, `gw auth login`'s last step, and the only place a
-// refresh token is ever created rather than read.
+// Exchanges an authorization code from the consent flow, `gw auth login`'s last step, and the only place a refresh
+// token is created rather than read.
 export const exchangeCode = async (
     clientId: string,
     clientSecret: string,
@@ -132,8 +126,8 @@ export const exchangeCode = async (
     }
     const refreshToken = body["refresh_token"];
     if (typeof refreshToken !== "string") {
-        // Google issues a refresh token only on the FIRST consent for a client unless asked to do it again;
-        // the flow always asks (prompt=consent), so this means the approval never completed.
+        // Google issues a refresh token only on first consent unless asked again; the flow always asks, so a missing
+        // one means approval never completed.
         throw new Error("Google returned no refresh token. Run the login again and approve the consent screen to the end.");
     }
     return { refreshToken, scopes: typeof body["scope"] === "string" ? body["scope"] : "" };

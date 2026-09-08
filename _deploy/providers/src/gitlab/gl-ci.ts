@@ -5,8 +5,8 @@ import { parseInputs, registryImage } from "../core/inputs.js";
 import type { GitLabApi } from "./gitlab-api.js";
 import { gitlabApi } from "./gitlab-api.js";
 
-// One environment's build job. Unlike the GitHub path (one workflow file per env), GitLab uses a single
-// .gitlab-ci.yml, so this provider is per-APP and emits one job per environment gated by branch.
+// One environment's build job; GitLab uses a single .gitlab-ci.yml, so this provider is per-app and emits one
+// job per environment gated by branch.
 const glCiEnvSchema = z.object({
     name: z.string(),
     branch: z.string(),
@@ -21,7 +21,7 @@ const glCiSchema = z.object({
     token: z.string(),
     // The container-registry authority (e.g. registry.gitlab.com); image = registry/owner/repo:tag.
     registry: z.string(),
-    // Komodo's PUBLIC url the notify step logs into (GitLab-hosted runners reach it through the tunnel).
+    // Komodo's public url the notify step logs into; GitLab-hosted runners reach it through the tunnel.
     komodoUrl: z.string(),
     // The Komodo admin the notify step logs in with (the password is set as a CI/CD variable).
     adminUser: z.string(),
@@ -36,13 +36,13 @@ const DOCKERFILE_PATH = "Dockerfile";
 
 const VAR_KOMODO = "KOMODO_PASSWORD";
 
-// A YAML block-sequence item that is a JSON double-quoted scalar. YAML 1.2 is a JSON superset, so
-// JSON.stringify robustly escapes any command (quotes, $, backslashes) into a valid script line.
+// YAML block-sequence item as a JSON double-quoted scalar; YAML 1.2 is a JSON superset, so JSON.stringify safely
+// escapes any command.
 const scriptLine = (command: string): string => `    - ${JSON.stringify(command)}`;
 
-// One build job: build on docker-in-docker, push to the GitLab Container Registry via the built-in job-token
-// creds, then log into Komodo and trigger an immediate Deploy. Gated to its env's branch via rules:. The
-// host is never SSHed from CI, its Periphery pulls outbound.
+// One build job: builds on docker-in-docker, pushes to the GitLab Container Registry via the built-in job-token
+// creds, then logs into Komodo and triggers a Deploy, gated to its env's branch via rules:. The host is never SSHed
+// from CI.
 const jobYaml = (parsed: GlCiInputs, environment: GlCiInputs["environments"][number]): string => {
     const image = registryImage({ registry: parsed.registry, owner: parsed.owner, repoName: parsed.repoName, tag: environment.tag });
     const shaImage = `${parsed.registry}/${parsed.owner}/${parsed.repoName}:$CI_COMMIT_SHA`;
@@ -83,10 +83,8 @@ const gitlabCiYaml = (parsed: GlCiInputs): string =>
         "",
     ].join("\n");
 
-// The app's CI/CD wiring for the GitLab path: commits the single .gitlab-ci.yml and sets the Komodo-login
-// CI/CD variable its notify steps consume. Mirrors gh-ci.ts but per-app (one file, all envs) and with
-// plaintext project variables instead of libsodium-encrypted Actions secrets. PENDING-guards on owner (the
-// gitlab node's output) and komodoUrl so a plan proceeds before the forge account and Komodo are up.
+// GitLab-path CI/CD wiring: commits the single .gitlab-ci.yml (one file, all envs) and sets the Komodo-login
+// CI/CD variable its notify steps consume; guards on owner and komodoUrl until both are up.
 export const createGlCiProvider = (api: GitLabApi = gitlabApi): Provider => ({
     read: async (inputs, ctx) => {
         if (typeof inputs["token"] !== "string" || typeof inputs["owner"] !== "string" || typeof inputs["komodoUrl"] !== "string") {
@@ -132,7 +130,7 @@ export const createGlCiProvider = (api: GitLabApi = gitlabApi): Provider => ({
             await api.commitFile({ ...common, path: DOCKERFILE_PATH, content: starterDockerfile(), branch, message: "intentic: starter Dockerfile" });
         }
 
-        // Commit the CI file LAST so its first run already sees the Dockerfile + variable.
+        // Commits the CI file last, so its first run already sees the Dockerfile and variable.
         await api.commitFile({ ...common, path: CI_FILE_PATH, content: gitlabCiYaml(parsed), branch, message: "intentic: GitLab CI pipeline" });
         return {};
     },

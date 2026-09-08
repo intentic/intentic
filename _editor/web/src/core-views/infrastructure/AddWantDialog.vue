@@ -8,12 +8,9 @@ import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
 import ConnectHost from "./ConnectHost.vue";
 
-/* The Infra "Add" dialog: the single entry point for declaring a want. Step 1 is a catalog with two groups:
- * YOUR APPS (the apps present in workspace monorepos, via the daemon's per-repo apps routes: each addable as
- * i.want.app) and SELF-HOSTED SERVICES (INVENTORY_SERVICES → i.want.service). Step 2 is a minimal form: name
- * and zone-aware domain; host/Cloudflare bindings are derived (exposure is the single Cloudflare entry, the
- * server is asked for only when several are declared). Submitting writes the entry into deploy.config.ts
- * through the sandbox's /inventory routes and emits `added`, so the page can run its Apply-changes stream. */
+// Add-a-want dialog. Step 1: catalog of workspace apps (i.want.app) and INVENTORY_SERVICES (i.want.service).
+// Step 2: name plus zone-aware domain; host/Cloudflare bindings are derived, asked only when more than one
+// is declared. Submits to deploy.config.ts via /inventory and emits `added`.
 
 const NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
@@ -36,31 +33,27 @@ const on = ref(``);
 const subdomain = ref(``);
 const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()));
 
-// The apps living in workspace monorepos: fetched only while the dialog is open, live against the repo list.
+// Apps in workspace monorepos; fetched only while the dialog is open, live against the repo list.
 const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
 const appsNotice = computed<NoticeModel | undefined>(() =>
     appsError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list the apps in this workspace.`, detail: appsError.value },
 );
 
-// Apps already declared in intent (by entry name): shown as added instead of addable.
+// Apps already declared in intent (by entry name); shown as added instead of addable.
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));
 
-// Host / Cloudflare binding names the user already declared (a want references them by name).
+// Host / Cloudflare binding names already declared; a want references them by name.
 const hostOptions = computed(() => entries.value.filter((entry) => entry.kind === `backend` && entry.provider === `host`).map((entry) => entry.name));
 const hostPickerOptions = computed<PickerOption[]>(() => hostOptions.value.map((host) => ({ value: host, label: host, icon: `server`, mono: true })));
 const cloudflareEntries = computed(() => entries.value.filter((entry) => entry.kind === `backend` && entry.provider === `cloudflare`));
-// Exposure is derived, never asked: Cloudflare is the single exposure mechanism, so the want binds to the
-// (only) declared cloudflare entry.
+// Exposure is derived: Cloudflare is the only mechanism, so the want binds to the one declared entry.
 const expose = computed(() => cloudflareEntries.value[0]?.name ?? ``);
-// The zone recorded on the cloudflare entry when it was connected: drives the `<subdomain>.<zone>` domain
-// field in every session. Undefined (free-text full-domain fallback) only when the token was pre-seeded, so
-// no zone could be listed at connect time.
+// The zone recorded on the cloudflare entry; drives `<subdomain>.<zone>`. Undefined if pre-seeded with none.
 const zone = computed(() => {
     const recorded = cloudflareEntries.value[0]?.values[`zone`];
     return typeof recorded === `string` && recorded.length > 0 ? recorded : undefined;
 });
-// The full hostname the want is exposed on: `<subdomain>.<zone>` when the zone is known, else the raw
-// value the user typed into the free-text Domain field.
+// The full hostname exposed: `<subdomain>.<zone>` if the zone is known, else the free-text Domain value.
 const domainValue = computed(() => (zone.value !== undefined ? `${subdomain.value.trim()}.${zone.value}` : (values.value[`domain`] ?? ``).trim()));
 const domainValid = computed(() => (zone.value !== undefined ? subdomainValid.value : domainValue.value.length > 0));
 
@@ -102,8 +95,7 @@ const pick = async (picked: Picked): Promise<void> => {
     on.value = hostOptions.value.includes(`self`) ? `self` : (hostOptions.value[0] ?? ``);
 };
 
-// A server that registers while the dialog is open (the inline ConnectHost flow) becomes the binding:
-// the form appears with `on` already wired, no re-pick needed.
+// A server registered while the dialog is open (inline ConnectHost) becomes the binding automatically.
 watch(hostOptions, (hosts) => {
     if (on.value === ``) {
         on.value = hosts.includes(`self`) ? `self` : (hosts[0] ?? ``);
@@ -173,8 +165,7 @@ const submit = async (): Promise<void> => {
 
             <Notice v-if="error" :of="error" class="mb-3" />
 
-            <!-- A want needs Cloudflare for its domain and a server to run on. Rather than send the user off,
-                 collect each missing one right here; the created entries then flip this into the form below. -->
+            <!-- A want needs Cloudflare and a server; both are collected inline rather than sending the user elsewhere. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
             <ConnectHost v-else-if="hostOptions.length === 0">
                 <template #reason>What you want needs a server to run on.</template>
@@ -184,7 +175,7 @@ const submit = async (): Promise<void> => {
                     <span class="ui-field-label">Name</span>
                     <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
                 </label>
-                <!-- Domain, zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
+                <!-- Domain is zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
                 <label v-if="zone !== undefined" class="ui-field">
                     <span class="ui-field-label">Domain</span>
                     <div class="flex items-center gap-2">
@@ -211,8 +202,10 @@ const submit = async (): Promise<void> => {
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
                 <label v-if="hostOptions.length > 1" class="ui-field">
                     <span class="ui-field-label">Server</span>
-                    <!-- `on` holds `` for "none yet" (the Picker's empty state), never undefined: hence the
-                         explicit binding instead of v-model. -->
+                    <!--
+                        `on` holds `` for "none yet" (Picker's empty state), never undefined: explicit binding, not
+                        v-model.
+                    -->
                     <Picker
                         :model-value="on === `` ? undefined : on"
                         :options="hostPickerOptions"

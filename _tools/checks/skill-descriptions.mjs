@@ -1,18 +1,7 @@
 #!/usr/bin/env node
-/* EVERY SKILL DESCRIPTION FITS THE CATALOG BUDGET, because the description is the one part of a skill that is
- * paid for whether or not the skill is used.
- *
- * The harness lists every loaded skill's name and description in the system prompt of every call of every
- * session; the body is read only when the skill is invoked. Measured 2026-09-06 over this workspace: 45 skill
- * files, 14,253 description characters (~3.6k tokens) on every call, re-read some 200 times a session, and the
- * longest single line spent 836 characters spelling out sixteen e-mail addresses that the skill's own roster
- * carried anyway (docs/token-efficiency-plan.md §2.4). A description is a TRIGGER: what the skill is for and
- * the words a request arrives in. Everything else belongs in the body, which costs nothing until it is opened.
- *
- * 320 characters (~80 tokens) is the ceiling this repository's own longest well-formed triggers fit under once
- * their restatements were cut; a description that needs more is carrying body text. Generated descriptions
- * (the identities roster, a platform skill's connected accounts) are budgeted at render time instead
- * (browser/browser-skill.ts rosterSummary), since their length is data this check cannot see. */
+// Every skill description costs tokens on every call whether the skill runs or not (the harness lists name and
+// description for every loaded skill); the body loads only when invoked. Budgeted at 320 characters; generated
+// descriptions (the identities roster, a platform skill's connected accounts) are budgeted separately, at render time.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root, trackedFiles } from "./lib/repo.mjs";
@@ -20,8 +9,8 @@ import { root, trackedFiles } from "./lib/repo.mjs";
 const BUDGET = 320;
 const SKILL_FILE = /(^|\/)skills\/[^/]+\/SKILL\.md$/;
 
-// The frontmatter's `description`, folded onto one line: the plain `key: value` form every skill here uses, plus
-// YAML's `>`/`|` block forms and indented continuation lines, so a wrapped description is measured whole.
+// Folds the frontmatter's `description` onto one line, handling YAML's `>`/`|` block form and indented continuations,
+// so a wrapped description is measured whole.
 const descriptionOf = (text) => {
     const frontmatter = /^---\n([\s\S]*?)\n---/.exec(text);
     if (frontmatter === null) {

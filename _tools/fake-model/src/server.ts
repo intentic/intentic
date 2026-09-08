@@ -14,45 +14,18 @@ import {
     toolNames,
 } from "./responses.js";
 
-/* A MODEL THAT DOES WHAT THE TEST SAYS, so a provider's REAL CLI can be driven without a token, a network, or a
- * vendor's mood.
- *
- * This is the piece that turns "we believe Codex still reads that config key" into a test. Every provider
- * adapter in this repo is covered by a fake at the seam BELOW the CLI: a scripted event list stands in for the
- * app-server, and the CLI itself never runs. That proves the mapping from provider events to AgentEvents and
- * proves nothing about the half where the failures actually happened, the argv, the config file, the env, the
- * wire. Both sides of that seam are ours, so a vendor changing its behaviour moves neither: the fake and the
- * parser drift together and the suite stays green while the product breaks.
- *
- * So this server replaces the MODEL instead, one layer further out. The real `codex` binary starts, reads the
- * real config.toml, parses the real hooks, assembles its real prompt, and posts it here. What comes back is
- * whatever the test scripted. The turn is deterministic and costs nothing, and everything between the daemon
- * and the model is the shipped article.
- *
- * WHAT A TEST GETS THAT IT CANNOT GET ANYWHERE ELSE is `requests`: the bodies the CLI sent. A capability the
- * catalog claims (`instructions: "replace"`, the question tool being registered exactly when asked for) is a
- * statement about what reaches the model, so it can only be checked by reading what reached the model. Those
- * claims currently rest on comments recording what someone once saw on the wire; here they are assertions.
- *
- * DIALECTS. `/v1/responses` is OpenAI's Responses API, which is what Codex speaks (`wire_api = "responses"`)
- * and what the translator serves. `/v1/messages` is Anthropic's, for the Claude Code loop via ANTHROPIC_BASE_URL.
- * Each refuses the other's route rather than answering everything, so a base URL pointed at the wrong surface
- * fails here with a sentence naming it instead of passing by accident. */
+// Fakes the model, one layer past the CLI: the real `codex` binary reads its real config, assembles its real prompt,
+// and posts here, so the test exercises the real CLI/config/prompt path instead of a scripted event list standing in
+// for it. `requests` records what actually reached the wire, turning capability claims into assertions.
 
-/* One step of a scripted conversation: what the model "does" when the CLI asks for the Nth time.
- *
- * Steps are consumed in order and the LAST one repeats, so a script ends in a state rather than falling off:
- * a CLI that asks once more (a retry, a follow-up after a tool result) gets the final step again instead of a
- * 500 the test then has to explain. */
+// One step of a scripted conversation, consumed in order; the last one repeats so an extra request (a retry, a
+// follow-up) gets it again instead of a 500.
 export interface ScriptedStep {
     /** Answer with prose and end the turn. */
     readonly text?: string;
-    /* Run a shell command, then continue to the next step. Targets `exec_command`, the flat function tool
-     * `codex app-server` publishes, which is the surface this daemon drives. Use `execScript` for the other
-     * one. */
+    // Runs a shell command via exec_command, the flat tool app-server publishes; execScript covers codex exec.
     readonly shell?: string;
-    /* Run a shell command the way `codex exec` offers one: as JavaScript inside the `exec` custom tool. Only
-     * for suites driving that CLI surface; against app-server it produces a tool-router error, not a command. */
+    // Runs a shell command as codex exec's JS-input exec tool; against app-server this is a tool-router error.
     readonly execScript?: string;
     /** Call a named function tool with these arguments, then continue to the next step. */
     readonly call?: { readonly name: string; readonly args: JsonValue };
@@ -66,17 +39,7 @@ export interface FakeModelOptions {
     /** 0 (the default) takes any free port, the only safe choice when suites run in parallel. */
     readonly port?: number;
     readonly script?: readonly ScriptedStep[];
-    /* ANSWER BY WHAT WAS ASKED, instead of by how many times. Given a request, return the step to answer it
-     * with, or undefined to fall through to `script`.
-     *
-     * A positional script is the simplest thing that works and the wrong thing for two situations that come up
-     * constantly. A CLI that RETRIES consumes steps the scenario never meant to spend, so a flaky network turns
-     * a deterministic test into a different one. And a runtime whose server cannot be reconfigured per test
-     * (OpenCode fixes provider config at spawn) has to share one model across a whole suite, where a positional
-     * script couples every test to the order of the others.
-     *
-     * Keying off the prompt removes both: each scenario recognizes its own request and answers it, retries get
-     * the same answer again, and tests can run in any order. */
+    // Answers by request content, not position: immune to retries and cross-test ordering.
     readonly respond?: (request: ResponsesRequest) => ScriptedStep | undefined;
     /** Bearer the OpenAI surface requires. Unset accepts any, which is what most scenarios want. */
     readonly requireKey?: string;
@@ -101,9 +64,8 @@ const sendSse = (response: ServerResponse, frames: readonly SseFrame[]): void =>
     response.end();
 };
 
-/* Chat Completions streams NAMELESS frames and ends with a literal `[DONE]` sentinel rather than a typed
- * terminal event, so it cannot share `sendSse`: a reader of this dialect ignores `event:` lines and waits for
- * that exact string, and a stream that merely stopped would hang it until a timeout. */
+// Chat Completions streams nameless frames and ends with a literal [DONE] instead of a typed event, so it can't share
+// sendSse. A stream that merely stopped would hang the reader until a timeout.
 const sendChatSse = (response: ServerResponse, chunks: readonly JsonValue[]): void => {
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
     for (const chunk of chunks) {
@@ -113,8 +75,7 @@ const sendChatSse = (response: ServerResponse, chunks: readonly JsonValue[]): vo
     response.end();
 };
 
-// The step that governs request N, with the last one repeating (see ScriptedStep). An empty script answers
-// with prose, so the simplest possible turn needs no script at all.
+// Empty script answers with prose, so the simplest turn needs no script at all.
 const stepFor = (script: readonly ScriptedStep[], index: number): ScriptedStep => {
     if (script.length === 0) {
         return { text: "ok" };
@@ -122,13 +83,8 @@ const stepFor = (script: readonly ScriptedStep[], index: number): ScriptedStep =
     return script[Math.min(index, script.length - 1)]!;
 };
 
-/* WHICH SHELL FORM THIS REQUEST WANTS, read off the tools the CLI just offered rather than configured by the
- * test. The two model families take different ones (`exec_command` as a flat function, or the `exec` custom
- * tool taking JavaScript), and a step aimed at the wrong one comes back as a tool-router error rather than as a
- * command, which a suite would read as the runtime refusing to execute.
- *
- * Deciding here is what lets a scenario say "run this command" once and have it hold across the catalog. The
- * flat form is preferred when both are somehow offered: it is the one with a schema rather than a script. */
+// Picks the shell form from the tools the request actually offered, not from test config, so one scripted command works
+// across both model families. Prefers the flat form when both are offered: it has a schema, not just a script.
 const shellCall = (request: ResponsesRequest, callId: string, command: string): JsonValue => {
     const offered = toolNames(request);
     if (offered.some((name) => name === "exec_command" || name.endsWith(".exec_command"))) {
@@ -152,13 +108,8 @@ const framesFor = (step: ScriptedStep, index: number, request: ResponsesRequest)
     return responseFrames(id, assistantMessage(`msg_${index + 1}`, step.text ?? "ok"), step.usage ?? {});
 };
 
-/* THE CHAT COMPLETIONS REPLY, the dialect OpenCode reaches every custom provider through
- * (`@ai-sdk/openai-compatible`). A third shape rather than a variant of the first two: its tool calls arrive as
- * `delta.tool_calls` fragments on the choice, and a turn is finished by `finish_reason` rather than by a typed
- * terminal event.
- *
- * `id` and `created` are fixed rather than generated. A conformance fixture that changed on every run could not
- * be diffed between CLI versions, which is half of what recording one is for. */
+// OpenCode's dialect: tool calls arrive as delta.tool_calls fragments, and finish_reason ends the turn, not a typed
+// event. id/created are fixed so a fixture diffs cleanly across CLI versions.
 const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => {
     const id = `chatcmpl_${index + 1}`;
     const head = { id, object: "chat.completion.chunk", created: 0, model: "fake-model" };
@@ -197,8 +148,8 @@ const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => 
     ];
 };
 
-/* The Anthropic Messages reply, for the Claude Code loop. A far smaller surface than Responses because the SDK
- * assembles the turn itself: one content block and a stop reason is a complete answer. */
+// Anthropic Messages reply for the Claude Code loop; a smaller surface than Responses since the SDK assembles the turn
+// itself.
 const anthropicFrames = (step: ScriptedStep, index: number): readonly SseFrame[] => {
     const text = step.text ?? "ok";
     return [
@@ -252,8 +203,8 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
                     sendJson(response, 401, { error: { message: "fake-model: wrong or missing bearer", type: "invalid_request_error" } });
                     return;
                 }
-                // A body that will not parse is the test's bug, not the CLI's, and saying so beats a stack
-                // trace from inside a JSON reviver three frames down.
+                // An unparsable body is the test's bug, not the CLI's; say so instead of a deep JSON-reviver stack
+                // trace.
                 let parsed: ResponsesRequest;
                 try {
                     parsed = JSON.parse(body) as ResponsesRequest;
@@ -279,8 +230,7 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
                     sendJson(response, 401, { error: { message: "fake-model: wrong or missing bearer", type: "invalid_request_error" } });
                     return;
                 }
-                // Recorded like a Responses body so one set of readers answers about either dialect; `input` is
-                // synthesized from `messages` so `userMessages` means the same thing on both.
+                // Synthesizes `input` from `messages` so the same readers (userMessages, etc.) work on both dialects.
                 const parsedChat = JSON.parse(body) as {
                     messages?: readonly { role?: string; content?: unknown }[];
                     model?: string;
@@ -321,16 +271,14 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
                 return;
             }
 
-            /* A model listing, which several clients probe before their first turn and treat a 404 on as "this
-             * provider is unreachable" rather than as "no listing". Answering it costs nothing and removes a
-             * failure mode that has nothing to do with the scenario under test. */
+            // Several clients probe this before their first turn and read a 404 as unreachable rather than no listing.
             if (url.includes("/models")) {
                 sendJson(response, 200, { object: "list", data: [{ id: "fake-model", object: "model", owned_by: "intentic" }] });
                 return;
             }
 
-            // Deliberately a refusal rather than an empty 200: a CLI pointed at the wrong surface must fail
-            // with the path it asked for, which is the sentence that names the misconfiguration.
+            // Refuses by name rather than answering everything, so a CLI on the wrong surface fails with a readable
+            // reason.
             sendJson(response, 404, { error: { message: `fake-model serves /v1/responses, /v1/chat/completions and /v1/messages, not ${url}` } });
         })();
     });

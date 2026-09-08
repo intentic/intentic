@@ -7,21 +7,9 @@ import { host } from "./host";
 import { STEP_TONE, workflowDag } from "./workflowDag";
 import { useWorkflows } from "./useWorkflows";
 
-/* WATCHING A RUN: the same page shape as the designer, and read-only.
- *
- * IT USES DagGraph, NOT DagEditor, and that is the point of there being two: nothing here is editable, so
- * nothing here offers a handle to drag or an edge to click. The graph is the same picture either way because
- * both read `workflowDag` and both draw `WorkflowNodeCard`: a run and the design it came from must not look
- * like two different workflows.
- *
- * A run is the longest-lived thing in the product, so the question this answers is not "what happened" but
- * "where is it, and is it going anywhere". Hence what the cards carry: state, and the ROUND COUNT, which is
- * the only number that separates a step that is working from one that is stuck.
- *
- * THE STEP PANEL LEADS WITH THE OUTPUT, not the status: by the time you have clicked a node you know its
- * colour, and what you came for is what it decided. The transcript link is last because it is the escape
- * hatch: if the output answered the question you never needed it.
- */
+// Read-only counterpart to the designer, sharing `workflowDag`/`WorkflowNodeCard` so a run looks like its design. Uses
+// `DagGraph`, not `DagEditor`: nothing here is editable. Cards show state and round count, the only signal that
+// separates working from stuck; the step panel leads with output, not status.
 
 const { run } = defineProps<{ run: WorkflowRun }>();
 const emit = defineEmits<{ close: [] }>();
@@ -32,8 +20,7 @@ const failure = ref<string>();
 
 const dag = computed(() => workflowDag(run.workflow, run));
 
-// Follow the run: with nothing picked, show whatever is moving. A panel left on a stale selection describes a
-// step that finished twenty minutes ago while three others came and went.
+// With nothing picked, follows whatever is running rather than showing a stale selection.
 const shown = computed(() => {
     const picked = run.steps.find((step) => step.stepId === selectedId.value);
     return picked ?? run.steps.find((step) => step.state === `running`) ?? run.steps.find((step) => step.state === `failed`) ?? run.steps[0];
@@ -51,8 +38,7 @@ watch(
 const spent = computed(() => run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0));
 const finished = computed(() => run.steps.filter((step) => step.state === `done`).length);
 
-// The document's `data`, as rows. A record in the contract because that is what the model writes; flattened
-// here because a table is what a person reads.
+// Flattens the document's `data` record into rows for display.
 const dataRows = computed(() => Object.entries(shown.value?.document?.data ?? {}).map(([key, value]) => ({ key, value })));
 
 const asText = (value: unknown): string =>
@@ -67,9 +53,8 @@ const stopRun = async (): Promise<void> => {
     }
 };
 
-/* A step's conversation is an ordinary fleet agent, so its chat is reachable exactly as any other agent's is.
- * This is the door from a block on the diagram to the session log behind it, and it is a real link (appLink),
- * so the address is under the pointer and Ctrl/⌘-click opens the log beside the diagram it came from. */
+// A step's conversation is an ordinary fleet agent's chat; a real link (`appLink`) so Ctrl/Cmd-click opens it beside
+// the diagram.
 const chatLink = (conversationId: string) => {
     const path = `/agents/${encodeURIComponent(conversationId)}`;
     return appLink(host().href(path), () => host().navigate(path));
@@ -98,8 +83,7 @@ const chatLink = (conversationId: string) => {
 
         <div class="flex min-h-0 flex-1">
             <div class="min-w-0 flex-1">
-                <!-- Never magnified: this graph gets a whole page, where filling it in both directions turns a
-                     short run into billboards. Same answer the designer's canvas gives (DagEditor's own cap). -->
+                <!-- Never magnified, or a short run would fill the page as billboards, same as the designer's canvas. -->
                 <DagGraph v-model="selectedId" :nodes="dag.nodes" :edges="dag.edges" :node-width="216" :node-height="62" :magnify="false">
                     <template #node="{ node }"><WorkflowNodeCard :node="node.data" /></template>
                 </DagGraph>
@@ -120,14 +104,10 @@ const chatLink = (conversationId: string) => {
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
 
-                <!-- A step with no goal of its own is measured against what the run was asked to do, so THAT is
-                     what "done when" has to show. Falling back to the run's request rather than to the step's
-                     title: the title is a label ("Claude's attempt"), and reading it here as a completion bar
-                     is how a panel starts describing a rule the scheduler is not applying. -->
+                <!-- Falls back to the run's own request, not the step's title, which is a label rather than a completion bar. -->
                 <p class="text-xs text-subtle"><span class="text-content">Done when:</span> {{ shownStep.goal ?? run.request }}</p>
 
-                <!-- The declared output, as a table. The reason `json` exists: a step's conclusion as data you
-                     can read at a glance and the next step can act on, rather than a paragraph about it. -->
+                <!-- Declared `json` output as a table: data to read at a glance and for the next step to act on. -->
                 <div v-if="dataRows.length > 0" class="overflow-hidden rounded-md border border-line-subtle">
                     <div v-for="row in dataRows" :key="row.key" class="flex gap-3 border-b border-line-subtle px-2.5 py-1.5 last:border-b-0">
                         <span class="w-28 shrink-0 font-mono text-2xs text-subtle">{{ row.key }}</span>
@@ -137,12 +117,10 @@ const chatLink = (conversationId: string) => {
 
                 <p v-if="shown.document?.reason" class="text-xs text-content">{{ shown.document.reason }}</p>
                 <p v-if="shown.document?.evidence" class="text-2xs text-subtle">{{ shown.document.evidence }}</p>
-                <!-- The step's own last words, only when there is no document to show instead: otherwise the
-                     panel says the same thing twice in two registers. -->
+                <!-- Shown only when there's no document, to avoid saying the same thing twice. -->
                 <p v-else-if="shown.report && shown.document === undefined" class="whitespace-pre-wrap text-xs text-subtle">{{ shown.report }}</p>
 
-                <!-- Why it stopped, which for a failed step is the most important line here: it says whether to
-                     give it more room, change the prompt, or fix the check. -->
+                <!-- Why it stopped; for a failed step this says whether to retry, reprompt, or fix the check. -->
                 <p v-if="shown.detail" class="text-2xs" :class="shown.state === `failed` ? `text-danger` : `text-subtle`">{{ shown.detail }}</p>
             </aside>
         </div>

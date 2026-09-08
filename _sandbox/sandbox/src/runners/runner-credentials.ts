@@ -10,18 +10,11 @@ import {
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
-/* THE RUNNER'S SIDE of the credential doors: a dispatched turn authenticates with whatever the ORIGIN
- * sandbox would have used, asked for per turn over HTTPS with this runner's own token. The answer is
- * translated back into exactly the shape local resolution produces (HarnessCredentialsResult), so
- * everything downstream — harnessEnv, the withholding rule, the connect-gate refusal rendering — cannot
- * tell a forwarded credential from a stored one.
- *
- * The mid-turn refresh hook is the door's second half: the harness calls it when the API refuses the token
- * it holds, and the re-mint runs at the PARENT, against the store with the refresh token. `current` tracks
- * what this harness holds so the parent supersedes exactly that one (the same rule local rotation keeps). */
+// The runner's side of the credential doors: a dispatched turn asks the origin sandbox for its credential per turn over
+// HTTPS, translated back into the same shape local resolution produces. The refresh hook re-mints at the parent when
+// the API rejects the held token; `current` tracks it so the parent supersedes exactly that one.
 
-// A resolution is one small POST on the turn's critical path; a parent that cannot answer this fast is a
-// parent the turn should fall back from rather than wait on.
+// On the turn's critical path: a parent too slow to answer is one to fall back from, not wait on.
 const RESOLVE_TIMEOUT_MS = 30_000;
 
 export interface ParentCredentials {
@@ -93,8 +86,7 @@ export const parentCredentialSource = (identity: RunnerIdentity, logger: { warn:
                         },
                     };
                 case "parent-translator":
-                    // The bearer is this runner's OWN token: the parent's proxy verifies it and swaps in the
-                    // translator's local one, so no translator credential ever reached this box.
+                    // The bearer stays this runner's own token; the parent's proxy swaps in the translator's local one.
                     return {
                         ok: true,
                         credentials: {

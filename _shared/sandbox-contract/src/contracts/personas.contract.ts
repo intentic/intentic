@@ -13,23 +13,9 @@ import {
 } from "../schemas/personas.js";
 import { OkSchema } from "../schemas/shared.js";
 
-/* The sandbox's named personas (PersonaSchema): which connected accounts each one speaks for, what a session
- * wearing it may do, where it works, and what it is told. The card half is a plain three-verb CRUD with no apply
- * step, because a card provisions NOTHING, unlike a capability, saving one connects nothing, installs nothing
- * and spends nothing. It records a decision about accounts that already exist.
- *
- * The file behind it is committed workspace config (personas/personas-store.ts), so these routes are one of
- * two equally supported ways to edit them: this, and opening the file in the editor like any other project
- * config. Neither is the "real" one, which is why `save` is a whole-card upsert rather than a field patch, so
- * a round trip through the UI leaves a diff a reviewer would recognise.
- *
- * THE KIT ROUTES BELOW EDIT FILES, not the card, and they are here rather than on the skills contract because
- * what they write belongs to one persona: its prompt, and the skills only its turns can reach
- * (personas/persona-kit.ts). The sandbox's `skills` domain answers "what does the agent know" for every chat;
- * this answers "what does this card carry", and the two lists are different questions with different answers.
- *
- * Per-verb routes rather than one whole-kit PUT: a kit is a directory of files somebody edits one at a time, and
- * a save that shipped the whole folder would make an edit to one skill capable of deleting another. */
+// Named personas (PersonaSchema): accounts each speaks for, what it may do, what it is told. Card CRUD provisions
+// nothing, only a decision about existing accounts. The kit routes below edit its files (prompt, skills only its turns
+// reach) per verb, not one whole-kit PUT, so one skill's edit cannot delete another.
 export const personasContract = {
     list: oc
         .route({
@@ -51,14 +37,8 @@ export const personasContract = {
         })
         .input(PersonaSchema)
         .output(OkSchema),
-    /* Removing a card takes away a persona, never an account: the login it named stays connected and reachable from
-     * every other surface. What it CAN do is orphan a reference, an automation pinned to this id now names a
-     * card that no longer exists, and the resolver reads that as "no accounts at all" rather than "all of
-     * them", so the automation goes quiet instead of posting as somebody unintended. */
-    /* Removing a card takes away a persona, never an account: the login it named stays connected and reachable from
-     * every other surface. It DOES take the card's kit with it, a folder no card can reach is a folder no list
-     * shows, and leaving the owner's prompt and skills orphaned on disk is worse than deleting what they just
-     * asked to delete. */
+    // Never removes the account; an automation pinned to this id resolves as no accounts, and goes quiet.
+    // Also deletes the persona's kit folder (prompt + skills), rather than leaving it orphaned on disk.
     remove: oc
         .route({
             method: "DELETE",
@@ -70,10 +50,7 @@ export const personasContract = {
         .input(PersonaIdParamSchema)
         .output(OkSchema),
 
-    /* WHICH CARD A NEW CHAT BELONGS TO, asked by the composer before the first turn and answered by the
-     * `persona-router` helper role (the sandbox's agent/persona-router.ts). A READ that spends a small model
-     * call, which is why it is a POST: it is not idempotent in cost, only in effect. Nothing is applied here; the
-     * composer applies the answer, or shows it, under the `personaRouting` setting. */
+    // Costs a model call, hence POST though a read; the composer applies or shows the answer per setting.
     route: oc
         .route({
             method: "POST",
@@ -85,7 +62,7 @@ export const personasContract = {
         .input(PersonaRouteAskSchema)
         .output(PersonaRouteSchema),
 
-    // ---- the kit: what this card is told, and the skills only it reaches ----
+    // The kit: what this card is told, and the skills only it reaches.
 
     kit: oc
         .route({
@@ -97,8 +74,7 @@ export const personasContract = {
         })
         .input(PersonaIdParamSchema)
         .output(PersonaKitSchema),
-    // An empty prompt DELETES the file rather than storing a blank one, so "custom with nothing written" is one
-    // state instead of two, the resolver falls back to the sandbox's prompt for it (personas.ts personaPrompt).
+    // An empty prompt deletes the file rather than storing a blank; it then falls back to the sandbox's own prompt.
     savePrompt: oc
         .route({
             method: "POST",
@@ -118,8 +94,7 @@ export const personasContract = {
         })
         .input(PersonaSkillNameSchema)
         .output(PersonaSkillBodySchema),
-    // Upsert by name, like the sandbox's own skills, and with no enabled list to write, because a kit skill is
-    // on exactly when its persona is worn. That is what "specific to that persona" has to mean.
+    // Upsert by name, no enabled list to write: a kit skill is on exactly when its persona is worn.
     saveSkill: oc
         .route({
             method: "POST",

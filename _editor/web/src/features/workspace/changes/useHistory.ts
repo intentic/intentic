@@ -9,10 +9,9 @@ import { resetEditBuffers } from "../files/useEditBuffers";
 import { GIT_CHANGES, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
-/* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
- * restore markers, hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace
- * tree. The list is vue-query cached; diff/fileDiff stay imperative (the panel loads them on demand). Restore
- * rewrites /work on the daemon, so it refreshes the snapshots, the tree, and drops stale edit buffers. */
+// Workspace history: the daemon's checkpoints of /work (turns, user changes, restores; hidden interval captures
+// aren't listed). The snapshot list is vue-query cached; diff and fileDiff stay imperative, loaded on demand.
+// Restore rewrites /work, so it refreshes snapshots and the tree and drops stale edit buffers.
 
 const { busy, notice: actionError, run } = useAsyncAction();
 
@@ -22,14 +21,8 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
         `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
     );
 
-/* WHAT EVERY SURFACE HAS TO DO ONCE /work HAS BEEN REWRITTEN UNDER IT, shared because there is now more than
- * one thing that rewrites it: the timeline's restore below, and the chat bubble's rewind, which restores
- * daemon-side as one step of a larger operation and so cannot go through the POST above.
- *
- * `.every` for the tree, its keys carry the focused scope before the appended sandbox id, so `.of()` would
- * NOT prefix-match them (see queryKeys). Snapshots and changes have no such variant, so the sandbox-scoped
- * `.of()` is the right reach there. A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS
- * the new review set. Disjoint caches, refetch concurrently. */
+// Shared by every /work rewrite (this restore, and chat's rewind mid-operation). `.every` for the tree since
+// its keys don't prefix-match under `.of()`; a restore never moves HEAD, so the new diff is the new review set.
 export const invalidateWorkspace = async (queryClient: QueryClient): Promise<void> => {
     // Stale buffers would silently resurrect post-restore files on save.
     resetEditBuffers();
@@ -40,18 +33,12 @@ export const invalidateWorkspace = async (queryClient: QueryClient): Promise<voi
     ]);
 };
 
-// The restore action, standalone so surfaces without their own useHistory() can share it, the caller supplies
-// the setup-scoped queryClient.
+// Standalone so surfaces without their own useHistory() can share it; caller supplies the scoped queryClient.
 const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
     run(async () => {
         await sandboxJson(`/history/restore`, jsonBody(`POST`, { id }));
         await invalidateWorkspace(queryClient);
-        /* AND TELL THE CHATS THAT WERE WATCHING. This restore rewrote /work, which is the workspace every
-         * main-tree conversation is reasoning about, their contexts now describe files that changed underneath
-         * them, and until this line the only evidence was the next turn behaving oddly. The timeline and the
-         * transcript are two views of one history, so a move made in either has to be visible from the other.
-         *
-         * Isolated chats are left alone: they work in checkouts of their own, which this did not touch. */
+        // Tells every non-isolated conversation /work moved underneath it; isolated chats use their own checkout.
         for (const conversation of useChat().conversations.value) {
             if (!conversation.isolated.value) {
                 conversation.noteWorkspaceRestored();

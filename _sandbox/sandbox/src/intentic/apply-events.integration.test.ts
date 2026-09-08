@@ -8,9 +8,7 @@ import { applyEventsPath, applyRunLive, isTerminalExit, resetEventsFile, tailInt
 const line = (value: Record<string, unknown>): string => `${JSON.stringify(value)}\n`;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/* The idle wake the live tests drive the tail with, well under the 150ms they stay quiet for, so "it
- * heartbeats while nothing is happening" is a fact about the loop rather than a race with the default second.
- * The tail is woken by the WRITE, so shortening this makes the suite deterministic, not faster. */
+// Idle wake for live tests, well under the 150ms quiet period, so heartbeats are deterministic, not racy.
 const WAKE_MS = 25;
 
 const collect = async (gen: AsyncGenerator<IntenticLine>): Promise<string[]> => {
@@ -33,7 +31,6 @@ test("resetEventsFile truncates and writes the start marker", async () => {
     const path = applyEventsPath(dir);
     await writeFile(path, line({ kind: "stale" }) + line({ kind: "exit", code: 1 }));
     await resetEventsFile(path);
-    // A fresh reader sees only the new run's start, never the previous run's exit.
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => false, undefined))).toEqual(["start"]);
 });
 
@@ -46,7 +43,6 @@ test("replays from the start and closes on the exit line", async () => {
             line({ kind: "result", converged: true }) +
             line({ kind: "exit", code: 0 }),
     );
-    // Not running, but the exit line ends the stream regardless: everything up to and including it replays.
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => false, undefined))).toEqual(["start", "node", "result", "exit"]);
 });
 
@@ -60,7 +56,6 @@ test("ignores blank lines and returns immediately when the file is absent", asyn
 test("closes without an exit line once the job is gone (SIGKILL fallback)", async () => {
     const path = applyEventsPath(dir);
     await writeFile(path, line({ kind: "start" }) + line({ kind: "node", phase: "apply", state: "start", id: "db" }));
-    // No exit line and the tmux session is already gone → drain what's there, then close.
     expect(await collect(tailIntenticEvents(path, isTerminalExit, () => false, undefined))).toEqual(["start", "node"]);
 });
 
@@ -68,7 +63,7 @@ test("follows lines appended live while the job runs, heartbeating when idle", a
     const path = applyEventsPath(dir);
     await resetEventsFile(path);
     let running = true;
-    // The job sits idle long enough to be heartbeated at, then appends its events and exits.
+    // Idles long enough to be heartbeated, then appends its events and exits.
     const appending = (async () => {
         await delay(150);
         await appendFile(path, line({ kind: "node", phase: "apply", state: "done", id: "route", action: "update" }));
@@ -77,8 +72,7 @@ test("follows lines appended live while the job runs, heartbeating when idle", a
     })();
     const kinds = await collect(tailIntenticEvents(path, isTerminalExit, () => running, undefined, WAKE_MS));
     await appending;
-    // The events, in order, whatever the idle stretch heartbeated in between. Both appends are delivered on
-    // their own write rather than coalesced by a sleep, so the two may arrive as one batch or as two.
+    // Two appends may arrive as one batch or two; only order and non-heartbeat kinds are asserted.
     expect(kinds.filter((kind) => kind !== "heartbeat")).toEqual(["start", "node", "exit"]);
     expect(kinds).toContain("heartbeat");
 });
@@ -89,8 +83,7 @@ test("clean apply/resolve exits keep the tail open through the chain; adopt's ex
     let running = true;
     const appending = (async () => {
         await delay(150);
-        // The service capability's chain: resolve exits 0, then apply converges and exits 0, the tail must
-        // stay open through both, adopt is still to come.
+        // Chain order: resolve exits first, then apply converges and exits; adopt is still pending.
         await appendFile(path, line({ kind: "exit", command: "resolve", code: 0 }));
         await appendFile(path, line({ kind: "result", converged: true }) + line({ kind: "exit", command: "apply", code: 0 }));
         await delay(150);
@@ -99,7 +92,6 @@ test("clean apply/resolve exits keep the tail open through the chain; adopt's ex
     })();
     const kinds = await collect(tailIntenticEvents(path, isTerminalExit, () => running, undefined));
     await appending;
-    // All exits are yielded; only adopt's closes the stream (heartbeats interleave while idle).
     expect(kinds.filter((kind) => kind !== "heartbeat")).toEqual(["start", "exit", "result", "exit", "exit"]);
 });
 
@@ -128,22 +120,22 @@ test("a check run's tail ends on any exit: single-command files carry exactly on
 
 test("applyRunLive reports a started-but-not-exited run, and only that", async () => {
     const path = applyEventsPath(dir);
-    expect(await applyRunLive(path)).toBe(false); // never ran
+    expect(await applyRunLive(path)).toBe(false);
     await resetEventsFile(path);
-    expect(await applyRunLive(path)).toBe(true); // started, no exit — a live run to protect
+    expect(await applyRunLive(path)).toBe(true);
     await appendFile(path, line({ kind: "exit", command: "resolve", code: 0 }));
-    expect(await applyRunLive(path)).toBe(true); // resolve done, apply still running
+    expect(await applyRunLive(path)).toBe(true);
     await appendFile(path, line({ kind: "exit", command: "apply", code: 0 }));
-    expect(await applyRunLive(path)).toBe(true); // apply done, adopt still running
+    expect(await applyRunLive(path)).toBe(true);
     await appendFile(path, line({ kind: "exit", command: "adopt", code: 0 }));
-    expect(await applyRunLive(path)).toBe(false); // whole job finished
+    expect(await applyRunLive(path)).toBe(false);
 });
 
 test("ends the stream when a newer run truncates the file mid-tail", async () => {
     const path = applyEventsPath(dir);
     await writeFile(path, line({ kind: "start" }) + line({ kind: "node", phase: "apply", state: "start", id: "db" }));
     let running = true;
-    // After the first heartbeat, a newer apply resets the file (smaller than our read offset) → we close.
+    // A newer run resets the file, now smaller than the read offset, which ends the tail.
     const resetting = (async () => {
         await delay(150);
         await resetEventsFile(path);
@@ -151,7 +143,6 @@ test("ends the stream when a newer run truncates the file mid-tail", async () =>
     })();
     const kinds = await collect(tailIntenticEvents(path, isTerminalExit, () => running, undefined, WAKE_MS));
     await resetting;
-    // start + node replayed, heartbeats while idle, then the truncation ends the stream (no second run's start).
     expect(kinds.filter((kind) => kind !== "heartbeat")).toEqual(["start", "node"]);
     expect(kinds).toContain("heartbeat");
 });

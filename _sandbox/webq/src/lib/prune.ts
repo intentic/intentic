@@ -1,20 +1,13 @@
-/* Fit-content pruning: walk the body top-down, score every element on text density, link density, tag
- * kind, class/id smell and text mass, and drop the subtrees that score under the threshold. What survives
- * is the readable page — the article without its chrome.
- *
- * The scoring model is a TypeScript port of crawl4ai's PruningContentFilter (Apache-2.0,
- * https://github.com/unclecode/crawl4ai — crawl4ai/content_filter_strategy.py), the composite score with
- * the upstream weights and 0.48 fixed threshold, chosen because those numbers are battle-tested against
- * years of real pages and there is no reason to re-learn them. The mechanics differ where our tree does:
- * upstream re-serializes every node to measure markup length (quadratic on deep trees); here one post-order
- * pass computes text length, approximate markup length and direct-link text per node, and the walk reads
- * the memo. The approximation only feeds a density ratio, so its absolute scale is irrelevant. */
+// Fit-content pruning: scores every element on text/link density, tag kind, class/id smell and text mass; drops
+// subtrees under the threshold. Ports crawl4ai's PruningContentFilter (Apache-2.0,
+// https://github.com/unclecode/crawl4ai), same weights and threshold. One post-order pass memoizes lengths instead of
+// re-serializing each node.
 import { attr, childElements, type Element, isElement, isText, remove, textOf } from "./dom.js";
 
-// Never content, removed before scoring — upstream's excluded_tags plus the invisibles our parser keeps.
+// Never content; upstream's excluded_tags plus the invisible tags this parser still keeps.
 const EXCLUDED = new Set(["nav", "footer", "header", "aside", "script", "style", "form", "iframe", "noscript", "template", "svg", "canvas"]);
 
-// A class or id that names page chrome. Upstream's negative_patterns, verbatim.
+// Class or id naming page chrome; upstream's negative_patterns, verbatim.
 const NEGATIVE = /nav|footer|header|sidebar|ads|comment|promo|advert|social|share/i;
 
 const TAG_WEIGHTS: Record<string, number> = {
@@ -49,7 +42,7 @@ interface Mass {
     readonly linkTextLen: number;
 }
 
-/** Prunes IN PLACE under `body`; returns the fraction of text mass removed (for the capsule's honesty line). */
+/** Prunes in place under `body`; returns the fraction of text mass removed, for the capsule's honesty line. */
 export const pruneTree = (body: Element, options: PruneOptions = {}): number => {
     const threshold = options.threshold ?? 0.48;
     const before = textOf(body).length;
@@ -73,8 +66,8 @@ const stripExcluded = (el: Element): void => {
     }
 };
 
-/* One post-order pass: every element's text mass, an approximation of its serialized length (tag names,
- * attributes, brackets), and the text sitting in its DIRECT <a> children — the three inputs of the score. */
+// One post-order pass computes text mass, approximate markup length, and direct <a> text length per element: the
+// score's three inputs.
 const weigh = (el: Element, memo: Map<Element, Mass>): Mass => {
     let textLen = 0;
     let markupLen = 0;

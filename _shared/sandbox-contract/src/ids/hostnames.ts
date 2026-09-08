@@ -1,10 +1,6 @@
-// The single source for the tunnel/preview hostname + ingress scheme, shared by the CLI, platform API, daemon,
-// AND the browser. Pure string builders/parsers with NO node imports (unlike ./tunnel-ids, which needs
-// node:crypto for the digest), so the web bundle can import them and derive identical names. The caller supplies
-// the 12-hex id (sandboxIdFromToken/hostSshIdFromToken in node; WebCrypto in the browser).
-//
-// All four apps MUST agree on these strings: a divergence resolves to NXDOMAIN that resolvers negative-cache for
-// the zone's SOA TTL. This module is that agreement.
+// The single source for tunnel/preview hostnames and scheme, shared by the CLI, platform API, daemon and browser; pure
+// string builders, no node imports, so the browser can derive identical names. All four must agree, or a divergence
+// resolves to a negative-cached NXDOMAIN.
 
 // The sandbox daemon's subdomain + hostname: `sandbox-<id>` / `sandbox-<id>.<zone>`.
 const SANDBOX_PREFIX = "sandbox-";
@@ -14,27 +10,8 @@ export const sandboxHostname = (id: string, zone: string): string => `${sandboxS
 // The container sshd hostname the desktop-sync (Mutagen) reaches over the sandbox tunnel: `ssh-<id>.<zone>`.
 export const sshHostname = (id: string, zone: string): string => `ssh-${id}.${zone}`;
 
-/* The LOOPBACK name: `<id>.local.<zone>`, resolving to 127.0.0.1 under ONE wildcard record for the whole zone.
- *
- * A public DNS name for a private address looks odd until you ask what the alternative is. A browser on the
- * same machine as the sandbox can reach its daemon in microseconds instead of crossing to a Cloudflare edge
- * and back, but only over HTTPS, because Safari refuses http://127.0.0.1 from an HTTPS page as mixed content
- * (WebKit 171934, open since 2017), and HTTPS needs a name a public CA will certify. An IP literal cannot have
- * one; this can. The daemon holds the key and gets the certificate by proving control of the zone over
- * DNS-01 (there is nothing on the public internet for a CA to connect to).
- *
- * IT IS A LABEL DEEPER THAN THE OTHER NAMES, and that is the entire point rather than a naming preference. A
- * DNS wildcard matches ONE label, so `*.<zone>` cannot cover `<id>.local.<zone>` and `*.local.<zone>` covers
- * every sandbox that will ever exist: one record for the platform, not one per sandbox. The shape it replaced,
- * `local-<id>.<zone>`, needed a record each, and a zone has a hard per-record quota (Cloudflare 81045). Every
- * OTHER per-sandbox record went away with the move to the zrok hub, so this was the last thing consuming that
- * quota, and when the zone filled the platform could no longer write the record OR the ACME challenge beside
- * it: the certified shortcut stopped resolving, every browser fell back to the plain-http loopback, and that
- * transport is HTTP/1.1 with six connections per origin (see the editor's streamBudget.ts for what that cost).
- * A quota nothing can exhaust is the fix that keeps working.
- *
- * It discloses nothing: the id is already the leading label of the sandbox's public hostname, and the address
- * it resolves to is every machine's own loopback. */
+// A public HTTPS name for 127.0.0.1, needed since Safari refuses http from an https page. One label deeper than other
+// names, so a single `*.local.<zone>` wildcard covers every sandbox rather than needing a record each.
 export const localHostname = (id: string, zone: string): string => `${id}.${LOCAL_LABEL}.${zone}`;
 
 // The label the loopback names live under, so the wildcard has something to be a wildcard OF.
@@ -46,31 +23,17 @@ export const localWildcardHostname = (zone: string): string => `*.${LOCAL_LABEL}
 // What that record points at, and the reason it is safe to publish: every resolver on earth gets 127.0.0.1.
 export const LOCAL_ADDRESS = "127.0.0.1";
 
-// A per-host SSH tunnel's Cloudflare tunnel NAME (its hostname reuses sshHostname with the host-ssh id).
+// A per-host SSH tunnel's Cloudflare tunnel name; its hostname reuses sshHostname with the host-ssh id.
 export const hostSshTunnelName = (id: string): string => `host-ssh-${id}`;
 
 // The proxied-CNAME target every tunnel points its DNS record at.
 export const cfargotunnelCname = (tunnelId: string): string => `${tunnelId}.cfargotunnel.com`;
 
-// The cloudflared ingress catch-all, must be the LAST rule.
+// The cloudflared ingress catch-all; must be the last rule.
 export const CATCH_ALL = { service: "http_status:404" } as const;
 
-// Preview scheme: `preview-<panel>-<sandboxId>.<zone>`, one DNS label (the free Universal SSL `*.<zone>` cert
-// covers exactly one level), where <panel> is `<repo>` or `<repo>--<app>` and <sandboxId> pins the hostname to
-// this sandbox (the shared intentic zone hosts many sandboxes; without the id two users' panels would collide).
-// Port-forward scheme: `port-<slot>-<sandboxId>.<zone>`, the same shape with a `port-` prefix, where <slot>
-// is one of the sandbox's forward slots (portSlotsFromToken in ./tunnel-ids), not the port number itself:
-// slots keep the intentic-provided path's minted routes bounded and warm while dev servers churn ephemeral
-// ports. The slot labels are salted with the connect token rather than being the letters a…h, so a forwarded
-// port's hostname is not derivable from the (public) sandbox id alone, see tunnel-ids for why that matters.
-//
-// Outbox scheme: `public-<slot>-<sandboxId>.<zone>`, the same shape again, serving the workspace's `public/`
-// directory as static files. <slot> is publicSlotFromToken (./tunnel-ids), salted for the same reason the port
-// slots are, and one record per sandbox rather than a pool: there is one outbox, and its link has to stay good
-// for as long as the file does.
-//
-// A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>` /
-// `public-<slot>`), the unit reachability is expressed in, so one rule covers all three.
+// Three schemes share one shape, `<label>-<sandboxId>.<zone>`: preview, port-forward (`port-<slot>`, salted,
+// unguessable from the sandbox id alone), and outbox (`public-<slot>`, one record per sandbox).
 export const previewLabel = (panel: string): string => `preview-${panel}`;
 export const portLabel = (slot: string): string => `port-${slot}`;
 export const publicLabel = (slot: string): string => `public-${slot}`;
@@ -81,9 +44,8 @@ export const previewHostname = (panel: string, id: string, zone: string): string
 export const portHostname = (slot: string, id: string, zone: string): string => labelHostname(portLabel(slot), id, zone);
 export const publicHostname = (slot: string, id: string, zone: string): string => labelHostname(publicLabel(slot), id, zone);
 
-// A label's public URL, undefined unless the sandbox has both a zone and an id (headless/loopback sandboxes
-// have neither and advertise nothing). One builder, three vocabularies: a panel's preview, a forwarded port's,
-// and the outbox's.
+// A label's public URL, undefined unless the sandbox has both a zone and an id (headless/loopback sandboxes advertise
+// nothing). One builder, three vocabularies.
 const labelUrl = (label: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
     zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${labelHostname(label, sandboxId, zone)}` : undefined;
 export const previewUrl = (panel: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
@@ -93,11 +55,8 @@ export const portUrl = (slot: string, zone: string | undefined, sandboxId: strin
 export const publicUrl = (slot: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
     labelUrl(publicLabel(slot), zone, sandboxId);
 
-// The key after `<prefix>` from a request's Host header. The first DNS label must carry the prefix (the
-// own-Cloudflare wildcard also catches stray subdomains → undefined → the caller's 404) and, when the sandbox
-// has an id, the exact `-<sandboxId>` suffix, a fixed-length match, so keys containing `-` stay unambiguous.
-// Without an id the bare label is the key (loopback tests and provider-deployed workspaces, which front the
-// proxy themselves).
+// The key after `<prefix>` in the Host header; with an id, the label must end in the exact `-<sandboxId>` suffix so a
+// key containing `-` stays unambiguous. Without one, the bare label is the key.
 const keyFromHost = (prefix: string, hostHeader: string | undefined, sandboxId: string | undefined): string | undefined => {
     const label = hostHeader?.split(":")[0]?.split(".")[0] ?? "";
     if (!label.startsWith(prefix)) {
@@ -118,10 +77,8 @@ export const portSlotFromHost = (hostHeader: string | undefined, sandboxId: stri
 export const publicSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
     keyFromHost("public-", hostHeader, sandboxId);
 
-// The sandbox's identity AS THE USER SEES IT: the leading DNS label of its public URL, minus the `sandbox-`
-// prefix, `https://sandbox-0f310c3c4db4.intentic.dev` → `0f310c3c4db4`, i.e. sandboxIdFromToken's digest read
-// back off the wire by anyone holding only the URL. On the own-Cloudflare path the label is whatever subdomain
-// the owner chose, so that is the id there. undefined until the sandbox has a URL at all.
+// The sandbox's identity as the user sees it: the URL's leading DNS label minus the `sandbox-` prefix. On the
+// own-Cloudflare path the label is whatever subdomain the owner chose, so that is the id there.
 export const sandboxIdFromUrl = (url: string | undefined): string | undefined => {
     if (url === undefined || url === "") {
         return undefined;
@@ -139,13 +96,8 @@ export const sandboxIdFromUrl = (url: string | undefined): string | undefined =>
     return label.startsWith(SANDBOX_PREFIX) ? label.slice(SANDBOX_PREFIX.length) : label;
 };
 
-// The LOCAL folder desktop sync mirrors /work into: `~/intentic/<sandbox name>-<sandboxIdFromUrl>`. Both halves
-// are strings the user already has in front of them, the name in the sandbox switcher, the id in the address
-// bar, so the folder on disk and the sandbox it mirrors read as ONE identity: `~/intentic/shop-0f310c3c4db4`
-// belongs to `https://sandbox-0f310c3c4db4.intentic.dev` and nothing else. Keyed on the URL rather than the
-// name alone for the same reason the hostname is: a torn-down sandbox recreated under the same name gets a new
-// id, hence its own fresh folder instead of reusing the dead one's (which cleanup never deletes) and colliding
-// on the two-way sync. Lives here, beside the hostname builders, because that match IS the contract.
+// Where desktop sync mirrors /work to: `~/intentic/<name>-<sandboxIdFromUrl>`. Keyed on the URL, not the name alone, so
+// a sandbox recreated under the same name gets a fresh folder instead of colliding with the old one's.
 export const syncFolder = (name: string, url: string | undefined): string => {
     const slug =
         name
@@ -156,11 +108,8 @@ export const syncFolder = (name: string, url: string | undefined): string => {
     return `~/intentic/${slug}${id === undefined ? "" : `-${id}`}`;
 };
 
-// The Cloudflare zone from a sandbox public URL (https://sandbox-<id>.<zone> → <zone>): the hostname minus its
-// first DNS label. undefined when the URL is unparsable OR the hostname has fewer than three labels (no zone
-// suffix to strip, e.g. a 2-label host would otherwise yield a bare TLD). Accepts scheme-less input too, so it
-// works whether the caller passes `https://…` (daemon/CLI) or a bare host. This is the single reconciled
-// implementation of what used to be the daemon's `zoneFromPublicUrl` and the web's `zoneFromDaemonUrl`.
+// The zone from a sandbox's public URL: the hostname minus its first DNS label. Undefined when unparsable or under
+// three labels, so a two-label host doesn't yield a bare TLD; accepts scheme-less input too.
 export const zoneFromUrl = (url: string | undefined): string | undefined => {
     if (url === undefined || url === "") {
         return undefined;

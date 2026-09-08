@@ -18,26 +18,9 @@ import {
 import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 
-/* WHAT THE OTHER SANDBOXES ARE HOLDING, at the foot of the Changes panel.
- *
- * The panel above it is a REVIEW: every uncommitted path in this workspace, stageable, committable, discardable.
- * This is deliberately not that, and could not be. Two sandboxes' `/work/intentic` are two checkouts whose paths
- * collide and neither of which contains the other, so there is no merged tree to browse and no row here that a
- * diff could be opened from. What crosses sandboxes is not files, it is EXPOSURE: how much work exists on a
- * machine and nowhere else. So this is a ledger, one line per repo, and its verbs are the two that make sense
- * at a distance: send it, or go there.
- *
- * IT IS AT THE FOOT AND IT IS FOLDED, which is the whole of its claim on the reader's attention. The work in
- * front of you outranks the work on another machine every time, so this never pushes a row of the panel above
- * it off the screen; what it does is stop "there are eleven commits on the laptop that have never been pushed"
- * from being a fact nobody can learn without going and looking. Open once and it stays open, per window.
- *
- * WHY THIS IS WORTH A SURFACE AT ALL is the sentence outgoingWork.ts already makes about one box: a sandbox is
- * a machine that can go away. Everything the local panel says about that risk was, until this, said about
- * exactly one of the user's machines.
- *
- * It draws NOTHING on a one-sandbox account, and nothing when every other box is clean: an empty heading
- * explaining a feature you have no use for is worse than no heading. */
+// Ledger of what other sandboxes hold: one line per repo, showing unpushed or uncommitted work with no merged tree to
+// diff against. Folded at the foot of the Changes panel by default, staying open once opened, so it never pushes the
+// panel above off screen. Renders nothing on a single-sandbox account, or when every box is clean.
 
 const open = ref(false);
 const release = subscribeChanges();
@@ -46,8 +29,7 @@ onUnmounted(release);
 const rows = computed(() => ledgerRows.value);
 const silent = computed(() => silentChangeBoxes.value);
 
-// The one line the folded heading carries, and the reason to unfold it. Commits first: an unpushed commit is
-// the more recoverable-looking and less recoverable of the two exposures, since it reads as saved.
+// Commits listed first: an unpushed commit reads as saved and so is the less obviously at-risk of the two exposures.
 const summary = computed(() => {
     const parts: string[] = [];
     const outgoing = outgoingAcross.value;
@@ -60,30 +42,19 @@ const summary = computed(() => {
     return parts.join(`, `);
 });
 
-// Silence is reported as its own clause rather than folded into the summary: "nothing outstanding" and "two
-// machines didn't answer" are opposite claims, and a heading that ran them together would say the first while
-// meaning the second.
+// Reported separately from the summary: 'nothing outstanding' and 'two machines didn't answer' are different claims
+// that must not merge into one.
 const silentLine = computed(() =>
     silent.value.length === 0
         ? undefined
         : `${silent.value.map((box) => box.sandbox.name).join(`, `)} ${silent.value.length === 1 ? `isn't` : `aren't`} answering`,
 );
 
-// Nothing outstanding anywhere, and nothing unaccounted for. The section is absent rather than reassuring: a
-// permanent "all clear" row is the statistic this app's badge rule keeps off every other surface.
+// Absent when there's nothing outstanding, rather than showing a permanent all-clear row.
 const show = computed(() => hasOtherSandboxes.value && (rows.value.length > 0 || silent.value.length > 0));
 
-/* GO AND WORK IN THAT BOX. The row's other press, and the one that costs the switch: everything the ledger
- * itself offers is a count and a push, and anything more (reading the diff, committing, running that box's own
- * pre-push suite) needs the workspace of the machine it is on.
- *
- * It lives HERE rather than beside the data it acts on, because a switch reaches the router and the store
- * behind this section must not: `agentActions` re-reads that store after a land, and an import edge from there
- * to the router is one every node-environment test in the app has to carry.
- *
- * The destination is recorded before the selection moves, for the reason sandboxScreen's own helper gives: the
- * switch otherwise lands on whatever that box was last showing, which is a detour taken from the one direction
- * where the caller knew where it was going. */
+// Lives here, not in changesAcross, so that module doesn't need a router import every node-environment test would
+// carry. Destination is recorded before the switch, so it doesn't land on whatever the target was last showing.
 const openWorkspaceIn = (sandboxId: string): void => {
     landOnAfterSwitch(sandboxId, `/workspace`);
     useSandbox().select(sandboxId);
@@ -91,8 +62,7 @@ const openWorkspaceIn = (sandboxId: string): void => {
 
 const rowKey = (row: LedgerRow): string => `${row.sandboxId}:${row.repo}`;
 const sendable = (row: LedgerRow): boolean => !row.unreadable && (row.ahead > 0 || row.publish);
-// The verb the row's own state earns, the same split the local panel makes: a branch git has never pushed is
-// Published, everything else is Pushed, and a branch that is both is sent by one ordinary push.
+// Publish for a branch never pushed, Push otherwise; a branch that's both is sent by one ordinary push.
 const sendVerb = (row: LedgerRow): string => (row.publish && row.ahead === 0 ? `Publish` : `Push`);
 
 const detail = (row: LedgerRow): string => {
@@ -127,8 +97,7 @@ const detail = (row: LedgerRow): string => {
             <span v-if="summary" class="shrink-0 text-2xs text-warning">{{ summary }}</span>
         </button>
 
-        <!-- Named boxes, not a count, and outside the fold: a reader deciding whether the summary above is the
-             whole story needs to know it is missing one, before choosing not to open this. -->
+        <!-- Named boxes, not a count, shown outside the fold: a reader needs to know the summary is incomplete before deciding not to open this. -->
         <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-4 pr-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1 truncate">{{ silentLine }}</span>
             <button type="button" class="shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
@@ -146,9 +115,10 @@ const detail = (row: LedgerRow): string => {
 
             <div v-for="row in rows" :key="rowKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
                 <div class="min-w-0 flex-1">
-                    <!-- The BOX first and the repo second, because the box is what the reader is orienting by:
-                         the same repo name appears in several of them, and which machine it is on is the whole
-                         question this section answers. -->
+                    <!--
+                        Box name first, repo second: the same repo can appear in several boxes, and which machine it's on is the question this
+                        answers.
+                    -->
                     <p class="min-w-0 truncate text-2xs text-content">
                         <span class="text-muted">{{ row.sandboxName }}</span>
                         <span class="px-1 text-subtle">/</span>{{ row.repo }}
@@ -165,8 +135,7 @@ const detail = (row: LedgerRow): string => {
                     v-tooltip.top="`${sendVerb(row)} straight from here. Its own pre-push checks run in that sandbox, not this one`"
                     @click="pushRow(row)"
                 />
-                <!-- Everything this ledger cannot do: read the diff, commit, run the checks. One press, and it
-                     says which machine it is taking you to rather than just moving the app under the reader. -->
+                <!-- Everything this ledger can't do (diff, commit, checks) lives on that machine; the label names which one it's taking you to. -->
                 <button
                     type="button"
                     class="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"

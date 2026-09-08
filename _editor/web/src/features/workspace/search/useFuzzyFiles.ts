@@ -7,12 +7,9 @@ import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
 import { useSearchOptions } from "./useSearchOptions";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 
-/* Ranked filename matching for the quick-open surfaces (Ctrl/Cmd+P palette, the chat @-mention picker).
- * Client-ranked by default: the explorer's tree query already holds every visible file path (the daemon's
- * file-watch SSE keeps it fresh), and scoring ≤5k paths takes well under a millisecond, results land in the
- * same frame as the keystroke, no debounce, no network, ranked from the first character. The daemon's `files`
- * search stays as the fallback for exactly the two cases the tree can't answer: the include-ignored toggle
- * (ignored files aren't in the eager tree) and a tree truncated by the 5k entry cap (the daemon sweeps to 100k). */
+// Ranked filename matching for quick-open surfaces (Ctrl/Cmd+P palette, chat @-mention picker). Client-ranked by
+// default: the tree already holds every visible path and scores fast enough for no debounce. Falls back to the
+// daemon's `files` search only for include-ignored or a tree truncated past its 5k cap (daemon sweeps to 100k).
 
 const LIMIT = 100;
 // The fallback is already rare and server-bound, a tight debounce just coalesces a keystroke burst.
@@ -22,14 +19,8 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     const { tree, rootHidden, error: treeError, isLoading } = useWorkspaceTree();
     const { includeIgnored } = useSearchOptions();
 
-    // Every non-ignored file path in the eager tree (ignored entries are listed grayed but excluded here,
-    // matching the daemon's filtered sweep), plus whether the tree is INCOMPLETE anywhere, i.e. holds a dir the
-    // breadth-first walk never listed (no `children`; it lazy-loads on expand). The client can't answer from the
-    // tree alone then, so the query falls back to the daemon's sweep.
-    //
-    // The sandbox's own locked entries are skipped WHOLE, not offered as something to open, and not counted as
-    // a gap either. They are the one kind of dir the walk deliberately never descends, so reading their absent
-    // children as "the tree is incomplete" would send every keystroke to the server sweep forever.
+    // Collects non-ignored paths from the eager tree, plus whether any dir is unloaded (`children` undefined), forcing
+    // the daemon fallback. Locked entries are skipped whole, not counted as a gap, or every keystroke would fall back.
     const clientTree = computed<{ paths: readonly string[]; cut: boolean }>(() => {
         const paths: string[] = [];
         let cut = false;

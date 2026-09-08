@@ -5,33 +5,18 @@ import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import { repoRoot } from "@intentic/constants/node";
 
-/* THE `ic` BINARY THE CLI LANE DRIVES, AND WHY IT IS NOT THE ONE A USER DOWNLOADS.
- *
- * The one-liner the wizard renders is a bootstrap shim: it fetches `ic` from the LATEST GITHUB RELEASE, gets
- * the machine ready for Docker, and hands the whole flow over to `ic sandbox connect`. Running those bytes
- * verbatim here would test the last release rather than this branch — the objection images.ts makes about
- * pulling `:latest` instead of building the api — and on a machine with no Docker it would try to install
- * some. So this lane takes the setup CODE off the rendered command and runs THIS checkout's binary against
- * this run's platform. The shim's own half (fetching ic, preparing Docker) is what the desktop smokes cover,
- * on both operating systems, against the bytes an installer actually shipped.
- *
- * FOUR SOURCES, most explicit first, and every one of them is this checkout:
- *
- *   IC_BIN                       CI hands one in, cross-built by a job that has the Rust toolchain.
- *   _sandbox/ic/dist-bin/…       what build-ic.sh leaves; a developer who has already built one.
- *   target/release/ic            a previous `cargo build --release` in this tree.
- *   cargo                        build it now, when the toolchain is here.
- *
- * With none of those, the lane STANDS DOWN with the sentence that fixes it, exactly as the world does without
- * Docker: this tier gates releases, so every reason it is red has to be one somebody can act on, and "no Rust
- * toolchain on this machine" is a fact about the machine rather than about the product.
- */
+// Runs this checkout's own ic binary, not the wizard's fetch-latest-release one, so this lane tests this branch, not
+// the last release. Checked in order, all from this checkout:
+// - IC_BIN: handed in by CI, cross-built with the Rust toolchain.
+// - _sandbox/ic/dist-bin/…: what build-ic.sh left, for a developer who already built one.
+// - target/release/ic: a previous cargo build --release in this tree.
+// - cargo: build it now, if the toolchain is here.
+// With none found, stands down with an actionable message rather than failing red, since this tier blocks releases.
 
 const run = promisify(execFile);
 const root = repoRoot(import.meta.url);
 
-// What `_tools/scripts/build/build-ic.sh linux-x64` writes: a static musl binary, the same artifact the
-// desktop setup tier hands the shipped connect.sh through IC_BIN.
+// What `build-ic.sh linux-x64` writes: a static musl binary, same artifact shipped via IC_BIN.
 const BUILT = join(root, `_sandbox/ic/dist-bin/ic-linux-amd64`);
 const CARGO_BUILT = join(root, `_sandbox/ic/target/release/ic`);
 const MANIFEST = join(root, `_sandbox/ic/Cargo.toml`);
@@ -75,8 +60,7 @@ export const findIcBinary = async (): Promise<IcBinary> => {
         };
     }
     try {
-        // Minutes on a cold registry, seconds on a warm one. Release profile, because this is the binary the
-        // lane spends its whole run inside and a debug build's docker polling is measurably slower.
+        // Release profile: the lane runs inside this binary the whole run, and a debug build polls docker slower.
         await run(`cargo`, [`build`, `--release`, `--manifest-path`, MANIFEST], { timeout: 20 * 60_000, maxBuffer: 64 * 1024 * 1024 });
     } catch (cause) {
         return { standDown: `building ic from this checkout failed: ${errorMessage(cause)}` };

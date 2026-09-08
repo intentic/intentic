@@ -4,11 +4,8 @@ import { probeSpec } from "./probes.js";
 import { IDIOM_RULES } from "./stack.js";
 import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG, WORKSPACE_ROOT_RG_EXCLUDE_ARG } from "./workspace-scope.js";
 
-/* The parsers are the part of this library that faces someone else's output, so they are tested the way that
- * output actually arrives: real shapes, then the shapes that have historically broken things, a tool that
- * printed a warning line before its JSON, a version whose fields moved, an empty run. The bar for every one of
- * them is the same: recognise it, or return undefined so the runner can record a failure. Never throw, and never
- * report a clean result from output it did not understand. */
+// Parsers face real tool output: warning lines before JSON, moved fields, empty runs. Unrecognized output must return
+// undefined, never throw, never read as clean.
 
 const parse = (id: Parameters<typeof probeSpec>[0], stdout: string) => probeSpec(id).parse(stdout);
 
@@ -43,8 +40,6 @@ describe(`outdated`, () => {
         });
     });
 
-    // pnpm prints deprecation and lockfile notices on the same stream in some versions; the JSON still has to be
-    // found. This is the single most common reason a parser like this silently reports "clean".
     test(`finds the JSON after a leading warning line`, () => {
         expect(parse(`outdated`, ` WARN  Ignoring broken lockfile\n{"vue":{"current":"1.0.0","latest":"2.0.0"}}`)).toEqual({
             id: `outdated`,
@@ -78,8 +73,6 @@ describe(`audit`, () => {
         });
     });
 
-    // "<0.0.0" is npm's spelling of "no version fixes this". Treating it as a range would have the chore promise
-    // a bump that cannot be made, which is the one thing a security prompt must not do.
     test(`treats "<0.0.0" as no patch published`, () => {
         const facts = parse(`audit`, JSON.stringify({ advisories: { "1": advisory({ patched_versions: `<0.0.0` }) } }));
         expect(facts).toEqual({ id: `audit`, advisories: [expect.not.objectContaining({ patched: expect.anything() })] });
@@ -129,7 +122,6 @@ describe(`knip`, () => {
         });
     });
 
-    // A clean run still prints the envelope, and an empty one is the answer that keeps the chore quiet.
     test(`an empty issue list is a clean repository, not an unrecognisable one`, () => {
         expect(parse(`knip`, JSON.stringify({ issues: [] }))).toEqual({
             id: `knip`,
@@ -137,8 +129,6 @@ describe(`knip`, () => {
         });
     });
 
-    // Without an `issues` array this is not knip's report, whatever else it contains, and reporting zero dead code
-    // from a shape we do not recognise is exactly the lie the state machine exists to prevent.
     test(`a shape without an issues array is a failure`, () => {
         expect(parse(`knip`, JSON.stringify({ files: [`src/old.ts`] }))).toBeUndefined();
     });
@@ -180,15 +170,13 @@ describe(`jscpd`, () => {
         });
     });
 
-    // jscpd writes its report to a file; when the run dies the `cat` in the command prints nothing at all.
     test(`no output at all is a failure`, () => {
         expect(parse(`jscpd`, ``)).toBeUndefined();
     });
 });
 
-/* The mutation report is the cross-tool "mutation testing report schema", and the whole risk in this parser is
- * the arithmetic rather than the shape: two of the eight statuses land on the counter-intuitive side, and getting
- * either one backwards produces a number that looks plausible and is wrong. So the statuses are tested by name. */
+// Two of the eight mutation statuses count counter-intuitively; tested by name since getting either backwards looks
+// plausible.
 describe(`mutation`, () => {
     const report = (...mutants: readonly Record<string, unknown>[]) =>
         JSON.stringify({
@@ -204,15 +192,11 @@ describe(`mutation`, () => {
     });
 
     test(`counts Killed and Timeout as caught, Survived and NoCoverage as missed`, () => {
-        // Stryker's own arithmetic, restated as a test because both halves read backwards at a glance: a mutant
-        // that HANGS the suite was noticed by it, and a mutant nothing ran cannot have been.
         const facts = parse(`mutation`, report(mutant(`Killed`), mutant(`Timeout`), mutant(`Survived`), mutant(`NoCoverage`)));
         expect(facts).toMatchObject({ id: `mutation`, mutation: { killed: 2, survived: 2, score: 50 } });
     });
 
     test(`leaves mutants that never got a verdict out of the score entirely`, () => {
-        // One caught, one missed, and three with no answer: the score is 50%, not 20% and not 80%. Folding the
-        // undecided into either column is the mistake this pins.
         const facts = parse(`mutation`, report(mutant(`Killed`), mutant(`Survived`), mutant(`CompileError`), mutant(`RuntimeError`), mutant(`Ignored`)));
         expect(facts).toMatchObject({ id: `mutation`, mutation: { killed: 1, survived: 1, inconclusive: 3, score: 50 } });
     });
@@ -224,8 +208,6 @@ describe(`mutation`, () => {
         });
     });
 
-    // A mutator that DELETES an expression reports an empty replacement, which would otherwise render as a blank
-    // in the panel and read as a missing field rather than as the removal it is.
     test(`renders a deleted expression as a removal rather than as nothing`, () => {
         const facts = parse(`mutation`, report({ ...mutant(`Survived`), replacement: `` }));
         expect(facts).toMatchObject({ mutation: { survivors: [{ replacement: `(removed)` }] } });
@@ -237,8 +219,6 @@ describe(`mutation`, () => {
         });
     });
 
-    // The distinction the runner depends on: an empty `files` map is a real measurement, a MISSING one is output
-    // this parser did not understand, and reporting the second as a clean 100% is the one answer it must never give.
     test(`output without a files map is a failure, not a clean repository`, () => {
         expect(parse(`mutation`, JSON.stringify({ schemaVersion: `2.0` }))).toBeUndefined();
         expect(parse(`mutation`, ``)).toBeUndefined();
@@ -251,9 +231,8 @@ describe(`mutation`, () => {
     });
 });
 
-/* The UI sweep is the one probe whose output we produce ourselves, which removes the "their JSON moved" failure
- * and replaces it with a worse one: a command of eleven piped ripgreps in which any single stage can silently
- * contribute nothing. The marker line is what tells those two apart, and most of what is below is about it. */
+// The sweep is our own command, not third-party JSON; the risk is a silently empty pipeline stage, which the marker
+// line exists to catch.
 describe(`ui`, () => {
     const sweep = (...lines: readonly string[]) => [`UI`, ...lines].join(`\n`);
 
@@ -282,9 +261,6 @@ describe(`ui`, () => {
         });
     });
 
-    /* The distinction the marker exists for, and the one this whole probe would get wrong without it: a
-     * repository with no components and no findings emits exactly the marker, while a sweep that never ran emits
-     * nothing. Collapsing them would report a spotless front-end for a command that failed to start. */
     test(`the marker alone is a clean repository`, () => {
         expect(parse(`ui`, sweep())).toEqual({ id: `ui`, scan: { components: [], bypasses: [], idioms: [] } });
     });
@@ -295,7 +271,6 @@ describe(`ui`, () => {
         expect(parse(`ui`, `rg: unrecognized flag --count-matches`)).toBeUndefined();
     });
 
-    // A path with a colon in it is legal and rare; the count is always the digits after the last one.
     test(`splits a count off the end of a path that contains a colon`, () => {
         expect(parse(`ui`, sweep(`BYPASS\tsrc/weird:name.vue:7`))).toMatchObject({ scan: { bypasses: [{ path: `src/weird:name.vue`, count: 7 }] } });
     });
@@ -304,9 +279,6 @@ describe(`ui`, () => {
         expect(parse(`ui`, sweep(`BYPASS\tsrc/Button.vue`, `BYPASS\tsrc/Card.tsx:notanumber`))).toMatchObject({ scan: { bypasses: [] } });
     });
 
-    /* Every path the sweep prints wears a `./`, because every ripgrep in it is handed `.` to walk. Downstream this
-     * would have to be remembered at each comparison: jscpd's paths against the component list, a bypass against
-     * a component, so it is spent once, here, and one spelling of a path leaves the parser. */
     test(`strips the prefix ripgrep prints for a path it was told to walk`, () => {
         expect(parse(`ui`, sweep(`COMPONENT\t./src/Button.vue`, `BYPASS\t./src/Button.vue:3`, `IDIOM\tvue-options-api\t./src/Old.vue`))).toEqual({
             id: `ui`,
@@ -323,9 +295,7 @@ describe(`ui`, () => {
     });
 });
 
-/* THE COMMAND ITSELF, which for this probe is generated and therefore the thing to test. Both cases below are
- * bugs that reached a real repository and could not be seen in the output: one made the sweep silently empty, the
- * other made it depend on a ripgrep feature that is a compile-time option. */
+// Tests the composed command directly: past bugs here produced no visible difference in output, only a broken command.
 describe(`the sweep's composed command`, () => {
     const stages = (): string[] => probeSpec(`ui`).command.split(`; `);
 
@@ -334,10 +304,6 @@ describe(`the sweep's composed command`, () => {
         expect(probeSpec(`ui`).command.split(WORKSPACE_ROOT_RG_EXCLUDE_ARG)).toHaveLength(3 + IDIOM_RULES.length);
     });
 
-    /* Given no path, ripgrep searches STDIN whenever stdin is not a TTY, which is exactly how a probe is spawned.
-     * The sweep exited 0, printed its marker and matched nothing, in every repository, forever, which the marker
-     * line cannot catch because the sweep really did run. It reproduces from a child process and never from an
-     * interactive shell, so the command is the only place it is visible. */
     test(`every ripgrep is given a path to walk, including the availability gate`, () => {
         const searches = stages().filter((stage) => stage.startsWith(`rg `));
         expect(searches).toHaveLength(IDIOM_RULES.length + 2);
@@ -376,8 +342,6 @@ describe(`bundle`, () => {
         });
     });
 
-    // The `find` prints nothing for a directory that exists but holds no assets. `available` is supposed to catch
-    // that, and this is the second line of defence: a zero-byte bundle would otherwise read as a fact.
     test(`a directory line with no assets is an empty build, not a failure`, () => {
         expect(parse(`bundle`, `DIR\tbuild`)).toMatchObject({ bundle: { dir: `build`, assets: [], totalBytes: 0, totalGzip: 0 } });
     });

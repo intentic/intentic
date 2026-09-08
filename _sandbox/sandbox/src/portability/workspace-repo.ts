@@ -25,36 +25,14 @@ import { rootPathIsExcluded } from "../history/history.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { DEFINITION_SOURCES } from "./definition.js";
 
-/* THE WORKSPACE AS A REFERENCE: publishing /work, and taking somebody's published /work into a fresh sandbox.
- *
- * /work has always been a git repo — the daemon's `root` scope, git dir on /history, in-worktree `.git` a
- * pointer file (git/root-repo.ts). Its exclude list is DERIVED from the contract's `versioned` flag, so it
- * tracks every workspace file that is not a nested repo, the reference shelf, or daemon-internal state, which
- * by that allowlist means the owner's authored content: notes, skills, personas, automations, workflow and
- * loop designs, approvals, workspace extensions. Until it had a remote, none of that could travel by reference
- * and a bundle was the only door. This module is the two halves of giving it one.
- *
- * THE ARRIVAL IS THE HARD HALF, and the reason is the format's own promise: a definition is safe to publish,
- * which means it is also a file a stranger may hand you. The typed sections keep that promise by construction,
- * a capability lands unauthenticated, an overlay lands as a proposal. A CHECKOUT keeps nothing by
- * construction: whatever is in the tree is what lands. The fetched tree is therefore inspected and rewritten
- * in a detached temporary worktree BEFORE it can touch /work: private/ignored paths and executable git entry
- * types are refused, typed definition sources keep the target's bytes, and everything that acts on its own is
- * switched off. Only that inert tree is checked out. There is no live unsafe window for a watcher to catch.
- */
+// Publishes /work and adopts a published workspace into a fresh one. The exclude list tracks only owner-authored
+// content (notes, skills, personas, automations, approvals, extensions). A foreign tree is preflighted and rewritten
+// inert in a detached worktree before it ever touches /work; nothing unsafe is checked out live.
 
 export class WorkspaceRemoteError extends Error {}
 
-/* Git's own words, WHOLE, where the ordinary one-line verdict would throw the answer away. A checkout refusal
- * reads
- *
- *   error: The following untracked working tree files would be overwritten by checkout:
- *   	notes.md
- *   Please move or remove them before you switch branches.
- *   Aborting
- *
- * and the middle of that is the entire point: WHICH files. gitFailureReason keeps the last verdict line, which
- * is right for "the push was rejected" and useless for this one. */
+// Keeps git's full stderr, not just the last line: a checkout refusal names which files block it in the middle of the
+// message.
 const gitRefusal = (error: unknown, fallback: string): string => {
     const stderr = (error as { stderr?: unknown }).stderr;
     const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : errorMessage(error);
@@ -65,9 +43,7 @@ const gitRefusal = (error: unknown, fallback: string): string => {
     return lines.length === 0 ? fallback : lines.join(" ");
 };
 
-// The connected github/gitlab accounts, in the order a publish would try them. Same resolution the CI project
-// mapping and git access ride (ci/projects.ts), so "which hosts can I publish to" and "which hosts do my repos
-// belong to" can never answer differently.
+// Connected github/gitlab accounts, in the order a publish would try them.
 const gitHosts = async (services: Services): Promise<GitHost[]> =>
     (await services.capabilities.list()).flatMap((capability) => {
         if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab")) {
@@ -76,13 +52,13 @@ const gitHosts = async (services: Services): Promise<GitHost[]> =>
         try {
             return [gitHostOf(capability.config)];
         } catch {
-            // A gitlab capability with an unparseable instance url publishes nowhere; it fails its own probe.
+            // An unparseable gitlab instance url publishes nowhere; it fails its own probe.
             return [];
         }
     });
 
-// The URL of a repo's configured remote, or undefined when it has none this daemon can read. Total: every
-// failure here is an ordinary state (no remote yet, a remote with no URL), never an exception to render.
+// A repo's remote URL, or undefined; every failure here (no remote, unreadable URL) is an ordinary state, not an
+// exception.
 const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: string; branch?: string }> => {
     const state = await remoteState(dir, {}, git).catch(() => ({ ahead: 0, behind: 0 }) as Awaited<ReturnType<typeof remoteState>>);
     const branch = state.branch === undefined || state.branch === "" ? undefined : state.branch;
@@ -97,18 +73,14 @@ const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: stri
 export const workspaceRemoteUrl = async (root: string, git: GitRunner = defaultGit): Promise<string | undefined> =>
     (await remoteUrlOf(root, git)).remote;
 
-// Where /work stands and where it could go, the card's first render: published or not, and which hosts could
-// publish it. Read-only.
+// Where /work stands and could go: published or not, and which hosts could publish it. Read-only.
 export const workspaceRemote = async (services: Services, git: GitRunner = defaultGit): Promise<WorkspaceRemote> => ({
     ...(await remoteUrlOf(services.workspace.root, git)),
     hosts: (await gitHosts(services)).map((host) => host.host),
 });
 
-/* WHETHER A DEFINITION MAY MATERIALIZE A WORKSPACE HERE, the `beside, never over` rule as it has to be spelled
- * for a checkout that owns the whole tree. Commit count and message are not provenance: somebody else's
- * one-commit repository can look exactly like the daemon's baseline. The daemon records the exact baseline
- * sha in protected git config, and a fresh marker covers only the unborn boot-seed window before that commit.
- * A changed HEAD or any visible worktree change makes the workspace somebody's work and therefore ineligible. */
+// Whether a definition may materialize a workspace here: the exact baseline sha (in protected git config) must match
+// HEAD with no worktree changes, or an unborn repo must carry the fresh marker. Commit count alone is not provenance.
 export const workspaceIsPristine = async (root: string, git: GitRunner = defaultGit): Promise<boolean> => {
     const head = await git(root, ["rev-parse", "-q", "--verify", "HEAD"])
         .then(({ stdout }) => stdout.trim())
@@ -143,10 +115,8 @@ const treeEntries = async (root: string, commit: string, git: GitRunner): Promis
             return { mode, type, path: entry.slice(tab + 1) };
         });
 
-// Every path the root repository itself excludes is refused, rather than trusted merely because a foreign
-// repository force-added it. Symlinks and gitlinks are refused too: the former can redirect a later write out
-// of the inspected tree, and the latter is a nested repository with a second, uninspected source. `public/` is
-// an additional arrival-only refusal because creating it is the switch that serves its contents to the world.
+// Refuses anything the root's own exclude list would (even if the foreign repo force-added it), any symlink or gitlink
+// (an escape or an uninspected nested repo), and a top-level public/ (serves files on creation).
 const preflightTree = async (root: string, commit: string, git: GitRunner): Promise<void> => {
     const repoIds = await discoverRepos(root);
     for (const entry of await treeEntries(root, commit, git)) {
@@ -309,8 +279,7 @@ const safeWorkspaceCommit = async (
         for (const [path, content] of targetSources) {
             await replaceFile(stage, path, content);
         }
-        // The remote's switch file never gets authority over extensions already installed in the target. Start
-        // from the target's choices and add an explicit false for every piece of workspace extension code.
+        // The remote's switch file never overrides extensions already installed in the target.
         await replaceFile(stage, EXTENSION_ENABLEMENT, undefined);
         const actions = [
             await gateOverlay(stage, incomingOverlay, options.overlayHandledBySection),
@@ -339,11 +308,8 @@ const safeWorkspaceCommit = async (
     }
 };
 
-/* Take a published workspace into this one without ever checking the foreign tree out live. Fetching only
- * writes the protected git dir. The tree is preflighted and made inert in a temporary worktree; the target sees
- * a single checkout of that safe commit, with ignored-file overwrites explicitly forbidden. The branch is then
- * moved back to the remote commit with a mixed reset, so the safety rewrites remain visible local changes and
- * can never be pushed upstream as though the source owner authored them. */
+// Never checks the foreign tree out live: only a preflighted, inert commit is checked out, with ignored-overwrites
+// forbidden. A mixed reset then moves the branch to the real remote commit, keeping the rewrites local-only.
 export const adoptWorkspaceRemote = async (
     services: Services,
     workspace: DefinitionWorkspace,
@@ -370,13 +336,11 @@ export const adoptWorkspaceRemote = async (
         const prepared = await safeWorkspaceCommit(services, remoteCommit, options, git);
         await git(root, ["checkout", "--no-overwrite-ignore", "-B", branch, prepared.commit]);
         checkedOut = true;
-        // Move HEAD + index to the real remote commit without touching the already-safe worktree. The disabled
-        // switches and target-owned source files now read as deliberate local differences from upstream.
+        // Moves HEAD and index to the real remote commit without touching the already-safe worktree.
         await git(root, ["reset", "--mixed", remoteCommit]);
         await git(root, ["config", "--unset-all", ROOT_FRESH_CONFIG]).catch(() => undefined);
         await git(root, ["config", "--unset-all", ROOT_BASELINE_CONFIG]).catch(() => undefined);
-        // Upstream is a convenience, not part of landing the tree: a remote whose ref layout surprises us
-        // still leaves a correct checkout behind.
+        // Upstream tracking is a convenience, not required for a correct checkout.
         await git(root, ["branch", `--set-upstream-to=origin/${branch}`, branch]).catch(() => undefined);
         return { branch, actions: prepared.actions };
     } catch (error) {
@@ -387,17 +351,9 @@ export const adoptWorkspaceRemote = async (
     }
 };
 
-/* ---- publishing ----
- *
- * The other half, and the one a definition cannot do for itself: `[workspace]` names a remote, and nothing can
- * name one that does not exist. Deliberately its own owner-gated route rather than a side effect of the
- * export, publishing a workspace is an OUTWARD act with its own confirmation, and deriving a document has to
- * stay read-only.
- *
- * What travels is decided by root's exclude list, not by this function: nested repos, the reference shelf,
- * `.intentic/local` and `.intentic/secrets`, `.env*` and the junk dirs are all outside the repo already, which
- * is what makes pushing a workspace safe to offer at all.
- */
+// Publishing: the half a definition cannot do for itself, since naming a remote requires one to exist; its own
+// owner-gated route, since publishing is outward and deriving stays read-only. What travels is root's exclude list
+// already: nested repos, the reference shelf, .intentic/local and /secrets, .env*, junk dirs.
 
 const created = async (host: GitHost, name: string, owner: string | undefined): Promise<string> => {
     if (host.provider === "gitlab") {
@@ -417,7 +373,7 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
         }
         return body.http_url_to_repo;
     }
-    // github: an owner that is not the authenticated user is an organization, which has its own endpoint.
+    // github: an owner other than the authenticated user is an organization, with its own endpoint.
     const login = await fetch(`${host.apiBase}/user`, { headers: githubHeaders(host.token) })
         .then(async (response) => ((await response.json().catch(() => ({}))) as { login?: string }).login)
         .catch(() => undefined);
@@ -439,8 +395,7 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
     return body.clone_url;
 };
 
-// A repo name from the sandbox's own name, since that is what the owner will recognise in a list of repos.
-// Nothing derives authority from it; an empty or unusable name falls back to a fixed one.
+// Repo name derived from the sandbox's name, recognizable in a repo list; empty or unusable falls back to a fixed name.
 const repoNameFrom = (name: string): string => {
     const cleaned = name
         .trim()
@@ -477,8 +432,7 @@ export const publishWorkspace = async (services: Services, input: WorkspacePubli
     }
     const pushed = await pushBranch(root, { branch }, git);
     if (!pushed.ok) {
-        // The remote comes back off on a failed push for the reason the adopt path un-wires its own: a remote
-        // nothing was pushed to would still make `deriveDefinition` claim a `[workspace]` nobody can clone.
+        // Removed on a failed push; otherwise deriveDefinition would claim a [workspace] nobody can clone.
         await git(root, ["remote", "remove", "origin"]).catch(() => undefined);
         throw new WorkspaceRemoteError(pushed.reason);
     }

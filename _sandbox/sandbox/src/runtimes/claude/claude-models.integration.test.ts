@@ -7,20 +7,14 @@ import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";
 
-/* The catalog's TWO-SOURCE MERGE (CLI tier aliases + REST /v1/models) and its FALLBACK LADDER: live merge →
- * persisted last-known-good → seed floor. Both sources are injected rather than suppressed by withholding a
- * credential: the real discovery spawns the Claude Code CLI, which inherits the ambient environment, so on any
- * machine that has a logged-in CLI (every developer's, and this repo's own agent sandbox) a credential-free
- * catalog still returns the live list and the lower rungs are never exercised.
- *
- * The rule every test below turns on: ONLY ROWS THAT NAME A VERSION are offered. Aliases are mined for the
- * effort levels and badges they alone publish, then dropped. */
+// Catalog's two-source merge (CLI aliases + REST /v1/models), falling live merge to persisted last-known-good to seed
+// floor. Every test's rule: only rows naming a version are offered; aliases are mined for effort/badges, then dropped.
 
 const emptyStore = { list: async () => [] } as unknown as ClaudeStore;
 const noContainerToken = { claudeCodeOauthToken: "" } as unknown as Config;
-// A container credential, so the REST rung actually runs (the store is empty, so this is the token it falls to).
+// Container credential the REST rung falls to, since the store is empty.
 const containerToken = { claudeCodeOauthToken: "oauth-token" } as unknown as Config;
-// Discovery that fails the way an unreachable/unauthenticated CLI does, so every read descends past the live tier.
+// Fails the way an unreachable or unauthenticated CLI does, so every read descends past the live tier.
 const discoveryFails = async (): Promise<Model[]> => {
     throw new Error("claude code cli unavailable");
 };
@@ -52,17 +46,13 @@ test("a successful discovery is written through, so the next offline read still 
     const online = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, async () => live, apiFails).models();
     expect(online.models).toEqual(live);
 
-    // A separate catalog instance, so nothing is served from the in-memory cache: this reads the file the first
-    // one wrote. Before persistence this fell to the aliases and the discovered tier was lost on every restart.
+    // A separate catalog instance avoids the in-memory cache; this reads the file the first one wrote.
     const offline = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, discoveryFails, apiFails).models();
     expect(offline.models).toEqual(live);
 });
 
 test("offers the REST catalog's versioned models and no tier alias at all", async () => {
-    // The regression the REST source exists for: supportedModels() publishes only tier ALIASES, and an alias lags
-    // a release: `opus` still resolved to claude-opus-4-8 while claude-opus-5 had shipped and was already serving
-    // turns, so a picker sourced from the CLI alone could not reach the new model at all. And an alias ROW can
-    // never say which version answered a turn, so the picker offers versions only.
+    // An alias row can't say which version served a turn, so the picker offers only versioned rows.
     const aliases: Model[] = [
         { id: "default", label: "Default (recommended)", description: "Opus 4.8 with 1M context" },
         { id: "opus[1m]", label: "Opus (1M context)" },
@@ -81,19 +71,15 @@ test("offers the REST catalog's versioned models and no tier alias at all", asyn
         ]),
     ).models();
 
-    // `opus[1m]` carries a digit but no version: the numeric-SEGMENT test is what tells a context-window suffix
-    // apart from a version, so it goes the way of `default` and `opus`.
+    // opus[1m] has a digit but no version segment, so it drops like the other aliases.
     expect(catalog.models.map((model) => model.id)).toEqual(["claude-opus-5", "claude-opus-4-8"]);
     expect(catalog.models.map((model) => model.label)).toEqual(["Claude Opus 5", "Claude Opus 4.8"]);
-    // The REST order (newest first) is the provider's own, so the default a fresh chat lands on names a version.
+    // Default follows the REST order (newest first), the provider's own ordering.
     expect(catalog.default).toBe("claude-opus-5");
 });
 
 test("versioned rows inherit the effort levels and badges only the tier alias publishes", async () => {
-    // Dropping the alias rows must not drop the composer's effort control with them: supportedModels() is the one
-    // source for effort levels and capability flags, and it reports them per TIER, so every version of that tier
-    // inherits them. A family the CLI offers no alias for (fable here) carries none: the honest answer, since
-    // nothing published any. The alias `description` is NOT inherited: it describes one version, not the family.
+    // Effort levels and badges come from the alias per tier, inherited by every version; the description is not.
     const aliases: Model[] = [
         { id: "opus", label: "Opus", description: "Opus 4.8 with 1M context", efforts: ["low", "high", "max"], badges: ["reasoning"] },
         { id: "haiku", label: "Haiku", efforts: ["low"], badges: ["fast"] },
@@ -121,8 +107,7 @@ test("versioned rows inherit the effort levels and badges only the tier alias pu
 });
 
 test("a REST failure descends the ladder rather than serving the aliases the CLI returned", async () => {
-    // The CLI answered, but nothing it published names a version, so there is no catalog to serve and the read
-    // falls through to the persisted last-known-good, which does.
+    // Nothing the CLI published names a version, so the read falls to the persisted last-known-good instead.
     const recorded: Model[] = [{ id: "claude-opus-5", label: "Claude Opus 5" }];
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
     const persistPath = join(dir, "models.json");
@@ -141,8 +126,7 @@ test("a REST failure descends the ladder rather than serving the aliases the CLI
 });
 
 test("serves the REST catalog alone when the CLI is unreachable, rather than falling to the floor", async () => {
-    // An unauthenticated/unstartable CLI used to drop the read straight to the three hardcoded aliases. The REST
-    // rung answers over plain HTTP, so it survives exactly the conditions that kill the CLI probe.
+    // The REST rung answers over plain HTTP, so it survives the conditions that kill the CLI probe.
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
 
     const catalog = await createClaudeCatalog(
@@ -182,8 +166,7 @@ test("serves the persisted last-known-good catalog when discovery fails, present
 
     const catalog = await catalogIn(recorded);
 
-    // The whole point of persisting records rather than bare ids: a tier nobody hardcoded survives a restart with
-    // its provider-supplied display name and description, instead of collapsing back to the alias floor.
+    // Persisting full records, not bare ids, lets an unhardcoded tier survive a restart with its display data.
     expect(catalog.models).toEqual(recorded);
     expect(catalog.default).toBe("claude-fictional-9");
 });
@@ -191,23 +174,20 @@ test("serves the persisted last-known-good catalog when discovery fails, present
 test("falls back to the seed floor when nothing has been persisted yet", async () => {
     const catalog = await catalogIn();
 
-    // The floor the contract publishes: versioned like every other rung, so even a daemon that has never
-    // reached either source offers models the user can name.
+    // Seed floor is versioned like every rung, so a daemon that reached neither source offers nameable models.
     expect(catalog.models).toEqual(CLAUDE_SEED_MODELS);
     expect(catalog.default).toBe(CLAUDE_SEED_MODELS[0]!.id);
 });
 
 test("treats a corrupt or older-build persisted file as absent rather than serving it half-formed", async () => {
-    // `label` missing is exactly the shape a pre-widening build would have left behind; the schema parse rejects
-    // the whole file so the picker never renders a record it can't label.
+    // Missing label matches a pre-widening file shape; the schema parse rejects the whole file, not just the row.
     const catalog = await catalogIn([{ id: "claude-fictional-9" } as Model]);
 
     expect(catalog.models).toEqual(CLAUDE_SEED_MODELS);
 });
 
 test("a persisted file carrying tier aliases can't put an unnameable row back in the picker", async () => {
-    // The file is untrusted disk state (which is why it is schema-parsed at all), so the versioned test runs on
-    // the way out too: only the versioned record survives, and the aliases beside it are dropped.
+    // Persisted disk state is untrusted, so the versioned-only rule applies on the way out too.
     const catalog = await catalogIn([
         { id: "opus", label: "Opus" },
         { id: "claude-opus-5", label: "Claude Opus 5" },
@@ -219,8 +199,7 @@ test("a persisted file carrying tier aliases can't put an unnameable row back in
 });
 
 test("the default is the provider's own first-listed model, never a tier matched by name", async () => {
-    // Opus deliberately sits last: the old catalog hardcoded a /opus/i preference, so a name-matching default
-    // would pick it here. Order is the provider's opinion and is the only thing that stays correct on a rename.
+    // Opus sits last on purpose: the default follows list order, the provider's own, not a name match.
     const catalog = await catalogIn([
         { id: "claude-haiku-9", label: "Claude Haiku 9" },
         { id: "claude-opus-9", label: "Claude Opus 9" },

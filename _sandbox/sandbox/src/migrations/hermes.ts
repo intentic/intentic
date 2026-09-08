@@ -20,25 +20,15 @@ import {
     text,
 } from "./adapter-shared.js";
 
-/* THE HERMES ADAPTER, `~/.hermes` read into a migration plan, pure over the archive's file map so the same
- * function answers the preview and the apply (the apply re-derives; the wire plan is a rendering, never the
- * trusted input, bundle-arrival.ts's rule).
- *
- * The layout it reads (verified against Hermes' own configuration reference and against OpenClaw's `migrate`
- * command, whose Hermes provider is a peer-reviewed inventory of the same directory):
- *
- *   config.yaml           model/fallbacks, providers (custom endpoints), mcp_servers, platforms, cron
- *   .env                  API keys and platform tokens (parseEnv, the same parser Hermes loads it with)
- *   auth.json             OAuth blobs (refused, sign in fresh here) and the occasional plain api_key
- *   SOUL.md, AGENTS.md    personality and operating notes
- *   memories/ or memory/  MEMORY.md, USER.md, and whatever else the agent wrote
- *   skills/               SKILL.md folders in agent-skills format, sometimes nested (flattened, as Hermes'
- *                         own migrations do)
- *   cron/                 scheduled jobs
- *
- * EVERYTHING UNRECOGNIZED DEGRADES, nothing throws: an unparseable YAML section, a cron line croner refuses, a
- * provider with no base_url each become a `refused` line the owner reads, because a migration that dies on the
- * one odd corner of a lived-in home directory imports nothing at all. */
+// Reads ~/.hermes into a plan, pure over the archive's file map, so preview and apply share one function.
+// - config.yaml: model/fallbacks, providers, mcp_servers, platforms, cron
+// - .env: API keys and platform tokens
+// - auth.json: OAuth (refused, sign in fresh) and occasional plain api_key
+// - SOUL.md, AGENTS.md: personality and operating notes
+// - memories/ or memory/: MEMORY.md, USER.md, and the rest
+// - skills/: SKILL.md folders, flattened
+// - cron/: scheduled jobs
+// Nothing throws: an unrecognized corner becomes a refused line instead.
 
 export const detectHermes = (files: Files): boolean =>
     files.has("config.yaml") &&
@@ -70,7 +60,7 @@ export const planHermes = (files: Files): SourcePlan => {
         return raw === undefined ? {} : ({ ...parseEnv(raw) } as Record<string, string>);
     })();
 
-    // -- memory: SOUL.md, AGENTS.md, the memories folder, each its own fence, so each re-imports alone --
+    // Memory: SOUL.md, AGENTS.md, and the memories folder, each its own fence so each re-imports independently.
     const soul = text(files, "SOUL.md");
     if (soul !== undefined && soul.trim() !== "") {
         planned.push({
@@ -120,10 +110,10 @@ export const planHermes = (files: Files): SourcePlan => {
         });
     }
 
-    // -- skills: every SKILL.md under skills/, flattened (their own migrate flattens too) --
+    // Skills: every SKILL.md under skills/, flattened.
     planned.push(...planSkillFiles(files, "skills/", "Hermes", new Set(), refused));
 
-    // -- secrets: .env keys, plus the plain api_key entries auth.json sometimes holds --
+    // Secrets: .env keys, plus any plain api_key entries in auth.json.
     const secrets = secretPlanner(planned, refused, ["HERMES_", "TERMINAL_"]);
     for (const [key, value] of Object.entries(env).toSorted(([left], [right]) => left.localeCompare(right))) {
         secrets.plan(key, value, ".env");
@@ -150,13 +140,13 @@ export const planHermes = (files: Files): SourcePlan => {
         }
     }
 
-    // -- MCP servers: URL-served ones become mcp capabilities; command-run ones cannot cross --
+    // MCP servers: URL-served ones become mcp capabilities; command-run ones cannot cross.
     const capabilityId = idPool();
     for (const [name, entry] of Object.entries(asRecord(config["mcp_servers"]) ?? {}).toSorted(([left], [right]) => left.localeCompare(right))) {
         planMcpEntry(name, asRecord(entry), `config.yaml: mcp_servers.${name}`, capabilityId, { planned, refused, needsAction });
     }
 
-    // -- custom providers: anything with a base_url becomes a model endpoint capability --
+    // Custom providers: anything with a base_url becomes a model endpoint capability.
     for (const [name, entry] of Object.entries(asRecord(config["providers"]) ?? {}).toSorted(([left], [right]) => left.localeCompare(right))) {
         const provider = asRecord(entry);
         const baseUrl = asString(provider?.["base_url"]);
@@ -194,7 +184,7 @@ export const planHermes = (files: Files): SourcePlan => {
         });
     }
 
-    // -- cron: the config.yaml section and the cron/ folder, whichever this install used --
+    // Cron: reads both the config.yaml section and the cron/ folder, whichever this install used.
     const planCron = automationPlanner("hermes", planned, refused);
     const cronSection = asRecord(config["cron"]);
     if (cronSection !== undefined) {
@@ -224,7 +214,7 @@ export const planHermes = (files: Files): SourcePlan => {
         }
     }
 
-    // -- loose notes at the root: kept, under imports/, as the agent's reference pile --
+    // Loose root-level notes are kept under imports/ as the agent's reference pile.
     for (const path of [...files.keys()].filter((candidate) => candidate.endsWith(".md") && !candidate.includes("/")).toSorted()) {
         if (path === "SOUL.md" || path === "AGENTS.md") {
             continue;
@@ -246,7 +236,7 @@ export const planHermes = (files: Files): SourcePlan => {
         });
     }
 
-    // -- what is already known not to move: channels to reconnect, the model to pick --
+    // What is known not to move automatically: channels to reconnect, the model to pick.
     const PLATFORM_TOKENS: Record<string, string> = {
         telegram: "TELEGRAM_BOT_TOKEN",
         discord: "DISCORD_BOT_TOKEN",

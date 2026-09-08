@@ -5,19 +5,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 
-/* The router's whole contract, driven over real stdio against real child processes:
- *
- *   1. the handshake and the tool list are answered WITHOUT a backend: the entire point, since the harness
- *      asks both of every server at startup whether or not the turn ever browses, and every listed tool
- *      carries the injected `account` parameter;
- *   2. a tool call resolves `account` (account id or identity id) to the profile owner, spawns that owner's
- *      backend, strips the parameter, and pipes the answer back; two owners get two backends;
- *   3. an id outside the manifest is refused with the granted set named: the persona enforcement seam;
- *   4. stdin closing (the turn ending) kills the backends.
- *
- * The backend is a canary script standing in for @playwright/mcp: same wire protocol, and it writes a marker
- * file on spawn: the file IS the assertion that lazy means lazy. It echoes a call's arguments back, which is
- * how the stripping of `account` is asserted from the outside. */
+// The router's contract, driven over real stdio against real child processes:
+// 1. handshake and tools/list are answered with no backend; every listed tool gains an injected `account` parameter.
+// 2. a tool call resolves `account` to its owner, spawns that backend, strips the parameter, and pipes back the reply.
+// 3. an id outside the manifest is refused with the granted set named.
+// 4. stdin closing kills the backends.
+// The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
+// back.
 
 const ROUTER = fileURLToPath(new URL("../../bin/browser-router.mjs", import.meta.url));
 
@@ -144,11 +138,9 @@ test("handshake and tools/list cost no backend, and every tool gains the require
     expect(tools.map((tool) => tool.name)).toEqual(["browser_probe"]);
     expect(tools[0]?.inputSchema.properties["account"]).toMatchObject({ type: "string" });
     expect(tools[0]?.inputSchema.required).toContain("account");
-    // The whole point: the startup questions cost no browser process.
     expect(await exists(harness.markers["identity-1"] as string)).toBe(false);
     expect(await exists(harness.markers["standalone"] as string)).toBe(false);
-    // …but the schema had to come from somewhere: the probe ran once and its answer is cached UNMUTATED for
-    // every later router of this version: the account parameter is injected on the way out, not into the cache.
+    // Schema cache is unmutated by the probe; the account parameter is injected on the way out, not into the cache.
     expect(JSON.parse(await readFile(harness.schemaCachePath, "utf8"))).toEqual([
         { name: "browser_probe", description: "canary tool", inputSchema: { type: "object", properties: {} } },
     ]);
@@ -164,13 +156,11 @@ test("a call routes by account to the owner's backend with the parameter strippe
         params: { name: "browser_probe", arguments: { account: "born-acct", url: "https://example.com" } },
     });
     const echoed = (call["result"] as ToolResult).content[0]?.text ?? "";
-    // The identity's backend answered, and `account` never reached it.
     expect(echoed).toContain(harness.markers["identity-1"] as string);
     expect(echoed).toContain('{"url":"https://example.com"}');
     expect(await exists(harness.markers["identity-1"] as string)).toBe(true);
     expect(await exists(harness.markers["standalone"] as string)).toBe(false);
 
-    // A second owner named: a second backend, beside the first.
     const other = await rpc(harness.router, {
         jsonrpc: "2.0",
         id: 4,

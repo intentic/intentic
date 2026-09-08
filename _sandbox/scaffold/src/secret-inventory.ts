@@ -8,9 +8,7 @@ import { ARTIFACT_FILE } from "./workspace-layout.js";
 
 const ENV_FILE = ".env";
 const SECRETS_FILE = ".secrets.json";
-// Digests of the secret values last pushed to Forgejo Actions (`adopt` / `intentic deploy secrets push`). Forgejo
-// cannot read secrets back, so this local record is the only way to tell "CI has the current value" from
-// "CI is stale". Gitignored and on the daemon's file denylist, like the value files beside it.
+// Digests of secrets last pushed to CI; the only way to tell current from stale, since CI can't read them back.
 export const SYNC_FILE = ".secrets-sync.json";
 
 export const secretDigest = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -31,14 +29,10 @@ export const writeSyncState = async (dir: string, state: SyncState): Promise<voi
     await writeFile(join(dir, SYNC_FILE), `${JSON.stringify(state, undefined, 4)}\n`, { mode: 0o600 });
 };
 
-// The env|generated slice of the secrets inventory, aggregated from one desired-state checkout: the artifact's
-// {$secret} refs (what the intent REQUIRES and which resources consume each key), .env / .secrets.json keys
-// (what is SET, values are read only to digest-compare against the CI sync record, never returned), and the
-// sync record (CI staleness). Keys set in .env but not referenced by the artifact still appear (requiredBy [])
-//, the user put them there, so they must be visible and removable. Capability/provider entries are the
-// daemon's to add, they live in its stores, not in this repo.
+// Aggregates the secrets inventory: what the artifact requires, what .env/.secrets.json set (digest-compared against
+// CI, never returned), and CI staleness. Keys set in .env but unreferenced still appear, with an empty requiredBy.
 export const collectSecretInventory = async (dir: string): Promise<SecretInventoryEntry[]> => {
-    // Four independent reads (each already degrades to a default on absence), resolve them concurrently.
+    // Four independent reads, each already degrading to a default on absence; resolved concurrently.
     const [graph, envRaw, generated, sync] = await Promise.all([
         readJson<DesiredStateGraph>(join(dir, ARTIFACT_FILE)),
         readFile(join(dir, ENV_FILE), "utf8").catch(() => ""),

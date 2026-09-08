@@ -60,26 +60,23 @@ import ProviderLogo from "../accounts/ProviderLogo.vue";
  * deliberate two-finger gesture for the press that starts something. A caller with no commit bar ignores it. */
 const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
 const { provider, model, unpickable } = defineProps<{
-    // The pair the list checkmarks. Both, because a model id is only meaningful under the provider that vends it.
+    // The pair the list checkmarks; both, since a model id is only meaningful under the provider that vends it.
     provider: AgentProvider;
     model: string;
-    // Rows this caller cannot switch to right now: the chat's mid-stream rule (a provider switch retires the
-    // session), and nothing at all for a caller that is only choosing what a future run opens on.
+    // Rows this caller can't switch to (mid-stream rule); undefined for a caller only picking a future run's model.
     unpickable?: (entry: PickerEntry) => boolean;
 }>();
 
 const { mobile } = useDevice();
 
 const query = ref(``);
-// The rail filter holds a LANE key, not a provider: one chip stands for every locally-run card (see lanesOf).
+// The rail filter holds a lane key, not a provider: one chip stands for every locally-run card.
 const rail = ref<string | undefined>();
 const searchInput = ref<{ focus: () => void } | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
 
-// The rail's own lanes: the native providers, then every configured model endpoint and every installed ACP
-// agent, folded by the same rule the sections use (lanesOf), so a chip and the group it filters to are the
-// same grouping seen twice, and the locally-run cards are one chip rather than a row of identical ones.
+// Rail lanes: native providers, then endpoints and ACP agents, folded by the same rule the sections use.
 const railLanes = computed<readonly PickerLane[]>(() =>
     lanesOf([
         ...PROVIDERS.map((option) => option.value),
@@ -88,16 +85,13 @@ const railLanes = computed<readonly PickerLane[]>(() =>
     ]),
 );
 
-// The custom-model row, appended last to the search results: typing a full model id offers it directly (see
-// customEntryFor). It targets the railed lane's first provider when one is filtered, else the current one:
-// the same provider an ordinary pick would apply to.
+// Custom-model row appended last to results; targets the railed lane's first provider, else the current one.
 const railLane = computed<PickerLane | undefined>(() => railLanes.value.find((lane) => lane.key === rail.value));
 const customEntry = computed<PickerEntry | undefined>(() =>
     searching.value ? customEntryFor(pickerEntries.value, query.value, railLane.value?.providers[0] ?? provider) : undefined,
 );
 
-// Which groups are showing their full catalog, by lane key. Browse-only, and reset with the component like
-// query and rail: every open starts at the calm, newest-first view rather than inheriting the last session's sprawl.
+// Which groups show their full catalog, by lane key; resets with query and rail on every open.
 const expanded = ref<ReadonlySet<string>>(new Set());
 const toggleExpanded = (target: string): void => {
     const next = new Set(expanded.value);
@@ -107,17 +101,13 @@ const toggleExpanded = (target: string): void => {
     expanded.value = next;
 };
 
-// The visible list: while searching a single flat ranked section (provider identity rides on every row's
-// logo); browsing, one section per lane with the current provider's lane hoisted first, each opening at one row
-// per model family. A section renders as BLOCKS: the latest band, then (expanded) each family's older versions
-// under its own header. Rows carry their index in visual order: the keyboard highlight's coordinate system.
+// The visible list: one flat section while searching, else one section per lane, blocks latest then older.
 const sections = computed<
     readonly {
         key: string;
         // The group header. Absent while searching, where one flat section spans every provider.
         label: string | undefined;
-        // The lane's single provider: absent while searching AND for the folded local lane, since the access
-        // chip, the reconnect mark and the Connect link all speak for one account, which that lane has none of.
+        // The lane's single provider; absent while searching and for the folded local lane (no single account).
         provider: AgentProvider | undefined;
         // Every provider the section draws, for the facts that survive folding: the catalog's load state.
         providers: readonly AgentProvider[];
@@ -126,11 +116,9 @@ const sections = computed<
         hidden: number;
         expanded: boolean;
         collapsible: boolean;
-        // What this provider costs, when it isn't connected yet. Undefined while searching (one flat section
-        // spanning every provider): there, each row carries its own lock instead.
+        // What this provider costs if not connected; undefined while searching, where each row carries its own lock.
         badge: string | undefined;
-        // The free trial's remaining allowance. A separate field from `badge` because it is a different kind of
-        // statement: a count, not a price, and because it must NOT drag the "Connect" button along with it.
+        // The trial's remaining allowance; separate from `badge` since it's a count, not a price, with no Connect link.
         trial: string | undefined;
     }[]
 >(() => {
@@ -139,9 +127,7 @@ const sections = computed<
         entries.map((entry) => ({ entry, index: index++ }));
     if (searching.value) {
         const matched = filterEntries(pickerEntries.value, query.value, rail.value, providerReady);
-        // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match. A
-        // search deliberately spans the WHOLE catalog flat: an older version behind a family's disclosure is
-        // exactly what someone reaches for the search box to find, so re-grouping it here would defeat both.
+        // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [
             {
@@ -162,8 +148,7 @@ const sections = computed<
     return pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
         const isExpanded = expanded.value.has(section.key);
         const single = section.providers.length === 1 ? section.providers[0] : undefined;
-        // The selected model survives collapse only for the CURRENT provider's lane: it's the only group whose
-        // current model is the one a checkmark would be claiming.
+        // The selected model survives collapse only for the current provider's lane; only that checkmark is real.
         const blocks = pickerBlocks(section.groups, section.providers.includes(provider) ? model : undefined, isExpanded);
         const rowCount = blocks.reduce((count, block) => count + block.entries.length, 0);
         return {
@@ -191,18 +176,14 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entr
 // The selected row: the caller's current pair (the harness, where a caller has one, is a separate axis).
 const isSelected = (entry: PickerEntry): boolean => entry.provider === provider && entry.value === model;
 const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true;
-// A row whose provider has no credential yet. Dimmed and lock-marked, never disabled: see the header comment.
+// A row whose provider has no credential yet; dimmed and lock-marked, never disabled.
 const isLocked = (entry: PickerEntry): boolean => !providerReady(entry.provider);
 
-/* Straight to the handshake, for the user who opened the picker already knowing they need to connect something.
- * The provider rides along as `?connect=<provider>` so the Agent tab opens on that card: the same deep link the
- * composer's connect gate uses, and now a real address on a real link rather than a router push behind a
- * <button>: hovering it shows where it goes, and Ctrl/⌘-click sets the handshake up in another tab while the
- * picker stays where it is. */
+// Deep link to the handshake: `?connect=<provider>` opens the Agent tab on that card. A real link, not a button click,
+// so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
 const connectTo = (target: AgentProvider) => ({ path: `/sandbox/agent`, query: { connect: target } });
 
-// Closing the picker is what the PLAIN click does. A modified one opens a tab elsewhere and must leave this
-// list exactly as the user left it.
+// A plain click closes the picker; a modified one opens elsewhere and must leave this list untouched.
 const closeOnPlainClick = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         emit(`close`);
@@ -222,8 +203,8 @@ const pickActive = (): void => {
     }
 };
 
-// Esc clears the query first (restoring the grouped view), then closes. stopPropagation keeps the host
-// Popover's own document-level Esc handler from closing it while there's still a query to clear.
+// Esc clears the query first, then closes on a second press; stopPropagation stops the host Popover's own Esc handler
+// from closing early.
 const onEsc = (event: KeyboardEvent): void => {
     if (query.value.length > 0) {
         event.stopPropagation();
@@ -233,8 +214,8 @@ const onEsc = (event: KeyboardEvent): void => {
     emit(`close`);
 };
 
-// Rail clicks (and the no-results escape) re-point the filter without ending the keyboard flow: focus goes
-// straight back to the search input so arrows/Enter/Esc keep working. Mobile keeps its keyboard down.
+// Rail clicks re-point the filter without ending keyboard flow: focus returns to the search input (desktop only, so
+// mobile's keyboard stays down).
 const railTo = (target: string | undefined): void => {
     rail.value = target;
     if (!mobile.value) {
@@ -245,32 +226,21 @@ const railTo = (target: string | undefined): void => {
 const rowAriaLabel = (entry: PickerEntry): string =>
     `${entry.label}${isSelected(entry) ? `, current model` : ``}${isLocked(entry) ? `, ${accessBadge(entry.provider)}` : ``}`;
 
-// A provider whose (any) connected account can no longer be refreshed: badge it so a broken credential
-// doesn't look identical to a healthy one until the user tries to chat.
+// A provider whose connected account can no longer be refreshed; badged so a broken credential isn't mistaken for a
+// healthy one.
 const providerNeedsReauth = (target: AgentProvider): boolean => accessStateFor(target).needsReauth;
 
-/* Why this provider's RUNTIME can't serve a turn, as the daemon's own background probe found it (see the
- * sandbox's agent/adapter-health.ts). Distinct from the credential badges above, which are about the account:
- * this answers "is the thing that would run the turn even reachable", and it is the one thing the picker used
- * to be unable to say: the answer arrived as the turn's failure, after a prompt had been written.
- *
- * Silent unless the probe is sure. `unknown` and "not probed yet" both render as nothing at all.
- *
- * Asked against the NATIVE harness, because the harness is a separate axis this picker does not carry, and
- * native is the honest one to name: it is what the row would run on unless the user has already moved the
- * other axis, and a provider forced onto the Claude Code loop is served by a runtime this rail is not about. */
+// Whether this provider's runtime can serve a turn, from the daemon's background probe; distinct from the credential
+// badges above. Silent unless sure; asked against the native harness, the axis a row would run on by default.
 const { runtimeIssue } = useSandboxVersion();
 const providerRuntimeIssue = (target: AgentProvider): string | undefined => runtimeIssue(capabilitiesOf(target, `native`).runtime);
 
-/* What a lane STANDS ON: its first provider. Every fact the rail draws besides the label is an account fact,
- * and the one folded lane is folded precisely because its cards have no accounts, no price and one runtime
- * between them, so reading them off the first card says the same thing as reading them off any of them. */
+// What a lane stands on: its first provider; every other rail fact is an account fact.
 const railLead = (lane: PickerLane): AgentProvider => lane.providers[0]!;
 const railReady = (lane: PickerLane): boolean => lane.providers.some(providerReady);
 const railActive = (lane: PickerLane): boolean => lane.providers.includes(provider);
 
-// The rail tooltip carries what the icon cannot: whether this lane can run at all, and at what price. It is
-// the only place the requirement shows while the rail is filtered to a single lane.
+// The rail tooltip carries what the icon can't: whether this lane can run, and at what price.
 const railTooltip = (lane: PickerLane): string => {
     const lead = railLead(lane);
     return [
@@ -282,11 +252,8 @@ const railTooltip = (lane: PickerLane): string => {
     ].join(` · `);
 };
 
-// A group with no rows yet gets a state row (loading / error+retry: keyed off section.rowCount in the
-// template): the codex/grok catalogs have no static floor, so a pre-load/error would otherwise read as "this
-// provider has nothing". Claude's seed floor always renders, so it never qualifies. A folded lane answers for
-// every card it holds: one failed fetch is what the reader has to act on, and it is only "nothing here" once
-// every card has answered.
+// A folded lane's state is loading/error until every card has answered, error winning; codex/grok have no static floor,
+// so an empty catalog would otherwise misread as truly empty.
 const stateFor = (providers: readonly AgentProvider[]): CatalogLoadState => {
     const states = providers.map((target) => providerModelsState.value[target]);
     if (states.includes(`error`)) {
@@ -305,17 +272,7 @@ const retrySection = (providers: readonly AgentProvider[]): void => {
 onMounted(() => {
     // The catalogs are daemon-owned and cached there: refresh on every open so search spans warm lists.
     void loadAllProviderModels();
-    /* AND THE CONNECTIONS, on the same seam and for a sharper reason. Everything this panel says about ACCESS
-     * is read from them, which providers are locked, which need reconnecting, and (in the footer a chat host
-     * gives it) how much of each account's plan is left, and all of it was as old as the last time the daemon
-     * became reachable, which for a browser tab left open is the morning. These pools are account-wide, so an
-     * afternoon of spending elsewhere, a revoked credential or a downgraded seat all land here as a confident
-     * green ring that nothing on screen has any reason to doubt.
-     *
-     * Opening the picker IS the moment the numbers get read, so it is the moment to take them: the daemon
-     * re-measures behind this call (claude/claude-accounts.ts) and answers within its own deadline, and the rings
-     * redraw as it lands. Unforced: the daemon's freshness bound is what keeps opening a picker twice in a
-     * minute off the provider's quota endpoint; the footer's own control is the way past it. */
+    // Access data (locks, reauth, plan) is only as fresh as the daemon's bound; also refresh on every open.
     void refreshConnections();
     // Desktop only: on mobile the software keyboard would instantly cover half the sheet.
     if (!mobile.value) {
@@ -325,12 +282,15 @@ onMounted(() => {
 </script>
 
 <template>
-    <!-- A flex column with a shrinkable middle, so the panel fits whatever height its host gives it: a desktop
-         popover caps itself to the room around its trigger, which on a short window is less than the list's
-         preferred height. Search and footer hold their size; the list gives. -->
+    <!--
+        Flex column with a shrinkable middle, so the panel fits whatever height its host gives (a desktop popover caps
+        to the room around its trigger). Search and footer hold their size; the list gives.
+    -->
     <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
-        <!-- The keys are bound on the BAR, not inside it: they bubble up from the input, and what they mean
-             (Enter picks a model, Esc clears then closes) is this panel's business, not the field's. -->
+        <!--
+            Keys bind on the bar, not the field: they bubble from the input, and what they mean (Enter picks, Esc
+            clears then closes) is this panel's business.
+        -->
         <SearchBar
             ref="searchInput"
             v-model="query"
@@ -346,23 +306,15 @@ onMounted(() => {
             @keydown.esc="onEsc"
         />
 
-        <!-- Fixed height on desktop so the panel's overall size stays stable as the rail filters between
-             sparse and dense providers: a variable height makes a bottom-anchored popover grow upward and the
-             filter buttons jump under the cursor. Provider filters sit in a horizontal strip above the catalog,
-             the same pattern the mobile sheet uses: the catalog is therefore the panel's only vertical scroller
-             instead of competing with a second, narrow scroller in a provider rail. Extra custom providers move
-             sideways in that strip, an orthogonal and local gesture that never captures catalog scrolling.
-
-             THE FLOOR IS WHY THIS IS `min-h-40` AND NOT `min-h-0`. The column gives way when the host is shorter
-             than 320px, which is what lets the panel fit above its own pill on a short window, but it may no
-             longer give way to NOTHING. It could: the footer below is a session panel whose height belongs to
-             whatever the provider happens to have connected. The 160px floor reserves the 44px filter strip
-             plus four compact model rows before the footer gets any of the height at all. A picker with no
-             models in it is not a degraded picker, it is a different panel. Mobile lets the sheet own vertical
-             scrolling, so its content-height column needs no floor or nested catalog scroller. -->
+        <!--
+            Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height
+            depends on what's connected, and a picker with no models must not fully collapse into it.
+        -->
         <div class="flex h-80 min-h-40 flex-col max-md:h-auto max-md:min-h-0">
-            <!-- Provider strip: a filter, never a switcher, scoping the list to one provider must stay a
-                 safe exploratory glance, so switching only ever happens by picking a model row. -->
+            <!--
+                Provider strip filters, never switches: scoping to one provider is a safe glance; switching only
+                happens by picking a model row.
+            -->
             <div
                 role="radiogroup"
                 aria-label="Filter by provider"
@@ -397,11 +349,12 @@ onMounted(() => {
                         :provider="railLead(lane)"
                         :class="[rail === lane.key ? 'text-primary-500' : 'text-subtle', { 'opacity-50': !railReady(lane) }]"
                     />
-                    <!-- The current provider's dot: independent of the filter selection; both must be legible
-                         at once. -->
+                    <!-- The current provider's dot: independent of the filter selection; both must be legible at once. -->
                     <span v-if="railActive(lane)" class="absolute right-1 top-1 h-1 w-1 rounded-full bg-primary-500" aria-hidden="true"></span>
-                    <!-- One corner, two mutually exclusive faults: a provider with a broken account has an
-                         account, so it is never the locked one. -->
+                    <!--
+                        One corner, two mutually exclusive faults: a provider with a broken account has an account, so
+                        it is never the locked one.
+                    -->
                     <Icon
                         v-if="providerNeedsReauth(railLead(lane))"
                         name="exclamation-triangle"
@@ -424,10 +377,10 @@ onMounted(() => {
                 aria-label="Models"
             >
                 <template v-for="section in sections" :key="section.key">
-                    <!-- The group header doubles as the access line: what this group costs, and the way out of
-                         it. The chip is absent once connected: a usable provider should read as the plain
-                         default, not as a state worth annotating. The folded local lane carries the label
-                         alone: it has no account, so there is nothing for the rest of the line to say. -->
+                    <!--
+                        Group header doubles as the access line (cost + way out); absent once connected, since a usable
+                        provider needs no annotation. The folded local lane carries only the label, having no account.
+                    -->
                     <div
                         v-if="section.label !== undefined"
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
@@ -460,8 +413,7 @@ onMounted(() => {
                                 </RouterLink>
                             </template>
                         </template>
-                        <!-- The trial's count. No Connect beside it on purpose: this provider already works, and
-                             offering a handshake for it would be offering to fix something that isn't broken. -->
+                        <!-- The trial's count; no Connect beside it, since this provider already works. -->
                         <span
                             v-if="section.trial !== undefined"
                             class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal text-primary-500"
@@ -469,8 +421,10 @@ onMounted(() => {
                         >
                     </div>
                     <template v-for="block in section.blocks" :key="block.key">
-                        <!-- A family header, shown only for the older-versions blocks a disclosure reveals: the
-                         latest band needs none (the provider header above it already names the group). -->
+                        <!--
+                            Family header, shown only for older-version blocks; the latest band needs none, since the
+                            section header above already names the group.
+                        -->
                         <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">
                             {{ block.label }}
                         </p>
@@ -508,8 +462,10 @@ onMounted(() => {
                                 class="shrink-0 text-2xs text-subtle"
                                 :aria-label="BADGE_META[badge].label"
                             />
-                            <!-- The per-row lock. Redundant with the section chip while browsing, but search is
-                                 one flat list across every provider, where the row is all there is to go on. -->
+                            <!--
+                                The per-row lock, redundant with the section chip while browsing; in search the row is
+                                all there is to go on.
+                            -->
                             <Icon
                                 v-if="isLocked(row.entry)"
                                 name="lock"
@@ -519,12 +475,10 @@ onMounted(() => {
                             <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                         </button>
                     </template>
-                    <!-- Group disclosure: the merged Claude catalog is long enough to bury every other provider's
-                         group below the fold, so a group opens at one row per family and expands in place. It sits at
-                         the truncation boundary, where the list visibly stops: rather than in the footer, which
-                         is session controls, or the rail, which owns the provider axis. Deliberately NOT a
-                         role=option: it selects nothing, so it stays out of the arrow-key model list, and the
-                         keyboard path to a buried version is the search box, which never truncates. -->
+                    <!--
+                        Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others.
+                        Not role=option; the keyboard path to a buried version is search.
+                    -->
                     <button
                         v-if="section.label !== undefined && section.collapsible"
                         type="button"
@@ -554,15 +508,10 @@ onMounted(() => {
                         Search all providers
                     </button>
                 </div>
-                <!-- THE DOOR TO EVERYTHING THIS LIST CAN ONLY BADGE: a second account on a provider, an account
-                     to drop, the mechanics behind each sign-in. It sits at the foot of the list because that is
-                     where a reader ends up who has read every row and found nothing they can run: this panel is
-                     now the only place the app makes that offer, so it must carry the way out of it as well as
-                     the way in. It came from the connect card that used to greet every new user; the pitch went,
-                     this line stayed.
-                     A place, so a real link: hovering shows where it goes and Ctrl/⌘-click sets it up in another
-                     tab while the picker stays where it is (closeOnPlainClick). Hidden while searching, where the
-                     list is a flat result set and a standing footer reads as a result. -->
+                <!--
+                    The door to everything this list can only badge: a second account, dropping one, sign-in mechanics.
+                    Hidden while searching; a real link, at the foot of the list.
+                -->
                 <RouterLink
                     v-if="!searching"
                     to="/sandbox/agent"
@@ -577,7 +526,7 @@ onMounted(() => {
 
         <div class="sr-only" aria-live="polite">{{ flat.length }} models</div>
 
-        <!-- Whatever the caller configures BESIDE the model. Empty for a caller that only chooses one. -->
+        <!-- Whatever the caller configures beside the model; empty for a caller that only chooses one. -->
         <slot name="footer" />
         <!-- And the press that spends it, for a caller whose answer starts something. See the header. -->
         <slot name="commit" />

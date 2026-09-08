@@ -1,12 +1,7 @@
-<!-- SHARE THIS CONVERSATION: the one screen between a private chat and a link anyone can open.
-     Everything about it is shaped by that being irreversible in the way that matters: a link can be withdrawn,
-     but not un-read. So the two decisions it asks for are the two that change what a stranger sees: what it is
-     called, and how much of it travels, and both are stated in the words of what happens, not of what is
-     configured. The consequence line changes with the choice rather than sitting under it as fine print,
-     because "this publishes your code" is only true of one of the two answers and reads as noise on the other.
-
-     It ends on the link itself. Sharing is a gesture with a result, and a dialog that closed on success would
-     leave the user hunting for the thing they just made. -->
+<!--
+    Confirms sharing a conversation, which is irreversible once opened. Asks only what changes what a stranger sees — the link's name, and how much
+    of the chat travels — and the consequence text below updates with that choice. Stays open on the resulting link rather than closing on success.
+-->
 <script setup lang="ts">
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";

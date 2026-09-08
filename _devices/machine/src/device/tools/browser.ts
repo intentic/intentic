@@ -3,23 +3,10 @@ import { type Browser, BrowserError, renderPage } from "@intentic/browser";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
-/* The browser, driven by what is ON the page rather than where it is on screen.
- *
- * `device` can already click a browser, badly. Coordinates move when the window moves, a scroll invalidates
- * every one of them, and "the Submit button" is a guess about which grey rectangle is which. A browser will
- * simply say what it is showing, so these tools ask it: snapshot the page, act on an element by reference. The
- * same instruction then works at any window size, on any machine, after any re-render.
- *
- * SCOPES, following the rule the rest of the tools use, what the action DOES, not what implements it:
- *   snapshot / read   → `screen`, because they are ways of seeing what is on the machine.
- *   click / fill / key → `control`, because they change what the machine is doing.
- *   open               → `shell`, because it may start a browser process.
- *
- * THE BROWSER IT DRIVES IS NOT THE USER'S OWN. A browser only speaks this protocol if it was started with a
- * debugging port, and nobody's everyday browser was; restarting theirs would close every tab they had open. So a
- * separate instance runs against its own profile, which the user signs into once. Their session is never
- * automated and never at risk from a misfired click, and the sign-in is a thing they do deliberately, in a
- * window they can watch, rather than a credential handed to an agent. */
+// The browser, driven by what is on the page rather than where it is on screen: snapshot it, act on an element
+// by reference, so the same instruction works at any window size or re-render. Scopes follow the apps.ts rule
+// (look -> `screen`, change -> `control`, open -> `shell`). The browser is a separate instance with its own
+// profile, never the user's own, so a misfired click never touches their session.
 
 export const openPage = async (web: Browser, url: string, scopes: HostScopes): Promise<string> => {
     // Opening may start a browser process, which is what the shell switch governs.
@@ -27,8 +14,8 @@ export const openPage = async (web: Browser, url: string, scopes: HostScopes): P
     if (url === "") {
         throw new BrowserError(`"url" is required: the page to open.`);
     }
-    // A bare host is what people type; a browser needs the scheme, and refusing over a missing "https://" would
-    // be pedantry rather than safety.
+    // A bare host is what people type; a browser needs the scheme, and refusing over a missing "https://" would be
+    // pedantry rather than safety.
     const target = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
     return renderPage(await web.open(target));
 };
@@ -44,9 +31,8 @@ export const readPage = async (web: Browser, scopes: HostScopes): Promise<string
     return text.trim() === "" ? "That page has no readable text, it may still be loading, or it may be a canvas or a PDF." : text;
 };
 
-/* Every action answers with a FRESH SNAPSHOT, for the same reason `device` answers with a screenshot: the page
- * after a click is a different page, and an agent that has to ask what happened will either forget to or will
- * spend a round trip finding out. This is the difference between one call per step and three. */
+// Every action answers with a fresh snapshot: the page after a click is a different page, and an agent that has
+// to ask what happened will forget to, or spend a round trip finding out.
 export const clickElement = async (web: Browser, ref: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (ref === "") {
@@ -95,6 +81,6 @@ export const selectTab = async (web: Browser, id: string, scopes: HostScopes): P
     return renderPage(await web.selectTab(id));
 };
 
-// A page needs a beat after an action before its next state is worth reading: a click that triggers a fetch, a
-// framework that re-renders on the next tick. Without it the snapshot describes the page BEFORE the action.
+// A page needs a beat after an action before its next state is worth reading, a click that triggers a fetch, a
+// re-render on the next tick.
 const settle = (): Promise<void> => sleep(500);

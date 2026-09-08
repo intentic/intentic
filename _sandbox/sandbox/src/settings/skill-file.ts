@@ -1,33 +1,22 @@
-/* READING AND WRITING ONE SKILL.md, the frontmatter half, in one place.
- *
- * A skill is a markdown file whose leading `---` block declares the two things the model reads before deciding
- * whether to open the rest: `name` and `description`. Everything else in the file is instructions. The daemon
- * has to do both directions: it COMPOSES that block for a skill the owner writes (so a saved skill can never be
- * one the loader skips over), and it PARSES it for every skill it merely found, the ones inside extension
- * checkouts and plugin repos, which it does not own and must describe as their authors wrote them.
- *
- * Deliberately not a YAML dependency. The block this reads is two known keys written by a tool or by this file,
- * and the failure mode of a real parser here is worse than the failure mode of ignoring a line: a skill whose
- * frontmatter this cannot understand still lists, under its directory name, with an empty description, visibly
- * incomplete rather than absent from a list whose whole promise is that it shows everything. */
+// Reads and writes a SKILL.md's frontmatter (`name`, `description`); composes it for a skill the daemon owns, parses it
+// for one merely found (extension checkouts, plugin repos). Not a YAML dependency on purpose: an unreadable frontmatter
+// must degrade to an incomplete listing, never a missing one.
 
 const FENCE = "---";
 
-// Values that would not survive as a YAML plain scalar. `: ` and ` #` change the meaning of the line; a leading
-// indicator character changes what kind of node it is. Anything else is written bare, the way every skill file
-// in this repo already writes it.
+// Values that would not survive as a YAML plain scalar: `: ` or ` #` mid-string, or a leading indicator character
+// change what the line means.
 const needsQuoting = (value: string): boolean => value.includes(": ") || value.includes(" #") || /^[-?:,[\]{}#&*!|>'"%@`]/.test(value);
 
-// One frontmatter value, on one line. Newlines are collapsed rather than folded: a description is a sentence the
-// model reads, multi-line YAML scalars have three spellings that differ in whitespace handling, and none of that
-// is worth the chance of writing a block the loader reads differently than intended.
+// Flattens a value onto one line rather than folding it: YAML's multi-line scalar forms differ in whitespace handling,
+// not worth risking the loader reading the block differently than intended.
 const yamlValue = (value: string): string => {
     const flat = value.replace(/\s+/g, " ").trim();
     return needsQuoting(flat) ? `"${flat.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : flat;
 };
 
-// The document a saved skill becomes: the declared block, then the instructions as written. The body's own
-// leading blank lines are dropped so re-saving an unchanged skill is byte-identical.
+// The document a saved skill becomes: the declared block, then the instructions as written. Leading blank lines in the
+// body are dropped, so resaving an unchanged skill is byte-identical.
 export const skillDocument = (name: string, description: string, body: string): string =>
     `${FENCE}\nname: ${yamlValue(name)}\ndescription: ${yamlValue(description)}\n${FENCE}\n\n${body.replace(/^\n+/, "").trimEnd()}\n`;
 
@@ -40,19 +29,15 @@ const unquote = (value: string): string => {
 };
 
 export interface ParsedSkill {
-    // Absent when the file declares no frontmatter at all, or none this can read, callers fall back to the
-    // directory name, which is what the loader itself keys the skill by.
+    // Absent with no readable frontmatter; callers fall back to the directory name, the loader's own key.
     readonly name?: string;
     readonly description?: string;
-    // Everything after the frontmatter. The whole file when there is none.
+    // Everything after the frontmatter; the whole file when there is none.
     readonly body: string;
 }
 
-/* Split a SKILL.md into its declared fields and its instructions.
- *
- * A continuation line, indented, with no `key:` of its own, appends to the value above it, which is how a long
- * description written by hand or by another tool arrives. Unknown keys are skipped rather than collected: the two
- * this reads are the two anything downstream uses, and a bag of the rest would be a shape nothing consumes. */
+// Splits a SKILL.md into its declared fields and its instructions. An indented continuation line with no key of its own
+// appends to the value above it; unknown keys are skipped since only `name` and `description` are ever used.
 export const parseSkillFile = (text: string): ParsedSkill => {
     const lines = text.split("\n");
     if (lines[0]?.trim() !== FENCE) {

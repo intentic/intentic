@@ -1,19 +1,8 @@
 import { nextTick, type Ref, ref, watch } from "vue";
 
-/* MAKE THE NATIVE SCROLLBAR TRUTHFUL AFTER A TRANSCRIPT LANDS WHOLESALE.
- *
- * .chat-message rows are content-visibility:auto with a 3rem estimate (chat.css), so a freshly swapped-in
- * transcript reports a scrollHeight built almost entirely of estimates. Left alone, every row realizing on the
- * way past rewrites scrollHeight mid-scroll, and a native scrollbar DRAG maps the thumb against the current
- * scrollHeight, so the thumb kept leaping hundreds of px away from the cursor. The cure is one idle-time
- * realization pass: .chat-realize forces every row to lay out for real, `auto` records those heights as
- * remembered sizes, and skipping resumes with a scrollHeight that no longer moves.
- *
- * Two frames under the class on purpose: the first lays the realized transcript out and records remembered sizes
- * (that happens at resize-observer timing, at the end of the frame), the second may drop back to skipping. A
- * followed transcript survives the growth spurt through useStickToBottom's own observer; elsewhere scroll
- * anchoring holds the view. requestIdleCallback keeps the one full layout off the restore's critical path
- * (Safari has no idle callback, a beat of setTimeout is the same bargain). */
+// Forces content-visibility:auto rows (chat.css) to lay out for real after a transcript swap, since scrollHeight is
+// otherwise built from estimates. Two frames under .chat-realize: the first records remembered sizes, the second drops
+// back to skipping; requestIdleCallback (a timeout on Safari) keeps it off the critical path.
 
 // Safari's stand-in for an idle callback.
 const IDLE_FALLBACK_MS = 200;
@@ -28,17 +17,14 @@ export const useTranscriptWarmup = (transcript: {
     const realizing = ref(false);
     let queued = false;
 
-    /* This window, unless there is no window at all: a torn-down document, which happens between a deferred
-     * callback being queued and it running (a unit test's environment closing under an idle task).
-     * `globalThis.window` rather than a bare `window`, because the bare identifier THROWS where the property
-     * merely reads undefined. */
+    // This window, or undefined if the document has torn down between scheduling and running a deferred callback. Uses
+    // globalThis.window, not a bare window, since the bare identifier throws when undefined.
     const painter = (): (Window & typeof globalThis) | undefined => globalThis.window;
 
     const whenIdle = (task: () => void): void => {
         const view = painter();
         if (view === undefined) {
-            // Nothing left to schedule against. The work is a scroll warm-up, so dropping it costs a frame of
-            // layout on a pane that no longer exists.
+            // No window to schedule against; the pane this warm-up targets is already gone.
             return;
         }
         if (view.requestIdleCallback === undefined) {
@@ -58,8 +44,7 @@ export const useTranscriptWarmup = (transcript: {
             void nextTick(() => {
                 const view = painter();
                 if (view === undefined) {
-                    // The document went away between the idle callback and this tick. Clear the latch by hand,
-                    // since the frames that would have cleared it are never going to run.
+                    // Document gone before this tick; clear the latch by hand, the scheduled frames won't run.
                     realizing.value = false;
                     queued = false;
                     return;
@@ -74,10 +59,10 @@ export const useTranscriptWarmup = (transcript: {
         });
     };
 
-    // Every path that mounts never-painted rows outside the viewport, and nothing that fires per streamed frame:
-    // a tab switch or history open swaps the whole list (conversationId), the IndexedDB repaint and the daemon's
-    // replay land in bulk (length jumps while idle, a live turn only ever appends one bubble per flush), and a
-    // turn's end covers an answer that streamed in below the fold while the user was scrolled up reading.
+    // Warms up on:
+    // - a new transcript (tab switch, history open)
+    // - a bulk arrival of messages while idle
+    // - a streamed turn ending
     watch(transcript.conversationId, warm, { immediate: true });
     watch(transcript.messageCount, (now, before) => {
         if (!transcript.streaming.value && Math.abs(now - before) > 1) {

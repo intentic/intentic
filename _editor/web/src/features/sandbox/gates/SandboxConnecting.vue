@@ -9,44 +9,33 @@ import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { connectionNotice } from "./connectionNotice";
 
-/* Shown in the workspace outlet whenever the active sandbox's daemon isn't reachable (see SandboxGate). What
- * it says is a pure function of the CLASSIFIED connection failure (connectionNotice) rather than of a boolean
- * "did a probe fail", so a sandbox that never announced itself, one that stopped answering mid-session, and
- * an expired Google session each get their own words and their own offered action instead of sharing one
- * "unreachable" screen. The connection machine flips to `online` the moment the daemon answers, and the real
- * views render. */
+// Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
+// failure (connectionNotice), so setup, sign-in and account-mismatch causes each get their own words and action.
+// Flips to the real views the moment the daemon answers.
 
 const { active, connection, activeWakeRefused } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
 
-/* THE ONE CLOCK ON THIS SCREEN, and it runs only while there is a running outage to time: a wait that has
- * lasted a minute on a machine WE run is a different sentence from the same wait at ten seconds
- * (connectionNotice), and nothing else here changes with time. Stopped the moment the failure clears, so a
- * connected workspace pays nothing for it. */
+// Runs only while an outage is ongoing; a connected workspace pays nothing for the clock.
 const timing = computed(() => connection.value.unavailableSince !== undefined);
 const now = useNow(timing);
 const notice = computed(() =>
     connectionNotice({
         failure: connection.value.failure,
         sandboxName: active.value?.name,
-        // A machine the platform started for this sandbox: the row says so, and it is what earns this gate the
-        // right to name a cause instead of waiting politely forever.
+        // A machine the platform started for this sandbox, which earns the gate the right to name a cause.
         hostedMachine: (active.value?.hosted ?? null) !== null,
         outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
-        // The platform's own word on the last wake: refused for spent hours, or not. Owner-addressed, because
-        // only the owner can buy the plan that lifts it.
+        // Whether the platform refused the last wake for spent hours; addressed to the owner, who can buy the plan.
         hoursSpent: activeWakeRefused.value !== undefined,
         owner: active.value?.role === `owner`,
     }),
 );
 
-// Carry the sandbox id so /setup resumes THIS sandbox instead of offering a blank create form.
-// Carried as a link rather than pushed, so the one way out of this gate has an address on it like everything
-// else that goes somewhere.
+// Carries the sandbox id so /setup resumes this sandbox rather than offering a blank create form.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
-// Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser:
-// clearCredential disables auto-select) instead of replaying whatever the daemon just refused.
+// Drops both credentials so re-establishing goes through a fresh Google proof with the account chooser.
 const signIn = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
@@ -78,8 +67,7 @@ const signIn = async (): Promise<void> => {
             >
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
-            <!-- The plan and the other way out, side by side: the second is free and must never read as the
-                 lesser option. Both are places, so both are links. -->
+            <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->
             <template v-else-if="notice.action?.kind === `billing`">
                 <Button :as="RouterLink" to="/settings/billing" :label="notice.action.label" icon-pos="right" class="ui-button-loud">
                     <template #icon><Icon name="arrow-right" /></template>

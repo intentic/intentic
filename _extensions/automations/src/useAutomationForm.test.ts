@@ -4,13 +4,8 @@ import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";
 import { useAutomationForm } from "./useAutomationForm";
 
-/* THE PROMPT HAS TO AGREE WITH THE TRIGGER, and nothing downstream can tell when it doesn't: the daemon fires
- * whatever prompt it stores, and the woken turn reads a payload it was never told about. The bug these tests
- * exist for shipped: a starter was seeded when the trigger CARD was clicked, so picking Listen (live) and then
- * switching the source to CI/CD left the row telling the agent to answer Discord messages.
- *
- * Every case below is the same question, whose text is in the box. The form's own (a starter, a template) may be
- * rewritten for whatever fires now; the user's may not, ever. */
+// The form's prompt must always match its trigger: a starter or template's text may be rewritten when the trigger
+// changes, but the owner's own text never is.
 
 const DISCORD: AvailableSource = {
     provider: `discord`,
@@ -36,9 +31,7 @@ const CI: AvailableSource = {
     starterPrompt: `Handle CI results.`,
 };
 
-/* The templates arrive from the daemon's catalogue now, so the fixtures below stand in for it rather than
- * being imported from a table in this package. Shaped on the two the form actually has to tell apart: one that
- * sets a listener trigger, and one that sets a workspace trigger AND a guard. */
+// Stand-ins for the daemon's template catalogue: one listener trigger, one workspace trigger with a guard.
 const FIX_CI: AutomationTemplate = {
     id: `fix-failing-ci`,
     title: `Fix failing CI`,
@@ -56,10 +49,7 @@ const REVIEW: AutomationTemplate = {
     chore: true,
 };
 
-/* EVERY STORED AUTOMATION CARRIES A LADDER, because the schema requires one: an automation spends a real
- * allowance with nobody watching, so it names the models it may spend rather than inheriting a default. The
- * fixtures below therefore all have one, and the round-trip cases are asserting that it survives an edit
- * untouched like any other field the form owns. */
+// Every automation needs a model ladder; round-trip tests check it survives an edit untouched.
 const LADDER = [{ provider: `claude`, model: `claude-sonnet-4-6` }, { provider: `codex`, model: `gpt-5.3-codex` }] satisfies Automation["models"];
 
 const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
@@ -89,7 +79,6 @@ describe(`the prompt follows the trigger`, () => {
         await nextTick();
         form.kind = `event`;
         await nextTick();
-        // A webhook's payload is whatever its sender POSTs, so there is no starter to describe it.
         expect(form.prompt).toBe(``);
     });
 
@@ -101,7 +90,7 @@ describe(`the prompt follows the trigger`, () => {
         form.provider = `ci`;
         await nextTick();
         expect(form.prompt).toBe(`Only tell me about deploys to main.`);
-        // Nothing to name: it is the owner's sentence, not a starter left behind.
+        // staleStarter tracks only a lingering starter, not text the owner typed.
         expect(staleStarter.value).toBeUndefined();
     });
 });
@@ -112,8 +101,7 @@ describe(`a template's own text`, () => {
         const { form, loadTemplate } = formState();
         loadTemplate(fixCi);
         await nextTick();
-        // Filling the form from a template moves the trigger AND the prompt in one go: without that being told
-        // apart from a trigger change, the template's own words are the first thing overwritten.
+        // Trigger and prompt load together; the trigger change must not overwrite the template's prompt.
         expect(form.prompt).toBe(fixCi.prompt);
         expect(form.prompt).not.toBe(CI.starterPrompt);
     });
@@ -144,8 +132,7 @@ describe(`editing a stored automation`, () => {
 
     it(`names a starter that belongs to another source, and swaps it on request`, () => {
         const { form, load, staleStarter, applyStarter } = formState();
-        // Exactly what the shipped bug saved: a CI trigger carrying Discord's briefing. Nothing may rewrite it
-        // now: it is a stored prompt, so the form names the mismatch and offers the swap.
+        // Stored prompt: CI trigger, Discord's starter text; an edit must not overwrite it, only offer a swap.
         load({
             id: `on-failed-ci`,
             trigger: { kind: `listener`, provider: `ci`, eventType: `pipeline_failed` },
@@ -173,14 +160,13 @@ describe(`editing preserves fields outside the changed control`, () => {
         load(nightly);
         expect(form.afterSessions).toBe(30);
         expect(build()).toEqual(nightly);
-        // Zero is "every occurrence", which the record says by carrying no bar at all.
+        // Zero means unlimited: the record represents it by omitting afterSessions, not by storing zero.
         form.afterSessions = 0;
         expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 5 * * *` });
     });
 
     it(`keeps a webhook's daily ceiling and disabled state`, () => {
-        // The token is not on the record any more (the daemon keeps it with the door), so what an edit has to
-        // carry through untouched is the trigger's own setting and the switch.
+        // Token lives at the door, not the record; only dailyMax and enabled must survive the edit untouched.
         const automation: Automation = {
             id: `deploy-hook`,
             trigger: { kind: `event`, dailyMax: 40 },
@@ -199,8 +185,7 @@ describe(`editing preserves fields outside the changed control`, () => {
             id: `support`,
             trigger: { kind: `listener`, provider: `webchat`, eventType: `message`, allowedOrigins: [`https://example.com`] },
             prompt: `Answer support questions.`,
-            // One provider throughout, which is what lets the account pin below survive a round trip: an account
-            // id is that provider's store key, so the form drops it the moment the ladder crosses providers.
+            // Single provider throughout, so the account pin (that provider's store key) survives the round trip.
             models: [
                 { provider: `claude`, model: `claude-opus-4-6` },
                 { provider: `claude`, model: `claude-sonnet-4-6` },
@@ -220,7 +205,7 @@ describe(`editing preserves fields outside the changed control`, () => {
                 conversationMessageMax: 8,
                 sessionTtlMinutes: 30,
             },
-            // Deliberately narrower than its persona: editing must not widen a security boundary.
+            // Narrower than its persona; editing must not widen a security boundary.
             allowedTools: [`Read`],
             actsAs: `front-desk`,
             account: `reliable-account`,
@@ -232,9 +217,6 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual(automation);
     });
 
-    /* A Front Desk is driven by a stranger with nobody watching, so it is the one automation that must never end
-     * up unbounded. Naming no persona means the full toolbox everywhere else in the product: here it is filled
-     * in with the front desk, the read-only card the daemon writes on save. */
     it(`gives a Front Desk that names no persona the front desk`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
@@ -245,8 +227,6 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build().actsAs).toBe(`front-desk`);
     });
 
-    // ...and the owner's own choice stands. A Front Desk deliberately pointed at a card with more powers is a
-    // decision they made on a visible field, not something to quietly overwrite on every save.
     it(`leaves a Front Desk's chosen persona alone`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
@@ -259,11 +239,7 @@ describe(`editing preserves fields outside the changed control`, () => {
     });
 });
 
-/* WHAT THE WAKE SPENDS, WHICH IS THE ONE THING THE FORM WILL NOT ANSWER FOR THE OWNER.
- *
- * An automation fires against a real allowance with nobody in the room, on a schedule set once and rarely
- * re-read. There is no sandbox-wide tier behind it any more and no composer pick to inherit, so a saveable form
- * with no models would be the product choosing whose money to spend. */
+// Pins that a saveable automation must always name its own models; there is no sandbox-wide default to fall back on.
 describe(`the model ladder`, () => {
     const filled = () => {
         const state = formState();
@@ -281,8 +257,7 @@ describe(`the model ladder`, () => {
         expect(valid.value).toBe(true);
     });
 
-    // A gallery template is written before this sandbox exists, so it cannot know which providers its owner has
-    // connected: naming one would be a guess that either fails at fire time or spends the wrong account.
+    // Templates are authored before this sandbox exists and cannot know which providers are connected.
     it(`is not filled in by a template`, () => {
         const { form, loadTemplate } = formState();
         loadTemplate(REVIEW);
@@ -303,10 +278,8 @@ describe(`the model ladder`, () => {
         expect(build()).toEqual(automation);
     });
 
-    /* THE LADDER CAN TAKE THE ACCOUNT PIN AWAY, and has to. An account id is one provider's store key, so it is
-     * only meaningful beside that provider — pinning one under a ladder that crosses providers would name an
-     * account the winning rung's provider has never heard of. The scheduler drops it on the same rule, so what
-     * is stored and what is spent cannot disagree. */
+    // An account id is one provider's store key; pinning one only makes sense while the ladder stays on that provider,
+    // so crossing providers clears it.
     it(`clears a pinned account once the ladder crosses providers`, () => {
         const { form, build } = filled();
         form.models = [{ provider: `claude`, model: `claude-sonnet-4-6` }];

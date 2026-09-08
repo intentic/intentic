@@ -3,23 +3,11 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
-/* HOW a pipeline trigger actually gets its events, the one thing about a `ci` automation that is not visible
- * from the automation itself.
- *
- * A `ci` trigger depends on two things nobody agreed to when they created it: at least one workspace repo
- * whose remote maps to a connected GitHub/GitLab account, and a webhook the daemon could register on it. When
- * either is missing the row still reads as armed. That is the worst state an automation can be in, a
- * scheduled one that never fires at least has an empty run history saying so, but "nothing happened" is also
- * exactly what a healthy pipeline trigger looks like on a week when CI stayed green.
- *
- * So the form says which of the three it is, in the words that matter to the person reading:
- *   ok      , instant, over the provider's webhook
- *   polling , the webhook could not be registered, so runs are polled instead (slower, still works)
- *   none    , no repo maps to a connected account, so this will never fire
- *
- * Read from GET /ci/runs, which already carries per-repo `hookWarning` for the Pipelines view, the reconciler
- * writes that warning once and both surfaces read it, rather than each deciding for itself what a missing hook
- * means. */
+// How a `ci` trigger actually gets events: it needs a workspace repo mapped to a connected account and a webhook the
+// daemon could register; either missing still reads as armed. State comes from GET /ci/runs's hookWarning:
+// ok: webhook delivers within seconds
+// polling: webhook failed to register, runs are polled instead
+// none: no repo maps to a connected account, this will never fire
 
 const POLL_MINUTES = Math.round(CI_POLL_INTERVAL_MS / 60_000);
 
@@ -28,14 +16,12 @@ export type CiDeliveryState = `ok` | `polling` | `none`;
 export interface CiDelivery {
     readonly state: CiDeliveryState;
     readonly summary: string;
-    // The reconciler's own words for the first unwired repo, the manual recipe (URL + secret + where to paste
-    // it) for an owner who would rather fix the webhook than be polled. Absent unless state is `polling`.
+    // Manual webhook setup recipe for the first unwired repo; present only when state is `polling`.
     readonly detail?: string;
 }
 
 const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
-    // A trigger narrowed to one repo is answered about THAT repo: the workspace's other repos being wired says
-    // nothing about whether this automation will fire.
+    // Narrowed to one repo when the trigger has one; other repos' wiring doesn't affect this answer.
     const scoped = repoFilter === `` ? repos : repos.filter((repo) => repo.repo === repoFilter);
     if (scoped.length === 0) {
         return {
@@ -62,8 +48,8 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
     };
 };
 
-// `repo` is the trigger's channelId (blank ⇒ every mapped repo). Only fetches while a caller is actually
-// looking at a CI trigger, the automations page has no other reason to hold the CI picture.
+// `repo` is the trigger's channelId (blank ⇒ every mapped repo); fetches only while a caller is actively viewing a CI
+// trigger.
 export function useCiDelivery(active: Ref<boolean>, repo: Ref<string>) {
     const api = host();
     const query = useQuery({
@@ -72,8 +58,7 @@ export function useCiDelivery(active: Ref<boolean>, repo: Ref<string>) {
         enabled: computed(() => active.value && api.sandbox.reachable()),
     });
     return {
-        // Undefined until the first answer lands, the form shows nothing rather than guessing `none`, which
-        // would read as "this is broken" for the second it takes to find out.
+        // Undefined until the first answer lands, rather than guessing `none` and reading as broken.
         delivery: computed<CiDelivery | undefined>(() =>
             query.data.value === undefined ? undefined : describe(query.data.value, repo.value.trim()),
         ),

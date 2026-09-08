@@ -6,26 +6,11 @@ import { accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.handler.js";
 
-/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE, the container browser accounts are born from (see
- * IdentityConfigSchema for the model). This handler is deliberately the browser handler's sibling: the payload
- * is the same machinery (one persisted Chromium profile, the browser feature pack, a roster line on the shared
- * `identities` skill), because an identity IS a browser, the one its accounts share. What differs is what the
- * profile means: not "signed into one site" but "signed into its own email provider, with room for the
- * accounts that will live beside it".
- *
- * A CORE CARD, NOT A CONTRIBUTION. Platform cards are extension data because sites vary; an identity has no
- * site, it has an email address, and everything a card would pin (where the sign-in starts) is derivable from
- * it or answered on the form. So there is no contribution lookup here, and the skill is rendered from core
- * (browser-skill.ts identitiesSkill) rather than a pack's SKILL.md. ONE skill for all identities, each a
- * roster line, converged by account-skills.ts on every apply/remove.
- *
- * The connected marker means "the identity's browser is signed into its provider", the one login that stays
- * the OWNER's own hands (automated Google sign-ins are what Google blocks), done in the guided window. Its
- * accounts mark themselves connected one by one, exactly like standalone accounts do. */
+// One email identity the sandbox acts as online, the browser its accounts are born into (browser handler's sibling). A
+// core card, not a contribution: an identity has no site, so the skill renders from core. The connected marker means
+// signed into its own provider by the owner, since Google blocks automated sign-in.
 
-// Where the guided login starts for this identity, the provider's own sign-in. Known mail hosts get their real
-// login pages; anything else falls back to the address's own domain, which for hosted mail commonly serves (or
-// redirects to) the provider's webmail, and `loginUrl` on the card overrides the guess entirely.
+// Guided-login start pages; an unknown domain falls back to itself, and `loginUrl` overrides the guess.
 const PROVIDER_LOGINS: Record<string, string> = {
     "gmail.com": "https://accounts.google.com/",
     "googlemail.com": "https://accounts.google.com/",
@@ -47,8 +32,7 @@ export const identityLoginUrl = (config: IdentityConfig): string => {
 };
 
 export const identityHandler: CapabilityHandler = {
-    // The identity's stored email password, typed into the provider by the daemon on the agent's behalf (the
-    // accounts tools), never revealed. Unset for the common case: the owner signs the provider in by hand.
+    // Stored email password, typed in by the daemon for the agent; unset when the owner signs in by hand.
     secret: (config) => ((config as IdentityConfig).password !== undefined ? "password" : undefined),
     echo: (config) => {
         const { password, ...rest } = config as IdentityConfig;
@@ -57,12 +41,10 @@ export const identityHandler: CapabilityHandler = {
             ...(password !== undefined ? { hasPassword: true } : {}),
         };
     },
-    // The identity's browser is the browser pack, same probe, same fragment, same rebuild story.
+    // Same pack, probe and rebuild story as the browser handler's.
     fragment: () => packFragment("browser"),
-    /* An identity's browser is the whole point of it: the Google sign-in that makes "Continue with Google" a
-     * click, and every account living beside it. So the profile MOVES rather than being re-made, the re-apply
-     * that follows re-converges the shared skill, whose roster line is derived from the new name. The accounts
-     * that name this identity are repointed by the route, which is where cross-connection references belong. */
+    // The profile moves rather than being re-made: an identity's whole point is the sign-in every account beside it
+    // shares. Accounts naming this identity are repointed by the route, not here.
     rename: {
         carry: async (ctx, from, to) => {
             await moveSession(ctx.workspace.root, from, to);
@@ -73,12 +55,11 @@ export const identityHandler: CapabilityHandler = {
         if (!email.includes("@")) {
             throw new Error(`"${email}" is not an email address: the identity IS an address, so this field is the card`);
         }
-        // A linked mailbox must be a real connected entry, checked here where the reader is still on the form,
-        // a dangling reference would otherwise surface turns later as a code tool that shrugs.
+        // Checked here, on the form, so a dangling mailbox reference fails now, not later as a shrugging tool.
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
             throw new Error(`no capability "${mailbox}" to read mail from: connect the mailbox (IMAP) first, or leave the field empty`);
         }
-        // The route upserts AFTER apply, so the entry rides in as the delta rather than being read back.
+        // Route upserts after apply; the entry rides in as the delta, not a read-back.
         await convergeAccountSkills(ctx, { upsert: { id, kind: "identity", config: config as IdentityConfig } });
         yield {
             kind: "log",
@@ -97,9 +78,8 @@ export const identityHandler: CapabilityHandler = {
         }
         return { state: "active" };
     },
-    /* Removal REFUSES while accounts still name this identity: their sessions live in its profile, so tearing
-     * it down would sign every one of them out as a side effect of removing something else. The message names
-     * the accounts because the fix is per-account and the reader is about to go do it. */
+    // Refuses while accounts still name this identity: their sessions live in its profile, so removing it would sign
+    // them all out as a side effect. The message names them since the fix is per-account.
     remove: async (ctx, id) => {
         const born = (await ctx.capabilities.list()).filter(
             (capability) => capability.kind === "browser" && (capability.config.identity ?? "") === id,
@@ -109,7 +89,7 @@ export const identityHandler: CapabilityHandler = {
                 `"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")}, remove them first`,
             );
         }
-        // The route deletes the entry AFTER this hook, so the converge is told to leave it out.
+        // Route deletes the entry after this hook; told here to omit it up front.
         await convergeAccountSkills(ctx, { omit: id });
         await clearSession(ctx.workspace.root, id);
     },

@@ -1,35 +1,10 @@
 #!/usr/bin/env node
-/* THE FIGURES THE SYSTEM PROMPT IS ARGUED FROM, RECOMPUTED.
- *
- *   pnpm --filter @intentic/sandbox bench:guidance                        # against ~/.claude/projects
- *   pnpm --filter @intentic/sandbox bench:guidance /path/to/projects      # against a corpus you carried in
- *   pnpm --filter @intentic/sandbox bench:guidance --json                 # machine-readable, for a diff over time
- *
- * WHY THIS EXISTS. Nearly every block in src/agent/prompt/system-prompt.ts is justified by a measurement written into
- * the comment above it: 23.9% of Reads re-read a path, 42% of Bash calls shell out to grep, sleep costs 35.2h,
- * TaskCreate was called zero times. Those numbers were computed by hand, once, and nothing recomputes them. A
- * steer whose number has gone to zero is indistinguishable, from the file, from one still earning its tokens,
- * and the corpus only grows.
- *
- * It has already happened. The checklist block is argued from "TaskCreate was called zero times"; today that
- * figure is in the thousands, because the block worked. Which is the good outcome, and also the one that makes
- * the sentence's stated reason false.
- *
- * WHAT IT IS NOT. It cannot tell you whether a steer is WORKING, only what the world it describes looks like
- * now. A figure that moved is an invitation to go and read the block, not a verdict on it, and for a steer that
- * changed the behaviour it measures, "the number collapsed" and "the number never mattered" leave the same
- * trace here. Only the holdout arms (UsageTurn) separate those two, and they are not in this corpus.
- *
- * READ THE CLAIMED COLUMN AS A DATE, NOT A TARGET. It is what the comment said when someone last looked, kept
- * here so drift is visible at a glance; it is not a threshold and nothing fails when it moves.
- *
- * SCOPE. Claude Code transcripts only. Codex, Grok, Gemini, Cursor, Pi and ACP turns keep their own history
- * elsewhere and are invisible here, so every share below is a share OF THE CLAUDE ARM, which is also the arm
- * these particular guidance blocks were written from.
- *
- * The measuring lives in guidance-corpus.ts, which this only prints: that half is imported by its test, and a
- * module that scanned a corpus on import could not be.
- */
+// Recomputes the measurements cited in system-prompt.ts's comments (Claude Code transcripts only); a moved number is an
+// invitation to read that block, not a verdict on it, since only the holdout arms separate a steer that stopped
+// mattering from one that worked.
+// pnpm --filter @intentic/sandbox bench:guidance
+// pnpm --filter @intentic/sandbox bench:guidance --json
+// The scan itself lives in guidance-corpus.ts, kept separate so it can be imported by its own test.
 
 import { homedir } from "node:os";
 import { join } from "node:path";

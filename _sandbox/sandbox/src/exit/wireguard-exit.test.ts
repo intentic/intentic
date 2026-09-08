@@ -1,9 +1,8 @@
 import { expect, test } from "vitest";
 import { countryOfConf, neutralisedConf, parseWireguardConfigs } from "./wireguard-exit.js";
 
-// The bring-your-own arm's whole job is reading what providers already write into their .conf files, so a user
-// pasting five of them has to annotate none. These pin the shapes the real providers emit, and, just as
-// importantly, the shapes that must NOT be read as a country.
+// Pins the shapes real providers write into .conf files, and the shapes that must not be read as a country, so a pasted
+// file needs no annotation.
 
 const PROTON = `[Interface]
 # Key for exit-nl
@@ -36,28 +35,22 @@ test("Mullvad's relay hostname is read as its country", () => {
 });
 
 test("an explicit country line beats every other signal", () => {
-    // The escape hatch for a provider whose naming nothing can read, and it has to win outright or it is not
-    // an escape hatch.
     expect(countryOfConf(`# country: FR\n${MULLVAD}`)).toBe("FR");
     expect(countryOfConf(`# country = fr\n${MULLVAD}`)).toBe("FR");
 });
 
 test("ordinary comments and hostnames are NOT mistaken for countries", () => {
-    /* Each of these is a real false positive the naive version produced, and each is worse than no label at
-     * all: an unlabelled config is eligible for any country and gets resolved by dialling it, a mislabelled one
-     * fails later with "asked for MY, came out in DE". */
     expect(countryOfConf("[Interface]\n# my-server-1\nPrivateKey = X\nEndpoint = 1.2.3.4:51820")).toBeUndefined();
     expect(countryOfConf("[Interface]\n# in-progress, do not use\nPrivateKey = X\nEndpoint = 1.2.3.4:51820")).toBeUndefined();
-    // Two dash-separated parts is a hostname, not a relay name: `my-vpn.example.com` is not Malaysia.
+    // Two dash-separated parts is a hostname, not a relay name.
     expect(countryOfConf("[Interface]\nPrivateKey = X\n[Peer]\nEndpoint = my-vpn.example.com:51820")).toBeUndefined();
-    // Proton's own `node-nl-01` does not start with a country code, and must not be read as Norway.
+    // `node-nl-01` doesn't start with a country code and must not read as Norway.
     expect(countryOfConf("[Interface]\nPrivateKey = X\n[Peer]\nEndpoint = node-nl-01.protonvpn.net:51820")).not.toBe("NO");
-    // A bare IP endpoint carries no country; that is what dialling and observing is for.
+    // A bare IP carries no country; dialling and observing answers that instead.
     expect(countryOfConf("[Interface]\nPrivateKey = X\n[Peer]\nEndpoint = 203.0.113.9:51820")).toBeUndefined();
 });
 
 test("configs pasted back to back become one pool", () => {
-    // The core of the card's "paste one file per country" instruction: no separator convention, no editing.
     const pool = parseWireguardConfigs(`${PROTON}\n\n${MULLVAD}`);
     expect(pool).toHaveLength(2);
     expect(pool.map((profile) => profile.country)).toEqual(["NL", "DE"]);
@@ -80,18 +73,13 @@ test("noise around and between configs is ignored", () => {
 
 test("a pasted config is neutralised before it is ever brought up", () => {
     const safe = neutralisedConf(PROTON);
-    /* Both removals are load-bearing, and both are invisible when they are missing:
-     *   DNS   → wg-quick applies it by rewriting /etc/resolv.conf for the WHOLE container, so an exit nothing
-     *           has opted into would silently repoint every name lookup in the sandbox.
-     *   Table → without `off`, AllowedIPs 0.0.0.0/0 installs a default route in the MAIN table and the sandbox
-     *           loses its own uplink the moment the tunnel comes up. */
+    // DNS surviving rewrites the whole container's resolver; a missing Table=off lets the pushed route hijack main.
     expect(safe).not.toMatch(/^\s*DNS\s*=/im);
     expect(safe).toMatch(/^Table = off$/im);
-    // Everything that makes it a working tunnel survives.
     expect(safe).toContain("PrivateKey = AAAA");
     expect(safe).toContain("Endpoint = 91.207.175.1:51820");
     expect(safe).toContain("AllowedIPs = 0.0.0.0/0");
-    // Table = off goes INSIDE [Interface]; anywhere else wg-quick ignores it.
+    // Table = off goes inside [Interface]; anywhere else wg-quick ignores it.
     const lines = safe.split("\n");
     expect(lines[lines.findIndex((line) => /\[Interface\]/.test(line)) + 1]).toBe("Table = off");
 });

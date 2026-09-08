@@ -1,20 +1,12 @@
 // @vitest-environment jsdom
-//
-// A DOM, because everything under test is about a document that has been open too long: the event the desktop
-// app dispatches into the page, the visibility change that re-asks, and the `window` marker the app injects at
-// load. None of the three has a meaning in a bare node context.
+// DOM: the desktop app's update event, the visibility-change re-ask, and the `window` marker it injects at load are
+// all meaningless in a bare node context.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
-/* THE BANNER'S TWO FAILURE MODES, and they are opposites.
- *
- * Never appearing is what this whole thing exists to fix: a workspace nobody reloads, running a build from
- * Monday on Friday, saying nothing about it.
- *
- * Appearing when it should not is worse, because the button it draws reloads a page. Every case below where
- * the answer is "no banner" is one where a naive implementation shows one anyway: a dev server whose id is the
- * string `dev`, a `build.json` that 404s on a build predating it, a body that is not what we expect, an origin
- * that is offline. */
+// Two failure modes: never appearing defeats the point (a stale workspace nobody reloads); appearing wrongly is
+// worse, since the button it draws reloads the page. Every "no banner" case below is one a naive implementation
+// gets wrong (a dev id, a missing build.json, an unexpected body, an offline origin).
 
 /** A fresh module graph per test: the offer is module state (there is one app, so there is one offer). */
 const load = async (options: {
@@ -30,9 +22,8 @@ const load = async (options: {
             json: () => Promise.resolve(options.deployed),
         }),
     );
-    // Assigned on the real `window` rather than stubbed over it: this is exactly what the app's own
-    // initialization script does (desktop-app windows.rs), and replacing the whole object would take
-    // vitest.setup.ts's `window.env` with it — which every module in the import graph reads at load.
+    // Assigned on the real `window`, not stubbed over: replacing the object would also drop vitest.setup.ts's
+    // `window.env`, which every module in the import graph reads at load.
     window.__INTENTIC_DESKTOP__ =
         options.desktopUpdate === undefined ? undefined : { version: `1.0.0`, installId: `id`, update: options.desktopUpdate };
     vi.doMock(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
@@ -54,24 +45,23 @@ beforeEach(() => {
 
 describe(`isStaleBuild`, () => {
     it(`says nothing at all when the two ids match`, async () => {
-        // The overwhelmingly common answer, and the one that must cost nothing.
+        // The common case; must stay cheap.
         const { isStaleBuild } = await import(`./appUpdate`);
         expect(isStaleBuild(`1730000000000`, `1730000000000`)).toBe(false);
     });
 
     it(`treats a rollback as staleness, not just a newer build`, async () => {
         const { isStaleBuild } = await import(`./appUpdate`);
-        // Ids are build stamps, and "different" is the honest comparison: a tab running the version that was
-        // just PULLED is exactly as wrong as one running a version that is too old, and a `>` here would leave
-        // everybody on the bad build with nothing on screen.
+        // Ids are build stamps; "different" is the correct comparison; a rollback is exactly as stale as a newer build,
+        // and `>` would miss it.
         expect(isStaleBuild(`1730000000000`, `1720000000000`)).toBe(true);
         expect(isStaleBuild(`1720000000000`, `1730000000000`)).toBe(true);
     });
 
     it(`never fires against a dev build on either side`, async () => {
         const { isStaleBuild } = await import(`./appUpdate`);
-        // A dev server reports `dev` for every session, so a plain inequality would put a permanent "reload"
-        // banner in front of everybody working on this app.
+        // A dev server reports `dev` for every session; plain inequality would show a permanent reload banner to every
+        // developer.
         expect(isStaleBuild(`dev`, `1730000000000`)).toBe(false);
         expect(isStaleBuild(`1730000000000`, `dev`)).toBe(false);
         expect(isStaleBuild(`dev`, `dev`)).toBe(false);
@@ -105,10 +95,8 @@ describe(`the offer`, () => {
         expect(wrong.useAppUpdate().offer.value).toBeUndefined();
     });
 
-    /* THE DESKTOP HALF, in the ordering that used to be impossible to serve: the app finished downloading
-     * BEFORE this page loaded, so there is no event coming and the only evidence is the marker the app injects
-     * at load. Without reading it the banner would appear on a reload — on the one screen that is never
-     * reloaded. */
+    // The app finished downloading before this page loaded, so there's no event, only the marker it injects at load.
+    // Without reading it, the banner would appear on a reload, the one screen that's never reloaded.
     it(`reads an update the app had already downloaded before this page loaded`, async () => {
         const { useAppUpdate } = await load({ running: `1730000000000`, deployed: { buildId: `1730000000000` }, desktopUpdate: `1.214.0` });
         const { offer } = useAppUpdate();
@@ -127,9 +115,8 @@ describe(`the offer`, () => {
         expect(offer.value).toEqual({ kind: `app`, version: `1.214.0` });
     });
 
-    /* ONE OFFER FOR ONE RESTART. Restarting the app reloads this webview onto whatever is deployed, so a stale
-     * page inside an app that is itself stale is one problem. Drawn as two, the user would take the restart
-     * and come back to a banner about the thing the restart just fixed. */
+    // One offer per restart: restarting the app also reloads this page onto whatever's deployed, so a stale page and a
+    // stale app are one problem, not two banners.
     it(`lets an app restart stand in for a page reload rather than offering both`, async () => {
         const { useAppUpdate } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` }, desktopUpdate: `1.214.0` });
         const { offer } = useAppUpdate();
@@ -137,9 +124,8 @@ describe(`the offer`, () => {
         expect(offer.value).toEqual({ kind: `app`, version: `1.214.0` });
     });
 
-    /* "NOT NOW" MEANS NOT NOW. It covers the offer that was on screen and nothing else — the next build is a
-     * different thing to decide about, and a dismissal that outlived it would silently turn the banner off for
-     * the rest of the session. */
+    // A dismissal covers only the offer on screen; the next build is a different thing to decide about, so it must not
+    // silently disable the banner for the rest of the session.
     it(`forgets a dismissal as soon as a newer build is on the table`, async () => {
         const { useAppUpdate } = await load({ running: `1730000000000`, deployed: { buildId: `1730000000000` }, desktopUpdate: null });
         const { offer, dismiss } = useAppUpdate();

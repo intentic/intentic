@@ -1,33 +1,9 @@
 import { lexBlocks } from "./render.js";
 
-/* A DOCUMENT AS THE PIECES YOU CAN EDIT ONE AT A TIME, the source-offset spans behind the file viewer's
- * pretty-editing surface (MarkdownViewer.vue).
- *
- * The surface it serves renders prose and lets the reader click a paragraph to edit THAT paragraph's markdown,
- * with the rest of the document staying rendered. To do that it needs to know where each block starts and ends
- * in the source, which is a question about markdown and therefore belongs to the engine rather than to the app:
- * the answer has to agree with what the renderer drew, and there is exactly one renderer.
- *
- * THE SPANS TILE THE SOURCE. Every character of the document belongs to exactly one block: `blocks[0]` starts
- * at 0, the last ends at `source.length`, and each one ends where the next begins. That is not tidiness, it is
- * what makes an edit safe: the surface replaces one span with the text the user typed and splices the document
- * back together, so a character in no block would be a character an edit could silently drop, and a character
- * in two would be one an edit could duplicate.
- *
- * The blank lines BETWEEN blocks (marked's `space` tokens) are therefore not blocks of their own: they hang off
- * the end of the block above, which is where a writer thinks they belong. Editing a paragraph and deleting its
- * trailing blank line is then a thing you can actually do.
- *
- * SO ARE LINK DEFINITIONS, for a different reason: `[ref]: https://…` renders to nothing at all, so a block
- * holding one would be an invisible, unclickable span of the document, i.e. text with no way to reach it. They
- * merge into the block above and travel with it, and their source is ALSO handed back separately as `defs` so a
- * block that uses `[text][ref]` can still be parsed with its references resolved when it is parsed alone.
- *
- * WHEN IN DOUBT, ONE BLOCK. The lexer's `raw` fields are the whole basis for the offsets here, and this checks
- * that they reassemble the source exactly before trusting them. Any document where they don't (or that the
- * lexer refuses outright) comes back as a single block covering everything: the surface then renders it as one
- * document and offers the whole file as the editable unit, which is the behaviour it had before this existed.
- * A wrong offset would corrupt a file; a coarse one only costs convenience. */
+// Source-offset spans behind the file viewer's per-paragraph editing surface. Spans tile the source with no gaps
+// or overlaps, so an edit can safely splice one span back in. Blank lines and link definitions merge into the
+// block above, since they render nothing on their own; untrustworthy offsets fall back to one block covering the
+// whole document.
 
 /** One editable span of a markdown document. Half-open: `[start, end)` in source characters. */
 export interface MarkdownBlock {
@@ -38,24 +14,18 @@ export interface MarkdownBlock {
 export interface MarkdownBlocks {
     /** The document's blocks in order, tiling `[0, source.length)` with no gaps and no overlaps. */
     readonly blocks: readonly MarkdownBlock[];
-    /* Every link-reference definition in the document, as source. A surface that parses one block on its own
-     * prepends this, so `[text][ref]` still resolves against a definition that lives in another block; the
-     * definitions render to nothing, so prepending them adds nothing to the output. Empty for the documents
-     * that have none, which is most of them. */
+    // Link-reference definitions' source; prepend when parsing one block alone so `[text][ref]` still resolves.
     readonly defs: string;
 }
 
-// Token types that produce no rendered output, so a block of nothing but these would be unreachable on a
-// surface you navigate by clicking. `space` is the blank-line run between two blocks; `def` is `[ref]: url`.
+// Token types with no rendered output (`space`: blank-line run, `def`: `[ref]: url`); unreachable alone.
 const INVISIBLE = new Set([`space`, `def`]);
 
 const whole = (source: string): MarkdownBlocks => ({ blocks: source === `` ? [] : [{ start: 0, end: source.length }], defs: `` });
 
 /**
- * Split `source` into the spans a reader can edit one at a time.
- *
- * Falls back to a single whole-document block whenever the lexer's spans cannot be trusted to reassemble the
- * source exactly, so a caller may always splice with what it gets back.
+ * Splits `source` into the spans a reader can edit one at a time. Falls back to one whole-document block whenever
+ * the lexer's spans can't be trusted to reassemble the source exactly.
  */
 export const splitMarkdownBlocks = (source: string): MarkdownBlocks => {
     if (typeof source !== `string` || source === ``) {
@@ -77,10 +47,7 @@ export const splitMarkdownBlocks = (source: string): MarkdownBlocks => {
     const blocks: MarkdownBlock[] = [];
     const defs: string[] = [];
     let at = 0;
-    /* Invisible tokens are absorbed rather than emitted: into the block above where there is one, and otherwise
-     * held here until the first visible token arrives and takes them as its own leading text. That second case
-     * is a document that opens with blank lines or with its link definitions, and the alternative, a first
-     * block the reader cannot see or click, is exactly the hole this avoids. */
+    // Leading invisible tokens (before any block exists) are held here until the first visible token claims them.
     let pending: number | undefined;
     for (const token of tokens) {
         const start = at;
@@ -100,8 +67,7 @@ export const splitMarkdownBlocks = (source: string): MarkdownBlocks => {
         blocks.push({ start: pending ?? start, end: at });
         pending = undefined;
     }
-    // Nothing visible in the whole document (blank lines, or definitions alone): it is still text someone has to
-    // be able to edit, so it comes back as the one block it is.
+    // An all-invisible document (blank lines or definitions alone) still needs an editable block.
     return blocks.length === 0 ? whole(source) : { blocks, defs: defs.join(`\n`) };
 };
 

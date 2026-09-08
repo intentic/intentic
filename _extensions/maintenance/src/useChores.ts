@@ -5,41 +5,22 @@ import { computed, ref, watch } from "vue";
 import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
 
-/* The evidence, and what it means. One request, `GET /chores` carries every repository's cached probe results,
- * its resident signals and the ledger, and then @intentic/sandbox-contract/chores turns that into verdicts HERE, in the
- * browser, which is the seam the whole design rests on:
- *
- *   the daemon measures        it is the thing with a filesystem, a shell and a resident index
- *   the browser decides        it is the thing that ships with the product, and can be updated
- *
- * A sandbox daemon is baked into an image the owner updates when they feel like it, so a daemon that also
- * computed verdicts would be arguing with the browser about what needs doing every time the chore book changed.
- * It also means the rail badge (attention.ts) and this panel run the SAME function over the SAME report, the
- * number on the tile and the reason in the panel are one computation, and cannot drift apart.
- *
- * The poll is slow because nothing here is urgent: probes refresh on a daily-to-weekly TTL, so a panel that
- * re-read every few seconds would be asking a question whose answer changes twice a week. The daemon's own file
- * push (contributes.files on .intentic/records/chores/) is what makes a probe finishing or a run landing appear at once,
- * which is the only case where promptness matters. */
+// One request (`GET /chores`) carries every repository's cached probes and ledger; verdicts are computed here in the
+// browser, not the daemon, so the rail badge and this panel share one computation and cannot disagree:
+// the daemon measures: it has a filesystem, a shell, a resident index
+// the browser decides: it ships with the product and can be updated
 
 const POLL_MS = 5 * 60_000;
-/* How fast the panel asks while something is actually being measured. The slow poll above is right for standing
- * evidence and completely wrong for work in flight: a probe that finishes in eight seconds would leave the row
- * spinning for five minutes, which is a worse lie than the one this whole change exists to fix. Two seconds is
- * cheap because it only ever runs while the reader is watching a spinner they asked for. */
+// Poll rate while a probe is in flight; only runs while the reader watches a spinner they asked for.
 const MEASURING_POLL_MS = 2000;
-/* How long a click is believed on its own, before the daemon has confirmed it in `running`. The gap is one
- * request, but it is the gap the button is judged on, the whole complaint was that pressing it changed nothing
- *, so the click marks the probe measuring immediately and this is only the backstop for an ack that never
- * arrives (the daemon restarted, the probe id went away). Long enough to cover a slow first poll. */
+// How long an unconfirmed click is trusted before falling back; backstop for an ack that never arrives.
 const UNCONFIRMED_MS = 15_000;
 
 // Repo + probe, the key both halves of "what is measuring" agree on.
 const probeKey = (repo: string, id: string): string => `${repo}|${id}`;
 
-/* A measurement in flight, as the panel needs to draw it. `startedAt` absent means it is waiting behind another
- * one, the runner has one lane across the sandbox, and the row says "queued" rather than counting up from a
- * start that has not happened. */
+// A measurement in flight. `startedAt` absent means queued behind another (one runner lane sandbox-wide); the row says
+// 'queued' rather than counting from nothing.
 export interface MeasuringProbe {
     readonly repo: string;
     readonly id: ProbeId;
@@ -50,34 +31,23 @@ export interface MeasuringProbe {
 export function useChores() {
     const api = host();
     const queryClient = useQueryClient();
-    // The first key segment matches the manifest's `contributes.files` invalidation for .intentic/records/chores/, so a
-    // probe the background runner just wrote reaches the panel without a poll.
+    // Matches the manifest's `contributes.files` invalidation, so a fresh probe reaches the panel unpolled.
     const reportKey = computed(() => api.sandbox.key(`maintenance-report`));
 
-    // What THIS panel has asked for and not yet seen confirmed, so the click lands on screen in the same frame it
-    // happened rather than one request later. Cleared by the reconciliation below, never by a timer alone.
+    // Unconfirmed clicks from this panel, shown before the daemon confirms; cleared only by reconciliation.
     const asked = ref(new Map<string, number>());
 
     const query = useQuery({
         queryKey: reportKey,
         enabled: computed(() => api.sandbox.reachable()),
-        /* Fast while anything is measuring, slow the rest of the time. Read off the query's OWN state rather
-         * than the `measuring` computed below, which would be a cycle, and OR'd with this panel's unconfirmed
-         * clicks, because the first moments after a press are precisely when the report has not yet heard about
-         * the work and the reader most needs it to. */
+        // Fast while measuring; reads the query's own state, not `measuring` (a cycle), OR'd with unconfirmed clicks.
         refetchInterval: (state) => (asked.value.size > 0 || (state.state.data?.running ?? []).length > 0 ? MEASURING_POLL_MS : POLL_MS),
-        // The shared definition, so this panel, the rail badge's timer and the host's read-ahead all fill and
-        // read ONE entry, see choresQuery. Opening this view usually finds it already answered.
+        // Shared definition: this panel, the rail badge and the host's read-ahead all fill and read one entry.
         queryFn: () => choresReportQuery().queryFn(),
     });
 
-    /* WHAT IS BEING MEASURED, the daemon's lane, plus this panel's own unconfirmed clicks.
-     *
-     * Both halves are needed and neither is enough. The daemon's list is the truth about work, but it arrives a
-     * request late, which is exactly the window the reader is staring at the button in. The local list is
-     * instant, but it is a wish, and a wish that outlived its request is how a row ends up spinning forever. So a
-     * click shows immediately, the daemon's answer takes over the moment it lands, and an unconfirmed click
-     * expires, the row falls back to the evidence rather than lying about it. */
+    // Daemon's list (truth, but a request late) plus this panel's unconfirmed clicks (instant, but a wish). A click
+    // shows immediately, the daemon's answer takes over, and an unconfirmed one expires rather than spinning forever.
     const measuring = computed<MeasuringProbe[]>(() => {
         const live = query.data.value?.running ?? [];
         const known = new Set(live.map((entry) => probeKey(entry.repo, entry.id)));
@@ -88,9 +58,8 @@ export function useChores() {
         return [...live, ...unconfirmed];
     });
 
-    /* Forget a click once the daemon has taken it over, once the probe has actually re-run, or once it is old
-     * enough that no ack is coming. Written as a plain read-time prune rather than a watcher because it is a
-     * question about the CURRENT report, and a watcher would answer it one tick after the render that needed it. */
+    // Drops a click once the daemon has taken it over, the probe re-ran, or no ack arrived in time. A read-time prune,
+    // not a watcher, which would answer a tick late.
     const settle = (): void => {
         const report = query.data.value;
         const live = new Set((report?.running ?? []).map((entry) => probeKey(entry.repo, entry.id)));
@@ -108,14 +77,12 @@ export function useChores() {
         }
     };
 
-    /* Re-derived on every render tick rather than memoised against a clock: two of the verdicts depend on elapsed
-     * time (a survey's cadence, a snooze lapsing), and a panel left open overnight that still claims a chore is
-     * snoozed is lying about the only fact the reader came to check. */
+    // Re-derived every render, not memoised: cadence and snooze lapsing depend on elapsed time, and a stale claim
+    // overnight would be wrong.
     const verdicts = computed<ChoreVerdict[]>(() => (query.data.value === undefined ? [] : assessReport(query.data.value, Date.now())));
 
-    // Repo → its verdicts, in the book's own order (the chore book's CHORES array is a product decision about reading
-    // order, not the order they happened to be written in), and repos in the daemon's discovery order with the
-    // workspace root first, which is what `GET /chores` already returns.
+    // Repo to its verdicts, in CHORES' reading order; repos stay in `GET /chores`'s own discovery order (workspace root
+    // first).
     const byRepo = computed(() =>
         (query.data.value?.repos ?? []).map(({ repo }) => ({
             repo,
@@ -124,12 +91,8 @@ export function useChores() {
         })),
     );
 
-    /* Re-run one repository's probe now, ahead of its TTL. An ack: the daemon queues it and the result arrives
-     * through the file push or the next poll, a jscpd sweep outlives any request.
-     *
-     * The probe is marked measuring BEFORE the request, not after. The round trip is short but it is not free,
-     * and the press has to change the screen in the frame it happened, that is the whole of what "the button
-     * does nothing" meant. If the ack fails, the mark comes straight back off and the caller shows the error. */
+    // Requests one probe re-run; an ack only, the result lands via file push or the next poll. Marked measuring before
+    // the request so the press changes the screen immediately; a failed ack rolls it back.
     const refreshProbe = async (repo: string, id: string): Promise<void> => {
         const key = probeKey(repo, id);
         asked.value = new Map([...asked.value, [key, Date.now()]]);
@@ -143,13 +106,12 @@ export function useChores() {
             asked.value = new Map([...asked.value].filter(([held]) => held !== key));
             throw failure;
         }
-        // Ask again straight away rather than waiting out the interval: the report that comes back is the one
-        // that carries this probe as running, which is what turns the optimistic mark into a confirmed one.
+        // Invalidates immediately, so the next report can confirm the optimistic mark right away.
         await queryClient.invalidateQueries({ queryKey: reportKey.value });
     };
 
-    // Snooze a chore, or take a snooze back (a date in the past). Written as a ledger row because that is where
-    // "what is currently true about this chore" already lives; nothing else in the row changes.
+    // Snoozes a chore, or un-snoozes it (a past date); written as a ledger row, where the chore's current truth already
+    // lives.
     const snooze = async (verdict: ChoreVerdict, until: number): Promise<void> => {
         await api.sandbox.json(`/chores/ledger`, {
             method: `POST`,
@@ -160,9 +122,7 @@ export function useChores() {
                 ranAt: verdict.lastRun?.ranAt ?? 0,
                 runId: verdict.lastRun?.runId ?? ``,
                 outcome: verdict.lastRun?.outcome ?? `reported`,
-                // The digest of the evidence being snoozed, so that NEW evidence is not covered by an old snooze:
-                // "not this quarter" said about four outdated majors should not also silence a critical advisory
-                // that arrives next week.
+                // Evidence's digest, so new evidence is never covered by an old snooze on stale evidence.
                 digest: verdict.digest,
                 snoozedUntil: until,
             }),
@@ -170,23 +130,17 @@ export function useChores() {
         await queryClient.invalidateQueries({ queryKey: reportKey.value });
     };
 
-    // Every report is the answer to "has my click been taken over yet", so settling rides on the data rather than
-    // on a timer of its own, a probe that finished between two polls stops spinning on the poll that saw it.
+    // Settles on every new report, not its own timer; a finished probe stops spinning on the poll that saw it.
     watch(() => query.dataUpdatedAt.value, settle, { immediate: true });
 
     return {
         report: computed(() => query.data.value),
         verdicts,
         byRepo,
-        // What is being measured right now, this panel's own unconfirmed clicks included, the state every
-        // surface that offers a re-measure draws its progress on. One list, not a keyed set as well: the rows
-        // are the only thing that draws it now, and a row wants the start time to count up from.
+        // Includes this panel's unconfirmed clicks; a flat list, not a keyed set: rows only need a start time.
         measuring,
         error: computed(() => query.error.value?.message),
-        // isPending, not isLoading: true from mount until the FIRST report, INCLUDING the window where `enabled`
-        // still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing is in
-        // flight), and a panel that trusts it renders "Nothing needs attention" over a report it has not read,
-        // the one sentence this surface must never say wrongly.
+        // isPending, not isLoading: true even while `enabled` still gates the fetch on the sandbox handshake.
         isPending: query.isPending,
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: reportKey.value });

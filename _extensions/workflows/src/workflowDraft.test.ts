@@ -3,30 +3,20 @@ import { reactive, ref, shallowRef } from "vue";
 import { WORKFLOW_TEMPLATES } from "./templates";
 import { editableCopy } from "./workflowDraft";
 
-/* THE REGRESSION THIS FILE EXISTS FOR.
- *
- * The designer took its draft with `structuredClone`, which throws `DataCloneError` on a Vue reactive proxy:
- * and a reactive proxy is what it is handed on every single path into it. The throw was inside `setup()`, so
- * the dialog never mounted: New, every template card and the edit pencil were all a crash, and the feature
- * read as broken rather than one control in it.
- *
- * Nothing caught it because every test was of PURE DATA and the crash needed a value that had been through
- * Vue. So these tests put the value through Vue: three ways, because the three doors into the designer wrap
- * it differently, and assert the copy comes out equal and detached. No DOM and no component: the fault was
- * never in the rendering, it was in cloning something reactive, and that is testable on its own.
- */
+// Pins the fix for `structuredClone` throwing `DataCloneError` on a Vue reactive proxy, which crashed `setup()`. Values
+// here are put through real Vue refs, since pure-data tests never caught it.
 
 const template = () => WORKFLOW_TEMPLATES[0]?.workflow ?? (undefined as never);
 
 test("a draft can be taken from a value held in a deep ref: what the parent used to hand over", () => {
     const held = ref(template());
-    // `ref(.value)` is a proxy; this is the exact expression that threw.
+    // `ref(.value)` is a proxy: the shape that throws under `structuredClone`.
     expect(() => editableCopy(held.value)).not.toThrow();
     expect(editableCopy(held.value)).toEqual(template());
 });
 
 test("a draft can be taken from query data: what the edit button hands over", () => {
-    // The list's workflows come out of a reactive store, so an edit passes a proxy whatever the parent does.
+    // Mimics the list's reactive store, which is what an edit actually hands the designer.
     const fromQuery = reactive({ ...template(), runs: [] });
     expect(() => editableCopy(fromQuery)).not.toThrow();
     expect(editableCopy(fromQuery).steps).toEqual(template().steps);
@@ -47,8 +37,7 @@ test("the copy is detached: editing a draft must not write through to the saved 
     if (firstStep !== undefined) {
         firstStep.goal = `changed`;
     }
-    // Nested too: a shallow copy would have let the step edit through, which is the failure that would make
-    // "Cancel" not actually cancel.
+    // Nested field, too: a shallow copy would let this edit through and break Cancel.
     expect(original.name).not.toBe(`renamed`);
     expect(original.steps[0]?.goal).not.toBe(`changed`);
 });

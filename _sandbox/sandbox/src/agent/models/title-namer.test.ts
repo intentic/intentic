@@ -4,14 +4,12 @@ import { unstubbed } from "@intentic/testing";
 import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
 
 const ask = vi.fn<() => Promise<{ value: string }>>();
-// Whether the owner has set a model for session titles. Nothing is derived for an empty list, so this pass has
-// to ask before it spends anything — see the test at the foot of this file.
+// Whether a model is set for session titles; false means this pass must ask before spending anything.
 const modelSet = vi.fn<() => boolean>(() => true);
 vi.mock("./role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
 
-/* The session-title role's name for a session, unwrapped from the packaging models reach for even when told not to.
- * Same instinct as cleanCommitSubject: the name is right and only its wrapper is wrong, and a pass that
- * refuses a good name over a pair of backticks leaves the fleet board wearing the derived guess for nothing. */
+// Same instinct as cleanCommitSubject: an answer's wrapper is stripped rather than refusing a good name over stray
+// formatting.
 
 test("takes the name and nothing but the name", () => {
     expect(cleanSessionTitle("Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
@@ -20,7 +18,7 @@ test("takes the name and nothing but the name", () => {
     expect(cleanSessionTitle("Title: Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(cleanSessionTitle("Session name: Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(cleanSessionTitle("- Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
-    // The first non-empty line is the name; an explanation the model added anyway has nowhere to go.
+    // The first non-empty line is the name; a trailing explanation has nowhere to go.
     expect(cleanSessionTitle("Sandbox freezes · fix\n\nThis names the work because…")).toBe("Sandbox freezes · fix");
 });
 
@@ -33,9 +31,8 @@ test("keeps quotes that are part of the name", () => {
     expect(cleanSessionTitle(`"Resume with Claude" prompt · remove`)).toBe(`"Resume with Claude" prompt · remove`);
 });
 
-/* The action tag reaches the browser's sessionCategory.ts as the kind of work the card is tinted by, so the
- * separator in front of it is normalised rather than taken as written: a model that answered with the right
- * name and a dash still gets its tag read. */
+// The separator feeds the browser's action tag (sessionCategory.ts), so it is normalised even when the model already
+// got the name right.
 
 test("normalises whatever separator the model reached for", () => {
     expect(cleanSessionTitle("Sandbox freezes - fix")).toBe("Sandbox freezes · fix");
@@ -45,7 +42,7 @@ test("normalises whatever separator the model reached for", () => {
 });
 
 test("leaves a hyphenated noun alone", () => {
-    // The one shape a bare hyphen is common to: splitting here would name the session `Resume-with · Claude`.
+    // A bare hyphen inside a compound noun must survive; splitting it here would misname the session.
     expect(cleanSessionTitle("Resume-with-Claude prompt · remove")).toBe("Resume-with-Claude prompt · remove");
     expect(cleanSessionTitle("Auth refresh-loop")).toBe("Auth refresh-loop");
 });
@@ -55,14 +52,10 @@ test("returns empty for a reply with nothing in it", () => {
     expect(cleanSessionTitle("```\n```")).toBe("");
 });
 
-/* The pass itself, over a fake registry: only the entry read and the title write matter to these rules, and
- * the helper model is the mock above: what it answers (or that it was never asked) IS each test's subject. */
+// Fake registry: only entry() and setTitle matter; the mocked role model's reply, or that it was never asked, is what
+// each test checks.
 
-/* THE STRINGS THAT ARE NOT NAMES, EVERY ONE THAT HAS ACTUALLY TAKEN A SESSION'S NAME IN THIS FLEET, and the list
- * is the point: the pass guarded the session-limit sentence alone, the auth sentence walked in and took four
- * cards, both were guarded, and a Gemini rung's tool-call stand-in walked in and took four more. Whether a REPLY
- * may become a name is settled at the ask now (role-answer.ts); what stays this pass's business is whether a
- * STORED one counts as a name at all, which is what lets the cards already wearing these heal. */
+// Old titles a broken guard once let through; still checked here so cards already wearing one can heal.
 const STOLEN_TITLES = [
     "You've hit your session limit · resets 11:50pm (UTC)",
     "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
@@ -85,10 +78,6 @@ beforeEach(() => {
     modelSet.mockReturnValue(true);
 });
 
-/* NO MODEL SET FOR SESSION TITLES ⇒ THE JOB DOES NOT RUN, silently. Nothing is derived for an empty list any
- * more, so this is the state of every sandbox that has not been to Sandbox ▸ Agent ▸ Models; asking anyway
- * would throw on the FIRST turn of every conversation, and the call site logs a warning per throw. The derived
- * title stands, which is exactly what this pass leaves behind whenever it cannot better it. */
 test("asks nothing when no model is set for session titles", async () => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     modelSet.mockReturnValue(false);
@@ -111,17 +100,13 @@ test("names a still-derived conversation from the prompt that just opened its tu
 });
 
 test("leaves a conversation that already answers to a better name alone", async () => {
-    // The gate that makes one model call per conversation: a plan heading and a rename both outrank this pass,
-    // and spending the call to have promoteTitle reject it is the same title for the price of a turn's latency.
+    // titleSource `plan` outranks a model name, skipping the call rather than paying for promoteTitle to reject it.
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     await nameAgentTitle(servicesWith({ title: "Session titles · rethink", titleSource: "plan" }, setTitle), "c1", "rethink session titles");
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-// A chain asked to the bottom without one rung writing a usable name writes NOTHING: the derived title stands
-// and the next turn, which has more to go on, asks again. The reply guards that used to live here are the ask's
-// now, so what reaches this pass is either a name or a throw.
 test("a chain that never wrote a usable name leaves the derived title standing", async () => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
     ask.mockRejectedValue(new Error("gemini-3.5-flash: wrote a tool call instead of a session title"));

@@ -3,26 +3,15 @@ import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
 
-/* The outline of a diff whose content has not arrived yet: what a `pending` tab shows instead of an empty pane.
- *
- * Drawn as the layout the content will occupy, for the same reason the transcript's outline is: the reader
- * already knows which file they clicked (the strip says so, and the toolbar above this has the status letter and
- * the ± counts), so the only thing left to say is "the panes are coming, and there are two of them". A spinner in
- * the middle of the area would say less and then hand the reader a re-anchor when the code appears at the top.
- *
- * The pane split follows the same preference the real viewer reads, so the outline cannot promise a layout the
- * diff then contradicts.
- *
- * Nothing here is armed with a timer or a slow state: this outline is only ever mounted through the workspace's
- * loading reveal, which does not draw it at all for an answer that lands in the first beat, and a warmed diff
- * lands in the same tick as the click. */
+// Outline of a diff whose content hasn't arrived (what a `pending` tab shows). Drawn as the eventual layout, not
+// a spinner, since the reader already knows which file; the toolbar above already gives status and ± counts. Split
+// follows the same preference the real viewer reads, so the outline never promises a layout the diff then contradicts.
 
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
 const split = computed(() => !mobile.value && diffLayout.value === `split`);
 
-// Code-shaped line widths: a fixed uneven set, indented the way a file is. Fixed rather than random because an
-// outline that reshuffles on every re-render is an animation nobody asked for.
+// Fixed, uneven line widths, indented like code; fixed so the outline doesn't reshuffle on re-render.
 const LINES = [
     { width: `w-5/6`, indent: `` },
     { width: `w-2/3`, indent: `ml-4` },
@@ -50,8 +39,7 @@ const LINES = [
             aria-hidden="true"
         >
             <span v-for="(line, index) in LINES" :key="index" class="flex items-center gap-3">
-                <!-- The gutter, which every pane has whatever the layout: the line numbers are the one column a
-                     reader can count on being there. -->
+                <!-- Gutter appears in every pane regardless of layout: the one column a reader can always count on. -->
                 <span class="h-2 w-4 shrink-0 rounded bg-content/10" />
                 <span class="h-2 rounded bg-content/10" :class="[line.width, line.indent]" />
             </span>

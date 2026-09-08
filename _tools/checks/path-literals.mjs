@@ -1,31 +1,12 @@
 #!/usr/bin/env node
-/* NO HAND-SPELLED ROOTS, AND NO COUNTING THE WAY UP TO ONE: the two habits that made every path in this repo
- * quietly position-dependent.
- *
- * COUNTING. Two dozen files worked out where the monorepo root was by counting how deep they sat: `../..` from
- * a package directory, `../../..` from its src, `../../../..` from the installer scripts. Each number is right
- * for exactly one location and is checked by nothing, so moving a file resolves it somewhere else in silence:
- * no import fails, no type breaks, and you find out when a config loader reads no .env and hands back empty
- * credentials. `repoRoot()` / `packageRoot()` from @intentic/constants/node walk up to a marker instead, which
- * has no such coupling. In shell, `_tools/scripts/lib/repo-root.sh` does the same.
- *
- * SPELLING. `/work`, `/history`, `.intentic` and `/opt/intentic` were typed out by hand in hundreds of places
- * with nothing linking the copies, so a rename fixed some and orphaned the rest. @intentic/constants names each
- * one once.
- *
- * WHAT THIS DELIBERATELY ALLOWS, because each is a real distinction rather than an oversight:
- *
- *   - ASSERTION LINES IN TESTS. A test that checks a returned path against the same constant the code under
- *     test used agrees with the implementation by construction and can no longer catch a wrong root. Fixtures
- *     (the paths a test feeds IN) must use the constants; expectations stay spelled out. That split is the
- *     whole reason this check parses tests instead of skipping them.
- *   - `join(x, "..")` WHERE x IS COMPUTED. "The parent of this directory" is an operation, not a location.
- *     Only `..` counted from `import.meta.dirname` / `import.meta.url` / `$0` is a position claim.
- *   - THE FILES THAT CANNOT IMPORT. The installer scripts are downloaded and run standalone; intentic-docs
- *     ships as a raw directory on the agent's PATH with no node_modules. They keep literal copies, by name,
- *     and the constants README records the obligation that goes with that.
- *   - `homedir()`-BASED `.intentic`. The user's home config directory shares a name with the workspace state
- *     directory and is a different place; coupling them would make renaming one rename the other. */
+// No hand-spelled roots (`/work`, `.intentic`, etc., typed literally in hundreds of places) and no counting depth with
+// `../..` from a file's own location, which resolves silently wrong when the file moves. Use
+// `repoRoot()`/`packageRoot()` from @intentic/constants/node, or `_tools/scripts/lib/repo-root.sh` in shell.
+// Allowed:
+// a test's assertion lines (fixtures still go through the constants)
+// `join(x, "..")` where x is computed — an operation, not a position claim
+// files that cannot import (see MAY_SPELL_A_ROOT below)
+// `homedir()`-based `.intentic`, a different directory from the workspace state dir
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,20 +15,12 @@ import { writesBaselines } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
-/* THE BASELINE, and why this check has one when the others refuse. The rule was written after the sweep that
- * introduced the constants, and the sweep did not finish: 269 spellings across the tree were still there the
- * day this check was first RUN by anything (it lived in `pnpm check`, which no hook and no job ran). Fixing them
- * all at once is a repository-wide edit with its own risk; refusing every push until someone does is how a
- * check gets switched off. So the standing findings are written down here, per file, as a number that may
- * shrink and may not grow: a file with MORE spellings than its entry fails, a file that no longer has as many
- * as its entry fails too (update the entry, or delete it once the file is clean), and a file not listed fails
- * on its first. Shrink this file; never grow it. `--write-baseline` rewrites it from the current findings for
- * the one occasion that is legitimate, adopting the rule. */
+// Standing spellings the constants sweep didn't finish are held per file in this baseline: a count may only shrink or
+// be deleted, never grow. `--write-baseline` adopts the current findings, for the one occasion that's legitimate.
 const BASELINE = join(root, "_tools/checks/baselines/path-literals.json");
 const writeBaseline = process.argv.includes("--write-baseline");
 
-/* The files that are allowed to spell a root literally, each for a reason that is about reach, not taste:
- * two of them define the constants, and the rest cannot resolve a bare import at the moment they run. */
+// Files allowed to spell a root literally, each for a reason about reach, not taste.
 const MAY_SPELL_A_ROOT = new Set([
     `_tools/constants/src/index.ts`, // where the names are defined
     `_tools/constants/src/node.mjs`, // the walker itself
@@ -56,42 +29,28 @@ const MAY_SPELL_A_ROOT = new Set([
     `_site/site/public/scripts/connect.sh`, // downloaded and run standalone
     `_site/site/public/scripts/recreate.sh`, // downloaded and run standalone
     `_extensions/documentation/bin/intentic-docs`, // ships as a raw dir on the agent's PATH, no node_modules
-    // The scaffolded extension template. It is copied OUT of this repo into a user's own project and must stay
-    // installable from npm with the one dependency it declares, so it cannot reach an intentic internal for a
-    // string: the same bargain the file's own header already makes about @intentic/sandbox-contract.
+    // Copied into a user's project; must stay installable from npm with only its declared dependency.
     `_tools/extension-example/seed/src/notes.ts`,
 ]);
 
-/* Committed BUILD OUTPUT. The site ships a bundled copy of the demo, so these are minified artifacts of source
- * that is itself checked here: flagging them would be flagging the same line twice, once where it can be
- * fixed and once where it cannot. */
+// Committed build output: the site ships a bundled copy already flagged at its source, so skip the duplicate.
 const GENERATED = [`_site/site/public/`, `_site/site/dist/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
 
-// A filesystem root spelled out. `/workspace` and `/workflows` are HTTP ROUTES that merely start with the same
-// letters, so the boundary after the root is required rather than assumed.
+// A filesystem root spelled out; the trailing boundary excludes HTTP routes sharing the same prefix.
 const SPELLED_ROOT = /(["'`])(\/work|\/history|\/opt\/intentic)(\/[^"'`${\n]*)?\1/;
 
-/* `/history/...` IS ALSO AN HTTP ROUTE PREFIX: the snapshot surface answers on /history/snapshots, /history/diff
- * and friends. Those are a different namespace that happens to share a spelling: they are wire paths the browser
- * and the daemon agree on, not directories, and pointing them at HISTORY_ROOT would mean a rename of the history
- * VOLUME silently moved the API. Recognised by the company they keep, since the strings themselves are
- * identical in shape to a filesystem path. */
+// `/history/...` is also an HTTP route prefix (the snapshot API): recognized by the company it keeps, not the string
+// shape, since pointing it at HISTORY_ROOT would let a volume rename silently move the API.
 const ROUTE_CONTEXT = /oc\.route\(|\bpath:\s*["'`]\/|sandboxJson|sandboxRequest|app\.(get|post|put|patch|delete)\(|\bfetch\(|\.request\(/;
-// The workspace state dir, except where the line is plainly about the user's HOME.
+// The workspace state dir, except where the line is plainly about the user's home.
 const SPELLED_STATE = /(["'`])\.intentic(\/[^"'`${\n]*)?\1/;
 
-/* WHERE A SPELLED-OUT `.intentic/…` IS THE STRONGER MECHANISM, NOT A WEAKER ONE.
- *
- * `statePath(root, path)` takes `WorkspaceStatePath`: the literal-union type produced by the `as const` state
- * table in the contract. A caller can therefore only name a file the table declares, and renaming an entry
- * breaks the build until both move together. Swapping in `${STATE_DIR}/…` would turn each of those checked
- * literals into an ordinary string and throw that guarantee away, which is the opposite of what this check is
- * for: STATE_DIR exists for callers OUTSIDE the table, and the table's own members stay literal so the compiler
- * keeps its hold on them. The table's declaring files are exempt for the same reason: they ARE the union. */
+// A spelled `.intentic/…` here is the stronger form: `statePath()` takes a literal-union type tied to the state table,
+// and `${STATE_DIR}/…` would throw that guarantee away. The table's declaring files are exempt, since they are the
+// union.
 const TYPED_STATE_PATH = /state(?:Rel)?Path\(/;
 const STATE_TABLE_FILES = new Set([`_shared/sandbox-contract/src/state/workspace-state.ts`, `_shared/sandbox-contract/src/state/history-state.ts`]);
-// Counting up to a root from the running file's own location: the position claim, in each spelling that
-// reaches PAST the file's own directory (a single `..` inside a package is a sibling, not a root claim).
+// Position claims only: `..` counted past the file's own directory, not a single `..` to a sibling.
 const COUNTED_JS = [
     /new URL\(\s*(["'`])\.\.\/\.\./,
     /(resolve|join)\(\s*(import\.meta\.dirname|__dirname)\s*,\s*(["'`])\.\.\/\.\./,
@@ -105,8 +64,7 @@ const CODE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue)$/;
 const TEST = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const SHELL = /\.(sh|bash)$/;
 
-// Is this line an assertion, or a continuation of one that has not been terminated yet? Same rule the
-// conversion used, so what the check permits and what the codebase does are one decision.
+// Whether this line is an assertion, or a continuation of one not yet terminated.
 const ASSERTS = /\b(expect|assert)\s*\(/;
 const isAssertion = (lines, i) => {
     if (ASSERTS.test(lines[i])) {
@@ -132,14 +90,8 @@ const isComment = (line) => {
     return s.startsWith(`*`) || s.startsWith(`//`) || s.startsWith(`/*`) || s.startsWith(`#`);
 };
 
-/* THE ONE ESCAPE HATCH, for the case the rules above genuinely cannot see: a string that LOOKS like a path but
- * IS the text under test: shell source a rewriter must leave byte-for-byte alone, a simulated stderr line, a
- * fixture transcript. Substituting a constant there does not move a location, it edits the subject of the test.
- *
- * Deliberately per-line and deliberately requiring a reason, rather than a per-file exemption: a whole file
- * waved through stops being checked the day someone adds a real path to it. Write it as
- *   // path-literals: content, <why this is text, not a location>
- * on the offending line or the one above it. */
+// Escape hatch for a string that looks like a path but is the text under test (a fixture, a transcript), not a
+// location. Per line, with a reason: `// path-literals: content, <why>`, on the line or the one above it.
 const CONTENT_PRAGMA = /path-literals: content/;
 
 const tracked = execFileSync(`git`, [`ls-files`, `-z`], { cwd: root, encoding: `utf8`, maxBuffer: 64 * 1024 * 1024 })
@@ -184,8 +136,7 @@ for (const path of tracked) {
         if (shell) {
             continue; // a shell script has no import to reach the named constants through
         }
-        // In a test, an expectation is allowed to spell a root: that literal is what makes the assertion able
-        // to fail. Everything else in a test is a fixture and goes through the constants like any other code.
+        // A test's expectation may spell a root; a fixture still goes through the constants.
         if (test && isAssertion(lines, i)) {
             continue;
         }
@@ -198,7 +149,7 @@ for (const path of tracked) {
     }
 }
 
-// Findings per file, which is the unit the baseline counts in: a line number moves with every edit above it.
+// Findings per file, the baseline's unit: a line number shifts with every edit above it.
 const perFile = new Map();
 for (const { at } of findings) {
     const path = at.slice(0, at.lastIndexOf(":"));
@@ -220,16 +171,8 @@ for (const [path, count] of perFile) {
         grown.push(`  ${path}: ${count} spelling(s), the baseline allows ${allowed}`);
     }
 }
-/* AN ENTRY THE TREE HAS BEATEN IS TIGHTENED, NEVER FAILED. This ratchet used to fail both ways — a count that
- * grew, and a count that shrank without the baseline being lowered in the same change — so that the file kept
- * describing the tree. With a dozen conversations landing into one tree, failing on a shrink means every
- * DELETION becomes everyone else's red: an agent removes one spelling, and every other agent's turn and the
- * owner's next push are refused over a number in a shared file none of them touched, until somebody edits it,
- * and two of them editing it is a merge conflict. So the improvement is written down here, by this check,
- * wherever the write can become a commit, and merely reported everywhere else — in an agent's worktree it
- * would be one more line for the owner's tree to reconcile against every other turn's, and on a CI runner
- * nobody commits anything at all (lib/repo.mjs's `writesBaselines` is the one place that decides). Nothing
- * fails for having improved; the ratchet still cannot slip, because it is this check that lowers it. */
+// A baseline entry the tree has beaten is tightened, never failed: only this check may lower it (via writesBaselines),
+// so a shrink can't slip and can't become everyone else's merge conflict.
 const tightened = [];
 const next = { ...baseline };
 for (const [path, allowed] of Object.entries(baseline)) {

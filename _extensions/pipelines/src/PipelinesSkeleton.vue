@@ -1,24 +1,11 @@
 <script setup lang="ts">
 import { RowGroup } from "@intentic/extension-ui";
 
-/* What the Pipelines view shows before its first /ci/runs response: the SHAPE of the answer, not a spinner.
- * The geometry here is a deliberate copy of the real thing: a repo group and run rows with a status dot, an
- * avatar, a headline, a meta line, stage circles and an action button, so the page does not jump when the data
- * lands, and so the wait already tells the reader what they are waiting for.
- *
- * THE LIST, AND NOT THE TALLY ABOVE IT. The orientation line rides the title row now and only falls back into
- * the body on a narrow pane (PipelinesView's TALLY_AT_REM), so its loading form has to be drawn wherever the
- * real one is: <PipelinesTally skeleton> is that one shape, and the view places it in both states.
- *
- * The group is drawn with the kit's own <RowGroup> in its loading form, rather than a second copy of its markup
- * that a change to it would leave behind.
- *
- * Widths vary per row because a column of identical bars reads as a rendering artifact rather than as a list
- * of commit subjects. They are fixed, not random: a placeholder that reshuffles on every re-render is worse
- * than one that repeats. */
+// Mirrors the real page's shape (repo group, rows with status dot, avatar, headline, meta, stage circles, action
+// button) so the page doesn't jump when data lands. The orientation line's own skeleton (<PipelinesTally skeleton>) is
+// drawn wherever the real one sits. Widths vary per row but are fixed, not random.
 
-// Headline/meta widths per row, and how many stage circles that row hints at: a real board has neither a
-// uniform subject length nor a uniform pipeline shape.
+// Per-row widths and stage count vary; a real board has neither uniform subjects nor uniform pipelines.
 const ROWS = [
     { headline: `w-72`, author: `w-20`, stages: 3 },
     { headline: `w-56`, author: `w-16`, stages: 4 },
@@ -30,11 +17,9 @@ const ROWS = [
 </script>
 
 <template>
-    <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
-         indistinguishable from an empty board. The bars themselves carry no text, so there is nothing to read. -->
+    <!-- aria-busy, not aria-hidden: silence here reads as an empty board, not as loading. -->
     <div role="status" aria-busy="true" aria-label="Loading pipelines">
-        <!-- One repo group. A second would be a guess about the workspace; one is the floor every board has.
-             h-4 in the heading slots is the line box of the label they stand in for (`text-xs`). -->
+        <!-- One repo group: a second would be guessing about the workspace. h-4 matches the real label's text-xs line box. -->
         <RowGroup>
             <template #label>
                 <span class="flex h-4 items-center gap-2">
@@ -44,8 +29,7 @@ const ROWS = [
                 </span>
             </template>
 
-            <!-- Wraps exactly as the real row does (PipelineRunRow), so a narrow pane does not re-flow the
-                 list the moment the runs land. -->
+            <!-- Wraps exactly as PipelineRunRow does, so a narrow pane doesn't re-flow once the runs land. -->
             <div
                 v-for="(row, index) in ROWS"
                 :key="index"
@@ -54,9 +38,10 @@ const ROWS = [
                 <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
                 <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
 
-                <!-- The two line boxes are h-5 / h-4 with an h-0.5 gap because that is exactly what the real
-                     headline (text-sm) and meta line (text-2xs, mt-0.5) measure: a 63px row either way, so
-                     the list does not shuffle upward the moment the runs arrive. -->
+                <!--
+                    Line-box heights and gap copy the real headline (text-sm) and meta line (text-2xs, mt-0.5) exactly, so the row height matches and
+                    the list doesn't shuffle when runs arrive.
+                -->
                 <div class="min-w-40 flex-1">
                     <div class="flex h-5 items-center gap-2">
                         <span class="skeleton h-3.5 max-w-full" :class="row.headline"></span>
@@ -70,8 +55,7 @@ const ROWS = [
                 </div>
 
                 <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
-                    <!-- Stage circles, connectors and all: the row's most distinctive shape, and the part a
-                         reader scans first once the data is there. -->
+                    <!-- Stage circles and connectors: the row's most distinctive shape, and what a reader scans first. -->
                     <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
                         <template v-for="stage in row.stages" :key="stage">
                             <span v-if="stage > 1" class="h-px w-3 shrink-0 bg-line"></span>

@@ -6,11 +6,8 @@ import { slugOf } from "./transcript/slug.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Copies the committed fixture workspace + transcript templates into a tmp dir. Templates carry __ROOT__
-// (absolute workspace root), __TS_<n>D__ (ISO timestamp n days before now, so recency assertions don't rot
-// as the repo ages), and __PAD_40K__ (~40 KB filler making session A's second turn visibly token-expensive).
-// Workspace file mtimes are backdated 30 days so fixture touches are fresh by default; staleness tests bump
-// files forward.
+// Copies the committed fixture workspace and transcript templates into a tmp dir. Templates use __ROOT__ (workspace
+// root), __TS_<n>D__ (timestamp n days ago), and __PAD_40K__ (~40 KB filler); mtimes are backdated 30 days by default.
 export const makeRecallFixture = async (): Promise<{
     root: string;
     claudeDir: string;
@@ -22,8 +19,7 @@ export const makeRecallFixture = async (): Promise<{
     const root = join(tmp, "workspace");
     const claudeDir = join(tmp, "claude");
     const historyRoot = join(tmp, "history");
-    // Anchored to the package root, so it resolves from dist/testing.js and src/testing.ts alike (fixtures are
-    // never compiled) without either layout's depth being part of the answer.
+    // Anchored to the package root so it resolves the same from dist/testing.js and src/testing.ts.
     const fixtures = join(packageRoot(import.meta.url), "src/__fixtures__");
     await cp(join(fixtures, "workspace"), root, { recursive: true });
     const backdated = new Date(Date.now() - 30 * DAY_MS);
@@ -44,11 +40,7 @@ export const makeRecallFixture = async (): Promise<{
         await writeFile(join(projectsDir, name), resolved);
         sessionIds.push(name.replace(/\.jsonl$/, ""));
     }
-    /* A DAEMON'S FLEET REGISTRY beside the sessions, so a suite can exercise the join that names a runtime
-     * session's conversation (fleet/conversations.ts). Derived from the transcripts just written rather than
-     * listed here: a fixture transcript added later is filed under a conversation without anyone remembering
-     * to. Only reachable by a test that points `historyRoot` at it, so nothing that ignores this keeps its
-     * previous answers. */
+    // Fleet registry derived from the transcripts just written; reachable only via `historyRoot`.
     await mkdir(historyRoot, { recursive: true });
     await writeFile(
         join(historyRoot, "agents.json"),

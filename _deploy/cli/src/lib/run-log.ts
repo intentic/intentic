@@ -3,20 +3,10 @@ import { join } from "node:path";
 import { loadConfig } from "../env.config.js";
 import type { Sink } from "./output.js";
 
-// Tee a command's rendered output to <intenticLogDir>/<command>-<timestamp>.log so every deploy-lifecycle run
-// leaves a durable record, stdout is otherwise the only copy. Local-only, never committed. Token-printing
-// commands (secrets, the tunnels) are deliberately NOT wired through this. Lazy open: a run that writes
-// nothing leaves no file. Sync fs throughout, chunks are already-rendered strings, and the exit hook (the
-// only place stricli's failure exit code is visible) must write synchronously.
-//
-// Retention is PER COMMAND, not global: high-frequency reads (the UI polls `deployments` several times a
-// minute) must not evict the rare, important plan/apply/resolve logs, those are exactly the ones a
-// postmortem needs.
+// Retention is per command: frequent reads must not evict the rare plan/apply/resolve logs a postmortem needs.
 const KEEP_RUNS_PER_COMMAND = 10;
 
-// The failure a run died with, recorded by the CLI's exception formatter so the run log carries it. stricli
-// renders errors on STDERR, which the stdout tee never sees, without this line a crashed run's log is
-// indistinguishable from a hung run's (both just stop).
+// Failure a run died with, so the log tells a crash from a hang apart (stricli's stderr bypasses the tee).
 let runFailure: string | undefined;
 export const recordRunFailure = (message: string): void => {
     runFailure = message;
@@ -32,7 +22,7 @@ export const withRunLog = (sink: Sink, command: string): Sink => {
         try {
             const dir = loadConfig().intenticLogDir;
             mkdirSync(dir, { recursive: true });
-            // Prune within THIS command's logs only (the filename prefix is the command name).
+            // Prune within this command's logs only (the filename prefix is the command name).
             const runs = readdirSync(dir)
                 .filter((name) => name.startsWith(`${command}-`) && name.endsWith(".log"))
                 .flatMap((name) => {

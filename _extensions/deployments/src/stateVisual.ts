@@ -2,14 +2,9 @@ import type { IconName, StatusVariant } from "@intentic/extension-ui";
 import type { DeployServerState, DeployState } from "./contract";
 import type { IncidentTone } from "./incidents";
 
-/* Every way a deployment state is drawn, in one table, the statusVisual.ts pattern from ext-pipelines. Class
- * strings are spelled out in full because Tailwind scans source text: `text-${tone}` would never reach the
- * stylesheet.
- *
- * `stopped` is NEUTRAL, not red, and that is the design rather than an oversight. Most stopped things were
- * stopped on purpose, so colouring them as breakage paints a board that is permanently alarming and therefore
- * unreadable, the level-vs-edge point that incidents.ts exists to make. What turns red is `unhealthy` (a
- * crash loop is never intentional) and the incident strip above the list. */
+// Every deployment state's visuals, in one table (mirrors ext-pipelines' statusVisual.ts). Classes are spelled out in
+// full since Tailwind scans source text; `text-${tone}` would never reach the stylesheet. `stopped` is neutral, not
+// red, by design: most things are stopped on purpose, only `unhealthy` and the incident strip turn red.
 
 export interface StateTone {
     readonly icon: IconName;
@@ -18,9 +13,7 @@ export interface StateTone {
     readonly variant: StatusVariant;
     readonly text: string;
     readonly dot: string;
-    // The row's left accent stripe, ext-pipelines' `rowBorder`, so a stopped container and a canceled CI run
-    // are the same grey by construction. It is what lets a board be scanned by colour down its edge instead of
-    // by reading a chip on every line.
+    // Left accent stripe (mirrors ext-pipelines' rowBorder), so a board can be scanned by colour down the edge.
     readonly rowBorder: string;
 }
 
@@ -94,8 +87,7 @@ export const SERVER_TONE: Record<DeployServerState, StateTone> = {
     },
 };
 
-// `panel` is the incident strip's own border + wash. Spelled out per tone rather than interpolated for the
-// reason at the top of this file: a `border-${tone}/20` would never reach the stylesheet.
+// `panel`: the incident strip's border+wash, spelled out per tone since interpolation misses the stylesheet.
 export const INCIDENT_TONE: Record<
     IncidentTone,
     { readonly text: string; readonly dot: string; readonly variant: StatusVariant; readonly panel: string }
@@ -105,8 +97,8 @@ export const INCIDENT_TONE: Record<
     info: { text: `text-info`, dot: `bg-info`, variant: `info`, panel: `border-info/20 bg-info/5` },
 };
 
-// A usage gauge's colour. The thresholds are the ones an operator already thinks in: comfortable under 75,
-// worth noticing past it, worth acting on past 90.
+// Usage gauge colour at thresholds an operator already thinks in: comfortable under 75, worth noticing past it, acting
+// on past 90.
 export const gaugeTone = (percent: number): string => {
     if (percent >= 90) {
         return `bg-danger`;
@@ -114,11 +106,6 @@ export const gaugeTone = (percent: number): string => {
     return percent >= 75 ? `bg-warning` : `bg-success`;
 };
 
-/* What a container image reads as in a row: the repository's last segment and its tag.
- *
- * `registry.gitlab.com/radarsu/atlas/registry-api:main` becomes `registry-api:main`. Four services of one stack
- * share the first forty characters of that string, so a column of them is forty characters of identical noise
- * ahead of the eight that differ, the reader's eye has nowhere to land. The full reference is never dropped,
- * only demoted to the row's tooltip, which is where a registry host belongs: you check it when something is
- * wrong, you do not read it forty times a day. */
+// Repository's last segment and tag only: a stack's services share a long registry prefix that would otherwise bury
+// what differs. Full reference moves to the tooltip.
 export const imageLabel = (image: string): string => image.split(`/`).at(-1) ?? image;

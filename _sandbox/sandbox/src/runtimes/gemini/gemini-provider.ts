@@ -12,18 +12,15 @@ import { onPath } from "../../platform/boot/on-path.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 
-/* EVERYTHING GEMINI CONTRIBUTES TO THE DAEMON, aggregated by the provider registry (agent/provider-module.ts
- * is the seam). Gemini is the module with the strangest shape, and honestly so: its native runtime is GROK'S
- * OpenCode loop pointed at a different backend, and its credential is the TRANSLATOR'S, so this module owns
- * only what is genuinely Gemini's — the catalog, and the loop binding. */
+// Everything Gemini contributes to the daemon, aggregated by the provider registry. Its native runtime is Grok's
+// OpenCode loop pointed at a different backend, and its credential is the translator's, so this module owns only the
+// catalog and the loop binding.
 
 export interface GeminiSlice {
-    // Gemini's model catalog (discovery → persisted → seed floor, never empty). Held directly as well as in
-    // the shared record because OpenCode's server config reads it too: the translator re-serves these ids as
-    // an OpenAI-compatible backend, and the server registers them at boot.
+    // Never empty (discovery → persisted → seed); OpenCode's server config also reads it to register ids at boot.
     readonly geminiModels: GeminiCatalog;
-    // Gemini's native runtime: the SAME OpenCode loop grokAgent runs on, bound to a different model backend,
-    // which is why it is built from the same factory rather than being a separate adapter file.
+    // Same OpenCode loop grokAgent runs on, just a different backend; built from the same factory, not a separate
+    // adapter.
     readonly geminiAgent: Services["agent"];
 }
 
@@ -33,22 +30,13 @@ export const createGeminiSlice = (input: {
     readonly openCode: OpenCodeService;
 }): GeminiSlice => ({
     geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json")),
-    // One warm OpenCode server serves Grok and Gemini both, so the runner is the same shape; only the model
-    // backend the prompt names differs (opencode.ts registers it as an OpenAI-compatible provider on the
-    // translator).
+    // One warm OpenCode server serves Grok and Gemini both; only the model backend the prompt names differs.
     geminiAgent: createGrokAgent(createGrokRunner(input.openCode), OPENCODE_GEMINI_PROVIDER),
 });
 
-/* GEMINI ON ITS NATIVE RUNTIME, the same OpenCode loop Grok runs on, pointed at the translator instead of at
- * xAI. The credential question is therefore the one a ROUTED turn asks, not the one planGrokTurn asks: OpenCode
- * holds nothing for Gemini, CLIProxyAPI holds every Google auth file and balances the fleet behind them.
- *
- * It exists because the Claude Code loop can no longer reach Google. That CLI prepends its own identity line to
- * every request and bakes it into the binary; Google's Antigravity channel refuses on that exact sentence, and
- * reports it as a quota error, so the translator walked all 31 accounts looking for headroom none of them
- * lacked, ~60s a turn. This loop sends OpenCode's prompt, which the block has nothing to match in.
- *
- * The model is resolved from the same catalog the Claude Code path uses, so a pin survives a harness switch. */
+// Gemini on the same OpenCode loop Grok runs on, pointed at the translator instead of xAI; OpenCode holds no
+// credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
+// gets every Google account refused as a false quota error.
 export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     if (services.config.translator.url === "") {
         return {
@@ -57,14 +45,10 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
         };
     }
     if ((await services.cliProxy.accounts()).gemini.length === 0) {
-        // The requirement comes off the provider's own spec row, so this refusal names the same thing the
-        // connect prompt, the badge and the picker do. It said "Google account" here while every surface a
-        // user could act on said "Google sign-in", which is a sentence sending somebody to look for a
-        // control that is not on the page.
+        // Reads the wording off the provider's spec row, matching what the connect prompt and picker already say.
         return { ok: false, message: `Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent to run Gemini here.` };
     }
-    // Never empty (discovery → persisted → seed floor), so this always resolves: keep the pinned model while the
-    // catalog still offers it, else take the catalog's default, the same rule routedModel applies.
+    // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const catalog = await services.geminiModels.models();
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
     return {
@@ -74,14 +58,9 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
     };
 };
 
-/* Gemini's native runtime, the same OpenCode loop, a different model backend and an entirely different
- * credential question. It is its own row rather than a second provider on the grok adapter because health is
- * keyed by runtime (adapter-health.ts): sharing one entry would let a missing xAI sign-in grey Gemini out of
- * the picker, and a missing Google account grey out Grok.
- *
- * OpenCode stores nothing for Gemini. CLIProxyAPI holds Google's auth files and balances them, so the
- * credential half asks the translator, exactly as a routed turn does. The binary half is Grok's, unchanged: one
- * `opencode serve` serves both, so if it is missing neither can run. */
+// Own adapter row, not a second provider on Grok's, since health is keyed by runtime: sharing one entry would grey
+// Gemini out over a missing xAI sign-in, or Grok out over a missing Google account. OpenCode holds no Gemini credential
+// (CLIProxyAPI does); the binary is Grok's, so if `opencode` is missing, neither runs.
 const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
     runtime: "opencode-gemini",
     oneShot: geminiOneShot,
@@ -107,8 +86,7 @@ export const geminiProvider: ProviderModule = {
     adapters: [OPENCODE_GEMINI_ADAPTER],
     catalog: (services) => services.geminiModels.models(),
     ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).gemini.length > 0,
-    // No boot and no pack of its own: the loop is Grok's binary (its module warms it), the credential is the
-    // translator's (its pack rides translatorWanted), and the catalog needs nothing started.
+    // No boot or pack of its own: Grok's loop, translatorWanted's credential, catalog needs nothing started.
     secretEntries: async (_services, shared) =>
         (await shared.translatorAccounts()).gemini.map((account) =>
             providerAccountEntry("gemini", "Gemini", account.name, account.label, authStateRelPath("cliproxy")),

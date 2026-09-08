@@ -1,26 +1,8 @@
 #!/usr/bin/env node
-// intentic dev-sandbox watch loop: the automated inner loop for testing sandbox changes in docker.
-//
-// One-time setup (done by hand):
-//   1. SANDBOX_IMAGE=intentic-sandbox:dev bash _site/site/public/scripts/connect.sh   (builds the dev image if missing; establishes tunnel + auth once)
-//   2. pnpm dev:sandbox                                                               (this script: leave it running)
-//
-// `pnpm dev:sandbox <slug>` watches for the NAMED sandbox: the slug rides through to both swap paths below.
-// Without one they detect the single sandbox on this machine and refuse to guess between several, so a machine
-// running two of them (a branch beside main) needs the slug or the loop stops at every rebuild.
-//
-// Then every edit under the watched paths rebuilds intentic-sandbox:dev and recreates the running
-// sandbox container against its existing tunnel/auth/volumes (the sibling dev-sandbox.sh). The daemon is
-// baked into the image (Dockerfile COPY --from=build /out/sandbox), so a rebuild is the only way a
-// running container reflects a source change: there is no bind-mount of dist to hot-reload.
-//
-// Rebuilds are DEBOUNCED and SERIALIZED: two never run at once, and edits that land mid-build are
-// coalesced into exactly one follow-up run. A failed `pnpm build:sandbox` leaves the running
-// container untouched (we only recreate on a clean build).
-//
-// Scope note: this watches all of _libs, not just the sandbox's own workspace deps, a change to any
-// shared lib triggers a full image rebuild. That's intentional under the "auto-rebuild whole image"
-// model (the sandbox bundles several @intentic/* libs, and over-rebuilding is safe, just slower).
+// intentic dev-sandbox watch loop: rebuilds the image or reloads the daemon as sandbox sources change. One-time setup:
+// 1. `SANDBOX_IMAGE=intentic-sandbox:dev bash _site/site/public/scripts/connect.sh` builds the dev image, sets up
+//    tunnel/auth.
+// 2. `pnpm dev:sandbox` runs this script; leave it running.
 import { spawn } from "node:child_process";
 import { join, resolve, sep } from "node:path";
 import { watch } from "chokidar";
@@ -28,15 +10,13 @@ import { watch } from "chokidar";
 const SCRIPT_DIR = import.meta.dirname;
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEBOUNCE_MS = 500;
-// Which sandbox this loop drives, forwarded verbatim to both swap scripts. Empty means "the one on this
-// machine", which is what they detect for themselves.
+// Which sandbox this loop drives, forwarded verbatim; empty means the one machine-local sandbox (auto-detected).
 const SLUG_ARGS = process.argv.slice(2);
 
-// The groups holding the daemon and every workspace package it depends on (package.json's workspace: deps
-// live in _sandbox, _deploy, _search: plus @intentic/constants, which sits in _tools).
+// Groups holding the daemon and its workspace deps; @intentic/constants lives in _tools, unlike the others.
 const WATCH_PATHS = [join(REPO_ROOT, "_sandbox"), join(REPO_ROOT, "_deploy"), join(REPO_ROOT, "_search"), join(REPO_ROOT, "_tools/constants")];
 
-// chokidar v4 dropped glob support, so we watch dirs and filter build artifacts / vcs dirs by segment.
+// chokidar v4 dropped glob support; build artifacts and vcs dirs are filtered by path segment instead.
 const IGNORED_SEGMENTS = new Set(["node_modules", "dist", ".turbo", ".cache", "generated", ".astro", ".git"]);
 const ignored = (path) => path.split(sep).some((segment) => IGNORED_SEGMENTS.has(segment));
 
@@ -46,32 +26,24 @@ const run = (command, args) =>
         child.on("exit", (code) => resolvePromise(code ?? 1));
     });
 
-// Which path a change needs. The container bind-mounts every compiled tree from the working tree
-// (dev-mounts.mjs), so anything that ends up as JavaScript in one of those dists reloads with a build + restart;
-// everything else is baked into an image layer and needs the full rebuild.
-//
-// The list is deliberately a denylist of what the mounts CANNOT carry, not an allowlist of TypeScript: a new
-// kind of source file should reload fast by default, whereas forgetting to list a new baked artifact here would
-// leave the container running stale code: the failure this whole loop exists to prevent.
+// Denylist of what the dev-mount can't carry; everything else reloads via mount, only these need a rebuild.
 const IMAGE_ONLY_PATHS = [
     join(REPO_ROOT, "_sandbox/sandbox/Dockerfile"),
     join(REPO_ROOT, "_sandbox/sandbox/docker-entrypoint.sh"),
-    // The feature-pack fragments the dev image (standard profile) splices in: image layers by definition.
+    // Feature-pack fragments the dev image splices in; image layers by definition.
     join(REPO_ROOT, "_sandbox/sandbox/image-packs"),
     // Copied to /usr/local/bin and /root/.claude/skills, outside any mounted dist.
     join(REPO_ROOT, "_sandbox/sandbox/bin"),
     join(REPO_ROOT, "_sandbox/sandbox/seed-skills"),
 ];
 
-// A dependency change alters node_modules, which is never mounted (the image keeps its own installed tree,
-// including native builds); only a real image rebuild can install it.
+// A dependency change touches node_modules, which is never mounted; only an image rebuild can install it.
 const isManifest = (path) => path.endsWith("package.json") || path.endsWith("pnpm-lock.yaml");
 
 const needsImageRebuild = (path) => isManifest(path) || IMAGE_ONLY_PATHS.some((prefix) => path === prefix || path.startsWith(prefix + sep));
 
 let building = false;
-// The pending run's kind: `undefined` when nothing is queued, otherwise whether a full rebuild is required.
-// Changes coalesce upward: if anything in the batch needs an image rebuild, the whole batch gets one.
+// Pending run's kind: undefined means nothing queued; one image-rebuild need promotes the whole batch.
 let pending;
 let queued;
 let timer;
@@ -87,8 +59,8 @@ const cycle = async (fullRebuild) => {
             console.error("intentic: build failed, the running sandbox is untouched. Fix the error and save again.");
         }
     } else {
-        // The fast path: compile into the mounted dists and restart the daemon in place. It refuses (with an
-        // explanation) if this container predates the mounts, so a stale run can't masquerade as a reload.
+        // Fast path: builds into the mounted dists and restarts the daemon; refuses on a container older than the
+        // mounts.
         console.log("\nintentic: change detected, reloading the daemon…");
         await run("sh", [join(SCRIPT_DIR, "dev-reload.sh"), ...SLUG_ARGS]);
     }

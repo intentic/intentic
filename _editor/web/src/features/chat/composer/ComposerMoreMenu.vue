@@ -2,21 +2,9 @@
 import { Icon } from "@intentic/ui";
 import type { ComposerControl, ComposerMoreRow } from "./composerMore";
 
-/* THE COMPOSER'S OVERFLOW: the controls this chat is leaving at their default, each named, valued and
- * explained. Which controls those are is composerMore.ts; this only draws them.
- *
- * EVERY ROW IS A HANDOFF, not a setting. Three of the four open the picker that already owns the choice (mode,
- * persona, run-through), anchored to the button this panel hangs off, so the choice is made in the same list it
- * has always been made in and this file never grows a second copy of one. The fourth is a toggle with nothing
- * to pick, so its row IS the press.
- *
- * A ROW PRESSED IS A ROW GONE, and that is the feedback: setting a control to anything but its default promotes
- * it out of here and into the composer row as a chip wearing its own name. Nothing lands silently in a menu the
- * user is about to close.
- *
- * The value sits on the right of the label because the labels are the scan target: four values in a column,
- * right-aligned against a column of labels, is the shape a settings list has, and it lets "what is this chat
- * currently doing" be read down one edge without reading a word of the left one. */
+// The composer's overflow: controls left at default, drawn from composerMore.ts. Every row is a
+// handoff to the picker that owns the choice (or, for the one toggle, the press itself), not a
+// setting of its own; pressing one promotes it out to a chip and off this list.
 
 defineProps<{ rows: ComposerMoreRow[] }>();
 const emit = defineEmits<{ pick: [control: ComposerControl] }>();

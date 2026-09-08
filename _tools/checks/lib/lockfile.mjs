@@ -1,8 +1,6 @@
-/* pnpm-lock.yaml AND THE CATALOGS, read with a line scanner rather than a YAML parser on purpose: these checks
- * run BEFORE `pnpm install`, so they cannot import one. The indentation IS the grammar here (2/4/6/8), and each
- * level's anchor makes the levels mutually exclusive, so a line is read as exactly one of importer, block,
- * entry, specifier or version. A shape the scanner stops recognizing shows up as an empty region, which the
- * checks report as drift rather than passing in silence. */
+// Reads pnpm-lock.yaml and the catalogs with a line scanner, not a YAML parser, since these checks run before `pnpm
+// install`. Indentation (2/4/6/8) is the grammar; each level's anchor keeps them mutually exclusive, and a shape the
+// scanner stops recognizing appears as an empty region, reported as drift.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "./repo.mjs";
@@ -15,10 +13,10 @@ const LEVELS = [
     { depth: 6, of: "entry" },
 ];
 const SPECIFIER = /^ {8}specifier:[ \t]*(.*?)[ \t]*$/;
-// The line under it: what that specifier RESOLVED to, which is where the reachability walk starts.
+// The line below `specifier:`: what it resolved to, the reachability walk's starting point.
 const VERSION = /^ {8}version:[ \t]*(.*?)[ \t]*$/;
 
-// The lines of one column-0 region: from its key to the next column-0 line, blank lines included.
+// Lines of one column-0 region, from its key to the next column-0 line, blanks included.
 const region = (lines, name) => {
     const found = [];
     let inside = false;
@@ -34,7 +32,7 @@ const region = (lines, name) => {
     return found;
 };
 
-// `importers:` as importer -> block -> { name: specifier }, plus every `version:` an importer resolved.
+// Reads `importers:` as importer -> block -> { name: specifier }, plus every `version:` an importer resolved.
 const readImporters = (lines) => {
     const recorded = new Map();
     const installed = [];
@@ -49,8 +47,8 @@ const readImporters = (lines) => {
                 recorded.set(currentImporter, new Map());
             } else if (level.of === "block") {
                 section = name;
-                // `?.` here and below: a level arriving without its parent means the shape moved, and the empty
-                // `recorded` that leaves is reported as drift by the size check, which a stack trace would not be.
+                // `?.`: a level without its parent means the shape moved; the empty result is reported as drift, not a
+                // crash.
                 recorded.get(currentImporter)?.set(section, new Map());
             } else {
                 entry = name;
@@ -69,11 +67,8 @@ const readImporters = (lines) => {
     return { recorded, installed };
 };
 
-/* `catalogs:` as catalog name -> { dependency: specifier }: THE SAME CATALOGS AS THE LOCKFILE RECORDED THEM, a
- * second copy of the manifest and therefore a second thing that can go stale. pnpm snapshots every catalog
- * entry an importer resolved through, and `--frozen-lockfile` compares pnpm-workspace.yaml against THAT. One
- * level deeper than the manifest's: the catalog's name at 2, a dependency at 4, its `specifier:`/`version:`
- * pair at 6. The SPECIFIER is the comparable half. */
+// Reads `catalogs:` as catalog name -> { dependency: specifier }: the same catalogs `--frozen-lockfile` compares
+// against pnpm-workspace.yaml. One level deeper than the manifest; the specifier is the comparable half.
 const readCatalogued = (lines) => {
     const catalogued = new Map();
     let recordedCatalog, cataloguedEntry;
@@ -99,11 +94,8 @@ const readCatalogued = (lines) => {
 
 export const idOf = (name, value) => (value.startsWith("link:") ? undefined : value.startsWith("file:") || /^\d/.test(value) ? `${name}@${value}` : value);
 
-/* `snapshots:` as a graph, package id -> [package id]. Edges are each snapshot's `dependencies:` and
- * `optionalDependencies:`, whose values are versions of the key beside them: except when they name a package
- * outright, which is how pnpm writes an alias (`'@openai/codex-linux-x64': '@openai/codex@0.147.0-linux-x64'`).
- * A leading digit is the whole difference, and `file:` (an injected workspace package, which does get an
- * entry) parts company with `link:` (a symlinked one, which does not). */
+// Reads `snapshots:` as package id -> [package id], from each entry's `dependencies:`/`optionalDependencies:` edges
+// (including pnpm's alias form). `link:` targets are dropped; `file:` ones are kept, via idOf.
 const readSnapshots = (lines) => {
     const edges = new Map();
     let snapshot, group;
@@ -111,7 +103,7 @@ const readSnapshots = (lines) => {
         if (!line.trim()) {
             continue;
         }
-        // 2 spaces is a package id, 4 a dependency group, 6 an edge: the same grammar, one region down.
+        // 2 spaces is a package id, 4 a dependency group, 6 an edge: one region down from the same grammar.
         const id = /^ {2}(\S.*?):(?: \{\})?[ \t]*$/.exec(line);
         if (id) {
             snapshot = unquote(id[1]);
@@ -131,26 +123,19 @@ const readSnapshots = (lines) => {
     return edges;
 };
 
-/* The lockfile's three regions:
- *   recorded    importer -> block -> { name: specifier }
- *   installed   [name, version] for every `version:` an importer resolved, the reachability roots
- *   catalogued  catalog name -> { dependency: specifier }
- *   edges       package id -> [package id] */
+// What `readLockfile` returns:
+// recorded importer -> block -> { name: specifier }
+// installed [name, version] pairs, the reachability roots
+// catalogued catalog name -> { dependency: specifier }
+// edges package id -> [package id]
 export const readLockfile = () => {
     const lines = readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n");
     return { ...readImporters(lines), catalogued: readCatalogued(lines), edges: readSnapshots(lines) };
 };
 
-/* `packageManagerDependencies:` as `package -> version`: WHICH PNPM THE LOCKFILE SAYS THIS WORKSPACE RUNS.
- *
- * Its own reader, and its own pass over the file, because it lives in the lockfile's FIRST YAML DOCUMENT —
- * pnpm 12 writes the package-manager pin as a `---`-separated document ahead of the real lockfile, and both
- * documents open with `importers:` and a `.:` importer. readImporters above scans the concatenation, so the
- * second document's `.` replaces the first's and this block leaves no trace in `recorded`. That blind spot is
- * why a lockfile pinning a package pnpm 12 will not resolve passed every check here while any pnpm command
- * rewrote it in the working tree.
- *
- * The pin is read wherever it appears, and the caller compares it against the manifest's `packageManager`. */
+// Reads `packageManagerDependencies:` as package -> version: which pnpm the lockfile pins. A separate pass, since pnpm
+// 12 writes this pin in a `---`-separated document ahead of the real lockfile that `readImporters` would otherwise
+// overwrite.
 export const readPackageManagerPin = () => {
     const pinned = new Map();
     let inside = false;
@@ -173,9 +158,8 @@ export const readPackageManagerPin = () => {
     return pinned;
 };
 
-/* The catalogs pnpm-workspace.yaml declares, as `catalog name -> { dependency: version }`. Same flat shape,
- * same scanner: `catalog:` at column 0 is the default catalog's entries, `catalogs:` is a level of named ones
- * above them. */
+// The catalogs pnpm-workspace.yaml declares, catalog name -> { dependency: version }. Same scanner: `catalog:` at
+// column 0 is the default catalog, `catalogs:` is a level of named ones above it.
 export const readCatalogs = () => {
     const catalogs = new Map([["default", new Map()]]);
     let catalogName;
@@ -191,7 +175,7 @@ export const readCatalogs = () => {
         if (mapping === null) {
             continue;
         }
-        // A 2-space key with no value inside `catalogs:` names the catalog the 4-space entries below it belong to.
+        // A 2-space key with no value inside `catalogs:` names the catalog the 4-space entries below belong to.
         if (catalogName === "" || (mapping[2] === "" && /^ {2}\S/.test(line))) {
             catalogName = unquote(mapping[1]);
             catalogs.set(catalogName, new Map());

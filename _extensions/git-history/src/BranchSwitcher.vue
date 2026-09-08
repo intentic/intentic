@@ -3,12 +3,9 @@ import { Button, Icon, Popover, SearchBar, timeAgo, vAction, ui } from "@intenti
 import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
 
-/* The graph header's branch control: the checked-out branch as a pill, and a popover to switch, create or
- * delete. Deliberately not a bare `<select>`: a branch row carries more than a name (its upstream, how far
- * ahead/behind it is, whether that upstream is gone), and the destructive verb needs a confirm step a native
- * select can't host.
- *
- * Everything here is one composable call away from git; this component owns only the popover's local state. */
+// Graph header's branch control: current branch as a pill, a popover to switch, create or delete. Not a bare
+// `<select>`, since a row carries upstream/ahead-behind state and delete needs a confirm step. All git access is one
+// composable call away; this component owns only the popover's local state.
 
 const { repo } = defineProps<{ repo: string }>();
 const repoRef = computed(() => repo);
@@ -18,23 +15,19 @@ const popover = ref<InstanceType<typeof Popover>>();
 const filter = ref(``);
 const creating = ref(false);
 const newName = ref(``);
-// Two-step delete, matching the Changes panel's discard: the first click arms one branch, the second runs it.
+// Two-step delete: the first click arms a branch, the second runs it.
 const armedDelete = ref<string | undefined>(undefined);
-// A branch git refused to delete because its commits are unmerged: the force retry is offered only after
-// git itself has said no, never up front.
+// Set when git refuses to delete for unmerged commits; the force retry is offered only after that refusal.
 const forceFor = ref<string | undefined>(undefined);
 
-/* The filter matches the group's shared name, so typing "main" keeps the row that is `main` locally and
- * `origin/main` on two remotes: one row, not three. Already ordered (current first, then newest tip) by
- * groupBranches, so nothing here re-sorts. */
+// Filters by the group's shared name, so `main`/`origin/main` share a row; already ordered, so no re-sort.
 const shown = computed(() => {
     const needle = filter.value.trim().toLowerCase();
     return needle === `` ? groups.value : groups.value.filter((group) => group.name.toLowerCase().includes(needle));
 });
 
-/* CHECKING OUT A REMOTE-ONLY BRANCH creates the local branch that tracks it, which is what `git checkout <name>`
- * does on its own when exactly one remote has that name, so the same verb serves both rows and the reader does
- * not have to know which case they are in. */
+// Checking out a remote-only branch creates the local tracking branch, since plain `git checkout <name>` already does
+// that when exactly one remote matches.
 const pick = async (name: string): Promise<void> => {
     if (name === current.value?.name) {
         popover.value?.hide();
@@ -80,7 +73,7 @@ const confirmDelete = async (name: string): Promise<void> => {
         forceFor.value = undefined;
         return;
     }
-    // git refused (unmerged commits): offer the deliberate force retry on this branch only.
+    // git refused for unmerged commits; the force retry appears only after that refusal, not up front.
     forceFor.value = name;
 };
 </script>
@@ -109,9 +102,10 @@ const confirmDelete = async (name: string): Promise<void> => {
                 <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 
                 <div class="scrollbar-thin flex max-h-64 flex-col overflow-auto">
-                    <!-- ONE ROW PER LINE OF WORK. `main` and `origin/main` are the same branch seen from two
-                         places, so they share a row: the name once, and the remotes it also lives on as small
-                         pills after it. A row with no local branch is one somebody else pushed. -->
+                    <!--
+                        One row per line of work: `main` and `origin/main` share a row, named once with remote pills after it. No local branch means
+                        somebody else pushed it.
+                    -->
                     <template v-for="branch in shown" :key="branch.name">
                         <div class="group/row flex items-center gap-1 rounded transition-colors hover:bg-overlay">
                             <button
@@ -128,8 +122,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <span class="min-w-0 flex-1 truncate text-xs" :class="branch.local?.current ? 'text-content' : 'text-muted'">{{
                                     branch.name
                                 }}</span>
-                                <!-- Which remotes also have it. Named rather than counted, because "it is on
-                                     origin" and "it is on my fork" are different facts. -->
+                                <!-- Remotes named, not counted: "on origin" and "on my fork" are different facts. -->
                                 <span
                                     v-for="entry in branch.remotes"
                                     :key="entry.name"
@@ -137,9 +130,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                     v-tooltip.top="entry.name"
                                     >{{ entry.remote }}</span
                                 >
-                                <!-- "gone" is not the same as "no upstream": the branch WAS tracking something
-                                     that has since been deleted on the remote, which is the usual sign a PR
-                                     merged and this local copy is safe to drop. -->
+                                <!-- "gone" means the upstream was deleted, usually a merged PR; different from never having one. -->
                                 <span v-if="branch.local?.gone" class="shrink-0 text-2xs text-warning" v-tooltip.top="'Upstream branch was deleted'"
                                     >gone</span
                                 >
@@ -147,8 +138,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 <span v-if="(branch.local?.ahead ?? 0) > 0" class="shrink-0 text-2xs text-subtle">↑{{ branch.local!.ahead }}</span>
                                 <span class="shrink-0 text-2xs text-subtle">{{ timeAgo(branch.at) }}</span>
                             </button>
-                            <!-- Only a LOCAL branch can be deleted here: dropping a remote one is somebody
-                                 else's repository, and a different confirmation entirely. -->
+                            <!-- Only a local branch can be deleted here; a remote one belongs to somebody else's repository. -->
                             <button
                                 v-if="branch.local && !branch.local.current"
                                 type="button"

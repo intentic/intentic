@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { componentOfPackage, parseDocIndex, parseRepoDoc, type RepoDoc } from "./docModel.js";
 
-/* A document set is written by a model into a repository the owner then reads, so every parser here is total: a
- * field that arrives malformed must cost that field, never the page. The exception, and the only one: is
- * provenance, which is required, because a document nobody can date is a document nobody can trust. */
+// Pins that every parser here is total, a malformed field costs only itself, never the page, except provenance, which
+// is required.
 
 const provenance = { sourceRev: `abc123`, generatedAt: 1_785_000_000_000 };
 const withProvenance = (body: Record<string, unknown>): string => JSON.stringify({ ...body, provenance });
@@ -30,7 +29,7 @@ describe(`parseRepoDoc`, () => {
     });
 
     it(`accepts the workspace root repo, whose name is legitimately empty`, () => {
-        // `repo: ""` is the /work repo itself. Checking truthiness rather than presence would reject it.
+        // Checking truthiness rather than presence would reject the legitimate empty repo.
         expect(parseRepoDoc(withProvenance({ repo: `` }))?.repo).toBe(``);
     });
 
@@ -49,7 +48,7 @@ describe(`parseRepoDoc`, () => {
             }),
         );
         expect(doc?.components).toHaveLength(1);
-        // A component with no `name` is named by its id rather than dropped: the id is authored and readable.
+        // A component with no name falls back to its id, rather than being dropped.
         expect(doc?.components[0]).toMatchObject({ id: `a`, name: `a` });
         expect(doc?.glossary).toHaveLength(1);
     });
@@ -66,8 +65,8 @@ describe(`parseRepoDoc`, () => {
     });
 });
 
-/* There is no `parsePackageDoc`: a package has no JSON document. Everything the app knows about one that is not
- * its README's prose arrives in the generated index, which is what these cover. */
+// No `parsePackageDoc`: a package has no JSON document, everything else about it comes from the generated index these
+// tests cover.
 describe(`parseDocIndex`, () => {
     it(`reads the generated index, including a package's derived anchors and measures`, () => {
         const index = parseDocIndex(
@@ -138,8 +137,6 @@ describe(`componentOfPackage`, () => {
     };
 
     it(`inverts the map's component → packages relation`, () => {
-        // The file declares one direction (the direction a human authors in); every reader wants the other. It is
-        // derived so the file never holds the same fact twice.
         expect(componentOfPackage(doc, `_platform/api`)?.id).toBe(`app`);
         expect(componentOfPackage(doc, `_libs/contract`)?.id).toBe(`wire`);
     });

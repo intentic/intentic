@@ -2,40 +2,24 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityKind, CapabilityState, VpnLink } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 
-/* A LIVE CONNECTION, READ THE WAY ITS OWNER READS IT.
- *
- * Two surfaces show the same connections, the Connected slice lists every one in the sandbox, a card lists the
- * ones that came from it, and both read their state through here, so a Reddit account cannot be "needs sign-in"
- * in the inventory and "pending" on its card. That mattered enough to delete a second mapping written for the
- * card rows alone. */
+// A live connection read the way its owner reads it: both the Connected slice and a card's own list read state
+// through here, so a Reddit account can't be "needs sign-in" in one and "pending" in the other.
 
-/* A browser capability goes pending on one of TWO different things, and they lead to opposite places: its
- * Chromium is not installed yet (a sandbox rebuild, on another screen) or it is and nobody has signed in (the
- * login window, right on the card). The daemon tells them apart by the word "rebuild" in the detail, see the
- * handler, which is written to keep that word in one and out of the other. Read everywhere that acts on the
- * distinction, so the hint under a card and the hand-off after an add can never disagree about it. */
+// A browser goes pending on one of two things leading to opposite places: Chromium isn't installed (rebuild,
+// another screen) or it is and nobody's signed in (login window, right here). The daemon tells them apart by the
+// word "rebuild" in the detail.
 export const awaitingLogin = (instance: CapabilitySummary): boolean =>
     instance.status.state === `pending` && !String(instance.status.detail ?? ``).includes(`rebuild`);
 
-/* THE ONE UNFINISHED STEP A ROW CANNOT OFFER ITSELF. A pending connection is waiting on one of three things, and
- * two of them, a browser's login, a computer's pairing command, are already a button on the row, so a second
- * link beside the badge saying "Log in →" next to the Log in button was the same click twice.
- *
- * The third has nowhere on the card to go: a rebuild happens on the Sandbox screen. That is the only one that
- * still needs a link, and pointing it at the right place is the whole reason this is a function rather than a
- * `v-if`, a reader sent to /sandbox for a browser that merely needs signing in is a reader who does not come
- * back. */
+// The one unfinished step a row can't offer itself: login and pairing are already buttons on the row, so only a
+// rebuild (which happens on the Sandbox screen) still needs a link. A function, not a `v-if`, so a signed-in-needed
+// reader is never sent to /sandbox by mistake.
 export const rebuildStep = (kind: CapabilityKind | undefined, instance: CapabilitySummary): boolean =>
     instance.status.state === `pending` && kind !== `host` && !awaitingLogin(instance);
 
-// What identifies a connection to the person who made it, in the order they would say it. `provider`/`platform`
-// are deliberately absent, they are the card, which the row already names, so printing them would spend the
-// line on "github · github". Secrets never reach here: the daemon strips them from the config it echoes back.
-// `email` is an identity row's one fact; `identity` is the born-from note on an account row filed under one.
-// `purpose` sits LAST because it is the widest and the least identifying, but for an account under an identity
-// it is usually the only other fact there is (a site card pins its URLs, so the row has no host and no url), and
-// "what did we open this one for" is the question the owner actually has when they see a name they don't
-// recognise. The date it was opened is deliberately not here: it never beats `purpose` for the second slot.
+// What identifies a connection, in the order a person would say it. `provider`/`platform` are excluded since the
+// row already names the card; secrets never reach here (the daemon strips them). `purpose` sits last, the widest
+// and least identifying fact, though often the only one an identity-filed account has.
 const CONNECTION_FACTS = [`host`, `server`, `url`, `account`, `email`, `identity`, `org`, `guild`, `database`, `user`, `path`, `purpose`] as const;
 
 // Two facts at most. A row is a line, and the third fact is the one that pushes the state badge off the end of it.
@@ -45,8 +29,8 @@ export const connectionFacts = (instance: CapabilitySummary): string =>
         .slice(0, 2)
         .join(` · `);
 
-// A connected VPN instance's live facts, compactly: the assigned address and what it routes. Undefined while the
-// tunnel is down, the capability row's own status already says that.
+// A connected VPN's live facts: assigned address and routes; undefined while down, since the row's status already
+// says that.
 export const vpnFacts = (id: string, links: readonly VpnLink[]): string | undefined => {
     const link = links.find((candidate) => candidate.id === id);
     if (link === undefined || link.state !== `connected`) {
@@ -65,11 +49,9 @@ export interface ConnectionState {
     readonly rank: number;
 }
 
-/* THE STATE IN THE READER'S WORDS, and the order the rows sort in. "active/pending/error/inactive" is the
- * daemon's vocabulary and it is the wrong one here: `pending` is the state of a thing whose setup was never
- * finished, and the reader's question is not what to call it but whether they still have something to do. Rank
- * is the same judgement as the wording, what is unfinished or broken sorts above what is merely working, so a
- * list that mostly works still opens on the part that doesn't. */
+// State in the reader's words, since the daemon's active/pending/error/inactive answers the wrong question (whether
+// there's still something to do, not what to call it). Rank follows the same judgement: unfinished or broken sorts
+// above merely working.
 const CONNECTION_STATES: Readonly<Record<CapabilityState, ConnectionState>> = {
     error: { label: `error`, tone: `danger`, rank: 0 },
     pending: { label: `needs setup`, tone: `warning`, rank: 1 },
@@ -86,9 +68,8 @@ const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);
 
 export const signsInByHand = (kind: CapabilityKind | undefined): boolean => kind !== undefined && SIGNS_IN_BY_HAND.has(kind);
 
-/* Two kinds know something truer about themselves than their status field does, and both are the difference
- * between "you have something to do" and "it is simply asleep", which is exactly what this column is for. A
- * machine's `online` is the roster's answer, which no stored status can carry. */
+// Two kinds know something truer about themselves than status: a machine's `online` comes from the roster, which no
+// stored status can carry.
 export const connectionState = (kind: CapabilityKind, instance: CapabilitySummary, hostOnline: boolean | undefined): ConnectionState => {
     if (signsInByHand(kind) && awaitingLogin(instance)) {
         return NEEDS_SIGN_IN;

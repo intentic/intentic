@@ -1,51 +1,35 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-// Statically imported for its LOAD COST alone: every test re-imports it through `load()` below, and the first
-// of those used to pull the whole graph (useEndpoint, the storage layer, vue) inside the first test's 20s
-// budget: ~0.6s idle, but ten times that on a runner where every core is busy, which is how this file failed
-// with the first test timing out and the other eleven passing in a second each. Collection is bounded by the
-// run rather than by a test, so paying it here costs the same and can't time anything out. Nothing is bound:
-// `load()` resets the module registry and re-executes the (already transformed) graph fresh for each test.
+// Imported once for its load cost, so the first test doesn't pay it inside its own timeout; each test still
+// gets a fresh module via load() below (vi.resetModules).
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./sandboxSession";
 
-/* useSandboxSession decides which bearer a daemon call presents. The contract under test: a valid stored
- * session needs neither Google nor the network; establishing one is a single shared Google mint + exchange;
- * a daemon that refuses the exchange fails loudly rather than degrading to the raw ID token; renewal happens
- * in the background with the session itself. */
+// useSandboxSession picks the bearer for a call: a valid stored session needs no Google or network, a refusal
+// fails loudly instead of degrading to a raw ID token, and renewal near expiry uses the session itself.
 
 const state = vi.hoisted(() => ({
     idToken: `id-token` as string | undefined,
-    /* A proof ALREADY IN HAND, which is the whole of what a background reader may spend. Google's own layer
-     * serves its cached token without any UI and mints a new one with plenty (One Tap, then the app's gate), so
-     * the two are separate answers here rather than one token behind a counter. Undefined by default: the
-     * interesting case is the browser whose ~1h proof has aged out, which is every refresh after an hour. */
+    // The only proof a background reader may spend; undefined by default, since a reload finds no live Google cache.
     cachedIdToken: undefined as string | undefined,
     minted: 0,
-    // Whether the daemon this establishment is aimed at is answering its /health at all. A sign-in must never be
-    // asked for on behalf of a machine that is switched off.
+    // Whether the target daemon answers its /health; a sign-in must never be raised for a machine that's off.
     daemonAnswers: true,
-    // What the Google layer was ASKED to do with the credential: a session rejection must never reach either.
+    // What the Google layer was asked to do with the credential; a session rejection must never reach either.
     cleared: 0,
     canceled: 0,
     sandboxId: `sb-1` as string | undefined,
-    /* A mint that does not resolve: what a real one does while Google's prompt (or the app's own gate) is up
-     * and the reader has not answered it. The state a switch has to be able to leave behind.
-     *
-     * Released in afterEach, because `load()` resets the module registry but the mocked useSandbox is
-     * evaluated once for the file: every previously-loaded copy of the module still watches that same ref, so
-     * a parked establish left in one of THEIR `inflight` maps answers the next test's switch as well. */
+    // A mint that never resolves, the state left behind while Google's prompt is up. Released in afterEach since
+    // the mocked useSandbox ref is shared across every loaded copy of the module in this file.
     mintParks: false,
     releaseMint: (): void => {},
-    // Points the workspace at another sandbox the way the switcher does, through the ref the module watches.
-    // Bound by the useSandbox mock's factory, which vitest evaluates once for the file.
+    // Points the workspace at another sandbox like the switcher does, via the ref the module watches.
     select: (_id: string | undefined): void => {},
 }));
 
 vi.mock("../../auth/useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
         getIdToken: async (options?: { interactive?: boolean }) => {
-            // `interactive: false` is a caller with no standing to interrupt: it gets what Google can hand over
-            // in silence, and nothing at all otherwise. No prompt, so nothing to count and nothing to park on.
+            // interactive:false is a caller with no standing to interrupt: silence or nothing, never a prompt to count.
             if (options?.interactive === false) {
                 return state.cachedIdToken;
             }
@@ -66,17 +50,14 @@ vi.mock("../../auth/useGoogleIdentity", () => ({
         },
     }),
 }));
-/* The reachability question this module asks before it asks a PERSON for anything, stubbed at the seam rather
- * than through a /health response: endpoint.ts owns that check and tests it there, and what matters here is
- * only the answer it gives back. Everything else in the module is the real thing, since the target resolution
- * underneath these tests rides on it. */
+// Stubs the reachability check at the seam rather than a real /health response; endpoint.ts tests that check
+// itself, and target resolution underneath is otherwise real.
 vi.mock("../secrets/endpoint", async () => ({
     ...(await vi.importActual<typeof import("../secrets/endpoint")>(`../secrets/endpoint`)),
     healthAnswers: async () => state.daemonAnswers,
     sandboxIdOf: async () => `sb-1`,
 }));
-// A real ref, not a getter: the module WATCHES the active sandbox (a switch settles a mint left parked for the
-// sandbox being left), and a watch source has to be one.
+// A real ref, not a getter, since the module watches the active sandbox to settle a parked mint on a switch.
 vi.mock("./useSandbox", async () => {
     const { computed, ref } = await vi.importActual<typeof import("vue")>(`vue`);
     const activeSandboxId = ref(state.sandboxId);
@@ -91,7 +72,7 @@ vi.mock("./useSandbox", async () => {
         }),
     };
 });
-// Storage stub for the node test environment: the standard Storage surface, backed by a Map.
+// A minimal Storage stand-in for the node test environment, backed by a Map.
 const stubStorage = (): void => {
     const map = new Map<string, string>();
     vi.stubGlobal(`localStorage`, {
@@ -116,7 +97,7 @@ const sessionResponse = (token = `sess-minted`): Response =>
         headers: { "content-type": `application/json` },
     });
 
-// Fresh module per test: the singleton carries the in-memory session mirror.
+// Fresh module per test, since the singleton carries the in-memory session mirror.
 const load = async (): Promise<typeof import("./sandboxSession")> => {
     vi.resetModules();
     return import("./sandboxSession");
@@ -132,14 +113,13 @@ beforeEach(() => {
     state.canceled = 0;
     state.sandboxId = `sb-1`;
     state.mintParks = false;
-    // The active-sandbox ref lives in the mock factory, which vitest evaluates once for the whole file, so it
-    // survives `load()`'s module reset: a test that switches sandboxes has to hand it back.
+    // The active-sandbox ref lives in the mock factory (evaluated once per file) and survives load(); reset by hand.
     state.select(`sb-1`);
 });
 afterEach(async () => {
     state.releaseMint();
     state.releaseMint = () => {};
-    // One turn for the released establish to fall out of its module's `inflight`.
+    // One tick for a released establish to fall out of its module's inflight map.
     await new Promise((resolve) => setTimeout(resolve));
     vi.unstubAllGlobals();
 });
@@ -159,7 +139,7 @@ it(`establishes a session from a Google proof: one exchange, persisted, then ser
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
-    // The exchange call: the daemon's session route, the Google bearer, the TOFU connect token.
+    // Checks the exchange request: the daemon's session route, the Google bearer, the TOFU connect token.
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(`https://daemon.test/system/session`);
     expect(init.headers).toMatchObject({ authorization: `Bearer id-token`, "x-intentic-connect": `connect` });
@@ -182,10 +162,8 @@ it(`shares one in-flight establish across concurrent calls`, async () => {
     expect(state.minted).toBe(1);
 });
 
-/* A DAEMON THAT WILL NOT MINT IS BROKEN, NOT OLD, and both spellings of the refusal say so. A 404 used to
- * mean "this build predates the route" and bought the caller a raw Google ID token per call, silently: a
- * credential mode nobody chose, on a sandbox nothing reported as degraded. The exchange is the only road to a
- * bearer now, so the failure surfaces where it happened. */
+// The exchange is the only road to a bearer; failure surfaces immediately rather than falling back to a raw
+// Google token unreported.
 it.each([
     [404, /refused its session exchange \(404\)/],
     [500, /refused its session exchange \(500\)/],
@@ -267,12 +245,8 @@ it(`resolves undefined when the user dismisses the sign-in gate. nothing to exch
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
-/* NOBODY IS WAITING, SO NOBODY IS ASKED. The app reads across sandboxes on a timer now (fleetAcross,
- * changesAcross: one poll per box, plus one per surface on every page load), and a box this browser holds no
- * session for takes the whole establishment path. Its first step was a Google mint — browser UI, and behind it
- * a window-wide gate — raised on behalf of a machine the reader is not looking at, with nothing on the gate
- * able to name it. Worse, a box that cannot answer stores nothing, so the same prompt came back on the next
- * tick and on the next refresh: one stopped laptop in the account was enough to make signing in feel constant. */
+// Background reads happen on a timer across every sandbox in the account; nobody is waiting, so nothing may
+// prompt for a credential, and a box that can't answer must not be re-asked constantly.
 const otherBox = { sandboxId: `sb-2`, base: `https://other.test`, connectToken: `connect-2` };
 
 it(`a background read with no proof in hand asks Google for nothing and exchanges nothing`, async () => {
@@ -284,8 +258,7 @@ it(`a background read with no proof in hand asks Google for nothing and exchange
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// The other half of the same rule: a poll that CAN establish still does, silently, and the box is then good for
-// a month. Refusing to reach for a credential is not refusing to use one.
+// The other half of the rule: a poll that can establish still does, silently, without prompting for one.
 it(`a background read spends a proof already in hand`, async () => {
     state.cachedIdToken = `cached-token`;
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
@@ -296,10 +269,7 @@ it(`a background read spends a proof already in hand`, async () => {
     expect(state.minted).toBe(0);
 });
 
-/* A SIGN-IN IS ALWAYS ASKED FOR ON BEHALF OF A DAEMON, so that daemon has to be there. A stopped sandbox cannot
- * complete the exchange whatever the reader does, so the prompt buys them nothing at all: no session is stored,
- * and the next call asks again. The probe is the same identity-checked /health the transport qualifies
- * addresses with, and it is paid only on the path that would otherwise put Google on the screen. */
+// The probe is the same identity-checked /health the transport already uses, paid only on this path.
 it(`will not raise a sign-in for a daemon that is not answering`, async () => {
     state.daemonAnswers = false;
     const fetchMock = vi.fn();
@@ -310,8 +280,6 @@ it(`will not raise a sign-in for a daemon that is not answering`, async () => {
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// A box that just failed is not asked again on every tick and every refresh. A press is never held back by the
-// cooldown, because the reason somebody presses is usually that they have this second brought the machine back.
 it(`holds a failed background establishment for a cooldown, but never a foreground one`, async () => {
     state.cachedIdToken = `cached-token`;
     const fetchMock = vi.fn(() => Promise.reject(new TypeError(`fetch failed`)));
@@ -320,7 +288,7 @@ it(`holds a failed background establishment for a cooldown, but never a foregrou
     await expect(getSessionToken(otherBox, { background: true })).rejects.toThrow(`fetch failed`);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    // The next poll tick, seconds later: the box is known not to be answering, so nothing goes out.
+    // Simulates the next poll tick: the box is already known not to be answering, so nothing goes out.
     expect(await getSessionToken(otherBox, { background: true })).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -328,8 +296,6 @@ it(`holds a failed background establishment for a cooldown, but never a foregrou
     expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
-// Sharing an establishment goes one way only. A poll may settle for what a press produces; a press may not
-// settle for what a poll produces, since a poll is content with "no credential, then" and a person is not.
 it(`a press does not adopt an establishment a poll started`, async () => {
     state.cachedIdToken = `cached-token`;
     const answers: ((response: Response) => void)[] = [];
@@ -347,19 +313,16 @@ it(`a press does not adopt an establishment a poll started`, async () => {
     await new Promise((resolve) => setTimeout(resolve));
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    // Both exchanges are answered rather than left parked: every previously loaded copy of this module still
-    // watches the shared active-sandbox ref, so an establishment left in flight here answers a LATER test's
-    // switch as a sign-in worth cancelling (the same reason `mintParks` is released in afterEach).
+    // Both exchanges are drained rather than left parked: an in-flight establishment here would answer a later
+    // test's switch too, since every loaded module copy shares the active-sandbox ref.
     for (const answer of answers) {
         answer(sessionResponse());
     }
     await new Promise((resolve) => setTimeout(resolve));
 });
 
-/* WHAT A 401 IS ALLOWED TO COST. The daemon session is a per-sandbox credential and the Google proof is the
- * ~1h thing that establishes it, so clearing the second is not a retry, it is a visible sign-in gate: the
- * mint that follows has no cached token to serve and `clearCredential` has switched Google's automatic
- * re-authentication off. A refused SESSION must therefore never reach it, however the refusals arrive. */
+// Clearing the Google proof would turn off silent reauth, forcing a visible gate on the next mint; a session
+// rejection must never do that.
 it(`a rejected session never costs the Google proof, however many calls were holding it`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ token: `sess-A` }));
     const { useSandboxSession } = await load();
@@ -367,8 +330,8 @@ it(`a rejected session never costs the Google proof, however many calls were hol
     const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
     const bearer = await getSessionToken(target);
 
-    // Two requests were in flight on the same session and the daemon refused both. The first drops it; the
-    // second finds nothing on file, which used to fall through to clearing Google.
+    // Two concurrent rejections on the same session: the first drops it, the second finds nothing on file and must
+    // not fall through to clearing Google.
     rejectSessionToken(target, bearer!);
     rejectSessionToken(target, bearer!);
     expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
@@ -387,10 +350,7 @@ it(`…including when the other window's invalidate lands first`, async () => {
     expect(state.cleared).toBe(0);
 });
 
-/* …and a refusal from a box NOBODY ASKED ABOUT says nothing about the credential either. Clearing the proof
- * turns Google's automatic re-authentication off, so the next mint anywhere in the app is a visible gate: far
- * too much to spend on a poll of a machine the reader is not looking at, whose likelier explanations (a sandbox
- * bound to another account, a member since removed) are not about the token at all. */
+// A background refusal says nothing about the credential either; clearing it would force a visible gate everywhere.
 it(`a background exchange refused with 401 keeps the Google proof`, async () => {
     state.cachedIdToken = `cached-token`;
     vi.stubGlobal(
@@ -404,8 +364,8 @@ it(`a background exchange refused with 401 keeps the Google proof`, async () => 
     expect(localStorage.getItem(`intentic.session.sb-2`)).toBeNull();
 });
 
-// Loopback: no sandbox id to key a session by, so the raw Google proof is the bearer. It is the only caller
-// that still spends one, and a rejection has to throw it away or a dead token is replayed forever.
+// Loopback has no sandbox id to key a session by, so the raw Google proof is the bearer, and is the one still
+// cleared on rejection.
 it(`a rejected raw Google proof still clears it, so a dead token cannot be replayed forever`, async () => {
     const { useSandboxSession } = await load();
     const { getSessionToken, rejectSessionToken } = useSandboxSession();
@@ -417,8 +377,7 @@ it(`a rejected raw Google proof still clears it, so a dead token cannot be repla
     expect(state.cleared).toBe(1);
 });
 
-// A session already superseded (a background renewal, the other window's write) was not the one refused, and
-// retiring its successor spends a round trip on a credential nothing has rejected.
+// A session already replaced (a renewal, another window's write) was not the one refused.
 it(`a rejection that names a superseded session leaves the current one alone`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ token: `sess-current` }));
     const { useSandboxSession } = await load();
@@ -431,8 +390,6 @@ it(`a rejection that names a superseded session leaves the current one alone`, a
     expect(state.cleared).toBe(0);
 });
 
-// One sandbox's 401 used to discard a session ANOTHER sandbox had just minted, because the generation guard
-// was a single counter: the exchange landed, the write was skipped, and the next call established again.
 it(`invalidating one sandbox does not discard a session another sandbox just minted`, async () => {
     let answer: ((response: Response) => void) | undefined;
     vi.stubGlobal(
@@ -456,10 +413,6 @@ it(`invalidating one sandbox does not discard a session another sandbox just min
     expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-sb1`);
 });
 
-/* THE GATE MUST NOT OUTLIVE ITS REASON. Establishing a session parks on a Google mint, and the mint raises a
- * window-wide overlay (immediately when Google skips the prompt, five seconds later otherwise). Switching away
- * used to leave it standing over the sandbox the user moved TO — one that needs nothing — and every window of
- * the app showed it at once, because the popped-out panels follow the active sandbox. */
 it(`a switch away settles the sign-in left parked for the sandbox being left`, async () => {
     state.mintParks = true; // The establish is waiting on Google, which is what puts the gate up.
     const { useSandboxSession } = await load();

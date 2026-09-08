@@ -8,68 +8,25 @@ import type { Logger } from "pino";
 import { closeBrowserSessionsFor, runningBrowserOwners } from "../../browser/sessions/browser-sessions.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, scanProcesses, signalFor } from "./leftovers.js";
 
-/* THE REAPER, everything a conversation holds, reclaimed on one clock, from one place.
- *
- * A conversation that stops leaves things behind, and before this module each kind had its own custodian on its
- * own schedule: stamped processes on a 3-minute grace (leftovers), tmux sessions on a 2-hour idle sweep that
- * never touched a live pane at all, browser records on a prune nobody triggered, and /tmp on nothing. The sum
- * read as "cleanup exists"; the machine read 17 idle terminals, a fleet of orphaned dev servers, and a sandbox
- * swapping itself to death. The policies were not wrong one by one, they were never one policy.
- *
- * Now they are. The unit of ownership is the CONVERSATION (the same owner the workload stamp carries and the
- * turn registry reports on), the unit of time is "how long since it stopped", and every resource kind hangs off
- * that single clock:
- *
- *   · processes  , stamped with the owner (platform/leftovers.ts), SIGTERM → SIGKILL once the owner has been
- *                   stopped past PROCESS_GRACE. Pane-descended trees are exempt while their pane lives, because
- *                   the session below owns them as a unit.
- *   · terminals  , the conversation's `agent-*` tmux sessions, live panes INCLUDED, killed once the owner has
- *                   been stopped past TERMINAL_GRACE and nobody is attached. A watched session survives while
- *                   it is watched; detaching hands it to the next pass. This deliberately ends the era of the
- *                   immortal left-behind dev server.
- *   · browsers   , the daemon-side records close with the turn (Chromium itself is part of the stamped tree
- *                   and dies with it); the reaper is the backstop for records whose disconnect never fired.
- *   · disk       , the /tmp state turns mint (tmux-run capture dirs, land/classify patch dirs, delegation
- *                   signals), swept hourly by name prefix and age. Worktrees are NOT here: they are the user's
- *                   work, and archive/discard owns them (agents/archive.ts).
- *
- * "Stopped" means the turn registry reports no run in flight, the same fact the chat, the fleet card and the
- * journal key on. The settle event seeds the clock exactly (onOwnerStopped), so a stop is acted on GRACE after
- * it happened, not GRACE after a timer noticed; after a daemon restart the clock starts at first sight, which
- * only ever errs toward patience.
- *
- * Archive and discard are the hard stop: the user has filed the conversation away (or destroyed it), so its
- * resources go NOW, attached viewers included on discard, reapConversation(id, { force: true }).
- *
- * The tmux side is attributed by the `@intentic_owner` session option (set by bin/tmux-run at session creation,
- * from the same stamp the processes carry), so a session names its owner even after every pane in it has died
- * and there is no environ left to read. A session with no owner option is judged by its own idle clock instead:
- * fresh-state rules, no second policy for how it got that way. */
+// Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
+// turn registry reports it stopped, on one clock instead of one policy per resource kind. Archive and discard bypass
+// the grace and reap immediately, attached terminals included.
 
 const execFileAsync = promisify(execFile);
 
-// tmux user option carrying the owning conversation id, set once per session by bin/tmux-run, read back by
-// the sweep's list format. Contract between exactly those two places.
+// tmux user option carrying the owning conversation id; set once by bin/tmux-run, read back by the sweep.
 const TMUX_OWNER_OPTION = "@intentic_owner";
 
-/* HOW LONG AN OWNER MAY BE STOPPED before each kind of resource goes.
- *
- * Processes: long enough that a turn's own unwind, the SDK's stdin-EOF, its grace, its SIGTERM, and whatever
- * the CLI then does to its MCP servers, has plainly had its chance and not taken it. Terminals: long enough
- * that the Bash card of the turn that just ended still opens a live scrollback, and that a follow-up message
- * sent minutes later finds its background job still there, then gone, because every pane's bytes are already
- * in the terminal logs and the transcript holds the commands. The tab was never the record. */
+// How long a stopped owner's resources wait before reclaim: processes wait out their own SDK unwind and SIGTERM chain;
+// terminals wait long enough for a live scrollback and a delayed follow-up message to still find their job.
 const PROCESS_GRACE_MS = 2 * 60_000;
 const TERMINAL_GRACE_MS = 10 * 60_000;
 
 const SWEEP_INTERVAL_MS = 60_000;
 const DISK_SWEEP_INTERVAL_MS = 3_600_000;
 
-/* The /tmp state turns leave behind, swept by prefix + age. `intentic-run-` is a tmux-run capture dir whose
- * wrapper never got to its own `rm -rf` (soft-timeout returns early on purpose; SIGKILL skips traps), a day
- * covers any command still legitimately streaming into one. The patch dirs are land/classify workspaces whose
- * in-line cleanup a crash skipped. Delegation signal files are deleted the moment they are folded, so anything
- * still there after a day is a spool orphan (a hook that fired while no daemon lived). */
+// Prefix-and-age sweep for /tmp state a crashed or soft-timed-out turn can leave behind (capture dirs, patch dirs,
+// delegation signal files); worktrees are not here, archive/discard owns those.
 const TMP_SWEEPS: readonly { readonly prefix: string; readonly maxAgeMs: number }[] = [
     { prefix: "intentic-run-", maxAgeMs: 24 * 3_600_000 },
     { prefix: "intentic-classify-", maxAgeMs: 6 * 3_600_000 },
@@ -77,7 +34,7 @@ const TMP_SWEEPS: readonly { readonly prefix: string; readonly maxAgeMs: number 
 ];
 const SIGNALS_SWEEP = { dir: join(tmpdir(), "intentic", "agent-signals"), maxAgeMs: 24 * 3_600_000 };
 
-// One agent tmux session as the sweep sees it: who owns it, whether anyone is watching, when it last moved.
+// One agent tmux session as the sweep sees it: owner, whether attached, last activity.
 export interface AgentSessionState {
     readonly name: string;
     readonly owner: string | undefined;
@@ -85,13 +42,11 @@ export interface AgentSessionState {
     readonly activityAt: number;
 }
 
-// The list format below, tab-separated because the owner field may be empty, and a space-split would shift
-// every field after a hole.
+// Tab-separated: the owner field may be empty, and a space split would shift every field after it.
 const SESSION_FORMAT = `#{session_name}\t#{${TMUX_OWNER_OPTION}}\t#{session_attached}\t#{session_activity}`;
 
-// The pure parse, one row per SESSION (list-sessions, not list-panes: the decision below needs no per-pane
-// fact, pane liveness deliberately does not matter to it). An unparseable activity stamp reads as "just now":
-// the flag gates a kill, so the safe direction is "keep".
+// Parses one row per session, not per pane; pane liveness does not matter here. An unparseable activity stamp reads as
+// "just now", the safe direction since it gates a kill.
 export const parseAgentSessions = (stdout: string, now: number): AgentSessionState[] => {
     const sessions: AgentSessionState[] = [];
     for (const line of stdout.split("\n")) {
@@ -111,19 +66,15 @@ export const parseAgentSessions = (stdout: string, now: number): AgentSessionSta
 };
 
 export interface TerminalPolicy {
-    // Since when this owner has had no run in flight, undefined means it is live (or unknown, which the
-    // caller seeds as "first seen now" before asking).
+    // Since when this owner has had no run in flight; undefined means live, or not yet known to the caller.
     readonly ownerStoppedSince: (owner: string) => number | undefined;
-    // Sessions of turns in flight, by name, the belt to the owner clock's braces: a live turn's session is
-    // never reaped even if its owner attribution failed.
+    // Sessions of turns in flight, by name; a live turn's session is never reaped even without owner attribution.
     readonly liveNames: ReadonlySet<string>;
     readonly graceMs: number;
 }
 
-/* The pure decision: which agent sessions go this pass. Attached is absolute (someone is LOOKING at it, the
- * kill button in the panel is theirs to press); an owned session goes when its owner has been stopped past the
- * grace; an unowned one is judged by its own idle clock against the same grace, because a session nobody can
- * attribute is not entitled to a longer afterlife than one somebody can. */
+// Which agent sessions go this pass. Attached is absolute; an owned session goes once stopped past grace, an unowned
+// one is judged by its own idle clock against the same grace.
 export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[], now: number, policy: TerminalPolicy): string[] =>
     sessions
         .filter((session) => {
@@ -139,16 +90,15 @@ export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[]
         .map((session) => session.name);
 
 export interface ReaperDeps {
-    // Whether this owner still has a run in flight, the turn registry's answer (plus the reserved owners).
+    // Whether this owner still has a run in flight, per the turn registry (plus the reserved owners).
     readonly ownerLive: (owner: string) => boolean;
-    // Whether this owner is a conversation this daemon's registry knows, the out-of-group licence
-    // (platform/leftovers.ts LeftoverPolicy.ownerKnown).
+    // Whether this owner is a conversation this daemon's registry knows (leftovers.ts LeftoverPolicy.ownerKnown).
     readonly ownerKnown: (owner: string) => boolean;
-    // The tmux session names of turns in flight (registry's live session ids, name-derived).
+    // tmux session names of turns in flight.
     readonly liveSessionNames: () => ReadonlySet<string>;
-    // Every live tmux pane's root pid, the pane exemption's input, shared with the ports scan.
+    // Every live tmux pane's root pid, shared with the ports scan.
     readonly panePids: () => Promise<Map<number, string>>;
-    // The settle event: fires with the conversation id the moment a run finishes, seeding the stop clock.
+    // Fires with the conversation id the moment a run finishes, seeding the stop clock.
     readonly onOwnerStopped: (listener: (owner: string) => void) => () => void;
     readonly logger: Logger;
     readonly processGraceMs?: number;
@@ -159,10 +109,10 @@ export interface ReaperDeps {
 export interface ResourceReaper {
     readonly start: () => void;
     readonly stop: () => void;
-    // One full pass, exposed for boot and tests. Never rejects.
+    // One full sweep pass, exposed for boot and tests; never rejects.
     readonly sweep: () => Promise<void>;
-    // The hard stop: everything this conversation holds goes now. `force` includes attached terminals, discard
-    // and archive have already decided the conversation is over, watchers included.
+    // Reaps everything this conversation holds immediately. `force` also kills attached terminals, for archive and
+    // discard, which have already decided the conversation is over.
     readonly reapConversation: (owner: string, options?: { readonly force?: boolean }) => Promise<void>;
     readonly metrics: () => Readonly<Record<string, number>>;
 }
@@ -176,7 +126,7 @@ const listAgentSessions = async (now: number): Promise<AgentSessionState[]> => {
         const { stdout } = await execFileAsync("tmux", ["list-sessions", "-F", SESSION_FORMAT]);
         return parseAgentSessions(stdout, now);
     } catch {
-        // No tmux server ⇒ nothing of ours runs in a terminal.
+        // No tmux server: nothing of ours runs in a terminal.
         return [];
     }
 };
@@ -188,12 +138,9 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
 
-    /* The stop clock: owner → when it was first known to be stopped. Seeded exactly by the settle event, lazily
-     * by the sweep for stops nobody announced (a daemon restart), and cleared the moment the owner runs again,
-     * so a follow-up message resets every grace window it is entitled to. */
+    // Owner → when first known stopped; cleared when the owner runs again, resetting its grace window.
     const stoppedAt = new Map<string, number>();
-    // Process-sweep state: since when a pid has been unowned, and which pids were already asked nicely. Both
-    // pruned to what the current pass can still see, so an exited (or reused) pid carries nothing forward.
+    // Since when a pid has been unowned, and which pids were already asked; both pruned to pids still visible.
     const unownedSince = new Map<number, number>();
     const asked = new Set<number>();
     let lastDiskSweep = 0;
@@ -242,7 +189,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                 reclaimed.push(leftover);
                 asked.add(leftover.pid);
             } catch {
-                // Already gone, or not ours to signal. Either way the next pass sees the truth.
+                // Already gone, or not ours to signal; the next pass sees the truth.
             }
         }
         if (reclaimed.length > 0) {
@@ -270,10 +217,8 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         logger.info({ count: names.length, sessions: names.slice(0, 10) }, "reaper: killed terminals of stopped conversations");
     };
 
-    // Browser records whose owner has stopped: Chromium itself is part of the stamped tree (the process sweep's
-    // business); this closes the observer record, and with it any Chromium whose disconnect never fired. Every
-    // running record's owner is put on the stop clock here, so a conversation that browsed without ever opening
-    // a terminal still closes on schedule.
+    // Closes browser records of owners that have stopped; Chromium itself is reaped by the process sweep. Puts every
+    // running record's owner on the stop clock, so browsing alone still closes on schedule.
     const sweepBrowsers = async (now: number): Promise<void> => {
         const owners = new Set<string>();
         for (const owner of runningBrowserOwners()) {
@@ -285,8 +230,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         await Promise.all([...owners].map((owner) => closeBrowserSessionsFor(owner)));
     };
 
-    /* A capture dir's own mtime freezes at creation (appends inside move only the file), so a directory is
-     * judged by the newest thing IN it, a dev server still tee-ing into its `out` a day later keeps its dir. */
+    // A directory's own mtime freezes at creation, so age is judged by the newest file inside it.
     const newestMtime = async (path: string): Promise<number | undefined> => {
         const stats = await stat(path).catch(() => undefined);
         if (stats === undefined) {
@@ -351,10 +295,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         running = true;
         try {
             const now = Date.now();
-            /* The stop clock is pruned by liveness on read (ownerStoppedSince); owners nothing references any
-             * more are dropped here so the map cannot grow one entry per conversation forever. A day, not a
-             * multiple of the graces: an ATTACHED terminal of a stopped conversation legitimately outlives
-             * every grace, and pruning its owner's clock would restart the wait each time someone detached. */
+            // Drops stale owners so the map cannot grow forever; pruned by a day, not a grace.
             for (const [owner, since] of stoppedAt) {
                 if (now - since > 24 * 3_600_000) {
                     stoppedAt.delete(owner);
@@ -379,8 +320,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
             await Promise.all(mine.map((session) => killSession(session.name)));
             await closeBrowserSessionsFor(owner);
             if (group !== undefined && process.platform === "linux") {
-                // The conversation is over by decree, so its stamped processes get their SIGTERM now, pane
-                // trees included, whose sessions died above. Survivors meet SIGKILL on the interval sweep.
+                // The conversation is over: SIGTERM its processes now; survivors meet SIGKILL on the interval sweep.
                 const [scanned, panes] = await Promise.all([scanProcesses(), deps.panePids().catch(() => new Map<number, string>())]);
                 const mineToo = leftoverProcesses(scanned, {
                     group,
@@ -414,9 +354,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
         timer.unref();
         unsubscribe = deps.onOwnerStopped((owner) => {
             stoppedAt.set(owner, Date.now());
-            /* Act GRACE after the stop, not GRACE after a timer notices the stop: one pass at each grace edge
-             * (plus slack for the clocks to agree), so the longest a resource outlives its conversation is the
-             * grace itself. The interval remains the backstop for everything event-less. */
+            // Acts grace after the stop, not after a timer notices it, via one scheduled pass per grace edge.
             for (const delay of [processGraceMs + 2_000, terminalGraceMs + 2_000]) {
                 const edge = setTimeout(() => {
                     scheduled.delete(edge);

@@ -1,14 +1,14 @@
 import type { RecallDb } from "../store/db.js";
 
-// Matches iq-engine's RECENCY_HALF_LIFE_DAYS: a two-week-old association is worth half a fresh one.
+// Mirrors iq-engine's RECENCY_HALF_LIFE_DAYS: a two-week-old association is worth half a fresh one.
 const HALF_LIFE_DAYS = 14;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const decayOf = (ts: number, now: number): number => 2 ** (-Math.max(0, now - ts) / (HALF_LIFE_DAYS * DAY_MS));
 
-// User text → FTS5 query: bare tokens OR-ed, each quoted so operators/punctuation can't break the parser.
-// OR (not implicit AND) because prompts paraphrase. BM25 still ranks fuller matches higher.
+// User text to FTS5 query: bare tokens OR-ed and quoted so operators/punctuation can't break the parser; OR since
+// prompts paraphrase, BM25 still favors fuller matches.
 export const ftsQueryOf = (query: string): string | undefined => {
     const tokens = query.match(/[\p{L}\p{N}_$]+/gu);
     if (tokens === null || tokens.length === 0) {
@@ -27,7 +27,7 @@ const chunked = <T>(items: readonly T[], size: number): T[][] => {
 
 const inList = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
 
-// Inverse ubiquity: files touched in nearly every session (package.json, configs) carry no topical signal.
+// Inverse ubiquity: a file touched in nearly every session (package.json, configs) carries no topical signal.
 export const fileIdf = (db: RecallDb, paths: readonly string[]): Map<string, number> => {
     const total = Number(db.get("SELECT COUNT(*) AS n FROM sessions")?.["n"] ?? 0);
     const idf = new Map<string, number>();
@@ -52,12 +52,10 @@ export interface MatchingTurn {
     readonly score: number;
 }
 
-// Prompt counts double the response: the typed prompt states intent, the answer adds recall vocabulary.
-// Per-column BM25 stats mean a prompt-only match scores exactly as it did before responses were indexed, so
-// the fixture-tuned strong-match thresholds keep their calibration.
+// Prompt weighted 2x response: intent's in the prompt; per-column split keeps score calibration intact.
 export const TURN_BM25 = "-bm25(turns_fts, 1.0, 0.5)";
 
-// Turns whose prompt or response matches the query, with bm25 sign-flipped to positive-better.
+// Turns whose prompt or response matches the query; bm25 is sign-flipped to positive-better.
 export const matchingTurns = (db: RecallDb, fts: string, sinceTs: number): MatchingTurn[] =>
     db
         .all(
@@ -69,7 +67,7 @@ export const matchingTurns = (db: RecallDb, fts: string, sinceTs: number): Match
         )
         .map((row) => ({ turnId: Number(row["id"]), sessionRowId: Number(row["session"]), ts: Number(row["ts"]), score: Number(row["score"]) }));
 
-// Session-row-id → title bm25 score (positive-better) for sessions whose ai-title matches the query.
+// Session row id to title bm25 score (positive-better), for sessions whose ai-title matches the query.
 export const matchingTitles = (db: RecallDb, fts: string): Map<number, number> =>
     new Map(
         db
@@ -95,8 +93,8 @@ export interface TopicOptions {
     readonly limit?: number;
 }
 
-// Feature A: files that past sessions associated with this topic, ranked by prompt/title BM25 × recency
-// decay × inverse ubiquity, with modified files weighted over merely-read ones.
+// Files past sessions associated with this topic, ranked by prompt/title BM25 × recency decay × inverse ubiquity;
+// modified files score higher than merely-read ones.
 export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOptions = {}): TopicFile[] => {
     const fts = ftsQueryOf(query);
     if (fts === undefined) {
@@ -157,7 +155,7 @@ export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOpt
         .slice(0, options.limit ?? 20);
 };
 
-// All distinct files a session touched (workspace-relative).
+// All distinct files a session touched, workspace-relative.
 export const sessionFiles = (db: RecallDb, sessionRowId: number): Set<string> =>
     new Set(
         db

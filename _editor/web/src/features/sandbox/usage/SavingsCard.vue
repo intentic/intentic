@@ -1,29 +1,12 @@
 <script setup lang="ts">
 import { Card, InfoHint, Verdict, type VerdictTone } from "@intentic/ui";
 
-/* ONE savings card's frame, and the same frame for all three, which is the whole point of it existing.
- *
- * The three mechanisms this section reports on measure different things in different units and two of them are
- * experiments, so the cards used to be written independently and drifted into three layouts: one led with a
- * percentage, the other two led with a methodology tag and opened with a paragraph. A
- * reader could not scan the row, because there was no slot that held the answer on every card.
- *
- * So the frame fixes four positions, and a card may only fill them:
- *
- *   TITLE (i)   what is being measured, one line, with the method behind the hint
- *   VERDICT     the answer, at the same size and in the same place on every card: "25%", "↓12%", "Measuring",
- *               "Off". A word when there is no figure: the state IS the answer, and it belongs where the eye
- *               already is rather than four lines down in 11px prose.
- *   BODY        the evidence: the bar, the arms, or what to switch on.
- *   FOOTNOTE    provenance. Bottom-aligned so the row's footnotes share a baseline whatever the bodies do.
- *
- * The method text moves into the hint rather than being deleted: it is right, it is what makes the numbers
- * trustworthy, and it is not what anyone is reading the card FOR. Hover/focus is the correct altitude for it.
- *
- * THE VERDICT SLOT IS <Verdict>, at the card rank, and this file no longer owns how it is drawn. It used to
- * carry its own three-entry tone map — the same three entries, verbatim, as the agent settings' measurement
- * block, which reports the SAME experiments one tab away and drew them in its own language. Two copies of a
- * tone map is not an expensive bug; it is the tell that the two files were one component at two sizes. */
+// One frame shared by all three savings cards, with four fixed slots:
+//   TITLE: what is measured, with the method behind an info hint
+//   VERDICT: the answer, same size and place on every card (a word like "Measuring" when there's no figure)
+//   BODY: the evidence (bar, arms, or a toggle)
+//   FOOTNOTE: provenance, bottom-aligned across the row
+// The verdict slot is `<Verdict>`, owned by the design system, not this file.
 
 defineProps<{
     title: string;
@@ -35,9 +18,10 @@ defineProps<{
 </script>
 
 <template>
-    <!-- @container, so the body can lay itself out against the CARD rather than the viewport. At this depth the
-         two have nothing to do with each other: the rail, the chat panel and the tab's own padding sit between
-         them, which is how a "3 columns at xl" grid came to draw 215px cards on a 1280px screen. -->
+    <!--
+        `@container`: the body lays out against the card, not the viewport, which sit many nested widths apart (rail,
+        chat panel, tab padding).
+    -->
     <Card class="@container flex min-w-0 flex-col gap-3">
         <div class="flex items-start justify-between gap-2">
             <h3 class="text-sm font-semibold text-content">{{ title }}</h3>
@@ -46,8 +30,7 @@ defineProps<{
             </InfoHint>
         </div>
 
-        <!-- Verdict and unit on one baseline, at the card rank. The unit is not decoration: "↓12%" alone does
-             not say twelve percent of what, and the two experiments are scored on different metrics. -->
+        <!-- Unit is not decoration: "down 12%" alone doesn't say of what, and the two experiments use different metrics. -->
         <Verdict size="lg" :value="value" :unit="unit" :tone="tone" />
 
         <slot />

@@ -1,19 +1,6 @@
-/* Section anchors and the "On this page" list, derived from the page's own rendered HTML.
- *
- * WHY DERIVED AND NOT AUTHORED. Before this, six of the docs site's 148 section headings had an `id`. The other
- * 142 could not be linked to, bookmarked, shared, or jumped to: on pages up to nine screens long, several of
- * which are pure lookup material nobody reads top to bottom. Authoring 142 ids by hand fixes it once and then
- * decays, because the next heading someone writes will not have one and nothing will complain.
- *
- * So DocsLayout renders its slot to a string and passes it through here: every prose heading comes back with a
- * stable id and an anchor control, and the same pass yields the section list the rail renders. A new page gets
- * both for free, and a renamed heading takes its anchor with it.
- *
- * WHICH HEADINGS COUNT. Prose headings are written bare: `<h2>` and `<h3>` with no attributes, while the ones
- * inside card grids and embedded panels carry Tailwind classes. That is the discriminator: a heading with a
- * `class` is furniture inside a component and does not belong in a page's table of contents. A heading that
- * already has an `id` keeps it, because six pages' worth of deep links are already published against those.
- */
+// Section anchors and the "On this page" list, derived from the page rendered HTML rather than authored by hand, so a
+// new heading always gets one. A bare `<h2>`/`<h3>` (no `class`) is a prose heading; one with `class` is component
+// furniture and is skipped. An existing `id` is kept.
 
 export interface DocsHeading {
     /** Anchor target, without the "#". */
@@ -45,12 +32,7 @@ function plainText(html: string): string {
         .trim();
 }
 
-/**
- * "contributes.processes and contributes.listener" → "contributes-processes-and-contributes-listener"
- *
- * Dots and slashes become hyphens rather than vanishing, so `api.views` and `apiviews` cannot collide, and the
- * result stays readable in a URL bar: a shared link should say which section it points at.
- */
+/** Dots and slashes become hyphens, not gaps, so `api.views` and `apiviews` cannot collide in the resulting slug. */
 function slugify(text: string): string {
     return (
         text
@@ -63,30 +45,18 @@ function slugify(text: string): string {
 
 const ANCHOR_LABEL = "Copy link to this section";
 
-/* The anchor control sits INSIDE the heading, after its text, and is invisible until the heading is hovered or
- * the control is focused: a permanent "#" beside every heading is visual noise on a page with twelve of them.
- * It is a real link, so middle-click and "copy link address" work; the click handler that copies it to the
- * clipboard is progressive enhancement on top. */
+// Anchor sits inside the heading, hidden until hover or focus; a real `<a>` so middle-click and copy-link-address work,
+// with a click handler that copies it as enhancement.
 function anchorMarkup(id: string): string {
     return `<a class="docs-anchor" href="#${id}" aria-label="${ANCHOR_LABEL}" title="${ANCHOR_LABEL}">` + `<span aria-hidden="true">#</span></a>`;
 }
 
 /**
- * Fail the build if a `<code>` has swallowed the rest of the page.
- *
- * WHY THIS EXISTS. An Astro expression inside a `<code>` inside a `<table>`, such as `<code>{"{repo}"}</code>`,
- * is the ordinary way to print a literal brace. It makes the compiler emit an opening `<code>` it never closes, just after
- * the table. Every heading, paragraph and table from there to the foot of the page then renders in the monospace
- * face, and the tail of it on the dark code background. It shipped that way on the two longest reference pages,
- * which are the two people arrive at from search with a specific question.
- *
- * It is invisible in the source, invisible in a diff, and the open and close tag counts still balance, so nothing
- * downstream notices. The fix at each site is `<code set:text="{repo}" />`; this is the guard that makes forgetting
- * it loud.
+ * Fails the build if an Astro expression inside a `<code>` inside a `<table>` leaves the `<code>` unclosed, silently
+ * rendering the rest of the page as code. Fix at the source: `<code set:text="..." />`.
  */
 export function assertNoCodeBleed(html: string, pageId: string): void {
-    // One pass, tracking how deep we are inside <code>. Cheaper and more honest than a parser: the artifact we are
-    // hunting is precisely a depth that never returns to zero.
+    // One pass tracking `<code>` nesting depth; the bug is exactly a depth that never returns to zero.
     let depth = 0;
     const tags = /<(\/?)code[\s>]|<(h[23]|p|table)[\s>]/g;
     for (let match = tags.exec(html); match !== null; match = tags.exec(html)) {
@@ -109,8 +79,7 @@ export function assertNoCodeBleed(html: string, pageId: string): void {
 }
 
 /**
- * Give every prose heading an id and an anchor, and report the headings found.
- *
+ * Gives every prose heading an id and an anchor; returns the headings found.
  * @param html The page's rendered content, from `Astro.slots.render("default")`.
  */
 export function extractDocsContent(html: string): DocsContent {
@@ -132,8 +101,7 @@ export function extractDocsContent(html: string): DocsContent {
 
         const authored = /\sid="([^"]*)"/.exec(attrs)?.[1];
         let id = authored ?? slugify(text);
-        // Two sections can legitimately share a name across a page; the second gets a suffix so both remain
-        // reachable rather than the first silently swallowing the link.
+        // Two headings can share a name; the second gets a numeric suffix so both stay linkable.
         if (used.has(id)) {
             let suffix = 2;
             while (used.has(`${id}-${suffix}`)) {

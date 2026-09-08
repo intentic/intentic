@@ -6,20 +6,14 @@ import { useEditBuffers } from "../files/useEditBuffers";
 import type { WorkspaceTab } from "./workspaceTabs";
 import { basename } from "@intentic/ui/path";
 
-/* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or generated workspace surface.
- * Presentational: selection/close are emitted up to Workspace.vue by tab id, which drives the tab list +
- * active id (useWorkspaceTabs), and embeds this strip in its tab row (which provides the bar's
- * border/background). A file tab shows its type icon, basename, and a close ×; a dirty file shows a dot in
- * the close slot (→ × on hover). A diff tab shows its status letter + basename and is never dirty. The one tab
- * in the preview slot is drawn italic and promoted out of
- * it by a double-click, exactly as VSCode does. */
+// Open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or workspace surface. Presentational:
+// selection/close emit up to Workspace.vue by tab id (useWorkspaceTabs drives the list). The preview-slot tab draws
+// italic and is promoted permanent by double-click.
 
-// `preview` is the one transient tab, if any (see OpenMode): drawn italic, like VSCode's, because it is going
-// to be replaced by the next file the user looks at.
+// `preview`: the one transient tab, if any, drawn italic until replaced by the next file looked at.
 const { tabs, active, preview } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: string | null; preview?: string | null }>();
-// `contextmenu` carries the right-clicked tab's id, or undefined when the click landed on the strip's empty
-// space: the parent owns both menus, so it decides which rows a tab-less right-click deserves. `keep` is the
-// double-click that makes a preview tab permanent.
+// `contextmenu` id is undefined when the click lands on empty strip space; the parent decides that menu's rows.
+// `keep` is the double-click that makes a preview tab permanent.
 const emit = defineEmits<{
     select: [id: string];
     keep: [id: string];
@@ -30,16 +24,14 @@ const emit = defineEmits<{
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
 
-// A file the sandbox keeps to itself wears the padlock in the strip too, so the tab matches the row that opened
-// it and the reason is on screen from the moment it appears (isLockedWorkspacePath; FileLocked says the rest).
+// Locked files show a padlock in the tab too, matching the row that opened them (isLockedWorkspacePath).
 const fileIcon = (path: string): IconName => (isLockedWorkspacePath(path) ? `lock` : iconForEntry(basename(path), `file`));
 
 const tabLabel = (tab: WorkspaceTab): string => {
     if (tab.kind === `directory`) {
         return basename(tab.dir);
     }
-    // A document is named for the DIRECTORY it explains, not for the document family: the strip is a list of
-    // subjects, and "Architecture" three times over would name none of them. The family is in the tooltip.
+    // Named for the directory it explains, not the family, or every 'Architecture' tab looks the same.
     if (tab.kind === `document`) {
         return basename(tab.path);
     }
@@ -57,8 +49,7 @@ const tabSubject = (tab: WorkspaceTab): string => {
     }
     return tab.kind === `diff` ? `${tab.label} (diff)` : tab.path;
 };
-// The preview tab's tooltip carries the gesture that keeps it: a double-click is the one affordance the tab
-// itself has no room to show, and the italic alone doesn't say what to do about it.
+// Preview tab's tooltip names the double-click gesture that keeps it; italic alone doesn't say how.
 const tabHint = (tab: WorkspaceTab): string => (tab.id === preview ? `${tabSubject(tab)} · double-click to keep open` : tabSubject(tab));
 
 const onClose = (event: Event, id: string): void => {
@@ -67,9 +58,8 @@ const onClose = (event: Event, id: string): void => {
     emit(`close`, id);
 };
 
-/* Overlay scrollbar. The native bar is hidden (it would eat 6px of the fixed-height row and shove the tab
- * text up); instead the strip scrolls via scrollLeft: mouse wheel, or dragging this thumb, and a thin thumb
- * floats over the bottom edge, revealed on hover. `thumbWidth === 0` means no overflow (thumb hidden). */
+// Overlay scrollbar: native bar hidden (it would shove the tab text up), so the strip scrolls via scrollLeft
+// (wheel or dragging this thumb). `thumbWidth === 0` means no overflow, thumb hidden.
 const scroller = ref<HTMLElement>();
 const thumbLeft = ref(0); // %
 const thumbWidth = ref(0); // %, 0 ⇒ everything fits, no thumb
@@ -97,7 +87,7 @@ const onWheel = (event: WheelEvent): void => {
     updateThumb();
 };
 
-// Drag the thumb: thumb travel maps to content travel by scrollWidth/clientWidth (inverse of the thumb ratio).
+// Drag the thumb: travel maps to content by scrollWidth/clientWidth (inverse of the thumb's ratio).
 const dragging = ref(false);
 let startX = 0;
 let startLeft = 0;
@@ -124,11 +114,8 @@ const onThumbUp = (event: PointerEvent): void => {
     (event.target as HTMLElement).releasePointerCapture(event.pointerId);
 };
 
-/* Keeping the focused tab in view. Almost nothing that focuses a tab is inside this strip: a row in the file
- * tree, a Changes or Checkpoints row, a restored strip on reload, so once the strip overflows, the tab any of
- * them opens can sit past its right edge, and a strip that stays put reads as a click that did nothing.
- * `nearest` moves the least it can and no-ops on a tab already visible, so clicking a tab here never shifts it
- * out from under the pointer. */
+// Keeps the focused tab in view: most things that focus a tab (file tree, Changes, a reload) live outside this
+// strip, so an overflowing strip can leave it off-screen. `nearest` moves least and no-ops if already visible.
 const tabEls = new Map<string, HTMLElement>();
 const setTabEl = (id: string, el: unknown): void => {
     if (el) {
@@ -138,7 +125,7 @@ const setTabEl = (id: string, el: unknown): void => {
     }
 };
 
-// A newly opened tab is one tick away from existing, so the reveal waits for the DOM the focus change produced.
+// A newly opened tab is one tick from existing; reveal waits for the DOM the focus change produced.
 const revealActive = async (): Promise<void> => {
     await nextTick();
     if (active === null || active === undefined) {
@@ -146,7 +133,7 @@ const revealActive = async (): Promise<void> => {
     }
     tabEls.get(active)?.scrollIntoView({ block: `nearest`, inline: `nearest` });
 };
-// `immediate` is the reload: the strip mounts already focused, on a tab that may be well past the right edge.
+// `immediate` covers reload: the strip can mount already focused on a tab past the right edge.
 watch(() => active, revealActive, { immediate: true });
 
 let observer: ResizeObserver | undefined;
@@ -154,7 +141,7 @@ onMounted(() => {
     updateThumb();
     observer = new ResizeObserver(() => {
         updateThumb();
-        // A strip that just got narrower (explorer reopened, window resized) can leave the focused tab behind it.
+        // A narrower strip (explorer reopened, window resized) can leave the focused tab behind.
         void revealActive();
     });
     if (scroller.value !== undefined) {
@@ -171,12 +158,10 @@ watch(
 
 <template>
     <div class="group/tabs relative flex min-w-0 flex-1">
-        <!-- A right-click that lands on the scroller ITSELF (past the last tab) is the strip's own menu; a tab
-             stops its own event before it gets here.
-
-             The native horizontal scrollbar is hidden by `.scrollbar-none` (ui styles/utilities.css): it would
-             take 6px off the fixed-height row and push the tab text up. Scrolling still works via scrollLeft (the
-             wheel handler + the overlay thumb below), which is the condition that utility documents for its use. -->
+        <!--
+            Right-click past the last tab (on the scroller itself) is the strip's own menu; a tab stops its own event first.
+            `.scrollbar-none` hides the native bar; scrollLeft (wheel + the thumb below) still works.
+        -->
         <div
             ref="scroller"
             class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto"
@@ -208,11 +193,10 @@ watch(
                 />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
-                <!-- The provider's own glyph, an open string like every extension-supplied icon (a bundle may name
-                     one this app has never heard of): an unknown name renders the set's fallback, never an error. -->
+                <!-- Provider's own glyph, an open string; an unknown name falls back in the icon set rather than erroring. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
-                <!-- Italic slants past its box; truncate clips the last glyph unless we leave room on the right. -->
+                <!-- Italic slants past its box; truncate would clip the last glyph without room on the right. -->
                 <span class="max-w-40 truncate" :class="tab.id === preview ? `pr-[0.2em] italic` : ``">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
                     <Icon

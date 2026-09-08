@@ -13,17 +13,12 @@ import { fileLoopsStore } from "../loops/loops-store.js";
 import { createGateRoute } from "./gate.routes.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 
-/* The public door, end to end: a pipeline runner with no identity POSTs, waits, and is told whether to ship.
- *
- * EVERY TEST USES ITS OWN WORKFLOW ID. The daily ceiling is a module singleton keyed by workflow, which is
- * the right shape for a daemon and a trap for a test file, since one shared id would make the ceiling test
- * silently spend the other tests' allowance.
- */
+// Gate route end to end: an identity-less runner posts, waits, and is told whether to ship. Each test uses its own
+// workflow id: the ceiling is a module singleton keyed by workflow, so ids must not collide.
 
 const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
 
-// ONE door store for the file: every test names its own workflow id, so the credentials never collide, and
-// `post` below presents the one the door was issued, exactly as an operator copies it off the gate panel.
+// One door store for the file: each test names its own workflow id, so credentials never collide.
 const DOORS = memoryDoorTokens();
 const token = (id: string): Promise<string> => DOORS.ensure("gate", id);
 
@@ -62,8 +57,8 @@ const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
     ...over,
 });
 
-// A turn that writes the step's verdict file and converges on the first iteration. `release` is what the judge
-// decides; `prompts` collects what it was asked, which is how the request-passing test sees the body.
+// Writes the step's verdict file and converges on the first iteration; `release` is the judge's decision, `prompts`
+// collects what it was asked.
 const judging = (root: string, release: string, prompts: string[] = []): TurnFn =>
     async function* turn(_services, input: AgentTurn) {
         prompts.push(input.prompt);
@@ -82,8 +77,8 @@ const appFor = (services: Services, wake: TurnFn): Hono => new Hono().post("/wor
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
-// No query ⇒ the door's own credential, as the bearer header the gate CLI and the action send; a query is the
-// test's own wording (a wrong token, a deadline beside the token) and rides the URL as a webhook sender's would.
+// No query uses the door's own credential as the bearer header; a query supplies the test's own wording (wrong token,
+// deadline) riding the URL like a webhook sender's would.
 const post = async (app: Hono, id: string, query?: string, body = ""): Promise<Response> =>
     query === undefined
         ? app.request(`/workflows/${id}/gate`, { method: "POST", body, headers: { authorization: `Bearer ${await token(id)}` } })
@@ -102,9 +97,6 @@ test("a passing judgment ships, and the run is the one the gate started", async 
     expect((await services.workflowRuns.get(verdict.runId))?.state).toBe("done");
 });
 
-/* The gate answers 200 for a FAILED release, and that is the contract with `curl --fail`: the status says the
- * exchange worked, the body says the product is broken. Folding this into a 4xx would make a wrong token and a
- * broken app the same event to whoever is on call. */
 test("a failing judgment answers fail over a 200, not an HTTP error", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -115,8 +107,6 @@ test("a failing judgment answers fail over a 200, not an HTTP error", async () =
     expect((await response.json()).outcome).toBe("fail");
 });
 
-// The payload seam: whatever the pipeline knows (the sha, the preview URL) has to reach the step's prompt, or
-// the workflow is testing nothing in particular.
 test("the request body reaches the step as the run's request", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -150,8 +140,6 @@ test("a wrong token is refused before anything is spent", async () => {
     expect(await services.workflowRuns.list()).toEqual([]);
 });
 
-// A gate is a paid endpoint with no person in the loop, so the day has a ceiling and the ceiling refuses
-// rather than queues.
 test("a gate past its daily ceiling refuses without starting a run", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -167,8 +155,6 @@ test("a gate past its daily ceiling refuses without starting a run", async () =>
     expect(await services.workflowRuns.list()).toHaveLength(1);
 });
 
-// A hand-edited manifest is the only way to reach this, and reaching it at run time would otherwise cost a
-// full fan-out before answering nothing.
 test("a gate pointed at a field nobody declares is refused at call time", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -179,8 +165,6 @@ test("a gate pointed at a field nobody declares is refused at call time", async 
     expect((await response.json()).error).toContain("shipit");
 });
 
-/* The deadline. A pipeline that gave up must not leave a fan-out of sessions burning, so the wait STOPS the
- * run, and the answer is `blocked`, because nothing was learned about the product. */
 test("a run that outlasts the deadline is stopped and answers blocked", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -195,6 +179,5 @@ test("a run that outlasts the deadline is stopped and answers blocked", async ()
     const elapsed = Date.now() - startedAt;
 
     expect((await response.json()).outcome).toBe("blocked");
-    // It answered on its own deadline rather than on the run's: the property the whole route exists for.
     expect(elapsed).toBeLessThan(2_000);
 });

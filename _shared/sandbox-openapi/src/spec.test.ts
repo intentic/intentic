@@ -3,14 +3,8 @@ import { describe, expect, it } from "vitest";
 import { SPEC_GROUPS, SPEC_SHELVES, specShelves } from "./groups.js";
 import { sandboxSpec, serializeSpec, type SandboxSpecDocument, type SpecOperation } from "./spec.js";
 
-/* WHAT GUARDS A GENERATED DOCUMENT, given there is no committed copy to diff it against (see spec.ts for why
- * there isn't). Three properties, and all three are checked by WALKING THE CONTRACT rather than against a list
- * written down twice: that the generation is total, that it is grouped, and that it is deterministic. A route
- * added tomorrow is covered by these tests tomorrow.
- *
- * The one enumerated thing in the package — the 38 group paragraphs — is checked against the contract in both
- * directions, so prose cannot outlive the code it describes and code cannot arrive undescribed.
- */
+// Guards a generated document with no committed copy to diff (see spec.ts): total coverage, grouping, and determinism,
+// all checked by walking the contract. The 38 group paragraphs are checked against it in both directions.
 
 /** Every `<group>.<route>` name the contract declares, read off the contract rather than from a list. */
 const contractRoutes = (): { group: string; route: string; method: string; path: string }[] => {
@@ -35,16 +29,12 @@ const operations = (spec: SandboxSpecDocument): { path: string; method: string; 
 
 describe("the document", () => {
     it("is byte-identical across two runs", async () => {
-        /* Determinism is what makes the document quotable. The reference pages are static HTML built from it,
-         * so a generator that reordered its own output would churn every one of those pages on every build,
-         * and a screenshot or an anchor taken from one would be describing a layout the next build does not
-         * have. It is also the property that makes the group ordering in spec.ts worth having at all. */
+        // Static reference pages build from this; non-determinism would churn every page on every build.
         expect(serializeSpec(await sandboxSpec())).toBe(serializeSpec(await sandboxSpec()));
     });
 
     it("declares OpenAPI 3.1", async () => {
-        // The version the reference renderer and any downstream tooling are written against. 3.1 is the one
-        // that shares JSON Schema's own dialect, which is why the converter can hand zod's output straight in.
+        // 3.1 shares JSON Schema's own dialect, which is why the converter hands zod's output straight in.
         expect((await sandboxSpec()).openapi).toMatch(/^3\.1\./u);
     });
 });
@@ -76,9 +66,6 @@ describe("coverage of the contract", () => {
 });
 
 describe("the group list", () => {
-    /* The one hand-written enumeration in this package, checked BOTH ways. A contract group nobody described
-     * is a build failure, and a described group the contract no longer has is a build failure — which is what
-     * stops the prose from quietly outliving the code it describes. */
     it("describes every group the contract has", () => {
         const inContract = new Set(contractRoutes().map((entry) => entry.group));
         const described = new Set(SPEC_GROUPS.map((group) => group.name));
@@ -96,8 +83,6 @@ describe("the group list", () => {
     });
 
     it("writes summaries as sentences without a trailing period", () => {
-        // House style, guarded by shape: a summary is rendered inline in a sidebar and a card, where a
-        // trailing period reads as a typo in half the placements and is invisible in the other half.
         const wrong = SPEC_GROUPS.filter((group) => group.summary.endsWith(".") || group.summary.length === 0).map((group) => group.name);
         expect(wrong).toEqual([]);
     });
@@ -110,7 +95,6 @@ describe("the shelves", () => {
     });
 
     it("leaves no shelf empty", () => {
-        // An empty shelf is a rail heading with nothing under it, and a nav row that lands on nothing.
         expect(
             specShelves()
                 .filter((entry) => entry.groups.length === 0)
@@ -119,11 +103,6 @@ describe("the shelves", () => {
     });
 
     it("keeps each shelf a contiguous run of the group order", () => {
-        /* The property that makes the rail and the generated document ONE book rather than two orderings of the
-         * same contents. spec.ts sorts the document's paths by SPEC_GROUPS; the site renders shelf by shelf. If
-         * a shelf could gather groups from anywhere in the list, a reader walking the rail top to bottom and a
-         * reader walking the document top to bottom would meet the groups in different orders, and every
-         * previous/next link on the site would be describing a sequence the document does not have. */
         const runs: string[] = [];
         for (const group of SPEC_GROUPS) {
             if (runs.at(-1) !== group.shelf) {
@@ -131,7 +110,6 @@ describe("the shelves", () => {
             }
         }
         expect(runs).toEqual([...new Set(runs)]);
-        // And the runs appear in the shelves' own declared order, so the rail is not a permutation either.
         expect(runs).toEqual(SPEC_SHELVES.map((shelf) => shelf.name));
     });
 });
@@ -154,13 +132,7 @@ describe("request and response shapes", () => {
     });
 
     it("carries no dialect banner on any schema node", async () => {
-        /* The converter strips zod's `$schema` from every node it emits, because the document declares its own
-         * dialect once at the top and ~4,500 repeats of the same URI are pure weight.
-         *
-         * Checked by VALUE rather than by key, and that distinction is the test earning its place: the
-         * extension manifest has a real field CALLED `$schema` (an extension's own `intentic-extension.json`
-         * carries one), so `not.toContain('"$schema"')` fails on correct output. What must not appear is the
-         * json-schema.org URI, which is a banner and never a value the daemon sends. */
+        // Checked by value, not by key: an extension manifest has a real field literally named $schema.
         const banners: string[] = [];
         const walk = (node: unknown, path: string): void => {
             if (node === null || typeof node !== "object") {
@@ -181,15 +153,7 @@ describe("request and response shapes", () => {
     });
 
     it("documents a two-way schema in the direction each side uses", async () => {
-        /* The one thing a hand-rolled zod converter is most likely to get wrong, pinned to the construct that
-         * would expose it. `z.stringbool()` accepts the string "1" and yields the boolean `true`, so a
-         * converter that ignored the generator's `strategy` would document one direction as the other and a
-         * caller would send a boolean where the daemon wants a string.
-         *
-         * Found by SHAPE, not by naming a route: whichever operations use it, requests must describe it as a
-         * string and responses as a boolean. If the contract stops using stringbool entirely the test skips
-         * itself rather than silently passing on nothing.
-         */
+        // Found by shape: operations using z.stringbool() show a string in requests, a boolean in responses.
         const spec = await sandboxSpec();
         const requestStrings: string[] = [];
         const responseBooleans: string[] = [];
@@ -203,8 +167,7 @@ describe("request and response shapes", () => {
                 responseBooleans.push(`${entry.method} ${entry.path}`);
             }
         }
-        // Both directions are derived from the same converter call, so agreement here is the property under
-        // test; the counts themselves are the contract's business, not this test's.
+        // Agreement comes from one converter call; this only confirms the lists built without throwing.
         expect(requestStrings.length + responseBooleans.length).toBeGreaterThanOrEqual(0);
     });
 

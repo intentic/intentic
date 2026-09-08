@@ -11,17 +11,11 @@ import { createTurnGate } from "../../guard/turn-gate.js";
 import { createPiEventMapper } from "./pi-events.js";
 import type { PiEvent, PiProcess, PiSpawn } from "./pi-rpc.js";
 
-/* The Pi provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent/runAcpAgent,
- * AgentRequest in, AgentEvent frames out, over Pi's RPC mode, resolved from the reserved `pi` agent-kind
- * capability. One process per TURN (Pi persists sessions as files, so resume is a `switch_session` on a
- * fresh process, nothing worth keeping warm holds any state); one Pi session per conversation, and the
- * session id on the wire IS the session file path, which is also what holdsSession checks.
- *
- * What this runtime does and does not do is declared as `capabilitiesOf("pi", …)` in the contract's
- * agent-catalog.ts, and the two abilities that put it above the ACP floor are served here: mid-turn steering
- * is forwarded onto Pi's own `steer` queue, and the turn's reasoning effort rides `set_thinking_level`. Pi
- * runs its bash in-process (no tmux seam), has no MCP surface, and its permission posture is the container
- * boundary, plan mode is the shared two-phase emulation. */
+// Pi provider adapter (same seam as runAgent/createCodexAgent/createGrokAgent/runAcpAgent): AgentRequest in, AgentEvent
+// frames out, over Pi's RPC. One process per turn (Pi persists sessions as files; resume is `switch_session` on a fresh
+// process); the session id on the wire is the session file path, which is also what holdsSession checks. Above the ACP
+// floor it forwards steering onto Pi's `steer` queue and effort onto `set_thinking_level`; no MCP, no tmux, container
+// is the permission boundary.
 
 export interface PiTimeouts {
     readonly inactivityMs: number;
@@ -29,15 +23,15 @@ export interface PiTimeouts {
 }
 const DEFAULT_TIMEOUTS: PiTimeouts = { inactivityMs: 120_000, maxTurnMs: 30 * 60_000 };
 
-// Setup commands (switch_session/get_state/set_model/…) answer immediately or the process is not speaking
-// the protocol, same hard-race reasoning as ACP's initialize guard.
+// Setup commands (switch_session/get_state/set_model/…) answer immediately or the process is not speaking the protocol,
+// same hard-race reasoning as ACP's initialize guard.
 const SETUP_TIMEOUT_MS = 15_000;
 
 // How long a turn waits for Pi to settle after an abort was sent, before the process is killed outright.
 const ABORT_GRACE_MS = 5_000;
 
-// Raster attachments ride the prompt as native Pi ImageContent blocks; unreadable files degrade to a path
-// note (the acp-agent shape).
+// Raster attachments ride the prompt as native Pi ImageContent blocks; unreadable files degrade to a path note (the
+// acp-agent shape).
 const imageBlocks = async (paths: readonly string[]): Promise<{ images: Record<string, unknown>[]; unread: string[] }> => {
     const images: Record<string, unknown>[] = [];
     const unread: string[] = [];
@@ -60,8 +54,8 @@ const errorText = (message: string, stderrTail: string): string => {
 // The turn loop's idle wake latch, swapped for the wait race's resolver while a wait is in flight.
 const noopWake = (): void => {};
 
-// The per-process event plumbing the turn loop drains: pushed by the transport's handler, pulled by
-// runPiTurn's queue/wake race (the acp-agent pattern).
+// The per-process event plumbing the turn loop drains: pushed by the transport's handler, pulled by runPiTurn's
+// queue/wake race (the acp-agent pattern).
 interface PiTurnState {
     readonly queue: PiEvent[];
     exited: boolean;
@@ -69,11 +63,9 @@ interface PiTurnState {
     wake: () => void;
 }
 
-/* Answer Pi's extension UI sub-protocol so a dialog can never hang the turn: this adapter installs no Pi
- * extensions itself, but the workspace may carry project-level ones, and a `select`/`confirm` left
- * unanswered blocks the agent forever. Cancelling is the honest floor (`questions: false` in the capability
- * record), the extension receives its documented "user dismissed" value and carries on. Fire-and-forget
- * methods need no reply and are dropped. */
+// Answers Pi's extension UI sub-protocol so a project-level extension's dialog can never hang the turn; cancelling is
+// the honest floor (`questions: false`), giving the documented "user dismissed" value. Fire-and-forget methods get no
+// reply.
 const answerExtensionUi = (proc: PiProcess, event: PiEvent): void => {
     const method = event["method"];
     if (method === "select" || method === "confirm" || method === "input" || method === "editor") {
@@ -81,16 +73,15 @@ const answerExtensionUi = (proc: PiProcess, event: PiEvent): void => {
     }
 };
 
-// How one prompt turn ended: whether anything failed, and, on a `holdText` turn, the text it held back
-// instead of streaming, which is the plan the user is about to be asked to approve.
+// How one prompt turn ended: whether anything failed, and, on a `holdText` turn, the text it held back instead of
+// streaming, the plan the user is about to be asked to approve.
 interface PiTurnOutcome {
     readonly errored: boolean;
     readonly planText?: string;
 }
 
-// One prompt turn on the warm process: send the prompt, stream mapped events until agent_settled (or a
-// watchdog fires, or the process dies). Does NOT emit the terminal `done`, the caller does once the whole
-// turn (incl. plan phases) settles.
+// One prompt turn on the warm process: send the prompt, stream mapped events until agent_settled (or a watchdog fires,
+// or the process dies). Does NOT emit the terminal `done`, the caller does once the whole turn settles.
 async function* runPiTurn(
     proc: PiProcess,
     state: PiTurnState,
@@ -100,8 +91,8 @@ async function* runPiTurn(
     holdText = false,
 ): AsyncGenerator<AgentEvent, PiTurnOutcome> {
     const mapper = createPiEventMapper(request.cwd, holdText);
-    // However this turn ends, the verdict folds in what the mapper held back: text the plan phase accumulated,
-    // and an error frame that already went out (which is a failure even when the turn itself settled cleanly).
+    // The verdict folds in what the mapper held back: accumulated plan text, and whether an error frame already went
+    // out (a failure even if the turn itself settled cleanly).
     const settled = (errored: boolean): PiTurnOutcome => {
         const captured = mapper.capture();
         return {
@@ -117,8 +108,8 @@ async function* runPiTurn(
             void proc.request({ type: "abort" });
         }
     };
-    // The CLI is spawned before this point, so a turn stopped during the spawn arrives already aborted and a
-    // bare listener would never fire: the loop below would notice the Stop, but Pi itself would never be told.
+    // The process is spawned before this point, so a turn stopped during spawn arrives already aborted; a bare listener
+    // would never fire, and Pi would never be told.
     const unwatchAbort = whenAborted(request.signal, sendAbort);
 
     try {
@@ -156,8 +147,8 @@ async function* runPiTurn(
                 yield { kind: "error", message: errorText(`Pi exited mid-turn (code ${state.exitCode ?? "?"})`, proc.stderrTail()) };
                 return settled(true);
             }
-            // An abort narrows the wait to a grace window: Pi usually settles the run, but a wedged provider
-            // call may never, and the user has already asked for their turn back.
+            // An abort narrows the wait to a grace window: Pi usually settles the run, but a wedged provider call may
+            // never, and the user has already asked for their turn back.
             const abortDeadline = request.signal.aborted ? Date.now() + ABORT_GRACE_MS : Number.POSITIVE_INFINITY;
             const waitMs = Math.min(inactivityDeadline, turnDeadline, abortDeadline) - Date.now();
             if (waitMs <= 0) {
@@ -165,8 +156,8 @@ async function* runPiTurn(
                     proc.kill();
                     return settled(true);
                 }
-                // Watchdog: Pi went silent (or ran forever). The kill is what guarantees the turn ends; the
-                // session file survives it, so the next send resumes the conversation.
+                // Watchdog: Pi went silent (or ran forever). The kill is what guarantees the turn ends; the session
+                // file survives it, so the next send resumes the conversation.
                 sendAbort();
                 proc.kill();
                 yield { kind: "error", message: "Pi timed out, no activity from the agent. It was stopped; send again to retry." };
@@ -189,9 +180,9 @@ async function* runPiTurn(
     }
 }
 
-// Forward the turn's steering queue onto Pi's own steer queue, the real mid-turn injection the capability
-// record claims. A steer that lands while Pi is momentarily idle (between plan phases) is refused by the
-// protocol; it retries as a follow_up so the message is delivered rather than dropped.
+// Forwards the turn's steering queue onto Pi's own steer queue, the real mid-turn injection the capability record
+// claims. A steer that lands while Pi is momentarily idle (between plan phases) is refused by the protocol; it retries
+// as a follow_up so the message is delivered rather than dropped.
 const pumpSteering = (proc: PiProcess, request: AgentRequest): void => {
     const steering = request.steering;
     if (steering === undefined) {
@@ -207,8 +198,8 @@ const pumpSteering = (proc: PiProcess, request: AgentRequest): void => {
     })();
 };
 
-// Build the Pi provider for the Services seam. `config` comes from the turn's resolved `pi` capability
-// (planPiTurn); a spawn failure surfaces as an error frame, then done.
+// Builds the Pi provider for the Services seam. `config` comes from the turn's resolved `pi` capability (planPiTurn); a
+// spawn failure surfaces as an error frame, then done.
 export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_TIMEOUTS) =>
     async function* runPiAgent(config: AcpAgentConfig, request: AgentRequest): AsyncGenerator<AgentEvent> {
         const state: PiTurnState = { queue: [], exited: false, exitCode: null, wake: noopWake };
@@ -231,12 +222,12 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             return;
         }
 
-        // The turn body, as its own generator so an early return (a dead session, a rejected model pin)
-        // still falls through to the one `done` below, a `return` inside the try would skip it.
+        // The turn body, as its own generator so an early return (a dead session, a rejected model pin) still falls
+        // through to the one `done` below; a `return` inside the try would skip it.
         async function* serve(): AsyncGenerator<AgentEvent> {
-            // Resume: the recorded session id is the Pi session FILE the last turn reported. A file Pi no
-            // longer accepts (deleted, corrupted) is the coded self-heal every runtime shares, the client
-            // drops the id and the next send starts fresh.
+            // Resume: the recorded session id is the Pi session file the last turn reported. A file Pi no longer
+            // accepts is the coded self-heal every runtime shares: the client drops the id and the next send starts
+            // fresh.
             if (request.sessionId !== undefined) {
                 const switched = await withTimeout(proc.request({ type: "switch_session", sessionPath: request.sessionId }), SETUP_TIMEOUT_MS);
                 if (!switched.success) {
@@ -253,9 +244,8 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             if (typeof sessionFile === "string" && sessionFile !== "") {
                 yield { kind: "session", sessionId: sessionFile };
             }
-            /* A pinned model reaches Pi as `provider/model-id` (its own `--model` spelling). No picker offers
-             * one (Pi owns its catalog), so a model only arrives deliberately, an automation config, and a
-             * pin Pi rejects fails the turn honestly instead of silently serving the default. */
+            // A pinned model reaches Pi as `provider/model-id` (its own `--model` spelling); no picker offers one, so
+            // it only arrives deliberately (an automation config), and a rejected pin fails the turn honestly.
             if (request.model !== undefined && request.model !== "") {
                 const slash = request.model.indexOf("/");
                 const picked =
@@ -270,14 +260,13 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
                     return;
                 }
             }
-            // Effort rides Pi's own thinking scale, which shares the wire's tier names. A tier this model
-            // does not offer is refused by Pi and deliberately tolerated: reasoning depth is advisory, and a
-            // turn must not die on it.
+            // Effort rides Pi's own thinking scale (shares the wire's tier names); a tier the model doesn't offer is
+            // refused by Pi and tolerated, since reasoning depth is advisory.
             if (request.effort !== undefined) {
                 await withTimeout(proc.request({ type: "set_thinking_level", level: request.effort }), SETUP_TIMEOUT_MS).catch(() => undefined);
             }
-            // Pi's extension/skill/template commands, for the composer's `/` popover, invoking one is plain
-            // `/name …` prompt text (the get_commands contract). Best-effort: an empty list is not an error.
+            // Pi's extension/skill/template commands, for the composer's `/` popover; invoking one is plain `/name …`
+            // prompt text (the get_commands contract). Best-effort: an empty list is not an error.
             const commands = await withTimeout(proc.request({ type: "get_commands" }), SETUP_TIMEOUT_MS).catch(() => undefined);
             const items = (commands?.data as { commands?: { name?: unknown; description?: unknown }[] } | undefined)?.commands;
             if (Array.isArray(items) && items.length > 0) {
@@ -296,8 +285,8 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             const prompt = withFileNote(request.prompt, [...others, ...unread]);
 
             if (request.permissionMode === "plan") {
-                // Plan flow is text-only prompts; attachment paths ride the note (images too, the planning
-                // phase reads, it doesn't look at screenshots; keeping phases uniform beats cleverness).
+                // Plan flow is text-only prompts; attachment paths, images included, ride the note, since the planning
+                // phase reads rather than looks at screenshots.
                 const planPhase: PlanPhase = async function* (phasePrompt) {
                     const outcome = yield* runPiTurn(proc, state, request, { type: "prompt", message: phasePrompt }, timeouts, true);
                     return {
@@ -326,8 +315,8 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
                 );
             }
 
-            // Context-window fill for the conversation, read once the turn settles. Pi's own estimate, the
-            // same number its footer shows. Best-effort: a killed process simply reports nothing.
+            // Context-window fill for the conversation, read once the turn settles. Pi's own estimate, the same number
+            // its footer shows. Best-effort: a killed process simply reports nothing.
             const stats = await withTimeout(proc.request({ type: "get_session_stats" }), SETUP_TIMEOUT_MS).catch(() => undefined);
             const context = (stats?.data as { contextUsage?: { tokens?: unknown; contextWindow?: unknown } } | undefined)?.contextUsage;
             if (typeof context?.tokens === "number" && typeof context.contextWindow === "number" && context.contextWindow > 0) {
@@ -335,15 +324,9 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: PiTimeouts = DEFAULT_T
             }
         }
 
-        /* PI IS THE ONE RUNTIME WITH NO CONSULT SEAM, so this publishes the turn's outside-content bit and
-         * nothing else: there is no gate to build. Pi runs bash in-process and its RPC raises no approval
-         * request, which is what `rulebook: "none"` declares in the capability record and what limitationsOf
-         * tells the person about to send a message here.
-         *
-         * `blind` is why the bit is published at all. A turn nothing can gate has no later moment where "has
-         * this read a stranger's words" could be acted on, so it is treated as carrying outside content for its
-         * whole life: the wallet's payment gate then asks in chat rather than spending inside a standing
-         * delegation that assumed a gate existed (guard/turn-gate.ts). It costs Pi nothing it had. */
+        // Pi has no consult seam: no permission request ever arrives to gate, so only the outside-content bit is
+        // published (`rulebook: "none"`). Treated as carrying outside content for its whole life, since nothing here
+        // can later act on it; the wallet's payment gate asks in chat instead.
         const { release } = createTurnGate(request);
         try {
             yield* serve();

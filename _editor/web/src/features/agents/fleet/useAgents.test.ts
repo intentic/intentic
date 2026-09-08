@@ -1,22 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// canArchive is pure, but it lives beside the fleet store, so importing it pulls useChat -> the app shell. Cut
-// the edges that need a browser at module-eval, exactly as useChat.test.ts does: the router (createWebHistory wants
-// window, and its @intentic/ui barrel drags in .vue files the node test env can't transform), plus the three
-// modules that reach environment.ts's window.env read: analytics (direct), useSandbox (via useApi), and
-// sandboxClient (via useGoogleIdentity). The projection under test touches none of them.
+// canArchive is pure, but the fleet store it lives beside pulls useChat and the app shell at import time. These
+// mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
-// The scoping rule the key registry builds on, pinned to a fixed id so the assertions below can spell the whole
-// key out (activeSandbox is a leaf module: it needs no browser, only a predictable answer).
+// Pins the scoping rule to a fixed id so assertions below can spell out the whole key.
 vi.mock("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
-// And the fourth: the roster says out loud when it caught itself behind (auditRoster), and the reporter posts
-// to the daemon through sandboxTarget, which reads window.env the moment it is imported.
+// And the fourth: auditRoster reports through sandboxTarget, which reads window.env on import.
 vi.mock("../../../app/clientDiagnostics", () => ({ reportClient: vi.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
@@ -32,9 +27,8 @@ import { resetAgents, useAgents } from "./useAgents";
 import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
 import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
 
-/* The Finished lane's cap, and the one card it is never allowed to drop. The board draws a ring on whatever the
- * docked chat is pointing at, so a lane that culls that card leaves the ring nowhere at all, which reads as
- * "this chat is not an agent", not as "that card is further down". */
+// The Finished lane's cap, and the one card it may never drop: the board's selection ring points at whatever the
+// docked chat shows, so culling that card would leave the ring nowhere.
 describe("windowFinished", () => {
     const lane = (count: number): FleetAgent[] =>
         Array.from({ length: count }, (_, at) => ({
@@ -49,8 +43,7 @@ describe("windowFinished", () => {
             unsent: false,
         }));
     const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
-    // The board reads its entries' own id; the chat list reaches through a wrapper for its conversation's (see
-    // ChatTabList). The rule is the same either way, which is why the window takes the reader rather than a type.
+    // The board reads its own id; the chat list reaches through a wrapper, hence a reader function, not a type.
     const byId = (agent: FleetAgent): string => agent.id;
 
     it("shows a short lane whole, with nothing to collapse", () => {
@@ -68,7 +61,7 @@ describe("windowFinished", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
         expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
-        // Eight cards on screen out of ten: the row below them may only claim the two it actually hides.
+        // Eight cards on screen out of ten: the row below may only claim the two it actually hides.
         expect(hidden).toBe(2);
     });
 
@@ -87,8 +80,8 @@ describe("windowFinished", () => {
         expect(hidden).toBe(0);
     });
 
-    // The id the chat list windows by lives one level down, on the conversation the entry wraps: the case the
-    // extractor exists for, and the one a `T extends { id }` constraint would have forced a duplicate field for.
+    // The id lives one level down, on the wrapped conversation, the case the extractor exists for that a
+    // `T extends { id }` constraint could not reach.
     it("windows entries whose id is not their own field: the chat list's wrapped conversations", () => {
         const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
         const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
@@ -98,10 +91,8 @@ describe("windowFinished", () => {
     });
 });
 
-/* The board's exit gate, which is NOT the Finished lane. Gating it on the lane is what stranded a failed turn:
- * an errored card's only offered drop is a land onto Finished, so an agent that failed with nothing landable
- * could neither be archived (not finished) nor finish (nothing to land). The line that matters is whether
- * archiving would bury something the agent is still WAITING for. */
+// The board's exit gate is not the Finished lane: gating on it stranded a failed turn with nothing to land, so it
+// was neither archivable nor finishable. The line that matters is whether archiving would bury something awaited.
 describe("canArchive", () => {
     const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
@@ -126,17 +117,13 @@ describe("canArchive", () => {
     it("refuses a live turn (the worktree is its working state) and a draft (no registry entry to archive)", () => {
         expect(canArchive({ status: `running`, attention: none })).toBe(false);
         expect(canArchive({ status: `draft`, attention: none })).toBe(false);
-        // A REFUSED send is the other half of that same reason: it is in the Attention lane, where archiving
-        // is otherwise the move, but the daemon turned its request away and so has no entry to file. The
-        // affordance the card offers instead is Close (AgentCard.closable).
+        // A refused send is in Attention with no entry to file; its affordance is Close, not Archive.
         expect(canArchive({ status: `failed`, attention: none })).toBe(false);
-        // A stopped turn is still a live turn until its generator unwinds: the daemon holds the worktree for
-        // the whole of it, and that window is exactly when a user reaches for the next control.
+        // A stopped turn is still live until its generator unwinds; the daemon holds the worktree the whole time.
         expect(canArchive({ status: `stopping`, attention: none })).toBe(false);
     });
 
-    // Once it HAS stopped it is a dead end like any other: half-written work, nothing outstanding on the
-    // user's side, and archiving buries no question.
+    // Once stopped it's a dead end like any other: half-written work, nothing outstanding, safe to archive.
     it("takes a turn the user stopped", () => {
         expect(canArchive({ status: `stopped`, attention: none })).toBe(true);
     });
@@ -146,9 +133,8 @@ describe("canArchive", () => {
     });
 });
 
-/* An open tab follows the roster's name for its conversation. A tab used to seed its title once and own it,
- * which stopped being enough the moment the daemon could promote a title on its own (a plan heading naming
- * the job) or another device could rename it. */
+// An open tab follows the roster's title: seed-once ownership broke once the daemon could promote a title itself,
+// or another device could rename it.
 describe("roster titles", () => {
     const registered = (id: string, title?: string): AgentSummary => ({
         id,
@@ -160,8 +146,8 @@ describe("roster titles", () => {
         ...(title !== undefined ? { title } : {}),
     });
 
-    // Each case installs the one tab it is about. The list is never emptied: useChat guarantees an ACTIVE
-    // conversation at all times, and its computeds read straight through that guarantee.
+    // Each case installs the one tab it's about; the list is never emptied, since useChat guarantees an active
+    // conversation at all times.
     beforeEach(() => {
         resetAgents();
     });
@@ -179,8 +165,7 @@ describe("roster titles", () => {
     });
 
     it("leaves a tab that named itself alone while its entry carries no title", async () => {
-        // A draft's first turn has not begun, so the roster knows the conversation without knowing its name:
-        // adopting that absence would blank a tab the browser had already titled from the prompt.
+        // No title yet means the turn hasn't started; adopting that would blank a tab already titled from the prompt.
         const conversation = new Conversation(`a1`);
         conversation.title.value = `The login page throws on submit`;
         useChat().conversations.value = [conversation];
@@ -192,19 +177,15 @@ describe("roster titles", () => {
     });
 });
 
-/* WHAT THE BOARD IS ALLOWED TO SKIP, which is a guarantee about this projection rather than about any
- * component. AgentsView memoises each card on the object it was handed (its `v-memo`), so a frame that changed
- * nothing about an agent has to hand back the very same object or every lane rebuilds every card to tick one
- * elapsed readout. The daemon re-frames the roster about once a second per running turn, which is the
- * difference between one card repainting and all of them, once a second, for as long as anything is working. */
+// AgentsView memoizes each card on the object it's handed (v-memo); a frame that changed nothing about an agent
+// must hand back the same object, or every lane re-renders every card each tick.
 describe("roster frames the board can skip", () => {
     const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
         id,
         status: `running`,
         provider: `claude`,
         harness: `native`,
-        // seenAt outruns updatedAt so nothing here reads as unread: what is under test is object identity, and
-        // an unread badge flipping would be a second reason for a card to change.
+        // seenAt outruns updatedAt so nothing here reads as unread; object identity is what's under test.
         updatedAt: 1_000,
         seenAt: 2_000,
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
@@ -222,48 +203,39 @@ describe("roster frames the board can skip", () => {
         const before = useAgents().fleet.value;
         const wasA1 = cardsById().get(`a1`);
 
-        // The same roster over again, freshly off the wire: every object in it is new, nothing it says is.
+        // The same roster again, freshly off the wire: every object is new, nothing it says has changed.
         setAgents([summary(`a1`), summary(`a2`)], 2);
         await nextTick();
 
-        // The ARRAY too, not just its entries, so `lanes` never re-groups and the board never re-renders at all.
+        // The array too, not just its entries, so `lanes` never re-groups and the board never re-renders.
         expect(useAgents().fleet.value).toBe(before);
         expect(cardsById().get(`a1`)).toBe(wasA1);
     });
 
-    // Which card a moving frame is allowed to re-mint is pinned beside the diff-invalidation cases above
-    // ("reuses fleet entries across frames that only tick another agent"); what is left for here is the
-    // stronger guarantee, and the one invariant holding the comparison itself together.
+    // What a moving frame may re-mint is covered by the diff-invalidation cases; this pins the stronger guarantee
+    // underlying the comparison itself.
 
-    /* WHY THE CACHED ENTRY IS RE-FINGERPRINTED EVERY FRAME instead of carrying the string it was filed under.
-     * The optimistic writes go into the held entry IN PLACE, so a stored fingerprint would describe that entry
-     * as it was BEFORE the write: a frame carrying the server's own value would compare equal to a string
-     * nothing holds any more, the locally-mutated object would be handed back, and the board would keep showing
-     * an intent the daemon had refused, silently, for as long as that field never changed again. */
+    // The cached fingerprint isn't stored: optimistic writes mutate the held entry in place, so a stored string would
+    // describe the pre-write entry and mask a value the daemon later refused.
     it("lets a later frame overrule an optimistic write still in flight", async () => {
         setAgents([summary(`a1`, { title: `Old name` })], 1);
         await nextTick();
 
-        // The request never settles, so what the board holds is the in-place optimistic write and nothing else.
+        // The request never settles, so the board holds only the in-place optimistic write.
         vi.mocked(sandboxJson).mockImplementation(() => new Promise(() => undefined));
         void useAgents().rename(`a1`, `New name`);
         await nextTick();
         expect(cardsById().get(`a1`)?.title).toBe(`New name`);
 
-        // ...and a frame that still says otherwise puts the roster back on the daemon's account of it.
+        // A frame that still disagrees puts the roster back on the daemon's own account.
         setAgents([summary(`a1`, { title: `Old name` })], 2);
         await nextTick();
         expect(cardsById().get(`a1`)?.title).toBe(`Old name`);
     });
 });
 
-/* THE BEAT'S AUDIT: what happens about the snapshot that never arrived.
- *
- * Everything above is about frames that LAND. The failure this covers is the one nothing in the stream used to
- * report: a roster frame that was never applied, so the board sits at that instant — cards present, statuses
- * frozen, the window otherwise alive — until somebody reloads the page. The daemon's heartbeat now states the
- * revision it was sent at, and a beat only goes out when that connection has nothing queued, so a disagreement
- * is proof rather than a race. */
+// The beat's audit: a roster frame that never applied leaves the board silently frozen until reload. The
+// heartbeat states its revision, sent only when the queue is empty, so a mismatch is proof, not a race.
 describe("the beat's audit of the roster", () => {
     const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
         id,
@@ -280,7 +252,7 @@ describe("the beat's audit of the roster", () => {
             status: `awaiting`,
             attention: { plan: false, question: true, permission: false, capability: false, credential: false, conflict: false },
         });
-    // What the roster says about one agent right now, which is the whole of what a stale board gets wrong.
+    // What the roster says about one agent right now, the whole of what a stale board gets wrong.
     const parked = (id: string): boolean => useAgents().fleet.value.find((card) => card.id === id)?.attention.question === true;
     const answers = (agents: AgentSummary[], rev: number): void => {
         vi.mocked(sandboxJson).mockResolvedValue({ agents, rev });
@@ -305,7 +277,7 @@ describe("the beat's audit of the roster", () => {
         setAgents([asking(`a1`)], 7);
         await nextTick();
         expect(parked(`a1`)).toBe(true);
-        // The answer the board never heard about: the question is settled and the agent is working again.
+        // The answer the board never heard: the question is settled and the agent is working again.
         answers([summary(`a1`)], 8);
 
         auditRoster(8);
@@ -314,9 +286,8 @@ describe("the beat's audit of the roster", () => {
         expect(sandboxJson).toHaveBeenCalledWith(`/agents`);
     });
 
-    /* A REVISION LOWER THAN THE ONE WE HOLD, which the pull alone could not repair: the guard exists to drop
-     * snapshots older than the last applied, so it would drop this read's own answer and leave the board
-     * exactly as frozen as it found it. The daemon owns its revision line, so the line is adopted. */
+    // A revision lower than the one held can't be repaired by a plain pull, since the guard would drop the pull's own
+    // answer too. The daemon owns its revision line, so it's adopted instead of defended.
     it("adopts a revision line that moved backwards instead of defending the one it holds", async () => {
         setAgents([asking(`a1`)], 50);
         await nextTick();
@@ -340,13 +311,10 @@ describe("the beat's audit of the roster", () => {
     });
 });
 
-/* The review panel's diff query is pull-only while the roster is push-fed, so a status transition is the one
- * signal that a land performed elsewhere (the auto-land at turn completion, another device's button) changed
- * what that query holds. Without it the header said "Landed" over a review still counting every file as
- * pending, with Land now armed. */
+// The diff query is pull-only while the roster is push-fed, so a status transition is the one signal that a land
+// performed elsewhere changed what the query holds.
 describe("diff invalidation", () => {
-    // seenAt outruns updatedAt so nothing here reads as unread: the markSeen watcher must stay out of a
-    // suite that is about cache invalidation, not read markers.
+    // seenAt outruns updatedAt so nothing here reads unread; this suite is about invalidation, not read markers.
     const summary = (id: string, status: AgentSummary["status"]): AgentSummary => ({
         id,
         status,
@@ -402,12 +370,8 @@ describe("diff invalidation", () => {
     });
 });
 
-/* The DRAFT card: the fleet's one client-only state, there so "New agent" has a visible result on the board
- * before the first turn registers anything. It used to be derived from "this open tab has no entry on the live
- * roster", which is also true of every agent the user ARCHIVES (the roster carries live agents only) and of
- * every agent at all while the events stream is down. So an archived agent with a tab still open: read from the
- * archive view, or caught by the daemon's retention sweep: came straight back as a brand-new card in the ACTIVE
- * lane. The rule is now a one-way latch on the conversation: a draft is one the fleet has NEVER registered. */
+// A draft is the fleet's one client-only card, latched as a one-way rule (never registered) rather than derived
+// from "absent on the live roster", which also matched archived agents and every agent while the stream was down.
 describe("draft cards", () => {
     const registered = (id: string): AgentSummary => ({
         id,
@@ -418,19 +382,16 @@ describe("draft cards", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
 
-    // The lane the phantom card landed in, by id: the board's own list, not a count, so a case can say which
-    // agent is on it and not merely how many.
+    // The lane the phantom card landed in, by id, so a case can say which agent rather than merely how many.
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
-    // One tab of a popped-out chat's strip, as the window drawing it would publish it (tabFacts): a draft
-    // holding the given words, or an empty one.
+    // One tab of a popped-out chat's strip, as the drawing window would publish it (tabFacts).
     const draftTab = (id: string, words?: string, at?: number): TabFacts => ({
         id,
         registered: false,
         standing: `draft`,
         peek: false,
-        // A draft the user asked for ("New agent", a card click): the blank a panel is only standing on is the
-        // case below, and the board's whole answer to it is not to draw a card at all.
+        // A user-requested draft; the panel-only blank (`standIn`) is the case below, drawing no card at all.
         standIn: false,
         provider: `claude`,
         harness: `native`,
@@ -442,10 +403,8 @@ describe("draft cards", () => {
     const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
 
     beforeEach(() => {
-        // These cases drive the real open path, which fires the daemon's best-effort side calls (the read
-        // marker, the attach probe). Both are answered rather than left as bare vi.fn()s: an undefined return
-        // is not a rejection either function knows how to survive, and the noise would be this file's, not the
-        // code's.
+        // These cases drive the real open path, firing the daemon's best-effort side calls (read marker, attach probe);
+        // both are stubbed to resolve, since an undefined return isn't something either knows how to survive.
         vi.mocked(sandboxJson)
             .mockReset()
             .mockResolvedValue({} as never);
@@ -454,9 +413,8 @@ describe("draft cards", () => {
             .mockResolvedValue({ ok: false } as never);
         resetAgents();
         useAgents().archived.value = [];
-        // One open tab per case, installed by the case itself. The list is never emptied: useChat guarantees
-        // an active conversation at all times, so this registered placeholder keeps that invariant without
-        // posing as another draft under test.
+        // One open tab per case, installed by the case itself; this registered placeholder keeps useChat's
+        // always-one-active-conversation invariant without acting as another draft under test.
         const other = new Conversation();
         other.isolated.value = false;
         other.registered.value = true;
@@ -469,24 +427,20 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`fresh`]);
     });
 
-    /* ...AND DRAWS NOTHING FOR THE BLANK A CLOSE LEAVES BEHIND, which is the same shape of tab and a different
-     * thing entirely (Conversation.standIn). The panel always holds a conversation, so closing the last card
-     * leaves an empty composer standing; carding that put a "New agent" in this lane wearing the selection ring
-     * the moment somebody closed their last chat, which is the reported glitch: /agents saying a session was
-     * selected while the popped-out window that emptied itself showed nothing. */
+    // Draws nothing for the blank a close leaves behind (Conversation.standIn), a different thing from a real draft:
+    // carding it put a "New agent" wearing the selection ring the moment the last chat closed.
     it("draws no card for the blank left standing when the last chat closes", () => {
         const chat = useChat();
 
         chat.closeTabs(new Set(chat.conversations.value.map((conversation) => conversation.conversationId)));
 
-        // The panel kept its one conversation, and the board is empty: nothing was started, so nothing is
-        // carded and nothing can be ringed.
+        // The panel kept its one conversation, and the board is empty: nothing started, nothing carded.
         expect(chat.conversations.value).toHaveLength(1);
         expect(activeIds()).toEqual([]);
     });
 
-    // ...and it is a card again the instant it stands for something the user did. Nothing remembers the
-    // promotion: the words in the composer are the whole of the difference (tabFacts.unasked).
+    // It becomes a card again the instant it stands for something the user did; nothing else marks the promotion
+    // (tabFacts.unasked).
     it("cards that blank once words land in it", async () => {
         const chat = useChat();
         chat.closeTabs(new Set(chat.conversations.value.map((conversation) => conversation.conversationId)));
@@ -498,10 +452,8 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([blank.conversationId]);
     });
 
-    /* A CHAT WITH NO TAB LEFT ANYWHERE, closed with its message still in it (chat/closedDrafts). The board is
-     * the only surface that can show it — the strip lists open tabs, and the fleet never registered this one —
-     * so without this card the words would be recoverable by nothing the user can see, which is the same as
-     * gone. It stands where the tab stood: named by the message, wearing its mark and its age. */
+    // A chat closed with its message still in it has no tab and no roster row, so this card is the only way the words
+    // stay visible; it stands where the tab stood, named by the message.
     it("cards a draft whose chat was closed with the message still in it", () => {
         keepClosedDraft({
             conversationId: `set-aside`,
@@ -531,14 +483,13 @@ describe("draft cards", () => {
             {
                 id: `set-aside`,
                 status: `draft`,
-                // No tab holds it, which is what the card is FOR, and what its × forgets rather than closes.
+                // No tab holds it, which is what the card is for; its × forgets it rather than closing it.
                 open: false,
                 unsent: true,
                 preview: `fix the login redirect`,
                 draftAt: 1_700,
                 model: `claude-opus-5`,
-                // Undated, like every card the daemon has no row for: the mark says how old the MESSAGE is, and
-                // a footer reading "2m ago" the moment the chat closed claimed activity where there was none.
+                // Undated like every card the daemon has no row for: the mark ages the message, not activity.
                 updatedAt: 0,
             },
         ]);
@@ -546,8 +497,7 @@ describe("draft cards", () => {
         forgetClosedDraft(`set-aside`);
     });
 
-    // ...and it gives way to the tab the moment there is one: opening the card takes the entry back (useChat),
-    // and a board drawing both would offer the same message twice, one of them a copy nothing can clear.
+    // It gives way to the tab the instant one exists; drawing both would show the same message twice.
     it("draws one card, not two, when the chat is open again", () => {
         keepClosedDraft({
             conversationId: `set-aside`,
@@ -572,9 +522,7 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`workspace-fresh`]);
     });
 
-    /* WHAT A CARD NOBODY HAS NAMED IS CALLED: the opening words of the message waiting in it. A title is minted
-     * by the first turn, so a lane of drafts read "New agent" as many times as there were cards, at exactly the
-     * moment the reader was trying to tell them apart. */
+    // An unnamed card is called by the opening words waiting in it, since a title is minted only by the first turn.
     it("names a draft card after the words waiting in its composer", () => {
         const conversation = new Conversation(`fresh`);
         conversation.draft.value = `fix the login redirect`;
@@ -585,11 +533,8 @@ describe("draft cards", () => {
         ]);
     });
 
-    /* WHAT A PREPARED DRAFT WILL RUN ON, on the card, on the tick the pick is made. A message standing in a
-     * composer is queued work and the model is a decision already taken about it, so a board of drafts is a
-     * board of pending spends; the model used to reach the card only once a turn was in flight, so the one way
-     * to read a pick back was to reload and hope. The card follows the composer's own conversation, which is
-     * also why picking in ONE draft moves that card and no other. */
+    // A prepared draft's model shows on its card immediately, following its own conversation, so picking a model in
+    // one draft moves only that card.
     it("names the model a prepared draft will run on, and moves only that card when it is picked", () => {
         const first = new Conversation(`prepared`);
         first.draft.value = `fix the login redirect`;
@@ -609,7 +554,7 @@ describe("draft cards", () => {
             { id: `prepared`, provider: `cursor`, model: `composer-2.5` },
         ]);
 
-        // One draft is re-pointed at another provider's model: its card follows at once, the other holds still.
+        // One draft re-pointed at another provider's model: its card follows at once, the other holds still.
         first.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
 
         expect(shown()).toEqual([
@@ -618,27 +563,23 @@ describe("draft cards", () => {
         ]);
     });
 
-    // ...and a tab nobody has typed in names none: it is a placeholder for work not yet described, and a model
-    // on it would put a spend on the board for a turn nobody has decided to take.
+    // An untouched tab names no model, since nothing has been decided about it yet.
     it("leaves an untouched New agent card unpriced", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
 
         expect(useAgents().lanes.value.active.map((card) => card.model)).toEqual([undefined]);
     });
 
-    /* THE SAME DRAFT, BEING TYPED IN THE POPPED-OUT CHAT: the reported bug. The composer is a window away, so
-     * over here the tab looks untouched, and clicking another card swept it: the board threw away the one card
-     * whose contents nothing else could rebuild. The window drawing the chat publishes its strip (chatEcho), and
-     * the board reads that and nothing else: mark, name, age and the card itself. */
+    // A draft typed in the popped-out chat looks untouched over here, so clicking another card used to sweep it away;
+    // the board reads the drawing window's own published strip (chatEcho) instead.
     it("draws a draft, named and marked, from the popped-out chat's strip, whatever this window holds", async () => {
         const { receiveChatNote } = await import("../../chat/run/chatChannel");
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
-        // This window's own copy of the strip is EMPTY of it: the tab exists out there. The card is drawn anyway.
+        // This window's own strip is empty of it; the card is drawn from the other window's note anyway.
         receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) } });
 
-        // The age comes off the strip too, for the same reason the words do: the composer is a window away, so
-        // there is nothing here to derive it from, and a mark that guessed would report this window's own boot.
+        // The age comes off the strip too; guessing here would report this window's own boot time instead.
         expect(
             useAgents().lanes.value.active.map((card) => ({
                 id: card.id,
@@ -653,13 +594,8 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    /* THE SAME COMPOSER ONE SEND LATER, and the mirror image of the case above: the reported bug.
-     *
-     * A window that is not drawing the chat keeps the tab objects it already built, frozen with whatever was in
-     * their composers when the panel left (it forgets the stored strip, not the in-memory one). The board used to
-     * count those AND the echo, so the send went out in the popped-out window, which cleared its own composer and
-     * published an empty snapshot, and the card over here went on wearing an unsent chip for a message that no
-     * longer existed anywhere: nothing this window could do would ever clear a composer it is not showing. */
+    // A window not drawing the chat keeps its tab frozen at whatever was in the composer when the panel left; this
+    // window can't clear a mark for a composer it never sees, so it must trust the drawing window's own strip.
     it("drops the mark when the popped-out chat says the message went, whatever this window's frozen tab holds", async () => {
         const { receiveChatNote } = await import("../../chat/run/chatChannel");
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
@@ -675,7 +611,7 @@ describe("draft cards", () => {
         });
         expect(useAgents().lanes.value.finished.map((card) => card.unsent)).toEqual([true]);
 
-        // Sent out there: the holder's next strip holds the tab without words, and this window's copy is stale.
+        // Sent out there: the holder's next strip carries the tab without words; this window's own copy was stale.
         receiveChatNote({
             sandbox: undefined,
             note: { kind: `strip`, strip: strip({ ...draftTab(`a1`), registered: true, standing: `resumed` }) },
@@ -686,12 +622,8 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    /* THE × ON THE POPPED-OUT CHAT'S RAIL, seen from the board: the reported glitch. The rail's × takes the chat
-     * off that surface and no more (useChat.closeTabs): the floating window sets the message aside (closedDrafts)
-     * and drops the tab, and the board over here hears those two facts in that order on the one channel. The
-     * card it draws is the SAME card throughout, live draft to set-aside draft: it never vanishes between the
-     * two, and it never starts dating itself. (The board's own × is the other close, the conversation's, and
-     * takes the card with it: summon.test.ts.) */
+    // The rail's × removes the chat from that surface only; the floating window sets the message aside, then drops
+    // the tab, and the board reads both as one continuous card.
     it("turns a draft card into a set-aside card in one step when the popped-out chat closes it", async () => {
         const { receiveChatNote } = await import("../../chat/run/chatChannel");
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
@@ -707,7 +639,7 @@ describe("draft cards", () => {
             }));
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
-        // First the words are set aside (the floating window's closeTabs, before it drops the tab)...
+        // First the words are set aside (closeTabs), before the tab itself is dropped.
         receiveChatNote({
             sandbox: undefined,
             note: {
@@ -729,7 +661,7 @@ describe("draft cards", () => {
         });
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
-        // ...then the tab is gone from the strip: the card stands, now for the message alone, and undated.
+        // Then the tab is gone from the strip: the card stands for the message alone, undated.
         receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip() } });
         expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
@@ -737,12 +669,8 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    /* THE WORDS AND THE AGE ON A CARD THAT ALREADY HAS A NAME, which is where the mark is read most often and
-     * where it could say least. `preview` used to be confined to the NAMELESS cards, since naming them is what it
-     * was added for, so a long-running agent with a half-written follow-up in its composer wore a mark able to
-     * report only that some message existed: not which one, and not whether it was broken off a minute ago or
-     * abandoned last week. Both are the whole content of that mark's hover (UnsentMark), so the join carries them
-     * for every unsent card and AgentCard keeps a real title in front of the preview. */
+    // `preview`/`draftAt` are not confined to nameless cards: a titled agent's half-written follow-up needs the same
+    // mark tooltip (UnsentMark), naming which message and how old.
     it("carries the message's words and its age on a card that has a title of its own", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
@@ -756,14 +684,8 @@ describe("draft cards", () => {
         ]);
     });
 
-    /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send
-     * was REFUSED: the daemon turns a request away and never makes an entry, which is precisely why the fleet
-     * has never heard of it. Reading that as a draft put a card nobody can act on into the Active lane, sorted
-     * ABOVE the agents genuinely working (drafts lead that lane), where it survived every reload for the life of
-     * the sandbox: the report this came from had ten of them.
-     *
-     * Attention is where it belongs and `Didn't start` is what the chip says, because the card IS a thing that
-     * needs the user, and what they do about it is close it, which is the affordance that standing unlocks. */
+    // A conversation whose send was refused has no registry entry, but reading that as a draft put an unactionable
+    // card above genuinely working agents; it belongs in Attention as `failed`, closable.
     it("cards a conversation whose send was refused as failed, in Attention rather than among the working", () => {
         const conversation = new Conversation(`refused`);
         conversation.error.value = `invalid attachment path: nope.png`;
@@ -775,8 +697,7 @@ describe("draft cards", () => {
         ]);
     });
 
-    // The error is about the LAST send, not about the conversation: a turn that goes through clears it, and the
-    // card has to follow rather than wear a refusal the user has already sent past.
+    // The error is about the last send, not the conversation; a successful turn clears it.
     it("cards it as a draft again once a turn is under way", () => {
         const conversation = new Conversation(`refused`);
         conversation.error.value = `invalid attachment path: nope.png`;
@@ -786,10 +707,8 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([`refused`]);
     });
 
-    /* A SENT TURN THE DAEMON HAS NOT FILED YET is `starting`, and the card says what this browser knows about it.
-     *
-     * It used to report the wire's own `running` and carry the four identity fields alone, so the board drew a
-     * title under a spinner and nothing else (no model, no elapsed) for as long as the filing took. */
+    // A sent turn the daemon hasn't filed yet is `starting`, carrying what the browser itself knows (model, elapsed)
+    // instead of the bare wire fields a spinner used to show alone.
     it("cards a sent turn the fleet has not registered as starting, with the settings and elapsed it knows", () => {
         const conversation = new Conversation(`sent`);
         conversation.model.value = `claude-opus-5`;
@@ -802,13 +721,8 @@ describe("draft cards", () => {
         ).toEqual([{ id: `sent`, status: `starting`, model: `claude-opus-5`, startedAt: 4_000 }]);
     });
 
-    /* CLICKING ONE MUST NOT TAKE IT OFF THE BOARD: the reported bug, in one case.
-     *
-     * `open` latches the tab as registered for a card the fleet DOES know, which is right for every registry card
-     * and was being applied to this one too, because `running` was indistinguishable from the daemon's own
-     * running. The drafts half then skipped the conversation for being registered and the registry had no entry
-     * to render instead, so the agent vanished from every lane on the very click meant to open it, and only a
-     * reload brought it back. */
+    // Opening a `starting` card latches it as registered, which used to make the drafts half skip it while the
+    // registry had no entry yet, vanishing the agent from every lane.
     it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {
         const conversation = new Conversation(`sent`);
         conversation.streaming.value = true;
@@ -833,8 +747,7 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`]);
     });
 
-    // Archive from the board while the agent's chat is open in the dock: the card leaves BOTH views, and the tab
-    // it closes must not come back as a phantom draft in the Active lane (the reported bug).
+    // Archiving from the board while its chat is open must close both views, not leave a phantom draft behind.
     it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
@@ -848,9 +761,7 @@ describe("draft cards", () => {
         expect(useAgents().archived.value.map((entry) => entry.id)).toEqual([`a1`]);
     });
 
-    // The same hole, reached from the other side: an archived agent keeps its branch, its diff and its
-    // transcript, so reading one from the archive is a real destination, and it OPENS the tab, which must not
-    // put the card the user just filed away straight back on the board.
+    // An archived agent keeps its branch/diff/transcript; opening it from the archive must not re-board it.
     it("leaves it off the board when its tab is opened from the archive", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
@@ -862,8 +773,7 @@ describe("draft cards", () => {
         expect(useChat().conversations.value.some((conversation) => conversation.conversationId === `a1`)).toBe(true);
     });
 
-    // A dropped events stream empties the roster wholesale. Reading that as "every open agent is a draft" put
-    // the whole fleet into the Active lane as fresh cards until the reconnect's first frame repainted it.
+    // A dropped stream empties the roster wholesale; that must not turn every open tab into a fresh draft.
     it("does not turn every open agent tab into a draft when the stream drops", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
@@ -873,11 +783,8 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([]);
     });
 
-    /* A CONVERSATION REOPENED FROM HISTORY IS NOT A DRAFT. It has no registry entry: the agent that ran it is
-     * long gone, or it was a plain chat, so it lands in this same client-only half, and calling that a draft
-     * put a three-week-old conversation at the HEAD of the Active lane wearing "Draft": the board announcing
-     * the user's own history as work about to begin. Nothing is running and nothing is owed, which is
-     * `finished`. */
+    // A conversation reopened from History has no registry entry either, but it isn't new work: carding it as a draft
+    // put old history at the head of Active. Nothing is running or owed, so it's `finished`.
     it("cards a conversation reopened from History as an earlier chat, not as a fresh draft", () => {
         const conversation = new Conversation(`old-chat`);
         conversation.session.value = { id: `sess-1`, provider: `claude`, account: undefined, harness: `native` };
@@ -889,12 +796,8 @@ describe("draft cards", () => {
         ]);
     });
 
-    /* WORDS THE USER HAS NOT SENT KEEP AN ARCHIVED SESSION ON THE BOARD.
-     *
-     * Reading an agent out of the archive opens its chat by design, and typing there is the ordinary next move.
-     * The board had no card for it, so clearing the search that found it left the half-written message with
-     * nowhere to be seen from: the report this came from. It is lifted for exactly as long as the words are
-     * there, says "archived" on its face (archivedAt survives the lift), and nothing is written daemon-side. */
+    // An archived session with unsent words stays on the board for as long as those words exist, still marked
+    // archived on its face; nothing is written daemon-side.
     it("lifts an archived session back onto the board while its chat holds an unsent message", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
@@ -909,8 +812,7 @@ describe("draft cards", () => {
         ]);
     });
 
-    // ...and it files itself straight back when they go. Whitespace is not a message: send() refuses it too, so
-    // a stray space must not be what keeps a card on the board for the rest of the day.
+    // It files back the moment the words clear; whitespace isn't a message, matching send()'s own rule.
     it("puts it back in the archive the moment the message is cleared", () => {
         const { archived, open } = useAgents();
         const entry = { ...registered(`a1`), archivedAt: 2_000 };
@@ -925,11 +827,8 @@ describe("draft cards", () => {
     });
 });
 
-/* THE FOLD, AND WHAT IT MAY NOT SWALLOW. The Finished lane windows to FINISHED_WINDOW cards while it is being
- * browsed, ordered by recency, so an old session is behind the fold by definition, which is fine right up
- * until the user starts writing in one. Those words live in this window and nowhere else, so the ordering puts
- * them in front of the fold and the only thing that can push one behind it is MORE unsent messages than the
- * window has room for: at that point they are hiding each other rather than being hidden by unrelated work. */
+// The Finished lane windows to FINISHED_WINDOW cards, so an old session sits behind the fold until its chat gets
+// unsent words, which move it ahead regardless of age.
 describe("the finished fold", () => {
     const landed = (id: string, updatedAt: number): AgentSummary => ({
         id,
@@ -949,8 +848,8 @@ describe("the finished fold", () => {
         useChat().conversations.value = [other];
     });
 
-    // The reported case, at the store level: the session the user searched up is the oldest thing in the lane,
-    // so the fold has it, until they start writing, at which point it leads the lane instead.
+    // The reported case: the searched-up session is the oldest in the lane and folded away, until writing in it moves
+    // it to the front.
     it("holds the oldest finished card in front of the fold when its chat has a message waiting", () => {
         const oldest = `a${FINISHED_WINDOW + 1}`;
         const conversation = new Conversation(oldest);
@@ -968,9 +867,8 @@ describe("the finished fold", () => {
         expect(shownIds()).toContain(oldest);
     });
 
-    // Ordering, not pinning: the cards holding words lead the lane (newest of them first, the lane's own rule),
-    // and the window then falls where it falls. Past a window's worth of them the fold is back, which is the
-    // honest outcome: the lane is a browsing list, not a promise to draw everything at once.
+    // Ordering, not pinning: unsent cards lead by recency among themselves, and past a window's worth the fold still
+    // applies.
     it("orders every unsent card ahead of the sent ones", () => {
         const held = [`a6`, `a7`, `a8`].map((id) => {
             const conversation = new Conversation(id);
@@ -992,12 +890,8 @@ describe("the finished fold", () => {
         ).toEqual([`a6`, `a7`, `a8`]);
     });
 
-    /* AND BETWEEN THEM, THE WORK THAT STOPPED SHORT (AgentSummary.unfinished). Three kinds of card in this lane
-     * are owed something, and they sort in the order of how easily each is lost: an unsent message lives in
-     * this window and nowhere else, an unfinished session's work is on a branch that keeps but wears the same
-     * settled face as a session that finished, and a card ready to land is an offer the daemon repeats for as
-     * long as the branch exists. Recency decides the rest, and here it argues against all three: the card that
-     * owes nothing is the newest one. */
+    // Sorts by how easily each is lost: unsent (lives only in this window), then unfinished work
+    // (AgentSummary.unfinished), then ready-to-land, then recency.
     it("orders unfinished cards under the unsent ones and above the ones ready to land", () => {
         const writing = new Conversation(`a1`);
         writing.registered.value = true;
@@ -1018,16 +912,8 @@ describe("the finished fold", () => {
     });
 });
 
-/* CARDS THAT WOULD NOT SIT STILL: the reported bug, and the argument for the tiebreaker every lane order now
- * ends on.
- *
- * A tie in a sort is not a draw, it is a question passed down: the order falls to the array underneath, and
- * this board's array is `fleet`, kept sorted by `updatedAt` descending. That clock ticks per agent, a second
- * at a time and out of step with the rest, so every activity frame dealt the tied cards a fresh order and the
- * column reshuffled itself under the user's eyes.
- *
- * The ties are ordinary. Agents resumed TOGETHER: one credential renewal bringing a batch of turns back:
- * begin in the same millisecond, so they carry an identical `startedAt` for as long as they run. */
+// An unresolved tie falls to `fleet`'s own order, sorted by updatedAt; since that ticks per agent independently,
+// tied cards reshuffled every frame. Ties are ordinary: a resumed batch shares one `startedAt`.
 describe("lane order holds still", () => {
     const running = (id: string, startedAt: number, updatedAt: number): AgentSummary => ({
         id,
@@ -1048,8 +934,8 @@ describe("lane order holds still", () => {
         useChat().conversations.value = [other];
     });
 
-    // The report itself: four agents resumed at one stroke, each reporting its own activity, trading places in
-    // the column every second. The lane settles on one order and every frame after it is the SAME order.
+    // Four agents resumed at once, each reporting its own activity, used to trade places every second; the lane must
+    // settle on one order and hold it.
     it("holds agents that started in the same millisecond in place as their activity ticks", () => {
         const batch = [`c`, `a`, `d`, `b`];
         setAgents(
@@ -1059,7 +945,7 @@ describe("lane order holds still", () => {
         const settled = activeIds();
 
         expect(settled).toHaveLength(4);
-        // Each in turn becomes the most recently active: the frames that used to re-deal the lane.
+        // Each in turn becomes most recently active: the frames that used to re-deal the lane.
         for (const [at, live] of batch.entries()) {
             setAgents(
                 batch.map((id) => running(id, 5_000, id === live ? 6_000 + at : 5_000)),
@@ -1070,8 +956,7 @@ describe("lane order holds still", () => {
         }
     });
 
-    // Attention orders on `updatedAt` alone, so a batch that also stalls together (two agents asking at once)
-    // ties outright: the same churn, one lane over.
+    // Attention orders on updatedAt alone, so two agents asking at once tie outright too.
     it("holds the attention lane still when two cards share an updatedAt", () => {
         const asking = (id: string): AgentSummary => ({
             ...running(id, 5_000, 7_000),
@@ -1081,16 +966,15 @@ describe("lane order holds still", () => {
         setAgents([asking(`b`), asking(`a`)], 1);
         const settled = useAgents().lanes.value.attention.map((entry) => entry.id);
 
-        // The daemon's own roster order is not a promise: the same agents arrive the other way round on the
-        // next frame, and the lane may not move because of it.
+        // The daemon's roster order is not a promise; the lane must not move just because it changed.
         setAgents([asking(`a`), asking(`b`)], 2);
 
         expect(useAgents().lanes.value.attention.map((entry) => entry.id)).toEqual(settled);
     });
 });
 
-// The board's exit. Archiving is the ROUTINE way an agent leaves the fleet, so what these pin down is the
-// thing that makes it routine: it never asks first, it never interrupts, and it always keeps a way back.
+// Archiving is the routine way an agent leaves the fleet: it never asks first, never interrupts, and always keeps
+// a way back.
 describe("archive", () => {
     const agent = (id: string): AgentSummary => ({
         id,
@@ -1102,25 +986,20 @@ describe("archive", () => {
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
-    // The tabs whose conversation is one of THIS suite's agents: the strip also carries the main-tree chat the
-    // reset installs, which no archive is about.
+    // This suite's own agent tabs; reset also installs a main-tree chat no archive case is about.
     const openTabs = (): string[] =>
         useChat()
             .conversations.value.map((conversation) => conversation.conversationId)
             .filter((id) => [`a`, `b`].includes(id));
 
-    // The store is a module singleton (one board per app), so each case resets what it looks at: resetAgents
-    // drops the roster, the undo set and both reports, since all of them were promises about one daemon. The
-    // tab strip is reset too, since archiving now writes to it: one MAIN-TREE chat, which is not fleet work and
-    // cards nothing, so a case that wants an agent's tab open installs it itself.
+    // The store is a module singleton, so each case resets the roster, undo set and reports (promises about one
+    // daemon) plus the tab strip, since archiving now writes to it.
     beforeEach(() => {
-        // Answered by default rather than left bare: an archive fires the daemon's best-effort side calls (the
-        // read marker), and an undefined return is not something they know how to survive. The per-case
-        // mockResolvedValueOnce/mockRejectedValueOnce still take precedence.
+        // Stubbed to resolve by default: an archive fires the daemon's best-effort side calls, and undefined isn't
+        // something they survive. Per-case mocks still take precedence.
         post.mockReset().mockResolvedValue({} as never);
         resetAgents();
-        // The board reports into the app's one receipt channel (composables/notifications.ts), which no longer
-        // resets with the fleet: it is shared, and a desync clearing it would wipe whatever else is on screen.
+        // The receipt is the app's shared channel; a desync must not wipe what else is on screen.
         useNotifications().dismissReceipt();
         useAgents().archived.value = [];
         const other = new Conversation();
@@ -1139,25 +1018,20 @@ describe("archive", () => {
 
         expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ ids: [`a`] }) }));
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
-        // The archive half is filled from the same response: no second round-trip, so the detail page's
-        // cross-half lookup resolves an agent archived under the user's cursor.
+        // Archive half fills from the same response, no second round-trip, so a cross-half lookup resolves at once.
         expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
-        // The whole point of the rework: one card is the routine case, and the routine case interrupts nobody.
+        // The whole point of the rework: the routine single-card case interrupts nobody.
         expect(receipt.value).toBeUndefined();
         expect(notice.value).toBeUndefined();
-        // Quiet is not the same as unrecoverable: the undo is held, and the counter is told to pulse.
+        // Quiet isn't unrecoverable: the undo is held and the counter still pulses.
         expect(undoable.value).toEqual([`a`]);
         expect(archivedFlash.value).toBe(flashes + 1);
     });
 
-    /* THE PRESS PAINTS; THE REQUEST FOLLOWS IT.
-     *
-     * Behind one press sit a commit of whatever the worktree held, a checkout teardown and a ref park, per repo
-     *, so the card used to hold still for as long as the git took, which on a board carrying a fleet's worth
-     * of finished sessions reads as a button that did nothing. The card leaves on the press instead, and the
-     * daemon's answer only ever corrects it: what it declined comes back, and a failure brings back the lot. */
+    // Behind one press sit a commit, checkout teardown and ref park per repo, so the old code held the card still for
+    // as long as git took. The card now leaves on the press; the daemon's answer only ever corrects it.
     describe("before the daemon has answered", () => {
-        // A request left open on purpose, so the assertions can be made in the frame the user actually sees.
+        // A request left open on purpose, so assertions land in the frame the user actually sees.
         const held = <T>(): { answer: Promise<T>; give: (value: T) => void; refuse: (error: Error) => void } => {
             let give!: (value: T) => void;
             let refuse!: (error: Error) => void;
@@ -1176,7 +1050,7 @@ describe("archive", () => {
 
             const press = archive([`a`]);
 
-            // Not awaited: the daemon has said nothing yet, and this is the whole point of the change.
+            // Not awaited: the daemon has said nothing yet, which is the whole point of the change.
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
             request.give({ moved: [archivedAgent(`a`)], failed: [], rev: 2 });
             await press;
@@ -1194,9 +1068,9 @@ describe("archive", () => {
             expect(notice.value).toContain(`the agent's turn is running`);
         });
 
-        // The removal is a guess about what the daemon will take. An agent it declines: a turn that started
-        // under the press, a worktree that would not retire: is a card that must come back, while the ones
-        // beside it stay gone.
+        // The removal is only a guess: an agent the daemon declines (a turn that started under the press) must come
+        // back,
+        // while the rest stay gone.
         it("hands back exactly what the daemon declined", async () => {
             const { archive, lanes, archived, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
@@ -1209,7 +1083,7 @@ describe("archive", () => {
             expect(undoable.value).toEqual([`a`]);
         });
 
-        // "Nothing moved" is the case the optimistic removal got entirely wrong, so the board is put back whole.
+        // "Nothing moved" is the case the optimistic removal got entirely wrong, so the board goes back whole.
         it("puts the whole lane back when nothing moved", async () => {
             const { archive, lanes } = useAgents();
             const { receipt } = useNotifications();
@@ -1222,10 +1096,9 @@ describe("archive", () => {
             expect(receipt.value?.title).toContain(`Nothing to archive`);
         });
 
-        /* THE REPORT THIS PAIR EXISTS FOR. A refusal (a checkout whose repository was deleted, a locked one)
-         * answers 200 with nothing moved, and the board used to read that as "there was nothing to archive" and
-         * say so, about the very card still sitting in front of the user, on every press. The daemon now names
-         * what it refused and why, and the strip that does not expire is where that belongs. */
+        // A refusal (deleted repo, locked checkout) answers 200 with nothing moved; the daemon now names what and why,
+        // on
+        // the persistent strip rather than as a false "nothing to archive".
         it("says why the daemon refused, instead of claiming there was nothing to archive", async () => {
             const { archive, lanes, notice } = useAgents();
             const { receipt } = useNotifications();
@@ -1243,8 +1116,7 @@ describe("archive", () => {
             expect(receipt.value).toBeUndefined();
         });
 
-        // A mixed answer: the cards that went are gone and the one that stayed keeps its explanation, which the
-        // "the archive worked, drop the stale strip" line used to wipe on its way past.
+        // A mixed answer keeps the refused card's explanation instead of wiping it as "archive worked".
         it("keeps the refusal on screen when the rest of the press succeeded", async () => {
             const { archive, lanes, notice } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
@@ -1260,10 +1132,9 @@ describe("archive", () => {
             expect(notice.value).toContain(`worktree busy`);
         });
 
-        /* The rollback withdraws only its OWN unanswered intent. Two presses can be open on one card: the card
-         * menu of a card still animating out, a double press, and if the one that FAILS is the one that
-         * answers last, dropping the hold the successful one left would put an archived card back on the board
-         * for good. So the failure hands back only what nobody has since archived. */
+        // The rollback withdraws only its own unanswered intent: if two presses are open on one card and the failing
+        // one
+        // answers last, dropping the successful one's hold would put an archived card back for good.
         it("leaves a card another press did archive off the board when it rolls back", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
@@ -1312,8 +1183,8 @@ describe("archive", () => {
         expect(undoable.value).toEqual([]);
     });
 
-    // Mod+Z reaches the last archive whether or not a receipt was ever raised, which, for the single-card
-    // case, it never is. Without this the quiet archive would be the unrecoverable one.
+    // Mod+Z reaches the last archive whether or not a receipt was raised, since the single-card case never raises
+    // one; without this a quiet archive would be unrecoverable.
     it("undoes a silent single archive from the keyboard", async () => {
         const { archive, undoArchive, undoable, lanes } = useAgents();
         setAgents([agent(`a`)], 1);
@@ -1328,8 +1199,8 @@ describe("archive", () => {
         expect(undoable.value).toEqual([]);
     });
 
-    // The gate that lets the chord stay out of everything else Mod+Z means: with nothing to put back it is
-    // not an undo that fails, it is not an undo at all.
+    // The gate keeping the chord out of everything else Mod+Z means: nothing to put back is not a failed undo, it's
+    // not an undo at all.
     it("undoes nothing, and asks the daemon nothing, when there is nothing to put back", async () => {
         const { undoArchive } = useAgents();
 
@@ -1338,8 +1209,8 @@ describe("archive", () => {
         expect(post).not.toHaveBeenCalled();
     });
 
-    // A card restored one at a time from the archive view is no longer the undo's to give back, or the undo
-    // would ask the daemon to unarchive an agent that is already on the board.
+    // A card restored individually from the archive view leaves the undo set, or undo would try to unarchive an
+    // already-restored agent.
     it("drops individually restored agents from the undo set", async () => {
         const { archive, restore, undoable } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
@@ -1352,8 +1223,7 @@ describe("archive", () => {
         expect(undoable.value).toEqual([`b`]);
     });
 
-    // One agent is a card and a tab, so the archive moves both: driven off `moved`, so a bulk sweep closes
-    // exactly the chats whose cards left and no others.
+    // One agent is a card and a tab, so a bulk archive closes exactly the tabs whose cards moved.
     it("closes the chat tabs of the cards that moved, and only those", async () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
@@ -1365,8 +1235,7 @@ describe("archive", () => {
         expect(openTabs()).toEqual([`b`]);
     });
 
-    // A press the daemon refused leaves the tab where it was: the close is a consequence of the card leaving the
-    // board, not of the button being pressed.
+    // A refused press leaves the tab open: closing follows the card leaving, not the press itself.
     it("leaves the chat tab open when the archive failed", async () => {
         const { archive } = useAgents();
         setAgents([agent(`a`)], 1);
@@ -1389,8 +1258,7 @@ describe("archive", () => {
         expect(receipt.value?.actions).toBeUndefined();
     });
 
-    // A failure is the one thing here that must be read, so it lands on the strip that has no timer: never
-    // on the receipt, which retires itself whether or not anyone looked.
+    // A failure must be read, so it lands on the timerless strip, never the self-retiring receipt.
     it("reports a failure on the persistent strip, without dropping any cards off the board", async () => {
         const { archive, notice, lanes } = useAgents();
         const { receipt } = useNotifications();
@@ -1404,10 +1272,10 @@ describe("archive", () => {
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
     });
 
-    // Clicking card after card is the normal way this gets used, so overlapping calls are the normal case:
-    // not an edge one. Each of these pins something that broke when the two requests shared one piece of state.
+    // Clicking card after card makes overlapping archive calls the normal case, not an edge one; each case here pins
+    // something that broke when two requests shared state.
     describe("overlapping archives", () => {
-        // Resolves when the test says so, so two archives can be held open at once.
+        // Resolves on command, so two archives can be held open at once.
         const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void } => {
             let resolve!: (value: T) => void;
             const promise = new Promise<T>((settle) => (resolve = settle));
@@ -1427,8 +1295,7 @@ describe("archive", () => {
 
             first.resolve({ moved: [archivedAgent(`a`)], failed: [], rev: 7 });
             await archiveA;
-            // The bug: the first call's cleanup used to clear the shared in-flight list, so b's card went quiet
-            // while its request was still open.
+            // The bug: one call's cleanup used to clear the shared in-flight list, silencing the other card's request.
             expect(busyIds.value).toEqual([`b`]);
 
             second.resolve({ moved: [archivedAgent(`b`)], failed: [], rev: 8 });
@@ -1465,7 +1332,7 @@ describe("archive", () => {
 
             const archiveA = archive([`a`]);
             const archiveB = archive([`b`]);
-            // b finishes first; a's response was composed when b was still on the board.
+            // b finishes first; a's response was composed while b was still on the board.
             second.resolve({ moved: [archivedAgent(`b`)], failed: [], rev: 9 });
             await archiveB;
             first.resolve({ moved: [archivedAgent(`a`)], failed: [], rev: 10 });
@@ -1483,20 +1350,20 @@ describe("archive", () => {
             post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], failed: [], rev: 12 } as never);
             await archive([`b`]);
 
-            // Clicking down the lane is ONE intent, so the way back to `a` is not dropped by archiving `b`.
+            // Clicking down the lane is one intent, so undoing `b` must not drop the way back to `a`.
             expect(undoable.value).toEqual([`b`, `a`]);
             post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 13 } as never);
             await undoArchive();
             expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`b`, `a`] }) }));
         });
 
-        // The roster arrives as full snapshots from three racing sources (the /events stream, refresh(), and
-        // this browser's own writes), so "which one is newest" cannot be "which one landed last". These pin the
-        // ordering rules that replaced last-frame-wins: each was a way an archived card came back.
+        // The roster arrives as full snapshots from three racing sources, so newest is not "whichever landed last";
+        // these
+        // pin the ordering rules that replaced that, each one a way an archived card came back.
         it("ignores a roster snapshot older than the one already applied", () => {
             const { lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 5);
-            // A slow GET /agents that was read at revision 3 and delivered after the revision-5 frame.
+            // A slow GET /agents read at revision 3, delivered after the revision-5 frame.
             setAgents([agent(`a`), agent(`b`), agent(`c`)], 3);
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
@@ -1507,9 +1374,7 @@ describe("archive", () => {
             post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
-            // A running turn ticks updatedAt about once a second, so a legitimately newer roster arrives that
-            // was still composed before the archive applied. Revision ordering alone would accept it and put
-            // the card back; the pending move is what holds the board steady until revision 9.
+            // A newer roster can still predate the archive; the pending move holds the card off until revision 9.
             setAgents([agent(`a`), agent(`b`)], 8);
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
         });
@@ -1520,8 +1385,7 @@ describe("archive", () => {
             post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
-            // The roster that reflects the archive retires the local intent, and the daemon is authoritative
-            // again, so an agent it has since restored elsewhere reappears instead of being held off forever.
+            // The roster reflecting the archive retires the intent, so a since-restored agent reappears, not stuck.
             setAgents([agent(`a`), agent(`b`)], 9);
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
@@ -1530,13 +1394,14 @@ describe("archive", () => {
             const { lanes } = useAgents();
             setAgents([agent(`a`)], 42);
             resetAgents();
-            // A daemon that restarted counts from 0 again; holding onto 42 would reject every frame it sends.
+            // A restarted daemon counts from 0 again; holding onto 42 would reject every frame it sends.
             setAgents([agent(`a`), agent(`b`)], 0);
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
 
-        // The way back no longer hangs off the message offering it, which is what lets the message expire on
-        // a timer, and lets the single-card archive have no message at all.
+        // The undo no longer hangs off the message offering it, letting the message expire on a timer or the
+        // single-card
+        // case have none at all.
         it("keeps the undo after the receipt that announced it is gone", async () => {
             const { archive, undoable } = useAgents();
             const { receipt, dismissReceipt } = useNotifications();
@@ -1552,10 +1417,8 @@ describe("archive", () => {
     });
 });
 
-/* The archive list is the fleet's pull-only half: no stream carries it, so its one invalidation signal is an
- * id leaving the roster by another hand than this browser's (the daemon's retention sweep, another device's
- * archive or discard). Without it the Finished header's count, and the archive door it gates, froze at
- * whatever the last visit read, which is how the door came to look like it disappears. */
+// The archive list is pull-only; its one invalidation signal is an id leaving the roster by another hand (daemon
+// sweep, another device). Without it the Finished header's count froze at the last visit's reading.
 describe("the archive list", () => {
     const agent = (id: string): AgentSummary => ({
         id,
@@ -1597,7 +1460,7 @@ describe("the archive list", () => {
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
         await archive([`a`]);
 
-        // The daemon's own account of the archive, and a later unrelated frame: neither is news to the list.
+        // The daemon's own archive account, and a later unrelated frame, are neither news to the list.
         setAgents([agent(`b`)], 2);
         setAgents([agent(`b`)], 3);
 
@@ -1627,11 +1490,8 @@ describe("the archive list", () => {
     });
 });
 
-/* THE SWEEP'S OTHER HALF. One agent is a card and a tab, and the two only ever moved together when the press
- * happened in this browser: archiving from the board closed the chat with the card, while the daemon's own
- * retention sweep took the card and left the tab. So the board stayed seven deep while the chat list's Finished
- * lane grew for the life of the sandbox: the thing the user reports as "my floating chat never cleans up".
- * Same departure signal as the archive list above, applied to the strip. */
+// The daemon's own retention sweep used to take only the card and leave the tab, growing the chat list's Finished
+// lane unbounded. Same departure signal as the archive list, applied to the strip.
 describe("tabs the daemon retired", () => {
     const agent = (id: string): AgentSummary => ({
         id,
@@ -1642,8 +1502,8 @@ describe("tabs the daemon retired", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const openTabs = (): string[] => useChat().conversations.value.map((conversation) => conversation.conversationId);
-    // A tab the roster has latched as registered: an untouched draft would be swept by the tab list's own
-    // rules, and would prove nothing about this one.
+    // A tab latched as registered by the roster; an untouched draft would be swept by the tab list's own rules
+    // regardless.
     const openAgentTab = (id: string): Conversation => {
         const conversation = new Conversation(id);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
@@ -1656,8 +1516,7 @@ describe("tabs the daemon retired", () => {
             .mockResolvedValue({} as never);
         resetAgents();
         resetArchive();
-        // The chat the user is sitting in, which is not fleet work and cards nothing. Focused, so the strip's
-        // "at most one untouched draft, and only the focused one" rule keeps it through every write below.
+        // The user's own chat; focused, so the strip's one-untouched-draft rule keeps it through the writes below.
         useChat().conversations.value = [new Conversation(`here`)];
         useChat().setActive(`here`);
     });
@@ -1672,8 +1531,8 @@ describe("tabs the daemon retired", () => {
         expect(openTabs()).toEqual([`here`]);
     });
 
-    // The sweep runs on a clock the user cannot see, so the one thing it must never do is empty the panel that
-    // is being read. The tab says it is archived and closes like any other once the user moves on.
+    // The sweep runs on a clock the user can't see, so it must never empty the panel being read; the tab just marks
+    // itself archived and closes once the user moves on.
     it("spares the chat the user is looking at", () => {
         openAgentTab(`a`);
         setAgents([agent(`a`)], 1);
@@ -1684,8 +1543,8 @@ describe("tabs the daemon retired", () => {
         expect(openTabs()).toContain(`a`);
     });
 
-    // Everything else a chat holds survives a close: the transcript is in History, the turn detaches, the
-    // branch is on the daemon. A half-typed message does not.
+    // Everything else a chat holds survives a close (transcript in History, turn detached, branch on the daemon); a
+    // half-typed message does not, so it's spared.
     it("spares one holding unsent input", () => {
         const drafted = openAgentTab(`a`);
         openAgentTab(`b`);
@@ -1697,8 +1556,8 @@ describe("tabs the daemon retired", () => {
         expect(openTabs()).toEqual([`here`, `a`]);
     });
 
-    // The departure signal is "left by another hand". A reconnect resets the board, so its first snapshot has
-    // nothing to compare against, and must not read as the whole fleet being swept.
+    // The departure signal is "left by another hand"; a reconnect resets the board, so its first snapshot has nothing
+    // to compare against and must not read as the whole fleet being swept.
     it("keeps every tab across a reconnect's first snapshot", () => {
         openAgentTab(`a`);
         setAgents([agent(`a`)], 7);

@@ -5,33 +5,15 @@ import type { Provisioner, ProvisionContext } from "../provisioner.js";
 import { openRunTab } from "../run-step.js";
 import { type Completed, freshShellEnv, runTool } from "../shell.js";
 
-/* THE CLI PATH — the wizard's setup code, redeemed by THIS checkout's `ic sandbox connect`.
- *
- * This is the lane the desktop app and the terminal one-liner both end up in, and until it existed it was the
- * only onboarding path with no end-to-end coverage at all: the claim's values reach a container through a list
- * written once in Rust, and every layer around it is tested separately. That gap shipped. When reachability
- * moved to intentic's own edge, ic stopped passing the two values a daemon dials with and nothing noticed —
- * the platform minted them, the run contract replayed them, the daemon read them, and the CLI in the middle
- * dropped them on the floor. Installs came up healthy, registered with the platform, and answered 502 on their
- * own address forever.
- *
- * SO THE ASSERTION THAT MATTERS HERE IS `reachedBy`. A hermetic world has no edge (the grant names an
- * unroutable `.test` address on purpose; world.ts says why), so no tunnel can ever come up and asserting one
- * would be asserting a fiction. What IS knowable, and is exactly the fingerprint of that bug, is the POSTURE
- * the daemon reports on /health: `tunnel` means it was given a grant and an edge and is dialling, `loopback`
- * means it was given neither and never will be. One field, no log scraping, and no edge required.
- */
+// Redeems the wizard's setup code with this checkout's `ic sandbox connect`, the coverage the desktop app and one-liner
+// lane previously had none of. Asserts `reachedBy` from /health (tunnel vs loopback), since a hermetic world has no
+// edge to tunnel through, but a dropped dial value is what leaves a container healthy yet unreachable.
 
-/* The setup code off the one-liner the wizard renders — `curl … | env … sh -s -- <code>`, or `env … sh
- * <path> <code>` when the page is handing out the checkout's own scripts.
- *
- * The command is not RUN: it fetches ic from the latest GitHub release (this lane drives the branch's binary,
- * for the reason images.ts builds the api rather than pulling `:latest`) and would prepare Docker on a machine
- * that already has it. What it carries is the code, and taking that from the bytes the page actually copies is
- * what keeps this honest about the command a user is given. */
+// Extracts the setup code from the wizard's one-liner (`curl | sh -s -- <code>` or `sh <path> <code>`); the command
+// itself is never run, only parsed for the code the page actually copied.
 const setupCodeOf = (command: string): string | undefined => /\bsh\s+(?:-s\s+--\s+)?(\S+)\s*$/u.exec(command.trim())?.[1];
 
-/** The slug every later command keys off: the leading label of the address the daemon announced. */
+/** Slug every later command keys off: the leading label of the announced daemon address. */
 const slugOf = (daemonUrl: string): string | undefined => {
     try {
         const label = new URL(daemonUrl).hostname.split(`.`)[0];
@@ -41,20 +23,13 @@ const slugOf = (daemonUrl: string): string | undefined => {
     }
 };
 
-/* THE LINKS THIS WORLD CANNOT ANSWER, and the only failure this lane tolerates.
- *
- * `ic sandbox connect` ends by verifying the whole reachability chain and fails a code-carrying setup when any
- * link is broken — which is right, and which a world with no edge cannot satisfy: the sandbox's public name is
- * under a reserved TLD that resolves nowhere. Those two links are therefore expected to fail HERE and nowhere
- * else. Every other link (the container, the daemon, its registration) is this tier's business, so a run that
- * fails one of them fails the lane — and so does a non-zero exit that names no link at all, which is a setup
- * that died somewhere this tolerance was never meant to cover. */
+// Only links expected to fail in a world with no edge; any other failing link fails the lane.
 const OUTWARD_LINKS = new Set([`Public DNS`, `Public URL`]);
 
-/** The check names out of ic's failure summary — its numbered `  1. Public DNS` lines and nothing else. */
+/** Check names from ic's failure summary's numbered ` 1. Public DNS` lines. */
 const failedChecks = (output: string): string[] => [...output.matchAll(/^\s+\d+\.\s+(\S.*?)\s*$/gmu)].map((match) => match[1] ?? ``);
 
-/** Whether a finished setup is one this world explains, or a failure to report with everything it printed. */
+/** Whether a finished setup is one this world explains, or a real failure to report in full. */
 const tolerated = (setup: Completed): boolean => {
     if (setup.code === 0) {
         return true;
@@ -69,15 +44,11 @@ export const icProvisioner = (): Provisioner => {
     let ic: string | undefined;
     let slug: string | undefined;
 
-    /* THE CODE, OFF THE PAGE. The run step's own Copy button is the only `Copy` on screen while the terminal
-     * tab is open (the compose tab's buttons render with the compose panel), and the command it copies is
-     * guarded before anything is redeemed: the wizard writes a LOCAL platform into it only when the api is
-     * served on loopback, and without that this run would spend its setup code on the real platform. */
+    // Only `Copy` button on screen while the terminal tab is open. Guarded before redeeming: the wizard writes a local
+    // platform into the command only when the api is on loopback.
     const readSetupCode = async (context: ProvisionContext, apiUrl: string): Promise<string> => {
         const { page } = context;
-        /* The wizard opens with step 1 already done — the platform mints the sandbox and its address behind it
-         * — so the RUN step is what this waits for, behind the fold the app-first page puts it and patiently,
-         * both of which run-step.ts owns for the compose lane as well. */
+        // Step 1 is already done (sandbox minted); this waits on the RUN step, rendered behind a fold.
         await openRunTab(page, /Linux \/ macOS/u, `Linux / macOS`);
 
         await page.getByRole(`button`, { name: `Copy`, exact: true }).first().click();
@@ -98,10 +69,8 @@ export const icProvisioner = (): Provisioner => {
         return code;
     };
 
-    /* WHICH CONTAINER THIS SANDBOX IS, asked of Docker rather than composed from a naming rule this package
-     * would then own a second copy of. Every later flow — recreate, cleanup, the desktop launcher — addresses
-     * a sandbox by a name keyed on its slug, so a single running container carrying the slug IS the sandbox,
-     * and two would mean a stray from an earlier run that the assertions below could pick at random. */
+    // Asks Docker which container this sandbox is, rather than deriving a name this package would then own a second
+    // copy of. Exactly one running container should carry the slug; two means a stray from an earlier run.
     const containerOf = async (sandboxSlug: string): Promise<string> => {
         const listed = await runTool(`docker`, [`ps`, `--filter`, `name=${sandboxSlug}`, `--format`, `{{.Names}}`], {
             env: freshShellEnv(),
@@ -120,9 +89,8 @@ export const icProvisioner = (): Provisioner => {
         return names[0] ?? ``;
     };
 
-    /* THE ASSERTION THIS LANE EXISTS FOR. `reachedBy` is the daemon's own account of how the world gets to it,
-     * computed from the grant and the edge it was handed. Read from inside the container, so nothing about it
-     * depends on an edge existing in this world. */
+    // The assertion this lane exists for: reachedBy is the daemon's own account of how it's reached, computed from its
+    // grant and edge. Read from inside the container, so it needs no edge to exist in this world.
     const requireTunnelPosture = async (container: string): Promise<void> => {
         const health = await runTool(`docker`, [`exec`, container, `curl`, `-sf`, `--max-time`, `10`, `localhost:${DAEMON_PORT}/health`], {
             env: freshShellEnv(),
@@ -166,15 +134,12 @@ export const icProvisioner = (): Provisioner => {
             const startedAt = new Date();
             const setup = await runTool(ic, [`sandbox`, `connect`, code, `-y`], {
                 env: freshShellEnv({
-                    // The claim, from the host. The container's own copy is derived from this one by ic, which
-                    // rewrites loopback to `host.docker.internal` — the spelling the daemon trusts without a
-                    // certificate it could never have been given (announce.ts's LOCAL_HOSTS).
+                    // Host's claim; ic rewrites loopback to host.docker.internal, which the daemon trusts uncertified.
                     PLATFORM_URL: apiUrl,
-                    // The one browser origin that will call this daemon. Without it the box answers the
-                    // workspace's very first request with a CORS refusal, which reads as a dead app.
+                    // Only browser origin allowed to call this daemon; without it the first request gets a CORS
+                    // refusal.
                     WEB_ORIGIN: webUrl,
-                    // The image CI just published, when it names one; otherwise the same `:stable` the
-                    // wizard's own compose file pins.
+                    // CI's just-published image if named; otherwise `:stable`, matching the wizard's own compose file.
                     SANDBOX_IMAGE: process.env[`SANDBOX_E2E_IMAGE`] ?? `ghcr.io/intentic/sandbox:stable`,
                 }),
                 timeoutMs: SETUP_TIMEOUT_MS,
@@ -183,8 +148,7 @@ export const icProvisioner = (): Provisioner => {
                 throw new Error(`ic sandbox connect exited ${setup.code} for a reason this world does not explain:\n${setup.output}`);
             }
 
-            /* WAIT FOR THE PLATFORM'S REGISTRY, not for words on a screen — announce.ts says why the row is
-             * the only honest gate, and it hands back the address the daemon claimed. */
+            // Waits on the platform's registry, not screen text; returns the address the daemon claimed.
             const announced = await waitForAnnounce(databaseUrl, startedAt, 300_000);
             slug = slugOf(announced.daemonUrl);
             if (slug === undefined) {
@@ -197,13 +161,11 @@ export const icProvisioner = (): Provisioner => {
             if (slug === undefined || ic === undefined) {
                 return;
             }
-            /* `ONBOARDING_KEEP=1` leaves the sandbox standing. Debugging this path means reading the daemon's
-             * log and the container's environment, and both are gone the instant teardown runs. */
+            // ONBOARDING_KEEP=1 leaves the sandbox up, so the daemon log and container env survive for debugging.
             if (process.env[`ONBOARDING_KEEP`] === `1`) {
                 return;
             }
-            // The product's own cleanup, which is also the command every failure in this flow points at: it
-            // takes the container, its network and its volumes, so nothing outlives the run.
+            // Product's own cleanup: removes the container, network and volumes so nothing outlives the run.
             await runTool(ic, [`sandbox`, `remove`, slug, `-y`], { env: freshShellEnv(), timeoutMs: 300_000 }).catch(() => undefined);
             slug = undefined;
         },

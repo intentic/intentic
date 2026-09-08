@@ -1,32 +1,24 @@
-/* WHICH GOOGLE ACCOUNTS THIS SHELL IS CARRYING, read off the environment alone.
- *
- * The daemon injects a cli capability's env vars suffixed with the instance id (cli-env.ts: `google` →
- * `GOOGLE_MODE_GOOGLE`, `work-gmail` → `GOOGLE_MODE_WORK_GMAIL`), which is what lets two Google accounts
- * coexist in one shell. So the set of connected accounts is not something to ask the daemon for, it is
- * already here, and `GOOGLE_MODE_*` is the key that enumerates it.
- *
- * A HALF-FILLED CARD IS A CONNECTION WITH A PROBLEM, not an absent one. Dropping it would make `gw` answer
- * "no Google account is connected" to someone looking straight at their connected card, and the true answer,
- * "this one has no refresh token", is the only one they can act on. */
+// Which Google accounts this shell carries, read off the environment: the daemon suffixes each cli capability's env
+// vars with the instance id (`GOOGLE_MODE_GOOGLE`, `GOOGLE_MODE_WORK_GMAIL`...). A half-filled card is a connection
+// with a problem, not an absent one: the true answer ("no refresh token") is what the owner can act on.
 
 import { envSuffix } from "@intentic/sandbox-contract";
 
 export type AccessLevel = "read" | "write";
 
-// The two ways a card authenticates. `user` is one person's OAuth grant; `domain` is a Workspace service
-// account impersonating one person, which is why it still carries the address rather than being account-less.
+// The two ways a card authenticates: `user` is one person's OAuth grant; `domain` is a service account impersonating
+// one person, hence the address.
 export type Credential =
     | { readonly mode: "user"; readonly clientId: string; readonly clientSecret: string; readonly refreshToken: string }
     | { readonly mode: "domain"; readonly clientEmail: string; readonly privateKey: string; readonly tokenUri: string };
 
 export interface Connection {
-    // The instance name as `--account` accepts it: the env suffix, lowercased. `envSuffix` of this is the
-    // suffix again, so a name printed by `gw accounts` always selects the connection it was printed for.
+    // The instance name as `--account` accepts it: the env suffix, lowercased.
     readonly name: string;
     readonly email: string;
     readonly access: AccessLevel;
     readonly mode: "user" | "domain";
-    // undefined when the card cannot authenticate, `problem` says why, in the owner's terms.
+    // Undefined when the card can't authenticate; `problem` says why, in the owner's terms.
     readonly credential: Credential | undefined;
     readonly problem: string | undefined;
 }
@@ -36,9 +28,8 @@ const DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token";
 
 type Env = Record<string, string | undefined>;
 
-/* THE CARD'S SEVEN VALUES, whichever side they were read from. `gw` finds them in its environment (the daemon
- * suffixes each with the instance id); the watcher is handed them as a stored capability config over the
- * listener state route. Same card, same rules, so the rules are written against this rather than twice. */
+// The card's seven values, from whichever side they were read: `gw`'s environment, or the watcher's stored capability
+// config. Same card, same rules, written once against this shape.
 export interface CardFields {
     readonly mode: string;
     readonly email: string;
@@ -51,8 +42,8 @@ export interface CardFields {
 
 const value = (env: Env, key: string, suffix: string): string => (env[`${key}_${suffix}`] ?? "").trim();
 
-// The pasted service-account JSON, as far as minting a token needs it. Anything else in the file (project id,
-// key id, the console URLs) is Google's bookkeeping and never reaches a request.
+// The pasted service-account JSON, as far as minting a token needs it; everything else in the file (project id, key id,
+// console URLs) never reaches a request.
 const domainCredential = (raw: string): { credential?: Credential; problem?: string } => {
     if (raw === "") {
         return { problem: "no service account key on the card" };
@@ -90,8 +81,7 @@ export const connectionOf = (name: string, fields: CardFields): Connection => {
     return {
         name,
         email: fields.email,
-        // `read` only when it was chosen; anything else reads as write, which is the card's own default, a
-        // silent downgrade to read-only would look like a broken tool rather than a setting.
+        // `read` only when chosen; anything else is write, the card's own default.
         access: fields.access === "read" ? "read" : "write",
         mode: domain ? "domain" : "user",
         credential: resolved.credential,
@@ -99,8 +89,8 @@ export const connectionOf = (name: string, fields: CardFields): Connection => {
     };
 };
 
-// The stored capability config, as the watcher receives it over the listener state route, the same seven
-// values the daemon spread across the environment for `gw`, still in one object.
+// The stored capability config, as the watcher receives it over the listener state route, the same seven values as
+// `CardFields`, in one object.
 export interface CardConfig {
     readonly mode?: string;
     readonly email?: string;
@@ -146,9 +136,8 @@ export const connectionsFrom = (env: Env): Connection[] => {
 const NONE_CONNECTED =
     "No Google account is connected. Add the Google Workspace card under Capabilities: it covers Gmail, Calendar, Drive, Docs, Sheets and Contacts.";
 
-/* Which connection a command runs against. The single-account case is the one that has to need no flag, and
- * the several-account case is the one that must never guess: picking the first would send mail from whichever
- * card happened to sort first, which is the kind of wrong nobody notices until it is in someone's inbox. */
+// Which connection a command runs against. The single-account case must need no flag; the several-account case must
+// never guess, since picking the first would silently send mail from the wrong card.
 export const selectConnection = (connections: readonly Connection[], wanted: string | undefined): Connection => {
     if (connections.length === 0) {
         throw new Error(NONE_CONNECTED);
@@ -171,8 +160,8 @@ export const selectConnection = (connections: readonly Connection[], wanted: str
 
 export const describe = (connection: Connection): string => (connection.email === "" ? connection.name : `${connection.name} (${connection.email})`);
 
-// The credential, or the card's problem said out loud. Every command goes through here, so a card that cannot
-// authenticate fails with what to fix rather than with whatever Google says about an empty token.
+// The credential, or the card's problem said out loud; every command goes through here, so a bad card fails with what
+// to fix.
 export const credentialOf = (connection: Connection): Credential => {
     if (connection.credential === undefined) {
         throw new Error(`The Google account "${describe(connection)}" is not usable: ${connection.problem ?? "its card is incomplete"}.`);

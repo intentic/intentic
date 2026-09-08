@@ -1,9 +1,5 @@
-/* The rewriting rules of move-files.mjs, drilled on the four styles this repository actually writes. Run by
- * `pnpm verify` (`node --test _tools/scripts`) and by hand: `node --test _tools/scripts/build/`.
- *
- * These are the pure halves — resolution, specifier style, manifest targets — because they are where a
- * codemod is wrong in a way a type-check cannot see: a specifier that still RESOLVES but now points at the
- * wrong file of two with the same name. The `git mv` half is exercised by using the tool. */
+// Pins move-files.mjs's specifier rewriting (resolution, specifier style, manifest targets) across the styles this repo
+// writes; `git mv` itself is exercised by using the tool, not asserted here.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { expandMoves, planEdits, resolveRelative, rewriteManifest, rewriteSpecifiers, specifierFor } from "./move-files.mjs";
@@ -46,12 +42,12 @@ test("each style survives the move it is written in", () => {
     assert.equal(specifierFor("_editor/web/src/features/chat/ChatArea.vue", "_editor/web/src/lib/index.ts", "../lib"), "../../lib");
     // a .vue target keeps its real extension
     assert.equal(specifierFor("_editor/web/src/pages/Home.vue", "_editor/web/src/features/chat/ChatArea.vue", "../chat/ChatArea.vue"), "../features/chat/ChatArea.vue");
-    // a sibling is written as one, never as a bare name
+    // a sibling is written as a relative path, not bare.
     assert.equal(specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/run/turn-plan.ts", "./turn-plan.js"), "./turn-plan.js");
-    // plumbing that runs unbuilt imports the .mjs that EXISTS, and must not be re-pointed at an emitted name
+    // unbuilt plumbing imports the .mjs that exists; not re-pointed at an emitted name.
     assert.equal(specifierFor("_tools/scripts/verify/verify.mjs", "_tools/scripts/lib/steps.mjs", "../lib/steps.mjs"), "../lib/steps.mjs");
     assert.equal(specifierFor("_tools/scripts/verify/verify.mjs", "_tools/constants/src/node.mjs", "../../constants/src/node.mjs"), "../../constants/src/node.mjs");
-    // a dot inside the filename is not an extension: `environment.default` keeps its extensionless spelling
+    // a dot in the filename isn't an extension: `environment.default` keeps its spelling.
     assert.equal(
         specifierFor("_editor/web/src/app/environments/environment.local.ts", "_editor/web/src/app/environments/environment.default.ts", "./environment.default"),
         "./environment.default",

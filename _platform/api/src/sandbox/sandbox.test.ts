@@ -20,7 +20,7 @@ const sandboxRow = {
     tunnelId: sandboxIdFromToken(`tok`)!,
 };
 
-// Minimal prisma fake: each test overrides just the calls its route makes.
+// Minimal prisma stub; each test supplies only the calls its route actually makes.
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
@@ -41,10 +41,6 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
 afterEach(() => {
     vi.unstubAllGlobals();
 });
-
-// A Cloudflare API where the tunnel delete fails with `tunnelDelete` (its connections cleanup + zone/list all
-
-// A happy-path Cloudflare API: one zone, tunnel t1 found by name, connector token, ingress + DNS accepted.
 
 const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
     const error = await promise.then(
@@ -83,13 +79,13 @@ describe(`sandbox routes`, () => {
 
     it(`attach rejects a URL the browser could never call: http, junk, or a trailing slash`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
-        // The web app is HTTPS, so an http:// daemon would be blocked as mixed content on every call.
+        // Web app is HTTPS; an http:// daemon would be blocked as mixed content.
         await expectOrpcCode(
             call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `http://sandbox.example.com` }, { context: context({ prisma }) }),
             `BAD_REQUEST`,
         );
         await expectOrpcCode(call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `nonsense` }, { context: context({ prisma }) }), `BAD_REQUEST`);
-        // A trailing slash is normalized away rather than rejected: daemon calls append an absolute path.
+        // Trailing slash is normalized, not rejected: daemon calls append an absolute path.
         const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl: `https://sandbox.example.com` });
         const normalizing = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         await call(
@@ -116,8 +112,7 @@ describe(`sandbox routes`, () => {
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: logo }, { context: context({ prisma }) });
         expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: logo }, include: { hosted: true } });
 
-        // `null` is a value, not an omission: it has to reach the row as a write, or removing a logo would be
-        // silently ignored the same way an absent field is.
+        // `null` must reach the row as a write, or clearing a logo would be silently ignored like an absent field.
         await call(sandboxRoutes.update, { sandboxId: `s1`, image: null }, { context: context({ prisma }) });
         expect(update).toHaveBeenLastCalledWith({ where: { id: `s1` }, data: { image: null }, include: { hosted: true } });
     });
@@ -141,9 +136,7 @@ describe(`sandbox routes`, () => {
         expect(result).toEqual({ ok: true });
     });
 
-    /* The phone's handoff. Two properties are the whole point of the route and both are worth pinning: it can
-     * only mail the CALLER (there is no recipient input to abuse), and what it mails is an address, not a
-     * credential: the setup code and the connect token must never ride a channel we hand to a mail provider. */
+    // Only ever mails the caller: there's no recipient input to abuse, and the link carries no credential.
     it(`emailSetupLink mails the caller's own address a link that resumes this sandbox`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, setupCode: `s3cr3t-code` }) } });
         const sent = vi.fn().mockResolvedValue(new Response(`{}`));
@@ -156,8 +149,7 @@ describe(`sandbox routes`, () => {
         const [mail] = sent.mock.calls[0] as [{ to: string; html: string }];
         expect(mail.to).toBe(`owner@example.com`);
         expect(mail.html).toContain(`https://app.test/setup?sandbox=s1`);
-        // The sandbox's own secrets stay off the wire: a mail is stored and forwarded by people we have no
-        // relationship with, and the page behind this link is session-gated anyway.
+        // Secrets stay off the wire; a mail is stored and forwarded by parties we have no relationship with.
         expect(mail.html).not.toContain(`s3cr3t-code`);
         expect(mail.html).not.toContain(sandboxRow.token);
     });
@@ -181,32 +173,26 @@ describe(`sandbox routes`, () => {
         );
     });
 
-    /* THE MINT: a signature and a payload carrying exactly what the box needs to dial the edge. Nothing is
-     * cached, which is the change — the hub era wrote an account token to the row here, and the assertion
-     * that used to guard that column is now the one below saying the ROUTE calls no provider at all. The owner
-     * email is lowercased into the payload for the reason it always was: the daemon binds that one Google
-     * identity as owner. */
+    // Owner email is lowercased into the payload: the daemon binds that identity as owner.
     it(`setupCode signs the reachability grant into the payload, with no provider call`, async () => {
         const update = vi.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null };
-        // Provisioning reachability is local arithmetic now: a fetch from this route is the regression.
+        // Reachability is signed in-process; a fetch here is the regression this stub catches.
         vi.stubGlobal(`fetch`, () => {
             throw new Error(`the mint must call no provider — a grant is signed in-process`);
         });
 
         const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma, user: mixedCase }) });
 
-        // The address is derived from the connect token, so it is knowable before anything runs.
         expect(minted.hostname).toBe(`${sandboxSubdomain(sandboxIdFromToken(`tok`)!)}.sbx.test`);
         const stored = JSON.parse((update.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
-        // The grant is the credential, so it is asserted the way the ingress will read it: verified against the
-        // public key, naming THIS sandbox. A `expect.any(String)` here would pass for the empty payload too.
+        // Verified against the public key naming this sandbox; `expect.any(String)` would also pass an empty payload.
         expect(verifyReachabilityGrant(INGRESS_TEST_PUBLIC_KEY, stored[`SANDBOX_GRANT`]!)?.sandboxId).toBe(sandboxIdFromToken(`tok`));
         expect(stored[`INGRESS_URL`]).toBe(`https://ingress.sbx.test`);
         expect(stored[`SANDBOX_HOSTNAME`]).toBe(minted.hostname);
         expect(stored[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        // Nothing about reachability is written to the row: the payload IS the whole handdown.
+        // Nothing about reachability is written to the row; the payload is the whole handoff.
         expect(Object.keys((update.mock.calls.at(-1)![0] as { data: Record<string, unknown> }).data)).not.toContain(`tunnelId`);
     });
 
@@ -217,9 +203,7 @@ describe(`sandbox routes`, () => {
         await expectOrpcCode(call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: noFabric }), `NOT_FOUND`);
     });
 
-    /* …AND THE SAME ANSWER, ASKED WITHOUT SPENDING A CODE. The wizard has to know which lanes it can offer
-     * before it draws them; discovering it from the mint's 404 meant drawing the ones that need an address
-     * first and taking them back a round-trip later. Same switch, so the two can never disagree. */
+    // Wizard needs this before drawing lanes, not after a mint 404s; same switch as setupCode.
     it(`addressOffer reports the fabric the mint requires, without minting`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn(), update: vi.fn() } });
         expect(await call(sandboxRoutes.addressOffer, {}, { context: context({ prisma }) })).toEqual({ enabled: true });
@@ -229,11 +213,6 @@ describe(`sandbox routes`, () => {
         expect(await call(sandboxRoutes.addressOffer, {}, { context: noFabric })).toEqual({ enabled: false });
     });
 
-    /* DELETING THE ROW IS THE REVOCATION, and this is the test that used to assert the opposite. Under the hub
-     * a delete had to call upstream FIRST and the whole removal failed on a hub hiccup, because a grant whose
-     * row was gone could never be found again. Now the edge asks US on every tunnel registration, so the row's
-     * absence is the refusal: there is no call to make, and a removal cannot be blocked by anything but the
-     * database. The `fetch` stub is the assertion — a provider call on this path is the regression. */
     it(`delete drops the row and calls nothing: the row's absence IS the revocation`, async () => {
         const deleteRow = vi.fn().mockResolvedValue({});
         vi.stubGlobal(`fetch`, () => {
@@ -254,18 +233,17 @@ describe(`sandbox routes`, () => {
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
     });
 
-    /* THE 12-HEX ID IS WRITTEN AT CREATION, because it is the key two readers that cannot derive it look a
-     * sandbox up by: the ingress on tunnel registration (GET /api/reachability/<id>) and the DNS sweep. Pinned
-     * against the shared derivation rather than a transcribed digest, so a change to either side fails here. */
+    // tunnelId is the key ingress registration and the DNS sweep look sandboxes up by; pinned against the shared
+    // derivation, not a transcribed digest.
     it(`create stores the sandbox's derived tunnel id alongside the token's digest`, async () => {
         const create = vi.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { create } });
         await call(sandboxRoutes.create, { name: `first` }, { context: context({ prisma }) });
 
         const { data } = create.mock.calls[0]![0] as { data: { token: string; tokenDigest: string; tunnelId: string } };
-        // secrets.key is empty, so the stored token passes through as the plaintext connect token.
+        // secrets.key is empty, so the stored token is the plaintext connect token.
         expect(data.tunnelId).toBe(sandboxIdFromToken(data.token));
-        // And it really is the digest's leading label, which is what makes every hostname derivable from it.
+        // Confirms tokenDigest's leading label is the tunnelId, which is what makes hostnames derivable from it.
         expect(data.tokenDigest.startsWith(data.tunnelId)).toBe(true);
     });
 
@@ -288,7 +266,7 @@ describe(`sandbox routes`, () => {
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
         expect(sandboxes.map((sandbox) => sandbox.providedAddress)).toEqual([true, false, false]);
 
-        // The zone alone defaults even when the fabric is off (no signing key): it must not flag on its own.
+        // Zone defaults even with the fabric off (no signing key); it must not flag on its own.
         const tokenless = {
             intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
             ingress: { ...testIngressConfig, signingKey: `` },
@@ -303,16 +281,8 @@ describe(`sandbox routes`, () => {
     });
 });
 
-/* THE FREE LANE'S REFUSAL IS A 402, not a 500. `PAYMENT_REQUIRED` is the platform's own code rather than one
- * of oRPC's, and an unknown code takes oRPC's fallback status, which is 500 (`fallbackORPCErrorStatus`). So
- * every user who reached their monthly hour ceiling was answered "internal server error": the code still rode
- * the response body, so the editor's gate offered the plan and nothing on screen was wrong, which is exactly
- * why nobody saw it. What it cost was the operator's own reading of the platform, the expected refusal that
- * is the moment the plan is deserved arriving in the logs and in error monitoring as a fault.
- *
- * Pinned here rather than only in the hermetic tier (e2e/hosted-plan.e2e.test.ts, which asserts the same
- * 402 over real HTTP) because that tier needs Docker and a switch, and this is the assertion that must hold
- * on an ordinary `pnpm test`. */
+// PAYMENT_REQUIRED is the platform's own code; oRPC's unknown-code fallback would otherwise report 500 for this
+// ordinary refusal. Pinned here, not only in the Docker-gated e2e tier, since this must hold on a plain `pnpm test`.
 describe(`a metered owner whose month is spent`, () => {
     const hostedConfig = {
         webOrigin: `https://app.test`,
@@ -324,10 +294,8 @@ describe(`a metered owner whose month is spent`, () => {
         hostedPlan: { compEmails: `` },
     } as unknown as OrpcContext[`config`];
 
-    /* The owner's month, fully spent: no plan row, the settled row at the ceiling, and no machine awake, so
-     * settling the previous stretch is a no-op and Fly is never asked. `hostedMachine.findUnique` answers null
-     * for the provision path's idempotence check (this sandbox has no machine yet), `count` zero so the slot
-     * gate passes and the HOURS are what refuses. */
+    // Owner's month fully spent, no plan, no machine awake: `findUnique` null keeps the idempotence check clear,
+    // `count` zero passes the slot gate, and the hour ceiling is what actually refuses.
     const spent = () =>
         fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },

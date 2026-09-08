@@ -2,9 +2,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 
-// A thin typed wrapper over the Discord REST API v10 (raw fetch, same pattern as komodo-api.ts /
-// cloudflare-api.ts). Only the operations intentic needs: guild CRUD, channel CRUD, webhook CRUD,
-// and posting messages to a webhook. Auth is a Bot token in the Authorization header.
+// Thin typed wrapper over the Discord REST API v10: guild CRUD, channel CRUD, webhook CRUD, and posting
+// messages to a webhook. Auth is a Bot token in the Authorization header.
 
 const API_BASE = "https://discord.com/api/v10";
 
@@ -49,8 +48,8 @@ const headers = (botToken: string): Record<string, string> => ({
 
 const MAX_RETRIES = 3;
 
-// Discord is aggressive with rate limits (HTTP 429). The response body carries `retry_after` (seconds);
-// we sleep that long and retry, up to MAX_RETRIES. All API methods go through this wrapper.
+// Retries on HTTP 429 up to MAX_RETRIES, sleeping the response's `retry_after` seconds; every API call goes through
+// this.
 const discordFetch = async (url: string, init: RequestInit, label: string): Promise<Response> => {
     for (let attempt = 0; ; attempt++) {
         // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
@@ -68,7 +67,7 @@ const discordFetch = async (url: string, init: RequestInit, label: string): Prom
     }
 };
 
-// The Discord API surface intentic uses, injectable for testing (same pattern as KomodoApi).
+// Discord API surface intentic uses, injectable for testing.
 export interface DiscordApi {
     // GET /users/@me/guilds, list guilds the bot is a member of.
     readonly listGuilds: (botToken: string) => Promise<readonly DiscordGuild[]>;
@@ -82,8 +81,7 @@ export interface DiscordApi {
     readonly getChannelWebhooks: (botToken: string, channelId: string) => Promise<readonly DiscordWebhook[]>;
     // POST /channels/{id}/webhooks, create a webhook on a channel.
     readonly createWebhook: (botToken: string, channelId: string, name: string) => Promise<DiscordWebhook>;
-    // POST /webhooks/{id}/{token}, execute a webhook (no auth header needed). Used for posting
-    // reconcile summaries.
+    // POST /webhooks/{id}/{token}, execute a webhook (no auth header needed).
     readonly executeWebhook: (webhookId: string, webhookToken: string, content: string) => Promise<void>;
 }
 

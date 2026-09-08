@@ -20,24 +20,21 @@ import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTre
 import { environment } from "../app/environments/environment";
 import RailIcon from "./rail/RailIcon.vue";
 
-/* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page:
- * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
- * comes from the same singletons the desktop chrome reads; only the presentation is form-factor-specific. */
+// The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
+// switching, the presence roster, the area list, account actions. Same state singletons, different
+// presentation.
 
 interface AreaRow {
-    // The contributing extension's id: what railBands groups by, so this page's sections and the desktop rail's
-    // hairline-separated runs are the same partition of the same list.
+    // Groups by railBands, so this page's sections match the desktop rail's runs.
     readonly id: string;
     readonly to: string;
     readonly label: string;
     readonly icon?: IconName;
-    // Same shape the rail badges with, so a core area and an extension say "there is something here" the one
-    // way. There is no hover on a phone, so the row spells the badge's tooltip out where the rail would only
-    // show its count.
+    // Same shape the rail badges with; spelled out here since there's no hover to show a tooltip on tap.
     readonly badge?: ViewBadge;
 }
 
-// Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
+// Activation.icon is an open string in the extension API, trusted to name an app icon.
 const extensionRow = (active: ActiveExtension): AreaRow => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
@@ -57,14 +54,7 @@ const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability
 const { user, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
-/* What the sandbox needs from its owner. The desktop splits this across two surfaces: a badge on the rail's
- * collapsed chip, the sentences in the popover it opens, and the phone splits it the same way: the Menu TAB
- * carries the badge, and this page, which is what the tab opens, carries the rows. So the Sandbox row below
- * takes no badge of its own: on desktop the chip and its popover are never on screen together, here they
- * would be, and a chip restating the section right above it is the badge saying nothing twice.
- *
- * Two sections for the popover's reason (sandboxAttention's `kind`): the tab's badge counts `needs`, so the
- * notes below it must not be filed under a heading that says otherwise. */
+// The Sandbox row below stays badge-free; the tab's own badge already flags this, so a chip would repeat it.
 const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
 
 onMounted(() => {
@@ -73,17 +63,7 @@ onMounted(() => {
     }
 });
 
-/* The rail's extension tiles, same detection AND same bands as ShellDesktop: Workspace/Approvals/Chat live on the
- * tab bar, so the menu lists only the remaining areas. The desktop rail separates its bands with a hairline
- * because 44px leaves no room for a word; this page has the width, so it spells the band names out. Same
- * partition either way, which is the point of railBands living in the registry.
- *
- * EVERY AREA, SEATED OR NOT, and deliberately not filtered by the desktop's seat rule (registry.ts's
- * `railSeated`). That rule exists because a 44px column has about nine seats and an area that is not saying
- * anything is spending one; this page has a scroll and no such scarcity, so hiding a quiet area here would cost
- * a tap and buy nothing. THIS PAGE IS THE PHONE'S "More": what the desktop reaches through a menu at the foot of
- * the rail, a phone reaches through the Menu tab, which is the same list under a different door. Badges still
- * say which of them wants something, which is the part that was ever load-bearing. */
+// Same detection and bands as ShellDesktop, but unfiltered by railSeated — no seat scarcity here.
 const areaBands = computed(() =>
     railBands(
         detectActivations(panels.value, capabilities.value)
@@ -92,10 +72,7 @@ const areaBands = computed(() =>
         (area) => area.id,
     ),
 );
-// The box rather than the work: the same things the desktop rail keeps below its last divider, next to the
-// terminal and the "+". Not banded: none of them is an area a rail tile ever stood for. The terminal row is
-// the ship tier's, like the desktop rail's tile: a PTY is the whole sandbox, and the daemon refuses the
-// socket below maintainer anyway.
+// Matches the desktop rail's tail (terminal, +); terminal needs ship tier since a PTY is the whole sandbox.
 const { canShip } = useRole();
 const sandboxRows = computed<readonly AreaRow[]>(() => [
     { id: `capabilities`, to: `/capabilities`, label: `Add a capability`, icon: `plus` },
@@ -104,28 +81,23 @@ const sandboxRows = computed<readonly AreaRow[]>(() => [
     { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
-// Two lists, for the desktop switcher's reasons (roster.ts): a sandbox that has never checked in cannot be
-// switched to, so it is not offered beside the ones that can: tapping it here used to strand the reader on a
-// connecting gate with no way back but the menu they had just left.
+// Split so an unreachable sandbox isn't offered beside ones that can actually be switched to.
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
-// Both of these are places, so both are links: the same rule the desktop switcher's rows follow. Switching
-// sandboxes is not (it re-points this window at another daemon), so those rows stay buttons.
+// A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
 const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
 
 const logout = async (): Promise<void> => {
     await signOut();
-    // A full navigation, not a router push: the environment's landing may live outside this SPA entirely (the
-    // demo's is the site's homepage).
+    // Full navigation, not a router push: afterSignOut may point outside this SPA.
     globalThis.location.href = environment.afterSignOut;
 };
 </script>
 
 <template>
     <div class="mx-auto flex w-full max-w-lg flex-col gap-6 p-4">
-        <!-- What the badge on this page's own tab is about: one row per pending item, each tapping through to
-             the hub tab that resolves it. First on the page, because the badge is what brought the reader. -->
+        <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
         <section v-if="sandboxAttention.length > 0" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</h2>
             <RouterLink
@@ -142,9 +114,7 @@ const logout = async (): Promise<void> => {
             </RouterLink>
         </section>
 
-        <!-- What is simply true of the box: same rows, quieter ink, and a heading that asks for nothing. None of
-             these put the badge on the tab that opened this page, so none of them may read as the reason it is
-             there. -->
+        <!-- Quieter ink; none of these carry the tab's badge, so none should read as the reason it's flagged. -->
         <section v-if="sandboxNotes.length > 0" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</h2>
             <RouterLink
@@ -197,9 +167,7 @@ const logout = async (): Promise<void> => {
                 Add sandbox
             </RouterLink>
 
-            <!-- Setups that were never finished, under the two things the reader came here for. Same partition
-                 and same wording as the desktop switcher: the row offers the one move left in it rather than
-                 naming a machine that does not exist yet. -->
+            <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->
             <template v-if="unfinished.length > 0">
                 <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</h2>
                 <RouterLink
@@ -235,14 +203,11 @@ const logout = async (): Promise<void> => {
             </div>
         </section>
 
-        <!-- The areas the desktop rail links to (minus the ones on the tab bar), in the rail's own bands: the
-             headings the 44px column can only imply with a hairline. -->
-        <!-- A BADGE'S SENTENCE IS A SECOND LINE, NEVER A PILL BESIDE THE NAME. A tooltip is a sentence
-             ("api agent/soft-deletes is failing: 1 run in a row"), and rendered as a `shrink-0` chip it was
-             the only thing in the row that could not yield: the name, the one word saying where the row goes
-            : collapsed to nothing, and the chip still ran 130px past the edge of the screen. So the name
-             keeps the first line to itself and the sentence sits under it, which is the shape the "Needs you"
-             section above already uses. The PILL survives for a bare count, which is what a pill is for. -->
+        <!-- Areas the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
+        <!--
+            A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a
+            sentence-length pill would push or truncate the name. A bare count still uses the pill.
+        -->
         <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
@@ -257,8 +222,7 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2">
                         <span class="min-w-0 truncate">{{ area.label }}</span>
-                        <!-- The count, when that is all there is to say. `min-w-0` so a runaway number shrinks
-                             rather than pushing the name it belongs to off the row. -->
+                        <!-- The count only, when there's no tooltip; min-w-0 shrinks a long number instead of pushing the name off. -->
                         <span
                             v-if="area.badge && area.badge.tooltip === undefined"
                             class="min-w-0 shrink rounded-full px-1.5 py-px text-2xs font-semibold"

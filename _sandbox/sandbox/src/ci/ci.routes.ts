@@ -10,20 +10,16 @@ import type { OrpcContext } from "../app-env.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
-// The owner-facing CI surface (the Pipelines rail view's whole backend). Reads serve the webhook-freshened
-// cache and backfill it over the vendors' REST APIs when stale, a freshly opened view gets history even on a
-// sandbox whose webhooks never registered. Actions re-resolve repo → project per call (a stale card must not
-// act on a project the workspace no longer maps to) and translate vendor refusals into BAD_GATEWAY with the
-// vendor's own words, the one boundary where the message is the whole point.
+// Backend for the Pipelines rail: reads serve the webhook-freshened cache, backfilled from the vendor's REST API when
+// stale. Actions re-resolve repo -> project per call, since a stale card must not act on a project the workspace no
+// longer maps to; a vendor refusal becomes BAD_GATEWAY carrying its own message.
 
 const RUNS_PER_PROJECT = 15;
-// How much failed-job log tail seeds a fix conversation, enough to see the actual error, small enough that
-// the turn's context stays about fixing rather than scrolling.
+// Failed-job log tail seeded into a fix conversation: enough to see the error, not to flood the context.
 const FIX_LOG_BYTES = 24_000;
 const TITLE_MAX = 80;
 
-// A vendor refusal (403 on rerun, an expired run) is an upstream answer, not a daemon bug: 502 carrying
-// the vendor's message, so the view can show WHY instead of a blank 500.
+// A vendor refusal is an upstream answer, not a daemon bug: rethrown as 502 carrying the vendor's own message.
 const upstream = async <T>(action: Promise<T>): Promise<T> => {
     try {
         return await action;
@@ -45,8 +41,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
         runs: i.runs.handler(async ({ context }) => {
             const projects = await ciProjects(services);
             const warnings = services.ciHooks.warnings();
-            // The recipe carries the webhook SECRET, so it reaches an operator's screen and nobody else's: not a
-            // viewer reading the board, not a program holding a read token (auth/operator.ts).
+            // Carries the webhook secret; only an operator's screen gets it, not a viewer or a read-token program.
             const operator = operatorHere(services, context);
             const repos: CiRepo[] = projects.map((project) => {
                 const warning = warnings.get(project.repo);
@@ -63,8 +58,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
             if (cached !== undefined) {
                 return { repos, runs: cached };
             }
-            // Backfill sweep: one list call per project, a failing vendor degrades to its repos missing rather
-            // than the whole view erroring (the other host's runs are still worth showing).
+            // One list call per project; a failing vendor drops just its own repos, not the whole view.
             const listed = await Promise.all(
                 projects.map((project) =>
                     ciClientFor(project.account.provider, fetchFn)
@@ -95,8 +89,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
         fix: i.fix.handler(async ({ input }) => {
             const project = await resolve(input.repo);
             const client = ciClientFor(project.account.provider, fetchFn);
-            // The run's metadata for the prompt: the cache usually has it (the view the click came from was
-            // just looking at it); a cold daemon re-lists.
+            // Usually already in the cache, from the view the click came from; a cold daemon re-lists instead.
             const run: PipelineRun | undefined =
                 (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === input.repo && candidate.runId === input.runId) ??
                 (await client.listRuns(project, RUNS_PER_PROJECT).catch(() => [])).find((candidate) => candidate.runId === input.runId);
@@ -105,19 +98,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 client.failedJobLogs(project, input.runId, FIX_LOG_BYTES).catch(() => ""),
             ]);
             const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${input.runId})`;
-            /* THE INSTRUCTION KNOWS WHERE IT IS RUNNING, which the first version of it did not. It said
-             * "reproduce the failure locally before changing anything", and for about half the jobs in this
-             * repository's pipelines that is an instruction to do something impossible: the nightly's jobs
-             * want docker-in-docker and a mounted socket, the desktop ones want a runner with webkit and a
-             * Windows box, the image ones want to build a CI image from scratch. Agents obeyed it anyway,
-             * because it was the instruction — $27 and $33 turns spent building images and guessing, and one
-             * of them needed a second round because the fix could not be tested from here either way.
-             *
-             * So it names the boundary and names the way ACROSS it. A job the local suite covers is reproduced;
-             * a job it does not is read, changed, and verified by dispatching the workflow on the agent's own
-             * branch — which is the only place the runner constraints actually exist. Stated as a rule about
-             * environments rather than as a list of job names, because a list here would be a second copy of
-             * .github/workflows/ that nothing updates when a job moves. */
+            // Names the environment boundary, not job names, so the prompt can't drift from .github/workflows/.
             const prompt = [
                 `The CI pipeline for the workspace repo "${input.repo}" failed ${where}. Investigate and fix it.`,
                 ...(failedJobs.length > 0 ? [`Failed jobs: ${failedJobs.join(", ")}.`] : []),
@@ -127,21 +108,13 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 `You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
-            /* DERIVED FROM THE RUN, never minted: this is the name the Pipelines board re-computes to find out
-             * whether an agent is already on this failure (conversation-ids.ts has the whole argument). One
-             * failed run is therefore one conversation, one worktree and one branch, however many times the
-             * button is pressed. */
+            // Derived from the run, not minted, so the board can tell an agent is on this failure via the same id.
             const conversationId = ciFixConversationId(input.repo, input.runId);
             const turn: AgentTurn & { conversationId: string } = {
                 prompt,
                 conversationId,
                 isolated: true,
-                /* Started by a surface rather than by someone at a composer, so the `pipeline-fix` list answers for it
-                 * (turn-resume.ts), which is also what the button's own caret names before the click.
-                 *
-                 * UNLESS they used that caret. A pick rides on as the turn's own agent/model/effort, and the
-                 * daemon's fill step then leaves it alone because it only fills what is absent. The flag stays
-                 * either way: it is what the turn IS, not a statement about whether a model was named. */
+                // True regardless of a caret pick: it names the turn's origin, not whether a model was chosen.
                 unattended: true,
                 runRole: `pipeline-fix`,
                 // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness, effort,
@@ -149,18 +122,10 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 ...input.pick,
                 title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
             };
-            /* Use the SAME detached-run boundary as POST /agent. The old fire-and-forget generator bypassed the
-             * run map, turn journal, transcript record, and push observer. The UI navigated to the returned id,
-             * found no attachable run and no persisted transcript, and quite correctly opened an empty chat
-             * while the work happened invisibly. This call returns synchronously with the run registered; its
-             * provider work still outlives the request. It is also what gives the fix its ordinary fleet card:
-             * `conversationId` is what streamAgent registers on, whatever placement the turn asked for. */
+            // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired.
             const started = await startConversationTurn(services, wake, turn);
             if (started === undefined) {
-                /* A REAL STATE NOW, not an invariant breach: the id is derived, so a second press on the same
-                 * failure addresses the conversation the first one opened. Live, that turn is the answer and
-                 * this says so in words the board can show; finished, the call above adds a turn to it instead,
-                 * which is what makes "try again" continue the fix rather than start a rival agent. */
+                // undefined means the conversation already has a live turn; report that in words, not as a bug.
                 throw new ORPCError("CONFLICT", { message: "An agent is already working on this run's failure." });
             }
             return { conversationId };

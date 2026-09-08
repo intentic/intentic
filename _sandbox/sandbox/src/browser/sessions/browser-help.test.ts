@@ -2,10 +2,8 @@ import { expect, test } from "vitest";
 import { createRequest } from "../../agent/tools/agent-requests.js";
 import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowserSession, raiseBrowserHelp } from "./browser-sessions.js";
 
-/* The help-request STATE, without a Chromium: openBrowserSession registers the record from the hook alone (the
- * attach dials a port nothing listens on, and closing the session is what stops it), so everything the /browsers
- * banner renders from (raise, list, clear, and the close-settles-the-waiter guarantee) is assertable here.
- * The full drive-a-real-browser seam stays in browser-sessions.integration.test.ts. */
+// Help-request state, without a Chromium: openBrowserSession registers the record from the hook alone, so everything
+// the /browsers banner renders from (raise, list, clear, close-settles-the-waiter) is assertable here.
 
 const open = (sessionId: string, server: string): string => {
     const name = openBrowserSession({ sessionId, server, port: 1 });
@@ -33,9 +31,8 @@ test("a help request lands on the account's running browser and lists for the ba
     }
 });
 
-/* The browser dying under a parked request must settle it: the parked tool call waits on a PERSON, not on
- * Chromium, so nothing else would ever release it: the turn would sit parked on a banner the close just took
- * down. The settle reads as "not helped", which is the honest account of a browser that closed first. */
+// The parked tool call waits on a person, not on Chromium, so nothing else releases it if the browser dies; the settle
+// reads as "not helped", the honest account of a browser that closed first.
 test("closing a browser settles its open help request as not-helped", async () => {
     const name = open("he1p3333-4444", "npmjs-main");
     const { id, wait } = createRequest("browser_help", { kind: "browser_help", requestId: "", helped: false, note: "aborted" });

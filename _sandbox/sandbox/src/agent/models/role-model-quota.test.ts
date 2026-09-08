@@ -5,9 +5,8 @@ import type { Services } from "../../composition.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";
 import { spentRung } from "./role-model-quota.js";
 
-/* READING THE QUOTA INSTEAD OF DISCOVERING IT. Every case here is about the same trade: this may only ever say
- * "spent", and only on evidence, because a wrong "spent" retires a working account silently while a wrong
- * "ask it" costs one call. So the tests that matter most are the ones asserting `undefined`. */
+// Quota reads must only ever say spent on evidence, never as a guess; the undefined-returning cases are what this suite
+// pins.
 
 const NOW = 1_700_000_000_000;
 const SECONDS = Math.floor(NOW / 1000);
@@ -34,8 +33,6 @@ const GEMINI = { provider: `gemini`, model: `gemini-3-flash-lite` };
 const HAIKU = { provider: `claude`, model: `claude-haiku-4-5` };
 
 test("steps over a routed fleet whose every account is spent, and says when it comes back", async () => {
-    // The measured case this exists for: a plan at 100% with a renewal three days out, asked three times in one
-    // landing because nothing consulted the number that was already on file.
     const spent = await spentRung(routed({ pool: `Gemini models`, spent: 31, withHeadroom: 0, reopensAt: SECONDS + 3 * 86_400 }), GEMINI, NOW);
 
     expect(spent?.reason).toContain(`31`);
@@ -45,14 +42,11 @@ test("steps over a routed fleet whose every account is spent, and says when it c
 });
 
 test("asks a routed rung while any one account still has room", async () => {
-    // Everything cooling with headroom on file is not a quota problem, so the allowance may not be what steps
-    // over it: that is the refusal's job, and it lasts minutes rather than until a weekly reset.
     await expect(spentRung(routed({ spent: 30, withHeadroom: 1 }), GEMINI, NOW)).resolves.toBeUndefined();
 });
 
 test("asks a routed rung that nothing has measured", async () => {
-    // Both counts zero ⇒ no reading covers this pool (never polled, or a bucket the vendor renamed). Claiming
-    // the fleet is spent from that would take a whole provider out of the chain on no evidence at all.
+    // spent:0, withHeadroom:0 means the pool was never measured, not exhausted.
     await expect(spentRung(routed({ spent: 0, withHeadroom: 0 }), GEMINI, NOW)).resolves.toBeUndefined();
 });
 
@@ -78,7 +72,6 @@ const weekly = (utilization: number, resetsAt?: number): UsageWindow => ({
 test("steps over Claude only when every connected account is at its cap", async () => {
     const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 7_200)], two: [weekly(100, SECONDS + 3_600)] }), HAIKU, NOW);
 
-    // The EARLIEST reset, because either account reopening is enough to unblock the rung.
     expect(spent?.reason).toContain(`2`);
     expect(spent?.reason).toContain(`Claude`);
     expect(spent?.reason).toMatch(/1h/);
@@ -90,25 +83,19 @@ test("asks Claude while one account of several still has room", async () => {
 });
 
 test("a per-model pool at its cap does not retire the whole Claude rung", async () => {
-    /* The subtlety that decides whether this feature is safe. A plan's per-model allowance ("Fable", "Opus")
-     * arrives under the provider's own display name, and nothing connects that name to the model id this helper
-     * is about to run, so a spent Fable pool says nothing about a cheap Haiku call. Reading it as one allowance
-     * would take the most reliable rung in the chain out of service on a limit it does not spend. */
+    // A per-model pool (e.g. `model:Fable`) is scoped by name to its own model id, separate from the plan-wide weekly
+    // window.
     const account = { one: [weekly(12), { kind: `model:Fable`, label: `Fable`, utilization: 100, gates: { models: [`Fable`] } }] };
 
     await expect(spentRung(claude(account), HAIKU, NOW)).resolves.toBeUndefined();
-    // …while the model the slice IS scoped to is stepped over, in the plan's own words for the pool.
     const fable = await spentRung(claude(account), { provider: `claude`, model: `claude-fable-5` }, NOW);
     expect(fable?.reason).toContain(`Fable allowance`);
 });
 
 test("asks Claude when an account has no reading at all", async () => {
-    // A fresh sandbox has measured nothing. Unmeasured is not spent, or the feature would disable itself before
-    // it had ever run a turn.
     await expect(spentRung(claude({ one: [weekly(100)], two: undefined }), HAIKU, NOW)).resolves.toBeUndefined();
 });
 
 test("says nothing about a rung on a user's own endpoint", async () => {
-    // An endpoint publishes no quota, so there is nothing to read and the refusal memo is the only cover.
     await expect(spentRung(unstubbed<Services>(`services`, {}), { provider: `endpoint/local`, model: `qwen` }, NOW)).resolves.toBeUndefined();
 });

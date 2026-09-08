@@ -22,30 +22,25 @@ import type { LandOutcome } from "../land/land.js";
 import type { LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 
-// The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
-// store, write-through on persisted mutations) plus per-conversation turn state rebuilt from AgentEvent frames
-//, status (running/awaiting), attention flags, the card's activity snippet, context fill, and the per-
-// conversation turn mutex. Every card-visible change broadcasts the FULL roster (snapshots, not diffs, the
-// same last-frame-wins contract as presence), which system.routes relays onto /events.
+// Runtime half of the fleet registry: the in-memory entry list (loaded once, write-through on persisted mutations) plus
+// per-conversation turn state built from AgentEvent frames. Every card-visible change broadcasts the full roster as a
+// snapshot, never a diff (system.routes relays it onto /events).
 
 const MAX_TITLE_LENGTH = 80;
-/* Long enough for the provider's own explanation, the entitlement refusal that prompted this field runs to 140
- * characters and names both ways out of it, and short enough that a stack trace or an HTML error page cannot
- * ride into the roster, which every connected browser re-reads in full on every card change. */
+// Long enough for a provider's own explanation; short enough that a stack trace or error page can't ride into the
+// roster.
 const MAX_FAILURE_LENGTH = 400;
-// One bounded line, for the same reason a title is one: this is read in a card's width and in a run's row, and a
-// message that arrives with a newline in it would break both. Empty in ⇒ nothing to say, which reads as absent.
+// One bounded line, no newlines: read in a card's width and a run's row, and a newline would break both. Empty
+// collapses to `undefined`.
 const sanitizeFailure = (message: string): string | undefined => {
     const clean = message.replaceAll(/\s+/gu, " ").trim().slice(0, MAX_FAILURE_LENGTH);
     return clean === "" ? undefined : clean;
 };
-// The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
-// source reads as `derived`, i.e. as replaceable by anything better.
+// Numeric so promoteTitle's comparison is one `<=`; an entry with no source reads as `derived`, replaceable by
+// anything.
 const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
-/* ONE BOUNDED LINE: control characters and runs of whitespace collapse to single spaces, and the whole thing is
- * cut to the caller's limit. The limit is a parameter rather than a constant because that is the only difference
- * between the two things scrubbed this way, a title read in a card's width, and a sentence read in a changelog
- * entry, and sharing the constant as well as the scrub is what truncated the notes. */
+// Collapses control characters and whitespace to single spaces and cuts to `limit`. A parameter, not a constant, since
+// a title's card width and a changelog sentence's length must not share one ceiling.
 const sanitizeLine = (text: string, limit: number): string | undefined => {
     const clean = text
         .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
@@ -57,139 +52,62 @@ const sanitizeLine = (text: string, limit: number): string | undefined => {
 
 const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
 
-/* A STRING THAT CANNOT BE A NAME, HOWEVER IT GOT HERE: a provider's failure sentence ("You've hit your session
- * limit · resets …", "Failed to authenticate. API Error: 401 …"), or a tool-call stand-in written by a rung whose
- * runtime taught it to type its tool calls out (`[tool_call: glob for pattern '**']`, see failure-sentences.ts).
- *
- * Read twice below, and that pairing is the whole mechanism: such a title may never be WRITTEN by anything but a
- * rename (a rename is the user's to waste), and a stored one FORFEITS its source's rank, so the next honest
- * promotion replaces it instead of bouncing off the sideways-move rule. The naming pass tests the same family for
- * the same reason (title-namer's `poisoned`), which is what heals the four fleet cards that were named this way
- * before the ask-side guard existed. The family, never a member of it: guarding one member is what cost four
- * other cards their names, twice. */
+// A provider's failure sentence or a tool-call stand-in; never written as a name except by an explicit rename, and a
+// stored one forfeits its rank so the next honest title replaces it.
 const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
 
-/* The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub, these are read as
- * one line in a changelog entry and in the update card, and emphatically NOT the title's ceiling: a title is
- * bounded by a CARD'S width, and sharing that 80 is what published four of the first five changelog entries
- * ending mid-word ("…versus addin").
- *
- * The ceiling itself belongs to the prompt that writes these (git/commit-message.ts), which asks for a sentence
- * that fits it. One number, so a note is never cut at a length nothing asked it to respect.
- *
- * A BACKSTOP rather than the working limit, exactly as it is for a subject below: the reader clips a long note
- * on a word boundary before it is stored (clipNote), because THIS cut is a hard slice and a hard slice is what
- * filed a breaking warning ending "…, GitStageSchema, and numer" into a commit box. */
+// One-line scrub on its own limit (MAX_NOTE_LENGTH), never the title's 80-character card width: sharing that ceiling
+// once truncated changelog entries mid-word. A backstop; the drafter clips on a word boundary before this is reached.
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
 
-/* A DRAFTED SUBJECT IS NOT A TITLE, and giving it the title's ceiling is what cut one in half.
- *
- * This went through sanitizeTitle until it filed `feat(access): StatusBadge on member roster and expired
- * tokens, ui.inputSm on inv` into the commit box: a conventional header severed at exactly 80 characters,
- * mid-word, which the user had to finish typing before they could commit. 80 is the width of a CARD. A commit
- * subject answers to what git will accept, which is the 100 of every conventional hook's header-max-length, and
- * that number lives with the prompt that writes to it (git/ops/commit-message.ts, MAX_SUBJECT_LENGTH).
- *
- * The same one-line scrub, and the same mistake sharing a ceiling already made of the release notes one layer
- * up (see sanitizeNote). A BACKSTOP rather than the working limit: the drafter clips on a word boundary before
- * this is reached (conventionalSubject), so a cut here means something bypassed it. */
+// A commit subject's own limit (MAX_SUBJECT_LENGTH, git's header max), never the title's 80-character card width. A
+// backstop; the drafter clips on a word boundary before this is reached.
 const sanitizeSubject = (subject: string): string | undefined => sanitizeLine(subject, MAX_SUBJECT_LENGTH);
 
-/* There is no body scrub here any more, and there is no body to scrub: a drafted message is a subject and, for a
- * repo that keeps a changelog, its notes (git/commit-message.ts). The multi-line cleaner this replaces existed
- * only to keep a model's "- " fact lines readable, and those lines are neither asked for nor read back now. */
+// A drafted message is only a subject and, for a repo with a changelog, its notes; no other text needs scrubbing here.
 
 interface RuntimeState {
     running: boolean;
-    // The cards the turn is parked on RIGHT NOW, by the requestId each was raised with, the fleet's attention
-    // flags are read straight off it. Keyed rather than counted because a turn can be parked on more than one
-    // card at a time (a question raised beside a parallel tool call's permission prompt), and each is released
-    // by its own `resolved` frame. Emphatically NOT inferred from the frames that follow a park: frames keep
-    // arriving while a turn waits, the pausing tool's own `tool_call` regularly trails its card, and reading
-    // one of those as "the user answered" is what kept an agent asking a question out of the Attention lane.
+    // Cards parked right now, keyed by requestId; concurrent pauses are possible, and each is released only by its own
+    // `resolved` frame.
     pauses: Map<string, "plan" | "question" | "permission" | "browser_help" | "terminal_help" | "capability_offer" | "credential_offer">;
     errored: boolean;
-    // The sentence the last error frame carried, flushed onto the entry at finish so the card can say why
-    // rather than only that. Last one wins: a turn that fails twice died of the second.
+    // Sentence from the last error frame, flushed at finish; a turn failing twice died of the second.
     failure: string | undefined;
-    /* And what that frame CALLED it, plus the two facts a spent allowance carries that no other failure does:
-     * when its window reopens, and whether the turn is being held whole for a re-run.
-     *
-     * All three travel with the sentence and are flushed by the same finish, because they answer one question
-     * between them, "is this card a crash or a wait", and a card that has the words without the code has to
-     * guess. Guessing is what drew an 18-hour-old spent allowance as a red error with "View error" on it.
-     *
-     * Read off the FRAME rather than looked up: the route decides both at frame time (agent.routes.ts dresses
-     * the limit frame with them), so reading them here is the two surfaces agreeing by construction instead of
-     * by coincidence. */
+    // The failure's code, plus what a spent allowance alone carries: when the window reopens, and whether the turn is
+    // held for a rerun. Read off the frame, not looked up, so the client and the card agree by construction.
     failureCode: string | undefined;
     limitResetsAt: number | undefined;
     limitHeld: boolean;
     limitScheduled: boolean;
-    // Where a booked move is taking the held turn (the frame's `held.moving`), while it is booked.
+    // Where a booked move is taking the held turn, while it is booked.
     limitMoving: string | undefined;
-    /* THE USER ENDED THIS TURN and the abort has landed, it is on its way out but not out yet, in the two
-     * flavours that end differently.
-     *
-     * It is runtime state rather than a status write because the turn is still LIVE: aborting the provider only
-     * asks it to unwind, and the generator keeps the conversation (its worktree, its mutex) until it has walked
-     * its own cleanup, seconds, on a turn with a big tool call in flight. That window used to be published as
-     * plain `running`, so a stopped agent kept its spinner turning on every surface until it settled.
-     *
-     * Read twice: `summaryOf` publishes either flavour as `stopping` the moment it is set, and `finish` reads
-     * WHICH to decide the terminal status, the one thing that tells a turn a person ended from one the daemon
-     * died under, and a Stop from a card the user waved away.
-     *
-     * `dismissed` is the second flavour, and it ends where a clean turn does. Pressing Stop leaves half-written
-     * work nobody asked to be finished, so its card waits in Attention to be picked up; dismissing a question
-     * is the user saying they are done with this, nothing is owed, so the card settles in Finished and the
-     * branch keeps whatever it wrote for whenever they come back to it. */
+    // Set the instant a stop/dismiss lands, while the turn is still unwinding; publishing plain `running` here is what
+    // let a killed turn keep spinning. `finish` reads which flavor to pick the terminal status.
     stopping: "stopped" | "dismissed" | undefined;
-    /* This turn was killed by something the daemon is already undoing, a rotated credential being re-minted, a
-     * provider outage being waited out, and it is coming back on its own (turn-resume.ts).
-     *
-     * The one flag here that OUTLIVES its turn, and it has to: `finish` runs seconds before the resume does, and
-     * what it writes is how the turn ended, which for this one is nothing, because it hasn't. Without it the
-     * entry's resting `idle` went out in between and the board filed a card the daemon was about to re-run under
-     * Finished, then pulled it back into Active a moment later. Cleared by whatever ends the wait: the resumed
-     * turn's own `begin` (a fresh runtime state), or `abandonResume` when the re-mint fails and the failure has
-     * to stand. */
+    // A turn the daemon is already recovering (a remint, an outage wait) and will re-run on its own; the one flag that
+    // survives `finish`. Cleared by the resumed turn's own `begin`, or by `abandonResume` if the recovery fails.
     resuming: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
     contextWindow: number | undefined;
     startedAt: number | undefined;
     lastAt: number | undefined;
-    // This turn's prompt, held only until it can be filed under a session id. A FIRST turn has none at begin
-    // (the SDK mints it and announces it on the `session` frame), and the fleet filter searches by what the
-    // user wrote, so without this the prompt that just started an agent is the one prompt that agent can't
-    // be found by, for as long as its turn runs. Cleared the moment it is filed.
+    // This turn's prompt, held until a session id exists to file it under; cleared once filed.
     pendingPrompt: string | undefined;
-    // Frame-carried fields flushed into the persisted entry at finish (one write per turn, not per frame).
+    // Frame-carried fields, flushed into the entry once at finish rather than per frame.
     pendingSessionId: string | undefined;
     pendingCostUsd: number;
     pendingInputTokens: number;
     pendingOutputTokens: number;
     pendingToolUses: number;
-    // The children this turn has started so far. Flushed like the rest, so a delegating turn costs one write at
-    // its end rather than one per child, and the card still counts them as they are born (see summaryOf).
+    // Children started so far, flushed once at finish; the card counts them live via summaryOf.
     pendingSubagents: number;
-    /* THE AGENT'S OWN CHECKLIST, whole, as of the last `todos` frame (the list itself, where `activity.todo`
-     * keeps only the one line the card is showing right now). Held for the finish, which is the only reader:
-     * what is on the list matters live, and what is STILL on it matters once the turn is over.
-     *
-     * Undefined means this process has not seen the list, which is not the same as an empty one and is treated
-     * as such at finish: a conversation resumed after a restart says nothing about its tasks until it touches
-     * them, and reading that silence as "nothing left" would wipe the mark off every card a restart passed
-     * under. */
+    // The agent's own checklist, whole, as of the last `todos` frame; only `finish` reads it. `undefined` means this
+    // process has not seen the list yet, which is not the same as an empty one.
     checklist: readonly TodoItem[] | undefined;
-    /* HOW THE TURN'S OWN END-OF-TURN CHECK WENT, last run wins (rules/turn-ending.ts runs it at the Stop, and
-     * again after a repair). Recorded through the registry as well as turn-checks.ts because the two readers
-     * want it at different moments and the other one CONSUMES it: the land takes the verdict and clears it
-     * (agent.routes.ts) a beat before finish runs, so a finish reading that store would find it already gone.
-     *
-     * Not carried across turns, unlike the checklist beside it: a checklist is state the harness keeps, a
-     * verdict is one measurement of one tree, and the turn that follows it edits that tree. */
+    // How the end-of-turn check went, last run wins. Recorded here too since the land consumes and clears
+    // turn-checks.ts before `finish` runs; unlike the checklist, a verdict is not carried into the next turn.
     check: { label: string; failed: boolean } | undefined;
 }
 
@@ -221,30 +139,12 @@ const freshRuntime = (): RuntimeState => ({
     check: undefined,
 });
 
-/* IS SOMETHING BRINGING THIS TURN BACK SOON ENOUGH THAT THE CARD SHOULD GO ON READING AS WORK IN PROGRESS?
- *
- * The frame's own verdict decides it, never the code, so every condition that resumes itself is covered without
- * this having to know their names. "available" is not one: nothing is armed, so the failure stands.
- *
- * A SPENT ALLOWANCE IS THE ONE EXCEPTION, and it is an exception about TIME rather than about certainty. The
- * other scheduled resumes are due within seconds (a re-minted token) or minutes (an outage backoff), so "coming
- * back" describes the card fairly for the whole of the wait. A limit's fire is due when the provider says the
- * window reopens, which is routinely hours and can be days: drawn as work in progress, a card would spin
- * through Thursday while hiding the one fact its reader wants, which is WHEN. So a limit is recorded as the
- * failure it is, and what makes it read as a wait rather than as a crash is the classification recorded with it
- * (failureOf below, and the client's `limited`). */
+// The frame's own verdict decides, not the code, except a rate limit: its reopening can be hours away, so treating it
+// as work in progress would hide the one fact, when, that matters. Recorded as a failure instead.
 const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean => event.autoResume === "scheduled" && event.code !== "rate_limit";
 
-/* WHAT AN ERROR FRAME LEAVES BEHIND ON THE TURN, all four fields at once, because they are one answer rather
- * than four facts: this is how the turn died, and a reader that has the sentence without the code cannot tell a
- * wall from a crash. Writing them together is also what keeps them consistent under the last-one-wins rule, a
- * turn refused by a spent allowance, resumed, and then killed by a bad request must not go on carrying a
- * countdown describing the refusal it already got past.
- *
- * Read off the FRAME rather than looked up anywhere: agent.routes dresses a limit frame with the reset instant
- * and the hold at frame time, so taking them from it is the client and the card agreeing by construction.
- *
- * Pure and outside the closure, like statusOf below: a rule worth stating and testing without a registry. */
+// All four failure fields are written together from one frame, so a later refusal can't leave a stale code or countdown
+// behind from an earlier one. Read off the frame, not looked up, so the client and the card agree by construction.
 const failureOf = (
     event: Extract<AgentEvent, { kind: "error" }>,
 ): Pick<RuntimeState, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving"> => {
@@ -254,55 +154,35 @@ const failureOf = (
         failureCode: event.code,
         limitResetsAt: limit ? event.resetsAt : undefined,
         limitHeld: limit && event.held !== undefined,
-        // The daemon's own verdict about this very failure (agent.routes' limitFrame), not a posture read back
-        // later: the pass that performs the fire reads the same answer, so the card and the schedule agree.
+        // The daemon's own verdict for this failure; the firing pass reads the same value, so the card and the schedule
+        // agree.
         limitScheduled: limit && event.autoResume === "scheduled",
         limitMoving: limit ? event.held?.moving : undefined,
     };
 };
 
-/* WHAT THIS TURN LEAVES OPEN BEHIND IT, read at the finish out of the two things the turn itself measured: the
- * agent's own checklist, and the verdict of the workspace's own end-of-turn check.
- *
- * NEITHER READING ASKS ANYBODY ANYTHING. No model is spent on the question and no agent is told to report on
- * itself, which is the point: an instruction to declare unfinished work is an instruction the turn that ran out
- * of room is least likely to follow, and a model asked afterwards is a model guessing about a transcript. Both
- * facts here already arrive as frames, on every harness, for free.
- *
- * THE TWO SILENCES ARE NOT THE SAME SILENCE, and that asymmetry is the whole of the carry rule below:
- *   · A CHECKLIST is state the harness keeps across turns. This process not having seen it (a conversation
- *     resumed after a restart, which says nothing about its tasks until it next touches them) is ignorance, not
- *     an empty list, so what was known before stands.
- *   · A CHECK is one measurement of one tree, and the turn that follows it edits that tree. A turn that ran no
- *     check has not confirmed the last one, so the old verdict is dropped rather than carried.
- *
- * Pure and outside the closure, like failureOf above: this is a rule worth stating and testing on its own. */
+// What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing
+// checklist means this process has not seen it yet, a missing check means it was not re-run.
 const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
     const open = list.filter((item) => item.status !== "completed");
     if (open.length === 0) {
         return undefined;
     }
-    // What it would have picked up next: the one it had in hand, else the first still waiting.
+    // What it would pick up next: the one already in progress, else the first still waiting.
     const next = (open.find((item) => item.status === "in_progress") ?? open[0])?.content;
     return { open: open.length, total: list.length, ...(next !== undefined ? { next } : {}) };
 };
 
-// The end-of-turn check's own verdict, and only when it ran and went red: a check that passed, was cancelled,
-// or never ran at all leaves nothing behind (rules/turn-ending.ts, agent/turn-checks.ts).
+// The check's verdict, only when it ran and failed; passed, cancelled, or never run leaves nothing.
 const failedCheck = (state: RuntimeState | undefined): string | undefined => (state?.check?.failed === true ? state.check.label : undefined);
 
-/* WHEN THE WORK WAS LEFT THIS WAY: the moment of the MEASUREMENT, not of the write.
- *
- * A finish that observed neither the list nor a check has learned nothing about where the work stands, and
- * several of them happen: a turn that only answered a question, a manual land (which finishes outside any turn
- * at all), the first turn after a restart. Stamping those `now` would restart the mark's clock every time the
- * conversation was touched, so a job abandoned on Tuesday would read as broken off just now — which is exactly
- * the distinction the age is carried for. */
+// The moment of measurement, not of the write: a finish that observed neither the list nor a check learned nothing new,
+// and stamping `now` there would restart the age of an old abandonment.
 const leftAt = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): number =>
     state?.checklist === undefined && state?.check === undefined ? (entry.unfinished?.at ?? now) : now;
 
 const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): UnfinishedWork | undefined => {
-    // Observed this turn, else what the last finish that DID observe it wrote (see the note above on silence).
+    // Observed this turn, else whatever the last finish that did observe it wrote.
     const steps = state?.checklist === undefined ? entry.unfinished?.steps : openSteps(state.checklist);
     const check = failedCheck(state);
     if (steps === undefined && check === undefined) {
@@ -311,16 +191,8 @@ const unfinishedOf = (entry: PersistedAgent, state: RuntimeState | undefined, no
     return { at: leftAt(entry, state, now), ...(steps !== undefined ? { steps } : {}), ...(check !== undefined ? { check } : {}) };
 };
 
-/* WHAT A CARD IS CURRENTLY REPORTING ABOUT ITS LAST DEATH: the sentence, the code that says which KIND of
- * death it was, and, for the one kind that comes back on a clock, when the window reopens and whether the turn
- * is held for a press.
- *
- * ONLY WHILE THE CARD STILL READS AS FAILED, which is the whole of the guard and the reason it is one guard
- * over four fields rather than four guards. A branch whose standing has moved on (the work landed by another
- * road, the delta went away) is answered by `landing`, and an explanation left under it would be describing a
- * turn the board no longer shows as the last word. For the limit facts that would be worse than stale: a
- * countdown is a promise about the future, and one attached to a death nobody is reporting any more is the one
- * thing more misleading than the red line this whole classification exists to replace. */
+// The failure fields, only while the card still reads as `error`; once the standing has moved on, they would describe a
+// turn the board no longer shows as the last word.
 const reportedFailure = (
     entry: PersistedAgent,
     status: AgentStatus,
@@ -336,11 +208,8 @@ const reportedFailure = (
               ...(entry.limitMoving !== undefined ? { limitMoving: entry.limitMoving } : {}),
           };
 
-/* THE FOUR STANDING CHOICES A CONVERSATION CAN MAKE FOR ITSELF, each a three-state override of a sandbox-wide
- * default (absent ⇒ inherit): hold or land its work, retry through an outage, send again at the reset, move to
- * another account when spent. Projected together because they are read together, by the card's menu and the
- * chat's offers, and because a fifth would otherwise be one more conditional in a projection that already has
- * more than it can carry. */
+// The four per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the
+// card's menu and the chat's offers read them together.
 const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" | "resumeAfterOutage" | "resumeAfterLimit" | "moveAfterLimit">> => ({
     ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
     ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
@@ -348,24 +217,13 @@ const postures = (entry: PersistedAgent): Partial<Pick<AgentSummary, "autoLand" 
     ...(entry.moveAfterLimit !== undefined ? { moveAfterLimit: entry.moveAfterLimit } : {}),
 });
 
-/* WHAT THE CARD SAYS THE LAST TURN LEFT OPEN, which is what the entry says, EXCEPT WHILE A TURN IS RUNNING.
- *
- * A live turn is the answer to the question this asks. The card is in the Active lane, the agent is working
- * through the very list that is short, and "3 steps left" printed beside a turn spending itself on those three
- * steps is noise on the one card that needs none. It comes back the moment the turn settles, saying whatever
- * that finish measured, so nothing is hidden and nothing stale is shown.
- *
- * Takes the runtime state rather than a boolean read at the call site, for the reason reportedFailure above
- * takes the whole entry: the guard belongs with the fact it guards, where it can be read in one place. */
+// What the entry says the last turn left open, except while a turn is running, where it would be noise on a card
+// already working through that very list.
 const reportedUnfinished = (entry: PersistedAgent, state: RuntimeState | undefined): Partial<Pick<AgentSummary, "unfinished">> =>
     state?.running === true ? {} : opt("unfinished", entry.unfinished);
 
-/* AND WHAT A FINISH WRITES THROUGH from it: the whole account of the failure, or nothing at all. The four
- * fields move as one because the finish that clears them is the same finish that writes them, and a card
- * carrying a reset instant with no code (or a code with no sentence) would be describing half a death.
- *
- * A turn that did NOT error answers `{}`, and the caller's destructure has already dropped whatever the entry
- * was carrying, so the pair is what clears a previous turn's wall off a card that has since run clean. */
+// The failure fields a finish writes, all four or none, so a clean turn's `{}` clears any wall a previous turn left on
+// the card.
 const endedFailure = (
     state: RuntimeState | undefined,
 ): Partial<Pick<PersistedAgent, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> =>
@@ -380,25 +238,8 @@ const endedFailure = (
               ...(state.limitMoving !== undefined ? { limitMoving: state.limitMoving } : {}),
           };
 
-/* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how the
- * last one ENDED, then where the work stands. The `idle` rung is why it is the only persisted value that
- * yields, it is the one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and
- * the question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers them:
- * a turn that died is not made fine by a branch that happens to be empty.
- *
- * Within the live rung, an ending the user chose outranks a park: a turn aborted while holding a question is on
- * its way out, and publishing it as `awaiting` would keep asking the user to answer a card the abort has
- * already settled. WHICH ending they chose is published too, and that is the whole of `dismissing`: both
- * flavours are the same unwind and they come to rest in different lanes, so a single value forced every board
- * to hold the card where it was until finish() landed seconds later (see AgentStatusSchema). Said apart, the
- * destination is known at the press and each card moves exactly once.
- *
- * An armed resume outranks every settled reading below it for the same reason a stop does: the entry describes
- * a turn that has stopped, and this one has stopped without ending.
- *
- * A pure function of the four things it reads, outside the registry closure: this is the rule every surface's
- * lane machine is downstream of, so it is worth being able to state it, and test it, without standing up a
- * registry to ask. */
+// Status precedence: the live turn (a chosen ending outranks a park), then an armed resume, then how the last turn
+// ended, then the land standing; only `idle` yields to the standing. Pure, so the rule is testable without a registry.
 const statusOf = (
     state: RuntimeState | undefined,
     parked: readonly string[],
@@ -417,25 +258,13 @@ const statusOf = (
     return entryStatus === "idle" ? landing : entryStatus;
 };
 
-/* WHICH SESSION THIS CONVERSATION IS ON AND WHOSE ACCOUNT IT IS, as one fact, from the turn's `session` frame.
- *
- * The two travel together because they are only useful together: a provider session resumes solely under the
- * credential that minted it, so an id filed without its account tells a reopened tab nothing about whether its
- * next message continues this conversation or opens a fresh one at the price of the whole transcript.
- *
- * The FRAME's account, never the request's. A turn that names no account is served by whichever connected one
- * has the most headroom (agent/harness-credentials.ts), so what begin() could record — the client's pin, when
- * it sent one — is blank for every automation, channel mention and webchat turn, and merely a request for the
- * rest. A frame carrying none (the container's env token, a translator subscription) leaves what is there:
- * silence means "no stored account served this", not "forget the one that did".
- *
- * Pure and outside the closure, like statusOf above: it is a rule worth stating and testing on its own. */
+// Session id and account move together: a session resumes only under the account that minted it. Taken from the frame,
+// not the request; a frame naming none leaves the existing account alone rather than clearing it.
 const sessionBinding = (
     entry: Pick<PersistedAgent, "sessionId" | "account"> | undefined,
     frame: { readonly sessionId: string; readonly account?: string | undefined },
 ): { readonly sessionId: string; readonly account?: string } | undefined => {
-    // A conversation whose entry has gone (archived, purged) mid-turn has nothing to bind, the same
-    // non-answer recordTier gives: there is no next turn for the value to be read by.
+    // Entry gone (archived, purged) mid-turn: nothing to bind, and no next turn to read it.
     if (entry === undefined) {
         return undefined;
     }
@@ -444,284 +273,143 @@ const sessionBinding = (
     return moved ? { sessionId: frame.sessionId, ...(account !== undefined ? { account } : {}) } : undefined;
 };
 
-// The registry input of any conversation turn, the fields begin() records onto the entry. Placement is kept
-// here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
-// not, while both share the same identity, status and transcript lifecycle.
+// The fields `begin` records for a turn. Placement (branch or not) is explicit here rather than inferred from the
+// provider, since isolated and workspace conversations share the same identity and status lifecycle.
 export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
     Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
-        // The runner this conversation executes on, latched like `isolated` directly below: only a
-        // conversation the registry has never seen takes the request's choice. Implies isolation.
+        // Latched like `isolated`; only a conversation never seen before takes the request's runner, and naming one
+        // implies isolation.
         readonly runner?: string;
         readonly provider: NonNullable<AgentTurn["agent"]>;
         readonly harness: NonNullable<AgentTurn["harness"]>;
-        // Who asked for this turn, as the daemon verified it (agent/turn-actor.ts). Latched on the first turn.
+        // Who asked for this turn, as the daemon verified it; latched on the first one.
         readonly startedBy?: string;
     };
 
-// Who asked for the conversation's FIRST turn, the same latch rule `begin` applies to `origin`: an existing
-// entry keeps its answer, and only a conversation the registry has never seen takes the request's.
+// Who asked for the conversation's first turn; an existing entry keeps its answer, latched the same way as `origin`.
 const startedByOf = (existing: PersistedAgent | undefined, turn: AgentTurnIdentity): { readonly startedBy?: string } =>
     opt("startedBy", existing?.startedBy ?? turn.startedBy);
 
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
     readonly ids: () => string[];
-    // The BOARD's roster, live agents only. Archived ones are excluded here (and from every broadcast) so a
-    // sandbox with a thousand retired agents still streams a roster the size of the work in flight.
+    // The board's roster, live agents only; archived ones are excluded here and from every broadcast.
     readonly list: () => AgentSummary[];
-    // The cold half, newest-archived first. Read on demand by the board's archive view; never broadcast.
+    // The archive, newest first; read on demand, never broadcast.
     readonly listArchived: () => AgentSummary[];
     readonly get: (id: string) => AgentSummary | undefined;
-    // The persisted entry, the worktree composition (per-repo bases) diff/land need.
+    // The persisted entry, including the per-repo bases diff and land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly running: (id: string) => boolean;
-    /* HOW MANY TURNS ARE IN FLIGHT ON EACH RUNNER RIGHT NOW, by runner id, which is what the fleet scheduler
-     * divides free capacity by (runners/runner-scheduler.ts).
-     *
-     * DERIVED, never counted: this daemon dispatched every one of those turns, so the registry already knows,
-     * and a second tally kept beside it is a number that drifts the first time a turn ends by a path nobody
-     * remembered to decrement. */
+    // Turns in flight per runner, what the scheduler divides free capacity by. Derived, not counted, so it cannot drift
+    // from a decrement somebody forgot.
     readonly inFlightByRunner: () => Map<string, number>;
-    /* IS THE AGENT ACTUALLY WRITING RIGHT NOW, the narrow half of `running`, for the one caller that can
-     * safely act on a live turn.
-     *
-     * `running` is true for two states a user reads as opposites: an agent editing files, and an agent PARKED
-     * on a question, a permission card or a plan, doing nothing at all until someone answers. Every guard used
-     * the broad one, so "wait for the agent turn to finish" was also the answer to landing work from an agent
-     * that was, in fact, waiting for the user, the turn it was told to wait for could not end until they
-     * acted, and the thing they wanted to do was the acting.
-     *
-     * A park is the daemon's own definition of quiet: it already commits and rebases that very checkout when a
-     * parked card settles (agents/sync.ts), so a land there is a write of a class this codebase already takes
-     * unasked. `stopping` counts as quiet for the same reason, the provider has been aborted and is only
-     * unwinding; nothing new is being written.
-     *
-     * It is NOT a proof of stillness, and no caller should treat it as one: a turn can be parked on one card
-     * while a parallel tool call keeps running (see RuntimeState.pauses). It is the honest, cheap reading of
-     * "is anyone at the keyboard", which is what the land guard needs, the mid-write case stays behind an
-     * explicit user override rather than behind this. */
+    // Narrower than `running`: excludes a turn parked on a question or permission card, since a park already counts as
+    // quiet enough to rebase under. Not proof of stillness; a parallel tool call may still run.
     readonly writing: (id: string) => boolean;
-    // The SDK session ids of the turns in flight RIGHT NOW. The terminals list maps them to the `agent-*` tmux
-    // sessions those turns run their Bash in (agent/agent-terminals.ts), so a working agent's terminal doesn't
-    // read as finished while it thinks, between two commands its only window is the last one's dead pane, and
-    // pane liveness alone would call that done. Known from the turn's first SDK frame (`session`), well before
-    // its first command; an id the entry has not been flushed with yet falls back to the last turn's.
+    // SDK session ids of turns running right now, so the terminals list doesn't read a thinking agent's pane as
+    // finished between commands. A not-yet-flushed entry falls back to the last turn's id.
     readonly liveSessionIds: () => string[];
-    // One conversation's CURRENT session id, including a running first turn's, the entry is only flushed with
-    // it at finish, so `entry(id).sessionId` alone is undefined for exactly the turn most likely to be steered.
+    // Current session id, including a running first turn's, which the persisted entry alone would miss until finish.
     readonly sessionIdOf: (id: string) => string | undefined;
-    // Acquire the conversation's turn mutex and mark it running, creating/updating the entry. False ⇒ a turn
-    // is already running for that conversation, or a rewind holds the same mutex (the caller surfaces the
-    // coded busy error).
+    // Acquires the turn mutex and marks it running. False: a turn is already running, or a rewind holds the same mutex.
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
-    /* HOLD THE CONVERSATION AGAINST ITS OWN TURNS while something destructive happens to the workspace, the
-     * rewind's restore, which overwrites the files a running turn is reading and editing.
-     *
-     * The lease exists because "check that nothing is running, then restore" is NOT the same thing and cannot
-     * be made safe by adding checks: a turn admitted in the gap between the last check and the first `git
-     * checkout` lands mid-restore, and both halves lose. What closes it is that this and `begin` are the same
-     * mutex, taken in one synchronous step, the refusal and the claim happen with no await between them, so
-     * there is no gap for a turn to arrive in. Both directions are covered: a turn cannot start under a lease,
-     * and a lease cannot be taken under a turn.
-     *
-     * Undefined ⇒ refused because a turn is running; the caller surfaces that as busy, exactly like begin's
-     * false. The lease is always released, including when `fn` throws, a conversation stuck unrunnable
-     * because a restore failed would be a worse outcome than the failure itself. */
+    // Holds the conversation against its own turns while a rewind restores files under a running turn. Shares one mutex
+    // with `begin`, claimed synchronously; always released, even if `fn` throws.
     readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
-    // Record the worktree composition on first creation (per-repo full base shas).
-    /* Write down what the conversation's checkout IS (its repos, each with the main-line sha it stands on) and,
-     * on the turn that created it, what it was decided it SHOULD carry (agents-store.ts `composition`). The
-     * composition is set only when given, so the callers that rewrite the repos alone, the pre-turn rebase, a
-     * join or a leave, keep the decision the opening turn made. */
+    // Writes what the checkout is (its repos, each with the main-line base) and, only when given, what it should carry
+    // (`composition`); callers that merely rewrite repos keep the opening turn's decision.
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][], composition?: Composition) => Promise<void>;
-    /* Take repos that no longer exist out of EVERY composition, live and archived, and answer with the
-     * conversations that named them. The one write that may edit a composition after it is frozen, because a
-     * deleted repo is the one change to the workspace a frozen composition cannot survive: every per-repo pass
-     * would keep running git in a directory that is not there. Who decides a repo is gone, and what happens to
-     * the checkouts, is agents/vanished-repos.ts; this is only the registry's half of it. */
+    // Strips a deleted repo out of every composition, live and archived, since a frozen composition can't survive a
+    // directory that no longer exists. Only the registry's half; agents/vanished-repos.ts decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
-    /* Record what the complexity judge made of the turn just planned (PersistedAgent.tier), which the NEXT
-     * turn in this conversation reads as its `afterHardTurn` signal.
-     *
-     * Not part of `begin` because it is not a fact the caller has: the turn identity is what the client sent,
-     * and this is what the daemon concluded a moment later. Not broadcast either, unlike the settings it sits
-     * beside: no surface renders it, it is machinery for the next judgement, and putting it on the roster
-     * frame would spend a full board broadcast per turn to publish something nobody draws. */
+    // Records the complexity judge's verdict for the next turn's `afterHardTurn` signal. Not part of `begin` (the
+    // daemon decides it after the request), and not broadcast, since nothing renders it.
     readonly recordTier: (id: string, tier: "fast" | "standard") => Promise<void>;
-    // Set the display title, subject to the source ranking (see AgentTitleSourceSchema): a rename always
-    // lands, an automatic source only ever moves the title up. Deliberately does NOT bump updatedAt (a rename
-    // must not fake-unread other browsers or reorder lanes) and takes no running guard, begin()/finish()
-    // re-read the entry, so a mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to
-    // nothing; a rejected promotion returns the entry's CURRENT summary rather than undefined.
+    // Sets the title per the source ranking (AgentTitleSourceSchema): a rename always lands, an automatic source only
+    // moves it up. A rejected promotion still returns the entry's current summary, not `undefined`.
     readonly setTitle: (id: string, title: string, source: AgentTitleSource) => Promise<AgentSummary | undefined>;
-    /* Record what this agent's landed work DID, as a commit subject (PersistedAgent.landedSubject). No ranking
-     * and no ladder, unlike a title, which is an identity several sources compete over, this is one sentence
-     * about one diff, and the newest land is by definition the one describing the most of the claim.
-     *
-     * BROADCAST, like the drafting flag it answers. The Changes panel reads this off the roster frame and only
-     * falls back to the review's copy for an agent the roster has dropped, so the sentence reaches the commit
-     * box on the push that already exists, rather than waiting for something to make the panel re-read a
-     * workspace-wide scan. The caller still publishes that scan afterwards (agents/landed-subject.ts), because
-     * the review's copy is what an ARCHIVED agent's chip is read through. Leaves updatedAt alone for the same
-     * reason setTitle does, the land already stamped the activity this describes. */
+    // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
+    // current claim. Broadcast so the Changes panel picks it up immediately.
     readonly setLandedSubject: (id: string, draft: { subject: string; note?: string; breaking?: string }) => Promise<void>;
-    /* Publish the full account of the sentence above being drafted, which models were asked, how each went,
-     * and how it ended, as it changes. The wait is the only part of a landing a user ever experiences, so it
-     * is the one part that owes them a report rather than a spinner. Runtime and broadcast rather than
-     * persisted and published; the implementation says why. `undefined` withdraws it. Unknown id ⇒ no-op. */
+    // Publishes the live account of a landed message being drafted, as it changes; the wait is the one part of a land a
+    // user watches. Runtime and broadcast only, never persisted; `undefined` withdraws it.
     readonly setLandedMessageDraft: (id: string, draft: LandedMessageDraft | undefined) => void;
-    // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
-    // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
+    // Stamps the read marker; leaves `updatedAt` alone, since reading is not activity.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
-    // Set/clear the per-agent autoLand override (null ⇒ back to "inherit the sandbox setting"). Like setTitle
-    // it leaves updatedAt alone (configuring is not activity) and needs no running guard, the value is read
-    // at turn COMPLETION, so flipping it mid-turn is exactly "hold THIS turn's work". Undefined ⇒ unknown id.
+    // Set/clear the autoLand override (null inherits the sandbox setting); read at turn completion, so a mid-turn flip
+    // holds only this turn's work.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
-    // Set/clear THIS conversation's outage-resume override (null ⇒ back to "inherit the sandbox setting").
-    // Same grammar as setAutoLand and legal at the same moments, the value is read by the resume pass AFTER
-    // the turn has already died, so arming a conversation whose turn is still unwinding is the ordinary case
-    // rather than an edge one. Undefined ⇒ unknown id.
+    // Same grammar as `setAutoLand`; read by the resume pass after the turn has already died, so arming it mid-unwind
+    // is the ordinary case.
     readonly setResumeAfterOutage: (id: string, resumeAfterOutage: boolean | null) => Promise<AgentSummary | undefined>;
-    // Set/clear THIS conversation's limit-resume override (null ⇒ back to "inherit the sandbox setting"), the
-    // same grammar again for the blocker that comes back on a clock. Legal at the same moments and for a
-    // sharper version of the same reason: the press that writes it is made on a card whose turn died hours
-    // ago, and what it arms is a fire scheduled hours further out. Undefined ⇒ unknown id.
+    // Same grammar again, for a fire that can be scheduled hours out: the press is often made on a card whose turn died
+    // hours ago.
     readonly setResumeAfterLimit: (id: string, resumeAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
-    // Set/clear THIS conversation's move-on-limit override (null ⇒ inherit), the third of the same grammar, for
-    // the answer to a spent allowance that does not wait. Undefined ⇒ unknown id.
+    // Third of the same grammar, for a spent allowance that moves accounts instead of waiting.
     readonly setMoveAfterLimit: (id: string, moveAfterLimit: boolean | null) => Promise<AgentSummary | undefined>;
-    // Stamp a collaborator's ask for this work to be landed (AgentSummarySchema.landRequested). Like setTitle
-    // it leaves updatedAt alone (asking is not the agent's activity) and needs no running guard, the ask is
-    // about whatever the branch holds when a maintainer answers it. Re-asking re-stamps (latest asker wins;
-    // the board shows one ask, not a queue). Cleared by the land or discard that answers it. Undefined ⇒
-    // unknown id.
+    // Stamps a collaborator's ask to land; leaves `updatedAt` alone. Re-asking re-stamps rather than queuing; the land
+    // or discard that answers it clears the ask.
     readonly requestLand: (id: string, by: { email: string; name?: string }, at: number) => Promise<AgentSummary | undefined>;
-    /* Forget which provider session this conversation was resuming, what a rewind does after restoring the
-     * files, so the next turn opens a fresh thread instead of resuming one whose context describes edits that
-     * are no longer on disk. That mismatch is the whole reason rewind drops messages rather than only
-     * restoring: a provider still holding the dropped turns would keep reasoning from them.
-     *
-     * Only the pointer goes. The provider's own store keeps the old session, and the daemon's transcript record
-     * is authoritative for reading the conversation back, so nothing the user can see is lost by this. */
+    // Drops the resumed-session pointer after a rewind restores files, so the next turn opens a fresh thread instead of
+    // one describing edits no longer on disk. Only the pointer goes.
     readonly clearSession: (id: string) => Promise<void>;
-    // "Mark all read", one stamp across the whole fleet, so a board full of badges has a single escape hatch.
+    // Stamps every card's read marker at once, the board's one escape hatch for unread badges.
     readonly markAllSeen: (now: number) => Promise<void>;
-    // Persist a land's outcome: a successful composition's per-repo landedTips arrive together and a refusal
-    // advances none, alongside the refreshed cumulative diffstat and the conflict report behind the status.
-    // Takes the whole outcome rather than its pieces so the report cannot drift from the tips it belongs to,
-    // an outcome with no conflicts CLEARS the stored one, which is what makes a resolved conflict resolve.
+    // Persists a land's outcome (advanced landedTips, diffstat, conflict report) as one unit, so the report cannot
+    // drift from the tips it belongs to; an outcome with no conflicts clears the stored one.
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
-    /* THE LANDING IS ABSORBED, history has taken every path it put in the tree, and the attribution scan that
-     * observed it says so once, here, instead of re-deriving it from git on every scan forever (see the
-     * `absorbed` field's note in agents-store.ts). `size` is the landing's applied-path count, kept because the
-     * presence reading is a fraction and a settled repo still counts in the denominator.
-     *
-     * The shas are the GUARD, not context: a newer land advances both, and a mark computed against the old pair
-     * must not stamp the new landing, so a row whose landedHead/landedTip no longer match is left alone. No
-     * broadcast: nothing user-visible moves (an absorbed landing reads exactly as it did, fully present, no
-     * chips), this only stops the re-derivation. Unknown id ⇒ no-op. */
+    // Records once that a landing is fully absorbed, instead of re-deriving it from git on every scan; the (landedHead,
+    // landedTip) pair guards it. No broadcast: nothing visible changes.
     readonly markLandingAbsorbed: (id: string, repo: string, landedHead: string, landedTip: string, size: number) => Promise<void>;
-    // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
+    // Folds one frame into runtime state; broadcasts only when something card-visible changed.
     readonly observe: (id: string, event: AgentEvent) => void;
-    /* How this turn's end-of-turn check went, from the Stop that ran it (rules/turn-ending.ts, bound in
-     * turn-plan.ts). Last run wins, which is what makes a repaired tree a passing turn: the check that went red
-     * at the first Stop and green after the repair ends green.
-     *
-     * Told to the registry rather than read from turn-checks.ts because that store is CONSUMED by the land a
-     * beat before finish runs (agent.routes.ts takes and clears it), so the finish that writes the card's
-     * account of the turn would find nothing there. No broadcast: nothing on a card moves until the finish. */
+    // Records how the end-of-turn check went; last run wins, so a repaired tree passes. Kept here rather than read from
+    // turn-checks.ts, since that store is consumed before `finish` runs.
     readonly noteCheck: (id: string, check: { label: string; failed: boolean }) => void;
-    /* THE USER ENDED THIS TURN and the abort has landed, recorded NOW, ahead of the unwind.
-     *
-     * The whole point is the gap it closes. /agent/stop aborts the provider and then waits for the generator to
-     * walk its cleanup, and until finish() runs the roster still reads `running`: the press had no visible
-     * result anywhere, so every surface kept a spinner turning on a turn that was already dead. Called by the
-     * routes rather than inferred from a frame, because an abort's defining feature is that no frame follows
-     * it. A no-op when nothing is running, an ending that raced the turn's own changes nothing.
-     *
-     * The two endings differ in what the card does WHILE it unwinds, as well as where it lands. A Stop is
-     * published immediately, because the press is news and the card has to stop spinning. A dismissal is not:
-     * the card is already sitting in Attention where the user just acted on it, the unwind is over in a blink
-     * (the turn is parked inside the card being dismissed, so there is nothing in flight to unwind), and
-     * publishing the in-between would spend a lane change announcing that the agent went back to work for the
-     * length of that blink, which is the thing being fixed. It holds its place, and finish() moves it once. */
+    // Records a stop/dismiss the instant it lands, ahead of the seconds-long unwind, so the roster stops reading
+    // `running` on a turn already ending. `finish` moves the card once, afterward.
     readonly stopping: (id: string, ending: "stopped" | "dismissed") => void;
-    // End of turn (aborted included): flush pending usage/session into the entry, release the mutex, and write
-    // how the turn ENDED, error on an observed error frame, `stopped` when the user cut it short, else idle.
-    // Deliberately says nothing about where the work now stands: that is standing.ts's question, re-derived
-    // here before the roster goes out.
+    // Flushes pending usage and session, releases the mutex, and writes how the turn ended (error, stopped, or idle).
+    // Says nothing about where the work now stands; that comes from standing.ts.
     readonly finish: (id: string, now: number) => Promise<void>;
-    /* A RESUME IS COMING, the way INTO `resuming` for an ending the observer cannot see. The error-frame path
-     * covers a turn the daemon is repairing (a re-mint, an outage backoff); this covers a settlement that IS a
-     * beginning: a restored card's answer ends its placeholder turn and starts the real resumed one seconds
-     * later (turn-resume.ts), and without this flag the entry's resting `idle` goes out in between, the board
-     * files the card under Finished for the blink before it climbs back into Active. Set BEFORE the placeholder
-     * settles; cleared by what always clears it, the resumed turn's own begin, or abandonResume when the
-     * resume never comes. */
+    // Marks a resume as coming for the one path an error frame can't see: a restored card's placeholder turn settling
+    // seconds before the real resumed turn begins. Cleared by that turn's own `begin`, or by `abandonResume`.
     readonly markResuming: (id: string) => void;
-    /* THE RESUME IS NOT COMING, the other way out of `resuming`, and the one nobody sees happen: the credential
-     * could not be re-minted, or an outage's stranded turn went stale waiting for a setting that stayed off
-     * (turn-resume.ts). Writes the failure the card was holding open for: this is exactly the condition where a
-     * person really is needed, so it settles into Attention rather than back into the resting `idle` the
-     * interrupted turn left behind.
-     *
-     * A no-op while a turn is running: the resume lost a race to the user's own send, and that turn's begin has
-     * already cleared the wait and owns the entry this would otherwise write over.
-     *
-     * `reason` is what the card then says. The two callers are the only ones who know which of the two endings
-     * this is, and a card that has been promising to come back for an hour owes the reader more than the word
-     * "error" when it stops.
-     *
-     * Answers whether the WAIT IS OVER, which is not the same as whether anything was written: a card with no
-     * wait left to end (a fresh turn already cleared it, the entry is gone) is settled and answers true. Only a
-     * turn still unwinding answers false, the caller has to come back, because the failing turn's own finish is
-     * seconds away and will re-open the very spinner this was called to close. Dropping that call is how a
-     * refusal recorded one tick before its turn settled left a card spinning with nothing left to end it. */
+    // Ends a resume that is not coming, settling the card into the failure it was holding open, never back into a clean
+    // `idle`. Answers whether the wait is over, not whether anything was written.
     readonly abandonResume: (id: string, now: number, reason: string) => Promise<boolean>;
-    /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
-     * the answer can have changed without this daemon doing it, most of all the roster READ, which is what
-     * heals a card after work reached the main tree by a road the daemon never saw (a hand-merge in a
-     * terminal). Cheap and idempotent: a pass whose shas are unchanged spends one rev-parse per repo and
-     * broadcasts nothing. */
+    // Re-derives every live agent's land standing and publishes if any moved; called wherever the answer could have
+    // changed outside the daemon. Cheap when nothing moved: one rev-parse per repo, no broadcast.
     readonly refreshStandings: () => Promise<void>;
-    // Stamp/clear the archive marker. Both take the ids that ALREADY had their checkout retired (or restored)
-    //, the registry owns the marker, agents/archive.ts owns the git side and the order between them.
+    // Stamps/clears the archive marker; the caller must have already retired or restored the checkout
+    // (agents/archive.ts owns that order).
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
     readonly clearArchived: (ids: readonly string[]) => Promise<void>;
-    // Forget agents outright, `discard`, the archive's purge, and the boot sweep's vanished worktrees. Takes a
-    // SET because every caller but discard has one, and a per-id call would spend a persist and a roster
-    // broadcast on each agent of a batch.
+    // Forgets agents outright. Takes a set rather than one id at a time, so a batch costs one persist and one
+    // broadcast.
     readonly remove: (ids: readonly string[]) => Promise<void>;
-    // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting. The
-    // listener also receives the revision the snapshot was taken at (see `revision`).
+    // Delivers an immediate snapshot on subscribe, tagged with the revision it was taken at, so a fresh connection
+    // paints without waiting.
     readonly subscribe: (listener: (agents: AgentSummary[], rev: number) => void) => () => void;
-    // A counter bumped on every broadcast, i.e. on every registry change. The roster is published as full
-    // snapshots, and the browser reconciles three sources of it, this stream, its own GET /agents, and its
-    // optimistic writes, so each snapshot has to say WHEN it was true. Monotonic within a daemon process;
-    // it restarts at 0 on reboot, which is safe because the stream reconnects and the browser adopts the first
-    // roster it sees on a fresh connection.
+    // Bumped on every broadcast, so a browser reconciling this stream against its own GET and optimistic writes can
+    // tell which snapshot is newer. Resets to 0 on reboot; a fresh connection adopts the first roster it sees.
     readonly revision: () => number;
 }
 
 export const createAgentsRegistry = (store: AgentsStore, standings: LandStandings, presences: LandedPresences): AgentsRegistry => {
     let entries: PersistedAgent[] = [];
     const runtime = new Map<string, RuntimeState>();
-    /* The other half of the turn mutex, conversations a rewind is currently restoring. Deliberately NOT a flag
-     * on RuntimeState: that map is rebuilt per turn (freshRuntime in begin), and a lease that a turn's own
-     * bookkeeping could clear is not a lease. Empty in the overwhelmingly common case, so the extra read in
-     * begin costs a Set miss. */
+    // The other half of the turn mutex: conversations a rewind is restoring. Kept outside `RuntimeState`, which is
+    // rebuilt on every `begin`, so nothing here could accidentally clear the lease.
     const rewinding = new Set<string>();
-    /* The live account of each agent's commit message being drafted (agents/landed-subject.ts), which models
-     * have been asked, how each went, and how it ended. A Map beside `rewinding` rather than a flag on
-     * RuntimeState, and for the same reason: the drafting starts AFTER the turn that landed the work has ended,
-     * so a per-turn map is either stale or already replaced by the next turn's fresh state by the time this
-     * would be cleared. A finished report stays until the next land replaces it, how the LAST draft went is
-     * exactly what a user staring at an unfilled commit box needs to read. */
+    // Live account of each agent's commit message being drafted, kept outside `RuntimeState` since drafting starts
+    // after the landing turn has already ended. A finished report stays until the next land replaces it.
     const messageDrafts = new Map<string, LandedMessageDraft>();
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
-    // Bumped by broadcast(), so it advances exactly once per published change, see `revision` on the interface.
+    // Bumped by `broadcast()`, once per published change; see `revision` on the interface.
     let revision = 0;
 
     const runtimeOf = (id: string): RuntimeState => {
@@ -736,30 +424,24 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
 
     const summaryOf = (entry: PersistedAgent): AgentSummary => {
         const state = runtime.get(entry.id);
-        // A turn holding an unanswered card is AWAITING, however much else it has in flight beside it.
+        // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
         const parked = state === undefined ? [] : [...state.pauses.values()];
-        // See statusOf: the precedence rule lives up there, as a pure function of what it reads.
         const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
         const status = statusOf(state, parked, entry.status, landing);
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
-        // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
+        // Live totals: persisted amount plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
         const inputTokens = entry.inputTokens + (state?.pendingInputTokens ?? 0);
         const outputTokens = entry.outputTokens + (state?.pendingOutputTokens ?? 0);
-        /* THE CHILDREN, from the two places that each know half of it. What is RUNNING is a fact about right now
-         * and only the live registry has it; how many this agent has EVER started is a fact about the work, and
-         * only the entry keeps it, the live registry sweeps a finished child after five minutes and remembers
-         * nothing across a restart, which is what used to take the count off the card while the agent that
-         * earned it was still on the board. */
+        // Running count comes from the live subagent registry; the lifetime total comes from the entry, since the live
+        // registry sweeps a finished child and forgets everything across a restart.
         const subagents = { running: subagentCountsOf(entry.id).running, total: (entry.subagents ?? 0) + (state?.pendingSubagents ?? 0) };
         const loop = loopProjection.of(entry.id);
         const workflow = workflowProjection.of(entry.id);
-        // The outside conditions this conversation is parked on. Empty is the cleared state watchers.ts
-        // publishes when the last one ends, and it is turned back into an ABSENT field below, so a card that
-        // once watched something is indistinguishable from one that never did, which is the truth.
+        // Empty means every watch has ended; turned into an absent field below, indistinguishable from never having
+        // watched.
         const watches = watchProjection.of(entry.id);
-        // Read for branch-backed agents only, for the same reason a standing is: a workspace conversation
-        // reaches the main tree by typing in it, never through a land, so it has no landing to be missing.
+        // Branch-backed agents only: a workspace conversation reaches main by typing in it, never by landing.
         const landedPresence = entry.branch === undefined ? undefined : presences.of(entry.id);
         const landedMessage = landedMessageOf(entry);
         return {
@@ -775,19 +457,14 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 question: parked.includes("question"),
                 permission: parked.includes("permission"),
                 capability: parked.includes("capability_offer"),
-                // Its own lane rather than folded into `permission`, because it is the one pause the person
-                // reading the board may not be able to clear: a gated credential waits for the people the
-                // gate names, and a maintainer looking at the card cannot answer it for them.
+                // Its own lane, not folded into `permission`: the reader looking at the board often cannot be the one
+                // who clears it.
                 credential: parked.includes("credential_offer"),
-                // Reads the DERIVED verdict, not the stored report. Deriving this from a cached status was the
-                // shape of the original bug in miniature: a faithful projection over a stale input is stale.
+                // Reads the derived verdict, not a stored status; a cached status here was the original bug's shape.
                 conflict: status === "conflict",
             },
             ...reportedUnfinished(entry, state),
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
-            // Only while the card still READS as failed. A branch whose standing has moved on (the work landed
-            // by another road, the delta went away) is answered by `landing` above, and an explanation left
-            // under it would be describing a turn the board no longer shows as the last word.
             ...reportedFailure(entry, status),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...opt("startedBy", entry.startedBy),
@@ -797,8 +474,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
             ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
             ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
-            // The last verdict and the standing veto, the two facts the composer's pre-send preview needs: the
-            // first to judge a follow-up the way the daemon will, the second to restore the user's own toggle.
+            // `tier` and `tierHold`: what the composer's pre-send preview needs to judge a follow-up and restore the
+            // user's toggle.
             ...(entry.tier !== undefined ? { tier: entry.tier } : {}),
             ...(entry.tierHold !== undefined ? { tierHold: entry.tierHold } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
@@ -811,14 +488,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(state?.contextTokens !== undefined ? { contextTokens: state.contextTokens } : {}),
             ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
-            // The full account of this landing's commit message being drafted, live while a model is writing,
-            // kept after it ends until the next land replaces it. See setLandedMessageDraft.
+            // Live account of the commit message being drafted; kept until the next land replaces it.
             ...(messageDrafts.has(entry.id) ? { landedMessageDraft: messageDrafts.get(entry.id) } : {}),
-            /* …and the sentence itself the moment it exists. The flag above is a promise, and this is the frame
-             * that keeps it: the Changes panel's "From" chip files this into the commit box, and a landing's
-             * message is the one thing about that panel which arrives SECONDS after everything else it draws.
-             * Sending it here costs a string on a frame that was going out anyway; the alternative was the
-             * panel re-reading the whole review to collect it (see LandedMessage). */
+            // The finished sentence itself, the moment it exists; the Changes panel's 'From' chip reads it straight off
+            // this frame instead of re-scanning the whole review to find it.
             ...(landedMessage === undefined ? {} : { landedMessage }),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
             ...(entry.seenAt !== undefined ? { seenAt: entry.seenAt } : {}),
@@ -826,30 +499,26 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
             ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
-            // Absent for the agents that never delegated, which is most of them, so the chip appears on content
-            // rather than reading "0" down the board.
+            // Absent for agents that never delegated, so the chip appears on content, not as a column of zeros.
             ...(subagents.total > 0 ? { subagents } : {}),
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
                 : {}),
-            // Present ONLY when some of what this agent landed is no longer in the main tree, the user
-            // discarded it, or took it back out by hand. Its absence is the steady state and says nothing, so
-            // the card spends a line on this exactly when there is something to say (landed-presence.ts).
+            // Present only when some of what this agent landed is no longer in the tree; absence says nothing.
             ...(landedPresence !== undefined ? { landedPresence } : {}),
-            // The loop driving this conversation, read off the pump's own live state for the same reason the
-            // subagent counts are read off theirs, one projection, no second copy to go stale.
+            // Read off the loop pump's own live state; one projection, no second copy to drift.
             ...(loop !== undefined ? { loop } : {}),
             ...(workflow !== undefined ? { workflow } : {}),
-            // Presence is the signal (AgentSummarySchema.watches): an empty list means every watch has ended,
-            // and a card wearing `watches: []` would have to be read before it could be dismissed.
+            // An empty list would still have to be read before dismissal; turned absent instead when nothing is
+            // watching.
             ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
         };
     };
 
     const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
 
-    // One bump per published change, BEFORE the fan-out, so every listener on this broadcast sees the same
-    // revision and a mutation route reading revision() afterwards reports the one its own change produced.
+    // Bumped once per broadcast, before the fan-out, so every listener sees the same revision and a route reading
+    // `revision()` right after gets the one its own change produced.
     const broadcast = (): void => {
         const agents = list();
         revision += 1;
@@ -858,75 +527,35 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         }
     };
 
-    /* Both projections move BETWEEN turns, which is the card-visible change no frame announces: the last
-     * iteration's finish() has already published, and only then does the pump decide the goal is met; a step
-     * settles, and only then does the step after it name itself. Without this the card would hold
-     * `running · iteration 12/12` until something unrelated moved the fleet, at precisely the moment someone is
-     * watching it. Never unsubscribed: the registry outlives the process. */
+    // Loop/workflow state can change between turns, with no frame to announce it; without this hook the card would show
+    // a stale step until some unrelated broadcast moved the fleet. Never unsubscribed.
     loopProjection.onChange(broadcast);
     workflowProjection.onChange(broadcast);
-    /* The watches are the strongest case this notification has. EVERY transition of a watch happens between
-     * turns, that is what a watch IS: armed as one turn ends, fired or given up on hours later with nothing
-     * else moving on the board. Left to ride the next unrelated frame, a card would advertise a condition that
-     * was met at 3am until some other agent happened to broadcast. */
+    // Every watch transition happens between turns (armed as one ends, resolved hours later); without this, a card
+    // would keep showing a condition met hours ago until an unrelated broadcast came along.
     watchProjection.onChange(broadcast);
 
-    /* Only the live, branch-backed roster is probed, see LandStandings.refresh on why an archived agent keeps
-     * its last answer, and why a workspace conversation has no standing to probe at all.
-     *
-     * Two readings over one roster, because a land has two halves and only one of them is a sha: where the
-     * branch stands against the main line (standing.ts), and whether what already landed is still in the tree
-     * (landed-presence.ts). Both, or the board answers the discard case with a confident stale yes. Run
-     * together rather than chained so neither waits on the other's git, and `moved` is the OR: either half
-     * changing is a card the user is looking at changing.
-     *
-     * AND NEITHER MAY BE THE REASON A TURN FAILS, which is why this settles both instead of awaiting them.
-     * They are DERIVED readings of a world git already holds, best-effort by construction: the repo-level
-     * failures they actually meet (a pruned branch, a rewritten history, a checkout deleted under them) are
-     * answered per repo inside, so anything that reaches here is a projection misreading its own edge case
-     * rather than news about the conversation.
-     *
-     * What makes ignoring that the right call is WHERE this is awaited. `finish` runs in the turn generator's
-     * `finally`, so a rejection here does not merely skip a card refresh, it BECOMES the turn's outcome, and
-     * because the pass covers the whole roster, any one agent's broken repo ends every other agent's turn.
-     * That is precisely how one deleted workspace repo came to kill every session in a workspace, hours after
-     * the delete, with a git error naming a repo the conversation had never heard of. The board keeps its last
-     * verdicts and re-derives on the next pass instead, which is what an unprobed agent does at boot anyway.
-     *
-     * allSettled rather than one catch around both, so a half that fails costs only its own reading: the
-     * other's `moved` still publishes, instead of a broken standing suppressing a presence change nobody would
-     * see until something unrelated moved the fleet. */
+    // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
+    // never throw: this runs inside `finish`'s `finally`. `allSettled`, so a failing half costs only its own reading.
     const reprobe = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
         return probes.some((probe) => probe.status === "fulfilled" && probe.value);
     };
 
-    // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
-    // persists would each serialize the array they captured, and the one that finishes last would write back a
-    // snapshot missing the other's change. Archiving several agents at once is exactly that shape. Chaining also
-    // means the closure reads `entries` at EXECUTION time, so a queued write always persists the latest state.
-    // (`.then(save, save)` so one rejected write doesn't poison the queue, the push-store idiom.)
+    // Chained, not fire-and-forget: `entries` is replaced wholesale on every write, so two overlapping persists would
+    // each serialize a stale snapshot. `.then(save, save)` keeps a rejected write from poisoning the queue.
     let writes: Promise<unknown> = Promise.resolve();
-    /* Move a title UP the source ranking, or leave it exactly as it is. The single place the ranking is
-     * applied, so the rename route and the frame path cannot disagree about who may rename what.
-     *
-     * A rename always lands, including the second one, which an ordinary rank comparison would reject as a
-     * sideways move. Everything else has to strictly outrank what is already there: a model name or a plan
-     * heading may replace the prompt the title was derived from, a plan may replace a model name but never the
-     * reverse, nothing may replace a rename, and a REPLAN may not rename the job the first plan already named.
-     * The strictness is also what makes the naming pass self-limiting: once one model name lands, the next
-     * turn's would be a sideways move and is never even attempted. Returns whether the entry changed, so
-     * callers persist and broadcast only when something actually did. */
+    // The one place the title-rank comparison is applied, so every caller agrees on who may rename what. A rename
+    // always lands, even a second one; anything else must strictly outrank what's there.
     const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
         if (entry === undefined || clean === undefined) {
             return false;
         }
-        // Neither a provider's failure sentence nor a tool-call stand-in is ever a NAME, however it got here: a
-        // naming pass whose own model call hit the condition, a plan heading quoting the failure. See
-        // cannotBeAName above for why the write is refused and the stored one loses its rank.
+        // A failure sentence or tool-call stand-in is never a name, however it arrived; refused here, and a stored one
+        // loses its rank (see cannotBeAName).
         if (source !== "user" && cannotBeAName(clean)) {
             return false;
         }
@@ -958,22 +587,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
 
     return {
         init: async () => {
-            /* THE HELD TURNS DID NOT SURVIVE, so nothing loaded may claim one. `limitHeld` says a refused turn
-             * is sitting in memory waiting for a press to re-run it (turn-resume.ts's pendingLimit), and that
-             * memory is this process's: a daemon that has just started holds none of them, whatever the file
-             * says. Left standing, every card stranded by a limit before the restart would go on offering a
-             * press that answers NOT_FOUND, which is the one failure mode worse than no offer.
-             *
-             * Not migration and not compatibility, the flag is simply false at boot as a matter of fact, and
-             * this is where the process learns it. The reset instant beside it is untouched: an allowance
-             * reopening at four is still reopening at four, and saying so is what the card is for. */
+            // `limitHeld` names a turn waiting in this process's memory for a re-run press; a fresh daemon holds none,
+            // whatever the file says, so it is stripped on load.
             entries = (await store.load()).map(({ limitHeld: _held, limitScheduled: _booked, limitMoving: _moving, ...carried }) => carried);
-            /* The roster goes out the moment it is loaded, an /events stream that connected during boot is
-             * already holding an empty fleet and this frame is what fills it. Standings are probed BEHIND the
-             * broadcast, not before it: a reboot's verdict cache is empty, so the probe is a git spawn per live
-             * agent, and awaiting it here held the whole boot (and with it every route) behind minutes of git
-             * on a machine that had just crashed. Unprobed agents read `idle` for the seconds until the
-             * refresh's own broadcast corrects them. */
+            // Broadcasts immediately on load, before standings are probed, since a fresh boot's verdict cache is empty
+            // and probing first would hold the whole boot behind a git spawn per live agent.
             broadcast();
             void reprobe()
                 .then((moved) => {
@@ -1024,11 +642,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     return sessionId === undefined ? [] : [sessionId];
                 }),
         withRewindLease: async (conversationId, fn) => {
-            /* The claim. `running` is read and `rewinding` is written with NOTHING between them, no await, no
-             * call that could yield, so from the event loop's point of view this is one step, and `begin`
-             * (whose own check-to-claim path is likewise unbroken) can only ever observe it as taken or not
-             * taken. Introducing an await here, however harmless it looks, is what reopens the hole this
-             * function exists to close. */
+            // The claim: `running` is read and `rewinding` is written with no `await` between them, one atomic step.
+            // Adding an await here, however harmless it looks, reopens the race this function exists to close.
             if (runtime.get(conversationId)?.running === true) {
                 return undefined;
             }
@@ -1040,36 +655,32 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
         },
         begin: async (turn, now) => {
-            // Both arms of the mutex, read together. Everything from here to the runtime.set below is
-            // synchronous, which is what makes this a claim rather than a hopeful check, see withRewindLease.
+            // Both arms of the mutex, read together; everything through the `runtime.set` below is synchronous, a claim
+            // rather than a hopeful check.
             if (runtime.get(turn.conversationId)?.running === true || rewinding.has(turn.conversationId)) {
                 return false;
             }
             const existing = entryOf(turn.conversationId);
-            // Placement is latched with the identity. A stale tab may send its old `isolated` posture, but an
-            // existing workspace conversation stays in /work and an existing worktree conversation keeps its
-            // branch. Only a conversation the registry has never seen takes the request's placement choice.
+            // Placement latches with identity: an existing conversation keeps its workspace/worktree placement
+            // regardless of what a stale request's `isolated` says.
             const isolated = existing === undefined ? turn.isolated : existing.branch !== undefined;
-            // WHERE it executes latches by the same rule: the runner is part of the conversation's identity,
-            // and a remote conversation is isolated by construction (its branch is what moves between machines).
+            // Runner latches the same way: it's part of the conversation's identity, and a remote conversation is
+            // isolated by construction.
             const runner = existing === undefined ? turn.runner : existing.runner;
-            // An authored title, the browser's own derivation, or a rename that landed mid-turn, is taken as
-            // written. A turn that arrived WITHOUT one (an automation, a Discord mention, a webchat visitor)
-            // is named by the same rule the browser runs, so one prompt opens under one name wherever it
-            // entered; sanitizeTitle then does what it does for any title, including turning empty into none.
+            // An authored title, a browser derivation, or a mid-turn rename all stand as written; a turn naming none is
+            // titled the same way the browser would derive it.
             const title =
                 existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(deriveTitle(turn.prompt));
-            // The turn's settings, each falling back to the last turn's: a caller that states none (an
-            // automation, a Discord mention) keeps describing the agent by what it has actually been running.
+            // Each setting falls back to the last turn's, so a caller naming none keeps describing the agent by what it
+            // actually ran.
             const model = turn.model ?? existing?.model;
             const effort = turn.effort ?? existing?.effort;
             const thinking = turn.thinking ?? existing?.thinking;
             const fast = turn.fast ?? existing?.fast;
             const tierHold = turn.tierHold ?? existing?.tierHold;
             const account = turn.account ?? existing?.account;
-            // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
-            // own follow-up turns in a surfaced agent's tab carry no origin, and must not strip the Discord
-            // mention that opened it off the card.
+            // Provenance belongs to the turn that created the conversation, never re-derived, so a user's own follow-up
+            // can't strip the origin that opened it.
             const origin = existing?.origin ?? turn.origin;
             replace({
                 id: turn.conversationId,
@@ -1078,98 +689,64 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 provider: turn.provider,
                 harness: turn.harness,
                 repos: existing?.repos ?? [],
-                // The state this turn should be found in if it never reports back, see the store's note on
-                // PersistedAgentStatusSchema. finish() overwrites it moments later in the ordinary case (it
-                // runs in a `finally`, so an abort and a failure both reach it); what it cannot overwrite is
-                // the daemon being killed under the turn, and THAT is what this value is for.
+                // Resting state if this turn never reports back; `finish` overwrites it moments later in every ordinary
+                // case, so only a daemon killed mid-turn ever sees it.
                 status: "interrupted",
                 costUsd: existing?.costUsd ?? 0,
                 inputTokens: existing?.inputTokens ?? 0,
                 outputTokens: existing?.outputTokens ?? 0,
                 createdAt: existing?.createdAt ?? now,
                 updatedAt: now,
-                // The source rides with the title: an entry rebuilt for a follow-up turn keeps whatever
-                // promoted it (a rename stays a rename), and a fresh one starts at the bottom of the ranking
-                // so the turn's first plan can name it properly.
+                // Source rides with the title: a rebuilt entry keeps whatever promoted it, a fresh one starts at the
+                // bottom of the ranking.
                 ...(title !== undefined ? { title, titleSource: existing?.titleSource ?? "derived" } : {}),
                 ...(model !== undefined ? { model } : {}),
                 ...(effort !== undefined ? { effort } : {}),
                 ...(thinking !== undefined ? { thinking } : {}),
                 ...(fast !== undefined ? { fast } : {}),
                 ...(tierHold !== undefined ? { tierHold } : {}),
-                // Carried, never taken from the turn: the client has no opinion about this and the daemon's own
-                // verdict for THIS turn is not in yet (it is written by recordTier, once the turn is planned).
-                // Listed here because `replace` is an explicit field list, so an omission is a deletion, and
-                // dropping it would reset every conversation's history of itself on every single turn.
+                // Carried, never taken from the turn; an explicit field list means omitting it here would reset the
+                // tier every single turn.
                 ...(existing?.tier !== undefined ? { tier: existing.tier } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...startedByOf(existing, turn),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
-                // The read marker survives the rebuild too, a new turn makes the agent unread again (updatedAt
-                // now outruns it), but WHEN it was last opened is what tells "New" from "Updated".
+                // Survives the rebuild; `updatedAt` moving past it is what makes the agent unread again, not clearing
+                // this.
                 ...(existing?.seenAt !== undefined ? { seenAt: existing.seenAt } : {}),
-                // `archivedAt` is deliberately NOT carried across: sending an archived agent a message is how
-                // you un-archive it, so the entry rebuilt here is a live one again. The checkout follows
-                // immediately, the ensure() right after this re-attaches it from the surviving branch.
-                // The land posture survives the rebuild too: "hold this agent's work" is a standing choice
-                // about the conversation, and the next turn is exactly when it matters.
+                // `archivedAt` is dropped: messaging an archived agent un-archives it, and `ensure()` re-attaches the
+                // checkout. `autoLand` survives, as a standing choice about the conversation.
                 ...(existing?.autoLand !== undefined ? { autoLand: existing.autoLand } : {}),
-                // And so does the outage posture, for the reason the land posture survives: "keep finishing
-                // THIS work when the provider drops it" is a standing choice about the conversation, and the
-                // next turn, which is exactly what this rebuild is, is when it matters.
+                // Survives for the same reason as the land posture: a standing choice the next turn is exactly when it
+                // matters.
                 ...(existing?.resumeAfterOutage !== undefined ? { resumeAfterOutage: existing.resumeAfterOutage } : {}),
-                /* THE LAND REFUSAL AND THE ASK THAT IS STILL WAITING ON ONE, for the same "an omission is a
-                 * deletion" reason as `tier` above, and this pair is the one where the omission had teeth.
-                 *
-                 * `conflicts` describes the branch against the main tree, not the turn that last touched it, and
-                 * recordLanded is the ONLY thing entitled to retire it — "an outcome with no conflicts CLEARS the
-                 * stored one, which is what makes a resolved conflict resolve". Dropping it HERE retired it on
-                 * the next turn instead, which is precisely the turn "Have the agent resolve it" starts: the card
-                 * fell from `conflict` back to `ready` the moment the resolve turn began, the review opened with
-                 * no report to show, and recordLanded's `outcome.conflicts ?? cleared` fallback — the whole of
-                 * "only a verdict may replace a verdict" — had nothing left to fall back to.
-                 *
-                 * `landRequested` is a collaborator's standing ask, answered by the land or discard that settles
-                 * it. One more turn by the agent is not an answer. */
+                // Omission is deletion, and here it had teeth: only `recordLanded` may retire a conflict report, and
+                // dropping it here retired one on the very follow-up turn meant to resolve it.
                 ...(existing?.conflicts !== undefined ? { conflicts: existing.conflicts } : {}),
                 ...(existing?.landRequested !== undefined ? { landRequested: existing.landRequested } : {}),
-                /* WHAT THE LANDED WORK IS CALLED SURVIVES THE REBUILD, because it describes a CLAIM on the main
-                 * tree and not the turn that made it. The claim is what `repos` above carries across, and it
-                 * outlives any number of follow-up turns, a commit is what retires it.
-                 *
-                 * Dropping these was silent and total: land, then send one more message, and the drafted commit
-                 * message and its release note were gone from the entry the "From" chip reads. A turn that lands
-                 * again redraws them, which is why this only ever bit the turns that landed NOTHING, a question
-                 * answered, a check that found nothing to change, and those are the turns most likely to be
-                 * followed by the commit that needed the sentence. */
+                // Survives the rebuild: it describes a claim on the main tree, not the turn that made it, and only a
+                // commit retires it. Dropping it here was silent: a follow-up message would erase the drafted message.
                 ...opt("landedSubject", existing?.landedSubject),
                 ...opt("landedNote", existing?.landedNote),
                 ...opt("landedBreaking", existing?.landedBreaking),
-                // Lifetime counters + diffstat survive the per-turn entry rebuild.
+                // Lifetime counters and diffstat survive the rebuild.
                 ...opt("turns", existing?.turns),
                 ...opt("toolUses", existing?.toolUses),
                 ...opt("subagents", existing?.subagents),
                 ...opt("diffFiles", existing?.diffFiles),
                 ...opt("diffInsertions", existing?.diffInsertions),
                 ...opt("diffDeletions", existing?.diffDeletions),
-                /* WHAT THE LAST TURN LEFT OPEN survives the rebuild, for the "an omission is a deletion" reason
-                 * `tier` above gives, and because the turn beginning here is the one most likely to be ABOUT it:
-                 * a checklist is the harness's own state and outlives any number of turns, while this process's
-                 * copy of it does not (the fresh runtime state below is empty until the agent next touches its
-                 * list). Dropping it here would mean a card lost its mark to the very message sent to clear the
-                 * work, and got it back only if that turn happened to touch the checklist. The finish at the end
-                 * of this turn rewrites or clears it on what it actually observed. */
+                // Survives the rebuild for the same reason; the turn beginning here is often exactly about this work.
+                // The fresh runtime state starts blank until the agent touches its list again.
                 ...opt("unfinished", existing?.unfinished),
             });
             const state = freshRuntime();
             state.running = true;
             state.startedAt = now;
             state.lastAt = now;
-            // File this turn's prompt against the session the fleet filter will search, right now if the
-            // conversation already has one, else on the `session` frame that mints it (see observe). The
-            // transcript gets the same prompt moments later, but "moments" is a whole turn long when the turn
-            // is a twenty-minute one, and the prompt just sent is the likeliest thing to be searched for.
+            // Filed against the session immediately if one exists, else on the frame that mints it; a long turn is a
+            // slow way for the transcript's own copy to arrive.
             if (existing?.sessionId !== undefined) {
                 recordPrompt(existing.sessionId, turn.prompt);
             } else {
@@ -1191,8 +768,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         },
         dropRepos: async (repos) => {
             const gone = new Set(repos);
-            // Snapshotted before the first replace, which rebuilds `entries`; the rows themselves are copied,
-            // never mutated, because every reader holding this array must keep seeing what it read.
+            // Snapshotted before the first `replace` rebuilds `entries`; rows are copied, never mutated, since readers
+            // keep the array they read.
             const touched = entries.filter((entry) => entry.repos.some(({ repo }) => gone.has(repo)));
             if (touched.length === 0) {
                 return [];
@@ -1200,17 +777,15 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             for (const entry of touched) {
                 replace({ ...entry, repos: entry.repos.filter(({ repo }) => !gone.has(repo)) });
             }
-            // One persist and one broadcast for the whole sweep: nothing on a card moves for a nested repo
-            // going away, but the entries did change, and a roster that says so is what stops the next reader
-            // asking about the repo again.
+            // One persist and broadcast for the whole sweep; nothing on a card moves, but the roster should stop naming
+            // a repo that's gone.
             await persist();
             broadcast();
             return touched.map((entry) => entry.id);
         },
         recordTier: async (id, tier) => {
             const entry = entryOf(id);
-            // A conversation whose entry has gone (archived, purged) mid-turn is not an error worth surfacing:
-            // there is no next turn for the value to be read by.
+            // Entry gone mid-turn (archived, purged) is not worth surfacing; there is no next turn to read the value.
             if (entry === undefined || entry.tier === tier) {
                 return;
             }
@@ -1231,14 +806,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         setLandedSubject: async (id, draft) => {
             const entry = entryOf(id);
             const clean = sanitizeSubject(draft.subject);
-            // One bounded line, no control characters, on the SUBJECT's own ceiling rather than a card's (see
-            // sanitizeSubject). An empty draft writes nothing rather than clearing what the last land said.
+            // Bounded to the subject's own ceiling, not the card's; an empty draft writes nothing rather than clearing
+            // the last one.
             if (entry === undefined || clean === undefined) {
                 return;
             }
-            /* Both notes go through the note cleaner and are both CLEARED when this land wrote none. They
-             * describe the claim as it NOW stands, so a second land that turned out to need neither must not
-             * leave the previous land's sentences standing over a subject that has since been rewritten. */
+            // Both notes clear when this land wrote none; they describe the claim as it now stands, not a leftover from
+            // an earlier land.
             const cleanNote = draft.note === undefined ? undefined : sanitizeNote(draft.note);
             const cleanBreaking = draft.breaking === undefined ? undefined : sanitizeNote(draft.breaking);
             replace({
@@ -1250,17 +824,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             broadcast();
             await persist();
         },
-        /* THE DRAFT'S OWN STORY, RE-TOLD WHOLE ON EVERY BEAT, set by the drafter and nowhere else
-         * (agents/landed-subject.ts). Snapshot-not-diff like every roster fact: the caller hands the complete
-         * report as it now stands, so a browser that missed a frame is merely late, never wrong.
-         *
-         * Runtime, never persisted, and that is the point rather than a shortcut: a daemon that died mid-draft
-         * did not leave a draft running, so a report restored from disk would show a walk nothing will ever
-         * finish. A restart forgetting it is the correct answer.
-         *
-         * Broadcast, because a report nobody is told about is a report nobody can draw. This is the cheap frame
-         * the roster already sends, not the review, see the note at the publish site for which of the two
-         * carries what. `undefined` withdraws it (a land that turned out to have nothing to describe). */
+        // The draft's whole story, re-sent complete on every beat, so a browser that missed one frame is merely late,
+        // never wrong. Runtime only, never persisted.
         setLandedMessageDraft: (id, draft) => {
             if (entryOf(id) === undefined) {
                 return;
@@ -1282,8 +847,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const next = { ...entry, seenAt: now };
             replace(next);
             await persist();
-            // Broadcast so the badge clears on EVERY connected surface at once, the phone that opened it and
-            // the desktop rail counting it are looking at the same fleet.
+            // Broadcasts so the badge clears on every connected surface at once.
             broadcast();
             return summaryOf(next);
         },
@@ -1297,8 +861,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return undefined;
             }
-            // null strips the key entirely rather than storing it: absent IS the "inherit" state, and it is
-            // what keeps the agent following the sandbox-wide toggle wherever it is pointed next.
+            // null strips the key entirely; absent is the inherit state, so the agent keeps following the sandbox
+            // toggle.
             const { autoLand: _cleared, ...carried } = entry;
             const next = { ...carried, ...(autoLand !== null ? { autoLand } : {}) };
             replace(next);
@@ -1311,8 +875,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return undefined;
             }
-            // null strips the key, exactly as setAutoLand does: absent IS "inherit", and it is the only state
-            // that keeps this conversation following the sandbox default wherever it is pointed next.
+            // Same as `setAutoLand`: null strips the key, since absent is the only state that means inherit.
             const { resumeAfterOutage: _cleared, ...carried } = entry;
             const next = { ...carried, ...(resumeAfterOutage !== null ? { resumeAfterOutage } : {}) };
             replace(next);
@@ -1325,7 +888,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return undefined;
             }
-            // null strips the key, the same three states as its two neighbours: on, off, and inherit.
+            // Same three states as its neighbors: on, off, or (absent) inherit.
             const { resumeAfterLimit: _cleared, ...carried } = entry;
             const next = { ...carried, ...(resumeAfterLimit !== null ? { resumeAfterLimit } : {}) };
             replace(next);
@@ -1361,9 +924,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return;
             }
-            // The RUNTIME's pending id too, not just the persisted one: a first turn's session lives only there
-            // until finish() flushes it, and sessionIdOf reads it in preference, clearing one of the two would
-            // leave the next turn resuming through the half that survived.
+            // Clears the runtime's pending id too, not just the persisted one; leaving either behind would let the next
+            // turn resume through whichever half survived.
             const state = runtime.get(id);
             if (state !== undefined) {
                 state.pendingSessionId = undefined;
@@ -1376,47 +938,26 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         observe: (id, event) => {
             const state = runtimeOf(id);
             state.lastAt = Date.now();
-            // A plan's heading is the agent's own name for the whole job, which the opening prompt rarely was.
-            // Promoted out here rather than under `case "plan"` so that case keeps falling through to the
-            // shared pause registration, and applied to the entry immediately so the card and every open tab
-            // pick the name up on the broadcast this frame was already going to make, a plan parks the turn
-            // on the user, and it may sit there a while. The write out is fire-and-forget: it is ordered
-            // behind whatever else is in the store's write chain, and a daemon that dies before it lands loses
-            // a title the next plan frame re-derives anyway.
+            // Promoted here rather than inside the switch, so the `plan` case still falls through to the shared pause
+            // registration below. Fire-and-forget, like the session write below.
             if (event.kind === "plan" && promoteTitle(id, planParts(event.text).title, "plan")) {
                 void persist();
             }
             switch (event.kind) {
                 case "session": {
                     state.pendingSessionId = event.sessionId;
-                    /* AND ON THE ENTRY, NOW, rather than at the finish that flushes it (see finish's
-                     * `pendingSessionId ?? entry.sessionId`). The runtime copy alone is what every reader in
-                     * this process wants, so this write buys exactly one thing: the id survives the daemon.
-                     *
-                     * Which is the whole of a failure that cost seven conversations. `pendingSessionId` lives in
-                     * the process, and the process is regularly killed mid-turn (a rebuild, an OOM), so a
-                     * conversation whose FIRST turn was killed came back with no session id at all, which is the
-                     * only key into the provider store: `recordInterruptedTurn` had nothing to read back, the record held
-                     * nothing either (it is appended per SETTLED turn), and the chat opened permanently blank
-                     * over a session file sitting on disk the whole time. A LATER turn's death is the same bug
-                     * one step quieter: the entry keeps pointing at the previous turn's session, so the next
-                     * message resumes a thread that never saw the work the user is looking at.
-                     *
-                     * Fire-and-forget, exactly like the plan-title promotion above: it is ordered behind whatever
-                     * is in the store's write chain, and a daemon that dies before it lands is no worse off than
-                     * it was without this write. The turn journal carries the same id for the same reason, and
-                     * turn-resume reads THAT for the turn it is recovering; this is what makes the id survive
-                     * every other way a turn can end badly. */
-                    // AND WHOSE ACCOUNT IT IS ON, in the same write and by the same rule (sessionBinding), which
-                    // is what a reopened tab reads back to decide whether its next message resumes this session.
+                    // Written to the persisted entry immediately, not only held in memory until finish: a daemon killed
+                    // mid-turn otherwise loses the only key into the provider's session store. Fire-and-forget.
+                    // Written together with the session id (sessionBinding), so a reopened tab can tell if its next
+                    // message resumes this thread.
                     const entry = entryOf(id);
                     const binding = sessionBinding(entry, event);
                     if (entry !== undefined && binding !== undefined) {
                         replace({ ...entry, ...binding });
                         void persist();
                     }
-                    // The turn's own prompt has been waiting for exactly this id (see begin), file it so the
-                    // agent is findable by what started it from its first frame, not from its last.
+                    // Files the prompt that was waiting for this id, so the agent is findable by what started it, not
+                    // just its latest message.
                     if (state.pendingPrompt !== undefined) {
                         recordPrompt(event.sessionId, state.pendingPrompt);
                         state.pendingPrompt = undefined;
@@ -1439,17 +980,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "terminal_help":
                 case "capability_offer":
                 case "credential_offer":
-                    // A turn being torn down cannot park on anything: the abort settles every waiter, so a card
-                    // raised by a frame still in flight behind the stop would ask the user a question whose
-                    // answer has nowhere to go, and would put the card back in Attention as it leaves.
+                    // A turn being torn down cannot park on anything; a card raised behind the stop would ask a
+                    // question with nowhere to go.
                     if (state.stopping) {
                         return;
                     }
                     state.pauses.set(event.requestId, event.kind);
                     break;
                 case "resolved":
-                    // Nothing to release ⇒ nothing to publish: a daemon that restarted mid-park never saw the
-                    // card go up, and re-broadcasting for it would only churn the board.
+                    // Nothing to release means nothing to publish; a daemon restarted mid-park never saw the card go
+                    // up.
                     if (!state.pauses.delete(event.requestId)) {
                         return;
                     }
@@ -1465,35 +1005,18 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "todos": {
                     const current = event.items.find((item) => item.status === "in_progress")?.content;
                     state.activity = { ...state.activity, ...(current !== undefined ? { todo: current } : {}) };
-                    // And the list WHOLE, for the finish that has to say what was left on it. Every frame
-                    // carries the entire checklist (never a patch), on every harness that has one, so the last
-                    // frame of a turn is that turn's last word on the subject by construction.
+                    // Kept whole for `finish`: every `todos` frame carries the complete list, never a patch, so the
+                    // last one is the final word.
                     state.checklist = event.items;
                     break;
                 }
-                /* THE AGENTS THIS ONE STARTED. A birth is the only place the lifetime count can be taken, the
-                 * live registry sweeps the child five minutes after it reports, so it is counted here and
-                 * flushed at finish, exactly like the turn's tool calls above.
-                 *
-                 * Both cases also PUBLISH, which nothing else did. A parent that spawns children and then waits
-                 * on them emits no frames of its own, so the card learned about its children only as a side
-                 * effect of whatever they happened to do next, and a count that had gone quiet stayed on the
-                 * board after the last child settled.
-                 *
-                 * An update publishes only when it carries a STATUS. What the card shows is running-of-total,
-                 * and the rest of an update is one child's tokens and tool names, the Subagents area's
-                 * business, arriving several times a second per child, and not worth re-publishing the whole
-                 * fleet for. */
+                // The lifetime count is taken only at birth; the live registry sweeps a settled child and forgets it.
+                // Flushed at finish like tool calls; an update publishes only with a status change.
                 case "subagent":
                     state.pendingSubagents += 1;
                     break;
-                /* THE WINDOW WAS THROWN AWAY, filed on the entry so the next turn can be told again what this one
-                 * can no longer see (turn-plan.ts, and PersistedAgent.compactedTurn for why it is a turn index
-                 * rather than a timestamp). Written at most once per turn: the value is the turn's own index, so a
-                 * loop that compacts repeatedly inside one turn writes the same number and the guard drops it.
-                 *
-                 * Fire-and-forget, exactly like the session id above, and no broadcast: no card draws this, and a
-                 * compaction lands mid-turn where the board is already saying the only thing it can say. */
+                // Filed on the entry so the next turn's plan can restate what a compaction summarized away; written
+                // once per turn even if it compacts repeatedly. Fire-and-forget, no broadcast.
                 case "compact": {
                     const compacted = entryOf(id);
                     const at = compacted?.turns ?? 0;
@@ -1509,21 +1032,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     }
                     break;
                 case "error":
-                    /* A failure the daemon has already scheduled a resume for is not how this turn ENDED, the
-                     * turn is coming back (turn-resume.ts), and the card has to read as work in progress rather
-                     * than as a card the user needs to go look at. Without this a provider blip painted the whole
-                     * board red for the length of an outage, which is both wrong and the strongest possible
-                     * argument for switching the automation off.
-                     *
-                     * Keyed on the frame's own verdict rather than on the code, so it covers every condition that
-                     * resumes itself. "available" is NOT covered, nothing is armed, so the failure stands until
-                     * the user arms it.
-                     *
-                     * Remembered rather than merely skipped, because skipping alone only got the card as far as
-                     * the entry's resting `idle`, which is the Finished lane. The flag is what carries "coming
-                     * back" past the finish() that is seconds away (see RuntimeState.resuming). Nothing to
-                     * broadcast here: the turn is still running, and `running` is what the card should say until
-                     * it isn't. Which frames qualify, and the one that does not, is comingBackNow's. */
+                    // A scheduled resume is not how the turn ended; it must still read as work in progress. Keyed on
+                    // the frame's own verdict; `available` is not covered, nothing is armed.
                     if (comingBackNow(event)) {
                         state.resuming = true;
                         return;
@@ -1532,63 +1042,51 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     Object.assign(state, failureOf(event));
                     break;
                 default:
-                    return; // delta/thinking/etc, not card-visible, skip the broadcast.
+                    return; // delta/thinking etc: not card-visible, skip the broadcast.
             }
             broadcast();
         },
         stopping: (id, ending) => {
             const state = runtime.get(id);
-            // Nothing running ⇒ nothing to say. An ending that raced the turn's own last frame is not news, and
-            // marking a settled conversation would leave `stopping` on the entry for the NEXT turn to inherit.
+            // Nothing running means nothing to say; marking an already-settled conversation would leak `stopping` onto
+            // its next turn.
             if (state === undefined || !state.running || state.stopping !== undefined) {
                 return;
             }
             state.stopping = ending;
-            /* The abort settles every card this turn was parked on (agent-requests.ts), including the ones
-             * whose `resolved` frame will never make it out of the dying stream. Cleared here rather than at
-             * finish so the card stops asking for an answer it can no longer take the moment the ending lands. */
+            // Clears every parked card here, before finish, since a `resolved` frame may never make it out of a dying
+            // stream.
             state.pauses.clear();
-            /* PUBLISHED FOR BOTH ENDINGS, because the roster now says WHICH one (`stopping` vs `dismissing`,
-             * see statusOf) and each names the lane its card is going to rest in. Publishing a dismissal used to
-             * be skipped precisely because it could not: with one value for both, a released card on a live turn
-             * read as work in progress, so the frame would have filed the agent under Active for the blink
-             * before finish() landed. That skip was never a fix, only a bet that nothing ELSE would broadcast
-             * inside the same window, and the roster goes out in full on every card-visible change anywhere in
-             * the fleet: one other agent's frame lost the bet and published the in-between anyway. */
+            // Published for both endings, since the roster now names which lane the card is heading for. A shared value
+            // used to make a dismissal read as work in progress for the blink before `finish` landed.
             broadcast();
         },
         noteCheck: (id, check) => {
-            // runtimeOf, not get: a check can only run inside a live turn, but the entry it belongs to may have
-            // been rebuilt under it, and a verdict with nowhere to land would be a red tree nothing reports.
+            // `runtimeOf`, not `get`: a check only runs inside a live turn, and a verdict with nowhere to land would
+            // report nothing.
             runtimeOf(id).check = check;
         },
         finish: async (id, now) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
-            // Captured BEFORE the reset: only a finish that ends a LIVE turn counts toward `turns`, the
-            // manual land route finishes with an outcome outside any turn and must not inflate the counter.
+            // Captured before the reset; a manual land finishes outside any turn and must not inflate `turns`.
             const ranTurn = state?.running === true;
-            // Same reason, for the value this writes below: the reset clears it, and a manual land's finish
-            // (no runtime state at all) must not read as an ending the user chose.
+            // Captured for the same reason: a manual land's finish has no runtime state and chose no ending.
             const ended = state?.stopping;
             if (state !== undefined) {
                 state.running = false;
                 state.stopping = undefined;
-                // A turn that ended holds nobody up any more, however it ended: an aborted card's waiter is
-                // settled by the same abort, and its `resolved` frame may never make it out of the stream.
+                // A turn that ended holds nobody up, however it ended; an aborted waiter is already settled.
                 state.pauses.clear();
                 state.startedAt = undefined;
-                // `resuming` is deliberately NOT reset here, unlike everything else on this list: it is the one
-                // fact that has to survive the finish, because it says this turn's ending isn't one.
+                // Deliberately not reset here, unlike the rest of this state: it says this ending isn't one.
             }
-            // Tolerates a missing runtime state: the manual land route finishes with an outcome outside any
-            // turn (possibly right after a daemon restart), and must still write the status through.
+            // Tolerates a missing runtime state: a manual land finishes outside any turn and must still write the
+            // status.
             if (entry !== undefined) {
                 const sessionId = state?.pendingSessionId ?? entry.sessionId;
-                // Dropped from the carried entry and re-added only under the status it explains, the same
-                // shape recordLanded clears `conflicts` with, and for the same reason: this finish is the one
-                // that decides how the turn ended, so an explanation it did not write is one for a death that
-                // is no longer being reported.
+                // Dropped and re-added only under the status this finish decides; an explanation it did not write would
+                // describe a death no longer being reported.
                 const {
                     failure: _ended,
                     failureCode: _coded,
@@ -1596,29 +1094,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     limitHeld: _held,
                     limitScheduled: _booked,
                     limitMoving: _moving,
-                    // Dropped from the carried entry for the same reason as the four above it: this finish is
-                    // the one that decides what the turn left behind, so the previous answer must not survive
-                    // its own re-measurement. What is genuinely still true is carried by unfinishedOf itself,
-                    // which reads the old value where the new turn observed nothing.
+                    // Dropped for the same reason; `unfinishedOf` itself carries forward whatever is still true.
                     unfinished: _open,
                     ...carried
                 } = entry;
                 replace({
                     ...carried,
-                    // What this turn leaves open, from the checklist it kept and the check it ran (unfinishedOf).
-                    // The one field here that can be true of a turn that ended perfectly cleanly.
+                    // The one field here that can be true even of a turn that ended perfectly cleanly.
                     ...opt("unfinished", unfinishedOf(entry, state, now)),
-                    /* How the turn ENDED, which is all this field says now: an observed error frame, the user's
-                     * own Stop, else the clean ending that hands the question to standing.ts. A stop outranks
-                     * nothing, the abort's own unwind no longer reaches here as an error (see agent.routes'
-                     * frame loop), so an errored stop means the turn had already failed when it was stopped.
-                     *
-                     * A DISMISSED card takes the clean ending with everything else that had nothing left to
-                     * do. It is an ending the user chose, like the Stop beside it, but not the same one: they
-                     * waved the question away rather than reaching in to halt work they still wanted, so
-                     * nothing is owed and the card belongs with the finished ones. Whatever the turn had
-                     * written stays on its branch for a later message to carry on from, exactly as it does
-                     * for any turn that ends with an unlanded delta. */
+                    // How the turn ended: an error, the user's stop, or the clean ending that hands off to standing.ts.
+                    // A dismissal takes the clean ending too, settling with the finished ones.
                     status: state?.errored === true ? "error" : ended === "stopped" ? "stopped" : "idle",
                     ...endedFailure(state),
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
@@ -1643,41 +1128,37 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     state.limitResetsAt = undefined;
                     state.limitHeld = false;
                     state.limitScheduled = false;
-                    // The verdict is spent with the turn that earned it: it measured THAT tree, and anything
-                    // that runs next changes it. The checklist beside it is deliberately left alone, being the
-                    // harness's own state rather than this turn's measurement (see unfinishedOf).
+                    // Spent with the turn that earned it; the checklist beside it is left alone, being the harness's
+                    // own state.
                     state.check = undefined;
                 }
                 await persist();
             }
-            // The turn just moved the branch (and, on an auto-land, the main tree), re-derive BEFORE the
-            // roster goes out, so the card the user sees settle carries the new standing rather than the one
-            // from before the turn ran.
+            // Re-derives before the roster goes out, so the settling card carries the new standing, not the one from
+            // before this turn.
             await reprobe();
             broadcast();
         },
         markResuming: (id) => {
-            // runtimeOf, not get: the placeholder's finish is about to reset the state, and `resuming` is the
-            // one flag finish deliberately leaves alone, it only has to exist before that reset runs.
+            // `runtimeOf`, not `get`: this only has to exist before the placeholder's own finish resets everything
+            // else.
             runtimeOf(id).resuming = true;
         },
         abandonResume: async (id, now, reason) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
-            // Still unwinding, its own finish() is about to write how it ended, over anything written here.
-            // The one answer that means "come back", and the reason this returns anything at all.
+            // Still unwinding; its own `finish` is about to overwrite anything written here.
             if (state?.running === true) {
                 return false;
             }
-            // Nothing left to end: a fresh turn's begin already cleared the wait, or the entry is gone.
+            // Nothing left to end: a fresh `begin` already cleared the wait, or the entry is gone.
             if (entry === undefined || state?.resuming !== true) {
                 return true;
             }
             state.resuming = false;
             const failure = sanitizeFailure(reason);
-            // The daemon's OWN sentence about a resume that never came, so the classification the original
-            // frame carried is dropped with it: this ending is not that failure any more, and a countdown left
-            // standing under it would be counting down to a window nobody is waiting for.
+            // The daemon's own sentence about a resume that never came; the original failure's classification is
+            // dropped with it.
             const { failureCode: _coded, limitResetsAt: _reopens, limitHeld: _held, limitScheduled: _booked, ...carried } = entry;
             replace({ ...carried, status: "error", ...(failure !== undefined ? { failure } : {}), updatedAt: now });
             await persist();
@@ -1689,15 +1170,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (entry === undefined) {
                 return;
             }
-            // The land answers a pending ask along with clearing the old conflict report, a request chip that
-            // outlived the land it asked for would read as a second, phantom ask.
+            // A land answers any pending ask too; letting it outlive the land would read as a second, phantom ask.
             const { conflicts: cleared, landRequested: _answered, ...carried } = entry;
-            /* ONLY A VERDICT MAY REPLACE A VERDICT. A `measure` land settles the books and never touches the
-             * main tree, so it reaches no conflict gate and reports none: read as "nothing refuses anymore"
-             * that silently deleted the last real refusal, and with it the premise the conflict standing, the
-             * review's report and "Have the agent resolve it" all hang off (see LandOutcome.adjudicated).
-             * It carries the stored report across instead; the derived layers retire it on their own terms the
-             * moment the delta stops being outstanding. */
+            // Only a verdict may replace a verdict: a measure land touches no conflict gate and reports none, so it
+            // carries the stored report across rather than reading silence as resolved.
             const verdict = outcome.adjudicated ? outcome.conflicts : (outcome.conflicts ?? cleared);
             replace({
                 ...carried,
@@ -1708,7 +1184,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(verdict !== undefined ? { conflicts: [...verdict] } : {}),
             });
             await persist();
-            // The landedTips just moved, which is half the anchor every standing is measured from.
+            // landedTips just moved, half of what every standing is measured against.
             await reprobe();
             broadcast();
         },
@@ -1718,13 +1194,12 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 return;
             }
             const row = entry.repos.find((composed) => composed.repo === repo);
-            // The guard: only the very landing the caller measured. A newer land wrote fresh shas (and with
-            // them a fresh, unmarked row), and an already-marked row has nothing left to record.
+            // Only the exact landing the caller measured; a newer land's fresh shas, or an already-marked row, are left
+            // alone.
             if (row === undefined || row.landedHead !== landedHead || row.landedTip !== landedTip || row.absorbed !== undefined) {
                 return;
             }
-            // Copy-on-write, one row replaced: the entry array is shared with every reader that holds it, and
-            // mutating the row in place would move the mark under a scan already reading it.
+            // Copy-on-write: the array is shared with readers already holding it, so the row is replaced, not mutated.
             const repos = [...entry.repos];
             repos[entry.repos.indexOf(row)] = { ...row, absorbed: size };
             replace({ ...entry, repos });
@@ -1734,8 +1209,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const targets = new Set(ids);
             entries = entries.map((entry) => (targets.has(entry.id) ? { ...entry, archivedAt: now } : entry));
             await persist();
-            // The roster this broadcasts no longer contains them, which IS how every connected surface learns
-            // the cards left the board.
+            // Excluding them from this broadcast's roster is how every connected surface learns the cards left the
+            // board.
             broadcast();
         },
         clearArchived: async (ids) => {
@@ -1760,19 +1235,15 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             presences.forget(ids);
             loopProjection.forget(ids);
             workflowProjection.forget(ids);
-            /* The projection only. DISARMING the watches themselves is the caller's, and has to be: the timers
-             * live in agent/watchers.ts, which reaches the steering registry and the detached-turn door, so
-             * this module cannot see them without closing a cycle. The routes that remove an agent stop its
-             * watches first (agents.routes discard/purge), which is also the honest order, a watch is
-             * cancelled while the conversation it would wake still exists. */
+            // Forgets the projection only; disarming the watch timers themselves is the caller's job
+            // (agent/watchers.ts), to avoid a dependency cycle back into this module.
             await persist();
             broadcast();
         },
         subscribe: (listener) => {
             listeners.add(listener);
-            // The immediate paint carries the CURRENT revision without bumping it: subscribing is not a change,
-            // and inventing a revision here would make a new connection look newer than the rosters already
-            // applied by tabs that have been connected all along.
+            // Carries the current revision without bumping it; subscribing is not a change, and a bumped one would look
+            // newer than already-applied rosters.
             listener(list(), revision);
             return () => listeners.delete(listener);
         },

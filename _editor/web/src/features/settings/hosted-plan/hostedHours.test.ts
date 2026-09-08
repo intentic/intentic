@@ -2,8 +2,8 @@ import type { HostedPlanState } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { formatDayShort, formatMinutes, hoursLeftLine, hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
-/* The sentences every hosted-plan surface shares. Pinned as words, because the failure this module exists to
- * prevent is two surfaces answering the same question differently. */
+// Pins the hosted-plan sentences as words: the failure this suite guards against is two surfaces phrasing the same fact
+// differently.
 
 const usage = (usedMinutes: number, allowanceMinutes: number | null = 2_400) => ({
     month: `2026-09`,
@@ -25,8 +25,7 @@ const state = (over: Partial<HostedPlanState> = {}): HostedPlanState => ({ enabl
 const RENEWS_AT = `2026-10-01T00:00:00.000Z`;
 const subscriber = (over: Partial<HostedPlanState> = {}): HostedPlanState => state({ onPlan: true, status: `active`, renewsAt: RENEWS_AT, ...over });
 
-/* The free lane's whole chip, spelled once because it is the answer to four different questions — spent hours,
- * unspent hours, no ceiling at all, no machine — and the point of those cases is that the answer never moves. */
+// The free lane's chip; the same answer for spent hours, unspent hours, no ceiling, and no machine at all.
 const FREE = { label: `free`, variant: `neutral`, detail: `Free lane. This account is not on the hosted plan.` };
 
 describe(`minutes as words`, () => {
@@ -54,12 +53,11 @@ describe(`the meter`, () => {
         expect(hoursLeftLine(hoursMeter(usage(1_680))!)).toBe(`12 h of 40 h left this month`);
     });
 
-    // The strip's threshold: five hours, or an eighth of a small allowance, and never while spent (its own state).
     it(`is low under five hours, but not at the first minute of a month, and not once spent`, () => {
         expect(lowOnHours(hoursMeter(usage(2_100)))).toBe(true);
         expect(lowOnHours(hoursMeter(usage(0)))).toBe(false);
         expect(lowOnHours(hoursMeter(usage(2_400)))).toBe(false);
-        // A platform with an 8-hour ceiling: low at an hour, not at four.
+        // 480 minutes is an 8-hour ceiling: low with 1h left, not with 4h left.
         expect(lowOnHours(hoursMeter(usage(420, 480)))).toBe(true);
         expect(lowOnHours(hoursMeter(usage(240, 480)))).toBe(false);
     });
@@ -71,25 +69,17 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(state({ enabled: false }))).toBeUndefined();
     });
 
-    /* THE CHIP IS ABOUT THE LANE, NEVER THE METER. The row it replaced spelled out the hours here and went
-     * amber as they ran down; that alarm belongs to the composer's strip and the wake gate, which are in the
-     * reader's path, and a menu is not. Every free owner gets the same quiet word whatever they have spent. */
     it(`gives the free lane one quiet word, whatever the meter says`, () => {
         for (const spent of [0, 2_200, 2_400]) {
             expect(planBadge(state({ hosted: hosted(spent) }))).toEqual(FREE);
         }
     });
 
-    // A lane is a lane with or without an hour ceiling, so unlike the row, the chip still shows up here.
     it(`still names the free lane on a platform with no ceiling`, () => {
         expect(planBadge(state({ hosted: hosted(500, null) }))).toEqual(FREE);
         expect(planBadge(state())).toEqual(FREE);
     });
 
-    /* "ENDS", NOT "RENEWS", for a subscriber who has cancelled: Stripe keeps the status active until the period
-     * runs out, and the one word is the difference between a chip that agrees with what they just did and one
-     * that contradicts it. The sentence says what happens after, because "ends" alone reads as the account
-     * ending rather than the plan. */
     it(`turns hosted into ending once the plan is cancelling`, () => {
         expect(planBadge(subscriber())).toEqual({
             label: `hosted`,
@@ -109,7 +99,6 @@ describe(`the account menu's plan chip`, () => {
             variant: `info`,
             detail: `Hosted plan trial, ends ${formatDayShort(RENEWS_AT)}.`,
         });
-        // No card and no renewal, which is the whole of what a comp means to the person holding one.
         expect(planBadge(state({ onPlan: true, comped: true }))).toEqual({
             label: `complimentary`,
             variant: `info`,
@@ -118,9 +107,6 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(state({ onPlan: true }))).toEqual({ label: `hosted`, variant: `primary`, detail: `On the hosted plan.` });
     });
 
-    /* THE ONE ALARM THE CHIP CARRIES. A lapsed subscriber arrives with `onPlan: false` — the same answer as
-     * somebody who never paid — so this must be read before the free lane, or a declined card reads `free`. The
-     * sentence has to say what is at stake, since the chip is two words and Billing is one row below it. */
     it(`takes the danger tone for a failing card, ahead of the free lane`, () => {
         for (const status of [`past_due`, `unpaid`, `incomplete`]) {
             expect(planBadge(state({ status, renewsAt: `2026-09-01T00:00:00.000Z`, hosted: hosted(0) }))).toEqual({
@@ -131,8 +117,6 @@ describe(`the account menu's plan chip`, () => {
         }
     });
 
-    /* Every state carries its hover sentence, and the six of them are six different sentences: a chip nobody can
-     * expand must still be explainable, and two lanes explained with the same words explain neither. */
     it(`gives every state its own sentence to hover`, () => {
         const every = [
             state({ hosted: hosted(0) }),

@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-//
-// jsdom because what this component decides is what it RENDERS: a checklist in the transcript is a snapshot,
-// so which row animates (and how the row that was underway reads once nothing is moving it) is the whole
-// component. Only a mounted render can answer that.
+// Needs jsdom: whether a row animates is what this component renders, and only a mounted render can show that.
 import { afterEach, describe, expect, it } from "vitest";
 import type { TodoItem } from "@intentic/sandbox-contract";
 import { type App, createApp, h } from "vue";
@@ -20,8 +17,7 @@ const mount = (todos: TodoItem[], live: boolean): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatTodoList, { todos, live }) });
-    // Icon is registered app-wide in the real app. The stand-in renders which glyph it was handed (and whether
-    // it spins), because that IS what this component decides.
+    // Icon stub renders which glyph and spin state it was handed, since that is what this component decides.
     app.component(`Icon`, IconStub);
     app.mount(element);
     return element;
@@ -42,14 +38,10 @@ describe(`ChatTodoList`, () => {
     });
 
     it(`freezes the active row once the bubble is settled: a snapshot must not animate`, () => {
-        // The reported bug: scrolling back through a session that finished long ago and finding a row still
-        // spinning, which reads as an agent still working.
         const element = mount(LIST, false);
         expect(element.querySelector(`[data-spin]`)).toBeNull();
         expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
-        // Still marked as the row the agent had reached: a filled dot where the spinner was.
         expect(element.querySelector(`[data-icon="circle-fill"]`)).not.toBeNull();
-        // And read back in the same imperative form as the rows around it, not as something in progress.
         expect(element.textContent).toContain(`Serialize git write routes`);
         expect(element.textContent).not.toContain(`Serializing`);
     });

@@ -4,18 +4,13 @@ import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
 import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
 
-// When the turn started: what its user row is stamped with (TranscriptRow.sentAt).
+// Epoch ms stamped on the opening user row's sentAt.
 const SENT_AT = 1_767_225_600_000;
 const openingOf = (prompt: string): TranscriptRow[] => [userRow(prompt, SENT_AT, [])];
 const foldOf = (prompt: string, events: readonly AgentEvent[]): TranscriptRow[] => foldTurn(openingOf(prompt), events);
 
-/* THE ONE FOLD, tested where it lives. Every window draws these rows and the record keeps them, so what is
- * asserted here is what a chat shows live, what it shows reopened, and what the record holds: one set of rules,
- * one set of tests. */
+// The one fold every window and the stored record draw from; pins what a live, reopened and stored chat all show.
 describe("foldTurn", () => {
-    /* The live bubble boundary: `text_end` retires the block that WROTE something, so the calls it introduced
-     * land in a fresh bubble under it, and the prose that reports them joins that same bubble. This is Claude
-     * Code's interleaving: says what it's about to do → the cards → what it found. */
     it("retires a prose bubble at text_end so the calls it introduced land beneath it", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "I'll look" },
@@ -32,8 +27,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    /* THE USER SPOKE MID-TURN, and the rows hold it where the turn took it. It closes the open bubble: what the
-     * agent says next is its answer to these words and belongs below them. */
     it("writes a mid-turn steer down as a user row, with the answer to it beneath", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "on it" },
@@ -47,8 +40,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // A text_end on a bubble holding only cards is not a boundary: retiring there would split a card away from
-    // the prose that reports it, a shape the live stream never draws.
     it("does not retire a bubble that has written no prose", () => {
         const events: AgentEvent[] = [
             { kind: "tool_call", id: "t1", name: "Read", category: "read", status: "completed" },
@@ -72,17 +63,11 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // A card the turn died mid-call keeps `in_progress`: that is what happened, and claiming a completion it
-    // never reported would be the one thing a transcript must not invent.
     it("leaves an unanswered call in progress", () => {
         const events: AgentEvent[] = [{ kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" }];
         expect(foldOf("run", events).at(-1)?.tools?.[0]?.status).toBe("in_progress");
     });
 
-    /* A DELEGATION: its calls and its thinking nest under the Agent card that spawned them, so a delegation
-     * reads as one unit rather than a leaf card. Its PROSE stays off the card: that card has nowhere to render
-     * prose, and the child's report already arrives as the card's own result content. The child's live state
-     * (the `subagent` frames) rides the same card. */
     it("nests a subagent's calls, thinking and live state under the card that spawned them", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "delegating" },
@@ -107,8 +92,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // Its Agent card is not in this stream (a malformed log, or one level of a deeper spawn read on its own), so
-    // there is nothing to hang the child off, which is exactly what keeps a nested level out of the level above.
     it("drops a subagent's frames when the card that spawned them is absent", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "delegating" },
@@ -117,9 +100,6 @@ describe("foldTurn", () => {
         expect(foldOf("delegate", events).slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
     });
 
-    // One subagent's own side of the same log: what the Subagents area renders while it runs. Read at the
-    // child's level its prose IS top-level, the parent's frames are not its business, and the parent's cards
-    // stay out: read at a subagent's own level a card is not that stream's.
     it("reads one subagent's stream as a transcript of its own", () => {
         const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "a" }] }];
         const events: AgentEvent[] = [
@@ -173,8 +153,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // End-of-turn accounting lands on the bubble the answer ended in, and closes the turn: a steered
-    // conversation's stream can carry several turns, and the next opens a fresh bubble below.
     it("attaches the turn's usage to its last bubble and closes it", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "done" },
@@ -187,16 +165,11 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // Frames that are not transcript (init, the settle) carry no bubble of their own, so a turn that only
-    // emitted those folds to the prompt alone rather than an empty reply.
     it("yields nothing but the prompt for a turn that said nothing", () => {
         const events: AgentEvent[] = [{ kind: "init", model: "claude-opus-4" }, { kind: "done" }];
         expect(foldOf("hi", events)).toEqual([{ role: "user", text: "hi", sentAt: SENT_AT }]);
     });
 
-    /* A REFUSED TURN SAYS SO. The provider's answer to this one is an error frame and no prose at all, so folding
-     * only the two speakers left a question with no reply under it. The daemon's clause about what comes next
-     * rides the same line, so the reopened chat and the live one read the same. */
     it("keeps what went wrong, as the notice line the turn ended on", () => {
         const refusal = "Your organization has disabled Claude subscription access for Claude Code";
         const events: AgentEvent[] = [{ kind: "delta", text: "I'll take a look" }, { kind: "error", message: refusal }, { kind: "done" }];
@@ -227,9 +200,6 @@ describe("foldTurn", () => {
         });
     });
 
-    /* AND SO DOES A TURN THAT RAN CHEAPER THAN THE MODEL ASKED FOR. Scrolling back a week later, "was THIS
-     * answer the cheap one" is the question, and only a row per routed turn can answer it. The offer rides
-     * along so the reopened line keeps its one press. A verdict that moved nothing writes nothing. */
     it("writes down a turn that ran on a cheaper model, and nothing for a verdict that moved nothing", () => {
         const routed: AgentEvent[] = [
             { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], model: "claude-haiku-4-5", routed: true },
@@ -247,7 +217,6 @@ describe("foldTurn", () => {
         expect(foldOf("go", held).map((message) => message.role)).toEqual(["user", "assistant"]);
     });
 
-    // What happened to the turn outside the model's words: a rebase, a landing, a compaction, each one line.
     it("writes the turn's own events down as notices", () => {
         const events: AgentEvent[] = [
             { kind: "worktree", branch: "agent/x", base: "abc1234", sync: { commits: 2, blocked: [] } },
@@ -270,7 +239,6 @@ describe("foldTurn", () => {
         );
     });
 
-    // The checkpoint and the daemon's notes land on the turn's own user row, where a reader finds them.
     it("stamps the checkpoint and the preamble's notes on the turn's user row", () => {
         const events: AgentEvent[] = [
             { kind: "checkpoint", id: "snap-1", index: 4 },
@@ -288,9 +256,6 @@ describe("foldTurn", () => {
         });
     });
 
-    /* THE CARD THE TURN PARKED ON, and the answer that released it. The card takes the open bubble and closes it,
-     * so the ask tool's own call (which trails its card) lands in the row beneath, with what the agent said once
-     * answered. The reply settles the card's status by the one derivation (card-status.ts). */
     it("records the question a turn asked, with the picks that answered it, and closes the bubble on the card", () => {
         const questions = [
             {
@@ -319,9 +284,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // A card raised under prose that is still open joins that prose, the one row; the answer's continuation
-    // opens the next. A plan whose text IS the adjacent retired prose takes that row over instead of drawing
-    // the same markdown twice.
     it("keeps the prose that led up to a card in the card's own row, and folds a repeated plan into its prose", () => {
         const document = { path: "docs/plan.md", title: "Plan", markdown: "# Plan\n\n1. do it" };
         const events: AgentEvent[] = [
@@ -344,10 +306,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    /* A card nobody answered is nobody's decision: when the turn ends under it, it freezes as `cancelled`, with
-     * everything it was raised with intact — including the judge's sentence, which is what the user was actually
-     * reading when the turn died. (The sentence arrives ON the card now rather than as a later frame patched
-     * into it: it is the reason the card exists, so there was no card before it existed.) */
     it("freezes a card nobody answered as cancelled when the turn ends, keeping what it was raised with", () => {
         const events: AgentEvent[] = [
             { kind: "permission", requestId: "perm1", toolName: "Bash", title: "Claude wants to run pnpm test", explain: "Runs the test suite." },
@@ -367,9 +325,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    /* A GATED CREDENTIAL's card keeps WHO released it, not merely that something was approved: the approver is
-     * the whole point of the gate, and the reply cannot carry them (it is the daemon that verified the
-     * identity), so the receipt frame is the only place that name ever appears. */
     it("keeps who released a gated credential on the card that asked for it", () => {
         const offer = {
             subject: "DATABASE_URL",
@@ -396,9 +351,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    /* A release nobody answered is nobody's refusal. The deadline passing freezes the card `cancelled` and
-     * writes NO receipt, because "refused" would name a decision a person never made — the same split the
-     * gate's two refusal sentences make to the agent. */
     it("freezes an unanswered release as nobody's decision, with no receipt", () => {
         const offer = {
             subject: "reddit",
@@ -414,7 +366,6 @@ describe("foldTurn", () => {
         ]);
     });
 
-    // A turn the user stopped says so, after freezing whatever it was parked on.
     it("writes a stop down after cancelling what the turn was waiting on", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "half" },
@@ -427,8 +378,7 @@ describe("foldTurn", () => {
     });
 });
 
-/* THE PATCHES, the other half of the same fold: what a window applies to the rows it holds must reproduce the
- * rows the fold holds, exactly, or the two drift and the reopened chat disagrees with the live one. */
+// Patches applied to a window's rows must reproduce the fold's own rows exactly, or live and reopened chats drift.
 describe("patches", () => {
     const replay = (
         opening: readonly TranscriptRow[],
@@ -491,7 +441,6 @@ describe("patches", () => {
         ]);
     });
 
-    // A bubble the fold opened and never wrote into is dropped, and it was the last row, so nothing above moves.
     it("drop an empty bubble the turn opened and abandoned", () => {
         const events: AgentEvent[] = [
             { kind: "todos", items: [] },
@@ -503,8 +452,6 @@ describe("patches", () => {
         expect(folded.map((row) => row.role)).toEqual(["user", "user"]);
     });
 
-    // A patch carries a COPY: the row the fold keeps mutating afterwards must not reach back into a patch that
-    // was already handed out, or a slow reader applies a delta on top of text that already holds it.
     it("carry copies, not the fold's own rows", () => {
         const fold = new TranscriptFold(openingOf("go"));
         const [appended] = fold.apply({ kind: "delta", text: "a" });

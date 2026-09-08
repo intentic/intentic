@@ -1,41 +1,19 @@
 import type { EnvironmentItem } from "@intentic/api-contract";
 import type { IconName } from "@intentic/ui";
 
-/* THE MARK ON A CONTENTS ROW, what makes "Rust, ffmpeg, Docker" legible from the left edge alone, instead of
- * eighteen identical boxes down a column that costs width and carries nothing.
- *
- * DERIVED IN THE BROWSER RATHER THAN SENT OVER THE WIRE. The wire carries what the sandbox HAS; which picture
- * this app draws for it is a fact about this app. Keeping the table here also means the marks appear against a
- * daemon that predates them, routinely the case, since the app plane serves whatever image was last pulled,
- * where a new wire field would arrive empty until the sandbox itself updates.
- *
- * MATCHED ON WORDS, not on whole names, because a block is named by whoever wrote it: `rust-tauri`, `Rust tauri`
- * and `rustc` all have to reach the same mark. The item's own name is asked first and the commands it installs
- * second, a block named after a product ("Discord") should keep the product's mark rather than take the one
- * belonging to the first tool inside it ("whisper-cli").
- *
- * TWO TIERS, BECAUSE THE FIRST HAS HOLES. Most of what a sandbox installs is somebody's product and has a brand
- * in the icon set; ripgrep, jq, yq, ssh and rsync have none, and handing those the same generic box would leave
- * a quarter of the list exactly as unscannable as before. So the second tier is a glyph chosen per KIND, a
- * magnifier for the searcher, a key for ssh, a wrench for the build runners, and only what neither tier
- * recognises falls through to the box.
- */
+// Marks derived in the browser, not sent over the wire, so they work against a daemon that predates them. Matched per
+// word (not whole name), name checked before commands, so a block named after a product keeps its own brand. Two tiers:
+// a brand logo, then a glyph by kind for tools with no brand.
 
 export interface EnvironmentVisual {
-    /** A simple-icons slug for <BrandMark>, absent for anything with no brand in that set. */
+    /** A simple-icons slug for <BrandMark>; absent for anything with no brand in that set. */
     readonly logo?: string;
-    /** What is painted under the brand: while it loads, if it fails, and forever when there is no slug. */
+    /** What's painted under the brand while it loads, if it fails, or forever when there's no slug. */
     readonly icon: IconName;
 }
 
-/* The brands, keyed by every word that should reach them. Slugs are verified against the CDN rather than
- * guessed, a 404 costs a request and degrades to the glyph, which is survivable but is a hole in a list whose
- * whole job is being scannable.
- *
- * GNU MAKE IS DELIBERATELY ABSENT. There IS a `make` slug and it is Make.com's purple M, so honouring it would
- * put a no-code automation brand beside a Makefile. A wrong logo is worse than no logo: the fallback glyph reads
- * as "no mark for this", while the wrong mark reads as a fact.
- */
+// Verified against the CDN, not guessed: a wrong logo reads as fact, so a slug that doesn't exist is not risked here.
+// `make` is deliberately absent: the real `make` slug belongs to Make.com, not GNU Make.
 const LOGOS: Readonly<Record<string, string>> = {
     ffmpeg: `ffmpeg`,
     bun: `bun`,
@@ -58,8 +36,7 @@ const LOGOS: Readonly<Record<string, string>> = {
     python3: `python`,
     pip: `python`,
     pip3: `python`,
-    // The python pack's tools carry no mark of their own in the icon set, and each one is only ever met as
-    // part of a python row, so they take the language's.
+    // The python pack's own tools carry no mark of their own, so they borrow the language's.
     uv: `python`,
     uvx: `python`,
     ruff: `python`,
@@ -75,8 +52,7 @@ const LOGOS: Readonly<Record<string, string>> = {
     tmux: `tmux`,
     cloudflare: `cloudflare`,
     cloudflared: `cloudflare`,
-    // Chromium's own mark is not in the set and Chrome's is the same shape in fuller colour, near enough to be
-    // recognised as "the browser", which is the whole job here.
+    // Chromium has no mark of its own; Chrome's is close enough to read as "the browser".
     chromium: `googlechrome`,
     chrome: `googlechrome`,
     pandoc: `pandoc`,
@@ -109,8 +85,7 @@ const LOGOS: Readonly<Record<string, string>> = {
     mongodb: `mongodb`,
 };
 
-// The kinds with no brand to borrow, each given a glyph that says what it DOES, so the five brandless rows are
-// still told apart at a glance, which a shared box never managed.
+// A glyph per kind for tools with no brand to borrow, so brandless rows are still told apart at a glance.
 const ICONS: Readonly<Record<string, IconName>> = {
     rg: `search`,
     ripgrep: `search`,
@@ -131,31 +106,29 @@ const ICONS: Readonly<Record<string, IconName>> = {
     magick: `image`,
     imagemagick: `image`,
     graphviz: `sitemap`,
-    // Painted under the browser's brand while it loads, and left there if the CDN is unreachable.
+    // Shown under the browser's logo while it loads, and left in place if the CDN is unreachable.
     chromium: `globe`,
     chrome: `globe`,
 };
 
-/* The words a name or a command offers up: `rust-tauri` → rust, tauri · `Node.js` → node, js · `C++ build tools`
- * → c++, build, tools. Punctuation that is part of the name survives (`c++`, `g++`, `whisper-cli` is asked whole
- * before it is split); only the separators go. */
+// Splits into words on whitespace/punctuation separators; embedded punctuation like `c++`, `g++` survives since it
+// isn't a separator.
 const wordsOf = (text: string): string[] =>
     text
         .toLowerCase()
         .split(/[\s._/-]+/u)
         .filter((word) => word !== ``);
 
-// Name before commands, whole before split, most specific first, so the least specific word never wins a match
-// the block's own name could have answered.
+// Name before commands, whole name before its words: the most specific key is tried first, so a common word never wins
+// a match the full name would have.
 const keysOf = (item: EnvironmentItem): string[] => [
     item.name.toLowerCase(),
     ...wordsOf(item.name),
     ...item.tools.flatMap((tool) => [tool.name.toLowerCase(), ...wordsOf(tool.name)]),
 ];
 
-// The lookup itself, over whatever words a caller can offer. A glyph found early is remembered but does not
-// stop the search: a brand further down the list still wins the top tier, and the glyph it passed becomes what
-// sits under it.
+// Continues past the first glyph match: a brand further down the key list still wins the logo tier, and the glyph
+// already found becomes what's shown under it.
 const visualFor = (keys: readonly string[]): EnvironmentVisual => {
     let icon: IconName | undefined;
     for (const key of keys) {
@@ -170,10 +143,7 @@ const visualFor = (keys: readonly string[]): EnvironmentVisual => {
 
 export const environmentVisual = (item: EnvironmentItem): EnvironmentVisual => visualFor(keysOf(item));
 
-/* THE SAME MARK FOR A RUNTIME INSTALL, which has a tool name and an ecosystem rather than an item's name and
- * commands. Its KIND is asked last and as a fallback: `pip`, `cargo` and `npm` are all in the brand table, so a
- * tool with a brand of its own (`zizmor` → nothing, `chromium-headless-shell` → the browser) keeps it, and only
- * a tool the table has never heard of borrows its package manager's. Without that a whole list of pip packages
- * would draw the Python logo down the left edge and say nothing about which package each row is. */
+// The tool's own keys are tried before its ecosystem's; a package with a brand of its own keeps it, and only an
+// unrecognised one borrows its package manager's logo.
 export const runtimeInstallVisual = (tool: string, kind: string): EnvironmentVisual =>
     visualFor([tool.toLowerCase(), ...wordsOf(tool), kind.toLowerCase(), ...wordsOf(kind)]);

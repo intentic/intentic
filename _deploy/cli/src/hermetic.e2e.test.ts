@@ -14,17 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { APPLY_WORKFLOW_PATH, forgejoSecretName, GIT_TOKEN_SECRET, GIT_USER_SECRET, INTENT_WORKFLOW_PATH } from "./pipelines/adopt-pipelines.js";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 
-// The hermetic Tier-1 run: the same DinD host + real CLI as cli.e2e.test.ts, but with ZERO external
-// dependencies: no Cloudflare token, no zone, no DNS, no tunnel. Two existing seams make that possible:
-// an authored `zone` resolves the full artifact offline (no token/network), and `apply --target` over the
-// derived platform trio (forgejo + runner + komodo) reconciles a slice whose inputs reference nothing but
-// the host. This covers exactly the deployment path that breaks in the field: the derived control plane
-// coming up on a real Docker host, gated by the engine-level SSH readiness probe: plus `adopt` against the
-// real Forgejo, idempotent re-runs, and a reproduced readiness failure asserting the diagnostic sweep.
-// Gated behind INTENTIC_E2E_HERMETIC (needs a privileged local Docker daemon); runs as a non-blocking MR
-// sidecar in CI, while the Cloudflare-backed cli.e2e stays nightly.
-// Its own switch, not the nightly's: naming no secrets is exactly what lets this tier run on every merge
-// request, so it must not turn on with the gated ones.
+// Own gate (INTENTIC_E2E_HERMETIC): naming no secrets is what lets this run on every merge request.
 const tier = e2eTier("intentic CLI hermetic end-to-end (DinD, no external services)", { enabledBy: "INTENTIC_E2E_HERMETIC" });
 
 const exec = promisify(execFile);
@@ -32,8 +22,7 @@ const exec = promisify(execFile);
 const repoRoot = findRepoRoot(import.meta.url);
 const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 
-// An RFC 2606 reserved TLD: resolvable by no one, so a hermetic run that accidentally reaches for the
-// public domain fails loudly instead of leaking traffic.
+// RFC 2606 reserved TLD: resolvable by no one, so an accidental public-domain reach fails loudly.
 const ZONE = "e2e.test";
 const HOST = "host";
 const FORGEJO = forgejoId(HOST);
@@ -95,13 +84,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                 .withEnvironment({ DOCKER_TLS_CERTDIR: "" })
                 .withExposedPorts(22, FORGEJO_PORT)
                 .withCopyContentToContainer([{ content: keys.public, target: "/root/.ssh/authorized_keys", mode: 0o600 }])
-                // Port 3000 stays silent until apply boots Forgejo, so waiting on listening ports would
-                // hang: wait for sshd instead (the entrypoint starts it only after dockerd accepts commands).
+                // Waits for sshd, not port 3000: Forgejo isn't up until apply runs, waiting on ports would hang.
                 .withWaitStrategy(Wait.forSuccessfulCommand("nc -z 127.0.0.1 22"))
                 .withStartupTimeout(180_000);
 
-        // CI provides the published dind-host image; anything else (missing var, private registry, local
-        // run) falls back to building @intentic/dind-host locally.
+        // CI supplies the published dind-host image; anything else falls back to a local build.
         const image = process.env["INTENTIC_HOST_IMAGE"];
         if (image !== undefined && image !== "") {
             try {
@@ -127,8 +114,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     }, 60_000);
 
-    // Run a real `pnpm intentic <args>` from the repo root; surface stdout+stderr on failure so a broken
-    // apply is debuggable from the test output.
+    // Runs a real `pnpm intentic <args>` from the repo root; surfaces stdout+stderr on failure for debugging.
     const intentic = async (...args: string[]): Promise<string> => {
         try {
             const { stdout } = await exec("pnpm", ["intentic", ...args], { cwd: repoRoot, env: process.env, maxBuffer: 64 * 1024 * 1024 });
@@ -197,16 +183,14 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(running).toContain("intentic-forgejo-runner");
         expect(running).toContain("komodo-core");
 
-        // Re-verify the engine's readiness gate independently: the derived internalUrl must be fetchable
-        // FROM THE HOST at the discovered internalIp: the exact check that timed out in the field.
+        // Re-verifies the readiness gate: internalUrl must be fetchable from the host at the discovered internalIp.
         const internalIp = (await sshRun(INTERNAL_IP_COMMAND)).stdout.trim();
         expect(internalIp).not.toBe("");
         expect((await sshRun(`wget -q -T 10 -O /dev/null http://${internalIp}:${FORGEJO_PORT}`)).code).toBe(0);
         expect((await sshRun(`wget -q -T 10 -O /dev/null http://${internalIp}:${KOMODO_PORT}`)).code).toBe(0);
 
         const generated = await readGeneratedSecrets(targetDir);
-        // Non-empty and whitespace-free each, and DIFFERENT from one another. The last of those is the one worth
-        // having: one secret generated once and written under two names satisfies "both are truthy" perfectly.
+        // Non-empty and different from each other: catches one secret written under two names, both truthy.
         expect(generated["FORGEJO_ADMIN_PASSWORD"]).toMatch(/^\S+$/);
         expect(generated["KOMODO_ADMIN_PASSWORD"]).toMatch(/^\S+$/);
         expect(generated["FORGEJO_ADMIN_PASSWORD"]).not.toBe(generated["KOMODO_ADMIN_PASSWORD"]);
@@ -230,19 +214,16 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await intentic("deploy", "adopt", "--artifact", artifactPath, "--baseUrl", baseUrl);
 
         const creds = { baseUrl, user: adminUsername, password };
-        // The repo that came back is the repo that was asked for: `findRepo` answering with SOMETHING says
-        // nothing about which of the two it found, and these two calls differ only in that name.
+        // Confirms `findRepo` returned the repo asked for, not just some repo: the two calls differ only in `name`.
         expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toMatchObject({ name: "intent" });
         expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "desired-state" })).toMatchObject({ name: "desired-state" });
         const onMain = { ...creds, owner: adminUsername, branch: "main" };
-        // A file that exists reads back as text. `expect.any(String)` fails on the undefined a missing path
-        // returns, and unlike a bare presence check it also rejects a client that answered with a buffer or a
-        // parsed object, which is what a wire change here would actually look like.
+        // expect.any(String) fails on a missing file's undefined and also rejects a buffer/object response.
         expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: "deploy.config.ts" })).toEqual(expect.any(String));
         expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: INTENT_WORKFLOW_PATH })).toEqual(expect.any(String));
         expect(await forgejoApi.readFile({ ...onMain, name: "desired-state", path: APPLY_WORKFLOW_PATH })).toEqual(expect.any(String));
 
-        // Actions secrets landed on both repos (list via the raw API: the provider client only writes).
+        // Actions secrets landed on both repos; lists via the raw API since the provider client only writes.
         const listSecrets = async (name: string): Promise<string[]> => {
             const response = await fetch(`${baseUrl}/api/v1/repos/${adminUsername}/${name}/actions/secrets`, {
                 headers: { Authorization: `Basic ${Buffer.from(`${adminUsername}:${password}`).toString("base64")}` },
@@ -254,8 +235,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(intentSecrets).toContain(GIT_USER_SECRET);
         expect(intentSecrets).toContain(GIT_TOKEN_SECRET);
         const applySecrets = await listSecrets("desired-state");
-        // Reserved-prefix keys (FORGEJO_*) are stored under their INTENTIC_-prefixed name: assert the
-        // same transform the PUT and the workflow reference use.
+        // Reserved-prefix keys (FORGEJO_*) store under their INTENTIC_-prefixed name, per the PUT/workflow transform.
         for (const key of ["HOST_SSH_KEY", "CLOUDFLARE_API_TOKEN", "FORGEJO_ADMIN_PASSWORD", "KOMODO_ADMIN_PASSWORD"]) {
             expect(applySecrets).toContain(forgejoSecretName(key));
         }
@@ -270,13 +250,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 60_000);
 
     it("a readiness-gate failure self-explains with the SSH diagnostic sweep", async () => {
-        // Reproduce the field failure class: the service is healthy in-container (the provider's own
-        // localhost healthcheck passes) but unreachable at the discovered internalIp (the engine gate's
-        // host-side probe). An iptables DROP on the internalIp:3000 INPUT path creates exactly that split:
-        // the provider probes http://localhost:3000 (dst 127.0.0.1, unmatched), the gate probes
-        // http://<internalIp>:3000 (matched, dropped). readyWhen sits outside `inputs`, so shrinking the
-        // timeout does not perturb the stamp hash; removing the container forces a create so the gate
-        // (skipped on noop) actually runs.
+        // readyWhen sits outside `inputs`, so editing its timeout here doesn't perturb the resource's stamp hash.
         const artifact = JSON.parse(await readFile(artifactPath, "utf8")) as {
             resources: Record<string, { readyWhen?: { timeout?: string } }>;
         };

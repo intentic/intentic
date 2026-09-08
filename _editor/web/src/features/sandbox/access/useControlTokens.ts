@@ -5,15 +5,9 @@ import { jsonBody } from "../client/jsonBody";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
 
-/* Owner-minted control tokens: the credential anything outside the browser presents to drive this sandbox.
- * Mint shows the raw token ONCE (the daemon stores only its hash); the list supports per-token revocation.
- * The trust model is the sync pairing's (the browser is already the owner), made durable + revocable.
- *
- * The SCOPE and the EXPIRY are the mint's arguments, not this composable's: the Access tab mints any rung, the
- * Devices card mints the editor slice, and the daemon refuses a mint that names no scope. The list is
- * deliberately unfiltered: every token against this sandbox shows up on whichever surface you have open,
- * because a revoke surface that only shows you the tokens you happened to mint from this card is how a leaked
- * one stays live. */
+// Owner-minted control tokens: credentials anything outside the browser presents to drive this sandbox.
+// Mint returns the raw token once; the daemon stores only its hash. List and revoke are unfiltered by scope,
+// since hiding tokens minted elsewhere would let a leaked one stay live unnoticed.
 
 export interface ControlToken {
     readonly id: string;
@@ -36,7 +30,7 @@ export function useControlTokens() {
     const { active } = useSandbox();
 
     const tokens = ref<readonly ControlToken[]>([]);
-    // The last mint's RAW token, shown once, gone on navigation/sandbox switch, never refetchable.
+    // The last mint's raw token; shown once, cleared on navigation or sandbox switch, never refetchable.
     const minted = ref<{ readonly token: string; readonly label: string; readonly scope: ControlScope } | undefined>(undefined);
     const { busy: minting, notice, run } = useAsyncAction();
 
@@ -73,7 +67,7 @@ export function useControlTokens() {
             await refresh();
         }, `Minting failed.`);
 
-    // Deliberately not through `run`, revoking must not flash the mint button's busy state.
+    // Not routed through `run`: revoking must not flash the mint button's busy state.
     const revoke = async (id: string): Promise<void> => {
         try {
             await sandboxJson(`/system/control/tokens/${encodeURIComponent(id)}`, { method: `DELETE` });

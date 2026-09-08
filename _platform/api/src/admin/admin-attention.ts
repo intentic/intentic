@@ -1,18 +1,14 @@
 import type { AdminAttention, AdminAttentionItem, BootReport, SetupReport } from "@intentic/api-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 
-/* THE RED-ROWS FEED — every row that is a person's setup, plan, or machine waiting on a human, composed
- * into sentences HERE so the vocabulary lives in one place and the panel stays a renderer.
- *
- * Each category is capped (`TAKE`) and the feed says so (`truncated`), because a bounded list that reads as
- * complete is worse than no list. Ordering is severity first, then newest, so the top of the feed is always
- * the worst thing that happened most recently. */
+// Every row that is a person's setup, plan, or machine waiting on a human, composed into sentences here. Each category
+// is capped (`truncated` says so); ordered severity first, then newest.
 
 const TAKE = 20;
 
 const MINUTE_MS = 60 * 1000;
 
-// A pool claim is an instant; one still `claimed` after this long is a claim that crashed mid-handoff.
+// A pool claim is an instant; one still `claimed` this long is a claim that crashed mid-handoff.
 const CLAIM_LINGER_MS = 15 * MINUTE_MS;
 // A build is minutes of image pull; hours of `building` is a machine the reconcile should have collected.
 const BUILD_STALE_MS = 2 * 60 * MINUTE_MS;
@@ -35,14 +31,14 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
                 take: TAKE,
                 select: { id: true, name: true, lastSeenAt: true, bootReport: true, owner: { select: { email: true } } },
             }),
-            // A live disagreement about where a sandbox lives — invisible to its owner by construction.
+            // A live disagreement about where a sandbox lives, invisible to its owner by construction.
             prisma.sandbox.findMany({
                 where: { announceRefusal: { not: Prisma.DbNull } },
                 orderBy: { updatedAt: `desc` },
                 take: TAKE,
                 select: { id: true, name: true, updatedAt: true, announceRefusal: true, owner: { select: { email: true } } },
             }),
-            // Stripe is retrying their card; the plan already paused. Churn about to happen.
+            // Stripe is retrying their card; the plan is already paused.
             prisma.hostedPlan.findMany({
                 where: { status: `past_due` },
                 orderBy: { updatedAt: `desc` },

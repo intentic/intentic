@@ -5,8 +5,8 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { createOutboundSniffer } from "./outbound.js";
 
-// The sniffer only touches activity/logger; `unstubbed` keeps the fake that small. The fake append pushes
-// synchronously, so assertions can follow observe() directly.
+// Only stubs activity/logger, which is all the sniffer touches; append pushes synchronously so assertions can follow
+// observe() directly.
 const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } => {
     const appended: Partial<ActivityEvent>[] = [];
     const services = unstubbed<Services>("services", {
@@ -16,8 +16,7 @@ const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } =
     return { appended, services };
 };
 
-// The turn that owns the sniffer: stamped on every call it records, so the audit feed can fold a turn's sends
-// into that turn's own row.
+// Turn id stamped on every call the sniffer records, so the audit feed can fold sends into their turn's row.
 const TURN = "turn-1";
 
 const tool = (command: string, id = "t1"): AgentEvent => ({
@@ -35,7 +34,7 @@ const result = (output: string, id = "t1", isError?: boolean): AgentEvent => ({
     content: [{ type: "text", text: output }],
 });
 
-// The exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts): what real turns produce.
+// Exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts); what real turns produce.
 const SEND = `curl -s -X POST -H "Authorization: Bot $DISCORD_BOT_TOKEN" -H "Content-Type: application/json" -d '{"content":"hello"}' https://discord.com/api/v10/channels/123/messages`;
 const REACT = `curl -s -X PUT -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages/456/reactions/%F0%9F%91%8D/@me"`;
 const READ = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages?limit=20" | jq '.[] | {id, content}'`;
@@ -119,8 +118,8 @@ test("flush records calls whose results never arrived, without an outcome", () =
     expect(appended[0]?.outcome).toBeUndefined();
 });
 
-// The exact shapes the telegram SKILL teaches. The method rides in the path BEHIND the bot token, which is why
-// these assert on the endpoint as much as on the classification.
+// Exact shapes the telegram skill teaches; the method rides in the path, behind the bot token, hence asserting on the
+// endpoint too.
 const TG_SEND = `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":-100123,"text":"on it"}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"`;
 const TG_FILE = `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=abc"`;
 const TG_DOWNLOAD = `curl -s -o /work/incoming "https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/voice/file_1.oga"`;
@@ -146,9 +145,8 @@ test("a telegram send records the method as the endpoint, with the chat and text
     ]);
 });
 
-/* A BOT TOKEN MUST NEVER REACH THE ACTIVITY FEED. Telegram puts it in the URL path, the feed is read by people
- * and pasted into support threads, and the skills teach `$TELEGRAM_BOT_TOKEN` precisely so it does not expand:
- * but a hand-typed one has to be dropped on the floor too, which is what recording only the method does. */
+// A bot token must never reach the activity feed; Telegram puts it in the URL path, so recording only the method drops
+// even a hand-typed token.
 test("a literally-pasted bot token does not survive into the recorded call", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);
@@ -171,7 +169,7 @@ test("file reads, uploads and downloads each classify without a token in the end
     expect(appended.map(({ type, method, endpoint, channelId }) => ({ type, method, endpoint, channelId }))).toEqual([
         { type: "file.read", method: "GET", endpoint: "/getFile", channelId: undefined },
         { type: "api.call", method: "GET", endpoint: "/file", channelId: undefined },
-        // A multipart upload carries the chat as a form field rather than in JSON: same fact, different syntax.
+        // A multipart upload carries the chat as a form field, not JSON.
         { type: "message.send", method: "POST", endpoint: "/sendDocument", channelId: "-100123" },
     ]);
 });
@@ -184,9 +182,7 @@ test("telegram reports a refusal in `description` where slack uses `error`: both
     expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([{ outcome: "error", error: "Bad Request: chat not found" }]);
 });
 
-/* WhatsApp's skill teaches a BIN, not curl: the paired socket lives in the gateway and the agent drives it
- * with `whatsapp send …`. The matcher parses that command shape, so sends land in the activity feed and the
- * `whatsapp.message.send` action rule has something to bite on. */
+// WhatsApp's skill drives a CLI (`whatsapp send …`), not curl; the matcher parses that command shape directly.
 test("a whatsapp CLI send records message.send with the chat and text, whatever the quoting", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);

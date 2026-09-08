@@ -1,36 +1,12 @@
 import { errorMessage } from "./errors.js";
 import type { IDisposable } from "./lifecycle.js";
 
-/* THE FOUR SHAPES OF "DON'T DO THAT AGAIN YET", WRITTEN ONCE.
- *
- * These four existed eleven times between the daemon and the web, hand-rolled at each site out of a `let
- * timer` and a `setTimeout`, and the copies did not agree, which matters, because the difference between them
- * is not style. Two of the debouncers reset their clock on every event and two deliberately did not, and only
- * one of the four said which it was; a reader had to decide from `timer ??= setTimeout(…)` versus `timer =
- * setTimeout(…)`, one character apart, opposite behaviour, and the wrong one either drops the tail of a burst
- * or never fires at all while an agent keeps editing.
- *
- * Naming them separates that decision from the plumbing:
- *
- *   Delayer    , the clock restarts on every call. "Do it once the caller goes quiet." A search box.
- *   Coalescer  , the clock starts on the FIRST call of a window and later calls join it. "Do it at most every
- *                 N ms, with everything that arrived." A file watcher under a running agent, which never goes
- *                 quiet and so would starve a Delayer forever.
- *   SingleFlight- concurrent callers for the same key share one run. "Only one of these at a time; everybody
- *                 else waits for the answer that is already coming."
- *   retry      , the loop, with the delay in it.
- *
- * And, below them, the three primitives every reconnect loop, readiness wait and respawn ladder in the product
- * was hand-rolling beside its own copy of `setTimeout`-in-a-promise: `sleep`, `pollUntil` and `createBackoff`.
- *
- * All three classes are disposables, which is the other half of what the hand-rolled versions kept getting
- * wrong: a pending timer is a live handle, and every one of these sites had a teardown path that dropped it.
- */
+// Delayer restarts on every call (a search box); Coalescer opens on the first call and holds the window (a watcher that
+// never goes quiet); SingleFlight shares one run per key; retry loops with a delay. Plus sleep, pollUntil and
+// createBackoff below. All are disposables: a pending timer is a live handle.
 
-/* Trailing debounce. Each `trigger` cancels the pending run and starts the wait over, so the task runs once,
- * `delay` after the last call, and the promise every caller in the window is holding resolves with that one
- * run's result. Superseded callers are not rejected: they asked for the effect, not for their own invocation,
- * and rejecting them turns "the user typed another character" into an unhandled rejection. */
+// Trailing debounce: `trigger` restarts the wait, so the task runs once, `delay` after the last call; every caller in
+// the window shares that result. Superseded callers are not rejected, only the effect was requested.
 export class Delayer<T> implements IDisposable {
     private handle: ReturnType<typeof setTimeout> | undefined;
     private pending:
@@ -71,10 +47,8 @@ export class Delayer<T> implements IDisposable {
         return this.handle !== undefined;
     }
 
-    /* Drops the pending run WITHOUT settling the promise its callers hold. That is deliberate: a cancel means
-     * the effect is no longer wanted, and the callers are `void`-ing the promise for the effect. Settling it
-     * with a value nobody computed would be a lie, and rejecting it would make every ordinary teardown produce
-     * an unhandled rejection at every site that fired and forgot. */
+    // Drops the pending run without settling its promise: callers `void` it for the effect, so resolving with nothing
+    // or rejecting would both be wrong.
     cancel(): void {
         if (this.handle !== undefined) {
             clearTimeout(this.handle);
@@ -89,10 +63,8 @@ export class Delayer<T> implements IDisposable {
     }
 }
 
-/* Windowed batching. The first `add` of a window opens it and schedules the flush; everything arriving before
- * the flush joins the same batch and does NOT push the deadline out. This is the one a file watcher wants: an
- * agent editing continuously never produces a quiet moment, so a trailing debounce under it either never fires
- * or fires only when the agent stops, which is precisely when the browser no longer needs telling. */
+// Windowed batching: the first `add` opens the window and schedules the flush; later calls join it without pushing the
+// deadline out. For a source that never goes quiet (a file watcher under a live agent).
 export class Coalescer<T> implements IDisposable {
     private handle: ReturnType<typeof setTimeout> | undefined;
     private batch: T[] = [];
@@ -102,9 +74,8 @@ export class Coalescer<T> implements IDisposable {
         private readonly flush: (batch: readonly T[]) => void,
     ) {}
 
-    /* An arrow property, not a method, because this one is a SINK: callers hand `coalescer.add` straight to a
-     * watcher, a worker port or a stream as the callback, and a plain method detached from its instance throws
-     * on the first item. The rest of this file keeps ordinary methods, they are called on the object. */
+    // Arrow property, not a method: callers hand `coalescer.add` directly to a watcher or stream as a callback, and a
+    // detached method would lose its `this`.
     readonly add = (...items: readonly T[]): void => {
         this.batch.push(...items);
         this.handle ??= setTimeout(() => {
@@ -121,8 +92,7 @@ export class Coalescer<T> implements IDisposable {
         return this.handle !== undefined;
     }
 
-    // Emit what has accumulated right now and close the window. The one caller that needs this is a shutdown
-    // that would otherwise drop a batch it already has.
+    // Emits what has accumulated and closes the window now, for a shutdown that would otherwise drop a pending batch.
     flushNow(): void {
         if (this.handle === undefined) {
             return;
@@ -145,14 +115,8 @@ export class Coalescer<T> implements IDisposable {
     }
 }
 
-/* One run per key at a time, shared by everyone who asks while it is going. Not a queue: a second caller does
- * not get its own later run, it gets the answer from the run already in flight, which is the correct reading
- * for the two things in this daemon that need it. Refreshing an OAuth token is the sharp one, because a
- * *second* refresh of the same token is not merely wasteful: presenting a refresh token twice is what some
- * providers treat as theft and answer by revoking the grant.
- *
- * The key's entry is removed when the run settles, failure included, so a failed attempt is retried by the
- * next caller rather than being cached as a rejection forever. */
+// One run per key, shared by every concurrent caller; not a queue, so a second caller gets the run already in flight.
+// The key's entry is removed when the run settles, so a failure is retried, not cached.
 export class SingleFlight<K, T> implements IDisposable {
     private readonly running = new Map<K, Promise<T>>();
 
@@ -168,10 +132,8 @@ export class SingleFlight<K, T> implements IDisposable {
         return started;
     }
 
-    /* The run already in flight for this key, or undefined, for callers that want to WAIT for one if it is
-     * happening but must not start one themselves. Token refresh needs exactly this: a reader that finds a
-     * rotation under way has to let it land before reading the store, because the token sitting there is the
-     * one that rotation is about to supersede, and handing it out would snapshot a doomed credential. */
+    // The run already in flight for a key, or undefined, for a caller that must wait for one without starting one
+    // itself.
     joined(key: K): Promise<T> | undefined {
         return this.running.get(key);
     }
@@ -180,15 +142,14 @@ export class SingleFlight<K, T> implements IDisposable {
         return this.running.size;
     }
 
-    /* Forgets the tracking, which is all it can do, a promise cannot be cancelled. Runs already in flight
-     * settle into nothing, which is right for teardown and is why this does not pretend to await them. */
+    // Forgets the tracking; a promise cannot be cancelled, so runs already in flight settle into nothing, unawaited.
     dispose(): void {
         this.running.clear();
     }
 }
 
-/* Attempt, wait, attempt again, and when the attempts run out, throw what the LAST one threw rather than a
- * summary of its own. The error a caller can act on is the provider's, not "retries exhausted". */
+// Attempts, waits, attempts again; when attempts run out, throws the last attempt's own error, since that is what a
+// caller can act on.
 export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: number): Promise<T> => {
     let last: unknown;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -206,13 +167,8 @@ export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: 
     throw last;
 };
 
-/* A promise that resolves after `ms`, and EARLY when the signal aborts, never rejecting: the loops that wait
- * this way read their own stop flag on the next line, so an aborted sleep simply ends the wait and the loop
- * sees why for itself. Rejecting would turn every ordinary teardown into a catch block at every call site.
- *
- * `unref` is for a daemon's own long waits (a tunnel's redial, a nudge's retry): a pending timer is a live
- * handle, and one that holds the process open past its shutdown is a leak with a stack trace nobody sees. It
- * is a no-op wherever the timer has no such handle (a browser). */
+// Resolves after `ms`, and early, never rejecting, if the signal aborts, so a loop reading its own stop flag next just
+// ends. `unref` keeps a daemon's long waits from holding the process open; a no-op where there is no such handle.
 export const sleep = (ms: number, options?: { readonly signal?: AbortSignal | undefined; readonly unref?: boolean }): Promise<void> =>
     new Promise((resolve) => {
         const signal = options?.signal;
@@ -236,26 +192,15 @@ export interface PollOptions {
     readonly intervalMs: number;
     readonly timeoutMs: number;
     readonly signal?: AbortSignal | undefined;
-    /* Runs only when another probe is coming, so a caller that narrates the wait ("still waiting for the
-     * tunnel…") says nothing extra on the attempt that gave up. */
+    // Runs only when another probe is coming, so a narrated wait says nothing extra on the attempt that gave up.
     readonly onRetry?: (() => void) | undefined;
-    /* The clock, injectable as a pair so a test can run a ten-minute wait instantly. Both or neither: a fake
-     * `now` with a real sleep spins, and a fake sleep with a real `now` never reaches its deadline. An
-     * injected `wait` owns its own cancellation — the `signal` is still consulted between probes, but it is
-     * the real `sleep` that returns EARLY on abort. */
+    // Injectable clock pair, both or neither: a fake `now` with real `sleep` spins; `wait` still respects `signal`.
     readonly now?: (() => number) | undefined;
     readonly wait?: ((ms: number) => Promise<void>) | undefined;
 }
 
-/* THE ONE WAITING LOOP. Every "is it up yet" in the daemon, the engine and the providers is the same three
- * lines — probe, give up at a deadline, sleep between tries — and when they were each spelled out again they
- * drifted on the edges (one gave up at `>` its deadline where the rest used `>=`).
- *
- * Always probes once BEFORE consulting the clock, so a wait is never skipped by a deadline that has already
- * passed, and answers whether the check passed rather than throwing: what a miss MEANS ("dockerd did not come
- * up", "the display never answered") belongs to the caller, which is the one that can name it. A check that
- * throws propagates: some waits (a process that already exited, a CA that said `invalid`) must fail fast
- * rather than burn the whole deadline. An aborted signal ends the wait as a miss. */
+// Probe, give up at a deadline, sleep between tries; probes once before checking the clock, so a passed deadline never
+// skips a wait. Returns false on a miss or abort; a throwing check propagates.
 export const pollUntil = async (check: () => boolean | Promise<boolean>, options: PollOptions): Promise<boolean> => {
     const now = options.now ?? Date.now;
     const wait = options.wait ?? ((ms: number) => sleep(ms, { signal: options.signal }));
@@ -277,32 +222,21 @@ export const pollUntil = async (check: () => boolean | Promise<boolean>, options
 export interface BackoffOptions {
     readonly floorMs: number;
     readonly capMs: number;
-    /* A run that lasted at least this long was a WORKING one, and its failure restarts the ladder from the
-     * floor. Without it a link that has been up for a week reconnects at the ceiling after one blip, because
-     * the ladder still remembers a bad afternoon in between; with it, a dial that is refused on arrival keeps
-     * climbing, which is what keeps a bad grant or a dead edge from being hammered. */
+    // A run at least this long resets the ladder to the floor on failure; a short run keeps climbing.
     readonly stableMs?: number;
-    /* Full jitter: each wait is a random point between the floor and the rung it would otherwise be, so a
-     * fleet that lost the same edge at the same instant does not reconvene on it at the same instant,
-     * repeatedly. Injected rather than `Math.random` so a test can read the schedule off the ceiling. */
+    // Full jitter: each wait lands randomly between floor and next rung; injectable so a test can fix the schedule.
     readonly random?: () => number;
 }
 
 export interface Backoff {
-    /* How long to wait before the next attempt, and the ladder climbs one rung for the time after that:
-     * floor, 2×, 4×, … capped. `uptimeMs` is how long the attempt that just failed had been working, and at
-     * or past `stableMs` it puts the ladder back on the floor first. */
+    // Next wait; the ladder climbs a rung after (floor, 2x, 4x... capped), unless `uptimeMs` is past `stableMs`.
     readonly next: (uptimeMs?: number) => number;
     // Back to the floor: the attempt succeeded outright (a health check passed, a poll answered).
     readonly reset: () => void;
 }
 
-/* THE EXPONENTIAL LADDER, written once. It existed fifteen times across the tunnel, the runner link, the
- * machine agent, the web extension, two process supervisors, two messaging connectors and four browser
- * streams, out of a `let delay` and a `Math.min(delay * 2, cap)`, and the copies did not agree on the two
- * things that decide whether a flapping link is a nuisance or an outage: whether a session that WORKED earns
- * the floor back (four did, five reset on any `open`, which lets a socket that opens and dies at once hammer
- * at the floor forever), and whether there is any jitter at all (one had it). */
+// Exponential backoff ladder: a session that worked (past `stableMs`) earns the floor back on failure; one that dies
+// immediately keeps climbing. Jitter is optional.
 export const createBackoff = ({ floorMs, capMs, stableMs, random }: BackoffOptions): Backoff => {
     let rung = floorMs;
     return {
@@ -326,20 +260,8 @@ export interface NarratedLine {
     readonly text: string;
 }
 
-/* A CALLBACK-REPORTING OPERATION, TURNED INTO THE STREAM SOMEBODY WATCHES.
- *
- * The operations this adapts (a sandbox flow on a connected machine, a repo sync on a runner) take an `onLine`
- * because their OTHER caller is an MCP tool, which wants one answer at the end and has no use for a line as it
- * arrives. This adapts those same calls rather than having a second implementation of any of them, so what a
- * person watches and what an agent is told can never describe the same run differently.
- *
- * LINES ARE QUEUED, NOT DROPPED, when the consumer is slower than the machine: an image pull prints faster
- * than a WebSocket drains, and a progress log with holes in it is worse than one that lags.
- *
- * The run is STARTED rather than awaited, so the loop can yield what it prints while it is still running, and
- * its rejection is captured as a value: a failure is this stream's terminal frame, not this generator's own
- * failure — a consumer reading frames must not have to also catch. `end` builds that frame, because what
- * "finished" and "failed" are called is the caller's wire shape and not this primitive's business. */
+// Turns a callback-reporting operation (`onLine`) into a stream: lines are queued, not dropped, when the consumer is
+// slower. A failure is the stream's terminal frame, not a thrown rejection, via `end`.
 export async function* narrate<Value, Frame>(
     run: (onLine: (line: string) => void) => Promise<Value>,
     end: (outcome: { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: string }) => Frame,

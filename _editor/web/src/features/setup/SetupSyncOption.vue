@@ -1,8 +1,7 @@
-<!-- DESKTOP SYNC, AS A SWITCH RATHER THAN A DECISION. It is on unless somebody objects, and almost nobody
-     does, so it belongs with the reference material about what the command does, not in the reader's path to
-     pasting it. From `xl` the setup page renders it in that column, under "What this does"; below `xl` there is
-     no column, so the run card carries it instead. Exactly one of the two is visible, and both drive the same
-     `v-model`, which is why this is a component rather than markup written twice. -->
+<!--
+    Desktop-sync toggle, presented as reference material rather than a decision the user must make. Renders in two places (under 'What this does'
+    above `xl`, or on the run card below it), driving the same `v-model`; exactly one is visible at a time.
+-->
 <script setup lang="ts">
 import Checkbox from "primevue/checkbox";
 

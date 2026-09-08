@@ -15,29 +15,22 @@ import {
 import { sshOf } from "../lib/ssh.js";
 import type { PlatformRefs } from "./platform.js";
 
-// The people + teams resolver: a Forgejo git account and a Komodo UI user per declared user, and a Forgejo
-// organization + team per declared team. It also wires the cross-cutting grant graph that only exists once all
-// apps are known, which repos a team is attached to (and at what role), and which deployments a user can act
-// on in Komodo (and at what level). Authenticates every call as the single admin (it owns the orgs, so its
-// git + packages tokens retain full access); each user's login password is one intentic-generated secret,
-// reused for both the Forgejo and Komodo account.
+// People + teams resolver: a Forgejo account and Komodo user per declared user, a Forgejo org + team per declared
+// team, and the cross-cutting grant graph (which repos a team is attached to, which deployments a user can act on).
+// Authenticates as the single admin; each user's login password is one generated secret shared by both accounts.
 
 // The single Forgejo team name inside each org. A "team" maps to one org with one members team in it.
 const TEAM_NAME = "members";
 
-// Forgejo role precedence: a Forgejo team carries ONE permission applied to all its repos, but an app may grant
-// a team at a different role than another app does. The strongest grant wins, so a team never loses access it
-// was granted elsewhere.
+// Forgejo role precedence: a team has one permission for all its repos; the strongest grant across apps wins.
 const forgejoRoleRank: Readonly<Record<ForgejoRole, number>> = { read: 1, write: 2, admin: 3 };
 const strongerForgejoRole = (a: ForgejoRole, b: ForgejoRole): ForgejoRole => (forgejoRoleRank[a] >= forgejoRoleRank[b] ? a : b);
 
-// The Komodo permission level a team's role maps to, and its precedence for the same dedup reason (a user in
-// two teams that both grant the same deployment gets the strongest level).
+// Komodo level a team's role maps to; a user in two teams on one deployment gets the strongest level.
 const komodoLevel: Readonly<Record<KomodoRole, "Read" | "Execute" | "Write">> = { read: "Read", execute: "Execute", admin: "Write" };
 const komodoLevelRank: Readonly<Record<"Read" | "Execute" | "Write", number>> = { Read: 1, Execute: 2, Write: 3 };
 
-// Raise one user's Komodo level on each of an app's deployments to what this team grants, keeping whichever
-// level is already stronger: the same dedup as above, applied where a user is reached through two teams.
+// Raises a user's Komodo level per deployment to this team's grant, keeping whichever is stronger.
 const raiseKomodoGrants = (
     grantsForUser: Map<string, "Read" | "Execute" | "Write">,
     deployments: readonly string[],
@@ -57,8 +50,7 @@ interface RepoGrant {
 }
 
 export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hostId: string, host: HostInput): ResolvedNode[] => {
-    // The identity nodes drive the Forgejo/Komodo admin APIs over an SSH port-forward to the CP host, the
-    // public routes stay out of the engine's control path.
+    // Identity nodes drive Forgejo/Komodo admin APIs over an SSH port-forward, not the public routes.
     const ssh = sshOf(host);
     const forgejoAdmin = { adminUser: adminUsername, adminPassword: generated("FORGEJO_ADMIN_PASSWORD") };
     const komodoAdmin = { adminUser: adminUsername, adminPassword: generated("KOMODO_ADMIN_PASSWORD") };
@@ -66,8 +58,7 @@ export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hos
     const userById = new Map(intent.users.map((user) => [user.id, user.input]));
     const teamById = new Map(intent.teams.map((team) => [team.id, team.input]));
 
-    // Validate references up front (matches emit's app.observe -> service check), so a typo fails here with a
-    // clear message rather than as a dangling dependency the compiler rejects.
+    // Validates references up front, so a typo fails here with a clear message, not a dangling dependency error.
     for (const team of intent.teams) {
         for (const member of team.input.members) {
             if (!userById.has(member)) {
@@ -83,9 +74,7 @@ export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hos
         }
     }
 
-    // Per team: its effective Forgejo permission (strongest grant) and the repos it is attached to. Per user:
-    // the strongest Komodo level on each deployment it can reach through its teams. Built by walking every app
-    // grant once.
+    // Per team: strongest permission + attached repos. Per user: strongest Komodo level per deployment reached.
     const teamPermission = new Map<string, ForgejoRole>();
     const teamRepos = new Map<string, RepoGrant[]>();
     const userGrants = new Map<string, Map<string, "Read" | "Execute" | "Write">>();

@@ -2,17 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-/* Testing an extension without the app: import the BUILT bundle and run `activate()` against a host stub that
- * enforces the same rule the real host does: a registration whose id the manifest never declared is refused.
- *
- * That is the whole trick. The manifest is the contract between an extension and its host, so a test that reads
- * the manifest and checks the code against it catches the failure mode that actually happens in practice: code
- * and manifest drifting apart, which in the real app shows up as a view that silently never appears.
- *
- * Node's own test runner, and no test dependency at all: the bundle's only imports are the ones the host
- * provides (`vue`, `@tanstack/vue-query`), and those resolve here from devDependencies. If this import ever fails
- * for a missing package, the bundle is carrying an import the host does not publish, which is a real bug: it
- * would throw inside the browser's blob-URL import, where the failure is far less obvious than here. */
+// Runs the built bundle's activate() against a host stub that enforces the manifest's registration rules, catching
+// code/manifest drift. Node's test runner only; the bundle's host-provided imports resolve here from devDependencies.
 
 const manifest = JSON.parse(await readFile(new URL(`../intentic-extension.json`, import.meta.url), `utf8`));
 const { activate } = await import(`../dist/extension.js`);
@@ -20,7 +11,7 @@ const { activate } = await import(`../dist/extension.js`);
 const declaredViews = new Set((manifest.contributes?.views ?? []).map((view) => view.id));
 const declaredCommands = new Set((manifest.contributes?.commands ?? []).map((entry) => entry.command));
 const declaredRoutes = manifest.permissions?.sandbox ?? [];
-// The paths the host is allowed to wake this extension for, which is exactly what `contributes.files` declares.
+// Paths the host may wake this extension for; exactly what contributes.files declares.
 const declaredFiles = (manifest.contributes?.files ?? []).map((file) => file.path);
 
 const disposable = () => ({ dispose: () => {} });
@@ -53,9 +44,7 @@ const hostStub = () => {
             },
         },
         workspace: {
-            // The host announces a write to one of the paths `contributes.files` declared, scoped to that
-            // declaration. Recorded rather than ignored: a badge that does not subscribe is a badge that is only
-            // as fresh as its interval, which is the thing this extension is showing you how not to build.
+            // Recorded, not ignored: a badge that doesn't subscribe is only as fresh as its poll interval.
             onDidChangeFiles: (listener) => {
                 registered.watchers.push(listener);
                 return disposable();
@@ -63,9 +52,8 @@ const hostStub = () => {
         },
         navigate: () => {},
     };
-    /* What the daemon's push does: the notes file was written, so anything derived from it should re-read. The
-     * path comes off the MANIFEST rather than being typed again here, which is this file's whole method: the
-     * declaration is the contract, and a test that spells its own copy of it stops noticing when the two drift. */
+    // Simulates the daemon's push. The path is read off the manifest, not retyped, so a test copy can't drift from the
+    // declared contract.
     const notesWritten = () => {
         for (const listener of registered.watchers) {
             listener(declaredFiles);
@@ -88,12 +76,12 @@ test(`activate registers exactly what the manifest declares`, async () => {
 
     const view = registered.views[0];
     assert.equal(view.surface, `rail`);
-    // One activation, workspace-wide: this view is not rooted at a repo.
+    // One activation, workspace-wide: this view isn't rooted at a repo.
     assert.deepEqual(
         view.detect([], []).map((activation) => activation.key),
         [`example`],
     );
-    // The lazily imported component resolved: the SFC really is inside this single-file bundle.
+    // Confirms the SFC bundled: the lazy import actually resolves inside this single file.
     assert.equal(typeof (await view.view()), `object`);
 
     for (const subscription of context.subscriptions) {
@@ -107,7 +95,7 @@ test(`the badge stays quiet until there is something unread, and clears the time
     await activate(api, context);
     const view = registered.views[0];
 
-    // The badge's own scan is what fetched: a closed view still knows there is a note.
+    // The badge's own scan fetches this, independent of the view being open.
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(registered.requested.some((path) => path.startsWith(`/workspace/file?path=`)));
     assert.equal(view.badge(view.detect([], [])[0])?.count, 1);
@@ -128,8 +116,7 @@ test(`the badge re-reads when the file it derives from is written, rather than a
     notesWritten();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // The interval here is ten minutes. Without this subscription the tile would be that far behind a file the
-    // reader can already see the contents of, which is what makes a count stop being believed.
+    // Without the file-write subscription, the tile would lag ten minutes (POLL_MS) behind a file already visible.
     assert.ok(registered.requested.length > afterActivation);
 
     for (const subscription of context.subscriptions) {
@@ -138,6 +125,6 @@ test(`the badge re-reads when the file it derives from is written, rather than a
 });
 
 test(`every route the extension can reach is one the manifest declared`, () => {
-    // Not a runtime assertion: a reminder that this list IS the approval surface the owner sees at install.
+    // A reminder, not a runtime check: this list is the approval surface the owner sees at install.
     assert.deepEqual(declaredRoutes, [`GET /workspace/file`]);
 });

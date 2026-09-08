@@ -1,29 +1,11 @@
-/* THE OBSIDIAN LOCAL REST API, as much of it as this connector needs.
- *
- * The vault is not a folder this sandbox can see: it lives in the Obsidian window on the owner's own machine,
- * and the community "Local REST API" plugin is the only door into it that works while the app is open and
- * whatever the owner syncs with is running. So every read and write here is one HTTP call to that plugin,
- * bearer-authenticated with the key it shows in its settings.
- *
- * TWO THINGS ABOUT THE TRANSPORT that are not incidental:
- *
- * 1. THE HOST IS `host.docker.internal`, not localhost. This sandbox is a container; the vault is on the
- *    machine hosting it. The card's default says so, because "localhost" is the answer everybody tries first
- *    and it fails with a connection refused that names nothing.
- * 2. THE CERTIFICATE IS SELF-SIGNED, always. The plugin mints its own CA on first run and serves https on
- *    27124 with it, so certificate verification cannot succeed unless the owner installs that CA, which is a
- *    step nobody takes to reach their own laptop. Verification is therefore switched off for https, and only
- *    for the https case, in a process whose entire life is talking to that one address. Said out loud here
- *    rather than buried, because "TLS off" deserves to be a sentence somebody can disagree with.
- *
- * The note bodies cross as PLAIN MARKDOWN (the plugin can return parsed JSON instead; it is not asked to), so
- * the knowledge base's own parser is what reads a vault note, one reader, one link resolver, one idea of what
- * a note says, whether the file sits in the workspace or in the owner's vault. */
+// Talks to the Obsidian Local REST API plugin over HTTP, bearer-authenticated, at host.docker.internal (the vault lives
+// outside this sandbox). The plugin's certificate is self-signed, so TLS verification is off for it. Note bodies come
+// back as plain markdown, not the plugin's parsed JSON.
 
 import { errorMessage } from "@intentic/base/errors";
 import type { VaultConnection } from "./connection.js";
 
-// One failed call, in the terms the caller has to print. `status` is undefined when the request never landed.
+// One failed call, in terms the caller can print; `status` is undefined when the request never landed.
 export interface VaultError {
     readonly error: string;
     readonly status?: number | undefined;
@@ -32,17 +14,15 @@ export interface VaultError {
 export const isVaultError = <T>(value: T | VaultError): value is VaultError =>
     typeof value === "object" && value !== null && "error" in (value as Record<string, unknown>);
 
-/* Certificate verification, off for https and nothing else. Node reads this at connection time and offers no
- * per-request override without reaching for undici internals the self-contained CLI bundle cannot import, so
- * it is a process-level switch, flipped once, by a process that dials one host. */
+// Disables TLS verification for https only; process-level, not per-request: Node has no finer-grained switch.
 export const relaxTlsFor = (url: string, env: Record<string, string | undefined>): void => {
     if (url.toLowerCase().startsWith("https://")) {
         env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
     }
 };
 
-// Each path segment encoded, the slashes left alone, a note called "Q&A/2026.md" is a real path with a real
-// separator, and encodeURIComponent over the whole thing would turn it into one filename with a slash in it.
+// Encodes each path segment, leaving `/` separators alone; encodeURIComponent over the whole path would escape them
+// too.
 export const encodeVaultPath = (path: string): string =>
     path
         .split("/")
@@ -76,12 +56,8 @@ const describe = (status: number, path: string): string => {
     }
 };
 
-/* Every call goes through here, so the four things that are true of all of them, the bearer header, the
- * self-signed certificate, an unreachable Obsidian, a non-2xx answer, are handled once and phrased once.
- *
- * A DEAD CONNECTION IS THE COMMON FAILURE, not a rare one: the owner closed Obsidian, or never turned the
- * plugin on. That is the message worth spending words on, because it is the one the reader can act on and the
- * one a raw fetch error ("fetch failed") describes worst. */
+// Single choke point for the bearer header, TLS, an unreachable Obsidian, and a non-2xx response; a closed Obsidian is
+// treated as the common failure, not a rare one.
 export const vaultCall = async (vault: VaultConnection, call: Call): Promise<string | VaultError> => {
     if (vault.problem !== undefined) {
         return { error: vault.problem };
@@ -124,16 +100,15 @@ const json = async <T>(vault: VaultConnection, call: Call): Promise<T | VaultErr
     }
 };
 
-// ---- the calls ---------------------------------------------------------------------------------------------
+// the calls
 
-// Whether the door opens at all, and what is behind it. The plugin answers this one unauthenticated too, but it
-// is sent WITH the key on purpose: "reachable" and "reachable and authorised" are different states of a card.
+// Reachability and identity of the plugin. Sent with the key even though the endpoint doesn't require one: reachable
+// and authorised are different states.
 export const vaultInfo = async (vault: VaultConnection): Promise<{ readonly service?: string; readonly authenticated?: boolean } | VaultError> =>
     await json(vault, { method: "GET", path: "/" });
 
-// One directory. Obsidian answers with names relative to it, directories carrying a trailing slash. Not
-// exported: `vaultWalk` below is the only sensible way to ask this question, since one call answers for one
-// level and a vault is a tree.
+// One directory: names relative to it, directories with a trailing slash. Not exported; `vaultWalk` is the tree-walking
+// entry point.
 const vaultList = async (vault: VaultConnection, folder: string): Promise<readonly string[] | VaultError> => {
     const encoded = encodeVaultPath(folder);
     const result = await json<{ files?: readonly string[] }>(vault, { method: "GET", path: `/vault/${encoded === "" ? "" : `${encoded}/`}` });
@@ -158,8 +133,7 @@ export const vaultDelete = async (vault: VaultConnection, file: string): Promise
     return isVaultError(result) ? result : undefined;
 };
 
-// Bring a note to the front in the owner's own window, the one verb here that is for the PERSON rather than
-// for the agent, and the reason the agent can say "look at this" instead of "open the file called…".
+// Brings a note to the front of the owner's own Obsidian window; the one verb here meant for the person, not the agent.
 export const vaultOpen = async (vault: VaultConnection, file: string): Promise<undefined | VaultError> => {
     const result = await vaultCall(vault, { method: "POST", path: `/open/${encodeVaultPath(file)}` });
     return isVaultError(result) ? result : undefined;
@@ -171,9 +145,8 @@ export interface VaultHit {
     readonly matches?: readonly { readonly context?: string }[] | undefined;
 }
 
-// The plugin's plain text search. Its richer Dataview/JsonLogic endpoint is deliberately not wired: it needs a
-// query language the agent would have to be taught, to answer questions the knowledge graph answers better
-// once the notes are pulled in.
+// Plain text search only. The Dataview/JsonLogic endpoint is not wired: the knowledge graph answers structured queries
+// once notes are pulled in.
 export const vaultSearch = async (vault: VaultConnection, query: string, contextLength: number): Promise<readonly VaultHit[] | VaultError> => {
     const result = await json<readonly VaultHit[]>(vault, {
         method: "POST",
@@ -182,9 +155,7 @@ export const vaultSearch = async (vault: VaultConnection, query: string, context
     return isVaultError(result) ? result : result;
 };
 
-/* Every markdown file in the vault, walked. The plugin lists one directory per call, so this is a breadth-first
- * walk rather than one request, and it skips the directories a vault keeps that hold no notes, the same set
- * the workspace-side reader skips, so "what is in the vault" means the same thing on both sides. */
+// Breadth-first, one level per `vaultList` call; skips directories the workspace reader also skips.
 const SKIP_DIRS = new Set([".obsidian", ".trash", ".git"]);
 
 export const vaultWalk = async (vault: VaultConnection, folder = ""): Promise<readonly string[] | VaultError> => {

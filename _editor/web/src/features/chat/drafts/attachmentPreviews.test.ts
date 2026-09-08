@@ -1,8 +1,6 @@
-// The thumbnail a restored transcript re-mints for itself, and specifically its behaviour when the first ask
-// CANNOT work: these chips render on the first frame, before the app knows the sandbox's address, so "the fetch
-// failed" is the ordinary case here rather than the exceptional one. What is pinned is which failures are worth
-// another go and which are final: the difference between a screenshot that comes back and a permanent
-// `image.png` chip.
+// Attachment thumbnail re-fetch, focused on the case where the first ask fails before the sandbox's address is
+// known. Pins which failures are worth retrying and which are final: the difference between a screenshot that
+// comes back and a permanent `image.png` chip.
 import { beforeEach, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
 
@@ -62,8 +60,7 @@ it("fetches once for a path however many bubbles ask", async () => {
     expect(blob).toHaveBeenCalledTimes(1);
 });
 
-// THE REPORTED BUG. The chips paint before there is anywhere to send the request, and the answer used to park
-// the path for good: a killed and restarted dev server showed `image.png` where the screenshot had been.
+// A chip can paint before there is an address to fetch from; that first failure must not be final.
 it("recovers the thumbnail once an address resolves after the first ask failed unreachable", async () => {
     const path = freshPath();
     blob.mockRejectedValueOnce(new Error(`Your sandbox isn't reachable yet`));
@@ -128,15 +125,8 @@ it("gives up on a chain that never lands, without a chip that polls forever", as
     expect(blob).toHaveBeenCalledTimes(6);
 });
 
-/* THE BYTES THIS WINDOW UPLOADED ARE ALREADY HERE, so nothing is asked of the daemon for them. Staging a file
- * makes an object URL to draw the composer chip with, and that same URL answers for every bubble the message
- * goes on to produce here.
- *
- * THE REPORTED BUG this closes: the URL used to be copied onto the sent message and nowhere else, so it lived
- * exactly as long as that object. A message sent MID-TURN is drawn from the run's own frame log, where an
- * attachment is a path and a name, so a screenshot the user had just pasted came back as a grey `image.png`
- * chip in their own chat, and the only way back to the picture was a round trip for bytes this page was
- * holding. Filed under the path, every redraw finds it. */
+// The bytes this window uploaded are already here, so nothing is asked of the daemon for them: staging a file
+// makes an object URL that answers for every bubble the message goes on to produce.
 it("answers from the composer's own object URL, without asking the daemon at all", () => {
     const path = freshPath();
     rememberPreview(path, `blob:just-pasted`);
@@ -145,8 +135,7 @@ it("answers from the composer's own object URL, without asking the daemon at all
     expect(blob).not.toHaveBeenCalled();
 });
 
-// …and the staged file taken back off the composer takes its URL with it: that URL is revoked on removal, so
-// leaving it here would hand later bubbles a thumb pointing at nothing.
+// A staged file's URL is revoked on removal; the cache must drop it too or hand out a dead thumb.
 it("drops a staged file's URL when the chip is removed", async () => {
     const path = freshPath();
     rememberPreview(path, `blob:staged`);

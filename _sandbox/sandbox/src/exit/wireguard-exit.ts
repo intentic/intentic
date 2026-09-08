@@ -8,49 +8,30 @@ import { exitInterface, exitProxyPort, exitStateDir, wgConfPath } from "./exit-p
 import { readSelection, writeSelection } from "./exit-state.js";
 import { dropProxy, ensureProxy, proxyBound, tunnelAddress, tunnelResolver } from "./exit-tunnel.js";
 
-/* BRING YOUR OWN EXITS: one or more WireGuard .conf files, pasted together, treated as a pool.
- *
- * This is the arm that makes the feature complete rather than free-only. Proton VPN's free tier hands out
- * .conf files for its five free countries; Mullvad hands out fifty; a self-hosted box hands out one. All three
- * arrive here as text and become the same thing: a list of exits with countries attached, switched under a
- * proxy port that never moves.
- *
- * It is also the only arm with no catalog to fetch, which makes AUTO-LABELLING the whole job. Nobody wants to
- * annotate five pasted files by hand, so the country is read out of what providers already write into them:
- * Proton labels its peers `# NL-FREE#1`, Mullvad and Proton both name their endpoint hosts `de-...`, and an
- * explicit `# country: DE` line always wins. Anything still unlabelled is resolved by dialling it once and
- * asking the internet, then remembered.
- *
- * TWO LINES ARE STRIPPED FROM EVERY PASTED CONF, and both matter:
- *   `DNS  =` , wg-quick applies it by REWRITING /etc/resolv.conf for the whole container. An exit is supposed
- *              to be inert until something opts in; silently repointing every name lookup in the sandbox at a
- *              VPN provider's resolver is the opposite of that.
- *   `Table =` , replaced with `Table = off` so wg-quick installs no routes at all. Without it, AllowedIPs of
- *              0.0.0.0/0 becomes a default route in the MAIN table and the sandbox loses its own uplink.
- */
+// One or more pasted WireGuard .conf files treated as a pool; Proton, Mullvad or a self-hosted box all arrive as text
+// and switch under one fixed proxy port.
+// The only arm with no catalog to fetch, so auto-labelling is the whole job: peer label, hostname, or an explicit `#
+// country: DE` line, else resolved by dialling once.
+// Every pasted conf is stripped of DNS (would rewrite the whole container's resolver) and Table (replaced with `off`,
+// or a pushed default route hijacks the main table).
 
 const config = (raw: ExitConfig): WireguardExitConfig => raw as WireguardExitConfig;
 
 export interface WireguardProfile {
-    // What to call it in a picker and in `geo list`. The provider's own peer label when there is one.
+    // What to call it in a picker and `geo list`; the provider's own peer label when there is one.
     readonly name: string;
     readonly country?: string | undefined;
     readonly endpoint?: string | undefined;
     readonly conf: string;
 }
 
-/* Country, in the order a label is most likely to be right, and each rule kept DELIBERATELY NARROW, because a
- * wrong label is worse than no label: an unlabelled conf is simply eligible for any country and gets resolved
- * by dialling it, while a mislabelled one produces a confusing "asked for MY, came out in DE" failure.
- *
- *   1. an explicit `# country: DE`, which a user can always add and which nothing else may override;
- *   2. an UPPERCASE country code opening a comment, which is exactly Proton's `# NL-FREE#1`. Uppercase is the
- *      whole guard here: without it `# my-server-1` reads as Malaysia and `# in-progress` as India;
- *   3. a relay-style endpoint hostname, `de-ber-wg-001.relays.mullvad.net`. At least three dash-separated
- *      parts before the first dot, or `my-vpn.example.com` becomes Malaysia by the same accident.
- *
- * A guess from the endpoint's IP address is not attempted at all: dialling it and observing the answer is both
- * cheaper to get right and already implemented. */
+// Country, in order of how likely a label is right; each rule kept narrow, since a wrong label is worse than none.
+//   1. an explicit `# country: DE` line, which always wins.
+//   2. an uppercase country code opening a comment (Proton's `# NL-FREE#1`); the case is the guard, or `# my-server-1`
+//      reads as Malaysia.
+//   3. a relay-style endpoint hostname with 3+ dash-separated parts before the first dot, or `my-vpn.example.com` reads
+//      as Malaysia too.
+// No guess from the endpoint's IP: dialling and observing is cheaper to get right and already implemented.
 const ISO_PREFIX = /^([A-Za-z]{2})[-_# ]/;
 
 export const countryOfConf = (conf: string): string | undefined => {
@@ -74,9 +55,8 @@ export const countryOfConf = (conf: string): string | undefined => {
     return fromHost !== undefined && isCountryCode(fromHost) ? fromHost.toUpperCase() : undefined;
 };
 
-/* Split the pasted blob into individual configs. `[Interface]` starts each one, which is true of every
- * WireGuard config there is (wg-quick requires it), so the split needs no separator convention of its own and
- * a user can paste files back to back with no editing at all. */
+// Splits on `[Interface]`, which every WireGuard config has (wg-quick requires it), so pasting files back to back needs
+// no separator of its own.
 export const parseWireguardConfigs = (blob: string): WireguardProfile[] => {
     const chunks = blob
         .split(/^(?=\s*\[Interface\])/im)
@@ -96,7 +76,7 @@ export const parseWireguardConfigs = (blob: string): WireguardProfile[] => {
     return profiles;
 };
 
-// The pasted conf, made safe to bring up: no pushed DNS, no routes. See the header for why both matter.
+// Strips pushed DNS and routes so bringing up an arbitrary pasted conf can't rewrite the resolver or main table.
 export const neutralisedConf = (conf: string): string => {
     const lines = conf
         .split("\n")
@@ -110,9 +90,8 @@ export const neutralisedConf = (conf: string): string => {
 
 const profiles = (raw: ExitConfig): WireguardProfile[] => parseWireguardConfigs(config(raw).config);
 
-// Which conf to bring up: the first in the wanted country that isn't the one already up. An unlabelled conf is
-// eligible for any country, because the whole reason it is unlabelled is that nobody knows where it comes out
-// yet and dialling it is how that gets answered.
+// The first conf in the wanted country not already up; an unlabelled conf is eligible for any country, since dialling
+// it is how its country gets learned.
 const pick = (all: readonly WireguardProfile[], country: string | undefined, avoid: string | undefined): WireguardProfile | undefined => {
     const eligible = all.filter((profile) => country === undefined || profile.country === country.toUpperCase() || profile.country === undefined);
     return eligible.find((profile) => profile.name !== avoid) ?? eligible[0];
@@ -130,9 +109,8 @@ async function* bring(id: string, profile: WireguardProfile): AsyncGenerator<Int
 }
 
 export const wireguardExitDriver: ExitDriver = {
-    // The catalog IS the pasted confs; there is nothing to fetch, so it is always live. Unlabelled confs are
-    // counted under a separate bucket rather than dropped, so a user can see that four of their five pasted
-    // files were recognised and one was not.
+    // The catalog is the pasted confs themselves, always live. Unlabelled ones count separately rather than get
+    // dropped, so a user can see which pasted files weren't recognised.
     catalog: async (_id, raw) => {
         const counts = new Map<string, number>();
         for (const profile of profiles(raw)) {

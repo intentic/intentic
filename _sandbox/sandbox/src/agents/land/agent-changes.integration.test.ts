@@ -14,14 +14,8 @@ import { agentRepoReview, presentInMain } from "./agent-changes.js";
 import { landAgent } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../worktrees/worktrees.js";
 
-/* WHAT THE REVIEW SHOWS AFTER THE USER HAS DEALT WITH A LANDING, against real git, because every case here is
- * one that NO SHA RECORDS. A land leaves its delta in the main tree uncommitted; accepting it moves main's
- * HEAD and nothing else, discarding it moves nothing at all, and the agent's branch is untouched by either.
- * Stub any of it and the test proves only that the stub agrees with itself.
- *
- * This is the reported bug in test form: land, then accept some and discard some, and the review kept showing
- * every file as though nothing had happened. Its anchor was the merge-base, which a commit on main does not
- * move, and its `landed` flag came from `landedTip`, which a discard does not move either. */
+// Reviews land state against real git: accept moves main's HEAD, discard moves nothing, and the agent branch is
+// untouched by either, so no stub can stand in for these states.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -62,7 +56,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-// The review's own two steps, in one call: the rows, and how each of them stands against the main tree.
+// Runs both review steps together: the rows, and how each stands against the main tree.
 const review = async (
     worktrees: AgentWorktrees,
     entry: ReturnType<typeof isolatedAgent>,
@@ -84,8 +78,7 @@ const review = async (
 test("landed and left uncommitted: every row stays, and every row says the workspace has it", async () => {
     const { worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
-    // An untracked add beside a tracked edit: the new file is the case `git diff` cannot see at all, since it
-    // walks the commit and the index and a landed-but-uncommitted file is in neither.
+    // An untracked add beside a tracked edit: `git diff` cannot see it, since it is in neither commit nor index.
     await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
@@ -105,8 +98,6 @@ test("accepting the landed work retires its rows: they are the user's history no
     await commit(work, "take it");
 
     const state = await review(worktrees, isolatedAgent(landed.repos));
-    // The whole of the old bug: main's HEAD moved, the merge-base did not, so both rows survived here as
-    // "changed" against a fork point from before the land, and both claimed to be landed.
     expect(state.rows).toEqual([]);
     expect(state.absorbed).toEqual(["added.ts", "app.ts"]);
 });
@@ -121,8 +112,6 @@ test("discarding the landed work puts its rows back as outstanding, which no sha
 
     const state = await review(worktrees, isolatedAgent(landed.repos));
     expect(state.rows).toEqual(["added.ts", "app.ts"]);
-    // Not in the workspace any more, which is what puts them back under "Land now". The old reading answered
-    // from `landedTip`, which the discard left exactly where it was, so both rows kept saying "landed".
     expect(state.landed).toEqual([]);
     expect(state.absorbed).toEqual([]);
 });
@@ -148,8 +137,7 @@ test("a landed file the agent has since rewritten is outstanding again, name in 
     await writeFile(join(conversation.cwd, "added.ts"), "first draft\n");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    // Turn two rewrites the same new file and does NOT land. A file of that name is sitting untracked in the
-    // main tree, so presence by NAME would call this landed; it is the content that answers.
+    // Turn two rewrites but does not land; presence must go by content, not name, since main has a same-named file.
     await writeFile(join(conversation.cwd, "added.ts"), "second draft\n");
     const entry = isolatedAgent(landed.repos);
     await sh(conversation.cwd, "add", "-A");
@@ -166,7 +154,7 @@ test("work the agent has not committed yet is never read as landed, whatever the
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    // Mid-turn: on disk in the agent's checkout and in no commit, so the branch tip speaks for none of it.
+    // Uncommitted in the agent checkout; the branch tip reflects none of it.
     await writeFile(join(conversation.cwd, "app.ts"), edited(4));
     await writeFile(join(conversation.cwd, "draft.ts"), "half a thought\n");
 
@@ -182,9 +170,7 @@ test("a branch git cannot read hides nothing: every row stays, and none of them 
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
     const entry = isolatedAgent(landed.repos);
 
-    // A pruned branch, a rewritten history, a main checkout that has gone: the probe's reads throw, and the
-    // one thing it must not do then is answer as though it had looked. Rows shown, none flagged: a "Land now"
-    // over content already there is a no-op, work the user cannot see is missing is not.
+    // An unreadable branch must answer as though it never looked: nothing landed, nothing absorbed.
     const present = await presentInMain(worktrees, { ...entry, branch: "agent/does-not-exist" }, entry.repos[0]!, ["app.ts"]);
     expect([...present.absorbed]).toEqual([]);
     expect([...present.inWorkspace]).toEqual([]);
@@ -197,8 +183,7 @@ test("a rebase after the accept leaves the answer where it was: nothing outstand
 
     await sh(work, "add", "-A");
     await commit(work, "take it");
-    // The pre-turn sync (agents/sync.ts) moves the branch onto the main line it was just merged into. The
-    // review must not change its mind about a single file because of it.
+    // Simulates the pre-turn sync's rebase onto main; the review must not change for any file because of it.
     const head = await sh(work, "rev-parse", "HEAD");
     await sh(conversation.cwd, "rebase", "--onto", head, landed.repos[0]?.landedTip ?? "HEAD").catch(() => sh(conversation.cwd, "rebase", "--abort"));
 

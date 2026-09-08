@@ -1,11 +1,7 @@
-<!-- The orientation strip at the top of a document: a handful of counts a reader wants before any prose.
-
-     NOT A CHART, deliberately. These are unrelated measures: packages, lines, test coverage, and drawing
-     unrelated measures as one chart is the dual-axis mistake. When the form is a number, the form is a number.
-
-     No colour encoding: nothing here is a series, so everything wears text tokens. The values use the font's
-     default PROPORTIONAL figures rather than tabular-nums: these are standalone display numbers, not a column
-     that has to align, and tabular digits make a value like "121" read loose at this size. -->
+<!--
+    The orientation strip atop a document: a handful of unrelated counts, deliberately not a chart, since unrelated measures share no axis. Values
+    use proportional, not tabular, figures.
+-->
 <script setup lang="ts">
 import type { StatsFigureItem } from "../../markdown/figures.js";
 

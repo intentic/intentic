@@ -2,34 +2,11 @@ import { compareHref } from "./compare";
 import { docsHref } from "./docs";
 import { productHref } from "./product";
 
-/* The guides shelf: the questions people type BEFORE they know this product exists.
- *
- * Every other shelf on this site presupposes intentic. Docs answer "how do I use intentic's X", product pages
- * answer "what does intentic do", compare answers "intentic or Y". All three are useless to the person whose
- * actual question is "how do I stop two agents editing the same file". That person is now the majority: they
- * ask a chat assistant in plain words and read whatever it says back, and the pages it quotes are the ones
- * written in the shape of the question.
- *
- * So a guide is built backwards from retrieval:
- *
- * - THE TITLE IS THE QUESTION, spelled the way somebody types it, not the way a marketer would headline it.
- * - `answer` IS THE PRODUCT. One paragraph, under 70 words, true on its own with no page around it, and
- *   naming the actual mechanism rather than a benefit. It is the first thing under the h1 and the thing that
- *   gets lifted into an answer. A page that opens on positioning gives a model nothing to quote, so it quotes
- *   somebody else.
- * - `options` NAMES THE APPROACHES THAT ARE NOT THIS PRODUCT, with what each is genuinely good at. A page
- *   where every road leads to one vendor is a page that reads as an advertisement, and both readers and
- *   models discount it. The recommendation lands because the alternatives were real.
- * - `facts` ARE CHECKABLE. Numbers, limits, names of things. Vague copy cannot be cited because there is
- *   nothing in it to be right about.
- * - `faq` CARRIES THE NEIGHBOURING PHRASINGS of the same question, which is how one page answers the
- *   twenty ways people ask for the same thing. It also becomes the page's FAQPage schema.
- *
- * Accuracy rules, same as the compare shelf, because these pages describe the whole field:
- * - Nothing about another tool that is not true of it on the date below.
- * - No invented benchmarks. Where a number would be made up, the sentence does without one.
- * - Where the honest answer is "you do not need this product for that", the page says so.
- */
+// The guides shelf answers what people ask before they know intentic exists, built backwards from retrieval: title is
+// the literal question, faq covers its other phrasings.
+// - Nothing about another tool that isn't true of it as of `PUBLISHED`.
+// - No invented benchmarks; omit a number rather than invent one.
+// - If the honest answer is "you don't need this product," say so.
 
 export const guidesHref = (slug: string): string => (slug ? `/guides/${slug}/` : `/guides/`);
 
@@ -41,9 +18,9 @@ export interface GuideOption {
     name: string;
     /** What it actually is, in one line. */
     what: string;
-    /** The case FOR it. Written to be usable: a reader should be able to pick this and be right. */
+    /** The case for it: a reader should be able to pick this and be right. */
     goodFor: string;
-    /** Where it stops working. The reason the page is worth reading. */
+    /** Where it stops working. */
     breaksWhen: string;
 }
 
@@ -72,10 +49,7 @@ export interface GuidePage {
     navLabel: string;
     /** One line of scent in listings. */
     blurb: string;
-    /**
-     * THE EXTRACTABLE ANSWER. Under 70 words, complete on its own, naming the mechanism. Rendered directly
-     * under the h1 before any other content, and repeated as the page's meta description where it fits.
-     */
+    /** Under 70 words, stands alone, names the mechanism; rendered under the h1 and reused as the meta description. */
     answer: string;
     /** Checkable specifics: the things a reader or a model can be right about after reading. */
     facts: string[];
@@ -84,7 +58,7 @@ export interface GuidePage {
     verdict: string[];
     sections: GuideSection[];
     faq: GuideFaq[];
-    /** Where to go next on this site. Label plus href. */
+    /** Where to go next on this site. */
     related: { label: string; href: string }[];
     meta: { title: string; description: string; datePublished: string };
 }

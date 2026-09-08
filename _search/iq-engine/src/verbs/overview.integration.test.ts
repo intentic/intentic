@@ -29,23 +29,21 @@ test("map: files ranked by import graph, each showing its exported signatures at
     const outcome = await engine.run(request({ verb: "map", query: "" }));
     expect(outcome.exitCode).toBe(0);
 
-    // registry.ts and WidgetList.vue both `import … from "../__fixtures__/workspace/alpha/src/widget.js"`: a specifier naming a file that does
-    // not exist, since the real neighbour is widget.ts. Ranking widget.ts above registry.ts (which nothing
-    // imports) therefore also proves the TypeScript .js→.ts resolution works.
+    // registry.ts and WidgetList.vue both import a nonexistent "widget.js"; ranking widget.ts above registry.ts also
+    // proves .js→.ts resolution.
     const paths = outcome.result.groups.map((group) => group.path);
     expect(paths).toContain("alpha/src/widget.ts");
     expect(paths.indexOf("alpha/src/widget.ts")).toBeLessThan(paths.indexOf("alpha/src/registry.ts"));
 
     const widget = outcome.result.groups.find((group) => group.path === "alpha/src/widget.ts")!;
     expect(widget.hits.map((hit) => hit.text)).toEqual(expect.arrayContaining([expect.stringContaining("createWidget")]));
-    // Every line stays a usable anchor: the signature sits on the line the symbol is actually declared.
     const def = widget.hits.find((hit) => hit.text.includes("createWidget"))!;
     expect(def.line).toBe(6);
 });
 
 test("map: a component's script-setup locals never become definitions", async () => {
     const outcome = await engine.run(request({ verb: "map", query: "" }));
-    // WidgetList.vue exports nothing: its `widgets`/`labelOf` are locals, so it contributes no map entry.
+    // WidgetList.vue's `widgets`/`labelOf` are script-setup locals, not exports.
     expect(outcome.result.groups.map((group) => group.path)).not.toContain("alpha/src/WidgetList.vue");
 });
 
@@ -56,7 +54,6 @@ test("map: generated files are excluded: their re-exports are not definitions", 
     );
     const outcome = await engine.run(request({ verb: "map", query: "" }));
     expect(outcome.result.groups.map((group) => group.path)).not.toContain("alpha/src/shim.ts");
-    // The real definition site is untouched by the shim's arrival.
     expect(outcome.result.groups.map((group) => group.path)).toContain("alpha/src/widget.ts");
 });
 
@@ -66,12 +63,11 @@ test("hotspots: ranks by commits × complexity, and never lists uncommitted or b
     expect(outcome.text).toMatch(/alpha\/src\/\S+\s+1 commit\s+\+\d+ -\d+\s+cx \d+\s+score \d+/);
 
     const paths = outcome.result.groups.map((group) => group.path);
-    // WidgetList.vue is the only fixture file with branch points, and they live in its <script> block, so this
-    // also proves .vue complexity is counted rather than skipped for want of a Vue grammar.
+    // WidgetList.vue is the only fixture with branch points, in its <script> block; proves .vue complexity is counted.
     expect(paths).toContain("alpha/src/WidgetList.vue");
-    // beta/ has no git repo: no commits, so no churn, so it cannot be a hotspot.
+    // beta/ has no git repo, so no commits and no churn: it cannot be a hotspot.
     expect(paths.every((path) => path.startsWith("alpha/"))).toBe(true);
-    // registry.ts is committed but branch-free; notes.md is markup, where keyword scans read content, not code.
+    // registry.ts is committed but branch-free; notes.md is markup, not code.
     expect(paths).not.toContain("alpha/src/registry.ts");
     expect(paths).not.toContain("notes.md");
 });

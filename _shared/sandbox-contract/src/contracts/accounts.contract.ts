@@ -14,23 +14,9 @@ import {
 } from "../schemas/provider-oauth.js";
 import { OkSchema } from "../schemas/shared.js";
 
-/* THE ACCOUNTS THIS SANDBOX HOLDS ITSELF, one route family with the provider as a PARAMETER.
- *
- * Four families used to serve this (Claude's, Cursor's, Grok's, and one for every provider whose sign-in mints
- * its own key), each "the previous one's shape" with a verb renamed: `oauth/start` here, `login/start` there,
- * an `exchange` for the flow whose proof travelled and a `complete` for the one whose proof did not. The
- * lesson providers.contract.ts learned about model catalogs holds for accounts too: the operations are the
- * same six for all of them, so the id is a parameter and a provider's own mechanism is its module's to declare
- * (the daemon's ProviderModule.accounts), not a vertical slice through the contract, the router and every test
- * double.
- *
- * WHY NOT THE TRANSLATOR ROUTES. Those address subscriptions CLIProxyAPI holds and re-serves behind an Anthropic
- * endpoint; these credentials live in this daemon's own auth tree (or, for Grok, in OpenCode's), and a
- * disconnect here removes a file rather than asking a proxy to forget one. A provider served both ways (Grok)
- * has a row in each.
- *
- * Nothing redeemable is on any answer here: `accounts` is an OauthAccount list, whose shape has no field a
- * credential could ride in, and a sign-in's proof never leaves the sandbox (provider-oauth.ts, LoginStart). */
+// One route family for the accounts this sandbox holds itself, with the provider as a parameter rather than a vertical
+// slice per provider. Distinct from the translator routes (subscriptions proxied through CLIProxyAPI): these
+// credentials live in this daemon's own auth tree, and no credential ever rides in an answer.
 export const accountsContract = {
     start: oc
         .route({
@@ -61,8 +47,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginCancelSchema.shape))
         .output(OkSchema),
-    // Each account carries its plan-limit reading where the provider publishes one. `force` re-measures before
-    // answering (AccountListQuerySchema); a provider with nothing to measure accepts it and answers at once.
+    // `force` re-measures before answering; a provider with nothing to measure accepts it and answers at once.
     accounts: oc
         .route({
             method: "GET",

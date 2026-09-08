@@ -2,18 +2,10 @@ import { oc } from "@orpc/contract";
 import { ChoreLedgerWriteSchema, ChoreProbeRequestSchema, ChoresReportSchema } from "../schemas/maintenance.js";
 import { OkSchema } from "../schemas/shared.js";
 
-/* Maintenance evidence: what every repo under /work currently measures, and what has already been done about it.
- * Three routes, because there are exactly three things the surface does, read the evidence, ask for a
- * measurement to be retaken, and record what a turn concluded.
- *
- * There is no `GET /chores/{id}` and no "run this chore" route on purpose. A chore RUN is an ordinary isolated
- * fleet agent (`POST /agent` with a derived conversation id), the same as an acceptance run or a documentation
- * generation, so the worktree, the live status, the cost, the transcript and the /agents/<id> page already
- * exist, and adding a bespoke launcher here would be a second way to start a turn that has to be kept in step
- * with the first. */
+// Maintenance evidence across `list`/`probe`/`record`. No route runs a chore: a chore run is an ordinary isolated fleet
+// agent (`POST /agent`), reusing its worktree, status, cost and transcript rather than duplicating a launcher here.
 export const choresContract = {
-    // Every repo's standing evidence in one read: cached probe results (with their age and state), the cheap
-    // resident signals, the ledger, and the daemon's node version. The rail badge polls this; so does the panel.
+    // Polled by both the rail badge and the panel.
     list: oc
         .route({
             method: "GET",
@@ -23,8 +15,6 @@ export const choresContract = {
                 "Every repo's standing evidence in one read: what the last measurement found and how old it is, the cheap signals that are always current, and what has already been decided about each.",
         })
         .output(ChoresReportSchema),
-    // Re-run one repo's probe now, ignoring its TTL, the panel's per-probe refresh. An ack: the runner works in
-    // the background and the result arrives on the next `list`, because a jscpd sweep outlives any sane request.
     probe: oc
         .route({
             method: "POST",
@@ -35,8 +25,7 @@ export const choresContract = {
         })
         .input(ChoreProbeRequestSchema)
         .output(OkSchema),
-    // Record what a chore turn concluded, or snooze one. Upsert by repo+chore: a chore has one current verdict,
-    // and a growing history of "we looked at this and it was fine" is not something any reader wants paged.
+    // Also how a snooze is recorded, upserted the same way as a verdict.
     record: oc
         .route({
             method: "POST",

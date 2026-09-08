@@ -18,45 +18,20 @@ import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { sizeLabel } from "@intentic/base/format";
 
-/* A BUNDLE ARRIVING: this sandbox's own export format, taken in as a plan the owner ticks rather than as a
- * write that happens on file pick.
- *
- * THE CHANGE THIS FILE IS. Restoring used to be the one inbound door with no preview: pick a file and the
- * bytes went down, then a report explained what had already happened. It was also the most destructive of the
- * doors — a definition and a foreign setup land BESIDE what a sandbox has, a bundle lands OVER it — so the
- * arrival that most needed a checklist was the only one without one. It has one now, and the cost is a spool.
- *
- * WHY A SPOOL AND NOT MEMORY. The other sources are small: a definition is a document, a foreign home
- * directory is bounded and held in RAM precisely because it is a credential store. A bundle is a whole
- * workspace and can be tens of gigabytes, so the only way to read it twice — once to say what is in it, once
- * to write what was ticked — is to put it down. It lands on /history (never /work: see the `arrivals/` entry
- * in history-state.ts), mode 0600, and is deleted on apply, on abandon, and by the boot sweep for whatever a
- * crash left behind.
- *
- * ONE PASS PRODUCES BOTH. The upload is piped to the spool file and, simultaneously, through gunzip into a tar
- * walk that decides every entry and counts it. So the plan costs one download, one decompression and one
- * write, and by the time the owner sees the checklist the file is already on disk in full.
- *
- * EVERY DECISION IS RE-DERIVED, TWICE. The bundle is a file the owner can hand around, so what it says about
- * itself is never trusted: an entry is written because THIS daemon's manifests class its path as carryable,
- * not because some exporter packed it. The index pass and the write pass ask `classify.ts` the same questions
- * in the same order, which is what makes the counts the owner ticked describe the bytes that land.
- */
+// Bundle arrival: this sandbox's own export format, taken in as a preview-first plan instead of the old write-on-pick
+// restore. Spooled to /history, never memory, since a bundle can be tens of gigabytes; one pass writes the spool and
+// indexes it together. Every entry is re-derived from classify.ts, never trusted from what the bundle claims.
 
 export class BundleFormatError extends ArrivalFormatError {}
 
-// Where a bundle waits while its owner reads the plan. Beside `exports/`, which is the same volume for the
-// same reasons, and never under /work.
+// Beside `exports/`, same volume for the same reasons; never under /work.
 export const arrivalsDir = (historyRoot: string): string => join(historyRoot, "arrivals");
 
-/* WHAT THE OWNER TICKS. Three kinds of row, and the middle one is the whole reason a bundle plan is worth
- * having: a repository is a unit somebody actually wants to decline ("bring the sandbox, leave the six-gigabyte
- * monorepo"), and it is only nameable because a v3 manifest lists what it carries.
- *
- * `bundle:files`   /work, minus the repositories, plus the workspace repo's own git dir
- * `repo:<id>`      one repository: its working tree AND its real git dir, which have to move together
- * `bundle:history` transcripts, checkpoint timelines, ledgers — what no definition can ever reference
- */
+// Three rows the owner ticks; the repo row is why a bundle plan is worth having, since a repository is a unit somebody
+// may decline.
+// - bundle:files: /work minus its repositories, plus the workspace repo's own git dir
+// - repo:<id>: one repository's working tree and its real git dir, which move together
+// - bundle:history: transcripts, checkpoints, ledgers — nothing a definition can reference
 const FILES_ITEM = "bundle:files";
 const HISTORY_ITEM = "bundle:history";
 const repoItem = (id: string): string => `repo:${id}`;
@@ -67,17 +42,12 @@ interface Placed {
     readonly relPath: string;
 }
 
-/* Which row an entry belongs to, and where it would land. Returns undefined for an entry that is not part of
- * this format at all — a foreign tar, or a bundle whose layout moved — which the caller refuses by name.
- *
- * "root" is deliberately NOT a repository row. `/work` is a git repo of its own (the daemon's root scope) and
- * its git dir on `history/gits/root` is as much a part of the workspace as the files it tracks; offering it as
- * a separate tick would let an owner take the tree without the history that makes it a repo. */
+// Maps an entry to its row and destination; undefined means it's not part of this format (caller refuses it by name).
+// `root` isn't its own repo row: /work's git dir is as much part of the workspace as its files.
 const place = (name: string, repos: ReadonlySet<string>): Placed | undefined => {
     if (name.startsWith("workspace/")) {
         const relPath = name.slice("workspace/".length);
-        // Longest match wins, so a nested id ("clients/foo") claims its own files rather than losing them to
-        // a shorter id that happens to be its prefix.
+        // Longest match wins, so a nested id ("clients/foo") claims its own files over a shorter prefix id.
         const owner = [...repos]
             .filter((id) => relPath === id || relPath.startsWith(`${id}/`))
             .toSorted((left, right) => right.length - left.length)[0];
@@ -100,14 +70,12 @@ const place = (name: string, repos: ReadonlySet<string>): Placed | undefined => 
     if (id === "root") {
         return { item: FILES_ITEM, root: "history", relPath };
     }
-    // A git dir for a repository the manifest does not declare is exactly the tamper case this format's
-    // re-derivation exists to catch: it would land a repo the plan never offered.
+    // A git dir for an undeclared repository is exactly the tamper case re-derivation exists to catch.
     return repos.has(id) ? { item: repoItem(id), root: "history", relPath } : undefined;
 };
 
-// Whether this daemon would write the entry at all, at its most permissive: the index describes what the
-// bundle OFFERS, and the owner's credential choice narrows it at apply. Directory entries are judged by the
-// descent rule, an empty `.intentic/records/sessions/…` is a legitimate carried directory under a credential root.
+// Whether this daemon would write the entry at all, at its most permissive: the index describes what the bundle offers,
+// and the owner's credential choice narrows it later, at apply.
 const allowed = (placed: Placed, isDirectory: boolean, secrets: boolean): boolean => {
     const relPath = isDirectory ? placed.relPath.replace(/\/$/, "") : placed.relPath;
     if (isDirectory) {
@@ -116,8 +84,7 @@ const allowed = (placed: Placed, isDirectory: boolean, secrets: boolean): boolea
     return carries(placed.root === "workspace" ? workspacePortability(relPath) : historyPortability(relPath), secrets);
 };
 
-// What one row would land, counted rather than estimated: the checklist says "4,213 files, 812 MB" because the
-// index pass already walked every entry.
+// What one row would land, counted by the index pass rather than estimated.
 interface Tally {
     files: number;
     bytes: number;
@@ -137,9 +104,8 @@ export interface HeldBundle {
 const countLabel = (tally: Tally | undefined): string =>
     tally === undefined ? "nothing" : `${tally.files.toLocaleString()} file${tally.files === 1 ? "" : "s"}, ${sizeLabel(tally.bytes)}`;
 
-/* Walk a bundle's entries, handing each one to `visit`. The shape both passes share, so the plan cannot
- * describe a different bundle than the one the apply writes: the manifest is read here, the placement and the
- * allow check happen here, and the caller only decides what to DO with an entry it is given. */
+// Walks a bundle's entries for `visit`; both passes share this shape, so the plan can never describe a different bundle
+// than the one applied — placement and the allow check happen here, not per caller.
 const walkBundle = async (
     source: Readable,
     onManifest: (manifest: BundleManifest) => void,
@@ -171,8 +137,7 @@ const walkBundle = async (
             onManifest(parsed.data);
             return;
         }
-        // The manifest is the first entry a packer writes; anything before it means this is not our format (or
-        // it was repacked), and deciding entries without it would mean deciding them blind.
+        // Manifest must be the first entry written; anything else means this isn't the format, or was repacked.
         if (manifest === undefined) {
             throw new BundleFormatError(`expected ${BUNDLE_MANIFEST_ENTRY} first: this does not look like an intentic environment bundle`);
         }
@@ -185,12 +150,8 @@ const walkBundle = async (
         await visit(placed, header, stream, refuse);
     };
 
-    /* A failure of the DECODERS is the caller's fault, not the daemon's: gunzip answers Z_DATA_ERROR for
-     * anything that is not gzip, and tar-stream throws on a truncated or malformed member. Both mean "that
-     * upload is not a bundle", which is a 400, reported as one rather than escaping as an unhandled throw the
-     * route turns into a 500 and the owner reads as "the sandbox broke". Failures of `handleEntry` propagate
-     * UNCHANGED — a full disk, a permission error or the size cap (UploadTooLargeError → 413) is the sandbox's
-     * own problem, and blaming the bundle for it sends the owner to the wrong file. */
+    // Decoder failures mean the upload isn't a bundle: a 400, not an unhandled 500. `handleEntry` failures propagate
+    // unchanged, since a full disk or the size cap is this sandbox's problem, not the bundle's.
     await extractAll(
         source,
         ex,
@@ -204,24 +165,18 @@ const walkBundle = async (
     refusedOut.set(source, refused);
 };
 
-// The refused list is the walk's, not the caller's, and a WeakMap keyed on the source keeps it off the
-// signature of a function whose two callers want it at different moments.
+// The walk's refusals, kept off the signature via a WeakMap since callers read it at different moments.
 const refusedOut = new WeakMap<Readable, string[]>();
 
-/* Put the upload down and learn what is in it, in one pass over the network stream.
- *
- * The tee is what makes it one pass: `source.pipe()` to two destinations feeds the spool file and the tar walk
- * from the same bytes, with backpressure the slower of the two. A first cut spooled first and indexed after,
- * which read the whole bundle off disk a second time for nothing.
- */
+// Spools the upload and indexes it in one pass: `pipe()` to both the spool file and the tar walk shares one read of the
+// network stream, instead of indexing then re-reading the whole bundle off disk.
 export const spoolBundle = async (body: ReadableStream<Uint8Array>, historyRoot: string, limit: number): Promise<HeldBundle> => {
     await mkdir(arrivalsDir(historyRoot), { recursive: true });
     const spool = join(arrivalsDir(historyRoot), `${randomUUID()}.tar.gz`);
 
     const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>);
     const gunzip = createGunzip();
-    // Mode 0600 like every other credential-bearing file the daemon writes: a bundle exported WITH secrets is
-    // exactly that, and it sits here for as long as the owner takes to read a checklist.
+    // Mode 0600 like every credential-bearing file this daemon writes; a bundle with secrets is exactly that.
     const toDisk = createWriteStream(spool, { mode: 0o600 });
     source.pipe(gunzip);
     const written = pipeline(source, toDisk);
@@ -264,8 +219,8 @@ export const spoolBundle = async (body: ReadableStream<Uint8Array>, historyRoot:
     return { spool, index: { manifest, tallies, refused: refusedOut.get(gunzip) ?? [] } };
 };
 
-// The checklist. Rows for what the tar actually holds, in the order they land: the workspace tree first (a
-// repo unpacked before it would sit under files that were not there yet), then the repositories, then history.
+// Checklist rows in landing order: workspace tree first (a repo unpacked before it would land under files not there
+// yet), then repositories, then history.
 export const bundleItems = (index: BundleIndex): ArrivalItem[] => {
     const row = (id: string, group: ArrivalItem["group"], label: string, detail: string): ArrivalItem | undefined => {
         const tally = index.tallies.get(id);
@@ -288,9 +243,8 @@ export const bundleItems = (index: BundleIndex): ArrivalItem[] => {
     ].filter((item): item is ArrivalItem => item !== undefined);
 };
 
-/* The action list: what a bundle cannot carry, plus what the owner's export-time choice already cost. Ordered
- * by what blocks the most — the image first (until it is rebuilt the sandbox is missing every tool the overlay
- * installs), then credentials, then identity. */
+// What a bundle can't carry, plus what the export-time choice cost, ordered by what blocks the most: the image, then
+// credentials, then identity.
 export const bundleActions = (manifest: BundleManifest, includeSecrets: boolean): NeedsAction[] => {
     const actions: NeedsAction[] = [];
     if (manifest.definition.environment.dockerfile !== undefined) {
@@ -299,8 +253,7 @@ export const bundleActions = (manifest: BundleManifest, includeSecrets: boolean)
             detail: "The overlay Dockerfile travels, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows; until then this sandbox is on the stock image and none of the tools the overlay installs are present.",
         });
     }
-    // Two ways to arrive without credentials, and they are different facts: the bundle never held them, or it
-    // held them and the owner declined to take them. Both leave the same connections keyless, so both are said.
+    // Two distinct facts, same result: the bundle never held credentials, or the owner declined to take them.
     const withoutSecrets = !manifest.secrets || !includeSecrets;
     if (withoutSecrets && manifest.definition.capabilities.length > 0) {
         actions.push({
@@ -322,19 +275,8 @@ export const bundleActions = (manifest: BundleManifest, includeSecrets: boolean)
     return actions;
 };
 
-/* THE HEAL. A repo's in-tree `.git` is a POINTER FILE naming its real git dir on /history (see
- * git/repo-git-dirs.ts for the invariant that forces it), and that path is ABSOLUTE. The bundle carries both
- * halves, but the pointer it carries was written for the SOURCE sandbox's historyRoot, so on a target whose
- * HISTORY_ROOT differs, every pointer names a directory that does not exist and every git command in the
- * arrived workspace answers `fatal: not a git repository`.
- *
- * Rewriting them is the whole difference between an arrived workspace and a pile of files. It is cheap and it
- * is idempotent: the pointer is one line, and re-running on an already-correct tree writes the same line.
- *
- * The root repo is included deliberately, `/work/.git` is a pointer too, and `ensureRootRepo` heals only a
- * MISSING one. Over a dangling pointer, `git init --separate-git-dir` refuses outright (verified: exit 128,
- * "not a git repository"), so boot convergence cannot rescue this and the arrival has to.
- */
+// A repo's `.git` points at its real dir on /history by absolute path — the source sandbox's path, rewritten here for
+// the target. Includes `root`: /work/.git is a pointer too, and boot convergence can't heal a dangling one.
 const healGitPointers = async (workspaceRoot: string, historyRoot: string, landed: ReadonlySet<string>): Promise<string[]> => {
     const healed: string[] = [];
     const gitsDir = join(historyRoot, "gits");
@@ -350,10 +292,8 @@ const healGitPointers = async (workspaceRoot: string, historyRoot: string, lande
     return healed;
 };
 
-/* Write the ticked rows out of the spooled bundle. Every safety the index pass applied is applied again here,
- * from the same functions, plus the one decision the index could not make: whether the owner consented to the
- * credential VALUES this bundle carries.
- */
+// Writes the ticked rows from the spooled bundle, re-applying every safety the index pass used, plus the one thing the
+// index couldn't decide: whether the owner consented to this bundle's credential values.
 export const applyBundle = async (
     held: HeldBundle,
     roots: { readonly workspaceRoot: string; readonly historyRoot: string },
@@ -364,15 +304,13 @@ export const applyBundle = async (
     const applied: ArrivalReport["applied"] = [];
     const failed: ArrivalReport["failed"] = [];
     const refused: string[] = [...held.index.refused];
-    // Which rows actually put bytes down, so the report counts rows rather than claiming every ticked one
-    // landed, and so the heal runs for exactly the repositories that arrived.
+    // Rows that actually put bytes down, so the report counts landed rows, not ticked ones.
     const landed = new Set<string>();
     let remaining = limit;
     let withheld = 0;
 
-    // One entry to one path. Split out of the visitor because the visitor's own job is the three DECISIONS
-    // above it (ticked? consented to? inside the root?) and putting the four write shapes in the same function
-    // buried them.
+    // One entry to one path, split out of the visitor so its three decisions (ticked? consented? inside the root?)
+    // aren't buried beside the four write shapes.
     const writeEntry = async (target: string, header: Headers, stream: Readable): Promise<void> => {
         if (header.type === "directory") {
             await mkdir(target, { recursive: true });
@@ -380,8 +318,7 @@ export const applyBundle = async (
         }
         await mkdir(dirname(target), { recursive: true });
         if (header.type === "symlink") {
-            // An arrival runs onto a fresh sandbox, but the daemon's own boot has already converged some of
-            // these paths; replacing rather than failing keeps it idempotent.
+            // Boot has already converged some of these paths; replacing rather than failing keeps this idempotent.
             await rm(target, { force: true });
             await symlink(header.linkname ?? "", target);
             return;
@@ -390,8 +327,7 @@ export const applyBundle = async (
         if (header.mtime !== undefined) {
             await setWorkspaceMtime(target, header.mtime.getTime());
         }
-        // The mode is what the generic folder-drop path loses: every entry it writes gets the default, so an
-        // arrived `+x` script is no longer executable. Best-effort, a chmod failure must not fail a write.
+        // The mode a folder-drop would lose to its own default; best-effort, so a chmod failure can't fail the write.
         if (header.mode !== undefined) {
             await chmod(target, header.mode & 0o7777).catch(() => {});
         }
@@ -410,9 +346,7 @@ export const applyBundle = async (
             if (!wanted.has(placed.item)) {
                 return skip();
             }
-            /* THE SECOND CONSENT, applied where the bytes are: a credential-classed path is written only when
-             * the owner said so on the way IN. It used to be decided on the way out, at export, by whoever
-             * packed the file — which is the wrong person and the wrong moment for the sandbox receiving it. */
+            // Second consent: writes a credential path only if the owner allowed it coming in, not whoever packed it.
             if (!allowed(placed, header.type === "directory", selection.includeSecrets)) {
                 withheld += 1;
                 return skip();
@@ -432,8 +366,7 @@ export const applyBundle = async (
     );
 
     const repos = [...landed].flatMap((item) => (item.startsWith("repo:") ? [item.slice("repo:".length)] : []));
-    // The workspace repo's own pointer is healed with the workspace files, because that is the row its git dir
-    // travelled under; see `place`.
+    // Workspace repo's pointer heals with the workspace files, the row its git dir travels under (see `place`).
     const healed = await healGitPointers(roots.workspaceRoot, roots.historyRoot, new Set(landed.has(FILES_ITEM) ? [...repos, "root"] : repos));
     for (const item of bundleItems(held.index)) {
         if (!wanted.has(item.id)) {
@@ -461,12 +394,11 @@ export const applyBundle = async (
     return { applied, failed, refused, needsAction };
 };
 
-// Drop one spool. Called on apply, on abandon, and by the boot sweep — the same one-line operation each time,
-// so a crash mid-review leaves nothing a later boot cannot clear.
+// Called on apply, abandon and the boot sweep alike, so a crash mid-review leaves nothing boot can't clear.
 export const dropSpool = (spool: string): Promise<void> => rm(spool, { force: true });
 
-/* Whatever a crash left behind. A spool only ever outlives the daemon that wrote it, so on boot every file in
- * the directory is by definition abandoned: nothing holds a token across a restart, and the owner re-reads. */
+// Whatever a crash left behind: a spool never outlives its daemon, so everything in the directory on boot is abandoned
+// by definition.
 export const sweepArrivals = async (historyRoot: string): Promise<void> => {
     await rm(arrivalsDir(historyRoot), { recursive: true, force: true });
 };

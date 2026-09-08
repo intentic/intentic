@@ -1,28 +1,19 @@
 import type { TurnNote } from "@intentic/sandbox-contract";
 
-/* WHAT THIS SESSION CAN SEE, told to a model that would otherwise assume it sees everything.
- *
- * A conversation wearing a persona card that names its context stands in a tree that holds some of the
- * workspace's repositories and not others,
- * and a directory that is not there reads, to a model, exactly like a directory that never existed. Left to
- * itself it concludes the code is gone, or clones it, or asks the user why the repo was deleted. The map that
- * opens a conversation (agent/workspace-map.ts) draws the rule this note follows: what was left out is counted
- * out loud, because a list that stops silently reads as a complete list, and that is the one way a description
- * of the tree is actively misleading.
- *
- * It rides the user message like the map and for the same reason, it is computed per conversation and must not
- * sit in the byte-stable system prefix, on the opening turn and again after a compaction, the two moments
- * nothing in the session's own history can be relied on to carry it. */
+// Tells a model which repos it can and can't see: an absent directory looks identical to one that never existed, so a
+// model left to guess concludes the code is gone. Follows workspace-map.ts's rule: what's excluded is stated
+// explicitly, since a list that stops silently reads as complete. Rides the user message on the opening turn and after
+// a compaction, not the stable system prefix, since those are the only moments history can't carry it.
 
 export const CONTEXT_NOTE_HEADER = "## Context of this session";
 export const CONTEXT_NOTE_TITLE = "Context of this session";
 
 export interface ContextNoteInput {
-    // The label (or id) of the persona card the composition was read off, absent when it was set without one.
+    // Label (or id) of the persona card the composition read from; absent if set without one.
     readonly persona: string | undefined;
     // Repository ids the conversation carries, in composition order. Root is implied and not listed.
     readonly carried: readonly string[];
-    // Live repository ids the conversation does NOT carry.
+    // Live repository ids the conversation does not carry.
     readonly absent: readonly string[];
     // Repository ids the composition names that the workspace does not have.
     readonly missing: readonly string[];

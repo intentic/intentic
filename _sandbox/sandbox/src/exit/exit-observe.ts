@@ -6,20 +6,13 @@ import { countryName } from "./exit-countries.js";
 import { type ExitResolver, resolveThroughExit } from "./exit-dns.js";
 import { socksConnect } from "./exit-socks.js";
 
-/* WHAT THE WORLD SEES. The load-bearing check of the whole feature: a country switch that reports success
- * because a tunnel came up has reported nothing, and this is what turns it into a claim worth making.
- *
- * The request has to go THROUGH the exit, which is why it is built by hand on a socket the caller supplies
- * rather than with fetch: there is no global proxy setting to reach for, and setting one would put the
- * daemon's own traffic through a volunteer relay, which is exactly what this design refuses to do.
- */
+// The load-bearing check of the feature: a country switch that reports success just because a tunnel came up has proven
+// nothing. Requests go through the exit on a caller-supplied socket, built by hand rather than via fetch, since there's
+// no global proxy setting and one would route the daemon's own traffic through a volunteer relay.
 
 const PROBE_TIMEOUT_MS = 20_000;
 
-// Where to ask, in order. Cloudflare's trace endpoint first and by some distance: it answers at the edge
-// before any bot challenge, returns the address AND the country in one cheap plaintext response, needs no key
-// and has no rate limit worth thinking about. The others are fallbacks for when a destination blocks
-// Cloudflare or the exit's own operator intercepts it.
+// Probes tried in order; Cloudflare's trace endpoint first (address+country in one response, no key or limit).
 const PROBES: readonly { host: string; path: string; tls: boolean; parse: (body: string) => ExitObservation | undefined }[] = [
     {
         host: "www.cloudflare.com",
@@ -34,8 +27,8 @@ const PROBES: readonly { host: string; path: string; tls: boolean; parse: (body:
             );
             const ip = fields.get("ip");
             const loc = fields.get("loc");
-            // `loc` is XX for an address Cloudflare cannot place, which is an answer about the address, not a
-            // parse failure: report the IP and leave the country unknown rather than discard the reading.
+            // `loc` XX means Cloudflare couldn't place the address: report the IP, country unknown, not a parse
+            // failure.
             return ip === undefined ? undefined : observation(ip, loc === undefined || loc === "XX" ? undefined : loc);
         },
     },
@@ -51,8 +44,7 @@ const PROBES: readonly { host: string; path: string; tls: boolean; parse: (body:
         },
     },
     {
-        // Plain HTTP: this one's free tier does not serve TLS. Last in the list for that reason, and harmless
-        // where it lands, the answer is a public fact about the connection making the request.
+        // Plain HTTP: this provider's free tier has no TLS; last in the list because of it.
         host: "ip-api.com",
         path: "/json/?fields=query,countryCode",
         tls: false,
@@ -70,13 +62,12 @@ const observation = (ip: string, country: string | undefined): ExitObservation =
     ...(country === undefined ? {} : { country: country.toUpperCase(), countryName: countryName(country) }),
 });
 
-// How a caller opens a raw TCP connection that comes out of the exit. Two shapes exist because the two kinds
-// of provider are genuinely different: tor hands out a SOCKS port, a tunnel hands out a source address.
+// How a caller opens a raw TCP connection through the exit; tor hands out a SOCKS port, a tunnel hands out a source
+// address.
 export type ExitDialer = (host: string, port: number) => Promise<Socket>;
 
-// One HTTP/1.1 GET over an already-connected socket, with TLS put on top when the probe wants it. Hand-built
-// because the socket is the whole point: it is already inside the exit and nothing higher-level can be told
-// to use it. `Connection: close` makes the body's end unambiguous without parsing chunked encoding.
+// One HTTP/1.1 GET over an already-connected socket, TLS layered on when needed. Hand-built since the socket is already
+// inside the exit and nothing higher-level can reuse it; `Connection: close` avoids parsing chunked encoding.
 const get = (socket: Socket, host: string, path: string, useTls: boolean): Promise<string> =>
     new Promise((resolve, reject) => {
         const stream = useTls ? tlsConnect({ socket, servername: host }) : socket;
@@ -99,8 +90,8 @@ const get = (socket: Socket, host: string, path: string, useTls: boolean): Promi
             }
             const status = Number.parseInt(body.slice(9, 12), 10);
             if (!Number.isInteger(status) || status >= 400) {
-                // A challenge page or a block, which is a real and common outcome for Tor exits: naming the
-                // status is what tells a reader "the destination refused you", not "the exit is broken".
+                // A challenge or block page is common for Tor exits; the status says the destination refused, not the
+                // exit.
                 reject(new Error(`${host} answered ${Number.isInteger(status) ? status : "an unreadable status"} through the exit`));
                 return;
             }
@@ -119,9 +110,8 @@ const get = (socket: Socket, host: string, path: string, useTls: boolean): Promi
         }
     });
 
-/* Ask every probe in turn and take the first that answers. Failing over matters more here than it looks: an
- * exit that cannot reach Cloudflare is usually not a broken exit, it is a relay whose address Cloudflare has
- * decided to challenge, and giving up there would report a perfectly working German exit as failed. */
+// Tries every probe in turn, returns the first that answers. An exit that can't reach Cloudflare is often just
+// relay-blocked, not broken; giving up there would report a working exit as failed.
 export const observeThrough = async (dial: ExitDialer): Promise<ExitObservation> => {
     const failures: string[] = [];
     for (const probe of PROBES) {
@@ -139,13 +129,12 @@ export const observeThrough = async (dial: ExitDialer): Promise<ExitObservation>
     throw new Error(`could not read this exit's public address. Tried:\n${failures.map((line) => `  ${line}`).join("\n")}`);
 };
 
-// Through a provider that publishes a SOCKS port (tor). Hostnames are handed to the proxy as names, so they
-// resolve at the exit, which is both the private answer and the geographically honest one.
+// Through a SOCKS-publishing provider (tor); hostnames resolve at the exit, private and geographically honest.
 export const observeThroughSocks = (proxyPort: number): Promise<ExitObservation> =>
     observeThrough((host, port) => socksConnect(proxyPort, host, port));
 
-// Through a provider that publishes an interface (vpngate, wireguard). The name is resolved through the exit
-// first (exit-dns.ts), then the socket is bound to the tunnel address so the routing rule picks it up.
+// Through an interface-publishing provider (vpngate, wireguard); the name resolves through the exit first
+// (exit-dns.ts), then the socket binds to the tunnel address so routing picks it up.
 export const observeThroughAddress = (localAddress: string, resolver: ExitResolver): Promise<ExitObservation> =>
     observeThrough(async (host, port) => {
         const address = await resolveThroughExit(resolver, host);

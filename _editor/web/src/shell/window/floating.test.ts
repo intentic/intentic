@@ -3,27 +3,18 @@ import { effectScope } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloatingNote } from "./floating";
 
-/* THE ONE SHARED FACT: a floating window announces itself, and every window reads its whole view of the
- * arrangement off that. What is pinned here is the arrangement rather than any window's bookkeeping, because
- * bookkeeping was the old shape's whole problem: a panel painted from another window's realm needed a liveness
- * protocol to tell a live panel from a photograph of one, and none of it could catch two perfectly healthy
- * windows disagreeing.
- *
- * So each test speaks in notes on the channel, which is the only thing windows exchange:
- *   · `here`, somebody is floating this panel. Every other window collapses its place for it.
- *   · silence past the deadline, that window is gone, whatever took it (a dock, a close, a crash, a kill).
- *   · `here` from a SECOND window, exactly one of the two survives, and it is the older claim.
- */
+// Pins the note protocol windows exchange to arbitrate a floating panel, not any one window's bookkeeping:
+//
+// 1. `here`: a window claims the panel; every other window collapses its place for it.
+// 2. Silence past the deadline: that window is gone, however it went.
+// 3. Two `here` claims for the same panel: the older one wins.
 
 const size = () => ({ width: 800, height: 600 });
 
-// The note a floating window beats out. `since` is when its claim began, which is the whole of how a race
-// between two of them is settled.
+// The note a floating window beats out; `since` (claim start) is what settles a race between two of them.
 const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
 
-/* THE OTHER SIGNAL: the token a floating window holds for as long as its realm exists, which is what tells a
- * window the browser has stopped running on time from a window that is gone. jsdom has no Web Locks, so every
- * test that does not install this runs the beat-only path a browser without them takes. */
+// Web Lock stub: jsdom has no Web Locks, so a test that skips this runs the beat-only path instead.
 let lockedNames: Set<string> | undefined;
 
 const stubLocks = (held: readonly string[]) => {
@@ -43,11 +34,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    /* EVERY TEST ENDS WITH THE ARRANGEMENT EMPTY, which is also the state a fresh window starts in. The module
-     * is a singleton and its sweep is one interval: dropping the fake clock while that interval is live leaves a
-     * dead id standing in for a running timer, `startSweeping` sees a sweep it thinks is already going, and the
-     * next test that needs one silently never gets it. So the tokens go first and the clock is run out until
-     * every claim has been retired and the sweep has stood itself down. */
+    // Ends every test with the arrangement empty, like a fresh window. Tokens go first, then the clock runs out fully,
+    // so the module's one sweep interval fully retires and doesn't wedge the next test's.
     lockedNames?.clear();
     await vi.advanceTimersByTimeAsync(10_000);
     vi.useRealTimers();
@@ -69,8 +57,7 @@ describe(`a panel nobody floats`, () => {
 
         surface.open();
 
-        // A route of the app, resolved against its base, not a page of its own: the window boots a copy of the
-        // app and renders the panel itself.
+        // A route of the app, not a standalone page: the window boots a copy of the app and renders the panel there.
         expect(open.mock.calls[0]?.[0]).toBe(`/floating/preview`);
         expect(open.mock.calls[0]?.[2]).toContain(`popup=1`);
     });
@@ -84,10 +71,9 @@ describe(`a panel floating in another window`, () => {
 
         expect(surface.floats.value).toBe(true);
         expect(surface.here.value).toBe(false);
-        // The whole reason a docked window collapses: there is one chat surface and it is out there.
         expect(surface.shows.value).toBe(false);
 
-        // Silence, which is what a dock, a close, a crash and a killed window all look like from here.
+        // Silence: what a dock, a close, a crash or a kill all look like from here.
         vi.advanceTimersByTime(4_000);
 
         expect(surface.floats.value).toBe(false);
@@ -98,7 +84,7 @@ describe(`a panel floating in another window`, () => {
         const surface = createFloatingSurface(`chat`, size);
         receiveFloatingNote(here(`chat`, `w-1`));
 
-        // A page load out there is a gap in the beat, and the deadline is deliberately several beats long.
+        // A page load out there is a gap in the beat; the deadline is deliberately several beats long.
         vi.advanceTimersByTime(1_000);
         expect(surface.shows.value).toBe(false);
 
@@ -108,23 +94,20 @@ describe(`a panel floating in another window`, () => {
         expect(surface.shows.value).toBe(false);
     });
 
-    /* A MINIMIZED WINDOW IS NOT A CLOSED ONE, and no deadline can tell them apart: a minimized window is a
-     * hidden page, and the browser throttles a hidden page's timers to about one a minute once it has been
-     * hidden five minutes (and may stop them altogether), so the window the user PUT AWAY falls as silent as the
-     * one they killed. Without the token, the panel was reclaimed out from under a chat still sitting on the
-     * second screen: the rail grew its Chat tile back and a second live copy of the conversation mounted here. */
+    // A minimized window is not a closed one: the browser throttles a hidden page's timers, so its beat can go as
+    // silent as a killed window's. The lock token is what tells them apart.
     it(`leaves the panel out there while that window is only minimized`, async () => {
         const surface = createFloatingSurface(`chat`, size);
         const locks = stubLocks([`intentic.floating.chat.w-1`]);
         receiveFloatingNote(here(`chat`, `w-1`));
 
-        // Twenty-four deadlines' worth of silence, without one beat in it. Its realm is still there.
+        // Many deadlines' worth of silence with no beat; the realm (lock) is still held, though.
         await vi.advanceTimersByTimeAsync(60_000);
 
         expect(surface.floats.value).toBe(true);
         expect(surface.shows.value).toBe(false);
 
-        // And when that window really goes, the browser drops the token with it: no beat, no realm, no claim.
+        // When that window really goes, the browser drops the token with it: no beat, no realm, no claim.
         locks.drop();
         await vi.advanceTimersByTimeAsync(2_000);
 
@@ -145,8 +128,7 @@ describe(`a panel floating in another window`, () => {
     it(`ignores a farewell from a window that is not the one it is watching`, () => {
         const surface = createFloatingSurface(`chat`, size);
         receiveFloatingNote(here(`chat`, `winner`, 1_000));
-        // A LOSER's farewell, which lands right after the winner's claim. Retiring on it would collapse the
-        // panel back into this window for a beat and then take it away again.
+        // A loser's stale farewell landing right after the winner's claim; retiring on it would flash the panel back.
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
 
         expect(surface.shows.value).toBe(false);
@@ -154,8 +136,8 @@ describe(`a panel floating in another window`, () => {
 });
 
 describe(`the floating window itself`, () => {
-    // The window's own half: claim the panel, beat, and act on what it hears. Held in a scope, because the
-    // claim is released with the route component that took it.
+    // The window's own half: claim the panel, beat, and act on what it hears. Held in a scope, since the claim
+    // releases with the route component that took it.
     const claim = (panel: `chat` | `terminal`, onDock: () => void, since = 1_000) => {
         vi.setSystemTime(since);
         const scope = effectScope();
@@ -170,7 +152,7 @@ describe(`the floating window itself`, () => {
         expect(surface.here.value).toBe(true);
         expect(surface.floats.value).toBe(true);
         expect(surface.shows.value).toBe(true);
-        // What the shell reads to keep the panel mounted at any width: a floating window is desktop by intent.
+        // What the shell reads to keep the panel mounted at any width; a floating window is desktop by intent.
         expect(floatingWindowPanel.value).toBe(`chat`);
 
         release();
@@ -179,9 +161,8 @@ describe(`the floating window itself`, () => {
         expect(floatingWindowPanel.value).toBeUndefined();
     });
 
-    /* The claimant's half of the reading above: hold a token nobody has to remember to renew, and let it go
-     * only when this window stops being the panel's window while staying open (a lost session bounced to
-     * /login). A window that is closed, crashed or killed never gets here and the browser does it instead. */
+    // Holds a token nobody has to renew, released only when this window stops being the panel's window while staying
+    // open; a closed, crashed or killed window never reaches this and the browser drops it instead.
     it(`takes a token for its claim and gives it back when it stops being that window`, async () => {
         const asked: string[] = [];
         let letGo = false;
@@ -201,8 +182,7 @@ describe(`the floating window itself`, () => {
         const release = claim(`chat`, vi.fn());
         await vi.advanceTimersByTimeAsync(1);
 
-        // Named after the CLAIM, id and all, so two windows racing for one panel are granted both tokens at
-        // once and neither queues behind the other: the oldest-claim rule settles that, never this lock.
+        // Named after the claim, with id, so two racing windows get a token at once; the oldest-claim rule decides.
         expect(asked).toHaveLength(1);
         expect(asked[0]).toMatch(/^intentic\.floating\.chat\..+/u);
         expect(letGo).toBe(false);
@@ -233,9 +213,8 @@ describe(`the floating window itself`, () => {
         release();
     });
 
-    /* DUPLICATES CANNOT SURVIVE. Both windows hear each other, both reach the same verdict about the same pair,
-     * and the younger claim is the one that goes. This is what replaced relying on window.open's target name,
-     * which only ever deduplicated inside one browsing context group and therefore not between two app tabs. */
+    // Both windows independently reach the same verdict about the same pair; the younger claim is always the one
+    // that stands down.
     it(`stands down for an older claim on the same panel`, () => {
         const onDock = vi.fn();
         const release = claim(`chat`, onDock, 5_000);
@@ -259,8 +238,7 @@ describe(`the floating window itself`, () => {
     it(`breaks a tie on the same millisecond by id, so exactly one of the pair goes`, () => {
         const onDock = vi.fn();
         const release = claim(`chat`, onDock, 4_000);
-        // This window's id is a uuid, so `aaa…` sorts below it and wins; the pair's other half reaches the
-        // mirror-image verdict about this one and stays.
+        // A lower id sorts first and wins; the other half of the pair reaches the mirror verdict and stays.
         receiveFloatingNote(here(`chat`, `00000000-0000-0000-0000-000000000000`, 4_000));
 
         expect(onDock).toHaveBeenCalledTimes(1);
@@ -273,8 +251,7 @@ describe(`where the window comes back`, () => {
         const surface = createFloatingSurface(`terminal`, size);
         const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
         vi.stubGlobal(`open`, open);
-        // The floating window's own reading of where the user left it, written from its own realm rather than
-        // measured across windows while it was closing.
+        // The floating window's own record of where it was, written from its own realm, not measured while closing.
         localStorage.setItem(`intentic.floating.frame.terminal`, `2200,180,900,1100`);
 
         surface.open();
@@ -286,8 +263,7 @@ describe(`where the window comes back`, () => {
         const surface = createFloatingSurface(`terminal`, size);
         const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
         vi.stubGlobal(`open`, open);
-        // One screen, and a frame far off the right of it: a window opened out there is one the user can
-        // neither find nor close, so the panel opens centred instead.
+        // One screen, with a frame far off its right edge: unreachable, so the panel opens centred instead.
         Object.defineProperty(window.screen, `isExtended`, { value: false, configurable: true });
         Object.defineProperty(window.screen, `availWidth`, { value: 1440, configurable: true });
         localStorage.setItem(`intentic.floating.frame.terminal`, `4000,100,900,700`);

@@ -34,9 +34,7 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.filename, "../../..");
 const src = join(root, "_sandbox/sandbox/src");
 
-/* The subsystems that predate the invariant registry and have not yet been audited. Each entry is a promise to
- * come back, not a verdict that there is nothing to check: removing one means writing its `invariant.ts`, empty
- * with a reason or full with a check. Shrink this list; never grow it. */
+// Subsystems not yet audited; removing an entry needs a real or explained invariant.ts. Shrink only.
 const UNAUDITED = new Set([
     "activity",
     "approvals",
@@ -85,14 +83,11 @@ const UNAUDITED = new Set([
     "workspace",
 ]);
 
-/* Not subsystems: the registry itself, and the three directories that hold no daemon code at all — the gated
- * end-to-end suites, the route harness every suite stands its routes up with, and the vitest fences. A
- * runtime invariant over test scaffolding would be a check on something no runtime runs. */
+// Not subsystems: the registry itself, plus test-scaffolding dirs with no daemon code.
 const NOT_A_SUBSYSTEM = new Set(["invariants", "e2e", "harness"]);
 
 const failures = [];
-/* Debt this run found already paid: an UNAUDITED entry whose directory is gone, or one that has since written
- * its invariant.ts. Said on stdout and never counted as a failure, for the reason rule 5 gives. */
+// UNAUDITED entries already resolved: directory gone, or invariant.ts now exists. Logged, not failed.
 const retired = [];
 
 const directories = readdirSync(src)
@@ -107,7 +102,7 @@ for (const entry of UNAUDITED) {
     }
 }
 
-// Every file that could import a companion, read once: rule 4 asks whether anything references each one.
+// Every file other than the invariant module, read once, so rule 4 can check whether anything imports each companion.
 const sources = [];
 const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -137,8 +132,7 @@ for (const directory of directories) {
     if (UNAUDITED.has(directory)) {
         retired.push(`'${directory}' now has an invariant.ts but is still listed as UNAUDITED`);
     }
-    // "Has checks" is read structurally rather than by executing the module: the companions are factories over
-    // daemon services, and a gate that had to construct those would be a second composition root.
+    // Checks for `checks` structurally; executing the module would mean constructing daemon services.
     const empty = /export const checks[^=]*=\s*(\[\s*\]|\(\s*\)\s*(:[^=]*)?=>\s*\[\s*\])/.test(body);
     if (empty) {
         if (!/^\s*(\/\/|\*)\s*No runtime invariant:/m.test(body)) {
@@ -162,7 +156,7 @@ for (const directory of directories) {
     }
 }
 
-// Said, so the list gets trimmed when this file is next edited, and never a refusal (rule 5).
+// Logged so the list gets trimmed on the next edit; never treated as a failure.
 for (const line of retired) {
     console.log(`verify-invariants: ${line}: drop it from UNAUDITED when you next edit this file`);
 }
@@ -175,8 +169,7 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-// The backlog is the UNAUDITED entries that are still true: the retired ones are debt already paid, and counting
-// them would let the summary say the tree is less audited than it is for as long as the list goes untrimmed.
+// Backlog excludes retired entries, so the summary doesn't undercount how much of the tree is audited.
 const backlog = UNAUDITED.size - retired.length;
 const audited = directories.length - backlog;
 console.log(`verify-invariants: ok, ${audited} of ${directories.length} subsystems audited, ${backlog} in the backlog`);

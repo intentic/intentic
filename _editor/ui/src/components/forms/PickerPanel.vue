@@ -1,7 +1,7 @@
-<!-- The Picker's open panel (internal, hosts are Picker.vue's Popover/BottomSheet): an optional filter box
-     over a grouped listbox. Rows carry icon · label · quiet description · check; keyboard follows the
-     QuickOpen pattern (arrows wrap, Enter picks, Esc clears the query before it closes). The host remounts
-     this per open, so the query and highlight reset for free and onMounted is the open moment. -->
+<!--
+    <Picker>'s open panel: an optional filter box over a grouped listbox, with QuickOpen-style keyboard navigation (arrows wrap, Enter picks, Esc
+    clears then closes). Remounted per open, so query and highlight reset for free.
+-->
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../../composables/useListNavigation.js";
@@ -37,9 +37,7 @@ const groups = computed(() => normalizePickerGroups(options));
 const optionCount = computed(() => groups.value.reduce((count, group) => count + group.options.length, 0));
 const searchable = computed(() => optionCount.value >= searchThreshold);
 
-// The visible list: groups filtered by the query (a group's label counts as a match for all its rows, so
-// "claude" finds every model under the Claude Code header), each row carrying its index in visual order:
-// the keyboard highlight's coordinate system.
+// Filtered list; a group's label matches all its rows, and each row keeps its visual index for the keyboard.
 const shown = computed(() => {
     const needle = query.value.trim().toLowerCase();
     let index = 0;
@@ -59,14 +57,10 @@ const shown = computed(() => {
 });
 const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((group) => group.rows.map((row) => row.option)));
 
-/* Hinted rows are two lines, so the whole LIST switches to top-alignment: per-row would step the icons and
- * checks up and down the column as the reader's eye travels it. One list, one baseline. */
+// Any hinted row makes the whole list top-align, so icons and checks don't step up and down row by row.
 const hinted = computed(() => flat.value.some((option) => option.hint !== undefined));
 
-/* And for the same reason, one list, one row HEIGHT once anything in it wears a face. A face is taller than the
- * line of text beside it, so a list of people with a "Nobody" glyph at the top came out with one short row and
- * five tall ones: a visible hitch at exactly the row a reader lands on first. Applied to the whole list rather
- * than per row, so the column steps evenly whichever rows happen to be filtered out. */
+// Same rule for row height: any faced row makes the whole list use the taller height, evenly across filters.
 const faced = computed(() => flat.value.some((option) => option.face !== undefined));
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (option) => option.value);
@@ -98,8 +92,7 @@ const onKeydown = (event: KeyboardEvent): void => {
             }
             return;
         case `Escape`:
-            // Esc clears the query first (restoring the full list), then closes. stopPropagation keeps the
-            // host popover's own document-level Esc handler from closing it while there's a query to clear.
+            // Esc clears the query first; stopPropagation keeps the host popover's own Esc handler from closing it too.
             if (query.value.length > 0) {
                 event.stopPropagation();
                 query.value = ``;
@@ -170,10 +163,10 @@ onMounted(() => {
                     @mouseenter="activeIndex = row.index"
                 >
                     <slot name="icon" :option="row.option">
-                        <!-- A row that names a PERSON wears their face. Bigger than the glyph beside it and
-                             bigger than the closed trigger's, on purpose: the trigger is a form field that must
-                             not grow, while a list of people is the one place where recognising a face at a
-                             glance is the entire reason you are looking. -->
+                        <!--
+                            A row naming a person wears their face, bigger than the trigger's: a form field must not
+                            grow, but a people list is exactly where a glance should recognize a face.
+                        -->
                         <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="28" />
                         <Icon
                             v-else-if="row.option.icon !== undefined"
@@ -183,16 +176,20 @@ onMounted(() => {
                             aria-hidden="true"
                         />
                     </slot>
-                    <!-- Label and its sentence are ONE column: the hint belongs under the words it explains,
-                         not under the icon, and a check landing beside a two-line row has to clear both. -->
+                    <!--
+                        Label and hint share one column, under the words they explain, not the icon; a check must clear
+                        both lines.
+                    -->
                     <span class="flex min-w-0 shrink flex-col gap-0.5">
                         <span
                             class="truncate text-sm md:text-xs"
                             :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``, labelClass]"
                             >{{ row.option.label }}</span
                         >
-                        <!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and the panel is
-                             already width-capped, so the only thing left to spend is height. -->
+                        <!--
+                            Wraps on purpose: a sentence cut off mid-clause teaches nothing, and height is the only
+                            room left to spend.
+                        -->
                         <span v-if="row.option.hint !== undefined" class="text-2xs leading-snug text-subtle">{{ row.option.hint }}</span>
                     </span>
                     <span v-if="row.option.description !== undefined" class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{

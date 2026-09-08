@@ -1,51 +1,14 @@
-/* THE NAME A NEW CONVERSATION IS BORN WITH.
- *
- * A conversation's id is not an internal key, it is the most PUBLIC string this app produces. The same value
- * becomes the git branch (`agent/<id>`), the worktree directory on disk, the id in the page's address, and the
- * name printed on every board card (SessionChip). So it is read far more often than it is dereferenced, and by
- * eyes rather than by code: in `git branch`, in a terminal `cd`, on a card in a lane of twenty.
- *
- * It used to be `crypto.randomUUID()`, and a UUID fails every one of those readings. Forty-two characters of
- * hex that no one can say, remember, or tell apart from the card next to it, two agents differ in the fourth
- * character and look identical at a glance, which is exactly when the board is being scanned rather than read.
- * It was also the widest line on a card that has a title to show. The app already knew this everywhere else:
- * the tmux session for the very same turn is called `agent-32b6cb04` (session-names.ts), eight characters,
- * because eight is what a human uses.
- *
- * So a new conversation gets a name instead: `swift-otter-k9m2`. The pair is the part a person actually uses,
- * sayable over a call, distinguishable at a glance, and memorable for the hour anyone cares about it. The
- * four-character tail is the part that makes it an id: the pairs alone would start colliding within a few
- * hundred conversations (a workspace passes that in a month), and a branch name that collides is a worktree
- * that refuses to be created. Random rather than a timestamp because a timestamp in base36 is eight characters
- * of its own and would put the length straight back.
- *
- * The shape satisfies ConversationIdSchema (`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`) by construction, every word
- * here is lowercase a–z, the tail is lowercase base36, and the separator is the one the regex allows. That
- * guard is the injection guard for the branch name and the path, so it is the one thing about this module that
- * is not a matter of taste; the test beside it holds the whole generated space to it.
- *
- * Conversations the SANDBOX starts keep their own minters and their own prefixes (an automation's fire is
- * `a-<automation>-<time>`, a CI fix is DERIVED from the run it fixes, see below), those names say WHERE the
- * conversation came from, which beats a random pair for a card the user did not ask for. This is the default
- * for the ones a person opens.
- */
+// A conversation's id is the most public string this app produces: the git branch, the worktree directory, the URL, and
+// the card title. `adjective-noun-tail` reads at a glance; the tail keeps it unique and must satisfy
+// ConversationIdSchema. Sandbox-started conversations use their own prefixed, derived ids instead.
 
-/* THE SHAPE ITSELF, and the injection guard every path that interpolates a conversation id leans on.
- *
- * A conversation id becomes a branch name, a worktree directory, a transcript filename and a journal filename,
- * so "is this a conversation id" is really "is this safe to put in a path", and it is asked on the read side by
- * everything that walks one of those directories: a stray file, a hand-made name, a `../` — none of them may
- * be dereferenced. Those checks had each restated the pattern under a local name (FILE_ID, SAFE_ID,
- * CONVERSATION_ID) beside the schema that defines it, which is five places to fix if the shape ever moves and
- * five chances for one of them to be laxer than the id it is guarding. */
+// The injection guard every path that interpolates a conversation id relies on: is this safe to put in a path.
 export const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 // Safe to interpolate into a path or a branch name. `false` for anything else, including the empty string.
 export const isConversationId = (value: string): boolean => CONVERSATION_ID.test(value);
 
-/* The two halves of the name. Kept short (nothing over seven letters) because the whole point is a string that
- * fits on a card, and visually distinct from one another, no near-rhymes and no two words sharing a first
- * syllable, since a name is only useful here if it can be told apart from its neighbour in the lane. */
+// Short (nothing over seven letters) and visually distinct: no near-rhymes, no shared first syllable.
 const ADJECTIVES = [
     "amber",
     "brave",
@@ -155,13 +118,11 @@ const NOUNS = [
     "wren",
 ] as const;
 
-// How many base36 characters the disambiguating tail carries. Four is 1.7M values per word pair, which puts a
-// collision far past the life of any workspace, and is still short enough to be ignored while reading.
+// Four base36 characters is 1.7M values per word pair, far past any workspace's collision risk.
 const TAIL_LENGTH = 4;
 
-// A Uint32Array draw has 2^32 possible values. Reject the short remainder above the last full bucket before
-// dividing it into `upperBound` equal ranges; folding that remainder back with `%` makes its first few answers
-// slightly more likely, which is exactly the bias a CSPRNG is meant to avoid.
+// Rejects the short remainder above the last full bucket rather than folding it back with `%`, which would bias the
+// first few results, exactly what a CSPRNG must avoid.
 const UINT32_RANGE = 0x1_0000_0000;
 const randomBelow = (upperBound: number): number => {
     const bucketSize = Math.floor(UINT32_RANGE / upperBound);
@@ -174,42 +135,21 @@ const randomBelow = (upperBound: number): number => {
     }
 };
 
-// Uniform over the array, drawn from the platform CSPRNG, `Math.random()` is seeded per process, and two
-// browser tabs opened in the same instant are exactly the case this must not produce the same name for.
+// Draws uniformly via the platform CSPRNG, not `Math.random()` (seeded per process): two tabs opened at once must not
+// get the same name.
 const pick = <T>(values: readonly T[]): T => values[randomBelow(values.length)]!;
 
 // Lowercase base36, one character per draw: 0-9a-z, all of which the id guard accepts.
 const tail = (): string => Array.from({ length: TAIL_LENGTH }, () => randomBelow(36).toString(36)).join("");
 
-/* A fresh conversation id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`. Sixteen characters or so
- * against a UUID's thirty-six, and the first eleven of them are the ones a person reads. */
+// A fresh id: `<adjective>-<noun>-<tail>`, e.g. `swift-otter-k9m2`; about sixteen characters against a UUID's
+// thirty-six.
 export const newConversationId = (): string => `${pick(ADJECTIVES)}-${pick(NOUNS)}-${tail()}`;
 
-/* WHAT A CI FIX CONVERSATION IS CALLED, and the one id in this file that is DERIVED rather than drawn.
- *
- * It is derived because the question "has anybody already put an agent on this failure?" has to be answerable
- * from the failure alone. Nothing records that anywhere: the fleet roster IS the record (the conversation, its
- * worktree, its branch, its live status), and a roster is keyed by id, so an id nothing can re-compute is a
- * record nothing can read. This one used to carry a timestamp and a per-process counter, which made every fix
- * unfindable the moment the click was over: the board could offer "Fix with agent" and nothing else, forever,
- * however many agents were already working on the row.
- *
- * Deriving it settles a second question the same way. One failed run is now one conversation, so a second press
- * (from another tab, or from a reader who did not scroll to the state) CONTINUES the fix rather than starting a
- * rival agent on a rival branch: the daemon refuses while the turn is live, and adds a turn to the same session
- * once it is not. The old recipe made a fresh worktree every time.
- *
- * THE REPOSITORY IS IN IT because a run id belongs to one forge project, not to the workspace: two repos can
- * each have a run 42, and without the repo their failures would share a conversation. It is slugified rather
- * than hashed because this string is read by people, in `git branch` (`agent/ci-fix-web-4213`), in a path and
- * on a card, and `ci-fix-a3f91c-4213` answers the join just as well while saying nothing. Two repositories
- * whose names agree for the first REPO_SLUG_MAX characters share a slug, and would then share a fix
- * conversation for identically-numbered runs, a pairing rare enough to prefer the readable name over guarding
- * against it.
- */
+// Derived, not drawn, so a re-computed id says whether an agent is already on this failure and a second press continues
+// it. The repo is included (one run id per project) and slugified, not hashed, since people read it.
 export const CI_FIX_PREFIX = "ci-fix-";
-// Leaves ~24 characters for the run id inside ConversationIdSchema's 64, which is twice the widest id either
-// forge mints.
+// Leaves ~24 characters for the run id within the 64-char id limit, twice the widest either forge mints.
 const REPO_SLUG_MAX = 32;
 const repoSlug = (repo: string): string =>
     repo
@@ -219,29 +159,12 @@ const repoSlug = (repo: string): string =>
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
 
-/* WHAT A PUSH-CHECK FIX CONVERSATION IS CALLED, derived for the same reason the CI one is and keyed by
- * something different, because a refused push has no run number to be keyed by.
- *
- * The CI board answers "is anybody already on this?" from a run id. The push gate has none: the check runs on
- * the owner's machine, against a working tree, as often as they press the button. So the key is WHAT FAILED —
- * the set of gate names the run refused on (fixProposal.ts's `fixSignature` extracts it) — and that turns out
- * to be the better key anyway, because it is what makes two failures THE SAME FAILURE. A red check, a fix
- * agent, another push, the same three gates red again: the second press continues the conversation that is
- * already looking at those three gates instead of opening a rival agent on a rival branch, which is what a run
- * id would have done.
- *
- * The waste this was written for: two presses three minutes apart put two frontier agents on the same five
- * gates, one hit a land conflict against the other, and $13.74 and four turns later the failure had been fixed
- * three times — twice by them and once by the owner's own tree landing the same repair.
- *
- * The signature is HASHED where the run id was spelled, because the alternative is a branch name with
- * "checkout-gates-lint-assertion-ratchet" in it. The pairing is still readable from the other end: the fix
- * agent's first message quotes the gates by name. */
+// Keyed by which gates failed (fixSignature), not a run id (a push has none); the same gates red again is the same
+// failure. Hashed rather than spelled into the branch name; the fix agent's first message names the gates.
 export const PUSH_FIX_PREFIX = "push-fix-";
 
-/* FNV-1a over the signature, base36. A hash rather than a cryptographic digest because nothing here is a
- * secret and nothing is defended: the only property needed is that the same failure produces the same seven
- * characters in every browser and in node, which is what makes the id re-derivable rather than recorded. */
+// FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same
+// seven characters in every browser and in node.
 const FNV_OFFSET = 0x811c_9dc5;
 const FNV_PRIME = 0x0100_0193;
 const digest = (text: string): string => {

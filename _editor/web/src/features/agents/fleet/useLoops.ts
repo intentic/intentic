@@ -2,20 +2,14 @@ import type { Loop, LoopRecord } from "@intentic/sandbox-contract";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 
-/* THE LOOP MUTATIONS, and deliberately nothing else.
- *
- * There is no store here and no query, because a running loop has nothing for one to hold: where the loop
- * stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes into useAgents
- * about once a second. A second source polling /loops for the same three numbers could only ever disagree with
- * the card next to it.
- */
+// Loop mutations only. Loop state rides the fleet roster's `AgentSummary.loop` via the `/events` stream, not a
+// separate store or query.
 
-// Start looping a conversation. Resolves with the record as the daemon wrote it; the loop itself runs detached,
-// and the fleet card is where it is watched.
+// Starts looping; resolves with the daemon's written record while the loop itself runs detached, watched via the
+// fleet card.
 export const startLoop = (loop: Loop): Promise<LoopRecord> => sandboxJson<LoopRecord>(`/loops`, jsonBody(`POST`, loop));
 
-// Ask the loop to stop after the iteration in flight. Explicitly NOT a turn abort, the work running right now
-// finishes and lands. Throwing Stop at the turn as well is `stopAgentTurn`, and pressing both is how a user
-// abandons a loop outright.
+// Stops the loop after the iteration in flight, not a turn abort. Aborting a loop outright needs both this and
+// `stopAgentTurn`.
 export const stopLoop = (conversationId: string): Promise<void> =>
     sandboxJson(`/loops/${encodeURIComponent(conversationId)}/stop`, { method: `POST` }).then(() => undefined);

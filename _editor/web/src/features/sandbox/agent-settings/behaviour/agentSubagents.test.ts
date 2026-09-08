@@ -1,15 +1,6 @@
 // @vitest-environment jsdom
-//
-// DELEGATION AS ONE GROUP: whether the assistant may hand work to agents of its own, and then how far. The
-// posture arrived here from a group of its own on the Safety tab ("Child agents"), which filed a spending
-// ceiling under the gate that decides whether a command may delete your files, and left one concept under two
-// names on two screens.
-//
-// What the move actually risks is the posture's storage, which is unlike every other row on this page: the three
-// ceilings are plain numbers on their own keys, while the posture is one entry in `actionRules` — an OPEN record
-// that also holds the outbound sniffer's `<provider>.<type>` rules. Writing it as if it owned that object would
-// silently delete every send rule the owner has, and nothing on screen would say so. That is the claim this file
-// exists to hold.
+// Pins that the posture (`agents.spawn`) writes into the shared `actionRules` record without clobbering other
+// keys (e.g. the outbound sniffer's `<provider>.<type>` rules), unlike the three plain-number ceilings beside it.
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
@@ -53,14 +44,10 @@ afterEach(() => {
 const numberBox = (host: HTMLElement, label: string): HTMLInputElement =>
     host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
-// The posture's own trigger, which opens a list rather than taking a value: reached by what it announces, not
-// by position, because it is the only control in the group that is not a number box.
+// Reached by its aria-label, not `numberBox`: the posture control isn't a number input.
 const postureTrigger = (host: HTMLElement): HTMLElement =>
     host.querySelector<HTMLElement>(`[aria-label="Start agents of its own"]`)!;
 
-/* WHETHER AND HOW MANY ARE ONE GROUP. Pinned as membership rather than as a screenshot: the whole point of the
- * merge is that an owner who turns the ceilings down finds the switch that turns the feature off in the same
- * place, and a group that quietly lost one half again would still render four healthy-looking rows. */
 test("draws the posture and all three ceilings together", () => {
     const host = mount();
 
@@ -70,8 +57,6 @@ test("draws the posture and all three ceilings together", () => {
     }
 });
 
-// The defaults are read off the schema rather than transcribed: these are the Claude Code CLI's own numbers, and
-// a copy here would go stale the day the daemon changes one.
 test("each ceiling opens on the daemon's own default", () => {
     const host = mount();
     const defaults = SandboxSettingsSchema.parse({});
@@ -91,18 +76,13 @@ test("a ceiling writes its own key and nothing else", async () => {
     expect(patch).toHaveBeenCalledWith({ subagentsAtOnce: 5 });
 });
 
-/* THE POSTURE'S STORAGE, which is the one thing the move could have broken, and it is checked against the
- * function rather than through the picker: <Picker> opens a measured overlay, so driving it here would test the
- * design system's placement code and not the merge that can eat somebody's rules. */
+// Checked directly against `withPosture`, not through <Picker>: jsdom never opens the overlay to click through.
 
 test("writing the posture keeps every other action rule", () => {
-    // `actionRules` is shared with the outbound sniffer, whose keys this row has never heard of.
+    // `slack.message` stands in for the outbound sniffer's own keys, sharing the same `actionRules` record.
     expect(withPosture({ "slack.message": `hold` }, `deny`)).toEqual({ "slack.message": `hold`, "agents.spawn": `deny` });
 });
 
-/* DEFAULT IS NOT ALLOW, and the difference is the whole reason it is one of the four postures rather than the
- * absence of a choice: an unset key holds a spawn from a turn that has taken in outside content, so returning to
- * Default has to DELETE the key rather than write one spelling out the fallback. */
 test("returning to Default removes the rule instead of writing one", () => {
     const rules = withPosture({ "agents.spawn": `deny`, "slack.message": `hold` }, `default`);
 
@@ -115,34 +95,20 @@ test("an absent rule reads back as Default, not as allow", () => {
     expect(postureOf({ "agents.spawn": `allow` })).toBe(`allow`);
 });
 
-/* FOUR POSTURES, NOT A TOGGLE. This is the claim the repository's own history defends and the one nothing
- * covered: every test above keeps passing if the picker is "simplified" into an on/off switch, because the merge
- * and the read-back would both still work on the two values a boolean leaves.
- *
- * Two of the four are what such a tidy-up would cost. `hold` is the only answer that lets a spawn happen with
- * the owner in the loop rather than choosing for them in advance, and `default` is NOT `allow`: an unset key
- * holds a spawn from a turn that has taken in outside content, so a boolean's "on" would silently switch that
- * protection off for everyone who had never touched the control.
- *
- * Held against the exported list rather than the rendered row on purpose: <Picker> draws its options into a
- * measured overlay that jsdom never opens, so an assertion on the markup would pass an empty list. */
+// Checked against the exported `POSTURES` list, not the rendered row: <Picker> draws options into an overlay
+// jsdom never opens.
 test("offers exactly the four postures, and Default is one of them", () => {
     expect(POSTURES.map((option) => option.value)).toEqual([`default`, `allow`, `hold`, `deny`]);
 });
 
-// Default leads, because reading down is meant to run from "whatever the sandbox decides" to the three answers
-// that overrule it, and because the option a reader lands on first should be the one already in force.
 test("puts Default first and says what it actually does", () => {
     const fallback = POSTURES[0];
 
     expect(fallback?.value).toBe(`default`);
-    // The prompt-injection nuance that used to justify filing this control under Safety lives here now: it is a
-    // property of this one option, and the row has no other way to say so.
+    // Guards that the outside-content nuance is described on this option, not filed elsewhere.
     expect(fallback?.description).toContain(`outside content`);
 });
 
-// Every posture the picker offers has to be one the write can store, and every stored value one the picker can
-// draw: a label with no rule behind it is a control that silently does nothing.
 test("every posture round-trips through the write", () => {
     for (const option of POSTURES) {
         const rules = withPosture({}, option.value);
@@ -150,8 +116,6 @@ test("every posture round-trips through the write", () => {
     }
 });
 
-// The write does not mutate what it was handed: settings are a shared reactive object, and a patch that edited
-// it in place would leave the optimistic cache already holding the new value if the save were refused.
 test("leaves the rules it was given alone", () => {
     const before = { "agents.spawn": `hold` } as const;
     withPosture(before, `deny`);
@@ -159,8 +123,6 @@ test("leaves the rules it was given alone", () => {
     expect(before).toEqual({ "agents.spawn": `hold` });
 });
 
-// A refused feature with three live number boxes under it invites an owner to tune a limit on work that will
-// never start, so the group says so instead of leaving them to find out.
 test("says the ceilings bound nothing while delegation is refused", async () => {
     settings.value = { ...settings.value, actionRules: { "agents.spawn": `deny` } };
     const host = mount();

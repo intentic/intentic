@@ -16,31 +16,10 @@ import {
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import PersonaPowersFields from "../../sandbox/personas/PersonaPowersFields.vue";
 
-/* WHO WORKS IN THIS FOLDER: opened by the person icon on a directory row in the Workspace tree.
- *
- * The Personas page is where a card is thought about: which accounts it speaks through, and everything it may do.
- * This is the other half of the same feature and a different question ("who works HERE") asked in the place
- * where the answer is obvious, with the starting path taken from the row that was clicked rather than typed into
- * a text field on another page.
- *
- * THAT QUESTION HAS THREE ANSWERS, and the panel is one question with three ways to answer it rather than three
- * panels: write a new card that starts here, point a card you ALREADY have at this folder, or change one of the
- * cards already starting here. The second one is why the panel is not called "Add a persona": somebody who has
- * built "Docs bot" once should not have to build it again to make it work in a second repo, and before this the
- * only route was the Personas page plus retyping the path by hand.
- *
- * A PERSONA HAS ONE STARTING FOLDER, so pointing an existing card here MOVES it. The picker says where each card
- * starts today and the panel says so again once one is chosen, because that is a change to a persona somebody
- * else's automation may be pinned to, and it is invisible everywhere except the folder it left.
- *
- * A FOLDER HOLDS SEVERAL, which is why this is a list and not a toggle: "Docs bot" and "Refactor crew" can both
- * start in the same repo with different bounds, and a panel that showed one card would silently edit the wrong one.
- *
- * THE FORM IS ALWAYS THERE, below whatever is already here, because everything people arrive wanting to do is then
- * one click away and none of it is behind a mode the panel has to be put into first.
- *
- * The save is a whole-card upsert, so an edit carries over every field this panel does not ask about. Leaving
- * `capabilities` out of a card that had two accounts would not "not change them"; it would take them away. */
+// Who works in this folder, opened from a directory row: one question with three answers — write a new persona
+// starting here, point an existing one at this folder (which MOVES it, since a persona has one starting folder),
+// or edit one that already starts here. Every save is a whole-card upsert; a field this panel doesn't ask about must be
+// carried over, not dropped.
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -48,8 +27,7 @@ const { personas, save } = usePersonas();
 const { capabilities } = useCapabilities();
 const grantables = computed(() => grantablesFrom(capabilities.value));
 
-// The dialog is open exactly when there is a folder to be open ABOUT: one piece of state, so there is no way to
-// be open over no folder or closed over one.
+// Open exactly when there's a folder to be open about — one flag, so there's no open-with-no-folder state.
 const visible = computed({
     get: () => dir.value !== undefined,
     set: (open: boolean) => {
@@ -61,15 +39,11 @@ const visible = computed({
 const folderName = computed(() => dir.value?.split(`/`).pop() ?? ``);
 const cards = computed<Persona[]>(() => (dir.value === undefined ? [] : personasStartingIn(personas.value, dir.value)));
 
-/* ── The form ────────────────────────────────────────────────────────────────────────────────────────────────
- *
- * WHICH OF THE THREE ANSWERS is being given, as one piece of state, because every other thing on screen follows
- * from it: the heading, whether there is a name field or a picker, and the verb on the button. `editing` and
- * `chosen` each belong to exactly one mode and are cleared entering any other, so there is no way to submit a
- * name while a picked card is still remembered underneath. */
+// Mode drives everything on screen (heading, fields, button verb) from one piece of state.
+// `editing` and `chosen` are cleared entering any other mode, so a picked card can't leak into a name submission.
 type Mode = `new` | `existing` | `edit`;
 const mode = ref<Mode>(`new`);
-// The id of the card being changed (edit), and the id of the card being pointed at this folder (existing).
+// Id of the card being changed (edit) or pointed at this folder (existing).
 const editing = ref<string | undefined>(undefined);
 const chosen = ref<string | undefined>(undefined);
 const filter = ref(``);
@@ -94,8 +68,7 @@ const startEdit = (persona: Persona): void => {
     chosen.value = undefined;
     label.value = persona.label ?? persona.id;
     powers.value = powersDraftOf(persona);
-    // Opened for whoever came to change the bounds, since on an existing card that is usually why, and it is
-    // where the card's own answers are, which a collapsed section would hide behind a click.
+    // Auto-expanded when editing, since changing bounds is the usual reason to open an existing card.
     advanced.value = persona.powers !== undefined;
     saveError.value = undefined;
 };
@@ -107,14 +80,11 @@ const startExisting = (): void => {
     saveError.value = undefined;
 };
 
-// A second folder must not inherit the first one's half-typed name, and a previous failure must not greet a
-// fresh open.
+// A second folder must not inherit the first one's half-typed name or a previous save failure.
 watch(dir, () => startAdd());
 
-/* ── Pointing a card you already have at this folder ─────────────────────────────────────────────────────────
- *
- * Every persona that does not already start here, whether it starts somewhere else or nowhere at all. The ones
- * that DO start here are the list above; offering them again would be an action that changes nothing. */
+// Every persona that doesn't already start here (elsewhere, or nowhere); the ones that do are the list above,
+// so offering them again would be a no-op.
 const elsewhere = computed<Persona[]>(() => personas.value.filter((persona) => persona.workspace?.startIn !== dir.value));
 const query = computed(() => filter.value.trim().toLowerCase());
 const shown = computed(() =>
@@ -122,17 +92,14 @@ const shown = computed(() =>
         ? elsewhere.value
         : elsewhere.value.filter((persona) => `${persona.label ?? ``} ${persona.id}`.toLowerCase().includes(query.value)),
 );
-// The filter earns its place only once the list is longer than a glance: the same rule the account chooser on
-// the Personas page follows.
+// Filter earns its place only past a glance-length list, same threshold as the Personas page's account chooser.
 const filterable = computed(() => elsewhere.value.length > 6);
 const chosenCard = computed(() => personas.value.find((persona) => persona.id === chosen.value));
-/* Where the chosen card starts TODAY, when that is somewhere. A card has one starting folder, so this action
- * takes it off that one, which the panel has to say out loud, because the folder losing it is not on screen. */
+// Where the chosen card starts today, if anywhere; stated aloud since the folder losing it isn't shown on this screen.
 const movedFrom = computed(() => chosenCard.value?.workspace?.startIn);
 
 const cardId = computed(() => (mode.value === `edit` ? editing.value : personaSlug(label.value)) ?? ``);
-// A new card may not land on a name already taken: the save is by id, so it would silently rewrite that card
-// instead, including one belonging to another folder entirely.
+// A new card can't land on a taken name — save is by id, so it would silently overwrite that other persona.
 const taken = computed(() => mode.value === `new` && personas.value.some((persona) => persona.id === cardId.value));
 const nameValid = computed(() => cardId.value !== `` && !taken.value);
 const valid = computed(() => (mode.value === `existing` ? chosen.value !== undefined : nameValid.value));
@@ -147,17 +114,15 @@ const heading = computed(() =>
     mode.value === `edit` ? `Editing ${label.value}` : mode.value === `existing` ? `Use an existing persona` : `Add a persona`,
 );
 
-/* How bounded this draft is, in the phrase the rest of the app uses: shown beside the collapsed Advanced
- * section, because a card someone limited last week must not read as a full-powers card just because the section
- * holding that fact is folded away. */
+// How bounded this draft is, in the app's own phrase; shown beside the collapsed Advanced section so a limited
+// card doesn't read as full-powers just because that section is folded away.
 const bounds = computed(() => {
     const stored = storedPowers(powers.value);
     return stored === undefined ? undefined : personaBounds({ id: cardId.value, capabilities: [], powers: stored });
 });
 
-/* THE DECISIONS THIS PANEL DOES NOT ASK ABOUT and must not undo when it rewrites an existing card: what it is
- * for, which prompt it runs on, which repositories it carries, which models it runs on. A card rebuilt from
- * this form without them would lose each on the first folder change, silently, in a tracked file. */
+// Fields this panel never asks about but must not drop when rewriting an existing card: what it's for, its
+// prompt mode, its repos, its models — each would otherwise vanish on the first folder change.
 const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "systemPromptMode" | "context" | "models"> => ({
     ...(existing?.brief !== undefined ? { brief: existing.brief } : {}),
     ...(existing?.systemPromptMode !== undefined ? { systemPromptMode: existing.systemPromptMode } : {}),
@@ -165,15 +130,12 @@ const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "sy
     ...(existing?.models !== undefined ? { models: existing.models } : {}),
 });
 
-/* THE WHOLE CARD THIS PANEL IS ABOUT TO WRITE, or undefined when the form does not describe one yet. Built here
- * rather than inline in the handler so the two shapes sit side by side: the mode that only moves a card touches
- * exactly one field of it, and the mode that writes one spells out every field it is responsible for. */
+// The whole card about to be written, or undefined until the form describes one. Built here so the two modes'
+// shapes sit side by side: moving a card touches one field, writing one spells out every field it owns.
 const draftCard = (folder: string): Persona | undefined => {
     if (mode.value === `existing`) {
         const picked = chosenCard.value;
-        /* A MOVE, not a re-decision. Everything except where it starts is the card exactly as it stands: its
-         * accounts, its powers, the projects that prefer it, because the only thing this mode asked about was
-         * the folder. */
+        // A move, not a re-decision: everything but `startIn` stays exactly as the picked card already has it.
         return picked === undefined ? undefined : { ...picked, workspace: { ...picked.workspace, startIn: folder } };
     }
     if (!nameValid.value) {
@@ -184,16 +146,14 @@ const draftCard = (folder: string): Persona | undefined => {
     const named = label.value.trim();
     return {
         id: cardId.value,
-        // Carried over, not asked about: see the header. A new card starts with no accounts, which is what a
-        // persona created to work in a folder rather than to post as somebody wants.
+        // Carried over, not asked about (see header); a brand-new card starts with no accounts.
         capabilities: existing?.capabilities ?? [],
         ...carriedOver(existing),
-        // Only worth storing when it says something the id does not.
+        // Only stored when it says something the id doesn't already.
         ...(named !== `` && named !== cardId.value ? { label: named } : {}),
         // Absent means the full toolbox, so an untouched Advanced section commits nothing.
         ...(stored !== undefined ? { powers: stored } : {}),
-        // The whole point of the panel: the row that was clicked, kept alongside whatever else the card
-        // already said about where it works.
+        // The panel's whole point: the clicked folder, kept alongside anything else the card already said about itself.
         workspace: { ...existing?.workspace, startIn: folder },
     };
 };
@@ -215,22 +175,18 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- THE HEADER IS THE FOLDER'S QUESTION, not a claim about its contents. "Personas in knowledge" read as a
-         list of cards that live in that folder, and said it over an empty panel on every folder that has none,
-         which is exactly the folder somebody opens this from the first time. "Who works in …" is what the panel
-         is FOR, and it stays true whether the answer gets written here, borrowed from a card that already
-         exists, or changed. -->
+    <!--
+        The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list,
+        wrong on the folder's first use. "Who works in …" holds whether the answer is written, borrowed, or edited here.
+    -->
     <Modal v-model:open="visible" size="md" :header="`Who works in ${folderName}`">
         <div class="flex flex-col gap-4">
-            <!-- One sentence, and it is about this folder rather than about personas in general. -->
             <p class="text-xs text-subtle">
                 A persona that starts here opens its sessions in <code class="ui-code">{{ dir }}</code
                 >. Everything else about it can stay as it is.
             </p>
 
-            <!-- WHAT IS ALREADY HERE, first: a folder can hold several, and the card you meant to change is one
-                 of them. Absent entirely on a folder with none, rather than an empty box saying so: the form
-                 below already reads as "there is nothing here yet, name one". -->
+            <!-- Existing cards first, since a folder can hold several; absent entirely (not an empty box) when there are none. -->
             <div v-if="cards.length > 0" class="flex flex-col gap-1">
                 <span :class="ui.sectionLabel()">Starting here</span>
                 <div
@@ -239,8 +195,7 @@ const submit = async (): Promise<void> => {
                     class="flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors"
                     :class="editing === persona.id ? `border-link bg-link/10` : `border-line`"
                 >
-                    <!-- Smaller than the lists that exist to show personas off: this panel is about a FOLDER,
-                         and these are the cards that happen to start in it. -->
+                    <!-- Smaller than a persona-focused list; this panel is about the folder, not about showing cards off. -->
                     <PersonaFace :persona :size="32" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
                     <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
@@ -250,17 +205,14 @@ const submit = async (): Promise<void> => {
                 </div>
             </div>
 
-            <!-- The rule separates the form from the cards above it, so on a folder with none there is nothing for
-                 it to separate, and a line under a lone paragraph reads as a section whose contents failed to
-                 load. -->
+            <!-- Only drawn when there are cards above to separate from; alone, a rule under one paragraph reads as a load failure. -->
             <div class="flex flex-col gap-3" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
                 <div class="flex items-center gap-2">
                     <span :class="ui.sectionLabel()">{{ heading }}</span>
-                    <!-- THE OTHER WAY TO ANSWER, always at the same end of the same row: a mode switch a reader
-                         has to hunt for is one they use once. Only ever one link: two side by side would make a
-                         three-way choice out of a form that is already showing which choice it is on. And it is
-                         pushed off the heading, which reads as a continuation of it when it sits flush against
-                         an uppercase label. -->
+                    <!--
+                        Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way
+                        choice. Set off from the heading, or it reads as a continuation of the uppercase label.
+                    -->
                     <button
                         v-if="mode !== `new`"
                         type="button"
@@ -279,9 +231,10 @@ const submit = async (): Promise<void> => {
                     </button>
                 </div>
 
-                <!-- ONE OF YOUR CARDS, POINTED HERE. The rows read like the ones above them on purpose: it is the
-                     same kind of thing, one folder along. Each says where it starts TODAY, because that is what
-                     picking it takes away: a persona has one starting folder, so this moves it. -->
+                <!--
+                    Rows styled like the ones above on purpose — same kind of thing, one folder along. Each names where it
+                    starts today, since that's what picking it here takes away.
+                -->
                 <template v-if="mode === `existing`">
                     <input v-if="filterable" v-model="filter" :class="ui.input('w-full')" placeholder="Find a persona…" aria-label="Find a persona" />
                     <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
@@ -304,8 +257,7 @@ const submit = async (): Promise<void> => {
                         </button>
                         <p v-if="shown.length === 0" class="px-0.5 py-1 text-xs text-subtle">No persona goes by that.</p>
                     </div>
-                    <!-- Said again, in words, once there is something to say it about. The folder that loses the
-                         card is not on this screen, and a move nobody meant is only noticed there. -->
+                    <!-- Stated in words too, since the folder that loses the card isn't shown on this screen. -->
                     <p v-if="movedFrom !== undefined" class="text-xs text-warning">
                         This moves it: <span class="font-medium">{{ chosenCard?.label ?? chosenCard?.id }}</span> starts in
                         <code class="ui-code">{{ movedFrom }}</code> today, and a persona has one starting folder.
@@ -325,10 +277,10 @@ const submit = async (): Promise<void> => {
                         <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                     </div>
 
-                    <!-- PERMISSIONS, FOLDED. Every card gets the full toolbox unless somebody says otherwise, so
-                         this is the section most people never open, and the badge is what keeps that safe: a card
-                         that IS limited says so on the closed section. (Absent while picking an existing card:
-                         that mode moves a persona and re-decides nothing about it.) -->
+                    <!--
+                        Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed.
+                        Absent while picking an existing card — that mode moves a persona without re-deciding anything about it.
+                    -->
                     <div class="flex flex-col gap-3">
                         <div class="flex items-center gap-2">
                             <button
@@ -351,14 +303,12 @@ const submit = async (): Promise<void> => {
         </div>
 
         <template #footer>
-            <!-- The rest of a card (the accounts it speaks through, the folders it is fenced to) lives on the
-                 page that owns it, and this is the way there rather than a second copy of it. -->
+            <!-- The rest of a card lives on the page that owns it; this link is the way there, not a second copy of it. -->
             <RouterLink to="/sandbox/personas" :class="ui.linkButton('mr-auto gap-1 text-xs text-muted hover:text-content')">
                 Full editor <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
             <Button label="Cancel" text size="small" @click="dir = undefined" />
-            <!-- The verb is the mode's, so the button never promises to add a persona while the panel is moving
-                 one. "Start here" is true of a card that had a folder and of one that had none. -->
+            <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
                 :label="mode === `new` ? `Add persona` : mode === `existing` ? `Start here` : `Save`"
                 size="small"

@@ -1,58 +1,26 @@
 #!/usr/bin/env node
-/* THE TAIL OF A "g" IS NOT A STYLE CHOICE, AND THIS IS THE GATE THAT KEEPS IT.
- *
- * The site's display type and the app's one display heading are painted as a BACKGROUND clipped to the shape of
- * the letters (`background-clip: text` over three noise-and-gradient layers, which is what makes them read as cut
- * stone rather than flat gold). A background is painted across an element's padding box and stops there, so any
- * part of a glyph that hangs below that box is not painted at all: not clipped raggedly, not faded, simply
- * absent. Playfair's descenders are long, so a heading whose line box is short loses the tails of g, y, p, j, q
- * outright while every other letter looks perfect. That is the bug, and it came back four separate times.
- *
- * IT CAME BACK BECAUSE THE OLD FIX WAS A NUMBER SOMEBODY HAD TO REMEMBER. The clearance used to come from
- * `line-height`, and in Tailwind a size utility carries its own leading: `text-3xl` is 1.2, `text-4xl` is 1.111,
- * `leading-none` is 1, and a utility outranks the component layer the display recipe lives in. So the recipe's
- * own 1.24 was overridden by the very class that made the heading big, and staying unbroken depended on every
- * author writing `leading-tight` at every call site forever. Most did. The ones who did not shipped clipped
- * headings on the docs layout, the reference layout, the legal pages, the download page, the changelog and 404.
- *
- * SO THE CLEARANCE IS NOW STRUCTURAL: `padding-block-end` buys the descender room inside the painted box, and a
- * matching negative `margin-block-end` takes the same amount back out of the layout, so the letters gain their
- * tails and nothing below them moves. It holds at any leading, including 1, which is the point: the call site
- * cannot get it wrong by forgetting something.
- *
- * WHAT IS LEFT TO GUARD IS THE PAIR ITSELF, and that is what this checks:
- *
- *   1. Each rule that paints letters with a clipped background declares BOTH halves. Delete the padding and the
- *      descenders go; delete the negative margin and every heading grows a gap nobody asked for.
- *   2. Nothing sets a bottom margin on one of those elements from outside, because that wins over the takeback
- *      and leaves the padding standing as dead space. In markup that is an `mb-*` / `my-*` / `m-*` utility on an
- *      element that also carries the display class; in CSS it is a rule whose selector targets one of them and
- *      whose `margin` shorthand or `margin-bottom` is not the negative takeback.
- *
- * Deliberately NOT checked: how deep the padding is. 0.2em clears Playfair with room to spare, but the number
- * belongs to whoever is looking at the type, not to a script that cannot see it. */
+// Clipped-background text paints only inside the padding box, so a descender below it is invisible unless
+// `padding-block-end` buys room and a matching negative `margin-block-end` removes that room from layout. Checks that
+// the pair stays declared together and nothing overrides the takeback.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
 
 const root = repoRoot(import.meta.url);
 
-/* THE RULES THAT PAINT LETTERS AS A CLIPPED BACKGROUND, each named by the selector it is declared under. Two
- * today: the site's display recipe, and the app skin's single display heading. A THIRD ONE IS THE REASON THIS
- * LIST IS HERE — add it, or the next stone heading gets its own quiet regression. */
+// Selectors that paint clipped-background text; add a new one here or it goes unchecked.
 const CLIPPED_TYPE = [
     { file: `_site/site/src/styles/global.css`, selector: `.display`, marks: [`.display`] },
     { file: `_editor/web/src/skins/sanctum.css`, selector: `[data-skin="sanctum"] h1.text-4xl`, marks: [] },
 ];
 
-// The class that marks a clipped-type element in markup, and the utilities that would fight the takeback.
+// Matches a `.display` element in markup, and a margin utility that would override its descender takeback.
 const MARK_CLASS = /\bclass=["'][^"']*\bdisplay\b[^"']*["']/;
 const BOTTOM_MARGIN_UTILITY = /\b(?:sm:|md:|lg:|xl:|2xl:|max-sm:|max-md:|max-lg:)?(?:mb|my|m)-(?!0\b)[\w./[\]-]+/;
 
 const findings = [];
 
-/* PART ONE: THE PAIR IS STILL DECLARED. Read each rule's own block rather than the whole file, so a padding
- * declared on some unrelated selector three hundred lines away cannot pass for this one. */
+// Reads each rule's own block, not the whole file, so an unrelated selector's padding cannot pass for this one.
 for (const { file, selector } of CLIPPED_TYPE) {
     const source = readFileSync(`${root}/${file}`, `utf8`);
     const start = source.indexOf(`${selector} {`);
@@ -79,16 +47,15 @@ for (const { file, selector } of CLIPPED_TYPE) {
     }
 }
 
-/* PART TWO: NOBODY OVERRIDES THE TAKEBACK FROM OUTSIDE. In markup, a bottom-margin utility on the element that
- * carries the mark class; in the stylesheets, a rule that targets the mark and sets a bottom margin that is not
- * the takeback itself. `margin: … 0` is the exact shape that caused this on the landing page. */
+// Checks that nothing overrides the takeback from outside: a margin utility in markup, or a CSS rule on the mark whose
+// margin isn't the takeback itself.
 const tracked = execFileSync(`git`, [`ls-files`, `-z`, `_site/site/src`, `_editor/web/src`, `_editor/ui/src`], {
     cwd: root,
     encoding: `utf8`,
     maxBuffer: 64 * 1024 * 1024,
 })
     .split(`\0`)
-    // On disk as well as in the index: a deletion left unstaged is still listed by git and has nothing to read.
+    // Skips a path git lists but that no longer exists on disk (an unstaged deletion).
     .filter((path) => existsSync(`${root}/${path}`) && path !== ``);
 
 const marks = CLIPPED_TYPE.flatMap(({ marks: selectors }) => selectors);

@@ -10,24 +10,16 @@ import { exitProxyPort, exitStateDir, upMarkerPath } from "./exit-paths.js";
 import { forgetLiveState, readObservation, readSelection, writeObservation, writeSelection } from "./exit-state.js";
 import { ensureProxy, proxyBound } from "./exit-tunnel.js";
 
-/* The one place the manifest ("which exits exist") is joined to the machine ("which are up, and where do they
- * actually come out"). Everything that can move an exit, the capability card, the `exit` CLI, the capability
- * handler's apply, the browser wiring and the boot restore, goes through these functions, so there is exactly
- * one definition of what switching country means and no surface can drift from another.
- *
- * AND IT IS WHERE A SWITCH BECOMES TRUE. The drivers know how to bring a tunnel up; only this layer insists
- * that the tunnel came up WHERE IT WAS ASKED TO, by looking from the outside. A start or a use that cannot
- * prove its country takes the exit back down rather than leaving something running that a browser would
- * happily use while believing it was somewhere else.
- */
+// Joins the manifest (which exits exist) to the machine (which are up, and where they actually come out); every
+// caller that can move an exit (capability card, `exit` CLI, capability handler, browser wiring, boot restore)
+// goes through these functions. Where a switch becomes true: a start that can't prove its country takes the exit
+// back down rather than leave it running under a wrong belief.
 
 export type ExitEntry = TunnelEntry<ExitConfig>;
 
 export const proxyUrl = (id: string): string => `socks5://127.0.0.1:${exitProxyPort(id)}`;
 
-// A fresh tunnel is not immediately usable, tor is still finishing circuits, an openvpn tunnel has just been
-// addressed, so the first look often fails on something that works two seconds later. Retried rather than
-// trusted, because "could not check" and "came out in the wrong country" must not be confused.
+// Fresh tunnels fail their first look (tor circuits, openvpn addressing); retry before trusting.
 const OBSERVE_ATTEMPTS = 3;
 const OBSERVE_BACKOFF_MS = 2_000;
 
@@ -47,9 +39,9 @@ const observeWithRetry = async (entry: ExitEntry): Promise<ExitObservation> => {
     throw last ?? new Error("could not read this exit's public address");
 };
 
-// One configured exit as the UI, the CLI and the browser wiring see it: manifest intent, the OS's answer, and
-// the last observation. Cheap by design, the stored observation is read rather than re-made, because the
-// capability card polls and every check is a real request through a volunteer relay.
+// One exit as the UI, CLI and browser wiring see it: manifest intent, the OS's answer, and the last observation.
+// Reads the stored observation rather than re-probing, since the capability card polls and each check is a real
+// request through a volunteer relay.
 export const exitLink = async (entry: ExitEntry): Promise<ExitLink> => {
     const driver = exitDrivers[entry.config.provider];
     const probe = await driver.probe(entry.id, entry.config);
@@ -79,14 +71,9 @@ export const exitLink = async (entry: ExitEntry): Promise<ExitLink> => {
 export const exitLinks = async (capabilities: CapabilitiesStore): Promise<ExitLink[]> =>
     await Promise.all(tunnelEntries(await capabilities.list(), "exit").map((entry) => exitLink(entry)));
 
-/* Bring an exit up (or move it) at `country`, and prove it.
- *
- * The proof is the point. A driver reporting success means a tunnel exists; it does not mean traffic leaves
- * where it was asked to, and on tor in particular a country with too little capacity fails by quietly not
- * building circuits. So: start, look from the outside, and if the country does not match, STOP. Leaving a
- * mismatched exit running would be the worst of the options, a browser account bound to it would carry on
- * believing it was German while coming out of Amsterdam, which is precisely the failure this feature exists
- * to make impossible. */
+// Brings an exit up (or moves it) at `country`, and proves it: a driver reporting success only means a tunnel
+// exists, not that traffic leaves where asked (tor especially fails quietly when a country lacks capacity). Stops
+// the exit rather than leave a mismatched one running under a false belief.
 export async function* startExit(entry: ExitEntry, country: string | undefined): AsyncGenerator<IntenticLine> {
     const driver = exitDrivers[entry.config.provider];
     const missing = await driver.missingTool();
@@ -124,18 +111,10 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
     };
 }
 
-/* ONE START PER EXIT AT A TIME, shared by everyone waiting on it.
- *
- * `startExit` is not safe to run twice concurrently against one id: both would write the same conf, dial the
- * same interface and race on the same proxy port, and the loser's failure would stop the winner's working
- * exit. Nothing needed this while every caller was a person clicking a button. It became load-bearing the
- * moment a start could be ABANDONED by its caller and left running (see resolveProfileExit's budget): a turn
- * that gives up waiting must leave the start in flight, and the next turn must join that one rather than
- * begin a second.
- *
- * Progress lines are dropped, not buffered. The callers that want them (the CLI, the capability card) stream
- * `startExit` directly; the callers that reach for this one only ever asked "is it up yet".
- */
+// One start per exit id at a time, shared by every caller: two concurrent starts would race on the same conf,
+// interface and proxy port. Needed because a caller can abandon a start and leave it running (resolveProfileExit's
+// budget); the next turn must join the in-flight one rather than begin a second. Progress lines are dropped, not
+// buffered, callers wanting them stream `startExit` directly.
 const starting = new Map<string, Promise<void>>();
 
 export const startExitOnce = (entry: ExitEntry, country: string | undefined): Promise<void> => {
@@ -148,23 +127,22 @@ export const startExitOnce = (entry: ExitEntry, country: string | undefined): Pr
             void line;
         }
     })().finally(() => starting.delete(entry.id));
-    // Marks the rejection handled for the abandoned case. Callers still see the real failure through `run`;
-    // without this, a start nobody is waiting on any more would crash the daemon as an unhandled rejection.
+    // Marks the rejection handled for the abandoned case; without it, a start nobody is waiting on any more crashes
+    // the daemon as an unhandled rejection.
     void run.catch(() => undefined);
     starting.set(entry.id, run);
     return run;
 };
 
-// The driver already recorded which server it picked; preserve it when the links layer rewrites the selection
-// with the confirmed country, or a rotate would lose track of what to avoid next time.
+// The driver already recorded which server it picked; preserve it when rewriting the selection with the confirmed
+// country, or a rotate loses track of what to avoid next time.
 const selectionServer = async (id: string): Promise<{ server?: string }> => {
     const server = (await readSelection(id))?.server;
     return server === undefined ? {} : { server };
 };
 
-/* A different address in the same country. Fails when the address does not actually move: small pools really
- * do run out, and saying so is better than reporting a rotation that did nothing. Unlike a country mismatch
- * this leaves the exit UP, because an exit at the same address is still exactly what it claims to be. */
+// A different address in the same country. Fails if the address doesn't actually move (small pools run out);
+// unlike a country mismatch, leaves the exit up, since it's still what it claims to be.
 export async function* rotateExit(entry: ExitEntry): AsyncGenerator<IntenticLine> {
     const before = (await readObservation(entry.id))?.seen.ip;
     yield* exitDrivers[entry.config.provider].rotate(entry.id, entry.config);
@@ -183,24 +161,17 @@ export async function* rotateExit(entry: ExitEntry): AsyncGenerator<IntenticLine
 
 export const checkExit = async (entry: ExitEntry): Promise<ExitObservation> => await observeWithRetry(entry);
 
-// Take an exit down. Tolerant by contract: the goal state is "not up", so an already-down exit is a success.
-// The remembered observation goes with it, a stale reading outliving its tunnel would let `list` claim a
-// country nothing is coming out of any more.
+// Tolerant by contract: an already-down exit is a success. Clears the remembered observation too, or a stale
+// reading would let `list` claim a country nothing comes out of any more.
 export const stopExit = async (entry: ExitEntry): Promise<void> => {
     await exitDrivers[entry.config.provider].stop(entry.id, entry.config).catch(() => undefined);
     await forgetLiveState(entry.id);
 };
 
-/* Boot restore, and a repair the vpn subsystem has no equivalent of.
- *
- * Two different things are wrong after a restart. Exits marked auto-start are down and want dialling, the
- * familiar half. But a tunnel-based exit's CLIENT survives the daemon (it is its own process) while its SOCKS
- * proxy does not, because that listener lived in the daemon: so there can be a live tunnel with nothing
- * publishing it. `ensureProxy` is idempotent precisely so that gap can be closed without touching the tunnel,
- * which is cheaper and far less disruptive than tearing a working exit down to rebuild it.
- *
- * Both halves are best-effort: a dead relay must not take the daemon down with it, so failures land in the
- * link's state and the log. */
+// Boot restore, plus a repair the vpn subsystem has no equivalent of: a tunnel-based exit's client process
+// survives a daemon restart, but its SOCKS proxy lived in the daemon and does not, so a live tunnel can end up
+// with nothing publishing it. `ensureProxy` is idempotent so that gap closes without touching the tunnel. Both
+// this and the ordinary autostart dial are best-effort: a dead relay must not take the daemon down with it.
 export const restoreExits = async (
     capabilities: CapabilitiesStore,
     logger: { info: (message: string) => void; warn: (message: string) => void },

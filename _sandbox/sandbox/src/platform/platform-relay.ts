@@ -2,16 +2,9 @@ import { request } from "node:https";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./tls/local-tls.js";
 
-/* ONE BUFFERED PLATFORM CALL, authenticated by the connect token, the daemon's door onto the platform's
- * connect-token routes (the wallet's signer above all, wallet/wallet-signer.ts).
- *
- * The daemon adds exactly one thing here: the connect token, which is the credential that names whose
- * account is acting and which the platform refuses everything without. Everything else is the platform's
- * job, and the relay carries its answers through untouched, because a refusal is ALREADY written for the
- * person who will read it, and a daemon that rewrote it would only blur who said what.
- *
- * node:https for the platform-client.ts reason: a dev platform is a self-signed cert on
- * host.docker.internal, and undici cannot skip verification for one request only. */
+// One buffered platform call, authenticated by the connect token, onto the platform's connect-token routes
+// (wallet-signer.ts above all). Its answer is relayed through untouched, since a refusal is already written for its
+// reader. node:https, not fetch: a dev platform's cert needs per-request verification skipped.
 
 export interface RelayedAnswer {
     readonly status: number;
@@ -19,7 +12,7 @@ export interface RelayedAnswer {
     readonly contentType: string;
 }
 
-// The daemon's own sentence for a sandbox with no platform, the one answer that can't be relayed.
+// The daemon's own answer for a sandbox with no platform; the one case that can't actually be relayed.
 const UNRELAYABLE: RelayedAnswer = {
     status: 502,
     body: JSON.stringify({ error: "this sandbox is not connected to a platform" }),

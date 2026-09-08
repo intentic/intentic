@@ -1,25 +1,14 @@
 // @vitest-environment jsdom
-//
-/* THE MODEL PICKER, MOUNTED, and specifically the job it took over from a card.
- *
- * A brand-new user used to meet a "Try free with Google" pitch on the first screen after signing up, headline
- * and button, with the paid subscriptions demoted under it. It read as a sign-in wall, and it was one: the
- * screen behind it could not be reached until the card was answered or the free trial arrived. The card is gone.
- * What replaced it is this panel, because this is where a person is when they want a different model, and the
- * whole offer here is made of things the list was already saying: an order, a badge, and a way out.
- *
- * So three things are pinned, and each is the card's job in its new home:
- *   · the cheapest way in LEADS the locked rows, rather than sitting last of five by alphabet
- *   · each locked row still states its price, so "free" is legible without connecting anything
- *   · the door to the accounts page is here, since nothing else offers it any more
- */
+// The model picker replaces the old sign-in-wall card; everything it offered lives in the list now:
+// - the cheapest way in leads the locked rows, not sorted last by alphabet
+// - every locked row still states its price
+// - the accounts page link lives here, since nothing else offers it
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The catalogs are daemon-owned; the picker refreshes them on open. Mocked to no-ops so the mount is about what
-// the panel RENDERS from the module state each test seeds, not about a fetch.
+// Catalogs are daemon-owned and refreshed on open; mocked to no-ops so the mount reflects only seeded state.
 vi.mock(`./useChat-catalog`, () => ({
     loadAllProviderModels: () => Promise.resolve(),
     loadProviderModels: () => Promise.resolve(),
@@ -48,16 +37,15 @@ const mount = (): HTMLElement => {
     return element;
 };
 
-// The provider names, in the order their sections are drawn: the panel's own answer to "what should I look at
-// first". Read off the header's first span, since the header also carries the price chip and the connect link.
+// Provider names in section order (the panel's own answer to what to look at first); read off the header's
+// first span, since it also carries the price chip.
 const headings = (element: HTMLElement): string[] =>
     [...element.querySelectorAll(`[role="presentation"] > span:first-child`)].map((node) => node.textContent?.trim() ?? ``);
 
 const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `, `-`), label }];
 
 beforeEach(() => {
-    // Nothing connected, and every provider carrying the seed floor the daemon serves: the exact state a user
-    // is in when they open this panel for the first time, and the state the old card used to cover up.
+    // Nothing connected, every provider at its seed floor: the exact state a first-time user sees.
     providerAccounts.value = perProvider(() => []);
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     acpProviders.value = [];
@@ -93,8 +81,7 @@ it(`keeps the provider filters from adding a second vertical scroller beside the
 it(`leads the locked rows with the way in that costs nothing, and prices the rest`, () => {
     const element = mount();
 
-    // Claude is the selected provider, so it leads whatever it costs: it is what the composer would send on.
-    // Behind it, the free Google sign-in ahead of every paid subscription, where it used to come last.
+    // Claude leads since it's the selected provider; free Google sign-in comes next, ahead of paid subscriptions.
     expect(headings(element).slice(0, 2)).toEqual([`Claude Code`, `Google`]);
 
     // And the price is on the row, so "free" is readable without connecting anything to find out.
@@ -104,8 +91,7 @@ it(`leads the locked rows with the way in that costs nothing, and prices the res
     expect(element.textContent).not.toContain(`Try free with Google`);
 });
 
-// The trial is what a fresh sandbox on the hosted platform actually sends with, so it is a working row with a
-// count on it rather than a price: connected providers lead, and cost only ever separates the locked ones.
+// The trial is a working row (a count, not a price): connected providers lead, cost only separates the locked ones.
 it(`seats the working free trial above the locked rows, with its allowance rather than a price`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
@@ -118,9 +104,8 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     expect(element.textContent).toContain(`trial`);
 });
 
-/* THE DOOR TO EVERYTHING THIS LIST CAN ONLY BADGE: a second account on one provider, an account to drop, the
- * mechanics behind a sign-in. It came off the deleted card, which was the only other place that offered it, so
- * losing it here would have left the app with no route to the accounts page from the chat at all. */
+// The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. The
+// only route to the accounts page from chat.
 it(`carries the way out to the accounts page, and drops it while searching`, async () => {
     const element = mount();
 

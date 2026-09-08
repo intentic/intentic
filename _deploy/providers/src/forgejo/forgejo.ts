@@ -15,12 +15,9 @@ const forgejoSchema = sshSchema.extend({
     domain: z.string(),
     adminUser: z.string(),
     adminPassword: z.string(),
-    // The fully-pinned image (repo:tag@sha256) the resolver records in the desired-state graph. read observes
-    // the running container's image and diff recreates on a mismatch, so a version bump rolls forward.
+    // Fully-pinned image (repo:tag@sha256); diff recreates the container on a mismatch.
     image: z.string(),
-    // Guarded-update inputs, present only when the host opted into updatePolicy:"guarded" + declared a backup.
-    // A version bump then snapshots the data volume, recreates, health-gates, and rolls image + data back on
-    // failure. The restic password/creds come from the on-host restic.env the backup provider writes.
+    // Guarded-update inputs, present only under updatePolicy:"guarded" with a backup.
     guardRepo: z.string().optional(),
     resticImage: z.string().optional(),
 });
@@ -28,12 +25,9 @@ type ForgejoInputs = z.infer<typeof forgejoSchema>;
 const parse = (inputs: ResolvedInputs): ForgejoInputs => parseInputs(forgejoSchema, inputs, "forgejo");
 
 const CONTAINER = "intentic-forgejo";
-// The fixed host port Forgejo publishes, the port every engine-side Forgejo consumer forwards to over SSH.
+// Fixed host port Forgejo publishes; every consumer forwards to it over SSH.
 export const FORGEJO_HTTP_PORT = 3000;
-// The runner registration token + a scoped git access token + a packages access token are minted once and
-// persisted on the host, then read back every run, so they are STABLE outputs (re-minting would rotate them,
-// breaking the stateless contract). The git token is what Komodo authenticates with to clone the admin's
-// private app repos; the packages token is what the Forgejo Action pushes images with and Komodo pulls with.
+// Tokens are minted once, persisted on the host, and read back every run; re-minting would rotate them.
 const STATE_DIR = `${HOST_STATE_ROOT}/forgejo`;
 const TOKEN_FILE = `${STATE_DIR}/runner-token`;
 const GIT_TOKEN_FILE = `${STATE_DIR}/git-token`;
@@ -55,8 +49,7 @@ const running = async (session: SshSession): Promise<boolean> => {
     return result.stdout.trim() === CONTAINER;
 };
 
-// The image reference the running container was created with (the exact repo:tag@sha256 string), so diff can
-// compare it against the desired pin and recreate on a version bump.
+// Image reference the running container was created with, compared against the desired pin by diff.
 const runningImage = async (session: SshSession): Promise<string> => {
     const result = await session.exec(`docker inspect --format '{{.Config.Image}}' ${CONTAINER} 2>/dev/null || true`);
     return result.stdout.trim();
@@ -78,15 +71,11 @@ const waitHealthy = async (session: SshSession): Promise<void> => {
     }
 };
 
-// Forgejo (Git + CI) running on the host as a single SQLite-backed container, with an admin user and a
-// persisted runner-registration token. read returns the resource only when the container is up, healthy,
-// and the token is persisted (so a noop re-derives a stable output set); diff is a noop because the only
-// reconciled state is "running + healthy", which read already gates. apply is idempotent: the SQLite data
-// lives in a named volume that survives container recreation, and the admin/token bootstraps are guarded.
+// Forgejo (Git + CI) on the host, single SQLite-backed container with an admin user and persisted tokens. `read`
+// gates on container up + healthy + tokens persisted; the SQLite volume and guarded bootstraps make apply idempotent.
 export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-        // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
+        // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;
         }
@@ -120,8 +109,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             await session.dispose();
         }
     },
-    // The SQLite data volume + host token files survive the rm/run recreation in apply, so a version bump is a
-    // safe in-place update: recreate on the new image, then the readiness gate re-checks health.
+    // SQLite data and token files survive apply's rm/run recreation, so a version bump is a safe in-place update.
     diff: (inputs, observed) => {
         const desired = parse(inputs).image;
         if (observed.detail?.["image"] !== desired) {
@@ -134,7 +122,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
         const session = await executor.connect(sshTarget(parsed));
         try {
             await session.exec(`mkdir -p ${STATE_DIR}`);
-            // (Re)create the container on a given image and wait for health; throws if it never gets healthy.
+            // (Re)creates the container on a given image and waits for health; throws if it never becomes healthy.
             const bringUp = async (image: string): Promise<void> => {
                 await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
                 const run = await session.exec(
@@ -148,8 +136,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
                 }
                 await waitHealthy(session);
             };
-            // On a guarded version bump (existing container + a backup repo), wrap the recreate in a snapshot +
-            // health-gate + image/data rollback transaction; otherwise just bring up the desired image.
+            // A guarded version bump wraps recreate in a snapshot + health-gate + rollback transaction.
             const oldImage = observed?.detail?.["image"];
             if (observed !== undefined && parsed.guardRepo !== undefined && parsed.resticImage !== undefined && typeof oldImage === "string") {
                 await guardedUpdate({
@@ -176,7 +163,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             if (admin.code !== 0 && !admin.stderr.includes("already exists")) {
                 throw new Error(`failed to create forgejo admin: exited ${admin.code}: ${admin.stderr.trim()}`);
             }
-            // Mint the runner + git + packages tokens only once; reuse the persisted ones on later applies so outputs stay stable.
+            // Mints the runner/git/packages tokens once; later applies reuse the persisted ones.
             await session.exec(`test -f ${TOKEN_FILE} || docker exec -u git ${CONTAINER} forgejo actions generate-runner-token > ${TOKEN_FILE}`);
             await session.exec(
                 `test -f ${GIT_TOKEN_FILE} || docker exec -u git ${CONTAINER} forgejo admin user generate-access-token ` +
@@ -204,7 +191,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
             await session.dispose();
         }
     },
-    // Parses only the SSH block, so it works from a removed node's inputs AND a ListedResource's (a host's).
+    // Parses only the SSH block, so it works from a removed node's inputs or a ListedResource's.
     delete: async (inputs) => {
         const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "forgejo")));
         try {

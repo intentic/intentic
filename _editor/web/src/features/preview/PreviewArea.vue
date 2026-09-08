@@ -1,14 +1,8 @@
-<!-- THE PREVIEW AREA: the preview panel's full-window home, desktop only.
-
-     The panel itself is mounted once per page by shell/WorkspaceRuntime's PoppablePanels and TELEPORTED to
-     whichever slot is published (shell/dockSlots.ts): this route publishes the preview's one in-shell slot.
-     Away from here the panel waits parked behind the rail's Preview tile, its iframe still holding the
-     previewed app's own state; nothing preview-shaped is duplicated in this file.
-
-     WHILE THE PREVIEW IS IN A WINDOW OF ITS OWN this area does not steal it: the panel is drawn by that window,
-     so the area stands empty and the notice below says where the preview is, with the one explicit way to
-     recall it. Never an automatic recall: a URL that happens to be /preview must not close a window under the
-     user. Every move of the panel is a button. (The same contract as pages/ChatArea.vue.) -->
+<!--
+    Full-screen /preview route, desktop only: publishes the dock slot the preview panel teleports into (shell/dockSlots.ts), the same contract as
+    ChatArea.vue. Parked behind the rail's Preview tile, the panel's iframe keeps its state. When the preview is in its own window, this area shows a
+    notice with an explicit recall button — never automatic.
+-->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";

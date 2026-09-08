@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { cliLauncher, quotedCommandLine, stubCommand } from "./launcher.js";
 
-/* How a CLI re-invokes itself decides whether its background loop and its autostart entry ever run, and the two
- * install shapes need OPPOSITE argv. The released install is a `bun build --compile` binary whose
- * process.argv[1] is a path inside its own virtual filesystem; the runtime re-injects that entry on every
- * launch, so passing it again shifts the real command to argv[2] and every spawn dies with "No command
- * registered for `/$bunfs/root/…`". The sync agent shipped exactly that: mirroring silently never started on any
- * released build, and the broken argv was persisted into the autostart entry too. A plain `node dist/cli.js` run
- * still needs the script path. */
+// A bun-compiled binary re-injects its own entry (argv[1]) on every launch, so passing it again shifts the real
+// command; a plain node invocation still needs the script path.
 describe("cliLauncher", () => {
     const withEntry = <T>(entry: string | undefined, run: () => T): T => {
         const argv = process.argv;
@@ -39,8 +34,7 @@ describe("cliLauncher", () => {
     });
 });
 
-// Installed paths routinely contain spaces (C:\Users\First Last\…), and an unquoted Run value or Exec line
-// splits on them into a command nobody registered.
+// Installed paths often contain spaces; an unquoted Run value or Exec line splits on them into an unregistered command.
 describe("quotedCommandLine", () => {
     it("quotes every element", () => {
         expect(quotedCommandLine(["C:\\Program Files\\node.exe", "C:\\Users\\First Last\\cli.js", "mirror"])).toBe(
@@ -49,9 +43,8 @@ describe("quotedCommandLine", () => {
     });
 });
 
-/* The stub's command line is written into a registry value AND passed to a spawn, so the two shapes come from
- * one function: a drift between them is a bug that shows up one reboot later. The launcher's own parser is
- * deliberately rigid about this order (`--log <file> -- <program> …`), so the order is the contract. */
+// Registry value and spawn args both come from one function so the two shapes can't drift; the parser is rigid about
+// order (`--log <file> -- <program> ...`).
 describe("stubCommand", () => {
     it("puts the log first and everything the child owns after the separator", () => {
         expect(stubCommand("C:\\bin\\intentic-launch.exe", "C:\\logs\\host.log", ["C:\\bin\\intentic-host.exe", "run", "--foreground"])).toEqual([

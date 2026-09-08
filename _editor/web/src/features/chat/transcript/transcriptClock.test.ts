@@ -3,15 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TranscriptClock } from "./transcriptClock";
 import type { AttachEntry, AttachHead } from "../run/turnStream";
 
-/* WHO THE TYPEWRITER IS FOR: the pane the reader is in, and nobody else.
- *
- * A floating chat window shows as many chats side by side as the user picks (ChatPanel's panes), and each
- * one that is streaming owns a clock. Left to themselves they would all type at once: N things moving in the
- * periphery of someone trying to read one of them, each paying the reveal's per-paint cost (a list rebuild to
- * append a few characters). So a transcript nobody is watching settles its text in the frame it arrives.
- *
- * Driven a FRAME AT A TIME here, because that is the whole difference: the buffer drains either way, and a
- * test that runs frames until the clock stops cannot tell "typed over ten frames" from "settled in one". */
+// Needs fake timers/rAF (paint() drives frames by hand) to tell "typed over N frames" apart from "settled in one". Only
+// the watched pane types; unwatched panes settle whole in the frame text arrives.
 
 const TURN = { userMessageId: 1, run: `run-1`, provider: `claude`, account: undefined, harness: `native` } as const;
 const head = (rows: readonly TranscriptRow[], run = `run-1`): AttachHead => ({ kind: `attached`, run, startedAt: 0, seq: 0, rows: [...rows] });
@@ -33,8 +26,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// Exactly one paint of whatever the clock has asked for: the frames it schedules DURING the tick wait for the
-// next call, which is what makes "one frame" a measurable thing.
+// One paint only: frames scheduled during the tick wait for the next call to this.
 const paint = (): void => {
     for (const frame of frames.splice(0, frames.length)) {
         frame(0);
@@ -43,7 +35,7 @@ const paint = (): void => {
 
 const said = (clock: TranscriptClock): string => clock.messages.value.at(-1)?.text ?? ``;
 
-// A run whose head holds the prompt and an open bubble, the shape every live turn has once its first word lands.
+// A run whose head holds the prompt and an open bubble, the shape of a live turn once its first word lands.
 const attached = (clock: TranscriptClock): void => {
     clock.attachRun(
         head([
@@ -75,8 +67,6 @@ it(`settles an unwatched transcript in the frame its text arrives`, () => {
     expect(said(clock)).toBe(ANSWER);
 });
 
-// The pane the user moves to takes over mid-answer: what is already buffered starts typing from there, rather
-// than the transcript staying settled for the rest of the turn because of where the focus used to be.
 it(`starts typing when a pane takes the focus mid-answer`, () => {
     const clock = new TranscriptClock(() => {});
     attached(clock);
@@ -92,9 +82,6 @@ it(`starts typing when a pane takes the focus mid-answer`, () => {
     expect(said(clock).length).toBeLessThan(ANSWER.length * 2);
 });
 
-/* THE HEAD'S ROWS LAND WHOLE, however closely the pane is watched: they are history, nobody watched them
- * happen, and there is no pace to keep. Opening an agent that had been working for an hour used to mean
- * watching an hour of prose type itself out before reaching what the agent is doing NOW. */
 it(`takes a head's rows whole, and types only what follows it`, () => {
     const clock = new TranscriptClock(() => {});
     clock.attachRun(
@@ -112,10 +99,8 @@ it(`takes a head's rows whole, and types only what follows it`, () => {
     expect(said(clock).length).toBeLessThan(ANSWER.length * 2);
 });
 
-/* RE-ATTACHING TO THE SAME RUN REPLACES ITS ROWS, never draws them again under themselves: the head carries the
- * run's transcript whole, and where this window last put the run is where the new copy goes. What the run sits
- * UNDER (the rows of earlier turns, a notice this window wrote) is untouched, and the bubble a send drew ahead
- * of the head is where the run's rows start: it keeps its id when the daemon's row replaces it. */
+// Re-attaching the same run replaces its rows in place, keeping what sits above untouched; the bubble a send drew ahead
+// of the head keeps its id when the daemon's row replaces it.
 it(`replaces a run's rows on every head and keeps what sits above them`, () => {
     const clock = new TranscriptClock(() => {});
     clock.append({ role: `assistant`, text: `earlier answer` });
@@ -140,7 +125,6 @@ it(`replaces a run's rows on every head and keeps what sits above them`, () => {
     expect(clock.messages.value.map((message) => message.text)).toEqual([`earlier answer`, `hi`, `first and more`, `Stopped.`]);
     expect(clock.messages.value[1]?.id).toBe(asked);
 
-    // A different run is a new turn: it goes below everything this window holds.
     clock.attachRun(
         head(
             [
@@ -222,7 +206,6 @@ it(`drops the typewriter's buffer for a row the daemon replaced whole`, () => {
     expect(said(clock)).toBe(ANSWER);
 });
 
-// Every entry reaches the conversation once, in arrival order, with the replay flag it came with.
 it(`hands every entry to the conversation in order`, () => {
     const seen: [string, boolean][] = [];
     const clock = new TranscriptClock((entry, _turn, replay) => seen.push([entry.kind === `patch` ? entry.patch.op : entry.fact.kind, replay]));
@@ -236,7 +219,6 @@ it(`hands every entry to the conversation in order`, () => {
     ]);
 });
 
-// A notice this window writes is its own, marked so a fork counts it out, and stamped nothing else.
 it(`marks its own notices local`, () => {
     const clock = new TranscriptClock(() => {});
     clock.notice(`Switched to Codex.`);

@@ -2,14 +2,10 @@ import type { IntenticApi, ViewerRegistration } from "@intentic/extension-api";
 import * as viewers from "@intentic/ext-viewers";
 import { describe, expect, it } from "vitest";
 
-/* Exercises the ext-viewers package the way loadBuiltins does: activate() against a minimal fake IntenticApi:
- * proving it registers every viewer its manifest declares. This is the end-to-end wiring of the
- * contributes.viewers path (manifest → activate → api.viewers.register), minus the browser render.
- *
- * It matters more than a wiring test usually would, because this ONE extension is every file format the app can
- * show that isn't source code. The core resolves a path to text or to opaque bytes and has no branch for a
- * picture, a PDF or a recording (see pages/workspace/fileType.ts): if a registration here silently stopped
- * happening, the workspace would not throw: it would quietly start offering downloads instead of previews. */
+// Exercises ext-viewers by calling activate() against a minimal fake IntenticApi, proving it registers every viewer its
+// manifest declares.
+// This is the only extension covering non-source file formats; a silent registration failure wouldn't throw, it would
+// just fall back to downloads instead of previews.
 
 const activateAndCaptureViewers = (): ViewerRegistration[] => {
     const registered: ViewerRegistration[] = [];
@@ -47,10 +43,9 @@ describe(`ext-viewers`, () => {
         expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`], fetch: `blob` });
     });
 
-    /* Media is the ONLY `url` viewer, and has to stay one: a blob fetch means downloading the whole file before
-     * the first frame and refusing anything past the daemon's 25 MiB raw cap, which is most recordings. Audio
-     * and video share the entry because the player decides which it is from the decoded track, not the
-     * extension (an .mp4 is frequently audio-only). */
+    // Media is the only `url` viewer: a blob fetch would download the whole file before the first frame and hit the
+    // daemon's 25 MiB raw cap for most recordings.
+    // Audio and video share one entry because the player decides which it is from the decoded track, not the extension.
     it(`declares audio and video as one streaming viewer`, () => {
         const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);
         expect(media?.fetch).toBe(`url`);

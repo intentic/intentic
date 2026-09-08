@@ -1,12 +1,6 @@
-/* The bounded crawl: a frontier under hard caps, worked by a small pool. Order is BFS until a query makes
- * it best-first — then links whose anchor text and URL share words with the query jump the queue (the
- * best-first idea, like the pruning weights, follows crawl4ai, Apache-2.0). The caps are the contract:
- * max-pages is absolute, depth bounds discovery, robots.txt is obeyed by default, and everything the crawl
- * did NOT do comes back as a per-reason count — a capped crawl that reads like a complete one is the
- * failure mode this report exists to prevent.
- *
- * Everything flows through the same page pipeline (and so the same cache) as `webq fetch`: re-crawling a
- * site an agent already touched this quarter-hour costs no network at all. */
+// Bounded crawl: BFS by default, best-first once a query scores anchor/URL word overlap (best-first and pruning follow
+// crawl4ai, Apache-2.0). Caps (max-pages, depth, robots.txt) are a contract: everything skipped returns as a per-reason
+// count. Shares `webq fetch`'s page pipeline and cache.
 import { setTimeout as sleep } from "node:timers/promises";
 import { tokenize } from "./bm25.js";
 import { closeBrowser } from "./browser.js";
@@ -74,8 +68,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
         }
         const queued = pending.get(url);
         if (queued !== undefined) {
-            // The same URL reached through a better door: a link whose anchor text finally says what the
-            // page is about must be able to promote a candidate the sitemap seeded blind.
+            // A URL reached through a better link (real anchor text) can promote a candidate the sitemap seeded blind.
             const score = scoreCandidate(url, anchorText, depth, queryTerms);
             if (score > queued.score) {
                 queued.score = score;
@@ -117,9 +110,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
     let inFlight = 0;
     let landed = 0;
 
-    // The pool: pop the best candidate, work it, admit what it links to. Ends when the frontier is dry and
-    // nothing is in flight, or the moment the page cap is reached — candidates still queued then are the
-    // beyond-cap count, not a silent omission.
+    // Works the best candidate until the frontier is idle or the cap is hit; the rest then count as beyond-cap.
     await new Promise<void>((resolve) => {
         const pump = (): void => {
             if (landed >= maxPages || (pending.size === 0 && inFlight === 0)) {
@@ -129,9 +120,8 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
                 }
                 return;
             }
-            // Best-first needs signal before speed: until the first page lands, its links (the anchor
-            // texts that score the frontier) don't exist yet, so a query crawl fans out only after the
-            // scout page — otherwise the concurrency burst spends the page budget on blind seeds.
+            // A query crawl fetches one scout page first; anchor-text scores don't exist yet, so early fan-out wastes
+            // it.
             const width = queryTerms.length > 0 && landed === 0 ? 1 : concurrency;
             while (inFlight < width && pending.size > 0 && landed + inFlight < maxPages) {
                 const next = takeBest(pending);
@@ -149,8 +139,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
                     await sleep(delayMs);
                 }
                 const page = await fetchPage(candidate.url, options);
-                // A 4xx/5xx is a link that lied, not a page: counted, never written — a saved "nope" body
-                // would sit in the index costing tokens and trust.
+                // A 4xx/5xx is a broken link, not a page: counted but never written to the index.
                 if (page.status >= 400) {
                     skipped["http-errors"] += 1;
                     return;
@@ -192,8 +181,8 @@ const takeBest = (pending: Map<string, Candidate>): Candidate => {
     return best as Candidate;
 };
 
-/* Without a query this reduces to plain BFS (depth is the only signal). With one, a link advertising the
- * query's own words — in what it says or where it points — is worth visiting before its siblings. */
+// Without a query this is plain BFS (depth only). With one, a link whose anchor text or URL echoes the query's words is
+// visited before its siblings.
 const scoreCandidate = (url: string, anchorText: string, depth: number, queryTerms: string[]): number => {
     if (queryTerms.length === 0) {
         return -depth;
@@ -227,7 +216,7 @@ const loadRobots = async (startUrl: string, timeoutMs: number | undefined): Prom
     try {
         const origin = new URL(startUrl).origin;
         const response = await httpFetch(`${origin}/robots.txt`, { timeoutMs: Math.min(timeoutMs ?? 10_000, 10_000) });
-        // A missing robots.txt allows everything; an unreachable SITE will fail loudly on the first page.
+        // A missing robots.txt allows everything; an unreachable site fails loudly on the first page fetch instead.
         return response.status >= 200 && response.status < 300 ? parseRobots(response.body) : EVERYTHING_ALLOWED;
     } catch {
         return EVERYTHING_ALLOWED;

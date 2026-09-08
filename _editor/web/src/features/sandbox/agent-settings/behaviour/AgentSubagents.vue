@@ -7,38 +7,22 @@ import { commitCount } from "../models/numberInputs";
 import { type Posture, postureOf, POSTURES, withPosture } from "../safety/spawnPosture";
 import SubagentsInfo from "./SubagentsInfo.vue";
 
-/* HOW MUCH THE ASSISTANT MAY DELEGATE: whether it may at all, and then how far. Four rows on one activity, and
- * they are four rather than one because they stop different things — the posture over the whole feature, the
- * width of one fan-out, the lifetime budget of a conversation, and how far a delegated agent may itself
- * delegate. Raising only the width is what makes a wide sweep hit the second ceiling two rounds later, which
- * reads as the same wall in a new place, so they are shown together.
- *
- * THE POSTURE USED TO BE A GROUP OF ITS OWN, on the Safety tab, called "Child agents". Two things were wrong
- * with that. It filed a delegation ceiling under the gate that decides whether a command may delete your files,
- * which is a different kind of question and a different kind of consequence: nothing about starting an agent is
- * irreversible, it just costs. And it left one concept under two names on two tabs, so an owner who turned the
- * feature down here found the switch that turns it off somewhere else, with nothing on either screen saying they
- * were related. The prompt-injection nuance that put it under Safety survives as a property of the DEFAULT
- * posture, described on the row, rather than as the filing of the whole control.
- *
- * The bounds are the daemon's (SandboxSettingsSchema), restated here so the box refuses a number the save would:
- * a field that accepts 5000 and then silently keeps 200 looks like a setting that didn't take. */
+// Four rows over one activity: whether it may delegate at all, how wide one fan-out is, the lifetime budget per
+// conversation, and how deep delegation nests. Raising only the width just hits the per-conversation ceiling
+// later. Bounds mirror SandboxSettingsSchema so the box never accepts a number the save would reject.
 const { settings, patch } = useSandboxSettings();
 
 const AT_ONCE = { min: 1, max: 200 };
 const PER_TURN = { min: 1, max: 2000 };
 const DEPTH = { min: 1, max: 10 };
 
-/* Whether a turn may start agents of its own (the guard's `agents.spawn`), stored in `actionRules` rather than
- * as a number, because it is the only row here that answers allow/ask/refuse instead of how many. The four
- * postures and the merge the write needs both live in spawnPosture.ts, which says why this is a picker rather
- * than a toggle and why Default is one of the four rather than the absence of a choice. */
+// Stored in `actionRules` (allow/ask/refuse), not a number: the only row here that isn't a ceiling. Postures
+// and the merge logic live in spawnPosture.ts.
 const rules = computed<Readonly<Record<string, AdmissionRule>>>(() => settings.value?.actionRules ?? {});
 const posture = computed<Posture>(() => postureOf(rules.value));
 const setPosture = (next: Posture): void => patch({ actionRules: withPosture(rules.value, next) });
 
-// Whether the three ceilings below bound anything. A refused feature with three live number boxes under it
-// invites an owner to tune a limit on work that will never start.
+// Whether the three ceilings below bound anything, since a denied posture makes tuning them moot.
 const spawnDenied = computed(() => posture.value === `deny`);
 </script>
 
@@ -46,9 +30,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
     <RowGroup label="Subagents">
         <template #info><SubagentsInfo /></template>
 
-        <!-- WHETHER, before HOW MANY. It leads the group because it is the switch over the other three: reading
-             down, the question narrows from "may it delegate" to "how far", which is the order somebody
-             arriving with either question can follow. -->
+        <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
         <Row icon="robot" title="Start agents of its own" description="A child agent spends the same connected accounts this one does.">
             <template #control>
                 <Picker
@@ -68,9 +50,10 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-        <!-- The parallel width: the one people meet first, because it is the one a fan-out hits within seconds.
-             The assistant is told to stop and NOT retry when it lands here, so the cost of a low number is work
-             done one item at a time rather than a failure. -->
+        <!--
+            First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work
+            instead of failing it.
+        -->
         <Row
             icon="users"
             title="Subagents at once"
@@ -93,9 +76,10 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-        <!-- The lifetime budget of one conversation. Separate from the width because it is the cap a long session
-             creeps up on rather than one a single message hits: twenty rounds of five is the same hundred agents
-             as one round of a hundred, and only this row bounds it. -->
+        <!--
+            Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one
+            round of a hundred.
+        -->
         <Row
             icon="clone"
             title="Subagents per conversation"
@@ -118,8 +102,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-        <!-- Nesting. The only one of the three whose runaway case multiplies rather than merely widens, which is
-             why the warning below is attached to this row and not to the other two. -->
+        <!-- The only one of the three whose runaway case multiplies rather than widens. -->
         <Row
             icon="sitemap"
             title="Nesting depth"

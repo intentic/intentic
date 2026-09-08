@@ -5,17 +5,9 @@ import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";
 
-/* WHERE THIS CHAT CAME FROM, at the top of the transcript it inherited.
- *
- * A fork opens holding somebody else's turns. Without a line saying so, those turns read as this conversation's
- * own beginning, and the two chats, which exist to be COMPARED, look unrelated. So the relationship is stated
- * exactly where the inherited history starts, and it is a link: the reason to have forked is to go back and
- * forth between the two answers.
- *
- * Read from the fleet rather than from the tab, because the tab is the half that does not last. Closing this
- * chat and reopening it from history builds a new tab that knows nothing, while the registry entry has carried
- * the fork's source since its first turn, and it is the same read from either end (see the source's own mark
- * in ChatForkCut). */
+// Banner at the top of a forked transcript linking back to the chat it inherited turns from, so the two stay
+// comparable. Read from the fleet registry rather than the tab, since the registry has carried the fork's source since
+// the first turn, unlike a reopened tab.
 
 const { conversation } = usePaneView();
 const { agentById } = useAgents();
@@ -24,15 +16,11 @@ const { conversations, setActive } = useChat();
 const forkedFrom = computed(() => agentById(conversation.value.conversationId)?.forkedFrom);
 const source = computed(() => (forkedFrom.value === undefined ? undefined : agentById(forkedFrom.value.conversationId)));
 
-// The source may be open in this window, closed, or gone entirely (discarded). The first two are a destination;
-// the third is not, and a link that opened nothing would be worse than plain text.
+// Source may be open, closed, or discarded entirely; only the first two are a real destination to link to.
 const reachable = computed(() => source.value !== undefined);
 const label = computed(() => source.value?.title ?? `the chat this was forked from`);
 
-/* AND WHICH FILES IT STARTED ON. Said out loud, permanently, because it is the half of a fork that has no other
- * evidence: the inherited turns are on screen, but whether the workspace under them is the one those turns
- * describe or the one that exists today is invisible, and getting it wrong is how an agent ends up reasoning
- * about edits that are not there. */
+// Which files the fork started on: the only record of whether inherited turns match today's workspace.
 const files = computed(() =>
     forkedFrom.value?.files === `then` ? `on the files as they were at that point` : `on the files as they stood when it was forked`,
 );

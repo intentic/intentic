@@ -1,24 +1,7 @@
 #!/usr/bin/env node
-// Does every baked package.json in a running sandbox still describe the dist dev-mounts.mjs binds over it?
-//
-//   node _sandbox/sandbox/scripts/dev-manifest-drift.mjs <container>
-//
-// Exits 0 when the manifests agree, 1 when any has drifted (and says which subpaths, and what to run).
-//
-// Why this check exists: only compiled output is mounted, never node_modules (dev-mounts.mjs explains why), so
-// a package.json is installed by an image build and by nothing else. Add an export subpath to a baked package,
-// reload fast, and the container ends up with the new dist/ and the OLD manifest — Node then refuses the
-// subpath that is sitting right there on disk, with `Package subpath './x' is not defined by "exports"`. That
-// shipped: `@intentic/base` gained ./format and ./plain-text, and `iq` (whose engine imports ./format at module
-// top level) died at startup on every invocation, along with the daemon's rule and CI paths that import
-// ./plain-text. dev-sandbox.mjs's watcher already forces a full rebuild on a manifest edit, so this is the guard
-// for the fast path invoked directly, where nothing was watching.
-//
-// Exports only, deliberately. `pnpm deploy` copies these manifests verbatim (all 22 baked ones are byte-identical
-// to their source), but the field it would be most tempting to also compare — dependencies — is the one a future
-// pnpm could start rewriting during the prune, which would turn this guard into a permanent false failure that
-// blocks every reload. A missing dependency also announces itself as ERR_MODULE_NOT_FOUND naming the package,
-// whereas an unresolvable subpath points at a file that is visibly present.
+// Checks whether every baked package.json in a running sandbox still describes the dist dev-mounts.mjs binds over it;
+// exits 0 if manifests agree, 1 if any drifted. Compares exports only, never dependencies, since a future pnpm prune
+// could rewrite dependency fields and turn this into a permanent false failure.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,9 +17,7 @@ if (!container) {
 const packages = workspacePackages();
 const names = bakedPackageNames().filter((name) => packages.has(name));
 
-// One `docker exec` for all of them rather than one apiece: the check sits in front of every fast reload, and
-// twenty-odd container round trips is latency the loop exists to avoid. A package the image never baked cats
-// nothing and is reported as absent, which is its own reason to rebuild.
+// One `docker exec` batches every package; a never-baked package cats nothing and reports as absent.
 const DELIM = "@@INTENTIC-MANIFEST@@";
 const script = names
     .map((name) => `printf '%s\\n%s\\n' '${DELIM}' '${name}'; cat '${packageDir(name)}/package.json' 2>/dev/null || true`)
@@ -53,7 +34,7 @@ try {
     process.exit(2);
 }
 
-// Split back into one entry per package: the delimiter line, then the name line, then the file (possibly empty).
+// Splits back into one entry per package: delimiter line, then name line, then the file (possibly empty).
 const bakedManifests = new Map();
 for (const chunk of raw.split(`${DELIM  }\n`)) {
     if (chunk.trim() === "") {

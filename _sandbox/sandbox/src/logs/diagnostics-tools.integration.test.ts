@@ -6,9 +6,8 @@ import type { UsageTurn } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { createDiagnosticsServer, type DiagnosticsToolDeps } from "./diagnostics-tools.js";
 
-/* The tools as the model meets them: called by name, answered in text. What these pin is the WORDING as much as
- * the filtering, because the whole reason these exist rather than a documented file path is that the answer has
- * to be readable by whoever asked without a second call to work out what it meant. */
+// Tools as the model meets them: called by name, answered in text. Pins the wording, not just the filtering: the answer
+// must be readable without a second call.
 
 const NOW = Date.UTC(2026, 7, 22, 12, 30, 0);
 const at = (minutesAgo: number): string => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -37,11 +36,8 @@ const setup = async (files: Record<string, readonly string[]>, turns: readonly U
     return { historyRoot, usage: { turns: async () => [...turns] }, now: () => NOW };
 };
 
-/* Call one tool by name and return the text it answered with, which is all the model ever sees.
- *
- * Through the SDK server's own registry rather than a hand-rolled seam: the registry is what the harness
- * actually dispatches on, so a tool renamed or dropped fails these tests instead of quietly disappearing from
- * the prompt. `_registeredTools` is private to McpServer, hence the one cast. */
+// Calls a tool through the SDK server's own registry, not a hand-rolled seam, so a renamed or dropped tool fails here
+// instead of vanishing from the prompt. `_registeredTools` is private to McpServer, hence the cast.
 const call = async (deps: DiagnosticsToolDeps, name: string, args: Record<string, unknown>): Promise<string> => {
     const server = createDiagnosticsServer(deps);
     const registry = server.instance as unknown as {
@@ -64,7 +60,6 @@ test("errors defaults to warn and worse, newest first", async () => {
     const text = await call(deps, "errors", {});
     expect(text).toContain("2 lines");
     expect(text).toContain("newest first");
-    // The error is above the warning, and the routine line is not there at all.
     expect(text.indexOf("turn failed")).toBeLessThan(text.indexOf("heartbeat"));
     expect(text).not.toContain("probe finished");
 });
@@ -95,7 +90,6 @@ test("slow reads its own file and can be narrowed to one operation", async () =>
     });
 
     const all = await call(deps, "slow", {});
-    // The load rides along: it is what separates a real regression from a busy machine.
     expect(all).toContain("19.2");
     expect(await call(deps, "slow", { op: "git." })).not.toContain("http.request");
 });
@@ -119,7 +113,6 @@ test("turns reports what ran and what failed, and names the asked-for model only
     expect(text).toContain("2 turns");
     expect(text).toContain("1 failed");
     expect(text).toContain("claude-not-entitled");
-    // The divergence is the answer, so it is printed; a matching pair would only be noise on every row.
     expect(text).toContain(`"asked":"opus-4-6-thinking"`);
     expect(text).not.toContain(`"asked":"claude-opus-5"`);
 });
@@ -137,8 +130,7 @@ test("turns can be narrowed to failures and to one conversation", async () => {
     expect(await call(deps, "turns", { conversationId: "c2" })).toContain("1 turns");
 });
 
-/* THE OTHER WAY A TURN GOES WRONG, and the one no status word could ever show: every row here is `ok`, so a
- * reader filtering on failure sees a clean day. Two of these three finished on code nothing stands behind. */
+// Every turn here has outcome `ok`; verification (verified/unproven/failing) is what actually distinguishes them.
 test("turns separates the ones that finished from the ones that only stopped", async () => {
     const deps = await setup({}, [
         turn({ outcome: "ok", conversationId: "proved", verification: "verified", check: "pnpm test src/parser.test.ts", filesEdited: 2 }),
@@ -150,9 +142,7 @@ test("turns separates the ones that finished from the ones that only stopped", a
     expect(all).toContain("3 turns");
     expect(all).toContain("0 failed");
     expect(all).toContain("2 finished with unproven");
-    // "verified" is only worth the word because the check that earned it is printed beside it.
     expect(all).toContain(`"check":"pnpm test src/parser.test.ts"`);
-    // A plan the turn wrote itself and left open is the readable form of "it stopped talking".
     expect(all).toContain(`"checklistOpen":2`);
 
     const unproven = await call(deps, "turns", { only: "unproven" });
@@ -161,8 +151,6 @@ test("turns separates the ones that finished from the ones that only stopped", a
     expect(unproven).not.toContain("proved");
 });
 
-/* A turn the provider never answered records no verdict, and the filter must not read that silence as a
- * finding: an unknown counted as a hit is how a filter comes to be distrusted. */
 test("a turn with no recorded verdict is never counted as unproven", async () => {
     const deps = await setup({}, [turn({ outcome: "error", errorCode: "claude-not-entitled" }), turn({ outcome: "ok", verification: "no-code" })]);
     expect(await call(deps, "turns", {})).toContain("0 finished with unproven");
@@ -171,7 +159,6 @@ test("a turn with no recorded verdict is never counted as unproven", async () =>
 
 test("a turn with no recorded outcome is reported as unrecorded, never as a success", async () => {
     const deps = await setup({}, [turn({})]);
-    // Absent means the row predates outcome being recorded. Printing "ok" here would be inventing a fact.
     expect(await call(deps, "turns", {})).toContain(`"outcome":"unrecorded"`);
 });
 
@@ -193,14 +180,11 @@ test("a misspelled metric path is diagnosed rather than answered with an empty s
     const deps = await setup({ "resource-metrics.jsonl": [JSON.stringify({ at: at(1), daemon: { memory: { rssBytes: 5 } } })] });
 
     const text = await call(deps, "resources", { field: "daemon.memory.rssByttes" });
-    // The failure mode this prevents: a confident "no data" that was really a typo.
     expect(text).toContain("daemon.memory.rssByttes");
     expect(text).toContain("1 samples");
 });
 
-/* THE BROWSER'S OWN ACCOUNT, read through the same tool. Its own source rather than folded into the daemon's
- * lines, because the two are different kinds of evidence: one is the daemon describing what it did, the other is
- * a page describing itself over a route anyone signed in can post to. */
+// Fixture seeds both daemon.log and client.jsonl to prove the browser source reads only client.jsonl.
 test("the browser source reads the client file and names itself as such", async () => {
     const deps = await setup({
         "daemon.log": [JSON.stringify({ time: at(2), level: "error", message: "turn failed" })],
@@ -227,7 +211,6 @@ test("the browser source reads the client file and names itself as such", async 
     const text = await call(deps, "errors", { source: "browser" });
     expect(text).toContain("2 browser reports");
     expect(text).toContain("/agents");
-    // The daemon's own log is a different question, so it is not mixed in.
     expect(text).not.toContain("turn failed");
     expect(await call(deps, "errors", {})).toContain("turn failed");
 });
@@ -239,11 +222,10 @@ test("a self-heal wipe is findable by name, which is the report that used to be 
         ],
     });
 
-    // The bug class that fixes itself by clearing storage and reloading, which is why it left no evidence at all.
     expect(await call(deps, "errors", { source: "browser", contains: "self-heal" })).toContain("cannot read hydrated blob");
 });
 
 test("no browser reports yet reads as quiet, not as an error", async () => {
-    // client.jsonl does not exist until a browser has something to say.
+    // client.jsonl only exists once a browser has reported something.
     expect(await call(await setup({}), "errors", { source: "browser" })).toMatch(/^No browser reports/);
 });

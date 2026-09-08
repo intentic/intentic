@@ -3,10 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Pairing } from "./config.js";
 import { type BridgeExec, bridgeRepo, listSandboxRepos, runGitBridge } from "./git-bridge.js";
 
-// A scripted BridgeExec: `handlers` maps a command-line PREFIX to its stdout (undefined = that command fails),
-// first match wins, anything unscripted succeeds with empty output. `existing` is the fake filesystem. An ARRAY
-// answers successive calls of the same command in order (the last entry repeats): the bridge reads the
-// sandbox's remote-tracking ref both before and after a fetch, and the two readings are the whole point.
+// Maps a command-line prefix to its stdout (undefined = failure); first match wins, unscripted succeeds empty.
+// `existing` is the fake filesystem; an array answers successive calls in order (last entry repeats).
 const scripted = (handlers: Record<string, string | undefined | readonly (string | undefined)[]>, existing: readonly string[] = []) => {
     const calls: string[] = [];
     const paths = new Set(existing);
@@ -36,14 +34,13 @@ const ALIAS = "intentic-sync-x";
 const LOCAL = join("/", "home", "u", "sandbox");
 const DIR = join(LOCAL, "proj");
 
-// Stand-in object ids. Hex, because that is the shape the tip probe reads out of the `ls-remote` listing.
+// Stand-in object ids, hex-shaped like real `ls-remote` output.
 const TIP = "a1a1a1"; // where the sandbox's main sits
 const OLD = "b2b2b2"; // a local HEAD the sandbox has moved past
 const DIVERGED = "c3c3c3"; // a local HEAD carrying commits the sandbox lacks
 const TIP2 = "d4d4d4"; // where the sandbox's feature branch sits
 
-// What `ls-remote --symref sandbox HEAD` answers: the symref line, then the tip line. Both come out of the one
-// round trip, which is what lets a pass decide "nothing moved" without fetching.
+// What `ls-remote --symref sandbox HEAD` answers: symref line, then tip line, both from one round trip.
 const SYMREF_MAIN = `ref: refs/heads/main\tHEAD\n${TIP}\tHEAD\n`;
 
 describe("listSandboxRepos", () => {
@@ -135,7 +132,7 @@ describe("bridgeRepo", () => {
         await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
-        // The whole quiet pass is this one round trip, which is what makes running it every tick affordable.
+        // The quiet pass makes exactly one ls-remote call.
         expect(calls.filter((line) => line.startsWith("git ls-remote"))).toHaveLength(1);
     });
 
@@ -188,9 +185,8 @@ describe("bridgeRepo", () => {
         expect(logs.join("\n")).toContain("diverge");
     });
 
-    // The rewind: the sandbox undoes a commit the bridge had already installed here. HEAD is then a commit the
-    // sandbox lacks: indistinguishable from local work by ancestry alone, and refusing it strands the desktop
-    // on discarded history while file sync keeps delivering every later commit as uncommitted noise.
+    // The sandbox rewinds a commit the bridge already installed; HEAD then holds a commit the sandbox lacks,
+    // indistinguishable from local work by ancestry alone.
     it("follows the sandbox back when it rewinds history the bridge itself installed", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
@@ -211,8 +207,7 @@ describe("bridgeRepo", () => {
         expect(logs.join("\n")).toContain("rewound");
     });
 
-    // The same shape, but the local tip is NOT what the bridge installed: someone committed here. That is work
-    // no sync may destroy, so the refusal stands.
+    // Same shape, but local HEAD is not what the bridge installed; that's local work, so refusal stands.
     it("still refuses when the local tip is a commit the bridge never installed", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
@@ -232,19 +227,15 @@ describe("bridgeRepo", () => {
         expect(logs.join("\n")).toContain("diverge");
     });
 
-    /* The regression the marker exists for. The valve used to ask the REMOTE-TRACKING ref what the bridge had
-     * installed, and a fetch advances that ref whether or not HEAD follows, so the answer survived exactly one
-     * pass. Miss the rewind once (an agent too old to follow it, one tick with the sandbox unreachable, anything
-     * staged at the wrong moment) and the repo froze for good: hundreds of "changes" that grew with every later
-     * sandbox commit and that nothing but a hand-run reset could clear. Here the sandbox has committed many times
-     * since the bridge last moved HEAD, and it still recognises its own history. */
+    // Detection relies on refs/intentic/bridged/main, never the remote-tracking ref: a fetch advances that
+    // regardless of whether HEAD follows.
     it("still recognises its own history long after passes that fetched without moving HEAD", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
                 "git ls-remote": SYMREF_MAIN,
-                // Far past what the bridge installed: this ref has followed the sandbox through every pass since.
+                // Far past what the bridge installed; has followed the sandbox through every pass since.
                 "git rev-parse -q --verify refs/remotes/sandbox/main": `${TIP}\n`,
                 "git rev-parse -q --verify refs/intentic/bridged/main": `${DIVERGED}\n`,
                 "git rev-parse -q --verify HEAD": `${DIVERGED}\n`,
@@ -255,15 +246,14 @@ describe("bridgeRepo", () => {
         );
         await bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls).toContain(`git reset -q ${TIP}`);
-        // And the decision owes nothing to the remote-tracking ref's value BEFORE the fetch: it is never read there.
+        // Confirms the decision never reads the remote-tracking ref's value before the fetch.
         const fetchAt = calls.findIndex((line) => line.startsWith("git fetch"));
         expect(calls.slice(0, fetchAt).some((line) => line.includes("refs/remotes/sandbox/main"))).toBe(false);
         expect(logs.join("\n")).toContain("rewound");
     });
 
-    // Arming the valve costs no divergence: a repo that has never once fallen behind never reaches the reset
-    // that records a marker, so the quiet pass records one itself. This is also the state a hand-run recovery
-    // leaves behind, and it must not have to freeze a second time before the valve can help.
+    // A repo that never falls behind never hits the reset that records the marker; the quiet pass records one
+    // itself so recovery doesn't need a second freeze.
     it("records what HEAD holds on a quiet pass, so an install that never falls behind still carries a marker", async () => {
         const { calls, exec } = scripted(
             {
@@ -298,8 +288,7 @@ describe("bridgeRepo", () => {
 
 describe("runGitBridge", () => {
     const config: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "x", mode: "sync", localDir: LOCAL };
-    // A mirror-only enrollment has no localDir AT ALL: the key is absent, not present-and-undefined, which
-    // is the distinction the config type draws and the bridge reads.
+    // A mirror-only enrollment has no localDir key at all (absent, not present-and-undefined).
     const { localDir: _localDir, ...withoutLocalDir } = config;
 
     it("reuses a repo list an earlier pass returned instead of re-listing over ssh", async () => {

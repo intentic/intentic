@@ -1,26 +1,13 @@
 // @vitest-environment jsdom
-//
-// jsdom because half of what is pinned here is what happens INSIDE a mounted component: a run button naming
-// its model from a computed, and the other half is the same read with no component at all.
+// jsdom: half of what's pinned here happens inside a mounted component (a run button naming its model from a
+// computed), the rest is the same read with no component at all.
 import { beforeEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "vue";
 
-/* WHAT THE RUN BUTTONS READ, AND FROM WHERE. `agentRunChoice(role)` is the standing answer to "which model
- * will this click spend": pressed by both Fix buttons, Maintenance, Documentation, Acceptance and a failed
- * pre-push check, and handed to every extension as `api.models.agentRun(role)`.
- *
- * IT TAKES THE JOB, because the sandbox keeps one model list per job rather than one for unattended work as a
- * class: a documentation sweep and a red production pipeline are the same component and not the same spend.
- * `pipeline-fix` throughout here — which role is asked for is the caller's business, and what these tests are
- * about is the reading itself.
- *
- * It is a READ, and these tests are about the places it is read from. Vue offers an injection context only
- * inside a setup, and none of the callers are one: `useAgentRunPick` reads it in a computed, the caret reads it
- * again from a click handler, and an extension may ask from anywhere at all. Underneath sits vue-query, which
- * needs that context and which builds a query observer per call, so a per-call implementation both threw and
- * leaked, and the Pipelines board (twenty rows, each with a Fix button) showed exactly that: a crashed
- * extension over a console filling with "vue-query hooks can only be used inside setup()", behind an
- * ever-growing pile of pollers for one settings object. */
+// `agentRunChoice(role)` is the standing answer to which model a run-button click spends, kept per job role rather
+// than one shared unattended-work list, and handed to extensions as `api.models.agentRun(role)`. It is read from
+// places with no Vue setup context (a computed, a click handler, an extension), which is what these tests probe;
+// `pipeline-fix` here stands for any role.
 
 const { useAgentRunPick } = await import("@intentic/ui");
 const { queryClient } = await import("../../../lib/queryPersistence");
@@ -29,16 +16,16 @@ const { providerAccounts } = await import("../accounts/providerAccounts");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
 
-// No VueQueryPlugin anywhere in this file, on purpose: an app that never provides the client is the sharpest
-// statement that nothing under here injects one.
+// No VueQueryPlugin anywhere in this file: an app that never provides the client proves nothing under here injects
+// one.
 const mounted = (setup: () => () => unknown): App => {
     const app = createApp(defineComponent({ setup }));
     app.mount(document.createElement(`div`));
     return app;
 };
 
-// How many live readers the settings entry has. One is the app's own; anything more is a leak, because the
-// only thing that could have added it is a read that built a second one.
+// Live reader count for the settings entry; one is the app's own, more means a read built a second observer (a
+// leak).
 const settingsObservers = (): number => queryClient.getQueryCache().find({ queryKey: SANDBOX_SETTINGS.of() })?.observers.length ?? 0;
 
 beforeEach(() => {
@@ -80,8 +67,7 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
         return () => h(`div`, `${tick.value}:${pick.model.value.label}`);
     });
     const afterFirst = settingsObservers();
-    // A settings write is what the daemon's own answer does, and it is what invalidates the computed the
-    // button reads, so this is five genuine re-evaluations, not five renders of a cached one.
+    // Mimics the daemon's write, invalidating the computed: five real re-evaluations, not cached renders.
     for (let round = 0; round < 5; round += 1) {
         queryClient.setQueryData(SANDBOX_SETTINGS.of(), { modelRoles: {}, round });
         tick.value += 1;
@@ -93,17 +79,10 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
     expect([afterFirst, afterFive]).toEqual([1, 1]);
 });
 
-/* THE TIER IS PART OF THE STANDING ANSWER, and the run button and its picker both open on it: a caret that
- * started at "Default" would make every override drop the tier its owner pinned, since the daemon fills a pin's
- * knobs in only for a turn that named no model.
- *
- * `max` is the case worth pinning down, and it is read against THE PIN'S OWN THINKING, because a turn that named
- * no model takes the whole entry (turn-resume.ts). An entry that pinned Max keeps Max; the one that also
- * switched thinking off is the pair the API refuses, and the daemon drops that tier to `high` before it sends
- * (sendableEffort). The button has to say what will actually run, not what the setting reads. */
+// The run button shows the tier that will actually run: a pin with no chosen model takes it whole (turn-resume.ts),
+// but the daemon drops a Max pin with thinking off to `high` before sending (sendableEffort).
 const pinned = (pin: Record<string, unknown>): void => {
-    // The chain drops a pin whose provider this sandbox holds no credential for, so the account list is what
-    // makes the pin reachable at all: the same fact the daemon's own resolver reads.
+    // Needs a credentialed account for the pin's provider, or the chain drops it (same as the daemon's resolver).
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude` }] as never };
     providerModels.value = {
         ...providerModels.value,

@@ -20,51 +20,41 @@ import {
     type BackendHostExtension,
 } from "./backend-host-config.js";
 
-/* THE BACKEND HOST'S SUPERVISOR, the daemon-side half of the extension backend system.
- *
- * Extension backends run in ONE separate node process (backend-host-main.ts), never in the daemon, because
- * loaded code cannot be unloaded: the off switch, an install at a new sha and a live-edited workspace
- * extension all require the process holding the old code to die, and the process that dies must not be the
- * one holding chat, terminals and file sync. So every lifecycle moment is a RESTART of the host, a couple of
- * seconds during which /x routes answer 503 with a readable reason, and the daemon supervises: spawn, wait
- * for health, forward output into its own log, respawn with backoff when the host dies uninvited.
- *
- * It also owns the two credentials of the seam. The HOST token is how the host knows a request came through
- * the daemon's gate rather than from a neighbor on loopback. The PER-EXTENSION tokens are what each backend's
- * api.daemon presents back, verified here against the manifest's `permissions.daemon`, which is what makes a
- * backend's reach into the core declared and refusable rather than ambient (the all-routes panel token this
- * deliberately does not reuse). Tokens are per boot and per extension; a disabled extension's token stops
- * verifying at the restart that removes it. */
+// Daemon-side supervisor for the backend host process; extension code runs there, never in the daemon, since loaded
+// code cannot be unloaded.
+// Every lifecycle change is a host restart (/x routes answer 503 meanwhile); the daemon spawns, waits for health,
+// forwards logs, and respawns with backoff.
+// Owns the HOST token (proves a request came through the daemon's gate) and per-extension tokens verified against the
+// manifest's permissions.daemon.
 
-// What one extension's backend row reports, the host's own /health answer, plus the two states only the
-// supervisor can know (a server declared but not runnable here; an engines mismatch).
+// One extension's backend row: the host's own /health states, plus two the supervisor alone can know (absent,
+// incompatible).
 export type BackendStatus = BackendExtensionStatus | { readonly id: string; readonly state: "absent" | "incompatible"; readonly detail: string };
 
 export interface ExtensionBackendState {
-    // stopped, no extension ships a backend (or stop() was called); starting/running/error, the host's own arc.
+    // `stopped`: no backend to run, or stop() was called. `starting`/`running`/`error`: the host's own arc.
     readonly state: "stopped" | "starting" | "running" | "error";
     readonly detail?: string;
     readonly extensions: readonly BackendStatus[];
 }
 
 export interface ExtensionBackend {
-    // Converge now: enumerate enabled backends, respawn the host on the new set. Boot calls this once;
-    // everything else goes through restart().
+    // Converges immediately: enumerates enabled backends and respawns the host. Boot calls this once; everything else
+    // uses restart().
     start(): Promise<void>;
-    // Debounced converge, the toggle, an install, a workspace-extension edit. Safe to call in bursts.
+    // Debounced converge; safe to call in bursts (toggle, install, workspace-extension edit).
     restart(): void;
     stop(): void;
     status(): ExtensionBackendState;
     statusOf(id: string): BackendStatus | undefined;
-    // Where the /x proxy forwards while the host is up; undefined answers 503 with the current state's detail.
+    // Where the /x proxy forwards while the host is up; undefined means answer 503 with the current state's detail.
     proxyTarget(): { readonly port: number; readonly hostToken: string } | undefined;
-    // The extension grant's resolver (auth/grants.ts): a minted backend token → its declared daemon reach.
+    // Extension grant resolver (auth/grants.ts): maps a minted backend token to its declared daemon reach.
     verifyExtensionToken(presented: string): { readonly permissions: readonly string[] } | undefined;
 }
 
-/* The host entry, resolved beside THIS file so dev and dist stay one code path: compiled, both are .js in
- * dist/ and node runs the entry directly; under tsx (dev, tests) both are .ts and the child needs the same
- * loader, resolved by absolute path so the spawn's cwd doesn't decide whether dev works. */
+// Resolves the host entry beside this file so dev and dist take the same code path (.js under node, .ts under tsx).
+// Uses an absolute path so the spawn's cwd cannot change which one runs.
 const hostCommand = (): { readonly file: string; readonly args: readonly string[] } => {
     const dev = import.meta.url.endsWith(".ts");
     const entry = fileURLToPath(new URL(dev ? "./backend-host-main.ts" : "./backend-host-main.js", import.meta.url));
@@ -86,9 +76,7 @@ interface SpawnedHost {
 }
 
 export const createExtensionBackend = (services: () => ExtensionHost, daemonPort: number, logger: Logger): ExtensionBackend => {
-    /* Per-extension backend tokens, minted once per daemon lifetime so a host restart doesn't invalidate a
-     * request already in flight. What a token REACHES is resolved per restart (`reach` below), so a disabled
-     * extension's token verifies nothing even though its bytes still exist. */
+    // Minted once per daemon lifetime so a restart doesn't invalidate an in-flight token; reach resolves separately.
     const tokens = new Map<string, string>();
     const tokenFor = (id: string): string => {
         const existing = tokens.get(id);
@@ -99,14 +87,14 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         tokens.set(id, minted);
         return minted;
     };
-    // token → the declared permissions.daemon of the extension it was minted for, as of the last converge.
+    // Token to the permissions.daemon it was minted for, as of the last converge.
     let reach = new Map<string, readonly string[]>();
 
     let generation = 0;
     let desired = false;
     let host: SpawnedHost | undefined;
     let state: ExtensionBackendState = { state: "stopped", extensions: [] };
-    // Climbs while the host keeps dying on arrival, back to the floor the moment one answers /health.
+    // Climbs while the host keeps dying on arrival; resets the moment one answers /health.
     const ladder = createBackoff({ floorMs: BACKOFF_START_MS, capMs: BACKOFF_CAP_MS });
     let debounce: NodeJS.Timeout | undefined;
     let retry: NodeJS.Timeout | undefined;
@@ -118,9 +106,9 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         }
     };
 
-    // The enabled extensions that ship a backend, split into runnable ones and rows only this side can
-    // report, plus each runnable one's declared daemon reach, which stays on THIS side of the seam (the
-    // daemon gates; the host never needs to know what it may ask for).
+    // Splits enabled backend-shipping extensions into runnable ones and report-only rows (absent, incompatible).
+    // Each runnable extension's declared daemon reach stays on this side; the host never needs to know what it may ask
+    // for.
     const collect = async (): Promise<{
         runnable: BackendHostExtension[];
         reported: BackendStatus[];
@@ -142,8 +130,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 });
                 continue;
             }
-            // The processes spawn gate's honesty rule, applied to the backend: a core image bakes the
-            // manifest without the tree behind it, and not loading is the only true answer.
+            // A core image can bake the manifest without its tree; not loading is the only honest answer here too.
             if (await extensionRuntimeAbsent(extension)) {
                 reported.push({ id: extension.id, state: "absent", detail: RUNTIME_ABSENT_DETAIL });
                 continue;
@@ -155,8 +142,8 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         return { runnable, reported, tokenReach };
     };
 
-    // The host's own /health answer, or undefined when it died first or never answered within the timeout, the
-    // two misses the caller reports the same way.
+    // The host's /health answer, or undefined if it died first or never answered in time; the caller treats both misses
+    // alike.
     const waitHealthy = async (spawned: SpawnedHost): Promise<BackendHealth | undefined> => {
         let health: BackendHealth | undefined;
         await pollUntil(
@@ -174,7 +161,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                         return true;
                     }
                 } catch {
-                    // Not up yet, the poll IS the wait.
+                    // Not up yet; the poll is the wait.
                 }
                 return false;
             },
@@ -220,7 +207,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         });
         const spawned: SpawnedHost = { child, port, hostToken };
         host = spawned;
-        // Both streams into the daemon log, attributed: extension log lines carry their own [id] prefix.
+        // Both streams feed the daemon log; extension lines carry their own [id] prefix already.
         for (const stream of [child.stdout, child.stderr]) {
             if (stream !== null) {
                 createInterface({ input: stream }).on("line", (line) => logger.info(`extension-backend: ${line}`));
@@ -235,8 +222,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             if (run !== generation || !desired) {
                 return;
             }
-            // Uninvited death, report it and respawn with backoff, so a crash-looping extension costs a log
-            // line every few seconds instead of a dead /x namespace forever.
+            // Uninvited death: report it and respawn with backoff rather than leave /x dead forever.
             state = { state: "error", detail: `the backend host exited (${signal ?? code})`, extensions: collected.reported };
             host = undefined;
             retry = setTimeout(() => void converge(), ladder.next());

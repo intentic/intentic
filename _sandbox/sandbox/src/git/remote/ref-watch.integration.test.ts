@@ -6,9 +6,8 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { createRefWatch } from "./ref-watch.js";
 
-/* Against real git repositories, because every interesting case here is one git's own on-disk layout decides:
- * where a linked worktree keeps HEAD versus where it keeps refs, and which files a commit actually touches. A
- * mocked filesystem would only assert the shape this test was written against. */
+// Against real git: cases depend on git's own on-disk layout (linked-worktree HEAD placement, which files a commit
+// touches), which a mocked filesystem can't prove.
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -38,8 +37,7 @@ const workspace = async (): Promise<string> => {
     return root;
 };
 
-// The watcher debounces, so every expectation here is "eventually": poll rather than sleep a fixed time, or the
-// test is either flaky or slow.
+// The watcher debounces, so every expectation here is eventual; poll rather than sleep a fixed time.
 const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -59,25 +57,13 @@ const watchRoot = (root: string): string[][] => {
     return batches;
 };
 
-// Long enough after a batch that a straggler from the same window has landed too: the watcher debounces at
-// 250ms, and everything here that clears `batches` has to outlast that or it clears them into the next
-// assertion.
+// Long enough to outlast the 250ms debounce, so a straggler batch lands before the next assertion clears it.
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 600));
 
-/* ATTACHING IS ASYNCHRONOUS, so waiting a constant for it is the one thing this file must not do. Setting a
- * watcher up runs a `git rev-parse` and then chokidar's own initial scan, and on a loaded machine that outruns
- * any number written here. What made it a bad flake rather than a slow test is that a ref moved before the
- * watch exists is reported by NOTHING: the case then waited out its entire budget for a batch that was never
- * coming, and failed as "timed out waiting for a ref batch", which reads as the watcher being broken.
- *
- * Which is why the probe REPEATS. One move and a wait is the same bet in a different place: fire it a moment
- * too early and there is nothing left to report it. So keep moving a ref until a move comes back: the batch
- * is the proof, and it costs exactly what attaching took. Each `move` puts the repo back as it found it, so
- * the case still starts from the state it was written against. */
+// Attaching is async (rev-parse + chokidar's scan), so this can't wait a fixed time: it repeats a ref move until a
+// batch comes back, restoring state each time, rather than betting on one try.
 const attached = async (batches: string[][], move: () => Promise<void>): Promise<void> => {
-    // A hang detector, not a latency budget: attaching plus one probe measured ~7s with every package's suite
-    // running at once, so a ten-second ceiling was about to fail a watcher that was merely waiting its turn.
-    // Well clear of that, still a fraction of the suite's own minute, so a watcher that never attaches says so.
+    // A hang detector, not a latency budget: generous enough that suite-wide contention alone won't trip it.
     const deadline = Date.now() + 30_000;
     while (batches.length === 0) {
         if (Date.now() >= deadline) {
@@ -90,8 +76,7 @@ const attached = async (batches: string[][], move: () => Promise<void>): Promise
     batches.length = 0;
 };
 
-// A ref move that leaves nothing behind: the branch is created and deleted, and both halves are a real write
-// under `refs/`, which is what the watch is on.
+// A ref move that leaves nothing behind: create and delete are both real writes under `refs/`, what the watch is on.
 const probeBranch = (dir: string) => async (): Promise<void> => {
     await git(dir, ["branch", "refwatch-probe"]);
     await git(dir, ["branch", "-D", "refwatch-probe"]);
@@ -123,10 +108,8 @@ test("a branch created and then deleted is reported", async () => {
     expect(batches[0]).toEqual(["root"]);
 });
 
-/* THE CASE THE WATCHER EXISTS FOR. Every agent session runs in a LINKED WORKTREE, where git splits the state
- * this watcher reads across two directories: refs and packed-refs stay in the common dir, while HEAD and the
- * in-progress markers are per worktree. A watcher that resolved only one of them would miss half of what it is
- * for, and would miss it silently, since the other half keeps arriving. */
+// Linked worktrees split state across two dirs: refs/packed-refs stay in the common dir, HEAD and in-progress markers
+// are per-worktree; missing either half misses it silently.
 test("a checkout inside a linked worktree is reported, HEAD being per-worktree", async () => {
     const root = await mkdtemp(join(tmpdir(), "refwatch-wt-"));
     roots.push(root);
@@ -138,7 +121,7 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     await git(main, ["add", "."]);
     await git(main, ["commit", "-m", "first"]);
     await git(main, ["branch", "other"]);
-    // The linked worktree sits at <root>/linked, so the watcher discovers it as the repo id "linked".
+    // The linked worktree at <root>/linked is discovered as repo id "linked".
     await git(main, ["worktree", "add", join(root, "linked"), "other"]);
 
     const batches: string[][] = [];
@@ -149,31 +132,24 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     closers.push(watch.close);
     watch.subscribe((repos) => batches.push(repos));
 
-    /* Attachment is proven on the SAME per-worktree HEAD this case is about, then put back: the branch probe
-     * the other cases use would only have proved the common dir's watch, which is the half this one exists to
-     * distrust. */
+    // Attachment is proven on this case's own per-worktree HEAD; the branch probe other cases use would only prove the
+    // common dir's watch.
     const linked = join(root, "linked");
     await attached(batches, async () => {
         await git(linked, ["checkout", "--detach"]);
         await git(linked, ["checkout", "other"]);
     });
 
-    /* Detaching writes the linked worktree's OWN HEAD in its per-worktree admin dir and touches NO ref in the
-     * common dir, so this passes only if the gitdir is resolved and watched separately from the common dir.
-     * (Checking out a branch would have written a common-dir ref too and let a half-right watcher through.) */
+    // Detaching touches only the per-worktree HEAD, no common-dir ref; a branch checkout would write a common-dir ref
+    // too and mask a half-broken watch.
     await git(linked, ["checkout", "--detach"]);
 
     await waitFor(() => batches.some((batch) => batch.includes("linked")));
     expect(batches.flat()).toContain("linked");
 });
 
-/* HOW MANY BATCHES A BURST BECOMES IS NOT ASKED HERE, and that is the point of the case rather than a gap in
- * it. Counting them behind a real watcher measures whether the runner got three git subprocesses and their
- * inotify events through inside one 250ms window: true on an idle box, false on one running every package's
- * vitest at once, where each commit opened its own window and the case failed as "expected 3 to be less than
- * 3", reading as a broken debounce over a watcher that was working. The coalescing is settled in ref-watch.test
- * .ts against timers the test owns; what only real git can say is what a burst of real commits is reported AS,
- * which is this. */
+// Batch count is not asserted (real git+inotify timing is flaky under load); that's covered by ref-watch.test.ts's own
+// timers. This proves only what a burst of real commits is reported as.
 test("every batch from a burst of commits names the repo that moved, and nothing else", async () => {
     const root = await workspace();
     const batches = watchRoot(root);

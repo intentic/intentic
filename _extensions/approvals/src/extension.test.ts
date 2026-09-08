@@ -6,8 +6,8 @@ import { bindHost } from "./host";
 import { owedOf } from "./useApprovals";
 import { heldWakesQuery, waitingOf } from "./useHeldWakes";
 
-/* The badge is what seats the tile, so what it counts is the whole question: the agent's proposals that owe a
- * decision, the automations held for one, and nothing that is about to happen on its own. */
+// The badge seats the tile; it counts proposals owing a decision and automations held for one, never anything already
+// underway.
 
 const post = (id: string, over: Partial<PostApprovalSummary> = {}): PostApprovalSummary => ({
     id,
@@ -69,8 +69,7 @@ describe(`what the queue owes`, () => {
     });
 
     it(`counts only the held wakes that genuinely need a person`, () => {
-        // A hold with an `autoRunAt` is a DELAY: the scheduler releases it itself, so nobody is being asked for
-        // anything and the rail must not say otherwise.
+        // A hold with `autoRunAt` is a delay the scheduler releases itself; nobody is actually being asked.
         expect(waitingOf([wake(`a`), wake(`b`, { autoRunAt: 2 }), wake(`c`)]).map((entry) => entry.id)).toEqual([`a`, `c`]);
     });
 
@@ -97,11 +96,10 @@ describe(`the Approvals tile`, () => {
 
         const registered = views[0];
         expect(registered?.id).toBe(`approvals`);
-        // One proposal plus one wake waiting for a yes; the done post and the countdown hold count for nothing.
-        // Settling on the badge's CONTENT, not on its existence: polled separately, the wait could be satisfied
-        // by a first, empty badge and the assertion after it read a value that had already moved on.
+        // One proposal plus one waiting wake count; the done post and delayed hold don't. Waits for the badge's
+        // content, not just its existence, since a first poll could catch an empty value.
         await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 2, tooltip: `2 waiting on you`, tone: `info` }));
-        // Warming both entries the badge already filled: the page opens on the queue rather than on a spinner.
+        // Both queries the badge itself already filled, so the page opens on data, not a spinner.
         expect(registered?.warm?.().map((query) => query.queryKey)).toEqual([
             [`sandbox`, `box`, `approvals`],
             [`sandbox`, `box`, `automation-approvals`],
@@ -121,9 +119,8 @@ describe(`the Approvals tile`, () => {
 
         activate(api, { extensionId: `ext-approvals`, subscriptions });
 
-        // Waited for rather than asserted on the spot: the badge is module state that outlives one activation
-        // (it is scoped to the sandbox, not to the view), so this is the poll's answer landing and CLEARING a
-        // count, which is the direction that actually matters, a tile that cannot stand down never stands down.
+        // Waits rather than asserts immediately: the badge is sandbox-scoped module state that outlives activation, and
+        // this is the poll clearing it, the direction that actually matters.
         await vi.waitFor(() => expect(views[0]?.badge?.(tile)).toBeUndefined());
     });
 });

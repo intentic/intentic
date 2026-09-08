@@ -6,16 +6,10 @@ import { diagnose } from "./client.js";
 import { rename } from "./rename.js";
 import type { Diagnostic } from "./report.js";
 
-// lsp. TypeScript rename + diagnostics for the agent, over the native TypeScript compiler. Two verbs:
-//   lsp rename <file> <symbol> <newName>   rename a declared symbol across its TS project (updates every usage)
-//   lsp diag <file...>                     print syntactic + semantic diagnostics for the given files
-// Scope is the invoked file's own tsconfig project (see the skill). Exit 0 on success, 1 on a usage/arg error, 2
-// on an internal failure, including a project whose config cannot be loaded well enough to answer, because a
-// wrong answer printed confidently is the one outcome this tool must never produce.
-//
-// Every question is answered by a fresh run of the native compiler, which parses the project, answers, and
-// exits, nothing stays resident. A cold whole-project check costs 0.1–2s, at or below what the old resident
-// JS-compiler daemon answered in through its socket, and it holds no memory between questions.
+// lsp: TypeScript rename and diagnostics for the agent, over the native compiler; nothing stays resident.
+//   lsp rename <file> <symbol> <newName> rename a declared symbol across its TS project
+//   lsp diag <file...> print diagnostics for the given files
+// Exit 0 on success, 1 on a usage error, 2 on an internal failure, including an unloadable project.
 
 const USAGE = "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>";
 
@@ -26,9 +20,7 @@ const runRename = async (args: readonly string[]): Promise<number> => {
         return 1;
     }
     const path = resolve(file);
-    // A rename on a half-loaded program is worse than a refused one: module resolution is how the usages are
-    // FOUND, so a blind program quietly renames a subset and leaves the rest referring to the old name. The
-    // same run that would refuse a diag refuses the rename, before anything is touched.
+    // A rename on a half-loaded program could silently rename a subset of usages; refuse first, like diag.
     const report = await checkProject(findTsconfig(path), [path], undefined);
     const [unavailable] = report.unavailable;
     if (unavailable !== undefined) {
@@ -62,8 +54,7 @@ const runDiag = async (args: readonly string[]): Promise<number> => {
     const paths = args.map((arg) => resolve(arg));
     const report = await diagnose({ files: paths });
     if (report === undefined) {
-        // No tsconfig above any of these files: check each on its own against the compiler's defaults, the way
-        // a projectless script is checked.
+        // No tsconfig above any of these files: check each alone against the compiler's defaults.
         const alone = await Promise.all(paths.map((path) => checkProject(undefined, [path], undefined)));
         const [refused] = alone.flatMap((r) => r.unavailable);
         if (refused !== undefined) {

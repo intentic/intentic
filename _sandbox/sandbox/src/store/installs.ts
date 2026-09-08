@@ -1,29 +1,15 @@
 import { z } from "zod";
 import { jsonFile } from "./json-file.js";
 
-/* DID THE SNIPPET ACTUALLY LAND ON THE SITE?
- *
- * Shared by the two public endpoints a customer embeds a script for, the Front Desk widget and the bug
- * reporter's SDK, because the silence is identical on both and so is the mistake behind it: until this existed
- * the app could not tell "installed correctly, nobody has written yet" from "the snippet was never pasted" or
- * "it was pasted on an origin the allowlist doesn't have", all three are an automation with no runs, and the
- * middle one is the single likeliest setup mistake (www.example.com and example.com are different origins, and
- * a site that redirects one to the other still loads the script from whichever the browser was on).
- *
- * Every embed fetches its `/…/<id>/config` on every page load, so that request is the probe. Recording it turns
- * the silence into an answer, and recording the REFUSED ones turns the commonest mistake into a sentence naming
- * the origin to add.
- *
- * ONE STORE, TWO FILES: the two callers differ only in which path they hand this, which is what "the same
- * diagnostic" means concretely. They must not share one file, though, since the key inside is an automation id
- * and a Front Desk's id colliding with an intake's would merge two panels' answers. */
+// Tracks whether an embed snippet is actually loading, per origin, to tell an unconfigured automation apart from one
+// whose origin isn't allowlisted. Shared by the Front Desk widget and the bug-reporter SDK, one file per caller since
+// automation ids aren't unique across the two.
 
 const ProbeSchema = z.object({
-    // Whether this origin was admitted. A refused probe is the useful one, it is a site asking to be let in.
+    // Whether this origin was admitted; a refused probe is the actionable case, a site asking to be let in.
     allowed: z.boolean(),
     lastSeenAt: z.number(),
-    // Script loads seen from this origin. Approximate by design (see the flush note below); it is here to
-    // distinguish "one page load while testing" from "this is live", not to be an analytics number.
+    // Approximate load count from this origin; distinguishes test traffic from live traffic, not an analytics figure.
     loads: z.number(),
 });
 export type InstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
@@ -31,23 +17,18 @@ export type InstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
 const FileSchema = z.record(z.string(), z.record(z.string(), ProbeSchema));
 type InstallsFile = z.infer<typeof FileSchema>;
 
-/* A busy site loads the script on every page view, so writing per probe would be a write storm on the workspace
- * volume for information nobody is watching second-by-second. The map is authoritative in memory and flushed on
- * a timer, which means a daemon killed inside the window loses at most this many seconds of counts, an
- * acceptable trade for a diagnostic, and the reason `loads` is documented as approximate. */
+// Diagnostic counts are flushed on this timer instead of per write; a crash loses at most this many seconds of counts.
 const FLUSH_MS = 30_000;
 
-// Bound both dimensions. Origins are evicted least-recently-seen first, so the site someone is actively
-// installing on is never the one dropped.
+// Origins beyond this are evicted least-recently-seen first, so an actively-installing site's entry is kept.
 const MAX_ORIGINS_PER_AUTOMATION = 20;
 
 export interface InstallsStore {
-    // One script load. `allowed` is the admission decision that was actually made, so the panel reports what
-    // happened rather than re-deriving it from a list that may have been edited since.
+    // Records one script load; `allowed` is the decision actually made, not re-derived from the current allowlist.
     readonly record: (automationId: string, origin: string, allowed: boolean, now: number) => void;
-    // Newest first, what the install panel renders.
+    // Newest first, as rendered by the install panel.
     readonly list: (automationId: string) => Promise<InstallProbe[]>;
-    // Flush now and stop the timer. For tests and shutdown; ordinary use never calls it.
+    // Flushes now and stops the timer; for tests and shutdown, ordinary use never calls it.
     readonly flush: () => Promise<void>;
 }
 
@@ -57,22 +38,19 @@ export const fileInstallsStore = (path: string): InstallsStore => {
         fallback: () => ({}),
     });
 
-    // undefined until the first read/record pulls the file in, so a daemon whose embeds nobody visits never
-    // touches this file at all.
+    // Undefined until the first read or record pulls the file in, so an automation nobody visits never touches this
+    // file.
     let memory: InstallsFile | undefined;
     let timer: NodeJS.Timeout | undefined;
 
-    /* Every mutation and every read rides this one chain. `record` is called from a request handler that must
-     * not wait on a diagnostic, so it cannot be awaited, but the panel is opened moments after the page load
-     * it is asking about, and a read that overtook the write it is looking for would report the exact silence
-     * this store exists to end. Serializing both is what makes "reload your site, then look" reliable. */
+    // Serializes every read and write so a panel opened right after a page load never reads ahead of that load's write.
     let tail: Promise<unknown> = Promise.resolve();
     const queue = <T>(work: (all: InstallsFile) => T): Promise<T> => {
         const next = tail.then(async () => {
             memory ??= await file.read();
             return work(memory);
         });
-        // A failed probe must not poison the chain for the next one; the caller still sees its own rejection.
+        // Caught only to keep the chain alive after a failure; the caller still sees its own rejection.
         tail = next.catch(() => undefined);
         return next;
     };
@@ -97,7 +75,7 @@ export const fileInstallsStore = (path: string): InstallsStore => {
                 forAutomation[origin] = { allowed, lastSeenAt: now, loads: (existing?.loads ?? 0) + 1 };
                 all[automationId] = evictOldest(forAutomation);
                 timer ??= setTimeout(() => void flush(), FLUSH_MS);
-                // Never hold the daemon open on a diagnostic write.
+                // Never holds the daemon open on a diagnostic write.
                 timer.unref?.();
             });
         },

@@ -13,12 +13,9 @@ import {
     withoutToolCallStandIns,
 } from "./failure-sentences.js";
 
-/* The two conditions the CLI reports as prose, and the third reading of them that the routed providers forced.
- *
- * The prefixes are the SDK's own, so what these pin is the boundary: a sentence the CLI wrote when it stopped
- * trying, versus one it wrote about a spent plan, versus a model's ordinary answer that must never be mistaken
- * for either (isFailureSentence guards the naming paths, where a false positive renames an agent after an error
- * and throws away the prompt it was derived from). */
+// Pins the line between each failure condition a routed provider reports as prose and an ordinary model answer;
+// isFailureSentence guards the naming paths, where confusing them renames a session after an error or misfires a commit
+// subject.
 
 const KIMI_403 =
     "Failed to authenticate. API Error: 403 You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle.";
@@ -29,63 +26,51 @@ test("keeps a refused credential and a spent allowance apart by the prefix each 
     expect(isFailureSentence("Sure — I've updated the config and the tests pass.")).toBe(false);
 });
 
-/* THE CASE THAT MADE THIS NECESSARY. Kimi answers a spent Kimi Code plan with a 403, and a 403 is what the CLI
- * prints its "Failed to authenticate" prefix over, so the prefix-based classification, which is right about
- * what the CLI has stopped trying, is wrong about what the user must DO. Reading the sentence is what stops the
- * Agent tab from telling someone to reconnect an account in perfect health. */
+// Kimi reports a spent plan as a 403, which the CLI's own "Failed to authenticate" prefix also covers; reading the
+// sentence is what keeps that from telling someone to reconnect a healthy account.
 test("reads a spent plan in a routed provider's own words, whichever prefix the CLI wrote over it", () => {
     expect(isAuthFailureText(KIMI_403)).toBe(true);
     expect(mentionsSpentAllowance(KIMI_403)).toBe(true);
     expect(mentionsSpentAllowance("API Error: 429 quota exceeded for this project")).toBe(true);
 });
 
-// A genuinely dead credential says nothing about an allowance, and must keep reading as the reconnect it is.
+// A dead credential says nothing about an allowance; it must still read as a reconnect.
 test("does not read a revoked token as a spent allowance", () => {
     expect(mentionsSpentAllowance("Failed to authenticate. API Error: 401 OAuth access token has been revoked")).toBe(false);
 });
 
-/* "rate limit" is deliberately NOT one of the phrases: the harness says it while it is still retrying, and a
- * transient throttle it works through by itself is not a plan that ran out. Pinned because adding the phrase is
- * the obvious-looking change that would quietly start reporting healthy accounts as spent. */
+// "rate limit" is deliberately excluded: the harness says it mid-retry, and a throttle it clears on its own is not a
+// spent plan. Adding it back would report healthy accounts as spent.
 test("ignores the transient throttling the harness retries through by itself", () => {
     expect(mentionsSpentAllowance("API Error: 429 rate limit exceeded, retrying in 620ms")).toBe(false);
 });
 
-/* THE THIRD CONDITION, AND WHY IT NEEDED ONE. An organization that has switched Claude Code off for a seat
- * refuses every turn with a sentence that fits neither predicate above: no usage-limit prefix, and it does not
- * start with "Failed to authenticate", so the frame went out uncoded and nothing durable was ever written about
- * it. The account meanwhile authenticates fine and its usage endpoint keeps publishing pools, so the picker went
- * on drawing a full, fresh ring over the one account in the list that could not run anything at all. */
+// A seat with Claude Code disabled fits neither predicate above (no usage-limit prefix, doesn't start with "Failed to
+// authenticate"); the account otherwise authenticates fine, so without this the picker kept drawing it as healthy.
 const SEAT_REVOKED =
     "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
 
 test("reads a revoked seat as its own condition, not as a spent plan or a dead credential", () => {
     expect(isEntitlementRefusalText(SEAT_REVOKED)).toBe(true);
-    // The two it must not be mistaken for: a re-mint and a reset are both recoveries that cannot help here, and
-    // offering either sends the user somewhere that will not fix it.
+    // Must not read as either: re-minting a credential or waiting out an allowance would both fail to fix this.
     expect(isAuthFailureText(SEAT_REVOKED)).toBe(false);
     expect(mentionsSpentAllowance(SEAT_REVOKED)).toBe(false);
 });
 
-// And the reverse, which is the direction that would do real damage: a spent plan or a revoked token read as an
-// entitlement problem would tell the user to go and find an administrator over something they can fix themselves.
+// The reverse matters more: misreading a fixable problem as needing an administrator is the worse mistake.
 test("does not read a spent plan or a revoked token as a revoked seat", () => {
     expect(isEntitlementRefusalText(KIMI_403)).toBe(false);
     expect(isEntitlementRefusalText("Failed to authenticate. API Error: 401 OAuth access token has been revoked")).toBe(false);
     expect(isEntitlementRefusalText("Sure — I've updated the config and the tests pass.")).toBe(false);
 });
 
-/* A FOURTH READING, AND THE ONE THAT ACTUALLY SHIPPED A BUG. Nothing was wrong with the provider: the naming
- * pass asked a healthy model to name a session, the opening prompt was too thin to name, and the model asked a
- * question back. Every predicate above passed it: it is neither a spent allowance nor a dead credential, so
- * it was written down as the conversation's name at the highest automatic rank, and the commit box then read
- * that name, prefixed it, and filed `feat: i need more context to name this session…` as a commit subject. */
+// A healthy model asking for more context passed every predicate above, so it got written down as the session's name
+// and then as a commit subject prefixed `feat:`.
 const DECLINED_NAMING = "I need more context to name this session. What feature, surface, file, or system does this touch?";
 
 test("reads a model asking for context as no answer at all: the reply that became a commit subject", () => {
     expect(isDeclinedAnswer(DECLINED_NAMING)).toBe(true);
-    // The conditions it is NOT: nothing here is a provider's fault, so nothing here should send the user to an
-    // account screen or make them wait for a reset.
+    // Not a provider fault: this should never send the user to an account screen or a reset wait.
     expect(isFailureSentence(DECLINED_NAMING)).toBe(false);
     expect(isEntitlementRefusalText(DECLINED_NAMING)).toBe(false);
 });
@@ -101,11 +86,8 @@ test("catches the shapes a decline arrives in, not one provider's wording", () =
     expect(isDeclinedAnswer("Please provide the file contents.")).toBe(true);
 });
 
-/* A FIFTH READING, THE 4xx THAT IS NOT THE REQUEST'S FAULT. A ten-minute Codex turn died on `400
- * prompt_cache_retention is not supported on this model`, a parameter no layer in this sandbox sets: the CLI's
- * outgoing body was captured without it, and the provider's own successful answers come back carrying it, so it
- * is the provider's default being refused by the provider. Uncoded, that is a red line and a dead tab over a
- * condition that cleared by itself minutes later. */
+// A 400 for a parameter nothing in this sandbox sets (the provider's own default, refused by the provider itself) is
+// the provider's fault, not the turn's; uncoded it was a dead tab over something that cleared itself minutes later.
 const UNSENT_PARAMETER_400 =
     '{"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
 
@@ -118,9 +100,8 @@ test("reads a refused parameter nothing here sends as the provider's fault, not 
     expect(mentionsSpentAllowance(UNSENT_PARAMETER_400)).toBe(false);
 });
 
-/* BOTH HALVES REQUIRED, which is what keeps this from swallowing ordinary 4xx. A parameter the turn DID ask for
- * (a model, an effort, a tool schema) stays uncoded, because re-sending it on a timer is a loop, and a reply
- * that merely discusses prompt caching, which the CLI's own instructions do, is not a refusal at all. */
+// Both halves required, or this swallows ordinary 4xx: a parameter the turn actually asked for stays uncoded (retrying
+// it is a loop), and text merely discussing caching is not a refusal.
 test("refuses to read a request's own bad parameter, or a mention of caching, as an outage", () => {
     expect(isUnsentParameterRefusalText("API Error: 400 output_config.effort 'max' is not supported when thinking is disabled")).toBe(false);
     expect(isUnsentParameterRefusalText("Preserve prompt_cache_key when the application already uses it.")).toBe(false);
@@ -128,8 +109,7 @@ test("refuses to read a request's own bad parameter, or a mention of caching, as
     expect(isUnsentParameterRefusalText("Sure — I've updated the config and the tests pass.")).toBe(false);
 });
 
-// The direction that would do real damage: refusing a good answer leaves a session wearing a cut sentence and a
-// commit box empty, so every ordinary name and subject has to pass.
+// The damaging direction: refusing a good answer leaves a session and a commit box empty.
 test("passes the names and subjects these seams actually exist to collect", () => {
     expect(isDeclinedAnswer("feat: ordered model picker")).toBe(false);
     expect(isDeclinedAnswer("fix: stop the picker reordering on refresh")).toBe(false);
@@ -141,18 +121,15 @@ test("passes the names and subjects these seams actually exist to collect", () =
     expect(isDeclinedAnswer("   ")).toBe(false);
 });
 
-/* THE SIXTH READING, AND THE ONE THAT ARRIVED LOOKING LIKE AN ANSWER: a model writing out the tool call it would
- * have made, because the runtime carrying it (OpenCode, on every Gemini rung) prepends a coding-agent prompt
- * whose worked examples demonstrate exactly that. Four fleet cards and three commits in this repo's own history
- * are named `[tool_call: glob for pattern '**']` and its siblings. */
+// A model writing out the tool call it would have made, since OpenCode (every Gemini rung) prepends a coding-agent
+// prompt whose worked examples demonstrate exactly that.
 
 test("reads a written-out tool call as the non-answer it is", () => {
     expect(isToolCallStandIn("[tool_call: glob for pattern '**']")).toBe(true);
     expect(isToolCallStandIn("[tool_call: ls for path '/work']\n[tool_call: read for absolute_path '/work/a.ts']")).toBe(true);
     expect(isToolCallStandIn('<tool_call>{"name":"Glob"}</tool_call>')).toBe(true);
     expect(isToolCallStandIn("[TOOL_CALLS] search(query='titles')")).toBe(true);
-    // The tail of a stand-in line is the model continuing its imagined transcript, so the line goes whole: this
-    // one is a title this fleet actually wore.
+    // The tail of a stand-in line is the model continuing its imagined transcript, so the whole line goes.
     expect(isToolCallStandIn("[tool_call: grep for pattern 'gone quiet|offline'] Bluntly search th")).toBe(true);
 });
 
@@ -171,9 +148,8 @@ test("reads a model self-identity reply as a non-answer", () => {
     expect(isSelfIdentityAnswer("")).toBe(false);
 });
 
-/* Anchored at the start of a line, which is where every runtime that writes these puts them, and that anchor is
- * what keeps the family from swallowing an answer ABOUT one: the commit subject for the change that added this
- * predicate has to be writable. Empty is nothing, not a stand-in, same rule as a decline. */
+// Anchored at line start, where every runtime writes these, so it doesn't swallow an answer merely mentioning one —
+// even this predicate's own commit subject must stay writable. Empty is nothing, same rule as a decline.
 test("leaves an answer that merely talks about a tool call alone", () => {
     expect(isToolCallStandIn("fix(role-model): refuse a [tool_call: …] reply as an answer")).toBe(false);
     expect(isToolCallStandIn("Tool-call stand-ins · refuse")).toBe(false);
@@ -181,18 +157,15 @@ test("leaves an answer that merely talks about a tool call alone", () => {
     expect(isToolCallStandIn("   ")).toBe(false);
 });
 
-// A model that narrated its tool call and THEN did the job has still done the job: the stand-in lines come off
-// and what is left is the reply. Refusing that would spend a rung on the model's phrasing.
+// Narrating a tool call then doing the job still counts: only the stand-in lines come off.
 test("strips the stand-in lines and keeps whatever the model actually wrote", () => {
     expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']\nSandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(withoutToolCallStandIns("Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']")).toBe("");
 });
 
-/* THE FOURTH CONDITION REPORTED AS PROSE, and the first one the sandbox can fix by itself: the provider refuses
- * a model because the engine driving it is too old, and names the version that would work. Both numbers are
- * read out of the sentence because the card turns them into an install (engines/engines.ts); the running one is
- * optional, since only the floor decides which version fixes it. */
+// An engine-too-old refusal, the first condition this sandbox can fix itself. Both versions are read out since the card
+// turns them into an install (engines/engines.ts); the running one is optional, since only the floor decides the fix.
 const TOO_OLD =
     "API Error: 400 Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required. Run 'claude update', or update the Claude desktop app, then try again.";
 
@@ -200,15 +173,13 @@ test("reads both versions out of an engine-too-old refusal", () => {
     expect(versionFloorOf(TOO_OLD)).toEqual({ floor: "2.1.251", running: "2.1.233" });
 });
 
-// The floor clause is what is matched, not the product name: the rest of the sentence is Anthropic's to reword
-// and a classification that broke on a comma would take the recovery down with it.
+// Matches the floor clause, not the product name, which is Anthropic's to reword freely.
 test("reads the floor even when the sentence is reworded around it", () => {
     expect(versionFloorOf("This model needs a newer client: version 3.0.0 or newer is required.")).toEqual({ floor: "3.0.0" });
 });
 
-/* Neighbouring failures must not read as this one. A spent allowance and a refused credential both mention
- * numbers and neither is fixed by installing anything, so a false positive here would answer a billing problem
- * with a download. */
+// A spent allowance or a refused credential both mention numbers but neither is fixed by installing anything; a false
+// positive here would answer a billing problem with a download.
 test("does not read other refusals as a version floor", () => {
     expect(versionFloorOf(KIMI_403)).toBeUndefined();
     expect(versionFloorOf("You've hit your session limit · resets 1:40pm (UTC)")).toBeUndefined();

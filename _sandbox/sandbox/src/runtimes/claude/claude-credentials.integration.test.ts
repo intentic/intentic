@@ -25,8 +25,8 @@ const silent = pino({ level: "silent" });
 
 const storeDir = (): string => mkdtempSync(join(tmpdir(), "claude-store-"));
 
-// One in-memory account keyed by id, matching the file store's account-keyed surface. `withRefreshLock` is a
-// straight call: a single process's exclusion is the in-flight map's job, and these tests drive that directly.
+// In-memory account keyed by id, matching the file store's surface. withRefreshLock just calls act(): a single
+// process's exclusion is the in-flight map's job, tested directly.
 const memoryStore = (initial?: StoredAccount): ClaudeStore & { current: () => StoredAccount | undefined } => {
     let account = initial;
     return {
@@ -46,7 +46,7 @@ const memoryStore = (initial?: StoredAccount): ClaudeStore & { current: () => St
     };
 };
 
-// Unnamed on purpose: the row's name is derived on read, so the store holds one only when the user typed it.
+// Unnamed on purpose; the store holds a name only when the user typed one, else it's derived on read.
 const stored = (tokens: TokenSet): StoredAccount => ({ id: "a", connectedAt: 0, ...tokens });
 
 // Comfortably outside REFRESH_AHEAD_MS, so "valid" means valid rather than "about to be rotated".
@@ -64,16 +64,13 @@ test("buildAuthorizeUrl produces a PKCE authorize URL with the verifier/state to
 test("newAccount mints an id and falls back to a default label", () => {
     const first = newAccount({ accessToken: "t" }, "");
     expect(first.id.length).toBeGreaterThan(0);
-    // Nothing to name it after yet: nothing is STORED, and the display name falls back to the provider's.
     expect(first.label).toBeUndefined();
     expect(displayLabel(first)).toBe("Claude");
     expect(newAccount({ accessToken: "t" }, " work ").label).toBe("work");
 });
 
-// The whole reason a second account was indistinguishable from the first: unnamed, both rows said "Claude".
 test("newAccount names an unnamed account after the identity the sign-in reported", () => {
     expect(displayLabel(newAccount({ accessToken: "t", email: "a@example.com" }, ""))).toBe("a@example.com");
-    // A name the user typed outranks the derived one: it is the more specific answer, and theirs.
     expect(displayLabel(newAccount({ accessToken: "t", email: "a@example.com" }, "Work"))).toBe("Work");
 });
 
@@ -82,11 +79,10 @@ test("renameAccount renames, and a blank name restores the derived one", () => {
     expect(renameAccount(account, " Work ").label).toBe("Work");
     expect(renameAccount(account, "").label).toBeUndefined();
     expect(displayLabel(renameAccount(account, ""))).toBe("a@example.com");
-    // Nothing to derive from: the provider default, never a nameless row.
+    // No identity to derive from falls back to the provider default, never a nameless row.
     expect(displayLabel(renameAccount(stored({ accessToken: "t" }), ""))).toBe("Claude");
 });
 
-// The identity travels beside the label, not inside it: a renamed account must still be able to say whose it is.
 test("toAccount surfaces the identity alongside the user's own name", () => {
     expect(toAccount({ ...stored({ accessToken: "t", email: "a@example.com", organization: "Acme" }), label: "Work" })).toEqual({
         id: "a",
@@ -112,8 +108,6 @@ test("ensureFreshToken returns the access token while it is still valid", async 
     expect(refreshed).toBe(false);
 });
 
-// The window is deliberately wide: the token is snapshotted into the agent subprocess at spawn, so handing a
-// turn one that is minutes from death means recovering mid-flight instead of never running dry.
 test("ensureFreshToken rotates well before the real expiry rather than at the last second", async () => {
     const store = memoryStore(stored({ accessToken: "old", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "ahead" }))).toBe("ahead");
@@ -135,18 +129,13 @@ test("ensureFreshToken keeps the old refresh token when the refresh response omi
     expect(store.current()).toMatchObject({ accessToken: "fresh", refreshToken: "keep" });
 });
 
-// A refresh answers on the same endpoint with the same envelope, so an account stored before any of this
-// existed picks its identity up on the next rotation rather than staying anonymous forever.
 test("a refresh teaches an account who it is without touching the name it already has", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r", expiresAt: Date.now() - 1000 }));
     await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh", email: "a@example.com", organization: "Acme" }));
     expect(store.current()).toMatchObject({ email: "a@example.com", organization: "Acme" });
-    // THE POINT OF DERIVING THE NAME: the row said "Claude" while the account was anonymous, and says who it
-    // is the moment the provider tells us, without a rename and without a second sign-in.
     expect(displayLabel(store.current()!)).toBe("a@example.com");
 });
 
-// The mirror case: a response that says nothing about identity must not erase what we already knew.
 test("a refresh without identity leaves the stored one standing", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r", email: "a@example.com", expiresAt: Date.now() - 1000 }));
     await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh" }));
@@ -161,10 +150,6 @@ test("ensureFreshToken returns the (expired) token unchanged when there is no re
     expect(token).toBe("only");
 });
 
-/* The incident this file exists for: several turns starting at once (a fleet of agents, plus the model
- * catalog's own timer) all crossed the expiry window together, each POSTed the SAME refresh token, and
- * Anthropic's reuse-detection revoked the whole family: every live session died at once with
- * "401 OAuth access token has been revoked", including turns holding a token that had just been minted. */
 test("concurrent callers refresh exactly once", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r1", expiresAt: Date.now() - 1000 }));
     let refreshes = 0;
@@ -178,8 +163,6 @@ test("concurrent callers refresh exactly once", async () => {
     expect(tokens).toEqual(Array.from({ length: 8 }, () => "fresh"));
 });
 
-// The loser of a cross-process race must ADOPT what the winner wrote. Replaying the refresh token the winner
-// already spent is the revocation trigger itself, so "refresh anyway" is the one thing it must not do.
 test("a caller that waited on the lock adopts the token the holder rotated", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r1", expiresAt: Date.now() - 1000 }));
     const rotate = async (): Promise<void> => {
@@ -187,7 +170,7 @@ test("a caller that waited on the lock adopts the token the holder rotated", asy
     };
     const locked: ClaudeStore = {
         ...store,
-        // Stand in for another process finishing its refresh while we blocked on the lock file.
+        // Stands in for another process finishing its refresh while this one waited on the lock file.
         withRefreshLock: async (_id, act) => {
             await rotate();
             return act();
@@ -208,7 +191,6 @@ test("an invalid_grant marks the account revoked instead of retrying the dead to
     };
     expect(await ensureFreshToken(store, "a", refresh)).toBeUndefined();
     expect(store.current()?.revokedAt).toBeGreaterThan(0);
-    // The second call must not present the dead token again: that replay is what revokes live sessions.
     expect(await ensureFreshToken(store, "a", refresh)).toBeUndefined();
     expect(attempts).toBe(1);
 });
@@ -230,10 +212,8 @@ test("a revoked account surfaces as needsReauth in the list", async () => {
     expect(await store.list()).toEqual([{ id: "acct-1", label: "Personal", connectedAt: 1, needsReauth: true, detail: "gone" }]);
 });
 
-// The catalog persists its discovered models as models.json in the SAME dir the account store scans, so an
-// unparsed read surfaced it as a blank `{}` account: a phantom row in the picker, and, since the list is
-// sorted by connectedAt and `accounts[0]` is the daemon's default: a coin-flip chance of the turn resolving
-// no account at all.
+// models.json mirrors the model catalog's real file in this directory; an unparsed entry there must not surface as a
+// phantom account.
 test("fileClaudeStore ignores non-account json in the store dir", async () => {
     const dir = storeDir();
     const store = fileClaudeStore(dir, silent);
@@ -253,11 +233,6 @@ test("fileClaudeStore round-trips an account through the filesystem", async () =
     expect(await store.list()).toEqual([]);
 });
 
-/* THE FILE HOLDS AN OAUTH REFRESH TOKEN, so its mode is part of the store's job and not the umask's.
- *
- * The mode that survives is the TEMP file's — `rename` carries it onto the target — so a bare `writeFile` for
- * the temp published the credential at whatever the umask allowed (0644 by default), readable by everything in
- * the container. The Cursor store next door already wrote 0o600; this one did not, and nothing said so. */
 test("fileClaudeStore writes the credential owner-only, temp file included", async () => {
     const dir = storeDir();
     const store = fileClaudeStore(dir, silent);
@@ -265,8 +240,6 @@ test("fileClaudeStore writes the credential owner-only, temp file included", asy
     expect((await stat(join(dir, "acct-1.json"))).mode & 0o777).toBe(0o600);
 });
 
-// A reader must never catch the file mid-write: a torn read parses to nothing, which used to degrade to "no
-// such account": indistinguishable, to the user, from a credential that disconnected itself.
 test("fileClaudeStore writes atomically and leaves no temp files behind", async () => {
     const dir = storeDir();
     const store = fileClaudeStore(dir, silent);
@@ -278,8 +251,7 @@ test("fileClaudeStore writes atomically and leaves no temp files behind", async 
     expect(await store.list()).toEqual([{ id: "acct-1", label: "Work", connectedAt: 7 }]);
 });
 
-// The lock is what covers a SECOND daemon on a shared AGENT_AUTH_DIR: the in-flight map only sees its own
-// process. Two stores over one dir stand in for two sandboxes.
+// Two separate fileClaudeStore instances over one dir stand in for two daemons sharing AGENT_AUTH_DIR.
 test("withRefreshLock excludes a second holder over the same store dir", async () => {
     const dir = storeDir();
     const [first, second] = [fileClaudeStore(dir, silent), fileClaudeStore(dir, silent)];
@@ -291,14 +263,13 @@ test("withRefreshLock excludes a second holder over the same store dir", async (
             order.push(`${tag}:exit`);
         });
     await Promise.all([hold(first, "a"), hold(second, "b")]);
-    // Whoever won, the other's critical section starts only after it closed.
     expect(order).toEqual(order[0] === "a:enter" ? ["a:enter", "a:exit", "b:enter", "b:exit"] : ["b:enter", "b:exit", "a:enter", "a:exit"]);
 });
 
 test("withRefreshLock steals a lock left behind by a dead holder", async () => {
     const dir = storeDir();
     const store = fileClaudeStore(dir, silent);
-    // Backdated past LOCK_STALE_MS: a process that died mid-refresh must not wedge the credential forever.
+    // Backdated past LOCK_STALE_MS so the lock reads as abandoned.
     await writeFile(join(dir, "acct-1.refresh.lock"), "999999\n");
     const stale = new Date(Date.now() - 5 * 60_000);
     const { utimes } = await import("node:fs/promises");
@@ -306,18 +277,12 @@ test("withRefreshLock steals a lock left behind by a dead holder", async () => {
     expect(await store.withRefreshLock("acct-1", async () => "ran")).toBe("ran");
 });
 
-/* ROTATION vs LIVE TURNS. Anthropic retires the previous access token the moment a refresh mints its
- * successor, and a turn's token is a snapshot in a subprocess env that cannot be updated, so a rotation
- * landing mid-turn kills every turn holding the old one. One real refresh did exactly that to three agents at
- * once. While a turn holds the account, the rotation waits. */
 test("a rotation waits while turns are holding the token", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
     const release = holdAccount("a");
-    // Inside REFRESH_AHEAD_MS, so this WOULD rotate, but breaking the turns holding it costs more than
-    // carrying a token that is still ten minutes from expiry.
+    // Inside REFRESH_AHEAD_MS, so this would rotate if nothing were holding the account.
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("held");
     expect(store.current()?.accessToken).toBe("held");
-    // The moment the last turn lets go, the next pass rotates as it always did.
     release();
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
 });
@@ -325,8 +290,7 @@ test("a rotation waits while turns are holding the token", async () => {
 test("the wait is bounded: a token about to genuinely expire rotates even under a live turn", async () => {
     const store = memoryStore(stored({ accessToken: "dying", refreshToken: "r", expiresAt: Date.now() + 30_000 }));
     const release = holdAccount("a");
-    // Past ROTATE_REGARDLESS_MS: waiting longer would let it lapse, which fails the NEXT turn too. The turns
-    // still running are covered by the auth resume instead.
+    // Past ROTATE_REGARDLESS_MS: waiting would let the token lapse, so it rotates despite the held turn.
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
     release();
 });
@@ -342,16 +306,12 @@ test("holds nest and release once: two turns on one account, and the second rele
     expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
 });
 
-/* WAITING FOR A GAP ONLY WORKS IF THE GAP IS TAKEN WHEN IT COMES. Deferring at REFRESH_AHEAD_MS gave a busy
- * fleet half an hour to fall quiet in, and a fleet that never did rotated at the floor instead: into the most
- * turns it would ever have running. One such rotation refused five agents in twenty seconds. So the hunt starts
- * hours out and, crucially, fires off the RELEASE rather than off a timer that keeps missing the gaps. */
 test("the last turn's release rotates the token there and then", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
-    // The boot tick runs immediately; nothing holds the account, so it takes the gap it is already in.
+    // The boot tick runs immediately; with nothing holding the account, it rotates right away.
     await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
-    // Now with a turn in flight: the release is the trigger, so nothing moves until it lands.
+    // With a turn now in flight, nothing rotates until the release lands.
     await store.write(stored({ accessToken: "second", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const release = holdAccount("a");
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -361,8 +321,6 @@ test("the last turn's release rotates the token there and then", async () => {
     stop();
 });
 
-// The other half of the rule: early is only safe when it is also FREE. A token with most of its life left is
-// left alone, so the sandbox is not re-minting on every turn boundary for no reason.
 test("a quiet moment does not rotate a token that is nowhere near expiry", async () => {
     const store = memoryStore(stored({ accessToken: "fresh", refreshToken: "r", expiresAt: Date.now() + 7 * 60 * 60_000 }));
     const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
@@ -373,10 +331,6 @@ test("a quiet moment does not rotate a token that is nowhere near expiry", async
     stop();
 });
 
-/* THE GAP IS ALSO WHEN THE NEXT TURN STARTS. A quiet rotation and a turn resolving its credential race over the
- * same instant, and the holder gate cannot separate them: the new turn holds nothing YET. Handing it the store's
- * current token would snapshot into a subprocess the exact token the in-flight mint is about to retire: the
- * collision, reintroduced through the door opened to avoid it. So the resolve waits for the mint. */
 test("a turn starting during a rotation gets the new token, not the one being superseded", async () => {
     const store = memoryStore(stored({ accessToken: "doomed", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     let began = (): void => {};
@@ -392,8 +346,7 @@ test("a turn starting during a rotation gets the new token, not the one being su
         await held;
         return { accessToken: "rotated" };
     });
-    // The boot tick's rotation has reached the provider and is waiting on it; the store still holds the token
-    // that mint is about to supersede, which is exactly the state a turn must not resolve its credential in.
+    // Rotation has reached the provider and is waiting; the store still holds the token about to be superseded.
     await started;
     expect(store.current()?.accessToken).toBe("doomed");
     const resolving = ensureFreshToken(store, "a");
@@ -402,10 +355,9 @@ test("a turn starting during a rotation gets the new token, not the one being su
     stop();
 });
 
-// A release arriving after the daemon tore the loop down must not reach into a store that is no longer running.
 test("stopping the refresh loop unhooks the release trigger", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
-    // Held across the boot tick, so the loop is genuinely stopped rather than having already rotated.
+    // Held before the loop starts, so stopping it is proven genuine rather than a rotation that already happened.
     const release = holdAccount("a");
     const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
     await new Promise((resolve) => setTimeout(resolve, 10));

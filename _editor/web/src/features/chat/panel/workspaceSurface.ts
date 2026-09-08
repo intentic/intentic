@@ -4,41 +4,29 @@ import { openWorkTerminal } from "../../terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../../workspace/files/openFileRef";
 import type { ChatSurface } from "../tools/chatToolSurface";
 
-/* THE APP'S OWN CHAT SURFACE, everything a tool card can lead to when there IS a workspace behind it.
- *
- * The half of ChatToolCard that used to be imported straight into the component, now stated once here so the
- * component itself holds no opinion about where it is mounted. Two callers with genuinely different answers:
- * a chat PANE, which has a live conversation and therefore a shell and a browser to attach to, and a
- * subagent's transcript page, which has neither and wants only the files and pictures.
- *
- * `agent` is whose copy of the workspace this conversation's paths name (workspaceScope). An isolated
- * conversation works in its own checkout, so a file it named is the one in THAT tree, the shared tree's file
- * of the same path is a different file, or none at all, and linking there is how "I edited auth.ts" led to a
- * not-found page. Undefined for a shared-workspace conversation: /work IS its tree. Read through a getter
- * rather than passed as a value, because a pane's conversation changes under it. */
+// The app's own ChatSurface for tool cards with a real workspace behind them: shared between chat panes (live
+// conversation, shell, browser) and a subagent's transcript page (files only). `agent` picks whose workspace copy a
+// path resolves in (workspaceScope), undefined for the shared tree; a getter, since a pane's conversation can change
+// under it.
 export interface WorkspaceSurfaceOptions {
     readonly agent: () => string | undefined;
-    // The tmux session an agent's commands run in, and the browser session its browser tools drive. A page
-    // with no live conversation behind it supplies neither, and its cards simply carry no watch buttons.
+    // tmux session for commands, and the browser session for browser tools; absent on a page with no live conversation.
     readonly terminal?: () => string | undefined;
     readonly browser?: () => string | undefined;
-    // How a route is entered. Passed in rather than taken from useRouter() so this stays a plain function,
-    // the two callers are components and already have one.
+    // How a route is entered; passed in (not useRouter()) so this stays a plain function for either caller.
     readonly navigate?: (route: string) => void;
 }
 
 export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface => ({
     imageUrl: attachmentPreview,
     openFile: (path, line) => openWorkspaceRef(path, line, { agent: options.agent() }),
-    // Prose on a card gets the same file links the assistant's own answer does, into the same tree. Built per
-    // fragment rather than once, for the reason `agent` is a getter: a pane's conversation changes under it.
+    // Same file-link decoration as the assistant's own prose, rebuilt per fragment since `agent` can change under it.
     decorate: (fragment) => fileLinkDecorator({ agent: options.agent() })(fragment),
     ...(options.terminal === undefined ? {} : { commandTerminal: options.terminal, watchTerminal: openWorkTerminal }),
     ...(options.browser === undefined || options.navigate === undefined
         ? {}
         : { commandBrowser: options.browser, watchBrowser: (session: string) => options.navigate?.(`/browsers/${session}`) }),
     subagentRoute: (toolId) => `/subagents/${toolId}`,
-    // A page with no navigate of its own still gets a working link, it just costs a full load, which for the
-    // subagent page linking to another subagent is the honest fallback rather than a dead anchor.
+    // No navigate still yields a working link, just a full page load; the honest fallback rather than a dead anchor.
     ...(options.navigate === undefined ? {} : { navigate: options.navigate }),
 });

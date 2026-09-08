@@ -1,11 +1,7 @@
-<!-- ONE DIRECTORY'S PAGE, OPENED IN THE WORKSPACE: the same document DocsView renders, next to the code it
-     explains instead of in an area you have to navigate to. This is the whole point of the document contribution:
-     the question "what is this package?" is asked while looking at the package.
-
-     It is a DIFFERENT COMPONENT from DocsView rather than a mode of it, and the reason is the URL. DocsView keeps
-     which page is open in the query (`?doc=`), which is right for a routed area and wrong here twice over: the
-     route belongs to the Workspace, and two document tabs open at once would fight over one key. A tab's subject
-     is the tab's own state, so this takes it as a prop and touches no query at all. -->
+<!--
+    One directory's documentation page opened in a Workspace tab beside its code. A separate component from DocsView, not a mode of it: DocsView
+    tracks the open page in the `?doc=` query, which two open tabs would collide over, so this takes the page as a prop instead.
+-->
 <script setup lang="ts">
 import { appLink, Button, ui, Icon, SegmentedControl, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
@@ -16,13 +12,12 @@ import { host } from "./host.js";
 import { splitRepo } from "./paths.js";
 import { useDocs, type DocSource } from "./useDocs.js";
 
-// The directory this tab explains, workspace-root-relative: the identity the tree row and the stored tab share.
+// Directory this tab explains, workspace-root-relative; the identity shared with the tree row and stored tab.
 const { path } = defineProps<{ path: string }>();
 
 const api = host();
 
-// Which repository owns the path, and where inside it. Derived from the workspace's repos rather than carried on
-// the tab, so a tab restored into a workspace whose repos have moved resolves against what is there now.
+// Repo owning the path, derived from the workspace's current repos, not stored on the tab.
 const location = computed(() =>
     splitRepo(
         path,
@@ -30,7 +25,7 @@ const location = computed(() =>
     ),
 );
 const repo = computed(() => location.value?.repo ?? ``);
-// "" ⇒ the repository's own overview page (repo.md), which is what a repo row's icon opens.
+// "" means the repository's own overview page (repo.md).
 const dir = computed(() => (location.value === undefined || location.value.dir === `` ? undefined : location.value.dir));
 const label = computed(() => (path === `` ? `the workspace root` : path));
 
@@ -41,16 +36,14 @@ const SOURCES = [
 ];
 
 const { set, isLoading, hasStaged, usePackage } = useDocs(repo, source);
-// Drawn only once the wait has earned it, and keyed on the directory so opening another one starts a fresh
-// wait rather than holding the last page's outline over it.
+// Keyed on the directory, so switching directories starts a fresh wait instead of the last page's outline.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `${repo.value}:${dir.value ?? ``}`),
 );
 const packageQuery = usePackage(dir);
 
-// A page that exists only as a draft has to show the draft, or the tab renders empty for the one document that is
-// actually there. Published stays the default everywhere else: it is what the repository says.
+// Flips to staged only when a page exists solely as a draft; published remains the default otherwise.
 watch([hasStaged, set, packageQuery.data], ([staged, repoSet, page]) => {
     const published = dir.value === undefined ? repoSet?.prose !== undefined : page !== undefined;
     if (staged && !published && source.value === `published`) {
@@ -61,8 +54,7 @@ watch([hasStaged, set, packageQuery.data], ([staged, repoSet, page]) => {
 const entries = computed(() => set.value?.index?.entries ?? []);
 const staleness = computed(() => entries.value.find((entry) => entry.dir === dir.value));
 
-// The full area, for everything this tab deliberately does not carry: the map, the other packages, generation,
-// publishing. `doc` is dropped for a repo overview so the link lands on the overview rather than an empty page.
+// Full documentation area link; `doc` is dropped for a repo overview so it lands there, not on an empty page.
 const areaLink = computed(() => {
     const to = `/ext/documentation?repo=${encodeURIComponent(repo.value)}${dir.value === undefined ? `` : `&doc=${encodeURIComponent(dir.value)}`}`;
     return appLink(api.href(to), () => api.navigate(to));
@@ -71,8 +63,7 @@ const areaLink = computed(() => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
-        <!-- A thin strip, not a PageHeader: this is a tab beside a file's tab, and a full page title on top of a
-             document would say the same thing the tab strip already says. -->
+        <!-- A thin strip, not a PageHeader: the tab strip already names the document. -->
         <div class="flex h-8 shrink-0 items-center gap-2 border-b border-line-subtle px-3">
             <Icon name="question-circle" class="shrink-0 text-2xs text-subtle" />
             <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ label }}</span>
@@ -85,9 +76,7 @@ const areaLink = computed(() => {
         <DocSkeleton v-if="isLoading && outline" />
         <div v-else-if="isLoading" class="min-h-0 flex-1" />
 
-        <!-- Undocumented is the ordinary state of most directories, so it is an invitation rather than an error:
-             and the invitation goes where generation actually lives, because a run needs a scope and choosing one
-             is a decision this tab has no business taking. -->
+        <!-- An invitation, not an error, since undocumented is ordinary; it links to generation, not a scope choice. -->
         <div
             v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value === undefined"
             class="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin"
@@ -99,15 +88,10 @@ const areaLink = computed(() => {
             </div>
         </div>
 
-        <!-- NO CARD HERE. In the routed area the document is a body beside a contents rail and takes the frame
-             that says so; in a tab it IS the pane, and boxing it draws a lit border a few pixels inside the
-             pane's own: a card in a card, paying for it twice in padding and handing the prose a narrower
-             column than the same text has when the README beside it is opened as a file. So this reads exactly
-             like that file preview: the canvas, a centred measure, and `ui-softscroll`, a whisper of a
-             scrollbar until the pointer is in the column, which is right for a surface being read.
-
-             The scroll area is the TAB's rather than the page's, and can be: the host keys a document tab by its
-             directory, so another package is a fresh mount and arrives at the top on its own. -->
+        <!--
+            No card here: this div IS the pane, so it matches the file-preview treatment, a centered measure with `ui-softscroll`. The scroll area
+            belongs to the tab, keyed by directory, so switching packages remounts at the top.
+        -->
         <div v-else class="ui-softscroll min-h-0 flex-1 overflow-y-auto bg-canvas px-6 py-5">
             <DocPage
                 v-if="dir === undefined"

@@ -1,23 +1,7 @@
-<!-- THE INDEX COLUMN: a filter, some pinned rows, grouped selectable rows, a footnote. The activity source
-     rail, the knowledge index and the documentation contents were three implementations of this, and they
-     disagreed on every part a reader can see: three selection tints (two `bg-overlay`, one primary-at-13%
-     against the app's canonical 15%), two scrollbars, two group-heading treatments, and three filter fields.
-
-     WHAT THIS OWNS IS THE CHROME, NOT THE ROW. A rail's rows differ for good reasons: one carries a gateway
-     dot and two counts, one a draft mark and a timestamp, one a path split at its last slash, so the row is a
-     scoped slot and stays the caller's. What was never worth three answers is everything around it: where the
-     filter sits, how a heading looks, what "selected" is tinted with, and which scrollbar a 16rem column gets.
-
-     HEADINGS CAN STICK. With 55 rows the grouping is otherwise visible only at the moment you scroll past it,
-     so `stickyHeadings` keeps the answer to "what am I looking at" on screen. Off by default: it costs a
-     stacking context and a background, and a rail with six rows in two groups has nothing to keep.
-
-     IT NEVER DRAWS A BORDER, and that is not configurable. It used to be: `framed` for a rail sitting beside
-     another panel, bare for one sitting beside a document, and each reading was defensible on its own page.
-     Together they meant three adjacent screens with three different index columns, which is how a shared
-     component still produced an app that looked unshared. An index is chrome pointing AT something; boxing it
-     makes it compete with the thing it points at, and in a 16rem column every stroke counts double. One
-     treatment, so the rail is the same object wherever a reader meets it. -->
+<!--
+    The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome only; row content is a caller-supplied slot. Never
+    draws a border. `stickyHeadings` pins the group heading while scrolling.
+-->
 <script setup lang="ts" generic="T">
 import { computed } from "vue";
 import { ui } from "../../lib/ui.js";

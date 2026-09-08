@@ -7,9 +7,8 @@ import type { Logger } from "pino";
 import { afterEach, expect, test } from "vitest";
 import { createServiceProcesses, type ServiceProcesses, serviceSession } from "./service-processes.js";
 
-/* The supervisor against REAL processes, because everything it exists for — exits observed rather than
- * polled, groups killed as units, respawns that actually respawn — is exactly what a mocked child proves
- * nothing about. Timing is injected small so a crash loop costs milliseconds, not the shipping backoff. */
+// Runs against real processes: exit detection, group kills, and respawn are exactly what a mocked child proves nothing
+// about. Timing is injected small so a crash loop costs milliseconds.
 
 const logger = unstubbed<Logger>("logger", { warn: () => {}, error: () => {} });
 
@@ -60,7 +59,7 @@ test("a crashing service is respawned with the exit code on the record and the p
     await until("two respawns", () => (supervisor?.statusOf("crasher")?.restarts ?? 0) >= 2);
     const status = supervisor.statusOf("crasher");
     expect(status?.lastExitCode).toBe(7);
-    // The port is assigned once per start(): the gateway poke and the deliver route hold it across respawns.
+    // The port is assigned once per start(); it stays stable across respawns.
     expect(supervisor.portOf("crasher")).toBe(port);
     expect(serviceSession("crasher")).toBe("svc-crasher");
 });
@@ -68,8 +67,7 @@ test("a crashing service is respawned with the exit code on the record and the p
 test("stop kills the whole process group and ends the respawning", async () => {
     const dir = logsDir();
     supervisor = createServiceProcesses(dir, logger, TIMING);
-    // The service forks its own child (the `sleep`), the shape of a gateway with a helper process: stop must
-    // take the group, not just the leader.
+    // Forks a child (sleep), like a gateway with a helper; stop must kill the group, not just the leader.
     await supervisor.start("looper", { cwd: dir, command: "sleep 30 & wait" });
     await until("it to run", () => supervisor?.running("looper") === true);
     supervisor.stop("looper");

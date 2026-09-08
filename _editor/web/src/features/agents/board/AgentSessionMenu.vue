@@ -7,52 +7,36 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { landsByDefault } from "../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 
-/* What you do to a SESSION, as opposed to what you do to its diff: refresh, land, hold, archive, discard.
- * Width-agnostic body (Popover on desktop, BottomSheet on mobile), the same shape ChatModeMenu has.
- *
- * These five used to sit permanently in the review's toolbar, four of them competing with the diff for the
- * reader's attention on every file they scanned: with the destructive one a few pixels from the primary one.
- * They are once-per-session decisions: you archive an agent when you are done with it, not while reading its
- * third file. So they live behind one glyph next to the status chip that says which of them is even relevant,
- * and the toolbar goes back to being about the review.
- *
- * Land stays out on desktop, as a labelled button in the header: it is the reason this page exists. On a phone
- * there is no room for it beside the Chat|Changes switch, so it is the first item here instead. */
+// Session-level actions (refresh, land, hold, archive, discard), as opposed to diff actions; once-per-session decisions
+// live behind one glyph rather than permanently cluttering the toolbar.
+// Land stays a labelled header button on desktop; on mobile, where it has no room beside Chat|Changes, it's this menu's
+// first item instead.
 
 const { changes, agentId, landInMenu } = defineProps<{
     agentId: string;
-    // The review's ONE state instance, owned by AgentDetail: a second useAgentChanges() would give this menu
-    // its own busy/error flags, so a land fired here would leave the panel's spinners saying nothing happened.
+    // AgentDetail's one useAgentChanges instance; a second one here would desync the panel's busy/error state.
     changes: ReturnType<typeof useAgentChanges>;
     // Mobile, where Land has no room in the header row: it becomes this menu's first item.
     landInMenu: boolean;
     streaming: boolean;
 }>();
-// `forceLand` goes up for the same reason `discard` does: the warning it raises is a modal, and modals live on
-// the page rather than inside a menu that closes on every press.
+// Goes up like `discard`: the warning is a modal, and modals live on the page, not inside a closing menu.
 const emit = defineEmits<{ selected: []; discard: []; forceLand: [] }>();
 
 const { agentById, restore, busyIds, setResumeAfterLimit, setMoveAfterLimit } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
-/* WORK THIS SESSION LANDED THAT THE WORKSPACE NO LONGER HOLDS: the reason "Land now" above stands down.
- *
- * The menu item it replaces was the sharpest form of the problem: with everything recorded as landed, its
- * caption read "Already in your workspace" over a tree the user had emptied of it, and the item was greyed out
- * so there was nothing to press either. Read off the roster rather than off the diff, because the diff is the
- * agent's own branch and the branch is exactly what has NOT changed. */
+// Work this session landed that the workspace no longer holds; the reason "Land now" stands down for it.
+// Read off the roster, not the diff: the diff is the agent's own branch, which is exactly what hasn't changed.
 const away = computed(() => {
     const agent = agentById(agentId);
     return agent === undefined || agent.archivedAt !== undefined ? undefined : landedAway(agent);
 });
-// Both directions claim the same per-id counter in the fleet store, so one flag covers the round trip either way.
+// Archive and restore share the same per-id busy counter, so one flag covers either direction.
 const archiveBusy = computed(() => busyIds.value.includes(agentId));
 
-/* THE HOLD TOGGLE: this agent's land-at-completion posture. It reads the EFFECTIVE value (the agent's
- * override, else the sandbox-wide setting: Sandbox ▸ Agent owns the default), and a click flips it FOR THIS
- * AGENT only. Flipping back to what the sandbox already says clears the override entirely (null), so agents
- * don't accumulate frozen overrides that quietly stop following the global toggle. Deliberately legal
- * mid-turn: the daemon reads the value at turn COMPLETION, so pressing hold while the agent works is exactly
- * "keep THIS turn's work on the branch": the press that matters most. */
+// Reads the effective value (this agent's override, else the sandbox default) and flips it for this agent only.
+// Flipping back to the sandbox's own value clears the override to null, rather than leaving a frozen copy of it; legal
+// mid-turn, since the daemon reads it only at turn completion.
 const { settings: sandboxSettings } = useSandboxSettings();
 const sandboxLands = computed(() => landsByDefault(sandboxSettings.value?.rules ?? []));
 const autoLandOn = computed(() => effectiveAutoLand(agentById(agentId), sandboxLands.value));
@@ -62,16 +46,9 @@ const toggleAutoLand = async (): Promise<void> => {
     await changes.setAutoLand(next === sandboxLands.value ? null : next);
 };
 
-/* THE OTHER POSTURE THIS CARD OWNS, and the only one that is not always worth a row: whether the turn a spent
- * allowance refused goes again by itself when the window reopens.
- *
- * OFFERED ONLY ON A CARD IT APPLIES TO, unlike the hold toggle above. Auto-land is a standing property of every
- * agent, so its row is always true; this one describes a wait that most cards are not in, and a menu row about
- * an allowance nobody hit is a row that teaches people to stop reading the menu.
- *
- * SAME THREE-STATE GRAMMAR as the hold toggle, including the clear: flipping back to what the sandbox already
- * says drops the override entirely, so a card cannot sit holding a frozen copy of a default it has quietly
- * stopped following. */
+// Shown only on a card actually waiting on a spent allowance, unlike the always-present hold toggle.
+// Same three-state grammar as the hold toggle: flipping back to the sandbox's value clears the override rather than
+// freezing a copy of it.
 const limitedCard = computed(() => {
     const agent = agentById(agentId);
     return agent !== undefined && limited(agent) ? agent : undefined;
@@ -84,9 +61,8 @@ const toggleSendsAgain = async (): Promise<void> => {
     await setResumeAfterLimit(agentId, next === sandboxSendsAgain.value ? null : next);
 };
 
-/* The other answer to the same wall, in the same three states: move the held turn to another account of the
- * same provider with room, now, rather than waiting for this one's reset. Offered on the same card and for
- * the same reason, and its row says what it spends: a second account, on this conversation's behalf. */
+// The other answer to the same wall: moves the held turn to another account of the same provider with room, instead of
+// waiting for reset.
 const sandboxMoves = computed(() => sandboxSettings.value?.moveAfterLimit ?? false);
 const movesOn = computed(() => effectiveLimitMove(agentById(agentId), sandboxMoves.value));
 const toggleMoves = async (): Promise<void> => {
@@ -95,9 +71,8 @@ const toggleMoves = async (): Promise<void> => {
     await setMoveAfterLimit(agentId, next === sandboxMoves.value ? null : next);
 };
 
-// The ship-tier items (land, re-land, auto-land posture, discard) leave the menu below maintainer rather
-// than sit disabled in it: a collaborator's asking press lives on the card as "Request land", and a menu of
-// grey rows teaches people the menu is broken, not that a tier exists.
+// Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.
+// A menu of grey rows reads as broken, not as tiered.
 const { canShip } = useRole();
 
 const run = (action: () => void): void => {
@@ -105,17 +80,14 @@ const run = (action: () => void): void => {
     emit(`selected`);
 };
 
-/* WHETHER A LAND HERE NEEDS THE WARNING FIRST: the same split the header button makes (AgentDetail), and it
- * has to be made in both places because either one can be the press.
- *
- * `streaming` still disables archive and discard below: those take the worktree away and the daemon refuses
- * them for any live turn. A land only reads it, so the two land items follow `writing` instead: a turn parked
- * on a question is not writing anything, and that is precisely when someone wants this menu. */
+// Same split as the header button (AgentDetail); made independently here since either one can be the press.
+// Archive and discard below still gate on `streaming`; the land items follow `writing` instead, since a turn parked on
+// a question isn't writing.
 const writing = computed(() => {
     const agent = agentById(agentId);
     return agent !== undefined && writingNow(agent);
 });
-// Every land in this menu goes through here: warn while the agent writes, otherwise just land.
+// Every land in this menu goes through here: warns while the agent writes, otherwise lands directly.
 const pressLand = (land: () => void): void => {
     if (writing.value) {
         emit(`forceLand`);
@@ -124,10 +96,10 @@ const pressLand = (land: () => void): void => {
     }
     run(land);
 };
-// "Land again" (see `away`). The RUNG is not named here: the review decides it from the same landed-presence
-// reading `away` is (useAgentChanges land), so this item and the header's button cannot ask for different
-// spans of the same work. Through `run` like every other item, so the menu closes on the press and the panel's
-// own busy/error line owns the round trip.
+// Land again (see `away`): the span isn't decided here, but read from the same landed-presence reading, so this and the
+// header button never disagree.
+// Goes through `run`, like every other item, so the menu closes and the panel's own busy/error line owns the round
+// trip.
 const relandNow = (): void => pressLand(() => changes.land());
 
 const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-overlay disabled:opacity-40 disabled:hover:bg-transparent max-md:py-3`;
@@ -158,11 +130,11 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!-- THE WAY BACK, where the session's own decisions live. It replaces "Land now" rather than joining
-             it, because the two are never both the honest offer: with landed work missing from the tree, a
-             plain land carries the remainder and leaves the missing part exactly as missing, which is the one
-             outcome that looks like it worked. Quiet like everything else in this menu: the card is where the
-             fact is announced; this is just the second place the press can be found. -->
+        <!--
+            Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part
+            exactly as missing.
+            This is just a second place to find the press the card already announces.
+        -->
         <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
@@ -187,10 +159,11 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!-- The allowance posture, on the one card in ten that is waiting on one. It is what the card's own
-             readout promises when it says nothing is sending this for you, and the reason that promise is kept
-             here rather than on the card itself: the card already carries a press that spends money now, and a
-             second control beside it, arming something that spends money later, is two decisions in one line. -->
+        <!--
+            The allowance posture, shown only on a card actually waiting on one.
+            Kept off the card itself: the card already has a press that spends money now, and a second one arming
+            future spend would be two decisions in one line.
+        -->
         <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleSendsAgain">
             <Icon :name="sendsAgainOn ? 'clock' : 'refresh'" class="mt-0.5 text-xs" :class="sendsAgainOn ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
@@ -219,8 +192,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!-- Two endings, and the copy is what keeps them apart: archive KEEPS everything and only takes the
-             agent off the board, discard is the one that throws work away. -->
+        <!-- Archive keeps everything and only removes the agent from the board; discard actually throws work away. -->
         <button
             v-if="!archived"
             type="button"

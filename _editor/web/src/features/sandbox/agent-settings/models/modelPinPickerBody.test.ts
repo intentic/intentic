@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
-//
-// THE FOOTER OF THE SETTINGS PAGE'S MODEL PICKER: which knobs an entry is offered, and what each one writes.
-//
-// Two claims, and both are about honesty rather than plumbing. A knob is drawn only where the run would honour
-// it — the harness axis belongs to the two providers that have one, extended thinking and speed to Claude — so
-// the panel never offers a switch with nothing behind it. And what it writes back distinguishes ABSENT from
-// OFF: a pin that says nothing about thinking sends nothing and the harness's own default answers, while one
-// that says `false` turns it off, and the two must not collapse into each other on the way to the setting.
+// Pins that the footer draws a knob only where the run would honour it, and that it writes ABSENT (no field)
+// separately from explicit OFF, never collapsing the two.
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-/* The model list itself is the app's own panel and has its own suite; here it is a stub that renders the footer
- * slot and can answer with a row, which is the same treatment the shell picker's test gives it. */
+// Stubbed: the model list has its own suite; this stub renders the footer slot and can answer with a pick.
 vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
     __esModule: true,
     default: defineComponent({
@@ -31,10 +24,9 @@ vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
 }));
 let unpickable: ((entry: { provider: string; value: string }) => boolean) | undefined;
 
-// The chat's own pick is only the floor for an ADD, where there is no entry to read a provider off.
+// Only used as the floor when adding, where there's no entry to read a provider off.
 vi.mock(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
-// An empty live catalog puts every model on the static effort scale and publishes no `fast` badge, which is the
-// state a fresh sandbox is in; the badge case gets its own catalog below.
+// Empty: puts every model on the static effort scale with no `fast` badge; the badge case sets its own catalog below.
 const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[]; efforts?: readonly string[] }[]>>({});
 vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
     providerModels: catalog,
@@ -74,14 +66,12 @@ afterEach(() => {
     unpickable = undefined;
 });
 
-// Every row the footer drew, by the label it announces (the rows are label-left, control-right). Asserted
-// whole rather than one row at a time, because what an entry is OFFERED is the claim.
+// Every row the footer drew, by its label; asserted as a whole set, since what's offered is the claim under test.
 const knobRows = (host: HTMLElement): string[] =>
     [...host.querySelectorAll<HTMLElement>(`div.flex.items-center.justify-between`)]
         .map((element) => element.querySelector(`span`)?.textContent?.trim() ?? ``)
         .filter((label) => label !== ``);
 
-// A footer row by the label it announces, for reaching the controls inside it.
 const row = (host: HTMLElement, label: string): HTMLElement | undefined =>
     [...host.querySelectorAll<HTMLElement>(`div.flex.items-center.justify-between`)].find((element) =>
         element.querySelector(`span`)?.textContent?.trim().startsWith(label),
@@ -91,8 +81,6 @@ const segment = (host: HTMLElement, label: string, option: string): HTMLButtonEl
     [...(row(host, label)?.querySelectorAll<HTMLButtonElement>(`button`) ?? [])].find((button) => button.textContent?.trim() === option)!;
 
 test("a list whose entries carry no run settings gets the list and no footer at all", async () => {
-    // The quick helpers are one-shot calls the daemon runs with thinking disabled and no effort, so a reasoning
-    // control there would be a switch with nothing behind it.
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: false });
     await nextTick();
 
@@ -107,8 +95,6 @@ test("adding draws no footer either: there is nothing to configure until the ent
 });
 
 test("a Claude entry is offered the reasoning tiers and thinking, and neither the harness nor speed", async () => {
-    // Claude runs its own loop, so there is no harness to choose; fast speed needs the model's own catalog
-    // badge, which this catalog does not publish.
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: true });
     await nextTick();
 
@@ -124,8 +110,7 @@ test("speed is offered only for a model whose catalog row publishes it", async (
     segment(host, `Speed`, `Fast`).click();
     expect(written).toEqual([{ provider: `claude`, model: `claude-haiku-4-5`, fast: true }]);
 
-    // …and back to standard drops the field rather than storing a false: absent is what the turn schema means
-    // by standard speed.
+    // Back to Standard drops the field rather than storing `false`; absent is what the schema means by standard.
     written.length = 0;
     segment(host, `Speed`, `Standard`).click();
     expect(written).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
@@ -143,16 +128,10 @@ test("thinking keeps its three stops apart: absent sends nothing, off sends off"
     expect(written).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
 });
 
-/* THE TOP RUNG IS THE MODEL'S TO PUBLISH, and the entry's own thinking chip is the only thing that can take it
- * away again: `effort: max` with thinking DISABLED is a 400 that kills the turn before the model sees it. The
- * chip's Default position is not that pair — the turn goes out with no thinking field and the daemon names the
- * reasoning the tier needs (sendableThinking) — and collapsing the two is what hid Max behind a chip nobody had
- * touched. */
 test("the top tier follows the entry's own thinking: only switching it off takes Max away", async () => {
     catalog.value = { claude: [{ value: `claude-opus-5`, label: `Claude Opus 5`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }] };
     const rungs = (host: HTMLElement): string[] =>
-        // The rungs are the meter's own segments: the row also holds the reset ×, which keeps its slot (hidden)
-        // even at Default so that picking a tier never re-lays-out the row under the cursor.
+        // Meter segments only: the row also holds the reset ×, kept in the tab order even when hidden.
         [...(row(host, `Reasoning effort`)?.querySelectorAll<HTMLButtonElement>(`button.composer-effort-seg`) ?? [])].map(
             (button) => button.getAttribute(`aria-label`) ?? ``,
         );
@@ -168,9 +147,6 @@ test("the top tier follows the entry's own thinking: only switching it off takes
     expect(rungs(off)).toEqual([`Low`, `Medium`, `High`, `X-High`]);
 });
 
-// …and a provider that published no scale is never GIVEN the top rung: its floor is the tiers every runtime
-// accepts, and `max` is one a provider has to claim for itself (Claude's floor is the documented exception,
-// pinned in effortScale's own suite).
 test("an entry on a provider that published no scale gets a floor with no Max in it", async () => {
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6` }, knobs: true });
     await nextTick();
@@ -193,9 +169,6 @@ test("a codex entry is offered the harness axis, and picking a chip writes it", 
 });
 
 test("re-pointing within the provider keeps every knob; across providers it keeps only the tier", async () => {
-    // Effort travels because every native scale has tiers and the meter clamps what a shorter one will run at.
-    // The harness, thinking and speed are facts about the provider that vends the model, so carrying them
-    // across a switch would pin the new entry to a knob its provider does not have.
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, effort: `high`, harness: `claude-code` }, knobs: true });
     await nextTick();
 
@@ -212,7 +185,6 @@ test("a model another entry already holds cannot be pinned twice, but the entry'
     await nextTick();
 
     expect(unpickable?.({ provider: `claude`, value: `claude-opus-5` })).toBe(true);
-    // Its own row stays pickable: a panel that refused the selection it opened on would look like it had lost it.
     expect(unpickable?.({ provider: `codex`, value: `gpt-5.6` })).toBe(false);
     expect(unpickable?.({ provider: `claude`, value: `claude-haiku-4-5` })).toBe(false);
 });

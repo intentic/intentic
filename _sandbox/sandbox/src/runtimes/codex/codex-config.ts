@@ -1,21 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-/* Codex CLI config for the sandbox's single CODEX_HOME. Codex has no sandbox-owned OAuth: every Codex turn
- * authenticates through the bundled translator (CLIProxyAPI) on the user's ChatGPT SUBSCRIPTION, or the
- * container's OPENAI_API_KEY on a bare dev run with no translator. This module writes that home's config.toml:
- * privacy hardening plus, when a translator is baked, the `translator` model_provider pointed at its
- * OpenAI-compatible endpoint (the bearer rides CODEX_API_KEY via env_key; supports_websockets=false because
- * the translator's inbound is plain POST SSE). */
+// Codex CLI config for the sandbox's single CODEX_HOME. Every turn authenticates via the bundled translator on the
+// subscription, or the container's OPENAI_API_KEY with no translator. Writes config.toml: privacy hardening, plus a
+// translator model_provider (CODEX_API_KEY bearer, no websockets).
 
-// Privacy hardening: Codex has no telemetry env vars, analytics (chatgpt.com events, whose flag also gates the
-// default statsig metrics exporter), the Sentry-backed /feedback flow, and the startup update probe (the CLI is
-// image-pinned) are all config.toml keys at the user level $CODEX_HOME.
+// Privacy hardening: analytics, feedback, and the startup update probe (image-pinned CLI) have no env var, only
+// config.toml keys at $CODEX_HOME.
 const privacyConfig = (translatorSelected: boolean): string =>
     [
         `check_for_update_on_startup = false`,
-        // The default provider for every turn: the translator on the subscription. A per-turn adapter override
-        // still wins for the primary provider path (codex-agent.ts).
+        // Default provider for every turn; a per-turn adapter override still wins (codex-agent.ts).
         ...(translatorSelected ? [`model_provider = "translator"`] : []),
         ``,
         `[analytics]`,
@@ -28,9 +23,8 @@ const privacyConfig = (translatorSelected: boolean): string =>
         `metrics_exporter = "none"`,
     ].join("\n");
 
-// The `translator` model_provider block: Codex's own Responses wire format pointed at the translator's
-// OpenAI-compatible endpoint, authed by the fixed local bearer (env_key → CODEX_API_KEY, which never rotates,
-// so nothing races the translator's own subscription refresh).
+// translator model_provider block: Responses wire format at the translator's endpoint, authed by a fixed bearer
+// (CODEX_API_KEY) that never rotates, so nothing races the translator's own refresh.
 const translatorProviderBlock = (translatorUrl: string): string =>
     [
         ``,
@@ -42,13 +36,13 @@ const translatorProviderBlock = (translatorUrl: string): string =>
         `supports_websockets = false`,
     ].join("\n");
 
-// The full config.toml for the codex home. `translatorUrl` empty ⇒ no translator baked (dev): Codex uses its
-// default OpenAI provider on OPENAI_API_KEY.
+// Full config.toml for the codex home. translatorUrl empty means no translator baked; Codex uses its default OpenAI
+// provider on OPENAI_API_KEY.
 export const codexConfigToml = (translatorUrl: string): string =>
     `${privacyConfig(translatorUrl !== "")}${translatorUrl !== "" ? translatorProviderBlock(translatorUrl) : ""}\n`;
 
-// Write the codex home's config.toml. Authoritative (overwrites): the daemon owns this single home, so the
-// translator provider + privacy config are always current, no per-account homes, no migration (assume fresh).
+// Writes the codex home's config.toml, overwriting whole: the daemon owns this one home, so it's always current; no
+// per-account homes.
 export const writeCodexConfig = async (home: string, translatorUrl: string): Promise<void> => {
     await mkdir(home, { recursive: true });
     await writeFile(join(home, "config.toml"), codexConfigToml(translatorUrl), { mode: 0o600 });

@@ -10,8 +10,8 @@ import type { AlerterConfig, DeploymentConfig, KomodoApi } from "./komodo/komodo
 import type { CloudflareApi, IngressRule } from "./network/cloudflare-api.js";
 import { createProviders } from "./providers.js";
 
-// Parse a compose YAML literal into a service -> image map, mirroring the providers' `{{.Config.Image}}`
-// observation: each `  <service>:` header followed by an `    image: <ref>` line.
+// Parses a compose YAML literal into a service -> image map: each ` <service>:` header followed by a ` image: <ref>`
+// line.
 const serviceImages = (yaml: string): Record<string, string> => {
     const images: Record<string, string> = {};
     let service: string | undefined;
@@ -31,18 +31,15 @@ const serviceImages = (yaml: string): Record<string, string> => {
 
 const ok = (stdout = "", code = 0): SshResult => ({ stdout, stderr: "", code });
 
-/* Read a `--label intentic.<key>=<value>` back out of an emitted docker command the way the host's shell hands
- * it to docker, rather than by matching one quoting style. The provider shell-quotes its arguments, so a value
- * with a space arrives single-quoted and a plain one arrives bare: a fake that only understood `"…"` reported
- * an empty schedule, and the diff then wanted to recreate a container that was already correct. */
+// Reads a `--label intentic.<key>=<value>` out of a docker command; the shell may leave the value bare or single-quoted
+// depending on whether it contains spaces.
 const labelValue = (command: string, key: string): string | undefined => {
     const quoted = new RegExp(`--label '(?:intentic\\.${key}=)([^']*)'`).exec(command);
     return quoted?.[1] ?? new RegExp(`--label (?:intentic\\.${key}=)(\\S*)`).exec(command)?.[1];
 };
 
-// A stateful host shared by host/forgejo/forgejo-runner/komodo/tunnel/signoz: Docker-ready, default route ->
-// 10.0.0.5, and it remembers which containers have been started (and on which image) so a second apply reads
-// them as running on the desired pin: exercising the image-drift diff's idempotency.
+// Stateful fake host shared by host/forgejo/forgejo-runner/komodo/tunnel/signoz: reports Docker-ready, default route
+// 10.0.0.5, and remembers started containers and their images so a second apply sees them as already running.
 const fakeSsh = (): SshExecutor => {
     const started = new Set<string>();
     const containerImages = new Map<string, string>();
@@ -60,7 +57,7 @@ const fakeSsh = (): SshExecutor => {
                 if (command.includes("ip -4 -o route")) {
                     return ok("10.0.0.5\n");
                 }
-                // Capture every heredoc-written file (compose.yaml, config.toml, runner config.yaml, ...).
+                // Captures every heredoc-written file (compose.yaml, config.toml, runner config.yaml, ...).
                 const write = /cat > (\S+) <<'(\w+)'\n([\s\S]*)\2/.exec(command);
                 if (write?.[1] !== undefined && write[3] !== undefined) {
                     files.set(write[1], write[3]);
@@ -84,8 +81,7 @@ const fakeSsh = (): SshExecutor => {
                 if (command.includes("docker-buildx")) {
                     return ok("/usr/local/libexec/docker/cli-plugins/docker-buildx");
                 }
-                // Compose-project image inspect (komodo/signoz): report each running service's image from the
-                // compose file the provider wrote.
+                // Compose-project image inspect (komodo/signoz): images come from the compose file the provider wrote.
                 const project = /com\.docker\.compose\.project=(\w+)/.exec(command);
                 if (project?.[1] !== undefined) {
                     if (!started.has(`intentic-${project[1]}`)) {
@@ -98,8 +94,8 @@ const fakeSsh = (): SshExecutor => {
                             .join("\n"),
                     );
                 }
-                // Backup observe: the multi-field inspect (image|schedule|repo) from the container's create-time
-                // labels: distinct from the single-image inspect below, so match it first.
+                // Backup observe: multi-field inspect (image|schedule|repo); must match before the single-image inspect
+                // below.
                 const backupInspect = /docker inspect --format '[^']*intentic\.schedule[^']*' (\S+)/.exec(command);
                 if (backupInspect?.[1] !== undefined) {
                     const name = backupInspect[1];
@@ -129,7 +125,7 @@ const fakeSsh = (): SshExecutor => {
                     if (image?.[1] !== undefined) {
                         containerImages.set(run[1], image[1]);
                     }
-                    // The backup container carries its schedule/repo as create-time labels (what its observe reads back).
+                    // Backup container carries schedule/repo as create-time labels.
                     const schedule = labelValue(command, "schedule");
                     const repo = labelValue(command, "repo");
                     if (schedule !== undefined && repo !== undefined) {
@@ -141,8 +137,7 @@ const fakeSsh = (): SshExecutor => {
                     const proj = /docker compose -p (\w+)/.exec(command);
                     if (proj?.[1] !== undefined) {
                         started.add(`intentic-${proj[1]}`);
-                        // Containers carry the intentic.id stamps written into the project's compose.yaml:
-                        // mark each as started, which is what the label-based running() checks match.
+                        // Containers carry intentic.id stamps written into the compose.yaml; mark each as started.
                         const file = /-f (\S+\/compose\.yaml)/.exec(command);
                         const content = file?.[1] !== undefined ? (files.get(file[1]) ?? "") : "";
                         for (const match of content.matchAll(/intentic\.id=([^"\s,\]]+)/g)) {
@@ -159,7 +154,7 @@ const fakeSsh = (): SshExecutor => {
                 if (command.includes("cat /data/.runner")) {
                     return ok(started.has("intentic-forgejo-runner") ? "http://10.0.0.5:3000" : "");
                 }
-                // Runner config read (configuredJobImage): return the file the provider wrote.
+                // Runner config read (configuredJobImage): returns the file the provider wrote.
                 const read = /cat (\/\S+) 2>\/dev\/null/.exec(command);
                 if (read?.[1] !== undefined && files.has(read[1])) {
                     return ok(files.get(read[1]));
@@ -176,8 +171,7 @@ const fakeSsh = (): SshExecutor => {
                 return ok();
             },
             dispose: async () => {},
-            // The control-plane API providers (repo/ci/deployment/…) reach their service over a loopback
-            // forward; the fake apis ignore the authority, so any fixed port serves.
+            // APIs reach the service via a loopback forward; the fake ignores authority, so any port works.
             forward: async () => ({ port: 9999, close: async () => {} }),
         }),
     };
@@ -188,8 +182,7 @@ const fakeCloudflare = (): CloudflareApi => {
     const records = new Map<string, { id: string; content: string }>();
     let ingress: IngressRule[] | undefined;
     let seq = 0;
-    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
-    // while `unstubbed` supplies the rest of the interface: this fake models the calls the engine drives.
+    // `satisfies` keeps the literal contextually typed; `unstubbed` fills in the rest of the interface.
     const modelled = {
         getZone: async () => ({ id: "zone-123", accountId: "acct-1" }),
         listZones: async () => [{ id: "zone-123", name: "example.com", accountId: "acct-1" }],
@@ -226,8 +219,7 @@ const fakeForgejoApi = (): ForgejoApi => {
     const hooks = new Map<string, ForgejoHook[]>();
     const files = new Map<string, string>();
     let seq = 0;
-    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
-    // while `unstubbed` supplies the rest of the interface: this fake models the calls the engine drives.
+    // `satisfies` keeps the literal contextually typed; `unstubbed` fills in the rest of the interface.
     const modelled = {
         findRepo: async ({ name }) => repos.get(name),
         createRepo: async ({ name }) => {
@@ -294,8 +286,7 @@ const fakeKomodoApi = (): KomodoApi => {
     const deployments = new Map<string, { id: string; config: DeploymentConfig }>();
     const alerters = new Map<string, { id: string; config: AlerterConfig }>();
     let seq = 0;
-    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
-    // while `unstubbed` supplies the rest of the interface: this fake models the calls the engine drives.
+    // `satisfies` keeps the literal contextually typed; `unstubbed` fills in the rest of the interface.
     const modelled = {
         login: async () => "jwt",
         listDeployments: async () => [...deployments].map(([name, value]) => ({ id: value.id, name })),
@@ -359,7 +350,7 @@ const buildGraph = () =>
         });
     }, "example.com");
 
-// Drive the real registry entirely off in-memory fakes: same wiring the e2e harness uses with real deps.
+// Registry wired from in-memory fakes; same wiring as the e2e harness with real deps.
 const realProviders = () =>
     createProviders({
         ssh: fakeSsh(),
@@ -369,9 +360,8 @@ const realProviders = () =>
         dnsPropagation: async () => {},
     });
 
-// The GitLab stack: a hosted git + CI + registry backend (no Forgejo, but Komodo still orchestrates the
-// deployments). Same host + Cloudflare, but i.have.gitlab instead: the resolver derives gl-repo/gl-ci and
-// the shared Komodo slice + "deployment" nodes.
+// GitLab stack: hosted git+CI+registry backend, no Forgejo, Komodo still orchestrates deployments. Same
+// host+Cloudflare, but i.have.gitlab derives gl-repo/gl-ci and the shared Komodo slice.
 const buildGitlabGraph = () =>
     defineStack((i) => {
         const host = i.have.host("host", { address: "203.0.113.10", user: "deploy", sshKey: env("HOST_SSH_KEY") });
@@ -400,7 +390,7 @@ test("the full provider suite reconciles an app end-to-end, then is idempotent",
     const providers = realProviders();
 
     const first = await apply(graph, { ...base, providers });
-    // Owned inventory (host, cf) reads as existing; every derived platform/app node is created.
+    // Owned inventory (host, cf) reads as existing; every derived node is created.
     const byId = new Map(first.steps.map((step) => [step.id, step.action]));
     expect(byId.get("host")).toBe("noop");
     expect(byId.get("cf")).toBe("noop");
@@ -427,10 +417,10 @@ test("the full provider suite reconciles an app end-to-end, then is idempotent",
             "host-tunnel",
         ].toSorted(),
     );
-    // Komodo's output is url/internalUrl only: the stale v1 passkey was dropped.
+    // Komodo's output is url/internalUrl only; no passkey field.
     expect(first.outputs["host-deploy"]).toEqual({ url: "https://deploy.example.com", internalUrl: "http://10.0.0.5:9120" });
 
-    // Same fakes (same world) => everything is found, healthy, and converged => all noop.
+    // With identical fakes, everything is found, healthy, and converged: all steps noop.
     const second = await apply(graph, { ...base, providers });
     expect(second.steps.every((step) => step.action === "noop")).toBe(true);
 });
@@ -442,11 +432,11 @@ test("the GitLab provider stack reconciles an app end-to-end, then is idempotent
     const first = await apply(graph, { ...base, providers });
     const byId = new Map(first.steps.map((step) => [step.id, step.action]));
 
-    // The derived GitLab nodes are created; the gitlab inventory node resolves the owner (noop, like host/cf).
+    // GitLab-derived nodes are created; the gitlab inventory node resolves as noop, like host/cf.
     expect(byId.get("my-app-repo")).toBe("create");
     expect(byId.get("my-app-gl-ci")).toBe("create");
     expect(byId.get("my-app.production")).toBe("create");
-    // One project, ONE .gitlab-ci.yml for the app, and the shared Komodo slice (+ its route, backup): no forgejo.
+    // One project, one .gitlab-ci.yml, and the shared Komodo slice (route, backup); no forgejo.
     expect([...byId.keys()].toSorted()).toEqual(
         [
             "host",
@@ -462,11 +452,11 @@ test("the GitLab provider stack reconciles an app end-to-end, then is idempotent
             "host-tunnel",
         ].toSorted(),
     );
-    // The deployment surfaces the same url/internalUrl shape as on the Forgejo stack.
+    // Deployment surfaces the same url/internalUrl shape as the Forgejo stack.
     expect(first.outputs["my-app.production"]?.["url"]).toBe("https://app.example.com");
     expect(first.outputs["my-app.production"]?.["internalUrl"]).toMatch(/^http:\/\/10\.0\.0\.5:\d+$/);
 
-    // Same fakes => project found, .gitlab-ci.yml unchanged, container running => all noop.
+    // Same fakes: project found, .gitlab-ci.yml unchanged, container running; all noop.
     const second = await apply(graph, { ...base, providers });
     expect(second.steps.every((step) => step.action === "noop")).toBe(true);
 });

@@ -4,9 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEnvelope } from "./chatChannel";
 import type { Strip, TabFacts } from "../tabs/tabFacts";
 
-// The sandbox id is the envelope's own scope (chatChannel), so it is pinned rather than left as a fresh ref per
-// call: every case below is about whether a strip is BELIEVED, and half of that is which sandbox it names.
-// useSandbox itself reaches window.env through useApi, which no node-environment suite has.
+// Sandbox id is pinned, since every case here turns on which sandbox a strip is believed to name; useSandbox reaches
+// window.env through useApi, which no node suite has.
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
     const activeSandboxId = ref<string | undefined>(`sb1`);
@@ -15,8 +14,7 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
 
 const posted: ChatEnvelope[] = [];
 
-// The chat's channel, and only that one: floating.ts opens a channel of its own under the same global. Copied by
-// structured clone as the browser does it (chatChannel.test.ts says why that matters).
+// Mimics BroadcastChannel's structured-clone copy, not just a kept reference.
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(envelope: ChatEnvelope): void {
@@ -25,7 +23,7 @@ class FakeChannel {
         }
     }
     addEventListener(): void {
-        // Notes arrive through receiveChatNote, the same door the channel listener uses.
+        // Real notes arrive through receiveChatNote instead, not this listener.
     }
 }
 
@@ -37,13 +35,12 @@ const { EMPTY_STRIP } = await import("../tabs/tabFacts");
 const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
 const { useSandbox } = await import("../../sandbox/client/useSandbox");
 
-/* THE CHAT IS IN A WINDOW OF ITS OWN, as the rest of the app hears it: one heartbeat from that window
- * (floating.ts's own seam), which is the whole of what makes this window stop drawing the panel and start
- * believing what it is told about the strip out there. */
+// One heartbeat from the floating window is what flips this window from drawing the panel to believing what it's told
+// about the strip.
 const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
 const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
 
-// One published tab: a draft holding the given words, as the drawing window's tabFacts would describe it.
+// A draft tab holding the given words, as the drawing window's tabFacts would describe it.
 const draftTab = (id: string, preview?: string): TabFacts => ({
     id,
     registered: false,
@@ -58,7 +55,7 @@ const draftTab = (id: string, preview?: string): TabFacts => ({
 });
 const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
 
-// The strips this window has posted, and nothing else it said (the roll-call is a separate case).
+// Only the strips this window posted; the roll-call note is a separate case.
 const postedStrips = (): Strip[] => posted.flatMap((envelope) => (envelope.note.kind === `strip` ? [envelope.note.strip] : []));
 
 const hear = (heard: Strip, sandbox = `sb1`): void => receiveChatNote({ sandbox, note: { kind: `strip`, strip: heard } });
@@ -73,9 +70,8 @@ afterEach(() => {
     publishStrip(EMPTY_STRIP);
 });
 
-/* WHAT THE BOARD IS TOLD ABOUT THE STRIP IT CANNOT SEE. The report: with the chat popped out, a draft being
- * typed out there had no card, no name and no mark over here, and a card closed out there lingered. The
- * window drawing the chat now says what it is showing, and this is the window hearing it. */
+// What the board is told about a strip it can't see: with the chat popped out, this is the window hearing what the
+// drawing window says it's showing.
 describe(`elsewhereStrip`, () => {
     it(`is empty while this window draws the chat itself: its own strip is the answer`, () => {
         hear(strip(draftTab(`c1`, `hello`)));
@@ -97,7 +93,6 @@ describe(`elsewhereStrip`, () => {
         ]);
     });
 
-    // A snapshot, never a patch: what the last note does not name is gone.
     it(`retires a tab the next strip no longer names`, () => {
         popOut();
         hear(strip(draftTab(`c1`, `about to send`)));
@@ -113,9 +108,7 @@ describe(`elsewhereStrip`, () => {
         expect(elsewhereStrip.value.tabs).toEqual([]);
     });
 
-    /* A SANDBOX SWITCH forgets the strip heard for the old box and asks the holder for the new one's: the
-     * chats of one daemon have no business on another's board, and a strip that survived the switch used to sit
-     * there until the holder happened to type. */
+    // A sandbox switch drops the old strip and re-asks, rather than letting a stale one from the previous box linger.
     it(`forgets the heard strip on a sandbox switch and asks again`, async () => {
         popOut();
         hear(strip(draftTab(`c1`, `on the first box`)));
@@ -131,9 +124,8 @@ describe(`elsewhereStrip`, () => {
     });
 });
 
-/* WHO MAY SPEAK FOR THE STRIP. `showsPanel` is optimistic during boot: until a floating holder's first beat
- * arrives, every ordinary window briefly reads as though it draws the chat. The holder identity is the proof;
- * it also distinguishes a reloaded holder, whose empty restored strip must retire its predecessor's. */
+// `showsPanel` is optimistic during boot, so every window briefly reads as drawing the chat until a holder's first beat
+// arrives; holder identity also lets a reloaded holder retire its predecessor's strip.
 describe(`strip publisher ownership`, () => {
     it(`does not let a docked or booting window overwrite the floating chat's strip`, () => {
         publishStrip(strip(draftTab(`c1`, `a stale local copy`)));
@@ -145,8 +137,7 @@ describe(`strip publisher ownership`, () => {
     it(`publishes an empty first strip when a reloaded floating chat takes ownership`, async () => {
         popOut();
         hear(strip(draftTab(`c1`, `already sent`)));
-        // The replacement realm restored the authoritative chat with an empty strip before its route claimed
-        // the panel. Suppressed, this left the strip above alive on every dashboard.
+        // Simulates the replacement realm restoring with an empty strip before its route claims the panel.
         publishStrip(EMPTY_STRIP);
 
         const scope = effectScope();
@@ -157,7 +148,6 @@ describe(`strip publisher ownership`, () => {
         scope.stop();
     });
 
-    // A board that boots while the chat is already floating asks, and the holder answers with what it has.
     it(`answers a roll-call with its current strip once it holds the chat`, async () => {
         const scope = effectScope();
         scope.run(() => claimFloating(`chat`, vi.fn()));

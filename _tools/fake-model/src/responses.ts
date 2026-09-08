@@ -1,23 +1,15 @@
-/* THE OpenAI RESPONSES WIRE, AS CODEX ACTUALLY SPEAKS IT, and the one file that has to change when it moves.
- *
- * Every shape here was read off codex-cli 0.147 talking to a local server, not from documentation: the request
- * body's `input` array, the SSE event names, the two output-item forms a turn can carry, and the usage block
- * `response.completed` must include or the CLI reports the turn as having spent nothing.
- *
- * The tool surface is the part that surprises. Codex does NOT publish a shell tool the model calls directly; it
- * publishes ONE custom tool, `exec`, whose input is JavaScript source evaluated in a V8 isolate, and the shell
- * is reached from inside it as `await tools.exec_command({cmd: "…"})`. `cmd` is a STRING: handed the argv array
- * that reads more natural, the CLI answers "invalid type: sequence, expected a string" and the model sees a
- * failed script rather than a command. That is exactly the class of fact a hand-written fake cannot know and a
- * real CLI states for free. */
+// OpenAI Responses wire as Codex actually speaks it (read off the CLI, not docs): request `input` array, SSE event
+// names, and the usage block response.completed needs or the CLI reports zero spend. Codex publishes no direct shell
+// tool; it's a JS-input `exec` tool reaching `tools.exec_command({cmd: string})`, and cmd must be a string, not an
+// array.
 
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 /** One SSE frame: the `event:` name and the object that rides its `data:` line. */
 export type SseFrame = readonly [string, JsonValue];
 
-/* The token block `response.completed` carries. Codex reads `input_tokens`/`output_tokens` and the two detail
- * objects; omitting the details is not a smaller answer but an unparseable one, so they are always written. */
+// Token block response.completed carries; Codex requires the two detail objects too, or it can't parse it, so they're
+// always written.
 export interface FakeUsage {
     readonly inputTokens?: number;
     readonly cachedInputTokens?: number;
@@ -37,16 +29,15 @@ const usageBlock = (usage: FakeUsage): JsonValue => {
     };
 };
 
-/* One response, start to finish. Codex tolerates a stream that carries only these three frames: it wants the
- * item on `response.output_item.done` rather than assembled from deltas, which keeps a scripted turn a value
- * rather than a state machine. A test that needs partial-delta behaviour scripts the frames itself. */
+// Minimal valid stream: Codex reads the item whole from response.output_item.done rather than assembling deltas. A test
+// needing partial-delta behaviour scripts its own frames.
 export const responseFrames = (id: string, item: JsonValue, usage: FakeUsage = {}): readonly SseFrame[] => [
     ["response.created", { type: "response.created", response: { id } }],
     ["response.output_item.done", { type: "response.output_item.done", item }],
     ["response.completed", { type: "response.completed", response: { id, usage: usageBlock(usage) } }],
 ];
 
-/** The assistant's prose. `output_text`, not `text`: the other spelling parses and renders as nothing. */
+/** output_text, not text: the other spelling parses and renders as nothing. */
 export const assistantMessage = (id: string, text: string): JsonValue => ({
     type: "message",
     id,
@@ -55,23 +46,13 @@ export const assistantMessage = (id: string, text: string): JsonValue => ({
     content: [{ type: "output_text", text }],
 });
 
-/* A SHELL COMMAND, IN THE TWO DIFFERENT SHAPES THE SAME BINARY OFFERS depending on how it was started. This is
- * the single most surprising thing the wire says, and no amount of reading the adapter would reveal it:
- *
- *   `codex app-server --stdio`, which is what this daemon drives, publishes a FLAT function tool named
- *      `exec_command`, whose one required argument is `cmd`, a shell string.
- *   `codex exec`, the CLI a delegated shell runs, publishes ONE custom tool named `exec` whose input is
- *      JavaScript source, and the shell is reached from inside it as `await tools.exec_command({cmd: "…"})`.
- *
- * Both are the same release of the same binary. A test written against the wrong one gets a tool-router error
- * rather than a command, which is why both live here and are named for the surface they belong to. */
+// Two shapes, same binary: `codex app-server --stdio` (this daemon) uses a flat `exec_command(cmd: string)` tool;
+// `codex exec` instead offers an `exec` tool taking JS that calls `tools.exec_command({cmd})`.
 export const execCommandCall = (callId: string, command: string): JsonValue =>
     functionCall(callId, "exec_command", { cmd: command });
 
-/* The `codex exec` surface's form. JSON.stringify around the command is not decoration: a command carrying a
- * quote would otherwise close the script's string literal and the isolate would fail to parse a script the test
- * believed it had written. `text(r)` is what returns the result to the model instead of the isolate
- * discarding it. */
+// `codex exec`'s form. JSON.stringify guards a quote in `command` from closing the script's string literal. `text(r)`
+// is what returns the result to the model; otherwise the isolate discards it.
 export const execScriptCall = (callId: string, command: string): JsonValue => ({
     type: "custom_tool_call",
     id: `ctc_${callId}`,
@@ -89,9 +70,8 @@ export const functionCall = (callId: string, name: string, args: JsonValue): Jso
     arguments: JSON.stringify(args),
 });
 
-/* WHAT A REQUEST BODY SAYS, in the three vocabularies a conformance test asks about. These are readers rather
- * than assertions so a suite states its own expectation; what they encapsulate is the SHAPE, which is the part
- * that moves between CLI releases. */
+// Three reader vocabularies over a request body, not assertions: a suite states its own expectation. What moves between
+// CLI releases is the SHAPE these encapsulate.
 
 export interface ResponsesRequest {
     readonly model?: string;
@@ -120,45 +100,28 @@ const messagesOf = (request: ResponsesRequest, role: string): readonly string[] 
     return found;
 };
 
-/* The developer messages, in wire order. An APPEND (`developer_instructions`) lands here, at the head of the
- * first one, ahead of Codex's skills block. */
+// Developer messages in wire order; an appended `developer_instructions` lands at the head of the first one, ahead of
+// Codex's skills block.
 export const developerMessages = (request: ResponsesRequest): readonly string[] => messagesOf(request, "developer");
 
-/* The top-level `instructions` field, when the request carries one. Empty string when it does not, which is a
- * statement about the surface rather than about the prompt, see `systemInstructions` below. */
+// Top-level `instructions` field; empty string when absent is a statement about the surface, not the prompt.
 export const baseInstructions = (request: ResponsesRequest): string => {
     const value = (request as Record<string, unknown>)["instructions"];
     return typeof value === "string" ? value : "";
 };
 
-/* THE BASE PROMPT, WHEREVER THIS MODEL FAMILY KEEPS IT, and the reader every capability assertion should use.
- *
- * The same CLI puts it in two different places depending on the MODEL, not on the entry point:
- *
- *   `gpt-5-codex` and its family send it as the top-level `instructions` field.
- *   `gpt-5.6-sol` and its family send it as the FIRST developer message instead, with the tools moved into a
- *      namespaced `additional_tools` item to match.
- *
- * A suite pinned to either one passes on half the models the product offers and fails on the other half for a
- * reason that has nothing to do with the capability under test. Asking "what is this turn's base prompt" and
- * letting this decide where to look is what makes `instructions: "replace"` assertable across the catalog
- * rather than against one model id that will age out. */
+// Base prompt location depends on the MODEL, not the entry point: `gpt-5-codex` sends top-level `instructions`;
+// `gpt-5.6-sol` sends the first developer message instead. This keeps an assertion valid across the catalog.
 export const systemInstructions = (request: ResponsesRequest): string => {
     const top = baseInstructions(request);
     return top !== "" ? top : (developerMessages(request)[0] ?? "");
 };
 
-/** The user messages. The last one is the turn's prompt; the one before it is Codex's environment context. */
+/** Last message is the turn's prompt; the one before it is Codex's environment context. */
 export const userMessages = (request: ResponsesRequest): readonly string[] => messagesOf(request, "user");
 
-/* EVERY TOOL OFFERED ON THIS REQUEST, from both places the same binary puts them.
- *
- * `codex app-server` uses the ordinary top-level `tools` field, flat: `exec_command`, `request_user_input`, …
- * `codex exec` instead rides an `additional_tools` INPUT ITEM whose entries are namespaces, reported here as
- * `namespace.name` so the two surfaces stay distinguishable in an assertion.
- *
- * Reading only one of them is how a suite concludes that no tools were offered at all, which reads as a
- * capability being withheld rather than as the reader looking in the wrong place. */
+// Reads tools from both surfaces the binary uses: the flat top-level `tools` field, and `additional_tools`' namespaced
+// entries (reported as `namespace.name`). Reading only one under-reports what's offered.
 export const toolNames = (request: ResponsesRequest): readonly string[] => {
     const names: string[] = [];
     const top = (request as Record<string, unknown>)["tools"];
@@ -168,7 +131,7 @@ export const toolNames = (request: ResponsesRequest): readonly string[] => {
                 continue;
             }
             const record = tool as Record<string, unknown>;
-            // A namespace groups its own; `web_search` and friends carry a type and no name at all.
+            // A namespace groups its own; web_search and friends carry a type but no name.
             if (record["type"] === "namespace" && Array.isArray(record["tools"])) {
                 for (const nested of record["tools"]) {
                     names.push(`${String(record["name"])}.${String((nested as Record<string, unknown>)["name"])}`);
@@ -204,14 +167,13 @@ export const toolNames = (request: ResponsesRequest): readonly string[] => {
     return names;
 };
 
-/* WAS THIS TOOL OFFERED, whichever surface this model family uses. The same tool is `request_user_input` on one
- * and `functions.request_user_input` on the other, so an assertion written against either spelling silently
- * inverts on half the catalog. Matches the bare name or any namespace's version of it. */
+// Same tool is bare `request_user_input` on one surface, namespaced on the other; matching only one spelling silently
+// inverts on half the catalog. Matches either form.
 export const hasTool = (request: ResponsesRequest, name: string): boolean =>
     toolNames(request).some((offered) => offered === name || offered.endsWith(`.${name}`));
 
-/* The outputs the CLI sent BACK for tool calls it ran, keyed by call id. This is where a test reads what a
- * command actually printed, which is the only proof that the CLI ran it rather than reporting that it had. */
+// Outputs the CLI sent back for tool calls, keyed by call id: the only proof a command actually ran, not just was
+// reported as run.
 export const toolOutputs = (request: ResponsesRequest): ReadonlyMap<string, string> => {
     const outputs = new Map<string, string>();
     for (const item of request.input) {

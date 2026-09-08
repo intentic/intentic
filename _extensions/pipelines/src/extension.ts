@@ -3,13 +3,11 @@ import { ciBadge, startCiAttention } from "./ciAttention";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
 
-/* ext-pipelines activation: bind the host handle, start the badge's background poll, then register the
- * "Pipelines" rail view. Capability-driven, not repo-driven, the tile surfaces when a github/gitlab connector
- * is on, detected purely from the public capability facts (which repos actually map to CI projects is the
- * daemon's answer, rendered inside the view). */
+// Binds the host, starts the badge poll, then registers the Pipelines rail view; shown when a github/gitlab capability
+// is present, not tied to specific repos.
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
-    // Before the registration, so the tile can badge on its first render rather than a minute later.
+    // Starts before the view registers, so the first render already has a badge.
     context.subscriptions.push(startCiAttention());
     context.subscriptions.push(
         api.views.register({
@@ -28,12 +26,10 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                        * either lands or doesn't", which is the whole of what the tile reports. */
                       [{ key: `pipelines`, title: `Pipelines`, icon: `bolt` }]
                     : [],
-            // Branches whose last commit is red, for as long as it is: see ciStreaks.ts for why this counts
-            // broken branches rather than failed runs, and why looking at the board does not clear it.
+            // Counts branches whose last commit is red; viewing the board does not clear it.
             badge: () => ciBadge(),
-            /* The board's opening read, into the same entry observed by usePipelines and filled by the badge's
-             * poll. The host schedules it at the rail band: a wish for spare time, never competition for work
-             * the user actually asked for. */
+            // Board's initial read, sharing the entry usePipelines reads and the badge fills; scheduled at low
+            // priority.
             warm: () => [ciRunsQuery()],
             view: async () => (await import(`./PipelinesView.vue`)).default,
         }),

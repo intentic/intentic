@@ -1,42 +1,19 @@
 // @vitest-environment jsdom
-//
-// WHAT A PRESS ON AN EXPANDABLE ROW MEANS, pinned on the real component because the bug this suite exists for
-// was invisible from every side except a pointer's.
-//
-// <DisclosureRow hit="pair"> used to make the whole title-and-description block swallow its clicks, on the
-// theory that such a row's headline is a control. On the activity feed only a turn WITH a transcript has a
-// link for a title, so on every message and every loose event the row's own name did nothing and the row
-// opened from a 10px chevron — while `ui-row-select` painted a pointer cursor and a hover wash over all of it.
-// The rows that DID carry a link were no better: the link is a few words, and the facts line, the preview and
-// the space after a short name were dead on the same rule. Nothing about that is visible in a snapshot, in a
-// typecheck, or in a projection test; it is only visible in where a click lands.
-//
-// So what is pinned here is the geography: which parts of a row open it, which parts belong to a control, and
-// which parts of an OPEN row close it again. Mounted with plain Vue rather than @vue/test-utils, as
-// brandMarkTiers.test.ts and ReviewStat.test.ts do.
+// What a press on an expandable row opens or closes, pinned on the real component since the failure is only visible
+// from a pointer, not a snapshot or a typecheck. `hit="pair"` used to let the whole title/description block swallow
+// clicks, so a plain name did nothing and a link's surrounding text was dead too. This pins the geography: which parts
+// open a row, which belong to a control, and which parts of an open row close it again.
 import { DisclosureRow } from "@intentic/ui";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
-/* ONE REAL MILLISECOND BEFORE EVERY DISPATCH, and it is jsdom's clock rather than anything under test.
- *
- * Vue stamps each event with `Date.now()` and then DROPS it on any handler whose attach time is greater than
- * or equal to that stamp — a guard so a listener added while an event is dispatching does not then receive
- * that same event. In a browser the guard never fires: `Event.timeStamp` is high-resolution, so Vue compares
- * against `performance.now()` (milliseconds since load, a small number) while the stamp is epoch milliseconds
- * (a vast one). Under jsdom both clocks are `Date.now()`, a mount and the click after it land inside the same
- * millisecond, and the handler is skipped.
- *
- * Which reads as a flaky component: roughly half of these presses were swallowed before <DisclosureRow> saw
- * them, on whichever test happened to run inside its own mount's millisecond. Worth the ~10ms it costs the
- * file to be rid of, and worth writing down, because the next suite to dispatch a synthetic event at a
- * freshly-mounted component will meet it too. */
+// Vue stamps each event with `Date.now()` and drops it on any handler added at or after that stamp. Under jsdom both
+// the event stamp and the attach clock are `Date.now()`, so a mount and the click right after it can land in the same
+// millisecond and the handler gets skipped; waiting one real ms avoids it.
 const afterAMillisecond = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1));
 
-/* A press, as a pointer makes one: down somewhere, up (and click) somewhere `moved` pixels away. The
- * `pointerdown` is what <DisclosureRow> measures a drag against, so a test that skipped it would be testing a
- * keyboard press wearing a mouse's coordinates. `detail: 1` is what marks a click as a POINTER's — the
- * keyboard's synthetic click carries 0, and the component keys on exactly that. */
+// A press as a pointer makes one: `pointerdown` somewhere, then `click` (`detail: 1`, a pointer's mark) up to `moved`
+// pixels away. <DisclosureRow> measures the drag against the `pointerdown`.
 const press = async (element: Element, moved = 0): Promise<void> => {
     await afterAMillisecond();
     const at = { clientX: 40, clientY: 40 };
@@ -45,8 +22,8 @@ const press = async (element: Element, moved = 0): Promise<void> => {
     await nextTick();
 };
 
-// Enter or Space on the toggle: a click with no pointer behind it, which the browser reports at (0, 0) with
-// `detail: 0`. It has to open the row even though the last real pointer press was a viewport away.
+// Enter/Space produces a click with no pointer behind it: `detail: 0` at (0, 0). It must open the row even though the
+// last real pointer press was elsewhere.
 const pressByKeyboard = async (element: Element): Promise<void> => {
     await afterAMillisecond();
     element.dispatchEvent(new MouseEvent(`click`, { bubbles: true, detail: 0, clientX: 0, clientY: 0 }));
@@ -63,15 +40,14 @@ interface Harness {
     /** The chevron + `#lead` mark: a real <button>, and the row's tab stop under `pair`. */
     readonly toggle: () => HTMLElement;
     readonly find: (selector: string) => HTMLElement;
-    /** The expanded block, by the id the toggle says it controls. */
+    /** The expanded block, by the id the toggle names as `aria-controls`. */
     readonly evidence: () => HTMLElement;
-    /** The column beside the evidence — the toggle's own, continued down the open row. */
+    /** The column beside the evidence: the toggle's own, continued down the open row. */
     readonly gutter: () => HTMLElement;
 }
 
-/* TORN DOWN BY THE RUNNER, not by the test body. A row left mounted is a row still holding the document, and
- * the first version of this file cleaned up on the last line of each `it` — so the one test that threw took
- * two others down with it, and the failure that mattered was reported three tests away from its cause. */
+// Torn down by the runner rather than by each test body, so a test that throws does not leave the document held by a
+// mounted row that outlives it.
 const mounted: { app: App; host: HTMLElement }[] = [];
 
 afterEach(() => {
@@ -116,8 +92,8 @@ const mount = (hit: `header` | `pair`, slots: Slots): Harness => {
         return found;
     };
     const toggle = (): HTMLElement => find(`button[aria-expanded]`);
-    // By the id the toggle NAMES, so the lookup follows the same `aria-controls` a screen reader does. An
-    // attribute selector rather than `#id` + CSS.escape: jsdom under vitest ships no `CSS` object at all.
+    // By the id the toggle names via `aria-controls`, so the lookup follows what a screen reader would. An attribute
+    // selector rather than `#id` + CSS.escape: jsdom under vitest ships no `CSS` object.
     const evidence = (): HTMLElement => find(`[id="${toggle().getAttribute(`aria-controls`) ?? ``}"]`);
     return {
         isOpen: () => open.value,
@@ -128,7 +104,7 @@ const mount = (hit: `header` | `pair`, slots: Slots): Harness => {
     };
 };
 
-// A plain-text headline, which is what most rows on a `pair` list actually have.
+// A plain-text headline, which is what most rows on a `pair` list have.
 const plain = (): Harness => mount(`pair`, { title: () => h(`span`, { class: `name` }, `A message from discord`) });
 
 // The headline this mode exists for: a name that is itself a link, over a description that is not.
@@ -164,9 +140,9 @@ it(`opens from the facts line under the title`, async () => {
     expect(row.isOpen()).toBe(true);
 });
 
-/* THE ONE THING `pair` IS FOR, and the reason the guard cannot simply be dropped: a press on the headline's
- * own control is that control's, and must not also open the row. Two facts in one assertion on purpose — a
- * guard that stopped the toggle by also swallowing the link would pass half of this. */
+// The one thing `pair` is for: a press on the headline's own control belongs to that control and must not also open the
+// row. Both facts are asserted together, since a guard that stops the toggle by also swallowing the link would pass
+// half of this.
 it(`gives a press on the headline's link to the link, and not to the row`, async () => {
     const row = linked();
     await press(row.find(`.name`));
@@ -181,17 +157,16 @@ it(`opens from the chevron and mark pair, and from the keyboard on it`, async ()
     expect(row.isOpen()).toBe(false);
 });
 
-// `hit="header"` puts the whole left region in one <button>, which stops the press itself; the row-wide
-// handler must not then toggle it a second time and land back where it started.
+// `hit="header"` puts the whole left region in one <button>, which stops the press itself; the row-wide handler must
+// not toggle it a second time.
 it(`toggles once, not twice, when the header itself is the button`, async () => {
     const row = mount(`header`, { title: () => h(`span`, { class: `name` }, `A turn that failed`) });
     await press(row.find(`.name`));
     expect(row.isOpen()).toBe(true);
 });
 
-/* CLOSING, WHICH IS THE HALF THAT WAS MISSING. An open row could only be closed from the header line it had
- * just pushed up the page: the evidence stops every press (it is there to be read), and the column beside it —
- * directly under the chevron, which is the one place a reader has learnt the toggle lives — was inert. */
+// Closing: an open row could previously only close from the header line it had pushed up the page. The evidence stops
+// presses (it is there to be read); the column beside it, under the chevron, must not be inert.
 it(`closes from the toggle column beside the open evidence, but not from the evidence itself`, async () => {
     const row = plain();
     await press(row.toggle());
@@ -211,9 +186,8 @@ it(`closes from the headline of a row it opened`, async () => {
     expect(row.isOpen()).toBe(false);
 });
 
-/* A SELECTION IS NOT A PRESS. It only became possible to lose one here once the headline stopped swallowing
- * clicks: sweeping across an error string or a session id ends in a `click` on the row, and a row that closed
- * under that would take the text away with it. */
+// A selection is not a press: sweeping across text ends in a `click` on the row, and a row that closed on that would
+// take the selected text away with it.
 it(`ignores a press that travelled, so text can be selected out of the row`, async () => {
     const row = plain();
     await press(row.find(`.name`), 40);
@@ -223,8 +197,8 @@ it(`ignores a press that travelled, so text can be selected out of the row`, asy
     expect(row.isOpen()).toBe(true);
 });
 
-/* A DRAWER'S HOVER WASH RIDES THE WRAPPER, not the header <Row>. The header loses its bottom padding when the
- * drawer opens, and a wash that stopped at the header read as cut off over the evidence and the verbs below it. */
+// A drawer's hover wash rides the wrapper, not the header <Row>, since the header loses its bottom padding when the
+// drawer opens and a wash stopping there would look cut off over the evidence below.
 it(`puts the hover wash on the wrapper when the body is a drawer, not on the header row`, async () => {
     const host = document.createElement(`div`);
     document.body.append(host);

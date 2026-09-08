@@ -16,8 +16,8 @@ import {
     repoTargetId,
 } from "./previewModel";
 
-/* The Preview area's model: what counts as previewable, and which target the panel lands on without being
- * asked. Pure functions, so the rules that decide what a new user sees first are pinned without a daemon. */
+// Preview model: what counts as previewable and which target the panel lands on unasked. Pure functions, pinned without
+// a daemon.
 
 const panel = (over: Partial<PanelSummary>): PanelSummary => ({
     repo: `shop`,
@@ -43,8 +43,7 @@ const port = (over: Partial<PortSummary>): PortSummary => ({
     host: `127.0.0.1`,
     forwardable: true,
     kind: `workspace`,
-    // What the row is CALLED and where it came from: the daemon resolves all three (ports/port-identity.ts);
-    // the rail only counts and links, so any honest values do here.
+    // Row's label/purpose/origin: daemon-resolved in reality; the rail just counts and links, so any values do here.
     title: `Vite dev server`,
     purpose: `Started in one of your terminals.`,
     origin: `terminal`,
@@ -54,10 +53,6 @@ const port = (over: Partial<PortSummary>): PortSummary => ({
 });
 
 describe(`repoTargets`, () => {
-    /* A MONOREPO IS A TARGET IN ITS OWN RIGHT, and this is the regression that matters: when it wasn't, a
-     * monorepo whose root `dev` runs turbo (no `_apps/` instances at all) produced a rail badge saying "1
-     * running" over a panel saying there was nothing to preview. Its apps replace this row only when it has
-     * any: see mergeTargets. */
     it(`previews every runnable repo, monorepos included, and skips a repo with no dev server`, () => {
         const targets = repoTargets([panel({}), panel({ repo: `mono`, monorepo: true }), panel({ repo: `lib`, hasPanel: false })]);
         expect(targets.map((target) => target.id)).toEqual([`repo:shop`, `repo:mono`]);
@@ -69,21 +64,13 @@ describe(`repoTargets`, () => {
         expect(repoTargets([panel({})])[0]?.session).toBeUndefined();
     });
 
-    /* The address is the daemon's to give: it advertises the preview hostname exactly while its own proxy
-     * resolves it to something serving, terminal-started servers included, and withholds it while the repo is
-     * merely installing or is answering on several ports at once. The row carries that verdict verbatim,
-     * because second-guessing it here is what produced a target whose url was a 502. */
     it(`carries the preview address exactly as the daemon advertises it`, () => {
         const url = `https://preview-shop-s.zone`;
         expect(repoTargets([panel({ previewUrl: url, running: true, healthy: true })])[0]?.url).toBe(url);
-        // Serving from a dev server somebody started by hand: no assignment, still previewable.
         expect(repoTargets([panel({ previewUrl: url, running: false, healthy: true })])[0]?.url).toBe(url);
-        // Running, nothing advertised: installing, or fanned out across ports of its own.
         expect(repoTargets([panel({ running: true, healthy: true })])[0]?.url).toBeUndefined();
     });
 
-    /* What it is REALLY serving, for the one screen that has to name them: a monorepo's `dev` fans a turbo run
-     * out across packages that pin their own ports, and no single hostname can stand for three servers. */
     it(`carries the repo's answering servers, so the panel can name them instead of framing nothing`, () => {
         const servers = [
             { port: 4321, url: `http://localhost:4321`, dir: `_site/site` },
@@ -93,9 +80,6 @@ describe(`repoTargets`, () => {
         expect(repoTargets([panel({})])[0]?.servers).toEqual([]);
     });
 
-    // Start is offered where there is something to start. A monorepo with no root `dev` script and no
-    // operator/ panel is listed (its apps carry their own rows) and used to offer a button whose only possible
-    // answer was "no runnable panel".
     it(`offers Start only for a repo that has a dev server to start`, () => {
         expect(repoTargets([panel({})])[0]?.startable).toBe(true);
         expect(repoTargets([panel({ repo: `mono`, monorepo: true, hasPanel: false })])[0]?.startable).toBe(false);
@@ -124,9 +108,6 @@ describe(`publicTarget`, () => {
     });
 });
 
-/* THE REGRESSION THAT MADE A PREVIEW A LIE: everything was framed with `sandbox`, which strips the page's own
- * origin, so a dev server refused its own fonts (CORS) and its own images (403 on `/@fs`), and the panel
- * showed a text-only ghost of the app it promised to show. */
 describe(`frameSandbox`, () => {
     it(`leaves a real server its own origin, and keeps the agent-written outbox page without one`, () => {
         expect(frameSandbox(`repo`)).toBeUndefined();
@@ -161,9 +142,6 @@ describe(`addressTarget`, () => {
     });
 });
 
-/* THE BUG THIS FILE EXISTS FOR, one level up: the rail counted a monorepo and the panel dropped it, so a
- * monorepo with no `_apps/` (a root `dev` running turbo, the ordinary shape) badged "1 running" over an
- * empty screen. Both readings come from these builders now, so the two cannot disagree. */
 describe(`mergeTargets`, () => {
     const monorepo = repoTargets([panel({ repo: `mono`, monorepo: true, healthy: true })]);
 
@@ -232,7 +210,6 @@ describe(`the rail's half`, () => {
                 [],
             ),
         ).toBe(2);
-        // The static page is not a running thing, so it never inflates a count that says "running".
         expect(previewHealthyCount([], [], [file({})])).toBe(0);
         expect(previewHealthyCount([], [port({})], [])).toBe(1);
         expect(previewHealthyCount([panel({ repo: `lib`, hasPanel: false, healthy: true })], [], [])).toBe(0);

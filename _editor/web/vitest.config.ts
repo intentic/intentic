@@ -3,75 +3,21 @@ import { defineConfig } from "vitest/config";
 import { sourceAliases } from "./source-aliases.ts";
 
 export default defineConfig({
-    // SFCs have to compile for a test to mount one. Most suites here test plain .ts (composables, pure
-    // projections) and never touch this, but the pieces whose whole contract is what they RENDER, a chart's
-    // geometry, say, can only be pinned by mounting them.
+    // SFCs must compile for a test to mount one; most suites test plain .ts and never touch this.
     plugins: [vue()],
-    // The same source-first aliases as vite.config.ts, without them, tests resolve first-party extensions to
-    // pnpm's injected node_modules copies, whose extension-api snapshot lacks src and (on a fresh CI install)
-    // dist. See source-aliases.ts.
+    // Same source-first aliases as vite.config.ts; without them, tests resolve first-party extensions to pnpm's
+    // injected copies, which on a fresh checkout lack both src and dist (source-aliases.ts).
     resolve: {
         alias: sourceAliases(),
-        // Every workspace package exports an `@intentic/src` condition pointing at its .ts source, and none of
-        // them ship a dist in a fresh checkout. Vite applies the condition for the app build; vitest resolves
-        // with node's defaults unless told, which is why a suite that reached one of the un-aliased libs
-        // (@intentic/sandbox-run, @intentic/constants) failed to LOAD rather than to assert.
+        // Points every workspace package at its .ts source; unlike Vite, vitest won't apply this condition by default.
         conditions: [`@intentic/src`],
     },
     test: {
         include: ["./src/**/*.test.ts"],
         environment: "node",
-        // The browser APIs jsdom omits, stubbed for every suite, see the file for which and why.
+        // Stubs the browser APIs jsdom omits for every suite; see vitest.setup.ts for which and why.
         setupFiles: ["./vitest.setup.ts"],
-        /* These budgets bound a HANG; they do not measure latency, and nothing here should be near them.
-         *
-         * Module loading is on the same clock as the assertions. A full run of this package spends ~170s
-         * importing and ~90s transforming against ~50s actually running tests, the composables are singletons,
-         * so ~90 `await import()` calls re-enter the graph from inside test bodies and hooks, and a mounted
-         * component pulls a Vue view's whole subtree. Idle, the heaviest of those costs ~1s; on a runner with
-         * every core busy it costs ten times that, and vitest's 5s/10s defaults then fail whichever file lost
-         * the race, a different one each run, which reads as flakiness rather than as contention. Worse, a
-         * timed-out test keeps running: its in-flight work lands on the NEXT test's mocks, so one slow import
-         * reports as two failures, the second pointing at innocent code.
-         *
-         * Prefer taking the load off the clock over raising these further: a static import costs the same but
-         * is paid during collection, where it is bounded by the run rather than by a test. It works whenever
-         * the file's hoisted setup only installs globals (staleChunk.test.ts, startAgent.test.ts); when a
-         * `vi.mock` factory closes over module-scope state, hoist the STATE too rather than deferring the
-         * import, or the factory reads it in its temporal dead zone (codebaseHealthPanel.test.ts).
-         *
-         * ALREADY MEASURED, on this suite, with every core busy, don't re-derive these:
-         *  - `deps.optimizer` (esbuild prebundling): no effect (5.42s vs 5.44s). What costs here is FIRST-party
-         *    source pulled through the alias map above, which the optimizer never sees.
-         *  - `pool: "threads"`: ~20% less transform+import CPU, and no wall-clock win at all under contention
-         *    (18.8s vs 18.8s) because jsdom setup gets dearer in a thread (~60s vs ~45s). Not worth changing
-         *    what a crashing worker takes down with it.
-         *  - `isolate: false`: 21 failures paired with threads, and with forks it shares a module registry
-         *    across files in a package built on singletons, a pass there means the file order was lucky.
-         *  - capping `maxWorkers` IN THIS CONFIG: 2.5× SLOWER solo, 55s vs 22s for the whole repo, so no cap
-         *    lives here and a package run by itself still gets every core. The REPO-WIDE run is bounded
-         *    instead, at the fan-out: the root `pnpm test` sets VITEST_MAX_WORKERS=4 (sized against turbo's
-         *    `concurrency: 4`), because the thing over-subscription does hurt is MEMORY — 2026-08-25, sixteen
-         *    uncapped forks plus vue-tsc pinned a 10 GiB cgroup into a reclaim livelock that froze the
-         *    daemon for six minutes. The CPU scheduler handles over-subscription; the cgroup does not.
-         * What is left is the shape of the tests themselves: ~90 `await import()` calls, most of them a
-         * singleton being reset. Those are relied on, and this is the budget that covers them.
-         *
-         * WHY 60 AND NOT THE 20 THIS SAID FOR A WHILE. 20s was set against "the heaviest costs ~1s idle, ten
-         * times that busy" and that estimate was low. Measured in one full `pnpm test` on this workspace, from
-         * the run's own per-test timings, PASSING tests in this package: 19.5s to load every Shiki grammar in
-         * LANGS, 18.3s to send a push with nobody watching, 14.1s to draw every control that goes somewhere as
-         * a link. Two others died on 20s in the same run, a different pair than the run before, which is the
-         * signature of a ceiling standing where the work is rather than clear of it. A budget that the slowest
-         * honest test comes within half a second of is not a hang detector, it is a coin toss, and it reports as
-         * a red push against code nobody touched.
-         *
-         * 60s is three times the slowest real test here and still finite. It stays this package's own number
-         * rather than the shared one (`@intentic/testing/vitest`, 20s): those suites do in-memory work and their
-         * imports are paid during collection, while this one re-enters a large graph from INSIDE test bodies,
-         * ~90 times, each of those re-imports serialized behind the single transform server all of its workers
-         * share. Different work, different ceiling, and each says which it is.
-         */
+        // Hang bounds, not latency targets: 60s covers ~90 in-body re-imports, above the shared 20s default.
         testTimeout: 60_000,
         hookTimeout: 60_000,
     },

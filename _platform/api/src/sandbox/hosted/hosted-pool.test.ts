@@ -4,10 +4,8 @@ import type { Config } from "../../config.js";
 import { reconcileHostedPool } from "./hosted-pool.js";
 import { hostedInstanceId } from "./hosted.js";
 
-/* THE POOL'S PROMISES, pinned: a warm machine never runs the sandbox (its one boot is a no-op), the stock
- * converges on the target per region and only per region (the EEA caller's machine must already BE in the
- * EEA), a drifted image is worthless and rebuilt, and turning the pool off empties it rather than stranding
- * the platform's own machines behind a reaper that spares them. */
+// Pins the pool's promises: warm machines never boot the sandbox, stock converges on the target per region, a drifted
+// image is rebuilt, and switching the pool off empties it rather than stranding it behind the reaper.
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -34,14 +32,13 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
-            // The schema's own default: no ceiling, so the refill's room is unlimited unless a case says so.
+            // The schema's own default: no ceiling, so the refill's room is unlimited unless a case says otherwise.
             maxMachines: 0,
             ...over,
         },
     }) as unknown as Config;
 
-// A pool row as the reconcile reads it. Fresh stamps by default: staleness is opted into per case. Named after
-// its identity, exactly as the build names it (secrets.key is empty, so the stored token is the plaintext).
+// Fresh stamps by default; named as the build names it (secrets.key empty, so the token is plaintext).
 const POOL_TOKEN = `p00l-t0k3n`;
 const poolRow = (over?: Record<string, unknown>) => ({
     id: `p1`,
@@ -57,9 +54,7 @@ const poolRow = (over?: Record<string, unknown>) => ({
     ...over,
 });
 
-/* The counts exist because the refill asks how much room is left on the provider before it builds anything
- * (hosted-capacity.ts). They are only READ on a platform that has a ceiling, so a case that is not about one
- * never touches them; the ceiling's own cases set them to say how full the fleet is. */
+// Counts exist for the refill's room-left check (hosted-capacity.ts); only read on a platform with a ceiling.
 const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({
         hostedPoolMachine: {
@@ -106,13 +101,11 @@ describe(`reconcileHostedPool`, () => {
         const create = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
         await reconcileHostedPool(fakePrisma({ hostedPoolMachine: { create } }), config(), logger);
-        // One machine per region: the residency promise makes a warm iad box useless to an EEA caller.
         const machines = calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`));
         expect(machines).toHaveLength(2);
         const regions = machines.map((entry) => (entry.body as { region: string }).region).toSorted();
         expect(regions).toEqual([`arn`, `iad`]);
-        // The pull AND the prepared volume are the point; the sandbox runs its own entrypoint (no exec
-        // override) in prewarm mode, with no identity at all.
+        // Prewarm mode: the sandbox boots its own entrypoint (no exec override) with no identity at all.
         const posted = machines[0]?.body as {
             config: { image: string; init?: unknown; env: Record<string, string>; metadata: Record<string, string> };
         };
@@ -120,9 +113,8 @@ describe(`reconcileHostedPool`, () => {
         expect(posted.config.init).toBeUndefined();
         expect(posted.config.env[`SANDBOX_PREWARM`]).toBe(`1`);
         expect(posted.config.env[`SANDBOX_VM`]).toBe(`1`);
-        // …and it says so to Fly, which is the only place the truth survives: this app is named `pool` for
-        // life, claimed or not, so the console's app list can never be the answer. The platform stamp is on
-        // it from its first second, so no other deployment sharing this org reads our stock as litter.
+        // The app stays named `pool` for life and stamped from birth, so no other deployment reads this stock as
+        // litter.
         expect(posted.config.metadata).toEqual({ intentic_role: `warm`, intentic_platform: hostedInstanceId(config()) });
         expect(posted.config.env[`CONNECT_TOKEN`]).toBeUndefined();
         expect(posted.config.env[`OWNER_EMAIL`]).toBeUndefined();
@@ -130,11 +122,6 @@ describe(`reconcileHostedPool`, () => {
         expect(create.mock.calls[0]?.[0]).toMatchObject({ data: { state: `building`, image: `ghcr.io/intentic/sandbox:stable` } });
     });
 
-    /* STOCK IS THE WRONG THING TO SPEND THE LAST MACHINES ON. Prewarming is worth a great deal right up until
-     * it competes with a person for the last slot the provider allows: past the ceiling it would take the
-     * machines somebody is about to ask for and hold them empty, and — since this runs every five minutes
-     * forever — write a failure line per region per tick into the log an operator has to read to notice they
-     * are full. So the refill stops, says so once, and leaves the room for arrivals. */
     it(`builds nothing once the fleet is at the ceiling the provider allows`, async () => {
         const create = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
@@ -147,8 +134,6 @@ describe(`reconcileHostedPool`, () => {
         expect(create).not.toHaveBeenCalled();
     });
 
-    // …and the room that IS left is used: four short of a hundred is four machines the pool may still build,
-    // one per region here, so the ceiling brakes the pool rather than switching it off.
     it(`builds up to the room the ceiling leaves`, async () => {
         const create = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
@@ -160,10 +145,7 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(2);
     });
 
-    /* THE APP IS NAMED AFTER AN IDENTITY MINTED AT BUILD, before anybody has asked for the machine. The edge
-     * reaches a hosted sandbox by replaying to `<prefix>-<id>` with no lookup, and Fly never renames an app,
-     * so a pool app named any other way could never serve the sandbox that is later claimed onto it. The
-     * identity lives in the row only: the machine's env stays empty until claim. */
+    // The edge replays to `<prefix>-<id>` with no lookup; a pool app named otherwise couldn't serve a later claim.
     it(`names each warm app after a connect token it mints, and keeps that token in the row, not the machine`, async () => {
         const create = vi.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);
@@ -179,8 +161,6 @@ describe(`reconcileHostedPool`, () => {
         expect(machine.config.env[`CONNECT_TOKEN`]).toBeUndefined();
     });
 
-    // Stock from before identities existed: its app is not named after any id the edge could route to, so it
-    // is worth exactly what a wrong rootfs is worth, and is replaced the same way.
     it(`replaces standing stock that carries no identity`, async () => {
         const deleteRow = vi.fn().mockResolvedValue({});
         const calls = stubFetch([
@@ -214,9 +194,7 @@ describe(`reconcileHostedPool`, () => {
         expect(update).toHaveBeenCalledWith({ where: { id: `p1` }, data: { state: `ready` } });
     });
 
-    /* THE LANDMINE THIS PINS SHUT: a `ready` row used to be trusted for life, so a machine Fly destroyed under
-     * one stayed in the pool as stock that does not exist, filled a slot so nothing replaced it, and (claims
-     * take the oldest row first) was handed to the next arrival BEFORE any live machine. */
+    // Claims take the oldest row first, so a phantom `ready` row would be handed out before any live machine.
     it(`replaces standing stock Fly no longer has: a ready row is a claim about a machine, not proof of one`, async () => {
         const del = vi.fn().mockResolvedValue({});
         const calls = stubFetch([
@@ -227,13 +205,11 @@ describe(`reconcileHostedPool`, () => {
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
-        // …and the slot it was squatting is refilled in the same pass, which is the half that was missing.
+        // The freed slot is refilled in the same pass.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
     });
 
-    // A pulled rootfs is the thing the pool is for, so it is banked whenever it is noticed. A build the
-    // reconcile did not witness for an hour (a restart, a wedged tick) finished all the same, and tearing it
-    // down for being late would pay for the same pull twice.
+    // Tearing down a late-noticed build would pay for the same pull twice.
     it(`banks a build that finished while nobody was watching, however late it is noticed`, async () => {
         const update = vi.fn().mockResolvedValue({});
         const del = vi.fn().mockResolvedValue({});
@@ -251,9 +227,6 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.some((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toBe(false);
     });
 
-    /* The other side of that check, and the more dangerous one to get wrong: "we could not ask Fly" is not
-     * "the machine is gone". Spending the first as the second turns one bad minute at the provider into a
-     * drained pool and a queue of cold builds. */
     it(`keeps standing stock when Fly cannot be asked, and while a machine is mid-transition`, async () => {
         for (const respond of [() => json({ error: `internal` }, 500), () => json({ id: `m1`, state: `started` })]) {
             const del = vi.fn().mockResolvedValue({});
@@ -263,7 +236,7 @@ describe(`reconcileHostedPool`, () => {
             await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
             expect(del).not.toHaveBeenCalled();
             expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);
-            // The row still counts as stock, so the target is met and nothing is built beside it.
+            // Still counted as stock, so the target is already met.
             expect(calls.some((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toBe(false);
         }
     });
@@ -277,7 +250,7 @@ describe(`reconcileHostedPool`, () => {
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(poolRow().appName))).toBe(true);
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
-        // …and the slot is refilled in the same pass.
+        // The freed slot is refilled in the same pass.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
     });
 
@@ -296,9 +269,7 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.some((entry) => entry.method === `POST`)).toBe(false);
     });
 
-    /* A crashed claim is the one row whose app may already carry a sandbox's tokens. Adopted (a HostedMachine
-     * row took the app) means the hand-off actually landed: only the pool row is stale. Unadopted means a
-     * half-branded machine belongs to nobody, and it must go entirely. */
+    // A crashed claim's app may already carry a sandbox's tokens, so adopted vs. unadopted decides drop vs. destroy.
     it(`collects a crashed claim: drops the row when adopted, destroys the machine when not`, async () => {
         const stale = new Date(Date.now() - 16 * 60 * 1000);
         const del = vi.fn().mockResolvedValue({});
@@ -321,9 +292,6 @@ describe(`reconcileHostedPool`, () => {
         expect(del).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 
-    /* Turning the pool OFF is a drain, and the drain must make the same distinction the live pass does: an
-     * ADOPTED app is a user's machine wearing a pool name, and destroying it because the pool closed would be
-     * the platform deleting someone's workspace as housekeeping. */
     it(`drains around an adopted claim: the row goes, the user's machine stays`, async () => {
         const stale = new Date(Date.now() - 16 * 60 * 1000);
         const del = vi.fn().mockResolvedValue({});
@@ -345,7 +313,7 @@ describe(`reconcileHostedPool`, () => {
         });
         await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
         expect(del).not.toHaveBeenCalled();
-        // …and it does not count as stock either: the slot it vacated is rebuilt.
+        // Not counted as stock either, so its slot is rebuilt.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
     });
 });

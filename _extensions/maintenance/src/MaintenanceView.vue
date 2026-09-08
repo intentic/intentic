@@ -24,53 +24,10 @@ import ScopeNote from "./ScopeNote.vue";
 import { useChores } from "./useChores";
 import { useRuns } from "./useRuns";
 
-/* MAINTENANCE: the chore book, against this workspace, with the evidence attached.
- *
- * TWO AXES, AND THEY DO DIFFERENT JOBS. A chore is decided and acted on PER REPOSITORY: "update dependencies" in
- * two repositories is two different pieces of work with two different answers, so the repository is what the rail
- * scopes by, and one repository's chores are what the body is about. But repository is a bad way to SORT the rows
- * inside it: it was one flat column of thirteen, where "16 advisories · carrying" and "not surveyed in 90 days"
- * were the same object with a different badge colour, and the reader had to re-derive from each row how alarmed to
- * be. Grouped by kind (CHORE_KINDS), the same rows read as "one risk you are carrying, two things accruing, one
- * drift, two reading assignments", and the page finally says out loud that only one of the six is urgent.
- *
- * That grouping is also the page keeping its own promise. Every row here shows its working so you can disagree
- * with it; the ordering was the one editorial claim the page made, it lived in a comment in the chore book, and it
- * was thrown away at render: a claim nobody could see, let alone argue with.
- *
- * AND THE SAME MISTAKE, ONE AXIS OVER: WHETHER ANYONE HAD ALREADY ANSWERED A ROW. The verdict has carried that
- * fact all along — `lastRun` says what a turn concluded, `settled` says the evidence was re-measured and did not
- * move — and this page used both only inside an opened drawer. So a `security-advisories` row an agent had
- * reported back on ten minutes earlier wore full amber under a heading counting it as work, indistinguishable
- * from a finding nobody had opened, and with `cadenceMs: 0` it would have worn it for ever. The answer is on the
- * collapsed row now (ChoreRow's mark), answered rows sink under the ones nobody has looked at, and every count on
- * this page — the tab badge, the group headings, the rail column — stops counting them, which is finally the same
- * definition `unseenVerdicts` has always used for the tile. Sunk and unbadged, never hidden: the row keeps its
- * place, its evidence and its verbs, because a chore that disappears the moment somebody worked on it is how this
- * surface would lose the argument in the other direction.
- *
- * The rail NARROWS, it does not select a document: every row is a real chore under "All repositories" as much as
- * under one of them. So the page keeps <SplitView>'s default `collapse` behaviour on a phone, and the rail sits
- * above the list rather than covering it. It disappears entirely when there is one repository or when the host
- * pinned one (the Workspace tree's per-repo panel): an index over a single thing is a column of chrome.
- *
- * The filter defaults to what needs attention, and that is the only thing hidden by default: "Everything" is one
- * click away and shows the clear and unmeasured rows too. Both halves matter. A surface that only ever shows
- * problems cannot be used to check that there are none, and the reason a chore is CLEAR (measured yesterday,
- * nothing found) is exactly the reassurance someone opens this page for.
- *
- * Opening the page acknowledges what is on it (attention.ts): the rail's badge means "evidence you have not seen",
- * so seeing it is what clears it. Nothing is marked done, nothing is dismissed: the chores stay exactly as due as
- * they were.
- *
- * EVERY NUMBER ON THIS PAGE SAYS HOW OLD IT IS, and the page never claims a measurement it knows is out of date.
- * The deep probes refresh on a weekly TTL, so an hour after a turn deleted the dead code the row was still
- * quoting the count from six days before it: with a line underneath saying a turn had run, which read as "we
- * checked and nothing moved". Nothing had checked. The measurement's age now rides on the row itself, and a chore
- * whose evidence predates its last turn steps down to `stale` (verdict.ts): still listed, still showing what it
- * found, but no longer due and offering a re-measure rather than a second turn. */
+// The chore book for this workspace: rows are decided and acted on per repository, then grouped by kind so one urgent
+// risk doesn't hide among several that can wait. Every count on the page reflects only outstanding, unanswered chores.
 
-// Bound by the host for a `directory` activation; absent for the rail's workspace-wide tile, which picks its own.
+// Bound by the host for a `directory` activation; absent for the rail's own workspace-wide tile.
 const { repo: pinned } = defineProps<{ repo?: string }>();
 
 const api = host();
@@ -83,10 +40,8 @@ const expanded = ref<string>();
 const busy = ref(false);
 const notice = ref<string>();
 
-/* WHICH REPOSITORY IS IN VIEW LIVES IN THE URL, so "what does intentic owe" is a link somebody can be sent.
- * Derived from the query rather than mirrored into a ref: one direction of flow, and Back/Forward work for free.
- * Absent means every repository, which is why it is `undefined` rather than a sentinel: the tidy URL is the one
- * you get by default. The filter is NOT in the URL: it is a posture, not a place. */
+// Repository lives in the URL query, not a mirrored ref, so Back/Forward work and the view is linkable. Absent means
+// every repository; the filter stays out of the URL.
 const query = computed(() => api.route.query());
 const repo = computed<string | undefined>({
     get: () => pinned ?? query.value[`repo`],
@@ -95,26 +50,17 @@ const repo = computed<string | undefined>({
 
 const rowKey = (verdict: ChoreVerdict): string => `${verdict.repo}|${verdict.chore.id}`;
 
-// A month. Long enough to mean "not this cycle" and short enough that nobody has to remember they said it:
-// a snooze that outlives the reason for it is indistinguishable from the chore being wrong.
+// A month: long enough to skip a cycle, short enough not to outlive its own reason.
 const SNOOZE_MS = 30 * 86_400_000;
 
-/* WHAT THE RAIL LISTS. The count is what is DUE, not how many chores exist: thirteen is the same number in every
- * repository and says nothing. Whether any of them is a risk being CARRIED is the row's COLOUR rather than a
- * second number: one live advisory and one dependency drift are not the same morning's work, but two numbers in
- * a 16rem column read as "1 5" with nothing saying which is which, and the reader who needs the distinction is
- * scanning, not hovering. Tint is the encoding the rows themselves already use for the same fact (ChoreRow's
- * badge is warning for `carrying` and info for everything else), so the rail and the list say it the same way.
- * The tooltip is where the split is spelled out, because that is a question you ask of one row at a time. */
+// Rail shows the due count; whether any is being carried is the row's colour, not a second number illegible at this
+// width. The split is spelled out in the tooltip.
 const railTone = (carrying: number): string => (carrying > 0 ? `text-warning` : ``);
 const railNote = (due: number, carrying: number): string =>
     carrying === 0 ? `${due} due` : `${due} due · ${carrying} a risk being carried right now`;
 
-/* WHAT COUNTS AS OUTSTANDING, in the one place every number on this page derives from. A chore a turn has already
- * answered, and whose answer still stands (choreAnswered), is NOT this morning's work: it is a decision the owner
- * made, sitting where they can see it. Counting it kept the rail column, the group headings and the tile badge
- * disagreeing, because `unseenVerdicts` has always excluded settled chores and these two counts never did: an
- * amber "CARRYING 1" over a row nobody needed to touch, beside a dark tile that was right. */
+// Single source every count on this page derives from: a due chore whose answer still stands (`choreAnswered`) is not
+// outstanding, matching `unseenVerdicts`.
 const outstanding = (verdict: ChoreVerdict): boolean => verdict.state === `due` && !choreAnswered(verdict);
 
 const counts = computed(() =>
@@ -125,7 +71,7 @@ const counts = computed(() =>
     })),
 );
 
-// One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
+// One unlabelled group: a heading over the rail's only group would name a distinction that isn't made.
 const railGroups = computed<RepoRailGroup[]>(() => [
     {
         key: `repos`,
@@ -146,31 +92,20 @@ const railAll = computed<RepoRailAll>(() => {
     return { icon: `wrench`, meta: String(due), tone: railTone(carrying), tooltip: railNote(due, carrying) };
 });
 
-/* The rail exists when the view is the thing choosing the scope, and not when the host already fixed it, which is
- * the whole difference between the two surfaces. Deliberately NOT "when there is more than one repository": that
- * is unknown until the report lands, so the column would appear a moment after the page did and shove the list
- * 17rem sideways under the reader's eyes, to reach a case the rail surface cannot be in anyway (the report always
- * carries the workspace root alongside whatever repos activated the tile). */
+// True when the view chooses scope, not the host. Not 'more than one repo': that's unknown until the report lands, and
+// would shift the layout after render.
 const railed = computed(() => pinned === undefined);
 
 const scoped = computed(() => (repo.value === undefined ? byRepo.value : byRepo.value.filter((group) => group.repo === repo.value)));
 
-/* A chore that does not APPLY here is not a row under any filter: there is no Dockerfile to slim, no pipeline to
- * tighten, no documentation to re-read, and listing it as "clear" would claim we checked something that does not
- * exist. It is not hidden either: <ScopeNote> counts them under the list and opens to every one of them and why,
- * so "why is there no Docker chore in this repository?" has an answer one click away rather than a support
- * question. */
-/* `stale` is under "Needs attention" alongside due and snoozed, and it has to be. It is the state a chore lands
- * in the moment a turn finishes on it, so filtering it out would make a chore VANISH from the page exactly when
- * the owner came back to see what happened to it: the same disappearance the settled note exists to prevent,
- * arriving through the filter instead. What it needs is a measurement rather than a turn, but it does need one. */
+// Not-applicable chores are never rows; <ScopeNote> counts and explains them under the list instead.
+// `stale` counts as needing attention: it is the state a chore lands in right after a turn finishes it.
 const shown = (verdict: ChoreVerdict): boolean =>
     verdict.state !== `not-applicable` &&
     (filter.value === `all` || verdict.state === `due` || verdict.state === `snoozed` || verdict.state === `stale`);
 
-/* Chore-major within the scope: under "All repositories" the same chore's rows from every repository sit together,
- * which is what makes the repository name on the row the thing being compared. CHORES is already in the book's
- * order, which is kind order, so the groups below come out in reading order for free. */
+// Chore-major, not repo-major: under 'All repositories' the same chore's rows sit together. CHORES is already in kind
+// order, so groups come out ordered for free.
 const rows = computed(() =>
     CHORES.flatMap((chore) => scoped.value.flatMap((group) => group.verdicts.filter((verdict) => verdict.chore.id === chore.id && shown(verdict)))),
 );
@@ -178,7 +113,7 @@ const rows = computed(() =>
 const groups = computed(() =>
     CHORE_KINDS.flatMap((spec) => {
         const kindRows = rows.value.filter((verdict) => verdict.chore.kind === spec.kind);
-        // A kind with nothing to show under the current filter drops out rather than rendering an empty heading.
+        // Drops the kind entirely rather than rendering an empty heading.
         if (kindRows.length === 0) {
             return [];
         }
@@ -187,39 +122,24 @@ const groups = computed(() =>
                 kind: spec.kind,
                 label: spec.label,
                 caption: spec.caption,
-                /* ANSWERED ROWS SINK, they do not leave. A turn that has concluded against a row's exact evidence
-                 * makes it a different KIND of thing from the rows above it — something to read rather than
-                 * something to start — and interleaving the two meant a group of four had no reading order at
-                 * all: the eye had to open each one to find out which was which. Sorting rather than filtering,
-                 * because a chore vanishing from the page the moment somebody worked on it is the trust failure
-                 * this whole surface is built to avoid (verdict.ts), and it is the same disappearance whether the
-                 * filter does it or the group does. `sort` is stable, so within each half the book's own order
-                 * survives. */
+                // Answered rows sink via a stable sort, not a filter; the book's order survives within each half.
                 rows: [...kindRows].sort((a, b) => Number(choreAnswered(a)) - Number(choreAnswered(b))),
-                // The heading counts what is OUTSTANDING, not how many rows are under it: under "Everything" a
-                // group of six with one due is a very different heading from a group of six with six.
+                // Counts what is outstanding, not the row count: matters once 'Everything' shows the whole group.
                 due: kindRows.filter((verdict) => outstanding(verdict)).length,
             },
         ];
     }),
 );
 
-// The footnote is about ONE repository's chores and probes, so it renders when the scope is one repository:
-// which "All repositories" also is in a workspace that only has one, and that is the right answer there too.
+// Set when exactly one repository is in scope, including 'All repositories' in a single-repo workspace.
 const only = computed(() => (scoped.value.length === 1 ? scoped.value[0] : undefined));
-// Under a wider scope the repository is what tells two otherwise identical rows apart, so the row carries it.
+// True once more than one repository is in scope, where the repo name is what tells rows apart.
 const showRepo = computed(() => scoped.value.length > 1);
 
-// The tab's own badge, on the same definition as everything else: it is a claim on the reader's attention, and an
-// answered chore has stopped making one. It has always counted fewer rows than the tab shows (snoozed and stale
-// are listed and uncounted), which is the point of it: the number is the work, the list is the record.
+// Same definition as every other count here; snoozed and stale rows are listed but not counted.
 const scopeDue = computed(() => scoped.value.flatMap((group) => group.verdicts).filter((verdict) => outstanding(verdict)).length);
 
-/* Acknowledge whatever is currently on screen, whenever it changes while this page is open. `immediate` because
- * the common case is arriving here BECAUSE the tile was lit: the first render is the moment the evidence was
- * seen. Idempotent by digest, so the repeated firing this watcher does costs one comparison and no write. It is
- * the RENDERED rows, not every verdict in the workspace: acknowledging a repository the reader has not opened
- * would spend the badge on evidence nobody looked at. */
+// Acknowledges only the rendered rows, immediately on mount; idempotent by digest so repeats are cheap.
 watch(
     rows,
     (verdicts) => {
@@ -228,9 +148,7 @@ watch(
     { immediate: true },
 );
 
-// Finished runs become ledger rows here, on the same data the page already holds: see useRuns.promote for why
-// the agent writes a file and the browser does the recording. Workspace-wide on purpose: a run that landed is a
-// fact about the ledger, not about what is currently in view.
+// Workspace-wide on purpose: a finished run is a ledger fact regardless of what's currently in view.
 const ledgerRunIds = computed(
     () =>
         new Set(byRepo.value.flatMap((group) => group.verdicts).flatMap((verdict) => (verdict.lastRun === undefined ? [] : [verdict.lastRun.runId]))),
@@ -243,8 +161,7 @@ watch(
     { immediate: true },
 );
 
-// One place for every action's failure, because they all fail the same way (the daemon said no) and each of them
-// is a single click whose only feedback is that something happened.
+// Single failure path for every action; each is a one-click request whose only feedback is that something happened.
 const attempt = async (what: string, action: () => Promise<unknown>): Promise<void> => {
     busy.value = true;
     notice.value = undefined;
@@ -257,38 +174,25 @@ const attempt = async (what: string, action: () => Promise<unknown>): Promise<vo
     }
 };
 
-/* Re-measure everything ONE chore rests on, from its own row: the ONLY way this page asks for a measurement, and
- * the reason the probe strip that used to sit under the title is gone. That strip offered a refresh button per
- * probe, above a list whose rows are what anyone actually wants re-measured, so the reader had to know which of
- * seven tools decides "Clear out dead code" before they could press anything. The row carries its repository, so
- * this also works under "All repositories", which the strip's buttons never could.
- *
- * `attempt` here covers the ASK, not the measurement: the request is milliseconds and the sweep is minutes, and
- * conflating them is what made this button feel broken: the page's busy flag went up and straight back down
- * while the actual work had not started. What the reader watches instead is `measuring`, which lives as long as
- * the probe does. */
+// Re-measures everything the chore needs, from its own row; works under 'All repositories' since the row carries its
+// repo. `attempt` only covers the request; `measuring` tracks the actual sweep.
 const onRemeasure = (verdict: ChoreVerdict): void => {
     void attempt(`ask for that measurement`, async () => {
         await Promise.all(verdict.chore.needs.map((id) => refreshProbe(verdict.repo, id)));
     });
 };
 
-// `pick` is set only when the reader used the caret beside this chore's button; otherwise the daemon opens the
-// session on the sandbox's agent-run list, which is the ordinary path.
+// `pick` is set only via the caret beside the button; otherwise the daemon opens on the sandbox's agent-run list.
 const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void => {
     void attempt(`start that turn`, async () => {
-        // Straight into the conversation it just started: the turn IS the work, and a page that spawns an agent
-        // and then keeps you on the page has hidden the only thing you now care about. The chore row stays
-        // behind, and will show the run when you come back.
+        // Opens the new conversation immediately; the row stays behind and will show the run on return.
         api.chat.openSession(conversationIdOf(await start(verdict, pick)));
     });
 };
 </script>
 
 <template>
-    <!-- `scroll="page"`: this body is a REPORT read top-down, which is the `page` case. It was clamped and given
-         a scroller of its own, so a workspace with a full book of chores was read through a window with the page
-         around it holding still and nothing to scroll. -->
+    <!-- `scroll="page"`: this body is a report read top-down, not a clamped panel with its own scroller. -->
     <SplitView title="Maintenance" scroll="page" :scroll-key="`${repo ?? ``}/${filter}`">
         <template #actions>
             <SegmentedControl
@@ -299,10 +203,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     { label: `Everything`, value: `all`, title: `Every chore in the book, including the clear and the unmeasured` },
                 ]"
             />
-            <!-- IT RE-READS, IT DOES NOT RE-MEASURE, and it used to say "Refresh · Re-read the evidence", which
-                 is the button anyone presses after a chore's work lands, and the reason they conclude the page is
-                 broken when the numbers do not move. Measuring again costs a subprocess and minutes, so it stays
-                 a per-chore decision on the row that needs it; this one says what it actually does. -->
+            <!-- Re-reads the latest results; it does not re-measure. Measuring again is a per-chore decision made on the row. -->
             <PageAction
                 quiet
                 icon="refresh"
@@ -313,10 +214,10 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
             />
         </template>
 
-        <!-- Failures only, and the slot is only PASSED when there is one: the strip band reserves its margin on
-             the mere presence of the slot, so a permanently-mounted, usually-empty strip is 16px of nothing
-             between the title and the list. What this repository could not be asked is a footnote UNDER the list
-             (<ScopeNote>) rather than a strip over it: it is read once, by someone surprised a chore is missing. -->
+        <!--
+            Slot only passed when there is a notice, so the strip reserves no margin when empty. Inapplicable chores get a footnote under the list
+            instead (<ScopeNote>).
+        -->
         <template v-if="notice || error" #strips>
             <Notice v-if="notice" tone="warning">{{ notice }}</Notice>
             <Notice v-if="error" :of="noticeOf(error)" />
@@ -327,15 +228,12 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         </template>
 
         <template #detail>
-            <!-- The gap stays, the scroller and the shrink-to-fit do not: see the note on the split above. -->
+            <!-- Gap stays; the scroller and shrink-to-fit belong to SplitView, not this wrapper. -->
             <div class="flex flex-col gap-6">
-                <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
-                     fetch. Show the book's shape rather than a sentence, so the page that arrives is the page you
-                     were already looking at. -->
+                <!-- Also covers the window before the sandbox handshake unblocks the fetch. Shows the book's shape, not a loading sentence. -->
                 <MaintenanceSkeleton v-if="isPending" />
 
-                <!-- The empty state under "Needs attention" is the one this design most wants to be reachable, so
-                     it says what was checked rather than congratulating anyone. -->
+                <!-- The empty state this design most wants reachable; states what was checked rather than congratulating. -->
                 <div v-else-if="groups.length === 0" class="flex flex-col items-start gap-2 py-10">
                     <p class="text-sm text-content">Nothing needs attention.</p>
                     <p class="max-w-read-sm text-xs text-subtle">
@@ -345,8 +243,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     <Button size="small" severity="secondary" text label="Show everything" @click="filter = `all`" />
                 </div>
 
-                <!-- ONE GROUP PER KIND, in the book's own order: the four claims the page makes, each with the
-                     sentence that argues for it (CHORE_KINDS) beside the heading. -->
+                <!-- One group per kind, in the book's own order; each heading carries its own argument from CHORE_KINDS. -->
                 <template v-else>
                     <RowGroup
                         v-for="group in groups"
@@ -374,8 +271,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     </RowGroup>
                 </template>
 
-                <!-- The record of what was left out, last: a chore with no subject here, a probe this repository
-                     cannot run, a tool that broke. It qualifies the list, so it comes after it. -->
+                <!-- Record of what was left out (no subject here, a probe that can't run, a broken tool); qualifies the list, so it comes last. -->
                 <ScopeNote v-if="only" :probes="only.probes" :inapplicable="only.verdicts.filter((verdict) => verdict.state === `not-applicable`)" />
             </div>
         </template>

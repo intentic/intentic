@@ -1,8 +1,6 @@
-/* Query-focused block filtering: score each content block against the query with BM25 and keep the ones
- * that carry signal, in document order. The idea (and the "keep headings regardless" rule, which preserves
- * the skeleton the surviving blocks hang from) follows crawl4ai's BM25ContentFilter (Apache-2.0,
- * https://github.com/unclecode/crawl4ai); the implementation is plain BM25 with k1=1.2, b=0.75 and no
- * stemming — an agent's query words are usually the page's own words, and a stemmer is a dependency. */
+// Scores blocks against the query with BM25, keeping only ones with signal, in document order; headings are always
+// kept. Follows crawl4ai's BM25ContentFilter (Apache-2.0, https://github.com/unclecode/crawl4ai). Plain BM25, k1=1.2
+// b=0.75, no stemming.
 
 export interface ScoredBlock<T> {
     readonly block: T;
@@ -16,9 +14,8 @@ export const tokenize = (text: string): string[] =>
         .filter((token) => token.length >= 2)
         .map(foldPlural);
 
-/* The cheapest stemming that earns its keep: fold English plurals so "webhooks" finds "webhook" and
- * "retries" finds "retry". A real stemmer is a dependency and a language commitment; this is neither, and
- * an agent's query usually reuses the page's own vocabulary anyway. */
+// Folds English plurals (webhooks to webhook, retries to retry) instead of a real stemmer, which would add a dependency
+// and a language commitment.
 const foldPlural = (token: string): string => {
     if (token.length <= 3) {
         return token;
@@ -37,8 +34,8 @@ const K1 = 1.2;
 const B = 0.75;
 
 /**
- * Ranks `blocks` against `query` over each block's text. Returns every block with a positive score,
- * highest first — the caller decides how many to keep and in what order to print them.
+ * Ranks `blocks` against `query`; returns every block with a positive score, highest first. Caller decides how many to
+ * keep.
  */
 export const bm25Rank = <T>(blocks: readonly T[], textOf: (block: T) => string, query: string): ScoredBlock<T>[] => {
     const queryTerms = [...new Set(tokenize(query))];

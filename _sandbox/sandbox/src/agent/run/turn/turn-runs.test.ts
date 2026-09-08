@@ -4,8 +4,8 @@ import type { JournalEntry } from "./turn-journal.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
 import { type AttachEntry, type AttachHead, startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
 
-// A hand-cranked turn: the test pushes events (or a failure) and the run's pump consumes them as they land:
-// the same push/pull shape SteeringQueue uses, so live-follow interleavings are exercised for real.
+// A hand-cranked turn: push events (or a failure) and the pump consumes them as they land, mirroring SteeringQueue's
+// push/pull shape.
 const crankedTurn = (): { turnFn: TurnFn; push: (event: AgentEvent) => void; fail: (error: Error) => void; close: () => void } => {
     const buffer: (AgentEvent | Error | typeof CLOSE)[] = [];
     const CLOSE = Symbol(`close`);
@@ -85,9 +85,6 @@ describe(`turn runs`, () => {
         ]);
     });
 
-    /* A LATE ATTACH gets the rows whole and nothing it already holds again: the head carries the transcript as
-     * it stands, the facts replay behind it (a window joining late still has to learn the session), and only
-     * what lands afterwards streams. */
     it(`hands a late attach the rows so far and the facts, then only what follows`, async () => {
         const { turnFn, push, close } = crankedTurn();
         startTurnRun(turnFn, turn(`c-replay`), { opening });
@@ -118,7 +115,6 @@ describe(`turn runs`, () => {
         const first = collect(`c-multi`);
         push({ kind: `delta`, text: `a` });
         await vi.waitFor(() => expect(turnRunOf(`c-multi`)!.rows).toHaveLength(2));
-        // The second follower attaches mid-run: the row so far on its head, then live for the rest.
         const second = collect(`c-multi`);
         push({ kind: `delta`, text: `b` });
         close();
@@ -129,7 +125,6 @@ describe(`turn runs`, () => {
         expect(late.entries.map((entry) => entry.seq)).toEqual([3]);
     });
 
-    // The raw frames, for the daemon's own readers: what the provider said, from the moment of subscribing.
     it(`hands its raw frames to a listener from the moment it subscribes`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const run = startTurnRun(turnFn, turn(`c-frames`))!;
@@ -173,13 +168,10 @@ describe(`turn runs`, () => {
         const { turnFn: nextTurnFn, close: closeNext } = crankedTurn();
         const second = startTurnRun(nextTurnFn, turn(`c-busy`))!;
         expect(second.id).not.toBe(first.id);
-        // The new run replaced the retained one under the conversation key.
         expect(turnRunOf(`c-busy`)!.id).toBe(second.id);
         closeNext();
     });
 
-    /* A THROWN TURN folds into the rows as the failure it was, and an abort as a stop: both are things the user
-     * watched happen and will look for when they come back, so both are rows, and the record keeps them. */
     it(`folds a thrown turn into a failure line and an abort into a stop`, async () => {
         const { turnFn, fail } = crankedTurn();
         startTurnRun(turnFn, turn(`c-throw`), { opening });
@@ -196,7 +188,6 @@ describe(`turn runs`, () => {
         expect((await collect(`c-abort`)).entries).toEqual([]);
     });
 
-    // A card the turn was parked on when it was stopped is nobody's decision, and the stop says so.
     it(`freezes a card the stop caught pending, before the stop's own line`, async () => {
         const { turnFn, push, fail } = crankedTurn();
         startTurnRun(turnFn, turn(`c-park-stop`), { opening });
@@ -210,14 +201,12 @@ describe(`turn runs`, () => {
         ]);
     });
 
-    // A row the daemon writes on the turn's behalf lands where the transcript stands, for every follower.
     it(`takes a note the daemon writes, as a row every follower sees`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const run = startTurnRun(turnFn, turn(`c-note`), { opening })!;
         const followed = collect(`c-note`);
         push({ kind: `plan`, requestId: `p1`, text: `the plan` });
         await vi.waitFor(() => expect(run.rows).toHaveLength(2));
-        // The decision settles the card through the turn's own frame; the daemon's line about it follows.
         push({ kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } });
         await vi.waitFor(() => expect(run.rows[1]?.plan?.status).toBe(`approved`));
         run.note({ role: `notice`, text: `Plan approved.` });
@@ -236,7 +225,6 @@ describe(`turn runs`, () => {
         ]);
     });
 
-    // A helper's frames fold into a transcript of their own, read by the call that spawned it.
     it(`keeps one transcript per helper, out of the same frames`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const run = startTurnRun(turnFn, turn(`c-child`), { opening })!;
@@ -287,7 +275,6 @@ describe(`turn runs`, () => {
         expect(invoked).toBe(true);
     });
 
-    // The settled turn is handed to the record as the rows the run folded, with where the steers landed.
     it(`hands the settled rows and the steered positions to the transcript sink`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const transcript = vi.fn(async () => true);
@@ -306,16 +293,8 @@ describe(`turn runs`, () => {
         );
     });
 
-    /* THE JOURNAL: one entry per in-flight turn, so a daemon death leaves behind exactly what to re-run.
-     *
-     * The fake makes every write SLOW and records completion order, which is the whole point of these two. None
-     * of the writes may block the caller (the route acks the run id synchronously), so they all run detached:
-     * but they must not overtake each other either. A clear that beat the opening write would unlink a file that
-     * does not exist yet; a clear that beat the session-frame update would be followed by that update
-     * re-creating the entry. Either way a journal entry outlives its turn, and the next boot resumes a turn that
-     * already finished. */
-    // A write costs more than an unlink, here as on a real disk, which is exactly what makes the ordering bug
-    // reachable rather than theoretical: fired independently, the clear WINS, and then a write lands after it.
+    // Fake journal with slow, ordered writes, to prove recordTurn/clearTurn never race however slow the writes are.
+    // writeMs > clearMs mirrors a real disk: an unserialized clear would otherwise outrun a slower write.
     const fakeJournal = (writeMs = 20, clearMs = 1) => {
         const calls: string[] = [];
         const after = async (ms: number, label: string): Promise<void> => {
@@ -340,14 +319,12 @@ describe(`turn runs`, () => {
         const { calls, journal } = fakeJournal();
         startTurnRun(turnFn, turn(`c-journal`), { journal });
 
-        // The turn settles well inside a single write's duration: the window where an unserialized clear wins.
         push({ kind: `session`, sessionId: `sess-7` });
         push({ kind: `done` });
         close();
         await vi.waitFor(() => expect(turnRunOf(`c-journal`)!.done).toBe(true));
 
         await vi.waitFor(() => expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
-        // And it STAYS cleared: nothing lands after the clear to re-create the entry.
         await new Promise((resolve) => setTimeout(resolve, 60));
         expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]);
     });
@@ -382,10 +359,6 @@ describe(`turn runs`, () => {
         await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-transcript-commit`]));
     });
 
-    /* THE PARKED CARDS ride the journal entry while they are up: they are what a boot restores when the daemon
-     * dies under a park (turn-resume.ts), and their content exists nowhere else once the run dies with the
-     * process. Every rewrite carries the whole live state (session AND cards), so neither update can erase the
-     * other's half. */
     it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const entries: (JournalEntry & { kind: "turn" })[] = [];
@@ -403,8 +376,7 @@ describe(`turn runs`, () => {
         push({ kind: `session`, sessionId: `sess-3` });
         push({ kind: `plan`, requestId: `r-plan`, text: `the plan` });
         push({ kind: `question`, requestId: `r-q`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] });
-        // Both handovers park the turn and neither is ever journalled: the browser one's Chromium and the
-        // terminal one's waiting command both die with the container, so there is nothing to restore them to.
+        // Handover cards are never journalled: both die with the container, so there is nothing to restore them to.
         push({ kind: `browser_help`, requestId: `r-b`, session: `b-1`, account: `acc`, message: `captcha` });
         push({ kind: `terminal_help`, requestId: `r-t`, session: `agent-t1`, message: `type the one-time password` });
         push({ kind: `resolved`, requestId: `r-plan` });
@@ -414,7 +386,7 @@ describe(`turn runs`, () => {
 
         const parked = entries.map((entry) => ({ session: entry.sessionId, cards: (entry.parked ?? []).map((card) => card.requestId) }));
         expect(parked).toEqual([
-            { session: undefined, cards: [] }, // the opening write
+            { session: undefined, cards: [] }, // opening write
             { session: `sess-3`, cards: [] },
             { session: `sess-3`, cards: [`r-plan`] },
             { session: `sess-3`, cards: [`r-plan`, `r-q`] },
@@ -447,14 +419,14 @@ describe(`turn runs`, () => {
 
         const followed = collect(`c-commands`);
         push({ kind: `commands`, items: [{ name: `review`, description: `Review a PR` }] });
-        // Replace-wholesale, matching the frame's own semantics: the later list wins outright.
+        // Later commands list replaces the earlier one wholesale.
         push({ kind: `commands`, items: [{ name: `deploy`, description: `Ship it` }] });
         push({ kind: `done` });
         close();
         await followed;
 
         expect(commandsOf(`kimi`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
-        // Keyed by provider: a turn on one never answers for another. An absent `agent` means claude.
+        // Keyed by provider; an absent `agent` means claude.
         expect(commandsOf(`claude`)).toEqual([]);
     });
 });

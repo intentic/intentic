@@ -1,22 +1,14 @@
 import type { Files } from "./adapter-shared.js";
 
-/* WHY AN UPLOAD WAS NOT RECOGNIZED, said in terms of what was actually in it.
- *
- * The first version answered every unrecognized archive by repeating the packing instruction, the one thing
- * the user had already tried and which had already failed them. An upload arrives after a real chore (pack on
- * a server, copy the file over, find it in a dialog), so the answer has to move them forward: the reader holds
- * the whole file list, so it can say which mistake this is.
- *
- * Four mistakes cover nearly all of it, and each has a different next move:
- *   an empty archive         , the pack command errored and they did not see it
- *   workspace files, no config- they packed the workspace folder instead of the whole setup folder
- *   a home directory         , they packed `~` and the setup folder is somewhere in it (or not)
- *   something else entirely  , name what the top level actually holds, so they can see the mismatch
- */
+// Explains why an upload wasn't recognized, in terms of what was actually in it, not by repeating the packing
+// instruction. Four cases, each with a different next move:
+// - empty archive: the pack command errored silently
+// - workspace files, no config: they packed the workspace folder, not the whole setup folder
+// - home directory: they packed ~, and the setup folder is somewhere inside it
+// - something else: names what the top level actually holds
 
 const ANCHORS = ["config.yaml", "openclaw.json"];
-// Files that only exist inside one of these tools' WORKSPACES, seeing them without a config is the single
-// most common near-miss, because the workspace is the folder a user thinks of as "my assistant's stuff".
+// Files that exist only in a tool's workspace; seeing one without a config is the single most common near-miss.
 const WORKSPACE_MARKERS = ["SOUL.md", "AGENTS.md", "IDENTITY.md", "MEMORY.md", "USER.md", "HEARTBEAT.md"];
 
 const topLevel = (files: Files): string[] => [...new Set([...files.keys()].map((path) => path.split("/")[0] ?? path))].toSorted();

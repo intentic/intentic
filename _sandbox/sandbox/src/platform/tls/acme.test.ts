@@ -3,13 +3,8 @@ import { exportJWK, flattenedVerify, importJWK } from "jose";
 import { expect, it, vi } from "vitest";
 import { obtainCertificate } from "./acme.js";
 
-/* A fake CA, in-process, so the ORDER FLOW is exercised rather than asserted about: the parts that go wrong
- * in an ACME client are sequencing (nonce rotation, jwk-then-kid, POST-as-GET vs `{}`) and the key
- * authorization digest, and every one of them is checked here against what a real CA would enforce.
- *
- * The signatures are verified with the account's PUBLIC key, so this also proves the JWS is genuinely ES256 in
- * the P1363 form JOSE requires and not node's default DER: a mistake that produces a same-length signature
- * every real CA would reject. */
+// In-process fake CA exercising ACME's real failure modes: nonce rotation, jwk-then-kid, POST-as-GET vs `{}`, and the
+// digest. Verifies signatures with the account's public key, proving real ES256/P1363, not node's DER default.
 
 const PEM = "-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nissuer\n-----END CERTIFICATE-----\n";
 const TOKEN = "challenge-token";
@@ -21,8 +16,8 @@ interface Seen {
     readonly payload: string;
 }
 
-// A CA that walks an order from new-account to certificate. `authzStatus` lets a test drive the validation
-// outcome; `nonceFailures` makes the first N posts answer badNonce, the retry every real client must handle.
+// Walks an order from new-account to certificate; `authzStatus` drives the validation outcome, `nonceFailures` makes
+// the first N posts answer badNonce.
 const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number } = {}) => {
     const seen: Seen[] = [];
     const issuedNonces = new Set<string>();
@@ -54,12 +49,12 @@ const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number } = {
         if (init?.method === "HEAD") {
             return respond({});
         }
-        // Every POST is a JWS: verify it the way the CA would, and record what it said.
+        // Every POST is a JWS: verified the way a real CA would, and recorded.
         const jws = JSON.parse(String(init?.body)) as { protected: string; payload: string; signature: string };
         const header = JSON.parse(Buffer.from(jws.protected, "base64url").toString()) as Record<string, unknown>;
         const key = await importJWK((header["jwk"] ?? accountPublicJwk) as Parameters<typeof importJWK>[0], "ES256");
         const verified = await flattenedVerify(jws, key);
-        // A nonce is single-use, and the URL is bound into the header so a request cannot be replayed elsewhere.
+        // A nonce is single-use, and the URL is bound into the header so a request can't be replayed elsewhere.
         expect(issuedNonces.has(header["nonce"] as string), `unknown nonce on ${url}`).toBe(true);
         expect(spent.has(header["nonce"] as string), `replayed nonce on ${url}`).toBe(false);
         spent.add(header["nonce"] as string);
@@ -113,12 +108,11 @@ const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number } = {
 
 const accountKey = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey;
 const certificateKey = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey;
-// The PUBLIC half: what a CA has, and the only thing that can verify a signature.
+// Public half: what a CA has, and the only thing that can verify a signature.
 const accountPublicJwk = await exportJWK(createPublicKey(accountKey));
 
-/* The zone stands in for the one the challenge is published into: by default a record is visible the moment it
- * is written, and a test that cares about propagation supplies its own `resolveTxt`. The clock is virtual, so a
- * poll can reach its deadline without a test spending it. */
+// Stands in for the zone: a record is visible the moment it's written unless a test overrides `resolveTxt`. The clock
+// is virtual, so a poll can reach its deadline without the test spending real time.
 const run = async (
     ca: ReturnType<typeof fakeCa>,
     hooks: {
@@ -154,8 +148,7 @@ it("walks an order to a certificate, publishing the digest the spec asks for", a
     const ca = fakeCa();
     expect(await run(ca, { publish })).toEqual({ certificate: PEM });
 
-    // The TXT value is SHA-256 of `<token>.<account thumbprint>`, base64url: NOT the key authorization
-    // itself, which is the single most common way a DNS-01 client fails validation against a real CA.
+    // TXT value is sha256 of `<token>.<thumbprint>`, base64url — not the key authorization itself.
     const { calculateJwkThumbprint } = await import("jose");
     const expected = createHash("sha256")
         .update(`${TOKEN}.${await calculateJwkThumbprint(accountPublicJwk, "sha256")}`)
@@ -181,11 +174,11 @@ it("identifies by jwk until the account exists, then by kid: never both", async 
 it("reads protected resources with POST-as-GET and answers the challenge with {}", async () => {
     const ca = fakeCa();
     await run(ca);
-    // An empty payload is a read; `{}` is "I am ready". Posting `{}` to an authorization is a 400 from a real CA.
+    // Empty payload is a read; `{}` means ready. Posting `{}` to an authorization instead gets a real CA's 400.
     expect(ca.seen.filter((request) => request.url.endsWith("/authz/1")).every((request) => request.payload === "")).toBe(true);
     expect(ca.seen.find((request) => request.url.endsWith("/cert/1"))?.payload).toBe("");
     expect(ca.seen.find((request) => request.url.endsWith("/challenge/dns"))?.payload).toBe("{}");
-    // Finalize carries the CSR, base64url, unpadded.
+    // Finalize carries the CSR as base64url, unpadded.
     const finalize = JSON.parse(ca.seen.find((request) => request.url.endsWith("/finalize"))!.payload) as { csr: string };
     expect(finalize.csr).toMatch(/^[A-Za-z0-9_-]+$/);
 });
@@ -193,7 +186,7 @@ it("reads protected resources with POST-as-GET and answers the challenge with {}
 it("retries a badNonce once with the fresh nonce, the way a CA expects", async () => {
     const ca = fakeCa({ nonceFailures: 1 });
     expect(await run(ca)).toEqual({ certificate: PEM });
-    // Two attempts at the first endpoint, with DIFFERENT nonces: the fake CA rejects any replay outright.
+    // Two attempts at the first endpoint with different nonces: the fake CA rejects any replay outright.
     const accountAttempts = ca.seen.filter((request) => request.url.endsWith("/new-account"));
     expect(accountAttempts).toHaveLength(2);
     expect(accountAttempts[0]?.header["nonce"]).not.toBe(accountAttempts[1]?.header["nonce"]);
@@ -202,16 +195,12 @@ it("retries a badNonce once with the fresh nonce, the way a CA expects", async (
 it("fails with the CA's own reason when validation is refused, and still cleans up", async () => {
     const remove = vi.fn(async () => undefined);
     await expect(run(fakeCa({ authzStatus: () => "invalid" }), { remove })).rejects.toThrowError(/no TXT record found/);
-    // The challenge record must not survive a failed order: the next attempt publishes a different value.
+    // The challenge record must not survive a failed order, so the next attempt can publish a different value.
     expect(remove).toHaveBeenCalledWith(`_acme-challenge.${HOST}`);
 });
 
 it("never asks the CA to look before the zone actually serves the record", async () => {
     const ca = fakeCa();
-    /* The failure this prevents: a zone API returns once it has ACCEPTED the write, seconds before its
-     * nameservers answer with the record, and a CA that looks into that gap marks the authorization `invalid`
-     * for good: `NXDOMAIN looking up TXT` is not a retryable "not yet". So an unpublished record has to fail
-     * here, with the CA never told to validate. */
     await expect(run(ca, { resolveTxt: async () => [] })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
     expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(false);
 });
@@ -220,19 +209,17 @@ it("waits out the gap between the zone accepting the record and serving it", asy
     const ca = fakeCa();
     let value: string | undefined;
     let lookups = 0;
-    // Invisible for the first two lookups, exactly as a zone mid-propagation is.
+    // Invisible for the first two lookups, as in a zone mid-propagation.
     const resolveTxt = async (): Promise<string[]> => (++lookups > 2 && value !== undefined ? [value] : []);
     const result = await run(ca, { publish: async (_recordName, published) => void (value = published), resolveTxt });
     expect(result).toEqual({ certificate: PEM });
     expect(lookups).toBe(3);
-    // And having waited, it does go on to answer the challenge: the wait must not become its own dead end.
+    // The wait must not become its own dead end: confirms the challenge was still answered after it.
     expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(true);
 });
 
 it("re-sends a request that never reached the CA", async () => {
     const ca = fakeCa();
-    // Issuance runs at boot and then on a slow cycle, so its first request always goes down a long-idle egress
-    // path: routinely slower than the 10s undici allows a connect. One such moment cost the whole certificate.
     let failures = 2;
     const flaky = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         if (failures > 0) {
@@ -263,7 +250,7 @@ it("lets an HTTP error status through untouched: that is the CA answering, not a
         return ca.fetchImpl(input, init);
     }) as typeof fetch;
     await expect(run({ ...ca, fetchImpl: refusing })).rejects.toThrowError(/too many registrations/);
-    // Retrying a rate limit is how a client turns one refusal into a ban.
+    // Retrying a rate limit only turns one refusal into a ban.
     expect(accountAttempts).toBe(1);
 });
 

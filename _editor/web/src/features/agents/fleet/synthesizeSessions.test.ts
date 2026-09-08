@@ -1,8 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
-// The guarantee under test is the QUALITY CONTRACT of "Synthesize N": every source rides whole (reasoning,
-// tools, diffs, notices, not a summary), the preparation refuses WHOLE when any source can't be captured
-// completely, and the composed chat opens as a draft: prompt in the composer, transcripts as chips, nothing
-// sent until the user decides what to spend on it.
+// The guarantee under test is the quality contract of "Synthesize N": every source rides whole (reasoning, tools,
+// diffs, notices, never a summary), the preparation refuses whole synthesis when any source can't be captured
+// completely, and the composed chat opens as a draft with nothing sent until the user decides.
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,15 +10,15 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn(), 
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-// Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId + reachable.
+// Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
 });
-// agentActions reaches ui's useDevice, which reads window.matchMedia at module scope, and the reveal is the
-// one thing this module takes from it, so the mock is also the assertion hook that the composed chat is shown.
+// agentActions reaches ui's useDevice, which reads window.matchMedia at module scope; the reveal is what this module
+// takes from it, and this mock is also the assertion hook that the composed chat is shown.
 vi.mock("./agentActions", () => ({ revealConversation: vi.fn() }));
 
 // The node test environment has neither storage; conversations persist their tab snapshot on every change.
@@ -45,8 +44,7 @@ const sandboxUploadMock = vi.mocked(sandboxUpload);
 const { revealConversation } = await import("./agentActions");
 const { resetChat, useChat } = await import("../../chat/run/useChat");
 const { draftConversation, reveal } = await import("../../chat/panel/useChat-reveal");
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// The store half of "New agent", as the summons applies it: the fixture these suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -59,8 +57,8 @@ beforeEach(() => {
     local.clear();
     session.clear();
     resetChat();
-    // A daemon with nothing to say, unless the test says otherwise: an unmocked background call resolving to
-    // `undefined` surfaces as an unhandled rejection attributed to whichever test happens to be running.
+    // A daemon with nothing to say unless the test overrides it: an unmocked background call resolving to undefined
+    // surfaces as an unhandled rejection on whichever test happens to be running.
     sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
     sandboxUploadMock.mockResolvedValue(undefined);
 });
@@ -69,8 +67,8 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-// Two settled conversations side by side: the board state the button appears for. Each gets a restored
-// transcript (so it reads as having completed turns) and a column of its own.
+// Two settled conversations side by side, the board state the button appears for; each gets a restored transcript and a
+// column of its own.
 const openTwoPanes = (): readonly [string, string] => {
     const chat = useChat();
     const first = chat.active.value;
@@ -226,8 +224,8 @@ describe(`synthesizeSessions`, () => {
         expect(uploads[0]!.text).toContain(`# Source A: "Approach one"`);
         expect(uploads[0]!.text).toContain(`done it one way`);
         expect(uploads[1]!.text).toContain(`# Source B: "Approach two"`);
-        // The composed chat is the focused draft: prompt in the composer, chips staged and done, an ordinary
-        // chat posture, and NOTHING enqueued. The user picks the model and presses send.
+        // The composed chat is the focused draft: prompt in the composer, chips staged and done, nothing enqueued. The
+        // user picks the model and presses send.
         const composed = useChat().active.value;
         expect(composed.conversationId).not.toBe(first);
         expect(composed.conversationId).not.toBe(second);

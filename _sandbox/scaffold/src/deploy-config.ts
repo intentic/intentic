@@ -1,19 +1,8 @@
 import type { InventoryEntry, InventoryProvider, ServiceKind } from "@intentic/sandbox-contract";
 
-/* The platform-owned region of an intent's deploy.config.ts. Everything between the markers is regenerated
- * wholesale from the structured inventory entries, so the UI can edit the file deterministically; the user's
- * code outside the markers is never touched. The sandbox owns this (the browser calls the daemon's /inventory
- * routes directly).
- *
- * Three entry shapes live in the region: `backend` (i.have.<provider>(...), host/cloudflare/github/stripe),
- * `service` (i.want.service(...), an authorable shared tool like SigNoz) and `app` (i.want.app(...), a
- * deployable app, single production environment on `main`). Services and apps reference an existing host +
- * cloudflare binding by NAME, rendered as bare const references (`on: self`), and parsed back to those
- * names, the render→parse cycle must be lossless so repeated edits never mangle a user's entries.
- *
- * The inventory wire schemas (InventoryEntry / AddInventoryInputSchema / the provider + service enums) live in
- * @intentic/sandbox-contract, the single source the daemon and the browser client both validate against. This
- * module only renders/parses those entries to and from TypeScript. */
+// Renders/parses the platform-owned region between the markers in deploy.config.ts, regenerated wholesale from
+// InventoryEntry (backend/service/app); user code outside is untouched. Name references (`on: self`) round-trip
+// losslessly; wire schemas live in @intentic/sandbox-contract.
 
 // ---- managed-region parser/renderer ----
 
@@ -25,22 +14,19 @@ const INDENT = `    `;
 type ServiceEntry = Extract<InventoryEntry, { kind: `service` }>;
 type AppEntry = Extract<InventoryEntry, { kind: `app` }>;
 
-// How one option is emitted: from a provided value (string/number), or as an env() secret reference.
+// How one option is emitted: a provided value (string/number), or an env() secret reference.
 interface FieldSpec {
     readonly key: string;
     readonly source: "string" | "number" | "env";
     readonly envVar?: string;
-    // An optional field is emitted only when the entry actually carries a value, so a default like a host's
-    // "direct" transport isn't written as an empty literal that would fail the provider's enum on re-read.
+    // Emitted only when the entry carries a value; a default (e.g. "direct" transport) is omitted.
     readonly optional?: boolean;
 }
 interface ProviderSpec {
     readonly fields: readonly FieldSpec[];
 }
 
-// Cloudflare/github/stripe use fixed env-var names (a single account each). Hosts get a PER-NAME ssh-key var
-// (see hostSshKeyEnvVar) so multiple deploy targets don't collide, so the `envVar` here is never read for a
-// host: hostSshKeyEnvVar answers for every one of them, `self` included.
+// A host never reads its `envVar`; hostSshKeyEnvVar supplies a per-name var for every host, `self` included.
 const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
     host: {
         fields: [
@@ -49,24 +35,21 @@ const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
             { key: `port`, source: `number` },
             // SSH transport; only written when non-default (e.g. "cloudflared" for a NAT'd self-host).
             { key: `via`, source: `string`, optional: true },
-            // No `envVar`: hostSshKeyEnvVar answers for every host, so a static one here could only ever be a
-            // second spelling nothing reads.
+            // No `envVar`: hostSshKeyEnvVar answers for every host; a static one here would be an unread duplicate.
             { key: `sshKey`, source: `env` },
         ],
     },
     cloudflare: {
         fields: [
             { key: `apiToken`, source: `env`, envVar: `CLOUDFLARE_API_TOKEN` },
-            // The zone picked at connect time; resolve validates domains against it instead of re-discovering
-            // it from the token. Optional: an entry without it falls back to token-based discovery.
+            // Zone picked at connect time, validates domains against it; omitted falls back to token-based discovery.
             { key: `zone`, source: `string`, optional: true },
         ],
     },
     github: {
         fields: [{ key: `token`, source: `env`, envVar: `GITHUB_TOKEN` }],
     },
-    // GitLab is self-hostable, so an optional instance url is written when non-default; owner/registry are
-    // advanced and authored by hand.
+    // Instance url is written only when non-default; owner/registry stay hand-authored, not modeled here.
     gitlab: {
         fields: [
             { key: `url`, source: `string`, optional: true },
@@ -78,8 +61,7 @@ const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
     },
 };
 
-// i.want.service field specs (beyond kind/on/expose, which are rendered structurally). Every catalog
-// service takes just a domain, ports/env are the provider's concern.
+// Field specs beyond kind/on/expose (rendered structurally); every catalog service takes just a domain.
 const SERVICE_REGISTRY: Record<ServiceKind, ProviderSpec> = {
     signoz: { fields: [{ key: `domain`, source: `string` }] },
     outline: { fields: [{ key: `domain`, source: `string` }] },
@@ -89,12 +71,11 @@ const SERVICE_REGISTRY: Record<ServiceKind, ProviderSpec> = {
     infisical: { fields: [{ key: `domain`, source: `string` }] },
 };
 
-// The env var a host's SSH private key rides: host `<name>` reads env("<NAME>_SSH_KEY"), name upper-cased, with
-// no name spelled differently from the rest. ONE rule, shared by the render below and the daemon's /enroll route
-// (enroll-host.ts) so the two can never drift.
+// Env var name for a host's SSH key: `<NAME>_SSH_KEY`, upper-cased; shared with the daemon's /enroll route so the two
+// can't drift.
 export const hostSshKeyVar = (name: string): string => `${name.toUpperCase()}_SSH_KEY`;
 
-// Returns undefined for non-host / non-sshKey fields so they use their static envVar.
+// Undefined for anything but a host's sshKey field; those fall back to their static envVar.
 const hostSshKeyEnvVar = (entry: InventoryEntry, field: FieldSpec): string | undefined =>
     entry.kind === `backend` && entry.provider === `host` && field.key === `sshKey` ? hostSshKeyVar(entry.name) : undefined;
 
@@ -103,7 +84,7 @@ const renderOption = (entry: InventoryEntry, field: FieldSpec): string | undefin
         return `${field.key}: env(${JSON.stringify(hostSshKeyEnvVar(entry, field) ?? field.envVar ?? ``)})`;
     }
     const value = entry.values[field.key];
-    // An optional field with no value is omitted entirely rather than rendered as an empty literal.
+    // Optional field with no value is omitted, not rendered as an empty literal.
     if (field.optional && (value === undefined || value === ``)) {
         return undefined;
     }
@@ -122,8 +103,8 @@ const renderBackendEntry = (entry: Extract<InventoryEntry, { kind: `backend` }>)
     return `${INDENT}const ${entry.name} = i.have.${entry.provider}(${JSON.stringify(entry.name)}, { ${options} });`;
 };
 
-// i.want.service references its host + cloudflare bindings by name (bare identifiers. NOT quoted), so the
-// generated TS wires the same const bindings the backend entries declare.
+// References host/cloudflare bindings by bare identifier, not a quoted string, so generated TS reuses the backend
+// entries' const bindings.
 const renderServiceEntry = (entry: ServiceEntry): string => {
     const spec = SERVICE_REGISTRY[entry.service];
     const options = [
@@ -135,8 +116,8 @@ const renderServiceEntry = (entry: ServiceEntry): string => {
     return `${INDENT}const ${entry.name} = i.want.service(${JSON.stringify(entry.name)}, { ${options} });`;
 };
 
-// i.want.app wires on/expose like a service; the single production environment carries the domain, branch fixed
-// to main. Kept to one line so the region's line-based parse stays lossless.
+// Wires on/expose like a service; the one production environment carries the domain, branch fixed to "main". Kept to
+// one line for the region's line-based parse.
 const renderAppEntry = (entry: AppEntry): string => {
     const domain = JSON.stringify(String(entry.values[`domain`] ?? ``));
     const options = `on: ${entry.on}, expose: ${entry.expose}, environments: { production: { domain: ${domain}, branch: "main" } }`;
@@ -156,8 +137,8 @@ const renderEntry = (entry: InventoryEntry): string => {
 const renderRegion = (entries: readonly InventoryEntry[]): string =>
     [`${INDENT}${BEGIN_MARKER}`, ...entries.map(renderEntry), `${INDENT}${END_TAG}`].join(`\n`);
 
-// Rewrites the managed region in `src` to exactly `entries`. Replaces the existing region when present; otherwise
-// inserts one just inside the defineIntent callback body. Throws when neither is possible (no defineIntent found).
+// Rewrites the managed region in `src` to `entries`, replacing it if present or inserting one inside defineIntent's
+// body; throws if there's no defineIntent to insert into.
 export const writeManagedRegion = (src: string, entries: readonly InventoryEntry[]): string => {
     const lines = src.split(`\n`);
     const begin = lines.findIndex((line) => line.trim().startsWith(BEGIN_TAG));
@@ -175,8 +156,8 @@ export const writeManagedRegion = (src: string, entries: readonly InventoryEntry
     return [...lines.slice(0, open + 1), ...region, ``, ...lines.slice(open + 1)].join(`\n`);
 };
 
-// Best-effort parse of the option object source into display values: `key: "string"` and `key: 123`. env(...)
-// references (secrets) and bare-identifier references (on/expose) are intentionally skipped, not display values.
+// Best-effort parse of an option object into display values (`key: "string"`, `key: 123`); env() and bare-identifier
+// references are skipped, not display values.
 const parseValues = (optionsSrc: string): Record<string, string | number> => {
     const values: Record<string, string | number> = {};
     for (const match of optionsSrc.matchAll(/(\w+)\s*:\s*"([^"]*)"/g)) {
@@ -199,8 +180,8 @@ const parseValues = (optionsSrc: string): Record<string, string | number> => {
 const KNOWN_PROVIDERS = new Set<string>(Object.keys(REGISTRY));
 const KNOWN_SERVICES = new Set<string>(Object.keys(SERVICE_REGISTRY));
 
-// Pick only the known display fields of a service kind out of the parsed values (drops `kind`, which the
-// parser also captures as a string value).
+// Keeps only a service kind's known display fields from the parsed values; drops `kind`, which the parser also
+// captured.
 const serviceValues = (kind: ServiceKind, all: Record<string, string | number>): Record<string, string | number> => {
     const values: Record<string, string | number> = {};
     for (const field of SERVICE_REGISTRY[kind].fields) {
@@ -211,9 +192,8 @@ const serviceValues = (kind: ServiceKind, all: Record<string, string | number>):
     return values;
 };
 
-// Parses the i.have.* and i.want.service declarations inside the managed region into structured entries.
-// Unknown providers/services (anything not in the registries) are skipped, the inventory only surfaces what
-// the platform knows how to manage, so a hand-authored declaration we don't model is left untouched.
+// Parses i.have.* / i.want.service declarations in the managed region into structured entries; an unmodeled provider or
+// service is skipped, left untouched.
 export const readManagedRegion = (src: string): InventoryEntry[] => {
     const lines = src.split(`\n`);
     const begin = lines.findIndex((line) => line.trim().startsWith(BEGIN_TAG));
@@ -224,7 +204,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
 
     const entries: InventoryEntry[] = [];
     for (const line of lines.slice(begin + 1, end)) {
-        // service: i.want.service("name", { kind, on, expose, ... }), on/expose are bare const references.
+        // Matches i.want.service("name", { kind, on, expose, ... }); on/expose are bare const references.
         const serviceMatch = /i\.want\.service\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
         if (serviceMatch) {
             const name = serviceMatch[1];
@@ -251,7 +231,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
             }
             continue;
         }
-        // app: i.want.app("name", { on, expose, environments: { production: { domain, branch } } }).
+        // Matches i.want.app("name", { on, expose, environments: { production: { domain, branch } } }).
         const appMatch = /i\.want\.app\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
         if (appMatch) {
             const name = appMatch[1];
@@ -264,7 +244,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
             }
             continue;
         }
-        // backend: i.have.<provider>("name", { ... }).
+        // Matches i.have.<provider>("name", { ... }).
         const match = /i\.have\.(\w+)\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
         const provider = match?.[1];
         const name = match?.[2];
@@ -277,8 +257,8 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
     return entries;
 };
 
-// A fresh deploy.config.ts containing only the managed region, the base when writing inventory into a repo
-// that has no config yet, and the neutral ledger the CLI's `init --minimal` and the daemon's first-boot scaffold.
+// Fresh deploy.config.ts containing only the managed region; the base for a repo with no config yet, used by `init
+// --minimal` and first-boot scaffold.
 export const scaffoldDeployConfig = (entries: readonly InventoryEntry[]): string =>
     [
         `import { env } from "@intentic/graph";`,

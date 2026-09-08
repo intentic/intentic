@@ -4,24 +4,16 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import type { Config } from "../config.js";
 import { encryptSecret } from "../crypto.js";
 
-/* THE ONE PLACE A SANDBOX ROW IS MINTED, for the signup path (sandbox.routes.ts) and the canary that proves the
- * signup path still works (hosted-canary.ts). The row's three derived columns all come off one connect token:
- * the encrypted token itself, the digest the daemon's announce is matched by, and `tunnelId`, the 12-hex id
- * every hostname this sandbox will ever serve is built from (sandboxIdFromToken). Stored rather than re-derived
- * because two readers need it as a KEY, the ingress's registration check and the DNS sweep, and neither can
- * decrypt a token or scan a table for a digest prefix. Two copies of that derivation is how the canary ends up
- * proving a path no user takes; one is how it cannot.
- *
- * The raw token is returned once, here, because the canary provisions with it and the signup hands it to the
- * setup mint; nothing else ever sees it unencrypted. */
+// Mints a sandbox row for signup and the canary, deriving three columns from one connect token: the encrypted token,
+// its digest (matched to the daemon's announce), and `tunnelId` (the hostname id) — stored so callers can use them as
+// keys without decrypting. The raw token is returned once, here.
 
-// A fresh connect token. Also minted for a warm pool machine before anybody owns it (hosted-pool.ts), which
-// is why the mint is its own function: an identity and a row are made in different places now.
+// Fresh connect token; also minted for an unclaimed warm pool machine (hosted-pool.ts), which is why minting is
+// separate from row creation.
 export const mintConnectToken = (): string => randomBytes(16).toString(`base64url`);
 
-/* The two columns a connect token implies, in one place so a row minted here and a row that ADOPTS a pool
- * machine's identity (hosted.ts claim) write the same derivation. `tunnelId` falls back to the empty string
- * only for an empty token, which the contract's own guard refuses upstream. */
+// Derives tokenDigest and tunnelId from a connect token, shared by row creation and pool-identity adoption (hosted.ts)
+// so both write the same derivation. `tunnelId` falls back to empty only for an empty token, refused upstream.
 export const connectTokenIdentity = (token: string): { readonly tokenDigest: string; readonly tunnelId: string } => ({
     tokenDigest: sha256Hex(token),
     tunnelId: sandboxIdFromToken(token) ?? ``,

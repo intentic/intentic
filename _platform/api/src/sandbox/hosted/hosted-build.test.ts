@@ -40,7 +40,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
         google: { clientId: `gcid` },
         api: { url: `https://api.test` },
         secrets: { key: `` },
-        // A real signing key: the machine config carries its public half (the owner ticket's), derived at compose.
+        // Real signing key; machine config carries its public half, derived at compose.
         ingress: { ...testIngressConfig },
         hosted: {
             flyApiToken: `fly`,
@@ -113,7 +113,7 @@ const buildRow = (over: Record<string, unknown> = {}) => ({
     log: null,
     error: null,
     minutes: null,
-    // Two and a half minutes ago: rounds up to 3 whatever the clock does between here and the assertion.
+    // 2.5 minutes ago: rounds up to 3 regardless of clock drift before the assertion.
     createdAt: new Date(Date.now() - 150_000),
     updatedAt: new Date(),
     finishedAt: null,
@@ -131,8 +131,7 @@ const request = (over: Partial<Parameters<typeof requestHostedBuild>[3]> = {}) =
     ...over,
 });
 
-/* Every model the module touches, stubbed to the harmless answer. The defaults describe a platform with no
- * build anywhere and an owner with a full month, so each case overrides only the fact it is about. */
+// Every model the module touches, stubbed to a harmless default; each case overrides only what it's testing.
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
     ({
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },
@@ -171,7 +170,7 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
         },
     }) as unknown as PrismaClient;
 
-// The two Fly APIs behind one fetch: the Machines REST client and the GraphQL token mint, recorded per call.
+// Fly's two APIs behind one fetch: the Machines REST client and the GraphQL token mint, recorded per call.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: (body: unknown) => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
@@ -188,7 +187,7 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 };
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
-// GraphQL answers by the query's first word, so one route serves the org lookup, the mint and the revoke.
+// One route answers org lookup, mint, and revoke, matched by keywords in the query text.
 const graphqlRoute = () => ({
     match: (_method: string, url: string) => url === `https://api.fly.io/graphql`,
     respond: (body: unknown) => {
@@ -208,8 +207,7 @@ afterEach(() => {
 });
 
 describe(`requesting a build: every refusal spends nothing`, () => {
-    /* What a refused request leaves behind, measured: the refusal's code, and three counts that must all be
-     * zero, Fly calls (no token minted, no machine made), guards taken, rows written. */
+    // A refusal must leave no Fly calls, no guard taken, and no row written.
     const outcome = async (prisma: PrismaClient, cfg: Config, over: Partial<Parameters<typeof requestHostedBuild>[3]> = {}) => {
         const calls = stubFetch([]);
         const code = await requestHostedBuild(prisma, cfg, logger, request(over)).then(
@@ -261,7 +259,6 @@ describe(`requesting a build: every refusal spends nothing`, () => {
         expect(await outcome(prisma, config())).toEqual(refused(`busy`));
     });
 
-    // Running builds count at the full timeout, so the ceiling holds before they finish.
     it(`refuses when the platform's minutes for the day are spent, counting builds still running`, async () => {
         const prisma = fakePrisma({
             hostedBuild: {
@@ -269,7 +266,7 @@ describe(`requesting a build: every refusal spends nothing`, () => {
                 aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: 500 } }),
             },
         });
-        // 500 finished + 3 × 30 running + 30 for this one = 620 > 600.
+        // 500 finished + 3 x 30 running + 30 for this one = 620 > 600.
         expect(await outcome(prisma, config())).toEqual(refused(`ceiling`));
     });
 
@@ -292,19 +289,16 @@ describe(`requesting a build: the start`, () => {
         const state = await requestHostedBuild(prisma, config({ image: `ghcr.io/intentic/sandbox:1.60.0` }), logger, request());
         expect(state.state).toBe(`building`);
         expect(state.hash).toBe(HASH);
-        // The guard first, by conditional update from null.
         expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({
             where: { id: `h1`, buildingId: null },
             data: { buildingId: expect.any(String) },
         });
-        // The token: this app, the deploy profile, minutes.
         const mint = calls.find((call) => (call.body as { query?: string } | undefined)?.query?.includes(`createLimitedAccessToken`));
         expect((mint!.body as { variables: { input: Record<string, unknown> } }).variables.input).toMatchObject({
             profile: `deploy`,
             profileParams: { app_id: `intentic-sbx-abc` },
             expiry: `45m`,
         });
-        // The builder: buildkit on a shared guest, no volume, no restart, the recipe as files, our stamp.
         const create = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines`))!.body as {
             name: string;
             region: string;
@@ -329,7 +323,7 @@ describe(`requesting a build: the start`, () => {
         const files = Object.fromEntries(
             create.config.files.map((file) => [file.guest_path, Buffer.from(file.raw_value, `base64`).toString(`utf8`)]),
         );
-        // The FROM is pinned to the image the platform runs, everything else byte-identical to what was approved.
+        // FROM is rewritten to the pinned image; everything else must stay byte-identical to what was approved.
         expect(files[BUILD_PATHS.dockerfile]).toBe(OVERLAY.replace(`FROM ${BASE}`, `FROM ghcr.io/intentic/sandbox:1.60.0`));
         expect(JSON.parse(files[BUILD_PATHS.dockerConfig]!)).toEqual({
             auths: { "registry.fly.io": { auth: Buffer.from(`x:fm2_deploy`).toString(`base64`) } },
@@ -339,7 +333,6 @@ describe(`requesting a build: the start`, () => {
         expect(create.config.env[BUILD_ENV.cache]).toBe(`registry.fly.io/intentic-sbx-abc:env-cache`);
         expect(create.config.env[BUILD_ENV.timeoutSeconds]).toBe(`1800`);
         expect(create.config.env[BUILD_ENV.reportUrl]).toMatch(/^https:\/\/api\.test\/sandbox\/hosted-build-report\/[0-9a-f-]+$/);
-        // The row: the secret only as its hash, the content as approved, the base the build was pinned to.
         const created = (prisma.hostedBuild.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
         expect(created.data).toMatchObject({
             state: `building`,
@@ -382,7 +375,6 @@ describe(`requesting a build: the start`, () => {
         expect(calls).toHaveLength(0);
     });
 
-    // A swap, not a build: the same recipe on the same base was built before and its image is still there.
     it(`re-applies an image already built for this recipe and base instead of building it again`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
@@ -398,7 +390,7 @@ describe(`requesting a build: the start`, () => {
         expect(update.config.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
         expect(update.config.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
         expect(update.config.env[`SANDBOX_BASE_IMAGE`]).toBe(BASE);
-        // Stopped stays stopped: no start, so applying a build is never a way around the wake gate.
+        // Stopped stays stopped: applying a build must never start a machine on its own.
         expect(calls.some((call) => call.url.endsWith(`/start`))).toBe(false);
     });
 });
@@ -438,14 +430,13 @@ describe(`the builder's report`, () => {
         };
         expect(verdict.where).toEqual({ id: `b1`, state: `building` });
         expect(verdict.data).toMatchObject({ state: `built`, exitCode: 0, digest: DIGEST, log: `#1 DONE\n`, minutes: 3 });
-        // Charged to the owner's month, exactly as a stretch is.
+        // Build minutes are charged to the owner's month the same way a session stretch is.
         expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
             expect.objectContaining({ create: expect.objectContaining({ userId: `u1`, minutes: 3 }), update: { minutes: { increment: 3 } } }),
         );
         expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/machines/mb1?force=true`))).toBe(true);
         const revoke = calls.find((call) => (call.body as { query?: string } | undefined)?.query?.includes(`deleteLimitedAccessToken`));
         expect((revoke!.body as { variables: unknown }).variables).toEqual({ input: { id: `lat-1` } });
-        // The guard released, the machine re-pointed by digest, the row remembering what it runs.
         expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({ where: { id: `h1`, buildingId: `b1` }, data: { buildingId: null } });
         const update = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`))!.body as {
             config: { image: string; env: Record<string, string> };
@@ -466,7 +457,7 @@ describe(`the builder's report`, () => {
             { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
             {
                 match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`),
-                // Running before the update, `replacing` for a read, then started again.
+                // Mock returns started, then replacing on the second read, then started again.
                 respond: () => json({ id: `m1`, state: (reads += 1) === 2 ? `replacing` : `started` }),
             },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `started` }) },
@@ -501,7 +492,6 @@ describe(`the builder's report`, () => {
         expect(prisma.hostedMachine.update).toHaveBeenCalledTimes(0);
     });
 
-    // A zero exit with no digest is a builder that did not push: not a success, whatever the code says.
     it(`does not boot an image the builder never named`, async () => {
         stubFetch([graphqlRoute(), { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) }]);
         const prisma = withBuild(buildRow());
@@ -593,7 +583,7 @@ describe(`the reconcile`, () => {
         expect(prisma.hostedBuild.updateMany).toHaveBeenCalledTimes(0);
     });
 
-    // The fleet invariant: while a token is alive, an app holds the sandbox and this build's builder, nothing else.
+    // While a build's token is alive, its app should hold only the sandbox and this build's builder.
     it(`destroys a machine nobody made inside a building app`, async () => {
         const calls = stubFetch([
             appMachines([`m1`, `mb1`, `intruder`]),

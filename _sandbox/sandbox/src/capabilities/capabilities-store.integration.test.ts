@@ -7,7 +7,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities-store.js";
 
-// A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).
+// Fresh temp path; .intentic doesn't exist yet, so the store must create it on write.
 const tempStore = (): { store: CapabilitiesStore; path: string } => {
     const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
     return { store: fileCapabilitiesStore(path), path };
@@ -40,16 +40,12 @@ test("a corrupt or schema-invalid manifest reads as empty rather than throwing",
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
     expect(await store.list()).toEqual([]);
-    // Valid JSON, wrong shape (unknown kind) → dropped, not thrown.
+    // Valid JSON, wrong shape (unknown kind): dropped, not thrown.
     await writeFile(path, JSON.stringify([{ id: "x", kind: "bogus", config: {} }]));
     expect(await store.list()).toEqual([]);
 });
 
 test("ONE unreadable entry never takes the rest of the manifest down with it", async () => {
-    // The regression that made a rebuild loop: parsing the file as z.array(CapabilitySchema) returned an EMPTY
-    // manifest for any single bad entry, so a capability whose config shape changed under it silently erased
-    // devops, docker and every mcp connector too, and the composed overlay collapsed to a bare FROM, which the
-    // Environment card then asked the owner to rebuild.
     const invalid: string[] = [];
     const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
     const store = fileCapabilitiesStore(path, (id) => invalid.push(id));
@@ -70,8 +66,7 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
 });
 
 test("an unreadable entry survives writes instead of being quietly deleted", async () => {
-    // The stale entry is the user's data (a VPN's credentials). A daemon that cannot read it must not be the
-    // thing that destroys it on the next unrelated upsert.
+    // Stale entry is real user data (VPN credentials); an unrelated write must not be what destroys it.
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     const stale = { id: "office", kind: "vpn", config: { config: "[Interface]\n", enabled: "on" } };
@@ -82,7 +77,7 @@ test("an unreadable entry survives writes instead of being quietly deleted", asy
     expect(onDisk).toContainEqual(stale);
     expect(await store.list()).toHaveLength(1);
 
-    // And it is still addressable: re-adding that id (the fix path) replaces it rather than duplicating.
+    // Still addressable: re-adding that id (the fix path) replaces it rather than duplicating.
     await store.upsert({ id: "office", kind: "vpn", config: { provider: "wireguard", config: "[Interface]\n", autoConnect: "on" } });
     expect(JSON.parse(await readFile(path, "utf8")) as unknown[]).toHaveLength(2);
     expect((await store.list()).map((capability) => capability.id)).toEqual(["linear", "office"]);

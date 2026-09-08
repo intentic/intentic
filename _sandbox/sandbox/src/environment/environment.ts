@@ -9,40 +9,20 @@ import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sou
 import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-// The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
-// the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the
-// owner-approved custom section. The agent writes the proposal (custom-section content only, no FROM, no
-// runtime directives) with its normal file tools; the owner-gated approve route stores it as the custom file
-// and recomposes. The container can't rebuild itself (no docker socket), an outside executor (`ic sandbox rebuild`
-// served at intentic.dev/rebuild, or the workspace provider) verifies the approved content against the hash pinned in the rebuild
-// command, builds, and recreates with SANDBOX_ENVIRONMENT_HASH stamped. Status is derived, never stored.
+// Overlay Dockerfile composed from the pinned FROM, each capability's fragment, and the owner-approved custom section.
+// Agents propose custom-section content only; the owner-gated approve route stores it as custom and recomposes. An
+// outside executor then verifies the approved hash, builds, and recreates with it stamped.
 
 export const proposalPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.Dockerfile");
 export const approvedPath = (services: Services): string => statePath(services.workspace.root, ".intentic/local/environment.approved.Dockerfile");
 export const customPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.custom.Dockerfile");
 
-// The overlay extends the image this sandbox is actually on, not a fixed tag. Hardcoding `:stable` meant every
-// environment rebuild silently rolled the daemon back to the last release: a sandbox started on `:latest` or a
-// pinned SHA (SANDBOX_IMAGE, which connect.sh passes through) came back from a rebuild older than it went in,
-// with no sign a downgrade happened. A capability whose whole point is its image fragment (vpn) is the worst
-// case, applying the fragment and running a daemon that understands it become mutually exclusive.
+// Extends the image this sandbox is actually on, not a fixed tag, so a rebuild can't silently roll it back.
 const RELEASE_IMAGE = "ghcr.io/intentic/sandbox:stable";
 
-// Both inputs are RUNNER-set container env (SANDBOX_BASE_IMAGE / SANDBOX_IMAGE), never anything the agent can
-// write, so neither is a path for smuggling a base image past the owner.
-//
-// `baseImage` wins because after a rebuild `runningImage` is the overlay's own tag
-// (`intentic-sandbox-env-<slug>:<hash>`, see the ic recreate flow), which is not a base at
-// all. Preferring the running image there would flip the composed FROM on every recompose, changing the
-// content, changing its hash, and asking the owner to rebuild AGAIN, the endless prompt, which each time also
-// downgraded them to whatever `:stable` happened to be.
-//
-// An unofficial ref is honoured ONLY when the runner named it explicitly as the base: that is the local dev
-// image (`intentic-sandbox:dev`), where the alternative is worse, a rebuild that silently replaces a
-// developer's freshly-built daemon with the last release. Deriving a base from `runningImage` stays restricted
-// to official refs, so a stock sandbox can never end up extending something unofficial by inference.
-// Blank-checked rather than `!== ""`: this value ends up verbatim in a FROM line, so anything unset must fall
-// through to a real image instead of composing `FROM undefined`, an overlay that fails to build at all.
+// Both inputs are runner-set, never agent-writable. `baseImage` wins since `runningImage` after a rebuild is the
+// overlay's own tag, not a base; an unofficial ref is only honoured when the runner named it explicitly (the dev
+// image).
 export const baseImageOf = (baseImage: string | undefined, runningImage: string | undefined): string => {
     if (baseImage !== undefined && baseImage.trim() !== "") {
         return baseImage.trim();
@@ -51,12 +31,11 @@ export const baseImageOf = (baseImage: string | undefined, runningImage: string 
     return isOfficialSandboxImage(running) ? running : RELEASE_IMAGE;
 };
 
-// The composed overlay must extend the official sandbox image: the first instruction is pinned so an approved
-// overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; every
-// executor re-checks it with the contract's `hasOfficialBase` (ic in Rust, the platform's hosted rebuild).
+// Composed overlay must extend the official sandbox image; the FROM line is pinned in composeEnvironment, and every
+// executor (`ic`, the hosted rebuild) re-checks it via the contract's `hasOfficialBase`.
 
-// A proposal is custom-section content only: the daemon owns the base pin (no FROM) and runtime directives are
-// reserved for capability fragments (a proposal can't smuggle container privileges).
+// A proposal is custom content only: no FROM (daemon owns the base) and no runtime directive (reserved for capability
+// fragments).
 const invalidProposal = (content: string): boolean =>
     content.split("\n").some((line) => /^\s*from\s/i.test(line)) || content.includes("intentic:runtime");
 
@@ -65,19 +44,8 @@ const HEADER =
     "# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.";
 const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
 
-/* Persist a DERIVED file only when it actually derives to something new.
- *
- * Every file this module writes is composed from other state, so a recompose that lands on what is already
- * there has changed nothing, but an unconditional write says otherwise to the one reader that cannot check:
- * the workspace watcher, which reports the mtime bump, which the browser turns into "the `environment` query
- * is stale" (WORKSPACE_STATE_FILES binds `.intentic/environment.` to it).
- *
- * That is a closed loop when the recompose happens on a READ. `readEnvironment` folds pending drafts into the
- * proposal, so with any draft on disk: GET /environment writes → the watcher pushes → the browser invalidates
- * `environment` → GET /environment writes → … paced only by the watcher's 250ms debounce, which is four
- * requests a second forever, each frame also dragging a tree walk and a `git status` along behind it.
- * Comparing first ends it: the first read after a real draft change writes once, and the next composes the
- * same bytes and stays silent. */
+// Writes a derived file only when its content actually changed; on a read-triggered recompose, an unconditional write
+// would retrigger the workspace watcher into refetching the same query forever.
 const writeComposed = async (services: Services, path: string, content: string): Promise<void> => {
     if ((await services.files.read(path)) === content) {
         return;
@@ -85,17 +53,11 @@ const writeComposed = async (services: Services, path: string, content: string):
     await services.files.write(path, content);
 };
 
-// Regenerate the approved (composed) overlay from the capability manifest + the custom file. Returns the
-// composed hash, or undefined when no overlay should exist. Called on capability add/remove, approve, and boot
-// (boot converges fragment drift: a daemon update that changes a fragment flips the derived state to "pending
-// rebuild" with no new state). ponytail: races the store's read-modify-write under concurrent adds, a stale
-// compose self-heals on the next capability event or boot.
-/* A VM HONOURS NO RUNTIME DIRECTIVE. `# intentic:runtime …` lines are what a docker-run executor turns into
- * container privileges (recreate.rs), and a hosted machine is a microVM that is already root over the whole
- * box: the docker capability starts its engine there with no privilege to grant. Left in, a fragment made of
- * nothing but that directive composes an overlay whose only content is a comment, which the card reads as
- * `pending rebuild` and the hosted builder would build for nothing. So on a VM the lines go, and a fragment
- * with no instruction left goes with them. Everything else (a real install) still rides. */
+// Regenerates the approved overlay from the capability manifest and custom file; returns the composed hash, or
+// undefined when none should exist. Runs on capability add/remove, approve, and boot, catching drift when a daemon
+// update changes a fragment.
+// On a hosted VM, already root over the whole machine, `# intentic:runtime` lines (privileges for a docker-run
+// executor) are meaningless; stripped here along with any fragment left with no real instruction after they're gone.
 export const withoutRuntimeDirectives = (fragments: readonly string[]): string[] =>
     fragments
         .map((fragment) =>
@@ -113,8 +75,7 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         ...new Set([
             ...(await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat(),
             ...(await workspaceExtensionFragments(services)),
-            // The helper binaries a CONNECTED provider needs (codex/opencode/cli-proxy-api), for a base image
-            // that doesn't already bake them, see provider-packs.ts.
+            // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
             ...(await providerPackFragments(services)),
         ]),
     ].toSorted();
@@ -127,8 +88,7 @@ export const composeEnvironment = async (services: Services): Promise<string | u
             await services.files.remove(approvedPath(services));
             return undefined;
         }
-        // The running container was built from an overlay that now has nothing left in it: keep a bare overlay
-        // so the owner has a hash-pinned rebuild path back to stock.
+        // Built from an overlay now empty; keep a bare one so the owner has a hash-pinned path back to stock.
         const bare = `${HEADER}\n\nFROM ${base}\n`;
         await writeComposed(services, approvedPath(services), bare);
         return sha256Hex(bare);
@@ -139,11 +99,8 @@ export const composeEnvironment = async (services: Services): Promise<string | u
     return sha256Hex(content);
 };
 
-// Where an AGENT writes what it needs installed, one file per thing, named for it (`ffmpeg.Dockerfile`).
-// Not the proposal itself, for two reasons. Worktree-isolated agents run in PARALLEL, and a single shared
-// proposal file makes concurrent drafts a last-writer-wins race in which one agent's request silently vanishes.
-// And naming the file after the tool means two agents that both need ffmpeg converge on one entry instead of
-// appending a near-duplicate each. The owner still reviews exactly one composed proposal.
+// Where an agent writes what it needs, one file per tool. Not the proposal itself: parallel worktree-isolated agents
+// sharing one file would race, and naming by tool lets two agents needing the same thing converge on one entry.
 export const draftsDir = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.d/");
 
 const readDrafts = async (services: Services): Promise<string> => {
@@ -158,9 +115,8 @@ const readDrafts = async (services: Services): Promise<string> => {
     return drafts.filter((draft) => draft !== undefined).join("\n\n");
 };
 
-// Compose the proposal the owner reviews: the already-approved custom section plus every pending draft. The
-// custom section is carried forward because approval REPLACES it wholesale, composing drafts alone would
-// quietly uninstall everything approved before them. No drafts ⇒ leave the proposal untouched.
+// Composes the proposal from the approved custom section plus every pending draft; carrying custom forward matters
+// since approval replaces it wholesale. No drafts ⇒ proposal untouched.
 const mergeProposalDrafts = async (services: Services): Promise<void> => {
     const drafts = await readDrafts(services);
     if (drafts === "") {
@@ -175,18 +131,14 @@ const fileState = async (services: Services, path: string): Promise<{ content: s
     return content === undefined ? undefined : { content, hash: sha256Hex(content) };
 };
 
-/* The snapshot's bornAt and a fresh computation of the same moment differ by clock-read jitter (both are
- * derived from /proc/uptime at different instants), so "same container" is a tolerance, not an equality. Five
- * seconds is orders of magnitude above the jitter and orders below any two containers' real birth gap. */
+// bornAt reads differ by clock-read jitter, so "same container" is a tolerance, not an equality.
 const SAME_BIRTH_MS = 5_000;
 
 // How many recurring entries the card is asked to carry; the ledger itself keeps more.
 const RECURRING_SHOWN = 30;
 
-/* The runtime-install half of the payload: the persisted drift snapshot (guarded against describing a container
- * that no longer exists) and the ledger entries worth the owner's attention — recurring across sessions, or
- * present in the live container and doomed with it. Spawn-free: the route is polled, so presence checks are
- * stats against known paths (installLive), never a walk; the walk belongs to the sweep. */
+// Drift snapshot (guarded against a stale container) and ledger entries worth attention, recurring or live in this
+// container. Spawn-free since this route is polled; presence checks are stats, the walk belongs to the sweep.
 const runtimeAttention = async (services: Services, baked: string): Promise<Pick<Environment, "drift" | "recurring">> => {
     const ledger = await services.runtimeInstalls.read();
     const born = await containerBornAtMs().catch(() => undefined);
@@ -213,8 +165,7 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
             ...(step === undefined ? {} : { step }),
         });
     }
-    // Answered entries sink BEFORE the cap below: the card folds them out of sight anyway, so a dismissal must
-    // not spend one of the thirty slots an install still waiting on a decision needs.
+    // Answered entries sink before the cap: a dismissal must not spend a slot an undecided install still needs.
     recurring.sort((left, right) => Number(left.declined ?? false) - Number(right.declined ?? false) || right.lastAt - left.lastAt);
     return {
         ...(drift !== undefined ? { drift } : {}),
@@ -223,8 +174,7 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
 };
 
 export const readEnvironment = async (services: Services): Promise<Environment> => {
-    // Fold in anything agents have drafted since the last read, so the card shows what they actually asked for
-    // and its hash is the one approve will check against.
+    // Folds in drafts since the last read, so the card's hash is the one approve will check against.
     await mergeProposalDrafts(services);
     const proposal = await fileState(services, proposalPath(services));
     const custom = await fileState(services, customPath(services));
@@ -242,13 +192,10 @@ export const readEnvironment = async (services: Services): Promise<Environment> 
     };
 };
 
-// Store the proposal as the custom section and recompose, only when its content still hashes to what the
-// owner reviewed (`mismatch` kills the TOCTOU where the agent swaps content after review) and it carries no
-// FROM/runtime-directive lines. An empty proposal clears the custom section.
+// Stores the proposal as the custom section and recomposes, only if its hash still matches what the owner reviewed and
+// it carries no FROM or runtime-directive line. An empty proposal clears the custom section.
 export const approveEnvironment = async (services: Services, hash: string): Promise<"missing" | "mismatch" | "invalid" | undefined> => {
-    // Same fold as the read, so approve checks the hash against the same content the card rendered. A draft
-    // that landed in between changes the content and so fails the hash check, which is the point: it sends
-    // the owner back to re-read rather than approving a step they never saw.
+    // Same fold as the read; a mid-flight draft changes the hash and forces a re-read, not a blind approve.
     await mergeProposalDrafts(services);
     const proposal = await fileState(services, proposalPath(services));
     if (proposal === undefined) {
@@ -261,17 +208,15 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
         return "invalid";
     }
     await services.files.write(customPath(services), proposal.content);
-    // The drafts are now IN the custom section; leaving them would recompose the same proposal on the next
-    // read and ask the owner to approve what they just approved, forever.
+    // Drafts are now in the custom section; leaving them would re-propose what the owner just approved, forever.
     await services.files.remove(draftsDir(services));
     await composeEnvironment(services);
     return undefined;
 };
 
-// Rejecting drops the drafts too, otherwise the next read composes the rejected proposal straight back. The
-// AUTO-drafted among them are additionally tombstoned in the ledger first: deleting alone would only pause
-// them until the drift sweep's next pass re-earned the same draft, a proposal the owner already answered
-// coming back forever. Agent-written drafts keep today's meaning — deleted, and free to be asked for again.
+// Drops the drafts too, or the next read composes the rejected proposal right back. Auto-drafted ones are also
+// tombstoned, so the sweep can't just re-earn and recreate them; agent-written ones are simply deleted, free to be
+// asked for again.
 export const rejectEnvironment = async (services: Services): Promise<void> => {
     const auto = await autoDraftedTools(services);
     if (auto.length > 0) {
@@ -281,16 +226,9 @@ export const rejectEnvironment = async (services: Services): Promise<void> => {
     await services.files.remove(proposalPath(services));
 };
 
-/* ONE LINE OF THE RECURRING LIST, ANSWERED. Rejecting above is the owner answering a whole PROPOSAL, and until
- * this existed it was the only route to a tombstone at all — so a recurring install the owner was content to
- * keep making (a throwaway experiment, a tool that genuinely belongs in a venv) had no way to stop asking, and
- * anything a classifier bug invented was unremovable short of editing the ledger file by hand. This workspace's
- * own card carried `2>&1` for six days for exactly that reason.
- *
- * The tool's AUTO-DRAFT goes with it, because leaving it would put a step in front of the owner for a tool they
- * just dismissed, and synthesis skips existing files, so it would never be rewritten or cleaned up. An agent's
- * own hand-written draft is left alone: it means the agent asked, which dismissing a ledger line does not answer.
- * Restoring (`dismissed: false`) clears the tombstone only — the sweep re-earns the draft on its own terms. */
+// Answers one recurring entry: tombstones it and its auto-draft (else synthesis would never rewrite it), but leaves an
+// agent's own hand-written draft alone. Restoring only clears the tombstone; the sweep re-earns the draft on its own
+// terms.
 const dismissRuntimeInstall = async (services: Services, tool: string): Promise<void> => {
     await services.runtimeInstalls.decline([tool], Date.now());
     const file = draftFileName(tool);
@@ -301,21 +239,15 @@ const dismissRuntimeInstall = async (services: Services, tool: string): Promise<
     const content = await services.files.read(path);
     if (content?.startsWith(`${AUTO_MARKER} ${tool}`) === true) {
         await services.files.remove(path);
-        // The proposal is composed from the drafts that remain; with none left there is nothing to review, and a
-        // proposal left standing would ask the owner to approve a step whose file is gone.
+        // With no drafts left, a standing proposal would ask approval for a step whose file is already gone.
         if ((await readDrafts(services)) === "") {
             await services.files.remove(proposalPath(services));
         }
     }
 };
 
-/* THE OTHER HALF: bake it, now, on the owner asking rather than on the sweep's terms.
- *
- * The auto-drafter's gates — a second session, and the live container corroborating — are what make it safe to
- * write a draft NOBODY ASKED FOR. An owner pressing the button on the card has supplied both of those in person,
- * so this writes the same draft from the same template without them. The freeze still holds: an existing draft
- * (this module's from an earlier pass, or an agent's own) is left exactly as it is, because the proposal's hash
- * must not move under a reader who is halfway through it. */
+// Writes the draft on the owner's say-so, skipping the sweep's gates since a person asking already supplies both. An
+// existing draft is still left untouched, so the proposal's hash never moves under a reader mid-review.
 const adoptRuntimeInstall = async (services: Services, tool: string): Promise<"unavailable" | undefined> => {
     const ledger = await services.runtimeInstalls.read();
     const entry = ledger.installs.find((install) => install.tool === tool);
@@ -324,8 +256,7 @@ const adoptRuntimeInstall = async (services: Services, tool: string): Promise<"u
     if (entry === undefined || step === undefined || file === undefined) {
         return "unavailable";
     }
-    // Adopting a tool that was dismissed earlier is the owner changing their mind; leaving the tombstone would
-    // have the sweep fight the draft they just asked for.
+    // Adopting a previously dismissed tool clears its tombstone, or the sweep would fight the requested draft.
     await services.runtimeInstalls.decline([tool], undefined);
     const path = join(draftsDir(services), file);
     if ((await services.files.read(path)) === undefined) {

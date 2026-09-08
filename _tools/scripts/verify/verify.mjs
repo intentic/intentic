@@ -1,29 +1,12 @@
 #!/usr/bin/env node
-/* `pnpm verify`: THE WHOLE REPOSITORY, THE WAY CI'S VERIFY GROUPS MEASURE IT, runnable everywhere the code is
- * written. Four steps, each once:
- *
- *     node _tools/checks/run.mjs                   the checkout gates (under two seconds)
- *     node _tools/scripts/build/emit-declarations.mjs    every emitted package's dist, with tsgo -b
- *     turbo run typecheck
- *     turbo run test --only                        off the `^build` edge, which the emit above replaces
- *
- * ONCE is the point of this being a script rather than `pnpm typecheck && pnpm test`: each of those runs the
- * emit for itself, so the pair paid for it twice (7s cold, 2s incremental) on every run of the gate.
- *
- * WHO RUNS IT. The daemon, after every land, on the main tree, serialized and off every model's clock
- * (workspace/verify-deps.ts): the one moment that legitimately needs the whole repository against a tree
- * nobody else is moving. An owner, by hand. Not the turn-ending check any more: at the Stop a model can only
- * act on its own diff, so that runs the affected closure instead (verify-turn.mjs). Not `pnpm build`, which
- * dies EXDEV under worktree isolation; the push gate (verify-push.mjs) runs build from the primary checkout.
- *
- * A GREEN RUN IS RECORDED against a hash of the tree it measured (lib/tree-verdict.mjs), so the push gate that
- * follows replays it and runs only the build.
- *
- * EVERY STEP THAT CAN STILL SAY SOMETHING RUNS (lib/steps.mjs). This is the whole repository, measured after a
- * land, on the main tree, off every model's clock: a run that stopped at the first failing step would be
- * spending that serialized slot to report a fraction of what it had already paid to find out. The one real
- * dependency is the declarations emit, which typecheck and the suites READ; those are skipped when it fails,
- * and the digest says so rather than letting an unmeasured package read as a green one. */
+// Runs the whole repo the way CI's verify groups measure it, once each, since typecheck and test would otherwise both
+// pay for the declarations emit. Runs after every land on the main tree, not from the turn-ending check
+// (verify-turn.mjs, the affected closure only) or the push gate (build only). Records a green run for the push gate to
+// replay.
+// node _tools/checks/run.mjs the checkout gates
+// node _tools/scripts/build/emit-declarations.mjs every emitted package's dist
+// turbo run typecheck
+// turbo run test --only
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { createSteps } from "../lib/steps.mjs";
@@ -32,26 +15,19 @@ import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 const root = repoRoot(import.meta.url);
 const { step, skip, finish } = createSteps("verify", root);
 
-/* Independent of everything below: it reads the checkout, not the build. `--tidy=warn` because this runs after
- * every LAND, on a tree a dozen conversations are moving: a tidy rule red for a directory nobody in this land
- * touched would mark the whole run failed, and the verdict it records is what the next push replays — so one
- * stale baseline entry would spend ten minutes of somebody's push re-running typecheck and tests that had just
- * passed. What a tidy failure means and where it does refuse: _tools/checks/manifest.mjs. */
+// `--tidy=warn`: a tidy rule red for an unrelated directory shouldn't fail this land's verdict and cost the next push
+// ten minutes replaying typecheck and tests. What a tidy failure means: _tools/checks/manifest.mjs.
 step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "--tidy=warn"]);
 
-/* The scripts' own tests. `_tools/scripts` is plumbing rather than a workspace package, so `turbo run test`
- * cannot reach it and a `*.test.mjs` there would otherwise be a test nothing runs — which is what move-files.mjs,
- * the codemod every directory move is made of, must not be. node:test needs no install. */
+// `_tools/scripts` is plumbing, not a workspace package, so `turbo run test` can't reach its `*.test.mjs` files; run
+// directly via node:test, which needs no install.
 step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test.mjs"]);
 
-// VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory (turbo.json says why); the caller's
-// own value wins. INDEXNOW_ENABLED=0 for the reason ci.yml gives: the site build otherwise polls the live site.
+// VITEST_MAX_WORKERS bounds a repo-wide run's memory; INDEXNOW_ENABLED=0 stops the site build from polling live.
 const SUITE_ENV = { VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4", INDEXNOW_ENABLED: "0" };
 
-/* THE ONE EDGE. Both steps below resolve their workspace imports through the .d.ts this emits, so after a
- * failed emit they report missing modules and name files that are correct. Typecheck and test are independent
- * of EACH OTHER, though — vitest strips types, so a suite runs and means something on a tree that does not
- * type-check — which is exactly the pair that used to be reported one per run. */
+// Typecheck and test both resolve imports through the emitted `.d.ts`, so both are skipped if the emit fails. They're
+// independent of each other: vitest strips types, so a suite can mean something on a tree that doesn't type-check.
 if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
     step("typecheck", "pnpm", ["turbo", "run", "typecheck", "--continue=dependencies-successful"]);
     step("test", "pnpm", ["turbo", "run", "test", "--only", "--continue=dependencies-successful"], { env: SUITE_ENV });

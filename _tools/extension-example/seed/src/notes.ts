@@ -1,14 +1,6 @@
 import { host } from "./host";
 
-/* The one file this extension reads, and the shape the `intentic-example` CLI writes into it. The path is
- * declared twice on purpose, here, and in the manifest's `contributes.files`, because those two declarations
- * do different jobs: this one is what gets fetched, that one is what the daemon's file watcher pushes on.
- *
- * The daemon's `{ path, content }` body is narrowed by hand below rather than with the wire schema from
- * `@intentic/sandbox-contract`, for one contingent reason: that package's published tarball declares a
- * dependency on `@intentic/registry@0.0.0`, which is not on npm, so `npm i @intentic/sandbox-contract` fails
- * today (fixed by adding _shared/registry to the release set, this comment goes away with the next release).
- * Keeping the example installable from npm alone was worth two lines of type guard. */
+// Also declared in the manifest's `contributes.files`, whose copy makes a write here push instead of poll.
 export const NOTES_PATH = `.intentic/example-notes.json`;
 
 export interface Note {
@@ -24,10 +16,8 @@ const contentOf = (body: unknown): string | undefined => {
     return typeof content === `string` ? content : undefined;
 };
 
-/* Newest first. A missing file is the ordinary FIRST state, nobody has written a note yet, so it answers an
- * empty list rather than throwing, and the view renders its empty state instead of an error the user can do
- * nothing about. Unparseable content is treated the same way: the CLI owns this file, and a half-written one is
- * a transient the next read fixes. */
+// Newest first. A missing or unparsable file returns an empty list rather than throwing: the CLI owns this file, so an
+// absent or half-written one is an ordinary, transient state.
 export const readNotes = async (): Promise<readonly Note[]> => {
     let content: string | undefined;
     try {

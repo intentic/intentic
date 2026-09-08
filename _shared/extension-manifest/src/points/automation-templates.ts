@@ -1,21 +1,11 @@
 import { z } from "zod";
 import type { ContributionPoint } from "../contribution-point.js";
 
-/* A STARTING POINT in the automation composer, a trigger, a prompt written for that trigger's payload, and
- * whatever guard or hold makes it safe to leave on. Pure prefill: creating one makes an ordinary automation and
- * the daemon knows nothing about templates afterwards.
- *
- * IT LIVES WITH THE AREA THAT KNOWS THE SERVICE, which is the point of it being a contribution at all. The
- * automation surface used to carry every one of these. Komodo's, Sentry's, Stripe's, CI's, the chore book's,
- * so a pack that gained something worth reacting to could not say so without an edit to a surface it has
- * nothing to do with. A template declared here appears when the pack is installed and its capability connected,
- * and disappears with it.
- *
- * The daemon validates each one against the real trigger schema when it builds the catalogue and drops what
- * does not parse, so a template can never offer a trigger that `upsert` would refuse. */
+// A starting point in the automation composer: a trigger, a prompt written for that trigger's payload, and any guard
+// that makes it safe to leave on. Pure prefill, creating one makes an ordinary automation. The daemon validates each
+// against the real trigger schema when building the catalogue and drops what doesn't parse.
 export const AutomationTemplateContributionSchema = z.object({
-    // Prefills the automation name, and is what "does one of these exist already" is asked by, so it must be
-    // spelled as an automation id, not as prose.
+    // Prefills the automation name and is what "does one exist already" is asked by, so spell it as an id, not prose.
     id: z
         .string()
         .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/)
@@ -23,16 +13,16 @@ export const AutomationTemplateContributionSchema = z.object({
     title: z.string().min(1),
     logo: z.string().min(1).optional().describe("A simple-icons slug for the card."),
     icon: z.string().min(1).optional().describe("A name from the host's icon set, drawn when no simple-icons slug fits."),
-    // Capability providers that make this template WORK, any one connected is enough (fixing CI rides github
-    // or gitlab). Omitted ⇒ nothing to connect, always offered.
+    // Capability providers that make this template work; any one connected is enough. Omitted ⇒ nothing to connect,
+    // always offered.
     requires: z
         .array(z.string().min(1))
         .optional()
         .describe(
             "Capability providers that make this template work: any one connected is enough (fixing CI rides github or gitlab). Omitted ⇒ nothing to connect, so it is always offered.",
         ),
-    // Shaped loosely here and parsed strictly at the merge: the manifest package cannot see the trigger union
-    // (the dependency runs the other way), so the daemon is where a declaration meets the real schema.
+    // Shaped loosely here and parsed strictly at the merge, since this package can't see the daemon's real trigger
+    // union.
     trigger: z
         .object({
             kind: z.enum(["schedule", "event", "listener", "workspace"]),
@@ -54,19 +44,16 @@ export const AutomationTemplateContributionSchema = z.object({
     note: z.string().min(1).optional(),
     setup: z.string().min(1).optional().describe("What the user must do themselves before this can work."),
     description: z.string().min(1).optional(),
-    /* Absent ⇒ the create dialog's gallery, where you go once you know what you want. `create` puts a card on
-     * the page that makes the automation switched off in one click; `configure` puts one there that opens the
-     * dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never
-     * think to go looking for, and a pack that marked everything as offered would have built a gallery with
-     * extra steps. */
+    // Absent ⇒ waits in the gallery. `create` puts a card that makes it switched off in one click; `configure` opens
+    // the dialog prefilled, for a template that can't work unconfigured.
     offer: z
         .enum(["create", "configure"])
         .optional()
         .describe(
             "Absent ⇒ it waits in the gallery, where you go once you know what you want. `create` puts a card on the page that makes it, switched off, in one click. `configure` puts one there that opens the dialog prefilled, for a template that cannot work unconfigured. Both are for what a user would never think to go looking for: mark everything as offered and you have rebuilt the gallery with extra steps.",
         ),
-    // Whether what this makes watches THIS codebase (the chores shelf) rather than the outside world. Declared
-    // rather than read off the trigger: a nightly dependency sweep and a nightly Stripe poll are both schedules.
+    // Whether what this makes watches this codebase rather than the outside world; declared rather than read off the
+    // trigger, since a schedule can point either way.
     chore: z
         .boolean()
         .optional()

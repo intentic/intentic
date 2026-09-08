@@ -1,10 +1,9 @@
-// Runnable, framework-free check for the drop-traversal recursion (the web app has no test runner).
-// Run: node _editor/web/scripts/dropEntries.check.mjs  (Node 24 strips the imported .ts types natively.)
+// Runnable, framework-free check for the drop-traversal recursion (no test runner in the web app). Run: node
+// _editor/web/scripts/dropEntries.check.mjs (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
 import { collectDroppedFiles, filesToEntries, isRootGitPath } from "../src/features/workspace/explorer/transfer/dropEntries.ts";
 
-// Fake FileSystemEntry builders (only the fields the walk touches). fullPath is required: the walk dedupes on it
-// to break symlink cycles; the real API always supplies a unique string, so the fakes do too (defaults to name).
+// fullPath is required: the walk dedupes on it to break symlink cycles, so the fakes need one too.
 const fileEntry = (name, fullPath = `/${name}`) => ({ isFile: true, isDirectory: false, name, fullPath, file: (cb) => cb({ name }) });
 const dirEntry = (name, children, fullPath = `/${name}`) => ({
     isFile: false,
@@ -27,14 +26,14 @@ const dirEntry = (name, children, fullPath = `/${name}`) => ({
     },
 });
 
-// A drop of one or more entry roots (a folder or loose file each). `null` roots model webkitGetAsEntry returning
-// nothing (a symlink/special item Chrome won't expose).
+// A drop of one or more entry roots; `null` models `webkitGetAsEntry` returning nothing for an item Chrome won't
+// expose.
 const dt = (roots, files = []) => ({ items: roots.map((entry) => ({ kind: "file", webkitGetAsEntry: () => entry })), files });
 // The walk is parallel, so path ORDER isn't deterministic: compare as sorted sets.
 const paths = (result) => result.files.map((e) => e.path).sort();
 
-// A nested folder flattens to slash-joined relative paths. Give every entry a distinct fullPath so the visited set
-// doesn't collapse same-named nodes.
+// A nested folder flattens to slash-joined relative paths; distinct fullPaths keep the visited set from collapsing
+// same-named nodes.
 const tree = dirEntry("root", [
     fileEntry("a.txt", "/root/a.txt"),
     dirEntry(
@@ -45,7 +44,7 @@ const tree = dirEntry("root", [
 ]);
 assert.deepEqual(paths(await collectDroppedFiles(dt([tree]))), ["root/a.txt", "root/sub/b.txt", "root/sub/deep/c.txt"]);
 
-// Multiple directories + a loose file dropped together: the case that broke the sequential walk.
+// Multiple directories plus a loose file dropped together.
 const multi = await collectDroppedFiles(
     dt([
         dirEntry("proj", [fileEntry("index.ts", "/proj/index.ts"), dirEntry("src", [fileEntry("app.ts", "/proj/src/app.ts")], "/proj/src")]),
@@ -58,8 +57,8 @@ assert.deepEqual(paths(multi), ["docs/readme.md", "proj/index.ts", "proj/src/app
 // A single dropped file keeps its basename.
 assert.deepEqual(paths(await collectDroppedFiles(dt([fileEntry("note.md")]))), ["note.md"]);
 
-// Ignored dirs (node_modules) + secrets (.env) are skipped; `.git` is KEPT (repo stays connected); onFile fires
-// once per captured file.
+// Ignored dirs (node_modules) and secrets (.env) are skipped; `.git` is kept so the repo stays connected. onFile
+// fires once per captured file.
 const withJunk = dirEntry("proj", [
     fileEntry("index.ts", "/proj/index.ts"),
     dirEntry("node_modules", [fileEntry("dep.js", "/proj/node_modules/dep.js")], "/proj/node_modules"),
@@ -83,8 +82,8 @@ assert.deepEqual(paths(canceled), []);
 const fallback = await collectDroppedFiles({ items: [], files: [{ name: "x.txt" }] });
 assert.deepEqual(paths(fallback), ["x.txt"]);
 
-// A directory whose readEntries never calls back (Chromium's validity-window hang) is SKIPPED after the timeout;
-// the rest of the drop still resolves. Uses a tiny timeout override so the check stays fast.
+// A directory whose readEntries never calls back is skipped after a timeout; the rest of the drop still resolves.
+// Uses a tiny timeout override to stay fast.
 const neverEntry = {
     isFile: false,
     isDirectory: true,
@@ -95,7 +94,7 @@ const neverEntry = {
 const partial = await collectDroppedFiles(dt([fileEntry("ok.txt", "/ok.txt"), neverEntry]));
 assert.deepEqual(paths(partial), ["ok.txt"]); // hung subtree dropped, ok.txt survives
 
-// A fullPath CYCLE (a followed symlink pointing back at itself) resolves instead of recursing forever.
+// A fullPath cycle (a symlink pointing back at itself) resolves instead of recursing forever.
 const cyclic = { isFile: false, isDirectory: true, name: "loop", fullPath: "/loop" };
 cyclic.createReader = () => {
     let drained = false;
@@ -127,12 +126,12 @@ assert.deepEqual(
     ["p.png", "folder/q.ts"],
 );
 
-// isRootGitPath: only the workspace ROOT's own .git (the /work pointer file the daemon also refuses), the drop
-// that produces it is a repo's CONTENTS landing at the root.
+// isRootGitPath: only the workspace root's own .git; a drop that produces this is a repo's contents landing at the
+// root.
 assert.equal(isRootGitPath(".git"), true);
 assert.equal(isRootGitPath(".git/config"), true);
 assert.equal(isRootGitPath(".git/objects/ab/cdef"), true);
-// A NESTED repo's .git travels: dropping the repo's FOLDER, or its contents onto a folder, both land here.
+// A nested repo's .git travels: dropping the repo's folder, or its contents onto a folder, both land here.
 assert.equal(isRootGitPath("repo/.git"), false);
 assert.equal(isRootGitPath("repo/.git/config"), false);
 // Name-alike siblings at the root are ordinary content: segment-exact, not a prefix match.

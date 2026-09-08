@@ -20,59 +20,25 @@ import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 
-/* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness, which speaks only the
- * Anthropic Messages API, drive OpenAI (Codex), xAI (Grok), Kimi Code and Google (Gemini) models on the user's
- * SUBSCRIPTION. CLIProxyAPI holds each provider's subscription OAuth in its auth-dir and re-serves it behind an
- * Anthropic-compatible endpoint; a routed turn (streamAgent) points ANTHROPIC_BASE_URL at config.translator.url
- * with config.translator.token as the bearer, and the model id selects the upstream provider.
- *
- * The binary is baked into the sandbox image (see the Dockerfile). On a bare `tsx watch` dev run TRANSLATOR_URL
- * is empty and startTranslator is a no-op, routed turns then surface streamAgent's clean "no translator" error.
- * The config is static (port + auth-dir + the local bearer); accounts are added/removed at runtime through the
- * Management API (see createCliProxyClient), so no config reconverge/restart is needed on a connect. */
+// CLIProxyAPI: a bundled Go proxy that lets the Claude Code harness (Anthropic Messages only) drive
+// Codex/Grok/Kimi/Gemini on the user's subscription, behind an Anthropic-compatible endpoint keyed by model id. Config
+// is static; accounts are added/removed at runtime via the Management API, no restart needed.
 
-/* CLIProxyAPI's provider ids for the routed providers. Only `codex` matches ours: the app says "grok" where
- * CLIProxyAPI says "xai", and "gemini" where it says "antigravity". Antigravity is Google's own agent product,
- * and its channel is the one CLIProxyAPI serves Gemini models on from a plain Google-account sign-in. The app
- * surfaces the model the user picks, not the Google product that vends it.
- *
- * DERIVED from each provider's spec row rather than written out here, because this map and the enum that says
- * which providers are routed at all are the same fact: a provider added to one and not the other reads back
- * `undefined` and addresses the Management API at the URL `…/model-definitions/undefined`. The row is where the
- * proxy's name for a provider lives (ProviderAuth's `cliProxy`), so the record cannot be short a key. */
+// Our provider ids to CLIProxyAPI's (grok/xai, gemini/antigravity), derived from each provider's spec row.
 const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = Object.fromEntries(
     KeyedProviderSchema.options.map((provider) => [provider, cliProxyIdOf(provider) ?? provider] as const),
 ) as Record<KeyedProvider, string>;
 
-// The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
+// The subscription-token store; survives sandbox rebuilds alongside the other AI-provider credentials.
 export const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
 
-// CLIProxyAPI's own provider id, back to ours, the inverse of CLIPROXY_PROVIDER, which is what an auth file on
-// disk stamps itself with.
+// Inverse of CLIPROXY_PROVIDER: what an auth file on disk stamps itself with.
 const KEYED_PROVIDER: Record<string, KeyedProvider> = Object.fromEntries(
     Object.entries(CLIPROXY_PROVIDER).map(([provider, cliproxy]) => [cliproxy, provider as KeyedProvider]),
 );
 
-/* THE CONNECTION VIEW THAT DOES NOT NEED THE PROXY, every subscription CLIProxyAPI holds, read from its
- * auth-dir on disk.
- *
- * The Management API answers the same question from the RUNNING proxy, and that is the better answer whenever
- * there is one: only the proxy knows each account's `auth_index`, which is what a quota read is addressed by. So
- * `listFiles` prefers it and falls back here, and every caller of this function is somewhere the proxy cannot
- * be asked at all:
- *
- *   · whether to spawn the proxy, and whether the translator pack belongs in the environment overlay, both run
- *     BEFORE one exists, so asking it is circular. On a core image, where the binary is absent entirely, it could
- *     only ever answer "nothing connected", which would keep the pack out of the very rebuild that installs it.
- *   · the connection list and the routed turn's credential gate, while the proxy is down, its 15s boot warm-up,
- *     or any rung of the restart ladder. An empty answer there is a lie that hides connected accounts.
- *
- * Each auth file is one account, named `<type>-<account>.json`; the `type` INSIDE it is read rather than the
- * filename parsed, since the name is CLIProxyAPI's to change. Nothing is filtered on the files' `disabled` or
- * `expired` flags: those describe an account's health, `accounts` does not filter on them either, and a stale
- * credential is still a connected subscription, the answer here has to match the list the user is looking at.
- * That last rule is the whole reason this file is read at all: a lapsed Google token is a connected account with
- * a problem, never an absent one, and it must not vanish from the card that exists to let the user renew it. */
+// Connection view that doesn't need a running proxy: reads subscriptions off the auth-dir, for callers when the proxy
+// can't be asked (before it exists, or while down). A stale credential still counts as connected.
 export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFile[]> => {
     const names = (await readdir(authDir).catch(() => [])).filter((name) => name.endsWith(".json"));
     const files = await Promise.all(
@@ -85,16 +51,13 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             try {
                 parsed = JSON.parse(raw) as { type?: unknown; email?: unknown };
             } catch {
-                // A file half-written by a login that is still polling, it counts on the next read.
+                // A file half-written by a login still polling; it counts on the next read.
                 return [];
             }
             if (typeof parsed.type !== "string" || KEYED_PROVIDER[parsed.type] === undefined) {
                 return [];
             }
-            /* Shaped as the Management API's own row so both sources are one type to every caller. `auth_index`
-             * is deliberately absent: it is the proxy's in-memory handle for a quota read, so an account read
-             * off disk renders as the connected account it is with a dot instead of a ring, which is the
-             * correct answer while the thing that measures rings isn't running. */
+            // Shaped like the Management API's row; `auth_index` is absent, only the proxy can supply it.
             return [{ name, provider: parsed.type, ...(typeof parsed.email === "string" ? { email: parsed.email } : {}) }];
         }),
     );
@@ -111,76 +74,28 @@ export const connectedTranslatorProviders = async (authRoot: string): Promise<Se
     );
 };
 
-// Would a translator have anything to serve? Its two workloads are the routed SUBSCRIPTIONS above and the
-// user's own openai-protocol endpoints (endpoint-translator.ts), which it re-serves as compat providers. Neither
-// ⇒ starting it buys nothing, and on a core image the binary it would spawn isn't there to begin with.
+// Whether starting the translator would serve anything: a subscription or a user's own endpoint connected.
 export const translatorWanted = async (services: Services): Promise<boolean> =>
     (await connectedTranslatorProviders(services.authRoot)).size > 0 || translatedEndpoints(await services.capabilities.list()).length > 0;
 
-// What a user can DO about a helper the running image doesn't carry. The word "rebuild" is required: it is
-// what the UI reads to route a state to the Environment card, so it must survive any rewording of these strings.
+// The word 'rebuild' is required: the UI matches it to route the error to the Environment card.
 export const TRANSLATOR_BINARY_MISSING =
     "This sandbox's image doesn't include the model translator yet: rebuild it from the Environment card in Sandbox ▸ Environment to add it.";
-// The rendered server config (on /history, outside the agent's reach); the login subprocess shares it via --config.
+// The rendered server config, outside the agent's reach; the login subprocess shares it via --config.
 export const cliProxyConfigPath = (config: Config): string => join(config.historyRoot, "translator", "config.yaml");
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.
 export const cliProxyManagementUrl = (config: Config): string => `${config.translator.url.replace(/\/$/, "")}/v0/management`;
 
-/* A localhost-bound CLIProxyAPI serving the Anthropic endpoint (api-keys) + the Management API (secret-key). Both
- * accept the same fixed local bearer, the port is loopback-only.
- *
- * EVERY KEY THIS OMITS IS A GO ZERO VALUE, not CLIProxyAPI's documented default. The two are not the same, and
- * the difference is invisible: its config.example.yaml documents `quota-exceeded` as three `true`s, a missing
- * YAML bool unmarshals to `false`, and nothing anywhere says which one is in force. So the whole block is written
- * out, a routed provider's quota failover is exactly the behaviour a translator config exists to pin, and
- * leaving it to the encoding of an absent key is how all three came to be off here without a decision.
- *
- * `antigravity-credits` is the one that is off ON PURPOSE. It is the last-resort fallback to PAID AI credits once
- * every free-tier Google auth is spent on Claude models, real money, drawn per turn, with nobody asked. A routed
- * turn must not be able to reach for it; hitting the weekly wall and saying so is the correct outcome.
- *
- * `compat` is the rendered openai-compatibility block, the user's own model endpoints (endpoint-translator.ts).
- * It is rendered INTO the file rather than left to the Management API push, because this function runs on every
- * spawn and on every rung of the restart ladder below: entries that lived only in the running proxy's memory
- * would be erased by the first crash-restart, silently taking the user's endpoints out of service. */
-/* HOW MANY ACCOUNTS ONE REQUEST MAY BE RETRIED ON before the refusal is the answer. CLIProxyAPI's own default
- * is 0, meaning the whole fleet, every auth file it holds, and that default is only correct if a refusal is
- * always ABOUT the account it came from. It is not.
- *
- * Google answers a request it will not serve for any reason with `RESOURCE_EXHAUSTED`, "Resource has been
- * exhausted (e.g. check quota)", including when what it objects to is the REQUEST. Measured here: a Claude Code
- * turn carries an identity line Google's Antigravity channel refuses, and every one of 31 connected accounts
- * refused it identically, in 44–62 upstream calls taking 57–69 SECONDS, while every one of those accounts sat at
- * ~0% of its weekly allowance. The fleet was not the problem and walking it could not have found an answer.
- *
- * So the walk is bounded. The number is a genuine trade and is set where the two failures cost least:
- *   too low , a real cooldown gives up while a later account had room, costing one retry the user must ask for.
- *   too high, a request nothing will serve burns the fleet and a minute of someone's attention, every time.
- * Five is enough to step over a handful of genuinely cooling credentials (which is what a transient looks like)
- * and far short of proving the same refusal 31 times. Cheap to revisit: it is one number in one rendered file.
- *
- * It does NOT make the daemon's own chain redundant, that steps between MODELS and providers, this bounds one
- * request inside one of them. */
+// Every field is written explicitly: an omitted key unmarshals to Go's zero value, not CLIProxyAPI's documented
+// default. `antigravity-credits` is off on purpose: the paid-credits fallback must not spend real money unasked.
+// Retries one request across at most this many accounts; CLIProxyAPI's own default (0) means the whole fleet.
 const MAX_RETRY_CREDENTIALS = 5;
 
-/* THE PARAMETER NO REQUEST FROM THIS SANDBOX MAY CARRY, removed at the proxy's own edge, for every model and
- * every route it serves.
- *
- * `prompt_cache_retention` is the provider's own knob, not ours: nothing in this repo sets it, and a captured
- * Codex request body does not contain it. It still ended a ten-minute turn with `400 prompt_cache_retention is
- * not supported on this model`, because the proxy's Codex paths each strip the field SEPARATELY and one of them,
- * the conversation-compaction call a long turn makes at its very end, forgot to. The pin in
- * image-packs/translator.Dockerfile is past that bug; this rule is what makes the guarantee independent of the pin,
- * since a `payload.filter` runs before every one of those paths, compaction included, on any version.
- *
- * Belt and braces on purpose. A pin can be bumped by someone reading a changelog, and a client we do not control
- * (a user's own tool pointed at the same loopback endpoint) can send the field at any time; neither should be
- * able to cost somebody a turn's work. `prompt_cache_key` is deliberately NOT filtered: the proxy sets it itself
- * to keep a session's cache warm, which is the saving this parameter family exists for. */
+// Stripped from every request at the proxy's edge; `prompt_cache_key` stays, keeping the session cache warm.
 const FILTERED_PARAMETERS = ["prompt_cache_retention", "prompt_cache_options"];
 
-// Exported for the test alone: the bounded walk above is a behaviour nothing else in this repo can observe (the
-// proxy is a separate binary reading a file), so the rendered file IS the assertable surface.
+// Exported for the test alone: the proxy is a separate binary reading this file, so the rendered output is the only
+// assertable surface.
 export const renderConfig = (opts: { port: number; authDir: string; token: string; compat: string }): string =>
     [
         `host: "127.0.0.1"`,
@@ -215,22 +130,17 @@ const portOf = (url: string): number | undefined => {
     }
 };
 
-// The restart ladder: a proxy that crashes on arrival must not be respawned every few seconds forever (it has
-// been, hundreds of spawns and log lines an hour, all saying nothing). Ten seconds after the first short life,
-// doubling to five minutes; a run that survived past a minute was a working proxy whose exit is news, so the
-// ladder starts over (the shared createBackoff, whose test pins this policy).
+// Restart backoff: 10s doubling to 5min; a run past a minute resets the ladder (createBackoff).
 const RESTART_LADDER = { floorMs: 10_000, capMs: 300_000, stableMs: 60_000 } as const;
 
 // The tail of the proxy's output kept per run, enough to carry a Go panic or a bind error into the exit log.
 const OUTPUT_TAIL_BYTES = 2_048;
 
-// How long after spawning the proxy the first quota sweep runs, long enough for its management API to be
-// listening, short enough that opening the Agent tab straight after a restart still finds rings.
+// How long after spawn the quota sweep runs first: enough for the API to listen, short of an early tab open.
 const WARMUP_DELAY_MS = 15_000;
 
-// Start the CLIProxyAPI server and keep it alive. Best-effort and non-throwing: a routed turn that finds it down
-// surfaces its own error. Returns immediately; the proxy runs for the daemon's lifetime. No-op when no translator
-// is baked (config.translator.url empty, the dev path).
+// Starts CLIProxyAPI and keeps it alive for the daemon's life; best-effort and non-throwing, returns immediately. No-op
+// when no translator is baked (empty translator URL).
 export const startTranslator = (services: Services): void => {
     const { config, authRoot, logger } = services;
     if (config.translator.url === "") {
@@ -249,30 +159,19 @@ export const startTranslator = (services: Services): void => {
     const start = async (): Promise<void> => {
         await mkdir(authDir, { recursive: true });
         await mkdir(dirname(configPath), { recursive: true });
-        // The trial's entry bakes the platform's address into the config, and on a dev machine that address is
-        // the loopback tunnel's, which binds concurrently with this spawn. Waiting for its final answer (bound,
-        // failed, or not needed: settled either way, see PlatformTunnel.ready) is what makes the rendered
-        // config deterministic instead of almost-always-right.
+        // Waits for the platform tunnel to settle, so the rendered address is deterministic.
         await services.platformTunnel.ready;
-        // The user's own endpoints, resolved before the spawn so the proxy comes up already serving them. Their
-        // catalogs fall back to a persisted list, so a model server that happens to be down right now keeps its
-        // entry instead of being rendered out of the config until something asks again.
+        // Resolved before spawn so the proxy serves these at once; a down server keeps its persisted entry.
         const compat = compatYaml(await endpointCompatEntries(services).catch(() => []));
         await writeFile(configPath, renderConfig({ port, authDir, token: config.translator.token, compat }), { mode: 0o600 });
         const startedAt = Date.now();
-        // The proxy states WHY it exited (a taken port, a bad config, a panic) in its own log, and that log
-        // goes to STDOUT. Its stderr stays empty even for a fatal `bind: address already in use`, so watching
-        // stderr alone is why hundreds of restarts each reported a bare `code: 0` beside an empty reason while
-        // the one line that named the cause was being discarded. Both streams, one tail, in the order said.
+        // The proxy logs its exit reason on stdout, not stderr; both streams are captured, in order.
         let outputTail = "";
         const keepTail = (chunk: Buffer): void => {
             outputTail = (outputTail + chunk.toString()).slice(-OUTPUT_TAIL_BYTES);
         };
-        // Daemon-owned: supervised here with its own restart ladder, so it is never abandoned in this life,
-        // the stamp is what lets a NEXT daemon recognise the copy this one left behind (platform/leftovers.ts).
-        /* The store's copy when an owner has taken one, the pack's global install otherwise, and the bare name
-         * when neither is here — which spawns, fails ENOENT, and is reported as the missing pack it is
-         * (engines/engine-resolve.ts). */
+        // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
+        // Falls back from a store copy, to the pack install, to the bare name, reported as missing.
         const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
         child = spawn(binary, ["--config", configPath], {
             stdio: ["ignore", "pipe", "pipe"],
@@ -290,25 +189,12 @@ export const startTranslator = (services: Services): void => {
 
     void start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
 
-    /* Warm the routed accounts' headroom once the proxy is answering. Without this the first person to open the
-     * Agent tab after a restart reads a cold store and gets dots, because `accounts` serves what is on file and
-     * the tab would fill in only on a later visit. The delay is for the proxy's own startup: the management API
-     * is what these reads go through, and a sweep fired the instant the child is spawned would simply find
-     * nothing listening. Best-effort like everything else here. */
+    // Warms headroom once the proxy should be up, so the first tab after a restart isn't cold.
     setTimeout(() => void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options }, maxAgeMs: 0 }), WARMUP_DELAY_MS).unref();
 };
 
-// The CLIProxyAPI Management API client + login orchestration the /translator routes and the routed-turn gate
-// use. `accounts` reads the connected subscriptions per provider, a LIST, because CLIProxyAPI holds any number
-// of auth files per provider and balances requests across them, so a second account is more headroom; `connect`
-// starts a provider's login and returns what the card shows; `complete` finishes the one provider whose login
-// can't self-complete (see below); `disconnect` clears ONE account's tokens by auth-file name.
-//
-// Codex, Grok and Kimi are device-code logins: the user opens a URL and approves, and CLIProxyAPI polls to
-// completion in the background and writes the token to auth-dir, so the UI polls `accounts` until connected and
-// never calls `complete`. Google's is a browser redirect to a loopback port that only exists inside this
-// container, so nothing can observe the grant, the user pastes the URL they landed on and `complete` hands it
-// back to CLIProxyAPI, which then finishes the exchange on its own and the UI polls `accounts` the same way.
+// Management API client and login orchestration for /translator routes and the routed-turn gate. Codex/Grok/Kimi are
+// device-code logins the proxy polls to completion; Google is a redirect whose landing URL `complete` hands back.
 interface TranslatorLogin {
     readonly url: string;
     readonly code: string;
@@ -317,21 +203,13 @@ interface TranslatorLogin {
 }
 
 export interface CliProxyClient {
-    // The connection inventory, each row carrying whatever headroom is on file for it. ONE method, and it never
-    // waits on an upstream quota call: this is the routed-turn credential gate as well as the settings list, so
-    // a round-trip here would land on every routed turn's startup path. Freshness is the headroom service's
-    // (usage/headroom.ts), which reads these accounts through `headroom` below whenever something happened.
+    // Connection inventory with on-file headroom; never waits on upstream, since it gates every turn's start.
     readonly accounts: () => Promise<TranslatorAccounts>;
     // The routed half of the headroom service: one target per auth file whose quota the proxy can read.
     readonly headroom: HeadroomSource;
-    /* THE ONE ACCOUNT A PROVIDER'S PUSHED READING CAN BE FILED UNDER. A routed turn never learns which auth file
-     * served it, CLIProxyAPI picks, so a reading that arrives on the turn's own stream (Codex's app-server
-     * pushes its rate limits) is attributable only when the provider holds exactly one file. Undefined
-     * otherwise, and the caller refreshes the provider's files instead, which reads each precisely. */
+    // The one account a pushed reading can be filed under, only when a provider holds exactly one file.
     readonly sharedUsageKey: (provider: KeyedProvider) => Promise<string | undefined>;
-    // What the recorded quota says about the pool THIS TURN'S MODEL spends, across every account connected for
-    // the provider, for the turn that was just refused by it. Reads the recorded snapshots only; see the
-    // implementation for why the refusal itself cannot answer this.
+    // What the recorded quota says about the pool this turn's model spends, across the provider's accounts.
     readonly turnLimit: (provider: KeyedProvider, model: string) => Promise<TurnLimit>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
@@ -339,9 +217,8 @@ export interface CliProxyClient {
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
 }
 
-// An account's key in the shared usage store, namespaced by provider, an auth-file name is only unique
-// within the provider it belongs to, and the store is shared with the native accounts. Exported for the
-// route that forgets an account's snapshot when it is disconnected (translator.routes.ts).
+// Namespaced by provider since the store is shared with native accounts and a file name is unique only within one.
+// Exported for translator.routes.ts, which forgets a disconnected account's snapshot.
 export const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
 
 export const createCliProxyClient = (params: {
@@ -355,39 +232,19 @@ export const createCliProxyClient = (params: {
 }): CliProxyClient => {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
-    // The store counts as present: a core image bakes no translator, and an owner who installed one from the
-    // Environment card has a working binary that PATH knows nothing about.
+    // Counts as present: a core image bakes none, and an installed binary may be invisible to PATH.
     const binaryPresent = params.binaryPresent ?? (async () => (await engineBinary("translator", "cli-proxy-api")) !== undefined);
     const auth = { authorization: `Bearer ${token}` };
 
-    /* WHY THE PROXY DIDN'T ANSWER, which is two entirely different situations with two different things for the
-     * user to do, and they used to share one sentence.
-     *
-     * No binary in this image is a core image missing the translator pack, fixed by a rebuild. A binary that IS
-     * here and still isn't answering is a proxy mid-boot (its Management API listens a beat after the spawn) or
-     * mid-restart on its backoff ladder, fixed by waiting a moment. Telling the second group to rebuild their
-     * image sends them off to do something slow that changes nothing, and it is what every new user saw in the
-     * seconds between their sandbox starting and the proxy binding its port. */
+    // No binary in the image needs a rebuild; a binary that's present but not answering is mid-boot or mid-restart and
+    // just needs a moment.
     const unreachable = async (cause?: unknown): Promise<Error> =>
         (await binaryPresent())
             ? new Error("The model translator isn't answering yet: it may still be starting up. Try again in a moment.", { cause })
             : new Error(TRANSLATOR_BINARY_MISSING, { cause });
 
-    /* EVERY SUBSCRIPTION THIS SANDBOX HOLDS, from the running proxy when it is up, and from its credential
-     * store on disk when it is not.
-     *
-     * The disk fallback is the difference between "we couldn't ask" and "there is nothing there", and getting
-     * those two confused is what made a shelf of connected Google accounts disappear from the Agent tab and come
-     * back as a Connect button. The proxy is down for real windows: 15s of boot warm-up, and up to 5 minutes on
-     * the restart ladder's ceiling, and this read is BOTH the settings list and the routed turn's credential
-     * gate, so an empty answer in that window told the user they had never signed in and told their turn there
-     * was nothing to run on. The tokens were on disk the whole time, which is where connectedTranslatorProviders
-     * has always read them from for exactly this reason.
-     *
-     * Both shapes of unreachable fall through here: a non-ok answer (proxy still booting / not baked) and the
-     * fetch itself throwing, a dead port, or no translator configured at all (an empty TRANSLATOR_URL makes
-     * this a relative URL, which fetch rejects before it ever dials). The local dev profile lives in that last
-     * shape permanently and reads its accounts off disk from now on. */
+    // Every held subscription: read from the running proxy when up, else its auth-dir on disk. The disk fallback is the
+    // difference between 'couldn't ask' and 'nothing there' while the proxy boots or restarts.
     const listFiles = async (): Promise<TranslatorAuthFile[]> => {
         const response = await fetchFn(`${managementUrl}/auth-files`, { headers: auth }).catch(() => undefined);
         if (response === undefined || !response.ok) {
@@ -396,8 +253,8 @@ export const createCliProxyClient = (params: {
         return ((await response.json()) as { files?: TranslatorAuthFile[] }).files ?? [];
     };
 
-    // CLIProxyAPI's xAI and Kimi logins are headless-friendly device flows exposed over the Management API. Each
-    // returns a verification URL, optional user code and state, then polls to completion in the background.
+    // xAI/Kimi logins are device flows over the Management API: returns a verification URL and code, then polls to
+    // completion in the background.
     const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
         const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth }).catch(
             async (err: unknown) => {
@@ -414,11 +271,8 @@ export const createCliProxyClient = (params: {
         return { url: body.url, code: body.user_code ?? "", state: body.state, flow: "device" };
     };
 
-    // Gemini: CLIProxyAPI's Antigravity login is Google's ordinary browser OAuth, it hands back an authorize URL
-    // and a `state`, then waits for the grant to land in its auth-dir. Google redirects to a loopback port bound
-    // inside THIS container, which the user's browser can never reach, so the redirect always dead-ends in their
-    // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
-    // Google; the explicit redirect flow tells the card to ask for the landing URL.
+    // Google's redirect lands on a loopback port inside this container the user's browser can't reach, so it dead-ends
+    // in their address bar; they paste that URL, and `complete` posts it back. No device flow exists for Google.
     const connectGemini = async (): Promise<TranslatorLogin> => {
         const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth }).catch(async (err: unknown) => {
             throw await unreachable(err);
@@ -433,9 +287,8 @@ export const createCliProxyClient = (params: {
         return { url: body.url, code: "", state: body.state, flow: "redirect" };
     };
 
-    // Hand a pasted redirect URL back to CLIProxyAPI, which parses ?code=&state= out of it, matches it to the
-    // pending session and resumes the token exchange in the background. Its rejections are the ones worth
-    // reading (an expired handshake, a state that belongs to a different login), so surface its own message.
+    // Hands a pasted redirect URL to the proxy, which matches it to the pending login and resumes the exchange;
+    // surfaces the proxy's own rejection message.
     const complete = async (input: { provider: KeyedProvider; redirectUrl: string; state: string }): Promise<void> => {
         const response = await fetchFn(`${managementUrl}/oauth-callback`, {
             method: "POST",
@@ -450,14 +303,11 @@ export const createCliProxyClient = (params: {
         }
     };
 
-    // Codex: CLIProxyAPI's Management API Codex login is a browser-redirect flow (loopback callback) that can't
-    // complete in a remote sandbox. Its device-code flow is only exposed as the `--codex-device-login` CLI command,
-    // so drive that as a subprocess: parse the URL + code it prints, surface them, and leave it running to poll to
-    // completion (writing the token to auth-dir). A superseding connect kills the prior child.
+    // Codex's Management API login can't complete remotely (browser redirect), so this drives `--codex-device-login` as
+    // a subprocess, parsing its URL and code. A new connect kills the prior child.
     let codexChild: ChildProcess | undefined;
     const connectCodex = async (): Promise<TranslatorLogin> => {
-        // Resolved before the executor, which is synchronous: the login has to drive the SAME binary the
-        // supervised proxy does, or a store copy would sign in through the image's.
+        // Resolved before the executor so the login drives the same binary the supervised proxy does.
         const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
         return new Promise((resolve, reject) => {
             codexChild?.kill("SIGTERM");
@@ -476,7 +326,7 @@ export const createCliProxyClient = (params: {
                 code = buffer.match(/Codex device code:\s*(\S+)/)?.[1] ?? code;
                 if (!settled && url !== undefined && code !== undefined) {
                     settled = true;
-                    // The subprocess owns the poll to completion, so there is no handshake for the UI to resume.
+                    // The subprocess polls to completion itself; no handshake is left for the UI to resume.
                     resolve({ url, code, state: "", flow: "device" });
                 }
             };
@@ -485,8 +335,7 @@ export const createCliProxyClient = (params: {
             child.on("error", (error) => {
                 if (!settled) {
                     settled = true;
-                    // A core image carries no cli-proxy-api, so the spawn fails ENOENT, a message naming a
-                    // binary the user has never heard of, for a state they can actually fix.
+                    // ENOENT means a core image with no cli-proxy-api; reported as the fixable, named error.
                     reject((error as NodeJS.ErrnoException).code === "ENOENT" ? new Error(TRANSLATOR_BINARY_MISSING) : error);
                 }
             });
@@ -494,8 +343,7 @@ export const createCliProxyClient = (params: {
                 if (child === codexChild) {
                     codexChild = undefined;
                 }
-                // Exit before we saw a code ⇒ the flow failed to start. Exit after ⇒ the poll finished (success or
-                // timeout); the UI already learned the outcome by polling `accounts`.
+                // No code yet at exit: the flow failed. After: the poll finished; accounts has it.
                 if (!settled) {
                     settled = true;
                     reject(new Error(`Codex device login exited (${exitCode}) before printing a code`));
@@ -504,11 +352,8 @@ export const createCliProxyClient = (params: {
         });
     };
 
-    // Drop ONE account: the provider check keeps a name from another provider's file (or a stale row) from
-    // deleting a credential the user didn't point at. A pending codex device login still dies with any codex
-    // disconnect, its poll would otherwise re-land a token into a store the user is clearing out. The account's
-    // snapshot goes with it, exactly as /claude/accounts drops a disconnected account's: leaving it behind would
-    // hand its headroom straight back to the next account to be given the same auth-file name.
+    // Drops one account; the provider check stops a stale or cross-provider name from deleting the wrong credential. A
+    // pending Codex login dies with any Codex disconnect, and the account's snapshot is dropped with it.
     const disconnect = async (provider: KeyedProvider, name: string): Promise<void> => {
         if (provider === "codex") {
             codexChild?.kill("SIGTERM");
@@ -517,12 +362,7 @@ export const createCliProxyClient = (params: {
         const cliproxyProvider = CLIPROXY_PROVIDER[provider];
         for (const file of await listFiles()) {
             if (file.provider === cliproxyProvider && file.name === name) {
-                /* The proxy OWNS the delete, it holds the credential in memory as well as on disk, so removing
-                 * the file behind its back would leave a live account serving turns off a token the user believes
-                 * they revoked. So a proxy that isn't answering means the disconnect did not happen, and saying so
-                 * is the only honest answer: the row this list now draws from disk is reachable while the proxy is
-                 * down, which is exactly when a silently-swallowed DELETE would report success and change nothing.
-                 */
+                // The proxy owns the delete; unanswering means nothing happened, and must not report success.
                 const response = await fetchFn(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, {
                     method: "DELETE",
                     headers: auth,
@@ -536,17 +376,8 @@ export const createCliProxyClient = (params: {
         }
     };
 
-    /* WHERE a routed account's headroom lives. The readings go in the shared account-usage store, exactly as a
-     * Claude turn's do, so a page load draws its rings from disk instead of owing an upstream round-trip per
-     * account, and a daemon restart doesn't blank the Agent tab. Namespaced by provider because that store is
-     * shared with the native accounts: an auth-file name is only unique within its own provider.
-     *
-     * WHEN they are re-read is the headroom service's business (usage/headroom.ts): this client only says which
-     * files can be read and how. `auth_index` is the proxy's own handle for the account, and a quota read is
-     * addressed by it, so a row that has none is not readable, whatever else is true of it. That is every row
-     * `listFiles` recovers from disk while the proxy is down (authFilesOnDisk), and without this filter each one
-     * would look permanently overdue: the service would ask an upstream it has no address for and record
-     * nothing. */
+    // Readings live in the shared account-usage store, like a Claude account's, so a page load reads disk, not
+    // upstream. A file needs `auth_index` (the proxy's handle) to count as readable.
     const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
         KeyedProviderSchema.options
             .filter(reportsPlanLimits)
@@ -578,22 +409,12 @@ export const createCliProxyClient = (params: {
             })),
     };
 
-    // The provider's files, as the fleet reads them: the recorded snapshot beside the proxy's own verdict on
-    // the credential, which is the more current of the two.
+    // A provider's files, each paired with the proxy's current verdict and its recorded usage snapshot.
     const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
         files.flatMap((file) => (file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined ? [{ ...file, name: file.name }] : []));
 
-    /* WHETHER THIS PROVIDER CAN SERVE THIS MODEL AT ALL, and when it next can, read from the snapshots above
-     * rather than from the refusal, because the refusal cannot say. CLIProxyAPI balances across every auth file
-     * it holds and walks the whole set on a quota 429, so what comes back is the LAST word on the fleet ("All
-     * credentials for model X are cooling down") with no account named and no per-account reset in it. The
-     * quota reads do carry both, for every account, and cost nothing here, they are already on file.
-     *
-     * The rule itself is fleetLimit's (usage/fleet-limit.ts), scoped to the pools this MODEL spends through the
-     * windows' own gates, and read beside the proxy's own bench of each credential, which is the one fact
-     * fresher than any reading. One deliberate imprecision remains, erring early: a snapshot can miss an
-     * account that has since hit its wall. Early costs one retry that fails the same way; late leaves someone
-     * waiting past a window that already reopened. */
+    // Read from recorded snapshots, not the refusal itself, since CLIProxyAPI's 429 is only the fleet's last word,
+    // naming no account or reset. Errs early: a snapshot can miss an account that has since hit its wall.
     const turnLimit = async (provider: KeyedProvider, model: string): Promise<TurnLimit> => {
         const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
         return fleetLimit(

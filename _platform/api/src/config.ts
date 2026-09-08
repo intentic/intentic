@@ -3,38 +3,26 @@ import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristi
 import { join } from "node:path";
 import { z } from "zod";
 
-// Root .env, found by walking up to the workspace marker so loading is cwd-independent (dev runs from
-// _platform/api) AND depth-independent, this file's distance from the root is no longer part of the answer.
+// Root .env, found by walking up to the workspace marker; independent of cwd and this file's depth.
 const rootEnv = join(repoRoot(import.meta.url), ".env");
 
-// Nested schema. @puristic/env derives env var names by SCREAMING_SNAKE-casing each path segment and joining
-// with "_": database.url → DATABASE_URL, betterAuth.secret → BETTER_AUTH_SECRET, google.clientId →
-// GOOGLE_CLIENT_ID, etc. Secrets are marked with .meta({ secret: true }); plaintext for now, encryptable later.
-//
-// Strict, sandbox-centric model (CLAUDE.md): the platform holds no backend/infra secrets. The only credentials
-// here are for the central account (Google sign-in) and the platform's own session signing, everything else
-// (Claude/git tokens, SSH keys, Cloudflare) lives in the user's sandbox.
+// @puristic/env maps each dotted path to SCREAMING_SNAKE; .meta({secret:true}) marks a secret field.
 export const configSchema = z.object({
     database: z.object({
         url: z.string().min(1).meta({ secret: true }),
-        // Per-process pg pool cap (DATABASE_POOL_MAX). Size deliberately: replicas × poolMax must stay
-        // under Postgres max_connections (default 100) with headroom for migrations and psql.
+        // Per-process pg pool cap: replicas x poolMax must stay under Postgres max_connections with headroom.
         poolMax: z.coerce.number().int().positive().default(10),
     }),
     betterAuth: z.object({
         secret: z.string().min(1).meta({ secret: true }),
     }),
-    // Key material for encrypting the platform's few persisted secrets at rest (crypto.ts): Google OAuth
-    // tokens, sandbox connect tokens, setup payloads. Any random string; the effective AES key is its
-    // SHA-256. Unset → those columns are stored plaintext (dev only; main.ts warns).
+    // Key for encrypting persisted secrets at rest (crypto.ts); unset stores those columns as plaintext.
     secrets: z
         .object({
-            key: z.string().default(``).meta({ secret: true }), // SECRETS_KEY
+            key: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
-    // Browser-facing origin of the API, where the SPA calls /rpc + /api/auth directly (no dev-server proxy).
-    // In dev this is http://localhost:6480; the SPA's own origin is webOrigin. Also the base Better Auth uses
-    // + the CORS allow-origin.
+    // Browser-facing API origin the SPA calls directly; also Better Auth's base and the CORS allow-origin.
     webOrigin: z.url(),
     google: z
         .object({
@@ -42,247 +30,88 @@ export const configSchema = z.object({
             clientSecret: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
-    /* THE PLATFORM'S OPERATORS. Comma-separated emails whose signed-in session may call the admin surface
-     * (guards.ts requireAdmin) — deployment config rather than a database row on purpose: sign-in is
-     * Google-only, so a session's email is Google-verified, and an allowlist the API cannot write means no
-     * endpoint exists that could mint an admin (adding one is a redeploy, which is the right friction).
-     * Empty (the default, and the only sane one for a fresh self-hosted platform) disables the admin
-     * surface outright: every /admin route answers FORBIDDEN for everybody. ADMIN_EMAILS. */
+    // Comma-separated admin emails, deployment config rather than a row; empty disables /admin entirely.
     admin: z
         .object({
             emails: z.string().default(``),
-            /* The second gate, for the admin surface's MUTATIONS (suspend a service, retry a payout, stop a
-             * machine, delete an account). Off by default and separate from `emails` on purpose: the panel's
-             * bytes are workspace-authored until it graduates to a pinned install, and a read-only surface
-             * is the stated safety of that arrangement. Flip this only on a deployment whose panel is
-             * pinned. Every mutation also requires a typed confirmation input naming its target.
-             * ADMIN_MUTATIONS. */
+            // The admin mutation gate, off until the panel's bytes are a pinned install; each mutation confirms its
+            // target.
             mutations: z.stringbool().default(false),
         })
         .prefault({}),
-    // Transactional email (Resend), sandbox invites, and the setup link a phone sends itself to finish on a
-    // real machine (mail.ts). `apiKey` is the Resend API key (re_…); `from` is the verified sender (e.g.
-    // "intentic <invites@your-domain>"). Unset → both are still accepted but the link is logged server-side
-    // instead of emailed (dev only; main.ts warns).
+    // Resend email for invites and the setup link; unset logs the link server-side instead of sending it.
     email: z
         .object({
-            apiKey: z.string().default(``).meta({ secret: true }), // EMAIL_API_KEY (re_…)
-            from: z.string().default(``), // EMAIL_FROM
+            apiKey: z.string().default(``).meta({ secret: true }),
+            from: z.string().default(``),
         })
         .prefault({}),
-    /* Intentic-OWNED Cloudflare token + zone. DNS ONLY since the tunnel fabric moved in-house (`ingress`
-     * below). What is left of it: the loopback certificate's `*.local.<zone>` wildcard and the per-order ACME
-     * challenge beside it (the daemon relays for both, having no token for this zone), plus the daily sweep
-     * that clears the residue of everything this platform used to mint here.
-     *
-     * "Nothing against the per-zone quota" is now true and was not before: a sandbox used to leave a
-     * `local-<id>` A record behind forever, that was the last per-sandbox record anywhere in this zone once
-     * reachability stopped costing DNS, and enough of them filled the zone and stopped issuance for everyone.
-     * DNS-ONLY is also literal, the sweep may not call anything but /dns_records, or a narrowed token kills it.
-     *
-     * Unset ⇒ the loopback-certificate path is simply off. */
+    // Intentic-owned Cloudflare token/zone, DNS only, for the loopback cert wildcard; unset disables that path.
     intenticCloudflare: z
         .object({
-            apiToken: z.string().default(``).meta({ secret: true }), // INTENTIC_CLOUDFLARE_API_TOKEN
-            zone: z.string().default(`intentic.dev`), // INTENTIC_CLOUDFLARE_ZONE
-            /* MAY THIS DEPLOYMENT DELETE RECORDS IN THAT ZONE? Off by default, and the default is the whole
-             * point. The sweep decides what is an orphan by asking THIS deployment's database, and a zone is
-             * shared by every deployment holding the token: a developer running the API locally with the
-             * production credentials in their env swept the production zone against an empty local database
-             * and deleted the tunnel records of live sandboxes. Nothing in the code could have known the
-             * difference, so the operator says. Unset ⇒ the sweep still runs and still reports (the record
-             * count is the number that matters for quota) and simply never deletes.
-             * INTENTIC_CLOUDFLARE_REAP. */
+            apiToken: z.string().default(``).meta({ secret: true }),
+            zone: z.string().default(`intentic.dev`),
+            // Off by default: reaping is shared per zone, so sweeping with the wrong database can delete live records.
             reap: z.stringbool().default(false),
-            // Report the candidates without deleting even where reaping is ON: a new deployment's first sweep
-            // runs with this, the operator confirms the list, then it comes off. INTENTIC_CLOUDFLARE_REAP_DRY_RUN.
+            // Reports candidates without deleting even when reaping is on, so a first sweep can be reviewed.
             reapDryRun: z.stringbool().default(false),
         })
         .prefault({}),
-    /* THE REACHABILITY FABRIC: the platform's OWN edge (`@intentic/ingress`), which sandboxes dial with one
-     * outbound tunnel and authenticate with a grant this key signs (sandbox/reachability.ts). It replaced a
-     * self-hosted tunnel hub, and what went with the hub is the interesting part — there is no admin
-     * credential here, because there is no fabric to administer: the platform does not create, name, or
-     * revoke anything upstream, it signs a claim about a sandbox's identity and the edge verifies it offline.
-     * Revocation is deleting the sandbox row, which the ingress reads back over /api/reachability/<id>.
-     *
-     * intenticCloudflare above is unrelated and stays: DNS only, for the loopback certificate's records.
-     *
-     * `signingKey` (with `url`) is the switch: empty — the default for a developer and for a self-hoster who
-     * runs no ingress — leaves every provisioning route 404 and the wizard offering only the attach lane. */
+    // The platform's own edge; it signs a reachability grant offline. Empty signingKey disables provisioning.
     ingress: z
         .object({
-            /* The wildcard DNS zone every sandbox hostname is a label under. The names themselves did not
-             * change with the fabric, only what answers behind them. INGRESS_ZONE. */
+            // The wildcard zone every sandbox hostname is a label under.
             zone: z.string().default(`sbx.intentic.dev`),
-            /* The public base the BOXES dial to open their tunnel. Deliberately a label under the same
-             * wildcard (`https://ingress.<zone>`), so it costs no DNS record and is covered by the same
-             * wildcard certificate the edge already terminates. One address, not the hub era's
-             * platform-view/agent-view pair: the edge is public by construction. INGRESS_URL. */
+            // The public base boxes dial to open their tunnel; one address, under the same wildcard and certificate.
             url: z.url().default(`https://ingress.sbx.intentic.dev`),
-            /* The platform's Ed25519 PRIVATE key (PKCS8 PEM), the whole of what minting reachability needs.
-             * The ingress holds only the matching public key, so a compromised edge can verify grants and
-             * never mint one. INGRESS_SIGNING_KEY. */
+            // The platform's Ed25519 private signing key; the ingress holds only the matching public key.
             signingKey: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
-    /* THE HOSTED LANE, intentic's OWN Fly.io credential, the THIRD documented exception to the secret-free
-     * model (intenticCloudflare and trial.keys are the others), and the one that changes the trust story the
-     * most: for a HOSTED sandbox the platform creates the machine, keeps the way back in (start/stop/destroy),
-     * and the provider could reach inside it, so a platform breach reaches hosted machines, where every other
-     * lane stays out of reach by construction. ARCHITECTURE.md states this trade in full; every other lane is
-     * unchanged, and a platform with no token here (the default, and the right one for self-hosters) has no
-     * hosted lane at all: the routes 404 and the editor never offers it.
-     *
-     * `flyApiToken` is the switch (org rides along, a token without an org cannot place a machine). The rest
-     * sizes the starter box: deliberately small and cheap, because the lane's job is "signed in → working
-     * sandbox in seconds", and the reader's own computer is the answer for power, not a bigger bill here. */
+    // Intentic's own Fly credential; a platform breach can reach hosted machines, unlike every other lane.
     hosted: z
         .object({
-            // Org-scoped Fly API token (fly tokens create -o <org>). HOSTED_FLY_API_TOKEN.
             flyApiToken: z.string().default(``).meta({ secret: true }),
-            // The Fly organization slug hosted apps are created in. HOSTED_FLY_ORG.
             flyOrg: z.string().default(``),
-            // Fly region code a machine lands in when the caller is outside the EEA. HOSTED_REGION.
+            // Fly region for a caller outside the EEA.
             region: z.string().default(`iad`),
-            /* Where an EEA caller's machine lands instead. The privacy policy PROMISES this, a European
-             * user's workspace, and every file and secret they put in it, stays inside the EEA rather than
-             * crossing to Ashburn, so the pick is a data-protection commitment, not a latency tweak, and
-             * emptying this knob breaks a published statement rather than merely a default.
-             * HOSTED_REGION_EU. */
+            // Where an EEA caller's machine lands instead, per the privacy policy's EEA-data commitment.
             regionEu: z.string().default(`arn`),
-            // Fly app names are GLOBALLY unique: <appPrefix>-<sandbox id> keeps ours claimable and lets the
-            // reaper recognize our apps by prefix. HOSTED_APP_PREFIX.
+            // Fly app names are globally unique: <appPrefix>-<sandboxId> keeps ours claimable and reaper-recognizable.
             appPrefix: z.string().default(`intentic-sbx`),
-            // The image a hosted machine boots, the same public sandbox image every other lane runs.
-            // HOSTED_IMAGE.
+            // The image every hosted machine boots, the same public sandbox image every lane runs.
             image: z.string().default(`ghcr.io/intentic/sandbox:stable`),
-            /* The starter machine: shared CPUs + memory in MB (Fly guest shape), disk in GB. HOSTED_CPUS,
-             * HOSTED_MEMORY_MB, HOSTED_VOLUME_GB.
-             *
-             * Sized against `monthlyHours` below, not against what a workstation wants. Once awake time is
-             * capped the guest shape stops being the bill's driver, a capped month on this shape costs less
-             * than the DISK did on the 4×/8 GB/20 GB box this replaces, so the money saved by halving memory
-             * again buys nothing and costs the thing people actually notice: 4 GB survives an install and a
-             * build on a real repository, 2 GB meets the OOM killer and reads as "intentic is broken".
-             *
-             * THE CPU CUT IS THE ONE THAT WENT TOO FAR, and it is back at four. Memory at 4 GB was the right
-             * half of that trade; two shared vCPUs was not, because this box does not run one thing. The
-             * entrypoint puts cloudflared and a nested dockerd beside the daemon (SANDBOX_VM), and the
-             * daemon's hot path is git: a Changes review is ~11 spawns per repo, and a workspace write sets
-             * one off. On two shared vCPUs that work is not merely slow, it CROWDS OUT the event loop serving
-             * everything else, so an unrelated read behind it goes from ~300ms to seconds and creating one
-             * empty file reads as a ten-second hang. Measured against a hosted box over the tunnel: p50 314ms,
-             * p90 2.2s, p99 4.9s, against a ~126ms floor that is pure network.
-             *
-             * The daemon side of that was fixed too (git.routes.ts bounds how many repos are scanned at once,
-             * workspace/repo-watch.ts stopped re-walking the tree per reader), and this is the other half:
-             * bounding concurrency on a box with two shared vCPUs just means the bound is two. Four shared
-             * vCPUs is still the cheap end of Fly's shapes and still far under `monthlyHours` as the cost
-             * driver — the disk outlasts the awake time, and the awake time is what is capped. */
+            // Starter machine shape; CPUs must stay high or git-heavy work beside cloudflared/dockerd starves the loop.
             cpus: z.coerce.number().int().positive().default(4),
             memoryMb: z.coerce.number().int().positive().default(4096),
             volumeGb: z.coerce.number().int().positive().default(10),
-            // Hosted sandboxes per user. The free promise is ONE instant box each; more is a product decision,
-            // not a config bump someone makes casually. HOSTED_PER_USER.
+            // Hosted sandboxes per user; the free promise is one instant box each.
             perUser: z.coerce.number().int().positive().default(1),
-            /* THE WHOLE FLEET'S CEILING: how many machines this platform may hold on its provider at once,
-             * counting people's sandboxes, the warm stock waiting for them and any overlay builder in flight.
-             * A provider has its own limit (a Fly org's machine allowance, ours a hundred) and it is enforced
-             * the only way a provider can: by refusing the create, at the moment somebody is watching a page
-             * for their first sandbox.
-             *
-             * Set to a shade under the provider's own number, and the refusal stops being a surprise: the lane
-             * says it is full BEFORE the button (hosted-capacity.ts, sandbox.routes.ts's hostedOffer), a
-             * browser arrival stops starting machines it cannot get, and the warm pool leaves the last slots
-             * for people instead of prewarming into the wall. The provider's own refusal is still handled,
-             * because the two counts can drift (a machine created outside the platform, a raised quota nobody
-             * told us about); this knob is what keeps anybody from having to meet it.
-             *
-             * 0 (the default) means the platform imposes no ceiling of its own and learns it from the provider
-             * instead, which is the right answer for a self-hoster whose org allowance is theirs to know.
-             * HOSTED_MAX_MACHINES. */
+            // The fleet's machine ceiling on the provider; 0 defers to the provider's own limit instead of one here.
             maxMachines: z.coerce.number().int().nonnegative().default(0),
-            // Minutes of nobody-watching-nothing-running before the daemon exits and the machine stops,
-            // rides into the box as IDLE_STOP_MINUTES. 0 disables (always-on). HOSTED_IDLE_STOP_MINUTES.
+            // Idle minutes before the daemon exits and the machine stops; 0 disables (always-on).
             idleStopMinutes: z.coerce.number().int().nonnegative().default(20),
-            /* THE FREE LANE'S CEILING: awake hours per calendar month for an owner WITHOUT a membership.
-             * Members are unmetered, so this is the one number that decides what the free machine costs and
-             * the one place the hosted lane asks anybody to upgrade.
-             *
-             * Charged only while the machine is actually awake, it sleeps after `idleStopMinutes`, so
-             * thinking time and a closed laptop cost nothing, and enforced at WAKE, never mid-session:
-             * running out means the next visit offers the upgrade, not that the box dies under someone's
-             * hands. 0 disables the ceiling (self-hosters metering nothing). HOSTED_MONTHLY_HOURS. */
+            // Free-lane awake hours per month; members are unmetered. Charged only while awake, enforced at wake.
             monthlyHours: z.coerce.number().int().nonnegative().default(40),
-            /* THE CEILING'S BACKSTOP. The meter charges a stretch when the machine stops, and the machine
-             * stops from the inside (the daemon's idle-stop), where the owner is root: a pane that prints a
-             * line every minute keeps a free machine awake, and an awake machine used to be one that was
-             * never charged. The hourly meter tick (hosted-meter.ts) now counts a running machine's open
-             * stretch live and STOPS a metered owner's machines once the month is spent by more than this
-             * many minutes. The grace is what keeps "never under someone's hands" true in every ordinary
-             * case: the editor's meter reads zero and its strip has said so long before the platform acts.
-             * HOSTED_OVER_BUDGET_GRACE_MINUTES. */
+            // Backstop past monthlyHours: stops a metered owner's machine once over budget by this many minutes.
             overBudgetGraceMinutes: z.coerce.number().int().nonnegative().default(60),
-            /* THE FREE LANE'S EXPIRY, in days since the machine was last woken. A hosted disk bills every day
-             * it exists, so a machine nobody has opened since spring is the free tier's largest cost and its
-             * least useful one. Non-members only; a member's machine is never collected.
-             *
-             * `idleWarnDays` sends one email first, the machine is about to go, opening it is the whole
-             * remedy, because this deletes a disk somebody may still want. Either at 0 disables the sweep.
-             * HOSTED_IDLE_DAYS, HOSTED_IDLE_WARN_DAYS. */
+            // Days since last wake before a non-member's disk is collected; idleWarnDays emails once first. 0 disables.
             idleDays: z.coerce.number().int().nonnegative().default(21),
             idleWarnDays: z.coerce.number().int().nonnegative().default(14),
-            /* THE WARM POOL: machines built (image pulled, then stopped) before anyone asks, PER REGION, so
-             * claiming the free sandbox costs the seconds of a machine start instead of the minutes of an
-             * image pull. A pool machine holds no identity and no running compute, its standing cost is its
-             * volume, and the reconcile job keeps the pool at this size, rebuilding it when the image moves.
-             * ON by default (a couple of volumes per region is cheap; every cold first boot reported as
-             * "stuck" is not), and only where the lane itself is on, a platform without hosted credentials
-             * builds nothing regardless. 0 disables the pool and drains anything left in it.
-             * HOSTED_POOL_SIZE. */
+            // Warm pool: machines pre-built per region so claiming one costs a start, not an image pull; 0 drains it.
             poolSize: z.coerce.number().int().nonnegative().default(2),
-            /* HOW OFTEN THE LANE IS CHECKED AGAINST THE PROVIDER, in minutes (hosted-health.ts). Read-only:
-             * it compares the platform's rows with what Fly actually has and says so, loudly, when they
-             * disagree. It exists because they did disagree, for days, and the only trace was one warn line
-             * per machine per night while every affected person met a button that could not work. 0 turns the
-             * watch off. HOSTED_HEALTH_MINUTES. */
+            // How often the lane is checked against Fly; read-only, logs when rows and provider disagree. 0 turns it
+            // off.
             healthMinutes: z.coerce.number().int().nonnegative().default(15),
-            /* THE PROVISIONING CANARY (hosted-canary.ts): how often, in minutes, the platform provisions a
-             * sandbox of its own end to end and waits for its daemon to check in, then destroys it. The health
-             * watch above compares rows against Fly, which cannot see a lane that is intact but no longer
-             * WORKS, an image that stopped booting, a tunnel grant the hub refuses, a region out of capacity.
-             * All of those look perfect from here and show up only as people who never arrive.
-             *
-             * OFF by default because every run spends a real machine's few minutes. Both knobs are required:
-             * the email is the account the canary's sandbox belongs to, and it must be one nobody signs in as.
-             * HOSTED_CANARY_MINUTES, HOSTED_CANARY_EMAIL. */
+            // Provisioning canary: end-to-end sandbox test on this interval; off by default, since a run spends a
+            // machine.
             canaryMinutes: z.coerce.number().int().nonnegative().default(0),
             canaryEmail: z.string().default(``),
-            /* WHO THIS DEPLOYMENT IS to the provider, stamped into every machine it creates and the only
-             * thing its orphan sweep will destroy (hosted.ts). Derived from the API URL and the database when
-             * empty, which separates deployments without anybody having to remember a knob; set it only to
-             * carry an identity across a database move, or to hand one fleet deliberately from one deployment
-             * to another. Two deployments sharing this value share a fleet, including the right to destroy
-             * each other's machines. HOSTED_INSTANCE_ID. */
+            // This deployment's identity to the provider; only its own machines are destroyed. Sharing it shares a
+            // fleet.
             instanceId: z.string().default(``),
-            /* THE OVERLAY BUILDER (hosted-build.ts): the machine the platform creates inside a sandbox's own app
-             * to build its owner-approved environment overlay, the hosted lane's `ic sandbox rebuild`. Its
-             * minutes are the platform's money spent on whatever RUN steps the recipe carries, so every knob
-             * here is a brake as much as a shape, and the brakes come in pairs: a per-owner limit and a
-             * platform-wide ceiling behind it, because sign-in is Google and accounts are free to make.
-             *
-             * `builderImage` is buildkit, pinned; `builderCpuKind` is SHARED by default, a fraction of the
-             * price and worth nothing to anyone who approved a recipe in order to mine on it, a build being
-             * mostly a package manager waiting on the network. `buildTimeoutMinutes` is enforced twice, by the
-             * script itself and by the reconcile that destroys what outlives it. `buildsPerDay` is per owner
-             * (0 turns the feature off); `buildConcurrency` and `buildMinutesPerDay` are platform-wide, the
-             * latter the circuit breaker whose refusal the rebuild route logs at error level, because a day
-             * whose builds are spent is either a busy day or somebody farming. Builder minutes are also charged to the
-             * owner's month like awake minutes (HOSTED_MONTHLY_HOURS), which is what makes a free account's
-             * builds self-limiting. HOSTED_BUILDER_IMAGE, HOSTED_BUILDER_CPU_KIND, HOSTED_BUILDER_CPUS,
-             * HOSTED_BUILDER_MEMORY_MB, HOSTED_BUILD_TIMEOUT_MINUTES, HOSTED_BUILDS_PER_DAY,
-             * HOSTED_BUILD_CONCURRENCY, HOSTED_BUILD_MINUTES_PER_DAY. */
+            // The overlay builder (ic sandbox rebuild): per-owner and platform-wide build caps, charged like awake
+            // time.
             builderImage: z.string().default(`docker.io/moby/buildkit:v0.20.2`),
             builderCpuKind: z.enum([`shared`, `performance`]).default(`shared`),
             builderCpus: z.coerce.number().int().positive().default(4),
@@ -293,64 +122,32 @@ export const configSchema = z.object({
             buildMinutesPerDay: z.coerce.number().int().nonnegative().default(600),
         })
         .prefault({}),
-    /* THE FREE-TRIAL POOL, intentic's OWN model keys, and the SECOND documented exception to the secret-free
-     * model above (intenticCloudflare is the first). It is a larger exception than that one and says so here
-     * rather than in a commit message: a tunnel token is spent provisioning DNS, while these keys serve model
-     * turns, so for as long as a user is on the trial their prompts pass through the platform. That is the whole
-     * cost of letting someone chat before they own any AI subscription, it is bounded to the trial, and every
-     * surface that offers the trial says it in those words.
-     *
-     * `keys` is the switch. Empty (the default, and the only sane one for a self-hosted platform) disables the
-     * trial outright: the routes 404, the daemon provisions nothing, and the chat's front door is the free
-     * Google sign-in alone. Several keys are a POOL. Google's free tier is sized for one developer, so a launch
-     * day exhausts one project's quota and the next key takes the turn rather than the user meeting a 429. */
+    // Intentic's own model keys serving free-trial chat, tried as a pool. Empty (default) disables the trial.
     trial: z
         .object({
-            // Comma-separated Google AI Studio API keys, tried in order. TRIAL_KEYS.
+            // Comma-separated Google AI Studio keys, tried in order.
             keys: z.string().default(``).meta({ secret: true }),
-            // Google's OpenAI-compatible surface. Any OpenAI-shaped upstream works; this is the one whose free
-            // tier is meant for serving end users. TRIAL_BASE_URL.
+            // Google's OpenAI-compatible endpoint; any OpenAI-shaped upstream works.
             baseUrl: z.url().default(`https://generativelanguage.googleapis.com/v1beta/openai`),
-            /* Comma-separated model ids the trial may ROUTE TO, in preference order. Empty (the default) uses
-             * the curated ladder in code (trial-ladder.ts).
-             *
-             * This narrows what the trial SPENDS, not what it OFFERS, the two used to be the same list and
-             * that was the bug. The trial now publishes a single synthetic id and picks a real model per
-             * message, walking this list until one answers, so an operator keeping a free tier off the
-             * expensive end sets it here and users never see the difference. An operator who repoints
-             * TRIAL_BASE_URL off Google must set it: the curated ladder names Google's aliases, and this
-             * replaces it wholesale rather than filtering it. TRIAL_MODELS. */
+            // Comma-separated model ids the trial may route to, in preference order; empty uses the curated ladder in
+            // code.
             models: z.string().default(``),
-            // Messages per signed-in account per UTC day. Enough to judge the product, far too few to work on.
-            // TRIAL_DAILY_MESSAGES.
+            // Messages per signed-in account per UTC day; enough to judge the product, too few to work on.
             dailyMessages: z.coerce.number().int().nonnegative().default(12),
         })
         .prefault({}),
-    /* THE HOSTED PLAN, the one thing this platform sells: a Stripe subscription that makes the owner's hosted
-     * sandbox always on and never collected (docs/design/pricing-model.md). Off by default: with no key and no
-     * price there is no plan, every plan surface answers "not here", and the hosted lane is free-lane only. */
+    // The hosted plan, sold via Stripe; no key/price means no plan and the hosted lane stays free-lane only.
     hostedPlan: z
         .object({
-            // The Stripe secret key (sk_… / rk_…). HOSTED_PLAN_STRIPE_SECRET_KEY.
             stripeSecretKey: z.string().default(``).meta({ secret: true }),
-            /* Where the Stripe client sends its calls. Stripe itself by default and in every deployment; the
-             * hermetic and browser e2e tiers point it at a stand-in that speaks Stripe's shapes
-             * (@intentic/testing/stripe-fake), which is what lets the REAL client, webhook, mirror row and
-             * Billing page be driven end to end with no account and no network. HOSTED_PLAN_STRIPE_API_URL. */
+            // Where the Stripe client sends calls; tests point it at a stand-in that speaks Stripe's own shapes.
             stripeApiUrl: z.url().default(`https://api.stripe.com/v1`),
-            // The signing secret of the /hosted-plan/webhook endpoint (whsec_…), without it subscription
-            // events are refused, so a plan that takes money must set it. HOSTED_PLAN_STRIPE_WEBHOOK_SECRET.
+            // Webhook signing secret; without it, subscription events are refused.
             stripeWebhookSecret: z.string().default(``).meta({ secret: true }),
-            // The recurring Price the checkout sells (price_…). HOSTED_PLAN_STRIPE_PRICE_ID.
             stripePriceId: z.string().default(``),
-            // The plan's monthly price in USD as the app and the admin panel state it, display only; what
-            // Stripe actually charges is the Price above. HOSTED_PLAN_PRICE_USD.
+            // Display only; what Stripe actually charges is the Price above.
             priceUsd: z.coerce.number().nonnegative().default(20),
-            /* Comma-separated emails that count as on the plan WITHOUT a subscription. Checked at answer time
-             * (hosted-plan.ts), never seeded as rows, so it works the moment the account exists and reverts
-             * the moment the email leaves the list. A comped account is absent from the admin panel's plan
-             * count and revenue (they pay nothing). Local dev's way to an unmetered hosted sandbox, and the
-             * operator's way to comp a person. HOSTED_PLAN_COMP_EMAILS. */
+            // Comma-separated emails treated as on-plan without a subscription; checked live, never seeded as rows.
             compEmails: z.string().default(``),
         })
         .prefault({}),
@@ -358,71 +155,46 @@ export const configSchema = z.object({
         .object({
             url: z.url().default(`http://localhost:6480`),
             port: z.coerce.number().int().positive().default(6480),
-            // Bind address. Loopback in dev, localhost is the origin the dev cert, CORS, and Better Auth all
-            // trust, so a container must set API_HOST=0.0.0.0 for the reverse proxy / tunnel (a separate
-            // container or host) to reach it. TLS is still terminated by that proxy in prod.
+            // Loopback in dev; a container must set 0.0.0.0 for a reverse proxy to reach it, which still terminates
+            // TLS.
             host: z.string().default(`127.0.0.1`),
-            // Dev TLS: paths to a cert/key (the @intentic/localhost-https package) so the API serves https,
-            // matching the https SPA. Google's FedCM One Tap needs https and won't run on http://localhost.
-            // Empty in prod, where TLS is terminated by the proxy in front of the API.
+            // Dev TLS cert/key so the API serves https, since Google's One Tap needs it; empty in prod behind a proxy.
             httpsKey: z.string().default(``),
             httpsCert: z.string().default(``),
         })
         .prefault({}),
-    /* THE AGENT WALLET's signer, the platform half of a sandbox spending USDC on x402 endpoints.
-     *
-     * `custodyUrl` + `custodyKey` are the switch, exactly like pool.stripeSecretKey: both empty (the
-     * default, and the right one for a self-hosted platform) and there is no signer: /wallet routes 404,
-     * a sandbox's wallet capability stays pending and says so on its card. The platform never holds key
-     * material either way: the credential here authenticates it to a custody provider that holds the
-     * member's wallet and signs with it (wallet/wallet-custody.ts). */
+    // The agent wallet's signer; empty custodyUrl/custodyKey disables /wallet. The platform holds no key material.
     wallet: z
         .object({
-            // The custody provider's API root. WALLET_CUSTODY_URL.
             custodyUrl: z.string().default(``),
-            // The platform's API credential there. WALLET_CUSTODY_KEY.
             custodyKey: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
-    /* THE PUSH RELAY's forwarding credential, the FOURTH documented exception to the secret-free model
-     * (intenticCloudflare, trial.keys and hosted.flyApiToken are the others), and the narrowest: Apple only
-     * accepts pushes from the app's vendor, so a daemon on the owner's own hardware cannot notify the iOS
-     * shell without SOMEONE holding this key, and that someone can only be the platform. What passes through
-     * is a notification's title and body, never a transcript, never a diff (the daemon's payloads are
-     * pointers back into the workspace by design), but it passes through READABLE, unlike web push, and the
-     * push-relay README states that trade in full.
-     *
-     * `keyP8` is the switch, exactly like trial.keys: empty (the default, and the right one for a platform
-     * that ships no iOS app) and the relay does not exist: /push routes 404, and the web app inside the
-     * shell reports notifications unsupported rather than half-working. */
+    // Push relay's Apple credential: the only way a daemon can notify iOS, since Apple only accepts pushes from it.
     apns: z
         .object({
-            // The APNs auth key, the .p8 file's contents, literal "\n" escapes accepted. APNS_KEY_P8.
+            // The .p8 file's contents; literal \n escapes are accepted.
             keyP8: z.string().default(``).meta({ secret: true }),
-            // The key's id (from the Apple developer portal) and the team it belongs to. APNS_KEY_ID,
-            // APNS_TEAM_ID.
+            // The key's id and the team it belongs to, from the Apple developer portal.
             keyId: z.string().default(``),
             teamId: z.string().default(``),
-            // The iOS shell's bundle id. APNs routes on it (`apns-topic`). APNS_BUNDLE_ID.
+            // APNs routes pushes by this (`apns-topic`).
             bundleId: z.string().default(`dev.intentic.app`),
-            // Apple's production gateway; point at https://api.sandbox.push.apple.com for development builds
-            // (a token minted by a debug install is unknown to the production gateway). APNS_URL.
+            // Apple's production gateway; point at the sandbox host for development builds instead.
             url: z.url().default(`https://api.push.apple.com`),
         })
         .prefault({}),
-    // Pino logging. LOG_LEVEL sets verbosity; LOG_PRETTY toggles human-readable dev output (colorized,
-    // in-process) vs. single-line JSON for prod. Defaults to pretty everywhere but production.
+    // Pino logging: level sets verbosity, pretty toggles colorized dev output vs single-line JSON in prod.
     log: z
         .object({
             level: z.enum([`fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`]).default(`info`),
-            // z.stringbool parses "true"/"false"/"1"/"0" from the env string (z.coerce.boolean treats any
-            // non-empty string, including "false", as true).
+            // z.stringbool parses true/false/1/0; z.coerce.boolean treats any non-empty string, even 'false', as true.
             pretty: z.stringbool().default(process.env[`NODE_ENV`] !== `production`),
         })
         .prefault({}),
 });
 
-// Merge order (later wins): .env file < process env < CLI args. So `bun start --api.port=7000` overrides.
+// Merge order, later wins: .env file, then process env, then CLI args.
 const definition = {
     schema: configSchema,
     sources: [envFile(rootEnv), env(), cliArgs()],
@@ -430,7 +202,7 @@ const definition = {
 
 export type Config = z.infer<typeof configSchema>;
 
-// Dotted paths of secret fields, pass to mask() before logging the config.
+// Dotted paths of secret fields; pass to mask() before logging the config.
 export const CONFIG_SECRETS = [
     `database.url`,
     `betterAuth.secret`,

@@ -4,34 +4,18 @@ import { dirname, join } from "node:path";
 import { resolveEngine } from "../../engines/engine-resolve.js";
 import { resolveOnPath } from "../../platform/boot/on-path.js";
 
-/* WHICH `codex` BINARY A TURN DRIVES, and why the daemon resolves it before spawning app-server.
- *
- * The adapter directly spawns `codex app-server --stdio`. @openai/codex-sdk stays as the exact version anchor,
- * but the ~350 MB @openai/codex platform package it pins is pruned from the deployed tree
- * (prepare-image-trees.sh). The one copy of the CLI is the codex PACK's global install at
- * /usr/local/bin/codex, pinned to that exact dependency version, so PATH makes app-server and the agent's own
- * the CLI on PATH provably the same engine.
- *
- * The SDK dependency also provides the DEV fallback's location, and only when its pinned platform package is
- * really there: a checkout that still has the package (a `pnpm install` outside the image) keeps working with
- * no pack installed. */
+// Resolves the `codex` binary a turn spawns as `codex app-server --stdio`. The pack's global install at
+// /usr/local/bin/codex is the deployed copy; the SDK's pinned platform package, resolved through @openai/codex-sdk, is
+// the dev-checkout fallback (pruned from the image).
 
-// The rebuild-fixable state, in the user's terms. "rebuild" is required, it is the word the UI reads to
-// route a state to the Environment card, so it has to survive any rewording of this sentence.
+// "rebuild" is required verbatim: the UI matches this text to route to the Environment card.
 export const CODEX_BINARY_MISSING =
     "This sandbox's image doesn't include the Codex CLI yet: rebuild it from the Environment card in Sandbox ▸ Environment to run Codex here.";
 
-/* The tree's own copy, resolved through Node from the SDK's location, not this module's. @openai/codex is the
- * SDK's dependency and not ours, so under pnpm's non-hoisted layout it is only
- * reachable from inside @openai/codex-sdk, and asking the resolver rather than guessing a path is also what
- * keeps this working in both layouts the daemon runs in (the workspace's shared store in a dev checkout, the
- * self-contained tree in the image).
- *
- * import.meta.resolve for the first hop because the SDK is ESM-only: it publishes no `require` condition, so
- * createRequire().resolve() on it fails ERR_PACKAGE_PATH_NOT_EXPORTED before ever reaching the question.
- *
- * Either resolve throws for the pruned package, which is the ordinary answer here rather than an error; the
- * access check then covers a package directory that survived with its bin removed. */
+// Resolves @openai/codex's location through @openai/codex-sdk, the only reachable path under pnpm's non-hoisted layout;
+// import.meta.resolve first since the SDK is ESM-only.
+// A throw here means the package was pruned (expected, not an error); the access check catches a directory that
+// survived with its bin removed.
 const vendoredWrapper = async (): Promise<string | undefined> => {
     let wrapper: string;
     try {
@@ -46,13 +30,9 @@ const vendoredWrapper = async (): Promise<string | undefined> => {
     );
 };
 
-/* Resolved per call, not once per daemon, because the ENGINE STORE can move under a running daemon: an owner
- * pressing Update installs a newer codex and the next turn must drive it. The two fallbacks below are still
- * fixed at container start, and the store's own answer is cached for seconds (engines/engine-resolve.ts), so
- * this costs a map lookup on the overwhelmingly common path.
- *
- * ORDER IS STORE, THEN PATH, THEN THE TREE. The store is what an owner asked for explicitly; PATH is the
- * pack's global install, which is the image's floor; the tree copy is the dev checkout's. */
+// Resolved per call, not cached: the engine store can change under a running daemon (an Update installs a newer codex).
+// Order: the store (explicit request), then PATH (the image's pack install), then the tree copy (dev-checkout
+// fallback).
 export const codexBinary = async (): Promise<string | undefined> => {
     const stored = await resolveEngine("codex");
     return stored.paths.binPath ?? (await resolveOnPath("codex")) ?? vendoredWrapper();

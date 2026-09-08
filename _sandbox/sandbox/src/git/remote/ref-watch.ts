@@ -4,46 +4,19 @@ import type { Logger } from "pino";
 import { Coalescer } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* REF-MOVE PUSH, the third change feed, beside the file watcher and the repo-set differ.
- *
- * The other two cannot carry this, and not by omission. A repo's git dir is RELOCATED OFF /work entirely (onto
- * /history, so an isolated turn's worktree can stand in for the workspace root, repo-git-dirs.ts explains why),
- * and the workspace watcher descent-ignores `.git` on top of that. So no path the browser ever sees can say "a
- * commit landed". Without this feed the commit graph is exactly as fresh as the last thing the user clicked,
- * and in this product most commits are not the user's at all: the agent commits, rebases and lands out-of-band.
- *
- * WHAT IS WATCHED, and why these and not the git dir wholesale: `objects/` is rewritten continuously by fetch,
- * gc and every commit, and watching it would turn one `git fetch` into thousands of wake-ups for information
- * already carried by the ref that moved. So this watches the places a REF or an operation marker is written:
- *
- *   commondir  refs/**            branch/tag/remote-tracking updates, and creation + deletion
- *              packed-refs        the same after a gc or a clone packs them away
- *   gitdir     HEAD               a checkout, and which branch a commit lands on
- *              logs/HEAD          the reflog, a commit that moves HEAD without touching a loose ref
- *              MERGE_HEAD …       a merge, cherry-pick or revert starting, finishing or being aborted
- *              rebase-merge/ …    the same for either rebase backend, and for a queued sequencer run
- *
- * The two dirs are resolved SEPARATELY and both are watched, because in a linked worktree they differ: refs and
- * packed-refs are shared in the common dir, while HEAD and the in-progress markers are per worktree. Every agent
- * session in this product runs in a linked worktree, so a watcher that assumed one dir would miss half of what
- * it exists to catch. In the main checkout they resolve to the same path and the duplicate watch collapses. */
+// A third change feed (beside the file watcher and repo-set differ): the git dir is often relocated off /work and the
+// file watcher ignores `.git`, so nothing else can say a commit landed. Watches only where a ref or operation marker is
+// written, not `objects/` (rewritten by every fetch/gc):
+// - commondir: refs/**, packed-refs
+// - gitdir: HEAD, logs/HEAD, MERGE_HEAD/CHERRY_PICK_HEAD/REVERT_HEAD, rebase-merge/rebase-apply/sequencer
+// Both dirs are resolved and watched separately, since a linked worktree splits them (refs are common, HEAD is
+// per-worktree).
 
-// One batch fires this long after the FIRST move in a window, so a rebase replaying forty commits is one frame
-// rather than forty. Matches the file watcher's own debounce.
+// Time after the first move before a batch fires, coalescing a burst; matches the file watcher's debounce.
 export const BATCH_MS = 250;
 
-/* The coalescing rule itself, apart from the watcher that feeds it: repo names accumulate while the window is
- * open and go out as one sorted, deduplicated batch when it closes, so a commit that writes both a ref and the
- * reflog names its repo once.
- *
- * It is a separate factory for the same reason createPathBatcher is one in workspace-watch.ts: it is the only
- * part of this file a test can pin down. Counting batches behind a real watcher measures how fast a loaded
- * machine ran three git subprocesses and delivered their inotify events, not what this code does, the "green on
- * a box, red on a busy runner" trap _tools/testing/src/vitest.ts is written against. Reached without a watcher
- * in front of it, the rule answers to timers the test owns.
- *
- * A Coalescer, not a Delayer: the window opens on the FIRST move and later ones join it rather than pushing the
- * deadline out, so a rebase that never goes quiet still reports within a window instead of only once it ends. */
+// Coalesces names into one sorted, deduped batch per window, factored out so tests use owned timers, not real inotify
+// timing. A Coalescer: the window opens on the first move; later ones join it, not reset it.
 export const createRepoBatcher = (emit: (repos: string[]) => void): Coalescer<string> =>
     new Coalescer<string>(BATCH_MS, (batch) => emit([...new Set(batch)].toSorted()));
 
@@ -51,16 +24,15 @@ export interface RefWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
 }
 
-// A repo's git dir and its common dir, absolute. Asking git rather than guessing is what makes this work for a
-// relocated git dir, a linked worktree, and a plain in-tree `.git` alike.
+// A repo's git dir and common dir, absolute; asked of git rather than guessed, so a relocated dir, a linked worktree
+// and a plain `.git` all work.
 const gitDirsOf = async (dir: string, git: GitRunner): Promise<{ gitDir: string; commonDir: string } | undefined> => {
     try {
         const { stdout } = await git(dir, ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"]);
         const [gitDir, commonDir] = stdout.trim().split("\n");
         return gitDir === undefined || commonDir === undefined ? undefined : { gitDir, commonDir: commonDir === "" ? gitDir : commonDir };
     } catch {
-        // Not a repo (yet), a directory the discovery listed a moment before it was removed, or a clone still
-        // being written. The next repo-set frame re-runs this.
+        // Not a repo yet, mid-removal, or a clone still being written; the next repo-set frame retries.
         return undefined;
     }
 };
@@ -100,24 +72,20 @@ export const createRefWatch = (
         if (dirs === undefined) {
             return;
         }
-        // A second call may have won while this one awaited git, keep the first and drop this one, or the map
-        // loses a watcher it can never close.
+        // A second call may have won the race while this one awaited git; drop this one or the map leaks a watcher.
         if (watchers.has(repo)) {
             return;
         }
-        /* `ignoreInitial` because chokidar otherwise reports every existing ref as an `add` at startup, which
-         * would announce a move for every repo the moment the daemon boots. `depth: 2` bounds the refs walk:
-         * `refs/heads/<name>` and `refs/remotes/<remote>/<name>` are the deep cases, and a ref hierarchy nested
-         * further than that is not one any surface here renders. */
+        // `ignoreInitial`: chokidar otherwise reports every existing ref as an `add` at boot. `depth: 2` covers
+        // `refs/heads/<name>` and `refs/remotes/<remote>/<name>`, the deepest cases any surface renders.
         const watcher = watch(watchPaths(dirs), { ignoreInitial: true, depth: 2 });
         watcher.on("all", () => batcher.add(repo));
         watcher.on("error", (error) => logger?.warn({ err: error, repo }, "ref watch error"));
         watchers.set(repo, watcher);
     };
 
-    // Repos come and go (a clone, a scaffold, a delete), so the watcher set is reconciled against each repo-set
-    // frame rather than built once. "root" is always in it: the /work repo is where every landed agent branch
-    // lands, and discovery legitimately omits it (it is the container the others are discovered inside).
+    // Reconciled against each repo-set frame, since repos come and go. `root` is always included: discovery omits it
+    // (the container the others are found inside), but every landed branch lands there.
     const reconcile = (discovered: readonly string[]): void => {
         const wanted = new Set(["root", ...discovered]);
         for (const [repo, watcher] of watchers) {

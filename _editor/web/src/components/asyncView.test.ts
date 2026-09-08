@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
-//
-// The routing rule "navigation never waits", at its mechanism. A route registered through asyncView must
-// complete its navigation while the chunk is still in flight, draw its outline only once the wait is long
-// enough to deserve being seen (loadingReveal's thresholds), swap to the real view the moment the code lands:
-// and own the failure path the router can no longer see: a dead chunk answers with the stale-window reload,
-// anything else with a notice that carries the retry.
+// Navigation completes while the chunk is still in flight; the outline only shows past the reveal delay, then
+// swaps to the real view. Owns the failure path: a dead chunk gets the stale-window reload, anything else a notice with
+// retry.
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { type App, type Component, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter, RouterView, type Router } from "vue-router";
 import { asyncView } from "./asyncView";
 
-// jsdom's window.location is unforgeable, so the reload the recovery performs is observed through a replaced
-// global: same trick as the router's own staleChunk suite.
+// window.location is unforgeable in jsdom; the reload is observed via a replaced global, per staleChunk.test.
 const assign = vi.fn();
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
@@ -34,7 +30,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// A real router at a real wrapped route: the claim under test is about NAVIGATION, not just rendering.
+// Real router, real route: the claim under test is navigation, not just rendering.
 const mountAt = async (view: Component): Promise<{ router: Router; el: HTMLElement }> => {
     const router = createRouter({
         history: createMemoryHistory(),
@@ -53,8 +49,8 @@ const mountAt = async (view: Component): Promise<{ router: Router; el: HTMLEleme
     return { router, el };
 };
 
-// The loader's promise settles through a few microtask hops (start's reset, attempt's catch, the finally) and
-// Vue's flush rides the same queue: a handful of beats drains all of it without touching the fake timers.
+// Drains the loader's promise chain and Vue's render flush, which ride the same microtask queue, without
+// touching fake timers.
 const settle = async (): Promise<void> => {
     for (let beat = 0; beat < 8; beat += 1) {
         await nextTick();
@@ -67,9 +63,9 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
     const { router, el } = await mountAt(view);
 
     await router.push(`/target`);
-    // The click landed: URL flipped, while the loader is still pending…
+    // URL already flipped; the loader is still pending.
     expect(router.currentRoute.value.path).toBe(`/target`);
-    // …and a wait shorter than the reveal delay paints NO placeholder: a warm chunk must not flash grey.
+    // A wait under the reveal delay paints no placeholder; a warm chunk must not flash grey.
     expect(el.querySelector(`[data-outline]`)).toBeNull();
 
     await vi.advanceTimersByTimeAsync(250);
@@ -92,8 +88,7 @@ it(`a revisit renders synchronously: the chunk is fetched once and kept`, async 
 
     await router.push(`/`);
     await router.push(`/target`);
-    // One render flush and no loader beat: the remount paints the kept component in its first frame, and the
-    // count is the proof nothing was fetched twice.
+    // One flush, no loader beat: remount paints the kept component immediately; call count proves no refetch.
     await nextTick();
     expect(el.querySelector(`[data-view]`)).not.toBeNull();
     expect(load).toHaveBeenCalledTimes(1);
@@ -105,11 +100,10 @@ it(`answers a dead chunk with one reload landed on the destination, and a notice
     await first.router.push(`/target`);
     await settle();
     expect(assign).toHaveBeenCalledWith(`/target`);
-    // The page is being replaced: no failure surface flashed at it.
+    // The page is being replaced; no failure surface flashes.
     expect(first.el.textContent).not.toContain(`couldn't load`);
 
-    // The reloaded window (fresh wrapper, same sessionStorage) fails again: the chunk is GENUINELY gone.
-    // One reload per destination: this time the failure is said, with the retry.
+    // Same sessionStorage, fresh wrapper, fails again: the chunk is genuinely gone, so this shows the retry.
     const second = await mountAt(asyncView(dead));
     await second.router.push(`/target`);
     await settle();
@@ -140,7 +134,7 @@ it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, as
 });
 
 it(`a chunk resolving re-arms the stale-window reload for the next redeploy`, async () => {
-    // The guard was spent on some destination; landing any chunk is the proof this window's assets exist.
+    // The reload guard was already spent; landing any chunk proves this window's assets are current.
     sessionStorage.setItem(`intentic.chunkReloaded`, `/target`);
     const { router } = await mountAt(asyncView(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`) }) })));
     await router.push(`/target`);

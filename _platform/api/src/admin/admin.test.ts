@@ -19,17 +19,13 @@ import { adminTrends } from "./admin-trends.js";
 import { adminUserDetail } from "./admin-user.js";
 import { adminUsers } from "./admin-users.js";
 
-/* THE ADMIN SURFACE'S WHOLE SECURITY STORY IS ONE GUARD, so the things worth pinning are the refusals: an
- * empty allowlist refusing everyone (a fresh self-hosted platform has no admin surface), a signed-in
- * non-admin reading FORBIDDEN rather than data, and the allowlist matching by address rather than by
- * spelling (case and whitespace are presentation, not identity). Below that, each read module is pinned on
- * the arithmetic that would lie silently if it drifted: funnel stages, attention sentences and ordering,
- * cost aggregation against config knobs, and the support page's shape. */
+// The admin surface's security story is one guard: an empty allowlist refuses everyone, a non-admin gets FORBIDDEN,
+// matching is by address not spelling. Reads are pinned on arithmetic that would drift silently.
 
 const NOW = new Date(`2026-08-25T10:30:00Z`);
 
-// The slice of Config the admin modules read, cast whole — parsing the full schema here would couple these
-// tests to every unrelated knob's default.
+// The slice of Config the admin modules read, cast whole rather than parsed, so tests stay decoupled from unrelated
+// knobs' defaults.
 const configWith = (overrides?: Record<string, unknown>): Config =>
     ({
         admin: { emails: `radarsu@gmail.com`, mutations: false },
@@ -86,7 +82,7 @@ describe(`adminOverview`, () => {
     it(`assembles counts, the plan book, activity windows and lanes — absent group-by rows zero-filled`, async () => {
         // The sandbox mock answers by window: the where's gte names which count is being asked for.
         const windows = new Map([
-            [new Date(`2026-08-25T10:25:00Z`).getTime(), 3], // 5 min — connected now
+            [new Date(`2026-08-25T10:25:00Z`).getTime(), 3], // 5 min: connected now
             [new Date(`2026-08-24T10:30:00Z`).getTime(), 4], // 24h
             [new Date(`2026-08-18T10:30:00Z`).getTime(), 5], // 7d
             [new Date(`2026-07-26T10:30:00Z`).getTime(), 6], // 30d
@@ -105,7 +101,7 @@ describe(`adminOverview`, () => {
                     { status: `past_due`, _count: { _all: 1 } },
                 ],
                 count: async () => 1,
-                // Two active plans, one of them covering two hosted sandboxes: three slots billed.
+                // Two active plans, one covering two hosted sandboxes: three slots billed.
                 aggregate: async () => ({ _sum: { quantity: 3 } }),
             },
             hostedMachine: { count: async () => 5 },
@@ -192,7 +188,7 @@ describe(`adminFunnel`, () => {
             { ownerId: `carol`, firstAnnouncedAt: new Date(`2026-08-22T01:00:00Z`), owner: { createdAt: new Date(`2026-01-01T00:00:00Z`) } },
         ];
         const funnel = await adminFunnel(prismaWith(counts, [], activated, [{ ownerId: `carol` }]), () => NOW);
-        // Alice 2h, Bob 10h → median 6h over 2 accounts.
+        // Alice 2h, Bob 10h: median 6h over 2 accounts.
         expect(funnel.activation).toEqual({ medianHours: 6, count: 2 });
     });
 });
@@ -211,7 +207,7 @@ describe(`adminAttention`, () => {
 
     it(`composes sentences server-side, orders danger before warning then newest, and anchors drill-downs`, async () => {
         const prisma = emptyPrisma();
-        // A stuck setup WITH a failure (danger), a warm-pool claim that crashed (danger), a plan past due (warning).
+        // A stuck setup with a failure (danger), a warm-pool claim that crashed (danger), a plan past due (warning).
         (prisma.sandbox as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
             args.where[`setupCodeClaimedAt`]
                 ? [
@@ -246,7 +242,6 @@ describe(`adminAttention`, () => {
             sandboxId: `sb1`,
         });
         expect(claim).toMatchObject({ severity: `danger`, title: `Warm-pool machine intentic-sbx-warm (arn) stuck in “claimed”` });
-        // The plan sentence names the account and the period that ran out, and anchors the drill-down.
         expect(pastDue).toMatchObject({ severity: `warning`, title: `late@example.com's hosted plan is past due`, email: `late@example.com` });
         expect(pastDue?.detail).toContain(`2026-08-20`);
     });
@@ -327,7 +322,7 @@ describe(`adminCosts`, () => {
             usersToday: 4,
             messages7d: 11,
             users7d: 3,
-            // Accounts per model, distinct — u1 served by two rungs counts once under each.
+            // Accounts per model, distinct: u1 served by two rungs counts once under each.
             models: [
                 { model: `gemini-2.5-flash`, accounts: 2 },
                 { model: `gemini-2.5-pro`, accounts: 1 },
@@ -503,10 +498,8 @@ describe(`adminUsers`, () => {
     });
 });
 
-/* THE WIRE, NOT JUST THE FUNCTIONS. The panel is a plain `fetch` against the OpenAPI surface — a GET whose
- * input arrives as query-string strings — so what is worth pinning here is the whole path through the same
- * OpenAPIHandler app.ts mounts: query params parsed and coerced into the contract input, the guard answering
- * 403 as an HTTP status, and the audit line written with the caller's email. */
+// The panel is a plain fetch against the OpenAPI surface, so this pins the whole path: query params coerced into
+// contract input, the guard as an HTTP status, and the audit line.
 describe(`admin over the OpenAPI wire`, () => {
     const logLines: unknown[] = [];
     const logger = { info: (fields: unknown) => logLines.push(fields), warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
@@ -547,9 +540,8 @@ describe(`admin over the OpenAPI wire`, () => {
         const response = await serve(`/rpc/admin/users?limit=2&query=radar`, { email: `radarsu@gmail.com` }, prisma);
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({ users: [], total: 0 });
-        // limit=2 arrived as a string and reached the query as the number 3 (limit + the overflow row).
+        // limit=2 arrived as a string and reached the query as the number 3 (limit plus the overflow row).
         expect(findArgs).toMatchObject({ take: 3 });
-        // The audit line names who asked for what.
         expect(logLines).toContainEqual({ admin: `radarsu@gmail.com`, route: `admin.users` });
     });
 
@@ -590,8 +582,7 @@ describe(`admin over the OpenAPI wire`, () => {
         });
         expect(wrong.status).toBe(400);
         expect(touched).toBe(false);
-        // The gate passed; what answers now is the action itself, which on this context (no hosted lane)
-        // declines in a sentence rather than throwing.
+        // The gate passed; the action answers now, declining in a sentence rather than throwing (no hosted lane).
         const right = await serve(`/rpc/admin/machine/stop`, { email: `radarsu@gmail.com` }, prisma, {
             mutations: true,
             body: { sandboxId: `sb1`, confirm: `sb1` },
@@ -735,7 +726,7 @@ describe(`sendAdminDigest`, () => {
             () => NOW,
         );
         expect(logged.info.some((entry) => entry.fields?.[`items`] === 2 && entry.fields?.[`admins`] === 2)).toBe(true);
-        // The unconfigured mailer declined twice — once per admin — instead of throwing.
+        // The unconfigured mailer declined twice, once per admin, instead of throwing.
         expect(logged.warn.filter((entry) => entry.message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
     });
 });
@@ -753,7 +744,7 @@ describe(`admin actions`, () => {
         expect(result.message).toContain(`sb1`);
     });
 
-    // The erasure's prisma: one sandbox with no machine, a user row to delete, and a plan row (or none).
+    // One sandbox with no machine, a user row to delete, and a plan row (or none).
     const erasurePrisma = (plan: { stripeSubscriptionId: string; status: string } | null, onDelete: (args: Record<string, unknown>) => void) =>
         ({
             sandbox: { findMany: async () => [{ id: `sb1`, hosted: null }] },
@@ -777,9 +768,6 @@ describe(`admin actions`, () => {
         expect(deleted).toMatchObject({ where: { id: `u1` } });
     });
 
-    /* THE SUBSCRIPTION IS NOT A ROW OF OURS. The cascade takes the plan's mirror; Stripe's subscription kept
-     * charging a customer with no account left to open the portal from. It is cancelled before the row goes,
-     * while the row still names it. */
     it(`erasure cancels the account's live subscription before the cascade takes its row`, async () => {
         const order: string[] = [];
         const prisma = erasurePrisma({ stripeSubscriptionId: `sub_1`, status: `active` }, () => order.push(`delete`));

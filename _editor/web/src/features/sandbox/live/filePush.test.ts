@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-// The stream router's import chain reaches the app's environment read at module eval; jsdom plus these mocks are
-// the whole of what it wants (the same edge runtimeEvents.test.ts cuts, for the same reason).
+// Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
@@ -21,15 +20,8 @@ import { onFilesChanged } from "../../../extension-host/fileEvents";
 import { queryClient } from "../../../lib/queryPersistence";
 import { applySystemEvent } from "./systemEvents";
 
-/* WHAT A FILE PUSH REACHES, both halves of it.
- *
- * A `contributes.files` declaration had exactly one effect: evict the query keys it names. That serves whatever
- * the reader is LOOKING at and nothing else, because an eviction only reaches a query something observes, and the
- * badge on a rail tile is read with nothing mounted. So the extension's own background state, the thing that
- * decides what the tile says, was on a timer and every tile in the app was as fresh as its interval.
- *
- * These are the two properties that fix it: the same frame is announced, and the frame that means the MOST (no
- * path list at all) stops being the frame that means nothing. */
+// A file push evicts the query keys a `contributes.files` declaration names, and also announces the frame to
+// listeners with no mounted query; an empty path list (too many to enumerate) means everything moved, not nothing.
 
 const SANDBOX = `sbx-1`;
 const APPROVALS = `${STATE_DIR}/config/approvals/`;
@@ -68,9 +60,7 @@ it(`announces a write to the extension that declared the path, as well as evicti
     expect(listener).toHaveBeenCalledWith([`${APPROVALS}proposal.json`]);
 });
 
-/* The daemon sends no path list past its per-frame cap, so a branch switch, a codegen run or a mass delete
- * arrives as an empty batch. Matched against a prefix table that is nothing, which made the largest change in the
- * app the only one that refreshed neither a view nor a badge. */
+// The daemon sends no path list past its per-frame cap, so a branch switch or mass delete arrives empty.
 it(`treats a batch too large to list as "assume everything file-backed moved"`, () => {
     const listener = woken([APPROVALS]);
 

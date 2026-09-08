@@ -4,19 +4,13 @@ import { computed } from "vue";
 import { host } from "./host";
 import { BRIEF_OVERRIDE, STORIES_DIR, type Story, storiesOf, uniqueOf } from "./stories";
 
-/* EVERY repo's stories, read straight off the workspace. Three facts shape this:
- *
- *  • The area is workspace-wide, so the walk is too: every repo the daemon says carries `userStories` is listed
- *    in one pass, and the repo becomes a field on each story rather than the thing that addressed the view.
- *  • Story text is prefetched for the list and editor, titles come from headings and rows show authored criteria.
- *    A run reads every selected file again at launch, because this display cache is bounded and is not evidence.
- *  • Directories are walked to a bounded depth. A stories tree is written by hand; a deep one means someone
- *    pointed this at the wrong directory, and the walk should stop rather than crawl a repo.
- */
+// All repos' stories, read straight off the workspace.
+// - Every repo with `userStories` is walked in one pass; the repo becomes a field on each story.
+// - Prefetched text is a display cache, not evidence; opening a story re-reads it.
+// - The walk is bounded to `MAX_DEPTH`; a deep tree stops rather than crawls the repo.
 
 const MAX_DEPTH = 3;
-// A prefetch bound across the WHOLE workspace, not a limit on what can be tested: past this the list falls back
-// to filename titles rather than issuing hundreds of reads on first paint. Stated in the UI, never silent.
+// Caps prefetch across the whole workspace; past this, titles fall back to filenames. Stated in the UI.
 const MAX_PREFETCH = 200;
 
 export interface StoriesState {
@@ -24,7 +18,7 @@ export interface StoriesState {
     readonly contents: Readonly<Record<string, string>>;
     // Each repo's docs/user-stories/.acceptance.md, when it ships one.
     readonly notes: Readonly<Record<string, string>>;
-    // How many story files went untitled because the prefetch bound was hit.
+    // Story files past the prefetch bound, left untitled.
     readonly unread: number;
 }
 
@@ -33,8 +27,7 @@ export function useStories() {
     const queryClient = useQueryClient();
     const key = computed(() => api.sandbox.key(`acceptance`, `stories`));
 
-    // Every repo that could hold stories. `userStories` is the daemon's own evidence; `hasPanel` repos are here
-    // because they are where the FIRST story gets written, and a repo you cannot pick is a repo you cannot author in.
+    // Repos that could hold stories: `userStories` ones, plus `hasPanel` ones so a first story has somewhere to go.
     const repos = computed<readonly string[]>(() =>
         api.workspace
             .repos()
@@ -42,16 +35,12 @@ export function useStories() {
             .map((repo) => repo.repo),
     );
 
-    /* THE READERS ARE DECLARED BEFORE THE QUERY, and must stay that way. vue-query subscribes its observer
-     * synchronously inside `useQuery`, so a query that is enabled and has nothing cached calls `queryFn` during
-     * setup, before any `const` further down this function has been initialized. Declaring these below the
-     * query typechecks fine and dies at runtime with `Cannot access 'walk' before initialization`, surfacing as
-     * the view's error banner until a retry (by which time the closure is live) quietly succeeds. */
+    // Must stay above the query: an enabled query with nothing cached calls `queryFn` synchronously during setup, so
+    // declaring these below typechecks but throws `Cannot access 'walk' before initialization` at runtime.
 
     const children = async (path: string): Promise<WorkspaceTreeEntry[]> =>
         WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`)).entries;
-    // Breadth-first to MAX_DEPTH. A directory that does not exist (or was removed under us) is an empty level,
-    // not an error, the stories dir is a convention, and the daemon's facts may be a poll stale.
+    // Breadth-first to `MAX_DEPTH`. A missing or removed directory is an empty level, not an error.
     const walk = async (root: string): Promise<WorkspaceTreeEntry[]> => {
         const listed: WorkspaceTreeEntry[] = [];
         let frontier = [root];
@@ -77,8 +66,8 @@ export function useStories() {
                 repos.value.map(async (repo) => [repo, await api.workspace.file(`${repo}/${BRIEF_OVERRIDE}`)] as const),
             );
             return {
-                // Re-derived with the fetched text so titles come from headings rather than filenames. The
-                // cross-repo renumbering runs again on the same input, so slugs are identical either way.
+                // Re-derived with fetched text so titles come from headings, not filenames; slugs stay the same either
+                // way.
                 stories: uniqueOf(perRepo.flatMap(({ repo, entries }) => storiesOf(repo, entries, contents))),
                 contents,
                 notes: Object.fromEntries(overrides.flatMap(([repo, body]) => (body === undefined ? [] : [[repo, body] as const]))),
@@ -91,9 +80,8 @@ export function useStories() {
         await queryClient.invalidateQueries({ queryKey: key.value });
     };
 
-    // Write one story. The PATH is the caller's, not derived here: the editor keeps an existing story's file
-    // exactly where it is (a title edit must not move a file out from under git) and names only a new one after
-    // its title, and that decision belongs where the user can see the filename it produces.
+    // Writes one story at the caller's path; the path is never derived here, so a title edit doesn't move a file out
+    // from under git.
     const save = async (input: { readonly path: string; readonly markdown: string }): Promise<void> => {
         await api.workspace.write(input.path, input.markdown);
         await invalidate();

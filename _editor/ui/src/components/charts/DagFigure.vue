@@ -1,15 +1,7 @@
-<!-- A ```dag fence, drawn: one branch of MarkdownFigure's switch, living in a file of its own because it is the
-     one figure kind heavy enough to be worth loading only when a document actually holds one.
-
-     Under it is a graph canvas: Vue Flow plus dagre, and a stylesheet import that no bundler will drop. Reached
-     statically from the prose surface, that lands in every bundle that can render prose: measured on the page a
-     shared conversation is published as, which a stranger downloads to read someone's transcript, it was a fifth
-     of a megabyte for a canvas almost no conversation contains. So MarkdownFigure imports this file lazily, on
-     mermaid's rule (mermaidRender.ts) and Shiki's (code.ts): the first document that holds one pays, the many
-     that do not never see it.
-
-     The author supplies meaning; this file and dagre supply the picture. Nothing here reads a coordinate, a
-     colour or a size from the document: that is the whole reason figures are data instead of HTML. -->
+<!--
+    Renders a ```dag fence as a graph canvas (Vue Flow + dagre); loaded lazily by <MarkdownFigure> since the canvas is heavy and most documents hold
+    none. Nothing here reads colour or coordinates from the document.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { DagFigure } from "../../markdown/figures.js";

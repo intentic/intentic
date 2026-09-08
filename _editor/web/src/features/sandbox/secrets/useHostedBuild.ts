@@ -4,14 +4,9 @@ import { computed, watch } from "vue";
 import { apiClient } from "../../../lib/useApi";
 import { ENVIRONMENT_KEY } from "../environment/useEnvironment";
 
-/* A HOSTED SANDBOX'S ENVIRONMENT BUILD, as the Environment card follows it. On a docker host the owner runs
- * `ic sandbox rebuild` and watches a terminal; a hosted sandbox has no host, so the platform builds the
- * approved overlay on a machine of its own and this is the browser's window onto that build: one call to
- * start it, one poll while it runs, and the environment query invalidated when it ends, because the daemon
- * coming back with the hash as applied is the last word, not anything the platform says.
- *
- * Polled only while a build is in flight, five seconds apart: a build is minutes long and the state changes
- * once. Keyed under `sandbox` so the persisted cache never keeps a build log on disk. */
+// A hosted sandbox's environment build, as followed by the Environment card: the platform builds the overlay
+// since there is no local host to run `ic sandbox rebuild`. Polls every 5s only while a build is in flight; keyed under
+// `sandbox` so the persisted cache never retains a build log.
 const POLL_MS = 5_000;
 
 export const hostedBuildKey = (sandboxId: string): unknown[] => [`sandbox`, `build`, sandboxId];
@@ -28,8 +23,8 @@ export function useHostedBuild(sandboxId: () => string | undefined) {
     const build = computed(() => query.data.value?.build ?? undefined);
     const applied = computed(() => query.data.value?.applied ?? undefined);
 
-    // The card derives "applied" from the daemon's /environment, so when a build ends that read is asked
-    // again; the wake reflex reconnects to the restarted daemon and the query refetches on its own after.
+    // Re-fetches the environment query when a build finishes, since `applied` comes from the daemon, not this build
+    // status.
     watch(
         () => build.value?.state,
         (state, previous) => {
@@ -39,7 +34,7 @@ export function useHostedBuild(sandboxId: () => string | undefined) {
         },
     );
 
-    // Start one. The platform re-hashes the content, so what is sent is exactly what the card showed.
+    // Sends the content as shown; the platform recomputes the hash itself.
     const rebuild = async (hash: string, content: string): Promise<HostedBuildState> => {
         const id = sandboxId();
         if (id === undefined) {

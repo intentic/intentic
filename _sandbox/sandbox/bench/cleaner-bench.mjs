@@ -1,15 +1,9 @@
 #!/usr/bin/env node
-// Offline output-cleaner benchmark: replay captured command outputs through named cleaner configs and report the
-// output-token delta per config. Deterministic, no agent: the "few different setups" harness for the cleaners
-// (the analogue of iq-bench's config sweep). Plain .mjs so it shares the exact filter code the sandbox ships.
-//
-//   pnpm --filter @intentic/sandbox bench:cleaners                                # sweep configs over fixtures
-//   pnpm --filter @intentic/sandbox bench:cleaners corpus [~/.claude/projects]    # sweep over REAL transcripts
-//   pnpm --filter @intentic/sandbox bench:cleaners discover <filter-stats.jsonl>  # live-run savings + gaps
-//
-// Fixtures are a unit-level sanity check: they say a cleaner still fires, not what the cleaners are worth. Only
-// `corpus` answers the second question, and the two disagree by a factor of five when the fixture list drifts
-// toward the outputs someone hoped to compress. Quote `corpus`.
+// Offline benchmark: replay captured outputs through named cleaner configs and report the token delta per config.
+// Fixtures only prove a cleaner still fires; only `corpus` shows what it actually saves.
+//   pnpm --filter @intentic/sandbox bench:cleaners # sweep configs over fixtures
+//   pnpm --filter @intentic/sandbox bench:cleaners corpus [~/.claude/projects] # sweep over real transcripts
+//   pnpm --filter @intentic/sandbox bench:cleaners discover <filter-stats.jsonl> # live-run savings + gaps
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -18,15 +12,12 @@ import { filterOutput } from "../bin/agent-output-filter.mjs";
 import { parseCleaners } from "../bin/cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../bin/filter-stats.mjs";
 
-// ~4 chars/token, the same heuristic iq-engine's estimateTokens uses: kept inline so the bench has no build dep.
+// ~4 chars/token, the same heuristic as iq-engine's estimateTokens.
 const estimateTokens = (text) => Math.ceil(text.length / 4);
 const pad = (value, width) => String(value).padEnd(width);
 const percent = (part, whole) => (whole === 0 ? "0%" : `${Math.round((part / whole) * 100)}%`);
 
-// Captured representative raw outputs (combined stdout+stderr, as tmux-run tees them). Shapes and command
-// spellings are taken from the session corpus, `cd …  &&` prefix included: that prefix is how four out of five
-// agent commands are actually written, and a fixture list without it silently benchmarks a command style the
-// agent does not use.
+// Raw outputs as tmux-run tees them (stdout+stderr); keep the `cd … &&` prefix most agent commands use.
 const FIXTURES = [
     {
         name: "find (path run)",
@@ -61,7 +52,7 @@ const FIXTURES = [
         name: "git status (tiny)",
         command: "cd /work/intentic && git status --short",
         exitCode: "0",
-        // The never-worse case: nothing here is compressible, so the filter must hand it back byte for byte.
+        // Never-worse case: nothing here is compressible; the filter must hand it back unchanged.
         raw: " M _sandbox/sandbox/bin/cleaners.mjs\n M _sandbox/sandbox/bin/agent-output-filter.mjs\n",
     },
     {
@@ -96,8 +87,7 @@ const FIXTURES = [
     },
 ];
 
-// Named configs, mirroring iq-bench: the "off" baseline (filter disabled ⇒ raw) plus cleaner subsets. The two
-// shape cleaners get their own holdout row each, because they are the ones carrying the corpus.
+// "off" is the raw baseline (filter disabled); the rest are cleaner subsets, incl. per-shape-cleaner holdouts.
 const CONFIGS = [
     { name: "off (raw)", spec: "off" },
     { name: "all", spec: "" },
@@ -133,10 +123,8 @@ const bench = () => {
     }
 };
 
-// ---- corpus: the same sweep over what the agent actually ran ------------------------------------------------
-// Session transcripts are JSONL; a Bash command is a `tool_use` block and what the model saw is the `tool_result`
-// block carrying its id. Results the live filter already processed are skipped: replaying them would count the
-// same trim twice and report a saving the cleaners did not make on this run.
+// Corpus mode: replay what the agent actually ran, from session JSONL (tool_use paired with its tool_result). Skip
+// results already filtered live: replaying them would double-count the trim.
 
 const resultText = (content) => {
     if (typeof content === "string") {
@@ -153,7 +141,7 @@ const resultText = (content) => {
 
 const FILTERED = /\n--- \[exit .*\] \d+ lines filtered to \d+/;
 const TMUX_WRAPPED = /^\/?\S*tmux-run\s/;
-// tmux-run's wrapper quotes the agent's own command line; the bench wants what the agent wrote, not the wrapper.
+// tmux-run quotes the agent's command line; unwrap recovers what the agent actually wrote.
 const unwrap = (command) => {
     if (!TMUX_WRAPPED.test(command)) {
         return command;
@@ -232,8 +220,7 @@ const corpus = (root) => {
     const rawBytes = samples.reduce((sum, sample) => sum + sample.raw.length, 0);
     sweep(samples, `corpus: ${samples.length} Bash results, ${(rawBytes / 1e6).toFixed(2)} MB raw, from ${root}`);
 
-    // Which mechanism earned it, over the whole corpus: the same stage ledger the savings report reads, summed
-    // offline. A stage at zero here is a cleaner with no payer, and the reason to delete it.
+    // Per-mechanism savings across the corpus; a stage at zero means that cleaner has no payer and can be deleted.
     const stageBytes = new Map();
     let emitted = 0;
     for (const sample of samples) {
@@ -250,9 +237,8 @@ const corpus = (root) => {
     }
 };
 
-// Read a live sandbox's filter-stats.jsonl: report realized savings + high-volume commands no cleaner matched
-// (candidates for a new registry handler: the rtk `discover` idea). Uses the shared summarizeStats so the CLI
-// and the daemon's /settings/savings route report the same numbers.
+// Reads a live sandbox's filter-stats.jsonl: realized savings plus high-volume commands no cleaner matched.
+// summarizeStats is shared with the daemon's /settings/savings route, so the numbers match.
 const discover = (file) => {
     const report = summarizeStats(parseStatsFile(readFileSync(file, "utf8")));
     const measured = report.holdout.measuredSavedPct !== undefined ? ` · holdout-measured ${report.holdout.measuredSavedPct}%` : "";
@@ -260,8 +246,7 @@ const discover = (file) => {
         `commands: ${report.commands} · raw ~${report.rawTokens} tok → emitted ~${report.emittedTokens} tok · saved ${report.savedPct}%${measured}\n`,
     );
     if (report.perCleaner.length > 0) {
-        // Tokens first: which handler is WORTH the most is the question this list is read for, and a count of
-        // how often one fired answers a different one (a cleaner can fire constantly and save nothing).
+        // Tokens first, not fire count: a cleaner can fire often and save nothing.
         process.stdout.write(
             `by mechanism: ${report.perCleaner.map((entry) => `${entry.id} ~${entry.savedTokens} tok ×${entry.commands}`).join(", ")}\n`,
         );
@@ -273,8 +258,7 @@ const discover = (file) => {
     }
     process.stdout.write("high-volume commands with NO matching cleaner (add a handler for these):\n");
     for (const gap of report.gaps) {
-        // ×N first: a command that costs this much ACROSS N runs is a handler worth writing, and one that did
-        // it once is an outlier. Same grouping the settings page's list reads from.
+        // ×N first: cost across many runs signals a handler worth writing; a single occurrence is likely noise.
         process.stdout.write(`  ~${gap.tokens} tok ×${gap.commands}  ${gap.command}\n`);
     }
 };

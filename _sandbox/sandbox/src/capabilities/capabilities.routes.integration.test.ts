@@ -14,14 +14,12 @@ import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 
-/* The capabilities routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
- * one file that two agents working on unrelated features collided in every time. The fakes and the client
- * are shared (route-services.testing.ts and its siblings); what lives here is what these routes do. */
+// Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
+// Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes
+// do.
 
 test("capabilities.list reports each capability with its status; devops can't be removed, unknown is NOT_FOUND", async () => {
-    // An isolated workspace, so the derived recommendations depend on this test's tree rather than on whatever
-    // the machine running it happens to have checked out under /work.
+    // Isolated workspace so recommendations depend on this test's tree, not whatever's checked out under /work.
     const client = clientFor(
         createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([{ id: "devops", kind: "devops", config: {} }]) })),
     );
@@ -31,14 +29,12 @@ test("capabilities.list reports each capability with its status; devops can't be
         capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {}, secrets: [] }],
         recommendations: [],
     });
-    // DevOps has no teardown (deleting the repos is data loss) → CONFLICT; an unknown id is NOT_FOUND.
+    // DevOps has no teardown (deleting the repos is data loss): CONFLICT; an unknown id is NOT_FOUND.
     expect(await errorCode(client.capabilities.remove({ id: "devops" }))).toBe("CONFLICT");
     expect(await errorCode(client.capabilities.remove({ id: "ghost" }))).toBe("NOT_FOUND");
 });
 
-// The whole point of deriving recommendations: a compose-backed dev database (`pnpm db:up`) fails with a bare
-// "Cannot connect to the Docker daemon" against a sandbox whose engine is dormant, and nothing in that error
-// names the capability. The list route is where the Capabilities page learns to badge it.
+// Docker's own error ("Cannot connect to the Docker daemon") never names the capability; this is where that gets fixed.
 test("capabilities.list recommends docker when a repo in the workspace carries a compose file", async () => {
     const workspace = tempWorkspace([{ name: "app" }]);
     writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
@@ -48,9 +44,7 @@ test("capabilities.list recommends docker when a repo in the workspace carries a
     ]);
 });
 
-// "Not needed" is the other half of making suggestions at all: a surface that re-derives them on every load and
-// cannot be told no becomes the strip people stop reading. The evidence is recorded daemon-side, so the record
-// answers the claim that was on screen rather than whatever the client chose to send.
+// Evidence is recorded daemon-side, not client-supplied, so the record matches what was actually on screen.
 test("capabilities.dismiss takes a recommendation off the catalog and records what it was declined against", async () => {
     const workspace = tempWorkspace([{ name: "app" }]);
     writeFileSync(join(workspace.root, "app", "docker-compose.yml"), "");
@@ -63,10 +57,9 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
     expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
 });
 
-/* RENAMING IS A MIGRATION, and this is the case that proves why it can't be an add plus a remove: the identity's
- * logged-in browser has to arrive at the new name, and the account living in that browser has to still know
- * whose it is. A remove would have deleted the profile (signing every account in it out) and left the account
- * pointing at a name nothing answers to. */
+// Rename can't be add-plus-remove: that deletes the profile (signing every account out) and orphans the account's name.
+// The identity's browser must arrive at the new name, and every account living in it must still know whose browser it
+// is.
 test("capabilities.rename carries the browser profile and repoints everything that named the old id", async () => {
     const workspace = tempWorkspace([]);
     const personas = memoryPersonasStore([{ id: "front", capabilities: ["me", "reddit"] }]);
@@ -82,7 +75,7 @@ test("capabilities.rename carries the browser profile and repoints everything th
             }),
         ),
     );
-    // The finished sign-in, which is the thing worth carrying: a marker beside a profile directory.
+    // The finished sign-in, the thing worth carrying: a marker beside a profile directory.
     await markConnected(workspace.root, "me");
     mkdirSync(sessionDir(workspace.root, "me"), { recursive: true });
 
@@ -131,13 +124,13 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
             disk.delete(path);
         },
     });
-    // The vpn handler writes ~/.wireguard on the real fs: point HOME at a temp dir like vpn.handler.integration.test.ts.
+    // vpn writes ~/.wireguard on the real fs; point HOME at a temp dir, as vpn.handler.integration.test.ts does.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-home-"));
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 
     const events = await collect(
-        // auto-connect on: with no VPN tooling installed yet, the apply must still land in the manifest and say
-        // a rebuild is what installs the client: the pre-rebuild bootstrap this whole flow depends on.
+        // Auto-connect on with no VPN tooling yet: apply must still land in the manifest and prompt the install
+        // rebuild.
         await client.capabilities.add({
             id: "office",
             kind: "vpn",
@@ -154,17 +147,8 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
     expect(disk.get("/work/.intentic/local/environment.approved.Dockerfile")).toBeUndefined();
 });
 
-/* CHANGING A CONNECTION WITHOUT RE-TYPING WHAT IT IS SIGNED IN WITH: the whole point of the marker.
- *
- * A tunnel's WireGuard conf is a credential, so it is never sent to the browser; every other answer is. Editing
- * one therefore means posting back a config with a hole where the credential goes, and the two obvious spellings
- * of that hole are both wrong: an empty string is a config that fails to dial, and an absent key fails the
- * schema. VAULTED is the third, and this pins what it costs: the tunnel keeps dialling with the key it had,
- * and the answer that WAS changed is the one that changed.
- *
- * The refusal is half the test. A marker with nothing behind it means the sender believed a credential was
- * stored and none is, and a daemon that let it through would write the literal marker into a conf file and fail
- * at dial time, somewhere with no way to say which box to go back and fill in. */
+// VAULTED lets an edit keep a credential the sender never saw: empty fails to dial, an absent key fails the schema.
+// Refusing a marker with nothing behind it matters too: letting it through writes the literal marker into a conf file.
 test("capabilities.add keeps a credential the sender never saw, and refuses to keep one that isn't there", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-edit-home-"));
     const disk = new Map<string, string>();
@@ -185,7 +169,7 @@ test("capabilities.add keeps a credential the sender never saw, and refuses to k
         errorCode((async () => collect(await client.capabilities.add(input)))());
 
     await collect(await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: conf, autoConnect: "on" } }));
-    // What a browser is told it holds: the shape, and the NAMES of the credentials in it, never the values.
+    // What a browser is told it holds: the shape and the names of its credentials, never the values.
     const [listed] = (await client.capabilities.list()).capabilities;
     expect(listed?.config).toEqual({ provider: "wireguard", autoConnect: "on" });
     expect(listed?.secrets).toEqual(["config"]);

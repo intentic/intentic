@@ -8,12 +8,11 @@ import { sshOf } from "../lib/ssh.js";
 import type { IngressPair } from "./route.js";
 import { exposeRoute } from "./route.js";
 
-// The deploy-orchestrator slice every stack shares: the Komodo node + its public route. The Forgejo stack
-// extends it with the git+CI slice below.
+// Deploy-orchestrator slice every stack shares: the Komodo node + its public route; Forgejo extends it with the
+// git+CI slice below.
 export interface DeployRefs {
     readonly deploy: string;
-    // The cf-route id for deploy.<zone>, so nodes that call the public URL can depend on the route being
-    // live (DNS + tunnel) before they run.
+    // cf-route id for deploy.<zone>; nodes calling the public URL depend on it being live (DNS + tunnel).
     readonly deployRoute: string;
 }
 
@@ -22,39 +21,35 @@ export interface PlatformRefs extends DeployRefs {
     readonly gitRoute: string;
 }
 
-// The [[docker_registry]] account Komodo pulls app images with: the Forgejo built-in registry + the admin's
-// packages token, ghcr.io + the GitHub PAT, or the GitLab Container Registry + the GitLab PAT.
+// [[docker_registry]] account Komodo pulls images with: Forgejo registry + admin packages token, ghcr.io + GitHub
+// PAT, or GitLab registry + GitLab PAT.
 export interface RegistryAccount {
     readonly authority: string;
     readonly user: Input<string>;
     readonly token: Input<string>;
 }
 
-// The [[git_provider]] account Komodo clones private app repos with. Forgejo stack only (hosted-forge
-// deployments are registry Images Komodo never clones).
+// [[git_provider]] account Komodo clones private app repos with; Forgejo stack only, since hosted forges are
+// registry images Komodo never clones.
 export interface GitAccount {
     readonly url: Input<string>;
     readonly account: string;
     readonly token: Input<string>;
 }
 
-// The fixed host ports the platform services listen on (Forgejo HTTP, Komodo Core), mirrored by their
-// providers; the tunnel routes git.<zone>/deploy.<zone> to these.
+// Fixed host ports the platform services listen on, mirrored by their providers; the tunnel routes to these.
 const FORGEJO_PORT = 3000;
 const KOMODO_PORT = 9120;
 
-// When guarded updates are on (host.updatePolicy === "guarded" + a backup is declared), the stateful
-// services carry the restic repo + image so a pin bump runs as a snapshot/rollback transaction; the
-// password/creds come from the on-host restic.env the backup provider writes.
+// When guarded updates are on, stateful services carry the restic repo + image so a pin bump runs as a
+// snapshot/rollback transaction; password/creds come from the on-host restic.env.
 export interface GuardConfig {
     readonly repo: string;
     readonly resticImage: string;
 }
 
-// The deploy orchestrator every app on a host requires, shared per host: Komodo, exposed at deploy.<zone> so
-// its UI + the worker Peripheries are reachable. Terse defaults: adminUser "intentic", an intentic-generated
-// admin password, a domain-derived health gate. Returns the exposure's ingress pair so the caller can
-// aggregate the host's tunnel ingress.
+// Deploy orchestrator every app on a host requires, shared per host: Komodo, exposed at deploy.<zone> so its UI
+// and worker Peripheries are reachable. Returns the exposure's ingress pair for the caller to aggregate.
 export const resolveDeploy = (
     hostId: string,
     cloudflareId: string,
@@ -66,9 +61,7 @@ export const resolveDeploy = (
     git?: GitAccount,
 ): { komodo: ResolvedNode; route: ResolvedNode; refs: DeployRefs; ingress: IngressPair } => {
     const deploy = komodoId(hostId);
-    // The platform services are deployed ONTO the host over SSH (like the tunnel connector), so every
-    // deploy-style node carries the host's SSH creds + its internal ip. internalUrl/readyWhen are keyed
-    // to the host-internal address so they're reachable before the Cloudflare tunnel + DNS routes exist.
+    // internalUrl/readyWhen use the host-internal address, reachable before the tunnel/DNS routes exist.
     const exposure = exposeRoute(cloudflareId, hostId, deployDomain(zone), KOMODO_PORT, apiToken);
     const komodo: ResolvedNode = {
         id: deploy,
@@ -96,9 +89,8 @@ export const resolveDeploy = (
     return { komodo, route: exposure.route, refs: { deploy, deployRoute: exposure.route.id }, ingress: exposure.ingress };
 };
 
-// The Forgejo stack's full control plane, shared per host: Forgejo, its runner, and Komodo, exposed at
-// git.<zone>/deploy.<zone> so push/CI/UI are reachable. Komodo's git + registry accounts derive from the
-// Forgejo node's outputs (internal url, git token, packages token).
+// Forgejo stack's full control plane, shared per host: Forgejo, its runner, and Komodo, exposed at
+// git.<zone>/deploy.<zone>. Komodo's git + registry accounts derive from Forgejo's outputs.
 export const resolvePlatform = (
     hostId: string,
     cloudflareId: string,
@@ -118,11 +110,9 @@ export const resolvePlatform = (
         apiToken,
         host,
         guard,
-        // The Forgejo built-in registry + the admin's packages token, so Komodo can pull the private app
-        // images CI pushes.
+        // Forgejo's built-in registry + the admin's packages token, so Komodo can pull the images CI pushes.
         { authority: registryAuthority(zone), user: adminUsername, token: makeRef<string>(forgejo, "packagesToken") },
-        // The admin's token + account, so Komodo can clone the private app repos. The git provider domain is
-        // derived from Forgejo's internal http://<ip>:3000 authority.
+        // Admin's token + account so Komodo can clone private repos; domain is Forgejo's internal http://<ip>:3000.
         { url: makeRef<string>(forgejo, "internalUrl"), account: adminUsername, token: makeRef<string>(forgejo, "gitToken") },
     );
 
@@ -146,8 +136,7 @@ export const resolvePlatform = (
         {
             id: runnerId(hostId),
             type: "forgejo-runner",
-            // The runner runs ON the host, so it reaches Forgejo at its internal url directly, using the
-            // public url would force a needless round-trip through the tunnel (and depend on DNS being live).
+            // Runner runs on the host; uses Forgejo's internal url, avoiding a tunnel round-trip and DNS dependency.
             inputs: {
                 server,
                 ...ssh,

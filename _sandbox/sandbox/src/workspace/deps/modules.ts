@@ -3,29 +3,16 @@ import { join } from "node:path";
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 
-/* The modules of one repo: every directory owning a package.json that NAMES itself, as repo-relative dirs.
- * This is what the review panels group changed files under when the reader has asked for modules instead of
- * paths, "which part of the system did this touch" is the first question of any review, and a manifest name
- * is the only thing in the tree that answers it in the words the team actually uses.
- *
- * A filesystem walk rather than package-graph.ts's pnpm-workspace globs, which the DEPENDENCY graph is right
- * to use: pnpm's view is what a dependency edge means, while grouping is about where a file lives. A package
- * outside the globs (a scratch app, a vendored tool) still holds files a reviewer thinks of by its name, and a
- * repo with no pnpm workspace at all has modules just the same.
- *
- * The walk is bounded on both axes and prunes exactly what every other walk here prunes (hidden dirs, junk
- * dirs) plus nested repos, a repo inside a repo carries its own {repo} id, and its files arrive under that id
- * rather than under its parent's. */
+// Modules of a repo: every directory with a self-naming package.json, as repo-relative dirs, used to group changed
+// files in review panels. A filesystem walk, not package-graph.ts's pnpm-workspace globs: grouping is about where a
+// file lives, not a dependency edge. Bounded, and prunes nested repos too, which carry their own {repo} id.
 
-// packages/<group>/<pkg> is the deepest layout worth walking for; past that a "module" is not what anyone
-// means by the word.
+// packages/<group>/<pkg> is the deepest layout worth walking; past that isn't what anyone means by module.
 const MAX_DEPTH = 3;
-// Runaway guard for a pathological tree, matching repo-discovery's shape (a dir farm stops the scan rather
-// than stalling the daemon).
+// Runaway guard for a pathological tree: stop the scan rather than stall the daemon.
 const MAX_DIRS = 5_000;
 
-// The name a directory's manifest declares, or undefined when there is no manifest, it doesn't parse, or it
-// names nothing, none of which is a module.
+// The name a directory's manifest declares; undefined when there's no manifest, it doesn't parse, or it names nothing.
 const manifestName = (dir: string): string | undefined => {
     let parsed: unknown;
     try {
@@ -49,8 +36,7 @@ export const readModules = (repoDir: string): WorkspaceModule[] => {
         try {
             entries = readdirSync(join(repoDir, rel), { withFileTypes: true });
         } catch {
-            // Unreadable dir (permissions, a symlink that went nowhere), it contributes no modules, and the
-            // rest of the repo still does.
+            // Unreadable dir (permissions, a dangling symlink) contributes no modules; the rest of the repo still does.
             return;
         }
         for (const entry of entries) {
@@ -65,15 +51,12 @@ export const readModules = (repoDir: string): WorkspaceModule[] => {
             if (name !== undefined) {
                 modules.push({ dir: child, name });
             }
-            // Kept walking THROUGH a module: a package that holds packages (an app with its own operator UI,
-            // a plugin dir) is the ordinary case, not a boundary.
+            // Keeps walking through a module: a package holding packages is ordinary, not a boundary.
             walk(child, depth + 1);
         }
     };
     walk("", 0);
-    // A repo that is ONE package declares itself at its root. Read only when nothing under it claimed a file
-    // first, otherwise a monorepo's private root manifest ("@acme/root", a holder for scripts) would become
-    // the module every loose file at the top level belongs to, which is a name no reviewer would recognize.
+    // A one-package repo declares itself at its root, read only when nothing under it claimed a file first.
     const own = modules.length === 0 ? manifestName(repoDir) : undefined;
     return own === undefined ? modules : [{ dir: "", name: own }];
 };

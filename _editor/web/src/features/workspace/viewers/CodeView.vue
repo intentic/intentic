@@ -1,8 +1,6 @@
 <script lang="ts">
 import type * as Monaco from "monaco-editor-core";
-// View state (scroll + cursor/selection + folding) per file, shared across the read-only and editable
-// instances so toggling Edit/Preview and switching tabs keeps the position: module scope, like the old
-// FileCode's scrollMemory, but Monaco's own richer view state.
+// View state (scroll, cursor, folding) per file, module-scoped so toggling Edit/Preview keeps position.
 const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 </script>
 
@@ -15,16 +13,9 @@ import { useEditorSelection } from "../files/useEditorSelection";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
 import type { LineJump } from "../tabs/workspaceTabs";
 
-/* The workspace code surface: a single Monaco editor for BOTH the read-only preview and (with `editable`) the
- * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a
- * file over the highlight cap) opens as plaintext (no tokenizer). Colored by Shiki via @shikijs/monaco.
- *
- * With `hideComments` the reader gets the code alone: the same analysis the diff surface uses (codeAnalysisClient.ts), so
- * a file reads the same whether it is being reviewed or read. The comments are REMOVED rather than folded: a
- * folded comment still spends a line saying it is there, which shortens the model, so the file's own numbering
- * is carried alongside and used for everything the reader or the app can see: the gutter, a search jump, the
- * selection the chat's context chip reads. Never applied while editing: a buffer without the comments would
- * SAVE the file without them. */
+// Single Monaco editor for both read-only preview and (with `editable`) editing, coloured by Shiki; no lang or
+// over the highlight cap opens as plaintext. `hideComments` removes (not folds) comments, keeping the file's own
+// line numbers for the gutter/jumps/selection; never applied while editing, or a save would drop them from disk.
 
 const { code, lang, scrollToLine, editable, path, hideComments } = defineProps<{
     code: string;
@@ -43,21 +34,18 @@ const host = ref<HTMLElement>();
 const editor = shallowRef<Monaco.editor.IStandaloneCodeEditor>();
 let monaco: typeof Monaco | undefined;
 let model: Monaco.editor.ITextModel | undefined;
-// The grammar Monaco actually loaded. A failed lazy chunk leaves this undefined, so both the editor and the
-// comment stripper use the same plaintext fallback instead of letting optional highlighting blank the file.
+// Grammar Monaco loaded; undefined on a failed chunk, so editor and stripper share one plaintext fallback.
 let modelLang: string | undefined;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
-// The file's line each model line came from, while the comments are out; undefined when the model IS the file.
+// File line each model line came from, while comments are out; undefined when model equals file.
 let sourceLines: number[] | undefined;
 
 // The file's line `line` of the model holds: identity when nothing was stripped.
 const fileLine = (line: number): number => sourceLines?.[line - 1] ?? line;
 
-// What the model should hold, and the mapping back to the file it came from. `undefined` lines means the two are
-// the same text, which is the answer for every editable surface and for a file the stripper declines: no grammar
-// for it (unknown extension, plaintext), a budget it blew, or nothing but comments in it: a file with no code to
-// isolate is shown whole rather than as an empty pane the reader has to explain to themselves.
+// What the model should hold, plus the mapping back to its file lines. `undefined` lines means unchanged text:
+// every editable surface, or a file the stripper declines (no grammar, over budget, all-comment).
 const display = async (text: string): Promise<{ text: string; lines?: number[] }> => {
     if (editable === true || hideComments !== true) {
         return { text };
@@ -69,9 +57,8 @@ const display = async (text: string): Promise<{ text: string; lines?: number[] }
     return analysis.code;
 };
 
-// Land a content-search jump: cursor on the line (keyboard nav continues from the hit), centered scroll, and a
-// temporary highlight of the line (the decoration owns its 1.5s lifetime). `line` is the FILE's, so with the comments
-// out it lands on the line that kept it, or on the code the removed comment introduces.
+// Lands a content-search jump: cursor + centered scroll + a 1.5s highlight. `line` is the file's, so with
+// comments stripped it lands on whatever code took that line's place.
 const jumpTo = (line: number): void => {
     if (monaco === undefined || editor.value === undefined) {
         return;
@@ -80,16 +67,8 @@ const jumpTo = (line: number): void => {
     const target = sourceLines === undefined ? line : modelLineOf(sourceLines, line);
     view.setPosition({ lineNumber: target, column: 1 });
     view.revealLineInCenter(target);
-    /* THE REVEAL IS RE-ASSERTED UNTIL IT ACTUALLY LANDS, which is what makes the FIRST click on a search match
-     * land on the match. A jump that opens the file reveals into an editor Monaco has just created against a
-     * pane the browser has not finished laying out: measured at a height of 5px, `revealLineInCenter` scrolls to
-     * 3px and stays there, so the file opened at line 1 and only a SECOND click, on an editor that had since
-     * been measured, went to the line. Nothing about that is detectable up front (the pane may or may not be
-     * settled, the model may still be wrapping long lines), so instead of predicting it we check: while the
-     * target is not among the visible ranges, ask again, for a handful of frames.
-     *
-     * Bounded on purpose: it stops the moment the line is on screen, and gives up after ~half a second either
-     * way, so it can never sit there fighting a reader who has started scrolling. */
+    // Re-asserts the reveal until it lands: revealLineInCenter can silently fail against a pane Monaco hasn't
+    // measured yet. Retries every frame while off-screen, bounded to about half a second.
     let attempts = 0;
     let lastTop = view.getScrollTop();
     const onScreen = (): boolean => view.getVisibleRanges().some((range) => range.startLineNumber <= target && target <= range.endLineNumber);
@@ -98,8 +77,7 @@ const jumpTo = (line: number): void => {
             return;
         }
         const top = view.getScrollTop();
-        // Only re-ask while the scroll is STUCK: smooth scrolling means the target is off screen for the frames
-        // the animation is running, and re-revealing into a live animation every frame makes it crawl.
+        // Only re-asks while scroll is stuck; re-revealing into a live smooth-scroll animation would make it crawl.
         if (top === lastTop) {
             view.revealLineInCenter(target);
         }
@@ -115,14 +93,8 @@ const jumpTo = (line: number): void => {
 };
 
 let rendered = 0;
-/* Put `text` in the model the way the reader wants it, keeping their place. Both callers can be in flight at once
- * (an external write landing while the toggle's tokenizer runs), so the later one wins outright: a stale pair
- * would leave the gutter numbering a text it no longer holds. setValue lands the reader back at line 1 otherwise,
- * and losing your place mid-file is worse than the comments you wanted gone: the top line is remembered as the
- * FILE's, which is the one thing both views agree on.
- *
- * Scrolled to exactly, not revealed: every reveal* keeps a margin of context above the line, so toggling twice
- * walks the reader backwards through the file a screenful at a time. */
+// Sets `text` in the model, keeping the reader's place; the later of two concurrent calls wins, since a stale
+// one mislabels the gutter. Scrolled to the anchored file line exactly, or toggling twice would drift the view.
 const render = async (text: string): Promise<void> => {
     const view = editor.value;
     if (model === undefined || view === undefined) {
@@ -142,11 +114,8 @@ const render = async (text: string): Promise<void> => {
     }
 };
 
-// Save = normalize, then emit the normalized text. Normalization (LF EOLs, no trailing whitespace: kept for
-// markdown hard breaks: one final newline) lands as model edits via pushEditOperations, so the cursor stays put
-// and undo works; the emitted value is then exactly what the editor shows AND what lands on disk, keeping the
-// buffer/baseline/disk one shape (the save echo reconciles as a no-op). The point is the agent: its exact-string
-// edits fail on invisible whitespace drift, so every file a user saves is already in the shape the agent expects.
+// Save normalizes first (LF EOLs, no trailing whitespace but markdown hard breaks, one final newline) via
+// pushEditOperations, so cursor/undo survive and disk matches exactly what the agent's exact-string edits expect.
 const doSave = (): void => {
     if (!editable || monaco === undefined || model === undefined) {
         return;
@@ -167,10 +136,8 @@ const doSave = (): void => {
     }
     emit(`save`, target.getValue());
 };
-/* Append text at the end of the model, for the windowed viewer loading the next slice of a huge file. An edit
- * rather than a new `code` prop: setValue() rebuilds the whole model and throws away the view state, so paging
- * through a log would yank the reader back to wherever the new scroll landed. This keeps the position, and
- * Monaco only tokenizes and paints what the append touched. */
+// Appends text for the windowed big-file viewer's next slice. An edit, not a new `code` prop: setValue() would
+// rebuild the model and lose the view state (and scroll position); this only tokenizes/paints what changed.
 const appendText = (text: string): void => {
     if (monaco === undefined || model === undefined) {
         return;
@@ -196,8 +163,7 @@ onMounted(async () => {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded
     }
     monaco = m;
-    // Stripped before the model exists rather than after, so a file opened with the comments off never flashes
-    // them first. The grammar it tokenizes with is the one ensureLanguage just loaded.
+    // Stripped before the model exists, so comments-off never flashes them first.
     const first = await display(code);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while the stripper tokenized
@@ -213,23 +179,17 @@ onMounted(async () => {
         readOnly: !editable,
         domReadOnly: !editable,
         automaticLayout: true,
-        // The slider is the only thing on the minimap that says where you ARE, and Monaco's default hides it
-        // until the pointer comes over: with the vertical scrollbar off (below), that leaves the reader with no
-        // standing indication of their position in the file at all. So it is painted always.
+        // Minimap slider is the only position indicator once the scrollbar is off; shown always instead of on hover.
         minimap: { enabled: true, showSlider: `always` },
-        // Wrap, so a long line is READ rather than scrolled to. Continuation rows carry no gutter number,
-        // which is what marks them as a wrap. `bounded` rather than `on`: wrap at the viewport when the pane
-        // is narrow, but on a wide one stop just past this repo's own 150-column format width, so formatted
-        // source keeps its intended shape and only genuine overflow (prose, logs, generated files) folds.
+        // Wraps a long line to be read, not scrolled to; continuation rows carry no gutter number. `bounded` wraps at
+        // the viewport when narrow, else past this repo's 150-column width, so only real overflow folds.
         wordWrap: `bounded`,
         wordWrapColumn: 160,
-        // The FILE's numbering, always: with the comments out the model is short by every line removed, and a
-        // gutter counting its own lines would print numbers that match nothing the reader can act on (a jump, a
-        // ref they paste into chat, the same file in the diff). Identity while nothing is stripped.
+        // Always the file's own numbering: with comments stripped, the model's own line count wouldn't match anything
+        // the reader can act on (a jump, a chat reference, the diff). Identity when nothing is stripped.
         lineNumbers: (line) => String(fileLine(line)),
-        // The minimap slider is the vertical scroll affordance: a scrollbar beside it is redundant
-        // (wheel/keyboard/minimap-drag still scroll). Size 0 too: `hidden` alone still reserves the 14px
-        // strip in the layout. Horizontal only ever appears for what wrapping can't fold (a long token).
+        // Vertical scrollbar hidden: the minimap slider is already the scroll affordance (wheel/keyboard/drag still
+        // work). Size 0 too, since `hidden` alone still reserves its 14px strip.
         scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
@@ -253,8 +213,8 @@ onMounted(async () => {
         });
     }
 
-    // Publish the live selection for the chat composer's editor-context chip (opt-in there, so reporting is
-    // free). Collapsed cursor ⇒ no selection; the chip then offers the whole file instead.
+    // Publishes the live selection for the chat's editor-context chip. A collapsed cursor clears it, and the chip
+    // falls back to the whole file.
     if (path !== undefined) {
         const filePath = path;
         view.onDidChangeCursorSelection((event) => {
@@ -273,9 +233,8 @@ onMounted(async () => {
         });
     }
 
-    // A content-search jump wins; otherwise restore the remembered position (first open of a file has none).
-    // The jump lands even though this editor was created a moment ago against a pane that may not be measured
-    // yet: jumpTo re-asserts the reveal until it takes.
+    // A content-search jump wins over the remembered position (first open has none); jumpTo re-asserts the reveal
+    // until the freshly created pane is measured.
     if (scrollToLine !== undefined) {
         jumpTo(scrollToLine.line);
         return;
@@ -286,8 +245,8 @@ onMounted(async () => {
     }
 });
 
-// Later jumps land on the LIVE editor: clicking hits while the file is already open. Each jump is a fresh
-// object (seq), so even the same line re-reveals; the mount path above covers jumps that open the file.
+// Later jumps land on the live editor, once the file is already open (the mount path above covers opening
+// jumps). A fresh object (seq) re-reveals even the same line.
 watch(
     () => scrollToLine,
     (next) => {
@@ -297,8 +256,8 @@ watch(
     },
 );
 
-// Read-only mirrors the incoming prop (post-save refetch, external change); editable is uncontrolled and
-// remounted per file via :key, so it never clobbers the live text from the textarea.
+// Read-only mirrors the incoming prop (refetch, external change); editable is uncontrolled and remounted per
+// file via :key, so this never clobbers live text.
 watch(
     () => code,
     (next) => {
@@ -308,14 +267,13 @@ watch(
     },
 );
 
-// Comments in or out, in place: same editor, same file, same scroll position, no remount, and the setting is
-// the reader's (useLayout), so it holds as they walk from file to file.
+// Toggles comments in place, no remount; the setting persists (useLayout) as the reader moves between files.
 watch(
     () => hideComments,
     () => void render(code),
 );
 
-// Same for the app's text size: the open file re-types rather than waiting to be reopened (see editorType).
+// Same for text size: the open file re-types live instead of waiting to be reopened.
 watchEditorType((type) => editor.value?.updateOptions(type));
 
 onBeforeUnmount(() => {

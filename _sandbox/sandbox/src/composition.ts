@@ -236,363 +236,195 @@ import type { WorkspaceScopeDeps } from "./workspace/layout/workspace-scope.js";
 import { statePath } from "./workspace/layout/state-paths.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/deps/reconcile-deps.js";
 
-/* The daemon's collaborators, wired once at boot and handed to the route factories, the injection seam the
- * route tests build fakes against (the equivalent of the old createDaemon `deps` object). Stateful members
- * (appProcesses, the agent/intentic process runners, the credential/tool stores) live here; the in-memory
- * plan/question bridge stays a module singleton in agent-requests.ts (the agent routes call it directly).
- *
- * WHAT A MODULE SHOULD TAKE OF IT. This type is the composition root's, not every consumer's. A module that
- * reads a few seams declares those and nothing else, `export type PortsRoutesDeps = Pick<Services, "config" |
- * "portForwards" | ...>`, because the surface a module depends on is the surface a test has to stand up, and
- * the surface a change somewhere else can reach it through. Twenty-two of the daemon's route modules and their
- * leaf stores are written that way, and their tests build three or four seams instead of a hundred and thirty.
- *
- * The exception is real and is the reason the rest still take `Services` whole: a module that ORCHESTRATES the
- * daemon, the agent turn, the land pass, the capability handlers, the workspace routes, hands `services`
- * onward to machinery that legitimately reaches most of it. A `Pick` of forty members there would be a
- * transcription of `Services` that goes stale, which is the exact failure this file's fakes used to have. Take
- * the whole thing where you pass the whole thing on; name what you use where you use a few. */
-/* The daemon's whole wiring, one interface. The per-provider members arrive by EXTENSION: each provider
- * directory declares the slice of Services it contributes (its stores, catalogs, gates and runtime entry
- * point) beside the code that implements them, and composition merely spreads the slices in. Adding a
- * provider therefore adds an `extends` clause and a spread here, never a block of members whose docs live a
- * package away from their owners (agent/provider-module.ts is the seam). */
+// Wired once at boot for the route factories; a module should Pick only the seams it uses, not take Services whole,
+// unless it orchestrates most of the daemon.
+// One interface; each provider extends it with its own slice declared beside its code, so adding a provider needs only
+// an extends clause and a spread.
 export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlice, GeminiSlice, KimiSlice, MintedSlice {
     readonly config: Config;
     readonly logger: Logger;
-    /* The sink for what the BROWSER reports about itself (logs/client.jsonl), separate from `logger` above
-     * because that file's value is that only the daemon writes it. Undefined when there is nowhere to write, and
-     * the route then records nothing and says so rather than pretending, see logs/logs.routes.ts `report`. */
+    // Sink for the browser's own reports; undefined when there's nowhere to write, and the route says so.
     readonly clientLogger: Logger | undefined;
-    // Where the daemon's time goes. Every expensive path (git subprocesses, the Changes scan, repo-lock waits,
-    // HTTP requests, event fan-out) measures itself through this, so a "the panel felt slow" report has a log
-    // line naming the op instead of a stall with no attribution, see platform/perf.ts.
+    // Every expensive path measures itself here, so a slow report names the op instead of an unattributed stall.
     readonly perf: PerfTracker;
-    // Cardinalities of the resident structures whose growth should explain heap growth in the durable resource
-    // series. Reading this must stay allocation-light: the sampler calls it every minute on the daemon loop.
+    // Cardinalities behind heap growth in the resource series; stays allocation-light, called every minute.
     readonly resourceOwners: () => Readonly<Record<string, unknown>>;
-    // Where the boot chain is. main.ts declares its steps and drives it; app.ts gates every data route on its
-    // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
-    // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
+    // Where the boot chain lives; app.ts gates every data route on `converged`, and /events streams its progress.
     readonly boot: BootTracker;
-    // The promises this daemon makes to itself, checked while it runs, one companion per subsystem, reported
-    // and never thrown (see invariants/invariants.ts). main.ts drives the moments; nothing else reads it except
-    // the diagnostics surface and the tests.
+    // Promises the daemon makes to itself, checked while running, reported and never thrown; read by diagnostics.
     readonly invariants: InvariantRegistry;
-    // The platform registration, same split as `boot`: main starts/stops it, /health reports its state, the
-    // one setup link nothing outside the container can probe (see platform/announce.ts).
+    // Platform registration; main starts/stops it, /health reports its state, the one link the container can probe.
     readonly announcer: Announcer;
-    // Whether this sandbox's PUBLIC address actually answers, established by the box probing itself and
-    // reported to the platform (see platform/reach-report.ts). The announce's missing other half: registering
-    // proves the daemon started, this proves somebody can reach it.
+    // Whether this sandbox's public address answers; the announcer proves it started, this proves it's reachable.
     readonly reach: ReachReporter;
     readonly workspace: WorkspacePaths;
-    /* Was /work empty when this daemon started, i.e. is anything in it somebody's own work rather than the
-     * daemon's furniture? Composed rather than asked on demand BECAUSE OF WHEN IT HAS TO BE ASKED: services
-     * are built before this process writes anything into the workspace, and every later boot step, detached
-     * seed and capability convergence writes into a workspace that is no longer as it arrived. The starter
-     * site is the reader (scaffold/starter-site.ts), and asking this question one boot step too late is
-     * exactly how the desktop install path stopped seeding it. */
+    // Was /work empty at daemon start; must be asked before any boot step writes into the workspace, not later.
     readonly workspaceArrivedEmpty: boolean;
-    // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
-    // drive (discovery of which repo has a panel is convention-only, see panels/panels.ts).
+    // Per-repo operator panels: the in-memory process manager the /panels routes and preview proxy drive.
     readonly processes: ManagedProcesses;
-    // Supervised background services — the extensions' declared processes (connector gateways and kin) as the
-    // daemon's own children: real exits, respawn with backoff, one log file each. The interactive/adoptable
-    // tmux surfaces (panels, dockerd, local models, one-shot jobs) stay on `processes` above; the split and
-    // its reasons are the header of processes/service-processes.ts.
+    // Extensions' declared background processes as the daemon's own children (respawn, one log file each).
     readonly serviceProcesses: ServiceProcesses;
-    // The single owner of dependency status, durable setup requests, watcher reconciliation and installs.
+    // Single owner of dependency status, durable setup requests, watcher reconciliation and installs.
     readonly dependencies: DependencyCoordinator;
-    // The extension backend host's supervisor: one separate node process running every enabled extension's
-    // `server` bundle, proxied under /x/<id>/ and restarted on any change to the enabled set or a workspace
-    // extension's files (see extensions/backend/backend-supervisor.ts).
+    // Extension backend: one node process running every enabled extension's server, proxied under /x/<id>/.
     readonly extensionBackend: ExtensionBackend;
-    // The forwarded-port slot table the /ports routes drive and the preview proxy resolves port-<slot> hosts
-    // against (see ports/port-forwards.ts).
+    // Forwarded-port slot table the /ports routes drive and the preview proxy resolves port-<slot> hosts against.
     readonly portForwards: PortForwards;
-    // Discovers every listening TCP socket via procfs, each traced back to the terminal it runs in, the
-    // discovery seam behind both the Ports view and a repo's answering dev servers.
+    // Discovers every listening TCP socket via procfs, traced back to the terminal it runs in.
     readonly scanPorts: () => Promise<ListeningPort[]>;
-    // Runs user-triggered shell commands inside visible job-* tmux sessions (window per command), the
-    // surfacing substrate for capability adds and the infra check (see terminal-run.ts for the principle).
+    // Runs user-triggered shell commands inside visible job-* tmux sessions, one window per command.
     readonly terminalRun: TerminalRunner;
-    // A per-boot secret injected into every panel process (INTENTIC_PANEL_TOKEN) so a panel's own backend can
-    // call the daemon from inside the sandbox without the browser's Google token. Never leaves the container.
-    // One-shot tickets the WebSocket upgrades redeem, so a bearer never rides a query string (auth/ws-tickets.ts).
+    // Per-boot secret in every panel process so it can call the daemon without a browser token; container-only.
     readonly wsTickets: WsTickets;
-    // Path-scoped tickets /workspace/media accepts, for the one route the browser cannot header-authenticate:
-    // a <video>/<audio> element fetching its own byte ranges (auth/media-tickets.ts).
+    // Path-scoped tickets /workspace/media accepts, for a <video>/<audio> element that cannot header-authenticate.
     readonly mediaTickets: MediaTickets;
     readonly panelToken: string;
-    // A per-boot secret the in-container `vpn` and `otp` CLIs present (x-intentic-agent), written to a 0600
-    // file at AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE
-    // panelToken it is scoped hard (agentReach in auth/grants.ts): the agent may dial and drop the owner's
-    // tunnels and mint expiring one-time codes, never read the credentials behind them. Never leaves the container.
+    // Per-boot secret the vpn/otp CLIs present; dials/drops tunnels, mints codes, never reads credentials.
     readonly agentToken: string;
-    // A per-boot secret the AGENT's host tools carry (as their MCP bearer) to reach /mcp/hosts/:id, the door
-    // onto a connected computer of the user's. Deliberately NOT the machine's own enrollment token: that one
-    // lives on /history where the agent cannot read it, and this one dies with the daemon and works only from
-    // inside the container. What it opens is still bounded by the scopes that machine enforces (hosts/).
+    // Per-boot secret the agent's host tools carry to reach /mcp/hosts/:id; dies with the daemon, container-only.
     readonly hostBridgeToken: string;
-    // The user's own computers, a peer door (peers/): enrollment (a durable per-machine token, digests on
-    // /history) and who is actually holding a socket right now.
+    // The user's own computers as a peer door: durable enrollment plus who is holding a socket right now.
     readonly hosts: HostStore;
     readonly hostHub: HostHub;
-    // The same pair one layer in, for the user's own BROWSERS (webext/): the extension's enrollment, and which
-    // browsers are holding a socket. A separate bridge token from the machines' for the ordinary reason two
-    // per-boot secrets are separate — one leaking must not open the other's door.
+    // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
-    // This sandbox's RUNNERS, its own execution containers on other machines (docs/remote-runners-plan.md,
-    // workspace root), the third peer door: same enrollment mechanic, same hub, no grant and no MCP bridge.
+    // This sandbox's own runner containers on other machines: same enrollment and hub, no grant, no MCP bridge.
     readonly runners: RunnerStore;
     readonly runnerHub: RunnerHub;
-    /* The fourth door that enrolls this way, and the odd one out: desktop sync's pairing (platform/sync.ts).
-     * Only the PAIRING is here — its enrollment half is keyed by SSH key rather than by a capability id, has a
-     * single-holder lock and derives authorized_keys, so it stays where those rules are. A field rather than
-     * the module-global it was, because a pairing table is per-history-root state like every store beside it. */
+    // Desktop sync's pairing; only the pairing lives here, its SSH-keyed enrollment half stays in platform/sync.ts.
     readonly syncPairings: Pairings<SyncMode>;
-    /* Set only when THIS daemon is a runner (startRunnerMode): the parent sandbox as a credential source,
-     * consulted first by resolveHarnessCredentials so a dispatched turn spends the ORIGIN's model providers.
-     * A mutable slot rather than a field, because runner identity is read off /history after the boot chain,
-     * long after this object is frozen shut. */
+    // Set only when this daemon is a runner: the parent sandbox as a credential source, read off /history at boot.
     readonly runnerParent: { current?: ParentCredentials };
-    // Owner-minted, hashed, revocable tokens for anything driving this sandbox from outside the browser, the
-    // ACP editor bridge today (x-intentic-control header). Each carries the scope it was minted with; what a
-    // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
+    // Owner-minted, hashed, revocable tokens for driving this sandbox outside the browser; each carries its scope.
     readonly controlTokens: ControlTokens;
-    // This sandbox's identity for the platform's Connections card; undefined ⇒ /info returns {} (loopback/test).
+    // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
     readonly info:
         | {
               readonly name: string;
               readonly image: string;
               readonly version: string;
-              // The release channel this sandbox follows and the image it would roll back to, both runner-set
-              // container env (see env.config.ts). Absent when this sandbox predates channels, or has never
-              // been swapped, in which case the Update card offers no rollback.
+              // Release channel and rollback image, runner-set env; absent if predating channels or never swapped.
               readonly channel?: string;
               readonly previousImage?: string;
           }
         | undefined;
-    // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
+    // Intent-declared internal MCP tools, constant for the sandbox; merged with mcp-kind capabilities each turn.
     readonly tools: readonly AgentTool[];
-    // The unified capability manifest (.intentic/config/capabilities.json). DevOps/mcp/service/integration. Reads also
-    // carry the daemon-provisioned free-trial endpoint when the platform serves one (trial/trial-endpoint.ts);
-    // it is never written to the file.
+    // The unified capability manifest; reads carry the daemon's free-trial endpoint, never written to the file.
     readonly capabilities: CapabilitiesStore;
-    // Moves any credential still sitting in the READABLE manifest into the vault, answering the ids it moved.
-    // A boot step (main.ts), and an invariant rather than a one-time conversion, the manifest is a file the
-    // agent may edit, so a real value can arrive in it at any time (capabilities/capabilities-store.ts).
+    // Moves any credential left in the readable manifest into the vault; the agent may edit the manifest anytime.
     readonly vaultManifestSecrets: () => Promise<readonly string[]>;
-    /* The same vault, for the same reason, one table over: values of `contributes.settings` entries an extension
-     * declared `secret: true`. Held as the store rather than behind a function because three call sites read
-     * settings and each needs rehydration (extension-settings.ts owns what that means). */
+    // Same vault, one table over: extension settings declared secret:true; needs rehydrating at three call sites.
     readonly extensionSecretVault: SecretVault;
-    // The settings twin of vaultManifestSecrets, a boot step, and an invariant for the same reason: the tracked
-    // settings file is one the agent may edit, so a real token can arrive in it at any time.
+    // Settings twin of vaultManifestSecrets: the tracked settings file is agent-editable too.
     readonly vaultExtensionSettingSecrets: () => Promise<readonly string[]>;
-    // Every credential this sandbox stores under its stable name, the capability vault, the DevOps .env and
-    // the deploy engine's generated values, read by the agent's masking (values → `{{secret:name}}`) and by
-    // the two exits that resolve the same reference back (secrets/secret-registry.ts).
+    // Every credential under a stable name; read by the agent's masking and the exits resolving a reference back.
     readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
-    // The use ledger those exits feed, one row per resolved reference or typed field, joined onto the
-    // secrets inventory as each entry's "last used" (secrets/secret-uses.ts).
+    // Use ledger those exits feed, one row per resolved reference, joined onto the secrets inventory as last-used.
     readonly secretUses: SecretUsesStore;
-    /* WHICH CREDENTIALS NEED A NAMED PERSON'S CLICK, and the machinery that asks for one. Three fields
-     * because they are three different lifetimes: the POLICY is a file the owner writes (off the workspace,
-     * beside the vault, for the reason secrets/credential-gates.ts gives), the GRANTS are in memory and die
-     * with the daemon on purpose (secrets/credential-grants.ts), and the GATE is the consult every exit and
-     * every mount shares, so the rule cannot be enforced at three doors and forgotten at the fourth. */
+    // Which credentials need a person's click: policy is owner-written, grants in-memory, gate the shared consult.
     readonly credentialGates: CredentialGatesStore;
     readonly credentialGrants: CredentialGrants;
     readonly credentialGate: CredentialGate;
-    // The wallet's payment record, one row per attempt that reached policy, opened before any signature is
-    // asked for and settled after the endpoint answers; the daily-cap arithmetic reads it (wallet/wallet-ledger.ts).
+    // Wallet's payment record, one row per attempt reaching policy, opened before and settled after the answer.
     readonly walletLedger: WalletLedgerStore;
-    // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
-    // left. Answered by the platform, so a sandbox with no platform never has one.
+    // Whether this sandbox can chat before an AI account connects, and today's allowance; unset with no platform.
     readonly trial: TrialService;
-    // The loopback TLS terminator for a dev platform (platform/local-tunnel.ts). Read wherever the trial's
-    // platform address is written down: the trial capability and the translator's static routing entry, and
-    // awaited (`ready`) by the translator's config render so the baked address is deterministic, not a race
-    // against the loopback bind.
+    // Loopback TLS terminator for a dev platform; awaited by the translator's render so the address isn't a race.
     readonly platformTunnel: PlatformTunnel;
-    // Recommendations the owner has declined (.intentic/config/capability-dismissals.json), so a "no" survives the
-    // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
+    // Recommendations the owner declined, so a 'no' survives the reload that would otherwise re-derive it.
     readonly capabilityDismissals: DismissalsStore;
-    // The named personas this sandbox shows the outside world (.intentic/config/personas.json), which connected
-    // accounts each speaks for. The turn path reads it to decide what a wake may act through.
+    // Named personas this sandbox shows outside; the turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
-    // Which agent commands are heavy enough to queue (.intentic/config/heavy-commands.json). The agent's Bash
-    // hook reads it per command, so an edit binds on the next command rather than the next restart.
+    // Which agent commands are heavy enough to queue; the Bash hook reads it per command, binding on the next one.
     readonly heavyCommands: HeavyCommandsStore;
-    // Scheduled agent wake-ups (.intentic/config/automations.json), the scheduler polls it; /automations edits it.
-    // Their run history is the untracked ledger beside it (.intentic/records/automation-runs.json), joined on read so
-    // that nothing above this store knows the two are separate files.
+    // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
     readonly automations: AutomationsStore;
-    // Ralph loops (.intentic/records/loops.json): the pump drives them, /loops starts and stops them, and the record is
-    // its own restart journal, a loop still marked `running` at boot is one the daemon died under.
+    // Ralph loops: the pump drives them, /loops starts/stops them; `running` at boot is what the daemon died under.
     readonly loops: LoopsStore;
-    // Saved loops (.intentic/config/loop-designs.json): the manifest half of the same feature, a loop's machinery with
-    // its goal left out, so the composer can arm one and the message supplies the job.
+    // Saved loops: the manifest half, a loop's machinery with its goal left out for the composer to supply.
     readonly loopDesigns: LoopDesignsStore;
-    // Workflow designs (.intentic/config/workflows.json): a manifest the user authors and edits, changing at human
-    // speed. /workflows edits it; nothing fires it on its own.
+    // Workflow designs, a manifest the user authors at human speed; /workflows edits it, nothing fires it alone.
     readonly workflows: WorkflowsStore;
-    // Workflow runs (.intentic/records/workflow-runs.json): the ledger the scheduler writes several times per step.
-    // Kept out of the manifest so a run's writes cannot rewrite the user's designs, and so a run of a deleted
-    // workflow stays readable, it snapshotted its definition. Its own restart journal, like the loops one.
+    // Workflow runs, the ledger the scheduler writes per step; kept apart so a run outlives a deleted design.
     readonly workflowRuns: WorkflowRunsStore;
-    // Maintenance evidence (.intentic/records/chores/): the probe cache the background runner fills, and the ledger of
-    // what has been done about it. /chores reads both; @intentic/sandbox-contract/chores turns them into verdicts, in the
-    // browser, where the panel and the rail badge share one computation.
+    // Maintenance evidence: the probe cache the background runner fills, and the ledger of what was done about it.
     readonly chores: ChoresStore;
-    // The background sweep that keeps the probe cache from expiring. Serialized across the whole sandbox and
-    // skipped entirely while any turn is live, maintenance is the least urgent thing this daemon does.
+    // Background sweep keeping the probe cache from expiring; skipped entirely while any turn is live.
     readonly probeRunner: ProbeRunner;
-    // CI state (.intentic/secrets/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
-    // success after a failure read as `pipeline_fixed`.
+    // CI state: the webhook secret plus per repo+branch conclusion memory that reads a recovery as pipeline_fixed.
     readonly ciStore: CiStore;
-    // The credentials behind the public doors (.intentic/secrets/doors.json): an event automation's webhook token,
-    // a workflow's gate token, a bug intake's key. Kept out of the versioned manifests that declare the doors;
-    // attached to a listed automation or workflow for an operator only (auth/door-tokens.ts).
+    // Credentials behind the public doors (webhook, gate, intake tokens); attached to a listing for operators only.
     readonly doorTokens: DoorTokens;
-    // The dependency verifier's memory (.intentic/records/verify.json): last check verdict per project + consecutive
-    // red count, what makes `deps.fixed` an edge and lets a fix chore's guard cap its own retries.
+    // Dependency verifier's memory: last verdict per project plus red streak, what makes deps.fixed an edge.
     readonly verifyStore: VerifyStore;
     // The Pipelines view's read model: webhook deliveries freshen it, /ci/runs backfills it when stale.
     readonly ciRuns: RunsCache;
     // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
     readonly ciHooks: CiHookReconciler;
-    // Wakes from `requireApproval` automations, held for the owner (.intentic/records/approvals/, one file per wake),
-    // the /automations pending routes approve (run the held wake) or reject them.
+    // Wakes from requireApproval automations, held for the owner; /automations pending routes approve or reject.
     readonly heldWakes: HeldWakesStore;
-    // Which sandbox conversation each inbound THREAD owns (.intentic/records/thread-sessions.json), a Front Desk
-    // visitor's chat, a Discord or Slack channel. What makes a stream of messages one agent that remembers
-    // instead of one fresh worktree per message; a thread past its TTL starts over.
+    // Which conversation each inbound thread owns; lets a message stream remember instead of starting fresh.
     readonly threadSessions: ThreadSessionsStore;
-    // Things the agent prepared and may not do unasked (.intentic/config/approvals/, one file per item: posts to
-    // publish, actions to carry out), the agent writes them; /approvals is the owner's approve/edit/reject side.
+    // Things the agent prepared and may not do unasked; /approvals is the owner's approve/reject side.
     readonly approvals: ApprovalsStore;
-    /* Bug reports from the owner's own sites and apps (.intentic/records/issues/, one file per fingerprint),
-     * written by the public /intake ingest and triaged from /issues.
-     *
-     * ONE INSTANCE, WHICH IS THE WHOLE REASON IT IS A SERVICE rather than something each route factory builds:
-     * the store serializes its read-modify-writes per fingerprint, and a hundred browsers hitting one bug in the
-     * same second is exactly the traffic it is built for. Two instances would each serialize against themselves
-     * and race each other, and a crash affecting a thousand people would report as affecting three. */
+    // Bug reports from /intake, triaged from /issues; one instance so per-fingerprint writes don't race.
     readonly issues: IssuesStore;
-    // Which sites have actually loaded the reporter's script, and which were turned away (the intake's config
-    // fetch is the probe). The install panel's whole answer to "did the snippet land?".
+    // Which sites loaded the reporter's script and which were turned away; the install panel's landing check.
     readonly issueInstalls: InstallsStore;
-    // What is in flight right now (historyRoot/turns/, one file per in-flight turn or automation fire). Written
-    // at the turn's start, cleared when it settles, so whatever is still there at boot is exactly what the
-    // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
-    // it must outlive the container recreates (rebuild, update, dev-sandbox.sh swap) that cause the deaths.
+    // What is in flight right now; cleared on settle, so what remains at boot is what the daemon died under.
     readonly turnJournal: TurnJournal;
-    // What condition watches are armed right now (historyRoot/watches/, one file per armed watch). The turn
-    // journal's argument applied to the other thing that outlives a turn on purpose: a watch's whole life
-    // happens BETWEEN turns, so the container recreates that kill turns kill watches too, and held only in
-    // memory that death was silent, no fire and no timeout wake. Written when a watch arms, deleted the moment
-    // it ends for any reason a person or the agent chose, so whatever is here at boot is what the daemon died
-    // under, which is what agent/watchers.ts `restoreWatchers` re-checks and re-arms. Carries no credential:
-    // the check's env is re-derived at boot from the live capability store, see agent/watch-journal.ts.
+    // Armed condition watches; a watch's life is between turns, so only a boot-time read survives a recreate.
     readonly watchJournal: WatchJournal;
-    // What each conversation message can be put back to (historyRoot/turn-anchors.json), a workspace
-    // checkpoint for a main-tree turn, that conversation's own per-repo commits for an isolated one. Written at
-    // every turn's start, read by the rewind route, by a fork asking for the files as they were, and by a
-    // transcript being read back, see agent/turn-anchors.ts for why this is a map and not the commit.
+    // What each message can be restored to: a workspace checkpoint, or an isolated turn's own per-repo commits.
     readonly turnAnchors: TurnAnchors;
-    // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
-    // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
+    // Activity audit log, outside the agent's reach: inbound wakes, sniffed calls, voice sessions, failures.
     readonly activity: ActivityStore;
-    // The durable spend ledger (historyRoot/usage.jsonl, outside the agent's reach): one row per attributed
-    // turn, NEVER pruned, unlike the activity log, whose rolling window makes spend totals shrink over time.
-    // streamAgent appends at turn end; /usage/rollup and /system/usage project it.
+    // Durable spend ledger, outside the agent's reach, one row per attributed turn, never pruned unlike activity.
     readonly usage: UsageStore;
-    // Per-sandbox agent settings (.intentic/config/settings.json): /settings edits it; streamAgent reads it to gate
-    // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability) and it carries the
-    // owner's rule table (rules/rules.ts).
+    // Per-sandbox agent settings; streamAgent reads it to gate per-turn behavior and the owner's rule table.
     readonly sandboxSettings: SandboxSettingsStore;
-    /* The safety policy (.intentic/config/safety.md), the prose the command judge is handed before it decides
-     * about a flagged command, and the log of what it decided (.intentic/records/safety-log.json).
-     *
-     * Not fields on the settings above, for the reason the rule firings next door are not either, doubled: the
-     * policy is a DOCUMENT rather than a set of flags, and the log changes several times a turn on its own. */
+    // Safety policy the judge is handed, and what it decided; a policy is a document, the log changes mid-turn.
     readonly safetyPolicy: SafetyPolicyStore;
     readonly safetyLog: SafetyLog;
-    // When each rule last did something (.intentic/local/rule-firings.json). Beside the settings rather than in them:
-    // a firing is not an edit, so it must not make every push a write of the owner's configuration.
+    // When each rule last fired; kept beside settings, not in them, so a firing isn't a config write.
     readonly ruleFirings: RuleFiringsStore;
-    // The runtime-install ledger (.intentic/records/runtime-installs.json): which tools sessions installed into
-    // the container at runtime, written by the install-steering hook, read by the Environment card and the
-    // drift sweep's auto-drafter (environment/runtime-installs.ts).
+    // Runtime-install ledger: tools sessions installed at runtime, read by the Environment card and drift sweep.
     readonly runtimeInstalls: RuntimeInstallsStore;
-    // The environment drift sweep: probes what the live container has that the image did not put there, and
-    // drafts overlay steps for recurring runtime installs (environment/drift-sweep.ts).
+    // Environment drift sweep: probes what the container has beyond the image, drafts steps for recurring installs.
     readonly driftSweep: DriftSweep;
-    // Push state: this sandbox's VAPID keypair + one channel per registered device (browsers over web push,
-    // native installs through the platform relay). On the HISTORY volume, outside the agent's reach, because
-    // the private key and the relay secrets can forge notifications to the owner's devices.
+    // Push state: this sandbox's VAPID keypair plus one channel per device; outside agent reach, can forge a push.
     readonly push: PushStore;
-    // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
-    // actively watching; `notify` (the settings test button) always fires.
+    // Sends push notifications; notifyIfAway is suppressed while someone is actively watching, notify always fires.
     readonly pushSender: PushSender;
-    // The latest plan-limit snapshot per account of ANY provider (historyRoot/account-usage.json). streamAgent
-    // records what a Claude turn's stream reports and the translator client records what it pulls for the
-    // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
-    // every account the user can see reports its headroom from one place.
+    // Latest plan-limit snapshot per account of any provider; every account surface merges it from one place.
     readonly accountUsage: AccountUsageStore;
-    // The one place a headroom reading is asked for, coalesced and announced (usage/headroom.ts): every
-    // provider's targets behind one `refresh`, triggered by what happened (a turn settled, a plan refused, a
-    // screen opened) rather than by a clock, and every write pushed to the browsers on /events.
+    // Coalesced headroom reads across every provider behind one refresh, triggered by events, pushed on /events.
     readonly headroom: HeadroomService;
-    // The last time each PROVIDER refused a turn outright (historyRoot/provider-refusals.json), a spent plan or
-    // a credential the API would not take. The observed counterpart to the polled snapshot above: streamAgent
-    // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
-    // read the two together (a healthy meter beside a fresh refusal means the meter is stale).
+    // Last time each provider refused a turn outright; the observed counterpart to the polled headroom snapshot.
     readonly providerRefusals: ProviderRefusalStore;
-    /* Which MODELS this sandbox's credentials were refused (historyRoot/model-refusals.json), which the store
-     * above cannot hold: its key is the provider, and one subscription routinely serves some of a vendor's
-     * models and not others. Written by the turn that was refused and read by the catalog seam, which drops
-     * the rows so the picker stops offering a model the plan will not run (usage/model-refusals.ts). */
+    // Which models this sandbox was refused on, finer-grained than providerRefusals; the picker drops them.
     readonly modelRefusals: ModelRefusalStore;
-    // Every native provider's live model catalog, keyed by provider, what /providers/{provider}/models serves
-    // the picker, what the one-shot helper resolver compares over, and what a routed turn validates its pick against.
-    // ASSEMBLED from the provider modules (agent/provider-registry.ts), so those readers do a lookup instead
-    // of each keeping its own enumeration of the providers.
+    // Every native provider's live model catalog, assembled from provider modules for one lookup, not each its own.
     readonly providerCatalogs: Record<NativeProvider, ProviderCatalog>;
-    // What each `endpoint` capability's own server publishes, the user's model APIs, wherever they run. Keyed by
-    // capability id because these are user-created and unbounded, unlike the fixed native catalogs above, and
-    // there is no seed floor: only the server can say what it serves. Read by the picker route, by the capability
-    // card, and by the translator reconciler that turns each one into a routable provider.
+    // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.
     readonly endpointModels: EndpointCatalog;
-    // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
-    // (codex → ChatGPT, grok → SuperGrok, kimi → Kimi Code, gemini → Google). Codex, Kimi and Gemini have no
-    // other credential. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
+    // Bundled translator: connects/disconnects subscription OAuth; codex/kimi/gemini have no other credential.
     readonly cliProxy: CliProxyClient;
-    // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
-    // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
+    // Shared OpenCode runtime backing Grok; OpenCode owns the xAI credential, so there is no separate GrokStore.
     readonly openCode: OpenCodeService;
-    // The AI-provider credential root (also OpenCode's XDG_DATA_HOME), the CLIs point at it, an absolute
-    // agent's `opencode run` commands at it.
+    // AI-provider credential root (also OpenCode's XDG_DATA_HOME); CLIs and an absolute agent's opencode use it.
     readonly authRoot: string;
-    // Daemon-owned workspace snapshots on /history (outside the agent's reach): auto-captured per turn + on an
-    // interval, diffed and restored through the /history routes.
+    // Daemon-owned workspace snapshots on /history, outside agent reach: captured per turn and on an interval.
     readonly history: WorkspaceHistory;
-    /* The Claude Code loop, the one adapter that is NOT a provider slice's: it serves native Claude turns,
-     * Kimi (which has no runtime of its own), every routed provider under the claude-code harness, and every
-     * endpoint capability, so no single provider may own it. The other native runtimes' entry points arrive
-     * through the slices this interface extends (see the provider modules). */
+    // The Claude Code loop: serves native Claude, Kimi, every routed provider, every endpoint capability.
     readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
-    // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
+    // Generic ACP adapter for every agent-kind capability outside NATIVE_PROVIDERS; one warm subprocess per agent.
     readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly acpConnections: AcpConnections;
-    // The Pi adapter serving the reserved `pi` agent-kind capability over Pi's RPC protocol, one process per
-    // turn, sessions persisted as files under `<authRoot>/pi/sessions` (see pi/pi-agent.ts).
+    // Pi adapter for the reserved pi agent-kind capability over Pi's RPC; one process per turn, sessions as files.
     readonly piAgent: (config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     readonly git: {
@@ -603,79 +435,59 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly clone: (parentDir: string, name: string, cloneUrl: string, options?: GitCloneOptions) => Promise<void>;
         readonly checkout: (dir: string, ref: string) => Promise<void>;
         readonly head: (dir: string) => Promise<string>;
-        // The unabbreviated HEAD sha, the form a sha-pinned capability config stores (extension revert).
+        // Unabbreviated HEAD sha, the form a sha-pinned capability config stores.
         readonly fullHead: (dir: string) => Promise<string>;
         readonly sync: (dir: string) => Promise<GitSyncResult>;
-        // The Changes review verbs (git/changes.ts, changes-index.ts, changes-diff.ts): working-tree status split
-        // into the index and worktree sides, the index moves, the two whole-repo commit shapes, per-path discard,
-        // and the per-side file diffs.
-        // `head` rides along because the status read already carries it: the scan's other readers (attribution)
-        // take it as an argument rather than spawning `rev-parse HEAD` for the answer it just had.
+        // Changes review verbs: status split into index/worktree, index moves, whole-repo commits, discard, diffs.
         readonly changedFiles: (dir: string) => Promise<{
             branch?: string;
             head?: string;
             conflicted: GitChange[];
             staged: GitChange[];
             unstaged: GitChange[];
-            // The object names status already reported per path, which is what the code-only counts are cached
-            // on (git/code-counts.ts): free on this read, a spawn per file anywhere else.
+            // Object names status already reported per path; free here, a spawn per file elsewhere.
             blobs: Map<string, { head?: string; index?: string }>;
         }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
-        // The whole repository in one spawn, no list built and none to chunk: what a scope that narrows nothing
-        // resolves to, and the reason "stage everything and commit" has no size beyond which it stops working.
+        // The whole repository in one spawn, nothing built or chunked; why staging everything has no size limit.
         readonly stageAll: (dir: string) => Promise<void>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
-        // Branches (git/branches.ts) and the remote (git/remote.ts). The remote verbs return an ActionResult
-        // because "no remote"/"no upstream"/"won't fast-forward" are ordinary outcomes, not exceptions.
+        // Branches and the remote; remote verbs return an ActionResult since 'no remote' is an outcome, not an error.
         readonly listBranches: (dir: string) => Promise<GitBranch[]>;
-        // Remote-tracking branches, so the switcher can pair `main` with `origin/main` instead of listing them
-        // as unrelated peers.
+        // Remote-tracking branches, so the switcher can pair main with origin/main instead of unrelated peers.
         readonly listRemoteBranches: (dir: string) => Promise<GitRemoteBranch[]>;
         readonly createBranch: (dir: string, name: string, start: string | undefined, checkout: boolean) => Promise<void>;
         readonly deleteBranch: (dir: string, name: string, force: boolean) => Promise<void>;
-        // `known.branch` lets a caller that already holds the checked-out branch (the Changes scan reads it
-        // off the same status pass that produced the rows) spare the spawn that would re-derive it.
+        // known.branch lets a caller that already holds the checked-out branch skip re-deriving it.
         readonly remoteState: (dir: string, known?: { readonly branch?: string | undefined }) => Promise<GitRemoteState>;
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
         readonly pullRemote: (dir: string) => Promise<ActionResult>;
-        // Where the repo is online (host + `owner/name`), so a workspace repo can be recognised in a list of
-        // project ids that came from somewhere else, the publisher claim matches the registry's list this way.
+        // Where the repo is online (host + owner/name), so it can be matched against a project id from elsewhere.
         readonly remoteProjectOf: (dir: string) => Promise<{ host: string; project: string } | undefined>;
-        /* One file onto the default branch and out to the remote, in a single step whose answer says how far it
-         * got. `write` is passed in by the router, which owns path resolution; everything else, the mid-sequence
-         * and wrong-branch refusals, committing that path ALONE so a staged index survives, is in publish-file.ts. */
+        // One file onto the default branch and out to the remote in one step; write is passed in by the router.
         readonly publishFile: (
             dir: string,
             file: { path: string; content: string; message: string },
             write: (content: string) => Promise<void>,
         ) => Promise<GitPublishFileResult>;
-        // The working tree's two diffs, one per side the Changes panel lists, a partially staged file has two
-        // of them, and HEAD↔worktree is neither. `fileDiff`'s `ref` is the before side for the AGENTS review,
-        // whose worktree has no index to split (a conversation's recorded base sha); `refFileDiff` is that same
-        // row for an ARCHIVED agent, whose retired checkout leaves both sides as refs in the main repo.
+        // The working tree's two diffs, one per Changes-panel side; fileDiff's ref is a conversation's base sha.
         readonly stagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly unstagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly conflictedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
-        // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
-        // (changed files, then a file's before/after AT the commit).
+        // Git-history graph, read-only: one repo's commit log across all refs, lazy per-commit detail on request.
         readonly commitLog: (dir: string, limit: number, skip?: number) => Promise<{ branch?: string; commits: GitCommit[]; hasMore: boolean }>;
-        // What one repo contributes to an AI-drafted commit message: its recent subjects (the house style), the
-        // file list, and the diff of whichever side the commit will record, a commit that stages first reads
-        // the worktree (`all`, or just the `paths` it will stage), a bare one reads the index.
+        // What one repo contributes to an AI commit message: recent subjects, file list, and the diff to be recorded.
         readonly collectRepoDiff: (repo: string, dir: string, scope: CommitScope) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
-        // The halted-operation pair. Never something this daemon's own verbs leave behind (they abort
-        // themselves), this is for what a terminal left: an agent's `git rebase` that stopped on a conflict.
+        // The halted-operation pair, for what a terminal left (a rebase stopped on conflict), not this daemon's verbs.
         readonly operationInProgress: (dir: string) => Promise<GitOperation | undefined>;
         readonly abortOperation: (dir: string, operation: GitOperation) => Promise<void>;
-        /* The stash, the one part of a repository's real state nothing here used to read, so a `git stash` in a
-         * terminal made the work invisible. An entry is a commit, which is why it reads like one. */
+        // The stash, read here because nothing else used to; an entry is a commit, which is why it reads like one.
         readonly stashList: (dir: string) => Promise<StashEntry[]>;
         readonly stashChanges: (dir: string, ref: string) => Promise<GitChange[]>;
         readonly stashPush: (
@@ -684,19 +496,17 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         ) => Promise<{ ok: true } | { ok: false; reason: string }>;
         readonly stashApply: (dir: string, ref: string, pop: boolean) => Promise<{ ok: true } | { ok: false; reason: string }>;
         readonly stashDrop: (dir: string, ref: string) => Promise<void>;
-        // Walking the current branch back off its own reflog, the ref-level complement to a checkpoint restore.
+        // Walks the current branch back off its own reflog, the ref-level complement to a checkpoint restore.
         readonly undoableAction: (dir: string) => Promise<UndoableAction | undefined>;
         readonly undoLastAction: (
             dir: string,
             expectedPreviousSha: string,
             discardChanges: boolean,
         ) => Promise<{ ok: true; action: UndoableAction } | { ok: false; reason: string }>;
-        // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the
-        // HEAD-movers (checkout/reset) return void + propagate git errors; the sequence ops return an
-        // ActionResult so a conflict is a value. The route auto-checkpoints every destructive one.
+        // Graph write actions: non-destructive refs return void and propagate errors, sequence ops return a value.
         readonly createBranchAt: (dir: string, name: string, sha: string) => Promise<void>;
         readonly createTagAt: (dir: string, name: string, sha: string) => Promise<void>;
-        // The other two things one does with a tag, so a tag pill is not a create-only affordance.
+        // The other two things one does with a tag, so a tag pill is not create-only.
         readonly deleteTag: (dir: string, name: string, remote: string | undefined) => Promise<void>;
         readonly pushTag: (dir: string, name: string, remote: string) => Promise<ActionResult>;
         readonly checkoutRef: (dir: string, ref: string) => Promise<void>;
@@ -707,29 +517,21 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly rebaseOnto: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
         readonly dropCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
     };
-    // The fleet registry (persisted at historyRoot/agents.json + runtime turn state), one entry per isolated
-    // conversation. streamAgent begins/observes/finishes turns; /agents lists, lands, and discards.
+    // Fleet registry, one entry per isolated conversation; streamAgent runs turns, /agents lists/lands/discards.
     readonly agents: AgentsRegistry;
-    // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
+    // Per-conversation worktree compositions on /history/worktrees: create/repair/remove/prune.
     readonly agentWorktrees: AgentWorktrees;
-    // Everything a stopped conversation still holds, its processes, terminals, browsers, temp state, reclaimed
-    // on the conversation's own stop clock. main starts it (container role only); archive/discard call its hard
-    // stop (see platform/reaper.ts for the whole policy).
+    // Everything a stopped conversation holds (processes, terminals, browsers, temp), reclaimed on its own clock.
     readonly reaper: ResourceReaper;
-    // Which copy of the workspace a file read means, the shared tree, or one conversation's checkout (see
-    // workspace/workspace-scope.ts). Composed once here because the two surfaces that serve files ask the same
-    // question: the oRPC workspace routes, and the raw/media byte routes in app.ts.
+    // Which copy of the workspace a file read means: the shared tree or one conversation's checkout.
     readonly workspaceScope: WorkspaceScopeDeps;
-    // Builds an isolated turn's mount namespace, where the conversation's worktree stands in for the
-    // workspace root. Probes the container's capability once and reports "unavailable" forever after when it
-    // has none, so a sandbox launched without CAP_SYS_ADMIN keeps running turns the old way.
+    // Builds an isolated turn's mount namespace; probes capability once, then reports unavailable forever.
     readonly turnIsolation: TurnIsolation;
-    // Which agent an uncommitted main-tree file came from, derived from the landed shas (agents/origins.ts).
+    // Which agent an uncommitted main-tree file came from, derived from the landed shas.
     readonly agentOrigins: AgentOrigins;
     readonly files: {
         readonly read: (absPath: string) => Promise<string | undefined>;
-        // One bounded window of a file's text, for the route the browser reads through, see
-        // readWorkspaceFileWindow. `read` above stays for the daemon's own already-bounded readers.
+        // One bounded window of a file's text, for the browser's own route; `read` stays for already-bounded readers.
         readonly readWindow: (absPath: string, offset?: number, limit?: number) => Promise<WorkspaceFileWindow | undefined>;
         readonly write: (absPath: string, content: string | Uint8Array) => Promise<void>;
         readonly writeStream: (absPath: string, body: ReadableStream<Uint8Array>, limit: number, offset?: number) => Promise<void>;
@@ -743,98 +545,59 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
-    // Resident workspace search: one iq engine instance holding the index DB open with its sweep cached in
-    // memory: /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
-    // watcher (main.ts) instead of the query path. The agent's Bash `iq` calls share the same on-disk index.
-    // Indexing itself runs on the engine's own worker thread; only queries touch this one.
+    // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
     readonly iq: ResidentEngine;
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<TranscriptRow[]>;
-        // The LAST turn of one, which is what a turn the daemon died under reads back as: it never settled, so
-        // the conversation's own record has nothing of it, and this is what the boot pass writes down in its
-        // place (sessions/turn-transcript.ts → recordInterruptedTurn).
+        // The last turn of a session that never settled; what the boot pass writes in its place.
         readonly readTail: (dir: string, id: string) => Promise<TranscriptRow[]>;
-        // No `dir`, unlike its neighbours: a search reads the phrase index and a listing bound to this
-        // workspace's root, both of which the daemon built once. A parameter the implementation is free to
-        // ignore is a trap for the next caller who passes something else and is quietly obeyed.
+        // No dir, unlike its neighbours: search reads the phrase index and the workspace listing, both built once.
         readonly search: (query: string, caseSensitive: boolean) => Promise<SessionSummary[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
-    /* A CONVERSATION's transcript, as opposed to a SESSION's, keyed by conversationId, which is the identity
-     * that survives everything a session id does not (an archive, a worktree retired, a runtime swapped, a
-     * provider with no session store at all). Written by every settled turn, read by /agents/:id/transcript.
-     * See sessions/transcript-record.ts for why this stopped being the provider's job. */
+    // A conversation's transcript, keyed by conversationId, surviving an archive, a retired worktree, a swap.
     readonly transcripts: {
-        /* THE WHOLE RECORD, for the readers that cannot be handed a piece of one: a published share, a runtime
-         * handoff seeding a replacement session, a subagent's transcript, an agent recalling what was said. */
+        // The whole record, for readers that cannot take a piece: a share, a runtime handoff, a subagent, self-recall.
         readonly read: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
-        // ONE PAGE of it, newest turns by default, `window` walking back through the rest: what a tab opening
-        // a chat asks for, and the only transcript read on the click path.
+        // One page, newest turns by default, window walking back; what a chat tab opening asks for.
         readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
-        // Opens a BRANCH's record, as a copy of the first `keep` rows of the conversation it was cut from; a
-        // no-op once the record exists. Every other record is created by its first settled turn's append.
+        // Opens a branch's record as a copy of the source's first `keep` rows; a no-op once the record exists.
         readonly fork: (agent: TranscriptAgent, source: string, keep: number) => Promise<void>;
         readonly append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => Promise<void>;
-        // How many messages are stored, the position the next turn starts at, which its checkpoint is filed
-        // under so a rewind can address it (see transcript-record.ts).
+        // How many messages are stored, the position the next turn starts at and its checkpoint is filed under.
         readonly count: (agent: TranscriptAgent) => Promise<number>;
-        // Drop everything after the message a rewind went back to; returns how many went.
+        // Drops everything after the message a rewind returned to; returns how many went.
         readonly truncate: (agent: TranscriptAgent, keep: number) => Promise<number>;
     };
-    /* WHAT WAS SAID, INDEXED, the substrate both phrase searches answer from: the fleet filter over the board
-     * and the archive (/agents/search) and the chat-history box (/sessions?query=). On disk, written forward as
-     * turns settle, so a query reads an index and never a transcript. See sessions/search-index.ts for the
-     * numbers that made this durable rather than a heap cache built on the query path. */
+    // What was said, indexed: what the fleet filter and chat-history search answer from, written as turns settle.
     readonly saidIndex: {
-        /* One query, one round trip: which sources said this and the line that proves it.
-         *
-         * Async at this seam though the index itself answers synchronously (it is one SQL statement). The seam
-         * is what a test harness substitutes, and a harness has to read the fake transcripts it was given
-         * before it can answer; forcing that to be synchronous is how a double ends up diverging from the
-         * thing it stands for. One microtask on a path that used to take seconds. */
+        // One query, one round trip; async here only so a test harness can substitute a fake without going synchronous.
         readonly search: (...args: Parameters<SearchIndex["search"]>) => Promise<ReturnType<SearchIndex["search"]>>;
-        // Bring the index level with the stores. Detached at boot and after an archive sweep; a no-op once
-        // there is nothing behind.
+        // Brings the index level with the stores; detached at boot and after a sweep, a no-op if nothing's behind.
         readonly backfill: (signal?: AbortSignal) => Promise<void>;
-        /* Whether a backfill is running right now, which is the same question as "can this answer still grow".
-         * Both search routes report it, so a screen showing a partial list can say that it is partial instead
-         * of implying it is everything. */
+        // Whether a backfill is running, whether the answer can still grow; both search routes report it as partial.
         readonly indexing: () => boolean;
     };
-    /* Which conversations have been published as pages anyone with the link can read (historyRoot/shares.json).
-     * The index only, the pages themselves live in the workspace's outbox. See share/share-store.ts. */
+    // Which conversations are published as shareable pages; the index only, pages live in the workspace outbox.
     readonly shares: ShareStore;
-    // The composer's voice input: whisper.cpp over browser-recorded WAV utterances, with the serialized run
-    // queue and the first-use model download that make it stateful (see speech/transcribe.ts).
+    // Composer's voice input: whisper.cpp over browser WAV, with a serialized queue and first-use model download.
     readonly speech: Speech;
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
-    // What a panel's preview hostname actually serves right now, listening sockets over assignments (see
-    // panels/panel-upstream.ts). The preview proxy routes on it, and the panels list advertises a preview URL
-    // only where it answers, so no surface can offer an address that resolves to a dead port.
+    // What a panel's preview hostname actually serves; the panels list only advertises a URL where it answers.
     readonly panelUpstreamOf: PanelUpstreamResolver;
-    // Shared-access grants, the emails authorized besides the owner. Always present; the /members routes read
-    // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
+    // Shared-access grants besides the owner; the daemon enforces these, the platform only mirrors them.
     readonly members: MembersStore;
-    /* WHO THIS SANDBOX BELONGS TO, the bound owner's email, read-only. Undefined before the first sign-in has
-     * bound one (trust-on-first-use, auth/auth.ts), which is also every loopback and test daemon.
-     *
-     * The READ half alone, on purpose: two surfaces need the email (the Access roster, so the owner appears on
-     * their own roster and can be named a credential approver; the gate routes, which check approvers against
-     * "the owner or a member"), and neither may WRITE it. Binding ownership stays where it is. */
+    // Bound owner's email, read-only; undefined before the first trust-on-first-use sign-in; binding is elsewhere.
     readonly ownerEmail: () => Promise<string | undefined>;
-    // When set, the daemon is exposed directly and verifies the caller's bearer (a daemon-minted session, or a
-    // Google ID token) on every route but /health; CORS is emitted for `allowOrigins`. Undefined ⇒ loopback mode
-    // (tests / host-internal preview). authorizeOwner gates the owner-only member-management routes; mintSession
-    // backs system.session, the Google-verified exchange that makes sessions the steady-state credential.
+    // When set, the daemon verifies the bearer on every route but /health and emits CORS; unset means loopback.
     readonly auth:
         | {
               readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<Caller>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
               readonly authorizeRetirement: (bearer: string) => Promise<void>;
               readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
-              // Re-key the session signer: every browser holding a session for this sandbox is signed out at
-              // once (auth/session.ts rotate). Backs the owner-only "sign out everywhere" route.
+              // Re-keys the session signer, signing every browser out at once; backs 'sign out everywhere'.
               readonly rotateSessions: () => Promise<void>;
               readonly disableBrowserAccess: () => Promise<void>;
               readonly connections: AuthConnections;
@@ -842,44 +605,27 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         | undefined;
 }
 
-// Build the production services from config (env). The agent/intentic/git/files/sessions/tree members are the
-// real module functions referenced directly (their injectable last arg defaults to the real subprocess/fs).
+// Builds production services from config; the agent/intentic/git/files/sessions/tree members default to real
+// subprocess/fs functions.
 export const createServices = (config: Config, logger: Logger): Services => {
     const workspace = workspacePaths(config.workspaceRoot);
-    // The AI-provider credential root. AGENT_AUTH_DIR points it at a stable dir shared across dev sandboxes so
-    // subscription OAuth survives resets; everything else under .intentic (owner/members/capabilities/sessions/…)
-    // stays per-workspace. ponytail: sharing OpenCode's XDG dir also shares its session/snapshot storage, and
-    // concurrent sandboxes can race a token refresh (recoverable: reconnect once), split auth.json out /
-    // per-provider locks if either bites.
+    // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
-    // Hoisted because two services share it: the turn stream records Claude's readings into it, and the
-    // translator client both reads and records the routed subscriptions' through the same file.
+    // Hoisted: the turn stream and the translator client both read and record into this same file.
     const accountUsage = fileAccountUsageStore(join(config.historyRoot, "account-usage.json"));
     const cliProxy = createCliProxyClient({
         managementUrl: cliProxyManagementUrl(config),
         token: config.translator.token,
         configPath: cliProxyConfigPath(config),
-        // The credential store the proxy reads, so the connection list survives a proxy that isn't answering,
-        // its 15s boot warm-up and every rung of its restart ladder (see listFiles).
+        // The credential store the proxy reads, so the connection list survives a proxy that isn't answering yet.
         authDir: cliProxyAuthDir(authRoot),
         usageStore: accountUsage,
     });
-    /* The OpenCode server and the Gemini slice hold references to EACH OTHER, and the knot is real rather
-     * than an ordering accident: OpenCode's spawn config re-serves Gemini's model ids as an OpenAI-compatible
-     * backend, and Gemini's runtime is the OpenCode loop. The model read below is lazy (it runs when the
-     * server boots, in main's provider boot pass, long after this function returned), so the forward
-     * reference is safe — the extensionBackend holder two pages down is the same pattern for the same reason.
-     *
-     * OpenCode itself stays CORE rather than becoming Grok's: one warm server serves Grok's turns, Gemini's
-     * native runtime and the permission watchers, so no single provider may own it. Its data dir (OpenCode's
-     * XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts. Gemini brings no
-     * credential of its own here — the translator holds Google's, exactly as for a routed turn; an unbaked
-     * translator (the dev profile) leaves the config absent and the loop serves Grok alone. */
+    // OpenCode and the Gemini slice reference each other; safe since the model read runs lazily, after returning.
     // oxlint-disable-next-line prefer-const -- openCode's config closure below reads `gemini` before this is assigned, which is what the definite-assignment `!` is for. There is no initialiser to merge into.
     let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
-        // Where a non-isolated conversation runs, and so the one directory whose permission watcher is
-        // worth opening at boot, event streams are per-directory, and a turn registers its own worktree itself.
+        // Where a non-isolated conversation runs, the one directory whose permission watcher is worth opening at boot.
         workspaceRoot: config.workspaceRoot,
         ...(config.translator.url === ""
             ? {}
@@ -899,21 +645,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   name: config.sandbox.name,
                   image: config.sandbox.image,
                   version,
-                  // Empty is "not set", never a value to publish: `channel: ""` on the wire reads as a channel
-                  // literally named nothing, and a rollback offer pointing at "" is a button that cannot work.
+                  // Empty means not set, never a value to publish; "" would be an unclickable rollback button.
                   ...(config.sandbox.channel !== "" ? { channel: config.sandbox.channel } : {}),
                   ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
               }
             : undefined;
     const members = fileMembersStore(statePath(workspace.root, ".intentic/identity/members.json"));
-    /* THE BOUND OWNER, hoisted out of the authorizer it used to be built inside, because two surfaces now
-     * need to READ the email rather than merely authorize against it: the Access roster answers with it (an
-     * owner absent from their own roster cannot be named an approver), and the credential gate routes check
-     * an approver list against "the owner or a member". Exposed as the read alone, never the write: binding
-     * ownership stays the authorizer's trust-on-first-use, and nothing else may set it. */
+    // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
     const ownerStore = fileOwnerStore(statePath(workspace.root, ".intentic/identity/owner.json"));
-    // The session secret lives under historyRoot (like the activity/usage ledgers), daemon-private, outside
-    // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
+    // Session secret under historyRoot, daemon-private and persistent, so a restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();
     const browserAccess = fileBrowserAccess(join(config.historyRoot, "browser-access-disabled"));
@@ -927,8 +667,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
-                  // Hosted machines only: the provisioner is the one thing that sets the platform's public key,
-                  // and a ticket is only ever checked against THIS sandbox's id (auth.ts ownerTicketVerifier).
+                  // Hosted machines only: the provisioner sets the platform's key, checked against this sandbox's id.
                   ...(config.platform.publicKey !== "" && config.connectToken !== ""
                       ? { ownerTicket: ownerTicketVerifier(config.platform.publicKey, sandboxIdFromToken(config.connectToken) ?? "") }
                       : {}),
@@ -946,12 +685,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
           }
         : undefined;
 
-    /* The provider slices: each provider directory builds its own Services members (agent/provider-module.ts
-     * is the seam), and this function's whole part in it is these calls and the spreads in the literal below.
-     * The Gemini slice is built beside OpenCode above, whose knot it is part of. */
+    // Provider slices: each directory builds its own Services members; Gemini's slice is built beside OpenCode.
     const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root });
-    // Both halves of "what does each account have left" behind one service: Claude's accounts on their own
-    // tokens, the routed subscriptions through the translator's credential-scoped call.
+    // Both halves of 'what each account has left': Claude's own tokens, routed subscriptions via the translator.
     const headroom = createHeadroomService({
         store: accountUsage,
         sources: [claudeHeadroomSource(claude.claudeStore), cliProxy.headroom],
@@ -961,25 +697,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const cursor = createCursorSlice({ authRoot, logger });
     const grok = createGrokSlice(openCode);
     const kimi = createKimiSlice(cliProxy);
-    // One slice covering every minted provider (Meta, Z.ai): a store, a sign-in and a catalog per estate each,
-    // built from the spec table rather than named here, so adding one is a contract row and not a line in this
-    // file.
+    // One slice for every minted provider, built from a spec table so adding one is a contract row, not code here.
     const minted = createMintedSlice({ authRoot, logger });
 
-    // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
-    // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
-    // Its per-span slow lines go to logs/perf.jsonl rather than daemon.log (createPerfLogger says why); the
-    // ranked summary stays on the main logger, where an incident reader will meet it.
+    // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
 
-    /* Hoisted for the same reason the perf tracker is: the invariant companions registered at the end of this
-     * function observe the very instances built here, and a second journal would let a check read a directory
-     * the turn path never writes to, a diagnostic that agrees with itself and with nothing else. */
+    // Hoisted: the invariant companions below observe these exact instances, not a second, disagreeing one.
     const turnJournal = fileTurnJournal(join(config.historyRoot, "turns"));
     const invariants = createInvariantRegistry(logger);
 
-    // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
-    // same runner, so both must share one instance (and its `visible` gate).
+    // Hoisted: the ACP connection pool implements ACP terminal/* over the same runner, so both share one instance.
     const terminalRun = createTerminalRunner();
     const acpConnections = createAcpConnections(logger, terminalRun);
     const processes = createManagedProcesses();
@@ -990,17 +718,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
         requestsPath: join(config.historyRoot, "dependency-requests.json"),
     });
-    // Hoisted: the store and the sender that reads it must be the same instance, or a subscription added
-    // through the routes would be invisible to the next send.
+    // Hoisted: the store and the sender reading it must be the same instance, or a subscription would go unseen.
     const pushStore = filePushStore(join(config.historyRoot, "push.json"));
-    // Hoisted because the credential gate notifies through it when a release card goes up, and the gate is
-    // built below in the same object this sender is returned on.
+    // Hoisted because the credential gate notifies through it when a release card goes up.
     const pushSender = createPushSender(pushStore, logger);
-    // Shared by the turn path (which builds a namespace per isolated turn) and worktree creation (which plants
-    // mount points rather than symlinks when it knows the namespace is coming), so both read ONE probe.
+    // Shared by the turn path and worktree creation so both read one capability probe.
     const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot: config.historyRoot, logger });
-    // Hoisted ABOVE the registry, which now derives each card's land standing through it (standing.ts) rather
-    // than reading a verdict off the entry.
+    // Hoisted above the registry, which now derives a card's land standing through it rather than a stored verdict.
     const agentWorktrees = createAgentWorktrees(
         {
             workspace,
@@ -1010,16 +734,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
             logger,
             perf,
         },
-        // Demoted git: a worktree ensure is a whole-monorepo checkout (and several conversations start
-        // together), bulk agent-plane IO that must lose to the daemon's own loop under contention.
+        // Demoted: a worktree ensure is bulk agent-plane IO that must lose to the daemon's own loop under contention.
         politeGit,
     );
-    // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to, a
-    // second instance would answer from a stale agents.json.
-    // The presences are held by name too, because their caches report into the resource series below.
-    // ONE expiry tracker for both landing readers (agents/expiry.ts): they ask the identical
-    // "what has history touched since this landing" question, so sharing the tracker halves both the
-    // per-head-move diff and the memory the answers sit in.
+    // Hoisted: the Changes scan and the turns share one registry; one tracker serves both landing readers' query.
     const landingExpiry = createExpiryTracker();
     const landedPresences = createLandedPresences(agentWorktrees, logger, landingExpiry);
     const agents = createAgentsRegistry(
@@ -1027,10 +745,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         createLandStandings(agentWorktrees),
         landedPresences,
     );
-    /* The reaper, keyed to the same three facts everything else keys to: whose work (the workload stamp),
-     * whether it is live (the turn registry), and whether it is OURS (this registry knows the conversation).
-     * The reserved owners answer for themselves, what the daemon keeps warm on purpose (the ACP/Pi pools, the
-     * translator) is live for as long as this daemon is, and a helper one-shot never is. */
+    // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
     const reaper = createResourceReaper({
         ownerLive: (owner) => owner === DAEMON_OWNER || turnRunOf(owner)?.done === false,
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
@@ -1045,41 +760,24 @@ export const createServices = (config: Config, logger: Logger): Services => {
         onOwnerStopped: onTurnSettled,
         logger,
     });
-    /* A settled turn's outside-content bit is dropped with the turn (guard/turn-taint.ts). The bit's LIFETIME
-     * is the turn, a page read three tool calls ago still counts, the next turn starts clean, and the
-     * registry that publishes it to the daemon's own consult sites has to be told when that moment is. */
+    // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
     onTurnSettled(clearTurnTaint);
-    // Hoisted like the presences above, and for the same reason: the attribution caches report into the
-    // resource series, they are the structures whose silent growth was once the daemon's memory leak.
+    // Hoisted like the presences above: its attribution caches report into the resource series.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): the OFFER surfaces:
-     * the endpoint catalog, the picker's provider list, the capability card: see the trial as an ordinary
-     * endpoint exactly while the platform says one exists, and the file on disk stays what the user put there.
-     * The one consumer deliberately NOT fed from this layer is the translator's routing table, which carries
-     * the trial's static entry whenever a platform is configured at all (trialCompatEntry): routing must be a
-     * constant of configuration, not a function of the probe's timing. Availability is probed on boot below. */
+    // The free trial lays over the manifest, never into it; routing stays a config constant, not probe timing.
     const trial = createTrialService(config);
-    /* And the one thing between the trial and a platform running on the developer's own machine: the bundled
-     * translator opens the trial's connection itself and verifies the certificate, which a self-signed dev
-     * platform cannot satisfy. Opens nothing at all against a deployed platform (platform/local-tunnel.ts). */
+    // The bundled translator opens the trial's connection and verifies its cert; a self-signed platform fails this.
     const platformTunnel = startPlatformTunnel(config.platform.url, logger);
     const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
     );
-    /* The credential values, off /work (secret-vault.ts). Sited beside the AI-provider logins under
-     * AGENT_AUTH_DIR, which is already outside the file routes, the tree walk and the search index. */
+    // Credential values, off /work, sited beside the AI-provider logins outside the file routes and search index.
     const secretVault = fileSecretVault(join(authRoot, "capability-secrets.json"));
-    /* The approval policy sits BESIDE the vault it guards, off the workspace, for the vault's own reason:
-     * `.intentic/config/` is tracked and agent-editable, so a gate kept there would be a lock with its key in
-     * the room with the agent (secrets/credential-gates.ts). Hoisted with the grants map because the gate
-     * below closes over both. */
+    // Approval policy sits beside the vault it guards, off the tracked, agent-editable config directory.
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const credentialGrants = createCredentialGrants();
-    /* The connector registry this needs to know which of an entry's fields are credentials, resolved against the
-     * RAW manifest rather than the vaulted store, enumerating extensions reads capability entries, so pointing
-     * it at the decorator would have the decorator call itself. Enumeration only ever looks at an entry's
-     * kind/id/path, never at a credential, so the un-rehydrated view is the whole truth it needs. */
+    // Resolved against the raw manifest, not the vaulted store, since enumeration never reads a credential.
     const secretFieldConnectors = () =>
         contributionRegistry({
             workspace: { root: workspace.root },
@@ -1091,14 +789,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(
             `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")}, left in the manifest, which the agent can read`,
         );
-    /* THE EXTENSION-SETTINGS HALF OF THE SAME SPLIT (extensions/extension-settings.ts). A second vault file
-     * rather than rows in the capability one: the two are keyed differently, a capability entry id there, a
-     * manifest identity (publisher.name) here, and one namespace holding both would collide the day an
-     * extension capability and its own manifest identity share a name, which is the common case.
-     *
-     * The resolver reads the manifests through the same minimal adapter `secretFieldConnectors` builds, and over
-     * `installedExtensions` rather than the enabled ones: a switched-off extension's stored token is exactly as
-     * readable as a running one's, so the sweep must reach it. */
+    // Extension-settings' own vault, keyed by publisher.name, not capability id, since the two ids can collide.
     const extensionSecretVault = fileSecretVault(join(authRoot, "extension-secrets.json"));
     const extensionHostAdapter = {
         workspace: { root: workspace.root },
@@ -1129,44 +820,30 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const heavyCommands = fileHeavyCommandsStore(statePath(workspace.root, ".intentic/config/heavy-commands.json"), (reason) =>
         logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
     );
-    /* Written on boot if it is not there yet, because a rule list nobody can see is a rule list nobody edits:
-     * the defaults would work in silence and the first anyone heard of the queue would be a command waiting.
-     * Existing files, including hand-tuned ones, are left exactly as they are (see `seed`). Deliberately not
-     * awaited — a boot must not turn on a config write, and nothing before the first Bash command reads it. */
+    // Seeded on boot if absent so the rule list isn't invisible; not awaited, since nothing reads it before then.
     void heavyCommands.seed().catch((error: unknown) => logger.warn({ err: error }, "heavy-commands: could not write the default rules"));
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
-    // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route
-    // reads, and the sweep is constructed inside the services literal below.
+    // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
     const runtimeInstalls = fileRuntimeInstallsStore(statePath(workspace.root, ".intentic/records/runtime-installs.json"));
-    // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
-    // instance would answer a poll from a file the runner had already moved past.
+    // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
-    // Bound once, and against the SAME registry instance above, `sessionIdOf` answers from live turn state as
-    // well as the persisted entry, so a second registry would report no session for a first turn still running.
+    // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
     const turnAnchors = fileTurnAnchors(join(config.historyRoot, "turn-anchors.json"));
     const transcriptDeps: AgentTranscriptDeps = {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
         turnAnchors,
     };
-    /* THE PHRASE INDEX, on the history volume beside the records it is derived from, daemon-private and outside
-     * the agent's reach like the journal and the activity ledger. A pure cache: it is deleted and rebuilt on a
-     * schema bump, and every line in it can be re-extracted from a record. */
+    // Phrase index on the history volume, daemon-private; a pure cache, deleted and rebuilt on a schema bump.
     const saidIndex = openSearchIndex(join(config.historyRoot, "said-index"));
-    // One listing of the history menu's window, shared by the search that filters it and the backfill that
-    // indexes it, so a keystroke burst costs one stat pass over the session store rather than one per query.
+    // One listing of the session window, shared by search and backfill, so a keystroke burst costs one stat pass.
     const recentSessions = createRecentSessions(workspace.root);
-    /* The version an indexed conversation is pinned to: its record's byte size, one stat. Append-only plus
-     * rewind's truncate, so any change to what the conversation said moves this. `undefined` (no record at all)
-     * is a version too, so a conversation that has genuinely said nothing is not re-read on every pass. */
+    // Version an indexed conversation is pinned to: its record's byte size; undefined (no record) is a version too.
     const recordVersion = async (id: string): Promise<string | undefined> => {
         const size = await transcriptDeps.record.size(id);
         return size === undefined ? undefined : String(size);
     };
-    /* Bring the index level with both stores, ONE PASS. The conversation half is the ROSTER's own list, live and
-     * archived together, which is exactly the set /agents/search answers over. The session half is the history
-     * list's window, which is what /sessions can return, and it prunes: a session that has fallen out of that
-     * window can never be answered with, so its rows are dead weight. */
+    // Brings the index level with both stores in one pass: the roster's own list, and the session list's window.
     const runSaidBackfill = async (signal?: AbortSignal): Promise<void> => {
         const roster = [...agents.list(), ...agents.listArchived()].flatMap((summary) => {
             const entry = agents.entry(summary.id);
@@ -1197,8 +874,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 prune: true,
                 sources: listed.map((session): BackfillSource => ({
                     key: session.id,
-                    // The session file's own mtime, which the list already read: a session the SDK appended
-                    // to moves it, and nothing else has to be opened to find out.
+                    // The session file's own mtime, already read by the list; an append moves it, nothing else to open.
                     version: async () => String(session.updatedAt),
                     lines: () => readSessionLines(workspace.root, session.id),
                 })),
@@ -1207,9 +883,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             signal,
         );
     };
-    /* Reentrancy guard AND the flag both search routes report. Two passes over the same sources at once would
-     * race for no gain, and a search taken during either is legitimately partial, which is the thing the board
-     * needs told rather than hidden. */
+    // Reentrancy guard and the flag both search routes report; a search taken mid-backfill is legitimately partial.
     let backfillingSaid = false;
     const backfillSaidIndex = async (signal?: AbortSignal): Promise<void> => {
         if (backfillingSaid) {
@@ -1222,30 +896,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
             backfillingSaid = false;
         }
     };
-    /* A COLD INDEX REBUILD USED TO ANNOUNCE ITSELF NOWHERE, and that silence was the whole bug report.
-     *
-     * Rebuilding every vector in the workspace is ~30 minutes at four cores. Nothing said so: the machine simply
-     * went busy, the index reported a sweep that never completed and a change queue that only grew, and no line
-     * in this log connected the three. It reads exactly like a wedged worker, and it cost a full investigation
-     * to find out it was working correctly the whole time.
-     *
-     * Logged at a human cadence, the first slice, every 30s after, and the finish, so the load has a name
-     * while it is happening. `backlogActive` is what makes the closing line fire only for a backlog that was
-     * actually announced: with no model configured the worker reports 0 forever, and a "complete" for work that
-     * never started is noise. */
+    // A full embeddings rebuild is slow; logged at a human cadence so the load has a name while it runs.
     const BACKLOG_LOG_MS = 30_000;
     let backlogLoggedAt = 0;
     let backlogActive = false;
-    /* The engine runs in a CHILD PROCESS (iq-engine/host), not on this one. Its two worker threads and their
-     * ML models were the bulk of this daemon's ~2 GB RSS against ~360 MB of heap, and on a memory-pressured
-     * host that put most of a gigabyte of the CONTROL PLANE into swap, the floor under every slow request
-     * here, search or not. The interface is unchanged (a ResidentEngine either way), and a child that dies
-     * takes only the searches it was holding: the next one brings up a fresh engine. */
+    // The engine runs in a child process, most of this daemon's RSS; a dead child only loses its own searches.
     const iq = createEngineClient({
         root: workspace.root,
         indexDir: statePath(workspace.root, ".intentic/local/cache/", "iq"),
-        // An index pass that fails once warm() has settled has no caller to reject, without this the index
-        // would stop tracking disk and search would just quietly get older.
+        // An index pass failing after warm() has no caller to reject; without this it silently stops tracking disk.
         onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed, search results may be stale"),
         onIndexProgress: (remaining) => {
             if (remaining === 0) {
@@ -1263,28 +922,20 @@ export const createServices = (config: Config, logger: Logger): Services => {
             backlogLoggedAt = now;
             logger.info({ remaining }, "iq index building embeddings: semantic search fills in as it goes");
         },
-        // The query worker owns the semantic scan and the cross-encoder. Losing it does not fail a search,
-        // it silently narrows one to keyword matching, so it has to be visible here.
+        // The query worker owns the semantic scan and cross-encoder; losing it narrows a search to keyword matching.
         onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed, search fell back to keyword matching"),
         ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
         ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
     });
-    // Named once at boot, because from outside this box the engine is now just one more node child among
-    // several, and "which process is holding the gigabyte" is the first question anyone asks of a memory
-    // report. Without this line the answer needs `ps` plus a guess.
-    // `enginePid`, not `pid`: pino stamps every line with the DAEMON's pid under that name, and a second one
-    // made the boot line a JSON object with two `pid` keys, where the last wins, so a log reader was told the
-    // daemon lived at the engine's pid.
+    // Named once at boot: from outside the engine is one more node child, and this answers which holds the memory.
     logger.info({ enginePid: iq.pid() }, "iq search engine running in its own process");
 
-    /* The backend supervisor enumerates extensions through the finished services object (the same
-     * ExtensionHost seam every other consumer uses), which does not exist until the literal below is built,
-     * so it takes a thunk bound afterwards. Nothing calls it before main() starts the boot chain. */
+    // The backend supervisor enumerates extensions through the finished services object, so it needs a thunk after.
     const servicesHolder: { current?: Services } = {};
     const services: Services = {
         config,
         logger,
-        // The browser's own reports, in their own file (createClientLogger says why it is not `logger`).
+        // The browser's own reports, in their own file.
         clientLogger: createClientLogger(config),
         perf,
         resourceOwners: () => {
@@ -1299,16 +950,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
             };
         },
-        // Born converged, main() declares the chain and closes the gate behind it, so a services object built
-        // for a test or the host-internal preview has nothing to wait for.
+        // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
         boot: createBootTracker(logger),
         announcer: createAnnouncer(config, logger),
-        // The tracker is a sibling in this literal, so the reporter reads it through the holder at call time.
+        // Reads the tracker through the holder at call time, since this and boot are siblings in the same literal.
         reach: createReachReporter(config, logger, () => servicesHolder.current?.boot),
         workspace,
-        // Read HERE, at composition, and read once: this is the last moment /work still looks the way the user
-        // handed it over. Everything after this line, the boot chain, the detached setup seeds and capability
-        // cards that converge skill files, may write into it.
+        // Read here, once, at composition: the last moment /work still looks the way the user handed it over.
         workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
         processes,
         serviceProcesses,
@@ -1323,11 +971,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             config.sandbox.port,
             logger,
         ),
-        // Slot names are salted with the connect token, so a forwarded port's public hostname can't be guessed
-        // from the sandbox id alone (tunnel-ids.ts). The daemon and the platform derive the same eight.
+        // Slot names are salted with the connect token so a port's hostname can't be guessed from the sandbox id.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
-        // The pane listing rides along with the scan rather than behind it: both are cheap reads of live state,
-        // and a port whose terminal is unknown is a port nobody can do anything about.
+        // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
         scanPorts: async () => {
             const [listeners, panes] = await Promise.all([scanListeningPorts(), panePids()]);
             return withOwningSessions(listeners, panes);
@@ -1358,13 +1004,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
         credentialGates,
         credentialGrants,
-        /* THE RELEASE GATE, composed here rather than at each door, because its GRANTS must be one map: a
-         * release clicked at the shell exit has to be the same release the browser mount reads next turn, and
-         * two gates built at two routes would be two maps that agree about nothing.
-         *
-         * `liveRun` and `observe` are the seams every offer card takes (agent/offer-card.ts): the card is
-         * raised from code deep inside a turn rather than from the turn generator, so it is pushed into the
-         * live run's frame log and mirrored to the registry by hand. */
+        // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
         credentialGate: createCredentialGate({
             gates: credentialGates,
             grants: credentialGrants,
@@ -1400,12 +1040,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
         turnJournal,
-        // Beside the turn journal on the history volume, and for its reason: it has to outlive the container
-        // recreates (rebuild, update, dev-sandbox.sh swap) that are the commonest way an armed watch dies.
+        // Beside the turn journal on the history volume, for the same reason: it must outlive a container recreate.
         watchJournal: fileWatchJournal(join(config.historyRoot, "watches")),
         invariants,
-        // The same instance the transcript reader holds, two would answer a read from a file the other had
-        // already moved past, exactly the argument the chores store above makes.
+        // The same instance the transcript reader holds; a second would answer from a file the first already passed.
         turnAnchors,
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
@@ -1417,7 +1055,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),
         push: pushStore,
         pushSender,
-        // The provider slices, whole: their members' docs live on the slice interfaces, beside the code.
+        // Provider slices, spread whole; their members' docs live on the slice interfaces, beside the code.
         ...claude,
         ...codex,
         ...cursor,
@@ -1429,8 +1067,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         headroom,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
         modelRefusals: fileModelRefusalStore(join(config.historyRoot, "model-refusals.json")),
-        // Assembled from the provider modules, LATE-BOUND through the same holder the extension backend uses:
-        // the record is a member of the object its thunks read from, and the thunks only run per request.
+        // Late-bound through the same holder the extension backend uses; the thunks only run per request.
         providerCatalogs: providerCatalogsOf(() => {
             if (servicesHolder.current === undefined) {
                 throw new Error("provider catalog read before services finished composing");
@@ -1445,11 +1082,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agent: runAgent,
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,
-        // Pi sessions sit beside the other AI-provider state under authRoot, so a dev sandbox pointing
-        // AGENT_AUTH_DIR at a stable dir keeps its Pi conversations resumable across resets too.
+        // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
         piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
-        // Bound to the daemon logger so every CLI run's lifecycle (spawn/kill/exit) is attributable from
-        // daemon.log, the runs themselves are transient subprocesses whose absence proves nothing.
+        // Bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
         intentic: (run, signal) => runIntentic(run, signal, logger),
         git: {
             init: gitInit,
@@ -1536,7 +1171,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
             readTail: readWorkspaceSessionTail,
-            // Bound to this daemon's one index: the history box and the fleet board answer from the same rows.
+            // Bound to this daemon's one index, so the history box and the fleet board answer from the same rows.
             search: (query, caseSensitive) =>
                 searchWorkspaceSessions(recentSessions, query, caseSensitive, async (...args) => saidIndex.search(...args)),
             exists: workspaceSessionExists,
@@ -1544,16 +1179,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         transcripts: {
             read: (agent) => agentTranscript(transcriptDeps, agent),
             page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
-            // A branch's opening history is by definition the source conversation's record, copied once.
+            // A branch's opening history is the source conversation's record, copied once.
             fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),
-            /* THE INDEX IS WRITTEN HERE, on the same call that records the turn, because this is the moment the
-             * conversation's words become durable and every road a turn can be started down ends at it (see
-             * turn-transcript's recordTurnTranscript). Appending the turn's own lines rather than re-extracting
-             * the conversation is what keeps this at ~1.4 ms on the settle path.
-             *
-             * The index write is best-effort and deliberately AFTER the record's: the record is the truth and
-             * must not be held hostage to a cache. An index write that fails leaves the conversation's last turn
-             * unsearchable until the next boot's backfill notices the version moved and re-reads it. */
+            // Written right after the record, best-effort: a failed index write is fixed by the next backfill.
             append: async (agent, messages) => {
                 await transcriptDeps.record.append(agent.id, messages);
                 try {
@@ -1563,9 +1191,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 }
             },
             count: (agent) => transcriptDeps.record.count(agent.id),
-            /* A rewind is the one thing that SHORTENS a record, so the index cannot be appended to here: it is
-             * re-stated whole from what the record now holds. Rare enough (a person clicking back to a turn)
-             * that reading one conversation is the right trade against tracking positions in the index. */
+            // A rewind shortens the record; the index is re-stated whole from it, never appended.
             truncate: async (agent, keep) => {
                 const dropped = await transcriptDeps.record.truncate(agent.id, keep);
                 try {
@@ -1583,28 +1209,21 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         shares: fileShareStore(join(config.historyRoot, "shares.json")),
         speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
-        // The index goes with the state: a purged conversation's rows would otherwise keep it findable by
-        // phrase after everything it said was deleted.
+        // The index goes with the state; a purged conversation's rows would otherwise still be findable by phrase.
         purgeConversationState: async (removed, retained) => {
             await purgeConversationState(workspace.root, config.historyRoot, removed, retained);
             for (const entry of removed) {
                 saidIndex.forget(entry.id);
-                /* A conversation nobody can reopen must not leave a live credential release behind it.
-                 * Conversation ids are not guaranteed never to be reused, and a grant is consent given inside
-                 * a conversation somebody was watching: once the conversation is gone there is nothing left
-                 * for that consent to be about (secrets/credential-grants.ts). */
+                // A gone conversation must not leave a live credential release behind it.
                 credentialGrants.forget(entry.id);
             }
         },
-        // Reads the live sockets (through the shared scan, cached for a beat inside the resolver) rather than
-        // the port the panel manager handed out: a repo whose `dev` pins its own ports is the ordinary
-        // monorepo, and the assignment is fiction there.
+        // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({
             workspaceRoot: workspace.root,
             repos: () => discoverRepos(workspace.root),
             listeners: () => services.scanPorts(),
-            // Panels answer from the panel manager; an extension process's preview (`ext-*` keys, preview:
-            // true in its manifest) answers from the service supervisor that assigned its port.
+            // Panels answer from the panel manager; an extension preview answers from the supervisor that assigned it.
             portOf: (key) => processes.portOf(key) ?? serviceProcesses.portOf(key),
         }),
         members,
@@ -1612,17 +1231,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
         auth,
     };
     servicesHolder.current = services;
-    /* Arm the checks over the instances built above. Registration only, nothing runs until main.ts drives a
-     * moment, so a composition used by a test or the host-internal preview carries the companions without ever
-     * paying for them. The container-claim companion is not here: its subject is the role main.ts learns after
-     * this returns (invariants/register.ts). */
+    // Registration only; nothing runs until main.ts drives a moment, so a test build carries it unpaid for.
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,
         manifest: capabilityManifest,
         connectors: secretFieldConnectors,
-        // The DECORATED store for the exit checks: they read `kind` and a country code, never a credential, so
-        // the rehydrating read is the right one and the raw store would only hide vault markers from them.
+        // The decorated store, since the exit checks read kind and a country code, never a credential.
         capabilities: services.capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,

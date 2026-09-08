@@ -32,14 +32,13 @@ const keep = ref<HTMLButtonElement | undefined>(undefined);
 const content = ref<HTMLElement | undefined>(undefined);
 useFitToContent(content);
 
-// The webview's own user agent, not a round trip: this window has to be on screen the instant the × is
-// clicked, and a command that shells out to look at the machine is the one thing that could delay it.
+// Reads the webview's own user agent rather than a round trip, so the window isn't delayed by a shell-out.
 const onWindows = navigator.userAgent.includes(`Windows`);
 
 const choose = (action: CloseAction): Promise<void> => closeWorkspace(action, remember.value);
 
-/* Escape and the dialog's own × mean "I did not mean to close it": the window stays exactly as it was, and
- * nothing is remembered. Backing out is this window closing and nothing else, so there is no command for it. */
+// Escape or the dialog's own × means "I didn't mean to close it": nothing is remembered, and this window simply
+// closes.
 const cancel = (): Promise<void> => getCurrentWindow().close();
 const onKey = (event: KeyboardEvent): void => {
     if (event.key === `Escape`) {
@@ -49,8 +48,7 @@ const onKey = (event: KeyboardEvent): void => {
 
 onMounted(() => {
     window.addEventListener(`keydown`, onKey);
-    // Focused so Return takes the safe answer. The app staying up is recoverable in one click; quitting in the
-    // middle of a setup is not, so it is never what a stray keystroke picks.
+    // Focused so Return picks the recoverable answer (stay in tray), not quitting.
     keep.value?.focus();
 });
 onUnmounted(() => window.removeEventListener(`keydown`, onKey));

@@ -33,8 +33,7 @@ export interface AnchorRect {
 
 export interface PlacementInput {
     readonly anchor: AnchorRect;
-    // The box AS IT CURRENTLY MEASURES. Deliberately not a "natural" size: re-measuring an uncapped box on
-    // every reposition is what makes a ResizeObserver-driven overlay oscillate between two heights forever.
+    // The box's current measured size, not a natural size: re-measuring an uncapped box would oscillate forever.
     readonly box: Size;
     // The anchor's own window (innerWidth/innerHeight).
     readonly view: Size;
@@ -51,11 +50,9 @@ export interface Placement {
     readonly side: Side;
     readonly left: number;
     readonly top: number;
-    // The room the chosen side has, for the box's max-height (vertical sides), the cap that keeps a tall panel
-    // inside the window instead of hanging off it, unreachable.
+    // Room on the chosen side, for the box's max-height; keeps a tall panel inside the window.
     readonly maxHeight: number;
-    // The anchor's centre in the box's own coordinates: an arrow drawn there points at the anchor even when the
-    // box has been shoved sideways to stay on screen.
+    // Anchor's centre in box coordinates; an arrow drawn there still points at the anchor after a sideways shove.
     readonly arrow: number;
 }
 
@@ -71,15 +68,10 @@ export const placeAnchored = ({ anchor, box, view, side, cross, gap, edge }: Pla
         right: view.width - (anchor.left + anchor.width) - gap - edge,
     };
     const span = (place: Side): number => (place === `top` || place === `bottom` ? box.height : box.width);
-    /* FLIP ONLY WHEN IT HELPS. The preferred side keeps the box unless it doesn't fit there AND the opposite
-     * side has more room, flipping into an equally cramped side moves the clipping without fixing it, and
-     * flipping a box that already fits is the jitter every "why did my menu jump?" report is made of. The box
-     * measures as it currently is (see PlacementInput.box), so a box already capped to the preferred side's
-     * room fits by construction and this is stable across repositions. */
+    // Flips only if the preferred side doesn't fit and the opposite has strictly more room; otherwise stays put.
     const chosen = span(side) <= room[side] || room[OPPOSITE[side]] <= room[side] ? side : OPPOSITE[side];
     const vertical = chosen === `top` || chosen === `bottom`;
-    // A box taller than its side's room is capped to it; one that fits keeps its own height, and the cap is
-    // still reported so the caller can pin it (a panel that GROWS later must stay inside the window).
+    // A box taller than its room is capped; the cap is still reported for callers whose box grows later.
     const height = Math.min(box.height, Math.max(room[chosen], 0));
 
     const left = vertical

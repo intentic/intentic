@@ -5,17 +5,8 @@ import type { AccountUsage } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { createCliProxyClient } from "./translator.js";
 
-/* A DOWN PROXY IS NOT AN EMPTY SHELF.
- *
- * `accounts` is both the Agent tab's connection list and the routed turn's credential gate, and it used to answer
- * a proxy it couldn't reach with four empty arrays. So during the proxy's 15s boot warm-up, and on every rung of
- * its restart ladder up to a five-minute ceiling, a sandbox holding connected Google subscriptions told its owner
- * they had never signed in, and told their turns there was nothing to run on. The tokens were on disk the whole
- * time; that is where the answer comes from now when the proxy is silent.
- *
- * Here rather than in translator.test.ts because these two need a REAL auth-dir: the behaviour under test is a
- * directory read, and the one thing worth pinning about it is what it does with the files a live sandbox actually
- * accumulates: a credential, another provider's credential, a half-written one, and something that isn't one. */
+// `accounts` falls back to the auth-dir files on disk when the proxy is unreachable, rather than reporting empty. Uses
+// a real auth dir (not translator.test.ts) since what's pinned is how it reads the files a live sandbox accumulates.
 
 const memoryStore = () => {
     const snapshots: Record<string, AccountUsage> = {};
@@ -39,8 +30,7 @@ const clientOver = (authDir: string) => {
         configPath: "/tmp/config.yaml",
         authDir,
         usageStore: memoryStore(),
-        // The binary IS in this image; what is missing is a proxy answering on the port. Pinned rather than probed
-        // so the assertions below are about the fallback and not about the runner's PATH.
+        // Pinned true rather than probed, so the assertions test the fallback, not the runner's PATH.
         binaryPresent: async () => true,
     });
 };
@@ -59,7 +49,7 @@ test("lists the subscriptions on disk when the management API cannot be reached"
     const authDir = authDirWith({
         "antigravity-user.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com" }),
         "codex-someone.json": JSON.stringify({ type: "codex", email: "someone@example.com" }),
-        // Not credentials: a file half-written by a login still polling, and a JSON that is none of our business.
+        // Not credentials: a half-written login file, and JSON that isn't a credential shape.
         "half-written.json": "{",
         "notes.json": JSON.stringify({ type: "something-else" }),
     });
@@ -75,7 +65,6 @@ test("lists the subscriptions on disk when the management API cannot be reached"
 test("names the account by its file when the credential carries no email", async () => {
     const authDir = authDirWith({ "antigravity-nameless.json": JSON.stringify({ type: "antigravity" }) });
 
-    // A row with no label at all is a row the user cannot tell from any other, so the file name stands in.
     expect(await clientOver(authDir).accounts().then((accounts) => accounts.gemini)).toEqual([
         { name: "antigravity-nameless.json", label: "antigravity-nameless.json" },
     ]);
@@ -84,9 +73,5 @@ test("names the account by its file when the credential carries no email", async
 test("refuses to report a disconnect the unreachable proxy never performed", async () => {
     const authDir = authDirWith({ "antigravity-user.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com" }) });
 
-    /* The proxy holds the credential in memory as well as on disk, so deleting the file behind its back would
-     * leave a live account serving turns off a token the user believes they just revoked. Now that the row is
-     * visible while the proxy is down, this is reachable, and a swallowed DELETE would report success and change
-     * nothing. */
     await expect(clientOver(authDir).disconnect("gemini", "antigravity-user.json")).rejects.toThrow(/starting up/);
 });

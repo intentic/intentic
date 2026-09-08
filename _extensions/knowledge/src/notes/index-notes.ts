@@ -1,17 +1,13 @@
 import { type NoteFile, parseNote, type ParsedNote } from "./note.js";
 import { type Drift, relationDrift, type Vocabulary, readVocabulary, typeDrift, VOCABULARY_TYPE } from "./vocabulary.js";
 
-/* THE KNOWLEDGE BASE, RESOLVED, the one place a pile of files becomes a graph.
- *
- * Everything here is derived and nothing is stored. There is no index file to rebuild, go stale, or disagree
- * with the notes: a knowledge base of a few thousand small markdown files parses in milliseconds, so the honest answer
- * is to read it. The backend builds one per request and the CLI builds one per run (read-notes.ts); both
- * end at exactly the same object, which is what keeps the panel and the agent from telling different stories. */
+// The knowledge base, resolved: the one place a pile of files becomes a graph. Nothing is stored, since parsing a few
+// thousand markdown files takes milliseconds; the backend and the CLI each build one per run and land on the same
+// object.
 
 export interface NoteEdge {
     readonly from: string;
-    // The resolved note, or undefined when the link points at something that isn't there yet. BOTH are kept:
-    // an unresolved link is not an error, it is a note somebody has not written, the knowledge base's own to-do list.
+    // Resolved note, or undefined when the link points at something unwritten; unresolved isn't an error.
     readonly to: string | undefined;
     readonly target: string;
     readonly relation: string | undefined;
@@ -21,33 +17,26 @@ export interface KnowledgeIndex {
     readonly notes: readonly ParsedNote[];
     readonly byPath: ReadonlyMap<string, ParsedNote>;
     readonly edges: readonly NoteEdge[];
-    // Incoming edges per note path, what links HERE, which is the half a plain file tree cannot show you.
+    // Incoming edges per note path; what a plain file tree can't show you.
     readonly backlinks: ReadonlyMap<string, readonly NoteEdge[]>;
     readonly outgoing: ReadonlyMap<string, readonly NoteEdge[]>;
     readonly vocabulary: Vocabulary;
-    // A link target that matches more than one note. Reported so the knowledge base can be disambiguated; resolution
-    // picks the first in path order so behaviour stays deterministic either way.
+    // A link target matching more than one note; resolution picks the first in path order.
     readonly ambiguous: ReadonlyMap<string, readonly string[]>;
-    // Resolve a link target the way a knowledge base does: by path, then filename, then title, then alias.
+    // Resolves a link the way a knowledge base does: by path, then filename, then title, then alias.
     resolve(target: string): ParsedNote | undefined;
 }
 
 const normalise = (value: string): string => value.trim().toLowerCase();
 
-// A link may be written with or without the extension, and with or without folders, `[[Ada Lovelace]]`,
-// `[[ada-lovelace]]`, `[[people/ada-lovelace]]`, `[[people/ada-lovelace.md]]` all mean the same note.
+// A link may be written with or without the extension or folders; all forms key the same note.
 const pathKeys = (path: string): string[] => {
     const withoutExtension = path.replace(/\.md$/i, "");
     return [normalise(path), normalise(withoutExtension)];
 };
 
-/* The lookup table, built in FOUR passes so that a stronger kind of match always wins over a weaker one however
- * the knowledge base happens to be ordered: a note whose title is "Ada" beats a different note that merely lists "Ada"
- * as an alias, whichever of them the directory walk reached first. Within one pass the first note in path order
- * wins and the collision is recorded.
- *
- * Path before title before alias, because that is the order of how deliberate the name is: a filename was
- * chosen for this note, an alias is a convenience that may be shared. */
+// Built in four passes (path, slug, title, alias) so a stronger match always wins regardless of file order; within a
+// pass the first note in path order wins and a collision is recorded as ambiguous.
 const buildLookup = (notes: readonly ParsedNote[]): { lookup: Map<string, ParsedNote>; ambiguous: Map<string, string[]> } => {
     const lookup = new Map<string, ParsedNote>();
     const ambiguous = new Map<string, string[]>();
@@ -82,7 +71,7 @@ const buildLookup = (notes: readonly ParsedNote[]): { lookup: Map<string, Parsed
 };
 
 export const buildIndex = (files: readonly NoteFile[]): KnowledgeIndex => {
-    // Path order, so every tie above is broken the same way on every machine and every run.
+    // Path order, so every tie above breaks the same way on every machine and run.
     const notes = files.map(parseNote).toSorted((a, b) => a.path.localeCompare(b.path));
     const { lookup, ambiguous } = buildLookup(notes);
     const resolve = (target: string): ParsedNote | undefined => {
@@ -113,7 +102,7 @@ export const buildIndex = (files: readonly NoteFile[]): KnowledgeIndex => {
     };
 };
 
-// ---- what the knowledge base amounts to, and what is wrong with it -------------------------------------------------
+// What the knowledge base amounts to, and what's wrong with it.
 
 export interface NameCount {
     readonly name: string;
@@ -132,16 +121,15 @@ export interface KnowledgeOverview {
     readonly types: readonly NameCount[];
     readonly tags: readonly NameCount[];
     readonly vocabulary: Vocabulary;
-    // Links pointing at a note nobody has written. The knowledge base's to-do list, not its error list.
+    // Links to a note nobody has written; the to-do list, not the error list.
     readonly broken: readonly BrokenLink[];
-    // Notes nothing links to and which link to nothing, knowledge that fell out of the graph and will never
-    // be found again by following anything.
+    // Notes nothing links to and that link to nothing; unreachable by following anything.
     readonly orphans: readonly string[];
-    // Notes with no `type:`, usable, but invisible to every "show me every decision about X" question.
+    // Notes with no `type:`; usable, but invisible to any "show me every X" question.
     readonly untyped: readonly string[];
     readonly typeDrift: readonly Drift[];
     readonly relationDrift: readonly Drift[];
-    // Header keys the parser could not read, per note, the only way a malformed header is ever announced.
+    // Header keys the parser couldn't read, per note; the only way a malformed header is announced.
     readonly unreadable: readonly { readonly path: string; readonly keys: readonly string[] }[];
     readonly ambiguous: readonly { readonly name: string; readonly notes: readonly string[] }[];
 }
@@ -161,9 +149,7 @@ export const overviewOf = (index: KnowledgeIndex): KnowledgeOverview => ({
     tags: counted(index.notes.flatMap((note) => note.tags)),
     vocabulary: index.vocabulary,
     broken: index.edges.flatMap((edge) => (edge.to === undefined ? [{ from: edge.from, target: edge.target, relation: edge.relation }] : [])),
-    /* The vocabulary note is never an orphan however few links it holds, it is the knowledge base's structure, not a
-     * fact that fell out of it, and reporting it would put a permanent entry in a list whose whole value is
-     * being empty most of the time. */
+    // The vocabulary note is never an orphan: it's the knowledge base's structure, not a fact that fell out of it.
     orphans: index.notes
         .filter(
             (note) =>

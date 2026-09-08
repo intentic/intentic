@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is the LADDER: which rungs a refusal offers, and what the sentence beside them
-// claims. Both are template decisions over five states, and the component's own header names mounting it on
-// its own as the point of it being a component at all.
+// jsdom because the subject is the ladder: which rungs a refusal offers, and the sentence claiming them beside it,
+// both template decisions across five states.
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
@@ -13,8 +11,8 @@ const { default: AgentConflictReport } = await import("./AgentConflictReport.vue
 let app: App | undefined;
 let host: HTMLElement | undefined;
 
-// The report's own props, with the four the tests never vary defaulted below. Spelled out rather than taken as
-// a loose record, so a prop renamed on the component is a failure here rather than a silently ignored key.
+// Spelled out rather than a loose record, so a prop renamed on the component fails here instead of being silently
+// ignored. Four props the tests never vary are defaulted below.
 interface ReportProps {
     readonly conflicts: readonly LandConflict[];
     readonly streaming?: boolean;
@@ -37,7 +35,7 @@ const mount = async (props: ReportProps): Promise<HTMLElement> => {
                 ...props,
             }),
     });
-    // `Icon` is registered app-wide by the real app; here it is a stand-in, since no assertion is about a glyph.
+    // `Icon` is a stand-in here; no assertion is about a glyph.
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
@@ -56,12 +54,10 @@ afterEach(() => {
 const text = (el: HTMLElement): string => (el.textContent ?? ``).replace(/\s+/g, ` `).trim();
 const hasButton = (el: HTMLElement, label: string): boolean => [...el.querySelectorAll(`button`)].some((b) => (b.textContent ?? ``).includes(label));
 
-// A refusal the AGENT can clear on its own: the main line moved under its branch, and nothing here is held by
-// the user's own edits. This is the only shape a three-way apply is offered for.
+// A refusal the agent can clear alone; the only shape here that offers the merge button.
 const agentsToFix: LandConflict[] = [{ repo: `api`, clean: 1, mainBranch: `main`, paths: [{ path: `src/server.ts`, reason: `diverged` }] }];
 
-// The same refusal with the user's own uncommitted work in it, which is the shape the fixture in the demo
-// carries and the one a real conflict usually has: git refuses a three-way apply through unstaged paths.
+// Same refusal plus the user's own uncommitted work, the shape a real conflict usually has.
 const mixed: LandConflict[] = [
     {
         repo: `api`,
@@ -81,25 +77,19 @@ it(`offers the agent, the user and the merge when the conflict is the agent's al
     expect(hasButton(el, `Open in`)).toBe(false);
 });
 
-/* THE TWO RUNGS THAT CANNOT REACH ANOTHER SANDBOX collapse into the crossing, and nothing else moves. Asking
- * the agent needs the conversation the chat singleton holds for one daemon; committing your own edits needs
- * that box's workspace. Landing is neither, so it stays exactly where it was. */
+// The two rungs that can't reach another sandbox (asking the agent, committing locally) collapse into the
+// crossing; landing is neither, so it stays put.
 it(`replaces both of those rungs with one crossing when the agent is in another box`, async () => {
     const el = await mount({ conflicts: agentsToFix, box: `acme-laptop` });
     expect(hasButton(el, `Have the agent resolve it`)).toBe(false);
     expect(hasButton(el, `Commit or stash yours`)).toBe(false);
     expect(hasButton(el, `Open in acme-laptop`)).toBe(true);
-    // The land is addressed by agent id and writes into the workspace the conflict is actually about, so it
-    // crosses intact. Dropping it would leave a distant conflict with no action on it at all.
+    // The land is addressed by agent id and writes into the actual workspace, so it crosses intact.
     expect(hasButton(el, `Land with conflict markers`)).toBe(true);
 });
 
-/* THE CLAIM THE CROSSING MAKES HAS TO MATCH THE ROWS UNDER IT.
- *
- * The sentence beside the crossing ended "Landing with conflict markers still works from here", unconditionally,
- * and that is false in the commonest shape a conflict comes in: a `workspace` blocker means git would refuse the
- * three-way apply, so `mergeable` is false and the row is not drawn. The block was promising an action it did
- * not offer, one line above the empty space where it would have been. */
+// The crossing's sentence claimed landing still worked unconditionally, false whenever a `workspace` blocker
+// makes `mergeable` false and hides the row.
 it(`only promises the merge when the merge is actually on offer`, async () => {
     const withMerge = await mount({ conflicts: agentsToFix, box: `acme-laptop` });
     expect(hasButton(withMerge, `Land with conflict markers`)).toBe(true);
@@ -117,8 +107,7 @@ it(`only promises the merge when the merge is actually on offer`, async () => {
     expect(withoutMergeText).toContain(`edits`);
 });
 
-// The local path is unchanged by any of the above, which is the other half of the same guarantee: a conflict in
-// the box you are standing in still ends on the user's own move.
+// The local path is unaffected: a conflict in the box you're standing in still ends on the user's own move.
 it(`keeps the user's own rung on a local conflict held by their uncommitted edits`, async () => {
     const el = await mount({ conflicts: mixed });
     expect(hasButton(el, `Commit or stash yours`)).toBe(true);

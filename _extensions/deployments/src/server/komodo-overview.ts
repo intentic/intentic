@@ -1,27 +1,14 @@
 import type { DeployAlert, DeployResource, DeployServer, DeployState } from "../contract.js";
 import type { KomodoAlert, KomodoDeploymentInfo, KomodoListItem, KomodoServerInfo, KomodoStackInfo, KomodoStackService } from "./komodo-client.js";
 
-/* Komodo's vocabulary → the view's. Pure functions over already-fetched data, so the mapping is testable
- * without a Komodo: the routes do the I/O, this does the translation, and the extension does the attention
- * model on top of what comes out.
- *
- * The whole file is written to survive a Komodo upgrade. Every field is read defensively and every unknown
- * word falls through to a defined answer rather than throwing, because the failure mode we care about is the
- * one where a new enum variant blanks an operator's board during an incident. */
+// Komodo's vocabulary translated to the view's, as pure functions over already-fetched data, testable without a Komodo.
+// Every field is read defensively and every unknown word falls through to a defined answer instead of throwing, since a
+// new Komodo enum variant must never blank an operator's board.
 
-// Komodo's deep links, from its own `usableResourcePath`: the lowercase plural, then the resource id.
+// Builds Komodo's own deep link: lowercase plural of the resource kind, then its id.
 const resourceUrl = (baseUrl: string, path: string, id: string): string => `${baseUrl}/${path}/${id}`;
 
-/* Eleven state words across DeploymentState and StackState, onto five.
- *
- * `stopped` deliberately swallows exited: a container that exited could have crashed or been stopped on
- * purpose, and Komodo's own status prose ("Exited (1) 20 minutes ago") is the only thing that knows which.
- * Guessing from the exit code here would put a red chip on every deliberately-stopped resource, a LEVEL that
- * is lit forever, which is the exact failure ciStreaks was written to avoid. What says a running thing stopped
- * is the alert log, and that is an edge.
- *
- * `unhealthy` is the breakage a chip may carry on its own: restarting (a crash loop is never intentional),
- * dead, unhealthy. */
+// Eleven Komodo states onto five; `exited` maps to `stopped`, only the alert log knows if it crashed.
 const STATE: Record<string, DeployState> = {
     running: "running",
     deploying: "deploying",
@@ -74,8 +61,7 @@ export const stackResource = (baseUrl: string, item: KomodoListItem<KomodoStackI
     };
 };
 
-// ServerState is Ok | NotOk | Disabled; anything else reads as unreachable, which is the safe direction, a
-// state we cannot interpret must not be drawn as healthy.
+// ServerState is Ok | NotOk | Disabled; anything unrecognized reads as unreachable, the safe direction, never healthy.
 const serverState = (state: string | undefined): DeployServer["state"] => {
     if (state === "Ok") {
         return "ok";
@@ -83,8 +69,8 @@ const serverState = (state: string | undefined): DeployServer["state"] => {
     return state === "Disabled" ? "disabled" : "unreachable";
 };
 
-// Komodo reports memory and disk in GB, not as percentages; cpu already is one. A zero total means "no stats"
-// rather than "100% full", so it yields undefined and the gauge simply doesn't render.
+// Memory/disk arrive in GB, not percentages (cpu already is one); a zero total means no stats, not "100% full", so the
+// gauge just doesn't render.
 const percent = (used: number | undefined, total: number | undefined): number | undefined =>
     used === undefined || total === undefined || total <= 0 ? undefined : Math.round((used / total) * 100);
 
@@ -106,24 +92,20 @@ export const serverEntry = (baseUrl: string, item: KomodoListItem<KomodoServerIn
 
 const LEVEL: Record<string, DeployAlert["level"]> = { OK: "ok", WARNING: "warning", CRITICAL: "critical" };
 
-// Every AlertData variant names its subject the same two ways when it has them, `name` for the resource and
-// `server_name` for its host, so one reader serves ContainerStateChange, ServerUnreachable, BuildFailed and
-// every variant Komodo adds next. A variant carrying neither still produces an alert; it just goes unnamed,
-// which is a far better outcome during an incident than being dropped.
+// Every AlertData variant names its subject the same two keys when it has them (`name`, `server_name`), so one reader
+// serves every variant. One with neither still produces an alert, just unnamed, rather than being dropped.
 const text = (data: Record<string, unknown> | undefined, key: string): string | undefined => {
     const value = data?.[key];
     return typeof value === "string" && value !== "" ? value : undefined;
 };
 
-// Bracket access because the field is mongo's `_id` and the repo forbids dangling underscores in member
-// expressions, the same spelling _deploy/providers' Komodo client already uses for this exact field.
+// Bracket access since the field is mongo's `_id`, and dangling underscores are forbidden in member expressions.
 const alertId = (raw: KomodoAlert, index: number): string => {
     const id = raw["_id"];
     if (typeof id === "string") {
         return id;
     }
-    // Komodo serializes the mongo id as {$oid}; an alert with neither still needs a stable list key, and its
-    // open timestamp plus position is unique enough for one response.
+    // Mongo id as `{$oid}`; with neither, timestamp plus index is a stable enough key for one response.
     return id?.$oid ?? `${raw.ts ?? 0}-${index}`;
 };
 
@@ -135,8 +117,7 @@ export const deployAlert = (raw: KomodoAlert, index: number): DeployAlert => {
     const to = text(data, "to");
     return {
         id: alertId(raw, index),
-        // The raw variant tag. A variant we have not met is exactly the one worth surfacing, so it passes
-        // through unmapped rather than collapsing into an "other" the view cannot reason about.
+        // Raw variant tag passes through unmapped; an unmet variant is exactly the one worth surfacing.
         type: raw.data?.type ?? "Unknown",
         level: LEVEL[raw.level ?? ""] ?? "warning",
         resolved: raw.resolved === true,
@@ -148,7 +129,6 @@ export const deployAlert = (raw: KomodoAlert, index: number): DeployAlert => {
     };
 };
 
-// Newest first, the same order every list on this surface uses, and the order an operator reads an incident
-// log in.
+// Newest first, the order every list here uses, and the order an operator reads an incident log in.
 export const deployAlerts = (raw: readonly KomodoAlert[]): DeployAlert[] =>
     raw.map((alert, index) => deployAlert(alert, index)).toSorted((a, b) => b.ts - a.ts);

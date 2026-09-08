@@ -5,17 +5,8 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { afterEach, expect, test } from "vitest";
 
-/* recreate.sh is a bootstrap shim: the flow lives in the ic CLI (_sandbox/ic), and the script's one job is
- * mapping every argument shape the platform's one-liners ever handed out onto ic verbs. That mapping is the
- * compatibility contract: a pasted command from an old card must keep working, so it is exercised here
- * under a real `sh` with a stand-in ic that records its argv.
- *
- * The record-before-rm ordering that used to be checked against this script moved to the Rust source with
- * the logic itself; the source-order check below follows it there, because it is still the single most
- * important property of the flow: the rm is what makes the replaced image unknowable, so a record written
- * after it would be a record of nothing, and the rollback button would be permanently dead in exactly the
- * situation it exists for. (The record's arithmetic: rollback swaps the pair, an unchanged base keeps the
- * target, is tested in Rust: _sandbox/ic/src/sandbox/recreate.rs.) */
+// recreate.sh maps old one-liner argument shapes onto ic verbs, tested under a real `sh` with a stand-in ic. Also
+// checks recreate.rs writes the rollback record before destroying the container: a late write leaves rollback dead.
 
 const SCRIPT = join(repoRoot(import.meta.url), "_site/site/public/scripts/recreate.sh");
 const RECREATE_RS = join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/recreate.rs");

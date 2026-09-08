@@ -1,27 +1,18 @@
-<!-- THE CORRECTION, WHEN NOTHING HAS HAPPENED FOR A WHILE. The mistake it exists to catch is SILENT: somebody
-     who has not understood that the command runs on ANOTHER machine never does anything this page can react
-     to, so elapsed time is the only trigger there is.
-
-     It is a component because it renders in two places and must not be written twice. From `xl` the setup page
-     puts it in the reference column, directly under "What this does", where it sits beside the command it is
-     about; below `xl` there is no second column and it goes back under the wait line on the run card itself.
-     Exactly one is visible at a time (the other is display:none), which is the same arrangement SetupRunDetails
-     uses and for the same reason: it appeared at the very bottom of a long card, several screenfuls under the
-     command it was correcting, which is the one place a correction cannot do its job.
-
-     `variant` is decided by the page, because the page holds the state that decides it: what kind of handoff
-     was made, and on what device. Everything here is prose about one of those states. -->
+<!--
+    Nudges the user after inactivity on the run step — the only trigger available, since not running the command is silent. Renders in two places
+    (the `xl` reference column, or under the wait line below `xl`); exactly one is visible via `display:none`, per the page's own `variant`.
+-->
 <script setup lang="ts">
 import { CopyButton, Notice } from "@intentic/ui";
 
-/* The reader this is addressed to:
- *   `emailed` : a phone that mailed itself the link and hasn't opened it on the other computer
- *   `terminal`: the command is on screen and was, apparently, never pasted anywhere
- *   `phone`   : a phone with the command still folded away, which has not been told anything wrong yet
- *   `install` : a browser offered the desktop app, which hasn't been installed and opened yet
- *   `downloaded`: the installer was taken from this page, so the remaining steps are Windows' and not ours
- *   `app`     : the desktop app was handed the setup and its own window has the log
- *   `button`  : in the app, with nothing pressed yet */
+// Reader this is addressed to:
+//   `emailed` : a phone that mailed itself the link, not yet opened on the other computer
+//   `terminal` : the command is on screen and was never pasted anywhere
+//   `phone` : a phone with the command still folded away
+//   `install` : a browser offered the desktop app, not yet installed or opened
+//   `downloaded`: the installer was taken from this page
+//   `app` : the desktop app was handed the setup and its own window has the log
+//   `button` : in the app, with nothing pressed yet
 const {
     variant,
     stalled = false,
@@ -29,12 +20,10 @@ const {
     copyable = false,
 } = defineProps<{
     variant: "emailed" | "terminal" | "phone" | "install" | "downloaded" | "app" | "button";
-    // Past the long fuse: stop assuming the command was never run and start helping the person whose terminal
-    // answered back instead. Only the `terminal` reader has a terminal to be told about.
+    // Only the `terminal` reader has a terminal to be told about; other variants ignore this.
     stalled?: boolean;
     command?: string;
-    // Copying again IS the way out for the reader who has the command, and is no kind of help to the one
-    // whose clipboard was never the blocked step.
+    // Copying again is the way out only for the reader who has the command.
     copyable?: boolean;
 }>();
 
@@ -59,9 +48,7 @@ const emit = defineEmits<{ copied: [] }>();
                 <span v-else-if="variant === `install`" class="min-w-0">
                     <span class="font-medium">Still nothing.</span> Nothing starts until you install the app above and open it.
                 </span>
-                <!-- The one variant that is not a correction. This reader did the right thing and is somewhere in
-                 Windows' half of it; the useful thing to say is where they are and that they can stop watching
-                 this tab, not that nothing has happened. -->
+                <!-- The one variant that is not a correction: this reader did the right thing and is in Windows' half of the flow. -->
                 <span v-else-if="variant === `downloaded`" class="min-w-0">
                     <span class="font-medium">Waiting on the installer.</span> Run the file your browser downloaded, then open Intentic and press "Set
                     it up now". This page picks it up on its own, so you can leave it.
@@ -76,9 +63,7 @@ const emit = defineEmits<{ copied: [] }>();
             <p v-if="stalled && variant === `terminal`" class="opacity-90">
                 Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.
             </p>
-            <!-- `cta`, because here copying again IS the way out: the quiet chip that suits a copy-beside-content
-                 read as the dimmest thing in the loudest box on the card. `self-start`, or the column flex stretches
-                 it edge to edge. -->
+            <!-- `cta`: copying again is the way out here. `self-start`, or the column flex stretches it edge to edge. -->
             <CopyButton v-if="copyable" class="self-start" :text="command" label="Copy again" :cta="true" @copied="emit(`copied`)" />
         </span>
     </Notice>

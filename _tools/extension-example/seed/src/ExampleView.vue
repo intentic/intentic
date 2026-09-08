@@ -4,34 +4,17 @@ import { markSeen } from "./badge";
 import { NOTES_PATH } from "./notes";
 import { useNotes } from "./useNotes";
 
-/* The rail view. Mounted by the host at /ext/example with `repo` (and any Activation props) bound: this
- * activation is workspace-wide, so it takes none.
- *
- * ON STYLING. Layout, typography, spacing and colour are PROVIDED BY THE HOST, and they are a promise rather
- * than a side effect: the whole spacing scale, every step of the type scale and every colour role are generated
- * whether or not anything is currently using one. That matters here more than anywhere, because nothing scans
- * this bundle for class names: nobody builds it but you, so a class works if and only if the host promised
- * it. (This view used to be written in inline styles for exactly that reason, back when the app inferred its
- * classes from whatever it happened to be reading.)
- *
- * Two rules follow, and they are the whole of it:
- *
- *   NAME A ROLE, NOT A COLOUR: `text-muted`, `bg-card`, `border-line`, `text-danger`. The theme decides what
- *   each means in light and dark, so the view recolours with the shell for free and picks up the reader's
- *   accent. A literal colour is a view that looks wrong on half the installs.
- *
- *   SIZE AGAINST THE CONTAINER, `@container` and `@lg:`, not `lg:`. This renders into a pane the reader can
- *   drag narrow, pop out, or stack under a chat. The window's width is not the question being asked.
- *
- * What the promise cannot cover is one-off values (`w-[37px]`, `max-w-[64ch]`, `text-[0.65rem]`): they are
- * infinite, so no promise reaches them, and they render as nothing at all. Use the scale, reach for a kit
- * component, or ship the rule in your own stylesheet: added by activate() and removed when the extension is
- * switched off. Note too that vite's lib build emits an SFC <style> block as a SEPARATE css asset, and the
- * loader imports one JS file from a blob URL, so nothing would ever fetch it. */
+// Rail view mounted by the host at /ext/example, workspace-wide (no activation props). Classes are host-provided only;
+// nothing else scans this bundle, so a class works only if the host's generated scale promises it. Two rules:
+// Name a role, not a colour (text-muted, bg-card, border-line): the theme recolours it for light/dark; a literal colour
+// breaks on half the installs.
+// Size against the container (@container, @lg:), not the window (lg:): this view can be dragged narrow, popped out, or
+// stacked under a chat.
+// One-off values (`w-[37px]`) render as nothing; use the scale or ship your own stylesheet via activate().
 
 const { all, shown, limit, isLoading } = useNotes();
 
-// Opening the view IS the acknowledgement the badge clears on.
+// Opening the view is the acknowledgement the badge clears on.
 onMounted(() => markSeen(all.value.length));
 watch(all, (notes) => markSeen(notes.length));
 </script>

@@ -2,8 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 
-// One ingress rule of a Cloudflare Tunnel: a public hostname routed to an internal service URL, or the
-// trailing catch-all (no hostname, service "http_status:404"). The provider owns the catch-all policy.
+// One ingress rule: a public hostname routed to an internal service, or the trailing catch-all (no hostname).
 export interface IngressRule {
     readonly hostname?: string;
     readonly service: string;
@@ -11,18 +10,15 @@ export interface IngressRule {
 
 const ingressRuleSchema = z.object({ hostname: z.string().optional(), service: z.string() });
 
-// The Cloudflare v4 REST surface the providers use, injected so the providers are unit-testable with a
-// fake; the default `cloudflareApi` below talks to api.cloudflare.com over native fetch. Auth flows
-// per-call (the bearer token is a resolved node input), never baked into the adapter at construction.
+// Cloudflare v4 REST surface the providers use, injected so they're testable with a fake, with `cloudflareApi`
+// below as the real implementation. Auth is a bearer token passed per call, never baked into the adapter.
 export interface CloudflareApi {
-    // Resolve an OWNED zone by name; undefined if no such zone exists. The account that owns it comes back
-    // with the zone (a zone name is globally unique across Cloudflare), so callers need not supply it.
+    // Resolves an owned zone by name; the owning account comes back with it since zone names are globally unique.
     readonly getZone: (args: {
         readonly apiToken: string;
         readonly zone: string;
     }) => Promise<{ readonly id: string; readonly accountId: string } | undefined>;
-    // Every zone the token can see, with the account that owns each. Used to discover which zone the authored
-    // domains live under, the token is the only Cloudflare credential the author supplies.
+    // Every zone the token can see, with its owning account; finds which zone an authored domain lives under.
     readonly listZones: (args: {
         readonly apiToken: string;
     }) => Promise<{ readonly id: string; readonly name: string; readonly accountId: string }[]>;
@@ -40,9 +36,7 @@ export interface CloudflareApi {
     }) => Promise<{ readonly id: string }>;
     // The connector token used to run cloudflared on the host.
     readonly getTunnelToken: (args: { readonly accountId: string; readonly apiToken: string; readonly tunnelId: string }) => Promise<string>;
-    // The tunnel's connectivity as Cloudflare's edge sees it: "healthy"/"degraded" when a connector is
-    // serving, "inactive" when none ever registered, "down" when the last one dropped. The tunnel provider
-    // polls this after (re)starting cloudflared so apply returns only once the tunnel actually serves.
+    // Tunnel connectivity per Cloudflare's edge: healthy/degraded serving, inactive if never registered, else down.
     readonly getTunnelStatus: (args: { readonly accountId: string; readonly apiToken: string; readonly tunnelId: string }) => Promise<string>;
     // The tunnel's current ingress; undefined if no configuration has been set yet.
     readonly getTunnelIngress: (args: {
@@ -63,8 +57,7 @@ export interface CloudflareApi {
         readonly zoneId: string;
         readonly name: string;
     }) => Promise<{ readonly id: string; readonly content: string } | undefined>;
-    // Every DNS record in the zone whose comment starts with the given prefix, the zone-wide scan behind
-    // cf-route's `list` (records are stamped through their comment).
+    // Every DNS record whose comment starts with the given prefix; backs cf-route's `list` scan.
     readonly listStampedDnsRecords: (args: {
         readonly apiToken: string;
         readonly zoneId: string;
@@ -87,8 +80,7 @@ export interface CloudflareApi {
         readonly content: string;
         readonly comment: string;
     }) => Promise<void>;
-    // Delete a tunnel by id. The engine has no destroy path; this exists so the e2e harness can purge the
-    // live Cloudflare resources it created during teardown.
+    // Deletes a tunnel by id; exists for the e2e harness to purge live resources, the engine has no destroy path.
     readonly deleteTunnel: (args: { readonly accountId: string; readonly apiToken: string; readonly tunnelId: string }) => Promise<void>;
     // Delete a DNS record by id, for the same teardown purpose.
     readonly deleteDnsRecord: (args: { readonly apiToken: string; readonly zoneId: string; readonly recordId: string }) => Promise<void>;
@@ -96,22 +88,18 @@ export interface CloudflareApi {
 
 const BASE = "https://api.cloudflare.com/client/v4";
 
-// The Cloudflare success envelope. `result` is validated per-call against the shape we consume; here it is
-// left unknown so an error envelope (success:false) still surfaces its `errors` rather than failing the
-// result schema first.
+// Cloudflare's envelope; `result` stays unknown here so a success:false error still surfaces `errors` first.
 const envelopeSchema = z.object({
     success: z.boolean(),
     errors: z.array(z.object({ code: z.number(), message: z.string() })),
     result: z.unknown(),
-    // Pagination metadata, present in varying shapes on list endpoints, left unknown so the shared
-    // success-envelope check never trips on an endpoint whose result_info omits total_pages (cfd_tunnel,
-    // dns_records). listZones extracts the page count from it defensively.
+    // Pagination metadata, left unknown since some endpoints (cfd_tunnel, dns_records) omit total_pages.
     result_info: z.unknown().optional(),
 });
 
-// Fetch + validate the success envelope, throwing transport/API errors. Returns the whole envelope so list
-// callers can read result_info (pagination) alongside result. Transport failures carry the elapsed time so a
-// postmortem can tell a 30s timeout from an instant refusal without any tracing.
+// Fetches and validates the success envelope, throwing on transport/API errors; returns the whole envelope so
+// list callers can read result_info. Transport failures include elapsed time, to tell a timeout from an instant
+// refusal.
 const request = async (apiToken: string, path: string, init?: RequestInit): Promise<z.infer<typeof envelopeSchema>> => {
     const label = `Cloudflare API ${init?.method ?? "GET"} ${path}`;
     const started = Date.now();
@@ -231,7 +219,7 @@ export const cloudflareApi: CloudflareApi = {
         return { id: found.id, content: found.content };
     },
     listStampedDnsRecords: async ({ apiToken, zoneId, commentPrefix }) => {
-        // ponytail: one page of up to 1000 records, paginate if a zone ever carries more stamped records.
+        // One page of up to 1000 records; paginate if a zone ever exceeds that many stamped records.
         const records = await call(
             apiToken,
             `/zones/${encodeURIComponent(zoneId)}/dns_records?comment.startswith=${encodeURIComponent(commentPrefix)}&per_page=1000`,

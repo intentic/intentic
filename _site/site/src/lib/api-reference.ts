@@ -1,18 +1,8 @@
 import { sandboxSpec, type SandboxSpecDocument, type SpecOperation } from "@intentic/sandbox-openapi";
 import { exampleBody, exampleFor, type SchemaNode } from "./api-examples";
 
-/* THE GENERATED DOCUMENT, TURNED INTO WHAT A PAGE RENDERS.
- *
- * One side of this file reads OpenAPI; the other hands an Astro page a flat list of operations with their
- * fields, their examples and their copyable commands already made. Nothing downstream of here knows what a
- * `requestBody` is, which is the point: the reference pages are about presentation, and every question about
- * how oRPC spells something is answered once, here.
- *
- * IT ALL HAPPENS AT BUILD TIME. The pages are static HTML, so the schema walking, the example generation and
- * the snippet writing are paid once by the build and never by a reader. What reaches the browser is finished
- * text plus a small JSON payload per group for the playground — a few kilobytes against the few hundred that
- * shipping the group's schemas would have cost.
- */
+// Turns the OpenAPI document into flat operations (fields, examples, copyable commands) an Astro page renders; nothing
+// downstream reads raw OpenAPI. Runs at build time; only finished text and a small per-group JSON reach the browser.
 
 export interface RefParam {
     name: string;
@@ -56,10 +46,7 @@ export interface RefOperation {
 
 const SANDBOX = "https://sandbox-a1b2c3d4e5f6.intentic.dev";
 
-/* A field note is a LABEL in a narrow cell, not prose. The contract's own descriptions run to full sentences,
- * which crowd a column built for a word or two, so a note is cut to the first handful of words: the first
- * sentence, then a hard word cap, with an ellipsis when the source ran longer so a reader knows the whole of
- * it lives in the OpenAPI document. */
+// Cuts a description to a short label: first sentence, then a word cap, with an ellipsis when it was trimmed.
 const FEW_WORDS = 6;
 const terse = (text: string | undefined): string | undefined => {
     const trimmed = text?.trim();
@@ -71,9 +58,7 @@ const terse = (text: string | undefined): string | undefined => {
     return words.length <= FEW_WORDS ? words.join(" ") : `${words.slice(0, FEW_WORDS).join(" ")}…`;
 };
 
-/* Loaded once for the whole build rather than once per page. Astro imports this module a single time and the
- * 39 group pages all await the same promise, so the generator runs once for 269 operations instead of 39
- * times, which is the difference between a build step and a build problem. */
+// Cached once per build; Astro imports this module once and every group page awaits the same promise.
 let cached: Promise<SandboxSpecDocument> | undefined;
 const spec = (): Promise<SandboxSpecDocument> => (cached ??= sandboxSpec());
 
@@ -91,10 +76,8 @@ const resolve = (schema: SchemaNode | undefined, root: SchemaNode): SchemaNode |
     return name === undefined ? undefined : root.$defs?.[name];
 };
 
-/* A TYPE A READER RECOGNISES. Deliberately not the schema's own vocabulary: nobody wants to read
- * `{"anyOf":[{"type":"string"},{"type":"null"}]}` to learn that a field is an optional string. Unions of
- * fixed values become the values, because that is the useful half; unions of shapes become "one of several
- * shapes", because listing them inline is a paragraph in a table cell. */
+// Human type label, not the schema's own vocabulary: a fixed-value union becomes its values; a shape union becomes "one
+// of N shapes".
 const typeLabel = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): string => {
     const schema = resolve(raw, root);
     if (schema === undefined || depth > 4) {
@@ -105,8 +88,7 @@ const typeLabel = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): st
     }
     if (schema.enum !== undefined) {
         const values = schema.enum.map((entry) => JSON.stringify(entry));
-        // Past four the cell turns into a paragraph, and the reader's question is answered by the first few
-        // plus a count.
+        // Past four values, show the first four plus a count; more reads as a paragraph, not a cell.
         return values.length > 4 ? `${values.slice(0, 4).join(" | ")} … (${values.length})` : values.join(" | ");
     }
 
@@ -138,10 +120,8 @@ const typeLabel = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): st
     return type ?? "unknown";
 };
 
-/* WHICH FIELD PICKS THIS BRANCH OUT OF A UNION, and what it has to be. A discriminated union spells that as a
- * single-valued property on every branch, so the branch is identified by the one field that can only be one
- * thing. Returns undefined for a union whose branches are not told apart that way, which is the signal to fall
- * back to documenting the first branch rather than inventing a distinction the schema does not make. */
+// Field that picks a branch out of a discriminated union: the one property that is a single fixed value on every
+// branch. Undefined when branches aren't told apart that way.
 const discriminatorOf = (branch: SchemaNode, root: SchemaNode): { field: string; value: string } | undefined => {
     const resolved = resolve(branch, root);
     for (const [name, child] of Object.entries(resolved?.properties ?? {})) {
@@ -156,13 +136,8 @@ const discriminatorOf = (branch: SchemaNode, root: SchemaNode): { field: string;
     return undefined;
 };
 
-/* A SCHEMA AS A LIST OF LINES, indented by nesting. Flat rather than a tree of components because that is
- * what the page renders: a table where a child sits one step in from its parent, which is legible at four
- * levels in a way that nested boxes are not.
- *
- * Depth is capped, and past the cap a branch says so rather than being silently dropped. A reader who sees
- * "nested further" knows to look at the example beside it; a reader shown nothing concludes the object is
- * empty. */
+// Schema as a flat, depth-indented list of rows, matching the table the page renders. Past a depth cap a row says
+// "nested further" instead of being silently dropped.
 const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): RefRow[] => {
     const schema = resolve(raw, root);
     if (schema === undefined) {
@@ -182,30 +157,17 @@ const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): R
             return schemaRows(real[0], root, depth);
         }
 
-        /* A CHOICE BETWEEN SHAPES, rendered as the choice it is. Connecting something, a capability's config,
-         * is twenty different shapes behind one route, and the union is the whole content of the request: a
-         * table that showed the first branch and stopped documented one twentieth of the call while looking
-         * complete, which is the worst way for a reference to be wrong.
-         *
-         * Each branch gets a heading row naming the value that selects it, with its own fields indented under
-         * it. Interleaving them instead would read as one object with contradictory fields, which is the
-         * failure this shape exists to avoid. Beyond the cap the remainder is counted rather than dropped,
-         * because a reader who sees "and 6 more" knows to open the document, and one shown nothing does not. */
+        // A union of shapes renders as the choice it is: each branch gets a heading row for its discriminator.
         const named = real.flatMap((branch) => {
             const tag = discriminatorOf(branch, root);
             return tag === undefined ? [] : [{ branch, tag }];
         });
-        /* Expanded two levels deep, not one, because of exactly one shape: a stream's frames sit inside the
-         * wire envelope, so the union that IS the answer, the forty kinds of thing a turn can say, is a level
-         * further down than every other union on this surface. Stopping at one level documented the envelope
-         * and then showed the first frame kind as though it were the only one. */
+        // Two levels deep, not one: a stream's answer union sits one level under the wire envelope, not at the top.
         if (named.length < 2 || depth > 2) {
             return schemaRows(real[0], root, depth);
         }
 
-        /* Enough that the two genuinely wide unions on this surface, connecting something and answering a
-         * parked card, are documented rather than sampled. Past twenty a table stops being a table, and the
-         * remainder is counted so a reader knows to open the document rather than concluding they have it all. */
+        // Enough to cover the two genuinely wide unions on this surface; past it the remainder is counted, not dropped.
         const SHOWN = 20;
         const rows: RefRow[] = named
             .slice(0, SHOWN)
@@ -265,10 +227,8 @@ const queryString = (params: RefParam[]): string => {
     return pairs.length === 0 ? "" : `?${pairs.join("&")}`;
 };
 
-/* THE COPYABLE COMMAND, and it is the real one. The playground beside it answers from a simulation, so this is
- * the page's promise that the thing being demonstrated exists: same address, same header, same body. It uses
- * shell variables for the sandbox and the token rather than baking in fake ones, because a reader who pastes
- * this has their own two values and a literal placeholder in the middle of a URL is an easy thing to miss. */
+// The real copyable curl command: same address, header and body as the actual call, with shell variables for the
+// sandbox and token instead of fake literals.
 const curlFor = (operation: { method: string; path: string; params: RefParam[]; body?: unknown; streams: boolean }): string => {
     const address = `"$SANDBOX${fillPath(operation.path, operation.params)}${queryString(operation.params)}"`;
     const lines: string[] = [];
@@ -280,16 +240,14 @@ const curlFor = (operation: { method: string; path: string; params: RefParam[]; 
     lines.push(`  -H "x-intentic-control: $INTENTIC_TOKEN"${operation.body === undefined ? "" : " \\"}`);
     if (operation.body !== undefined) {
         lines.push(`  -H "content-type: application/json" \\`);
-        // Compact rather than indented: a multi-line body inside a shell string is fragile to paste and the
-        // structure is already laid out in the schema table above it.
+        // Compact, not indented: a multi-line body inside a shell string is fragile to paste.
         lines.push(`  -d '${JSON.stringify(operation.body)}'`);
     }
     return lines.join("\n");
 };
 
-/* The same call through the typed client an extension is handed, so the two ways of reaching a route sit side
- * by side. The client mirrors the contract exactly — group, then route, then the input — which is worth
- * showing precisely because it is not obvious from the URL that `POST /git/{repo}/commit` is `git.commit`. */
+// Same call through the typed client, so the two ways of reaching a route sit side by side; the client mirrors the
+// contract exactly (group, then route, then input).
 const typescriptFor = (operationId: string, params: RefParam[], body: Record<string, unknown> | undefined): string => {
     const [group = "", route = ""] = operationId.split(".");
     const input: Record<string, unknown> = {};
@@ -303,8 +261,8 @@ const typescriptFor = (operationId: string, params: RefParam[], body: Record<str
     return `import { sandbox } from "@intentic/sandbox-client";\n\nconst result = await sandbox.${group}.${route}(${argument});`;
 };
 
-/* Takes the document's own parameter shape with its schema already narrowed, so this file declares that shape
- * nowhere: the generator names it, and the one narrowing happens at the read below. */
+// Reuses the generator's own parameter shape rather than redeclaring it; the schema field is narrowed once, at the read
+// below.
 type SpecParam = NonNullable<SpecOperation["parameters"]>[number];
 
 const paramFrom = (raw: Omit<SpecParam, "schema"> & { schema?: SchemaNode }, root: SchemaNode): RefParam => {
@@ -316,19 +274,14 @@ const paramFrom = (raw: Omit<SpecParam, "schema"> & { schema?: SchemaNode }, roo
         required: raw.required === true,
         type: typeLabel(schema, root),
         description: terse(raw.description ?? schema.description),
-        // Everything on the wire is text: a query value and a path segment are strings even when the schema
-        // calls them numbers, so the playground's field holds a string and this matches it.
+        // Wire values are always text: a query or path value is a string even when the schema calls it a number.
         example: value === undefined || value === null ? "" : String(value),
         options: schema.enum?.every((entry) => typeof entry === "string") === true ? (schema.enum as string[]) : undefined,
     };
 };
 
-/* WHERE A SCHEMA STOPS BEING OPAQUE. The generator hands schemas over as `unknown`, deliberately: a JSON
- * Schema is general, and that package converts them rather than interpreting them, so it declines to claim a
- * shape the contract is free to grow tomorrow. This file is the one that DOES interpret them, and `SchemaNode`
- * is its reading — every field optional, every branch guarded, so a node that turns out to have none of them
- * simply falls through the walks above. Narrowing in one named place is what keeps that reading out of the
- * five call sites that would otherwise each assert it for themselves. */
+// Narrows the generator's `unknown` schema to `SchemaNode` in one place; every field is optional, so an unmatched shape
+// falls through the walks above.
 const asSchema = (schema: unknown): SchemaNode | undefined => (schema === null || typeof schema !== "object" ? undefined : (schema as SchemaNode));
 
 /** Every operation in one route group, in the document's own order. */

@@ -13,17 +13,8 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { packBundle } from "./bundle.js";
 import { applyBundle, BundleFormatError, bundleItems, dropSpool, spoolBundle } from "./bundle-arrival.js";
 
-/* THE ROUND TRIP: export a sandbox's two volumes, take them into empty ones, and check that what came out is
- * what went in. The claim this suite exists to hold is the one the feature was asked for: "export and then
- * import result in the same environment". Anything the bundle deliberately does NOT carry is asserted just as
- * hard as what it does, because a silent omission is the failure mode that made this feature necessary.
- *
- * A BUNDLE ARRIVES THROUGH A PLAN NOW, so `arrive` below is spool → items → apply rather than one call. The
- * default is every row ticked, which is the old behaviour exactly; the tests that care about a subset name it.
- * The second consent moved with it: what is IN the file is still the exporter's `secrets` choice, and whether
- * the credential-classed entries are WRITTEN is now the receiving owner's `includeSecrets`, so the tests
- * about secrets assert both axes rather than one.
- */
+// Exports a sandbox's two volumes into empty ones and checks the result, including deliberate omissions. Arrival is
+// spool->items->apply; a secret needs both the exporter's choice and the receiver's includeSecrets.
 
 const LIMIT = 64 * 1024 * 1024;
 
@@ -44,12 +35,8 @@ const cleanup = async (): Promise<void> => {
     }
 };
 
-/* Services shaped for the bundler: the real roots, real file reads (it reads the custom overlay off disk), and
- * whatever capability manifest the test wants the environment facts derived from.
- *
- * The two vault sweeps are stubbed to no-ops by DEFAULT rather than left unstubbed, because the export now runs
- * them before it walks (bundle.ts says why) and a fake that throws its own name would make every test here about
- * that seam. One test overrides them to prove the ordering. */
+// Real roots and file reads for the bundler; vault sweeps default to no-ops so a throwing fake doesn't make every test
+// about that seam. One test overrides them to prove ordering.
 const bundlerServices = (work: string, history: string, capabilities: Capability[] = [], sweeps: Partial<Services> = {}): Services =>
     services({
         workspace: workspacePaths(work),
@@ -61,8 +48,8 @@ const bundlerServices = (work: string, history: string, capabilities: Capability
         ...sweeps,
     } as Parameters<typeof services>[0]);
 
-/* Take a bundle in, end to end: spool it, read the plan it produces, apply the ticked rows, drop the spool.
- * `pick` narrows the rows for the one test that needs to decline something; everything else takes the lot. */
+// Spools a bundle, applies its ticked rows, drops the spool; `pick` narrows rows for the one test that declines
+// something.
 const arrive = async (
     bundle: ReadableStream<Uint8Array>,
     target: { work: string; history: string },
@@ -87,7 +74,7 @@ const bundleOf = async (
     sweeps: Partial<Services> = {},
 ): Promise<ReadableStream<Uint8Array>> => {
     const stream = packBundle(bundlerServices(source.work, source.history, capabilities, sweeps), { secrets, now: 1_700_000_000_000 });
-    // Buffered here only so one test can restore it twice; the route streams it straight to the wire.
+    // Buffered only so a test can reread it; the route streams straight to the wire.
     const chunks: Uint8Array[] = [];
     const reader = stream.getReader();
     for (;;) {
@@ -113,11 +100,10 @@ test("a workspace round-trips: content, nesting, modes and symlinks all survive"
     const { report } = await arrive(await bundleOf(source, false), target);
 
     expect(await readFile(join(target.work, "repo/src/main.ts"), "utf8")).toBe("export const x = 1;\n");
-    // The mode is the assertion that separates this from the folder-drop path, which writes every file 0644.
     expect((await stat(join(target.work, "repo/run.sh"))).mode & 0o777).toBe(0o755);
     expect(await readFile(join(target.work, "repo/link.ts"), "utf8")).toBe("export const x = 1;\n");
     expect((await stat(join(target.work, "empty-on-purpose"))).isDirectory()).toBe(true);
-    // `repo` here is a plain directory with no .git, so the whole tree is the one "Workspace files" row.
+    // No .git here, so this whole tree lands as the single bundle:files row.
     expect(report.applied.map((entry) => entry.id)).toEqual(["bundle:files"]);
     expect(report.refused).toEqual([]);
     await cleanup();
@@ -125,7 +111,7 @@ test("a workspace round-trips: content, nesting, modes and symlinks all survive"
 
 test("every repo's real git dir travels, and its in-tree pointer is rewritten for the target's historyRoot", async () => {
     const source = await makeRoots();
-    // The shape the daemon keeps: the git dir on /history, the in-tree .git a pointer file naming it.
+    // Real shape: git dir lives under /history; the in-tree .git is a pointer file naming it.
     await mkdir(join(source.history, "gits/root/refs"), { recursive: true });
     await writeFile(join(source.history, "gits/root/HEAD"), "ref: refs/heads/main\n");
     await mkdir(join(source.history, "gits/nested/refs"), { recursive: true });
@@ -138,19 +124,15 @@ test("every repo's real git dir travels, and its in-tree pointer is rewritten fo
     const target = await makeRoots();
     const { plan, report } = await arrive(await bundleOf(source, false), target);
 
-    /* A REPOSITORY IS ITS OWN ROW, which is the whole reason a bundle is worth previewing: "bring the sandbox,
-     * leave the six-gigabyte monorepo" is a sentence an owner can now say. `root` is deliberately not one —
-     * the workspace repo's git dir is as much a part of /work as the files it tracks. */
+    // A nested repo gets its own preview row; the root workspace repo doesn't, its git dir is part of /work.
     expect(plan).toEqual(["bundle:files", "repo:nested"]);
 
-    // The git dirs themselves came across…
     expect(await readFile(join(target.history, "gits/root/HEAD"), "utf8")).toBe("ref: refs/heads/main\n");
     expect(await readFile(join(target.history, "gits/nested/HEAD"), "utf8")).toBe("ref: refs/heads/agent/x\n");
-    // …and both pointers now name the TARGET's historyRoot, not the source's. Without this the restored tree is
-    // a pile of files answering `fatal: not a git repository` to every command.
+    // Pointers are rewritten to name the target's historyRoot; otherwise the tree is not a git repository.
     expect(await readFile(join(target.work, ".git"), "utf8")).toBe(`gitdir: ${join(target.history, "gits/root")}\n`);
     expect(await readFile(join(target.work, "nested/.git"), "utf8")).toBe(`gitdir: ${join(target.history, "gits/nested")}\n`);
-    // Both rows landed, and the heal is reported rather than silent.
+    // The re-pointer heal is reported, not silent.
     expect(report.applied.map((entry) => entry.id)).toEqual(["bundle:files", "repo:nested"]);
     expect(report.needsAction.find((action) => action.subject === "Repositories re-pointed")?.detail).toContain("nested");
     await cleanup();
@@ -167,22 +149,14 @@ test("identity never travels and is refused on the way in even when a bundle car
     const target = await makeRoots();
     const { report } = await arrive(await bundleOf(source, true), target);
 
-    // Ordinary settings travel even with secrets on…
     expect(await readFile(join(target.work, ".intentic/config/settings.json"), "utf8")).toBe(`{"autoLand":true}`);
-    // …the two identity files do not, and `secrets: true` does not buy them. Carrying owner.json would hand the
-    // target's ownership to whoever holds the bundle.
+    // Identity files never travel, even with secrets:true; owner.json would hand over the target's ownership.
     await expect(readFile(join(target.work, ".intentic/identity/owner.json"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.history, "session-secret"), "utf8")).rejects.toThrow();
     expect(report.refused).toEqual([]);
     await cleanup();
 });
 
-/* TWO CONSENTS, NOT ONE, and this test is where the difference is asserted.
- *
- * The exporter decides what goes INTO the file, which is what makes a bundle safe to hand over or not. The
- * receiving owner decides what comes OUT of it, on the way in, which is the consent that used to be missing
- * entirely: a bundle-with-secrets wrote its credentials wherever it was pointed, because the only person ever
- * asked was whoever packed it. Both have to hold for a credential to land. */
 test("secrets obey the exporter's choice AND the receiving owner's, and need both", async () => {
     const source = await makeRoots();
     await mkdir(join(source.work, `${STATE_DIR}/secrets`), { recursive: true });
@@ -193,7 +167,7 @@ test("secrets obey the exporter's choice AND the receiving owner's, and need bot
     await arrive(await bundleOf(source, false), notPacked, { includeSecrets: true });
     await expect(readFile(join(notPacked.work, ".intentic/secrets/ci.json"), "utf8")).rejects.toThrow();
 
-    // Packed, and declined on arrival: still not written, and the report says so rather than staying quiet.
+    // Packed, then declined on arrival: still not written, and the report says so.
     const declined = await makeRoots();
     const { report } = await arrive(await bundleOf(source, true), declined, { includeSecrets: false });
     await expect(readFile(join(declined.work, ".intentic/secrets/ci.json"), "utf8")).rejects.toThrow();
@@ -206,18 +180,6 @@ test("secrets obey the exporter's choice AND the receiving owner's, and need bot
     await cleanup();
 });
 
-/* THE CAPABILITY MANIFEST CHANGED SIDES, and this is the pair of assertions that says why it was allowed to.
- *
- * It used to be asserted beside ci.json above: classed `secret`, dropped wholesale from a no-secrets bundle. It
- * now travels in every bundle, because the credential VALUES are no longer in it (capabilities-store.ts's vault)
- * and what is left is the shape of each connection, which is the difference between a target that arrives
- * listing its connections unauthenticated and one that arrives blank with a list of homework.
- *
- * That is only true of the BYTES while nothing has hand-written a real token back in, which is why the export
- * sweeps first and why the second half of this test is about ordering rather than about classification. The
- * stubbed sweep stands in for the vault: if it runs before the walk, the packed file holds the marker; if it
- * runs after, or not at all: the packed file holds the token, and a bundle the owner was told carried no
- * secrets carries one. */
 test("the capability manifest travels without its credentials, swept before the walk", async () => {
     const source = await makeRoots();
     await mkdir(join(source.work, `${STATE_DIR}/config`), { recursive: true });
@@ -239,10 +201,9 @@ test("the capability manifest travels without its credentials, swept before the 
     );
 
     const restored = await readFile(join(target.work, ".intentic/config/capabilities.json"), "utf8");
-    // The shape arrived: the id, the kind and the address the owner would otherwise have to remember.
     expect(restored).toContain("mcp1");
     expect(restored).toContain("https://mcp.example.com");
-    // The credential did not, and it is the sweep's ordering that decided that.
+    // The sweep's ordering, not classification, keeps the credential out.
     expect(restored).not.toContain("REAL-TOKEN");
     await cleanup();
 });
@@ -286,17 +247,16 @@ test("the composed overlay is left for the target to recompose; its source secti
     await mkdir(join(source.work, `${STATE_DIR}/local`), { recursive: true });
     await writeFile(join(source.work, `${STATE_DIR}/config/environment.custom.Dockerfile`), "RUN apt-get install -y ffmpeg\n");
     await writeFile(join(source.work, `${STATE_DIR}/config/environment.d/rust.Dockerfile`), "RUN rustup default stable\n");
-    // Composed from a base image the target may not even be on: restoring it would pin the wrong FROM.
+    // Composed from a base image the target may not be on; restoring it would pin the wrong FROM.
     await writeFile(join(source.work, `${STATE_DIR}/local/environment.approved.Dockerfile`), "FROM registry.example/sandbox:old\n");
 
     const target = await makeRoots();
     const { report } = await arrive(await bundleOf(source, false), target);
 
     expect(await readFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
-    // A pending agent request survives the move: the owner still has a question to answer on the other side.
+    // A pending overlay draft survives the move; the owner still answers it on the other side.
     expect(await readFile(join(target.work, ".intentic/config/environment.d/rust.Dockerfile"), "utf8")).toBe("RUN rustup default stable\n");
     await expect(readFile(join(target.work, ".intentic/local/environment.approved.Dockerfile"), "utf8")).rejects.toThrow();
-    // And the owner is told the one thing the container cannot do for itself.
     expect(report.needsAction.some((action) => action.subject.toLowerCase().includes("environment"))).toBe(true);
     await cleanup();
 });
@@ -341,8 +301,7 @@ test("derived trees are left out while durable artifacts travel", async () => {
 });
 
 test("an undeclared /history file is left behind rather than carried on a guess", async () => {
-    // The volume defaults to SKIP: a file no manifest claims is either junk from a build that moved on or state
-    // this daemon has no name for, and neither belongs in a bundle.
+    // Undeclared /history state defaults to skip: unclaimed by any manifest, so it stays out of the bundle.
     const source = await makeRoots();
     await writeFile(join(source.history, "some-future-store.json"), "{}");
     const target = await makeRoots();
@@ -355,7 +314,7 @@ test("a tar that is not a bundle is refused at the SPOOL, before a single byte i
     const target = await makeRoots();
     const notABundle = new Blob([new Uint8Array([1, 2, 3, 4])]).stream();
     await expect(spoolBundle(notABundle, target.history, LIMIT)).rejects.toThrow();
-    // And the spool it started is gone: a refused read leaves no file behind to be swept later.
+    // A refused spool leaves no file behind to be swept later.
     await expect(readFile(join(target.history, "arrivals"), "utf8")).rejects.toThrow();
     await cleanup();
 });
@@ -363,16 +322,15 @@ test("a tar that is not a bundle is refused at the SPOOL, before a single byte i
 test("a bundle whose manifest this daemon cannot read is refused by version, not guessed at", async () => {
     const source = await makeRoots();
     const target = await makeRoots();
-    // Round-trip a real bundle first so the happy path is known-good in this same suite…
+    // Confirms the happy path works before testing the guard.
     await expect(arrive(await bundleOf(source, false), target)).resolves.toBeDefined();
-    // …then prove the guard: BundleFormatError is what the route turns into a 400.
+    // BundleFormatError is what the route turns into a 400.
     expect(new BundleFormatError("x")).toBeInstanceOf(Error);
     await cleanup();
 });
 
-/* THE POINT OF PREVIEWING A BUNDLE AT ALL. Before this, taking one in was all-or-nothing and it happened on
- * file pick, so "I want the sandbox but not that repository" had no answer short of deleting the directory
- * afterwards — on the most destructive of the four arrivals, the only one that lands OVER a workspace. */
+// Bundle apply is the only arrival that lands over an existing workspace, which is why previewing and unticking rows
+// matters here.
 test("an unticked repository is left in the file: its tree and its git dir both stay out", async () => {
     const source = await makeRoots();
     await mkdir(join(source.history, "gits/huge"), { recursive: true });
@@ -385,14 +343,11 @@ test("an unticked repository is left in the file: its tree and its git dir both 
     const target = await makeRoots();
     const { plan, report } = await arrive(await bundleOf(source, false), target, { pick: (id) => id !== "repo:huge" });
 
-    // The row was offered…
     expect(plan).toContain("repo:huge");
-    // …and declining it left BOTH halves behind: a tree without its git dir would be a pile of files, and a
-    // git dir without its tree would be dead weight on the history volume.
+    // Declining a repo drops both halves; either alone would be dead weight or a non-repo pile of files.
     expect(report.applied.map((entry) => entry.id)).toEqual(["bundle:files"]);
     await expect(readFile(join(target.work, "huge/blob.bin"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.history, "gits/huge/HEAD"), "utf8")).rejects.toThrow();
-    // While everything outside it came across as usual.
     expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("# keep me\n");
     await cleanup();
 });

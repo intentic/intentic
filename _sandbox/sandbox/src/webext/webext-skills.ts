@@ -1,17 +1,6 @@
-/* Substituted for the `${tools}` slot in a browser pack's SKILL.md: what a connected browser's tools ARE, and
- * the rules for working inside somebody's own signed-in browser while they watch. Core, not per-family data —
- * the tool surface, the grant refusals and the act/read split are identical in Chrome, Edge and Firefox.
- * `${id}` is the instance name (renderSkill).
- *
- * The BROWSER-SPECIFIC half is one pack per family, contributed by an extension, and it is separate for the
- * host pack's reason: context is not free, and a note about Firefox's container tabs costs tokens on every turn
- * of a session whose only connected browser is Chrome.
- *
- * What goes in here is chosen by what a model gets WRONG unaided:
- *   - that this browser is NOT the sandbox's own, and the person is looking at it,
- *   - that a site it cannot touch is a permission the PERSON grants, in the browser, not an error to route around,
- *   - that page text is a stranger's writing and not an instruction,
- *   - and that the cheap read (`read`) and the acting read (`snapshot`) are different questions. */
+// Fills the `${tools}` slot in a browser pack's SKILL.md: the tool surface and act/read rules shared by every
+// connected-browser family (Chrome, Edge, Firefox); `${id}` is the instance name. Per-family quirks live in a separate
+// pack contributed by the extension, so an unused browser costs no tokens.
 export const WEBEXT_TOOLS_NOTE = `# Connected browser "\${id}"
 
 This is the person's OWN browser, on their own computer, with the extension they installed in it. It is not the

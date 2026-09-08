@@ -20,17 +20,13 @@ import { listTerminals, useTerminals } from "./terminals";
 import { useApps } from "./useApps";
 import { useVitest } from "./useVitest";
 
-/* The workspace extension (formerly two tiles: apps + vitest). One tile per repo. A monorepo shows three
- * groups: Apps (startable instances, live status + preview + start/stop + an Add-an-app dialog, each with its
- * own vitest projects as a Run-tests action), Packages (non-app _apps/<x> dirs that carry tests but no preview),
- * and Library tests (_libs/* + the repo root). A vitest-only repo shows a single flat Tests list. Every run:
- * dev servers, test runs, the add-apps job: is a tmux session the daemon creates and the ONE global terminal
- * panel attaches; there is no embedded terminal. Each Run targets its OWN session so a second Run never
- * no-ops against a still-running one. */
+// One tile per repo. A monorepo shows Apps (status, preview, start/stop, Run-tests), Packages (tests-only dirs), and
+// Library tests; a vitest-only repo shows one flat Tests list. Every run is its own tmux session in the one global
+// terminal, so a second Run never no-ops against a running one.
 
 const props = defineProps<{ repo: string; monorepo: boolean }>();
 const { apps, templates, error, isLoading, addApps, refresh, startApp, stopApp } = useApps(toRef(props, `repo`));
-// Drawn only once the wait has earned it, and keyed on the repo so switching starts a fresh wait.
+// Drawn only once the wait has earned it, keyed on the repo so switching starts a fresh wait.
 const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
 const { projects, error: testsError, isLoading: testsLoading, runTests: postRunTests } = useVitest(toRef(props, `repo`));
 const openFocused = (session: string): void => host().terminal.open(session);
@@ -38,26 +34,18 @@ const openFocused = (session: string): void => host().terminal.open(session);
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
 const addOpen = ref(false);
-// The add-apps job runs in a one-shot tmux session (see workspace.routes addApps); its terminal is the live
-// install log. `adding` drives the indicator from kickoff until the daemon's sweep sees the job's shell back at
-// its prompt, which it announces on the `terminals` domain (watchAdd). The `--add_apps` key uses an underscore
-// so it can never collide with an app panel session (panel-<repo>--<app>).
+// One-shot tmux session; `adding` clears once the daemon's sweep sees the shell back at its prompt (watchAdd). Session
+// key uses an underscore (`--add_apps`) so it can't collide with panel-<repo>--<app>.
 const adding = ref(false);
 const ADD_SESSION = `panel-${props.repo}--add_apps`;
-/* Whether the add job's session has been SEEN alive. Absence reads as "finished" only after presence: before
- * that it is the ordinary first moment after kickoff, when the daemon has created the session and not listed it
- * yet, and taking it for completion would clear the spinner instantly on every add. */
+// Whether the session has been seen alive; absence means finished only after presence, not on kickoff.
 let sawAdd = false;
 
 const stopped = computed(() => apps.value.filter((app) => !app.running));
 const running = computed(() => apps.value.filter((app) => app.running));
 
-// The type signal (issue: api/web read identical). An app's `kind` is the manifest key it was scaffolded from,
-// or the framework the daemon detected for an app it found by convention: a frontend (web/landing/astro) and
-// a backend (api) get a distinct icon + tint + kind pill so they're told apart at a glance. Matched by the
-// canonical keys and framework names with a loose contains() so a custom-named instance (e.g. "storefront-api")
-// still classifies; an unrecognized kind falls back to the neutral package glyph and shows itself raw, and an
-// app with no kind at all (a bare `dev` script, no framework) shows the glyph alone.
+// An app's kind names its scaffold template or detected framework, matched loosely against known frontend/backend
+// patterns for a badge. Unrecognized or absent kinds fall back to a neutral glyph.
 interface AppKind {
     readonly icon: IconName;
     readonly label: string | undefined;
@@ -83,7 +71,7 @@ const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(
 
 const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
 
-// Vitest projects split into: this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
+// Vitest projects split into this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
 const grouped = computed(() =>
     groupTests(
         projects.value,
@@ -116,8 +104,8 @@ const act = async (action: () => Promise<void>): Promise<void> => {
     }
 };
 
-// Ask the daemon to run `pnpm vitest run` for these repo-relative dirs in a one-shot session
-// panel-<repo>--<suffix>, then attach it in the global panel (the daemon created it, so focus is reliable).
+// Runs `pnpm vitest run` for these repo-relative dirs in a one-shot session (panel-<repo>--<suffix>), then focuses it
+// in the global terminal.
 const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
     act(async () => {
         if (dirs.length === 0) {
@@ -130,13 +118,8 @@ const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
         openFocused(`panel-${props.repo}--${suffix}`);
     });
 
-/* Wait for the add-apps session to go away or its tab to dim (running=false once the daemon's sweep sees the
- * job's shell back at its prompt), then clear the spinner and refresh so the new apps appear.
- *
- * Pushed rather than polled: `sessions` is the shared, unpolled terminals list (terminals.ts), which the daemon
- * refreshes on the `terminals` frame it sends for exactly this transition. A transient list failure cannot
- * clear the spinner early, vue-query holds the last good data through a failed refetch, so the list never
- * blanks, and `sawAdd` means absence is only read as an ending once there was something to end. */
+// Watches the shared, push-updated terminals list for the add-apps session to end, then clears the spinner and
+// refreshes. `sawAdd` guards against reading absence as an ending before it was ever seen.
 const { sessions } = useTerminals();
 const watchAdd = (): void => {
     sawAdd = false;
@@ -156,9 +139,8 @@ watch(sessions, (list) => {
     }
 });
 
-// Kick off the add-apps tmux job (from the dialog's picks) and hand the user its terminal tab: the terminal IS
-// the live install log and survives refresh/navigation. Completion is observed by watchAdd on the shared
-// terminals list, which the daemon refreshes when the one-shot job's shell returns to its prompt.
+// Kicks off the add-apps job and focuses its terminal tab, the live install log that survives navigation. Completion is
+// picked up by watchAdd on the shared terminals list.
 const add = (entries: { template: string; name: string }[]): Promise<void> =>
     act(async () => {
         adding.value = true;
@@ -172,20 +154,16 @@ const add = (entries: { template: string; name: string }[]): Promise<void> =>
         watchAdd();
     });
 
-// Any start opens the global terminal focused on the app: the terminals ARE the launch feedback (install +
-// boot stream live). The panel is opened UP FRONT so its chrome appears instantly, and it is opened BY NAME:
-// the session doesn't exist until the POST lands, and a panel opened with no name on an empty strip fills the
-// gap with its own `web-*` shell: the stray "1" tab that used to greet every Start. Naming it makes the panel
-// wait for this session instead. Focused again once the POST returns (startApp no longer blocks on a refetch),
-// which is when the tab is really there.
+// Opens the terminal focused on the app's named session before the POST lands (an unnamed panel would open its own
+// stray shell instead), then refocuses once start completes and the tab is really there.
 const startOne = (app: string): Promise<void> =>
     act(async () => {
         openFocused(sessionOf(app));
         await startApp(app);
         openFocused(sessionOf(app));
     });
-// Start all opens on the FIRST app's terminal for the same reason: some session has to be named, and the one
-// at the top of the list is the one the panel would have landed on anyway.
+// Opens on the first app's terminal, since some session must be named and that's the one the panel would land on
+// anyway.
 const startAll = (): Promise<void> =>
     act(async () => {
         const names = stopped.value.map((app) => app.app);
@@ -199,12 +177,8 @@ const startAll = (): Promise<void> =>
     });
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
-/* A refresh/navigation during a run: the tmux job survived it, so recover the "Adding…" state from the terminals
- * list and resume watching. A one-shot read rather than the reactive list, which may not have answered yet on
- * mount, and seeing the session here is what arms `sawAdd` for the ending.
- *
- * No unmount teardown to pair with it any more: what watches the job is a scope-bound watcher that retires with
- * this view, and the job and its tab live on globally either way. */
+// Recovers 'Adding…' state after a refresh via a one-shot terminals read, since the reactive list may not have answered
+// yet, arming `sawAdd` for watchAdd. No unmount teardown: the watcher is scope-bound and retires with this view.
 onMounted(async () => {
     const listed = await listTerminals().catch(() => undefined);
     if (listed?.some((session) => session.name === ADD_SESSION && session.running)) {
@@ -233,13 +207,12 @@ onMounted(async () => {
                 <Notice v-if="testsError" :of="noticeOf(testsError)" class="mb-4" />
                 <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-4" />
 
-                <!-- Apps: startable instances (monorepo only), one grouped list keyed by type. Each app carries its
-                     own Run-tests when it owns projects; the type icon (globe = frontend, server = backend) is the
-                     at-a-glance signal, backed by a kind pill. -->
+                <!--
+                    Startable app instances (monorepo only); each carries its own Run-tests when it owns projects, with a type icon/pill for frontend
+                    vs backend at a glance.
+                -->
                 <section v-if="monorepo">
-                    <!-- The scan of the workspace, as the rows it is about to produce. The empty state was
-                         already held back until the answer was in, which left the section blank meanwhile:
-                         correct, and indistinguishable from a repository with no apps in it. -->
+                    <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps. -->
                     <div
                         v-if="isLoading && outline"
                         class="overflow-hidden rounded-lg border border-line-subtle bg-card"
@@ -329,8 +302,7 @@ onMounted(async () => {
                     </div>
                 </section>
 
-                <!-- Packages: _apps/<x> dirs that carry tests but aren't startable template apps (e.g. cli/sandbox/sync).
-                     A secondary group: muted surface + denser rows, so it never competes with the startable apps. -->
+                <!-- _apps/<x> dirs with tests but not startable apps; muted and denser so this never competes with Apps. -->
                 <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
                     <h3 :class="ui.sectionLabel('mb-2')">Packages</h3>
                     <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">

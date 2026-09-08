@@ -1,11 +1,7 @@
 // @ts-check
-// A small HTML → Markdown pass for this site's own build output.
-//
-// It is deliberately not a general-purpose converter. The input is Astro's emitted markup for a known
-// set of components, so the parser only has to handle well-formed HTML, and the renderer only has to
-// know the tags those components actually produce. Anything it does not recognise is treated as a
-// transparent container and its children are rendered: which is what makes the diagram-heavy pages
-// (rows of labelled cards) come out as readable lines instead of disappearing.
+// A small HTML to Markdown pass for this site's own build output, not a general-purpose converter: the parser only
+// handles Astro's well-formed emitted markup, and an unrecognized tag is treated as a transparent container so
+// diagram-heavy pages (rows of labelled cards) still render as readable lines.
 
 const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 const RAW_TEXT_TAGS = new Set(["script", "style"]);
@@ -347,9 +343,7 @@ function renderNode(node, ctx) {
             if (BLOCK_TAGS.has(node.tag)) {
                 return asBlock(renderNodes(node.children, ctx));
             }
-            // An unrecognised inline container is almost always a chip or a label in a diagram, and those
-            // sit flush against each other in the markup. Without a separator "Sandbox rules" and
-            // "AI oversight" come out as one word. The trailing whitespace collapse tidies up the rest.
+            // An unrecognized chip/label sits flush against its neighbor; add a space so words don't merge.
             const body = renderNodes(node.children, ctx);
             return body && !/^\s/.test(body) ? ` ${body}` : body;
         }

@@ -7,9 +7,8 @@ import { createStore, type OutputStore, PENDING } from "../store.js";
 import type { EngineConfig, OrphanEntry, PrunedResource, PruneOutcome } from "../types.js";
 import { makeContext, requireProvider } from "./reconcile.js";
 
-// A read pass that seeds `store` with each node's live outputs (PENDING for any not-yet-created node),
-// mirroring plan.ts's seeding. Skips ids already seeded, so it can layer the previous graph's removed
-// nodes over the current graph's kept ones.
+// A read pass that seeds `store` with each node's live outputs (PENDING for a not-yet-created node), mirroring
+// plan.ts's seeding. Skips ids already seeded.
 const seedOutputs = async (nodes: readonly ResourceNode[], config: EngineConfig, store: OutputStore): Promise<void> => {
     const env = config.env ?? process.env;
     const log = config.log ?? console.log;
@@ -42,16 +41,9 @@ const inOrder = (graph: DesiredStateGraph): ResourceNode[] =>
         .map((id) => graph.resources[id])
         .filter((node): node is ResourceNode => node !== undefined);
 
-// Converge by deletion: tear down every resource present in the last successfully-applied (`previous`) graph
-// but absent from the new (`current`) one. Deletes run in REVERSE dependency order (dependents before their
-// dependencies) using each removed node's PREVIOUS resolved inputs. A removed type whose provider has no
-// `delete` is left in place and logged (converge-forward, like orphan reporting). Idempotent: a provider's
-// `delete` may find the resource already gone.
-//
-// The store is seeded by reading the kept graph AND the removed nodes (still live at this point): a removed
-// node's inputs may reference kept platform nodes (cloudflare.zoneId, komodo.internalUrl, ...) or OTHER
-// removed nodes (deleting a whole stack, or everything, when `current` is empty). Reverse dependency order
-// guarantees a delete's referenced dependencies are still alive when it runs.
+// Tears down resources in `previous` absent from `current`, in reverse dependency order, using each node's
+// previous inputs. The store seeds from both graphs: a removed node may reference a kept node or another removed
+// one.
 export const prune = async (previous: DesiredStateGraph, current: DesiredStateGraph, config: EngineConfig): Promise<PruneOutcome> => {
     const env = config.env ?? process.env;
     const log = config.log ?? console.log;
@@ -77,8 +69,7 @@ export const prune = async (previous: DesiredStateGraph, current: DesiredStateGr
         }
         const type = node.type as ResourceType;
         const provider = requireProvider(config.providers, type, id);
-        // The protect convention: a node carrying a literal `protect: true` input is never pruned, the
-        // author must flip it off (a reviewed config change) before removal deletes the data it guards.
+        // The protect convention: a node carrying a literal `protect: true` input is never pruned.
         if (node.inputs["protect"] === true) {
             emit({ kind: "prune", state: "skipped", id, type, reason: "protected" });
             skipped.push({ id, type });
@@ -98,12 +89,9 @@ export const prune = async (previous: DesiredStateGraph, current: DesiredStateGr
     return { deleted, skipped };
 };
 
-// The collection-oriented prune: tear down every discovered orphan (collectOrphans entries, live stamped
-// resources absent from the desired graph) using each ListedResource's own inputs, no last-applied
-// baseline needed. Takes the entries rather than re-scanning, so a caller can preview them (a --yes gate)
-// and then delete exactly what it showed. An orphan whose provider has no `delete`, or one carrying the
-// intentic.protect stamp, is left in place. Orphans have no dependency edges (they are outside every
-// graph), so they delete in discovery order.
+// The collection-oriented prune: tear down every discovered orphan using each ListedResource's own inputs. Skips
+// a `delete`-less or intentic.protect orphan; orphans have no dependency edges, so they delete in discovery
+// order.
 export const pruneOrphans = async (orphans: readonly OrphanEntry[], config: EngineConfig): Promise<PruneOutcome> => {
     const env = config.env ?? process.env;
     const log = config.log ?? console.log;

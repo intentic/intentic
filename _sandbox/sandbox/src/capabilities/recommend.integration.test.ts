@@ -6,10 +6,8 @@ import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { capabilityRecommendations } from "./recommend.js";
 
-/* The scan exists to make specific failures legible: a compose-backed dev database against a dormant Docker
- * Engine, a workspace of GitHub repos against an agent that cannot read one issue. So what these cases hold is
- * that the evidence is found where repos actually sit, that it identifies the right card, that a connected
- * capability stops it, and that a declined one stays declined only while it is answering the same claim. */
+// Pins that evidence is found where repos actually sit, the right card is picked, a connected capability suppresses it,
+// and a decline holds only while the same evidence stands.
 
 const workspace = async (files: Readonly<Record<string, string>>): Promise<string> => {
     const root = await mkdtemp(join(tmpdir(), "recommend-"));
@@ -21,15 +19,14 @@ const workspace = async (files: Readonly<Record<string, string>>): Promise<strin
     return root;
 };
 
-// `git remote -v` per repo dir, answered from a table keyed by the dir's basename. A dir with no entry answers
-// like a repo with no remote configured (empty output), which is what git itself does.
+// Answers `git remote -v` from a table keyed by the dir's basename; an unlisted dir returns empty, like git itself.
 const gitWithRemotes =
     (remotes: Readonly<Record<string, readonly string[]>>): GitRunner =>
     async (dir) => {
         const urls = remotes[dir.split("/").pop() ?? ""] ?? [];
         return { stdout: urls.map((url) => `origin\t${url} (fetch)\norigin\t${url} (push)`).join("\n"), stderr: "" };
     };
-// No repo has a remote: the scan still runs, it just finds nothing to map.
+// No repo has a remote; the scan runs but finds nothing to map.
 const noRemotes = gitWithRemotes({});
 
 const docker: Capability = { id: "docker", kind: "docker", config: { gpu: "off" } };
@@ -69,8 +66,7 @@ test("the reference shelf is skipped while a repository-local refs directory rem
     ]);
 });
 
-// Depth 2 is the cutoff: a compose file three levels down belongs to a subproject's own tooling, and scanning
-// for it would turn every /capabilities load into a full-tree walk.
+// Depth 2 is the cutoff: deeper belongs to a subproject's own tooling and would force a full-tree walk.
 test("a compose file deeper than a repo's root is left alone", async () => {
     const root = await workspace({ "intentic/_tools/selfhost/docker-compose.yml": "" });
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([]);
@@ -97,8 +93,7 @@ test("a gitlab.com remote recommends gitlab, pre-filling the instance the card w
     ]);
 });
 
-// The case a hostname cannot answer on its own, and the reason the pipeline file is read at all: `git.acme.dev`
-// is a GitLab only because a .gitlab-ci.yml sits next to the remote pointing at it.
+// git.acme.dev only reads as GitLab because a .gitlab-ci.yml sits beside the remote pointing at it.
 test("a pipeline file identifies a self-hosted GitLab whose hostname says nothing, and fills in its url", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere", "api/.gitlab-ci.yml": "stages: [build]" });
     const git = gitWithRemotes({ api: ["git@git.acme.dev:team/api.git"] });
@@ -141,19 +136,16 @@ test("a declined recommendation stays quiet", async () => {
     expect(await capabilityRecommendations(root, [], dismissed, noRemotes)).toEqual([]);
 });
 
-// The whole point of keying a dismissal on the evidence: "no, not for that" is not "no, never".
 test("a declined recommendation comes back when the evidence behind it changes", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
     const dismissed = [{ card: "docker", evidence: "old/compose.yml" }];
     expect((await capabilityRecommendations(root, [], dismissed, noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
 });
 
-/* THE MEMO, which exists because this whole scan (a repo walk, a `git remote -v` per repo, a depth-2 directory
- * walk) used to run on every GET /capabilities, and that route is polled for as long as the view is on screen.
- * What these hold is the line it draws: the WORKSPACE may be up to a TTL stale, the owner's own actions may
- * never be, because both of those ride the key rather than the clock. */
+// The memo bounds the workspace scan to a TTL; the owner's own connect/decline actions bypass the clock entirely, since
+// both ride the key rather than time.
 
-// The scan reaches git once per repo, so counting the runner counts the scans.
+// Counts git invocations, since the scan reaches git once per repo.
 const countingRemotes = (urls: readonly string[]): { git: GitRunner; scans: () => number } => {
     let calls = 0;
     return {
@@ -175,8 +167,7 @@ test("a repeat read with the same inputs does not walk the workspace again", asy
     expect(scans()).toBe(1);
 });
 
-// The case a bare timer would have got wrong: the card the owner just connected must not keep being suggested
-// for the rest of the TTL. `active` reaches the key through `wanted`, so connecting one changes it.
+// `active` reaches the memo key through `wanted`, so connecting a card changes the key immediately.
 test("connecting a card is never served from the memo", async () => {
     const root = await workspace({ "api/.git": "gitdir: elsewhere" });
     const { git } = countingRemotes(["git@github.com:acme/api.git"]);
@@ -184,7 +175,6 @@ test("connecting a card is never served from the memo", async () => {
     expect(await capabilityRecommendations(root, [github], [], git)).toEqual([]);
 });
 
-// And the same for declining one, which reaches the key directly.
 test("declining a recommendation is never served from the memo", async () => {
     const root = await workspace({ "intentic/docker-compose.yml": "" });
     expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
@@ -192,7 +182,7 @@ test("declining a recommendation is never served from the memo", async () => {
     expect(await capabilityRecommendations(root, [], dismissed, noRemotes)).toEqual([]);
 });
 
-// Two workspaces are two answers: the root is in the key, so one sandbox's scan can never be served to another.
+// The workspace root is part of the memo key, so one sandbox's scan is never served to another.
 test("a different workspace root is a different answer", async () => {
     const withCompose = await workspace({ "intentic/docker-compose.yml": "" });
     const without = await workspace({ "intentic/README.md": "" });

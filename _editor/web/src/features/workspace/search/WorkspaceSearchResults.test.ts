@@ -1,11 +1,6 @@
 // @vitest-environment jsdom
-//
-// The subject is what the panel BUILDS, which is the one thing that made the workspace unusable: a one-word
-// query in a monorepo answers with a couple of thousand rows, the panel asked the highlighter to colour every
-// one of them, the batch overflowed its LRU, and the rows that got evicted were re-requested by the very
-// re-render their landing triggered: 1331 lines scheduled, then 731 rescheduled per round, forever, on the
-// main thread with no yield. The tab took no further input. Nothing about that is visible in a composable
-// test: it is a property of how many rows the component decides to build.
+// Pins that the panel's build cost (rows rendered, lines tokenized) doesn't scale with result count; a
+// composable test can't see this, since it's a property of how many rows the component builds.
 import type { WorkspaceSearchGroup } from "@intentic/api-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
@@ -16,8 +11,8 @@ const tokenized = vi.hoisted(() => {
     return lines;
 });
 
-// The real barrel, with the one function whose COST is the subject recorded instead of run. Grammar loading is
-// what a mount cannot afford here; every call is a scheduled tokenize, which is exactly what is being counted.
+// The real barrel, with only tokenizeLine recording its cost instead of running it, since grammar loading is
+// what a mount can't afford; every call is a scheduled tokenize, exactly what's counted.
 vi.mock("@intentic/ui", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@intentic/ui")>();
     return {
@@ -34,8 +29,8 @@ vi.mock("@intentic/ui", async (importOriginal) => {
 
 const { default: WorkspaceSearchResults } = await import("./WorkspaceSearchResults.vue");
 
-// jsdom lays nothing out, so a scroller reports clientHeight 0 and the window would be empty whatever the
-// component did. One viewport's worth of pixels is what makes the assertion about the component.
+// jsdom lays nothing out, so a real scroller reports clientHeight 0; stubbing one viewport of pixels is what
+// makes the assertion about the component, not jsdom.
 const VIEWPORT = 400;
 Object.defineProperty(globalThis.HTMLElement.prototype, `clientHeight`, { configurable: true, get: () => VIEWPORT });
 
@@ -91,8 +86,7 @@ test(`a result set of thousands of rows costs a screenful of them`, async () => 
     expect(el.textContent).toContain(total.toLocaleString(`en-US`));
     expect(el.textContent).toContain(String(groups.length));
     expect(el.querySelector(`[role="listbox"] > div`)?.getAttribute(`style`)).toContain(`136400px`);
-    // ...and a viewport's worth of them, plus overscan, are what actually got built and coloured. The number
-    // that matters is that neither of these grows with the result set.
+    // A viewport's worth, plus overscan, is what gets built; neither count grows with the result set.
     expect(rows(el)).toBeLessThan(40);
     expect(tokenized.length).toBeLessThan(40);
 });
@@ -106,15 +100,12 @@ test(`scrolling swaps the window instead of adding to it`, async () => {
     expect(rows(el)).toBeLessThan(40);
     // The rows on screen are the ones at that offset, not the ones at the top.
     expect(el.textContent).not.toContain(`source0.ts`);
-    // Two windows' worth of colour requested for two screenfuls looked at, and the LRU holds far more than
-    // that, which is the whole reason nothing evicts under the render that asked for it.
+    // Two windows of colour for two screenfuls; the LRU holds far more, so nothing evicts under this render.
     expect(tokenized.length).toBeLessThan(80);
 });
 
-/* BOTH numbers are floors when the search says so, because the two things that make a total partial bound the
- * file count as well: the scan's ceiling stops it before it has opened every matching file. A "+" on the
- * matches and a bare number of files would read as "we know exactly how many files, just not how many lines",
- * which is the one reading that is never true. */
+// Both totals are floors when the search says so, since the same scan ceiling bounds both; a "+" with a bare
+// file count would wrongly imply an exact one.
 test(`the count line says both totals are floors, and which file made the matches one`, async () => {
     const groups = groupsOf(1, 50);
     const el = await mount({ groups: [{ ...groups[0]!, capped: true }], total: 4_211, files: 87, partial: true });

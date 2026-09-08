@@ -1,33 +1,21 @@
 import type { IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
 
-/* WHICH TUNNEL SERVES WHICH SANDBOX ON THIS MACHINE, and nothing else. This is the entire durable-looking state
- * the edge keeps, it lives in memory, and it is deliberately not durable: a tunnel is a live connection, so the
- * truth about it cannot outlive the process holding it. An edge that restarts forgets every registration and
- * every container redials within its backoff. Which OTHER machine holds a tunnel is cluster.ts's soft map,
- * fed by the events this registry raises — the edge scales by adding machines that tell each other what they
- * hold, not by sharing a store.
- *
- * DISPLACEMENT IS THE WHOLE DESIGN. A second tunnel claiming an id takes it, and the previous session is
- * closed with 4001. Under the hub this replaced, a recreated container fought its dead predecessor for a name
- * the hub still believed was held, and the loser was whichever box asked second — so `docker rm -f` followed
- * by a fresh run produced a sandbox that 502'd on its own address until a reaper noticed. Here the new
- * container is by definition the live one, so the fight cannot exist: the newest grant-bearing connection
- * wins, always, and the old session's teardown cannot evict it (see `unregister`).
- */
+// In-memory map of which tunnel serves which sandbox on this machine, nothing else; not durable, since a tunnel's truth
+// cannot outlive the process holding it.
+// Displacement is the whole design: a second tunnel claiming an id takes it and closes the previous session with
+// `DISPLACED_CODE`; the newest connection always wins.
+// The old session's teardown cannot evict its replacement (see `unregister`).
 
-// The WebSocket close code for a session that lost its id to a newer one. In the application range (4000-4999)
-// so it can never collide with a protocol code, and distinct from an ordinary close so the daemon's reconnect
-// loop can tell "you were replaced" from "the edge went away".
+// Close code for a session displaced by a newer one; app range (4000-4999), distinct from an ordinary close.
 export const DISPLACED_CODE = 4001;
 
 export interface TunnelEntry {
     readonly session: IngressSession;
-    // Ends the peer's WebSocket. Held by the registry because displacement is the registry's decision, and the
-    // only way to act on it is to close the connection the losing session rides.
+    // Ends the peer's WebSocket; held here since displacement is the registry's decision to act on.
     readonly close: (code: number, reason: string) => void;
 }
 
-// What the registry tells the cluster (cluster.ts): a local tunnel came or went, so the peers should hear.
+// What the registry tells the cluster: a local tunnel came or went.
 export interface RegistryEvent {
     readonly kind: `register` | `unregister`;
     readonly sandboxId: string;
@@ -38,24 +26,17 @@ export interface TunnelRegistryOptions {
 }
 
 export interface TunnelRegistry {
-    /* Take the id for this session, closing whatever held it. Returns whether anything was displaced, which is
-     * only ever a log line — the caller has no decision to make either way. */
+    // Takes the id for this session, closing whatever held it; returns whether something was displaced.
     readonly register: (sandboxId: string, entry: TunnelEntry) => boolean;
-    /* Close and drop the local session for an id because a NEWER one registered on another machine (the
-     * cluster's delta says so). The same "newest wins" as a local displacement, reaching across the cluster:
-     * without it, two machines would each keep answering for a sandbox whose container has moved on, and
-     * which one a browser got would depend on where anycast landed it. Returns whether anything was held. */
+    // Closes and drops the local session for an id a peer's registration claimed; returns whether one was held.
     readonly displace: (sandboxId: string, reason: string) => boolean;
-    /* Give the id up, but ONLY if this session still holds it.
-     *
-     * The guard is not defensive tidiness, it is the correctness of displacement. A displaced session's close
-     * handler fires AFTER its replacement has registered, so an unconditional delete here would hand the new
-     * container an id that routes nowhere and leave it that way until it happened to redial. Every route to
-     * that sandbox would 502 in the meantime, with a perfectly healthy tunnel attached. */
+    // Gives the id up only if this session still holds it.
+    // A displaced session's close fires after its replacement registers; an unconditional delete would orphan the new
+    // tunnel's route.
     readonly unregister: (sandboxId: string, session: IngressSession) => void;
     readonly lookup: (sandboxId: string) => IngressSession | undefined;
     readonly size: () => number;
-    // Every registered id, for the edge's own status surface.
+    // Every registered id, for the edge's status surface.
     readonly ids: () => readonly string[];
 }
 
@@ -70,8 +51,7 @@ export const createTunnelRegistry = (options: TunnelRegistryOptions = {}): Tunne
             if (previous === undefined) {
                 return false;
             }
-            /* The replacement is already in the map before the loser is told, so there is no window in which
-             * the id routes nowhere: closing a WebSocket runs handlers that reach back into this registry. */
+            // The replacement is in the map before the loser is told, so there's no window where the id routes nowhere.
             previous.close(DISPLACED_CODE, `displaced by a newer tunnel`);
             previous.session.close();
             return true;
@@ -81,8 +61,7 @@ export const createTunnelRegistry = (options: TunnelRegistryOptions = {}): Tunne
             if (held === undefined) {
                 return false;
             }
-            /* Dropped BEFORE the socket is closed, and no event is raised: the id is not leaving the cluster,
-             * it has moved, and the close handler's `unregister` finds nothing of its own to remove. */
+            // Dropped before the socket closes, with no event raised: the id moved, it didn't leave the cluster.
             tunnels.delete(sandboxId);
             held.close(DISPLACED_CODE, reason);
             held.session.close();

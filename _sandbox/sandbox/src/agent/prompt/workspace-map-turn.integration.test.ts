@@ -13,24 +13,9 @@ import { planTurn, type TurnContext } from "../run/turn/turn-plan.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
-/* WHO ACTUALLY RECEIVES THE PROJECT MAP: the gates, asserted through a real plan rather than by reading them.
- *
- * The generator has its own suite (workspace-map.integration.test.ts); this file is about the four decisions
- * around it that live in turn-plan, and each one is a way the feature fails silently rather than loudly:
- *
- *   OFF MEANS OFF. An opt-in that leaks would spend the owner's tokens on a setting they never turned on, and
- *   nothing in the transcript would look wrong.
- *
- *   ONCE PER CONVERSATION. The map is stable and already above the follow-up in the transcript, so re-sending it
- *   is the exact repetition the dependency notice had to be walked back from: invisible, and paid every turn.
- *
- *   EVERY RUNTIME, not just the Claude Code loop. It is placed in honoured() for the reason the worktree note
- *   and the dependency notice are: a fact about the filesystem is as true of a Codex turn, and the harness arm
- *   is the one place that reaches only one of the six.
- *
- *   AND IT FOLLOWS THE RUN, which is the whole feature: a turn whose tree is an isolated worktree must be told
- *   about THAT tree. Getting this wrong produces a note that is well-formed, plausible, and about a directory
- *   the turn cannot edit. */
+// Pins the four turn-plan gates around the workspace map (the generator itself has its own suite): off must mean off,
+// sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
+// checkout.
 
 vi.mock("../providers/harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
@@ -54,8 +39,7 @@ const projectAt = async (prefix: string, marker: string): Promise<string> => {
     return root;
 };
 
-// The message the model actually receives is built from the CONTEXT's prompt, not the turn's: the route has
-// already folded attachments into it by the time a plan is made, so the tests below read it back from here.
+// The model's message comes from CONTEXT.base.prompt, not the turn's; attachments are already folded in by then.
 const contextIn = (root: string, localCwd = root, prompt = "do the thing"): TurnContext => ({
     base: { prompt, cwd: root, signal: new AbortController().signal },
     attachmentPaths: [],
@@ -75,8 +59,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             issueAt: async () => undefined,
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
-        // Nothing gated: planTurn narrows the manifest once for every runtime, so the approval policy is
-        // read on every turn whether or not a gate exists (secrets/credential-gating.ts).
+        // Empty on purpose: planTurn reads the policy every turn whether or not a gate exists.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
@@ -97,8 +80,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         ...overrides,
     });
 
-// What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
-// function dispatch uses (agent.routes.ts, composeWirePrompt).
+// What the model actually reads: notes serialized by the same function dispatch uses (composeWirePrompt).
 const promptOf = async (services: Services, turn: AgentTurn, context: TurnContext): Promise<string> => {
     const plan = await planTurn(services, turn, context);
     expect(plan).toMatchObject({ ok: true });
@@ -131,8 +113,7 @@ test("a follow-up in the same conversation is not charged for the map again", as
         root,
         { workspaceMap: true },
         {
-            // The registry counts every turn that ran, however it ended: a non-zero count is a conversation already
-            // carrying the map in its own transcript.
+            // Non-zero `turns` means the conversation already carries the map in its own transcript.
             agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 3 }) as ReturnType<Services["agents"]["entry"]> }),
         },
     );
@@ -162,12 +143,8 @@ test("a native Codex turn gets the same map: it is a fact about the filesystem, 
     expect(prompt).toContain(`The ${sharedMarker} billing area`);
 });
 
-/* THE STARTING POSITION, and the one case where getting it wrong is invisible.
- *
- * An isolated conversation edits a worktree, and the daemon reaches that worktree at `localCwd` while the shared
- * checkout still sits at the workspace root. A map built from the root would name the root's areas: real
- * directories, plausibly described, and not the ones this turn can write to. The two trees are given different
- * area descriptions here precisely so that a map of the wrong one cannot pass. */
+// root and worktree get different area descriptions here, so a map built from the wrong tree is a mismatch the
+// assertions would catch, not a coincidence.
 test("an isolated turn is mapped against its own tree, not the shared checkout", async () => {
     const sharedMarker = "shared";
     const branchMarker = "branch";
@@ -180,11 +157,8 @@ test("an isolated turn is mapped against its own tree, not the shared checkout",
     expect(prompt).not.toContain(`The ${sharedMarker} billing area`);
 });
 
-/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID, and the PROVIDER's store keeps the composed prompt
- * verbatim, so the boundary parser must still recognize it there (history menu, adoption, search). This is the
- * round trip: the same serialization dispatch performs, read back by the parser, which is what fails if a note
- * ships typed with a header the parser's registry does not know, and what keeps the two vocabularies from
- * drifting apart (turn-preamble.ts, INJECTED). */
+// Round-trips through the same registry dispatch uses (turn-preamble.ts INJECTED); this is what catches a note shipped
+// with a header the parser doesn't know.
 test("the map strips back off the stored message, and the chat is given a row for it", async () => {
     const root = await projectAt("wsmap-strip-", "shared");
 

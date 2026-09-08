@@ -66,14 +66,13 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "sandbox_logs",
     ]);
     expect(names).not.toContain("delete_file");
-    // remove_sandbox is the one exception to "there is no delete", and it is deliberately not a file tool: it
-    // deletes a SANDBOX, behind a switch of its own, which is a different grant from anything under the roots.
+    // remove_sandbox is the one exception to "there is no delete", and is not a file tool: it deletes a sandbox
+    // behind its own switch, a different grant from anything under the roots.
     expect(names).not.toContain("remove_file");
 });
 
-/* Every tool publishes the schema its arguments are CHECKED against, which is the whole reason there is only one
- * of them. Asserted structurally rather than tool by tool, so a tool added without a schema fails here instead
- * of being advertised as taking anything. */
+// Every tool publishes the schema its arguments are checked against. Asserted structurally so a tool added
+// without a schema fails here instead of being advertised as taking anything.
 test("tools/list publishes each tool's argument schema, which is the one an arriving call is held to", async () => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
         result: { tools: { name: string; description: string; inputSchema: Record<string, unknown> }[] };
@@ -96,8 +95,7 @@ test("an argument the schema does not accept is a readable result, and nothing i
     expect(badOp.text).toMatch(/op/);
     const badSwap = await call("swap_sandbox", { op: "remove", slug: "work" }, scopes());
     expect(badSwap.isError).toBe(true);
-    // Past the published ceiling, refused rather than quietly trimmed: a model that asked for 9000 lines and got
-    // 2000 has no way to know it is reading a fraction of what it reasoned about.
+    // Past the published ceiling, refused rather than quietly trimmed.
     const tooMany = await call("sandbox_logs", { slug: "work", lines: 9000 }, scopes());
     expect(tooMany.isError).toBe(true);
     expect(tooMany.text).toMatch(/lines/);
@@ -139,10 +137,8 @@ test("a write says whether it created or replaced, and a read gets it back", asy
 });
 
 test("trash moves the file somewhere recoverable instead of deleting it", async () => {
-    // The trash lives under $HOME and the move is a rename, which files.ts refuses across filesystems by design.
-    // A home of its own next to the file keeps both on ONE filesystem, which is the case this test means. Left to
-    // the host they need not be: in a container job $HOME is a bind mount from the runner while tmpdir() is the
-    // image's own layer: two devices, so this passed on every laptop and failed only in CI.
+    // The trash and the file's temp home must share a filesystem for files.ts's rename to work; a container job's
+    // $HOME (bind mount) and tmpdir() (image layer) are two devices, so this passed on laptops and failed only in CI.
     vi.stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "doomed.txt");
@@ -151,7 +147,7 @@ test("trash moves the file somewhere recoverable instead of deleting it", async 
     expect(trashed.isError).toBe(false);
     const moved = /to (.+?)\. It is recoverable/.exec(trashed.text)?.[1];
     // An absolute path, which is the claim the message makes ("to <path>. It is recoverable") and the part a
-    // reader of that message would act on. A bare "it is not undefined" would pass on a relative fragment.
+    // reader would act on.
     expect(moved).toMatch(/^\//);
     expect(await readFile(moved ?? "", "utf8")).toBe("keep me");
 });
@@ -190,7 +186,7 @@ test("a command waiting for input dies on the timeout with an explanation instea
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const result = await call("run_command", { command: "read -r line", cwd: root, timeoutMs: 1500 }, scopes({ roots: root }));
     // Either the shell reads EOF from the closed stdin (fast, exit code) or the deadline kills it: both are
-    // answers the agent can act on, and neither is a hang.
+    // answers the agent can act on, neither is a hang.
     expect(result.text).toMatch(/Exit code|killed after/);
 });
 
@@ -208,14 +204,13 @@ test("an unknown tool answers plainly rather than throwing", async () => {
     expect(missing.text).toMatch(/no tool called/);
 });
 
-/* A reshape with nothing to change is refused before anything is spawned, and refused as a RESULT the model can
- * read: the same shape a wrong op or a switched-off scope comes back in. The at-least-one rule lives on the
- * machine (icReshapeArgs), which is why the tool's own schema is the bare fields. */
+// A reshape with nothing to change is refused as a readable RESULT, the same shape a wrong op or a
+// switched-off scope comes back in.
 test("reshape_sandbox refuses an empty ask as a readable result, not a transport fault", async () => {
     const empty = await call("reshape_sandbox", { slug: "work" }, scopes());
     expect(empty.isError).toBe(true);
     expect(empty.text).toMatch(/change something/i);
-    // And a malformed cap is caught by the schema before the machine is touched: whole GiB, whole cores.
+    // A malformed cap is caught by the schema before the machine is touched: whole GiB, whole cores.
     const fractional = await call("reshape_sandbox", { slug: "work", cpus: 1.5 }, scopes());
     expect(fractional.isError).toBe(true);
     expect(fractional.text).toMatch(/cpus/i);

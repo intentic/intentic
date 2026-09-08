@@ -1,12 +1,6 @@
 // @vitest-environment jsdom
-//
-// THE END OF THE COMPOSER ROW HOLDS ONE PRIMARY BUTTON, asserted through the real pane, because this is a rule
-// about what a user's eye and finger find in one place and nothing below the DOM can express it.
-//
-// Mid-turn the composer has two things it could be for: stopping what is running, and writing the next message.
-// The row used to show both at all times, so a live turn with an empty box put a DEAD GREY Send in the slot the
-// eye goes to and demoted the live Stop to its left. The rule now: Stop takes that slot while there is nothing
-// to send, the first keystroke hands it back to Send, and the two never swap order.
+// The composer row ends in one primary button, asserted through the mounted pane. Stop takes that slot while
+// there is nothing to send; the first keystroke hands it back to Send, and the two never swap order.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -18,7 +12,7 @@ import { router } from "../../../router";
 import ChatPanel from "../panel/ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
+// The import-time globals a mounted chat surface needs.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -28,8 +22,7 @@ vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
-// The fleet roster and the workflow ledger, which the pane asks about on mount and neither of which this file
-// is about: an empty answer costs nothing and keeps the polling out of it.
+// Fleet roster and workflow ledger are irrelevant here; empty mocks keep polling out of it.
 vi.mock(`../../agents/fleet/useAgents`, async () => {
     const { computed } = await import(`vue`);
     return {
@@ -48,8 +41,7 @@ vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
-// The composer only exists when the sandbox does: unreachable, the whole footer yields to "Chat is available
-// once your sandbox is connected" and there is no row to be about (see chatContinue.test.ts).
+// The composer only renders once the sandbox is reachable; mocked online here.
 vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
     const { computed } = await import(`vue`);
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
@@ -104,18 +96,18 @@ const mountPanel = async (): Promise<void> => {
 
 const sendButton = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`);
 const stopButton = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`button.composer-stop`);
-// The round buttons at the end of the row, in DOM order: what the eye reads right-to-left and the finger lands on.
+// The round buttons at the end of the row, in DOM order.
 const roundButtons = (): string[] =>
     [...document.querySelectorAll<HTMLButtonElement>(`button.composer-send`)].map((element) => element.ariaLabel ?? ``);
 
 beforeEach(async () => {
     app?.unmount();
     app = undefined;
-    // BOTH stores, because a window's tabs live in sessionStorage and only seed from localStorage (windowStore).
+    // Clears both stores: a window's tabs live in sessionStorage, seeded from localStorage.
     localStorage.clear();
     sessionStorage.clear();
     resetChat();
-    // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
+    // `connected` gates the composer: with no provider account the box is inert.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
     await nextTick();
@@ -135,9 +127,7 @@ it(`ends the row with Send while nothing is running`, async () => {
     expect(stopButton()).toBeNull();
 });
 
-/* THE STATE THIS IS ABOUT. A live turn and an empty box: there is no message to send, so a Send button is a
- * circle that cannot be pressed sitting where the one live action should be. It goes, and Stop inherits the
- * slot: the same place, the same size, the only thing there is to do. */
+// A live turn with an empty box: Send would be unpressable, so it disappears and Stop inherits its slot.
 it(`gives the end of the row to Stop when a turn is running and there is nothing to send`, async () => {
     const conversation = useChat().active.value;
     await mountPanel();
@@ -150,9 +140,8 @@ it(`gives the end of the row to Stop when a turn is running and there is nothing
     expect(stopButton()?.disabled).toBe(false);
 });
 
-/* AND THE FIRST KEYSTROKE HANDS IT BACK. Mid-turn text is never refused, it steers the running turn or queues
- * behind it, so the moment there are words the press has somewhere to go and the button has to be there,
- * enabled, in its usual place, with Stop stepping aside to its left rather than trading places with it. */
+// Mid-turn text is never refused, only steered or queued; the first keystroke restores Send, with Stop
+// stepping aside rather than trading places.
 it(`brings Send back, last in the row, as soon as there is something to send`, async () => {
     const conversation = useChat().active.value;
     await mountPanel();
@@ -165,9 +154,8 @@ it(`brings Send back, last in the row, as soon as there is something to send`, a
     expect(sendButton()?.disabled).toBe(false);
 });
 
-/* A REFUSED SEND KEEPS ITS BUTTON, which is why the rule reads the box rather than `canSend`: an edit armed
- * while a turn is running cannot go yet, and the greyed button's tooltip is the only place that says why. Take
- * the button away and the user is left holding words with nothing on screen to explain them. */
+// A refused Send keeps its button rather than vanishing: the rule reads the box, not `canSend`, so the
+// greyed button's tooltip can say why it can't go yet.
 it(`keeps a greyed Send on screen when it is refusing words the user has already typed`, async () => {
     const conversation = useChat().active.value;
     conversation.restoreMessages([

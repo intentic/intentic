@@ -9,51 +9,28 @@ import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, upda
 import { editableCopy } from "./workflowDraft";
 import { useWorkflows } from "./useWorkflows";
 
-/* THE DESIGNER: a full page whose content is the canvas.
- *
- * IT WAS A DIALOG, AND THAT WAS THE WHOLE PROBLEM. A graph needs horizontal room; a modal is the one container
- * that categorically cannot give it any. Inside 72rem the canvas was a letterbox that showed one node while the
- * second sat off-screen, and the form beside it was a scrolling column of nine questions. The page it is now
- * uses `Page width="full"`: the width tier whose own comment reads "canvas surfaces that need every pixel":
- * and reserves everything below the header for the graph.
- *
- * IT IS A MODE OF THE WORKFLOWS VIEW, NOT A ROUTE OF ITS OWN. An extension's route space is the QUERY (see
- * IntenticApi.route), so `?edit=<id>` is the whole navigation, Back leaves the designer, and the URL is
- * linkable. Same shape the documentation extension uses for opening a document.
- *
- * WHAT LIVES WHERE, and it is the same rule three times: the thing goes where you can see it.
- *  · dependencies  → the canvas. You draw them.
- *  · the handoff   → the EDGE. Click it; it is already drawn as solid-versus-dashed.
- *  · a step's prose → the inspector, which asks two questions and folds the other nine away.
- *  · run settings  → a popover off the header. They belong to the whole run, not to any step, and putting them
- *                    beside a step's fields is what made the old panel read as one undifferentiated wall.
- *
- * THE SPLIT IS THE READER'S TO SET. Canvas and inspector want opposite things and both are right: reading the
- * shape of a nine-step graph wants the width, writing a step's prompt wants the column. A fixed 20rem answered
- * neither: the prompt, which is the one real paragraph in this extension, was being written three words to a
- * line. So the seam is draggable, double-click puts it back, and the width is remembered.
- */
+// Full-page designer, not a modal, since a graph needs horizontal room a dialog can't give. A mode of the workflows
+// view via `?edit=<id>`, not its own route. Dependencies live on the canvas, handoff on the edge, prose in the
+// inspector, run settings in a header popover; the canvas/inspector seam is draggable.
 
-// `initial` is the list's summary for a saved design (which carries the gate's token for an operator) or a
-// bare template for a new one. The token is held apart from the draft: the draft is what gets saved, and a
-// credential must never ride in it.
+// Saved design's summary (with gate token) or a bare template; the token is kept out of the saveable draft.
 const { initial, creating } = defineProps<{ initial: Workflow & { readonly gateToken?: string }; creating: boolean }>();
 const emit = defineEmits<{ close: []; saved: [id: string] }>();
 
 const { save } = useWorkflows();
-// `editableCopy`, not structuredClone: `initial` is a reactive proxy here. See workflowDraft.ts.
+// `editableCopy`, not structuredClone, since `initial` here is a reactive proxy.
 const draft = ref<Workflow>(editableCopy(initial));
 const gateToken = ref<string | undefined>(initial.gateToken);
 const selectedId = ref<string | undefined>(initial.steps[0]?.id);
-// The edge the reader last clicked, as its endpoints. Drives the little edge card over the canvas.
+// Endpoints of the last-clicked edge; drives the floating edge card over the canvas.
 const pickedEdge = ref<{ from: string; to: string }>();
 const failure = ref<string>();
 const settingsAnchor = ref<HTMLElement>();
 const settings = ref<InstanceType<typeof Popover>>();
 const gatePanel = ref<InstanceType<typeof Popover>>();
 
-// Re-opening on a different workflow must not keep the last one's draft: a designer that silently edits the
-// wrong workflow is the one mistake here that is invisible until it is saved.
+// Resets the draft when `initial` changes, so reopening on a different workflow can't silently keep editing the last
+// one.
 watch(
     () => initial,
     (next) => {
@@ -74,8 +51,7 @@ const patch = (over: Partial<Workflow>): void => {
     draft.value = { ...draft.value, ...over };
 };
 
-// Every graph gesture goes through workflowEdit, which is where the invariants are kept and where they are
-// tested. This component's job is to say which gesture happened, not what it means.
+// Every gesture routes through workflowEdit, which owns the invariants and is what's tested.
 const onAdd = (after?: string): void => {
     const added = addStep(draft.value, after);
     draft.value = added.workflow;
@@ -106,17 +82,10 @@ const flipHandoff = (): void => {
     }
 };
 
-/* THE PROMPT IS NO LONGER A CONDITION OF SAVING, and that is the point of the whole change rather than a
- * loosened rule. A step with no prompt is not an unfinished step: it is one that does whatever the run was
- * asked to do, which is the ordinary case for a design kept as a SHAPE. Requiring one here forced every author
- * to write a paraphrase of the request into every node before the graph would save, which is exactly the
- * wrapper the default removes. What remains is what genuinely cannot be inferred: a name, and a runnable graph.
- */
+// Prompt is optional now; only a name and a fault-free graph are required to save.
 const ready = computed(() => faults.value.length === 0 && draft.value.name.trim() !== ``);
 
-/* THE INSPECTOR'S WIDTH. Remembered per browser rather than per workflow: it is a property of the desk you are
- * working at (how wide the window is, whether you are writing or reading), not of the graph in front of you.
- * The floor is a readable column, the ceiling leaves the canvas more than half of a laptop screen. */
+// Inspector width is remembered per browser, not per workflow; a property of the desk, not the graph.
 const WIDTH_KEY = `ext-workflows-inspector-width`;
 const DEFAULT_WIDTH = 360;
 const readWidth = (): number => {
@@ -142,11 +111,7 @@ watch(inspectorWidth, (px) => {
 const commit = async (): Promise<void> => {
     failure.value = undefined;
     try {
-        /* Saved as authored. An unstated goal used to be back-filled with the step's TITLE here, because the
-         * contract demanded one: an invented bar dressed up as an honest one, since "Claude's attempt" is a
-         * label and not a description of done. It is absent now, and absent has a real meaning: the step is
-         * measured against what the run was asked to do. The inspector already stores a cleared box as absent
-         * rather than as ``, so there is nothing left to normalize on the way out. */
+        // Saved as authored: an absent goal means measured against the run's request, nothing to normalize here.
         const saved = await save.mutateAsync({ workflow: draft.value, create: creating });
         gateToken.value = saved.gateToken;
         emit(`saved`, draft.value.id);
@@ -168,9 +133,7 @@ const commit = async (): Promise<void> => {
                 placeholder="Name this workflow"
                 @input="patch({ name: ($event.target as HTMLInputElement).value })"
             />
-            <!-- The discoverable way to add a step. The `+` on a node's handle is faster once you know it is
-                 there, and dragging off a handle is faster still, but neither is visible until you hover a
-                 node, and an editor whose primary action only appears on hover has no primary action. -->
+            <!-- Discoverable add: the node handle's `+` and drag-to-add are faster but hidden until hover. -->
             <Button label="Add step" size="small" severity="secondary" @click="onAdd(selectedId ?? draft.steps.at(-1)?.id)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
@@ -179,9 +142,7 @@ const commit = async (): Promise<void> => {
                     <template #icon><Icon name="sliders-h" /></template>
                 </Button>
             </span>
-            <!-- The gate sits beside Run settings because it is the same kind of thing: a property of the
-                 whole design, not of any step. The icon takes the link tint when one is declared, which is the
-                 header's whole statement of "a pipeline can call this". -->
+            <!-- Property of the whole design, like Run settings; the icon tints when a gate is declared. -->
             <Button label="CI gate" size="small" severity="secondary" :text="true" @click="gatePanel?.toggle($event)">
                 <template #icon><Icon name="shield" :class="draft.gate !== undefined ? `text-link` : ``" /></template>
             </Button>
@@ -206,7 +167,7 @@ const commit = async (): Promise<void> => {
                     @add="(from) => onAdd(from)"
                 />
 
-                <!-- The empty state sits ON the canvas, because the canvas is where the first step goes. -->
+                <!-- Empty state sits directly on the canvas, where the first step will go. -->
                 <div v-if="draft.steps.length === 0" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
                     <p class="text-xs text-subtle">Nothing here yet.</p>
                     <Button class="pointer-events-auto" label="Add the first step" size="small" @click="onAdd()">
@@ -214,9 +175,7 @@ const commit = async (): Promise<void> => {
                     </Button>
                 </div>
 
-                <!-- THE EDGE CARD. A dependency has exactly two things worth saying about it, so it gets two
-                     controls floating over the canvas rather than a panel: is this the same agent carrying on,
-                     and should the line be there at all. -->
+                <!-- Edge card: a dependency has exactly two settings, same agent or not, and whether it exists at all. -->
                 <div
                     v-if="pickedEdge && pickedStep"
                     class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-line bg-card px-2.5 py-1.5 shadow-sm"
@@ -258,8 +217,7 @@ const commit = async (): Promise<void> => {
             </template>
         </div>
 
-        <!-- Run settings: properties of the WHOLE run, so they are one click off the header rather than mixed
-             in with a step's own fields. -->
+        <!-- Run settings are properties of the whole run, kept off the header rather than mixed into a step's fields. -->
         <Popover ref="settings">
             <div class="flex w-80 flex-col gap-3 p-1">
                 <label class="flex flex-col gap-1">

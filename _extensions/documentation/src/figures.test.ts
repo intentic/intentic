@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { DocIndex, RepoDoc } from "./docModel.js";
 import { packageFigures } from "./figures.js";
 
-/* The figures a page never writes. What matters here is not how they look: the app draws them, but that they
- * are built from the index and therefore cannot disagree with it, and that each one declines to render when it
- * would say nothing. */
+// Pins that figures are built from the index, so they can't disagree with it, and each declines to render when it would
+// say nothing.
 
 const provenance = { sourceRev: `abc123`, generatedAt: 1_785_000_000_000 };
 
@@ -45,8 +44,7 @@ const repoDoc = {
     provenance,
 } as RepoDoc;
 
-// Each figure is a fence whose body is JSON; the renderer degrades a fence that does not parse to a code block,
-// so "it parses" is the contract every one of them has to meet.
+// Each figure fence's body is JSON; a fence that doesn't parse degrades to a code block instead of failing loudly.
 const bodies = (markdown: string): Record<string, unknown>[] =>
     [...markdown.matchAll(/```(?:dag|bars|stats)\n([\s\S]*?)\n```/g)].map((match) => JSON.parse(match[1] ?? ``) as Record<string, unknown>);
 
@@ -63,7 +61,7 @@ describe(`packageFigures`, () => {
         expect(stats.items).toEqual([
             { label: `Lines`, value: `563` },
             { label: `Files`, value: `3` },
-            // Two edges point AT this package; the third points away from it and must not be counted here.
+            // Two edges point at this package; the third points away and must not count.
             { label: `Used by`, value: `2 packages` },
             { label: `Tests`, value: `yes` },
         ]);
@@ -81,19 +79,17 @@ describe(`packageFigures`, () => {
     it(`gives every node its component's accent, so diagrams across the set agree`, () => {
         const dag = bodies(packageFigures(`_deploy/graph`, index, repoDoc))[1] as { nodes: { id: string; accent: string }[] };
         expect(dag.nodes.find((node) => node.id === `_deploy/graph`)?.accent).toBe(`5`);
-        // A package the map never placed still draws, in the neutral slot, rather than borrowing someone's colour.
+        // An unplaced package still draws, in the neutral slot rather than borrowing a colour.
         expect(dag.nodes.find((node) => node.id === `_tools/tsconfig`)?.accent).toBe(`neutral`);
     });
 
     it(`omits the size comparison when there is nothing to compare against`, () => {
-        // A component of one draws a bar chart with one bar, which is a number wearing a costume.
+        // A component of one package has nothing to compare it against.
         const alone = { ...repoDoc, components: [{ id: `c`, name: `C`, oneLiner: `x`, packages: [`_deploy/graph`], accent: `1` }] } as RepoDoc;
         expect(bodies(packageFigures(`_deploy/graph`, index, alone))).toHaveLength(2);
     });
 
     it(`says nothing at all about a directory the index does not know`, () => {
-        // The ordinary state of a page whose index has not been regenerated yet: it must cost the figures, not
-        // the page.
         expect(packageFigures(`_libs/unknown`, index, repoDoc)).toBe(``);
         expect(packageFigures(`_deploy/graph`, undefined, repoDoc)).toBe(``);
     });

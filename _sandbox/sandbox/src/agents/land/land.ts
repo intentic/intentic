@@ -13,59 +13,22 @@ import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
-// Land a conversation's work into the main tree as UNCOMMITTED changes, the Claude Code review model: the
-// agent's finished delta appears in the user's normal Changes panel and their own commit is the review
-// boundary. Preserve every worktree's dirty state as an agent-authored commit on agent/<id> (provenance,
-// nothing is ever lost), take each repo's delta from its anchor to the tip (see anchorOf) as a binary
-// rename-aware patch, and preflight the WHOLE composition before writing any main tree. Only when every repo
-// passes does the second phase apply every patch working-tree-only. Main's HEAD never moves; landedTip
-// advances so the next land applies only the new delta. A patch that cannot apply (the user edited the same
-// lines, or an overlapping dirty/untracked path) refuses the WHOLE composition and reports the precise repo
-// and paths; every worktree keeps everything and "Land now" recovers once the user resolves. Called
-// automatically at clean turn completion (streamAgent) and manually from the /agents land route.
-//
-// The one thing land must never call a conflict is work that ALREADY REACHED the main tree by another road,
-// an agent that committed onto the main line itself, a user who committed the branch by hand. It is not a
-// state anyone can resolve, and reporting it strands the agent on a red card with nothing to do about it.
-// Two independent mechanisms rule it out: anchorOf, when the main line's history contains the work, and the
-// reverse probe in classifyDelta, when it holds the CONTENT but not the commits.
+// Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
+// agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
+// preflights clean. Content that already reached main another way is never a conflict.
 
-// The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
-// no status change) from a real outcome, `repos` carries the advanced landedTips, and `diff` is the agent's
-// CUMULATIVE anchor→tip output across the composition, the review's own reading of it (agent-changes.ts),
-// totalled for the card and independent of how much of it has landed.
+// Wire LandResult plus registry state: `changed` distinguishes no-op from a real outcome, `repos` carries advanced
+// landedTips, `diff` is the cumulative anchor->tip stat the review itself reads.
 export interface LandOutcome extends LandResult {
     readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
     readonly diff: { files: number; insertions: number; deletions: number };
-    /* DID THIS LAND ACTUALLY JUDGE THE DELTA: false for `measure` unless it was re-judging a stored refusal
-     * (see `rejudging` below), and that single bit is what stops a land that touches nothing from retiring the
-     * verdict of one that did.
-     *
-     * `measure` runs at the end of every turn nobody let finish (agent.routes.ts settleLandBooks): a dismissed
-     * question, the user's own Stop. It preserves the worktree's remainder, refreshes the diffstat and marks
-     * spans the main tree took by another road, and it deliberately never reaches the conflict gate, because
-     * its whole promise is that the main tree is not its to touch. So it always reports `conflicts: undefined`,
-     * which recordLanded used to read as "nothing refuses anymore" and clear the stored report with.
-     *
-     * That wiped the premise every other surface hangs off. The conflict standing is derived from a stored
-     * report (standing.ts) and so went back to `ready`; the review's diff route re-derives its report only when
-     * one is stored (agents.routes.ts) and so returned none; and "Have the agent resolve it" reads THAT and
-     * refuses with "Nothing left for the agent to rebase" (agentActions.ts). Meanwhile the tree had not moved
-     * an inch, so a real land refused exactly as before, a dead end with no exit: land says conflict, resolve
-     * says there is nothing to resolve, and the one press that could break the tie is the one being refused.
-     *
-     * A verdict may only be replaced by another verdict. */
+    // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
     readonly adjudicated: boolean;
 }
 
-/* Does a patch fit the main tree, and, asked in `reverse`, is it ALREADY IN IT?
- *
- * `git apply --check` answers by exit code, which the runner surfaces as a throw. The reverse question is the
- * one that separates the two ways a patch can fail to apply: content that CLASHES with the main tree, and
- * content the main tree already has. Only the first is a conflict. (Reverse is exact, not a guess: a patch
- * un-applies cleanly precisely when its post-image is what is sitting there, `--binary` emits both
- * directions for binary files for exactly this reason.) */
+// `git apply --check` (exit code as a throw); `reverse` tells a clash from content main already has, since a patch
+// un-applies cleanly exactly when its post-image is already there.
 const applies = async (main: string, patch: string, direction: "forward" | "reverse", git: GitRunner): Promise<boolean> => {
     try {
         await git(main, ["apply", "--check", ...(direction === "reverse" ? ["--reverse"] : []), patch]);
@@ -75,70 +38,41 @@ const applies = async (main: string, patch: string, direction: "forward" | "reve
     }
 };
 
-/* THE PATCH GOES STRAIGHT FROM GIT TO A FILE, and never through this process.
- *
- * Every land below already wrote its diff to a temp file and handed git the PATH, so carrying the bytes through
- * the daemon on the way bought nothing, and it cost the whole feature a ceiling. The git runner buffers a
- * command's stdout and rejects past MAX_GIT_OUTPUT, 16 MiB (@intentic/scaffold exec.ts); an ordinary change
- * clears that without trying. Twenty-three product screenshots retaken in one turn came to a 51 MiB binary
- * patch: the turn had finished its work, the hand-over died on `stdout maxBuffer length exceeded`, the session
- * was marked failed, and the message named neither the size that broke it nor the step it broke in. Raising the
- * ceiling would only move it, and a 50 MiB string in a daemon already running at ~420 MB of heap is a hazard of
- * its own. A file has no ceiling to raise.
- *
- * `--output` is git's own answer, and it needs an ABSOLUTE path: the runner passes `-C <repo>`, so a relative
- * one would land inside the repository being diffed. Returns the patch's SIZE, because a size is all any caller
- * ever wanted the string for, `patch === ""` becomes `bytes === 0`. git creates the file either way, so an
- * empty delta is a zero-byte file rather than a missing one; the `catch` covers only a diff that never ran.
- */
+// Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
+// ceiling. Returns the file's size, since that's all callers ever wanted.
 const writePatch = async (main: string, patchPath: string, range: readonly string[], git: GitRunner): Promise<number> => {
     await git(main, ["diff", `--output=${patchPath}`, "--binary", "-M", ...range]);
     return (await stat(patchPath).catch(() => undefined))?.size ?? 0;
 };
 
-/* ONE CHANGE of a delta, carrying the COMPLETE set of paths its own diff spans.
- *
- * The unit is a CHANGE, not a path, and that distinction is functional rather than tidy: a rename is ONE
- * change across TWO paths, so any git pathspec derived from a delta has to name both. Name the destination
- * alone and `-M` has nothing left to pair, git emits a bare "new file" in place of a rename, and applying
- * THAT creates the destination while leaving the source sitting in the tree.
- *
- * This is not a hypothetical. Reading the delta with `--name-only` (which reports a rename at its destination
- * and nowhere else) is what shipped a land that carried every rename's add and dropped every rename's delete:
- * the main tree ended up holding both halves of each renamed file, the user's commit recorded the stale halves
- * as still-present, and they surfaced later as deletions nobody could attribute to anything.
- */
+// One change of a delta with the complete path set its diff spans: a rename is one change across two paths, so naming
+// only the destination breaks `-M` pairing and creates instead of renaming.
 interface DeltaChange {
-    // The destination path, what a conflict report names, because it is the path the user goes looking for.
+    // Destination path: what a conflict report names, since it's the path the user goes looking for.
     readonly path: string;
     // Every path this change's own diff spans: the destination, plus a rename's source.
     readonly paths: readonly string[];
-    // What must NOT exist once this change has applied: a deletion's own path, a rename's source.
+    // What must not exist once this change has applied: a deletion's own path, a rename's source.
     readonly removes: readonly string[];
 }
 
-// A delta's changes, split by what the main tree makes of each: `clean` is what a land would carry, `blocked` is
-// the genuine conflict set. Changes already IN the main tree are in neither, see classifyDelta.
+// A delta's changes split by what main makes of each: `clean` is what a land would carry, `blocked` is a genuine
+// conflict. Already-in-main changes are in neither.
 interface DeltaReport {
     readonly blocked: { path: string; reason: LandConflictReason }[];
     readonly clean: DeltaChange[];
 }
 
-// A `--name-status` row's path set. `from` is git's rename source; a copy carries none (parseNameStatusZ reports
-// it as a plain add, which is what it is for our purposes, the source stays put).
+// A `--name-status` row's path set; `from` is git's rename source. A copy carries none (parseNameStatusZ reports it as
+// a plain add).
 const deltaChangeOf = (change: GitChange): DeltaChange => ({
     path: change.path,
     paths: change.from === undefined ? [change.path] : [change.from, change.path],
     removes: change.status === "deleted" ? [change.path] : change.from === undefined ? [] : [change.from],
 });
 
-/* Directories a removal leaves empty are debris the user is then asked to tidy by hand, git tracks no
- * directories, so nothing downstream ever cleans them up. `git apply` prunes them itself whenever the patch
- * expresses the removal (its remove_path removes emptied leading dirs, the whole-delta and 3-way lands are
- * covered by that); the post-condition `rm`s in applyChanges are the one removal git never sees, so their
- * emptied parents are pruned here. Scoped strictly to the delta's own removals: climb from each removed path's
- * parent toward the repo root, `rmdir` refuses a non-empty dir and a missing one means the chain is already
- * gone, so either failure IS the stop, and a pre-existing empty folder elsewhere is never touched. */
+// Git tracks no directories, so a removal's emptied parents are debris `git apply` doesn't already prune (it prunes
+// when the patch itself expresses the removal). Scoped to this delta's own removals only.
 export const pruneEmptiedDirs = async (main: string, removed: readonly string[]): Promise<void> => {
     const root = resolve(main);
     for (const path of removed) {
@@ -152,46 +86,18 @@ export const pruneEmptiedDirs = async (main: string, removed: readonly string[])
     }
 };
 
-/* WHICH changes of a delta actually refuse to apply, and why.
- *
- * `git apply` is ATOMIC: one unapplicable file rejects the entire patch. So a failed bulk check says only
- * "something in here does not fit", it says nothing about WHAT, and the first version of this code guessed,
- * intersecting the delta with the main tree's dirty paths and falling back to naming the whole delta when
- * that intersection came up empty. That fallback fires exactly when the cause is a moved main line, which is
- * the common case, so the common case reported every file as a conflict.
- *
- * Re-checking each change on its own is the only way to tell four real conflicts from the fourteen an atomic
- * failure implicates. Each probe is diffed over that change's WHOLE path set, so rename detection pairs inside
- * it and the probe is the patch shape the real apply will use, a rename probed at its destination alone is a
- * bare creation, which applies cleanly no matter what state the source is in. That made two lies at once: the
- * change was called clean when the user's own edit to the source was in the way, and the "clean" set it joined
- * went on to build a pathspec that could no longer express the rename at all (see DeltaChange).
- *
- * The reverse probe is what keeps ALREADY-LANDED work out of the report. An agent that commits its own delta
- * straight onto the main line, pushing to main, or a user committing the branch by hand, leaves content git
- * cannot recognize as this branch's, because it arrived as a DIFFERENT commit: ancestry says the work is
- * unmerged, so the anchor still spans it and the patch re-offers what the main tree already holds. Every path
- * of it then fails to apply, and reporting that as a conflict is a dead end, there is nothing for the user to
- * resolve and no edit of theirs to point at. Asked in reverse, those paths answer plainly: already here. */
+// `git apply` is atomic, so a failed bulk check names nothing; each change is re-probed alone, over its whole path set,
+// so rename pairing stays correct. The reverse probe drops content that reached main by another road.
 const classifyDelta = async (main: string, from: string, tip: string, patchDir: string, repo: string, git: GitRunner): Promise<DeltaReport> => {
     const rows = parseNameStatusZ((await git(main, ["diff", "--name-status", "-z", "-M", from, tip])).stdout);
     const changes = rows.map(deltaChangeOf);
-    /* WHICH OF THESE ARE BINARY, asked of git's own numstat rather than read off the patch.
-     *
-     * The reason used to come from a `"GIT binary patch"` substring test on the per-change patch, which meant
-     * holding that patch as a string, which is the one thing writePatch exists to stop: a single 3 MB image is a
-     * ~4 MB probe and nothing bounds how big one file can be. numstat answers the same question in one bounded
-     * read for the whole delta, and answers it from git's own classification rather than from the spelling of a
-     * header. A binary file is listed with BOTH counts omitted (parseNumstatZ omits rather than zeroes them,
-     * `-\t-`); a text file always carries both. Keyed on the destination path, which is how numstat keys a
-     * rename, and which is the path a conflict is reported at. */
+    // Numstat, not a patch string search: a binary file has both counts omitted, keyed on the destination path.
     const stats = parseNumstatZ((await git(main, ["diff", "--numstat", "-z", "-M", from, tip])).stdout);
     const isBinary = (path: string): boolean => {
         const counts = stats.get(path);
         return counts !== undefined && counts.additions === undefined && counts.deletions === undefined;
     };
-    // A path the user STAGED conflicts with the incoming patch exactly as much as one they left unstaged, so
-    // "yours is the copy at risk" has to consider the union, rename `from` legs included.
+    // Staged and unstaged both count: a staged copy is as much at risk as an unstaged one, rename `from` legs included.
     const mainState = await changedFiles(main, git);
     const mainDirty = new Set<string>();
     for (const change of [...mainState.staged, ...mainState.unstaged]) {
@@ -213,11 +119,10 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
             continue;
         }
         if (await applies(main, probePath, "reverse", git)) {
-            // Already in the main tree: not clean (re-applying it would fail) and not a conflict (there is
-            // nothing to resolve). It simply drops out of the land, nothing to carry, nothing to report.
+            // Already in the main tree: not clean, not a conflict, simply drops out with nothing to report.
             continue;
         }
-        // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
+        // Binary checked first: it outranks the other reasons, since no three-way merge of it exists.
         const reason: LandConflictReason = isBinary(change.path)
             ? "binary"
             : change.paths.some((path) => mainDirty.has(path))
@@ -228,23 +133,8 @@ const classifyDelta = async (main: string, from: string, tip: string, patchDir: 
     return { blocked, clean };
 };
 
-/* Apply exactly `changes` to the main WORKING TREE, the subset land, taken when part of a delta is already in
- * the main tree and only the remainder is genuinely outstanding.
- *
- * Re-diffed over the changes' own paths rather than sliced out of the full patch, so one git invocation keeps
- * rename detection coherent, and it stays coherent only because the pathspec carries BOTH legs of every
- * rename (see DeltaChange). An empty change set therefore has to return early rather than run the diff: a `--`
- * with no paths after it is not an empty pathspec to git, it is NO pathspec, and the subset land would quietly
- * become a whole-delta land including the parts that were excluded on purpose.
- *
- * Then the post-condition, and it lives in here rather than at the call site so the two cannot drift apart: this
- * is the one apply whose patch is built from a pathspec, so it is the one that can under-express the delta, and
- * the way it failed was silent. A tree left holding a file the delta deletes reads as the user's own content,
- * git says nothing, the user's commit records it as present, and it resurfaces days later as a deletion with no
- * author. Finishing the removal is not a guess: the delta is derived from git refs, and a path absent at `tip`
- * is absent. Nor can it collide with something the same set creates, git reports a rename only when the source
- * is gone at `tip`, so a rename's source is never another change's destination.
- */
+// Re-diffed over the changes' own paths so rename pairing stays coherent; an empty set must return early since a bare
+// `--` means no pathspec, not an empty one. Explicit `rm`s finish removals a pathspec diff can silently under-express.
 const applyChanges = async (
     main: string,
     from: string,
@@ -264,30 +154,14 @@ const applyChanges = async (
     const removes = changes.flatMap((change) => change.removes);
     await git(main, ["apply", patchPath]);
     await Promise.all(
-        // `force` so an already-absent path, which is all of them, whenever the patch expressed its own
-        // removals, costs one stat and no error.
+        // `force`: the path is already gone whenever the patch expressed its own removal.
         removes.map(async (path) => await rm(join(main, path), { force: true })),
     );
     await pruneEmptiedDirs(main, removes);
 };
 
-/* THE REFUSAL AS IT STANDS NOW, the stored conflict report re-asked against today's tree, touching nothing.
- *
- * A land's report is written once, at refusal time, and its sharpest claim rots from under it: `workspace`
- * names the user's uncommitted copy as the thing in the way, and the user clears that by COMMITTING, which
- * no land observes. Served verbatim, the stored report kept saying "commit or stash them" over a spotless
- * tree, and the resolve flow kept refusing to send the agent (a rebase provably cannot reach the user's
- * half, so the web gates on exactly this reason, agentActions.ts), a dead end whose only exit, another
- * land, is the one thing the message never asks for. The same drift retires rows outright: a main line that
- * has since absorbed or moved past the delta leaves nothing to refuse.
- *
- * So the report is re-derived at read time (agents.routes.ts diff): the land's own anchor, probes and
- * classifier, minus every write. The stored report remains what it honestly is, the EVENT that the last
- * land refused, which is what keeps the card on `conflict` (standing.ts) until a land clears it; its
- * per-path content is what this recomputes. Read-only means no provenance commit, so an attached worktree's
- * uncommitted remainder is not in the span, the recorded refusal's span exactly, since the land that wrote
- * it committed everything first; newer work reshapes the report the way it reshapes everything else: at the
- * next land. */
+// Re-derives the stored conflict report live against today's tree, read-only: the stored report rots once the user
+// commits or the main line moves past it. The stored event itself (what keeps the card on `conflict`) is untouched.
 export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: IsolatedAgent, git: GitRunner = defaultGit): Promise<LandConflict[]> => {
     const conflicts: LandConflict[] = [];
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
@@ -296,7 +170,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
             await worktrees.withRepoLock(repo, async () => {
                 const main = worktrees.mainDir(repo);
                 if (!(await pathExists(join(main, ".git")))) {
-                    // The main checkout vanished, the same per-repo surface the land itself reports.
+                    // Vanished main checkout: reported the same way land itself reports it.
                     conflicts.push({ repo, paths: [], clean: 0 });
                     return;
                 }
@@ -315,7 +189,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                 if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
                     return;
                 }
-                // Applies whole, or is already in whole: nothing refuses today, whatever refused back then.
+                // Applies whole or already whole: nothing refuses today, whatever refused before.
                 if ((await applies(main, patchPath, "forward", git)) || (await applies(main, patchPath, "reverse", git))) {
                     return;
                 }
@@ -354,10 +228,8 @@ interface RepoLandPlan {
     readonly write?: RepoLandWrite;
 }
 
-/* HOLD EVERY REPOSITORY LOCK FOR BOTH PHASES. Preflighting all repos and then releasing their locks before
- * applying would only move the partial-land race: another browser could stage, discard or land between the
- * check and the write. A stable alphabetical order makes two composed lands queue rather than deadlock, while
- * single-repo operations simply wait on whichever member of the composition they address. */
+// Locks stay held through both phases, or another request could stage/discard/land between check and write.
+// Alphabetical order queues composed lands instead of deadlocking them.
 const withRepoLocks = async <T>(worktrees: AgentWorktrees, repos: readonly string[], task: () => Promise<T>): Promise<T> => {
     const ordered = [...new Set(repos)].sort();
     const acquire = async (index: number): Promise<T> => {
@@ -392,9 +264,7 @@ const applyRepoWrite = async (
             await applyChanges(write.main, write.from, write.tip, write.changes, patchDir, write.repo, git);
             return;
         case "merge":
-            /* `--3way` exits non-zero precisely BECAUSE it left conflicts, so the throw is the intended
-             * result. Preflight already proved this repo has no workspace blocker; the paths named here are
-             * therefore the marker-bearing result the user explicitly requested. */
+            // `--3way` exits non-zero exactly because it left markers; that throw is the expected result here.
             try {
                 await git(write.main, ["apply", "--3way", write.patchPath]);
             } catch {
@@ -408,88 +278,45 @@ export const landAgent = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
     mode: LandMode = "check",
-    /* WHICH RUNG THE PATCH IS MEASURED FROM, `outstanding` for every automatic land, and the only reason the
-     * other exists is that a land's product is UNCOMMITTED. The user can discard it in the Changes panel like
-     * any other change, and when they do, nothing this file records moves: `landedTip` still says the work
-     * went in, so the outstanding span is empty and the one action that could put it back would carry an
-     * empty patch. `cumulative` re-measures from the branch's own base, which is the only rung that can still
-     * see what is gone; classifyDelta's reverse probe drops every path the tree already holds, so what
-     * applies is the missing part and nothing else. Offered on the card as "Land again", never automatically:
-     * the discard was a decision, and a daemon that undid it in the background would make it meaningless. */
+    // 'outstanding' for automatic lands; 'cumulative' re-measures from base, the only rung that still sees a discard.
     span: AgentSpan = "outstanding",
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
     const conflicts: LandConflict[] = [];
-    /* A STORED REFUSAL IS RE-JUDGED, even by a `measure`, and this is the only thing a measure does that it
-     * would not do for an agent nothing refuses.
-     *
-     * "Only a verdict may replace a verdict" (see LandOutcome.adjudicated) is right, and on its own it strands
-     * every conflict a sandbox with auto-land held ever records. That is the DEFAULT posture: with no
-     * `agent.finished` rule the landing verdict is hold, so every turn ends in `measure`, `measure` reaches no
-     * conflict gate, and the stored refusal outlives whatever fixed it. The loop that produces is the one the
-     * button is named for: "Have the agent resolve it" starts a turn, the agent rebases the branch until the
-     * delta applies, the turn ends in `measure`, the old verdict survives untouched, and the card returns to
-     * Attention asking for the same resolve it just got. Nothing the agent can do inside that turn ends it.
-     *
-     * So a measure that finds a stored refusal asks the conflict gate again. It is `git apply --check` and
-     * `git diff` only, which write nothing, so measure's promise — the main tree is not mine to touch — is
-     * kept exactly. What changes is that the answer counts: `adjudicated` goes true and the fresh verdict
-     * REPLACES the old one, clearing it when the delta now applies.
-     *
-     * EVERY repo is re-judged, not only the ones that carried a conflict, because the verdict replaces the
-     * stored report wholesale: judging a subset and reporting it as the whole would retire a refusal in a
-     * repository this pass never looked at.
-     *
-     * Only agents already marked conflicted pay for it, which is the population it exists for. */
+    // Even a `measure` re-judges a stored refusal, or 'resolve' loops forever; only a verdict may replace a verdict.
     const rejudging = mode === "measure" && (entry.conflicts?.length ?? 0) > 0;
-    // Only a `measure` land sets this: an outstanding delta it deliberately left on the branch (see LandModeSchema).
+    // Set only by a `measure` land that deliberately left an outstanding delta on the branch.
     let held = false;
-    // Only a `merge` land fills this, and only in phase two after every repository passed phase one.
+    // Filled only by a `merge` land, only in phase two once every repo passed phase one.
     const resolving: { repo: string; paths: string[] }[] = [];
     const plans: RepoLandPlan[] = [];
     const diff = { files: 0, insertions: 0, deletions: 0 };
     let changed = false;
-    // One temp dir for the run's patch files, removed whole in the finally.
+    // One temp dir for this run's patch files, removed whole in the finally.
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-land-"));
     try {
         return await withRepoLocks(
             worktrees,
             entry.repos.map(({ repo }) => repo),
             async () => {
-                /* PHASE ONE: preserve branch work and build a complete, read-only verdict. Plans may compute
-                 * the landedTip each repo would receive, but none is returned and no main tree is written if
-                 * even one conflict is found anywhere in the composition. */
+                // Phase one: read-only, computes every repo's plan; nothing is written if any repo conflicts.
                 for (const composed of entry.repos) {
                     const { repo, base } = composed;
                     let next: PersistedAgent["repos"][number] = composed;
                     const main = worktrees.mainDir(repo);
                     if (!(await pathExists(join(main, ".git")))) {
-                        // The main checkout vanished, nothing to apply into; surfaced, not silently skipped. No
-                        // path-level account exists for it, which is what an empty `paths` with nothing clean says.
+                        // Vanished main checkout: surfaced as a conflict, not silently skipped.
                         conflicts.push({ repo, paths: [], clean: 0 });
                         changed = true;
                         plans.push({ next });
                         continue;
                     }
-                    /* Which checkout answers for the branch. A retired one (an archived agent, or a restored one
-                     * whose next turn hasn't re-attached it yet) is NOT "nothing to land": the branch still holds
-                     * everything, retire commits the worktree's remainder before reclaiming it, and the shared
-                     * object store makes all of it readable from the main repo. Skipping here was how landing an
-                     * archived agent "succeeded" while landing nothing, and stamped the card Landed over a review
-                     * still counting every file as pending. */
+                    // A retired checkout still holds the branch's work via the shared store: not 'nothing to land'.
                     const attached = await worktrees.attached(entry.id, repo);
                     const worktree = worktrees.worktreeDir(entry.id, repo);
-                    // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch,
-                    // staged, unstaged and untracked alike (`add -A` sweeps all three), and a no-op when staging
-                    // leaves the index empty. That last case is the ROOT repo of a workspace whose only change
-                    // lives inside a NESTED repo of the composition: root sees "modified: <repo> (modified
-                    // content)" but can stage nothing, because a gitlink moves only when that repo's own HEAD
-                    // does. The nested repo lands its own work below; root's gitlink follows whenever someone
-                    // commits there. (A retired checkout has nothing uncommitted to preserve, its retire did this.)
+                    // Stages staged/unstaged/untracked alike; a no-op when the only change is a nested repo's gitlink.
                     if (attached) {
-                        /* The lockfile first, so the manifest edit and the lockfile that records it are one
-                         * commit and one patch (lockfile-reconcile.ts). Best-effort: a resolution that fails
-                         * leaves the tree as it was, and the push gate's lockstep tier still names the gap. */
+                        // Lockfile fixed before the commit: manifest and lockfile land as one commit, one patch.
                         await reconcileLockfile(worktree, composed.landedTip ?? base, git);
                         await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
                     }
@@ -498,13 +325,9 @@ export const landAgent = async (
                         plans.push({ next });
                         continue;
                     }
-                    // Ref-only reads run wherever the refs live: the worktree while attached, the main repo after.
+                    // Ref-only reads run where the refs live: the worktree while attached, the main repo after.
                     const refDir = attached ? worktree : main;
-                    /* The card's counter, totalled over the very rows the REVIEW lists (agent-changes.ts), the
-                     * agent's cumulative output, landed work included. Read here because a land is where a turn's
-                     * work becomes final and the shas are already in hand, but computed by the review's own
-                     * reader: a second, independent diffstat is how the card came to claim 336 files over a review
-                     * showing 6, having measured from the frozen base while the review measured from the anchor. */
+                    // Totalled by the review's own reader, so the card's count can't disagree with the review.
                     for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
                         diff.files += 1;
                         diff.insertions += change.additions ?? 0;
@@ -512,14 +335,7 @@ export const landAgent = async (
                     }
                     const from = await anchorOf(refDir, main, tip, span === "cumulative" ? undefined : composed.landedTip, base, git);
                     if (tip === from) {
-                        /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
-                         * the tip) and this land is a true no-op, but when ANCESTRY says so, the registry is
-                         * hearing it for the first time: the main line merged the branch, or fast-forwarded onto
-                         * it, since the last land, an agent told to "land on main" that ran the merge itself.
-                         * That is a real outcome and must be persisted like one: with landedTip left behind, the
-                         * review re-offers the whole delta as "not landed" forever and a conflict report from
-                         * before the merge never clears. No landedHead/landedAt, as with the net-zero delta:
-                         * nothing here arrived as uncommitted content to attribute. */
+                        // Ancestry alone can mean landed; still persisted, or the review re-offers this delta forever.
                         if ((composed.landedTip ?? base) !== tip) {
                             next = { repo, base, landedTip: tip };
                             changed = true;
@@ -529,39 +345,22 @@ export const landAgent = async (
                     }
                     changed = true;
                     const target = { main, repo, base, tip } satisfies RepoLandTarget;
-                    // The patch is checked now and written only in phase two. `apply --check` is CONTEXT-based,
-                    // which keeps incremental landing valid: a previously landed copy matches, while a user's
-                    // edit to the same lines refuses the entire composition before any repo is touched.
+                    // `apply --check` is context-based: a landed copy matches; an edit to the same lines refuses it.
                     const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
                     if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
-                        // A net-zero delta, the agent reverted everything it did since the last land. There is
-                        // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
-                        // or every future land re-reports this range as a phantom conflict nothing can resolve.
-                        // No provenance: nothing of this agent's is in the main tree to attribute.
+                        // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
                         next = { repo, base, landedTip: tip };
                         plans.push({ next });
                         continue;
                     }
-                    /* `measure`: auto-land is off, so an outstanding delta STAYS on the branch, everything above
-                     * this line already ran (the provenance commit, the diffstat, the tip===from and net-zero
-                     * bookkeeping), and everything below is exactly what "don't touch the main tree" forbids. The
-                     * one question still worth asking is the reverse probe: a delta that un-applies cleanly is
-                     * already sitting in the main tree by another road (the agent committed onto the main line
-                     * itself, a user applied the branch by hand), and holding THAT "ready to land" would offer a
-                     * land that can never do anything, so it advances like any other already-in-main outcome.
-                     * Anything else is genuinely outstanding: held, tips untouched, and the eventual deliberate
-                     * land runs the full conflict gate on the cumulative delta. */
+                    // `measure`: an outstanding delta stays on the branch; an already-landed match still advances.
                     if (mode === "measure") {
                         if (await applies(main, patchPath, "reverse", git)) {
                             next = await advancedRepo(target, git);
                             plans.push({ next });
                             continue;
                         }
-                        /* The re-judgement (see `rejudging`). A delta that applies now carries no verdict at all,
-                         * which is what retires the stored one; anything still blocked is reported exactly as the
-                         * conflict gate below reports it, because it IS that gate, asked without applying. `held`
-                         * is set either way and the return suppresses it wherever a conflict was found, so the
-                         * outcome reads the same as a real land's for the same tree. */
+                        // A delta that now applies retires the stored verdict; blocked paths report like the real gate.
                         if (rejudging && !(await applies(main, patchPath, "forward", git))) {
                             const report = await classifyDelta(main, from, tip, patchDir, repo, git);
                             if (report.blocked.length > 0) {
@@ -580,25 +379,15 @@ export const landAgent = async (
                     }
                     if (!(await applies(main, patchPath, "forward", git))) {
                         const report = await classifyDelta(main, from, tip, patchDir, repo, git);
-                        /* NOTHING here is in conflict, the atomic check failed only because part of this delta is
-                         * already in the main tree. That is a land, not a refusal: apply whatever is genuinely
-                         * outstanding (nothing at all, when the agent put its whole delta on the main line itself)
-                         * and advance, so the work stops being re-offered on every future land. */
+                        // Atomic failure can mean part is already landed: apply what's outstanding, advance regardless.
                         if (report.blocked.length === 0) {
                             plans.push({ next, write: { ...target, kind: "subset", from, changes: report.clean } });
                             continue;
                         }
-                        /* A three-way apply merges THROUGH THE INDEX, so git refuses it outright, applying not
-                         * one file, not even the clean ones, as soon as any path it must fall back on differs
-                         * between the working tree and the index ("does not match index"). That is precisely the
-                         * `workspace` cause. So merge mode is offered only where git can actually merge: the
-                         * user's own uncommitted copy has to be committed or stashed first, and saying so beats
-                         * attempting it and reporting a failure they cannot read. */
+                        // Three-way apply refuses outright on any workspace-dirty path; merge needs none of those.
                         const mergeable = report.blocked.every((conflict) => conflict.reason !== "workspace");
                         if (mode === "check" || !mergeable) {
-                            // What `check` promises is that a refusal leaves the workspace byte-identical. Report
-                            // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
-                            // Only `blocked` is reported: an already-in-main path is not something to resolve.
+                            // `check` promises a refusal leaves the workspace untouched; only `blocked` is reported.
                             const mainBranch = await mainBranchOf(main, git);
                             conflicts.push({
                                 repo,
@@ -609,9 +398,7 @@ export const landAgent = async (
                             plans.push({ next });
                             continue;
                         }
-                        /* `merge`: the user asked for the whole composition to arrive even though this repo
-                         * needs markers. Queue it, but write nothing until every other repo has also proved it
-                         * can either apply or produce its own requested markers. */
+                        // Queued: written only once every other repo also proves it can apply or produce markers.
                         plans.push({
                             next,
                             write: { ...target, kind: "merge", patchPath, paths: report.blocked.map((conflict) => conflict.path) },
@@ -621,10 +408,7 @@ export const landAgent = async (
                     plans.push({ next, write: { ...target, kind: "whole", patchPath } });
                 }
 
-                /* A REFUSAL RETURNS THE ORIGINAL REPO RECORDS. The prepared tips stay outstanding together,
-                 * so a later successful land applies the same composed change rather than treating the clean
-                 * repos as already delivered. The only writes phase one made were provenance commits inside
-                 * the agent's own worktrees. */
+                // A refusal returns the original repo records, so a later land still applies the whole composed change.
                 if (conflicts.length > 0) {
                     return {
                         landed: false,
@@ -636,8 +420,7 @@ export const landAgent = async (
                     };
                 }
 
-                // PHASE TWO: the complete preflight passed while every repo lock remained held. Apply every
-                // plan, then and only then stamp every landed tip as one outcome.
+                // Phase two: preflight passed under held locks; apply every plan, then stamp every tip as one outcome.
                 for (const plan of plans) {
                     if (plan.write === undefined) {
                         continue;

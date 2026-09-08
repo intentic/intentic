@@ -8,29 +8,24 @@ export interface FaqItem {
     question: string;
     /** Each entry is a paragraph of the answer. */
     answer: string[];
-    /**
-     * A page carrying the long answer. Rendered under the paragraphs and absent from the
-     * FAQPage schema: the answer above has to stand on its own, because a rich result shows the text and
-     * not the link.
-     */
+    /** Page with the long answer; omitted from the FAQPage schema, so the answer above must stand alone. */
     more?: { label: string; href: string };
 }
 
 /**
- * One topic band of the FAQ. The landing page renders each question as a collapsed disclosure, so a band
- * is a short list of headlines a visitor skims: the grouping tells them which three or four questions are
- * worth opening, and nothing below the fold is spent on answers nobody asked for.
+ * One topic band of the FAQ; grouped so a visitor skimming collapsed headlines can tell which questions are worth
+ * opening.
  */
 export interface FaqGroup {
     /** Anchor id for the topic nav; prefixed so it can never collide with a question's id. */
     id: string;
     label: string;
-    /** One line under the label: what this band answers, so a reader knows whether to skim it at all. */
+    /** One line under the label: what this band answers. */
     blurb: string;
     items: FaqItem[];
 }
 
-// The objection bank from docs/marketing/messaging.md: answers verified against intentic-app and the engine repo.
+// Objection bank from docs/marketing/messaging.md; verified against intentic-app and the engine repo.
 export const faqGroups: FaqGroup[] = [
     {
         id: "faq-what-it-is",

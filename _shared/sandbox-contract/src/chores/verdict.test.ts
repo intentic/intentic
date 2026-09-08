@@ -13,10 +13,8 @@ import { describe, expect, test } from "vitest";
 import { choreById, CHORES } from "./chores.js";
 import { assessReport, choreAnswer, choreAnswered, ledgerKey, unseenVerdicts } from "./verdict.js";
 
-/* The state machine, tested at the distinctions it exists to draw. Every case below is one that a simpler design
- * gets wrong in a way that costs the surface its credibility: reporting a repository clean that was never
- * measured, badging the same finding every hour while its fix sits in review, letting a snooze become a
- * permanent silence, or letting an agent's "these were false positives" be forgotten by the next poll. */
+// The chore verdict state machine, tested at the distinctions a simpler design gets wrong: reporting an unmeasured repo
+// clean, badging the same finding repeatedly, a snooze becoming permanent, or a false-positive report being forgotten.
 
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 6, 31);
@@ -30,8 +28,7 @@ const pkg = (over: Partial<ChorePackage> = {}): ChorePackage => ({
     ...over,
 });
 
-// A repository that is a Node workspace with documents, a pipeline, an image and a Tailwind front-end, so every
-// chore APPLIES by default and each applicability test can turn off exactly the one fact it is about.
+// A repo where every chore applies by default, so an applicability test only has to toggle the one fact it's about.
 const shape = (over: Partial<ChoreShape> = {}): ChoreShape => ({
     docs: [`docs/architecture/repo.md`],
     dockerfiles: [`Dockerfile`],
@@ -66,8 +63,7 @@ const auditProbe = (names: readonly string[]): ProbeResult =>
 const report = (over: Partial<ChoresReport> = {}): ChoresReport => ({
     repos: [{ repo: `app`, probes: [], signals: signals() }],
     ledger: [],
-    // Verdicts are about EVIDENCE, never about work in flight: a probe running does not make a chore more or
-    // less due, it only makes the panel say so. Empty here because no assertion in this file should depend on it.
+    // Verdicts are about evidence, not work in flight; empty here since no test in this file depends on it.
     running: [],
     node: `v24.18.0`,
     ...over,
@@ -88,8 +84,6 @@ describe(`what "we have not measured this" means`, () => {
         expect(verdict.detail.join(` `)).toContain(`Security advisories`);
     });
 
-    // The distinction that stops the panel reporting a green repository it has never looked at. A tool the repo
-    // does not have is not evidence of anything, and it carries the tool's own reason rather than an invented one.
     test(`a probe the repository cannot run says so, and never badges`, () => {
         const knipReason = `knip is not a devDependency`;
         const input = report({
@@ -129,8 +123,6 @@ describe(`the ledger debounces; it cannot hide`, () => {
         expect(unseenVerdicts([verdict], {})).toEqual([]);
     });
 
-    // The point of digesting evidence rather than stamping a time: a fix landing, or a NEW advisory arriving,
-    // both move the evidence and both deserve to be heard again.
     test(`evidence that has moved since the run is unsettled again`, () => {
         const moved = report({
             repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `minimist`])], signals: signals() }],
@@ -159,9 +151,6 @@ describe(`the ledger debounces; it cannot hide`, () => {
         expect(lapsed.state).toBe(`due`);
     });
 
-    /* A chore with a cadence expires its own settlement, so "we looked and chose not to act" cannot silence it
-     * for good. Security has no cadence on purpose: an advisory does not become interesting again because
-     * ninety days passed, it becomes interesting when the advisory set changes, so its settlement persists. */
     test(`settlement expires with the chore's cadence, and persists for the chores that have none`, () => {
         const dependencies = choreById(`dependencies-outdated`);
         expect(dependencies?.cadenceMs).toBeGreaterThan(0);
@@ -172,10 +161,8 @@ describe(`the ledger debounces; it cannot hide`, () => {
     });
 });
 
-/* The distinction the digest alone cannot draw, and the one whose absence had the panel quoting a six-day-old
- * dead-code count an hour after the turn that deleted it. An unchanged digest is what a probe that never re-ran
- * produces, so "the fix did not move the numbers" and "we have not looked since the fix" reached the same branch
- * and both came out as a confident `due`. */
+// Guards the case an unchanged digest alone can't tell apart: a probe that never re-ran looks identical to a fix
+// that didn't work, and both used to read as a confident `due`.
 describe(`a measurement older than the work is not evidence about the work`, () => {
     const withAdvisories = report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] });
     const ledgerEntry = (over: Partial<ChoreLedgerEntry> = {}): ChoreLedgerEntry => ({
@@ -188,24 +175,20 @@ describe(`a measurement older than the work is not evidence about the work`, () 
         ...over,
     });
 
-    // The probe ran a day ago; the turn started an hour ago. Whatever it did, nothing has looked since.
+    // Probe ran a day ago, the ledger entry an hour ago: nothing has looked since the entry.
     test(`a turn that landed after the measurement steps the chore down from due`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })] }, `security-advisories`);
         expect(verdict.state).toBe(`stale`);
-        // The evidence stays on the row: it is what the reader checks the claim against, and the claim comes off.
         expect(verdict.detail).not.toEqual([]);
         expect(verdict.settled).toBe(false);
     });
 
-    // No prompt, so the row cannot offer to spend a second turn on a finding nobody has re-checked; and no badge,
-    // which is what stops the tile lighting for work that is already done.
     test(`a stale chore offers no turn and never badges`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000 })] }, `security-advisories`);
         expect(verdict.prompt).toBeUndefined();
         expect(unseenVerdicts([verdict], {})).toEqual([]);
     });
 
-    // Re-measuring is the whole cure: the same run, against evidence taken after it, is settled rather than stale.
     test(`re-measuring after the turn restores the verdict: due, and now genuinely settled`, () => {
         const remeasured = report({
             repos: [{ repo: `app`, probes: [{ ...auditProbe([`left-pad`]), ranAt: NOW - 60_000 }], signals: signals() }],
@@ -216,14 +199,11 @@ describe(`a measurement older than the work is not evidence about the work`, () 
         expect(verdict.settled).toBe(true);
     });
 
-    // The agent's own "these were false positives" is a judgement about the live tree, made after the measurement.
-    // It outranks staleness, or every clean run would be re-opened by the very probe age it was reported against.
     test(`an agent reporting the findings did not hold up still clears the chore`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, outcome: `clean` })] }, `security-advisories`);
         expect(verdict.state).toBe(`clear`);
     });
 
-    // A snooze is the owner speaking, and it outranks both.
     test(`a snooze still wins`, () => {
         const verdict = verdictFor(
             { ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, snoozedUntil: NOW + DAY })] },
@@ -232,12 +212,9 @@ describe(`a measurement older than the work is not evidence about the work`, () 
         expect(verdict.state).toBe(`snoozed`);
     });
 
-    // Every measured row carries when it was taken, so no row can pass off a week-old count as this morning's.
     test(`every measured verdict says when it was measured, and the unmeasurable ones say nothing`, () => {
         expect(verdictFor(withAdvisories, `security-advisories`).measuredAt).toBe(NOW - DAY);
-        // A survey rests on no measurement: it is decided by the calendar, and has nothing to be out of date.
         expect(verdictFor(report(), `standardize-patterns`).measuredAt).toBeUndefined();
-        // Nor does a probe that never ran.
         expect(verdictFor(report(), `security-advisories`).measuredAt).toBeUndefined();
     });
 });
@@ -285,8 +262,6 @@ describe(`the badge speaks about transitions, not about statistics`, () => {
         expect(unseenVerdicts([next], seen)).toHaveLength(1);
     });
 
-    // The rule the whole surface is built to satisfy: a backlog that has been seen once must stop speaking, or
-    // the tile is lit every day and the rail stops being read at all.
     test(`a standing backlog of undocumented packages goes quiet once seen, but a new package speaks`, () => {
         const undocumented = (dirs: readonly string[]): ChoresReport =>
             report({
@@ -314,7 +289,7 @@ describe(`the findings themselves`, () => {
             score: complexity * 20,
             latestMs: NOW,
         });
-        // An even ranking has no outlier and no key module in it: a healthy repository, and an empty finding.
+        // An even ranking has no outlier and no key module: a healthy repository, an empty finding.
         const even = report({
             repos: [{ repo: `app`, probes: [], signals: signals({ hotspots: [hotspot(`a.ts`, 30), hotspot(`b.ts`, 28), hotspot(`c.ts`, 26)] }) }],
         });
@@ -355,8 +330,6 @@ describe(`the findings themselves`, () => {
         expect(verdict.detail[0]).toContain(`schema validation`);
     });
 
-    // The runtime table is static and offline by design; a major it does not know about must read as "not
-    // end-of-life", which is the safe direction to be wrong in.
     test(`an unknown node major is not reported as end-of-life`, () => {
         expect(verdictFor({ ...report(), node: `v99.0.0` }, `runtime-eol`).state).toBe(`clear`);
     });
@@ -376,8 +349,6 @@ describe(`the prompts`, () => {
     const dueVerdict = () =>
         verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] }), `security-advisories`);
 
-    /* A prompt that counts without NAMING sends the agent off to re-derive a list we are already holding: slowly,
-     * and against a tree that has moved since. Every measured chore names its artefacts. */
     test(`name the artefacts, not just how many there were`, () => {
         const verdict = dueVerdict();
         expect(verdict.prompt).toContain(`left-pad`);
@@ -435,7 +406,6 @@ describe(`the prompts`, () => {
             expect(verdict.prompt, verdict.chore.id).toBeTypeOf(`string`);
             expect(verdict.digest, verdict.chore.id).not.toBe(``);
         }
-        // Each measured chore's own artefact reaches its own prompt: the regression this whole test exists for.
         const promptFor = (chore: string) => due.find((verdict) => verdict.chore.id === chore)?.prompt ?? ``;
         expect(promptFor(`security-advisories`)).toContain(`left-pad`);
         expect(promptFor(`dependencies-outdated`)).toContain(`vue 1.0.0 → 2.0.0`);
@@ -447,10 +417,9 @@ describe(`the prompts`, () => {
     });
 });
 
-/* APPLICABILITY, whether the chore is a QUESTION worth asking of this repository, as opposed to whether the
- * answer is yes. Every case here is one where the previous design showed a row that could never be acted on:
- * an offer to re-read documentation that was never written, to slim an image that does not exist, to tighten a
- * pipeline nobody has. Each of those teaches the reader that this list was not written by someone who looked. */
+// Applicability: whether the chore is a question worth asking here, as against whether the answer is yes. Each
+// case is a row the previous design could never act on (re-reading documentation that doesn't exist, slimming an image
+// that isn't there).
 describe(`what does not apply here`, () => {
     const withShape = (over: Partial<ChoreShape>): ChoresReport =>
         report({ repos: [{ repo: `app`, probes: [], signals: signals({ shape: shape(over) }) }] });
@@ -483,9 +452,6 @@ describe(`what does not apply here`, () => {
         expect(verdictFor(single, `library-overlap`).state).toBe(`not-applicable`);
     });
 
-    // A survey has no evidence to be absent: "90 days have passed" is true everywhere, so without a gate it
-    // fires forever in repositories where its subject does not exist. This is the regression that motivated
-    // making `applies` a required field on SurveySpec rather than an optional one.
     test(`a tiny repository is not surveyed for cross-cutting patterns it cannot have`, () => {
         const fileCount = 4;
         const tiny = report({
@@ -497,8 +463,6 @@ describe(`what does not apply here`, () => {
     });
 
     test(`applicability is decided before measurement, so a missing probe never masks it`, () => {
-        // dead-code needs the knip probe, which has not run; the gate still wins, because "we cannot ask this
-        // question here" outranks "we have not measured it".
         expect(verdictFor(withShape({ packageManifest: false }), `dead-code`).state).toBe(`not-applicable`);
     });
 
@@ -512,11 +476,6 @@ describe(`what does not apply here`, () => {
         expect(assessReport(withShape({}), NOW).filter((verdict) => verdict.state === `not-applicable`)).toEqual([]);
     });
 
-    /* THE CAUSES HAVE TO GROUP, and that is a fact about the STRINGS rather than about the gates. The panel's
-     * scope note prints one line per distinct cause with the chores it costs listed beside it, so two gates that both mean
-     * "there is no package.json here" and say it in different words print two lines, and a workspace root, where
-     * a dozen chores are ruled out by three facts, is back to the paragraph-per-chore wall this phrasing replaced.
-     * Bounded rather than enumerated: a new gate may invent a new cause, it may not invent a new sentence. */
     test(`applicability reasons are bare causes, so the ones that mean the same thing group`, () => {
         const bare = withShape({ packageManifest: false, lockfile: false, docs: [], ci: [], dockerfiles: [], deps: [] });
         const causes = assessReport(bare, NOW)
@@ -526,14 +485,14 @@ describe(`what does not apply here`, () => {
             expect(cause, cause).toMatch(/^[a-z]/);
             expect(cause.split(` `).length, cause).toBeLessThanOrEqual(4);
         }
-        // Four chores are ruled out by ONE absent file, and the strip says so once rather than four times.
+        // Four chores are ruled out by one absent file; the strip says so once rather than four times.
         expect(causes.filter((cause) => cause === `no package.json`)).toHaveLength(4);
     });
 });
 
-/* THE FRONT-END CHORES. Four chores over two probes, tested where they decide something: the share that makes a
- * bundle a finding, the names that make two components one component, and above all the digests, because three of
- * these four measure things that move every time anyone writes a line of markup. */
+// Four chores over two probes, tested where they decide something: the share that makes a bundle a finding, the
+// names that make two components one, and the digests, since three of the four measure things that move on every markup
+// edit.
 const uiProbe = (scan: Partial<UiScan> = {}): ProbeResult =>
     probe({ id: `ui`, facts: { id: `ui`, scan: { components: [], bypasses: [], idioms: [], ...scan } } });
 
@@ -575,14 +534,10 @@ describe(`what the browser downloads`, () => {
         expect(verdictFor(withProbes([bundleProbe(even)]), `bundle-weight`).state).toBe(`clear`);
     });
 
-    // Two files cannot tell you how a build is divided, and the larger of them is over half by arithmetic.
     test(`too few assets to have a shape is clear, not due`, () => {
         expect(verdictFor(withProbes([bundleProbe([chunk(`dist/a-1.js`, 900), chunk(`dist/b-2.js`, 10)])]), `bundle-weight`).state).toBe(`clear`);
     });
 
-    /* THE CASE THIS CHORE WOULD OTHERWISE FAIL EVERY DAY. A content hash changing is what a content hash is for,
-     * so rebuilding identical code renames every asset. Digesting the raw paths would mint new evidence on every
-     * `pnpm build` and badge forever while reporting nothing new. */
     test(`rebuilding the same code does not read as new evidence`, () => {
         const before = verdictFor(
             withProbes([bundleProbe([chunk(`dist/vendor-DlAUqK2U.js`, 800), chunk(`dist/index-a1b2c3d4.js`, 100), chunk(`dist/s.css`, 50)])]),
@@ -619,9 +574,6 @@ describe(`idioms the framework has replaced`, () => {
         expect(verdict.detail[0]).toContain(`script setup`);
     });
 
-    /* A migration in progress is a set that changes on every commit, so digesting the file identities, which is
-     * right for the documentation chore, whose set is packages: would badge continuously through exactly the
-     * period someone is doing the work. The bucketed count moves on real progress and not on daily churn. */
     test(`one more file in a large migration is not news`, () => {
         const before = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 40)] })]), `framework-idiom`);
         const after = verdictFor(withProbes([uiProbe({ idioms: [idioms(`vue-options-api`, 41)] })]), `framework-idiom`);
@@ -634,15 +586,10 @@ describe(`idioms the framework has replaced`, () => {
         expect(after.digest).not.toBe(before.digest);
     });
 
-    // The daemon composes the sweep from its own copy of the table, so an image ahead of the browser can report a
-    // rule this build has no label or replacement for. A row about it could say nothing useful.
     test(`an idiom this build of the book does not know is dropped, not shown unnamed`, () => {
         expect(verdictFor(withProbes([uiProbe({ idioms: [idioms(`react-from-2029`, 5)] })]), `framework-idiom`).state).toBe(`clear`);
     });
 
-    /* A probe's command is a fixed string, so every rule sweeps every repository and the Angular patterns get
-     * their chance in a Vue codebase. Run against this workspace it found one file: the rule table itself, which
-     * quotes `RouterModule.forRoot` as a pattern. What the repository declares is what settles it. */
     test(`an idiom from a framework the repository does not declare is not its problem`, () => {
         const vue = withProbes([uiProbe({ idioms: [idioms(`angular-ngmodule`, 4)] })], { deps: [`vue`] });
         const angular = withProbes([uiProbe({ idioms: [idioms(`angular-ngmodule`, 4)] })], { deps: [`@angular/core`] });
@@ -669,8 +616,6 @@ describe(`components built twice`, () => {
         expect(verdictFor(withProbes([components(`src/Button.vue`, `src/Card.vue`), jscpdProbe([])]), `component-overlap`).state).toBe(`clear`);
     });
 
-    // The other half of the evidence: two components with unrelated names doing the same work, which no name
-    // comparison can reach and jscpd already measured.
     test(`a clone counts only when a component sits on both sides of it`, () => {
         const ui = components(`src/Chart.vue`, `src/Graph.vue`);
         const shared = verdictFor(
@@ -686,8 +631,6 @@ describe(`components built twice`, () => {
         expect(oneSided.state).toBe(`clear`);
     });
 
-    /* Half a measurement would let the row claim it looked for shared logic in a repository where jscpd has never
-     * run: the "measured and found nothing" lie the unavailable state exists to prevent. */
     test(`without the clone sweep the chore is unavailable, not clear`, () => {
         expect(verdictFor(withProbes([components(`src/Button.vue`, `src/ui/Button.vue`)]), `component-overlap`).state).toBe(`unavailable`);
     });
@@ -713,8 +656,6 @@ describe(`hard-coded styles`, () => {
         expect(verdict.detail[0]).toContain(`11`);
     });
 
-    // Tailwind gates this one alone: a Vue repository with no Tailwind has no theme scale to have bypassed, and
-    // a row saying so would be the surface inventing a subject.
     test(`a repository without Tailwind is not asked the question at all`, () => {
         const verdict = verdictFor(
             withProbes([uiProbe({ bypasses: [{ path: `src/Nav.vue`, count: 2 }] })], { deps: [`vue`] }),
@@ -724,8 +665,8 @@ describe(`hard-coded styles`, () => {
         expect(verdict.headline).toContain(`Tailwind`);
     });
 
-    // And the framework gate the other four share, from the other side: deps come from shape, not from packages,
-    // because a single-package Vite app has no workspace packages at all.
+    // The framework gate all four share reads `deps` from shape, not from `packages`: a single-package app has no
+    // workspace packages at all.
     test(`a repository with no framework rules the front-end chores out entirely`, () => {
         const states = [`bundle-weight`, `framework-idiom`, `component-overlap`, `tailwind-arbitrary-values`].map(
             (id) => verdictFor(withProbes([], { deps: [`pino`] }), id).state,
@@ -734,9 +675,8 @@ describe(`hard-coded styles`, () => {
     });
 });
 
-/* THE SECOND AXIS: has anyone already answered this, and does the answer still stand. The panel demotes on these
- * two — the mark on the collapsed row, the tint it drops, the counts it leaves out — so what they draw apart has
- * to be exactly what the panel means by "you do not need to act on this one". */
+// The second axis: has anyone already answered this, and does the answer still stand; what the panel demotes on
+// (mark, tint, counts) has to match this exactly.
 describe(`whether a chore has already been answered`, () => {
     const withAdvisories = report({ repos: [{ repo: `app`, probes: [auditProbe([`left-pad`])], signals: signals() }] });
     const ledgerEntry = (over: Partial<ChoreLedgerEntry> = {}): ChoreLedgerEntry => ({
@@ -749,8 +689,6 @@ describe(`whether a chore has already been answered`, () => {
         ...over,
     });
 
-    // The row this whole distinction was built for: an advisory with no upstream patch, reported on, re-measured,
-    // and due for ever. It has to be legible as answered or it wears the page's one alarm colour permanently.
     test(`a settled chore carries its answer, and the answer stands`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry()] }, `security-advisories`);
         expect(verdict.state).toBe(`due`);
@@ -758,8 +696,6 @@ describe(`whether a chore has already been answered`, () => {
         expect(choreAnswered(verdict)).toBe(true);
     });
 
-    // A turn landed and nothing has measured since. The row's badge says "re-measure", which is the next move and
-    // not the news: the news is that an agent already acted here, and it is the mark that says so.
     test(`a stale chore carries its answer too`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, outcome: `acted` })] }, `security-advisories`);
         expect(verdict.state).toBe(`stale`);
@@ -767,11 +703,6 @@ describe(`whether a chore has already been answered`, () => {
         expect(choreAnswered(verdict)).toBe(true);
     });
 
-    /* THE TWO ARE ASKED OF DIFFERENT THINGS, and this is the row that proves it: a run whose recorded digest no
-     * longer lines up with what is on screen. There is no answer to SHOW — naming an outcome would be claiming
-     * that turn had seen this evidence — but there is still nothing to press, because a stale chore carries no
-     * prompt in any case. Demoting on the mark instead would sort the one row you cannot act on above the ones
-     * you can. */
     test(`a stale chore with nothing to show is still nothing to start`, () => {
         const verdict = verdictFor(
             { ...withAdvisories, ledger: [ledgerEntry({ ranAt: NOW - 3_600_000, digest: `answered-something-else` })] },
@@ -783,9 +714,6 @@ describe(`whether a chore has already been answered`, () => {
         expect(choreAnswered(verdict)).toBe(true);
     });
 
-    /* The digest is what makes this an answer rather than a timestamp. A run against evidence that has since
-     * changed answered a different question, and a mark claiming otherwise would be the exact false reassurance
-     * this feature exists to remove: the reader would see "reported" over a finding nobody has read. */
     test(`a run against evidence that has since moved has answered nothing`, () => {
         const moved = report({
             repos: [{ repo: `app`, probes: [auditProbe([`left-pad`, `minimist`])], signals: signals() }],
@@ -797,10 +725,6 @@ describe(`whether a chore has already been answered`, () => {
         expect(choreAnswered(verdict)).toBe(false);
     });
 
-    /* THE TWO COME APART WHEN THE CADENCE LAPSES, which is the only case where they do, and the reason they are
-     * two functions rather than one boolean. The answer is still a fact worth showing — "an agent reported on
-     * exactly this, a year ago" is what you want in front of you before spending a second turn — but it has
-     * stopped standing, so the row goes back to full weight and gets counted again. */
     test(`a lapsed chore still shows what was concluded, and no longer counts as answered`, () => {
         const dependencies = choreById(`dependencies-outdated`);
         expect(dependencies?.cadenceMs).toBeGreaterThan(0);
@@ -811,21 +735,19 @@ describe(`whether a chore has already been answered`, () => {
             facts: { id: `outdated`, packages: [{ name: `vue`, current: `1.0.0`, latest: `2.0.0`, kind: `major`, section: `dependencies` }] },
         });
         const repos = [{ repo: `app`, probes: [outdatedProbe], signals: signals() }];
-        // The digest is taken from the verdict itself rather than transcribed, so this stays a test about the
-        // cadence and cannot quietly become a test about a mismatched fingerprint.
+        // The digest comes from the verdict itself, not a transcription, so this stays a test about the cadence, not a
+        // mismatched fingerprint.
         const digest = verdictFor(report({ repos }), `dependencies-outdated`).digest;
         const entry: ChoreLedgerEntry = { repo: `app`, chore: `dependencies-outdated`, ranAt: lapsedAt, runId: `r0`, outcome: `acted`, digest };
 
         const verdict = verdictFor(report({ repos, ledger: [entry] }), `dependencies-outdated`);
         expect(verdict.state).toBe(`due`);
-        // Same evidence, so the run did answer THIS; the cadence expiring is the book asking again anyway.
+        // Same evidence: the run did answer this; only the cadence lapsing asks again.
         expect(verdict.settled).toBe(false);
         expect(choreAnswer(verdict)?.outcome).toBe(`acted`);
         expect(choreAnswered(verdict)).toBe(false);
     });
 
-    // Nothing to answer: an empty digest identifies no evidence, so a plain clear or unmeasured row can never
-    // pick up a mark from a ledger entry that happens to sit beside it.
     test(`a row with no finding of its own has no answer`, () => {
         const clear = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([])], signals: signals() }], ledger: [ledgerEntry()] }), `security-advisories`);
         expect(clear.state).toBe(`clear`);
@@ -834,9 +756,8 @@ describe(`whether a chore has already been answered`, () => {
     });
 });
 
-/* THE CRITERION: the rule in words, next to the evidence that met it. A row that reports a number without the
- * rule behind it is asking to be taken on trust, and the first row that turns out to be wrong costs the whole
- * list its credibility. */
+// The criterion: the rule in words beside the evidence that met it. A row reporting a number without it is
+// asking to be trusted, and one wrong row costs the list its credibility.
 describe(`every chore says what would make it due`, () => {
     test(`every entry in the book carries a criterion`, () => {
         for (const chore of CHORES) {

@@ -25,36 +25,35 @@ const inputs: PipelineInputs = {
 
 test("the intent workflow resolves and pushes to the desired-state repo with the pinned CLI version", () => {
     const yaml = intentWorkflowYaml(inputs);
-    // The post-adopt resolve syncs newly-required secrets into Forgejo and regenerates apply.yaml.
+    // Post-adopt resolve syncs newly-required secrets into Forgejo and regenerates apply.yaml.
     expect(yaml).toContain(
         "pnpm dlx @intentic/cli@1.2.3 deploy resolve --config deploy.config.ts --out /tmp/ds/desired-state.json --sync-control-plane",
     );
     expect(yaml).toContain("clone https://git.example.com/intentic/desired-state.git /tmp/ds");
-    // The git-push credential rides on the INTENTIC_GIT_* secrets, mapped to env.
+    // Git-push credential rides on the INTENTIC_GIT_* secrets, mapped to env.
     expect(yaml).toContain(`GIT_USER: \${{ secrets.${GIT_USER_SECRET} }}`);
     expect(yaml).toContain(`GIT_TOKEN: \${{ secrets.${GIT_TOKEN_SECRET} }}`);
-    // Only push when the resolve actually changed the artifact.
+    // Only pushes when resolve actually changed the artifact.
     expect(yaml).toContain("git diff --cached --quiet");
 });
 
 test("the apply workflow injects every secret, diffs against the applied tag, and re-stamps it on success", () => {
     const yaml = applyWorkflowYaml(inputs);
-    // The env var name stays the real key; the lookup uses the (possibly reserved-prefix-sanitized) store name.
+    // Env var name stays the real key; the lookup uses the (possibly sanitized) store name.
     for (const key of inputs.applySecretKeys) {
         expect(yaml).toContain(`${key}: \${{ secrets.${forgejoSecretName(key)} }}`);
     }
     expect(yaml).toContain(`FORGEJO_ADMIN_PASSWORD: \${{ secrets.INTENTIC_FORGEJO_ADMIN_PASSWORD }}`);
     expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 deploy apply --yes --artifact desired-state.json $PREV");
-    // The prune baseline is the last successfully-applied commit, read from the intentic-applied tag.
+    // Prune baseline is the last successfully-applied commit, read from the intentic-applied tag.
     expect(yaml).toContain("git show intentic-applied:desired-state.json > /tmp/previous.json");
     expect(yaml).toContain("git tag -f intentic-applied HEAD");
-    // The tag push authenticates with the Forgejo admin password secret (already in the apply env).
+    // Tag push authenticates with the Forgejo admin password secret already in the apply env.
     expect(yaml).toContain("printf '%s:%s' 'intentic' \"$FORGEJO_ADMIN_PASSWORD\"");
 });
 
-// The workflows are rendered from .eta templates; a stray space or dropped newline would produce a file that
-// still "looks" right but no longer parses. Parse both as YAML and assert the structure the runner depends on:
-// this is the durability guard the templating switch is for.
+// Workflows render from .eta templates; a stray space could produce a file that looks right but doesn't parse. Parses
+// both as YAML and asserts the structure the runner depends on.
 test("both rendered workflows are valid YAML with the expected job structure", () => {
     const intent = parse(intentWorkflowYaml(inputs)) as {
         on: { push: { branches: string[]; paths: string[] } };
@@ -62,7 +61,7 @@ test("both rendered workflows are valid YAML with the expected job structure", (
     };
     expect(intent.on.push.branches).toEqual(["main"]);
     expect(intent.jobs.resolve["runs-on"]).toBe("docker");
-    // The env block's indentation must nest under the job: a mis-indented entry would land at the wrong level.
+    // Env block must nest under the job; a mis-indented entry would land at the wrong level.
     expect(intent.jobs.resolve.env["GIT_USER"]).toBe(`\${{ secrets.${GIT_USER_SECRET} }}`);
     expect(intent.jobs.resolve.env["CLOUDFLARE_API_TOKEN"]).toBe(`\${{ secrets.CLOUDFLARE_API_TOKEN }}`);
 
@@ -95,7 +94,7 @@ test("setRepoSecrets PUTs each name/value onto the repo via the Forgejo API", as
         secrets: { HOST_SSH_KEY: "key", FORGEJO_ADMIN_PASSWORD: "pw" },
     });
 
-    // The reserved-prefix key is stored under its sanitized name; the value is unchanged.
+    // Reserved-prefix key is stored under its sanitized name; the value is unchanged.
     expect(calls).toEqual([
         { name: "desired-state", secretName: "HOST_SSH_KEY", data: "key" },
         { name: "desired-state", secretName: "INTENTIC_FORGEJO_ADMIN_PASSWORD", data: "pw" },

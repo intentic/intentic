@@ -2,31 +2,19 @@ import type { IconName } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { present } from "./toolPresentation";
 
-/* A TURN'S RUN OF TOOL CALLS, reduced to the mark that stands in for it while they are hidden (see
- * ChatToolRun.vue).
- *
- * The mark says two things and no more: HOW MANY calls the turn made, and WHAT the most notable of them was.
- * Both are answers to the question somebody skimming actually has, "did anything happen between these two
- * paragraphs, and was any of it consequential?", and neither requires reading a single row.
- *
- * The count is of top-level calls, which is exactly what opening the mark reveals. A sub-agent's own calls stay
- * counted as the one delegation that spawned them, because that is how they render: nested under it. */
+// Summary of a turn's tool-call run for its collapsed mark (see ChatToolRun.vue): how many top-level calls it made (a
+// sub-agent's own calls count as the one delegation that spawned them) and which was the most notable.
 
 export interface ToolRun {
     readonly count: number;
-    // The icon of the run's most notable call, borrowed from that call's own presentation so a browser run wears
-    // the globe and a delegation wears the delegation mark, exactly as their rows would.
+    // Icon of the run's most notable call, borrowed from that call's own presentation.
     readonly icon: IconName;
     readonly failed: boolean;
     readonly running: boolean;
 }
 
-/* HOW NOTABLE A CALL IS. Ordered by what a reader would want to know happened, most consequential first: work
- * handed to another agent, a change to the workspace, a picture that came back, a page, a command, a search, a
- * read. One number per call, so the run's mark is simply the highest.
- *
- * Deliberately about what a call DID rather than which tool it was: an Edit and a shell `>` redirection are the
- * same event to a reader, and both outrank a hundred greps. */
+// Ranks a call by consequence (delegation, workspace edit, image, fetch/browser, command, search, read) rather than by
+// which tool it is; the mark is the highest score.
 const notability = (tool: TranscriptTool): number => {
     if (tool.subagent !== undefined || (tool.children?.length ?? 0) > 0) {
         return 70;
@@ -56,8 +44,8 @@ const notability = (tool: TranscriptTool): number => {
     return 5;
 };
 
-/* The run's most notable call, the FIRST of the highest-scoring ones, so a mark doesn't change its face as
- * later calls of equal weight land while the turn is still going. */
+// Picks the first call reaching the top score, so the mark's icon doesn't change as later calls of equal weight arrive
+// mid-turn.
 const mostNotable = (tools: readonly TranscriptTool[]): TranscriptTool | undefined => {
     let best: TranscriptTool | undefined;
     let bestScore = -1;

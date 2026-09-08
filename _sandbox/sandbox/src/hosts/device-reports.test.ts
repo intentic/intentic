@@ -16,8 +16,7 @@ const report = (hostname: string, overrides: Partial<DeviceReport> = {}): Device
     ...overrides,
 });
 
-// A host capability as the hub holds it: the card's platform always, and what the machine said about itself only
-// once it has connected.
+// platform is always set on a host capability; connected-machine facts appear only once it has answered.
 const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => ({
     id,
     platform: "linux",
@@ -25,15 +24,10 @@ const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => 
     ...overrides,
 });
 
-/* One desktop-sync enrollment, as the store now hands them over: a machine, the half of sync it holds, and when
- * it last checked in. The merge used to take a bare list of NAMES, which is why a row could say "this machine is
- * paired" and nothing about what that pairing does or how to end it. */
+// One desktop-sync enrollment fixture: a machine name and which sync mode it holds.
 const enrolled = (machine: string, mode: "sync" | "mirror" = "sync"): SyncEnrollmentRow => ({ machine, mode });
 
-/* `run_command` answers in PROSE: it is written for the agent, which is its only other caller, so a machine
- * reader has to find its JSON inside a human answer. These pin that extraction, because it is the one place this
- * feature depends on the shape of somebody else's output. */
-// The status envelope the agent prints: the machine report rides as its `sync` half.
+// Status envelope the agent prints; the report rides in its `sync` field.
 const statusEnvelope = (machine: DeviceReport): string =>
     JSON.stringify({ version: "1.0.0", summary: "syncing", device: { links: [] }, sync: machine });
 
@@ -54,33 +48,22 @@ test("survives a banner before it and a warning after it", () => {
     expect(reportFrom(answer)?.hostname).toBe("laptop");
 });
 
-// "There is no report here" has to be distinguishable from a report, or a machine with no agent reads as a
-// machine with no folders and no ports.
 test("finds nothing when the command printed no report", () => {
     expect(reportFrom("Exit code 127 (failed).\n--- stderr ---\nintentic-machine: command not found")).toBeUndefined();
-    // JSON that is not a report is not a report.
     expect(reportFrom(`--- stdout ---\n{"hostname":"laptop"}`)).toBeUndefined();
-    // Brace-shaped but not JSON: a candidate line that will not parse must be skipped, not thrown on, this runs
-    // over whatever somebody's login shell decided to print.
     expect(reportFrom(`--- stdout ---\n{ not json at all }`)).toBeUndefined();
 });
 
-// ...and a bad line must not hide a good one that follows it.
 test("keeps looking past a line that only looked like JSON", () => {
     const answer = `--- stdout ---\n${statusEnvelope(report("laptop"))}\n{ tail garbage }`;
     expect(reportFrom(answer)?.hostname).toBe("laptop");
 });
 
-/* Unlike run_command, list_sandboxes answers its JSON bare: the machine's own tool produced it for this exact
- * reader. What still needs pinning is the skew: a machine running an agent from before the tool refuses it, and
- * that must read as a machine with no listable sandboxes, never as a failed pull. */
 test("reads the fleet the machine's own tool answered", () => {
     const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
     expect(sandboxesFromTool(JSON.stringify(fleet, undefined, 2), false)).toEqual(fleet);
 });
 
-// A machine that inspected its containers reports each one's share of itself, and it rides through verbatim:
-// the Resources dialog pre-fills from it, so a dropped field there is a dialog that lies about what is set.
 test("a container's resources ride through the fleet reading untouched", () => {
     const fleet = [
         {
@@ -105,10 +88,6 @@ test("keeps an enrolled machine that has never reported, and says why it is empt
     expect(merged).toEqual([{ key: "laptop", label: "laptop", sync: enrolled("laptop"), gap: "unreported" }]);
 });
 
-/* WHAT THE MACHINE IS has to survive having no report, because that is the row it matters on: a connected
- * device with no sync agent had nothing on it but a name, so a Windows PC and a Linux desktop rendered as the
- * same line twice. None of this comes from an agent: the card names the platform and the machine described
- * itself when it connected. */
 test("says what a connected device is even when it reported nothing", () => {
     const facts = { os: "Windows 11 Pro (build 10.0.26100)", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\ada", roots: ["C:\\Users\\ada"] };
     const merged = mergeDevices(
@@ -129,8 +108,7 @@ test("says what a connected device is even when it reported nothing", () => {
     });
 });
 
-// A sync-only machine has no capability card to name its platform, so the report's own token is read: in the
-// spelling `os.platform()` uses, which is not one anybody should have to recognise on screen.
+// The report's os field is `os.platform()`'s spelling (win32/darwin), mapped here to platform names.
 test("reads a sync-only machine's platform off its report", () => {
     const merged = mergeDevices(
         [enrolled("laptop"), enrolled("mac")],
@@ -143,9 +121,7 @@ test("reads a sync-only machine's platform off its report", () => {
     expect(merged.map((row) => row.platform)).toEqual(["windows", "macos"]);
 });
 
-/* The conservative half of the reconciliation. Both doors onto the SAME box collapse into one row only because
- * the two reports agree on a hostname: the sandbox knows the machine as "laptop" (the ssh key's comment) and the
- * capability calls it "my-pc", and neither name could have told us they were the same device. */
+// Rows join on hostname, not on the enrollment name or capability id, which can each differ.
 test("folds a sync enrollment and a host capability into one row when the hostname agrees", () => {
     const pulled: PullResult = {
         report: report("blackbox", { sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }] }),
@@ -154,14 +130,9 @@ test("folds a sync enrollment and a host capability into one row when the hostna
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", sync: enrolled("laptop"), hostId: "my-pc", online: true });
-    // The pulled report wins, because it is the only one carrying containers.
     expect(merged[0]?.report?.sandboxes).toHaveLength(1);
 });
 
-/* A LAPTOP WITH ITS LID SHUT IS THE ORDINARY CASE HERE, not an edge one, and it used to fork into a SECOND row
- * for a device already on screen: same name, no report, nothing to show. The two rows then disagreed about one
- * box — the sync row, seeing no device door, offered "Connect this device" for a device that is connected
- * and merely asleep — and both carried the same `key`, which is a duplicate list key wherever they are drawn. */
 test("joins an offline device to the machine it is already syncing", () => {
     const merged = mergeDevices(
         [enrolled("radarsu-rog")],
@@ -170,18 +141,10 @@ test("joins an offline device to the machine it is already syncing", () => {
     );
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog", hostId: "radarsu-rog", online: false, platform: "windows" });
-    // The volunteered report survives: a shut device door does not stop files syncing, and a row that dropped
-    // its folders and ports would be reporting an outage that is not happening.
     expect(merged[0]?.report?.hostname).toBe("radarsu-rog");
-    // And the row is NOT marked offline, because the machine plainly is not — only its device half is. That
-    // distinction is what the row reads to say "no buttons, and here is why" over a live agent's own facts.
     expect(merged[0]?.gap).toBeUndefined();
 });
 
-/* EVIDENCE OUTRANKS A NAME, whatever order the capability list is in. One laptop can hold two device
- * connections — Windows, and the WSL distro inside it under its own id — and only one of them is awake and can
- * see the container. If the sleeping one takes the row because its id matches the enrollment, the machine that
- * can actually manage the sandbox lands on a row of its own: all the buttons over there, all the folders here. */
 test("lets the device that answered take the row before one that only shares its name", () => {
     const merged = mergeDevices(
         [enrolled("radarsu-rog")],
@@ -192,12 +155,9 @@ test("lets the device that answered take the row before one that only shares its
         ],
     );
     expect(merged.find((row) => row.sync !== undefined)).toMatchObject({ hostId: "radarsu-rog-wsl", online: true });
-    // The sleeping one still gets its row; it simply does not get THAT one.
     expect(merged.map((row) => row.hostId).toSorted()).toEqual(["radarsu-rog", "radarsu-rog-wsl"]);
 });
 
-/* TWO CAPABILITY IDS, ONE HOSTNAME: a Windows machine and the WSL distro inside it genuinely report the same
- * one. The first join wins the row; the second must not overwrite its identity, and must not take its key. */
 test("keeps two devices apart when they report one hostname", () => {
     const merged = mergeDevices(
         [],
@@ -211,8 +171,6 @@ test("keeps two devices apart when they report one hostname", () => {
     expect(new Set(merged.map((row) => row.key)).size).toBe(2);
 });
 
-// The failure this conservatism exists to prevent: two collaborators' laptops on one shared sandbox must never
-// become one row just because both are reachable.
 test("keeps two machines apart when nothing says they are the same box", () => {
     const merged = mergeDevices(
         [enrolled("ada-laptop")],
@@ -223,8 +181,7 @@ test("keeps two machines apart when nothing says they are the same box", () => {
     expect(merged.map((row) => row.sync?.mode)).toEqual(["sync", undefined]);
 });
 
-/* Each gap is a different errand, so each survives to the UI as itself. "scope-off" in particular is the one the
- * reader can close in a single click, and the tab can only say which switch if the daemon does not flatten it. */
+// Gap reasons (offline, scope-off, no-agent) must reach the UI distinct, not flattened.
 test("carries the reason a reachable device produced nothing", () => {
     const merged = mergeDevices(
         [],
@@ -239,22 +196,9 @@ test("carries the reason a reachable device produced nothing", () => {
     expect(merged.every((row) => row.sync === undefined)).toBe(true);
 });
 
-/* --- HOW OFTEN THE MACHINE IS ACTUALLY ASKED ---------------------------------------------------------------
- *
- * The reason this route was slow was never the merge above; it was that every reader waited on a live round trip
- * to every one of their laptops (a measured p50 of ~9.8s, with a tail past a minute). These pin the three rules
- * that fixed it, and each of them is a rule somebody could quietly undo while making the merge nicer.
- *
- * The cache lives in the module, so every test here uses ids of its own: sharing one would make the order of the
- * file part of its meaning. */
+// Cache/dedupe tests: the pull cache is module-level, so each test uses its own machine id, not a shared one.
 
-/* A history root with no enrollments file behind it, so the sync door contributes nothing and these read the
- * PULLED half alone, which is the half with the round trip in it.
- *
- * A path that does not exist rather than a real directory, and the difference is the point: nothing here writes
- * an enrollment, `readEnrollments` answers an unreadable file with an empty list, and cutting a temp tree for it
- * would put this whole file, its dozen pure-function tests included, under the integration budget for storage it
- * never touches. */
+// A nonexistent path: sync contributes nothing, and no test here needs a real temp directory for history.
 const NO_HISTORY = "/nonexistent/machine-reports-history";
 
 interface FakeCall {
@@ -286,9 +230,6 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
 
 afterEach(() => vi.useRealTimers());
 
-/* THE ANSWER COMES OUT OF MEMORY AND THE REFRESH RUNS BEHIND IT. Only a machine this daemon has never once read
- * is worth waiting for; every reader after that gets the last reading at once. A reading carries its own
- * capturedAt and the view prints "Last heard from ..." over it, so serving it is not a claim that it is live. */
 test("waits for the first reading of a machine, then serves it while refreshing behind the answer", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     let hostname = "first";
@@ -296,26 +237,19 @@ test("waits for the first reading of a machine, then serves it while refreshing 
         call.tool === "run_command" ? answer(statusEnvelope(report(hostname))) : answer("[]"),
     );
 
-    // Cold: this one pays the round trip, which is the only time anybody does.
     expect((await devices(services))[0]?.report?.hostname).toBe("first");
     expect(calls).toHaveLength(2);
 
-    // Inside the TTL: straight out of the map, machine untouched.
     hostname = "second";
     expect((await devices(services))[0]?.report?.hostname).toBe("first");
     expect(calls).toHaveLength(2);
 
-    // Past it: the reader still gets the reading in hand rather than waiting on a new one...
     vi.setSystemTime(Date.now() + 31_000);
     expect((await devices(services))[0]?.report?.hostname).toBe("first");
-    // ...and the refresh it kicked off lands for whoever asks next.
     await vi.waitFor(() => expect(calls).toHaveLength(4));
     expect((await devices(services))[0]?.report?.hostname).toBe("second");
 });
 
-/* ONE OUTSTANDING PULL PER MACHINE, WHOEVER ASKS. Without this, a second browser tab, the desktop app, another
- * member of the sandbox and a poll landing on top of a manual refetch were four simultaneous round trips to one
- * laptop asking it the same question. */
 test("coalesces concurrent readers into a single round trip", async () => {
     let release = (): void => {};
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -332,10 +266,7 @@ test("coalesces concurrent readers into a single round trip", async () => {
     expect(calls.filter((call) => call.tool === "run_command")).toHaveLength(1);
 });
 
-/* BOTH QUESTIONS GO OUT TOGETHER. They are independent, and asking the second only once the first came back cost
- * every reporting machine two round trips where it needed one. The status call still decides what the row SAYS,
- * which is why the fleet call has to happen even on a machine whose status answer turns out to be no report at
- * all: if it did not, this test would pass with the calls back in sequence. */
+// Uses a no-report status so the fleet call must still fire concurrently, not only when status succeeds.
 test("asks for the status and the fleet in one go, and bounds the pair with one deadline", async () => {
     const { services, calls } = fakeServices("bare-pc", async (call) =>
         call.tool === "run_command" ? answer("intentic-machine: command not found", false) : answer("[]"),
@@ -343,23 +274,18 @@ test("asks for the status and the fleet in one go, and bounds the pair with one 
 
     expect((await devices(services))[0]?.gap).toBe("no-agent");
     expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "run_command"]);
-    // One signal over the whole reading, and it is the daemon's own: without it the only ceiling on this route is
-    // the hub's fifteen-minute backstop, which is what the minute-long samples in the perf log were.
     expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
     expect(calls[0]?.signal).toBe(calls[1]?.signal);
 });
 
-// A machine that will not answer is a machine you cannot read: the row says so instead of the request hanging on
-// it. Same outcome the deadline produces, reached here without waiting for one.
 test("a machine that refuses to answer at all reads as offline", async () => {
     const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
     expect((await devices(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
 });
 
-/* ---- runner lifecycle, the two ops the daemon fills in for ---- */
+// Runner lifecycle: the two ops the daemon fills in for.
 
-// The flow the machine was actually asked to run, plus the store the parent kept: enough to see both halves of
-// starting a runner, the pairing this side mints and the argv the far side gets.
+// Fixture exposing both the flow sent to the machine and what this side minted, revoked or disconnected.
 const runnerServices = (
     overrides: { publicUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
 ): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
@@ -369,9 +295,7 @@ const runnerServices = (
     const disconnected: string[] = [];
     const services = {
         config: { historyRoot: NO_HISTORY, sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" } },
-        // The shape sources runner-up reads, present so the injection's best-effort reads answer rather than
-        // throw: a workspace with nothing approved and default settings ships no shape, which is what the
-        // exact-equality assertions above depend on.
+        // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
         workspace: { root: "/nowhere" },
         files: { read: async () => overrides.approved },
         sandboxSettings: { get: async () => ({ ...overrides.settings }) },
@@ -412,8 +336,7 @@ const drain = async (flow: AsyncGenerator<DeviceFlowLine>): Promise<DeviceFlowLi
     return lines;
 };
 
-/* THE PAIRING IS THE DAEMON'S TO MINT, never the caller's to carry. A browser that could name the credential
- * could mint a runner anywhere; what it names is a machine and a name, and this side supplies the rest. */
+// The daemon mints the pairing; a caller only names a machine and a runner, never carries a credential in.
 test("starting a runner fills in this sandbox's address and a pairing bound to the runner's own name", async () => {
     const { services, sent, minted } = runnerServices();
     await drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
@@ -428,8 +351,7 @@ test("a sandbox with no public address refuses rather than leaving a container w
     expect(sent).toEqual([]);
 });
 
-// Every other op is passed through untouched: the injection is for `runner-up` alone, and a pairing riding an
-// update would be a live credential in a flow that has no use for one.
+// Pairing injection applies only to `runner-up`; every other op passes through untouched.
 test("no other op grows a pairing", async () => {
     const { services, sent, minted } = runnerServices();
     await drain(manageDeviceSandbox(services, "rog", { op: "update", slug: "work" }));
@@ -437,10 +359,8 @@ test("no other op grows a pairing", async () => {
     expect(minted).toEqual([]);
 });
 
-/* THE PARENT'S SHAPE RIDES THE FLOW: its approved overlay byte-exact with the sha256 that pins it (the
- * `ic sandbox rebuild` pair, checked again on the machine before anything builds), and its non-default
- * settings as a definition seed. A sandbox with nothing approved and default settings ships neither — the
- * exact-equality test above is that half's pin. */
+// The approved overlay ships byte-exact with its sha256 (checked again on the machine); non-default settings ship as a
+// definition seed.
 test("starting a runner ships the approved overlay with its pinning hash and the settings as a seed", async () => {
     const approved = "FROM ghcr.io/intentic/sandbox:stable\nRUN true\n";
     const { services, sent } = runnerServices({ approved, settings: { hashlineEdits: true } });
@@ -448,14 +368,11 @@ test("starting a runner ships the approved overlay with its pinning hash and the
     const flow = sent[0] as DeviceSandboxFlow;
     expect(flow.overlay).toBe(approved);
     expect(flow.overlayHash).toBe(sha256Hex(approved));
-    // The seed is a settings-only definition: the flag travels, and nothing else grew a section.
     expect(flow.definition).toContain("hashlineEdits = true");
     expect(flow.definition).not.toContain("[[capabilities]]");
     expect(flow.definition).not.toContain("secrets");
 });
 
-/* A RUNNER REMOVED FROM ITS MACHINE IS REMOVED HERE TOO, and only on the machine's own success: a removal that
- * failed left the container running, and revoking its way home would strand a working runner. */
 test("a removed runner loses its enrollment here, but only when the machine says it worked", async () => {
     const { services, revoked, disconnected } = runnerServices();
     await drain(manageDeviceSandbox(services, "rog", { op: "runner-remove", slug: "rig" }));

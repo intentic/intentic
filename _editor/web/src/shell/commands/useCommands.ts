@@ -5,9 +5,8 @@ import { commandContext } from "./contextKeys";
 import { formatChord, isApplePlatform, matchesChord } from "./keybindings";
 import { effectiveKeybinding } from "./useKeymap";
 
-/* The command registry: commands registered by extensions (and, opportunistically, builtins) surfaced in Quick
- * Open's `>` command mode and executable by id. A module-level singleton ref, like the extension registry,
- * every consumer reads the same reactive list. */
+// Command registry: extensions (and builtins) register commands here, surfaced in Quick Open's `>` mode and
+// executable by id. A module-level singleton ref; every consumer reads the same reactive list.
 
 export interface CommandRegistration {
     // "builtin" or the owning extension's id.
@@ -15,25 +14,15 @@ export interface CommandRegistration {
     readonly command: string;
     readonly title: string;
     readonly icon?: string | undefined;
-    // The keyboard chord that runs this command, in the notation `keybindings.ts` parses (e.g. "Mod+Shift+P");
-    // undefined for commands reachable only from the palette. The shell's dispatcher (useKeybindings) reads it.
+    // Chord in keybindings.ts notation (e.g. "Mod+Shift+P"); undefined if reachable only from the palette.
     readonly keybinding?: string | undefined;
-    /* Gates the KEYBINDING only (palette execution ignores it): a condition over the shell's context keys
-     * (`contextKeys.ts`), e.g. `tabSurface == 'chat'` or `agentsUndoable && !editableTarget`. False leaves the
-     * keystroke with whatever owns it. Monaco's find widget, the shell in a terminal, the browser.
-     *
-     * A STRING rather than the predicate this used to take, because a predicate cannot be written down. An
-     * extension declares its commands in JSON, so under the old shape extension commands could carry no
-     * condition at all and every one of them was always bound; and the keybindings page could see that a
-     * command was gated but never on what. Both surfaces read the same string now. */
+    // Gates the keybinding only: a contextKeys.ts condition; false leaves the keystroke to its current owner.
     readonly when?: string | undefined;
     readonly handler: (...args: unknown[]) => unknown;
 }
 
-// What the registry holds: the registration plus its condition already parsed. Parsed ONCE here rather than
-// per keystroke in `boundCommand`, and an unparseable condition throws at registration, for a builtin that is
-// a bug in this repo and failing loudly is how it is found, and an extension's has already been refused by the
-// manifest schema before it could reach this.
+// Registration plus its condition parsed once, here, not per keystroke; an unparseable condition throws at
+// registration time.
 export interface RegisteredCommand extends CommandRegistration {
     readonly gate: WhenExpression | undefined;
 }
@@ -44,9 +33,7 @@ export const registerCommand = (registration: CommandRegistration): Disposable =
     if (commands.value.some((existing) => existing.command === registration.command)) {
         throw new Error(`command "${registration.command}" is already registered`);
     }
-    /* Descriptors rather than a spread. Two shell commands carry a GETTER for `title`, the chat pop-out
-     * renames itself for the direction the next press will take, and a spread reads every property, which
-     * would freeze both at whatever they said the moment the shell mounted. */
+    // Descriptors, not a spread: some commands define `title` as a live getter (e.g. the chat pop-out).
     const entry = Object.defineProperties({} as RegisteredCommand, {
         ...Object.getOwnPropertyDescriptors(registration),
         gate: { value: registration.when === undefined ? undefined : parseWhen(registration.when), enumerable: true },
@@ -67,13 +54,10 @@ export const executeCommand = async (command: string, ...args: unknown[]): Promi
     return await found.handler(...args);
 };
 
-// The command a live keydown is bound to, matching the EFFECTIVE chord (user remap ?? declared default) and
-// skipping commands whose `when` gate is closed. This is the ONE matching loop shared by the window dispatcher
-// (which then executes the command) and the terminal's key-forwarding hook (which makes xterm ignore the key so
-// it reaches the dispatcher), sharing it means "which chords are shell-owned" can never drift between the two.
+// Command bound to a live keydown: matches the effective chord (remap ?? default), skips a closed `when` gate.
+// Shared by the window dispatcher and terminal key-forwarding hook, so shell-owned chords can't drift.
 export const boundCommand = (event: KeyboardEvent, isMac: boolean): RegisteredCommand | undefined => {
-    // Built once per keystroke, not once per candidate: resolving the focused surface walks the DOM, and doing
-    // that inside the find would repeat it for every registered command the chord does not match.
+    // Built once per keystroke: resolving the focused surface walks the DOM, costly to repeat per candidate.
     const context = commandContext(event);
     return commands.value.find((entry) => {
         if (entry.gate !== undefined && !evaluateWhen(entry.gate, context)) {
@@ -84,11 +68,8 @@ export const boundCommand = (event: KeyboardEvent, isMac: boolean): RegisteredCo
     });
 };
 
-// The formatted shortcut label for a registered command, its EFFECTIVE chord (user override ?? declared
-// default) run through the platform-native formatter (⇧⌘P vs Ctrl+Shift+P), or undefined when it has no
-// binding / isn't registered. Menus and tooltips call this so a discoverable action also teaches its key; it
-// reads the registry and keymap reactively, so a live remap re-renders the hint. Platform is read per call
-// (cheap) rather than at module load, to keep this import-safe in non-DOM test setups.
+// Formatted shortcut for a command: effective chord (override ?? default) via the platform formatter, or undefined
+// if unbound. Reads registry and keymap reactively; platform is read per call to stay import-safe outside a DOM.
 export const commandShortcut = (command: string): string | undefined => {
     const entry = commands.value.find((candidate) => candidate.command === command);
     if (entry === undefined) {
@@ -98,9 +79,8 @@ export const commandShortcut = (command: string): string | undefined => {
     return chord === undefined ? undefined : formatChord(chord, isApplePlatform());
 };
 
-// A label that also teaches its shortcut, "New terminal (Ctrl+Shift+`)" when the command is bound, the plain
-// text otherwise. Tooltips and aria-labels on buttons that DUPLICATE a command call this, so the control the
-// pointer finds is what teaches the key the hand should learn instead.
+// Appends a command's shortcut to a label, e.g. "New terminal (Ctrl+Shift+`)", for tooltips/aria-labels that
+// duplicate a command's action.
 export const withShortcut = (text: string, command: string): string => {
     const shortcut = commandShortcut(command);
     return shortcut === undefined ? text : `${text} (${shortcut})`;

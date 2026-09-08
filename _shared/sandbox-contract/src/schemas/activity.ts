@@ -1,9 +1,8 @@
-// activity: the activity audit log (historyRoot/activity.jsonl)
+// Activity audit log schemas (historyRoot/activity.jsonl).
 import { z } from "zod";
 import { AgentOriginSchema } from "./agent.js";
-// One provider-agnostic event per agent↔provider interaction, appended by the daemon only (never the agent,
-// the log lives under historyRoot, outside /work, so the agent can't read or rewrite its own trail). Discord
-// is the first source; other cli providers reuse the same shape.
+// One provider-agnostic event per agent↔provider interaction, appended only by the daemon; the log lives outside /work,
+// so an agent can't read or rewrite its own trail.
 
 export const ActivityEventSchema = z.object({
     id: z.string().describe("The entry's own id."),
@@ -11,21 +10,17 @@ export const ActivityEventSchema = z.object({
     at: z.number().describe("When it happened, in milliseconds. Also what you page by."),
     // "discord", …; absent on provider-less system events (a cron automation.run).
     provider: z.string().optional().describe("Which outside service, when one was involved. Absent for the sandbox's own events."),
-    // Which provider account handled the turn, the attribution key for per-account usage totals. Absent on
-    // provider-less events and turns that ran on the provider's default account.
+    // Which provider account handled it; attribution key for per-account usage, absent on provider-less or
+    // default-account turns.
     account: z
         .string()
         .optional()
         .describe("Which account handled it. Absent for the sandbox's own events and for work run on a provider's default."),
     direction: z.enum(["in", "out", "system"]).describe("Whether something arrived, something went out, or the sandbox did it to itself."),
-    // in: message.received | voice_utterance.received | voice_transcript.received
-    // out: message.send | reaction.add | messages.read | api.call (unclassified provider endpoint)
-    // system: gateway.login_failed | dispatch.failed | voice.session_started | voice.session_ended | automation.run
-    //         | turn.started | turn.plan | turn.error | turn.completed (agent turn lifecycle; provider = claude/codex)
-    //         | rule.blocked_push | rule.held_work | rule.continued_turn (a rule DID something, see RuleSchema.
-    //           Only the three outcomes a person would otherwise have no explanation for: a push that did not
-    //           go, work that did not arrive, a turn that did not end. A rule that ran and passed says nothing,
-    //           because a feed that logs every green check is one the eye learns to skip.)
+    // in: message.received, voice_utterance.received, voice_transcript.received
+    // out: message.send, reaction.add, messages.read, api.call (unclassified endpoint)
+    // system: gateway.login_failed, dispatch.failed, voice.session_started, voice.session_ended, automation.run,
+    // turn.started, turn.plan, turn.error, turn.completed, rule.blocked_push, rule.held_work, rule.continued_turn
     type: z
         .string()
         .describe(
@@ -34,50 +29,41 @@ export const ActivityEventSchema = z.object({
     channelId: z.string().optional().describe("Which channel or thread it happened in."),
     // Inbound author display name.
     author: z.string().optional().describe("Who sent it, for something that arrived."),
-    /* WHO ASKED FOR A TURN, as the daemon verified the request that started it: a member's email, or
-     * `token:<label>` for a control token. Distinct from `author` (the outside sender a listener relayed) and
-     * from `account` (the provider account that served it). Absent for a wake nothing asked for (a schedule, a
-     * listener, a boot-time resume), whose provenance is its origin. */
+    // Distinct from `author` (the relayed sender) and `account` (who served it); absent for an unasked wake.
     actor: z
         .string()
         .optional()
         .describe("Who asked for the turn, as the sandbox verified it: a member's email, or token:<label> for a program's control token. Absent for a wake nothing asked for."),
     // Full message text (inbound) or sent payload content (outbound).
     content: z.string().optional().describe("The message, in full, whichever direction it went."),
-    // Outbound HTTP method + endpoint path (tokens ride headers, never URLs).
+    // HTTP method and endpoint path of an outgoing call; credentials ride headers, never the URL.
     method: z.string().optional().describe("The verb of an outgoing call."),
     endpoint: z.string().optional().describe("The address of an outgoing call. Credentials travel in headers, so they are never here."),
     // The agent turn that made/handled it, the join key between an inbound wake and its outbound calls.
     sessionId: z.string().optional().describe("The provider session behind it."),
-    /* ONE TURN'S EVENTS, TIED TOGETHER. A turn writes four lifecycle events plus one per outbound provider call,
-     * and read as five rows they say one thing five times, so the feed groups on this instead. It cannot be
-     * sessionId: the runtime does not mint one until the stream's first frame, which is AFTER turn.started, so
-     * the very event carrying the prompt is the one that could never be joined. Minted by the turn itself. */
+    // Ties one turn's events together; not sessionId, minted only after turn.started, too late for that event.
     turnId: z
         .string()
         .optional()
         .describe(
             "Ties one turn's entries together. A turn writes several, and read as separate rows they say one thing several times, so a feed groups on this.",
         ),
-    // The stable conversation the turn belongs to. Outlives sessionId, which a provider/account/harness switch
-    // retires mid-conversation, so this, not sessionId, is what "the same agent" means across a feed.
+    // Outlives sessionId, retired by a provider switch; this is what "same agent" means across a feed.
     conversationId: z
         .string()
         .optional()
         .describe(
             "Which conversation. This, rather than the provider session, is what the same agent means across a feed, because a session is retired whenever the model changes.",
         ),
-    // The conversation's display title as it stood when the event was written. Denormalised on purpose: the
-    // registry entry it came from is prunable and renameable, and an audit row must still read as words years
-    // later. Absent on the first event of a fresh conversation, the auto-namer has not run yet.
+    // Denormalized title at write time, since the registry entry is prunable/renameable; absent before the auto-namer
+    // runs.
     title: z
         .string()
         .optional()
         .describe(
             "What that conversation was called at the time. Copied in rather than looked up, because an audit entry must still read as words years later, after the conversation has been renamed or pruned.",
         ),
-    // What woke the conversation from outside, when something did (see AgentOriginSchema), the feed's "who
-    // called me" attribution, and how a turn is filed under Discord rather than under the runtime that served it.
+    // Files a turn under what caused it (e.g. Discord), not under the runtime that served it.
     origin: AgentOriginSchema.optional().describe(
         "What woke the conversation from outside, when something did. It is how a turn gets filed under the chat service that caused it rather than under the model that served it.",
     ),
@@ -99,10 +85,8 @@ export const ActivityQuerySchema = z.object({
 });
 export type ActivityQuery = z.infer<typeof ActivityQuerySchema>;
 export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema).describe("The audit entries, newest first.") });
-// Live connection health, probed per provider capability (not stored): gateway state from the client pool
-// (idle = the gateway is up but has no enabled listener automation to connect for, distinct from a
-// connection that should be up but isn't; pairing = the socket is up but the credential is a ceremony nobody
-// has finished, which no amount of waiting fixes), lastError from the newest system-error event in the log.
+// Live connection health, probed per capability, not stored; `gateway` from the client pool, `lastError` from the
+// newest system-error event in the log.
 export const ActivityConnectionSchema = z.object({
     capabilityId: z.string().describe("Which connection."),
     provider: z.string().describe("Which service it is."),

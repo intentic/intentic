@@ -3,38 +3,20 @@ import { builtinModules } from "@intentic/web/builtins";
 import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 import { demoMode } from "../mode";
 
-/* The sandbox's own furniture for the recorded workspace: what acme-shop is made of, what it is wired to, which
- * extensions supply that wiring, and the spend ledger behind the Usage tab.
- *
- * The connector entries are copies of the real `_extensions/connectors` and `_extensions/discord` manifests,
- * same providers, same catalog copy, minus the credential guides, which only matter in an add dialog this
- * fixture can't complete. A card a visitor sees here is a card the product really contributes. */
+// acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
+// Usage tab's spend ledger. Connector entries copy the real `_extensions/connectors` and `_extensions/discord`
+// manifests, minus credential guides.
 
 const day = (now: number, back: number): string => new Date(now - back * 86_400_000).toISOString().slice(0, 10);
 
-/* WHAT EACH REPOSITORY IS MADE OF. `GET /panels`, and the most relied-on rows in this fixture.
- *
- * These are the facts every extension's `detect()` runs over, so they are what decides which tiles the rail
- * carries at all: Documentation and Maintenance activate on there being a repository, Acceptance on one that
- * has user stories or a dev server, Preview on `hasPanel`, Apps on `monorepo`/`vitest`. A fixture that answered
- * this route with an empty list, as this one did, is a fixture whose sidebar is missing half the product.
- *
- * Evidence over identity, exactly as the daemon computes it: `web` ships a Vite dev server and carries stories
- * under `docs/user-stories`; `api` carries stories but has no dev script to preview. Neither is a monorepo and
- * neither runs vitest (the storefront's suite is Playwright), so neither claims an Apps panel.
- *
- * `running` is false for both, and that is the honest answer rather than a shy one: nothing runs in a
- * recording. The panel's Start button reaches a refusal that says so (daemon.ts), and Acceptance's target
- * picker shows the repo as "stopped", which is exactly what it shows against a real sandbox before you press
- * anything. */
+// Facts every extension's `detect()` runs over, deciding which rail tiles show. `running` is false for both: nothing
+// runs in a recording.
 export const demoPanels = (): PanelSummary[] => [
     {
         repo: `web`,
         hasPanel: true,
         running: false,
-        // The recorded workspace is one somebody has already worked in, so its tree is installed and the Start
-        // screen would promise seconds rather than an install. `api` has nothing runnable, which reads as
-        // installed for the same reason the daemon says so (panels.routes.ts).
+        // Tree already installed; Start would promise seconds, not a fresh install.
         installed: true,
         healthy: false,
         servers: [],
@@ -44,7 +26,7 @@ export const demoPanels = (): PanelSummary[] => [
         monorepo: false,
         vitest: false,
         userStories: true,
-        // Its set is PUBLISHED (fixture/docs.ts); `api`'s is only staged, which is what the false below means.
+        // Set is published (fixture/docs.ts); `api`'s below is only staged.
         docs: true,
     },
     {
@@ -64,10 +46,8 @@ export const demoPanels = (): PanelSummary[] => [
     },
 ];
 
-/* The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
- * the daemon returns, a token never leaves the sandbox, so it never appears in a list row either. `secrets`
- * names the keys stripped out of each, which is what lets a card's form be opened over one of these and show
- * dots where it may not show a value. */
+// One capability per system the agents operate. `config` is the secret-stripped echo the daemon returns; `secrets`
+// names the stripped keys so a form can show dots for them.
 export const demoCapabilities = (): CapabilitySummary[] => [
     { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github`, git: `on` }, secrets: [`token`] },
     {
@@ -96,13 +76,7 @@ export const demoCapabilities = (): CapabilitySummary[] => [
     },
 ];
 
-/* The extensions those cli capabilities resolve through: without the contribution there is no card, which is
- * exactly how the product works, a connector is manifest data, not a hardcoded table in the app. These two are
- * daemon-side (a connector catalog and a listener), so no code of theirs runs in the browser and the hub calls
- * them `agent-only`.
- *
- * No `enabled` on either literal: which extensions are switched on is the demo MODE's call, applied once in
- * `demoExtensions()` below. A list that carried its own would quietly outrank the switcher. */
+// No `enabled` here; `demoExtensions()` below applies demo mode's on/off once.
 const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     {
         id: `intentic.connectors`,
@@ -243,28 +217,19 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     },
 ];
 
-/* THE LIST THE IMAGE WOULD BAKE. Every first-party extension whose code this app build compiled in, read off
- * the app's own registry rather than re-typed here, because the extension host treats a compiled-in extension
- * the daemon didn't mention as version drift, and says so on each row: "this sandbox image doesn't list it,
- * the image and the app are on different versions". True of a dogfooding sandbox, alarming nonsense on a
- * marketing page, and re-listing them by hand would only move the drift to the next extension somebody adds.
- *
- * `commit` is `demo` for the same reason `info.version` is: the recording is not a build of anything. */
+// Every first-party extension compiled into this build, read from the app's own registry so it can't drift from what's
+// really compiled in. `commit` is `demo`: this recording isn't a real build.
 const compiledExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
     [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, source: `builtin` }));
 
-// Built once and then LIVE: the hub's Extensions tab really writes these switches, because the daemon persists
-// a flip and every later read reflects it, a fixture that answered read-only would have a toggle that springs
-// back on the next poll.
+// Built once, then live: toggling here persists across reads, like the real daemon.
 let extensions: ExtensionSummary[] | undefined;
 
-/* WHICH OF THEM ARE ON is the demo mode's opening position (mode.ts), and only that: every extension stays in
- * the list, because the Extensions tab showing the whole catalog with most of it switched off is the truth
- * about a workspace nobody has set up yet, and the visitor can turn any of them on from there. */
+// Which extensions start on is demo mode's opening position only; every extension stays listed, most switched off, as
+// an unset-up workspace really looks.
 export const demoExtensions = (): ExtensionSummary[] =>
     (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
-        // In place: these objects ARE the live list from here on, the hub's switch writes `enabled` straight
-        // back into them (setExtensionEnabled below), as it has since before there were modes.
+        // Mutates in place: `setExtensionEnabled` below writes `enabled` straight onto these objects.
         Object.assign(extension, { enabled: demoMode.extensions?.includes(extension.id) ?? true }),
     ));
 
@@ -275,9 +240,7 @@ export const setExtensionEnabled = (id: string, enabled: boolean): void => {
     }
 };
 
-/* The image overlay: the layer of the environment everyone else keeps closed. What's applied is what the
- * container was built from; the proposal is the agent asking for one more tool, approved by the owner, never
- * by the agent, which is the whole point of showing a Dockerfile diff instead of installing behind your back. */
+// Applied is what the container was built from; the proposal awaits owner approval, never the agent's.
 const APPLIED_OVERLAY = `# intentic:custom: approved 3 days ago
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\
  && rm -rf /var/lib/apt/lists/*
@@ -302,11 +265,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
     },
 });
 
-/* The same environment read as CONTENTS, what the sandbox has rather than how it was built, which is the view
- * the Environment tab opens on. Every state the rows can be in is represented, because each one is a different
- * sentence to a visitor: installed and answering, approved but waiting on a rebuild, and proposed by the agent
- * and waiting on them. Versions are what the tools report in a real sandbox, so they are written as real
- * versions here rather than as round numbers. */
+// Same environment as contents (what the sandbox has, not how it was built); every row state is represented. Versions
+// are real tool output, not round numbers.
 export const demoEnvironmentContents = (): EnvironmentContents => ({
     items: [
         {
@@ -441,8 +401,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
     ],
 });
 
-/* The spend ledger the Usage tab projects: real turns cost real money on YOUR subscription, and the sandbox
- * records every one of them. Two providers, two accounts, the models the fleet is actually running. */
+// Spend ledger the Usage tab projects: two providers, two accounts, the models the fleet actually runs.
 export const demoUsageRollup = (now: number): UsageRollupRow[] => {
     const rows: UsageRollupRow[] = [];
     const shape = [
@@ -451,8 +410,7 @@ export const demoUsageRollup = (now: number): UsageRollupRow[] => {
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-haiku-4-5-20251001`, harness: `claude-code`, turns: 9, cost: 0.28 },
         { provider: `codex`, account: `chatgpt-ada`, model: `gpt-5.2-codex`, harness: `native`, turns: 6, cost: 1.1 },
     ];
-    // A fortnight of work with a weekend dip, the ledger is per day × provider × account × model, and the
-    // browser re-projects it into every chart on the tab.
+    // Two weeks with a weekend dip; rows are per day × provider × account × model.
     for (let back = 13; back >= 0; back -= 1) {
         const weekday = new Date(now - back * 86_400_000).getUTCDay();
         const load = weekday === 0 || weekday === 6 ? 0.2 : 0.7 + ((back * 37) % 60) / 100;

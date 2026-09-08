@@ -2,15 +2,8 @@ import { createServer, type Server } from "node:net";
 import { afterEach, expect, test } from "vitest";
 import { startSocks, socksConnect, type SocksHandle } from "./exit-socks.js";
 
-/* The proxy is the seam every consumer of an exit talks to, so it is exercised as a real SOCKS5 server over
- * loopback rather than unit-tested in pieces: a handshake that parses in theory and hangs in practice is worth
- * nothing, and the bugs this catches (a fragmented greeting, a client that writes before the reply lands) only
- * exist on a socket.
- *
- * `localAddress` is 127.0.0.1 here rather than a tunnel address, which is the one thing that cannot be
- * exercised without a live tunnel. Everything else — framing, hostname handling, the early-write replay, the
- * refusal paths and teardown — is the same code that runs behind a real exit.
- */
+// Exercises the proxy as a real SOCKS5 server over loopback: bugs like a fragmented greeting only show on a socket.
+// `localAddress` stands in for a tunnel address; everything else is the same code a real exit runs.
 
 const opened: (SocksHandle | Server)[] = [];
 
@@ -22,8 +15,7 @@ afterEach(async () => {
     }
 });
 
-// An echo server that also reports what it received first, so a test can prove the client's early bytes
-// survived the handshake instead of being dropped.
+// Reports what it received first, so a test can prove the client's early bytes survived the handshake.
 const echoServer = async (): Promise<{ port: number }> => {
     const server = createServer((socket) => {
         socket.on("data", (chunk) => socket.write(chunk));
@@ -38,22 +30,15 @@ const proxy = async (port: number): Promise<SocksHandle> => {
     const handle = await startSocks({
         port,
         localAddress: "127.0.0.1",
-        // No resolver is reachable in a test, so a hostname target must fail rather than hang; the IP paths
-        // below are what a real caller uses most.
+        // No resolver is reachable in a test; a hostname target must fail rather than hang.
         resolver: { servers: [], localAddress: "127.0.0.1" },
     });
     opened.push(handle);
     return handle;
 };
 
-/* A fixed port per test, so two tests in this file never fight for one listener — and BELOW the ephemeral
- * range, which is the half that was wrong. These used to start at 38400, inside `ip_local_port_range`
- * (32768–60999 on Linux), so the kernel was free to hand the very same number to any outbound socket on the
- * machine: the exit then failed to bind with "local port N is already taken", which is a true statement about
- * a port this test had no claim to. It only bites under load, so it passed run after run beside its own file
- * and failed inside `pnpm verify`, where 40-odd suites are making connections at once — a gate that reports
- * the machine's traffic rather than the code. The kernel never auto-assigns below the range's low bound, so
- * these are ports nothing takes unless a service is deliberately bound to one. */
+// A fixed port per test, distinct from the kernel's ephemeral range (`ip_local_port_range`), so nothing else on the
+// machine can be auto-assigned the same port under concurrent test load.
 let next = 21_000;
 const freePort = (): number => (next += 7);
 
@@ -68,10 +53,8 @@ test("an IPv4 CONNECT is proxied end to end", async () => {
 });
 
 test("bytes written immediately after the handshake are not lost", async () => {
-    /* The bug this pins: the handshake reader buffers whatever arrives, and a client that writes its request
-     * in the same breath as the SOCKS reply lands those bytes in that buffer rather than on the wire. Dropping
-     * them does not error, it hangs the request until something times out, which is the worst possible shape
-     * for a failure. */
+    // The handshake reader buffers whatever arrives; a client that writes its request in the same breath as the reply
+    // lands those bytes in that buffer instead of on the wire.
     const target = await echoServer();
     const port = freePort();
     await proxy(port);
@@ -83,7 +66,7 @@ test("bytes written immediately after the handshake are not lost", async () => {
     const request = Buffer.alloc(10);
     request.set([5, 1, 0, 1, 127, 0, 0, 1], 0);
     request.writeUInt16BE(target.port, 8);
-    // Request and payload in ONE write: the payload rides in behind the request, before the reply exists.
+    // Request and payload in one write: the payload rides in behind the request, before the reply exists.
     socket.write(Buffer.concat([request, Buffer.from("early")]));
     const seen = await collect(socket, 15);
     expect(seen.includes("early")).toBe(true);
@@ -91,8 +74,7 @@ test("bytes written immediately after the handshake are not lost", async () => {
 });
 
 test("a fragmented greeting still completes", async () => {
-    // TCP may split anywhere, and every SOCKS field is length-prefixed by something read earlier, so a reader
-    // that assumes one chunk per field works locally and fails against a real client.
+    // TCP may split anywhere; a reader assuming one chunk per SOCKS field breaks against a real client.
     const target = await echoServer();
     const port = freePort();
     await proxy(port);
@@ -134,16 +116,15 @@ test("an unsupported command is refused with the right SOCKS code, not a dropped
 });
 
 test("a port already in use fails with the recovery, not an errno", async () => {
-    // The derived-port collision exit-paths.ts warns about. "EADDRINUSE" tells a user nothing; the fix is to
-    // rename the exit, because the port is a function of the name.
+    // The derived-port collision exit-paths.ts warns about; rename the exit, since the port is a name function.
     const port = freePort();
     await proxy(port);
     await expect(proxy(port)).rejects.toThrow(/Rename the exit/);
 });
 
 test("closing the proxy cuts connections still riding it", async () => {
-    // An exit going down takes its tunnel with it. A socket left piping into a tunnel that no longer exists
-    // hangs instead of failing, so close has to be a cut, not just "stop accepting".
+    // An exit going down takes its tunnel with it; a socket left piping into a vanished tunnel hangs, so close must cut
+    // the connection, not just stop accepting.
     const target = await echoServer();
     const port = freePort();
     const handle = await proxy(port);
@@ -155,19 +136,15 @@ test("closing the proxy cuts connections still riding it", async () => {
 });
 
 test("the client half speaks the same protocol as the server half", async () => {
-    // socksConnect is what the observation goes through on a tor exit; pointing it at our own server proves
-    // the two halves agree, which is the only place both are written by hand.
+    // socksConnect is what the observation uses on a tor exit; our own server proves the two halves agree.
     const target = await echoServer();
     const port = freePort();
     await proxy(port);
-    // Our server resolves hostnames itself and has no resolver in this test, so the failure has to be the
-    // resolver's, reported cleanly rather than as a hang.
+    // Our server resolves hostnames and has no resolver here, so the failure is the resolver's, reported cleanly.
     await expect(socksConnect(port, "example.invalid", target.port)).rejects.toThrow(/refused|resolve/i);
 });
 
-// --- helpers -------------------------------------------------------------------------------------------
-
-// A minimal SOCKS5 client that targets an IPv4 literal, so the tests above do not depend on the resolver.
+// Minimal SOCKS5 client targeting an IPv4 literal, so these tests don't depend on a resolver.
 const socksConnectRaw = async (proxyPort: number, host: string, port: number) => {
     const { connect } = await import("node:net");
     const socket = connect({ host: "127.0.0.1", port: proxyPort });
@@ -185,8 +162,7 @@ const socksConnectRaw = async (proxyPort: number, host: string, port: number) =>
 const once = (socket: { once: (event: string, listener: (chunk: Buffer) => void) => void }): Promise<string> =>
     new Promise((resolve) => socket.once("data", (chunk) => resolve(chunk.toString("utf8"))));
 
-// Read until `atLeast` bytes have arrived or the socket goes quiet, so a reply split across segments is not
-// mistaken for a short one.
+// Reads until `atLeast` bytes arrive or the socket goes quiet, so a reply split across segments isn't read as short.
 const collect = (socket: { on: (event: string, listener: (chunk: Buffer) => void) => void }, atLeast: number): Promise<string> =>
     new Promise((resolve) => {
         let seen = "";

@@ -1,21 +1,15 @@
 // @vitest-environment jsdom
-//
-// AN ADD THAT ENDS `pending` HAS NOT FINISHED. The remaining step differs by kind: a machine's one-liner, a
-// browser's login, a sandbox rebuild, but it is named on the card the user just filled in, and the form used
-// to navigate away from it the moment the apply succeeded. That left the reader on the catalog grid with a
-// capability quietly gone pending and nothing on screen saying what to do. These pin what is on screen when
-// the apply finishes, for each of the three.
+// An add that ends pending has not finished; the remaining step (a one-liner, a login, a rebuild) is named on the
+// card just filled in. These pin what stays on screen for each of the three.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
-// module scope, environment.ts reads window.env and throws without it.
+// Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
-// Which card the page is on. Read once during setup, so setting it before mount is enough: the page is
-// URL-driven and nothing here navigates.
+// Which card the page is on, read once at setup since the page is URL-driven and nothing here navigates.
 let card = `linux`;
 const push = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
@@ -24,9 +18,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
-// Both cards are CONTRIBUTED, not static: there is no `linux` or `reddit` entry in the catalog to route to
-// unless an enabled extension declares one. These are the devices and social manifests narrowed to what a
-// card needs; the permission switches a device carries are added by the catalog itself, not by the manifest.
+// Both cards are contributed, not static; a device's permission switches come from the catalog, not the manifest.
 vi.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
@@ -67,9 +59,8 @@ vi.mock(`../extensions/useExtensions`, () => ({
     }),
 }));
 
-/* The apply, and the list it lands in. `add` writes the instance the daemon would have written, because what
- * the page does next is read off that list and off the STATUS its handler reported, which is the whole
- * subject here. Each test sets the status that handler would have returned. */
+// `add` writes what the daemon would write; each test sets the status its handler would report, which the page
+// then reads.
 const capabilities = ref<CapabilitySummary[]>([]);
 let applied: CapabilityStatus = { state: `pending` };
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
@@ -92,24 +83,22 @@ vi.mock(`./connect/useCapabilities`, () => ({
     }),
     browseMarketplace: vi.fn(),
 }));
-// The Extension card's signpost reads the registry cache for its two counts; nothing has browsed one here.
+// Extension card's signpost reads the registry cache; nothing here has browsed it.
 vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
     viewProcessLogs: vi.fn(),
 }));
-// No machine has ever checked in, which is what a just-added device looks like.
+// No machine has checked in, matching a just-added device.
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
-/* The vpn card's rows are <VpnConnections>, which dials as well as lists, so this stub is the whole composable
- * rather than its list: `error` is read on every render, and a stub without it throws in the render function. */
+// VpnConnections dials as well as lists, so `error` must be present or the render throws.
 vi.mock(`../sandbox/devices/useVpn`, () => ({
     importForticlient: vi.fn(),
     useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
 }));
-// The two dialogs mint real credentials against a daemon. What matters here is only that one is open and on
-// what, so the stubs render that and nothing else.
+// The two dialogs mint real credentials against a daemon; the stubs render only what's open and on what.
 vi.mock(`./connect/HostConnectDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, id: String, platform: String, permissions: String },
@@ -122,9 +111,7 @@ vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, capability: String, label: String, mode: String },
         render() {
-            // One window, two jobs, so the stub records WHICH one it was opened for: a hand-off that landed on
-            // the browse mode would be pointing at the wrong step. It records the CONNECTION too, because a card
-            // can hold several accounts of one site and the window opens exactly one of them.
+            // Records both the mode and the connection: a hand-off must land on the right step and the right account.
             return this.visible ? h(`div`, { "data-browser": this.capability, "data-mode": this.mode }, this.label) : null;
         },
     }),
@@ -137,8 +124,8 @@ const mount = (): HTMLElement => {
     document.body.append(el);
     const app = createApp({ render: () => h(Capabilities) });
     app.component(`Icon`, IconStub);
-    // Registered app-wide by the router plugin in the real app, which this mount deliberately does without.
-    // `href` is kept because one of these tests is about WHERE a row leads.
+    // RouterLink stub, since the real router plugin isn't mounted; `href` stays since one test checks where a row
+    // leads.
     app.component(
         `RouterLink`,
         defineComponent({
@@ -154,8 +141,7 @@ const mount = (): HTMLElement => {
     return el;
 };
 
-// The card's own form, submitted the way the button submits it: the Add button is a PrimeVue component and
-// what it does is dispatch this.
+// Submits the way the button does: Add is a PrimeVue component that dispatches this event.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
@@ -176,11 +162,11 @@ it(`hands over the machine's command when a device is added, instead of returnin
 
     await submitForm(el);
 
-    // Opened on the machine that was just created: the name the form suggested, and the platform the card pins.
+    // Opened on the just-created machine: the suggested name and the card's platform.
     const dialog = el.querySelector(`[data-connect]`);
     expect(dialog?.getAttribute(`data-connect`)).toBe(`linux`);
     expect(dialog?.getAttribute(`data-platform`)).toBe(`linux`);
-    // The grant the dialog states is the one the switches were left on, not a fixed sentence.
+    // Grant stated is whatever the switches were left on, not a fixed sentence.
     expect(dialog?.textContent).toContain(`run commands`);
     expect(push).not.toHaveBeenCalled();
 });
@@ -196,26 +182,23 @@ it(`opens the sign-in window when a browser account is added and the login is wh
     expect(push).not.toHaveBeenCalled();
 });
 
-// The same card, pending on the OTHER thing. Opening the login here would point at the wrong step: there is no
-// browser installed to sign into yet, and the remedy is a rebuild on another screen.
+// Same card, pending on the other thing: no browser is installed yet, so the remedy is a rebuild elsewhere.
 it(`does not open the sign-in window when the browser is still waiting on a rebuild`, async () => {
     const el = start(`reddit`, { state: `pending`, detail: `rebuild the sandbox to install the browser (Environment card)` });
 
     await submitForm(el);
 
     expect(el.querySelector(`[data-browser]`)).toBeNull();
-    // Still no navigation: the card is where the row that names the rebuild, and leads to it, lives.
+    // Still no navigation: the row naming the rebuild lives on the card.
     expect(push).not.toHaveBeenCalled();
-    // NAMES IT AND LEADS TO IT, in the row's two halves: the daemon's own words are the state badge, and the
-    // link beside them is the way to the screen that carries the remedy. They used to be one sentence inside
-    // the link, which is why this asserted the anchor's text.
+    // Names it and leads to it in two halves: the status badge is the daemon's words, the link beside it goes to the
+    // remedy.
     const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
     expect(link).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`rebuild the sandbox to install the browser`);
 });
 
-// The other half of the rule: an apply that actually finished has nothing left to hand over, and the catalog
-// is the right place to land.
+// An apply that finished has nothing left to hand over, so it returns to the catalog.
 it(`returns to the catalog when the capability came back active`, async () => {
     const el = start(`reddit`, { state: `active` });
 
@@ -225,9 +208,8 @@ it(`returns to the catalog when the capability came back active`, async () => {
     expect(push).toHaveBeenCalledTimes(1);
 });
 
-// A connected account is not finished with. The row that offers a re-log-in also offers the browser ITSELF:
-// the same signed-in profile the agent uses, for the user to do something in by hand, and the difference
-// between the two is the mode the window opens in, not a second browser.
+// A connected account isn't finished with: the same row also opens the signed-in browser itself, in browse mode
+// instead of login.
 it(`offers the connected browser to be used, not only signed into again`, async () => {
     const el = start(`reddit`, { state: `active` });
     await submitForm(el);
@@ -241,10 +223,8 @@ it(`offers the connected browser to be used, not only signed into again`, async 
     expect(window?.getAttribute(`data-mode`)).toBe(`browse`);
 });
 
-/* ONE SITE, TWO ACCOUNTS. The card's Name field already invites a second connection ("Give this one a new name
- * to add another connection"), and each connection is its own signed-in browser, so every button on a row has
- * to act on THAT row's account. Opening the site instead of the connection is the bug this pins: it would put
- * the user in whichever account happened to be first, on a window that says nothing about which one it is. */
+// One site, two accounts: every row's button must act on that row's own signed-in browser, not whichever account
+// is first.
 it(`opens the account a row belongs to when one site is connected twice`, async () => {
     card = `reddit`;
     applied = { state: `active` };
@@ -253,12 +233,11 @@ it(`opens the account a row belongs to when one site is connected twice`, async 
     push.mockClear();
     const el = mount();
 
-    // The form pre-fills a free name over the taken one, so submitting adds a SECOND account rather than
-    // overwriting the first.
+    // Form pre-fills a free name over the taken one, so submit adds a second account instead of overwriting the first.
     await submitForm(el);
     expect(add).toHaveBeenCalledWith(expect.objectContaining({ id: `reddit-2` }));
 
-    // Two rows, in list order, each with its own window: the second row's opens the second account.
+    // Two rows in list order; the second row's button opens the second account.
     const opens = [...el.querySelectorAll(`button`)].filter((button) => button.textContent?.includes(`Open browser`));
     expect(opens).toHaveLength(2);
     opens[1]!.click();
@@ -266,7 +245,7 @@ it(`opens the account a row belongs to when one site is connected twice`, async 
 
     const window = el.querySelector(`[data-browser]`);
     expect(window?.getAttribute(`data-browser`)).toBe(`reddit-2`);
-    // And it names the ACCOUNT, not the card: two windows onto one site have to be tellable apart.
+    // Names the account, not the card: two windows on one site must be tellable apart.
     expect(window?.textContent).toBe(`reddit-2`);
 });
 

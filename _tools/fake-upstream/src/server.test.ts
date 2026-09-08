@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_REPLY, type FakeUpstream, startFakeUpstream } from "./server.ts";
 
-/* What the platform's trial actually sends, asserted against the stand-in that will answer it in CI.
- *
- * The tests worth having here are the REFUSALS. A fake that answers everything is a fake that goes green on the
- * mix-up it was built to catch: the platform asks two surfaces with two different credentials, and sending the
- * wrong one to either is the failure this package exists to make visible. */
+// Trial requests asserted against the CI stand-in. The valuable tests are refusals: the platform hits two surfaces with
+// two different credentials, and this fake must reject the wrong one on either, not answer everything.
 
 let upstream: FakeUpstream | undefined;
 
@@ -31,8 +28,7 @@ describe(`the OpenAI-compatible surface`, () => {
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({
             object: `list`,
-            // `models/` prefixed, so the platform's own strip runs instead of being made unnecessary by a
-            // helpful fake. An unprefixed id here would let a broken `bareId` ship.
+            // Prefixed on purpose: an unprefixed id here would let a broken bareId ship undetected.
             data: [
                 { id: `models/alpha`, object: `model` },
                 { id: `models/beta`, object: `model` },
@@ -60,9 +56,9 @@ describe(`the OpenAI-compatible surface`, () => {
         expect(response.status).toBe(200);
         const body = (await response.json()) as { choices: { message: { content: string } }[]; model: string };
         expect(body.choices[0]?.message.content).toBe(DEFAULT_REPLY);
-        // Echoed rather than fixed: a picker that sent the wrong id would otherwise look right in the answer.
+        // Echoed, not fixed: a wrong id from the picker would otherwise still look right.
         expect(body.model).toBe(`fake-flash-latest`);
-        // The prompt reached the upstream, which is the half of the pipe a rendered reply alone does not prove.
+        // Proves the prompt reached upstream; a rendered reply alone doesn't cover that half.
         expect(fake.received).toHaveLength(1);
         expect(fake.received[0]).toContain(`hi`);
     });
@@ -93,16 +89,14 @@ describe(`Google's own surface beside it`, () => {
         expect(response.status).toBe(200);
         const body = (await response.json()) as { models: { name: string; supportedGenerationMethods: string[] }[] };
         expect(body.models[0]?.name).toBe(`models/alpha`);
-        // Without this the platform reads every model as un-chattable and serves the floor instead: the exact
-        // silent emptying the catalog's floor exists to survive.
+        // Missing this reads as no model being chattable, silently falling back to the floor.
         expect(body.models[0]?.supportedGenerationMethods).toContain(`generateContent`);
     });
 
     it(`refuses a bearer the way Google refuses one`, async () => {
         const fake = await start();
 
-        // THE BUG THIS PACKAGE EXISTS TO CATCH. The credential is valid; the dialect is not, and the real
-        // upstream answers 401 rather than falling back to looking for an api key.
+        // Valid credential, wrong dialect: the real upstream answers 401 rather than falling back to an API key check.
         const response = await fetch(nativeUrl(fake), { headers: { authorization: `Bearer key-1` } });
 
         expect(response.status).toBe(401);
@@ -131,10 +125,10 @@ describe(`the refusing keys`, () => {
             body: JSON.stringify({ messages: [] }),
         });
 
-        // 429 is what the platform's `poolRefused` reads as "try the next key" rather than "tell the user no".
+        // 429 is what poolRefused reads as try the next key, not tell the user no.
         expect(refused.status).toBe(429);
         expect(served.status).toBe(200);
-        // Both attempts recorded, which is how a test asserts the pool actually walked rather than gave up.
+        // Both recorded: proof the pool actually walked to the next key, not gave up.
         expect(fake.received).toHaveLength(2);
     });
 });

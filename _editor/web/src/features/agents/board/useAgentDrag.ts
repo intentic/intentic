@@ -8,63 +8,33 @@ import { dropActionFor, type DropAction, type DropTarget, type PendingAction } f
 import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
-/* Pointer-driven card drag for the board. Pointer Events rather than HTML5 drag-and-drop: the ghost is a real
- * AgentCard instead of a browser drag image, Escape cancels, and the drop target is hit-tested against the
- * live DOM so a scrolled lane still answers correctly.
- *
- * The dragged card STAYS in its lane, dimmed, while a fixed ghost follows the pointer. Nothing changes lane on
- * drop either: the action fires and the daemon's next roster frame moves the card. So the board never paints a
- * lane the status machine disagrees with, which is the whole point of laneOf being a pure projection.
- *
- * Mouse and pen only. Touch is deliberately excluded, a drag would fight the lanes' own scrolling, and the
- * mobile layout stacks the lanes anyway; land and discard stay reachable there from the review panel.
- *
- * Module-level singleton (one board), like useAgents and useChat. */
+// Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
+// DOM hit-testing for the drop target. The card stays in its lane, dimmed, until the action's own roster frame moves
+// it; nothing changes lane on drop itself. Mouse and pen only; touch stacks the lanes instead. Module-level singleton,
+// like useAgents and useChat.
 
 // Far enough that a click with a shaky hand still opens the card.
 const DRAG_THRESHOLD_PX = 5;
 
 const { fleet, refresh, notice, stopWatching } = useAgents();
 
-/* WHICH CARD IS IN FLIGHT, as an id AND the box it is in.
- *
- * An id alone stopped being an identity the day the board could show two sandboxes at once: agent ids are
- * minted per daemon, so a workspace cloned onto a second machine, or the same conversation resumed there, puts
- * the same id on two cards. Resolving by id would then pick whichever half of the fleet was searched first,
- * and a drop meant for the laptop's card would stop, land or discard the desk's. */
+// An id and its box: agent ids are minted per daemon, so the same id can be on two cards from two sandboxes, and
+// resolving by id alone could act on the wrong one's card.
 const draggedId = ref<string | undefined>(undefined);
 const draggedBox = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
-/* WHAT EACH CARD IS WAITING ON: a map keyed by card, not the one action this board is running.
- *
- * A single slot was a bug the moment two presses could overlap, which on this board is constantly: the user
- * clicks "Have the agent resolve it" on one card and, while that send is still out, on the next. The second
- * press overwrote the slot, so the first card's button flicked back to its resting label as though the press
- * had never taken, and whichever call returned first cleared the other card's spinner too. The archive pair
- * had the same fault and the same fix (useAgents-archive's busyCounts): a press claims ITS OWN card and
- * releases only what it claimed. No counter here, unlike there: re-entry on one card is refused below, so a
- * key is claimed once or not at all.
- *
- * Keyed by the PAIR, never by the id: agent ids are minted per daemon, so the same id can sit on two cards
- * from two boxes (see draggedBox), and a key naming only the id would spin both. JSON rather than a
- * delimiter, because a sandbox id is a slug of someone's choosing and any literal separator is one unlucky
- * name away from two cards sharing a key.
- *
- * The value is the ACTION and not a flag because the card's own buttons report their progress in place: see
- * PendingAction. */
+// Keyed by (sandboxId, id) as JSON, never by id alone, since the same id can sit on two cards from two boxes and a
+// literal-delimiter key risks colliding with a sandbox name. A press claims only its own card and releases only what it
+// claimed.
 const cardKey = (id: string, at?: string): string => JSON.stringify([at ?? null, id]);
 const inFlight = ref<ReadonlyMap<string, PendingAction>>(new Map());
 const pendingOn = (id: string, at?: string): PendingAction | undefined => inFlight.value.get(cardKey(id, at));
 const ghostWidth = ref(0);
 
-/* Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
- * retract its "Stop the turn" drop instead of letting the user cancel a turn that already finished.
- *
- * Out of the roster the card CAME from, never out of whichever one answers to its id first: see draggedBox. A
- * card from another sandbox that resolved to nothing here would have every drop on it silently refused with no
- * reason to show, and one that resolved to a local namesake would be worse than that. */
+// Resolved live against the roster, not snapshotted at grab time, so a turn ending mid-drag retracts its Stop action.
+// Read from the roster the card came from (via draggedBox), never from whichever answers to the id first.
 const dragged = computed<FleetAgent | undefined>(() =>
     draggedBox.value === undefined
         ? fleet.value.find((agent) => agent.id === draggedId.value)
@@ -89,8 +59,8 @@ const ghostStyle = computed(() => ({
     transform: `translate3d(${pointer.value.x - grabOffset.x}px, ${pointer.value.y - grabOffset.y}px, 0)`,
 }));
 
-// A drag's pointerup also lands as a click on the source card, the board asks this before opening the agent,
-// the same handshake titleEdit uses to protect its blur-commit.
+// A drag's pointerup also lands as a click on the source card; the board asks this before opening the agent, the same
+// handshake titleEdit uses to protect its blur-commit.
 const consumeSuppressedOpen = (): boolean => {
     if (!suppressOpen) {
         return false;
@@ -115,17 +85,14 @@ const cancel = (): void => {
     over.value = undefined;
 };
 
-// One runner for both spans, because a re-land IS a land in every way the board cares about, same claim on the
-// card, same refusal notice, same refresh. What differs is the rung it measures from, and that is one argument
-// rather than a parallel path free to drift on the other three.
+// One runner for land and reland: same claim on the card, same refusal notice, same refresh. Only the rung it measures
+// from differs, as one argument rather than a parallel path free to drift.
 const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
     const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`, false, at);
     await invalidateAgentAction(id, at);
     if (!result.landed) {
-        // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves instead),
-        // either way a first refusal with a report to read, not the repeat of one the user has already seen. A
-        // re-land reaches it when the user's own tree has moved over the paths it is putting back, which is
-        // the same report and the same read.
+        // Reachable from an errored card's drop or a ready card's button; either way a first refusal with a report to
+        // read, not a repeat.
         notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
     }
 };
@@ -136,10 +103,9 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
         return;
     }
     if (chosen === `unwatch`) {
-        // The store's own optimistic write moves the card out of Active the moment this is pressed
-        // (useAgents.stopWatching), so the drop needs nothing here beyond the call: no report to read, and
-        // nothing that can half-succeed. Local by construction: the drop is refused for a card in another box
-        // (laneDrop's NEEDS_THIS_BOX), because this store is the active daemon's roster.
+        // The store's own optimistic write moves the card out of Active on press (useAgents.stopWatching), so nothing
+        // else is needed here. Refused for a card in another box (laneDrop's NEEDS_THIS_BOX), since this store is the
+        // active daemon's roster.
         await stopWatching(id);
         return;
     }
@@ -148,10 +114,9 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
         return;
     }
     if (chosen === `resolve`) {
-        // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card. Its own
-        // frames are the progress report, so a send that WENT says nothing here. One that didn't has to: the
-        // board is armed off `status: "conflict"` alone, so it cannot know until the report is read that this
-        // particular conflict is the user's own to clear (see askAgentToResolve).
+        // The turn does the rest: it rebases and resolves, and the auto-land at completion moves the card, so a send
+        // that went says nothing here; one that didn't must, since the board can't tell from `status: "conflict"` alone
+        // whether this refusal is the user's to clear.
         const ask = await askAgentToResolve(id);
         if (!ask.sent) {
             notice.value = ask.why;
@@ -162,13 +127,12 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
     await invalidateAgentAction(id, at);
 };
 
-// The card doesn't move lane here, the roster frame the action provokes does that. Until it arrives the card
-// shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
+// The card doesn't move lane here; the roster frame the action provokes does. Until it arrives the card shows busy in
+// place.
 const perform = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
     const key = cardKey(id, at);
-    /* Re-entry on the SAME card is a no-op, like useAsyncAction's: a card mid-action is dimmed and
-     * pointer-inert, so a second press on it is a double-click rather than a second intention. A press on
-     * ANOTHER card is not re-entry at all, which is the whole reason this is a map. */
+    // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is dimmed and pointer-inert. A
+    // press on another card is not re-entry, which is the whole reason this is a map.
     if (inFlight.value.has(key)) {
         return;
     }
@@ -176,11 +140,8 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
     notice.value = undefined;
     try {
         await runAction(id, chosen, at);
-        /* The action's own roster frame is already on its way; this just closes the gap on a quiet stream.
-         *
-         * Another box has no stream to close a gap on, so its re-read is the ONLY thing that moves the card:
-         * without it a landed card would sit in Attention until the poll's next tick, which is the one place a
-         * press on the wider board could read as a press that did nothing. */
+        // The action's own roster frame is already on its way; this just closes the gap on a quiet stream. Another box
+        // has no stream to close, so its re-read is the only thing that moves the card.
         await (at === undefined ? refresh() : Promise.resolve(refreshAcross()));
     } catch (caught) {
         notice.value = errorMessage(caught, `That didn't work.`);
@@ -191,20 +152,9 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
     }
 };
 
-/* WHY THE RESOLVE DROP ASKS FIRST, and none of the others do.
- *
- * Stop, land, discard and unwatch all act on state this browser already has: what they will do is fully
- * described by the card and the drag hint, and each is either reversible or already carries its own
- * confirmation elsewhere. Unwatch is the cheapest of them to undo, since the agent can be told to watch the
- * same thing again in a sentence, and the card names the condition it is ending before the drop is made.
- * `resolve` STARTS A TURN, it spends the agent's time and the user's money on work nobody has seen the shape
- * of yet, and a drag is the easiest gesture here to make by accident: a card grabbed to be read, released a
- * few pixels into the wrong lane. So it stops at a dialog naming the agent, and the board performs it only
- * when the user says so. The review panel's button doesn't ask, because a deliberate press under a paragraph
- * explaining the mechanics is already the answer this dialog exists to collect.
- *
- * Held as the id alone: by the time the dialog is answered the roster has probably moved, and the confirm
- * should act on the agent that was dropped, not on a snapshot of what it looked like when it was. */
+// Stop, land, discard and unwatch act on state this browser already has and are reversible or already confirmed
+// elsewhere; `resolve` spends a turn on unseen work from an easily-accidental gesture, so it confirms first. The review
+// panel's own button doesn't ask, since a deliberate press there is already the answer.
 const pendingResolve = ref<string | undefined>(undefined);
 
 const confirmResolve = (): void => {
@@ -219,41 +169,20 @@ const cancelResolve = (): void => {
     pendingResolve.value = undefined;
 };
 
-/* THE SAME ASK, FROM THE CARD'S OWN BUTTON, and deliberately the same runner, not a second one.
- *
- * A conflicted card's press and a conflicted card's drop are one action on one board, so they share `perform`:
- * one claim on the card (which dims in place), one notice strip for a refusal, one refresh closing the gap on a
- * quiet stream. A parallel implementation here would be free to drift on all three, and the first thing to
- * drift would be the report of a failure, the half nobody exercises by hand.
- *
- * It does NOT go through pendingResolve's dialog, and that is the whole difference between the two. The dialog
- * guards a GESTURE: a card grabbed to be read and released a few pixels into the wrong lane starts a turn the
- * user never asked for, and nothing about a drag says what it is about to cost. A press on a button labelled
- * with the action, under a tooltip that states the mechanics, IS the answer that dialog exists to collect,
- * the same reasoning the review panel's own button already rests on. Asking twice for the same intent teaches
- * people to click through dialogs. */
+// Shares `perform` with the drop rather than a second implementation, so the claim, notice and refresh can't drift.
+// Skips the confirm dialog: a button press, unlike a drag, already states the action it is about to take.
 const resolveNow = (id: string, at?: string): Promise<void> => perform(id, `resolve`, at);
 
-// The ready card's "Land now", the same runner for the same reasons resolveNow shares it (one claim on the
-// card, one notice strip, one refresh). No dialog: landing is reversible in the git sense (the branch keeps everything)
-// and the button states its own mechanics, exactly like the review panel's copy of it.
+// The ready card's "Land now": shares the same runner as resolveNow, with no confirm dialog since landing is reversible
+// in the git sense (the branch keeps everything).
 const landNow = (id: string, at?: string): Promise<void> => perform(id, `land`, at);
 
-// The way back for a card whose landed work was discarded from the workspace, the same runner again, one
-// argument apart (see perform). No dialog, for the reason the two above have none and one of their own: this
-// press UNDOES a destruction rather than causing one, and the only thing it can put in the tree is work the
-// user has already reviewed once.
+// The way back for a card whose landed work was discarded: same runner, no dialog, since this only restores work
+// already reviewed once.
 const relandNow = (id: string, at?: string): Promise<void> => perform(id, `reland`, at);
 
-/* THE WAY OFF A WATCH, from the card's own readout, and the fourth press to share `perform` for the reasons
- * the three above give: one claim on the card, one notice strip, one refresh, and a refusal reported the same way
- * whichever gesture asked.
- *
- * It exists because the drop and the context menu were the whole of it, and both are gestures a user has to
- * already know about: the card SAID it was watching, in the one place the eye lands, and that readout was the
- * only thing on it that could not be acted on. No dialog, and this is the clearest case on the board for
- * having none: the card names the condition it is ending, the wait is the only thing lost, and re-arming it is
- * a sentence to the agent. */
+// The fourth press to share `perform`, for a card's own readout rather than the drop or context menu. No dialog: the
+// card already names the condition it's ending, and re-arming it is a sentence to the agent.
 const unwatchNow = (id: string, at?: string): Promise<void> => perform(id, `unwatch`, at);
 
 const onMove = (event: PointerEvent): void => {
@@ -278,8 +207,8 @@ const onUp = (): void => {
     if (id === undefined || chosen === undefined) {
         return;
     }
-    // The one drop that starts a turn stops for an answer first; the rest go straight through. `resolve` is
-    // refused outright for a card in another box (laneDrop), so the dialog only ever holds a local id.
+    // The one drop that starts a turn confirms first; `resolve` is refused outright for a card in another box, so the
+    // dialog only ever holds a local id.
     if (chosen === `resolve`) {
         pendingResolve.value = id;
         return;
@@ -293,18 +222,16 @@ const onKey = (event: KeyboardEvent): void => {
     }
 };
 
-// Arms a drag on the card's pointerdown, it only becomes one once the pointer travels far enough, so a plain
-// click still opens the agent and the rename affordances keep their own gestures.
+// Arms a drag on pointerdown; it becomes one only once the pointer travels far enough, so a plain click still opens the
+// agent.
 const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void => {
-    // Ahead of every guard: a press on ANY card ends the previous drag's claim on the next click. A drop onto
-    // another lane never delivers that click to the source card, so the flag would otherwise outlive its drag
-    // and swallow the first click on a card this function declines to drag (a draft, say).
+    // Ahead of every guard: a press on any card ends the previous drag's claim, or the suppression flag would outlive
+    // its drag and swallow the next card's first click.
     suppressOpen = false;
     if (event.pointerType === `touch` || event.button !== 0) {
         return;
     }
-    // A draft is an open tab that never ran, and a refused one never got past the door, no registry entry
-    // either way, so no drop on it could do anything.
+    // A draft or refused send has no registry entry, so no drop on it could do anything.
     if (unregistered(agent.status)) {
         return;
     }

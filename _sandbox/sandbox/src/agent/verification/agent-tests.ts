@@ -3,42 +3,13 @@ import { join } from "node:path";
 import { type AssertionMeasure, measureFile, TEST_FILE, type Weakening, weakened } from "@intentic/constants/assertion-measure";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* THE `verify-tests` BUILT-IN: what a turn did to its tests, read when the turn tries to end.
- *
- * A green suite answers one question, does the code pass the tests, and the two ways a model makes that answer
- * worthless both leave it green. It WIDENS an assertion until the failing test passes (`toEqual({…})` becomes
- * `toMatchObject({…})`, an exact string becomes `toContain("9")`), or it writes a test that passes without the
- * change it is meant to cover. On 2026-08-31 eight commits in fifty minutes did the first to about 180 files;
- * the second is the reason agent-test-strength.ts exists. AGENTS.md forbids both, and a paragraph in AGENTS.md is
- * weighed against everything else in the context; a fact about the file just edited, delivered at the Stop, is
- * read.
- *
- * TWO MEASUREMENTS, ONE FOLLOW-UP. For every test file the turn touched (read from the tree, so a file written by
- * a heredoc counts like one written by Edit):
- *
- *   THE RATCHET compares the file's assertions with the same file at HEAD, three numbers each way, exact
- *   matchers, loose matchers, and the characters of literal text the matchers pin down, and reports a file that
- *   got weaker in either of two shapes: a DOWNGRADE (fewer exact, more loose) or a NARROWING (the asserted text
- *   shrank by more than a quarter with no test removed). The measure is @intentic/constants/assertion-measure,
- *   the one copy the push gate applies to a commit range (_tools/scripts/verify/assertion-ratchet.mjs, which says why
- *   the vocabulary is what it is); there it refuses an undeclared weakening, here it tells the model while the
- *   model can still act, which is the cheaper moment by a whole push.
- *
- *   THE FAULT CHECK re-runs the test with the turn's own source changes served from HEAD and reports a test that
- *   still passes (agent-test-strength.ts). It used to fire on the first edit of each test file, on the first
- *   draft, with a 20-second budget and only where the edit tools could see it; at the Stop it measures the
- *   finished test, every touched one, with the patience this moment already has.
- *
- * IT REPORTS, IT NEVER REFUSES, and the message says which two answers need no work: a test written ahead of its
- * implementation, and a refactor's test that passes either way. Both measurements are heuristics that a reviewer
- * would want to hear about, not verdicts, and a gate here would fight correct work several times for every weak
- * test it caught. */
+// verify-tests, read at the Stop: flags a test whose assertions were widened until a failing check passed, or a new
+// test that passes without the change it covers. Two measurements report, never refuse: the ratchet (assertion strength
+// vs HEAD) and the fault check (re-run with this turn's source reverted, agent-test-strength.ts).
 
 
-/* Said once per turn, on the first edit of a test file, when a `verify-tests` rule stands (rules/turn-ending.ts).
- * Two sentences, at the moment they apply, the same economy the dependency notice keeps: the rules exist in
- * AGENTS.md and are weighed there against everything else in the context; here they are the only thing in the
- * tool result, about the file the model has just opened. */
+// Shown once per turn, on the first edit of a test file (rules/turn-ending.ts). Kept to two sentences: unlike
+// AGENTS.md's rules, this is the only thing in that tool result competing for attention.
 export const TEST_WRITING_NOTE =
     "Editing a test: derive fixture facts from their source (a schema's default, the tree, the same call the code makes) rather " +
     "than transcribing them, and fix a failing assertion by updating the expected value to the new truth, never by widening the " +
@@ -46,22 +17,19 @@ export const TEST_WRITING_NOTE =
     "follow-up, and so does a new test that passes against the pre-turn code, wherever the suite can be re-run.";
 
 
-/* ── the built-in ─────────────────────────────────────────────────────────────────────────────────────────── */
+// ── the built-in ──
 
-// How many touched test files each measurement reads. The ratchet is a file read and a `git show`, so its cap
-// is only against a turn that rewrote a hundred suites; the fault check runs a package's vitest per file, and
-// three of those at the Stop is already most of a minute in the slow packages.
+// Ratchet reads are cheap; the fault check runs a vitest per file, so 3 is most of a minute in slow packages.
 const RATCHET_FILES = 20;
 const FAULT_FILES = 3;
 
-// The test re-run against HEAD's source: the source files that were restored, or undefined for no finding
-// (agent-test-strength.ts passesAgainstHead).
+// Re-runs a test against HEAD's source; returns the restored files, or undefined for no finding.
 export type FaultCheck = (testFile: string) => Promise<readonly string[] | undefined>;
 
 export interface VerifyTestsDeps {
-    // The tree the turn worked in, where git runs and what `changed` is relative to.
+    // Tree the turn worked in; git runs here and `changed` is relative to it.
     readonly root: string;
-    // The paths the tree says the turn changed, root-relative (git/changes.ts dirtyPathsAcross).
+    // Root-relative paths the tree says changed (git/changes.ts dirtyPathsAcross).
     readonly changed: () => Promise<readonly string[]>;
     // Absent ⇒ only the ratchet speaks.
     readonly faults?: FaultCheck | undefined;
@@ -90,9 +58,7 @@ const ratchetFindings = async (deps: VerifyTestsDeps, files: readonly string[]):
         if (after === undefined) {
             continue;
         }
-        // No HEAD version means the file is new this turn, which can only be stronger.
-        // Measured as the language its NAME says it is, both sides, or the two versions of one file would be
-        // read by two different vocabularies and every number would move.
+        // No HEAD means the file is new, only ever stronger; both sides are measured by the file's own language.
         const before = await git(deps.root, ["show", `HEAD:${path}`])
             .then((result) => measureFile(result.stdout, path))
             .catch(() => undefined);

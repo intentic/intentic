@@ -2,14 +2,9 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { droppedRules, pyrightErrors, ruffFindings } from "./python-diagnostics.js";
 
-/* THE TWO PARSERS BETWEEN THIS DAEMON AND A TOOL IT DOES NOT OWN. Both read a format someone else versions, and
- * both have the same duty at the edge: a payload that cannot be understood is "not checked", never "checked and
- * clean". A silent misparse here does not look like a bug — it looks like a python file that had nothing wrong
- * with it, on every edit, forever.
- *
- * The ruff fixtures are its real output, taken from running `ruff check --isolated --select E9,F821
- * --output-format concise` over files with those faults in them; both spellings it emits are here because they
- * differ in punctuation and one regex has to read both. */
+// Two parsers between this daemon and a tool it does not own: a payload neither can understand must read as unchecked,
+// never as clean. Ruff's fixtures are its real output (`ruff check --isolated --select E9,F821 --output-format
+// concise`), covering both spellings it emits.
 
 const asIs = (file: string): string => file;
 
@@ -32,8 +27,7 @@ test("ruff's two diagnostic spellings both parse, and the prose around them does
 });
 
 test("a relative path is resolved against the run's own directory before it is reported in the agent's names", () => {
-    // Both halves of what stands between a tool's idea of a path and the agent's: ruff names the file relative
-    // to where it ran, and an unanchored turn's checker stands in the worktree while the agent stands in /work.
+    // Both halves of the path gap: ruff names files where it ran; an unanchored checker sits in the worktree.
     const findings = ruffFindings("deep/main.py:2:12: F821 Undefined name `x`", `${HISTORY_ROOT}/worktrees/c1/app`, (file) =>
         file.replace(`${HISTORY_ROOT}/worktrees/c1`, WORKSPACE_ROOT),
     );
@@ -41,8 +35,7 @@ test("a relative path is resolved against the run's own directory before it is r
     expect(findings.map((finding) => finding.text)).toEqual(["/work/app/deep/main.py:2:12: error F821: Undefined name `x`"]);
 });
 
-// One payload, every case the reader has to tell apart: an error is shown, a warning is not, and the position
-// is the JSON's zero-based one moved to the one-based one everything else in the report uses.
+// One payload covering every case: error shown, warning not, position moved zero-based to one-based.
 const PYRIGHT_JSON = JSON.stringify({
     version: "1.1.413",
     generalDiagnostics: [
@@ -70,7 +63,7 @@ const PYRIGHT_JSON = JSON.stringify({
     summary: { filesAnalyzed: 1, errorCount: 2, warningCount: 1 },
 });
 
-// The two facts that decide what pyright is allowed to say: an environment behind it, and a gate in front of it.
+// The two facts that decide what pyright may say: an environment behind it, a gate in front of it.
 const WHOLE = droppedRules({ environment: true, gated: false });
 
 test("with an environment, every error is reported, warnings are not, and positions become one-based", () => {
@@ -81,15 +74,13 @@ test("with an environment, every error is reported, warnings are not, and positi
 });
 
 test("without an environment the unresolved-import errors are dropped and the rest still stands", () => {
-    // Dropped rather than reported, because with no `.venv` they say only that we already knew there was none —
-    // and dropping them is what lets the file's own errors be reported instead of a wall of missing imports.
+    // Dropped rather than reported: with no `.venv` they only confirm what is already known, not real errors.
     expect(pyrightErrors(PYRIGHT_JSON, asIs, droppedRules({ environment: false, gated: false }))).toEqual([
         '/work/app/main.py:12:5: error reportAttributeAccessIssue: Cannot access attribute "titel" for class "str"',
     ]);
 });
 
-// The one finding both tools produce: ruff calls it F821, pyright calls it reportUndefinedVariable, and it is
-// the same missing name at the same position.
+// The one finding both tools produce: ruff's F821 and pyright's reportUndefinedVariable, the same missing name.
 const UNDEFINED_NAME_JSON = JSON.stringify({
     generalDiagnostics: [
         {
@@ -103,18 +94,15 @@ const UNDEFINED_NAME_JSON = JSON.stringify({
 });
 
 test("what the ruff gate already said, pyright does not say again — and says when the gate did not run", () => {
-    // With ruff's answer in hand the model must see one line for one missing name, not the same fault twice in
-    // two vocabularies; with no ruff in the sandbox pyright is the only thing that can report it, so it does.
+    // With ruff's answer in hand the model sees one line, not two; with no ruff, pyright reports it instead.
     expect(pyrightErrors(UNDEFINED_NAME_JSON, asIs, droppedRules({ environment: true, gated: true }))).toEqual([]);
     expect(pyrightErrors(UNDEFINED_NAME_JSON, asIs, droppedRules({ environment: true, gated: false }))).toEqual([
         '/work/app/main.py:2:12: error reportUndefinedVariable: "missing_helper" is not defined',
     ]);
 });
 
-/* AND THE SILENCE IS NARROW. The tests above prove the gate's rule is dropped and that it comes back when the
- * gate did not run; neither would notice a `dropped` set that had grown to swallow the type half's own
- * findings along with it, which is the shape this file exists to prevent — a check that reports nothing reads
- * exactly like a file with nothing wrong. So: the same payload, both findings, one of them the gate's. */
+// The gate drops its own rule and nothing else: a `dropped` set that grew to swallow the type half's findings too would
+// read exactly like a clean file.
 test("dropping the gate's rule takes nothing else with it", () => {
     const both = JSON.stringify({
         generalDiagnostics: [
@@ -140,9 +128,7 @@ test("dropping the gate's rule takes nothing else with it", () => {
 });
 
 test("a payload this cannot read is not a clean file", () => {
-    // Each of these is a real way the run can end: a tool that printed something else, a version that renamed
-    // the field, a process killed mid-write. Every one must answer "could not read" so the caller says the file
-    // went unchecked; an empty array here would be a clean bill of health nobody issued.
+    // Every unreadable payload answers "could not read": unchecked, not a clean bill of health.
     expect(pyrightErrors("", asIs, WHOLE)).toBeUndefined();
     expect(pyrightErrors("Traceback (most recent call last):", asIs, WHOLE)).toBeUndefined();
     expect(pyrightErrors(JSON.stringify({ version: "1.1.413", summary: {} }), asIs, WHOLE)).toBeUndefined();
@@ -152,8 +138,7 @@ test("a payload this cannot read is not a clean file", () => {
 });
 
 test("a diagnostic missing the parts it should have is still reported, with what it has", () => {
-    // Pyright omits `rule` on syntax and internal errors, and a payload with no range at all has been seen from
-    // a crashed analysis. Reporting the claim at 1:1 beats dropping an error because its position was missing.
+    // Pyright omits `rule` on some errors and may omit range entirely; reporting at 1:1 beats dropping the error.
     expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [{ file: "/work/a.py", severity: "error", message: "Expected expression" }] }), asIs, WHOLE)).toEqual([
         "/work/a.py:1:1: error error: Expected expression",
     ]);

@@ -2,21 +2,8 @@ import { type AccountUsage, type AgentProvider, bindingWindow, type ModelRef, ty
 import type { Services } from "../../composition.js";
 import { moveAfterLimitArmed } from "../run/turn/turn-resume.js";
 
-/* THE ACCOUNT A SPENT ALLOWANCE CAN BE ANSWERED WITH, as the daemon judges it, so the owner's policy can move a
- * held turn without a browser in the room. The editor's limitFallback.ts makes the same judgement for the press
- * in the chat, and the two have to agree about what "room" means: a reading, not the absence of one. An account
- * nobody has measured is not offered, because landing a turn on an unmeasured wall costs a refused request and
- * teaches the owner the policy lies.
- *
- * CLAUDE ONLY, by construction rather than by omission. Claude is the provider whose accounts this daemon picks
- * between per turn (harness-credentials.ts): a refusal names one of them and the others are readable from the
- * usage store. The routed providers (Codex, Gemini, Kimi, Grok) sit behind the translator, which balances its
- * own credentials BEFORE it refuses, so a refusal there already means every one is spent and there is nothing
- * left to move to. A different PROVIDER is never a move: it retires the session for a saving that is not one.
- *
- * EMPTIEST FIRST, for the reason the editor gives: the move is made once, on the owner's behalf, and landing
- * on the account nearest its own ceiling is how one refusal becomes two. A credential the provider has stopped
- * accepting is not room whatever its last reading said, the move would land on a reconnect prompt. */
+// Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
+// is left. Picks the emptiest account with an actual reading, skipping the refused, unmeasured, and dead ones.
 export const siblingWithRoom = async (
     services: Pick<Services, "claudeStore" | "accountUsage">,
     params: { readonly provider: AgentProvider; readonly model: string | undefined; readonly refused: string | undefined },
@@ -39,8 +26,8 @@ export const siblingWithRoom = async (
     )?.id;
 };
 
-// One account's room for the model, as its fullest gating window reads it; undefined for the refused account, a
-// dead credential, an unmeasured one, or one at the cap.
+// One account's room for the model, from its fullest gating window; undefined for the refused, dead, unmeasured, or
+// capped account.
 const roomOf = (account: OauthAccount, usage: AccountUsage | undefined, model: ModelRef | undefined, refused: string | undefined): number | undefined => {
     if (account.id === refused || account.needsReauth === true) {
         return undefined;
@@ -49,14 +36,8 @@ const roomOf = (account: OauthAccount, usage: AccountUsage | undefined, model: M
     return window === undefined || window.utilization >= SPENT_UTILIZATION ? undefined : window.utilization;
 };
 
-/* WHERE A HELD TURN GOES NEXT, decided once at the failure. Undefined is the ordinary answer: no policy for this
- * conversation, or nothing with room, and the turn stays held or booked for the reset exactly as before.
- *
- * `carry` is the policy's second question, answered from the owner's line (limitMoveCarryUnder) against what
- * the turn measured: the session comes along only when the turn actually ran (a refused-at-the-door session
- * holds one unanswered message and is worth less than the brief), when its context is known, and when reading
- * that context again on the other account is under the line. A carry the other account has already refused is
- * not tried twice. */
+// Where a held turn moves to, decided once at the failure; undefined means no policy applies or no account has room.
+// `carry` requires the turn to have run, a known context under the owner's line, and not already refused elsewhere.
 export const bookLimitMove = async (
     services: Pick<Services, "claudeStore" | "accountUsage" | "agents" | "sandboxSettings">,
     params: {

@@ -19,29 +19,10 @@ import {
 } from "./paths.js";
 import { documentedDirs, listStagedTails } from "./stagedTree.js";
 
-/* GENERATION, map first, then one agent per package.
- *
- * A documentation session is an ISOLATED fleet agent: `POST /agent` with a conversationId and `isolated: true` is
- * the shape (and the only shape) that registers a fleet entry, which is why this extension owns no session
- * machinery. The worktree, live status, cost, transcript and the /agents/<id> page all already exist; a run is
- * N of them with derived ids. Isolation is NOT for safety here, these agents write to shared staging and are
- * told not to touch source, it is for that registry entry, and the branch it comes with is what keeps a
- * misbehaving run out of the main tree.
- *
- * WHY THE MAP GOES FIRST, AND WHY THAT COSTS A PHASE. The component grouping and the glossary are cross-package
- * judgements: 42 agents deciding independently produce 42 vocabularies and no map. So the fan-out cannot start
- * until `repo.json` exists, and the browser is what notices that it does.
- *
- * ADVANCING IS IDEMPOTENT AND DERIVED, WHICH IS WHAT MAKES THAT SAFE. `advance()` runs on every poll. It starts a
- * package's agent only when there is neither a fleet entry for its (derived) conversation id nor a staged document
- * for it, both read from the world rather than from bookkeeping. So closing the browser mid-run does not orphan
- * it: the run resumes the next time the view is open, and nothing is ever started twice. An agent that finished
- * and was archived drops off `GET /agents`, which is exactly why the staged document is the second half of the
- * test, without it, an archived agent's package would be documented again on the next poll.
- *
- * `bypassPermissions`, for the reason acceptance uses it: nobody watches a fan-out of forty for permission cards,
- * and the scope is bounded the way the fleet bounds it (one worktree each, and a brief whose first rule is
- * "write only these two files". */
+// Each package gets an isolated fleet agent; the map runs first, since component grouping and vocabulary are
+// cross-package judgements no single agent can make. advance() is idempotent: it starts an agent only when neither a
+// fleet entry nor a staged document exists for it, so a closed browser or an archived agent never duplicates or stalls
+// work.
 
 const POLL_MS = 4000;
 
@@ -51,14 +32,7 @@ export interface RunManifest {
     readonly runId: string;
     readonly createdAt: number;
     readonly repo: string;
-    /* The packages in scope, or ABSENT for "whatever the map finds".
-     *
-     * Absent is the normal first run, and it is what keeps package discovery in one place. Only `intentic-docs
-     * facts` can enumerate a repo's packages, it runs on the AGENT's PATH, and the browser has no business
-     * reimplementing that walk over `/workspace/children` to populate a picker. So a first run says "document this
-     * repo", the map phase discovers the packages and assigns them to components, and the fan-out reads its scope
-     * out of `repo.json`. A later run can narrow to a subset, the stale ones, because by then an index exists to
-     * choose from. */
+    // Packages in scope, or absent for whatever the map finds; a later run can narrow once an index exists.
     readonly packages?: readonly string[];
     /* The model every session in this run opens on, when the reader used the caret beside Generate. Absent ⇒
      * the sandbox's agent-run list answers, which is the ordinary path.
@@ -114,7 +88,7 @@ export interface RunRow {
 export interface StartRunInput {
     readonly repo: string;
     readonly label: string;
-    // Absent ⇒ document every package the map finds. See RunManifest.packages.
+    // Absent ⇒ document every package the map finds.
     readonly packages?: readonly string[] | undefined;
     // The caret's choice, when the reader made one. Recorded on the manifest so the whole fan-out inherits it.
     readonly pick?: NonNullable<AgentRunPick> | undefined;
@@ -156,16 +130,8 @@ export function useRuns(repo: Ref<string>) {
     const agentsQuery = useQuery({
         queryKey: agentsKey,
         enabled: computed(() => api.sandbox.reachable()),
-        /* Liveness comes from THIS QUERY'S OWN DATA, never from a computed defined below it.
-         *
-         * vue-query resolves `refetchInterval` synchronously while `useQuery` builds its observer, so a callback
-         * reading a `const` declared later in this function reads it inside its temporal dead zone and throws
-         * `Cannot access 'live' before initialization`, which is what shipped, because nothing in the suite ever
-         * CALLED this composable: a type-level cycle was broken with annotations while the runtime cycle was left
-         * in place. useRuns.test.ts now executes it for exactly this reason.
-         *
-         * Deriving from `query.state.data` is not a workaround but the honest source: "is any documentation-run
-         * agent still working" is a fact about the agents list, and this query IS the agents list. */
+        // Derives liveness from this query's own data, not a computed defined later: vue-query resolves
+        // `refetchInterval` synchronously while building the observer, before such a const would exist.
         refetchInterval: (query) => {
             const agents = query.state.data ?? [];
             return agents.some((agent) => agent.id.startsWith(ANY_RUN_PREFIX) && isLive(agent)) ? POLL_MS : false;
@@ -176,17 +142,15 @@ export function useRuns(repo: Ref<string>) {
         },
     });
 
-    // Staged documents per run repo, the "which packages are finished" half of advance(), and the run rows' own
-    // progress readout. Keyed on the same `documentation` prefix the manifest's contributes.files invalidates,
-    // so an agent writing a document updates this without a poll.
+    // Staged documents per run repo, advance()'s "which packages are finished" half and the run rows' progress. Keyed
+    // on the `documentation` prefix contributes.files invalidates, so a write updates this without a poll.
     const stagedQuery = useQuery({
         queryKey: computed(() => api.sandbox.key(`documentation`, `staged-tails`, repo.value)),
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async () => documentedDirs(await listStagedTails(api, repo.value)),
     });
 
-    // Annotated because the inferred type would otherwise walk back through three query results; the annotation
-    // is also what keeps every downstream `row` from degrading to `any`.
+    // Annotated so the type doesn't walk back through three queries and degrade every `row` to `any`.
     const rows: ComputedRef<readonly RunRow[]> = computed(() => {
         const agents = agentsQuery.data.value ?? [];
         const staged = stagedQuery.data.value ?? [];
@@ -209,12 +173,8 @@ export function useRuns(repo: Ref<string>) {
             });
     });
 
-    /* `unattended` with a `runRole` and usually no model: the daemon then fills in from that role's list, which
-     * is the one place
-     * a documentation run and every other surface-started run get their answer from.
-     *
-     * `pick` is the run's own override, read back off its manifest so every session in the fan-out opens on the
-     * same model and tier the caret named, including the ones started an hour later by `advance()`. */
+    // `unattended` + `runRole`, usually with no model, so the daemon fills one in from that role's list. `pick`
+    // overrides it, read off the manifest so every session in the fan-out (even ones started later) agrees.
     const startAgent = async (conversationId: string, prompt: string, pick?: RunManifest[`pick`]): Promise<void> => {
         await api.sandbox.request(`/agent`, {
             method: `POST`,
@@ -242,16 +202,15 @@ export function useRuns(repo: Ref<string>) {
             ...(input.packages === undefined ? {} : { packages: [...input.packages] }),
             ...(input.pick === undefined ? {} : { pick: input.pick }),
         };
-        // The manifest is written BEFORE the first turn starts, so a run that dies mid-launch is still a run the
-        // view can show and advance rather than an invisible half-thing.
+        // Written before the first turn starts, so a run that dies mid-launch is still visible and advanceable.
         await api.workspace.write(runManifestPath(runId), `${JSON.stringify(manifest, undefined, 2)}\n`);
         await startAgent(mapConversationId(runId), mapBrief({ repo: input.repo, label: input.label }), input.pick);
         void queryClient.invalidateQueries({ queryKey: api.sandbox.key(`documentation-runs`) });
         return runId;
     };
 
-    /* Start the package agents a run still owes, once its map exists. Safe to call on every poll: the two tests
-     * below are both derived, so a package that has an agent or a document is never started again. */
+    // Starts the package agents a run still owes, once its map exists; safe on every poll since both checks below are
+    // derived, never bookkept.
     const advance = async (): Promise<void> => {
         const agents = agentsQuery.data.value ?? [];
         const staged = stagedQuery.data.value ?? [];
@@ -261,14 +220,12 @@ export function useRuns(repo: Ref<string>) {
             }
             const text = await api.workspace.file(stagingPath(row.manifest.repo, REPO_DOC_TAIL));
             const repoDoc: RepoDoc | undefined = text === undefined ? undefined : parseRepoDoc(text);
-            // No map means the map agent finished without producing one (it errored, or it was stopped). Starting
-            // 40 package agents with no shared vocabulary is worse than leaving the run visibly unfinished.
+            // No map means the map agent finished without one; starting package agents with no shared vocabulary is
+            // worse.
             if (repoDoc === undefined) {
                 continue;
             }
-            /* The run's scope: what it was told to document, or, for a first run, every package the map assigned
-             * to a component. The map is the only thing that has run `intentic-docs facts`, so this is where its
-             * discovery becomes the fan-out's work list. */
+            // The run's scope: what it was told, or, for a first run, every package the map assigned to a component.
             const scope = row.manifest.packages ?? [...new Set(repoDoc.components.flatMap((component) => component.packages))];
             const pending = scope.filter((dir) => {
                 const conversationId = conversationIdOf(row.manifest.runId, slugOf(dir));

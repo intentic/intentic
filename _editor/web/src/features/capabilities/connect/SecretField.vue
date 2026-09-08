@@ -6,11 +6,9 @@ import { devFillGet } from "../../setup/devFill";
 import { useCapabilitySecret } from "./useCapabilities";
 import { useSecrets } from "./useSecrets";
 
-/* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight
- * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Sandbox Secrets tab
- * and every credential form (Cloudflare/GitHub/GitLab/Stripe), so the wording and behavior stay identical.
- * `collect` mode skips the write and only emits the value: for flows that need the raw value first (e.g.
- * Cloudflare zone discovery) and write it themselves. */
+// The one way a secret value enters the app: masked input + eye toggle, writing KEY=value to the sandbox daemon's
+// .env (never the platform), with a shared provenance line, used by every credential form so wording stays
+// identical. `collect` mode skips the write and only emits the value, for a caller that writes it itself.
 
 const props = withDefaults(
     defineProps<{
@@ -35,8 +33,7 @@ const props = withDefaults(
 const value = defineModel<string>({ default: `` });
 const emit = defineEmits<{ saved: []; cancel: [] }>();
 
-// Dev autofill (inert in prod): offer the last value saved under this key, mount-only and only when empty, so
-// the post-save clear stays cleared and collect-mode callers receive the prefill through v-model.
+// Dev autofill (inert in prod): fills the last value saved under this key, mount-only and only when empty.
 if (value.value === ``) {
     const remembered = devFillGet(`secret.${props.secretKey}`);
     if (remembered !== undefined) {

@@ -1,23 +1,13 @@
 #!/usr/bin/env node
-/* THE PUBLISH SET IS CLOSED AND ORDERED, checked where breaking it costs milliseconds rather than a release.
- *
- * PUB in _tools/scripts/lib/packages.sh is hand-maintained, and every package split re-litigates it by hand. The
- * failure it invites is quiet until publish day: a listed package depending on an unlisted workspace package
- * packs a version specifier nothing on npm satisfies, and the release either 403s mid-way (half-published, the
- * worst outcome) or ships a package nobody can install. Three gaps existed the day this was written.
- *
- * Order matters for the same reason closure does: publish-npm.sh publishes serially in PUB order so a
- * dependent never references a version npm cannot resolve yet.
- *
- * The list is read out of the shell file rather than handed in, so this runs from the manifest runner without
- * a bash in the path; release-prepare.sh still calls it with the array it sourced, and both readings have to
- * agree, which the `--` form below is for. */
+// Checks that PUB (_tools/scripts/lib/packages.sh, hand-maintained) is dependency-closed and topologically ordered: an
+// unlisted workspace dependency packs an unresolvable specifier, and publish-npm.sh publishes serially in PUB order.
+// Reads the list out of the shell file so this runs without bash in the path.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { root } from "./lib/repo.mjs";
 
-// `PUB=( a b \ c )` in packages.sh: the array body, continuation backslashes folded, split on whitespace.
+// The `PUB=( ... )` array body in packages.sh, continuation backslashes folded, split on whitespace.
 const pubFromScript = () => {
     const text = readFileSync(join(root, "_tools/scripts/lib/packages.sh"), "utf8");
     const match = /^PUB=\(([\s\S]*?)\)/m.exec(text);

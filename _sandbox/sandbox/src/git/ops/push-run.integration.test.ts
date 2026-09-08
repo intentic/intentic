@@ -12,17 +12,8 @@ import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
 import { createPushRuns, type PushRunDeps } from "./push-run.js";
 
-/* REAL GIT, REAL HOOKS, A FAKE TERMINAL. What is under test is the decisions this module makes about a push:
- * when a run is visible, what it settles with, who it says refused it, and what it tells the owner. The push
- * itself is git's, against a bare origin on disk, and the three ways a push is refused are produced by the
- * real thing rather than typed in: a pre-push hook that exits 1, an origin that has moved on, a remote that
- * is not a repository. A transcript typed into a fixture would only ever prove the classifier reads what the
- * author of the fixture believed git prints.
- *
- * THE RUNNER SEAM is the pre-push check's (prepush.integration.test.ts): a `bash -c` child holding the
- * runner's contract, a non-zero exit is a RESULT and an abort THROWS, with stdout and stderr merged because
- * that is what a pane capture is. The real runner is not used, for the reason given there: it decides
- * `visible` by looking for the image's tmux wrapper, and would open real tmux sessions on a box that has it. */
+// Real git and hooks, a fake terminal (the real one would open actual tmux sessions): tests what this module decides
+// about visibility, settlement and refusal, with all three refusal kinds produced by real git.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -61,8 +52,7 @@ const ahead = async (): Promise<{ clone: string; origin: string }> => {
     return { clone, origin };
 };
 
-// This repository's own pre-push hook, the thing a real workspace's gate is: whatever it prints goes to the
-// pane, and its exit code is git's answer.
+// A real pre-push hook; its stdout/stderr go to the pane, its exit code is git's answer.
 const hook = async (clone: string, script: string): Promise<void> => {
     const path = join(clone, ".git", "hooks", "pre-push");
     await mkdir(join(clone, ".git", "hooks"), { recursive: true });
@@ -138,9 +128,8 @@ const settled = async (runs: ReturnType<typeof createPushRuns>, repo: string): P
     return runs.state(repo);
 };
 
-/* THE RACE THE ROUTE'S `await` EXISTS FOR: the caller polls `state` the instant `start` resolves, so `start`
- * must not resolve before the run is visible. Resolving early hands that first poll an `idle`, which the push
- * flow reads as "already settled". */
+// Guards the race the route's `await` exists for: `start` must not resolve before the run is visible to `state`, or the
+// first poll reads `idle` as already settled.
 test("start resolves only once the run is visible to state, naming the command git will run", async () => {
     const { clone } = await ahead();
     await hook(clone, "sleep 1");
@@ -183,12 +172,10 @@ test("a push that goes is passed, reports the repo pushed, and interrupts nobody
     expect(pushed).toEqual(["app"]);
     expect(notified()).toEqual([]);
     expect(feed()).toEqual([]);
-    // The commit actually arrived: the whole point of the exercise.
     expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("two");
 });
 
-/* The three refusals, produced by git rather than typed in. The pre-push hook is the one an agent can fix, so
- * it is the one that carries `hook`; the other two say so and are left to the owner. */
+// Of the three refusal kinds, only the hook is something an agent can fix; the other two are the owner's.
 test("a pre-push hook that says no settles as failed, refused by the hook, with the hook's words in the tail", async () => {
     const { clone, origin } = await ahead();
     await hook(clone, 'echo "verify-push: typecheck failed; the push does not go" >&2; exit 1');
@@ -217,8 +204,7 @@ test("an origin that has moved on settles as refused by the remote", async () =>
     const runs = createPushRuns(services, () => {});
     await runs.start("app", clone, {});
     const run = await settled(runs, "app");
-    // The reason is the ref status line, which names WHY in brackets; git's verdict under it only says that
-    // some refs failed, which the owner can see.
+    // The ref status line names why, in brackets; git's plain verdict below it only says some refs failed.
     expect(run).toMatchObject({ status: "failed", exitCode: 1, refusedBy: "remote", reason: "! [rejected] main -> main (fetch first)" });
 });
 
@@ -242,7 +228,7 @@ test("a repo with no remote is an error that ran nothing, with the situation as 
     await runs.start("app", lonely, {});
     expect(runs.state("app")).toMatchObject({ status: "error", repo: "app", reason: "no remote configured", output: "" });
     expect(count()).toBe(0);
-    // The owner still hears about it: they asked for a push and it is not going anywhere.
+    // Still notified even though nothing ran: the owner asked for a push that went nowhere.
     expect(notified()).toEqual(["Push couldn't run"]);
 });
 
@@ -265,8 +251,7 @@ test("two repos take turns in the one terminal window", async () => {
     const runs = createPushRuns(services, () => {});
     await runs.start("one", first.clone, {});
     await runs.start("two", second.clone, {});
-    // Both are running as far as the owner is concerned, but only the first is in a terminal: the second is
-    // queued behind it and names none until it actually starts, so the browser is not sent to an empty pane.
+    // The second push is queued behind the first and has no session until it actually starts.
     await vi.waitFor(() => expect(runs.state("one").session).toBe(CHECKS_SESSION), SETTLES);
     expect(runs.state("two")).toMatchObject({ status: "running" });
     expect(runs.state("two").session).toBeUndefined();

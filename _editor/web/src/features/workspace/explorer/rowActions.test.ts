@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerDocumentProvider } from "../../../core-views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "./rowActions";
 
-/* The composition rule for a tree row's icons. Worth a test because it is the one place four unrelated
- * contributors (git repos, directory-surface extensions, document providers, personas) meet on the same row, and
- * the thing that used to go wrong is silent: a row simply renders one icon fewer than it should. */
+// Composition rule for a tree row's icons: the one place git repos, directory-surface extensions, document providers
+// and personas meet on the same row.
 
 const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     repoDirs: new Set<string>(),
@@ -55,8 +54,7 @@ describe(`rowActionsFor`, () => {
         expect(actions.map((action) => action.id)).toEqual([`health`, `directory`]);
     });
 
-    // The eye is the Preview AREA's door, not another in-tree tab: a runnable repo used to open an iframe tab
-    // here, and this is where that gesture went.
+    // Eye opens the Preview area, not another in-tree tab.
     it(`gives a previewable repo its eye, ahead of the cog`, () => {
         const source = sources({
             repoDirs: new Set([`shop`]),
@@ -69,16 +67,14 @@ describe(`rowActionsFor`, () => {
         expect(source.openPreview).toHaveBeenCalledWith(`shop`);
     });
 
-    // The document is what the directory IS, so it leads: the same narrowing the rail's order follows, rather
-    // than the newcomer joining the end of the queue.
+    // Document leads the row, matching the rail's ordering, not appended after existing affordances.
     it(`puts a document ahead of the repo's own affordances`, () => {
         provider(`architecture`, `intentic`);
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) }));
         expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`]);
     });
 
-    // The whole point of the path-keyed contribution: a package deep inside a monorepo is not a repo and has no
-    // management surface, but it can still have something to read.
+    // Documents are path-keyed, independent of repo/management status: a non-repo package can still have one.
     it(`offers a document on a package directory that is not a repo`, () => {
         provider(`architecture`, `intentic/_sandbox/acp-bridge`);
         const source = sources();
@@ -94,9 +90,8 @@ describe(`rowActionsFor`, () => {
         );
     });
 
-    /* WHICH ICONS SURVIVE THE POINTER BEING SOMEWHERE ELSE. A row's icons are revealed on hover, and an offer
-     * that is evidence ("this package has a page") opts out of that: hiding it hides the fact, which is how a
-     * documented monorepo came to look exactly like an undocumented one. What you can DO to a repo does not. */
+    // Icons show on hover, except an offer that is evidence (a page exists): hiding it would hide the fact. What you
+    // can DO to a repo never stands.
     it(`lets an offer stand on the row, and never the repo's own affordances`, () => {
         provider(`architecture`, `intentic/_deploy/graph`, true);
         expect(rowActionsFor(`intentic/_deploy/graph`, sources()).map((action) => action.standing)).toEqual([true]);
@@ -107,23 +102,22 @@ describe(`rowActionsFor`, () => {
         ).toEqual([false, false]);
     });
 
-    // An offer every directory of its kind gets (a repo always has git history) says nothing by being permanent,
-    // so it waits for the pointer like the affordances beside it.
+    // A permanent-but-non-evidence offer (e.g. git history) still waits for hover like any other affordance.
     it(`leaves an offer that is not evidence on hover`, () => {
         provider(`history`, `intentic`);
         expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false]);
     });
 
-    /* THE PERSONA ICON IS EVIDENCE ONCE THERE IS ONE: "which of these packages has its own persona" is a
-     * question about the tree, and a hover-only glyph answers it for nobody. Empty folders have no persona icon. */
+    // Persona icon stands (is evidence) once a folder has a persona, answering "which packages have one" without hover.
+    // Empty folders show none.
     it(`stands on a folder that already has a persona, and is absent on one that has none`, () => {
         const withCards = sources({ personaDirs: new Map([[`intentic/_editor`, 1]]) });
         expect(rowActionsFor(`intentic/_editor`, withCards)[0]?.standing).toBe(true);
         expect(rowActionsFor(`intentic/_sandbox`, withCards)).toEqual([]);
     });
 
-    /* A folder holds SEVERAL cards, and the count is the reason to expect a list behind the icon rather than one
-     * card, so the tooltip carries it rather than saying "personas" and leaving the number to the click. */
+    // Several cards means a list behind the icon, not one card, so the tooltip states the count rather than leaving it
+    // to the click.
     it(`says how many personas start here`, () => {
         const one = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 1]]) }))[0]?.tooltip ?? ``;
         const three = rowActionsFor(`docs`, sources({ personaDirs: new Map([[`docs`, 3]]) }))[0]?.tooltip ?? ``;

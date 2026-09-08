@@ -1,19 +1,12 @@
 import type { ExtensionManifest } from "./manifest.js";
 
-/* WHAT AN UPDATE ASKS FOR, MECHANICALLY. The install dialog renders a manifest's contributions once; an update
- * is judged on what sits BETWEEN two manifests, and "read both and compare" is exactly the job a person will
- * skip on the fifth update. So each manifest is folded to a set of POWERS, the consequential facts an owner
- * approved: which daemon routes it may call, which processes the daemon runs for it, what lands on the agent's
- * PATH, what may interrupt from another screen, each under a stable key (the identity compared) with a plain
- * sentence (what the reader sees). The diff is set arithmetic over the keys.
- *
- * Deliberately NOT here: plain settings (a new knob is config surface, not reach), display marks, category,
- * version. A power's INTERNALS moving (a process's command line, a fragment's contents) keeps its key, the
- * code changed, which is what the sha pin and the agent diff-read answer for; this diff answers only "did the
- * set of things I approved grow". An empty `added` is what makes an update one click. */
+// What an update asks for, mechanically. Each manifest folds to a set of POWERS, the consequential facts an owner
+// approved, under a stable key (compared) with a plain sentence (shown). The diff is set arithmetic over the keys.
+// Deliberately excludes plain settings, display marks, category and version; a power's internals moving keeps its key,
+// since the sha pin answers that question instead.
 
 export interface PowersDiff {
-    // Powers the new manifest declares that the installed one didn't, the reason an update re-asks.
+    // Powers the new manifest declares that the installed one didn't; the reason an update re-asks.
     readonly added: string[];
     readonly removed: string[];
     readonly unchanged: string[];
@@ -80,8 +73,8 @@ const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     return powers;
 };
 
-// `before` absent covers a first install: everything the manifest declares is `added`, which is exactly what
-// the install dialog already renders, one vocabulary for both moments.
+// `before` absent covers a first install: everything the manifest declares is `added`, the same vocabulary the install
+// dialog already renders.
 export const diffPowers = (before: ExtensionManifest | undefined, after: ExtensionManifest): PowersDiff => {
     const from = before === undefined ? new Map<string, string>() : powersOf(before);
     const to = powersOf(after);

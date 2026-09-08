@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-//
-// The badge's job is to state a number and to be honest about which reading it is, so what is asserted here is
-// WHICH reading it prints in each state, not its markup. Every number it is given is final — the daemon counts
-// the code-only pair and ships it with the change — so there is no provisional state left to assert on. Mounted
-// with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
+// Asserts which reading the badge shows in each state, not its markup; every number is final so nothing here is
+// provisional. Mounted with plain Vue, as markdownFigures.test does.
 import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
@@ -25,8 +22,7 @@ const render = (props: Props): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     const app = createApp({ render: () => h(ReviewStat, props) });
-    // Both are global in the real app (installUi). The glyph is stubbed away because nothing here asserts on it;
-    // the tooltip keeps its text, since which reading the hover offers is half of what this file is about.
+    // Icon and tooltip are global (installUi); icon is stubbed here, tooltip keeps its text (what's tested).
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {
         mounted: (el: HTMLElement, binding: { value?: string }) => {
@@ -63,7 +59,7 @@ describe(`<ReviewStat>`, () => {
 
         expect(host.textContent).toContain(`+34`);
         expect(host.textContent).toContain(`−8`);
-        // Nothing differs from what is on screen, so there is nothing for a hover to add.
+        // Nothing differs from what's on screen, so there's no hover to add.
         expect(host.querySelector(`[data-tip]`)).toBeNull();
     });
 
@@ -71,7 +67,7 @@ describe(`<ReviewStat>`, () => {
         await withComments(false);
         const host = render({ code: { additions: 0, deletions: 0 }, additions: 26, deletions: 4 });
 
-        // +0 −0 is how the badge says "a rename", and it reads as though the file were untouched.
+        // +0 −0 reads as a rename, as if the file were untouched.
         expect(host.textContent).toMatch(/comments|\+0|−0/);
         const tip = host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`] ?? ``;
         expect(tip).toContain(`+26`);
@@ -87,9 +83,8 @@ describe(`<ReviewStat>`, () => {
         expect(host.querySelector(`[data-tip]`)).toBeNull();
     });
 
-    /* A FILE THERE IS NO CODE-ONLY READING OF — bytes, one side too large, a language this build ships no
-     * grammar for — arrives with no `code` at all, and git's numbers are then the reading rather than standing in
-     * for one. At full weight and with no hover, because nothing about it is provisional: this is the answer. */
+    // A file with no code-only reading (bytes, an oversized side, an unsupported language) arrives with no `code`;
+    // git's numbers become the answer, at full weight and with no hover.
     it(`prints git's numbers whole for a file that cannot be read as code`, async () => {
         await withComments(false);
         const host = render({ additions: 54, deletions: 0 });
@@ -100,11 +95,10 @@ describe(`<ReviewStat>`, () => {
     });
 });
 
-/* The rail: the same badge asked how much new code this file is against the rest of the list. What matters is
- * that it agrees with the numbers printed beside it — a bar scaled off a reading the badge is not showing would
- * be two answers to one question, a few pixels apart — and that it draws nothing where there is nothing to rank. */
+// The rail asks the same badge how much new code this file is against the list; it must agree with the numbers
+// printed beside it and draw nothing where there is nothing to rank.
 const rail = (host: HTMLElement): HTMLElement | null => host.querySelector<HTMLElement>(`span[aria-hidden="true"]`);
-// The bar's own length as a share of its track.
+// The bar's length as a share of its track.
 const fill = (host: HTMLElement): string | undefined => (rail(host)?.firstElementChild as HTMLElement | undefined)?.style.width;
 
 describe(`<ReviewStat> rail`, () => {
@@ -118,9 +112,8 @@ describe(`<ReviewStat> rail`, () => {
         expect(fill(render({ code: { additions: 50, deletions: 10 }, additions: 60, deletions: 12, of: 50 }))).toBe(`100%`);
     });
 
-    /* THE INVARIANT WORTH PINNING. This file's git additions (34) are eleven times its code additions (3), and
-     * the badge is printing the code ones. Scaled against a list whose biggest addition is 34, a bar drawn off
-     * git's number would be full; off the number on screen it is a third of the track. */
+    // Scales the rail to the reading the badge shows, not git's raw count: a bar drawn off git's number would be
+    // full, off the shown number it's partial.
     it(`scales to the reading the badge is showing, not to git's`, async () => {
         await withComments(false);
         expect(fill(render({ code: { additions: 3, deletions: 0 }, additions: 34, deletions: 8, of: 34 }))).not.toBe(`100%`);
@@ -131,9 +124,8 @@ describe(`<ReviewStat> rail`, () => {
         expect(fill(render({ code: { additions: 3, deletions: 0 }, additions: 34, deletions: 8, of: 34 }))).toBe(`100%`);
     });
 
-    /* A DELETION IS NOT THE SMALLEST THING IN THE LIST, it is a row with no new code in it, and an empty track
-     * would say the first of those. This is the case that made the measure additions rather than churn: with the
-     * rail scaled by total change, one removed bundle sets the top of the scale and buries everything else. */
+    // A deletion is 'no new code', not the smallest value, so it draws no rail at all. Measured as additions, not
+    // total churn, so one big deletion doesn't dominate the scale.
     it(`stays off a row that added nothing, however much it removed`, async () => {
         await withComments(false);
         expect(rail(render({ code: { additions: 0, deletions: 1353 }, additions: 0, deletions: 1353, of: 131 }))).toBeNull();

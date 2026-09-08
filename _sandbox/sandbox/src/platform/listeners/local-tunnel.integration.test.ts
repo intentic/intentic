@@ -8,18 +8,12 @@ import type { Logger } from "pino";
 import { afterAll, expect, it } from "vitest";
 import { startPlatformTunnel } from "./local-tunnel.js";
 
-/* THE FAILURE THIS EXISTS FOR, REPRODUCED: a platform on the developer's own machine, serving a certificate cut
- * for a name that is not the one the sandbox reaches it on. The bundled translator opens the trial's connection
- * itself, verifies, fails, and answers 500, which the harness reads as an outage and rides its retry budget,
- * so the reader is told "The model provider is not responding" about a certificate.
- *
- * Pinned as an integration test rather than a unit one because the whole claim is about a real TLS handshake:
- * that a strict client which CANNOT be reached by any of this daemon's fetch wrappers still gets through.
- */
+// Reproduces a dev platform's certificate-name mismatch: the bundled translator opens the connection itself and fails
+// TLS verification. Integration, not unit, since the claim is about a real handshake.
 
 const dir = mkdtempSync(join(tmpdir(), "tunnel-"));
-// Cut for `localhost` and reached on `127.0.0.1`: the same shape of mismatch a dev platform hands a sandbox
-// that has to address it as `host.docker.internal`. openssl is already a test dependency here.
+// Cut for `localhost`, reached on `127.0.0.1`: the same mismatch shape a dev platform hands a sandbox addressing it as
+// `host.docker.internal`.
 execFileSync(
     "openssl",
     [
@@ -52,8 +46,7 @@ const logger = { info: () => undefined, warn: () => undefined } as unknown as Lo
 afterAll(() => platform.close());
 
 it("carries a strict client past a dev platform's own certificate", async () => {
-    // The state of the world without it: a client that verifies, which is every client we do not own, cannot
-    // talk to this platform at all, and says so in a sentence about certificates.
+    // Baseline: without the tunnel, a verifying client cannot reach this platform at all.
     await expect(fetch(`${platformUrl}/trial/status`)).rejects.toThrow();
 
     const tunnel = startPlatformTunnel(platformUrl, logger);
@@ -62,15 +55,14 @@ it("carries a strict client past a dev platform's own certificate", async () => 
     const response = await fetch(`${tunnel.url()}/trial/v1/models`);
 
     expect(response.status).toBe(200);
-    // Transparent: the path, the method and the body are the platform's own, nothing here rewrites a request,
-    // which is what lets a streamed completion stream through it.
+    // Proves the tunnel rewrites nothing: path, method and body pass through untouched.
     expect(await response.json()).toEqual({ path: `/trial/v1/models` });
     tunnel.close();
 });
 
 it("opens nothing for a deployed platform, which needs no help", () => {
     expect(startPlatformTunnel(`https://app.intentic.dev`, logger).url()).toBeUndefined();
-    // Nor for a daemon with no platform at all (a loopback or test run), nor for one already on plain http.
+    // Also true for no platform configured at all, and for one already on plain http.
     expect(startPlatformTunnel(``, logger).url()).toBeUndefined();
     expect(startPlatformTunnel(`http://localhost:6480`, logger).url()).toBeUndefined();
 });

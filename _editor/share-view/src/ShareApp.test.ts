@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
-//
-// jsdom because every claim here is about what the published page RENDERS, and the load-bearing half of that
-// is what it does NOT render. A shared conversation is the one surface of this product an outsider ever
-// touches, so "there is nothing on it that reaches back into the workspace" has to be checked against real
-// output rather than argued from the source.
+// jsdom, since every claim here is about what the published page renders — including what it does not render.
+// This is the one surface an outsider touches, so "nothing here reaches back into the workspace" is checked
+// against real output, not the source.
 import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The app's chat components read browser globals at import time (useDevice reads matchMedia, its refs are
-// module-level). jsdom provides no matchMedia, so it is stood up before the imports evaluate: the same
-// hoist the app's own card test does.
+// jsdom has no matchMedia, which useDevice reads at import time; hoisted so it runs before the imports evaluate.
 vi.hoisted(() => {
     globalThis.matchMedia ??= ((query: string) => ({
         matches: false,
@@ -39,8 +35,7 @@ const publish = (payload: SharePayload | null): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp(ShareApp);
-    // Icon and v-tooltip are registered globally by the page's own boot; stand-ins keep the test off the icon
-    // collections, which are 28 KB of data that say nothing about what is on the page.
+    // Stubs keep the test off the real icon collections (28 KB of data irrelevant to what's asserted).
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -81,9 +76,8 @@ it(`draws the conversation it was published with: the prompt, the answer's prose
     expect(element.textContent).toContain(`auth/guard.ts`);
 });
 
-/* THE PAGE'S ONE SECURITY CLAIM, checked rather than asserted: a card here reaches nothing. In the app the
- * same card's path opens the workspace, its command attaches to a shell and its delegation links to a
- * transcript: every one of those is a door, and a published page has no building behind it. */
+// The page's one security claim, checked rather than asserted: in the app the same card's path opens the
+// workspace, its command attaches to a shell; here none of those doors exist.
 it(`leaves nothing on a tool card to click: no workspace, no shell, no links out`, () => {
     const element = publish(
         conversation([
@@ -91,8 +85,7 @@ it(`leaves nothing on a tool card to click: no workspace, no shell, no links out
                 role: `assistant`,
                 text: `Done.`,
                 tools: [
-                    // A card whose header IS a path (no separate target), which is the one the app draws as a
-                    // button into the workspace.
+                    // A card whose header is a path (no separate target) — the one the app draws as a workspace button.
                     { id: `t1`, name: `Read`, category: `read`, status: `completed`, locations: [{ path: `auth/guard.ts`, line: 12 }] },
                     {
                         id: `t2`,
@@ -112,7 +105,7 @@ it(`leaves nothing on a tool card to click: no workspace, no shell, no links out
     // The fold toggle is the only button a card may carry here.
     const buttons = [...element.querySelectorAll(`button`)];
     expect(buttons.every((button) => button.getAttribute(`aria-expanded`) !== null)).toBe(true);
-    // And nothing navigates anywhere, in-app or out, except the one attribution link in the footer.
+    // Nothing navigates anywhere except the one attribution link in the footer.
     const links = [...element.querySelectorAll(`a`)].map((anchor) => anchor.getAttribute(`href`));
     expect(links).toEqual([`https://intentic.dev`]);
 });

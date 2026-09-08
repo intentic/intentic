@@ -42,66 +42,13 @@ import { useHeldWakes, waitingOf } from "./useHeldWakes";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
 
-/* Approvals: the inbox of things the agent prepared and may not do until the owner says yes. The agent writes
- * one JSON file per item into .intentic/config/approvals/ (taught by the daemon's approvals skill); this page is
- * the owner's approve / edit / reschedule / reject side. There is no create dialog here: items originate with
- * the agent, never the UI.
- *
- * ONE QUEUE, TWO KINDS, ONE SET OF VERBS. A post to publish and an action to carry out (a booking, a payment, a
- * message sent as the owner) are the same decision: the agent prepared an exact thing, the owner's click
- * releases it, a machine does precisely that thing. So the ENVELOPE of every row is the same, who it acts as,
- * when it goes, approve / reject / hold back, the countdown, and only the BODY differs: a post is read as a
- * post (PostBody.vue, editable in place), an action as a headline and the specifics under it (ActionBody.vue,
- * not editable: an owner rewriting an agent's brief is approving something nobody proposed). A third kind is
- * one body component and nothing else on this page.
- *
- * AND THE AUTOMATIONS HELD AT THE DOOR, from the daemon's other queue (useHeldWakes.ts). A `requireApproval`
- * automation that fired is exactly this page's shape of decision, a prepared wake waiting for a yes, and it used
- * to badge the Automations tile, a "Set up" shelf, for a "Judge" decision. It is a section here now, with the
- * verbs it always had: approve runs it, reject drops it, and a countdown hold shows its clock with Start now and
- * Cancel. Different store, different route, same page, because the owner's question is "what is waiting on me"
- * and the answer should not depend on which process wrote the file.
- *
- * AN INDEX BESIDE THE QUEUE (<SplitView>), the shape Capabilities, Pipelines and the hubs already use, and the
- * app's standard page width with it. It was a narrow column with every section stacked down one scroll: fine
- * for a handful of posts on one platform, and the thing that stops scaling the moment an agent proposes across
- * several: what is waiting on you for one platform sits below everything the others have ever posted. The rail
- * is bounded by how many platforms a workspace posts to plus one row for actions, so the body stays finite as
- * the queue behind it grows (see <ApprovalRail>). It NARROWS rather than selects: every section reads the same
- * whether you came in via All approvals or via one slice, and the slice lives in the URL, so "the Reddit queue"
- * is a link.
- *
- * APPROVING DOES NOT DO IT. It starts a minute (approvals-execution.ts): the daemon dates the item one hold into
- * the future and sleeps until exactly then, and for that minute the row sits in Going ahead with a live count
- * and one button that calls it back. A post is public and permanent the instant it lands, a booking is charged,
- * and the gap between realising and reaching for the mouse is about two seconds, so the whole design of this
- * page's second half is that the seconds exist and are visible. An item carrying a date of its own keeps it and
- * simply waits.
- *
- * THE THING IS THE SUBJECT OF THE ROW, and it is READ rather than glanced at. Everything about where an item is
- * going lives on one muted line beneath a mark; under it the post is set as a post, or the action as a headline
- * with its specifics: a capped measure, body type, paragraph rhythm, because a row as wide as the window runs
- * ~110 characters to the line, and past about 75 the eye loses the start of the next one.
- *
- * ONE SECTION PER DECISION, in the order the queue owes them: something broke, something is waiting on you,
- * something is seconds from happening, something is on the calendar, something already happened. A status
- * badge survives only where its section does not already state it (`in progress`, inside Going ahead): every
- * other badge was re-labelling its own group. Each section sorts by the field it is actually read for: soonest
- * first while something can still be changed, newest first once it is history.
- *
- * WEIGHT MARKS PRIORITY. Only the section that owes a decision carries labelled buttons; scheduled and done rows
- * get bare icon actions and a smaller mark. A queue with nothing to review should look like nothing to do.
- *
- * THE WORDS OF A POST CAN BE CHANGED, in the two sections where changing them is still worth anything: something
- * waiting on a yes, and something that already went out wrong. Approve/reject alone made every post a verdict
- * on someone else's sentence: a proposal that was one word off had to be thrown away and re-asked for. Editing
- * is a plain field on the same upsert every other action here uses (PostEditor.vue). Rows that are already on
- * their way deliberately do NOT get it: their "back to review" is the way in, so nothing can be rewritten on
- * the same row the executor may already be reading. */
+// The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
+// instant: it starts a one-minute hold with a live countdown and a way to call it back. Sections are ordered by what's
+// owed: broken, needs review, about to happen, scheduled, done.
 
 const { approvals, invalid, isLoading, error: listError, save, remove } = useApprovals();
 const { held, error: heldError, approve: approveWake, reject: rejectWake } = useHeldWakes();
-// Only drawn once the wait has earned it: a warm queue answers well inside the reveal delay.
+// Only drawn once the wait has earned it; a warm queue answers within the reveal delay.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `approvals`),
@@ -113,26 +60,17 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 const heldNotice = computed<NoticeModel | undefined>(() =>
     heldError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read the held automations.`, detail: heldError.value },
 );
-// Releasing is the ship tier: below maintainer the queue is a read, the items, their schedule, their status:
-// with every approve/reject/reschedule affordance absent (the daemon floors the mutations the same way).
-// Watching what is about to happen is exactly what a viewer is for.
+// Below maintainer, the queue is read-only (the daemon floors the mutation too); a viewer can still watch.
 const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
 
 const isPost = (item: ApprovalSummary): item is PostApprovalSummary => item.kind === `post`;
 const isAction = (item: ApprovalSummary): item is ActionApprovalSummary => item.kind === `action`;
 
-/* WHO POSTS IT, from the manifest that owns that fact. `platform` is a bare string by contract (a new platform
- * needs no contract change) and it is the id of the capability whose skill does the posting, so the enabled
- * extensions' own catalog entries already hold its display name and brand slug, including the detail nothing
- * here could have guessed: X's mark is black, so its entry forces a light one. A platform with no installed
- * connector still renders, because BrandMark falls through to a monogram, and that is the case that has to
- * keep working: a post can be proposed for somewhere this sandbox cannot yet post. */
+// Platform display data from the enabled extensions' catalogs; falls back to a monogram if none is installed.
 const platformCatalog = usePlatformCatalog();
-/* Keyed by the platform ID as well as by an item, because the rail's rows ARE platforms: there is no post
- * beneath them to read the id off. An unnamed platform's fallback is CAPITALISED here rather than in CSS,
- * unlike the queue's own meta line (ApprovalMeta.vue): the same string is a picker option and a tooltip on a
- * phone, neither of which a text-transform on one row would reach. */
+// Keyed by platform id directly, since the rail's own rows are platforms with no post to read an id off. Capitalised
+// here, not in CSS, since the same string is also a Picker option and a tooltip.
 const nameOfPlatform = (platform: string): string =>
     platformCatalog.value.get(platform)?.name ?? `${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
 const logoOfPlatform = (platform: string): string | undefined => platformCatalog.value.get(platform)?.logo;
@@ -140,10 +78,8 @@ const logoOfPlatform = (platform: string): string | undefined => platformCatalog
 const nameOf = (item: ApprovalSummary): string => (isPost(item) ? nameOfPlatform(item.platform) : `Action`);
 const targetOf = (item: ApprovalSummary): string | undefined => (isPost(item) ? item.target : undefined);
 
-/* THE RAIL'S ROWS ARE THE SLICES THE QUEUE ACTUALLY HOLDS, never the ones we could post to: a row for a
- * platform with nothing in it promises a slice that turns out to be empty, and the rail offers no way back from
- * one. Platforms alphabetical, because a rail that reorders itself as items are approved moves the row you were
- * reaching for out from under the cursor; actions and held automations last, as the rows that are not a place. */
+// Rows are the slices the queue actually holds, not ones it merely could: an empty slice has no way back. Platforms
+// sort alphabetically; actions and automations sort last.
 const ACTIONS_SCOPE = `actions`;
 const AUTOMATIONS_SCOPE = `automations`;
 const scopeOf = (key: string, label: string, subset: readonly ApprovalSummary[], mark: { logo?: string; icon?: IconName }): ApprovalScope => ({
@@ -187,12 +123,7 @@ const scopes = computed<ApprovalScope[]>(() => {
     ];
 });
 
-/* WHICH SLICE LIVES IN THE URL, replaced rather than pushed: Back should leave the page, not walk you through
- * every slice you clicked on the way. Derived from the query rather than mirrored into a ref, so there is one
- * direction of flow and no watcher pair to fight over what is shown.
- *
- * A slice the queue no longer holds is not a slice. Approving the last Reddit post takes that row away, and a
- * link to it made yesterday falls back to everything rather than stranding its reader on a page about nothing. */
+// Replaced not pushed (Back leaves the page); falls back to all when the linked slice is gone.
 const scope = computed<string>({
     get: () => host().route.query()[`scope`] ?? ``,
     set: (value) => host().route.setQuery({ scope: value === `` ? undefined : value }),
@@ -200,8 +131,7 @@ const scope = computed<string>({
 const activeScope = computed<ApprovalScope>(() => scopes.value.find((entry) => entry.key === scope.value) ?? allScope.value);
 const railScope = computed<string>({ get: () => activeScope.value.key, set: (value) => (scope.value = value) });
 
-// What the sections below are built from. The countdown strip and its clock deliberately read the WHOLE queue
-// instead: see `holding`.
+// What the sections below are built from; the countdown strip reads the whole queue instead (`holding`).
 const inScope = (item: ApprovalSummary, key: string): boolean => {
     if (key === ``) {
         return true;
@@ -217,32 +147,19 @@ const heldVisible = computed<AutomationApproval[]>(() =>
     activeScope.value.key === `` || activeScope.value.key === AUTOMATIONS_SCOPE ? held.value : [],
 );
 
-// Soonest first, undated last: the queue then reads in the order it will actually happen. An item with no date
-// does go ahead as soon as it is picked up, but it is also the one still owed a decision about when, so it
-// belongs at the end of the run rather than jumping the front of it.
+// Soonest first, undated last: undated still goes ahead immediately, but it's owed a decision about when.
 const due = (item: ApprovalSummary): number => item.scheduledAt ?? Number.MAX_SAFE_INTEGER;
 const bySoonest = (left: ApprovalSummary, right: ApprovalSummary): number => due(left) - due(right);
 
 const ofStatus = (...statuses: ApprovalSummary[`status`][]): ApprovalSummary[] => visible.value.filter((item) => statuses.includes(item.status));
 
-/* GOING AHEAD vs SCHEDULED: one section became two, because approving stopped meaning "done" and started
- * meaning "doing it in a minute unless you stop me" (approvals-execution.ts). Those are not the same row. An
- * item dated for Tuesday is a calendar entry: the thing to offer is a date control. An item forty seconds from
- * happening is the only thing on this page with a deadline, and the thing to offer is one obvious way to stop
- * it. Folding both into "Scheduled" put a countdown nobody was watching next to a date nobody was in a hurry
- * about.
- *
- * THE WINDOW IS WIDER THAN THE HOLD, deliberately. An item someone dated for two minutes' time is every bit as
- * imminent as one that was just approved, and it would be strange for it to sit under a heading that implies
- * there is time. Anything already handed to the executor (`running`) is here too: it is the most imminent thing
- * there is. */
+// Going ahead (imminent, or already running) needs a stop button; Scheduled needs a date control. The window is wider
+// than the hold itself, since a two-minute-out item is just as urgent.
 const GOING_AHEAD_WINDOW = 2 * 60_000;
 const imminent = (item: ApprovalSummary, at: number): boolean => item.status === `running` || (item.scheduledAt ?? 0) - at <= GOING_AHEAD_WINDOW;
 
-/* The clock, armed only while this page has something approved on it: an idle queue costs no tick. Armed off
- * the WHOLE queue rather than the slice on screen, because the strip it drives speaks for the whole queue. The
- * condition is deliberately NOT "is anything counting down", which is a function of `now` and would have this
- * ref arming itself. */
+// Ticks only while something is approved or running, off the whole queue (the strip it drives isn't scoped to a slice).
+// Not keyed on "is anything counting down": that depends on `now` itself.
 const now = useNow(
     () =>
         approvals.value.some((item) => item.status === `approved` || item.status === `running`) ||
@@ -261,29 +178,23 @@ const scheduled = computed(() =>
         .filter((item) => !imminent(item, now.value))
         .toSorted(bySoonest),
 );
-// History, newest first. finishedAt is optional in the contract, so a record without one sorts last rather than
-// leaping to the top on a 0.
+// Newest first; a record with no `finishedAt` sorts last, not to the top on a 0.
 const done = computed(() => ofStatus(`done`).toSorted((left, right) => (right.finishedAt ?? 0) - (left.finishedAt ?? 0)));
 
-/* EVERYTHING THAT IS COUNTING DOWN, whichever slice the rail is pointing at: the strip at the top of the page
- * and the button that stops all of it read this rather than the section below. A post is forty seconds from
- * being public whether or not the reader happens to be filtered to another slice, and a countdown that a
- * filter can hide is the one thing on this page that must never be hideable. */
+// Everything counting down, across every slice; the top strip must never be hidden by a filter.
 const holding = computed(() => approvals.value.filter((item) => item.status === `approved` && imminent(item, now.value)).toSorted(bySoonest));
 
 const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0);
 
-/* A HELD WAKE'S CLOCK. A countdown hold runs ITSELF when the timer passes: the row's job is to say so and keep
- * the cancel in reach. The daemon releases on its own coarser tick and only on a quiet fleet, so "starting…"
- * (past due, fleet busy or scan pending) is a real state and gets said rather than showing a negative number. */
+// A countdown hold runs itself when the timer passes; the row just says so and keeps cancel in reach. "starting…"
+// covers past-due, since the daemon releases on its own coarser tick.
 const startsIn = (autoRunAt: number): string => {
     const seconds = Math.ceil((autoRunAt - now.value) / 1_000);
     return seconds <= 0 ? `starting…` : `starts in ${seconds}s unless you cancel`;
 };
 const wakeName = (wake: AutomationApproval): string => wake.title ?? wake.automationId;
 
-// Release a held wake (the agent runs now) or drop it (never runs). Both go through the same strip as the
-// queue's own errors: one place for "that click did not take".
+// Release runs the wake now; drop means never. Both report through the same error strip as the rest of the queue.
 const releaseWake = (wake: AutomationApproval): Promise<void> =>
     run(async () => {
         await approveWake.mutateAsync(wake.id);
@@ -297,21 +208,17 @@ const dropWake = (wake: AutomationApproval): Promise<void> =>
 const rejecting = ref<ApprovalSummary | undefined>(undefined);
 const approvingAll = ref(false);
 
-// Approve, retry, put-back and reschedule are all a re-post of the whole file with one field changed (the
-// daemon upserts by id). Errors surface in the strip at the top; the query refetch reconciles the row.
+// Approve, retry, put-back and reschedule are all a re-post of the whole item with one field changed (upsert by id).
 const patch = <T extends ApprovalSummary>(item: T, changes: Partial<T>): Promise<void> =>
     run(async () => {
         await save.mutateAsync({ ...item, ...changes });
     }, `Could not update it.`);
 
-/* ONE POST EDITED AT A TIME, saved as it is typed (usePostEdit.ts). One at a time because the queue is read
- * top to bottom and a second open field is a second thing to keep track of; saved as typed because the row must
- * not have to rearrange itself around a Save button. */
+// One post editable at a time, saved as typed (usePostEdit.ts): a second open field is a second thing to track, and the
+// row shouldn't need a Save button.
 const edit = usePostEdit(async (post, changes) => void (await save.mutateAsync({ ...post, ...changes })));
 
-// Every action on a post's TEXT writes the pending keystrokes first. The window between the last one and the
-// debounce firing is precisely where someone fixes a word and immediately approves, and a post published from
-// the list's copy would go out with that word still wrong.
+// Flushes pending keystrokes before acting, so approving right after a fix doesn't publish the pre-edit text.
 const settled = (act: () => Promise<unknown>): Promise<void> =>
     run(async () => {
         await edit.flush();
@@ -320,8 +227,8 @@ const settled = (act: () => Promise<unknown>): Promise<void> =>
 
 const approve = (item: ApprovalSummary): Promise<void> => settled(() => save.mutateAsync({ ...item, status: `approved` }));
 
-// The list it was fired against, not the live one: each approval moves a row out of `needsReview`, so reading
-// the computed inside the loop would walk a list shrinking underneath it.
+// Snapshots the list before looping: each approval removes a row from `needsReview`, which would shrink underneath a
+// live read.
 const approveAll = (): Promise<void> => {
     const queue = needsReview.value;
     approvingAll.value = false;
@@ -340,18 +247,14 @@ const reject = (item: ApprovalSummary): Promise<void> => {
     }, `Could not remove it.`);
 };
 
-// The pencil is a toggle, and it is the ONLY thing the click changes: open, and the words become typeable
-// where they already are; close, and the last of them is written on the way out.
+// Toggles in place: opening makes the words typeable where they are; closing writes the last of them on the way out.
 const toggleEdit = (post: PostApprovalSummary): Promise<void> =>
     run(async () => {
         await (edit.isEditing(post) ? edit.close() : edit.open(post));
     }, `Could not save your changes.`);
 
-/* CALLING IT BACK: the other half of a hold, and the reason the hold is worth having. It puts the item back in
- * review AND CLEARS THE DATE, which is the part that would be silently wrong if it were left out: the date on a
- * held item is a deadline the daemon wrote, not something the owner chose, and an item carrying it back into
- * review would be re-approved into a deadline that had already passed: done instantly, with no second minute to
- * stop it. The one gesture on this page whose failure is a post nobody meant to send. */
+// Clears `scheduledAt` along with the status: it's a deadline the daemon wrote, and re-approving a held item without
+// clearing it would fire instantly, with no second hold to stop it.
 const holdBack = (item: ApprovalSummary): Promise<void> => patch(item, { status: `proposed`, scheduledAt: undefined });
 
 const holdBackAll = (): Promise<void> => {
@@ -363,14 +266,8 @@ const holdBackAll = (): Promise<void> => {
     }, `Could not hold those back.`);
 };
 
-/* THE COUNTDOWN, SAID ONCE AT THE TOP OF THE PAGE. The section below states it per row, which is right when you
- * are looking at that row, and the whole point of a hold is the case where you are NOT: you approved, your eye
- * moved on, and the thing you want back is already three rows up. So while anything is counting down the page
- * carries one line saying what is about to happen and one button that stops all of it.
- *
- * `info`, not `warning`. Nothing is wrong: this is the system doing exactly what was asked, out loud. And an
- * explicit `key` so the stack treats each tick as the same notice re-worded rather than a new one arriving
- * every second. Absent below the ship tier, where there would be no way to act on it. */
+// One line at the top covers the case where the eye has moved on from the row itself. `info`, not `warning`: nothing's
+// wrong. A fixed `key` keeps each tick as one notice, not a new one per second.
 const goingAheadNotice = computed<NoticeModel | undefined>(() => {
     const soonest = holding.value[0];
     if (!canShip.value || soonest === undefined) {
@@ -387,19 +284,13 @@ const goingAheadNotice = computed<NoticeModel | undefined>(() => {
     };
 });
 
-// What an item is called where it has to be named in one line: a confirm's list, an action's accessible name,
-// the strip. A post's title if the platform wanted one, else its opening line; an action's summary.
+// One-line name for a confirm list or aria-label: a post's title or opening line; an action's summary.
 const headline = (item: ApprovalSummary): string => (isPost(item) ? (item.title ?? item.content.split(`\n`)[0] ?? item.id) : item.summary);
 
-/* HOW BIG THE POST IS, against the room the platform gives it. The one property of a post that decides whether
- * it can go out at all and that reading it cannot tell you: 30 characters over on X is not a worse post, it is
- * no post, so it sits in the footer of every post row that still owes a decision, and turns red when it is the
- * reason the post will fail. Platforms with no well-known cap (postText.ts) get a plain count, and only once the
- * post is long enough for its size to be a question at all. */
+// Post length against the platform's limit: going over doesn't make a worse post, it makes no post.
 const OVERSIZED = 280;
-// Counted off the FIELD while one is open (usePostEdit.ts), so the number moves with the words being typed: it
-// is the one fact on the row that has to, since going over is the reason a post fails outright, and it updating
-// in place is also what makes a separate editor footer unnecessary.
+// Counts off the live field while editing (usePostEdit.ts), so the number tracks each keystroke instead of a stale
+// editor footer.
 const lengthOf = (item: ApprovalSummary): string | undefined => {
     if (!isPost(item)) {
         return undefined;
@@ -413,55 +304,35 @@ const lengthOf = (item: ApprovalSummary): string | undefined => {
 };
 const isOver = (item: ApprovalSummary): boolean => isPost(item) && edit.liveLength(item) > (limitOf(item.platform) ?? Infinity);
 
-/* THE AGENT'S OWN NOTE about a post, which is what `title` holds everywhere the platform doesn't publish one
- * (postText.ts): why this post, which thread, what it is not saying. Worth keeping, it is the reasoning behind
- * the thing being approved, and worth keeping SMALL: rendered as a headline it was a three-line bold block
- * above a post it had no business outweighing. One muted line, the rest on hover. */
+// The agent's own note on a post, held in `title` wherever the platform doesn't publish one (postText.ts): shown as one
+// muted line, not a headline.
 const noteOf = (item: ApprovalSummary): string | undefined => (isPost(item) && !postsATitle(item.platform, item.target) ? item.title : undefined);
 
 // A result that is an address is somewhere to go; anything else is a sentence to read.
 const resultHref = (item: ApprovalSummary): string | undefined => (item.result?.startsWith(`http`) === true ? item.result : undefined);
 
-/* ONE COLUMN PER ROW. The mark sits in a gutter and everything else: the meta line, the body, the facts under
- * it: starts at the same left edge, the way every surface that shows a post composes one. The indent is the mark
- * plus <Row>'s own gap (28 + 10, and 22 + 10 on the compact tiers), so it tracks the header beside it rather
- * than being a number that happens to look right today. Only from `sm` up: on a phone those 38px are a tenth of
- * the line, and an aligned column costs more than a hanging one is worth. */
+// Indent matches the mark plus <Row>'s gap, so the body aligns with the header; only from `sm` up.
 const POST_COLUMN = `sm:pl-10`;
 const QUIET_COLUMN = `sm:pl-8`;
 
-// An action's mark: the same footprint as a brand mark, wearing the glyph the rail uses for its slice, so an
-// action and its slice are recognised by the same thing, exactly as a post and its platform are.
+// An action's mark: brand-mark footprint, wearing the rail's own glyph for actions.
 const ACTION_MARK = `flex shrink-0 items-center justify-center rounded-md bg-overlay text-muted`;
 
-// The row's footer: facts about the item, wrapping on a narrow screen, quieter than the body itself, and held
-// to the body's own measure so the note at its end truncates against the column rather than the window.
+// Row footer facts, held to the body's measure so a trailing note truncates against the column.
 const FACTS = `mt-3 flex max-w-read flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`;
 
-// And the note under it: two lines at most, the rest on hover. Below the post rather than above it, because it
-// is the agent talking ABOUT the post: a reader who mistakes it for the post has read the wrong thing.
+// Two lines at most, rest on hover; below the post since it's the agent talking about it, not the post itself.
 const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtle`;
 
-/* THE PENCIL SITS WITH THE OTHER ACTIONS, which is the fix for where it used to be. It began life as a muted
- * phrase in the row's footer, on the reasoning that rewriting a post is rarer than approving one and should not
- * draw like a rival to Approve. The reasoning was fine and the placement was not: it put one of the row's three
- * actions at the bottom-left while the other two sat at the top-right, so "what can I do to this post" had two
- * answers in two places. Quiet is a matter of WEIGHT, not of distance: a bare icon button beside the trash is
- * quiet and still findable, and the cluster now answers the question once.
- *
- * IT IS A TOGGLE, AND IT LIGHTS UP. The pressed state is the only thing on the row that changes when editing
- * opens; everything else (the trash, Approve, the schedule, the count) stays exactly where it was. */
+// The pencil lives with the row's other actions, not the footer, so "what can I do here" has one answer in one place.
+// It's a toggle that lights up; nothing else on the row moves when it opens.
 const EDIT_ACTIVE = `bg-overlay text-content`;
 </script>
 
 <template>
-    <!-- `scroll="page"`: a QUEUE is a feed, and the rail narrows it rather than selecting a document out of it,
-         which is the `page` case exactly. A row is tall (a mark, a body that folds at 20rem, a schedule and four
-         controls), so a clamped pane showed two of them and hid the rest behind a scrollbar inside a card inside
-         a page. -->
+    <!-- `scroll="page"`: a queue is a feed, and rows are tall, so a clamped pane hid most of them behind an inner scrollbar. -->
     <SplitView title="Approvals" scroll="page" :scroll-key="railScope">
-        <!-- Whole-page banners: the countdown speaks for every slice, and a file that could not be parsed has
-             no slice to be filed under. Both belong above the split rather than inside the slice. -->
+        <!-- Whole-page banners: the countdown speaks for every slice, and an unparsed file has no slice to belong to. -->
         <template #strips>
             <NoticeStack :of="[actionError, listNotice, heldNotice, goingAheadNotice]" />
             <Notice v-if="invalid.length > 0" tone="warning">
@@ -470,19 +341,17 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
             </Notice>
         </template>
 
-        <!-- One slice of the queue, or all of it. The rail NARROWS the body rather than selecting a document, so
-             <SplitView> folds it above the queue on a phone (mobile="collapse", the default) instead of covering
-             it, and <ApprovalRail> already swaps itself to a Picker at that width. An empty queue gets no index:
-             a column of nothing pointing at nothing. -->
+        <!--
+            The rail narrows rather than selects, so it folds above the queue on a phone instead of covering it. Hidden on an empty queue: a column
+            of nothing pointing at nothing.
+        -->
         <template v-if="!isEmpty" #rail>
             <ApprovalRail v-model="railScope" :all="allScope" :scopes="scopes" />
         </template>
 
         <template #detail>
             <div class="flex flex-col">
-                <!-- Before the queue is read it is indistinguishable from an empty one, and the sentence below
-                     is a claim about the reader's agent that nothing has yet checked. Drawn as the rows that
-                     are coming instead: a queue of items, each a mark, a line of text and a control. -->
+                <!-- Loading looks like empty otherwise, and the empty-state text would be an unverified claim; skeleton rows stand in instead. -->
                 <template v-if="isLoading">
                     <RowGroup v-if="outline" role="status" aria-busy="true">
                         <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
@@ -491,9 +360,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
                 </template>
 
-                <!-- Nothing proposed, nothing done, nothing broken. The rail hides its tile in this state, so the
-                     page is only reached deliberately, and it owes an explanation of what would ever put
-                     something here. -->
+                <!-- Nothing at all. The rail hides its own tile here, so a reader arriving deliberately is owed an explanation. -->
                 <p v-else-if="isEmpty" :class="ui.emptyState(`py-8`)">
                     Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all
                     land here for you to approve.
@@ -509,8 +376,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
                             <template #control>
-                                <!-- A post that failed for being too long can only be retried at the length that failed,
-                                     unless the words themselves can be changed, so the pencil is here too. -->
+                                <!-- A too-long post can only be retried at the length that failed unless it's edited, so the pencil is here too. -->
                                 <button
                                     v-if="canShip && isPost(item)"
                                     type="button"
@@ -557,8 +423,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                         <PostBody v-else :post="item" />
                                     </template>
                                     <ActionBody v-else :action="item" />
-                                    <!-- The reason, in the row. It used to live in a tooltip on the status badge: the
-                                         one state whose entire content is an explanation, hidden behind a hover. -->
+                                    <!--
+                                        The failure reason, in the row: the one state whose whole content is an explanation, not hidden behind a
+                                        hover.
+                                    -->
                                     <Notice :of="noticeOf(item.error ?? `The run did not say why.`)" class="mt-3 max-w-read" />
                                     <div v-if="lengthOf(item)" :class="FACTS">
                                         <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
@@ -595,10 +463,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :note="item.createdAt === undefined ? undefined : `proposed ${timeAgo(item.createdAt)}`"
                                 />
                             </template>
-                            <!-- THE ROW'S THREE ACTIONS, TOGETHER AND FIXED. Edit (posts only), reject, approve: in the
-                                 order they escalate, and none of them moves, hides or swaps when the editor opens.
-                                 Approving with a field still open is safe because the click writes the pending
-                                 keystrokes first (`settled`), which is what let the mid-edit disappearing act go. -->
+                            <!--
+                                Edit, reject, approve, in escalating order; none moves or hides when the editor opens. Approving mid-edit is safe:
+                                the click flushes pending keystrokes first (`settled`).
+                            -->
                             <template #control>
                                 <button
                                     v-if="canShip && isPost(item)"
@@ -627,9 +495,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #below>
                                 <div :class="POST_COLUMN">
-                                    <!-- The body, or the same post with a caret in it: same column, same measure, same
-                                         type. Unclamped up to a screenful either way: this is the section where a
-                                         decision is owed, and the thing's own words are what the decision is about. -->
+                                    <!--
+                                        The body, or the same post with a caret in it: same column and measure either way, unclamped, since the words
+                                        are what the decision is about.
+                                    -->
                                     <template v-if="isPost(item)">
                                         <PostEditor
                                             v-if="edit.isEditing(item)"
@@ -643,9 +512,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     </template>
                                     <ActionBody v-else :action="item" />
 
-                                    <!-- The facts that DECIDE the item rather than describe it: when it happens, and
-                                         for a post whether it fits where it is going. Present in both states and
-                                         unmoved by the switch: the count simply starts following the keystrokes. -->
+                                    <!--
+                                        Facts that decide the item, not describe it: when it runs, and whether a post fits. Unmoved by the edit
+                                        toggle; the count just follows the keystrokes.
+                                    -->
                                     <div :class="FACTS">
                                         <ScheduleControl
                                             :at="item.scheduledAt"
@@ -661,11 +531,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!-- AUTOMATIONS HELD AT THE DOOR. One section for both shapes of hold, because the reader's question
-                         is the same for each: "this fired, and the agent has not run: do I want it to?" A hold with
-                         no deadline waits for a yes; a countdown hold says when it will start by itself and offers
-                         to start it now or call it off. The payload rides under the row, truncated, because for a
-                         Front Desk or a webhook it IS the reason the wake exists. -->
+                    <!--
+                        One section for both hold shapes, since the reader's question is the same: run it, or not? A deadline-less hold waits for a
+                        yes; a countdown hold offers start-now or cancel.
+                    -->
                     <RowGroup v-if="heldVisible.length > 0" label="Automations held for you" :count="heldVisible.length">
                         <Row v-for="wake in heldVisible" :key="wake.id" :title="wakeName(wake)">
                             <template #lead>
@@ -712,15 +581,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!-- ABOUT TO HAPPEN, and the only thing on this page with a deadline. Directly under the review
-                         queue rather than at the top of the page, because that is where an approved row LANDS: it
-                         leaves the section above and appears immediately below it, which reads as the item moving one
-                         step along rather than as the page rearranging itself under the click. The strip at the very
-                         top is what covers the case where you are no longer looking here at all.
-
-                         ONE LABELLED BUTTON, where the sections around it use bare icons: the page's weight rule
-                         applied to the state it was written for. Stopping something is urgent, singular, and cannot be
-                         something you go hunting for behind a tooltip. -->
+                    <!--
+                        Sits right under the review queue since that's where an approved row lands, reading as one step along rather than a page
+                        rearrange. One labelled Stop button, unlike its quiet neighbors: urgent and singular.
+                    -->
                     <RowGroup v-if="goingAhead.length > 0" label="Going ahead" :count="goingAhead.length">
                         <Row v-for="item in goingAhead" :key="item.id" density="compact">
                             <template #lead>
@@ -729,8 +593,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
                             <template #meta>
-                                <!-- Handed over: the daemon is mid-run, so there is nothing left to stop and the row
-                                     says so instead of offering a button that would lose the race. -->
+                                <!-- Mid-run: nothing left to stop, so the row says so instead of offering a button that would lose the race. -->
                                 <StatusBadge v-if="item.status === `running`" variant="info" label="in progress" size="xs" :dot="true" />
                                 <span v-else class="tabular-nums text-warning">{{ countdownWords((item.scheduledAt ?? 0) - now) }}</span>
                             </template>
@@ -757,9 +620,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!-- Approved and waiting for a date that is still some way off. Quiet by design: the decision is
-                         made and there is time, so the row's job is to say when it happens and otherwise stay out of
-                         the way of the sections above it. -->
+                    <!-- Approved with time to spare; quiet by design, since the decision is made and the row need only say when. -->
                     <RowGroup v-if="scheduled.length > 0" label="Scheduled" :count="scheduled.length">
                         <Row v-for="item in scheduled" :key="item.id" density="compact">
                             <template #lead>
@@ -801,8 +662,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!-- History. Nothing here can be acted on any more, so it carries no schedule and no approval:
-                         only what happened, where, and when, and the result where there is one. -->
+                    <!-- History: nothing here can be acted on, so the row shows only what happened, where, when, and its result. -->
                     <RowGroup v-if="done.length > 0" label="Done" :count="done.length">
                         <Row v-for="item in done" :key="item.id" density="compact">
                             <template #lead>
@@ -848,9 +708,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
                 </div>
 
-                <!-- Rejecting deletes the file: there is no undo and no trash to fish it back out of, which is exactly
-                     what this dialog is for. A done row asks the same question about a different thing, and says so:
-                     deleting the record does not undo what was done. -->
+                <!-- Rejecting deletes the file outright, no undo; a done row's version of this asks about the record only, and says so. -->
                 <ConfirmDialog
                     :open="rejecting !== undefined"
                     :header="rejecting?.status === `done` ? `Remove this record?` : `Reject this?`"

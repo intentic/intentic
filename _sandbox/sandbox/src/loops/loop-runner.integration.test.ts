@@ -11,15 +11,8 @@ import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, runLoop, type TurnFn } from "./loop-runner.js";
 import { loopProjection } from "./loop-state.js";
 
-/* The pump's ceilings, end to end. Every test here is about a way the loop STOPS, because that is the whole
- * risk surface: a loop that never converges and never gives up is the one failure mode that costs real money
- * with nobody watching.
- *
- * The tree is a temp dir with no git in it, so `treeDigest` answers the same empty digest every time, which
- * means "nothing changed" is the default and the stall detector is live in every test unless a test writes into
- * a repo. That is the right default here: it makes the stall test cheap and it keeps the other tests honest
- * about needing their own reason to stop.
- */
+// Tests every way the loop stops. Tree is a git-less temp dir, so treeDigest always returns the same empty digest: the
+// stall detector is live by default unless a test writes into a repo.
 
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
@@ -31,7 +24,7 @@ const fakeServices = (root: string): Services =>
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
 
-// A turn that does nothing but end, recording the prompt it was given. `events` lets a test add usage or an error.
+// Turn that ends immediately, recording the prompt it was given; `events` lets a test add usage or an error.
 const fakeTurn = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnFn =>
     // eslint-disable-next-line require-yield
     async function* fake(_services, input: AgentTurn) {
@@ -64,17 +57,11 @@ test("a loop that never claims done runs to its iteration ceiling and settles `e
     const settled = await services.loops.get("c1");
     expect(settled?.state).toBe("exhausted");
     expect(settled?.iterations).toHaveLength(3);
-    // The card must end up saying what the record says: the projection is the only thing the fleet reads.
+    // loopProjection is what the fleet UI reads, so it must match the record's state too.
     expect(loopProjection.of("c1")).toMatchObject({ state: "exhausted", iteration: 3 });
     expect(loopRunning("c1")).toBe(false);
 });
 
-/* WHAT A TURN IS TOLD IS THE JOB, NEVER THE MACHINE RUNNING IT. Every message used to open "# Iteration 2 of
- * at most 3: you are one iteration of a loop that repeats until a goal is met", which is the pump's own
- * bookkeeping wearing the clothes of an instruction: the model cannot act on the number, and a workflow step
- * that would only ever run once still announced a ceiling of twenty. What it needs is the goal, the file that
- * is its memory, and the work: asserted here BOTH ways, because the absence is the point.
- */
 test("a turn is told the goal and where its memory is, and nothing about being one of several", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -86,19 +73,18 @@ test("a turn is told the goal and where its memory is, and nothing about being o
     for (const prompt of prompts) {
         expect(prompt).toContain("fix the top failure");
         expect(prompt).toContain("the suite is green");
-        // `fresh` mode's memory rule: without it every session repeats the last one's dead end.
+        // Without progress.md a fresh session repeats the last one's dead end.
         expect(prompt).toContain("progress.md");
         expect(prompt).not.toContain("Iteration");
         expect(prompt).not.toContain("at most");
-        // The word survives only as a PATH (`.intentic/records/artifacts/loops/…`), which is a file the turn has to write, not a
-        // description of the harness, so the assertion is against the prose, not against the letters.
+        // The path (`.intentic/records/artifacts/loops/…`) contains "loop", so the assertion targets prose, not the raw
+        // string.
         expect(prompt).not.toContain("a loop");
         expect(prompt).not.toContain("this loop");
     }
 });
 
-// A goal the prompt already carries would be the same sentence twice: the ordinary shape of a workflow step,
-// which is measured against the very request it was handed verbatim.
+// The common case for a workflow step: its goal defaults to the very request it was handed verbatim.
 test("a goal the prompt already contains is not quoted back under it", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -113,8 +99,7 @@ test("a written verdict of done stops the loop on that iteration", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     await mkdir(join(root, LOOP_DIR, "c3"), { recursive: true });
-    // The turn's own side effect is the verdict file, which is exactly how a `claim` iteration reports, and
-    // the path it is asked for is the only place the round's number appears in the message at all.
+    // Extracts the iteration number from the verdict path in the prompt, the only place it appears.
     const turn: TurnFn = async function* claiming(_services, input: AgentTurn) {
         const n = /iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1";
         await writeFile(join(root, LOOP_DIR, "c3", `iteration-${n}.json`), JSON.stringify({ done: n === "2", reason: `pass ${n}` }));
@@ -161,7 +146,7 @@ test("the spend ceiling ends the loop, and the iterations' own usage is what cou
     const record = await services.loops.start({ ...baseLoop("c6"), maxIterations: 20, stallLimit: 99, maxSpendUsd: 1 }, 1);
     await runLoop(services, record, spendy);
 
-    // Three iterations spend $1.20, which is the first total at or past the ceiling; the fourth never starts.
+    // 3 iterations at $0.40 total $1.20, the first sum at or past the $1 ceiling; a 4th never starts.
     expect(prompts).toHaveLength(3);
     const settled = await services.loops.get("c6");
     expect(settled?.state).toBe("overspent");
@@ -176,16 +161,14 @@ test("an errored turn is an iteration outcome, not the end of the loop", async (
     const record = await services.loops.start({ ...baseLoop("c7"), maxIterations: 2 }, 1);
     await runLoop(services, record, failing);
 
-    // The whole point: a turn that died on a blip is what a loop exists to ride out.
     expect(prompts).toHaveLength(2);
     const settled = await services.loops.get("c7");
     expect(settled?.state).toBe("exhausted");
     expect(settled?.iterations.every((entry) => entry.outcome === "error")).toBe(true);
 });
 
-/* A LOOPING AGENT IS A WATCHABLE ONE. `/agent/attach` renders a conversation by finding its live run in the
- * turn-run registry, so a turn pumped straight off the generator is invisible to every browser: the panes a
- * workflow opens for its steps showed "start a conversation" while the agent behind them worked. */
+// /agent/attach finds a conversation via its live entry in the turn-run registry; a turn not registered there is
+// invisible to any browser watching it.
 test("a loop's turn is attachable while it runs, exactly as a composer's is", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
@@ -199,16 +182,15 @@ test("a loop's turn is attachable while it runs, exactly as a composer's is", as
     expect(attachable).toBe(true);
 });
 
-/* The other half of that rule, and the one a workflow rests on: with NOTHING declared to produce and nothing to
- * check, "the turn finished" is the entire completion condition, so a turn the provider refused cannot be
- * `done`. It used to be, and a three-step run of them reported 3/3 complete with three empty sessions in it. */
+// With nothing to produce or check, a turn finishing cleanly is the entire completion condition; a refused turn cannot
+// count as done.
 test("a loop with nothing to verify ends on its turn's failure rather than calling it done", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
     const prompts: string[] = [];
     const refusal = "Your organization has disabled Claude subscription access for Claude Code";
     const refused = fakeTurn(prompts, [{ kind: "error", message: refusal }, { kind: "done" }]);
-    // A workflow step's own shape (workflow-runner's loopForStep): no output, no checks, one round.
+    // Mirrors workflow-runner's loopForStep shape: no output, no checks, one round.
     const record = await services.loops.start({ ...baseLoop("c11"), output: { kind: "none" }, checks: [], maxIterations: 1 }, 1);
     const settlement = await runLoop(services, record, refused);
 
@@ -253,8 +235,6 @@ test("a second pump on one conversation is refused rather than raced", async () 
     const record = await services.loops.start({ ...baseLoop("c10"), maxIterations: 1 }, 1);
     let seen = false;
     const slow: TurnFn = async function* watching() {
-        // While this iteration is in flight the conversation must read as looping, and a second runLoop against
-        // it must return without starting anything.
         seen = loopRunning("c10");
         const prompts: string[] = [];
         await runLoop(services, record, fakeTurn(prompts));

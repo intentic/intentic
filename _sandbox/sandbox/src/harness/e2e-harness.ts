@@ -5,21 +5,16 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { GenericContainer, PullPolicy, type StartedTestContainer, Wait } from "testcontainers";
 
-// Shared harness for the gated *.e2e.test.ts suites (sandbox + discord): boot the REAL sandbox image in
-// loopback mode and play the outside-executor role for overlay builds. Test-only, excluded from the package
-// build (tsconfig `exclude`), like the test files that import it.
+// Shared harness for the gated *.e2e.test.ts suites: boots the real sandbox image in loopback mode and plays the
+// outside-executor role for overlay builds. Test-only, excluded from the package build.
 
 const root = repoRoot(import.meta.url);
 
-// The from-source image tag, a stable name so docker's layer cache carries across runs (the tag is the
-// cache; it is deliberately NOT removed on teardown).
+// From-source image tag, stable so docker's layer cache carries across runs; not removed on teardown.
 const SOURCE_IMAGE_TAG = "intentic-sandbox-e2e:local";
 
-// Build via the docker CLI, not testcontainers' fromDockerfile: the sandbox Dockerfile needs BuildKit
-// (COPY --chmod), which the CLI uses by default, and the CLI shares the layer cache with CI's images job.
-// The STANDARD profile, the artifact CI publishes under the plain tags, composed fresh from the checked-in
-// packs into .image-out beside the `trees` payload, whose preparation the caller owns exactly as every other
-// from-source build does (prepare-image-trees.sh must have run).
+// Builds via the docker CLI, not testcontainers' fromDockerfile: the Dockerfile needs BuildKit (COPY --chmod) and CLI
+// shares CI's layer cache. Composes the STANDARD profile; prepare-image-trees.sh must have run first.
 const buildSourceImage = async (): Promise<void> => {
     const dockerfile = join(root, ".image-out/Dockerfile.standard");
     writeFileSync(dockerfile, execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "standard"], { cwd: root }));
@@ -33,18 +28,15 @@ const buildSourceImage = async (): Promise<void> => {
     });
 };
 
-/* A REFERENCE THAT NAMES A REGISTRY, so a moving tag can be re-resolved rather than assumed (see the pull
- * policy below). The first path segment is a registry host only if it carries a dot or a port, docker's own
- * rule, which is what separates `ghcr.io/intentic/sandbox:latest` from a tag that exists nowhere but this
- * machine. */
+// Whether a reference names a registry (so a moving tag gets re-resolved rather than assumed): the first path segment
+// counts only if it carries a dot, a colon, or is `localhost`, docker's own rule.
 const registryQualified = (image: string): boolean => {
     const [first = "", ...rest] = image.split("/");
     return rest.length > 0 && (first.includes(".") || first.includes(":") || first === "localhost");
 };
 
-// Build the image from this repo's Dockerfile (the artifact CI publishes) unless SANDBOX_E2E_IMAGE points at a
-// prebuilt one, then start it in loopback: GOOGLE_CLIENT_ID / PLATFORM_URL stay unset, so auth + announce are
-// off and the only requirement is a Docker daemon.
+// Builds this repo's image unless SANDBOX_E2E_IMAGE points at a prebuilt one, then starts it in loopback:
+// GOOGLE_CLIENT_ID/PLATFORM_URL stay unset, so auth and announce are off.
 export const startSandboxContainer = async (environment: Record<string, string>): Promise<StartedTestContainer> => {
     const prebuilt = process.env["SANDBOX_E2E_IMAGE"];
     let image = prebuilt;
@@ -52,27 +44,10 @@ export const startSandboxContainer = async (environment: Record<string, string>)
         await buildSourceImage();
         image = SOURCE_IMAGE_TAG;
     }
-    /* PULL THE MOVING TAG, EVERY RUN. testcontainers' default policy skips the pull whenever the docker host
-     * already holds the tag, which is right for a pinned digest and wrong for `:latest`: a long-lived runner
-     * boots whatever `:latest` meant the last time anything on that host pulled it, and the suite then asserts
-     * today's expectations against a daemon that can be days old. Four consecutive nightlies failed here that
-     * way, each morning differently: a device row with no `sync` half, the per-device revoke answering 404,
-     * and finally `/system/devices` answering Hono's plain-text "404 Not Found" (which reaches the test as a
-     * JSON parse error) because the cached image still served the pre-rename /system/computers. The published
-     * image was right every time. The suite was not looking at it.
-     *
-     * Only for a reference a registry can answer for. A locally built tag (the from-source build above, or
-     * whatever a debugging session points this at) has nowhere to pull from, and forcing one would fail the
-     * run on an image that is already correct. */
+    // Pulls a registry-qualified tag every run; the default policy would reuse whatever :latest was pulled last.
     const pullPolicy = registryQualified(image) ? PullPolicy.alwaysPull() : PullPolicy.defaultPolicy();
-    // Unprivileged like every production runner's default: the image bakes a Docker Engine but it stays
-    // dormant (dockerd starts only when a docker capability is enabled AND the container runs privileged,
-    // the overlay-rebuild grant the suites don't exercise).
-    //
-    // SANDBOX_ALLOW_UNAUTHENTICATED is what lets the suites pass a CONNECT_TOKEN (the only source of a sync ssh
-    // hostname) to a daemon they then drive with no credential: main.ts's auth floor kills exactly that pair on
-    // sight, and this is the acknowledgement it accepts instead. Set HERE, once, rather than in each suite's
-    // environment map, a suite that forgot it would fail as an opaque 180s /health timeout.
+    // Unprivileged, like production; the baked Docker Engine stays dormant. SANDBOX_ALLOW_UNAUTHENTICATED lets these
+    // suites drive the daemon with only a CONNECT_TOKEN; omitting it fails as an opaque 180s /health timeout.
     return new GenericContainer(image)
         .withPullPolicy(pullPolicy)
         .withEnvironment({ SANDBOX_ALLOW_UNAUTHENTICATED: "1", ...environment })
@@ -84,8 +59,7 @@ export const startSandboxContainer = async (environment: Record<string, string>)
 
 export const daemonUrl = (container: StartedTestContainer): string => `http://${container.getHost()}:${container.getMappedPort(8787)}`;
 
-// Poll until `read` returns a defined value, daemon-side effects (automation fires, approval holds, gateway
-// dispatches) run detached from their HTTP responses.
+// Polls until `read` returns a defined value; daemon-side effects run detached from their HTTP responses.
 export const until = async <T>(read: () => Promise<T | undefined>, what: string, timeoutMs = 30_000): Promise<T> => {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -100,10 +74,8 @@ export const until = async <T>(read: () => Promise<T | undefined>, what: string,
     }
 };
 
-// `docker build` the composed overlay from stdin, the exact command recreate.sh runs (`docker build - <overlay`).
-// BuildKit is pinned on for the same reason the ic recreate flow pins it (see docker.rs stream_with_stdin): the
-// fragments carry `RUN --mount=type=cache`, which the legacy builder fails on rather than ignores, so a runner
-// with DOCKER_BUILDKIT=0 in its environment would fail these tests for a reason that has nothing to do with them.
+// `docker build` from stdin, the same command recreate.sh runs. BuildKit is pinned on since the overlay fragments use
+// `RUN --mount=type=cache`, which the legacy builder fails on rather than ignores.
 export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
     new Promise((resolve, reject) => {
         const build = spawn("docker", ["build", "-t", tag, "-"], { env: { ...process.env, DOCKER_BUILDKIT: "1" } });
@@ -115,8 +87,7 @@ export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
         build.stdin.end(dockerfile);
     });
 
-// `docker run --rm <tag> <command…>` with bind mounts, returning combined output, how the whisper overlay is
-// exercised without the daemon (the binary lives in the rebuilt image, not the running container).
+// `docker run --rm` with bind mounts, combined output; exercises the whisper overlay without the daemon.
 export const dockerRun = (tag: string, mounts: { host: string; container: string }[], command: string[]): Promise<string> =>
     new Promise((resolve, reject) => {
         const args = ["run", "--rm", ...mounts.flatMap((mount) => ["-v", `${mount.host}:${mount.container}:ro`]), tag, ...command];

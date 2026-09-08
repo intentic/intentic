@@ -14,33 +14,15 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 
-/* THE ONE PLACE EVERY CREDENTIAL IN THIS SANDBOX IS VISIBLE, and, past a dozen of them, a list built to be
- * scanned rather than read. It is the Extensions tab's four rules over a different subject, because it is the
- * same problem: a tab whose length is the number of things you own.
- *
- * IT HOLDS TWO KINDS OF THING AND ONLY ONE OF THEM IS WORK (see ./secretRows). The owner's own values can be
- * missing, are set and rotated and removed here, and a deploy fails without them. Capability credentials belong
- * to a connection: connected by construction, unsettable from here, and already managed one click away on the
- * Capabilities tab. That list is what grows without limit, so once there are enough rows to bury the half that
- * is work the first few stay visible and the rest sit behind the same toggle the Agent tab uses. AI provider
- * accounts are not listed here at all; they live on the Agent tab.
- *
- * WHAT IS OWED IS PINNED, AND THE BANNER IS GONE. A strip at the top saying "3 required secrets are not set"
- * named a number and then left the reader to find three rows scattered down five groups. The rows themselves
- * rise into one group above everything instead, the extension tab's precedent, and the same argument: a
- * summary of a problem is worth less than the problem, in a place you can act on it.
- *
- * THE INSTRUMENT ARRIVES WHEN IT IS EARNED. Below a handful of secrets the list IS the overview and a filter
- * box is more chrome than the thing it filters; past that, finding beats scrolling, and the box matches what a
- * row SHOWS (the account, the brand, what uses it) rather than only the key the daemon stored it under.
- *
- * Values stay in the sandbox: the only value-returning action anywhere here is the owner-only reveal. */
+// The one place every credential in this sandbox is visible, built to be scanned past a dozen rows. Owner-set
+// values are the only "work" here (settable, removable); capability credentials are read-only and collapse behind a
+// toggle past a threshold. Unfinished rows rise into one "Needs attention" group instead of a banner; the filter
+// appears only once there's enough to search; nothing here reveals a value except the owner's own action.
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-// Below this many rows the list is its own overview. A display choice, so it lives here rather than in the row model.
+// Below this many rows the list is its own overview; a display choice, kept out of the row model.
 const FILTERABLE_FROM = 8;
-/* Same truncation as AiAccountSection: five fit comfortably; beyond that show the first three and a toggle for
- * the rest, on capability credentials alone. */
+// Same truncation as AiAccountSection, applied to capability credentials alone.
 const COLLAPSE_THRESHOLD = 5;
 const VISIBLE_WHEN_COLLAPSED = 3;
 
@@ -49,13 +31,10 @@ const outline = useSandboxOutline(inventoryPending);
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 
-// DevOps scaffolds the desired-state repo the env/generated secrets live in; until its capability reports
-// `active`, those groups are empty and every /secrets write 412s, so gate them on this signal (state, not
-// mere presence: a scaffolding devops sits at `pending`).
+// Gated on DevOps being `active` (not merely present): scaffolding-in-progress still 412s on /secrets writes.
 const devopsActive = computed(() => capabilities.value.some((entry) => entry.kind === `devops` && entry.status.state === `active`));
 
-// Every secret as this tab reads it: named, marked, and sorted with whatever is unfinished first.
-// Provider accounts live on the Agent tab; they are excluded here so nothing downstream needs to filter them.
+// Provider accounts are excluded here (they live on the Agent tab) so nothing downstream must filter them.
 const rows = computed<SecretRow[]>(() =>
     secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value }).filter((row) => row.group !== `provider`),
 );
@@ -77,8 +56,7 @@ const matches = computed<SecretRow[]>(() => {
     return rows.value.filter((row) => matchesSecret(row, needle, scope.value === `missing`));
 });
 
-/* WHAT IS OUTSTANDING, lifted out of the groups it belongs to. A missing required value and a copy CI never got
- * are the two things this tab is opened in a hurry for, and either can sit under any heading. */
+// Unfinished rows lifted out of their groups: the two reasons this tab gets opened in a hurry.
 const attention = computed(() => matches.value.filter((row) => row.attention));
 const held = (group: SecretGroup): SecretRow[] => matches.value.filter((row) => !row.attention && row.group === group);
 const required = computed(() => held(`required`));
@@ -89,9 +67,7 @@ const credentials = computed(() => held(`credential`));
 // Empty groups keep their informative note at rest, but drop out entirely while filtering.
 const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value || list.length > 0;
 
-/* Capability credentials truncation: the same pattern AiAccountSection uses. Once the list is long enough to
- * bury the rest of the tab, the first three stay visible and the rest sit behind a toggle. While filtering,
- * every match shows and the toggle is hidden. */
+// Same collapse pattern as AiAccountSection; filtering shows every match and hides the toggle.
 const credentialsExpanded = ref(false);
 const shouldCollapseCredentials = computed(() => credentials.value.length > COLLAPSE_THRESHOLD);
 const collapsedCredentialCount = computed(() => credentials.value.length - VISIBLE_WHEN_COLLAPSED);
@@ -107,7 +83,7 @@ const clearFilters = (): void => {
     scope.value = `all`;
 };
 
-// Three different facts, and the wrong one is a lie the reader can see.
+// Distinguishes still-loading, empty inventory, and no filter matches.
 const emptyNote = computed<string | undefined>(() => {
     if (inventoryPending.value || matches.value.length > 0) {
         return undefined;
@@ -124,7 +100,7 @@ const cancelAdd = (): void => {
     newKey.value = ``;
 };
 
-// CI sync: once adopt recorded a push, stale entries get the "Push to CI" action (streams `intentic deploy secrets push`).
+// CI sync: a stale entry gets the "Push to CI" action, which streams `intentic deploy secrets push`.
 const ciStale = computed(() => inventory.value.some((entry) => entry.ci !== undefined && !entry.ci.synced));
 const ciKnown = computed(() => inventory.value.some((entry) => entry.ci !== undefined));
 const pushing = ref(false);
@@ -155,15 +131,15 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[pushError]" />
 
-        <!-- TWO GATES, NOT ONE, and every loading state in this hub is built the same way. The CONTENT waits on
-             the read itself (`inventoryPending`), so a half-read inventory never renders as "no secrets"; the
-             OUTLINE waits on the reveal, so a warm daemon paints a blank beat and then the list rather than a
-             skeleton nobody had time to read. Collapsing them into one flag gives up whichever half you drop. -->
+        <!--
+            Two gates: content waits on `inventoryPending` (a half-read inventory never shows as empty), the outline waits
+            on the reveal (a warm daemon skips the skeleton). Collapsing them into one flag loses one half.
+        -->
         <template v-if="inventoryPending">
-            <!-- The shape of the list that is coming, rather than a spinner over an empty column. A credential
-                 list is long and uniform, so its outline is the one thing a placeholder here can honestly
-                 promise: rows, each with a key and the control that reveals it. The label rides INSIDE the
-                 reveal: an empty bordered surface with a heading over it is its own flash. -->
+            <!--
+                Shows the shape of the coming list (rows with a key and reveal control), not a spinner. Label sits inside the
+                reveal so an empty bordered surface with a heading doesn't flash first.
+            -->
             <RowGroup v-if="outline" label="Your secrets">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading your sandbox's secrets…</span>
@@ -173,8 +149,7 @@ const pushToCi = async (): Promise<void> => {
         </template>
 
         <template v-else>
-            <!-- The tab's instrument, not any one group's: the filter and the scope narrow everything below and
-                 read as one control, while pushing the set to CI does not and stays chromeless beside them. -->
+            <!-- Filter and scope narrow everything below as one control; the CI push button is separate and chromeless. -->
             <div v-if="filterable || ciKnown" class="flex flex-wrap items-center justify-end gap-2">
                 <FilterBar
                     v-if="filterable"
@@ -198,8 +173,7 @@ const pushToCi = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <!-- WHAT IS OWED, above everything and only while something is. This is the strip that used to say
-                 "3 required secrets are not set", except it is the three secrets. -->
+            <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
             <RowGroup v-if="attention.length > 0" label="Needs attention" :count="attention.length">
                 <SecretEntryRow
                     v-for="row in attention"
@@ -223,11 +197,8 @@ const pushToCi = async (): Promise<void> => {
                     />
                 </RowGroup>
 
-                <!-- The gate sits on the group it gates rather than at the top of the page: with DevOps off,
-                     everything else on this tab works, and a banner over the whole thing said otherwise. -->
-                <!-- A line that GOES somewhere is a <Row>, wrapped in a <RouterLink> — the pattern <Row> itself
-                     documents for internal navigation, and what makes this sit at the list's own tier instead of
-                     the `px-4 py-3` it was hand-written at, which matches no tier at all. -->
+                <!-- Gate sits on the group it gates, not atop the page: everything else here works with DevOps off. -->
+                <!-- A navigating row is `<Row>` wrapped in `<RouterLink>` (the pattern it documents), at the list's own tier. -->
                 <RowGroup v-else-if="!devopsActive && !filtering" label="Your secrets">
                     <RouterLink to="/capabilities" class="block no-underline">
                         <Row
@@ -250,9 +221,7 @@ const pushToCi = async (): Promise<void> => {
                         :expanded="opened === row.entry.key"
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
-                    <!-- The list's own "add one", at the list's own tier and with its plus in the column the
-                         chevrons above it are hung on: <RowNote action> rather than the fourth hand-written
-                         spelling of this line (see the component's note). -->
+                    <!-- `<RowNote action>`, not another hand-written spelling of this row, aligned with the chevron column above. -->
                     <RowNote v-if="!filtering && !adding" variant="action" label="Add a secret" @click="adding = true" />
                     <RowNote v-else-if="!filtering" variant="block">
                         <div class="flex flex-col gap-2">
@@ -285,9 +254,7 @@ const pushToCi = async (): Promise<void> => {
                     />
                 </RowGroup>
 
-                <!-- Capability credentials: the inventory the Capabilities page shows. Once there are enough rows
-                     to bury the rest of the tab, the first three stay visible and the rest sit behind the same
-                     toggle the Agent tab uses. -->
+                <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
                 <RowGroup v-if="groupVisible(visibleCredentials)" label="Capability credentials" :count="credentials.length">
                     <template #actions>
                         <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />

@@ -2,35 +2,20 @@ import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { writeJsonFile } from "./json-file.js";
 
-/* The substrate under the daemon's per-entry-file stores, a DIRECTORY holding one JSON file per entry
- * (.intentic/config/approvals/, .intentic/records/approvals/) rather than one manifest holding them all. `jsonFile` is the other
- * shape; this is the one to reach for when the daemon is not the only writer.
- *
- * PER FILE, NEVER A MANIFEST, because both of these have a second writer: the agent creates approvals with its own
- * file tools, and separate automations fire held wakes concurrently. Two writers on one manifest race a
- * read-modify-write and the loser's entry is simply gone, `jsonFile`'s update queue orders this daemon's own
- * handlers and nothing else. One file per entry has nothing to race: a write touches only its own id.
- *
- * THE ID IS THE FILENAME and is never in the body, grafted on read, the caller strips it on write. That is
- * what makes a body that disagrees with its own filename impossible to write, and what lets `mv` rename an
- * entry.
- *
- * A NAME THAT IS NOT A VALID ID IS REPORTED, NEVER READ. These directories are a trust boundary, the approvals
- * one is written by the agent, so `list` answers with the entries it parsed AND the filenames it refused,
- * and a typo surfaces in the UI instead of becoming an item that silently never runs. */
+// Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the
+// single-manifest shape for a daemon-only writer.
+// - the id is the filename, stripped from the body on write and grafted back on read, so the two can never disagree
+// - an unparsable filename is reported by list(), never silently dropped
 
-// The contract's `entryId` charset (sandbox-contract's schemas/internal.ts, which the package index does not
-// re-export). Held once here rather than re-typed per store: both copies of it carried a comment claiming to
-// match this, which is exactly the kind of agreement that drifts unobserved.
+// Charset must mirror `entryId` in sandbox-contract's schemas/internal.ts.
 const ENTRY_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,59}$/;
 
 export interface JsonDir<T> {
     // The entry, or undefined when it is absent, unreadable, or fails the schema.
     readonly read: (id: string) => Promise<(T & { id: string }) | undefined>;
-    // Every entry in the directory, unordered (each store sorts by the field its UI reads), plus the filenames
-    // that failed. An absent directory is empty, not an error, nothing has been written yet.
+    // All entries, unordered, plus filenames that failed to parse; a missing directory reads as empty, not an error.
     readonly list: () => Promise<{ entries: (T & { id: string })[]; invalid: string[] }>;
-    // Upsert: writing an id that exists replaces it whole. Atomic, so a concurrent `list` never sees a prefix.
+    // Upsert, replacing an existing id whole; atomic, so a concurrent list() never sees a partial write.
     readonly write: (id: string, body: T) => Promise<void>;
     // True when an entry of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
@@ -64,8 +49,7 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined):
             }
             const entries: (T & { id: string })[] = [];
             const invalid: string[] = [];
-            // Only `.json`, which is also what keeps a write's own `.<id>.json.<pid>.tmp` from being read as a
-            // malformed entry while it is mid-swap.
+            // Filters to `.json` so an in-progress `.<id>.json.<pid>.tmp` write is never read as a malformed entry.
             for (const name of names.filter((candidate) => candidate.endsWith(".json"))) {
                 const entry = await read(name.slice(0, -".json".length));
                 if (entry === undefined) {

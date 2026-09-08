@@ -1,29 +1,9 @@
-/* ARE THE TWO SIDES ACTUALLY TWO PICTURES? The question a binary diff of a screenshot raises and, until this
- * module, could not answer. Two re-captures of the same screen, two exports of the same logo, a PNG squeezed by
- * a different optimiser: all of them arrive as "modified", both panes fill, and the reviewer is left comparing
- * two ~2.6 MB images by eye at 27% zoom, where a changed number in 11px type is a smudge. The honest answer is
- * cheap and the browser already holds everything it needs: both sides' bytes are in memory to be rendered at
- * all, so the file question is a buffer compare and the picture question a decode away.
- *
- * BYTES FIRST, because it is exact and free: equal bytes means the two sides are one file, which git cannot
- * normally produce (a diff exists because something changed) and which therefore also serves as this viewer's
- * own alarm, if a diff source ever hands the same side over twice, the pane says so instead of quietly looking
- * like a broken comparison.
- *
- * PIXELS SECOND, because "the bytes differ" is not the same as "the picture changed", and for a re-exported
- * asset it is the difference between a review that has something to look at and one that does not.
- *
- * Everything here degrades to `undefined`: an image type the browser will paint but not decode into a canvas
- * (some ICOs), a canvas call a hardened context refuses, an image too large to be worth comparing. Unknown is
- * reported as unknown, never as a verdict. */
+// Answers whether a binary image diff's two sides are actually different pictures, not just different bytes.
+// Bytes compared first (exact, free, and catches a diff source handing the same side twice); pixels compared
+// second, since differing bytes don't mean the picture changed. Undecodable images degrade to undefined.
 
-/* What the two sides turn out to be. `undefined` is "nothing to add": the two pictures are different shapes,
- * which the captions already say, or nothing here could decode them.
- *
- * `changed` carries a share rather than a bare "they differ" because that is the case a reviewer is stuck on:
- * two captures of one screen at one size, where the captions agree down to the rounded byte count and the
- * only honest report is HOW MUCH moved. 0.2% says "one figure changed, go and find it"; 40% says "this is a
- * different screen". */
+// `undefined`: different shapes (captions already say so) or nothing decodable. `changed` carries a share, not
+// a bare "differ": 0.2% says find one changed figure, 40% says a different screen.
 export type SidesComparison = { readonly kind: "bytes" } | { readonly kind: "pixels" } | { readonly kind: "changed"; readonly share: number };
 
 export interface ImageSize {
@@ -31,9 +11,7 @@ export interface ImageSize {
     readonly h: number;
 }
 
-/* Above this the pixel pass is skipped. Two 8K screenshots are 66 MP a side, and comparing them means two full
- * RGBA decodes (~265 MB each) to answer a question the byte compare has already answered "not the same file"
- * for. The pass is an extra courtesy for the common case, not a promise about every case. */
+// Above this, the pixel pass is skipped: decoding both sides fully costs too much for a courtesy check.
 const MAX_COMPARED_PIXELS = 40_000_000;
 
 const sameBytes = async (before: Blob, after: Blob): Promise<boolean> => {
@@ -46,9 +24,8 @@ const sameBytes = async (before: Blob, after: Blob): Promise<boolean> => {
     return a.every((byte, index) => byte === b[index]);
 };
 
-// The picture's own size, which is the one fact that distinguishes two screenshots at a glance and the one the
-// caption could not previously report. Decoded rather than parsed out of the container: every renderable type
-// answers, and none of their headers has to be understood here.
+// The picture's own size, decoded rather than parsed from the container: every renderable type answers, no
+// header format needs understanding here.
 export const imageSize = async (blob: Blob): Promise<ImageSize | undefined> => {
     if (typeof createImageBitmap !== `function`) {
         return undefined;
@@ -63,13 +40,9 @@ export const imageSize = async (blob: Blob): Promise<ImageSize | undefined> => {
     }
 };
 
-/* Somewhere to decode into, which is never shown: an offscreen surface where the browser has one (no document,
- * no layout), a detached <canvas> otherwise. `willReadFrequently` because reading the whole surface straight
- * back IS the purpose here, and it keeps the context on the CPU rather than paying a GPU readback for a
- * one-shot compare.
- *
- * Typed as the on-screen context: OffscreenCanvas's differs only in what it is attached to, and the two calls
- * made below (drawImage, getImageData) are the same method on both. */
+// Offscreen canvas where available, else a detached one; `willReadFrequently` keeps it on the CPU, since reading
+// the whole surface back is the point. Typed as the on-screen context, since the methods used here are identical on
+// both.
 const context2d = (size: ImageSize): CanvasRenderingContext2D | undefined => {
     if (typeof OffscreenCanvas === `function`) {
         return (new OffscreenCanvas(size.w, size.h).getContext(`2d`, { willReadFrequently: true }) as CanvasRenderingContext2D | null) ?? undefined;
@@ -98,11 +71,8 @@ const pixelsOf = async (blob: Blob, size: ImageSize): Promise<Uint8ClampedArray 
     }
 };
 
-/* How many pixels of the two are not the same pixel. Counted rather than stopped at the first difference: the
- * count IS the answer here, and a full pass over a fitted-in-a-pane screenshot costs a few milliseconds off
- * the render path. A pixel counts as changed if any of its four channels moved, no tolerance: a re-encode that
- * shifts a channel by one is a real difference in the file, and the caller reports the share, not a verdict
- * about whether it matters. */
+// Counts every changed pixel, not just the first, since the count is the answer. Any channel difference counts,
+// no tolerance: a real difference, with the caller reporting share, not a verdict.
 const changedShare = (a: Uint8ClampedArray, b: Uint8ClampedArray): number => {
     let changed = 0;
     for (let index = 0; index < a.length; index += 4) {
@@ -113,8 +83,8 @@ const changedShare = (a: Uint8ClampedArray, b: Uint8ClampedArray): number => {
     return changed / (a.length / 4);
 };
 
-/* The comparison, in the order that costs the least: equal bytes ⇒ one file; different dimensions ⇒ two
- * pictures, which the captions already show and no decode is needed to say; otherwise the pixels decide. */
+// Cheapest check first: equal bytes ⇒ one file; different dimensions ⇒ two pictures (captions already show
+// that, no decode needed); otherwise pixels decide.
 export const compareSides = async (before: Blob, after: Blob): Promise<SidesComparison | undefined> => {
     if (await sameBytes(before, after)) {
         return { kind: `bytes` };

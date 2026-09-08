@@ -1,57 +1,21 @@
 #!/usr/bin/env node
-/* WHICH FAILED PUBLISH IS WORTH A SECOND ATTEMPT — asserted against the failures that actually killed releases,
- * in both directions, for both of the retry helpers a release runs through.
- *
- *   node _tools/checks/publish-retry.mjs
- *
- * registry-retry.sh and npm-publish-retry.sh are each one decision, and the decision is a list of patterns
- * matched against a tool's output. A pattern that stops matching costs a release:
- *
- *   1.197.0  a 403 from GHCR whose body was a rate limit, not a permission
- *   1.207.0  a blob upload GHCR had accepted and then disowned
- *   1.243.0  a transparency-log entry Rekor refused as a duplicate of its own work, nineteen packages in
- *
- * Every one of those was carried by a retry the moment somebody re-ran the job by hand. A pattern that matches
- * too much costs the opposite — three silent backoffs in front of a broken Dockerfile or an unregistered
- * trusted publisher turn a fast red pipeline into a slow one that reads like an infrastructure flake.
- *
- * THESE USED TO BE SHELL TESTS BESIDE THE SCRIPTS, AND NOTHING RAN THEM. `registry-retry.test.sh` and
- * `npm-publish-retry.test.sh` were both correct, both complete, and both on no list: not the checks manifest,
- * not a workflow, not a package script. That is the exact failure this directory exists to end
- * (manifest.mjs's header), so their corpora moved here — where preflight, the pre-push hook, the turn-ending
- * check and `pnpm checks` all read them.
- *
- * THE PATTERNS ARE READ BACK OUT OF THE SHELL SCRIPTS rather than restated here, the same way affected.mjs
- * reads prepare-image-trees.sh's payload: a second copy of the list is a copy that drifts, and drift in THESE
- * lists is invisible until a release dies. A shape this can no longer read is reported as such, never passed
- * over in silence.
- *
- * POSIX ERE AND JAVASCRIPT AGREE ON EVERYTHING IN THOSE LISTS — alternation, character classes, `+`, `[0-9]` —
- * so the patterns are compiled here as written, case-insensitively, exactly as `grep -Eqi` applies them. One
- * that reached for a dialect feature only one side has would fail to compile below rather than quietly mean
- * something different in the two places.
- *
- * THE BACKOFF LOOPS ARE EXERCISED TOO, through bash, when there is a bash to exercise them with: that a dropped
- * push succeeds on the way back through — and that a publish whose ANSWER was lost is reported as published
- * rather than failed — are the properties the helpers exist for, and neither is visible in the pattern list.
- * Attempted and vouched for less where bash is absent (a Windows pre-push hook), the same trade the
- * vue-templates check makes. */
+// Checks registry-retry.sh and npm-publish-retry.sh: each is a pattern list deciding which publish failure gets
+// retried, asserted against failures that actually killed a release, in both directions. Patterns are read back out of
+// the scripts, compiled as POSIX ERE case-insensitively; the backoff loop is drilled through bash when available.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { root, trackedFiles } from "./lib/repo.mjs";
 
-/* ── the two subjects ─────────────────────────────────────────────────────────────────────────────────────
- * Each drill prints one line per case, `<case> <attempts> <status>`, and declares what those should be. The
- * delays are set to 0: the gap between attempts is a clock, and this has no reason to wait one out. */
+// Each drill prints one line per case, `<case> <attempts> <status>`. Delays are 0: there's no clock worth waiting out.
 
 const SUBJECTS = [
     {
         id: "registry-retry",
         script: "_tools/scripts/lib/registry-retry.sh",
         predicate: "registry_retry_transient",
-        // Verbatim from the runs that died. A shorter paraphrase would assert less than the release cost to learn.
+        // Verbatim from the runs that died; a paraphrase would assert less than the release cost to learn.
         rideItOut: [
             [
                 "blob upload unknown (killed 1.207.0)",
@@ -79,9 +43,8 @@ const SUBJECTS = [
             ["a missing build context", 'ERROR: failed to solve: failed to compute cache key: "/opt/nothing": not found'],
             ["no login", "ERROR: failed to push: unauthorized: authentication required"],
         ],
-        // A push GHCR drops once and accepts on the way back through is a GREEN release; a broken build is
-        // refused on the first attempt. The attempts are counted ON DISK: registry_retry runs its command as
-        // `"$@" | tee`, which puts it in a SUBSHELL, so a counter variable never comes back.
+        // A push GHCR drops once and accepts on retry is a green release; a broken build fails on the first attempt.
+        // Attempts are counted on disk, since `tee` puts the counted command in a subshell.
         drill: String.raw`
 export REGISTRY_RETRY_ATTEMPTS=3 REGISTRY_RETRY_DELAY=0
 DROPPED='ERROR: failed to push ghcr.io/intentic/sandbox:1.207.0-amd64: unknown: blob upload unknown to registry'
@@ -131,13 +94,12 @@ run broken registry_retry broken
                 'npm error code E403\nnpm error 403 Forbidden - PUT https://registry.npmjs.org/@intentic%2fscaffold - You do not have permission to publish "@intentic/scaffold".',
             ],
             ["a tarball the registry will not take", "npm error code EBADPLATFORM\nnpm error Invalid package.json: name can only contain URL-friendly characters"],
-            // A conflict the registry does NOT confirm: the landed-probe is what tells this from our own write
-            // coming back, so with the registry saying no it must be reported rather than retried.
+            // The landed-probe, not the exit code, decides an unconfirmed conflict must be reported, not retried.
             ["a conflict the registry does not confirm", "npm error code EPUBLISHCONFLICT\nnpm error You cannot publish over the previously published versions: 1.243.0."],
         ],
-        // Three properties the pattern list cannot show: a dropped signature is re-signed and lands; a
-        // 4xx about us fails at once; and a publish whose ANSWER was lost is reported as PUBLISHED, because
-        // the registry holds the version whatever exit status npm handed back.
+        // Three properties the pattern list alone can't show: a dropped signature re-signs and lands, a 4xx about us
+        // fails at once, and a lost answer is reported as published, since the registry holds the version regardless of
+        // npm's exit status.
         drill: String.raw`
 export NPM_PUBLISH_ATTEMPTS=3 NPM_PUBLISH_DELAY=0
 landed="$(mktemp)"
@@ -170,14 +132,14 @@ rm -f "$landed"
     },
 ];
 
-/* ── the pattern lists, read back out of the scripts ──────────────────────────────────────────────────────── */
+// The pattern lists, read back out of the scripts.
 
 const problems = [];
 const vouched = [];
 
 for (const subject of SUBJECTS) {
     const source = readFileSync(join(root, subject.script), "utf8");
-    // The predicate's body only: the file's other single-quoted text must not be mistaken for a pattern.
+    // The predicate's body only, so other single-quoted text in the file isn't mistaken for a pattern.
     const body = source.match(new RegExp(String.raw`^${subject.predicate}\(\)\s*\{([\s\S]*?)^\}`, "m"));
     if (body === null) {
         problems.push(`${subject.script}: cannot find ${subject.predicate}(), the shape changed and this check needs updating`);
@@ -210,13 +172,9 @@ for (const subject of SUBJECTS) {
         }
     }
 
-    /* ── every caller sets pipefail, because the helper is silently useless without it ────────────────────
-     * Both helpers judge an attempt by `<command> 2>&1 | tee "$log" || status=$?`, and the status of a
-     * PIPELINE is its last command's — tee's, which succeeds whatever the push did. Only `set -o pipefail`
-     * makes that status the command's own. So a caller that sources one of these without pipefail gets a
-     * retry wrapper that reports SUCCESS for every failure: no retry, no error, a green step over an
-     * artifact that never landed. Both scripts state the assumption in a comment ("every caller sets it");
-     * this is what keeps it true. */
+    // Both helpers judge an attempt through `cmd | tee`, whose pipeline status is tee's own unless the caller sets
+    // `pipefail`; without it every failure silently reports success. Checks that every caller sourcing the script also
+    // sets it.
     const basename = subject.script.slice(subject.script.lastIndexOf("/") + 1);
     const sourcesIt = new RegExp(String.raw`^\s*\.\s+.*${basename.replace(/\./g, "\\.")}"`, "m");
     const setsPipefail = /^\s*set\b[^\n]*\bpipefail\b/m;
@@ -230,9 +188,8 @@ for (const subject of SUBJECTS) {
         }
     }
 
-    /* ── and the loop itself, where bash can run it ───────────────────────────────────────────────────────
-     * `run` is the harness both drills share: it runs one case, records the retry function's exit status,
-     * and prints `<case> <attempts> <status>`. The counter is a file for the subshell reason above. */
+    // The harness both drills share: runs one case, records the retry function's exit status, prints `<case> <attempts>
+    // <status>`. The counter is a file, for the same subshell reason.
     const HARNESS = String.raw`
 set -uo pipefail
 . "$SCRIPT"

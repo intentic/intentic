@@ -13,8 +13,7 @@ import { emit } from "./emit.js";
 const host: HostIntent = { id: "host", input: { address: "203.0.113.10", user: "deploy", sshKey: env("HOST_SSH_KEY") } };
 const cloudflare: CloudflareIntent = { id: "cf", input: { apiToken: env("CLOUDFLARE_API_TOKEN") } };
 
-// The full single-combination assignment for an intent under the default catalog: the one combo emit
-// supports today.
+// Single-combination assignment for an intent; the only combo emit currently supports.
 const assign = (intent: IntentSet, catalog: Catalog = forgejoCatalog): Assignment => {
     const byNeed = new Map<string, string>();
     for (const need of resolveNeeds(intent)) {
@@ -133,22 +132,21 @@ test("the GitLab stack derives gl-repo + one app-scoped gl-ci + per-env Komodo d
     const nodes = emit(intent, assign(intent, gitlabCatalog), "example.com");
     const byId = new Map(nodes.map((node) => [node.id, node]));
 
-    // The GitLab inventory node carries the default instance url + the derived registry authority flows to gl-ci.
+    // GitLab inventory node carries the default instance url; the derived registry flows to gl-ci.
     expect(byId.get("gl")?.type).toBe("gitlab");
     expect(byId.get("gl")?.inputs["url"]).toBe("https://gitlab.com");
 
-    // One project, ONE .gitlab-ci.yml for the whole app (both envs), and a Komodo deployment per env.
+    // One project, one .gitlab-ci.yml for the whole app (both envs), and a Komodo deployment per env.
     expect(byId.get("app-repo")?.type).toBe("gl-repo");
     expect(byId.get("app-gl-ci")?.type).toBe("gl-ci");
     expect(nodes.filter((node) => node.type === "gl-ci")).toHaveLength(1);
     expect(byId.get("app.staging")?.type).toBe("deployment");
     expect(byId.get("app.production")?.type).toBe("deployment");
     expect(byId.get("app-gl-ci")?.inputs["registry"]).toBe("registry.gitlab.com");
-    // The CI's notify step reaches Komodo through its PUBLIC url (hosted runners are external).
+    // CI's notify step reaches Komodo through its public url; hosted runners are external.
     expect(byId.get("app-gl-ci")?.inputs["komodoUrl"]).toEqual(makeRef("host-deploy", "url"));
 
-    // Komodo is unconditional (the deploy orchestrator on every stack); Forgejo + its runner are not derived:
-    // GitLab is the git/CI/registry. Komodo pulls from the GitLab registry with the account's PAT.
+    // Komodo is unconditional; Forgejo and its runner aren't derived since GitLab is the git/CI/registry.
     const types = nodes.map((node) => node.type);
     expect(types).not.toContain("forgejo");
     expect(types).not.toContain("forgejo-runner");
@@ -230,7 +228,7 @@ test("app without notify derives no notification sinks even when discord is decl
     const types = emit(intent, assign(intent), "example.com").map((node) => node.type);
     expect(types.filter((type) => type === "forgejo-notify")).toHaveLength(0);
     expect(types.filter((type) => type === "komodo-notify")).toHaveLength(0);
-    // The discord node IS emitted but its apps list is empty (no app references it).
+    // Discord node is still emitted; its apps list is empty since nothing references it.
     expect(types.filter((type) => type === "discord")).toHaveLength(1);
     expect(emit(intent, assign(intent), "example.com").find((node) => node.type === "discord")?.inputs["apps"]).toEqual([]);
 });
@@ -310,7 +308,7 @@ test("a services-only intent emits the service + its route + tunnel, but no app 
     const signoz = nodes.find((node) => node.id === "obs");
     expect(signoz?.type).toBe("signoz");
     expect(signoz?.inputs["domain"]).toBe("signoz.example.com");
-    // The build platform exists only to ship apps from source: a services-only intent skips it.
+    // Build platform exists only to ship apps from source; a services-only intent skips it.
     expect(nodes.some((node) => node.type === "forgejo")).toBe(false);
     expect(nodes.some((node) => node.type === "komodo")).toBe(false);
     // The service's dashboard port is aggregated onto the host tunnel's ingress.
@@ -408,7 +406,7 @@ test("users and teams derive Forgejo accounts + org/team and Komodo users, and t
     expect(byId.get("host-git-org-squad")?.type).toBe("forgejo-org");
     expect(byId.get("host-git-org-squad-team")?.type).toBe("forgejo-team");
 
-    // The repo is owned by the team's org (its id), and so are the ci/deployment image namespaces.
+    // Repo is owned by the team's org (its id); so are the ci/deployment image namespaces.
     expect(byId.get("app-repo")?.inputs["owner"]).toBe("squad");
     expect(byId.get("app.prod")?.inputs["owner"]).toBe("squad");
     expect(byId.get("app-repo")?.explicitDependsOn).toContain("host-git-org-squad");
@@ -579,7 +577,7 @@ test("a workspace-only intent emits the sandbox node + its wildcard preview rout
     const nodes = emit(intent, assign(intent), "example.com");
     const sandbox = nodes.find((node) => node.id === "workspace");
     expect(sandbox?.type).toBe("workspace");
-    // The workspace IS the sandbox image now (no runner); the daemon + preview proxy ports are resolver constants.
+    // Workspace is the sandbox image (no runner); daemon and preview ports are resolver constants.
     expect(sandbox?.inputs["image"]).toBe(IMAGES.sandbox);
     expect(sandbox?.inputs["domain"]).toBe("*.example.com");
     expect(sandbox?.inputs["network"]).toBe("intentic-workspace");
@@ -588,8 +586,7 @@ test("a workspace-only intent emits the sandbox node + its wildcard preview rout
     // No app platform for a workspace-only intent.
     expect(nodes.some((node) => node.type === "forgejo")).toBe(false);
     expect(nodes.some((node) => node.type === "komodo")).toBe(false);
-    // The wildcard hostname flows unchanged into the cf-route (id slugged) and routes to the sandbox's preview
-    // proxy on the host tunnel's ingress (the daemon stays host-internal: preview-only).
+    // Wildcard hostname routes to the sandbox's preview proxy; the daemon itself stays host-internal, preview-only.
     expect(nodes.find((node) => node.type === "cf-route")?.inputs["hostname"]).toBe("*.example.com");
     expect(nodes.find((node) => node.id === "host-tunnel")?.inputs["ingress"]).toEqual([{ hostname: "*.example.com", port: 5173 }]);
 });
@@ -607,8 +604,7 @@ test("a workspace exposing a service wires it as an MCP tool (domain URL + gener
     };
 
     const sandbox = emit(intent, assign(intent), "example.com").find((node) => node.id === "workspace");
-    // The tool is addressed by its routed domain (works cross-host), with an intentic-generated bearer (raw
-    // SecretRef here: the $secret form is the compiled shape). The token key is shared with the tool itself.
+    // Tool is addressed by its routed domain, with a generated bearer token whose key matches the tool's.
     expect(sandbox?.inputs["tools"]).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: { kind: "secret", source: "generated", key: "SIGNOZ_MCP_TOKEN" } },
     ]);
@@ -640,8 +636,7 @@ test('a host with via:"cloudflared" threads the transport onto every node deploy
         apps: [oneApp],
     };
     const nodes = emit(intent, assign(intent), "example.com");
-    // Every SSH-deploying node, not just the host: must carry via, so the executor tunnels to a NAT'd self
-    // host for the control plane, its runner, the backup job, and the tunnel connector alike.
+    // Every SSH-deploying node must carry via, not just the host, so all reach a NAT'd host.
     for (const id of ["host", "host-git", "host-git-runner", "host-deploy", "host-backup", "host-tunnel"]) {
         expect(nodes.find((node) => node.id === id)?.inputs["via"], id).toBe("cloudflared");
     }

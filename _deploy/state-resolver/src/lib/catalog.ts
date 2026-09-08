@@ -1,8 +1,7 @@
 import type { Capability, IntentSet } from "@intentic/need-resolver";
 
-// A concrete way to satisfy one or more capabilities. One option can fill several needs at once. Forgejo
-// (the "Gitea" option) provides both source control and a Docker registry, which couples those needs to
-// the same choice.
+// A concrete way to satisfy one or more capabilities; one option can fill several needs at once, e.g. forgejo
+// provides both source-control and docker-registry.
 export interface Option {
     readonly id: string;
     readonly provides: readonly Capability[];
@@ -12,8 +11,7 @@ export interface Catalog {
     optionsFor(capability: Capability): readonly Option[];
 }
 
-// The Forgejo+Komodo stack: self-hosted git, CI, registry, and deploy orchestration. Default when no
-// i.have.github is declared.
+// Forgejo+Komodo stack: self-hosted git, CI, registry, deploy orchestration; the default stack.
 const forgejoOptions: readonly Option[] = [
     { id: "forgejo", provides: ["source-control", "docker-registry"] },
     { id: "komodo", provides: ["infra-control"] },
@@ -21,9 +19,7 @@ const forgejoOptions: readonly Option[] = [
     { id: "cloudflare-tunnel", provides: ["domain"] },
 ];
 
-// The GitHub stack: hosted git + CI (GitHub Actions) + registry (GHCR). Komodo still fills infra-control,
-// the deploy orchestrator is unconditional, so CI only builds + pushes and the host stays outbound-only.
-// Selected when i.have.github is declared.
+// GitHub stack: hosted git+CI (Actions)+registry (GHCR); Komodo still deploys, so CI only builds and pushes.
 const githubOptions: readonly Option[] = [
     { id: "github", provides: ["source-control", "docker-registry"] },
     { id: "komodo", provides: ["infra-control"] },
@@ -31,8 +27,7 @@ const githubOptions: readonly Option[] = [
     { id: "cloudflare-tunnel", provides: ["domain"] },
 ];
 
-// The GitLab stack: hosted (or self-hosted) git + CI (.gitlab-ci.yml) + registry (GitLab Container Registry).
-// Komodo fills infra-control exactly like the GitHub stack. Selected when i.have.gitlab is declared.
+// GitLab stack: hosted or self-hosted git+CI (.gitlab-ci.yml)+registry; Komodo deploys, like the GitHub stack.
 const gitlabOptions: readonly Option[] = [
     { id: "gitlab", provides: ["source-control", "docker-registry"] },
     { id: "komodo", provides: ["infra-control"] },
@@ -47,9 +42,8 @@ export const forgejoCatalog: Catalog = makeCatalog(forgejoOptions);
 export const githubCatalog: Catalog = makeCatalog(githubOptions);
 export const gitlabCatalog: Catalog = makeCatalog(gitlabOptions);
 
-// Select the catalog based on the intent: i.have.github ⇒ the GitHub stack, i.have.gitlab ⇒ the GitLab stack;
-// otherwise the self-hosted Forgejo+Komodo default. The SDK enforces a single source-control account, so at
-// most one of github/gitlab is set.
+// Selects the catalog: i.have.github ⇒ GitHub stack, i.have.gitlab ⇒ GitLab stack, otherwise Forgejo+Komodo. The
+// SDK enforces at most one of github/gitlab.
 export const catalogFor = (intent: IntentSet): Catalog => {
     if (intent.github !== undefined) {
         return githubCatalog;

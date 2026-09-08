@@ -4,57 +4,32 @@ import type { DeviceSandbox } from "@intentic/sandbox-contract";
 import { readPrepareUpdates } from "./config.js";
 import { fleet, icInFlight, runIc } from "./tools/sandboxes.js";
 
-/* KEEPING THE NEXT SANDBOX UPDATE DOWNLOADED, so taking one is a half-minute restart instead of minutes of
- * watching a pull. The update card can only quote the short number once `ic sandbox prepare` has run, and
- * until this tick existed nobody ran it unless the owner found the Download button first — which made the
- * common case the expensive one on every machine whose owner never did.
- *
- * The tick is deliberately dumb: every few hours, for each sandbox container on this machine, run
- * `ic sandbox prepare <slug> --auto` and let `ic` decide everything. It already declines on low disk, skips
- * pinned and locally-built images, no-ops cheaply when the channel tag hasn't moved (one registry manifest
- * check), and clears a stale staged record when the sandbox caught up by another route. Teaching this file a
- * second copy of any of those rules is how the timer and the command would drift apart.
- *
- * WHY THE MACHINE AGENT AND NOT THE SANDBOX: the download's costs — disk, bandwidth, a Docker daemon — are
- * this machine's, so the switch lives here (`intentic-machine device updates`, cached in device.json)
- * with the machine's owner, not on a surface an agent can reach. Nothing in any sandbox can start, steer or
- * observe this tick; a sandbox only ever learns what `ic` tells it the way it always has, through the staged
- * marker on its own /history volume.
- *
- * Failures stay in this log. A failed background download leaves the world exactly as it was — the update
- * card still offers the ordinary paths — so nothing here is worth a user-facing error; a slug that keeps
- * failing is retried on a doubling backoff so a broken one costs a line every day or two, not every tick. */
+// Keeps the next sandbox update downloaded by running `ic sandbox prepare <slug> --auto` on a timer, letting `ic`
+// decide everything (disk checks, pinned/dev images, no-ops). Lives on the machine, not the sandbox, since the
+// download's disk/bandwidth/docker cost is the machine's; failures just log with backoff, never surface to the user.
 
-// The first look, well after boot: docker, the containers and their tunnels are themselves still coming up in
-// the minutes after login, and a pull racing that start-up would bill its noise to the wrong culprit.
+// Well after boot: docker and its containers are still starting up, so an early pull would blame the wrong thing.
 const FIRST_TICK_MS = 5 * 60_000;
-// A release is not urgent (the daemon's own version check says the same); what matters is that the download
-// predates the click by hours, not that it lands within minutes of the tag moving.
+// A release isn't urgent; what matters is the download predates the click by hours, not minutes.
 const TICK_MS = 6 * 60 * 60_000;
-// Spread across a fleet: a release day must not have every machine of an org pull in the same minute.
+// Spread across a fleet, so a release day doesn't have every machine pull in the same minute.
 const JITTER_MS = 30 * 60_000;
-// The backoff ceiling, in ticks: a slug that fails forever is retried every ~2 days, cheap enough to keep
-// trying and loud enough (one log line per try) to be findable when someone goes looking.
+// Backoff ceiling in ticks: a permanently failing slug retries every ~2 days, still loud enough to notice.
 const MAX_SKIP_TICKS = 8;
 
-// Which of this machine's sandboxes an unattended prepare may even consider: running ones (`prepare` reads
-// the approved overlay out of the container, and a stopped sandbox gets its download on the tick after it
-// starts), and never runners — a runner's image is its PARENT's decision, reconciled from the parent sandbox
-// (the parent's runner door), and staging an update under one would fight that reconciler. Pinned and dev images are
-// deliberately NOT filtered here: `ic` classifies those from the container's own stamps, where the knowledge
-// lives.
+// Only running sandboxes (a stopped one downloads on its next start) and never runners, whose image is the parent's
+// decision to reconcile. Pinned/dev images aren't filtered here; ic classifies those from the container's own stamps.
 export const prepareTargets = (boxes: readonly DeviceSandbox[]): string[] =>
     boxes.filter((box) => box.running && !box.slug.startsWith("runner-")).map((box) => box.slug);
 
-// How many ticks a slug sits out after its n-th consecutive failure: 1, 2, 4, then MAX_SKIP_TICKS.
+// How many ticks a slug sits out after its n-th consecutive failure: 1, 2, 4, up to MAX_SKIP_TICKS.
 export const ticksToSkip = (failures: number): number => (failures <= 0 ? 0 : Math.min(2 ** (failures - 1), MAX_SKIP_TICKS));
 
-// The exact command line, beside its `--auto` contract: ic treats the flag as "nobody is watching", so a
-// spelling that dropped it would run the attended flow's judgement calls unattended (recreate.rs names them).
+// `--auto` tells ic nobody is watching; dropping it would run the attended flow's judgement calls unattended.
 export const autoPrepareArgs = (slug: string): string[] => ["sandbox", "prepare", slug, "--auto"];
 
-// Consecutive failures and remaining sit-out ticks, per slug. A slug that succeeds — or disappears from the
-// fleet — takes its entries with it.
+// Consecutive failures and remaining sit-out ticks, per slug; a slug that succeeds or leaves the fleet takes its
+// entries with it.
 export interface AutoPrepareState {
     readonly failures: Map<string, number>;
     readonly waits: Map<string, number>;
@@ -62,8 +37,7 @@ export interface AutoPrepareState {
 
 export const newState = (): AutoPrepareState => ({ failures: new Map(), waits: new Map() });
 
-// ic's own last sentence is the one worth a long-lived log: it says which outcome this was (staged, already
-// current, skipped) or, on a failure, what broke.
+// ic's last output line names the outcome (staged, current, skipped) or, on failure, what broke.
 const lastLine = (output: string): string | undefined => output.split(/\r?\n/).findLast((line) => line.trim() !== "");
 
 const prepareOne = async (
@@ -77,8 +51,7 @@ const prepareOne = async (
     try {
         run = await prepare(slug);
     } catch (error) {
-        // runIc throws when this machine has no `ic` at all — the one failure shared by every slug, and
-        // still just a failure here: backoff keeps it from repeating every tick for every sandbox.
+        // runIc throws when this machine has no ic at all; backoff keeps that from repeating every tick.
         run = { code: 1, output: errorMessage(error) };
     } finally {
         icInFlight.delete(slug);
@@ -97,10 +70,8 @@ const prepareOne = async (
     );
 };
 
-/* One pass over the fleet, serialised: two pulls at once double the disk's worst moment for zero wall-clock
- * anyone is waiting on. Split from the scheduler so a test can hand it a fleet and a fake `prepare` and
- * assert the decisions — which slug ran, which sat out, what a failure did to the next tick — without timers
- * or docker. */
+// Serialised: two pulls at once doubles the disk's worst moment for no benefit. Split from the scheduler so a test can
+// hand it a fake prepare and assert the decisions without timers or docker.
 export const runTick = async (
     state: AutoPrepareState,
     boxes: readonly DeviceSandbox[],
@@ -109,8 +80,7 @@ export const runTick = async (
     busy: ReadonlySet<string> = icInFlight,
 ): Promise<void> => {
     const targets = prepareTargets(boxes);
-    // Bookkeeping for sandboxes that left this machine, so a removed slug's failure history cannot leak onto
-    // a future sandbox that happens to reuse its name.
+    // Drops entries for slugs no longer on this machine, so history can't leak onto a reused name.
     for (const slug of [...state.failures.keys(), ...state.waits.keys()]) {
         if (!targets.includes(slug)) {
             state.failures.delete(slug);
@@ -118,7 +88,7 @@ export const runTick = async (
         }
     }
     for (const slug of targets) {
-        // A person's flow is running on this slug right now — stay out of its way; next tick is hours off.
+        // A person's flow is already running on this slug; leave it alone until next tick.
         if (busy.has(slug)) {
             continue;
         }
@@ -132,10 +102,8 @@ export const runTick = async (
     }
 };
 
-/* The scheduler: first look a few minutes after the loop starts, then every few hours with jitter. The
- * switch is re-read every tick — it is one small file, and a toggle must win even if the loop restart that
- * normally follows it never happened. Timers are cleared by `stop`, which the resident loop calls from the
- * same two places it stops everything else, so a tick never outlives the process's reason to exist. */
+// First look minutes after start, then every few hours with jitter; the switch is re-read every tick so a toggle wins
+// even without a restart.
 export const startAutoPrepare = (log: Log): { stop: () => void } => {
     let timer: NodeJS.Timeout | undefined;
     let stopped = false;
@@ -149,8 +117,7 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
                 await runTick(state, await fleet(), async (slug) => await runIc(autoPrepareArgs(slug), () => undefined), log);
             }
         } catch (error) {
-            // `fleet` throws where docker itself is missing or wedged; the machine has bigger problems than a
-            // background download, and this loop's job is to still be there when docker is back.
+            // fleet throws when docker is missing or wedged; this loop just needs to still be there when it's back.
             log(`auto-prepare: skipped this round — ${errorMessage(error)}`);
         }
         if (!stopped) {

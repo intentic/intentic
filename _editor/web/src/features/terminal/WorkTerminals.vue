@@ -6,27 +6,12 @@ import { relativeTime } from "../chat/models/catalog";
 import { KIND_ICONS } from "./terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
 
-/* The terminal panel's door to work IN PROGRESS: the shells the agent's Bash commands are running in and the
- * sessions the daemon is running its jobs in (a capability add, the infra check), listed HERE instead of tabbing
- * themselves into the strip (see useWorkTerminals for why). Mounted in the panel toolbar beside the
- * background-processes panel it is modelled on, and hidden until something is actually running, so a quiet
- * sandbox never grows a button for it.
- *
- * This is the surface that lets the strip stay clean. Work tabs only while someone is watching it, and while it
- * runs it is always one click away here: named after the conversation that owns it, whatever spoke last on top.
- *
- * Finished work is deliberately absent: a dead pane is not a record (the logs on disk and the transcript are),
- * and a list of them is just the row of corpses the strip was rid of, moved into a menu. That is also why
- * there is no broom here: nothing accumulates for one to sweep, and the daemon ages the dead sessions out on
- * its own (terminal-session.ts reapFinishedSessions). Opening a row reveals it as a tab whichever way the toggle
- * sits: a reveal is an explicit request, and the preference only decides the DEFAULT. There is no Stop, either:
- * killing that shell would take the agent's own command (or the install) with it, so ending one stays the
- * strip's × on a tab the user chose to open. */
+// Popover listing work in progress (agent Bash shells, daemon job sessions) instead of tabbing into the strip; hidden
+// until something runs. No finished work: a dead pane isn't a record, and the daemon reaps it on its own. Revealing a
+// row tabs it regardless of the preference; there is no Stop here.
 
 const { rows, showWorkTerminals } = useWorkTerminals();
-/* Anchored rather than a PrimeVue Popover for the reason its sibling <BackgroundProcesses> is: while the
- * terminal is popped out, an overlay that measures its room against the opener's window opens off the bottom
- * edge of the floating one, over the very button that toggles it. The anchor carries the window. */
+// Anchored, not a Popover, so the overlay follows a popped-out terminal window instead of its edge.
 const trigger = ref<HTMLButtonElement | null>(null);
 const panelOpen = ref(false);
 
@@ -35,8 +20,8 @@ const open = (row: WorkTerminalRow): void => {
     openWorkTerminal(row.session);
 };
 
-// The second line: how long since this said anything, the one thing that separates a turn mid-command from an
-// install that has been quiet for twenty minutes. A session tmux gave no stamp for says only that it is running.
+// Time since last output, the one signal that separates a mid-command turn from a quietly-compiling install; no stamp
+// just means running.
 const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `running · ${relativeTime(row.activityAt)}` : `running`);
 </script>
 
@@ -64,8 +49,7 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
                 class="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-overlay"
                 @click="open(row)"
             >
-                <!-- Live dot, then the kind glyph: sparkles for an agent's shell, bolt for a daemon job:
-                     literally the table their pills read from. -->
+                <!-- Live dot, then the kind glyph (sparkles for an agent shell, bolt for a job), from the same table the pills use. -->
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-link"></span>
                 <Icon :name="KIND_ICONS[row.kind]" class="shrink-0 text-2xs text-muted" />
                 <div class="min-w-0 flex-1">
@@ -74,7 +58,7 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
                 </div>
                 <Icon name="arrow-up-right" class="shrink-0 text-2xs text-muted" />
             </button>
-            <!-- The preference, where the terminals it hides are being looked for. -->
+            <!-- The preference for where hidden terminals reappear as tabs. -->
             <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line-subtle px-2 pb-1 pt-2">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs text-content">Always show as tabs</div>

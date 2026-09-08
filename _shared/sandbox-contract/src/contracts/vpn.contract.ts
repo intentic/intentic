@@ -3,16 +3,12 @@ import { IntenticLineSchema } from "../events/system-events.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputSchema, VpnIdParamSchema, VpnListSchema } from "../schemas/vpn.js";
 
-// The live VPN surface. A VPN is ADDED as a `vpn` capability (credentials, autoConnect, capabilities.contract);
-// it is DIALLED here. The split is deliberate: connecting is a runtime operation that both the operator (the
-// VPN capability card) and the agent (`vpn` on its PATH, which calls these very routes) perform many times
-// over one stored connection, so it cannot be a capability re-add, and its result is richer than a
-// CapabilityStatus, which is why `list` returns VpnLinks instead of {state, detail}.
-//
-// Every route reads tunnel state back from the OS rather than from daemon memory, so the agent dropping a
-// tunnel from a shell and the UI dropping it are the same event, and a daemon restart observes the truth.
+// A VPN is added as a `vpn` capability; connecting and dropping it happen through the routes here, called by both the
+// operator UI and the agent's `vpn` CLI.
+// Every route reads tunnel state from the OS, not daemon memory, so a shell-dropped tunnel and a UI-dropped one are the
+// same event across a restart.
 export const vpnContract = {
-    // Every configured VPN with its live link state, the VPN card, the rail indicator, and `vpn list`.
+    // Every configured VPN with its live link state; feeds the VPN card, rail indicator, and `vpn list`.
     list: oc
         .route({
             method: "GET",
@@ -22,9 +18,7 @@ export const vpnContract = {
                 "Every stored VPN with its live link state, read back from the operating system rather than from memory, so a tunnel dropped from a shell and one dropped from a screen look the same here.",
         })
         .output(VpnListSchema),
-    // Dial a stored VPN. Streams the client's progress (auth, then routing) because a dial takes seconds and
-    // can fail with something the user must read, a wrong password, an untrusted gateway certificate, or a
-    // required 2FA code. Idempotent: connecting an already-up tunnel reports it and stops.
+    // Dials a stored VPN, streaming auth and routing progress; idempotent, an already-up tunnel is just reported.
     connect: oc
         .route({
             method: "POST",
@@ -35,7 +29,7 @@ export const vpnContract = {
         })
         .input(VpnConnectInputSchema)
         .output(eventIterator(IntenticLineSchema)),
-    // Drop a tunnel. Tolerates an already-down one, "make it not be up" is the contract, not "it was up".
+    // Drops a tunnel; tolerates one already down, since the contract is "not up," not "it was up."
     disconnect: oc
         .route({
             method: "POST",
@@ -45,8 +39,7 @@ export const vpnContract = {
         })
         .input(VpnIdParamSchema)
         .output(OkSchema),
-    // Parse an exported FortiClient configuration into addable connections, so a user with that file fills the
-    // add form by picking a connection instead of re-keying host/port/protocol per tunnel.
+    // Parses an exported FortiClient config into addable connections a user can pick instead of retyping.
     importForticlient: oc
         .route({
             method: "POST",

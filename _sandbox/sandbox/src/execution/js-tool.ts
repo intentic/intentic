@@ -5,33 +5,25 @@ import { resolveCommandSecrets, type SecretAccess } from "../agent/tools/agent-s
 import type { TurnPlacement } from "../agents/worktrees/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
-/* THE JS BACKEND AS THE CLAUDE CODE LOOP SEES IT, one tool, a peer of Bash, mounted by agent.ts directly
- * from the request's own `jsExecution` field the way the ask tool and the terminal hand-off are mounted from
- * theirs. The SDK's in-process server seam is the WIRE here, nothing more: the backend is planned in
- * turn-plan, fenced in js-runtime, gated by the same command gate and secret exit Bash rides, a reader who
- * wants to know what a JS run may do reads the execution module, not a tool registry.
- *
- * The name constants live here because three places must agree on them exactly: the mount, the alias that
- * lets prompts and skills say `Code` the way they say `Bash`, and the command-gate matcher that puts JS runs
- * under the owner's rulebook. */
+// One tool, a peer of Bash, mounted by agent.ts from the request's own `jsExecution` field; the SDK server is only the
+// wire. Planning lives in turn-plan, fencing in js-runtime, gated by the same command gate and secret exit Bash rides.
+// Name constants live here since the mount, the `Code` alias, and the command-gate matcher must agree.
 export const JS_SERVER_NAME = "code";
 export const JS_TOOL_NAME = "mcp__code__run";
 export const JS_TOOL_ALIAS = "Code";
 
 export interface JsToolDeps {
     readonly plan: JsExecutionPlan;
-    // Where this turn's tree actually stands (agents/isolation.ts), the runner enters or maps, see placedPlan.
+    // Where this turn's tree actually stands (agents/isolation.ts); the runner enters or maps it, see placedPlan.
     readonly placement: TurnPlacement | undefined;
     // The turn's own signal: a script still running when the user stops the turn dies with it.
     readonly signal: AbortSignal;
-    // The `{{secret:name}}` exit, when this sandbox stores any (agent/agent-secrets.ts). Absent ⇒ references
-    // pass through as literal text, exactly as they would in a Bash command on a secretless sandbox.
+    // Secret-reference resolution, when this sandbox stores any; absent, references pass through as literal text.
     readonly secrets?: SecretAccess;
 }
 
-/* What the run looked like, to a model that has to act on it, the same text shape a shell gives: output
- * first, the status last, nothing wrapped in JSON it would have to unwrap. An undefined exit code is a run
- * that did not end on its own, and each of those roads says which it was. */
+// What the run looked like, to a model that has to act on it: output first, status last, nothing wrapped in JSON to
+// unwrap. An undefined exit code is a run that didn't end on its own; each road below says which.
 export const formatJsResult = (result: JsRunResult, timeoutSeconds: number): string => {
     const parts = [...(result.stdout === "" ? [] : [result.stdout]), ...(result.stderr === "" ? [] : [`--- stderr ---\n${result.stderr}`])];
     const status = result.timedOut
@@ -42,8 +34,7 @@ export const formatJsResult = (result: JsRunResult, timeoutSeconds: number): str
     return `${parts.length === 0 ? "(no output)" : parts.join("\n")}\n${status}`;
 };
 
-// Exported for the tests that pin its honesty: what a scoped plan promises the model must be what js-runtime
-// enforces, and the sentence that admits what the fence cannot cut must not quietly disappear.
+// Exported for the tests that pin its honesty: what a scoped plan promises must be what js-runtime enforces.
 export const jsToolDescription = (plan: JsExecutionPlan): string =>
     `Run a JavaScript program in the workspace: the code execution mode, a peer of the shell. ` +
     `The script is an ES module (top-level \`await\` works) run on Node 24: \`fetch\` and every \`node:\` builtin are there, ` +
@@ -67,8 +58,7 @@ export const jsToolDescription = (plan: JsExecutionPlan): string =>
 export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
         name: JS_SERVER_NAME,
-        // In the prompt, not behind tool search: an execution mode the model has to go looking for is one it
-        // replaces with the shell habit it already has, the same reasoning that keeps the ask tool loaded.
+        // In the prompt, not behind tool search: a mode the model must go looking for gets replaced by its shell habit.
         alwaysLoad: true,
         tools: [
             sdk().tool(
@@ -89,15 +79,12 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
         ],
     });
 
-/* The handler itself, bare, what a `run` call does once the SDK has delivered it, and the piece the tests
- * drive (the server wrapper above is registration, not behaviour). */
+// The handler itself, what a `run` call does once the SDK delivers it; the piece the tests drive (the server wrapper
+// above is only registration).
 export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutSeconds?: number | undefined }): Promise<string> => {
     const timeoutSeconds = Math.min(args.timeoutSeconds ?? JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S);
-    /* The secret exit, in the handler rather than as a hook: Bash needs its resolution composed inside the
-     * tmux rewrite because two hooks rewriting one string must order themselves; a JS run has no second
-     * rewriter, so the one pipeline is right here, after the command gate's hook has already read (and
-     * possibly carded) the reference-form script, and inside the process boundary the transcript never
-     * crosses: what the model sent, and what the result echoes back through masking, is the reference. */
+    // The secret exit lives in the handler, not a hook: Bash must compose its resolution inside the tmux rewrite since
+    // two hooks order themselves, but a JS run has only this one pipeline, after the command gate has read the script.
     let code = args.code;
     if (deps.secrets !== undefined) {
         const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code");

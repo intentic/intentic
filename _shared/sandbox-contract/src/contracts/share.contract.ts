@@ -2,15 +2,9 @@ import { oc } from "@orpc/contract";
 import { ShareCreateSchema, SharedConversationSchema, ShareListSchema, ShareRemoveSchema, ShareUpdateSchema } from "../schemas/share.js";
 import { OkSchema } from "../schemas/shared.js";
 
-/* Conversations published as read-only pages (see schemas/share.ts).
- *
- * Its own group rather than two more routes on `public`, because the two speak different path spaces and mean
- * different things by "publish". The outbox's routes take a path in the workspace and copy the bytes at it; a
- * share takes a CONVERSATION ID and renders something that did not exist as a file until it was asked for.
- * Folding them together would have `publish` accept two unrelated kinds of input distinguished by a flag.
- *
- * There is no route to read a share back. The page is the read, it answers on the unauthenticated
- * `public-<slot>` hostname like every other published file, which is the point of having made one. */
+// Conversations published as read-only pages. Separate from `public`: a share takes a conversation id and renders it,
+// `public` copies bytes at a workspace path. No route reads a share back, the page itself is the read, on the
+// unauthenticated `public-<slot>` hostname.
 export const shareContract = {
     list: oc
         .route({

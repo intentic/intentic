@@ -1,40 +1,28 @@
 import { readStored, storedId, writeStored } from "@intentic/sandbox-contract/embed";
 
-/* Who the visitor is, in the two forms the daemon distinguishes: a THREAD key (ephemeral, minted here, not a
- * claim about anybody) and, when the site asks for sign-in, a Google ID token the daemon verifies itself.
- *
- * The typed name is deliberately NOT part of identity, it rides the message as `displayName` and the daemon
- * hands it to the model tagged unverified. Anyone can type "admin"; only Google's signature says who someone is. */
+// Visitor identity is a thread key (ephemeral, minted here) or, after sign-in, a Google ID token the daemon verifies. A
+// typed display name is not identity; it rides as unverified `displayName`.
 
-// localStorage keys are namespaced per automation: two Front Desks on one site are two threads, and clearing one
-// must not log the visitor out of the other. Storage that refuses (Safari's private mode, a site that blocks
-// it) degrades to a fresh thread per page load, the contract's embed helpers' rule.
+// Keys are namespaced per automation, so two Front Desks on one site are two threads and clearing one leaves the other
+// signed in. Storage that refuses degrades to a fresh thread per load (embed helpers' rule).
 const key = (automationId: string, name: string): string => `intentic.front-desk.${automationId}.${name}`;
 
-// The visitor's thread id, minted once and kept. This is what makes a follow-up message land in the SAME
-// sandbox conversation instead of opening a new one, so it is the single most important thing to persist.
+// The visitor's thread id, minted once and kept; a follow-up message lands in the same conversation only when this
+// does.
 export const visitorConversationId = (automationId: string): string => storedId(key(automationId, "conversation"));
 
 export const storedDisplayName = (automationId: string): string | undefined => readStored(key(automationId, "name"));
 export const storeDisplayName = (automationId: string, name: string): void => writeStored(key(automationId, "name"), name);
 
-// Start a new thread, the visitor pressed "New chat". Only the conversation id is dropped; a typed name and a
-// Google session are properties of the person, not of the thread.
+// New chat: drops only the conversation id. A typed name and Google session belong to the person, not the thread.
 export const resetConversation = (automationId: string): string => {
     const minted = crypto.randomUUID();
     writeStored(key(automationId, "conversation"), minted);
     return minted;
 };
 
-/* ---- Google sign-in ----
- *
- * The site's OWN client id, never intentic's: Google Identity Services issues a token only to an authorized
- * JavaScript origin, and intentic's OAuth client cannot list every customer's domain. The daemon verifies the
- * resulting token against Google's JWKS with that same client id as the audience.
- *
- * The button is RENDERED (not One Tap): One Tap is unavailable in enough embedded contexts to be a support
- * burden, while renderButton only needs a container. That container is a light-DOM element the widget slots
- * into its panel, see element.ts, because Google's iframe belongs in the document, not in a shadow root. */
+// Uses the site's own client id: GIS tokens are scoped to an authorized origin. Renders the button (not One Tap) into a
+// light-DOM container; Google's iframe needs the real document.
 
 interface GoogleIdentityServices {
     accounts: {
@@ -47,7 +35,7 @@ interface GoogleIdentityServices {
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 
-// One <script> per page however many Front Desks are on it, and one promise however many times sign-in is opened.
+// One <script> tag per page and one load promise, however many Front Desks or sign-in opens.
 let gisLoad: Promise<GoogleIdentityServices> | undefined;
 
 const loadGis = async (): Promise<GoogleIdentityServices> => {
@@ -70,7 +58,7 @@ const loadGis = async (): Promise<GoogleIdentityServices> => {
             document.head.append(script);
             return;
         }
-        // Already on the page and possibly already loaded, a `load` listener added after the fact never fires.
+        // Script already on the page may have already loaded; a `load` listener added now would never fire.
         if ((window as unknown as { google?: GoogleIdentityServices }).google !== undefined) {
             settle();
         }
@@ -82,9 +70,8 @@ export interface GoogleSignIn {
     readonly idToken: string;
 }
 
-// Render Google's button into `container` and resolve with the ID token once the visitor signs in. Never
-// resolves if they don't, the caller keeps the panel open and the composer disabled, which is the whole point
-// of an access-gated Front Desk.
+// Renders Google's button into `container`, resolving with the ID token on sign-in; never resolves if they don't. The
+// caller must keep the panel open and composer disabled meanwhile.
 export const renderGoogleSignIn = async (container: HTMLElement, clientId: string): Promise<GoogleSignIn> => {
     const gis = await loadGis();
     return new Promise<GoogleSignIn>((resolve) => {

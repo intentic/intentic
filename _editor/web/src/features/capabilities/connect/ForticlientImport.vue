@@ -1,13 +1,8 @@
-<!-- FILL THE VPN FORM FROM THE FILE FORTICLIENT ALREADY WROTE.
-     A user with an exported FortiClient config drops it here and picks a connection instead of re-keying its
-     host, port and protocol per tunnel. The file is read IN THIS TAB and only its text is posted: the daemon
-     cannot reach the user's Downloads folder, and asking someone to open an XML export and copy it out by hand
-     was the step that made this feature not worth using.
-
-     NOTHING IS STORED by any of this. The picked connection is handed to the form as an answer the user can
-     still change, and the ordinary add below is what saves it. Credentials are never among the answers:
-     FortiClient encrypts them with a key tied to the machine that exported them, so each row says which fields
-     are still waiting. -->
+<!--
+    Fills the VPN add-form from a FortiClient export file read in this tab; only its text is sent, since the daemon cannot reach the user's
+    filesystem. Nothing is stored — the picked connection only pre-fills the form below. Credentials are never included; FortiClient encrypts them to
+    the exporting machine.
+-->
 <script setup lang="ts">
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
 import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
@@ -23,14 +18,12 @@ const emit = defineEmits<{
 }>();
 
 const connections = ref<ForticlientConnection[]>([]);
-// The file the list came from: named back at the user, so a picker full of unfamiliar connections is
-// attributable to what they dropped. Empty until one has been read successfully.
+// File the list came from, shown back to the user; empty until one has been read successfully.
 const fileName = ref(``);
 const importing = ref(false);
 const chooseFile = ref<HTMLInputElement>();
 
-// A FortiClient backup is tens of KB of XML. Far past that, the drop was a slip: reading the file into this tab
-// and posting it is the wrong answer to one.
+// A FortiClient backup is tens of KB; anything far larger means the wrong file was dropped.
 const MAX_BYTES = 4_000_000;
 
 const readFile = async (file: File | undefined): Promise<void> => {
@@ -47,8 +40,8 @@ const readFile = async (file: File | undefined): Promise<void> => {
     importing.value = true;
     try {
         const xml = await file.text();
-        // An empty file is "nothing to import", which the line under the zone already says: posting it would
-        // trade that sentence for the route's validation error, which answers a question nobody asked.
+        // An empty file needs no import call: the zone's own line already says so, so skip the route's validation
+        // error.
         connections.value = xml.trim().length === 0 ? [] : await importForticlient(xml);
         fileName.value = file.name;
     } catch (err) {
@@ -58,11 +51,9 @@ const readFile = async (file: File | undefined): Promise<void> => {
     }
 };
 
-// Only an OS-file drag offers anything here; a link or an image dragged around inside the app must not light the
-// zone up as though it could be imported.
+// Only an OS-file drag lights up the zone; a link or image dragged inside the app must not.
 const offersFile = (event: DragEvent): boolean => event.dataTransfer?.types.includes(`Files`) ?? false;
-// Depth, not a boolean: crossing onto the zone's own children fires dragleave on the zone, and a boolean would
-// flicker the highlight off while the pointer is still inside it.
+// Depth, not a boolean: crossing onto the zone's own children fires dragleave, which a boolean would flicker on.
 let dragDepth = 0;
 const dragging = ref(false);
 
@@ -88,8 +79,7 @@ const onDrop = (event: DragEvent): void => {
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
     void readFile(input.files?.[0]);
-    // Clear the field (the File is already captured): re-picking the SAME file after re-exporting it fires no
-    // `change` otherwise, and the zone would look dead.
+    // Clears the field so re-picking the same file after re-exporting still fires `change`.
     input.value = ``;
 };
 
@@ -104,8 +94,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                     Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections. Passwords
                     in that file are encrypted by FortiClient and can't be read: you'll still type those.
                 </p>
-                <!-- The zone IS the button, so the drag and the click share one target and there is no small "browse"
-                 link beside it to aim at. -->
+                <!-- The zone is the button itself: drag and click share one target, no separate browse link. -->
                 <button
                     type="button"
                     :class="
@@ -128,8 +117,10 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                         <template v-else-if="dragging">Drop it to read its connections</template>
                         <template v-else>Drop the configuration file here</template>
                     </span>
-                    <!-- Hidden, never unmounted: dropping the line would shorten the zone under the pointer mid-drag,
-                     and a cursor near its bottom edge would then leave and re-enter it in a loop. -->
+                    <!--
+                        Hidden, not unmounted: removing it would shrink the zone mid-drag and loop the pointer in and
+                        out.
+                    -->
                     <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">or click to choose one</span>
                 </button>
                 <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />

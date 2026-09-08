@@ -2,8 +2,7 @@ import type { IpsecVpnConfig } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ipsecConnConfig, ipsecFailureHint, ipsecSecretsConfig, parseIpsecLoaded, parseIpsecStatus } from "./ipsec.js";
 
-// The FortiClient <ipsecvpn> shape this has to serve: IKEv1 aggressive mode, a group pre-shared key, a local
-// ID the gateway keys its phase-1 selection off, and XAuth for the per-user credential.
+// FortiClient <ipsecvpn> shape: IKEv1 aggressive, a group PSK, a phase-1 local ID, and per-user XAuth.
 const systemEg: IpsecVpnConfig = {
     provider: "ipsec",
     server: "systemeg.float-zone.com",
@@ -26,33 +25,30 @@ test("generates an IKEv1 aggressive-mode conn with mode-config and XAuth", () =>
     expect(conf).toContain("aggressive=yes");
     expect(conf).toContain("right=systemeg.float-zone.com");
     expect(conf).toContain("leftid=extNET");
-    // %config is what makes the gateway hand out a virtual IP (FortiClient's mode config).
+    // `%config` is what makes the gateway hand out a virtual IP.
     expect(conf).toContain("leftsourceip=%config");
     expect(conf).toContain("leftauth2=xauth");
     expect(conf).toContain("xauth_identity=someone");
-    // Loaded, not dialled: connecting must stay an explicit action, never a side effect of writing config.
+    // `auto=add` loads the config without dialling; connecting stays a separate explicit action.
     expect(conf).toContain("auto=add");
-    // ONE group across both phases: IKEv1 quick mode derives its KE group from the IKE SA, so a phase-1 list
-    // starting on a different group than phase 2 needs is refused with NO_PROPOSAL_CHOSEN.
+    // One DH group across both phases: IKEv1 quick mode derives its KE group from the IKE SA; a mismatch is refused
+    // with NO_PROPOSAL_CHOSEN.
     expect(conf).toContain("ike=aes128-sha256-modp2048");
     expect(conf).toContain("esp=aes128-sha256-modp2048");
     expect(conf).not.toContain("modp1536");
 });
 
-// rightsubnet is what decides whether a tunnel is split or full, and a full one on a gateway without internet
-// egress takes the sandbox's own outbound traffic down with it: the failure this field exists to make fixable.
 test("the routed networks are what the tunnel asks the gateway to route, not a fixed catch-all", () => {
     expect(ipsecConnConfig("x", systemEg)).toContain("rightsubnet=0.0.0.0/0");
     const split = ipsecConnConfig("x", { ...systemEg, routedNetworks: "192.168.0.0/16" });
     expect(split).toContain("rightsubnet=192.168.0.0/16");
     expect(split).not.toContain("0.0.0.0/0");
-    // A list is typed the way a person types one; strongSwan reads this file literally, so the spaces go.
+    // Typed with spaces like a person would; strongSwan reads the file literally, so spaces are stripped.
     expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: "10.0.0.0/8, 192.168.0.0/16" })).toContain("rightsubnet=10.0.0.0/8,192.168.0.0/16");
 });
 
 test("a blank routed-networks value still produces a loadable file", () => {
-    // An empty rightsubnet makes charon reject the whole included config, which would take every OTHER tunnel
-    // on this sandbox down too, so the generator falls back rather than emitting it.
+    // An empty rightsubnet would make charon reject the whole included config, taking every other tunnel down with it.
     expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: " , " })).toContain("rightsubnet=0.0.0.0/0");
 });
 
@@ -75,7 +71,7 @@ test("writes both secrets in strongSwan's ipsec.secrets format, quoted", () => {
 });
 
 test("quotes a secret containing characters that would otherwise break the file", () => {
-    // A PSK with a quote or a space is legal and common; unquoted it would truncate or mis-parse the entry.
+    // A PSK with a quote or a space is legal; unquoted it would truncate or mis-parse the entry.
     const secrets = ipsecSecretsConfig({ ...systemEg, presharedKey: 'has "quotes" and spaces' });
     expect(secrets).toContain(String.raw`PSK "has \"quotes\" and spaces"`);
 });
@@ -90,8 +86,7 @@ test("falls back to %any as the PSK selector when no local id is configured", ()
     expect(ipsecSecretsConfig({ ...systemEg, localId: undefined })).toContain("%any systemeg.float-zone.com : PSK");
 });
 
-// Real `ipsec statusall <conn>` output for an established dial-up tunnel: the IKE_SA line carries ESTABLISHED,
-// the CHILD_SA selector line carries the assigned virtual IP and what the gateway routed into the tunnel.
+// `ipsec statusall` output: IKE_SA carries ESTABLISHED; CHILD_SA carries the virtual IP and routes.
 const STATUSALL = `Security Associations (1 up, 0 connecting):
       systemeg[1]: ESTABLISHED 5 minutes ago, 192.168.1.10[extNET]...203.0.113.5[203.0.113.5]
       systemeg[1]: IKEv1 SPIs: a1b2c3d4e5f60718_i* 1807f6e5d4c3b2a1_r, pre-shared key+XAuth reauthentication in 11 hours
@@ -118,18 +113,16 @@ test("a connecting or absent tunnel reads as not established", () => {
 });
 
 test("one connection's status is never read from another's lines", () => {
-    // Two tunnels in one status dump: asking about the down one must not pick up the up one's SA.
+    // Two tunnels in one dump: asking about the down one must not pick up the other's SA.
     const both = `${STATUSALL}      other[2]: ESTABLISHED 1 minute ago, 192.168.1.10[x]...198.51.100.9[198.51.100.9]\n`;
-    // `other` has an IKE_SA but no CHILD_SA: phase 1 only, so it is negotiating rather than connected, and it
-    // must NOT inherit systemeg's child SA.
+    // `other` has an IKE_SA but no CHILD_SA, so it reads as negotiating, not connected, and must not inherit systemeg's
+    // child SA.
     expect(parseIpsecStatus("other", both)).toEqual({ established: false, negotiating: true, routes: [] });
     expect(parseIpsecStatus("missing", both)).toEqual({ established: false, negotiating: false, routes: [] });
-    // systemeg still reads its own child SA correctly alongside the other connection.
     expect(parseIpsecStatus("systemeg", both).established).toBe(true);
 });
 
-// The real charon output from a dial-up FortiGate that accepted the proposal but rejected the key: the case
-// that reads as an opaque IKE internal unless it is translated.
+// Charon output: proposal accepted, key rejected; opaque IKE internals unless translated.
 const WRONG_PSK = `initiating Aggressive Mode IKE_SA systemeg[1] to 83.14.172.242
 selected proposal: IKE:AES_CBC_128/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_1536
 calculated HASH does not match HASH payload
@@ -147,12 +140,11 @@ test("distinguishes the failure modes a user can actually act on", () => {
     expect(ipsecFailureHint("received NO_PROPOSAL_CHOSEN error notify")).toContain("aggressive mode");
     expect(ipsecFailureHint("retransmit 5 of request with message ID 0")).toContain("did not answer");
     expect(ipsecFailureHint("XAuth authentication of 'someone' failed")).toContain("XAuth");
-    // A failure with no known signature must not invent an explanation: the raw log is still shown.
+    // An unrecognized failure returns undefined rather than inventing an explanation.
     expect(ipsecFailureHint("something entirely new")).toBeUndefined();
 });
 
-// Real `ipsec statusall` shape: a LOADED connection is `<name>:` under "Connections:", while its live SAs use
-// `<name>[n]:` and `<name>{n}:`. Telling them apart is what stops a dial racing charon's startup.
+// A loaded connection is `<name>:` under "Connections:"; live SAs use `<name>[n]:` and `<name>{n}:`.
 test("parseIpsecLoaded distinguishes a loaded connection from its SAs and from nothing", () => {
     const loaded = `Connections:
     systemeg:  %any...systemeg.float-zone.com  IKEv1 Aggressive, dpddelay=30s
@@ -160,7 +152,7 @@ test("parseIpsecLoaded distinguishes a loaded connection from its SAs and from n
 Security Associations (0 up, 0 connecting):
   none`;
     expect(parseIpsecLoaded("systemeg", loaded)).toBe(true);
-    // Charon up but the connection not loaded yet: the window that produced "no config named 'systemeg'".
+    // Charon is up but the connection is not loaded yet.
     expect(parseIpsecLoaded("systemeg", "Connections:\nSecurity Associations (0 up, 0 connecting):\n  none")).toBe(false);
     expect(parseIpsecLoaded("systemeg", "")).toBe(false);
     // An SA line alone must not read as "loaded", nor may another connection's name.
@@ -168,8 +160,7 @@ Security Associations (0 up, 0 connecting):
     expect(parseIpsecLoaded("systemeg", "    other:  %any...vpn.example.com  IKEv1 Aggressive")).toBe(false);
 });
 
-// Phase 1 up, quick mode failed (a PFS mismatch answers NO_PROPOSAL_CHOSEN only after XAuth and the virtual IP
-// have succeeded). Reporting this as connected claimed a tunnel that routes nothing.
+// Phase 1 up, quick mode failed; reporting this as connected would claim a tunnel that routes nothing.
 const IKE_ONLY = `Security Associations (1 up, 0 connecting):
       e2e[1]: ESTABLISHED 17 seconds ago, 10.77.0.20[extNET]...10.77.0.10[10.77.0.10]
       e2e[1]: IKEv1 SPIs: d57c3af1a0913198_i* 2ff7fc14da47e16d_r, pre-shared key+XAuth reauthentication in 2 hours`;
@@ -190,10 +181,8 @@ test("an installed CHILD_SA is what counts as connected", () => {
 });
 
 test("PFS decides whether quick mode offers a DH group at all", () => {
-    // Mixed lists are the bug: one DH-bearing proposal makes strongSwan send a KE payload, which a non-PFS
-    // gateway rejects outright.
-    // Only the esp= line matters: phase 1 (ike=) always carries a DH group, so asserting on the whole file
-    // would pass for the wrong reason.
+    // A non-PFS gateway rejects any DH-bearing proposal; only the esp= line matters, since phase 1's ike= line always
+    // carries a DH group regardless.
     const espLine = (conf: string): string => conf.split("\n").find((line) => line.trim().startsWith("esp=")) ?? "";
     expect(espLine(ipsecConnConfig("x", { ...systemEg, pfs: "on" }))).toContain("modp2048");
     expect(espLine(ipsecConnConfig("x", { ...systemEg, pfs: "off" }))).not.toContain("modp");
@@ -210,7 +199,7 @@ test("the DH group is pinned identically in both phases, and never emits an unma
         expect(conf).toContain(`ike=aes128-sha256-${name}`);
         expect(conf).toContain(`esp=aes128-sha256-${name}`);
     }
-    // A config that somehow carries an unmapped group must still produce a loadable file, not "…-undefined".
+    // An unmapped DH group must still produce a loadable file, not `...-undefined`.
     const broken = ipsecConnConfig("x", { ...systemEg, dhGroup: "99" as unknown as IpsecVpnConfig["dhGroup"] });
     expect(broken).not.toContain("undefined");
     expect(broken).toContain("modp2048");

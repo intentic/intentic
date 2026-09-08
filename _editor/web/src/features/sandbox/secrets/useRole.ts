@@ -3,18 +3,14 @@ import { roleAtLeast } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { useSandbox } from "../client/useSandbox";
 
-/* The signed-in user's trust tier on the ACTIVE sandbox, and the two lines the UI draws with it.
- *
- * The role comes off the platform's sandbox summary (the invite's granted tier; `owner` for an owned sandbox).
- * It gates AFFORDANCES only, every route is independently floored by the daemon (auth/role-floor.ts), so a
- * stale or spoofed reading here changes what renders, never what is allowed. Defaults to `owner` until the
- * list loads (loopback/dev sandboxes never carry a summary), the same optimistic guess the desktop-sync card
- * has always made, the daemon corrects a wrong one on the first call.
- *
- * Two derived lines instead of exposing rank arithmetic at every call site:
- *   canDrive, collaborator and up: start/steer agents, review, comment. A viewer watches.
- *   canShip , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
- */
+// The signed-in user's trust tier on the active sandbox, and the two affordance flags derived from it.
+//
+// Client-side gating only: every route is independently floored server-side (auth/role-floor.ts), so a wrong
+// reading here changes what renders, never what is allowed. Defaults to `owner` until the summary loads, corrected on
+// the first call.
+//
+//   canDrive, collaborator and up: start/steer agents, review, comment. A viewer watches.
+//   canShip , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
 export function useRole(): {
     role: ComputedRef<MemberRole>;
     canDrive: ComputedRef<boolean>;

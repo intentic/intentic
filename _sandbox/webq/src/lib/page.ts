@@ -1,9 +1,6 @@
-/* One URL → one PageResult: the pipeline every command runs. Cache first, static HTTP second, the image's
- * Chromium only when the static HTML is visibly an empty app shell (or the caller forces it) — the cheap
- * path is the default and the expensive one has to be earned. The result carries its own honesty: where
- * the bytes came from, what the pruner removed, what a query filter kept, and every degradation (byte cap
- * hit, JS page with no browser in the image) as a note the capsule prints — a silent fallback reads as
- * "that was the whole page" to an agent, which is a lie with consequences. */
+// One URL to one PageResult: cache first, static HTTP second, Chromium only for an empty-looking app shell (or forced).
+// Result carries its own honesty: source, prune share, query-filter outcome and every degradation as a note; a silent
+// fallback would read as the whole page.
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { bm25Rank } from "./bm25.js";
 import { chromiumAvailable, renderPage } from "./browser.js";
@@ -73,9 +70,7 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
         };
     }
 
-    // Meta and links come off the tree BEFORE pruning mutates it: navigation is chrome to the reader but
-    // structure to the crawler. Title and description are neutralized with the body below — both land in
-    // saved front matter and crawl indexes, which are files a later `Read` serves unwrapped.
+    // Read before pruning mutates the tree: navigation is chrome to the reader, structure to the crawler.
     const rawMeta = metaOf(doc);
     const meta: PageMeta = {
         title: neutralizeOutsideText(rawMeta.title),
@@ -91,11 +86,7 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
     if (body !== undefined && options.query !== undefined && options.query !== "") {
         notes.push(applyQueryFilter(body, options.query));
     }
-    /* Neutralized HERE, at the one point every command's markdown passes through, because the page's bytes are
-     * the internet's: printed to stdout they ride inside the daemon's untrusted-content envelope (the Bash
-     * seam wraps network commands), but the SAVED file is read back later by a plain `Read`, which wraps
-     * nothing — so a forged envelope marker or a `<system-reminder>` in the page has to die in the bytes
-     * themselves. Idempotent, so the stdout copy being wrapped again upstream costs nothing. */
+    // Neutralized here: stdout rides the daemon's untrusted wrapper, but a saved file is read back unwrapped.
     const markdown = body === undefined ? "" : neutralizeOutsideText(renderMarkdown(body, { baseUrl: finalUrl }));
     return { url, finalUrl, status, contentType, markdown, meta, links, source, prunedShare, notes };
 };
@@ -157,8 +148,8 @@ const parsed = (html: string, finalUrl: string, status: number, contentType: str
 
 const isHtml = (contentType: string): boolean => contentType === "" || /text\/html|application\/xhtml/i.test(contentType);
 
-/* The JS-shell tell: a body with almost no text next to scripts that were clearly meant to produce some.
- * Thresholded on text, not on framework fingerprints — the fingerprints age, the emptiness does not. */
+// JS-shell tell: almost no text next to scripts meant to produce some. Thresholded on text, not framework fingerprints,
+// which age.
 const looksLikeAppShell = (doc: Document, body: Element | undefined): boolean => {
     if (body === undefined) {
         return false;
@@ -196,8 +187,7 @@ const applyQueryFilter = (body: Element, query: string): string => {
     });
     const ranked = bm25Rank(candidates, (el) => textOf(el), query);
     const keep = new Set(ranked.map((entry) => entry.block));
-    // A query matching almost nothing means the filter would erase the page; keeping everything and saying
-    // so beats returning three sentences that happen to share a word with the query.
+    // Almost no match would erase the page; keep everything rather than three coincidentally matching sentences.
     if (keep.size < Math.min(3, candidates.length)) {
         return `query matched too little (${keep.size}/${candidates.length} blocks): kept the whole page`;
     }
@@ -209,8 +199,8 @@ const applyQueryFilter = (body: Element, query: string): string => {
     return `query kept ${keep.size}/${candidates.length} blocks`;
 };
 
-/* <li> inside a kept <table>'s cell (or nested lists) must not be scored twice — only top-most filterable
- * blocks compete, so removal never yanks a child out of a parent that already won. */
+// Only top-most filterable blocks compete; a <li> inside a kept <table> cell must not be scored (and possibly removed)
+// twice.
 const hasFilterableAncestorWithin = (el: Element, root: Element): boolean => {
     let parent = el.parentNode;
     while (parent !== null && parent !== root) {

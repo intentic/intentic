@@ -6,25 +6,23 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { cleanTranscription } from "@intentic/sandbox-contract";
 
-// Audio + whisper primitives for the voice session: PCM downsampling, WAV framing, whisper-cli transcription,
-// and a serialized transcriber queue. Pure of Discord and of the daemon, so they unit-test in isolation.
+// PCM downsampling, WAV framing, whisper-cli transcription, and a serialized transcriber queue for the voice session;
+// pure of Discord and the daemon, so it unit-tests in isolation.
 
-// Utterances shorter than this are dropped unheard, sub-quarter-second blips (key clicks, coughs) only feed
-// whisper hallucinations. 48kHz stereo s16le = 192,000 bytes/s.
+// Dropped below this: sub-quarter-second blips feed only hallucinations (192,000 B/s at 48kHz stereo).
 export const MIN_UTTERANCE_BYTES = 48_000;
 const TRANSCRIBE_TIMEOUT_MS = 120_000;
 
 export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
 const defaultExec: ExecFn = promisify(execFile);
 
-// The message the model reads when whisper isn't provisioned, it routes the agent to the pending rebuild
-// instead of a doomed retry loop (or a needless overlay proposal: the fragment is already composed).
+// Shown when whisper isn't installed; routes the agent to the pending rebuild instead of a doomed retry loop.
 export const WHISPER_MISSING =
     "whisper-cli isn't installed in this sandbox yet. It's part of the environment overlay that was composed when " +
     "Discord was connected: the sandbox needs a one-time rebuild. Ask the owner to run the rebuild command shown on " +
     "the Sandbox page's Environment card, and don't retry joining voice (or propose an overlay) until it has landed.";
 
-// ENOENT on spawn ⇒ the binary isn't on PATH. Any other outcome (including a non-zero exit) means it exists.
+// ENOENT on spawn means the binary isn't on PATH; any other outcome, even a non-zero exit, means it exists.
 export const whisperCliMissing = async (exec: ExecFn = defaultExec): Promise<boolean> => {
     try {
         await exec("whisper-cli", ["--help"], { timeout: 10_000 });
@@ -34,8 +32,8 @@ export const whisperCliMissing = async (exec: ExecFn = defaultExec): Promise<boo
     }
 };
 
-// 48kHz stereo s16le → 16kHz mono s16le: average each group of 3 stereo frames (6 samples) into one.
-// ponytail: naive decimation without a low-pass, fine for speech; swap in a real resampler if quality nags.
+// 48kHz stereo to 16kHz mono: averages each group of 6 samples into one. Naive decimation, no low-pass; fine for
+// speech, swap in a real resampler if quality suffers.
 export const to16kMonoPcm = (stereo48k: Buffer): Buffer => {
     const outFrames = Math.floor(stereo48k.length / 12);
     const out = Buffer.alloc(outFrames * 2);
@@ -80,9 +78,8 @@ export interface Transcriber {
     readonly transcribed: () => number;
 }
 
-// One whisper-cli run at a time, transcription is CPU-bound and the sandbox is small; utterances queue.
-// `onLine` runs inside the queue after each transcribed line (live file write + utterance dispatch); its
-// failures land in onError like a whisper failure would.
+// One whisper-cli run at a time: transcription is CPU-bound and the sandbox is small, so utterances queue. `onLine`
+// runs inside that queue after each line; its failures land in `onError` too.
 export const createTranscriber = (
     modelPath: string,
     language: string,

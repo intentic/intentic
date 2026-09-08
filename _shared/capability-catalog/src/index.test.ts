@@ -3,9 +3,7 @@ import { LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS } from "@intentic/sandb
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_CATALOG, contributionCard } from "./index.js";
 
-// The real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant data:
-// pins that the derived per-engine cards keep the manifest defaults the old merged "sql" card got wrong
-// (mysql on port 5432 / user postgres).
+// Real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant fields.
 const postgres: CapabilityContribution = {
     id: "postgres",
     kind: "cli",
@@ -68,40 +66,35 @@ describe("contributionCard", () => {
     });
 
     it("leaves no static card for any contributable kind: the catalog is extensible, the handlers are core", () => {
-        // The boundary the extraction exists to hold: a kind an extension can supply a card for has NO static
-        // card, so there is exactly one place a card of that kind comes from. What stays is one-to-one with a
-        // handler it can't be separated from (docker's --privileged, vpn's NET_ADMIN, extension's own installer).
+        // A contributable kind has no static card; what stays is tied 1:1 to a handler it can't be separated from.
         const contributable = new Set(["cli", "browser", "host", "agent"]);
         expect(CAPABILITY_CATALOG.filter((entry) => contributable.has(entry.kind))).toEqual([]);
         expect(CAPABILITY_CATALOG.map((entry) => entry.kind).toSorted()).toEqual([
             "devops",
             "docker",
             "endpoint",
-            // Static like endpoint: an exit's providers are core drivers, not something an extension supplies,
-            // and the country pickers are filled from the measured tables in the contract.
+            // Static like endpoint: exit's providers are core drivers, and country pickers come from the contract's
+            // tables.
             "exit",
             "extension",
-            // Static like endpoint, and for the same reason: an identity has no site, so there is nothing an
-            // extension could vary: the email IS the card.
+            // Static like endpoint: an identity has no site to vary, the email is the card.
             "identity",
             "integration",
-            // Static for the docker reason: the card's GPU switch is a privileged runtime directive, and its
-            // handler (the download, the server, the boot restore) is core code no extension ships.
+            // Static for the docker reason: the GPU switch is a privileged directive, and its handler is core code.
             "localmodel",
             "mcp",
             "monorepo",
             "plugin",
             "ssh",
             "vpn",
-            // Static for the docker/vpn reason in its strongest form: this card's fields are the ceilings a
-            // signer enforces on the owner's own money, and a card an extension could supply is a ceiling an
-            // extension could write. The handler and the card belong to the same core decision.
+            // Static, strongest form: these fields are money ceilings a signer enforces; an extension must never set
+            // them.
             "wallet",
         ]);
     });
 
     it("appends the core host scope switches to a contributed OS pack, which cannot declare them itself", () => {
-        // The grant does not vary by OS, so a platform pack that could restate it is one that could weaken it.
+        // The grant doesn't vary by OS; a pack that could restate it could also weaken it.
         const pack: CapabilityContribution = {
             id: "windows",
             kind: "host",
@@ -113,11 +106,8 @@ describe("contributionCard", () => {
         expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "destructive", "roots"]);
     });
 
-    /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, the answers that replace what a
-     * site card pins in its manifest, then the core credential pair every browser card gets (what lets the agent
-     * sign the account in itself: the daemon types them, the agent never reads them). Worth holding, because the
-     * whole point of this card is that the FORM carries the site: a card that lost its URL fields would be an
-     * unfillable one, and the failure would only show up as a login window opening on nothing. */
+    // Renders the pinned discriminator, then the manifest's own answers, then the core credential pair every browser
+    // card gets (daemon-typed, never read by the agent).
     it("renders the generic browser card's own fields, since the site comes from the form", () => {
         const generic: CapabilityContribution = {
             id: "website",
@@ -131,9 +121,7 @@ describe("contributionCard", () => {
             skill: "skills/website/SKILL.md",
         };
         const card = contributionCard(generic);
-        // …plus `identity`, whose browser the account lives in, and `exit`, which country that browser appears
-        // to be in. Both core the way the credentials are: facts about this sandbox's manifest, not about any
-        // site, so no site card may forget them or mean something else by them.
+        // `identity` and `exit` are core facts (which browser, which country) that no site card can override.
         expect(card.fields.map((field) => field.key)).toEqual([
             "platform",
             "homeUrl",
@@ -144,20 +132,16 @@ describe("contributionCard", () => {
             "identity",
             "exit",
         ]);
-        // Offered only to an account that owns its own profile: one belonging to an identity browses from that
-        // identity's exit, because it browses in that identity's Chromium profile.
+        // Offered only to an account with its own profile; one under an identity uses that identity's exit instead.
         expect(card.fields.find((field) => field.key === "exit")?.when).toBe("!identity");
         expect(card.fields[0]).toEqual({ key: "platform", label: "", value: "website" });
-        // The credentials are optional and the password is a secret: a card that stored it in the clear, or
-        // demanded it from someone who signs in by hand, would be wrong in two different ways.
+        // Optional and secret: required would demand a password from someone who signs in by hand.
         expect(card.fields.find((field) => field.key === "password")).toMatchObject({ secret: true, optional: true });
         // No brand to borrow: it stands for whatever site the user points it at, so it carries a glyph instead.
         expect(card.logo).toBeUndefined();
         expect(card.icon).toBe("globe");
     });
 
-    // A card that declares one of the core credential keys itself keeps its own version: the core pair must
-    // not render the same input twice.
     it("does not duplicate a credential field the browser card declares itself", () => {
         const declaring: CapabilityContribution = {
             id: "customsite",
@@ -184,18 +168,16 @@ describe("contributionCard", () => {
     });
 });
 
-/* THE LOCAL MODEL CARD'S TWO MEMORY HALVES, pinned because the failure they replace was a card that quoted one
- * number and served another. The window used to be a constant in the daemon and the labels assumed a value they
- * could not see, so the two drifted the moment either moved: see docs/local-models-design.md §10. */
+// Pins that the context window and its price labels never drift apart, quoting one number while serving another.
 describe("the local model card", () => {
     const card = CAPABILITY_CATALOG.find((entry) => entry.id === "localmodel")!;
     const field = (key: string) => card.fields.find((entry) => entry.key === key);
 
     it("prices every window rung and defaults to one of them", () => {
         const options = field("context")?.options ?? [];
-        // Every rung the schema accepts is offered, in order, plus the typed escape hatch last.
+        // Every rung the schema accepts is offered in order, with the typed escape hatch last.
         expect(options.map((option) => option.value)).toEqual([...LOCAL_MODEL_WINDOWS, "custom"]);
-        // …and every rung carries its price, which is the whole reason this is a choice a person can make.
+        // Every rung carries its price, so the choice is actually informed.
         for (const option of options.filter((entry) => entry.value !== "custom")) {
             expect(option.label).toMatch(/\d+k · \d+ GB/);
         }
@@ -203,21 +185,18 @@ describe("the local model card", () => {
         expect(LOCAL_MODEL_WINDOWS).toContain(field("context")?.default);
     });
 
-    /* The default is the smallest rung a full agent turn fits in (the contract argues it). A default under that
-     * is what shipped before: an entry that downloads, serves, and refuses every real turn. */
+    // The smallest rung a full agent turn fits in, per the contract; under it, downloads and serves a useless model.
     it("defaults to a window a full agent turn fits in", () => {
         expect(Number(LOCAL_MODEL_WINDOW_DEFAULT)).toBeGreaterThanOrEqual(65_536);
     });
 
-    // The model options price the WEIGHTS only. A label that folded the cache back in would re-create the
-    // coupling that made the window unofferable, so "free RAM" must not reappear on this field.
+    // Weights only: folding the cache back in would recreate the coupling that made the window unofferable.
     it("quotes the weights on the model field, never a total", () => {
         for (const option of field("model")?.options?.filter((entry) => entry.value !== "custom") ?? []) {
             expect(option.label).toMatch(/weights ~\d+ GB/);
         }
     });
 
-    // The typed number is asked for only when the rungs are declined, the custom-GGUF relationship exactly.
     it("asks for a typed window only when the rungs are declined", () => {
         expect(field("contextTokens")?.when).toBe("context == 'custom'");
     });

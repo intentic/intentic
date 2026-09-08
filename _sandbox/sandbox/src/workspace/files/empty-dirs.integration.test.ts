@@ -18,8 +18,7 @@ test("scanBarrenDirs reports an empty folder and every folder above it that hold
 
 test("scanBarrenDirs finds a barren pocket under a folder full of files, at any depth", async () => {
     const root = await workspace();
-    // Six levels down, well past anything a listing budget would reach: this is the case the sweep was blind to,
-    // an empty folder left inside a repository by a move.
+    // Six levels down, well past any listing budget.
     await mkdir(join(root, "repo", "src", "composables", "workspace", "old"), { recursive: true });
     await mkdir(join(root, "repo", "src", "host"), { recursive: true });
     await writeFile(join(root, "repo", "package.json"), "{}");
@@ -38,8 +37,7 @@ test("scanBarrenDirs counts a file as content however small, and however deep", 
 
 test("scanBarrenDirs leaves ignored territory alone, and never offers the folder holding it", async () => {
     const root = await workspace();
-    // An empty dir inside node_modules is the package manager's business, and `a` holds one, so it is not a
-    // folder anybody should be invited to sweep either.
+    // An empty dir under node_modules also makes `a` itself ineligible to report.
     await mkdir(join(root, "a", "node_modules", "dep", "empty"), { recursive: true });
     await mkdir(join(root, "b", "out"), { recursive: true });
     await writeFile(join(root, "b", ".gitignore"), "out/\n");
@@ -51,8 +49,7 @@ test("scanBarrenDirs never descends the daemon's locked folders, nor counts one 
     const root = await workspace();
     await mkdir(join(root, STATE_DIR, "secrets", "auth"), { recursive: true });
 
-    // `.intentic/secrets/auth` is locked: unlistable here, so unknown, so neither it nor `.intentic/secrets`
-    // above it can be claimed empty.
+    // Locked and unlistable, so unknown, never counted as empty.
     expect(await scanBarrenDirs(root)).toEqual([]);
 });
 
@@ -70,7 +67,7 @@ test("scanBarrenDirs stops at its cap rather than half-answering: an unfinished 
     const root = await workspace();
     await mkdir(join(root, "a", "b", "c"), { recursive: true });
 
-    // One directory's worth of budget: the root is visited, `a` is not, so nothing is known to be empty.
+    // maxDirs: 1 visits only the root; `a` is never listed, so nothing is known empty.
     expect(await scanBarrenDirs(root, { maxDirs: 1 })).toEqual([]);
 });
 
@@ -82,9 +79,8 @@ test("walkWorkspaceTree reports empty folders its own entry budget never reached
         await writeFile(join(root, "repo", `${name}.ts`), "export {};");
     }
 
-    // A budget too small to list past the top level: none of `repo/src` is anywhere in the tree, and the sweep
-    // is told about all of it anyway, which is the whole point of asking the question separately. `repo/src`
-    // heads the branch, since the four files sit in `repo` itself.
+    // maxEntries: 1 stops listing past the top level, so `repo/src` never appears in the tree; barren still reports it
+    // and what's under it.
     const result = await walkWorkspaceTree(root, { maxEntries: 1 });
     expect(result.tree.map((entry) => entry.path)).toEqual(["repo"]);
     expect(result.tree[0]?.children).toBeUndefined();

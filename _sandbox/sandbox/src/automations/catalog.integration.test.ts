@@ -15,9 +15,8 @@ import { testConfig } from "../testing.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { automationCatalog, CORE_TRIGGER_SOURCES, triggerSourceEvents } from "./catalog.js";
 
-/* The catalogue is the ONE list the composer draws and `upsert` validates against, so what it is checked for is
- * exactly the two ways that pairing used to break: an area could not add itself, and a disabled area took the
- * automation standing on it down with it. */
+// Pins that the composer's source list and `upsert`'s trigger validation read the same catalogue: a source can add
+// itself, and a disabled source still blocks new triggers on it.
 
 const services = (root: string, extensionsDir: string): Services =>
     unstubbed<Services>("services", {
@@ -60,7 +59,6 @@ test("serves the daemon's own sources with no extension installed at all", async
     const catalog = await automationCatalog(services(mkdtempSync(join(tmpdir(), "catalog-work-")), ""));
 
     expect(catalog.sources.map((source) => source.provider)).toEqual(CORE_TRIGGER_SOURCES.map((source) => source.provider));
-    // The chore book's scheduled forms are generated, so the count is not asserted: that they arrive at all is.
     expect(catalog.templates.some((template) => template.id === "front-desk")).toBe(true);
     expect(catalog.templates.some((template) => template.id === "fix-failing-ci")).toBe(true);
 });
@@ -88,7 +86,6 @@ test("an installed pack's listener source and templates join the catalogue witho
     const rooms = catalog.sources.find((source) => source.provider === "rooms");
     expect(rooms).toMatchObject({ label: "Rooms", icon: "bell", enabled: true });
     expect(catalog.templates.find((template) => template.id === "room-mention")?.requires).toEqual(["rooms"]);
-    // And `upsert` will accept exactly what the editor can now offer.
     expect(triggerSourceEvents(catalog).get("rooms")).toEqual(new Set(["message"]));
 });
 
@@ -116,9 +113,6 @@ test("a branch filter and a mention filter are drawn only where the source decla
     expect(catalog.sources.find((source) => source.provider === "webchat")?.branchField).toBeUndefined();
 });
 
-/* THE SWITCH CUTS THE TWO HALVES DIFFERENTLY, and that asymmetry is the point: a source has to survive being
- * switched off so the automation standing on it stays readable and editable, while a template is a thing you
- * have not made yet and offering one from a switched-off pack offers a row that cannot fire. */
 test("a disabled pack keeps its source listed and loses its templates", async () => {
     const root = mkdtempSync(join(tmpdir(), "catalog-work-"));
     const baked = mkdtempSync(join(tmpdir(), "catalog-baked-"));
@@ -137,7 +131,6 @@ test("a disabled pack keeps its source listed and loses its templates", async ()
 
     expect(catalog.sources.find((source) => source.provider === "rooms")).toMatchObject({ label: "Rooms", enabled: false });
     expect(catalog.templates.some((template) => template.id === "room-mention")).toBe(false);
-    // Off means off: the editor may still DESCRIBE a stored `rooms` trigger, and `upsert` still refuses a new one.
     expect(triggerSourceEvents(catalog).has("rooms")).toBe(false);
 });
 
@@ -148,7 +141,7 @@ test("a template whose trigger would not survive upsert is dropped rather than o
         pack("rooms", {
             automationTemplates: [
                 { id: "good", title: "Nightly", trigger: { kind: "schedule", cron: "0 3 * * *" }, prompt: "Sweep." },
-                // `workspace` names an event vocabulary the daemon owns; "whenever" is not in it.
+                // `workspace` events come from a fixed vocabulary; "whenever" is not one of them.
                 { id: "bad", title: "Whenever", trigger: { kind: "workspace", event: "whenever" }, prompt: "Do something." },
             ],
         }),
@@ -173,9 +166,6 @@ test("an extension cannot shadow one of the daemon's own sources", async () => {
     expect(catalog.sources.find((source) => source.provider === "ci")?.label).toBe("CI/CD");
 });
 
-/* THROUGH THE REAL ROUTER, once: the merge above is a function, and a function nobody can reach is a function
- * that does not exist. This also pins the other half of the promise: the picker and `upsert` read ONE list, so
- * a provider the catalogue does not carry is refused rather than stored to fail at fire time. */
 test("the catalogue is served, and upsert refuses a provider it does not carry", async () => {
     const app = createApp(routeServices({ automations: memoryAutomationsStore([]) }));
 

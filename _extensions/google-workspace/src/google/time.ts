@@ -1,19 +1,10 @@
 import { UsageError } from "../cli/args.js";
 
-/* WHEN SOMETHING HAPPENS, from what a model will actually type.
- *
- * Google's calendar API wants RFC 3339 with an offset, and nothing that reaches this tool has one: a model
- * asked to "book something tomorrow at 2" types `tomorrow 14:00`, and a model reading its own earlier output
- * types `2026-08-12T14:00`. Rejecting those would make the calendar commands unusable in exactly the way they
- * are meant to be used, so they are accepted and resolved here.
- *
- * A NAIVE TIME IS A TIME IN THE CALENDAR'S OWN ZONE, not in the container's. The sandbox runs in UTC and the
- * owner does not, so "2pm" resolved against the process clock would book meetings an hour or two out all
- * summer. Google will do the conversion itself given `{dateTime, timeZone}`, so for writes that pair is sent
- * rather than an instant computed here; for the query parameters that must be absolute, the offset is worked
- * out from the zone with Intl. */
+// Resolves what a model actually types (`tomorrow 14:00`, `2026-08-12T14:00`) into RFC 3339 with an offset, what
+// Google's calendar API wants. A naive time is read in the calendar's own zone, not the container's, since the sandbox
+// runs UTC; writes send `{dateTime, timeZone}` so Google converts it.
 
-// "+02:00" for a zone at a moment. DST included, because Intl knows and arithmetic does not.
+// "+02:00" for a zone at a moment, DST included.
 export const offsetOf = (timeZone: string, at: Date): string => {
     const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" }).formatToParts(at);
     const name = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+00:00";
@@ -21,7 +12,7 @@ export const offsetOf = (timeZone: string, at: Date): string => {
     return offset === "" ? "+00:00" : offset;
 };
 
-// The calendar date at a moment, in a zone, "today" is a question only a zone can answer.
+// The calendar date at a moment, in a zone: "today" is a question only a zone can answer.
 export const dateIn = (timeZone: string, at: Date): string => new Intl.DateTimeFormat("en-CA", { timeZone }).format(at);
 
 const RELATIVE = /^([+-])(\d+)\s*(m|min|h|hour|hours|d|day|days|w|week|weeks)$/i;
@@ -43,8 +34,7 @@ const NAMED = /^(today|tomorrow|yesterday)(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/i;
 const ACCEPTED_WHEN =
     "accepted: `now`, `+2h` / `-30m` / `+3d` / `+1w`, `today 14:00`, `tomorrow`, `2026-08-12`, `2026-08-12 14:00`, or a full RFC-3339 timestamp";
 
-// What Google's event start/end object should be. `date` is an all-day event, a bare date means the whole
-// day, which is what someone typing one means.
+// Google's event start/end shape; `date` alone means an all-day event, the whole day.
 export interface EventTime {
     readonly date?: string;
     readonly dateTime?: string;
@@ -80,11 +70,8 @@ export const parseWhen = (text: string, now: Date, timeZone: string): EventTime 
     throw new UsageError(`"${text}" is not a time this understands: ${ACCEPTED_WHEN}`);
 };
 
-/* What an event ends at when nobody said: an hour later, or, for an all-day event, the next day, because
- * Google's `end.date` is EXCLUSIVE and a start and end on the same date is a zero-length event it rejects.
- *
- * The naive case advances the WALL CLOCK by an hour rather than the instant: 14:00 in Berlin ends at 15:00 in
- * Berlin. Reading the naive string as UTC purely to do the arithmetic is what keeps it naive on the way out. */
+// The default end when nobody said one: an hour later, or the next day for an all-day event (Google's `end.date` is
+// exclusive). Advances the wall clock, not the instant, so a naive time stays naive.
 export const defaultEnd = (start: EventTime): EventTime => {
     if (start.date !== undefined) {
         return { date: new Date(new Date(`${start.date}T00:00:00Z`).getTime() + DAY_MS).toISOString().slice(0, 10) };
@@ -96,15 +83,13 @@ export const defaultEnd = (start: EventTime): EventTime => {
     return { dateTime: new Date(new Date(`${naive}Z`).getTime() + 3_600_000).toISOString().slice(0, 19), timeZone: start.timeZone };
 };
 
-// The same value where the API insists on an absolute instant (timeMin/timeMax, freeBusy).
+// The same value where the API needs an absolute instant (timeMin/timeMax, freeBusy).
 export const toInstant = (text: string, now: Date, timeZone: string): string => {
     const parsed = parseWhen(text, now, timeZone);
     if (parsed.dateTime !== undefined && parsed.timeZone === undefined) {
         return parsed.dateTime;
     }
     const naive = parsed.dateTime ?? `${parsed.date}T00:00:00`;
-    // The offset is taken at the naive time read as UTC, within a few hours of the real instant, which is
-    // near enough to pick the right side of a DST boundary except for the hour it moves, and there is no
-    // exact answer for that hour anyway.
+    // Offset taken at the naive time read as UTC: near enough except within the hour a DST boundary moves.
     return `${naive}${offsetOf(timeZone, new Date(`${naive}Z`))}`;
 };

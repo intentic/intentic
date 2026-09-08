@@ -4,12 +4,11 @@ import { simpleParser } from "mailparser";
 import { expungeMessage, flagsMessage, htmlText, mailMessage } from "./normalize.js";
 import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./watermark.js";
 
-// One account's ImapFlow lifecycle: connect, open the watched mailbox read-only, catch up from the persisted
-// UID watermark, then sit in IDLE dispatching message/flags/expunge events at the daemon. The gateway's
-// reconcile loop owns *which* connections exist; this module owns what one connection does.
+// One account's ImapFlow lifecycle: connect, watch the mailbox read-only, catch up from the persisted UID watermark,
+// then IDLE dispatching message/flags/expunge events. The reconcile loop owns which connections exist; this module owns
+// what one connection does.
 
-// Cap on the fetched raw MIME per message: enough for headers + the text parts of real mail, small enough
-// that a 40MB attachment mail costs nothing (attachments are listed from BODYSTRUCTURE, not the source).
+// Cap on fetched raw MIME per message; attachments come from BODYSTRUCTURE, not the source.
 const SOURCE_MAX = 512 * 1024;
 
 export interface ImapConnectorConfig {
@@ -20,28 +19,25 @@ export interface ImapConnectorConfig {
     readonly password: string;
     readonly mailbox?: string;
 }
-// A long outage on a busy inbox must not fetch a thousand bodies on reconnect: deliver the newest batch,
-// advance the watermark past the rest (logged), the agent can still read the skipped ones over the skill.
+// On catch-up, only the newest of these are delivered; the rest are skipped, still readable via the skill.
 export const CATCH_UP_MAX = 50;
 
 export const mailboxOf = (config: ImapConnectorConfig): string => (config.mailbox === undefined || config.mailbox === "" ? "INBOX" : config.mailbox);
 
-// The connection identity: the reconcile loop stops and reopens a slot whose serialized config changed, so an
-// edited password or watched mailbox reconnects within one tick. Also the fatal-backoff key, an edited
-// config clears its own backoff instantly (the discord gateway's by-token behavior).
+// Identity used to detect a config change (reopens the slot) and as the fatal-backoff key (an edit clears backoff
+// instantly).
 export const configKeyOf = (config: ImapConnectorConfig): string =>
     JSON.stringify([config.host, config.port, config.username, config.password, mailboxOf(config)]);
 
-// The accounts with enough config to try connecting (the shell already gates on an enabled imap listener
-// automation existing, no automations ⇒ it asks for nothing).
+// Accounts with enough config to attempt a connection.
 export const desiredAccounts = (connectors: ReadonlyArray<ConnectorEntry<ImapConnectorConfig>>): ReadonlyArray<ConnectorEntry<ImapConnectorConfig>> =>
     connectors.filter(({ config }) => config.host !== "" && config.username !== "" && config.password !== "");
 
-// A connect failure the reconcile backoff treats as fatal (bad credential / bad mailbox): retrying every tick
-// can't help until the owner fixes the config, and providers lock accounts on repeated failed logins.
+// Marks a connect failure retries can't fix (bad credential or mailbox); providers can lock an account on repeated
+// failed logins.
 export class FatalConnectionError extends Error {}
 
-// The client slice one catch-up pass reads, a seam so the pass is testable without a live ImapFlow.
+// Client slice one catch-up pass reads, so the pass is testable without a live ImapFlow.
 export interface SyncSource {
     readonly search: (range: string) => Promise<number[] | false>;
     readonly fetch: (uid: number) => Promise<FetchMessageObject | false>;
@@ -55,15 +51,14 @@ export interface SyncOptions {
     readonly warn: (fields: object, msg: string) => void;
 }
 
-// One catch-up pass: everything above the watermark, oldest first, advancing (and persisting) the mark only
-// after each successful dispatch, a failure mid-pass aborts and the next event or reconnect retries from the
-// exact message that failed.
+// Delivers everything above the watermark, oldest first, saving the mark after each successful dispatch; a failure
+// mid-pass resumes from the failed message next time.
 export const syncNewMail = async (source: SyncSource, mark: { lastUid: number }, opts: SyncOptions): Promise<void> => {
     const found = await source.search(`${mark.lastUid + 1}:*`);
     if (found === false) {
         return;
     }
-    // `N:*` always matches the highest-UID message even when N exceeds it (RFC 3501), drop seen uids.
+    // `N:*` matches the highest-UID message even when N exceeds it (RFC 3501); drop already-seen uids.
     let pending = found.filter((uid) => uid > mark.lastUid).toSorted((a, b) => a - b);
     if (pending.length > CATCH_UP_MAX) {
         opts.warn({ capabilityId: opts.capabilityId, skipped: pending.length - CATCH_UP_MAX }, "imap catch-up capped to the newest messages");
@@ -72,7 +67,7 @@ export const syncNewMail = async (source: SyncSource, mark: { lastUid: number },
     for (const uid of pending) {
         const msg = await source.fetch(uid);
         if (msg === false) {
-            // Expunged between search and fetch, nothing to deliver; later uids still advance the mark.
+            // Expunged between search and fetch; nothing to deliver, but later uids still advance the mark.
             continue;
         }
         await opts.dispatch(await opts.payloadOf(msg));
@@ -86,8 +81,8 @@ export interface ImapConnection {
     readonly stop: () => Promise<void>;
 }
 
-// Best-effort text of the (size-capped) raw MIME: mailparser's plain text, then stripped html, then nothing,
-// truncated MIME can fail to parse, and an unreadable body must degrade to envelope-only content, not fail.
+// Best-effort text: mailparser's plain text, then stripped html, else undefined; a body that fails to parse must not
+// fail the sync.
 const textOf = async (source: Buffer | undefined): Promise<string | undefined> => {
     if (source === undefined) {
         return undefined;
@@ -114,14 +109,11 @@ export const openImapConnection = async (
     const client = new ImapFlow({
         host: config.host,
         port,
-        // Implicit TLS is universally the 993 convention; any other port starts plain and imapflow upgrades
-        // over STARTTLS when the server offers it, which also lets dev/test servers on odd ports connect.
+        // 993 implies implicit TLS; other ports start plain and upgrade via STARTTLS if offered.
         secure: port === 993,
         auth: { user: config.username, pass: config.password },
         logger: false,
-        // Break + re-issue IDLE every 5 min: well under the RFC 29-minute cap, and doubles as a dead-NAT
-        // detector (the break surfaces a socket error on a gone connection, which lands on "close" and the
-        // reconcile tick reconnects). Servers without IDLE degrade to imapflow's NOOP poll on this cadence.
+        // Re-issues IDLE every 5 min, under RFC's 29-min cap; also surfaces a dead connection as a close event.
         maxIdleTime: 5 * 60_000,
         connectionTimeout: 30_000,
     });
@@ -152,8 +144,7 @@ export const openImapConnection = async (
     const point = resumePoint(await readWatermark(path), { mailbox, uidValidity, uidNext: box.uidNext });
     const mark = { lastUid: point.lastUid };
     if (point.baselined) {
-        // First watch of this mailbox generation (fresh add, folder change, or a UIDVALIDITY reset): record
-        // the current end and dispatch nothing, the agent reacts to mail from now on, never to history.
+        // New mailbox generation (add, folder change, UIDVALIDITY reset): baseline now, dispatch nothing from history.
         await writeWatermark(path, { mailbox, uidValidity, lastUid: mark.lastUid });
     }
 
@@ -184,15 +175,14 @@ export const openImapConnection = async (
                         text: await textOf(msg.source),
                     }),
                 dispatch: ctx.daemon.dispatch,
-                // Persist per message, not per batch: a crash mid-catch-up re-delivers at most the in-flight
-                // message (ids are stable, so a prompt can even dedupe that).
+                // Persists per message; a crash mid-catch-up re-delivers at most the in-flight message.
                 save: (lastUid) => writeWatermark(path, { mailbox, uidValidity, lastUid }),
                 warn: ctx.log.warn,
             },
         );
 
-    // Catch-up runs are serialized: an `exists` burst during a pass queues exactly one rerun, and a failed
-    // pass (network, daemon down) leaves the watermark where it was, the next event or reconnect retries.
+    // Catch-up runs are serialized: an `exists` burst during a run queues exactly one rerun; a failed run leaves the
+    // watermark for the next event or reconnect to retry.
     const sync = { running: false, queued: false };
     const runSync = (): void => {
         if (sync.running) {
@@ -251,8 +241,7 @@ export const openImapConnection = async (
         }
     });
 
-    // Unconditional first pass: covers both the resume backlog and any mail that raced in between mailboxOpen
-    // and the listeners attaching (its uid is above the mark either way).
+    // Unconditional first pass covers the resume backlog and any mail that raced in before the listeners attached.
     runSync();
 
     return {

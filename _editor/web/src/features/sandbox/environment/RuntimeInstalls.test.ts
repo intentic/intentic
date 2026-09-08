@@ -1,26 +1,17 @@
 // @vitest-environment jsdom
-//
-// THE SUBJECT IS WHETHER A ROW ENDS SOMEWHERE. This list shipped as a caption over a bare <ul> of
-// `tool · 2 sessions · proposed`, and the state it describes is one the daemon can reach and then not leave:
-// an install it has recorded, corroborated against the live container, and has no mechanical template for
-// sits there being reported, forever, with no press anywhere on the card that answers it. This workspace's own
-// `chromium-headless-shell` did exactly that for six days.
-//
-// So what is pinned is the VERBS, per state, because that is the whole change: a templatable entry can be
-// added, an untemplatable one can be handed to an agent, and either can be dismissed — which until now was
-// reachable only as a side effect of rejecting an entire proposal.
+// Pins the per-state verbs (add to the image, ask an agent, dismiss) for a runtime install the daemon can report but
+// never resolve without one.
 import type { EnvironmentRecurring } from "@intentic/api-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The brand CDN is stubbed to refuse, exactly as an offline sandbox answers: every mark paints its glyph tier
-// and nothing here waits on a round trip.
+// Fetch is stubbed to fail, mirroring an offline sandbox, so every mark paints its glyph tier.
 vi.hoisted(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
 });
 
-// Starting a turn summons a chat tab through app-wide singletons; the press is what this suite is about.
+// Starting a turn opens a chat through app-wide singletons; this captures the press instead.
 const started: string[] = [];
 vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
 
@@ -33,8 +24,7 @@ const entry = (over: Partial<EnvironmentRecurring> & Pick<EnvironmentRecurring, 
     ...over,
 });
 
-// One of each state the list can be in: a mechanical step nobody has taken yet, an ecosystem with no step at
-// all, and one already folded into the proposal above.
+// One of each state: a templatable step, an ecosystem with no step, and one already drafted into the proposal.
 const TEMPLATABLE = entry({
     tool: `chromium-headless-shell`,
     kind: `playwright`,
@@ -64,21 +54,20 @@ const mount = (entries: EnvironmentRecurring[], canOperate = true): HTMLElement 
     return el;
 };
 
-// The rows are an accordion: everything below the headline, verbs included, is behind the row's own chevron.
+// Rows are an accordion: everything but the headline, verbs included, sits behind the row's own chevron.
 const openRow = async (el: HTMLElement, index = 0): Promise<void> => {
     (el.querySelectorAll(`button[aria-expanded]`)[index] as HTMLElement | undefined)?.click();
     await nextTick();
 };
 
 const verbs = (el: HTMLElement): string[] =>
-    // The header's fold is not a verb on a row: it filters which rows are drawn, and it is the one button here
-    // carrying `aria-pressed`.
+    // The header's fold isn't a row verb; it's the one button carrying `aria-pressed`, filtered out here.
     [...el.querySelectorAll(`button:not([aria-pressed])`)]
         .map((button) => button.textContent?.trim() ?? ``)
         .filter((label) => label !== ``)
         .filter((label) => !label.startsWith(`chromium`) && !label.startsWith(`zizmor`) && !label.startsWith(`p7zip`));
 
-// The header press that unfolds what has been dismissed.
+// The header press that reveals dismissed rows.
 const unfold = async (el: HTMLElement): Promise<void> => {
     (el.querySelector(`button[aria-pressed]`) as HTMLElement | undefined)?.click();
     await nextTick();
@@ -96,20 +85,15 @@ it(`heads the list the way the rest of the tab heads a section`, () => {
     const el = mount([TEMPLATABLE, HUMAN]);
     expect(el.textContent).toContain(`Installed at runtime`);
     expect(el.textContent).toContain(`2 items`);
-    // The count is a count of items, not of the sessions beside it: a bare "2" between "playwright" and
-    // "2 sessions" reads as one more of those.
     expect(el.textContent).toContain(`Not in the image`);
-    // Closed rows cost one line each: the step, the reasoning and the verbs are all behind the chevron.
     expect(el.textContent).not.toContain(`playwright install --with-deps`);
 });
 
 it(`offers the deterministic fix where a step follows from the package name`, async () => {
     const el = mount([TEMPLATABLE]);
     await openRow(el);
-    // The step is shown, not just promised: the difference between a button you can judge and one you trust.
     expect(el.textContent).toContain(`npx --yes playwright install --with-deps chromium-headless-shell`);
     expect(verbs(el)).toContain(`Add to the image`);
-    // And no agent is spent on a question a template already answers.
     expect(verbs(el).some((label) => label.includes(`Ask an agent`))).toBe(false);
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Add to the image`))?.click();
     expect(decisions).toEqual([[`chromium-headless-shell`, `adopt`]]);
@@ -118,11 +102,9 @@ it(`offers the deterministic fix where a step follows from the package name`, as
 it(`hands the routing decision to an agent where no template can make it`, async () => {
     const el = mount([HUMAN]);
     await openRow(el);
-    // The reason is the ecosystem's, not a shrug: it is what the reader needs to judge the agent's answer.
     expect(el.textContent).toContain(`virtualenv`);
     expect(verbs(el).some((label) => label.includes(`Ask an agent`))).toBe(true);
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Ask an agent`))?.click();
-    // The brief carries what the turn cannot recover: which tool, which ecosystem, how often, where to write.
     expect(started).toHaveLength(1);
     expect(started[0]).toContain(`\`zizmor\` (pip)`);
     expect(started[0]).toContain(`3 sessions`);
@@ -142,34 +124,25 @@ it(`dismisses one entry, and lets that be undone`, async () => {
     await unfold(dismissed);
     await openRow(dismissed);
     expect(dismissed.textContent).toContain(`Dismissed.`);
-    // A dismissal a mis-click can reach is one that has to be reversible, and nothing else is offered on it.
     expect(verbs(dismissed)).toContain(`Undo`);
     expect(verbs(dismissed).some((label) => label.includes(`Ask an agent`))).toBe(false);
     [...dismissed.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Undo`)?.click();
     expect(decisions).toEqual([[`zizmor`, `restore`]]);
 });
 
-/* WHAT THE PRESS ACTUALLY DID, which for six days was "nothing you can see". A dismissed row used to stay in
- * the list — greyed, sunk to the bottom, still counted as an item under a heading about what every rebuild
- * loses — so the card went on reporting an install the owner had settled, with no press left that could clear
- * it. The row leaves; the header keeps the way back. */
 it(`folds an answered row out of the list, and out of the count`, async () => {
     const el = mount([TEMPLATABLE, { ...HUMAN, declined: true }]);
     expect(el.textContent).toContain(`chromium-headless-shell`);
     expect(el.textContent).not.toContain(`zizmor`);
-    // One entry is still asking something; the answered one is not an item, it is a footnote on the header.
     expect(el.textContent).toContain(`1 item`);
     expect(el.textContent).toContain(`1 dismissed`);
 
     await unfold(el);
     expect(el.textContent).toContain(`zizmor`);
-    // Unfolding shows what was answered without re-ordering what was not: the live entry keeps the top.
     expect([...el.querySelectorAll(`button[aria-expanded]`)].map((row) => row.textContent?.includes(`zizmor`))).toEqual([false, true]);
     expect(el.textContent).toContain(`1 item`);
 });
 
-// The end state the fold has to survive: everything answered. No count, no warning about what rebuilds lose,
-// no rows — one quiet press that still leads back to them.
 it(`says nothing of a list whose every entry is answered`, async () => {
     const el = mount([
         { ...HUMAN, declined: true },
@@ -189,8 +162,6 @@ it(`asks nothing of an entry already waiting in the proposal above`, async () =>
     await openRow(el);
     expect(el.textContent).toContain(`waiting for your approval`);
     expect(verbs(el)).not.toContain(`Add to the image`);
-    // Dismiss survives: approving is not the only answer, and rejecting the whole proposal is too blunt a way
-    // to say "not this one".
     expect(verbs(el)).toContain(`Dismiss`);
 });
 
@@ -200,6 +171,5 @@ it(`offers a member the agent but none of the owner's decisions`, async () => {
     await openRow(el, 1);
     expect(verbs(el)).not.toContain(`Add to the image`);
     expect(verbs(el)).not.toContain(`Dismiss`);
-    // Asking an agent is not an owner-gated write: it opens a chat, which any member can already do.
     expect(verbs(el).some((label) => label.includes(`Ask an agent`))).toBe(true);
 });

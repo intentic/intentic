@@ -7,19 +7,16 @@ import { call } from "../google/request.js";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
-/* VALUES IN, VALUES OUT. Everything here is the `values` half of the Sheets API, the grid, and none of it is
- * the `spreadsheets.batchUpdate` half, which is formatting, charts, conditional rules and frozen panes.
- *
- * `USER_ENTERED` is what writes go in as, not `RAW`: a cell written as `=SUM(A1:A9)` should become the formula
- * and `2026-08-12` should become a date, exactly as if a person had typed it. RAW would store both as text and
- * the spreadsheet would look right while computing nothing. */
+// Only the `values` half of the Sheets API, the grid, not `spreadsheets.batchUpdate` (formatting, charts, rules, frozen
+// panes). Writes go in as `USER_ENTERED`, not `RAW`, so `=SUM(A1:A9)` becomes a formula and a date parses as one, as if
+// typed by a person.
 
 interface ValueRange {
     readonly range?: string;
     readonly values?: readonly (readonly string[])[];
 }
 
-// --csv FILE, --json '[["a","b"]]', or --values "a,b;c,d" for a couple of cells typed inline.
+// `--csv FILE`, `--json-values '[["a","b"]]'`, or `--values "a,b;c,d"` for a couple of inline cells.
 const valuesOf = async (args: Args): Promise<string[][]> => {
     const csv = flag(args, "csv");
     if (csv !== undefined) {
@@ -79,9 +76,7 @@ const tabs: Command = {
     },
 };
 
-/* Sheets has no "the whole thing" range selector, a range is always a tab name, optionally narrowed. So a
- * `read` with no `--range` asks what the first tab is called and reads that whole, which is what someone who
- * did not name a range meant. */
+// Sheets has no "whole spreadsheet" range: a `read` with no `--range` asks the first tab's name and reads that whole.
 const firstTab = async (ctx: CommandContext, id: string): Promise<string> => {
     const book = await call<{ sheets?: { properties?: { title?: string } }[] }>(ctx.session, {
         url: `${API}/${encodeURIComponent(id)}`,

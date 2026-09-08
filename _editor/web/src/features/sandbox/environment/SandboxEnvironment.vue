@@ -7,35 +7,15 @@ import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
 import MoveCard from "../access/MoveCard.vue";
 
-/* The Sandbox hub's "Environment" tab, and it answers two questions in that order: WHAT THIS SANDBOX IS
- * (the composed overlay Dockerfile, agent-proposed and owner-approved; the engines that run its turns), and
- * then MOVING IT — out, or in.
- *
- * THE SECOND HALF USED TO BE THREE CARDS SPLIT BY ARTIFACT: "Move this sandbox" (the bundle), "Sandbox
- * definition" (the sandbox.toml) and "Arrive from another assistant". Two of those headings were not even on
- * the same axis — one named a job, the other named a file — so a reader who wanted to move a sandbox read the
- * first, exported gigabytes of private bytes, and never learned the publishable document existed. And each of
- * the three held BOTH directions at once, so every card asked its reader to keep in and out straight while
- * reading it.
- *
- * Splitting them by DIRECTION fixed the axis, and then two direction cards turned out to be one card: out and
- * in are halves of a single subject, not two subjects, so they share a surface and a heading in MoveCard. The
- * artifact is a choice inside each half rather than a card of its own.
- *
- * The overlay card sits above it because a bundle's last step IS the rebuild it hands you: the overlay travels
- * as a recipe and the image it describes does not. EnvironmentCard self-hides until there's an overlay or a
- * proposal, so this tab adds the empty-state for a sandbox that has neither yet. */
+// The Sandbox hub's Environment tab: what this sandbox is (overlay, engines), then moving it. The move cards are split
+// by direction (out/in), not by artifact, since each artifact is a choice inside a direction rather than its own card.
+// The overlay sits above MoveCard, since a bundle's last step is the rebuild it hands you.
 
 const { proposal, pending, applied, query } = useEnvironment();
 const empty = computed(() => !proposal.value && !pending.value && !applied.value);
 
-/* The empty state below is indistinguishable from the unread one: all three computeds read off a single
- * `state` that is undefined until /environment answers, so without this a sandbox WITH an overlay still opened
- * on "no environment changes yet" and then replaced it with a diff. That is the one sentence on this tab a
- * reader might act on (propose a change that already exists), told wrong.
- *
- * The outline stands in for the card, not for the sentence: what is coming is a bordered block with a title and
- * a body of Dockerfile lines, and promising the empty state's shape would be promising the wrong answer. */
+// Without `reading`, an unread sandbox flashes the empty-state sentence before its real overlay loads, since all three
+// computeds read off one initially-undefined state. The outline stands in for the card's shape, not the sentence.
 const reading = query.isLoading;
 const outline = useSandboxOutline(reading);
 </script>
@@ -51,21 +31,18 @@ const outline = useSandboxOutline(reading);
                 <span v-for="(width, index) in [`w-3/4`, `w-1/2`, `w-5/6`, `w-2/5`]" :key="index" class="skeleton block h-2.5" :class="width" />
             </div>
         </div>
-        <!-- `!reading` and not merely `!outline`: the sentence must be silent for the whole wait, including the
-             beat before the outline is allowed to appear. -->
+        <!-- `!reading`, not `!outline`: the sentence must stay silent through the pre-outline delay too. -->
         <div v-else-if="empty && !reading" :class="ui.emptyState('py-10')">
             No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and rebuild.
         </div>
 
-        <!-- Below the overlay and above the bundle, because it answers the same question one layer down: that
-             card is what this sandbox has INSTALLED, this one is which version of the programs that run the
-             turns. Never hidden — unlike the overlay above it, every sandbox has engines, and "which Claude
-             Code am I on" is worth an answer before anything has gone wrong. -->
+        <!--
+            Sits one layer below the overlay (installed vs. which engine version) and above the bundle; never hidden, since every sandbox has engines
+            worth checking.
+        -->
         <EnginesCard />
 
-        <!-- One card, both directions. Out is drawn first inside it because it is the one an owner reaches for
-             while still holding this sandbox; in is what they do on the far side, usually in a different
-             browser on a different day. -->
+        <!-- One card, both directions: out is drawn first, since that's the one an owner reaches for while still holding this sandbox. -->
         <MoveCard />
     </div>
 </template>

@@ -7,72 +7,39 @@ import { installedBuild } from "../installed.js";
 import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
 import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 
-/* THE MACHINE REPORT, everything this agent knows about the device it runs on, in one shape.
- *
- * It exists because the answer used to live only in the sync agent's printed status output, on a terminal that
- * the two audiences who most need it do not have open: the desktop app (whose whole premise is not needing one)
- * and the Desktop sync card in the browser, which could say a machine was enrolled but not which folder it synced
- * into, which ports it held, or whether the watcher behind all of it was still alive.
- *
- * So the report is the product and the printed status is one rendering of it, `status` formats this, `status
- * --json` emits it, the mirror watcher posts it, and a `host` capability reads it back over run_command. One
- * producer is what keeps those from drifting, the same argument the desktop app makes for spawning connect.sh
- * instead of reimplementing it.
- *
- * What is NOT here is deliberate: no docker scan. Enumerating a machine's containers is the reader's job (the
- * desktop app already does it natively; the daemon does it through the host capability), and a sync agent
- * volunteering the list of a machine's OTHER sandboxes to one of them is the disclosure this design avoids by
- * construction rather than by remembering to filter. `sandboxes` is therefore always empty here, and filled in
- * by whoever is trusted to. */
+// Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
+// watcher's post, and the host capability, so they can't drift. No docker scan: enumerating a machine's containers
+// is the disclosure this design avoids; `sandboxes` is always empty here, filled in by whoever is trusted to.
 
-/* The loop's liveness, the PID it claims AND the last pass it finished, because only the pair is an answer.
- * A loop that died still holds its pidfile (its tunnel listeners keep the process alive), so `running`
- * on its own has twice now reported a stopped mirror, a stopped git bridge and file syncs that were never created
- * as a healthy machine. The stamp is what makes that visible to every reader at once: this terminal, the Desktop
- * sync card, and the Devices view all read this shape.
- *
- * An unreadable or unparseable stamp is `undefined`, "this loop has not finished a pass yet", which is true
- * of a loop that just started and of one that has never ticked, and both are better read as not-yet-known than
- * as a number. Read from the pidfile's neighbour the same way every other cross-process caller reads it; inlined
- * rather than imported from mirror.ts, which imports this module to post the report. */
+// Liveness needs both the held pid and the last finished pass: a dead loop still holds its pidfile (tunnel
+// listeners keep it alive), so `running` alone can misreport a stopped mirror as healthy. Undefined means no pass has
+// finished yet.
 const lastTick = async (): Promise<number | undefined> => {
     const raw = await readFile(mirrorHeartbeatPath, "utf8").catch(() => undefined);
     const stamped = Number(raw?.trim());
     return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
 };
 
-/* THE AGENT ON THIS DEVICE, both halves of the one question, in the block every reader now takes it from: the
- * loop's own record (its pid, and the BUILD it stamped beside it when it claimed the file) and the build
- * INSTALLED on disk. Two facts rather than one because a binary replaced under a live loop leaves the process
- * running the old code, so "which agent is on this device" and "which agent is serving it" are different
- * questions, and every version anyone could read used to answer only one of them (see ../installed.ts).
- *
- * `installed` is passed in rather than read here: it is the one fact that costs a syscall (and, after a swap, a
- * spawn) and the only one a test has any reason to vary. */
+// Two facts, not one: the loop's own build (from its pidfile note) and the build installed on disk, since a
+// swapped binary leaves a live loop running the old code. `installed` is passed in because it costs a syscall/spawn.
 const agentState = async (installed: string | undefined): Promise<DeviceAgent> => {
     const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), lastTick()]);
     return { running: resident !== undefined, pid: resident?.pid, build: resident?.note, installed, lastTickAt };
 };
 
 const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePairing => {
-    /* Whether this device is putting the sandbox's ports on its localhost at all, stated on EVERY pairing
-     * rather than left to be inferred from an empty port list. The two look identical from the sandbox's side
-     * and mean opposite things: "nothing is listening over there" versus "this device was told not to", and
-     * only the second has anything for a reader to do about it. It is also what lets the browser's Stop button
-     * know which way to point (sync/config.ts setMirrorOff owns the switch itself). */
+    // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
+    // was told not to" look identical otherwise, and only one has anything for a reader to do.
     const mirroring = pairing.mirrorOff === true ? "off" : "on";
-    // A mirror-only enrollment has no file sync at all, so there is no session to ask about, its absent status
-    // is a fact about the mode, not a failure to read one.
+    // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
+    // failed read.
     if (pairing.mode !== "sync" || mutagen === undefined) {
         return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, mirroring };
     }
-    /* A sync pairing with NO session is the state this report exists to make visible, so it is carried as the
-     * ABSENCE of a status rather than as some word for it: nothing is syncing that folder, whatever the ports and
-     * the watcher rows say. Every reader renders that one way (see pairingLine) instead of each inventing a
-     * default. A session that exists always has a status, readSessionState resolves Mutagen's omitted zero. */
+    // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
+    // renders it the same way instead of inventing a default. readSessionState resolves Mutagen's omitted zero.
     const session = readSessionState(mutagen, sessionName(pairing.sandboxId));
-    // The state backup rides beside it and is read the same way. Its absence is carried the same way too: no
-    // word means no session, which for this one means the sandbox is the only copy of its own state.
+    // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state.
     const backup = readSessionState(mutagen, backupSessionName(pairing.sandboxId));
     return {
         sandboxId: pairing.sandboxId,
@@ -81,16 +48,14 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePai
         mirroring,
         mutagenStatus: session.status,
         conflicts: session.conflicts,
-        // The stuck paths, not just how many: a count names nothing to go and look at, and this report is the
-        // only way they reach a screen at all (see mutagen.ts conflictsFrom).
+        // The stuck paths, not just a count: a number names nothing to look at.
         conflictedPaths: session.conflictedPaths,
         paused: session.paused,
         backupStatus: backup.status,
     };
 };
 
-// Both halves of one pairing's port picture, as the last reconcile left them: what reached localhost, and what
-// wanted to and could not. The second half is the one nothing has ever been able to show.
+// Both halves of one pairing's port picture: what reached localhost, and what wanted to but couldn't.
 const portRows = (pairing: Pairing): DevicePort[] => [
     ...(pairing.mirroredPorts ?? []).map((port): DevicePort => ({
         port: port.port,
@@ -109,10 +74,8 @@ const portRows = (pairing: Pairing): DevicePort[] => [
     })),
 ];
 
-/* Build the report. `mutagen` is the resolved binary path, or undefined to skip the session reads, a caller that
- * has no Mutagen (or does not want to pay for the per-session spawns) still gets the pairings, folders, ports and
- * the agent, which is most of the answer. `capturedAt` is stamped here because this is where the reading happens;
- * everything downstream ages the report against it rather than against its own arrival time. */
+// `mutagen` undefined skips the session reads but still returns pairings, folders, ports and the agent.
+// `capturedAt` is stamped here, where the reading happens; downstream ages the report against it.
 export const buildReport = (state: SyncState, mutagen: string | undefined, agent: DeviceAgent, capturedAt: number): DeviceReport => ({
     hostname: hostname(),
     os: platform(),
@@ -127,16 +90,8 @@ export const buildReport = (state: SyncState, mutagen: string | undefined, agent
 export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> =>
     buildReport(await readState(), mutagen, await agentState(installedBuild()), Date.now());
 
-/* One pairing's slice, for POSTing to the sandbox that pairing belongs to. This is the disclosure rule as code:
- * a report crossing the network to a sandbox carries THAT sandbox's pairing and ports, never its siblings', and
- * a `mirror` enrollment (a collaborator's own laptop, which the sandbox's owner does not own) drops the local
- * folder with them, so mirroring a dev-server port never hands over a map of someone's machine.
- *
- * The whole-machine report stays whole-machine only where it is read by the machine's own user: `status`, and the
- * desktop app.
- *
- * Dropping the folder needs no step of its own: a "mirror" pairing never has a localDir to begin with (config.ts
- * sets it only for mode "sync"), so scoping to the one pairing is what withholds it. */
+// One pairing's slice for posting to its sandbox: only that pairing and its ports cross the network. A `mirror`
+// enrollment's folder drops too, since it never had a localDir to begin with.
 export const scopedReport = (report: DeviceReport, sandboxId: string): DeviceReport => ({
     ...report,
     pairings: report.pairings.filter((pairing) => pairing.sandboxId === sandboxId),

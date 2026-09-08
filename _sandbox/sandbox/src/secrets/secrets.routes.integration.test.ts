@@ -14,10 +14,8 @@ import { clientFor, errorCode, rejectForbidden } from "../harness/route-client.t
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
-/* The secrets routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
- * one file that two agents working on unrelated features collided in every time. The fakes and the client
- * are shared (route-services.testing.ts and its siblings); what lives here is what these routes do. */
+// Drives the secrets routes over the daemon's HTTP surface the way the browser does; fakes and the client are shared
+// from route-services.testing.ts and its siblings.
 
 // A scaffolded desired-state checkout on disk: an artifact requiring HOST_SSH_KEY, an .env holding it plus an
 // undeclared EXTRA_TOKEN, and a generated admin password in .secrets.json.
@@ -73,8 +71,6 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             revealable: true,
         },
         { key: "EXTRA_TOKEN", kind: "env", status: "set", requiredBy: [], storedAt: "desired-state/.env", revealable: true },
-        // The vault, not the manifest: the manifest keeps the shape of the connection and is reviewable in git,
-        // so pointing "where does this live" at it would name a file the credential is deliberately not in.
         {
             key: "github",
             kind: "capability",
@@ -103,16 +99,13 @@ test("secrets.inventory joins the use ledger: env keys by name, a capability by 
     const { entries } = await clientFor(createApp(svc)).secrets.inventory();
     const byKey = new Map(entries.map((entry) => [entry.key, entry]));
     expect(byKey.get("EXTRA_TOKEN")?.lastUse).toEqual({ at: 10, lane: "shell", detail: "curl https://api" });
-    // The capability's row is keyed by the id alone, so its fields' uses fold onto it.
     expect(byKey.get("github")?.lastUse).toEqual({ at: 20, lane: "shell", detail: "gh api /user" });
-    // Never used ⇒ no lastUse at all, rather than a zero that renders as 1970.
     expect(byKey.get("HOST_SSH_KEY")?.lastUse).toBeUndefined();
 });
 
 test("secrets.inventory answers pre-scaffold with capability/provider entries only", async () => {
     const client = clientFor(createApp(services()));
     const { entries } = await client.secrets.inventory();
-    // One entry per connected account: the default fake has a single Claude account, no Codex, no Grok.
     expect(entries.map((entry) => entry.key)).toEqual(["claude:default"]);
 });
 

@@ -4,58 +4,31 @@ import { router } from "../../../router";
 import { readWindowState, writeWindowState } from "../../../shell/window/windowStore";
 import { useSandbox } from "./useSandbox";
 
-/* WHICH SCREEN EACH SANDBOX WAS LAST ON, and landing there when the user switches to it (Alt+1…9, or a row in
- * the switcher popover).
- *
- * A switch re-points the entire shell at another machine, sandboxScope re-scopes the client-side state, the
- * liveness probe re-aims, every query key changes, and the SCREEN is part of what it re-points. Two sandboxes
- * are two different pieces of work, and a route that named something in the outgoing one (an agent id, a file
- * path, a browser session) names nothing in the incoming one. Holding the URL across the switch therefore made
- * every jump start with a detour: back to where that sandbox actually was, by hand, from a view that had
- * nothing to show.
- *
- * Per WINDOW (windowStore), like every other "what was this window showing", two windows are allowed to sit on
- * two sandboxes, and each one's memory of a sandbox is its own.
- *
- * Registered at module scope (imported once from main.ts) next to sandboxScope, for the same reason: the active
- * sandbox also changes while the shell is unmounted (the "add sandbox" flow, on /setup), and a shell-scoped
- * watcher would miss it. */
+// Remembers which screen each sandbox was last on and lands there on a switch, since a route naming something
+// in the outgoing sandbox means nothing in the incoming one. Kept per window. Registered at module scope, like
+// sandboxScope, since the active sandbox can change while the shell is unmounted.
 
 const screenKey = (sandboxId: string): string => `intentic.sandboxScreen.${sandboxId}`;
 
-/* A screen OF A SANDBOX is a route inside the workspace shell, and every one of them matches the shell record
- * (path `/`) first. The account's own pages: /login, /setup, /invite, /desktop-auth, sit outside it and
- * belong to no sandbox: neither remembering one nor landing on one says anything about the machine that was
- * picked, and answering a switch with a setup screen is the worst of the two. */
+// A screen of a sandbox is a route inside the workspace shell (path `/`); account pages like /login and /setup
+// belong to no sandbox and must never answer a switch.
 const inShell = (matched: readonly RouteRecordNormalized[]): boolean => matched[0]?.path === `/`;
 
-// A stored screen is a path or it is nothing (a hand-edited key, an older build that stored another shape). A
-// path this build no longer routes needs no check of its own: the router's catch-all sends it to the same
-// landing as a sandbox with no memory at all.
+// A stored screen is a path or nothing; one this build no longer routes needs no separate check, the router's
+// catch-all handles it like no memory at all.
 const parseScreen = (raw: string): string | undefined => (raw.startsWith(`/`) ? raw : undefined);
 
 const { activeSandboxId } = useSandbox();
 
-/* AIM THE LANDING BEFORE THE SWITCH, for a crossing that is going somewhere specific.
- *
- * The rule above is that a switch lands on whatever that sandbox was last showing, which is right for every
- * switch made from the switcher: you are going to that box, not to anything in particular in it. It is wrong
- * for the one crossing that has a destination, "open this agent in the box it lives in", which the
- * All-sandboxes board offers on a card whose agent it can read but not converse with. Left to the rule, that
- * press would select the box and then land on whatever screen it was last left on, which is the detour the
- * rule exists to prevent, arriving from the one direction where the caller knew the answer.
- *
- * Written as that sandbox's remembered screen rather than pushed after the switch, because the landing watch
- * `replace`s at `flush: post` and would cancel a navigation started beside it. Recording it is the supported
- * way to say where a switch ends up, and it is the same slot a visit would have written anyway. */
+// Overrides "land on the last screen" for a switch with a known destination (opening an agent from another
+// sandbox's card). Recorded rather than pushed after the switch: the landing watch replaces at flush:post and
+// would cancel a concurrent push.
 export const landOnAfterSwitch = (sandboxId: string, path: string): void => {
     writeWindowState(screenKey(sandboxId), path);
 };
 
-// Recorded on arrival, under whichever sandbox was active when the navigation landed, so the outgoing
-// sandbox's screen is already on file by the time a switch reads it back, and deep links and back/forward are
-// covered by the same one rule. A FAILED navigation is a screen nobody reached: recording it would land the
-// next switch on the view the user was denied (and a canceled one is how the landing below wins its race).
+// Recorded on arrival under whichever sandbox was active, so it's on file before the next switch reads it back;
+// a failed navigation is not recorded, or the next switch would land on a screen the user was denied.
 router.afterEach((to, _from, failure) => {
     const sandboxId = activeSandboxId.value;
     if (failure !== undefined || sandboxId === undefined || !inShell(to.matched)) {
@@ -64,21 +37,9 @@ router.afterEach((to, _from, failure) => {
     writeWindowState(screenKey(sandboxId), to.fullPath);
 });
 
-/* The landing.
- *
- * `replace`, not `push`: flipping between two sandboxes is something people do a dozen times in a row, and each
- * flip would otherwise leave a back-entry, burying the history that Back is actually for under a stack of
- * screens the user never asked to visit twice.
- *
- * A sandbox this window has never shown lands on the shell's home (`/` redirects per device) rather than
- * holding the current route: with no "last time" to honour, the front door is the honest answer, and it is the
- * only one that cannot carry the outgoing sandbox's ids into a machine that has never heard of them.
- *
- * `flush: post`, because a switch moves several things at once and this has to move last. The workspace strip
- * re-points the URL at the incoming sandbox's open file (useWorkspaceRoute projects the tab strip that
- * sandboxScope has just restored, in a pre-flush watcher), and vue-router gives the tie to whichever navigation
- * STARTS last, so a pre-flush landing would be canceled by that push, and a sandbox last left on /agents would
- * come back on whatever its editor happened to hold. */
+// `replace`, not `push`, so switching sandboxes repeatedly doesn't bury Back under a stack of visits. A sandbox
+// never shown lands on the shell's home. `flush: post` so useWorkspaceRoute's own pre-flush navigation wins the
+// tie instead.
 watch(
     activeSandboxId,
     (sandboxId) => {

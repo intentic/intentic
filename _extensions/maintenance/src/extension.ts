@@ -3,65 +3,29 @@ import { maintenanceBadge, startMaintenanceAttention } from "./attention.js";
 import { choresReportQuery, choresRunsQuery } from "./choresQuery.js";
 import { bindHost } from "./host.js";
 
-/* ext-maintenance activation: bind the host handle, start the badge's background poll, then register the two
- * surfaces maintenance legitimately has.
- *
- * ONE RAIL TILE, WORKSPACE-WIDE. Two decisions, each of which could have gone the other way:
- *
- * Workspace-wide rather than per repo, because the question this surface answers is "what is this workspace
- * owed", and the answer is read across repos, the same shape, and for the same reason, as Acceptance and
- * Documentation. A tile per repo would fragment one list into five that each need visiting.
- *
- * It activates on ANY repository, and deliberately not on evidence of a problem. Gating the AREA on something
- * being due would mean the first time an owner ever sees this surface is the first time it has bad news, and
- * would make the empty state, which is the state we most want to be reachable, the one state you cannot
- * navigate to. "There is code here that will need maintaining" is the honest evidence for offering it.
- *
- * WHAT ACTIVATING NO LONGER BUYS IS A SEAT. This used to say the tile was always present, on the argument that a
- * surface which only exists while something is wrong cannot be visited to check that nothing is. That argument
- * survives; what changed is where it is answered. The app's seat table (core-views/registry.ts) puts this tile
- * on the column while the badge below has something to report and behind the More menu otherwise, and More lists
- * it either way, so "let me check nothing is owed" is one press, on a rail that is not carrying a silent tile
- * per surface to make it two. */
+// Binds the host, starts the badge poll, then registers two views: one rail tile, workspace-wide, and one per-repo
+// surface. The tile activates on any repository, not on evidence of a problem, so the empty state stays reachable; seat
+// placement (column vs More) is decided elsewhere (core-views/registry.ts).
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
-    // Before the registration, so the tile can badge on its first render rather than ten minutes later.
+    // Started before registration, so the tile can badge on its first render.
     context.subscriptions.push(startMaintenanceAttention());
     context.subscriptions.push(
         api.views.register({
             id: `maintenance`,
             label: `Maintenance`,
             surface: `rail`,
-            /* `wrench`, machinery being kept running, which is what this is. Not `list-check`: that is Acceptance's,
-             * and two tiles sharing a glyph in a column read at a glance is worse than either being slightly less
-             * apt. Not a warning triangle either, the two chores that are genuinely urgent say so with the
-             * badge's tone, and an icon that shouts permanently says nothing. And no longer `cog`: a gear means
-             * Settings everywhere else in this app (the account popover's row, the mobile menu's), so the one
-             * glyph a reader already has a fixed meaning for is the one it must not borrow. */
+            // `wrench`: kept running. Not `list-check` (Acceptance's), a warning triangle, or `cog` (means Settings).
             detect: (repos) => (repos.length === 0 ? [] : [{ key: `maintenance`, title: `Maintenance`, icon: `wrench` }]),
             badge: maintenanceBadge,
-            /* The two reads this page opens on, so the host reads them ahead of the click. Worth asking for
-             * here more than on most tiles, and for a reason the badge makes plain: this is a surface people
-             * reach BECAUSE it lit up, so the arrival is the whole interaction, and its run history is a
-             * directory walk plus two files per run, which is a visible wait over a tunnel. Neither read is
-             * urgent (probes move on a daily-to-weekly TTL), which is exactly what makes them safe to have
-             * early. */
+            // Warms both reads ahead of the click: arrival here is the whole interaction (the tile just lit up).
             warm: () => [choresReportQuery(), choresRunsQuery()],
             view: async () => (await import(`./MaintenanceView.vue`)).default,
         }),
     );
 
-    /* THE PER-REPO SURFACE, opened from the Workspace tree beside whatever else serves that repository. The rail
-     * tile answers "what is this WORKSPACE owed" and is read across repos; this answers the same question about
-     * the repository whose files you are already looking at, which is where it is actually asked, and it is the
-     * same component, with `repo` bound by the host, because the two are one list under two scopes.
-     *
-     * AUXILIARY, so it adds a surface rather than claiming the repo: maintenance renders no preview, and dropping
-     * the dev-server tile beside it would cost the user something for nothing. Same call, and the same reasoning,
-     * as the documentation extension's docs browser.
-     *
-     * No badge here. The rail's badge means "evidence you have not seen anywhere in this workspace", and a second
-     * copy of it per repository in the tree would be the same claim said five times. */
+    // Per-repo view of the same list, opened from the Workspace tree; `repo` is bound by the host. Auxiliary (adds a
+    // surface, doesn't claim the repo) and unbadged: the rail's badge already covers the whole workspace.
     context.subscriptions.push(
         api.views.register({
             id: `maintenance-repo`,

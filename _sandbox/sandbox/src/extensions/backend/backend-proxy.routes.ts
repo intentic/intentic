@@ -2,11 +2,9 @@ import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 
-/* Headers about ONE transport connection cannot cross the extension-backend proxy. The child host speaks
- * HTTP/1.1, whose server adds `Connection: keep-alive` and `Keep-Alive` to every answer; the browser-facing
- * loopback listener speaks HTTP/2, where Node refuses those fields and aborts the response before its body can
- * reach the browser. `Connection` may name additional hop-by-hop fields, so discover those before removing the
- * standard set. Apply the same boundary in both directions: HTTP/1 fallback clients can send them too. */
+// HTTP/1.1 host headers (Connection, Keep-Alive) abort an HTTP/2 response if forwarded untouched; strip both
+// directions.
+// `Connection` may list further hop-by-hop fields, so read it before removing this fixed set.
 const HOP_BY_HOP_HEADERS = [
     "connection",
     "keep-alive",
@@ -33,13 +31,9 @@ const endToEndHeaders = (source: Headers): Headers => {
     return headers;
 };
 
-/* Extension backend namespaces: /x/<id>/* proxied verbatim to the backend host (extensions/backend/).
- * The request has already been through everything above it in app.ts: the boot gate, CORS, and the bearer
- * middleware with its role floor (an unlisted GET floors at viewer, an unlisted mutation at maintainer, the
- * same defaults every unclassified core route gets). What is forwarded is the request MINUS its credentials:
- * the backend acts on the daemon through its own scoped token, and handing it the owner's bearer would
- * quietly re-grant everything the token model just took away. A host mid-restart answers 503 with the
- * supervisor's own words, which is the web's cue to retry rather than to render an error state. */
+// Proxies /x/<id>/* verbatim to the backend host; the request already passed the boot gate, CORS and bearer role floor.
+// Credentials are stripped before forwarding, the backend authenticates only with its own scoped token; 503 during a
+// restart is the client's retry cue.
 export const createBackendProxyRoute =
     (services: Pick<Services, "extensionBackend">) =>
     async (c: Context<AppEnv>): Promise<Response> => {

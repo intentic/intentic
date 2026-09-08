@@ -3,17 +3,12 @@ import { ref, type Ref } from "vue";
 import { SandboxHttpError, sandboxJson } from "../../sandbox/client/sandboxClient";
 import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
 
-/* Hands-free voice input for the composer: the microphone is captured in the page (AudioWorklet, any modern
- * browser), the silence segmenter cuts the stream into utterances (voiceAudio.ts), and each utterance's WAV is
- * transcribed privately by the SANDBOX's whisper (POST /speech/transcribe), audio never leaves the user's own
- * infrastructure, and no browser is excluded the way the old Web Speech path excluded everything un-Googled.
- *
- * Per-call state (each caller gets its own refs and capture chain). The caller supplies the transcript sink;
- * what "send" means, the countdown, Escape, the draft, is the composer's business, not this file's. */
+// Hands-free voice input: the mic is captured in-page (AudioWorklet), the silence segmenter (voiceAudio.ts)
+// cuts the stream into utterances, and each utterance is transcribed by the sandbox's whisper
+// (POST /speech/transcribe); audio never leaves the user's infrastructure. Per-call state; "send" is the composer's
+// business.
 
-// The capture worklet, inlined as a blob module: 128-sample process() blocks are batched to ~2048 before
-// crossing the thread boundary (‾46ms at 44.1kHz: 20 messages/s instead of 375). A string rather than an
-// asset file so a floating window and the dev server load it identically, with no Vite plumbing.
+// Capture worklet, inlined as a blob string so it loads identically in a floating window and the dev server.
 const CAPTURE_WORKLET = `
 class IntenticVoiceCapture extends AudioWorkletProcessor {
     constructor() {
@@ -46,9 +41,8 @@ registerProcessor("intentic-voice-capture", IntenticVoiceCapture);
 
 export type VoiceState = `idle` | `preparing` | `listening`;
 
-// The refusals the composer words for the user. `needs-rebuild` is the image without whisper (the one-time
-// sandbox update); `unavailable` is voice failing to START (a daemon that doesn't answer /speech at all,
-// e.g. one older than this app); `failed` is an utterance lost mid-session; the rest are the microphone's own.
+// `needs-rebuild` is the image without whisper; `unavailable` is voice failing to start (daemon too old for
+// /speech); `failed` is an utterance lost mid-session; the rest are the microphone's own.
 export type VoiceError = `mic-blocked` | `no-mic` | `needs-rebuild` | `unavailable` | `failed`;
 
 interface SpeechStatus {
@@ -57,14 +51,14 @@ interface SpeechStatus {
 }
 
 const STATUS_POLL_MS = 2500;
-// A failed capture leaves its error on-screen; auto-clear it so it doesn't hold composer space forever.
+// Live microphone level (RMS, 0..1), the listening indicator's pulse.
 const ERROR_DISMISS_MS = 8000;
 
 export function useVoiceInput(): {
     state: Ref<VoiceState>;
-    /** Live microphone level (RMS, 0..1), the listening indicator's pulse. */
-    level: Ref<number>;
     /** Utterances transcribing right now, "Transcribing…" while > 0. */
+    level: Ref<number>;
+    /** A failed capture leaves its error on-screen; auto-clear it so it doesn't hold composer space forever. */
     pending: Ref<number>;
     error: Ref<VoiceError | undefined>;
     start(onTranscript: (text: string) => void): void;
@@ -82,8 +76,7 @@ export function useVoiceInput(): {
         dismiss = setTimeout(() => (error.value = undefined), ERROR_DISMISS_MS);
     };
 
-    // The live capture chain, torn down whole by stop(). `generation` invalidates the async arms of a start
-    // (status polls, getUserMedia) that resolve after the user already toggled off.
+    // The live capture chain, torn down by stop(); `generation` invalidates async start arms that resolve late.
     let generation = 0;
     let stream: MediaStream | undefined;
     let context: AudioContext | undefined;
@@ -112,8 +105,7 @@ export function useVoiceInput(): {
         controller = new AbortController();
         const signal = controller.signal;
 
-        // Utterances transcribe strictly one after another: whisper is serialized daemon-side anyway, and
-        // chaining here keeps transcripts arriving in speech order however the network reorders responses.
+        // Utterances transcribe one at a time; chaining keeps transcripts in speech order despite network reordering.
         let chain: Promise<void> = Promise.resolve();
         const transcribe = (samples: Float32Array): void => {
             pending.value += 1;
@@ -138,20 +130,20 @@ export function useVoiceInput(): {
                         teardown();
                         return;
                     }
-                    // A 409 (model download raced us) or any transient failure: the utterance is lost, say so
-                    // once, keep listening, the next pause retries the whole path naturally.
+                    // A 409 (model download raced) or any transient failure: the utterance is lost, say so once, keep
+                    // listening.
                     fail(`failed`);
                 })
                 .finally(() => {
-                    // teardown() already zeroed the count for a stopped session, never step below it.
+                    // teardown() already zeroed the count for a stopped session; never step below it.
                     pending.value = Math.max(0, pending.value - 1);
                 });
         };
 
         void (async () => {
             try {
-                // Whether this sandbox can hear at all, and the first-use model download, which the status
-                // poll both starts and watches ("Preparing voice…" is this loop).
+                // Whether this sandbox can hear at all, and the first-use model download; "Preparing voice…" is this
+                // loop.
                 for (;;) {
                     const status = await sandboxJson<SpeechStatus>(`/speech/status`, { signal });
                     if (!alive()) {
@@ -187,7 +179,7 @@ export function useVoiceInput(): {
                 } finally {
                     URL.revokeObjectURL(workletUrl);
                 }
-                // The mic tap is the user gesture; resume() here is what satisfies the autoplay policy.
+                // The mic tap is the user gesture; resume() here satisfies the autoplay policy.
                 await audio.resume();
                 if (!alive()) {
                     return;
@@ -214,9 +206,8 @@ export function useVoiceInput(): {
                 } else if (name === `NotFoundError` || name === `OverconstrainedError` || name === `NotReadableError`) {
                     fail(`no-mic`);
                 } else if (cause instanceof SandboxHttpError) {
-                    // A daemon refusal during start is about the sandbox, not about anything spoken: 501 is the
-                    // image without whisper; anything else (a 404 from a daemon older than this app) is voice
-                    // simply not being there to start.
+                    // During start, a daemon refusal is about the sandbox: 501 lacks whisper, anything else lacks
+                    // voice.
                     fail(cause.status === 501 ? `needs-rebuild` : `unavailable`);
                 } else {
                     fail(`failed`);

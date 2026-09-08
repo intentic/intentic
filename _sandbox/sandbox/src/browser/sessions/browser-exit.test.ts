@@ -3,14 +3,9 @@ import { expect, test } from "vitest";
 import { boundExitId } from "./browser-exit.js";
 import { profileOwner } from "./session-store.js";
 
-/* WHICH BROWSER GOES WHERE. The rule under test is one sentence with a lot behind it: the exit belongs to
- * whatever owns the Chromium profile, never to an account living inside somebody else's.
- *
- * The reason is not tidiness. An identity's accounts share one profile, cookies and all, so if two of them
- * could name different exits, one signed-in Google session would appear from two countries at once. Sites do
- * not flag "datacenter address" anywhere near as hard as they flag a session that teleports, so the design
- * makes that unexpressible rather than merely discouraged.
- */
+// Exit belongs to whoever owns the Chromium profile, never to an account inside somebody else's: an identity's accounts
+// share one profile, so two exits for two accounts in it would have one signed-in session appear from two countries at
+// once.
 
 const identity = (id: string, exit?: string): Capability =>
     ({ id, kind: "identity", config: { email: `${id}@example.com`, openAccounts: "off", ...(exit === undefined ? {} : { exit }) } }) as Capability;
@@ -24,9 +19,7 @@ test("a standalone account is bound by its own field", () => {
 });
 
 test("an identity's accounts are bound by the identity, not by themselves", () => {
-    /* The account names an exit AND belongs to an identity that names another. profileOwner resolves the
-     * account to the identity, so the identity's exit is the one that applies: the account's own field is not
-     * consulted at all, which is what stops one shared profile straddling two countries. */
+    // Account names one exit, its identity names another; profileOwner resolves to the identity, not the account.
     const capabilities = [identity("work", "osaka"), account("reddit-work", { identity: "work", exit: "berlin" })];
     const owner = profileOwner(capabilities[1] as Capability);
     expect(owner).toBe("work");
@@ -41,8 +34,7 @@ test("an unbound profile resolves to nothing, and browses from the sandbox's own
 });
 
 test("an account's own exit field is inert while it belongs to an identity", () => {
-    // Asked about the ACCOUNT's id directly (which profileOwner would never return for such an account), the
-    // answer is still nothing: the invariant is stated in both directions rather than relied on from one side.
+    // Checks the account's own id directly, which profileOwner never returns for it anyway; stated both ways.
     const capabilities = [identity("work"), account("reddit-work", { identity: "work", exit: "berlin" })];
     expect(boundExitId(capabilities, "reddit-work")).toBeUndefined();
 });

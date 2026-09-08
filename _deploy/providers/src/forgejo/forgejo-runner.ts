@@ -8,10 +8,8 @@ import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
-// image: the pinned act_runner image; jobImage: the pinned image act_runner runs each `runs-on: docker` job
-// in (carries node for the JS actions; the docker CLI + buildx are bind-mounted from the host below). Both
-// are recorded in the desired-state graph, the runner image on the container, the job image inside
-// config.yaml, and read/diff converge on both.
+// image is the act_runner image; jobImage is what each `runs-on: docker` job runs in (docker CLI + buildx are
+// bind-mounted from the host). Both are tracked: the runner image on the container, the job image in config.yaml.
 const runnerSchema = sshSchema.extend({ instanceUrl: z.string(), token: z.string(), image: z.string(), jobImage: z.string() });
 type RunnerInputs = z.infer<typeof runnerSchema>;
 const parse = (inputs: ResolvedInputs): RunnerInputs => parseInputs(runnerSchema, inputs, "forgejo-runner");
@@ -19,10 +17,8 @@ const parse = (inputs: ResolvedInputs): RunnerInputs => parseInputs(runnerSchema
 const CONTAINER = "intentic-forgejo-runner";
 const CONFIG_DIR = `${HOST_STATE_ROOT}/runner`;
 
-// act_runner config so each job container builds with the HOST docker: host networking + the daemon socket
-// auto-mounted (docker_host: automount) + the host's static docker CLI and buildx plugin bind-mounted in, so
-// the CI workflow's docker/* actions push to 127.0.0.1:3000 via the host daemon and the notify step reaches
-// Komodo's host-internal url. dockerBin/buildxPlugin are discovered on the host (paths vary by distro).
+// act_runner config: host networking, the docker socket auto-mounted (docker_host: automount), and the host's
+// static docker CLI + buildx plugin bind-mounted in, so jobs build with the host docker. Paths vary by distro.
 const runnerConfig = (dockerBin: string, buildxPlugin: string, jobImage: string): string =>
     [
         "runner:",
@@ -42,16 +38,15 @@ const running = async (session: SshSession): Promise<boolean> => {
     return result.stdout.trim() === CONTAINER;
 };
 
-// A registered runner writes /data/.runner recording the instance it is bound to. If that file is missing
-// or bound to a different instance (e.g. the forgejo url changed), the runner must re-register.
+// A registered runner writes /data/.runner recording its bound instance; missing or mismatched means it must
+// re-register.
 const registeredTo = async (session: SshSession, instanceUrl: string): Promise<boolean> => {
     const result = await session.exec(`docker exec ${CONTAINER} cat /data/.runner 2>/dev/null || true`);
     return result.stdout.includes(instanceUrl);
 };
 
-// The runner image is the container's create-time reference; the job image lives in config.yaml's label line
-// (it is never a running container the engine can inspect), so it is read back from the host file. diff
-// converges on both.
+// Runner image is the container's create-time reference; job image lives in config.yaml's label line, read back
+// from the host file since it is never a running container to inspect.
 const runningImage = async (session: SshSession): Promise<string> => {
     const result = await session.exec(`docker inspect --format '{{.Config.Image}}' ${CONTAINER} 2>/dev/null || true`);
     return result.stdout.trim();
@@ -63,14 +58,11 @@ const configuredJobImage = async (session: SshSession): Promise<string> => {
     return match?.[1] ?? "";
 };
 
-// The Forgejo Actions runner (act_runner) for a host, registered against the host's Forgejo with the
-// platform's runner token. No outputs (it is a worker). read returns the resource only when the container
-// is up and registered to the desired instance; apply is idempotent, the persistent token lets the same
-// registration repeat safely.
+// Forgejo Actions runner (act_runner) for a host, registered with the platform's runner token; no outputs, it's
+// a worker. `read` returns the resource only when the container is up and registered to the desired instance.
 export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-        // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
+        // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "instanceUrl", "token")) {
             return undefined;
         }
@@ -98,8 +90,8 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             await session.dispose();
         }
     },
-    // Recreate on a runner-image bump or a job-image change (the latter only rewrites config.yaml + restarts
-    // the daemon). The registration in the persistent /data volume survives, so the re-register is a noop.
+    // Recreates on a runner-image bump or job-image change (the latter only rewrites config.yaml + restarts the
+    // daemon); the registration in /data survives, so re-register is a noop.
     diff: (inputs, observed) => {
         const parsed = parse(inputs);
         if (observed.detail?.["image"] !== parsed.image) {
@@ -117,9 +109,7 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
         const parsed = parse(inputs);
         const session = await executor.connect(sshTarget(parsed));
         try {
-            // CI builds the app image with the HOST docker daemon, so each job container needs the docker CLI +
-            // buildx plugin. Both are static binaries, discover them on the host and bind-mount them into jobs
-            // (via the runner config) instead of pulling a multi-GB docker-in-node image.
+            // Jobs need the host's docker CLI + buildx (static binaries), discovered here and bind-mounted in.
             const dockerBin = (await session.exec("command -v docker")).stdout.trim();
             if (dockerBin === "") {
                 throw new Error("forgejo-runner: no docker CLI found on the host (CI builds the app image with the host daemon)");
@@ -136,9 +126,7 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             await session.exec(`cat > ${CONFIG_DIR}/config.yaml <<'CFG'\n${runnerConfig(dockerBin, buildxPlugin, parsed.jobImage)}CFG`);
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             const run = await session.exec(
-                // --user root: the runner executes jobs via the mounted docker socket; its default non-root user
-                // gets "permission denied" on /var/run/docker.sock, so the daemon crash-loops. --config points
-                // both register + daemon at the config that wires the host docker into job containers.
+                // --user root avoids a docker-socket permission crash-loop; --config wires both to the host docker.
                 `docker run -d --restart unless-stopped --network host --user root --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=forgejo-runner --label intentic.hash=${ctx.inputsHash ?? ""} ` +
                     `-v ${CONTAINER}-data:/data -v /var/run/docker.sock:/var/run/docker.sock -v ${CONFIG_DIR}/config.yaml:/config.yaml:ro ${parsed.image} ` +
                     `sh -c "forgejo-runner register --no-interactive --config /config.yaml --instance ${parsed.instanceUrl} --token ${parsed.token} && forgejo-runner daemon --config /config.yaml"`,
@@ -151,7 +139,7 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
             await session.dispose();
         }
     },
-    // Parses only the SSH block, so it works from a removed node's inputs AND a ListedResource's (a host's).
+    // Parses only the SSH block, so it works from a removed node's inputs or a ListedResource's.
     delete: async (inputs) => {
         const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "forgejo-runner")));
         try {

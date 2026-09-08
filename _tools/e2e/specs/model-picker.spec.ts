@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// The unified model picker (T3Chat-style): one searchable list spanning every provider, a provider rail that
-// FILTERS (never switches), harness folded into "via Claude Code" rows, and keyboard-first selection. The
-// daemon endpoints are mocked so the catalogs are deterministic; everything else is the real Vue app, the
-// pill trigger, the Popover host, the picker wiring, and the atomic provider+harness+model selection.
+// Unified model picker: one searchable list across providers, a rail that filters (never switches), harness folded into
+// 'via Claude Code' rows. Catalogs are mocked for determinism; everything else is the real app and picker wiring.
 
 const CLAUDE_CATALOG = {
     models: [
@@ -60,22 +58,18 @@ test("search spans providers and Enter picks the top hit: an atomic cross-provid
     await connectAll(page);
     await openPicker(page);
 
-    // Browse mode groups by provider, every connected provider's catalog is in one list.
     await expect(page.getByRole("option", { name: "Opus 4.6 — current model" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("option", { name: "GPT-5.1", exact: true })).toBeVisible();
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeVisible();
 
-    // The search input is auto-focused on open (desktop). "fast" narrows to the sole label match across all
-    // providers; the other providers' rows drop out. (fill, not type: type races the just-opened popover's
-    // input mount, this asserts the settled search state a real user sees.)
+    // fill, not type: type races the just-opened popover's input mount; this asserts the settled search state.
     await expect(page.getByRole("searchbox")).toBeFocused();
     await page.getByRole("searchbox").fill("fast");
     await expect(page.getByRole("option", { name: "Grok 4 Fast", exact: true })).toBeVisible();
     await expect(page.getByRole("option", { name: "GPT-5.1", exact: true })).toBeHidden();
-    // Enter takes the highlighted top hit (highlight snaps to row 0 on every result change).
+    // Enter takes the highlighted top hit; the highlight snaps to row 0 on every result change.
     await page.keyboard.press("Enter");
 
-    // One keystroke switched provider AND model: the conversation now targets Grok 4 Fast, picker closed.
     await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("Grok 4 Fast", { timeout: 15_000 });
     await expect(page.getByRole("searchbox")).toBeHidden();
 
@@ -88,13 +82,10 @@ test("a 'via Claude Code' row selects the translator harness and surfaces the AP
     await connectAll(page);
     await openPicker(page);
 
-    // The codex group carries the deterministic translator row alongside the native catalog.
     const translatorRow = page.getByRole("option", { name: "GPT-5 Codex via Claude Code" });
     await expect(translatorRow).toBeVisible({ timeout: 15_000 });
     await translatorRow.click();
 
-    // The pick applied provider+harness+model atomically; reopening shows the row as current and the footer
-    // explains the harness's API-key requirement.
     await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("GPT-5 Codex", { timeout: 15_000 });
     await page.getByRole("button", { name: "Provider and model" }).click();
     await expect(page.getByRole("option", { name: "GPT-5 Codex via Claude Code — current model" })).toBeVisible({ timeout: 15_000 });
@@ -110,19 +101,18 @@ test("the rail filters without switching, and the no-results escape widens the s
     await openPicker(page);
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeVisible({ timeout: 15_000 });
 
-    // Scoping to Codex hides the other providers' rows, but does NOT touch the conversation's provider.
+    // Filtering to Codex hides other rows but doesn't touch the conversation's own provider (still Opus 4.6).
     await page.getByRole("radio", { name: "Codex" }).click();
     await expect(page.getByRole("option", { name: "GPT-5.1", exact: true })).toBeVisible();
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("Opus 4.6");
 
-    // A query with no hits inside the scoped provider offers the one-click escape to all providers.
     await page.getByRole("searchbox").fill("grok");
     await expect(page.getByText("No models match.")).toBeVisible();
     await page.getByRole("button", { name: "Search all providers" }).click();
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeVisible();
 
-    // Esc clears the query first (grouped view returns), a second Esc closes the picker.
+    // Esc order matters: first clears the query (grouped view returns), second closes the picker.
     await page.keyboard.press("Escape");
     await expect(page.getByRole("option", { name: "Opus 4.6 — current model" })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -134,17 +124,11 @@ test("the rail filters without switching, and the no-results escape widens the s
     await page.screenshot({ path: "./.cache/model-picker.png", fullPage: true });
 });
 
-/* THE PANEL MUST NEVER COVER THE PILL IT HANGS OFF. The picker is the tallest overlay in the app and its
- * trigger sits a couple of rows off the bottom of the window, so on a short window the panel wants more room
- * than there is above it, and PrimeVue answers that by pinning the overlay to the top of the viewport, which
- * put it straight over the pill. That is unrecoverable from the pointer alone: every click aimed at the pill
- * lands inside the overlay, which is the one click the dismiss logic deliberately ignores, so the picker could
- * not be closed by its own button or by the space around it. The panel is capped to the room it has instead
- * (ChatPanel), and this is the geometry that says so. */
+// On a short window PrimeVue's default overlay pins to the viewport top, covering the pill it hangs off and becoming
+// unclosable by click. The panel is capped to the room it has (ChatPanel) instead.
 test("on a short window the panel fits above the pill instead of covering it", async ({ page }) => {
     const { pageErrors, vueErrors } = collectErrors(page);
-    // Short enough that the picker's natural height (search + list + session footer) exceeds the room above
-    // the composer pill, the state a small laptop window or a popped-out chat window is routinely in.
+    // Short enough that the picker's height exceeds the room above the pill (a small laptop or popped-out window).
     await page.setViewportSize({ width: 1100, height: 520 });
     await connectAll(page);
     await openPicker(page);
@@ -155,13 +139,12 @@ test("on a short window the panel fits above the pill instead of covering it", a
 
     const pillBox = (await pill.boundingBox())!;
     const panelBox = (await panel.boundingBox())!;
-    // Wholly above the pill, and wholly on screen, a panel clipped off the top hides its own search box.
+    // Also checks the top isn't clipped off-screen, which would hide the search box.
     expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(pillBox.y);
     expect(panelBox.y).toBeGreaterThanOrEqual(0);
-    // The list gave way rather than the panel overflowing: rows still scroll inside it.
+    // The list shrinks and scrolls inside the panel, rather than the panel overflowing the window.
     await expect(page.locator("#model-picker-list")).toBeVisible();
 
-    // And so the pill still closes what it opened.
     await pill.click();
     await expect(page.getByRole("searchbox")).toBeHidden();
 

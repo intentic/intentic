@@ -3,14 +3,11 @@ import { Conversation } from "../session/conversation";
 import { clampEffort, effortsFor } from "./effortScale";
 import { providerModels } from "../accounts/providerCatalog";
 
-// Nothing here sends a turn; the stub is only so importing a Conversation doesn't pull the daemon client's
-// environment in behind it.
+// Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client.
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 
-/* The reasoning-effort scale, which belongs to the MODEL and not to the provider: Kimi K2.7 stops at 'high'
- * where K3 runs to 'max', so a pick carried across a model switch is routinely off-scale. Every read of a
- * conversation's effort goes through the clamp, because an off-scale tier both leaves the composer's segments
- * with nothing lit and sends the runtime a level it never published. */
+// Effort scale is a property of the model, not the provider (Kimi K2.7 stops at 'high', K3 at 'max'), so a pick carried
+// across models is routinely off-scale. Every read goes through the clamp.
 describe(`the effort scale`, () => {
     const values = (options: { value: string }[]): string[] => options.map((option) => option.value);
 
@@ -22,9 +19,8 @@ describe(`the effort scale`, () => {
         };
     });
 
-    /* THE TOP RUNG IS WHAT THE CATALOG PUBLISHED, and the only thing that takes it away again is the one pair
-     * Anthropic refuses. Read as "only Claude, and only with thinking on", it went missing from both ends: from
-     * Kimi, whose own rows publish it, and from every run pick, which pins no thinking at all. */
+    // Max is removed only for the one pair Anthropic refuses (Claude, thinking off); any other provider or an unset
+    // thinking keeps it.
     it(`takes Max away only where the API refuses it: Claude with thinking switched off`, () => {
         expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toContain(`max`);
         // The run-button case: nothing pinned the thinking, so nothing has been turned off.
@@ -36,21 +32,17 @@ describe(`the effort scale`, () => {
         expect(values(effortsFor(`kimi`, `kimi-k3`, false))).toEqual([`low`, `high`, `max`]);
     });
 
-    /* A provider that published nothing gets the tiers every runtime accepts, and 'max' is not one of them: it
-     * is a rung a provider has to claim for itself, and putting it in everybody's floor is what left the filter
-     * above having to take it away again.
-     *
-     * Claude's floor is the documented exception and carries it, so a model the live catalog has said nothing
-     * about — a family with no tier alias, or any model read before the catalog answers — is not told that
-     * Anthropic's scale stops at X-High. */
+    // An unpublished provider gets the floor tiers, never 'max': that's a rung a provider must claim itself. Claude's
+    // floor
+    // is the documented exception and keeps it.
     it(`invents no top rung for a provider that has not published one, and keeps Claude's`, () => {
         expect(values(effortsFor(`codex`, `gpt-5-codex`, true))).toEqual([`low`, `medium`, `high`, `xhigh`]);
         expect(values(effortsFor(`grok`, `grok-5`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`]);
         expect(values(effortsFor(`claude`, `claude-unlisted-model`, undefined))).toEqual([`low`, `medium`, `high`, `xhigh`, `max`]);
     });
 
-    // The daemon reports a model's tiers without knowing this turn's thinking setting, so the live list needs
-    // the same filter as the static fallback: otherwise the constraint only holds until a catalog loads.
+    // The daemon's live tier list doesn't know this turn's thinking setting, so it needs the same filter as the static
+    // fallback.
     it(`filters the daemon's live tier list by thinking too`, () => {
         providerModels.value = { ...providerModels.value, claude: [{ label: `Opus 5`, value: `claude-opus-5`, efforts: [`high`, `xhigh`, `max`] }] };
         expect(values(effortsFor(`claude`, `claude-opus-5`, true))).toEqual([`high`, `xhigh`, `max`]);
@@ -64,11 +56,10 @@ describe(`the effort scale`, () => {
     });
 
     it(`drops a pick to the strongest tier the model actually offers`, () => {
-        // The bug this exists for: 'xhigh' carried onto Kimi, whose scale is low/high, lit no segment at all.
+        // 'xhigh' carried onto Kimi's low/high scale would otherwise light no segment.
         expect(clampEffort(`xhigh`, `kimi`, `kimi-k3`, true)).toBe(`high`);
         expect(clampEffort(`medium`, `kimi`, `kimi-k3`, true)).toBe(`low`);
-        // A tier the model publishes rides untouched, K3's own top rung included, and one below its whole scale
-        // takes the weakest.
+        // A tier the model publishes rides untouched, top rung included; one below the whole scale takes the weakest.
         expect(clampEffort(`max`, `kimi`, `kimi-k3`, true)).toBe(`max`);
         expect(clampEffort(`low`, `kimi`, `kimi-k3`, true)).toBe(`low`);
         expect(clampEffort(`minimal`, `kimi`, `kimi-k3`, true)).toBe(`low`);
@@ -81,14 +72,13 @@ describe(`the effort scale`, () => {
         conversation.effortPick.value = `xhigh`;
         expect(conversation.effort.value).toBe(`high`);
 
-        // Back on a model whose scale has it, the user's own pick returns: a smaller model borrows the
-        // selection, it doesn't ratchet it down.
+        // Back on a model whose scale has it, the pick returns: a smaller model borrows it, doesn't ratchet it down.
         conversation.provider.value = `claude`;
         conversation.model.value = `claude-opus-5`;
         expect(conversation.effort.value).toBe(`xhigh`);
     });
 
-    // The catalog arrives AFTER a conversation is seeded, so no setter runs at the moment the scale changes.
+    // The catalog arrives after a conversation is seeded, so no setter runs at the moment the scale changes.
     it(`follows a catalog that loads under a seeded conversation`, () => {
         providerModels.value = { ...providerModels.value, kimi: [] };
         const conversation = new Conversation(`c-late-catalog`);
@@ -102,7 +92,7 @@ describe(`the effort scale`, () => {
         expect(conversation.effort.value).toBe(`high`);
     });
 
-    // 'max' leaves Claude's own scale the moment extended thinking goes off: the API rejects the pair with a 400.
+    // 'max' leaves Claude's scale the moment extended thinking goes off: the API rejects the pair with a 400.
     it(`drops Max when thinking is switched off`, () => {
         const conversation = new Conversation(`c-thinking`);
         conversation.model.value = `claude-opus-5`;

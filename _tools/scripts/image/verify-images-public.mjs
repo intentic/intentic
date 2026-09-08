@@ -1,36 +1,14 @@
 #!/usr/bin/env node
-/* Assert that the images an end user's machine pulls are readable WITHOUT a credential.
- *
- *   node _tools/scripts/image/verify-images-public.mjs
- *   IMAGES="ghcr.io/intentic/sandbox:stable ..." node _tools/scripts/image/verify-images-public.mjs
- *
- * This is the one check in the pipeline that runs credential-free, and it exists because everything else here
- * does not: every job in ci.yml and nightly.yml opens with a `docker login ghcr.io`, so no other job can tell a
- * public package from a private one. That blindness shipped — ghcr.io/intentic/sandbox was published private
- * (GHCR package visibility is separate from repository visibility and defaults to private; see
- * publish-images.sh), CI stayed green throughout, and every `irm https://intentic.dev/connect.ps1 | iex` died at
- * `error from registry: unauthorized` on the first pull. Even nightly's desktop-setup tier, which runs the
- * SHIPPED connect.sh on a clean host, hands its runner login through and so cannot catch this.
- *
- * It asks the registry's token endpoint rather than running `docker pull`: the docker CLI would present
- * whatever login the runner's shared config holds, which is precisely the blindness being fixed. ghcr.io issues
- * an anonymous pull token only for a public package, and the manifest request that follows proves the tag
- * behind it actually exists — a public package with no `stable` in it fails a user's install just as hard.
- *
- * WHY THIS IS JAVASCRIPT. It was a shell script that read the token out of the endpoint's JSON with a `sed`
- * substitution over the response body — a regex against JSON, which is right until the day the field moves or
- * a value carries an escape. Two `fetch` calls and a `.json()` say the same thing and cannot be wrong about
- * it. */
+// Confirms the images an end user pulls are readable without a credential, since every job in ci.yml/nightly.yml runs
+// `docker login` first and so can't tell a public package from a private one. Asks the registry's token endpoint
+// directly, not `docker pull` (which would use the runner's login), and confirms the tag's manifest actually exists.
 
-// Exactly the references the connect scripts pull unauthenticated on a user's machine — `stable` and
-// `core-stable` for the sandbox (release-images.sh moves both on every release), `latest` for the dind-host
-// that the Windows self-host path stands up.
+// What connect scripts pull unauthenticated: sandbox stable/core-stable, dind-host latest (Windows self-host).
 const images = (process.env.IMAGES ?? "ghcr.io/intentic/sandbox:stable ghcr.io/intentic/sandbox:core-stable ghcr.io/intentic/dind-host:latest")
     .split(/\s+/)
     .filter(Boolean);
 
-// The media types a manifest request must declare it accepts, or the registry answers 404 for an image whose
-// manifest is an OCI index — which every multi-arch sandbox tag is.
+// Manifest request needs these accept types, or ghcr answers 404 for a multi-arch (OCI index) image.
 const MANIFEST_TYPES = [
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",

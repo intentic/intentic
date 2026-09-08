@@ -1,36 +1,11 @@
 #!/usr/bin/env node
-/* WHAT THIS DIRECTORY STRUCTURE COSTS THE AGENTS THAT WORK IN IT, mined from the conversations themselves.
- *
- *   node _tools/nav/structure-stats.mjs > _tools/nav/baselines/structure-pre.json
- *   node _tools/nav/structure-stats.mjs --since 2026-09-06 > _tools/nav/baselines/structure-post.json
- *
- * The sibling of bench.mjs, one level up. bench.mjs measures what opening a SYMBOL costs; this measures what
- * FINDING one costs: how many directory listings a session runs, how many of them come back too big to read,
- * which paths agents guess at and miss, how many packages and directories a single piece of work touches, and
- * how long a removed directory name goes on being typed after the rename. Those are the numbers the
- * directory-structure overhaul (docs/audits/directory-structure-audit.md) is judged by, and they can only be had
- * from the transcript corpus — no property of the tree predicts them.
- *
- * WHAT IT READS. `HISTORY_ROOT/transcripts/<conversation>.jsonl` (one line per message; assistant lines carry
- * `tools[]` with `name`, `status`, `target` and `content[]`, with the children of an Agent call inlined) and
- * `HISTORY_ROOT/agents.json` (provider, model, createdAt per conversation). Both are daemon-owned and
- * append-only, so a run over the same window always produces the same file.
- *
- * THE DEFINITIONS ARE THE MEASUREMENT, so they are stated once here and must not drift between a pre- and a
- * post-overhaul run, or the comparison means nothing:
- *
- *   work session   a conversation with at least 3 reads+searches. Chat and one-shot commands are not work.
- *   listing        a Bash/exec command starting with ls, tree, find, fd, rg --files, exa or eza. In raw
- *                  Claude sessions the search tools are not Grep/Glob (zero calls) but Bash running rg, which
- *                  is why every classifier below reads the COMMAND rather than trusting the tool name.
- *   big listing    a listing whose result text exceeds 4,000 characters: a directory too flat to read.
- *   failed read    a Read whose status is failed, or whose short result says the path does not exist. This is
- *                  the direct cost of a name that moved, or of a directory an agent expected and guessed.
- *   stale name     a mention, anywhere in a tool call's target or command, of a name STALE lists as removed.
- *                  Extend STALE at every rename; the point of the metric is how many weeks a dead name lives.
- *
- * `--since <YYYY-MM-DD>` filters by the conversation's createdAt, which is how a window after a landing is
- * isolated from the corpus that predates it. */
+// Measures what FINDING a symbol costs, from transcripts; bench.mjs measures opening one instead.
+// Reads HISTORY_ROOT/transcripts/*.jsonl and agents.json (append-only). Definitions must not drift pre/post-run:
+// - work session: 3+ reads+searches; chat and one-shot commands aren't work.
+// - listing: Bash/exec starting ls/tree/find/fd/rg --files/exa/eza, matched on the command text, not the tool name.
+// - big listing: a listing whose result exceeds 4,000 characters.
+// - failed read: a Read with failed status, or a result saying the path doesn't exist.
+// - stale name: a mention of a name in STALE; extend STALE at every rename.
 import fs from "node:fs";
 import path from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
@@ -43,8 +18,7 @@ const meta = new Map(agents.map((a) => [a.id, a]));
 const dir = path.join(HISTORY_ROOT, "transcripts");
 const files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
 
-// Names this repository no longer has. Extend at every rename: an entry stops being interesting only when its
-// count reaches zero and stays there, which is the whole finding.
+// Names this repo no longer has; extend at every rename, until a name's count stays at zero.
 const STALE = ["_apps", "_libs", "_computers", "intentic-app/", "intentic-dev/", "packages/"];
 
 // A repo-relative path out of an absolute one, whether the session ran in the main checkout or in a worktree.
@@ -52,8 +26,7 @@ const rel = (s) => {
     const m = String(s).match(/(?:\/work\/|\/history\/worktrees\/[^/\s]+\/)intentic\/([A-Za-z0-9_.\-/]+)/);
     return m ? m[1] : null;
 };
-// Every repo path a command mentions: absolute ones, plus bare part-relative ones (`_editor/web/src`), which
-// is how a listing command names its target.
+// Every repo path a command mentions: absolute paths, plus bare partial ones like `_editor/web/src`.
 const pathsIn = (s) =>
     [...String(s).matchAll(/(?:\/work\/|\/history\/worktrees\/[^/\s]+\/)intentic\/([A-Za-z0-9_.\-/]+)/g)]
         .map((m) => m[1])
@@ -88,7 +61,7 @@ const textOf = (t) => (t.content || []).map((c) => String(c.text || "")).join("\
 const failText =
     /(?:does not exist|No such file|ENOENT|not found|No files found|No matches found|no matches|not a directory|Path not found|cannot access|is a directory)/i;
 
-// What the whole corpus adds up to: one session record each, and the cross-session tallies the report ranks.
+// Per-session records, plus the cross-session tallies the report ranks.
 const S = [];
 const listDirs = new Map();
 const bigListings = new Map();
@@ -98,9 +71,8 @@ const dirSessions = new Map();
 const pkgPairs = new Map();
 const staleByDate = {};
 
-/* One tool call's contribution to its session's counters, split from the loop by the four questions it can
- * answer: did it name a dead directory, did it list one, did it search, did it read. A call can be more than
- * one of those (`rg --files _editor/web` is a listing and a search), and each is counted where it belongs. */
+// Splits one tool call's contribution into what it can answer: named a dead directory, listed one, searched, or read; a
+// call may be more than one (e.g., `rg --files` is a listing and a search).
 const countStale = (s, mentioned) => {
     for (const st of STALE) {
         if (mentioned.includes(st)) {
@@ -120,7 +92,7 @@ const countListing = (s, cmd, out) => {
     }
 };
 
-// A read that landed is what the session KNOWS; one that missed is what the structure cost it.
+// A read that landed is what the session knows; one that missed is what the structure cost it.
 const countRead = (s, seen, t, cmd, failed) => {
     s.reads++;
     const rp = t.name === "Read" ? rel(t.target) : pathsIn(cmd)[0] || null;
@@ -229,7 +201,7 @@ for (const f of files) {
     for (const x of s.dirs) {
         dirSessions.set(x, (dirSessions.get(x) || 0) + 1);
     }
-    // Co-read pairs: the vertical slice a piece of work actually is, against the horizontal layers it reads it from.
+    // Co-read package pairs: the vertical slice of work, against the horizontal layers it touches.
     const pr = [...s.pkgs].filter((p) => p.startsWith("_")).sort();
     for (let i = 0; i < pr.length; i++) {
         for (let j = i + 1; j < pr.length; j++) {

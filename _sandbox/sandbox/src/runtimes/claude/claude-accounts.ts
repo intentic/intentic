@@ -4,50 +4,27 @@ import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
 
-/* CLAUDE'S ACCOUNT DOOR (agent/provider-module.ts): subscription OAuth the sandbox owns, the platform never
- * sees. Anthropic's is the one PASTE-BACK flow: the browser shows a code, the user brings it here, and the
- * exchange answers with the account at once. The PKCE verifier used to travel to the browser and back for that;
- * it is held HERE now, by the attempt's state, so nothing redeemable is on the wire at all and an attempt the
- * daemon restarted under is simply one to start again. */
+// Claude's account door (agent/provider-module.ts): subscription OAuth the sandbox owns, never the platform.
+// Anthropic's flow is paste-back: browser shows a code, user brings it here, exchange returns the account. The PKCE
+// verifier stays here, never on the wire.
 
-// An account plus its usage window, when one has been measured. Kept out of the map callback so the account
-// object is never mutated in place, the store hands back a fresh view per call, but it isn't ours to edit.
+// Merges in the usage window when measured; account objects from the store are not mutated in place.
 const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): OauthAccount => (usage === undefined ? account : { ...account, usage });
 
-/* And the row for an account whose organization has switched Claude Code off: the provider's own sentence, said
- * WITHOUT needsReauth. That is the whole distinction, reconnecting is the fix for a dead credential and the one
- * thing that cannot help here, since this account signs in perfectly and publishes headroom the entire time it
- * refuses every turn. Only an admin clears it, so the row says what happened rather than offering a button that
- * would spend a sign-in to arrive back where it started.
- *
- * A revoked credential outranks it: that one IS reconnectable, and it is the older problem of the two. */
+// Row for an account an org has switched off: shows the provider's own sentence without needsReauth, since reconnecting
+// can't fix it. A revoked credential still outranks this, since that one is reconnectable.
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
     seat === undefined || account.needsReauth === true ? account : { ...account, detail: seat.reason };
 
 export type ClaudeAccountDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom">;
 
-/* How long the account list will wait for a fresh plan-limit reading before answering with what is on file.
- *
- * It waits at all because the read is free, no tokens, one round-trip per account, and because a percentage
- * this list cannot back up is worth less than no percentage: these pools are account-wide, so a reading taken
- * at the end of the last turn describes an allowance that the desktop app, another Claude Code or claude.ai
- * itself may have spent since. Waiting is what makes this list say the same thing the provider's own usage
- * dialog says, which is the only standard it can be judged against.
- *
- * And it waits only THIS long because the list is also how the Agent tab learns which accounts exist at all. A
- * quota endpoint having a slow minute must cost the rings their freshness, never the page its connections, so
- * the sweep keeps running past the deadline and lands for the next read. */
+// How long list waits for a fresh plan-limit reading before falling back to what's on file.
 const USAGE_WAIT_MS = 1_500;
 
-/* And how long a FORCED read waits, which is longer for the one reason that changes the arithmetic: somebody is
- * watching a spinner they started. The deadline above is set so a page never pays for a slow quota endpoint;
- * here the read IS what was asked for, so giving up early would answer the question with the stale number the
- * press was doubting. Bounded by the read's own timeout (READ_TIMEOUT_MS, 8s), past that there is nothing left
- * to wait for. */
+// How long a forced read waits (longer: the caller is watching a spinner); bounded by READ_TIMEOUT_MS (8s).
 const FORCED_USAGE_WAIT_MS = 9_000;
 
-// How long a started attempt stays answerable: Anthropic's own code lifetime is shorter, so this only bounds
-// how long a forgotten attempt's verifier is kept.
+// How long a started attempt stays answerable; only bounds how long a forgotten attempt's verifier is kept.
 const LOGIN_WINDOW_MS = 15 * 60_000;
 
 export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
@@ -81,10 +58,9 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
         cancel: (handshake) => {
             pending.delete(handshake);
         },
-        // Each account carries its plan-limit reading, so the picker can show what's left on each without
-        // spending a turn on it, brought up to date first (see USAGE_WAIT_MS), because an account's allowance
-        // moves whether or not this sandbox is the one spending it. Absent only for an account no reading has
-        // ever been obtained for; the UI reads that as unknown, not as empty.
+        // Refreshes plan-limit usage before listing (see USAGE_WAIT_MS), since an account's allowance can move outside
+        // this sandbox. Usage is absent only when no reading has ever been obtained; the UI reads that as unknown, not
+        // empty.
         list: async (force) => {
             await services.headroom.refresh({
                 scope: { providers: ["claude"] },
@@ -101,12 +77,10 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             }
             const renamed = renameAccount(stored, label);
             await services.claudeStore.write(renamed);
-            // The row this replaces on the card carries the seat note, so this one has to as well: a rename is
-            // not the moment to quietly drop the reason an account has been benched.
+            // Rename must carry the seat note too; it replaces the whole row on the card.
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
-        // Forget the credential AND everything filed against it: a reconnect mints a fresh account id, so a
-        // snapshot or a seat refusal left behind here is orphaned for good.
+        // Clears the credential, usage, and seat state; a reconnect mints a new id, so anything left behind orphans.
         disconnect: async (id) => {
             await Promise.all([services.claudeStore.clear(id), services.headroom.clear("claude", id), services.claudeSeats.clear(id)]);
         },

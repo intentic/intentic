@@ -7,9 +7,7 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
 
-// The node test environment has no storage, and this store is one of the two things that keep a draft past the
-// window that wrote it (the other is the tab snapshot). localStorage rather than the session's, deliberately:
-// the words belong to the browser, not to the window whose × dismissed them.
+// No storage in the node test env; stubs localStorage since drafts persist per-browser, not per-window.
 const entries = new Map<string, string>();
 Object.defineProperty(globalThis, `localStorage`, {
     configurable: true,
@@ -51,9 +49,7 @@ describe(`closedDrafts`, () => {
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c2`, `c1`]);
     });
 
-    // The same chat closed twice (reopened, typed in, closed again) is one entry, and it is the LAST thing that
-    // was in the composer: two rows for one conversation would put the same card on the board twice, one of them
-    // offering to restore words the user has already replaced.
+    // Closing the same chat twice keeps one entry: the latest words, not a second stale card on the board.
     it(`replaces the entry for a chat closed a second time`, () => {
         keepClosedDraft(tab(`c1`, `first thought`));
         keepClosedDraft(tab(`c1`, `what I actually meant`));
@@ -69,8 +65,7 @@ describe(`closedDrafts`, () => {
         expect(closedDrafts.value).toEqual([]);
     });
 
-    // One claim for the whole reveal (a Shift-run of cards into panes), and only the chats it names: the rest of
-    // the board's set-aside cards are nobody's business on that press.
+    // One claim covers a whole reveal and only the chats it names; other set-aside cards are untouched.
     it(`claims several at once and leaves the chats the reveal didn't name`, () => {
         keepClosedDraft(tab(`c1`, `first`));
         keepClosedDraft(tab(`c2`, `second`));
@@ -84,15 +79,14 @@ describe(`closedDrafts`, () => {
         keepClosedDraft(tab(`c1`, `still here tomorrow`));
         vi.resetModules();
 
-        // A fresh realm — a reload, another window opening — reading the same origin's storage.
+        // A fresh realm, a reload or another window opening, reading the same origin's storage.
         const { closedDrafts: reloaded } = await import("./closedDrafts");
 
         expect(reloaded.value.map((entry) => entry.draft)).toEqual([`still here tomorrow`]);
     });
 
-    /* Another window's note, which is what makes this work at all while the chat is POPPED OUT: the × is
-     * pressed out there and the board that has to keep the card is in here. A snapshot, never a patch — the
-     * last note wins, the presence rule every channel in this app follows. */
+    // Cross-window note: the × is pressed in the popped-out window, the board keeping the card is here.
+    // A snapshot, never a patch; the last note wins.
     it(`takes the whole set from another window's note`, () => {
         keepClosedDraft(tab(`c1`, `mine`));
 
@@ -101,7 +95,7 @@ describe(`closedDrafts`, () => {
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c2`]);
     });
 
-    // The channel's own guard (chatChannel), read here from this store's side of it.
+    // The channel's own guard filters another sandbox's notes before they reach this store.
     it(`ignores a note about another sandbox's chats`, () => {
         keepClosedDraft(tab(`c1`, `mine`));
 

@@ -5,8 +5,7 @@ import { activate } from "./extension";
 import { bindHost } from "./host";
 import { runningOf, workflowRunsQuery } from "./runsQuery";
 
-// Only the run's state is read here, so the rest of the ledger's shape is deliberately not built out: a fixture
-// carrying a whole workflow graph per row would be testing the schema, which has its own tests.
+// Only `state` is populated; a full workflow graph per row would be testing the schema, not this.
 const run = (state: WorkflowRun[`state`]): WorkflowRun => ({ state }) as WorkflowRun;
 
 const fakeHost = (runs: WorkflowRun[]) => {
@@ -21,9 +20,7 @@ const fakeHost = (runs: WorkflowRun[]) => {
                 paths.push(path);
                 return { runs };
             },
-            // Answers the ENTRY rather than running its queryFn, so the badge cases above can hand it two-field
-            // runs: the parse is the first test's subject, and a fixture carrying a whole graph per row to get
-            // past it would be a schema test wearing a badge test's name.
+            // Returns the entry directly rather than running queryFn, so callers can hand it minimal run fixtures.
             fetch: async <T>(query: HostQuery<T>): Promise<T> => {
                 fetched.push(query);
                 return runs as unknown as T;
@@ -62,7 +59,6 @@ describe(`the run ledger`, () => {
 
     it(`counts what is happening now and nothing that has already ended`, () => {
         expect(runningOf([run(`running`), run(`done`), run(`failed`), run(`stopped`), run(`overspent`), run(`error`), run(`running`)])).toBe(2);
-        // The state this tile spends most of its life in: every design saved, nothing in flight, nothing to say.
         expect(runningOf([run(`done`), run(`failed`)])).toBe(0);
     });
 });
@@ -77,12 +73,7 @@ describe(`the Workflows tile`, () => {
 
         const registered = views[0];
         expect(registered?.id).toBe(`workflows`);
-        // Waiting for the BADGE THIS TEST IS ABOUT rather than for any badge at all: polled separately, the
-        // wait can be satisfied by a first, empty badge and the assertion after it read a value that was
-        // already stale. One expression settles and asserts the same thing.
-        // `neutral`: a run working is an inventory, not a debt. It seats the tile without asking to be cleared.
         await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tone: `neutral`, tooltip: `1 running` }));
-        // The badge and the page read ONE entry: the poll fills what the view then paints from.
         expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
         expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
     });

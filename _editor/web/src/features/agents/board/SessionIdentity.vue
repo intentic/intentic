@@ -3,36 +3,27 @@ import { CopyButton } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 
-/* THE ONE PLACE THE SESSION'S NAME IS SHOWN WHOLE, and in every form anyone pastes it in. Raised from the
- * agent page's chip (a popover on desktop, a sheet on a phone), because that page is where a name is looked UP
- *: the board is where it is glanced at, and glancing wants one gesture, not a menu.
- *
- * Three forms, because the same name is asked for by three different things and only one of them is on screen
- * anywhere today:
- *   - the ID is what the worktree is called and what the CLI takes,
- *   - the BRANCH is what git takes,
- *   - the LINK is how the agent is opened in another window, or on the phone in your hand.
- * Spelling all three out beats a single value plus a rule the reader has to remember ("drop the agent/ off the
- * front"), and it is what makes the copy honest: what you press is beside the exact text it hands over.
- *
- * The values stay selectable text rather than becoming buttons themselves: a row you can drag a caret through
- * is the escape hatch for the half of a name someone actually wants, and nesting a copy button inside a copy
- * target would make the row answer one press two ways. */
+// The one place the session's name is shown whole, in every form it's pasted as; raised from the agent page's chip, not
+// the board, since this is where a name is looked up rather than glanced at.
+// Three forms since three different tools want different ones (id for the worktree/CLI, branch for git, link to open
+// the agent elsewhere); spelling all three out avoids a rule to remember.
+// Values stay selectable text, not buttons themselves, so dragging a caret through a name still works and a copy button
+// isn't nested inside a copy target.
 
 const { agentId, branch } = defineProps<{ agentId: string; branch: string }>();
 
 const router = useRouter();
-// Through the router, so the app's own base path is part of the link rather than something the reader has to
-// add back. Same origin the user is already on, which is the sandbox this agent lives in.
+// Through the router, so the app's base path rides in the link, not left for the reader to add.
 const link = computed(() => `${globalThis.location.origin}${router.resolve({ name: `agent`, params: { id: agentId } }).href}`);
 
 const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
 </script>
 
 <template>
-    <!-- No hover labels down this column. Each row already reads "<what it is> <the value> [copy]", so a hint
-         on the button could only repeat the label six pixels to its left, and three of them stacked is a
-         column that pops a box wherever the pointer rests on its way to the one you want. -->
+    <!--
+        No hover labels down this column: each row already reads its label and value, so a hint would only repeat it
+        and pop boxes along the way to the one wanted.
+    -->
     <div class="flex flex-col p-1">
         <div :class="ROW">
             <span class="w-16 shrink-0 pt-px text-2xs text-subtle">Session id</span>
@@ -49,8 +40,10 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ link }}</span>
             <CopyButton :text="link" aria-label="Copy a link to this agent" />
         </div>
-        <!-- The reason the id is worth carrying anywhere: it is also what brings you back. Said once, here,
-             rather than as a hint on every surface that prints the name. -->
+        <!--
+            The id is also what brings you back, via Quick Open.
+            Said once here, not repeated as a hint on every surface that prints the name.
+        -->
         <p class="px-2.5 pb-1 pt-1.5 text-2xs text-subtle">Paste the id into Quick Open to come back to this agent from anywhere.</p>
     </div>
 </template>

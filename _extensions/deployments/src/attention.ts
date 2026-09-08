@@ -4,40 +4,14 @@ import { sandboxPoll, sandboxValue } from "@intentic/extension-api";
 import { incidents, incidentTooltip, topTier, unseenIncidents } from "./incidents";
 import { host } from "./host";
 
-/* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updated while
- * you were already looking at Deployments could never tell you anything you did not know (background.ts).
- *
- * Polled PER CONNECTION, because a sandbox can hold two Komodo capabilities and each is its own rail tile.
- * Which connections exist is not this module's question: the host calls detect() on every facts poll and hands
- * each activation's key straight back to badge(), so this only has to keep a map and fill it. */
+// Rail badge source: module state owned by activate(), not the view, so it updates even while nobody is looking at
+// Deployments. Polled per connection, since a sandbox can hold multiple Komodo capabilities, each its own rail tile.
+// Which connections exist isn't this module's concern: the host's detect() call hands each key straight to badge().
 
-/* Which capabilities to poll. Written by detect() on every facts poll, so a connection added or removed in
- * /capabilities starts or stops being watched without a reload. Sandbox-scoped and so emptied on a switch: a
- * Komodo capability belongs to the box it is configured in, so the first poll after a switch has to ask about
- * this box's connections rather than the last box's.
- *
- * NOT a `sandboxRef`, and this is the one place in the extension where that distinction bites. Nothing renders
- * this list, it is the poller's note to itself about what to ask, while `detect()`, its only writer, runs
- * inside the host's render computed. A reactive ref here is therefore a computed that reads and writes the
- * same cell on every pass, and since detect() hands over a freshly mapped array each time, the write always
- * counts as a change: the rail re-runs itself until Vue gives up on the frame and drops every update queued
- * behind it. See sandboxValue in extension-api/scope.ts. */
+// Not a sandboxRef: written from inside the render computed, so a reactive ref here would self-loop.
 const watched = sandboxValue<readonly string[]>(() => []);
 
-/* A TIMER BECAUSE THERE IS NOTHING TO PUSH, the same reason ciAttention keeps one: the subject is a Komodo
- * server's API, not a workspace file, so no watcher can notice it and the interval is the whole feed rather than
- * the backstop it is for a file-derived badge (background.ts).
- *
- * Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
- * the minute is timely, and the view's own faster polling is what serves someone actually watching.
- *
- * NO OPENING READ (`immediate: false`), unlike every other badge here: at activation this knows of no
- * connections, so the first read would be a round of nothing. `watchConnections` below is what starts it, at
- * the moment there is something to ask.
- *
- * The round ACCUMULATES onto what it already holds, which is why it takes `previous`: one unreachable Komodo
- * must leave the others' boards standing, and its OWN last known board too. A flapping tile is worse than a
- * slightly stale one, and "we could not ask" is not "nothing is wrong". */
+// Accumulates onto `previous`: one unreachable Komodo must not clear another's last-known board.
 const {
     state: boards,
     start: startDeployAttention,
@@ -53,7 +27,7 @@ const {
             try {
                 next.set(capability, DeployOverviewResponseSchema.parse(await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability}/overview`)));
             } catch {
-                // See above: this connection keeps whatever board it had.
+                // Failed fetch: this connection keeps its last known board.
             }
         }
         return next;
@@ -62,26 +36,19 @@ const {
 
 export { startDeployAttention };
 
-// Called from detect(), the host's own per-facts-poll callback, which is the only place that knows which
-// Komodo capabilities are currently connected.
+// Called from detect(), the host's per-facts-poll callback; the only place that knows which Komodo capabilities are
+// connected.
 export const watchConnections = (capabilities: readonly string[]): void => {
     const added = capabilities.filter((capability) => !watched.value.includes(capability));
     watched.value = capabilities;
-    // A newly connected Komodo should badge on its first render, not a minute later.
+    // A newly connected Komodo should badge immediately, not after a full poll interval.
     if (added.length > 0) {
         refresh();
     }
 };
 
-/* What the tile says. Read inside the host's render computed, touching `boards` here is what repaints it.
- *
- * UNREACHABLE IS NOT BROKEN. A Komodo we cannot talk to gets a `warning` mark and no count: one fact, one
- * click, and the amount goes in the tooltip (the ViewBadge.mark case). It is emphatically not `danger`,
- * reading a network blip as "production is down" is how a rail earns its colour back into meaninglessness,
- * and the whole value of `danger` here is that only one other tile in the app claims it.
- *
- * It is still SEEN-GATED like everything else: once you have opened the view and read "cannot reach Komodo",
- * you know, and the rail stops saying it. */
+// Unreachable gets a `warning` mark, never `danger`: a network blip reading as "production is down" would burn the
+// rail's one truly urgent colour. Seen-gated like everything else, so it stops once the view has been opened.
 export const deployBadge = (capability: string): ViewBadge | undefined => {
     const board = boards.value.get(capability);
     if (board === undefined) {
@@ -97,8 +64,8 @@ export const deployBadge = (capability: string): ViewBadge | undefined => {
     return { count: unseen.length, tone: unseen[0]?.tone ?? `info`, tooltip: incidentTooltip(unseen) };
 };
 
-// Called when a connection's view is opened. Stamps read state daemon-side and folds the answer straight into
-// the local board, so the badge clears on the spot instead of at the next poll.
+// Stamps read state daemon-side and folds the answer into the local board, so the badge clears immediately instead of
+// at the next poll.
 export const markDeploymentsSeen = async (capability: string): Promise<void> => {
     try {
         const api = host();
@@ -113,7 +80,6 @@ export const markDeploymentsSeen = async (capability: string): Promise<void> => 
             boards.value = new Map(boards.value).set(capability, { ...board, seenAt });
         }
     } catch {
-        // Best-effort, like markPipelinesSeen: a failed write only means the badge returns on the next poll,
-        // a far smaller harm than an error surfacing for background bookkeeping.
+        // Best-effort: a failed write only means the badge returns on the next poll.
     }
 };

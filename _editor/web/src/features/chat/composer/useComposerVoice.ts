@@ -1,18 +1,9 @@
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref } from "vue";
 import { useVoiceInput, type VoiceError, type VoiceState } from "./useVoiceInput";
 
-/* HANDS-FREE VOICE, AS THE COMPOSER MEANS IT. One mic tap arms it; from there the gesture is speech itself:
- * talk, and the pause is the send.
- *
- * The capture and the transcription are useVoiceInput's (sandbox-side whisper, every browser, and audio never
- * leaves the user's infrastructure). What lives HERE is the half that is about a composer rather than a
- * microphone: what "send" means, the glance-window before it happens, the words for each state, and the rule
- * that the mic never records where nobody is looking.
- *
- * The mode STAYS ON between turns, because a conversation is the point of hands-free, until the mic is tapped
- * again, the user starts typing, or the pane stops being the one they are working in. The pane owns that last
- * one (its conversation and its focus both move under it) and says so by calling `quit`; leaving the page at all
- * is handled here, because a mic outliving its composer is never right. */
+// Composer-side half of hands-free voice: one mic tap arms it, and an utterance's pause is the send. Capture
+// and transcription live in useVoiceInput; this file owns the send rule, the glance window, and the state words.
+// Stays armed across turns until the mic is tapped again, typing starts, or the owner calls `quit`.
 
 export interface ComposerVoice {
     readonly state: Ref<VoiceState>;
@@ -26,7 +17,7 @@ export interface ComposerVoice {
     readonly live: ComputedRef<boolean>;
     /** The mic button's tooltip. */
     readonly buttonHint: ComputedRef<string>;
-    /** What the composer's one hint slot says while voice is doing something, or nothing when it isn't. */
+    /** The composer's one hint slot while voice is doing something, or nothing when it isn't. */
     readonly slotHint: ComputedRef<string | undefined>;
     /** The capture's failure, in the user's words. */
     readonly errorMessage: ComputedRef<string | undefined>;
@@ -34,8 +25,7 @@ export interface ComposerVoice {
     readonly quit: () => void;
 }
 
-// The glance-window between the words appearing and the message going. A countdown, not a confirmation: the
-// default is that speaking sends, and this is only how long the catch stays possible.
+// The glance window between words appearing and the message going: a countdown, not a confirmation.
 const VOICE_SEND_DELAY_MS = 1200;
 
 const BUTTON_HINT: Record<VoiceState, string> = {
@@ -44,15 +34,14 @@ const BUTTON_HINT: Record<VoiceState, string> = {
     idle: `Talk hands-free, pause to send, tap again to stop`,
 };
 
-// The hint slot is shared with the turn's own shortcuts, so an idle mic says nothing and yields it back.
+// Shared with the turn's own shortcuts, so an idle mic yields it back.
 const SLOT_HINT: Record<VoiceState, string | undefined> = {
     preparing: `Preparing voice (first use)…`,
     listening: `Listening, pause to send, Esc to stop`,
     idle: undefined,
 };
 
-// `needs-rebuild` is the one with an errand attached: the image predates the whisper pack, and the Environment
-// card's rebuild is what adds it.
+// `needs-rebuild` means the image predates the whisper pack; the Environment card's rebuild adds it.
 const ERROR_LINE: Record<VoiceError, string> = {
     "mic-blocked": `Microphone access is blocked. Allow it in your browser's site settings, then try again.`,
     "no-mic": `No microphone was found.`,
@@ -62,7 +51,7 @@ const ERROR_LINE: Record<VoiceError, string> = {
 };
 
 export const useComposerVoice = (composer: {
-    /** The box the words land in, an utterance joins whatever is already there. */
+    /** The box the words land in; an utterance joins whatever is already there. */
     readonly draft: Ref<string>;
     /** No daemon, no transcription: the tap does nothing rather than failing halfway. */
     readonly reachable: Ref<boolean>;
@@ -81,9 +70,8 @@ export const useComposerVoice = (composer: {
         armed.value = false;
     };
 
-    // An utterance's words join whatever the box already holds (a typed half-sentence stays the user's), then
-    // the countdown re-arms, a second utterance inside the glance window extends the message rather than
-    // racing it.
+    // An utterance joins whatever the box already holds, then the countdown re-arms: a second utterance inside
+    // the glance window extends the message rather than racing it.
     const heard = (text: string): void => {
         disarm();
         const base = composer.draft.value.trim();
@@ -104,7 +92,7 @@ export const useComposerVoice = (composer: {
         disarm();
     };
 
-    // A mic left running in a torn-down pane records where nobody is looking, for the rest of the session.
+    // A mic left running in a torn-down pane keeps recording; tear it down on unmount.
     onBeforeUnmount(quit);
 
     return {
@@ -114,8 +102,7 @@ export const useComposerVoice = (composer: {
         armed,
         live: computed(() => on.value || armed.value),
         buttonHint: computed(() => BUTTON_HINT[state.value]),
-        /* Armed-send first (the narrowest window), then transcription, then the two working states. Each of
-         * these is the only place the user learns what the mode is doing right now. */
+        // Armed-send first (narrowest window), then transcription, then the two working states.
         slotHint: computed(() => {
             if (armed.value) {
                 return `Sending: Esc to edit`;

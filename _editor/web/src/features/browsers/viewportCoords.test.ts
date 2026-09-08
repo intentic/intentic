@@ -5,7 +5,7 @@ import { pictureRect, viewportCoords } from "./viewportCoords";
 const WIDTH = 1280;
 const HEIGHT = 800;
 
-// A pane, and a click at a point inside it. Only the four fields the rule reads are stubbed.
+// A pane and a click inside it; only the four fields the rule reads are stubbed.
 const at = (box: { left: number; top: number; width: number; height: number }, clientX: number, clientY: number) => {
     const element = { getBoundingClientRect: () => ({ ...box, right: box.left + box.width, bottom: box.top + box.height }) } as HTMLElement;
     return viewportCoords({ clientX, clientY } as MouseEvent, element, WIDTH, HEIGHT);
@@ -18,10 +18,9 @@ test("a pane of the remote shape maps one-for-one", () => {
     expect(at(box, WIDTH, HEIGHT)).toEqual({ x: WIDTH, y: HEIGHT });
 });
 
-/* THE BUG THIS RULE EXISTS FOR. The frame is object-contain'd, so in a pane wider than 8:5 it paints in a
- * centred column with black either side, and measuring the PANE instead of that column drags every x toward
- * the middle. Here the picture occupies 1280 of a 2560-wide pane: a click 640px in is its left edge, which the
- * old rule (clientX / paneWidth * 1280) called x=320, a third of the way into the page. */
+// The frame is object-contain'd, so a wide pane letterboxes; measuring the pane instead of the picture drags x
+// toward the middle. Here a 640px click on a 2560-wide pane is the picture's own left edge (x=0), not the old
+// rule's x=320.
 test("a pane wider than the remote shape measures the picture, not the letterbox", () => {
     const box = { left: 0, top: 0, width: 2560, height: HEIGHT };
     expect(at(box, 640, 0)).toEqual({ x: 0, y: 0 });
@@ -36,7 +35,7 @@ test("a pane taller than the remote shape letterboxes the other way", () => {
 });
 
 test("the pane's own offset on the page is subtracted", () => {
-    // Scrolled down, sitting beside a rail: the same click is the same page coordinate.
+    // Scrolled down, sitting beside a rail: the same click is still the same page coordinate.
     expect(at({ left: 240, top: 96, width: WIDTH, height: HEIGHT }, 240 + 100, 96 + 50)).toEqual({ x: 100, y: 50 });
 });
 
@@ -55,7 +54,7 @@ test("a pane with no area yet maps to the origin rather than dividing by zero", 
     expect(at({ left: 0, top: 0, width: 0, height: 0 }, 10, 10)).toEqual({ x: 0, y: 0 });
 });
 
-// The same pane, asked the other question: where on it does something the remote page reported get painted?
+// The same pane, asked the reverse question: where does something the remote page reported get painted?
 const placed = (box: { left: number; top: number; width: number; height: number }, rect: { x: number; y: number; width: number; height: number }) =>
     pictureRect(
         { getBoundingClientRect: () => ({ ...box, right: box.left + box.width, bottom: box.top + box.height }) } as HTMLElement,
@@ -64,9 +63,8 @@ const placed = (box: { left: number; top: number; width: number; height: number 
         rect,
     );
 
-/* WHERE THE DROP-DOWN MENU GOES. A <select> is reported in the page's own coordinates and the menu has to open
- * over it, so this is viewportCoords run backwards, and it has to letterbox identically or the menu drifts off
- * the control that opened it, by exactly the half-letterbox the forward rule exists to subtract. */
+// A <select> reports its own page coordinates; the menu has to open over it, so this runs viewportCoords backwards
+// and must letterbox identically, or the menu drifts off the control by exactly the half-letterbox gap.
 test("a rect from the page lands on the picture, letterbox and all", () => {
     // One-for-one pane: the control is where it says it is.
     expect(placed({ left: 0, top: 0, width: WIDTH, height: HEIGHT }, { x: 100, y: 60, width: 200, height: 40 })).toEqual({
@@ -91,8 +89,8 @@ test("a rect from the page lands on the picture, letterbox and all", () => {
     });
 });
 
-/* The round trip, which is the property that actually matters: click a control, and the menu drawn from what
- * the page reports about it must come back to the pixels that were clicked. */
+// The property that actually matters: click a control, and the menu drawn from what the page reports about it must
+// land back on the pixels that were clicked.
 test("a click and the rect it lands in agree with each other", () => {
     const box = { left: 240, top: 96, width: 1920, height: 1000 };
     const control = { x: 400, y: 300, width: 160, height: 32 };

@@ -3,19 +3,11 @@ import { z } from "zod";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import { ModelsSchema } from "../schemas/provider-oauth.js";
 
-// An `endpoint` capability's picker catalog, the models the configured server itself publishes, read from its
-// own /v1/models. Every other provider's catalog is one fixed route because there is one of each; endpoints are
-// user-created and unbounded, so the id rides in the path. There is no seed floor and no static list: what a
-// model API serves is knowable only by asking it, and an empty answer is the honest report that we could not.
+// Endpoints are user-created and unbounded (unlike every other provider, which has one fixed catalog route), so the id
+// rides in the path.
 
-/* The free trial's remaining allowance, on the endpoints contract because the trial IS an endpoint, the one
- * the daemon provisions rather than the user (agent-catalog.ts TRIAL_ENDPOINT_ID). It is a separate read from
- * the catalog above because it answers a different question and changes on a different clock: the model list is
- * a property of the upstream, while this is a property of the ACCOUNT and moves with every message sent.
- *
- * `available` false is the ordinary answer, not an error: most sandboxes run against a platform that serves no
- * trial, and the picker simply has no trial row to badge.
- */
+// The trial is an endpoint the daemon provisions rather than the user (TRIAL_ENDPOINT_ID); a separate read since
+// this is a property of the account, moving with every message, not of the upstream model list.
 const TrialHealthSchema = z.enum(["unknown", "healthy", "degraded", "unavailable"]);
 export type TrialHealth = z.infer<typeof TrialHealthSchema>;
 
@@ -30,16 +22,7 @@ export const TrialStatusSchema = z.object({
     resetsAt: z.string().optional(),
     // Earliest known time a quarantined upstream key can be tried again.
     retryAt: z.string().optional(),
-    /* THE REAL MODEL BEHIND THE TRIAL'S ONE PUBLISHED ID, on this account's most recent message.
-     *
-     * The trial routes per message across a ladder of models (the platform's trial-ladder.ts), so the id the
-     * user selected names the trial rather than what answered them. Telling them which model ran is what keeps
-     * that from being a black box: an answer that reads as weak has a visible cause, and a bug report can name
-     * the model instead of guessing at one.
-     *
-     * It arrives on the STATUS poll rather than in the turn's own stream because the translator sits between the
-     * platform and this daemon and does not forward response headers. The client refreshes this when a trial
-     * turn ends, so in practice it is the model that served the turn just finished. Absent until one has been. */
+    // The real model that served the last trial message; the published id only names the trial ladder.
     servedModel: z.string().optional(),
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;

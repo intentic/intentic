@@ -35,10 +35,8 @@ test("toolCategoryOf categorizes builtin names case-insensitively", () => {
     expect(toolCategoryOf("mystery")).toBe("other");
 });
 
-/* THE CATEGORY ALONE CANNOT ANSWER "was this a search", and the search-teaching experiment is judged on the
- * answer. This workspace's own search tool is a CLI: `iq q "…"` is Bash, which categorizes as `execute`, so
- * counting the `search` category would miss every search on a sandbox with iq switched on, which is the sandbox
- * the teaching is being measured against. */
+// Category alone can't answer whether a call searched: this workspace's search tool is a CLI (`iq q ...`), which
+// categorizes as `execute`.
 test("isSearchCall counts the CLI searches the category misses, and leaves shell plumbing alone", () => {
     expect(isSearchCall({ category: "search", target: "createServer" })).toBe(true);
     expect(isSearchCall({ category: "execute", target: `iq q "where is the floor enforced"` })).toBe(true);
@@ -54,10 +52,8 @@ test("isSearchCall counts the CLI searches the category misses, and leaves shell
     expect(isSearchCall({ category: "read", target: "src/index.ts" })).toBe(false);
 });
 
-/* THE LISTING THE PROJECT MAP CLAIMS TO REPLACE, and the line it draws is depth: a listing of the root or of
- * one directory below it is a turn working out what the project is, and a listing three levels down is a turn
- * looking into somewhere it has already chosen. The map answers the first and says nothing about the second,
- * so counting both would report a mechanism against work it never touches. */
+// The line is depth: a listing of the root or one level down is orientation; three levels down is looking at something
+// already chosen.
 test("isRootListing counts the orientation listings and leaves the ones that are work alone", () => {
     expect(isRootListing({ category: "execute", target: "ls" }, CWD)).toBe(true);
     expect(isRootListing({ category: "execute", target: "ls -la" }, CWD)).toBe(true);
@@ -66,7 +62,7 @@ test("isRootListing counts the orientation listings and leaves the ones that are
     expect(isRootListing({ category: "execute", target: "tree intentic/" }, CWD)).toBe(true);
     // A filter behind a pipe belongs to the filter, not to the listing.
     expect(isRootListing({ category: "execute", target: "ls | head -30" }, CWD)).toBe(true);
-    // …and a compound command is read statement by statement, like every other predicate here.
+    // A compound command is read statement by statement, like every predicate here.
     expect(isRootListing({ category: "execute", target: `cd ${CWD} && ls docs` }, CWD)).toBe(true);
 
     expect(isRootListing({ category: "execute", target: `ls ${CWD}/intentic/_sandbox/sandbox/src` }, CWD)).toBe(false);
@@ -105,8 +101,6 @@ test("toolCategoryOf categorizes MCP names by their tool segment's trailing verb
     expect(toolCategoryOf("mcp__voice__join_call")).toBe("other");
 });
 
-// Every browser tool used to fall through the suffix rule to "other" and draw the generic cog: a turn spent
-// clicking through the user's own app read as a column of identical grey rows.
 test("browser tools read as going somewhere, doing something, or looking at the result", () => {
     expect(displayNameOf("mcp__web__browser_navigate")).toBe("Browser navigate");
     expect(displayNameOf("mcp__reddit__browser_click")).toBe("Browser click");
@@ -151,15 +145,13 @@ test("toolLocations omits paths escaping the workspace (the routes can't address
     expect(toolLocations({ command: "ls" }, CWD)).toBeUndefined();
 });
 
-/* A `~/.claude/…` path LOOKS like an escape and is not: those stores are symlinked onto the workspace volume
- * (sessions/session-store.ts), so the plan the CLI just wrote is an ordinary workspace file the card can open.
- * Without this the commonest document an agent produces was the one thing the chat could not link to. */
+// A `~/.claude/...` path looks like an escape and is not: those stores are symlinked onto the workspace volume, so the
+// CLI's plan is an ordinary workspace file the card can open.
 test("toolLocations resolves the SDK's own stores onto the workspace they are linked into", () => {
     expect(toolLocations({ file_path: `${homedir()}/.claude/plans/wiggly-spring.md` }, CWD)).toEqual([
         { path: ".intentic/records/sessions/claude/plans/wiggly-spring.md" },
     ]);
-    // Not every ~/.claude entry is linked: skills and settings are image-baked and container-local, and
-    // pointing them at a workspace path nothing writes would be a link to a file that isn't there.
+    // Not every ~/.claude entry is linked: skills and settings are image-baked and container-local.
     expect(toolLocations({ file_path: `${homedir()}/.claude/skills/iq/SKILL.md` }, CWD)).toBeUndefined();
     expect(toolLocations({ file_path: `${homedir()}/.claude/settings.json` }, CWD)).toBeUndefined();
 });

@@ -1,12 +1,7 @@
-/* Single source of truth for the Shiki grammars the app ships. Split out from useHighlighter so the web
- * app's vite.config can derive its optimizeDeps.include from the same list without pulling in shiki/core.
- *
- * The import specifiers MUST stay literal. Vite reads them at build time to know which grammar chunks to
- * emit, so the map can't be generated from data. */
+// Source of truth for Shiki grammars the app ships; vite.config's optimizeDeps.include derives from this list. Import
+// specifiers must stay literal since vite resolves them at build time, not from data.
 
-// Lazily-importable grammars, keyed by Shiki language id, only the ones actually rendered ship in the
-// bundle. The workspace file viewer maps a file's extension to one of these ids (see fileType.ts); add a
-// row here and an extension mapping there to cover a new language. Callers stay untouched.
+// Lazily-imported grammars keyed by Shiki lang id; only actually-rendered ones ship in the bundle.
 export const LANGS = {
     bash: () => import(`@shikijs/langs/bash`),
     powershell: () => import(`@shikijs/langs/powershell`),
@@ -50,23 +45,15 @@ export const LANGS = {
     log: () => import(`@shikijs/langs/log`),
 } satisfies Record<string, () => Promise<unknown>>;
 
-/* The ids above, as a type. Every surface that NAMES a grammar itself, a <Code lang>, the file viewer's
- * extension table, a markdown fence alias, is typed with this, so a name we ship no grammar for stops
- * compiling. It used to cost nothing at build time and render the block as plain grey text at runtime, which
- * is indistinguishable from "this language has no colours": `lang="dockerfile"` sat in the sandbox's
- * Environment card that way, next to a diff of the same file that WAS coloured (the id is `docker`). */
+// Ids above, typed: naming an id with no shipped grammar (a markdown fence, a file-viewer entry) fails to compile
+// instead of rendering as plain text.
 export type ShikiLang = keyof typeof LANGS;
 
-/* The loader for an id that came from OUTSIDE, a markdown fence's info string is whatever its writer typed,
- * so an arbitrary string has to be a legal question with `undefined` for an answer. A Map, so asking it one
- * needs no cast. Surfaces that pick their own id use ShikiLang instead and are checked. */
+// Loader for an untrusted external id (a markdown fence's info string); unknown ids return undefined.
 const loaders: ReadonlyMap<string, () => Promise<unknown>> = new Map(Object.entries(LANGS));
 export const langLoader = (lang: string): (() => Promise<unknown>) | undefined => loaders.get(lang);
 
-// The @shikijs/langs packages Vite must pre-bundle (see the web app's vite.config optimizeDeps.include):
-// every grammar except the local gitignore one. Derived from LANGS so it can't drift. Without pre-bundling,
-// the dev optimizer serves 504 for each dynamically-imported grammar chunk and <Code> falls back to plain
-// text.
+// Grammar packages vite.config must pre-bundle (optimizeDeps.include), derived from LANGS so it can't drift.
 export const shikiLangDeps = Object.keys(LANGS)
     .filter((id) => id !== `gitignore`)
     .map((id) => `@shikijs/langs/${id}`);

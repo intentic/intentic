@@ -7,32 +7,16 @@ import {
 } from "@intentic/sandbox-contract";
 import { jsonFile } from "../store/json-file.js";
 
-/* THE RUNTIME-INSTALL LEDGER: which tools sessions installed into the container at runtime, and how often.
- *
- * Anything installed outside /work dies with the container, and the model was never going to be the reliable
- * reporter of that: transcript mining found cargo-xwin reinstalled in six sessions and a Windows rustup target
- * in eight, each time by an agent that had been told, in-context, to also draft an overlay step. So the ledger
- * is written by the HARNESS — the install-steering hook classifies the command and records it here without a
- * word to the model — and read by the drift sweep, which joins it with what the live container actually has
- * and drafts the overlay step itself (auto-drafts.ts).
- *
- * The file lives under /work and so SURVIVES container recreates, which is what makes recurrence observable:
- * "installed again in a fresh container" is precisely the evidence that a tool belongs in the image, and no
- * single container can ever witness it. Sessions are the unit of recurrence, not commands — a session that
- * retries an install five times needed the tool once.
- *
- * The drift snapshot rides in the same file so a daemon restart does not blank the Environment card until the
- * next sweep; it is machine-scoped where the ledger is workspace-scoped, and every reader guards on its bornAt
- * matching the running container (drift.ts) rather than trusting persistence to mean truth. */
+// Ledger of tools installed into the container at runtime, written by the harness (the install-steering hook), not the
+// model. Lives under /work so it survives container recreates; recurrence counts per session, not per command. Carries
+// the drift snapshot too, machine-scoped where the ledger is workspace-scoped.
 
-// Distinct sessions kept per tool. Recurrence gates on ≥ 2; eight is enough to say "constantly" on the card
-// without the file growing with every conversation this workspace ever runs.
+// Distinct sessions kept per tool; recurrence needs ≥ 2, and eight is enough to call it constant.
 const SESSIONS_KEPT = 8;
-// Recent commands kept per tool, provenance for the draft's comment, not a history.
+// Recent commands kept per tool, for the draft's comment only.
 const COMMANDS_KEPT = 3;
 const COMMAND_MAX_LENGTH = 240;
-// Tools kept overall; past this the entry silent longest is dropped. Far above any real workspace — the point
-// is that a pathological classifier cannot grow the file without bound, not that eviction ever happens.
+// Max tools kept; the oldest entry is evicted past this, bounding a runaway classifier.
 const TOOLS_KEPT = 200;
 
 export interface ClassifiedInstall {
@@ -42,16 +26,11 @@ export interface ClassifiedInstall {
 
 export interface RuntimeInstallsStore {
     readonly read: () => Promise<RuntimeInstallsFile>;
-    // One command's worth of classified installs, merged by (kind, tool). `session` absent (a turn with no
-    // conversation id) still counts the command and stamps the time, it just cannot add to recurrence.
+    // Merges one command's installs by (kind, tool); a missing `session` still records but can't add recurrence.
     readonly record: (installs: readonly ClassifiedInstall[], command: string, session: string | undefined, at: number) => Promise<void>;
     readonly saveDrift: (drift: EnvironmentDrift) => Promise<void>;
-    /* The owner rejected auto-drafted steps naming these tools, or dismissed them from the Environment card:
-     * tombstone them so the sweep never proposes the same step again. Without this the auto-drafter would
-     * recreate a rejected draft on its next tick, forever.
-     *
-     * `at: undefined` CLEARS the tombstone, because a dismiss that cannot be undone is a dismiss nobody presses:
-     * the card's control is one quiet button on an open row, a mis-click away from a tool the owner meant to keep. */
+    // Tombstones tools the owner declined so the sweep won't redraft them. `at: undefined` clears the tombstone: a
+    // dismiss that can't be undone is a dismiss nobody presses.
     readonly decline: (tools: readonly string[], at: number | undefined) => Promise<void>;
 }
 

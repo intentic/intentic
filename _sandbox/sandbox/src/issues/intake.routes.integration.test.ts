@@ -24,8 +24,8 @@ import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { createIntakeRoutes } from "./intake.routes.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 
-/* The public ingest, end to end. This is one of two doors on this daemon a stranger can reach, so the tests
- * that matter are the refusals and the ARITHMETIC OF WAKING: a crash loop must cost file writes, not turns. */
+// Public ingest end to end: one of two doors a stranger can reach. What matters is the refusals and the arithmetic of
+// waking, a crash loop must cost file writes, not agent turns.
 
 const ORIGIN = "https://shop.example";
 
@@ -41,15 +41,13 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
-        // A held wake notifies the owner (scheduler.ts), fire-and-forget, so a missing stub would surface only
-        // as an unhandled rejection in some later test.
+        // Fire-and-forget notify; a missing stub would surface as an unhandled rejection in a later test.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {
             notify: async () => ({ delivered: 0, failed: 0 }),
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
-        /* Real parsed defaults, which for THIS source means the admission floor is `hold` — so every test below
-         * that expects a turn to run asserts against a policy deliberately set to allow. That is the shipped
-         * default and it belongs in the fixture rather than being quietly overridden. */
+        // Admission defaults to `hold` for this source; set to `allow` here since most tests below expect a turn to
+        // run.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({ admission: { issues: "allow" } }),
         }),
@@ -95,14 +93,8 @@ const setup = async (automation: Automation) => {
     return { services, appends, issues };
 };
 
-/* The wake is started detached (the reporting page may be seconds from unloading and has nothing to wait on),
- * so a test that asserts on it has to let that chain drain first.
- *
- * IT IS A CHAIN OF FILE WRITES, NOT A MICROTASK HOP — a thread session opened, a run noted, an approval or a
- * fire — so a fixed sleep is a race the machine wins whenever it is busy, and a suite running every other
- * package beside it is exactly that machine. Wait for the thing that was expected to happen instead, up to a
- * deadline generous enough that only a real hang reaches it. Where the assertion is that NOTHING woke there is
- * no condition to wait for, and a short drain is the whole of what can be asked. */
+// The wake runs detached (nothing to await from the report), so tests drain it. Waits for the expected condition (file
+// writes, not a microtask hop) up to a deadline; a short fixed drain is the only option when asserting nothing woke.
 const DRAIN_MS = 50;
 const SETTLE_DEADLINE_MS = 5_000;
 const settled = async (until?: () => boolean | Promise<boolean>): Promise<void> => {
@@ -123,13 +115,11 @@ test("a report from an allowed site is stored, grouped, and answered immediately
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; id: string };
     expect(body.ok).toBe(true);
-    // The short reference a reporter can be given, and the id of the group it landed in.
     expect(body.id).toMatch(/^[0-9a-f]{16}$/);
     await settled(() => turns.length === 1);
 
     expect(await issues.read(body.id)).toMatchObject({ count: 1, kind: "crash", origin: ORIGIN, release: "a1b2c3d", automationId: "bugs" });
     expect(appends[0]).toMatchObject({ provider: "issues", direction: "in", type: "issue.new" });
-    // The run is linked back, so the inbox can offer it instead of starting a second turn on the same bug.
     expect((await issues.read(body.id))?.runs).toEqual([{ conversationId: turns[0]?.conversationId, at: expect.any(Number), atCount: 1 }]);
     expect((await issues.read(body.id))?.status).toBe("investigating");
 });
@@ -144,19 +134,16 @@ test("the brief the agent gets separates what we recorded from what a stranger's
     expect(turns).toHaveLength(1);
     const prompt = turns[0]?.prompt ?? "";
     expect(prompt).toContain("fix:bugs");
-    /* Sealed as a stranger's words both ways: inside the envelope the model reads, and flagged to the guard
-     * layer, which does not depend on the model believing it. This is a public entry point, so both halves are
-     * asserted here rather than only at their own seams. */
+    // Sealed both ways: inside the envelope the model reads, and flagged for the guard layer independently.
     const sealed = /<untrusted-content source="issues" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\1">/.exec(prompt);
     const brief = JSON.parse(sealed?.[2] ?? "{}") as Record<string, unknown>;
     expect(brief).toMatchObject({ why: "new", count: 1, release: "a1b2c3d", site: ORIGIN });
-    // The evidence sits under a key that says where it came from, never at the top level beside the facts.
+    // Untrusted evidence sits under its own key, never at the top level beside recorded facts.
     expect(brief["untrusted"]).toMatchObject({ message: "TypeError: x is not a function", page: "https://shop.example/checkout" });
     expect(turns[0]?.outsideWake).toBe("issues");
 });
 
-/* THE TEST THE WHOLE PRODUCT RESTS ON. Two hundred browsers hitting one broken deploy must be one row and a
- * handful of wakes, not two hundred agent turns. */
+// 200 browsers hitting one broken deploy must be one row and a handful of wakes, not 200 agent turns.
 test("a crash loop is one issue with a count, and wakes only on the escalation step", async () => {
     const { services, issues } = await setup(intake("bugs", { issues: { escalateAfter: 10 } }));
     const turns: AgentTurn[] = [];
@@ -164,39 +151,33 @@ test("a crash loop is one issue with a count, and wakes only on the escalation s
 
     let id = "";
     for (let n = 0; n < 25; n += 1) {
-        // A different client each time: 25 separate browsers hitting the same bug, which is what a real loop is.
+        // A different clientId each time, simulating 25 separate browsers hitting the same bug.
         const res = await post(app, "bugs", { clientId: `browser-${n}` });
         id = ((await res.json()) as { id: string }).id;
-        /* Each wake has to finish before the next report lands: `noteRun` stamps the count the wake was decided
-         * at, and that stamp is the escalation rule's only memory. The step it fires on is the rule under test,
-         * so it is spelled out here rather than read back off the issue — one for the fresh group, then one per
-         * ten arrivals after it. */
+        // Each wake finishes before the next report; the expected count (1 + n/10) is the escalation rule under test.
         await settled(() => turns.length === 1 + Math.floor(n / 10));
     }
     expect((await issues.read(id))?.count).toBe(25);
-    // Once when it was new, then at +10 and +20. Three, not twenty-five.
     expect(turns).toHaveLength(3);
-    // All three on ONE conversation, so the agent that read the stack the first time still has it.
+    // One conversation across all three wakes, so context from the first read carries forward.
     expect(new Set(turns.map((turn) => turn.conversationId)).size).toBe(1);
 });
 
-/* THE OTHER HALF OF THE SAME ARITHMETIC: an app that puts a request id in every error message would mint a
- * fresh fingerprint per report, and the grouping must survive that by normalizing the values out. */
+// An app that puts a request id in every message would mint a fresh fingerprint per report; grouping must survive that
+// by normalizing values out.
 test("ids inside a message do not split one bug into many", async () => {
     const { services, issues } = await setup(intake("bugs"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns), issues);
     for (const order of [8813, 9204, 1001]) {
         await post(app, "bugs", { report: crash({ message: `Failed to load /api/orders/${order}` }) });
-        // Only the first arrival is new, so one wake covers all three: after it, this returns on the first tick.
+        // Only the first arrival is new; after that, this condition is already true on the first tick.
         await settled(() => turns.length === 1);
     }
     expect((await issues.list()).issues).toHaveLength(1);
     expect(turns).toHaveLength(1);
 });
 
-// Two people describing one annoyance in their own words are two things to read; a count of 2 on the first
-// person's sentence would hide the second person's entirely.
 test("written reports never group, so nobody's words are swallowed by a count", async () => {
     const { services, issues } = await setup(intake("bugs"));
     const turns: AgentTurn[] = [];
@@ -224,22 +205,18 @@ test("an origin nobody listed is refused, and nothing is recorded for it", async
     expect(turns).toEqual([]);
 });
 
-/* A phone or a server has no Origin header for the allowlist to read, so it presents the ingest key instead.
- * `keyFromBrowsers` stays off by default because the commonest way an intake is abused is its key ending up in
- * a public web bundle, and the allowlist is what stops that mattering. */
+// keyFromBrowsers defaults off: the commonest way an intake key leaks is a public web bundle, and the origin allowlist
+// is what still stops that mattering.
 test("a keyless client is admitted by its key, and a browser is not, unless the owner said so", async () => {
     const { services, issues } = await setup(intake("bugs"));
     const app = appFor(services, fakeWake([]), issues);
-    // The key lives in the door store, never on the record: this is what an operator copies off the install panel.
+    // Key lives in the door store, not the automation record; this is what an operator copies off the install panel.
     const key = await services.doorTokens.ensure("intake", "bugs");
 
-    // No origin at all (a phone), with the key: admitted.
     expect((await post(app, "bugs", { key }, {})).status).toBe(200);
-    // No origin, wrong key: refused, and told which door it was trying.
     const wrong = await post(app, "bugs", { key: "nope" }, {});
     expect(wrong.status).toBe(403);
     expect(await wrong.json()).toEqual({ error: "this intake needs a valid key" });
-    // A browser on an unlisted origin cannot buy its way in with the key while `keyFromBrowsers` is off.
     expect((await post(app, "bugs", { key }, { origin: "https://evil.example" })).status).toBe(403);
 
     await services.automations.upsert(intake("open-bugs", { issues: { keyFromBrowsers: true } }));
@@ -270,9 +247,7 @@ test("a malformed body is refused before anything is stored", async () => {
 });
 
 test("the day's ceiling stops an intake spending forever", async () => {
-    /* ITS OWN INTAKE ID, because the ceiling is counted per automation in a module-level budget that lives as
-     * long as the daemon does (store/daily-budget.ts says why it is not persisted). Sharing an id with the
-     * tests above would make this one depend on how many reports they happened to send. */
+    // Own intake id: the budget is per-automation, module-level, so sharing one would leak other tests' counts.
     const { services, issues } = await setup(intake("capped", { issues: { dailyReportMax: 2 } }));
     const app = appFor(services, fakeWake([]), issues);
     expect((await post(app, "capped", { clientId: "a" })).status).toBe(200);
@@ -282,8 +257,8 @@ test("the day's ceiling stops an intake spending forever", async () => {
     expect(await over.json()).toEqual({ error: "this intake has reached today's limit" });
 });
 
-/* The trigger narrows the WAKING, not the recording, which is this source's one departure from the others: an
- * owner can hear about production crashes while still reading staging's, from one intake. */
+// The trigger narrows waking, not recording, this source's one departure from the others; an owner can hear only about
+// production crashes while still reading staging's, from one intake.
 test("a trigger narrowed to crashes still records what people write in", async () => {
     const { services, issues } = await setup(
         intake("bugs", { trigger: { kind: "listener", provider: "issues", allowedOrigins: [ORIGIN], eventType: "crash" } }),
@@ -302,13 +277,13 @@ test("a trigger narrowed to crashes still records what people write in", async (
     expect(turns).toHaveLength(1);
 });
 
-/* The shipped default for this source is `hold`, and it has to behave like every other hold: the wake parks in
- * the held-wakes queue carrying its own conversation, so approving it later lands in the issue's thread. */
+// Shipped default for this source is `hold`; it must behave like every hold, parking in the held-wakes queue with its
+// own conversation so an approval lands in the issue's thread.
 test("the admission floor holds the wake, with the issue's own brief on the card", async () => {
     const { issues } = await setup(intake("bugs"));
     const root = mkdtempSync(join(tmpdir(), "intake-held-"));
     const base = fakeServices(root, []);
-    // The same automation, under the SHIPPED policy rather than the fixture's deliberate allow.
+    // Same automation, but under the shipped policy rather than the fixture's deliberate allow.
     const held = unstubbed<Services>("services", {
         ...base,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
@@ -318,35 +293,32 @@ test("the admission floor holds the wake, with the issue's own brief on the card
     const app = appFor(held, fakeWake(turns), issues);
 
     expect((await post(app, "bugs", {})).status).toBe(200);
-    // Waiting on the CARD rather than on a drain is also what makes the line under it mean anything: the wake
-    // has demonstrably reached its decision, and the decision was to park rather than to run.
+    // Waits on the card, not a fixed drain, so the assertion after it proves the wake decided to park, not merely that
+    // time passed.
     await settled(async () => (await held.heldWakes.list()).length === 1);
     expect(turns).toEqual([]);
 
     const pending = await held.heldWakes.list();
     expect(pending).toHaveLength(1);
     expect(pending[0]?.title).toContain("Crash: TypeError: x is not a function");
-    /* The conversation is snapshotted on the approval, which is what makes an approved run land in the issue's
-     * own thread rather than in a fresh one. Minted from the intake and the fingerprint, so it is recognizable
-     * on the board and in a worktree name. */
+    // Minted from intake + fingerprint: recognizable on the board, lands the run in the issue's own thread.
     expect(pending[0]?.conversationId).toMatch(/^bug-bugs-[0-9a-f]{16}$/);
     expect(pending[0]?.origin).toMatchObject({ provider: "issues", automationId: "bugs" });
 
-    // And the count is stamped, so the next crash does not queue a second card for the same bug.
+    // firedAt stamps the count, so the next crash doesn't queue a second card for the same bug.
     expect((await issues.list()).issues[0]?.firedAt).toBe(1);
 });
 
 test("the config route serves resolved settings and never the ingest key", async () => {
     const { services, issues } = await setup(intake("bugs", { issues: { title: "Something wrong?" } }));
-    // A key exists for this door; the public config must not carry it.
     await services.doorTokens.ensure("intake", "bugs");
     const app = appFor(services, fakeWake([]), issues);
     const res = await app.request("/intake/bugs/config", { headers: { origin: ORIGIN } });
     expect(res.status).toBe(200);
     const config = (await res.json()) as Record<string, unknown>;
     expect(config).toMatchObject({ automationId: "bugs", title: "Something wrong?", captureCrashes: true, antiBot: "off" });
-    // The whole point of naming every field rather than spreading the stored config.
+    // Fields are named explicitly, never spread from the stored config, or a secret would leak here.
     expect(JSON.stringify(config)).not.toContain("intake_secret");
-    // Origin-gated like the ingest, so an intake's wording is not readable from anywhere on the internet.
+    // Origin-gated like the ingest, so an intake's wording isn't readable from anywhere on the internet.
     expect((await app.request("/intake/bugs/config", { headers: { origin: "https://evil.example" } })).status).toBe(403);
 });

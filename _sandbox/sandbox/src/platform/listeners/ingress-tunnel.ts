@@ -8,62 +8,34 @@ import {
 import { serveIngressSession, webSocketDuplex, type IngressSessionServer, type TunnelWebSocket } from "@intentic/sandbox-contract/ingress-protocol";
 import { WebSocket } from "ws";
 
-/* HOW THIS SANDBOX BECOMES REACHABLE, and it is one outbound dial.
- *
- * WHAT THIS REPLACED. The entrypoint used to spend ~150 lines before the daemon even started: enable a zrok
- * environment, claim the `sandbox-<id>` name, bind a share to it, and reclaim whatever the previous container
- * had left holding that name. All of it existed because reachability was STATE on a hub — an account, a name,
- * a share — and a `docker rm -f` killed the terminator without telling the hub, so a recreated box came up 502
- * on its own address and fought its own corpse for the name.
- *
- * None of that is here, because none of it is needed: every public name this sandbox serves ends in its own
- * 12-hex id, so the edge decides who may serve a request by PARSING the Host. The only thing that has to be
- * proved is identity, and that is a signature the platform already put in this container's environment. So the
- * whole of reachability is: dial, present the grant, serve h2 over the socket. Nothing to claim, nothing to
- * bind, nothing to reclaim — and a redial simply displaces whatever held the id, which is what makes a
- * recreated container heal itself instead of needing a reaper.
- *
- * IT NEVER GIVES UP. The tunnel IS this sandbox's reachability; a daemon that stopped dialing would be a
- * workspace nobody can open, with no way back short of a restart nobody knows to perform. So, like the agent
- * loop it replaces, it only ever waits longer.
- */
+// Reachability is one outbound dial: present the grant already signed into the container's env and serve h2 over the
+// socket. No claim, no bind, no reclaim; a redial simply displaces whatever held the id, so a recreated container heals
+// itself. It never gives up: the tunnel IS this sandbox's reachability.
 
-// Backoff bounds. The floor is low because the overwhelmingly common redial is a deploy of the edge — the
-// container should be back within a second, not sit out a punishment interval for someone else's rollout.
+// Backoff bounds; the floor is low since the common redial cause is an edge deploy, back within a second rather than
+// serving a punishment interval for someone else's rollout.
 const BACKOFF_MIN_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
 
-/* A session that lasted this long was a WORKING tunnel, so the next failure starts its backoff from the floor
- * again. Without this, a container that has been up for a week reconnects at the ceiling after one blip,
- * because the counter still remembers a bad afternoon in between. One that opened and died young keeps
- * climbing, which is what keeps a refused grant or a dead edge from being hammered. The ladder itself, with
- * the full jitter every container in a region needs when it redials the same edge at the same instant, is
- * @intentic/base's createBackoff. */
+// A session this long counts as working: the next failure's backoff restarts from the floor, not the ceiling.
 const STABLE_AFTER_MS = 60_000;
 
-/* DISPLACEMENT IS NOT A FAILURE, and redialing straight into it is how two containers sharing one connect
- * token turn into a flap: each dial evicts the other, forever, and neither serves a request in between.
- *
- * Normally the loser here is a container that is already being torn down, so this delay costs nothing and is
- * never observed. When it is observed, something else is genuinely holding this id — a stale container that
- * outlived its recreate, a second box started from a copied token — and waiting a minute means the live one
- * keeps the address for minutes at a time instead of milliseconds. It still redials, because the other side
- * may be the one that is dying. */
+// Wait after being displaced: redialing immediately into another live holder would flap the two tunnels forever.
 const DISPLACED_BACKOFF_MS = 60_000;
 
 // The registry's code for "a newer tunnel took your id" (ingress registry.ts).
 const DISPLACED_CODE = 4001;
 
-/* The door, derived rather than configured: a container is told one address (INGRESS_URL) and the path is the
- * contract's. Versioned in the path, so a v2 session shape is a new door rather than a flag day. */
+// The door, derived rather than configured: INGRESS_URL plus the contract's path, versioned so a v2 session shape is a
+// new door rather than a flag day.
 export const tunnelUrl = (base: string): string => {
     const url = new URL(INGRESS_TUNNEL_PATH, base);
     url.protocol = url.protocol === `http:` ? `ws:` : `wss:`;
     return url.toString();
 };
 
-/* The bits of `ws` this uses, named so a test can supply a fake without a network. Nothing here is a
- * WebSocket-the-spec, it is the node client's surface. */
+// The bits of `ws` this uses, named so a test can supply a fake without a network; not a WebSocket-the-spec, the node
+// client's surface.
 export interface TunnelSocket {
     readonly on: (event: string, listener: (...args: never[]) => void) => unknown;
     readonly close: (code?: number, reason?: string) => void;
@@ -84,11 +56,8 @@ const realConnect = (url: string, headers: Record<string, string>): TunnelSocket
 const realServe = async (socket: TunnelSocket, targetPort: number): Promise<IngressSessionServer> =>
     serveIngressSession(webSocketDuplex(socket as unknown as TunnelWebSocket), { targetPort });
 
-/* HOW THIS SANDBOX IS REACHED, decided from its own configuration and reported on /health: through a tunnel
- * it dials, directly (a Fly machine the platform's edge replays to), or over loopback alone.
- *
- * `reason` names the piece that decides it, because the postures are fixed in different places: the profile,
- * the deployment's env, the lane that was supposed to mint a grant, or the platform's provisioner. */
+// How this sandbox is reached: tunnel, direct (a Fly machine the edge replays to), or loopback. `reason` names the
+// deciding piece, since postures are fixed in different places.
 export type ReachPosture =
     { readonly by: "tunnel" } | { readonly by: "direct"; readonly reason: string } | { readonly by: "loopback"; readonly reason: string };
 
@@ -113,17 +82,8 @@ export const reachPosture = (options: {
     return { by: `tunnel` };
 };
 
-/* START IT ONLY IF THIS SANDBOX HAS WHAT IT TAKES, and say what the posture is when it does not.
- *
- * Four postures reach here and only one of them is a tunnel: a container the platform made reachable over
- * one, a hosted machine the edge reaches directly, a `local` profile serving one loopback port, and a test.
- * None of the other three is degraded — a loopback-only sandbox is a supported way to run this, and a hosted
- * machine is reached better without a tunnel than with one — so the log line states the posture rather than
- * warning about it.
- *
- * `frontDoor` is whether the preview proxy is running (traits.extraListeners): the tunnel forwards every
- * hostname to it, so without one there is nowhere for a stream to land. `vm` is SANDBOX_VM, the platform's
- * own hosted machine, which is reached by replay and holds no grant to present. */
+// Starts the tunnel only if this sandbox has what it takes, and logs the posture otherwise. `frontDoor` is whether the
+// preview proxy runs (traits.extraListeners); `vm` is SANDBOX_VM, the platform's own hosted machine reached by replay.
 export const startIngressTunnelWhenConfigured = (options: {
     readonly url: string;
     readonly grant: string;
@@ -162,10 +122,8 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
     let connected = false;
     let socket: TunnelSocket | undefined;
 
-    /* ONE DIAL, resolving with how long to wait before the next one. Written as a promise the loop awaits
-     * rather than as a web of listeners, because every way a tunnel ends — refused, opened-then-dropped,
-     * displaced, timed out — has to converge on exactly one "settle, then redial", and a listener graph that
-     * can fire twice is how a reconnect loop turns into two reconnect loops sharing one flag. */
+    // One dial, resolving with how long to wait before the next. A promise the loop awaits rather than a listener web,
+    // since every way a tunnel ends must converge on exactly one settle-then-redial.
     const dialOnce = (): Promise<number> =>
         new Promise<number>((resolve) => {
             let settled = false;
@@ -205,22 +163,16 @@ export const startIngressTunnel = (options: IngressTunnelOptions & IngressTunnel
                     settle(DISPLACED_BACKOFF_MS);
                     return;
                 }
-                // How long the session worked is what the ladder reads: long enough earns the floor back, a
-                // dial that was refused or died on arrival keeps climbing.
+                // Long enough earns the floor back; a dial that died on arrival keeps climbing the ladder.
                 settle(ladder.next(openedAt === undefined ? 0 : now() - openedAt));
             }) as (...args: never[]) => void);
 
-            /* `error` and `close` both fire for a refused dial, in that order, so the wait is decided by the
-             * close handler above and this one only reports. Deciding it here too is how the same failure
-             * became two redials. */
+            // Both `error` and `close` fire for a refused dial; only the close handler above decides the wait.
             ws.on(`error`, ((error: Error) => options.log(`the ingress tunnel dropped`, error)) as (...args: never[]) => void);
         });
 
-    /* THE LOOP, written as a tail call rather than a `while`, because its exit condition is set from OUTSIDE
-     * it: `close()` is what ends this, and a loop whose guard nothing in its body touches is both a lint
-     * finding and a fair description of the confusion. Each pass is one dial and one wait, and the flag is
-     * re-read at both points where giving up is still cheap. No stack grows: every call is a fresh
-     * continuation off a resolved promise. */
+    // The loop, written as a tail call rather than a `while` since its exit condition (`close()`) is set from outside
+    // it. No stack grows: every call is a fresh continuation off a resolved promise.
     const run = async (): Promise<void> => {
         const waitMs = await dialOnce();
         if (stopped) {

@@ -6,22 +6,11 @@ import { LOOP_DESIGNS } from "../../../lib/queryKeys";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
-/* THE SAVED LOOPS, the manifest half of looping, read by the chat composer's loop picker and edited on the
- * page that owns them.
- *
- * IT LIVES IN CORE RATHER THAN IN THE WORKFLOWS EXTENSION, alongside `useWorkflowRuns` and for the same
- * reason: every composer in the app lists these, and a composer exists whether or not the extension that
- * edits them is switched on. Reading them through the extension would have made the picker go blank the day
- * an owner turned workflows off, a control that empties itself when an unrelated switch moves.
- *
- * NOT POLLED. A saved loop changes when a person edits one, and the daemon pushes that file change onto the
- * `loop-designs` key (core's WORKSPACE_STATE_FILES table), so the picker refreshes itself without asking. The
- * push matters more here than it does for most keys: the page that edits a loop and the composer that picks
- * one are routinely in DIFFERENT WINDOWS, a floating chat is its own, and nobody thinks to reopen a menu.
- */
+// Saved loop designs, read by the composer's loop picker and edited on their own page. Lives in core rather than
+// the workflows extension so composers still list them when workflows is off. Not polled: the daemon pushes
+// changes onto the `loop-designs` key.
 
-// Shared, because vue-query caches by it and every composer in the app lands on one fetch between them. The
-// daemon's file-change push invalidates by this exact name.
+// Shared across composers so they land on one cached fetch; the daemon's push invalidates by this exact key.
 const designsKey = LOOP_DESIGNS.every;
 
 export function useLoopDesigns() {
@@ -33,8 +22,7 @@ export function useLoopDesigns() {
         queryFn: async () => LoopDesignsListSchema.parse(await sandboxJson(`/loops/designs`)).designs,
     });
 
-    // Create and update are one call with the intent spelled out, so a minted id that happens to collide is
-    // refused rather than silently replacing somebody's loop.
+    // Create and update share this call; a colliding minted id is refused, not silently overwritten.
     const save = useMutation({
         mutationFn: async ({ design, create }: { design: LoopDesign; create: boolean }): Promise<LoopDesign> =>
             LoopDesignSchema.parse(await sandboxJson(`/loops/designs`, jsonBody(`POST`, { design, create }))),

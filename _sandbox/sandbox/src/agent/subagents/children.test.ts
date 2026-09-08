@@ -12,16 +12,13 @@ import { startTurnRun, turnRunOf, type TurnFn as RunTurnFn } from "../run/turn/t
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
 
-/* The spawn engine, driven through its real entry point with a fake turn generator, the loop pump's own test
- * shape. What the suite defends is the seam's PROMISES rather than its plumbing: a child is an ordinary
- * isolated unattended conversation on the provider the spec names; the budgets are enforced in the daemon;
- * and the roster record a parent's `wait` parks on moves with the child's own frames. */
+// Drives the spawn engine through its real entry point; defends the seam's promises (isolated unattended conversation,
+// budgets enforced in the daemon, roster tracks the child's frames), not its plumbing.
 
 const settings = (over: Partial<SandboxSettings> = {}): SandboxSettings => ({ ...SandboxSettingsSchema.parse({}), ...over });
 
-/* The fleet a spawn is placed onto (runners/runner-scheduler.ts). Empty by default, which is every sandbox
- * with no runners and therefore every test that is not about placement: with nothing to spread onto, a spawn
- * runs here exactly as it always did. */
+// The fleet a spawn can be placed onto; empty by default, so most tests place nothing and a spawn runs here as it
+// always did.
 interface FakeRunner {
     readonly id: string;
     readonly online: boolean;
@@ -36,8 +33,7 @@ const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeR
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
         config: unstubbed<Services["config"]>("config", {
-            // Nested seam: the scheduler's parity read touches three of this object's dozen fields, and the
-            // helper's job is to make the other nine throw by name rather than be quietly invented here.
+            // Only the fields the scheduler's parity read touches; the rest throw by name instead of being invented.
             sandbox: unstubbed<Services["config"]["sandbox"]>("config.sandbox", {
                 image: "ghcr.io/intentic/sandbox:2",
                 channel: "stable",
@@ -52,8 +48,8 @@ const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeR
                     ? { online: false }
                     : {
                           online: true,
-                          // No definitionToml: these runners never declared a shape, which is a real state (a
-                          // hand-started runner) and costs nothing the placement tests care about.
+                          // No definitionToml: a hand-started runner never declares one, which placement tests don't
+                          // care about.
                           announced: { version: "0.0.0", image: "ghcr.io/intentic/sandbox:2", channel: "stable" },
                           facts: { cpus: found.cpus ?? 8, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.1 },
                       };
@@ -61,14 +57,13 @@ const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeR
         }),
         agents: unstubbed<Services["agents"]>("agents", {
             inFlightByRunner: () => new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
-            // A held supervisor call raises a card and mirrors it here, which is what lights the fleet's
-            // "needs you" lane; the tests only care that it is reachable.
+            // A held supervisor call mirrors its card here too; tests only need it reachable.
             observe: () => {},
         }),
     });
 
-// A child's whole turn, recorded and scripted: `turns` collects what the pump was asked to run, `events` is
-// what the child says back. The generator ends the turn, which is what settles the record.
+// `turns` collects what the pump was asked to run; `events` is what the child says back. The generator ending settles
+// the record.
 const fakeTurn = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): TurnFn =>
     // eslint-disable-next-line require-yield
     async function* fake(_services, input: AgentTurn) {
@@ -78,8 +73,7 @@ const fakeTurn = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }])
 
 const parent = { conversationId: "conv-parent", cwd: "/work" };
 
-// The child settles on its own detached pump; the parent's own wait primitive is how a test (like a parent)
-// finds out, which keeps the suite honest about the only observation surface a real parent has.
+// Uses the parent's own wait primitive, the only observation surface a real parent has.
 const settled = (id: string): Promise<unknown> => waitForSubagent(parent.conversationId, { target: id, until: ["finished"], timeoutMs: 5_000 });
 
 beforeEach(() => {
@@ -196,10 +190,8 @@ describe("the child's life on the roster", () => {
     });
 });
 
-/* THE OWNER'S RULE AND THE FLOORS (guard/actions.ts childSpawn), consulted on every supervisor mutation, so
- * the rulebook binds on every door at once. The taint floor composes BOTH ways: a parent that has taken in
- * outside content may not reach its children unless the owner explicitly allowed it, and a child on a runtime
- * beyond every gate (rulebook "none") marks the parent's own turn bit on its way out. */
+// Every supervisor mutation consults the owner's rulebook and taint floor (guard/actions.ts childSpawn); a tainted
+// parent needs explicit allowance, and a child beyond every gate marks the parent's own turn bit.
 describe("the spawn rulebook and the floors", () => {
     it("a deny rule refuses every door's spawn, a per-provider hold names the owner", async () => {
         const denied = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "deny" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
@@ -211,7 +203,7 @@ describe("the spawn rulebook and the floors", () => {
             fakeTurn([]),
         );
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
-        // The blanket rule does not reach a provider the owner singled out as allowed.
+        // A per-provider hold doesn't reach a provider the owner didn't name.
         const other = await spawnChild(fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(other.ok).toBe(true);
         if (other.ok) {
@@ -254,12 +246,8 @@ describe("the spawn rulebook and the floors", () => {
     });
 });
 
-/* THE ESCALATION LADDER, and its one hard rule. A child's QUESTION is the parent's to answer — the parent
- * often holds the information — through the very request registry the child's ask parked on, so the picks
- * arrive exactly as an owner's would. A child's CONSENT cards (permission, plan) refuse BY KIND: a parent
- * that could approve its child's held commands would be a model approving its own dangerous actions through a
- * proxy. `send` steers a working child where its runtime takes mid-turn input, and runs a follow-up turn on a
- * settled one, continuing the session its last turn reported. */
+// A child's question is the parent's to answer, via the same request registry the child parked on; consent cards refuse
+// by kind, so a parent can't approve its own child's action. `send` steers a working child or follows up a settled one.
 describe("the escalation ladder", () => {
     const questionFrame = (requestId: string): AgentEvent => ({
         kind: "question",
@@ -278,7 +266,7 @@ describe("the escalation ladder", () => {
     });
 
     it("answers a child's question through the real request registry, and the child carries on", async () => {
-        // The child's ask, exactly as its runtime would raise it: a parked request whose id rides the frame.
+        // The child's ask, as its runtime would raise it; the id rides the frame that follows.
         const { id: requestId, wait: parked } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
         const asked = parked(new AbortController().signal);
         const gate = Promise.withResolvers<void>();
@@ -298,7 +286,7 @@ describe("the escalation ladder", () => {
             throw new Error(result.message);
         }
         await waitForSubagent(parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
-        // The wait surfaces hand the parent the WHOLE question, options included.
+        // The wait surfaces hand the parent the whole question, options included.
         expect(pendingQuestionOf(result.id)).toMatchObject({
             kind: "question",
             requestId,
@@ -306,7 +294,7 @@ describe("the escalation ladder", () => {
         });
         const answered = await answerChild(services, parent, result.id, { "Which port should the server bind?": ["8080"] });
         expect(answered.ok).toBe(true);
-        // The child's parked ask settled with the parent's picks, as a real answer rather than the abort stand-in.
+        // Settled with the parent's picks: a real answer, not the abort stand-in.
         await expect(asked).resolves.toMatchObject({ reply: { kind: "question", answers: { "Which port should the server bind?": ["8080"] } } });
         gate.resolve();
         await settled(result.id);
@@ -327,9 +315,9 @@ describe("the escalation ladder", () => {
             throw new Error(result.message);
         }
         await waitForSubagent(parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
-        // The consent card is not a question: the wait surfaces hand the parent nothing to answer with…
+        // A consent card is not a question: the wait surfaces hand nothing to answer with.
         expect(pendingQuestionOf(result.id)).toBeUndefined();
-        // …and a direct attempt refuses by kind, naming whose the card is.
+        // A direct attempt refuses by kind, naming whose the card is.
         const refused = await answerChild(fakeServices(), parent, result.id, { anything: ["yes"] });
         expect(refused).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
         gate.resolve();
@@ -345,14 +333,8 @@ describe("the escalation ladder", () => {
         await expect(answerChild(fakeServices(), parent, result.id, {})).resolves.toMatchObject({ ok: false, message: expect.stringContaining("not waiting") });
     });
 
-    /* ONLY THE PARENT THAT STARTED A CHILD MAY REACH IT, which children.ts calls the security spine of the
-     * whole surface, and it has to be asserted WHILE there is something to reach. Against a settled child every
-     * door refuses anyway ("not waiting on anything"), so `ok: false` alone proves nothing: delete the parentage
-     * check and a stranger still gets `ok: false`, from the wrong branch, and the suite stays green.
-     *
-     * So the child is parked on a real question first, and the refusals are read by their REASON. What is at
-     * stake is a cross-conversation channel into a live turn: `answer` settles a card the child is blocked on,
-     * `send` injects text straight into it, and `pendingQuestion` would hand a stranger the full question. */
+    // Only the parent that started a child may reach it (children.ts' security spine); asserted while the child is
+    // live, since a settled child refuses from every door regardless and would prove nothing.
     it("refuses a stranger every door onto a child parked mid-turn, by parentage rather than by state", async () => {
         const { id: requestId, wait: parked } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
         void parked(new AbortController().signal);
@@ -374,7 +356,7 @@ describe("the escalation ladder", () => {
         await waitForSubagent(parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
         const stranger = { conversationId: "conv-other", cwd: "/work" };
 
-        // The real parent CAN see the card — so the refusals below are about who is asking, not about state.
+        // The real parent can see the card, so the refusals below are about who's asking, not state.
         expect(pendingQuestionOf(result.id)).toMatchObject({ kind: "question", requestId });
 
         await expect(answerChild(services, stranger, result.id, { "Which port should the server bind?": ["8080"] })).resolves.toMatchObject({
@@ -385,7 +367,7 @@ describe("the escalation ladder", () => {
             ok: false,
             message: expect.stringContaining("No such child"),
         });
-        // The stranger's send started no turn, and its answer settled nothing: the child is still parked.
+        // The stranger's send started no turn; the child is still parked, unanswered.
         expect(turns).toHaveLength(1);
         expect(pendingQuestionOf(result.id)).toMatchObject({ kind: "question", requestId });
 
@@ -421,7 +403,6 @@ describe("the escalation ladder", () => {
             isolated: true,
             unattended: true,
         });
-        // The roster record reopened for the follow-up and settled again with its report.
         expect(listSubagentSessions()[0]).toMatchObject({ id: result.id, status: "completed", summary: "first pass done" });
     });
 
@@ -445,9 +426,8 @@ describe("the escalation ladder", () => {
     });
 });
 
-/* The SHELL door's gate (children.routes.ts): the persona decision is recorded at plan time as the supervisor
- * itself, so the route uses exactly what a tool call would have, and a conversation no qualifying turn ever
- * planned has nothing armed to use. */
+// children.routes.ts' gate: the persona decision is recorded at plan time as the supervisor itself, so a conversation
+// no qualifying turn planned has nothing armed.
 describe("the shell door's arming", () => {
     const supervisor = (onSpawn: (prompt: string) => void): ChildSupervisor => ({
         spawn: async (spec) => {
@@ -513,11 +493,7 @@ describe("the budgets, enforced in the daemon", () => {
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
-    /* THE CAP HAS TO HOLD AGAINST TWO SPAWNS AT ONCE, which is the shape a runaway actually arrives in: two
-     * tool_use blocks in one assistant message, or a turn backgrounding two `agents spawn` shells, each landing
-     * on POST /children/spawn independently. Every case above this one awaits its first spawn before starting
-     * the second, so all of them pass against a ledger that is read in one turn of the event loop and written
-     * in another — which is what it used to be. Both calls read {live: 0}, both cleared a ceiling of one. */
+    // Guards the race the sequential tests above can't reach: two spawns reading the ledger before either writes it.
     it("holds the live ceiling against spawns that arrive together", async () => {
         const gate = Promise.withResolvers<void>();
         const holdOpen = async function* (services: Services, input: AgentTurn): AsyncGenerator<AgentEvent> {
@@ -541,18 +517,11 @@ describe("the budgets, enforced in the daemon", () => {
         gate.resolve();
     });
 
-    /* A CLAIMED SEAT THAT NEVER BECAME A TURN HAS TO COME BACK, however the spawn ended.
-     *
-     * The budget is reserved BEFORE the child is assembled, because reading and writing it in one synchronous
-     * step is the only thing that makes it a cap (the two tests around this one). The cost of taking it early
-     * is that an exception on the way to the turn strands it — and a stranded live seat is permanent: it
-     * lowers subagentsAtOnce by one for the life of the conversation, and the parent is eventually refused
-     * forever over children that do not exist. A throwing spec is the cheapest way to reach that path. */
+    // The live-seat budget is reserved before the child is assembled (read and write must be one synchronous step); an
+    // exception before the turn starts must give it back, or a stranded seat refuses the parent forever.
     it("gives the seat back when the spawn throws before the turn starts", async () => {
         const services = fakeServices({ subagentsAtOnce: 1 });
-        /* Routed properly, and only the PROMPT explodes: the provider and the model are read before the seat is
-         * claimed (they gate admission), so a spec missing those would be refused at the door and never reach
-         * the path this test is about. */
+        // Only the prompt explodes: provider and model are read first and gate admission before this path is reached.
         const exploding = {
             description: "a spec that cannot be read",
             provider: "claude",
@@ -564,14 +533,12 @@ describe("the budgets, enforced in the daemon", () => {
 
         await expect(spawnChild(services, parent, exploding, fakeTurn([]))).rejects.toThrow("boom");
 
-        // The proof is that the next spawn fits: under a ceiling of one, a stranded seat would refuse it.
+        // Proof: the next spawn fits, when a stranded seat under a ceiling of one would refuse it.
         const after = await spawnChild(services, parent, { prompt: "ok", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(after.ok).toBe(true);
     });
 
-    // The same race against the LIFETIME counter, which is the one that stays wrong: a live seat is given back
-    // when the child settles, but a turn that was never counted is never counted, so N parallel spawns used to
-    // cost 1 against a budget meant to meter N.
+    // Targets the lifetime counter: a live seat frees on settle, but N parallel spawns must still cost N against it.
     it("counts every concurrent spawn against the lifetime budget", async () => {
         const services = fakeServices({ subagentsAtOnce: 5, subagentsPerTurn: 2 });
 
@@ -584,14 +551,12 @@ describe("the budgets, enforced in the daemon", () => {
 
         expect(results.filter((result) => result.ok)).toHaveLength(2);
         await Promise.all(results.map(async (result) => (result.ok ? settled(result.id) : undefined)));
-        // The lifetime budget is spent, so a later sequential spawn is refused too: the concurrent pair really
-        // was recorded, rather than merely being let through and forgotten.
+        // Proves the concurrent pair was really recorded, not merely let through: a later spawn is refused too.
         const later = await spawnChild(services, parent, { prompt: "five", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(later).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
-    /* The runaway case the depth setting exists for: a child gets the spawn tool too, so the cap a chain
-     * cannot read its way around has to live here, keyed by the CHILD's conversation id. */
+    // Keyed by the child's own conversation id, since a child gets the spawn tool too.
     it("refuses a chain deeper than the owner's setting", async () => {
         const services = fakeServices({ subagentDepth: 1 });
         const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
@@ -604,12 +569,9 @@ describe("the budgets, enforced in the daemon", () => {
     });
 });
 
-/* ---- where a spawned child runs (the fleet) ---- */
-
 describe("placing a child on the fleet", () => {
-    /* Every assertion here waits for the child to SETTLE first. A spawn hands its turn to a detached pump and
-     * returns immediately, so reading the recorded turn any earlier reads an empty array, and an assertion
-     * that the placement is absent would pass on a turn that had not started. */
+    // Waits for the child to settle first: reading the turn immediately sees an empty array, so an absent placement
+    // would pass on a turn that hadn't started.
     const placementOf = async (services: Services, spec: Parameters<typeof spawnChild>[2]): Promise<AgentTurn["placement"]> => {
         const turns: AgentTurn[] = [];
         const result = await spawnChild(services, parent, spec, fakeTurn(turns));
@@ -618,8 +580,7 @@ describe("placing a child on the fleet", () => {
         return turns[0]?.placement;
     };
 
-    /* THE POINT OF THE WHOLE FEATURE, in one assertion: a turn that fans out spreads onto the machines the
-     * owner connected without anybody choosing per agent, which is the only way thirty of them get placed. */
+    // Lets a fan-out of many children spread across connected machines without choosing per agent.
     it("sends a child to a ready runner with no one asking", async () => {
         expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "rig" });
     });
@@ -628,7 +589,7 @@ describe("placing a child on the fleet", () => {
         expect(await placementOf(fakeServices(), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
     });
 
-    // Six slots on eight cores, all taken: the sandbox that was free all along beats waiting for one.
+    // Six slots used of eight cores counts as full; the free sandbox wins over waiting.
     it("keeps the work here when every machine is full", async () => {
         expect(await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
     });
@@ -639,20 +600,17 @@ describe("placing a child on the fleet", () => {
             { id: "other", online: true, cpus: 32 },
         ];
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "rig" })).toEqual({ kind: "runner", id: "rig" });
-        // Nobody asking gets the roomier machine, which is what makes the line above a real preference.
+        // Nobody asking gets the roomier machine, confirming the line above is a real preference.
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "other" });
     });
 
-    /* CROSS-PROVIDER CHILDREN ARE THE POINT OF THE SPAWN ENGINE, and half of them cannot travel: only the
-     * Claude Code runtime's family spends the origin's credentials (runner-scheduler.credentialsTravel).
-     * A Cursor child sent to a machine that has never signed into Cursor dies on its first request, which
-     * reads as a broken fleet rather than as a login that was never there. */
+    // Only the Claude Code runtime family's credentials travel (runner-scheduler.credentialsTravel); a Cursor child
+    // sent elsewhere dies on its first request, reading as a broken fleet rather than a missing login.
     it("keeps a child here when its runtime authenticates from the machine it runs on", async () => {
         const fleet = [{ id: "rig", online: true }];
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor" })).toBeUndefined();
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex" })).toBeUndefined();
-        // The same provider UNDER the Claude Code harness is routed through the translator the parent
-        // re-serves, so that one travels.
+        // The same provider under the claude-code harness routes through the translator, so it does travel.
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex", harness: "claude-code" })).toEqual({
             kind: "runner",
             id: "rig",
@@ -669,15 +627,11 @@ describe("placing a child on the fleet", () => {
     });
 });
 
-/* WHERE A HOLD IS ASKED RATHER THAN REFUSED, which is the difference between a rule the owner can answer and a
- * sentence the model reads out to nobody.
- *
- * The floor fires on exactly the same input in both cases; what changes is whether there is a live turn to draw
- * a card in. Every other test in this file runs without one, which is why they all see the refusal — that is
- * the detached `agents` shell, and it is still correct there. */
+// Same floor fires either way; what differs is whether a live turn exists to draw a card on. Every other test here has
+// none, which is the detached `agents` shell case and is still the correct refusal.
 describe("a held supervisor call asks the owner where there is one to ask", () => {
-    // A parent turn that stays open for as long as the test needs, so `turnRunOf` finds a live stream. The
-    // real pump, not a stand-in: a card raised into anything else would prove nothing about the wiring.
+    // Keeps a parent turn open for the test via the real pump, not a stand-in, so `turnRunOf` finds a live stream a
+    // card can actually be raised into.
     const liveParent = (): { release: () => void } => {
         let release = (): void => {};
         const held = new Promise<void>((resolve) => {
@@ -691,7 +645,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         return { release };
     };
 
-    // The card's requestId, off the parent's own frame log: exactly what a client would answer with.
+    // The card's requestId, off the parent's own frame log, exactly what a client would answer with.
     const cardOn = async (): Promise<string> => {
         const run = turnRunOf(parent.conversationId);
         for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -709,10 +663,10 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         try {
             const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
             const requestId = await cardOn();
-            // The card names the move and the provider, so answering it is not a guess about what it would do.
+            // Names the move and provider, so answering it isn't a guess about what it does.
             const card = turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
             expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on claude?", displayName: "Start it" });
-            // No always-allow offered, because nothing here would remember one.
+            // No always-allow offered: nothing here would remember one.
             expect(card).not.toHaveProperty("alwaysLabel");
 
             expect(resolveRequest({ kind: "permission", requestId, decision: "once" })).toBe("settled");
@@ -721,7 +675,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             if (result.ok) {
                 await settled(result.id);
             }
-            // The card's row settles on the parent's run, which is what stops a client drawing the card as live.
+            // Settles on the parent's run, so a client stops drawing the card as live.
             expect(turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission?.status).toBe("allowed");
         } finally {
             live.release();
@@ -742,9 +696,8 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         }
     });
 
-    /* THE ONE THE OLD CODE GOT RIGHT AND MUST KEEP GETTING RIGHT: a call with no live turn behind it (a
-     * backgrounded `agents` shell, a turn that has already ended) has nowhere to draw a card, so it still
-     * refuses — and now says which of the two situations it is in. */
+    // With no live turn to draw a card on (a backgrounded shell, an ended turn), it still refuses and names which case
+    // it is.
     it("with no live turn there is nowhere to ask, and it says so", async () => {
         const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("outside a live turn") });

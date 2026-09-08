@@ -1,21 +1,19 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import { type AgentReply, type AgentTurn, type AttachFrame, AttachFrameSchema, sseData, sseFrames, type TranscriptRow } from "@intentic/sandbox-contract";
 
-/* The bridge's view of the sandbox daemon: a turn started with POST /agent and watched over /agent/attach (the
- * run's rows on the head, then every change to them and every fact about the turn), plus the reply side
- * channel and the session store, every call carrying an `editor`-scoped control token (x-intentic-control,
- * see the daemon's auth/grants.ts). A 401 surfaces as ACP auth_required so the editor re-runs the auth flow; a
- * 403 names the scope violation, which for this bridge means the daemon's editor scope and this client have
- * drifted apart. Unknown frame shapes are skipped (forward compatibility: a newer daemon must not break an
- * older bridge). */
+// The bridge's view of the daemon: POST /agent starts a turn, /agent/attach watches it (head rows, then every change
+// and fact), plus a reply side channel and the session store.
+// Every call carries an editor-scoped control token (x-intentic-control); a 401 surfaces as ACP auth_required, a 403
+// means this client's scope has drifted from the daemon's.
+// Unknown frame shapes are skipped, so a newer daemon cannot break an older bridge.
 
 export interface DaemonClient {
-    // The whole attach stream of the turn just started: its head, its entries, its end.
+    // Whole attach stream of the turn just started: its head, its entries, its end.
     readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AttachFrame>;
-    // Un-parks a turn waiting on any interactive card (plan / question / permission), one route, one body.
+    // Un-parks a turn waiting on any interactive card (plan, question, permission); one route, one body.
     readonly postReply: (reply: AgentReply) => Promise<void>;
     readonly getSession: (id: string) => Promise<TranscriptRow[]>;
-    // The auth probe (also `intentic-acp login`'s validation call).
+    // Auth probe, also used by `intentic-acp login`'s validation call.
     readonly listSessions: () => Promise<void>;
 }
 
@@ -40,8 +38,7 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
 
     return {
         async *streamTurn(turn, signal) {
-            // The ack names the run; the attach is what carries it. Two requests because the turn runs detached
-            // on the daemon whether or not anybody watches, and the watcher is a separate connection by design.
+            // Two requests: the ack names the run the turn started as; attach is the separate, detached watch on it.
             const started = (await (await post("/agent", turn, signal)).json()) as { run?: string };
             const response = await post("/agent/attach", { conversationId: turn.conversationId, ...(started.run === undefined ? {} : { run: started.run }) }, signal);
             if (response.body === null) {

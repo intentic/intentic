@@ -1,20 +1,6 @@
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE FAVICON LADDER: every icon the site hands a browser, drawn from the mark in the top-left corner.
- *
- * Run: `node scripts/icons.mjs`  (from _site/site). Its output is committed.
- *
- * ONE DRAWING, NOT A SECOND LOGO. The lotus here is not redrawn: it is read out of
- * `src/components/ornaments.ts`, the same string the bar, every bullet and every frame finial render
- * from. A favicon that is a hand-copy of the logo is a logo that will one day be two logos. The crop, the
- * ember and the two leaves it drops are in `scripts/lotus.mjs`, with the reasoning, because the desktop
- * app's ladder and the browser extension's take exactly the same three decisions.
- *
- * WHAT IS LEFT HERE IS THIS SURFACE'S OWN ANSWER: which sizes a browser asks for, and in what containers.
- *
- * WHY THE SVG IS NOT ENOUGH. Modern browsers prefer `favicon.svg`, but the crawlers and feed readers
- * that fetch `/favicon.ico` by convention do not read the tag that offers it, and iOS wants a real PNG.
- * So all three ship, and this script is the one place their sizes are decided.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+// Favicon ladder: every icon size a browser gets, drawn from the mark in `src/components/ornaments.ts` (not a redrawn
+// copy, so it can't drift). Crop/ember/leaf decisions live in `scripts/lotus.mjs`, shared with the desktop app and
+// extension. Ships SVG, ICO and PNG since crawlers fetch `/favicon.ico` by convention and iOS wants a real PNG.
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -39,8 +25,7 @@ console.log(`favicon.ico  ${ICO_SIZES.join("/")}  ${(ico.length / 1024).toFixed(
 await writeFile(join(PUBLIC, "favicon.svg"), `${icon(512, paths).replace(` width="512" height="512"`, "")}\n`);
 console.log("favicon.svg");
 
-/* 180 is what iOS pins to a home screen; 192 and 512 are what the web manifest asks for, and the larger
- * of the two is what an install prompt draws. */
+// 180 is what iOS home-screen pins to; 192 and 512 come from the web manifest, the larger for install prompts.
 for (const [size, name] of [
     [180, "apple-touch-icon.png"],
     [192, "assets/icon-192.png"],

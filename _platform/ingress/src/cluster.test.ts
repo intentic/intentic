@@ -16,7 +16,7 @@ const session = (): IngressSession =>
 
 const from = (peer: Peer, op: HoldsMessage[`op`], ids: string[]): HoldsMessage => ({ from: peer, instance: peer.host, op, ids });
 
-// A discovery the test moves by hand, since the cluster reacts to machines coming and going.
+// Peer discovery the test moves by hand to simulate machines joining and leaving.
 const movablePeers = (initial: readonly Peer[]) => {
     let peers = initial;
     const listeners = new Set<(next: readonly Peer[]) => void>();
@@ -39,12 +39,11 @@ const movablePeers = (initial: readonly Peer[]) => {
     };
 };
 
-/* The clock and the network are injected: `sent` is every holds message this machine put on the wire, and
- * `holdsOf` is what a peer answers when greeted. Nothing here waits on a timer. */
+// Injects the clock and network; `sent` records every holds message sent, `holdsOf` answers a peer's greeting.
 const world = (options: { readonly peers?: PeerDiscovery; readonly holdsOf?: (peer: string) => string[]; readonly self?: Peer } = {}) => {
     let clock = 1_000;
     const sent: { readonly url: string; readonly body: HoldsMessage }[] = [];
-    // The registry reports to a cluster that does not exist yet; the closure only ever runs after it does.
+    // `registry` reports to `cluster` before `cluster` exists; the callback only fires once `cluster` is assigned.
     const registry = createTunnelRegistry({ onChange: (event) => cluster.onRegistryChange(event) });
     const log = vi.fn();
     const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
@@ -65,7 +64,7 @@ const world = (options: { readonly peers?: PeerDiscovery; readonly holdsOf?: (pe
         registry,
         log,
         // SAFETY: the fake takes the two arguments the cluster passes and answers a Response; the rest of
-        // fetch's overload surface is never reached.
+        // SAFETY: fetchImpl only takes the two arguments cluster passes; fetch's wider overload surface is unused.
         fetchImpl: fetchImpl as unknown as typeof fetch,
         now: () => clock,
     });
@@ -83,8 +82,6 @@ describe(`createCluster`, () => {
         expect(cluster.remoteCount()).toBe(1);
     });
 
-    // The internal port is private, and this is the second lock on it: a machine discovery has not listed
-    // cannot put an entry in the map, so the map is bounded by the machine set.
     test(`ignores a peer discovery does not know`, () => {
         const { cluster, log } = world();
         cluster.receive(from(STRANGER, `add`, [X]));
@@ -103,8 +100,6 @@ describe(`createCluster`, () => {
         expect(cluster.holder(X)).toBeUndefined();
     });
 
-    /* NEWEST WINS ACROSS THE CLUSTER. The container redialled and landed on A; the session this machine still
-     * holds is its corpse, and keeping it would leave two machines answering for one sandbox. */
     test(`a delta add displaces a local session for the same id`, () => {
         const { cluster, registry } = world();
         const held = session();
@@ -118,8 +113,6 @@ describe(`createCluster`, () => {
         expect(cluster.holder(X)).toEqual(A);
     });
 
-    /* A SNAPSHOT NEVER DISPLACES. Two live sessions for one id is a token run twice, which is a
-     * misconfiguration to log, not a fight to start; local routing wins, as it always did. */
     test(`a set replaces the peer's entries and leaves a local session alone`, () => {
         const { cluster, registry, log } = world();
         const close = vi.fn();
@@ -136,8 +129,6 @@ describe(`createCluster`, () => {
         expect(log).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: X }), expect.stringContaining(`also holds`));
     });
 
-    // An entry nobody has refreshed for two sync intervals belongs to a peer that stopped talking, whether or
-    // not discovery has caught up.
     test(`an entry expires when its peer stops refreshing it`, async () => {
         const { cluster, advance } = world();
         cluster.receive(from(A, `add`, [X]));
@@ -191,8 +182,6 @@ describe(`createCluster`, () => {
         ]);
     });
 
-    /* GREETING. A machine that has just come up asks every peer what it holds and tells them what it holds,
-     * so nobody waits out a sync interval to be useful. */
     test(`greets the peers it starts with: pulls their holds, pushes its own`, async () => {
         const { cluster, sent, settle } = world({ holdsOf: (peer) => (peer === `peer-a` ? [X] : [Y]) });
         await settle();
@@ -222,8 +211,6 @@ describe(`createCluster`, () => {
         expect(cluster.holder(Y)).toEqual(B);
     });
 
-    // Off Fly with no advertised address, a machine can still route and forward; it just cannot tell anyone
-    // what it holds, and main.ts says so at boot.
     test(`a machine with no address of its own receives but never advertises`, () => {
         const { cluster, registry, sent } = world({ self: { ...SELF, host: `` } });
         registry.register(X, { session: session(), close: vi.fn() });

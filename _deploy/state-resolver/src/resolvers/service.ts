@@ -7,25 +7,19 @@ import { sshOf } from "../lib/ssh.js";
 import type { IngressPair } from "./route.js";
 import { exposeRoute } from "./route.js";
 
-// The service catalog: each authorable `kind` maps to the concrete resource type its provider deploys and
-// the dashboard port that provider publishes on the host (tunnel-routed to <domain>). Adding a service is
-// one entry here plus a provider, the authoring surface (i.want.service) is unchanged. The OTLP ingest
-// port a service exposes for app telemetry is the signoz provider's concern, not the resolver's, apps
-// reach it through the service's `otlpEndpoint` output, not a routed hostname.
+// Service catalog: each `kind` maps to its resource type and dashboard port (tunnel-routed to <domain>). Adding a
+// service is one entry plus a provider; OTLP ingest is the signoz provider's concern, reached via
+// `otlpEndpoint`, not a routed hostname.
 interface ServiceSpec {
     readonly type: ResourceType;
     readonly port: number;
-    // The pinned images this service's provider deploys, by input key. Carried here so adding a service is
-    // one catalog entry (type + port + its images), and so the versions land in the desired-state graph.
+    // Pinned images this service's provider deploys, by input key; keeps a service to one catalog entry.
     readonly images: Readonly<Record<string, string>>;
-    // How this kind is reached as an MCP tool from the sandbox agent, when a workspace exposes it via
-    // `i.want.workspace({ tools: [...] })`: the path on the service's routed domain that speaks MCP, and the
-    // intentic-generated secret key holding the scoped bearer token. Absent ⇒ the kind has no agent tool.
+    // MCP path on the service's domain + secret key holding its scoped bearer token; absent means no agent tool.
     readonly mcp?: { readonly path: string; readonly tokenSecret: string };
-    // Dashboard login when it is NOT the intentic@<zone> email convention (e.g. OpenProject's fixed "admin").
+    // Dashboard login when it isn't the intentic@<zone> email convention (e.g. OpenProject's "admin").
     readonly adminLogin?: string;
-    // A second public hostname (a first-level `<sub>-auth.<zone>` sibling of the service) routed to this host
-    // port, for services whose login flow needs a browser-reachable identity provider (Outline's bundled Dex).
+    // Second hostname (`<sub>-auth.<zone>` sibling) routed here, for a login IdP needing browser access (Dex).
     readonly authPort?: number;
     // readyWhen timeout override for slow first boots (OpenProject runs migrations before answering).
     readonly readyTimeout?: string;
@@ -82,18 +76,16 @@ const catalog: Readonly<Record<ServiceKind, ServiceSpec>> = {
     },
 };
 
-// The MCP endpoint descriptor for a service kind, or undefined when the kind exposes no agent tool. The
-// workspace resolver uses it to wire a tool's URL + scoped token into the sandbox (for the agent).
+// MCP endpoint descriptor for a kind, or undefined if it has no agent tool; the workspace resolver wires it
+// into the sandbox.
 export const serviceMcp = (kind: ServiceKind): { readonly path: string; readonly tokenSecret: string } | undefined => catalog[kind].mcp;
 
-// The admin identity intentic seeds for a service's dashboard. Services authenticate by email (unlike the
-// Forgejo/Komodo username), so it is an address in the exposed zone; the password is intentic-generated.
+// Admin identity for a service's dashboard; services authenticate by email, unlike Forgejo/Komodo's username.
 const serviceAdminEmail = (zone: string): string => `intentic@${zone}`;
 
-// A shared off-the-shelf service: one node deployed onto the host over SSH (like the platform's Forgejo /
-// Komodo) from a pinned image, plus its Cloudflare route. The deploy node carries the host SSH creds + its
-// internal ip and gates on its host-internal url so readiness passes before the tunnel + DNS route exist.
-// Returns the exposure's ingress pair so the caller can aggregate the host's tunnel ingress.
+// Shared off-the-shelf service: one node deployed onto the host over SSH from a pinned image, plus its Cloudflare
+// route; readiness gates on the host-internal url so it passes before the tunnel/DNS exist. Returns the exposure's
+// ingress pair to aggregate.
 export const resolveService = (
     intent: ServiceIntent,
     host: HostInput,
@@ -103,10 +95,7 @@ export const resolveService = (
     const spec = catalog[intent.kind];
     const ssh = sshOf(host);
     const exposure = exposeRoute(intent.expose, intent.on, intent.domain, spec.port, apiToken);
-    // A bundled identity provider (Outline's Dex) must be browser-reachable, so it gets its own hostname. It
-    // stays ONE label under the zone (a `<sub>-auth.<zone>` sibling of the service, not an `auth.<domain>`
-    // child) so Cloudflare's Universal SSL `*.<zone>` edge cert covers it, a child of a subdomain would be
-    // two labels deep and have no cert, failing the TLS handshake. On the apex it is just `auth.<zone>`.
+    // Auth hostname stays one label under the zone (not nested under the service domain) so `*.<zone>` covers it.
     const authDomain =
         spec.authPort === undefined
             ? undefined

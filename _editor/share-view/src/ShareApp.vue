@@ -1,10 +1,5 @@
 <script setup lang="ts">
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-/* Both by FILE rather than through the barrel, which is boot.ts's rule and this is what enforces it: the barrel
- * statically imports every component in the kit, and among them is the graph canvas, whose stylesheet import is
- * a side effect no bundler will drop. Reached through the barrel, prose costs this page a fifth of a megabyte of
- * Vue Flow: in the bundle a stranger downloads to read someone's transcript, for a canvas a conversation almost
- * never contains. Reached by file, a `dag` figure loads it on demand and nothing else pays. */
 import Icon from "@intentic/ui/icon";
 import Markdown from "@intentic/ui/markdown-view";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
@@ -14,30 +9,18 @@ import { computed, provide, ref } from "vue";
 import { readPayload } from "./payload";
 import { shareSurface } from "./shareSurface";
 
-/* THE PUBLISHED CONVERSATION, as the person the link was sent to reads it.
- *
- * The transcript is drawn by the app's own pieces: the same markdown engine every surface renders prose with,
- * and the same tool card the chat draws work with (with nothing to click, see shareSurface.ts). What this file
- * adds is only what the app's chat does around them: the bubble, the thinking fold, the day markers.
- *
- * It deliberately does NOT reuse ChatMessageView. That component is the LIVE row: plan approvals, question
- * cards, permission prompts, pinning, the streaming loader, an errand's reveal, and every one of those is a
- * control, a decision or a claim about right now. A record has none: no card is pending, nothing is streaming,
- * and there is nobody here who could answer anything. Rendering the live row read-only would mean disabling a
- * dozen affordances one at a time and getting all of them right forever; drawing the record directly is both
- * smaller and the honest shape of the thing. */
+// Renders the published conversation using the app's own markdown engine and tool card, adding only the bubble,
+// thinking fold and day markers around them. Deliberately not ChatMessageView (the live row): a record has no
+// pending card, no streaming, nobody to answer anything.
 
 const result = readPayload();
 const payload = computed(() => (result.ok ? result.payload : undefined));
 
-// The cards on this page reach nothing beyond their own pictures: the whole difference between the app's
-// transcript and a published one, stated once here (chatToolSurface.ts).
+// Tool cards here reach nothing beyond their own pictures — the whole difference from the app's live transcript.
 provide(CHAT_SURFACE, shareSurface);
 
-/* Prose goes through the shared component with NO decorator. The app passes one that turns file mentions into
- * links into the workspace; here there is no workspace, and a link that navigated nowhere would be a promise the
- * page cannot keep. Everything else about the answer is the app's: including the figures in it, so a
- * conversation shared for the diagram it drew shows the diagram. */
+// The shared prose renderer gets no file-link decorator here (there's no workspace to link into) but keeps
+// everything else, including figures, so a diagram-focused share still shows its diagram.
 
 const subtitle = computed(() => {
     const shared = payload.value;
@@ -48,10 +31,8 @@ const subtitle = computed(() => {
     return `${count} message${count === 1 ? "" : "s"} · shared ${formatDate(shared.sharedAt)}`;
 });
 
-/* WHERE THE DAY CHANGES, so a conversation that ran across a week reads as one: the same marker the app's
- * transcript draws. Only user rows carry a stamp (TranscriptRow.sentAt), which is enough: a turn's answers
- * belong to the day its question was asked, and a conversation recorded before stamps existed simply gets no
- * markers rather than a row of guesses. */
+// Marks where the day changes, using only user rows' timestamps (a turn's answers belong to the day it was
+// asked). A conversation from before timestamps existed just gets no markers, not guesses.
 const dayMarks = computed(() => {
     const marks = new Map<number, string>();
     let last: string | undefined;
@@ -68,15 +49,13 @@ const dayMarks = computed(() => {
     return marks;
 });
 
-// A settled record: nothing is in flight, so no card may animate and no spinner may claim otherwise. The one
-// prop the tool card needs from this page, and it is always false.
+// Always false: a settled record has nothing in flight, so no card may animate.
 const LIVE = false;
 
-// Tool calls arrive as the contract's own restored shape, which is what the app's card renders too.
+// Tool calls arrive in the contract's own shape, the same one the app's card renders.
 const toolsOf = (message: TranscriptRow): readonly TranscriptTool[] => message.tools ?? [];
 
-// The agent's reasoning is folded away by default even on an `everything` share: it is the longest and least
-// read part of a transcript, and a page that opens on three screens of it buries the conversation.
+// Folded by default even on a full share: reasoning is the longest, least-read part of a transcript.
 const openThinking = ref<Record<number, boolean>>({});
 const toggleThinking = (index: number): void => {
     openThinking.value = { ...openThinking.value, [index]: !openThinking.value[index] };
@@ -90,20 +69,21 @@ const toggleThinking = (index: number): void => {
                 <h1 class="text-lg font-semibold text-content">{{ payload.title }}</h1>
                 <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                     <span :title="formatDateTime(payload.sharedAt)">{{ subtitle }}</span>
-                    <!-- What a reader is looking at, said plainly. A `messages` share leaves the agent's work
-                         out entirely, and a page that did not say so would read as a conversation in which the
-                         agent happened to do nothing. -->
+                    <!--
+                        Says plainly when work is left out, or a messages-only share reads as an agent that did
+                        nothing.
+                    -->
                     <span aria-hidden="true">·</span>
                     <span>{{ payload.detail === "messages" ? "messages only" : "with the agent's work" }}</span>
                 </p>
             </header>
 
-            <!-- `chat-turns` is the column the app reads a conversation in; `chat-markdown` tunes the prose
-                 tokens for it (<Markdown> brings `md-prose` itself). Both come from the app's own stylesheets,
-                 which is why a shared page's type, spacing and code blocks match the chat rather than
-                 approximating it. -->
-            <!-- No copy delegation up here: a code block's button lives inside rendered prose, and <Markdown>
-                 binds its own: a second listener on this element would copy the same text twice. -->
+            <!--
+                `chat-turns`/`chat-markdown` are the app's own stylesheet classes, so a shared page's type and spacing
+                match the
+                chat exactly.
+            -->
+            <!-- No copy delegation here: <Markdown> binds its own code-block button; a second listener would double it. -->
             <main class="chat-turns flex flex-1 flex-col">
                 <template v-for="(message, index) in payload.messages" :key="index">
                     <div v-if="dayMarks.get(index)" class="flex items-center gap-2 py-1 text-2xs text-subtle">
@@ -116,8 +96,10 @@ const toggleThinking = (index: number): void => {
                         <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-content">
                             {{ message.text }}
                         </div>
-                        <!-- What was attached to the ask. Published beside the page, so these are the bytes the
-                             agent actually looked at rather than a filename standing in for them. -->
+                        <!--
+                            Published beside the page: these are the actual bytes the agent looked at, not a filename
+                            standing in.
+                        -->
                         <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1">
                             <img
                                 v-for="path in message.attachments"
@@ -167,16 +149,13 @@ const toggleThinking = (index: number): void => {
             </main>
         </template>
 
-        <!-- A page with nothing to draw. Same shape as the outbox's own status pages: say what happened, offer
-             the one thing that is actually useful from here. -->
+        <!-- Empty state matches the outbox's own status pages: say what happened, offer one useful action. -->
         <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
             <h1 class="text-sm font-semibold text-content">Nothing to show</h1>
             <p class="text-xs text-muted">{{ result.ok ? "" : result.reason }}</p>
         </div>
 
-        <!-- The attribution the outbox's status pages already carry, at the same volume: a shared conversation
-             is the most persuasive thing this product produces, and the link is read by someone who has never
-             seen it. Bottom of the page, after the thing they came for. -->
+        <!-- Same attribution volume as the outbox's status pages, placed after the content rather than before it. -->
         <footer class="chat-footer mt-2 border-t border-line pt-3 text-center text-2xs text-subtle">
             <a href="https://intentic.dev" target="_blank" rel="noopener" class="text-link hover:underline">
                 Shared from <b>Intentic</b>: run your own agents →

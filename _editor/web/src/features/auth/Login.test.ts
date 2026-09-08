@@ -1,23 +1,15 @@
 // @vitest-environment jsdom
-//
-// ONE GOOGLE SIGN-IN INSTEAD OF TWO, which is the whole subject of this page now. Signing in used to bounce
-// off to Google and back, which proves the user to the platform and leaves the browser holding NOTHING, so
-// the sandbox, which authenticates people against Google itself and does not trust the platform, had to ask
-// for Google a second time. People read that second ask as a bug and some left at it.
-//
-// The page now mints the Google credential HERE and spends it twice: once on the platform, once (from the
-// cache it already lives in) on the sandbox. These tests hold the two things that must stay true: that the
-// token handed to the platform is the one the BROWSER minted, never the other way round, and that all three
-// ways this can fail land on the old redirect rather than on a dead page.
+// The page mints one Google credential and spends it twice: once on the platform, once (from the same cache) on
+// the sandbox, replacing two separate Google prompts. These tests check that the token handed to the platform is
+// the one the browser itself minted, and that every failure path falls back to the redirect rather than a dead page.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
-// environment.ts reads window.env and throws without it.
+// Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
 const push = vi.fn();
-// Where the guard that turned somebody away wrote the page they were going to (router/signIn.ts).
+// Where the guard that turned somebody away wrote the page they were headed to (router/signIn.ts).
 const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -39,8 +31,7 @@ vi.mock(`./useAuth`, () => ({
 const getIdToken = vi.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
 const renderButton = vi.fn<() => Promise<boolean>>();
 vi.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
-// Which build, if any, this visitor's machine can run. `undefined` is "none" (macOS today), which is the
-// steady state for every test below except the pair that assert the third step follows it.
+// Available desktop build for this visitor; undefined is the default, overridden only where a test needs one.
 const desktopInstaller = vi.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 vi.mock(`../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: ``,
@@ -58,14 +49,14 @@ const mount = async (): Promise<HTMLElement> => {
     app = createApp({ render: () => h(Login) });
     app.component(`Icon`, IconStub);
     app.mount(el);
-    // The sign-in chain is several awaits deep: a macrotask flushes it where a fixed count of ticks goes stale.
+    // The sign-in chain is several awaits deep; a macrotask flush avoids a fixed, fragile tick count.
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     await nextTick();
     return el;
 };
 
-// The old redirect control, found by its label: its presence IS the fallback being offered.
+// The old redirect control, found by its label; its presence is the fallback being offered.
 const redirectButton = (): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Continue with Google`));
 
@@ -74,7 +65,7 @@ beforeEach(() => {
     push.mockReset();
     signInWithGoogle.mockReset().mockResolvedValue(undefined);
     signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
-    // The steady state: Google's button renders, and a credential arrives from it.
+    // Steady state: Google's button renders and yields a credential.
     renderButton.mockReset().mockResolvedValue(true);
     getIdToken.mockReset().mockResolvedValue(`google-id-token`);
     desktopInstaller.mockReset().mockReturnValue(undefined);
@@ -89,16 +80,15 @@ afterEach(() => {
 it(`signs in to the platform with the token the browser minted`, async () => {
     await mount();
 
-    // The DIRECTION is the security property: a Google credential this window already holds goes INTO the
-    // platform. Nothing comes back out, so what the sandbox trusts never depends on the platform being honest.
+    // Direction is the security property: a credential this window holds goes into the platform, nothing comes back,
+    // so sandbox trust never depends on the platform's honesty.
     expect(signInWithGoogleCredential).toHaveBeenCalledWith(`google-id-token`);
     expect(push).toHaveBeenCalledWith(`/`);
 });
 
-/* THE PAGE THAT SENT THEM HERE, which both ways out of this screen used to forget: each hardcoded `/`, so a
- * guard that turned somebody away from a deep link signed them in and then dropped them in the workspace with
- * the address they asked for gone. Both paths are asserted because they fail independently — one pushes, the
- * other hands the path to Better Auth as an OAuth callback. */
+// Both exits from this page must return to where the guard sent the visitor, not hardcode `/`, or a deep link is
+// lost the moment sign-in redirects home. Asserted on both paths since one pushes and the other hands it to Better
+// Auth as an OAuth callback.
 it(`lands on the page that asked for the sign-in`, async () => {
     query.value = { returnTo: `/sandbox/usage` };
 
@@ -119,8 +109,8 @@ it(`brings Google's redirect back to that same page`, async () => {
     expect(signInWithGoogle).toHaveBeenCalledWith(`/sandbox/usage`);
 });
 
-/* An unchecked destination on THIS screen is an open redirect wearing the one page a user has been taught to
- * expect Google on: `//host` is protocol-relative to every URL parser there is. */
+// An unchecked returnTo makes this the one page users expect Google on into an open redirect; `//host` is
+// protocol-relative to every URL parser.
 it(`refuses a destination that leaves this origin`, async () => {
     query.value = { returnTo: `//evil.example` };
 
@@ -159,8 +149,8 @@ it(`falls back to the redirect when the platform refuses a token Google signed`,
 
     const el = await mount();
 
-    // A platform that will not take it (an older self-hosted build, a client-id mismatch) says NOTHING about
-    // whether the sandbox will, so the user gets the other way in rather than a dead page.
+    // A platform refusal (older build, client-id mismatch) says nothing about whether the sandbox will refuse too, so
+    // the user gets another way in instead of a dead page.
     expect(redirectButton()).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`Continue with Google below instead`);
     expect(push).not.toHaveBeenCalled();
@@ -174,19 +164,13 @@ it(`always offers a way in that does not depend on Google's embedded button`, as
     escape?.click();
     await nextTick();
 
-    // The ways that button can fail silently (a blocked frame, a popup policy) are invisible from this page,
-    // and each of them looks like a sign-in page that simply does nothing.
+    // The button can fail silently (blocked frame, popup policy), indistinguishable from a page doing nothing.
     expect(escape).toEqual(expect.any(Object));
     expect(signInWithGoogle).toHaveBeenCalledTimes(1);
 });
 
-/* THE THIRD STEP HAS TO DESCRIBE THE FLOW THIS VISITOR WILL ACTUALLY BE GIVEN.
- *
- * This band is the product's first description of itself, and it promised "Paste one command / One line starts
- * it on your own machine" to everybody — including Windows and Linux, where the setup page then hands over a
- * Download button and no command is ever shown. The reader most likely to be put off by a terminal was told,
- * on the way in, that there would be one. Both directions are asserted because the copy is only right when it
- * tracks `desktopInstaller`, and a single case would pass with the value hardcoded either way. */
+// The copy must track `desktopInstaller`: promising a pasted command to a visitor who's actually given a Download
+// button (or vice versa) is checked both ways, since either case alone would pass with the value hardcoded.
 it(`promises the pasted command only where there is no build to install`, async () => {
     const el = await mount();
 
@@ -210,6 +194,6 @@ it(`leaves the page usable when the user dismisses Google`, async () => {
 
     expect(signInWithGoogleCredential).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
-    // Nothing is said about a dismissal: the button the user turned away from is still standing there.
+    // A dismissal says nothing; the button the user turned away from is still there.
     expect(el.textContent).not.toContain(`Continue with Google below instead`);
 });

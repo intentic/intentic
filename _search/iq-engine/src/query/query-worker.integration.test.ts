@@ -3,19 +3,8 @@ import { createResidentEngine, type ResidentEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
 
-/* THE RESIDENT ENGINE'S SEMANTIC TIER NOW LIVES ON ANOTHER THREAD, and what these cover is that it still
- * ANSWERS, the worker path is the one that can break silently. A broken worker does not throw: the query
- * degrades to BM25 and returns a slightly worse answer, which is indistinguishable from a good day unless
- * something asserts on the tags.
- *
- * What is NOT asserted here is the latency property the worker exists for. Proving work happened off-thread
- * needs a side effect visible from this one: resident-thread.integration.test.ts has that, rows appearing in
- * SQLite while the host spins, and a request/response worker leaves none behind. Timing it instead would be a
- * throughput claim wearing a regression test's clothes, and it would breach on a loaded CI box. Those numbers
- * live in query-worker.ts's own header, measured against a real workspace index.
- *
- * One engine per fixture, never two on one root: a resident engine claims the index for writing, and a second
- * claimant is the exact collision the lock exists to prevent. */
+// Covers that the semantic tier still answers on a worker thread; a broken worker degrades silently to BM25 rather than
+// throwing. Not a latency test; one engine per fixture, since a resident engine claims the index for writing.
 
 const opened: { engine: ResidentEngine; cleanup: () => Promise<void> }[] = [];
 
@@ -45,8 +34,8 @@ const request = (query: string): QueryRequest => ({
     echo: `q "${query}"`,
 });
 
-// A host with no baked models is a supported configuration, and the worker says so rather than failing: the
-// query keeps its BM25 half and the capsule names what is missing.
+// A host with no baked models is a supported configuration; the worker reports it rather than failing, and the query
+// still runs on BM25.
 test("without a model dir the worker reports no backend and the query answers from BM25", async () => {
     const engine = await resident();
     const outcome = await engine.run(request("how are widgets built for the registry?"));
@@ -55,8 +44,8 @@ test("without a model dir the worker reports no backend and the query answers fr
     expect(outcome.result.groups.flatMap((group) => group.hits).some((hit) => hit.tags.some((tag) => tag.kind === "bm25"))).toBe(true);
 });
 
-// Both model stages, end to end, across the thread boundary: the vectors are scored on the worker's own
-// read-only handle and the cross-encoder runs there too, so tags for both are proof the round trip works.
+// Both model stages, across the thread boundary: vectors are scored on the worker's read-only handle and the
+// cross-encoder runs there too, so both tags prove the round trip works.
 test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
     "with baked models the worker answers with [sem] and [rerank] hits",
     async () => {
@@ -71,8 +60,6 @@ test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
     120_000,
 );
 
-// Concurrent turns are the daemon's normal state: several agents searching at once, and one thread answering
-// all of them must not hand an answer to the wrong caller.
 test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
     "queries in flight together each get their own answer",
     async () => {

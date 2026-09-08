@@ -7,18 +7,12 @@ import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@i
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
 
-/* The restore-point timeline: a quieter mode of the workspace's ONE left sidebar (Workspace.vue owns the
- * aside, resize handle, Files|Changes switch and history button): the daemon's checkpoints of /work, NOT git
- * history: agent turns (titled with the turn's prompt), user changes, and restore markers; hidden interval
- * captures dissolve into the next checkpoint's diff. Selecting a checkpoint lazy-loads everything it changed
- * since the previous one; a changed file opens a side-by-side diff as a tab in the main editor area (emitted up
- * to Workspace.vue); Restore (two-step confirm) rewrites /work to that point: files created since are removed,
- * secrets and git branches untouched, and a safety checkpoint is saved first, so a restore is itself
- * restorable. */
+// Restore-point timeline: daemon checkpoints of /work (not git), from agent turns, user changes, and restore markers.
+// Selecting one lazy-loads what changed since the previous checkpoint; a file opens a diff tab. Restore rewrites /work
+// to that point, leaving secrets and git branches untouched, after saving a safety checkpoint first.
 
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
-// The gesture decides the tab: a click is a look (the strip's preview tab, replaced by the next file looked at),
-// a double-click keeps it. See workspaceTabs' OpenMode.
+// Click opens a preview tab (replaced by the next file looked at); double-click keeps it, see OpenMode.
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode]; "fill-diff": [payload: DiffPayload] }>();
 
 const selectedId = ref<string | undefined>(undefined);
@@ -26,8 +20,7 @@ const changes = ref<readonly SnapshotChange[]>([]);
 const diffLoading = ref(false);
 const confirmRestoreId = ref<string | undefined>(undefined);
 
-// Fallback title + icon per trigger; a snapshot's own label (the turn's prompt) wins as the row title.
-// "interval" never surfaces in the list: the daemon keeps those captures off the timeline.
+// Fallback title/icon per trigger; a snapshot's own label wins as the row title. `interval` never appears here.
 const TRIGGER_META: Record<SnapshotTrigger, { title: string; icon: IconName }> = {
     turn: { title: `Agent turn`, icon: `sparkles` },
     user: { title: `Your changes`, icon: `user` },
@@ -56,8 +49,8 @@ const select = (snapshot: WorkspaceSnapshot): void => {
         .finally(() => (diffLoading.value = false));
 };
 
-// The tab opens on the click and the content fills it when the read lands: see DiffPayload's `pending`. A
-// checkpoint's diff is two blob reads on the daemon like any other, and the wait belongs in the tab it is for.
+// Opens the tab immediately; content fills in when the read lands (DiffPayload's `pending`). A checkpoint diff is two
+// blob reads on the daemon, so the wait belongs to the tab it's for.
 const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
     const snapshotId = selectedId.value;
     if (snapshotId === undefined) {
@@ -69,8 +62,7 @@ const openDiff = (change: SnapshotChange, mode: OpenMode): void => {
         label: changeLabel(change),
         status: change.status,
         path: change.path,
-        // A checkpoint over an image ships no text either: the bytes come from /diff/raw, against this
-        // same checkpoint so the preview shows what the row is about, not the file's state on disk.
+        // An image ships no text either; bytes come from /diff/raw against this same checkpoint.
         ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
     };
     emit(`open-diff`, { ...tab, pending: true }, mode);
@@ -101,9 +93,7 @@ const confirmRestore = (id: string): void => {
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
                 No restore points yet: file history is saved automatically as you and your agents work.
             </p>
-            <!-- No hairline per row: a restore point is one line with a hover state, and a rule under every one
-                 of them turned a list somebody scans into a ledger. The OPEN one gets a tint instead, which is
-                 what actually needs a boundary: its file list has to end somewhere the eye can see. -->
+            <!-- No hairline per row; the open row gets a tint instead, which is where a boundary is actually needed. -->
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row" :class="selectedId === snapshot.id ? `bg-content/4` : ``">
                 <button
                     type="button"
@@ -130,8 +120,7 @@ const confirmRestore = (id: string): void => {
                         @dblclick="openDiff(change, 'keep')"
                     >
                         <ChangeStatusMark :status="change.status" />
-                        <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl";
-                             the tooltip gives the whole path back, but only while the row is actually cut off. -->
+                        <!-- `<bdi>` stops a leading '_' from reordering under dir="rtl"; the tooltip shows the full path only while truncated. -->
                         <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl" v-tooltip.right.overflow="changeLabel(change)"
                             ><bdi>{{ changeLabel(change) }}</bdi></span
                         >
@@ -139,9 +128,7 @@ const confirmRestore = (id: string): void => {
 
                     <div class="mt-1.5 flex items-center gap-2">
                         <template v-if="confirmRestoreId === snapshot.id">
-                            <!-- The chat clause is not decoration: an open conversation is reasoning about the
-                                 files this is about to move, and until it was told, the only symptom was its
-                                 next turn behaving as though edits existed that no longer did. -->
+                            <!-- Not decoration: an open chat is reasoning about these files and must be told they moved. -->
                             <span class="flex-1 text-2xs text-warning"
                                 >Rewrite all files to this restore point? Files created after it are removed; git branches and secrets are untouched.
                                 Open chats working here are told the files moved.</span
@@ -169,9 +156,10 @@ const confirmRestore = (id: string): void => {
 </template>
 
 <style scoped>
-/* Cheap windowing without a virtual-scroller: the browser skips layout/paint for off-screen rows on long
- * snapshot and changed-file lists. contain-intrinsic-size reserves a plausible height so the scrollbar is
- * stable before a row is first rendered. */
+/*
+ * Cheap windowing without a virtual scroller: content-visibility skips paint for off-screen rows.
+ * contain-intrinsic-size keeps the scrollbar stable before a row first renders.
+ */
 .cv-row {
     content-visibility: auto;
     contain-intrinsic-size: auto 34px;

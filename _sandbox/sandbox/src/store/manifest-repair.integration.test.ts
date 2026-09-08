@@ -9,9 +9,8 @@ import { clearManifestProblems, manifestProblems } from "./manifest-problems.js"
 import { clearManifestEditors, repairManifest } from "./manifest-repair.js";
 import { objectParse } from "./unknown-keys.js";
 
-/* The other end of the notice: the button that takes the stray key back out, on a real file, through the store
- * that owns it. What only a real write can prove is the part the whole design turns on — that the repair is
- * ordered against the daemon's own writes, and that a file nobody is meant to touch stays untouched. */
+// End-to-end repair: removes a stray key on a real file through the store that owns it, proving the repair is ordered
+// against the daemon's own writes.
 
 const roots: string[] = [];
 const workspace = async (): Promise<string> => {
@@ -31,8 +30,7 @@ afterEach(async () => {
     }
 });
 
-// A stand-in shape: the names under test are the FILE names, which is what decides whether a path is reportable
-// (and so repairable) at all.
+// A stand-in schema; the file name under test is what decides reportability, not the shape.
 const Settings = z.object({ hashlineEdits: z.boolean().default(false), skills: z.array(z.string()).default([]) });
 const REL = `${STATE_DIR}/config/settings.json`;
 
@@ -73,8 +71,7 @@ test("renaming carries the value across, so the setting starts applying", async 
     await write(path, `{"skils": ["lsp"]}`);
 
     expect(await repairManifest({ root, path: REL, key: "skils", to: "skills" })).toBeUndefined();
-    // The point of a rename over a removal: the value the user typed is what they wanted, under the name they
-    // meant. A repair that dropped it would be a fix that costs them the setting.
+    // A rename keeps the value the user typed; dropping it would cost them the setting.
     expect(await file.read()).toEqual({ hashlineEdits: false, skills: ["lsp"] });
 });
 
@@ -84,8 +81,7 @@ test("a renamed key keeps its place in the file", async () => {
     await write(path, `{"skils": ["lsp"], "hashlineEdits": true}`);
 
     await repairManifest({ root, path: REL, key: "skils", to: "skills" });
-    // A hand-edited settings file has an order somebody put it in. Deleting and re-adding would move the line
-    // to the bottom, which is a diff they did not ask for on a file they are reading.
+    // A hand-edited file has an order; delete-and-re-add would move the line to the bottom as an unasked-for diff.
     expect(Object.keys(await contents(path))).toEqual(["skills", "hashlineEdits"]);
 });
 
@@ -94,8 +90,7 @@ test("renaming onto a key the file already has is refused, not merged", async ()
     const { path } = settingsFile(root);
     await write(path, `{"skils": ["wrong"], "skills": ["right"]}`);
 
-    // Either the guess is wrong or somebody has already fixed it by hand. Both readings end with a setting the
-    // user chose being overwritten by one they misspelled, so this refuses and says which button to press.
+    // Either the guess is wrong, or already fixed by hand; both would overwrite the setting the user chose.
     expect(await repairManifest({ root, path: REL, key: "skils", to: "skills" })).toBe("name taken");
     expect(await contents(path)).toEqual({ skils: ["wrong"], skills: ["right"] });
 });
@@ -113,8 +108,7 @@ test("a file the table does not report on cannot be edited through this door", a
     const { path } = settingsFile(root);
     await write(path, `{"contextShelf": ""}`);
 
-    // The guard is an exact match against REPORTED_MANIFEST_PATHS, so there is no traversal to defend against
-    // and no way to name a file the notice could not already have shown.
+    // Guard is an exact match against REPORTED_MANIFEST_PATHS: no traversal to defend, no unlisted file reachable.
     expect(await repairManifest({ root, path: `${STATE_DIR}/secrets/ci.json`, key: "contextShelf" })).toBe("unknown file");
     expect(await repairManifest({ root, path: `package.json`, key: "name" })).toBe("unknown file");
     expect(await contents(path)).toEqual({ contextShelf: "" });
@@ -125,13 +119,7 @@ test("a file this build cannot read is left exactly as it is", async () => {
     const { path } = settingsFile(root);
     await write(path, `{"contextShelf": ""`);
 
-    /* The DOWNGRADES rule in json-file.ts: bytes that could not be parsed are never rewritten from something
-     * derived from a fallback. A repair here would be this build volunteering an opinion about a file it does
-     * not understand.
-     *
-     * AND IT HAS TO SAY SO. Declining quietly and answering "done" is the failure this whole card exists to
-     * report: the file stays broken, the notice stays up, and the button is one more thing that visibly does
-     * nothing. */
+    // Downgrades rule: unparseable bytes are never rewritten, and the repair must say so, not silently succeed.
     expect(await repairManifest({ root, path: REL, key: "contextShelf" })).toBe("unreadable file");
     expect(await readFile(path, "utf8")).toBe(`{"contextShelf": ""`);
 });
@@ -141,9 +129,8 @@ test("a repair and a save cannot lose each other", async () => {
     const { path, file } = settingsFile(root);
     await write(path, `{"contextShelf": "", "skills": []}`);
 
-    /* THE REASON THIS GOES THROUGH THE STORE'S QUEUE AT ALL. The settings page rewrites this file whole every
-     * time somebody moves a switch, and the repair button is on a screen with those switches. Fired together,
-     * a repair doing its own read-modify-write would either lose the save or reinstate the key it removed. */
+    // Settings writes rewrite the whole file on every switch; without the store's queue, a concurrent repair and save
+    // would lose one or reinstate the removed key.
     await Promise.all([
         repairManifest({ root, path: REL, key: "contextShelf" }),
         file.update((current) => ({ ...current, hashlineEdits: true })),

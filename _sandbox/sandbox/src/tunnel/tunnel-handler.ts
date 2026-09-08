@@ -3,13 +3,11 @@ import type { CapabilityHandler } from "../capabilities/capability.js";
 import { removeLoadedSkill, writeLoadedSkill } from "../settings/loaded-skills.js";
 import type { TunnelEntry, TunnelKindName } from "./tunnel-links.js";
 
-/* A tunnel kind's capability handler is only the manifest's half of the story: STORE the thing (credentials, a
- * pool, whether it comes up on boot), and let the kind's own links layer do every dial, so the operator's card,
- * the agent's CLI, this apply and the boot restore observe one implementation. What the two kinds' handlers
- * had each written out is here once; a kind declares the data (its skill, its fragments, its echo) and the
- * three verbs its links layer already owns. */
+// Capability handler stores a tunnel kind's manifest data (credentials, pool, boot flag); the kind's own links layer
+// does every dial, so the operator card, agent CLI, apply, and boot restore share one implementation. A kind declares
+// its data and the three verbs its links layer already owns.
 
-// What the handler needs of a driver: the on-disk half. Both kinds' SPIs carry exactly these three.
+// On-disk half of a driver; both kinds' SPIs carry exactly these three.
 export interface TunnelDriverFiles<Config> {
     readonly write: (id: string, config: Config) => Promise<void>;
     readonly erase: (id: string, config: Config) => Promise<void>;
@@ -18,7 +16,7 @@ export interface TunnelDriverFiles<Config> {
 
 export interface TunnelKind<Config> {
     readonly kind: TunnelKindName;
-    // The skill the agent drives this kind through: shared by every entry of the kind, dropped with the last.
+    // Skill the agent drives this kind through: shared by every entry of the kind, dropped with the last.
     readonly skill: { readonly name: string; readonly text: string };
     readonly secret: NonNullable<CapabilityHandler["secret"]>;
     readonly echo: CapabilityHandler["echo"];
@@ -29,15 +27,13 @@ export interface TunnelKind<Config> {
     readonly up: (entry: TunnelEntry<Config>) => AsyncGenerator<IntenticLine>;
     readonly down: (entry: TunnelEntry<Config>) => Promise<void>;
     readonly status: (entry: TunnelEntry<Config>) => Promise<CapabilityStatus>;
-    // What an apply says when it stored the entry and dialled nothing: waiting for a click on the card, or
-    // waiting for the rebuild that installs its client.
+    // What an apply says when it stored the entry but dialled nothing: waiting on a click, or on a rebuild.
     readonly stored: (id: string) => string;
     readonly afterRebuild: string;
 }
 
-// A live link mapped onto the capability grid's four states. Mid-dial is `pending` rather than `active` on
-// purpose: a tunnel coming up is not yet carrying anything, and the grid's pending affordance already means
-// "not finished". `unavailable` is the pre-rebuild state, pending for the same reason.
+// Maps a live link onto the grid's four states. Mid-dial and pre-rebuild both read as `pending`, since neither is
+// finished and the grid's pending affordance already says so.
 export const tunnelStatus = (
     link: { readonly state: string; readonly detail?: string | undefined },
     live: { readonly active: string; readonly pending: string },
@@ -61,9 +57,8 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
     secret: spec.secret,
     echo: spec.echo,
     fragment: spec.fragment,
-    // A tunnel's files are written per name by its driver and the re-apply writes them under the new one, so a
-    // rename only takes the old one down and erases what it left. One that was up comes back where the config
-    // says it should, under the name it now has.
+    // Files are written per name by the driver; a rename only takes the old name down and erases it, since re-apply
+    // writes fresh ones under the new name.
     rename: {
         carry: async (_ctx, from, _to, raw) => {
             const config = raw as Config;
@@ -75,12 +70,10 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         const config = raw as Config;
         const entry = { id, config };
         const driver = spec.driverOf(config);
-        // Persist first: the manifest entry is what puts the fragment into the overlay, so an add must land
-        // even when the client isn't installed yet.
+        // Persist first: the manifest entry puts the fragment into the overlay before the client is installed.
         await driver.write(id, config);
         await writeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name, spec.skill.text);
-        // Re-applying (an edited credential, a changed country, an auto flip) must never leave the old one
-        // running: take it down, then bring it back below if it should be up.
+        // Re-applying must never leave the old instance running: take it down, then bring it back below if wanted.
         await spec.down(entry).catch(() => undefined);
         if (!spec.wanted(config)) {
             yield { kind: "log", message: spec.stored(id) };
@@ -88,8 +81,7 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         }
         const missing = await driver.missingTool();
         if (missing !== undefined) {
-            // Pre-rebuild bootstrap: a missing client is a soft outcome, not a failed add, the overlay this
-            // very add composes is what installs it.
+            // Missing client is a soft outcome, not a failed add: this very add's overlay is what installs it.
             yield { kind: "log", message: `Stored ${id}, this sandbox doesn't carry ${missing} yet. Rebuild it from the Environment card; ${spec.afterRebuild}.` };
             return;
         }
@@ -100,8 +92,8 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         const config = raw as Config;
         await spec.down({ id, config }).catch(() => undefined);
         await spec.driverOf(config).erase(id, config);
-        // The skill is shared by every entry of the kind, so it goes only with the last one. The route removes
-        // the manifest entry AFTER this handler, so `id` is still counted here.
+        // Skill is shared by the kind, so it goes only with the last entry; the route removes the manifest entry after
+        // this handler runs, so `id` still counts here.
         const left = (await ctx.capabilities.list()).filter((capability) => capability.kind === spec.kind).length;
         if (left <= 1) {
             await removeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name);

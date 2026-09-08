@@ -1,18 +1,7 @@
-<!-- Numbered step card for the setup wizard: card chrome + a badge (the step number, or a check once
-     `done`) + title, with a right-aligned `actions` slot for header affordances (an InfoHint, a "Check
-     now" button). Replaces the repeated `<section>` + badge markup across the setup steps so their chrome
-     stays identical; each step supplies its own (collapsed or expanded) body via the default slot.
-
-     A card that is the WHOLE flow rather than one step of several passes `icon` instead of `step`: a lone
-     "1" badge promises a step 2 that is never coming, which reads as a page that failed to finish loading.
-
-     THE ACTIONS SLOT IS THE CARD'S TOP-RIGHT CORNER, at every width, and it is sized for one thing: an
-     icon-sized affordance (an InfoHint's (i)). That is what makes it safe to share the title's line on a
-     phone. It used to wrap to a second row there, because the slot once held a "Check now" BUTTON and
-     sharing the line turned "Waiting for your sandbox to report in…" into a three-line column beside it:
-     a title that has to be read vertically reads as a broken layout. A 16px icon costs the title one word;
-     a second row cost it a corner, and a hint alone on a row of its own reads as a stray control rather
-     than as something belonging to the heading beside it. Put anything wider than an icon in the body. -->
+<!--
+    Numbered step card for the setup wizard: a badge (number, or a check once `done`), a title, and a right-aligned `#actions` slot sized for one
+    icon affordance only. Pass `icon` instead of `step` for a card that is the whole flow, not one step of several.
+-->
 <script setup lang="ts">
 import type { IconName } from "../../icons/iconSets.js";
 

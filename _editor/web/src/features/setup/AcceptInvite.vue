@@ -9,9 +9,9 @@ import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import AppBrand from "../../components/AppBrand.vue";
 
-/* Public accept-invite landing for the emailed link (/invite/:token). It previews the token (no session needed),
- * resolves the current session, then routes the invitee: sign in as the invited address → accept → into the
- * workspace. Accept is email-locked server-side; this page just picks the right prompt for the token × session. */
+// Public accept-invite landing for /invite/:token: previews the token without a session, resolves the current session,
+// then routes the invitee (sign in as the invited address, accept, into the workspace). Accept is email-locked
+// server-side; this page only picks the right prompt for token × session.
 
 const route = useRoute();
 const router = useRouter();
@@ -33,13 +33,7 @@ onMounted(async () => {
 
 const invitedEmail = computed(() => preview.value?.invitedEmail);
 const sandboxName = computed(() => preview.value?.sandboxName);
-/* WHAT THE LINK ACTUALLY GRANTS, in the sentence that asks somebody to take it.
- *
- * The page used to promise everyone the same thing, "open and work in", which is true of a collaborator and a
- * maintainer and false of a viewer: they accepted an invitation to work, and then met a workspace that refused
- * every write. Saying the tier here costs one clause and is the difference between a permission and a fault.
- * Fallback wording for an absent role (a preview from a platform that predates the field) says only what every
- * tier can do rather than guessing upward. */
+// States what the invitee's role grants; an absent role falls back to what every tier can do.
 const grantSentence = computed<string>(() => {
     switch (preview.value?.role) {
         case `maintainer`: {
@@ -95,7 +89,7 @@ const accept = async (): Promise<void> => {
     }
 };
 
-// The workspace is a place, so the button that opens it is a link: same as every other way into it.
+// The workspace is a place, so opening it is a link, not a click handler.
 
 const switchAccount = async (): Promise<void> => {
     await signOut();

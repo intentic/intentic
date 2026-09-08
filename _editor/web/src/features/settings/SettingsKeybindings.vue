@@ -5,11 +5,9 @@ import { commands } from "../../shell/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../shell/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../shell/commands/useKeymap";
 
-/* Keybindings: the user-facing face of the keymap (useKeymap). Lists every registered command (builtins and
- * extension-contributed alike, since they share one registry) with its EFFECTIVE chord, and lets the user record a
- * new shortcut, revert to the command's default, or unbind it. A remap persists to the keymap store and takes
- * effect live everywhere (dispatcher + palette). Recording captures one keystroke in the capture phase with
- * stopPropagation, so the shell's global dispatcher never fires the old shortcut mid-capture. */
+// Lists every command (builtins and extensions share one registry) with its effective chord; lets the user record,
+// reset, or unbind a shortcut, live everywhere via the keymap store. Recording captures one keystroke in the capture
+// phase, so the shell's dispatcher never fires the old shortcut mid-capture.
 
 const isMac = isApplePlatform();
 const { setKeybinding, unbindKeybinding, resetKeybinding, resetKeymap } = useKeymap();
@@ -45,10 +43,7 @@ const rows = computed<readonly CommandRow[]>(() => {
 // Any override at all → the "Reset all" affordance is meaningful.
 const hasAnyOverride = computed(() => Object.keys(keymapOverrides.value).length > 0);
 
-// chord → command ids sharing it, so a row can warn when its shortcut collides with another's (the shell resolves
-// a live conflict by first-registered-wins, but the user should see it). Commands with a `when` gate are left out
-// of the count: they only claim the chord in their own context (F2 renames the focused terminal OR the focused
-// chat, never both), so counting them would cry conflict over bindings that can't actually collide.
+// Chord → commands sharing it, for collision warnings; a `when` gate excludes a command since it can't collide.
 const chordOwners = computed<Record<string, readonly string[]>>(() => {
     const byChord: Record<string, string[]> = {};
     for (const entry of commands.value) {
@@ -64,8 +59,7 @@ const chordOwners = computed<Record<string, readonly string[]>>(() => {
 });
 const conflicting = (chord: string | undefined): boolean => chord !== undefined && (chordOwners.value[chord]?.length ?? 0) > 1;
 
-// Recording is a two-way pair: the capture handler ends it, and ending it detaches the handler, so the
-// listener rides in a variable both can name and neither has to be declared before the other.
+// Shared so the capture handler and stopRecording can each reference and clear the same listener.
 let capture: ((event: KeyboardEvent) => void) | undefined;
 
 const stopRecording = (): void => {
@@ -115,8 +109,7 @@ onUnmounted(stopRecording);
 
         <FilterBar v-model="query" placeholder="Filter commands…" :count="rows.length" />
 
-        <!-- A record list — a hundred-odd commands, read by scanning — so the group takes the compact tier and
-             its rows and its "nothing matched" line read it from there. -->
+        <!-- Compact tier: a long list of commands read by scanning. -->
         <RowGroup>
             <Row v-for="row in rows" :key="row.command" :title="row.title" :description="row.command">
                 <template #title>
@@ -126,9 +119,7 @@ onUnmounted(stopRecording);
                     </span>
                 </template>
 
-                <!-- The chord is a FACT about the command, so it rides #meta and lines up down the column; the
-                     three buttons that change it are actions and ride #control. The fixed width is what keeps
-                     every kbd in one vertical line rather than ragged against its row's title length. -->
+                <!-- Chord is a fact (#meta, right-aligned); the buttons that change it are actions (#control), at a fixed width. -->
                 <template #meta>
                     <span class="flex w-40 items-center justify-end gap-1.5">
                         <span v-if="recording === row.command" class="italic text-primary-500">Press keys… (Esc)</span>

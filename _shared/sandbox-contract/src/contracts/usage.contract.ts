@@ -3,18 +3,13 @@ import { z } from "zod";
 import { LimitResetClaimSchema, LimitResetStatusSchema } from "../schemas/plan-limits.js";
 import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/usage.js";
 
-// The one control over the headroom readings a person has: measure again, now, every connection. `force`
-// ignores the freshness the daemon otherwise honours (a reading from the last minute is what the provider
-// would answer again), because the person pressing it has just changed something about an account and is
-// asking whether what they can see survived it.
+// `force` ignores the daemon's freshness window and measures now instead of reusing a recent reading.
 export const RefreshPlanLimitsSchema = z.object({
     force: z.boolean().default(false).describe("Measure again even if a reading was taken a moment ago."),
 });
 
-// The durable spend ledger (see UsageTurnSchema). Read-only over the wire, rows are appended daemon-side at
-// turn end, so the ledger stays a trustworthy record of what was actually spent, the same principle as the
-// activity log. `rollup` serves every cost/usage panel: it groups by day × provider × account × model, and the
-// browser re-projects from there (spend per day, cost by model, cache hit rate) without another round trip.
+// Durable spend ledger, read-only over the wire; rows are appended daemon-side at turn end.
+// `rollup` groups by day, provider, account and model, so every cost panel re-projects from this one answer.
 export const usageContract = {
     rollup: oc
         .route({
@@ -26,9 +21,7 @@ export const usageContract = {
         })
         .input(DayWindowQuerySchema)
         .output(UsageRollupSchema),
-    // Not the ledger's business, but the same tab: the plan-limit readings behind every ring, re-measured on
-    // request for every provider at once. The readings themselves arrive on /events as they land, and on the
-    // account lists afterwards; this answers once the sweep is done or its deadline passes.
+    // Re-measures every account's plan limits on request; readings also arrive via /events and account lists otherwise.
     refreshPlanLimits: oc
         .route({
             method: "POST",
@@ -39,16 +32,9 @@ export const usageContract = {
         })
         .input(RefreshPlanLimitsSchema)
         .output(z.object({ ok: z.literal(true) })),
-    /* THE WAY PAST A SPENT SESSION WINDOW THAT ISN'T WAITING (LimitResetStatusSchema has what it costs).
-     *
-     * ASKED, NOT POLLED, and that is the whole reason it is a route of its own rather than another field on the
-     * account list. The provider only evaluates it when told the account is at the wall, so asking is a claim
-     * about the account's state; asking on every headroom sweep, for every connection, would be that claim made
-     * continuously and falsely. It is asked at the one moment it is true — a refused turn, with its strip on
-     * screen — and the answer is worth nothing a moment later, so nothing caches it.
-     *
-     * Answers `available: false` rather than failing for an account with no such mechanism, so a caller can ask
-     * about any account it holds without first knowing which provider grants one. */
+    // Asked, not polled: the provider only evaluates this when told the account is at the wall, and the answer isn't
+    // cached.
+    // Answers `available: false` rather than failing when the account has no such mechanism.
     limitReset: oc
         .route({
             method: "GET",

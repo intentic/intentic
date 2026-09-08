@@ -1,27 +1,8 @@
-<!-- THE REASONING-EFFORT METER: the little ladder of segments, and the word for the rung it is on. The app's one
-     effort control, over a plain (levels, level) pair rather than over a conversation, because it is now asked
-     the same question in two different grammars: the composer sets the effort of the turn you are about to send
-     (ComposerEffort binds this to a Conversation), and Sandbox ▸ Agent ▸ Models sets the effort of a model
-     PINNED for runs nobody is watching, which has no conversation anywhere near it.
-
-     THE RAMP IS THE POINT. A segment is not on-or-off: the lit ones climb from ~50% brand at Low to ~95% at the
-     top, so the ladder reads as "how hard" at a glance rather than as a count of boxes. A copy that lit every
-     segment the same colour would look right in a screenshot and wrong in use.
-
-     IT DRAWS NOTHING when there are no levels to offer, which is the caller's answer rather than this
-     component's: an ACP agent owns its own reasoning settings and OpenCode drops the field entirely (see
-     `capabilities.effort`). Segments there are buttons that change nothing, which is worse than no segments.
-
-     ON TOUCH THE LADDER IS A READOUT, NOT A CONTROL, and that is the one thing this component does differently
-     per pointer. A rung is 9–14px wide. Making the strip 44px tall (chat.css) fixes the axis a thumb misses on
-     and cannot fix the axis that matters here: five rungs a thumb can distinguish is 120px of a composer row
-     that has a model pill, a persona, a microphone and a send button already. Widening them would also stop
-     them being a ladder: a meter whose rungs are button-sized is a row of buttons, and the ramp that makes
-     this readable at a glance is gone.
-
-     So the phone gets the same ladder as a PICTURE, the level's word beside it, and one 44px target over the
-     whole thing that opens the levels as a sheet. Nothing about the desktop control changes: five direct
-     targets a mouse can hit exactly, which is why they exist. -->
+<!--
+    Reasoning-effort ladder over a plain (levels, level) pair, used by the composer and by Sandbox ▸ Agent ▸ Models. Segments brighten with level
+    rather than toggling on or off; it renders nothing when the caller has no levels to offer. On touch it is a readout that opens the levels as a
+    sheet, not five direct targets.
+-->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { CatalogOption } from "@intentic/sandbox-contract";
@@ -43,21 +24,13 @@ const {
     disabled?: boolean;
     /** Extra classes on the level word, for a composer that drops it in a narrow container. */
     labelClass?: string;
-    /**
-     * What the word beside the ladder reads when NO rung is chosen — "Default" for a pinned model that takes
-     * whatever the provider's own is. The composer never passes it: a conversation always has an effort.
-     */
+    /** What shows when no rung is chosen (e.g. "Default" for a pinned model); the composer always has an effort. */
     emptyLabel?: string;
 }>();
 
 const effortIndex = computed(() => efforts.findIndex((option) => option.value === effort));
 const effortLabel = computed(() => efforts.find((option) => option.value === effort)?.label ?? (effort === `` ? emptyLabel : effort));
-/**
- * Every word the label can ever read on this scale, stacked invisibly under the live one so the label box is as
- * wide as its WIDEST rung and never resizes. The meter sits at the right edge of a row (the picker's effort line,
- * the composer), so a label that grows from "High" to "X-High" used to push the ladder sideways — out from under
- * the cursor that had just clicked it, mid-click-through. The box is fixed, so the rungs hold still.
- */
+/** Every possible label, stacked invisibly, so the box is fixed at its widest rung's width and never resizes. */
 const labelWidths = computed(() => [...new Set([...efforts.map((option) => option.label), ...(emptyLabel === `` ? [] : [emptyLabel])])]);
 const effortFill = (index: number): string => {
     const top = Math.max(1, efforts.length - 1);
@@ -65,8 +38,8 @@ const effortFill = (index: number): string => {
     return `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)`;
 };
 
-// `coarse`, not `mobile`: this is a question about the POINTER reading the control, and a tablet on the desktop
-// shell has the same thumb as a phone. It matches how the rest of the kit decides touch affordances.
+// `coarse`, not `mobile`: about the pointer, not the device, so a desktop tablet gets the same touch
+// treatment.
 const { coarse } = useDevice();
 const sheetOpen = ref(false);
 const trigger = ref<HTMLButtonElement | null>(null);
@@ -79,7 +52,7 @@ const pick = (value: string): void => {
 
 <template>
     <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
-        <!-- TOUCH: the ladder is inert ink inside one button, and the button says the whole state in words. -->
+        <!-- Touch: the ladder is inert ink inside one button; the button says the whole state in words. -->
         <template v-if="coarse">
             <button
                 ref="trigger"
@@ -97,8 +70,10 @@ const pick = (value: string): void => {
                         :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
                     ></span>
                 </span>
-                <!-- The outer span keeps the caller's own display (labelClass hides the word in a narrow
-                     composer); the grid that reserves the widest rung's width lives one level in. -->
+                <!--
+                    Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives
+                    one level in.
+                -->
                 <span class="text-2xs text-subtle" :class="labelClass">
                     <span class="grid">
                         <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>
@@ -133,7 +108,7 @@ const pick = (value: string): void => {
             </ResponsiveOverlay>
         </template>
 
-        <!-- POINTER: five direct targets, exactly as before. -->
+        <!-- Pointer: five direct targets. -->
         <template v-else>
             <div class="flex items-center">
                 <button

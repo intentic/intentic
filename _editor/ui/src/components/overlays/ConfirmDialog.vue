@@ -1,28 +1,7 @@
-<!-- THE CONFIRM, one modal for every "are you sure?" in the app: discarding unsaved tabs, killing running
-     terminals, deleting files, removing a capability or an automation, leaving a sandbox.
-
-     DESTRUCTIVE IS THE DEFAULT, because deleting something is what nearly every confirm in this app is about,
-     and a confirm that has to declare its own tone is a confirm that will be declared wrong. `destructive`
-     turns off only the red: the second thing worth stopping for is a commit that CANNOT BE TAKEN BACK
-     without being a deletion (approving a queue of posts to the public internet), and painting that button
-     danger-red says "this deletes something", which is the one thing it does not do.
-
-     Nine call sites had written this out, and what they agreed on was everything that matters: the same four
-     Dialog props, the same Cancel-then-danger footer, the same `autofocus` on the destructive button. What
-     they had drifted on was the width: 24rem, 26rem, and one call site that had noticed a bare `26rem` dialog
-     overflows a 360px phone and clamped it. That clamp is now the only behaviour, because it was right and the
-     other eight were one narrow screen away from finding out. It is <Modal>'s clamp now rather than this
-     component's own: the same reasoning had to be repeated for every dialog that is not a confirm, and
-     repeating it once per shape is how thirteen widths happened.
-
-     THE LIST IS PART OF THE CONFIRM, not decoration. Three of the sites were about a SET: five files, three
-     terminals, and each had written the same "show five, then `…and N more`" truncation. A confirm that says
-     "delete 40 files?" without naming any is asking the user to trust a number they cannot check; naming five
-     and counting the rest is the compromise that fits in a modal. Pass `items` and render one with `#item`;
-     the default slot is the prose underneath, which is where the consequence goes ("This can't be undone").
-
-     Cancel is `@cancel` rather than a `v-model`, because the call sites hold state of every shape: a payload,
-     a path set, a plain boolean, and none of them wants this component deciding what "closed" means for it. -->
+<!--
+    The one confirm modal for every "are you sure?": Cancel plus a destructive (red, autofocused) button by default; `destructive: false` for a
+    non-deletion commit that still can't be undone. `items` renders a truncated list ("…and N more") when the action names a set.
+-->
 <script setup lang="ts" generic="T">
 import Button from "../primitives/Button.vue";
 import type { IconName } from "../../icons/iconSets.js";

@@ -1,41 +1,17 @@
-/* WAITING FOR A PREVIEW ADDRESS TO COME UP, and opening a forwarded port in a tab.
- *
- * A sandbox address is previewed at a `preview-<panel>-<id>` / `port-<slot>-<id>` hostname served by the
- * daemon's preview proxy. A slot's FIRST forward mints the name, so the address exists before it resolves, and
- * both ways of showing one fail badly if handed it too early: an iframe that error-pages never retries, and a
- * tab navigated to an unresolvable host shows the browser's own "site can't be reached" with nothing to retry
- * from. So the address is probed until it answers.
- *
- * WHAT THE PROBE ASKS, and why it is not a plain fetch of the page. Cross-origin, a `no-cors` request settles on
- * ANY response and lets you read none of it, so the old probe called an edge's "502, no route for this name" a
- * success — and the panel framed it. Chrome then rendered that error page's own `X-Frame-Options` as
- * "<host> refused to connect", which is how "this sandbox has no preview address" reached the user as a
- * browser-level connection error with no explanation anywhere.
- *
- * The proxy therefore answers ONE reserved path with CORS open (`/__intentic/preview-probe`, see the daemon's
- * panels/preview-proxy.ts, which owns this string and this shape) and tells the truth about itself: whether the
- * hostname reached the sandbox at all, and what it currently resolves to there. A readable answer means the
- * address is real; anything else means it is not, however plausibly the edge answered.
- *
- * Three surfaces had each written the waiting loop: the preview panel's iframe gate, the terminal's Ctrl+click
- * on a localhost link, and the Ports view's Preview button. The last of those is an extension, which could
- * reach neither of the first two, so the loop, the intervals, and the sentence a user reads while waiting all
- * lived in triplicate. */
+// Preview hostnames may not resolve yet when minted, and both an iframe and a raw tab fail silently if used too
+// early. This polls a reserved, CORS-open endpoint (`/__intentic/preview-probe`) rather than plain-fetching the
+// page, since a cross-origin `no-cors` request can't tell a real answer from an edge error page.
 
-// The proxy's own path (daemon: PREVIEW_PROBE_PATH). One string, two packages, no shared dependency between
-// them: the kit is presentational and takes none.
+// Proxy's reserved path (daemon: PREVIEW_PROBE_PATH), duplicated since the kit takes no daemon dependency.
 const PROBE_PATH = "/__intentic/preview-probe";
 
-// Fixed rather than per-caller: how long a freshly-minted name takes to answer is a property of the preview
-// fabric, not of the button waiting on it, and three surfaces disagreeing about it was the bug.
+// Fixed, not per-caller: resolve time is a property of the preview fabric, not of the button waiting on it.
 const PROBE_INTERVAL_MS = 3000;
 const PROBE_SLOW_AFTER_MS = 30_000;
-// Generous, because a first start can legitimately spend a minute on propagation, but bounded, so a name that
-// will never answer is not polled for the life of the tab.
+// Generous enough for first-start propagation, bounded so a dead name isn't polled forever.
 const PROBE_GIVE_UP_MS = 180_000;
 
-// What the sandbox says the address resolves to. `serving` is the only one worth framing; the rest are screens
-// to show, which is why they are carried rather than flattened into a boolean.
+// What the address resolves to; only `serving` is framed, the rest are screens to show instead.
 export type PreviewState = "serving" | "starting" | "several" | "stopped" | "unforwarded";
 
 export interface PreviewServer {
@@ -44,19 +20,17 @@ export interface PreviewServer {
     readonly dir?: string;
 }
 
-/* The outcome of a probe:
- *   · reached      , the hostname IS this sandbox's preview proxy, and `state` is what it serves there
- *   · unreachable  , nothing answered as a preview before the deadline: no route, no DNS, nothing listening at
- *                    the edge. NOT "the dev server is down", which is `reached` with a state that says so
- *   · abandoned    , the caller stopped wanting it (tab closed, component unmounted, newer probe) */
+// Outcome of a probe:
+// - reached: the hostname is this sandbox's preview proxy; `state` says what it serves.
+// - unreachable: nothing answered as a preview before the deadline; distinct from `reached` with a stopped state.
+// - abandoned: the caller stopped wanting it (tab closed, unmounted, superseded).
 export type PreviewProbe =
     | { readonly outcome: "reached"; readonly state: PreviewState; readonly servers: readonly PreviewServer[] }
     | { readonly outcome: "unreachable" }
     | { readonly outcome: "abandoned" };
 
 export interface ProbeOptions {
-    /* Called after each attempt that did not reach the proxy, with how long the wait has run. A caller that
-     * narrates progress uses the `slow` flag rather than inventing its own threshold. */
+    // Called after each failed attempt with elapsed time; use `slow` rather than inventing a threshold.
     readonly onWaiting?: (elapsedMs: number, slow: boolean) => void;
     /* Checked before every attempt and after every response. Returning false ends the probe as `abandoned`. */
     readonly stillWanted?: () => boolean;
@@ -70,8 +44,8 @@ interface ProbeBody {
 
 const STATES: readonly PreviewState[] = ["serving", "starting", "several", "stopped", "unforwarded"];
 
-// One attempt. Undefined for every way of not being a preview proxy: a rejected fetch (DNS, refused, an
-// opaque cross-origin answer), a non-200, a body that is anybody else's. Never throws.
+// One probe attempt; `undefined` for anything that isn't this proxy (rejected fetch, non-200, a body that isn't
+// its shape). Never throws.
 const askOnce = async (url: string): Promise<{ state: PreviewState; servers: readonly PreviewServer[] } | undefined> => {
     try {
         const response = await fetch(new URL(PROBE_PATH, url).toString(), { cache: "no-store" });
@@ -95,8 +69,8 @@ const askOnce = async (url: string): Promise<{ state: PreviewState; servers: rea
     }
 };
 
-/* Poll `url` until its preview proxy answers. Never throws: a caller is deciding what to SHOW, and every
- * outcome here is a thing to show rather than an error to handle. */
+// Polls `url` until its preview proxy answers. Never throws: every outcome is a thing to show, not an error to
+// handle.
 export const probePreview = async (url: string, options: ProbeOptions = {}): Promise<PreviewProbe> => {
     const { onWaiting, stillWanted } = options;
     const startedAt = Date.now();
@@ -124,31 +98,20 @@ export interface ForwardedPortTab {
     readonly port: number;
     // Carried across from a link that named a path on localhost, so Ctrl+clicking one lands where it pointed.
     readonly path?: string;
-    // The caller's own route to POST /ports/forward, the web app and the Ports extension reach the daemon
-    // through different clients, and which one is not this function's business. Answers undefined when the
-    // sandbox has no public preview hostname at all.
+    // Caller's route to POST /ports/forward; returns undefined when the sandbox has no public hostname.
     readonly forward: (port: number) => Promise<string | undefined>;
-    // Somewhere on the page to also say what went wrong, for a caller that has a place for it. The tab always
-    // says it too, because the tab is where the user is looking.
+    // Optional extra place to show the error; the opened tab always shows it too.
     readonly onError?: (message: string) => void;
 }
 
-/* Forward a port and open it, narrating the wait in the tab itself.
- *
- * THE TAB MUST OPEN SYNCHRONOUSLY, inside the click's user activation, or a popup blocker eats it, and the
- * forward plus the probe take anywhere from a moment to a minute. So a blank tab opens first, writes what it is
- * waiting for, and navigates once the address answers. Returns immediately for the same reason: the caller is
- * an event handler, and everything after the first line happens in the tab.
- *
- * `opener` is severed by hand rather than with `noopener`, which would return null and leave nothing to
- * navigate. The tab will show arbitrary app content, so it does not get a handle back on the shell. */
+// Forwards a port, opening a tab synchronously within the click's user activation (a later open would hit a
+// popup blocker). `opener` is severed by hand, not via `noopener`, which would leave no handle to navigate.
 export const openForwardedPort = ({ port, path = "", forward, onError }: ForwardedPortTab): void => {
     const tab = window.open("", "_blank");
     if (tab !== null) {
         tab.opener = null;
     }
-    // The tab, while it is still there to write to. A user who closed it has said they are done waiting, and a
-    // popup the browser blocked was never there, both mean "nothing left to narrate to".
+    // The tab, if still open; a closed or blocked tab means nothing left to narrate to.
     const live = (): Window | undefined => (tab !== null && !tab.closed ? tab : undefined);
     const show = (text: string): void => {
         const showing = live();
@@ -192,10 +155,8 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
 
-/* A terminal link that points at localhost names the SANDBOX's loopback, not the user's machine, the process
- * that printed it runs inside the remote container, so opening it verbatim is a dead link. This is the reading
- * of one: its port and the path to carry over, or undefined for anything that is not a sandbox-loopback
- * http(s) link (which the caller opens as-is). */
+// A `localhost` link printed by a process inside the sandbox names the sandbox's own loopback, not the user's
+// machine; opening it verbatim is dead. Reads the port and path from such a link, or `undefined` if it isn't one.
 export const parseLoopbackLink = (uri: string): { port: number; path: string } | undefined => {
     let url: URL;
     try {

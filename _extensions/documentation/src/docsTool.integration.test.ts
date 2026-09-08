@@ -5,15 +5,8 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/* `intentic-docs` against a real git repository, because the two things worth proving about it cannot be proved
- * any other way.
- *
- * ONE: a package's one-liner and its anchors are READ BACK OUT OF ITS README. There is no sidecar to hold them,
- * so if this parsing is wrong every package in the workspace silently loses its description and its links.
- *
- * TWO: staleness is the gap between the last commit that touched the package and the last that touched its
- * README. That is the whole anti-rot mechanism, it is expressed as a git range, and a unit test with a mocked
- * git would only prove the mock agrees with itself. The commits below are the point of the test. */
+// Runs `intentic-docs` against a real git repository: README parsing (one-liner, anchors) and staleness (a git commit
+// range) can't be proven against a mock.
 
 const BIN = join(import.meta.dirname, `..`, `bin`, `intentic-docs`);
 
@@ -30,8 +23,7 @@ const check = (): {
     }[];
     undocumented: string[];
 } => JSON.parse(execFileSync(`node`, [BIN, `check`, `--root`, root, `--from`, `published`], { encoding: `utf8` }));
-// The bin's exit code and whichever stream carried its answer: a refusal is the point of several of these, so a
-// non-zero exit is a result to assert on rather than a throw.
+// Returns the exit code and output stream; a refusal is asserted on, not thrown, since several tests expect one.
 const run = (...args: string[]): { status: number; output: string } => {
     try {
         return { status: 0, output: execFileSync(`node`, [BIN, ...args], { encoding: `utf8` }) };
@@ -94,7 +86,6 @@ describe(`intentic-docs against a real repository`, () => {
 
     it(`reads anchors from the key-files section only, resolving them against the repository root`, () => {
         const entry = check().entries.find((candidate) => candidate.dir === `_deploy/graph`);
-        // Package-relative in the file (so the link works on GitHub) and repo-relative out of the tool.
         expect(entry?.anchors).toEqual([
             { path: `_deploy/graph/src/compile.ts`, what: `RawNode map → validated graph.`, line: 42 },
             { path: `_deploy/graph/src/types.ts`, what: `the IR types.` },
@@ -116,8 +107,6 @@ describe(`intentic-docs against a real repository`, () => {
         expect(entry?.reason).toContain(`README`);
     });
 
-    /* THE RULE THE WHOLE LAYOUT EXISTS FOR: updating the README in the same commit as the code clears the debt,
-     * with nothing to bump and nothing to remember. */
     it(`returns to zero when the README moves in the same commit as the code`, () => {
         write(`_deploy/graph/src/compile.ts`, `export const compile = () => 3;\n`);
         write(
@@ -150,10 +139,8 @@ describe(`intentic-docs against a real repository`, () => {
         expect(check().undocumented).toContain(`_libs/quiet`);
     });
 
-    /* `--from` defaults to staging, and `check --write` is what an agent runs after editing a README that is
-     * already in the repository, so the flagless form used to CREATE a staging directory holding nothing but an
-     * index. The app reads that directory to answer "is there a draft to review": a lone index there announced a
-     * draft with no map and no pages, and the repository's published documents went behind a toggle. */
+    // A lone index in staging reads as "a draft exists", so writing one for a nonexistent draft would falsely offer it
+    // for review.
     it(`refuses to write a staged index for a draft that does not exist, and says which flag was meant`, () => {
         const result = run(`check`, `--root`, root, `--write`);
         expect(result.status).toBe(1);
@@ -167,10 +154,6 @@ describe(`intentic-docs against a real repository`, () => {
         expect(existsSync(join(root, `.intentic/config/docs/root/index.json`))).toBe(true);
     });
 
-    /* A REPOSITORY CHECKED OUT INSIDE ANOTHER ONE IS NOT PART OF IT. A workspace root holding clones: a monorepo
-     * beside a shelf of reference checkouts: is the ordinary shape here, and without a boundary the root claimed
-     * every package in every clone: hundreds of entries duplicating indexes those repos keep themselves, and every
-     * reference checkout reported as undocumented work nobody owes. */
     it(`leaves a nested repository's packages to that repository`, () => {
         write(`refs/openclaw/package.json`, `{ "name": "openclaw" }\n`);
         write(`refs/openclaw/pkg/package.json`, `{ "name": "openclaw-pkg" }\n`);
@@ -181,24 +164,17 @@ describe(`intentic-docs against a real repository`, () => {
         expect(mentioned.filter((dir) => dir.startsWith(`refs/`))).toEqual([]);
     });
 
-    /* `--repo` is relative to `--root`, and the absolute path is the obvious thing to type. Joining the two used
-     * to yield a directory that had never existed (`/work` + `/work/intentic` → `/work/work/intentic`): the run
-     * scanned nothing, found nothing, and left an empty index in a tree it had just invented, which someone then
-     * had to notice and delete by hand. */
+    // `--repo` is relative to `--root`; an absolute path is the natural mistake this guards against.
     it(`refuses an absolute repository path, and names the relative one it wanted`, () => {
         const result = run(`check`, `--root`, root, `--repo`, join(root, `refs/openclaw`), `--from`, `published`);
         expect(result.status).toBe(2);
         expect(result.output).toContain(`refs/openclaw`);
-        // The path the join would have invented: the root, with the whole absolute path hung off it again.
+        // The nonsensical path a naive join(root, absoluteRepo) would have produced.
         expect(existsSync(join(root, root))).toBe(false);
     });
 
-    /* THE SPELLING THE GUARD ABOVE CANNOT CATCH. `--repo .` is a valid path under the root: it IS the root, so an
-     * agent standing in a repository and naming it "here" is silently answered about the workspace instead. The
-     * workspace documents nothing itself, so the run wrote an all-empty index at the top of it, left the
-     * repository's real index unrefreshed, and rode into the next commit: deleted by hand, back the next session,
-     * thirteen times over. An index with no packages, no pages and no orphans is never worth writing: a
-     * single-package repository produces exactly the same nothing, so refusing it closes the spelling for good. */
+    // An index with no packages, pages or orphans is never worth writing, whether from `--repo .` naming the workspace
+    // or a genuinely package-less directory.
     it(`refuses to write an index that would say nothing, whichever way it was asked`, () => {
         write(`hollow/README.md`, `# hollow\n\nNot a repository, and nothing under it is a package.\n`);
         const result = run(`check`, `--root`, root, `--repo`, `hollow`, `--from`, `published`, `--write`);

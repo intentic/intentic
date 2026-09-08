@@ -18,18 +18,11 @@ import AgentSessionMenu from "../board/AgentSessionMenu.vue";
 import SessionChip from "../board/SessionChip.vue";
 import SessionIdentity from "../board/SessionIdentity.vue";
 
-/* Drill-in for one agent (/agents/:id): one canonical chat surface per form factor (the fleet-UX rule that
- * kills the duplicated-conversation problem):
- * - MOBILE: this IS the chat surface (no dock exists), Chat | Changes segmented, chat default.
- * - DESKTOP: the conversation lives ONLY in the docked ChatPanel (focused by the binding below); this view is
- *   review-only: the isolated diff + Land/Discard, the one job the dock can't host. A draft/unknown id has
- *   nothing to review → back to the board.
- *
- * THIS ROW OWNS THE SESSION; the panel below owns the review. That split is the whole point of the header:
- * everything here answers "what is this agent, and what do I want to happen to it": the title, the branch, the
- * one status chip, Land, and the ⋯ that holds the rest, while the panel's bars answer "what did it write".
- * They used to be interleaved across three stacked bars, which is how the page came to state its file count
- * four times and the word "landed" twice, in two different senses, twenty-four pixels apart. */
+// Drill-in for one agent (/agents/:id): one canonical chat surface per form factor.
+// - mobile: this IS the chat surface, Chat | Changes segmented, chat by default
+// - desktop: the conversation lives only in the docked ChatPanel; this view is review-only (diff, Land, Discard)
+//
+// This row owns the session; the panel below owns the review.
 
 const route = useRoute();
 const router = useRouter();
@@ -40,39 +33,25 @@ const { activeSandboxId } = useSandbox();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
 
-/* THE REVIEW OF AN AGENT IN ANOTHER SANDBOX, named by `?sandbox=`.
- *
- * A query parameter rather than a second route, because it is the same page about the same kind of thing: one
- * agent's work, its diff, and the two presses that settle it. What the parameter changes is which daemon
- * answers, and every read and mutation below takes it (useAgentChanges, agentActions), so the page is the
- * board's promise kept: work is readable and landable from wherever you are standing.
- *
- * IT IS DROPPED WHEN IT NAMES THE ACTIVE SANDBOX, which is what makes the URL survive a switch. Cross to that
- * box (the "Open in" press below, or the switcher) and this page is looking at a local agent again, through
- * the local roster, the local chat and the local review, with no stale aim left pointing at a daemon that is
- * now simply "here". */
+// Review of an agent in another sandbox, named by `?sandbox=`; every read and mutation below takes it, so work is
+// readable and landable from anywhere. Dropped when it names the active sandbox, so crossing into that box
+// returns this page to a local agent.
 const routeBox = computed(() => (typeof route.query[`sandbox`] === `string` ? route.query[`sandbox`] : undefined));
 const remoteBox = computed(() => (routeBox.value === activeSandboxId.value ? undefined : routeBox.value));
 const remote = computed(() => remoteBox.value !== undefined);
 const remoteName = computed(() => (remoteBox.value === undefined ? undefined : boxNameOf.value.get(remoteBox.value)));
 
-/* Across both halves of the fleet: an ARCHIVED agent is off the board's roster but keeps its branch, diff and
- * transcript, so this page is still its destination: from the board's archive, from a bookmarked URL, and
- * from the moment the review panel's own Archive button fires under the user's cursor.
- *
- * A remote agent is looked up in the box's own roster instead (fleetAcross), which is the store that read it.
- * Deliberately not in `agentById`: agent ids are minted per sandbox, so an id that exists in both boxes would
- * otherwise render this box's agent under the other one's URL. */
+// An archived agent keeps its branch/diff/transcript, so this page is still its destination. A remote agent is
+// looked up in that box's own roster (fleetAcross), not `agentById`, since ids are minted per sandbox and could
+// collide.
 const fleetAgent = computed(() =>
     remoteBox.value === undefined
         ? agentById(agentId.value)
         : otherFleet.value.find((agent) => agent.id === agentId.value && agent.sandboxId === remoteBox.value),
 );
 
-/* A REMOTE REVIEW KEEPS THE CROSS-SANDBOX STORE ALIVE FOR AS LONG AS IT IS OPEN, because this page can be
- * arrived at without the board: a bookmarked URL, a reload, a link opened in a tab of its own. Without it the
- * roster this page reads its agent's title and status out of would be whatever the board happened to leave
- * behind, and empty on a cold load. Disposed with the page, so an ordinary local review costs nothing. */
+// Keeps the cross-sandbox store alive for as long as a remote review is open, since this page can be reached
+// without the board (bookmark, reload, new tab); disposed with the page, so a local review costs nothing.
 let releaseBoxes: (() => void) | undefined;
 watch(
     remote,
@@ -92,19 +71,9 @@ onUnmounted(() => {
     sweepPeek();
 });
 
-/* AN ID THIS TAB HAS NOT BEEN TOLD ABOUT IS NOT AN ID THAT DOESN'T EXIST, and the difference is the whole of
- * this block. Neither half of the fleet is guaranteed to be here when the page opens: the live roster arrives
- * on the events stream, so a reconnect, a restarted daemon or an agent created in another window can leave
- * this tab a roster behind, and the archive is not read at all until something asks for it.
- *
- * Read as absence, that produced two failures a reload "fixed", which is exactly how it was reported. With no
- * tab open for the id the page bounced back to the board. With one open (the usual case: the chat was just
- * pointed at this agent) it stayed and went HOLLOW: no fleet entry means not registered, not registered means
- * not reviewable, and the review query is keyed on that, so the header rendered over a review area that was
- * empty for good, fetching nothing, explaining nothing.
- *
- * So both halves are asked, once per id, and the decisions below wait for the answer. Then the page either
- * fills in or bounces on something the daemon actually said. */
+// Neither half of the fleet is guaranteed loaded when the page opens (the roster streams in, the archive is read
+// on demand), so an absent id is not necessarily a nonexistent one. Both halves are asked once per id before the
+// page fills in or bounces.
 const settling = ref(false);
 let askedFor: string | undefined;
 const settleLookup = (id: string): void => {
@@ -113,8 +82,7 @@ const settleLookup = (id: string): void => {
     }
     askedFor = id;
     settling.value = true;
-    // A remote id is not in either local half and never will be: the read that can name it is that box's own
-    // roster, so a "we haven't been told yet" here means the poll has not come back rather than a bad URL.
+    // A remote id is never in either local half; it means the poll hasn't answered, not a bad URL.
     if (remote.value) {
         refreshAcross();
         settling.value = false;
@@ -122,21 +90,13 @@ const settleLookup = (id: string): void => {
     }
     void Promise.all([refresh(), loadArchived()]).finally(() => (settling.value = false));
 };
-// Registered = has run a turn. Only a branch-backed registered conversation has a Changes review.
+// Registered means it has run a turn; only a branch-backed registered conversation has a review.
 const registered = computed(() => fleetAgent.value !== undefined && !unregistered(fleetAgent.value.status));
 const reviewable = computed(() => registered.value && fleetAgent.value?.branch !== undefined);
 const conversation = computed(() => conversations.value.find((candidate) => candidate.conversationId === agentId.value));
 
-/* THE PHONE'S OWN FOCUS-LEAVE SWEEP, for the tab a tap on a fleet card opened as a LOOK (Conversation.peek).
- *
- * Everywhere else that sweep is the strip's: a peeked chat goes when the focus moves to another one, which on
- * the desktop is what the next card click does. A phone has no dock and no next card — a tap comes HERE, and
- * going back leaves the focus exactly where it was — so the screen being LEFT is the event, and this is the only
- * place that can see it. Without it the phone would be the one surface where skimming the board still cost a tab
- * per agent looked at.
- *
- * Only while it is still a look: anything done in the conversation has already promoted it (Conversation.keep),
- * and unsent words spare it whatever else is true (the same floor `transient` holds). */
+// Phone-only focus-leave sweep for a look (Conversation.peek): there's no dock or next card to close it here, so
+// leaving the screen is the only event that can. Skipped once anything promotes it or it holds unsent words.
 const sweepPeek = (): void => {
     const chat = conversation.value;
     if (mobile.value && chat?.peek.value === true && !chat.unsent.value) {
@@ -144,9 +104,9 @@ const sweepPeek = (): void => {
     }
 };
 
-// Bind the shared chat singleton to this agent's tab: open/create from the fleet entry, else focus the
-// already-open conversation. Desktop additionally requires a REGISTERED agent (there must be a diff to
-// review); a draft or unknown id bounces back to the board.
+// Binds the chat singleton to this agent's tab: opens/creates from the fleet entry, or focuses the already-open
+// conversation. Desktop also requires a registered agent (something to review); a draft or unknown id bounces to
+// the board.
 const bindLocalConversation = (id: string, previousId: string | undefined): void => {
     if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
         return;
@@ -158,10 +118,9 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
         }
         return;
     }
-    // Unknown so far: ask both halves for it (once), and let the reads land before reading anything into
-    // the silence. Either they name it, and this watch runs again on a roster that has it, or they don't.
+    // Unknown so far: ask both halves once, and wait for an answer before reading anything into the silence.
     settleLookup(id);
-    // No fleet entry means no registry entry, so there is no read marker to stamp: just focus the tab.
+    // No fleet entry means no registry entry, so there's no read marker to stamp: just focus the tab.
     if (conversation.value !== undefined) {
         setActive(conversation.value.conversationId);
         return;
@@ -172,23 +131,15 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     void router.replace(`/agents`);
 };
 
-// Keyed on the id + the roster SIZE, not the fleetAgent computed: its per-recompute object identity (and
-// markSeen's write into the fleet source) would refire this watch forever. The archive counts toward that
-// size: archiving the agent under review shrinks the roster by one and grows the archive by one, and only
-// watching the first would bounce the user off the page they are reading.
+// Keyed on id + roster size, not the fleetAgent computed itself, whose per-recompute identity would refire this
+// forever. Roster size includes the archive, since archiving the reviewed agent shifts one count and grows the other.
 watch(
     [agentId, () => fleet.value.length + archived.value.length, settling],
     ([id], [previousId] = [undefined, 0, false]) => {
-        /* NONE OF THE BINDING ABOVE APPLIES TO AN AGENT IN ANOTHER BOX, and running it would do real damage
-         * rather than merely nothing. `open()` files a conversation into the chat singleton, which is pointed
-         * at THIS daemon: it would mint a tab for an agent that daemon has never heard of, whose first message
-         * would start a turn in the wrong sandbox. The bounce at the end is the other half: a remote agent is
-         * legitimately absent from both local halves, which that path reads as "no such agent" and answers by
-         * sending the reader back to the board.
-         *
-         * A remote review has no chat surface at all, on either form factor. That is the design's line rather
-         * than an omission: read and land from anywhere, converse where the agent lives, and the header offers
-         * the crossing that gets you there. */
+        // None of the local binding applies to a remote agent: `open()` would mint a tab against the wrong daemon, and
+        // the local-absence bounce would wrongly read a remote agent as nonexistent. A remote review has no chat
+        // surface
+        // on either form factor by design.
         if (remote.value) {
             settleLookup(id);
             return;
@@ -198,7 +149,7 @@ watch(
     { immediate: true },
 );
 
-// Mobile-only mode switch; desktop always renders the review.
+// Mode switch only exists on mobile; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
 const viewOptions: { label: string; value: `chat` | `changes` }[] = [
     { label: `Chat`, value: `chat` },
@@ -213,46 +164,27 @@ const edit = createInlineRename(
     `Couldn't rename the agent.`,
 );
 
-// The card's own status glyph, carried into the header: the one piece of fleet state the review below can't
-// tell you (it reports the work, not whether the agent is still writing it). It is also the page's ONLY
-// statement of whether the work landed: the review's toolbar used to carry a second "✓ landed" chip a line
-// below this one, meaning "every file reached the workspace" where this one means "the last turn landed":
-// two scopes, one word, stacked.
+// Fleet's status glyph: what the review can't state (still writing), and the page's only "landed" signal.
 const status = computed(() => (fleetAgent.value === undefined ? undefined : agentStatusMeta(fleetAgent.value.status)));
 
-/* THE REVIEW'S STATE, owned here and handed to the panel. One instance, because the actions are split across
- * the two components now: Land and the ⋯ menu fire from this row, the conflict report's merge/resolve fire
- * from the panel, and a second useAgentChanges() would give each its own busy and error flags. The query
- * behind it is keyed by agent id, so this is also the only fetch. */
-// Empty until the agent is known to HAVE a review (registered, branch-backed), see useAgentChanges: this is
-// created for the page, which outlives the panel, so a draft agent must not send it looking for a diff.
-// The roster entry goes with it, because a land has to know whether work this agent already delivered has since
-// been taken back out of the workspace: that decides which rung the patch is measured from, and this page is
-// where the local and the cross-sandbox rosters have already been told apart (see `fleetAgent`).
+// Shared useAgentChanges instance: this row and the panel act on one busy/error state and one fetch.
+// Empty until the agent is reviewable; the roster entry lets a land measure from the correct rung.
 const changes = useAgentChanges(
     computed(() => (reviewable.value ? agentId.value : ``)),
     remoteBox,
     fleetAgent,
 );
-// A remote agent has no conversation in this browser by construction, so nothing here is streaming its turn.
-// That is what the review's own offers read to decide whether a land would catch the agent mid-sentence, and
-// `writing` below answers it from the roster instead, which is a fact about the agent rather than about us.
+// A remote agent has no local conversation; `writing` reads its live state from the roster instead.
 const streaming = computed(() => !remote.value && conversation.value?.streaming.value === true);
 
-/* Discard stays gated on the turn: it takes the worktree away and the daemon refuses it outright while one
- * runs. Land does not, any more: it only READS that checkout, so the daemon lets it through whenever nobody is
- * mid-sentence and asks for an explicit override when someone is (agents.routes.ts landable).
- *
- * So the button is live in every state that has something to apply, and `writing` decides which of the two
- * presses it is: a plain land, or the one that opens the warning first. Read off the FLEET status rather than
- * off `streaming`: this browser's stream is open for a parked turn exactly as it is for a working one, which
- * is what made "wait for the agent turn to finish" the answer to a card that was waiting for the user. */
+// Land only reads the checkout, so it's live whenever anything is pending, unlike Discard (worktree-gated,
+// refused mid-turn). `writing` (fleet status, not `streaming`) decides which press it is, since a parked turn
+// still streams.
 const writing = computed(() => fleetAgent.value !== undefined && writingNow(fleetAgent.value));
 const canLand = computed(() => !changes.actionBusy.value && changes.pending.value.length > 0);
-// A live turn that is NOT writing: parked on a question or a permission card, or unwinding a Stop. Its land is
-// an ordinary one, and saying so is the point: this is the state the old copy called "running".
+// A live turn that isn't writing: parked on a question, permission, or a Stop unwind; land is ordinary.
 const parked = computed(() => streaming.value && !writing.value);
-// What the button says it will do, in the three states it can be pressed in.
+// What the Land button promises, across the three states it can be pressed in.
 const landHint = computed(() =>
     writing.value
         ? `The agent is still writing: you'll be asked to confirm`
@@ -260,10 +192,8 @@ const landHint = computed(() =>
           ? `Applies what the agent has written so far`
           : `Applies ${changes.pending.value.length} change(s) to your workspace`,
 );
-/* The mid-write land, behind the one modal it warrants. Not a tooltip and not a quiet press: this is the only
- * land that can carry half-finished work, and the two facts that make it recoverable (it arrives uncommitted,
- * and the rest of the turn lands on top at completion) are exactly what the user needs in front of them to
- * judge it. A press on a parked or resting agent skips all of this and just lands. */
+// The only land that can carry half-finished work gets a modal, not a quiet press: the user needs to see why it's
+// recoverable (uncommitted, rest lands later) before confirming. A parked or resting press just lands.
 const pendingForceLand = ref(false);
 const pressLand = (): void => {
     if (writing.value) {
@@ -274,13 +204,11 @@ const pressLand = (): void => {
 };
 const confirmForceLand = async (): Promise<void> => {
     pendingForceLand.value = false;
-    // The rung is the review's own decision (useAgentChanges land), the same one a plain press gets: what the
-    // user answered here is the mid-write warning, not which span to measure from.
+    // The rung is the review's own decision (useAgentChanges.land); the modal only answers the mid-write warning.
     await changes.land(`check`, undefined, true);
 };
 
-// The role split on the toolbar's primary action: maintainers land, collaborators ask (the daemon floors the
-// land itself: see AgentCard for the same split on the board).
+// Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
 const { canDrive, canShip } = useRole();
 const requestingLand = ref(false);
 const requestLand = async (): Promise<void> => {
@@ -296,24 +224,13 @@ const requestLand = async (): Promise<void> => {
     }
 };
 
-/* WHAT A REMOTE REVIEW DOES NOT OFFER, in one place rather than as a condition repeated down the template.
- *
- * Renaming, archiving and the auto-land toggle all go through the fleet store, which IS the active daemon's
- * roster: it holds no entry for another box's agent, so those presses would address the wrong sandbox or
- * nothing at all. Handing the conflict back to the agent is the same line drawn one step further along, since
- * it sends a message and a message needs a conversation.
- *
- * They are ABSENT rather than disabled, and the crossing is offered in their place. A disabled button that
- * would work perfectly well one press away is a worse answer than a button that says where to press. */
+// What a remote review can't offer, gated in one place: rename/archive/auto-land address the fleet store (this
+// daemon's roster only), and asking the agent needs a conversation. Absent rather than disabled, with the
+// crossing offered instead.
 const localOnly = computed(() => !remote.value);
 
-/* WHY THERE IS NOTHING TO REVIEW, when the agent is in another box and the page has nothing to draw.
- *
- * `heardFrom` is the difference between "we have not been told" and "we were told, and this agent is not in
- * it": the store records when each box last answered, whatever that answer contained (fleetAcross's `readAt`),
- * so a box with a roster that simply lacks this id is a positive answer and gets a sentence that says so. A
- * bookmarked URL for a discarded agent lands there, which is the case the old wording described as a sandbox
- * failing to answer. */
+// `heardFrom` tells "not told yet" apart from "told, and this agent isn't in it" (fleetAcross's `readAt`), so a
+// box that answered but lacks this id gets a sentence saying so, not a false "hasn't answered".
 const heardFrom = computed(
     () => remoteBox.value !== undefined && otherBoxes.value.some((box) => box.sandbox.id === remoteBox.value && box.readAt !== undefined),
 );
@@ -332,12 +249,8 @@ const crossToAgent = (): void => {
     }
 };
 
-/* The session's name and the session's actions, each in the app's standard touch swap: anchored beside their
- * trigger on desktop, a thumb-reachable sheet on a phone. Both were the hand-written pair <ResponsiveOverlay>
- * exists to replace: a <BottomSheet> under `v-if="mobile"`, a PrimeVue <Popover> under `v-else`, and TWO open
- * flags between them (a `*Sheet` boolean plus the popover's own internal state), which is the drift that
- * component's header comment names. One flag each now, and the desktop half is measured against the window its
- * anchor is in rather than the module-scope one. */
+// Session name and session actions, each an anchored popover on desktop and a thumb-reachable sheet on a phone
+// (ResponsiveOverlay), one open flag each instead of the old hand-written pair per surface.
 const identityAnchor = ref<HTMLElement | null>(null);
 const identityOpen = ref(false);
 
@@ -347,8 +260,7 @@ const closeMenu = (): void => {
     menuOpen.value = false;
 };
 
-// Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
-// irreversible git action in this app uses.
+// Destructive and unrecoverable (branch and worktree go); same confirm modal as other irreversible git actions.
 const pendingDiscard = ref(false);
 const confirmDiscard = async (): Promise<void> => {
     pendingDiscard.value = false;
@@ -358,11 +270,9 @@ const confirmDiscard = async (): Promise<void> => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- A @container: the header thins out against ITS OWN width, which is the workspace pane's and not
-             the window's: with the chat panel open the two are nowhere near each other. -->
+        <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. -->
         <div class="view-header @container flex items-center gap-2.5 border-b border-line px-3.5 py-1">
-            <!-- The board is a place, so the way back to it is a link: hoverable, copyable, and openable in
-                 a tab of its own beside the agent being read. -->
+            <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. -->
             <RouterLink
                 to="/agents"
                 class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
@@ -395,10 +305,11 @@ const confirmDiscard = async (): Promise<void> => {
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
-            <!-- WHICH SANDBOX THIS AGENT IS IN, on a page that is otherwise about one agent in the box you are
-                 standing in. It is not decoration: every number below (the diff, the file count, what Land
-                 would apply) is about a workspace on another machine, and a header that did not say so would be
-                 the single most misreadable screen in the app. -->
+            <!--
+                Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land
+                applies) is
+                about a workspace on another machine.
+            -->
             <span
                 v-if="remoteName !== undefined"
                 class="inline-flex shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-px text-2xs text-muted"
@@ -407,14 +318,12 @@ const confirmDiscard = async (): Promise<void> => {
                 <Icon name="server" class="text-2xs" />
                 <span class="max-w-[10rem] truncate">{{ remoteName }}</span>
             </span>
-            <!-- THE SESSION'S NAME, and the way to get hold of it. This chip used to be a picture of the name:
-                 cut off at a fixed width, hoverable to see the rest, and impossible to put on a clipboard, so
-                 the only route to the id every git command, worktree path and CLI verb needs was to read
-                 thirty-six characters off the screen and retype them. Pressing it now opens the one panel that
-                 states the name in all three forms anyone pastes it in.
-                 It survives into a narrow header as the bare glyph rather than vanishing: this row has no width
-                 for a branch name there, but hiding the chip made the identity of the thing on screen unreachable
-                 exactly where retyping it is worst. -->
+            <!--
+                Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye.
+                Survives
+                into a narrow header as the bare glyph rather than vanishing, since that's exactly where retyping is
+                worst.
+            -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
                 ref="identityAnchor"
@@ -423,13 +332,11 @@ const confirmDiscard = async (): Promise<void> => {
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
             <SessionChip v-if="fleetAgent?.branch !== undefined && mobile" :branch="fleetAgent.branch" reveal compact @reveal="identityOpen = true" />
-            <!-- THE STATUS COMPRESSES TO ITS GLYPH IN A NARROW HEADER, and on mobile that is now the only
-                 fixed-width thing left competing with the title: the Chat | Changes switch moved to a row of
-                 its own below (see there for why). The words return the moment the HEADER, not the window, has
-                 room for them, so a phone in landscape and a narrow desktop column both get the sentence. The
-                 chip keeps its full accessible name at every width, so nothing is lost to a screen reader.
-                 Kept on `mobile` rather than on `mobile && reviewable`: what makes the row tight is the phone,
-                 and a draft chat's header carries the same back arrow, title, pencil and chip as any other. -->
+            <!--
+                Status compresses to its glyph in a narrow header; words return once the header itself has room. Kept
+                on
+                `mobile` alone, since a draft's header is exactly as tight as any other's.
+            -->
             <span
                 v-if="status !== undefined"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
@@ -441,9 +348,11 @@ const confirmDiscard = async (): Promise<void> => {
             </span>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
-                <!-- The page's one primary action, beside the status chip that says whether it is even needed.
-                     It appears only when there is something to apply, so the button's presence IS the "not
-                     landed" signal the toolbar below used to spend a pill on. -->
+                <!--
+                    The page's one primary action: appearing only when something is pending is itself the "not landed"
+                    signal,
+                    replacing the toolbar's old pill.
+                -->
                 <Button
                     v-if="!mobile && changes.pending.value.length > 0 && canShip"
                     size="small"
@@ -455,8 +364,7 @@ const confirmDiscard = async (): Promise<void> => {
                 >
                     <Icon name="check" />Land now
                 </Button>
-                <!-- The collaborator's copy of the press above: same spot, quieter chrome, and once asked it
-                     becomes the fact instead of the button (the daemon floors the land itself at maintainer). -->
+                <!-- The collaborator's copy of the button above; once asked it becomes a fact instead of a press. -->
                 <span
                     v-else-if="!mobile && changes.pending.value.length > 0 && canDrive && fleetAgent?.landRequested !== undefined"
                     class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted"
@@ -487,9 +395,11 @@ const confirmDiscard = async (): Promise<void> => {
                     <Icon name="bars" class="text-xs" />
                 </button>
             </template>
-            <!-- THE ONE PRESS THAT COSTS A SWITCH, and it says so. Everything else on this page reads or
-                 settles the work where the reader stands; talking to the agent needs the chat pointed at its
-                 daemon, so this is the door rather than a Reply box that would move the whole app under them. -->
+            <!--
+                The one press that costs a window switch, and says so: everything else here reads or settles work in
+                place, but
+                talking to the agent needs the chat pointed at its own daemon.
+            -->
             <Button
                 v-if="remoteName !== undefined"
                 size="small"
@@ -502,35 +412,28 @@ const confirmDiscard = async (): Promise<void> => {
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-        <!-- CHAT | CHANGES OWNS A ROW ON A PHONE, instead of riding the header above.
-             It was the single biggest thing in that row: a two-word switch is ~120px, and the row also
-             carries a back arrow, the title, a rename pencil, the session chip, the status and the actions
-             menu. Measured at 390px the title was left 55px for a string that needs 250: "Add Stripe checkout
-             to the pricing page" rendered as "Add St…", which is not a title, it is a shrug.
-             The `stretch` variant is the one built for this: SegmentedControl's own note calls it right when
-             "the choice is a step of the task on a narrow screen", so the two views become equal halves of a
-             full-width track at a thumb's height, and the header gets its width back. It costs ~36px and the
-             header stops needing the second line it was effectively wrapping onto. -->
-        <!-- The switch is local-only for the same reason the chat below is: there is no Chat half to switch to
-             for an agent whose conversation lives on another machine, so a phone gets the review full-width. -->
+        <!--
+            Chat|Changes gets its own row on a phone: crowding the header left too little width for the title.
+            `stretch`
+            fits a narrow-screen mode choice, costing ~36px to give the header its width back.
+        -->
+        <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">
             <SegmentedControl v-model="view" :options="viewOptions" stretch />
         </div>
-        <!-- `:tabs="false"`: this screen's header already names the conversation, and the panel's own mobile
-             header named it again directly beneath (see ChatPanel for the full reasoning). -->
+        <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
         <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
-        <!-- A remote agent with no review to draw, and the THREE reasons that can be true, told apart rather
-             than collapsed into one guess. Drawing an empty review for any of them would read as "this agent
-             changed nothing", which is a claim, and two of the three are the absence of an answer rather than
-             an answer. The first version of this said "hasn't answered yet" for all of them, and said it over a
-             box that had answered perfectly well and simply did not have this id: the same mistake this design
-             keeps catching, an unknown rendered as a fact. -->
+        <!--
+            A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess:
+            drawing an empty review would falsely read as "this agent changed nothing".
+        -->
         <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">
             {{ remoteUnavailable }}
         </p>
-        <!-- `chat` is the review asking to be swapped for the conversation: raised when it hands a land
-             conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
-             already on screen there, so the review has nothing to swap itself for. -->
+        <!--
+            `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the
+            agent; desktop never sees it since the docked chat is already on screen.
+        -->
         <AgentReviewPanel
             v-else-if="agentId !== '' && reviewable"
             :agent-id="agentId"
@@ -542,9 +445,10 @@ const confirmDiscard = async (): Promise<void> => {
             @chat="view = 'chat'"
         />
 
-        <!-- The session menu: anchored beside its button on desktop, a thumb-reachable sheet on a phone, one
-             body either way. `land-in-menu` is the one thing that differs, and it tracks the FORM rather than
-             the surface: landing has its own button in the header on desktop, and no room for one on a phone. -->
+        <!--
+            Session menu: one body, anchored on desktop or a thumb sheet on a phone. `land-in-menu` tracks form factor,
+            since desktop has its own header Land button and a phone has no room for one.
+        -->
         <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
             <AgentSessionMenu
                 :agent-id="agentId"
@@ -557,7 +461,7 @@ const confirmDiscard = async (): Promise<void> => {
             />
         </ResponsiveOverlay>
 
-        <!-- The session's identity, in the same two dresses as the menu above it. -->
+        <!-- Session identity, in the same two dresses (anchored popover / sheet) as the menu above. -->
         <ResponsiveOverlay
             v-model="identityOpen"
             :anchor="identityAnchor ?? undefined"
@@ -569,8 +473,11 @@ const confirmDiscard = async (): Promise<void> => {
             <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
         </ResponsiveOverlay>
 
-        <!-- THE MID-WRITE LAND'S WARNING. It states the one real risk and both reasons it is survivable,
-             because a warning that only says "are you sure" teaches people to click through it. -->
+        <!--
+            The mid-write land's warning states the one real risk and both reasons it's recoverable, since a bare "are
+            you
+            sure" just teaches people to click through.
+        -->
         <Modal :open="pendingForceLand" size="sm" header="Land while the agent is working?" @update:open="pendingForceLand = false">
             <p class="text-xs text-content">
                 The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes: one side of a

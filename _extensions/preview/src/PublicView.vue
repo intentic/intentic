@@ -5,21 +5,12 @@ import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
 import { usePublic } from "./usePublic";
 
-/* The Public view: the workspace's outbox, and the owner's only complete picture of it.
- *
- * The outbox has no auth in front of it, so the burden this screen carries is that nothing about what is
- * exposed can be a surprise. Three things follow from that. Files the guards REFUSE are listed as loudly as the
- * ones that are served, with the reason: the serve path deliberately tells a stranger nothing (every miss is
- * the same 404), which only works if the owner has somewhere that tells them everything. The empty state
- * explains the whole convention rather than showing an empty box, because "there is nothing here" and "this is
- * how publishing works" are the same sentence when the directory's existence IS the switch. And nothing here
- * says "shareable" without also saying public, in words, next to the link.
- *
- * Mounted as a tab on the sandbox hub (surface: "sandbox") beside Ports, so it renders a BODY, the hub owns
- * the Page and the header above the tab strip. */
+// Public view: the workspace's outbox, with no auth in front, so nothing exposed can be a surprise. Refused files are
+// listed as loudly as served ones (with why); the empty state explains the publishing convention itself; a shareable
+// link is always labeled public. Renders a BODY only; the hub owns the Page and header.
 
 const { files, url, servedCount, error, isLoading, unpublish } = usePublic();
-// Drawn only once the wait has earned it: see useLoadingReveal.
+// Drawn only once the wait has earned it.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `public-files`),
@@ -60,9 +51,7 @@ const size = (bytes: number): string => {
     <div class="flex flex-col gap-4">
         <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
-        <!-- Above the files, and it renders nothing when nothing is shared. A published conversation is the
-             most sensitive thing in this outbox, so where it exists it is the first thing on the screen; where
-             it does not, this view is exactly what it was. -->
+        <!-- Renders nothing when empty; a shared conversation is the most sensitive item here, so it leads when present. -->
         <SharedConversations />
 
         <section>
@@ -79,8 +68,7 @@ const size = (bytes: number): string => {
                 <StatusBadge v-if="servedCount > 0" variant="success" :label="`${servedCount} public`" size="xs" />
             </div>
 
-            <!-- The address itself is worth showing even with nothing published: it is what makes the empty
-                 state actionable, and it is the thing a user wants to copy once and keep. -->
+            <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
             <div v-if="url" class="mb-3 flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
                 <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" :title="url">{{ url }}</span>
@@ -90,9 +78,7 @@ const size = (bytes: number): string => {
                 This sandbox has no public address, so files can't be published from it.
             </div>
 
-            <!-- The list already knows not to say "nothing is published" before it has looked; what it did
-                 instead was leave the space empty, which says the same thing more quietly. The file rows that
-                 are coming stand in: an icon, the path, and its size on the line below. -->
+            <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading. -->
             <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
                 <span class="sr-only">Reading your published files…</span>
                 <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
@@ -125,8 +111,7 @@ const size = (bytes: number): string => {
                         <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
                         <div class="min-w-0 flex-1">
                             <p class="truncate font-mono text-xs text-content" :title="file.path">{{ file.path }}</p>
-                            <!-- A refused file is the one row that must explain itself: it is in the folder, so
-                                 the owner believes it is published, and only this line says otherwise. -->
+                            <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
                             <p v-if="file.blocked" class="truncate text-2xs text-danger">Not served: {{ file.blocked }}</p>
                             <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
                         </div>

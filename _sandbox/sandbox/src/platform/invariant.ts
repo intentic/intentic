@@ -2,24 +2,14 @@ import type { InvariantCheck } from "../invariants/invariants.js";
 import { claimHolder, type ContainerRole, type DaemonRoots } from "./boot/container-owner.js";
 import { processIdentity, type ProcessIdentity } from "./resources/proc-stat.js";
 
-/* ONE CONTAINER, ONE DAEMON, still true, or no longer true.
- *
- * container-owner.ts asks the question once, at boot, because that is the only moment it can act on the answer:
- * take the container or run as a guest. Everything downstream then trusts that answer forever. Four boot jobs
- * converged HOME on it, the leftover sweep reclaims processes on it, and the singletons with one address, the
- * translator, the platform announce, the scheduler, the approvals executor, the CI reconciler, each run because
- * of it.
- *
- * The claim is a FILE in a HOME two daemons share, and the second daemon's own boot is what overwrites it. So
- * the answer can stop being true while the daemon that acted on it is still acting on it, and today nothing
- * anywhere would say a word: the log line was written at boot, was correct at boot, and is the last mention.
- * That is the shape of the 2026-07-31 incident, seen from the survivor's side.
- */
+// Re-checks at runtime whether the boot-time container claim (container-owner.ts) still holds: HOME convergence, the
+// leftover sweep, and every singleton trust that one-time answer forever. The claim is a file a second daemon's boot
+// can overwrite, so it can go stale while the original daemon keeps acting on it.
 
 export interface ContainerClaimDeps {
     readonly role: ContainerRole;
     readonly roots: DaemonRoots;
-    // Overridden only by tests; production reads the process's real HOME, which is where the claim lives.
+    // Overridden only by tests; production reads the process's real HOME, where the claim lives.
     readonly home?: string;
     readonly identity?: ProcessIdentity;
 }
@@ -29,8 +19,7 @@ export const owner = "platform";
 export const checks = ({ role, roots, home, identity = processIdentity() }: ContainerClaimDeps): readonly InvariantCheck[] => [
     {
         name: "container-claim-matches-role",
-        // Boot too, not only the sweep: a claim taken during our own startup is the tightest race there is, and
-        // the first sweep is a minute away.
+        // Boot too, not only the sweep: a claim taken during startup is the tightest race there is.
         on: ["boot", "sweep"],
         run: ({ fail }) => {
             const held = claimHolder(home);
@@ -50,17 +39,13 @@ export const checks = ({ role, roots, home, identity = processIdentity() }: Cont
                 }
                 return;
             }
-            /* The guest's half of the same promise, and the one that actually did the damage: a run that decided
-             * it was a guest must not be holding the claim, because holding it is what tells the NEXT daemon the
-             * container is taken. A guest whose process identity is in that file locks the real sandbox out of
-             * its own box. */
+            // A guest holding the claim locks the real daemon out of its own box: the next boot reads it as taken.
             if (identity !== undefined && held?.pid === identity.pid && held.startTimeTicks === identity.startTimeTicks) {
                 fail(
                     `this daemon (pid ${identity.pid}) is running as a guest but holds the container claim: the sandbox's own daemon will refuse to converge behind it`,
                 );
             }
-            // A guest on OTHER roots is ordinary and expected. A guest on OUR roots that is not the holder is
-            // the restart case, already settled by then. Neither is worth a word.
+            // A guest on other roots, or on ours but not the holder (a settled restart), needs no complaint.
             void roots;
         },
     },

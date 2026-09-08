@@ -4,27 +4,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* THE MANIFEST AND THE LOCKFILE LEAVE THE WORKTREE TOGETHER.
- *
- * Nine `fix: lock` commits in two weeks were the same event: an agent's turn edited a package.json, the land
- * carried that edit into the main tree, the daemon's reinstall rewrote pnpm-lock.yaml beside it, and the owner
- * committed the first without the second. Every gate in the worktree passed, because the suite reads the tree;
- * CI's checkout failed the lockfile check in its first minute. The push gate now refuses that push by name
- * (verify-push.mjs, the lockstep tier), which is the right verdict at the latest possible moment.
- *
- * The right moment is here: the land, before the worktree's remainder is committed, while the delta is still
- * one thing. A turn cannot install inside its worktree (an isolated turn's install is discarded, and a
- * shared-tree install races every other turn), so a manifest edit leaves the worktree with a lockfile that
- * no longer records it. `pnpm install --lockfile-only` writes the lockfile and nothing else, needs no
- * node_modules, and runs where the manifest is, so the two arrive in the same patch, the same commit draft
- * and the same push.
- *
- * ONLY WHEN THE DELTA ITSELF SAYS SO: a manifest changed and the lockfile did not, in the dirty tree or in the
- * commits since the last land. A delta that carries both is an agent that ran the install itself, and a delta
- * that carries neither has nothing to reconcile. Best-effort, like every other pre-land step: a resolution that
- * fails (no network, a specifier nothing publishes) leaves the tree exactly as it was and the lockstep gate at
- * the push still says what is missing. pnpm only, by the lockfile's name: it is the manager this workspace
- * uses, and a guessed command for another would be worse than none. */
+// A manifest edit and its lockfile must leave the worktree in the same patch: reconciled here, before the land commits
+// the remainder, since a turn cannot install inside its own worktree. Runs only when the delta changed a manifest
+// without the lockfile; best-effort, pnpm only.
 
 export const LOCKFILE = "pnpm-lock.yaml";
 const MANIFEST = /(^|\/)(package\.json|pnpm-workspace\.yaml)$/;

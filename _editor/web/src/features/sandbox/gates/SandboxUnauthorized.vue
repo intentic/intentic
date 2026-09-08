@@ -7,20 +7,16 @@ import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { useSandboxSession } from "../client/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 
-/* Shown in the workspace outlet when the daemon is UP but rejects the signed-in Google account with 403:
- * the account is neither the sandbox's owner nor a granted member (see useSandboxLiveness). Distinct from
- * the connecting gate on purpose: waiting won't fix an account mismatch, so no spinner and no "Open setup".
- * Two shapes: you're on the WRONG Google account (≠ your intentic account) → sign in with your account; or
- * you're on your own account but this is someone else's sandbox → ask its owner. The liveness loop keeps
- * retrying in the background, so a grant (or a switch) clears this screen by itself within seconds. */
+// Shown when the daemon is up but rejects the signed-in Google account with 403: neither owner nor a granted
+// member. No spinner and no 'Open setup', since waiting won't fix an account mismatch; the liveness loop keeps
+// retrying, so a grant clears this screen by itself.
 
 const { active } = useSandbox();
 const { user } = useAuth();
 const { clearCredential } = useGoogleIdentity();
 const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
 
-// The identity the daemon saw isn't the account the user registered with: the common cause (they have two
-// Google accounts). Since platform login is Google-only, the intentic email is the account to sign in with.
+// The Google identity the daemon saw differs from the user's intentic account; usually two Google accounts.
 const wrongGoogleAccount = computed(
     () =>
         user.value?.email !== undefined &&
@@ -28,9 +24,7 @@ const wrongGoogleAccount = computed(
         user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
 
-// Drop both credentials: the daemon session the 403 was minted for AND the Google credential behind it, and
-// immediately re-establish: the sign-in gate overlays with Google's account picker (clearCredential disables
-// auto-select), and the liveness retries share the same in-flight establish.
+// Clears both the 403 session and the Google credential, then re-establishes through the account picker.
 const title = computed(() => `No access to "${active.value?.name}"`);
 
 const switchAccount = async (): Promise<void> => {

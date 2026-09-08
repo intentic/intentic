@@ -1,47 +1,41 @@
 import type { Input, Readiness, SecretRef } from "@intentic/graph";
 
-// The author-supplied data shapes. They reference only protocol primitives so the intent that carries
-// them stays free of any dependency on the authoring handles.
+// The author-supplied data shapes. They reference only protocol primitives, so the intent stays free of any
+// dependency on the authoring handles.
 
-// How image-pin bumps roll out on this host. "pinned" (default): recreate the service on the new pin and
-// health-gate (Phase-1 behavior); rollback is `git revert` + re-apply. "guarded": wrap each stateful
-// service's bump in a transaction, pre-update restic snapshot, recreate, health-gate, and auto-rollback
-// (old image + restored data) on failure. "guarded" requires i.have.backup (it reuses its restic repo).
+// How image-pin bumps roll out on this host.
+// - pinned (default): recreate the service on the new pin and health-gate; rollback is `git revert` + re-apply.
+// - guarded: snapshot before update, health-gate, auto-rollback on failure; requires i.have.backup.
 export type UpdatePolicy = "pinned" | "guarded";
 
-// The host an app runs on: its SSH connection, authored inline. address/user are literals; the private
-// key is a secret. SSH port defaults to 22 when omitted.
+// The host an app runs on: its SSH connection, authored inline. SSH port defaults to 22 when omitted.
 export interface HostInput {
     address: string;
     user: string;
     sshKey: SecretRef;
     port?: number;
     updatePolicy?: UpdatePolicy;
-    // How the sandbox reaches this host's SSH: "direct" (default) dials address:port; "cloudflared" tunnels
-    // through the host's own Cloudflare SSH tunnel, for a NAT'd self-host the sandbox can't reach by IP.
+    // How the sandbox reaches this host's SSH: "direct" (default) dials address:port, "cloudflared" tunnels through
+    // the host's own Cloudflare SSH tunnel.
     via?: "direct" | "cloudflared";
 }
 
-// The Cloudflare account an app is exposed through. `zone` is authored at connect time (the token is used
-// once to list zones so the user picks one); when present, resolve validates the authored domains against it
-// without touching the API. Absent, the zone is discovered from the token on each resolve. The owning account
-// is resolved from the zone either way, so it is never declared here.
+// The Cloudflare account an app is exposed through. When `zone` is authored, resolve validates the domains
+// against it without touching the API; absent, the zone is discovered from the token on each resolve.
 export interface CloudflareInput {
     apiToken: SecretRef;
     zone?: string;
 }
 
-// A GitHub account the apps are sourced through: repos, CI (GitHub Actions), and container registry (GHCR).
-// The PAT authenticates every API call; `owner` defaults to the token's authenticated user when omitted.
+// A GitHub account the apps are sourced through: repos, CI, and container registry. `owner` defaults to the
+// token's authenticated user when omitted.
 export interface GitHubInput {
     token: SecretRef;
     owner?: string;
 }
 
-// A GitLab account the apps are sourced through: projects, CI (.gitlab-ci.yml), and the GitLab Container
-// Registry. Self-hostable, so `url` selects the instance (default https://gitlab.com). The PAT authenticates
-// every API call; `owner` (user or group path) defaults to the token's authenticated user when omitted;
-// `registry` overrides the derived container-registry authority for self-hosted instances.
+// A GitLab account the apps are sourced through: projects, CI, and the container registry. Self-hostable, so
+// `url` selects the instance (default https://gitlab.com).
 export interface GitLabInput {
     token: SecretRef;
     url?: string;
@@ -56,32 +50,28 @@ export interface EnvironmentInput {
     readyWhen?: Readiness;
 }
 
-// The Discord bot token intentic uses to own the back-communication channel. intentic creates and
-// manages the guild, categories, channels, and webhooks; the user supplies only the bot token.
-// Absent = no Discord integration (no CI/CD notifications, no reconcile summaries).
+// The Discord bot token intentic uses to own the back-communication channel; the user supplies only the token.
+// Absent = no Discord integration.
 export interface DiscordInput {
     botToken: SecretRef;
 }
 
-// An external SaaS integration the apps use (e.g. Stripe). Only the API key is authored (a secret); intentic
-// validates it during reconcile and injects it into consuming apps' deployments. Absent = no integration.
+// An external SaaS integration the apps use (e.g. Stripe). Only the API key is authored; intentic validates it
+// during reconcile and injects it into consuming apps. Absent = no integration.
 export interface StripeInput {
     apiKey: SecretRef;
 }
 
-// How long restic keeps snapshots before `forget --prune` drops them. Omitted fields fall back to the
-// provider's defaults (7 daily / 4 weekly / 6 monthly).
+// How long restic keeps snapshots before `forget --prune` drops them. Omitted fields fall back to the provider's
+// defaults.
 export interface BackupRetention {
     daily?: number;
     weekly?: number;
     monthly?: number;
 }
 
-// The backup destination the operator provides: a restic repository plus the secrets to reach + decrypt it.
-// `repo` is a restic repo URL (s3:…, b2:…, sftp:…, rest:…). `password` is the restic encryption password.
-// `credentials` are the backend's access keys (e.g. AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, B2_ACCOUNT_ID/…),
-// keyed by the env var restic expects. `schedule` is a cron expression (default daily at 03:00). `signoz`
-// opts the (large, reconstructable) observability volumes into the backup set; off by default.
+// The backup destination the operator provides. `repo` is a restic repo URL; `credentials` are the backend's
+// access keys keyed by the env var restic expects; `schedule` is a cron expression (default daily at 03:00).
 export interface BackupInput {
     repo: string;
     password: SecretRef;
@@ -91,10 +81,8 @@ export interface BackupInput {
     signoz?: boolean;
 }
 
-// An off-the-shelf shared service the host runs, named by `kind` from the service catalog. Unlike apps
-// (built from source through the platform), a service is deployed directly onto the host from a pinned
-// image and exposed at its own `domain`. Catalog: SigNoz (observability), Outline (wiki), Paperless-ngx
-// (documents), OpenProject (project management), Invoice Ninja (invoicing), Infisical (secrets management).
+// An off-the-shelf shared service the host runs, deployed directly from a pinned image (unlike apps, which build
+// from source). Catalog: SigNoz, Outline, Paperless-ngx, OpenProject, Invoice Ninja, Infisical.
 export type ServiceKind = "signoz" | "outline" | "paperless" | "openproject" | "invoiceninja" | "infisical";
 
 export interface ServiceInput {
@@ -103,15 +91,14 @@ export interface ServiceInput {
 }
 
 // A person who works on the apps: a real Forgejo git account + a Komodo UI user. The login password is
-// intentic-generated (one per user, reused for both logins), so it is not authored here.
+// intentic-generated (one per user, reused for both logins).
 export interface UserInput {
     username: string;
     email: string;
 }
 
-// A team of users. Becomes a Forgejo organization (named by the team id) + a team inside it, and grants its
-// members a single Komodo permission level on the deployments of the apps the team is attached to. `members`
-// are user ids (i.want.user); the intent stays a serializable id graph, like AppIntent.on/expose.
+// A team of users. Becomes a Forgejo organization + team, and grants members a single Komodo permission level on
+// the team's attached apps. `members` are user ids (i.want.user).
 export type ForgejoRole = "admin" | "write" | "read";
 export type KomodoRole = "admin" | "execute" | "read";
 
@@ -120,8 +107,8 @@ export interface TeamInput {
     komodo: KomodoRole;
 }
 
-// An app's grant of a team at a Forgejo role. `team` is a team id. The first grant on an app owns its repo
-// (its org is the repo + registry namespace); the rest are added as collaborator teams at their role.
+// An app's grant of a team at a Forgejo role. The first grant on an app owns its repo; the rest are added as
+// collaborator teams at their role.
 export interface AppTeamGrantInput {
     team: string;
     role: ForgejoRole;

@@ -6,10 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Graph, Note, Overview } from "../contract.js";
 import { activateServer } from "./server.js";
 
-/* The backend as the daemon actually drives it: activateServer mounts one fetch handler, the host strips the
- * /x prefix, and everything below is real files on a real disk. Worth an integration test rather than unit
- * tests over the handlers, because what can break here is the WIRE: an output the contract's schema rejects,
- * a query parameter that never arrives, and none of that is visible from the inside. */
+// Integration test: activateServer's fetch handler against real files on disk, catching wire issues (schema rejections,
+// missing query params) invisible to unit tests over the handlers.
 
 let workspace: string;
 let handler: BackendRouteHandler;
@@ -22,8 +20,7 @@ const put = async (path: string, content: string): Promise<void> => {
 
 const call = async (path: string, init?: RequestInit): Promise<Response> => {
     const response = await handler(new Request(`http://sandbox${path}`, init));
-    // What the handler owes is a Response, not merely something. Saying so catches the route that returns a
-    // bare body or a thenable as clearly as the one that returns nothing, and names the path either way.
+    // Handler must return a Response; catches a bare body or thenable, not just a missing return.
     expect(response, `nothing served ${path}`).toBeInstanceOf(Response);
     return response!;
 };
@@ -76,7 +73,7 @@ describe(`the knowledge backend`, () => {
         const note = await json<Note>(`/note?path=${encodeURIComponent(`project/intentic.md`)}`);
         expect(note.summary.title).toBe(`Intentic`);
         expect(note.linkedFrom).toEqual([{ relation: `works_on`, path: `person/ada-lovelace.md`, title: `Ada Lovelace` }]);
-        // A link to a note nobody has written keeps its name and has nowhere to go: the knowledge base's to-do list.
+        // A link to a note nobody wrote keeps its name with nowhere to go.
         expect(note.linksTo).toEqual([{ relation: undefined, path: undefined, title: `nowhere` }]);
     });
 
@@ -140,7 +137,6 @@ describe(`the knowledge backend`, () => {
         expect((await json<{ notes: { path: string }[] }>(`/notes`)).notes.map((note) => note.path)).toContain(`decision/why-extensions.md`);
     });
 
-    // The route is reachable by anyone the daemon lets through; the knowledge base boundary is enforced here, not there.
     it(`refuses to write outside the knowledge base or as anything but a note`, async () => {
         for (const path of [`../escaped.md`, `run.sh`]) {
             const response = await call(`/note`, {
@@ -175,8 +171,6 @@ describe(`the knowledge backend`, () => {
         expect(overview).toMatchObject({ folder: `my-notes`, noteCount: 1 });
     });
 
-    /* Owner-pressed, never on a read: a knowledge base appearing in somebody's workspace because they looked at a panel
-     * is a surprise, and one that overwrote a vocabulary they had written would be worse than a surprise. */
     it(`starts an empty knowledge base off with a vocabulary, and touches a started one never again`, async () => {
         await rm(join(workspace, `knowledge`), { recursive: true, force: true });
         const first = await call(`/seed`, { method: `POST` });
@@ -186,8 +180,7 @@ describe(`the knowledge backend`, () => {
         const overview = await json<Overview>(`/overview`);
         expect(overview.noteCount).toBe(1);
         expect(overview.vocabulary.types).toContain(`person`);
-        // The vocabulary explains the link syntax in a fenced example, which must not become real links, or a
-        // brand-new knowledge base opens with a to-do list it invented about itself.
+        // The vocabulary's fenced link-syntax example must not parse as a real link.
         expect(overview.broken).toEqual([]);
 
         const again = await call(`/seed`, { method: `POST` });

@@ -9,17 +9,8 @@ import { createMintedCatalog } from "./minted-catalog.js";
 import type { MintedStore } from "./minted-credentials.js";
 import { seedModelsOf } from "./minted-provider.js";
 
-/* WHAT ACTUALLY GOES OUT ON THE WIRE when a minted provider's catalog is read, which is the half a conformance
- * test cannot reach.
- *
- * A spec row can be complete, typed and wrong: a base URL pointing at the general Z.ai entitlement instead of
- * the Coding Plan one, or a key sent as `x-api-key` because that is what "Anthropic-compatible" suggests, both
- * compile, both pass every table-walking assertion, and both fail only against the real vendor. So the request
- * is made against a stub that records it, and the URL and headers are asserted.
- *
- * DRIVEN BY THE SPEC TABLE, and by every ESTATE on each row rather than one per provider, so Z.ai's mainland
- * catalog is exercised on the same terms as its international one — which is the pair this file exists to keep
- * from drifting, since a key minted on one is refused by the other. */
+// Exercises what actually goes out on the wire for a minted provider's catalog read (URL, headers), against every
+// estate on the spec table, since a spec row can be typed and wrong yet pass a table-walking test.
 
 const catalogFor = async (
     provider: MintedProvider,
@@ -52,8 +43,7 @@ const catalogFor = async (
 const listing = (ids: readonly string[]): Response =>
     new Response(JSON.stringify({ data: ids.map((id) => ({ id })) }), { headers: { "content-type": "application/json" } });
 
-// Every estate of every minted provider, off the table, so a provider or a variant added tomorrow is exercised
-// the day it is added rather than the day somebody remembers to copy a describe block.
+// Every estate of every minted provider, off the table, so a provider added tomorrow is exercised the day it's added.
 const estates = MINTED_PROVIDERS.flatMap((provider) =>
     (mintedVariants(provider) ?? []).map((variant) => ({ provider, variant, name: `${provider}/${variant.id}` })),
 );
@@ -62,14 +52,11 @@ describe.each(estates)("$name's catalog read", ({ provider, variant }) => {
     test("goes to that estate's own /models, with the key as a bearer", async () => {
         const { seen } = await catalogFor(provider, variant, () => listing(["a-model"]));
         expect(seen).toHaveLength(1);
-        // The exact URL, not a prefix: a base with a stray slash or a doubled version segment is a 404 that
-        // shows up as an empty picker, which reads as "this provider has no models".
+        // The exact URL, not a prefix: a stray slash or doubled version segment 404s, which reads as an empty picker.
         expect(seen[0]?.url).toBe(`${variant.catalogBase}/models`);
         expect(seen[0]?.headers.get("authorization")).toBe("Bearer test-key");
-        /* NOT `x-api-key`, and this is the assertion with a real failure behind it. These providers speak the
-         * Anthropic Messages API for TURNS, which is the header that world uses, and the catalog is read over
-         * the OpenAI-compatible surface, which is not. Sending the wrong one is a 401 whose only symptom is a
-         * provider that never publishes a model. */
+        // Not x-api-key: turns speak the Anthropic Messages API, but the catalog is read over the OpenAI-compatible
+        // surface, and sending the wrong header 401s silently.
         expect(seen[0]?.headers.get("x-api-key")).toBeNull();
         expect(seen[0]?.headers.get("anthropic-version")).toBeNull();
     });
@@ -87,10 +74,7 @@ describe.each(estates)("$name's catalog read", ({ provider, variant }) => {
         expect(catalog.models.map((model) => model.id)).toEqual(["chat-9"]);
     });
 
-    /* A REFUSED KEY FALLS TO THE SEED, NOT TO NOTHING, and the difference is what the picker says to a person
-     * whose key has just been revoked: a floor still shows what this provider serves, under a badge saying it
-     * needs connecting, where an empty catalog reads as a provider that has stopped existing. It is also what
-     * keeps a turn resolvable: routedModel needs a default, and an empty catalog has none. */
+    // An empty catalog also breaks routedModel, which needs a default to resolve a turn.
     test("a refused key falls back to the seed floor rather than emptying the picker", async () => {
         const { catalog } = await catalogFor(provider, variant, () => new Response("unauthorized", { status: 401 }));
         expect(catalog.models.map((model) => model.id)).toEqual(seedModelsOf(provider).map((model) => model.id));
@@ -104,10 +88,8 @@ describe.each(estates)("$name's catalog read", ({ provider, variant }) => {
         expect(catalog.models.map((model) => model.id)).toEqual(seedModelsOf(provider).map((model) => model.id));
     });
 
-    /* A KEY FROM A DIFFERENT ESTATE IS NOT THIS ESTATE'S KEY, which is the whole reason a catalog is built per
-     * variant rather than per provider. Reading api.z.ai's list with a bigmodel.cn key is a 401 at best; at worst
-     * it succeeds against a host that lists models this key cannot actually run. So the store is filtered, and a
-     * non-matching credential produces no request at all — the same silence as no credential. */
+    // A mismatched key isn't just refused: it can succeed against a host listing models it can't actually run, so the
+    // store filters by estate first.
     test("another estate's key is not used here", async () => {
         const { seen } = await catalogFor(provider, variant, () => listing(["never-reached"]), { keyVariant: "some-other-estate" });
         expect(seen).toHaveLength(0);

@@ -4,32 +4,26 @@ import { HOST_STATE_ROOT } from "@intentic/constants";
 import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
-// A host-side advisory lock that serializes `apply` (and the `prune` that follows it) against a host, so two
-// concurrent runs, a laptop and CI, or two operators, cannot interleave mutations and corrupt infra. The
-// lock lives ON the contended resource (the host), reachable even at cold bootstrap; it is NOT a state file.
-//
-// Safety model: acquisition is an atomic `mkdir` of the lock dir (test-and-set). The lock carries a random
-// `nonce`; `verify` re-checks our nonce is still in place before destructive steps. `expiresAt` is only a
-// hint telling OTHER runs when an abandoned lock may be taken over, it never self-invalidates a live holder
-// (verify checks the nonce, not the clock). So a stale-TTL takeover does not silently create two writers:
-// the run whose nonce was overwritten fails its next `verify` and aborts. This is "no blind TTL takeover".
+// Host-side advisory lock serializing apply (and prune) against a host via atomic mkdir test-and-set; lives on the
+// host, not a state file. `expiresAt` only hints when a lock may be taken over: verify checks the nonce, not the clock,
+// so a stale-TTL takeover never leaves two writers, the overwritten run fails its next verify.
 const LOCK_DIR = `${HOST_STATE_ROOT}/apply.lock.d`;
-// Generous, an apply can pull images or run a restic restore for minutes. Crash-recovery only.
+// Generous: an apply can pull images or run a restic restore for minutes. Crash-recovery only.
 const DEFAULT_TTL_SECONDS = 30 * 60;
 
 export interface ApplyLock {
     // Throw if any held lock no longer carries our nonce (another run took it over). Call before mutating.
     readonly verify: () => Promise<void>;
-    // Push the takeover deadline out on every held lock (for an apply that runs longer than the TTL).
+    // Push the takeover deadline out on every held lock, for an apply that runs longer than the TTL.
     readonly renew: () => Promise<void>;
-    // Best-effort release of every lock we hold; only removes a lock that still carries our nonce.
+    // Best-effort release of every lock held; only removes a lock that still carries our nonce.
     readonly release: () => Promise<void>;
 }
 
 const lockKey = (target: SshTarget): string => `${target.address}:${target.port}`;
 
-// Dedupe by address:port and order deterministically, so two concurrent runs acquire a multi-host graph in
-// the SAME order (never A-then-B vs B-then-A) and cannot deadlock holding one lock while waiting on the other.
+// Dedupes by address:port and orders deterministically so concurrent runs acquire hosts in the same order, avoiding
+// deadlock.
 const orderedHosts = (targets: readonly SshTarget[]): SshTarget[] => {
     const byKey = new Map<string, SshTarget>();
     for (const target of targets) {
@@ -38,16 +32,16 @@ const orderedHosts = (targets: readonly SshTarget[]): SshTarget[] => {
     return [...byKey.values()].toSorted((a, b) => lockKey(a).localeCompare(lockKey(b)));
 };
 
-// Identifies the run holding the lock, surfaced to whoever is blocked. Sanitized to a space-free token so it
-// stays on one shell word and the lock header parses cleanly.
+// Identifies the run holding the lock, shown to whoever is blocked; sanitized to a space-free token so it stays one
+// shell word.
 const defaultHolder = (): string => `${hostname()}:${process.pid}`.replace(/[^A-Za-z0-9_.:@-]/g, "-");
 
-// Each script starts with a `#APPLYLOCK <op> <nonce> <ttl>` line: a no-op comment on a real host shell, and a
-// stable parse handle for the in-memory fake executor used in tests.
+// Each script starts with `#APPLYLOCK <op> <nonce> <ttl>`: a no-op comment on a real shell, a stable parse handle for
+// the fake test executor.
 const header = (op: string, nonce: string, ttl: number): string => `#APPLYLOCK ${op} ${nonce} ${ttl}\n`;
 
-// `expiresAt` is computed from the HOST's own clock (here and on takeover) so the staleness comparison never
-// crosses operator clock skew. POSIX `date +%s` (seconds) for portability.
+// `expiresAt` is computed from the host's own clock, not the operator's, avoiding clock skew; POSIX `date +%s` for
+// portability.
 const acquireScript = (holder: string, nonce: string, ttl: number): string =>
     `${header("acquire", nonce, ttl)}mkdir -p /opt/intentic 2>/dev/null
 [ -w /opt/intentic ] || { echo "CANNOT_WRITE /opt/intentic"; exit 1; }
@@ -89,10 +83,8 @@ const run = async (executor: SshExecutor, target: SshTarget, command: string): P
     }
 };
 
-// Acquire the apply lock on every host the graph touches, in deterministic order, all-or-abort. A host that
-// is unreachable over SSH is SKIPPED (logged) rather than failing the run: it cannot host a concurrent intentic
-// run while it is unreachable, and the apply will surface the real connectivity error when it reads that host.
-// A host whose lock is HELD by another live run aborts immediately, releasing any locks already taken.
+// Acquires the lock on every host in deterministic order, all-or-abort. An unreachable host is skipped (logged) rather
+// than failing the run; a host held by another live run aborts immediately, releasing locks already taken.
 export const acquireApplyLock = async (
     executor: SshExecutor,
     targets: readonly SshTarget[],

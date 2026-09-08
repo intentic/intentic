@@ -6,9 +6,8 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { undoableAction, undoLastAction } from "./undo.js";
 
-/* Against real repositories, because every claim here is about what GIT writes into a reflog: the subject
- * wording per verb, and which ref gets an entry at all. A fixture would only ever restate this module's own
- * assumptions back to it. */
+// Against real repos: every claim is about what git writes into a reflog (subject wording per verb, which ref gets an
+// entry).
 
 const run = promisify(execFile);
 const dirs: string[] = [];
@@ -49,15 +48,15 @@ test("the last commit is undoable, and undoing it moves the branch back without 
 
     const action = await undoableAction(dir);
     expect(action).toMatchObject({ kind: "commit", branch: "main", previousSha: before });
-    // A commit only moved the ref: its content is already in the tree, so undoing it does not need a hard reset.
+    // A commit only moves the ref; its content is already in the tree, so undoing needs no hard reset.
     expect(action?.changesWorkingTree).toBe(false);
-    // The reflog subject is git's own, so the button names what it will undo in git's words.
+    // The description is git's own reflog subject, not a paraphrase.
     expect(action?.description).toContain("two");
 
     const result = await undoLastAction(dir, action!.previousSha, false);
     expect(result.ok).toBe(true);
     expect(await sha(dir)).toBe(before);
-    // Soft: the undone commit's content is still on disk, staged, exactly as it was before the commit.
+    // Soft: the undone commit's content stays on disk, staged, as it was before the commit.
     expect((await git(dir, ["status", "--porcelain"])).stdout).toContain("a.txt");
 });
 
@@ -81,22 +80,18 @@ test("a reset is undoable and reported as rewriting the worktree", async () => {
     expect(await sha(dir)).toBe(afterTwo);
 });
 
-/* THE TRAP THIS MODULE EXISTS TO AVOID. HEAD's reflog records CHECKOUTS, so after switching branches its
- * previous entry belongs to a different branch entirely: resetting to it would move the branch you are on to a
- * position it has never held, silently. Reading the BRANCH's own reflog is what makes this case answer
- * correctly, and this test is what holds that choice in place. */
+// HEAD's reflog records checkouts, so after switching branches its previous entry belongs to a different one; reading
+// the branch's own reflog avoids silently moving it to a position it never held.
 test("after a checkout, the undo targets this branch's own history and not HEAD's previous position", async () => {
     const dir = await repo();
     await git(dir, ["checkout", "-b", "feature"]);
     await commit(dir, "feature work");
     const featureTip = await sha(dir);
 
-    // Back to main, whose own reflog has not moved since its first commit, so main has nothing to undo, even
-    // though HEAD's previous entry (the feature tip) is sitting right there.
+    // main's own reflog hasn't moved, so it has nothing to undo despite HEAD's previous entry being elsewhere.
     await git(dir, ["checkout", "main"]);
     expect(await undoableAction(dir)).toBeUndefined();
 
-    // And a commit on main undoes to MAIN's previous position, never to the feature branch's tip.
     const mainBase = await sha(dir);
     await commit(dir, "main work");
     const action = await undoableAction(dir);
@@ -111,8 +106,6 @@ test("a detached HEAD has no branch reflog and so offers no undo", async () => {
     expect(await undoableAction(dir)).toBeUndefined();
 });
 
-/* A halted operation ENDS BY BEING ABORTED, not by moving the branch. Offering both would be offering two
- * different recoveries for one state, and the undo is the wrong one: the branch has not moved yet. */
 test("a repo halted mid-rebase offers no undo, because aborting is what ends that state", async () => {
     const dir = await repo();
     await git(dir, ["checkout", "-b", "other"]);
@@ -124,14 +117,12 @@ test("a repo halted mid-rebase offers no undo, because aborting is what ends tha
     expect(await undoableAction(dir)).toBeUndefined();
 });
 
-/* THE STALE-UNDO REFUSAL. Two browsers, or a browser and an agent, can both be looking at this repo; an undo
- * prepared against a view that has since moved must not land somewhere the user never looked at. */
+// Two viewers (two browsers, or a browser and an agent) can be looking at the same repo at once.
 test("an undo prepared against a stale position is refused rather than landing somewhere else", async () => {
     const dir = await repo();
     await commit(dir, "two");
     const stale = await undoableAction(dir);
 
-    // The repository moves on: another writer commits.
     await commit(dir, "three");
 
     const result = await undoLastAction(dir, stale!.previousSha, false);
@@ -139,6 +130,6 @@ test("an undo prepared against a stale position is refused rather than landing s
     if (result.ok === false) {
         expect(result.reason).toContain("moved");
     }
-    // And nothing moved: the refusal is a refusal, not a partial application.
+    // The refusal doesn't partially apply: nothing about the repo moved.
     expect((await git(dir, ["log", "--oneline"])).stdout).toContain("three");
 });

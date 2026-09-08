@@ -1,15 +1,11 @@
 // codebase health: one repository's structure and risk, in numbers
 import { z } from "zod";
 import { WorkspaceSearchFreshnessSchema } from "./workspace-search.js";
-// The repo-level companion to the management panel and the git-history graph: what the same resident engine's
-// `hotspots` (churn × complexity) and `map` (PageRank over the import graph) verbs rank, as figures a panel can
-// plot instead of lines a terminal prints.
-//
-// Every field is a COUNT that can be recounted in the files themselves, commits, branch points, exported
-// symbols. Deliberately no composite "maintainability grade": those aren't comparable across projects and can't
-// be checked, and a repo-health surface that launders counts into a letter is worse than none.
-// How many hotspot files and key modules a report carries when the caller names no limit. A leaderboard, not an
-// inventory: past a screenful the ranking stops being the point, and the reader should be reading the files.
+// Repo-level companion to the management panel and git-history graph: the resident engine's `hotspots` (churn ×
+// complexity) and `map` (PageRank over imports) verbs, as figures a panel can plot. Every field is a recountable count;
+// no composite maintainability grade, since those aren't comparable across projects or checkable. HEALTH_LIMIT is how
+// many hotspot files and key modules a report carries by default: a leaderboard, not an inventory, since past a
+// screenful the reader should be reading the files instead.
 export const HEALTH_LIMIT = 20;
 export const WorkspaceHealthQuerySchema = z.object({
     // "root" (the /work repo) or a nested repo's root-relative dir, the same {repo} ids the git routes take.
@@ -28,8 +24,8 @@ export const WorkspaceHealthQuerySchema = z.object({
         .optional()
         .describe("How many files and modules to rank. A leaderboard rather than an inventory: past a screenful the ranking stops being the point."),
 });
-// One file that is BOTH churning and tangled. `score` is the product the ranking sorts by, carried explicitly
-// so the panel plots the number it ranks by rather than recomputing it.
+// A file both churning and tangled; `score` is the ranking product, carried explicitly so the panel plots what it ranks
+// by rather than recomputing it.
 export const WorkspaceHotspotSchema = z.object({
     path: z.string(),
     commits: z.number(),

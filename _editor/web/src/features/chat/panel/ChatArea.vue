@@ -1,19 +1,8 @@
-<!-- FULL-SCREEN CHAT, the /chat area: the rail-docked chat's whole surface, desktop only.
-
-     The panel itself is mounted once per page by shell/WorkspaceRuntime's PoppablePanels and TELEPORTED to
-     whichever slot is published (shell/dockSlots.ts): this route publishes the full-window one. With the rail
-     as the chat's home (useLayout.chatHome, claimed below), this area is the only place in the main window the
-     chat appears at all: every other view leaves it parked behind the rail's Chat tile, never as a side
-     column. Nothing chat-shaped is duplicated here, and a streaming turn survives every trip exactly as it
-     survives popping out.
-
-     The grid exists because the panel's own classes were written against the shell grid: it styles itself with
-     `grid-area: chat`, so the slot's parent must BE a grid with that area or the panel gets no box.
-
-     WHILE THE CHAT IS IN A WINDOW OF ITS OWN this area does not steal it: the panel is drawn by that window, so
-     the grid stands empty and the notice below says where the chat is, with the one explicit way to recall it.
-     Never an automatic recall: a URL that happens to be /chat must not close a window under the user. Every
-     move of the panel is a button. -->
+<!--
+    Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/dockSlots.ts). Its parent must be a grid,
+    since the panel styles itself with `grid-area: chat`. When the chat is in its own window, this area shows a notice with an explicit recall button
+    instead — never an automatic recall.
+-->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";

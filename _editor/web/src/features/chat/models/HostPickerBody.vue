@@ -33,8 +33,7 @@ import PickerRunSettings from "./PickerRunSettings.vue";
 
 const request = computed(() => modelRequest.value);
 
-// The block below the list: mounted only when it has something to say, since the border and padding are drawn
-// here rather than by it.
+// Mounted only when the block has something to say; border and padding are drawn here, not by it.
 const { hasContent } = usePickerAccounts(
     computed(() => request.value?.provider ?? `claude`),
     computed(() => request.value?.harness ?? `native`),
@@ -103,9 +102,10 @@ const choose = (entry: PickerEntry): void => {
         @close="dismissModelPick()"
     >
         <template #footer>
-            <!-- The composer's footer metrics exactly (ModelPicker's own 12px rhythm, the row groups bleeding
-                 back out with `-mx-3`): the two panels are the same panel, and a reader who opens this one from
-                 an extension should not be able to tell which surface asked for it. -->
+            <!--
+                Matches the composer's footer metrics exactly (ModelPicker's own px-3 rhythm, -mx-3 bleed): the two
+                panels must read as one, regardless of what opened them.
+            -->
             <div
                 v-if="footerVisible"
                 class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"

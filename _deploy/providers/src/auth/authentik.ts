@@ -21,9 +21,7 @@ type AuthentikInputs = z.infer<typeof authentikSchema>;
 const internalUrl = (parsed: AuthentikInputs): string => `http://${parsed.internalIp}:${parsed.publishPort}`;
 
 // Authentik as a self-contained compose stack: its own Postgres + Redis (Valkey) + the server (HTTP, stamped
-// intentic.id=<id>) + the worker. Image refs are the fully-pinned inputs inlined into the YAML so a bump
-// recreates the changed service on the next `up -d`; the AUTHENTIK_* secrets are interpolated from the
-// write-once .env beside it.
+// intentic.id=<id>) + the worker. Image refs are inlined into the YAML so a bump recreates the changed service.
 const composeYaml = (parsed: AuthentikInputs, id: string, hash: string): string =>
     [
         "services:",
@@ -59,10 +57,8 @@ const composeYaml = (parsed: AuthentikInputs, id: string, hash: string): string 
         "",
     ].join("\n");
 
-// An Authentik auth backing instance (i.want.auth). read returns the resource once the server answers its
-// health endpoint (so a noop re-derives the deterministic url/issuerUrl/internalUrl); diff drives a server
-// image-pin bump; apply is idempotent (compose up -d reconciles, the named volumes persist). Per-app OIDC
-// clients are the authentik-client binding's job, over the API.
+// An Authentik auth backing instance (i.want.auth). read returns the resource once the server answers its health
+// endpoint; per-app OIDC clients are the authentik-client binding's job, over the API.
 export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createBackingProvider(
         {
@@ -76,9 +72,9 @@ export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Pr
                 internalUrl: internalUrl(parsed),
             }),
             files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
-            /* Write-once, and this one has four secrets in it: the signing key, the bootstrap credentials the
-             * bindings reuse, and the database password. All four are baked in on first init, so re-keying the
-             * file would break every session and lock the stack out of its own database. */
+            // Write-once: this file carries the signing key, the bootstrap credentials the bindings reuse, and the
+            // database
+            // password. Re-keying it would lock the stack out of its own database.
             env: (parsed) => [
                 { key: "AUTHENTIK_POSTGRESQL__HOST", value: "postgresql" },
                 { key: "AUTHENTIK_POSTGRESQL__USER", value: "authentik" },
@@ -90,8 +86,7 @@ export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Pr
                 { key: "AUTHENTIK_BOOTSTRAP_PASSWORD", value: parsed.bootstrapPassword },
                 { key: "AUTHENTIK_BOOTSTRAP_TOKEN", value: parsed.bootstrapToken },
             ],
-            // Probe the server's health endpoint FROM THE HOST over SSH (it publishes 9000 on the host); it
-            // answers 2xx once migrations are done and it is serving.
+            // Probe the server's health endpoint from the host over SSH; it answers 2xx once migrations are done.
             probe: (parsed) => `wget -q -T 10 -O /dev/null ${internalUrl(parsed)}/-/health/ready/`,
         },
         executor,

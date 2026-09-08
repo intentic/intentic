@@ -4,22 +4,9 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { workspaceMapNote, workspaceMapOf } from "./workspace-map.js";
 
-/* PROPERTIES WORTH PINNING, and each is one the map is wrong in a way nobody would notice without a test.
- *
- * That the STARTING POSITION decides what is mapped: the whole feature is "answer for where this run begins",
- * and a regression to "always map the root" produces a note that is still plausible, still well-formed, and
- * answers a question nobody asked.
- *
- * That the shape rules are SHAPE rules. Areas, shelves and purposes are derived from what a directory has, not
- * from names this repository happens to use, and the only way that stays true is to assert it against layouts
- * this repository does not have: a Cargo workspace, a Python project, a repo whose only documentation is a
- * README with a badge row at the top.
- *
- * That a purpose is never INVENTED. An empty line is a correct answer and a confident wrong one is not, so the
- * no-manifest-no-README case is asserted to be empty rather than to be anything.
- *
- * And that the budget SHEDS rather than truncates, saying what it dropped: a list that quietly stops reads as
- * a complete list, which is the one failure mode that makes a map worse than no map. */
+// Pins properties nobody would notice breaking without a test: the starting position decides what's mapped, shape rules
+// key on structure not naming, a purpose is never invented, and the budget sheds whole areas rather than truncating
+// silently.
 
 const dirs: string[] = [];
 
@@ -66,8 +53,7 @@ test("the map is rooted at the project the run starts in, not at the workspace",
         "shop/catalog/a.ts": "",
     });
 
-    // Standing two levels inside `shop`: the project is shop, and the workspace's other entries are named
-    // rather than mapped.
+    // Standing two levels inside `shop`: project is `shop`; the workspace's other entries are named, not mapped.
     const map = workspaceMapOf({ root, cwd: join(root, "shop/checkout") });
 
     expect(map?.project).toBe("shop");
@@ -120,10 +106,8 @@ test("a shelf among real areas stays one line, and opens only when the run is in
     const shut = workspaceMapOf({ root: outside, cwd: outside });
     const open = workspaceMapOf({ root: inside, cwd: join(inside, "packages/web") });
 
-    // Either way the top level is the top level: the shelf never dissolves into its contents.
     expect(named(shut)).toEqual(["docs", "packages", "infra"]);
     expect(named(open)).toEqual(["docs", "packages", "infra"]);
-    // The count is known whether or not the packages are listed; the listing is what the run's position buys.
     expect(shut?.areas.find((area) => area.name === "packages")).toMatchObject({ packages: 3, children: [] });
     expect(open?.areas.find((area) => area.name === "packages")?.children.map((child) => child.name)).toEqual([
         "packages/api",
@@ -133,14 +117,10 @@ test("a shelf among real areas stays one line, and opens only when the run is in
     expect(open?.areas.find((area) => area.name === "packages")?.children.find((child) => child.name === "packages/web")?.here).toBe(true);
 });
 
-/* THE RUN STANDING NOWHERE, which measurement turned out to be nearly every run: across 470 mapped
- * conversations of this workspace not one said "you are here", so the zoom above had never fired in
- * production, while 97.7% of them opened a file under a single area that got one line. */
 test("at the project root the area holding most of the project is opened up", async () => {
     const root = await scaffold({
         ".git/HEAD": "ref: refs/heads/main\n",
-        // A repository with its own manifest, so it is an area rather than a shelf of packages: the case the
-        // packages-only zoom could never have opened.
+        // Its own manifest makes this an area, not a shelf of packages.
         "app/package.json": pkg("app", "The product"),
         "app/server/a.ts": "",
         "app/server/b.ts": "",
@@ -155,12 +135,10 @@ test("at the project root the area holding most of the project is opened up", as
     expect(named(map)).toEqual(["app", "notes"]);
     expect(map?.areas[0]?.children.map((child) => child.name)).toEqual(["app/server", "app/ui"]);
     expect(map?.areas[0]?.children[0]).toMatchObject({ files: 3, kinds: ["ts"], here: false });
-    // The area opened up is not the one the run is standing in: nothing is.
     expect(map?.areas[0]?.here).toBe(false);
 });
 
-/* A MAJORITY, not the largest. Three areas of a third each are a project whose top level IS the answer, and
- * opening one of them would be picking a favourite out of a tie. */
+// Majority, not merely largest: three equal thirds is a tie, and opening one would be picking a favourite.
 test("no area is opened up when none of them dominates", async () => {
     const root = await scaffold({
         ".git/HEAD": "ref: refs/heads/main\n",
@@ -178,8 +156,8 @@ test("no area is opened up when none of them dominates", async () => {
     expect(map?.areas.every((area) => area.children.length === 0)).toBe(true);
 });
 
-// The budget is a WHOLE-note budget and the shed that enforces it drops whole areas, so an area with forty
-// subdirectories could otherwise take itself out of the note it was opened to describe.
+// The note-wide budget could otherwise let one area's forty subdirectories crowd out the rest of the note; children are
+// capped independently.
 test("an opened area lists at most a dozen children and counts the rest out loud", async () => {
     const root = await scaffold({
         ".git/HEAD": "ref: refs/heads/main\n",
@@ -206,7 +184,7 @@ test("a purpose is read from whatever manifest the ecosystem uses, and a README 
         "py-thing/a.py": "",
         "go-thing/go.mod": "module github.com/acme/go-thing\n\ngo 1.22\n",
         "go-thing/a.go": "",
-        // No manifest: the README's first line of prose, past the title, the badges and the block quote.
+        // No manifest: purpose is the README's first line of prose, after the title, badges, and block quote.
         "read-thing/README.md":
             "# read-thing\n\n[![build](https://img.shields.io/x.svg)](https://ci.example)\n\n> a pull quote\n\nA documented thing.\n",
         "read-thing/a.md": "",
@@ -233,13 +211,12 @@ test("build output, dependencies and the workspace's reserved directories are no
         "node_modules/dep/index.js": "",
         "dist/bundle.js": "",
         ".cache/x": "",
-        // Reserved at the TOP level of the workspace: the reference shelf and the public outbox.
+        // Reserved only at the workspace's top level: the reference shelf and the public outbox.
         "refs/cloned-repo/a.ts": "",
         "public/report.html": "",
     });
 
-    // Sorted here because these two are the same size and the tie-break is alphabetical, which is a detail of
-    // the ranking, not of what counts as an area.
+    // Sorted here since these two tie in size; alphabetical tie-break is a ranking detail, not an area rule.
     expect(named(workspaceMapOf({ root, cwd: root })).toSorted()).toEqual(["lib", "src"]);
 });
 

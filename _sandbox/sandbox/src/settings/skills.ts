@@ -5,23 +5,9 @@ import type { Services } from "../composition.js";
 import { removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
-/* THE SKILLS THIS DAEMON OWNS, the baked tools it ships and the ones the owner wrote, and the one pass that
- * converges both into the directory the agents read.
- *
- * Baked-tool skills exist because the tool binaries are always on PATH (baked by the Dockerfile) while the
- * SKILL.md is what actually surfaces one to the agent: writing it gates the feature and keeps it out of the
- * prompt otherwise. Which are present is driven by the settings `skills` array (SandboxSettings), adding a new
- * baked tool is one registry entry here plus its name in that array, with no settings-contract change.
- *
- * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/config/skills/<name>/`
- * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder, its Claude loader
- * projection and the cross-runtime prompt catalogue), for one reason: switching a skill off must not delete
- * what you wrote. The loaded folder holds only what is currently on, so the durable copy has to sit beside the
- * daemon's other state, and then "off" is simply "not copied", with the text intact.
- *
- * The two share the `skills` array as their enabled set rather than having one each: from the owner's side there
- * is one question ("which skills are on"), and one list is what makes the Skills surface's switch mean the same
- * thing on every row it offers one. */
+// Baked-tool skills gate a tool already on PATH; writing its SKILL.md surfaces it, so adding one is a registry entry
+// here plus its name in the settings `skills` array. Own skills are the same mechanism over owner-typed text, stored
+// durably so switching one off never deletes it; both share that one array as their enabled set.
 
 export const LSP_SKILL = `---
 name: lsp
@@ -101,20 +87,18 @@ the shape, then only what the question needs:
   ask rather than guess.
 `;
 
-// skill name → SKILL.md body. The settings `skills` array selects which of these are written to disk.
+// skill name → SKILL.md body; the settings `skills` array selects which are written to disk.
 const SKILLS: Record<string, string> = {
     lsp: LSP_SKILL,
     fileq: FILEQ_SKILL,
 };
 
-// The baked tools this image can teach the agent about, whether or not they are currently on, what the Skills
-// list draws its `builtin` rows from, so a switched-off one is visible as available rather than missing.
+// Baked tools this image can teach, on or off; what the Skills list draws its `builtin` rows from.
 export const bakedSkillNames = (): readonly string[] => Object.keys(SKILLS);
 
 export const isBakedSkill = (name: string): boolean => name in SKILLS;
 
-// A baked tool's skill file as this image ships it, the text the reconciler writes, so the Skills list can read a
-// switched-off tool's description out of the same string rather than out of a second copy of it.
+// A baked tool's skill text as shipped; the Skills list reads a switched-off tool's description from this same string.
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
 // Where the owner's own skills are kept, switched on or off.
@@ -128,21 +112,20 @@ export interface OwnSkill {
     readonly body: string;
 }
 
-// One of the owner's skills, as stored. Undefined when there is no such directory or its file is unreadable,
-// callers turn that into a 404 rather than an empty skill, which would read as "this does nothing".
+// One of the owner's skills, as stored; undefined when the directory is missing or its file unreadable. Callers turn
+// that into a 404, not an empty skill.
 export const readOwnSkill = async (services: Services, name: string): Promise<OwnSkill | undefined> => {
     const text = await services.files.read(ownSkillFile(services.workspace.root, name));
     if (text === undefined) {
         return undefined;
     }
     const parsed = parseSkillFile(text);
-    // The DIRECTORY name wins over the declared one: it is what the loader keys the skill by, so trusting a
-    // frontmatter line that disagrees would name a row something the agent never sees.
+    // The directory name wins over the declared one: it's what the loader keys the skill by.
     return { name, description: parsed.description ?? "", body: parsed.body };
 };
 
-// Every skill the owner has written, by name. A directory with no readable SKILL.md is skipped rather than
-// listed empty, it is a half-written skill, not one that does nothing.
+// Every skill the owner has written. A directory with no readable SKILL.md is skipped, not listed empty: it's
+// half-written, not a skill that does nothing.
 export const listOwnSkills = async (services: Services): Promise<OwnSkill[]> => {
     const entries = await readdir(ownSkillsRoot(services.workspace.root), { withFileTypes: true }).catch(() => []);
     const skills: OwnSkill[] = [];
@@ -159,21 +142,16 @@ export const writeOwnSkill = async (services: Services, skill: OwnSkill): Promis
     await services.files.write(ownSkillFile(services.workspace.root, skill.name), skillDocument(skill.name, skill.description, skill.body));
 };
 
-// Delete the durable copy AND the loaded one. Only the durable half is this function's own state, but leaving the
-// copy behind would keep a deleted skill in the agents' context until the next reconcile happened to notice.
+// Deletes the durable copy and the loaded one; leaving the loaded copy behind would keep a deleted skill in the agent's
+// context until the next reconcile.
 export const removeOwnSkill = async (services: Services, name: string): Promise<void> => {
     await rm(ownSkillDir(services.workspace.root, name), { recursive: true, force: true });
     await removeLoadedSkill(services.files, services.workspace.root, name);
 };
 
-/* Converge every skill this daemon owns against the enabled list: written when its name is present (so the agent
- * learns it), removed otherwise. Called at boot and after every settings save, so a change takes effect on the
- * next turn without a restart. An enabled name that names neither a baked tool nor a stored skill is ignored,
- * there is nothing to write, and the name may belong to a skill an extension ships.
- *
- * The owner's own skills are read from disk on each pass rather than being handed in: the list this converges
- * against is a set of NAMES, and the text behind one of them may have been edited by the agent's own file tools
- * since the last save. Reading is what makes that edit reach the next turn. */
+// Writes every skill named in `enabled`, removes the rest; an enabled name matching neither a baked tool nor a stored
+// one is ignored (it may belong to an extension). Own skills are re-read from disk each pass, so an out-of-band edit
+// reaches the next turn.
 export const reconcileSkills = async (services: Services, enabled: readonly string[]): Promise<void> => {
     const own = await listOwnSkills(services);
     const sources: readonly (readonly [string, string])[] = [

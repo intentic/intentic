@@ -2,11 +2,8 @@ import type { IconName } from "@intentic/ui";
 import { ref, watch } from "vue";
 import { useSandbox } from "../sandbox/client/useSandbox";
 
-/* Per-terminal cosmetic overrides (VSCode's Rename / Change Color / Change Icon): a display label, a pill
- * color, and a pill icon, keyed by tmux session name. Pure client-side view state, the tmux session name is
- * the daemon's identity for the socket and kill routes and never changes, so this is a per-browser preference,
- * persisted per sandbox in localStorage. Stable names (a colored `panel-app` dev server) keep their look
- * across restarts; dead web-* entries are pruned on relist since their random names never return. */
+// Per-terminal cosmetic overrides (label, pill color, pill icon) keyed by tmux session name. Client-side
+// preference only, persisted per sandbox in localStorage.
 
 export interface TerminalMeta {
     readonly label?: string;
@@ -14,10 +11,7 @@ export interface TerminalMeta {
     readonly icon?: IconName;
 }
 
-// What each KIND looks like when the user hasn't overridden it, the strip's pills and the Recent-work rows
-// read from the same table, so a glyph means the same thing wherever it appears. A plain shell wears `code`,
-// the SAME glyph as the rail's terminal tile: the pill and the tile that opens it must be the one picture.
-// Not `desktop` (ri:device-line), which is the monitor the Devices and Browsers surfaces already own.
+// Default glyph per KIND; shared by the pills and Recent-work rows so a glyph means one thing everywhere.
 export const KIND_ICONS = {
     agent: `sparkles`,
     job: `bolt`,
@@ -26,7 +20,7 @@ export const KIND_ICONS = {
     panel: `code`,
 } as const satisfies Record<string, IconName>;
 
-// The offered palette (VSCode's terminal-tab colors, roughly), tuned to read on the dark pill background.
+// Offered pill colors, tuned for the dark pill background.
 export const TERMINAL_COLORS = {
     red: `#f87171`,
     orange: `#fb923c`,
@@ -39,7 +33,7 @@ export const TERMINAL_COLORS = {
 } as const;
 export type TerminalColor = keyof typeof TERMINAL_COLORS;
 
-// The icon picker's choices, a curated slice of the app's icon vocabulary that reads at pill size.
+// Icon choices offered in the picker, curated to read at pill size.
 export const TERMINAL_ICONS: readonly IconName[] = [
     `desktop`,
     `code`,
@@ -84,7 +78,8 @@ const persist = (): void => {
 
 export const terminalMeta = (name: string): TerminalMeta => metas.value[name] ?? {};
 
-// Merge a patch; an explicitly-undefined field clears its override, and a fully-cleared entry is dropped.
+// Merges patch into the stored meta; a field set to undefined clears that override, and an entry left
+// with no fields is dropped.
 export const setTerminalMeta = (name: string, patch: TerminalMeta): void => {
     const merged: Record<string, string> = {};
     for (const [key, value] of Object.entries({ ...metas.value[name], ...patch })) {
@@ -102,7 +97,7 @@ export const setTerminalMeta = (name: string, patch: TerminalMeta): void => {
     persist();
 };
 
-// Drop overrides for web-* sessions no longer listed (their random names never return); stable names keep theirs.
+// Drops meta for `web-*` sessions absent from `listed`; other names are kept regardless of state.
 export const pruneTerminalMeta = (listed: ReadonlySet<string>): void => {
     const entries = Object.entries(metas.value).filter(([name]) => !name.startsWith(`web-`) || listed.has(name));
     if (entries.length !== Object.keys(metas.value).length) {

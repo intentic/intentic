@@ -1,30 +1,12 @@
-/* THE PICTURE, OFF THE WIRE AND INTO AN <img>, for both screencast surfaces.
- *
- * Frames arrive as BINARY now rather than base64 inside JSON, and the change is worth more than the third of the
- * bytes it saves. A 1280x800 JPEG is 150-250 kB; base64 made every one of them a third bigger on a tunnel, and
- * the client then turned each into a `data:` URL, so a browsing agent allocated a fresh multi-hundred-kilobyte
- * STRING per frame and left it for the collector. A Blob costs a reference.
- *
- * The wire shape is one tag byte then the image (the daemon's encodeFrame writes it), because one socket carries
- * both kinds — a cheap JPEG while the page moves and a sharp WebP once it settles — and the decoder has to be
- * told which without a second message describing the first.
- *
- * WHY TWO URLS STAY ALIVE. An object URL has to be revoked or the blob is held for the life of the document, and
- * revoking the one just replaced is the obvious move — but `src` is assigned by Vue on the next tick, so at that
- * instant the <img> may still be decoding the picture being revoked. Keeping one generation of slack means the
- * URL let go of is one the element demonstrably moved on from two frames ago. Two blobs, never more. */
+// Frames arrive as one tag byte plus binary image data (see the tag table below) and become object URLs for the
+// <img>, avoiding a `data:` URL's giant string allocation per frame. Two URLs are kept alive at once, not one:
+// `src` is assigned on Vue's next tick, so the just-replaced blob may still be decoding when it would otherwise be
+// revoked.
 
-/* EVERY KIND OF PICTURE THIS SOCKET CARRIES, in one table, because the whole point of a tag byte is that the
- * client never has to be told separately what it is about to receive. Matches the daemon's own numbering
- * (screencast.ts for the images, videocast.ts for the coded frames):
- *
- *   0 jpeg, 1 webp — the frames path, one whole image per change.
- *   2 svg          — never encoded by the daemon; it is how the recorded demo plays drawn pages down this
- *                    same wire, which is only possible because the format travels WITH the frame.
- *   3 keyframe, 4 delta — the video path. Two tags rather than one plus a flag, because whether a frame can
- *                    start a decode is the single thing a VideoDecoder cannot work out for itself, and the tag
- *                    is where the client is already looking.
- */
+// Every picture kind this socket carries (matches the daemon's screencast.ts/videocast.ts numbering):
+// 0 jpeg, 1 webp — one whole image per change (frames path)
+// 2 svg — the recorded demo's drawn pages, format travels with the frame
+// 3 keyframe, 4 delta — video path; two tags so the client, not the VideoDecoder, knows what can start a decode
 const MEDIA_TYPES = [`image/jpeg`, `image/webp`, `image/svg+xml`] as const;
 export const FRAME_H264_KEY = 3;
 export const FRAME_H264_DELTA = 4;
@@ -52,8 +34,7 @@ export const frameUrls = (): FrameUrls => {
             if (bytes.byteLength < 2) {
                 return undefined;
             }
-            // An unknown tag is read as JPEG rather than dropped: a picture that decodes wrong is visibly wrong,
-            // where a frame silently discarded looks exactly like a browser that has stopped painting.
+            // Unknown tags decode as JPEG rather than being dropped: a bad decode is visibly wrong, not a silent stall.
             const type = MEDIA_TYPES[bytes[0] ?? 0] ?? MEDIA_TYPES[0];
             const url = URL.createObjectURL(new Blob([bytes.subarray(1)], { type }));
             drop(previous);

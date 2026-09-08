@@ -1,28 +1,13 @@
 import { environment } from "./environment";
 
-/* THE DESKTOP APP, AS THE BROWSER SEES IT (_editor/desktop-app).
- *
- * The app's workspace window loads this very SPA and marks itself with `__INTENTIC_DESKTOP__`, injected by a
- * Tauri initialization script. Everything this module builds is an `intentic://` LINK, never IPC: the app
- * intercepts those navigations in Rust, so remote content gets no command surface at all, and the identical
- * link works from an external browser, where the OS routes it to the installed app. Nothing here imports
- * Tauri, and nothing here is desktop-only at runtime; a plain browser just gets links nobody handles.
- *
- * Which is also why this file is about THREE cards rather than one. The app replaces a terminal in three
- * places, and only the first is onboarding:
- *   • Setup step 3, "run this install command on the machine" → Run on this computer
- *   • the Update card, the sandbox holds no host Docker socket, so it can NEVER recreate its own container
- *   • the Environment card, the same, for an owner-approved overlay
- * The last two are the ones a user meets over and over, which is the real argument for the app existing. */
+// The desktop app as the browser sees it: the app's workspace window loads this SPA and marks itself via
+// `__INTENTIC_DESKTOP__` (injected by Tauri). Everything here builds an `intentic://` link, never IPC, since the
+// app intercepts those navigations in Rust; the identical link also works from an external browser via OS routing.
+// Nothing here imports Tauri or is desktop-only at runtime.
 
-/* What the app tells the page about the webview it is standing in, as opposed to about the app: this window
- * does not gate the reach for loopback, so the page may dial the sandbox on this machine without asking anyone
- * first (loopbackPermission.ts).
- *
- * OPTIONAL BECAUSE THE TWO SIDES SHIP SEPARATELY. This SPA is deployed continuously and the app is a binary
- * somebody installed once, so an older window is an ordinary state rather than a legacy one — and it says
- * nothing here, which reads as "ask the browser", which is exactly right for a webview that still enforces the
- * check. */
+// What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
+// (loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
+// the browser", which is correct for an older window that still enforces the check.
 interface DesktopWebview {
     version: string;
     installId: string;
@@ -46,32 +31,25 @@ declare global {
     }
 }
 
-/* What the app tells the page about itself: the version, a random id for that installation of the app, and the
- * version it has ALREADY DOWNLOADED and is one restart away from running.
- *
- * The id is the only thread between this window's events and the ones the app's own screens report, two
- * webviews with separate storage, which analytics would otherwise read as two unrelated people (analytics.ts).
- *
- * `update` is the newest of the three and the only one that changes after load, so it arrives twice: here for
- * a page that loads after the download finished, and on the event below for a page that was already open when
- * it did. Neither is IPC — the app injects both, and the page's only way back is the `intentic://` link. */
+// What the app tells the page about itself: version, a per-install random id (the only thread joining this
+// window's analytics events to the app's own, since they're separate webviews), and the update already
+// downloaded. `update` arrives twice, here and via the event below, for the two orderings of page-load vs.
+// download-finish.
 export const desktopApp = (): DesktopWebview | undefined => window.__INTENTIC_DESKTOP__;
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
 
-/* The app announcing, mid-session, that the next version is downloaded and waiting (desktop-app's update.rs).
- * A plain DOM event because that is the widest one-way channel there is: no handshake, nothing exposed to the
- * page, and a browser with no app around it simply never fires it. */
+// The app announcing, mid-session, that an update finished downloading (update.rs). A plain DOM event: no
+// handshake, and a browser with no app simply never fires it.
 export const DESKTOP_UPDATE_EVENT = `intentic-desktop-update`;
 
 export interface DesktopUpdateEvent {
     version: string;
 }
 
-/* Take the offer: the app installs what it has downloaded and comes back on it. Sent as a navigation like
- * every other action here, so this file still knows nothing about Tauri — but unlike the others this one is
- * refused when it arrives from anywhere except the app's own window, because what it does is end the process
- * and run an installer (setup_link.rs). */
+// Take the offer: the app installs what it downloaded and restarts on it. Unlike the other links, the Rust side
+// refuses this one unless it arrives from the app's own window, since it ends the process and runs an installer
+// (setup_link.rs).
 export const DESKTOP_UPDATE_LINK = `intentic://update`;
 
 /* THE APP ANNOUNCING WHERE THE INSTALL IT IS RUNNING HAS GOT TO (desktop-app's windows.rs `announce_setup`),
@@ -168,13 +146,10 @@ export interface DesktopSetupArgs {
     platformUrl?: string;
 }
 
-/* The setup handoff. There is deliberately no `mode` on this link: the app runs the same connect script the
- * copy-paste command runs, and the script learns the reachability target by redeeming the code, so a link
- * that also named the mode would be a second, driftable copy of a decision the platform already made.
- *
- * The Cloudflare token rides the link ONLY inside the desktop webview, where the navigation is cancelled
- * in-process and never reaches the OS. An external browser's deep link can be logged by the protocol handler,
- * so from there it is omitted and the own-Cloudflare path stays on the pasted command. */
+// No `mode` on this link: the script learns its reachability target by redeeming the code, so naming the mode here
+// would be a second, driftable copy of that decision. The Cloudflare token rides only inside the desktop webview
+// (the nav never reaches the OS); an external deep link can be logged by the protocol handler, so it's omitted
+// there.
 export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     const params = new URLSearchParams({ code: args.code });
     if (args.name !== undefined && args.name !== ``) {
@@ -192,15 +167,14 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     return `intentic://setup?${params.toString()}`;
 };
 
-/* Ask the app to sign in, which it does in the user's DEFAULT BROWSER, because Google refuses OAuth from an
- * embedded webview and Google Identity Services is FedCM-based, which WebKitGTK does not implement. So the
- * login screen inside the app offers this instead of the in-page button that cannot work there; the
- * credentials come back over `intentic://auth` and the app reopens this SPA at /desktop-auth/complete. */
+// Signs in via the user's default browser, since Google refuses OAuth from an embedded webview (FedCM isn't
+// implemented by WebKitGTK). Credentials return over `intentic://auth`, and the app reopens this SPA at
+// /desktop-auth/complete.
 export const DESKTOP_SIGN_IN_LINK = `intentic://signin`;
 
 export interface DesktopSyncArgs {
-    /// The sandbox's own URL and the single-use pairing token — the same two values the card's one-liner
-    /// carries as SANDBOX_URL and PAIR_TOKEN.
+    // The sandbox's URL and single-use pairing token, the same two values the card's one-liner carries as
+    // SANDBOX_URL/PAIR_TOKEN.
     url: string;
     pair: string;
     /// The sandbox's display name, so the app's screen can say what the folder is being connected to.
@@ -210,13 +184,10 @@ export interface DesktopSyncArgs {
     mirror?: boolean;
 }
 
-/* The desktop-sync handoff: the Desktop sync card's enrollment as a button instead of a pasted one-liner,
- * for the one computer where the app IS a process on the machine. Deliberately NO folder on the link — the
- * app collects that in a system dialog, which is the entire reason the handoff exists.
- *
- * The Rust side honours this from the app's own window ONLY (setup_link.rs): both values are the sender's,
- * and honoured from the OS handler any page could put its reader one folder pick away from two-way syncing
- * that folder into a sandbox the sender signs in to. A browser without the app keeps the one-liner. */
+// Enrolls via a button instead of a pasted one-liner, for the one computer running the app itself. Deliberately no
+// folder on the link (the app collects that via a system dialog); the Rust side honors this only from the app's
+// own window, since honoring it from any page would let one folder-pick two-way-sync into a sandbox the sender is
+// signed into.
 export const desktopSyncLink = (args: DesktopSyncArgs): string => {
     const params = new URLSearchParams({ url: args.url, pair: args.pair });
     if (args.name !== undefined && args.name !== ``) {
@@ -231,12 +202,9 @@ export const desktopSyncLink = (args: DesktopSyncArgs): string => {
     return `intentic://sync?${params.toString()}`;
 };
 
-/* Swap a sandbox onto a different image: no hash updates to the fresh `:stable` base, a hash builds the
- * owner-approved overlay pinned to that digest, and `rollback` returns it to the image before the last update.
- * The same three argument shapes the pasted command carries.
- *
- * A rollback sends no digest even if one is at hand: it names a different destination image, and the app drops
- * the pair the same way rather than resolving it into a rebuild nobody asked for. */
+// Swaps a sandbox onto a different image: no hash means the fresh `:stable` base, a hash means the owner-approved
+// overlay pinned to it, `rollback` means the image before the last update. A rollback sends no digest even if one
+// is at hand, since it names a different destination image entirely.
 export const desktopRecreateLink = (slug: string, hash?: string, rollback = false): string => {
     const params = new URLSearchParams({ slug });
     if (rollback) {
@@ -247,32 +215,21 @@ export const desktopRecreateLink = (slug: string, hash?: string, rollback = fals
     return `intentic://recreate?${params.toString()}`;
 };
 
-// Follow a handoff link. A navigation rather than a fetch, because that is what the app intercepts, and in a
-// browser with no app installed it is a no-op the user cannot tell from a slow click, which is why every
-// caller shows the download links beside it.
+// A navigation, not a fetch, since that's what the app intercepts. In a browser with no app it's a silent no-op,
+// which is why every caller shows download links beside it.
 export const openDesktopLink = (link: string): void => {
     globalThis.location.href = link;
 };
 
-/* EVERY SIGN-IN SURFACE IN THIS APP ENDS UP HERE, which is the point of it being a function rather than the
- * one line it wraps. There are three of them, the login screen, the workspace's sandbox gate, and the
- * hand-off page itself, and each grew its own answer to "this webview cannot ask Google". Two got it right
- * and one rendered Google's button, which appears, takes clicks, and does nothing: the exact shape of a
- * broken product, on the screen between a fresh install and a working workspace.
- *
- * The mechanism enforces the rule now, useGoogleIdentity.renderButton refuses in this posture rather than
- * trusting three callers to each remember, and this is what a surface reaches for once it has been refused. */
+// Every sign-in surface funnels through here rather than reimplementing "this webview can't ask Google" each time.
+// `useGoogleIdentity.renderButton` now refuses in this posture too, so the rule holds even if a caller forgets to
+// check.
 export const signInThroughBrowser = (): void => openDesktopLink(DESKTOP_SIGN_IN_LINK);
 
-/* Download links, chosen by build like scriptCommand.ts:
- *   • deploy (production): the intentic.dev vanity URLs, the site worker serves a locally-staged installer
- *     when one exists in its assets, else redirects to the newest release's asset.
- *   • local dev: the site's own dev server (`pnpm --filter @intentic/site dev`, port 4321), which serves
- *     _site/site/public/ at the root, stage installers into public/desktop/ with
- *     `pnpm --filter @intentic/desktop-app stage:downloads`, so the download is your own build.
- * The file names here are the STAGED ones, which is why they carry no version: a release artifact is named
- * Intentic-<version>-x64-setup.exe, but a working-tree build has no version to state (it carries the 0.0.0
- * "not a release" sentinel), and the dev server has no worker to resolve a name it was not given. */
+// Download links, chosen by build (like scriptCommand.ts): deploy serves the intentic.dev vanity URLs (site worker
+// resolves to the newest release or a staged installer); dev serves the site's own dev server, staged via `pnpm
+// --filter @intentic/desktop-app stage:downloads`. File names here are the staged ones, unversioned, since a
+// working-tree build has no release version to state.
 const DESKTOP_FILES = {
     windows: { vanity: `windows`, file: `Intentic-setup.exe` },
     linuxAppImage: { vanity: `linux`, file: `Intentic.AppImage` },
@@ -290,17 +247,10 @@ export const DESKTOP_DOWNLOADS = {
     linuxRpm: downloadUrl(DESKTOP_FILES.linuxRpm),
 } as const;
 
-/* THE ONE INSTALLER THIS BROWSER'S MACHINE CAN ACTUALLY RUN, or undefined where none of them can.
- *
- * Setup asks this to decide which of the two ways onto your own computer leads, an installer, or a pasted
- * `curl … | sudo sh`. A grid of every build we ship cannot answer that: it is a download page, and a reader
- * who is on the fence about a terminal is not helped by being asked which package format they want. So the
- * question here is narrower than DESKTOP_DOWNLOADS', and it is allowed to answer "none": macOS has no build
- * yet, and a button pointing at nothing is worse than the command it would displace.
- *
- * `userAgentData.platform` where the browser has it, `navigator.platform` otherwise, the same pair
- * useOsPreference reads, and the same `startsWith` rather than a /win/ match, since "Darwin" contains "win".
- * Android is excluded by hand: it reports "Linux armv8l" through both, and the AppImage is not for it. */
+// The one installer this machine can actually run, or undefined (macOS has no build yet, and a button to nothing
+// is worse than the command it'd replace). Reads `userAgentData.platform` or `navigator.platform` (same pair as
+// useOsPreference), `startsWith` rather than a `/win/` match since "Darwin" contains "win". Android is excluded by
+// hand: it reports "Linux armv8l" through both, and the AppImage isn't for it.
 export const desktopInstaller = (): { platform: "windows" | "linux"; label: string; href: string } | undefined => {
     const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
     if (/android/i.test(nav.userAgent)) {
@@ -310,8 +260,8 @@ export const desktopInstaller = (): { platform: "windows" | "linux"; label: stri
     if (platform.startsWith(`win`)) {
         return { platform: `windows`, label: `Windows`, href: DESKTOP_DOWNLOADS.windows };
     }
-    // The AppImage, because it runs across distributions without making this the moment somebody picks a
-    // package format. Deb and rpm stay on the downloads page for the reader who wants one.
+    // The AppImage runs across distributions without forcing a package-format choice here; deb/rpm stay on the
+    // downloads page.
     if (platform.includes(`linux`)) {
         return { platform: `linux`, label: `Linux`, href: DESKTOP_DOWNLOADS.linuxAppImage };
     }

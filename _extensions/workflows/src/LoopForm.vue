@@ -3,27 +3,14 @@ import { Button, ui, Modal, SegmentedControl } from "@intentic/extension-ui";
 import type { LoopCheck, LoopDesign, LoopOutput } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 
-/* THE SAVED-LOOP FORM: the long questions about looping, asked ONCE per loop instead of once per use.
- *
- * This is the old composer dialog with its first field removed and a name put in its place, and that swap is
- * the whole redesign. The field it lost was THE GOAL, which is the only thing about a loop that is genuinely
- * different every time, and the one thing the user has already written, in the message box, before they ever
- * reached for the control. Everything that remains is machinery: how it ends, what memory it carries, how far
- * it may go. Machinery is what a saved thing is for.
- *
- * SO IT LIVES ON A PAGE AND NOT ON A COMPOSER. A modal over a chat has to be small enough to answer in the
- * middle of writing a message, which no honest version of this form is; here it is a form on the surface that
- * owns the thing, where a form belongs and where nobody is mid-sentence.
- *
- * THE ORDER IS WHAT THE AUTHOR KNOWS, unchanged from the dialog it replaces: the name, then how it ENDS:
- * the one decision worth thinking about, and the one that decides whether the loop is trustworthy: then the
- * ceilings, pre-filled with defaults that are safe on their own.
- */
+// Form for a saved loop's machinery (how it ends, memory, ceilings), asked once per loop rather than per use; the goal
+// itself is typed in the message box, not here. A full page rather than a modal, since none of this fits mid-message.
+// Order: name, then how it ends, then the ceilings.
 
 const { editing, taken } = defineProps<{
     /** The loop being edited, or undefined for a new one. */
     editing?: LoopDesign;
-    /** Names already in use, so a new loop can say so before the save round-trips a refusal. */
+    /** Names already in use, checked client-side before the save can refuse. */
     taken: readonly string[];
 }>();
 const open = defineModel<boolean>({ required: true });
@@ -40,9 +27,8 @@ const maxIterations = ref(8);
 const maxSpendUsd = ref(5);
 const stallLimit = ref(2);
 
-/* Every open reloads the form from the loop it was opened on, or clears it for a new one. Immediate, because
- * the dialog is mounted once and reused: without this, editing a loop after creating one would show the last
- * thing typed, which is the mistake here that costs real money the next time somebody picks it. */
+// Reloads the form from `editing` (or clears it) on every open; immediate, since the dialog is mounted once and reused
+// across loops.
 watch(
     () => [open.value, editing] as const,
     ([shown, design]) => {
@@ -74,9 +60,7 @@ const stopOptions = [
     { value: `judge` as const, label: `A reviewer agrees` },
 ];
 
-// What each choice actually costs, said where the choice is made rather than in a tooltip nobody opens. The
-// context note is the one people get wrong: "keep context" sounds strictly better until a loop spends fifteen
-// rounds agreeing with itself.
+// "Keep context" sounds strictly better but risks a loop agreeing with itself for many rounds.
 const contextNote = computed(() =>
     context.value === `fresh`
         ? `Every round starts a new session against the same working tree, and carries its notes in a progress file. Slower per round, and it does not drift.`
@@ -103,10 +87,7 @@ const ready = computed(() => {
 });
 
 const submit = (): void => {
-    /* The contract asks two questions where this form asks one, and collapsing them is deliberate: a saved loop
-     * has exactly one bar to clear, so offering "what do you produce" and "what else must be true" as separate
-     * controls would be two fields answering a question already answered. Combining them is a workflow step's
-     * job, and that has a designer. */
+    // Collapses the contract's two questions (output, extra checks) into this form's single stop condition.
     const output: LoopOutput = stopKind.value === `claim` ? { kind: `claim` } : { kind: `none` };
     const checks: LoopCheck[] =
         stopKind.value === `command`
@@ -134,8 +115,7 @@ const submit = (): void => {
             <label class="flex flex-col gap-1">
                 <span :class="ui.sectionLabel()">Name it</span>
                 <input v-model="name" :class="ui.input()" placeholder="Until the tests pass" autofocus />
-                <!-- The name is what the composer badge shows at pill width, so it is the one field whose
-                     length is worth a word about at the moment of typing it. -->
+                <!-- Shown at pill width on the composer badge, so length matters here more than for other fields. -->
                 <span v-if="clash" class="text-2xs text-danger">You already have a loop with that name.</span>
                 <span v-else class="text-2xs text-subtle">What you'll pick from the message box. Short enough to read on a button.</span>
             </label>
@@ -174,9 +154,7 @@ const submit = (): void => {
                 <span class="text-2xs text-subtle">{{ contextNote }}</span>
             </div>
 
-            <!-- The ceilings, together and pre-filled, because they are only ever read as a group: "how far can
-                 this go before it stops on its own". Every one of them is a way the loop ends without meeting
-                 the goal, so a loop saved with none of them touched still cannot start something unbounded. -->
+            <!-- Ceilings are grouped and pre-filled, so a loop saved untouched still can't run unbounded. -->
             <div class="flex flex-col gap-1.5">
                 <span :class="ui.sectionLabel()">Stop it anyway after</span>
                 <div class="grid grid-cols-3 gap-2">
@@ -193,8 +171,7 @@ const submit = (): void => {
                         <span class="text-2xs text-subtle">idle rounds</span>
                     </label>
                 </div>
-                <!-- The stall limit is the one nobody would think to set, and the one that saves the most: an
-                     agent re-reading the same files forever raises no error at all. -->
+                <!-- Stall limit catches an agent looping without progress, which raises no error on its own. -->
                 <span class="text-2xs text-subtle">
                     An idle round is one that changed nothing in the tree: that, not an error, is how a loop usually goes wrong.
                 </span>

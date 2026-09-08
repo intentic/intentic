@@ -1,7 +1,6 @@
-/* The SDK's message stream, normalized onto AgentEvents: sdkTurns finds the turn boundary in streaming-input
- * mode, and TurnFold maps each message onto the typed frames the client renders. High-value block types get a
- * dedicated frame; any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent
- * does that once the whole turn settles). */
+// Normalizes the SDK's message stream onto AgentEvents: sdkTurns finds the turn boundary in streaming-input mode, and
+// TurnFold maps each message onto typed frames. An SDK message with no mapping is dropped; the terminal `done` frame is
+// emitted by runAgent, not here.
 import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
 import type { AgentEvent, FastModeState, PermissionMode, TodoItem, UsageWindow } from "@intentic/sandbox-contract";
@@ -19,19 +18,18 @@ import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../tools/tool-calls.js";
 
-// What a turn needs from the SDK: the message stream and the session's slash-command list. The real `query`
-// returns a Query, which satisfies both; the method is optional because a fake stream legitimately has none
-// (it resolves a control request, which no canned generator answers).
+// What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
+// optional since a fake stream used in tests has none.
 export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
 };
 
-// The SDK `query` is injected so tests drive a fake message stream, no API calls, no bundled binary.
+// The SDK `query` injected so tests can drive a fake message stream with no API calls and no bundled binary.
 export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMessage>; readonly options: Options }) => AgentQuery;
 export const defaultQuery: QueryFn = (args) => sdk().query(args);
 
-// The SDK's slash commands, mapped onto the wire shape the composer's `/` popover renders. `argumentHint`
-// is always a string there (empty when the command takes no argument), so an empty one carries no hint.
+// Maps the SDK's slash commands onto the composer's `/` popover shape. `argumentHint` is always a string on the SDK
+// side; empty means no hint.
 const commandFrame = (commands: readonly SlashCommand[]): AgentEvent => ({
     kind: "commands",
     items: commands.map((command) => ({
@@ -41,8 +39,8 @@ const commandFrame = (commands: readonly SlashCommand[]): AgentEvent => ({
     })),
 });
 
-// The turn's prompt input: a steerable turn streams user messages (the initial prompt, then whatever the
-// steer route pushes until the queue closes at turn end); an unsteerable one keeps single-message mode.
+// The turn's prompt input: a steerable turn streams user messages (the prompt, then whatever the steer route pushes
+// until the queue closes); an unsteerable turn keeps single-message mode.
 export const promptInput = (prompt: string, steering: SteeringQueue | undefined): string | AsyncIterable<SDKUserMessage> =>
     steering === undefined ? prompt : steeredInput(prompt, steering);
 
@@ -53,12 +51,7 @@ async function* steeredInput(first: string, steering: SteeringQueue): AsyncGener
     }
 }
 
-// In streaming-input mode the SDK emits one `result` per TURN and keeps the stream open for further input: a
-// steered message the running turn could not absorb runs as its own follow-up turn AFTER the result (observed
-// to announce itself within ~2ms), while a steer absorbed mid-turn (injected between tool calls) produces no
-// extra result, so no message count can tell "more coming" from "settled". Instead, after a result on a
-// steered stream, the next SDK message is raced against this grace window: a message means another turn is
-// underway; silence means the turn stream is over.
+// Grace window after a steered result: a message means another turn is coming; silence means the stream ended.
 const STEER_GRACE_MS = 1000;
 
 const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> => {
@@ -73,102 +66,52 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
     }
 };
 
-/* The background work a turn's end must WAIT for, named by what it must NOT wait for. In-process tasks (a
- * backgrounded Agent child, a teammate, a workflow) live inside the turn's CLI process, so a stream ended while
- * one is live kills it mid-flight, the failure the user meets as "the session process exited and took all 14
- * agents with it", minutes after the model said it would come back with their results.
- *
- * WRITTEN INSIDE OUT BECAUSE THE ALLOWLIST IT REPLACES WAS SILENTLY EMPTY. `task_type` carries the CLI's own raw
- * discriminant, and the whole vocabulary is `local_agent`, `in_process_teammate`, `local_workflow`, `local_bash`,
- * `monitor_ws`, `monitor_mcp`, `remote_agent`. The first version of this set waited on `"subagent"` and
- * `"workflow"`, two spellings the CLI has never emitted (the SDK's own field docs use the raw ones: "only set
- * when task_type is 'local_workflow'"). `local_workflow` matched, so backgrounded workflows were held correctly
- * and nobody noticed that every backgrounded AGENT fell straight through and died at its parent's first result.
- *
- * The two mistakes are not symmetric, and that asymmetry is the whole argument for this direction. A type
- * missing from an allowlist kills running agents and says nothing about it. A type missing from THIS list holds
- * an already-finished turn open until the task clears, which is visible, stoppable, and bounded, only LIVE tasks
- * are ever listed. So anything the SDK adds later is waited on by default, and each name below earns its
- * exemption by outliving the process or by never ending at all:
- *
- *   local_bash    a backgrounded shell, running in the turn's tmux session, which the daemon owns and outlives
- *                 the turn: holding on one would keep a turn spinning for as long as a dev server runs.
- *   monitor_ws    ambient by design, alive for exactly as long as the session, so never a thing to wait on.
- *   monitor_mcp   the same.
- *   remote_agent  runs on the provider's side rather than in this process, so ending the stream cannot hurt it,
- *                 and waiting would park a turn on a cloud review for however long that review takes. */
+// Task types the turn need not wait for at stream end, since each outlives the process or never ends; anything else is
+// waited on by default:
+// local_bash a backgrounded shell in the daemon's own tmux session, independent of the turn
+// monitor_ws ambient for the life of the session
+// monitor_mcp the same
+// remote_agent runs on the provider's side, not in this process
 const UNHELD_TASK_TYPES: ReadonlySet<string> = new Set(["local_bash", "monitor_ws", "monitor_mcp", "remote_agent"]);
 
-/* HOW DEEP AN IN-TURN RETRY STORM MAY GET BEFORE THE TURN STOPS CLAIMING TO BE WORKING.
- *
- * The harness's own budget is three hundred attempts with no ceiling on the wait it will honour
- * (CLAUDE_CODE_RETRY_WATCHDOG, harness-credentials.ts), and for a provider having a bad minute that is exactly
- * right: retrying inside the live turn keeps the session, the prompt cache and everything the agent has already
- * done, where dying costs a respawn. It is exactly wrong for a provider that refuses EVERY request, and from in
- * here the two are indistinguishable, so the only honest bound is how many refusals in a row a turn sits through
- * before handing itself to the layer built for waiting.
- *
- * THAT LAYER IS BETTER AT WAITING IN EVERY WAY THAT MATTERS. The breaker (provider-health.ts) escalates 30s →
- * 20m over six attempts, spends ONE probe per provider however many conversations are stranded, and the resume
- * continues from the session the dead turn reported (turn-resume.ts), so the work is kept rather than re-done.
- * What it also does, and the harness's budget cannot, is tell the truth while it waits: a turn spinning inside
- * that budget reads as `running` everywhere, which is a card sitting in the Active lane under a "Working…"
- * spinner for as long as the storm lasts. That is what this bound is really for. A local model whose
- * llama-server refused the harness's tool schema outright (500 on every request, image-packs/llamacpp.Dockerfile has
- * the story) held its card there indefinitely, saying work was in flight while nothing had happened at all.
- *
- * Eight is roughly two minutes of the SDK's own backoff: long enough that an ordinary capacity burst or a
- * rolling deploy is absorbed in place and nobody learns it happened, short enough that a provider which cannot
- * serve this turn at all becomes news inside the pause a person will stare at a spinner for. `attempt` is per
- * REQUEST and resets on every response the harness accepts, so a long turn losing the odd socket never
- * approaches it; only a run of consecutive refusals does. */
+// Consecutive refusals before ending the turn for the breaker (provider-health.ts) instead of spinning.
 const MAX_IN_TURN_RETRIES = 8;
 
-// Live in-process background work, off the SDK's own level signal (replace semantics, a missed edge cannot
-// wedge a stale hold). Undefined on every other message, so the caller keeps its last count.
+// Live in-process background work off the SDK's own level signal (replace semantics; a missed edge can't wedge a stale
+// hold). Undefined on every other message, so the caller keeps its last count.
 const heldTaskCount = (message: SDKMessage): number | undefined =>
     message.type === "system" && message.subtype === "background_tasks_changed"
         ? message.tasks.filter((task) => !UNHELD_TASK_TYPES.has(task.task_type)).length
         : undefined;
 
-// A main-thread model frame, a turn mid-stream always produces more messages, so only the idle gaps BETWEEN
-// turns are raced against the grace window while held. Children's own frames (parented) keep arriving
-// throughout the hold and must not read as a turn underway.
+// A main-thread model frame; only the idle gaps between turns race the grace window. A child's own frames (parented)
+// keep arriving throughout a hold and must not read as a turn underway.
 const isMainTurnFrame = (message: SDKMessage): boolean =>
     (message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null;
 
-// Whether the CLI produced anything at all, model output, a child's, or a local slash command's. What
-// separates a turn that legitimately never called the model from one that swallowed its prompt.
+// Whether the CLI produced anything at all, model output, a child's, or a local slash command's; separates a turn that
+// legitimately called nothing from one that swallowed its prompt.
 const isWorkFrame = (message: SDKMessage): boolean =>
     message.type === "assistant" || message.type === "stream_event" || (message.type === "system" && message.subtype === "local_command_output");
 
-// The SDK message stream, ended at the right turn boundary. Unsteered (or never-steered) streams end at the
-// first result, as before. Once a steer was delivered, each result instead arms the grace race above; when it
-// goes silent, closing the input queue ends the SDK's streaming input and the stream drains to its natural
-// end (settling the subprocess), a turn that slipped in during the race still streams in full.
-//
-// A result with backgrounded CHILDREN still in flight is not the boundary either: they die with the
-// subprocess, and the CLI wakes the model with a task notification when one settles, so the stream is held
-// open and the wake turn (the "I'll come back with results") rides it like a steered follow-up. Once the last
-// child settles, either a wake turn announces itself within the grace window or none is coming and closing
-// the input drains the stream as above.
+// Ends the SDK stream at the right turn boundary: unsteered streams end at the first result; once steered, a result
+// arms the grace race, and one with children still live holds the stream for the CLI's wake turn.
 async function* sdkTurns(
     stream: AsyncIterable<SDKMessage>,
     steering: SteeringQueue | undefined,
-    // Push the turn's prompt back through the streaming input, once, see the swallowed-prompt branch below.
-    // Reports whether it did, so a stream that already redelivered ends at its result like any other.
+    // Push the turn's prompt back through streaming input once; true means the stream ends normally at its result.
     redeliver: (() => boolean) | undefined,
 ): AsyncGenerator<SDKMessage> {
     const iterator = stream[Symbol.asyncIterator]();
-    // A result passed on a steered stream: the next idle gap decides follow-up turn vs. turn stream over.
+    // A result passed on a steered stream: the next idle gap decides follow-up turn vs. turn-stream-over.
     let awaitingNextTurn = false;
-    // Live in-process background work, off the latest level signal. Counts only what the boundary waits for.
+    // Live in-process background work off the latest level signal; counts only what the boundary waits for.
     let heldTasks = 0;
-    // A result passed while children were live: the stream is being held open for the CLI's wake turn.
+    // A result passed while children were live: the stream is held open for the CLI's wake turn.
     let held = false;
-    // A main-thread model frame since the last result, see isMainTurnFrame.
+    // A main-thread model frame seen since the last result (see isMainTurnFrame).
     let midTurn = false;
-    // Anything produced since the last result, see isWorkFrame.
+    // Anything produced since the last result (see isWorkFrame).
     let sawWork = false;
     // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
     let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
@@ -177,10 +120,8 @@ async function* sdkTurns(
             const nextPromise = pending ?? iterator.next();
             pending = undefined;
             let step: IteratorResult<SDKMessage, void>;
-            /* The two parks that race the grace window, a result on a steered stream, and a hold whose last
-             * child settled between turns, end the same way on silence: close the input and let the stream
-             * drain. `held` is always false while awaitingNextTurn is set (every result path clears it before
-             * arming the race), so clearing both on timeout is exact for either park. */
+            // Both parks end alike on silence: close input and drain; `held` is always false while awaitingNextTurn is
+            // set.
             if (awaitingNextTurn || (held && !midTurn && heldTasks === 0)) {
                 awaitingNextTurn = false;
                 const winner = await nextWithinGrace(nextPromise);
@@ -206,23 +147,9 @@ async function* sdkTurns(
                 continue;
             }
             midTurn = false;
-            /* A SWALLOWED PROMPT: an instant "success" with num_turns 0 and not one frame of work behind it,
-             * before anything was even delivered. The CLI does this when a resume wakes up to its own stale
-             * background-task notifications (a previous turn's subagents killed at its end): it classifies the
-             * whole run as a notification wake needing no response and results in milliseconds, while the
-             * prompt it was just sent is dequeued into the dying run, stamped "No response requested." at the
-             * next resume, and never answered. To the user that is a sent message producing nothing at all: no
-             * reply, no error, no stopped state.
-             *
-             * The subprocess is still alive waiting on the streaming input, so the recovery is the one the user
-             * performs by hand, say it again: the prompt goes back through the steering queue and runs as a
-             * follow-up turn in the same process, whose notification debt the dead run just paid. The empty
-             * result is not yielded, nothing settled, and its zero-usage frame would end the client's turn.
-             * `sawWork` keeps a local slash command (the one legitimate num_turns-0 success) out of this branch,
-             * and redeliver() is once per turn: a second empty answer is a different problem, and looping the
-             * same prompt at it is noise, not recovery. `!held` keeps it off a stream held open for a wake turn:
-             * children can settle without one frame of forwarded work, and an empty wake there is the hold
-             * ending, not the prompt vanishing. */
+            // A swallowed prompt: an instant empty success with no work behind it (the CLI notification-wakes on a dead
+            // run and drops the queued message). Redelivered once through the steering queue instead of yielded;
+            // skipped while held for a wake turn.
             const idle = !sawWork;
             sawWork = false;
             if (!held && idle && message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver?.() === true) {
@@ -236,8 +163,8 @@ async function* sdkTurns(
             }
             held = false;
             if (steering === undefined || steering.delivered === 0) {
-                // Close before returning (not just in runAgent's finally) so a steer racing this result
-                // reports undelivered instead of landing in a queue nothing will ever consume.
+                // Closed before returning so a steer racing this result reports undelivered rather than queuing
+                // forever.
                 steering?.close();
                 return;
             }
@@ -248,49 +175,38 @@ async function* sdkTurns(
     }
 }
 
-// The modes the contract (and so the composer) models. The SDK also resolves 'dontAsk' and 'auto', from a
-// settings default, say, which have no UI here, so a mode frame is only emitted for one of these four.
+// Modes the contract models; the SDK also resolves 'dontAsk'/'auto' from settings, which have no UI here.
 const PERMISSION_MODES = new Set<PermissionMode>(["default", "acceptEdits", "plan", "bypassPermissions"]);
 
-// Every input streamSdk folds, stated by name at the one call site (runAgent), each carries the reason it
-// can be absent.
+// Every input streamSdk folds, named at its one call site (runAgent); each field's comment says why it can be absent.
 export interface StreamSdkArgs {
     readonly queryFn: QueryFn;
     readonly prompt: string | AsyncIterable<SDKUserMessage>;
     readonly options: Options;
     readonly cwd: string;
     readonly tmuxEnabled: boolean;
-    // Where this turn's browser artifacts land, how a screenshot's answer is turned back into a picture the
-    // chat can show. Absent on a turn with no browser tools at all.
+    // Where this turn's browser artifacts land; absent on a turn with no browser tools at all.
     readonly browserOutputDir: string | undefined;
     readonly steering: SteeringQueue | undefined;
-    // The swallowed-prompt recovery sdkTurns fires, see its result branch. Absent on an unsteerable turn,
-    // which has no road back into the streaming input.
+    // The swallowed-prompt recovery sdkTurns fires (see its result branch); absent on an unsteerable turn.
     readonly redeliver: (() => boolean) | undefined;
-    // Reads the credential's plan-limit pools at turn settle; absent when the turn ran on a credential with no
-    // pools to read (an API endpoint, the container env), no read, no frame.
+    // Reads the credential's plan-limit pools at turn settle; absent when the credential has no pools to read.
     readonly readUsage: (() => Promise<UsageWindow[]>) | undefined;
-    // Whose allowance this turn spends and when it reopens; absent on a native Claude turn, whose harness
-    // answers both by itself. See TurnAllowance.
+    // Whose allowance this turn spends and when it reopens; absent on a native Claude turn (see TurnAllowance).
     readonly allowance: TurnAllowance | undefined;
-    /* The translator endpoint this turn runs against, on a ROUTED turn only (absent on a native Claude one,
-     * which has nothing to ask). Carried so a retry storm can be asked what it actually is: the harness reports
-     * a 5xx and no body, and the body is the only thing that separates a provider having a bad minute from a
-     * model this subscription will never serve (routed-refusal.ts). */
+    // The translator endpoint on a routed turn only, so a retry storm can ask what it is (routed-refusal.ts).
     readonly routed: RoutedEndpoint | undefined;
     // A platform-owned trial turn has already walked its whole key pool before a retry reaches this stream.
     readonly trial: boolean;
     // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
     readonly subagents: SubagentTurn | undefined;
-    /* The checklist the resumed session already holds, off the CLI's own store (task-store.ts), adopted by the
-     * fold at the first frame that names the session (adoptChecklist). Absent on a conversation's first turn,
-     * and on a session that kept no list. */
+    // The checklist the resumed session already holds (task-store.ts); adopted once the fold sees the session id.
     readonly checklistSeed: ChecklistSeed | undefined;
 }
 
 type SdkOf<T extends SDKMessage["type"]> = Extract<SDKMessage, { type: T }>;
 
-// A tool_use block that can be correlated to its result, real streams always carry an id and a name.
+// A tool_use block that can be correlated to its result; real streams always carry an id and a name.
 interface ToolUseBlock {
     readonly id: string;
     readonly name: string;
@@ -302,75 +218,44 @@ const toolUseOf = (block: { type: string; id?: string; name?: string; input?: un
         ? { id: block.id, name: block.name, input: block.input }
         : undefined;
 
-/* The call that starts another AGENT, walked away from. Its input is the only place that says whether the
- * parent walked away from the child (subagents.ts), and background is the tool's own default, an explicit
- * `false` is the one shape that means the turn blocks on it. */
+// The call that starts another agent, walked away from. `run_in_background` is the tool's own default; an explicit
+// `false` is the one shape that blocks the turn on it.
 const isDetachedSpawn = (input: unknown): boolean => (input as { run_in_background?: unknown } | undefined)?.run_in_background !== false;
 
-/* One turn's worth of fold state, everything the messages accumulate between the first frame and the last.
- * A class rather than a bag of closure variables so each message type's handler reads as its own unit. */
+// One turn's worth of fold state, everything the messages accumulate between the first frame and the last. A class
+// rather than closure variables so each message type's handler reads as its own unit.
 class TurnFold {
     private readonly args: StreamSdkArgs;
-    // Bound rather than consumed as a bare AsyncIterable: the turn also reads the session's slash-command
-    // list off this handle at `init` (see onSystem).
+    // Bound rather than consumed as a bare AsyncIterable: also reads the slash-command list at `init` (onSystem).
     private readonly session: AgentQuery;
     private sessionSent = false;
-    // Whether this turn has already asked its routed endpoint what it is actually refusing (endRetrying). Once
-    // per turn: the answer cannot change mid-turn (a plan is not bought inside one), and a probe per retry
-    // would put a request of our own on top of a storm.
+    // Whether this turn already probed its routed endpoint; asked once per turn (endRetrying).
     private routedProbed = false;
-    // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
-    // watchable live) and once at that command's tool_result (by then tmux-run has definitely created the
-    // session, so a first-command cold-start that outran the tool_use relist still gets a tab). surface() is
-    // idempotent, so the double emit is harmless.
+    // The terminal surfaces at the first Bash tool_use and again at its result, in case tmux-run lagged behind.
     private terminalSent = false;
     private terminalResurfaced = false;
     private agentSession: string | undefined;
-    // Same idea for the agent's browser: named once, at the first browser tool call, so the client can offer
-    // "watch this" from the card that asked the question. The PreToolUse hook is what actually registers the
-    // session (browser/browser-sessions.ts); this frame only tells the client its name.
+    // Named once at the first browser call so the client can offer to watch; PreToolUse registers the session.
     private browserSent = false;
     private readonly bashToolIds = new Set<string>();
-    // tool_use ids of browser screenshots, so the result can be turned into a picture the chat actually shows
-    // instead of the literal "[image]" a non-text block collapses to (browser/browser-artifacts.ts).
+    // tool_use ids of browser screenshots, turned into a picture instead of the literal '[image]' text.
     private readonly screenshotToolIds = new Set<string>();
-    // tool_use ids whose tool_call already carried the authoritative diff (derived from the Edit/Write input),
-    // so the success result's redundant "file updated" text must not REPLACE it (update content is a snapshot).
+    // tool_use ids whose call already carried the diff; a redundant 'file updated' result must not replace it.
     private readonly diffToolIds = new Set<string>();
-    // The agent's working checklist, reassembled from the Task tool family. Their tool_use ids are remembered
-    // so the result path suppresses their cards too, the list IS their render.
+    // The agent's working checklist, rebuilt from the Task tool family; the list itself is their render.
     private readonly checklist = new TaskChecklist();
     private inheritedChecklist: TodoItem[] | undefined;
     private readonly checklistToolIds = new Set<string>();
-    // Of those, the ones a SUBAGENT made (see onChecklistCall): their cards are suppressed like any other
-    // checklist verb, and their results are kept away from this conversation's list.
+    // Task ids made by a subagent (onChecklistCall), kept off this conversation's list like any checklist verb.
     private readonly foreignChecklistToolIds = new Set<string>();
-    // Context-window fill for the turn: the latest message_start reports the request's input size (grows
-    // monotonically within a turn); the result reports the model's contextWindow. Paired into one
-    // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
+    // Context fill: message_start reports input size, the result reports the model's window; paired at result.
     private contextTokens: number | undefined;
     private contextModel: string | undefined;
-    // The text content block currently streaming, per agent, the main turn under "", each subagent under its
-    // Task tool id, so a content_block_stop closes exactly the prose its own deltas were writing (see the
-    // text_end frame). Keyed and index-matched rather than a bare flag so neither a stop belonging to some
-    // other block (thinking, a tool's input JSON) nor a subagent's interleaved stream can retire the wrong one.
-    // A block's stop always precedes its message's `assistant` frame, so the boundary lands BEFORE the tool
-    // calls that block introduced, which is what puts them under it rather than above it in the transcript.
+    // A block's stop always precedes its assistant frame, so introduced tool calls render after it, not before.
     private readonly textBlocks = new Map<string, number>();
-    // The turn's live permission mode, so the composer can follow it. The SDK has no mode-change message,
-    // `init` states the resolved starting mode, `status` piggybacks the current one, and the agent's own
-    // EnterPlanMode is only visible as a tool call, so the three are folded here and de-duplicated.
+    // Live permission mode, folded and de-duplicated across `init`, `status`, and the tool-call-only EnterPlanMode.
     private mode: PermissionMode | undefined;
-    /* What speed the harness is actually serving this turn at, folded and de-duplicated exactly like the mode
-     * above: it is reported on `init` and again on the result, and restating an unchanged answer would put a
-     * second identical row in front of the user for no new information.
-     *
-     * De-duplicated on the PAIR rather than on the state, because the reason moves on its own and the move is
-     * the informative part: `init` can answer `off`/`pending`, the harness has not finished asking, and the
-     * result then names why, which is the difference between "we're checking" and "your plan doesn't include
-     * it". A state change alone is the other case worth a frame: a turn that exhausts the fast-mode pool
-     * mid-flight (it has its own, separate from the model's) drops to `cooldown` and finishes at standard
-     * speed, and the bill will say so whether or not the transcript does. */
+    // Fast-mode speed, de-duplicated on the (state, reason) pair, since a changing reason alone is informative.
     private fastReported: string | undefined;
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
@@ -378,10 +263,8 @@ class TurnFold {
         this.session = session;
     }
 
-    // One SDK message onto its frames. Returns true when the message ends the whole stream (a terminal
-    // rate_limit mid-retry). Any SDK message type without a mapping (hook / task / plugin / status / …) is
-    // dropped, as before, new high-value types earn a dedicated frame here; the rest stay silent rather
-    // than noisy.
+    // One SDK message onto its frames; returns true when the message ends the whole stream (a terminal rate_limit
+    // mid-retry). Any message type with no mapping is dropped silently.
     async *onMessage(message: SDKMessage): AsyncGenerator<AgentEvent, boolean> {
         const sessionId = (message as { session_id?: string }).session_id;
         if (!this.sessionSent && typeof sessionId === "string" && sessionId !== "") {
@@ -389,7 +272,7 @@ class TurnFold {
             yield { kind: "session", sessionId };
             this.adoptChecklist(sessionId);
         }
-        // The session a child's transcript is filed under, onto the handle the hooks close over, see SubagentTurn.
+        // The session id a child's transcript files under, onto the handle the hooks close over (SubagentTurn).
         const subagents = this.args.subagents;
         if (subagents !== undefined && subagents.sessionId === undefined && typeof sessionId === "string" && sessionId !== "") {
             subagents.sessionId = sessionId;
@@ -439,8 +322,8 @@ class TurnFold {
         return { kind: "fast_mode", state, ...opt("reason", reason) };
     }
 
-    // Token deltas, text and extended thinking both arrive here (partial messages are enabled). Each
-    // request's message_start also reports its usage, which is the current context-window fill.
+    // Token deltas, text and extended thinking both arrive here since partial messages are enabled. Each request's
+    // message_start also reports usage, the current context-window fill.
     private *onStreamEvent(message: SdkOf<"stream_event">, parent: string | undefined): Generator<AgentEvent> {
         const event = message.event as {
             type: string;
@@ -471,8 +354,8 @@ class TurnFold {
         }
     }
 
-    // Text/thinking already streamed as deltas above; here we only surface tool calls (and the checklist
-    // verbs, which are tool calls we render as their own live list).
+    // Text and thinking already streamed as deltas above; here only tool calls surface (including checklist verbs,
+    // rendered as their own live list).
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
         if (message.error !== undefined) {
             yield await errorFrame(message, this.args.allowance, this.args.trial);
@@ -489,32 +372,26 @@ class TurnFold {
     }
 
     private *onToolUse(block: ToolUseBlock, sessionId: unknown, parent: string | undefined): Generator<AgentEvent> {
-        // The checklist, which renders as its own live list rather than as tool cards, one card per task
-        // creation and per status flip would bury the transcript.
+        // The checklist renders as one live list, not tool cards, so status flips don't bury the transcript.
         if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
             yield* this.onChecklistCall(block, parent);
             return;
         }
-        // The agent moving itself into planning. Nothing else reports it, there is no mode-change SDK
-        // message, so the tool call IS the signal. ExitPlanMode is NOT mirrored here: the user's approval
-        // chooses the mode it lands in, and canUseTool pushes that frame.
+        // The only signal for entering plan mode; ExitPlanMode isn't mirrored, since approval picks the landing mode.
         if (block.name === "EnterPlanMode") {
             const changed = this.modeChange("plan");
             if (changed !== undefined) {
                 yield changed;
             }
         }
-        // `Agent` is the Claude SDK's name for the tool, and the SDK task stream is the only thing that
-        // files these children, so a spawn is only noted when there is a registry to file it in.
+        // `Agent` is the Claude SDK's own tool name; a spawn is noted only when there is a registry to file it in.
         if (block.name === "Agent" && this.args.subagents !== undefined && isDetachedSpawn(block.input)) {
             noteSubagentSpawn(block.id);
         }
         if (block.name === "Bash") {
             yield* this.onBashCall(block, sessionId);
         }
-        // First browser tool of the turn: name the `browser-<id>` session so the card can offer to watch it.
-        // Unlike Bash there is no resurface pass, the session is registered by the same call's PreToolUse
-        // hook, which has already run by the time this block is streamed.
+        // First browser tool of the turn names the session so the card can offer to watch it.
         if (browserServerOfTool(block.name) !== undefined) {
             yield* this.onBrowserCall(block, sessionId);
         }
@@ -546,17 +423,11 @@ class TurnFold {
         }
     }
 
-    // A create can only render from its RESULT (that is where it learns its task id); an update names the id
-    // in its input, so the list moves the instant the agent says so; a TaskList renders from its result alone.
+    // A create renders from its result (the id arrives there); an update names its id in the input.
     private *onChecklistCall(block: ToolUseBlock, parent: string | undefined): Generator<AgentEvent> {
-        // Remembered whoever made the call, because no tool card was emitted for it: an id missing from here
-        // sends its result down the ordinary path, which updates a card that never existed.
+        // Remembered so the result path doesn't route this id to a tool card that was never created.
         this.checklistToolIds.add(block.id);
-        /* A CHILD'S LIST IS NOT ITS PARENT'S. Under `parent` this verb came from a subagent working inside a
-         * tool call, and its tasks were folding into the list this conversation shows — and, since the same
-         * list is what the finish reads, into what the card says the turn left open. A delegation that keeps
-         * three tasks of its own could take over its parent's checklist, and one that finished them could
-         * report the parent's work as done. The child's own transcript draws its list from its own stream. */
+        // A subagent's checklist is not its parent's: adopting it could overwrite the parent's own list.
         if (parent !== undefined) {
             this.foreignChecklistToolIds.add(block.id);
             return;
@@ -573,12 +444,8 @@ class TurnFold {
         }
     }
 
-    /* WHAT A CHECKLIST VERB'S RESULT DOES TO THE LIST: a create learns its task id here ("Task #1 created
-     * successfully"), and a TaskList result is the authoritative set, which is how tasks made before this turn
-     * attached are adopted.
-     *
-     * Nothing at all for a child's verb (onChecklistCall). That authority is exactly the danger: a delegation's
-     * TaskList answers with ITS tasks, and applied here it would replace this conversation's list wholesale. */
+    // What a checklist verb's result does to the list: a create learns its id here; a TaskList result is authoritative.
+    // A child's verb contributes nothing, since its TaskList would replace this list wholesale.
     private checklistFrom(toolUseId: string, content: unknown): TodoItem[] | undefined {
         if (this.foreignChecklistToolIds.has(toolUseId)) {
             return undefined;
@@ -587,10 +454,7 @@ class TurnFold {
     }
 
     private *onBashCall(block: ToolUseBlock, sessionId: unknown): Generator<AgentEvent> {
-        // First Bash of the turn: name the live `agent-<id>` tmux session so the browser surfaces that
-        // terminal. Same derivation the PreToolUse hook routes commands through, so they match. Remember
-        // every Bash tool_use id so the tool_result can re-surface (the session may not exist yet at
-        // tool_use, the SDK can lag before actually running the command).
+        // First Bash of the turn names the tmux session so the browser surfaces it; ids are kept for resurfacing.
         if (this.args.tmuxEnabled && typeof sessionId === "string") {
             this.agentSession ??= agentSessionName(sessionId);
             if (this.agentSession !== undefined) {
@@ -626,9 +490,8 @@ class TurnFold {
         return {
             kind: "tool_call",
             id: block.id,
-            // Through the shared vocabulary like every other backend's: Claude's own tool names have no entry
-            // and pass through untouched, and an MCP browser tool stops being `mcp__web__browser_navigate` on
-            // the card.
+            // Through the shared tool-name vocabulary; an MCP browser tool no longer shows its raw `mcp__web__` name
+            // here.
             name: displayNameOf(block.name),
             category: toolCategoryOf(block.name),
             status: "in_progress",
@@ -639,9 +502,8 @@ class TurnFold {
         };
     }
 
-    // Tool results come back as tool_result blocks on a (usually synthetic) user message, this is where
-    // edit diffs and bash output live. A result without a tool_use_id can't be correlated, real streams
-    // always carry one.
+    // Tool results arrive as tool_result blocks on a (usually synthetic) user message; this is where edit diffs and
+    // bash output live. A result with no tool_use_id can't be correlated.
     private *onToolResults(message: SdkOf<"user">): Generator<AgentEvent> {
         const content = message.message.content;
         if (!Array.isArray(content)) {
@@ -655,15 +517,12 @@ class TurnFold {
     }
 
     private *onToolResult(toolUseId: string, content: unknown, failed: boolean): Generator<AgentEvent> {
-        // Backstop: the first Bash tool_result guarantees tmux-run has created the session, so re-surface
-        // the terminal in case the tool_use-time relist raced ahead of session creation.
+        // Backstop: the first Bash result guarantees tmux-run created the session, in case tool_use raced ahead of it.
         if (!this.terminalResurfaced && this.agentSession !== undefined && this.bashToolIds.has(toolUseId)) {
             this.terminalResurfaced = true;
             yield { kind: "terminal", session: this.agentSession };
         }
-        // A checklist verb: no card was emitted for the call, so none is updated here. A create learns its
-        // task id from this result ("Task #1 created successfully"), and a TaskList result is the
-        // authoritative set, it adopts tasks made before this turn attached.
+        // A checklist verb has no card here; a create learns its id from this result, and TaskList is authoritative.
         if (this.checklistToolIds.has(toolUseId)) {
             const items = this.checklistFrom(toolUseId, content);
             if (items !== undefined) {
@@ -672,14 +531,12 @@ class TurnFold {
             return;
         }
         const text = resultText(content);
-        // A screenshot's answer names the file it wrote; carry the picture alongside the text so the card
-        // can show what the agent looked at, not just say that it looked.
+        // A screenshot's answer names the file it wrote; carry the picture too, not just the text that it looked.
         const image =
             !failed && this.screenshotToolIds.has(toolUseId) && this.args.browserOutputDir !== undefined
                 ? screenshotImage(text, this.args.cwd, this.args.browserOutputDir)
                 : undefined;
-        // A successful Edit/Write result is only the redundant "file updated" snippet, status alone, so the
-        // call-time diff stays the card's content. Errors DO replace it (the text is the reason).
+        // A successful Edit/Write result is just 'file updated', so the call-time diff stays; errors do replace it.
         yield {
             kind: "tool_call_update",
             id: toolUseId,
@@ -690,24 +547,8 @@ class TurnFold {
         };
     }
 
-    /* WHEN A RETRY IS NOT WORTH WAITING OUT, and which of the two reasons it is. Undefined means the harness is
-     * right to keep going and the caller forwards the ordinary `provider_retry` status.
-     *
-     * IS THIS AN OUTAGE AT ALL? is the first question, and the one the harness cannot answer about its own
-     * retry: it buckets every 5xx as `server_error` and forwards no body, and the body is where a translator
-     * says whether the subscription covers this model. So the endpoint is asked directly, ONCE per turn and
-     * only from in here, where something is already failing: on a healthy provider this never runs, and on a
-     * refused model it answers instantly with the vendor's own sentence (routed-refusal.ts holds the mechanism
-     * and the measurements).
-     *
-     * Asked at the FIRST retry rather than at the storm cap, which is the whole point of it: the cap is two
-     * minutes away, and those two minutes are the symptom — a spinner with nothing behind it, over a request
-     * that was refused in five milliseconds and will be refused identically forever. Undefined on doubt (a slow
-     * endpoint, an unreadable body, a probe that threw), and the ladder then runs exactly as before.
-     *
-     * THE STORM CAP is the second: it is not clearing, so stop riding it out in here. The frame the harness
-     * would have ended on eventually goes out now, agent.routes files it as the outage it is, and the resume
-     * scheduler owns the waiting from this point (MAX_IN_TURN_RETRIES has the argument). */
+    // Whether a retry is worth waiting out. Probes the routed endpoint once per turn to catch a refused model early;
+    // past MAX_IN_TURN_RETRIES, ends the turn for the resume scheduler to wait instead.
     private async endRetrying(attempt: number, status: number | undefined): Promise<AgentEvent | undefined> {
         const routed = this.args.routed;
         if (routed !== undefined && !this.routedProbed) {
@@ -732,18 +573,14 @@ class TurnFold {
                 if (changed !== undefined) {
                     yield changed;
                 }
-                // The harness's answer to "am I serving this turn fast?", at the earliest point it can be
-                // asked, before a single token has been spent, which is when it is still actionable.
+                // The harness's answer to "am I serving this fast?", asked before a token is spent, while still
+                // actionable.
                 const speed = this.fastModeChange(message.fast_mode_state, message.fast_mode_disabled_reason);
                 if (speed !== undefined) {
                     yield speed;
                 }
-                // The session's slash commands, built-ins plus the workspace's own .claude/commands and any
-                // plugin/skill commands, all of which load because baseOptions sets settingSources. Read HERE
-                // rather than before the stream on purpose: supportedCommands() awaits the SDK's initialize
-                // response, and `init` is proof that response already landed, so it resolves immediately. Asked
-                // any earlier, a CLI that dies during startup would hang the turn on a promise that never
-                // settles instead of surfacing as the stream error it is.
+                // Read here, not pre-stream: supportedCommands() resolves only after `init`, else a dead CLI could hang
+                // it.
                 const commands = await this.session.supportedCommands?.().catch(() => undefined);
                 if (commands !== undefined && commands.length > 0) {
                     yield commandFrame(commands);
@@ -751,8 +588,8 @@ class TurnFold {
                 return false;
             }
             case "status": {
-                // `status` carries the CURRENT mode when it knows it, the backstop that catches any mode move
-                // the two signals above miss (a hook, a settings default, a /mode-style slash command).
+                // `status` carries the current mode when known; the backstop for a mode move the other two signals
+                // miss.
                 const changed = this.modeChange(message.permissionMode as PermissionMode);
                 if (changed !== undefined) {
                     yield changed;
@@ -760,10 +597,8 @@ class TurnFold {
                 return false;
             }
             case "commands_changed": {
-                // A mid-session republish of the WHOLE list (skills discovered as the agent works in a
-                // subdirectory, a reloaded plugin). The SDK's contract is replace-wholesale, which is exactly
-                // what this frame means to the client, supportedCommands() is captured at initialize and
-                // never reflects these, so re-asking it would return the stale init list.
+                // A mid-session republish of the whole list; supportedCommands() is captured at init and won't reflect
+                // it.
                 yield commandFrame(message.commands);
                 return false;
             }
@@ -778,15 +613,9 @@ class TurnFold {
                 return false;
             }
             case "local_command_output": {
-                /* What a slash command the CLI answers ITSELF produced, no model request ran, so none of the
-                 * frames above carry it. Dropping it (which this did) made every such command look broken: the
-                 * turn ends with the composer's own echo and nothing else, whatever the command actually said.
-                 *
-                 * The unknown-command case is the one that costs the user their words: the CLI claims a leading
-                 * `/`, finds no such command, and discards the REST of the message, the model never sees it.
-                 * turn-plan.ts stops that before it happens whenever the command list is known; this is the
-                 * backstop for when it isn't (a daemon that has run no turn yet), so it carries a code the
-                 * client can act on rather than a line of red text the user has to read and re-type around. */
+                // A slash command the CLI answers itself; no model request ran, so no other frame carries it. An
+                // unknown leading `/` makes the CLI discard the rest of the message; coded so the client can act on it
+                // instead of showing red text.
                 const output = localCommandText(message.content);
                 const unknown = unknownCommandName(output);
                 if (unknown !== undefined) {
@@ -802,28 +631,18 @@ class TurnFold {
                 return false;
             }
             case "api_retry": {
-                // The platform has already exhausted its bounded key pool. Letting the harness begin another
-                // backoff cycle turns a refunded failure into the indefinite "provider not responding" spinner.
+                // The platform already exhausted its key pool; another backoff cycle reads as an indefinite spinner.
                 if (this.args.trial) {
                     yield trialRetryFrame(message.error);
                     return true;
                 }
-                /* A spent allowance is not an outage to ride out in a live process. The SDK names it directly
-                 * and sets its retry delay to the closed window's remaining lifetime; turn that into the same
-                 * terminal rate_limit frame as an assistant refusal, carrying the reset instant so the daemon's
-                 * existing resume scheduler can park the turn and bring its session back after the reset. Aside
-                 * from telling the truth, this frees the conversation's live-run lock instead of leaving a CLI
-                 * spinner attached to it for minutes or hours. Ending the stream closes the SDK iterator in
-                 * sdkTurns' finally; runAgent then supplies the ordinary terminal done frame. */
+                // A spent allowance is not an outage to ride out live: the SDK's own retry delay is the window's
+                // remaining lifetime, so end the stream as a terminal rate_limit frame and free the conversation's run
+                // lock for the resume scheduler.
                 if (message.error === "rate_limit") {
-                    /* WHEN THE SPENT WINDOW REOPENS, from the only party that knows, and on this path only one
-                     * of the two ever does. A NATIVE Claude turn's harness sets its retry delay to the closed
-                     * window's remaining lifetime, so the delay IS the reset and arithmetic on it is exact. On a
-                     * routed turn it is nothing of the sort: the delay is the SDK's own 620ms-and-doubling
-                     * backoff, and turning that into an instant is what produced "Resets 5:32 PM" for a Google
-                     * weekly quota five days out. So it is offered on the native path and withheld on the routed
-                     * one, where the recorded quota answers instead, and may name no instant at all, which the
-                     * client renders as a plain notice. That is the truth; an invented clock time is not. */
+                    // The reset instant is offered only on a native turn, whose retry delay IS the window's remaining
+                    // lifetime; a routed turn's delay is just SDK backoff, and turning it into an instant invents a
+                    // false reset.
                     const allowance = this.args.allowance;
                     yield await rateLimitFrame(
                         allowance,
@@ -831,22 +650,14 @@ class TurnFold {
                     );
                     return true;
                 }
-                // The two ways a retry stops being one: the endpoint is refusing this model outright, or the
-                // storm has gone on long enough that the waiting belongs outside this process (endRetrying).
+                // The two ways a retry stops: an outright model refusal, or a storm long enough to hand off
+                // (endRetrying).
                 const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);
                 if (terminal !== undefined) {
                     yield terminal;
                     return true;
                 }
-                /* Every other retry is still happening INSIDE this turn, so nothing has failed yet and there is
-                 * nothing in the transcript to write. Forwarded because the retry budget is deliberately long
-                 * (CLAUDE_CODE_RETRY_WATCHDOG in harness-credentials.ts): without this status a turn riding out
-                 * an outage is indistinguishable from one that hung.
-                 *
-                 * The bound on the wire is whichever of the two will actually be honoured, and on this path that
-                 * is almost always OURS: promising the harness's three hundred while the branch above ends the
-                 * turn at eight is a countdown to a number nothing intends to reach. Read as a min rather than
-                 * hard-coded so a harness release that lowers its own budget under ours still governs. */
+                // Forwarded so a long retry doesn't read as a hang; maxAttempts reports the smaller of the two budgets.
                 yield {
                     kind: "provider_retry",
                     attempt: message.attempt,
@@ -857,11 +668,8 @@ class TurnFold {
                 return false;
             }
             default: {
-                /* THE SDK'S SUBAGENT LIFECYCLE, the four messages that used to be dropped here for having "no UI
-                 * mapping". They are the only account of a child between its tool_use and its result: what it is,
-                 * what it is spending, what it is doing right now, whether it finished or failed. Which for a
-                 * BACKGROUNDED child (the Agent tool's default) is the entire account, because its result may not
-                 * land for minutes. The registry owns the fold; this only forwards what came back. */
+                // The SDK's subagent lifecycle messages, the only account of a backgrounded child between its tool_use
+                // and its result. The registry owns the fold; this only forwards what came back.
                 if (this.args.subagents !== undefined && message.subtype.startsWith("task_")) {
                     const frame = noteSubagentTask(this.args.subagents, message as SubagentTaskMessage);
                     if (frame !== undefined) {
@@ -873,9 +681,8 @@ class TurnFold {
         }
     }
 
-    // Claude subscription usage for the turn: which window is active, how much of it is spent, and when it
-    // resets. The SDK reports it on the stream at no token cost, we'd otherwise drop it. Only Claude turns
-    // emit it (Codex/Grok have no equivalent).
+    // Claude subscription usage for the turn: which window is active, how much is spent, and when it resets. The SDK
+    // reports it at no token cost; only Claude turns emit it.
     private *onRateLimitInfo(message: SdkOf<"rate_limit_event">): Generator<AgentEvent> {
         const info = message.rate_limit_info;
         yield {
@@ -888,8 +695,7 @@ class TurnFold {
     }
 
     private async *onResult(message: SdkOf<"result">): AsyncGenerator<AgentEvent> {
-        // Only surface accounting when the SDK actually reported it (real turns always do; the empty frame
-        // would be noise).
+        // Only surface accounting when the SDK actually reported it; an empty frame on every turn would be noise.
         if (message.usage !== undefined || message.total_cost_usd !== undefined) {
             yield {
                 kind: "usage",
@@ -902,8 +708,7 @@ class TurnFold {
                 ...opt("numTurns", message.num_turns),
             };
         }
-        // Context-window fill: pair the latest message_start input size with the model's window (a static
-        // per-model constant carried on the result). Key by the turn's model, fall back to the sole entry.
+        // Context-window fill: pairs the latest message_start size with the model's window, keyed by the turn's model.
         if (this.contextTokens !== undefined) {
             const window =
                 (this.contextModel !== undefined ? message.modelUsage[this.contextModel]?.contextWindow : undefined) ??
@@ -912,21 +717,13 @@ class TurnFold {
                 yield { kind: "context_usage", tokens: this.contextTokens, contextWindow: window };
             }
         }
-        // The settled answer on speed. Usually a no-op, `init` already said it and nothing moved, but it
-        // is the frame that catches a turn dropped into cooldown partway through, and the one that replaces
-        // an init-time `pending` with the real reason.
+        // The settled answer on speed: usually a no-op, but catches cooldown mid-turn or an init `pending`.
         const speed = this.fastModeChange(message.fast_mode_state, message.fast_mode_disabled_reason);
         if (speed !== undefined) {
             yield speed;
         }
-        /* THE TURN ENDED WITHOUT SUCCEEDING, and which way it did is now on the frame.
-         *
-         * This used to yield one uncoded error carrying the subtype inside its sentence, which made it the
-         * schema's own worst case: an unclassified failure is one nothing downstream knows how to handle, and
-         * the ledger recorded exactly that (UsageTurn.errorCode). The distinction it was throwing away is a
-         * real one, and it is the one a post-mortem asks for first, a loop that ran out of iterations is not a
-         * loop that broke. The sentence still carries the subtype verbatim, since it is the only thing that
-         * separates the several endings sharing the second code. */
+        // How the turn ended when it didn't succeed: the subtype decides the code (turn-cap vs. harness-incomplete),
+        // and the raw subtype still rides the sentence since it's the only thing telling several endings apart.
         if (message.subtype !== "success") {
             yield {
                 kind: "error",
@@ -934,17 +731,12 @@ class TurnFold {
                 message: `agent did not complete (${message.subtype})`,
             };
         }
-        // The account's headroom, re-read now that the turn has settled, the freshest this account's
-        // limits get without spending anything to find out. After the result frames on purpose: the read
-        // is a network round trip, and nothing about it should sit between the user and the answer they
-        // were waiting for. An empty read (no pools reported, a failed request) yields no frame at all
-        // rather than an empty window list, which would read as "measured, and you have no limits".
+        // The account's headroom, re-read now the turn has settled; an empty read yields no frame, not an empty list.
         const windows = this.args.readUsage === undefined ? [] : await this.args.readUsage();
         if (windows.length > 0) {
             yield { kind: "account_usage", windows };
         }
-        // NOT the end of the stream: sdkTurns owns the turn boundary, a steered stream can carry a
-        // follow-up turn after this result, whose frames keep flowing through the same cases above.
+        // Not the end of the stream; sdkTurns owns the boundary, and a steered stream may carry a follow-up turn next.
     }
 }
 

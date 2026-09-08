@@ -6,23 +6,9 @@ import { semanticSearch } from "../engines/semantic.js";
 import { openIndex } from "../store/db.js";
 import type { EngineHit } from "../types.js";
 
-/* ANSWERING A QUERY, OFF THE HOST'S EVENT LOOP, the counterpart to index-worker.ts, and the half that was
- * missing. That one moved the work of KEEPING the index current; this one moves the work of READING it.
- *
- * The daemon's thread used to run both model stages of every natural-language query itself. Measured against
- * this workspace's index (3.7k files, 58k chunks): ~300ms for the scan over every embedded chunk, ~400ms for
- * the cross-encoder over the 24 candidates, and the loop blocked for essentially all of both, node:sqlite is
- * synchronous, so the scan cannot yield, and transformers.js tokenizes in JS before ONNX ever sees the batch.
- * Agents search on every turn, so that is ~700ms of dead loop per turn on the thread that streams their output.
- *
- * READ-ONLY, and that is the whole concurrency story. The index worker writes; this side and the host only
- * read; WAL lets all three hold the file at once. Nothing here is stateful between requests either, so requests
- * need no ordering and no queue, each message is answered on its own, and `id` is what pairs an answer with
- * its question.
- *
- * The models load at startup rather than on first use. The host spawns this thread at boot, next to the index
- * worker, so the half-second of model loading overlaps the first index pass instead of landing on whoever
- * searches first, which, before this file existed, was a first query that paid it on the daemon's own thread. */
+// Answers queries off the host's event loop. index-worker.ts writes the index; this thread only reads, so WAL lets both
+// hold it open at once. Each request is independent; `id` pairs the answer with its question. Models load at startup,
+// overlapping the first index pass instead of the first query.
 
 export interface QueryWorkerData {
     readonly indexDir: string;
@@ -34,8 +20,8 @@ export type QueryWorkerRequest =
     | { readonly type: "semantic"; readonly id: number; readonly query: string; readonly allowed: string[] }
     | { readonly type: "rerank"; readonly id: number; readonly query: string; readonly passages: string[] };
 
-// Worker → host. "absent" is not a failure: a host with no baked model dir is a supported configuration, and
-// the pipeline degrades to BM25 (semantic) or to the fused order (rerank) and says so.
+// Worker → host. `absent` isn't a failure: no baked model dir degrades semantic search to BM25 and rerank to the fused
+// order.
 export type QueryWorkerResponse =
     | { readonly type: "semantic"; readonly id: number; readonly hits: EngineHit[]; readonly pending: number }
     | { readonly type: "rerank"; readonly id: number; readonly scores: number[] }
@@ -60,8 +46,7 @@ const answer = async (request: QueryWorkerRequest): Promise<QueryWorkerResponse>
         if (embedder === undefined) {
             return { type: "absent", id };
         }
-        // Counted here rather than on the host: it is one more read of the same index this thread already has
-        // open, and the only reason the host wants the number is to print "embeddings 87%" beside the results.
+        // Counted here since only this thread holds the index open; the host cannot query it directly.
         const pending = Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"] ?? 0);
         const hits = semanticSearch(db, await embedder.embedQuery(request.query), new Set(request.allowed));
         return { type: "semantic", id, hits, pending };
@@ -79,8 +64,7 @@ port.on("message", (request: QueryWorkerRequest) => {
             port.postMessage(response);
         },
         (error: unknown) => {
-            // Per-request failure, reported per-request: a query that hits a bad passage or a broken model call
-            // degrades that one answer, and the thread stays up for the next one.
+            // A failed request reports its own error; the thread stays alive for the next one.
             port.postMessage({ type: "failed", id: request.id, error: errorMessage(error) });
         },
     );

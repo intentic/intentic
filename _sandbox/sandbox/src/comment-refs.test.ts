@@ -4,59 +4,25 @@ import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import { expect, test } from "vitest";
 
-/* EVERY FILE A COMMENT POINTS AT STILL EXISTS: the one cross-file link nothing else checks.
- *
- * The comments here are load-bearing. README.md sends a new agent to `agents/isolation.ts` and
- * `agents/worktrees.ts` to learn why isolation is shaped the way it is, and those headers hand off to each
- * other by name. An import that goes stale stops compiling; a name in PROSE is just text. It survives every
- * rename, and it is read by exactly the people who do not yet know it is wrong.
- *
- * It had rotted in 28 places before this existed. `sandboxPool.ts` became `sandbox-pool.ts` and three comments
- * in _platform/api kept sending readers to the old spelling. The preview-hostname builder was folded into the
- * contract's `hostnames.ts` and three more named a file that had been gone for weeks. Fifteen suites gained the
- * `.integration.` marker that SELECTS THEIR TIMEOUT BUDGET while the comments naming them did not, so the
- * prose disagreed with the one convention AGENTS.md makes a suite's name mean something. Every one was a
- * one-line fix nobody had a reason to make, because nothing failed.
- *
- * Recognized by SHAPE rather than by a list of known-bad names, which would repeat the miss it exists to
- * prevent. A reference is a POINTER on any of three grounds: its stem names a real module here (so
- * `standing.test.ts` is measured against the `standing.integration.test.ts` that exists), or the stem is
- * compound and long (so a target renamed clean away is still caught: `sandboxPool.ts` had nothing left to
- * match), or it is shaped like a component, every .vue/.tsx here being PascalCase. That third ground is not
- * decoration: `Chat.vue` outlived the page it named and was invisible to the other two. Everything else is the
- * prose's own vocabulary: `foo.ts`, `a.ts`, `Foo.vue`, globs like `*.test.ts`, and is left alone. */
+// Every file a comment names still exists under that name; a reference is recognized by shape (a known stem, a long or
+// hyphenated/camelCase stem, or a PascalCase component name), not a list of known-bad names.
 
 const REPO_ROOT = repoRoot(import.meta.url);
 
 const SCANNED = new Set([".ts", ".tsx", ".vue", ".mjs"]);
 
-// Strings are consumed BEFORE comments can open inside them, so a URL in a literal ("https://…/foo.ts") is not
-// read as prose. Whatever is left starting with // or /* is a comment.
+// Strings are consumed before comments can open inside them, so a URL in a literal is never read as prose.
 const TOKENS = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
 
 const REFERENCE = /[\w./-]+\.(?:ts|tsx|vue|mjs)\b/g;
 
-// A stem worth checking on its own evidence: hyphenated or camelCase, and long enough that the compounding is a
-// name rather than an accident. Single short words are how this prose writes an EXAMPLE.
+// A stem worth checking alone: hyphenated or camelCase and long enough that the compounding is a name, not an accident.
 const compound = (stem: string): boolean => stem.length >= 6 && (/-/.test(stem) || /[a-z][A-Z]/.test(stem));
 
-// Every .vue/.tsx here is a PascalCase component, so a reference wearing that shape is NAMING one rather than
-// illustrating a filename, and it is the only ground a single-word component name is caught on.
+// Every .vue/.tsx here is a PascalCase component; that shape alone names one, even from a single word.
 const component = (stem: string, leaf: string): boolean => /\.(?:vue|tsx)$/.test(leaf) && stem.length >= 4 && /^[A-Z][a-z]/.test(stem);
 
-// Names for files outside this tree: they resolve to nothing and always will. Most are the chore analyzer's
-// examples of components in a USER's repository: chores/stack.ts reduces two of them to one stem, and holds
-// `page.tsx` up as the framework-chosen entry name that must NOT become a family, which are the two points it
-// is making. `legacyPlans.ts` is the same repository one file further out, a module rather than a component:
-// ChoreRow.vue quotes `unreferenced · src/legacyPlans.ts` to show the `<tag> · <claim>` shape every evidence
-// line has, and the claim half of an unreferenced-files line IS a path, so the illustration cannot avoid
-// spelling one. `one-file.ts` is the odd one out, an example argument in a documented command line — named here
-// rather than called "the last", because it stopped being last the moment the three new names were appended.
-// `client.mjs` is a DEPENDENCY's file, Vite's dev client under node_modules: the two styleStability modules
-// quote its `updateStyle` because that bare `style.textContent = content` is the write they exist to absorb, and
-// naming it is how a reader checks the claim against the version installed. It is caught by the first ground
-// rather than being long or PascalCase — eight of our own modules are called `client.ts` — so it needs the
-// exemption that `updateStyle`'s own file, being a name we never spell with an extension, does not.
+// Filenames that are examples or belong to another repo/dependency; quoted as evidence, not a broken pointer.
 const NOT_OURS = new Set([
     "BaseButton.vue",
     "ButtonV2.tsx",
@@ -69,7 +35,7 @@ const NOT_OURS = new Set([
     "client.mjs",
 ]);
 
-// The one file that has to QUOTE dead names in order to explain itself: its header is evidence, not a pointer.
+// The only file allowed to quote dead names; its header is evidence, not a pointer.
 const SELF = "_sandbox/sandbox/src/comment-refs.test.ts";
 
 const walk = async (dir: string): Promise<string[]> => {
@@ -77,9 +43,7 @@ const walk = async (dir: string): Promise<string[]> => {
     const found = await Promise.all(
         entries.map(async (entry) => {
             if (entry.isDirectory()) {
-                // `target` is cargo's build tree (ic, the desktop crate). No module of ours lives in it, and on a
-                // runner that checks out without cleaning it is tens of thousands of stats for nothing:
-                // sandbox-run-contract.test.ts skips it for the same reason.
+                // target is cargo's build tree; nothing of ours lives there, and it wastes stats on a dirty checkout.
                 return entry.name.startsWith(".") || entry.name === "target" || IGNORED_DIRS.has(entry.name) ? [] : walk(join(dir, entry.name));
             }
             return SCANNED.has(entry.name.slice(entry.name.lastIndexOf("."))) ? [join(dir, entry.name)] : [];
@@ -93,11 +57,7 @@ test("every module a comment names still exists under that name", async () => {
     const basenames = new Set(files.map((file) => file.slice(file.lastIndexOf("/") + 1)));
     const stems = new Set([...basenames].map((name) => name.slice(0, name.indexOf("."))));
 
-    // Read the tree in ONE batch rather than one await at a time. Same ~2400 files either way, but serialized
-    // they are 2400 round trips taken inside a suite that runs 230 files at once: 3736ms of a 5000ms budget in
-    // the last green run, 5015ms and a timeout in the next one, with nothing about this test having changed.
-    // Batched, the reads overlap and the cost is back to a fraction of the budget, which is what makes the
-    // budget mean "this hung" again instead of "the runner was busy".
+    // Reads the tree in one batch; serialized, many round trips risk the suite's time budget under concurrent runs.
     const sources = await Promise.all(
         files.filter((file) => !file.endsWith(SELF)).map(async (file) => [file, await readFile(file, "utf8").catch(() => "")] as const),
     );
@@ -127,14 +87,12 @@ test("every module a comment names still exists under that name", async () => {
         }
     }
 
-    // If the scan ever stops matching, this file would pass while guarding nothing.
+    // If the scan stops matching, this test passes while guarding nothing.
     expect(checked).toBeGreaterThan(500);
 
     expect(
         [...new Set(dead)].toSorted(),
         "These comments name a file that does not exist: point them at the current name, or reword so the name is not a claim about this tree.",
     ).toEqual([]);
-    // A stated budget, because vitest's 5s default was never a judgement about a suite that reads every source
-    // file in the repository: it is ~200ms of work on an idle machine and crossed 5s on a runner doing 230 test
-    // files at once, which failed CI for being busy rather than for being wrong. 20s still catches a hang.
+    // 20s budget: this suite reads every source file in the repo, slower than vitest's 5s default assumes.
 }, 20_000);

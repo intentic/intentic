@@ -1,25 +1,7 @@
-<!-- THE EDITABLE DAG: DagGraph's counterpart, and the two exist apart on purpose.
-
-     DagGraph is a domain-agnostic READ-ONLY renderer: it switches Vue Flow's interactivity off wholesale
-     (`nodes-draggable`, `nodes-connectable`, `elements-selectable` all false) and five surfaces depend on it
-     doing exactly that. Threading an `editable` mode back through it would blur that contract and put those
-     five at risk to serve one caller. So this is a sibling, and what the two SHARE is the thing that must
-     never disagree: `dagLayout.ts`, the positions and the layout signature. Draw the same graph in both and
-     you get the same picture.
-
-     WHAT IT ADDS OVER ITS SIBLING, and nothing else: a handle you can drag an edge out of, selectable nodes
-     AND edges, an add affordance on the trailing handle, and a canvas you can see the extent of (dots,
-     zoom controls). No new dependency: `@vue-flow/core` has carried all of this since it arrived, and the
-     optional add-on packages it publishes for the background and the controls are a CSS gradient and three
-     buttons, which is what they are here.
-
-     NODES ARE NOT DRAGGABLE, AND THAT IS THE DESIGN RATHER THAN A GAP. In a graph whose edges ARE the
-     dependencies, a node's position is DERIVED: dagre knows where it goes. Letting it be hand-placed means
-     every step you add makes the arrangement you chose slightly wrong, and tidying becomes a permanent chore
-     that buys the reader nothing a layout engine was not already giving them for free. Dragging is therefore
-     spent on the one thing position cannot express: dragging FROM a handle draws an edge.
-
-     The parent must size this component (single root, h-full w-full), same as DagGraph. -->
+<!--
+    Editable counterpart to <DagGraph>; both share dagLayout.ts so they draw the same graph. Adds edge-drag handles, selectable nodes/edges and an
+    add affordance; node position stays derived from dagre and is not draggable. Caller must size this component (h-full w-full).
+-->
 <script setup lang="ts" generic="T">
 import { Handle, Panel, Position, VueFlow } from "@vue-flow/core";
 import type { Connection, Edge, Node, VueFlowStore } from "@vue-flow/core";
@@ -42,18 +24,15 @@ const {
     nodeWidth?: number;
     nodeHeight?: number;
     direction?: `LR` | `TB`;
-    /* The tooltip on each node's add button. Absent ⇒ no add button: this component is an editor, but "you
-     * may add a node from here" is the caller's fact, not ours. */
+    // Tooltip on each node's add button; absent means no button, since adding is the caller's fact, not ours.
     addLabel?: string;
 }>();
 
-// Which node is selected; re-clicking the selected node clears it. Shared with DagGraph so a caller can move
-// a selection between the two without re-learning it.
+// Which node is selected; re-clicking clears it. Shared model with DagGraph, so a selection carries over.
 const selectedId = defineModel<string | undefined>();
 
 const emit = defineEmits<{
-    // A new dependency, drawn by dragging a handle onto another node. Vue Flow guarantees both ids exist; it
-    // does NOT guarantee the result is acyclic, so the caller validates and may refuse.
+    // A new dependency from dragging a handle; Vue Flow guarantees both ids exist but not that it's acyclic.
     connect: [from: string, to: string];
     // An edge the reader picked. Deleting or re-typing it is the caller's business: this only says which.
     selectEdge: [from: string, to: string];
@@ -66,8 +45,7 @@ defineSlots<{ node(props: { node: DagNode<T>; selected: boolean }): unknown }>()
 // Vue Flow scopes its injected state by id: unique per instance so two graphs can share a page.
 const flowId = useId();
 
-// Which edge is picked, as its endpoint pair. Kept locally rather than modelled: an edge selection is a
-// transient act (pick it, retype it, it is gone), while a NODE selection drives a whole inspector panel.
+// Kept locally, not modelled: an edge selection is transient, unlike a node selection which drives an inspector.
 const pickedEdge = ref<string>();
 const edgeKey = (from: string, to: string): string => `${from}>${to}`;
 
@@ -90,9 +68,8 @@ const flowEdges = computed<Edge[]>(() => {
             id: `${edge.from}>${edge.to}${edge.kind !== undefined ? `:${edge.kind}` : ``}`,
             source: edge.from,
             target: edge.to,
-            // Fatter than DagGraph's, because here an edge is a TARGET: a 1.5px curve is not something a mouse
-            // can reasonably be asked to hit. The stroke stays thin; `interactionWidth` is the invisible
-            // hit area around it.
+            // Fatter than DagGraph's: a 1.5px stroke is too thin to click, so `interactionWidth` adds an invisible hit
+            // area.
             interactionWidth: 20,
             class: [
                 edge.accent !== undefined ? `${edge.accent} dag-accent` : ``,
@@ -108,27 +85,14 @@ const flowEdges = computed<Edge[]>(() => {
 const sourcePosition = computed(() => (direction === `LR` ? Position.Right : Position.Bottom));
 const targetPosition = computed(() => (direction === `LR` ? Position.Left : Position.Top));
 
-/* FITTING NEVER MAGNIFIES, and this is the single most visible difference from DagGraph.
- *
- * `fitView` scales the graph to fill the viewport in BOTH directions, so on a canvas this large a one- or
- * two-node graph is scaled UP until it hits `maxZoom`: at 2×, a 12px label renders at 24px and the cards
- * look like billboards. That is not a hypothetical: it is what a two-step workflow looked like. Capping the
- * FIT at 1 means a small graph sits at its natural size in the corner of a big canvas, which is the honest
- * picture, and the reader can still zoom in past it by hand.
- *
- * DagGraph does not need this because its callers give it a band a couple of hundred pixels tall, where
- * filling the height is the right answer. Give the same component a full page and it stops being.
- */
-// `padding` is a fraction of the VIEWPORT applied on each side, so 0.2 spends 40% of the width on margin and
-// a four-step chain lands at 0.74 zoom with labels too small to read. 0.08 leaves the graph room to breathe
-// without paying for it in legibility, which is the thing a canvas is for.
+// Caps fit at 1x so a small graph sits at natural size instead of being magnified to fill this much larger canvas
+// — the opposite of DagGraph, whose callers give it only a short band.
+// `padding` is a viewport fraction per side; 0.08 leaves room to breathe without shrinking labels illegible.
 const FIT = { padding: 0.08, maxZoom: 1 } as const;
 
 const flow = ref<VueFlowStore>();
 
-/* THE READER HAS TAKEN HOLD of the viewport: DagGraph's rule, and it matters more on a canvas somebody is
- * working on: `@move-start` fires only for a real gesture (Vue Flow returns before emitting it when the
- * transform came from code), and from that moment nothing below fits over where they panned to. */
+// `@move-start` fires only on a real gesture; once held, nothing auto-fits over where the reader panned to.
 let held = false;
 const hold = (): void => {
     held = true;
@@ -144,11 +108,8 @@ const refit = (): void => {
 let observer: ResizeObserver | undefined;
 onBeforeUnmount(() => observer?.disconnect());
 
-/* Refit whenever a DIFFERENT graph arrives: the same rule and the same reasoning as DagGraph's, keyed on the
- * layout signature rather than the node count so two different graphs of one size cannot be mistaken for each
- * other. It earns its place harder here: the graph changes on every edit, and a canvas that let a new node
- * land outside the viewport would look like the click did nothing, which is also why an edit RELEASES the
- * hold: the picture the reader had chosen a place in is not the picture any more. */
+// Refits on a real layout change (keyed on signature, not node count), and releases any hold: an edit changes the
+// picture, so a new node landing outside the viewport must not look like the click did nothing.
 watch(
     () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
     async () => {
@@ -158,11 +119,8 @@ watch(
     },
 );
 
-/* Not `fit-view-on-init`: that runs Vue Flow's own fit with default options, which is exactly the magnifying
- * one. Fitting on ready instead is the same moment with our cap applied, and the two hooks beside it are what
- * make the fit hold: `nodes-initialized`, because `fitView` does NOTHING while no node has been measured yet
- * (a graph mounted a moment after its page loses that race and is left at 1× in the corner), and the observer,
- * because the canvas is resized every time the inspector opens beside it. DagGraph carries the long version. */
+// Not `fit-view-on-init` (that uses Vue Flow's own magnifying default); fits on ready instead, plus
+// `nodes-initialized` (fitView no-ops before nodes are measured) and a resize observer for the inspector opening.
 const onReady = async (store: VueFlowStore): Promise<void> => {
     flow.value = store;
     await nextTick();
@@ -190,15 +148,13 @@ const onEdgeClick = (edge: Edge): void => {
     emit(`selectEdge`, edge.source, edge.target);
 };
 
-// Clicking the empty canvas clears both selections: the ordinary "nothing is picked" gesture, and the only
-// way to close an inspector without hunting for an ×.
+// Clicking empty canvas clears both selections — the only way to close an inspector without hunting for an ×.
 const onPaneClick = (): void => {
     pickedEdge.value = undefined;
     selectedId.value = undefined;
 };
 
-// Fit is the ONLY control, because it is the only one with no gesture behind it: Vue Flow already gives wheel
-// and pinch zoom and drag-to-pan for free. A +/− pair beside them would be three buttons where one is needed.
+// Fit is the only button needed: Vue Flow already gives wheel/pinch zoom and drag-to-pan for free.
 const fit = (): void => void flow.value?.fitView(FIT);
 </script>
 
@@ -230,24 +186,13 @@ const fit = (): void => void flow.value?.fitView(FIT);
                     data.dimmed === true ? `opacity-30` : ``,
                 ]"
             >
-                <!-- The card's whole face is the select target; the handles and the add button sit over it.
-
-                     IT IS `relative` AND ROUNDED, AND BOTH ARE LOAD-BEARING RATHER THAN COSMETIC. A card's slot
-                     content may position something against the card's own edge: the workflow card's status
-                     stripe runs down the leading edge, and an `overflow-hidden` on a STATIC element does not
-                     clip a descendant whose containing block is an ancestor of it. Without `relative` here that
-                     stripe resolved against the FRAME instead, escaped this clip entirely, and painted its
-                     square corners over the frame's rounded ones: two dark notches at the top and bottom of the
-                     leading edge, obvious the moment a selected card put a ring behind them.
-
-                     THE RADIUS IS DERIVED, NOT TYPED. This button fills the frame's PADDING box, which curves
-                     one border-width tighter than the frame's own `rounded-md`, so the clip is that token
-                     minus the 1px border, and it stays right if either ever changes. Writing the number instead
-                     is how it went wrong the first time: `rounded-md` is 0.5rem against a root the app scales,
-                     which is 8.8px here and not the 6 it looks like in the stylesheet.
-
-                     DagGraph never had any of this because its card is ONE element: border, rounding and clip
-                     on the same box, so the browser reconciles them itself. -->
+                <!--
+                    `relative` and rounded are load-bearing: without `relative`, a slotted descendant (e.g. a status
+                    stripe) clips
+                    against the frame instead of this box, escaping the rounded corner. Radius is derived (frame's
+                    radius minus the
+                    1px border), not a literal value, so it stays correct if either token changes.
+                -->
                 <button
                     type="button"
                     v-tooltip.top="data.tooltip"
@@ -258,21 +203,13 @@ const fit = (): void => void flow.value?.fitView(FIT);
                 </button>
                 <Handle type="target" :position="targetPosition" class="dag-editor-handle" />
                 <Handle type="source" :position="sourcePosition" class="dag-editor-handle" />
-                <!-- The one-click chain. It sits ON the trailing handle because that is where the same action's
-                     drag gesture starts: one affordance, two ways to use it, and the cheap way is the default.
-
-                     IT IS PAINTED IN THE ACTION COLOUR, and that is a contrast fix rather than a decoration.
-                     It used to be `border-line` on `bg-canvas`: a ring at 1.42:1 in dark and 1.20:1 in light
-                     against the surface behind it, where WCAG's floor for the boundary of a control is 3:1, and
-                     a fill IDENTICAL to that surface, so the chip had no figure/ground at all. People reported
-                     hovering a node and not finding it, which is exactly what those numbers predict. No neutral
-                     in this palette can carry the job: `line-strong`, the darkest line token, still only reaches
-                     2.10:1/1.40:1. The accent does (8.42:1/4.29:1), and a button that chains a step IS the
-                     canvas's primary action, so it is the honest colour as well as the legible one.
-
-                     24px rather than 20 for the same reason on the other axis: SC 2.5.8's minimum target. And it
-                     answers focus, not only hover: revealed by `group-hover` alone, it was a control a keyboard
-                     could reach and never see. -->
+                <!--
+                    Painted in the action colour for contrast, not decoration: neutral tokens topped out at ~2:1
+                    against this
+                    surface (WCAG needs 3:1 for a control boundary), and hover-only reveal left it unreachable by
+                    keyboard. 24px for
+                    the same reason on touch-target size; visible on focus as well as hover.
+                -->
                 <button
                     v-if="addLabel !== undefined"
                     type="button"
@@ -303,8 +240,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
 </template>
 
 <style>
-/* Edge chrome matches DagGraph's, so the same graph reads the same in both: plus the two states only an
-   editable canvas has: a picked edge, and a handle you are meant to be able to grab. */
+/* Matches DagGraph's edge chrome, plus two states unique here: a picked edge, and a grabbable handle. */
 .dag-editor .vue-flow__edge-path {
     stroke: currentColor;
     stroke-opacity: 0.45;
@@ -327,14 +263,11 @@ const fit = (): void => void flow.value?.fitView(FIT);
     stroke-opacity: 1;
     stroke-width: 2;
 }
-/* Unlike DagGraph's inert anchors these are grab targets, so they are visible and hit-testable, but only
-   once the pointer is on the card. A canvas that shows every handle at rest reads as a circuit diagram.
-
-   A SOLID DOT, NOT A HOLLOW RING. Hollow, it was a 1px `line-strong` outline on a `canvas` fill: 2.10:1 in
-   dark and 1.40:1 in light against the surface it sits on, well under the 3:1 a control's boundary owes the
-   reader, and the fill was the surface, so a "visible" handle was a dot you had to already know was there.
-   Filled in `subtle` it clears the floor in both schemes (4.52:1 / 4.05:1) with the same 8px footprint, and
-   the canvas-coloured halo keeps it legible whether it lands on the card's edge or on the dotted pane. */
+/*
+ * Handles are grab targets (unlike DagGraph's inert ones), shown only on hover so the canvas doesn't read as a
+ * circuit diagram. Solid `subtle` fill, not a hollow ring, since the ring's outline fell under WCAG's 3:1
+ * control-boundary floor.
+ */
 .dag-editor .vue-flow__handle {
     height: 8px;
     width: 8px;
@@ -352,8 +285,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
 .dag-editor .vue-flow__handle.connectionindicator:hover {
     opacity: 1;
 }
-/* Under the pointer it becomes the thing an edge will be drawn in, which is the only preview of the gesture
-   there is before the drag starts. */
+/* Turns the colour an edge will be drawn in on hover — the only preview of the gesture before dragging starts. */
 .dag-editor .vue-flow__handle.connectionindicator:hover {
     background: var(--color-link);
 }
@@ -361,8 +293,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
     stroke: var(--color-link);
     stroke-width: 2;
 }
-/* The canvas's own extent, so panning reads as movement rather than as nothing happening. The published
-   @vue-flow/background package draws this with an SVG pattern; one gradient is the same picture. */
+/* Shows the canvas's extent so panning reads as movement; a gradient stands in for a background package. */
 .dag-editor .vue-flow__pane {
     background-image: radial-gradient(circle, var(--color-line) 1px, transparent 1px);
     background-size: 18px 18px;

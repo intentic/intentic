@@ -3,11 +3,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import { customEntryFor, familyGroups, filterEntries, lanesOf, type PickerEntry, pickerBlocks, pickerSections } from "./modelPickerState";
 import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatalog";
 
-/* The custom-model escape hatch. Everything else in modelPickerState.ts is pure derivation over the live catalogs;
- * this is the one path that lets a user name a model NO catalog published, which is the only way to reach a
- * model during the window between it shipping and the catalogs adopting it. */
+// The custom-model escape hatch: the one path that lets a user name a model no catalog has published yet, reachable
+// during the window before catalogs adopt it.
 
-// modelPicker pulls in conversation.ts for the live catalogs; stub its side-effecting seams so the import is inert.
+// modelPicker imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 vi.mock("./useChat-catalog", () => ({ loadProviderModels: vi.fn(async () => {}) }));
 
@@ -20,8 +19,7 @@ const CATALOG: readonly PickerEntry[] = [
 ];
 
 test("offers a typed id no catalog row covers, so a model that already serves turns is reachable", () => {
-    // The gap this fills: Claude Code's tier aliases lag a release by design and a REST /v1/models entry has to
-    // roll out to the account, yet the CLI itself accepts an arbitrary model string, so the picker must too.
+    // Tier aliases lag a release and REST entries roll out slowly; the CLI accepts any string, so must the picker.
     expect(customEntryFor(CATALOG, `claude-opus-6`, `claude`)).toEqual({
         key: `claude:claude-opus-6`,
         provider: `claude`,
@@ -44,8 +42,7 @@ test("treats a multi-word query as a search, never an id", () => {
 });
 
 test("stays silent for a bare search word, so browsing never grows a junk row per keystroke", () => {
-    // Typing "fast" to find "Grok 4 Fast" must not also offer a model literally named `fast`. Every real id
-    // across these providers is hyphenated, and the un-hyphenated tier aliases are catalog rows already.
+    // Typing "fast" to find Grok 4 Fast must not also offer a model named `fast`; real ids are hyphenated.
     expect(customEntryFor(CATALOG, `fast`, `claude`)).toBeUndefined();
     expect(customEntryFor(CATALOG, `opus`, `codex`)).toBeUndefined();
 });
@@ -63,10 +60,10 @@ test("offers nothing for an empty query, so simply focusing the search box adds 
     expect(customEntryFor(CATALOG, `   `, `claude`)).toBeUndefined();
 });
 
-/* FAMILY-MAJOR BROWSING. The catalog arrives as a release timeline, which opened the picker on five straight
- * Opus versions and left Haiku (a whole tier) below the fold. A group must open on one row per family. */
+// Family-major browsing: a release-timeline catalog would open the picker on five straight Opus versions, burying
+// Haiku; a group must open at one row per family.
 
-// Claude's account catalog in its own (newest-first) order, the shape the screenshot showed.
+// Claude's account catalog in its own newest-first order.
 const CLAUDE: readonly PickerEntry[] = [
     entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
     entry(`claude`, `claude-sonnet-5`, `Claude Sonnet 5`),
@@ -92,7 +89,7 @@ test("orders families frontier-first, which the catalog's own order cannot expre
 });
 
 test("leads with a family no tier rank names, so a brand-new flagship is never buried by its own novelty", () => {
-    // The precise inverse of the ranking this replaced, which sank unrecognized ids BELOW the everyday tier.
+    // An unrecognized family id ranks above every recognized tier, never below.
     const groups = familyGroups([entry(`claude`, `claude-mythos-1`, `Claude Mythos 1`), ...CLAUDE]);
 
     expect(groups[0]?.key).toBe(`claude-mythos`);
@@ -105,8 +102,7 @@ test("breaks a tier tie by release, so the family that shipped last leads the on
 });
 
 test("keeps catalog order between families that tie on BOTH, since Anthropic's catalog is itself a ranking", () => {
-    // Opus 5 and Fable 5: same tier, same version. Nothing derived can separate them, so the order the provider
-    // reported stands, which is the one place this module still defers to the catalog, and the only place it can.
+    // Same tier, same version: nothing derived can separate them, so catalog order stands here.
     const opus = entry(`claude`, `claude-opus-5`, `Claude Opus 5`);
     const fable = entry(`claude`, `claude-fable-5`, `Claude Fable 5`);
 
@@ -114,10 +110,8 @@ test("keeps catalog order between families that tie on BOTH, since Anthropic's c
     expect(familyGroups([fable, opus]).map((group) => group.key)).toEqual([`claude-fable`, `claude-opus`]);
 });
 
-/* THE OTHER PROVIDERS. Anthropic's catalog arrives ranked newest-first; Codex, Gemini, Kimi and Grok arrive from
- * an OpenAI-compatible /v1/models in registry order: alphabetical in practice. Reading that as a preference is
- * what opened the Codex group on GPT 5.4 Mini, and it put the NEWEST member of a family behind the "show older"
- * disclosure, since the collapsed band shows each family's first catalog row. Both facts now come off the id. */
+// Other providers (Codex, Gemini, Kimi, Grok) arrive from /v1/models in registry order (alphabetical), unlike
+// Anthropic's newest-first; ranking and family membership are derived from the id instead.
 
 // Codex exactly as the endpoint hands it over: alphabetical, i.e. meaningless.
 const CODEX: readonly PickerEntry[] = [
@@ -141,8 +135,7 @@ test("opens a registry-ordered group with Sol first and the remaining Codex tier
 });
 
 test("shows a family's NEWEST version collapsed, not whichever version the endpoint listed first", () => {
-    // Alphabetically gpt-5.1 leads its family, so the band used to offer it and hide gpt-5.6 behind the
-    // disclosure: the picker's one row for that family naming its oldest member.
+    // Alphabetically gpt-5.1 leads the family; the collapsed row must still show the newest, gpt-5.6.
     const gpt = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5.6`, `GPT 5.6`)];
 
     expect(familyGroups(gpt)[0]).toMatchObject({ latest: gpt[1], older: [gpt[0]] });
@@ -173,8 +166,7 @@ test("opens a group at one row per family: every tier visible, no version histor
 });
 
 test("keeps the selected model visible when it is an older version the latest band drops", () => {
-    // Otherwise a user pinned to Opus 4.7 opens the picker to a list with no checkmark anywhere in it, and no
-    // sign of which model the next turn actually runs.
+    // Otherwise a user pinned to an older version opens the picker with no checkmark anywhere in it.
     const [band] = pickerBlocks(familyGroups(CLAUDE), `claude-opus-4-7`, false);
 
     expect(band?.entries.at(-1)?.value).toBe(`claude-opus-4-7`);
@@ -199,10 +191,8 @@ test("gives a single-version provider no older blocks, so a short group never gr
     expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]] }]);
 });
 
-/* ACCESS ORDER. Every provider's catalog is non-empty whether or not its credential is connected: the daemon
- * serves a seed floor so a turn always resolves a model, so nothing in the list itself distinguishes a model
- * that can run from one that cannot. Readiness is that distinction, and it outranks every other ordering rule
- * here: a user scanning the top of the picker must be looking at models they can actually send to. */
+// Access order: every catalog is non-empty whether connected or not (the daemon serves a seed floor), so readiness must
+// be the top-level ordering rule, outranking everything else.
 
 const MIXED: readonly PickerEntry[] = [
     entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
@@ -223,35 +213,22 @@ test("seats connected providers above the ones that still need a credential", ()
 });
 
 test("keeps the ACTIVE provider first even when it is the locked one", () => {
-    // It is the provider the composer will send on, so burying it hides the selection the user is sitting on:
-    // and picking a locked model is how they reach the connect gate in the first place.
+    // It's the provider the composer will send on; burying it would hide the selection the user is already on.
     expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.key).toBe(`kimi`);
 });
 
-/* AND THE CHEAPEST WAY IN LEADS THE LOCKED BAND, which is this list's whole share of a job that used to be done
- * by a card: the free Google channel was pitched by a headline and a button on the first screen after signing
- * up, which read as a sign-in wall, while HERE, where the choice is actually made, it sat last of four locked
- * rows purely because `gemini` comes last in PROVIDERS.
- *
- * Cost only ever separates LOCKED rows. A connected provider costs the user nothing to pick whatever its price
- * would have been, so ranking the connected band by price would reorder working providers for no reason a
- * reader could see: `claude` stays above `gemini` here on readiness alone. */
+// The cheapest way in leads the locked band (free Google ahead of paid subscriptions), not sorted last by PROVIDERS
+// order. Cost separates only locked rows; a connected provider stays ranked by readiness alone, never re-sorted by
+// price.
 test("leads the locked band with the provider that costs nothing", () => {
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(`claude`));
 
-    /* The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
-     * which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
-     * `grok`, `cursor`, `meta` and `zai` ride along with no rows of their own: an empty section still renders
-     * its header and state row, which is how a provider nobody has connected is discovered at all.
-     *
-     * The tail is PROVIDERS order and not a price ranking, which is the honest answer now that there are only
-     * two rungs: every one of these is a subscription the user already pays for, including Meta's Muse Code and
-     * Z.ai's Coding Plan, whose keys are minted by a sign-in rather than metered per call. */
+    // Active first, then connected, then free ahead of paid; ties keep PROVIDERS order.
     expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {
-    // A model-specific query can hit Kimi head-on; "5" hits both rows below. Match quality still decides WITHIN a band.
+    // A query can hit multiple rows; match quality still decides ranking within an access band.
     const matched = filterEntries(MIXED, `5`, undefined, readyOnly(`codex`));
 
     expect(matched.map((row) => row.provider)).toEqual([`codex`, `claude`]);
@@ -261,9 +238,8 @@ test("leaves an unqueried list in access order too, so simply opening the picker
     expect(filterEntries(MIXED, ``, undefined, readyOnly(`gemini`)).map((row) => row.provider)).toEqual([`gemini`, `claude`, `codex`, `kimi`]);
 });
 
-/* THE LOCAL LANE. Each card the user runs weights on is its own provider, and drawn as one it gave the rail a
- * column of identical cpu chips, each filtering to a header over a single model: a grouping that grouped
- * nothing, and a rail whose chips could not be told apart. They are one lane now, in both places. */
+// The local lane: every locally-run card is folded into one lane, in both the rail (one chip) and the list (one group),
+// rather than one identical-looking chip per card.
 
 const LOCAL: readonly PickerEntry[] = [
     entry(`endpoint/ollama-a`, `qwen3-8`, `qwen3-8`),
@@ -304,8 +280,7 @@ test("draws one section holding every card's models, which is the group the rail
 });
 
 test("keeps each card's families apart, so one machine's model never hides behind another's disclosure", () => {
-    // qwen3-8 and qwen3-32 share a family by id, and folding the cards would have filed the second one under
-    // the first as an older version: two machines read as two releases.
+    // qwen3-8 and qwen3-32 share a family id; folding must not file one machine under another's version.
     withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
     const twins = [entry(`endpoint/ollama-a`, `qwen3-8`, `qwen3-8`), entry(`endpoint/ollama-b`, `qwen3-32`, `qwen3-32`)];
 

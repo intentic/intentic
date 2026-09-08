@@ -5,16 +5,10 @@ import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { remoteUrlsOf } from "./remote-urls.js";
 
-/* THE CACHE, which is why this read stopped being ~20% of every git subprocess the daemon runs. Its whole
- * validity rule is `.git/config`'s mtime, so these are about that file rather than about git: a counting runner
- * stands in for the spawn, and what is asserted is how many times it was reached.
- *
- * Integration rather than unit despite the fake runner: they mkdtemp real trees, which is what the mtime rule
- * needs something to watch, and that is the line the unit budget draws (_tools/checks/test-programs.mjs). `parseRemote`'s own cases
- * are pure and stay next door in remote-urls.test.ts. */
+// Tests the cache's `.git/config`-mtime validity rule with a counting fake runner; integration, not unit, since the
+// rule needs a real mtime to watch. parseRemote's pure cases live in remote-urls.test.ts.
 
-// A repo-shaped dir: just enough for the mtime rule to have something to watch. Each test gets its own, since
-// the cache is keyed by dir.
+// Repo-shaped dir with just enough for the mtime rule to watch; each test gets its own (cache keyed by dir).
 const repoDir = (): string => {
     const dir = mkdtempSync(join(tmpdir(), "remote-urls-"));
     mkdirSync(join(dir, ".git"));
@@ -48,8 +42,7 @@ test("a write to .git/config re-reads, so an added or moved remote is never serv
     const dir = repoDir();
     const first = countingGit(ORIGIN);
     expect(await remoteUrlsOf(dir, first.git)).toEqual(["https://github.com/acme/web.git"]);
-    // Stamped explicitly rather than rewritten: two writes inside one filesystem tick can share an mtime, and
-    // what is under test is the rule, not the clock's resolution.
+    // Stamped explicitly, not rewritten: two writes in one filesystem tick can share an mtime.
     const moved = new Date(Date.now() + 10_000);
     utimesSync(join(dir, ".git", "config"), moved, moved);
     const second = countingGit("origin\tgit@gitlab.example.com:group/app.git (fetch)\n");
@@ -57,8 +50,8 @@ test("a write to .git/config re-reads, so an added or moved remote is never serv
     expect(second.calls()).toBe(1);
 });
 
-/* A linked worktree's `.git` is a FILE naming a gitdir elsewhere, so there is no local config to watch and a
- * cache keyed on the pointer would go stale silently. Such a dir is deliberately not cached at all. */
+// A linked worktree's `.git` is a pointer file with no local config to watch; caching on it would go stale silently, so
+// it's deliberately never cached.
 test("a dir with no .git/config to watch is never cached", async () => {
     const dir = mkdtempSync(join(tmpdir(), "remote-urls-worktree-"));
     writeFileSync(join(dir, ".git"), "gitdir: /elsewhere/.git/worktrees/w\n");
@@ -68,8 +61,7 @@ test("a dir with no .git/config to watch is never cached", async () => {
     expect(calls()).toBe(2);
 });
 
-// The cached array is handed out by copy, so a caller that sorts or splices its answer cannot edit what the
-// next reader gets.
+// The cached array is handed out by copy, so a caller's mutation can't reach it.
 test("a caller mutating its answer does not corrupt the cached one", async () => {
     const dir = repoDir();
     const { git } = countingGit(ORIGIN);

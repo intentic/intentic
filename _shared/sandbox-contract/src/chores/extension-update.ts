@@ -1,13 +1,8 @@
 import { composeAsk } from "./prompt.js";
 
-/* AN EXTENSION UPDATE, READ AS A DIFF. The commit that is installed was approved once already, re-reading all
- * of it would bury the one question an update asks: what is different, and did any of it change the deal? So
- * the turn's subject is the diff between the two commits, and the manifest's delta leads, because a new entry
- * in `permissions.sandbox` is reach the owner never approved, arriving dressed as an update.
- *
- * Here in the contract's chores rather than in the web app, because two callers build it: the update card's
- * "read the diff" button, and the daemon's agent-prepared update policy, which runs this exact read
- * unprompted when the registry lists a new sha, so the owner opens a finished account instead of starting one. */
+// An extension update, read as a diff between the installed and proposed commits, manifest delta leading (a new
+// `permissions.sandbox` entry is reach never approved). Lives here, not the web app, because both the update card's
+// button and the daemon's agent-prepared update policy build this same read.
 const UPDATE_INVARIANTS =
     `This turn reads and reports; it changes nothing and installs nothing. Clone into a scratch directory ` +
     `outside the workspace and read the diff between the two commits: the installed code was approved once ` +

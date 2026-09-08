@@ -8,16 +8,13 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { commandInCall, judgeHostCommand } from "./host-command-gate.js";
 
-/* THE USER'S OWN COMPUTER as a peer door (peers/): the machine agent (@intentic/machine) dials this sandbox,
- * enrollment token in its first frame, and serves `hostContract` back over that socket. What is this door's
- * own: the grant is the `host` capability's config, pushed down on every connect; the agent reaches the machine
- * through the MCP bridge, where a `run_command` headed for somebody's laptop is judged against the owner's
- * safety policy before it crosses (host-command-gate.ts); and the setup flow can pre-arm a pairing from the
- * container's env (host-seed.ts), which is why this store's burn list matters. */
+// The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `hostContract`
+// over that socket. The grant is the `host` capability's config; a `run_command` is judged against the owner's safety
+// policy before it crosses (host-command-gate.ts), and the setup flow can pre-arm a pairing from the container's env
+// (host-seed.ts).
 
 export type HostClient = ContractRouterClient<typeof hostContract>;
-// What the hello carries beside the socket: the @intentic/machine build, so an old binary is visible rather
-// than mysteriously missing a tool.
+// @intentic/machine's build version, so an old binary is visible rather than mysteriously missing a tool.
 export interface HostAnnounced {
     readonly version: string;
 }
@@ -46,9 +43,8 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
     expired: "pairing expired, click Connect again in your browser for a fresh command.",
 };
 
-// The owner's view of their machines: the manifest's host capabilities, each with whatever the hub knows about
-// it right now. Enrollment state is deliberately part of it: "added but never connected" is the state the
-// connect card exists to resolve, and it must be distinguishable from "connected but asleep".
+// The owner's view of their machines: each host capability plus whatever the hub currently knows. Enrollment state must
+// distinguish "added but never connected" from "connected but asleep".
 export const hostSummaries = async (services: Services): Promise<HostSummary[]> =>
     (await services.capabilities.list()).flatMap((capability): HostSummary[] => {
         if (capability.kind !== "host") {
@@ -73,11 +69,9 @@ export const hostPeerRoutes = (services: Services) =>
         hub: services.hostHub,
         bridgeToken: services.hostBridgeToken,
         summaries: () => hostSummaries(services),
-        /* THE OWNER'S SAFETY POLICY, BEFORE THE TUNNEL. The bridge is the last thing that sees a call while a
-         * person can still be asked about it, so a `run_command` headed for somebody's own device is judged
-         * here (host-command-gate.ts argues the whole shape). The scopes on the machine remain the floor
-         * underneath and are untouched by any of this; a refusal here only ever stops a call the machine might
-         * otherwise have run. */
+        // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
+        // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
+        // otherwise have run.
         beforeCall: async (payload, c) => {
             const command = commandInCall(payload);
             if (command === undefined) {

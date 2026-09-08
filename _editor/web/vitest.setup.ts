@@ -1,20 +1,6 @@
-/* WHAT THE APP READS BEFORE A TEST GETS A WORD IN, stood up once for the whole package.
- *
- * Four globals, three of them reached at IMPORT rather than from a test body, which is why they live in a
- * setup file and not in a beforeAll: by the time a hook runs, the module that needed them has already thrown.
- *
- * `matchMedia` is the design system barrel's (useDevice), so any suite that touches @intentic/ui needs it
- * before its first import evaluates. matches:false everywhere keeps the device DESKTOP, the form factor whose
- * affordances the component suites assert. `ResizeObserver` is <AnchoredOverlay>'s, the overlay re-places on
- * its panel's own resize, and nothing in a test resizes, so observing is a no-op; without it arm() throws
- * inside a watcher, the panel renders un-armed, and the failure surfaces as "the menu row isn't there" three
- * assertions later. `window.env` is environments/environment.ts, which evaluates readEnvironment() at module
- * scope and throws when the deploy-time config script has not run, as it never has under vitest.
- *
- * These were once copied into every suite that tripped over them: ninety files carrying the same fifteen
- * lines of preamble, each with a `vi.hoisted` wrapper and a deferred `await import()` to make the ordering
- * work. The ordering is this file's job. A suite that wants different values assigns them outright (see
- * useGoogleIdentity.desktop.test.ts), `??=` here yields to nothing, because this runs first. */
+// Globals the app reads at import time, before any test hook runs: `matchMedia` (@intentic/ui device detection;
+// matches:false keeps the desktop form factor), `ResizeObserver` (AnchoredOverlay, a no-op here), `window.env`
+// (environment.ts, throws without deploy config). Set with `??=` so a suite can override.
 globalThis.matchMedia ??= ((query: string) => ({
     matches: false,
     media: query,
@@ -30,16 +16,13 @@ globalThis.ResizeObserver ??= class {
     disconnect(): void {}
 } as unknown as typeof globalThis.ResizeObserver;
 
-/* The fourth is jsdom's own gap rather than a global the app installs: `Element.scrollIntoView` is not
- * implemented there at all, and a view that reveals something by scrolling to it (Setup's ladder, the chat
- * rail) calls it from an async handler, where the resulting TypeError is an UNHANDLED REJECTION. Vitest fails
- * the whole run on those while every assertion still passes, which reads as "the suite is green but the
- * package is red". A no-op is the honest stub: nothing under jsdom can observe a scroll position anyway. */
+// jsdom omits scrollIntoView; calling it async throws an unhandled rejection that fails the run though every assertion
+// passed. A no-op is honest: nothing under jsdom can observe scroll position anyway.
 if (typeof Element !== "undefined") {
     Element.prototype.scrollIntoView ??= (): void => {};
 }
 
-// Only under jsdom: the node-environment suites have no `window`, and nothing they import reads one.
+// Only under jsdom: node-environment suites have no window and never read one.
 if (typeof window !== "undefined") {
     window.env ??= {
         production: false,

@@ -1,28 +1,7 @@
 #!/usr/bin/env node
-/* THE GATE BEHIND THE BLESSED ENGINE LIST.
- *
- *   node _tools/checks/engines-blessed.mjs      # checks engines.json against this repo, exits 1 on a breach
- *
- * WHY A GATE. engines.json is read by every sandbox on the `blessed` channel, hourly, straight off this
- * repository's main branch. That is what makes blessing a version a commit rather than a release — and it is
- * also what makes a careless edit here a fleet-wide change with no build, no review gate of its own and no
- * rollout. The word "blessed" has one meaning: this repository's own suite has run against that version. The
- * only way that claim stays true is if the file cannot name a version this repository does not itself pin.
- *
- * So each blessed version must equal the pin the repo already carries for that engine:
- *
- *   claude      the catalog pin for @anthropic-ai/claude-agent-sdk (pnpm-workspace.yaml), which is what the
- *               daemon is compiled and tested against;
- *   codex       image-packs/codex.Dockerfile's `@openai/codex@…`, the version the image bakes and CI exercises;
- *   cursor      image-packs/cursor.Dockerfile's `@cursor/sdk@…`;
- *   opencode    image-packs/opencode.Dockerfile's `opencode-ai@…`;
- *   translator  image-packs/translator.Dockerfile's `version=…`.
- *
- * Those pins are the same ones the daemon reads back at runtime as each engine's image floor
- * (_sandbox/sandbox/src/engines/engine-descriptors.ts), so this check also keeps the list and the floors from
- * drifting apart — a blessed version BELOW the floor would be a list asking sandboxes to downgrade.
- *
- * The rest of the file (notes, an advisory `minimum`) is deliberately unchecked: those are prose for a card. */
+// engines.json is read fleet-wide, hourly, with no build or review gate of its own, so each blessed version must equal
+// this repo's own pin for that engine and never fall below the runtime floor in
+// _sandbox/sandbox/src/engines/engine-descriptors.ts. Notes and the advisory `minimum` field are unchecked.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,8 +12,8 @@ const packs = join(root, "_sandbox", "sandbox", "image-packs");
 
 const read = (path) => readFileSync(path, "utf8");
 
-// One capture, exactly once: a pack that stops naming its version once, or starts naming it twice, is a broken
-// pin rather than a pin worth guessing at (the daemon's packPin holds the same rule).
+// Expects exactly one capture: a pack naming its version zero times or twice has a broken pin (mirrors the daemon's
+// packPin).
 const soleMatch = (text, pattern, what) => {
     const found = [...text.matchAll(pattern)].map((match) => match[1]);
     if (found.length !== 1) {
@@ -73,8 +52,7 @@ for (const [id, pin] of Object.entries(pins)) {
     }
 }
 
-// The reverse direction: a listed engine the repo knows nothing about would be a version nobody here has ever
-// run, shipped to every sandbox as though somebody had.
+// Catches the reverse: a listed engine this repo has no pin for would ship a version nobody here has run.
 for (const id of Object.keys(list.engines ?? {})) {
     if (pins[id] === undefined) {
         problems.push(`engines.json lists ${id}, which is not an engine this repository pins`);

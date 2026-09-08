@@ -6,20 +6,10 @@ import { useCodebaseHealth } from "./useCodebaseHealth";
 import { useRepos } from "../explorer/useRepos";
 import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 
-/* One repo's codebase health: the third repository-level surface, beside its management panel (the cog) and
- * its git history (the graph). Where the graph answers "what happened here", this answers "where does the risk
- * sit, and what holds this repo together": the daemon's resident iq engine ranks churn × complexity
- * (`hotspots`) and PageRank over the import graph (`map`), and this plots what the CLI prints.
- *
- * Every number here is a COUNT, never a grade. Branch points, commits, exported symbols: figures a reader can
- * go and recount in the files. A composite "maintainability score" would be unfalsifiable, not comparable
- * between repos, and would quietly replace the reader's judgement with the tool's: the ranking exists to send
- * someone to a FILE, which is why every row here opens one.
- *
- * The second thing a row can do is hand that file to an agent. It is the SAME claim acted on rather than read:
- * the prompt quotes the row's own numbers and nothing else, and which refactor it asks for is derived from
- * them (refactorAsk.ts). The user still picks the row: the ranking never picks it for them, which is why the
- * action rides on the row instead of standing at the top of the panel as a "fix my repo" button. */
+// Repo-level surface beside the management panel (cog) and git history (graph); answers where the risk sits,
+// via hotspots (churn x complexity) and map (PageRank over imports). Every number is a count a reader can
+// recount, never a grade, so a row opens a file, not a score. Its action hands that file to an agent, using the row's
+// own numbers.
 
 const { repo } = defineProps<{ repo: string }>();
 const emit = defineEmits<{ "open-file": [path: string]; "switch-repo": [repo: string] }>();
@@ -30,26 +20,20 @@ const { health, loading, error, refresh } = useCodebaseHealth(repoRef, churnWind
 const { options } = useRepos();
 
 const totals = computed(() => health.value?.totals);
-// Dormancy is measured from the read, not from a ticking clock: this recomputes whenever the report or the
-// window does, and no posture here turns on anything finer than a season.
+// Dormancy is measured from the read, not a live clock; recomputes only when the report or window changes.
 const rows = computed(() => hotspotRows(health.value?.hotspots ?? [], health.value?.modules ?? [], churnWindow.value, Date.now()));
 const modules = computed(() => moduleRows(health.value?.modules ?? []));
-// The index is built in the background, so a panel opened right after boot can be reading a partial one. Saying
-// so beats rendering "0 symbols" as if it were a fact about the repository.
+// Index builds in the background; a fresh panel may read a partial one, so this says so instead of showing 0.
 const building = computed(() => health.value?.freshness.state === `building`);
-/* HEADER AND ROWS SHARE ONE TRACK LIST so the columns line up, and sharing it is the whole point: two elements
- * that must agree, so the list is written once. The bar column is fixed rather than fluid — a ranked bar is
- * compared against its neighbours, and a column that grows with the panel would rescale the comparison every
- * time the sidebar moves. */
+// Shared by the header and each row so columns align; the bar column is fixed so a resize can't rescale it.
 const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items-center gap-2`;
 </script>
 
 <template>
     <div class="@container flex h-full min-h-0 flex-col bg-canvas text-content">
-        <!-- Header: repo switcher · churn window · refresh, the same shape as the graph's, one surface over. -->
+        <!-- Header: repo switcher, churn window, refresh. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
             <Icon name="wave-pulse" class="shrink-0 text-xs text-subtle" />
-            <!-- Switching navigates between per-repo health tabs, exactly as the graph's switcher does. -->
             <Picker
                 v-if="options.length > 1"
                 :model-value="repo"
@@ -61,8 +45,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
             />
             <span v-else class="text-xs font-medium text-content">{{ repo }}</span>
             <span class="flex-1"></span>
-            <!-- The window narrows CHURN only: complexity is a property of the file as it stands today, so it
-                 never moves when this does. -->
+            <!-- The window narrows churn only; complexity reflects the file as it stands today and doesn't move with it. -->
             <span class="shrink-0 text-2xs text-subtle">Commits from</span>
             <SegmentedControl v-model="churnWindow" size="xs" :options="CHURN_WINDOWS" />
             <button
@@ -87,8 +70,6 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                     The index is still building: these figures cover only what has been read so far.
                 </p>
 
-                <!-- What the index holds, as four counts. Not a chart: a handful of headline numbers is a
-                     stat-tile row, and a bar chart of four unrelated scales would say less. -->
                 <dl class="grid grid-cols-2 gap-2 @xl:grid-cols-4">
                     <div class="min-w-0 rounded-md border border-line bg-card px-3 py-2">
                         <dt class="text-2xs text-muted">Files</dt>
@@ -128,8 +109,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                         ranks nothing.
                     </p>
                     <template v-else>
-                        <!-- The action's track is held open in the header too, so the columns below it stay put
-                             whether or not a row is being hovered. -->
+                        <!-- Track kept open in the header too, so columns don't shift when a row's action fades in on hover. -->
                         <div class="mt-2 flex items-center gap-2 px-1 pb-1 text-2xs text-subtle">
                             <div :class="`${ROW_CLASS} min-w-0 flex-1`">
                                 <span></span>
@@ -146,13 +126,10 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 :key="row.path"
                                 class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay"
                             >
-                                <!-- One hue for every bar: length is the whole message, and a colour keyed to the
-                                     bar's own size would double-encode it. Text keeps text tokens throughout. -->
+                                <!-- One hue for every bar; length already encodes magnitude, so color must not. -->
                                 <button type="button" :class="`${ROW_CLASS} min-w-0 flex-1 text-left`" @click="emit('open-file', row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
-                                    <!-- The DIRECTORY takes the truncation; the filename is what identifies the
-                                         row, so it never shrinks, and it is the directory, not the row, that
-                                         earns a tooltip, and only while it is actually cut off. -->
+                                    <!-- Truncation lands on the directory, not the filename; the directory alone gets a tooltip, only when cut off. -->
                                     <span class="flex min-w-0 overflow-hidden text-xs">
                                         <span class="truncate text-subtle" v-tooltip.top.overflow="row.dir">{{ row.dir }}</span>
                                         <span class="shrink-0 text-content">{{ row.name }}</span>
@@ -166,11 +143,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.commits) }}</span>
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.complexity) }}</span>
                                 </button>
-                                <!-- Out of the scan until the row is hovered, on a pointer device: the ranking is
-                                     what this panel is for, and twenty always-lit buttons would read as twenty
-                                     things to do. Touch has no hover, so there it stays put. A dormant row keeps
-                                     the action but dims it: the tooltip says why it probably isn't worth it,
-                                     and the user may still know something the git log doesn't. -->
+                                <!-- Hidden until hover except on touch; a dormant row keeps the action but dimmed, with a tooltip explaining why. -->
                                 <button
                                     type="button"
                                     class="shrink-0 cursor-pointer transition-colors md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
@@ -193,7 +166,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                         first.
                     </p>
                     <p v-if="modules.length === 0" class="py-3 text-2xs text-subtle">Nothing in this repository exports a symbol the index reads.</p>
-                    <!-- No bar here: the RANK is the claim, and export counts are not a magnitude worth drawing. -->
+                    <!-- No bar here; rank is the claim, not the export count. -->
                     <ul v-else class="mt-2 flex flex-col">
                         <li
                             v-for="(module, index) in modules"
@@ -208,10 +181,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 </span>
                                 <span class="shrink-0 text-2xs tabular-nums text-muted">{{ formatCount(module.exports) }} exports</span>
                             </button>
-                            <!-- Only where the SURFACE is the finding. The top of a PageRank ranking is also where
-                                 a healthy chokepoint lives: an index.ts everything imports and that exports four
-                                 things is the shape you want, so most rows here keep the empty track and stay
-                                 what they are: a pointer at a file. -->
+                            <!-- Shown only when the module itself is the finding; a healthy chokepoint keeps no action, just a pointer. -->
                             <button
                                 v-if="module.ask"
                                 type="button"

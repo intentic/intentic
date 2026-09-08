@@ -3,40 +3,20 @@ import { posix } from "node:path";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import { agentCommand, commandWords, toolResultText } from "../providers/agent-installs.js";
 
-/* THE DEPENDENCY NOTICE, SAID WHEN IT IS NEEDED AND NOT BEFORE.
- *
- * There is exactly one failure this whole area exists to prevent: an agent reads `Cannot find module 'vue'`,
- * concludes it got the import wrong, and edits working source to satisfy an error that was never about the
- * code. For a long time the defence against it was a paragraph stapled to the front of every user message for
- * as long as any project anywhere under /work was behind, true, unactionable for most of the turns that read
- * it, and re-read identically on every one of them.
- *
- * The moment the misreading becomes possible is the moment a command actually fails on a name. That is when
- * this speaks, and the difference is not only economy: a notice attached to the failure names THE package the
- * agent just tripped over, where the standing paragraph could only name a sample and leave the connection to be
- * guessed. The post-edit half of the same job lives in agent-diagnostics.ts; this is its command-line twin,
- * built the way agent-installs.ts builds the missing-binary steering, and for the same reason, the failure
- * itself is the only reliable trigger.
- *
- * IT VERIFIES BEFORE IT SPEAKS, which is the whole of its bug-resistance. A name lifted out of a failure is a
- * CLAIM, and the tree is the only thing that can settle it: unless the package is genuinely declared under
- * /work and genuinely not on disk, this says nothing at all. So a mistyped import stays the agent's own problem
- *, which matters more than the saving, because a notice that excused real mistakes would teach a model to
- * distrust every unresolved import it ever sees, and that is the same failure arrived at from the other side. */
+// Speaks only when a command actually fails on a package name, naming that package rather than a standing paragraph
+// read on every turn. Verifies against the tree first: unless the package is genuinely declared and genuinely missing,
+// it says nothing, so a real import mistake stays the agent's problem.
 
-// The shapes an unresolved package takes on the way out of a command. Node's two loaders word it differently,
-// TypeScript's TS2307 reuses the CJS wording, and the bundlers have their own. Every one of them quotes the
-// SPECIFIER, which is all this needs, the verification step decides whether it means anything.
+// Every loader/bundler's wording for an unresolved import quotes the specifier; that's all this extracts.
 const UNRESOLVED: readonly RegExp[] = [
     /Cannot find module ['"]([^'"\n]+)['"]/g,
     /Cannot find package ['"]([^'"\n]+)['"]/g,
-    // Vite opens the sentence, Rollup embeds it mid-line ("Rollup failed to resolve import ..."), so the
-    // leading word is matched either way rather than betting on which bundler printed it.
+    // Vite opens the sentence, Rollup embeds it mid-line, so the leading word is matched either way.
     /[Ff]ailed to resolve (?:import|entry for package) ["']([^"'\n]+)["']/g,
     /ERR_MODULE_NOT_FOUND[^\n]*?['"]([^'"\n]+)['"]/g,
 ];
 
-// How many names one notice carries. The reader's decision, trust the error, or don't, is made by the second.
+// How many names one notice carries; trusting the error from there is the reader's call.
 const NAMED = 3;
 const DIRECT_CHECK_RUNNERS = new Set(["node", "tsc", "vite", "vitest", "jest", "mocha", "eslint", "biome", "turbo", "nx"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
@@ -61,10 +41,8 @@ const runsProjectCode = (command: string): boolean =>
         return args.some((word) => /^(?:run|exec|dlx|test|type-?check|lint|build|check)$/.test(word));
     });
 
-// Resolve the shell's explicit directory changes against the persona's starting project. We deliberately do
-// not guess from an error path: a side-by-side project's filename in output is not evidence that the command
-// ran there. `cd` is evidence, and covers the ordinary workspace-root turn (`cd app && pnpm test`) that a probe
-// pinned only to the persona start folder would otherwise miss entirely.
+// Only explicit `cd` in the command counts, never a filename guessed from the error output: a side-by-side project's
+// name there is not evidence the command ran there.
 export const dependencyDirForCommand = (start: string, workspaceRoot: string, command: string): string => {
     let current = start;
     const root = posix.normalize(workspaceRoot);
@@ -90,12 +68,8 @@ export const dependencyDirForCommand = (start: string, workspaceRoot: string, co
     return current;
 };
 
-/* The PACKAGE a specifier belongs to: `@scope/pkg/sub` and `pkg/sub` both resolve through one installed
- * directory, and that directory is what a manifest declares and what the drift walk looks for.
- *
- * Relative paths, absolute paths and `node:` builtins are dropped rather than normalized. None of them can be a
- * declared dependency, so a name from one could only ever produce a wasted lookup, and an unresolved relative
- * import is precisely the mistake in the code this must never excuse. */
+// `@scope/pkg/sub` and `pkg/sub` both resolve to one installed directory. Relative paths, absolute paths and `node:`
+// builtins are dropped: none can be a declared dependency, and excusing one would hide a real code mistake.
 const packageOf = (specifier: string): string | undefined => {
     if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("node:")) {
         return undefined;
@@ -140,18 +114,8 @@ const notice = (issue: DependencyIssue, names: readonly string[], canInstall: bo
     );
 };
 
-/* PostToolUse on Bash: a command that failed on a package the tree really is missing earns one sentence.
- *
- * Created once per turn (baseOptions), which is what the memories below are scoped to. Answers are keyed by the
- * effective command as well as package name: a root-level `pnpm test` and `cd app && pnpm test` can belong to
- * different projects, so caching one workspace-wide answer would recreate the cross-project false positive
- * this hook exists to avoid. `told` is per project/package: the model needs the reason, not a nag.
- *
- * A name is looked up ONCE and never revisited, and that is a deliberate limit rather than an oversight. No
- * install runs while a turn is live, that is the rule this notice is built around, so the answer cannot
- * change underneath it. The one thing it will miss is a dependency the agent itself added to a manifest this
- * turn, whose failure then arrives without the sentence explaining it; the errors are still right, and only the
- * reason goes unsaid. */
+// Keyed by command as well as package, so a root `pnpm test` and one behind `cd app` aren't conflated. Looked up once
+// per name and never revisited, since no install runs mid-turn (it can miss a dependency the turn itself just added).
 export const depsNoticeHooks = (
     issue: (command: string) => Promise<DependencyIssue | undefined>,
     canInstall: boolean,
@@ -180,9 +144,8 @@ export const depsNoticeHooks = (
                         const keyOf = (name: string): string => `${commandKey}\0${name}`;
                         let projectIssue = issues.get(commandKey);
                         if (names.some((name) => !checked.has(keyOf(name)))) {
-                            // One walk answers for every name in this failure. A walk that cannot be taken
-                            // leaves the verdicts unrecorded rather than guessed, silence is the safe answer,
-                            // and the next failure may find the tree readable.
+                            // One walk answers every name here; a failed walk leaves verdicts unrecorded rather than
+                            // guessed.
                             if (!issues.has(commandKey)) {
                                 try {
                                     projectIssue = await issue(command);

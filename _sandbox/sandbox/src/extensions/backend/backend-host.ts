@@ -10,23 +10,18 @@ import {
     EXTENSION_TOKEN_HEADER,
 } from "./backend-host-config.js";
 
-/* The BACKEND HOST's whole runtime, as a pure function of its config, the process entry (backend-host-main.ts)
- * only parses env and serves the returned fetch handler, so everything here is testable in-process without a
- * spawn. This file runs in the CHILD process: it must not import the daemon's services, stores or logger,
- * its only channels back are stdout (the supervisor forwards lines into the daemon log) and the /health body.
- *
- * One activation failure is one row saying so, never a dead host: every extension is loaded in its own
- * try/catch and reported per id, the same containment rule the web loader applies. The host itself has no
- * restart logic, dying IS its teardown story (the supervisor respawns it), which is what keeps "unload this
- * extension" an honest operation instead of a leak. */
+// The backend host's whole runtime as a pure function of its config; testable without a spawn.
+// Runs in the child process: must not import the daemon's services, store, or logger; only stdout and /health talk
+// back.
+// Each extension loads in its own try/catch and is reported per id; the host has no restart logic, dying is its
+// teardown.
 
 interface LoadedExtension {
     readonly status: BackendExtensionStatus;
     readonly handler?: BackendRouteHandler;
 }
 
-// The bundle's activateServer, wherever it exports it, default export object or named export, the same
-// tolerance the web loader extends to UI bundles.
+// Resolves activateServer from a default export or named exports, matching the web loader's tolerance for UI bundles.
 const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: ExtensionServerModule }): ExtensionServerModule => {
     const resolved = imported.default ?? imported;
     if (typeof resolved.activateServer !== "function") {
@@ -36,14 +31,13 @@ const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: Ex
 };
 
 const loadOne = async (config: BackendHostConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
-    // The mount slot, a second mount replaces the first, per the API contract.
+    // Mount slot; a second call to mount replaces the first, per the API contract.
     let mounted: BackendRouteHandler | undefined;
     const api: ExtensionServerApi = {
         apiVersion: config.apiVersion,
         workspaceRoot: config.workspaceRoot,
         extensionDir: extension.dir,
-        // stdout is the channel back to the daemon log; the prefix is what attributes the line to an extension
-        // once the supervisor forwards it.
+        // stdout is the only channel back to the daemon log; the prefix attributes the line to this extension.
         log: (message) => console.log(`[${extension.id}] ${message}`),
         routes: {
             mount: (handler) => {
@@ -80,7 +74,7 @@ const loadOne = async (config: BackendHostConfig, extension: BackendHostExtensio
     }
     return {
         status: { id: extension.id, state: "running" },
-        // An extension that activated without mounting anything is legal (timers only); requests answer 404.
+        // Activating without mounting a route is legal (timers only); unmounted requests answer 404.
         ...(mounted !== undefined ? { handler: mounted } : {}),
     };
 };
@@ -88,7 +82,8 @@ const loadOne = async (config: BackendHostConfig, extension: BackendHostExtensio
 const json = (body: unknown, status: number): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-// /x/<id>/<suffix> → the extension id and its own path ("" → "/"). Query string rides the suffix untouched.
+// Splits /x/<id>/<suffix> into the extension id and its own path ("" becomes "/"); the query string stays on the
+// suffix.
 const splitNamespace = (pathname: string): { id: string; suffix: string } | undefined => {
     const match = /^\/x\/([^/]+)(\/.*)?$/.exec(pathname);
     if (match === null || match[1] === undefined) {
@@ -111,8 +106,7 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
     return {
         statuses,
         fetch: async (request) => {
-            // Only the daemon: the port is loopback but loopback is container-shared, and every credential
-            // check lives in the daemon's gate, an unproxied caller has been through none of it.
+            // Accepts only daemon-proxied requests: loopback is shared and credential checks live in the daemon's gate.
             if (request.headers.get(BACKEND_HOST_HEADER) !== config.hostToken) {
                 return json({ error: "unauthorized" }, 401);
             }
@@ -132,9 +126,8 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
                 const detail = extension.status.state === "error" ? ` (its activation failed: ${extension.status.detail})` : "";
                 return json({ error: `the "${target.id}" backend serves no routes${detail}` }, 404);
             }
-            /* Rebase to the extension's own path space, its handler sees the same paths its contract declares.
-             * The origin is irrelevant to routing and deliberately synthetic. The daemon's proxy already
-             * stripped the owner's credentials; the host token stays out too. */
+            // Rebases onto the extension's own synthetic origin; owner credentials and the host token are already
+            // stripped.
             const headers = new Headers(request.headers);
             headers.delete(BACKEND_HOST_HEADER);
             const body = request.method === "GET" || request.method === "HEAD" ? undefined : request.body;
@@ -146,7 +139,7 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
             try {
                 return (await extension.handler(rebased)) ?? json({ error: "not found" }, 404);
             } catch (error) {
-                // Contained like an activation failure: one throwing route answers 500, the host lives on.
+                // Contained like an activation failure: a throwing route answers 500; the host stays up.
                 return json({ error: errorMessage(error) }, 500);
             }
         },

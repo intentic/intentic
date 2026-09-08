@@ -1,21 +1,8 @@
-<!-- THE ONE CONTROL ON THE COMPOSER THAT SAYS WHO THIS CHAT IS ABOUT TO ACT AS, before anybody picked. It appears
-     only when the daemon has read the draft and named a card (personaRoute.ts owns that rule, and its header says
-     when the reading is asked for at all). Three states, and each one's press is in its words:
-
-       suggest — the reading is an offer. "Act as Backend?" and one press puts the card on: its accounts, its
-                 repositories, its model. Nothing happens if it is left alone.
-       route   — the card WILL go on when the message is sent (routing is set to auto). The chip reads
-                 "→ Backend" beside the composer's persona pill that still says nothing, so the contradiction is
-                 the message; one press declines it for this chat.
-       held    — that press has been taken. "Everyone · Undo", and the same press lifts it.
-
-     THE ACTION IS IN THE WORDS, not in a tooltip, for the reason the tier chip beside it gives: a control that
-     narrows which accounts and repositories a chat reaches cannot be explained by hover alone. The reason the
-     daemon gave rides `title` and `aria-label` as the full sentence.
-
-     THE WHOLE CHIP IS THE PRESS, one target, and it keeps its mark at every width and drops only its words, the
-     tier chip's rule: a card about to go on silently is the last thing a narrow pane should hide. The face is
-     the mark: the same one the persona wears everywhere else, so the chip reads as that person arriving. -->
+<!--
+    Composer control naming which persona this chat is about to act as, shown only when personaRoute.ts detects one. Three states: suggest (press
+    adds the persona), route (adding automatically; press declines), held (declined; press undoes) — always spelled out in the label, never a
+    tooltip. Keeps its mark and drops only its words on a narrow pane.
+-->
 <script setup lang="ts">
 import { PersonaFace } from "@intentic/ui";
 import { computed } from "vue";

@@ -2,13 +2,8 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { type FakeStripe, signStripePayload, startFakeStripe } from "./stripe-fake.js";
 
-/* THE STAND-IN'S OWN HTML PAGES, which are the half of it nothing else covers. Its API surface is driven hard
- * by the platform's hermetic tier (_platform/api/src/e2e/hosted-plan.e2e.test.ts, every merge request), which
- * points the REAL Stripe client at it; its checkout and portal pages are driven only by the browser tier
- * (_tools/e2e), which is a dev-machine tier that no CI job runs. So a page that stopped redirecting, or a Pay
- * that stopped delivering the webhook, would be discovered by a person mid-journey rather than by a suite.
- *
- * `integration` by name because it opens a real socket: the budget, not the ceremony (@intentic/testing/vitest). */
+// Pins the stand-in's checkout/portal HTML pages: the platform's hermetic tier never drives them, only the browser tier
+// (_tools/e2e, no CI job) does. `integration` because it opens a real socket, not for vitest's timing budget.
 
 let stripe: FakeStripe | undefined;
 
@@ -57,8 +52,7 @@ const openCheckout = async (fake: FakeStripe, over: Record<string, string> = {})
 
 describe(`the Stripe stand-in's checkout page`, () => {
     it(`offers Pay and Back, and sends the browser to the success URL before the webhook lands`, async () => {
-        // A delay, because the ORDER is the point: production returns the browser first and the webhook after,
-        // which is the gap the Billing page's polling exists for.
+        // Delayed on purpose: production returns the browser before the webhook, the gap Billing's polling covers.
         const { stripe: fake, delivered } = await collecting({ checkoutWebhookDelayMs: 150 });
         const url = await openCheckout(fake);
 
@@ -72,7 +66,6 @@ describe(`the Stripe stand-in's checkout page`, () => {
         const paid = await fetch(`${url}/pay`, { method: `POST`, redirect: `manual` });
         expect(paid.status).toBe(303);
         expect(paid.headers.get(`location`)).toBe(`${RETURN}?plan=welcome`);
-        // The browser is home and nothing has been mirrored yet: exactly the state the page polls through.
         expect(delivered).toEqual([]);
 
         await expect.poll(() => delivered.length, { timeout: 5_000 }).toBe(1);
@@ -80,7 +73,6 @@ describe(`the Stripe stand-in's checkout page`, () => {
             type: `checkout.session.completed`,
             object: { mode: `subscription`, client_reference_id: `user-1`, subscription: expect.stringMatching(/^sub_/) },
         });
-        // Signed with the webhook secret, in Stripe's header shape, over the exact payload delivered.
         expect(delivered[0]?.signature).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
     });
 
@@ -127,13 +119,11 @@ describe(`the Stripe stand-in's billing portal`, () => {
         expect(cancelled.status).toBe(303);
         expect(cancelled.headers.get(`location`)).toBe(RETURN);
 
-        // The subscription is STILL ACTIVE and says it will end: the distinction the Billing page turns into
-        // "ends" rather than "renews", and the one a mirror that only read `status` used to get wrong.
+        // Still active but will end: the distinction the Billing page reads as "ends" rather than "renews".
         const subscription = [...fake.subscriptions.values()][0];
         expect(subscription).toMatchObject({ status: `active`, cancel_at_period_end: true });
         expect(delivered.at(-1)).toMatchObject({ type: `customer.subscription.updated`, object: { status: `active`, cancel_at_period_end: true } });
 
-        // And the page now offers the way back, which is what a reader who changed their mind needs.
         expect(await (await fetch(portal)).text()).toContain(`Resume plan`);
     });
 
@@ -158,7 +148,7 @@ describe(`the Stripe stand-in's test door`, () => {
         expect(state.subscriptions).toEqual([expect.objectContaining({ id: subscriptionId, status: `active` })]);
         expect(state.calls).toEqual([expect.objectContaining({ method: `POST`, path: `/checkout/sessions`, authorized: true })]);
 
-        // The browser tier's way to fail a charge: a patch, delivered as the event Stripe would send.
+        // The browser tier's way to fail a charge: a patch delivered as the event Stripe would send.
         const updated = await fetch(`${fake.origin}/__test/update/${subscriptionId}`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
@@ -167,7 +157,7 @@ describe(`the Stripe stand-in's test door`, () => {
         expect(updated.status).toBe(200);
         expect(delivered.at(-1)).toMatchObject({ type: `customer.subscription.updated`, object: { status: `past_due` } });
 
-        // A cancel is the OTHER event type, which is what the webhook route branches on.
+        // A cancel patch is the other event type the webhook route branches on.
         await fetch(`${fake.origin}/__test/update/${subscriptionId}`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
@@ -212,12 +202,8 @@ describe(`the Stripe stand-in's API`, () => {
     });
 });
 
-/* The signature the platform verifies, computed the way Stripe documents it. It is the shared premise of the
- * stand-in's every delivery and of `verifyStripeSignature` on the other side, so what is pinned is the RECIPE
- * rather than a digest: the expectation below spells out Stripe's rule (HMAC-SHA256 of the secret over
- * "<timestamp>.<payload>", the timestamp in whole seconds) from node:crypto, so a change to the separator, the
- * order, the units or the hash fails here instead of at a live endpoint. A transcribed hex string would pin
- * one input and say nothing about the rule. */
+// Recomputes Stripe's signature recipe from node:crypto rather than pinning a transcribed digest, so a change to the
+// separator, field order, units or hash algorithm fails here, not just at a live endpoint.
 describe(`Stripe's webhook signature`, () => {
     it(`is HMAC-SHA256 over "<timestamp>.<payload>", stated as t= and v1=`, () => {
         const payload = `{"id":"evt_1","type":"customer.subscription.updated"}`;
@@ -228,9 +214,9 @@ describe(`Stripe's webhook signature`, () => {
         const expected = createHmac(`sha256`, secret).update(`${timestamp}.${payload}`).digest(`hex`);
         expect(signStripePayload(payload, secret, at)).toBe(`t=${timestamp},v1=${expected}`);
 
-        // Whole seconds, so the milliseconds above are dropped rather than carried into the signed string.
+        // Whole seconds: milliseconds are dropped before signing.
         expect(signStripePayload(payload, secret, at)).toBe(signStripePayload(payload, secret, new Date(`2026-09-07T12:34:56.000Z`)));
-        // And the payload is signed, not merely accompanied: one byte different is a different signature.
+        // The payload is signed, not just attached: one different byte changes the signature.
         expect(signStripePayload(`${payload} `, secret, at)).not.toBe(signStripePayload(payload, secret, at));
     });
 });

@@ -1,21 +1,8 @@
 import type { AssistantSource } from "@intentic/api-contract";
 
-/* WHAT TO TELL SOMEONE WHOSE SETUP IS ON ANOTHER DEVICE, the instructions the migration card renders, as
- * data, so the copy is testable and the card stays about layout.
- *
- * The first version of this was one grey caption holding both tools' archive commands. It assumed six things
- * at once: that you know which command is yours, that you have a shell, that the shell is on the machine your
- * browser is on, that your setup sits at the default path, that you know where the file will land, and that
- * you know the file will hold your keys. Every wrong assumption failed LATE, after packing, copying and
- * uploading, which on a server is minutes per attempt.
- *
- * So: one tool at a time, one command, its output location named, and the three ways this actually goes wrong
- * (a server, a container, a folder that has moved) each answered in place instead of left to be discovered.
- *
- * The OpenClaw path deliberately uses the tool's OWN backup command rather than teaching an archive: it cannot
- * get the paths wrong, it works even when the config is malformed, and it is one line the user can check
- * against their own documentation. Hermes ships no equivalent, so that one is the archive command, with the
- * `&&` that stops a failed pack from printing a "Ready" line the reader would believe. */
+// Per-tool instructions for migrating setup to another device, as data (testable, keeps the card about layout).
+// One tool, one command, its output location named, and the three common failure modes each answered in place.
+// OpenClaw uses its own backup command since it can't get paths wrong; Hermes has none, so it's a manual archive.
 
 export interface SourceGuide {
     readonly label: string;
@@ -52,8 +39,8 @@ export interface HelpTopic {
     readonly command?: string;
 }
 
-/* The three cliffs, each answered where the reader hits it. They are folded shut: someone whose assistant runs
- * on the same machine as their browser should never have to read past the two steps. */
+// The three ways this can go wrong (server, missing folder, container), each answered where the reader hits it;
+// folded shut so the two-step case never has to read past them.
 export const helpTopics = (guide: SourceGuide): HelpTopic[] => [
     {
         title: `It runs on a server, not on this device`,

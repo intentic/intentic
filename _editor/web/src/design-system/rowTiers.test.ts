@@ -1,22 +1,11 @@
 // @vitest-environment jsdom
+// A list is one size, pinned on the real components since none of it is visible any other way:
+// `_tools/checks/row-tiers.mjs` guards that nobody re-answers the tier locally, but a passing gate says nothing about
+// whether the answer reaches the rows, the loading outline, and the notes between them.
 //
-// A LIST IS ONE SIZE, and this pins the mechanism that makes it so, on the real components, because none of it
-// is visible from any other angle. `_tools/checks/row-tiers.mjs` guards the call sites — that nobody re-answers
-// the tier locally — and a passing gate says nothing about whether the answer given once actually REACHES the
-// rows, the loading outline and the notes between them. A tier that resolves and is never read looks identical
-// from the gate's side to one that works, which is the same argument brandMarkTiers.test.ts makes about its own
-// ladder.
-//
-// What is pinned is therefore the four things the drift was made of:
-//
-//   · a group with no `density` IS compact, and its rows take that — the standard, in one assertion;
-//   · a row with no `density` takes its group's, which is what the extensions list never did;
-//   · a <SkeletonRows> promises the height of the rows that land, which is what the personas, payouts and
-//     services outlines got wrong (the payouts one under a comment saying it could not happen);
-//   · a row's `#lead` is HANDED the tier's mark size, so 20 / 22 / 24 / 32 cannot come back;
-//   · a <RowNote> pads from the same tier, so a group's empty line and its rows share an edge.
-//
-// Mounted with plain Vue rather than @vue/test-utils, as disclosureRowHits.test.ts and brandMarkTiers.test.ts do.
+// Pins four things: a group with no `density` is compact, and its rows take that; a row with no `density` takes its
+// group's; a <SkeletonRows> promises the height of the rows that land; a row's `#lead` is handed the tier's mark size;
+// a <RowNote> pads from the same tier.
 import { DisclosureRow, ROW_TIERS, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
@@ -41,18 +30,15 @@ const mount = async (density: `comfortable` | `compact` | `dense` | undefined, c
     return host;
 };
 
-/* The row's own outermost element, which is where <Row> puts the tier's padding. Found by the class rather than
- * by position: <DisclosureRow> wraps its <Row> in a tint div, so `firstElementChild` is a different node for the
- * two components and a positional lookup would quietly test the wrapper on one of them. */
+// The row's own outermost element, where <Row> puts the tier's padding. Found by class rather than position, since
+// <DisclosureRow> wraps its <Row> in a tint div and a positional lookup would test the wrong node on one of them.
 const padded = (host: HTMLElement, tier: `comfortable` | `compact` | `dense`): HTMLElement[] => {
     const [px] = ROW_TIERS[tier].pad.split(` `);
     return [...host.querySelectorAll<HTMLElement>(`[class*="${px}"]`)];
 };
 
-/* THE STANDARD, AS ONE ASSERTION. A <RowGroup> is a list and a list is compact, so a group that says nothing
- * and a row that says nothing land on the compact tier together. This is what stopped the Sandbox hub changing
- * row language as you tabbed through it: Personas at 14px/500 against Agent at 16px/600, decided by which file
- * somebody had edited last. Asserted with NO density anywhere, because that is the case that used to be wrong. */
+// The standard, as one assertion: a <RowGroup> is a list and a list is compact, so a group and a row that both say
+// nothing land on the compact tier together. Asserted with no density anywhere.
 it(`draws a group that states nothing, and the rows in it, at the compact tier`, async () => {
     const host = await mount(undefined, () => h(Row, { title: `Quick model`, description: `Fast models for background tasks.` }));
     const row = host.querySelector<HTMLElement>(`.group`);
@@ -60,8 +46,8 @@ it(`draws a group that states nothing, and the rows in it, at the compact tier`,
     expect(row?.className).not.toContain(ROW_TIERS.comfortable.pad);
 });
 
-/* OUTSIDE A GROUP IT IS STILL `comfortable`, and that is the card MASTHEAD's tier rather than a leftover: a
- * `flush :heading="2"` <Row> is not in a list, outranks the rows under it, and wants a glyph sized for an h2. */
+// Outside a group it is still `comfortable`, which is the card masthead's own tier: a `flush :heading="2"` <Row> is not
+// in a list, outranks the rows under it, and wants a glyph sized for an h2.
 it(`leaves a row outside any group on comfortable, which is the masthead's tier`, async () => {
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -79,17 +65,15 @@ it(`gives a row with no density of its own the tier its group published`, async 
     expect(row?.className).not.toContain(ROW_TIERS.comfortable.pad);
 });
 
-/* THE ROW STILL WINS WHERE IT DISAGREES, and it has to: a card's masthead is a `flush :heading="2"` <Row> above
- * compact rows on the same surface, comfortable by RANK rather than by list. Dropping the escape hatch to make
- * the rule tidier would take a whole shape with it. */
+// The row still wins where it disagrees, since a card's masthead is a `flush :heading="2"` <Row> above compact rows on
+// the same surface, comfortable by rank rather than by list.
 it(`lets a row that states its own tier keep it, for the masthead that outranks its list`, async () => {
     const host = await mount(`compact`, () => h(Row, { title: `Move this sandbox`, density: `comfortable` }));
     expect(host.querySelector<HTMLElement>(`.group`)?.className).toContain(ROW_TIERS.comfortable.pad);
 });
 
-/* THE OUTLINE PROMISES THE HEIGHT THAT LANDS. This is the one the payouts page had a comment about and not a
- * mechanism for, so it is asserted against the row it stands in for rather than against a class name: what
- * matters is that the two agree, not what either says. */
+// The outline promises the height that lands: asserted against the row it stands in for rather than a class name, since
+// what matters is that the two agree.
 it(`draws a loading outline at the same tier as the rows that will replace it`, async () => {
     const outline = await mount(`compact`, () => h(SkeletonRows, { rows: 2 }));
     const real = await mount(`compact`, () => [h(Row, { title: `a` }), h(Row, { title: `b` })]);
@@ -98,8 +82,7 @@ it(`draws a loading outline at the same tier as the rows that will replace it`, 
     expect(padded(outline, `comfortable`), `an outline must not promise settings rows to a record list`).toHaveLength(0);
 });
 
-/* THE MARK'S SIZE IS HANDED TO THE SLOT, so a call site has no number to type and no number to get wrong. The
- * seven record lists that each typed one had four answers between them. */
+// The mark's size is handed to the slot, so a call site has no number to type and no number to get wrong.
 it(`hands a row's #lead the tier's mark size`, async () => {
     const seen: number[] = [];
     const record = ({ mark }: { mark: number }): unknown => {
@@ -111,9 +94,8 @@ it(`hands a row's #lead the tier's mark size`, async () => {
     expect(seen).toEqual([ROW_TIERS.compact.mark, ROW_TIERS.comfortable.mark]);
 });
 
-/* <DisclosureRow> draws `#lead` TWICE — once visibly, once as the hidden mirror that offsets its opened block —
- * so it has to hand the same number to both. A mirror built from a second, independent lookup is exactly the
- * kind of copy that goes stale, which is the argument row.ts opens with. */
+// <DisclosureRow> draws `#lead` twice, once visibly and once as the hidden mirror that offsets its opened block, so
+// both must get the same number.
 it(`hands the same mark size to a disclosure row's lead and to its hidden mirror`, async () => {
     const seen: number[] = [];
     const record = ({ mark }: { mark: number }): unknown => {
@@ -125,9 +107,8 @@ it(`hands the same mark size to a disclosure row's lead and to its hidden mirror
     expect(new Set(seen)).toEqual(new Set([ROW_TIERS.compact.mark]));
 });
 
-/* The lines on a group's surface that are not rows. Before <RowNote> these were 58 hand-written blocks in six
- * spellings, four of which matched no tier — which is what put an empty state a few pixels off the rows above
- * it on every list that had one. */
+// The lines on a group's surface that are not rows. Before <RowNote> these were hand-written in several spellings,
+// several of which matched no tier.
 it(`pads a note and an action from the group's tier, so they share the rows' edge`, async () => {
     const host = await mount(`compact`, () => [
         h(Row, { title: `GITHUB_TOKEN` }),
@@ -139,8 +120,8 @@ it(`pads a note and an action from the group's tier, so they share the rows' edg
     expect(host.querySelector(`button`)?.className, `the "add one" line is pressable and on the tier`).toContain(ROW_TIERS.compact.pad);
 });
 
-// The empty state keeps the room an empty surface is owed rather than a row's, so it is the one variant whose
-// vertical padding is deliberately not the tier's. Its HORIZONTAL edge still has to line up.
+// The empty state keeps the room an empty surface is owed rather than a row's, so its vertical padding is deliberately
+// not the tier's; its horizontal edge still has to line up.
 it(`gives the empty state the group's left edge and more vertical room than a row`, async () => {
     const host = await mount(`compact`, () => h(RowNote, { variant: `empty` }, () => `Nothing installed yet.`));
     const note = host.querySelector<HTMLElement>(`[class*="px-4"]`);

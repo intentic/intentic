@@ -1,19 +1,13 @@
 // @vitest-environment jsdom
-//
-// HOW LONG THIS PAGE MAKES SOMEONE WAIT, which is the whole subject: the screen is one person watching a
-// spinner, and everything on it is either the wait or a way to end it. The page used to hide Google's button
-// behind a five-second timer that only ran out AFTER the silent attempt failed to say anything: the ordinary
-// case in a browser that suppresses the prompt, so the first frame offered nothing and the fifth second
-// offered a button. These mount the real page and read the FIRST frame: the button is there, and the mint it
-// races was asked for without the shared overlay that timer existed to raise.
+// These tests mount the real page and read the first frame: Google's button must be there immediately, and the
+// credential mint it races runs without the shared sign-in overlay.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
-// environment.ts reads window.env and throws without it.
+// Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-// The link the app opened, carrying the two values the handoff is tied to.
+// The link's query params carrying the state and challenge the handoff is tied to.
 const query = ref<Record<string, string>>({ state: `nonce-1`, challenge: `chal-1` });
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -28,30 +22,25 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
         }) as never,
 }));
 
-// A mint that never settles: the silent attempt going quiet is exactly the case these tests are about, and it
-// is what leaves the first frame standing still to be read.
+// A mint that never settles, since a silent attempt going quiet is what these tests read on the first frame.
 const getIdToken = vi.fn<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
-// True: an ordinary browser, where Google's button renders. The refusal case (the desktop webview) and what
-// every surface owes the reader there is signInSurfaces.test.ts's whole subject.
+// An ordinary browser, where Google's button renders; the webview refusal case is signInSurfaces.test.ts's case.
 const renderButton = vi.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
 const adoptIdToken = vi.fn<(credential: string) => boolean>().mockReturnValue(true);
 vi.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
 const signInWithGoogle = vi.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
-/* THE BROWSER THE APP ACTUALLY OPENS. `user` is what this window's session resolves to, and the case that
- * used to be unreachable is `null`: the app opens the OS DEFAULT browser, which is routinely a profile nobody
- * has signed in. A route guard answered that with a bounce to /login, taking the state and challenge with it. */
+// What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });
 const refresh = vi.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
 const signInWithGoogleCredential = vi.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
 vi.mock(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
 const handoff = vi.fn();
-// The credential the platform already holds. Undefined answer = it holds nothing usable, which is the case
-// the Google button below exists for.
+// The credential the platform already holds; undefined means it holds nothing usable.
 const googleIdToken = vi.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
 vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
 
-// A Google credential shaped the way idTokenClaims (not mocked here) actually reads one, so the page's own
-// freshness check runs for real rather than against a stub that always says yes.
+// A Google credential shaped like idTokenClaims actually reads one, so the page's freshness check runs for real,
+// not against a stub.
 const credential = (livesForMs: number): string => {
     const payload = { email: `owner@example.com`, exp: Math.floor((Date.now() + livesForMs) / 1000) };
     const body = btoa(JSON.stringify(payload)).replace(/\+/g, `-`).replace(/\//g, `_`).replace(/=+$/, ``);
@@ -67,8 +56,7 @@ const mount = async (): Promise<HTMLElement> => {
     app = createApp({ render: () => h(DesktopAuth) });
     app.component(`Icon`, IconStub);
     app.mount(el);
-    // The chain is several awaits deep (session, then the platform's credential, then Google's): a macrotask
-    // flushes all of it, where a fixed count of ticks goes stale the moment one more await is added.
+    // Awaits several deep (session, platform, Google); a macrotask flush avoids hardcoding a tick count.
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     await nextTick();
@@ -97,9 +85,7 @@ afterEach(() => {
 it(`puts Google's button up the moment the platform says it holds nothing, with no timer between`, async () => {
     await mount();
 
-    // No fake clock is advanced anywhere in this test. The button waits on one answer: does the platform
-    // already hold this credential, and on nothing else; the five-second guard it used to sit behind ran
-    // AFTER a silent Google attempt that says nothing in most browsers, so the wait was never informative.
+    // No fake clock; the button only waits on whether the platform already holds the credential.
     expect(renderButton).toHaveBeenCalledTimes(1);
     expect(renderButton.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
 });
@@ -107,12 +93,8 @@ it(`puts Google's button up the moment the platform says it holds nothing, with 
 it(`asks for the token without the shared sign-in overlay, and only one with real life left`, async () => {
     await mount();
 
-    // `gate: false` is what removes the five-second guard: the overlay it would raise is a second Google
-    // button on a page whose own button is already up.
-    //
-    // `usableFor` is the other half, and it is about what happens AFTER this page. The credential leaves for
-    // another process that cannot spend it until it has a daemon to spend it on: a whole setup away after a
-    // fresh install. A cached token a minute from death satisfies this page and strands the app.
+    // `gate: false` skips the redundant overlay button. `usableFor` requires enough life to survive setup after a
+    // fresh install, not just this page.
     expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number) });
     expect(getIdToken.mock.calls[0]?.[0]?.usableFor).toBeGreaterThanOrEqual(10 * 60 * 1000);
 });
@@ -121,13 +103,12 @@ it(`says what the button is for while the sign-in is outstanding`, async () => {
     const el = await mount();
 
     expect(el.textContent).toContain(`Continue with Google`);
-    // The handoff line belongs to the LATER wait: showing it now described a step that has not started.
+    // Belongs to a later wait; showing it now would describe a step that hasn't started.
     expect(el.textContent).not.toContain(`Handing your sign-in`);
 });
 
-/* THE SECOND ASK, GONE. Someone here pressed sign in inside the app and is already signed in in this browser.
- * A Google button on top of that is a third act of consent for something twice agreed to, and it is the step
- * people were stalling on, so the credential is asked of the platform, and Google is never shown. */
+// Signed in already in-app and in-browser; a Google button here would be a redundant third consent, so the
+// platform's own credential is used and Google is never shown.
 it(`finishes with no Google surface at all when the platform already holds the credential`, async () => {
     googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
     handoff.mockResolvedValue({ handoff: `row-1` });
@@ -141,8 +122,8 @@ it(`finishes with no Google surface at all when the platform already holds the c
     expect(el.textContent).not.toContain(`Continue with Google`);
 });
 
-// The same credential this browser's own sandbox gate wants, so one fetch settles both rather than leaving a
-// second Google prompt waiting inside the workspace.
+// Same credential this browser's own sandbox gate wants, so one fetch settles both instead of a second Google
+// prompt.
 it(`keeps the platform's credential for this browser too`, async () => {
     const held = credential(60 * 60 * 1000);
     googleIdToken.mockResolvedValue({ idToken: held });
@@ -154,8 +135,8 @@ it(`keeps the platform's credential for this browser too`, async () => {
     expect(adoptIdToken).toHaveBeenCalledWith(held);
 });
 
-/* This token LEAVES for a process that may not spend it for a whole setup, so one the daemon would reject on
- * arrival is worth no more than none at all: take Google's button instead, where a fresh one can be had. */
+// This token leaves for a process that may not spend it for a while; one the daemon would reject on arrival is
+// worth nothing, so fall back to Google's button.
 it(`treats a nearly-dead held credential as nothing held`, async () => {
     googleIdToken.mockResolvedValue({ idToken: credential(60 * 1000) });
 
@@ -167,8 +148,8 @@ it(`treats a nearly-dead held credential as nothing held`, async () => {
     expect(el.textContent).toContain(`Continue with Google`);
 });
 
-// A platform that does not answer this at all (an older build, a self-hosted one) is not an error state.
-// It holds nothing, which is precisely the case the button already covered.
+// A platform that can't answer this at all (older or self-hosted build) isn't an error; it's the same as holding
+// nothing.
 it(`falls back to Google's button when the platform cannot answer`, async () => {
     googleIdToken.mockRejectedValue(new Error(`no such route`));
 
@@ -180,9 +161,8 @@ it(`falls back to Google's button when the platform cannot answer`, async () => 
     expect(el.textContent).not.toContain(`Couldn't finish signing in`);
 });
 
-/* The failure nothing on this page can see: Google's button renders, takes the click, and does nothing:
- * a blocked frame, an extension, an origin Google has stopped accepting. Without a way out that needs none of
- * that machinery, the screen is indistinguishable from one that is simply broken. */
+// Covers a Google button that renders but silently does nothing (blocked frame, extension, rejected origin); the
+// escape hatch needs none of that machinery to work.
 it(`always offers Google's own page while the embedded button is up`, async () => {
     const el = await mount();
     await nextTick();
@@ -192,18 +172,13 @@ it(`always offers Google's own page while the embedded button is up`, async () =
     escape?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
     await nextTick();
 
-    // Back to THIS link, state and challenge intact, so the hand-off resumes by itself on return.
+    // Same link: state and challenge intact, so the handoff resumes on return.
     expect(signInWithGoogle).toHaveBeenCalledWith(expect.stringContaining(`state=nonce-1`));
     expect(signInWithGoogle.mock.calls[0]?.[0]).toContain(`challenge=chal-1`);
 });
 
-/* ══ THE BROWSER THAT WAS NEVER SIGNED IN ═══════════════════════════════════════════════════════════════
- *
- * The ordinary case, not an edge one: the app opens the OS DEFAULT browser, and the window the installer was
- * downloaded in was somebody's incognito tab or another profile entirely. This page used to be guarded, so
- * that window was sent to /login — which drops the state and challenge, signs the user in, and pushes into
- * the workspace. Having an account already made it look like a success: the browser lands in a working
- * workspace while the app that asked for the sign-in is still sitting on its own Google button. */
+// The default OS browser the app opens is often signed out or on another account; this is the ordinary case, not
+// an edge one.
 it(`signs an unsigned browser in with the credential it minted, and hands the same one over`, async () => {
     user.value = null;
     const minted = credential(60 * 60 * 1000);
@@ -212,14 +187,13 @@ it(`signs an unsigned browser in with the credential it minted, and hands the sa
 
     await mount();
 
-    // One Google interaction, spent twice: it proves the user to the platform (which is what makes the
-    // hand-off mintable at all) and it is the credential the sandbox daemon verifies for itself.
+    // One Google interaction serves twice: it signs the user in and is the credential the daemon verifies.
     expect(signInWithGoogleCredential).toHaveBeenCalledWith(minted);
     expect(handoff).toHaveBeenCalledWith({ idToken: minted, challenge: `chal-1` });
 });
 
-// The platform's routes answer a sessionless call with a 401, and a 401 tears the signed-in runtime down —
-// including the Google mint this page has in flight. Asking at all is the bug; there is nothing to ask with.
+// A sessionless call gets a 401, which tears down the signed-in runtime, including any Google mint in flight.
+// Asking at all is the bug.
 it(`asks the platform for a credential it cannot be holding`, async () => {
     user.value = null;
 
@@ -229,8 +203,8 @@ it(`asks the platform for a credential it cannot be holding`, async () => {
     expect(googleIdToken).not.toHaveBeenCalled();
 });
 
-// A browser that IS signed in keeps the account it is on. Re-spending the token would switch the session to
-// whichever account Google happened to answer with, silently, on a page nobody asked that question.
+// A signed-in browser keeps its account; re-spending the token would silently switch it to whichever account
+// Google answers with.
 it(`leaves a signed-in browser on the account it is already using`, async () => {
     googleIdToken.mockResolvedValue({});
     getIdToken.mockResolvedValueOnce(credential(60 * 60 * 1000));

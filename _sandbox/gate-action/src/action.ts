@@ -1,20 +1,9 @@
-/* THE ACTION'S DECISIONS, AS PURE FUNCTIONS, what @intentic/gate's gate.ts is to its CLI, this is to the
- * GitHub Action: everything the step decides, separated from the process that acts on it, so a workflow's
- * exact behaviour is asserted in tests rather than discovered in somebody's merge queue.
- *
- * ONE ACTION, TWO DOORS AND THE API. The daemon serves two routes a CI system can call with a door URL, the
- * release gate (/workflows/:id/gate), which holds the connection and answers a verdict, and the event
- * automation's webhook (/automations/:id/fire), which wakes the agent and answers immediately. The URL the user
- * pasted already says which one it is, so the action reads the path instead of asking for a mode input that
- * could disagree with it. The third way in is not a door: with a control token (`token`, minted on Sandbox →
- * Access) the step drives the agent at the sandbox's own address, starting a turn with a `prompt` and waiting
- * for it to settle (@intentic/gate's run.ts). The token is what selects that road: a door URL needs none.
- *
- * WHY THE RUNNER PROTOCOL IS SPOKEN BY HAND. A step's whole interface to the runner is environment variables
- * in (INPUT_*) and appended files out (GITHUB_OUTPUT, GITHUB_STEP_SUMMARY) plus `::error::` lines on stdout.
- * That is a few dozen lines, and @actions/core would be the only dependency in a closure that is otherwise
- * @intentic/gate's zero, bundled into the dist every workflow downloads, for nothing the tests here don't
- * already pin. */
+// Pure decision functions for the GitHub Action, separated from what acts on them, so a workflow's behaviour is
+// asserted in tests, not discovered in a merge queue.
+// Two doors read from the URL's own path (gate holds and answers a verdict, fire wakes and answers at once); a control
+// token instead selects a third road that drives the agent directly at the sandbox's address.
+// The runner protocol (env vars in, output files and `::error::` lines out) is spoken by hand rather than pulling in
+// @actions/core for a few dozen lines.
 
 import { exitOf, exitOfRun, type GateVerdict, type RunOutcome, WAIT_DEFAULT_S } from "@intentic/gate";
 
@@ -23,14 +12,12 @@ export type Door = "gate" | "fire" | "run";
 export interface ActionInputs {
     readonly url: string;
     readonly door: Door;
-    // What to tell the agent, verbatim. Empty means the process composes the default for the door: the
-    // commit/branch/PR line for a gate, the workflow's event payload for an automation. The run door's prompt.
+    // Verbatim message to the agent; empty composes the door's default (commit/branch/PR, or the event payload).
     readonly request: string;
     readonly waitS: number;
-    // A `blocked` verdict fails the step only when asked. Success by default: "the check could not judge" is
-    // not "the product is broken", and a gate that goes red for its own outages stops being believed.
+    // A `blocked` verdict fails the step only when asked; a judge that can't judge isn't a broken product.
     readonly blockedAsFailure: boolean;
-    // The run door's credential and settings; absent on the two door URLs, which carry their own token.
+    // Run door's credential and settings; absent on the two door URLs, which carry their own token.
     readonly token?: string;
     readonly agent?: string;
     readonly land: boolean;
@@ -38,8 +25,7 @@ export interface ActionInputs {
 
 export type ParsedInputs = { kind: "inputs"; inputs: ActionInputs } | { kind: "error"; message: string };
 
-/* Which door the URL names, read from the END of the path: the daemon may sit behind a tunnel or proxy that
- * prefixes segments, but the two routes it serves are the last things in their paths by construction. */
+// Door named from the end of the path, since a tunnel or proxy may prefix segments but never follow the route.
 const doorOf = (path: string): Door | undefined => {
     const segments = path.split("/").filter((segment) => segment !== "");
     const [route, , tail] = segments.slice(-3);
@@ -49,9 +35,9 @@ const doorOf = (path: string): Door | undefined => {
     return route === "automations" && tail === "fire" ? "fire" : undefined;
 };
 
-/* Which road the inputs name. A token means the API: the URL is then the sandbox's address and must not be a
- * door, because a door carries its own credential and a token beside it is a wiring mistake worth naming
- * rather than guessing at. No token means a door, read off the end of the path. */
+// A token means the API: the URL is then the sandbox's address, and must not also be a door (a door carries its own
+// credential).
+// No token means a door, read off the end of the path.
 const roadOf = (url: string, token: string): { readonly door: Door; readonly token?: string } | { readonly error: string } => {
     let path: string;
     try {
@@ -70,11 +56,11 @@ const roadOf = (url: string, token: string): { readonly door: Door; readonly tok
         : { error: "a door URL carries its own token: use `with: url` alone for a gate or a webhook, or point `url` at the sandbox's own address to drive the agent with `token`" };
 };
 
-// The runner hands a boolean input over as text; anything but the two words is refused rather than read as false.
+// Runner hands a boolean input as text; anything but the two words is refused rather than read as false.
 const landOf = (raw: string): boolean | { readonly error: string } =>
     raw === "" || raw === "false" ? false : raw === "true" ? true : { error: `land is "true" or "false", not "${raw}"` };
 
-// The one non-empty setting a run needs beyond the road: what to say. The two doors compose theirs.
+// The one non-empty setting a run needs beyond the road: what to say; the two doors compose theirs instead.
 const settingsOf = (env: Readonly<Record<string, string | undefined>>, door: Door): { readonly request: string; readonly agent?: string; readonly land: boolean } | { readonly error: string } => {
     const request = door === "run" ? (env["INPUT_PROMPT"] ?? "") : (env["INPUT_REQUEST"] ?? "");
     if (door === "run" && request === "") {
@@ -88,7 +74,7 @@ const settingsOf = (env: Readonly<Record<string, string | undefined>>, door: Doo
     return { request, ...(agent === "" ? {} : { agent }), land };
 };
 
-// The runner uppercases an input's name and prefixes INPUT_, `blocked-as` arrives as INPUT_BLOCKED-AS.
+// Runner uppercases an input name and prefixes INPUT_; `blocked-as` arrives as INPUT_BLOCKED-AS.
 export const parseInputs = (env: Readonly<Record<string, string | undefined>>): ParsedInputs => {
     const url = env["INPUT_URL"] ?? "";
     if (url === "") {
@@ -113,7 +99,7 @@ export const parseInputs = (env: Readonly<Record<string, string | undefined>>): 
     return { kind: "inputs", inputs: { url, ...road, waitS, blockedAsFailure, ...settings } };
 };
 
-// A whole positive number of seconds, or the sentence refusing what was written; empty is the default.
+// Whole positive number of seconds, or the sentence refusing what was written; empty is the default.
 const waitOf = (raw: string): number | { readonly error: string } => {
     const waitS = raw === "" ? WAIT_DEFAULT_S : Number(raw);
     return Number.isInteger(waitS) && waitS > 0 ? waitS : { error: `wait needs a whole number of seconds, not "${raw}"` };
@@ -122,11 +108,9 @@ const waitOf = (raw: string): number | { readonly error: string } => {
 const blockedOf = (raw: string): boolean | { readonly error: string } =>
     raw === "" || raw === "success" ? false : raw === "failure" ? true : { error: `blocked-as is "success" or "failure", not "${raw}"` };
 
-/* The gate's default request, what this workflow knows without being told: the commit, the branch, and the
- * link a reviewer would want, which is the pull request when the event carries one and the commit page
- * otherwise. Built from the runner's own variables so the copyable snippet stays one `uses:` line instead of
- * re-templating `${{ github.sha }}` into every workflow file. Empty when there is no context to compose from
- * (running outside a runner), which the caller refuses before spending a run on it. */
+// Default request built from the runner's own variables (commit, branch, PR link when there is one), so the copyable
+// snippet stays one `uses:` line.
+// Empty outside a runner, which the caller refuses before spending a run on it.
 export const defaultRequest = (env: Readonly<Record<string, string | undefined>>, event: unknown): string => {
     const sha = env["GITHUB_SHA"] ?? "";
     if (sha === "") {
@@ -148,10 +132,8 @@ export const defaultRequest = (env: Readonly<Record<string, string | undefined>>
     return parts.join(" ");
 };
 
-/* GITHUB_OUTPUT lines for the verdict, every value in the runner's heredoc form: a reason is a model's own
- * sentence and may hold anything, and one serialization for all four fields beats a "simple enough for =" test
- * that would eventually be wrong. The delimiter is the caller's (a UUID per invocation), so a value cannot
- * contain it. */
+// GITHUB_OUTPUT lines in the runner's heredoc form, since a reason is a model's own sentence that may hold anything.
+// The delimiter is a UUID per call, so a value can never contain it.
 export const outputLines = (verdict: GateVerdict, delimiter: string): string => {
     const entries: [string, string][] = [
         ["outcome", verdict.outcome],
@@ -162,16 +144,16 @@ export const outputLines = (verdict: GateVerdict, delimiter: string): string => 
     return entries.map(([key, value]) => `${key}<<${delimiter}\n${value}\n${delimiter}\n`).join("");
 };
 
-// The step summary, the verdict where a person will actually read it, above the fold of the run page.
+// Step summary: the verdict where a person actually reads it, above the fold of the run page.
 export const summaryOf = (verdict: GateVerdict): string =>
     `### Intentic gate: ${verdict.outcome}\n\n${verdict.reason}\n\nRun \`${verdict.runId}\` holds the full transcript in the sandbox.\n`;
 
-// A workflow-command's payload survives only with the runner's own escaping (%, CR, LF, in that order).
+// Workflow-command payload escaping, in the runner's own order: %, then CR, then LF.
 const escapeData = (value: string): string => value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
 
-/* The annotation the verdict earns: fail is an error whatever the settings, blocked is an error only when the
- * step is set to fail on it and a warning otherwise, visible either way, because "the check could not judge"
- * is exactly the line someone scans a green run for after an incident. Pass earns none; the summary carries it. */
+// Fail is always an error; blocked is an error only when the step is set to fail on it, a warning otherwise, but always
+// visible.
+// Pass earns no annotation; the summary carries it.
 export const annotationOf = (verdict: GateVerdict, blockedAsFailure: boolean): string | undefined => {
     if (verdict.outcome === "pass") {
         return undefined;
@@ -180,14 +162,14 @@ export const annotationOf = (verdict: GateVerdict, blockedAsFailure: boolean): s
     return `::${severity}::${escapeData(`${verdict.outcome}: ${verdict.reason}`)}`;
 };
 
-// The step's exit is the CLI's: pass 0, fail 1, blocked per the setting, one mapping, imported not repeated.
+// Step exit mirrors the CLI's mapping (pass 0, fail 1, blocked per setting), imported rather than repeated.
 export const stepExitOf = (verdict: GateVerdict, blockedAsFailure: boolean): number => exitOf(verdict, blockedAsFailure ? 1 : 0);
 
-// ---- the run door's half of the runner protocol ----
+// The run door's half of the runner protocol.
 
-/* GITHUB_OUTPUT lines for a run's ending, in the same heredoc form as a verdict's and for the same reason: a
- * summary is a model's own sentence. `landed` only when a land was asked for, so a workflow that did not ask
- * cannot read a "false" as a refusal. */
+// GITHUB_OUTPUT lines for a run's ending, same heredoc form as a verdict's, since a summary is also a model's own
+// sentence.
+// `landed` appears only when a land was asked for, so an unasked workflow can't read a false as a refusal.
 export const runOutputLines = (outcome: RunOutcome, delimiter: string): string => {
     const entries: [string, string][] = [
         ["status", outcome.status],
@@ -204,9 +186,9 @@ export const runSummaryOf = (outcome: RunOutcome): string =>
         outcome.landed === undefined ? "" : outcome.landed ? ", landed into the main tree." : ", not landed."
     }\n`;
 
-/* The annotation a run's ending earns. Failed is an error; parked is a warning, because the product is not
- * broken, a person is being asked for something; a timeout is an error about the WIRING (the deadline, not the
- * work, decided) and says the agent is still going. Completed earns none; the summary carries it. */
+// Failed is an error; parked is a warning, since the product isn't broken and a person is being asked something; a
+// timeout is an error about the wiring, since the deadline decided, not the work.
+// Completed earns no annotation; the summary carries it.
 export const runAnnotationOf = (outcome: RunOutcome): string | undefined => {
     if (outcome.status === "completed") {
         return undefined;

@@ -25,7 +25,7 @@ test("want.app derives its support stack: the host carries the authored connecti
         i.want.app("app", { on: host, expose: cf, environments: { prod: { domain: "app.example.com", branch: "main" } } });
     }, "example.com");
 
-    // The forgejo node is derived from want.app, wired to the host, with a zone-derived domain + default health gate.
+    // forgejo node derives from want.app: wired to the host, zone-derived domain, default health gate.
     expect(graph.resources["host-git"]?.inputs["server"]).toEqual({ $ref: "host" });
     expect(graph.resources["host"]?.inputs["sshKey"]).toEqual({ $secret: { source: "env", key: "HOST_SSH_KEY" } });
     expect(graph.resources["host"]?.inputs["address"]).toBe("203.0.113.10");
@@ -44,7 +44,7 @@ test("duplicate resource id throws", () => {
 });
 
 test("a dependency cycle throws", () => {
-    // Auto-derived ids cannot form an authored cycle, so exercise the compile-layer guard directly.
+    // Auto-derived ids cannot form an authored cycle; this exercises the compile-layer guard directly.
     const nodes = new Map<string, RawNode>([
         ["a", { id: "a", type: "host", inputs: { peer: { kind: "ref", resourceId: "b" } }, explicitDependsOn: [] }],
         ["b", { id: "b", type: "host", inputs: { peer: { kind: "ref", resourceId: "a" } }, explicitDependsOn: [] }],
@@ -70,7 +70,7 @@ test("want.service derives a signoz node + route, and want.app's observe wires t
         i.want.app("app", { on: host, expose: cf, observe: obs, environments: { prod: { domain: "app.example.com", branch: "main" } } });
     }, "example.com");
 
-    // The service is deployed onto the host and routed, but not built through the app platform.
+    // Service deploys onto the host and routes, but isn't built through the app platform.
     expect(graph.resources["obs"]?.type).toBe("signoz");
     expect(graph.resources["obs"]?.inputs["server"]).toEqual({ $ref: "host" });
     expect(graph.resources["cf-signoz-example-com"]?.type).toBe("cf-route");
@@ -91,7 +91,7 @@ test("want.workspace derives the sandbox node + its wildcard *.<zone> route", ()
     expect(graph.resources["workspace"]?.type).toBe("workspace");
     expect(graph.resources["workspace"]?.inputs["domain"]).toBe("*.example.com");
     expect(graph.resources["workspace"]?.inputs["server"]).toEqual({ $ref: "host" });
-    // The wildcard hostname becomes the cf-route (id slugged) routing through the host tunnel.
+    // Wildcard hostname becomes the cf-route (id slugged), routed through the host tunnel.
     expect(graph.resources["cf-example-com"]?.type).toBe("cf-route");
     expect(graph.resources["cf-example-com"]?.inputs["hostname"]).toBe("*.example.com");
 });
@@ -102,9 +102,7 @@ test("the derived platform trio slices to a cloudflare-free subgraph", () => {
         i.want.app("app", { on: host, expose: cf, environments: { prod: { domain: "app.example.com", branch: "main" } } });
     }, "example.com");
 
-    // The hermetic e2e applies exactly this slice with no Cloudflare credentials. It only holds while the
-    // trio's inputs reference nothing but the host (zone lands as string literals): a cloudflare/cf-route/
-    // tunnel ref added to any of them must fail here, in the unit tier, not minutes into the e2e.
+    // Hermetic e2e runs this slice without Cloudflare creds; it must never gain a cloudflare/cf-route/tunnel ref.
     const sliced = subgraph(graph, ["host-git", "host-git-runner", "host-deploy"]);
     expect(Object.keys(sliced.resources).toSorted()).toEqual(["host", "host-deploy", "host-git", "host-git-runner"]);
 });
@@ -120,7 +118,7 @@ test("apps share one derived platform", () => {
     const types = Object.values(graph.resources).map((node) => node.type);
     expect(types.filter((type) => type === "forgejo")).toHaveLength(1);
     expect(types.filter((type) => type === "komodo")).toHaveLength(1);
-    // Both apps' deployments target the same orchestrator (registered over the CP host's SSH).
+    // Both apps' deployments target the same orchestrator, registered over the host's SSH.
     expect(graph.resources["app-one.prod"]?.dependsOn).toContain("host-deploy");
     expect(graph.resources["app-two.prod"]?.dependsOn).toContain("host-deploy");
     expect(graph.resources["app-one.prod"]?.inputs["address"]).toBe("203.0.113.10");

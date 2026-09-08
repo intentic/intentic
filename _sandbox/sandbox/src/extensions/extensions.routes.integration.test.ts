@@ -18,14 +18,11 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 
-/* The extensions routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
- * one file that two agents working on unrelated features collided in every time. The fakes and the client
- * are shared (route-services.testing.ts and its siblings); what lives here is what these routes do. */
+// Extensions routes, driven over the daemon's HTTP surface exactly as the browser does.
+// Fakes and the client are shared (route-services.testing.ts and its siblings).
 
 test("extensions.setEnabled keeps the extension listed, switches it off, and unwires it daemon-side", async () => {
-    // A real workspace root, because the switch persists to <root>/.intentic/config/extension-enablement.json. The
-    // extensions dir is the repo's own _extensions, so this runs against the shipped first-party manifests.
+    // Real workspace root: the switch persists to .intentic/config/extension-enablement.json.
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-toggle-")));
     const svc = services({ workspace });
     const client = clientFor(createApp(svc));
@@ -38,25 +35,17 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
 
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: false });
 
-    // Still listed: that is what keeps the switch reachable, and off.
     expect((await listed())["intentic.discord"]).toBe(false);
-    // The listener provider an automations trigger validates against is gone with it, and its declared gateway
-    // can no longer be started by hand.
     expect((await listenerProvidersOf(svc)).has("discord")).toBe(false);
     expect(await errorCode(client.extensions.processStart({ id: "intentic.discord", name: "gateway" }))).toBe("PRECONDITION_FAILED");
 
-    // And back on, from the same list the tab renders.
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: true });
     expect((await listed())["intentic.discord"]).toBe(true);
 });
 
-/* THE FIXED SWITCHES. Each of these is the only control surface for an engine the daemon runs regardless:
- * the scheduler fires turns whether or not anything draws them, so "off" would not stop anything, only blind
- * the owner to it. The defect this pins: disabling the automations page used to leave every cron, listener and
- * approval firing with no way to see, stop or approve a single one. */
 test("an essential extension cannot be switched off, reads enabled over a stale entry, and says so on its row", async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-essential-")));
-    // A disabled entry written before the concept existed (or by hand): must not keep the surface shut.
+    // Simulates a disabled entry written before essential existed (or by hand); it must not keep the surface shut.
     await mkdir(join(workspace.root, ".intentic/config"), { recursive: true });
     await writeFile(join(workspace.root, ".intentic/config/extension-enablement.json"), JSON.stringify({ "intentic.automations": false }));
     const client = clientFor(createApp(services({ workspace })));
@@ -65,13 +54,9 @@ test("an essential extension cannot be switched off, reads enabled over a stale 
     const automations = rows.find((extension) => extension.id === "intentic.automations");
     expect(automations).toMatchObject({ enabled: true, essential: true });
 
-    // The refusal is the backstop for a caller that skipped the tab's fixed switch.
     expect(await errorCode(client.extensions.setEnabled({ id: "intentic.automations", enabled: false }))).toBe("BAD_REQUEST");
-    // Enabling an already-enabled essential is a no-op, not an error: idempotent callers stay simple.
     await client.extensions.setEnabled({ id: "intentic.automations", enabled: true });
 
-    // The set is exactly the fail-active surfaces; a fail-safe one (approvals acts only on prior yeses)
-    // keeps its ordinary switch.
     const essentials = rows.filter((extension) => extension.essential === true).map((extension) => extension.id);
     expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.maintenance", "intentic.workflows"]);
 });
@@ -85,8 +70,6 @@ test("a workspace extension lists like any other and serves its bundle by conten
         JSON.stringify({ publisher: "acme", name: "hello", version: "1.0.0", engines: { intentic: "^0.2.0" }, entry: "dist/index.js" }),
     );
     await writeFile(join(dir, "dist", "index.js"), "export const activate = () => {};");
-    // A sibling directory that is not an extension rides the same list as a named failure: the author's
-    // feedback channel, since nothing install-shaped ever rejected it.
     await mkdir(join(workspaceExtensionsRoot(workspace.root), "scratch"), { recursive: true });
 
     const app = createApp(services({ workspace }));
@@ -98,8 +81,6 @@ test("a workspace extension lists like any other and serves its bundle by conten
     });
     expect(list.invalid).toEqual([{ dir: "scratch", error: expect.stringContaining("no intentic-extension.json") }]);
 
-    // The bundle's identity is its bytes: same bytes answer 304, edited bytes are a new ETag, the live-edit
-    // loop a sha-pinned checkout never needs.
     const bundle = await app.request("/extensions/acme.hello/bundle");
     expect(bundle.status).toBe(200);
     expect(await bundle.text()).toBe("export const activate = () => {};");
@@ -111,9 +92,6 @@ test("a workspace extension lists like any other and serves its bundle by conten
 });
 
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {
-    // The Extensions tab is only a complete list if the daemon enumerates the web-builtin extensions too:
-    // their manifests ride the image beside the daemon-side ones (Dockerfile), so a bake that drops one shows
-    // up here rather than as a silently missing row.
     const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-list-"))) })));
     const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
     expect(ids).toEqual([
@@ -133,12 +111,8 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.imap",
         "intentic.issues",
         "intentic.knowledge",
-        /* No `intentic.logs`, and its absence is the first instance of a deliberate pattern rather than a
-         * regression. Logs moved OUT of this repo to its own (extensions/logs), because a screen that is not a
-         * control surface for an engine the daemon runs regardless does not have to ship in every image: it is
-         * installed by whoever wants it. The set that stays baked is the one a sandbox is not itself without:
-         * automations, workflows and maintenance (each the only window onto something running anyway) and
-         * viewers (without which every image, PDF and video in the workspace falls back to a download). */
+        // No `intentic.logs`: moved to its own extension since it isn't a control surface for an always-running engine.
+        // Baked stays only automations/workflows/maintenance and viewers (each the only window onto something running).
         "intentic.maintenance",
         "intentic.pi-agent",
         "intentic.pipelines",
@@ -161,22 +135,17 @@ test("extensions.create writes a workspace extension that is listed, enabled and
     const created = await client.extensions.create({ publisher: "workspace", name: "release-notes" });
     expect(created).toEqual({ id: "workspace.release-notes", dir: ".intentic/config/workspace-extensions/release-notes" });
 
-    // It is a real row on the same list the tab renders, on by default, not a draft awaiting an install step.
     const listed = (await client.extensions.list()).extensions.find((extension) => extension.id === "workspace.release-notes");
     expect(listed).toMatchObject({ source: "workspace", enabled: true });
     expect(listed?.manifest.permissions).toBeUndefined();
     expect(listed?.manifest.engines.intentic).toBe(`^${extensionApiVersion}`);
     expect(listed?.manifest.contributes?.views).toEqual([{ id: "release-notes", label: "Release Notes", surface: "rail" }]);
 
-    /* THE POINT OF THE SCAFFOLD: the bundle route serves the entry as written, so what was created is already
-     * the thing that runs. A scaffold that emitted a vite project would answer 404 here until someone installed
-     * and built it: listed, switched on, and dead. */
     const bundle = await app.request("/extensions/workspace.release-notes/bundle");
     expect(bundle.status).toBe(200);
     const source = await bundle.text();
     expect(source).toContain(`export const activate`);
-    // Only bare specifiers the host's import map publishes, and no relative import: a blob-URL module cannot
-    // resolve one, so a second file would 404 at activation.
+    // Only bare specifiers the import map publishes; a blob URL can't resolve a relative import, so a second file 404s.
     expect([...source.matchAll(/^import .* from "(.*)";$/gmu)].map((match) => match[1])).toEqual(["vue"]);
 });
 
@@ -189,22 +158,19 @@ test("extensions.create refuses a name that is already taken, without touching w
     await writeFile(entry, "export const activate = () => { /* edited */ };");
 
     expect(await errorCode(client.extensions.create({ publisher: "workspace", name: "notes" }))).toBe("CONFLICT");
-    // The author's edit survived: creating over an existing directory would destroy work with no checkout to
-    // recover it from, which is why the directory is created non-recursively.
     expect(await readFile(entry, "utf8")).toContain("edited");
 });
 
 test("usage is counted per declared route, accumulates across reports, and rides the list", async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-usage-")));
     const client = clientFor(createApp(services({ workspace })));
-    // A first-party extension with a real permissions list, so the manifest doing the filtering is a shipped one.
+    // First-party extension with a real permissions list, so the filtering manifest is a shipped one.
     const id = "intentic.repo-apps";
     const declared = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.manifest.permissions?.sandbox ?? [];
     expect(declared.length).toBeGreaterThan(1);
     const [first, second] = declared as [string, string];
 
-    // Nothing observed yet: `usage` is ABSENT rather than empty, which is what lets the row tell "never
-    // exercised" from "exercised and uses none of these": the difference between evidence and a guess.
+    // `usage` is absent, not empty, until observed; that's how a row tells never-exercised from exercised-but-unused.
     expect((await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage).toBeUndefined();
 
     await client.extensions.recordUsage({ reports: { [id]: { [first]: 2 } } });
@@ -223,8 +189,7 @@ test("usage the manifest no longer declares is dropped, so a removed permission 
     const declared = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.manifest.permissions?.sandbox ?? [];
     const [kept] = declared as [string];
 
-    // A browser still running a previous manifest reports a route this one never declared. Dropped rather than
-    // refused: it is not an error the owner can act on, and recording it would credit reach nobody approved.
+    // Simulates a stale browser reporting a route this manifest no longer declares.
     await client.extensions.recordUsage({ reports: { [id]: { [kept]: 1, "DELETE /everything": 9 } } });
 
     const usage = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage;
@@ -236,21 +201,15 @@ test("readiness catches the two failures that are invisible here and fatal once 
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-readiness-")));
     const client = clientFor(createApp(services({ workspace })));
 
-    // A scaffolded extension is publishable on every check that can be answered from its files.
     await client.extensions.create({ publisher: "workspace", name: "clean" });
     const clean = await client.extensions.readiness({ id: "workspace.clean" });
     expect(clean.checks.filter((check) => check.status === "fail")).toEqual([]);
-    // Its permissions check passes on the strongest possible ground: the scaffold declares no daemon reach at
-    // all, so there is nothing to have earned. (The `warn` state is for an extension that DOES declare routes and
-    // has never been exercised: the case where this check has nothing to say and must not say "fine".)
+    // Passes because the scaffold declares no daemon reach; `warn` is reserved for a declared-but-unexercised route.
     expect(clean.checks.find((check) => check.id === "permissions")).toMatchObject({
         status: "pass",
         detail: "It asks for no daemon routes at all.",
     });
 
-    /* Now the two ways a bundle that works here dies elsewhere. Both are silent in this workspace: the daemon
-     * serves the entry live and the author never sees a failure, and both are fatal at activation for anyone
-     * who installs the published sha. */
     const dir = join(workspaceExtensionsRoot(workspace.root), "broken");
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -264,11 +223,9 @@ test("readiness catches the two failures that are invisible here and fatal once 
 
     const broken = await client.extensions.readiness({ id: "workspace.broken" });
     const failed = Object.fromEntries(broken.checks.map((check) => [check.id, check]));
-    // A relative import cannot resolve against the blob URL the bundle is imported from: reported before the
-    // second import is even considered, because it is the one that 404s.
+    // A relative import can't resolve against the blob URL the bundle loads from; reported before axios is considered.
     expect(failed["bundle"]?.status).toBe("fail");
     expect(failed["bundle"]?.detail).toContain("./helper.js");
-    // And the engines range excludes the app it would be published from, so no installer could activate it.
     expect(failed["engines"]?.status).toBe("fail");
     expect(failed["engines"]?.detail).toContain("^1.0.0");
 });
@@ -278,8 +235,7 @@ test("readiness reports a promised file that is not there", async () => {
     const client = clientFor(createApp(services({ workspace })));
     const dir = join(workspaceExtensionsRoot(workspace.root), "promises");
     await mkdir(dir, { recursive: true });
-    // A manifest promising a CLI directory that was never committed: nothing fails here, and the agent's PATH
-    // quietly lacks the tool on somebody else's machine.
+    // Promises a CLI directory that was never committed; nothing fails here, only later on someone else's machine.
     await writeFile(
         join(dir, "intentic-extension.json"),
         JSON.stringify({ publisher: "workspace", name: "promises", version: "0.1.0", engines: { intentic: "^2.0.0" }, contributes: { bin: "bin" } }),

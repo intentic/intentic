@@ -27,44 +27,30 @@
      No text inside the artwork, ever. A label in an illustration cannot be translated, cannot be selected, and
      re-states the title six pixels above it. -->
 <script setup lang="ts">
-/* `kind` is the rung's own value, so the drawing cannot drift from the option it belongs to. `selected` is
- * passed rather than computed here: the picker owns which rung is chosen, and a child that re-derived it would
- * be a second copy of that state. */
+// `kind` picks which scene renders. `selected` is passed rather than computed: the picker owns which rung is
+// chosen.
 const { kind, selected = false } = defineProps<{ kind: "hosted" | "mine"; selected?: boolean }>();
 
-/* Two colours, and both are `color` a theme owns: every shape below paints with `currentColor`.
- *
- * The STRUCTURE lifts by one step when chosen rather than turning orange: a whole drawing in the accent is
- * what the first attempt did, and a solid orange monitor reads as a warning, not a choice. The card's border
- * and fill already say which rung is selected; the artwork only has to agree, quietly.
- * The ACCENT is the one detail that does turn, and it is never the same colour as the structure, in either
- * state, or the focal point of each drawing would vanish into its outline. */
+// Both colours are `color` a theme owns; every shape paints with `currentColor`. `edgeClass` lifts the structure
+// by one step when selected; `popClass` is the accent and is never the same colour as the structure.
 const edgeClass = (): string => (selected ? `text-muted` : `text-subtle`);
 const popClass = (): string => (selected ? `text-link` : `text-muted`);
 
-/* THE CLOUD IS DRAWN WIDE, and that is the one place these scenes part from the icon set on purpose.
- *
- * It started as `ri:cloud-line`'s own outer contour, scaled up: the safest possible match. But that shape is
- * 22×19 on its grid, which is very nearly SQUARE, and at 16px nobody reads a bounding box. At 100px they do:
- * beside a monitor that is plainly landscape, a square blob stops reading as a cloud and starts reading as a
- * lump. So this is a cloud built for the size it is shown at: flat base, three puffs,
- * roughly 1.75:1, while everything that makes it belong here is unchanged: one uniform band, arcs only, the
- * same geometry the line set is drawn with.
- *
- * Every arc's chord is kept inside its own diameter; an arc asked to span further than it can silently swells
- * its radius, which is how a hand-written cloud ends up with one bump fatter than its neighbours. */
+// Cloud built for the size it renders at (~1.75:1, flat base, three puffs), not `ri:cloud-line` scaled up, which
+// reads as a square lump at this size. Same band, arcs only, as the rest of the icon set.
 const CLOUD = `M36 66h56a14 14 0 0 0 4-27.5a22 22 0 0 0-40-12a15 15 0 0 0-22 11a15 15 0 0 0 2 28.5z`;
 // …and `ri:flashlight-line`'s bolt, solid rather than hollow: at this size the accent is a mark, not an object,
 // as the shared icon pack fills its small accent details.
 const BOLT = `M13 9h8L11 24v-9H4l9-15z`;
-// The band, in stage units: 2px at the size this renders. Both scaled groups pre-divide by their own scale,
-// since a transform scales the stroke with everything else.
+// Stroke band in stage units (2px at render size); scaled groups pre-divide by their own scale.
 const BAND = 2;
 </script>
 
 <template>
-    <!-- Capped rather than stretched: past ~132px the drawings stop reading as objects on a card and start
-         reading as a banner. `aria-hidden`, because everything this says is said in words underneath it. -->
+    <!--
+        Capped rather than stretched, or past ~132px the drawings read as a banner. `aria-hidden`: the words below say
+        what this shows.
+    -->
     <svg
         viewBox="0 0 132 76"
         class="mx-auto h-auto w-full max-w-[8.25rem]"
@@ -74,9 +60,7 @@ const BAND = 2;
         aria-hidden="true"
         focusable="false"
     >
-        <!-- OUR MACHINE, ALREADY WARM: the app's cloud with the app's bolt inside it. The cloud is whose the
-             machine is, the bolt is how long it takes: the two facts the title and the note carry between
-             them, said in one picture. -->
+        <!-- The app's cloud with the app's bolt inside it: whose machine, and how long it takes. -->
         <template v-if="kind === `hosted`">
             <path
                 :class="edgeClass()"
@@ -88,9 +72,7 @@ const BAND = 2;
             <path :class="popClass()" :d="BOLT" transform="translate(49.4,29) scale(1.25)" fill="currentColor" />
         </template>
 
-        <!-- THE READER'S OWN: a monitor on a stand, with work on the screen. The one scene here that is a thing
-             somebody is looking at right now, which is the point of it. Frame, then bezel at half weight, then
-             the stand: `ri:computer-line`'s own three parts. -->
+        <!-- A monitor on a stand, with work on the screen. Frame, then bezel at half weight, then the stand. -->
         <template v-else>
             <g :class="edgeClass()" stroke="currentColor" :stroke-width="BAND">
                 <rect x="20" y="7" width="92" height="52" rx="3" />

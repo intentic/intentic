@@ -1,49 +1,32 @@
 import { onBeforeUnmount, ref, watch, type Ref } from "vue";
 
-/* The reader's place in a rendered document, and the list of places they can jump to, the data behind the
- * preview's outline rail (MarkdownOutline.vue).
- *
- * READ OFF THE RENDERED DOM, NOT THE SOURCE. The headings are whatever `<h1>`–`<h4>` the prose surface actually
- * painted, found by querying the scroll container. That is the ground truth for a thing whose entire job is
- * scrolling to a position: a source-side scan would have to re-implement the parser's mind about fenced blocks,
- * setext headings and figure fences, and would still be guessing at the layout. It also means a document split
- * into runs by a figure (see Markdown.vue) needs no special case at all, document order is document order.
- *
- * THE DOM UNDERNEATH IS REPLACED WITHOUT WARNING, which is why nothing here holds a node between frames. A code
- * block's highlighting lands after the first paint and re-renders the whole v-html (markdown/code.ts), so every
- * heading element is swapped for a fresh one, an observer attached to the old ones would silently stop
- * reporting, and a remembered node would scroll to a position no longer in the document. A MutationObserver
- * re-measures instead, and the measurement is a list of NUMBERS (each heading's offset in the scroll box), which
- * survives the swap because the layout does. */
+// Reader's position and jump targets for the outline rail (MarkdownOutline.vue), read off the rendered DOM (h1-h4)
+// rather than the source, the real scroll target. The DOM is replaced without warning; nothing here holds a node
+// between frames, a MutationObserver remeasures into plain offset numbers instead.
 
 export interface OutlineHeading {
-    // 1–4, matching the levels prose.css styles. Drawn as indentation, never as a number.
+    // 1-4, matching the levels prose.css styles; drawn as indentation, never as a number.
     readonly level: number;
     readonly text: string;
 }
 
 const HEADINGS = `h1, h2, h3, h4`;
 
-/* Where "you are here" is measured, in pixels below the scroller's top edge. A section becomes current once its
- * heading crosses this line, not when it touches the top edge, at the top edge the heading you just scrolled
- * past is still filling the screen, so the rail would name the section you have left. */
+// Pixels below the scroll top marking where a section becomes current, not the top edge itself.
 const ACTIVE_LINE = 72;
 
-// A jumped-to heading lands this far below the top edge, so it reads as a heading with a document under it
-// rather than as text jammed against the frame. Must stay under ACTIVE_LINE or a jump would not mark its own row.
+// Pixels a jumped heading lands below the top edge; must stay under ACTIVE_LINE or a jump won't mark its row.
 const JUMP_INSET = 16;
 
-// The scroll positions two floats apart are the same position, browsers report fractional scrollTop, so an
-// exact comparison never sees the bottom.
+// Scroll positions this close count as equal since scrollTop is fractional and never hits the bottom exactly.
 const END_SLACK = 2;
 
-/** Which heading the reader is inside, given each one's offset in the scroll box. -1 when there are none. */
+/** Heading index the reader is inside, given each heading's scroll-box offset; -1 if none. */
 export const activeAt = (tops: readonly number[], scrollTop: number, atEnd: boolean): number => {
     if (tops.length === 0) {
         return -1;
     }
-    /* The last heading whose section a short document can never scroll to the top would otherwise never be
-     * current, the document runs out of travel first. At the bottom, the last section IS where you are. */
+    // A last section too short to scroll to top would never become active otherwise; at the bottom it always is.
     if (atEnd) {
         return tops.length - 1;
     }
@@ -57,7 +40,7 @@ export const activeAt = (tops: readonly number[], scrollTop: number, atEnd: bool
     return active;
 };
 
-/** How far through the document the reader is, 0–1. A document that fits its pane is fully read. */
+/** How far through the document the reader is, 0-1; a document that fits its pane is fully read. */
 export const progressAt = (scrollTop: number, scrollHeight: number, clientHeight: number): number => {
     const travel = scrollHeight - clientHeight;
     return travel <= 0 ? 1 : Math.min(1, Math.max(0, scrollTop / travel));
@@ -70,12 +53,10 @@ export const matchHeadings = (headings: readonly OutlineHeading[], query: string
     return needle === `` ? all : all.filter((row) => row.heading.text.toLowerCase().includes(needle));
 };
 
-// A heading's own words on one line. `## \`api.views\`, the surfaces` is three text nodes and a newline in the
-// source; the rail has one row to say it in.
+// A heading's own words as a single line, collapsing inline markup and source line-wraps.
 const headingText = (node: Element): string => (node.textContent ?? ``).replaceAll(/\s+/gu, ` `).trim();
 
-// The heading elements the prose is showing, in document order. One with no text, a bare `#`, or a level
-// marker whose content has not arrived, is furniture, not a section, and is skipped.
+// Heading elements in document order. One with no text (a bare `#`, or streamed-in content not arrived yet) is skipped.
 const headingNodes = (view: ParentNode): HTMLElement[] =>
     [...view.querySelectorAll<HTMLElement>(HEADINGS)].filter((node) => headingText(node) !== ``);
 
@@ -84,8 +65,8 @@ const toHeading = (node: Element): OutlineHeading => ({ level: Number(node.tagNa
 /** Every heading the prose is showing, in document order. */
 export const readHeadings = (view: ParentNode): OutlineHeading[] => headingNodes(view).map(toHeading);
 
-// Whether a re-measure found the same document. Compared so the rail is not rebuilt, losing hover, focus and
-// the filter's scroll position, every time a code block finishes highlighting.
+// Whether a re-measure found the same headings, so the rail isn't rebuilt and doesn't lose hover, focus or filter
+// state.
 const sameHeadings = (a: readonly OutlineHeading[], b: readonly OutlineHeading[]): boolean =>
     a.length === b.length && a.every((heading, index) => heading.level === b[index]?.level && heading.text === b[index]?.text);
 
@@ -94,15 +75,11 @@ export interface MarkdownOutline {
     readonly headings: Ref<OutlineHeading[]>;
     /** Index into `headings` of the section the reader is in; -1 when the document has none. */
     readonly active: Ref<number>;
-    /** Scroll position through the document, 0–1. */
+    /** Scroll position through the document, 0-1. */
     readonly progress: Ref<number>;
-    /** Whether the document is longer than its pane. False means `progress` has nothing to report. */
+    /** Whether the document is longer than its pane; false means `progress` has nothing to report. */
     readonly scrollable: Ref<boolean>;
-    /* How wide the scroller's own scrollbar strip is, in pixels, the distance between the document's right
-     * edge and the pane's. The rail parks itself exactly this far in, so the scrollbar keeps the outermost
-     * edge (where every application puts one) and nothing of the rail sits under it. Measured rather than
-     * assumed: it is 0 where the platform draws overlay scrollbars and ~11px where it draws real ones, and
-     * `scrollbar-gutter: stable` is what keeps the answer the same whether or not the document overflows. */
+    // Rail's own inset: scrollbar strip width in px; 0 with overlay scrollbars, ~11px otherwise.
     readonly gutter: Ref<number>;
     /** Scroll heading `index` into view. */
     readonly jump: (index: number) => void;
@@ -111,11 +88,8 @@ export interface MarkdownOutline {
 /**
  * Track the headings inside `scroller` and where the reader is among them.
  *
- * @param scroller The element that scrolls the prose, its scroll box is what every offset here is measured in.
- *   Declared as possibly NULL as well as undefined, and read through `element()` below, because a template ref
- *   is written both ways: `ref<HTMLElement>()` starts life `undefined`, but Vue puts `null` in it when the
- *   element unmounts, which for the caller is every switch to the Source view. A guard that only tested for
- *   `undefined` typechecked, then threw on the null the moment the reader left the preview.
+ * @param scroller Scroll container for the prose; can be `null` (Vue on unmount) as well as `undefined` (ref not yet
+ * bound), so read it through `element()`.
  */
 export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | undefined>>): MarkdownOutline => {
     const headings = ref<OutlineHeading[]>([]);
@@ -126,18 +100,16 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
 
     const element = (): HTMLElement | undefined => scroller.value ?? undefined;
 
-    // Each heading's offset from the top of the scroll box. Re-derived on every measure; never a node reference.
+    // Each heading's offset from the scroll box top; re-derived on every measure, never a node reference.
     let tops: number[] = [];
     let mutations: MutationObserver | undefined;
     let resizes: ResizeObserver | undefined;
-    // The prose element the size observer is watching. Held so a re-measure only re-observes when the surface
-    // has genuinely been replaced, re-observing the same element fires the observer again, which would
-    // re-measure, which would re-observe.
+    // Prose element the resize observer watches; re-observing the same element would loop re-measure/re-observe.
     let watched: Element | undefined;
     let measureFrame: number | undefined;
     let trackFrame: number | undefined;
 
-    // Where the reader is, from the numbers alone, cheap enough to run on every scroll frame.
+    // Where the reader is, from the numbers alone; cheap enough to run on every scroll frame.
     const track = (): void => {
         const view = element();
         if (view === undefined) {
@@ -162,18 +134,16 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
             return;
         }
         gutter.value = view.offsetWidth - view.clientWidth;
-        // One query for both answers: a re-measure runs on every mutation the prose makes, and the second walk
-        // of a long document's DOM bought nothing the first had not already found.
+        // One query serves both answers; a second DOM walk would find nothing the first didn't already.
         const nodes = headingNodes(view);
-        // Distance from the top of the scroll box: viewport position, minus the box's own, plus how far it is scrolled.
+        // Scroll box's origin (position at scrollTop 0), independent of current scroll.
         const origin = view.getBoundingClientRect().top - view.scrollTop;
         tops = nodes.map((node) => node.getBoundingClientRect().top - origin);
         const found = nodes.map(toHeading);
         if (!sameHeadings(found, headings.value)) {
             headings.value = found;
         }
-        // Images and figures settle their height after the prose paints, which moves every heading below them.
-        // Watching the prose itself is what catches that; watching only the pane would miss it entirely.
+        // Images and figures resize after paint, moving headings below; watching the pane alone would miss it.
         const content = view.firstElementChild ?? undefined;
         if (content !== watched) {
             if (watched !== undefined) {
@@ -210,12 +180,7 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
         watched = undefined;
     };
 
-    /* INSTANT, NOT SMOOTH, and that is the whole design of this function. Animating the jump was measured on a
-     * 30,000px document: clicking the second-to-last section took 1.6 SECONDS of blurred prose to arrive, during
-     * which the rail's highlight raced down every section in between. An outline is the control you reach for
-     * BECAUSE scrolling is too slow; making it scroll is the one thing it must not do. Nothing in this category
-     * animates it either. GitHub's outline is anchor links, VS Code and Obsidian reveal outright. With no
-     * animation there is also no motion to reduce, which is why no media query is consulted here. */
+    // Jumps instantly, never animated: an outline exists to skip scrolling, not add more of it.
     const jump = (index: number): void => {
         const view = element();
         const top = tops[index];
@@ -235,12 +200,11 @@ export const useMarkdownOutline = (scroller: Readonly<Ref<HTMLElement | null | u
                 return;
             }
             view.addEventListener(`scroll`, onScroll, { passive: true });
-            // childList/subtree only: what changes here is whole blocks being replaced (a new document, a code
-            // block gaining its colours), never text edited in place.
+            // childList/subtree only: blocks get replaced wholesale (new doc, code highlighting), not edited in place.
             mutations = new MutationObserver(scheduleMeasure);
             mutations.observe(view, { childList: true, subtree: true });
             resizes = new ResizeObserver(scheduleMeasure);
-            // The pane itself: a narrower column re-wraps the prose and moves every heading in it.
+            // The pane itself; a narrower column re-wraps the prose and moves every heading in it.
             resizes.observe(view);
             measure();
         },

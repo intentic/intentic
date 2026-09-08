@@ -10,26 +10,14 @@ import {
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* The loop manifest (<workspace>/.intentic/records/loops.json): every loop this workspace has run, with its iteration
- * history. Mirrors the automations store, down to the read-modify-write-through-jsonFile shape.
- *
- * KEYED BY CONVERSATION, because that is what a loop is, one conversation, driven repeatedly. A conversation
- * that is looped twice keeps ONE record and the second run replaces the first: the alternative is a growing list
- * of near-identical rows whose only distinguishing feature is a start time nobody reads, and the history a user
- * actually wants ("what did the loop on this agent do") is the current one.
- *
- * KEPT AFTER THE LOOP ENDS, unlike the turn journal beside it. A finished loop is not debris, it is the answer
- * to "why did this stop at iteration 4", and that answer is its iteration list. Bounded by RECORDS_KEPT rather
- * than by a lifetime, because a loop is a deliberate act (a person, or a workflow, started it) and there are
- * never many.
- */
+// Loop manifest (<workspace>/.intentic/records/loops.json): every loop run, with its iteration history; mirrors the
+// automations store's shape. Keyed by conversation, so re-running replaces rather than duplicates the prior record.
+// Kept after the loop ends, bounded by RECORDS_KEPT rather than time.
 
-// How many loops the manifest remembers, newest first. Generous, a loop is rare compared to a turn, each
-// record is a few hundred bytes, and the whole value of the file is being able to look back at one.
+// How many loops the manifest remembers, newest first; generous since loops are rare and small.
 const RECORDS_KEPT = 100;
 
-// How many iterations one record keeps. A loop is capped at 50 iterations by the contract, so this only ever
-// binds on a record that was restarted; it exists so a hand-edited manifest cannot grow without limit.
+// Iterations kept per record; only binds on a restarted record, since the contract caps a loop at 50 anyway.
 const ITERATIONS_KEPT = 50;
 
 export interface LoopsStore {
@@ -38,13 +26,11 @@ export interface LoopsStore {
     readonly get: (conversationId: string) => Promise<LoopRecord | undefined>;
     // Open a loop: replaces any previous record for that conversation and starts its history empty.
     readonly start: (loop: Loop, now: number) => Promise<LoopRecord>;
-    // Append one iteration's outcome. A record that vanished underneath (the manifest was hand-edited, the
-    // conversation was discarded) drops the write rather than resurrecting it, the same rule recordRun follows.
+    // Appends one iteration; a vanished record (hand-edited manifest, discarded chat) drops the write silently.
     readonly recordIteration: (conversationId: string, iteration: LoopIteration) => Promise<void>;
     // Close a loop. `detail` is why, for the states whose reason is not in their name.
     readonly settle: (conversationId: string, state: LoopState, now: number, detail?: string) => Promise<void>;
-    // Count one boot-time resume against the record, so a loop whose iteration kills the daemon cannot be
-    // resurrected forever. Returns the record as it now stands, or undefined when it went away underneath.
+    // Counts a boot resume so a daemon-killing loop isn't resurrected forever; undefined once the record is gone.
     readonly countResume: (conversationId: string) => Promise<LoopRecord | undefined>;
 }
 
@@ -53,8 +39,7 @@ export const fileLoopsStore = (path: string): LoopsStore => {
         parse: (raw) => z.array(LoopRecordSchema).safeParse(raw).data,
         fallback: () => [],
     });
-    // Every mutation below is "find this conversation's record, replace it", the find is by conversationId
-    // because that is the key, and a record that isn't there is a no-op rather than an error.
+    // Finds the record by conversationId and replaces it; a missing record is a no-op, not an error.
     const amend = async (conversationId: string, change: (record: LoopRecord) => LoopRecord): Promise<void> => {
         await file.update((records) => {
             const existing = records.find((record) => record.conversationId === conversationId);
@@ -82,21 +67,12 @@ export const fileLoopsStore = (path: string): LoopsStore => {
     };
 };
 
-/* THE SECOND FILE (<workspace>/.intentic/config/loop-designs.json): the loops a user has SAVED, which is a manifest and
- * not a ledger. It shares this module with the record store above and nothing else, the split is the one
- * workflows-store.ts draws for the same reason. A manifest is a handful of entries authored by a person and
- * changing at human speed; a ledger is written several times per iteration by a pump. Keeping them apart is
- * what stops a loop's fourth iteration write from rewriting the designs the user is editing in another tab.
- *
- * Unbounded, unlike the records: there is no machine here writing entries, so the only thing that can grow the
- * file is somebody deciding they want another saved loop.
- */
+// Saved loop designs (<workspace>/.intentic/config/loop-designs.json): human-edited, kept separate from the iteration
+// ledger above so a pump's write never collides with an edit. Unbounded: only a saved design grows it.
 export interface LoopDesignsStore {
     readonly list: () => Promise<LoopDesign[]>;
     readonly get: (id: string) => Promise<LoopDesign | undefined>;
-    // Atomic create-or-update with the caller's intent explicit, a create never overwrites, an update never
-    // invents. The same collision guard a workflow save keeps, and for the same reason: these ids are minted
-    // from names, so two loops called "until tests pass" would collide in the ordinary course of use.
+    // Create or update, intent explicit: create never overwrites, update never invents; name-minted ids can collide.
     readonly save: (design: LoopDesign, create: boolean) => Promise<"saved" | "conflict" | "missing">;
     readonly remove: (id: string) => Promise<boolean>;
 }

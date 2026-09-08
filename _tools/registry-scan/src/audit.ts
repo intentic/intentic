@@ -11,16 +11,9 @@ import {
     resolveSource,
 } from "@intentic/registry";
 
-/* THE SECURITY ADMISSION between a listing pull request and discovery.
- *
- * The nightly scan is intentionally mechanical; this module prepares the separate deterministic and adversarial
- * reviews that may admit executable code. It identifies every newly executable source in the curated diff. A
- * disposable CI job gives that immutable pointer to Trivy, while an intentic gate reads it in its own sandbox;
- * neither runs author code. Passing runs are written back as `securityReview`, and a second check of the
- * resulting commit proves that the evidence and source pointer still agree before branch protection can merge.
- *
- * Registry content is untrusted input. The request therefore says so explicitly and gives repository URLs and
- * paths as JSON data, never as instructions interpolated into the policy. */
+// Prepares the deterministic and adversarial reviews that admit newly executable registry code; neither Trivy's
+// disposable job nor the intentic gate runs author code. Registry content is untrusted: repository URLs and paths go in
+// as JSON data, never as instructions.
 
 type RegistryFileEntry = RegistryFile["plugins"][number];
 const PUBLIC_GIT_HOSTS = new Set(["bitbucket.org", "codeberg.org", "github.com", "gitlab.com"]);
@@ -38,9 +31,8 @@ const entryInstall = (file: RegistryFile, entry: RegistryFileEntry) => resolveSo
 const reviewChanged = (before: RegistrySecurityReview | undefined, after: RegistrySecurityReview | undefined): boolean =>
     JSON.stringify(before) !== JSON.stringify(after);
 
-/* What needs fresh automated checks. Metadata-only edits reuse the review of the same immutable object; a new
- * entry, changed source identity, unblocking, or any edit to the evidence itself gets a new read. The last case stops somebody
- * from manufacturing a convincing run id around code whose source pointer did not move. */
+// What needs fresh checks: a new entry, changed source identity, unblocking, or any edit to the evidence itself;
+// metadata-only edits reuse the existing review, stopping a run id being manufactured around an unmoved source pointer.
 export const securityAuditTargets = (base: RegistryFile, candidate: RegistryFile): SecurityAuditTarget[] => {
     const beforeByName = new Map(base.plugins.map((entry) => [entry.name, entry]));
     const targets: SecurityAuditTarget[] = [];
@@ -76,10 +68,8 @@ export const securityAuditTargets = (base: RegistryFile, candidate: RegistryFile
     return targets.toSorted((a, b) => a.name.localeCompare(b.name));
 };
 
-/* Static failures neither automated reviewer may be asked to wave through. Unchanged stale rows stay disabled
- * by the official registry resolver rather than becoming implicit targets: otherwise a policy bump would select
- * the whole catalogue and deadlock the one-subject rule. Touching one stale row schedules just that source for
- * fresh checks, so a catalogue can be refreshed safely one pull request at a time. */
+// Static failures neither reviewer may wave through. Unchanged stale rows stay disabled rather than becoming implicit
+// targets, or a policy bump would select the whole catalogue and deadlock the one-subject rule.
 export const admissionProblems = (candidate: RegistryFile, targets: readonly SecurityAuditTarget[]): string[] => {
     const problems: string[] =
         targets.length > 1 ? ["change one executable extension source per pull request so each audit has one complete subject"] : [];

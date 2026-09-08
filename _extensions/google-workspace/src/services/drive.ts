@@ -10,7 +10,7 @@ const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
 const FOLDER_TYPE = "application/vnd.google-apps.folder";
 
-// Drive returns nothing but ids unless asked, and asking for `*` is a lot of JSON per file.
+// Drive returns only ids unless asked; `*` would be a lot of JSON per file.
 const FIELDS = "nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink, parents, owners(emailAddress))";
 
 interface DriveFile {
@@ -23,10 +23,8 @@ interface DriveFile {
     readonly owners?: readonly { readonly emailAddress?: string }[];
 }
 
-/* DRIVE'S QUERY LANGUAGE IS NOT SOMETHING TO MAKE ANYONE LEARN. `name contains 'budget' and trashed = false`
- * is what it wants; "budget" is what gets typed. So a bare phrase becomes a full-text search over content and
- * names, and anything that already looks like a query is passed through untouched, which keeps the whole
- * language available to whoever does know it. */
+// Drive's query language isn't something to make anyone learn: a bare phrase becomes a full-text search, and anything
+// that already looks like a query passes through untouched.
 const OPERATORS = /\b(contains|in parents|mimeType|trashed|modifiedTime|starred|sharedWithMe|owners|fullText)\b/;
 
 export const driveQuery = (input: string): string => {
@@ -37,9 +35,8 @@ export const driveQuery = (input: string): string => {
     return `fullText contains '${phrase.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}' and trashed = false`;
 };
 
-/* Exporting a Google-native file means naming the format, and the formats differ per kind, a Doc has no csv,
- * a Sheet has no docx. Getting that wrong answers with a 400 nobody can act on, so the mapping is explicit and
- * an unsupported pair is refused here, by name. */
+// Export format per Google-native kind; a Doc has no csv, a Sheet has no docx, and getting it wrong is a 400 nobody can
+// act on.
 const EXPORTS: Record<string, Record<string, string>> = {
     "application/vnd.google-apps.document": {
         md: "text/markdown",
@@ -158,7 +155,7 @@ const get: Command = {
             : await callBytes(ctx.session, { url: `${API}/files/${encodeURIComponent(id)}`, query: { alt: "media", supportsAllDrives: true } });
         const out = flag(ctx.args, "out");
         if (out === undefined) {
-            // No path given: print it, which is what makes a text file usable without touching the disk.
+            // No path given: print it, so a text file is usable without touching disk.
             ctx.out(data.toString("utf8"));
             return;
         }
@@ -244,8 +241,7 @@ const rm: Command = {
     writes: true,
     run: async (ctx) => {
         const id = positional(ctx.args, 1, "A file id");
-        // Trashed, never deleted: Drive's own delete is permanent and immediate, and nothing an agent does on
-        // someone's behalf should be unrecoverable. The owner empties the bin.
+        // Trashed, never deleted: Drive's own delete is permanent, and nothing here should be unrecoverable.
         await call(ctx.session, {
             method: "PATCH",
             url: `${API}/files/${encodeURIComponent(id)}`,

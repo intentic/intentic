@@ -6,14 +6,8 @@ import { afterEach, expect, test } from "vitest";
 import { workspaceMapNote } from "../src/agent/prompt/workspace-map.js";
 import { mapStats, parseMapNote } from "./map-corpus.js";
 
-/* THE PARSER IS READING A FORMAT NOBODY WROTE DOWN, which is the whole risk in this bench: `workspace-map.ts`
- * renders the note by padding columns to a width computed from the names in it, and a parser written against
- * one example is a parser that breaks the first time the widest name changes. So the fixtures here are RENDERED
- * BY THE RENDERER rather than typed out, and the test asserts the round trip. A change to the note's shape that
- * this file does not survive is a change that would otherwise have made the bench quietly report zeros.
- *
- * The corpus fixtures are hand-written, because the transcript format is somebody else's and the expected
- * answers there are arithmetic rather than a snapshot of whatever the parser happened to do. */
+// Workspace fixtures are produced by workspace-map.ts itself, not hand-typed, so a renderer change that breaks parsing
+// shows here. Corpus fixtures are hand-written; their expected values are arithmetic, not renderer output.
 
 let dir: string | undefined;
 afterEach(() => {
@@ -23,8 +17,7 @@ afterEach(() => {
     }
 });
 
-// A workspace the real renderer will describe: three areas of different sizes, one of them carrying a package
-// manifest so its row gets a purpose line and the others do not.
+// Three areas of different sizes; only `engine` has a package manifest, so only its row gets a purpose line.
 const workspaceOf = (): string => {
     dir = mkdtempSync(join(tmpdir(), "map-corpus-"));
     const root = join(dir, "work");
@@ -46,19 +39,15 @@ test("the note the renderer produces is the note this reads back", () => {
     expect(note).toEqual(expect.stringContaining("## Map of this project"));
 
     const parsed = parseMapNote(`${note ?? ""}\n\nfix the thing please`);
-    /* Biggest first, then alphabetical among equals, which is the renderer's own ranking: `notes` and `site`
-     * hold one file each. `engine/src` is between them because `engine` holds seven of the project's nine
-     * files, so the renderer opens it up, and reading its children as areas of the project is exactly what
-     * this parser has to get right. */
+    // Order mirrors the renderer: biggest first, alphabetical among equals.
     expect(parsed?.areas.map((area) => area.name)).toEqual(["engine", "engine/src", "notes", "site"]);
-    // Sizes come off the same walk the renderer printed, so this is the renderer's own count, not a guess.
     expect(parsed?.areas[0]).toMatchObject({ files: 7, purpose: true, child: false, here: false });
     expect(parsed?.areas[1]).toMatchObject({ name: "engine/src", files: 6, child: true });
-    // A manifest with no description leaves the row without a purpose line rather than inventing one.
+    // No manifest description: no purpose line, rather than inventing one.
     expect(parsed?.areas.filter((area) => area.purpose).map((area) => area.name)).toEqual(["engine"]);
     expect(parsed?.here).toBeUndefined();
     expect(parsed?.truncated).toBe(false);
-    // The user's own message is not part of the note, which is what the char count is a cost of.
+    // chars counts only the note, not the user's message appended after it.
     expect(parsed?.chars).toBe(note?.length);
 });
 
@@ -66,10 +55,6 @@ test("a message with no map reads as a session that was not sent one", () => {
     expect(parseMapNote("just a prompt, no note above it")).toBeUndefined();
 });
 
-/* THE FAILURE THIS PARSER ACTUALLY HAD, and the reason it anchors on the rows rather than the head. The note's
- * opening paragraph has been rewritten twice; a parser keyed to one wording read every note written under the
- * others as a map listing nothing, and a map listing nothing dilutes every share computed from it without
- * anything looking wrong. Both of these are real notes from this workspace's own corpus. */
 test("a note whose wording changed still reads, because the rows did not", () => {
     const older = [
         "## Map of this project",
@@ -88,7 +73,7 @@ test("a note whose wording changed still reads, because the rows did not", () =>
     const parsed = parseMapNote(older);
     expect(parsed?.areas.map((area) => area.name)).toEqual(["intentic", "docs"]);
     expect(parsed?.project).toBe("");
-    // The request underneath is not part of the note, and neither is the blank line before it.
+    // chars excludes the trailing blank line and the request after it.
     expect(parsed?.chars).toBe(older.indexOf("\n\nand now"));
 });
 
@@ -148,15 +133,13 @@ test("scores the opening turn's listings by arm, and the map's lines by whether 
     const stats = mapStats(root, { agentRoot: WORKSPACE_ROOT });
 
     expect(stats.corpus).toMatchObject({ sessions: 2, mapped: 1 });
-    // The mapped session searched instead of listing; the unmapped one listed. That difference is the whole
-    // reading, and it is invisible in the searches: both ran exactly one.
+    // Mapped session searched, unmapped listed; search counts alone don't show the difference.
     expect(stats.opening.mapped.openedWithListing).toBe("0.0%");
     expect(stats.opening.unmapped.openedWithListing).toBe("100.0%");
     expect(stats.opening.mapped.searchesPerOpeningTurn).toBe(1);
     expect(stats.opening.unmapped.searchesPerOpeningTurn).toBe(1);
     expect(stats.opening.mapped.firstActions).toMatchObject({ "bash:rg": "100.0%" });
 
-    // One of the two listed areas was entered, so half the note's lines earned their characters.
     expect(stats.payload).toMatchObject({ sessions: 1, areasListed: 2, areasUsed: 1, linesUsed: "50.0%", firstFileInsideAListedArea: "100.0%" });
     expect(stats.payload.perArea).toEqual([
         { area: "api", listed: 1, used: 1, share: "100.0%" },
@@ -164,9 +147,7 @@ test("scores the opening turn's listings by arm, and the map's lines by whether 
     ]);
 });
 
-/* An area name is relative to the PROJECT the map described, and every path in a transcript is relative to the
- * workspace. A conversation opened inside a repo is where the two come apart, and reading `_editor` against
- * `intentic/_editor` scored every one of those sessions as having gone somewhere the map never mentioned. */
+// Area names are project-relative (`_editor`); transcript paths are workspace-relative (`intentic/_editor`).
 test("an area of a project inside the workspace is matched against workspace-relative paths", () => {
     const note = [
         "## Map of this project",
@@ -205,7 +186,6 @@ test("only the opening turn's calls are scored, since that is the only turn the 
     ]);
     const stats = mapStats(root, { agentRoot: WORKSPACE_ROOT });
     expect(stats.opening.mapped.openedWithListing).toBe("0.0%");
-    // …while coverage still counts where the session went afterwards: an area line is worth its characters if
-    // the session ever gets there.
+    // Coverage (areasUsed) counts all turns, not just the opening one.
     expect(stats.payload.areasUsed).toBe(2);
 });

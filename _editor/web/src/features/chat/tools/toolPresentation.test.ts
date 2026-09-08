@@ -24,8 +24,7 @@ describe(`present: icons`, () => {
     });
 
     it(`lets a per-name presenter override the category icon`, () => {
-        // The subagent tool categorizes as `other` but reads as a delegation. The Claude SDK
-        // names it `Agent`; native backends emit lowercase `task`: both resolve to the delegation icon.
+        // Claude's SDK names it `Agent`; native backends emit lowercase `task`; both resolve to the delegation icon.
         expect(present(tool({ name: `Agent`, category: `other` })).icon).toBe(`users`);
         expect(present(tool({ name: `Task`, category: `other` })).icon).toBe(`users`);
     });
@@ -69,8 +68,8 @@ describe(`present: bodies`, () => {
     });
 
     it(`degrades to plain text when the output is not really a path listing`, () => {
-        // A search tool may return prose or counts depending on the agent's chosen output mode; half-parsing
-        // that into a file list would render rows that go nowhere.
+        // A search tool may return prose or counts, not just paths; half-parsing that would render rows that go
+        // nowhere.
         const text = `No matches found\nTry a broader pattern`;
         expect(present(withText(`Grep`, text)).body).toEqual({ kind: `text`, text });
     });
@@ -219,15 +218,12 @@ describe(`present: diffs`, () => {
     it(`hands the structured diffs through and keeps the card foldable even with no text`, () => {
         const result = present(tool({ name: `Write`, category: `edit`, content: [{ type: `diff`, path: `a.ts`, newText: `hello` }] }));
         expect(result.diffs).toEqual([{ type: `diff`, path: `a.ts`, newText: `hello` }]);
-        // No text body, but the diffs are content: the card must still offer its fold affordance.
         expect(result.body).toBeUndefined();
     });
 });
 
-/* A DOCUMENT IS AN ARTIFACT, NOT AN ACT. A markdown file written whole is the one thing a turn produces that is
- * addressed to the reader, and drawn as a diff stat it was the one thing the transcript would not show. The
- * test the card asks is the contract's (documents.ts), so a document is the same thing on both sides of the
- * wire: what the daemon attaches to a question card is what the write's own card drew. */
+// A document is an artifact, not an act: a whole-file markdown write renders as prose, not a diff stat. Tested
+// to the same contract (documents.ts) as what the daemon attaches to a question card.
 describe(`present: documents`, () => {
     const written = (path: string, markdown: string, over: Partial<TranscriptTool> = {}): TranscriptTool =>
         tool({ name: `Write`, category: `edit`, content: [{ type: `diff`, path, newText: markdown }], ...over });
@@ -235,7 +231,7 @@ describe(`present: documents`, () => {
     it(`draws a markdown file written whole as prose, titled by its heading, and not also as its diff`, () => {
         const result = present(written(`docs/findings.md`, `# Why it is slow\n\nThe poll.`));
         expect(result.document).toMatchObject({ path: `docs/findings.md`, title: `Why it is slow` });
-        // One or the other, never both: the diff of a whole-file write is every line with a plus in front of it.
+        // One or the other, never both: a whole-file write's diff is every line with a plus in front of it.
         expect(result.diffs).toEqual([]);
     });
 

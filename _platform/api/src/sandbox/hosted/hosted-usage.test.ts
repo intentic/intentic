@@ -16,7 +16,7 @@ const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>
         ...over,
     }) as unknown as PrismaClient;
 
-// Fly's answer for one machine read. `updated_at` is the stamp the meter closes a stretch on.
+// Fly's answer for one machine read; updated_at is the stamp the meter closes a stretch on.
 const stubMachine = (state: string, updatedAt?: string) => {
     vi.stubGlobal(`fetch`, () =>
         Promise.resolve(new Response(JSON.stringify({ id: `m1`, state, ...(updatedAt === undefined ? {} : { updated_at: updatedAt }) }))),
@@ -37,10 +37,8 @@ describe(`the hosted hour meter`, () => {
         expect(usageResetsAt(new Date(`2026-12-31T23:59:00.000Z`)).toISOString()).toBe(`2027-01-01T00:00:00.000Z`);
     });
 
-    /* THE OPEN STRETCH COUNTS. A machine awake for 39 hours used to read as 40 left, because only a settled
-     * row was ever read; the ceiling was a cap on stopping, not on hours. The live figure is the row plus
-     * the minutes since each of the owner's machines woke, attributed to the month the stretch STARTED in,
-     * exactly as settling will attribute it. */
+    // The live figure = the settled row plus minutes since each open stretch began, attributed to the month the stretch
+    // started in, same as settling would.
     describe(`the live figure`, () => {
         const now = new Date(`2026-08-13T12:00:00.000Z`);
 
@@ -84,9 +82,7 @@ describe(`the hosted hour meter`, () => {
             expect(budget.remainingMinutes).toBe(2400);
         });
 
-        /* Two ways to be unmetered, and both must answer WITHOUT reading the meter: a member, and a platform
-         * running with no ceiling at all (the self-hosted default). The membership read short-circuits, so a
-         * member never pays a query to be told a limit does not apply to them. */
+        // Membership short-circuits, so a member never pays a query to learn a limit doesn't apply to them.
         it(`exempts a member without reading the meter`, async () => {
             const usage = { findUnique: vi.fn().mockResolvedValue({ minutes: 99_999 }) };
             const prisma = prismaWith({ hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) }, hostedUsage: usage });
@@ -98,8 +94,7 @@ describe(`the hosted hour meter`, () => {
             expect(await hostedBudgetOf(prismaWith({}), config(0), `u1`)).toMatchObject({ metered: false });
         });
 
-        // past_due is not on the plan (hosted-plan's rule): a charge that failed pauses the exemption too,
-        // otherwise a lapsed card would buy unmetered hours for as long as Stripe kept retrying.
+        // past_due isn't on the plan; otherwise a lapsed card would buy unmetered hours while Stripe kept retrying.
         it(`meters an owner whose payment is failing`, async () => {
             const prisma = prismaWith({ hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `past_due` }) } });
             expect(await hostedBudgetOf(prisma, config(), `u1`)).toMatchObject({ metered: true });
@@ -128,9 +123,7 @@ describe(`the hosted hour meter`, () => {
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         });
 
-        /* A running machine's stretch is real but unfinished. Billing it now would either double-count it at
-         * the next settle or need a second stamp to remember it had not, so it is left open, and the daily
-         * sweep closes it once the box has actually stopped. */
+        // Billing now would risk double-counting at the next settle; the daily sweep closes it once actually stopped.
         it(`leaves a running machine's stretch open and bills nothing`, async () => {
             stubMachine(`started`);
             const prisma = prismaWith({});
@@ -151,8 +144,7 @@ describe(`the hosted hour meter`, () => {
             expect(prisma.hostedUsage.upsert).not.toHaveBeenCalled();
         });
 
-        /* A provider we cannot reach is not evidence that anything stopped. Leaving the stretch open costs a
-         * day of accuracy; guessing would charge for time that may never have been used. */
+        // Unreachable isn't evidence anything stopped; guessing would risk billing time that was never used.
         it(`leaves the stretch open when Fly cannot be reached`, async () => {
             vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`network down`)));
             const prisma = prismaWith({});
@@ -161,8 +153,7 @@ describe(`the hosted hour meter`, () => {
             expect(prisma.hostedMachine.update).not.toHaveBeenCalled();
         });
 
-        // A stamp older than the wake (clock skew, a replaced machine) would bill a negative stretch and
-        // silently credit the month. Falling back to now is the latest the stretch could honestly have ended.
+        // A stamp older than the wake (clock skew, a replaced machine) would bill a negative stretch.
         it(`falls back to now rather than billing a stop stamp that precedes the wake`, async () => {
             stubMachine(`stopped`, `2020-01-01T00:00:00.000Z`);
             const prisma = prismaWith({});
@@ -176,8 +167,7 @@ describe(`the hosted hour meter`, () => {
             expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ minutes: 2 }) }));
         });
 
-        // A sub-minute stretch rounds to nothing, and writing a zero-minute row would be a row that says
-        // nothing happened. The stretch still closes: that is what stops it being counted twice later.
+        // Still closes, though: that's what stops the same stretch being counted again later.
         it(`writes no row for a stretch too short to round to a minute, but still closes it`, async () => {
             stubMachine(`stopped`, new Date().toISOString());
             const prisma = prismaWith({});
@@ -187,7 +177,6 @@ describe(`the hosted hour meter`, () => {
         });
     });
 
-    // Opening a stretch also cancels any pending collection: a machine somebody just woke is plainly in use.
     it(`opening a stretch clears the idle warning`, async () => {
         const prisma = prismaWith({});
         await openHostedStretch(prisma, `h1`);

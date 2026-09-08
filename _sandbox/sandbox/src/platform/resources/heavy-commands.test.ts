@@ -12,10 +12,8 @@ const config = (over: Partial<HeavyCommands> = {}): HeavyCommands => HeavyComman
 
 const matched = (command: string, over: Partial<HeavyCommands> = {}): string | undefined => matchHeavyCommand(command, config(over))?.id;
 
-/* THE COMMANDS THE INCIDENT WAS MADE OF. Each of these is a line an agent plausibly runs in a turn, and each
- * fans out past what one 16 GiB cgroup holds when four sessions run one at the same moment. `pnpm test` is
- * the shape the resource log caught on 2026-08-25 (see heavy-commands.ts); the rest are the same fan-out
- * reached by a different spelling, which is exactly why the rules match verbs rather than whole lines. */
+// Commands the incident was made of: each fans out past what a 16 GiB cgroup holds when four sessions run one at once,
+// matched by verb since a different spelling reaches the same fan-out.
 test.each([
     ["pnpm test", "package-script"],
     ["pnpm -w test", "package-script"],
@@ -35,9 +33,7 @@ test.each([
     expect(matched(command)).toBe(id);
 });
 
-/* ...AND THE ONES THAT MUST STAY FREE, which is the half a matcher gets wrong. A queue that also paces `ls`
- * is not a safety feature, it is a sandbox that feels broken: every one of these returns in well under a
- * second, and several of them are what an agent runs dozens of times per turn. */
+// Commands that must stay free: pacing any of these would feel broken, since several run dozens of times per turn.
 test.each([
     "ls -la",
     "git status",
@@ -52,8 +48,7 @@ test.each([
     expect(matched(command)).toBeUndefined();
 });
 
-/* Searching for the NAME of a heavy tool is the false positive that matters, because it is the single most
- * common thing an agent does. Every one of these matches a broad rule's pattern on its face. */
+// Searching for a heavy tool's name is the false positive that matters, since it's the most common thing an agent does.
 test.each([
     "grep -rn vitest .",
     "rg 'pnpm test' --files-with-matches",
@@ -65,7 +60,6 @@ test.each([
 });
 
 test("an exemption covers the line it starts, not a line that merely contains one", () => {
-    // The exempt rule is anchored, so the search half does not buy the suite half a free pass.
     expect(matched("rg -l foo && pnpm test")).toBe("package-script");
     expect(matched("grep -rn vitest .")).toBeUndefined();
 });
@@ -74,16 +68,13 @@ test("a compound line is judged one command at a time", () => {
     expect(commandSegments("rg -l foo && pnpm test")).toEqual(["rg -l foo ", " pnpm test"]);
     expect(commandSegments("a | b; c\nd")).toEqual(["a ", " b", " c", "d"]);
     expect(commandSegments("   ")).toEqual([]);
-    // Every separator that starts a new command has to cut, or a heavy tail hides behind an exempt head.
+    // Every separator that starts a new command must cut, or a heavy tail hides behind an exempt head.
     for (const line of ["grep x && pnpm test", "grep x || pnpm test", "grep x; pnpm test", "grep x | pnpm test", "grep x\npnpm test"]) {
         expect(matched(line)).toBe("package-script");
     }
 });
 
 test("the split is not a shell parser, and a quoted separator over-matches by design", () => {
-    /* Documented rather than fixed: a false positive costs one command a wait, a false negative costs every
-     * session on the box the twenty minutes in the resource log. Asserted so that if someone later teaches
-     * this to parse quotes, the behaviour change is deliberate rather than a surprise. */
     expect(matched(`git commit -m "a; pnpm test"`)).toBe("package-script");
     expect(matched(`git commit -m "add a test"`)).toBeUndefined();
 });
@@ -117,7 +108,6 @@ test("a rule's own pool and limit override the file's, and absent ones inherit",
 });
 
 test("an empty rule list switches the queue off", () => {
-    // The supported way to turn this off without touching the image, so it has to actually match nothing.
     expect(matchHeavyCommand("pnpm test", config({ rules: [] }))).toBeUndefined();
 });
 
@@ -129,8 +119,6 @@ test("a rule whose pattern does not compile is reported and skipped, and the res
             { id: "fine", pattern: "\\bvitest\\b" },
         ],
     });
-    // The point is the SECOND rule: one bad hand-edit must not silently switch the whole queue off, which is
-    // what a throw here would do — the hook swallows errors and would then queue nothing at all.
     expect(matchHeavyCommand("npx vitest run", parsed, (problem) => problems.push(problem.detail))).toEqual({ id: "fine", pool: "heavy", limit: 2 });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("broken");
@@ -141,15 +129,14 @@ test("matching is case-insensitive", () => {
 });
 
 test("only the first MATCH_LIMIT characters are searched", () => {
-    /* A user-authored regex runs inside the daemon's event loop and node has no regex timeout, so the subject
-     * is bounded instead. The cap has to genuinely cut, or it is decoration. */
+    // Bounded since node has no regex timeout for a user-authored pattern; the cap must actually cut, not just exist.
     const padded = `${"x".repeat(MATCH_LIMIT)} pnpm test`;
     expect(matched(padded)).toBeUndefined();
     expect(matched(`pnpm test ${"x".repeat(MATCH_LIMIT)}`)).toBe("package-script");
 });
 
 test("the shipped defaults parse, and describe a bounded queue", () => {
-    // Two, not four: the finding this whole file exists for is that four concurrent fan-outs do not fit.
+    // Two, not four; four concurrent fan-outs do not fit in the box's headroom.
     expect(DEFAULT_HEAVY_COMMANDS.limit).toBe(2);
     expect(DEFAULT_HEAVY_COMMANDS.rules.length).toBeGreaterThan(0);
     expect(DEFAULT_HEAVY_COMMANDS.waitSeconds).toBeGreaterThan(0);

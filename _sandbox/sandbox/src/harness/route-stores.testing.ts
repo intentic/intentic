@@ -7,12 +7,10 @@ import { type MintedStore, type StoredKeyAccount, toMintedAccount } from "../run
 import type { PersonasStore } from "../personas/personas-store.js";
 import type { ThreadSession, ThreadSessionsStore } from "../sessions/thread-sessions.js";
 
-/* The route harness's in-memory stores: one real implementation per persistence seam the routes and the turn
- * read, so a suite can seed state and read back what a route wrote without touching the filesystem. `services`
- * (route-services.testing.ts) composes an empty one of each; a suite that seeds one passes its own. Not part of
- * the build (tsconfig excludes `*.testing.ts`), type-checked with the tests (tsconfig.test.json). */
+// In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
+// state and read back what a route wrote without touching the filesystem. `services` composes an empty one of each.
 
-// An in-memory capabilities store so the capability routes + turn merge are testable without the fs.
+// In-memory capabilities store so the capability routes and turn merge are testable without the fs.
 export const memoryCapabilitiesStore = (initial: Capability[] = []): CapabilitiesStore => {
     let capabilities = [...initial];
     return {
@@ -30,11 +28,8 @@ export const memoryCapabilitiesStore = (initial: Capability[] = []): Capabilitie
     };
 };
 
-/* An in-memory credential vault. In-memory rather than `unstubbed` for the reason the capability store above is:
- * it sits on a path every TURN takes, not just the routes that are about it. An extension setting declared
- * `secret` lives here now, `env` is how such a value reaches the agent's shell, and so composing a turn's
- * environment reads the vault, a fake that threw its own name there failed the agent suites on a seam none of
- * them are testing. */
+// In-memory, not unstubbed, for the same reason as the capability store: it sits on every turn's path, not just the
+// routes about it (a `secret` extension setting reaches the shell's env through here).
 export const memorySecretVault = (initial: Record<string, Record<string, string>> = {}): SecretVault => {
     const rows = new Map(Object.entries(initial));
     return {
@@ -136,9 +131,8 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
     };
 };
 
-// An in-memory thread-session store, so the routes that turn an inbound message into a CONVERSATION (the
-// Front Desk, a listener gateway's dispatch) are testable without the fs. Honours the TTL, because "a quiet
-// thread starts over" is behaviour and not bookkeeping.
+// In-memory thread-session store, so routes turning an inbound message into a conversation are testable without the fs.
+// Honours the TTL: a quiet thread starting over is behaviour, not bookkeeping.
 export const memoryThreadSessionsStore = (): ThreadSessionsStore => {
     const sessions = new Map<string, ThreadSession>();
     const live = (key: string, ttlMs: number, now: number): ThreadSession | undefined => {
@@ -164,17 +158,8 @@ export const memoryThreadSessionsStore = (): ThreadSessionsStore => {
     };
 };
 
-/* One minted provider's store, in memory, starting empty. A REAL implementation of the seam rather than a stub
- * that throws, because the thing a suite most often wants from it is to record a connected plan and then ask
- * what a turn resolves — and a double that refuses the first half forces every such test to hand-build a store,
- * which is how doubles drift from the contract they stand in for.
- *
- * Empty is still the default state, which matters: no guard depends on these providers, so the honest starting
- * point is a sandbox where nobody has signed in.
- *
- * `variant` is required, exactly as it is on the real store: a test that connects an account has to say which
- * estate minted it, because that is what the turn dials.
- */
+// Real implementation, not a throwing stub: a suite usually wants to connect an account and then see what a turn
+// resolves. Starts empty (no guard depends on these providers); `variant` is required, as on the real store.
 export const memoryMintedStore = (providerName: string): MintedStore => {
     let accounts: StoredKeyAccount[] = [];
     const row = (stored: StoredKeyAccount) => toMintedAccount(stored, providerName);

@@ -2,10 +2,10 @@ import { describe, expect, test } from "vitest";
 import { measure, measureFile, measurePython, TEST_FILE, weakened } from "@intentic/constants/assertion-measure";
 import { verifyTestsMessage } from "./agent-tests.js";
 
-/* The measure behind the ratchet (@intentic/constants/assertion-measure) is one copy, read by the push gate and by
- * the built-in below; these are the judgments it has to make, on the shapes the 08-31 sweep produced. */
+// The measure behind the ratchet (@intentic/constants/assertion-measure) is one copy shared by the push gate and this
+// built-in; these are the shapes it must judge correctly.
 const CORPUS = [
-    // The shape the 08-31 sweep produced: exact object equality widened to a partial match plus a fragment.
+    // toEqual widened into toMatchObject plus a separate toContain fragment.
     `test("a", () => {
     expect(result).toEqual({ ok: true, message: "Reached Example, authenticated as ada." });
 });`,
@@ -33,24 +33,20 @@ describe(`what counts as weaker`, () => {
     test(`the toEqual → toMatchObject + toContain move is a downgrade`, () => {
         const before = measure(CORPUS[0] ?? "");
         const after = measure(CORPUS[1] ?? "");
-        // 38 is the length of the one string the exact matcher pins; 3 is "ada".
+        // 38 is the length of the exact matcher's pinned string; 3 is "ada".
         expect(before).toEqual({ exact: 1, loose: 0, chars: 38, tests: 1 });
         expect(after).toEqual({ exact: 0, loose: 2, chars: 3, tests: 1 });
         expect(weakened(before, after)).toBe("downgrade");
     });
 
-    /* THE OPPOSITE MOVE, which the rule read as the same one until it was told to look at the text. `toEqual({})`
-     * is an exact matcher that pins NOTHING — it says the result is empty — so trading it for
-     * `toMatchObject({ permissionDecision: "deny" })` moves a matcher into the loose column and pins a value the
-     * old assertion could not see. The command gate's own suite made exactly that trade while gaining five tests
-     * and 247 characters of expectation, and the push was refused for it. */
+    // toEqual({}) is an exact matcher that pins nothing; trading it for a loose matcher that pins real values is not a
+    // downgrade even though it looks like one.
     test(`a file that ends up pinning more text is not a downgrade`, () => {
         const before = measure(`test("a", () => { expect(out).toEqual({}); });`);
         const after = measure(`test("a", () => { expect(out).toMatchObject({ permissionDecision: "deny" }); });
 test("b", () => { expect(out.logged).toMatchObject([{ outcome: "refused" }]); });`);
         expect(before).toEqual({ exact: 1, loose: 0, chars: 0, tests: 1 });
-        // One exact matcher lost, two loose ones gained: the first two clauses of the rule both hold, and the
-        // eleven characters of "deny" and "refused" are the whole reason this is not a weakening.
+        // One exact matcher lost, two loose gained: the eleven pinned characters are why this isn't a weakening.
         expect(after).toEqual({ exact: 0, loose: 2, chars: 11, tests: 2 });
         expect(weakened(before, after)).toBeUndefined();
     });
@@ -69,11 +65,6 @@ test("b", () => { expect(out.logged).toMatchObject([{ outcome: "refused" }]); })
         expect(weakened(before, after)).toBeUndefined();
     });
 
-    /* WHAT COUNTS AS ASSERTED TEXT, on the literal shapes a test file actually writes: a template composed from
-     * a constant (which this repository requires of every path, see _tools/checks/path-literals.mjs), a regex,
-     * an escaped quote. The template is the one worth stating: `${STATE_DIR}/config/safety.md` asserts the
-     * seventeen characters of path around the interpolation, and reading the whole literal as computed made
-     * every path assertion in the repository read as an assertion about nothing. */
     test(`a template's static runs are asserted text, and its \${…} is not`, () => {
         expect(measure('test("x", () => { expect(p).toBe(`${STATE_DIR}/config/safety.md`); });')).toEqual({
             exact: 1,
@@ -81,14 +72,10 @@ test("b", () => { expect(out.logged).toMatchObject([{ outcome: "refused" }]); })
             chars: `/config/safety.md`.length,
             tests: 1,
         });
-        // 40 characters: 21 of template around `${n}`, 14 of regex source, 5 of a string holding an escaped quote.
+        // 40 characters: 21 from the template, 14 from the regex source, 5 from an escaped quote.
         expect(measure(CORPUS[2] ?? "")).toEqual({ exact: 2, loose: 1, chars: 40, tests: 1 });
     });
 
-    /* AND WHAT IS NOT ASSERTED TEXT: the prose around the assertion. These files are commented line by line and
-     * the prose says "the owner's", so a walker that read that apostrophe as an opening quote ran past the `)`
-     * it was measuring and counted to the end of the file. Editing a comment then moved the number, and landed a
-     * narrowing on a file whose assertions nobody had touched. */
     test(`an apostrophe in a comment is prose, not a string that swallows the file`, () => {
         const commented = `// the owner's own copy
 test("x", () => { expect(t).toBe("ada"); });
@@ -110,8 +97,7 @@ test("y", () => { expect(u).toBe("bob"); });`;
         expect(TEST_FILE.test("a.spec.tsx")).toBe(true);
         expect(TEST_FILE.test("testing.ts")).toBe(false);
         expect(TEST_FILE.test("a.ts")).toBe(false);
-        // pytest's own collection rule, and nothing wider: a project's fixtures and helpers live beside its
-        // tests under names like these, and measuring them would report on files no runner treats as tests.
+        // pytest's own collection rule; fixtures and helpers beside tests use similar names but are not tests.
         expect(TEST_FILE.test("tests/test_api.py")).toBe(true);
         expect(TEST_FILE.test("api_test.py")).toBe(true);
         expect(TEST_FILE.test("conftest.py")).toBe(false);
@@ -120,9 +106,8 @@ test("y", () => { expect(u).toBe("bob"); });`;
     });
 });
 
-/* THE PYTHON ARM OF THE SAME MEASURE. Python asserts with a statement where TypeScript calls a matcher, so the
- * counting is different code answering the same question, and these are the shapes it has to get right for the
- * ratchet's verdict to mean anything on a pytest suite. */
+// The python arm of the same measure: python asserts via statements rather than matcher calls, so counting is separate
+// code answering the same question.
 describe(`the assertion measure, on python`, () => {
     const STRONG = `import pytest
 
@@ -134,8 +119,7 @@ def test_greeting():
 def test_rows():
     assert rows(2) == [{"id": 1}, {"id": 2}]
 `;
-    // The same two tests after the move this whole mechanism exists to catch: an equality becomes a membership,
-    // and an equality becomes a bare truthiness check.
+    // The same two tests after the weakening move: an equality becomes membership, then a bare truthiness check.
     const WEAK = `import pytest
 
 
@@ -166,8 +150,7 @@ def test_rows():
     });
 
     test(`comments and docstrings are not assertions, whatever they contain`, () => {
-        // The failure this is for is the TypeScript half's own: a walker that reads prose as code counts an
-        // apostrophe as a quote and swallows the file. Here the prose holds an assert, an operator and quotes.
+        // The fixture's docstring holds an assert, an operator and quotes, none of them real assertions.
         const source = `# assert this == "not code"
 def test_x():
     """A docstring with == and 'quotes' in it."""
@@ -177,8 +160,6 @@ def test_x():
     });
 
     test(`an assert spanning lines is measured whole, brackets and all`, () => {
-        // The common pytest shape for a real expectation. Reading only its first line would leave the file's
-        // biggest pinned literal uncounted, and a reformat would then read as a narrowing.
         const source = `def test_big():
     assert result == {
         "a": 1,
@@ -189,8 +170,6 @@ def test_x():
     });
 
     test(`a file is measured as the language its name says, so the two versions cannot be read differently`, () => {
-        // The dispatch both readers share. A python file measured by the TypeScript vocabulary reads as zero of
-        // everything, which is the silent-wrong answer this exists to prevent.
         expect(measureFile(STRONG, `tests/test_api.py`)).toEqual(measurePython(STRONG));
         expect(measure(STRONG)).toEqual({ exact: 0, loose: 0, chars: 0, tests: 0 });
         expect(measureFile(CORPUS[0] ?? ``, `a.test.ts`)).toEqual(measure(CORPUS[0] ?? ``));
@@ -201,8 +180,7 @@ describe(`the verify-tests built-in`, () => {
     const STRONG = `test("x", () => { expect(t).toEqual({ a: 1, message: "Reached Example, authenticated as ada." }); });`;
     const WEAK = `test("x", () => { expect(t).toMatchObject({ a: 1 }); expect(t.message).toContain("ada"); });`;
 
-    // A tree with one file at HEAD and one in the working copy, and nothing on disk: git and the reader are the
-    // whole seam, so the test says exactly which version each side sees.
+    // Fake tree: HEAD and working-copy contents live only in these maps; git and `read` are the whole seam.
     const tree = (
         head: Readonly<Record<string, string>>,
         work: Readonly<Record<string, string>>,

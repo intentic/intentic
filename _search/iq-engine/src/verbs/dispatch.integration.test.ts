@@ -29,7 +29,6 @@ test("find: literal/regex content search with ranked, grouped, anchored output",
     expect(outcome.result.total).toBeGreaterThanOrEqual(3);
     expect(outcome.text).toContain("alpha/src/widget.ts");
     expect(outcome.text).toMatch(/════ alpha\/src\/[a-z.]+ \(\d+\) ════/);
-    // Anchors are line-exact.
     const widgetGroup = outcome.result.groups.find((group) => group.path === "alpha/src/widget.ts");
     expect(widgetGroup?.hits.some((hit) => hit.text.includes("export const createWidget"))).toBe(true);
 });
@@ -50,8 +49,7 @@ test("find: a zero-hit prose phrase escalates semantically unless literal intent
     expect(literal.exitCode).toBe(1);
     expect(literal.result.total).toBe(0);
 
-    // Terminal prose punctuation is scanned once rather than matched by an end-anchored repetition. A pasted
-    // run of punctuation stays prose and cannot make zero-hit recovery polynomial in the query length.
+    // Punctuation is scanned once, not end-anchored; a long `!` run cannot make recovery polynomial in query length.
     const emphatic = await engine.run(request({ verb: "find", query: `how are widgets built for the registry${"!".repeat(2_000)}` }));
     expect(emphatic.exitCode).toBe(0);
     expect(emphatic.result.note).toContain("answered semantically");
@@ -80,17 +78,14 @@ test("scope flags narrow search", async () => {
 });
 
 test("the index dir never surfaces; former-secret/.git paths follow the ignore model (no floor)", async () => {
-    // The iq index dir self-excludes in every mode: it must never index or surface itself.
     for (const scope of [{}, { ignored: true }] as const) {
         const indexDir = await engine.run(request({ verb: "find", query: "never be surfaced", scope }));
         expect(indexDir.result.total).toBe(0);
     }
-    // No security floor: a non-gitignore'd secret is indexed and searchable like any other file.
     const secret = await engine.run(request({ verb: "find", query: "fixture-secret-value" }));
     expect(secret.result.groups.map((group) => group.path)).toContain(".env");
     const files = await engine.run(request({ verb: "files", query: "env" }));
     expect(files.result.groups.map((group) => group.path)).toEqual(expect.arrayContaining([".env", ".env.example"]));
-    // `.git` is a junk-ignored dir: content search skips it by default, so the token-bearing config never surfaces.
     expect((await engine.run(request({ verb: "find", query: "token@example.com" }))).result.total).toBe(0);
 });
 
@@ -102,8 +97,6 @@ test("--ignored lifts .gitignore but keeps ranking honest", async () => {
 });
 
 test("the sweep, not ripgrep's own ignore handling: decides what find can match", async () => {
-    // git's repo-local excludes are a source rg reads and the sweep does not. A workspace whose code sits under
-    // such an exclude answered files/ask normally while every find returned zero; the sweep is the authority.
     const alphaExclude = join(root, "alpha/.git/info/exclude");
     await mkdir(dirname(alphaExclude), { recursive: true });
     await writeFile(alphaExclude, "/src/\n");
@@ -115,24 +108,17 @@ test("the sweep, not ripgrep's own ignore handling: decides what find can match"
 test("cursor: truncated result resumes exactly with --after", async () => {
     const first = await engine.run(request({ verb: "find", query: "widget", render: { budget: 120 } }));
     expect(first.result.truncated).toBe(true);
-    // The shape render/cursor.ts documents and the resume below has to be able to decode: an 8-hex spool id
-    // followed by a base36 group offset. "Not undefined" would pass on a cursor from a different encoding
-    // entirely, and the resume would then fail somewhere less obvious than here.
+    // Cursor format is an 8-hex spool id followed by a base36 group offset.
     expect(first.result.cursor).toMatch(/^[0-9a-f]{8}[0-9a-z]+$/);
 
     const next = await engine.run(request({ verb: "find", query: "widget", render: { budget: 4000, after: first.result.cursor! } }));
     expect(next.exitCode).toBe(0);
-    // Pages never overlap.
     const firstPaths = first.result.groups.map((group) => group.path);
     const nextPaths = new Set(next.result.groups.map((group) => group.path));
     expect(firstPaths.filter((path) => nextPaths.has(path))).toEqual([]);
     expect(first.result.total).toBe(next.result.total);
 });
 
-/* A NARROWED search is handed its surviving paths as the scan's arguments rather than the whole tree, so that
- * narrowing makes it faster instead of merely smaller. The optimisation is only sound if it changes nothing
- * about the answer, so that is what this asserts: the scoped run's hits are exactly the unscoped run's hits
- * for the same files. A mistranslated scope would show up here as a missing file or a short group. */
 test("a scoped find answers with exactly the unscoped hits for the files in scope", async () => {
     const scoped = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, scope: { globs: ["alpha/src/*.ts"] } }));
     const unscoped = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 100_000 } }));
@@ -144,23 +130,18 @@ test("a scoped find answers with exactly the unscoped hits for the files in scop
         const same = unscoped.result.groups.find((candidate) => candidate.path === group.path);
         expect(group.hits.map((hit) => hit.line)).toEqual(same?.hits.map((hit) => hit.line));
     }
-    // And it did not quietly drop a file the scope admits: every in-scope file the unscoped run found is here.
     const inScope = unscoped.result.groups.filter((group) => /^alpha\/src\/[^/]+\.ts$/.test(group.path)).map((group) => group.path);
     expect(paths.toSorted()).toEqual(inScope.toSorted());
 });
 
-/* A list caller's first page stops the scan one past the page it asked for, which is the whole latency fix. The
- * page after it re-runs UNCAPPED and slices at the offset, and these two have to agree: the ceilinged page is
- * the path-order prefix of exactly the set the continuation walks, so pages cannot overlap or skip. */
 test("a ceilinged list page and the page after it are one continuous result", async () => {
     const page = { hits: 2, files: 1 };
     const first = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 1500, list: page } }));
     expect(first.result.groups).toHaveLength(1);
     expect(first.result.truncated).toBe(true);
-    // The encoding render/cursor.ts documents: an 8-hex spool id and a base36 group offset.
+    // Cursor format is an 8-hex spool id followed by a base36 group offset.
     expect(first.result.cursor).toMatch(/^[0-9a-f]{8}[0-9a-z]+$/);
-    // The scan stopped early, so the counts beside it are floors and say so through the same flag a per-file
-    // cap sets. A panel renders this as "N+".
+    // Early stop sets `partial`, the same flag a per-file cap uses.
     expect(first.result.partial).toBe(true);
 
     const next = await engine.run(
@@ -169,8 +150,6 @@ test("a ceilinged list page and the page after it are one continuous result", as
     expect(next.result.groups.length).toBeGreaterThan(0);
     const seen = new Set(first.result.groups.map((group) => group.path));
     expect(next.result.groups.filter((group) => seen.has(group.path))).toEqual([]);
-    // The continuation was not ceilinged, so ITS total is the real one, and it is at least what page one could
-    // see. This is the assertion that fails if a ceiling ever leaks onto a continuation.
     expect(next.result.total).toBeGreaterThanOrEqual(first.result.total);
     expect(next.result.partial ?? false).toBe(false);
 });

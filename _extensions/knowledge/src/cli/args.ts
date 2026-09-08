@@ -1,10 +1,6 @@
-/* The `kb` CLI's argument reader. Hand-rolled and tiny, for the same reason the frontmatter parser is: this
- * file ends up inside a bundle that must be self-contained, and the grammar it has to cover is one verb, some
- * positionals and a handful of `--flag value` pairs.
- *
- * REPEATABLE BY DEFAULT, every flag is collected into a list, and the single-value readers take the last one.
- * `--tag colleague --tag math` is a thing the agent will type without being told it can, and a parser that
- * silently kept one of the two would drop half of what it asked for. */
+// Hand-rolled argument reader for the `kb` CLI: one verb, positionals, and `--flag value` pairs, kept tiny since it
+// ends up in a self-contained bundle. Every flag is collected into a list (repeatable); single-value readers take the
+// last.
 
 export interface Args {
     readonly verb: string;
@@ -40,8 +36,7 @@ export const parseArgs = (argv: readonly string[]): Args => {
             continue;
         }
         const next = argv[i + 1];
-        // A value-taking flag at the end of the line, or followed by another flag, is still a flag that was
-        // meant, record it as set-with-nothing rather than swallowing the next flag as its value.
+        // A trailing or flag-followed value-flag is recorded set-with-nothing, not by eating the next flag.
         if (next === undefined || next.startsWith("--")) {
             push(name, "");
             continue;

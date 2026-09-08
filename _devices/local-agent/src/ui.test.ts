@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { asLabel, createUi, estimate, humanDuration, truncate, wrap, type UiProcess } from "./ui.js";
 
-/* The property that makes every other property here safe to have: a PIPE gets the marker stream and nothing
- * else. The desktop app parses those markers into a progress bar (desktop-app/src/desktop.ts) and CI reads
- * them out of a log, so `plain` is a wire contract and the redrawing path must be unreachable from it. */
+// plain is a wire contract: the desktop app parses its markers into a progress bar and CI reads them from a log, so the
+// redrawing path must be unreachable from it.
 
 const fake = (over: Partial<UiProcess> & { readonly env?: Record<string, string | undefined> } = {}) => {
     const stdout: string[] = [];
@@ -24,12 +23,11 @@ describe("mode detection", () => {
     });
 
     it("lets a parent CLI force the mode it spawned this one for", () => {
-        // `ic` sets this when it runs an agent installer inside its own checklist: a second banner and a
-        // second plan in the middle of somebody else's install is the seam this exists to remove.
+        // `ic` sets this to run an installer inside its own checklist, avoiding a second banner and plan mid-install.
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "nested" } }).ui.mode).toBe("nested");
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "plain" } }).ui.mode).toBe("plain");
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_PLAIN: "1" } }).ui.mode).toBe("plain");
-        // A value nobody recognises is not a mode: fall back to asking the terminal.
+        // An unrecognised value isn't a mode: falls back to asking the terminal.
         expect(fake({ stdout: { write: () => {}, isTTY: true }, env: { INTENTIC_UI: "fancy" } }).ui.mode).toBe("rich");
     });
 });
@@ -77,8 +75,7 @@ describe("the plain contract", () => {
         ui.finished("Done.", "https://example.test", "Go back to your browser.", [["stop it", "x stop"]]);
         ui.fail("it broke");
         ui.close();
-        // A substring search rather than a regex: matching a control character in a pattern is itself a lint
-        // error (no-control-regex), and the assertion here is about the ABSENCE of the byte, not its shape.
+        // A substring search, not a regex: matching a control character in a pattern is itself a lint error.
         const ESC = "\u001b";
         expect(out()).not.toContain(ESC);
         expect(err()).not.toContain(ESC);
@@ -195,8 +192,8 @@ describe("durations and estimates", () => {
 
     it("holds the estimate still rather than letting it swing", () => {
         expect(estimate(400, 200, 100)).toBe("2m");
-        // A machine three times slower than the plan expects is quoted at the 3x clamp, so one stalled step
-        // cannot turn a two-minute install into an hour on screen. The same floor applies in reverse.
+        // A machine three times slower than planned is clamped at 3x, so one stalled step can't turn a two-minute
+        // install into an hour; the same floor applies in reverse.
         expect(estimate(400, 100, 6000)).toBe("15m");
         expect(estimate(400, 100, 1)).toBe("3m");
     });

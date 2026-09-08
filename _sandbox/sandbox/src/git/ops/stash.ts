@@ -2,26 +2,14 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { GitChange, StashEntry } from "@intentic/sandbox-contract";
 import { parseNameStatusZ, parseNumstatZ } from "../changes/changes-porcelain.js";
 
-/* THE STASH, work set aside without committing it.
- *
- * A stash entry IS a commit (git builds one, off to the side, and points `refs/stash` at it), which is why this
- * belongs in the history surface rather than beside the working-tree verbs: it has a sha, an author, a subject
- * and a diff, and the graph can draw it exactly like anything else. What it does NOT have is a place in any
- * branch's ancestry, its parents are HEAD and the index at the moment it was made, so it hangs off the graph
- * rather than flowing down it.
- *
- * Nothing in this daemon created stashes before, which is the honest reason the workspace never showed them: an
- * agent or a user typing `git stash` in a terminal had their work vanish from every surface here. */
+// A stash entry is a real commit (sha, author, subject, diff) that `refs/stash` points at, so it belongs on the history
+// graph; its parents are HEAD and the index at the time, so it hangs off the graph rather than any branch's ancestry.
 
 const RS = "\x1e";
 const US = "\x1f";
 
-/* Every stash entry, newest first.
- *
- * `git stash list` with a pretty format rather than `git log refs/stash`, the reflog IS the stash list, and only
- * `stash list` numbers the entries as `stash@{n}`, which is the handle every other verb takes. Fields are US
- * delimited and records RS delimited for the reason commitLog does it: a stash message is free text.
- */
+// Every stash entry, newest first, via `stash list` (not `log refs/stash`): only it numbers entries as `stash@{n}`, the
+// handle every other verb takes. US/RS delimited since a message is free text.
 export const stashList = async (dir: string, git: GitRunner = defaultGit): Promise<StashEntry[]> => {
     const format = `${RS}%gd${US}%H${US}%h${US}%P${US}%at${US}%gs`;
     const out = await git(dir, ["stash", "list", `--pretty=format:${format}`]).catch(() => undefined);
@@ -37,9 +25,8 @@ export const stashList = async (dir: string, git: GitRunner = defaultGit): Promi
         if (ref === undefined || sha === undefined) {
             continue;
         }
-        // `%gs` is the reflog subject: "WIP on main: 1a2b3c subject" for an unnamed stash, or "On main: my
-        // message" for a named one. Both name the branch first, and what follows the colon is what the user
-        // would recognise as the message.
+        // `%gs`, the reflog subject: `WIP on main: <sha> subject` (unnamed) or `On main: message` (named); both name
+        // the branch first.
         const raw = rest.join(US).trim();
         const match = /^(?:WIP on|On) ([^:]+): (.*)$/s.exec(raw);
         entries.push({
@@ -55,15 +42,8 @@ export const stashList = async (dir: string, git: GitRunner = defaultGit): Promi
     return entries;
 };
 
-/* The files one stash entry holds, the same shape, and the same status + numstat pairing, a commit's changed
- * files use, so the graph's detail renders the two identically.
- *
- * `git stash show -u` rather than a diff-tree against `<ref>^`, and that is not a stylistic choice: a stash made
- * with `--include-untracked` keeps those files in a THIRD PARENT commit of its own, outside the tracked-changes
- * tree entirely. Diffing the entry against its first parent therefore reports every untracked file as absent,
- * which is exactly the case the flag exists to cover, so the answer would be wrong for the stashes people most
- * need to look inside. `stash show` knows about all three parents; nothing else does.
- */
+// Same status+numstat shape as a commit's changes. Uses `stash show -u`, not a diff against `<ref>^`: untracked files
+// live in a third parent of their own, which only `stash show` knows to include.
 export const stashChanges = async (dir: string, ref: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
     const [statusOut, statsOut] = await Promise.all([
         git(dir, ["stash", "show", "--include-untracked", "--name-status", "-r", "-z", ref]),
@@ -74,9 +54,8 @@ export const stashChanges = async (dir: string, ref: string, git: GitRunner = de
     return status.map((change) => Object.assign(change, stats.get(change.path)));
 };
 
-// Set the working tree aside. `includeUntracked` also sweeps up files git has never seen, the usual reason a
-// stash "did not stash everything". An empty worktree makes git exit non-zero with nothing stashed, which is a
-// no-op rather than a failure, so the caller is told plainly.
+// Sets the tree aside; `includeUntracked` sweeps up files git has never seen. An empty worktree exits non-zero with
+// nothing to stash — a no-op, reported plainly, not a failure.
 export const stashPush = async (
     dir: string,
     options: { message?: string; includeUntracked?: boolean } = {},
@@ -97,13 +76,8 @@ export const stashPush = async (
     }
 };
 
-/* Put a stash back. `apply` keeps the entry, `pop` drops it on a clean apply, which is git's own distinction and
- * worth preserving rather than picking one: pop is what people mean by "resume this", apply is what they mean by
- * "try this here too".
- *
- * A conflicting apply leaves the worktree with conflict markers AND (for pop) keeps the entry, which is git's
- * behaviour and the right one, the work is not lost. Reported as `ok: false` so the caller can say so.
- */
+// `apply` keeps the entry, `pop` drops it on a clean apply — git's own distinction, kept rather than collapsed. A
+// conflict leaves markers and (for pop) keeps the entry too; reported as `ok: false`, not lost work.
 export const stashApply = async (
     dir: string,
     ref: string,
@@ -118,8 +92,8 @@ export const stashApply = async (
     }
 };
 
-// Discard a stash entry. The one verb here git cannot walk back on its own, the entry's commit becomes
-// unreachable, so the route checkpoints before it runs.
+// Discards an entry; the one verb here git can't walk back (the commit becomes unreachable), so the route checkpoints
+// first.
 export const stashDrop = async (dir: string, ref: string, git: GitRunner = defaultGit): Promise<void> => {
     await git(dir, ["stash", "drop", ref]);
 };

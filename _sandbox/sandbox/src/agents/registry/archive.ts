@@ -6,50 +6,20 @@ import type { AgentsRegistry } from "./agents-registry.js";
 import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
-// ARCHIVING, the board's only exit that isn't a deletion.
-//
-// The Finished lane is the fleet's one terminal state: nothing transitions out of `landed`/`idle`, so without
-// this every agent that ever ran stays on the board forever. And a finished card is not a row, it holds a git
-// worktree, one full checkout PER REPO, for as long as the entry lives. So the lane growing without bound is a
-// disk footprint growing without bound, and any fix that only hid old cards would turn a visible cost into an
-// invisible one.
-//
-// What archiving costs the user is therefore exactly nothing, and that is the point, it is what lets the
-// sweep below run unattended and the UI ask no confirmation:
-//   · whatever the worktree still held is COMMITTED onto agent/<id> first (worktrees.retire)
-//   · every commit, the registry entry, every counter, and the transcript all stay
-//   · only the CHECKOUT is reclaimed, the one part that is pure cache, restorable from the commits
-//   · and the branch moves off refs/heads/ onto the parked shelf (agents/agent-refs.ts), so a fleet's worth of
-//     archived conversations stops being a fleet's worth of branches in every repo. `agent/<id>` still names
-//     the same commits either way, which is why nothing below this file has to know.
-// A follow-up message re-attaches the checkout, unparks the branch and clears the marker (registry.begin +
-// worktrees.ensure), the review still reads from the two refs (agents.routes diff/fileDiff), and `unarchive`
-// puts the card back on the board untouched.
-//
-// Contrast `discard`, which is the destructive one: it drops the branch too, and with it the only record of
-// work that never landed.
+// The board's only non-destructive exit: the Finished lane never transitions out on its own, and each finished card
+// holds a full worktree checkout, so this reclaims that disk. The worktree is committed onto `agent/<id>` first; only
+// the checkout is reclaimed, and the branch parks off refs/heads/ rather than being dropped, unlike `discard`.
 
-/* Is this agent safe to archive UNATTENDED? The guards are about not stranding the user, not about disk, and
- * they are exactly two statuses wide because the SUMMARY status already folds in everything they used to test
- * separately. Reading the summary rather than the persisted entry is what keeps this honest: `conflict` and
- * `ready` are derived per roster now (agents/standing.ts), so an entry-level test could not see them at all,
- * and the sweep would have started filing conflicted and held-work agents away unread.
- *
- * What each excluded status is protecting:
- *   · running/awaiting, the worktree is the live turn's working state (the same guard land/discard take), and
- *     an awaiting turn is holding a question
- *   · conflict, the card is in the Attention lane asking for something; archiving it hides the ask
- *   · ready, a held delta nobody has landed yet: finished, but the user's deliberate land is still owed
- *   · error, a failure nobody has necessarily seen
- *   · interrupted, the same, for a turn the daemon died under: its worktree holds however far it got. This one
- *     is why the status is persisted rather than rehydrating to `idle`: the runtime flags a park raised die
- *     WITH the daemon, so a question-blocked agent used to come back `idle` and not running, passing every
- *     guard here, and eligible to be swept away unread.
- * `idle` with nothing landed is the most archivable case there is: a throwaway agent that produced nothing. */
+// Safe to archive unattended, reading the roster status rather than the persisted entry, since `conflict`/`ready` are
+// derived per roster and invisible there:
+// - running/awaiting: the worktree is live, or a question is pending
+// - conflict: still asking for something in Attention
+// - ready: held work nobody has landed yet
+// - error/interrupted: a failure or a daemon death nobody has seen
 export const archivable = (agent: AgentSummary): boolean => agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle");
 
-// Aged out of the board, per the sandbox's retention setting. Kept separate from `archivable` so the manual
-// "Clear finished" button can archive on demand while the sweep waits, same safety guards, different clock.
+// Aged out per the retention setting; kept separate from `archivable` so the manual Clear button can act immediately
+// while the sweep waits, same guards, different clock.
 export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: number): boolean =>
     retentionMs > 0 && archivable(agent) && now - agent.updatedAt >= retentionMs;
 
@@ -57,21 +27,18 @@ export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
-    // The hard stop for everything a filed-away conversation still runs, its terminals, browsers, processes
-    // (platform/reaper.ts). Archiving already committed whatever the worktree held, so nothing a shell was
-    // mid-writing is owed a grace window; attached viewers included, because the user just closed the card.
+    // Hard stop for everything the conversation still runs (terminals, viewers); archiving already committed its work,
+    // so nothing is owed a grace window.
     readonly reaper?: Pick<ResourceReaper, "reapConversation">;
     readonly purgeConversationState?: (removed: readonly PersistedAgent[], retained: readonly PersistedAgent[]) => Promise<void>;
 }
 
-// How many agents are torn down at once, by the archive's retire, and by the purge's outright removal. Each
-// one spawns a handful of short-lived git processes per repo, so this is a throttle on process pressure, not
-// on the lock: "Clear" on a full lane must not fork a hundred `git status` at once, and past a small number
-// the per-repo worktree-admin lock (worktrees.retire pass 2 / worktrees.remove) is the real ceiling anyway.
+// Throttle on process pressure, not on the lock; past a small number the per-repo worktree lock is the real ceiling
+// anyway.
 const TEARDOWN_CONCURRENCY = 4;
 
-// Run `worker` over [0, count) with at most TEARDOWN_CONCURRENCY in flight, off a shared cursor rather than
-// fixed chunks: a slow agent (a big checkout) holds up only its own worker.
+// Runs `worker` over `[0, count)` with at most `TEARDOWN_CONCURRENCY` in flight, off a shared cursor rather than fixed
+// chunks, so one slow agent only holds up its own slot.
 const pooled = async (count: number, worker: (index: number) => Promise<void>): Promise<void> => {
     let cursor = 0;
     await Promise.all(
@@ -83,20 +50,16 @@ const pooled = async (count: number, worker: (index: number) => Promise<void>): 
     );
 };
 
-/* What an archive actually did, and what it could not do. The FAILURES are half the answer and used to be
- * nowhere: a teardown that threw was warned to the log and dropped from the batch, so the press answered
- * "nothing moved", which the board can only read as "there was nothing to archive". A user looking straight at
- * the card it refused was told it was already gone, with the real reason (a repo that no longer exists, a
- * locked checkout) visible only in the daemon's log. Whatever stopped it, the person who pressed the button is
- * the one who has to hear it. */
+// What an archive did, and what it could not: failures are reported here rather than only logged, since a silent drop
+// reads to the board as `nothing to archive` when a card plainly refused.
 export interface AgentArchiveResult {
-    // Archived, in the order the caller named them: the undo reads better when it lists what the user picked.
+    // In the order the caller named them, so an undo lists what the user picked.
     readonly archived: string[];
     readonly failed: { readonly id: string; readonly reason: string }[];
 }
 
-// The failing teardown's own sentence, for the strip the board raises. Trimmed to one line: git's stderr
-// arrives as a paragraph, and the strip is a sentence wide.
+// The teardown's own failure sentence, for the board's strip; trimmed to one line, since git's stderr is a paragraph
+// and the strip is not.
 const reasonOf = (error: unknown): string => {
     const text = errorMessage(error);
     return (
@@ -107,18 +70,11 @@ const reasonOf = (error: unknown): string => {
     );
 };
 
-// Retire the checkouts, then stamp the marker, in that order, so a failure mid-way leaves an agent that is
-// still ON the board with its worktree intact rather than one the board has forgotten but the disk has not.
-// An agent whose retire throws takes only itself out of the batch; the rest still archive, and it is REPORTED
-// (see AgentArchiveResult) rather than merely logged.
-//
-// The retires overlap: "Clear" on a lane of ten is ten independent teardowns that share nothing but the repo
-// locks their removal pass takes, and running them one after another made the wait scale with the size of the
-// lane. The marker is still ONE write at the end, one persist, one roster broadcast, one repaint.
+// Retires each checkout before stamping the marker, so a mid-way failure leaves the agent on the board, worktree
+// intact. Retires run concurrently; the marker is still one persist and broadcast for the batch.
 export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string[], now: number): Promise<AgentArchiveResult> => {
     const pending = ids.filter((id) => deps.agents.entry(id) !== undefined);
-    // Written by slot, not pushed: the workers finish out of order, and the caller's undo reads better when the
-    // result still lists what the user picked in the order they picked it.
+    // Written by slot, not pushed, so out-of-order workers still leave the result in the order the caller picked.
     const done: (string | undefined)[] = Array.from({ length: pending.length });
     const refused: ({ id: string; reason: string } | undefined)[] = Array.from({ length: pending.length });
     const retire = async (index: number): Promise<void> => {
@@ -127,8 +83,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         if (id === undefined || entry === undefined) {
             return;
         }
-        // A workspace conversation has no checkout or ref to retire. Archiving it is purely the registry
-        // presentation change below, while its transcript and counters remain exactly like an isolated one's.
+        // A workspace conversation has no checkout to retire; archiving it is only the registry's presentation change.
         if (entry.branch === undefined) {
             done[index] = id;
             return;
@@ -145,8 +100,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
     const archived = done.filter((id) => id !== undefined);
     if (archived.length > 0) {
         await deps.agents.setArchived(archived, now);
-        // The marker is down; whatever the conversation still runs goes with it. After the registry write on
-        // purpose, an archive that half-fails must not have killed the shells of agents still on the board.
+        // After the registry write on purpose, so a half-failed archive can't kill shells of agents still on the board.
         for (const id of archived) {
             await deps.reaper?.reapConversation(id, { force: true });
         }
@@ -154,18 +108,8 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
     return { archived, failed: refused.filter((entry) => entry !== undefined) };
 };
 
-/* EMPTY THE ARCHIVE, `discard` applied to everything already filed away, and the fleet's only irreversible
- * bulk action. Where archiving reclaims the checkout and keeps the branch, this drops the branch too (and the
- * conversation dir with it, see worktrees.remove), so the work an agent never landed goes with it.
- *
- * Scoped to the ARCHIVE and nothing else: the archive is the pile of agents the user has already decided are
- * over, which is what makes one confirmation for the whole pile honest. A running agent cannot be in it (a turn
- * un-archives its own agent, registry.begin), but the guard stays because the cost of being wrong here is a
- * live turn's worktree pulled out from under it.
- *
- * An agent whose teardown throws takes only itself out of the batch, exactly as in archiveAgents: the rest are
- * deleted and the caller is told what actually went, so a repo that is momentarily locked leaves one row in the
- * archive rather than failing the press. The registry write is ONE persist and one broadcast at the end. */
+// Empties the archive, `discard` applied to everything filed away, the fleet's only irreversible bulk action; drops the
+// branch too. Scoped to the archive alone, so one confirmation for the whole pile is honest.
 export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> => {
     const targets = deps.agents
         .ids()
@@ -207,8 +151,8 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
     return removed;
 };
 
-// The unattended pass: archive every agent that has sat finished longer than the retention window. Runs at
-// boot and on an interval, `updatedAt` is the clock, so an agent the user keeps talking to never ages out.
+// The unattended pass: archives everything finished longer than the retention window; `updatedAt` is the clock, so
+// ongoing activity never ages out.
 export const sweepAgedAgents = async (deps: AgentArchiveDeps, now: number, retentionMs: number): Promise<string[]> => {
     const aged = deps.agents
         .list()

@@ -8,19 +8,12 @@ import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
 
-/* THE OTHER END OF THE HANDOFF: this page runs INSIDE the desktop app's webview, which has no session yet.
- *
- * Three steps, and the middle one is the whole trick:
- *   1. redeem the row the browser parked (single use: the platform deletes it as it answers)
- *   2. spend the Better Auth one-time token at /api/auth/one-time-token/verify. That endpoint replies with a
- *      Set-Cookie, so THIS webview obtains the platform session through an ordinary HTTP round trip; nothing
- *      is injected from Rust and no cookie is forged.
- *   3. adopt the Google ID token into the same cache a local mint would have filled, so the first daemon call
- *      exchanges it for a daemon session, which renews silently from then on, and is why Google does not
- *      come back every hour.
- *
- * A failure here is always terminal for this link (the row is gone either way), so the retry is "sign in
- * again", not "try this link again". */
+// This page runs inside the desktop app's webview, which starts with no session.
+// 1. Redeem the row the browser parked (single use).
+// 2. Verify the Better Auth one-time token at /api/auth/one-time-token/verify; its Set-Cookie gives this webview a
+//    session over an ordinary HTTP round trip, nothing injected from Rust.
+// 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
+// A failure is terminal for this link; retry means signing in again, not reloading the link.
 
 const route = useRoute();
 const router = useRouter();
@@ -38,8 +31,7 @@ const complete = async (): Promise<void> => {
     }
     try {
         const { ott, idToken } = await apiClient.desktop.redeem({ handoff, verifier });
-        // Better Auth's own endpoint, called directly rather than through the oRPC client: it lives under
-        // /api/auth (not the contract), and what we are after is its Set-Cookie, not its body.
+        // Called directly, not through oRPC: this lives under /api/auth. Only its Set-Cookie matters, not the body.
         const verified = await globalThis.fetch(`${environment.api.url}/api/auth/one-time-token/verify`, {
             method: `POST`,
             headers: { "content-type": `application/json` },

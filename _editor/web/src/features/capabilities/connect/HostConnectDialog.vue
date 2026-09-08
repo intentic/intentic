@@ -7,17 +7,9 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
-/* "Connect this device" for a `host`-kind capability. The counterpart of the browser-profile dialog: that one
- * signs a session in FOR the user, this one hands them a command to run ON the machine they want connected:
- * because the one thing a browser tab cannot do is install something on a device that isn't this one.
- *
- * The dialog is deliberately blunt about what the command does and what the machine will then be allowed to do,
- * since it is the moment a person decides to give an agent hands on their device. The permissions shown are
- * the capability's own config, so the sentence they read here is the same grant the machine will enforce.
- *
- * Once the machine connects, this flips to a confirmation without a refresh: the daemon pushes the socket
- * landing, and the machine coming online is exactly what the user is standing there waiting for. What this
- * dialog builds from the pairing is the one-liner, in the shell the machine actually has. */
+// Connect-this-device dialog for a host-kind capability: a tab can't install anything on another machine, so this
+// hands over a command instead. States the command and the exact permissions the machine will enforce. Flips to a
+// live confirmation once the machine connects, no refresh needed.
 
 const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();

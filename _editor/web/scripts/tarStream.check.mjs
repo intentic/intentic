@@ -1,5 +1,5 @@
-// Runnable, framework-free check for the streaming tar packer (the web app has no test runner).
-// Run: node _editor/web/scripts/tarStream.check.mjs  (Node 24 strips the imported .ts types natively.)
+// Runnable, framework-free check for the streaming tar packer (no test runner in the web app). Run: node
+// _editor/web/scripts/tarStream.check.mjs (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
 import { packTar } from "../src/features/workspace/explorer/transfer/tarStream.ts";
 
@@ -89,10 +89,8 @@ assert.ok(isZero(packed, packed.length - 512) && isZero(packed, packed.length - 
 assert.deepEqual(started, ["a.txt", "dir/b.txt", "empty.txt", longPath]);
 assert.equal(bytes, 14);
 
-// Drift: a File whose declared .size disagrees with what .stream() yields (the backing file changed between the
-// drop scan and the upload: e.g. a rebuilt build artifact). The packer must still emit EXACTLY .size body bytes
-// so framing stays aligned and a trailing entry is never corrupted. `chunks` is what .stream() emits; `errorAtEnd`
-// makes the read throw partway (a replaced/unreadable file).
+// A File whose declared `.size` disagrees with what `.stream()` yields; the packer must still emit exactly `.size`
+// body bytes so framing stays aligned. `errorAtEnd` makes the read throw partway through.
 const enc = new TextEncoder();
 const driftFile = (size, chunks, errorAtEnd = false) => ({
     size,

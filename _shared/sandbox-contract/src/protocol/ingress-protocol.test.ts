@@ -5,29 +5,16 @@ import { type Duplex, duplexPair } from "node:stream";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { openIngressSession, serveIngressSession } from "./ingress-protocol.js";
 
-/* THE WHOLE CHAIN, IN PROCESS, exactly as the two consumers wire it:
- *
- *   node http client ─h1→ FRONT server (the ingress) ─h2 stream→ duplex pair ─h2 session→ DAEMON half ─h1→ TARGET
- *
- * Driven by node's own http client rather than by calling the exported functions with hand-built objects,
- * because every property worth pinning here is a property of the BYTES: that a 4MB body survives, that a
- * response arrives in pieces instead of being buffered whole, that a WebSocket's `Sec-WebSocket-Accept` is the
- * daemon's own and not a recomputation, that a half-close reaches the far end. A fake IncomingMessage proves
- * none of those, and each of them is a way this file can be wrong while type-checking perfectly.
- *
- * The front server IS the shape the ingress uses (request → forwardRequest, upgrade → forwardUpgrade, a 502
- * when either rejects with nothing yet said to the browser), so a regression in the promise contract fails
- * here rather than in the ingress package alone. */
+// Drives the full ingress-to-daemon chain (front server, duplex pair, target) through node's real http client, in
+// process, so streaming, half-close and header identity are pinned as bytes, not shapes.
 
 const listen = async (server: Server): Promise<number> => {
     await new Promise<void>((resolve) => void server.listen(0, "127.0.0.1", resolve));
     return (server.address() as AddressInfo).port;
 };
 
-/* Two halves of a test that have to happen in a fixed ORDER without either measuring time: the gate is opened
- * by the far end observing something, and the near end waits for that rather than for a duration. A gate that
- * is never opened fails as the suite's own hang bound, which is the correct report — "the bytes never arrived"
- * is the failure, and no duration in this file would be measuring anything else. */
+// Coordinates a fixed order between two halves without measuring time: the near end waits on the far end's signal; an
+// unopened gate fails as the suite's own hang timeout.
 const gate = <T = void>(): { readonly open: (value: T) => void; readonly opened: Promise<T> } => {
     let open = (_value: T): void => {};
     const opened = new Promise<T>((resolve) => {
@@ -38,8 +25,8 @@ const gate = <T = void>(): { readonly open: (value: T) => void; readonly opened:
 
 const HOST = "sandbox-0123456789ab.sbx.test";
 
-// What the target saw, as the target's own answer, so the assertions are about a real server's view of the
-// forwarded request rather than about the proxy's bookkeeping.
+// What the target saw, mirrored back as its own response, so assertions read a real server's view rather than the
+// proxy's bookkeeping.
 interface Seen {
     readonly method: string;
     readonly url: string;
@@ -62,14 +49,12 @@ const firstChunk = gate();
 const secondSent = gate();
 const uploadStarted = gate();
 
-// 64KB a write, so a `/flood` response keeps node's write queue non-empty and a reset lands on top of a write
-// that has not completed.
+// 64KB per write, keeping node's write queue non-empty so a reset lands on an unfinished write.
 const FLOOD_CHUNK = Buffer.alloc(64 * 1024, 7);
 
 type Route = (request: IncomingMessage, response: ServerResponse) => void | Promise<void>;
 
-// One entry per property under test, rather than a chain of ifs: the routes are independent, and a reader
-// looking for "what does a cancelled request do" should find one function, not the fifth branch of one.
+// One route per property under test, not a branch of one handler, so each behavior has its own function.
 const routes: Record<string, Route> = {
     "/seen": (request, response) => {
         const seen: Seen = {
@@ -87,8 +72,7 @@ const routes: Record<string, Route> = {
         response.writeHead(200, { "content-type": "application/octet-stream", "x-sha256": digest(bytes) });
         response.end(bytes);
     },
-    // Two writes with the SECOND one held until the client has read the first: a proxy that buffers the whole
-    // response before forwarding it deadlocks here instead of passing.
+    // Second write waits for the client to read the first; a proxy that buffers the whole response deadlocks here.
     "/drip": async (_request, response) => {
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.write("one");
@@ -97,22 +81,20 @@ const routes: Record<string, Route> = {
         response.end();
         secondSent.open();
     },
-    // The mirror image: the request body's first chunk must reach here before the client sends the rest.
+    // Mirror of /drip: the first body chunk must arrive here before the client sends the rest.
     "/slurp": async (request, response) => {
         request.once("data", () => uploadStarted.open());
         const bytes = await bodyOf(request);
         response.writeHead(200, { "content-type": "text/plain" });
         response.end(bytes.toString("utf8"));
     },
-    // Never answered: the test asserts that the BROWSER giving up reaches this far, as a close on a response
-    // this server is still holding — "aborted", never the "ended" of an exchange that completed.
+    // Never answered; asserts a client abort surfaces as "aborted", not the "ended" of a completed exchange.
     "/hangup": (_request, response) => {
         response.writeHead(200, { "content-type": "text/event-stream" });
         response.write("open");
         response.on("close", () => cancelled.open(response.writableEnded ? "ended" : "aborted"));
     },
-    // A response big enough that writes are still pending when the client resets the stream: the interleaving
-    // that the loopback bridge exists to survive.
+    // Large enough that writes are still pending when the client resets mid-stream.
     "/flood": (_request, response) => {
         response.writeHead(200, { "content-type": "application/octet-stream" });
         const pump = (): void => {
@@ -139,9 +121,8 @@ const target = createServer((request: IncomingMessage, response: ServerResponse)
 
 const cancelled = gate<string>();
 
-/* A real HTTP/1.1 upgrade, hand-written because this package depends on no WebSocket library and does not need
- * one: what the protocol has to carry is the 101 head and the bytes after it. `/refuse` answers instead of
- * upgrading, which is the other branch of the daemon's CONNECT handling. */
+// Hand-written HTTP/1.1 upgrade carrying the 101 head plus the raw bytes after it. `/refuse` answers instead of
+// upgrading.
 target.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     if ((request.url ?? "") === "/refuse") {
         socket.end("HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nno dice");
@@ -152,8 +133,7 @@ target.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) =>
             "HTTP/1.1 101 Switching Protocols",
             "Upgrade: websocket",
             "Connection: Upgrade",
-            // Stands in for Sec-WebSocket-Accept: a value only this server can produce, so reading it back
-            // proves the head travelled rather than being reconstructed by the proxy.
+            // A value only this server can produce; proves the head travelled rather than being reconstructed.
             `Sec-WebSocket-Accept: ${digest(Buffer.from(String(request.headers["sec-websocket-key"])))}`,
             `X-Seen-Host: ${String(request.headers.host)}`,
             `X-Seen-Path: ${String(request.url)}`,
@@ -165,12 +145,11 @@ target.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) =>
         socket.write(head);
     }
     socket.on("data", (chunk: Buffer) => void socket.write(Buffer.concat([Buffer.from("echo:"), chunk])));
-    // A FIN from the far end of the whole chain must arrive as a FIN here, or a WebSocket close handshake never
-    // completes.
+    // A far-end FIN must arrive here or the close handshake never completes.
     socket.on("end", () => void socket.end("bye"));
 });
 
-// The ingress's shape: one session, every request routed through it per request.
+// One session; every request is routed through it.
 const front = async (
     targetPort: number,
 ): Promise<{ readonly server: Server; readonly poison: (bytes: Buffer) => void; readonly close: () => void }> => {
@@ -194,8 +173,7 @@ const front = async (
     });
     return {
         server,
-        // Garbage straight onto the wire the edge reads, interleaved with whatever the daemon half is sending:
-        // what a wedged peer or a half-open socket that came back wrong looks like from the ingress's side.
+        // Writes garbage onto the wire the edge reads, simulating a wedged or corrupted peer.
         poison: (bytes: Buffer) => void daemonSide.write(bytes),
         close: () => {
             session.close();
@@ -208,9 +186,8 @@ const front = async (
 let edge: Awaited<ReturnType<typeof front>>;
 let edgePort = 0;
 
-/* Every ERR_INTERNAL_ASSERTION this module can produce arrives as an uncaught exception from inside node, with
- * none of our frames on the stack — so it is caught HERE or not at all, and a test that merely "passed" while
- * the process was dying is exactly the report that hid this the first time. */
+// Node-internal assertion failures surface only as an uncaughtException with none of our frames on the stack; caught
+// here or not at all.
 const uncaught: string[] = [];
 
 beforeAll(async () => {
@@ -245,7 +222,7 @@ const call = (
 test("a request round-trips with its authority, path and method, and no hop-by-hop header crosses", async () => {
     const answer = await call("/seen?q=1", {
         method: "PUT",
-        // The three the browser must not be able to push through a hop, alongside two that must survive it.
+        // Three headers that must not cross a hop, plus two that must survive it.
         headers: { "x-custom": "kept", "x-forwarded-proto": "https", connection: "close", upgrade: "h2c", "keep-alive": "timeout=99" },
         body: Buffer.from("hi"),
     });
@@ -253,16 +230,9 @@ test("a request round-trips with its authority, path and method, and no hop-by-h
     expect(answer.status).toBe(201);
     expect(answer.headers["x-target"]).toBe("yes");
     const seen = JSON.parse(answer.body.toString("utf8")) as Seen;
-    // The Host the browser used is what the daemon's own listener sees — how a preview, a forwarded port and
-    // the daemon itself are told apart inside the container.
     expect(seen).toMatchObject({ method: "PUT", url: "/seen?q=1", host: HOST });
     expect(seen.headerNames).toContain("x-custom");
     expect(seen.headerNames).toContain("x-forwarded-proto");
-    /* Hop-by-hop headers describe ONE hop and are re-derived on each, never forwarded. `connection` is the
-     * assertion that says so by value: the browser sent `close`, and what reaches the target is the `keep-alive`
-     * of the daemon's own loopback hop. Asserting merely that the target sees no `connection` would be asserting
-     * something false — node writes one for its own hop — and would pass just as well if the browser's value had
-     * been forwarded and then overwritten. */
     expect(seen.connection).toBe("keep-alive");
     expect(seen.headerNames).not.toContain("upgrade");
     expect(seen.headerNames).not.toContain("keep-alive");
@@ -274,8 +244,6 @@ test("a multi-megabyte body survives in both directions, byte for byte", async (
     const answer = await call("/echo", { method: "POST", body: payload });
 
     expect(answer.status).toBe(200);
-    // The target's own digest of what it received, and ours of what came back: one assertion per direction,
-    // and neither can pass on a truncated or re-ordered stream.
     expect(answer.headers["x-sha256"]).toBe(digest(payload));
     expect(digest(answer.body)).toBe(digest(payload));
 });
@@ -298,8 +266,6 @@ test("a response is streamed, not buffered: the client reads chunk one before th
     await secondSent.opened;
 
     expect(chunks.join("")).toBe("onetwo");
-    // Two writes, two reads: coalesced into one would mean the proxy held the first until the body was
-    // complete, which is the failure this asserts against.
     expect(chunks.length).toBeGreaterThan(1);
 });
 
@@ -336,8 +302,6 @@ test("an upgrade splices raw bytes, carries the far end's own handshake head, an
     });
 
     expect(upgraded.status).toBe(101);
-    // Computed by the target from the key the browser sent, and therefore proof that the original request
-    // headers reached it through the CONNECT envelope AND that its answer came back verbatim.
     expect(upgraded.headers["sec-websocket-accept"]).toBe(digest(Buffer.from(key)));
     expect(upgraded.headers["x-seen-host"]).toBe(HOST);
     expect(upgraded.headers["x-seen-path"]).toBe("/socket");
@@ -350,7 +314,6 @@ test("an upgrade splices raw bytes, carries the far end's own handshake head, an
         upgraded.socket.on("end", () => resolve(read));
     });
     upgraded.socket.write("abc");
-    // Half-close: the far end must see the FIN, answer on the still-open direction, and then end.
     upgraded.socket.end();
 
     expect(await spliced).toBe("echo:abcbye");
@@ -386,15 +349,10 @@ test("a browser that gives up cancels the stream all the way to the target", asy
     });
     request.destroy();
 
-    // Without the RST_STREAM this asserts, the target keeps generating a response for a browser that is gone,
-    // for as long as the container lives.
     await expect(cancelled.opened).resolves.toBe("aborted");
 });
 
 test("a tunnel whose target is not listening fails the exchange rather than answering for it", async () => {
-    // A port nothing serves: the daemon half cannot reach a listener, so the exchange must fail in a way the
-    // ingress can turn into its own 502 — the body naming the host label is the ingress's to write, not this
-    // module's.
     const dead = createServer();
     const deadPort = await listen(dead);
     await new Promise<void>((resolve) => void dead.close(() => resolve()));
@@ -402,8 +360,7 @@ test("a tunnel whose target is not listening fails the exchange rather than answ
     const [edgeSide, daemonSide] = duplexPair();
     const daemon = await serveIngressSession(daemonSide, { targetPort: deadPort });
     const session = await openIngressSession(edgeSide);
-    // What the ingress needs to be true of the rejection, reported through the answer rather than asserted
-    // inside a catch nothing awaits: it is free to write a status, so nothing was said to the browser first.
+    // True if a status was already written before the rejection handler runs.
     const said = gate<boolean>();
     const server = createServer((request, response) => {
         void session.forwardRequest(request, response).catch(() => {
@@ -429,23 +386,11 @@ test("a tunnel whose target is not listening fails the exchange rather than answ
     server.close();
 });
 
-/* THE REGRESSION THIS MODULE'S TRANSPORT EXISTS FOR. Reset a batch of streams that are mid-write and the h2
- * session emits control frames on top of writes that have not completed — which, run directly over a Duplex,
- * is node's one-write-per-turn JSStreamSocket invariant and an ERR_INTERNAL_ASSERTION out of an internal
- * callback. Measured twice over: the process died, AND the RST_STREAM never went out, so the cancellation
- * never reached the container.
- *
- * Driven entirely through the public API, so it keeps pinning the behaviour however the transport is built. If
- * someone removes the loopback bridge because "http2 takes a Duplex", this is the test that goes red. */
 test("a shutdown landing on top of pending writes neither crashes nor wedges the session", async () => {
     const own = await front((target.address() as AddressInfo).port);
     const ownPort = await listen(own.server);
 
-    /* Eight responses actively writing, each confirmed to be delivering bytes before the shutdown, so node's
-     * write queue is genuinely non-empty when the GOAWAY is produced. All eight stay live on purpose: an
-     * earlier version of this test reset half of them first and passed against the broken transport, because
-     * the resets drained the very pressure the shutdown has to land on top of. (The reset path has its own
-     * test above; what is being pinned here is a control frame written over pending data.) */
+    // All eight stay live: resetting some first would drain the pending-write pressure the shutdown needs to land on.
     const flooding = Array.from({ length: 8 }, () =>
         new Promise<void>((resolve) => {
             const request = h1Request({ host: "127.0.0.1", port: ownPort, path: "/flood", headers: { host: HOST } }, (response) => {
@@ -461,19 +406,12 @@ test("a shutdown landing on top of pending writes neither crashes nor wedges the
     await new Promise((resolve) => setTimeout(resolve, 400));
     own.server.close();
 
-    /* Two ways to fail, and the suite's own budget is the second one. Run straight over a Duplex this hangs:
-     * the shutdown frame cannot be written, so `close()` never completes and the tunnel wedges holding every
-     * stream on it — which is why a hang bound, rather than a duration, is the right report here. */
+    // If the shutdown frame can't be written, this hangs; the suite's timeout is the failure signal, not an assertion.
     expect(uncaught).toStrictEqual([]);
-    // And the neighbours are untouched: the shared fixture's session still serves.
     const after = await call("/seen");
     expect(after.status).toBe(201);
 });
 
-/* CONTAINMENT: one tunnel's session dying must be one tunnel's problem. The ingress holds every sandbox's
- * session in a single process, so a peer that speaks nonsense — a wedged container, a half-open socket that
- * came back as garbage, anything that makes nghttp2 give up — is the failure most likely to be shared, and it
- * must not be. */
 test("a poisoned session dies alone and leaves another tunnel serving", async () => {
     const targetPort = (target.address() as AddressInfo).port;
     const poisoned = await front(targetPort);
@@ -493,15 +431,12 @@ test("a poisoned session dies alone and leaves another tunnel serving", async ()
     expect(await through(poisonedPort)).toBe(201);
     expect(await through(healthyPort)).toBe(201);
 
-    // Not an h2 frame by any reading: the session must fail rather than try to interpret it.
+    // Not a valid h2 preface; the session must fail rather than parse it.
     poisoned.poison(Buffer.from("this is not a PRI * HTTP/2.0 preface, nor anything else nghttp2 accepts"));
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    // The dead session refuses new streams, which the front turns into its 502 — the tunnel is gone, and that
-    // is a routing fact rather than a crash.
     expect(await through(poisonedPort)).toBe(502);
     expect(uncaught).toStrictEqual([]);
-    // The whole point: the other tunnel never noticed.
     expect(await through(healthyPort)).toBe(201);
 
     poisoned.close();

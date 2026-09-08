@@ -21,55 +21,36 @@ import { useFileNesting } from "../workspace/explorer/useFileNesting";
 import { useIconRailSize } from "../../shell/rail/useIconRailSize";
 import { type Skin, useSkin } from "../../skins/useSkin";
 
-/* Appearance: how the workspace looks for this account: the color scheme (data-mode), the one colour the whole app
- * is built out of, file-tree treatment, and which tabs the terminal strip carries. Each recolors/re-renders the whole UI
- * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
- * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
- * SegmentedControl control and the Explorer preview flush in the row's #below. */
+// How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
+// Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
+// since its tree isn't on this page.
 
 const { scheme, set: setScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
-// The review lists' reading. Grouping is also flipped from the Changes panel's own header toggle; the order is
-// asked for here alone (changeWeight.ts) — it is set once, so it does not need a button over every list it moves.
+// Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
 const { groupByModule } = useChangeGrouping();
 const { largestFirst } = useChangeWeight();
-// How much of an agent's working-out a transcript shows, the same preference the chat's own readout row flips,
-// which is where somebody staring at a run mark will reach for it; this is where they'll look to decide it once.
+// How much of an agent's working shows in transcripts; also flipped from the chat's own readout row.
 const { showToolCalls } = useToolCalls();
-// The explorer's two filters, the same preferences the workspace toolbar's funnel flips, which is where someone
-// already staring at node_modules will reach for them; this is where they'll look for them afterwards.
-// diffOpen has no such second home: it decides where a diff OPENS, so a control on the diff itself would look
-// like it did nothing at all. This page is the only place it can be asked for.
+// showIgnored/hideTests mirror the toolbar's filter; diffOpen has no other home, deciding where a diff opens.
 const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, diffOpen, setDiffOpen } = useLayout();
 
-/* Where a diff lands, in the order a reader gives up ground: Monaco's own, then past the import list (reading
- * order intact), then straight to the heaviest block (reading order given up for the meat). The labels say what
- * you get rather than naming the rule, and the hover lines carry the catch, which is only ever about what ends
- * up ABOVE the landing. `Biggest change` rather than any "hotspot" wording on purpose: hotspot elsewhere in the
- * trade means a file that churns over months, and this is one block in one file. */
+// Order a reader gives up ground: top, then past imports, then the biggest changed block.
 const DIFF_OPEN_OPTIONS = [
     { label: `Top`, value: `top`, title: `The first change in the file, imports and all` },
     { label: `Past imports`, value: `imports`, title: `The first change that isn't an import: nothing above it but the import list` },
     { label: `Biggest change`, value: `biggest`, title: `The block with the most changed lines: earlier changes end up above you` },
 ] as const satisfies readonly { label: string; value: DiffOpen; title: string }[];
 
-// SegmentedControl option lists: labels capitalized, values are the raw token strings the composables store.
+// SegmentedControl labels are capitalized; the values are the raw token strings the composables store.
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
 
-/* ── SKINS ────────────────────────────────────────────────────────────────────────────────────────────────
- * A skin is a whole-interface look rather than a colour (src/skins/README.md), and it rides the THEME row
- * alongside the two colour schemes because "which theme am I in" is one question. Asked as two controls it
- * becomes two, and someone ends up sitting in a light scheme with a dark instrument panel drawn over it,
- * looking for the switch that undoes it.
- *
- * So the value is the skin when one is on and the colour scheme otherwise, and picking a scheme drops the
- * skin: one row, one answer, no state you can get into that the row cannot show you.
- *
- * TO REMOVE SKINS ENTIRELY: delete this block and the `useSkin` import, leave `light`/`dark` in the options, and
- * put `:model-value="scheme"` / `@update:model-value="setScheme"` back on the row's control. */
+// A skin rides the Theme row instead of its own control, since two controls could show a light scheme under a dark skin
+// with no way back; picking a scheme drops the skin. To remove skins: delete this block and the useSkin import, keep
+// light/dark, and wire the row back to scheme/setScheme.
 const { skin, setSkin } = useSkin();
 type ThemeChoice = "light" | "dark" | Skin;
 const themeOptions = [
@@ -81,12 +62,11 @@ const themeOptions = [
         title: `The look of intentic.dev: ash stone, a gold rule round every panel, carved and cast plaques, and the site's own type.`,
     },
 ];
-// The row's lead glyph names the look rather than the light level, which is what the row now chooses.
+// Icon names the look, not the light level: what the row now chooses.
 const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, sanctum: `star-fill`, none: `moon` };
 const themeChoice = computed<ThemeChoice>(() => (skin.value === `none` ? scheme.value : skin.value));
 const setThemeChoice = (value: ThemeChoice): void => {
-    // The skin is built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
-    // useSkin flips it, so nothing to do here beyond naming the skin.
+    // useSkin also flips the color scheme, since the skin assumes a near-black canvas PrimeVue keys off.
     if (value !== `light` && value !== `dark`) {
         setSkin(value);
         return;
@@ -99,9 +79,7 @@ const iconRailOptions = [
     { label: `Compact`, value: `compact` as const },
     { label: `Comfortable`, value: `comfortable` as const },
 ];
-// Named for what they do to the reading, not for the percentages behind them (useTextSize owns those): "110%"
-// is the browser control this setting exists to replace, and repeating its number here would invite someone to
-// set both.
+// Labeled by effect, not percentage, so nobody sets this and the browser's 110% zoom together.
 const textSizeOptions = [
     { label: `Compact`, value: `compact` as const },
     { label: `Comfortable`, value: `default` as const, title: `110% — the size the interface was drawn at` },
@@ -129,17 +107,13 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
             </Row>
-            <!-- The colour the rest of the workspace is built out of, beside its title like every other choice
-                 in this group. It used to sit under the row, from when it was two rails and a swatch row and
-                 genuinely too wide to stand beside anything; what is left is one control, and a row of circles
-                 parked on its own line read as a second setting with no name. `wide-control` is what lets it
-                 wrap onto a second line in a narrow pane instead of stretching the row past it. -->
+            <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
             <Row icon="palette" title="Colour" wide-control>
                 <template #control>
                     <ColorPicker :model-value="accent" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
-            <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
+            <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
             <Row icon="expand" title="Text size">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
@@ -192,17 +166,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Changes: how a review reads: its list of files, and where each diff opens. Grouping is here as well
-             as on the panel itself (the Changes header's own toggle writes the same preference), for the same
-             reason the explorer's switches are in both places: this is where someone looks for it once they know
-             it exists. Both apply to the workspace's Changes tab and an agent's review alike. -->
+        <!-- How a review reads: its file list and where each diff opens; grouping mirrors the panel's own toggle. -->
         <RowGroup label="Changes">
             <Row as="label" icon="box" title="Group by module" description="Group files by package in review lists.">
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
-            <!-- The reorder half of "which of these files matters" (composables/workspace/changeWeight.ts). The
-                 other half, the rail beside every row's +/−, is always on and has nothing to switch. Like the
-                 diff landing below, this is the only place it is asked for: it is a reading you settle once. -->
+            <!-- The reorder half of file weighting (changeWeight.ts); the rail beside each row's +/− is always on. -->
             <Row
                 as="label"
                 icon="sort-desc"
@@ -211,8 +180,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             >
                 <template #control><ToggleSwitch v-model="largestFirst" /></template>
             </Row>
-            <!-- Not `as=\"label\"`, unlike the switches around it: a label wrapping three buttons hands every
-                 click on the description to the first of them. -->
+            <!-- Not as="label" like its neighbors: a label wrapping three buttons would route every click to the first. -->
             <Row icon="forward" title="Where a diff opens">
                 <template #control
                     ><SegmentedControl :model-value="diffOpen" :options="DIFF_OPEN_OPTIONS" @update:model-value="setDiffOpen"
@@ -220,20 +188,14 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Chat: how much of an agent's working-out a transcript shows. Off, each turn's run of calls sits
-             behind one mark you can open; on, every call is a row, which is what someone debugging an agent
-             rather than reading its answer wants. Also flipped from the chat itself, for the same reason the
-             explorer's switches are in both places. -->
+        <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
         <RowGroup label="Chat">
             <Row as="label" icon="eye" title="Show tool calls" description="Display individual tool calls in transcript.">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
         </RowGroup>
 
-        <!-- Terminal: what the panel's strip carries. The terminals work runs in are hidden by default (they're
-             evidence about something that ran, not tabs you keep (useWorkTerminals). This is the sticky way
-             back. The same preference is a checked row in the panel's own right-click menu and the
-             work-terminals popover's footer, which is where someone irritated by it will actually reach. -->
+        <!-- Work terminals are hidden by default (evidence, not kept tabs); this toggle is the way back. -->
         <RowGroup label="Terminal">
             <Row as="label" icon="sparkles" title="Work terminals">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>

@@ -1,96 +1,11 @@
 #!/usr/bin/env node
-/* THE PUSH GATE: what CI's verify groups would say about this tree, said before the tree leaves the machine.
- *
- * Two callers, one verdict:
- *
- *   · the `push.starting` rule the app runs when the owner clicks Push (_sandbox/sandbox prepush/prepush.ts), in
- *     a terminal they can watch:             cd intentic && pnpm verify:push
- *     Spelled through pnpm so the heavy-command rules (.intentic/config/heavy-commands.json, `pnpm … verify`)
- *     queue it in the same pool as every other suite; the hook below cannot assume pnpm and calls node directly.
- *   · .githooks/pre-push, for every push git makes from this checkout, whoever or whatever asked for it:
- *                                            node _tools/scripts/verify/verify-push.mjs --hook   (git's ref lines on stdin)
- *
- * WHY. Of the 100 CI pipelines on main before this was written, 55 were red, and the recent reds were not flakes:
- * type errors in @intentic/ui and @intentic/ingress, a test file that did not compile, a Rust crate rustfmt would
- * have reflowed. Every one of them had passed the push check of the day, which ran `pnpm test`, TESTS ONLY, on a
- * tree CI then type-checked first. A test file with a type error runs fine under vitest, which strips types, and
- * fails tsgo, so the gate's blind spot was the exact shape of what kept getting through. Behind it the git hook
- * ran only the invariants that need no install (~70ms), so a push from a terminal, or with the rule switched off,
- * was measured by nothing at all. And nothing anywhere ran rustfmt.
- *
- * The rule is the one every check in _tools/checks states for itself: a defect class visible to the 60-minute job gets a detector
- * in the seconds-long one. Here the detector is the job. verify.yml runs three steps and this runs the same three,
- * unfiltered:
- *
- *     pnpm prepass (the checks, then the declarations emit)    ┐ `pnpm typecheck`
- *     turbo run typecheck --continue=dependencies-successful   ┘
- *     turbo run build test --continue=dependencies-successful
- *
- * Unfiltered on purpose: turbo's cache is the filter. A package whose inputs did not move replays its last result
- * in milliseconds, so a push costs what it changed, and there is no second copy of "which packages does this
- * reach" here to drift from the one CI computes (affected.mjs). `build` is in the set because a push comes from
- * the main checkout, where it works; in a LINKED WORKTREE (an agent branch pushed by hand) `pnpm build` dies
- * EXDEV, so there the third step is the turn-ending check's shape, `turbo run test --only`, and the log says so.
- * Recognized the way the contract-shrink check recognizes it: a checkout whose git dir is not its common dir.
- *
- * TWO CHEAP TIERS FIRST, so a push that is wrong in a way readable from the checkout is refused in a second:
- *   1. the gates that read the checkout and nothing else: every check the manifest lists (_tools/checks/run.mjs:
- *      the lockfile, the test programs, the workflow policy, the byte scan, the invariant registry, the daemon's
- *      module boundaries and the rest, side by side, under two seconds), the assertion ratchet over the range's
- *      test files (assertion-ratchet.mjs: a test file may get stronger by itself and weaker only with a `test!:`
- *      subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep below, and the linter, which
- *      the turn-ending check already holds every agent edit to and which is the one step here that needs
- *      node_modules, so where pnpm is absent it says so and stands down rather than refusing a push over a
- *      linter CI does not run;
- *   2. `cargo fmt --check` on every Rust crate the push touches. ic-check and desktop-check went red on
- *      formatting alone five times in two weeks, and rustfmt is on this image and takes 0.2s. clippy stays in CI:
- *      it needs a compile, and for the desktop crate a webkit this image does not carry.
- *
- * THE MANIFEST AND THE LOCKFILE LEAVE TOGETHER. Nine `fix: lock` commits in two weeks were the same event: an
- * agent's landed work edited a package.json, the daemon's reinstall rewrote pnpm-lock.yaml beside it, and the
- * owner committed the first without the second. The working tree passes every gate here, because the suite reads
- * the tree; CI's checkout fails the lockfile check in the first minute. That is the one place the gap in the
- * last paragraph of this header has a known shape, so it is refused by name: a push whose range commits any of
- * package.json, pnpm-workspace.yaml or pnpm-lock.yaml while the tree holds an uncommitted change to any of them.
- *
- * ONE MEASUREMENT PER TREE. The app's rule runs first, then the daemon pushes, and the hook fires on the same tree
- * a minute later; running the suite twice would double the wait for nothing. So a verdict is recorded against a
- * hash of the working tree it measured (lib/tree-verdict.mjs: `intentic-push-verified` in the common git dir),
- * and the suite is re-run only for a tree that has no passing verdict. `pnpm verify` records one too, from
- * wherever it ran: the daemon runs it on the main tree after every land, so the ordinary push finds a `verify`
- * verdict for exactly this content, skips typecheck and tests, and runs only the build that `verify` cannot
- * (EXDEV in a worktree). An edit anywhere the suite could see invalidates it; an install under node_modules
- * does not, which is what the TTL is for.
- *
- * A RED VERDICT THE OWNER HAS ALREADY SEEN IS LET THROUGH BY THE HOOK, and it says so. The app offers "Push
- * anyway" after a red check, and that is a person deciding with the failure in front of them; a hook that then
- * spent ten minutes re-running the suite to refuse what they just chose would only teach them `--no-verify`. What
- * the hook guarantees is that nothing leaves UNMEASURED. `STRICT` below is the one-word change to refuse instead.
- *
- * A TAG IS A POINTER, NOT WORK. git names every ref on stdin, and a push whose refs are all tags moves a
- * pointer onto commits that are on the remote already: semantic-release pushing `v1.241.0` between prepare and
- * publish, ship-stable.sh force-pushing that tag onto `stable`, rollback-stable.sh moving it back. Measuring
- * one measures the wrong thing, and the v1.241.0 release is what that cost: the hook fired on
- * `refs/tags/v1.241.0 → refs/tags/stable`, took the OLD stable tag as the range's base — the previous release —
- * and handed the assertion ratchet every commit since it, two hundred of them, each already measured when it
- * was pushed. Two test files no single commit had weakened were weaker across that span, so the push was
- * refused, and the release stopped with its GitHub Release created, its images pushed, and `stable` still
- * naming the version before. The same shape would have run typecheck, build and tests inside the publish job.
- * So tag refs are dropped from what leaves, and a push carrying nothing else stands down. What reaches main
- * reaches it through a branch push, which is measured; a tag pushed at commits no branch carries reaches no
- * branch either, and nothing builds or ships from it.
- *
- * WHAT IT MEASURES IS THE WORKING TREE, and CI measures the COMMIT. They differ when the tree holds work that is
- * not in the push: landed agent work the owner has not committed yet, a lockfile an install left beside a
- * committed manifest. The suite here sees the union, so a commit that passes only because of something
- * uncommitted next to it passes here and fails there. That is the one gap this knows about and does not close,
- * and it says how big it is on every run.
- */
+// Push gate: runs the same three steps verify.yml runs (checks, typecheck, build, test) before a push leaves, from both
+// `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first; the full suite runs only if
+// both pass and no cached verdict already covers this tree. Measures the working tree, not always what CI's checkout
+// builds.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-// By file, not by package name, for the reason _tools/checks/lib/repo.mjs gives: the hook runs on a clone that may never have
-// installed, and a bare specifier resolves through node_modules.
 import { repoRoot } from "../../constants/src/node.mjs";
 import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
@@ -100,60 +15,30 @@ import { ago, freshFor, readVerdict, treeHash, writeVerdict } from "../lib/tree-
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
 
-/* GIT'S OWN ENVIRONMENT STOPS HERE, once, for every tier below.
- *
- * A hook is a child of git, and git hands its children the variables that say WHICH REPOSITORY a command acts
- * on — GIT_DIR above all, exported for every push from a linked worktree, and every agent turn runs in one.
- * Those variables outrank the `cwd` a command was given, so they reach past what anything here asked for.
- * Everything this gate runs git with names its directory: this file passes `cwd: root`, meaning THIS checkout,
- * and the checks and tests that build a THROWAWAY repository in a temp dir mean that one. With GIT_DIR in the
- * environment neither gets it. The release-notes check spent a push proving the cost: its scratch `git init`
- * re-initialised the pushing checkout, its two empty commits landed on that branch, its tags collided with the
- * real release tags, and it then refused the push over a `git describe` answer that was about the repository
- * being pushed rather than the repository it built. The tests that stand up real repositories (the stash, the
- * remote and the maintenance suites) inherit the same environment in tier 3.
- *
- * Deleted rather than worked around in each caller: a gate that measures a checkout should be told which one
- * by its own arguments, and nothing it runs has business acting on a repository it did not name. */
+// Clears inherited GIT_* vars (e.g. GIT_DIR in a worktree), overriding `cwd: root` toward the wrong repo.
 for (const variable of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_GRAFT_FILE", "GIT_CEILING_DIRECTORIES", "GIT_INDEX_VERSION"]) {
     delete process.env[variable];
 }
-// Refuse a tree the app's check measured red, instead of letting the owner's "Push anyway" stand.
+// Refuses a tree measured red already, instead of letting `Push anyway` stand.
 const STRICT = false;
-// How much of a failed suite's output is repeated into git's error text when the hook ran it (the terminal case
-// streams everything; this case has no terminal, only the pusher's error message).
+// Lines of a failed suite's output repeated into git's error text; the terminal case streams everything instead.
 const TAIL_LINES = 80;
 const ZERO_SHA = /^0+$/;
 const TAG_REF = /^refs\/tags\//;
 
-/* stderr throughout: git shows a hook's stderr to whoever pushed, and the daemon reads the same stream.
- *
- * THE TWO CHEAP TIERS COLLECT (lib/steps.mjs) AND THE BOUNDARY BETWEEN THEM AND THE SUITE DOES NOT, which is
- * the one place in this repository where stopping early is still the right answer. Inside a tier the steps are
- * independent readers of the same checkout and cost a second between them, so a push that is wrong in four ways
- * should be told about four rather than about the first; whether to then spend TEN MINUTES on typecheck, build
- * and tests for a tree already known to be refused is a different question, and the header's "refused in a
- * second" is the answer this gate was built to give. So: everything each tier found, then the decision. */
+// Reports to stderr, which git shows the pusher; a tier collects its findings, but the run stops between tiers.
 const { say, step, fail, finish } = createSteps("verify-push", root);
-// The refusals that end the run where they stand rather than joining a digest: the ones that are about the
-// PUSH rather than about the tree (an unmeasurable range, a suite that could not start, a verdict replayed).
+// Ends the run immediately, for refusals about the push itself, not the tree (e.g. an unmeasurable range).
 const refuse = (line) => {
     say(line);
     process.exit(1);
 };
 
-// Bound to this checkout once, so the call sites below read as plain git. Shared rather than spelled here for
-// the reason lib/git.mjs opens with: the copy this replaces had no `maxBuffer`, so a `git diff --name-only`
-// over a release-sized range came back as a FAILED command, and the lockstep refusal below then saw no
-// committed paths and stopped firing on exactly the largest pushes.
+// Bound to this checkout, so a large diff isn't misread as a failed git call (lib/git.mjs's larger maxBuffer).
 const git = (...args) => gitIn(root, ...args);
 
-/* ── what is leaving ─────────────────────────────────────────────────────────────────────────────────────────
- * git hands a pre-push hook one line per ref on stdin, `<local ref> <local sha> <remote ref> <remote sha>`: a
- * deletion has an all-zero local sha, a new branch an all-zero remote one, and a tag is the pointer move the
- * header describes, dropped here rather than measured. The rule has no stdin and asks the branch's upstream
- * instead. The range only SCOPES tier 2; the suite is unfiltered, and a range this cannot resolve widens to
- * "every crate", never to "none". */
+// Git's stdin line is `<local ref> <local sha> <remote ref> <remote sha>`; zero sha means deletion or new branch, tag
+// refs are dropped. No stdin asks the branch's upstream; an unresolvable range widens tier 2, never narrows it.
 const pushes = [];
 if (hook) {
     let stdin = "";
@@ -211,23 +96,16 @@ const changedPaths = () => {
     return paths;
 };
 
-// The commit ranges the push carries, `[base, head]` each, or none where a base cannot be resolved (a new branch
-// with no upstream, a remote sha this clone lacks). The ratchet reads committed content, so it has nothing to say
-// about an unresolvable range and says so rather than guessing at one.
+// Commit ranges the push carries as `[base, head]`; omitted where a base can't be resolved, since the ratchet has
+// nothing to say about an unresolvable range.
 const ranges = () =>
     pushes.flatMap(({ local, remote }) => {
         const base = remote === undefined ? undefined : git("merge-base", remote, local)?.trim();
         return base === undefined || base === local ? [] : [[base, local]];
     });
 
-/* Whether the tree's only change to pnpm-lock.yaml is inside `packageManagerDependencies:` — the block pnpm
- * rewrites from every command it runs (lockfile-drift.mjs's header carries the whole account).
- *
- * JUDGED POSITIONALLY, by which LINES the diff touches, and never by what those lines look like. The block's
- * own shape — a name, then `specifier:` and `version:` under it — is the shape of every importer entry in the
- * rest of the file, so a reader that matched on the text would call a real dependency change a rewrite and
- * tell somebody to throw their work away. The line numbers cannot be confused that way: the block is one
- * region of one document, and the diff either lands in it or does not. */
+// Line span of pnpm-lock.yaml's `packageManagerDependencies:` block. Judged by which lines a diff touches, never by
+// their text, since the block's own shape matches every importer entry elsewhere in the file.
 const blockSpan = (text) => {
     const lines = text.split("\n");
     const start = lines.findIndex((line) => /^ {4}packageManagerDependencies:[ \t]*$/.test(line));
@@ -246,8 +124,7 @@ const blockSpan = (text) => {
 };
 
 const lockfileRewriteOnly = () => {
-    // Read rather than assumed: "changed" includes DELETED, and a gate that threw here would crash the push
-    // instead of refusing it.
+    // Read, not assumed missing: a deleted lockfile shouldn't crash the push instead of refusing it.
     const tree = existsSync(join(root, "pnpm-lock.yaml")) ? readFileSync(join(root, "pnpm-lock.yaml"), "utf8") : "";
     const inTree = blockSpan(tree);
     const atHead = blockSpan(git("show", "HEAD:pnpm-lock.yaml") ?? "");
@@ -257,8 +134,7 @@ const lockfileRewriteOnly = () => {
         return false;
     }
     const hunks = [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)];
-    /* A hunk side with a count of 0 is an insertion point rather than a range: git names the line it sits
-     * AFTER, so it counts as inside when either that line or the one following it is. */
+    // A zero-count hunk side is an insertion point (the line git names, or the one after it), not a range.
     const within = ([from, to], at, count) => (count === 0 ? at >= from - 1 && at <= to : at >= from && at + count - 1 <= to);
     return (
         hunks.length > 0 &&
@@ -270,15 +146,8 @@ const lockfileRewriteOnly = () => {
     );
 };
 
-/* ── tier 1: readable from the checkout ────────────────────────────────────────────────────────────────────
- * `--tidy=warn`: WHAT STOPS A PUSH IS WHETHER THE CODE WORKS. The manifest splits the checks by what a failure
- * MEANS (_tools/checks/manifest.mjs), and only `code` refuses here. The measurement that made the split: of 18
- * push attempts in one day, 11 were refused and NINE of those were refused in under five seconds by a tidy
- * check — a ghost directory a landed rename had left, a baseline one count too high after somebody else's
- * deletion, a README link another conversation had broken. Not one of them was caused by the push being
- * refused, none could be fixed by the commits in it, and the agent then sent after the failure was working in a
- * worktree where the ghost was a mount and the failure did not reproduce. Tidy debt is real and is refused in
- * nightly.yml's `tidy` job, which reads one commit and blocks nobody. */
+// `--tidy=warn`: only a `code`-class check failure refuses a push (manifest.mjs splits checks by what failure means);
+// tidiness is enforced in nightly.yml's `tidy` job instead, which blocks nobody.
 step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "--tidy=warn"]);
 {
     const measured = ranges();
@@ -299,13 +168,7 @@ const changed = changedPaths();
     const committed = changed === undefined ? [] : [...changed].filter((path) => LOCKSTEP.test(path));
     const uncommitted = (treeChangedPaths(root) ?? []).filter((path) => LOCKSTEP.test(path));
     if (committed.length > 0 && uncommitted.length > 0) {
-        /* THE ONE CASE WHERE NOBODY MADE THE CHANGE. pnpm rewrites `packageManagerDependencies:` in the
-         * lockfile's first document from EVERY command it runs, not just the install family — so a `pnpm lint`
-         * is enough to dirty the tree, and this refusal then fires over a diff its author never typed. It is
-         * worth naming rather than folding into the sentence below, because the answer is the opposite one: the
-         * others are "commit them together", this one is "throw it away". (Two pnpm versions taking turns over
-         * one checkout is what makes the rewrite churn rather than settle; lockfile-drift.mjs is what now stops
-         * an environment from being on a different one.) */
+        // The one case nobody typed: pnpm rewrites `packageManagerDependencies` from every command it runs.
         const rewriteOnly = uncommitted.length === 1 && uncommitted[0] === "pnpm-lock.yaml" && lockfileRewriteOnly();
         fail(
             "manifest/lockfile lockstep",
@@ -328,9 +191,8 @@ const changed = changedPaths();
     }
 }
 
-/* ── tier 2: rustfmt on the crates this push touches ─────────────────────────────────────────────────────────
- * Discovered, not listed (AGENTS.md: guard invariants by discovery): every Cargo.toml outside the trees no crate
- * lives in. A crate is touched when any changed path sits under its directory. */
+// Crates found by walking for Cargo.toml, not listed by name; a crate counts as touched when any changed path sits
+// under its directory.
 const CRATE_SKIP = new Set(["node_modules", "target", "dist", "generated", ".cache", ".turbo", "out-tsc", ".git"]);
 const crates = (dir, depth) =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -355,13 +217,12 @@ if (touched.length > 0) {
     }
 }
 
-/* Everything both cheap tiers found, and the decision the header describes: a tree refused by a reader that
- * costs a second does not go on to spend ten minutes being refused again. On a clean pair this returns. */
+// Prints everything both tiers found; a tree already refused cheaply doesn't go on to the ten-minute suite.
 finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt");
 
-/* ── tier 3: the three steps verify.yml runs ─────────────────────────────────────────────────────────────── */
+// Tier 3: the three steps verify.yml runs.
 
-// The size of the one gap this gate knows about (header, last paragraph).
+// Reports how many uncommitted paths this measured but the push doesn't carry; CI won't see them.
 const noteUncommitted = () => {
     const count = (treeChangedPaths(root) ?? []).length;
     if (count > 0) {
@@ -372,16 +233,15 @@ const noteUncommitted = () => {
 };
 
 const suite = (buildOnly) => {
-    // INDEXNOW_ENABLED=0 for the reason ci.yml gives: the site build otherwise polls the live site for ~2 min.
-    // VITEST_MAX_WORKERS is what the root `test` script sets and turbo passes through; `turbo run build test`
-    // bypasses that script, so it is set here, and the caller's own value wins.
+    // INDEXNOW_ENABLED=0, or the site build polls the live site. VITEST_MAX_WORKERS mirrors the root `test` script's
+    // default, since `turbo run build test` bypasses that script; the caller's own value still wins.
     const env = { ...process.env, INDEXNOW_ENABLED: "0", VITEST_MAX_WORKERS: process.env.VITEST_MAX_WORKERS ?? "4" };
     const linked = isLinkedWorktree();
     if (linked) {
         say("a linked worktree: `build` cannot run here (EXDEV), so tests run off the prepass dist as the turn-ending check does");
     }
-    /* A `verify` verdict for this exact tree has already answered for typecheck and tests (verify.mjs); what it
-     * could not run is `build`, so that is all this runs, and in a linked worktree not even that. */
+    // A `verify` verdict already covers typecheck and tests; this runs only the build it couldn't, or nothing at all in
+    // a linked worktree.
     const commands = buildOnly
         ? linked
             ? []
@@ -395,9 +255,7 @@ const suite = (buildOnly) => {
     const started = Date.now();
     for (const [label, args] of commands) {
         say(`${label} …`);
-        /* In a terminal the output IS the point and streams through. Under git there is no terminal: the output
-         * becomes the pusher's error text, and the daemon caps what it reads back from git at 16 MiB, so the
-         * hook keeps the stream and repeats only the tail of a failure. */
+        // Streams live in a terminal; under git (no terminal) only the captured tail becomes the pusher's error text.
         const result = spawnSync("pnpm", args, {
             cwd: root,
             env,

@@ -8,41 +8,22 @@ import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
 import { closeHostedStretch } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";
 
-/* COLLECTING THE MACHINES NOBODY CAME BACK TO, the free hosted lane's largest cost and its least useful one.
- *
- * A hosted disk bills every day it exists, awake or asleep, and until this the only thing that ever removed
- * one was a user deleting their sandbox. So a machine someone tried once in spring was still costing money in
- * autumn, and the bill grew with signups forever rather than with use. This sweep is the answer: a machine
- * whose owner is not on the hosted plan and which nobody has opened for `hosted.idleDays` is destroyed, disk and all,
- * one warning email earlier at `hosted.idleWarnDays`.
- *
- * WHAT IS DELETED IS THE MACHINE, NOT THE SANDBOX. The row, the name, the address and the sharing all survive,
- * so coming back after a month means picking a machine again, the wizard's ordinary first screen, rather
- * than finding the workspace itself gone. That is also why the warning is worth sending: the remedy is one
- * click, and it is only free-lane data that was never backed up in the first place (the lane's card says so
- * before anybody chooses it).
- *
- * THREE THINGS IT REFUSES TO TAKE, each because taking it would be a bug rather than a saving:
- *   - a machine on the hosted plan, ever. The plan is the thing being sold; it is not an alarm clock.
- *   - a machine that is RUNNING right now. `lastSeenAt` is stamped by the daemon's boot announce, so a box
- *     that has been up for a month, a long-lived dev server, a job nobody restarted, reads as untouched
- *     while being exactly the opposite. Fly is asked before anything is destroyed, and a live machine is left
- *     alone and re-armed.
- *   - a machine whose owner we could not ask about, because Fly was unreachable. Tomorrow's sweep retries;
- *     a provider we cannot reach is not evidence of anything. */
+// Destroys a hosted machine (disk and all) once its owner hasn't opened it in `hosted.idleDays`, with one warning at
+// `hosted.idleWarnDays`; the sandbox row, name, address and sharing survive, so coming back means picking a new
+// machine, not losing the workspace. Never:
+// - a machine on the hosted plan
+// - a machine Fly reports running (`lastSeenAt` is a boot announce, not a heartbeat)
+// - a machine whose owner we couldn't ask about (Fly unreachable); retried tomorrow
 
-// The states in which a machine is alive and must not be collected. Same set the meter and the wake path use.
-// How long a machine has gone unopened. `lastSeenAt` is the daemon's last boot announce; a machine that has
-// never announced at all is measured from its own creation, which is what catches a provision that failed to
-// come up and was then abandoned, the exact case that leaves a disk billing for nothing.
+// lastSeenAt is the daemon's last boot announcement; a machine that never announced is measured from its own creation,
+// catching a stalled provision that was abandoned.
 const idleSince = (machine: { createdAt: Date; sandbox: { lastSeenAt: Date | null } }): Date => machine.sandbox.lastSeenAt ?? machine.createdAt;
 
 const warnMail = (config: Config, sandboxName: string, days: number) => ({
     subject: `Your intentic machine for "${sandboxName}" will be removed in ${days} days`,
     html: linkEmail({
         heading: `"${sandboxName}" has been sitting idle`,
-        // Says the whole thing: what goes, what stays, what stops it, and the one alternative that makes the
-        // question never come up again. No urgency theatre, the remedy really is to open it.
+        // States what goes, what stays, and the way to avoid this again; opening it is the real fix.
         body: `We run this sandbox's machine for free, and free machines are removed after a few weeks unopened. Open it and nothing happens, the timer resets. If you don't, in ${days} days the machine and the files on it are deleted. The sandbox itself, its name and its address all stay, so you can give it a new machine whenever you like. Running it on a computer of your own keeps everything indefinitely and has no limits at all.`,
         action: `Open the sandbox`,
         link: config.webOrigin,
@@ -50,8 +31,7 @@ const warnMail = (config: Config, sandboxName: string, days: number) => ({
     link: config.webOrigin,
 });
 
-/* What one candidate turned out to be. `dropped` is the case that is not about idleness at all: the provider
- * says the machine does not exist, so the row describes something that already ended. */
+// What one candidate turned out to be; `dropped` means the provider says the machine doesn't exist, not that it's idle.
 type IdleVerdict = "kept" | "warned" | "destroyed" | "dropped";
 
 interface IdleCandidate {
@@ -65,8 +45,8 @@ interface IdleCandidate {
     readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
 }
 
-// One candidate, decided. Split out of the sweep below so the sweep stays a loop with a tally and this stays
-// the whole policy: on the plan, gone, alive, past the axe, or owed its one warning.
+// Decides one candidate: on the plan, gone, alive, past the axe, or owed its one warning. Split from the sweep loop so
+// each stays one job.
 const decideIdleMachine = async (
     prisma: PrismaClient,
     config: Config,
@@ -77,11 +57,7 @@ const decideIdleMachine = async (
     if (await onHostedPlan(prisma, config, machine.sandbox.ownerId)) {
         return `kept`;
     }
-    /* A machine Fly no longer has is not a candidate for collection, it is a row describing something that
-     * already ended, and the row is not harmless: it holds the owner's one hosted slot (hostedOffer counts
-     * rows), so leaving it costs them the free lane entirely. Before this, such a row threw here every night
-     * forever. The SANDBOX still stays, exactly as when this sweep collects a machine itself, so its owner
-     * comes back to the wizard's first screen rather than to nothing. */
+    // A row Fly no longer backs still holds the owner's one hosted slot, so leaving it blocks a replacement.
     const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
         if (!isFlyGone(error)) {
             throw error;
@@ -97,8 +73,7 @@ const decideIdleMachine = async (
         return `dropped`;
     }
     if (LIVE_STATES.has(state.state)) {
-        // Up and working despite a stale announce. Re-arm so it gets a full warning period whenever it does
-        // eventually stop.
+        // Re-arms so a full warning period starts fresh whenever it does eventually stop.
         if (machine.idleWarnedAt !== null) {
             await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: null } });
         }
@@ -109,10 +84,7 @@ const decideIdleMachine = async (
         // is no machine to ask and, a line later, no row to hold the minutes.
         await closeHostedStretch(prisma, machine, machine.sandbox.ownerId, state.updatedAt);
         await destroyHosted(config, machine.appName);
-        // The row goes with the machine, and so does the address that was the machine's (forgetHostedMachine);
-        // the SANDBOX stays, which is what lets its owner give it a new machine without losing the name or who
-        // it is shared with, and what makes coming back land on "pick a machine" rather than on a workspace
-        // reconnecting forever to a box we deleted.
+        // Row and address go with the machine; the sandbox stays, so its owner just picks a new one.
         await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
         logger.warn(
             { app: machine.appName, sandboxId: machine.sandbox.id, idleDays: Math.floor(idleDaysSoFar) },
@@ -123,8 +95,7 @@ const decideIdleMachine = async (
     if (machine.idleWarnedAt !== null) {
         return `kept`;
     }
-    // Mail first, stamp second: a stamp written before a send that then failed would silently consume this
-    // machine's one warning and delete it unannounced a week later.
+    // Mail first, stamp second: a stamp before a failed send would silently burn the one warning.
     await sendMail(config, logger, {
         to: machine.sandbox.owner.email,
         ...warnMail(config, machine.sandbox.name, Math.max(1, Math.ceil(config.hosted.idleDays - idleDaysSoFar))),
@@ -133,9 +104,8 @@ const decideIdleMachine = async (
     return `warned`;
 };
 
-/* One pass. Sequential on purpose, a platform has a handful of these at most, the Fly API is happier for it,
- * and one machine's failure must not cost the rest of the sweep. Every failure is logged and retried tomorrow;
- * nothing here is urgent enough to be worth a partial teardown. */
+// One pass, sequential (a platform has a handful of these, and it's gentler on Fly). One machine's failure is logged
+// and retried tomorrow, never a partial teardown.
 export const reapIdleHosted = async (
     prisma: PrismaClient,
     config: Config,
@@ -147,7 +117,7 @@ export const reapIdleHosted = async (
     }
     const now = Date.now();
     const candidates = await prisma.hostedMachine.findMany({
-        // The warn threshold is the wider net; everything past the destroy threshold is inside it.
+        // The warn threshold is the wider net; everything past the destroy threshold falls inside it too.
         where: { sandbox: { OR: [{ lastSeenAt: { lt: new Date(now - idleWarnDays * DAY_MS) } }, { lastSeenAt: null }] } },
         select: {
             id: true,

@@ -6,10 +6,8 @@ import { describe, expect, it } from "vitest";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import { scopedTarget, type WorkspaceScopeDeps, workspaceRootFor } from "./workspace-scope.js";
 
-/* Whose copy of the workspace a read means: the resolution the three reported failures come down to.
- *
- * On disk rather than mocked, because "is the checkout there" is the question being answered and a stub of the
- * filesystem would answer it by assumption. */
+// Whose copy of the workspace a read means, and the three failures that resolution can produce.
+// Runs on disk, not mocked: whether the checkout exists is the question being answered.
 
 const agent = (over: Partial<PersistedAgent>): PersistedAgent =>
     ({ id: "c-1", provider: "claude", harness: "claude-code", repos: [], status: "idle", updatedAt: 0, ...over }) as PersistedAgent;
@@ -52,16 +50,14 @@ describe("workspaceRootFor", () => {
         expect(await workspaceRootFor(deps, "isolated")).toBe(join(worktrees, "isolated"));
     });
 
-    /* A conversation that works directly in /work is not an error: /work IS its tree. A link produced inside
-     * one carries its id like any other, and refusing it would make every link-producing surface first ask
-     * which mode the conversation runs in. */
+    // Working directly in /work isn't an error: /work IS the conversation's tree, so a link from it needs no mode
+    // check.
     it("sends a shared-workspace conversation back to the shared tree", async () => {
         const { main, deps } = await setup();
         expect(await workspaceRootFor(deps, "shared-mode")).toBe(main);
     });
 
-    // Archiving keeps the work on the branch and drops the checkout, so a link in that conversation is still a
-    // link somebody clicks. It has to read as "these files were cleaned up", never as "no such file".
+    // Archiving drops the checkout but keeps the branch; a stale link must read as "cleaned up", not "no such file".
     it("says so specifically when the checkout is gone rather than reporting a missing file", async () => {
         const { deps } = await setup();
         expect(await codeOf(() => workspaceRootFor(deps, "archived"))).toBe("PRECONDITION_FAILED");
@@ -70,8 +66,6 @@ describe("workspaceRootFor", () => {
     it("refuses an id the registry doesn't know, and one that isn't an id at all", async () => {
         const { deps } = await setup();
         expect(await codeOf(() => workspaceRootFor(deps, "nobody"))).toBe("NOT_FOUND");
-        // The byte routes read this off a query string and it becomes a path segment: the guard is here so no
-        // route can be the one that forgot it.
         expect(await codeOf(() => workspaceRootFor(deps, "../../etc"))).toBe("BAD_REQUEST");
     });
 });
@@ -86,8 +80,6 @@ describe("scopedTarget", () => {
         expect(shared).toBe(false);
     });
 
-    /* The same path exists in both trees with different text, the failure that had no symptom at all: the
-     * reader got the shared version of a file the agent had edited, under the name the agent used. */
     it("prefers the conversation's version over the shared tree's file of the same name", async () => {
         const { main, worktrees, deps } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
@@ -97,8 +89,6 @@ describe("scopedTarget", () => {
         expect(target).toBe(join(worktrees, "isolated", "README.md"));
     });
 
-    // A checkout mirrors the /work layout but is not a superset of it, so falling back is what keeps a scoped
-    // view from turning into a maze of missing files. `shared` is how the reader is told.
     it("falls back to the shared tree for a path the checkout doesn't carry, and reports that it did", async () => {
         const { main, worktrees, deps } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
@@ -120,11 +110,7 @@ describe("scopedTarget", () => {
         expect(await codeOf(() => scopedTarget(deps, "isolated", ".intentic/identity/owner.json"))).toBe("NOT_FOUND");
     });
 
-    /* A SYMLINK OUT OF THE WORKSPACE. `../` is a string the guard can see; a link is not: `work/escape` is
-     * inside /work by every lexical measure while its bytes are somewhere else entirely. That was academic
-     * while the explorer filtered links out of every listing and nothing could name one; it stops being
-     * academic now that the tree lists them, and there is real state one directory up (the capability secret
-     * vault and every agent-provider login live off /work precisely so the file routes cannot reach them). */
+    // A symlink escapes with no `../` in the path; lexically the target looks contained though its bytes are elsewhere.
     it("refuses a path whose bytes are outside the workspace because a symlink leaves it", async () => {
         const { main, deps } = await setup();
         const elsewhere = await mkdtemp(join(tmpdir(), "scope-elsewhere-"));
@@ -142,7 +128,6 @@ describe("scopedTarget", () => {
         await writeFile(join(main, "real", "a.ts"), "export const a = 1;");
         await symlink(join(main, "real"), join(main, "linked"));
 
-        // Resolved through the LINK's path, not the target's: the same file is reachable by both names.
         const { target } = await scopedTarget(deps, undefined, "linked/a.ts");
         expect(target).toBe(join(main, "linked", "a.ts"));
     });

@@ -4,34 +4,16 @@ import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import type { ListeningPort } from "./port-scan.js";
 
-/* WHAT IS ON THIS PORT, SAID IN WORDS: the half the Ports view was missing.
- *
- * The scan answers with evidence: a port, an argv, a working directory, a tmux session. That is everything a
- * person needs to WORK OUT what is listening, and nothing they need to KNOW it. The view rendered the argv
- * verbatim, so `node --report-on-fatalerror --report-directory=/history/logs /opt/sandbox/dist/main.js` was the
- * entire explanation of a port the reader is being invited to publish to the internet, and three of the rows
- * on a stock sandbox were that one process wearing three different port numbers.
- *
- * So every listener gets a NAME, a SENTENCE and an ORIGIN, resolved from the strongest evidence available.
- * It lives in the daemon rather than in the view for the reason `kind` already does: the two facts that
- * actually attribute a port (the panel key → extension index, and the workspace root) exist here and nowhere
- * else, and a second copy of this table in a view would answer differently from the one the desktop mirror and
- * the CLI read.
- *
- * The rules are deliberately evidence-ordered, not source-ordered: a `docker-proxy` is a container's port
- * whichever session dockerd happened to be started from, while a plain `node` is only ever explained by where
- * it was launched. Anything that matches nothing says so plainly: "we don't know" is a better row than a
- * confident guess, because the button beside it publishes the port to the internet.
- */
+// Turns scan evidence (argv, cwd, session) into a name, sentence and origin for each listener. Lives here, not in the
+// view, since the facts that attribute a port (panel key to extension index, workspace root) exist only here.
+// Evidence-ordered, not source-ordered: unmatched says so rather than guessing.
 
-// Which bucket the Ports view files a listener under: `workspace` = something the user (or their agent) runs
-// and might want to preview; `system` = the sandbox's own machinery, listed for transparency below the fold.
+// workspace = something the user or their agent runs and might preview; system = the sandbox's own machinery.
 export type PortKind = "workspace" | "system";
 
-/* WHO PUT IT THERE. Drives the row's icon and how the view phrases the trailing chip, and it is the field a
- * reader is actually asking about when they ask what a port is: "mine", "my agent's", "the box's". */
+// Who put the port there; drives the row's icon and chip wording ("mine", "my agent's", "the box's").
 export type PortOrigin =
-    // A terminal the user opened themselves (a web-* session).
+    // A terminal the user opened (a web-* session).
     | "terminal"
     // An agent's terminal (agent-*) or a job the app ran on their behalf (job-*).
     | "agent"
@@ -47,30 +29,25 @@ export type PortOrigin =
     | "unknown";
 
 export interface PortIdentity {
-    // Two or three words, what a person would call it: "Vite dev server", "Sandbox service", "Container port".
+    // Two or three words a person would call it ("Vite dev server", "Container port").
     readonly title: string;
-    // One sentence: what it does, and, where the evidence says so, who started it. Read straight into the
-    // row's description line, so it is written as UI copy rather than as a log message.
+    // One UI sentence: what it does and, where known, who started it.
     readonly purpose: string;
     readonly origin: PortOrigin;
     readonly kind: PortKind;
 }
 
-// argv0's basename: `/usr/bin/docker-proxy` → `docker-proxy`. The whole command line stays available to the
-// matchers below, because a node process is only ever identified by the SCRIPT it was handed.
+// argv0's basename, e.g. docker-proxy from /usr/bin/docker-proxy; matchers below use the full command line.
 const binaryOf = (command: string | undefined): string => {
     const argv0 = command?.split(" ")[0] ?? "";
     return argv0.slice(argv0.lastIndexOf("/") + 1);
 };
 
-// Where the image installs the daemon and its helper processes. Everything under it is the sandbox itself, no
-// matter that the daemon's own cwd is the workspace root, which is exactly how the daemon used to file itself
-// under the user's own ports and hand the reader a Preview button for the service rendering the page.
+// Where the image installs the daemon and its helpers; everything under it is the sandbox itself.
 const SANDBOX_INSTALL_DIR = "/opt/sandbox/";
 
-/* The sandbox's own runtime, by the one piece of argv that names it. Ordered most specific first: the
- * extension backend host is also a script under the install dir, so it has to be recognised before the
- * catch-all that reads any of them as the daemon. */
+// Ordered most specific first: the extension backend host is also under the install dir, so it must be matched before
+// the catch-all.
 const SANDBOX_SERVICES: readonly { readonly match: (command: string, binary: string) => boolean; readonly identity: Omit<PortIdentity, "kind"> }[] = [
     {
         match: (command) => command.includes(`${SANDBOX_INSTALL_DIR}dist/extensions/backend/`),
@@ -113,7 +90,7 @@ const SANDBOX_SERVICES: readonly { readonly match: (command: string, binary: str
         },
     },
     {
-        // The scan names this one itself, from its fixed 127.0.0.11 bind: no process in this namespace owns it.
+        // Named by the scan itself, from its fixed 127.0.0.11 bind; no process here owns it.
         match: (command) => command === "Docker embedded DNS",
         identity: {
             title: "Container name lookup",
@@ -147,9 +124,8 @@ const SANDBOX_SERVICES: readonly { readonly match: (command: string, binary: str
     },
 ];
 
-/* What a dev server is CALLED, for the many rows whose argv is `node …/node_modules/.bin/<tool>`. Not an
- * attempt at a package registry: it is the short list of things that bind a port in a workspace, and anything
- * missing falls back to its own binary name, which is still a name, just a less friendly one. */
+// Names for argv shaped like node .../node_modules/.bin/<tool>; not a package registry, just enough to cover common dev
+// servers. Anything missing falls back to its own binary name.
 const TOOL_TITLES: readonly { readonly test: RegExp; readonly title: string }[] = [
     { test: /(^|\/)vite(\s|$)/, title: "Vite dev server" },
     { test: /(^|\/)next(\s|$)/, title: "Next.js dev server" },
@@ -170,8 +146,7 @@ const TOOL_TITLES: readonly { readonly test: RegExp; readonly title: string }[] 
     { test: /(^|\/)ollama(\s|$)/, title: "Ollama" },
 ];
 
-// A workspace path said the way the view says it: repo-relative, since everything the user runs lives under
-// the workspace root and repeating it on every row buys nothing.
+// Repo-relative cwd, the way the view shows it; the workspace root prefix buys nothing repeated.
 const relativeCwd = (cwd: string | undefined, workspaceRoot: string): string | undefined => {
     if (cwd === undefined || !cwd.startsWith(`${workspaceRoot}/`)) {
         return undefined;
@@ -179,44 +154,35 @@ const relativeCwd = (cwd: string | undefined, workspaceRoot: string): string | u
     return cwd.slice(workspaceRoot.length + 1);
 };
 
-// "intentic.discord" + "gateway" → "Discord gateway". The manifest carries no display name (identity is
-// publisher.name), so the id's own name half IS the display name, sentence-cased, and a process whose name
-// merely repeats the extension's ("discord" in `intentic.discord`) does not say it twice.
+// The id's name half, sentence-cased, is the display name (no display name in the manifest); a process name repeating
+// it isn't said twice.
 const extensionTitle = (extensionId: string, processName: string): string => {
     const name = extensionId.slice(extensionId.lastIndexOf(".") + 1).replace(/-/g, " ");
     const capitalised = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
     return processName === name ? capitalised : `${capitalised} ${processName.replace(/-/g, " ")}`;
 };
 
-// `-container-port 5432` out of docker-proxy's argv: the ONE fact that makes a published port legible, since
-// the host-side number is already the row's own port and says nothing about what answers on it.
+// The container-side port from docker-proxy's argv; the host-side number is already the row's own port.
 const containerPort = (command: string): string | undefined => /-container-port\s+(\d+)/.exec(command)?.[1];
 
-// The panel key a session name carries, for the sessions the process manager owns (`panel-<key>`).
+// Panel key carried by a panel-<key> session, for sessions the process manager owns.
 const panelKeyOf = (session: string | undefined): string | undefined =>
     session?.startsWith(PANEL_SESSION_PREFIX) === true ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 export interface PortAttribution {
     readonly workspaceRoot: string;
-    /* Service key → the extension process behind it (extensionProcessIndex). Without it an
-     * `ext-intentic-discord-gateway` key cannot be split back into an extension and a process name: the
-     * dashes are ambiguous, and the row would be left calling somebody's gateway "node dist/gateway.js".
-     * An empty map is fine: those rows fall back to the generic extension-service wording. */
+    // Service key to its extension process; without it a key's dashes can't be split back into id and process.
     readonly extensionProcesses: ReadonlyMap<string, { readonly extensionId: string; readonly processName: string }>;
-    /* Port → the supervised service that was assigned it (serviceProcesses.list()). The supervisor's children
-     * descend from the daemon, not from any tmux pane, so a session can never claim them; the assigned PORT
-     * is what does. */
+    // Port to the supervised service assigned it; the daemon-spawned service has no session to claim it by.
     readonly servicePorts: ReadonlyMap<number, string>;
 }
 
-// The tool name, or the bare binary as its own title. Never empty: a listener with no readable argv at all is
-// handled before this is reached.
+// Tool name, or the bare binary as its own title; a listener with no argv is handled earlier.
 const toolTitle = (command: string, binary: string): string =>
     TOOL_TITLES.find(({ test }) => test.test(command))?.title ?? (binary === "" ? "Unnamed process" : binary);
 
-/* Where a listener came from, as a sentence: asked only once the WHAT is settled, so the two never contradict
- * each other. `folder` is the repo-relative cwd where there is one; a dev server's folder is the single most
- * useful thing on the row for somebody with three of them running. */
+// Asked only once the "what" is settled, so the two can't contradict; folder is the repo-relative cwd, the most useful
+// fact when several dev servers run.
 const startedBy = (
     listener: Pick<ListeningPort, "session" | "cwd">,
     folder: string | undefined,
@@ -241,10 +207,8 @@ const startedBy = (
         : { purpose: `Running in ${folder}, outside any terminal this app can show.`, origin: "unknown" };
 };
 
-/* WHAT KIND OF THING IS THIS, for the two groups the view draws. Unchanged in spirit from the classification
- * this replaces: a cwd inside a repo still beats the binary name, so somebody running an agent runtime in
- * their own checkout keeps their row, with the one correction that motivated the rewrite: a process out of
- * the sandbox's install dir is the sandbox's, whatever directory it happens to sit in. */
+// A cwd inside a repo beats the binary name; a process from the sandbox's install dir is always system, wherever its
+// cwd sits.
 const kindOf = (origin: PortOrigin, listener: Pick<ListeningPort, "cwd">, workspaceRoot: string): PortKind => {
     if (origin === "sandbox" || origin === "extension") {
         return "system";
@@ -255,11 +219,8 @@ const kindOf = (origin: PortOrigin, listener: Pick<ListeningPort, "cwd">, worksp
     return "workspace";
 };
 
-/* One listener, named. The order below IS the argument: the sandbox's own processes and a container's
- * published port are recognised from their argv (they can be started from anywhere, and a session tells you
- * nothing true about them), an extension service is recognised from the PORT the supervisor assigned it, a
- * panel from the session the manager started it in, and only what is left over is read off its command and
- * working directory. */
+// Match order is the logic: sandbox processes and container ports go by argv (session says nothing true about them),
+// extension services go by assigned port, panels by session; everything else falls back to command and cwd.
 export const identifyPort = (listener: ListeningPort, attribution: PortAttribution): PortIdentity => {
     const command = listener.command ?? "";
     const binary = binaryOf(listener.command);
@@ -274,8 +235,7 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
         };
     }
 
-    // A user's own checkout beats every table below it: `opencode` run inside a repo is that person's work, not
-    // the sandbox's copy of it, and the same goes for anything else the image happens to ship.
+    // A user's own checkout beats every table below it, even for a binary the image also ships.
     const inRepo = folder !== undefined && folder !== "";
 
     if (!inRepo) {
@@ -285,8 +245,7 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
         }
     }
 
-    // A published container port. Not the sandbox's own (dockerd only provides the plumbing) and not
-    // previewable-by-accident either: the row is one of the few where Preview is genuinely what you want.
+    // Not the sandbox's own port; dockerd only provides the plumbing, the container is the user's to preview.
     if (binary === "docker-proxy") {
         const inside = containerPort(command);
         return {
@@ -300,8 +259,7 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
         };
     }
 
-    // A supervised service's assigned port: the daemon's own child, recognised by the PORT it was handed
-    // rather than by a session it does not have.
+    // Recognized by the assigned port; a supervised service is the daemon's own child, with no session of its own.
     const serviceKey = attribution.servicePorts.get(listener.port);
     if (serviceKey !== undefined) {
         const owner = attribution.extensionProcesses.get(serviceKey);

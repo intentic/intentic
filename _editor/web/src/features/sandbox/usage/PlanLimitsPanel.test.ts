@@ -1,26 +1,19 @@
 // @vitest-environment jsdom
-//
-// jsdom because both subjects are POSITION, where a fact is drawn, which is the one thing a projection test
-// cannot see. The panel's data is pinned next door in usageStatus.test.ts; what is pinned here is the way
-// account headings sit above the pool meters they head:
-//
-//   an account was set exactly like the pool labels underneath it, so a provider holding three accounts drew
-//   nine meters in one column with nothing to say which three belonged to which sign-in.
+// needs jsdom: pins position (data itself is pinned in usageStatus.test.ts), specifically that an account
+// heading sits visually above the pool meters it groups, not styled like one of them.
 import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The panel's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
-// useDevice reads window.matchMedia; environment.ts reads window.env).
+// Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
 const { accountsLoaded, providerAccounts, translatorAccounts, usageByAccount } = await import("../../chat/accounts/providerAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 
-// Three Claude accounts, as this sandbox actually holds them: two named by their own email, one still carrying
-// the provider's default name with an email behind it: the row that identifies nothing on name alone.
+// Mirrors real accounts: some named by email, one still carrying the provider's default name.
 const claudeAccount = (over: Partial<OauthAccount>): OauthAccount => ({
     id: `acc-1`,
     label: `first@example.com`,
@@ -46,16 +39,14 @@ const mount = (accounts: OauthAccount[]): HTMLElement => {
 };
 
 afterEach(() => {
-    // The shared usage map is seeded from the rows above and outlives them; a reading one test left under an
-    // id the next reuses would otherwise outrank that test's own (newest wins).
+    // Shared usage map outlives the rows that seeded it; reset so a reused id doesn't inherit a stale reading.
     usageByAccount.value = {};
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
 });
 
-// The account's own line, found by the name printed on it rather than by position: the tiers are what this
-// file is about, so reading them off a fixed index would assume the answer.
+// Found by name, not position or index, since the tiers themselves are what this file tests.
 const accountLine = (el: HTMLElement, label: string): HTMLElement | undefined =>
     [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim() === label);
 
@@ -64,8 +55,7 @@ it(`sets an account a tier above the pools it heads, so an email cannot read as 
 
     const account = accountLine(el, `first@example.com`);
     const pool = accountLine(el, `5-hour session`);
-    // The app's three-tier scale (chat.css): meta 2xs, body xs, title sm. The pools sit at meta; the account
-    // that heads them has to be a step up, in the reading colour rather than the muted one.
+    // Three-tier scale (chat.css): meta 2xs, body xs, title sm. Pools sit at meta; the heading account is a step up.
     expect(account?.className).toContain(`text-xs`);
     expect(account?.className).toContain(`text-content`);
     expect(pool?.className).toContain(`text-2xs`);
@@ -74,8 +64,7 @@ it(`sets an account a tier above the pools it heads, so an email cannot read as 
 
 it(`names who an account signs in as when its own label does not`, () => {
     const el = mount([claudeAccount({ label: `Claude`, email: `someone@corp.example` })]);
-    // A lone account rides the provider line, which is where its identity has to appear too: the roster is a
-    // click away and the reader is looking at this row.
+    // A lone account's identity appears on the provider line itself, where the reader already is.
     expect(el.textContent).toContain(`Claude · someone@corp.example`);
 });
 
@@ -84,11 +73,8 @@ it(`does not print an identity twice for an account already named by its email`,
     expect(el.textContent?.match(/first@example\.com/g)?.length).toBe(1);
 });
 
-/* ---- the alarm ------------------------------------------------------------------------------------------------
- * The third subject: WHAT THIS SCREEN IS ALLOWED TO SHOUT ABOUT. It used to raise a spent pool, which is the most
- * ordinary event on a fleet, so at the end of a week a 36-account sandbox drew a 32-line alarm saying, one
- * account at a time, exactly what the capacity strip above it says in one sentence. An alarm that is longest when
- * nothing is wrong is one its reader learns to scroll past, taking the dead credential in it along. */
+// the alarm, pins what this screen may shout about: an unrefreshable credential, never a merely spent pool (the
+// ordinary state of a fleet, already counted in capacity).
 
 const spent: AccountUsage = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96, gates: `all` }] };
 
@@ -99,7 +85,7 @@ it(`stays silent about a fleet that is merely spent: the pools reopen on their o
     const el = mount([1, 2, 3, 4, 5].map((n) => claudeAccount({ id: `acc-${n}`, label: `account-${n}@example.com`, usage: spent })));
 
     expect(alarm(el)).toBeUndefined();
-    // Not lost, just not shouted: the capacity strip still counts every one of them and dates the reopen.
+    // Still counted, just not alarmed: the capacity strip already shows this.
     expect(el.textContent).toContain(`0 of 5 accounts have room`);
 });
 
@@ -111,16 +97,15 @@ it(`states the fix once and spends the rest of the section on names`, () => {
     ]);
 
     expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 2`);
-    // Once: the old section repeated this eleven-word instruction on every row it drew.
     expect(el.textContent?.match(/reconnect them on the Agent tab/g)?.length).toBe(1);
-    // And the spent account is not among the named, however full its pool is.
+    // The spent (not expired) account is excluded from the named list.
     const section = alarm(el)?.closest(`div.flex.flex-col`);
     expect(section?.textContent).toContain(`first@example.com`);
     expect(section?.textContent).not.toContain(`third@example.com`);
 });
 
 it(`caps the names rather than growing a column again, and says how many it held back`, async () => {
-    // Zero-padded: unread rows sort by label, so this makes "the last three" the same three a reader would name.
+    // Zero-padded so label sort matches numeric order, keeping "the last three" as expected.
     const el = mount(
         Array.from({ length: 15 }, (_, index) => {
             const name = `account-${String(index).padStart(2, `0`)}@example.com`;
@@ -132,7 +117,6 @@ it(`caps the names rather than growing a column again, and says how many it held
     const more = [...el.querySelectorAll(`button`)].find((button) => /\+3 more/.test(button.textContent ?? ``));
     expect(el.textContent).not.toContain(`account-14@example.com`);
 
-    // A cap, not a ceiling: the rest are one click away, in place.
     more?.click();
     await nextTick();
     expect(el.textContent).toContain(`account-14@example.com`);

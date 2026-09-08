@@ -4,13 +4,9 @@ import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./payment-offer.js";
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
 
-/* The payment gate, driven end to end with a fake endpoint, a fake signer and a fake live turn: what these
- * prove is the ONE property the module exists for: a signature is requested exactly when the owner's
- * policy allowed it AND (outside their standing band) a real click approved it, and every other ending
- * spends nothing and answers with a sentence the agent can act on.
- *
- * The fake endpoint answers 402 with a real v2 challenge first and 200 to the retry that carries payment,
- * which is the actual protocol handshake rather than a stub of it. */
+// Drives the payment gate end to end: a signature is requested only when policy allows it and, outside the auto-approve
+// band, a click approves it; every other path spends nothing.
+// The fake endpoint runs the real x402 handshake: 402 with a challenge, then 200 to the retry carrying payment.
 
 const ADDRESS = "0x857b06519E91e3A54538791bDbb0E22373e36b66";
 const PAY_TO = "0x209693Bc6afc0C5328bA36FaF03C514EF312287C";
@@ -45,8 +41,8 @@ const wallet = (over: Partial<WalletConfig> = {}): WalletConfig => ({
     ...over,
 });
 
-// A ledger in memory with the real store's semantics: open/settle/record, and the same spent-today rule
-// (paid plus in-flight), because the cap arithmetic is exactly what these tests are checking.
+// An in-memory ledger with the real store's semantics: open/settle/record and the same spent-today rule (paid plus
+// in-flight).
 const memoryLedger = (seed: readonly PaymentRow[] = []): WalletLedgerStore & { readonly rows: PaymentRow[] } => {
     const rows: PaymentRow[] = [...seed];
     let next = 0;
@@ -146,10 +142,10 @@ it("pays only after the click, and receipts the endpoint's own settlement", asyn
     expect(answer.status).toBe(200);
     expect(answer.paidUsd).toBe("0.10");
     expect(answer.transaction).toBe("0xdeadbeef");
-    // The unpaid probe went first, then exactly one retry carrying the payment header.
+    // The unpaid probe goes first, then exactly one retry carrying the payment header.
     expect(paidHeaders).toEqual([null, expect.any(String)]);
     expect(signed).toHaveLength(1);
-    // Every number on the card is the CHALLENGE's, and the agent's contribution is the one `why` line.
+    // Every number on the card comes from the challenge; the agent's only contribution is the `why` line.
     expect(frames[0]).toMatchObject({
         kind: "payment_offer",
         offer: { amountUsd: "0.10", payTo: PAY_TO, network: "eip155:8453", dailyCapUsd: "5.00", why: "the free tier has no intraday data" },
@@ -190,7 +186,7 @@ it("refuses a price over the per-payment ceiling without even raising a card", a
 it("refuses when the day's cap is already committed, counting in-flight payments", async () => {
     const ledger = memoryLedger([
         { id: "old", at: Date.now(), url: "https://x", host: "x", payTo: PAY_TO, network: "eip155:8453", amountUsd: "4.50", outcome: "paid" },
-        // A pending row is money whose fate is unknown: it holds against the cap, conservatively.
+        // A pending row holds against the cap conservatively: its fate is still unknown.
         { id: "flight", at: Date.now(), url: "https://y", host: "y", payTo: PAY_TO, network: "eip155:8453", amountUsd: "0.45", outcome: "pending" },
     ]);
     const { deps, signed, frames } = fake({ ledger });
@@ -214,19 +210,16 @@ it("pays without a card inside the owner's auto-approve band", async () => {
     const answer = await gatedPaidFetch(deps, asked());
     expect(answer.status).toBe(200);
     expect(signed).toHaveLength(1);
-    // No card, and therefore no card frames: the owner's standing delegation covered it.
     expect(frames).toEqual([]);
 });
 
 it("suspends the auto-approve band on a turn that has read outside content", async () => {
-    // The delegation covers the AGENT's judgment about small payments; a fetched page is what replaces that
-    // judgment, so the same payment that would have gone through silently now asks in chat instead.
+    // The delegation covers the agent's own judgment; content read from outside replaces that judgment.
     const { deps, frames, signed } = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "0.25" }), tainted: () => true });
     const pending = gatedPaidFetch(deps, asked());
     await answerCard(frames, true);
     expect((await pending).status).toBe(200);
     expect(signed).toHaveLength(1);
-    // It asked (the whole point) rather than refusing or paying silently.
     expect(frames[0]).toMatchObject({ kind: "payment_offer" });
 });
 
@@ -287,7 +280,6 @@ it("refuses when the platform declines to sign, without retrying the endpoint", 
     const answer = await pending;
     expect(answer.status).toBe(403);
     expect(answer.body).toContain("declined to sign");
-    // Only the unpaid probe ever went out.
     expect(paidHeaders).toEqual([null]);
     expect(ledger.rows.at(-1)).toMatchObject({ outcome: "refused" });
 });

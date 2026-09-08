@@ -3,15 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The workspace outbox, via the daemon's /public routes, the file-shaped counterpart to `usePorts`. A port is
- * exposed by forwarding a running server; a file is exposed by being in `public/`, which needs no process at
- * all and is why this list can be non-empty while nothing is running.
- *
- * The outbox is an ORDINARY directory, so an agent that writes a build output into it publishes it without
- * going through `publish` at all, which is exactly why this view must observe the filesystem rather than log
- * this UI's actions. It used to do that by polling. It does it now by SAYING SO: the manifest's
- * `contributes.files` binds `public/` to this query key, and the daemon's file watcher, the same push that
- * refreshes the tree when the agent writes anything else, carries it. Same observation, no clock. */
+// Workspace outbox via the daemon's /public routes, the file-shaped counterpart to `usePorts`: a file is exposed just
+// by sitting in `public/`, no process needed. Observed via the manifest's `contributes.files` binding, pushed by the
+// daemon's file watcher, so an agent's own writes there are seen too.
 
 const jsonPost = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -27,7 +21,7 @@ export function usePublic() {
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
-    // `path` is WORKSPACE-relative here and OUTBOX-relative in unpublish, two path spaces, matching the routes.
+    // `path` is workspace-relative here and outbox-relative in unpublish, two path spaces, matching the routes.
     const publish = async (path: string): Promise<PublishResult> => {
         const result = await api.sandbox.json<PublishResult>(`/public/publish`, jsonPost({ path }));
         void invalidate();
@@ -41,10 +35,9 @@ export function usePublic() {
     const files = computed<PublicFile[]>(() => query.data.value?.files ?? []);
     return {
         files,
-        // The outbox's own address, absent on a sandbox with no tunnel, which is also the honest signal that
-        // nothing here can be published at all.
+        // Outbox address; absent when the sandbox has no tunnel, which also signals nothing can be published.
         url: computed(() => query.data.value?.url),
-        // What is actually reachable, as opposed to what is merely sitting in the directory.
+        // Files actually reachable, not merely sitting in the directory.
         servedCount: computed(() => files.value.filter((file) => file.blocked === undefined).length),
         error: computed(() => query.error.value?.message),
         isLoading: query.isLoading,

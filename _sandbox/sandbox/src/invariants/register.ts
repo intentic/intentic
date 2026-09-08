@@ -17,16 +17,9 @@ import { checks as tunnelChecks, owner as tunnelOwner } from "../tunnel/invarian
 import { checks as webextChecks, owner as webextOwner } from "../webext/invariant.js";
 import type { InvariantRegistry } from "./invariants.js";
 
-/* WHERE THE COMPANIONS ARE WIRED, the one list, so a companion that is written and never registered is a file
- * nobody runs, and the gate can say so by reading this.
- *
- * The container-claim companion (platform/invariant.ts) is deliberately NOT here: its subject is the role this
- * process took, which main.ts learns AFTER the services are built, so main registers it at the moment it has an
- * answer. Everything whose subject is a service belongs to whoever built the service.
- *
- * The companions with no checks are registered too. The registry's `owners()` is then the list of subsystems
- * that have ANSWERED, which is the fact the diagnostics surface wants, and the same list the gate reads; a
- * subsystem with nothing to check is an answer, not an absence. */
+// The one list wiring invariant companions to the registry, so an unregistered companion is visible to the gate.
+// platform/invariant.ts is excluded (main.ts registers it once it knows this process's role); a companion with no
+// checks is still registered, since owners() means "answered", not "has checks".
 
 export type DaemonInvariantDeps = TurnJournalDeps &
     FleetRegistryDeps &

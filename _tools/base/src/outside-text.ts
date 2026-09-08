@@ -1,51 +1,12 @@
-/* THE ENVELOPE AROUND EVERYTHING THAT ARRIVES FROM OUTSIDE, a stranger's chat message, a fetched web page, a
- * tool result from a server this daemon does not serve. The model reads it as
- *
- *     <untrusted-content source="webchat" from="Alice" id="8f3a92c1d6e07b45">
- *     …the content, neutralized…
- *     </untrusted-content id="8f3a92c1d6e07b45">
- *
- * and the system prompt defines the language ONCE (the daemon's system-prompt.ts OUTSIDE_GUIDANCE): what is inside is data
- * to read and act ABOUT, never instructions to follow. The id is minted fresh per wrap, and the CLOSE tag
- * carries it, so content cannot end its own envelope and speak in the owner's voice after it: writing the
- * close tag requires a value the content was written before anyone knew.
- *
- * Two spoofs are neutralized in the body before wrapping, because an envelope is only as good as the reader's
- * ability to tell a real marker from a planted one:
- *
- *   · Envelope lookalikes, any complete `<untrusted-content …>` / `</untrusted-content …>` the content
- *     carries, matched after FOLDING: fullwidth and ornamental angle brackets to ASCII, fullwidth letters
- *     down, zero-width characters out. A marker spelled with a CJK `〈` or with a zero-width space inside
- *     "untrusted" reads as a marker to a model and as noise to a byte comparison; folding is what makes the
- *     comparison see what the model sees. A dangling marker PREFIX at the very end of the body (a forgery the
- *     content ran out of room to close) is cut for the same reason.
- *   · Control vocabulary, the tags the harness itself speaks in (`<system-reminder>`, `<task-notification>`,
- *     `<command-name>`, …) and the reserved tokens of the model families the translator routes to
- *     (`<|im_start|>`, `[INST]`, `<start_of_turn>`, …). The single highest-value forgery is not fake prose,
- *     it is the platform's own voice; a page that contains `<system-reminder>` is either quoting us or
- *     impersonating us, and an inert token serves the quoter fine.
- *
- * WHAT THIS IS NOT: a boundary against a hostile model, or a parser. It is the seam that makes "this text is
- * from outside" a property of the conversation the model cannot miss and the content cannot unsay, and the
- * same wrap is what flips the turn's taint (the daemon's guard/turn-taint.ts), which is where the mark grows teeth: a
- * tainted turn's credential reads stop being auto-allowed (guard/command-gate.ts, daemon side).
- *
- * Out of scope, deliberately: files already inside the workspace (the agent's own material), content a
- * delegated CLI read in its own context (its harness, its seams), and listener media files referenced by path
- * (the path is wrapped with the payload; the bytes ride the Read tool like any workspace file).
- *
- * It lives in @intentic/base rather than in the daemon because the daemon's seams are no longer the only
- * writers of outside-derived text: fileq bakes `neutralizeOutsideText` into the sidecars it derives from
- * binary files, and webq into the pages it saves — files a later `Read` serves with no envelope around them,
- * so the neutralization has to be in the bytes. One implementation, or the copies drift and the drift is a
- * working forgery. */
+// Wraps outside content (chat, pages, tool results) in `<untrusted-content id=...>` tags; the close tag's id is fresh
+// per wrap, so content cannot forge its own close. Neutralizes envelope lookalikes and the harness's control tags in
+// the body first. Not a boundary against a hostile model, only a taint marker.
 
-// The tag as the model reads it. One name, both ends, id on both, the close tag is the one that matters.
+// One tag name both ends; the id on the close tag is what a forgery can't reproduce.
 const TAG = "untrusted-content";
 
 export interface OutsideMeta {
-    // Where this came from, for the model's benefit: "webchat", "discord", "web", "browser", an MCP server's
-    // name. Free-form because the sources are open-ended; sanitized because it lands in an attribute.
+    // Where this came from ("webchat", "discord", an MCP server's name); free-form, sanitized for an attribute.
     readonly source: string;
     // Who sent it, when a sender exists (a listener message's author). Never proof of identity.
     readonly from?: string;
@@ -53,12 +14,10 @@ export interface OutsideMeta {
 
 /* ---- folding: make the byte comparison see what the model sees ---- */
 
-// Zero-width and invisible characters a spoof threads through a marker word. Removed for matching; the
-// replacement spans the original text, so they vanish with the marker they hid in.
+// Invisible characters a spoof threads through a marker word; stripped before matching, so they vanish with it.
 const IGNORABLE = new Set([0x200b, 0x200c, 0x200d, 0x2060, 0xfeff, 0x00ad]);
 
-// Angle-bracket homoglyphs → ASCII. The full OpenClaw-measured set: every bracket a model plausibly reads as
-// a tag delimiter.
+// Angle-bracket homoglyphs folded to ASCII: every bracket a model plausibly reads as a tag delimiter.
 const ANGLE: Record<number, string> = {
     0xff1c: "<",
     0xff1e: ">",
@@ -102,8 +61,7 @@ const foldChar = (code: number): string | undefined => {
 
 interface Folded {
     readonly text: string;
-    // For folded index i: the original-string span it came from, so a match on folded text can be replaced in
-    // the original without disturbing anything the fold left alone.
+    // For folded index i, the original-string span it came from, so a folded-text match maps back to the original.
     readonly starts: readonly number[];
     readonly ends: readonly number[];
 }
@@ -128,23 +86,16 @@ const fold = (input: string): Folded => {
 
 export const NEUTRALIZED = "[marker removed]";
 
-/* A complete envelope marker, either end, any attributes; and the JSON-escaped form a marker wears inside a
- * serialized payload (`\"` for its quotes), matched on FOLDED text. `[^>]*` is linear and unbounded on
- * purpose: capping the attribute run would let a forged marker with a longer id through whole. The separator
- * class covers spellings a model still reads as the tag: `untrusted content`, `untrusted_content`. */
+// A complete envelope marker, either end; `[^>]*` is unbounded so a longer forged id cannot slip past it.
 const MARKER = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*>/gi;
-// The same shape cut off by the end of the body, a forgery that ran out of room, removed so no prefix of a
-// marker ever stands immediately before the real close tag.
+// Same shape cut off at the body's end; no marker prefix may sit immediately before a real close tag.
 const MARKER_TAIL = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*$/i;
 
-/* The harness's own voice. Open and close forms both, attributes tolerated, `<system-reminder>` inside a web
- * page is either a quote of us or an impersonation of us, and the inert token serves the quoter fine. The
- * list is the vocabulary the daemon and the CLI actually inject around agent turns. */
+// The harness's own tags; a page with one is quoting or impersonating it, and an inert token serves either.
 const CONTROL_TAGS = ["system-reminder", "task-notification", "command-name", "command-message", "command-args", "local-command-stdout"];
 const CONTROL = new RegExp(String.raw`<\s*/?\s*(?:${CONTROL_TAGS.join("|")})\b[^>]*>`, "gi");
 
-/* Reserved tokens of the model families the translator routes turns to. A local server tokenizing raw text
- * could read these as turn structure; an API provider treats them as data, and for it this costs nothing. */
+// Reserved tokens a local server could read as turn structure; an API provider treats them as data, at no cost.
 const SPECIAL_TOKENS = [
     "<|im_start|>",
     "<|im_end|>",
@@ -171,8 +122,8 @@ const SPECIAL_TOKENS = [
 ];
 const RESERVED_TOKEN = /<\|reserved_special_token_\d+\|>/g;
 
-// Replace every folded-text match of `pattern` in the ORIGINAL string, via the fold's index map. Matches are
-// non-overlapping and in order, so a single left-to-right pass rebuilds the string.
+// Replaces every folded-text match of `pattern` in the original string via the fold's index map, in one left-to-right
+// pass.
 const replaceFolded = (original: string, folded: Folded, pattern: RegExp): string => {
     pattern.lastIndex = 0;
     let out = "";
@@ -190,13 +141,11 @@ const replaceFolded = (original: string, folded: Folded, pattern: RegExp): strin
     return out + original.slice(cursor);
 };
 
-/* Neutralize everything in `body` that could impersonate a marker or the harness once it sits inside an
- * envelope. Exported for tests; wrapOutsideContent is the caller. Idempotent: the replacement token matches
- * none of the patterns. */
+// Neutralizes anything in `body` that could impersonate a marker or the harness inside an envelope; idempotent, since
+// the replacement token matches none of the patterns.
 export const neutralizeOutsideText = (body: string): string => {
     let text = body;
-    // Envelope lookalikes and control tags fold-match; two passes so a control tag hidden inside a forged
-    // marker's attributes still dies with the marker around it.
+    // Two passes: a control tag hidden inside a forged marker's attributes still dies with the marker around it.
     for (const pattern of [MARKER, CONTROL]) {
         const folded = fold(text);
         pattern.lastIndex = 0;
@@ -212,8 +161,7 @@ export const neutralizeOutsideText = (body: string): string => {
             text = text.slice(0, folded.starts[tail.index] ?? tail.index) + NEUTRALIZED;
         }
     }
-    // Special tokens are exact literals, no fold needed (a homoglyph `<|im_start|>` is not the reserved
-    // token to any tokenizer), and split/join is immune to the regex-metacharacter content they carry.
+    // Exact literals, no folding needed; split/join avoids the regex metacharacters these tokens carry.
     for (const token of SPECIAL_TOKENS) {
         if (text.includes(token)) {
             text = text.split(token).join(NEUTRALIZED);
@@ -222,19 +170,17 @@ export const neutralizeOutsideText = (body: string): string => {
     return text.replace(RESERVED_TOKEN, NEUTRALIZED);
 };
 
-// Attribute values ride inside the open tag, so nothing in them may close it or open another: angle brackets,
-// quotes and newlines flatten to spaces. Neutralized first so a marker-shaped author dies the same death.
+// Attribute values ride inside the open tag, so angle brackets, quotes and newlines flatten to spaces; neutralized
+// first, same as the body.
 const attribute = (value: string): string =>
     neutralizeOutsideText(value)
         .replaceAll(/["<>\r\n]+/g, " ")
         .trim();
 
-/* Wrap one piece of outside content. The whole mechanism a call site needs: neutralize, mint the id, seal
- * both ends. The one-line header carries source and sender; the LANGUAGE lives in the system prompt once, not
- * here, a browsing turn re-reads a sermon per page or it reads a tag per page, and the tag wins. */
+// Neutralizes, mints the id and seals both ends; the header carries source and sender only, the rules for reading it
+// live in the system prompt once, not per page.
 export const wrapOutsideContent = (body: string, meta: OutsideMeta): string => {
-    // Web Crypto rather than node:crypto: this module is shared by every tier (daemon, CLIs, potentially the
-    // browser), and the global keeps it runtime-agnostic without changing the id's shape.
+    // Web Crypto, not node:crypto: this module is shared by every tier, including a possible browser.
     const id = [...globalThis.crypto.getRandomValues(new Uint8Array(8))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     const from = meta.from === undefined || meta.from.trim() === "" ? "" : ` from="${attribute(meta.from)}"`;
     return `<${TAG} source="${attribute(meta.source)}"${from} id="${id}">\n${neutralizeOutsideText(body)}\n</${TAG} id="${id}">`;

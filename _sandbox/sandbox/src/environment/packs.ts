@@ -3,41 +3,15 @@ import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-/* Feature packs, the single unit of image growth. A pack is a checked-in Dockerfile fragment
- * (packs/<name>.Dockerfile in this package): the SAME file is spliced into a published image by
- * _tools/scripts/image/compose-image-dockerfile.mjs when a profile bakes it (image-packs/profiles.json), and composed into
- * the environment overlay by a capability/provider that needs it on demand, one source, so the baked and
- * on-demand paths cannot drift.
- *
- * Whether the BASE image already carries a pack is a publish-time fact stamped INTO the image: the splice
- * appends a RUN writing the pack file's content hash to /opt/packs/<name>. packFragment() reads the stamp and
- * returns undefined for a base-baked pack, which is what keeps the composed overlay STABLE across rebuilds.
- * An overlay-applied pack deliberately never stamps: if it did, the post-rebuild recompose would drop the
- * fragment, change the overlay content and hash, and ask the owner to rebuild again forever. A stamp whose
- * hash no longer matches the shipped pack file reads as "not baked": the overlay then carries the newer pack
- * on top of the older base, which is the upgrade path, the same fragment-drift convergence boot already does.
- *
- * Two properties are inferred from content, not declared, so they cannot rot:
- *   - a pack with a COPY instruction is BAKE-ONLY (an overlay build has no `trees` build context), profiles
- *     can include it, packFragment() never returns it;
- *   - a pack referencing the daemon tree (/opt/sandbox) or a trees COPY splices AFTER the image's tree COPYs
- *     (the Dockerfile's post-trees marker); everything else splices before them, where pinned-install layers
- *     stay cache-stable across source changes. */
+// A pack is one checked-in Dockerfile fragment (packs/<name>.Dockerfile), spliced into published images by
+// compose-image-dockerfile.mjs and composed into the overlay on demand from the same file. The base image stamps its
+// content hash; packFragment returns undefined once it matches, so a rebuild converges instead of re-proposing it.
 
-// packs/ ships inside the deployed package (package.json has no `files` allowlist). Anchored to the package's
-// OWN root rather than counted back from this file, so it resolves from dist/environment in the image
-// (/opt/sandbox/packs) and from src/environment in a dev run alike, and keeps doing so if this file moves.
+// Anchored to the package's own root, not this file's location, so it resolves in both dist and src layouts.
 const packsDir = join(packageRoot(import.meta.url), "image-packs");
 
-/* Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp,
- * core image, dev run, or a pack newer than this base, reads as "not baked".
- *
- * THE ONE FACT IN THIS MODULE THAT COMES FROM THE MACHINE, so it is read per call and can be pointed
- * elsewhere. `bakedPackHash` and `packFragment` take the directory as an argument for the same reason and
- * suites that call them directly pass their own; a suite that reaches this code through `composeEnvironment`
- * cannot, and read the HOST's stamps instead — which made it assert one thing on CI, where /opt/packs does not
- * exist, and the opposite inside an agent sandbox, where it exists and matches the very packs the composed
- * capabilities name. That is the ambient-machine reading AGENTS.md names: state the mode a test means. */
+// Base image's stamp directory (content hash per baked pack); absent reads as not-baked. Read per call via env var, so
+// tests can point it elsewhere.
 const packStampsDir = (): string => process.env["INTENTIC_PACK_STAMPS_DIR"] ?? "/opt/packs";
 
 export interface Pack {
@@ -72,14 +46,14 @@ export const listPacks = async (): Promise<Pack[]> => {
     return entries.map((entry, index) => packOf(entry.slice(0, -".Dockerfile".length), raws[index] ?? ""));
 };
 
-// The hash the base image was stamped with for this pack, or undefined when the base doesn't bake it.
-// `stampsDir` is parameterized for tests only, every runtime caller reads the image's own stamps.
+// The base image's stamped hash for this pack, or undefined when the base doesn't bake it. `stampsDir` is a param for
+// tests only; runtime callers read the image's own stamps.
 export const bakedPackHash = async (name: string, stampsDir: string = packStampsDir()): Promise<string | undefined> =>
     (await readFile(join(stampsDir, name), "utf8").catch(() => undefined))?.trim();
 
-// The pack's overlay fragment: its content when the running BASE image doesn't already bake this exact
-// version, undefined when it does (or the pack is bake-only/unknown). One code path is what makes enabling a
-// feature instant on an image that bakes the pack and an ordinary owner-approved rebuild on one that doesn't.
+// The pack's overlay fragment: its content when the running base image doesn't already bake this version, else
+// undefined (also when bake-only or unknown). One path makes a baked feature instant, an unbaked one an ordinary
+// rebuild.
 export const packFragment = async (name: string, stampsDir: string = packStampsDir()): Promise<string | undefined> => {
     const pack = await readPack(name);
     if (pack === undefined || !pack.overlayable) {

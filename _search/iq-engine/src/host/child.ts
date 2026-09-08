@@ -1,20 +1,15 @@
 import { createResidentEngine, type ResidentEngine } from "../index.js";
 import type { EngineAnswer, EngineEvent, EngineMetricsSnapshot, EngineRequest } from "./protocol.js";
 
-/* THE ENGINE'S OWN PROCESS. Everything a search needs, the SQLite index, the two ML models on the query
- * worker, the indexer worker, the cached workspace sweep, is resident HERE, and the daemon that asks the
- * questions keeps none of it. client.ts holds the argument for why that is worth a process.
- *
- * The opposite of git-forker.ts, which must stay import-free to fork cheaply: this child is where the weight is
- * SUPPOSED to be. It forks nothing and serves one thing, so its resident size costs nobody anything. */
+// The engine's own process: the SQLite index, the two ML models, the indexer worker and the cached sweep all live here;
+// the daemon keeps none of it. Opposite of git-forker.ts, which stays import-free to fork cheaply.
 
 const send = process.send?.bind(process);
 if (send === undefined) {
     throw new Error("iq engine child started without an IPC channel");
 }
-// Guarded on the channel, because plenty of things here fire on their own schedule, a metrics tick, an index
-// pass that fails, the last slice of an embedding backlog, and any one of them landing after the parent has
-// gone would otherwise take the child down with an unhandled ERR_IPC_CHANNEL_CLOSED instead of ending it.
+// Guarded on process.connected: a metrics tick or backlog event firing after the parent is gone would otherwise crash
+// the child with ERR_IPC_CHANNEL_CLOSED.
 const emit = (event: EngineEvent): void => {
     if (process.connected) {
         send(event, () => undefined);
@@ -27,13 +22,10 @@ const describe = (error: unknown): { message: string; stack?: string } => {
 };
 
 let engine: ResidentEngine | undefined;
-// A constructor that threw (an index dir that cannot be opened at all) leaves nothing to serve. Kept rather
-// than thrown away so every later request answers with the REAL reason instead of "engine not initialised",
-// which would send the host looking in the wrong place.
+// Init failure kept so later requests answer with the real reason instead of "engine not initialised".
 let broken: unknown;
 
-// Aborting reaches across the boundary through this: one controller per in-flight query, dropped when the query
-// settles. Runs that arrive with no signal on the parent side simply never appear here.
+// One AbortController per in-flight query, dropped when it settles; how abort crosses the process boundary.
 const running = new Map<number, AbortController>();
 
 const answer = async (id: number, work: () => Promise<EngineAnswer>): Promise<void> => {
@@ -44,9 +36,7 @@ const answer = async (id: number, work: () => Promise<EngineAnswer>): Promise<vo
     }
 };
 
-/* PUSHED ON CHANGE, not on a schedule, because the host reads this synchronously and the channel should be
- * silent while nothing moves. Compared against the last push field by field, `sweptAt` is a timestamp exactly
- * so that an idle engine produces an IDENTICAL snapshot and sends nothing at all. */
+// Pushed only on change (compared field by field); an idle engine's identical snapshot sends nothing.
 let published: EngineMetricsSnapshot | undefined;
 const METRICS_INTERVAL_MS = 2000;
 
@@ -78,7 +68,7 @@ const publishMetrics = (): void => {
     emit({ type: "metrics", metrics: current });
 };
 
-// unref'd: this timer must never be the reason the child outlives its work. The channel is what holds it open.
+// unref'd: this timer must never be the reason the child outlives its work; the channel holds it open.
 const ticker = setInterval(publishMetrics, METRICS_INTERVAL_MS);
 ticker.unref();
 
@@ -89,9 +79,8 @@ process.on("message", (message: EngineRequest) => {
                 ...message.options,
                 onIndexError: (error) => emit({ type: "indexError", ...describe(error) }),
                 onQueryError: (error) => emit({ type: "queryError", ...describe(error) }),
-                // Every slice of the embedding backlog, and the pass that publishes it is also the one that
-                // moves the numbers the host plots, so the metrics ride the same beat instead of waiting out
-                // the timer above.
+                // Fires on every backlog slice, so metrics ride the same beat as progress instead of waiting for the
+                // timer.
                 onIndexProgress: (remaining) => {
                     emit({ type: "indexProgress", remaining });
                     publishMetrics();
@@ -147,10 +136,8 @@ process.on("message", (message: EngineRequest) => {
         });
         return;
     }
-    /* close: the answer goes out BEFORE the channel does, disconnecting first would leave the parent waiting
-     * on a reply that can no longer be sent. Nothing is force-exited after that: engine.close() terminates both
-     * workers and releases the index claim, the metrics timer is unref'd, and the disconnect handler below ends
-     * the process once there is nothing left holding it. */
+    // close: the answer goes out before the channel does, since disconnecting first strands the parent waiting on an
+    // unsendable reply. engine.close() releases both workers and the index claim before the process exits.
     const { id } = message;
     void (async () => {
         try {
@@ -165,8 +152,8 @@ process.on("message", (message: EngineRequest) => {
     })();
 });
 
-// The daemon going away leaves nothing to serve. Close first, the index claim is a pid file, and a child that
-// exits without releasing it leaves the next process to discover the owner is dead rather than being told.
+// Daemon gone means nothing to serve; close first, since the index claim is a pid file a later process would otherwise
+// find held by a dead owner.
 process.on("disconnect", () => {
     void (async () => {
         await engine?.close().catch(() => undefined);

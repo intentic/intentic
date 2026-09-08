@@ -1,65 +1,36 @@
-/* The Google channel's model catalog discovery. Google publishes no Anthropic-protocol endpoint, so a turn on
- * this provider always runs on the Claude Code harness pointed at the bundled translator (CLIProxyAPI), which
- * holds the user's Google account and re-serves the channel behind an Anthropic-compatible endpoint. That makes
- * the translator's own model endpoints the only catalog source worth consulting: they report exactly the ids the
- * connected account can drive, and it is the same list the turn will be routed against.
- *
- * The channel is Antigravity. Google's own agent product, and it vends MORE THAN GEMINI: Claude Opus/Sonnet
- * and GPT-OSS ride the same plain Google sign-in. So membership is decided by `owned_by`, the channel the
- * translator itself stamps on each model, rather than by an id prefix: a `/^gemini/` filter dropped the strongest
- * models a free Google account can reach, purely because of how they are named. */
+// Model catalog discovery for the Google channel (Antigravity), reached only through the translator (CLIProxyAPI) since
+// Google publishes no Anthropic endpoint; the translator's own model list is the catalog. Antigravity vends more than
+// Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix.
 import { getJson, humanizeModelId } from "../../agent/models/model-discovery.js";
 
-// A model the user could chat with, as opposed to the image/audio/embedding endpoints Google ships beside them
-// under the same channel. Named ids only, this is the one membership rule the seed floor can be checked against.
+// A model the user can chat with, not one of the image/audio/embedding endpoints Google ships alongside it.
 export const isChatModel = (id: string): boolean => !/(image|embedding|imagen|tts|audio|veo|moderation)/i.test(id);
 
-/* ONE MODEL ON THE GOOGLE CHANNEL, and why the modalities are part of its identity rather than a detail.
- *
- * The OpenCode runtime (opencode.ts) registers this channel as a CUSTOM provider pointed at a loopback URL, so
- * there is no models.dev row behind it and every capability it does not declare defaults to false. That default
- * is what made a screenshot invisible on every Google model: `input.image` false, so OpenCode dropped the image
- * out of the request, the model got "Image read successfully" and nothing else, and said it could not see it.
- *
- * The translator publishes `supportedInputModalities` per model, which is the only truthful source for this,
- * so it is discovered with the id and the label rather than guessed from the id or hardcoded per family. */
+// Modalities are part of a model's identity, not a detail: OpenCode defaults an undeclared capability to false, which
+// silently drops an image from the request rather than erroring. Discovered from the translator's own
+// supportedInputModalities per model, not guessed from the id.
 export interface GeminiModel {
     readonly id: string;
     readonly label: string;
-    // What the channel accepts on the way IN.
     readonly inputModalities: readonly InputModality[];
 }
 
-/* The input modalities the OpenCode runtime's model config understands, which is the vocabulary this whole
- * field is written in: the point of discovering a modality is to declare it there, so a word that cannot be
- * declared is not worth carrying. Anything else the channel invents is dropped rather than passed through, an
- * unknown name in the provider config is a boot-time schema failure for the whole runtime, which would cost
- * Grok its server too (one `opencode serve` drives both providers). */
+// Vocabulary OpenCode's model config understands; an unlisted modality is dropped rather than passed through, since an
+// unknown name there is a boot-time schema failure for the whole runtime (Grok's server included, one `opencode serve`
+// drives both).
 export type InputModality = "text" | "image" | "audio" | "video" | "pdf";
 
 const KNOWN_MODALITIES: readonly InputModality[] = ["text", "image", "audio", "video", "pdf"];
 
 const isKnownModality = (modality: string): modality is InputModality => (KNOWN_MODALITIES as readonly string[]).includes(modality);
 
-/* WHAT A MODEL MISSING FROM THE PUBLISHED LIST IS ASSUMED TO TAKE, and why it is not just text.
- *
- * Being wrong in the text-only direction is SILENT: the image is dropped somewhere inside OpenCode and the
- * model tells the user it cannot see, which is the bug this whole field exists to end. Being wrong the other
- * way is LOUD: the upstream rejects the request and the turn surfaces an error naming it. On this channel image
- * input is also the overwhelming norm (the text-only ones are a handful of GPT-OSS/Kimi ids), so the assumption
- * is usually right as well as safely wrong. */
+// Assumes image support when unlisted: guessing text-only fails silently, guessing image fails loudly instead.
 const ASSUMED_MODALITIES: readonly InputModality[] = ["text", "image"];
 
-// The translator's own name for the Google channel (`gemini` is this app's wire id for the same thing, see
-// CLIPROXY_PROVIDER in translator.ts).
+// The translator's own name for the Google channel; this app's wire id for the same channel is `gemini`.
 const CHANNEL = "antigravity";
 
-// The never-empty floor for the catalog: served only when live discovery yields nothing AND no last-known-good
-// catalog was persisted (no Google account connected yet, or a translator that is still booting). These are ids
-// the pinned CLIProxyAPI serves on the channel, strongest first. It doubles as the picker's SHOP WINDOW, with
-// nothing connected this is the list a user sees under "Free · Google sign-in", so it names what the sign-in
-// actually buys rather than a token placeholder. Discovery records the account's real catalog, so a stale seed
-// costs at most one refresh.
+// Served only when discovery and the persisted catalog are empty; strongest first, also the picker's display.
 export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
     { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", inputModalities: ["text", "image"] },
     { id: "gemini-pro-agent", label: "Gemini 3.1 Pro (High)", inputModalities: ["text", "image", "audio", "video"] },
@@ -70,13 +41,9 @@ export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
 
 const base = (translatorUrl: string): string => translatorUrl.replace(/\/$/, "");
 
-/* The vendor's own display names AND accepted input modalities, keyed by id. The OpenAI-compatible /v1/models
- * carries the channel but neither of these; the Gemini-shaped /v1beta/models carries both but not the channel,
- * so the catalog is the join of the two.
- *
- * The name matters: humanizing alone renders "gemini-pro-agent" as "Gemini Pro Agent", a model that does not
- * exist, where the translator publishes "Gemini 3.1 Pro (High)". The modalities matter for a harder reason,
- * see GeminiModel: they are what stops the OpenCode runtime declaring every Google model blind. */
+// Display names and input modalities keyed by id, from /v1beta/models (which lacks the channel but has both); the
+// catalog joins this with /v1/models's channel tag. Humanizing an id alone gets the name wrong (`gemini-pro-agent`
+// isn't "Gemini Pro Agent").
 const publishedModels = async (
     translatorUrl: string,
     token: string,
@@ -96,16 +63,15 @@ const publishedModels = async (
         const modalities = (model.supportedInputModalities ?? []).filter(isKnownModality);
         published.set(id, {
             ...(model.displayName !== undefined && model.displayName !== "" ? { label: model.displayName } : {}),
-            // An empty list is "published nothing usable" rather than "takes nothing", so it is left absent and
-            // the assumption below applies: a model that takes no input at all is not a model anyone can chat with.
+            // An empty list means nothing usable was published, not that the model takes no input; left absent instead.
             ...(modalities.length > 0 ? { inputModalities: modalities } : {}),
         });
     }
     return published;
 };
 
-// The Google channel's chat models, labelled and described as the translator publishes them; [] on non-ok /
-// parse error so the caller can fall through to the persisted/seed catalog.
+// Google channel's chat models, labelled as the translator publishes them; returns [] on a non-ok or parse error so the
+// caller falls through to the persisted/seed catalog.
 export const discoverGeminiModels = async (
     translatorUrl: string,
     translatorToken: string,

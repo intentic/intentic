@@ -3,9 +3,8 @@ import { browserCandidates } from "./launch.js";
 import { refIndex, renderPage, toPageState } from "./page.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 
-/* The parts of browser control that can be tested without a browser: how a page is rendered for the agent, how
- * references are read back, and which binaries would be looked for. The CDP calls themselves end in a real
- * Chrome painting a real page: those need a machine, not a test. */
+// Tests the parts of browser control that don't need a browser: rendering, ref lookup, and binary discovery; the
+// CDP calls themselves need a real Chrome, not a test.
 
 test("a page renders as its identity and then things to act on", () => {
     const rendered = renderPage({
@@ -20,8 +19,7 @@ test("a page renders as its identity and then things to act on", () => {
     expect(rendered).toContain("Page: Inbox (3)");
     expect(rendered).toContain("https://mail.example.com/inbox");
     expect(rendered).toContain(`[e0] link "Compose"`);
-    // What a field HOLDS matters as much as what it is called: it is how the agent knows a form is already
-    // filled, or filled with the wrong thing.
+    // A field's value matters as much as its name; it's how the agent knows a form is already filled.
     expect(rendered).toContain(`[e1] textbox "Search mail" = "invoice"`);
 });
 
@@ -57,15 +55,14 @@ test("a missing snapshot answers as an empty page rather than throwing", () => {
     expect(toPageState({ url: "u", title: "t" }).elements).toEqual([]);
 });
 
-/* The injected script runs inside somebody's page, where a syntax error is invisible until it happens on a site
- * nobody tested. Parsing it here is the cheapest guard available without a browser. */
+// Injected script runs inside somebody's page, where a syntax error is invisible until it hits an untested site;
+// parsing it here is the cheapest guard without a browser.
 test("the injected script is syntactically valid javascript", () => {
     expect(() => new Function(`return ${SNAPSHOT_SCRIPT}`)).not.toThrow();
 });
 
 test("the injected script avoids the template literals it is embedded in", () => {
-    // Nesting template literals inside this one is how this file would acquire a bug that only appears at
-    // runtime, so the script is written without them on purpose.
+    // Nesting template literals here creates a bug that only appears at runtime, so none are used.
     expect(SNAPSHOT_SCRIPT).not.toContain("`");
 });
 

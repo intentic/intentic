@@ -1,29 +1,21 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
 
-/* REPAIR BEFORE REFUSING. Everything in this module exists to close the gap between what a person naturally
- * pastes or types and what the daemon's schema accepts, in the direction of fixing it for them: trim the
- * newline off a copied token, put the scheme on a bare host, split the connection string they were going to
- * split by hand. Each repair is VISIBLE, the value in the box changes, or a one-line account of what was read
- * appears under it, so the form never silently disagrees with what was typed.
- *
- * Pure functions over (field, value), no reactivity: the page decides when to run them (blur for the quiet
- * repairs, paste for the expansions) and what to draw with the answers. */
+// Repairs what a person pastes or types into what the daemon's schema accepts, visibly (the box's
+// value changes, or a one-line summary appears). Pure functions over (field, value); the page runs
+// them on blur (quiet repairs) or paste (expansions).
 
-// ---------------------------------------------------------------------------
-// The quiet repairs: run on blur, written straight back into the box.
-// ---------------------------------------------------------------------------
+// Quiet repairs: run on blur, written straight back into the box.
 
-// The hosts that resolve to the CONTAINER rather than the machine the user is thinking of.
+// Hosts that resolve to the container, not the machine the user is thinking of.
 const LOCAL_HOST_RE = /^(localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0)$/i;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 const isUrlField = (field: CapabilityField): boolean =>
     field.secret !== true && field.multiline !== true && field.options === undefined && field.key.toLowerCase().includes(`url`);
 
-/* What a field's value becomes when the reader is done with it. Trim always (the trailing newline on a pasted
- * token is the classic invisible failure); digits-only for a port ("10,443" means 10443); a scheme for a bare
- * host in a URL box, http for the hosts that are plainly local, https for the world. */
+// Normalizes a field's value on blur: trims whitespace, strips non-digits from a port, and adds a
+// scheme (http for local hosts, https otherwise) to a bare URL.
 export const normalizeFieldValue = (field: CapabilityField, raw: string): string => {
     let value = raw.trim();
     if (value.length === 0) {
@@ -40,11 +32,8 @@ export const normalizeFieldValue = (field: CapabilityField, raw: string): string
     return value;
 };
 
-/* THE LOCALHOST TRAP, and its one-click way out. A URL in a capability's config is dialled FROM the sandbox,
- * and the sandbox is a container: localhost is the container itself, so `http://localhost:11434` reaches
- * nothing and fails with a timeout nobody can attribute. The paragraph of prose this used to take on three
- * different cards becomes a chip that fixes it. Returns the corrected URL, or undefined when there is nothing
- * to correct. */
+// A capability's URL is dialled from inside the sandbox container, where `localhost` means the
+// container itself. Returns the rewritten URL, or undefined when there's nothing to fix.
 export const containerUrlFix = (field: CapabilityField, value: string | undefined): string | undefined => {
     const trimmed = (value ?? ``).trim();
     if (!isUrlField(field) || trimmed.length === 0) {
@@ -57,9 +46,7 @@ export const containerUrlFix = (field: CapabilityField, value: string | undefine
     return `${match[1]}host.docker.internal${match[3]}`;
 };
 
-// ---------------------------------------------------------------------------
 // The expansions: one paste answers several fields, and says what it read.
-// ---------------------------------------------------------------------------
 
 export interface PasteExpansion {
     /** field key → answer. Keys not named keep whatever they hold. */
@@ -70,9 +57,8 @@ export interface PasteExpansion {
 
 const hasField = (entry: CapabilityCatalogEntry, key: string): boolean => entry.fields.some((field) => field.key === key);
 
-/* An SSH target as people actually carry them: `root@1.2.3.4`, `root@box:2222`, or the whole `ssh -p 2222
- * root@box` command copied out of a shell history. Parsed rather than refused, because the string already
- * contains every answer the form's three boxes ask for. */
+// Parses an SSH target as people actually paste it: `user@host`, `user@host:port`, or a full
+// `ssh -p 2222 user@host` command.
 const parseSshTarget = (pasted: string): PasteExpansion | undefined => {
     const tokens = pasted.trim().split(/\s+/u);
     if (tokens[0] === `ssh`) {
@@ -118,9 +104,8 @@ const parseSshTarget = (pasted: string): PasteExpansion | undefined => {
     return { values, summary: `Read from the paste: ${parts.join(` · `)}.` };
 };
 
-/* A database connection string, the form every provider's dashboard hands out and this form used to make
- * people take apart by hand. One paste fills all five boxes; the summary names what landed where, password
- * included but never echoed. */
+// Parses a database connection string, filling all five boxes; the summary names what landed where,
+// password included but not echoed.
 const parseConnectionString = (entry: CapabilityCatalogEntry, pasted: string): PasteExpansion | undefined => {
     if (!/^(postgres(?:ql)?|mysql):\/\//i.test(pasted.trim()) || !hasField(entry, `database`) || !hasField(entry, `host`)) {
         return undefined;
@@ -156,9 +141,8 @@ const parseConnectionString = (entry: CapabilityCatalogEntry, pasted: string): P
     return { values, summary: `Read from the connection string: ${parts.join(` · `)}.` };
 };
 
-/* A repository DEEP link (…/tree/<ref>/<path>, …/commit/<sha>) split into the three boxes it answers. People
- * copy the URL of the page they are looking at, not the clone URL, and the difference between the two was a
- * refusal on this form. GitHub and GitLab shapes; a plain repo URL passes through untouched. */
+// Splits a repository deep link (…/tree/<ref>/<path>, …/commit/<sha>) into url, ref and path; GitHub
+// and GitLab shapes. A plain repo URL passes through untouched.
 const parseRepoDeepLink = (entry: CapabilityCatalogEntry, pasted: string): PasteExpansion | undefined => {
     if (!hasField(entry, `ref`)) {
         return undefined;
@@ -181,9 +165,8 @@ const parseRepoDeepLink = (entry: CapabilityCatalogEntry, pasted: string): Paste
     return { values, summary: `Split the link: ${parts.join(` · `)}.` };
 };
 
-/* The IMAP settings a mail address already implies. The big providers' hosts are a lookup, not knowledge
- * anyone should need, so pasting the address into Username fills them, and only where the boxes still hold
- * their defaults, a host somebody typed is theirs. */
+// IMAP hosts for common providers, looked up from the pasted address; a host already typed is left
+// alone.
 const IMAP_HOSTS: Readonly<Record<string, string>> = {
     "gmail.com": `imap.gmail.com`,
     "googlemail.com": `imap.gmail.com`,
@@ -214,7 +197,7 @@ const parseImapAddress = (entry: CapabilityCatalogEntry, values: Readonly<Record
     const expansion: Record<string, string> = { username: address };
     const current = (values[`host`] ?? ``).trim();
     if (current.length > 0 && current !== host) {
-        // A host already typed is not overwritten by a guess; the address still lands in its own box.
+        // A host already typed stops the guess entirely; nothing is expanded here.
         return undefined;
     }
     expansion[`host`] = host;
@@ -222,9 +205,8 @@ const parseImapAddress = (entry: CapabilityCatalogEntry, values: Readonly<Record
     return { values: expansion, summary: `${domain}'s mail server is ${host}:993, filled in for you.` };
 };
 
-/* One paste, routed to whichever expansion recognises it. `field` is where the paste landed, which is part of
- * the meaning: a connection string in the Host box and an email in the Username box are both "I have this,
- * you sort it out", and sorting it out is this form's job. */
+// Routes one paste to whichever expansion recognises it; which field it landed in is part of the
+// meaning (host vs username vs url).
 export const expandPaste = (
     entry: CapabilityCatalogEntry,
     field: CapabilityField,
@@ -252,9 +234,7 @@ export const expandPaste = (
     return undefined;
 };
 
-// ---------------------------------------------------------------------------
 // The live account of an opaque paste: what a WireGuard blob actually holds.
-// ---------------------------------------------------------------------------
 
 export interface ConfSummary {
     readonly text: string;
@@ -262,10 +242,8 @@ export interface ConfSummary {
     readonly warning: boolean;
 }
 
-/* A WireGuard textarea is a wall the reader cannot check: did both files make it, did the copy lose the
- * [Peer]? This reads the blob the way the daemon will and says what it found, so the check happens in the box
- * rather than after a failed connect. Countries come from the `# country: XX` convention the exit card
- * documents; absence is not an error, the daemon has its own placement pass. */
+// Reads a pasted WireGuard blob the way the daemon will, catching a lost [Peer] before a failed
+// connect. Countries come from the `# country: XX` convention; absent is not an error.
 export const wireguardSummary = (value: string | undefined): ConfSummary | undefined => {
     const text = (value ?? ``).trim();
     if (text.length === 0) {

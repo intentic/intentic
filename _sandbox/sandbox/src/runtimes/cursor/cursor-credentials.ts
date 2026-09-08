@@ -6,61 +6,33 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { ensureCursorSdk } from "./cursor-sdk.js";
 
-/* CURSOR ACCOUNTS, AND THE SIGN-IN THAT MINTS THEM. The Claude store's shape (one JSON file per account under
- * the auth root, several accounts side by side, tokens never on the wire) with the whole refresh apparatus
- * removed, because Cursor's credential does not rotate.
- *
- * WHAT IS STORED IS A USER API KEY, not the session that produced it, and that is Cursor's design rather than
- * ours: `Cursor.auth.login()` uses the session token exactly once, to mint a named key with an expiry, then
- * drops it. The key is the narrower credential — revocable and visible in Cursor's own dashboard API-keys
- * list — where the session token would grant the whole account. Naming the key after this sandbox is
- * therefore not decoration: it is the only way an owner looking at that dashboard can tell which of their
- * machines a key belongs to, and revoke one without revoking the rest.
- *
- * NO REFRESH, SO NO LOCK. A Claude account needs a cross-process refresh lock because two daemons sharing an
- * auth dir can each try to redeem the same refresh token and get the whole family revoked. A Cursor key is
- * static for its ~90 days: concurrent readers are just readers, and when it does expire the only repair is a
- * new sign-in. So expiry is REPORTED (needsReauth, the row the account list already knows how to draw) rather
- * than handled.
- *
- * WHY THE SDK'S OWN CREDENTIAL STORE IS NOT USED. `SdkCredentialStore` is single-slot by construction —
- * `load()` takes no key — because it models one machine holding one login. A sandbox holds as many accounts as
- * the owner connects, so the login runs with `store: null` and the result is written here instead, and every
- * SDK call is handed its account's `apiKey` explicitly. That also keeps the credential out of `~/.cursor`,
- * where nothing fences it. */
+// Cursor accounts, one JSON file per account under the auth root; no refresh, since Cursor's key doesn't rotate. Stores
+// the minted user API key, not the session that produced it: login mints it once, then drops the session. The SDK's own
+// store is single-slot, so login runs with store: null and this file store holds every account instead.
 
 const StoredAccountSchema = z.object({
     id: z.string().min(1),
-    // What the user typed, when they have renamed it. Absent ⇒ the row derives its name (see displayLabel).
+    // What the user typed, if renamed; absent means the row derives its name (see displayLabel).
     label: z.string().optional(),
-    // Who Cursor says this is. Absent when the identity lookup did not answer, which is exactly when renaming
-    // is the only way to tell two rows apart.
+    // Who Cursor says this is; absent when identity lookup didn't answer, the case renaming exists for.
     email: z.string().optional(),
     apiKey: z.string().min(1),
-    // Epoch ms. Absent would mean a key that never expires; the login always sets one, so this is effectively
-    // always present, and optional only because it is the provider's field to send.
+    // Epoch ms; optional only because it's the provider's field, login always sets one in practice.
     apiKeyExpiresAtMs: z.number().optional(),
-    // The backend the key was minted against. Keys are backend-paired, so a key minted against a staging
-    // backend is not usable against production and vice versa; stored so a mismatched sandbox can say so
-    // instead of failing every call with an opaque 401.
+    // Backend the key was minted against; a mismatch can be reported instead of failing every call with a bare 401.
     backendUrl: z.string().optional(),
     connectedAt: z.number(),
 });
 export type StoredCursorAccount = z.infer<typeof StoredAccountSchema>;
 
-/* The name a row carries: what the user typed, else who Cursor says this is, else the provider's own name.
- * Derived on every read, never stored, the Claude rule, and for the same reason: "Cursor" is a true and
- * useless answer to "which account is this?". */
+// Row name: what the user typed, else who Cursor says this is, else "Cursor". Derived on every read, never stored.
 export const displayLabel = (stored: Pick<StoredCursorAccount, "label" | "email">): string => stored.label?.trim() || stored.email || "Cursor";
 
-/* How long before a key's expiry the row starts saying so. A Cursor key cannot be renewed in place, so this is
- * not a refresh window but a WARNING one: the point is that an owner meets "sign in again" while they are
- * looking at a settings page, rather than in the middle of a turn a week later. Three days is long enough to
- * be noticed on a normal working week and short enough not to nag for a quarter. */
+// Warning window before expiry, not a refresh window (a Cursor key can't be renewed in place); three days.
 const EXPIRY_WARNING_MS = 3 * 24 * 60 * 60_000;
 
-// Expired, or close enough that the next long turn might outlive it. Kept as one predicate because both
-// answers put the same row on screen, only the sentence differs.
+// Expired or close enough that a long turn might outlive it; one predicate since both cases mark the same row, only the
+// sentence differs.
 const expiryNote = (stored: StoredCursorAccount): string | undefined => {
     if (stored.apiKeyExpiresAtMs === undefined) {
         return undefined;
@@ -72,13 +44,8 @@ const expiryNote = (stored: StoredCursorAccount): string | undefined => {
     return left <= EXPIRY_WARNING_MS ? `This sign-in expires in under ${Math.max(1, Math.ceil(left / (24 * 60 * 60_000)))} days.` : undefined;
 };
 
-/* The metadata view the account list surfaces, with the key removed. An expiring key rides out as the same
- * needsReauth/detail pair Codex and Claude use, so the picker, the Setup row and the connect gate light up
- * unchanged for a third provider they know nothing specific about.
- *
- * `usage` is deliberately never set. Cursor publishes per-turn tokens and cost through the SDK but no
- * account-wide allowance, so a ring here would be inventing a denominator; an absent reading already means
- * "unknown" everywhere that draws these rows, which is the truth. */
+// Account-list view with the key removed; needsReauth/detail match Codex/Claude's shape, so the UI needs nothing
+// Cursor-specific. usage is never set: Cursor publishes no account-wide allowance, so absent already reads as unknown.
 export const toAccount = (stored: StoredCursorAccount): OauthAccount => {
     const note = expiryNote(stored);
     const expired = stored.apiKeyExpiresAtMs !== undefined && stored.apiKeyExpiresAtMs <= Date.now();
@@ -87,9 +54,7 @@ export const toAccount = (stored: StoredCursorAccount): OauthAccount => {
         label: displayLabel(stored),
         connectedAt: stored.connectedAt,
         ...(stored.email !== undefined ? { email: stored.email } : {}),
-        // needsReauth only once it is actually dead: a key with two days left still runs every turn asked of
-        // it, and flagging it as broken would send someone to reconnect a credential that works. The note goes
-        // out either way, which is the difference between warning and refusing.
+        // needsReauth only once the key is actually dead; a warning key still runs every turn asked of it.
         ...(expired ? { needsReauth: true } : {}),
         ...(note !== undefined ? { detail: note } : {}),
     };
@@ -100,8 +65,7 @@ export interface CursorStore {
     readonly write: (account: StoredCursorAccount) => Promise<void>;
     readonly clear: (id: string) => Promise<void>;
     readonly list: () => Promise<OauthAccount[]>;
-    // The stored accounts themselves, keys included. Only the turn path and the catalog call this; everything
-    // user-facing goes through `list`, which cannot leak a key because its shape has no field for one.
+    // Stored accounts with keys included; only the turn path and catalog call this, list() cannot leak one.
     readonly credentials: () => Promise<StoredCursorAccount[]>;
     readonly logger: Logger;
 }
@@ -117,8 +81,8 @@ const readCursorCredential = async (dir: string, id: string): Promise<StoredCurs
     }
 };
 
-/* The credential files that actually have Cursor's account shape. Shared with the provider-pack predicate so
- * a cache or foreign JSON file in the same directory cannot make a disconnected sandbox retain the runtime. */
+// Files with Cursor's own account shape; shared with the provider-pack predicate so a stray cache or foreign JSON can't
+// make a disconnected sandbox look connected.
 export const readCursorCredentials = async (dir: string): Promise<StoredCursorAccount[]> => {
     const entries = await readdir(dir).catch(() => [] as string[]);
     const stored = await Promise.all(
@@ -127,16 +91,14 @@ export const readCursorCredentials = async (dir: string): Promise<StoredCursorAc
     return stored.filter((account): account is StoredCursorAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
 };
 
-// A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/cursor/. That whole
-// tree is already classified `secret` by construction (workspace-state.ts), so a new provider directory under
-// it is fenced from search, export and the file routes without naming it anywhere.
+// One <id>.json per account under .intentic/secrets/auth/cursor/, already classified secret (workspace-state.ts):
+// fenced from search, export and file routes without naming it.
 export const fileCursorStore = (dir: string, logger: Logger): CursorStore => {
     return {
         logger,
         read: (id) => readCursorCredential(dir, id),
-        // Atomic, the Claude precedent: a reader (this daemon, the account list, another sandbox on a shared
-        // auth dir) must never observe a half-written file, because an unparseable read degrades to "no such
-        // account", which looks to the user like a credential that disconnected itself.
+        // Atomic write (temp file + rename): a reader must never observe a half-written file, which would read as a
+        // disconnected account.
         write: async (account) => {
             await mkdir(dir, { recursive: true });
             const path = cursorCredentialPath(dir, account.id);
@@ -152,31 +114,21 @@ export const fileCursorStore = (dir: string, logger: Logger): CursorStore => {
     };
 };
 
-/* ---- the sign-in ------------------------------------------------------------------------------------------
- *
- * Cursor's login is PKCE, and its verifier is redeemable on its own: anyone holding it plus the handshake id
- * can complete the sign-in and mint a durable key. So unlike Claude's paste-back flow, no part of this
- * handshake is allowed onto the wire. The daemon starts the flow, keeps the verifier inside the SDK call it
- * owns, polls Cursor itself, and writes the account when the browser completes. The caller gets a URL and a
- * cancellation handle, and learns the outcome by watching the account list, which is the same thing a device
- * login asks of it. */
+// Cursor's login is PKCE; the verifier is redeemable on its own, so unlike Claude's paste-back flow no part of the
+// handshake reaches the wire. The daemon holds the verifier, polls Cursor itself, and writes the account when the
+// browser completes; the caller gets a URL and a cancel handle, and learns the outcome by watching the account list.
 
-// What a caller may still cancel, by handshake id. In memory on purpose: a daemon restart drops any sign-in
-// that was in flight, which is correct, the poll it was running died with the process, and the browser tab
-// that was going to complete it is now completing nothing.
+// Handshake id to cancel handle; in memory, so a daemon restart correctly drops any sign-in in flight.
 const pending = new Map<string, { readonly abort: AbortController; readonly expiresAt: number }>();
 
-/* How long an unanswered attempt stays answerable. The SDK's own poll gives up at roughly twenty minutes; this
- * is deliberately a little under, so the card stops waiting because THIS said to, with a sentence, rather than
- * because a promise somewhere rejected with a timeout nobody chose. */
+// Answerable window; a little under the SDK's own ~20-minute poll, so the card times out with its own sentence.
 const LOGIN_WINDOW_MS = 18 * 60_000;
 
 export interface CursorLoginDeps {
     readonly store: CursorStore;
     // Names the minted key in Cursor's dashboard, so an owner can tell this sandbox's key from their laptop's.
     readonly keyName: string;
-    // Recompose after the credential lands: on every published image this is what makes the just-bootstrapped
-    // SDK durable across the next container recreation.
+    // Recomposes after the credential lands, so the SDK bootstrap survives the next container recreation.
     readonly connected: () => Promise<unknown>;
 }
 
@@ -186,12 +138,8 @@ export interface StartedLogin {
     readonly expiresAt: number;
 }
 
-/* Begin a sign-in. Resolves as soon as Cursor hands back the page to open; the rest (the poll, the mint, the
- * write) continues in the background and lands as a new row in the account list.
- *
- * THE BACKGROUND HALF NEVER REJECTS INTO NOTHING. It is a floating promise by design — the route has already
- * answered — so every outcome is either a written account or a logged line, and the cancelled case is not
- * logged as a failure because a person closing a tab is not an error. */
+// Resolves once Cursor hands back the page; the poll, mint and write continue in the background and land as a new row.
+// Never rejects into nothing: it's a floating promise by design, and a cancelled sign-in isn't logged as a failure.
 export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLogin> => {
     const sdk = await ensureCursorSdk();
     const handshake = randomUUID();
@@ -201,15 +149,15 @@ export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLo
     const timer = setTimeout(() => abort.abort(), LOGIN_WINDOW_MS);
     timer.unref();
 
-    // The URL arrives through a callback rather than a return value, so the route is unblocked by the first
-    // thing the flow produces instead of by the whole flow finishing (which is a person, minutes from now).
+    // URL arrives via callback so the route unblocks on the first thing the flow produces, not the whole flow
+    // finishing.
     const url = await new Promise<string>((settle, fail) => {
         const login = sdk.Cursor.auth
             .login({
                 openBrowser: false,
                 onLoginUrl: settle,
                 signal: abort.signal,
-                // Written here, not in ~/.cursor: this sandbox holds many accounts and that store holds one.
+                // store: null: written here instead, since this sandbox holds many accounts and that store holds one.
                 store: null,
                 apiKeyName: deps.keyName,
             })
@@ -235,8 +183,7 @@ export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLo
                 clearTimeout(timer);
                 pending.delete(handshake);
             });
-        // A flow that dies BEFORE producing a URL (no network, a backend that refuses) would otherwise leave
-        // this promise pending forever and the route hanging with it.
+        // Rejects if the flow dies before producing a URL; otherwise this promise would hang forever with the route.
         void login.then(() => {
             fail(new Error("Cursor did not hand back a sign-in page."));
         });
@@ -244,8 +191,7 @@ export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLo
     return { url, handshake, expiresAt };
 };
 
-// Stop waiting on a sign-in nobody completed. Unknown ids are a no-op rather than an error: the attempt has
-// already expired or already landed, and both are the state the caller was asking for.
+// Unknown ids are a no-op: the attempt already expired or already landed, both states the caller wanted.
 export const cancelCursorLogin = (handshake: string): void => {
     pending.get(handshake)?.abort.abort();
     pending.delete(handshake);
@@ -259,13 +205,8 @@ export const cancelAllCursorLogins = (): void => {
     pending.clear();
 };
 
-/* THE ACCOUNT A TURN SHOULD SPEND, given what the turn asked for. A named account that is still usable wins;
- * otherwise the oldest usable one, which is the same "first connected is the default" rule the other providers
- * follow. Undefined ⇒ nothing connected can serve, and the caller turns that into the refusal that says so.
- *
- * EXPIRY IS PART OF USABLE, and this is the one place it gates rather than warns. Sending a turn at a dead key
- * spends the user's time to arrive at a 401 the adapter would have to translate back into "sign in again",
- * when the store already knew. */
+// Named account if still usable wins; otherwise the oldest usable one (first-connected-is-default). The one place
+// expiry gates rather than warns: a dead key would otherwise fail the turn with a 401 the store already knew.
 export const usableCursorAccount = async (store: CursorStore, requested: string | undefined): Promise<StoredCursorAccount | undefined> => {
     const usable = (await store.credentials()).filter((account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now());
     if (requested !== undefined && requested !== "") {

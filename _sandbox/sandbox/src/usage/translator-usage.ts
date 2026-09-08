@@ -1,18 +1,11 @@
 import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow, type WindowGates, wordsOf } from "@intentic/sandbox-contract";
 import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 
-/* The READER for the routed subscriptions, the counterpart to claude-usage.ts, and the other half of what
- * fills account-usage.ts next door. Its whole job is to come back with an AccountUsage; where that snapshot is
- * then kept, merged or drawn is not its business.
- *
- * It has to pull where Claude's reader listens, because subscription quota is owned by CLIProxyAPI's auth files
- * rather than by anything in this daemon. The management API exposes exactly the door for it: a
- * credential-scoped HTTP proxy (`api-call`) that substitutes the chosen auth file's live access token
- * server-side, so quota is readable without a credential ever being downloaded here or handed to the browser.
- *
- * Every upstream shape is parsed defensively and both casings are accepted throughout: these are the providers'
- * private endpoints, not published contracts, and a field that changes name must cost a ring, never an
- * exception on the connection list. */
+// Reader for the routed subscriptions (counterpart to claude-usage.ts); returns an AccountUsage only, storage and
+// merging live elsewhere.
+// Pulls via the management API's `api-call`, a credential-scoped HTTP proxy that substitutes the auth file's access
+// token server-side.
+// Every upstream shape is parsed defensively in both casings; a changed field costs a ring, never an exception.
 
 export interface TranslatorAuthFile {
     readonly name?: string;
@@ -22,10 +15,8 @@ export interface TranslatorAuthFile {
     readonly auth_index?: string;
     readonly project_id?: string;
     readonly id_token?: unknown;
-    /* THE PROXY'S OWN VERDICT ON THE CREDENTIAL, from its `/auth-files` listing (sdk/cliproxy/auth/types.go).
-     * `unavailable` is the transient bench: upstream refused this file (a quota 429, an expired token) and the
-     * proxy routes around it until `next_retry_after`. `disabled` is the operator's switch. Both are more
-     * current than any quota reading, and neither is on disk: only the running proxy reports them. */
+    // The proxy's live verdict on this credential: `unavailable` is a transient bench (routed around until
+    // `next_retry_after`), `disabled` is the operator's switch; neither is persisted on disk.
     readonly unavailable?: boolean;
     readonly disabled?: boolean;
     readonly status?: string;
@@ -33,9 +24,8 @@ export interface TranslatorAuthFile {
     readonly next_retry_after?: string;
 }
 
-/* Whether the proxy is routing around this file right now, as the row and the fleet count read it
- * (TranslatorAccount.cooling). A bench with no retry instant is still a bench; the reason is the proxy's own
- * sentence where it gave one. */
+// Whether the proxy is currently routing around this file (TranslatorAccount.cooling); a bench with no retry instant is
+// still a bench.
 export const authFileCooling = (file: TranslatorAuthFile): { until?: number; reason?: string } | undefined => {
     if (file.unavailable !== true && file.disabled !== true) {
         return undefined;
@@ -50,13 +40,12 @@ interface ApiCallResult {
     readonly body?: string;
 }
 
-// Codex alone sends its resets as NUMBERS, an epoch instant or a relative offset, where the others send
-// ISO-8601 (resetFromIso, payload.ts).
+// Codex sends resets as numbers (epoch instant or relative offset); other providers send ISO-8601 (resetFromIso,
+// payload.ts).
 const resetSeconds = (absolute: unknown, relative: unknown, measuredAt: number): number | undefined => {
     const direct = asNumber(absolute);
     if (direct !== undefined) {
-        // Upstream currently sends epoch seconds. Accept milliseconds too, so a payload change cannot put a
-        // reset tens of thousands of years in the future.
+        // Accepts milliseconds as well as epoch seconds, so a unit change cannot land a reset far in the future.
         return Math.floor(direct > 10_000_000_000 ? direct / 1000 : direct);
     }
     const after = asNumber(relative);
@@ -73,22 +62,21 @@ const codexWindowKind = (seconds: number | undefined, fallback: "primary" | "sec
     if (seconds === 604_800) {
         return "seven_day";
     }
-    // Old payloads omitted the duration and defined the two positions instead.
+    // Missing duration falls back to the window's position, primary or secondary.
     return fallback === "primary" ? "five_hour" : "seven_day";
 };
 
 const codexWindowLabel = (group: string | undefined, kind: "five_hour" | "seven_day" | "monthly"): string | undefined => {
     if (group === undefined && kind !== "monthly") {
-        // The shared UI already has precise names for the two ordinary Codex pools.
+        // No label for the two ordinary pools; the UI already names them.
         return undefined;
     }
     const period = kind === "five_hour" ? "5-hour" : kind === "seven_day" ? "Weekly" : "Monthly";
     return group === undefined ? `${period} · all models` : `${group} · ${period}`;
 };
 
-/* WHAT A CODEX WINDOW GATES. The plan's own `rate_limit` is one undivided allowance, every model spends both
- * of its windows. The code-review limit and the `additional_rate_limits` are named features ("Code review",
- * "GPT-5 Codex Spark") that no chat turn here spends: shown, never binding. */
+// `rate_limit` is one undivided allowance every model spends. `code_review_rate_limit` and `additional_rate_limits` are
+// named features shown but never binding.
 const appendCodexLimit = (
     windows: UsageWindow[],
     value: unknown,
@@ -153,11 +141,8 @@ export const codexUsageFromPayload = (payload: unknown, measuredAt: number = Dat
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
-/* THE SAME TWO WINDOWS AS CODEX'S OWN RUNTIME PUSHES THEM, the app-server's `account/rateLimits/updated`
- * notification (its protocol/v2/account.rs RateLimitSnapshot): camelCase, `primary`/`secondary` rather than
- * `primary_window`, and the window length in MINUTES. Read off the turn's own stream at no cost and recorded
- * exactly as a pulled reading is, which is what makes a native Codex turn's ring current the moment the turn
- * ends instead of on the next pull. */
+// Maps the app-server's `account/rateLimits/updated` snapshot (camelCase, minutes) onto the same windows a pulled
+// reading uses.
 export const codexUsageFromRateLimits = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
     const snapshot = asRecord(payload);
     if (snapshot === undefined) {
@@ -178,12 +163,8 @@ export const codexUsageFromRateLimits = (payload: unknown, measuredAt: number = 
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
-/* WHICH MODELS A GOOGLE BUCKET GATES, read off the words the payload names its group and bucket with, because
- * that is the only place the grouping is stated. Antigravity meters two families off one sign-in: a "Gemini
- * Models" group and a "Claude and GPT models" group (the buckets are `gemini-weekly` and `3p-weekly`), each
- * with its own fraction and reset. A group naming neither family is read as the plan's own allowance and gates
- * everything: a pool this reader cannot place is better drawn as binding than silently ignored, and the
- * one-shot helper walk still asks a rung the reading alone would have skipped (its second pass). */
+// Gates come from words in the group/bucket names: `gemini` gates gemini only, `claude`/`gpt`/`3p`/etc gate the other
+// family, and an unrecognized name gates everything rather than being ignored.
 const GEMINI_WORDS = new Set(["gemini"]);
 const THIRD_PARTY_WORDS = new Set(["claude", "gpt", "3p", "third", "party", "anthropic", "openai"]);
 const googleGates = (...names: (string | undefined)[]): WindowGates => {
@@ -220,8 +201,8 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
             if (remainingNumber === undefined) {
                 continue;
             }
-            // A trailing-percent string is accepted defensively; the documented representation is a 0..1
-            // fraction. AccountUsage stores UTILIZATION, hence the deliberate inversion.
+            // A trailing `%` string is on a 0..100 scale; every other reading is a 0..1 fraction, normalized before the
+            // utilization inversion.
             const remaining = typeof remainingRaw === "string" && remainingRaw.trim().endsWith("%") ? remainingNumber / 100 : remainingNumber;
             const bucketName = asString(bucket[`displayName`] ?? bucket[`display_name`]);
             const bucketId = asString(bucket[`bucketId`] ?? bucket[`bucket_id`]) ?? `${groupIndex + 1}-${bucketIndex + 1}`;
@@ -238,14 +219,8 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
-/* KIMI CODE, whose quota this sandbox spent a release reporting as unknowable. It is not: the Kimi Code
- * subscription's own OAuth token reads `/coding/v1/usages` directly, which is the same door the vendor's CLI
- * uses and needs nothing from CLIProxyAPI beyond the token substitution every reader here already gets.
- *
- * Two pools arrive under different keys and mean different things: `usage` is the PLAN's pool (a week, whose
- * exhaustion is the "billing cycle" 403), and each `limits[]` entry is a shorter throttle inside it, today a
- * single 5-hour window. Both are used/limit COUNTS, as decimal strings, so utilization is computed here rather
- * than read; a pool with no limit is dropped rather than divided by. */
+// Kimi Code's own OAuth token reads `/coding/v1/usages` directly, the same door the vendor's CLI uses. `usage` is the
+// weekly plan pool; each `limits[]` entry is a shorter throttle inside it, both as decimal-string counts.
 const KIMI_UNIT_SECONDS: Record<string, number> = {
     TIME_UNIT_MINUTE: 60,
     TIME_UNIT_HOUR: 3_600,
@@ -253,8 +228,7 @@ const KIMI_UNIT_SECONDS: Record<string, number> = {
     TIME_UNIT_WEEK: 604_800,
 };
 
-// The window's length in seconds, from the proto-style enum the platform sends it as. Undefined ⇒ a shape we
-// don't recognise, which costs the pool its name below and nothing else.
+// Window length in seconds from the platform's enum; an unrecognized shape only costs the pool its name below.
 const kimiWindowSeconds = (value: unknown): number | undefined => {
     const window = asRecord(value);
     const unit = KIMI_UNIT_SECONDS[asString(window?.[`timeUnit`]) ?? ``];
@@ -262,10 +236,8 @@ const kimiWindowSeconds = (value: unknown): number | undefined => {
     return unit === undefined || duration === undefined ? undefined : unit * duration;
 };
 
-/* A pool's identity on our wire. The two lengths every other subscription also has take the SHARED kinds, so a
- * Kimi meter sorts and reads beside a Claude one instead of inventing a second vocabulary for the same idea
- * (WINDOW_NAMES, usageStatus.ts). Anything else keeps its own namespaced kind and states its length, because a
- * throttle we cannot name is still a throttle worth drawing. */
+// 5-hour and 7-day map to the shared kinds (WINDOW_NAMES, usageStatus.ts) so a Kimi meter reads beside a Claude one.
+// Anything else keeps a namespaced kind and states its length.
 const kimiWindowKind = (seconds: number | undefined): { kind: string; label?: string } => {
     if (seconds === 18_000) {
         return { kind: "five_hour" };
@@ -285,14 +257,13 @@ const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number 
     const pool = asRecord(value);
     const used = asNumber(pool?.[`used`]);
     const limit = asNumber(pool?.[`limit`]);
-    // A limit of zero is not a spent pool, it is a pool the plan does not meter, dividing by it would report
-    // every such account as permanently exhausted.
+    // A zero limit means unmetered, not spent; dividing by it would read as permanently exhausted.
     if (used === undefined || limit === undefined || limit <= 0) {
         return;
     }
     const { kind, label } = kimiWindowKind(seconds);
-    // First writer wins: the plan pool is appended before the throttles, so a `limits[]` entry that repeats the
-    // same length cannot overwrite the pool the plan is actually sold by.
+    // First writer wins: the plan pool is appended before throttles, so a same-length `limits[]` entry cannot overwrite
+    // it.
     if (windows.some((window) => window.kind === kind)) {
         return;
     }
@@ -313,8 +284,7 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
         return undefined;
     }
     const windows: UsageWindow[] = [];
-    // The plan pool carries no window of its own, the platform leaves it implicit, and it is the weekly one the
-    // subscription is sold by, which is also what the vendor's own client assumes when it synthesizes it.
+    // The plan pool has no window in the payload; it is the weekly one the subscription is sold by.
     appendKimiPool(windows, body[`usage`], 604_800);
     for (const entry of Array.isArray(body[`limits`]) ? body[`limits`] : []) {
         const limit = asRecord(entry);
@@ -381,8 +351,7 @@ export const fetchTranslatorUsage = async (params: {
     readonly provider: KeyedProvider;
     readonly file: TranslatorAuthFile;
 }): Promise<AccountUsage | undefined> => {
-    // A provider with no obtainable reading (reportsPlanLimits) never enters the refresh path, an unreadable
-    // quota is not a failure to retry, and its rows stay dots on purpose.
+    // A provider `reportsPlanLimits` rejects never enters the refresh path; its rows stay dots, not a retry failure.
     const authIndex = asString(params.file.auth_index);
     if (authIndex === undefined || !reportsPlanLimits(params.provider)) {
         return undefined;

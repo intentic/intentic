@@ -3,11 +3,8 @@ import { expect, test } from "vitest";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
-/* The rail badge's derivations. Both answer "is this branch red right now?", and both are worth pinning down
- * because the failure mode is silent: a badge that counts the wrong thing still renders a plausible number.
- *
- * `sha` defaults to one per run, so a test spells out a stream of commits unless it says otherwise. Passing the
- * SAME sha to several runs is the case this file exists for: one push firing several workflows. */
+// Pins failureStreaks and friends: is this branch red right now. `sha` defaults to one per run; the same sha on several
+// runs models one push firing several workflows.
 
 const run = (runId: number, status: PipelineRun["status"], createdAt: number, branch = "main", sha = `sha${runId}`): PipelineRun => ({
     repo: "intentic",
@@ -24,8 +21,6 @@ const run = (runId: number, status: PipelineRun["status"], createdAt: number, br
 test("a streak starts when the branch went red, not at its newest failure", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)]);
     expect(streaks).toHaveLength(1);
-    // `since` is the OLDEST failure still inside the breakage, so it names when the branch went red rather
-    // than when it last said so.
     expect(streaks[0]).toMatchObject({ repo: "intentic", branch: "main", sha: "sha1", since: 30, commits: 3, runs: 3 });
 });
 
@@ -33,15 +28,12 @@ test("green at the head ends the streak", () => {
     expect(failureStreaks([run(1, "success", 50), run(2, "failed", 40)])).toHaveLength(0);
 });
 
-/* THE BUG THIS RULE EXISTS FOR. One push fires every workflow the repo has, they start in the same second, and
- * which of them carries the newest timestamp is a coin toss. Reading the branch off the newest RUN let a green
- * sibling hide a red one and blinked the badge out while main was broken. */
 test("a commit with one failed run among green siblings is a red commit", () => {
     const push = [run(1, "success", 51, "main", "head"), run(2, "failed", 50, "main", "head"), run(3, "success", 49, "main", "head")];
     expect(failureStreaks(push)).toHaveLength(1);
-    // Whichever sibling the vendor happens to timestamp last.
+    // Order-independent: whichever sibling the vendor timestamps last.
     expect(failureStreaks([run(1, "failed", 49, "main", "head"), run(2, "success", 50, "main", "head")])).toHaveLength(1);
-    // And the streak is one commit deep however many of its runs are red: the count is branches, not failures.
+    // Commits counts branches, not failing runs: stays 1 even with 2 failed runs.
     const both = failureStreaks([run(1, "failed", 51, "main", "head"), run(2, "failed", 50, "main", "head")]);
     expect(both[0]).toMatchObject({ commits: 1, runs: 2 });
 });
@@ -49,7 +41,7 @@ test("a commit with one failed run among green siblings is a red commit", () => 
 test("a later commit that passes clean is what ends it", () => {
     const runs = [run(1, "success", 60, "main", "fixed"), run(2, "failed", 50, "main", "broke"), run(3, "success", 51, "main", "broke")];
     expect(failureStreaks(runs)).toHaveLength(0);
-    // A newer commit that is itself mixed is not a recovery: the branch is still red, now at the new commit.
+    // A mixed newer commit isn't a recovery; the branch stays red, now at the new commit.
     const mixed = failureStreaks([run(4, "failed", 60, "main", "next"), run(5, "success", 61, "main", "next"), ...runs.slice(1)]);
     expect(mixed[0]).toMatchObject({ sha: "next", commits: 2, since: 50 });
 });
@@ -63,7 +55,6 @@ test("canceled, skipped and running are not verdicts: they neither start nor bre
         run(5, "success", 30),
     ]);
     expect(streaks[0]).toMatchObject({ since: 40, commits: 2, runs: 2 });
-    // A push that supersedes a running pipeline must not read as a recovery.
     expect(failureStreaks([run(1, "running", 60), run(2, "failed", 50)])).toHaveLength(1);
 });
 
@@ -72,12 +63,11 @@ test("streaks are per branch", () => {
 });
 
 test("a breakage keeps badging for as long as it is broken", () => {
-    // No read marker anywhere in the derivation: the same runs give the same answer however often the board
-    // has been opened. Looking at a broken branch is not fixing it.
+    // No read marker: the same input gives the same answer regardless of how often it's read.
     const runs = [run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)];
     expect(failureStreaks(runs)).toHaveLength(1);
     expect(failureStreaks(runs)).toEqual(failureStreaks(runs));
-    // It clears the only way the condition does: a commit that passes.
+    // Clears only when a commit actually passes.
     expect(failureStreaks([run(5, "success", 60), ...runs])).toHaveLength(0);
 });
 
@@ -88,7 +78,7 @@ test("the tooltip names the branch while there is only one", () => {
     expect(single).toContain(only?.repo);
     expect(single).toContain(only?.branch);
     expect(single).toContain(String(only?.commits));
-    // One commit is the ordinary breakage, and the tooltip names the commit rather than counting to one.
+    // One-commit streaks name the commit, not a count of 1.
     const oneCommit = streakTooltip(failureStreaks([run(1, "failed", 50, "main", "abcdef1234")]));
     expect(oneCommit).toContain("abcdef1");
     const multi = streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])]);
@@ -96,20 +86,17 @@ test("the tooltip names the branch while there is only one", () => {
     expect(multi).not.toBe(single);
 });
 
-/* The row tiering's two derivations. Same head-commit rule as the badge, read per run: which failure still
- * asks to be fixed, and which one a later green closed. */
+// openFailures/supersededBy: same head-commit rule as the badge, applied per run.
 
 test("only the head commit's failures are open: the ones behind them are the same breakage", () => {
     const head = run(1, "failed", 50);
     const behind = run(2, "failed", 40);
     const open = openFailures([head, behind, run(3, "success", 30)]);
     expect(open.has(head)).toBe(true);
-    // Unfixed, but not a second thing to fix: flagging it too is how one breakage becomes three demands.
     expect(open.has(behind)).toBe(false);
 });
 
 test("two workflows failing on the head commit are two open failures", () => {
-    // Two pipelines, two logs, two fix buttons: the thing this must not do is silently drop one of them.
     const first = run(1, "failed", 50, "main", "head");
     const second = run(2, "failed", 49, "main", "head");
     const open = openFailures([first, second, run(3, "success", 48, "main", "head")]);
@@ -118,7 +105,7 @@ test("two workflows failing on the head commit are two open failures", () => {
 
 test("a branch that recovered has no open failure", () => {
     expect(openFailures([run(1, "success", 50), run(2, "failed", 40)]).size).toBe(0);
-    // Per branch: main is red while feat is green.
+    // Per branch: main red, feat green.
     expect(openFailures([run(1, "failed", 50, "main"), run(2, "success", 40, "feat"), run(3, "failed", 30, "feat")]).size).toBe(1);
 });
 
@@ -128,17 +115,14 @@ test("a failure is superseded by the run that recovered the branch, not by the n
     const later = run(3, "success", 30);
     const superseded = supersededBy([later, recovery, failure]);
     expect(superseded.get(failure)).toBe(recovery);
-    // A success supersedes nothing, and the green rows carry no chip.
     expect(superseded.get(recovery)).toBeUndefined();
 });
 
 test("a green run on the failure's OWN commit does not supersede it", () => {
-    // A different workflow passing on the same broken code is not a recovery, and saying "superseded by" of it
-    // would tell the reader their breakage is over while it is the branch's last word.
     const failure = run(1, "failed", 50, "main", "head");
     const sibling = run(2, "success", 51, "main", "head");
     expect(supersededBy([sibling, failure]).size).toBe(0);
-    // The next commit passing clean is: that is the one that closed it.
+    // The next commit passing clean does close it.
     const recovery = run(3, "success", 60, "main", "next");
     expect(supersededBy([recovery, sibling, failure]).get(failure)).toBe(recovery);
 });
@@ -148,88 +132,69 @@ test("a failure with nothing green after it is not superseded", () => {
     const behind = run(2, "failed", 40);
     const superseded = supersededBy([head, behind]);
     expect(superseded.size).toBe(0);
-    // And a green on ANOTHER branch cannot close it.
+    // A green on another branch cannot close it.
     expect(supersededBy([head, run(3, "success", 60, "feat")]).size).toBe(0);
 });
 
 test("canceled and running runs after a failure do not supersede it", () => {
     const failure = run(1, "failed", 10);
-    // Neither is a verdict, so neither is evidence the branch recovered: the same rule the streaks follow.
     expect(supersededBy([run(2, "canceled", 30), run(3, "running", 20), failure]).size).toBe(0);
 });
 
-/* The live half of what the board opens for you. The rule is two facts about one run, still going AND on the
- * newest commit its branch has, and each half is load-bearing: the first is why the graph is worth the space,
- * the second is what stops a stale row taking it. */
+// inFlightOnHead: still going AND on the branch's newest commit; both halves load-bearing.
 
 test("a run still going on the branch's newest commit is what the board opens", () => {
     const live = run(1, "running", 50, "main", "head");
     const stale = run(2, "running", 40, "main", "before");
     const open = inFlightOnHead([live, stale]);
     expect(open.has(live)).toBe(true);
-    // Still running, on code a later push replaced: a re-run somebody left behind, and not what anyone opened
-    // the board to watch.
+    // Running, but on code a later push replaced: a stale re-run, not what the board opens for.
     expect(open.has(stale)).toBe(false);
 });
 
-/* THE CASE THE STREAK WALK WOULD GET WRONG, and the reason this is a walk of its own: it keeps only the runs
- * that reached a verdict, so a push whose pipelines are ALL still going has no commit in that list at all, and
- * the head would be the commit before it — exactly the moment a live board has to open something. */
+// inFlightOnHead needs its own walk: the streak walk only keeps verdicted runs, so an all-running push has no commit in
+// it at all.
 test("a push whose pipelines are all still going is its own head commit", () => {
     const live = run(1, "running", 60, "main", "pushed");
     expect(inFlightOnHead([live, run(2, "success", 50, "main", "before")]).has(live)).toBe(true);
 });
 
 test("a run held at the runner is opened too: that is when the graph answers the only question there is", () => {
-    // The case that pays for the graph most. A rule keyed on "running" would keep the row shut for exactly as
-    // long as the run was stuck, and open it the moment a runner finally picked it up.
     const held = run(1, "queued", 50, "main", "head");
     expect(inFlightOnHead([held]).has(held)).toBe(true);
     expect(arrivesOpen([held]).has(held)).toBe(true);
-    // The freshness half still holds: a queued run on code a later push replaced stays shut.
+    // Stale queued run (code since replaced) stays shut.
     const stale = run(2, "queued", 40, "main", "before");
     expect(inFlightOnHead([held, stale]).has(stale)).toBe(false);
 });
 
 test("a finished run on the head commit is not opened, however new it is", () => {
-    // The graph of a run that is over is evidence to go looking for, not an answer arriving, and every green row
-    // opening itself would bury the board.
     const done = run(1, "success", 50, "main", "head");
     expect(inFlightOnHead([done, run(2, "failed", 49, "main", "head")]).size).toBe(0);
 });
 
 test("every branch with something in flight gets its own row opened", () => {
-    // Not one commit for the whole board: two branches building at once are two answers arriving, and hiding
-    // the earlier push's live run would be a silence the reader cannot account for.
     const mine = run(1, "running", 40, "feat", "mine");
     const theirs = run(2, "running", 50, "main", "theirs");
     expect(inFlightOnHead([theirs, mine, run(3, "success", 30, "feat", "older")])).toEqual(new Set([theirs, mine]));
 });
 
-/* …and the whole rule: everything the newest commit has to say that is not "fine". Both halves are head-commit
- * rules, so what these pin is as much what STAYS SHUT as what opens: a board that expands every red row it has
- * ever seen is the same unreadable page as one that expands nothing. */
+// arrivesOpen: everything the newest commit has to say that isn't 'fine'. Pins what stays shut as much as what opens.
 
 test("the head commit's failures arrive open, not just its live runs", () => {
     const broke = run(1, "failed", 50, "main", "head");
-    // What a reader who arrives after the pipeline finished came for: which job broke, without a click.
     expect(arrivesOpen([broke]).has(broke)).toBe(true);
-    // Still the live rule too: neither half swallows the other.
     const live = run(2, "running", 60, "feat", "building");
     expect(arrivesOpen([broke, live])).toEqual(new Set([broke, live]));
 });
 
 test("a commit still building with a failure of its own opens both rows", () => {
-    // One push, two workflows: one broke, the other is still going. Opening one of them would hide either the
-    // breakage or the run that may add to it, so this is a union and not a precedence.
     const broke = run(1, "failed", 50, "main", "head");
     const going = run(2, "running", 49, "main", "head");
     expect(arrivesOpen([broke, going])).toEqual(new Set([broke, going]));
 });
 
 test("a fresh push shows its live graph beside the failure the last commit left open", () => {
-    // The two halves read `head` differently on purpose: the push has no verdict yet, so the branch's most
-    // recent word is still the failure behind it, and both are worth the height until this push speaks.
     const pushed = run(1, "running", 60, "main", "pushed");
     const broke = run(2, "failed", 50, "main", "before");
     expect(arrivesOpen([pushed, broke])).toEqual(new Set([pushed, broke]));
@@ -237,15 +202,13 @@ test("a fresh push shows its live graph beside the failure the last commit left 
 
 test("a failure that is not the branch's current problem stays shut", () => {
     const head = run(1, "failed", 50);
-    // Behind a newer failure: the same breakage, and the row above it is the one to read.
     const behind = run(2, "failed", 40);
     expect(arrivesOpen([head, behind])).toEqual(new Set([head]));
-    // Closed by a later commit passing: history, and history does not unroll itself on the way past.
+    // Closed by a later passing commit; that's history now, not reopened.
     expect(arrivesOpen([run(3, "success", 60), head, behind]).size).toBe(0);
 });
 
 test("a passing board opens nothing", () => {
-    // Green rows are a tally, not a diagram: every one of them opening would bury the board it is reporting on.
     expect(arrivesOpen([run(1, "success", 50, "main", "head"), run(2, "success", 49, "main", "head")]).size).toBe(0);
 });
 
@@ -259,7 +222,7 @@ const entry = (createdAt: number, failed: readonly string[] | undefined, branch 
 test("a job failing run after run is one problem, not many failures", () => {
     const recurring = recurringFailures([entry(50, ["eslint", "unit"]), entry(40, ["eslint"]), entry(30, ["eslint"]), entry(20, [])]);
     expect(recurring[0]).toMatchObject({ job: "eslint", runs: 3 });
-    // Failed once, in the newest run only: that is the thing that just changed, not a pattern.
+    // Failed once, in the newest run only: not yet a pattern.
     expect(recurring.find((item) => item.job === "unit")).toBeUndefined();
 });
 
@@ -277,15 +240,13 @@ test("recurrence is counted per branch", () => {
     expect(recurring[0]).toMatchObject({ branch: "main", runs: 2 });
 });
 
-/* TAG REFS: release dispatch runs use the tag as head_branch (v1.245.0, not main), which would otherwise create
- * pseudo-branches that auto-open stale npm-publish runs. These should not participate in auto-open logic. */
+// Tag refs (release dispatch's head_branch, e.g. v1.245.0) must not participate in auto-open: read as branches, they'd
+// create pseudo-branches with stale runs.
 
 test("a running run on a tag ref does not auto-open", () => {
-    // GitHub workflow_dispatch runs triggered from a release tag carry the tag as head_branch.
     const tagRun = run(1, "running", 50, "v1.245.0", "cee7a1d");
     const mainRun = run(2, "running", 40, "main", "abc1234");
     const open = inFlightOnHead([tagRun, mainRun]);
-    // The tag ref is excluded from auto-open, but the regular branch run opens.
     expect(open.has(tagRun)).toBe(false);
     expect(open.has(mainRun)).toBe(true);
 });
@@ -294,7 +255,6 @@ test("a failed run on a tag ref does not auto-open", () => {
     const tagRun = run(1, "failed", 50, "v1.245.0", "cee7a1d");
     const mainRun = run(2, "failed", 40, "main", "abc1234");
     const open = openFailures([tagRun, mainRun]);
-    // The tag ref failure is excluded, but the regular branch failure opens.
     expect(open.has(tagRun)).toBe(false);
     expect(open.has(mainRun)).toBe(true);
 });
@@ -304,21 +264,18 @@ test("arrivesOpen excludes both running and failed tag ref runs", () => {
     const tagFailed = run(2, "failed", 50, "v1.245.0", "sha2");
     const mainRunning = run(3, "running", 40, "main", "sha3");
     const open = arrivesOpen([tagRunning, tagFailed, mainRunning]);
-    // Tag refs are excluded entirely from auto-open.
     expect(open.has(tagRunning)).toBe(false);
     expect(open.has(tagFailed)).toBe(false);
-    // Regular branches still auto-open.
     expect(open.has(mainRunning)).toBe(true);
 });
 
 test("tag ref detection matches semver patterns", () => {
-    // Various semver tag formats should all be excluded.
     const tags = ["v1.0.0", "v1.245.0", "v0.0.1", "v10.20.30", "v1.0.0-alpha", "v2.0.0-beta.1"];
     for (const tag of tags) {
         const tagRun = run(1, "running", 50, tag);
         expect(inFlightOnHead([tagRun]).size).toBe(0);
     }
-    // Non-tag branches should still work.
+    // Near-miss branch names that only look tag-like must still count as ordinary branches.
     const branches = ["main", "feat/v1-migration", "release-v1", "v1-branch", "version-1.0.0"];
     for (const branch of branches) {
         const branchRun = run(1, "running", 50, branch);

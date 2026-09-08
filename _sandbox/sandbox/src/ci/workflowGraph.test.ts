@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
-/* The translation this module exists for: `needs` is written in workflow job IDs, the jobs API answers in
- * display names, and matrices and reusable workflows mean those are not the same alphabet. Every test below
- * is a shape that appears in the workflow that prompted this, and the last few are the ways a matcher that
- * merely looks right quietly wires the graph to the wrong node. */
+// Pins resolveNeeds's job-id-to-display-name matching: needs uses job IDs, the jobs API reports display names, and
+// matrices/reusable workflows diverge further.
 
 test("plain jobs: needs in both the string and the list spelling", () => {
     const yaml = `
@@ -25,7 +23,6 @@ jobs:
 });
 
 test("a matched job with no needs is a ROOT, not an unknown", () => {
-    // The distinction the view depends on: [] draws a starting node, absent means fall back to timestamps.
     const resolved = resolveNeeds(`jobs:\n  preflight: {}\n`, ["preflight"]);
     expect(resolved.get("preflight")).toEqual([]);
     expect(resolved.has("preflight")).toBe(true);
@@ -41,11 +38,10 @@ jobs:
   release:
     needs: verify-site
 `;
-    // The called file contributes its own job names under the caller's, and it is not in front of us.
+    // verify-site.yml is not passed in; its jobs are only known by name.
     const resolved = resolveNeeds(yaml, ["preflight", "verify-site / verify", "verify-site / e2e-hermetic", "release"]);
     expect(resolved.get("verify-site / verify")).toEqual(["preflight"]);
     expect(resolved.get("verify-site / e2e-hermetic")).toEqual(["preflight"]);
-    // Depending on the caller means depending on everything the caller produced.
     expect(resolved.get("release")).toEqual(["verify-site / verify", "verify-site / e2e-hermetic"]);
 });
 
@@ -76,10 +72,9 @@ jobs:
     );
     // A root of the called file hangs where the calling job hung.
     expect(resolved.get("release / plan")).toEqual(["preflight"]);
-    // Inside the call, the file's own edges: this is the whole point of fetching it.
     expect(resolved.get("release / build")).toEqual(["release / plan"]);
     expect(resolved.get("release / publish")).toEqual(["release / plan", "release / build"]);
-    // Waiting for the call is waiting for what FINISHES it, not for every job it contains.
+    // Waiting for the call means waiting for the job that finishes it, not for every job it contains.
     expect(resolved.get("announce")).toEqual(["release / publish"]);
 });
 
@@ -104,7 +99,6 @@ jobs:
         ]),
     );
     expect(resolved.get("release / verify / smoke")).toEqual(["release / plan"]);
-    // `publish` waited on the nested call, so it waited on the job that finishes it, two files down.
     expect(resolved.get("release / publish")).toEqual(["release / verify / smoke"]);
 });
 
@@ -115,8 +109,7 @@ test("a ring of calls stops instead of following itself for ever", () => {
         [".github/workflows/second.yml", second],
         [".github/workflows/first.yml", first],
     ]);
-    // The walk stops the second time a file comes round, which leaves the innermost call unfollowed and
-    // therefore matchable, exactly like a call into another repository.
+    // Stops on the second repeat; the unfollowed innermost call is still matchable, like a call into another repo.
     expect(resolveNeeds(first, ["loop / back / loop"], sources).has("loop / back / loop")).toBe(true);
 });
 
@@ -151,8 +144,7 @@ jobs:
 });
 
 test("the LONGEST label wins: `verify` must not claim `verify-core / verify`", () => {
-    // Both are declared, and a plain startsWith would let the shorter id swallow the longer one's jobs,
-    // hanging the whole verify-core branch off the wrong parent.
+    // A plain startsWith would let `verify` swallow `verify-core`'s jobs as its own.
     const yaml = `
 jobs:
   verify: {}
@@ -179,7 +171,6 @@ jobs:
 `;
     const resolved = resolveNeeds(yaml, ["Lint everything", "legs (ubuntu)"]);
     expect(resolved.get("Lint everything")).toEqual([]);
-    // The rendered name ("leg ubuntu") matches nothing, so the id is what carries the leg.
     expect(resolved.get("legs (ubuntu)")).toEqual(["Lint everything"]);
 });
 

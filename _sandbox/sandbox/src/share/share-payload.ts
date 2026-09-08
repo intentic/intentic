@@ -3,38 +3,21 @@ import type { TranscriptRow, TranscriptTool, ShareDetail, ToolCallContent } from
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
 import { SECRET_PATTERNS } from "../public/public-files.js";
 
-/* WHAT ACTUALLY LEAVES, the one place a conversation is reduced to the thing a stranger may read.
- *
- * Pure and synchronous on purpose: everything about what a share contains is decided here, over plain values,
- * so the questions that matter ("does a messages-only share carry the diffs?", "does an API key pasted into a
- * prompt travel?") are answered by a unit test rather than by reading a renderer that is also doing file I/O.
- *
- * Three reductions, in order:
- *   1. DETAIL. `messages` keeps the two speakers' words; `everything` adds the agent's work and its thinking.
- *   2. REDACTION, on every string either level keeps.
- *   3. PICTURES. Workspace paths are rewritten to the copies that will sit beside the page, and the caller is
- *      told which files to copy. A page that still addressed a workspace path would be a page asking a
- *      recipient's browser for a file it has no business fetching (and could not fetch anyway).
- *
- * What is dropped in BOTH levels, and why it is not a third option:
- *   · `checkpointId`, an address in the daemon's own rewind state. Meaningless off this machine.
- *   · `notes`, the context the daemon prepended to a turn (a rebase that moved the branch, dependencies that
- *     are behind, retrieved workspace context). The published page has no surface that draws them, so keeping
- *     them would publish text nobody can read, which is strictly worse than not keeping it.
- *   · The cards a turn parked on (`question`, `plan`, `permission`, …, TranscriptRowSchema's card fields),
- *     for the same reason: the share view draws prose, thinking and tool cards and nothing interactive, so
- *     a card would leave as unreadable JSON. The day it draws them, the question and its picks belong at
- *     BOTH levels, they are the two speakers deciding something together. */
+// Pure, synchronous reduction of a conversation to what a stranger may read: testable without a renderer doing file
+// I/O. Three steps, in order:
+// detail (`messages` vs `everything`)
+// redaction of every string either level keeps
+// picture paths rewritten to published copies, so the page never addresses the workspace
+// Dropped at both levels: `checkpointId` (meaningless off this machine), `notes` and interactive cards (no surface to
+// draw them, unreadable JSON is worse than absent).
 
-// The marker a matched secret leaves behind. Visible on purpose: a silently shortened line reads as the agent
-// having said something odd, where this reads as what it is.
+// Visible marker, on purpose: a silently shortened line would read as the agent saying something odd.
 export const REDACTED = "[redacted]";
 
 const redact = (text: string): string => SECRET_PATTERNS.reduce((value, pattern) => value.replace(new RegExp(pattern, "g"), REDACTED), text);
 
-// What the page can actually draw. A path that is not one of these is not a picture, whatever a tool called it
-//, and since this list is also what decides which workspace bytes get copied out, it is the reason a share
-// cannot be talked into publishing an arbitrary file by naming it in an image entry.
+// What the page can draw; a path outside this set is never copied, so an image entry can't be used to publish an
+// arbitrary file.
 const PICTURE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"]);
 
 const isPicture = (path: string): boolean => PICTURE_EXTS.has(extname(path).toLowerCase());
@@ -42,14 +25,12 @@ const isPicture = (path: string): boolean => PICTURE_EXTS.has(extname(path).toLo
 // One picture to copy: where it is in the workspace, and what it is called beside the page.
 export interface SharePicture {
     readonly source: string;
-    // Relative to the share's own directory, which is what the payload now carries, `files/2-screenshot.png`.
+    // Relative to the share's own directory (`files/2-screenshot.png`).
     readonly published: string;
 }
 
-/* Workspace path → published name, minted once per distinct path so a screenshot shown three times is copied
- * once. Numbered because two conversations' worth of `screenshot.png` from different directories collide on
- * their basename alone, and a share that quietly showed the wrong picture would be worse than one that showed
- * none. The basename is kept for the readable half, sanitized to the same alphabet the share id uses. */
+// Workspace path → published name, minted once per distinct path. Numbered because two paths can share a basename; the
+// basename itself is kept for readability, sanitized to the share id's alphabet.
 class Pictures {
     private readonly byPath = new Map<string, string>();
 
@@ -72,8 +53,8 @@ class Pictures {
     }
 }
 
-// A tool's output, redacted and with its pictures repointed. An image entry whose path is not a picture we can
-// publish is dropped rather than left addressing the workspace.
+// A tool's output, redacted and with its pictures repointed; an image entry naming a path we can't publish is dropped
+// rather than left addressing the workspace.
 const shareContent = (content: readonly ToolCallContent[], pictures: Pictures): ToolCallContent[] =>
     content.flatMap((entry): ToolCallContent[] => {
         if (entry.type === "text") {
@@ -92,7 +73,7 @@ const shareContent = (content: readonly ToolCallContent[], pictures: Pictures): 
         return published === undefined ? [] : [{ type: "image", path: published }];
     });
 
-// One tool call, recursively, a delegation's nested calls are part of the work it did.
+// One tool call, recursively: a delegation's nested calls are part of the work it did.
 const shareTool = (tool: TranscriptTool, pictures: Pictures): TranscriptTool => ({
     id: tool.id,
     name: tool.name,
@@ -117,15 +98,10 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
             role: message.role,
             text: redact(message.text),
             ...(message.sentAt === undefined ? {} : { sentAt: message.sentAt }),
-            // A row the user placed wearing the agent's voice keeps its mark. A share is a HUMAN-facing page,
-            // the one audience the flag exists for, and a recipient reading planted words as the agent's own
-            // is exactly the confusion the mark was added to prevent. (The agent-facing handoff stays blind to
-            // it; see TranscriptRowSchema.)
+            // Placed rows keep their mark; a share is a human audience, the only one the flag exists for.
             ...(message.placed === true ? { placed: true } : {}),
         };
-        /* Attachments ride BOTH levels: a screenshot the user attached is part of what they said, not part of
-         * what the agent did, so leaving it out of a messages-only share would cut the prompt in half. Ones we
-         * cannot publish (a .pdf, a path that is no longer there) drop out rather than becoming dead links. */
+        // Attachments ride both levels, part of the prompt; unpublishable ones drop rather than becoming dead links.
         const attachments = (message.attachments ?? []).flatMap((path) => {
             const published = pictures.published(path);
             return published === undefined ? [] : [published];

@@ -1,31 +1,9 @@
 #!/usr/bin/env node
-/* Post a release highlight to the community Discord #announcements webhook.
- *
- *   DISCORD_RELEASE_WEBHOOK=https://discord.com/api/webhooks/… node _tools/scripts/release/post-release-discord.mjs 1.234.0
- *   DRY_RUN=1 …   # print the exact message that would be posted, post nothing
- *   FORCE=1 …     # post even when the release has no user-facing notes
- *
- * Reads the published GitHub Release body and quotes the same "## What's new" / "## Breaking changes" sections
- * the site changelog and the sandbox update card use — not the commit-subject list below them. That spelling
- * is a contract across four files that share no dependency edge, and the `release-headings` check
- * (_tools/checks/release-headings.mjs) is the only thing that notices when one of them drifts.
- *
- * WHY THE `success` STEP AND NOT publishCmd. .releaserc.json runs this after mark-release-cut.sh, which is the
- * only point where a release is finished rather than in progress: publishCmd is still stitching image
- * manifests and has not flipped make_latest yet (ship-stable.sh), so announcing from inside it would tell the
- * community about a version that `releases/latest/download` does not serve and that a later failure can leave
- * half-shipped. A Discord message cannot be un-sent the way a pointer can be rolled back.
- *
- * Skips quietly when the release has no user-facing notes (internal-only ship), unless FORCE=1 — roughly half
- * of this repository's releases are invisible to users and posting them would train people to mute the
- * channel. A failed post is never fatal: the release already shipped, and failing here would report a red
- * pipeline for a green release.
- *
- * WHY THIS IS JAVASCRIPT. It was a bash script that shelled out to `node` five times — to read two fields off
- * a JSON body, to run a heredoc'd program that extracted the sections, to count a message in characters rather
- * than bytes (`head -c` cuts a multi-byte character in half and leaves invalid UTF-8 in the payload), and to
- * build the payload itself. Every hard part was already JavaScript and only the two HTTP calls were shell, and
- * both of those are one `fetch`. */
+// Posts a release's `## What's new`/`## Breaking changes` sections to the Discord webhook; the heading spelling is a
+// contract release-headings.mjs checks. Runs at the `success` step, after the release ships, since a post can't be
+// un-sent. Skips quietly with no user-facing notes unless `FORCE=1`; a failed post never fails the pipeline.
+// DRY_RUN=1 print the message that would post, post nothing
+// FORCE=1 post even with no user-facing notes
 
 const version = process.argv[2];
 if (version === undefined) {
@@ -45,8 +23,7 @@ if (webhook === "") {
     process.exit(0);
 }
 
-// Unauthenticated where no token is set: the Release being read is public, and this runs from a maintainer
-// machine as readily as from the release job.
+// Unauthenticated without a token; the Release is public and this runs from a maintainer machine too.
 const release = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
     headers: {
         accept: "application/vnd.github+json",
@@ -60,10 +37,8 @@ if (release === undefined || !release.ok) {
 }
 const { body = "", html_url: htmlUrl } = await release.json();
 
-/* The bullets under one "## " heading, in the shape publish-github.sh emits: `- ` items until the next heading
- * of any level, which is where the commit-subject list ("### Features") begins. Its own copy of the walk, like
- * the daemon's and the site's, for the reason those two state — no dependency edge joins these four files —
- * and held to the same spelling by the release-headings check. */
+// Bullets under one `##` heading, up to the next heading of any level; its own copy of the walk, kept in step with the
+// site and daemon by the release-headings check.
 const sectionBullets = (label) => {
     const heading = new RegExp(String.raw`^##\s+${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*$`, "i");
     const lines = body.split(/\r?\n/);
@@ -92,7 +67,7 @@ if (breaking.length === 0 && notes.length === 0 && !force) {
     process.exit(0);
 }
 
-// Capped, with the overflow named rather than dropped: a release with thirty notes is a link to the full ones.
+// Caps bullets; overflow becomes a link to the full notes instead of being dropped.
 const formatBullets = (bullets) => {
     const shown = bullets.slice(0, limit).map((line) => `• ${line}`);
     const extra = bullets.length - shown.length;
@@ -108,9 +83,7 @@ const content = [
     `📦 [Release notes](${releaseUrl}) · [Changelog](https://intentic.dev/changelog)`,
 ].join("\n");
 
-// Discord caps a message at 2000 CHARACTERS, counted the way JavaScript counts them rather than in bytes.
-// flags 4 = SUPPRESS_EMBEDS: without it the two trailing links unfurl into preview cards twice the height of
-// the notes themselves.
+// Discord's 2000-character cap counts JS string length, not bytes; `flags: 4` suppresses link-preview embeds.
 const payload = { content: content.length > 2000 ? `${content.slice(0, 1999)}…` : content, flags: 4 };
 
 if (dryRun) {

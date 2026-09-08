@@ -1,22 +1,6 @@
-/* WHAT AN AGENT PAYS TO SEE ONE DEFINITION — the headline number, and the only one here worth optimising.
- *
- * THE WORKLOAD IS NOT CHOSEN. Every named import of a first-party symbol in every test file, resolved through
- * re-exports to the module that actually defines it. On this repository that is tens of thousands of real
- * "locate X" tasks that nobody hand-picked and nobody can quietly curate: they are the symbols the test suite
- * genuinely reaches for. A benchmark whose workload its author selected measures the author.
- *
- * WHAT IS CHARGED. The naive cost: open the file that holds the definition and read it. That is what an agent
- * does when it does not already know where inside a 2,000-line module to look, and it is the number that
- * collapses when a god file is split, because the definition stops arriving wrapped in ninety unrelated
- * neighbours. `lookup.mjs` charges the SKILLED cost — grep first, read a window — and the two move differently
- * on purpose. Report both or neither.
- *
- * THE NUMBER THAT MATTERS MOST is not the median. It is `over128k`: lookups whose defining file cannot be
- * loaded into a context window at all, where the agent is not paying more, it is failing. Driving that to zero
- * is worth more than any percentage.
- *
- * UNRESOLVED IS REPORTED, NEVER GUESSED. A name the resolver cannot follow is counted and excluded, not
- * attributed to a plausible file. See the header of `lib/resolve.mjs` for why that rule is not negotiable. */
+// What an agent pays to see one definition, over every real first-party import in the test suite (not a curated
+// sample). Charges the naive cost (open the file, read it) as lookup.mjs charges the skilled one (grep then a window);
+// report both or neither. over128k (files that can't fit a context window at all) matters more than the median.
 import { mean, percentile } from "./lib/files.mjs";
 
 const READ_WINDOW_LINES = 2000;
@@ -27,16 +11,15 @@ const declarationText = (file, declaration) =>
         .slice(declaration.startLine - 1, declaration.endLine)
         .join("\n");
 
-// Is a specifier this tree's own? Only used to tell a resolver limitation apart from a dependency import, and
-// that distinction is the reason `unresolved` is trustworthy as a quality signal on the resolver itself.
+// Tells a resolver limitation (first-party, unresolved) apart from an ordinary dependency import; that split is what
+// makes `unresolved` trustworthy.
 const isFirstParty = (tree, specifier) => specifier.startsWith(".") || [...tree.packages.keys()].some((name) => specifier.startsWith(name));
 
 // One imported name → one measured task, or a reason it is not one.
 const taskFor = (tree, countTokens, resolver, testPath, entry, imported) => {
     const home = resolver(testPath, entry.specifier, imported);
     if (!home) {
-        // "Leaves the tree" (correct, uninteresting) is not the same as "should have resolved and did not"
-        // (a resolver limitation that has to stay visible).
+        // Leaving the tree (external) isn't the same failure as should-have-resolved-and-didn't (unresolved).
         return { miss: isFirstParty(tree, entry.specifier) ? "unresolved" : "external" };
     }
 
@@ -109,9 +92,7 @@ export const runBench = (tree, countTokens, resolver) => {
         over32k: tasks.filter((task) => !task.fits32k).length,
         over128k: tasks.filter((task) => !task.fits128k).length,
         totalTokensIfReadWhole: tasks.reduce((total, task) => total + task.fileTokens, 0),
-        // The worst offenders, which is what a campaign's first round should actually target. Ranked by the
-        // total tokens the tree burns on this file across every lookup that lands in it — a 40k-token file
-        // nobody imports from is not the problem a 9k-token file imported 300 times is.
+        // Ranked by tokens burned across all lookups, not size: a small file imported often outweighs a big unused one.
         worstFiles: rankFiles(tasks),
     };
 };

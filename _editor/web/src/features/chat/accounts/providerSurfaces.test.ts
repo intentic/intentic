@@ -1,13 +1,6 @@
-/* EVERY PROVIDER THE CONTRACT KNOWS IS SERVABLE BY THIS APP, walked from the spec table rather than from a
- * list kept here.
- *
- * It exists because this side of the wire is where a provider used to go missing. The daemon's registry throws
- * at init on a module it has no row for; the browser has no such moment, so a provider added to the contract
- * appeared in the model picker (that list was already derived) and then had no tab to connect it on, no
- * readiness rule that knew how its credential is held, and a connect panel that fell through to a shape meant
- * for something else. Nothing failed. It just could not be used.
- *
- * So each test below asks one question of EVERY provider, and the answer has to be one a surface can render. */
+// Every provider the contract knows must be servable by this app, walked from the spec table. Unlike
+// the daemon, the browser has no init check that fails loudly when a new provider is missing a tab, a
+// readiness rule, or a connect panel shape; each test below asks one such question of every provider.
 import { accessFor, modelsFor, NATIVE_PROVIDERS, PROVIDER_SPECS, providerLabel, providerSpec, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { beforeEach, expect, it } from "vitest";
 import { accessBadge, connectPitch, hasSignIn, providerReady } from "../session/access";
@@ -32,17 +25,15 @@ beforeEach(() => {
 });
 
 it.each(NATIVE_PROVIDERS)(`%s has a tab to connect it on`, (provider) => {
-    // The label is the assertion: a tab that exists with nothing written on it is the same unusable row as
-    // no tab at all, and `find` returning undefined fails this line just as loudly.
+    // The label is the assertion: a blank tab is as unusable as no tab, and a missing one fails just as
+    // loudly.
     expect(providerTabs.find((entry) => entry.value === provider)?.label.trim(), `${provider} has no account tab`).toBe(
         providerSpec(provider)?.accountLabel,
     );
 });
 
 it.each(NATIVE_PROVIDERS)(`%s reads as not connected on a sandbox with nothing connected`, (provider) => {
-    // The floor every surface stands on: with no account anywhere, no provider may claim it can send. The rule
-    // this replaced fell through to "any account exists" for a provider it did not name, so a new one reported
-    // itself ready the moment an unrelated Claude account was connected.
+    // With no account anywhere, no provider may claim it can send.
     expect(providerReady(provider), `${provider} claims it can send with nothing connected`).toBe(false);
 });
 
@@ -57,15 +48,13 @@ it.each(NATIVE_PROVIDERS)(`%s says what it costs and what to connect while it is
 });
 
 it.each(NATIVE_PROVIDERS)(`%s has a name every surface can print`, (provider) => {
-    // Two labels, two questions: the picker names the runtime, the account rows name whose account it is. Both
-    // must resolve to something other than the raw id, which is what a provider nobody described falls back to.
+    // Two labels, two questions: the picker names the runtime, the account rows name whose account it is.
     expect(providerLabel(provider), `${provider} has no picker label`).not.toBe(provider);
     expect(providerDisplayLabel(provider), `${provider} has no display label`).not.toBe(provider);
 });
 
-/* A CONNECTED PROVIDER CAN SEND, per credential mechanism, which is the other half of the "not connected" test
- * above: a readiness rule that answered false for everything would pass that one and break the product. Each
- * arm connects the thing that mechanism actually stores. */
+// A connected provider can send, per credential mechanism; each arm connects the thing that mechanism
+// actually stores.
 it.each(PROVIDER_SPECS.map((spec) => ({ id: spec.id, kind: spec.auth.kind })))(`$id can send once its $kind credential is connected`, ({ id }) => {
     const spec = providerSpec(id)!;
     if (spec.auth.kind === `translator`) {
@@ -74,21 +63,18 @@ it.each(PROVIDER_SPECS.map((spec) => ({ id: spec.id, kind: spec.auth.kind })))(`
         providerAccounts.value = { ...providerAccounts.value, [id]: [{ id: `a`, label: `an account`, connectedAt: 1 }] };
     }
     expect(providerReady(id), `${id} cannot send with its own credential connected`).toBe(true);
-    // …and a connected provider stops advertising a price, which is what the badge's absence means.
+    // A connected provider stops advertising a price; the badge's absence is what says so.
     expect(accessBadge(id)).toBeUndefined();
 });
 
-/* A PROVIDER'S PICKER IS NEVER BLANK BEFORE ITS FIRST LIVE LOAD — or rather, it is blank for a stated reason.
- * Only Claude carries a static floor in the browser; every other provider's catalog is one route away and
- * never empty daemon-side, which is why the picker shows a per-provider spinner rather than an empty list. This
- * pins that the browser's floor is deliberately empty for them rather than accidentally so. */
+// Only Claude carries a static browser-side floor; every other provider's list is deliberately empty
+// until its first live load.
 it.each(NATIVE_PROVIDERS)(`%s's browser-side model floor is Claude's alone`, (provider) => {
     expect(modelOptionsFor(provider).length > 0).toBe(provider === `claude`);
     expect(modelsFor(provider).length > 0).toBe(provider === `claude`);
 });
 
-// The reserved endpoint the daemon provisions is not a native provider and must never be mistaken for one:
-// every rule above would then ask it for a spec row it does not have.
+// The trial endpoint is not a native provider; every rule above would ask it for a spec row it lacks.
 it(`the free trial is not a native provider`, () => {
     expect(NATIVE_PROVIDERS).not.toContain(TRIAL_PROVIDER);
     expect(providerSpec(TRIAL_PROVIDER)).toBeUndefined();

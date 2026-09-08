@@ -2,26 +2,17 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 
-/* WHAT A REGISTRY ROW BECOMES ONCE THIS SANDBOX IS TAKEN INTO ACCOUNT.
- *
- * The registry knows what has been published; the daemon knows what is installed here. Neither alone can answer
- * the only question a person browsing has, "is this one for me to get, or one I already have?", and the join
- * is what turns a catalogue into a surface you can act on. Kept as a pure module because it is the part with
- * cases in it: five states, two of which look identical on screen until you read why the button is off.
- *
- * THE JOIN KEY IS THE MANIFEST IDENTITY, not the capability id. A git-installed extension is named by whoever
- * installed it (its capability entry is called whatever they typed in the box), while the listing is keyed by
- * `publisher.name` read out of the manifest, the identity the app installs under and the one thing a registry
- * cannot rename or spoof. Matching on the typed name would show "Install" over an extension the reader already
- * has under a name of their own choosing. */
+// What a registry row becomes once this sandbox is checked against it: installable, installed, an update, blocked,
+// or unavailable. Joined on the manifest identity (`publisher.name`), not the capability id, since that can be
+// renamed while the identity can't.
 
 export type ListingStateKind = "installable" | "installed" | "update" | "blocked" | "unavailable";
 
 export interface ListingState {
     readonly kind: ListingStateKind;
-    /** The button's word. Absent when there is no button to press. */
+    /** The button's word; absent when there is no button to press. */
     readonly action?: string;
-    /** Why it cannot be installed, in the reader's words, a disabled control with no reason reads as a bug. */
+    /** Why it can't be installed, in the reader's words; a disabled control with no reason reads as a bug. */
     readonly reason?: string;
     /** The commit that is installed here, when one is and it differs from the listed one. */
     readonly installedRef?: string;
@@ -30,16 +21,12 @@ export interface ListingState {
 export interface DiscoverListing {
     readonly entry: RegistryEntry;
     readonly state: ListingState;
-    /** Everything the filter box may match on, pre-lowercased, the same trick the Extensions tab's rows use. */
+    /** Everything the filter box may match on, pre-lowercased. */
     readonly search: string;
 }
 
-/* WHAT THE NIGHTLY SCAN FOUND AT THIS ROW'S PINNED COMMIT, folded to the one question somebody browsing has:
- * will it load? Absent checks say NOTHING and must render as nothing, a registry that runs no scanner, or a
- * listing repointed since last night, is not evidence of a problem, and a warning there would punish every
- * private registry for not running a bot. "none" is a daemon-only extension with no browser bundle, which
- * loads perfectly well. Shared with the card, the detail panel and the Capabilities page so the app cannot
- * end up with two readings of one field. */
+// Whether the nightly scan found a problem at this row's pinned commit; absent means no scan ran, not a clean bill.
+// `bundle: "none"` is a daemon-only extension with no browser bundle, which loads fine.
 export const checksProblem = (entry: RegistryEntry): string | undefined => {
     if (entry.checks === undefined) {
         return undefined;
@@ -52,12 +39,8 @@ export const checksProblem = (entry: RegistryEntry): string | undefined => {
 
 export const checksOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && checksProblem(entry) === undefined;
 
-/* THE STATE, in the order the cases actually override each other.
- *
- * Blocked leads, and it leads even over "you already have this": it is the one case where the row is fine
- * mechanically and the answer is still no, and somebody who installed it before it was blocked is precisely
- * the reader who most needs to be told. The pointer rules come next because they are about whether an install
- * is possible at all, and only then does what is installed here get a say. */
+// Blocked wins even over already-installed, since a reader who installed before a block needs to know most.
+// Pointer validity is checked next, and only then does what's installed here decide the rest.
 export const listingState = (entry: RegistryEntry, installed: readonly ExtensionSummary[]): ListingState => {
     if (entry.trust === `blocked`) {
         return { kind: `blocked`, reason: entry.trustReason ?? `Blocked by the registry.` };
@@ -67,8 +50,7 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
         return { kind: `unavailable`, reason: `Published somewhere this sandbox can't clone from.` };
     }
     if (!isShaPinned(entry.install)) {
-        // Not a defect in the listing, it reads fine and links out fine. It just cannot be a one-click
-        // install, because extension code runs trusted in this browser and a branch is not a promise.
+        // Reads and links fine; not a one-click install, since code runs trusted here and a branch isn't a promise.
         return { kind: `unavailable`, reason: `The listing names no exact commit, so it can't be installed in one click.` };
     }
     if (!entry.admitted) {
@@ -80,18 +62,14 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
     if (here === undefined) {
         return { kind: `installable`, action: `Install` };
     }
-    /* An image-baked or workspace extension sharing this identity is INSTALLED and is not updatable from here:
-     * one ships with the sandbox image and the other is a directory somebody is editing, and offering to
-     * replace either with a registry commit would be offering to delete their work. */
+    // Built-in or workspace extensions here read as installed, never updatable: replacing either deletes work.
     if (here.source !== `installed` || here.commit === entry.install.ref) {
         return { kind: `installed` };
     }
     return { kind: `update`, action: `Update`, installedRef: here.commit };
 };
 
-// Pre-lowercased, and deliberately wider than what the card draws: somebody looking for "invoices" should find
-// the extension whose description says so, and somebody looking for a publisher should find everything of
-// theirs. The category rides along because it is a word people search with even where nothing displays it.
+// Pre-lowercased and wider than the card shows: matches on description and publisher too, not just name.
 const searchTextOf = (entry: RegistryEntry): string =>
     [entry.name, entry.description, entry.category, entry.version]
         .filter((part) => part !== undefined && part !== ``)
@@ -107,7 +85,7 @@ export const toListing = (entry: RegistryEntry, installed: readonly ExtensionSum
 /** The publisher half of `publisher.name`, and the extension's own half, drawn on two lines on a card. */
 export const splitListingName = (name: string): { readonly publisher: string; readonly title: string } => {
     const dot = name.indexOf(`.`);
-    // A listing whose name carries no dot is not one this app installs, but it still has to draw as something.
+    // A name with no dot isn't one this app would install, but it still has to draw as something.
     return dot === -1 ? { publisher: ``, title: name } : { publisher: name.slice(0, dot), title: name.slice(dot + 1) };
 };
 
@@ -118,16 +96,8 @@ export interface ListingSection {
     readonly listings: readonly DiscoverListing[];
 }
 
-/* THE TWO GROUPS, and why they are the website's two groups exactly.
- *
- * Verified means a human read the source at the listed commit, the most expensive thing anybody does per
- * listing, and until now a single glyph in a scrolling box. Leading with it is the whole point of the surface.
- * The second group keeps its honest caption rather than being dressed up as a review, because the difference
- * between "somebody read this" and "nobody has" is the only claim this page is really making.
- *
- * The public gallery splits the same rows the same way with the same words. That is not a coincidence to be
- * tidied up later: a person who browsed the gallery and then opened the app should see one catalogue, not two
- * presentations of one. */
+// Verified means a human read the source at the listed commit; leading with it is the point of the surface.
+// The other group keeps an honest caption instead of dressing up as reviewed.
 export const listingSections = (listings: readonly DiscoverListing[]): readonly ListingSection[] =>
     [
         {

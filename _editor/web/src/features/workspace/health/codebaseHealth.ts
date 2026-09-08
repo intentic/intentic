@@ -1,16 +1,14 @@
 import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/api-contract";
 import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
 
-/* The arithmetic behind the Codebase Health tab, as pure functions over the daemon's report, the same split as
- * usageChart.ts: the component binds, this file computes, and the numbers a reader is asked to act on are
- * testable without mounting anything. The refactor each row offers to start is part of that: it is DERIVED from
- * these same figures (refactorAsk.ts), so it is decided and tested here rather than assembled in a template. */
+// Pure-function arithmetic behind the Codebase Health tab: the component binds, this computes, so the numbers
+// are testable without mounting anything. Each row's refactor offer is derived from these same figures
+// (refactorAsk.ts), decided and tested here, not in the template.
 
-// Churn windows the panel offers. "All history" is the default because a hotspot ranking wants every commit a
-// file ever took; the narrower windows answer "what is hot NOW", which is a different question, so it is a
-// deliberate switch rather than a default.
+// `all` is the default: a hotspot ranking wants every commit a file ever took. The narrower windows answer a
+// different question, what's hot now.
 export type ChurnWindow = "all" | "90d" | "30d" | "7d";
-// Mutable by design: <SegmentedControl> takes its options array as-is.
+// Mutable by design; <SegmentedControl> takes its options array as-is.
 export const CHURN_WINDOWS: { label: string; value: ChurnWindow; title: string }[] = [
     { label: `All`, value: `all`, title: `Every commit in the repository's history` },
     { label: `90d`, value: `90d`, title: `Commits from the last 90 days` },
@@ -18,30 +16,28 @@ export const CHURN_WINDOWS: { label: string; value: ChurnWindow; title: string }
     { label: `7d`, value: `7d`, title: `Commits from the last 7 days` },
 ];
 
-// A path split at its last separator, so a row can dim the directory and keep the filename legible, the part
-// that identifies the file is the part that must survive truncation.
+// Splits a path at its last separator, so a row can dim the directory while the filename (the part that
+// identifies it) survives truncation.
 export const splitPath = (path: string): { dir: string; name: string } => {
     const cut = path.lastIndexOf(`/`);
     return { dir: cut === -1 ? `` : path.slice(0, cut + 1), name: path.slice(cut + 1) };
 };
 
-// One hotspot row, ready to render: the ranking's numbers plus the bar's length. `share` is scaled against the
-// LEADER, not an axis, a ranked list is read by comparing rows to each other, and there is no gridline here to
-// round up to (the same choice UsageBarChart makes).
+// Ranking's numbers plus the bar's length; `share` is scaled against the leader, since a ranked list is read
+// by comparing rows, not an axis.
 export interface HotspotRow extends WorkspaceHotspot {
     readonly dir: string;
     readonly name: string;
-    // 0..1 of the top row's score. Never 0 for a file that placed at all, a bar that vanishes reads as "no
-    // risk" when it means "much less than the leader".
+    // 0..1 of the top row's score; never 0 for a file that placed, so a vanished bar can't read as no risk.
     readonly share: number;
-    // Which refactor this row's own figures call for, and the turn that starts it.
+    // Which refactor this row's figures call for, and the turn that starts it.
     readonly ask: RefactorAsk;
 }
 
 const MIN_SHARE = 0.02;
 
-// The middle of a set of counts. Used for the peer group a key module's export surface is called wide against,
-// a mean would be dragged by the very outlier being looked for.
+// Median of a set of counts, used for the peer group a module's export surface compares against; a mean would
+// be dragged by the very outlier being looked for.
 export const median = (values: readonly number[]): number => {
     if (values.length === 0) {
         return 0;
@@ -51,10 +47,8 @@ export const median = (values: readonly number[]): number => {
     return sorted.length % 2 === 0 ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2 : (sorted[middle] ?? 0);
 };
 
-// The key modules come in beside the hotspots because a file in BOTH lists is a different problem from a file in
-// either, volatile and depended-on at once (refactorAsk.ts). `nowMs` is passed rather than read: a row's
-// posture depends on how long ago its file was last touched, and a function that reads the clock itself cannot
-// be tested on the boundary it exists to draw.
+// `nowMs` is passed in, not read live, so a row's dormancy posture can be tested at its boundary. Key modules
+// are cross-referenced since a file in both lists is a different problem than either alone.
 export const hotspotRows = (
     hotspots: readonly WorkspaceHotspot[],
     modules: readonly WorkspaceKeyModule[],
@@ -62,8 +56,7 @@ export const hotspotRows = (
     nowMs: number,
 ): HotspotRow[] => {
     const top = hotspots[0]?.score ?? 0;
-    // The ranking sorts by the PRODUCT, so neither signal's leader is necessarily the first row, each share is
-    // taken against the largest of that signal in the list the user is reading.
+    // Ranking sorts by the product; each share compares against that signal's own max, not necessarily row one.
     const leader = {
         commits: Math.max(0, ...hotspots.map((hotspot) => hotspot.commits)),
         complexity: Math.max(0, ...hotspots.map((hotspot) => hotspot.complexity)),
@@ -77,8 +70,8 @@ export const hotspotRows = (
     }));
 };
 
-// One key-module row. `ask` is undefined for most of them: PageRank's top is where a healthy chokepoint lives
-// too, and only an outsized export surface is a finding (refactorAsk.ts).
+// `ask` is undefined for most rows: PageRank's top is also where a healthy chokepoint lives, and only an
+// outsized export surface is a finding.
 export interface ModuleRow extends WorkspaceKeyModule {
     readonly dir: string;
     readonly name: string;
@@ -94,11 +87,9 @@ export const moduleRows = (modules: readonly WorkspaceKeyModule[]): ModuleRow[] 
     }));
 };
 
-// Thousands-separated while the exact number still fits a tile, compact past a million. These are counts a
-// reader may want to compare or repeat, so rounding them early ("10k symbols") costs real information for
-// space that was never short.
+// Thousands-separated up to a million, then compact; these are counts a reader may want to compare or repeat,
+// so early rounding costs real information.
 export const formatCount = (value: number): string => (value < 1_000_000 ? value.toLocaleString(`en-US`) : `${(value / 1_000_000).toFixed(1)}M`);
 
-// Branch points per file, the shape "complexity" is actually read in ("this repo averages 9 decisions a file").
-// The raw total is meaningless without the denominator, and one file in ten thousand is not a repo-level fact.
+// Branch points per file, since a raw total is meaningless without the file count and not a repo-level fact on its own.
 export const perFile = (total: number, files: number): string => (files === 0 ? `—` : (total / files).toFixed(1));

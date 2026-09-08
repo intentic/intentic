@@ -4,35 +4,14 @@ import { host } from "./host.js";
 import { SEEN_PATH, stagingKey } from "./paths.js";
 import { listStagedTails } from "./stagedTree.js";
 
-/* THE RAIL BADGE, and the one thing it is deliberately NOT.
- *
- * It is not a coverage count. "38 packages undocumented" would be lit every day for months, and the extension API
- * is explicit about why that is a bug rather than information: a badge "must mean something happened here that you
- * don't already know about, never here is a statistic", because a tile that is always lit teaches the eye to stop
- * seeing the rail. Staleness is the same shape, in an active repo something is always drifting, so it lives
- * inside the view, as a number next to the thing it describes.
- *
- * What it counts instead is a document set that has been GENERATED AND NOT YET REVIEWED: a run finished, drafts are
- * sitting in staging, and nobody has looked. That is an event, it is addressed to the person seeing it, and it
- * clears by acting, reviewing, publishing or discarding, rather than by waiting. */
+// Counts document sets generated and not yet reviewed, not coverage or staleness, which drift constantly and would make
+// the badge meaningless. Clears by reviewing, publishing or discarding, not by waiting.
 
-/* A PRESENCE LEDGER, unlike Maintenance's: what matters is whether this repo's staged set has been looked at at
- * all, not whether its contents have moved since. So the mark is never compared, it records WHEN, which nothing
- * reads and a human opening the file is glad of. */
+// Records when a repo's staged set was last seen; never compared against content, only presence matters.
 const seen = sandboxLedger(host, SEEN_PATH);
 
-/* Repos whose staged set is present and unacknowledged, kept current while the view is closed (background.ts),
- * a badge that only updated while you were already looking at Documentation could never tell you anything you
- * did not know.
- *
- * Sandbox-scoped, and here that is not merely tidiness: repo names repeat across workspaces, so carrying this
- * over a switch would not show a stale number, it would name repositories that exist in the new box too and say
- * something untrue about them.
- *
- * DRIVEN BY THE FILE BINDING, not by the interval. A staged set appears and disappears as writes under
- * `.intentic/config/docs/`, which the manifest declares, so the run finishing is what lights the tile and the
- * discard is what clears it. `everyMs` is the frame nobody delivered, hence ten minutes rather than one: a badge
- * that waits out a timer after the thing it describes is already on disk is a badge that has to be distrusted. */
+// Sandbox-scoped, since repo names repeat across workspaces; driven by the file binding under `.intentic/config/docs/`,
+// not by `everyMs`, which is only a backstop.
 const { state: pending, start: startDocumentationAttention } = sandboxPoll<readonly string[]>({
     host,
     everyMs: 10 * 60_000,
@@ -42,9 +21,8 @@ const { state: pending, start: startDocumentationAttention } = sandboxPoll<reado
         const staged = await Promise.all(
             api.workspace.repos().map(async ({ repo }) => {
                 const tails = await listStagedTails(api, repo);
-                // A `repo.json` is the marker that a set is worth reviewing: a run that has only just started has
-                // a run manifest but no map yet, and lighting the rail for that would badge the user's own click
-                // back at them.
+                // `repo.json` marks a set worth reviewing; a just-started run (manifest, no map yet) shouldn't
+                // self-badge.
                 return tails.includes(`repo.json`) && acknowledged[stagingKey(repo)] === undefined ? repo : undefined;
             }),
         );
@@ -61,24 +39,18 @@ export const documentationBadge = (): ViewBadge | undefined => {
     }
     return {
         count,
-        // `info` is the resting tone every core count uses. Nothing is broken and nothing is at risk, there is
-        // reading waiting, which is the mildest possible claim on attention.
+        // `info`: nothing is broken or at risk, just reading waiting, the mildest claim on attention.
         tone: `info`,
         tooltip: `${count} repositor${count === 1 ? `y has` : `ies have`} newly generated documentation waiting to be reviewed`,
     };
 };
 
-/* Acknowledge a repo's staged set, called when the owner actually opens it. Written to a file rather than held in
- * memory or in an extension setting: the badge is derived from files, so its acknowledgement belongs in the same
- * tree, where it survives a reload and is shared across the owner's browsers without adding a setting no user
- * would ever type. */
+// Marks a repo's staged set as reviewed. Written to the same file tree the badge derives from, so it survives a reload
+// and syncs across browsers without a new setting.
 export const acknowledgeStaged = async (repo: string): Promise<void> => {
     const key = stagingKey(repo);
     pending.value = pending.value.filter((entry) => entry !== repo);
-    /* Only the FIRST look writes. The view calls this on every open, and a mark that is a fresh timestamp each
-     * time would rewrite the file every time, which the daemon pushes to every connected browser as a change,
-     * costing them all a refetch for a fact that did not move. Presence is the signal; the time is a courtesy to
-     * whoever reads the file. */
+    // Only the first look writes; every open would otherwise push every browser a refetch for an unchanged fact.
     if ((await seen.read())[key] === undefined) {
         await seen.mark({ [key]: new Date().toISOString() });
     }

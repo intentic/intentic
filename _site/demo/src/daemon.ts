@@ -71,27 +71,13 @@ import { eventStream } from "./sse";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { json, refuse } from "./transport";
 
-/* THE DAEMON, as a fetch handler in the tab.
- *
- * Every route below answers in the shape the contract declares for it, the handlers are annotated with the
- * contract's own types, so a shape that drifts is a build error rather than a demo that quietly renders
- * nothing. What it deliberately is NOT is an oRPC server: the daemon's real `OpenAPIHandler` would want
- * `@orpc/server` in the browser bundle to re-validate payloads this file is the only writer of.
- *
- * Three classes of mutation, decided per route:
- *   real    , rename, archive, seen, sending a message: the fixture is mutable state and the UI is honest.
- *   refused , land, push, discard, secrets: `refuse()` gives the app the daemon's own error shape, so the
- *              message lands where a real refusal would instead of failing silently.
- *   missing , everything not listed: a 404 the app already knows how to narrate.
- */
+// A fetch handler standing in for the real daemon in the browser tab. Routes are typed against the
+// contract, so a shape drift is a build error, not a silent gap. Not an oRPC server: no runtime payload
+// validation here.
 
 const STARTED_AT = Date.now();
 
-/* The roster is live state: rename/archive/seen write it, and every write bumps `rev` and re-broadcasts, which
- * is exactly the contract the real registry has with the board (snapshot-not-diff, newest rev wins).
- *
- * How much of the cast it starts with is the demo mode's call (mode.ts), the fleet fixture stays the whole
- * roster, and a mode is a view onto it. */
+// Live state; every write bumps `rev` and re-broadcasts (snapshot-not-diff, newest rev wins).
 const roster = { agents: fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true), rev: 1 };
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
@@ -104,10 +90,8 @@ const broadcastRoster = (): void => {
     }
 };
 
-/* The recorded workflow run, as far as THIS board can see it. The fleet view draws a run's group card from
- * /workflows/runs rather than from the roster (useWorkflowRuns.ts), so a mode whose board does not carry the
- * two review agents must not be told about the run they are steps of, the card would be a doorway to cards
- * that are not there. Keyed on the live steps, because a finished step's conversation is history either way. */
+// Filters runs to steps whose still-running agent is on this board's roster; a board missing an agent
+// must not see the run it's a step of.
 const runsOnBoard = (now: number): WorkflowRun[] =>
     demoRuns(now).filter((run) =>
         run.steps.every((step) => step.state !== `running` || roster.agents.some((agent) => agent.id === step.conversationId)),
@@ -125,8 +109,7 @@ const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | un
     return next;
 };
 
-// Who is in the workspace. The second one is the whole sharing story told in one frame, and the first thing a
-// minimal recording drops, because an avatar nobody asked for is furniture.
+// The two demo presence users; TEAMMATE alone tells the whole sharing story.
 const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, role: `owner`, idle: false, view: `workspace` };
 const TEAMMATE: PresenceUser = {
     clientId: `demo-mate`,
@@ -137,22 +120,10 @@ const TEAMMATE: PresenceUser = {
     view: `agents`,
 };
 
-/* The /events stream: the hello identity frame, then a heartbeat inside the browser's 10s watchdog, plus the
- * roster and the presence of whoever this mode has in the workspace.
- *
- * `routes` is deliberately omitted from the hello. useDaemonRoutes reads its absence as "assume supported", so
- * no feature gates itself off on a daemon that never advertised, and the fixture doesn't have to keep a list
- * of route names in step with the contract. (SANDBOX_ROUTE_NAMES is imported only for the `info` build string,
- * so the count in the UI is honest about how much surface this fixture stands in for.) */
+// Heartbeat interval for /events, inside the browser's 10s watchdog.
 const HEARTBEAT_MS = 2_000;
 
-/* How often the fixture claims its running things moved.
- *
- * The real daemon watches its own tmux, sockets and registries and pushes `runtimeChanged` when what it sees
- * changes; those views hold no timer of their own any more. This fixture's rosters are CONSTANTS built against
- * the moment they are read (`activityAt: now - 4_000`), so with nothing pushing they would freeze, a browser
- * the demo shows as running, last active five minutes ago. Standing in for the real feed keeps the recording
- * honest and costs one small frame every few seconds. */
+// Interval for a synthetic `runtimeChanged` push, since the fixture's data doesn't change on its own.
 const RUNTIME_TICK_MS = 10_000;
 
 const events = (request: Request): Response =>
@@ -212,10 +183,7 @@ const attach = async (request: Request): Promise<Response> => {
     });
 };
 
-/* The conversation-id prefixes the rail's own areas derive their fan-outs from: `xt-` an acceptance run, `dg-` a
- * documentation run, `mt-` a chore turn. A visitor pressing Run there is asking for N isolated agents against a
- * checkout that does not exist here, so the turn is refused in the daemon's own error shape and the extension
- * shows the reason where it shows any other refusal. The visitor's OWN chat turn, no prefix, still runs. */
+// Prefixes for the rail's isolated extension runs (xt-/dg-/mt-), refused here; a prefixless run still works.
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
 const startTurn = async (request: Request): Promise<Response> => {
@@ -246,12 +214,8 @@ const reply = async (request: Request): Promise<Response> => {
     return json({ ok: true });
 };
 
-/* LAND NOW, the press the whole fleet board is pointed at, and the one mutation here that changes more than
- * one surface. A clean land moves the agent's delta into the main tree (fixture/workspace.ts), so the card
- * crosses into Finished, the review's rows flip to "landed", the Changes panel grows the files with this
- * agent's chip on them, and `workspaceChanged` tells every open panel to re-read. A refused one changes
- * nothing at all, which is exactly the promise `check` makes, the card goes back to conflict carrying the
- * report the panel then offers to hand to the agent. */
+// Moves the agent's delta into the main tree on success (fixture/workspace.ts) and broadcasts
+// `workspaceChanged`; on failure, flips the card to conflict with the check's report.
 const land = (id: string): Response => {
     const result = landAgentDelta(id);
     if (!result.landed) {
@@ -276,11 +240,8 @@ const land = (id: string): Response => {
 
 const info: Info = { name: `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
-/* The route table. Ordered, first match wins; `{name}` matches one segment, read back through `param`.
- *
- * Reads that are simply EMPTY here (browsers, subagents, drafts, ports, extensions, …) answer their contract's
- * empty shape rather than 404: an area that renders "nothing yet" is telling the truth about this fixture,
- * while a 404 would make the app narrate a daemon that predates the route. */
+// Route table: ordered, first match wins; `{name}` matches one path segment, read back via `param`. An
+// empty-but-real area answers its contract's empty shape, not a 404.
 interface RouteContext {
     readonly request: Request;
     readonly url: URL;
@@ -293,13 +254,11 @@ type Handler = (context: RouteContext) => Response | Promise<Response>;
 const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/events`, ({ request }) => events(request)],
     [`GET`, `/info`, () => json(info)],
-    // No loopback shortcut to adopt: the demo daemon is only ever at its own origin (see transport.ts).
+    // No loopback shortcut here; the demo daemon is only ever at its own origin.
     [`GET`, `/health`, () => json({ error: `The demo has no local daemon to shortcut to.` }, 404)],
     [`POST`, `/system/session`, () => json({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: `ada@acme.dev` })],
     [`POST`, `/system/presence`, () => json({ ok: true })],
-    // A WebSocket can't carry a bearer header, so the terminal and the browser view spend one of these per
-    // upgrade (wsTicket.ts). Answered rather than left to its 404 fallback: the fallback works, but it puts a
-    // failed request in the console of every demo.
+    // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
     [`POST`, `/system/ws-ticket`, () => json({ ticket: `demo-ticket` })],
     [`GET`, `/system/usage`, () => json({ accounts: [] })],
     [
@@ -310,28 +269,23 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
                 sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
             } satisfies TerminalsList),
     ],
-    // The agent's Chromium: one still being driven (its screencast is browser.ts) and one that has closed,
-    // which is the state the view renders as a record of where the agent went rather than as a broken stream.
+    // One still-driven browser session and one already closed, rendered as history, not a broken stream.
     [`GET`, `/system/browsers`, () => json({ sessions: BROWSER_SESSIONS(Date.now()) } satisfies BrowsersList)],
     [
         `DELETE`,
         `/system/browsers/{name}`,
         () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
     ],
-    // `sessions`, not `subagents`. SubagentsListSchema's field, which the client parses and the rail counts.
-    // Under the wrong key every read threw and vue-query retried it, so the one roster the demo has nothing to
-    // show for was also the busiest thing on its network tab.
+    // Must be `sessions`, the field SubagentsListSchema declares; the client parses that key.
     [`GET`, `/system/subagents`, () => json({ sessions: [] } satisfies SubagentsList)],
 
-    // `held` is the same approvals queue /automations/pending serves, projected onto the board, so the demo's
-    // "needs you" wake sits beside the running cards, as it does in the real fleet.
+    // `held` mirrors /automations/pending's approval queue, projected onto the board.
     [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev, held: [] } satisfies AgentsList)],
     [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``, url.searchParams.get(`caseSensitive`) === `true`))],
     [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
-    // Opening a card that is NOT mid-turn reads its transcript rather than attaching, so the one agent holding
-    // a finished delta carries the conversation that produced it (fixture/transcripts.ts).
+    // A card that is not mid-turn reads its transcript instead of attaching.
     [`GET`, `/agents/{id}/transcript`, ({ param }) => json(transcriptFor(param(`id`)))],
     [`GET`, `/agents/{id}/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
     [`POST`, `/agents/{id}/rename`, renameAgent],
@@ -357,18 +311,14 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`GET`, `/sessions/{id}`, () => json({ messages: [] })],
 
-    /* The recording's filesystem (fixture/workspace.ts), served the way the daemon serves /work: a tree, a lazy
-     * listing per directory, a read that says "nothing there" for a path that is not there, and real WRITES,
-     * because the surfaces reading these files also acknowledge, author and publish through them. What a visitor
-     * writes holds until the tab is reloaded. */
+    // Serves the recording's filesystem like the real daemon: a tree, lazy per-directory listing, and real
+    // writes that hold until the tab reloads.
     [`GET`, `/workspace/tree`, () => json(workspaceTree())],
     [`GET`, `/workspace/children`, ({ url }) => json(workspaceChildren(url.searchParams.get(`path`) ?? ``))],
     [`GET`, `/workspace/file`, ({ url }) => workspaceRead(url.searchParams.get(`path`) ?? ``)],
-    // The bytes behind an <img> in an acceptance report: its screenshots are files like any other, fetched
-    // through the daemon rather than from an origin, which is why they are served here and not from /public.
+    // Screenshot bytes for an <img>, served here rather than from /public.
     [`GET`, `/workspace/raw`, ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``)],
-    // The drop's two calls: the pre-flight that asks which files the sandbox already has byte-for-byte (nothing
-    // here is ever a re-drop, so none of them), then the per-file write the upload queue makes over XHR.
+    // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.
     [`POST`, `/workspace/upload-diff`, () => json({ skip: [] })],
     [`POST`, `/workspace/upload`, workspaceUpload],
     [`DELETE`, `/workspace/entry`, workspaceDelete],
@@ -393,37 +343,27 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/git/{repo}/branches`, ({ param }) => json({ branches: [{ name: `main`, current: true }], repo: param(`repo`) })],
     [`POST`, `/git/{repo}/commit`, () => refuse(`This is the demo workspace: commits need a real repository.`)],
     [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace: there is no remote to push to.`)],
-    /* Where each repo lives online. This is what the publisher-claim step matches against the registry's list,
-     * so `web` being an `acme/…` project is what makes the demo show the one-click path rather than the
-     * paste-a-line fallback, the more interesting of the two, and the one worth having on screen. */
+    // Where each repo lives online, matched against the registry for the publish path picker.
     [`GET`, `/git/remote-repos`, () => json({ repos: REMOTE_REPOS })],
-    // The claim's one press. Refused for the same reason commit and push are: the demo has no remote, and a
-    // fixture that answered `ok` would be showing a success the product could not have produced.
+    // Refused like commit and push: there is no remote to publish to.
     [`POST`, `/git/{repo}/publish-file`, () => json(PUBLISH_REFUSAL)],
 
-    /* The connected AI accounts and each provider's live model catalog. Without these the composer sits on
-     * "Checking your AI accounts…" forever: the chat gates itself on knowing what it could run a turn WITH. One
-     * connected Claude subscription and one Codex account is the honest shape of a working sandbox. */
+    // One connected Claude subscription; the composer's account gate needs at least one to stop waiting.
     [`GET`, `/claude/accounts`, () => json({ accounts: [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] } satisfies OauthAccountList)],
     [`GET`, `/grok/accounts`, () => json({ accounts: [] } satisfies OauthAccountList)],
-    // Codex authenticates ONLY through the translator (see access.ts), so this, not an oauth account, is what
-    // makes the fleet's two Codex agents legible: a connected ChatGPT subscription their turns ran on.
+    // Codex authenticates only through the translator, not an oauth account.
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
-    // One route for every provider's catalog, as the daemon serves it. A provider the demo has not connected
-    // answers empty, which is exactly what an unconnected provider looks like against the real daemon too.
+    // An unconnected provider answers empty, matching the real daemon's behavior.
     [`GET`, `/providers/{provider}/models`, ({ param }) => json(DEMO_CATALOGS[param(`provider`)] ?? { models: [], default: `` })],
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
-    // No rule has ever fired in a recorded demo, which is the honest answer for a table with no rules in it.
+    // No rule has ever fired in a recorded demo; an empty table is the honest answer.
     [`GET`, `/settings/rule-firings`, () => json({})],
     [`GET`, `/vpn`, () => json({ networks: [] })],
 
-    /* CI. The board is real data (fixture/ci.ts), and the rail's breakage badge is a fact about that data
-     * rather than about this visitor: the broken branch is broken for as long as the fixture says so, exactly
-     * as against a real daemon. What a recording cannot do is act on someone else's pipeline, so rerun, cancel
-     * and Fix-with-agent refuse in the daemon's own error shape, the view renders that line above the board,
-     * which is the whole point of refusing rather than pretending. */
+    // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
+    // refuse: a recording can't act on a real pipeline.
     [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now()))],
     [`POST`, `/ci/runs/jobs`, ciJobsRoute],
     [`POST`, `/ci/runs/rerun`, () => refuse(`This is the demo workspace: rerunning would start a pipeline on a repo that isn't yours.`)],
@@ -434,20 +374,16 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         () => refuse(`This is the demo workspace: a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
     ],
 
-    /* MAINTENANCE. `GET /chores` carries measurements, never verdicts, the chore book that decides what is due
-     * ships in the app, so every row a visitor reads here is computed in the browser from the numbers in
-     * fixture/chores.ts. The ledger is real state (a snooze holds, a finished run promotes into a row); what
-     * refuses is re-running a probe, because that is a subprocess in a box this recording does not have. */
+    // GET /chores computes rows in the browser from fixture/chores.ts; the ledger is real state. Re-running
+    // a probe refuses: it needs a subprocess this recording lacks.
     [`GET`, `/chores`, () => json(choresReport(Date.now()))],
     [`POST`, `/chores/ledger`, choresLedger],
     [`POST`, `/chores/probe`, () => refuse(`This is the demo workspace: a probe runs pnpm audit or knip against a real checkout.`)],
 
-    /* Automations, the sandbox working while nobody watches. Enabling, editing and deleting a row are real
-     * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
-     * an agent turn against a repo the recording doesn't have. */
+    // Enabling, editing, deleting and clearing a held wake are real (the fixture is the store); firing one
+    // refuses, since a wake is a real agent turn.
     [`GET`, `/automations`, () => json({ automations: automationsList(Date.now()) })],
-    // What can wake an agent here, and what is worth starting from. Without it the composer's source picker is
-    // empty and the page's whole offer half never draws: see the note on the fixture.
+    // What can wake an agent and what it can start from, for the composer's source picker.
     [`GET`, `/automations/catalog`, () => json(automationCatalog())],
     [`GET`, `/automations/pending`, () => json({ approvals: automationApprovals(Date.now()) })],
     [`POST`, `/automations`, saveAutomationRoute],
@@ -460,20 +396,15 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
 
-    /* Workflows, a designed graph of sessions, with one run of it going on right now. Reading is real (the
-     * designer opens on the saved graph, the run page draws the run the board's two review cards are steps
-     * of); what refuses is RUNNING one, because a run is several agent sessions against a real tree. Saving and
-     * deleting refuse for the same reason the run does: a design the demo let you keep would be a design that
-     * silently vanishes on reload, which teaches worse than a clear no. */
+    // Reading is real; running one refuses, since a run is several real agent sessions. Saving/deleting also
+    // refuse: a kept design must not vanish on reload.
     [`GET`, `/workflows`, () => json({ workflows: demoWorkflows(runsOnBoard(Date.now())) })],
     [`GET`, `/workflows/runs`, () => json({ runs: runsOnBoard(Date.now()) })],
     [`POST`, `/workflows`, () => refuse(`This is the demo workspace: designs are read-only here.`)],
     [`DELETE`, `/workflows/{id}`, () => refuse(`This is the demo workspace: designs are read-only here.`)],
     [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace: running a workflow starts several agent sessions on a real tree.`)],
     [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace: nothing is really running to stop.`)],
-    // Archiving a run takes its step SESSIONS off the board with it, and this fixture's archive is a one-way
-    // disappearance rather than a list you can open, so it refuses, in the demo's own voice, instead of
-    // swallowing four conversations the visitor could never get back.
+    // Archiving is one-way here with no way back, so it refuses instead of losing sessions silently.
     [
         `POST`,
         `/workflows/runs/{runId}/archive`,
@@ -481,23 +412,14 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace: nothing has been archived to restore.`)],
 
-    /* Saved loops, the workflows page's second kind of design, and the other half of the composer's
-     * run-through picker. Reading is real, so the picker shows what it is actually for: two ways for a message
-     * to be run over and over, each saying what stops it. Saving and deleting refuse for the reason every
-     * design here refuses, a loop the demo let you keep would vanish on reload, which teaches worse than a
-     * clear no. */
+    // Reading is real, showing two ways a message can rerun. Saving/deleting refuse, like every design here:
+    // a kept one would vanish on reload.
     [`GET`, `/loops/designs`, () => json({ designs: demoLoops() })],
     [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
     [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
 
-    /* Knowledge: the notes about things around the code, people, projects, decisions, words, and the graph they
-     * already form. Served under the extension's OWN namespace, because that is where its backend half lives
-     * and therefore what its panel calls; the paths come from the extension rather than being spelled out here,
-     * so the next move of that boundary lands as a compile error instead of an empty panel.
-     *
-     * The answers are computed by the extension's OWN engine over the fixture's raw markdown (fixture/knowledge.ts),
-     * not hand-authored: backlinks, the neighbourhood map and the drift report are the real ones, so a visitor
-     * clicking through the demo is seeing what the product does rather than a picture of it. */
+    // Served under the extension's own namespace and paths, so a boundary move is a compile error, not an
+    // empty panel. Answers come from the extension's real engine over fixture/knowledge.ts.
     [`GET`, `${KNOWLEDGE_BASE}/overview`, () => json(knowledgeOverview())],
     [`GET`, `${KNOWLEDGE_BASE}/notes`, () => json({ notes: knowledgeNotes() })],
     [`GET`, `${KNOWLEDGE_BASE}/search`, ({ url }) => json({ hits: knowledgeSearch(url.searchParams) })],
@@ -505,13 +427,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `${KNOWLEDGE_BASE}/graph`, ({ url }) => json(knowledgeGraph(url.searchParams))],
     [`PUT`, `${KNOWLEDGE_BASE}/note`, knowledgeWrite],
     [`DELETE`, `${KNOWLEDGE_BASE}/note`, knowledgeForget],
-    // The demo knowledge base is already started, so this only ever answers "nothing to write", which is the honest
-    // answer and the same one a real started knowledge base gives.
+    // The demo knowledge base already started, so this only ever answers nothing to write.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
-    /* THE CARDS THIS SANDBOX CAN SEND AS, the composer's persona picker, the personas page, and the chat
-     * rail's Personas column all read this one route. Three people make the point without turning the column
-     * into a directory: customer care, growth, and operations, each with the accounts their job reaches. */
+    // The persona picker's data; three personas make the point without turning the column into a directory.
     [
         `GET`,
         `/personas`,
@@ -525,35 +444,27 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
                 connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`],
             }),
     ],
-    /* Browsing a registry, what the Sandbox screen's Discover row renders. The real route clones a git repo
-     * and reads two JSON files out of it; this answers with them already joined. Every registry URL gets the
-     * same answer, which is honest enough for a demo: pointing the field at an internal repo is a real feature
-     * and there is no internal repo here to point it at. */
+    // Every registry URL answers the same joined data; the real route would clone a repo and read two JSON
+    // files from it.
     [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
-    // What each repository IS, the facts every extension's detect() runs over, and therefore which tiles the
-    // rail carries. Starting a dev server refuses: there is no checkout here to run one from.
+    // Facts each extension's detect() runs over, for which tiles the rail carries; starting a dev server refuses.
     [`GET`, `/panels`, () => json({ panels: demoPanels() })],
     [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace: a dev server needs the repository on your own machine.`)],
     [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace: nothing is running to stop.`)],
-    // `invalid` is not optional in the contract, and answering without it fails the whole list to parse, which
-    // reads as "couldn't list this sandbox's extensions" over an empty tab. Nothing here is unreadable: every
-    // extension is compiled into this build.
+    // `invalid` is required by the contract; omitting it fails the whole list to parse.
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions(), invalid: [] })],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
-    /* An extension's own settings, which the host loads BEFORE calling activate() so `api.settings.get` is
-     * synchronous from the first line of it. Missing here, the load rejected and the extension never activated
-     *, a whole surface silently absent from the demo, with nothing in the console but a routine "no fixture
-     * route" line. Answered as the defaults (empty), because a demo visitor configures nothing. */
+    // Loaded before an extension's activate(), so `api.settings.get` is synchronous; missing here means the
+    // extension never activates.
     [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
     [`GET`, `/approvals`, () => json({ approvals: [], invalid: [] })],
     [`GET`, `/members`, () => json({ members: [] })],
-    /* THE API TOKENS the Access tab lists and mints (auth/control-tokens.ts): two on the roster, one of them
-     * never used and one expiring, which is the state the roster exists to make visible, and a mint that
-     * answers the once-shown value the section renders with its snippets. */
+    // Two tokens on the roster (one unused, one expiring) make the roster's states visible; a mint answers
+    // the once-shown value.
     [
         `GET`,
         `/system/control/tokens`,
@@ -577,25 +488,13 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`DELETE`, `/system/control/tokens/{id}`, () => json({ ok: true })],
     [`GET`, `/environment`, () => json(demoEnvironment())],
     [`GET`, `/environment/contents`, () => json(demoEnvironmentContents())],
-    /* MOVING THE SANDBOX, the Environment tab's other half: one card for what leaves and one for what arrives.
-     * Both read on first render, so without these three the tab opened on a pair of error notices — the
-     * published-workspace row and the connected-computers row are the two things those cards say BEFORE the
-     * visitor clicks anything, and a demo that cannot say them is showing the empty version of the feature.
-     *
-     * A published workspace, because that is the state the card is about: the repo every definition names as
-     * `[workspace]`. No exports and no computers, which are the honest answers for a tab nobody has used yet
-     * and the states the two cards are designed to open in. */
+    // Read on first render; a published workspace and empty exports/computers are the tab's default states
+    // before the visitor clicks anything.
     [`GET`, `/definition/workspace`, () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] })],
     [`GET`, `/bundles`, () => json({ exports: [] })],
     [`GET`, `/arrivals/hosts`, () => json({ hosts: [] })],
-    /* Reading a file, answered as the checklist it produces, because the checklist IS the feature: one picker
-     * takes a sandbox.toml, an environment bundle or a packed Hermes/OpenClaw folder, and everything after
-     * that point is the same four rows the owner unticks. A demo that answered the upload with an error would
-     * show the button and hide the thing the button is for.
-     *
-     * A bundle, since it is the arrival that reads least like a document: one row for the workspace files, one
-     * per repository (the tick that lets an owner decline six gigabytes), one for the history nothing else can
-     * reproduce, and the two lines no arrival can do for the owner. */
+    // The checklist an upload produces: one row per repo, one for workspace files, one for history, plus two
+    // steps the arrival can't do for the owner.
     [
         `POST`,
         `/arrivals/plan`,
@@ -698,21 +597,16 @@ const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
 ];
 
-// What each provider's catalog route answers. Claude and Codex are the two this demo has connected; every other
-// provider is absent rather than listed empty, so the route's own fallback is the single place "nothing
-// connected" is spelled.
+// Claude and Codex are connected; every other provider falls back to empty rather than being listed.
 const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
     claude: { models: CLAUDE_MODELS, default: `claude-sonnet-5` },
     codex: { models: CODEX_MODELS, default: `gpt-5.2-codex` },
 };
 
-// The sandbox-wide agent settings the chat and the hub read. An EMPTY rule table is what puts a finished agent
-// in "Ready to land", with no rule saying otherwise, work waits on its branch, which is the state the demo's
-// review panel exists to show.
+// An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise.
 const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
 
-// What the tool-output cleaners were worth over the window the hub is showing. A measured claim, so the demo
-// states it the way the product does: per-stage, with the ledger's own freshness.
+// What the tool-output cleaners saved over the shown window, reported per-stage like the real product.
 const DEMO_SAVINGS: SavingsReport = {
     input: {
         updatedAt: STARTED_AT - 4 * 60_000,
@@ -754,8 +648,7 @@ function archiveAgents({ request }: RouteContext): Promise<Response> {
         }
         roster.agents = roster.agents.filter((agent) => !ids.includes(agent.id));
         broadcastRoster();
-        // `moved`/`failed`, the daemon's own shape (AgentsArchivedSchema). Answering `agents` meant the board
-        // read every archive here as "nothing moved" and told the visitor the card was already off it.
+        // Answers `moved`/`failed`, the daemon's own shape (AgentsArchivedSchema).
         return json({ moved: archived, failed: [], rev: roster.rev });
     });
 }
@@ -777,15 +670,11 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
 }
 
-/* The four filesystem handlers. A read of a path the recording does not carry answers "nothing there" rather
- * than a placeholder, because half the surfaces above read a file to find out whether something EXISTS, an
- * acknowledgement, a staged document set, a run's result, and a fixture that answered every read would be
- * telling all of them yes. It says so the way the daemon does, in a 200 body: a demo whose console fills with
- * failed requests looks broken to the one audience that reads consoles. */
+// A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to
+// check existence.
 const workspaceRead = (path: string): Response => json(readFile(path));
 
-// Only the screenshots an acceptance report embeds. `svg+xml` is a deliberate choice upstream (fixture/
-// storefront.ts): a page of product UI as markup weighs a few kilobytes and stays sharp at any size.
+// Serves only report screenshots; svg keeps them a few kilobytes and sharp at any size.
 const workspaceRaw = (path: string): Response => {
     const body = fileBody(path);
     if (body === undefined) {
@@ -812,8 +701,7 @@ const knowledgeRead = (url: URL): Response => {
     return note === undefined ? refuse(`No such note.`, 404) : json(note);
 };
 
-// Refuses exactly what the real backend refuses, a path that leaves the knowledge folder, or one that is not a note, so
-// the demo's error state is the product's rather than an optimistic success.
+// Refuses exactly what the real backend refuses: a path outside the knowledge folder, or not a note.
 function knowledgeWrite({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
         const { path, content } = body as { path?: string; content?: string };
@@ -848,8 +736,7 @@ function stopTurn({ request }: RouteContext): Promise<Response> {
     });
 }
 
-// The field's Aa switch, honoured here too: the browser's own tier matches case-sensitively the moment it is on,
-// and a fixture that ignored it would answer the same query two different ways on one board.
+// Honors the search field's case-sensitivity switch, matching the browser's own tier.
 const folded = (text: string, caseSensitive: boolean): string => (caseSensitive ? text : text.toLowerCase());
 
 const searchAgents = (query: string, caseSensitive: boolean): AgentSearchResult => {
@@ -858,7 +745,7 @@ const searchAgents = (query: string, caseSensitive: boolean): AgentSearchResult 
         needle === ``
             ? []
             : roster.agents.filter((agent) => folded(agent.title ?? ``, caseSensitive).includes(needle)).map((agent) => ({ id: agent.id }));
-    // The demo has no phrase index behind it (it matches titles only), so nothing is ever still being read.
+    // No phrase index behind this; nothing is ever still being indexed.
     return { matches, scanned: roster.agents.length, indexing: false };
 };
 
@@ -902,7 +789,7 @@ export const daemon = async (request: Request, url: URL): Promise<Response> => {
             return handler({ request, url, param: (name) => params[name] ?? `` });
         }
     }
-    // Named rather than silent: the console line is how the next fixture route gets found.
+    // Logged rather than silent, so a missing fixture route is easy to find.
     console.info(`[demo] no fixture route for ${request.method} ${url.pathname}`);
     return json({ error: `The demo fixture doesn't serve ${request.method} ${url.pathname}.` }, 404);
 };

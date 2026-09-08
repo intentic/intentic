@@ -1,10 +1,8 @@
-/* WHAT A LISTENER REMEMBERS BETWEEN MESSAGES, in memory and best-effort, the three things every chat connector
- * kept for itself in a copy of the same dozen lines. A restart forgets all of it, and each is bounded so a busy
- * workspace cannot grow the gateway's heap: at worst a restart costs one duplicate wake, one empty history,
- * one indicator that stops early. */
+// What a listener remembers between messages: recent delivery keys, per-chat history stand-ins, typing heartbeats.
+// Bounded and best-effort; a restart forgets all of it.
 
-// Recent delivery keys, to drop the duplicate delivery when two of our bots share a room and both receive the
-// same human message. `duplicate` answers whether the key was already seen, and records it when not.
+// Recent delivery keys; drops a duplicate when two bots share a room and see the same message. `duplicate` reports and
+// records.
 export interface RecentKeys {
     readonly duplicate: (key: string) => boolean;
 }
@@ -28,12 +26,11 @@ export const recentKeys = (max: number): RecentKeys => {
     };
 };
 
-/* The stand-in for a history API on the platforms that have none (Telegram, WhatsApp): what this process has
- * watched go by, per chat, oldest first, bounded per chat and in how many chats are kept. Insertion order is
- * recency (a push re-inserts its chat), so evicting the first key drops the chat quiet longest. */
+// Stand-in history for platforms with no history API (Telegram, WhatsApp): recent messages per chat, oldest first,
+// bounded per chat and in chats kept. Insertion order is recency; eviction drops the quietest chat.
 export interface ChatRings<T> {
     readonly remember: (chat: string, entry: T) => void;
-    // What came before, oldest first. A copy: the caller's history is its own to hand on.
+    // Oldest first; a copy, so the caller may keep or mutate it freely.
     readonly of: (chat: string) => T[];
 }
 
@@ -56,15 +53,12 @@ export const chatRings = <T>(limits: { readonly perChat: number; readonly chats:
     };
 };
 
-/* A "typing…" heartbeat per room. Every platform's indicator expires on its own after seconds, so it is re-sent
- * on the platform's cadence for the whole turn, and capped so a turn that never replies cannot leak the
- * interval forever. `start` on a room already typing is a continuation (the timer restarts, nothing is said
- * about stopping); `stop` says so through `onStop` where the platform wants a closing word (WhatsApp's
- * "paused" presence), and only for a heartbeat that was live. */
+// Per-room "typing…" heartbeat, re-sent on cadence since each indicator expires on its own; capped so a stalled turn
+// can't leak it. `start` on a live room continues it; `stop` fires `onStop` only if it was live.
 export interface TypingHeartbeat {
     readonly start: (room: string, send: () => void, onStop?: () => void) => void;
     readonly stop: (room: string) => void;
-    // Shutdown: every timer goes and nothing is said, the connection a closing word would ride is going too.
+    // Clears every timer without firing onStop.
     readonly stopAll: () => void;
 }
 

@@ -3,17 +3,9 @@ import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract"
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "../platform/tls/local-tls.js";
 
-/* THE FREE TRIAL, AS THE DAEMON SEES IT, is there one, and how much of today's allowance is left.
- *
- * The trial is served BY the platform (its /trial routes), which is the one thing on this product's command
- * path that is: everything else the browser drives goes straight to this daemon. That asymmetry is why the
- * daemon has to ask rather than assume. Whether a trial exists at all is the platform operator's decision (it
- * is off unless they configured keys), and a sandbox that provisioned a trial endpoint against a platform that
- * serves none would put a dead provider in the picker and a 404 at the end of the user's first message.
- *
- * So availability is PROBED, once at boot and then on the same poll that refreshes the allowance, and cached.
- * Unknown is treated as absent: a daemon that has not heard back offers no trial, which is the failure that
- * costs a user nothing. */
+// Trial is served by the platform, not this daemon, and its existence is the platform operator's decision; a sandbox
+// must probe rather than assume it. Availability is probed at boot and on the allowance poll, then cached; unknown
+// reads as absent.
 
 export interface TrialStatus {
     readonly allowance: number;
@@ -23,24 +15,21 @@ export interface TrialStatus {
     // ISO stamp of the next UTC midnight, the browser renders it in local time.
     readonly resetsAt: string;
     readonly retryAt?: string;
-    // The real model behind the trial's one published id, on this account's most recent message. The platform
-    // routes across a ladder, so this is the only thing that can say what actually answered.
+    // Real model behind the trial's published id for the account's latest message; the platform routes a ladder.
     readonly servedModel?: string;
 }
 
 export interface TrialService {
-    // Whether a trial endpoint should exist in this sandbox. False until a probe has said otherwise.
+    // Whether a trial endpoint should exist; false until a probe says otherwise.
     readonly available: () => boolean;
     // The last status read, or undefined before the first successful one.
     readonly status: () => TrialStatus | undefined;
-    // Re-probe. Swallows its own failure, an unreachable platform is not an error the caller can act on, and
-    // the cached answer stays until one arrives.
+    // Re-probes; swallows its own failure, since an unreachable platform is not something the caller can act on.
     readonly refresh: () => Promise<void>;
 }
 
-// A single authenticated GET to the platform, authenticated by possession of the connect token like every other
-// sandbox-originated call. node:https for the same reason platform-client.ts uses it: a dev platform arrives as
-// a self-signed cert on host.docker.internal, and undici cannot skip verification for one request only.
+// Authenticated GET via the connect token, over node:https rather than undici, since a dev platform's self-signed cert
+// on host.docker.internal needs per-request verification skip undici can't do.
 const getJson = (config: Config, path: string): Promise<{ status: number; json: unknown }> =>
     new Promise((resolve, reject) => {
         const url = new URL(path, config.platform.url);
@@ -83,8 +72,7 @@ const isStatus = (value: unknown): value is TrialStatus => {
 export const createTrialService = (config: Config, get = getJson): TrialService => {
     let status: TrialStatus | undefined;
     let available = false;
-    // A sandbox with no platform (a loopback or test daemon) can never have a trial: there is nobody to ask and
-    // no account to meter it against. Same gate announcing uses.
+    // No platform means nobody to ask and no account to meter; same gate announcing uses.
     const configured = config.platform.url !== "" && config.connectToken !== "";
     return {
         available: () => available,
@@ -95,12 +83,11 @@ export const createTrialService = (config: Config, get = getJson): TrialService 
             }
             const response = await get(config, "/trial/status").catch(() => undefined);
             if (response === undefined) {
-                // Left as-is rather than cleared: a platform that blipped has not withdrawn the trial, and
-                // dropping the endpoint mid-conversation would strand a turn the user is in the middle of.
+                // Left as-is, not cleared: a blip hasn't withdrawn the trial, and dropping it would strand an
+                // in-progress turn.
                 return;
             }
-            // 404 is the platform's own "no trial here", for a platform that runs none, and for a sandbox it
-            // does not recognise. Both mean the same thing to us, and both are final rather than transient.
+            // 404 means no trial, whether the platform serves none or doesn't know this sandbox; both are final.
             if (response.status === 404) {
                 available = false;
                 status = undefined;

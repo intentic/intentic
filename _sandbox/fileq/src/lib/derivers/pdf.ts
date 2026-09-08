@@ -7,28 +7,22 @@ import { extractText, getDocumentProxy, getMeta } from "unpdf";
 import { onPath } from "../tools.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* PDFs: the text layer, per page. unpdf over pdfjs-dist directly because it ships a serverless pdf.js build
- * that runs in plain Node with no worker, no canvas and no DOM shims — the exact subset text extraction
- * needs, at a fraction of the install.
- *
- * A PDF with no text layer (a scan) is the honesty case this deriver exists to get right. When the image
- * carries tesseract (an extension's layer puts it there; the core image does not), the scan is rasterised
- * and recognised, page by page and capped, and the sidecar says the words are recognised rather than
- * exact. When it does not, the sidecar says so instead of producing an empty page that reads as an empty
- * document. Either way the deterministic tier never guesses at pixels. */
+// PDF text layer, per page, via unpdf's serverless pdf.js build (no worker, canvas or DOM shims needed for text
+// extraction).
+// A scan with no text layer is rasterised and OCR'd when tesseract is on the image, noted as recognised rather than
+// exact; otherwise the sidecar says so instead of an empty page.
+// Either way, the deterministic tier never guesses at pixels.
 
-// Below this many characters per page on average the "text layer" is furniture (page numbers, a watermark),
-// not content — the tell of a scanned document with a vestigial layer.
+// Below this many chars per page, the text layer is furniture, not content: a scan with a vestigial layer.
 const SCAN_THRESHOLD_CHARS_PER_PAGE = 24;
 
-// OCR is the one derivation here that costs seconds per page, and it runs unasked in the background sweep,
-// so a 400-page scanned ledger gets its first pages recognised and a note naming the rest.
+// OCR costs seconds per page and runs unasked in the sweep, so a long scan gets its first pages and a note.
 const MAX_OCR_PAGES = 20;
 const OCR_DPI = "200";
 
 const run = promisify(execFile);
 
-/** Whether this image can recognise a scan: both halves, the rasteriser and the recogniser, on PATH. */
+/** Whether this image can recognise a scan: both the rasteriser and the recogniser on PATH. */
 export const ocrAvailable = (): boolean => onPath("tesseract") && onPath("pdftoppm");
 
 const recognisePages = async (absPath: string, totalPages: number): Promise<string[]> => {
@@ -55,10 +49,9 @@ const pagesToMarkdown = (pages: readonly string[]): string =>
         : pages.map((page, index) => `## Page ${index + 1}\n\n${page === "" ? "(no text on this page)" : page}`).join("\n\n");
 
 export const pdfDeriver: Deriver = {
-    /* The stamp is part of the deriver's identity, and OCR is part of what this deriver produces — so a
-     * sidecar written for a scan before tesseract arrived (an owner approving an extension's layer and
-     * rebuilding) must read as stale the moment it is here. Naming the capability in the stamp is what makes
-     * the next touch re-derive it; a static name would leave "OCR is not part of this tier" on disk forever. */
+    // The stamp names OCR capability, since a sidecar written before tesseract was available must read as stale now
+    // that it's here.
+    // A static name would leave a pre-OCR sidecar looking current forever.
     get name(): string {
         return ocrAvailable() ? "pdf+ocr" : "pdf";
     },

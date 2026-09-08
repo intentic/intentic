@@ -4,14 +4,8 @@ import { errorMessage } from "@intentic/base/errors";
 import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, USAGE } from "./gate.js";
 import { exitOfRun, parseRunArgs, RUN_USAGE, RunExchangeError, type RunOutcome, runExchange } from "./run.js";
 
-/* The process around gate.ts: stdin, one fetch, stdout, an exit code. No CLI framework, two options and a
- * body do not earn one (the acp-bridge CLI set the precedent).
- *
- * EXIT 2 IS NEVER A VERDICT. The daemon answers every verdict, including fail, as HTTP 200, so the status
- * line cleanly separates "the exchange worked" from "what the product is" (gate.routes.ts). This process keeps
- * that separation: 0/1 and the blocked exit come from the verdict's own outcome, and 2 means the exchange
- * itself broke, wrong token, no such gate, the daily ceiling, a network that ate the reply. Folding those
- * into `fail` would page whoever owns the PRODUCT for a problem in the pipeline's WIRING. */
+// Reads stdin, makes one fetch, writes stdout, and exits. Exit 2 means the exchange itself failed (bad token, no such
+// gate, daily ceiling, network); 0, 1, and the blocked exit come only from the verdict's own outcome.
 
 const readStdin = async (): Promise<string> => {
     const chunks: Buffer[] = [];
@@ -21,8 +15,7 @@ const readStdin = async (): Promise<string> => {
     return Buffer.concat(chunks).toString("utf8");
 };
 
-/* `intentic-gate run …` is the second exchange this binary speaks: not a door but the API itself, with a
- * control token (run.ts). Dispatched on the first word so the gate's own options stay exactly as they were. */
+// `run` dispatches to the API exchange in run.ts, matched on the first argument.
 if (process.argv[2] === "run") {
     const parsedRun = parseRunArgs(process.argv.slice(3), process.env, randomUUID);
     if (parsedRun.kind === "help") {
@@ -64,8 +57,7 @@ if (parsed.kind === "error") {
 }
 
 const { call } = parsed;
-// No words on the command line ⇒ the request rides in on stdin, but only when something is actually piped:
-// waiting on an interactive terminal's stdin would hang a pipeline that forgot the body, forever.
+// No words on the command line falls back to stdin, but only when piped in, not an interactive terminal.
 const request = call.request !== "" ? call.request : process.stdin.isTTY ? "" : (await readStdin()).trim();
 
 let response: Response;
@@ -108,8 +100,7 @@ if (verdict === undefined) {
     process.exit(2);
 }
 
-// One line for the pipeline log, the reason IS the product of this whole exchange, and the run id under it,
-// which is what a person pastes into the workflow run view when the one line is not enough.
+// Outcome and reason for the pipeline log; run id below it, for pasting into the workflow run view.
 console.log(`${verdict.outcome}: ${verdict.reason}`);
 console.log(`run ${verdict.runId}`);
 process.exit(exitOf(verdict, call.blockedExit));

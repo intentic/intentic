@@ -6,8 +6,7 @@ import type { TemplateManifest } from "@intentic/scaffold";
 import { describe, expect, test } from "vitest";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 
-// A minimal manifest exercising the two port conventions: web reads PORT (daemon-injected) + a sibling URL;
-// api reads a non-PORT var (API_PORT) via the {port} marker + a sibling URL.
+// Exercises both port conventions: web reads daemon-injected PORT, api reads API_PORT via the {port} marker.
 const MANIFEST: TemplateManifest = {
     scope: "@app_/",
     shell: [],
@@ -28,7 +27,7 @@ const MANIFEST: TemplateManifest = {
     },
 };
 
-// A monorepo on disk: each entry is an `_apps/<dir>` package.json.
+// Builds a monorepo fixture: one _apps/<dir>/package.json per entry.
 const scaffoldRepo = async (apps: Record<string, object>): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), "app-previews-"));
     for (const [app, pkg] of Object.entries(apps)) {
@@ -45,7 +44,6 @@ describe("app-previews", () => {
 
     test("buildAppSpec fills {pkg} with the app's real package name, sibling {previewUrl:*}, and routes {port} to portEnv", () => {
         const apiPreview = MANIFEST.templates["api"]!.previews[0]!;
-        // `pkg` is the real package.json name: scoped to the monorepo's OWN scope, not the template's @app_/.
         const spec = buildAppSpec({
             repo: "shop",
             repoDir: `${WORKSPACE_ROOT}/shop`,
@@ -58,16 +56,14 @@ describe("app-previews", () => {
 
         expect(spec.cwd).toBe("/work/shop");
         expect(spec.command).toContain("pnpm --filter @shop/api dev");
-        // The Hono API reads API_PORT, not PORT, so {port} becomes a portEnv the manager fills with the assigned port.
+        // The API reads API_PORT, not PORT; {port} becomes a portEnv filled with the assigned port.
         expect(spec.portEnv).toEqual(["API_PORT"]);
         expect(spec.env["API_PORT"]).toBeUndefined();
-        // The sibling web app's preview URL is filled from the zone + sandbox id.
         expect(spec.env["WEB_ORIGIN"]).toBe("https://preview-shop--web-abc123def456.z.dev");
     });
 
     test("buildAppSpec filters by the exact package name for a renamed instance", () => {
         const apiPreview = MANIFEST.templates["api"]!.previews[0]!;
-        // A renamed instance "admin-api" whose package name the inject engine set to @shop/admin-api.
         const spec = buildAppSpec({
             repo: "shop",
             repoDir: `${WORKSPACE_ROOT}/shop`,
@@ -101,9 +97,8 @@ describe("app-previews", () => {
         expect(discoverApps(dir, MANIFEST)).toEqual([{ app: "api", kind: "api", pkg: "@shop/api", preview: MANIFEST.templates["api"]!.previews[0] }]);
     });
 
-    /* The reason an Astro site sitting in `_apps/` used to be invisible: no manifest template matches it. It is
-     * still a dev server, so it is still an app, and since `astro dev` ignores the daemon-injected PORT and
-     * vite 403s an unrecognized preview Host, the derived command has to pass both on the command line. */
+    // astro dev ignores the daemon-injected PORT; vite 403s an unrecognized preview Host. The command passes both
+    // explicitly.
     test("discoverApps finds a framework app with no matching template and passes it the port + preview host", async () => {
         const dir = await scaffoldRepo({ site: { name: "@shop/site", scripts: { dev: "astro dev" }, dependencies: { astro: "^6" } } });
         const [found, ...rest] = discoverApps(dir, MANIFEST);
@@ -126,7 +121,7 @@ describe("app-previews", () => {
         expect(spec.command).toContain(`pnpm --filter @shop/site dev --port "$PORT" --host --allowed-hosts`);
     });
 
-    // astro/nuxt depend on vite themselves, so the more specific framework has to win the probe.
+    // astro/nuxt depend on vite, so vite alone would also match without a more-specific check.
     test("discoverApps prefers the specific framework over the vite it is built on", async () => {
         const dir = await scaffoldRepo({
             site: { name: "@shop/site", scripts: { dev: "astro dev" }, dependencies: { astro: "^6" }, devDependencies: { vite: "^7" } },
@@ -134,7 +129,7 @@ describe("app-previews", () => {
         expect(discoverApps(dir, MANIFEST)[0]?.kind).toBe("astro");
     });
 
-    // A server that reads PORT from the env (bun/node/hono) needs no flags: just the dev script.
+    // No recognized framework needs no flags: the server reads PORT from the env directly.
     test("discoverApps derives a bare dev command and no kind for an app with no recognized framework", async () => {
         const dir = await scaffoldRepo({ daemon: { name: "@shop/daemon", scripts: { dev: "bun --watch ./src/main.ts" } } });
         expect(discoverApps(dir, MANIFEST)).toEqual([
@@ -142,7 +137,6 @@ describe("app-previews", () => {
         ]);
     });
 
-    // A library in `_apps/` has no dev server, so it is not startable: the apps view lists it under Packages.
     test("discoverApps skips a package with no dev script and a dir with no package.json", async () => {
         const dir = await scaffoldRepo({ cli: { name: "@shop/cli", scripts: { build: "tsc" } } });
         await mkdir(join(dir, "_apps", "empty"), { recursive: true });

@@ -7,22 +7,17 @@ import { jsonBody } from "../client/jsonBody";
 import { CAPABILITIES, VPN } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-/* The sandbox's VPN tunnels, live, from the daemon's /vpn routes. A VPN is ADDED as a capability (credentials,
- * auto-connect, the Capabilities page); it is DIALLED here, which is why this is its own composable rather
- * than a slice of useCapabilities: connecting is a repeated runtime action with a much richer result than a
- * capability's {state, detail}.
- *
- * The daemon reads every field back from the OS, so this is also how the UI stays truthful about tunnels the
- * AGENT dialled or dropped through its own `vpn` command, there is one state, not two. */
+// Live VPN tunnels from the daemon's /vpn routes. A VPN is added as a capability but dialled here, since
+// connecting returns far more than a capability's {state, detail}. State always comes from the OS, so
+// tunnels the agent dials or drops outside the UI show up too.
 
 const QUERY_KEY = VPN.of();
-// A dial takes seconds and passes through "connecting"; poll while anything is mid-flight so the card settles
-// on its own. A steady list still refreshes on the slower default so an externally-dropped tunnel shows up.
+// Fast poll while a link is connecting; slow poll otherwise still catches externally-dropped tunnels.
 const TRANSIENT_POLL_MS = 2000;
 const STEADY_POLL_MS = 15_000;
 
-// Parse an exported FortiClient config into addable connections. Read-only and cache-free, nothing is stored
-// until the user picks one and submits the ordinary capability add, so it lives outside the composable.
+// Parses an exported FortiClient config into addable connections. Read-only and cache-free; nothing is
+// stored until the user submits the ordinary capability add.
 export const importForticlient = async (xml: string): Promise<ForticlientConnection[]> =>
     ForticlientImportSchema.parse(await sandboxJson(`/vpn/import-forticlient`, jsonBody(`POST`, { xml }))).connections;
 
@@ -48,13 +43,12 @@ export function useVpn(): {
     });
 
     const invalidate = async (): Promise<void> => {
-        // A VPN's capability row carries the same state under a different shape, refresh both so the
-        // Capabilities page's inventory and the VPN card's own rows never disagree about one tunnel.
+        // Refreshes both caches so the Capabilities page and the VPN card never disagree about one tunnel.
         await Promise.all([queryClient.invalidateQueries({ queryKey: QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CAPABILITIES.of() })]);
     };
 
-    // POST + read the streamed dial, calling onLine per frame; throws with the daemon's message on an error
-    // frame, a rejected password or an untrusted certificate is something the user must read, not a toast.
+    // Streams the dial, calling onLine per frame; throws the daemon's message on an error frame, since a
+    // rejected password or untrusted certificate needs to be read, not toasted.
     const connect = async (id: string, otp?: string, onLine?: (message: string) => void): Promise<void> => {
         const response = await sandboxRequest(
             `/vpn/${encodeURIComponent(id)}/connect`,
@@ -75,7 +69,7 @@ export function useVpn(): {
                 }
             }
         } finally {
-            // Even a failed dial can have moved the tunnel (a half-negotiated IPsec SA), re-read either way.
+            // A failed dial can still move the tunnel state (a half-negotiated SA), so re-read either way.
             await invalidate();
         }
     };

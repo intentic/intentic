@@ -6,9 +6,8 @@ import { createApp } from "../app.js";
 import { configSchema, type Config } from "../config.js";
 import { createTrialPool } from "./trial-pool.js";
 
-/* THE TRIAL IS THE ONE ROUTE FAMILY THAT SPENDS INTENTIC'S OWN MONEY, so the things worth pinning here are the
- * ones that cost something when they break: the allowance actually stopping a caller, a refused key moving to
- * the next one instead of surfacing, and a turn nobody served not being billed. */
+// The trial spends intentic's own money, so what's pinned here is what costs something when it breaks: the allowance
+// actually stopping a caller, a refused key failing over silently, and an unserved turn not being billed.
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 
@@ -28,7 +27,7 @@ const baseConfig = configSchema.parse({
 
 const configWith = (trial: Partial<Config["trial"]>): Config => ({ ...baseConfig, trial: { ...baseConfig.trial, ...trial } });
 
-// The digest the routes look a connect token up by: the same one /sandbox/announce uses.
+// Digest the routes look a connect token up by; the same one /sandbox/announce uses.
 const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`hex`);
 
 interface Counters {
@@ -44,8 +43,8 @@ const fakePrisma = ({ used }: Counters = {}) => {
             messages += 1;
             return { messages, lastModel };
         }),
-        // One `update` serves two callers: the refund decrements, and the served-model record writes a name.
-        // Branching on the payload rather than counting calls, so a test cannot pass by doing the wrong write.
+        // One `update` mock serves both the refund (decrement) and the served-model write (sets a name); branches on
+        // the payload so a test can't pass by triggering the wrong one.
         update: vi.fn(async ({ data }: { data: { lastModel?: string } }) => {
             if (typeof data.lastModel === `string`) {
                 lastModel = data.lastModel;
@@ -80,8 +79,7 @@ describe("the free trial", () => {
         const { prisma } = fakePrisma();
         const response = await call(configWith({ keys: `` }), prisma, `/trial/status`);
 
-        // 404, not 401: a platform that runs no trial has nothing here, and saying so is not an invitation to
-        // keep guessing tokens.
+        // 404, not 401: a platform running no trial has nothing here to guess tokens against.
         expect(response.status).toBe(404);
     });
 
@@ -114,7 +112,7 @@ describe("the free trial", () => {
     });
 
     it("refuses once the day's allowance is gone, and names the way forward", async () => {
-        // Two of two already spent; this is the third attempt.
+        // Fixture starts at the allowance ceiling; this call is the one that should be refused.
         const { prisma } = fakePrisma({ used: 2 });
         const fetchFn = vi.fn(async () => new Response(`{}`, { status: 200 }));
         vi.stubGlobal(`fetch`, fetchFn);
@@ -126,13 +124,13 @@ describe("the free trial", () => {
         expect(body.error.type).toBe(`trial_exhausted`);
         expect(body.error.message).toContain(`${body.trial.allowance} messages`);
         expect(body.error.message).toContain(body.trial.resetsAt);
-        // Nothing was sent upstream: a refused turn must not spend the pool as well as the allowance.
+        // A refused turn must not also spend the pool.
         expect(fetchFn).not.toHaveBeenCalled();
         vi.unstubAllGlobals();
     });
 
-    /* Only the chat POSTs are the subject here: the ladder reads the upstream's capability listing with a GET on
-     * the same pool, so a stub that answers by call ORDER would be describing that read instead. */
+    // Filters to just the chat POSTs: the ladder's own capability GET rides the same pool, and call-order would
+    // describe that read instead.
     const chatPosts = (fetchFn: ReturnType<typeof vi.fn>) =>
         fetchFn.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === `POST`);
 
@@ -154,8 +152,7 @@ describe("the free trial", () => {
 
         expect(response.status).toBe(200);
         expect(await response.text()).toBe(`{"choices":[1]}`);
-        // The SECOND key on the SAME model: a refused key is what failover is for, and reaching for the next
-        // model instead would spend the ladder on a problem the ladder is not about.
+        // Same model, next key: a refused key is failover's job, not the ladder's.
         expect(chatPosts(fetchFn)).toHaveLength(2);
         expect(chatPosts(fetchFn).every(([, init]) => JSON.parse(String((init as RequestInit).body)).model === `gemini-flash-latest`)).toBe(true);
         vi.unstubAllGlobals();
@@ -169,8 +166,7 @@ describe("the free trial", () => {
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(502);
-        // Every rung of the ladder against every key (two models, two keys) before anyone is told no. The user
-        // is not billed for a turn nobody served, and not billed once per rung either.
+        // Every rung tried on every key before refusing; not billed once per rung, or at all, for an unserved turn.
         expect(chatPosts(fetchFn)).toHaveLength(4);
         expect(spent()).toBe(0);
         vi.unstubAllGlobals();
@@ -183,7 +179,7 @@ describe("the free trial", () => {
 
         const response = await chat(baseConfig, prisma);
 
-        // Preserve the actionable upstream response, but do not charge for a completion that never happened.
+        // Preserves the actionable upstream response, but never charges for a completion that never happened.
         expect(response.status).toBe(404);
         expect(JSON.parse(await response.text())).toEqual({ error: { message: `model not supported` } });
         expect(spent()).toBe(0);
@@ -217,15 +213,14 @@ describe("the free trial", () => {
         // The ceiling is intentic's, not the reader's: they hold no plan with Google and never asked for one.
         expect(response.status).toBe(502);
         expect(await response.text()).not.toContain(`billing`);
-        // And an allowance that keeps counting down through turns nobody served is not an allowance.
+        // An allowance that counts down through turns nobody served isn't an allowance.
         expect(chatPosts(fetchFn)).toHaveLength(4);
         expect(spent()).toBe(0);
         vi.unstubAllGlobals();
     });
 
-    /* The two listing surfaces the ladder reads, stubbed apart: the compatibility shim's `/v1beta/openai/models`
-     * (ids only) and Google's own `/v1beta/models` beside it (ids plus what each can be asked to do). Chat POSTs
-     * fall through to a plain success, so one stub covers a whole route. */
+    // Stubs the two listing surfaces the ladder reads (the compat shim's ids-only list, and Google's own capability
+    // list); chat POSTs fall through to a plain success.
     const upstream = (generateContent: readonly string[]) =>
         vi.fn(async (url: string, init?: RequestInit) => {
             if (init?.method === `POST`) {
@@ -239,13 +234,8 @@ describe("the free trial", () => {
             );
         });
 
-    /* THE CATALOG IS A CONSTANT, and this is the test that says so in every direction at once.
-     *
-     * A fresh Google key lists ~54 models. Many of them declare `generateContent` and still cannot serve an
-     * agent turn: deep-research wants another API, gemma has no tool calling, lyria writes music, so the old
-     * capability filter passed them through and the id-derived ordering put them FIRST, which is the model a
-     * fresh conversation sends its opening message to. Publishing one synthetic id is what makes that
-     * unreachable: there is nothing to rank and nothing to get wrong. */
+    // A capability filter alone would still rank an unusable model first; publishing one synthetic id makes that
+    // impossible.
     it("publishes exactly one model, whatever the upstream lists", async () => {
         const { prisma } = fakePrisma();
         vi.stubGlobal(
@@ -263,11 +253,9 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    /* The other half of the same guarantee, and the one that produced the error people reported. The sandbox's
-     * translator writes its routing table from this catalog at boot; the picker re-reads it every minute. A
-     * catalog that MOVES between those two reads offers a row the translator will refuse with "unknown provider
-     * for model". A constant cannot move: including when the upstream has gone dark entirely, which used to be
-     * its own separate rung of fallback logic. */
+    // Constancy matters across two independent readers: the sandbox's translator writes its routing table from this
+    // catalog at boot, the picker re-reads it every minute, and a catalog that moved between them would offer a row the
+    // translator refuses.
     it("publishes the same one model when the upstream cannot be read at all", async () => {
         const { prisma } = fakePrisma();
         vi.stubGlobal(
@@ -277,7 +265,7 @@ describe("the free trial", () => {
 
         const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
 
-        // NOT a 502, and not an empty list: what this trial offers is no longer a question the upstream answers.
+        // Not a 502, not an empty list: what this trial offers isn't a question the upstream gets to answer.
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({
             object: `list`,
@@ -286,9 +274,6 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    /* WHAT THE PUBLISHED ID IS NOT: the thing sent upstream. The caller addresses `auto`, and the model actually
-     * asked to answer is the ladder's first healthy rung, which is the whole trick, since Google has never
-     * heard of `auto` and would refuse it. */
     it("sends a real model upstream, never the id the caller asked for", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`, `gemini-flash-lite-latest`]);
@@ -299,14 +284,12 @@ describe("the free trial", () => {
         expect(response.status).toBe(200);
         const sent = fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1];
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `gemini-flash-latest`, stream: true });
-        // And the answer says which one ran, because a routed trial the user cannot see into is a black box.
+        // The answer says which model ran; a routed trial the user can't see into is a black box.
         expect(response.headers.get(`x-intentic-trial-model`)).toBe(`gemini-flash-latest`);
         vi.unstubAllGlobals();
     });
 
-    /* THE REASON THE LADDER EXISTS. Google meters each model separately, so a Flash quota window that has closed
-     * says nothing about Lite, and on a shared pool Flash closes often. The user's message must survive that,
-     * which means the second rung is tried before anyone is told no. */
+    // Quotas are per model, so Flash's window closing says nothing about Lite.
     it("falls to the next model when the first is out of quota on every key", async () => {
         const { prisma, spent } = fakePrisma();
         const asked: string[] = [];
@@ -333,41 +316,37 @@ describe("the free trial", () => {
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(200);
-        // Both keys tried on the exhausted model, then the next rung, not a key sidelined for a model's quota.
+        // Both keys tried on the exhausted model before the next rung, not a key sidelined for one model's quota.
         expect(asked).toEqual([`gemini-flash-latest`, `gemini-flash-latest`, `gemini-flash-lite-latest`]);
         expect(response.headers.get(`x-intentic-trial-model`)).toBe(`gemini-flash-lite-latest`);
-        // The user got their message, so it is theirs to pay for: once, not once per rung tried.
+        // Billed once, for the message the user actually got, not once per rung tried.
         expect(spent()).toBe(1);
         vi.unstubAllGlobals();
     });
 
-    /* DISCOVERY IS A VETO, NOT A SOURCE: the half of the bargain that keeps the curated ladder honest.
-     *
-     * It may only REMOVE rungs we named, never add ones we did not: a model the upstream has retired stops being
-     * spent on without a release, while a family we have never vetted cannot reach a user by turning up in a
-     * catalog. That asymmetry is the whole reason the picker is trustworthy again. */
+    // Discovery may only remove rungs we named, never add ones we didn't: a retired model stops being used without a
+    // release, but an unvetted family can't reach a user by appearing in a catalog.
     it("stops routing to a rung the upstream has retired", async () => {
         const { prisma } = fakePrisma();
-        // Flash is gone from the listing; only Lite is left of the ladder.
+        // Flash is missing from the listing; only Lite remains of the ladder.
         const fetchFn = upstream([`gemini-flash-lite-latest`, `deep-research-max-preview-01`]);
         vi.stubGlobal(`fetch`, fetchFn);
 
-        // ONE app across both messages, because the ladder's cache belongs to the route instance: a fresh
-        // `createApp` per request would be two cold starts and would never exercise the veto at all.
+        // One app across both messages: the ladder's cache lives on the route instance, so a fresh app per request
+        // would never exercise the veto.
         const app = createApp(baseConfig, prisma, logger).app;
         const headers = { authorization: `Bearer tok`, "content-type": `application/json` };
         const send = () => app.request(`/trial/v1/chat/completions`, { method: `POST`, headers, body: `{"model":"auto"}` });
 
-        // The first message answers from the ladder as written and starts the capability read behind itself:
-        // the read is deliberately never on a user's critical path (trial-ladder.ts), so the veto lands next.
+        // First message answers from the unfiltered ladder and kicks off the capability read in the background; the
+        // veto only lands on the next one.
         await send();
         await vi.waitFor(() => expect(fetchFn.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method !== `POST`)).toBe(true));
         const before = chatPosts(fetchFn).length;
         const response = await send();
 
         expect(response.status).toBe(200);
-        // The surviving rung, and NOT the chat-capable model we never chose: an id we did not vet is not a
-        // candidate however loudly the upstream declares it can generate.
+        // The surviving rung, never the chat-capable model we never vetted, however loudly the upstream declares it.
         expect(
             chatPosts(fetchFn)
                 .slice(before)
@@ -376,8 +355,8 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    // The operator's list replaces the curated ladder wholesale: it is how a platform pointed at a non-Google
-    // upstream names ids we have never heard of, so it cannot be filtered against Google's own vocabulary.
+    // Replaces the curated ladder wholesale; can't be filtered against Google's vocabulary since it's meant for ids
+    // we've never heard of.
     it("routes to the operator's models when TRIAL_MODELS names some", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`]);
@@ -394,9 +373,6 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    /* The line an operator was handed to paste, pasted whole. It reached a deployment exactly like this and the
-     * picker offered its trailing note as the model, so what is pinned is that the note is not a model id, and
-     * that a setting which is nothing but a comment means what a blank one means. */
     it("reads a pasted `#` note as the blank setting it annotates, not as a model", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`]);
@@ -407,14 +383,13 @@ describe("the free trial", () => {
 
         expect(response.status).toBe(200);
         const sent = fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1];
-        // The curated ladder, not the comment, which no upstream would have answered for.
+        // Falls back to the curated ladder; the comment text itself is not something any upstream would answer for.
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `gemini-flash-latest` });
         vi.unstubAllGlobals();
     });
 
-    /* Which model answered is recorded where the daemon can read it back. It cannot ride the response: the
-     * sandbox's translator sits between us and does not forward headers, so the status poll the client already
-     * makes when a turn settles is the channel. */
+    // Can't ride the chat response: the sandbox's translator sits between us and drops headers, so the status poll it
+    // already makes is the channel.
     it("remembers which model served, and reports it on the status read", async () => {
         const { prisma } = fakePrisma();
         vi.stubGlobal(`fetch`, upstream([`gemini-flash-latest`]));
@@ -426,9 +401,7 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
-    /* The same paste on the setting above it, where it costs more: a note glued to the last key makes that key
-     * a credential no upstream knows. One key here, so the answer cannot depend on where the pool's rotating
-     * cursor happened to start. */
+    // One key only, so the result can't depend on where the pool's rotation happened to start.
     it("keeps a key a pasted note was glued to", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = vi.fn(async (_url: string, init: RequestInit) =>
@@ -488,26 +461,16 @@ describe("the free-trial key pool", () => {
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
 
-        // The third rotation would start on k1 again; quarantine skips it and goes straight to the good key.
+        // Third rotation would start on k1 again; quarantine skips straight to the good key.
         expect(auths).toEqual([`Bearer k1`, `Bearer k2`, `Bearer k2`, `Bearer k2`]);
         expect(pool.status().health).toBe(`degraded`);
     });
 
-    /* THE STALE MAP THAT TOLD EVERY TRIAL USER THE TRIAL WAS UNWELL, and the bug people actually reported: a
-     * banner reading "Free trial degraded" over an answer the model had just written, perfectly, on the first
-     * attempt.
-     *
-     * Health was judged on the SIZE of the quarantine, and an expired entry was stepped over by the walk but
-     * never removed, so the map was a record of every refusal since boot rather than of what is wrong now. One
-     * 429 on one key, once, and the word stood for the life of the process — for every user of a shared
-     * platform, since the pool is one pool. Both halves of the repair are here: a walk that meets no live
-     * sideline reports healthy, and a degraded reading left behind by traffic that has stopped expires on its
-     * own rather than waiting for a message that may not come for hours. */
     it("stops reporting degraded once the windows it was degraded for have closed", async () => {
         let clock = 1_000;
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
-            // k1's credential is refused while the clock is early, and works once it has moved on.
+            // k1 is refused only while the clock is early; it works again once time has moved past the quarantine.
             return new Response(`{}`, { status: auth === `Bearer k1` && clock < 60_000 ? 401 : 200 });
         });
         const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch, () => clock);
@@ -515,38 +478,28 @@ describe("the free-trial key pool", () => {
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
         expect(pool.status().health).toBe(`degraded`);
 
-        // Past the auth quarantine, with nobody sending anything: the reading has outlived its cause.
+        // Past the quarantine window, with nobody sending anything: the reading has outlived its cause.
         clock += 5 * 60_000 + 1;
         expect(pool.status()).toEqual({ health: `healthy` });
 
-        // And the next real message, answered by the first key it reaches for, says so too.
+        // Confirmed by a live message too, not only the passive status read.
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
         expect(pool.status()).toEqual({ health: `healthy` });
     });
 
-    /* THE OTHER HALF OF THAT BANNER: the ladder's capability listing rides this same pool, under no model at
-     * all, so a refusal there sidelines a key in the same map a chat walk reads. Health counted from the map
-     * therefore reported the CHAT path as unwell because a `models?pageSize=1000` GET had been rate-limited,
-     * on a different quota, for a request no user was waiting for. */
     it("does not read a refused capability listing as the chat path being unwell", async () => {
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) =>
             init?.method === `GET` ? new Response(`{}`, { status: 429 }) : new Response(`{"choices":[1]}`, { status: 200 }),
         );
         const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
 
-        // The listing, refused on every key, which observes no health of its own.
+        // Listing refused on every key; it must not register as chat-path health.
         await pool.call(``, { method: `GET`, url: `https://upstream.test/v1beta/models`, auth: `goog` });
-        // A message, answered by the first key it reaches for.
         await pool.call(`/chat/completions`, { method: `POST`, models: [`flash`], body: () => `{}`, observeHealth: true });
 
         expect(pool.status().health).toBe(`healthy`);
     });
 
-    /* A QUOTA IS ABOUT A MODEL, NOT A KEY, and reading it as a key fact is what would break the ladder.
-     *
-     * Google meters each model separately per project. If a 429 on Flash sidelined the whole key, the fallback
-     * rung would have no credential left to try, and since every key in a shared pool runs out of Flash at
-     * about the same time, the pool would go dark at exactly the moment the ladder existed to save it. */
     it("keeps a key usable for another model after one model's quota refuses it", async () => {
         const attempts: { key: string; model: string }[] = [];
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -564,7 +517,7 @@ describe("the free-trial key pool", () => {
         });
 
         expect(attempt?.response.status).toBe(200);
-        // Both keys refused on `flash`; the SAME keys are still reached for `lite`, and the first one answers.
+        // Both keys refused on flash; the same keys are tried again for lite, and the first one answers.
         expect(attempts).toEqual([
             { key: `Bearer k1`, model: `flash` },
             { key: `Bearer k2`, model: `flash` },
@@ -573,10 +526,6 @@ describe("the free-trial key pool", () => {
         expect(attempt?.model).toBe(`lite`);
     });
 
-    /* THE OUTAGE THIS PAIR OF TESTS IS ABOUT: the preferred rung stopped answering upstream, holding every
-     * connection open instead of refusing, and the walk spent its entire clock discovering that on key after
-     * key. The fallback rung was answering in under a second the whole time and was never reached, so a trial
-     * with a healthy model and allowance to spare told every user it was unavailable. */
     it("abandons a silent rung for the fallback instead of timing out on every key", async () => {
         vi.useFakeTimers();
         try {
@@ -584,7 +533,7 @@ describe("the free-trial key pool", () => {
             const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
                 const model = (JSON.parse(String(init?.body)) as { model: string }).model;
                 attempts.push(model);
-                // Silence, not a refusal: the condition a per-key walk cannot tell apart from a slow answer.
+                // Silence, not a refusal — the case a per-key walk alone can't tell apart from a slow answer.
                 return model === `flash` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
             const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
@@ -597,7 +546,7 @@ describe("the free-trial key pool", () => {
             await vi.advanceTimersByTimeAsync(20_000);
 
             expect((await pending)?.model).toBe(`lite`);
-            // ONE timeout, not one per key: silence says the same thing on every credential in the pool.
+            // One timeout only, not one per key: silence is the same fact on every credential.
             expect(attempts).toEqual([`flash`, `lite`]);
         } finally {
             vi.useRealTimers();
@@ -623,7 +572,7 @@ describe("the free-trial key pool", () => {
             attempts.length = 0;
             const second = await send();
 
-            // The cooldown is what keeps the timeout to the first message rather than every message.
+            // The cooldown is what limits the timeout cost to the first message, not every message after it.
             expect(second?.model).toBe(`lite`);
             expect(attempts).toEqual([`lite`]);
         } finally {
@@ -650,7 +599,7 @@ describe("the free-trial key pool", () => {
             silent = false;
             attempts.length = 0;
 
-            // Both rungs are cooling, so the cooldown has no preference left to express and is ignored.
+            // Both rungs are cooling, so the cooldown has nothing left to prefer and is ignored.
             expect((await send())?.model).toBe(`flash`);
             expect(attempts).toEqual([`flash`]);
         } finally {
@@ -682,8 +631,7 @@ describe("the free-trial key pool", () => {
 });
 
 it(`the Prisma import stays referenced, so createApp's error mapping narrows on the same class app.test.ts uses`, () => {
-    // The MEMBER app.test.ts actually spends (`Prisma.DbNull`), not the namespace object. A namespace that
-    // resolved to an empty module would satisfy "defined" and still take the error mapping down with it, which
-    // is the whole failure this guard exists to notice.
+    // app.test.ts actually spends the member `Prisma.DbNull`, not the namespace; an empty-module resolution would still
+    // satisfy "defined" while breaking the error mapping.
     expect(Prisma.DbNull).toBeInstanceOf(Object);
 });

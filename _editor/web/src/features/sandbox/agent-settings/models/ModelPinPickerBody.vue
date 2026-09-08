@@ -17,37 +17,9 @@ import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
 import { usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 
-/* THE SETTINGS PAGE'S BINDING OF THE APP'S MODEL PICKER: the same panel the composer opens (ModelPicker, with
- * its search, its provider rail and every provider's catalog), pointed at one entry of one of the pinned lists
- * in Sandbox ▸ Agent ▸ Models.
- *
- * IT IS THE WHOLE PICKER BECAUSE THE OLD ONE WAS NOT. These rows used to offer a 14rem dropdown of
- * `${provider}:${model}` options: no search across a Claude catalog that is now dozens of rows long, no access
- * badge saying what an unconnected provider would cost, no custom-id escape hatch, and no sign that a model is
- * the one the chat itself is on. Every one of those already exists, once, in the panel the composer opens, and a
- * settings page that spends the sandbox's money deserves the same list rather than a lesser copy of it.
- *
- * NO ACCOUNTS, and that is the one deliberate difference from the composer's footer. An account id is a key in
- * this daemon's credential store and choosing between them is a question about the NEXT turn, answered where
- * that turn is (PickerAccounts, bound to a conversation). A standing pin naming one would go stale the first
- * time an account was dropped, and would tie these runs to a login the owner cannot see from the row. Which
- * account pays is left to the daemon, which spreads unattended work over whatever has headroom.
- *
- * EVERYTHING ELSE THE COMPOSER CONFIGURES IS HERE, per entry, which is the point of the rewrite: the reasoning
- * effort used to be ONE control beside the list, so a frontier head and the cheap account under it that catches
- * it were pinned to the same tier — and a tier scale is a property of the model, so any answer was off-scale for
- * half the list. Effort, extended thinking, speed and the harness now belong to the entry that will actually
- * run, and turn-resume.ts composes the turn from exactly these.
- *
- * A KNOB IS DRAWN ONLY WHERE IT WOULD BE HONOURED, and that is now nearly everywhere. The one-shot jobs used to
- * get the list and no footer, on the argument that the daemon runs them with thinking disabled and no effort —
- * which was true of the machinery and had become the reason for itself: an owner who pinned a reasoning model to
- * their commit subjects paid its price and was handed a cheaper model's behaviour. The one-shot path carries the
- * knobs now (claude/claude-one-shot.ts), so those rows draw them too.
- *
- * The cheaper-tier list is the remaining exception, and it is a real one: automatic tier selection substitutes a
- * model on a turn that already has its own effort and never touches an unattended run, so a control there would
- * be a switch with nothing behind it. */
+// Full app model picker (composer's ModelPicker), pointed at one entry of a pinned list. No account control: that's a
+// per-turn question (PickerAccounts); the daemon spreads unattended work over headroom instead. Effort, thinking, fast
+// and harness live per entry, not shared, and draw only where the run would honour them.
 
 const emit = defineEmits<{ pick: [ModelPin]; configure: [ModelPin]; close: [] }>();
 const {
@@ -55,20 +27,15 @@ const {
     knobs = false,
     taken = [],
 } = defineProps<{
-    // The entry being re-pointed, or undefined while ADDING one. Adding draws no footer: there is nothing to
-    // configure until the entry exists, and the row it lands on opens this same panel with the knobs in it.
+    // Undefined while adding: nothing exists yet to configure until the entry's own row reopens this panel.
     pin?: ModelPin | undefined;
-    // Whether this list's entries carry their own run settings. See the header.
+    // Whether this list's entries carry their own run settings.
     knobs?: boolean;
-    // `${provider}:${model}` of every entry already in the list. Offered but unpickable, the same treatment the
-    // old dropdown gave them: a model that vanishes from a list as you use it makes you hunt for a row that was
-    // there a moment ago.
+    // Already-taken entries stay visible but unpickable, so the list doesn't shift under you as you use it.
     taken?: readonly string[];
 }>();
 
-/* WHAT THE LIST OPENS ON while adding: the model the owner's own chat is set to. The pair is what ModelPicker
- * checkmarks and which lane it hoists first, so anchoring it anywhere else would open a settings row on a
- * provider nobody is working in. */
+// The model the owner's own chat is set to, so the picker anchors on a provider actually in use.
 const chat = useChat();
 const provider = computed<AgentProvider>(() => pin?.provider ?? chat.provider.value);
 const model = computed(() => pin?.model ?? chat.model.value);
@@ -88,10 +55,7 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(
     computed(() => pin?.effort),
 );
 
-// The harness axis, for the providers that have one: the same subscription model ids run under the provider's
-// own loop or under Claude Code. Both chips NAME the runtime they select. WHICH providers those are is the
-// contract's answer (a spec whose two harnesses name one runtime has nothing to choose), not a list kept here
-// and in the chat picker separately — they had the same list twice, which is one edit away from disagreeing.
+// Which providers have a harness axis is the contract's answer, not a second list kept in sync by hand.
 const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
 const harnessOptions = computed(() => [
     { label: providerDisplayLabel(provider.value), value: `native` },
@@ -102,14 +66,13 @@ const harnessOptions = computed(() => [
 // for runs nobody is watching. Empty (the Claude Code loop, the ceiling) draws nothing.
 const limitations = computed(() => limitationsOf(capabilities.value));
 
-// Whether the footer earns the border and padding it draws: a rule over nothing is the one defect a footer like
-// this has to make impossible.
+// Whether the footer earns its border and padding: never draw a rule over nothing.
 const footerVisible = computed(
     () => knobs && pin !== undefined && (runSettingsShown.value || harnessChoosable.value || limitations.value.length > 0),
 );
 
-// A pin with the fields nobody set left OFF it rather than present-and-undefined: the daemon reads an absent
-// field as "the provider's own default", and a stored `null` would be a third state nothing means.
+// Unset fields are dropped rather than stored as undefined, since the daemon reads an absent field as the provider's
+// default and a stored null would be a third, meaningless state.
 const pruned = (next: ModelPin): ModelPin =>
     Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined && value !== ``)) as unknown as ModelPin;
 
@@ -119,21 +82,15 @@ const configure = (patch: Partial<ModelPin>): void => {
     }
 };
 
-/* A MODEL ROW ANSWERS AND CLOSES, exactly as it does in the composer, because it is the question the panel was
- * opened with. The knob rows below write through and stay open: they are settings of the entry, not the answer.
- *
- * THE KNOBS SURVIVE A RE-POINT ONLY AS FAR AS THEY MEAN ANYTHING. Effort travels (every native scale has tiers,
- * and the clamp above shows what a shorter one will run at), while the harness, thinking and fast speed are
- * facts about the provider that vends the model: carrying them across a switch would pin a Codex entry to a
- * Claude-only knob. Same rule the shell's own picker follows for its account and harness pins. */
+// A pick answers and closes, like the composer; the knob rows below write through and stay open as entry settings.
+// Effort survives a re-point; harness, thinking and fast speed don't, since they belong to the provider, not the pin.
 const pick = (entry: PickerEntry): void => {
     const kept = pin?.provider === entry.provider ? pin : { effort: pin?.effort };
     emit(`pick`, pruned({ ...kept, provider: entry.provider, model: entry.value }));
     emit(`close`);
 };
 
-// Every entry but the one being edited: re-picking the model an entry already holds has to stay possible, or
-// opening a row and closing it again would look like the panel had lost its own selection.
+// Excludes the entry being edited: re-picking the model an entry already holds must stay possible.
 const unpickable = (entry: PickerEntry): boolean =>
     `${entry.provider}:${entry.value}` !== `${pin?.provider}:${pin?.model}` && taken.includes(`${entry.provider}:${entry.value}`);
 </script>
@@ -141,15 +98,12 @@ const unpickable = (entry: PickerEntry): boolean =>
 <template>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`close`)">
         <template #footer>
-            <!-- The composer footer's own metrics (ModelPicker's 12px rhythm, on the canvas rather than the
-                 panel), because a reader who opens this from a settings row and one who opens it from the
-                 composer should not be able to tell which surface asked. -->
+            <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
             <div
                 v-if="footerVisible"
                 class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
             >
-                <!-- WHOSE SETTINGS THESE ARE. The list above browses every provider; everything here configures
-                     the one entry, and unlabelled the two read as one screen. -->
+                <!-- Labels whose settings these are: the picker above browses every provider, this configures only the one entry. -->
                 <div class="flex items-center justify-between gap-2">
                     <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
                         <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
@@ -170,8 +124,10 @@ const unpickable = (entry: PickerEntry): boolean =>
                     @update="configure($event)"
                 />
 
-                <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code
-                     harness. Separate from the model, since the same subscription ids run under either. -->
+                <!--
+                    Harness axis: the provider's own runtime, or its model through Claude Code. Separate from the model since the same subscription
+                    ids run under either.
+                -->
                 <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
                     <div class="flex items-center gap-1">
@@ -189,9 +145,10 @@ const unpickable = (entry: PickerEntry): boolean =>
                     </div>
                 </div>
 
-                <!-- The honest half of the choice, and it matters more here than in the composer: nobody is
-                     watching these runs, so "no mid-turn steering" is not something the user will discover by
-                     trying it. One row, the count behind a hover card, exactly as the composer draws it. -->
+                <!--
+                    Matters more here than in the composer: nobody is watching these runs, so a limitation like "no mid-turn steering" won't be
+                    discovered by trying it.
+                -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
                     <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">

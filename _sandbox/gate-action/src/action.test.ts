@@ -14,21 +14,15 @@ test("a gate URL and nothing else is a call with the defaults", () => {
     });
 });
 
-/* THE THIRD ROAD is selected by the token, not by the URL's shape: the sandbox's own address plus a control token
- * drives the agent. A door URL beside a token is a wiring mistake and says so, rather than one credential
- * quietly winning over the other. */
 test("a token turns the sandbox's address into a run, with the prompt as the request", () => {
     const parsed = parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "review the change", INPUT_AGENT: "codex", INPUT_LAND: "true" });
     expect(parsed).toEqual({
         kind: "inputs",
         inputs: { url: "https://box.example", door: "run", request: "review the change", waitS: WAIT_DEFAULT_S, blockedAsFailure: false, token: "ict_t", agent: "codex", land: true },
     });
-    // A run with nothing to say, and a bad land flag, are refused before anything is started.
     expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t" })).toMatchObject({ kind: "error", message: expect.stringContaining("prompt") });
     expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go", INPUT_LAND: "yes" }).kind).toBe("error");
-    // A door URL carries its own credential; a token beside it is a mistake worth naming.
     expect(parseInputs({ INPUT_URL: GATE_URL, INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go" })).toMatchObject({ kind: "error", message: expect.stringContaining("door URL carries its own token") });
-    // And without a token, the sandbox's bare address is neither door.
     expect(parseInputs({ INPUT_URL: "https://box.example" })).toMatchObject({ kind: "error", message: expect.stringContaining("add `with: token`") });
 });
 
@@ -78,22 +72,17 @@ test("the default request is the commit, the branch, and the link a reviewer wou
         GITHUB_REPOSITORY: "acme/app",
     };
     expect(defaultRequest(env, undefined)).toBe("commit abc123 on main — https://github.com/acme/app/commit/abc123");
-    // A pull request's page beats the bare commit's when the event carries one.
     expect(defaultRequest(env, { pull_request: { html_url: "https://github.com/acme/app/pull/7" } })).toBe(
         "commit abc123 on main — https://github.com/acme/app/pull/7",
     );
-    // Outside a runner there is nothing to compose from: empty, which the process refuses before spending a run.
     expect(defaultRequest({}, undefined)).toBe("");
 });
 
-/* Every value goes out in the heredoc form, because a reason is a model's own sentence: the one test that
- * matters here is that a multi-line reason survives the runner's parser. Held against the contract's schema
- * like gate's reader is, so a field the wire shape grows cannot be silently dropped half-written. */
+// Parsed against the contract's schema (like gate's reader) so a field the wire shape grows can't be silently dropped.
 test("outputs serialize schema-valid verdicts whole, multi-line reasons included", () => {
     const verdict = { outcome: "fail" as const, reason: "line one\nline two", runId: "run-9", value: "almost" };
     expect(GateVerdictSchema.safeParse(verdict).success).toBe(true);
     expect(outputLines(verdict, "D")).toBe("outcome<<D\nfail\nD\nreason<<D\nline one\nline two\nD\nrun-id<<D\nrun-9\nD\nvalue<<D\nalmost\nD\n");
-    // No judged value ⇒ no value line, rather than an empty one pretending the workflow produced "".
     expect(outputLines({ outcome: "pass", reason: "r", runId: "run-1" }, "D")).not.toContain("value");
 });
 

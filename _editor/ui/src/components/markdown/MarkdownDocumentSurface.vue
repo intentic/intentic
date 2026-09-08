@@ -1,24 +1,8 @@
-<!-- THE DOCUMENT, TYPED INTO DIRECTLY. The editing half of the markdown viewer.
-
-     There is no editor widget here and nothing is swapped when you click. The whole document is one
-     `contenteditable` whose text IS the markdown source (markdownSourceDom.ts), with the markup characters
-     wrapped in spans the stylesheet hides. Putting the caret in a block adds a class to it; the class reveals
-     that block's markers, which were in the layout all along. Nothing is torn down, nothing is measured, nothing
-     moves.
-
-     That is the difference from the surface this replaces, which mounted a Monaco editor in place of the clicked
-     paragraph: a different font in a different box at a different size, arriving with a flicker, on every click.
-
-     Caret, selection, IME and spellcheck are the browser's, which is the whole reason for building on
-     `contenteditable` rather than on a widget. What the browser must NOT be trusted with is markup and
-     whitespace, and it is not: every edit is read back as text and its blocks are built again from that text, so
-     anything it inserts of its own is gone on the next pass, and the newlines it would quietly delete are held
-     outside the DOM where it cannot reach them. See `built` and `makeEditable`.
-
-     UNDO IS OURS TOO, and for the same reason: rebuilding a block is a programmatic DOM write, which drops the
-     browser's own stack on the first keystroke. So is every shortcut that means markup rather than formatting,
-     because there is no bold here to switch on, only asterisks to put around something. See markdown/history.ts
-     and markdownEdits.ts. -->
+<!--
+    The editing half of <MarkdownDocument>: one `contenteditable` whose text is the markdown source (markdownSourceDom.ts), with markup characters
+    hidden until the caret enters their block. Every edit is read back as text and blocks rebuilt from it; undo and markup shortcuts are implemented
+    here, not by the browser.
+-->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
@@ -30,21 +14,12 @@ const { source, caretAt } = defineProps<{ source: string; caretAt?: number }>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const host = ref<HTMLElement>();
-/* The document as this surface last built it: one entry per block, holding the block's own text, the blank
- * lines that follow it, and the element drawing it.
- *
- * THE GAP IS HELD HERE AND NOT IN THE DOM, which is the one place this surface cannot take the browser at its
- * word. Those newlines have to collapse (they are structure, already said by the blocks they separate), and a
- * browser treats collapsed whitespace inside a `contenteditable` as spare: typing at the end of a paragraph
- * silently deleted the blank line after it, and the paragraph and the heading below it became one block. So the
- * DOM holds only what is VISIBLE, the gaps live here, and the source is the two put back together. */
+// Last-built blocks: each entry's text, trailing blanks (held here, since the DOM collapses them), and element.
 let built: { body: string; gap: string; element: HTMLElement }[] = [];
 let composing = false;
 let syncing = false;
 
-// The document, reassembled: what the DOM now says each block is, plus the gap that followed it. Read from the
-// DOM's own children rather than from `built`, so a block the user JOINED to its neighbour (backspace at the
-// start of one) correctly loses the gap between them instead of keeping a separator for a block that is gone.
+// Reassembled from the DOM's children, not `built`, so a joined block loses the right gap, not an orphaned one.
 const text = (): string => {
     const root = host.value;
     if (root === undefined) {
@@ -56,7 +31,7 @@ const text = (): string => {
 // The document's own children, which are the blocks. `built` mirrors them, but the DOM is the truth.
 const blockElements = (): Element[] => [...(host.value?.children ?? [])];
 
-// Where each block STARTS in the source: its own text plus the gap that follows it, accumulated.
+// Where each block starts in the source: accumulated text length plus its trailing gap.
 const blockStarts = (): number[] => {
     let at = 0;
     return blockElements().map((element, index) => {
@@ -77,9 +52,7 @@ const activeIndex = (): number => {
     return blockElements().findIndex((element) => element === node || element.contains(node));
 };
 
-/* A position in the DOM as an offset into the source. Resolved from the NODE rather than from the selection's
- * own start, so it answers for either end of a selection: the two ends can sit in different blocks, and a
- * shortcut that formats a selection needs both. */
+// DOM position as a source offset, resolved from a node, not the selection start, so it works for either end.
 const sourceOffsetOf = (node: Node, offset: number): number | undefined => {
     const root = host.value;
     if (root === undefined || !root.contains(node)) {
@@ -90,8 +63,7 @@ const sourceOffsetOf = (node: Node, offset: number): number | undefined => {
     if (element === undefined) {
         return undefined;
     }
-    // Within the block from the DOM, and the blocks before it from `built`: the gaps are not in the DOM to be
-    // counted, so they are added back here.
+    // Block text comes from the DOM; blocks before it come from `built`, since gaps aren't in the DOM to count.
     return (blockStarts()[index] ?? 0) + offsetOfCaret(element as HTMLElement, node, offset);
 };
 
@@ -121,8 +93,7 @@ const selectionRange = (): { start: number; end: number } | undefined => {
 const domPointAt = (offset: number): { node: Node; offset: number } | undefined => {
     const starts = blockStarts();
     const elements = blockElements();
-    // The last block whose start is at or before the offset: where a caret sitting in a gap belongs is the end
-    // of the block that gap follows, which is where the user was typing.
+    // Last block whose start is at or before the offset: a caret in a gap belongs at the block before it.
     let index = 0;
     for (let at = 0; at < starts.length; at += 1) {
         if ((starts[at] ?? 0) <= offset) {
@@ -153,8 +124,7 @@ const putSelection = (start: number, end: number): void => {
 
 const putCaret = (offset: number): void => putSelection(offset, offset);
 
-/* Which block the caret is in gets the class that reveals its markers. The same answer however the caret got
- * there: a click, an arrow key, a find, or the text under it being rewritten. */
+// Marks whichever block holds the caret, regardless of how it got there (click, arrow key, find, rewrite).
 const markActive = (): void => {
     const index = activeIndex();
     blockElements().forEach((element, at) => element.classList.toggle(`md-block-active`, at === index));
@@ -182,26 +152,10 @@ const render = (next: string): void => {
     }
 };
 
-/* WHY `true` AND NOT `plaintext-only`, which is the obvious choice and the wrong one.
- *
- * `plaintext-only` would stop the browser inserting markup of its own, which is exactly the guarantee this
- * surface wants. But Chromium FORCES `white-space: pre-wrap` on a plaintext-only editing host, below the
- * cascade, where no stylesheet can reach it. This document's newlines are structure, already expressed by the
- * blocks they separate, so preserving them visually drew the blank line between two paragraphs as an actual
- * blank line (the document came out nearly twice its height) and broke a hard-wrapped paragraph at the source's
- * column instead of at the reading column. Whitespace has to collapse here, so the attribute has to be `true`.
- *
- * What `plaintext-only` was buying is bought instead by the rebuild: every edit is read back as text and its
- * blocks are built again from that text (see `sync`), so markup the browser inserts on its own, a `<b>` from a
- * formatting shortcut, a paste full of HTML, a `<div>` from a stray Enter, contributes nothing to `textContent`
- * and is thrown away on the next pass. The guards below stop it happening at all where that is cheap; the
- * rebuild is what makes it harmless where it is not. */
-/* Rebuild the blocks whose source changed, and only those.
- *
- * The browser has already edited the DOM in place by the time this runs, so the text is right and only the
- * MARKUP is stale: an asterisk just typed is still a plain character until its block is parsed again. Rebuilding
- * only what changed is what keeps that reparse off the rest of the document, so typing in a long file costs the
- * paragraph being typed in rather than the file. */
+// `contenteditable=true`, not `plaintext-only`: Chromium forces `white-space:pre-wrap` on plaintext-only below the
+// cascade, rendering this document's structural newlines as visible blank lines.
+// Rebuilds only the blocks whose text actually changed: the DOM's text is already right, only its markup is stale, so a
+// long file's typing cost is one paragraph, not the whole document.
 const sync = (): void => {
     const root = host.value;
     if (root === undefined || composing) {
@@ -211,17 +165,16 @@ const sync = (): void => {
     const { blocks } = splitMarkdownBlocks(current);
     const wanted = blocks.map((block) => partsOf(current.slice(block.start, block.end)));
     const offset = caretOffset();
-    // An empty block is a line the caret is standing on that the document does not contain (see startBlock).
-    // Leave the layout alone while one exists: re-splitting would find one block fewer and rebuild it away,
-    // taking the caret with it.
+    // An empty block (the caret's transient line) is left alone; re-splitting would find one fewer block and rebuild it
+    // away.
     const pending = blockElements().some((element) => blockBody(element) === ``);
     syncing = true;
     try {
         if (wanted.length !== built.length && pending) {
             // Nothing to do: the extra element is the empty line, and it is not the document's business.
         } else if (wanted.length !== built.length) {
-            // A structural edit (a blank line typed, two blocks joined): the blocks no longer line up one to
-            // one, so the cheapest correct answer is to lay them out again.
+            // A structural edit (blank line, blocks joined): counts no longer line up, so the cheapest fix is relaying
+            // out.
             root.replaceChildren();
             built = [];
             for (const part of wanted) {
@@ -253,13 +206,10 @@ const sync = (): void => {
     markActive();
 };
 
-/* THE UNDO STACK IS THIS SURFACE'S, because the browser's cannot survive what this surface does: parsing an edit
- * and rebuilding the block it changed is a programmatic DOM write, which drops the native stack on the first
- * keystroke. See markdown/history.ts. */
+// Own undo stack: rebuilding a block is a DOM write, which drops the browser's native stack immediately.
 const history = createMarkdownHistory();
 
-// Note where the document has got to. Called after every edit, once the DOM has settled, so the caret recorded
-// with it is the one the user will be returned to.
+// Records document state after each edit, once settled, so the caret recorded is the one to return to.
 const remember = (kind: EditKind): void => history.record({ text: text(), caret: caretOffset() ?? 0 }, kind, Date.now());
 
 /** Put `next` on screen, tell the world, and restore the selection the edit asks for. */
@@ -271,13 +221,11 @@ const apply = (edit: TextEdit, kind: EditKind = `structural`): void => {
     remember(kind);
 };
 
-// An edit's kind, from what the browser says it did. Insertions and deletions coalesce into runs of their own
-// (see markdown/history.ts); anything else is a step by itself.
+// An edit's kind from the browser; insertions/deletions coalesce into runs, everything else its own step.
 const kindOf = (inputType: string): EditKind =>
     inputType.startsWith(`insert`) ? `typing` : inputType.startsWith(`delete`) ? `deleting` : `structural`;
 
-// What happens after the browser has edited the DOM: read the text back, reparse the blocks it changed, and note
-// the step. One path, whether the edit came from a keystroke or from an IME committing a word.
+// After any edit: read the text back, reparse changed blocks, record the step. One path for keystroke or IME.
 const commitInput = (kind: EditKind): void => {
     emit(`change`, text());
     sync();
@@ -291,8 +239,7 @@ const onInput = (event: Event): void => {
     commitInput(kindOf(event instanceof InputEvent ? event.inputType : ``));
 };
 
-/* An IME is mid-word: the DOM holds a composition the user has not committed, so reparsing it would rewrite the
- * text under their candidate list and lose it. Nothing happens until they accept. */
+// IME mid-word: reparsing now would rewrite text under the candidate list; nothing happens until committed.
 const onCompositionStart = (): void => {
     composing = true;
 };
@@ -303,12 +250,9 @@ const onCompositionEnd = (): void => {
     commitInput(`typing`);
 };
 
-/* Text spliced into the document at the caret, for the keys the browser would otherwise get wrong. Done to the
- * SOURCE and re-rendered rather than to the DOM through a range: the source is the thing that has to be right,
- * and going through it means the blocks are re-split by the same code path every other edit uses. */
+// Splices into the source and re-renders, not the DOM, so it takes the same re-split path as every edit.
 const insertAtCaret = (insert: string): void => {
-    // Over the SELECTION, not merely at the caret: pasting with words selected replaces them, which is what
-    // every editor does and what the browser would have done if this were not intercepted.
+    // Over the selection, not just the caret: replaces selected words, as the browser would have if left alone.
     const at = selectionRange();
     if (at === undefined) {
         return;
@@ -318,23 +262,8 @@ const insertAtCaret = (insert: string): void => {
     apply({ text: next, start: at.start + insert.length, end: at.start + insert.length });
 };
 
-/* ENTER, AND WHY IT NEEDS A BLOCK THAT IS NOT IN THE FILE.
- *
- * Pressing Enter at the end of a paragraph should leave the caret on a new, empty line. Markdown has no
- * empty-paragraph construct, so that line cannot be represented as a block: inserting the blank line and
- * re-splitting gives back the SAME blocks with a wider gap between them, and the caret has nowhere to land but
- * the end of the paragraph it just left. (VS Code hit this too and answered it the same way, with a transient
- * paragraph its parser never sees.)
- *
- * So an empty block element is added to the DOM and not to the document. It carries the blank lines that follow
- * it, so the source still reads back correctly, and `sync` leaves any empty block alone until something is typed
- * into it, at which point it becomes an ordinary block like any other. Deleting a block's last character lands
- * in exactly the same state, and gets exactly the same treatment, which is what it should be: an empty paragraph
- * you can type in, that costs the file nothing until you do.
- *
- * Mid-block, none of this applies: splitting a paragraph in two produces two real blocks, so the source is
- * edited directly and the blocks fall out of the split.
- */
+// Enter at a paragraph's end needs a caret-only line markdown can't represent as a block, so an empty element is added
+// to the DOM but not the document, left alone until typed into. Mid-block Enter just splits the paragraph in two.
 /** The caret at the very start of an element, for a block that has no source offset to aim at yet. */
 const caretInto = (element: HTMLElement): void => {
     const range = document.createRange();
@@ -345,14 +274,8 @@ const caretInto = (element: HTMLElement): void => {
     selection?.addRange(range);
 };
 
-/* WIDEN BLOCK `index`'s GAP TO A BLANK LINE, so whatever is inserted after it is a block of its own.
- *
- * `text()` joins each block to the next with the gap the block ABOVE it carries, and the last block in a file
- * carries whatever that file ends with — usually a single `\n`. Put a transient paragraph after it and the
- * source reads `- an item\nwhat you just typed`, which CommonMark calls a lazy continuation: the words join the
- * item above instead of starting a paragraph under it. Seen in a browser, on the case that produces it most
- * often — pressing Enter to leave a list at the end of a document — and true for any block at the end of any
- * file, which is why this is here rather than in the list code that found it. */
+// Widens a block's trailing gap to a blank line, so a transient paragraph after it starts a real paragraph instead of a
+// CommonMark lazy continuation onto the item above.
 const separate = (index: number): void => {
     const above = built[index];
     if (above !== undefined && !above.gap.includes(`\n\n`)) {
@@ -385,8 +308,7 @@ const startBlock = (): void => {
     remember(`structural`);
 };
 
-// Restore a state from the history stack. The whole document is laid out again: an undo can cross blocks, and
-// putting it back wholesale is the one way the DOM and the source cannot end up disagreeing about it.
+// Restores history by re-laying out the document: an undo can cross blocks, so a partial patch could disagree.
 const travel = (state: { text: string; caret: number } | undefined): boolean => {
     if (state === undefined) {
         return false;
@@ -398,8 +320,8 @@ const travel = (state: { text: string; caret: number } | undefined): boolean => 
     return true;
 };
 
-/* A formatting shortcut, applied to whatever is selected. Returns false when there is no selection to act on, so
- * the caller can leave the key to the browser rather than swallowing it. */
+// Applies a formatting shortcut to the selection; returns false with no selection, so the caller lets the browser
+// handle the key.
 const format = (edit: (text: string, start: number, end: number) => TextEdit): boolean => {
     const at = selectionRange();
     if (at === undefined) {
@@ -409,10 +331,8 @@ const format = (edit: (text: string, start: number, end: number) => TextEdit): b
     return true;
 };
 
-/* THE FORMATTING KEYS, as the markdown they mean. There is no "bold" to switch on here, there are two
- * asterisks to put around something, so Ctrl+B writes them and takes them away again. Doing it this way
- * rather than letting the browser's own `formatBold` run is what keeps the file readable: `<b>` would say
- * nothing markdown can express, and would vanish on the next rebuild anyway. */
+// Ctrl+B/I/K write the markdown characters directly (asterisks, a link), not the browser's own `formatBold`: a `<b>`
+// means nothing here and would vanish on rebuild.
 const onFormatKey = (event: KeyboardEvent, key: string): boolean => {
     if (event.altKey || (key !== `b` && key !== `i` && key !== `k`)) {
         return false;
@@ -423,10 +343,8 @@ const onFormatKey = (event: KeyboardEvent, key: string): boolean => {
     return true;
 };
 
-/* THE CHORDS: save, undo, redo, and the three formatting keys. Split out of `onKeydown` because that handler
- * answers three unrelated questions — what a modifier means, what a structural key means, and where a
- * boundary delete lands — and reading any one of them meant reading all three. Each returns whether it took
- * the key, so the dispatcher below stays a list of "did this claim it". */
+// Save, undo/redo, and formatting keys, split out of `onKeydown` since that handler otherwise mixes three unrelated
+// questions. Each returns whether it claimed the key.
 const onChordKey = (event: KeyboardEvent, key: string): boolean => {
     if (key === `s`) {
         event.preventDefault();
@@ -434,8 +352,7 @@ const onChordKey = (event: KeyboardEvent, key: string): boolean => {
         return true;
     }
 
-    /* UNDO AND REDO. Both spellings of redo, because both are in people's hands: Ctrl+Shift+Z everywhere, and
-     * Ctrl+Y as well on Windows, where a generation of editors bound it. */
+    // Both redo spellings are bound: Ctrl+Shift+Z everywhere, plus Ctrl+Y from a generation of Windows editors.
     if (key === `z` && !event.shiftKey) {
         event.preventDefault();
         travel(history.undo());
@@ -450,14 +367,8 @@ const onChordKey = (event: KeyboardEvent, key: string): boolean => {
     return onFormatKey(event, key);
 };
 
-/* SHIFT+ENTER IS A LINE BREAK INSIDE THE PARAGRAPH, which markdown spells as two trailing spaces before the
- * newline. Left to the browser it inserted a `<br>` carrying no source at all, so the break was gone on the
- * next rebuild: the key appeared to work and then undid itself.
- *
- * At the END of a block it starts a new one instead, because there markdown has nothing for it to mean: a
- * hard break needs a line to break TO, so the two spaces and the newline are trailing whitespace, which the
- * browser then collapses away exactly as it does everywhere else in this surface. Rather than write
- * characters that will not survive, the key does the visible thing the user was reaching for. */
+// Shift+Enter writes markdown's trailing-space line break; at a block's end that has nothing to break into, so it
+// starts a new block instead of writing whitespace that would just collapse away.
 const softBreak = (): void => {
     const at = selectionRange();
     const index = activeIndex();
@@ -470,17 +381,9 @@ const softBreak = (): void => {
     }
 };
 
-/* ENTER, TAB, AND SHIFT+ENTER: the keys that mean structure rather than characters.
- *
- * ENTER STARTS A NEW BLOCK. In markdown a single newline inside a paragraph is a SPACE, so letting the browser
- * insert one would answer the most confident keypress in text editing with nothing visible happening. What a
- * writer means by Enter here is a new paragraph, which is a blank line, so that is what it types.
- *
- * ON A LIST IT OPENS THE NEXT ITEM instead (`continueList`), because a list is the one place where what a
- * writer means by Enter is "another one of these". This is what lets a checklist be typed straight through,
- * and it is the affordance the acceptance panel used to hand-roll a whole keyboard layer to provide. */
-/* TAB INDENTS A LIST, and only a list. Everywhere else it stays the key that leaves the document, which is
- * the only way out for someone navigating by keyboard: a text box that swallows Tab is a trap. */
+// Enter starts a new block (a blank line), since a single newline in markdown is just a space and would type invisibly.
+// On a list it opens the next item instead (`continueList`).
+// Tab indents a list only; everywhere else it must stay the keyboard's way out of the document.
 const onTabKey = (event: KeyboardEvent): void => {
     const at = selectionRange();
     if (at !== undefined && onListLine(text(), at.start)) {
@@ -502,9 +405,7 @@ const onEnterKey = (event: KeyboardEvent): void => {
         return;
     }
     apply(continued.edit);
-    // Leaving a list: the marker is gone, and now the caret needs somewhere that is not a list item to stand.
-    // That is exactly what `startBlock` is for, and why the two halves are split this way — one is an edit to
-    // the source, the other is a line the document does not contain yet.
+    // Leaving a list removes the marker; the caret needs a non-item line to land on, which `startBlock` provides.
     if (continued.ended) {
         startBlock();
     }
@@ -525,9 +426,8 @@ const onStructureKey = (event: KeyboardEvent): boolean => {
     return false;
 };
 
-/* WHICH GAP A BOUNDARY DELETE CLOSES, as the index of the block ABOVE it, or nothing when the press is
- * ordinary text editing. Backspace at the very start of a block closes the gap above it; Delete at the very
- * end closes the one below. */
+// Which gap a boundary delete closes: Backspace at a block's start closes the gap above, Delete at its end closes the
+// one below.
 const seamAt = (key: string): number | undefined => {
     const index = activeIndex();
     const element = blockElements()[index];
@@ -550,11 +450,8 @@ const joinAt = (seam: number): TextEdit => {
     return { text: current.slice(0, cut) + current.slice(cut + gap), start: cut, end: cut };
 };
 
-/* JOINING TWO BLOCKS, which the browser cannot do here because the thing between them is not in the DOM for
- * it to delete (see `built`). Left to it, Backspace at the start of a paragraph would eat the last character
- * of the paragraph above instead of the blank line between them, which is a silent, wrong edit. So the two
- * boundary presses are taken and answered against the source: the gap goes, the blocks become one, and the
- * caret sits at the seam. Every other Backspace and Delete is ordinary text editing and is left alone. */
+// Joins two blocks by editing the source directly: the gap between them isn't in the DOM, so an unhandled Backspace
+// there would silently eat the wrong character instead.
 const onJoinKey = (event: KeyboardEvent): void => {
     const deleting = event.key === `Backspace` || event.key === `Delete`;
     if (!deleting || event.altKey || window.getSelection()?.isCollapsed === false) {
@@ -581,8 +478,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     }
 };
 
-// The selection moves for reasons that are not edits (a click, an arrow key), and the active block has to follow
-// it. Listened for on the document because that is the only place the event fires.
+// Selection moves without an edit (click, arrow key); listened for on the document, the only place this event fires.
 const onSelectionChange = (): void => {
     if (!syncing) {
         markActive();
@@ -591,15 +487,14 @@ const onSelectionChange = (): void => {
 
 const makeEditable = (root: HTMLElement): void => {
     root.setAttribute(`contenteditable`, `true`);
-    // Set here rather than in the template because what this element IS to a screen reader and to the
-    // spellchecker belongs with the line that makes it editable, not scattered across the markup.
+    // Set here, not the template: what this element is to a screen reader belongs with the editable-making line.
     root.setAttribute(`spellcheck`, `true`);
     root.setAttribute(`role`, `textbox`);
     root.setAttribute(`aria-multiline`, `true`);
 };
 
-// Paste is the text and only ever the text: a document's formatting lives in its markdown, so pasted styling
-// would be a claim this file cannot make.
+// Paste is the text and only the text: a document's formatting lives in its markdown, so pasted styling is not a claim
+// this file can make.
 const onPaste = (event: ClipboardEvent): void => {
     event.preventDefault();
     insertAtCaret(event.clipboardData?.getData(`text/plain`) ?? ``);
@@ -610,15 +505,8 @@ const onDrop = (event: DragEvent): void => {
     insertAtCaret(event.dataTransfer?.getData(`text/plain`) ?? ``);
 };
 
-/* Two things the browser must not do here, refused at the door.
- *
- * `formatBold` and friends would wrap a `<b>` around the selection, which says nothing this file can hold. The
- * shortcuts are answered in `onKeydown` as the markdown they mean; this catches the other ways in, a context
- * menu or a touch-keyboard's formatting bar.
- *
- * `historyUndo` and `historyRedo` are the browser reaching for a stack that this surface invalidated the moment
- * it first rebuilt a block (see markdown/history.ts). Letting it run would restore DOM the model knows nothing
- * about. Ctrl+Z is handled in `onKeydown`; this covers the menu and the trackpad gesture. */
+// Refuses `formatBold`-style commands (a `<b>` this file can't hold) from a context menu or touch bar, and
+// `historyUndo`/`historyRedo`, which would restore DOM this surface's own rebuilds already invalidated.
 const onBeforeInput = (event: InputEvent): void => {
     if (event.inputType.startsWith(`format`)) {
         event.preventDefault();
@@ -644,9 +532,7 @@ onMounted(() => {
     history.reset({ text: source, caret: caretAt ?? 0 });
 });
 
-// A new document (a different file, a reload from disk) replaces what is on screen; the surface's own edits come
-// back through `change` and must never round-trip, so an unchanged text is ignored. History starts again with it:
-// undoing past a file you did not edit into one you did is not something anyone means by Ctrl+Z.
+// A new document replaces the screen; the surface's own edits are ignored there, unchanged; history resets too.
 watch(
     () => source,
     (next) => {
@@ -663,13 +549,10 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
 </script>
 
 <template>
-    <!-- NO MEASURE AND NO CENTRING OF ITS OWN, which it used to have (`mx-auto max-w-3xl`, the workspace's
-         column, written into the only component that existed). A config document is a paragraph wide inside a
-         settings row, a story is 68ch inside a list, and a file in the workspace is a centred column: how much
-         room the words get is a fact about WHERE THE DOCUMENT IS, and the caller is the only one who knows it.
-         `md-prose` already reads `--prose-measure`, so a caller sets one number and both this surface and the
-         rendered half beside it obey it — which is the property that makes switching between them move
-         nothing. The caller's `class` lands here through ordinary fallthrough. -->
+    <!--
+        No measure or centering of its own; the caller sets `--prose-measure` (`md-prose` reads it), so this surface
+        and the rendered half beside it always agree. Caller's `class` lands here through fallthrough.
+    -->
     <div
         ref="host"
         class="md-prose md-editing"

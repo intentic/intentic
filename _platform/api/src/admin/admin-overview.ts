@@ -7,13 +7,10 @@ import { hostedEnabled } from "../sandbox/hosted/hosted.js";
 import { hostedPlanEnabled } from "../sandbox/hosted/hosted-plan.js";
 import { DAY_MS } from "../durations.js";
 
-/* The operator's glance, computed fresh on every read — counts only, no rows, so the query cost stays flat
- * no matter how the tables grow (every count below runs on an indexed column or the primary key). Nothing
- * here caches: an admin reading a number is usually reacting to something, and a stale count is exactly the
- * wrong thing to react to. */
+// Counts only, no rows, computed fresh on every read: query cost stays flat as tables grow, and nothing here caches a
+// number an admin might be reacting to.
 
-// A daemon that announced within this window reads as connected — the same order of recency the setup
-// wizard trusts `lastSeenAt` for.
+// Announced within this window reads as connected, the same recency the setup wizard trusts `lastSeenAt` for.
 const ACTIVE_DAEMON_WINDOW_MS = 5 * 60 * 1000;
 
 export const adminOverview = async (prisma: PrismaClient, config: Config, now: () => Date = () => new Date()): Promise<AdminOverview> => {
@@ -27,8 +24,7 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
         seenSince(7 * DAY_MS),
         seenSince(30 * DAY_MS),
         prisma.hostedPlan.groupBy({ by: [`status`], _count: { _all: true } }),
-        // Churn that already happened: canceled rows whose last webhook update landed this month. The
-        // update stamp is the cancellation's arrival for a status that never changes again afterwards.
+        // Churn that already happened: canceled rows whose last webhook update landed this month.
         prisma.hostedPlan.count({ where: { status: `canceled`, updatedAt: { gte: new Date(at.getTime() - 30 * DAY_MS) } } }),
         prisma.hostedMachine.count(),
         // Slots, not rows: a plan covering three hosted sandboxes bills three times the price.
@@ -46,8 +42,8 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             trialing: planCount(`trialing`),
             pastDue: planCount(`past_due`),
             canceled30d,
-            // Display arithmetic, never accounting: Stripe stays the money's source of truth. Trialing rows
-            // are excluded on purpose — they pay nothing yet, and PLAN_STATUSES is about entitlement.
+            // Display arithmetic, never accounting: Stripe is the money's source of truth. Trialing rows pay nothing
+            // yet.
             mrrUsd: (activeSlots._sum.quantity ?? 0) * config.hostedPlan.priceUsd,
         },
         hostedMachines,

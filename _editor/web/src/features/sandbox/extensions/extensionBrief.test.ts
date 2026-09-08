@@ -2,8 +2,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, test } from "vitest";
 import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } from "./extensionBrief";
 
-/* What the brief must not lose. These are not assertions about wording: they are the four things an agent
- * cannot recover on its own, each of which produced a directory that stopped loading when it was missing. */
+// What the brief must not lose: four facts an agent can't recover on its own, each once the cause of a directory
+// that stopped loading.
 
 const brief = extensionBrief({
     id: `workspace.release-notes`,
@@ -13,8 +13,7 @@ const brief = extensionBrief({
 
 describe(`the brief handed to an authoring agent`, () => {
     test(`carries the author's own words, not a paraphrase of them`, () => {
-        // Quoted verbatim (trimmed) so the person and the agent argue about one statement of the goal. A brief
-        // that summarised the wish would be the prompt author guessing at a request they were handed exactly.
+        // Verbatim and trimmed, so the person and the agent argue over one exact statement of the goal.
         expect(brief).toContain(`"a list of what shipped this week, from the git log"`);
     });
 
@@ -24,8 +23,7 @@ describe(`the brief handed to an authoring agent`, () => {
     });
 
     test(`states every constraint that is invisible from inside the directory`, () => {
-        // The four ways this goes wrong for an agent that knows Vue and not this host: bundling it, writing an
-        // SFC, registering something the manifest never declared, and helping itself to daemon routes.
+        // Four Vue-not-host mistakes checked for: bundling, an SFC, an undeclared registration, stray daemon routes.
         expect(brief).toContain(`ONE file`);
         expect(brief).toContain(`h()`);
         expect(brief).toContain(`Declare every contribution`);
@@ -33,8 +31,7 @@ describe(`the brief handed to an authoring agent`, () => {
     });
 
     test(`ends on something the agent can check rather than claim`, () => {
-        // "It still loads" is readable off the Extensions tab, which names a directory that stopped parsing:
-        // so finishing is verifiable without the author being there.
+        // Readable off the Extensions tab, which names any directory that stopped parsing.
         expect(brief).toContain(`Not loadable`);
         expect(brief).toContain(`workspace.release-notes`);
     });
@@ -49,21 +46,18 @@ describe(`the brief for tightening permissions`, () => {
     });
 
     test(`shows both sides of the evidence, so the claim can be weighed`, () => {
-        // The used counts are what make "never called" mean anything: without them the agent cannot tell an
-        // exercised extension from one nobody has opened, and both produce the same list of zeroes.
+        // Without used counts, an exercised extension and an unopened one produce the same list of zeroes.
         expect(tighten).toContain(`POST /agent, GET /panels`);
         expect(tighten).toContain(`GET /workspace/file (1,240)`);
     });
 
     test(`asks for a decision per route, not for the marked ones to be deleted`, () => {
-        // The failure this exists to prevent: an agent that treats the panel's marks as a task list and strips a
-        // route an error path needs. Keeping one with a reason has to read as success.
+        // Guards against an agent treating the panel's marks as a checklist and stripping a route an error path needs.
         expect(tighten).toContain(`Remove a route only when nothing in the code can reach it`);
         expect(tighten).toContain(`one-line reason`);
     });
 
     test(`forbids the turn from widening into the code`, () => {
-        // Behaviour changes are how a "tidy the manifest" turn becomes a diff nobody can review.
         expect(tighten).toContain(`edits \`permissions.sandbox\` and nothing else`);
     });
 });
@@ -76,14 +70,11 @@ describe(`the brief for publishing`, () => {
     });
 
     test(`forbids any change between the check and the push`, () => {
-        // The one instinct that must be suppressed: a tidy-up between the last test and the push ships bytes
-        // nobody ever ran, in a system where the pushed bytes ARE the release.
         expect(publish).toContain(`no tidy-up, no reformat, no version bump`);
     });
 
     test(`routes discovery through the scan, not a hand-written listing`, () => {
-        // The topic is the publish-side half of the nightly scan's contract; a hand-opened pull request beside
-        // it makes a maintainer review the same extension twice.
+        // The topic is what the nightly scan discovers repositories by; a hand-opened PR duplicates that review.
         expect(publish).toContain(`intentic-extension`);
         expect(publish).toContain(`Do not open a listing pull request yourself unless asked`);
     });
@@ -97,8 +88,7 @@ describe(`the brief for reading before installing`, () => {
     const audit = auditBrief({ label: `acme.incidents`, url: `https://github.com/acme/incidents.git`, ref: `a`.repeat(40), path: `` });
 
     test(`pins the audit to the exact commit the install would pin`, () => {
-        // The branch may have moved since the listing; auditing it would be an account of code nobody is about
-        // to run, delivered with full confidence.
+        // The branch may have moved since the listing; the exact commit is what would actually be installed.
         expect(audit).toContain(`a`.repeat(40));
         expect(audit).toContain(`the branch may have moved`);
     });
@@ -109,8 +99,7 @@ describe(`the brief for reading before installing`, () => {
     });
 
     test(`walks the permissions, which are the part worth a stranger's scrutiny`, () => {
-        // The manifest names reach; only the code says what uses it. Route-by-route with citations is what
-        // makes this an account rather than an impression.
+        // The manifest names reach; only the code says what actually uses it.
         expect(audit).toContain(`permission by permission`);
         expect(audit).toContain(`quoting file and line`);
     });

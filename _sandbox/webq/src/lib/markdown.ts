@@ -1,12 +1,6 @@
-/* DOM → GitHub-flavored markdown, written for a reader that is an agent. That reader changes the rules:
- * no character escaping (an agent reads the markdown raw and escaped prose is noise — only table pipes and
- * inline-code backticks get protected, because those change structure), absolute link and image URLs (the
- * agent follows them with another fetch, so a relative path is a broken one), and data: images dropped to
- * their alt text (a base64 blob can outweigh the whole article).
- *
- * Mixed content is handled as FLOW: walking a container, inline runs accumulate into a paragraph buffer
- * that flushes whenever a block element interrupts — so <div>text<p>para</p></div> yields two paragraphs
- * instead of losing the loose text, and unknown/custom elements are transparent containers by default. */
+// DOM to GitHub-flavored markdown for an agent reader: no character escaping except table pipes and code backticks,
+// absolute URLs (a relative link is a broken fetch), data: images dropped to alt text. Mixed content flows: inline runs
+// pool into a paragraph buffer flushed by a block; unknown elements are transparent containers.
 import { attr, type Element, isElement, isText, type Node, rawTextOf } from "./dom.js";
 
 const NON_CONTENT = new Set(["script", "style", "noscript", "template", "svg", "canvas", "iframe", "object", "embed", "link", "meta", "head"]);
@@ -143,8 +137,7 @@ const renderInline = (el: Element, options: MarkdownOptions): string => {
         return "";
     }
     if (el.tagName === "br") {
-        // A sentinel, not "\n": source-HTML newlines are whitespace and collapse to spaces, and only this
-        // marker survives collapse() as a real line break.
+        // Sentinel, not "\n": HTML newlines are whitespace and collapse to spaces; only this survives as a break.
         return BR;
     }
     if (el.tagName === "img") {
@@ -160,8 +153,7 @@ const renderInline = (el: Element, options: MarkdownOptions): string => {
     const wrap = INLINE[el.tagName];
     const inner = renderInlineChildren(el, options);
     if (wrap === undefined) {
-        // Unknown or neutral inline (span, small, q, time, custom elements): transparent — its text joins
-        // the surrounding run. Block elements never reach here; flow rendering dispatches them first.
+        // Unknown/neutral inline (span, small, q) is transparent; blocks never reach here, flow dispatches those first.
         return inner;
     }
     const trimmed = collapse(inner);
@@ -200,7 +192,7 @@ const renderList = (el: Element, options: MarkdownOptions, depth: number): strin
     items.forEach((item, index) => {
         const marker = ordered ? `${start + index}. ` : "- ";
         const indent = "    ".repeat(depth);
-        // An item is flow of its own: loose text becomes the item line, nested lists and blocks follow it.
+        // An item is flow of its own: loose text becomes the item line, nested lists/blocks follow.
         const nested: string[] = [];
         const inlineParts: string[] = [];
         for (const child of item.childNodes) {
@@ -295,13 +287,11 @@ const resolveUrl = (raw: string | undefined, base: string | undefined): string |
     }
 };
 
-// A control character no HTML text node ever carries: whitespace collapse cannot touch it, and only
-// it becomes a line break afterwards.
+// Control character no HTML text node carries; whitespace collapse skips it, and only it becomes a line break.
 const BR = "\u0001";
 
-/* Whitespace-collapse an inline run without eating the line breaks <br> put there: split on the sentinel
- * FIRST, so each side collapses as ordinary text and the joins are the only newlines that survive. Split
- * rather than a regex over the control character, which is a lint error for good reasons everywhere else. */
+// Collapses whitespace without eating <br>'s line breaks: splits on the sentinel first, so only the rejoins are
+// newlines. Split, not a regex over the control character (a lint error elsewhere).
 const collapse = (text: string): string =>
     text
         .split(BR)

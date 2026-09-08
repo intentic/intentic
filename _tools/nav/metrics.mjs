@@ -1,26 +1,10 @@
-/* THE SHAPE OF THE TREE: the distributions that say whether this is a codebase somebody can hold in their head.
- *
- * These are the cheap numbers — no symbol resolution, no simulation, just counting — and they are the ones a
- * refactor is usually judged on, so they are also the easiest ones to flatter yourself with. Three rules keep
- * them honest, and they are the reason this file looks paranoid:
- *
- * 1. LINES ARE REPORTED THREE WAYS, always. Physical, code, and comment+blank. A pass that compacts comments
- *    moves physical a long way and code barely at all. In the campaign this harness was built to reproduce,
- *    43% of a headline "-34% lines" was comments, docstrings and blanks — a real improvement in one sense and
- *    not remotely the same claim. A report that shows only the physical delta is not wrong, it is misleading,
- *    and the fix is to make the split impossible to omit.
- *
- * 2. TESTS ARE EXCLUDED FROM EVERY SHAPE NUMBER. "We deleted tests" must not be able to move the headline.
- *    They are counted separately so a drop in them is visible rather than invisible.
- *
- * 3. COUNTER-MOVERS ARE FIRST-CLASS. Splitting a god file RAISES module count and import-graph edges, and can
- *    grow the largest dependency cycle. Those are the price of the thing being bought, they are reported in
- *    the same table as the wins, and `compare` prints them whether they moved the right way or not. */
+// 1. Lines report physical, code, and comment+blank together; compacting comments moves physical but not code.
+// 2. Tests are excluded from every shape number; deleting tests must not move the headline.
+// 3. Counter-movers (module count, import edges, largest cycle) are reported alongside the wins, not hidden.
 import { mean, percentile, sum } from "./lib/files.mjs";
 import { resolveSpecifier } from "./lib/resolve.mjs";
 
-// Tarjan, iterative: a recursive one blows the stack on a real monorepo's import graph, and the largest cycle
-// is precisely the number that grows when a file is split, so it must survive being measured on the bad case.
+// Tarjan's algorithm, iterative: a recursive version blows the stack on a large import graph.
 const stronglyConnected = (nodes, edgesOf) => {
     const index = new Map();
     const low = new Map();
@@ -29,8 +13,7 @@ const stronglyConnected = (nodes, edgesOf) => {
     const components = [];
     let counter = 0;
 
-    // Discovering a node: assign it an index and push a frame. Extracted so the main loop stays flat enough
-    // to read, which is the property this whole file exists to measure.
+    // Discovers a node: assigns it an index and pushes a work frame.
     const discover = (node, work) => {
         index.set(node, counter);
         low.set(node, counter);
@@ -113,7 +96,7 @@ export const measureShape = (tree) => {
     const functionLines = functions.map((fn) => fn.lines);
     const complexities = functions.map((fn) => fn.complexity);
 
-    // The import graph, first-party edges only. A dependency edge is not a navigability cost this tree owns.
+    // Import graph, first-party edges only; a dependency edge isn't a navigability cost this tree owns.
     const edges = new Map();
     let edgeCount = 0;
     const fanIn = new Map();
@@ -149,7 +132,6 @@ export const measureShape = (tree) => {
             code,
             comment,
             blank,
-            // Spelled out so a reader never has to work out which part of a reduction was which.
             commentAndBlank: comment + blank,
         },
         tokens: {
@@ -189,8 +171,7 @@ export const measureShape = (tree) => {
             longestIfChain: sourceFiles.reduce((best, file) => Math.max(best, file.longestChain), 0),
             filesWithChainOver4: sourceFiles.filter((file) => file.longestChain >= 4).length,
         },
-        // THE COUNTER-MOVERS. Splitting buys the numbers above by making these worse. They live in the same
-        // object so no report can show one set without the other.
+        // Counter-movers: splitting improves the numbers above by making these worse; kept in the same object.
         cost: {
             modules: sourceFiles.length,
             importEdges: edgeCount,

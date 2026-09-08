@@ -7,8 +7,8 @@ import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import { SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
-// Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).
-// The client is a double too: an event stream the test feeds, and a record of every permission answered on it.
+// Captures server-spawn options instead of booting a real `opencode serve`; the client double also feeds an event
+// stream and records every permission answered.
 const { serverSpawns, permissionReplies, streamEvents } = vi.hoisted(() => ({
     serverSpawns: [] as { config?: unknown }[],
     permissionReplies: [] as { id: string; permissionID: string; directory: string | undefined; response: string | undefined }[],
@@ -25,8 +25,8 @@ vi.mock("@opencode-ai/sdk", () => ({
                 stream: {
                     async *[Symbol.asyncIterator]() {
                         yield* streamEvents;
-                        // Then stay open, like the real subscription: a stream that ended would send the
-                        // watcher round its retry ladder and spawn a second reader mid-assertion.
+                        // Stays open like the real subscription; ending it would send the watcher round its retry
+                        // ladder mid-assertion.
                         await new Promise(() => {});
                     },
                 },
@@ -61,7 +61,7 @@ const fileExists = async (path: string): Promise<boolean> =>
     access(path)
         .then(() => true)
         .catch(() => false);
-// A fetch that fails the test if the discovery path ever touches the network (used to prove it was skipped).
+// Fails the test if the discovery path ever touches the network.
 const forbiddenFetch = (() => {
     throw new Error("discovery must not hit the network in this case");
 }) as unknown as typeof fetch;
@@ -70,8 +70,7 @@ const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humaniz
 
 afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-    // The three doubles are module-level (vi.hoisted), so a test that fed the stream or answered a permission
-    // would otherwise be read by the next one's assertions.
+    // The three doubles are module-level (vi.hoisted); reset so one test's stream/permissions don't leak into the next.
     streamEvents.length = 0;
     permissionReplies.length = 0;
     serverSpawns.length = 0;
@@ -82,7 +81,7 @@ test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCo
     const service = createOpenCodeService(xdg);
     // No auth file yet ⇒ not connected.
     expect(await service.connected("xai")).toBe(false);
-    // The device flow wrote the OAuth token ⇒ connected, with no opencode-server restart (the snapshot bug this guards).
+    // OAuth token written by the device flow ⇒ connected, with no opencode-server restart.
     await writeAuth(xdg, { xai: { type: "oauth", access: "tok", refresh: "r", expires: 1 } });
     expect(await service.connected("xai")).toBe(true);
 });
@@ -90,8 +89,7 @@ test("connected('xai') reflects a persisted OAuth token in auth.json, not OpenCo
 test("connected('xai') is false for a non-oauth entry or a different provider", async () => {
     const xdg = await scratch();
     const service = createOpenCodeService(xdg);
-    // An api-key entry has no OAuth access token, and xaiModels() couldn't resolve one either, so "connected"
-    // must stay false to keep the UI consistent with what a turn can actually use.
+    // An api-key entry has no OAuth access token, so "connected" must stay false to match what a turn can actually use.
     await writeAuth(xdg, { xai: { type: "api", key: "sk-xxx" } });
     expect(await service.connected("xai")).toBe(false);
     await writeAuth(xdg, { anthropic: { type: "oauth", access: "tok" } });
@@ -119,7 +117,7 @@ test("xaiModels() returns the seed catalog (non-empty, with a default) when not 
 
 test("xaiModels() skips REST discovery when the token is expired, serving the persisted catalog instead", async () => {
     const xdg = await scratch();
-    // expires is a past ms epoch ⇒ every discovery probe would 401, so we must not even try (forbiddenFetch).
+    // expires is a past ms epoch ⇒ every discovery probe would 401, so this must not even try (forbiddenFetch).
     await writeAuth(xdg, { xai: { type: "oauth", access: "tok", expires: 1 } });
     const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
     await service.recordModels(["grok-4.20-0309-reasoning"]);
@@ -163,8 +161,8 @@ test("client() spawns the server with store:false for every known xai model (see
     await service.recordModels(["grok-4-latest"]);
     await service.client();
 
-    // xAI stores conversations server-side for 30 days unless each model call opts out: the per-model config
-    // options are the only seam OpenCode forwards to the call, so every known id must carry store:false.
+    // xAI stores conversations server-side unless each model call opts out; per-model config is the only seam OpenCode
+    // forwards, so every known id must carry store:false.
     const spawn = serverSpawns.at(-1) as { config: { provider: { xai: { models: Record<string, { options: unknown }> } } } };
     const models = spawn.config.provider.xai.models;
     expect(Object.keys(models).toSorted()).toEqual([...new Set([...SEED_XAI_MODELS, "grok-4-latest"])].toSorted());
@@ -173,41 +171,32 @@ test("client() spawns the server with store:false for every known xai model (see
     }
 });
 
-/* THE PERMISSION BLOCK, IN FULL: the three-key version of this cost a conversation five turns in half an hour.
- *
- * OpenCode defaults every key the config omits to `ask`, and an ask on this runtime reaches nobody: no TUI, no
- * permission channel, no user. The session just stops emitting, and two minutes later the adapter's watchdog
- * calls it a timeout. `external_directory` is the one that found it: an isolated conversation runs in a
- * worktree while its attachments stay on /work, so reading the image the user attached is a read outside the
- * session's own directory. */
+// OpenCode defaults an omitted key to `ask`, which nobody on this runtime can answer, so the turn just stops;
+// `external_directory` is the one that found it (attachments read from outside an isolated worktree).
 test("client() spawns the server with EVERY permission answered, not merely the ones anyone thought of", async () => {
     const xdg = await scratch();
     await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch }).client();
     const spawn = serverSpawns.at(-1) as { config: { permission: Record<string, unknown> } };
     const permission = spawn.config.permission;
 
-    // Every key present and answered. A key left out defaults to `ask`, which is the stall this test exists for.
+    // Every key must be present: an omitted one defaults to `ask`, which nobody here can answer.
     expect(Object.keys(permission).toSorted()).toEqual(["bash", "doom_loop", "edit", "external_directory", "webfetch"]);
     for (const key of ["edit", "webfetch", "doom_loop", "external_directory"]) {
         expect(permission[key], key).toBe("allow");
     }
 
-    /* `bash` is the one map, and its DEFAULT is still allow, which is what keeps this test's property true: the
-     * owner's command rulebook needs to see a command before it runs (guard/command-gate.ts), and OpenCode's
-     * permission channel is the only seam that offers one. So interesting shapes are pre-filtered to `ask` and
-     * answered by the real classifier, while everything else keeps the standing yes and never round-trips. */
+    // `bash`'s default is still allow; only shapes the rulebook might care about are pre-filtered to `ask` and answered
+    // by the real classifier.
     const bash = permission["bash"] as Record<string, string>;
     expect(bash["*"]).toBe("allow");
     expect(bash["*git push*"]).toBe("ask");
     expect(bash["*rm *"]).toBe("ask");
-    // Nothing in the map may be anything but allow-or-ask: a `deny` here would refuse without ever consulting
-    // the rulebook, which is the one verdict this layer must never reach on its own.
+    // Nothing in the map may be `deny`: that verdict must come from the rulebook, never from this layer alone.
     expect([...new Set(Object.values(bash))].toSorted()).toEqual(["allow", "ask"]);
 });
 
-/* ...and the same answer given live, for a permission kind this build has never heard of. A future OpenCode's
- * new key is `ask` by default and absent from the config we spawned with, which puts it exactly where
- * external_directory was, so an ask that reaches a watched directory is answered on the spot instead. */
+// A future OpenCode permission key defaults to `ask` and is absent from the spawned config, same as
+// `external_directory` was; answered on the spot rather than stalling.
 test("a permission ask on a watched directory is answered with a standing yes", async () => {
     const xdg = await scratch();
     streamEvents.push({ type: "permission.updated", properties: { id: "per_1", sessionID: "ses_1", type: "some_future_gate" } });
@@ -217,10 +206,8 @@ test("a permission ask on a watched directory is answered with a standing yes", 
     expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
 });
 
-/* THE OWNER'S SAFETY POLICY, ANSWERED OVER THIS CHANNEL. A registered session's permissions go through the same
- * pipeline every other runtime uses; an unregistered one keeps the standing yes above. This is the whole of what
- * `rulebook: "refuse-only"` claims for Grok and Gemini. The judge is a stub: what is under test is the channel,
- * not the model. */
+// A registered session's permission goes through the same pipeline every other runtime uses; unregistered keeps the
+// standing yes. The judge is a stub: the channel is under test, not the model.
 test("a registered session's permission is judged by the policy, and a refused command is rejected", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
@@ -242,9 +229,8 @@ test("a registered session's permission is judged by the policy, and a refused c
     release();
 });
 
-/* An allowed-but-classified command replies `once`, never `always`: `always` would tell OpenCode to stop asking
- * about that pattern for the rest of the session, and the next command matching it could be one the policy
- * WOULD refuse. */
+// `always` would stop OpenCode asking about that pattern for the rest of the session, and the next match could be one
+// the policy would refuse.
 test("a command the policy allows is approved for this call only", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
@@ -287,12 +273,8 @@ test("recordModels is a no-op for an empty or media-only list (keeps the seed fl
     expect(await service.xaiModels()).toEqual(SEED_CATALOG);
 });
 
-/* THE BUG THAT MADE EVERY GOOGLE MODEL BLIND, pinned at the one expression that caused it.
- *
- * OpenCode has no models.dev row for this loopback provider, so anything the config omits defaults to false,
- * and a model that does not declare image input has images stripped out of the request. Registering the models
- * as bare ids therefore cost the user their screenshot: it never reached the model, and neither did the read
- * tool's own image output, so the reply was "I can't view the image". */
+// OpenCode has no models.dev row for this loopback provider, so an omitted capability defaults to false; a model
+// missing "image" input has images stripped from the request.
 test("the Google provider declares each model's published modalities, so a screenshot is not stripped out", () => {
     const config = geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789/", token: "local", models: async () => [] }, [
         { id: "claude-opus-4-6-thinking", inputModalities: ["text", "image"] },
@@ -311,7 +293,7 @@ test("the Google provider declares each model's published modalities, so a scree
     });
 });
 
-// A catalog read that failed must cost Google its provider, not Grok its runtime: one `opencode serve` is both.
+// A catalog read that failed must cost Google its provider, not Grok its runtime: one opencode serve is both.
 test("no Google models means no Google provider at all, rather than one registered serving nothing", () => {
     expect(geminiProviderConfig({ baseUrl: "http://127.0.0.1:8789", token: "local", models: async () => [] }, [])).toEqual({});
     expect(geminiProviderConfig(undefined, [{ id: "gemini-pro-agent", inputModalities: ["text", "image"] }])).toEqual({});

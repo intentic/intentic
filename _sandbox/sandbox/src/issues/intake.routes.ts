@@ -21,37 +21,19 @@ import { ISSUES_PROVIDER } from "./provider.js";
 import { wakeBrief } from "./issue-payload.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 
-/* THE BUG INTAKE: the daemon's second public door (automations/public-door.ts), whose own verb is `report`.
- * What differs from the Front Desk is what happens AFTER admission, and the difference is the point of the
- * product:
- *
- *   the Front Desk    every message is an agent turn. Somebody is waiting for an answer, so the reply streams.
- *   this             every report is a FILE WRITE, and only sometimes a turn. Nobody is waiting: the reporter's
- *                    browser is usually mid-crash. So it answers immediately and the dedup decides, on its own
- *                    time, whether anybody needs waking at all.
- *
- * THAT SENTENCE IS THE SAFETY MODEL. A crash loop on one popular page is thousands of reports a minute; with a
- * turn per report it is a bill, and with grouping it is one row whose count goes up. Everything else (the
- * origin allowlist, the rate limit, the daily ceiling) bounds the file writes. The GROUPING is what bounds the
- * spend, and it happens before any of this can wake anyone.
- *
- * The prefix is `/intake/` rather than `/issues/` on purpose: `/issues` is the owner's inbox, keyed by
- * fingerprint, and these are public, keyed by automation id. Two id spaces with two audiences under one prefix
- * is how a rule gets widened without anybody seeing it. */
+// The daemon's second public door (report), differing from the Front Desk after admission: every report is a file
+// write, only sometimes a turn, since nobody waits on a crashing page. Grouping happens before anything can wake
+// anyone, which is what bounds the spend; everything else (allowlist, rate limit, ceiling) only bounds the writes.
+// `/intake/` is a separate id space, keyed by automation id, from the owner's `/issues/` inbox keyed by fingerprint.
 
-/* How long one issue keeps talking to the same agent. A crash that comes back inside the week resumes the
- * conversation that already looked at it, which is worth a great deal: the agent that read those frames on
- * Monday still has them on Thursday. Past that the worktree is stale and a fresh conversation is the honest
- * start. */
+// How long a recurrence resumes the same conversation before the worktree is stale and a fresh one starts.
 const ISSUE_THREAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Defaults resolved daemon-side so the SDK carries no fallback logic, and named field by field so a secret
-// added to IssuesConfig later is invisible to a stranger's browser until somebody lists it here.
+// Resolved daemon-side, named field by field, so a new IssuesConfig secret stays hidden until listed here.
 const DEFAULT_TITLE = "Report a problem";
 const DEFAULT_PROMPT = "What went wrong?";
 const DEFAULT_THANKS = "Thanks, we have it. We will look into it.";
-// Intentic's brand orange, the Front Desk's own default and for its reason: something embedded with nothing
-// configured should look like the product it came from.
+// Intentic's brand orange, same default as the Front Desk: unconfigured should still look like the product.
 const DEFAULT_ACCENT = "#e47100";
 
 export const publicIssuesConfig = (automation: AutomationRecord): IssuePublicConfig => {
@@ -76,17 +58,10 @@ export const INTAKE_DOOR: PublicDoorSpec<IssuesConfig> = {
     publicConfig: publicIssuesConfig,
     missing: "no bug intake with that id",
     disabled: "intake disabled",
-    /* TWO DOORS, because there are two kinds of client and only one of them has an Origin header to be judged
-     * by:
-     *
-     *   a browser   proves itself by the site it is on, against the automation's allowlist. This is the good
-     *               gate, it cannot be lifted out of a bundle and reused, and it is why `keyFromBrowsers` is
-     *               off by default: a key pasted into a public web build is a key anybody has.
-     *   an app      a phone, a desktop build, a server. No origin exists to check, so it presents the ingest
-     *               key. That key ships inside a binary and is therefore an abuse LABEL rather than a secret;
-     *               what it buys is that a leaked one can be rotated in a click while the web stays covered by
-     *               the allowlist. The ceilings are what actually bound the damage, which is the honest way
-     *               round. */
+    // Two admission paths, since only a browser has an Origin header to check:
+    // browser: origin checked against the allowlist; unforgeable, why keyFromBrowsers defaults off
+    // app (phone, desktop, server): no origin, so it presents the ingest key instead, a rotatable abuse label, not a
+    // secret
     admit: (automation, config, origin, keyed) => {
         if (origin === undefined) {
             return keyed ? undefined : "this intake needs a valid key";
@@ -94,21 +69,16 @@ export const INTAKE_DOOR: PublicDoorSpec<IssuesConfig> = {
         const listed = automation.trigger.kind === "listener" && (automation.trigger.allowedOrigins ?? []).includes(origin);
         return listed || (config.keyFromBrowsers === true && keyed) ? undefined : "origin not allowed";
     },
-    // Wider than the chat's: a crashing page can genuinely fire several reports in a second (an error, its
-    // rejection, a detection), and it is not the ceiling that matters anyway.
+    // Wider than the chat's: a crashing page can fire several reports a second; the daily ceiling is what matters.
     rateMax: 60,
     challengeParam: "client",
     installs: (root) => statePath(root, ".intentic/records/issue-installs.json"),
     conversationPrefix: "bug",
 };
 
-/* Does the trigger want to be woken for THIS one? `eventType` narrows to a kind (wake me for crashes, not for
- * every note somebody writes in), `channelId` to a single site origin (wake me for production, not for the
- * staging build three people are clicking around in). Absent means all, on both.
- *
- * A keyless client has no origin to match, so a trigger narrowed to one site never wakes for a phone. That is
- * the honest reading of "only this site" rather than an oversight: an app is not a site, and an owner who
- * wants both leaves the field empty. */
+// Whether the trigger wants to be woken for this event: eventType narrows to a kind, channelId to an origin, absent
+// meaning all. A keyless client has no origin, so a trigger narrowed to one site never wakes for it, an app is not a
+// site.
 const wakeWanted = (automation: AutomationRecord, kind: string, origin: string | undefined): boolean => {
     if (automation.trigger.kind !== "listener") {
         return false;
@@ -117,12 +87,11 @@ const wakeWanted = (automation: AutomationRecord, kind: string, origin: string |
     return (eventType === undefined || eventType === kind) && (channelId === undefined || channelId === origin);
 };
 
-// What a refused request answers with. One shape for every gate below, so the handler has exactly one way to
-// say no and the reasons stay comparable.
+// One refusal shape for every gate below, so the handler has exactly one way to say no.
 type Refusal = { status: 400 | 403 | 404 | 409 | 413 | 429; error: string };
 
-// The body, or the refusal. Size before JSON: reading a hundred-megabyte body to discover it is too big is the
-// denial of service the limit exists to prevent.
+// The parsed body, or a refusal; checks declared size before parsing JSON, so an oversized body is never fully read
+// first.
 const parsed = async (c: Context<AppEnv, "/intake/:id/report">): Promise<Refusal | { body: z.infer<typeof IssueIngestSchema> }> => {
     const declared = Number(c.req.header("content-length"));
     if (Number.isFinite(declared) && declared > ISSUE_PAYLOAD_MAX) {
@@ -135,10 +104,8 @@ const parsed = async (c: Context<AppEnv, "/intake/:id/report">): Promise<Refusal
     }
 };
 
-/* Everything between "a well-formed report arrived" and "this may be recorded", the door's gates in the door's
- * order, with one departure: the puzzle applies to WRITTEN reports only. A crash handler fires on a dying page,
- * where there is no second to spend on a challenge and nobody waiting to watch it happen, so demanding one
- * there would simply mean no crash reports at all. */
+// The door's gates, in order, between a well-formed report and one that may be recorded. One departure: the anti-bot
+// puzzle applies only to written reports, since a crash fires from a dying page with nobody there to solve one.
 const gated = async (
     door: PublicDoor<IssuesConfig>,
     c: Context<AppEnv, "/intake/:id/report">,
@@ -185,8 +152,8 @@ export const createIntakeRoutes = (
             const { automation, config, origin } = gate;
             const { report } = read.body;
 
-            // The grouping, which happens before anything can cost money. `randomUUID` is what makes a written
-            // report its own issue; a crash never reaches it.
+            // Grouping happens before anything costs money; randomUUID gives a written report its own issue, not a
+            // crash.
             const fingerprint = fingerprintOf(automation.id, report, crypto.randomUUID());
             const outcome = await issues.record({
                 id: fingerprint,
@@ -197,37 +164,23 @@ export const createIntakeRoutes = (
                 escalateAfter: config.escalateAfter ?? ISSUES_ESCALATE_AFTER_DEFAULT,
             });
 
-            /* Something brand new always deserves a look; something known deserves one again only once it has grown
-             * past its escalation step. Everything else is a count going up, which is exactly what the owner wants
-             * to see and exactly what nobody should be woken for.
-             *
-             * The trigger's own filters land HERE rather than at admission, which is this source's one departure
-             * from the others: an intake records everything it admits, and the trigger says what is worth
-             * interrupting somebody for. That is what lets an owner wake on production crashes while still reading
-             * staging's, from one intake, instead of running two. */
+            // New always wakes; known only past its escalation step. Filters apply here, after recording, not
+            // admission.
             if (wakeWanted(automation, report.kind, origin) && (outcome.fresh || outcome.escalated)) {
                 void startWake(services, wake, issues, automation, outcome.issue, outcome.fresh ? "new" : "recurring").catch((error: unknown) =>
                     services.logger.error({ err: error, automation: automation.id, issue: fingerprint }, "issue wake failed"),
                 );
             }
-            // Answered before any of that: the reporter's page may be seconds from unloading, and there is nothing
-            // for it to wait on.
+            // Answered before any of that: the reporter's page may be seconds from unloading, with nothing to wait on.
             return c.json({ ok: true as const, id: fingerprint });
         },
     };
 };
 
-/* Wake the agent for one issue, on the conversation that issue owns.
- *
- * THE THREAD IS DOING REAL WORK HERE, not bookkeeping. It gives the fire a stable conversation id, which is
- * what (a) makes a recurrence continue with the agent that already read these frames, (b) lets the inbox link
- * to the run, and (c) carries the whole thing through a HOLD: the approvals queue snapshots the conversation
- * and origin, and runHeldWake replays and settles them, so an approval-gated intake needs nothing of its own
- * here.
- *
- * `noteRun` is called BEFORE the fire and regardless of what the fire does with it, which is deliberate: it
- * stamps the count this wake was decided at, and that stamp is the escalation rule's only memory. A held wake
- * that did not stamp would put a fresh approval card in the queue for every single crash. */
+// Wakes the agent on the conversation the issue owns. A stable conversation id lets a recurrence continue with the same
+// agent, lets the inbox link to the run, and carries a hold through the approvals queue untouched. `noteRun` runs
+// before the fire regardless of outcome: it stamps the count this wake was decided at, escalation's only memory, or a
+// held wake would queue a fresh card for every crash.
 export const startWake = async (
     services: Services,
     wake: WakeFn,
@@ -257,8 +210,7 @@ export const startWake = async (
         wake,
         {
             payload: brief.payload,
-            // An issue's own turns must not overlap each other, and a second escalation arriving mid-fix is
-            // information the running turn would rather have than lose.
+            // An issue's turns never overlap; a second escalation mid-fix queues rather than being lost.
             overlap: "queue",
             origin: { automationId: automation.id, provider: ISSUES_PROVIDER, channelId: issue.id },
             title: brief.title,

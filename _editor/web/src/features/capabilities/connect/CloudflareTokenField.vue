@@ -4,39 +4,19 @@ import { computed } from "vue";
 import { CF_TOKEN_KEY, type useCloudflareZones } from "../../extensions/useCloudflareZones";
 import SecretField from "./SecretField.vue";
 
-/* PASTE A CLOUDFLARE TOKEN, PICK A ZONE: the acquisition half of every Cloudflare flow, and the part the
- * setup wizard and the in-app "Connect Cloudflare" step had each written out.
- *
- * The STATE was already shared (useCloudflareZones); the 45 lines that render it were not, down to identical
- * warning copy ("That doesn't look like a Cloudflare API token: double-check for copy/paste slips") and an
- * identical footer naming the three scopes. A token-format warning that exists twice is one a fix reaches
- * once, and the scopes line is exactly the kind of string that goes stale in one copy the day Cloudflare
- * renames a permission.
- *
- * THE LADDER IS THE POINT, and it is why this is a component rather than a snippet. Between an empty box and a
- * usable zone there are five states: nothing typed, malformed, looking up, the lookup failed, and more than
- * one zone to choose from, and each has to say something different. A caller that reimplements four of them
- * and forgets the fifth leaves a screen that just sits there.
- *
- * `storageNote` is a prop rather than fixed text because the two callers genuinely differ in what becomes of
- * the token: the in-app step WRITES it to the sandbox's .env, while the wizard lets it ride the install
- * command and never stores it anywhere. That is the one sentence a reader is owed and the one thing these two
- * flows do not share.
- *
- * The composable's whole binding set arrives as ONE prop. It is a factory, not a singleton: each caller holds
- * its own token and zone, so the state has to come from the parent, and threading its seven refs through
- * seven props would put six chances to mis-wire between a token and the zones it discovered. */
+// Shared token+zone flow between the setup wizard and the in-app Connect step, so the format warning and scopes
+// list live once. `storageNote` differs per caller (write to .env vs. never stored); `cf` carries the whole
+// composable's state since each caller owns its own token and zone.
 
 const { cf } = defineProps<{ cf: ReturnType<typeof useCloudflareZones>; storageNote: string }>();
 
-// Zones are domains: monospace rows behind a filterable picker, since an account-wide token can carry dozens.
-// The zone lookup reports whatever Cloudflare said; this field knows the user is trying to pick a domain.
+// Zones are domains, shown as a filterable picker of monospace rows since a token can carry dozens.
 const zonesNotice = computed<NoticeModel | undefined>(() =>
     cf.zonesError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your Cloudflare zones.`, detail: cf.zonesError.value },
 );
 const zoneOptions = computed<PickerOption[]>(() => cf.zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
 
-// Bridges SecretField's v-model onto the composable's setter, which is what drives the debounced zone lookup.
+// Bridges SecretField's v-model onto the composable's setter, which drives the debounced zone lookup.
 const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
 </script>
 
@@ -65,8 +45,10 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
         />
         <span class="text-xs text-muted">This token can reach several domains. Choose which one to use.</span>
     </label>
-    <!-- The one-zone case still confirms WHICH, because a token that sees a different domain than the user
-         expected is the failure this flow cannot otherwise surface until the tunnel is already built. -->
+    <!--
+        Confirms the zone even with only one, since a token might resolve to a domain other than the one the user
+        expected.
+    -->
     <slot name="zone-confirmed" />
 
     <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">

@@ -9,24 +9,15 @@ import { catalogPath, exitDir, exitInterface, exitProxyPort, exitStateDir, logPa
 import { readSelection, writeSelection } from "./exit-state.js";
 import { dropProxy, ensureProxy, proxyBound, tunnelAddress, tunnelResolver } from "./exit-tunnel.js";
 
-/* VPN GATE, the University of Tsukuba's volunteer relay pool, and the only free VPN with a machine-readable
- * server list and no account of any kind. Its public CSV IS the catalog: hostname, country, load and a
- * base64'd OpenVPN config per server, which is what lets this provider auto-fill completely, a user picks a
- * country and never sees a hostname.
- *
- * BE HONEST ABOUT ITS SHAPE. Measured against that CSV: ~95 servers across 10 countries, of which Japan and
- * Korea are 87%, and the list barely rotates between polls. It is not a world map. It is here because it
- * covers the half of the world Tor covers worst, Tor's Asian exit capacity is close to nothing, and because
- * "free, no signup, Japanese IP" is a real need with no other free answer.
- *
- * AND ABOUT ITS TRUST MODEL. The relays are run by anonymous volunteers who can log and inspect anything not
- * end-to-end encrypted, and the project keeps connection logs by policy. This is precisely why an exit never
- * carries the sandbox's own traffic: the operator sees what was deliberately pointed at them and nothing else.
- */
+// VPN Gate, University of Tsukuba's volunteer pool: the only free VPN with a machine-readable server list and no
+// account, letting this provider auto-fill completely.
+// Mostly Japan and Korea, not a world map; it exists because Tor's Asian exit capacity is thin and 'free, no signup,
+// Japanese IP' has no other answer.
+// Relays are run by anonymous volunteers who can log anything unencrypted, which is why an exit never carries the
+// sandbox's own traffic.
 
 const CATALOG_URL = "https://www.vpngate.net/api/iphone/";
-// Short: the pool churns and a stale entry is a dial that fails slowly. Long enough that browsing the country
-// list a few times in a row does not hammer a volunteer-funded service.
+// Short since the pool churns and a stale entry dials slowly; long enough not to hammer repeat browsing.
 const CATALOG_TTL_MS = 30 * 60 * 1000;
 const DIAL_TIMEOUT_MS = 90_000;
 
@@ -38,9 +29,8 @@ interface VpngateServer {
     readonly config: string;
 }
 
-/* The CSV: a `*vpn_servers` banner, a `#`-prefixed header, rows, and a `*` terminator. Parsed positionally
- * because the header names are stable and the format has not changed in a decade; a row with fewer than 15
- * fields is a truncated transfer, not a server, and is dropped rather than half-read. */
+// Parsed positionally since the header format hasn't changed in a decade; a row under 15 fields is a truncated
+// transfer, dropped rather than half-read.
 export const parseVpngateCsv = (csv: string): VpngateServer[] =>
     csv
         .split("\n")
@@ -85,10 +75,8 @@ const cachedServers = async (): Promise<{ servers: VpngateServer[]; live: boolea
     return { servers: fresh, live: true };
 };
 
-/* Which server to dial. Highest score in the country, skipping one the caller asked to avoid, which is how
- * `rotate` means anything on a pool this small: there is no signal to send, so a new address is a different
- * server or nothing. VPN Gate's own score already folds in speed, uptime and load, so re-ranking it here
- * would only be a worse version of what the project already computes. */
+// Highest score in the country, skipping one to avoid: on a pool this small, a new address is just a different server,
+// which is what makes `rotate` mean anything. VPN Gate's own score already folds in speed, uptime and load.
 const pick = (servers: readonly VpngateServer[], country: string | undefined, avoid: string | undefined): VpngateServer | undefined => {
     const eligible = servers
         .filter((server) => country === undefined || server.country === country.toUpperCase())
@@ -96,16 +84,8 @@ const pick = (servers: readonly VpngateServer[], country: string | undefined, av
     return eligible.find((server) => server.host !== avoid) ?? eligible[0];
 };
 
-/* The decoded .ovpn plus the directives that make it safe and controllable here.
- *
- * `route-nopull` IS THE LOAD-BEARING LINE. Without it OpenVPN installs the server's pushed default route into
- * the MAIN table and the sandbox loses its own uplink the instant the tunnel comes up, which is the failure
- * this whole subsystem is built to avoid. With it, the interface comes up addressed and routes nothing; the
- * exit's private table and its `ip rule` are added afterwards by exit-tunnel.ts.
- *
- * The original `dev`/`daemon`/`log` lines are dropped rather than overridden: OpenVPN's precedence between a
- * repeated option and a later one is not something to bet a tunnel on.
- */
+// `route-nopull` is load-bearing: without it OpenVPN installs the pushed route into the main table, and the sandbox
+// loses its uplink. dev/daemon/log lines are dropped, not overridden: their precedence isn't reliable.
 const ovpnFor = (id: string, server: VpngateServer): string => {
     const decoded = Buffer.from(server.config, "base64").toString("utf8");
     const stripped = decoded
@@ -116,16 +96,14 @@ const ovpnFor = (id: string, server: VpngateServer): string => {
         stripped.trimEnd(),
         "",
         "# --- added by intentic: keep this tunnel off the main routing table ---",
-        // Ignore every pushed route and pushed DNS. The exit is reached through its proxy, never by default.
+        // Ignores every pushed route and DNS; the exit is only reached through its proxy.
         "route-nopull",
         "dev-type tun",
         `dev ${exitInterface(id)}`,
         "daemon",
         `writepid ${pidPath(id)}`,
         `log ${logPath(id)}`,
-        // SoftEther servers still present small RSA keys and old TLS, which OpenSSL 3 refuses at its default
-        // security level. Lowering it for THIS connection only is the difference between the provider working
-        // and every dial failing with an unreadable handshake error.
+        // SoftEther servers present small RSA keys/old TLS that OpenSSL 3 refuses by default; lowered here only.
         "tls-cipher DEFAULT:@SECLEVEL=0",
         "data-ciphers AES-128-CBC:AES-256-GCM:AES-128-GCM",
         "verb 3",
@@ -133,12 +111,11 @@ const ovpnFor = (id: string, server: VpngateServer): string => {
     ].join("\n");
 };
 
-// This driver's two constants (where the pidfile is, what must still be running) bound to the shared pair.
+// This driver's pidfile/process-name pair, bound to the shared liveness check.
 const livePid = (id: string): Promise<number | undefined> => livePidOf(pidPath(id), "openvpn");
 
-// OpenVPN backgrounds itself once the tunnel is established, so the FOREGROUND exit code is the dial's
-// verdict, the fortinet driver's pattern. Output goes straight to the log file rather than a pipe so the
-// backgrounded grandchild keeps writing to it after this promise settles.
+// OpenVPN backgrounds itself once the tunnel is up, so the foreground exit code is the dial's verdict. Output goes to
+// the log file, not a pipe, so the backgrounded grandchild keeps writing after this promise settles.
 const dial = async (id: string): Promise<number> => {
     const handle = await open(logPath(id), "w", 0o600);
     try {
@@ -158,8 +135,8 @@ const dial = async (id: string): Promise<number> => {
 
 const halt = (id: string): Promise<void> => haltClient(pidPath(id), "openvpn");
 
-// Bring one server up: tear down whatever was there, write its config, dial, then publish the proxy. Shared
-// by start and rotate because "move this exit to that server" is the same operation either way.
+// Brings one server up: tear down what was there, write its config, dial, publish the proxy; shared by start and
+// rotate, since moving to a server is the same operation either way.
 async function* dialServer(id: string, server: VpngateServer): AsyncGenerator<IntenticLine> {
     await halt(id);
     await dropProxy(id);
@@ -241,8 +218,8 @@ export const vpngateDriver: ExitDriver = {
         if ((await tunnelAddress(id)) === undefined) {
             return { state: "starting", interface: name };
         }
-        // The client is up and addressed but this daemon has no proxy bound: a restart happened under a live
-        // tunnel. Honest as "starting", and the boot restore's ensureProxy is what closes the gap.
+        // Client up and addressed but no proxy bound means a restart happened under a live tunnel; reported as starting
+        // until the boot restore's ensureProxy closes the gap.
         return proxyBound(id) ? { state: "up", interface: name } : { state: "starting", interface: name, detail: "re-publishing the proxy" };
     },
     observe: async (id) => {

@@ -7,10 +7,8 @@ import { expect, test, vi } from "vitest";
 import { retrievalQueryOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
 import { stripTurnPreamble, withTurnPreamble } from "../../prompt/turn-preamble.js";
 
-/* Pre-injection spends input tokens on every turn it fires on, so what it refuses to fire on is as much of the
- * feature as what it retrieves. These pin the refusals, the gates on a weak answer, and the two properties that
- * keep a bad retrieval from becoming a bad turn: it can never delay one past its deadline, and it can never
- * fail one. */
+// Pins pre-injection's refusals and its two guarantees: a bad retrieval never delays a turn past its deadline and never
+// fails one.
 
 const answer = `answer: src/agent/turn-plan.ts:74 · confident\n════ src/agent/turn-plan.ts (2) ════\n  74: export const planTurn = async (`;
 
@@ -38,7 +36,7 @@ const depsOf = (run: ResidentEngine["run"]): TurnContextDeps => ({
 
 const answering = (result: QueryOutcome = outcome()): TurnContextDeps => depsOf(() => Promise.resolve(result));
 
-// The note when there is one, so a test that is about the note's CONTENT does not restate the union each time.
+// Returns the note when present, so tests about its content skip restating the union.
 const noteOf = async (deps: TurnContextDeps, prompt: string): Promise<string | undefined> => {
     const result = await retrieveTurnContext(deps, prompt);
     return "note" in result ? result.note : undefined;
@@ -51,14 +49,14 @@ test("a question about the workspace is what gets retrieved for", () => {
 });
 
 test("a prompt that already names its file is left alone: the model will just open it", () => {
-    // Retrieval on top of an anchor the user typed spends tokens pointing at the thing being pointed at.
+    // An anchor the user already typed needs no retrieval pointing back at it.
     expect(retrievalQueryOf("why does turn-plan.ts drop the model?")).toBeUndefined();
     expect(retrievalQueryOf("look at _sandbox/sandbox/src/agent and tell me what runs a turn")).toBeUndefined();
     expect(retrievalQueryOf("read ./src/index.ts first")).toBeUndefined();
 });
 
 test("conversational turns are not questions about the code", () => {
-    // The index has no idea what "that" was; the model does. Every one of these would retrieve for stopwords.
+    // The index can't resolve 'that'; retrieving here would search on stopwords alone.
     expect(retrievalQueryOf("yes please do that")).toBeUndefined();
     expect(retrievalQueryOf("go for it")).toBeUndefined();
     expect(retrievalQueryOf("thanks, looks good")).toBeUndefined();
@@ -66,9 +64,8 @@ test("conversational turns are not questions about the code", () => {
     expect(retrievalQueryOf("")).toBeUndefined();
 });
 
-/* The gate above used to read "skip when EVERY word is conversational", and one word off the list defeated it:
- * most often a bare number. These are real prompts from one day that each bought a 1.2k-token search of the
- * index for words whose referent was in the previous turn. */
+// The old gate skipped only when every word was conversational; one off-list word (often a bare number) defeated it and
+// still triggered a full-index search.
 test("a follow-up that points back at the last turn is not a query, however it is spelled", () => {
     expect(retrievalQueryOf("Go for these 2.")).toBeUndefined();
     expect(retrievalQueryOf("Go for 1.")).toBeUndefined();
@@ -76,9 +73,8 @@ test("a follow-up that points back at the last turn is not a query, however it i
     expect(retrievalQueryOf("Got for all of it.")).toBeUndefined();
 });
 
-/* The other half of that gate, and its limit. A resumptive OPENING is not a veto: only a bar, because a
- * message that starts by pointing back and then asks something real is a real question. The cost of keeping
- * those is that pure anaphora with enough words gets through too, and nothing lexical tells the two apart. */
+// A resumptive opening only bars retrieval if nothing else follows; long pure anaphora can still slip through since
+// nothing lexical tells the two apart.
 test("a resumptive opener still retrieves once the message carries its own question", () => {
     expect(retrievalQueryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toEqual(expect.any(String));
     expect(retrievalQueryOf("how are branch points counted when the hotspots verb ranks a file?")).toEqual(expect.any(String));
@@ -94,8 +90,7 @@ test("a long prompt is searched by its opening, cut at a word boundary", () => {
     const prompt = `${"why does the retry backoff double ".repeat(20)}end`;
     const query = retrievalQueryOf(prompt);
     expect(query!.length).toBeLessThanOrEqual(400);
-    // Never mid-identifier: the cut lands on a space in the original, so the last thing the engine sees is a
-    // whole word.
+    // Cuts on a space in the original, never mid-identifier.
     expect(prompt.startsWith(query!)).toBe(true);
     expect(prompt[query!.length]).toBe(" ");
 });
@@ -108,19 +103,15 @@ test("the note carries the answer, names the query it ran, and says it is not th
     expect(note).toContain(answer);
 });
 
-// The note is protocol the daemon staples on, so a reopened tab must not redraw it as something the user typed.
+// The note is protocol the daemon staples on; a reopened tab must not redraw it as something the user typed.
 test("the preamble round-trips: what restore gives back is the message alone", async () => {
     const prompt = "how does the daemon decide which runtime serves a turn?";
     const note = await noteOf(answering(), prompt);
     expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);
 });
 
-/* NO STAGE HELD BACK, which is a claim about the deadline as much as about ranking. This ran with the
- * cross-encoder switched off for as long as the cross-encoder ran on the daemon's own thread: measured on one
- * week of real prompts, the full pipeline answered in ~1.2s idle and ~2.7s on a busy box, which is how the
- * deadline came to take four eligible turns in five. Both model stages moved to the engine's query worker, so
- * narrowing the pipeline here buys nothing, and a narrowing left behind after its reason expired is how a
- * feature quietly keeps paying a cost nobody can find. */
+// No pipeline stage is skipped: both model stages already run on the engine's query worker, so narrowing here would
+// only cost accuracy for no time saved.
 test("the pre-injected query holds no stage back: the engine runs its full pipeline", async () => {
     const seen: Parameters<ResidentEngine["run"]>[0][] = [];
     const deps = depsOf((request) => {
@@ -137,10 +128,8 @@ test("an ineligible prompt never reaches the engine", async () => {
     expect(run).not.toHaveBeenCalled();
 });
 
-/* WHY NOTHING WAS PREPENDED, named rather than merely absent. All four of these used to return the same
- * undefined as a delivered note's opposite, so a turn assigned the treatment and a turn that got it were
- * indistinguishable downstream, which is how the experiment came to report a delta over an arm that was four
- * fifths untreated. */
+// Each refusal returns its own `skipped` reason rather than a bare undefined, so a treated turn is distinguishable from
+// one that never qualified.
 test("a weak answer is no answer, and says which kind of weak", async () => {
     const question = "how does the daemon decide which runtime serves a turn?";
     expect(await retrieveTurnContext(answering(outcome({ exitCode: 1 })), question)).toMatchObject({ skipped: "no-hits" });
@@ -161,8 +150,8 @@ test("a failed retrieval costs the note and nothing else", async () => {
         depsOf(() => Promise.reject(new Error("index corrupt"))),
         "how does the daemon decide which runtime serves a turn?",
     );
-    // The turn goes on. Killing it over a search this user never asked for would make the feature strictly
-    // worse than not having it.
+    // The turn proceeds regardless: failing it over an unrequested search would make the feature worse than not having
+    // it.
     expect(result).toMatchObject({ skipped: "failed" });
     expect(warn).toHaveBeenCalledOnce();
 });
@@ -185,22 +174,19 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
         expect(await pending).toEqual({ skipped: "deadline", durationMs: 3_000 });
         // The abort still goes out: it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);
-        // An abort is this deadline firing, which is a decision, not a failure worth logging.
+        // An abort here is the deadline firing by design, not a failure worth a warn log.
         expect(warn).not.toHaveBeenCalledTimes(2);
     } finally {
         vi.useRealTimers();
     }
 });
 
-/* The one test that runs the REAL engine, because everything the note is made of comes from outside this
- * module: the renderer's answer capsule, the ranking that decides which file it names, and the exact bytes
- * that then have to survive the preamble round-trip. A stubbed outcome can't fail the way those can: a
- * renderer that one day emits the preamble's own `---` separator would strip the user's message into the
- * daemon's note, and only a real answer would catch it. */
+// The one test against the real engine: the note's bytes (renderer output, ranking, preamble round-trip) can't be faked
+// with a stubbed outcome.
 test("against a real index: the note answers the question, and restore still gives the message back", async () => {
     const root = mkdtempSync(join(tmpdir(), "turn-context-"));
-    // Deliberately not the question's words: "rotate credentials" has to reach `refreshSessionToken`, which is
-    // the synonym gap the whole feature exists for.
+    // Deliberately not the question's words: "rotate credentials" has to reach `refreshSessionToken`, the synonym gap
+    // the feature exists for.
     writeFileSync(
         join(root, "auth.ts"),
         `export const refreshSessionToken = (token: string): string => {\n    // rotate the credential before it expires\n    return token + "-rotated";\n};\n`,

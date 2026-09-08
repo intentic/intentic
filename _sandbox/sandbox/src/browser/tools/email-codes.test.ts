@@ -1,11 +1,9 @@
 import { expect, test } from "vitest";
 import { decodeQuotedPrintable, extractCodes, extractLinks, imapSince, mailboxOf, matchesSite, parseSearch, siteToken } from "./email-codes.js";
 
-/* The pure half of the narrow mailbox key: everything between the curl transport and the tool's answer. Held
- * because each rule here decides what the MODEL gets to see: a parser that over-reads hands it somebody's
- * newsletter, an extractor that under-reads loses the six digits this entire tool exists to fetch. */
+// Pure parsing and extraction logic between the curl transport and the tool's answer; no network, no mocks needed.
 
-// ── what counts as the site ─────────────────────────────────────────────────────────────────────────────────
+// What counts as the site
 
 test("siteToken reduces a host to the site's own name", () => {
     expect(siteToken("www.reddit.com")).toBe("reddit");
@@ -16,19 +14,19 @@ test("siteToken reduces a host to the site's own name", () => {
 });
 
 test("a mail matches on sender or subject, never on body", () => {
-    // The common real shape: the sender's domain is a sibling of the site's, not the site itself.
+    // Common real shape: the sender's domain is a sibling of the site's, not the site itself.
     expect(matchesSite("Reddit <noreply@redditmail.com>", "Verify your email", "reddit")).toBe(true);
     expect(matchesSite("noreply@example.com", "Your Reddit verification code", "reddit")).toBe(true);
-    // A digest ABOUT the site is not a mail FROM it: body mentions must not count, so there is no body param.
+    // A digest about the site isn't mail from it; body mentions don't count (no body param).
     expect(matchesSite("digest@newsletter.com", "This week online", "reddit")).toBe(false);
 });
 
-// ── the wire parsers ────────────────────────────────────────────────────────────────────────────────────────
+// The wire parsers
 
 test("parseSearch reads UIDs off the SEARCH response and nothing else", () => {
     expect(parseSearch("* SEARCH 101 103 208\r\n")).toEqual([101, 103, 208]);
     expect(parseSearch("* SEARCH\r\n")).toEqual([]);
-    // Other untagged lines (a server greeting, an EXISTS) carry numbers that are not UIDs.
+    // Other untagged lines (a server greeting, an EXISTS) carry numbers that aren't UIDs.
     expect(parseSearch("* 12 EXISTS\r\n* SEARCH 7\r\n")).toEqual([7]);
 });
 
@@ -44,11 +42,11 @@ test("imapSince starts a day early in IMAP's own date shape", () => {
     expect(imapSince(new Date(Date.UTC(2026, 7, 10, 0, 10)))).toBe("9-Aug-2026");
 });
 
-// ── the extractors ──────────────────────────────────────────────────────────────────────────────────────────
+// The extractors
 
 test("subject codes come first, and a sentence-ending full stop is not a disqualifier", () => {
     const codes = extractCodes("483920 is your Reddit code", "Or use the code 771234.");
-    // The subject's own digits are the commonest real shape ("NNNNNN is your X code") and rank first.
+    // The subject's own digits are the commonest real shape ("NNNNNN is your X code"), so they rank first.
     expect(codes).toEqual(["483920", "771234"]);
 });
 
@@ -67,11 +65,11 @@ test("links keep the confirmation, drop the tracking noise", () => {
 });
 
 test("a confirmation-shaped link on a foreign relay host still counts", () => {
-    // Real verification links often live on a click-tracking domain: the WORDS in the path are the tell.
+    // Real verification links often live on a click-tracking domain; the words in the path are the tell.
     expect(extractLinks("https://click.mailer.net/ls/verify?u=9", "reddit")).toEqual(["https://click.mailer.net/ls/verify?u=9"]);
 });
 
-// ── the linked entry as a mailbox ───────────────────────────────────────────────────────────────────────────
+// The linked entry as a mailbox
 
 test("mailboxOf accepts exactly an IMAP-shaped cli entry", () => {
     const mailbox = mailboxOf({

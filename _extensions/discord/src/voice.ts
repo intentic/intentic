@@ -9,29 +9,15 @@ import { STATE_DIR, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
 import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
-// The Opus decoder for received voice. napi-rs, so the platform binding arrives as a prebuilt optional
-// dependency and nothing compiles on install, unlike @discordjs/opus, whose node-pre-gyp installer fetched and
-// untarred a binary at install time and needed a `tar` override to stay off a live advisory. Same class, same
-// `(sampleRate, channels)` constructor, same `decode(Buffer): Buffer`; decoded output matches the old binding to
-// within one 16-bit LSB (~110 dB SNR), which is libopus rounding and inaudible to whisper.
 import { OpusEncoder } from "mediaplex";
 import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import type { DiscordConnectorConfig } from "./client.js";
 
-/* On-demand voice transcription living IN this gateway process (so a session outlives any single agent turn):
- * the agent joins a voice channel via the `discord-voice` CLI (→ this process's HTTP control server), we capture
- * per-speaker audio through the shared discord.js client and transcribe each utterance locally with whisper.cpp as
- * it ends (1s of silence). Every transcribed utterance rewrites the live transcript in the workspace and dispatches
- * a voice_utterance listener event (POST /listeners/discord/dispatch), so automations can react mid-call and the
- * agent can read the file at any time. When the call ends (everyone left, `discord-voice leave`, or the connection
- * died) the transcript is finalized and a voice_transcript event fires so an automation can turn it into artifacts.
- *
- * whisper-cli is NOT in the base image: the discord connector's overlay fragment composes it in, so only sandboxes
- * that connect Discord carry it. A join detects the missing binary and points at the owner-run rebuild.
- *
- * A module singleton: one session per sandbox. ponytail, a map per channel if concurrent calls ever matter. */
+// On-demand voice transcription living in this gateway process, so a session outlives any single agent turn. Captures
+// per-speaker audio and transcribes each utterance locally with whisper.cpp as it ends (1s silence), dispatching a
+// voice_utterance event each time so automations can react mid-call. A module singleton: one session per sandbox.
 
 const fileExists = async (path: string): Promise<boolean> =>
     stat(path).then(
@@ -39,9 +25,8 @@ const fileExists = async (path: string): Promise<boolean> =>
         () => false,
     );
 
-// The whisper model, downloaded on first use into the workspace volume (kept out of the image). Size and language
-// come from the connector config: default `medium` (~1.5GB, best accuracy/CPU trade-off for non-English speech)
-// and `auto` detection; voiceLanguage=en selects the English-specialized ggml-*.en variant.
+// Whisper model, downloaded on first use into the workspace volume, kept out of the image. Size and language come from
+// connector config; voiceLanguage=en selects the English-specialized ggml-*.en variant instead of the multilingual one.
 const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfig): Promise<string> => {
     const model = config.voiceModel ?? "medium";
     const file = config.voiceLanguage === "en" && model !== "large-v3-turbo" ? `ggml-${model}.en.bin` : `ggml-${model}.bin`;
@@ -56,11 +41,7 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
         throw new Error(`whisper model download failed: ${WHISPER_MODEL_REPO} has no ${file}`);
     }
     await mkdir(dirname(path), { recursive: true });
-    // Stream straight to disk (up to ~1.5GB, never buffer it), landing BESIDE the model and only then taking
-    // its place: presence here is a bare stat, so a file growing in place is indistinguishable from a finished
-    // one, a torn download would look permanently present and every later join would feed whisper-cli a
-    // half-written model. rename is atomic within the directory, so the model is either absent or whole. The
-    // staged name is unique per attempt because the composer's own voice downloads into this same directory.
+    // Staged then renamed atomically, so a torn download can never look like a finished model.
     const staged = `${path}.${randomUUID()}.part`;
     try {
         // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
@@ -155,8 +136,8 @@ const subscribeSpeaker = (s: VoiceSession, userId: string): void => {
     });
 };
 
-// Wind the session down, write the transcript, and dispatch the voice_transcript listener event. Returns the
-// workspace-relative transcript path, or undefined when nothing was transcribed.
+// Winds the session down, writes the transcript, and dispatches voice_transcript. Returns the transcript path, or
+// undefined if nothing was transcribed.
 const endSession = async (s: VoiceSession, reason: string): Promise<string | undefined> => {
     if (s.ended) {
         return undefined;
@@ -235,8 +216,8 @@ export const joinVoice = async (ctx: GatewayCtx, channelId: string, config: Disc
     // Under artifacts/, a finished session's transcript is a durable output, the class that entry names.
     const relPath = join(STATE_DIR, "records", "artifacts", "voice", `${stamp}-${channelSlug}.md`);
     const participants = new Set<string>();
-    // Runs inside the transcriber queue after each utterance: rewrite the live transcript, then dispatch a
-    // voice_utterance event, the daemon's listener batcher debounces bursts into one automation wake.
+    // Runs inside the transcriber queue after each utterance: rewrites the live transcript, then dispatches
+    // voice_utterance; the daemon's batcher debounces bursts into one wake.
     const onLine = async (sorted: { at: number; line: string }[], newLine: string): Promise<void> => {
         await writeTranscript(ctx, relPath, channel.name, startedAt, participants, sorted);
         await ctx.daemon.dispatch({

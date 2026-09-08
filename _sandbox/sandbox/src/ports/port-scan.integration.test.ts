@@ -6,8 +6,8 @@ import { expect, test } from "vitest";
 import { parentPid } from "../platform/resources/proc-stat.js";
 import { scanListeningPorts, withOwningSessions } from "./port-scan.js";
 
-// A procfs fixture tree: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}. The fd entries are dangling
-// symlinks whose TARGET STRING is the socket marker: exactly what readlink returns on the real thing.
+// procfs fixture: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}; fd entries are dangling symlinks whose target
+// string is the socket marker, as readlink returns on the real thing.
 const HEADER = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode";
 const row = (local: string, st: string, inode: string): string =>
     `   0: ${local} 00000000:0000 ${st} 00000000:00000000 00:00000000 00000000  1000        0 ${inode} 1 0000000000000000 100 0 0 10 0`;
@@ -47,7 +47,7 @@ test("reports loopback/wildcard LISTEN sockets once per port, attributed to thei
     const ports = await scanListeningPorts(fixture());
     expect(ports).toEqual([
         { port: 3000, host: "127.0.0.1", forwardable: true }, // no fd matched its inode — still listed, just unattributed
-        // A ::1-only bind (a server that bound `localhost`, like Vite) must be dialed at ::1, not 127.0.0.1.
+        // A ::1-only bind (bound to `localhost`, e.g. Vite) must be dialed at ::1, not 127.0.0.1.
         { port: 9999, host: "::1", forwardable: true, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
         { port: 45678, host: "127.0.0.1", forwardable: true, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
     ]);
@@ -60,18 +60,17 @@ test("an unreadable proc tree yields an empty scan, not a rejection", async () =
 test("names the Docker embedded DNS bind (127.0.0.11) it can't attribute to any process", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
     mkdirSync(join(root, "net"), { recursive: true });
-    // 127.0.0.11:45661 LISTEN: libnetwork's embedded resolver. dockerd answers it from outside this PID
-    // namespace, so no /proc/*/fd owns inode 1005 and the pid walk comes up empty, but the address names it.
+    // 127.0.0.11:45661: dockerd's resolver, answered outside this PID namespace; unowned but named by address.
     writeFileSync(join(root, "net", "tcp"), [HEADER, row("0B00007F:B25D", "0A", "1005")].join("\n"));
     writeFileSync(join(root, "net", "tcp6"), HEADER);
-    // Named, but flagged not-forwardable: 127.0.0.11 only answers at its own address, not the dialed 127.0.0.1.
+    // Not forwardable: 127.0.0.11 only answers at its own address, not the dialed 127.0.0.1.
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 45661, host: "127.0.0.1", forwardable: false, command: "Docker embedded DNS" }]);
 });
 
 test("lists an un-nameable 127/8 alias but flags it not-forwardable", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
     mkdirSync(join(root, "net"), { recursive: true });
-    // 127.0.0.5:9500 LISTEN, no owning fd: a loopback alias we can neither name nor reach at 127.0.0.1.
+    // 127.0.0.5:9500: a loopback alias, unowned, unreachable at 127.0.0.1.
     writeFileSync(join(root, "net", "tcp"), [HEADER, row("0500007F:251C", "0A", "1007")].join("\n"));
     writeFileSync(join(root, "net", "tcp6"), HEADER);
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 9500, host: "127.0.0.1", forwardable: false }]);
@@ -89,11 +88,8 @@ test("falls back to /proc/<pid>/comm when a listening process has an empty cmdli
     await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", forwardable: true, pid: 200, command: "cloudflared" }]);
 });
 
-/* WHO IS OCCUPYING THE PORT: traced to the terminal, not to the process.
- *
- * The pid holding the socket is three generations below anything a person launched (`pnpm dev` → turbo → vite),
- * so the pane is found by walking parents. `/proc/<pid>/stat`'s comm field is deliberately hostile here: it is
- * parenthesized, and it may itself contain spaces and parens. */
+// Traced to the terminal, not the process: the listening pid may be generations below what a person launched, so the
+// pane is found by walking parents. comm is parenthesized and may itself contain spaces and parens.
 const statFile = (pid: number, comm: string, ppid: number): string => `${pid} (${comm}) S ${ppid} ${pid} ${pid} 0 -1 4194304 0 0`;
 
 test("traces a listener up its ancestry to the tmux pane it is running in", async () => {
@@ -110,7 +106,7 @@ test("traces a listener up its ancestry to the tmux pane it is running in", asyn
     }
     const listeners = [
         { port: 4321, host: "127.0.0.1" as const, forwardable: true, pid: 400 },
-        // Nothing in ITS ancestry is a pane: the daemon's own runtime, which no terminal can show or stop.
+        // Nothing in its ancestry is a pane: the daemon's own runtime, with no terminal to show it.
         { port: 8787, host: "127.0.0.1" as const, forwardable: true, pid: 397_000 },
         // Unattributable to any process at all: nothing to walk.
         { port: 5440, host: "127.0.0.1" as const, forwardable: true },
@@ -134,8 +130,7 @@ test("a process that IS the pane's own root process owns its port (a panel runni
 
 test("no tmux server annotates nothing, and a stat file that lies about its parent can't loop the walk", async () => {
     const root = mkdtempSync(join(tmpdir(), "port-scan-"));
-    // A cycle: 500's parent is 501, whose parent is 500. Kernel links never do this; a raced read of a recycled
-    // pid could, and the walk has to end either way.
+    // A cycle (500↔501): kernel links never do this, but a raced recycled-pid read could; the walk must end.
     mkdirSync(join(root, "500"), { recursive: true });
     mkdirSync(join(root, "501"), { recursive: true });
     writeFileSync(join(root, "500", "stat"), statFile(500, "node", 501));

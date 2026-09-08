@@ -3,37 +3,32 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { type StripeGateway, stripeGateway, type StripeSubscription } from "./hosted-plan-stripe.js";
 
-/* THE HOSTED PLAN: the one thing this platform sells. A Stripe subscription that makes the owner's hosted
- * sandboxes always on (no awake-hour ceiling, hosted-usage.ts) and never collected (hosted-idle.ts), one slot
- * per hosted sandbox (the subscription item's quantity). Nothing else in the product reads it: every feature
- * is in the free product, and money changes whose machine the agents run on, never what they can do
- * (docs/design/pricing-model.md, docs/design/billing-view.md). */
+// The one thing this platform sells: a Stripe subscription that makes the owner's hosted sandboxes always on (no
+// awake-hour ceiling) and never collected, one slot per sandbox (the subscription item's quantity). Nothing else in the
+// product reads it: money changes whose machine agents run on, never what they can do.
 
-// The plan exists when the platform can both sell (a price) and charge (a key). Anything less and every
-// plan surface answers "not here", the trial.keys precedent.
+// The plan exists when the platform can both sell (a price) and charge (a key); anything less and every plan surface
+// answers not here.
 export const hostedPlanEnabled = (config: Config): boolean =>
     config.hostedPlan.stripeSecretKey !== `` && config.hostedPlan.stripePriceId !== ``;
 
-/* THE ENTITLEMENT RULE, in one place. Active and trialing count; past_due does not. Stripe retries a failed
- * charge for days while reporting past_due, and the honest reading of "the charge failed" is that the plan
- * paused, not that it silently continues on money that never arrived. The webhook keeps `status` current, so
- * this needs no date arithmetic. */
+// Active and trialing count; past_due doesn't, since a retrying charge should read as paused, not silent.
 const PLAN_STATUSES = new Set([`active`, `trialing`]);
 
 export const isOnPlan = (plan: { status: string } | null): boolean => plan !== null && PLAN_STATUSES.has(plan.status);
 
-// Subscriptions Stripe will not let anybody cancel, because they are already over.
+// Subscriptions Stripe won't let anybody cancel, because they're already over.
 const OVER_STATUSES = new Set([`canceled`, `incomplete_expired`]);
 
-// The comp list, parsed at ask time, case-folded because an email's case is presentation, not identity.
+// Comp list, parsed at ask time, case-folded since an email's case is presentation, not identity.
 const compEmails = (config: Config): readonly string[] =>
     config.hostedPlan.compEmails
         .split(`,`)
         .map((email) => email.trim().toLowerCase())
         .filter((email) => email !== ``);
 
-// Whether this account's email is on the operator's comp list. Read only when no paid row answered, so the
-// paying path never pays for a user lookup.
+// Whether this account's email is on the operator's comp list; read only when no paid row answered, so the paying path
+// never pays for a lookup.
 export const isComped = async (prisma: PrismaClient, config: Config, userId: string): Promise<boolean> => {
     const comped = compEmails(config);
     if (comped.length === 0) {
@@ -43,10 +38,8 @@ export const isComped = async (prisma: PrismaClient, config: Config, userId: str
     return user !== null && comped.includes(user.email.toLowerCase());
 };
 
-/* On the plan = a live subscription, or an email on the operator's comp list (config.hostedPlan.compEmails).
- * The comp check runs only when no plan row answered and the list is non-empty, so the paying path costs what
- * it always did; a comped user's plan reverts the moment the email leaves the list, because nothing was ever
- * written down. */
+// On the plan: a live subscription, or an email on the comp list. Comp check runs only when no row answered; a comped
+// user's plan reverts the moment the email leaves the list, since nothing was ever written down.
 export const onHostedPlan = async (prisma: PrismaClient, config: Config, userId: string): Promise<boolean> => {
     if (isOnPlan(await prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true } }))) {
         return true;
@@ -63,19 +56,8 @@ export const hostedSlotsOf = async (prisma: Pick<PrismaClient, "hostedPlan">, co
     return plan !== null && isOnPlan(plan) ? Math.max(plan.quantity, config.hosted.perUser) : config.hosted.perUser;
 };
 
-/* Mirror one subscription state into the plan table. `userId` is known on the checkout-completed path (the
- * session's client_reference_id) and on the platform's own writes (a slot change), and absent on webhook
- * lifecycle events, where the customer id is the only join, an event for a customer the table has never seen
- * is dropped, which is exactly right for events belonging to some other product on the same Stripe account.
- *
- * `at` is the platform's own clock at the moment the subscription was READ from Stripe. Stripe delivers
- * webhooks in no particular order and says so, and a row that takes whatever lands last can be rolled back to
- * a state Stripe has already left; so no write here trusts an event's copy of the subscription: the webhook,
- * the checkout and a slot change all read it fresh and stamp the read, and the customer-join write refuses a
- * read older than the one it last applied. ONE CLOCK, OURS, ON EVERY STAMP. The guard used to compare our
- * millisecond stamps against Stripe's whole-second `created`, which dropped for good every event Stripe
- * emitted in the same second as a write of ours, a cancel made right after a slot change among them; the
- * hermetic tier (hosted-plan.e2e.test.ts) is where that showed. */
+// Mirrors one subscription into the plan table; userId is known on checkout/slot writes, otherwise the customer id is
+// the join. `at` stamps the read's own moment, since a later write must never be rolled back by an older one.
 export const applySubscription = async (
     prisma: PrismaClient,
     subscription: StripeSubscription,
@@ -90,12 +72,12 @@ export const applySubscription = async (
         cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
         quantity: subscription.quantity,
         syncedAt,
-        // A subscription answered with no item (none should be) keeps the id the row already has rather than blanking it.
+        // A subscription with no item keeps the row's existing id rather than blanking it.
         ...(subscription.itemId === `` ? {} : { stripeItemId: subscription.itemId }),
     };
     if (by.userId !== undefined) {
-        // One plan row per user, whatever Stripe-side churn produced it: a user who cancelled and bought
-        // again arrives here with a NEW subscription id, and the upsert-by-user overwrites the old.
+        // One row per user: a cancel-then-rebuy arrives with a new subscription id, and upsert-by-user overwrites the
+        // old.
         await prisma.hostedPlan.upsert({ where: { userId: by.userId }, create: { userId: by.userId, ...state }, update: state });
         return;
     }
@@ -112,14 +94,8 @@ export const applySubscription = async (
     });
 };
 
-/* END THE SUBSCRIPTION OF AN ACCOUNT THAT IS GOING AWAY. Both deletions (the owner's own, Better Auth's
- * deleteUser; the operator's GDPR erasure) cascade the plan row, and before this that was ALL they did: the
- * Stripe subscription kept charging a customer with no account left to open the portal from, and every later
- * webhook for it matched no row and was dropped. Called before the cascade, while the row still names the
- * subscription.
- *
- * A Stripe refusal is logged at error level and the deletion proceeds: an account erasure must not be held
- * hostage by a payment API, and the log line names the subscription for the manual cancel. */
+// Ends the subscription of an account being deleted: both deletion paths cascade the plan row alone, which used to
+// leave Stripe still charging a ghost account. Called before the cascade; a Stripe refusal is logged, not blocking.
 export const cancelHostedPlan = async (prisma: PrismaClient, config: Config, logger: Logger, userId: string, gateway?: StripeGateway): Promise<void> => {
     if (!hostedPlanEnabled(config)) {
         return;

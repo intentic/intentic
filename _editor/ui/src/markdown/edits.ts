@@ -1,13 +1,6 @@
-/* THE EDITS BEHIND THE FORMATTING KEYS, as transformations of markdown source.
- *
- * Ctrl+B in this surface cannot mean what it means in a word processor: there is no "bold" to switch on, there
- * are two asterisks to put around something. So each shortcut is a pure function from (text, selection) to
- * (text, selection), and the surface applies it the same way it applies a paste, which keeps every path that
- * changes the document going through one place.
- *
- * TOGGLING, NOT JUST WRAPPING, because a shortcut that only ever adds is a shortcut you can press once. Pressing
- * it on something already emphasised takes the emphasis off, whether the user selected the word inside the
- * asterisks or the asterisks along with it. */
+// Each formatting shortcut is a pure function from (text, selection) to (text, selection), applied the same way
+// the surface applies a paste. Toggles rather than only wraps: pressing it again on an already-emphasised
+// selection removes the markers instead of nesting them.
 
 export interface TextEdit {
     readonly text: string;
@@ -16,10 +9,8 @@ export interface TextEdit {
     readonly end: number;
 }
 
-/* How many of `char` run backwards from `at`, and forwards from it. Used to tell `**` from `*`: the character
- * beside a selection is not this marker if it is part of a longer run of the same one. Without the distinction,
- * Ctrl+I on a **bold** word read the neighbouring asterisk as its own and took a single one off each side,
- * quietly turning bold into italic instead of adding italics to it. */
+// How many of `char` run backward/forward from `at`, to tell `**` from `*`: a marker beside a selection doesn't
+// count if it's part of a longer run of the same character.
 const runBefore = (text: string, at: number, char: string): number => {
     let length = 0;
     while (at - length - 1 >= 0 && text[at - length - 1] === char) {
@@ -37,10 +28,8 @@ const runAfter = (text: string, at: number, char: string): number => {
 };
 
 /**
- * Put `marker` around the selection, or take it off if it is already there.
- *
- * With nothing selected the markers are inserted empty and the caret is left between them, so Ctrl+B then typing
- * writes bold text, which is what the reflex expects.
+ * Puts `marker` around the selection, or removes it if already there. With nothing selected, empty markers are
+ * inserted with the caret between them, so Ctrl+B then typing produces bold text.
  */
 export const toggleWrap = (text: string, start: number, end: number, marker: string): TextEdit => {
     const width = marker.length;
@@ -53,8 +42,7 @@ export const toggleWrap = (text: string, start: number, end: number, marker: str
         return { text: text.slice(0, start) + inner + text.slice(end), start, end: start + inner.length };
     }
 
-    // The selection is the words, and the markers are just outside it: `**[bold]**`. Only when the runs either
-    // side are exactly this marker, so a wider one around it is added to rather than eaten into.
+    // Selection is the words with markers just outside (`**[bold]**`), only when the flanking run matches exactly.
     if (runBefore(text, start, char) === width && runAfter(text, end, char) === width) {
         return {
             text: text.slice(0, start - width) + selected + text.slice(end + width),
@@ -71,10 +59,9 @@ export const toggleWrap = (text: string, start: number, end: number, marker: str
 };
 
 /**
- * Turn the selection into a link, or wrap the caret in an empty one.
- *
- * The selected words become the link's TEXT and the selection lands in the empty target, because the thing you
- * do not have yet is the URL. With nothing selected, the caret goes where the words go instead.
+ * Turns the selection into a link, or wraps the caret in an empty one. Selected words become the link text, and
+ * the selection lands in the empty target (the part not yet known); with nothing selected, the caret goes where
+ * the words would.
  */
 export const insertLink = (text: string, start: number, end: number): TextEdit => {
     const selected = text.slice(start, end);
@@ -84,13 +71,10 @@ export const insertLink = (text: string, start: number, end: number): TextEdit =
     return selected === `` ? { text: next, start: start + 1, end: start + 1 } : { text: next, start: target, end: target };
 };
 
-/* ONE STEP OF INDENTATION, two spaces: the least that nests a bullet under `- ` in CommonMark, and what a
- * document written with four gets to in two presses rather than being reformatted to a convention it did not
- * choose. Outdent removes a step, or a single tab where the line was indented with one. */
+// Indent step: two spaces, the least that nests a bullet under `- ` in CommonMark.
 const STEP = `  `;
 
-// The start offset of every line the selection touches. A caret sitting at the very start of a line does not
-// drag the line above into the edit.
+// Start offset of every line the selection touches; a caret at a line's very start excludes the line above.
 const linesIn = (text: string, start: number, end: number): number[] => {
     const first = text.lastIndexOf(`\n`, Math.max(0, start - 1)) + 1;
     const starts: number[] = [];
@@ -143,13 +127,9 @@ export const outdentLines = (text: string, start: number, end: number): TextEdit
         return line.slice(spaces.length);
     });
 
-/* WHAT OPENS A LIST ITEM: the indentation, the marker, an optional task box, and the space after them. Named
- * groups because three different callers want three different pieces of it, and positional indices into a
- * regex this shape are how the wrong piece gets used.
- *
- * `\d+[.)]` covers both ordered spellings CommonMark allows. The task box is part of the PREFIX rather than of
- * the content, because continuing a checklist has to produce an unticked box rather than a copy of the ticked
- * one above it. */
+// Matches what opens a list item: indent, marker (`\d+[.)]` covers both ordered spellings), optional task box,
+// and the trailing space, as named groups. The task box is part of the prefix, not the content, so continuing a
+// checklist starts unticked.
 const LIST_LINE = /^(?<indent>[ \t]*)(?<marker>[-*+]|\d+[.)])[ \t]+(?<task>\[[ xX]\][ \t]+)?(?<body>.*)$/u;
 
 /** The line `offset` sits on, as source offsets. */
@@ -165,23 +145,9 @@ export const onListLine = (text: string, offset: number): boolean => {
     return LIST_LINE.test(text.slice(start, end));
 };
 
-/* ENTER ON A LIST ITEM OPENS THE NEXT ONE, which is the affordance that lets a checklist be written without
- * reaching for the mouse, and the reason a story's acceptance criteria can be a plain markdown list rather
- * than a bespoke row editor with its own keyboard layer.
- *
- * ON AN EMPTY ITEM IT ENDS THE LIST INSTEAD. Pressing Enter twice is how every editor in the world says "I am
- * done listing things", and without it the only way out of a list is to type a character and delete it. The
- * empty marker is removed rather than left behind, so the file does not keep a bullet nobody wrote anything
- * against.
- *
- * AN ORDERED LIST COUNTS UP, and only by one from the line above: renumbering the whole list from here would
- * be an edit to lines the writer is not looking at, and CommonMark takes its numbering from the first item
- * anyway. A list written `1. 1. 1.` on purpose is left alone by the same rule — the number that follows `1`
- * under it is `2`, which is what the next press of Enter is asking for.
- *
- * Returns undefined when the caret is not on a list item, so the caller can let Enter mean what it usually
- * means. A caret in the MIDDLE of an item is a split, not a continuation, and is also left alone: markdown
- * has no way to say "half this item", and what the writer means there is a new paragraph. */
+// Enter on a list item opens the next one (numbered lists count up by one from the line above); on an empty item
+// it ends the list instead, removing the empty marker. Returns undefined off a list item, or mid-item (a split,
+// not a continuation).
 const nextOpener = (groups: Record<string, string | undefined>): string => {
     const indent = groups[`indent`] ?? ``;
     const marker = groups[`marker`] ?? ``;
@@ -193,11 +159,7 @@ const nextOpener = (groups: Record<string, string | undefined>): string => {
 
 export interface ListEnter {
     readonly edit: TextEdit;
-    /**
-     * The item was empty, so the writer is leaving the list. The caller applies the edit and then opens a
-     * block, which is the only thing that can put the caret somewhere that is not a list item: the empty line
-     * a writer wants next does not exist in markdown until they type into it.
-     */
+    /** True when the item was empty (leaving the list); the caller must also open a block to place the caret. */
     readonly ended: boolean;
 }
 
@@ -208,12 +170,9 @@ export const continueList = (text: string, offset: number): ListEnter | undefine
     if (groups === undefined) {
         return undefined;
     }
-    /* AN ITEM WITH NOTHING IN IT: the writer is leaving the list, and the marker goes with them — together
-     * with THE NEWLINE THAT ENDS IT, which is the part that was wrong the first time. Removing the marker and
-     * leaving its newline behind puts a blank line INSIDE the list, and markdown reads that as a loose list
-     * rather than as the end of one: the block was still a list, the caret was still in it, and the next
-     * sentence typed became a continuation of the item above instead of a paragraph after it (seen in a
-     * browser, which is the only way that class of bug is ever seen). */
+    // An empty item's marker is removed together with its trailing newline: leaving the newline creates a blank line
+    // inside the list, which markdown reads as a loose list rather than an ended one, and the next text continues the
+    // item above.
     if ((groups[`body`] ?? ``) === ``) {
         const cut = Math.min(end + 1, text.length);
         return { edit: { text: `${text.slice(0, start)}${text.slice(cut)}`, start, end: start }, ended: true };

@@ -4,12 +4,11 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { createEndpointCatalog } from "./endpoint-catalog.js";
 
-/* WHAT THE PICKER'S ROW SAYS about a model the server named for us. The id is the routing key and is never
- * rewritten; the label is presentation, and a sandbox-run local model arrives with the absolute path of the
- * weights file llama-server loaded, which no picker row can render. */
+// The id is the routing key, never rewritten; a local model's id is often the weights file's absolute path, which the
+// label must not be.
 
-// `props` undefined is a server with no such route (every gateway that is not llama.cpp): it answers 404, the
-// way the real one does, rather than handing the models payload back on a URL it does not serve.
+// props undefined means a server with no /props route (every non-llama.cpp gateway); it 404s like the real one instead
+// of answering.
 const catalogOf = async (data: readonly { id: string; display_name?: string; max_model_len?: number }[], props?: unknown) => {
     const dir = await mkdtemp(join(tmpdir(), "endpoint-catalog-"));
     const fetchImpl = (async (url: string) => {
@@ -37,12 +36,11 @@ test("a plain id stands as it is, and a published display name still wins", asyn
     expect(catalog.models.map((model) => model.label)).toEqual(["Llama-3-8B", "Qwen3 Coder", "gpt-4o-mini"]);
 });
 
-/* HOW MUCH THE SERVER WILL TAKE, which is the number a turn is refused against (agent/context-budget.ts), so
- * every case below is about not carrying a wrong one. */
+// How much the server will take, the number a turn is refused against; every case below is about not carrying a wrong
+// one.
 
 test("llama.cpp's served window is read off /props and stands for every row that server lists", async () => {
-    // The shape the real server answers with: the SLOT's window, after the flag was divided and clamped. This is
-    // the 16,384 whose 400 refused a two-word message, and it has nothing to do with what the weights allow.
+    // The real server's shape: the slot's window after the flag is divided/clamped, unrelated to weights.
     const catalog = await catalogOf([{ id: "/cache/Llama-3.2-3B-Instruct-Q4_K_M.gguf" }], {
         default_generation_settings: { n_ctx: 16_384 },
     });

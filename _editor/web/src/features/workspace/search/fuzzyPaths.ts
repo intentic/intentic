@@ -1,12 +1,11 @@
-/* fzf-style subsequence scoring over workspace paths, the client half of quick-open. Deliberately the same
- * ranking model as the sandbox's iq `files` engine (_search/iq-engine/src/engines/files.ts), kept in sync by
- * copy rather than import: iq is a dependency island nothing may import (see ARCHITECTURE.md). */
+// fzf-style subsequence scoring over workspace paths, the client half of quick-open. Mirrors the sandbox's iq
+// `files` engine (_search/iq-engine/src/engines/files.ts) by copy, not import: iq is a dependency island nothing
+// may import.
 
 const BOUNDARY = new Set([`/`, `.`, `_`, `-`]);
 
-// Score a needle against one path, 0..~1 (uncapped substring bonus so length still breaks ties). Substring
-// matches score highest (basename beats dir, shorter beats longer); otherwise boundary-aligned and consecutive
-// subsequence hits beat scattered ones. undefined = not a match.
+// Scores a needle against a path, 0..~1, undefined if no match. Substring hits score highest (basename over dir,
+// shorter over longer); otherwise boundary-aligned and consecutive subsequence hits beat scattered ones.
 export const fuzzyScore = (needle: string, path: string): number | undefined => {
     const n = needle.toLowerCase();
     const h = path.toLowerCase();
@@ -46,10 +45,7 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
 // The query's best matches over the workspace paths: score desc, then path asc for determinism, capped at limit.
 export const rankPaths = (query: string, paths: readonly string[], limit: number): string[] => {
     const scored: { path: string; score: number }[] = [];
-    /* ONE ROW PER PATH, whatever the candidate list handed over. A repeated path scores the same twice and so
-     * lands twice, adjacent, and the second one is not merely noise, it takes the slot the query's next-best
-     * match should have had, under a cap that is usually binding. The tree this reads today holds each path
-     * once, but that is a property of today's caller rather than of the argument. */
+    // Dedupes by path: a repeated path would score twice and displace a genuine next-best match under the cap.
     const seen = new Set<string>();
     for (const path of paths) {
         if (seen.has(path)) {

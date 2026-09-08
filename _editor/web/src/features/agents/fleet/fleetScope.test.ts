@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because `fleetScope` declares an account preference, and a preference is read from localStorage and
-// announced on a BroadcastChannel at module load (ui/composables/preference.ts). Neither exists in the node
-// environment, and stubbing them would be stubbing the thing under test's own storage.
+// jsdom: fleetScope declares an account preference read from localStorage and announced on a BroadcastChannel at module
+// load, neither of which exists in the node environment.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
@@ -12,12 +10,12 @@ const activeSandboxId = ref<string | undefined>(`sbx-here`);
 const select = vi.fn();
 vi.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
 
-// The store this reads from, stubbed to the shape its surfaces see: what it does with the network is
-// fleetAcross's own business and is tested there.
+// The store this reads from, stubbed to the shape its surfaces see; what it does with the network is fleetAcross's own
+// business.
 const otherBoxes = ref<unknown[]>([]);
 const silentBoxes = ref<unknown[]>([]);
-// `boxAttention` is the store's own per-box reading, stubbed to the two answers it can give: a number, or
-// undefined for a box that has never answered (the case the sum below must not turn into a zero).
+// `boxAttention` stubbed to its two real answers: a number, or undefined for a box that's never answered, the case the
+// sum below must not turn into a zero.
 const boxAttention = (box: { attention?: number }): number | undefined => box.attention;
 vi.mock("../../sandbox/live/fleetAcross", () => ({ otherBoxes, silentBoxes, boxAttention, subscribe: vi.fn(), refreshAcross: vi.fn() }));
 
@@ -53,14 +51,14 @@ beforeEach(() => {
 });
 
 describe("whether the scope is offered at all", () => {
-    // One connected sandbox is not a fleet: a switch whose two settings produce the same screen teaches a
-    // reader only to stop reading controls.
+    // One connected sandbox is not a fleet: a switch whose two settings produce the same screen only teaches a reader
+    // to stop reading controls.
     it("is not offered on an account with a single sandbox", () => {
         sandboxes.value = [{ id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` }];
         expect(scopeOffered.value).toBe(false);
     });
 
-    // A sandbox that never checked in has no daemon to read, so it is not somewhere else to look.
+    // A sandbox that never checked in has no daemon to read, so it isn't somewhere else to look.
     it("does not count an unfinished setup as somewhere else to look", () => {
         sandboxes.value = [
             { id: `sbx-here`, name: `Desk`, image: null, lastSeenAt: `2026-01-01T00:00:00Z` },
@@ -73,9 +71,8 @@ describe("whether the scope is offered at all", () => {
         expect(scopeOffered.value).toBe(true);
     });
 
-    /* A STORED PREFERENCE DOES NOT MAKE A BOARD READ ACROSS NOTHING. An account that drops to one sandbox keeps
-     * its `all` (they will likely add another) and the board quietly behaves as `box` until there is a second
-     * one, rather than drawing a scope that resolves to an empty half. */
+    // A stored preference doesn't make a board read across nothing: an account that drops to one sandbox keeps its
+    // `all` choice and behaves as `box` until there's a second one again.
     it("stops reading across when there is nowhere else, without forgetting the choice", () => {
         fleetScope.value = `all`;
         expect(readingAcross.value).toBe(true);
@@ -86,16 +83,15 @@ describe("whether the scope is offered at all", () => {
 });
 
 describe("another box's agents as board cards", () => {
-    /* THE HALVES ONLY A LOCAL CONVERSATION CAN ANSWER ARE FALSE, not guessed. `open` and `unsent` are facts
-     * about a tab in THIS browser pointed at THIS daemon, and a summary read at a distance has neither, so
-     * saying so plainly is what keeps the card from claiming unsent words nobody can see. */
+    // `open` and `unsent` are facts about a tab in this browser pointed at this daemon; a summary read at a distance
+    // has neither, so it says so plainly rather than guessing.
     it("never claims an open tab or unsent words for an agent it read at a distance", () => {
         otherBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [agent({})])];
         expect(otherFleet.value[0]).toMatchObject({ open: false, unsent: false, sandboxId: `sbx-laptop` });
     });
 
-    // `unread` IS derivable, because the read marker lives on the daemon entry rather than in this browser: it
-    // means the same thing at a distance as it does up close.
+    // `unread` is derivable since the read marker lives on the daemon entry, meaning the same thing at a distance as up
+    // close.
     it("still knows an agent worked since it was last opened", () => {
         otherBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [agent({ updatedAt: 500, seenAt: 100 })])];
         expect(otherFleet.value[0]?.unread).toBe(true);
@@ -108,8 +104,7 @@ describe("another box's agents as board cards", () => {
 });
 
 describe("isRemote", () => {
-    // `undefined` and "the active one" mean the same thing and must never be told apart by accident: every
-    // action on the board asks this before it decides which daemon to address.
+    // `undefined` and "the active one" mean the same thing and must never be told apart by accident.
     it("reads a card with no box as this sandbox's own", () => {
         expect(isRemote({ sandboxId: undefined })).toBe(false);
     });
@@ -134,8 +129,7 @@ describe("what the board says when its answer is partial", () => {
         expect(partialAnswer.value).toBeUndefined();
     });
 
-    /* NAMES, NOT A COUNT. The name is what tells a reader whether the box that did not answer is the one they
-     * came for, which "1 sandbox is unavailable" cannot. */
+    // Names, not a count: the name is what tells a reader whether the box that didn't answer is the one they came for.
     it("names the box that did not answer", () => {
         fleetScope.value = `all`;
         silentBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [])];
@@ -160,9 +154,8 @@ describe("how much the other boxes are owed", () => {
         expect(acrossAttention.value).toBe(5);
     });
 
-    /* A BOX THAT HAS NEVER ANSWERED CONTRIBUTES NOTHING AND BLOCKS NOTHING. The switcher can draw a dash on its
-     * row because it has a row per box; a badge has one digit, so the unknown is told beside it in words
-     * (agentsTile.scopeNote) rather than being smuggled into the number or suppressing it. */
+    // A box that has never answered contributes nothing and blocks nothing: the switcher can draw a dash per row, but a
+    // badge has one digit, so the unknown is told in words instead.
     it("skips a box that has never answered rather than counting it as zero or giving up", () => {
         otherBoxes.value = [{ ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 }, { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: undefined }];
         expect(acrossAttention.value).toBe(2);
@@ -170,9 +163,8 @@ describe("how much the other boxes are owed", () => {
 });
 
 describe("crossing to the agent's own sandbox", () => {
-    /* THE DESTINATION IS RECORDED BEFORE THE SELECTION MOVES. A switch lands on whatever that box was last
-     * showing (sandboxScreen), so pushing the route afterwards would race that landing and usually lose: the
-     * reader would arrive at the box's last screen instead of the agent they pressed. */
+    // The destination is recorded before the selection moves: a switch lands on whatever that box was last showing, so
+    // pushing the route after would usually lose the race.
     it("aims the landing first, then switches", () => {
         openInSandbox(`sbx-laptop`, `a1`);
         expect(landOnAfterSwitch).toHaveBeenCalledWith(`sbx-laptop`, `/agents/a1`);

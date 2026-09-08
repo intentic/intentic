@@ -1,24 +1,16 @@
-/* WHAT A PAGE LOOKS LIKE TO AN AGENT, and how that is written down for one to read.
- *
- * Split out of types.ts and snapshot.ts so it can be imported by things that are not this driver: the browser
- * EXTENSION (_devices/webext) drives the person's own Chrome through Chrome's own APIs rather than over CDP,
- * and none of this package's socket code can run there — but the two surfaces must speak the same language, or
- * an agent that learned `[e4] button "Send"` in one browser has to learn a second dialect for the other. This
- * module is that language: the shape, the rendering, and what a reference means.
- *
- * Everything here is pure and DOM-free (the walk that produces it is not — that is each driver's own), so it
- * type-checks in a node build and a browser bundle alike, and it is the part of both drivers that can be tested
- * without a browser at all. */
+// Shared page representation for both the CDP driver and the browser extension (which drives Chrome via its own
+// APIs, not CDP), so both speak the same ref/rendering language. Pure and DOM-free, so it type-checks and tests
+// in a node build and a browser bundle alike.
 
-// One thing on the page the agent can act on. `ref` is opaque and only valid until the next snapshot: the page
-// may have re-rendered, and a stale reference must fail rather than click whatever now occupies that slot.
+// One thing on the page the agent can act on; `ref` is opaque and valid only until the next snapshot, so a stale
+// one must fail rather than click whatever now sits there.
 export interface PageElement {
     readonly ref: string;
-    // What it IS, in the words a person uses: link, button, textbox, checkbox, heading.
+    // What it is, in words a person uses: link, button, textbox, checkbox, heading.
     readonly role: string;
-    // What it SAYS, its accessible name: the label, the placeholder, the alt text, or its own text.
+    // What it says: accessible name from the label, placeholder, alt text, or its own text.
     readonly name: string;
-    // What it currently HOLDS, for anything with a value. Absent for the rest.
+    // Current value, for anything that has one; absent otherwise.
     readonly value?: string | undefined;
 }
 
@@ -28,12 +20,10 @@ export interface PageState {
     readonly elements: readonly PageElement[];
 }
 
-// Beyond this the list is more noise than help: a search-results page can hold thousands of links, and a model
-// reading two hundred of them has already lost the thread. Truncation is reported so it is never silent.
+// Beyond this the list is more noise than help; truncation is always reported, never silent.
 export const MAX_ELEMENTS = 150;
 
-/* The agent-facing rendering. One line per element, the ref first because that is what gets passed back, then
- * what it is and what it says — the shape a person scanning for "the Send button" reads fastest. */
+// Agent-facing rendering: one line per element, ref first (what gets passed back), then role and name.
 export const renderPage = (page: PageState, truncated = false): string => {
     const header = [`Page: ${page.title === "" ? "(untitled)" : page.title}`, page.url];
     if (page.elements.length === 0) {
@@ -48,8 +38,8 @@ export const renderPage = (page: PageState, truncated = false): string => {
     return [...header, "", ...rows, ...note].join("\n");
 };
 
-// A snapshot as it comes back from whatever ran the walk: a CDP evaluate here, a chrome.scripting result in the
-// extension. Every field optional, because a page that navigated mid-call answers with less than it promised.
+// Snapshot as it comes back from whatever ran the walk (CDP evaluate here, chrome.scripting in the extension);
+// every field optional since a mid-call navigation answers with less.
 export interface RawSnapshot {
     readonly url?: string;
     readonly title?: string;
@@ -63,8 +53,7 @@ export const toPageState = (raw: RawSnapshot): PageState => ({
     elements: raw.elements ?? [],
 });
 
-// Which slot in the page's ref array a reference names. Rejects anything that is not one of ours, so a model
-// improvising a CSS selector gets a clear refusal rather than a mysterious no-op.
+// Slot in the page's ref array a reference names; rejects anything not one of ours with a clear refusal.
 export const refIndex = (ref: string): number => {
     const match = /^e(\d+)$/.exec(ref.trim());
     return match?.[1] === undefined ? -1 : Number(match[1]);

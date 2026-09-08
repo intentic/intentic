@@ -1,17 +1,6 @@
-/* INTENTIC'S OWN SYSTEM PROMPT - the default this product's agent runs on.
- *
- * It is a sibling of Claude Code's preset, not a patch on it: a full prompt, shipped here as text, chosen as
- * the default because it is the one we can tune for THIS harness. Claude's preset stays one click away
- * (preset-prompt.ts reads it out of the installed CLI), and a third option lets the owner write their own.
- *
- * Kept verbatim, and deliberately NOT assembled from fragments: it is read and edited as prose by whoever
- * tunes the agent's behaviour, and a prompt spliced together from constants cannot be read that way. Changes
- * here change every turn in every sandbox that hasn't opted out, so treat an edit as a product change.
- *
- * What is NOT in here is the harness wiring - the AskUserQuestion/plan guidance, the checklist guidance, the
- * browser-tool guidance. Those are appended to this text the same way they are appended to Claude's preset
- * (system-prompt.ts), because they describe widgets THIS app renders rather than anything about the model. A
- * default that dropped them would ship an agent whose question cards and todo panel silently never appear. */
+// Intentic's default agent system prompt: a full prompt, sibling to Claude Code's preset rather than a patch on it,
+// kept verbatim as prose for hand-tuning. Excludes harness widget wiring (AskUserQuestion, checklist, browser-tool
+// guidance), appended separately the same way as Claude's preset (system-prompt.ts).
 export const INTENTIC_PROMPT = `You are an Intentic agent on Claude Agent SDK.
 
 # Harness

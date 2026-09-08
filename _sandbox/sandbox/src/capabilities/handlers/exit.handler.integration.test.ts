@@ -8,11 +8,8 @@ import type { CapabilityCtx } from "../capability.js";
 import { exitHandler } from "./exit.handler.js";
 import { vpnHandler } from "./vpn.handler.js";
 
-/* A ctx exposing only what exitHandler touches, over a fresh temp workspace. HOME is pointed at a temp dir so
- * the handler's ~/.intentic-exit writes land there. Every case runs with the exit tooling ABSENT (no tor or
- * openvpn on the test host), which is the pre-rebuild state the handler must survive: an add has to land in
- * the manifest even when nothing can be started, because the add is what puts the fragment into the overlay
- * that installs the client in the first place. */
+// Ctx over a fresh temp workspace; HOME is a temp dir too, so ~/.intentic-exit writes land there. Every test runs with
+// the exit tooling absent, the pre-rebuild state an add must survive.
 const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: string; home: string } => {
     const root = mkdtempSync(join(tmpdir(), "exit-cap-ws-"));
     const home = mkdtempSync(join(tmpdir(), "exit-cap-home-"));
@@ -25,8 +22,7 @@ const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: stri
     return { ctx, root, home };
 };
 
-// The skill is `geo`, not `exit`: the CLI could not be called `exit` (a shell builtin swallows it), and the
-// skill is named for the command it teaches.
+// Named `geo`, not `exit`: a shell builtin swallows that name, so the skill takes the CLI's real name.
 const skillPath = (root: string): string => join(root, ".agents", "skills", "geo", "SKILL.md");
 
 const tor = (autoStart: "on" | "off" = "off", country?: string): ExitConfig =>
@@ -54,38 +50,30 @@ const fragments = async (config: ExitConfig): Promise<string[]> => {
     return result === undefined ? [] : typeof result === "string" ? [result] : [...result];
 };
 
-// The handler's secret/echo take the connector registry as their second argument; no exit provider consults it
-// (there are no contributed exit cards), so an empty map is the honest stand-in.
+// secret/echo take the connector registry as a second arg; no exit provider consults it, so empty is honest.
 const NO_CONNECTORS = new Map();
 
 test("a tor exit asks for NO container privileges: that is what makes it the cheap default", async () => {
-    /* The most consequential assertion in this file. Tor publishes its own SOCKS port, so it needs neither a
-     * tun device nor NET_ADMIN, and charging every tor user a privilege they never use would be exactly the
-     * quiet over-ask a capability card exists to prevent. If this ever starts failing, the card is disclosing
-     * a privilege the provider does not need. */
+    // Tor publishes its own SOCKS port; it needs neither a tun device nor NET_ADMIN.
     const blocks = await fragments(tor());
     expect(blocks.join("\n")).toContain("install -y --no-install-recommends tor");
     expect(blocks.join("\n")).not.toContain("intentic:runtime");
 });
 
 test("the tunnel-building providers ask for the tun privilege, and for exactly the same block the vpn kind uses", async () => {
-    /* Fragments are deduped by EXACT CONTENT when the overlay is composed. A vpn and an exit in one sandbox is
-     * the expected combination, not an exotic one, so if these two blocks ever differ by a byte the composed
-     * overlay keeps both and the recreate hands `docker run` the same --device twice. */
+    // Fragments dedupe by exact content when composed; a byte of drift here doubles the --device flag.
     const vpnBlocks = (await vpnHandler.fragment?.({ provider: "wireguard", config: "x", autoConnect: "off" })) ?? [];
     const shared = (typeof vpnBlocks === "string" ? [vpnBlocks] : [...vpnBlocks]).find((block) => block.includes("intentic:runtime"));
     for (const config of [vpngate, wireguard]) {
         const privileged = (await fragments(config)).find((block) => block.includes("intentic:runtime"));
         expect(privileged).toBe(shared);
     }
-    // And the directives are each present exactly once inside that one block.
     expect(shared?.match(/# intentic:runtime --device=\/dev\/net\/tun/g)).toHaveLength(1);
     expect(shared?.match(/# intentic:runtime --cap-add=NET_ADMIN/g)).toHaveLength(1);
 });
 
 test("each provider installs only its own client", async () => {
-    // The INSTALL lines, not the prose around them: the fragments explain themselves in comments, and matching
-    // those would pass on a fragment that documents a package it no longer installs.
+    // Strips comment lines first: matching prose would pass even if the fragment no longer installs the package.
     const installs = async (config: ExitConfig): Promise<string> =>
         (await fragments(config))
             .join("\n")
@@ -95,8 +83,7 @@ test("each provider installs only its own client", async () => {
     expect(await installs(vpngate)).toContain("openvpn");
     expect(await installs(vpngate)).not.toMatch(/\btor\b/);
     expect(await installs(wireguard)).toContain("wireguard-tools");
-    // Deliberately NOT openresolv: a pasted conf's DNS= line is stripped before the tunnel comes up, because
-    // applying it would rewrite /etc/resolv.conf for the whole container.
+    // No openresolv: a pasted conf's DNS= line is stripped so the tunnel can't rewrite the container's resolv.conf.
     expect(await installs(wireguard)).not.toContain("openresolv");
     expect(await installs(tor())).not.toContain("openvpn");
 });
@@ -107,27 +94,21 @@ test("adding an exit lands in the manifest and writes the shared skill, even wit
     expect(lines.join(" ")).toMatch(/Stored berlin/);
     const skill = readFileSync(skillPath(root), "utf8");
     expect(skill).toContain("name: geo");
-    // The collision that forced the rename is stated in the skill itself, or an agent types `exit list` once.
     expect(skill).toMatch(/`exit` is a shell builtin/);
-    // The three things an agent gets wrong without being told, all in the skill it is handed.
     expect(skill).toMatch(/proxied by default/i);
     expect(skill).toMatch(/Tor exits are blocked by a lot of the web/);
     expect(skill).toMatch(/datacenter addresses/);
 });
 
 test("only the bring-your-own arm carries a credential", () => {
-    // tor and vpngate have no account at all, which is most of the reason they are here. Marking them as
-    // holding a secret would put an empty row in the /secrets inventory and misdescribe the card.
+    // tor/vpngate have no account; marking them secret-holding would misdescribe an empty inventory row.
     expect(exitHandler.secret?.(tor(), NO_CONNECTORS)).toBeUndefined();
     expect(exitHandler.secret?.(vpngate, NO_CONNECTORS)).toBeUndefined();
     expect(exitHandler.secret?.(wireguard, NO_CONNECTORS)).toBe("config");
 });
 
 test("the echo is an allowlist, so pasted keys can never reach the browser", () => {
-    /* Not a spread of config. The complement of this echo is what gets vaulted, so a field forgotten here is
-     * replaced in the manifest by the vault marker: for `country` (a two-letter code) that marker fails the
-     * schema on the next read and takes the whole entry out of the manifest, which is a much louder failure
-     * than a leaked key and is exactly why the allowlist must stay complete. */
+    // A forgotten field is vaulted, not leaked; that fails validation on next read for a field like `country`.
     const echoed = exitHandler.echo?.(wireguard, NO_CONNECTORS) ?? {};
     expect(echoed).toEqual({ provider: "wireguard", autoStart: "off" });
     expect(JSON.stringify(echoed)).not.toContain("PrivateKey");
@@ -141,8 +122,7 @@ test("an exit with no client installed reads as needing a rebuild, not as broken
 });
 
 test("an auto-start exit says what it is waiting for instead of failing the add", async () => {
-    // The pre-rebuild bootstrap: the overlay this very add composes is what installs the client, so a missing
-    // client is a soft outcome. Failing here would make the capability impossible to add at all.
+    // This very add composes the overlay that installs the client; failing here would block the add entirely.
     const { ctx } = tempCtx();
     const lines = await drain(exitHandler.apply(ctx, "berlin", tor("on")));
     expect(lines.join(" ")).toMatch(/doesn't carry tor yet/);
@@ -154,8 +134,7 @@ test("removing the last exit takes the shared skill with it, and an earlier one 
     await drain(exitHandler.apply(ctx, "berlin", tor()));
     expect(() => readFileSync(skillPath(root), "utf8")).not.toThrow();
 
-    // Two exits configured: removing one must leave the skill, since the other still needs it. The route
-    // removes the manifest entry AFTER the handler, so the one being removed is still in the list.
+    // The route removes the manifest entry after the handler; the list here still holds the one being removed.
     const withTwo = tempCtx([
         { id: "berlin", kind: "exit", config: tor() },
         { id: "osaka", kind: "exit", config: vpngate },

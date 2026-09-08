@@ -7,15 +7,8 @@ import { syncCommands, syncUninstall } from "./sync/commands.js";
 import { assetUrl, runUpgrade, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
-/* `intentic-machine`, the one agent that lives on a user's own device.
- *
- * Two route groups carry the two capabilities, in the cards' own vocabulary:
- *   device   let a sandbox work on this machine (setup / uninstall) — the "Connect this device" card.
- *   sync       mirror folders and ports with a sandbox (setup / pause / resume / uninstall) — the Desktop
- *              sync card.
- *
- * Everything resident is shared and lives at the top level: `run` is the ONE loop serving both halves,
- * `status` answers for both, `upgrade` replaces the one binary, and bare `uninstall` removes everything. */
+// intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
+// folders/ports; both share one resident loop (`run`), `status`, `upgrade`, and `uninstall`.
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -38,20 +31,16 @@ const run = buildCommand<RunFlags>({
             return;
         }
         if (!flags.foreground) {
-            // Through the same reconcile every setup runs: covers this session AND repairs a missing or stale
-            // login entry while it is at it, so `run` after a botched install is a fix, not just a start.
+            // Reconcile also repairs a missing/stale login entry, so `run` after a botched install fixes it too.
             await reconcileResidency(out);
             return;
         }
-        // The log is long-lived, so bare lines in it are useless: every line is stamped.
+        // The log is long-lived: every line is timestamped since bare lines would be useless.
         await runForeground((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
     },
 });
 
-/* The build this agent is, on stdout, and nothing else on it. Deliberately bare rather than "intentic-machine
- * x.y.z": it is read by a person asking one question, by the release build proving the version stamp reached the
- * binary, and by `upgrade` vetting a freshly downloaded one before it installs it, and the last two want the
- * string, not a sentence around it. */
+// Bare version string, not a sentence: the release build and `upgrade` both parse it directly.
 const version = buildCommand({
     docs: { brief: "Print this agent's version" },
     parameters: {},
@@ -61,15 +50,8 @@ const version = buildCommand({
     },
 });
 
-/* Move this machine onto the current agent. WITHOUT a pairing token, which is the entire point. Updating and
- * enrolling had been the same command, so the cost of a version bump was a trip to the browser for a single-use
- * token that expires in ten minutes; the predictable result was machines running whatever was current the day
- * they were paired, indefinitely.
- *
- * Links, pairings, keys, ssh config, Mutagen sessions and mirrored ports are all untouched: this replaces one
- * file and restarts one background process. Everything that can fail is checked before the swap, and the one
- * thing that cannot be checked in advance, whether the new agent stays up on THIS machine, is rolled back
- * automatically (upgrade.ts). */
+// Moves this machine onto the current agent without a pairing token, unlike the old enroll-to-update flow. Checked
+// before swapping; rolled back automatically if the new agent doesn't stay up (upgrade.ts).
 interface UpgradeFlags {
     readonly force: boolean;
 }
@@ -87,14 +69,13 @@ const upgrade = buildCommand<UpgradeFlags>({
     async func(this: CommandContext, flags: UpgradeFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         out(upgradeMessage(await runUpgrade(machineUpgradeExec(out), assetUrl, MACHINE_VERSION, flags.force, out)));
-        // The launcher stub ships and updates with the agent now (install.ts), so an upgrade refreshes both.
+        // The launcher stub ships and updates with the agent, so an upgrade refreshes both.
         await ensureWindowsLauncher(out);
     },
 });
 
-// Everything, both halves, in one command: what "remove intentic from this machine" should cost. Sync goes
-// first because its teardown talks to Mutagen and the sandboxes while credentials still exist; the device
-// half's reconcile then finds nothing on either side and retires the loop and the login entry.
+// Removes both halves in one command; sync tears down first while credentials still exist, then device's reconcile
+// retires the loop and the login entry.
 const uninstall = buildCommand({
     docs: { brief: "Remove this machine's agent entirely: every sandbox link, every sync pairing, the login entry" },
     parameters: {},

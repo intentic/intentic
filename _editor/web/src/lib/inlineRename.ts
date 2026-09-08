@@ -1,18 +1,11 @@
 import { reactive, ref, type VNode } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 
-/* THE APP'S ONE INLINE-RENAME STATE MACHINE, a name that reads as text until it is clicked. Per-instance
- * factory; each surface owns its editing/draft/error state. Returned reactive() so nested refs unwrap in
- * templates. Conventions match WorkspaceTree's inline rename, which is where they were set: focus+select on
- * mount, enter=commit, esc=cancel, blur=commit, empty or unchanged = silent cancel.
- *
- * WHAT IT WRITES IS THE CALLER'S, which is the whole reason this is not in `composables/agents/` any more. It
- * was written for the fleet card and reached into useAgents().rename itself, so the four agent surfaces shared
- * one state machine and anything else that wanted a click-to-rename name had to grow a second copy of it. The
- * personas list is the first such surface, and a name whose editing rules differ from every other name in the
- * app by a keystroke is precisely the kind of drift a shared factory exists to prevent. */
+// Shared inline-rename state machine: a name that reads as text until clicked. Per-instance factory, returned
+// reactive() so refs unwrap in templates; what a commit writes is left to the caller. Conventions: focus+select on
+// mount, enter=commit, esc=cancel, blur=commit, empty or unchanged = silent cancel.
 
-// Focus + select the input the moment it mounts (the @vue:mounted trick, see WorkspaceTree).
+// Focus and select the input the moment it mounts (the @vue:mounted trick).
 const focusInput = (vnode: VNode): void => {
     const el = vnode.el as HTMLInputElement;
     el.focus();
@@ -31,13 +24,12 @@ export const createInlineRename = (
     const draft = ref(``);
     const busy = ref(false);
     const error = ref<string | undefined>(undefined);
-    // Blur fires before the click that caused it: a blur-commit must not ALSO activate what was clicked (the
-    // card body would open the agent). Consumed by the surface's open handler; self-clears for keyboard blurs.
+    // Blur fires before its click; suppresses that click's open handler, self-clearing for keyboard blurs.
     let suppressOpen = false;
 
     const begin = (): void => {
         if (busy.value) {
-            return; // a rename is in flight; racing it would fight the optimistic revert
+            return; // A rename is in flight; racing it would fight the optimistic revert.
         }
         draft.value = current() ?? ``;
         error.value = undefined;
@@ -48,12 +40,12 @@ export const createInlineRename = (
     };
     const commit = async (): Promise<void> => {
         if (!editing.value) {
-            return; // enter already committed; the input's unmount blur must not commit again
+            return; // Enter already committed; the unmount blur must not commit again.
         }
         editing.value = false;
         const trimmed = draft.value.trim();
         if (trimmed === `` || trimmed === (current() ?? ``)) {
-            return; // silent cancel, the WorkspaceTree convention
+            return; // Silent cancel: empty or unchanged, nothing to write.
         }
         busy.value = true;
         try {

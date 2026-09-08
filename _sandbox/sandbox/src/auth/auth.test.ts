@@ -40,8 +40,7 @@ const memMembers = (initial: Member[] = []): MembersStore => {
 // Most tests only care that an email is on the list; the role rides along.
 const granted = (...emails: string[]): Member[] => emails.map((email) => ({ email, role: "collaborator" as const }));
 
-// A fake verifier mapping a token straight to an email; an unknown token throws, standing in for a failed
-// JWKS/issuer/audience verification.
+// A fake verifier mapping a token to an email; an unknown token throws, standing in for a failed verify.
 const verifierFor =
     (map: Record<string, string>): IdTokenVerifier =>
     async (token) => {
@@ -72,12 +71,6 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
-    /* THE ROSTER IS LOWERCASE AND THE CLAIM IS NOT, and an exact comparison between them is a permanent
-     * lockout. Every write normalizes (app.ts's memberGrant/memberEmail both `.toLowerCase()`), while a Google
-     * Workspace `email` claim can preserve case — so a grant for `Alice@Corp.com` stores as `alice@corp.com`,
-     * and Alice was then a stranger to `enforce` forever. The owner's own `GET /members` still listed her, so
-     * the roster and the daemon disagreed with nothing on either side to explain it. First-bind already
-     * compared case-insensitively (the test below says so); these are the paths that did not. */
     test("a granted member is recognised whatever case the claim carries", async () => {
         const authz = createAuthorizer({
             verify: verifierFor({ "tok-m": "Alice@Corp.com" }),
@@ -98,8 +91,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorizeRetirement("tok-a")).resolves.toBeUndefined();
     });
 
-    // An unbound sandbox has no owner to be: the owner-only gates must refuse rather than compare against
-    // undefined, which is the shape that would let `email !== undefined` read as "not the owner" by accident.
+    // An unbound sandbox has no owner: the gates must refuse rather than compare against undefined.
     test("the owner-only gates refuse before the sandbox is bound", async () => {
         const authz = createAuthorizer({ verify: verifierFor({ "tok-a": "a@x.com" }), owner: memOwner(), members: memMembers() });
         await expect(authz.authorizeOwner("tok-a")).rejects.toBeInstanceOf(ForbiddenError);
@@ -266,10 +258,9 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
     });
 });
 
-/* THE PLATFORM'S OWNER TICKET (sandbox-contract's owner-ticket.ts), the hosted lane's way past the second Google
- * prompt. Held to every rule a Google proof is: it names THIS sandbox, the expected owner on first-bind, and the
- * roster afterwards, and it satisfies the connect-token gate by itself, because the platform that signed it is
- * the platform that put the token in the machine's env. */
+// The platform's owner ticket (owner-ticket.ts): the hosted lane's way past the second Google prompt.
+// Held to every rule a Google proof is (sandbox id, expected owner, roster) but satisfies the connect-token gate by
+// itself.
 describe("owner ticket", () => {
     const pair = generateKeyPairSync("ed25519");
     const privatePem = pair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;

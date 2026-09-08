@@ -4,50 +4,34 @@ import { type Breadcrumbs, createBreadcrumbs } from "./breadcrumbs.js";
 import { type Capture, reportFrom, startCapture } from "./capture.js";
 import { fetchChallenge, fetchConfig, send } from "./transport.js";
 
-/* THE SDK ITSELF: everything between "an error happened" and "the daemon has it", and nothing about how it
- * looks (the dialog is a separate module and an optional one).
- *
- * ONE RULE ABOVE ALL OTHERS: this must never be the thing that breaks the page it is watching. A crash reporter
- * that throws inside a crash handler turns one bug into two, one of which nobody can debug because the tool
- * that would have reported it is the tool that failed. So every path here swallows its own failures, `report`
- * resolves rather than rejecting, and the console is written to only where a SITE OWNER could act on it. */
+// Everything between an error happening and the daemon having it; how it looks is a separate, optional module
+// (dialog.ts). Must never break the page it watches: every path swallows its own failures, `report` resolves rather
+// than rejects, and the console is used only where a site owner could act.
 
 export interface InitOptions {
-    /* Which intake to send to. Both are derived for a <script> embed (main.ts reads them off the tag); an app
-     * calling `init` directly passes them, and `base` is the sandbox's own origin. */
+    // Which intake to send to; derived from the <script> tag for an embed, or passed to `init` directly.
     readonly automationId: string;
     readonly base: string;
-    /* THE COMMIT THIS BUILD CAME FROM. The single most valuable thing a host can set, and the reason there are
-     * no sourcemaps in this product: with it the agent checks the build out and reads the real frames; without
-     * it, it is guessing which version of the file it is looking at. Wire it to whatever your bundler already
-     * knows, a git sha, a tag, a release name. */
+    // The commit this build came from; with it the agent checks out the build, without it it's guessing.
     readonly release?: string;
-    // The key an app with no website origin presents (a phone, a desktop build, a server). A browser on an
-    // allowed origin needs none and should not carry one.
+    // The key an app with no origin presents (phone, desktop, server); an allowed browser origin needs none.
     readonly key?: string;
-    // Anything that describes the app rather than the crash: a route name, a locale, a tenant, a build channel.
-    // Small strings; the daemon bounds both the count and the length.
+    // Anything describing the app, not the crash (route, locale, tenant); small strings, bounded by the daemon.
     readonly context?: Record<string, string>;
-    // Whether to arm the uncaught-error handlers. Absent ⇒ whatever the intake is configured for, which is on.
+    // Whether to arm the uncaught-error handlers; absent defers to the intake's own config.
     readonly captureCrashes?: boolean;
-    /* THE LAST WORD ON WHAT LEAVES THE PAGE. Called with every report just before it is sent; return a modified
-     * one, or `null` to drop it entirely. This is where a host scrubs an id out of a message, drops crashes from
-     * a browser extension, or samples a noisy one. It runs INSIDE the try, so a `beforeSend` that throws drops
-     * the report rather than the page. */
+    // Return a modified report or `null` to drop it; inside the try, a throw here drops the report, not the page.
     readonly beforeSend?: (report: IssueReport) => IssueReport | null;
 }
 
 export interface IssueClient {
-    /* Report an error the app caught itself. The one call worth wiring by hand: a Vue `errorHandler`, a React
-     * error boundary's `componentDidCatch`, the `catch` in a job runner. Resolves to the issue's short id, or
-     * undefined when it was dropped or refused. */
+    // An error the app caught itself; resolves to the issue's short id, or undefined if dropped or refused.
     readonly captureException: (error: unknown, context?: Record<string, string>) => Promise<string | undefined>;
-    // Send what a person wrote. `description` is theirs; everything else is the SDK's.
+    // Send what a person wrote; `description` is theirs, everything else is the SDK's.
     readonly report: (input: { description: string; email?: string; name?: string }) => Promise<string | undefined>;
-    // Something the app noticed itself and thinks is wrong. Grouped like a crash, so a detection firing on every
-    // page load is one row with a count.
+    // Something the app noticed itself; grouped like a crash, so one repeatedly firing is one row with a count.
     readonly detect: (message: string, context?: Record<string, string>) => Promise<string | undefined>;
-    // Add a breadcrumb of the app's own: a step in a checkout, a feature flag flipping.
+    // Add a breadcrumb of the app's own: a checkout step, a feature flag flip.
     readonly breadcrumb: (kind: string, message: string) => void;
     // What the daemon says this intake looks like, for a host drawing its own dialog.
     readonly config: IssuePublicConfig;
@@ -58,15 +42,9 @@ export interface IssueClient {
 // The intake as the daemon resolved it, plus the two handles a page-long client keeps.
 export const createClient = async (options: InitOptions): Promise<IssueClient> => {
     const endpoint: EmbedEndpoint = { base: options.base.replace(/\/$/, ""), automationId: options.automationId };
-    /* The config fetch is also the reachability probe: a sandbox that is asleep, an intake that was deleted, and
-     * an origin nobody listed all land here. It THROWS rather than degrading to a default, because a reporter
-     * that silently posts into the void is worse than one that says it could not start. main.ts turns that into
-     * one console line for the site owner and then stands down. */
+    // Also the reachability probe: an asleep sandbox or bad origin throws here rather than posting into the void.
     const config = await fetchConfig(endpoint);
-    /* WHO IS REPORTING, in the only sense this SDK has one: a per-browser id, kept in localStorage and namespaced
-     * per intake, so two reporters on one site are two clients. NOT identity and NOT a secret: it is the key the
-     * daemon's per-minute rate window counts against, and what a solved proof of work is bound to. A name or an
-     * address is something they type into the dialog, and it reaches the agent labelled unverified. */
+    // A per-browser id in localStorage, namespaced per intake: the rate-limit key, and what a proof of work binds.
     const clientId = storedId(`intentic.issues.${options.automationId}.client`);
     const crumbs = createBreadcrumbs();
 
@@ -80,19 +58,14 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
                 report: enrich(shaped, options, crumbs),
                 clientId,
                 ...(options.key !== undefined ? { key: options.key } : {}),
-                // Only a written report is ever asked for a proof, and only when this intake asks. Solving is a
-                // second of the reporter's time, which is affordable while they wait on a dialog and is not
-                // affordable in a crash handler.
+                // Only a written report needs a proof, never a crash: a crash handler has no second to spend on it.
                 ...(shaped.kind === "report" && config.antiBot === "pow"
                     ? { powNonce: await solveProofOfWork(await fetchChallenge(endpoint, clientId), "This page must be served over HTTPS to send a report.") }
                     : {}),
             };
             return (await send(endpoint, body)).id;
         } catch {
-            /* Swallowed on purpose and without a console line. This runs on somebody else's product, often
-             * inside their crash: an offline visitor, a blocked request, a sandbox that is asleep must all be
-             * silent. The failures a site owner can actually fix (a bad id, an origin nobody listed) surface at
-             * startup instead, where they are about setup rather than about one lost report. */
+            // Swallowed silently: an offline visitor or asleep sandbox must not be noisy about it.
             return undefined;
         }
     };
@@ -106,9 +79,8 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
         report: ({ description, email, name }) =>
             deliver({
                 kind: "report",
-                /* The message is a HEADLINE the SDK makes up, and the description is what they actually wrote.
-                 * Both are sent: the daemon lists a written report by the description (it is the thing a person
-                 * said) and keeps the message as the fallback for one that arrives empty. */
+                // A headline the SDK invents; the daemon lists a report by `description`, falling back when that's
+                // empty.
                 message: description.split("\n")[0]?.slice(0, 200) || "A problem was reported",
                 description,
                 ...(email !== undefined || name !== undefined
@@ -125,9 +97,8 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
     };
 };
 
-/* Everything the report did not carry: where it happened, which build, what the app said about itself, and what
- * led up to it. Added HERE rather than at each call site so that a crash caught by the handlers and one the app
- * reported by hand arrive identical, which is what lets them group. */
+// Everything the report itself didn't carry: where it happened, the build, breadcrumbs. Added here, not per call site,
+// so a caught crash and a hand-reported one arrive identical and can group.
 const enrich = (report: IssueReport, options: InitOptions, crumbs: Breadcrumbs): IssueReport => {
     const crumbed = crumbs.all();
     return {

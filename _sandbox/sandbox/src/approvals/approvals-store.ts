@@ -4,18 +4,16 @@ import { writeLoadedSkill } from "../settings/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
 import { stateRelPath } from "../workspace/layout/state-paths.js";
 
-// The workspace-relative home the skill text below teaches the agent, the table's spelling, so the prompt
-// can never name a directory the store stopped reading.
+// The workspace-relative home the skill text teaches the agent; can't name a dir the store stopped reading.
 const APPROVALS_DIR = stateRelPath(".intentic/config/approvals/");
 
-// The approvals queue (<workspace>/.intentic/config/approvals/<id>.json, one file per item): the AGENT creates them
-// (taught by APPROVALS_SKILL below), the daemon edits/deletes them for the owner. Per-file, never a shared
-// manifest like automations.json, because the two writers would race a read-modify-write (see json-dir.ts,
-// which owns that cycle and the trust boundary around agent-written names). No secrets live here.
+// The approvals queue: one file per item at <workspace>/.intentic/config/approvals/<id>.json; the agent creates them,
+// the daemon edits/deletes them for the owner.
+// Per-file, never a shared manifest, since two writers would race a read-modify-write (see json-dir.ts). No secrets
+// live here.
 
 export interface ApprovalsStore {
-    // Parsed items (scheduledAt ascending) plus the filenames that failed to parse, an agent typo, or a kind
-    // this daemon does not know, must be visible in the UI, not an item that silently never runs.
+    // Parsed items (scheduledAt ascending) plus filenames that failed to parse; invalid stays visible, not silent.
     readonly list: () => Promise<{ approvals: ApprovalSummary[]; invalid: string[] }>;
     // Upsert by id, approve/edit/retry are all a rewrite of the whole file.
     readonly upsert: (approval: ApprovalSummary) => Promise<void>;
@@ -40,9 +38,8 @@ export const fileApprovalsStore = (dir: string): ApprovalsStore => {
     };
 };
 
-// How the agent learns the file format, the same loaded-skills mechanism every capability connector uses.
-// Triggered by description, so a user prompt like "prepare social media posts" or "book the hotel" routes
-// here without any automation change.
+// How the agent learns the file format: the loaded-skills mechanism every capability connector uses.
+// Triggered by description, so a prompt like "book the hotel" routes here without any automation change.
 const APPROVALS_SKILL = `---
 name: approvals
 description: Prepare things for owner approval instead of doing them: posts to publish, and any action you should not take unasked (a booking, a payment, a message sent as the owner, a deletion). Write one JSON file per item into ${APPROVALS_DIR}/. Use whenever asked to prepare, draft, propose or schedule a post (X, Reddit, YouTube, Discord, …), and whenever you are about to do something outward-facing or irreversible on the owner's behalf.
@@ -145,7 +142,7 @@ they go wrong in the same three places. So, whatever the errand:
   guess at their tone.
 `;
 
-// Approvals are native to every sandbox (like automations), so no capability owns this skill, the daemon
-// converges it at boot (the composeEnvironment pattern), keeping the prose current across daemon updates.
+// Native to every sandbox like automations; no capability owns this skill.
+// The daemon converges it at boot, keeping the prose current across daemon updates.
 export const ensureApprovalsSkill = (services: Pick<Services, "files" | "workspace">): Promise<void> =>
     writeLoadedSkill(services.files, services.workspace.root, "approvals", APPROVALS_SKILL);

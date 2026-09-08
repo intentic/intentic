@@ -5,18 +5,10 @@ import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";
 import { type FrontDeskInstall, embedSnippet, useAutomations, useFrontDeskInstalls } from "./useAutomations";
 
-/* "Did the snippet land?": the question the app could not answer until the config route started recording who
- * asks for it.
- *
- * This panel exists because copying the snippet is the ONLY act that matters for a Front Desk, and everything
- * about it used to happen once, inside the create dialog, at the moment the user was least able to act on it:
- * they had not opened their site's code yet. So the snippet lives here instead, reachable from the row forever,
- * with the thing that was missing entirely beside it, whether a browser has actually loaded it.
- *
- * The refused-origin row is the point of the whole feature. www.example.com and example.com are different
- * origins, a site that redirects one to the other still loads the widget from whichever the browser was on, and
- * before this the symptom was a chat that silently never opened. Now it is a line naming the origin and a
- * button that adds it. */
+// Whether the snippet actually landed: this panel exists since copying it is the only act that matters, moved out of
+// the create dialog into the row, reachable forever, with the missing half (has a browser loaded it) beside it. A
+// refused origin is the point: a www/bare-domain mismatch used to fail silently, now it's a named origin and an Allow
+// button.
 
 const props = defineProps<{ automation: AutomationSummary }>();
 const visible = defineModel<boolean>(`visible`, { default: false });
@@ -33,8 +25,8 @@ const allowedOrigins = computed<string[]>(() => {
     return trigger.kind === `listener` ? [...(trigger.allowedOrigins ?? [])] : [];
 });
 
-// Split rather than sorted: a refused origin is an ACTION and a working one is reassurance, and mixing them by
-// recency would bury the action under the reassurance on a busy site.
+// Split, not sorted by recency: a refused origin is an action, a working one is reassurance, and recency would bury the
+// action on a busy site.
 const refused = computed<FrontDeskInstall[]>(() => installs.value.filter((probe) => !probe.allowed));
 const loaded = computed<FrontDeskInstall[]>(() => installs.value.filter((probe) => probe.allowed));
 
@@ -90,8 +82,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
 
                 <Notice v-if="error" :of="noticeOf(error)" />
 
-                <!-- The waiting state is a real state, not an empty one: it tells the user what to DO to make it
-                     change, which is the only useful thing to say while nothing has happened yet. -->
+                <!-- A real state, not empty: it says what to do to change it, the only useful thing while nothing has happened yet. -->
                 <div v-else-if="installs.length === 0" class="flex items-start gap-2 rounded-md bg-overlay px-3 py-2.5 text-xs text-muted">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                     <span v-if="isLoading">Checking…</span>

@@ -20,7 +20,7 @@ vi.mock("node:timers/promises", async (importOriginal) => ({
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
-// The hosted lane's config, enabled: tests narrow fields per case.
+// Enabled hosted config fixture; each case overrides only the fields it's testing.
 const config = (over?: Record<string, unknown>): Config =>
     ({
         webOrigin: `https://app.test`,
@@ -45,8 +45,7 @@ const config = (over?: Record<string, unknown>): Config =>
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
-            // The schema's own default: no ceiling of this platform's own, so the fleet's size is nobody's
-            // question here. The capacity cases below set it to the number they are about.
+            // No ceiling by default; capacity tests set this to the number under test.
             maxMachines: 0,
         },
         hostedPlan: { compEmails: ``, stripeSecretKey: ``, stripePriceId: `` },
@@ -70,7 +69,7 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
         ),
         $executeRaw: vi.fn().mockResolvedValue(0),
         ...overrides,
-        // An empty pool by default, so every test not ABOUT the pool exercises the cold path it always did.
+        // Empty pool by default so tests not about the pool exercise the cold path.
         hostedPoolMachine: {
             findMany: vi.fn().mockResolvedValue([]),
             updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -92,8 +91,7 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
     return prisma as unknown as OrpcContext[`prisma`];
 };
 
-// `respond` receives the URL so a route can answer per app (the orphan sweep asks each app about its own
-// machines, and what those machines say is the whole subject of its tests).
+// `respond` receives the URL so a route can answer per app; the orphan sweep asks each app about its own machines.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: (url: string) => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
@@ -110,13 +108,8 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
-/* A FLY MACHINE THAT BEHAVES LIKE A REAL ONE ACROSS A CONFIG REPLACEMENT, which is the only way these tests
- * can hold `startAfterUpdate` honest. Two real behaviours matter and a flat stub has neither:
- *   • while the replacement lands, reads say `replacing` and a start is refused with 412
- *   • a STOPPED machine is left stopped by the update, so it runs only once a start has actually landed
- * A fake that answered `started` from the first read would pass a caller that never starts anything, and one
- * that answered `stopped` forever describes a start that returned 200 over a machine that never ran — which
- * is precisely the failure this path shipped. `replacingFor` is how many reads report `replacing` first. */
+// Fake Fly machine mirroring two real behaviours: while replacing, reads return `replacing` and starts get 412; an
+// update leaves a stopped machine stopped until started. `replacingFor` sets how many reads report `replacing` first.
 const settlingMachine = (id: string, options: { replacingFor?: number } = {}) => {
     let replacing = options.replacingFor ?? 0;
     let started = false;
@@ -141,10 +134,9 @@ const settlingMachine = (id: string, options: { replacingFor?: number } = {}) =>
     };
 };
 
-// This deployment's stamp, derived from its own API URL, so the fixtures below say what a machine of OURS
-// looks like without hard-coding a hash anybody would have to update by hand.
+// This deployment's stamp, derived from its own API URL.
 const INSTANCE = hostedInstanceId(config());
-// A Fly machine as the orphan sweep reads it: whose it is, and when it was made.
+// Fly machine as the orphan sweep reads it: whose it is, and when it was made.
 const flyMachine = (over: { platform?: string; ageMinutes?: number; role?: string } = {}) => ({
     id: `m1`,
     state: `stopped`,
@@ -154,9 +146,7 @@ const flyMachine = (over: { platform?: string; ageMinutes?: number; role?: strin
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    // A capacity refusal is remembered for a few minutes (hosted-capacity.ts), and that memory is a module's,
-    // not a fixture's: one case teaching the next that the provider is full would be the kind of shared state
-    // that makes a suite mean nothing.
+    // Clears module-level capacity-refusal memory so tests don't leak state between cases.
     forgetProviderCapacity();
 });
 
@@ -168,10 +158,8 @@ describe(`hostedEnabled`, () => {
     });
 });
 
-/* WHO THIS DEPLOYMENT IS, and the reason it is not just the API URL. The laptop that destroyed production's
- * fleet held a COPY of production's env file, which is how it had the Fly token at all, and a copy carries
- * API_URL with it. What a copy cannot carry is the database: a laptop cannot reach production's Postgres, so
- * it points at its own, and that is the difference the id has to be made of. */
+// Identifies a deployment by its API URL and database address, not credentials, so a copy of the same env file pointed
+// at a different database counts as a different deployment.
 describe(`hostedInstanceId`, () => {
     const withDb = (url: string, over: Record<string, unknown> = {}) => config({ database: { url }, ...over });
 
@@ -187,16 +175,12 @@ describe(`hostedInstanceId`, () => {
         expect(laptop).not.toBe(production);
     });
 
-    // …and the mirror image: a staging box restored from a production dump carries the same database NAME and
-    // answers on its own address.
     it(`differs for the same database name reached at a different address`, () => {
         const production = hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`));
         const staging = hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`, { api: { url: `https://api.staging.test` } }));
         expect(staging).not.toBe(production);
     });
 
-    // The credential never goes into the stamp: this is a label Fly stores in plaintext and shows to anyone
-    // who can read the machine.
     it(`ignores the database's credentials, so the same server under two passwords is one deployment`, () => {
         expect(hostedInstanceId(withDb(`postgresql://app:one@db:5432/intentic`))).toBe(
             hostedInstanceId(withDb(`postgresql://app:two@db:5432/intentic`)),
@@ -215,11 +199,10 @@ describe(`provisionHosted`, () => {
         sandboxId: `s1`,
         connectToken: `t0k3n`,
         ownerEmail: `owner@example.com`,
-        // The route decides this from the caller's country (region.test.ts covers the pick itself).
+        // In production this comes from the caller's country; region.test.ts covers the pick.
         region: `iad`,
     };
-    // The address a machine answers under is a pure derivation of its connect token, the same one the
-    // hostname builders and the edge's routing use.
+    // Hostname a machine answers under, derived from its connect token.
     const hostnameOf = (token: string): string => `sandbox-${sandboxIdFromToken(token)}.sbx.test`;
 
     it(`creates app → volume → machine and stamps the row; the env is the contract's vocabulary`, async () => {
@@ -241,23 +224,20 @@ describe(`provisionHosted`, () => {
             };
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
-        // The platform stamp rides with the role: it is what lets THIS deployment's reaper tell its own
-        // machines from those of anything else sharing the Fly org and credential (fly.ts, hosted.ts).
+        // Platform stamp lets this deployment's reaper distinguish its own machines from others sharing the org.
         expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(`t0k3n`)}`);
-        /* NO TUNNEL. A hosted machine is reached by the edge replaying to its app, so the env carries neither
-         * a grant nor an edge to dial: the two names every pasted run reads are absent here, on purpose. */
+        // Hosted machines are reached via the edge replaying to their app; no tunnel grant or edge to dial.
         expect(machine.config.env[`SANDBOX_GRANT`]).toBeUndefined();
         expect(machine.config.env[`INGRESS_URL`]).toBeUndefined();
-        // …and the front door is declared instead, checked under the hostname the replay arrives with.
+        // Front door is declared instead, checked under the replay hostname.
         expect(machine.config.services.map((service) => service.internal_port)).toEqual([5173]);
         expect(machine.config.checks[`front-door`]?.headers).toEqual([{ name: `Host`, values: [hostnameOf(`t0k3n`)] }]);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
         expect(machine.config.env[`SANDBOX_VM`]).toBe(`1`);
-        // `wokeAt` opens the hour meter's first stretch: the machine is running from the moment it is made,
-        // so provisioning starts the clock rather than handing out an uncounted first session.
+        // `wokeAt` opens the hour meter's first stretch at provisioning, not at first connection.
         expect(created).toHaveBeenCalledWith({
             data: {
                 sandboxId: `s1`,
@@ -283,10 +263,6 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    /* THE FLEET IS FULL, which is where the hosted lane meets the only limit it cannot argue with: the provider
-     * gives this platform a finite number of machines. Refused BEFORE the provider is called, so nobody spends
-     * a round-trip to be told, and refused as its own kind of failure, because every surface above answers it
-     * differently from a fault (sandbox.routes.ts, Setup.vue). */
     it(`refuses without touching the provider when the fleet is at its ceiling`, async () => {
         const fetchSpy = stubFetch([]);
         const full = fakePrisma({
@@ -300,9 +276,6 @@ describe(`provisionHosted`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    /* AND WHEN THE PROVIDER SAYS IT FIRST — the ceiling above is not configured, or the org filled up under us
-     * — the answer is the same one, so a reader never meets Fly's own sentence about an app they have never
-     * heard of. The half-made app still comes back down, exactly as any other failed provision's does. */
     it(`reads the provider's own "no machines left" as the same refusal, and still cleans up`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
@@ -319,10 +292,8 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    /* A warm machine matching the caller's region: ITS identity written in (the SAME composer the cold path
-     * uses, so nothing can drift), prewarm flag written out, machine started, hour meter opened at claim.
-     * The pool machine was named after a token minted when it was built; secrets.key is empty in these
-     * fixtures, so the stored token is the plaintext one. */
+    // Pool machine named after a token minted when it was built; secrets.key is empty in these fixtures, so the stored
+    // token is the plaintext one.
     const POOL_TOKEN = `p00l-t0k3n`;
     const POOL_APP = `intentic-sbx-${sandboxIdFromToken(POOL_TOKEN)}`;
     const SECOND_TOKEN = `p00l-t0k3n-2`;
@@ -358,37 +329,35 @@ describe(`provisionHosted`, () => {
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         expect(result).toEqual({ appName: POOL_APP, region: `iad`, warm: true });
-        // The row was WON, not just read: the guarded update is what keeps two claimers off one machine.
+        // Guarded update (state: `ready`) is what stops two claimers taking the same machine.
         expect(updateMany).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
-        // The identity goes in before the machine ever runs the sandbox, and the prewarm flag goes out.
+        // Identity is written before the machine can run the sandbox; the prewarm flag is cleared here too.
         const update = calls.find((entry) => entry.url.endsWith(`/machines/m7`))?.body as {
             config: { env: Record<string, string>; init?: unknown; mounts: { volume: string }[]; metadata: Record<string, string> };
             skip_launch?: boolean;
         };
-        // The stamp flips with the identity, in the same call: pool-born and built-to-order apps are named
-        // alike, so this is the only thing that can tell Fly this machine stopped being the platform's stock.
+        // Stamp flips with the identity in the same call; it's the only way to tell this machine left the pool.
         expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
-        /* THE MACHINE'S IDENTITY, NOT THE ROW'S. The app was named after a token minted at build, and the edge
-         * replays `sandbox-<id>` to the app named `<prefix>-<id>` with no lookup, so the sandbox served by
-         * this machine has to become the sandbox whose hostname carries this machine's id. */
+        // App was named for its build-time token, and the edge replays `sandbox-<id>` straight to app `<prefix>-<id>`:
+        // this machine's identity must become the sandbox it now serves.
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(POOL_TOKEN);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(POOL_TOKEN)}`);
-        // …and the row is told, in the same transaction as the hand-off: token, digest and id together.
+        // Row is updated in the same transaction as the hand-off: token, digest and id together.
         expect(adopt).toHaveBeenCalledWith({
             where: { id: `s1` },
             data: { token: POOL_TOKEN, tokenDigest: sha256Hex(POOL_TOKEN), tunnelId: sandboxIdFromToken(POOL_TOKEN) },
         });
         expect(update.config.init).toBeUndefined();
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
-        // The branding call IS the launch. Holding it back (skip_launch) and starting afterwards raced Fly's
-        // `replacing` state and refused every claim this pool ever made.
+        // The branding call is the launch itself; holding it back with skip_launch and starting separately races Fly's
+        // `replacing` state.
         expect(update.skip_launch).toBeUndefined();
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m7/start`))).toBe(true);
-        // And the start LANDED. An update leaves a stopped machine stopped, so "we asked" is not the claim's
-        // job here — a row committed over a machine that never ran is the sandbox that never comes up.
+        // An update leaves a stopped machine stopped; the claim must confirm the start landed, not just that it was
+        // requested.
         expect(machine.started).toBe(true);
-        // The user's clock starts here: the pool's own no-op boot was the platform's cost, not theirs.
+        // User's clock starts at claim, not at the pool's earlier no-op boot.
         expect(created).toHaveBeenCalledWith({
             data: {
                 sandboxId: `s1`,
@@ -403,21 +372,6 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
     });
 
-    /* TWO OUTAGES MEET IN THIS ONE TEST, and each one's fix is the other's bug unless `replacing` is treated
-     * as neither failure nor success.
-     *
-     * THE FIRST: the branding update puts a machine through Fly's `replacing` state for a few seconds, and a
-     * start fired inside that window is refused with `412 machine getting replaced`. Reading that as "this
-     * warm machine is bad" killed every claim, burned both warm machines of the caller's region per sign-up,
-     * and handed every reader the cold build the pool exists to spare. So `replacing` must NOT fall back.
-     *
-     * THE SECOND, which the fix for the first one caused: `replacing` was then counted as "coming up" and the
-     * claim committed on the strength of it. But a replacement resolves to STOPPED for a machine that was
-     * stopped when it started — every pool machine — so the row was handed over, the meter opened, and the
-     * machine never ran. The owner got "the machine we started for you isn't running" and the canary reported
-     * a warm machine "provisioned but never checked in". So `replacing` must NOT count as started either.
-     *
-     * It is a state to WAIT OUT: let it settle, then start, then confirm the machine really is running. */
     it(`waits out the replacement, then starts the machine: replacing is neither a dead row nor a running one`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
@@ -437,11 +391,9 @@ describe(`provisionHosted`, () => {
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
         expect(result).toEqual({ appName: POOL_APP, region: `iad`, warm: true });
-        // No cold build was touched, and the hand-off committed: the reader owns the warm machine.
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m7` }) }));
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p1` } });
-        // The half the earlier fix lost: the machine is actually RUNNING, not merely handed over.
         expect(machine.started).toBe(true);
     });
 
@@ -454,9 +406,8 @@ describe(`provisionHosted`, () => {
         const findMany = vi.fn().mockResolvedValue([]);
         const prisma = fakePrisma({ hostedMachine: { create: vi.fn().mockResolvedValue({}) }, hostedPoolMachine: { findMany } });
         await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
-        // The pool was asked ONLY for the caller's region (and the current image): never "anything warm".
         expect(findMany).toHaveBeenCalledWith({
-            // …and only for stock that has an identity: a row with none names no app the edge could reach.
+            // Excludes pool rows with no token: such a row names no app the edge could reach.
             where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable`, NOT: { token: `` } },
             orderBy: { createdAt: `asc` },
         });
@@ -467,9 +418,7 @@ describe(`provisionHosted`, () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
         const calls = stubFetch([
-            // The brand fails on the warm machine…
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ error: `host unavailable` }, 500) },
-            // …and the cold path proceeds as if the pool never existed.
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
@@ -486,15 +435,12 @@ describe(`provisionHosted`, () => {
         expect(result.appName.startsWith(`intentic-sbx-`)).toBe(true);
         expect(result.appName).not.toBe(POOL_APP);
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
-        // The won row is NOT put back: a half-branded machine already carries this sandbox's tokens, so it
-        // stays `claimed` for the reconcile job to collect rather than becoming someone else's "warm" machine.
+        // Won row stays `claimed`, not put back: a half-branded machine already carries this sandbox's tokens, so
+        // reconcile collects it instead.
         expect(poolDelete).not.toHaveBeenCalled();
     });
 
-    /* THE REGRESSION THIS PINS SHUT: the claim used to abandon the pool at the first refusal, so a machine Fly
-     * had destroyed under its row cost a reader the whole cold build while a live warm machine sat unclaimed
-     * beside it, in their own region, for every minute of the wait. Candidates come oldest-first, which is
-     * exactly the order that hands out the longest-standing (most likely dead) row before any healthy one. */
+    // Candidates are tried oldest-first, so the most likely-dead row is tried before any healthy one.
     it(`tries the next warm machine when the first one is gone: one dead row must not cost a cold build`, async () => {
         const created = vi.fn().mockResolvedValue({});
         const poolDelete = vi.fn().mockResolvedValue({});
@@ -515,22 +461,17 @@ describe(`provisionHosted`, () => {
             },
         });
         const result = await provisionHosted(prisma as never, config(), logger, args);
-        // The reader gets the SECOND warm machine, in seconds, and the cold path is never touched.
         expect(result).toEqual({ appName: SECOND_APP, region: `iad`, warm: true });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(calls.some((entry) => entry.url.endsWith(`/machines/m8/start`))).toBe(true);
         expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m8` }) }));
-        // Only the claimed row goes; the dead one stays `claimed` for the reconcile to collect.
+        // Dead row stays `claimed` for reconcile; only the claimed p2 row is removed here.
         expect(poolDelete).toHaveBeenCalledTimes(1);
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p2` } });
     });
 
-    /* THE OTHER REASON A CLAIM'S ROW-WRITE FAILS, and the one that must NOT be read as "this warm machine is
-     * bad". `sandboxId` is unique on HostedMachine, so a second provision for the same sandbox — a second tab,
-     * a retried request, the desktop app beside the browser — loses its write. Walking to the next candidate
-     * then brands, starts and strands EVERY ready machine in the region, one at a time, for a sandbox that
-     * already has one: the pool the next arrival was going to claim is gone, and several machines are running
-     * the same connect token until the reconcile collects them. */
+    // A duplicate write on `sandboxId` means the sandbox already has a machine, not that the warm machine is bad;
+    // treating it as the latter would strand every ready machine in the region.
     it(`abandons the claim when the sandbox was provisioned concurrently, instead of burning the region's stock`, async () => {
         const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed on the fields: (sandboxId)`, {
             code: `P2002`,
@@ -549,27 +490,22 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: {
                 create: created,
-                // What `alreadyProvisioned` asks: the winner's row is there, so this really is the race and
-                // not an appName collision on one bad pool app.
+                // Winner's row already exists: this is the concurrent-provision race, not an appName collision.
                 findUnique: vi.fn().mockResolvedValue({ id: `hm1` }),
             },
             hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow, second]), updateMany: claim, delete: poolDelete },
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
-        // ONE row branded, not every row in the region: the guarded `ready` → `claimed` win is the pool's
-        // whole cost per attempt, and it must be paid exactly once however the row-write then fails.
+        // Exactly one row is branded per attempt: the guarded ready-to-claimed win must be paid once regardless of how
+        // the write then fails.
         expect(claim).toHaveBeenCalledTimes(1);
         expect(claim).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
-        // The second warm machine is never touched, and no cold app is built either: exactly one machine is
-        // spent on losing the race.
         expect(calls.some((entry) => entry.url.includes(`/machines/m8`))).toBe(false);
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
         expect(created).toHaveBeenCalledTimes(1);
     });
 
-    // The same race one step later: the cold path's own row-write loses. Its app is unambiguously its own (a
-    // name collision would have failed at createApp), so it is taken back down and the winner's machine is the
-    // answer — not a gateway error over a sandbox that has a machine.
+    // Its own app is unambiguous here: a name collision would already have failed at createApp.
     it(`takes its own cold app back down and reports the race when the row-write loses`, async () => {
         const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed`, { code: `P2002`, clientVersion: `test` });
         const calls = stubFetch([
@@ -604,20 +540,14 @@ describe(`wakeHosted`, () => {
     });
 });
 
-/* THE SWEEP THAT CAUSED THE OUTAGE, and the three rules that keep it from causing another one.
- *
- * What it used to be: "every app under our prefix that our database cannot explain is litter". A Fly org is
- * shared by everything holding its credential, an app name carries no owner, and a second deployment (a
- * staging box, a laptop with a copy of the production env) therefore reads production's entire fleet as
- * litter. It destroyed all of it. The rows survived, pointing at machines that no longer existed, so every
- * affected person met a "start it over" button that could not, in principle, work. */
+// A Fly org is shared by every deployment holding its credential, and an app name alone proves no owner, so reaping
+// must key off this platform's own stamp, not an unexplained app under the prefix.
 describe(`reapHostedOrphans`, () => {
     const appList = (...names: string[]) => ({
         match: (method: string, url: string) => method === `GET` && url.includes(`/apps?org_slug=`),
         respond: () => json({ apps: names.map((name) => ({ name })) }),
     });
-    // Every app's machines answer from one table, keyed by the app named in the URL; an app missing from the
-    // table has none, which is also how an empty app (volumes only) is modelled.
+    // Machines keyed by app name; an app missing from the table has none (also models a volume-only app).
     const machinesOf = (byApp: Record<string, unknown[]>) => ({
         match: (method: string, url: string) => method === `GET` && (url.endsWith(`/machines`) || url.endsWith(`/volumes`)),
         respond: (url: string) => json(url.endsWith(`/volumes`) ? [] : (byApp[Object.keys(byApp).find((app) => url.includes(app)) ?? ``] ?? [])),
@@ -637,19 +567,16 @@ describe(`reapHostedOrphans`, () => {
                 `intentic-sbx-orphan`,
                 `intentic-sbx-stranger`,
                 `intentic-sbx-unstamped`,
-                // A warm machine waiting in the pool is OURS ON PURPOSE: a reaper that eats the pool every
-                // night would silently turn every claim back into a cold build.
+                // Warm pool machine is ours on purpose; reaping it nightly would turn every claim into a cold build.
                 `intentic-sbx-pool-warm1`,
                 `unrelated-app`,
             ),
             machinesOf({
                 "intentic-sbx-orphan": [flyMachine({ platform: INSTANCE })],
-                // Another deployment's machine, in the same org, under the same prefix. Destroying this is
-                // the outage; leaving it standing is the entire point of the stamp.
+                // Different platform stamp: another deployment's machine in the same org/prefix must be left standing.
                 "intentic-sbx-stranger": [flyMachine({ platform: `deadbeefcafe` })],
-                // No stamp at all: a machine from before this rule existed, or from a deployment that has not
-                // been updated yet. Unprovable is not the same as unwanted, so it stands (the health sweep
-                // reports it for a human instead).
+                // No stamp: predates the rule or an unupdated deployment; left standing, flagged by the health sweep
+                // instead.
                 "intentic-sbx-unstamped": [flyMachine()],
             }),
             deleteRoute,
@@ -658,18 +585,10 @@ describe(`reapHostedOrphans`, () => {
         const deleted = deletedApps(calls);
         expect(deleted).toHaveLength(1);
         expect(deleted[0]).toContain(`intentic-sbx-orphan`);
-        // Never even asked about: the prefix is still the jurisdiction, and a stranger's app outside it is
-        // not this platform's business to read, let alone destroy.
+        // Prefix is the jurisdiction: an app outside it is never even queried.
         expect(calls.some((entry) => entry.url.includes(`unrelated-app`))).toBe(false);
     });
 
-    /* A BUILDER CARRIES THE STAMP TOO, and the sweep must read it. An overlay build puts a SECOND machine in a
-     * sandbox's own app for the minutes it runs (hosted-build.ts), stamped `build` rather than `sandbox`, and
-     * an app can end up holding nothing but that one: a sandbox deleted while its build was in flight, a
-     * provision that failed after its builder was made. Ownership is read off whatever machines an app has, so
-     * a rule that believed only the `sandbox` and `warm` stamps would answer `unknown` here and leave a machine
-     * the platform is paying for standing forever, in an app nothing can ever prove is its own — the same
-     * "unprovable, therefore immortal" shape the empty-app case below exists to close. */
     it(`reads an app holding only a builder as its own: a build stamp proves ownership like any other`, async () => {
         const calls = stubFetch([
             appList(`intentic-sbx-leftover-builder`),
@@ -682,9 +601,6 @@ describe(`reapHostedOrphans`, () => {
         expect(deleted[0]).toContain(`intentic-sbx-leftover-builder`);
     });
 
-    /* A cold provision is app → volume → machine → row, minutes end to end, and for every one of them the app
-     * exists with nothing in the database to vouch for it. A sweep landing in that window used to destroy the
-     * machine of somebody who was, at that moment, watching it come up. */
     it(`leaves a young app alone: a provision in flight owns Fly resources before its row exists`, async () => {
         const calls = stubFetch([
             appList(`intentic-sbx-newborn`),
@@ -695,22 +611,15 @@ describe(`reapHostedOrphans`, () => {
         expect(deletedApps(calls)).toHaveLength(0);
     });
 
-    // An app's volumes, with an age, so the two verdicts about an app holding no machine can be told apart.
+    // App's volumes with an age, to distinguish the two verdicts for an app holding no machine.
     const volumesAged = (ageMinutes: number) => ({
         match: (method: string, url: string) => method === `GET` && url.endsWith(`/volumes`),
         respond: () => json([{ id: `vol_1`, created_at: new Date(Date.now() - ageMinutes * 60_000).toISOString() }]),
     });
     const noMachines = { match: (method: string, url: string) => method === `GET` && url.endsWith(`/machines`), respond: () => json([]) };
 
-    /* AN APP WITH NOTHING IN IT, which used to stand forever. The stamp lives on a MACHINE, so an app holding
-     * none has nothing to be proved by, and "unprovable" meant "leave it": the sweep logged it as unprovable
-     * every night, the health watch counted it as a stranger every fifteen minutes, and the admins were mailed
-     * about a fleet-loss that had not happened, on a schedule nothing could ever clear.
-     *
-     * Emptiness is its own evidence. A machine is the only thing that runs in an app, so an app without one is
-     * running nothing and can cost nobody their sandbox; past the grace window with no row behind it, the only
-     * things that produce this shape are a failed provision of ours and a failed provision of somebody
-     * else's — litter under either reading. */
+    // Past the grace window, an empty app can only be a failed provision, ours or someone else's, so it's collected
+    // either way.
     it(`collects an app holding no machine at all, which nothing could ever prove was ours`, async () => {
         const calls = stubFetch([appList(`intentic-sbx-hollow`), noMachines, volumesAged(120), deleteRoute]);
         await reapHostedOrphans(knownRows as never, config(), logger);
@@ -719,17 +628,14 @@ describe(`reapHostedOrphans`, () => {
         expect(deleted[0]).toContain(`intentic-sbx-hollow`);
     });
 
-    // And the safety property that makes the rule above sound: the SAME empty shape, minutes old, is a cold
-    // provision caught between its own steps (app → volume → machine → row) and must be left completely alone.
     it(`leaves an empty app whose volume was made minutes ago: that is a provision mid-flight`, async () => {
         const calls = stubFetch([appList(`intentic-sbx-mid-provision`), noMachines, volumesAged(2), deleteRoute]);
         await reapHostedOrphans(knownRows as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
 
-    /* THE CIRCUIT BREAKER. Every input this sweep has is "the database did not mention it", so every way the
-     * database can be wrong (a replica on the wrong DSN, a restore in flight, migrations that have not run)
-     * reads as "destroy everything" — and the sweep is most confident exactly when it is most wrong. */
+    // Every signal here is "the database didn't mention it", so a wrong database (bad replica, restore in flight, unrun
+    // migration) reads as "destroy everything", exactly when the sweep is most confident and most wrong.
     it(`refuses the whole pass when it would destroy an implausible share of the fleet`, async () => {
         const ours = Array.from({ length: 8 }, (_, index) => `intentic-sbx-${index}`);
         const calls = stubFetch([
@@ -751,17 +657,13 @@ describe(`reapHostedOrphans`, () => {
 
 describe(`sandbox routes: the hosted lane's gates`, () => {
     const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
-    /* HostedMachine is counted with two different questions in one request, and a fixture that answered both
-     * the same way would describe an account owning the entire fleet: `where` names an owner (the per-user
-     * allowance), no argument counts every machine the platform holds (the ceiling, hosted-capacity.ts). This
-     * says what the FLEET holds while leaving the caller's own allowance untouched. */
+    // hostedMachine.count answers two different questions per request: no `where` means the whole fleet (the ceiling);
+    // a `where` means one owner's allowance. This stub only answers the fleet question.
     const fleetOf = (machines: number) =>
         vi.fn().mockImplementation((query?: { where?: unknown }) => Promise.resolve(query?.where === undefined ? machines : 0));
 
-    /* `headers` is part of every real request and two routes read it: the region pick (region.ts, cf-ipcountry)
-     * decides where a machine lands, and the offer asks about the stock of the region the caller would be
-     * served from. Empty here means "cannot tell", which is the US default and exactly what a self-hosted
-     * platform with no Cloudflare in front of it sees. */
+    // `headers` feeds the region pick and the offer's stock-region check; empty means "cannot tell", the same as a
+    // self-hosted platform with no Cloudflare in front.
     const routeContext = (over?: Partial<OrpcContext>): OrpcContext =>
         ({ prisma: fakePrisma({}), config: config(), user, logger, headers: new Headers(), ...over }) as OrpcContext;
 
@@ -773,18 +675,14 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const on = await call(sandboxRoutes.hostedOffer, undefined, {
             context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: vi.fn().mockResolvedValue(0) } }) }),
         });
-        // A non-member on a platform with a ceiling is told the ceiling BEFORE spending any of it, so the
-        // lane's card can caption itself honestly rather than saying "Free" and correcting itself later.
+        // Ceiling is surfaced before any of it is spent, so the offer card doesn't say "free" and correct itself later.
         expect(on).toEqual({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     });
 
-    /* The hours block is ABSENT for anyone the ceiling does not apply to, rather than present and generous.
-     * A member being shown a limit they do not have is the failure this shape exists to prevent, and the
-     * same absence covers a self-hosted platform that meters nothing. */
     it(`hostedOffer tells a member nothing about hours, because none apply to them`, async () => {
         const member = fakePrisma({
             hostedMachine: { count: vi.fn().mockResolvedValue(0) },
-            // A plan row as the slot read selects it: status and how many hosted sandboxes it covers.
+            // Plan row: status and how many hosted sandboxes it covers.
             hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, quantity: 1 }) },
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
@@ -796,8 +694,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1 });
-        // Where the plan is actually sold, the same owner is told they are on it, so the card can say "always
-        // on" instead of "free": the two reasons `hours` is absent must not read alike.
+        // Where the plan is actually for sale, the same owner is told they're on it (`plan: true`), distinguishing this
+        // from the uncapped case above.
         const selling = routeContext({
             prisma: member,
             config: config({ hostedPlan: { ...config().hostedPlan, stripeSecretKey: `sk`, stripePriceId: `price` } }),
@@ -805,8 +703,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({ enabled: true, remaining: 1, plan: true });
     });
 
-    /* The gate itself: a non-member who has spent the month is refused the wake, and told both ways out. The
-     * refusal is PAYMENT_REQUIRED so the editor can offer the membership without reading the sentence. */
+    // PAYMENT_REQUIRED specifically, so the editor can offer membership without parsing the message.
     it(`wake refuses a non-member whose month is spent, and never touches the provider`, async () => {
         const fetchSpy = stubFetch([]);
         const spent = fakePrisma({
@@ -823,7 +720,6 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    // Same spent month, but the owner is a member: unmetered, so the machine starts and the meter is not read.
     it(`wake starts a member's machine however much of the month has been used`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
         const spentMember = fakePrisma({
@@ -838,7 +734,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spentMember }) })).toEqual({ ok: true });
     });
 
-    // The row every provision test starts from: created the ordinary way, tunnel already claimed from the pool.
+    // Baseline sandbox row: ordinary creation, tunnel already claimed.
     const ownedRow = {
         id: `s1`,
         name: `mine`,
@@ -864,10 +760,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    /* WHAT THE PAGE READS BEFORE IT DRAWS ANYTHING. A browser arrival provisions without being asked
-     * (setupArrival.ts), so "is there a machine to give" has to be answerable BEFORE that, or the first screen
-     * of the product on the day we fill up is a failed provision. Nothing to do with `remaining`, which is this
-     * account's own untouched allowance in exactly this fixture. */
+    // `remaining` here is this account's own untouched allowance, separate from the fleet-wide ceiling being tested.
     it(`hostedOffer says the lane is full when the fleet is at its ceiling with no stock left`, async () => {
         const full = fakePrisma({
             hostedMachine: { count: fleetOf(100) },
@@ -883,14 +776,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
     });
 
-    /* …and stock still counts as a machine to give, because claiming one creates nothing. A fleet sitting on
-     * its ceiling with a warm machine in the caller's region can serve them in seconds, and a card that said
-     * "full" over it would send somebody to install Docker for no reason at all. */
+    // Claiming warm stock creates nothing new, so it still counts as a machine to give even at the fleet ceiling.
     it(`hostedOffer keeps offering while there is warm stock the caller could claim`, async () => {
         const stocked = fakePrisma({
             hostedMachine: { count: fleetOf(98) },
-            // Two pool machines, both claimable: the same answer whether the count is asked about the whole
-            // pool or only the stock that is ready, which is what this fleet actually holds.
+            // Both machines are claimable, so the count reads the same whether it asks about the whole pool or just
+            // ready stock.
             hostedPoolMachine: { count: vi.fn().mockResolvedValue(2) },
             hostedBuild: { count: vi.fn().mockResolvedValue(0) },
         });
@@ -902,10 +793,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
     });
 
-    /* THE REFUSAL A READER ACTUALLY MEETS when the offer said there was room and the provisioning found none
-     * (a machine taken between the two reads, a replica that had not seen the provider refuse). It must not be
-     * a gateway error: those read as "something broke", and the editor cannot tell the difference between one
-     * it should retry and one it should replace with the other rung. */
+    // Not a gateway error: the editor can't tell a retryable fault from a capacity refusal it should treat differently.
     it(`hostedProvision answers a full fleet as unavailable, in words a person can act on`, async () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
@@ -932,8 +820,6 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         ).rejects.toMatchObject({ code: `NOT_FOUND` });
     });
 
-    // Idempotence is what makes a double-click (or a retry after a slow response) free rather than a second
-    // machine nobody asked for and everybody pays for.
     it(`hostedProvision answers with the sandbox it already hosts, without creating anything`, async () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
@@ -944,15 +830,11 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: vi.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
-        // `warm` is read off the app name (a pool claim keeps its pool name): the wait card's promise rides on it.
+        // `warm` is read off the app name: a pool claim keeps its pool-assigned name.
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(fetchSpy).toHaveLength(0);
     });
 
-    /* Idempotence again, for the case the check above cannot cover: the two calls OVERLAP. `existing` is a read
-     * with no lock behind it, so a second tab, a retried request or the desktop app beside the browser both get
-     * past it and one of them loses its row-write. The reader who lost is owed the machine that exists, not a
-     * gateway error about a sandbox that is, by then, perfectly hosted. */
     it(`hostedProvision answers with the winner's machine when a concurrent provision beat it`, async () => {
         const calls = stubFetch([
             {
@@ -972,24 +854,19 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 update: vi.fn().mockResolvedValue(ownedRow),
             },
             hostedMachine: {
-                // Null for the route's own pre-flight read, then the winner's row for the question
-                // `provisionHosted` asks once its write is refused.
+                // Null for the route's own pre-flight read, then the winner's row once the write is refused.
                 findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
                 count: vi.fn().mockResolvedValue(0),
                 create: vi.fn().mockRejectedValue(duplicate),
             },
         });
-        // `headers` is the region pick's only input (region.ts reads cf-ipcountry): absent means "cannot tell",
-        // which is the US default, exactly as it is for a self-hosted platform with no Cloudflare in front.
         const context = routeContext({ prisma, headers: new Headers() });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context });
-        // The winner's machine, and the loser's own half-built app taken back down behind it.
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
     });
 
-    // The lane switch: a sandbox nobody ever connected to can hand its machine back. One that HAS connected
-    // cannot: that is a workspace with files on it, and destroying its machine belongs to the delete dialog.
+    // A connected sandbox has files on its machine; destroying that belongs to the delete dialog, not release.
     it(`hostedRelease destroys the machine of a never-started sandbox and refuses on a live one`, async () => {
         const calls = stubFetch([{ match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) }]);
         const machineDelete = vi.fn().mockResolvedValue({});
@@ -1000,8 +877,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
         expect(summary.hosted).toBeNull();
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
-        // Once, to match the single provider DELETE above. Releasing twice would leave the row gone and the
-        // second call racing whatever claimed the name next, and "it was called" cannot see that.
+        // Called once: a second delete would race whatever claims the freed app name next.
         expect(machineDelete).toHaveBeenCalledTimes(1);
 
         const live = fakePrisma({
@@ -1014,8 +890,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {
-        // A restart replaces the config too, so it meets the same "update leaves a stopped machine stopped"
-        // rule the pool claim does — the machine has to be observed running, not merely asked to run.
+        // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
         const machine = settlingMachine(`m1`);
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
@@ -1049,17 +924,15 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(update.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`tok`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        // The replacement carries the launch; the wake that follows only confirms it (fly.ts).
+        // The replacement itself carries the launch; the wake that follows only confirms it landed (fly.ts).
         expect(update.skip_launch).toBeUndefined();
         expect(calls.findIndex((entry) => entry.url.endsWith(`/machines/m1`))).toBeLessThan(
             calls.findIndex((entry) => entry.url.endsWith(`/machines/m1/start`)),
         );
     });
 
-    /* THE BUTTON THAT COULD NOT WORK. A machine destroyed provider-side leaves a row pointing at nothing, so
-     * every refresh answers 404 and the setup card's one recovery failed forever, for exactly the people most
-     * likely to press it. There is nothing on a machine that does not exist to preserve, so the honest
-     * recovery is a new machine on the same sandbox: same name, same address, same sharing, empty disk. */
+    // Same sandbox identity (name, address, sharing) on a fresh, empty disk; nothing on a destroyed machine is worth
+    // preserving.
     it(`hostedRestart builds a replacement when the provider says the machine is gone`, async () => {
         const machineCreate = vi.fn().mockResolvedValue({});
         const rowDelete = vi.fn().mockResolvedValue({});
@@ -1070,9 +943,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
                 respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
             },
-            // The refresh of the machine that is gone…
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ error: `app not found` }, 404) },
-            // …and the cold build that replaces it.
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a2` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_2` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m2`, state: `created` }) },
@@ -1089,15 +960,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             },
         });
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
-        // The dead row goes first: `sandboxId` is unique on that table, so the replacement could not be
-        // written beside it, and a machine with no row is what the reaper collects.
+        // Dead row is deleted first: `sandboxId` is unique, so the replacement can't be written beside it.
         expect(rowDelete).toHaveBeenCalledWith({ where: { id: `h1` } });
         expect(machineCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m2`, sandboxId: `s1` }) }));
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
     });
 
-    // The other half of the same rule: a refusal that is NOT "there is no such machine" must never be read as
-    // one, or a bad minute at the provider would throw away a working machine and its disk.
     it(`hostedRestart destroys nothing when the provider merely refuses`, async () => {
         const rowDelete = vi.fn();
         stubFetch([
@@ -1125,8 +993,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(rowDelete).not.toHaveBeenCalled();
     });
 
-    // The wait card cannot narrate what the route will not say: a destroyed machine reads as `gone`, never as
-    // the `unknown` that means "keep waiting, we cannot see".
+    // Distinguish from `unknown`, which means keep waiting; `gone` must only mean actually destroyed.
     it(`hostedStatus answers gone when the provider says there is no such machine`, async () => {
         stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `app not found` }, 404) }]);
         const prisma = fakePrisma({
@@ -1141,12 +1008,6 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toBeInstanceOf(ORPCError);
     });
 
-    /* THE WEDGE THIS ROUTE IS THE ONLY WITNESS TO. The browser's wake reflex fires the instant a hosted daemon
-     * stops answering, so when the machine has been destroyed under its row — by hand at the provider, or by
-     * another deployment sharing the org — this is the one call that ever learns it. It used to answer
-     * BAD_GATEWAY and change nothing: the row went on holding the owner's single free machine, the sandbox went
-     * on advertising the dead address, and the workspace sat on "waiting for the sandbox to answer" until
-     * somebody deleted the whole sandbox to escape. Both facts are given up here now. */
     it(`wake drops the row and the sandbox's dead address when the provider has no such machine`, async () => {
         stubFetch([{ match: () => true, respond: () => json({ error: `machine not found` }, 404) }]);
         const written: unknown[] = [];
@@ -1163,14 +1024,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
             code: `NOT_FOUND`,
         });
-        // The row, so `hostedOffer` stops counting a machine that does not exist against the owner's allowance…
+        // Row is dropped so hostedOffer stops counting a machine that no longer exists against the owner's allowance.
         expect(written).toContainEqual({ where: { id: `h1` } });
-        // …and the address, so the browser reads "not connected" (and offers setup) instead of reconnecting forever.
+        // Address is cleared so the browser reads "not connected" and offers setup, instead of reconnecting forever.
         expect(written).toContainEqual({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
-    // A provider having a bad minute is not evidence of anything: the row and the address must survive it, or
-    // one Fly hiccup would hand every hosted sandbox back to the setup wizard.
+    // A refusal is not evidence of anything; treating it as "gone" would reset every hosted sandbox on one bad minute.
     it(`wake keeps the row when the provider merely refuses`, async () => {
         stubFetch([{ match: () => true, respond: () => json({ error: `host unavailable` }, 500) }]);
         const remove = vi.fn();
@@ -1196,7 +1056,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             { context: routeContext({ prisma: fakePrisma({ sandbox: { findFirst } }) }) },
         );
         expect(result).toEqual({ ok: true });
-        // The access query admits owner OR accepted member: the OR is the contract here.
+        // Access query admits owner OR accepted member; the OR is the contract under test.
         expect(findFirst.mock.calls[0]?.[0]?.where?.OR).toHaveLength(2);
     });
 });

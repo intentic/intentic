@@ -9,12 +9,8 @@ const TOPUP_CAP = 256;
 const TOPUP_TIME_MS = 2000;
 const BATCH = 16;
 
-// Opportunistic embedding top-up during a natural-language query: fill NULL embeddings until the cap or time budget runs out.
-// Returns how many chunks remain unembedded (0 = semantic coverage is complete).
-//
-// The cache is consulted per chunk hash BEFORE the model: a rebuilt index refills from vectors computed in a
-// previous life at SQLite speed, and only text the cache has never seen pays for inference. Chunks that share a
-// hash (identical text in two places) are embedded once and fan out.
+// Opportunistic embedding top-up during a query: fills NULL embeddings until the cap or budget runs out, returns how
+// many remain (0 = complete). Cache is checked before the model per hash; shared hashes embed once.
 export const embedPending = async (
     db: IndexDb,
     embedder: Embedder,
@@ -48,9 +44,8 @@ export const embedPending = async (
         db.transaction(() => {
             for (const row of rows) {
                 const hash = row["hash"] as string;
-                // The cache holds full-precision vectors; quantizing is the vector table's business, and
-                // happens on the way in. Keeping the cache at float means a re-embed is never needed if the
-                // stored precision ever changes.
+                // Cache stays full-precision; quantizing happens entering the vector table, so precision changes skip
+                // re-embed.
                 const blob = cached.get(hash) ?? fresh.get(hash)!;
                 putVector(db, Number(row["id"]), Number(row["file_id"]), new Float32Array(blob.buffer, blob.byteOffset, blob.byteLength / 4));
             }
@@ -60,18 +55,8 @@ export const embedPending = async (
     return Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"] ?? 0);
 };
 
-/* Rank inside SQLite, then read only what is shown.
- *
- * The shape this replaced pulled every embedded chunk, vector AND text, into JavaScript and scored them in a
- * loop, which on this workspace's index meant 98MB of vectors and 30MB of text read per query to return 24 rows
- * of answer. Three quarters of the 286ms that cost was the reading alone, and the garbage it made accounted for
- * 14.6% of the time. Here the vector table does the ranking and hands back 24 chunk ids; the text those need is
- * a second lookup of 24 rows, and the whole query is 31ms.
- *
- * Scope is pushed into that ranking rather than applied after it. Filtering the top 24 of the whole workspace
- * down to the ones in scope would answer a different question, the scoped top 24 can be nowhere near the
- * global one, so `allowed` becomes a file-id restriction the ranking itself honours. When every indexed file
- * is in scope, which is the ordinary case, there is no restriction to apply and none is built. */
+// Ranks inside SQLite, then reads only the shown chunks' text, instead of pulling every vector into JS. Scope is pushed
+// into the ranking itself, since a global top-K can differ from the scoped one.
 export const semanticSearch = (db: IndexDb, queryVec: Float32Array, allowed: ReadonlySet<string>): EngineHit[] => {
     const files = db.all("SELECT id, path FROM files");
     const allowedIds = files.filter((file) => allowed.has(file["path"] as string)).map((file) => Number(file["id"]));
@@ -106,8 +91,7 @@ export const semanticSearch = (db: IndexDb, queryVec: Float32Array, allowed: Rea
                     },
                 ];
             })
-            // Ties come back from SQLite in whatever order it walked them; the old scorer broke them by path then
-            // line, and callers (and tests) depend on one query giving one answer.
+            // Ties come from SQLite in whatever order walked; broken by path then line so one query gives one answer.
             .toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1) || a.line - b.line)
             .map(({ path, line, text, score }) => ({ path, line, text, tags: [{ kind: "sem" as const, score: Math.round(score * 100) / 100 }] }))
     );

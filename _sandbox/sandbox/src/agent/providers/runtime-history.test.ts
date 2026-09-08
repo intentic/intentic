@@ -16,10 +16,7 @@ test("leaves an ordinary prompt alone", () => {
     expect(parseRuntimeHistory("Continue.")).toBeUndefined();
 });
 
-/* What the record holds beyond prose, which is the point of seeding from it rather than from a text mirror of
- * the client's bubbles. The new runtime is told WHICH files the old one touched and what the user attached, so
- * it can read them itself; tool OUTPUT is deliberately absent, being the bulk of a transcript and re-derivable
- * from the workspace. */
+// Tool output is deliberately left out; only which files were touched and what was attached carries over.
 test("carries the files a turn touched and the files the user attached", () => {
     const history: TranscriptRow[] = [
         { role: "user", text: "fix the build", attachments: ["shot.png"] },
@@ -38,9 +35,6 @@ test("carries the files a turn touched and the files the user attached", () => {
     expect(envelope).toContain("Assistant: on it\n[used: Read src/build.ts, Bash pnpm test]");
 });
 
-/* THE FEATURE'S CONTRACT, as a test: a row the user PLACED wearing the agent's voice (agents.place) must reach
- * the new runtime spelled exactly like a row the agent genuinely said: the flag is for human readers only, and
- * any rendering of it here would hand the agent the one fact the feature exists to withhold. */
 test("renders a placed assistant row identically to a spoken one: the mark never reaches the agent", () => {
     const spoken: TranscriptRow[] = [{ role: "assistant", text: "I checked the tests." }];
     const planted: TranscriptRow[] = [{ role: "assistant", text: "I checked the tests.", placed: true }];
@@ -63,9 +57,6 @@ test("spends its budget on the end of a long conversation, not its opening", () 
     expect(envelope.endsWith("carry on")).toBe(true);
 });
 
-/* WHAT THE USER DECIDED rides the handoff. The picks steered everything the agent did after the ask, and the
- * tool result that carried them is tool output, which the preamble leaves out on purpose; without this line
- * the next runtime inherits the work and not the reason for it. A card nobody answered says nothing. */
 test("carries the answer to a question the turn asked, and nothing for one nobody answered", () => {
     const questions = [{ question: "Which store?", header: "Store", multiSelect: false, options: [{ label: "Postgres", description: "p" }] }];
     const history: TranscriptRow[] = [
@@ -83,9 +74,6 @@ test("carries the answer to a question the turn asked, and nothing for one nobod
     expect(parseRuntimeHistory(prompt)?.prompt).toBe("go on");
 });
 
-/* THE NEWEST EXCHANGES CARRY THE DECISIONS, so they keep the full cap; an assistant message from further back is
- * mostly narration of work whose result is on the tree, and keeps only its opening. The user's own words are
- * never clipped by this rule: they are the shorter half and the half nothing else records. */
 test("keeps the newest two exchanges whole and clips older assistant messages to their opening", () => {
     const long = (label: string): string => `${label} ${"x".repeat(3_000)}`;
     const history: TranscriptRow[] = [
@@ -98,15 +86,11 @@ test("keeps the newest two exchanges whole and clips older assistant messages to
     ];
 
     const envelope = withRuntimeHistory("carry on", history);
-    // The oldest assistant message is cut at its opening.
     expect(envelope).toContain("answer one");
     expect(envelope).toMatch(/answer one x{1,}\n… \(truncated\)/u);
-    // The newest two are not.
     expect(envelope).toContain(long("answer two"));
     expect(envelope).toContain(long("answer three"));
-    // And a user message, however old, stays whole.
     expect(envelope).toContain(long("ask one"));
-    // The envelope still comes apart on the way back into the session store.
     expect(parseRuntimeHistory(envelope)?.prompt).toBe("carry on");
     expect(parseRuntimeHistory(envelope)?.history).toHaveLength(6);
 });

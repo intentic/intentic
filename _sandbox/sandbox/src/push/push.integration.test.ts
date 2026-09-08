@@ -42,8 +42,6 @@ test("the VAPID keypair is generated once and reused across store instances", as
     expect(first.publicKey).not.toBe("");
     expect(first.privateKey).not.toBe("");
 
-    // A fresh store over the same file must NOT mint a new pair: every live browser subscription is bound to
-    // the public key it was created with, so rotating would silently orphan every device.
     expect(await filePushStore(path).keys()).toEqual(first);
 });
 
@@ -51,11 +49,6 @@ test("the first request cannot mint two keypairs: the browser must subscribe wit
     const path = await storePath();
     const store = filePushStore(path);
 
-    // Exactly what /push/config does, on a store nothing has loaded yet: keys() and list() concurrently. If
-    // each load generates its own pair, the response carries whichever keys() made while the file keeps
-    // whichever write landed last, so the browser subscribes with a key the daemon does not hold, every send
-    // is refused 403, and the row is pruned as dead. A toggle that enables cleanly and never notifies, on the
-    // first attempt of every new sandbox.
     const [keys] = await Promise.all([store.keys(), store.list()]);
 
     const persisted = JSON.parse(await readFile(path, "utf8"));
@@ -86,7 +79,6 @@ test("re-subscribing the same endpoint replaces its row rather than duplicating 
     await store.add({ kind: "webpush", endpoint: "https://push.example/a", keys: { p256dh: "rotated", auth: "rotated" } });
 
     const list = await store.list();
-    // Two rows would mean two notifications per event for one browser.
     expect(list).toHaveLength(1);
     expect(list[0]?.kind === "webpush" && list[0].keys.p256dh).toBe("rotated");
 });
@@ -94,7 +86,6 @@ test("re-subscribing the same endpoint replaces its row rather than duplicating 
 test("concurrent subscribes do not lose one another", async () => {
     const path = await storePath();
     const store = filePushStore(path);
-    // Read-modify-write on one file: without serialization the later write clobbers the earlier row.
     await Promise.all([
         store.add(subscription("https://push.example/a")),
         store.add(subscription("https://push.example/b")),
@@ -115,7 +106,6 @@ test("unsubscribe removes only the named endpoint", async () => {
 test("a corrupt store file is replaced rather than crashing the daemon", async () => {
     const path = await storePath();
     await (await import("node:fs/promises")).writeFile(path, "{ not json");
-    // Losing subscriptions is recoverable (each browser re-subscribes); refusing to boot is not.
     const keys = await filePushStore(path).keys();
     expect(keys.publicKey).not.toBe("");
     expect(JSON.parse(await readFile(path, "utf8")).channels).toEqual([]);
@@ -142,8 +132,6 @@ test("a 403 drops the subscription: a recreated sandbox's stale endpoints must n
     const store = filePushStore(path);
     await store.add(subscription("https://push.example/stale"));
     await store.add(subscription("https://push.example/live"));
-    // 403 is the push service saying "this endpoint was minted for a different VAPID key". Our key never
-    // rotates back, so the row is dead, and keeping it would let the settings toggle keep claiming "on".
     stubSends({ "https://push.example/stale": 403 });
 
     await createPushSender(store, silentLogger).notify(sample);
@@ -157,8 +145,6 @@ test("a transient 500 keeps the subscription and does not fail the caller", asyn
     await store.add(subscription("https://push.example/flaky"));
     stubSends({ "https://push.example/flaky": 500 });
 
-    // A turn must complete identically whether the push service is up, down, or slow: it resolves, reporting
-    // that nothing landed, rather than throwing at a caller for whom a missed notification is not a failure.
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
@@ -168,9 +154,6 @@ test("a send to nobody is reported as such: the test button's whole job is to ca
     const store = filePushStore(path);
     stubSends({});
 
-    // No subscriptions at all: the settings page's "Send test" reaches this and must be able to say so. It
-    // used to answer {ok:true} to a page that then said nothing, which is indistinguishable from a delivered
-    // notification the operating system chose not to show.
     expect(await createPushSender(store, silentLogger).notify(sample)).toEqual({ delivered: 0, failed: 0 });
 });
 
@@ -202,8 +185,7 @@ test("a relay channel is posted to its recorded url with the send capability and
 
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 1, failed: 0 });
 
-    // The daemon knows no platform by name: everything it can say is the url the registration recorded and
-    // the {deviceId, secret} capability the relay minted. The notification rides along verbatim.
+    // Relay calls carry the recorded url, the {deviceId, secret} capability, and the notification verbatim.
     expect(fetchSpy).toHaveBeenCalledWith(
         "https://platform.example/rpc/push/send",
         expect.objectContaining({ method: "POST", body: JSON.stringify({ deviceId: "device-1", secret: "secret-device-1", notification: sample }) }),
@@ -238,8 +220,7 @@ test("a relay that cannot be reached at all is a transient, not a prune", async 
     await store.add(relayChannel("unreachable"));
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
 
-    // The platform being down says nothing about the DEVICE: the row must survive to be sent to when the
-    // relay comes back, unlike a 410 which is the relay itself saying the device is gone.
+    // Unlike a 410, an unreachable relay says nothing about the device, so the row survives.
     await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
 });
@@ -278,12 +259,9 @@ test("a failed turn reports the error, not the prompt", () => {
 });
 
 test("finished and awaiting notifications collapse per conversation, and only awaiting is sticky", () => {
-    // A chatty turn asking three permissions must leave ONE notification, not three.
     expect(turnAwaiting("conv-1", "permission").tag).toBe(turnAwaiting("conv-1", "question").tag);
     expect(turnAwaiting("conv-1", "plan").requireInteraction).toBe(true);
-    // Different conversations stay distinct.
     expect(turnAwaiting("conv-2", "plan").tag).not.toBe(turnAwaiting("conv-1", "plan").tag);
-    // A "finished" notice may auto-dismiss; a blocked agent's request may not.
     expect(turnFinished("conv-1", "x", { ok: true }).requireInteraction).toBeUndefined();
     expect(turnFinished("conv-1", "x", { ok: true }).tag).not.toBe(turnAwaiting("conv-1", "plan").tag);
 });

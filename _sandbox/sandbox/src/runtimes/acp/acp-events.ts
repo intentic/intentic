@@ -8,13 +8,11 @@ import type {
 import { type AgentEvent, type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract";
 import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
 
-/* Pure mapping of ACP session/update notifications onto AgentEvent frames, the ACP-native producer of the
- * contract's tool-call vocabulary, so kind/status/locations/diff pass through near-verbatim. Updates with no
- * UI mapping are dropped (the streamSdk philosophy). ACP's `plan` is a TodoWrite-style progress checklist,
- * NOT intentic's approval plan frame, it maps to `todos`. */
+// Maps ACP session/update notifications onto AgentEvent frames; an update with no UI mapping returns undefined. ACP's
+// `plan` is a TodoWrite-style checklist, not intentic's approval plan frame, and maps to `todos`.
 
-// Our ToolKind is ACP's vocabulary verbatim; anything newer (e.g. switch_mode) falls back through the shared
-// name→kind table over the title.
+// ToolKind mirrors ACP's kind vocabulary verbatim; an unrecognized kind falls back to the shared name→kind table over
+// the title.
 const KINDS = new Set<string>(ToolKindSchema.options);
 const categoryOf = (kind: AcpToolKind | null | undefined, title: string): ToolKind =>
     typeof kind === "string" && KINDS.has(kind) ? (kind as ToolKind) : toolCategoryOf(title);
@@ -30,12 +28,11 @@ const mapContent = (entries: AcpToolCallContent[] | null | undefined, cwd: strin
         if (entry.type === "content") {
             mapped.push({ type: "text", text: textOf(entry.content) });
         } else if (entry.type === "diff") {
-            // The wire diff keeps a workspace-escaping path as-is for display; only locations enforce the
-            // route space (the tool-calls.ts convention).
+            // Diff paths keep a workspace-escaping value as-is; only locations enforce the workspace route space.
             mapped.push(diffContent(workspacePath(entry.path, cwd) ?? entry.path, entry.oldText ?? undefined, entry.newText));
         } else {
-            // A terminal-embed entry: the live view is the surfaced tmux session in the terminal panel (the
-            // adapter emits its terminal frame on the first terminal/create), the card notes where to look.
+            // Terminal-embed entry: the live tmux session shows in the terminal panel via the adapter's terminal frame;
+            // this is a pointer to it.
             mapped.push({ type: "text", text: "[running in the live terminal panel]" });
         }
     }
@@ -99,8 +96,8 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
         case "usage_update":
             return update.size > 0 ? { kind: "context_usage", tokens: update.used, contextWindow: update.size } : undefined;
         case "available_commands_update":
-            // The agent's own slash commands, the composer's `/` popover lists them; invoking one is plain
-            // "/name …" prompt text (the ACP convention), so no invocation channel is needed.
+            // Agent's own slash commands, shown in the composer's `/` popover; invoking one is plain `/name …` prompt
+            // text.
             return {
                 kind: "commands",
                 items: update.availableCommands.map((command) => ({
@@ -109,8 +106,7 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
                     ...(command.input?.hint !== undefined ? { hint: command.input.hint } : {}),
                 })),
             };
-        // user_message_chunk (prompt echo), current_mode/config_option/session_info updates, and the
-        // experimental plan_update/plan_removed have no UI mapping, dropped.
+        // user_message_chunk, current_mode/config_option/session_info, plan_update/plan_removed: no UI mapping.
         default:
             return undefined;
     }

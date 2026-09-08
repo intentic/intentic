@@ -7,43 +7,19 @@ import type { Logger } from "pino";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { freePort } from "./free-port.js";
 
-/* SERVICE PROCESSES: the daemon's own children, supervised, for everything that is a background SERVICE
- * rather than a terminal — the messaging connectors' gateway processes and any other process an extension
- * declares (`contributes.processes`).
- *
- * These used to ride the panel machinery: the command TYPED into a shell in a tmux session, tracked by
- * session. That shape is right for the interactive surfaces (a dev server the owner attaches, Ctrl+C's and
- * ↑-reruns) and was wrong for services, in ways every consumer had to compensate for one by one: a command
- * that died left a live shell the manager reported as running for the life of the container (the spawn gate's
- * original reason), a crashed gateway could not be restarted by `start` because its session was still
- * tracked (the web's stop-then-start workaround), nothing restarted a crashed connector until the owner
- * flipped something, and the exit code lived in a pane nobody read.
- *
- * Here the daemon is the parent, which is what a supervisor is: exits are events, not poll results; a crash
- * respawns on the shared ladder (@intentic/base's createBackoff, the same one under the backend host and the
- * translator); `running` means the
- * process is alive; and the output goes to one log file per service, which the terminal panel's read-only
- * log view tails (terminal.ts spawns `tail -F` for `svc-*` names — no tmux session exists).
- *
- * What deliberately does NOT move here: dockerd and the local model servers. Both are designed to SURVIVE a
- * daemon restart (main.ts re-adopts their tmux sessions at boot — killing dockerd kills the user's
- * containers, killing llama-server throws away a loaded model), and a direct child cannot outlive its
- * parent. A gateway dying with the daemon costs a few seconds of reconnect and was already the behavior (the
- * boot sweep killed ext-* sessions); a dockerd dying with the daemon costs the user's running containers. */
+// Daemon-supervised background services (messaging gateways, `contributes.processes` extensions), not terminal panels:
+// exits are events, and a crash respawns on the shared backoff ladder. dockerd and local model servers stay out, since
+// they must survive a daemon restart and a child cannot outlive its parent.
 
-// The name a service's read-only log view attaches under, in the terminals list and the /system/terminal
-// socket. A prefix of its own so terminal.ts can tell "tail this service's log" from "attach this tmux
-// session" — there IS no tmux session behind these.
+// Own prefix so terminal.ts knows to tail this log, not attach a tmux session; none exists here.
 export const SERVICE_SESSION_PREFIX = "svc-";
 export const serviceSession = (key: string): string => `${SERVICE_SESSION_PREFIX}${key}`;
 
-// Stamped into every service child's environment, so a daemon that died without unwinding (crash, OOM kill)
-// leaves children a later boot can FIND: they are in their own process groups and outlive their parent.
+// Stamped into every child's env so a later boot can find one orphaned by an unclean daemon death.
 export const SERVICE_ENV = "INTENTIC_SERVICE";
 
 export interface ServiceSpec {
-    // Run via `sh -c` in `cwd` with PORT (assigned once per start, stable across respawns) + `env` in the
-    // environment, node_modules/.bin of the cwd prepended to PATH (the panel launcher's rule, same reason).
+    // Runs via `sh -c` in `cwd` with PORT (stable across respawns) and `env`; PATH gets node_modules/.bin.
     readonly command: string;
     readonly cwd: string;
     readonly env?: Record<string, string>;
@@ -51,13 +27,10 @@ export interface ServiceSpec {
 
 export interface ServiceStatus {
     readonly key: string;
-    // running = the child is alive right now. backoff = it exited uninvited and the respawn timer is set;
-    // there is no terminal "failed" state on purpose: a service that is wanted keeps being retried at the
-    // capped interval, and `restarts` + the log file are the evidence something is wrong.
+    // No terminal 'failed' state on purpose: a wanted service keeps retrying; restarts and the log show trouble.
     readonly state: "running" | "backoff";
     readonly port: number;
-    // Uninvited respawns since start(). Resets only with a fresh start(), so a flapping service shows a
-    // number that grows rather than a row that merely blinks.
+    // Uninvited respawns since start(); resets only on a fresh start(), so flapping accumulates, not blinks.
     readonly restarts: number;
     // Epoch ms of the last state change, the terminals row's activity clock.
     readonly since: number;
@@ -65,20 +38,17 @@ export interface ServiceStatus {
 }
 
 export interface ServiceProcesses {
-    // Assigns a port, spawns, and supervises until stop(). No-op when the key is already tracked — a tracked
-    // service in backoff is already being retried, and a second start must not double-spawn it.
+    // Assigns a port and supervises until stop(); no-op if already tracked, even mid-backoff.
     readonly start: (key: string, spec: ServiceSpec) => Promise<void>;
-    // Untrack, then SIGTERM the child's process group (SIGKILL after a grace a wedged provider SDK doesn't
-    // get to veto — the connectors cap their own shutdown at 3s for the same reason).
+    // Untracks, then SIGTERMs the process group, SIGKILL after a grace a wedged SDK can't veto.
     readonly stop: (key: string) => void;
     readonly running: (key: string) => boolean;
     readonly portOf: (key: string) => number | undefined;
     readonly statusOf: (key: string) => ServiceStatus | undefined;
     readonly list: () => ServiceStatus[];
-    // Where this service's output is, for the terminal route's `tail -F` log view. Defined while tracked.
+    // Where this service's output is, for the terminal route's `tail -F` view; defined while tracked.
     readonly logPathOf: (key: string) => string | undefined;
-    // SIGTERM every child on daemon shutdown. The delayed SIGKILLs may not fire (the daemon is exiting);
-    // killOrphanServiceProcesses at the next boot is the backstop for a child that ignored the SIGTERM.
+    // SIGTERMs every child; killOrphanServiceProcesses at next boot backstops one that ignored it.
     readonly stopAll: () => void;
 }
 
@@ -92,12 +62,10 @@ export interface ServiceTiming {
 
 const DEFAULT_TIMING: ServiceTiming = { backoffStartMs: 1_000, backoffCapMs: 60_000, stableMs: 60_000, termGraceMs: 3_000 };
 
-// One rotation, size-capped: a chatty gateway must not fill the /history volume, and one previous generation
-// is enough to see what happened before the last respawn.
+// One rotation, size-capped, so a chatty gateway can't fill /history; one prior generation is enough.
 const LOG_ROTATE_BYTES = 4 * 1_048_576;
 
-// SIGTERM the child's whole process group now, SIGKILL whatever of it is left after the grace. The group is
-// the child's own (detached spawn), so a gateway's own children (an ffmpeg, a headless helper) go with it.
+// SIGTERMs the child's process group, SIGKILLs any survivor after the grace; its own children die with it.
 const killGroup = (child: ChildProcess, graceMs: number): void => {
     const pid = child.pid;
     if (pid === undefined) {
@@ -112,7 +80,7 @@ const killGroup = (child: ChildProcess, graceMs: number): void => {
         try {
             process.kill(-pid, "SIGKILL");
         } catch {
-            // exited within the grace, which is the good ending
+            // exited within the grace
         }
     }, graceMs);
     hardKill.unref();
@@ -137,9 +105,8 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
 
     const logPath = (key: string): string => join(logsDir, `${key}.log`);
 
-    // Append fd for the child's stdout+stderr, rotated once past the cap. Sync on purpose: it runs at spawn
-    // time on a daemon-owned directory, and an fd (not a stream) means the kernel does the writing and a slow
-    // disk backpressures the child, never the daemon.
+    // Append fd for stdout+stderr, rotated past the cap. An fd, not a stream, so the kernel does the writing and a slow
+    // disk backpressures the child, not the daemon.
     const openLog = (key: string): number => {
         mkdirSync(logsDir, { recursive: true });
         const path = logPath(key);
@@ -165,8 +132,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
                 PORT: String(entry.port),
                 [SERVICE_ENV]: key,
             },
-            // Its own process group: the whole tree is killable as a unit, and a child that must be found
-            // after a daemon crash is found by the env stamp rather than by parentage.
+            // Own process group, killable as a unit; found after a crash by its env stamp, not by parentage.
             detached: true,
             stdio: ["ignore", fd, fd],
         });
@@ -176,7 +142,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
         entry.since = Date.now();
         entry.spawnedAt = entry.since;
         child.on("error", (error) => {
-            // Spawn itself failed (no `sh`?): treated exactly like an instant exit, the backoff says so.
+            // Spawn itself failing (no `sh`?) is treated like an instant exit; the backoff handles it.
             logger.error({ err: error, service: key }, "service process failed to spawn");
         });
         child.on("exit", (code, signal) => {
@@ -189,8 +155,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
             entry.state = "backoff";
             entry.since = Date.now();
             entry.restarts += 1;
-            // A run that lasted was a working service; its next crash starts the ladder over rather than
-            // inheriting a cap it grew during some earlier bad hour (the ladder's stableMs).
+            // A run that lasted resets the ladder, rather than inheriting a cap grown during an earlier bad stretch.
             const retryInMs = entry.ladder.next(Date.now() - entry.spawnedAt);
             logger.warn({ service: key, code, signal, restarts: entry.restarts, retryInMs }, "service process exited, respawning after backoff");
             publishRuntimeChange("panels", "terminals");
@@ -210,7 +175,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
                 return;
             }
             const port = await freePort();
-            // A concurrent start of the same key won the race while we awaited the port; leave the winner be.
+            // A concurrent start of the same key won the race during the port await; leave it be.
             if (current.has(key)) {
                 return;
             }
@@ -275,11 +240,8 @@ const status = (key: string, entry: Entry): ServiceStatus => ({
     ...(entry.lastExitCode === undefined ? {} : { lastExitCode: entry.lastExitCode }),
 });
 
-/* THE BOOT BACKSTOP for a daemon that died without unwinding. Service children live in their own process
- * groups, so a crashed daemon leaves them running, holding ports and provider connections the new daemon
- * knows nothing about — a second gateway would then answer the same Discord bot twice. Found by the env
- * stamp (procfs environ, the leftovers scanner's trick), killed by group. SIGTERM first out of manners; the
- * delayed SIGKILL is unref'd, boot does not wait on it. */
+// Boot backstop for an unclean daemon death: orphans keep holding ports and connections the new daemon knows nothing
+// about. Found via the env stamp in procfs, killed by group; the SIGKILL is unref'd so boot doesn't wait.
 export const killOrphanServiceProcesses = async (logger: Logger): Promise<void> => {
     let pids: string[];
     try {
@@ -310,7 +272,7 @@ export const killOrphanServiceProcesses = async (logger: Logger): Promise<void> 
                     }
                 }, DEFAULT_TIMING.termGraceMs).unref();
             } catch {
-                // raced away, or not ours to read — either way not an orphan we can act on
+                // raced away, or not ours to read; not an orphan we can act on
             }
         }),
     );

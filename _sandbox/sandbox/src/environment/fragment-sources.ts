@@ -7,23 +7,15 @@ import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } f
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 
-/* The single resolver for every Dockerfile fragment a capability contributes to the composed overlay. Two
- * sources with DIFFERENT trust: core capability handlers (vpn/browser) return code-authored fragments
- * that MAY carry privileged `# intentic:runtime` directives; an extension's `contributes.environment.fragment`
- * is a checkout file restricted to RUN/ENV instructions only. Keeping the split here, not in
- * CapabilityHandler.fragment (which stays sync + trusted), means the "what can an extension bake into the
- * image" security surface is exactly `invalidExtensionFragment` (@intentic/sandbox-contract overlay-lint,
- * shared with the platform's hosted rebuild, which re-reads a whole overlay by the same grammar).
- * composeEnvironment calls this per capability. */
+// Single resolver for every Dockerfile fragment a capability contributes. Core handlers return trusted code that may
+// carry privileged `# intentic:runtime` directives; an extension's fragment is a checkout file restricted to RUN/ENV
+// only via `invalidExtensionFragment`, the same grammar the platform's hosted rebuild re-checks.
 
-// Every fragment one capability entry contributes. The core handler fragment first (trusted), then, for an
-// extension capability declaring contributes.environment, the checkout fragment, validated and skipped with a
-// warn if it rotted or violates the allowlist (install-time already hard-rejected a bad fragment; this is the
-// compose-time defense for a checkout that changed underneath).
+// Every fragment one capability contributes: the trusted core handler fragment first, then an extension's checkout
+// fragment, re-validated here as a compose-time defense against a checkout that changed since install.
 export const capabilityFragments = async (services: Services, capability: Capability): Promise<string[]> => {
     const fragments: string[] = [];
-    // One handler may contribute several blocks: see CapabilityHandler.fragment for why the privileged half is
-    // kept as its own byte-identical block rather than folded into the tools it accompanies.
+    // One handler may contribute several blocks; a privileged half stays its own block, not folded in.
     const core = await registry[capability.kind].fragment?.(capability.config);
     for (const block of core === undefined ? [] : typeof core === "string" ? [core] : core) {
         const trimmed = block.trim();
@@ -39,9 +31,7 @@ export const capabilityFragments = async (services: Services, capability: Capabi
             fragments.push(...(await readFragment(services, capability.id, join(dir, fragmentPath))));
         }
     }
-    // A cli connector's tools (psql/mysql/whisper client) come either from a feature pack it NAMES — the
-    // stamp-aware route, nothing composed when the base already bakes it — or from a fragment file in the
-    // extension that declares the connector, read the same allowlisted way.
+    // A cli connector's tools come from a named pack, skipped if already baked, or an allowlisted fragment.
     if (capability.kind === "cli") {
         const connector = contributionFor(await contributionRegistry(services), "cli", capability.config);
         const pack = connector === undefined ? undefined : contributionPackName(connector);
@@ -56,11 +46,8 @@ export const capabilityFragments = async (services: Services, capability: Capabi
     return fragments;
 };
 
-/* A named feature pack as an overlay fragment, or NOTHING when the running base image already bakes that exact
- * pack version — which is the whole reason a contribution should name a pack rather than copy one. The two
- * empty-handed cases that are NOT that are warned about, because they are manifest bugs that would otherwise
- * present as a capability silently missing its tool: a name no pack answers to, and a bake-only pack (one that
- * COPYs from the image build context, which an overlay build has no context for). */
+// A named pack as a fragment, or nothing when the base already bakes that exact version. The two other empty cases are
+// warned as manifest bugs: an unknown pack name, and a bake-only pack an overlay build has no context for.
 const resolvePack = async (services: Services, id: string, name: string): Promise<string[]> => {
     const pack = await readPack(name);
     if (pack === undefined) {
@@ -75,11 +62,9 @@ const resolvePack = async (services: Services, id: string, name: string): Promis
     return fragment === undefined ? [] : [fragment];
 };
 
-// A WORKSPACE extension's contributes.environment fragment. It has no capability entry, so the per-capability
-// resolver above never reaches it, and no install moment either, so unlike a checkout the allowlist check
-// below is its ONLY gate. That is enough: the fragment still only reaches the image through the overlay the
-// owner approves and rebuilds out-of-band. Baked extensions stay out deliberately (their fragments are inert
-// by design, rtk is git-install opt-in for exactly that reason).
+// A workspace extension's fragment has no capability entry and no install moment, so the allowlist check here is its
+// only gate; that's enough since it still only reaches the image through an owner-approved overlay. Baked extensions
+// are deliberately excluded.
 export const workspaceExtensionFragments = async (services: Services): Promise<string[]> => {
     const fragments: string[] = [];
     for (const extension of await enabledExtensions(services)) {
@@ -91,8 +76,8 @@ export const workspaceExtensionFragments = async (services: Services): Promise<s
     return fragments;
 };
 
-// Read + allowlist-check an extension/connector fragment file; skip (with a warn) a missing or non-RUN/ENV one
-// (install-time already hard-rejected a bad fragment; this is the compose-time defense for a rotted checkout).
+// Reads and allowlist-checks a fragment file; skips (with a warn) a missing or non-RUN/ENV one as defense against a
+// checkout that rotted after install.
 const readFragment = async (services: Services, id: string, path: string): Promise<string[]> => {
     const content = (await extensionRead(path))?.trim();
     if (content === undefined || content === "") {

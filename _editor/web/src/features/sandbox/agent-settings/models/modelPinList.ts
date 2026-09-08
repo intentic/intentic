@@ -3,28 +3,11 @@ import { computed, type ComputedRef } from "vue";
 import { effortLabelOf } from "../../../chat/models/effortScale";
 import { type DescribedPin, describePin } from "../../../chat/models/modelPins";
 
-/* ONE EDITOR OVER EVERY PINNED MODEL LIST IN THE SETTINGS, AND SEVERAL STORED SHAPES. Add, re-point, promote and
- * remove are the same four gestures whichever list they are made in, and a hand-rolled copy of each per list is
- * where the rows quietly stop agreeing about what "already in the order" means.
- *
- * What actually differs between the lists is how an entry is WRITTEN DOWN: the quick, cheaper-tier and safety
- * lists keep `${provider}:${model}` keys, while an agent-run entry is a pin carrying its own run settings
- * (ModelPinSchema). So the rows and the picker work in PINS, and each list says how one is stored.
- *
- * `read`/`write` rather than a settings key, because two of the lists are read through their own composables:
- * each resolves its own chain, and the row has to draw THE LIST AS THE USER WROTE IT either way. A pin whose
- * account was disconnected still belongs on screen, greyed: it is a setting they made, and a row that silently
- * stopped drawing it would look like the app had eaten it. (Every resolver drops it at run time, which is the
- * right answer THERE: no feature may fail on a credential the sandbox no longer has.)
- *
- * IT LIVES IN A MODULE OF ITS OWN rather than inside the component that first needed it. All four lists are
- * drawn by Sandbox ▸ Agent ▸ Models — including the safety judge's, which used to sit on the Safety tab and made
- * "where do I choose a model" a question with two answers — but they are four separate settings with four
- * different floors, and one editor over all of them is what keeps those four rows agreeing about what "already
- * in the order" means. */
+// One editor (add, re-point, promote, remove) over every pinned-model list; lists differ only in how an entry is stored
+// (a key string vs. a full ModelPin), each declaring its own encode/decode. Uses read/write rather than a settings key
+// since some lists resolve through their own composables and must draw entries as written, not as resolved.
 
-// One row of a list, exactly as <ModelPinList> takes it: the pin as the user wrote it, described for the screen,
-// with its place in the order and whatever this list has to say about how that entry runs.
+// One row of a list, exactly as `<ModelPinList>` takes it: the pin as written, described, with its place in the order.
 export type PinnedEntry = DescribedPin & {
     readonly key: string;
     readonly index: number;
@@ -33,12 +16,10 @@ export type PinnedEntry = DescribedPin & {
 };
 
 export interface PinnedList {
-    // Whether entries carry their own run settings, which the picker reads to decide whether to draw knobs.
-    // Only the agent-run list does; ModelPinPicker says why.
+    // Whether entries carry their own run settings, read by the picker to decide whether to draw knobs.
     readonly knobs: boolean;
     readonly entries: ComputedRef<readonly PinnedEntry[]>;
-    // Everything already written down, so the picker can offer those rows without letting one be pinned twice: a
-    // model that vanished from the list as you used it would make you hunt for a row that was there a moment ago.
+    // Every entry already in the list, so the picker can offer it without letting one be pinned twice.
     readonly taken: ComputedRef<readonly string[]>;
     readonly apply: (index: number | undefined, pin: ModelPin) => void;
     readonly remove: (index: number) => void;
@@ -50,9 +31,7 @@ export function pinnedList<T>(list: {
     readonly write: (entries: readonly T[]) => void;
     readonly decode: (entry: T) => ModelPin | undefined;
     readonly encode: (pin: ModelPin) => T;
-    // What this entry says about HOW it runs, beside its name. Only a list whose pins carry run settings has
-    // anything to say here, and only the fields actually set are named, so a pin left at the provider's own
-    // defaults reads as just a model.
+    // What an entry says about how it runs, beside its name; only set fields are named, so defaults read as bare.
     readonly detail?: (pin: ModelPin) => string | undefined;
     readonly knobs?: boolean;
 }): PinnedList {
@@ -73,19 +52,16 @@ export function pinnedList<T>(list: {
         knobs: list.knobs === true,
         entries,
         taken: computed(() => entries.value.flatMap((entry) => (entry.choice === undefined ? [] : [modelPinKey(entry.choice)]))),
-        // Adding appends; re-pointing an entry replaces it where it stands, because its position in the order is
-        // the other half of what the user said.
+        // Adding appends; re-pointing replaces the entry in place, since its position is part of what was said.
         apply: (index, pin) => {
             const stored = list.encode(pin);
             const current = list.read();
             list.write(index === undefined ? [...current, stored] : current.map((held, at) => (at === index ? stored : held)));
         },
-        // Emptying the list is not a broken state: it is how each row gets back to its own floor, which is why
-        // removing the last one needs no confirmation and no separate "reset" control.
+        // Emptying isn't a broken state, it's how a row returns to its own default; no confirmation needed.
         remove: (index) => list.write(list.read().filter((_, at) => at !== index)),
-        // One step up the order. Only up, and only where there is a step to take: with a whole list on screen,
-        // "move this one earlier" repeated is the entire vocabulary needed, and a second button per row in a
-        // 14rem column is how a settings page turns into a control panel.
+        // Moves up only, and only if there's room to: with the full list visible, repeating that covers every
+        // reordering need.
         promote: (index) => {
             const held = [...list.read()];
             const [moved] = held.splice(index, 1);
@@ -95,14 +71,8 @@ export function pinnedList<T>(list: {
     };
 }
 
-/* WHAT AN ENTRY SAYS ABOUT HOW IT RUNS, in one line beside its name, for every list whose pins carry knobs (the
- * role lists on Sandbox ▸ Agent ▸ Models, a persona card's ladder). Only the fields actually pinned are named, so
- * an entry left at the provider's own defaults reads as just a model: the point of the line is that a deliberate
- * choice is legible from the list without opening anything, not that every field has a value.
- *
- * The tier is clamped the way the composer clamps its own (effortScale.ts): a stored `max` on a model whose
- * scale stops at `high`, or on one whose thinking the same pin switched off, would otherwise name a rung this
- * run cannot use. The user's own pick stays stored either way, for the day the longer-scaled model leads again. */
+// One-line summary of a pin's knobs, for lists whose pins carry them; only fields actually set are named. Clamped like
+// the composer's own effort (effortScale.ts), since a stored `max` may exceed this model's scale.
 export const pinKnobSummary = (pin: ModelPin): string | undefined => {
     const effort = effortLabelOf(pin.effort, pin.provider, pin.model, pin.thinking);
     return (

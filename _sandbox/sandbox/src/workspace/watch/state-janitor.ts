@@ -4,49 +4,36 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { statePath } from "../layout/state-paths.js";
 
-/* THE STATE DIR'S GARBAGE COLLECTOR, the missing half of classifying everything under `.intentic`.
- *
- * The state table says what each tree IS; nothing said what happens to the ones whose class means "disposable".
- * So nothing happened: the workspace this module was written against carried 1.3 GB of pnpm store no install
- * pointed at, 3 400 browser screenshots, and a tmp/ of build logs from turns long finished, state whose own
- * classification already called it rebuildable, waiting for a manual `rm` nobody would ever run.
- *
- * Every rule here is DERIVED from a class, not from a judgment about content:
- *   - tmp/ is `derived` scratch and its entry says the janitor empties it, at boot, when nothing can be
- *     mid-write in it because no turn has started.
- *   - the pnpm store is content-addressable and `pnpm store prune` removes only unreferenced blobs, the
- *     vendor's own definition of garbage.
- *   - browser screenshots are the one AGE rule: they are artifacts (carried, owned by conversations), but a
- *     capture exists to be Read back within the turn that took it, and a transcript that outlives its images
- *     by a month degrades to a path string. Thirty days keeps every capture anyone revisits.
- */
+// Garbage collection for everything under `.intentic` classified as disposable; the state table says what a tree is,
+// this decides what happens to it. Every rule is derived from a class, not a judgment about content:
+// - tmp/ (derived scratch) is emptied at boot, when nothing can be mid-write
+// - the pnpm store is pruned via pnpm's own unreferenced-blob definition of garbage
+// - browser screenshots age out after 30 days, since a transcript that outlives its images degrades to a path string
 
-// Screenshots older than this are deleted; everything else in artifacts/ is untouched (attachments are the
-// owner's uploads, reports are records). Measured against file mtime, a capture is written once, never touched.
+// Screenshots older than this are deleted; attachments and reports in artifacts/ stay untouched.
 const SCREENSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-// How long `pnpm store prune` may run before the janitor gives up on it for this boot. It walks hash dirs on
-// the workspace volume; minutes is plenty, and a hung child must not hold the boot sweep's promise forever.
+// Ceiling on `pnpm store prune` per boot, so a hung child can't hold the boot sweep's promise forever.
 const PRUNE_TIMEOUT_MS = 5 * 60 * 1000;
 
 const remove = async (path: string, log: Logger, what: string): Promise<void> => {
     try {
         await rm(path, { recursive: true, force: true });
     } catch (error) {
-        // A busy file (or a permission oddity a container rebuild left behind) fails ONE target, not the sweep.
+        // A busy file or stray permission fails just this target, not the whole sweep.
         log.warn({ err: error, path }, `state janitor: could not remove ${what}`);
     }
 };
 
-// Empty a directory without removing it: the dir itself is furniture other writers mkdir -p around, and
-// deleting it mid-boot would race whoever recreates it.
+// Empties without removing the directory itself, which other writers mkdir -p around; deleting it mid-boot would race
+// them.
 const emptyDir = async (dir: string, log: Logger, what: string): Promise<void> => {
     const entries = await readdir(dir).catch(() => [] as string[]);
     await Promise.all(entries.map((entry) => remove(join(dir, entry), log, what)));
 };
 
-// Age out screenshots: top-level files only, which is the shape both capture dirs actually have, @playwright/mcp
-// writes flat page-*/console-* files and named shots beside them.
+// Top-level files only, the shape both capture dirs have: @playwright/mcp writes flat page-*/console-* files alongside
+// named shots.
 const sweepAgedCaptures = async (dir: string, now: number, log: Logger): Promise<void> => {
     const entries = await readdir(dir).catch(() => [] as string[]);
     await Promise.all(
@@ -60,8 +47,8 @@ const sweepAgedCaptures = async (dir: string, now: number, log: Logger): Promise
     );
 };
 
-// `pnpm store prune` against the store installs from under .intentic auto-created. Only ever removes blobs no
-// node_modules links, so a missing pnpm or a refusal costs nothing but the disk it would have freed.
+// Prunes the auto-created .intentic pnpm store; only removes blobs no node_modules links, so a missing pnpm costs
+// nothing but disk.
 const pruneStore = (storeDir: string, log: Logger): Promise<void> =>
     new Promise((resolve) => {
         execFile("pnpm", ["store", "prune", "--store-dir", storeDir], { timeout: PRUNE_TIMEOUT_MS }, (error) => {
@@ -72,8 +59,8 @@ const pruneStore = (storeDir: string, log: Logger): Promise<void> =>
         });
     });
 
-/* The boot sweep: scratch and the pnpm store, the things where "since last boot" is the natural cadence and
- * where sweeping mid-flight could race a writer. */
+// Boot sweep: scratch and the pnpm store, where "since last boot" is the natural cadence and mid-flight sweeping would
+// race a writer.
 export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Promise<void> => {
     await emptyDir(statePath(workspaceRoot, ".intentic/local/tmp/"), log, "boot scratch");
     const storeDir = statePath(workspaceRoot, ".intentic/local/.pnpm-store/");
@@ -83,7 +70,7 @@ export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Prom
     await sweepAgedState(workspaceRoot, Date.now(), log);
 };
 
-// The recurring half, cheap enough for the hourly timer the agent sweeps already run on.
+// The recurring half; cheap enough to ride the hourly timer agent sweeps already use.
 export const sweepAgedState = async (workspaceRoot: string, now: number, log: Logger): Promise<void> => {
     await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/records/artifacts/", "browser"), now, log);
 };

@@ -1,18 +1,7 @@
 // @vitest-environment jsdom
-//
-/* THE TRIAL'S STANDING, SAID ABOVE THE COMPOSER, and the difference between the two states that reach for the
- * reader.
- *
- * The platform's key pool publishes one word about itself. `unavailable` is an interruption: nothing answered,
- * the turn is held below, and the strip owes the user the press that sends it again. `degraded` is not: the
- * pool answered after failing over to another key or another rung, which is what a ladder is for. Both used to
- * get the same sentence ("Failed messages are not counted") and the same Retry button, so a person reading a
- * perfectly good answer was told above it that their message had failed. That is what these tests hold shut.
- *
- * The row itself is pinned too, because it went wrong in a way a screenshot shows and a snapshot does not: a
- * kit button beside a hand-styled link, two font sizes and three baselines in a row three items long. One box
- * holds the actions now, and the sentence has a width floor so the row wraps instead of being squeezed into a
- * column of single words. */
+// The trial's standing above the composer: `unavailable` is an interruption (nothing answered, held below, needs
+// Retry); `degraded` isn't (the pool answered after failing over). Both used to share one sentence and button,
+// wrongly telling a working answer's reader their message had failed.
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -24,7 +13,7 @@ const streaming = ref(false);
 const resume = vi.fn(async () => {});
 const loadTrialStatus = vi.fn(async () => {});
 
-// The pane's own view, which the real strip injects from its ChatPane: mounted bare here, so it is handed over.
+// The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
 vi.mock(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
 vi.mock(`./useChat-view`, () => ({
     usePaneView: () => ({
@@ -43,8 +32,7 @@ vi.mock(`./useChat-view`, () => ({
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
 vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
-// The free lane's meter as the strip reads it: settable, so the threshold is the platform's rule (hostedHours.ts)
-// and the strip's own concern is only whether to stand.
+// The free lane's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
 const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(undefined);
 const lowOnHours = ref(false);
 const planOffered = ref(true);
@@ -58,8 +46,7 @@ vi.mock(`../../agents/fleet/useAgents`, () => ({
         busyIds: ref([]),
     }),
 }));
-// The account gate is its own component with its own test and its own half-dozen reads; this file is about the
-// trial strip that sits under it.
+// The account gate is its own component with its own test; this file is only about the trial strip beneath it.
 vi.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -101,9 +88,8 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* THE BUG PEOPLE REPORTED: "Free trial degraded. Failed messages are not counted.", in a chat whose model had
- * just answered. A pool that failed over is a pool that worked, so the line stays the ordinary one, and the
- * state rides along at the end of it rather than replacing it. */
+// The reported bug: "Free trial degraded. Failed messages are not counted." on a chat whose model just answered. A
+// failed-over pool is a working pool, so the line stays ordinary with the state appended, not replacing it.
 it(`reports a pool that answered as a working trial, whatever it went through to answer`, () => {
     trialStatus.value = { ...trialStatus.value, health: `degraded`, servedModel: `gemini-flash-lite-latest` };
 
@@ -112,14 +98,13 @@ it(`reports a pool that answered as a working trial, whatever it went through to
     expect(element.textContent).toContain(`4 free messages left today`);
     expect(element.textContent).toContain(`Last answer: gemini-flash-lite-latest`);
     expect(element.textContent).toContain(`Trial capacity is tight right now`);
-    // The two claims that were false over an answered turn: that a message failed, and that there is something
-    // to press about it.
+    // The two false claims over an answered turn: that a message failed, and that there's something to press about.
     expect(element.textContent).not.toContain(`Failed messages are not counted`);
     expect(element.textContent).not.toContain(`degraded`);
     expect(named(element, `Retry`)).toBeUndefined();
 });
 
-// Healthy says nothing about the pool at all: there is nothing to say, and the count is what the reader wants.
+// Healthy says nothing about the pool: there's nothing to say, and the count is what the reader wants.
 it(`says nothing about the pool while it is answering cleanly`, () => {
     const element = mount();
 
@@ -128,9 +113,8 @@ it(`says nothing about the pool while it is answering cleanly`, () => {
     expect(named(element, `Retry`)).toBeUndefined();
 });
 
-/* THE FIRST SCREEN OF A NEW ACCOUNT. A count and a "Connect Google" over a chat that has answered nothing yet
- * reads as a limit about to be hit, so while more than half the day is left the strip stays down; it comes up
- * at the halfway mark, when the number has become something to plan around. */
+// The first screen of a new account: a count plus "Connect Google" over an unanswered chat reads as an imminent
+// limit, so the strip stays down until half the allowance is gone.
 it(`stays down while more than half the allowance is left, and comes up at the halfway mark`, () => {
     trialStatus.value = { ...trialStatus.value, used: 2, remaining: 8 };
     let element = mount();
@@ -145,15 +129,15 @@ it(`stays down while more than half the allowance is left, and comes up at the h
     expect(named(element, `Connect Google`)).toEqual(expect.any(Object));
 });
 
-// A strained pool is worth a line at any count: somebody watching a slow answer wants it explained.
+// A strained pool is worth a line at any count — someone watching a slow answer wants it explained.
 it(`says the pool is strained even while most of the allowance is left`, () => {
     trialStatus.value = { ...trialStatus.value, used: 1, remaining: 9, health: `degraded` };
     const element = mount();
     expect(element.textContent).toContain(`Trial capacity is tight right now`);
 });
 
-/* The state that IS an interruption. The turn is held below (turnFailures holds it and the platform refunds
- * it), so the strip names the failure and carries the press that sends it again. */
+// The state that is an interruption: the turn is held below (turnFailures holds it, the platform refunds it), so
+// the strip names the failure and carries the resend press.
 it(`interrupts, with the press that sends the held turn, only when nothing answered`, async () => {
     trialStatus.value = { ...trialStatus.value, health: `unavailable` };
 
@@ -169,7 +153,7 @@ it(`interrupts, with the press that sends the held turn, only when nothing answe
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
-// Spent is the signpost, not a warning: the free Google sign-in and the model list, both one press away.
+// Spent is the signpost, not a warning: the free sign-in and the model list are each one press away.
 it(`turns into the way out once today's allowance is gone`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
 
@@ -180,10 +164,8 @@ it(`turns into the way out once today's allowance is gone`, () => {
     expect(named(element, `Connect Google`)).toEqual(expect.any(Object));
 });
 
-/* WHY THE ROW LOOKED BROKEN, in the two structural facts that made it so. The actions were siblings of the
- * sentence, each hung from wherever its own box began; and the sentence could shrink to nothing, so `flex-wrap`
- * never engaged and flexbox took the overflow out of the text instead of dropping the buttons to their own
- * row. */
+// Why the row looked broken: the actions were siblings of the sentence, each hung from its own box edge, and the
+// sentence could shrink to nothing so `flex-wrap` never engaged.
 it(`hangs every action off one box, and gives the sentence a floor to wrap against`, () => {
     trialStatus.value = { ...trialStatus.value, health: `unavailable` };
 
@@ -193,8 +175,7 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
 
     expect(retry?.parentElement).toBe(connect?.parentElement);
     expect(retry?.parentElement?.className).toContain(`items-center`);
-    // Both are the kit's button at the same size, which is where their shared baseline comes from, and the
-    // sign-in is still a real link: it has an address, and Ctrl/⌘-click has to be able to use it.
+    // Both are the kit's button at the same size; the sign-in stays a real link for Ctrl/Cmd-click.
     expect(retry?.className.split(` `)).toEqual(expect.arrayContaining([`p-button`]));
     expect(connect?.className.split(` `)).toEqual(expect.arrayContaining([`p-button`]));
     expect(connect?.tagName).toBe(`A`);
@@ -203,9 +184,8 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
     expect(sentence?.className).not.toContain(`min-w-0`);
 });
 
-/* THE FREE LANE'S LAST HOURS, above the composer, to the one person spending them. Only on a hosted sandbox, only
- * to its owner (a guest spends hours they cannot buy), only while the meter says low, and with the door to
- * Billing where a plan is sold. */
+// The free lane's last hours, above the composer, to the one person spending them: only on a hosted sandbox, only
+// its owner (a guest can't buy more), only while the meter says low, with a door to Billing.
 it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, async () => {
     provider.value = `claude` as AgentProvider;
     hostedMeter.value = { usedMinutes: 2_160, allowanceMinutes: 2_400, remainingMinutes: 240, fraction: 0.1, resetsAt: `2026-10-01T00:00:00.000Z` };
@@ -221,7 +201,7 @@ it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, 
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
 
-    // Nor is anyone on a sandbox the platform does not run, or while most of the month is still there.
+    // Nor is anyone on a non-hosted sandbox, or while most of the month remains.
     active.value = { hosted: null, role: `owner` };
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);

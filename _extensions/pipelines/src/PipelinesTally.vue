@@ -2,16 +2,9 @@
 import { computed } from "vue";
 import { ProgressRing, StatusTally, type TallyItem } from "@intentic/extension-ui";
 
-/* THE BOARD'S ORIENTATION LINE: how the runs in view went, and what share of them passed.
- *
- * Its own component because it is drawn in three places now and has to be the same line in all of them: on the
- * title row where it usually lives, above the list on a pane too narrow to hold it beside the title and the
- * repository picker, and in its loading form while the first /ci/runs response is still out. The skeleton was
- * the copy that proved the point, it had the ring's geometry written out a second time in PipelinesSkeleton, and
- * a line whose shape is stated twice is a line that eventually reads two ways.
- *
- * The counts themselves are <StatusTally>'s (the app's one tally vocabulary); what this adds is the pass rate
- * that rides its trailing slot, and the decision that the two travel together. */
+// Orientation line (how runs went, and the pass rate), drawn in three places (title row, above the list on a narrow
+// pane, its own skeleton) that must stay one shape. Counts are `<StatusTally>`'s; this adds the pass rate riding its
+// trailing slot.
 
 const {
     items = [],
@@ -19,14 +12,13 @@ const {
     skeleton = false,
 } = defineProps<{
     items?: readonly TallyItem[];
-    /** Percent of the runs in view that passed. Absent ⇒ nothing has finished, so there is no rate to state. */
+    /** Percent of the runs in view that passed; absent means nothing has finished yet. */
     rate?: number | undefined;
     /** Draw the line's shape rather than its numbers, while the counts are still being fetched. */
     skeleton?: boolean;
 }>();
 
-// Green above 80, amber down to 50, red below it: a pass rate is only ever read as "is CI trustworthy", and
-// these are the cuts at which that answer changes.
+// Green above 80, amber to 50, red below: the thresholds where 'is CI trustworthy' changes answer.
 const rateTone = computed(() => {
     if (rate === undefined || rate >= 80) {
         return `text-success`;
@@ -36,8 +28,7 @@ const rateTone = computed(() => {
 </script>
 
 <template>
-    <!-- Three placeholders because the tally has three counts worth drawing at zero; the ring is the fourth
-         item and rides the same slot the real one does. -->
+    <!-- Three placeholders for the tally's three counts; the ring is a fourth, riding the real one's slot. -->
     <StatusTally :items="skeleton ? [] : items" :skeleton="skeleton ? 3 : 0">
         <div v-if="skeleton" class="flex h-5 items-center gap-2" aria-hidden="true">
             <span class="skeleton h-5 w-5 rounded-full"></span>

@@ -2,33 +2,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-/* WHAT THE REGISTRY ACTUALLY HAS, asked cheaply enough to sit in front of a tool call.
- *
- * This module answers one question, "is the version about to be written behind the newest published one",
- * and it answers it under a constraint that shapes every decision in here: it runs on the CRITICAL PATH of
- * the agent's own tool call. The command does not start until this returns. So the budget is a fraction of a
- * second, the payloads are chosen for size rather than for convenience, and a lookup that cannot be taken
- * says NOTHING rather than guessing — the same rule agent-deps.ts states for itself, for the same reason: a
- * notice that is sometimes invented teaches the model to distrust the ones that are true.
- *
- * WHY NOT THE PACKUMENT. The obvious call is `GET registry.npmjs.org/<name>`, which carries every version and
- * every publish date. It is also 2 MB for `typescript` and 1.6 MB abbreviated, measured, and putting that in
- * front of `pnpm add` would be a worse bug than the one this fixes. So npm is asked through two documents
- * that are 18–200 bytes and ~2 kB respectively:
- *   /-/package/<name>/dist-tags   what `latest` currently is.
- *   /<name>/<version>             whether the version being pinned is deprecated (and nothing else).
- * The pair is fetched concurrently and the second is allowed to fail on its own: a deprecation notice is a
- * bonus, a missing one is not a reason to withhold the version fact.
- *
- * THE COST OF THE MISSING PACKUMENT is the publish DATE, which is why no notice from here says "released N
- * days ago". It says which versions are in play and how far apart they are, both of which are arithmetic over
- * two strings this already has. The one caller that genuinely needs a date is the successor check, which runs
- * for a couple of dozen curated names that are small by construction, and it asks for the packument itself. */
+// Answers whether a pinned version is behind the registry's latest, cheaply enough for the agent's tool-call critical
+// path; a lookup that cannot be taken says nothing rather than guessing. Uses two small npm documents instead of the
+// multi-MB packument to check dist-tags and deprecation.
 
 export type Ecosystem = "npm" | "pypi" | "crates";
 
-// The comparison operator a manifest wrote in front of the version, which decides what "behind" even means.
-// An empty string is an exact pin.
+// Comparison operator a manifest wrote before the version, deciding what 'behind' means; empty is an exact pin.
 export type RangeOperator = "" | "^" | "~" | ">=";
 
 export interface PinnedPackage {
@@ -36,46 +16,30 @@ export interface PinnedPackage {
     readonly name: string;
     // The version as written, without its operator.
     readonly version: string;
-    // The operator that stood in front of it. A caret that already reaches the newest release is NOT stale,
-    // and treating it as such is how this feature would have become noise on a healthy manifest.
+    // Operator in front of the version; a caret already reaching the newest release is not stale.
     readonly range: RangeOperator;
 }
 
-// How far apart the pin and the registry are, in the only unit anyone acts on.
+// How far apart the pin and the registry are, the only unit anyone acts on.
 export type VersionGap = "major" | "minor" | "patch";
 
 export interface Freshness {
     readonly latest: string;
     readonly gap: VersionGap;
-    // The registry's own deprecation message for the pinned version, when it carries one.
+    // Registry's own deprecation message for the pinned version, when it has one.
     readonly deprecated?: string;
 }
 
 export type FreshnessResolver = (pinned: PinnedPackage) => Promise<Freshness | undefined>;
 
-/* How long a registry answer is believed. Six hours is chosen against what it protects: a version published
- * during the window is one the agent pins slightly stale and nobody notices, which is the status quo, while a
- * TTL short enough to catch it would put a network call in front of a meaningful share of tool calls. */
+// How long an answer is trusted; six hours balances staleness against a network call on too many tool calls.
 const TTL_MS = 6 * 60 * 60 * 1000;
 
-/* TWO CLOCKS, and separating them is what makes this usable rather than a check that goes quiet exactly when
- * it is needed.
- *
- * `GRACE_MS` is how long a CALLER waits. The agent is parked on a tool call for the whole of it, so it is
- * short, and a lookup that overruns it simply says nothing this time.
- *
- * `TIMEOUT_MS` is how long the FETCH ITSELF gets, and it is much longer, because the fetch is not abandoned
- * when the grace expires — it keeps going and lands in the cache. Measured from a cold container: the first
- * call to a registry costs 2.3–5.3 s of DNS and TLS, and every call after it to the same host is ~600 ms. One
- * clock for both would have to choose between blocking the agent for five seconds and being silent on the
- * first lookup of every session, which is the one it would most want to make. With two, the cold case reports
- * a beat late (the PostToolUse pass reads the same cache) and the warm case — the overwhelming majority — is
- * a hit that costs nothing. */
+// Two clocks: GRACE_MS bounds the caller's wait; TIMEOUT_MS bounds the fetch, past grace into the cache.
 const GRACE_MS = 800;
 const TIMEOUT_MS = 10_000;
 
-// A ceiling on any single response, so an ecosystem whose slim endpoint stops being slim cannot buy an
-// unbounded read on this path. PyPI's largest measured here is ~640 kB (numpy).
+// Ceiling on any single response, so a slim endpoint that stops being slim can't buy an unbounded read.
 const MAX_BYTES = 2_000_000;
 
 interface Semver {
@@ -92,21 +56,14 @@ export const parseVersion = (value: string): Semver | undefined => {
     return { major: Number(matched[1]), minor: Number(matched[2]), patch: Number(matched[3] ?? "0") };
 };
 
-// A prerelease is not what "latest" means to anyone reading this notice, and npm's own `latest` tag already
-// excludes them. This is the guard for the ecosystems whose slim endpoint does not.
+// A prerelease is never what 'latest' means; guards ecosystems whose slim endpoint doesn't already exclude them.
 export const isPrerelease = (value: string): boolean => /-/.test(value.trim());
 
 const compare = (left: Semver, right: Semver): number =>
     left.major !== right.major ? left.major - right.major : left.minor !== right.minor ? left.minor - right.minor : left.patch - right.patch;
 
-/* THE HIGHEST VERSION THE PIN ALREADY ADMITS, which is the thing `latest` has to beat before there is
- * anything to say.
- *
- * This is the difference between a useful notice and a nuisance. `"vite": "^7.1.7"` against a registry latest
- * of `8.2.1` IS behind: the caret stops at the major boundary and will never resolve to 8. The same caret
- * against `7.4.0` is not behind at all — the manifest already says yes to it, and `pnpm install` picks it up
- * without anybody editing anything. A check that could not tell those apart would fire on most of a healthy
- * lockfile and be switched off within a day. */
+// Highest version the pin already admits, what latest must beat before there's anything to report; ^7.1.7 admits 7.4.0
+// but not 8.2.1.
 export const admits = (pinned: PinnedPackage, candidate: Semver): boolean => {
     const base = parseVersion(pinned.version);
     if (base === undefined) {
@@ -138,7 +95,7 @@ const fetchJson = async (url: string, { signal }: FetchOptions): Promise<unknown
     const response = await fetch(url, {
         signal,
         headers: {
-            // crates.io refuses an unidentified client outright, and every registry here is friendlier to one.
+            // crates.io refuses an unidentified client; every registry here accepts this one.
             "user-agent": "intentic-dependency-freshness (+https://github.com/intentic/intentic)",
             accept: "application/json",
         },
@@ -162,8 +119,8 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
-// What one registry answers, before any comparison: the newest non-prerelease it publishes, and whatever it
-// says about the version we asked after.
+// What one registry answers before comparison: the newest non-prerelease version, and whatever it says about the pinned
+// one.
 interface RegistryAnswer {
     readonly latest: string;
     readonly deprecated?: string;
@@ -171,8 +128,7 @@ interface RegistryAnswer {
 
 const npmAnswer = async (name: string, version: string, options: FetchOptions): Promise<RegistryAnswer | undefined> => {
     const encoded = name.replace("/", "%2f");
-    // Concurrent, and the deprecation half is allowed to fail alone: it is an extra sentence on the notice,
-    // never the reason for it.
+    // Concurrent; the deprecation half may fail alone, since it is a bonus, never the reason for the notice.
     const [tags, pinned] = await Promise.all([
         fetchJson(`https://registry.npmjs.org/-/package/${encoded}/dist-tags`, options),
         fetchJson(`https://registry.npmjs.org/${encoded}/${encodeURIComponent(version)}`, options).catch(() => undefined),
@@ -192,7 +148,7 @@ const pypiAnswer = async (name: string, options: FetchOptions): Promise<Registry
     if (latest === undefined || isPrerelease(latest)) {
         return undefined;
     }
-    // PyPI marks a whole project yanked/inactive through its classifiers rather than a flag.
+    // PyPI marks a project yanked/inactive via its classifiers, not a flag.
     const classifiers = Array.isArray(info?.["classifiers"]) ? (info["classifiers"] as unknown[]) : [];
     const inactive = classifiers.some((entry) => typeof entry === "string" && entry.includes("Development Status :: 7 - Inactive"));
     return inactive ? { latest, deprecated: "the project marks itself Inactive on PyPI" } : { latest };
@@ -218,33 +174,25 @@ const ask = (pinned: PinnedPackage, options: FetchOptions): Promise<RegistryAnsw
 
 interface CacheEntry {
     readonly at: number;
-    // `null` records a registry that answered nothing, so a package that does not exist is not re-asked on
-    // every edit of the file that names it.
+    // null records a registry that answered nothing, so a nonexistent package isn't re-asked on every edit.
     readonly answer: RegistryAnswer | null;
 }
 
-// One file per package, named by hash: a package name can carry a slash, a scope and characters no filesystem
-// wants, and this cache is not something anybody reads by hand.
+// One file per package, named by a hash, since a package name can carry slashes and characters no filesystem wants.
 const cacheFile = (dir: string, pinned: PinnedPackage): string =>
     join(dir, `${createHash("sha256").update(`${pinned.ecosystem}\u0000${pinned.name}\u0000${pinned.version}`).digest("hex").slice(0, 32)}.json`);
 
 export interface FreshnessOptions {
-    // Where answers are kept between turns. Absent ⇒ memory only, which is what the tests run on.
+    // Where answers persist between turns; absent means memory only, which is what the tests run on.
     readonly cacheDir?: string | undefined;
     readonly now?: (() => number) | undefined;
-    // The fetch's own budget, not the caller's. See the two clocks above.
+    // The fetch's own budget, not the caller's grace.
     readonly timeoutMs?: number | undefined;
     readonly graceMs?: number | undefined;
 }
 
-/* A resolver, with its two layers of memory.
- *
- * Created once per turn so the in-memory layer is a turn's worth of answers — a manifest edited five times
- * costs one lookup, and the same package named in two files costs one. The disk layer spans turns and is what
- * keeps a busy workspace from re-asking the registry for the same forty packages every conversation.
- *
- * The in-flight map matters as much as either: a `Write` that names twenty dependencies fires twenty lookups
- * in the same tick, and without it the same package is fetched by several of them at once. */
+// A resolver with two memory layers, per-turn in-memory and cross-turn on disk, plus an in-flight map so concurrent
+// lookups for the same package share one fetch.
 export const createFreshnessResolver = (options: FreshnessOptions = {}): FreshnessResolver => {
     const now = options.now ?? Date.now;
     const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
@@ -272,14 +220,12 @@ export const createFreshnessResolver = (options: FreshnessOptions = {}): Freshne
             await mkdir(options.cacheDir, { recursive: true });
             await writeFile(cacheFile(options.cacheDir, pinned), JSON.stringify(entry), "utf8");
         } catch {
-            // A cache that cannot be written is a cache miss next time, and nothing worse. Never a reason to
-            // fail the lookup the agent is waiting on.
+            // An unwritable cache is a miss next time, nothing worse; never a reason to fail the caller's lookup.
         }
     };
 
-    /* The lookup itself, started at most once per package and never abandoned early. Whoever starts it owns
-     * writing the result into both caches, which is what makes it safe for a caller to walk away at its grace
-     * and for the NEXT caller to find the answer sitting there. */
+    // Starts a lookup at most once per package, never abandoned early; whoever starts it writes the result to both
+    // caches.
     const lookupFor = (pinned: PinnedPackage, key: string): Promise<RegistryAnswer | undefined> => {
         const running = inFlight.get(key);
         if (running !== undefined) {
@@ -294,8 +240,7 @@ export const createFreshnessResolver = (options: FreshnessOptions = {}): Freshne
             try {
                 answer = await ask(pinned, { signal: controller.signal });
             } catch {
-                // Timed out, offline, DNS, a registry returning something that is not JSON. Silence, and the
-                // silence is REMEMBERED below, so an unreachable registry is asked once rather than per edit.
+                // Timeout, offline, DNS, non-JSON: silence, remembered so a dead registry is asked once, not per edit.
                 answer = undefined;
             } finally {
                 clearTimeout(timer);
@@ -303,11 +248,7 @@ export const createFreshnessResolver = (options: FreshnessOptions = {}): Freshne
             const entry: CacheEntry = { at: now(), answer: answer ?? null };
             memory.set(key, entry);
             inFlight.delete(key);
-            /* NOT awaited, and that is the point: by here the answer is known, and the between-turn cache is
-             * an optimization that must never stand between it and the caller. Awaiting it cost exactly that
-             * once already — a `mkdir` that HANGS rather than failing (a container's /proc, a wedged network
-             * mount) held the answer past its grace and the notice was silently dropped, with a working
-             * lookup sitting behind it. writeDisk swallows its own failures, so nothing here can reject. */
+            // Not awaited: the answer is known; a hung write (mkdir that hangs, not fails) must never delay it.
             void writeDisk(pinned, entry);
             return answer;
         })();
@@ -315,10 +256,8 @@ export const createFreshnessResolver = (options: FreshnessOptions = {}): Freshne
         return lookup;
     };
 
-    /* What the CALLER gets, which is the cached answer if there is one and otherwise as much of a lookup as
-     * fits in the grace. The unresolved case returns `undefined` while the fetch carries on behind it: nothing
-     * is cancelled, so the answer is simply late rather than lost, and the next hook to ask the same question
-     * — the PostToolUse pass on the very same tool call — finds it in memory. */
+    // What the caller gets: a cached answer, or as much of a lookup as fits in the grace; an unresolved fetch continues
+    // and lands in memory for the next asker.
     const answerFor = async (pinned: PinnedPackage, key: string): Promise<RegistryAnswer | undefined> => {
         const remembered = memory.get(key) ?? (await readDisk(pinned));
         if (remembered !== undefined && now() - remembered.at < TTL_MS) {
@@ -353,8 +292,7 @@ export const createFreshnessResolver = (options: FreshnessOptions = {}): Freshne
         if (latest === undefined || isPrerelease(answer.latest)) {
             return answer.deprecated === undefined ? undefined : { latest: answer.latest, gap: "patch", deprecated: answer.deprecated };
         }
-        // A pin the manifest already reaches is not news — unless the registry says the pinned version is
-        // deprecated, which is worth saying whatever the numbers are.
+        // A pin already within range isn't news, unless the registry marks it deprecated, worth saying regardless.
         if (admits(pinned, latest)) {
             return answer.deprecated === undefined ? undefined : { latest: answer.latest, gap: gapBetween(base, latest), deprecated: answer.deprecated };
         }

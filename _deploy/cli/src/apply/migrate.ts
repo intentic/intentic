@@ -15,9 +15,8 @@ import {
     streamRepoVolume,
 } from "@intentic/providers";
 
-// A host whose node id is unchanged but whose `address` changed: the same logical host now lives on a
-// different machine. `address` is a plain literal in the artifact (only sshKey is a secret), so a move is a
-// direct string compare, no secret resolution needed to detect it.
+// A host whose id is unchanged but whose `address` changed. `address` is a plain literal (not a secret), so detecting a
+// move needs no secret resolution.
 export interface HostMove {
     readonly id: string;
     readonly oldNode: ResourceNode;
@@ -26,8 +25,8 @@ export interface HostMove {
     readonly newAddress: string;
 }
 
-// Detect hosts that moved between the last-applied graph and the one being applied: same id, different address.
-// A new host id (no match in `previous`) is a fresh create, and a removed id is a prune, neither is a move.
+// Detects hosts with the same id but a different `address` between the last-applied graph and the one being applied. A
+// new id is a create; a removed id is a prune; neither counts as a move.
 export const detectHostMoves = (previous: DesiredStateGraph, next: DesiredStateGraph): HostMove[] => {
     const moves: HostMove[] = [];
     for (const [id, newNode] of Object.entries(next.resources)) {
@@ -59,9 +58,8 @@ interface MigrateArgs {
     readonly log: (message: string) => void;
 }
 
-// The backup destination for a moved host: the control-plane backup node on that host (matched by its new
-// address, there is one per control-plane host). Its resolved inputs carry the repo/password/image the
-// snapshot was taken with, which restore reads back. undefined when the moved host runs no control plane.
+// Finds the control-plane backup node for a moved host's new address (one per CP host); its inputs carry the
+// repo/password/image restore reads back. Undefined if the host runs no control plane.
 const backupFor = (
     move: HostMove,
     args: MigrateArgs,
@@ -87,11 +85,8 @@ const backupFor = (
     return { repo, password, image, credentials };
 };
 
-// Migrate one host that moved machines: snapshot the old host, stream its restic repo to the new host (for the
-// on-host default repo, a remote repo is reachable from both, so no stream), and restore onto the new host.
-// The caller's reconcile then brings the services up on the new host atop the restored data. The old host is
-// left quiesced (writers stopped, tunnel connectors removed → it serves nothing) with its data volumes intact,
-// so the operator can verify the new host before reclaiming the old machine.
+// Snapshots the old host, streams its on-host restic repo to the new host (skipped when remote), and restores there;
+// reconcile brings services up after. The old host is left quiesced with data intact for verification.
 const migrateHost = async (move: HostMove, args: MigrateArgs): Promise<void> => {
     const backup = backupFor(move, args);
     if (backup === undefined) {
@@ -159,8 +154,8 @@ const migrateHost = async (move: HostMove, args: MigrateArgs): Promise<void> => 
     args.log(`restored "${move.id}" data onto ${move.newAddress}; reconcile will bring its services up next`);
 };
 
-// Migrate every host that moved machines, BEFORE reconcile, so the data is in place on the new host when its
-// services are (re)created. A no-op when nothing moved.
+// Migrates every moved host before reconcile, so data is in place when services are (re)created. No-op if nothing
+// moved.
 export const migrateHosts = async (moves: readonly HostMove[], args: MigrateArgs): Promise<void> => {
     for (const move of moves) {
         await migrateHost(move, args);

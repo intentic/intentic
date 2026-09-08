@@ -1,31 +1,8 @@
 import type { Ecosystem } from "./registry-freshness.js";
 
-/* THE OTHER HALF OF A STALE DEPENDENCY: not an old version of the right package, an old CHOICE of package.
- *
- * A registry can settle "is there a newer release" on its own. It cannot settle "is this still the thing to
- * reach for", and that is the question behind most of the disappointment this feature exists for — the
- * request in this workspace's own history was to audit for "packages and load-bearing solutions implemented
- * using old tech that already has faster replacements", which no version comparison anywhere would answer.
- *
- * So this file is a JUDGEMENT, and it is built to be honest about being one. Two kinds of entry, with
- * different evidence behind them and different rules about when they may speak:
- *
- *   abandoned  , the incumbent is finished: deprecated by its own author, or self-declared inactive. The
- *                 registry CORROBORATES this, and the daemon refuses to say it unless the registry does
- *                 (agent-freshness.ts checks). So the curation here supplies only the NAME of the
- *                 replacement, and the fact that something is wrong stays a measurement. An entry that
- *                 quietly stops being true stops being said, without anyone having to notice.
- *
- *   superseded , the incumbent is alive, maintained, and perfectly defensible; something else is simply
- *                 faster or better kept now. Nothing in a registry can corroborate that, so it earns a much
- *                 narrower licence: it is said ONLY when a package is being ADDED for the first time, never
- *                 about a version already in a manifest. Choosing between two live options is a real decision
- *                 at the moment of `pnpm add`; second-guessing a dependency the project already committed to
- *                 is noise, and would be this feature's fastest route to being switched off.
- *
- * KEPT SHORT ON PURPOSE. Every entry is a claim somebody has to still agree with in a year. The bar for
- * adding one is that the replacement is the broad consensus rather than a preference, and the reason fits on
- * one line, because that line is what the model is given and what a reader will judge this list by. */
+// Curated judgement of which package or pattern to reach for, beyond a version check. abandoned needs the registry to
+// corroborate and only names the replacement; superseded fires only when adding, never about what's already in the
+// manifest. Each reason must fit one line for the model and the reader.
 
 export type SuccessorKind = "abandoned" | "superseded";
 
@@ -34,15 +11,14 @@ export interface Successor {
     // Exactly as the manifest or the install command spells it.
     readonly from: string;
     readonly kind: SuccessorKind;
-    // What to reach for instead. Plain prose, because the answer is sometimes a language feature rather than
-    // a package and "use the platform" is a legitimate recommendation this list must be able to express.
+    // What to reach for instead, in prose; sometimes a language feature rather than a package.
     readonly to: string;
-    // Why, in one clause. Appended after an em dash, so it has to read as a continuation of the sentence.
+    // Why, in one clause, appended after an em dash as a continuation of the sentence.
     readonly reason: string;
 }
 
 export const SUCCESSORS: readonly Successor[] = [
-    // ---- abandoned: the registry itself will confirm these, or nothing is said ----
+    // abandoned: the registry itself must corroborate these, or nothing is said.
     { ecosystem: "npm", from: "request", kind: "abandoned", to: "undici, or the built-in fetch", reason: "it was deprecated in 2020 and takes no fixes" },
     { ecosystem: "npm", from: "node-sass", kind: "abandoned", to: "sass (dart-sass)", reason: "it binds a C++ library that no longer builds on current Node" },
     { ecosystem: "npm", from: "tslint", kind: "abandoned", to: "eslint or oxlint", reason: "it was retired in favour of typescript-eslint in 2019" },
@@ -56,7 +32,7 @@ export const SUCCESSORS: readonly Successor[] = [
     { ecosystem: "pypi", from: "nose", kind: "abandoned", to: "pytest", reason: "it does not run on Python 3.10 or later" },
     { ecosystem: "pypi", from: "distutils", kind: "abandoned", to: "setuptools or hatch", reason: "it was removed from the standard library in 3.12" },
 
-    // ---- superseded: said only at the moment of adding, never about what is already there ----
+    // superseded: said only when adding, never about a dependency already in the manifest.
     { ecosystem: "npm", from: "moment", kind: "superseded", to: "date-fns, Day.js, or the Temporal API", reason: "moment is in maintenance mode and ships no new features" },
     { ecosystem: "npm", from: "mkdirp", kind: "superseded", to: "node:fs mkdir with recursive: true", reason: "the platform has covered this since Node 10" },
     { ecosystem: "npm", from: "rimraf", kind: "superseded", to: "node:fs rm with recursive: true", reason: "the platform has covered this since Node 14" },

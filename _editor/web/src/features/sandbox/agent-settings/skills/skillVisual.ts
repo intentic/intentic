@@ -2,53 +2,26 @@ import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/api
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { capabilityMark } from "../../../capabilities/model/cards";
 
-/* THE MARK ON A SKILL ROW, what makes "Discord, GitHub, your Windows PC" legible from the left edge alone,
- * instead of thirteen identical grey glyphs down a column where twelve of them said `link`.
- *
- * The Skills list is the one surface where everything the agent carries sits together, so it is the longest list
- * in the hub and the one most often read by scanning ("which of these came with something I connected?"). Every
- * row of it was drawn with its ORIGIN's glyph, which means the column repeated six symbols over and over and
- * distinguished nothing inside a group, the eight connections were eight identical chain links. The environment
- * tab had already solved exactly this (environmentVisual.ts), and this follows its shape: one <BrandMark>, a
- * ladder of tiers, and the glyph kept as what the brand is painted over rather than as the answer.
- *
- * THE TOP TIER IS NOT A TABLE. IT IS WHAT THE OWNER ALREADY DECLARED. A skill that came with an extension or a
- * connection belongs to a thing that has a card, and that card's manifest already carries the mark the rest of
- * the app draws it with (the Extensions tab's rows, the Capabilities grid, the connections list). So this asks
- * that manifest rather than guessing from the skill's name: `linux` gets Tux because the Linux PC card says so,
- * and a Reddit account somebody named `reddit-work` still gets Reddit's mark, which no table keyed on a
- * user-typed name could ever manage.
- *
- * THE WORD TABLE IS THE SECOND TIER, and it is small on purpose. It exists for the rows with no owner to ask,
- * the baked tools and the skills the reader wrote themselves, where the name is all there is. A word is enough
- * (`figma-export` → Figma) and whole names are not, for environmentVisual's reason: nobody spells these the same
- * way twice.
- *
- * A WRONG MARK IS WORSE THAN NO MARK, which is why two obvious entries are missing. `linear` is a slug (the
- * issue tracker) and also an ordinary English word, so a skill about linear algebra would wear a project
- * management brand as though it were a fact; `x` is one character and matches far too much. The glyph tier reads
- * as "no brand for this one", so falling to it costs nothing and claims nothing. */
+// Marks for the skills list, in tiers: a manifest-declared mark from the owning extension or capability card,
+// then a word table for rows with no owner (baked tools, the reader's own skills), then the origin's glyph as a
+// fallback. A wrong mark is worse than none, so ambiguous words (`linear`, `x`) are left out of the table.
 
 export interface SkillVisual {
-    /** A simple-icons slug for <BrandMark>, absent for anything with no brand to draw. */
+    /** A simple-icons slug for <BrandMark>; absent when there's no brand to draw. */
     readonly logo?: string;
-    /** What is painted under the brand: while it loads, if it fails, and forever when there is no slug. An OPEN
-     *  string like <BrandMark>'s own prop, because a manifest may name a glyph this build has never heard of. */
+    /** Painted under the brand while it loads, on failure, or with no logo; an open string, not a fixed enum. */
     readonly icon: string;
 }
 
-/** What the list needs in hand to ask each skill's owner what it looks like. Both are already-cached reads. */
+/** What the list needs to ask each skill's owner what it looks like; both reads are already cached. */
 export interface SkillSources {
-    /** The sandbox's connections, a capability skill's `owner` is one of these ids. */
+    /** The sandbox's connections; a capability skill's `owner` is one of these ids. */
     readonly capabilities: readonly CapabilitySummary[];
-    /** The ENABLED extensions: their own manifests, and the capability cards they contribute. */
+    /** The enabled extensions: their manifests and the capability cards they contribute. */
     readonly extensions: readonly ExtensionSummary[];
 }
 
-/* Brands, keyed by every word that should reach them. Slugs are verified against the CDN rather than guessed,
- * a 404 costs a request and degrades to the glyph, which is survivable but is a hole in the column this exists
- * to fill. Slack and OpenAI are deliberately absent: neither is in that set, and both have a glyph in the app's
- * own icon vocabulary below. */
+// Slugs verified against the icon CDN; Slack and OpenAI are left out since they already have glyphs below.
 const LOGOS: Readonly<Record<string, string>> = {
     github: `github`,
     gitlab: `gitlab`,
@@ -89,8 +62,7 @@ const LOGOS: Readonly<Record<string, string>> = {
     anthropic: `claude`,
 };
 
-// The kinds of work with no brand to borrow, a glyph per KIND, so the baked tools and a reader's own skills are
-// still told apart at a glance rather than sharing one box.
+// A glyph per kind of work with no brand to borrow, so baked tools and own skills are still told apart.
 const GLYPHS: Readonly<Record<string, string>> = {
     lsp: `code`,
     iq: `search`,
@@ -123,13 +95,10 @@ const GLYPHS: Readonly<Record<string, string>> = {
     openai: `sparkles`,
 };
 
-/* The last tier: what KIND of thing put this skill in front of the agent. Reached only by a row whose owner
- * declared no mark and whose name says nothing, and it is still the answer for the one origin that has nothing
- * else to say, a loose file nobody claims. */
+// The last tier: what kind of thing put this skill here, used when nothing else recognizes anything.
 const ORIGIN_ICONS = {
     own: `pencil`,
-    // The same glyph the persona rows and the composer's chip wear, so a kit skill reads as belonging to the
-    // card it came from rather than as another thing the owner wrote.
+    // Same glyph as persona rows and the composer's chip, so it reads as belonging to that card.
     persona: `user`,
     builtin: `box`,
     capability: `link`,
@@ -138,31 +107,29 @@ const ORIGIN_ICONS = {
     dropped: `file`,
 } satisfies Record<SkillOrigin, string>;
 
-// `rust-tauri` → rust, tauri · `radarsu-omen` → radarsu, omen · `Code search` → code, search. The same splitter
-// the environment's marks use, for the same reason: a name is spelled by whoever typed it.
+// Splits a name into words the same way environmentVisual does (`rust-tauri` → rust, tauri), since names are
+// spelled inconsistently.
 const wordsOf = (text: string): string[] =>
     text
         .toLowerCase()
         .split(/[\s._/-]+/u)
         .filter((word) => word !== ``);
 
-/* A mark as its OWNER declares it: either half may be missing, and the row's own tiers fill the gap, a card
- * with a brand and no glyph still needs something painted under the brand while it loads. A CONNECTION's owner
- * is the card it came from, which is the join the Capabilities view already makes to list a card's instances,
- * run backwards, shared with it (capabilityMark) rather than written twice. */
+// A mark as declared by the thing that owns the skill; either half may be missing. A connection's mark is shared
+// with capabilityMark rather than duplicated.
 type Declared = { readonly logo?: string; readonly icon?: string } | undefined;
 
 const declares = (mark: { readonly logo?: string; readonly icon?: string }): Declared =>
     mark.logo === undefined && mark.icon === undefined ? undefined : mark;
 
-// What the thing that ships this skill is drawn as everywhere else in the app. Undefined when it declares
-// nothing, or when the list it lives in has not arrived yet, both are "ask the next tier", never a hole.
+// What the owning thing is drawn as elsewhere in the app. Undefined means ask the next tier, whether nothing is
+// declared or the list hasn't arrived yet, never a hole.
 const declaredMark = (skill: SkillSummary, sources: SkillSources): Declared => {
     if (skill.owner === undefined) {
         return undefined;
     }
     if (skill.origin === `extension`) {
-        // The row names an extension by its manifest name, which is what the daemon's inventory puts there.
+        // Matched by manifest name, which is what the daemon's inventory records.
         const manifest = sources.extensions.find((extension) => extension.manifest.name === skill.owner)?.manifest;
         return manifest === undefined ? undefined : declares(manifest);
     }
@@ -179,8 +146,7 @@ export const skillVisual = (skill: SkillSummary, sources: SkillSources): SkillVi
     if (declared !== undefined) {
         return { logo: declared.logo, icon: declared.icon ?? origin };
     }
-    // A glyph found early is remembered but does not stop the search, environmentVisual's rule: a brand further
-    // down the words still wins the top tier, and the glyph it passed becomes what sits under it.
+    // A glyph found early keeps searching for a logo; a later logo still wins, with the earlier glyph underneath it.
     let glyph: string | undefined;
     for (const word of [...wordsOf(skill.name), ...wordsOf(skill.owner ?? ``)]) {
         glyph ??= GLYPHS[word];

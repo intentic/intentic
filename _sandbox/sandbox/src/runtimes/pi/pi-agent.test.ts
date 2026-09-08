@@ -7,10 +7,8 @@ import { SteeringQueue } from "../../agent/anchors/agent-steering.js";
 import { createPiAgent, type PiTimeouts } from "./pi-agent.js";
 import type { PiEvent, PiProcessHandlers, PiResponse, PiSpawn } from "./pi-rpc.js";
 
-/* The Pi adapter over a scripted process: no spawn, no binary (the QueryFn/CodexRunner/fake-acp-agent
- * pattern for Pi RPC). The fake answers commands from a response table and scripts what streams after each
- * accepted prompt, so the tests exercise the adapter's real loop: setup, framing, steering, plan phases,
- * watchdogs, and the frames the client actually renders. */
+// The Pi adapter over a scripted process (no spawn, no binary): a fake answers commands from a response table and
+// scripts what streams after each accepted prompt, exercising the adapter's real loop end to end.
 
 const SESSION_FILE = "/auth/pi/sessions/s1.jsonl";
 
@@ -25,8 +23,8 @@ interface FakePi {
     readonly killed: () => boolean;
 }
 
-// `prompts` scripts the event burst that follows each accepted prompt, one entry per prompt in send order
-// (the last entry repeats: plan revisions loop). `responses` overrides the defaults per command type.
+// `prompts` scripts the event burst after each accepted prompt, one entry per prompt in send order (the last repeats:
+// plan revisions loop); `responses` overrides the defaults per command type.
 const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses: Record<string, Responder> = {}): FakePi => {
     const sent: Record<string, unknown>[] = [];
     let handlers: PiProcessHandlers | undefined;
@@ -99,8 +97,8 @@ const request = (overrides: Partial<AgentRequest> = {}): AgentRequest => ({
 
 const CONFIG = { command: "pi" };
 
-// Collect all frames; `onPlan` schedules a decision for each plan frame AFTER the generator parks on the
-// pending-plan bridge (the yield suspends before wait() registers, hence the macrotask).
+// Collects all frames; `onPlan` fires via `setTimeout` since the generator's yield suspends before the pending-plan
+// bridge's `wait()` registers.
 const collect = async (
     turn: AsyncGenerator<AgentEvent>,
     onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
@@ -181,7 +179,6 @@ test("steering messages are forwarded onto Pi's steer queue mid-turn", async () 
     const pi = fakePi([[]], {
         steer: (command) => {
             expect(command["message"]).toBe("also add a test");
-            // The steer is in: let the turn settle.
             setTimeout(() => pi.emit({ type: "agent_settled" }), 0);
             return { success: true };
         },

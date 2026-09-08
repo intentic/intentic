@@ -1,35 +1,10 @@
 #!/usr/bin/env node
-/* CLEAR A BUILD OUTPUT WITHOUT REPLACING IT, the one way this repository is allowed to throw away a `dist`, a
- * `generated` or a `node_modules`.
- *
- *   node _tools/scripts/build/clean-outputs.mjs ./generated ./dist ./.cache    named paths, relative to the cwd
- *   node _tools/scripts/build/clean-outputs.mjs --sweep .cache dist .turbo     every entry with one of those NAMES
- *
- * WHY THIS EXISTS AT ALL, since `rm -rf` is one word shorter. Every isolated turn runs in a mount namespace
- * where each of those directories is an overlayfs mount whose LOWERDIR is the main checkout's copy of it
- * (_sandbox/sandbox/src/agents/isolation.ts). An overlay resolves its lowerdir once, at mount time. Rewriting
- * the files inside is fine and the merged view follows along; giving the directory a NEW INODE is not, and
- * leaves every live turn's merged view reading as completely empty — upper layer included — with no way to
- * repair it short of a umount/mount that nothing inside the turn can perform.
- *
- * `rm -rf ./generated` in `_platform/prisma`'s build script is the incident: run on the main tree by `turbo run
- * build`, it emptied that package's `generated` overlay in every agent worktree at once, so the declarations
- * emit failed TS6307 on `generated/client.ts` — a file sitting right there, `stat`-able, in a directory that
- * `readdir` swore was empty — on the turn-ending check of every conversation regardless of what it had changed.
- * The full argument, and the measurements behind it, are in @intentic/constants/mirror-roots.
- *
- * So a mirrored directory is EMPTIED (its own inode survives, every child goes) and anything else is removed
- * outright, which is what makes this a drop-in for the `rm -rf` it replaces. A missing mirrored directory is
- * CREATED rather than skipped: the caller's next step is a build that writes into it, and creating it here,
- * before any turn could have mounted over it, is free — creating it later is the very inode swap this refuses.
- *
- * _tools/checks/mirror-roots.mjs is the gate: it refuses a `rm -rf <mirror root>` anywhere a shell command in
- * this repository spells one, and names this script as the shape to use instead. */
+// Clears a build output without giving its directory a new inode, the one way this repo may empty a `dist`,
+// `generated`, or `node_modules`. A mirrored directory (@intentic/constants/mirror-roots) is emptied in place since
+// agent worktrees overlay-mount it; anything else is removed outright. `--sweep <names...>` walks the repo instead of
+// taking explicit paths.
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-// By file, not by package name, for the reason _tools/checks/lib/repo.mjs gives: a bare specifier resolves
-// through node_modules, and this is the first step of a package's `build` and of the root's `clear` — the two
-// moments where an install is exactly what may be missing or half-written.
 import { MIRRORED_DIRS } from "../../constants/src/mirror-roots.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 
@@ -44,8 +19,7 @@ if (targets.length === 0) {
 let emptied = 0;
 let removed = 0;
 
-// The mirror-root rule, applied to one path: keep the directory, drop everything in it. Anything else — a
-// `.cache`, a `.turbo`, a `dist.zip` — is nobody's mount and goes whole.
+// Empties a mirrored directory in place; removes anything else (a `.cache`, a `.turbo`) outright.
 const clear = (path, name) => {
     if (MIRRORED_DIRS.has(name)) {
         mkdirSync(path, { recursive: true });
@@ -68,18 +42,15 @@ if (!sweep) {
     process.exit(0);
 }
 
-/* THE SWEEP, for the root's `clear` and `cache:clear`. Pruning is what the `find` this replaces did and is not
- * an optimisation: an installed tree holds a `dist` and a `.cache` for thousands of third-party packages, so a
- * sweep that descended into one would walk a quarter of a million paths in order to delete files that are about
- * to go with their parent — and on `cache:clear`, which leaves `node_modules` alone, it would quietly gut every
- * installed package instead. `.git` is pruned for the same reason and one more: nothing under it is output. */
+// Prunes `node_modules` and `.git` while walking: descending into an installed tree means walking a huge number of
+// paths, and on `cache:clear` (which leaves `node_modules` alone) would gut every installed package.
 const PRUNED = new Set(["node_modules", ".git"]);
 const root = repoRoot(import.meta.url);
 const wanted = new Set(targets);
 const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
-        // A matched name is cleared and never descended into, whether it is one of the pruned trees or not.
+        // Matched name is cleared, not descended into, even if it's also a pruned name.
         if (wanted.has(entry.name)) {
             clear(path, entry.name);
             continue;

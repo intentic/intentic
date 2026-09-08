@@ -1,21 +1,9 @@
-/* IS THE PEER STILL THERE, which TCP will not tell you in any useful time.
- *
- * A sandbox's tunnel is mostly idle — a workspace nobody is looking at sends nothing for hours — so "the
- * socket has not errored" is not evidence of anything. A container that was killed, a laptop that slept, a NAT
- * that dropped the mapping: all three leave a socket that looks open from here and will never deliver another
- * byte. The registration behind it keeps answering routes for a box that is gone, which is a 502 the browser
- * waits the full proxy timeout for instead of the immediate one it should get.
- *
- * So the edge asks: a WebSocket ping every interval, and a peer that has said NOTHING (pong, frame, anything)
- * for the dead window is unregistered and its socket closed. The numbers are the contract's.
- *
- * Split from the socket so it is a state machine rather than a timer: `tick` is one interval elapsing, and the
- * tests drive it directly instead of waiting out real seconds or reaching for fake timers.
- */
+// Detects a peer TCP won't report as gone: a killed container or dropped NAT mapping leaves a socket that looks open
+// but delivers nothing.
+// Pings every interval; a peer silent (no pong, no frame) for the dead window is declared dead.
+// A state machine, not a timer, so `tick` (one interval) can be driven directly by tests.
 
-// The contract's numbers: ping every 15s, dead after 45s of silence. Three missed intervals rather than one,
-// because a single dropped pong is ordinary on a congested link and tearing a working tunnel down for it
-// would be the more expensive mistake.
+// Ping every 15s, dead after three missed intervals (45s); one miss alone is ordinary on a congested link.
 export const PING_INTERVAL_MS = 15_000;
 export const DEAD_AFTER_MS = 45_000;
 
@@ -27,10 +15,9 @@ export interface HeartbeatOptions {
 }
 
 export interface Heartbeat {
-    // The peer said something. Any frame counts, not just a pong: a tunnel carrying traffic is alive by
-    // definition, and requiring the pong specifically would kill busy sessions on a lost control frame.
+    // Peer said something; any frame counts, since a busy tunnel is alive even if it drops a pong.
     readonly saw: () => void;
-    // One interval elapsed: declare the peer dead, or ping it.
+    // One interval elapsed: ping the peer, or declare it dead.
     readonly tick: () => void;
     readonly stop: () => void;
     readonly alive: () => boolean;
@@ -50,8 +37,8 @@ export const createHeartbeat = (options: HeartbeatOptions): Heartbeat => {
             if (stopped) {
                 return;
             }
-            /* Declared dead BEFORE pinging, so a peer that has gone quiet is not sent one more frame it will
-             * never answer. The order also makes the window exact: the first tick past the deadline ends it. */
+            // Declared dead before pinging: a peer already quiet gets no extra frame, and the deadline window stays
+            // exact.
             if (now() - lastSeen > deadAfterMs) {
                 stopped = true;
                 options.onDead();
@@ -66,7 +53,7 @@ export const createHeartbeat = (options: HeartbeatOptions): Heartbeat => {
     };
 };
 
-// The same thing wired to a real clock. Unrefed so a heartbeat can never be the reason this process stays up.
+// Wired to a real clock; unrefed so a heartbeat never keeps the process alive.
 export const startHeartbeat = (options: HeartbeatOptions & { readonly intervalMs?: number }): Heartbeat => {
     const heartbeat = createHeartbeat(options);
     const timer = setInterval(() => heartbeat.tick(), options.intervalMs ?? PING_INTERVAL_MS);

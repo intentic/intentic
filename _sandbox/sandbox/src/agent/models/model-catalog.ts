@@ -1,29 +1,12 @@
 import type { JsonFile } from "../../store/json-file.js";
 
-/* THE PICKER'S CATALOG, ONCE. Five providers (Claude, Codex, Gemini, Cursor, Kimi) answer "what can a turn on
- * me run" through the same ladder, and each used to carry its own copy of it beside its own copy of the
- * persist-to-disk cycle, four of them with a different idea of how to validate the file:
- *
- *   1. the LIVE source, whatever the provider publishes for the connected account;
- *   2. the persisted last-known-good list, rewritten on every successful discovery;
- *   3. the compile-time seed floor.
- *
- * ALWAYS non-empty, so the picker is never blank and a turn always resolves a concrete model. ONLY REAL ANSWERS
- * ARE CACHED: a read that fell to the file or the floor stays uncached, so the very next read retries a source
- * that may since have come up (the translator finished booting, the user connected the account), which is the
- * difference between a sandbox that recovers a second after sign-in and one that shows one row for a minute.
- *
- * What differs per provider is exactly what the options name: how to discover, what to keep on disk (Claude
- * keeps whole records so a version that postdates the build survives a restart with its name; Codex and Cursor
- * keep ids, having nothing else), the floor, and how each rung renders. Cursor keeps its raw items too (`live`),
- * because a turn needs the vendor's parameter definitions to translate an effort tier and must not spend a
- * round-trip re-fetching a list already in memory. Codex records the ids a turn proved (`record`), its self-heal.
- *
- * The file is a `jsonFile`, so it is written atomically and read through the caller's schema: a truncated write
- * or a record from another build reads as absent rather than reaching the picker half-formed. */
+// Shared 3-rung catalog ladder for every provider's model picker: the live source, the persisted last-known-good list,
+// and the compile-time seed floor — always non-empty. Only a live answer is cached, so a read that fell back to the
+// file or the seed retries the live source next time. Stored as a `jsonFile`, written atomically and read through the
+// caller's schema.
 export interface DiscoveredCatalogOptions<Item, Stored, Value, Args extends unknown[]> {
     readonly ttlMs: number;
-    // The live source. Empty means nothing usable right now; nothing is cached and the next read asks again.
+    // Live source; empty means nothing usable now, so nothing is cached and the next read asks again.
     readonly discover: (...args: Args) => Promise<readonly Item[]>;
     // The last-known-good file. Absent for a provider with nothing worth keeping across restarts.
     readonly store?: JsonFile<Stored[]> | undefined;
@@ -37,16 +20,13 @@ export interface DiscoveredCatalogOptions<Item, Stored, Value, Args extends unkn
 export interface DiscoveredCatalog<Item, Value, Args extends unknown[]> {
     // The catalog (+ default id), never empty.
     readonly models: (...args: Args) => Promise<Value>;
-    /* The live items behind the current answer, warming the cache through the same path a picker would so the
-     * two can never disagree about what is current. Undefined when only the file or the floor is in hand, and
-     * the last live list when a re-discovery just came back empty. */
+    // Live items behind the current answer, warmed through the same path a picker uses so the two can't disagree.
+    // Undefined when only the file/seed is in hand; the last live list if a re-discovery just came back empty.
     readonly live: (...args: Args) => Promise<readonly Item[] | undefined>;
     // Persist items proved some other way (a turn's self-heal) as the last-known-good, and cache them.
     readonly record: (items: readonly Item[]) => Promise<void>;
-    /* Forget the cached answer, for the provider whose account can be DISCONNECTED while the daemon runs. The
-     * file is the caller's to remove (it owns the `store`), but the cache is in here, and a catalog that kept
-     * serving a signed-out account's models for the rest of the TTL is the one way this ladder can state
-     * something that is no longer true. */
+    // Forgets the cached answer, for a provider whose account can disconnect while the daemon runs; the file remains
+    // the caller's to remove. Without this, a signed-out account's models would keep serving until the TTL expired.
     readonly forget: () => void;
 }
 

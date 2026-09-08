@@ -9,28 +9,24 @@ import { afterEach, vi } from "vitest";
 import { ForbiddenError } from "../auth/auth.js";
 import type { AppEnv, OrpcContext } from "../app-env.js";
 
-/* The route harness's client side: the typed oRPC client over an in-process app (or over one feature's routes
- * alone), the auth stubs a gate test hands `services`, and the helpers that read what came back.
- * route-services.testing.ts and route-turns.testing.ts both import from here, so the env hook below is armed in
- * every suite that reaches either. Not part of the build (tsconfig excludes `*.testing.ts`), type-checked with
- * the tests (tsconfig.test.json). */
+// Route harness's client side: a typed oRPC client over the in-process app (or one feature's routes alone), auth stubs,
+// and result helpers. Both route-services.testing.ts and route-turns.testing.ts import this, arming the env hook below
+// in every suite that reaches either.
 
-// A typed oRPC client over the in-process Hono app, the same OpenAPILink the browser uses, so streams round-
-// trip through the real SSE encode/decode. JSON routes resolve to their output; thrown ORPCErrors carry `.code`.
+// Typed client over the in-process app via the browser's own OpenAPILink, so SSE streams round-trip for real. JSON
+// routes resolve to their output; thrown ORPCErrors carry `.code`.
 export const clientFor = (app: Hono<AppEnv>): ContractRouterClient<typeof sandboxContract> =>
     createORPCClient(new OpenAPILink(sandboxContract, { url: "http://sandbox", fetch: async (request) => app.request(request) }));
 
 // Without a vitest config there is no unstubEnvs, so a stubbed var would outlive the test that set it.
 afterEach(() => vi.unstubAllEnvs());
 
-// An auth stub that refuses every bearer as an AUTHENTICATION failure (→ 401), proves a route's gate (or its
-// exemption from the bearer middleware).
+// Auth stub refusing every bearer as an AUTHENTICATION failure (401), for testing a route's gate.
 export const rejectAuth = async (): Promise<never> => {
     throw new Error("no bearer");
 };
 
-// An auth stub for a verified-but-unauthorized caller (→ 403): the bearer is valid, the identity just isn't
-// allowed (wrong Google account / member hitting an owner-only route).
+// Auth stub for a verified-but-unauthorized caller (403): bearer valid, identity just not allowed.
 export const rejectForbidden = async (): Promise<never> => {
     throw new ForbiddenError("not the sandbox owner");
 };
@@ -56,16 +52,8 @@ export const collect = async <T>(stream: AsyncIterable<T>): Promise<T[]> => {
     return events;
 };
 
-/* A client for ONE feature's routes, over that feature's own deps.
- *
- * `clientFor(createApp(services(...)))` builds the whole daemon to ask a question about one route: it needs a
- * hundred-and-thirty-member Services, and every service the daemon grows breaks a suite
- * that never mentions it. A route factory that declares what it reads (composition.ts, "WHAT A MODULE SHOULD
- * TAKE OF IT") can be stood up on exactly that, a plain object literal the compiler checks in full, with no
- * stand-in and nothing unstubbed to reach past.
- *
- * The app-level middleware is deliberately absent: auth, CORS and the boot gate belong to the app and are
- * tested there (app.integration.test.ts). What is left here is the route and its own deps. */
+// Client for one feature's routes and its own deps, not the whole daemon's Services, which would break every unrelated
+// suite as it grows. App middleware (auth, CORS, boot gate) is tested separately.
 export const routesClient = <TContract extends AnyContractRouter>(contract: TContract, router: AnyRouter): ContractRouterClient<TContract> => {
     const handler = new OpenAPIHandler(router);
     return createORPCClient(

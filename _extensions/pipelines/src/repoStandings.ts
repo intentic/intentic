@@ -1,40 +1,21 @@
 import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { failureStreaks } from "./ciStreaks";
 
-/* WHICH REPOSITORY THE BOARD LEADS WITH, and which ones stop costing a card.
- *
- * The repo list arrives in the daemon's discovery order, which is alphabetical by workspace path and has nothing
- * to do with CI. On a real workspace that put four repositories which have never run a pipeline above the one
- * that runs them all day: the entire first screen of a monitoring board was four identical "No runs yet" cards,
- * and the failing run, the only thing anyone opens this page for, sat below the fold.
- *
- * So the order is HOW LOUDLY A REPOSITORY IS ASKING, and one asking nothing at all is not a card:
- *
- *   0 failing   a branch's last word is red, the one thing on this page that wants a person
- *   1 in flight something is running or waiting for a runner, so the answer is arriving
- *   2 warned    the webhook could not be registered (`hookWarning`). Nothing is red, but the board may be out of
- *               date, and this is also the usual reason a repository looks silent, so it outranks green.
- *   3 settled   has runs, nothing red, nothing moving
- *   4 silent    no runs and nothing to say. A rail row rather than a section, see PipelinesView.
- *
- * QUEUED SHARES THE IN-FLIGHT TIER but is counted apart from running, and the two decisions pull in opposite
- * directions on purpose. For ORDER a queued pipeline is unfinished business and belongs above a settled repo,
- * whether or not a runner has picked it up yet. For the WORDS on the row it is the more useful of the two facts:
- * "6 queued" on a repository that has been quiet for an hour is the sentence that sends someone to look at their
- * runners, and "6 running" is the sentence that tells them to wait.
- *
- * Ties break on the newest run, so within a tier the board reads as a feed. Two silent repositories have no runs
- * to compare and fall back to their names, which is the alphabetical order the page used to have throughout. */
+// Row order ranks how loudly a repository is asking, not discovery order:
+// 0 failing: a branch's last run is red.
+// 1 in flight: running or queued (queued is its own row number, not its own rank).
+// 2 warned: `hookWarning` is set; often why a repo looks silent.
+// 3 settled: has runs, nothing red or moving.
+// 4 silent: no runs at all.
+// Ties break by newest run, then name.
 
 export interface RepoStanding {
     readonly repo: CiRepo;
     readonly runs: readonly PipelineRun[];
-    // Branches whose last commit is red, NOT failed runs (ciStreaks.ts). Three failures inside one breakage
-    // are one thing to fix, and so are two workflows failing on the same commit: the rail says "1".
+    // Branches whose last commit is red, not failed runs; multiple failures in one breakage still count as one.
     readonly failing: number;
     readonly running: number;
-    // Accepted by the forge, not yet picked up by a runner. Its own number rather than part of `running`: see
-    // the note above on why the row says which of the two it is.
+    // Accepted by the forge, not yet picked up by a runner; kept separate from `running`.
     readonly queued: number;
     // Nothing to show: no runs, and no warning explaining why there are none.
     readonly silent: boolean;
@@ -56,8 +37,7 @@ const rank = (standing: Omit<RepoStanding, `silent`>): number => {
 };
 
 export const repoStandings = (repos: readonly CiRepo[], runs: readonly PipelineRun[]): RepoStanding[] => {
-    // Across every repository, once: a streak is decided per branch, so scoping this to one repo first would
-    // give the same answer at N times the cost.
+    // Computed once across all repos; scoping per repo first would repeat the same work N times.
     const broken = failureStreaks(runs);
     return repos
         .map((repo) => {
@@ -75,8 +55,8 @@ export const repoStandings = (repos: readonly CiRepo[], runs: readonly PipelineR
         .toSorted((a, b) => rank(a) - rank(b) || b.latest - a.latest || a.repo.repo.localeCompare(b.repo.repo));
 };
 
-/* What one repository's row says on hover, the full state, because the row itself shows a single number and a
- * tint. Failing branches first, since that is the number the row is showing and the tooltip has to name it. */
+// Full-state hover text for a row that otherwise shows only a number and a tint; failing branches leads, matching what
+// the row itself highlights.
 export const standingNote = (standing: RepoStanding): string =>
     [
         standing.runs.length === 0

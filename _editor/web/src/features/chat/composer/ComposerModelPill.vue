@@ -1,15 +1,8 @@
-<!-- THE MODEL PILL: provider mark · model name · chevron, in the composer's ghost dress. Both composers (the
-     chat's and the suggested-session box's) open the same ChatModelPicker off it, and both had written the
-     button out by hand.
-
-     IT EXPOSES ITS ELEMENT, and that is the whole reason this is a component with an `el` rather than a slot:
-     the button IS the anchor. AnchoredOverlay derives from the anchor the document it teleports into, the
-     viewport it measures the free room against, and the one click that must never dismiss the panel, so a
-     popped-out composer works unchanged only if the overlay is handed THIS element rather than a remembered one.
-
-     NO HOVER LABEL, deliberately: the old one said the provider's name, which the logo beside it is already
-     there to say. The accessible name carries the full "provider · model" pair, which is what a screen reader
-     needs and a sighted user can already read. -->
+<!--
+    Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. Exposes its button as `el`: AnchoredOverlay
+    must anchor off the real element, not a copy, for a popped-out composer to keep working. No hover label; `aria-label` carries the full 'provider
+    · model' pair.
+-->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Conversation } from "../session/conversation";

@@ -3,42 +3,18 @@ import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
 
-/* WHAT THIS DEVICE NEEDS, AS SOMETHING YOU CAN ACT ON.
- *
- * A stopped install used to end here as four lines of stderr in a red box. That is the right shape for a
- * failure nobody could have predicted: a network that dropped, an image that would not pull, and the wrong
- * one for the failures that dominate a first Windows install, which are not accidents at all: WSL2 is not
- * turned on, this PC has no package manager, virtualization is switched off in firmware. Every one of those
- * has a known, specific answer, and three of the four we can simply do.
- *
- * So they are drawn as REQUIREMENTS rather than as an error: what is missing, what happens about it, and the
- * one button that does it. The user's consent for that button is the whole of the "ask once" this flow
- * promises: the installer's first pass deliberately changes nothing and reports the list, and this is where
- * the list is answered.
- *
- * The rows that are NOT ours to fix are the reason this is a component and not a confirm dialog. Firmware
- * virtualization cannot be turned on from inside Windows by anything, ever, and the honest UI for it is the
- * walkthrough the installer already wrote: shown here in full, in a monospace block, because it is a list of
- * keys to press on a screen that is not this one. */
+// Requirements render as actionable rows — what's missing, what will happen, one button — not a raw error box.
+// The install's first pass changes nothing and only reports; rows this app can't fix (like firmware
+// virtualization) show the installer's own walkthrough instead.
 
 const props = defineProps<{ requirements: Requirement[]; busy: boolean; progress?: Record<string, RequirementProgress> }>();
 const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();
 
-/* HOW EACH ROW IS GOING, WHILE IT IS GOING.
- *
- * The list used to be a thing you read once and then replaced with a spinner: click "Install and continue"
- * and the whole card was swapped for one progress row reading "Set up Docker", which then sat there for as
- * long as it took to switch WSL2 on, download 600 MB, run an installer, start an engine and wait for a
- * daemon. Ten minutes of one spinner, on the machines that need the most work: the readers least likely to
- * believe it is still going.
- *
- * So the rows stay, and each reports itself: the installer names what it is doing per requirement and what
- * it measures underneath (desktop.ts's requirement-state marker). Nothing here invents a state: a row with
- * no report is simply still pending, which is exactly what it is. */
+// Looks up a row's live progress. A row with no report is simply pending; nothing here invents an intermediate
+// state.
 const stateOf = (id: string): RequirementProgress | undefined => props.progress?.[id];
 
-// Which walkthroughs are open. Closed by default: the firmware one is thirty lines, and somebody whose only
-// problem is a missing Docker should not have to scroll past it.
+// Which walkthroughs are open; closed by default so a short fix isn't buried under a long one.
 const opened = ref<Record<string, boolean>>({});
 const toggle = (id: string): void => {
     opened.value = { ...opened.value, [id]: !opened.value[id] };
@@ -55,8 +31,7 @@ const ICON: Record<RequirementAction, string> = {
     unsupported: `times`,
 };
 
-// The one-word promise on each row, which is what makes a list of five problems readable at a glance: three
-// of them are ours and two are not, and the reader should be able to see that without reading five sentences.
+// One-word promise per row, so which ones this app will fix is visible without reading each line.
 const BADGE: Record<RequirementAction, string> = {
     fix: `we'll do this`,
     fixElevated: `we'll do this`,
@@ -68,8 +43,7 @@ const BADGE: Record<RequirementAction, string> = {
     unsupported: `not supported`,
 };
 
-/* …and what a row says about itself once it HAS a state, which retires the promise in `BADGE`. `pending` is
- * spelled here as the absence of one so the lookup has a total answer rather than a branch. */
+// Overrides BADGE once a row has a state; `pending` is undefined so the lookup is total.
 const STATE_BADGE: Record<string, string | undefined> = {
     pending: undefined,
     running: `working on it`,
@@ -81,26 +55,14 @@ const ourCount = computed(
     () => props.requirements.filter((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`).length,
 );
 const ours = computed(() => ourCount.value > 0);
-/* WHAT THE BUTTON PROMISES, IN THE WORDS THE ROWS ABOVE IT ALREADY USE.
- *
- * It read "Install and continue" for every list — including the commonest one on a developer's machine, where
- * Docker Desktop is installed and merely not running and the entire job is to start it. Naming an install that
- * is not going to happen is the kind of small wrongness that makes somebody stop and re-read a screen they
- * were about to click through, on the single click this whole flow is built to earn. It also contradicted the
- * row directly above it, whose remedy said "start it and wait for its engine to come up".
- *
- * `BADGE` already promises "we'll do this" per row; the button is that promise collected, so the two cannot
- * drift apart and neither has to guess which verb the list deserves. */
+// Button label matches the per-row promise in BADGE, so the two verbs never disagree (e.g. "Install" when the
+// real job is just starting Docker).
 const doLabel = computed(() => (ourCount.value > 1 ? `Do these and continue` : `Do this and continue`));
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
-/* The one that had no button. Adding an account to `docker-users` succeeds immediately and does nothing at
- * all until Windows re-issues the login token, which it does on the next sign-in, so this row's only
- * control was "Check again", which cannot possibly work, on a machine where everything else had. Same shape
- * as the restart: the setup is parked, Windows is asked to sign out, and the same RunOnce that survives a
- * reboot picks it up on the way back in. */
+// docker-users membership needs a Windows sign-out to take effect, not a recheck; setup is parked and resumes via
+// the same RunOnce as a restart.
 const signingOut = computed(() => props.requirements.some((requirement) => requirement.action === `signOut`));
-// Nothing here is ours, and nothing we can drive: every button would be a lie, so only "Check again" remains:
-// it is the honest one, because the user is about to go and change something we cannot see from here.
+// None of these rows are fixable here, so the only honest control left is Check again.
 const stuck = computed(() => !ours.value && !restarting.value && !signingOut.value);
 const needsAdmin = computed(() => props.requirements.some((requirement) => requirement.action === `fixElevated`));
 </script>
@@ -114,8 +76,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
         <ul class="flex flex-col gap-2">
             <li v-for="requirement in requirements" :key="requirement.id" class="rounded-md border border-line bg-canvas p-2.5">
                 <div class="flex items-start gap-2">
-                    <!-- The row's own state wins over its action, because once something is being DONE about
-                         a requirement, "we'll do this" is history and "how is it going" is the question. -->
+                    <!-- Live state overrides the static action icon once something is actually happening. -->
                     <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-primary-400" />
                     <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
                     <Icon
@@ -133,16 +94,13 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-baseline gap-x-2">
                             <span class="text-2xs font-medium text-content">{{ requirement.title }}</span>
-                            <!-- The badge is a PROMISE about what will happen, so it retires the moment
-                                 something has. A row that has just failed still reading "we'll do this" is
-                                 the screen contradicting the red mark beside it. -->
+                            <!-- Badge retires once the row has a live state, so it never contradicts it. -->
                             <span class="text-2xs text-subtle">{{
                                 STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? BADGE[requirement.action]
                             }}</span>
                         </div>
                         <p class="text-2xs text-muted">{{ requirement.problem }}</p>
-                        <!-- While something is happening, the installer's own words about THIS row replace the
-                             remedy: the remedy describes what will happen, and it already is. -->
+                        <!-- Live detail replaces the static remedy once the row is running. -->
                         <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
                         <p v-else-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
                         <button v-if="requirement.detail" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="toggle(requirement.id)">
@@ -150,8 +108,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                         </button>
                     </div>
                 </div>
-                <!-- Verbatim and monospace: this is a list of keys to press on a screen that is not this one,
-                     and re-flowing it would break the alignment that makes it readable at all. -->
+                <!-- Verbatim and monospace: reflowing would break the alignment of these steps. -->
                 <pre
                     v-if="requirement.detail && opened[requirement.id]"
                     class="mt-2 max-h-72 overflow-auto rounded-md border border-line bg-surface p-2 font-mono text-2xs leading-relaxed text-muted whitespace-pre-wrap"
@@ -159,17 +116,11 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
             </li>
         </ul>
 
-        <!-- True, and worth saying BEFORE the click rather than as a surprise a second later: an elevation
-             prompt nobody expected reads as something having gone wrong. -->
-        <!-- …and only while it is still ahead of them: once the run is going, the prompt has either happened or
-             is happening, and a warning about it in the future tense is one more stale sentence on the card. -->
+        <!-- Shown before the click, so an expected elevation prompt doesn't read as something going wrong. -->
+        <!-- Hidden once busy: the prompt has already happened or is happening by then. -->
         <p v-if="needsAdmin && ours && !busy" class="text-2xs text-subtle">Windows will ask for permission once.</p>
 
-        <!-- THE BUTTONS ARE THE QUESTION, SO THEY LEAVE WITH IT. They used to stay behind, greyed, for the
-             whole run the click started: "Do this and continue" sitting disabled above its own install, next
-             to "Check again", for the four minutes it takes. A disabled control is still a control on screen,
-             and three of them under a list that is now reporting live progress read as a card that had not
-             noticed it had been answered. The rows carry the state from here on. -->
+        <!-- Buttons hide once busy: progress lives in the rows below, not in a disabled button beside them. -->
         <div v-if="!busy" class="flex flex-wrap items-center gap-2">
             <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
@@ -186,12 +137,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
         </div>
         <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved: this window picks it up again once you're back.</p>
 
-        <!-- THE WAY OUT THAT IS NOT GIVING UP, and the only place in this app that offers one.
-             Everything above is a machine being asked for administrator, a 600 MB download and a restart, and
-             some of the people reading it are on a PC where none of that is going to happen. The browser hands
-             that reader a machine we run, in seconds; the app hid it on the argument that "this device" is
-             the whole point of being here: true until this device cannot, and then it is a dead end. One
-             quiet line, under the loud default. -->
+        <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
         <button v-if="!busy" type="button" :class="ui.textAction(`text-2xs`)" @click="emit(`elsewhere`)">
             <Icon name="server" class="shrink-0" />
             <span>Not on this device? Run it on a machine we host</span>

@@ -4,9 +4,8 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { expect } from "vitest";
 import { collect } from "./route-client.testing.js";
 
-/* The route harness's turn runner: a chat turn driven over the detached-run protocol exactly as the browser
- * drives it, and what the attach stream said, in the shapes a test asks about. Not part of the build (tsconfig
- * excludes `*.testing.ts`), type-checked with the tests (tsconfig.test.json). */
+// The route harness's turn runner: drives a chat turn over the detached-run protocol exactly as the browser does, and
+// reports what the attach stream said in the shapes a test asks about.
 
 // What one turn said over the attach stream, in the shapes a test asks about.
 export interface TurnOutcome {
@@ -18,10 +17,8 @@ export interface TurnOutcome {
     readonly rows: TranscriptRow[];
 }
 
-// Drive a chat turn over the detached-run protocol exactly as the browser does: start (acked with the run
-// id), attach, and keep what the stream said. Awaiting the attach to its `end` is also the settle barrier the
-// old in-request stream gave these tests. Ids are minted per turn unless the test pins one (the run registry
-// is keyed by conversationId across the whole test process).
+// Drives a chat turn like the browser: start, attach, and keep what the stream said; awaiting the attach's `end` is the
+// settle barrier. Ids are minted per turn unless pinned; the run registry is keyed by conversationId process-wide.
 let turnCounter = 0;
 export const runAgentTurn = async (
     client: ContractRouterClient<typeof sandboxContract>,

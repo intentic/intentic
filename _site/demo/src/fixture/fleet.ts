@@ -1,24 +1,16 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
-/* THE FLEET the demo opens on: one plausible afternoon in a two-repo product team, with a card in every state
- * the board is designed to distinguish. Every lane has to be occupied, a board with nothing in Attention says
- * the wrong thing about what the board is for, so the roster is built around `laneOf`:
- *
- *   attention  awaiting (a question is parked) · conflict (a land hit an overlap)
- *   active     running, one of them delegating to subagents
- *   finished   ready (held for a deliberate land) · landed · idle (an automation's overnight pass)
- *
- * Times are relative to page load, so "4m ago" is true whenever the visitor arrives. */
+// One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
+// question, conflict from a land overlap), active (running, one delegating to subagents), finished (ready, landed,
+// idle). Times are relative to page load.
 
-// The conversation whose transcript and scripted turn the chat opens (see turn.ts). Named because three
-// surfaces have to agree on it: the roster, the transcript route, and the attach stream.
+// Conversation id shared by the roster, transcript route and attach stream (turn.ts supplies the script).
 export const FEATURED_AGENT_ID = `cnv_checkout_stripe`;
-// The agent parked on a question, the fleet badge's reason to exist, and the card that proves the point.
+// Agent parked on a question: the fleet attention badge's reason to exist.
 export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
-// The agent holding a finished delta on its branch: the one the review panel opens on, and the one "Land now"
-// is demonstrated with (see workspace.ts).
+// Agent holding a finished delta: what the review panel opens on and demonstrates Land now with.
 export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
-// The agent whose land refuses: half its delta diverged under it, half is held by the owner's own edits.
+// Agent whose land refuses: half the delta diverged, half is held by the owner's own edits.
 export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 
 const minutes = (count: number): number => count * 60_000;
@@ -104,7 +96,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `cnv_latency_p99`,
-        // Started by a CI job holding a control token: the card's second provenance line (StartedByMark).
+        // CI job holding a control token; renders as the card's second provenance line.
         startedBy: `token:nightly CI`,
         sessionId: `ses_01j9latency`,
         title: `Investigate the p99 latency spike on /checkout`,
@@ -129,10 +121,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 2,
         toolUses: 19,
     },
-    /* TWO STEPS OF ONE WORKFLOW RUN, fanned out and running side by side, the case WorkflowMark exists for.
-     * They are ordinary agents in every other respect (own branch, own worktree, own spend), which is exactly
-     * why the run's name has to be on them: without it these are two unrelated cards that happen to have
-     * started in the same second. */
+    // Two steps of one workflow run: ordinary agents in every respect except sharing a `workflow` name.
     {
         id: `wf-a3f19c22-review-perf`,
         sessionId: `ses_01j9wfperf`,

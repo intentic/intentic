@@ -1,34 +1,22 @@
 import { createStreamingPainter, failureNotice, framePainter, type GatewayCtx, GatewayRefusal, type ListenerMessage, recentKeys } from "@intentic/connector-runtime";
 import type { SlackConnection } from "./client.js";
 
-/* The inbound half of the gateway: every Socket Mode envelope a connected app receives becomes a normalized
- * listener message POSTed to the daemon's dispatch route. On a mention we hold the streaming response and paint
- * the model's reply into the thread live (one painter per matched automation, keyed by automationId).
- *
- * Slack has no bot typing indicator, so the "I'm on it" signal is an :eyes: reaction on the triggering message,
- * added the moment we're tagged and removed when the turn ends, the same job ext-discord's typing heartbeat
- * does, in the gesture Slack actually has. */
+// Inbound half of the gateway: every Socket Mode envelope becomes a normalized message posted to the daemon's dispatch
+// route. On a mention, holds the streaming response and paints the reply into the thread live, one painter per
+// automation. :eyes: is Slack's stand-in for a typing indicator, added on tag and removed at turn end.
 
-// Slack renders a message beyond ~4000 chars as a truncated blob with a "show more"; a longer reply spills into
-// follow-up messages in the same thread instead.
+// Slack truncates messages beyond ~4000 chars; a longer reply spills into follow-up messages in the thread.
 const SLACK_MAX = 3_800;
-// Min gap between edits of the growing message. chat.update is Tier 3 (~50/min per workspace) and we don't need
-// to repaint on every token; the :eyes: reaction covers the gap until the first paint.
+// Min gap between edits; chat.update is rate-limited, and :eyes: covers the gap until the first paint.
 const EDIT_INTERVAL_MS = 1_500;
-// Recent `channel:ts` keys, to drop the duplicate delivery when two of our apps share a channel, and the
-// message/app_mention double-delivery Slack sends when a manifest subscribes to both.
-// ponytail: best-effort in-memory cap; a restart forgets it, at worst one duplicate wake.
+// Recent `channel:ts` keys dedupe shared channels and message+app_mention double-delivery; lost on restart.
 const RECENT_MAX = 500;
 // Prior messages pulled for context when the bot is tagged.
 const HISTORY_LIMIT = 20;
-// The "working on it" reaction. A name, not an emoji. Slack's reactions API is keyed by shortcode.
+// 'Working on it' reaction name (not an emoji); Slack's reactions API is keyed by shortcode.
 const ACK_REACTION = "eyes";
 
-/* Message subtypes worth waking on. A Slack channel event stream is mostly bookkeeping, joins, leaves, topic
- * and purpose changes, pins, edits, deletions, huddle notices, and every one of those would otherwise fire an
- * automation. An allowlist rather than a denylist because Slack keeps adding subtypes, and the failure mode of
- * guessing wrong is an agent woken by someone joining a channel. `bot_message` IS here: a third-party bot's CI
- * alert is a legitimate trigger (our own apps' posts are dropped by author below, not by subtype). */
+// Allowlist, not denylist: Slack keeps adding bookkeeping subtypes; third-party `bot_message` can trigger us.
 const WAKING_SUBTYPES = new Set(["file_share", "thread_broadcast", "bot_message"]);
 
 interface HistoryEntry {
@@ -62,8 +50,8 @@ export interface SlackReaction {
     readonly event_ts: string;
 }
 
-// One `slack_event` envelope, narrowed to what this gateway reads. `ack` MUST be called for every envelope or
-// Slack redelivers it three times and then drops the app's socket.
+// One `slack_event` envelope, narrowed to what this gateway reads; `ack` must be called for every one or Slack
+// redelivers it three times, then drops the socket.
 export interface SlackEnvelope {
     readonly ack: () => Promise<void>;
     readonly type: string;
@@ -73,9 +61,8 @@ export interface SlackEnvelope {
 // A Slack `ts` ("1755102030.001900") is epoch seconds with a microsecond fraction.
 export const tsToIso = (ts: string): string => new Date(Number(ts) * 1000).toISOString();
 
-// Chronological history entries from raw Slack messages, flagging posts by our own apps so the model recognizes
-// its prior replies. `order` says which way the API handed them over: conversations.history is newest-first,
-// conversations.replies is oldest-first. Exported for tests.
+// Chronological history entries, flagging our own apps' posts so the model recognizes its prior replies. `order` says
+// which way the source API delivered them (history: newest-first, replies: oldest-first).
 export const toHistory = (
     messages: readonly SlackMessage[],
     order: "newest-first" | "oldest-first",
@@ -95,11 +82,8 @@ export const toHistory = (
         return entry;
     });
 
-/* The gateway's /deliver door (GatewayHooks.deliver): post one message into a channel outside any live turn,
- * the daemon's "speak as the agent" path for a Slack conversation. The origin only recorded the channel, so the
- * message lands top-level rather than in any one thread. Which app speaks is whichever connected one the channel
- * accepts; the next app is only tried when NOTHING was posted (a partial spill re-sent through a second app
- * would duplicate its own chunks). Chunked at the same ceiling a streamed reply spills at. */
+// Posts into a channel outside any live turn (the daemon's speak-as-the-agent path), top-level since only the channel
+// was recorded. Tries the next app only if nothing posted yet, so a partial spill is never duplicated.
 export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string): Promise<void> => {
     let refusal: unknown = new GatewayRefusal("no Slack app is connected");
     for (const connection of connections.values()) {
@@ -127,8 +111,7 @@ export interface SlackListener {
 
 export const createSlackListener = (ctx: GatewayCtx, connections: () => ReadonlyMap<string, SlackConnection>): SlackListener => {
     const recent = recentKeys(RECENT_MAX);
-    // Slack events carry a user ID and nothing else; the model needs a name. One lookup per user, then cached
-    // for the life of the process, display names change rarely enough that a restart is a fine refresh.
+    // User id to display name, one lookup per user then cached for the process's life; a restart is a fine refresh.
     const names = new Map<string, string>();
 
     const selfIds = (): Set<string> => new Set([...connections().values()].map((connection) => connection.selfUserId));
@@ -162,15 +145,14 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             const history = await connection.web.conversations.history({ channel, latest: message.ts, limit: HISTORY_LIMIT });
             return toHistory((history.messages ?? []) as SlackMessage[], "newest-first", selfIds(), localName);
         } catch (error) {
-            // A history fetch failure (the bot isn't in the channel, a missing scope, a rate limit) must not drop
-            // the wake, degrade to no context.
+            // A history fetch failure must not drop the wake; degrade to no context instead.
             ctx.log.warn({ err: error }, "slack history fetch failed");
             return undefined;
         }
     };
 
-    // The :eyes: acknowledgement. Both halves are best-effort: already_reacted / no_reaction are ordinary races
-    // (two apps in one channel, a turn that finished before the add landed), not failures worth logging.
+    // :eyes: acknowledgement; both add/remove are best-effort, since already_reacted/no_reaction are ordinary races,
+    // not failures worth logging.
     const react = async (connection: SlackConnection, channel: string, ts: string, on: boolean): Promise<void> => {
         const args = { channel, timestamp: ts, name: ACK_REACTION };
         if (on) {
@@ -189,8 +171,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             return;
         }
         const ours = selfIds();
-        // Never wake on our own apps' posts, an agent reply in-channel must not re-trigger, and app A must not
-        // wake on app B. Third-party bots still dispatch; guards can filter them.
+        // Never wakes on our own apps' posts: a reply must not re-trigger, and app A must not wake on app B.
         if (message.user !== undefined && ours.has(message.user)) {
             return;
         }
@@ -200,9 +181,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         }
 
         const text = message.text ?? "";
-        // "Tagged": an @mention of any of our bots, or a DM, where every message is addressed to us. A thread
-        // the bot is already in counts too, so a follow-up in its own reply thread doesn't need re-tagging;
-        // that's decided from the history below, which we only fetch when it might matter.
+        // 'Tagged': a mention, a DM, or a joined thread; the last reads from history, fetched only when it matters.
         const directlyTagged = [...ours].some((id) => text.includes(`<@${id}>`)) || message.channel_type === "im";
         const threaded = message.thread_ts !== undefined;
         const history = directlyTagged || threaded ? await fetchHistory(connection, message, channel) : undefined;
@@ -224,7 +203,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             ...(history !== undefined && history.length > 0 ? { history } : {}),
             timestamp: tsToIso(message.ts),
             extra: {
-                // The reply target, a mention inside a thread continues that thread, a top-level one opens one.
+                // Reply target: a threaded mention continues that thread; a top-level one opens a new one.
                 threadTs: message.thread_ts ?? message.ts,
                 ...(teamId !== undefined ? { teamId } : {}),
                 ...(message.files !== undefined && message.files.length > 0
@@ -237,8 +216,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
             await ctx.daemon.dispatch(payload);
             return;
         }
-        // Paint the reply into the thread live: one painter per matched automation (framePainter), so two
-        // automations answering one mention don't scribble over each other's message.
+        // One painter per matched automation (framePainter), so two automations answering one mention don't collide.
         const threadTs = message.thread_ts ?? message.ts;
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "slack stream paint failed");
         const poster = {
@@ -257,8 +235,8 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
                 payload,
                 framePainter(
                     () => createStreamingPainter(poster, onError, { maxChars: SLACK_MAX, editIntervalMs: EDIT_INTERVAL_MS }),
-                    // Its own message in the same thread rather than through the painter: the painter owns the
-                    // reply text, and a turn that failed usually has none to flush.
+                    // Posted directly, not through the painter, which owns reply text; a failed turn usually has none
+                    // to flush.
                     (reason) => void poster.post(failureNotice(reason, SLACK_MAX)).catch(onError),
                 ),
             );
@@ -294,8 +272,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
 
     return {
         onEvent: (connection, envelope) => {
-            // Ack FIRST and unconditionally: an unacked envelope is redelivered, and a wake we chose not to fire
-            // is still an envelope we handled.
+            // Ack first, unconditionally: an unacked envelope is redelivered, even one we chose not to wake on.
             void envelope.ack().catch((error: unknown) => ctx.log.warn({ err: error }, "slack ack failed"));
             if (envelope.type !== "events_api") {
                 return;
@@ -309,9 +286,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
                     await onReaction(connection, event as SlackReaction);
                     return;
                 }
-                // `app_mention` is normalized as a message: Slack delivers BOTH for a mention when a manifest
-                // subscribes to both, and the recent-key dedup drops whichever arrives second. Handling them
-                // identically is what makes either manifest work without double-firing.
+                // `app_mention` handled like `message`: Slack can send both; dedup drops whichever arrives second.
                 if (event.type === "message" || event.type === "app_mention") {
                     await onMessage(connection, event as SlackMessage, envelope.body.team_id);
                 }

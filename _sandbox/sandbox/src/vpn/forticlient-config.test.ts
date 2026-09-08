@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { parseForticlientConfig, slugId, splitServer } from "./forticlient-config.js";
 
-// An export trimmed to the elements the parser reads, with the shapes a real FortiClient 7.4 file produces:
-// EncX-wrapped usernames and pre-shared key, a self-closing empty <username/>, a CDATA description, an
-// accented connection name, and an IPsec connection whose endpoint lives in <ike_settings>.
+// FortiClient 7.4 export shapes: EncX username/PSK, empty <username/>, CDATA, accented name, IKE endpoint.
 const XML = `<?xml version="1.0" encoding="UTF-8" ?>
 <forticlient_configuration generatedby="FCT-7.4.3.4726">
     <vpn>
@@ -66,19 +64,17 @@ test("reads every SSL-VPN connection with its endpoint split into host and port"
         ["ztm-warszawa", "theta.ztm.waw.pl", 10443],
         ["lodz", "89.171.20.82", 31443],
     ]);
-    // The original name survives for recognition even where the id had to be slugged.
+    // The original name survives as `label` even when `id` is slugged.
     expect(ssl.map((connection) => connection.label)).toEqual(["safety-hab", "ZTM Warszawa", "Łódź"]);
     expect(ssl[0]?.description).toBe("serwer ubuntu-vm");
 });
 
 test("drops FortiClient-encrypted usernames and asks for them, but keeps a plaintext one", () => {
     const ssl = parseForticlientConfig(XML).filter((connection) => connection.provider === "fortinet");
-    // EncX is not reversible: reporting it as a needed field beats importing an unusable value.
     expect(ssl[0]?.username).toBeUndefined();
     expect(ssl[0]?.needs).toEqual(["username", "password"]);
-    // An empty <username /> is equally "not supplied".
+    // An empty <username/> counts as not supplied too.
     expect(ssl[1]?.username).toBeUndefined();
-    // Stored in the clear ⇒ imported, and only the password is left to type.
     expect(ssl[2]?.username).toBe("plain.user");
     expect(ssl[2]?.needs).toEqual(["password"]);
 });
@@ -89,17 +85,16 @@ test("reads the IPsec connection's phase-1 endpoint, local id and aggressive mod
         id: "systemeg",
         label: "SystemEG",
         server: "systemeg.float-zone.com",
-        // No port on the IKE endpoint ⇒ the IKE default, not the SSL-VPN one.
+        // No port on the IKE endpoint falls back to the IKE default (500), not SSL-VPN's.
         port: 500,
         localId: "extNET",
         aggressive: true,
-        // Phase 2, from <ipsec_settings>: the pair that decides whether quick mode can succeed at all. The
-        // group must NOT come from <ike_settings>, which lists "5;14;" and says nothing about phase 2.
+        // pfs and dhGroup come from <ipsec_settings>, not <ike_settings>, which lists multiple groups without saying
+        // which applies.
         pfs: true,
         dhGroup: "14",
     });
-    // The PSK is always encrypted in an export; XAuth is enabled with an encrypted username, so both it and
-    // the password have to be typed.
+    // The PSK is always encrypted; XAuth is enabled with an encrypted username, so both need typing.
     expect(ipsec?.needs).toEqual(["presharedKey", "username", "password"]);
     expect(ipsec?.username).toBeUndefined();
 });

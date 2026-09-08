@@ -7,13 +7,9 @@ import { requestModelPick } from "./hostModelPicker";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { useChat } from "../run/useChat";
 
-/* WHAT A SURFACE-STARTED RUN OPENS ON, AND HOW TO RE-POINT IT, the shell's own implementation of the kit's
- * `ModelPicking`, which is what every <AgentRunButton> in the app is driven by.
- *
- * THE SAME TWO ANSWERS THE EXTENSION API GIVES (`api.models` in extension-host/apiImpl.ts), and that is not a
- * coincidence, apiImpl is built on this. It has to be: a Fix button drawn by the pipelines extension and one
- * drawn by the shell are the same button, and the day the two disagreed about which model a click would spend,
- * one of them would be lying to the user about money. */
+// The shell's implementation of the kit's `ModelPicking`, driving every <AgentRunButton>. `api.models` in
+// extension-host/apiImpl.ts is built on this, so a Fix button drawn by an extension and one drawn by the shell
+// must answer identically about which model a click spends.
 
 /* A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor),
  * shared with the composer's pill and the board's cards so no two surfaces can call the same pair different
@@ -52,27 +48,11 @@ const namedChoice = (selection: {
     };
 };
 
-/* ONE ROLE'S LIST, ENTERED ONCE FOR THE WHOLE APP, AND CACHED PER ROLE.
- *
- * `agentRunChoice` below is a READ, and it is read from places Vue gives nothing back: a run button names its
- * model from inside a computed, and the caret beside it re-reads the same fact from a click handler. Neither is
- * a setup, but `useRoleModel` is a vue-query composable underneath, and calling one per read did two bad things
- * at once. It needed an injection context that a computed getter and an event handler both lack, so the read
- * THREW ("vue-query hooks can only be used inside setup()") and took the surface down with it, which is how a
- * board of red pipeline rows came to render as a crashed extension. And every call that did land built another
- * query observer nothing ever disposed, so each settings change left one more copy of the same poll running:
- * twenty rows became twenty accumulating pollers, which is the other half of what that board did.
- *
- * A DETACHED SCOPE, not the scope of whoever reads first. This is app-lifetime state; owned by the first
- * component to render a run button, it would be torn down when that row unmounted and leave every later reader
- * holding a dead observer. Nothing stops it, by design, the list is as long-lived as the session.
- *
- * A MAP RATHER THAN ONE ENTRY, because there is a list per JOB now (contract model-roles.ts) and one board can
- * show two kinds of run button at once. Bounded by the role catalog, a fixed table, so "cache forever" is a
- * handful of computeds rather than a leak. */
+// Caches one role's list app-wide: read from a computed or click handler, contexts with no Vue injection of their
+// own, via a detached `appScope` so it outlives the first button to unmount. Bounded by the fixed role catalog.
 const appScope = effectScope(true);
 const entered = new Map<string, RoleModel>();
-// `run()` only answers undefined for a STOPPED scope, and this one is never stopped.
+// `run()` returns undefined only for a stopped scope; this one is never stopped.
 const roleModel = (role: string): RoleModel => {
     const held = entered.get(role);
     if (held !== undefined) {
@@ -83,26 +63,9 @@ const roleModel = (role: string): RoleModel => {
     return made;
 };
 
-/* THE STANDING ANSWER FOR ONE JOB, and the floor underneath it. The head of that job's list is what the daemon
- * would fill in; when the list is empty, or nothing in it is connected any more, the honest fallback is the
- * owner's own composer, because it is the model they already chose to work with rather than one this file
- * guessed at. Read inside a computed and it is reactive to both.
- *
- * A ROLE THIS BUILD DOES NOT KNOW resolves to an empty chain and so to that same composer floor, which is why
- * the parameter is a bare string: an extension shipped against a newer catalog names a job this shell has never
- * heard of, and the honest answer to that is the owner's own model rather than a thrown panel.
- *
- * The pin carries its provider WITH the model, and has to: a model id is only meaningful to the provider that
- * vends it, so honouring one without the other would send a Codex id to Claude.
- *
- * ITS EFFORT COMES ALONG, so the caret opens on the tier the run would actually have used rather than on
- * "Default", and so a reader who only re-points the MODEL keeps the tier their setting asked for. `sendableEffort`
- * is read against THE PIN'S OWN THINKING, because that is what the daemon will read: the whole entry rides onto
- * a turn that named no model (turn-resume.ts), so an entry written at `max` beside `thinking: off` runs at High
- * and the meter has to say High rather than light a rung the run will not use — while one that pinned no
- * thinking keeps Max, which is what it will actually spend. The composer floor contributes none: an empty list
- * means nobody chose a tier for this job, and the chat's own effort is an answer about the turn in front of
- * you. */
+// Standing model for one job; falls back to the chat's own composer model when the job's pin list is empty or its
+// role is unknown to this build. Effort follows the pin's own thinking via sendableEffort (turn-resume.ts): a Max
+// pin with thinking off reads as High, not Max.
 export const agentRunChoice = (role: string): AgentRunChoice => {
     const head = roleModel(role).choice.value;
     const chat = useChat();

@@ -3,45 +3,25 @@ import { buildId } from "./buildEpoch";
 import { sandboxAuthenticatedFetch } from "../features/sandbox/client/sandboxAuthFetch";
 import { currentSandboxTarget } from "../features/sandbox/client/sandboxTarget";
 
-/* WHAT THE BROWSER SAW, SENT SOMEWHERE IT SURVIVES.
- *
- * Everything this app measured or caught used to end at the console. perf.ts warns about a stall into a ring
- * buffer that dies on reload; Vue's errorHandler logs a render error and stops; selfHeal.ts, on a startup
- * crash, CLEARS this origin's storage and reloads, destroying the evidence for the one class of bug that
- * reproduces least often. All of that is fine for whoever happens to be sitting in front of devtools at the
- * moment it happens, and nothing at all for everyone else, which in practice is everyone.
- *
- * What that cost, measured over 728 sessions: 1,545 screenshots against 65 reads of a console, and a quarter of
- * all prompts arriving with a picture attached because the user had no other way to show the app its own bug.
- * The editor is 943 files with zero logging calls in them, and it is also, by the transcripts' own count, the
- * second-buggiest package in the workspace. Those two facts are the same fact.
- *
- * So this posts to the daemon, which appends to logs/client.jsonl beside its own records, where the diagnostic
- * tools can read it.
- *
- * THREE RULES, in priority order, because a diagnostic channel that misbehaves is worse than none:
- *
- *  1. It never throws. Every entry point swallows, because the callers are an error handler, an unload hook and
- *     a perf recorder, and a reporter that fails inside those turns a bug into two bugs.
- *  2. It never blocks. Batched on a timer, fire-and-forget, and capped: a component looping on a render error
- *     produces thousands of identical events a second, so identical ones coalesce and the queue has a ceiling.
- *  3. It is never the reason something breaks. No await on any UI path, no retry, and a failed post drops the
- *     batch rather than growing a queue nobody is draining.
- *
- * NOT ANALYTICS. PostHog owns product events (analytics.ts). This carries only what a person cannot describe
- * and a screenshot cannot show: errors the app caught, recoveries it performed, and stalls it measured. */
+// Posts what the browser saw or measured to the daemon (logs/client.jsonl beside its own records), since
+// console-only diagnostics (perf.ts's ring buffer, Vue's errorHandler, selfHeal's wipe-and-reload) reach only
+// whoever has devtools open at that moment.
+//
+// Three rules, since a diagnostic channel that misbehaves is worse than none:
+// 1. Never throws — callers are an error handler, an unload hook, a perf recorder.
+// 2. Never blocks — batched, fire-and-forget, capped.
+// 3. Never itself the reason something breaks — no await on a UI path, no retry, drops rather than growing a queue.
+//
+// Not analytics (PostHog owns product events, analytics.ts); this carries only what a screenshot can't show.
 
-// How long events wait for company. Long enough to coalesce a burst into one request, short enough that a user
-// who reloads a few seconds after a crash has already sent it.
+// How long events wait to batch: long enough to coalesce a burst, short enough to have sent before a quick reload.
 const FLUSH_MS = 5_000;
 
-/* The queue ceiling, and it is a DROP rather than a backpressure. The failure this exists for is a component
- * that re-renders and re-throws in a loop: at that point the interesting information is the first few events
- * and the count, and every event after that is the same event. Matches the schema's own batch cap. */
+// Queue ceiling is a drop, not backpressure, for a component looping on re-render/re-throw; matches the schema's
+// own batch cap.
 const MAX_QUEUED = 50;
 
-// How many times one (event, message) pair is sent per session before it is only counted. The first tells you
-// what broke; the four-hundredth tells you nothing the count does not.
+// Per-(event,message) cap before further copies are only counted; the first occurrence informs, repeats don't.
 const MAX_PER_KIND = 5;
 
 const queue: ClientDiagnostic[] = [];
@@ -49,8 +29,8 @@ const seen = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let dropped = 0;
 
-// Where the user was standing. The single most useful field for reproducing anything, and read off `location`
-// rather than the router so this module never depends on the thing that may be what crashed.
+// Where the user was, the single most useful field for reproducing anything. Reads `location` directly, not the
+// router, so this doesn't depend on the thing that may have crashed.
 const route = (): string | undefined => {
     try {
         return `${location.pathname}${location.search}`.slice(0, 300);
@@ -59,17 +39,10 @@ const route = (): string | undefined => {
     }
 };
 
-/* Post whatever is queued. `keepalive` is the load-bearing detail rather than a nicety: the two moments most
- * worth reporting are a startup crash about to wipe-and-reload and a tab being closed, and an ordinary fetch
- * issued on either is cancelled with the page. keepalive survives it. sendBeacon would too and cannot carry the
- * daemon's bearer header, which this route requires.
- *
- * Drops on failure. A diagnostic queue that retries is a queue that grows while the thing it is describing is
- * still going wrong.
- *
- * Deliberately NOT through the typed daemon client: that one wraps every call in `trackPerf`, so a slow report
- * would file a slow span, which would queue a report, which would post again. Reaching for the shared fetch
- * policy directly keeps the credentials and the retry-on-401 and leaves the measurement out of the loop. */
+// `keepalive` is load-bearing: a startup crash or a closing tab cancels an ordinary fetch with the page, but not a
+// keepalive one; `sendBeacon` would survive too but can't carry the daemon's bearer header. Drops on failure rather
+// than retrying. Deliberately not through the typed daemon client: that wraps calls in `trackPerf`, which would
+// make a slow report file a slow span that queues another report.
 const flush = (): void => {
     if (timer !== undefined) {
         clearTimeout(timer);
@@ -104,14 +77,14 @@ const flush = (): void => {
                 keepalive: true,
             }),
             target,
-            // Reporting is never worth interrupting anyone for. If this browser has no credential in hand the
-            // report is lost, which is the same outcome as an unaddressed sandbox above, and strictly better
-            // than a sign-in gate raised by the error handler that was describing the last thing that broke.
+            // Never worth interrupting anyone for: a missing credential just loses the report, which beats raising a
+            // sign-in
+            // gate from inside an error handler.
             { background: true },
         ).catch(() => undefined);
     } catch {
-        // Unaddressed, unauthenticated, or a body that would not serialize. All of them mean this report is
-        // lost, and none of them is worth telling the user about.
+        // Unaddressed, unauthenticated, or unserializable — all mean the report is lost, none worth surfacing to the
+        // user.
     }
 };
 
@@ -122,9 +95,8 @@ export const reportClient = (
     options: { level?: "warn" | "error"; fields?: Record<string, string | number | boolean>; requestId?: string } = {},
 ): void => {
     try {
-        // `\u0000` as the escape, never as the byte: a literal NUL in the source makes git, grep and every diff
-        // viewer read this file as binary (the repo's own `pnpm check:bytes` refuses it). Separator rather than
-        // a join on some punctuation because it is the one character an event name or a message cannot contain.
+        // `\u0000` is the JS escape, never a literal byte, which would make this file read as binary to git/grep/diffs.
+        // Used as separator since it's the one character an event or message can't contain.
         const key = `${event}\u0000${message.slice(0, 200)}`;
         const count = (seen.get(key) ?? 0) + 1;
         seen.set(key, count);
@@ -157,9 +129,8 @@ export const reportClient = (
 /** Send what is queued right now, for a caller about to destroy the page (a wipe-and-reload, a closing tab). */
 export const flushClientDiagnostics = (): void => flush();
 
-/* An error's own words, shortened to what a log line can carry. The stack rather than the message alone,
- * because a render error's message ("Cannot read properties of undefined") names nothing at all, and the first
- * few frames are the entire difference between a report and a shrug. */
+// An error's words, shortened to fit a log line. Keeps the stack, not just the message: a message like "Cannot
+// read properties of undefined" names nothing on its own.
 export const describeError = (error: unknown): { message: string; fields: Record<string, string> } => {
     if (error instanceof Error) {
         return {
@@ -170,18 +141,14 @@ export const describeError = (error: unknown): { message: string; fields: Record
     return { message: String(error).slice(0, 2_000), fields: {} };
 };
 
-/* Wire the browser's own failure events. Called once at boot, alongside installSelfHeal.
- *
- * `error` and `unhandledrejection` are BOTH reported here, though selfHeal deliberately only heals on the
- * first: a rejection in the opening seconds is legitimately routine (a daemon asleep behind its tunnel), which
- * makes it a bad reason to wipe storage and a perfectly good thing to have written down.
- *
- * pagehide, not beforeunload/unload: it is the one that fires on mobile Safari's back-forward cache, which is
- * where a closed tab actually goes. */
+// Wires the browser's own failure events, once at boot alongside installSelfHeal. Both `error` and
+// `unhandledrejection` are reported, even though selfHeal only heals on `error`: an early rejection (a daemon still
+// waking) is routine enough to log but not to wipe storage for. Uses `pagehide`, not beforeunload/unload, since
+// that's what fires on mobile Safari's back-forward cache.
 export const installClientDiagnostics = (): void => {
     window.addEventListener(`error`, (event) => {
-        // Resource-load and cross-origin events carry no Error and name nothing; a line saying "Script error"
-        // with no file and no stack is not worth a round trip.
+        // Resource-load and cross-origin events carry no Error; a bare "Script error" with no stack isn't worth a round
+        // trip.
         if (event.error instanceof Error) {
             const { message, fields } = describeError(event.error);
             reportClient(`window.error`, message, { fields });

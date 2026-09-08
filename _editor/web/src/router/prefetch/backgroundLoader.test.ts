@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { gapAfter, runBackgroundLoader, type LoaderBeat, type LoaderGates, type LoaderPace } from "./backgroundLoader";
 import type { WarmBand, WarmTask } from "./warmPlan";
 
-/* The loop is driven by hand here: every idle callback and every wait is released by the test rather than
- * waited out, so the pacing is ASSERTED instead of slept through. `now` is a counter the test advances, which
- * is a complete implementation of what the loop uses it for (durations, and nothing else). */
+// The loop is driven by hand: every idle callback and wait is released by the test, not slept through.
+// `now` is a counter the test advances, used only for durations.
 
 interface Harness {
     readonly pace: LoaderPace;
@@ -29,8 +28,7 @@ const harness = (): Harness => {
                 new Promise<void>((resolve) => {
                     releaseIdle = resolve;
                 }),
-            // Recorded, not honoured: the loop's next step is gated on `idle`, which the test releases, so a
-            // wait that actually slept would only make the suite slow.
+            // Recorded, not honoured: the loop waits on `idle`, which the test releases.
             wait: (ms) => {
                 waits.push(ms);
                 return Promise.resolve();
@@ -40,8 +38,7 @@ const harness = (): Harness => {
         step: async () => {
             releaseIdle?.();
             releaseIdle = undefined;
-            // A macrotask, so every microtask the released step queues (the read, its settle handler) has run by
-            // the time the assertion after it does.
+            // A macrotask: lets every microtask the released step queues finish before the following assertion.
             await new Promise((resolve) => setTimeout(resolve, 0));
         },
     };
@@ -51,9 +48,7 @@ const OPEN: LoaderGates = { paused: () => false, busy: () => false };
 
 const BANDS: readonly WarmBand[] = [`now`, `near`, `work`, `rail`];
 
-// A wish that is satisfied once it has been read: the shape every real source builds, since `have` is a cache
-// lookup and the read is what fills the cache. Reads append to `log`, which is what every assertion below is
-// about: WHAT the loop read, and in WHAT ORDER.
+// have() flips true once read() runs, mirroring a cache a real source fills. read() appends key to log, in order.
 const task = (log: string[], key: string, band: WarmBand, onRead: () => void = () => undefined): WarmTask => {
     let held = false;
     return {
@@ -71,10 +66,8 @@ const task = (log: string[], key: string, band: WarmBand, onRead: () => void = (
 
 const dead = (key: string): WarmTask => ({ key, band: `now`, have: () => false, read: () => Promise.reject(new Error(`daemon said no`)) });
 
-// A wish whose read SUCCEEDS and leaves it exactly as cold as it was: the shape a wish takes when the key it
-// says it is satisfied by is not the key its read fills. Every real wish used to be free to be this (its read
-// was a separate callback), and eight of them were; warmQuery now builds both halves out of one query so it
-// cannot be said in the app. The loop still has to survive being handed one, because an extension can.
+// A wish whose read succeeds but leaves have() false. The app can no longer build one, but an extension
+// can, so the loop must survive it.
 const stalling = (log: string[], key: string): WarmTask => ({
     key,
     band: `now`,
@@ -92,7 +85,7 @@ describe(`the background loader`, () => {
         const bench = harness();
         let stopped = false;
         void runBackgroundLoader(
-            // Sorted by band the way warmPlan does; the loop itself only ever takes the first unsatisfied one.
+            // Sorted by band, matching warmPlan; the loop always takes the first unsatisfied one.
             () => [...plan].sort((left, right) => BANDS.indexOf(left.band) - BANDS.indexOf(right.band)),
             OPEN,
             bench.pace,
@@ -173,18 +166,17 @@ describe(`the background loader`, () => {
         const read: string[] = [];
         const bench = harness();
         let stopped = false;
-        // A plan rebuilt per beat would hand back a fresh (unread) task each time; one instance, so `have`
-        // latches the way a cache does.
+        // One instance, not rebuilt per beat, so have() latches like a real cache.
         const only = task(read, `a`, `now`);
         void runBackgroundLoader(
             () => [only],
-            // Permanently busy: a hung daemon read with nothing to time it out.
+            // Permanently busy: simulates a read that never completes.
             { paused: () => false, busy: () => true },
             bench.pace,
             () => stopped,
         );
 
-        // Ten yields, then the loop proceeds regardless.
+        // Caps at ten yields before proceeding anyway.
         for (let beat = 0; beat < 10; beat += 1) {
             await bench.step();
             expect(read).toEqual([]);
@@ -234,7 +226,6 @@ describe(`the background loader`, () => {
         await bench.step();
         await bench.step();
         expect(beats.map((beat) => beat.outcome)).toEqual([`failed`, `failed`, `failed`]);
-        // The first two pace off normally; the third trips the streak and stands the loader down.
         expect(bench.waits.at(-1)).toBe(30_000);
         stopped = true;
     });
@@ -244,7 +235,7 @@ describe(`the background loader`, () => {
         const beats: LoaderBeat[] = [];
         const bench = harness();
         let stopped = false;
-        // One instance each, not rebuilt per beat, so `have` latches the way a cache does.
+        // One instance each, not rebuilt per beat, so have() latches like a cache.
         const plan = [stalling(read, `never-settles`), task(read, `settles`, `now`)];
         void runBackgroundLoader(
             () => plan,
@@ -256,22 +247,18 @@ describe(`the background loader`, () => {
             },
         );
 
-        // Read, answered, and no closer to warm: reported as its own outcome rather than as a read.
         await bench.step();
         expect(read).toEqual([`never-settles`]);
         expect(beats.at(-1)).toEqual({ outcome: `stalled`, key: `never-settles` });
 
-        // THE POINT: the walk carries on past it. Before, the loop took the first unsatisfied wish every beat,
-        // so this second one was never reached: on the real plan that was everything behind the agent board.
         await bench.step();
         expect(read).toEqual([`never-settles`, `settles`]);
 
-        // And with the rest of the plan in hand it goes quiet, rather than spending every beat re-reading it.
         await bench.step();
         expect(read).toEqual([`never-settles`, `settles`]);
         expect(beats.at(-1)?.outcome).toBe(`idle`);
 
-        // Set aside, not given up on: a minute later it gets one more try, in case the stall was "not yet".
+        // Set aside, not abandoned: retried after a minute in case the stall clears.
         bench.advance(60_000);
         await bench.step();
         expect(read).toEqual([`never-settles`, `settles`, `never-settles`]);

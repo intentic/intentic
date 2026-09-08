@@ -6,12 +6,8 @@ import type { Config } from "../env.config.js";
 import { withTrialEndpoint } from "../trial/trial-endpoint.js";
 import { endpointCompatEntries } from "./endpoint-translator.js";
 
-/* THE FRESH-INSTALL REGRESSION, pinned where it lived. The translator renders its routing table when it spawns,
- * and boot fires the trial's availability probe beside it without awaiting it, so the render always ran first
- * and an entry derived from probe state was missing exactly on a new sandbox's first boot. The picker heard
- * "trial exists" moments later and offered it; the first message died as 400 "unknown provider for model
- * free-trial/auto"; and the table healed only by accident, on the next proxy crash or capability edit. The
- * entry is static now, so the probe's timing must not matter in either direction. */
+// The trial's routing entry is static, not derived from the availability probe, so its timing relative to the
+// translator's render at boot cannot matter.
 
 const platformConfig = { ...withTranslator, platform: { url: `https://platform.test/` }, connectToken: `tok` } as Config;
 
@@ -21,7 +17,7 @@ const trialService = (available: boolean) => ({ available: () => available, stat
 
 test("the trial is in the routing table before the availability probe has answered: the fresh-boot render", async () => {
     const sandbox = services({ config: platformConfig });
-    // The layered store exactly as composition builds it, with the probe still unanswered: reads hide the trial.
+    // The layered store as composition builds it, probe still unanswered: reads hide the trial.
     const capabilities = withTrialEndpoint(memoryCapabilitiesStore([ollama]), platformConfig, trialService(false), sandbox.platformTunnel);
     const entries = await endpointCompatEntries({
         ...sandbox,
@@ -42,8 +38,7 @@ test("one entry per prefix once the probe HAS answered: the layered capability m
     const entries = await endpointCompatEntries({
         ...sandbox,
         capabilities,
-        // Reached only if the trial were treated as a discovered endpoint again: its model is a constant, and a
-        // routing entry that waits on a catalog fetch is the failure mode this split removed.
+        // Reached only if the trial were treated as a discovered endpoint again; its model is constant, never fetched.
         endpointModels: {
             models: async () => {
                 throw new Error(`the trial's entry must not fetch a catalog`);

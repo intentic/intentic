@@ -1,65 +1,38 @@
 import { type AccountUsage, gatingWindows, type ModelRef, SPENT_UTILIZATION, type UsageWindow } from "@intentic/sandbox-contract";
 
-/* WHAT THE RECORDED QUOTA SAYS ABOUT A PROVIDER'S FLEET FOR ONE MODEL, the single rule behind every daemon
- * decision that used to have its own: which routed turn's refusal names a reset (translator.ts turnLimit),
- * which one-shot helper rung is stepped over (role-model-quota.ts), and whether a run role's pin is worth
- * spending a session on (run-role-model.ts). Three facts rather than one instant, because they call for
- * different things next.
- *
- * `withHeadroom` is the fact a single reset could not carry, and the one that changes what a refusal means:
- * CLIProxyAPI balances across every auth file it holds, so a routed refusal is fleet-wide by construction. If
- * an account still has room in the pool this model spends, the quota is NOT what refused the turn, the
- * translator had every credential cooling for some other reason (a transient upstream error cools a credential
- * for a minute), and naming a weekly reset would send the user away for days over a condition that clears in
- * seconds.
- *
- * SCOPED TO THE POOLS THE MODEL SPENDS (UsageWindow.gates, read through gatingWindows). Google meters Gemini
- * and the Claude/GPT models as separate weekly allowances off one sign-in; the earliest exhausted window across
- * every account and every pool answered a Claude Opus turn with the Gemini pool's instant, on an account that
- * was not serving it, while another account still had room in the pool the turn was really spending. An
- * account counts as spent when ANY pool this model draws on is spent, it is gated by its tightest, and for an
- * undivided plan (Codex, Kimi: every window gates every model) a spent 5-hour throttle stops a turn the weekly
- * pool would have allowed.
- *
- * Both counts zero ⇒ nothing on file measures this pool at all (never polled, a renamed bucket, a model the
- * plan publishes no pool for), which is a third state and reads as one: the caller says a limit was hit and
- * claims nothing about the fleet. */
+// What the recorded quota says about a provider's fleet for one model. `withHeadroom` separates a real refusal from
+// CLIProxyAPI cooling a credential for another reason, since a fleet-wide proxy makes every refusal look quota-shaped.
+// Scoped to the pools this model spends; both counts zero means unmeasured.
 
 export interface FleetReading {
     readonly account: string;
     readonly usage: AccountUsage | undefined;
-    /* The translator's own bench (TranslatorAccount.cooling): a credential CLIProxyAPI is routing around right
-     * now, whatever its last quota reading says. Counted as spent, with the proxy's retry instant as its reset,
-     * because it is the more current of the two facts and the one that decides whether a turn can run. */
+    // Translator's own bench; counts as spent with the proxy's retry as its reset, the more current fact.
     readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
 }
 
 export interface TurnLimit {
-    // The exhausted pool's own name, as the subject of a sentence. Absent when the plan sells one undivided
-    // allowance (every window gates every model), so there is no pool to name.
+    // Exhausted pool's name; absent when the plan sells one undivided allowance, so there's no pool to name.
     readonly pool?: string;
     readonly spent: number;
     readonly withHeadroom: number;
-    // When the earliest spent account reopens. Only ever set when nothing has headroom: with headroom on file
-    // the pool is not the blocker, and there is no reset that answers "when can I send this again".
+    // Set only when nothing has headroom; with headroom on file the pool isn't the blocker.
     readonly reopensAt?: number;
-    // The newest reading among the accounts with headroom, epoch MS. What lets a memo of a refusal yield to a
-    // reading taken since: a reading older than the refusal it is asked to contradict says nothing.
+    // Newest reading among accounts with headroom (epoch ms); lets a fresher reading outrank an older refusal.
     readonly roomMeasuredAt?: number;
 }
 
-// One spent thing, with the instant it reopens where one is known, and the pool to name where there is one.
+// One spent thing: its reopen instant where known, and the pool to name where there is one.
 interface Exhausted {
     readonly resetsAt: number | undefined;
     readonly pool: string | undefined;
 }
 
-// A pool worth naming is one the plan scopes: the undivided 5-hour or weekly allowance is just "the
-// allowance", and saying "Weekly · all models allowance" tells the reader nothing.
+// A pool worth naming is one the plan scopes; the undivided allowance is just "the allowance".
 const exhaustedPool = (window: UsageWindow): Exhausted => ({ resetsAt: window.resetsAt, pool: window.gates === "all" ? undefined : window.label });
 
-// The exhausted entry whose reset is soonest, since any one account reopening unblocks the turn. An entry with
-// no instant is only the answer when nothing names one.
+// Exhausted entry with the soonest reset, since any one account reopening unblocks the turn; an entry with no instant
+// only wins when nothing names one.
 const soonestOf = (exhausted: readonly Exhausted[]): Exhausted | undefined =>
     exhausted.reduce<Exhausted | undefined>(
         (best, entry) =>
@@ -67,8 +40,8 @@ const soonestOf = (exhausted: readonly Exhausted[]): Exhausted | undefined =>
         undefined,
     );
 
-// One account's verdict for the model: nothing on file, room left (with when that was measured), or spent
-// (with every full pool). Kept as a value so the tally below is a fold rather than a branch per case.
+// One account's verdict: unmeasured, room (with when), or spent (with every full pool); a value so the tally below
+// folds rather than branches.
 type Verdict = { readonly kind: "unmeasured" } | { readonly kind: "room"; readonly measuredAt: number } | { readonly kind: "spent"; readonly exhausted: readonly Exhausted[] };
 
 const judge = (reading: FleetReading, model: ModelRef | undefined): Verdict => {

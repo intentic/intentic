@@ -1,34 +1,10 @@
 import { z } from "zod";
 import { jsonFile } from "../../store/json-file.js";
 
-/* WHAT EACH MESSAGE CAN GO BACK TO, the durable half of every "return to this point" affordance, and the one
- * place the two kinds of workspace a conversation can own are told apart.
- *
- * The daemon already picks a pre-turn state for every turn and ships it to the client, which is what "go back to
- * before this message" hangs on. That frame is the RIGHT state, as the agent found it, not as it left it, and
- * it is also gone the moment the tab reloads: the transcript comes back from the daemon's record, and a restored
- * message carries nothing of the kind. So the affordance was available for exactly as long as the browser that
- * watched the turn stayed open, which is the opposite of when it is wanted.
- *
- * TWO KINDS, because a conversation works in one of two places and they are not restorable by the same means:
- *   · `tree`     , a main-tree turn, whose before-state is a workspace history checkpoint (history/history.ts).
- *   · `worktree` , an isolated turn, which never touches those captures; its before-state is a commit per repo
- *                   on the conversation's own branch, taken at the top of the turn.
- * Both answer the same two questions, put this conversation's files back here, and start a fork on the files as
- * they were here, so both live in one store under one index, and the callers switch on `kind` rather than on
- * whether the conversation happens to be isolated. A reader that had to ask the registry which store to consult
- * would get it wrong for exactly the conversations that changed placement.
- *
- * WHY A MAP AND NOT THE COMMIT. The obvious alternative is to stamp the turn onto the state itself and read it
- * back out of `git log`. It does not work, and the reason is worth writing down: the turn-start state is USUALLY
- * NOT A NEW COMMIT. The fence capture is a no-op when the tree is clean, the common case by far, and the id
- * then refers to an EXISTING state, which may already belong to another turn and cannot be re-stamped after the
- * fact. A map keyed by (conversation, index) says the one thing that is true in both branches: this message's
- * before-state is that one. Several messages naming the same state is not a conflict, it is what a run of turns
- * that changed nothing looks like.
- *
- * On the HISTORY volume beside the transcripts and the journal: daemon-private, outside the agent's reach, and
- * surviving the container rebuilds that recreate everything under ~/. */
+// What each message can go back to: `tree` (workspace-history checkpoint) or `worktree` (a commit per repo on its own
+// branch); both share one store keyed by `kind`, not by asking the registry which placement applies. Keyed by
+// (conversation, index), not the commit itself: a turn's start state is usually not a new commit (a clean-tree capture
+// is a no-op), so the id may already belong to another turn and can't be re-stamped after the fact.
 
 const AnchorSchema = z.union([
     z.object({ kind: z.literal("tree"), snapshot: z.string().min(1) }),
@@ -36,28 +12,23 @@ const AnchorSchema = z.union([
 ]);
 export type TurnAnchor = z.infer<typeof AnchorSchema>;
 
-// index → anchor, per conversation. Object-keyed rather than an array because the indices are sparse: a turn
-// that could not be anchored at all (a history failure, a worktree that never came up) files nothing.
+// index → anchor, per conversation; object-keyed since indices are sparse (an unanchored turn files nothing).
 const FileSchema = z.record(z.string(), z.record(z.string(), AnchorSchema));
 type AnchorsFile = z.infer<typeof FileSchema>;
 
-/* Bound so one conversation cannot grow this without limit, and so the file stays a file. Oldest INDICES go
- * first, which is the right end: going back to the top of a thousand-turn conversation is not what any of this
- * is for, and the recent turns are the ones anyone reaches back into. */
+// Bounds one conversation's anchors so the file stays bounded; oldest indices evict first, only recent turns matter.
 const MAX_ANCHORS_PER_CONVERSATION = 200;
-// Conversations, evicted by which was touched least recently, same shape of bound, one level up.
+// Same bound one level up: conversations evicted by least-recently-touched.
 const MAX_CONVERSATIONS = 500;
 
 export interface TurnAnchors {
     // Remember what this conversation's message `index` can be put back to.
     readonly record: (conversationId: string, index: number, anchor: TurnAnchor) => Promise<void>;
-    // The anchor for one message, or undefined where it has none (a turn from before this file existed, a turn
-    // whose state could not be captured, or a conversation that has been evicted).
+    // The anchor for one message, or undefined if none was ever recorded or it's since been evicted.
     readonly of: (conversationId: string, index: number) => Promise<TurnAnchor | undefined>;
     // Every bound index for a conversation, for stamping a transcript being read back.
     readonly all: (conversationId: string) => Promise<ReadonlyMap<number, TurnAnchor>>;
-    // Drop the anchors at or after `from`, what a rewind does to the messages it just dropped, so a second
-    // rewind cannot offer to go back to a turn that no longer exists.
+    // Drops anchors at or after `from`, so a second rewind can't offer a turn the first one already dropped.
     readonly truncate: (conversationId: string, from: number) => Promise<void>;
 }
 
@@ -73,8 +44,8 @@ const trimmed = (anchors: Record<string, TurnAnchor>): Record<string, TurnAnchor
     return Object.fromEntries(kept.map((index) => [String(index), anchors[String(index)] as TurnAnchor]));
 };
 
-// Same anchor by value, a turn re-run at the same index against the same clean tree is the common repeat, and
-// recognising it is what lets the write below be skipped.
+// Same anchor by value; a turn re-run at the same index on a clean tree is the common repeat, letting the write be
+// skipped.
 const same = (a: TurnAnchor | undefined, b: TurnAnchor): boolean => {
     if (a === undefined || a.kind !== b.kind) {
         return false;
@@ -103,8 +74,8 @@ export const fileTurnAnchors = (path: string): TurnAnchors => {
                     return current;
                 }
                 const anchors = trimmed({ ...existing, [String(index)]: anchor });
-                /* Re-inserted LAST so plain key order is recency order, which is what makes the eviction below
-                 * a slice rather than a second timestamp per conversation to keep in step. */
+                // Re-inserted last so key order is recency order; eviction below is then a plain slice, no timestamp
+                // needed.
                 const { [conversationId]: _moved, ...rest } = current;
                 const next = { ...rest, [conversationId]: anchors };
                 const ids = Object.keys(next);

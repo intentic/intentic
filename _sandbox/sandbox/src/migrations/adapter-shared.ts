@@ -4,43 +4,27 @@ import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
 import { parseSkillFile } from "../settings/skill-file.js";
 
-/* WHAT EVERY SOURCE ADAPTER SHARES, the tolerant readers, the name shaping, and the one translation both
- * ecosystems spell identically (a folder of SKILL.md skills). An adapter's job is the judgment particular to
- * its source; everything here is the part that must NOT vary between them, because two adapters disagreeing on
- * what a valid id or a credential-shaped key is would make the same archive import differently by source. */
+// Shared across every source adapter: tolerant readers, name shaping, and the one translation both ecosystems spell
+// identically (a SKILL.md folder). An adapter's own judgment stays out of here; two adapters disagreeing on a valid id
+// would make one archive import differently by source.
 
-/* A MIGRATED AUTOMATION MINUS THE ONE THING AN ARCHIVE CANNOT KNOW: which models this sandbox may spend.
- *
- * Every other field of a cron job is IN the archive — its schedule, its prompt, whether it was on — and the
- * adapters are pure over that archive by design, so the same function answers the preview and the apply. The
- * ladder is not in the archive and never could be: it names providers THIS sandbox has connected, and the
- * machine being migrated from knew nothing about them. An adapter that invented one would be guessing whose
- * allowance to spend, which is the whole thing `Automation.models` being required exists to stop.
- *
- * So the adapters carry the job without it and the APPLY completes it (apply.ts), which is the first point in
- * the chain that has services and can ask what is actually connected. The owner still approves the row, and
- * the automation still lands held for approval on top of that. */
+// Automation minus `models`: the model ladder names providers THIS sandbox has connected, which an archive from another
+// machine cannot know. Adapters plan without it; apply.ts (with services) fills it in, still held for approval.
 export type MigratedAutomation = Omit<Automation, "models">;
 
-// What one planned item DOES at apply, held beside the wire item, never serialized to the browser. Secret
-// values ride here (they are already in the held archive's memory); `secretFields` names the config keys to
-// strip when the owner withheld secrets, so a capability still lands, keyless, rather than not at all.
+// What one planned item does at apply; held server-side, never serialized to the browser (secret values ride here).
+// `secretFields` lets a capability land keyless when the owner withholds secrets.
 export type ItemApply =
     | { readonly target: "memory"; readonly fence: string; readonly body: string }
     | { readonly target: "skill"; readonly skill: SkillDraft }
     | { readonly target: "automation"; readonly automation: MigratedAutomation }
     | { readonly target: "capability"; readonly capability: Capability; readonly secretFields: readonly string[] }
     | { readonly target: "secret"; readonly key: string; readonly value: string }
-    // One ticked row may land several files (a folder of daily notes), the checklist stays readable while the
-    // bytes stay complete.
+    // One ticked row can land several files (e.g. a folder of daily notes) while the checklist stays one line.
     | { readonly target: "file"; readonly files: readonly { readonly relPath: string; readonly content: Buffer }[] };
 
-/* The checklist row an adapter writes, which is an arrival row MINUS `applicable`. An assistant's home
- * directory has no notion of an inapplicable row: an adapter that cannot take something refuses it during the
- * walk, with a line in `refused` naming the file and the reason. So the field would read `true` on every one
- * of the thirty literals below and in the two adapters, saying nothing thirty times; it is filled once, where
- * the plan is assembled (assistants.ts). The other two flags are NOT constant here and stay on the literals:
- * `recommended` is the adapter's judgment, `secrets` is what the row would store. */
+// Arrival row minus `applicable`: an adapter that can't take an item refuses it during the walk, so this is filled once
+// at plan assembly, not repeated on every literal. `recommended` and `secrets` still do.
 export type AdapterRow = Omit<ArrivalItem, "applicable">;
 
 export interface PlannedItem {
@@ -64,8 +48,7 @@ export const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 export const asString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value : undefined);
 export const asArray = (value: unknown): readonly unknown[] | undefined => (Array.isArray(value) ? value : undefined);
 
-// ---- name shaping ----
-// A capability/automation id: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$, ≤60.
+// Capability/automation id: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$, at most 60 characters.
 export const entryId = (raw: string): string => {
     const cleaned = raw
         .replaceAll(/[^a-zA-Z0-9_-]+/g, "-")
@@ -102,23 +85,21 @@ export const idPool = (): ((raw: string) => string) => {
 
 export const localhost = (url: string): boolean => /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/]|$)/.test(url);
 
-// Whether an env key reads as a credential rather than tuning, the default-tick heuristic, never a gate.
-// `noise` names the source tool's own variable prefixes (timeouts, plumbing), whatever their suffix says.
+// Heuristic for the default tick, never a hard gate: does an env key read as a credential rather than tuning? `noise`
+// lists a source tool's own prefixes (timeouts, plumbing) to exclude regardless of suffix.
 export const credential = (key: string, noise: readonly string[]): boolean =>
     /(_API_KEY|_TOKEN|_SECRET|_SID|_PASSWORD)$/.test(key) && !noise.some((prefix) => key.startsWith(prefix));
 
-// Bootstrap files this size are a mistake at the source too (both tools cap injected context far lower),
-// truncating keeps one runaway export from swamping the memory files every turn reads.
+// Both source tools cap injected context far lower than this; truncating a runaway export keeps it from swamping every
+// turn's memory files.
 export const MEMORY_FILE_CHAR_LIMIT = 20000;
 export const clipped = (body: string): string =>
     body.length <= MEMORY_FILE_CHAR_LIMIT
         ? body
         : `${body.slice(0, MEMORY_FILE_CHAR_LIMIT)}\n\n*(truncated on import, the rest was ${body.length - MEMORY_FILE_CHAR_LIMIT} characters)*`;
 
-/* Every SKILL.md under a prefix, flattened into skill items, the one mapping both ecosystems share verbatim,
- * agent-skills format on both sides. Baked-tool collisions are renamed rather than shadowed (a skill called
- * `lsp` would claim the built-in's switch), and the taken-set is the CALLER's so two scanned locations (a
- * workspace skills folder and a managed one) resolve their collisions in the caller's precedence order. */
+// Flattens every SKILL.md under a prefix, the mapping both ecosystems share verbatim. A name colliding with a baked
+// tool is renamed, not shadowed; `taken` is the caller's, so scanned locations resolve collisions in its order.
 export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string, taken: Set<string>, refused: string[]): PlannedItem[] => {
     const planned: PlannedItem[] = [];
     for (const path of [...files.keys()].filter((candidate) => candidate.startsWith(prefix) && candidate.endsWith("/SKILL.md")).toSorted()) {
@@ -167,9 +148,8 @@ export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string
     return planned;
 };
 
-/* One secret item per env-shaped key, deduped across a plan's several sources (.env, an auth file, inline
- * channel tokens), first origin wins, which is why callers feed the most authoritative store first. The
- * checklist line and the default tick are decided here so every source's secrets read identically. */
+// One secret item per env-shaped key, deduped across a plan's sources: first origin wins, so callers feed the most
+// authoritative store first. The checklist line and default tick are decided here so every source reads the same.
 export const secretPlanner = (
     planned: PlannedItem[],
     refused: string[],
@@ -182,8 +162,8 @@ export const secretPlanner = (
             if (taken.has(key) || value === "") {
                 return;
             }
-            // A `${VAR}` value is a POINTER at an env store, not a credential, the real value arrives via the
-            // store it points at, and importing the pointer would store a literal dollar-string as a secret.
+            // A `${VAR}` value points at another env store; importing it would store the literal placeholder as a
+            // secret.
             if (/^\$\{[^}]+\}$/.test(value)) {
                 return;
             }
@@ -209,9 +189,8 @@ export const secretPlanner = (
     };
 };
 
-/* One source cron job into one held-for-approval automation. `requireApproval` on every imported job,
- * deliberately: these prompts were written for a different agent on a different machine, and the first few
- * fires should be read, not discovered. `enabled` follows the source, a job they switched off stays off. */
+// One source cron job becomes one held-for-approval automation: `requireApproval` is always on, since these prompts
+// were written for a different agent on a different machine. `enabled` follows the source job's own switch.
 export const automationPlanner = (
     sourcePrefix: string,
     planned: PlannedItem[],
@@ -225,8 +204,7 @@ export const automationPlanner = (
         if (cron === undefined || prompt === undefined) {
             return;
         }
-        // The job's OWN name wherever it declared one, a refusal that says "cron-2" makes the owner count
-        // list entries to learn which job it meant.
+        // Uses the job's own declared name; a refusal naming "cron-2" would force the owner to count list entries.
         const name = asString(entry["name"]) ?? asString(entry["id"]) ?? rawName;
         try {
             new Cron(cron).nextRun();
@@ -235,8 +213,8 @@ export const automationPlanner = (
             return;
         }
         const id = nextId(entryId(`${sourcePrefix}-${name}`));
-        // Every field the archive can answer for, validated here; the ladder is filled at apply, where the
-        // sandbox's own connected models are knowable (see MigratedAutomation).
+        // Validates every field the archive can answer for; the model ladder is filled later, at apply
+        // (MigratedAutomation).
         const automation = AutomationSchema.omit({ models: true }).safeParse({
             id,
             trigger: { kind: "schedule", cron },
@@ -262,8 +240,8 @@ export const automationPlanner = (
     };
 };
 
-/* One MCP server entry into an mcp capability when it is URL-served, a needs-action when it is command-run,
- * both ecosystems declare them the same way, down to the `sse+` transport prefix some spell into the scheme. */
+// One MCP server entry becomes an mcp capability when URL-served, or a needs-action when it's a local command; both
+// ecosystems declare servers the same way, down to the `sse+` transport prefix some use.
 export const planMcpEntry = (
     name: string,
     server: Record<string, unknown> | undefined,

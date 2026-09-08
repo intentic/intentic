@@ -1,26 +1,11 @@
 import type { DeviceConflict } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 
-/* WHAT TO SAY TO AN AGENT ABOUT A STUCK FOLDER, and why this is the button a conflict deserves.
- *
- * Resolving a file-sync conflict is per file and per judgement: somebody has to open both copies of
- * `settings.json`, work out that the laptop's is last week's and the sandbox's has the change they remember
- * making, and put one of them on both ends. Nothing about that is a switch, which is why the card offers no
- * "resolve" button and never should: a one-click winner is a one-click way to lose an afternoon's work on the
- * losing side. It IS, exactly, a turn: read both, decide, make them agree, say what you did.
- *
- * And an agent in this sandbox can reach both ends, which is the part that makes the offer honest rather than
- * decorative. The sandbox's copy is a file it can open; the device's copy is under that machine's own tools,
- * which exist because the same machine is a connected device (the `hostId` this ask requires is what the button
- * gates on). No new command on the machine, no new permission: the two things it needs are already there.
- *
- * The turn is aimed at the OWNER'S tree, not at a worktree, which is the one thing about this job that reads
- * wrong from inside an isolated conversation: /work is that conversation's own checkout, and the folder the
- * sync session actually carries is the shared one. Said explicitly in the prompt, because a turn that "fixed"
- * the conflicts inside its own worktree would change nothing at all and report success. */
+// Builds the turn prompt for resolving a stuck file-sync conflict: per-file judgement a switch cannot make,
+// offered because an agent here can reach both ends (the sandbox's copy directly, the device's through its own
+// tools). Aimed at the owner's shared tree, not an isolated worktree.
 
-// What happened on each side, named for the two places rather than for Mutagen's endpoints: the agent is on
-// neither of them, so "alpha" and "here" are both wrong and the machine's own name is right.
+// Named for the two places rather than Mutagen's endpoints, since the agent is on neither of them.
 const CHANGE: Record<NonNullable<DeviceConflict[`local`]>, string> = { created: `created`, modified: `changed`, deleted: `deleted` };
 
 const sides = (conflict: DeviceConflict, machine: string): string => {
@@ -28,20 +13,19 @@ const sides = (conflict: DeviceConflict, machine: string): string => {
         conflict.local === undefined ? undefined : `${CHANGE[conflict.local]} on ${machine}`,
         conflict.sandbox === undefined ? undefined : `${CHANGE[conflict.sandbox]} in the sandbox`,
     ].filter((side) => side !== undefined);
-    // Mutagen reported a conflict without saying what kind of change made it: the path is still the finding,
-    // and inventing a verb for it would be the one thing this ask must not do.
+    // Mutagen reported a conflict without a change kind; the path is still the finding.
     return said.length === 0 ? `both ends changed it` : said.join(`, `);
 };
 
 const pathLine = (conflict: DeviceConflict, machine: string): string =>
     `- ${conflict.path === `` ? `(the synced folder itself)` : conflict.path} — ${sides(conflict, machine)}`;
 
-/* Every clause here has a failure behind it that this turn could plausibly produce:
- *   the worktree note        a turn that resolves conflicts inside its own checkout changes neither end,
- *   read before you write    the only irreversible move available is overwriting a side unread,
- *   the list is the scope    it is loose in somebody's home directory with write tools,
- *   ask rather than merge    "both sides carry real work" is the case a person must decide, not a model,
- *   leave the session alone  pausing or unpairing to "fix" it hides the conflicts instead of resolving them. */
+// Each clause guards a failure this turn could produce:
+// - worktree note: resolving inside the wrong checkout changes neither end
+// - read before write: overwriting a side unread is the only irreversible move
+// - the list is the scope: it has write tools loose in someone's home directory
+// - ask rather than merge: two sides both holding real work is a human call
+// - leave the session alone: pausing or unpairing hides the conflict instead of ending it
 const CONFLICT_INVARIANTS =
     `Both ends are real files somebody uses, and neither write goes through \`land\`, so nothing here is reviewable ` +
     `as a diff afterwards: touch only paths that are actually in conflict, and read both copies of a path before ` +
@@ -49,16 +33,16 @@ const CONFLICT_INVARIANTS =
     `resume or unpair the sync, and do not touch Mutagen: the session resolves itself the moment the two ends agree.`;
 
 export interface ConflictAsk {
-    /** The button's tooltip: what the turn will do, before anyone spends one. */
+    /** The button's tooltip: what the turn will do, before spending one. */
     readonly hint: string;
-    /** The turn, sent as an ordinary first message so it sits in the transcript to be steered. */
+    /** The turn, sent as an ordinary first message so it's steerable in the transcript. */
     readonly prompt: string;
 }
 
 export interface ConflictSubject {
-    /** What the machine is called on screen, which is also what its owner calls it. */
+    /** What the machine is called on screen and to its owner. */
     readonly machine: string;
-    /** The host capability's id, which is the namespace of that machine's own tools (`mcp__<hostId>__…`). */
+    /** Host capability id: the namespace of that machine's own tools (`mcp__<hostId>__…`). */
     readonly hostId: string;
     /** The folder on that machine this sandbox is synced with. */
     readonly localDir: string | undefined;
@@ -70,13 +54,10 @@ export interface ConflictSubject {
 export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPaths }: ConflictSubject): ConflictAsk => {
     const folder = localDir ?? `the folder it syncs`;
     const listed = conflictedPaths.map((conflict) => pathLine(conflict, machine));
-    // The remainder is stated rather than dropped: the report caps what it carries and Mutagen caps what it
-    // reports, and a turn told about six of forty conflicts would declare victory forty percent of the way in.
+    // Stated rather than dropped: both the report and Mutagen cap what they carry.
     const rest = conflicts - listed.length;
-    /* An agent older than the field reports the count and no paths, and that machine's own `status` is no help
-     * either — it predates printing them too, so a turn sent to read it would come back with the number it
-     * already has. Mutagen itself is the source underneath both, and asking it directly is a thing an agent on
-     * that machine can do and this browser cannot. */
+    // An old agent reports the count with no paths, and its own `status` predates printing them too; Mutagen
+    // itself is the source under both, reachable only by a turn running on that machine.
     const inventory =
         listed.length === 0
             ? `That machine's agent is too old to report which paths they are. Ask Mutagen on the machine itself: \`mutagen sync ` +
@@ -86,9 +67,7 @@ export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPa
                   `The stuck paths, and what happened to each:`,
                   ``,
                   ...listed,
-                  /* The remainder is a fact about the LIST, not about the job, and it needs somewhere to go:
-                   * this machine's own `status` caps its output as well, so the pointer is at Mutagen, and at
-                   * re-reading rather than at trusting one answer to be the whole of it. */
+                  // A fact about the list's own cap, not the job; points at re-reading rather than trusting one answer.
                   ...(rest > 0
                       ? [
                             ``,

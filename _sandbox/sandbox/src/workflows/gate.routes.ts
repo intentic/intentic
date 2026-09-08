@@ -13,45 +13,14 @@ import { dailyBudget } from "../store/daily-budget.js";
 import { gateVerdictOf } from "./workflow-gate.js";
 import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
 
-/* THE RELEASE GATE, the daemon's third door for a caller with no identity, and the only one that ANSWERS.
- *
- * The Front Desk proved the shape: a route that is itself the source, normalizing an outside request and driving
- * the existing machinery rather than wrapping a second copy of it. This is that shape pointed at a workflow
- * instead of an agent turn, and the whole of what it adds is a wait and a verdict.
- *
- * WHY THIS IS NOT AN AUTOMATION. `/automations/{id}/fire` wakes one agent turn whose PROMPT may mention running
- * a workflow, which puts a model in the path of a dispatch that has to be deterministic: a pipeline cannot be
- * told "the gate probably ran". Here the workflow named in the URL is the workflow that runs, and nothing
- * decides otherwise.
- *
- * WHY IT IS TOKEN-AUTHED AND NOT ORIGIN-AUTHED. The Front Desk's gate is its embed-origin allowlist, which works
- * because its caller is a browser on a page the owner controls. A pipeline runner sends no Origin at all, the
- * Front Desk would refuse it by design, so this takes the event automation's model instead: a minted token
- * (auth/door-tokens.ts), in the query string for a caller that can carry nothing else, or as a bearer header
- * from the gate CLI and the Marketplace action, which can. Enforced ALWAYS, fail-closed even in loopback: a
- * gate with no credential admits nobody.
- *
- * WHY THERE IS NO `enabled` TOGGLE. A workflow does not have one, on the argument that nothing fires it on its
- * own. Something does now, but the GATE's presence is the switch: declare one and the door opens, drop it and
- * the door is gone along with the token behind it. A second toggle would be a way to leave a token live on a
- * closed door.
- *
- * CONCURRENT CALLS ARE FINE and deliberately not serialized. Two pipelines gating two commits derive different
- * run ids and different conversation ids, so nothing is shared and nothing collides, which is the property
- * that makes "gate every pull request" a thing anyone can actually turn on.
- */
+// Release gate: the daemon's identity-less door that answers synchronously, running exactly the workflow named in the
+// URL. Token-authed (query or bearer), since pipeline callers send no Origin; the gate's presence is its own enable
+// toggle, and calls run unserialized since each derives its own run and conversation id.
 
-// The per-workflow daily ceiling. Keyed by workflow id, so two gates on one sandbox each get their own day.
+// Per-workflow daily ceiling, keyed by workflow id so each gate gets its own day.
 const daily = dailyBudget();
 
-/* How long the gate will hold the connection when the caller names no deadline of its own, and the longest it
- * will hold it whatever they name.
- *
- * The default is short on purpose. A pipeline that has not said how patient it is has a job timeout of its own
- * that this knows nothing about, and being cut off by the runner mid-wait is the one outcome that leaves a run
- * burning with nobody left to read it. The ceiling is generous because a real acceptance sweep across a dozen
- * stories is tens of minutes, and a gate that could not outlast the work it gates would be decorative.
- */
+// Default wait with no caller deadline, and the ceiling regardless of what they ask.
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 3 * 3_600;
 
@@ -67,21 +36,16 @@ export const createGateRoute =
     (services: Services, wake: TurnFn = streamAgent) =>
     async (c: Context<AppEnv, "/workflows/:id/gate">): Promise<Response> => {
         const workflow = await services.workflows.get(c.req.param("id"));
-        // One 404 for "no such workflow" and for "that workflow declares no gate", unlike the Front Desk's
-        // 404/403 split. There is nothing here for a caller to fix by learning which it was: a workflow with no
-        // gate has no token either, so the request was never going to be admitted under any spelling.
+        // One 404 for both no such workflow and no gate declared; nothing here is fixable by learning which.
         if (workflow?.gate === undefined) {
             return c.json({ error: "no gated workflow with that id" }, 404);
         }
         const { gate } = workflow;
-        // The door's credential (auth/door-tokens.ts), as `?token=` or as a bearer header from a caller that can
-        // set one; a gate saved before the store existed has no credential yet and admits nobody until listed.
+        // Door credential via `?token=` or bearer header; a gate saved before the token store existed admits nobody.
         if (!(await services.doorTokens.verify("gate", workflow.id, presentedDoorToken(c.req.raw.headers, c.req.query("token"))))) {
             return c.json({ error: "unauthorized" }, 401);
         }
-        /* Re-checked at call time, not only at save time: a manifest can be hand-edited, and a gate whose field
-         * no longer exists would otherwise spend a full fan-out of sessions to discover it. The sentences are
-         * the designer's own, so a broken gate reads the same in a pipeline log as it does under the canvas. */
+        // Re-checked at call time: a hand-edited manifest may name a field that no longer exists.
         const faults = workflowFaults(workflow);
         if (faults.length > 0) {
             return c.json({ error: faults.join(" ") }, 400);
@@ -90,11 +54,7 @@ export const createGateRoute =
         if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
             return c.json({ error: "payload too large" }, 413);
         }
-        /* ADMISSION, the same session.start guard every automation wake passes, with this door's own source.
-         * The workflow floor is allow|deny only (a hold here is indistinguishable from a timeout to the CI
-         * runner holding the connection), so a refusal answers 403 with the policy's sentence, a fact about
-         * this workspace's configuration, which the caller's on-call can act on. Before the daily spend: a
-         * refused call must not eat the day's budget. */
+        // Same admission guard as every automation wake; a refusal must happen before the day's budget is spent.
         const { admission } = await services.sandboxSettings.get();
         const admitted = guard(sessionStart, { source: "workflow", admission });
         if (admitted.effect !== "allow") {
@@ -104,17 +64,9 @@ export const createGateRoute =
             return c.json({ error: "this gate has reached today's run limit" }, 429);
         }
 
-        /* The body becomes the run's REQUEST, the sentence every step is handed on top of its own prompt.
-         * That seam already exists for the composer, and it is exactly the right one: the commit under test,
-         * the preview URL it was deployed to, the branch, whatever this pipeline knows and the workflow's
-         * prompts were written to expect. The daemon does not parse it, because what it means is the graph's
-         * business and not this route's, which is the property that lets one door serve an acceptance sweep
-         * and a security review without learning what either of them is. */
+        // Request body becomes the run's request, appended to every step's prompt; the daemon never parses it.
         const request = (await c.req.text()).slice(0, PAYLOAD_MAX);
-        /* A design whose steps take their goal from the request cannot be run by a caller that sent an empty
-         * body, there would be nothing to tell the model at all. Refused here rather than discovered by the
-         * first step, because this door spends a whole fan-out of sessions per call and a gate wired into a
-         * push-triggered pipeline would spend it on every commit. 400, not 500: the body is the caller's. */
+        // Refused before the first step spends a session; 400, since the body is the caller's.
         const runFaults = workflowRunFaults(workflow, request);
         if (runFaults.length > 0) {
             return c.json({ error: runFaults.join(" ") }, 400);
@@ -125,35 +77,25 @@ export const createGateRoute =
         }
         const run = await services.workflowRuns.start(openRun(workflow, repos, Date.now(), request === "" ? undefined : request));
 
-        /* Held, unlike every other run-starting route here, holding it IS the product. A pipeline step's whole
-         * job is to block until it knows, and the alternative (ack now, make the caller poll) pushes the wait
-         * into a shell loop in everybody's workflow file.
-         *
-         * The run promise is caught rather than left bare: past the deadline we walk away from it, and a
-         * rejection landing after this handler has answered would otherwise be an unhandled one. */
+        // Holding the connection is the point: a pipeline step blocks until it knows rather than polling. The run
+        // promise is caught so a rejection past the deadline is not left unhandled.
         const finished = runWorkflow(services, run, wake).then(
             () => true,
             () => true,
         );
         const settled = await Promise.race([finished, sleep(waitMsOf(c.req.query("wait"))).then(() => false)]);
-        /* A caller that gave up leaves a fan-out of sessions running with nobody to read them, so the deadline
-         * STOPS the run rather than merely abandoning it. The steps are cut off where they stand, which is what
-         * makes the timeout cost one deadline's worth of spend instead of the whole graph's. */
+        // A given-up caller must not leave the fan-out running: stop it rather than abandon it.
         if (!settled) {
             stopWorkflowRun(run.runId);
         }
 
-        // Read back rather than reasoned about: the runner writes the documents and the step states, and the
-        // verdict is a function of what is on the ledger. A run that rolled off the end of it reads as blocked.
+        // Verdict is read back from the run ledger, not reasoned about; a run past the end of it reads as blocked.
         const record = await services.workflowRuns.get(run.runId);
         const verdict: GateVerdict =
             record === undefined
                 ? { outcome: "blocked", runId: run.runId, reason: "The run went missing before it could be read." }
                 : gateVerdictOf(record);
 
-        /* ALWAYS 200, including for `fail`. The status code says whether the exchange worked; the body says
-         * what the product is. Folding a failed gate into a 4xx would make `curl --fail` treat "your app is
-         * broken" and "your token is wrong" as the same event, and those need opposite responses from whoever
-         * is on call. The pipeline reads `outcome` and picks its own exit. */
+        // Always 200, even for `fail`: the pipeline reads `outcome` itself, distinct from a wrong-token failure.
         return c.json(verdict);
     };

@@ -1,21 +1,8 @@
-<!-- THE KIT, ON ONE PAGE: every shared part in every state it has, and every scale it is drawn from.
-     Dev-only: the route is registered under `import.meta.env.DEV` (router/index.ts), so it is not in a
-     production bundle and there is no guard to satisfy: it opens signed out, with no sandbox, in any theme.
-
-     IT EXISTS TO MAKE DRIFT VISIBLE. The design system is documented better than most, and the drift the audit
-     found still happened, because the two things that had drifted were never on screen together: thirteen
-     dialog widths, two red boxes differing only in whether they carried a warning icon, and four captions
-     rendered at sizes the scale does not contain. None of that is discoverable by reading a file. It is obvious
-     the moment the variants sit in a row.
-
-     SO THE SCALES ARE FIRST, before any component. A component gallery shows you what a part looks like; a
-     SCALE shows you the decision behind it, which is the thing a call site is tempted to reinvent. Every band
-     here prints the token name beside the sample, because the failure being prevented is somebody typing
-     `text-[0.65rem]` for want of knowing `text-3xs` exists.
-
-     WHAT IS NOT HERE, and deliberately: anything that needs the daemon, an agent, a repository or a signed-in
-     user. The parts that carry app state (the chat surfaces, the fleet board) are not kit parts, and a gallery
-     that has to boot a workspace is a gallery nobody opens. -->
+<!--
+    Dev-only page (behind `import.meta.env.DEV`) showing every shared component, state and scale together so drift between them is visible on one
+    screen. Scales render before components, each token name printed beside its sample. Excludes anything needing the daemon, an agent, a repository
+    or a signed-in user.
+-->
 <script setup lang="ts">
 import {
     AnchoredOverlay,
@@ -76,15 +63,10 @@ import { ref } from "vue";
 const { scheme, set: setScheme } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 
-/* Each band is a `[name, sample]` list rather than prose, so the page reads as a RULER: the name is what a
- * call site types, and the sample is what it gets. A band with one entry is a band with a decision nobody has
- * had to make yet: worth seeing as much as a crowded one. */
+// Each band is a [name, sample] pair: the name is what a call site types, the sample is what it gets.
 const TEXT_SIZES = [`text-4xs`, `text-3xs`, `text-2xs`, `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`] as const;
 const RADII = [`rounded-xs`, `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`] as const;
-/* SPELLED OUT, both of them, because Tailwind emits a utility only where it can SEE the name: a swatch class
- * built as `bg-${name}` is a class that ships as nothing at all, and a palette page that renders blank squares
- * is worse than no palette page. It is the same rule the series tokens record in semantic-colors.css, and this
- * is exactly the file that would have made the mistake. */
+// Spelled out per swatch: Tailwind only emits a class it can see, so `bg-${name}` would purge to nothing.
 const ROLE_COLORS = [
     { name: `canvas`, swatch: `bg-canvas` },
     { name: `card`, swatch: `bg-card` },
@@ -111,9 +93,7 @@ const SERIES = [
 const MODAL_SIZES = [`sm`, `md`, `lg`, `xl`, `full`] as const;
 const READ_WIDTHS = [`max-w-read-xs`, `max-w-read-sm`, `max-w-read`, `max-w-read-lg`] as const;
 const POP_WIDTHS = [`w-pop-sm`, `w-pop`, `w-pop-lg`] as const;
-/* Heights are drawn as a SHARE OF THE VIEWPORT rather than as a column of that height: `h-panel` is 60dvh, and
- * four honest columns would be two thousand pixels of bar to say four numbers. The share is the fact anyway:
- * these exist to stop a panel growing past the window, so how much window it leaves is the whole content. */
+// share is what matters: these clamp a panel's growth relative to the viewport, not an absolute height.
 const PANEL_HEIGHTS = [
     { name: `h-panel`, value: `60dvh`, share: 60 },
     { name: `h-panel-lg`, value: `72dvh`, share: 72 },
@@ -122,12 +102,9 @@ const PANEL_HEIGHTS = [
 ] as const;
 const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
 
-/* One machine, invented: a healthy sandbox and a stopped one that lost a port to it, which between them show
- * every state the row has: the running dot and the stopped word, a resting sync and a halted one, a mirrored
- * port and a contested one, and both halves of the power slot. */
+// Two sandboxes cover every row state: run/stop, sync/halted, mirrored/contested port, both power states.
 const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
-    // The one row with its share reported, so the Share line is on this page: a cap somebody set, and a privilege
-    // the approved environment demands rather than the owner asked for, which is the case the form draws locked.
+    // Only row with resources set: exercises the Share line and the privileged toggle drawn locked.
     {
         slug: `work`,
         name: `work`,
@@ -139,14 +116,8 @@ const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
     { slug: `hold`, name: `hold`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
 ];
-/* BOTH SESSIONS ON BOTH ROWS, because a pairing now runs two: the workspace sync and the one-way mirror that
- * carries the sandbox's own state down. The healthy row states its backup explicitly rather than omitting it:
- * an omitted one reads as "not backed up" and would draw a warning on the sample whose whole job is to show
- * what a well pairing looks like, which is how a fixture starts lying about the component it demonstrates. */
-/* THE THIRD ROW IS THE ONE WITH MIRRORING OFF, and it carries no ports for the same reason the real thing does:
- * a device told to keep its localhost clear reports none. That is exactly why the state has to be on the row
- * at all, an empty port list is also what a sandbox serving nothing looks like, and it is the variant worth
- * having here: healthy-and-quiet reads as a fault unless you can see the two next to each other. */
+// Healthy rows state both sync and backup explicitly; omitting one would misread as not backed up.
+// Third row: mirroring off, no ports — an empty list also means a quiet sandbox, not a fault.
 const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
     { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
@@ -159,10 +130,7 @@ const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
         mirroring: `off`,
     },
 ];
-/* SEVERAL PORTS, NOT ONE, because one is the case that never went wrong. A sandbox routinely serves three or
- * four, and the layout that broke was exactly that: a wrapping row of tinted chips each trailed by a program
- * name, running together as a single string. A kit fixture that shows one port per sandbox hides the only
- * arrangement worth checking on this page. */
+// Several ports, not one: a wrapping row of chips is the layout that actually broke.
 const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 5173, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/node_modules/.bin/vite` },
     { port: 33177, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/backend-host-main.js` },
@@ -171,10 +139,9 @@ const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
 ];
 
-// Live state for the parts that have any. One flag per surface, which is also what the surfaces themselves do.
+// One ref per stateful part, mirroring how each surface tracks its own flag.
 const modalSize = ref<(typeof MODAL_SIZES)[number]>(`md`);
-// The disclosure gallery's own open state: one of each shape left OPEN, because a closed row shows nothing
-// that could have drifted.
+// Left open: a closed disclosure row shows nothing that could have drifted.
 const kitRail = ref(true);
 const kitDrawer = ref(true);
 const kitBefore = ref(false);
@@ -192,9 +159,7 @@ const query = ref(``);
 const filter = ref(``);
 const prose = ref(`A paragraph typed into the writing field.`);
 const source = ref(`export const greet = (who: string): string => \`hello \${who}\`;\n`);
-/* The two markdown documents below, each with the "disk" it is measured against. Held as a pair rather than
- * one ref because `stored` is what makes the status line say anything at all, and a demo that never told the
- * component what was saved would show the one state the real surfaces never sit in. */
+// Held as a pair: `stored` is what drives the status line, so the demo needs a saved copy too.
 const NOTE = `## A note\n\nClick a line and type. The block you are in shows its markup; the rest stay clean.\n\n- Enter opens the next item\n- Enter on an empty one ends the list\n- [ ] and a task box is a task box\n`;
 const note = ref(NOTE);
 const noteOnDisk = ref(NOTE);
@@ -202,14 +167,8 @@ const POLICY = `# Safety policy\n\nAsk before anything that **deletes**, and bef
 const policy = ref(POLICY);
 const policyOnDisk = ref(POLICY);
 
-/* THE BUTTON'S WHOLE VOCABULARY, as data, so the gallery below is a MATRIX rather than a row of examples that
- * happens to be missing the state somebody is about to get wrong. The order is the ranking: read it top to
- * bottom and the page tells you which button a screen should collect its press on.
- *
- * The first four are RANKS, at most one loud per page. The last three are TONES — what kind of thing the press
- * does — and any of them can wear any rank, which is why they are listed after rather than beside. `warn` is
- * spelled `warn` and not `warning`: PrimeVue 4 renamed it, and the old spelling silently paints in the brand
- * colour instead of amber. */
+// Order is the rank, top to bottom; the last three are tones, not ranks, and any of them can carry any rank. `warn`,
+// not `warning`: PrimeVue 4's spelling — the old one silently paints the brand colour.
 const BUTTON_TIERS = [
     { name: `Loud`, spelling: `class="ui-button-loud"`, props: { class: `ui-button-loud` } },
     { name: `Accent`, spelling: `<Button>`, props: {} },
@@ -241,8 +200,7 @@ const PICKER_OPTIONS = [
     { value: `opus`, label: `Claude Opus 5`, description: `For the hard ones` },
     { value: `haiku`, label: `Claude Haiku 5` },
 ];
-// The hinted variant, side by side with the annotated one above: a choice whose options are TAUGHT on the row
-// rather than named and left. Access tiers are the case it was built for.
+// Hinted variant, beside the plain one above: options taught on the row itself, built for access tiers.
 const PICKER_HINTED = [
     { value: `viewer`, label: `Viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
@@ -281,7 +239,7 @@ const pickedTier = ref(`collaborator`);
         </PageHeader>
 
         <div class="flex flex-col gap-10 pb-16">
-            <!-- ── THE SCALES ─────────────────────────────────────────────────────────────────────────── -->
+            <!-- Scales -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Type scale</h2>
                 <RowGroup>
@@ -359,7 +317,6 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── SAYING SOMETHING WENT WRONG ────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Notice</h2>
                 <p class="text-xs text-muted">
@@ -386,7 +343,6 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── CONTAINERS ────────────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Containers</h2>
                 <p class="text-xs text-muted">
@@ -396,8 +352,7 @@ const pickedTier = ref(`collaborator`);
                 <div class="flex flex-wrap items-start gap-4">
                     <Card class="w-64"><p class="text-xs text-content">A card. Padding and radius come from the density tokens.</p></Card>
                     <Card dashed class="w-64"><p class="text-xs text-muted">A dashed card: the empty state.</p></Card>
-                    <!-- `grow` inside a fixed-height flex parent, which is the whole of how this is used: the frame
-                         is sized by its content otherwise, and a wrapper's height constrains nothing. -->
+                    <!-- `grow` needs a fixed-height flex parent, or the frame sizes to content and the wrapper's height is inert. -->
                     <div class="flex h-56 w-72 flex-col">
                         <ScrollFrame grow title="ScrollFrame" description="Header stays, body scrolls">
                             <div class="flex flex-col gap-2 p-3">
@@ -408,7 +363,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── LISTS ─────────────────────────────────────────────────────────────────────────────── -->
+            <!-- Lists -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Rows</h2>
                 <div class="grid gap-4 md:grid-cols-2">
@@ -425,10 +380,7 @@ const pickedTier = ref(`collaborator`);
                     <RowGroup label="Loading">
                         <SkeletonRows :rows="4" description control />
                     </RowGroup>
-                    <!-- `#below` IS FULL-WIDTH, WHICH IS WRONG FOR A SUB-BLOCK. `spine` hangs it off the row's
-                         name instead, on a rule under the row's own mark — the device <PlanLimitsPanel> arrived
-                         at for the same reason, having thrown away a bordered card per provider to get there.
-                         For a `#below` that is a BLOCK; a sentence continuing the description stays flush. -->
+                    <!-- Default `#below` is full-width; `spine` hangs it off the row's mark for a block, not a continuing sentence. -->
                     <RowGroup label="Below: flush, and on a spine">
                         <Row icon="sitemap" title="Flush" description="The default: the block starts at the group's edge">
                             <template #below><p class="text-2xs text-muted">A sentence continuing the description wants this.</p></template>
@@ -441,14 +393,10 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                 </div>
 
-                <!-- THE THREE TIERS, SIDE BY SIDE, because side by side is the only place this drift was ever
-                     visible: the Sandbox hub changed row language as you tabbed through it, and nobody had two
-                     tabs on one screen.
-
-                     ONLY THE MIDDLE ONE IS A LIST. `compact` is what a <RowGroup> IS — the default, set nowhere,
-                     which is why the group below has to be told to draw the other two at all. `dense` is the
-                     navigator rail; `comfortable` is a card's masthead, which is not in a list and keeps <Row>'s
-                     own fallback. Neither the rows nor the outline nor the notes say anything about size. -->
+                <!--
+                    compact is <RowGroup>'s default; dense is the navigator rail, comfortable a card's masthead. Neither the rows, the outline, nor
+                    the notes vary by size on their own.
+                -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Tiers, and the lines that are not rows</h3>
                 <div class="grid gap-4 md:grid-cols-3">
                     <RowGroup
@@ -458,8 +406,7 @@ const pickedTier = ref(`collaborator`);
                         :label="tier"
                         :caption="tier === `compact` ? `every list — the default` : tier === `dense` ? `navigator rails` : `card mastheads`"
                     >
-                        <!-- The mark comes from the slot, never from a number here: that is what `:size="mark"`
-                             is, and it is why these three columns cannot drift apart. -->
+                        <!-- Mark size comes from the `#lead` slot's `mark`, not a literal number, so the columns can't drift apart. -->
                         <Row title="A record" description="Its mark is the tier's">
                             <template #lead="{ mark }"><BrandMark :size="mark" name="GitHub" icon="github" /></template>
                         </Row>
@@ -470,11 +417,10 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                 </div>
 
-                <!-- EVERY SHAPE A DISCLOSURE ROW COMES IN, side by side, because side by side is the only place
-                     the drift this component ended was ever visible: fourteen lists had each answered "what does
-                     an expandable row look like" alone, and arrived at five chevrons, four indents and four
-                     tints. Both hit areas and both bodies are here open at once, so the next person to add one
-                     picks from a picture instead of from whichever file they happened to be in. -->
+                <!--
+                    Every disclosure-row shape, side by side, both hit areas and bodies open at once, so the next one added is picked from a picture,
+                    not guessed.
+                -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
                 <div class="grid gap-4 md:grid-cols-2">
                     <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
@@ -497,11 +443,7 @@ const pickedTier = ref(`collaborator`);
                     <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
                         <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
-                            <!-- THE LINK HUGS ITS TEXT (`w-fit`), which is the half of this mode a picture has to
-                                 show: underlined is where you GO, and every other pixel of the row — including
-                                 the blank after a short name — is where you OPEN. Drawn `block` instead, as the
-                                 activity feed's turn labels were, the link's hit area silently runs the whole
-                                 width of the headline and the row stops opening where it looks like it should. -->
+                            <!-- `w-fit` keeps the underline on the text; `block` would let the link's hit area span the row's full width. -->
                             <template #title>
                                 <a href="#" class="block w-fit max-w-full hover:text-link hover:underline">A headline that navigates</a>
                             </template>
@@ -512,8 +454,7 @@ const pickedTier = ref(`collaborator`);
                             </template>
                         </DisclosureRow>
                         <DisclosureRow v-model:open="kitBefore" body="drawer">
-                            <!-- The selection column: outside the toggle (a checkbox in a button is invalid and
-                                 unusable), inside the tint (the whole line is still one row). -->
+                            <!-- Selection column sits outside the toggle (a checkbox nested in a button is invalid) but inside the tint. -->
                             <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" /></template>
                             <template #title>With a #before selection column</template>
                             <template #meta><StatusBadge variant="success" label="pass" size="xs" /></template>
@@ -523,10 +464,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── ONE DEVICE'S SANDBOXES ──────────────────────────────────────────────────────────── -->
-            <!-- Here because TWO apps draw this: the Devices tab and the desktop app's manager window. That
-                 window cannot be opened in a browser, so this is the only place the two can be compared side by
-                 side, which is exactly how they drifted into different button sets in the first place. -->
+            <!-- Shown here since the desktop app's manager window (which draws the same UI) can't be opened in a browser. -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">A device's sandboxes</h2>
                 <div class="rounded-xl border border-line bg-canvas p-4">
@@ -535,10 +473,7 @@ const pickedTier = ref(`collaborator`);
                         <template #actions="{ group }">
                             <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
                         </template>
-                        <!-- The ports' own verb, which is NOT one of the container's above: it clears this
-                             device's localhost and stops nothing in the sandbox. Both directions are on this
-                             page at once (the third row's mirroring is off), which is the whole reason the
-                             fixture has three rows rather than two. -->
+                        <!-- Clears this device's localhost only, stops nothing in the sandbox; row three shows mirroring off. -->
                         <template #ports="{ group }">
                             <Button
                                 size="small"
@@ -556,7 +491,6 @@ const pickedTier = ref(`collaborator`);
                 />
             </section>
 
-            <!-- ── MARKS AND BADGES ──────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Badges and marks</h2>
                 <div class="flex flex-wrap items-center gap-2">
@@ -588,7 +522,6 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── FIGURES ───────────────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Figures</h2>
                 <p class="text-xs text-muted">
@@ -596,10 +529,10 @@ const pickedTier = ref(`collaborator`);
                 </p>
                 <StatusTally :items="COUNTS" />
                 <StatStrip :items="STATS" />
-                <!-- ONE MEASURED ANSWER, in the three ranks a card, a settings row and a second reading of the
-                     same experiment are drawn at. It brings no container and no margin: what it sits in is the
-                     caller's, which is why the same component is right on a savings card and inside a row's
-                     `#below`. A verdict is a WORD when there is no figure — the state IS the answer. -->
+                <!--
+                    No container or margin of its own; the caller supplies both, on a card or inside a row's #below alike. With no figure, the value
+                    is a plain word.
+                -->
                 <div class="flex flex-wrap items-start gap-x-10 gap-y-4">
                     <Verdict size="lg" tone="success" value="25%" unit="of command output removed" />
                     <Verdict tone="success" value="↓12%" unit="searches per turn" detail="±3.1pp (95%)" evidence="329 taught · 94 cold" />
@@ -620,18 +553,10 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── CONTROLS ──────────────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Controls</h2>
 
-                <!-- ── THE BUTTON, WHOLE ────────────────────────────────────────────────────────────────
-                     Every tier in every state, in one grid, because that is the only way the differences
-                     are checkable. The five-button row this replaces showed the tiers at REST and nothing
-                     else, which is exactly the gap the audit fell into: a screen carried a disabled accent
-                     button that read as a dead box, and a `text` button that had grown a border under one
-                     skin, for as long as nobody put them side by side.
-                     Read it DOWN for rank (which button is louder) and ACROSS for state. If two cells in a
-                     column look alike, the vocabulary has lost a distinction. -->
+                <!-- Every tier in every state, one grid, since the differences are only checkable side by side. Read down for rank, across for state. -->
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[34rem] border-separate border-spacing-x-3 border-spacing-y-2 text-left">
                         <thead>
@@ -663,9 +588,7 @@ const pickedTier = ref(`collaborator`);
                     button that repaints itself as unavailable the instant it is pressed is answering the wrong question.
                 </p>
 
-                <!-- ── AND THE FIVE CONTROLS THAT ARE NOT IT ────────────────────────────────────────────
-                     Each is here beside the button on purpose: the reason a hand-styled `<button>` gets
-                     written is that somebody could not see what the alternative was. -->
+                <!-- Shown beside the button since a hand-styled `<button>` usually means the alternative wasn't visible. -->
                 <div class="flex flex-wrap items-center gap-4">
                     <button type="button" :class="ui.iconButton()"><Icon name="cog" class="text-xs" /></button>
                     <button type="button" :class="ui.linkButton()">ui.linkButton — will navigate</button>
@@ -680,23 +603,13 @@ const pickedTier = ref(`collaborator`);
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />
                     <PageAction label="Quiet" icon="cog" quiet />
                 </div>
-                <!-- ── EVERY FIELD AGAINST EVERY STATE ──────────────────────────────────────────────────
-                     The audit that produced this vocabulary found NINE focus treatments across 128 fields
-                     (docs/input-audit.md), and the reason nobody caught it is written in this grid's absence:
-                     the kit used to print one field, at rest. Two states of one control on one screen is what
-                     makes "focus looks like hover" a thing somebody notices in a second rather than a thing
-                     that survives three years.
-
-                     `tabindex` is not needed to see the focus column — click into any of them. The disabled
-                     column is the one worth checking against a skin: a field does not repaint when it goes
-                     unavailable, it dims, and it is the only control here that does. -->
+                <!--
+                    tabindex isn't needed to see focus — click into any field. The disabled column is the one to check per skin: fields dim rather
+                    than repaint.
+                -->
                 <div class="flex flex-col gap-2">
                     <span :class="ui.sectionLabel(`text-2xs`)">Fields: every variant against every state</span>
-                    <!-- `minmax(0, …)` on the three state columns, not a bare `1fr`. A grid item's implicit
-                         `min-width` is `auto`, so a plain `1fr` column refuses to shrink below its content and
-                         pushes the whole page wider instead — at 375px this grid was forcing the document to
-                         923px and giving the design kit a horizontal scrollbar. `minmax(0, 1fr)` lets the
-                         columns give, which is what `1fr` reads as if you do not know that rule. -->
+                    <!-- `minmax(0, 1fr)`, not bare `1fr`: a grid item's implicit min-width is auto and won't shrink otherwise. -->
                     <div
                         class="grid max-w-read-lg items-center gap-x-3 gap-y-2 text-2xs text-subtle"
                         style="grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)"
@@ -732,10 +645,7 @@ const pickedTier = ref(`collaborator`);
                             <input class="field-bare min-w-0 flex-1 font-mono md:text-xs" placeholder="disabled" disabled />
                         </div>
                     </div>
-                    <!-- THE ROW THAT PROVES THE RULE. Both are inside a `overflow-hidden` box, four pixels
-                         apart. An outward focus ring would be sliced off by the clip and would paint over its
-                         neighbour; the inset one cannot do either, which is the whole argument in tokens.css
-                         made visible. Click from one to the other. -->
+                    <!-- Inputs sit in an overflow-hidden box: an outward ring would clip and bleed into its neighbor; inset can't. -->
                     <div class="ui-card flex max-w-read-lg gap-1 overflow-hidden p-0">
                         <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="clipped container, 4px apart" />
                         <input :class="ui.inputSm(`min-w-0 flex-1`)" placeholder="…and neither ring escapes" />
@@ -790,12 +700,10 @@ const pickedTier = ref(`collaborator`);
                     <span class="ui-field-label">Code</span>
                     <Code :code="source" lang="typescript" />
                 </div>
-                <!-- THE MARKDOWN SURFACE, and the reason the two fields above are not it: a markdown document
-                     is not source and it is not a paragraph, and every screen in this app that treated it as
-                     one of those had to add a Preview pill to admit it. Click the words and the caret lands
-                     where you clicked; the block you are in shows its own markup and nothing moves. Both save
-                     policies are here side by side because the difference between them is the only choice a
-                     caller makes. -->
+                <!--
+                    Not a code field or a prose field: a markdown document is neither source nor a plain paragraph. Both save modes (auto, explicit)
+                    are shown since that's the caller's one real choice.
+                -->
                 <div class="grid max-w-read-lg gap-6 md:grid-cols-2">
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">MarkdownDocument · save="auto"</span>
@@ -823,7 +731,6 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- ── THINGS THAT OPEN ──────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Overlays</h2>
                 <p class="text-xs text-muted">
@@ -871,10 +778,10 @@ const pickedTier = ref(`collaborator`);
             <p class="mt-3 text-xs text-muted">This can't be undone.</p>
         </ConfirmDialog>
 
-        <!-- The form behind a sandbox row's Resources… verb, on the SAME fixture the row above draws its Share
-             line from: the share and the form are two views of one container, and a kit that fixtured them
-             separately could drift them apart. The engine is 32 GiB / 8 cores, so the rails read back as real
-             numbers, and `work`'s overlay demands --privileged, which is the case that draws a switch locked. -->
+        <!--
+            Same fixture the Share line above reads from, so the two views can't drift apart. Engine is 32 GiB / 8 cores so the rails read as real
+            numbers; `work` needs --privileged, so its switch draws locked.
+        -->
         <SandboxResourcesDialog
             :open="resourcesOpen"
             name="work"

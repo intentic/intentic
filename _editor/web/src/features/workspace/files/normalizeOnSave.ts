@@ -1,14 +1,6 @@
-/* Save-time text normalization, the agent-convenience half of the write path. The coding agent's Edit tool is
- * exact-string matching against the bytes it last read, and its near-miss failures are almost always invisible
- * whitespace: trailing spaces, CRLF, a missing final newline. Normalizing every editor save keeps the files the
- * agent reads free of those, so its edits match on the first try instead of burning a failed call + re-read.
- *
- * Pure: computes Monaco-shaped edits (1-based line/column ranges) from the buffer's lines; CodeView applies them
- * via pushEditOperations so cursor position and the undo stack survive. EOL normalization (CRLF → LF) is NOT an
- * edit, the caller flips the model's EOL directly (model.setEOL), which Monaco applies without touching line
- * content. The canonical shape produced: no trailing spaces/tabs on any line (kept for markdown, where two
- * trailing spaces are a hard line break), no trailing blank lines, exactly one final newline. A whitespace-only
- * document normalizes to empty. */
+// Save-time whitespace cleanup so the agent's exact-match Edit tool doesn't fail on invisible trailing spaces or a
+// missing final newline. Canonical shape: no trailing blank lines, exactly one final newline; trimming trailing
+// whitespace is skippable, since markdown treats two as a hard break.
 
 export interface NormalizeEdit {
     readonly startLine: number;
@@ -44,9 +36,7 @@ export const normalizationEdits = (lines: readonly string[], trimTrailingWhitesp
             edits.push({ startLine: i, startColumn: kept + 1, endLine: i, endColumn: line.length + 1, text: `` });
         }
     }
-    // One tail edit covers the last content line's trailing whitespace, any trailing blank lines, and the final
-    // newline: replace everything after the kept content with exactly "\n". Skipped when that region already IS
-    // a lone "\n" (the file ends `content\n`), so an already-canonical file produces zero edits.
+    // One tail edit replaces everything after the kept content with a single newline; skipped if already canonical.
     const lastLine = lines[last - 1]!;
     const kept = trimmedLength(lastLine);
     const tail =

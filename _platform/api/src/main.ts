@@ -14,13 +14,10 @@ import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
 
-// Standard OTEL_* vars come from the environment. The dev/start scripts pass `--env-file=../../.env` so the
-// root .env populates process.env under Bun (it only auto-loads .env from cwd); in prod they're real env vars.
+// OTEL_* vars come from the environment; dev scripts pass --env-file so the root .env populates them under Bun.
 const tracing = startTracing();
 
-// Bun is the API runtime: it executes this TypeScript (and the source-first workspace libs) directly, no
-// build step in dev. `bun --watch` restarts on change. Bun.serve is the native server; it takes Hono's
-// fetch handler as-is and terminates TLS itself in dev (prod runs plain http behind a TLS proxy).
+// Bun runs this TypeScript directly, no build step in dev; Bun.serve takes Hono's fetch handler as-is.
 const config = loadConfig();
 const logger = createLogger(config);
 logger.info({ config: mask(config, CONFIG_SECRETS) }, `config loaded`);
@@ -33,38 +30,26 @@ if (!config.secrets.key) {
 if (!config.email.apiKey || !config.email.from) {
     logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: sandbox invite links will be logged instead of emailed`);
 }
-/* A plan that can take money but cannot hear back from Stripe. Every completed checkout would be charged and
- * then refused at the webhook (400, bad signature), so nobody who paid would ever be on the plan, and Stripe
- * would disable the endpoint after three days of retries. Said once at boot, where it can be acted on before
- * the first buyer meets it. */
+// A plan on sale with no webhook secret would take payment and refuse activation for every buyer via a 400.
 if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
     logger.error(`HOSTED_PLAN_STRIPE_WEBHOOK_SECRET unset while the hosted plan is on sale: every payment will be taken and no plan will ever activate`);
 }
 
 const prisma = createPrisma(config);
 startRetention(prisma, config, logger);
-// Keeps warm hosted machines built ahead of demand (and drains them when the pool is off), see hosted-pool.ts.
+// Keeps warm hosted machines built ahead of demand, and drains them when the pool is off (hosted-pool.ts).
 startHostedPool(prisma, config, logger);
-// Ends the environment builds whose builder never reported, destroys builders past their timeout, and keeps
-// every building app to one sandbox machine and one builder (hosted-build.ts).
+// Ends builds whose builder never reported and destroys builders past their timeout (hosted-build.ts).
 startHostedBuilds(prisma, config, logger);
-// The hour meter's hourly tick: close the stretch of every machine that stopped, count the open ones live,
-// and stop a free machine whose owner's month is spent (hosted-meter.ts).
+// Closes the stretch of every stopped machine and stops a free machine whose owner's month is spent.
 startHostedMeter(prisma, config, logger);
-// Watches the hosted lane against Fly and says so when the two disagree (hosted-health.ts). Reads only: it is
-// the alarm the sweeps above never had, and the reason a fleet destroyed under its rows was found by a user.
+// Watches the hosted lane against Fly and says so when they disagree; read-only (hosted-health.ts).
 startHostedHealth(prisma, config, logger);
-// …and the same question asked the only way that can answer it for certain: provision a sandbox end to end
-// and wait for its daemon to check in (hosted-canary.ts). Off unless HOSTED_CANARY_MINUTES says otherwise.
+// Provisions a sandbox end to end and waits for its daemon, off unless HOSTED_CANARY_MINUTES is set.
 startHostedCanary(prisma, config, logger);
 const { app } = createApp(config, prisma, logger);
 
-/* Dev serves https (the SPA does too, for FedCM); prod runs plain http behind a TLS-terminating proxy.
- *
- * API_HTTPS_KEY/CERT win when set. Otherwise dev falls back to the pair `pnpm install` mints for this user,
- * because that pair no longer has a path anyone could write into a .env: it lives in this user's own data
- * directory, which differs per person and per OS. Two guards keep the fallback out of production, not being
- * production, and the pair actually existing, which on a server it does not because nothing mints it there. */
+// Falls back to the pair pnpm install mints for this user (their own data directory) when the config knobs are unset.
 const devPair = (): { key: Buffer; cert: Buffer } | undefined => {
     if (process.env[`NODE_ENV`] === `production` || !existsSync(LEAF_KEY) || !existsSync(LEAF_CRT)) {
         return undefined;
@@ -81,9 +66,7 @@ const server = Bun.serve({
     ...(tls && { tls }),
 });
 
-// Bound to the loopback IP but advertised as localhost: that is the name the dev cert covers, the origin the
-// SPA calls, and the one Better Auth/CORS trust. Printing the IP invites a click that lands on an untrusted
-// origin, which the API then rejects with a bare preflight 204 the browser reports as an opaque CORS error.
+// Bound to loopback but advertised as localhost: the name the dev cert, CORS and Better Auth all trust.
 logger.info({ url: `${tls ? `https` : `http`}://localhost:${server.port}` }, `api started (auth at /api/auth, oRPC at /rpc)`);
 
 const shutdown = async () => {

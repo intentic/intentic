@@ -1,9 +1,7 @@
 import type { ListenerMessage } from "@intentic/connector-runtime";
 
-// Pure mapping from IMAP happenings to the daemon's normalized listener-message envelope (the contract's
-// ListenerMessageSchema): provider "imap", type message/flags/expunge, channelId = the watched mailbox so a
-// trigger's channelId filter selects a folder. Structural input slices (not imapflow's types) keep this module
-// pure and directly fakeable in tests.
+// Pure mapping from IMAP events to the daemon's normalized ListenerMessage: provider imap, type message/flags/expunge,
+// channelId is the watched mailbox. Structural input slices, not imapflow's types, keep this module pure and testable.
 
 export interface MailAddress {
     readonly name?: string;
@@ -27,16 +25,15 @@ export interface MailPart {
     readonly childNodes?: readonly MailPart[];
 }
 
-// Bounded excerpt: the wake carries the subject + enough body to triage; the agent fetches the full message
-// over the imap skill (by extra.uid) when it needs more.
+// Bounded excerpt; the agent fetches the full message over the imap skill (by extra.uid) for more.
 const EXCERPT_MAX = 4096;
 export const excerptOf = (text: string): string => {
     const trimmed = text.trim();
     return trimmed.length <= EXCERPT_MAX ? trimmed : `${trimmed.slice(0, EXCERPT_MAX)}…`;
 };
 
-// Crude but dependency-free text of an HTML-only message (mailparser only derives `text` when a text part
-// exists), tags and style/script bodies out, whitespace collapsed. Triage quality, not fidelity.
+// Crude dependency-free text of an HTML-only message (mailparser only derives text when a text part exists); strips
+// tags/style/script and collapses whitespace. Triage quality, not fidelity.
 export const htmlText = (html: string): string =>
     html
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -52,9 +49,8 @@ export interface MailAttachment {
     readonly size?: number;
 }
 
-// Attachments come from the untruncated BODYSTRUCTURE, not from parsing the (size-capped) source, a large
-// message's attachments must still be listed even when its MIME didn't fully arrive. Inline-with-filename
-// parts (pasted images) count; unnamed body parts don't.
+// Attachments come from the untruncated BODYSTRUCTURE, not the size-capped source, so a partially-fetched message still
+// lists them. Inline named parts count; unnamed body parts don't.
 export const attachmentsOf = (part: MailPart): MailAttachment[] => {
     if (part.childNodes !== undefined) {
         return part.childNodes.flatMap(attachmentsOf);
@@ -83,8 +79,7 @@ export const mailMessage = (input: MailMessageInput): ListenerMessage => {
     const address = from?.address ?? "unknown";
     const subject = input.envelope?.subject ?? "(no subject)";
     const attachments = input.bodyStructure === undefined ? [] : attachmentsOf(input.bodyStructure);
-    // "Addressed to me": the account address appears in To (not merely Cc), powers the trigger's `mentioned`
-    // filter. Only meaningful when the login is an address; host-style logins never set it.
+    // "Addressed to me": the account address appears in To, not Cc; meaningless for host-style logins.
     const mentioned =
         input.username.includes("@") && input.envelope?.to?.some((entry) => entry.address?.toLowerCase() === input.username.toLowerCase()) === true;
     const to = (input.envelope?.to ?? []).flatMap((entry) => (entry.address === undefined ? [] : [entry.address]));
@@ -109,9 +104,8 @@ export const mailMessage = (input: MailMessageInput): ListenerMessage => {
     };
 };
 
-// Flags/expunge carry whatever the server actually reported, plain servers send only a sequence number, and
-// no seq→uid map is kept (seq numbers shift after every expunge), so the payload never fabricates a uid.
-// These events have no human author; the account stands in.
+// Flags/expunge carry whatever the server reported; no seq-to-uid map is kept since seq numbers shift after every
+// expunge, so uid is never fabricated. These events have no human author; the account stands in.
 
 export interface FlagsMessageInput {
     readonly capabilityId: string;

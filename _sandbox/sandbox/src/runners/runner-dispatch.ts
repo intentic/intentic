@@ -9,25 +9,16 @@ import type { ConversationWorktree } from "../agents/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 
-/* ONE TURN, EXECUTED ON A RUNNER, the parent's side of the dispatch (docs/remote-runners-plan.md §5 at the
- * workspace root). The shape mirrors what the isolated arm does locally, station for station:
- *
- *   sync pull   — the runner brings its mirror of each repo's main line and the conversation's branch up to
- *                 date (the local arm's pre-turn rebase happens THERE, on the runner's CPU, which is the
- *                 whole point of the placement).
- *   runTurn     — the frames a local turn would have produced, re-yielded verbatim; the caller persists and
- *                 publishes them exactly as local ones.
- *   sync push   — the runner delivers the branch to refs/runner-incoming/<id>, and this side advances the
- *                 checked-out branch by hard-resetting the MIRROR worktree onto it, the move git sanctions
- *                 for a checked-out ref. The push runs in the finally: an aborted or failed turn still
- *                 delivers everything the runner committed, which is the failure model's "nothing lost that
- *                 was pushed".
- *
- * Attachments ride inline (base64) because they are daemon state, not repo content: the runner's mirror
- * syncs git, and a prompt naming a file the git road cannot carry would otherwise point at nothing. */
+// One turn executed on a runner, the parent's side of the dispatch (docs/remote-runners-plan.md §5): mirrors the
+// isolated arm's local shape, station for station.
+// sync pull: the runner brings its mirror of each repo and the conversation's branch up to date.
+// runTurn: re-yields the frames a local turn would have produced, persisted and published the same way.
+// sync push: delivers to refs/runner-incoming/<id>; run in a finally, so an aborted turn still delivers what was
+// pushed.
+// Attachments ride inline (base64): daemon state, not repo content, so the mirror's git sync can't carry them.
 
-// One sync's lines are narrated to the log rather than the transcript: they are operations plumbing (clone
-// progress, per-repo acks), and the transcript's own worktree frame already tells the user where they stand.
+// Sync lines go to the log, not the transcript: they are operations plumbing (clone progress, per-repo acks), and the
+// transcript's own worktree frame already tells the user where things stand.
 const drainSync = async (services: Services, stream: AsyncIterable<RunnerSyncLine>): Promise<string | undefined> => {
     for await (const line of stream) {
         if (line.kind === "line") {
@@ -39,8 +30,8 @@ const drainSync = async (services: Services, stream: AsyncIterable<RunnerSyncLin
     return "the runner's sync stream ended without an outcome — the link likely dropped";
 };
 
-// The composition as the sync input names it: repo id, workspace-relative dir ("" for the root), and each
-// repo's own main branch name, read from the parent's checkout because the parent is the origin.
+// Repo id, workspace-relative dir ("" for the root), and each repo's own main branch, read from the parent's checkout
+// since the parent is the origin.
 const syncRepos = async (services: Services, worktree: ConversationWorktree): Promise<RunnerSync["repos"]> => {
     const repos: { repo: string; dir: string; mainBranch: string }[] = [];
     for (const { repo } of worktree.repos) {
@@ -66,10 +57,8 @@ const inlineAttachments = async (services: Services, paths: readonly string[] | 
     return files.length > 0 ? files : undefined;
 };
 
-/* Advance the mirror after a push: each repo whose incoming ref moved gets its worktree hard-reset onto it,
- * which moves the checked-out agent/<id> branch through the sanctioned door and leaves diff, standing and
- * land reading the runner's work exactly as they read a local turn's. Best-effort per repo — one repo's
- * failure must not hide another's delivery. */
+// Hard-resets each repo whose incoming ref moved, the sanctioned way to move a checked-out branch, so diff, standing
+// and land read a runner's work like a local turn's. Best-effort: one repo's failure must not hide another's delivery.
 const advanceMirror = async (services: Services, conversationId: string, worktree: ConversationWorktree): Promise<void> => {
     const incoming = runnerIncomingRef(conversationId);
     for (const { repo } of worktree.repos) {
@@ -118,13 +107,11 @@ export async function* dispatchRemoteTurn(
         return;
     }
 
-    // The user's Stop reaches the runner as an explicit interrupt: closing the stream alone races the
-    // provider on the far side, and an abort that only the parent knows about is a turn that keeps spending.
+    // Stop must reach the runner explicitly: closing the stream alone races the provider, still spending unseen.
     const interrupt = (): void => {
         void client.interrupt({ conversationId: input.conversationId }).catch(() => undefined);
     };
-    // The sync pull above is a round trip to another machine, so a Stop during it lands on an already-aborted
-    // signal that a bare listener never hears — the runner would keep the turn nobody is waiting for.
+    // A Stop during the sync round trip lands on an already-aborted signal a bare listener misses.
     const unwatchAbort = whenAborted(signal, interrupt);
     try {
         const turn: RunnerTurn = {
@@ -145,10 +132,7 @@ export async function* dispatchRemoteTurn(
             { ...turn, ...(attachments !== undefined ? { attachments } : {}) },
             signal !== undefined ? { signal } : {},
         )) {
-            /* WHERE THE CARD CAME FROM, written down as it passes (runner-requests.ts). A question,
-             * permission prompt or plan approval raised over there is answered over HERE, and the answer
-             * carries nothing but the id, so this relay is the only moment the two can be tied together. A
-             * `resolved` frame is that card's last word, so the note goes with it. */
+            // Ties an answer back to where its card came from (runner-requests.ts); `resolved` is the card's last word.
             const requestId = (event as { requestId?: unknown }).requestId;
             if (typeof requestId === "string" && requestId !== "") {
                 if (event.kind === "resolved") {
@@ -161,12 +145,9 @@ export async function* dispatchRemoteTurn(
         }
     } finally {
         unwatchAbort();
-        // The turn is over, so nothing it raised can be answered any more; a stale id must not outlive it and
-        // send a later answer at a runner that has forgotten the card.
+        // The turn is over: nothing it raised can still be answered, so a stale id must not outlive it.
         forgetRemoteRequestsOf(input.conversationId);
-        /* Deliver whatever the runner committed, however the turn ended. Best-effort: a push the dropped
-         * link refuses leaves the branch on the runner, which the next dispatch's pull reconciles — the
-         * exact exposure a local power loss has today, and never data loss (the failure model's terms). */
+        // Best-effort: a failed push leaves the branch on the runner for the next pull to reconcile, never lost.
         try {
             const pushed = await drainSync(services, await client.syncWorkspace(sync("push")));
             if (pushed !== undefined) {

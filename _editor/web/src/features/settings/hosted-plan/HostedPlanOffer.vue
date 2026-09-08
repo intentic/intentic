@@ -2,16 +2,12 @@
 import { Button, Card, Icon } from "@intentic/ui";
 import { useHostedPlan } from "./useHostedPlan";
 
-/* THE OFFER: the one thing this product ever asks anybody for money for. A hosted sandbox is free to try
- * (an awake-hour ceiling each month, removed after a few weeks unopened); the plan makes it always on and
- * never collected. Nothing else changes: every feature is in the free product, and money changes whose
- * machine the agents run on, never what they can do (docs/design/pricing-model.md).
- *
- * THE PRICE IS THE PLATFORM'S. It arrives on the plan state rather than being typed here, so a platform that
- * charges differently is described correctly. */
+// The only thing this product charges for: a free hosted sandbox sleeps on an hour ceiling and gets removed after weeks
+// unopened; the plan keeps it always on and never collected, changing nothing else (docs/design/pricing-model.md).
+// Price comes from the plan state, not hardcoded, so a platform that charges differently is described correctly.
 
 const props = defineProps<{
-    // The action's own name: "Subscribe" or "Resubscribe". The button is the last thing read before a decision.
+    // Subscribe or Resubscribe: the last thing read before the decision.
     subscribeLabel: string;
     working?: boolean;
 }>();
@@ -20,8 +16,7 @@ const emit = defineEmits<{ checkout: [] }>();
 
 const { priceUsd } = useHostedPlan();
 
-// What the money buys, in facts rather than adjectives. Three, because there are exactly three things the plan
-// changes about the free machine.
+// What the money buys, stated as facts: the three things the plan changes about the free machine.
 const buys = [
     { icon: `bolt` as const, title: `Always on`, body: `No awake-hour ceiling. Agents and automations run around the clock, whether or not you are watching.` },
     { icon: `shield` as const, title: `Never removed`, body: `The free machine is collected after a few weeks unopened. Yours stays, with everything on it.` },
@@ -37,8 +32,7 @@ const assurances = [
 </script>
 
 <template>
-    <!-- The hero. Accent-tinted rather than another plain card: this is the one thing a first-time reader must
-         land on. The price is its own box, on the side the eye finishes on. -->
+    <!-- Accent-tinted hero: the first thing a new reader should land on, price boxed on the side the eye finishes on. -->
     <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
         <div class="flex flex-col gap-5 @2xl:flex-row @2xl:items-center @2xl:gap-8">
             <div class="min-w-0 flex-1">
@@ -58,7 +52,7 @@ const assurances = [
                     <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ priceUsd }}</span>
                     <span class="text-sm text-muted">/month</span>
                 </div>
-                <!-- The unit, said where the price is: a slot is a machine, and a second machine is a second slot. -->
+                <!-- A slot is a machine: stated next to the price. -->
                 <p class="mt-1 text-2xs text-subtle">per hosted sandbox</p>
                 <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud mt-3 w-full" @click="emit(`checkout`)" />
                 <p class="mt-2 text-center text-2xs text-subtle">Paid through Stripe · cancel any time</p>
@@ -86,7 +80,7 @@ const assurances = [
         </div>
         <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
             <Button :label="props.subscribeLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
-            <!-- The way out that is not "leave": the same workspace on a machine of your own costs nothing. -->
+            <!-- Not "leave": moving the workspace to your own machine costs nothing. -->
             <RouterLink :to="{ name: `setup` }" class="text-xs text-link hover:underline">Or run it on your own computer, free</RouterLink>
         </div>
     </Card>

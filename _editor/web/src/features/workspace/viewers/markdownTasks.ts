@@ -1,21 +1,12 @@
-/* Ticking a box in a rendered markdown document.
- *
- * The one edit a READER makes. It is a fact about the work rather than a change to the prose, every other
- * checklist in the app is clickable, and the plans agents write here are mostly checklists, so it stays
- * available while the document is merely being read rather than edited. Same line VS Code's markdown editor
- * draws: its rendered controls keep working in read-only mode, and only typing is refused.
- *
- * Done to the SOURCE rather than to the rendered checkbox, because the file is what anyone else will read. */
+// Ticking a rendered checkbox, done to the source text: it stays available while a document is only being read, not
+// edited.
 
-/* A task-list marker: the bullet, then its `[ ]` or `[x]`. Anchored per line, so a `[x]` sitting in the middle
- * of a sentence is prose and stays prose. Ordered items count too: `1. [ ] ship it` is a task list in GFM. */
+// A task-list marker: the bullet, then `[ ]`/`[x]`, anchored per line; ordered items count too (`1. [ ] ...`).
 const TASK_MARKER = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/gmu;
 
 /**
- * The document with its `index`-th task checkbox flipped, or undefined when there is no such checkbox.
- *
- * `index` counts the checkboxes the RENDERER drew, in document order, which is the same order they appear in the
- * source: the caller finds it by position among the rendered inputs.
+ * The document with its `index`-th task checkbox flipped, or undefined if there is no such checkbox. `index` counts
+ * checkboxes in rendered order, the same order they appear in the source.
  */
 export const toggleTaskCheckbox = (source: string, index: number): string | undefined => {
     TASK_MARKER.lastIndex = 0;

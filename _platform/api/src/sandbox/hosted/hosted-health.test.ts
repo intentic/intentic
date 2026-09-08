@@ -3,10 +3,8 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { forgetHostedHealthAlert, sweepHostedHealth } from "./hosted-health.js";
 
-/* THE WATCH THAT WAS MISSING. Every other sweep in this directory ACTS on the gap between the platform's rows
- * and Fly; none of them ever reported the gap itself, so a fleet destroyed under its rows was visible only as
- * one warn line per machine per night, and the first person to notice was a user pressing a button that could
- * not work. These tests pin the three things it has to say out loud. */
+// Every other sweep here acts on the gap between the platform's rows and Fly, but never reported the gap itself. These
+// tests pin what this watch has to say out loud.
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -33,9 +31,7 @@ const stubApps = (...names: string[]) => {
     vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }))));
 };
 
-/* The org's app list AND what each app is running, because "whose app is this" is now asked of the provider
- * rather than inferred from the absence of a row. An app not named in `machines` is running none, which is a
- * verdict of its own (see the litter test below). */
+// The org's app list and what each app runs, since ownership is now read off the provider, not a missing row.
 const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}) => {
     vi.stubGlobal(`fetch`, (url: URL | string) => {
         const target = String(url);
@@ -50,8 +46,7 @@ const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}) => {
     });
 };
 
-// A Fly machine as the classifier reads it: whose stamp it carries, and how old it is. Two hours by default,
-// so nothing here is inside the reaper's grace window by accident.
+// Whose stamp a Fly machine carries and how old it is; two hours by default, outside the reaper's grace window.
 const flyMachine = (platform: string, ageMinutes = 120) => ({
     id: `m1`,
     state: `stopped`,
@@ -59,10 +54,7 @@ const flyMachine = (platform: string, ageMinutes = 120) => ({
     config: { metadata: { intentic_role: `sandbox`, intentic_platform: platform } },
 });
 
-/* The counts are what the watch reads the fleet's size off when a ceiling exists (hosted-capacity.ts), so they
- * answer the same rows the listings do rather than a number of their own: a fixture where the two disagreed
- * would describe a platform that cannot exist. The pool's count is asked twice, for the whole pool and for the
- * stock that is claimable, which is what the `where` tells apart. */
+// Counts mirror the same rows as the listings; pool count is asked twice (whole pool, then claimable).
 const prismaWith = (machines: unknown[], pooled: unknown[]) =>
     ({
         hostedMachine: { findMany: vi.fn().mockResolvedValue(machines), count: vi.fn().mockResolvedValue(machines.length) },
@@ -93,8 +85,6 @@ describe(`hosted health`, () => {
         expect(health).toMatchObject({ healthy: true, missing: [], strangers: [] });
     });
 
-    /* THE OUTAGE'S OWN SIGNATURE, and the reading this whole module exists for: rows that believe in machines
-     * Fly does not have. One is a hiccup; several at once is another deployment's reaper eating this fleet. */
     it(`names the rows whose machine has vanished from the provider`, async () => {
         stubApps(`intentic-sbx-pool-1`);
         const prisma = prismaWith([taken(`intentic-sbx-a`), taken(`intentic-sbx-b`)], [warm(`intentic-sbx-pool-1`)]);
@@ -103,9 +93,7 @@ describe(`hosted health`, () => {
         expect(health?.missing).toEqual([`intentic-sbx-a`, `intentic-sbx-b`]);
     });
 
-    /* The CAUSE rather than the symptom, and the one this catches before anybody's machine is lost: an app
-     * under our prefix running a machine that names a DIFFERENT deployment. Read off the provider's own stamp,
-     * never off the absence of a row. */
+    // Read off the provider's own stamp, never off a missing row.
     it(`names apps running another deployment's machines`, async () => {
         stubFly([`intentic-sbx-pool-1`, `intentic-sbx-someone-elses`], { "intentic-sbx-someone-elses": [flyMachine(`another-platform`)] });
         const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
@@ -115,17 +103,13 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-    /* AND THE ALARM THAT MUST NOT FIRE, which is what stopped this watch being read. An app with no row is
-     * ordinary weather — a provision that failed and left its app behind — and the daily reaper collects it.
-     * Counting it as a stranger mailed the admins "another deployment is sharing this Fly org", which was not
-     * true, every six hours, about a fault no action could clear. It is reported and it is not an alarm. */
     it(`treats an app with no row of its own as litter, not as a stranger, and stays healthy`, async () => {
         stubFly([`intentic-sbx-pool-1`, `intentic-sbx-leftover`]);
         const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
         expect(health?.litter).toEqual([`intentic-sbx-leftover`]);
         expect(health?.strangers).toEqual([]);
-        // Healthy is the gate the alert mail sits behind, so this is the assertion that says "nobody is woken".
+        // healthy gates whether the alert mail fires.
         expect(health?.healthy).toBe(true);
     });
 
@@ -140,11 +124,7 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-    /* THE FAULT NOBODY WAS EVER TOLD ABOUT. A pool that cannot fill has always been logged and never mailed,
-     * on the grounds that short stock is ordinary weather — a claim just emptied a slot, a build is in flight.
-     * A fleet that has actually reached the ceiling its provider allows looks exactly like that from here, and
-     * it is not weather: every new sign-up is being turned away, and no tick will fix it. It is unhealthy, and
-     * it is worth waking somebody for, because the remedy is a raised allowance and only a person can do that. */
+    // A full ceiling looks like ordinary low stock but isn't: no tick fixes it without a raised allowance.
     it(`is unhealthy, and says why, when the fleet has reached the ceiling`, async () => {
         stubApps(`intentic-sbx-a`);
         const prisma = prismaWith([taken(`intentic-sbx-a`)], []);

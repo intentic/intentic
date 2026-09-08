@@ -1,26 +1,15 @@
 <script setup lang="ts">
-/* WHY a filtered row survived: the line the query hit, with the term marked and the side of the conversation
- * that said it named in front of it.
- *
- * The speaker label is not decoration. The filter matches the agent's own replies as well as the user's
- * prompts, and prose lifted out of a chat reads as something the reader wrote until the row says otherwise:
- * "landAgent lives in laneDrop.ts" under a card they never opened is a sentence they would go looking for in
- * their own memory. One word in front of it settles that before it can happen.
- *
- * Renders the LINE only: the wrapper, its icon and its clamp belong to whatever is showing it, because a card
- * in a lane and a row in a history list frame the same evidence differently.
- */
+// Renders the matched line from a filtered row, with the term marked and the speaker labeled. Only the line;
+// wrapper, icon and clamp are the caller's.
 import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { markSegments } from "../features/agents/review/markSegments";
 
 const props = defineProps<{
     snippet: MatchSnippet;
-    // The filter's term, folded the way the filter folded it. Absent while nothing is typed, which renders the
-    // line unmarked.
+    // Filter term, already case-folded; absent means the line renders unmarked.
     needle?: string;
-    // The filter's `Aa` switch: the marks obey it, so a lowercase twin of the term is never lit as a hit the
-    // search did not make.
+    // Whether matching is case-sensitive; marks obey it so a differently-cased match is never lit as a hit.
     matchCase?: boolean;
 }>();
 

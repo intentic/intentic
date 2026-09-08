@@ -5,7 +5,7 @@ import { resetDaemonRoutes, setDaemonRoutes } from "../overview/useDaemonRoutes"
 const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
 vi.mock("./sandboxSession", () => ({
     useSandboxSession: () => ({
-        // A bearer says WHICH credential it is, so a 401 can be attributed without re-reading storage.
+        // A bearer names which credential it is, so a 401 can be attributed without re-reading storage.
         getSessionToken: async () => ({ token: authState.token, kind: `session` }),
         rejectSessionToken: (_target: unknown, bearer: { token: string }) => {
             authState.rejected.push(bearer.token);
@@ -13,17 +13,15 @@ vi.mock("./sandboxSession", () => ({
         },
     }),
 }));
-// The real useEndpoint rides on top of this mock: with no loopback shortcut resolved for the sandbox, its
-// daemonBase falls through to daemonUrl, which is what keeps every call below aimed at the tunnel.
+// The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
 vi.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
 const { sandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
 
-// The daemon serves /events as an oRPC event iterator, which reaches the browser as text/event-stream. This is
-// the exact wire shape @orpc/server's OpenAPIHandler emits: proving the typed client decodes it is the whole
-// reason the browser no longer reassembles SSE frames by hand.
+// The daemon serves /events as an oRPC event iterator over text/event-stream; this reproduces that exact wire
+// shape so the typed client's own decoding is what's under test.
 const eventStream = (frames: readonly unknown[]): Response =>
     new Response(frames.map((frame) => `event: message\ndata: ${JSON.stringify(frame)}\n\n`).join(``), {
         status: 200,
@@ -64,8 +62,7 @@ it(`sends the session bearer and the TOFU connect token on the stream request`, 
     expect(request.headers.get(`authorization`)).toBe(`Bearer session-token`);
     expect(request.headers.get(`x-intentic-connect`)).toBe(`connect`);
     expect(request.url).toContain(`https://daemon.test/events`);
-    // The daemon keys this tab's presence roster entry by clientId, so a GET's input has to survive as a query
-    // param: the one thing a typed client could plausibly have changed about this route's wire shape.
+    // clientId must survive as a query param on this route; a typed client could otherwise drop it.
     expect(new URL(request.url).searchParams.get(`clientId`)).toBe(`c1`);
 });
 
@@ -88,8 +85,7 @@ it(`invalidates and retries exactly once when daemon middleware rejects a sessio
 });
 
 it(`surfaces the daemon's status so a refusal can be told from a failure to connect`, async () => {
-    // The daemon's hand-written routes answer `{ error }` with a bare status: NOT oRPC's error envelope, so
-    // the status has to survive the malformed-response path for the connection machine to classify a 403.
+    // Hand-written routes answer `{ error }` with a bare status, not oRPC's envelope, and it must still survive.
     vi.stubGlobal(
         `fetch`,
         vi.fn(async () => new Response(JSON.stringify({ error: `not a member` }), { status: 403, headers: { "content-type": `application/json` } })),
@@ -99,16 +95,8 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
     expect(daemonErrorMessage(failure)).toBe(`not a member`);
 });
 
-/* THE REGRESSION THIS PAIR EXISTS FOR, and it is not about a log field.
- *
- * `x-intentic-request-id` is outside the CORS safelist, so sending it forces a preflight, and a daemon built
- * before the name reached its `allowHeaders` answers a preflight that omits it. A browser then fails the whole
- * REQUEST, not just the header. Sent unconditionally, that took out every typed call to every older daemon,
- * `system.events` among them, so the stream never opened, the connection never reached `online`, and a sandbox
- * that was up and serving `/health` in a millisecond read as "Busy, catching up" until its image was rebuilt.
- *
- * A browser ahead of its daemon is the supported, ordinary case (useDaemonRoutes.ts), which is why the gate is
- * on positive evidence and why the silent case is the one asserted first. */
+// A custom header forces a CORS preflight; a daemon that hasn't advertised REQUEST_ID_HEADER in allowHeaders
+// fails the whole request, not just the header, so it's only sent once advertised.
 it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
     resetDaemonRoutes();
     const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
@@ -116,8 +104,7 @@ it(`withholds the correlation header from a daemon that has not advertised it`, 
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
 
-    // And an older daemon that DID advertise, i.e. one whose hello frame names routes but not this one: still
-    // positive evidence, and still evidence of the wrong thing.
+    // An older daemon that advertises other routes but not this one is still evidence of the wrong thing.
     setDaemonRoutes([`system.info`, `system.events`]);
     await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
@@ -130,8 +117,7 @@ it(`sends the correlation header once the daemon advertises the route that ships
     vi.stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     const sent = fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER);
-    // The value is the join key the daemon echoes onto its own `http.request` line: what matters is that it is
-    // there and distinct per call, never its shape.
+    // The join key the daemon echoes back; only that it's present and distinct per call matters, not its shape.
     expect(sent).toEqual(expect.stringMatching(/\S/));
     await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).not.toBe(sent);
@@ -146,8 +132,7 @@ it(`names an unaddressed sandbox as its own condition, before any request goes o
     const unaddressed = await import("./sandboxRpc");
     const fetchMock = vi.fn();
     vi.stubGlobal(`fetch`, fetchMock);
-    // The re-imported module's own class: vi.resetModules() mints a fresh one, so the outer import's is a
-    // different constructor.
+    // vi.resetModules() mints a fresh SandboxUnaddressedError; the outer import's class is a different one.
     await expect(unaddressed.sandboxRpc.system.info()).rejects.toBeInstanceOf(unaddressed.SandboxUnaddressedError);
     expect(fetchMock).not.toHaveBeenCalled();
     vi.doUnmock("./useSandbox");

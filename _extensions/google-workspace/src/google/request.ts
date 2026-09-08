@@ -1,16 +1,9 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Session } from "./session.js";
 
-/* EVERY REQUEST TO GOOGLE GOES THROUGH HERE, authorization, retries, paging and, above all, errors that say
- * what to do.
- *
- * Google's failures arrive as `{error: {code, message, status, details}}`, and the useful part is rarely the
- * message: a 403 from Gmail on a fresh project is an API nobody enabled, a 403 on an old one is usually a
- * scope the consent never granted, and both read as "Request had insufficient authentication scopes". The
- * agent relays whatever it is handed to the owner, so what is handed to it has to name the fix.
- *
- * A 401 is handled rather than reported: an access token that expired mid-command is not a condition anybody
- * should hear about, so the session mints a new one and the request is made again, once. */
+// Every request to Google goes through here: authorization, retries, paging, and errors that name the fix. Google's
+// `{error:{message,...}}` rarely says enough alone (a 403 could mean an unenabled API or a missing scope), so this
+// rewrites it. A 401 is retried once with a fresh token rather than reported.
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 4;
@@ -20,9 +13,7 @@ export interface CallSpec {
     readonly url: string;
     readonly query?: Record<string, string | number | boolean | readonly string[] | undefined>;
     readonly body?: unknown;
-    /* A pre-encoded payload (a MIME message, a multipart upload, raw file bytes) instead of a JSON body. The
-     * buffer is pinned to `ArrayBuffer` rather than the wider `ArrayBufferLike` because that is what `fetch`
-     * takes, a Buffer over a SharedArrayBuffer is not a body, and nothing here produces one. */
+    // A pre-encoded payload (MIME, multipart, raw bytes) instead of JSON; `ArrayBuffer` is what `fetch` takes.
     readonly raw?: { readonly contentType: string; readonly data: Uint8Array<ArrayBuffer> | string };
 }
 
@@ -36,8 +27,8 @@ export class GoogleApiError extends Error {
     }
 }
 
-// Rate limits and the transient 5xx family back off; everything else is the answer. Google sends Retry-After
-// on some quota refusals and it is authoritative when it does.
+// Rate limits and the transient 5xx family back off; everything else is the answer. Google's Retry-After header is
+// authoritative when present.
 export const retryDelay = (attempt: number, retryAfter: string | null): number => {
     const declared = retryAfter === null ? Number.NaN : Number.parseInt(retryAfter, 10);
     if (Number.isFinite(declared) && declared >= 0) {
@@ -136,7 +127,7 @@ const send = async (session: Session, spec: CallSpec): Promise<Response> => {
 
 export const call = async <T>(session: Session, spec: CallSpec): Promise<T> => {
     const response = await send(session, spec);
-    // 204 on a delete, and Gmail's modify endpoints answer 204 for some verbs.
+    // 204 on a delete; some Gmail modify endpoints also answer 204.
     if (response.status === 204) {
         return undefined as T;
     }
@@ -145,13 +136,8 @@ export const call = async <T>(session: Session, spec: CallSpec): Promise<T> => {
 
 export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> => Buffer.from(await (await send(session, spec)).arrayBuffer());
 
-/* Every Google list endpoint pages the same way, `pageToken` in, `nextPageToken` out, and every one of them
- * will happily walk a 30,000-message mailbox if nothing stops it. `limit` is that stop, and it is required
- * rather than optional: an unbounded paginate reached from a CLI is a command that never returns.
- *
- * The page-size parameter is NOT the same name across Google's own APIs (`maxResults` on Gmail and Calendar,
- * `pageSize` on Drive, Sheets and People), which is exactly the kind of difference a caller forgets, so it is
- * named per call rather than defaulted silently to whichever one was written first. */
+// Every Google list endpoint pages the same way and walks forever if nothing stops it; `limit` is required. The
+// page-size key differs per API (`maxResults` vs `pageSize`), so it's named per call.
 export interface PageSpec<T> {
     readonly itemsOf: (page: Record<string, unknown>) => readonly T[] | undefined;
     readonly limit: number;

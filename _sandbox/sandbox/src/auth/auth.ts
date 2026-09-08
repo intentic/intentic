@@ -6,34 +6,24 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-// The sandbox authenticates the END USER directly against Google, the platform never holds or signs this
-// credential, so a platform compromise can't command the sandbox. The browser obtains a Google ID token via
-// Google Identity Services and presents it as a bearer; we verify its signature against Google's published
-// JWKS and its issuer/audience. The audience is our Google *web* client id (public, not a secret).
+// The sandbox authenticates the end user directly against Google; the platform never holds this credential.
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 
 export interface VerifiedIdentity {
     readonly email: string;
-    // Display profile from the same token, when Google includes the claims, presence shows these to the
-    // other members. Never used for authorization decisions.
+    // Display profile from the same token, shown to other members via presence; never used for authorization.
     readonly name?: string;
     readonly picture?: string;
 }
 
-// Verifies a Google ID token and returns its verified identity; throws if the signature, issuer, audience, or
-// email verification fail. Implemented over Google's remote JWKS (jose caches the keys).
+// Verifies a Google ID token and returns its identity; throws on any signature/issuer/audience/email failure.
 export type IdTokenVerifier = (idToken: string) => Promise<VerifiedIdentity>;
 
 export const createGoogleVerifier = (audience: string): IdTokenVerifier => {
     const jwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_URL));
     return async (idToken) => {
-        // clockTolerance: a fresh container's clock (WSL/Docker after host sleep) can run ahead of the
-        // browser's, making a still-valid token look expired here and killing the terminal with 1008.
-        // `algorithms` pinned for the same reason session.ts pins HS256: the verifier should accept one shape,
-        // not whatever the token's own header proposes. jose already refuses to pair an RSA JWKS key with a
-        // symmetric alg, so this closes nothing open today, it just stops that guarantee from living in a
-        // dependency's behaviour instead of in this call.
+        // clockTolerance guards clock drift after host sleep; algorithms is pinned so the verifier decides the shape.
         const { payload } = await jwtVerify(idToken, jwks, { issuer: GOOGLE_ISSUERS, audience, clockTolerance: 60, algorithms: ["RS256"] });
         const email = payload["email"];
         if (typeof email !== "string" || payload["email_verified"] !== true) {
@@ -49,8 +39,7 @@ export const createGoogleVerifier = (audience: string): IdTokenVerifier => {
     };
 };
 
-// Persists the sandbox's single owner email (trust-on-first-use). Defaults to a JSON file beside the
-// workspace (the same .intentic/ dir as the claude/tools stores); injected in tests.
+// Persists the sandbox's single owner email (trust-on-first-use); a JSON file by default, injected in tests.
 export interface OwnerStore {
     read(): Promise<string | undefined>;
     write(email: string): Promise<void>;
@@ -58,11 +47,9 @@ export interface OwnerStore {
 
 const OwnerFileSchema = z.object({ email: z.string() });
 
-/* On the daemon's JSON substrate (store/json-file.ts) like every other manifest, and for the sharpest reason
- * any of them has: this file decides who may drive the sandbox. A bare `writeFile` truncates before it fills,
- * so a read landing mid-bind saw an empty owner and treated the next verified identity as the first; the
- * atomic rename closes that window, and the schema read keeps a half-written or foreign-build file from
- * binding nobody in silence. */
+// On the daemon's JSON substrate like every other manifest: this file decides who may drive the sandbox.
+// An atomic rename prevents a read landing mid-write from seeing an empty owner and treating the next identity as
+// first.
 export const fileOwnerStore = (path: string): OwnerStore => {
     const file = jsonFile<{ readonly email?: string }>(path, { parse: (raw) => OwnerFileSchema.safeParse(raw).data, fallback: () => ({}) });
     return {
@@ -73,10 +60,9 @@ export const fileOwnerStore = (path: string): OwnerStore => {
     };
 };
 
-// The additional authorized identities (shared access beyond the owner) and the role each was granted, stored
-// as { members: [{ email, role }] } in the same .intentic/ dir. The owner is NOT listed here, ownership stays
-// in the owner store. The daemon is the real enforcer of shared access; the platform only mirrors these grants
-// so a member's browser can find the sandbox.
+// The additional authorized identities beyond the owner and the role each was granted, stored as
+// {members:[{email,role}]}.
+// The owner is never listed here; the daemon enforces shared access, the platform only mirrors these grants.
 export interface Member {
     readonly email: string;
     readonly role: GrantedRole;
@@ -92,10 +78,9 @@ export interface MembersStore {
 const MemberSchema = z.object({ email: z.string(), role: GrantedRoleSchema });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
-// Same substrate as the owner store, and the per-file update queue is what makes two grants landing together
-// (an invite accepted while the owner re-grades another member) both survive instead of the second erasing
-// the first. One malformed entry is skipped so the rest keep their access; a file that is not a members file
-// at all reads as nobody.
+// Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
+// one erasing the other.
+// One malformed entry is skipped so the rest keep access; a file that isn't a members file at all reads as nobody.
 export const fileMembersStore = (path: string): MembersStore => {
     const file = jsonFile<{ readonly members: readonly Member[] }>(path, {
         parse: (raw) => {
@@ -118,8 +103,7 @@ export const fileMembersStore = (path: string): MembersStore => {
     };
 };
 
-// Identity verified but not allowed for this sandbox, mapped to 403 (vs 401 for every authentication
-// failure), so the browser can tell "wrong Google account" apart from "daemon down / bad token".
+// Identity verified but not allowed for this sandbox, mapped to 403 (vs 401 for an authentication failure).
 export class ForbiddenError extends Error {}
 
 // Extract the bearer token from an Authorization header (empty string when absent/malformed).
@@ -131,19 +115,16 @@ export const tokenEquals = (a: string, b: string): boolean => {
     return ab.length === bb.length && timingSafeEqual(ab, bb);
 };
 
-// A verified identity plus the trust tier it holds here, what every authorized request acts as. The role is
-// resolved fresh on each authorize (owner store + members list are re-read), so a re-grade applies on the
-// member's very next request, not at their next sign-in.
+// A verified identity plus the trust tier it holds here, what every authorized request acts as.
+// Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.
 export interface Caller extends VerifiedIdentity {
     readonly role: MemberRole;
 }
 
-/* THE PLATFORM'S OWNER TICKET, accepted as a sign-in proof on HOSTED machines only (sandbox-contract's
- * owner-ticket.ts carries the trust argument). Built from the public key the provisioner put in this machine's
- * env and this sandbox's own id: a ticket verifies only if the platform signed it, it names THIS sandbox, and it
- * has not expired. The email it names is then held to every rule a Google proof is held to (the expected owner
- * on first-bind, the roster afterwards), so the platform can vouch for an identity and still cannot pick one
- * the sandbox was not created for. Undefined for every other bearer, so nothing else changes shape. */
+// The platform's owner ticket, accepted as a sign-in proof on hosted machines only: verifies against the public key in
+// this machine's env and this sandbox's own id.
+// The email it names is then held to every rule a Google proof is (expected owner, roster); undefined for every other
+// bearer.
 export const ownerTicketVerifier =
     (publicKeyPem: string, sandboxId: string) =>
     (bearer: string): VerifiedIdentity | undefined => {
@@ -152,26 +133,20 @@ export const ownerTicketVerifier =
     };
 
 export interface Authorizer {
-    // Verify a request's bearer, a daemon-minted session (auth/session.ts) or a Google ID token, and enforce
-    // access. The FIRST authenticated request binds its email as the owner (TOFU) and must be a fresh Google
-    // proof, never a session; when a connectToken is configured, that first request must also carry it (the
-    // connection token only the operator holds, closes the first-bind race), and when an expectedOwner is
-    // configured its email must match (pins ownership to the intentic account, not just the token holder). Every
-    // later request must be the owner OR a granted member. Returns the caller's verified identity and role
-    // (presence shows both to the other members; the route floors gate on the role). Throws on any failure; the
-    // daemon maps a ForbiddenError to 403, anything else to 401.
+    // Verifies a bearer (session or Google ID token) and enforces access; the first request binds its email as owner
+    // (TOFU) and must be a fresh Google proof, never a session.
+    // A connectToken must accompany that first bind; an expectedOwner must match it. Throws on failure: the daemon maps
+    // ForbiddenError to 403, else 401.
     authorize(bearer: string, firstBind: string | undefined): Promise<Caller>;
-    // Verify the bearer AND assert the caller is the bound owner (not merely a member), the gate for the
-    // owner-only member-management routes. Throws on any failure.
+    // Verifies the bearer and asserts the caller is the bound owner, not merely a member; throws otherwise.
     authorizeOwner(bearer: string): Promise<void>;
-    // The account-deletion endpoint's idempotent owner check. This deliberately remains usable after browser
-    // access is disabled, but only to disable it again; every ordinary route stays behind authorize().
+    // The account-deletion endpoint's idempotent check; usable even after access is disabled, to disable it again.
     authorizeRetirement(bearer: string): Promise<void>;
 }
 
-/* The highest revokable grant has the owner's operating authority. Ownership remains a separate identity fact:
- * only authorizeOwner can change the access roster or retire the sandbox, so a maintainer can still be revoked
- * and can never revoke or replace the bound owner. */
+// The highest revokable grant carries the owner's operating authority, but ownership stays a separate fact.
+// Only authorizeOwner can change the roster or retire the sandbox; a maintainer can be revoked but never revoke or
+// replace the owner.
 export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string): Promise<void> => {
     const caller = await authorizer.authorize(bearer, undefined);
     if (!roleAtLeast(caller.role, "maintainer")) {
@@ -179,33 +154,23 @@ export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string
     }
 };
 
-/* ONE COMPARISON FOR THE ONE FACT EVERY GATE HERE TURNS ON: is this claim the same account as that stored row?
- *
- * A Google `email` claim is not guaranteed lowercase, while every write to the roster normalizes (app.ts's
- * memberGrant/memberEmail both `.toLowerCase()`). So an exact `===` against a stored member row could never
- * match a Workspace domain that preserves case: the owner grants `Alice@Corp.com`, it stores as
- * `alice@corp.com`, Alice signs in, `enforce` finds no row and throws — and `GET /members` still lists her, so
- * roster and daemon disagree with nothing on either side to explain it. First-bind already compared this way,
- * with the reason written beside it; this is that same rule, applied everywhere the question is asked. */
+// One comparison for the one fact every gate turns on: is this claim the same account as the stored row.
+// Case-insensitive since every roster write normalizes with `.toLowerCase()`, but a Google email claim isn't guaranteed
+// to.
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
 
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;
-    // Local verify for daemon-minted sessions, the steady-state credential (no JWKS round trip). Optional so
-    // compositions without a session store keep authorizing pure Google bearers.
+    // Local verify for daemon-minted sessions (no JWKS round trip); optional for a session-less composition.
     readonly session?: (bearer: string) => Promise<VerifiedIdentity>;
     readonly owner: OwnerStore;
     readonly members: MembersStore;
     readonly connectToken?: string;
-    // The account email this sandbox was created under (seeded from the platform). When set, the first-bind
-    // must be THIS identity, so daemon ownership always matches the intentic account, not just whoever holds
-    // the connect token first. Undefined ⇒ plain TOFU (headless/direct connect with no setup code).
+    // The account this sandbox was created under; when set, first-bind must match it, not just hold the token.
     readonly expectedOwner?: string;
-    // Permanent account-deletion marker. Optional for direct/test compositions; production always supplies it.
+    // Permanent account-deletion marker; optional for direct/test compositions, always supplied in production.
     readonly browserAccess?: { readonly enabled: () => Promise<boolean> };
-    // The platform's owner ticket as a sign-in proof (ownerTicketVerifier), present on hosted machines only. A
-    // ticket satisfies the connect-token gate on first-bind by itself: the platform that minted it is the same
-    // one that put the token in this machine's env.
+    // The platform's owner ticket as sign-in proof on hosted machines; satisfies the connect-token gate by itself.
     readonly ownerTicket?: (bearer: string) => VerifiedIdentity | undefined;
 }): Authorizer => {
     const requireBrowserAccess = async (): Promise<void> => {
@@ -213,8 +178,7 @@ export const createAuthorizer = (deps: {
             throw new Error("browser access has been removed");
         }
     };
-    // The bearer's verified identity once the daemon is bound: its own session when the token parses as one,
-    // otherwise a Google ID token against the JWKS. Session first, it is every call after sign-in.
+    // The bearer's verified identity: its own session if the token parses as one, else a Google ID token.
     const identify = async (bearer: string): Promise<VerifiedIdentity> => {
         const session = deps.session === undefined ? undefined : await deps.session(bearer).catch(() => undefined);
         return session ?? deps.verify(bearer);
@@ -236,9 +200,7 @@ export const createAuthorizer = (deps: {
                 throw new Error("missing bearer token");
             }
             const owner = await deps.owner.read();
-            /* A ticket SELECTS its own verification and commits the request to it (the same rule grants.ts
-             * states for every credential that stands in for the bearer): a bearer shaped like a ticket that
-             * does not verify is refused here, never handed on to the Google verifier to fail more slowly. */
+            // A ticket-shaped bearer that fails to verify is refused here, not handed to Google to fail more slowly.
             const vouched = isOwnerTicket(bearer) ? deps.ownerTicket?.(bearer) : undefined;
             if (isOwnerTicket(bearer) && vouched === undefined) {
                 throw new Error("owner ticket refused: not for this sandbox, expired, or not the platform's");
@@ -246,15 +208,12 @@ export const createAuthorizer = (deps: {
             if (owner !== undefined) {
                 return enforce(vouched ?? (await identify(bearer)), owner);
             }
-            // First-bind takes a fresh Google proof (or the platform's ticket) only, a session lingering from a
-            // wiped owner file (a recreated workspace under the same sandbox id) must never seed ownership.
+            // First-bind takes only a fresh Google proof or the platform's ticket; a lingering session can't seed it.
             const identity = vouched ?? (await deps.verify(bearer));
             if (vouched === undefined && deps.connectToken !== undefined && (firstBind === undefined || !tokenEquals(firstBind, deps.connectToken))) {
                 throw new Error("first-bind requires the connection token");
             }
-            // Identity gate AFTER the connect-token gate: a missing token is a setup problem (401), a wrong
-            // account is a permission problem (403 → the browser's "no access" screen). Case-insensitive since
-            // the platform seeds lowercase but a Google email claim isn't guaranteed to be.
+            // Checked after the connect-token gate: a missing token is a setup problem (401), a wrong account is 403.
             if (deps.expectedOwner !== undefined && identity.email.toLowerCase() !== deps.expectedOwner.toLowerCase()) {
                 throw new ForbiddenError(`this sandbox is registered to ${deps.expectedOwner}`);
             }

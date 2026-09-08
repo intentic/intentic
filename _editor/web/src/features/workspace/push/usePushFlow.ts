@@ -20,109 +20,75 @@ import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { usePrepush } from "./usePrepush";
 import { resetPushRuns, usePushRun } from "./usePushRun";
 
-/* THE PUSH, FROM THE CLICK TO THE ANSWER, the whole flow in one place, and deliberately not inside the panel
- * the click happens in.
- *
- * IT OUTLIVES ITS SURFACE, which is the entire point of moving it here. The check takes minutes; the user was
- * told to go and do something else, and doing something else means navigating, to the agents board, to a file,
- * to another repo's view. The flow used to live in the Changes panel's own setup, so leaving destroyed it: the
- * suite kept running, the push fired into an empty room when it went green, and a red verdict composed its fix
- * proposal into a component nobody was rendering. Module-level state has no such lifetime. Any surface that
- * wants to show the flow calls this and gets the same one.
- *
- * WHAT IT PROMISES, in the order the user meets it:
- *   1. The click is an INSTRUCTION, not an appointment. Asking to push commits to pushing; a green check sends
- *      it without asking again, whether or not anyone is watching.
- *   2. While it runs, the surface that was clicked says so IN PLACE (stage + since), and the rail says so from
- *      every other view. No dialog: there is nothing to decide yet, and the output belongs to the terminal.
- *   3. Only a RED outcome asks for the user back, `question`, which the app raises wherever they are, and
- *      which the daemon pushes to their devices when they have left the tab entirely (prepush/prepush.ts).
- *   4. Nothing is lost by walking away. The question and the fix proposal wait until they are answered.
- *
- * EVERY PUSH IN THE APP STILL COMES THROUGH ONE DOOR. `askSync` is that door now, useChanges deliberately
- * exports no single-repo push, because a second way to reach the verb is a way around the check. */
+// The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
+// that started it: any view calling this gets the same instance. `askSync` is the one door every push goes
+// through; useChanges exports no single-repo push, so there's no way around the check.
+//
+// - a click is an instruction: a green check sends it without asking again, whether anyone's watching or not.
+// - while running, the surface says so in place, and the rail says so from anywhere else; no dialog, since
+//   there's nothing to decide yet.
+// - only a red outcome raises `question`, wherever the user is (pushed to their devices too, if they've left;
+//   prepush/prepush.ts).
+// - nothing is lost by walking away: the question and the fix proposal wait until they're answered.
 
-// What is about to leave, named the way the control that asked for it was labelled, so the flow answers the
-// click the user made ("Publish", "Sync") instead of renaming it "Push" halfway through.
+// What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
+// click ("Publish", "Sync") instead of renaming it "Push".
 export interface PendingPush {
     readonly verb: string;
-    // What is going out, "3 commits across 2 repos", "intentic's branch".
+    // What is going out, e.g. "3 commits across 2 repos", "intentic's branch".
     readonly what: string;
     readonly targets: readonly SyncTarget[];
 }
 
-/* What a fix conversation's derived name is scoped to (conversation-ids.ts): the repos this push was about,
- * sorted so that the same two repos in either order are the same scope. The failing gates alone would not do
- * it — two workspaces can fail the same three gates, and their fixes are not each other's. */
+// What a fix conversation's derived name is scoped to: this push's repos, sorted so order doesn't matter.
+// Failing gates alone wouldn't do, since two workspaces can share the same three gates.
 const scopeOf = (push: PendingPush): string =>
     [...new Set(push.targets.map((target) => target.repo))].sort((left, right) => left.localeCompare(right)).join(`-`);
 
-// Which half of the flow is in flight. Undefined the moment it settles: nothing is "running" while a question
-// is waiting, and the two states drive different surfaces.
+// Which half of the flow is in flight; undefined the moment it settles, since nothing is running while a
+// question waits.
 export type PushStage = "checking" | "pushing";
 
-/* An outcome the user has to answer. Raised only for red, a pass is not a question, and phrasing it as one is
- * how the old dialog earned its "why am I being asked this" reputation. */
+// An outcome the user must answer, raised only for red; a pass phrased as a question is what earned the old
+// dialog its bad reputation.
 export interface PushQuestion {
-    // Four words at most: it is read at a glance, from a view the user may have walked back into.
+    // Four words at most, read at a glance from a view the user may have walked back into.
     readonly title: string;
-    // The command, drawn in the monospace it wears while the run is still going, so the line reads the same
-    // either side of the verdict: the check's command, or the push's own `git push …`. Absent only where
-    // several repos refused at once, no one command can stand for them, and where a pull ahead of the push was
-    // what failed, since nothing was run for it.
+    // The command, in the monospace it wears mid-run; absent when several repos refused at once or nothing ran.
     readonly command?: string;
     // The predicate that follows it: what happened, in prose.
     readonly detail: string;
-    /* `checks` still has a push to send, so the answer is Push anyway or hand it to an agent. `push` is the send
-     * itself having been refused, there is nothing to override, so the same button is the retry, and where the
-     * repository's own pre-push hook was what refused it, the fix is proposed exactly as for a red check. */
+    // `checks` still has a push to send; `push` is the send itself refused, so the same button retries it.
     readonly kind: "checks" | "push";
 }
 
-// How long the panel keeps saying "Pushed" after a green run. Long enough to be caught on the way back from
-// wherever the user was, short enough that it is gone before it becomes furniture. A pass is not news that
-// needs preserving: the outgoing work being gone is the durable half of the answer.
+// How long the panel says "Pushed": long enough to catch on the way back, short enough not to linger.
 const PUSHED_NOTE_MS = 8_000;
 
 const pending = shallowRef<PendingPush | undefined>(undefined);
 const stage = ref<PushStage | undefined>(undefined);
-// When the current stage began, what the elapsed readouts count from. Taken from the client rather than the
-// run, because it has to cover the push half too, and the two halves must count in the same clock.
+// When the stage began; taken from the client, not the run, so check and push halves share one clock.
 const since = ref(0);
 const question = shallowRef<PushQuestion | undefined>(undefined);
-// The fix session proposed for a failed check. shallowRef because a Conversation owns its own refs
-// (agents/sessionSuggestion.ts), and composed ONCE so edits to its text and model survive every re-render and
-// every navigation between the failure and the decision.
+// The fix session for a failed check; composed once, so edits survive every re-render, not re-read later.
 const proposedFix = shallowRef<Conversation | undefined>(undefined);
-/* The push runs that settled red behind a `push` question (useChanges files them with their failures), held
- * for the two things the card reads off a run and not off its sentence: the terminal it ran in, and the tail
- * the proposed fix quotes. The check's run is the prepush watcher's own; these are per repo. */
+// Push runs that settled red behind a `push` question: the terminal each ran in and the tail the fix quotes.
 const refusedRuns = shallowRef<readonly PushRun[]>([]);
 const pushed = shallowRef<PendingPush | undefined>(undefined);
 let pushedTimer: ReturnType<typeof setTimeout> | undefined;
 
-/* The agent settings in force when the button was pressed, carried rather than re-read at settle time. The
- * proposal is composed minutes later and possibly from no mounted surface at all, and "what was configured when
- * you asked" is the honest answer anyway. */
+// Agent settings when the button was pressed, carried since the proposal may compose minutes later, unmounted.
 let fixWith: { model?: string; effort?: string } = {};
 
-/* The git actions and the sandbox's identity, captured on the first call from a mounted surface. ONLY the
- * module-level halves of useChanges are ever read through this, `syncAll`, `actionBusy` and `failures` are one
- * per app rather than one per caller, so the capture stays good after the surface that made it has gone, which
- * is precisely the situation this flow exists to survive. The query-backed halves (`repos`, `outgoing`) are the
- * panel's business and are not touched here. */
+// Git actions and sandbox id, captured once from a mounted surface. Only useChanges's module-level halves
+// (syncAll, actionBusy, failures) are read here; the query-backed halves are the panel's own.
 let git: ReturnType<typeof useChanges> | undefined;
 let sandboxId: ReturnType<typeof useSandbox>["activeSandboxId"] | undefined;
 
 const prepush = usePrepush();
 
-/* HOW LONG THIS SUITE USUALLY TAKES, remembered across runs. Waiting is bearable when you know the size of it,
- * and leaving is comfortable when you know roughly when to come back, which is the difference between a
- * progress readout and a progress readout that lets someone stop watching.
- *
- * Per sandbox, because the command is: two workspaces have two suites. localStorage rather than the daemon,
- * mirroring the commit draft, it is a client-side convenience, and the daemon deliberately keeps nothing about
- * a check at rest (prepush/prepush.ts). */
+// How long this suite usually takes, remembered per sandbox in localStorage, not the daemon, which keeps
+// nothing about a check at rest.
 const storageKey = (id: string): string => `intentic.prepushDuration.${id}`;
 const typicalMs = ref<number | undefined>(undefined);
 
@@ -135,13 +101,12 @@ const readTypical = (id: string | undefined): void => {
         const stored = Number(localStorage.getItem(storageKey(id)));
         typicalMs.value = Number.isFinite(stored) && stored > 0 ? stored : undefined;
     } catch {
-        // Storage may be unavailable (private mode). The readout degrades to elapsed-only, which is the half
-        // that matters most anyway.
+        // Storage may be unavailable (private mode); the readout degrades to elapsed-only.
     }
 };
 
-// Only a run that RAN to a verdict measures anything: a cancel and a timeout are the clock being cut short, and
-// remembering either would teach the readout a duration no suite ever takes.
+// Only a run that reached a verdict measures anything; a cancel or timeout is the clock cut short, and
+// remembering it would teach the readout a duration no suite takes.
 const rememberTypical = (run: CommandRun): void => {
     const { startedAt, finishedAt } = run;
     if (startedAt === undefined || finishedAt === undefined || (run.status !== `passed` && run.status !== `failed`) || run.timedOut === true) {
@@ -159,8 +124,8 @@ const rememberTypical = (run: CommandRun): void => {
     }
 };
 
-// Entering a stage supersedes whatever was being asked: a new push is a new question, and the fix proposed for
-// the last one is about a verdict nobody is waiting on any more.
+// Entering a stage supersedes whatever was being asked: a new push is a new question, and the last one's fix
+// is about a verdict nobody's waiting on.
 const enter = (push: PendingPush, next: PushStage): void => {
     pending.value = push;
     stage.value = next;
@@ -170,7 +135,7 @@ const enter = (push: PendingPush, next: PushStage): void => {
     refusedRuns.value = [];
 };
 
-// Back to rest, having sent what was asked for. The note is the only thing left, and it expires by itself.
+// Back to rest, having sent what was asked; the note is the only thing left, and it expires on its own.
 const done = (push: PendingPush): void => {
     pending.value = undefined;
     stage.value = undefined;
@@ -183,11 +148,8 @@ const done = (push: PendingPush): void => {
     pushedTimer = setTimeout(() => (pushed.value = undefined), PUSHED_NOTE_MS);
 };
 
-/* A batch of git actions the user started while the suite ran, a commit, a fetch, a discard, holds the
- * panel's one busy span, and useChanges refuses re-entry while it does. A push fired into that would be
- * silently dropped, and this flow would report "Pushed" over a push that never happened. So it waits for the
- * door instead of knocking on a closed one: the user was invited to keep working, and the push they asked for
- * has to survive them accepting the invitation. */
+// Waits for the busy git-action span useChanges holds during a commit/fetch/discard, since a push fired into
+// it would be dropped silently; the user was invited to keep working, and the push must survive that.
 const untilIdle = async (): Promise<void> => {
     if (git?.actionBusy.value !== true) {
         return;
@@ -202,20 +164,13 @@ const untilIdle = async (): Promise<void> => {
     });
 };
 
-/* Send it. The failures useChanges files per repo ARE the outcome, the batch carries on past a repo that
- * refused, so "did this push go" is a question about which scopes came back marked, not about a thrown error.
- *
- * A push is a RUN (usePushRun.ts), and a refused one is filed with its run, so the question raised here is the
- * same question a red check raises, from the same material: the command in monospace, one line on how it
- * ended, the terminal it ran in, and, where the repository's own pre-push hook was what said no, the fix
- * composed from what the hook printed. A rejected ref or a dead host proposes nothing, on the rule `error` and
- * `cancelled` checks follow: nothing is known to be wrong with the code, and an agent sent after it would hunt
- * a bug that isn't there. */
+// Failures useChanges files per repo are the outcome; the batch carries on past a refusal. A refused push
+// raises the same question a red check does, and proposes nothing when nothing is known to be wrong with the code.
 const send = async (push: PendingPush): Promise<void> => {
     enter(push, `pushing`);
     prepush.forget();
     await untilIdle();
-    // Another ask superseded this one while it waited. Whatever the flow is about now, it is not this.
+    // Another ask superseded this one while it waited; whatever the flow is about now, it isn't this.
     if (pending.value !== push) {
         return;
     }
@@ -238,8 +193,7 @@ const send = async (push: PendingPush): Promise<void> => {
             prompt: pushFixPrompt(byHook),
             ...fixWith,
             isolated: true,
-            // Every repo that refused, and everything they refused on: one hook failure across three repos is
-            // one fix in one worktree (pushFixPrompt makes it one prompt), so it is one conversation.
+            // One hook failure across several repos is one fix in one worktree, so it's one conversation.
             conversationId: pushFixConversationId(byHook.map((run) => run.repo).join(`-`), fixSignature(byHook.map((run) => run.output).join(`\n`))),
         });
     }
@@ -249,22 +203,19 @@ const send = async (push: PendingPush): Promise<void> => {
 const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQuestion => {
     const only = refused.length === 1 ? git!.failures.value.get(refused[0]!) : undefined;
     if (only === undefined) {
-        // Several cannot share a line, and each row in the panel is already carrying its own reason under
-        // the repo that produced it.
+        // Several can't share a line; each row in the panel already carries its own reason.
         return { kind: `push`, title: `${push.verb} failed`, detail: `${refused.length} repos refused it, each row says why.` };
     }
     if (only.run === undefined) {
-        // No run: a pull that failed ahead of the push. The line has to name the repo itself.
+        // No run: a pull that failed ahead of the push, so the line names the repo itself.
         return { kind: `push`, title: `${push.verb} failed`, detail: `${refused[0]}: ${only.detail}` };
     }
-    // The run's own outcome names it ("Push timed out"), its command is drawn above the line, and the line is
-    // the predicate that follows the command, exactly as a red check's is.
+    // The run's own outcome names it; its command sits above the line, the predicate that follows, as a check's is.
     return { kind: `push`, title: commandRunOutcome(only.run, push.verb), command: only.run.command, detail: only.detail };
 };
 
-/* The terminal the current moment is about: the check's while the check runs or after it said no, the push's
- * while it runs (whichever target's is in a terminal already) or after it was refused. One button on every
- * surface, pointed at whichever run the user is being asked about. */
+// The terminal the current moment is about: the check's while it runs or after refusing, the push's while
+// running or after refusal. One button on every surface, pointed at whichever run is in question.
 const currentTerminal = (): { readonly session: string; readonly show: () => void } | undefined => {
     const pushRuns =
         question.value?.kind === `push`
@@ -280,17 +231,8 @@ const currentTerminal = (): { readonly session: string; readonly show: () => voi
     return session === undefined ? undefined : { session, show: prepush.showTerminal };
 };
 
-/* EVERYTHING THIS FLOW IS HOLDING ABOUT ONE WORKSPACE'S OUTGOING WORK, dropped when the browser is pointed at
- * another one. Called from sandboxScope.
- *
- * All of it names repositories, commits and a check suite in a single /work: a staged push, the stage it
- * reached, the question waiting on an answer, the fix session composed for a failure. Carried across a switch,
- * the panel offers to send the previous sandbox's commits, and answering the question would run a check in a
- * workspace the reader is no longer in.
- *
- * `git` and `sandboxId` are deliberately NOT dropped. They are captures of module-level composables, one per
- * app, not one per sandbox, and re-capturing them needs a mounted surface, which a switch does not guarantee
- * there is one of. `typicalMs` is not dropped either: its own watch on the sandbox id already re-reads it. */
+// Drops what this flow holds about one workspace's outgoing work on a sandbox switch: a staged push is about
+// a /work the reader has left. `git`/`sandboxId`/`typicalMs` stay: module-level captures, re-read by their own watches.
 export const resetPushFlow = (): void => {
     clearTimeout(pushedTimer);
     pushedTimer = undefined;
@@ -302,43 +244,29 @@ export const resetPushFlow = (): void => {
     refusedRuns.value = [];
     pushed.value = undefined;
     fixWith = {};
-    // The runs being followed name repositories in the same workspace, and are dropped with the flow that
-    // started them rather than by a second caller that would have to remember to.
+    // Runs being followed are dropped with the flow that started them, not left for a second caller to remember.
     resetPushRuns();
 };
 
 export function usePushFlow() {
     git ??= useChanges();
     const { settings } = useSandboxSettings();
-    // The owner's list for THIS job. A pre-push fix is its own row in Sandbox ▸ Agent ▸ Models: it reads a
-    // failing check on work that is about to leave the machine, which is not the same spend as a documentation
-    // sweep, and used to share a tier with one.
+    // This job's own model list: a pre-push fix reads a failing check on work about to leave the machine.
     const prePushFix = useRoleModel(`pre-push-fix`);
     if (sandboxId === undefined) {
         sandboxId = useSandbox().activeSandboxId;
         watch(sandboxId, (id) => readTypical(id), { immediate: true });
     }
 
-    /* THE ONE DOOR. Every Push, Sync and Publish in the app arrives here, the sync bar's button and each repo
-     * row's pill alike, so the check cannot be walked around by taking a different route to the same verb.
-     *
-     * A pull-only sync passes straight through: nothing leaves the machine, so there is nothing to check. So
-     * does a workspace with no check configured, and both still report their outcome, because "did my push
-     * go" is a question the user asks whether or not a suite was involved. */
+    // The one door every Push, Sync and Publish arrives at, so the check can't be walked around by another route.
+    // A pull-only sync, or a workspace with no check configured, both pass straight through and still report their
+    // outcome.
     const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
         if (stage.value !== undefined) {
             return;
         }
         const push: PendingPush = { verb, what, targets };
-        /* The HEAD of the pre-push-fix list, the entry the daemon would reach for, rather than the raw setting:
-         * this is composed into a draft the user can see and re-point, so it has to name a model that can
-         * actually be sent. `modelPinKey` because composeSession takes the pinned `${provider}:${model}`
-         * form. Read before the check is even considered: a push with no check configured can still be refused
-         * by the repository's own hook, and the fix proposed for that reads the same settings.
-         *
-         * THE EFFORT COMES OFF THAT ENTRY, not from a setting beside the list: each pin now carries its own
-         * (ModelPinSchema), so the tier proposed here is the one the owner wrote for the model being
-         * proposed rather than one shared with every other entry. */
+        // The head of the pre-push-fix list, read early: a no-check push can still be hook-refused and reuse this.
         const head = prePushFix.choice.value;
         fixWith = head === undefined ? {} : { model: modelPinKey(head), effort: head.effort };
         const command = prepushCommandOf(settings.value?.rules ?? []);
@@ -349,9 +277,7 @@ export function usePushFlow() {
         enter(push, `checking`);
         void prepush.start().then((settled) => {
             rememberTypical(settled);
-            /* Still ours, and still the half of the flow that was waiting on it. Either guard failing means the
-             * user has already answered, pushed anyway, dismissed, or started another sync, and a verdict
-             * arriving after the decision has nobody to interrupt. */
+            // Still ours: either guard failing means the user already answered; a late verdict has nobody to interrupt.
             if (pending.value !== push || stage.value !== `checking`) {
                 return;
             }
@@ -361,34 +287,25 @@ export function usePushFlow() {
             }
             stage.value = undefined;
             question.value = { kind: `checks`, title: checkOutcome(settled), command: settled.command, detail: outcomeSummary(settled) };
-            /* `error` and `cancelled` get no fix proposal. The command could not run, or the user stopped it,
-             * either way nothing is known to be wrong with the code, and an agent sent after it would hunt a bug
-             * that isn't there. */
+            // `error` and `cancelled` propose no fix: either way nothing is known to be wrong with the code.
             if (settled.status === `failed`) {
                 proposedFix.value = composeSession({
                     prompt: checkFixPrompt(settled),
                     ...fixWith,
-                    // Isolated, like any other fleet agent: the work under test is committed on a branch, so the
-                    // fix belongs in a worktree of its own and arrives as a diff to review rather than as edits
-                    // landing underneath the push the user is still deciding about.
+                    // Isolated, like any fleet agent: the fix belongs in its own worktree, arriving as a diff to
+                    // review.
                     isolated: true,
-                    /* NAMED AFTER WHAT FAILED, not after this press (conversation-ids.ts). The check runs again
-                     * every time the user tries the push, so the same broken tree raises this question two and
-                     * three times over; each press used to mint a fresh agent, and two of them on the same
-                     * gates is two worktrees, two branches and a land conflict between them. */
+                    // Named after what failed, not this press: the check reruns each attempt, so a fresh name would
+                    // fork the agent.
                     conversationId: pushFixConversationId(scopeOf(push), fixSignature(settled.output)),
                 });
             }
         });
     };
 
-    /* Push anyway, the answer that is always available, during the run and after a failure, and which never
-     * asks a second time. The user knows things the check does not: that the failure is the one they are pushing
-     * a fix for, that the suite is flaky, that they need this on a branch to look at it in CI. A check that
-     * BLOCKED the push would be switched off within the week.
-     *
-     * A check still running is left running, in the terminal it is running in: killing it here would decide, on
-     * the user's behalf, that an answer they chose not to wait for is an answer nobody wants. */
+    // Always available, during the run and after a failure, and never asks twice. A still-running check is left
+    // running: killing it here would decide, for the user, that an answer they chose not to wait for is wanted by
+    // nobody.
     const pushAnyway = (): void => {
         const push = pending.value;
         if (push !== undefined) {
@@ -396,8 +313,8 @@ export function usePushFlow() {
         }
     };
 
-    // Let it go unanswered, the push does not happen, and nothing is left running that was not already. The
-    // suite is not killed for the same reason Push anyway does not kill it.
+    // Leaves it unanswered: the push doesn't happen, and nothing new is left running. The suite isn't killed, for
+    // the same reason Push anyway doesn't kill it.
     const dismiss = (): void => {
         pending.value = undefined;
         stage.value = undefined;
@@ -447,8 +364,8 @@ export function usePushFlow() {
         }
     };
 
-    // Stop the suite, keep the push. The run settles as `cancelled`, so the wording still comes from where every
-    // other outcome's does, and the question it raises is the same one: this push is still waiting on you.
+    // Stops the suite, keeps the push: it settles as `cancelled`, so the wording matches any other outcome's, and
+    // the question raised is the same: still waiting on you.
     const stopChecks = (): void => void prepush.cancel();
 
     return {
@@ -457,16 +374,15 @@ export function usePushFlow() {
         since: computed(() => since.value),
         question: computed(() => question.value),
         proposedFix: computed(() => proposedFix.value),
-        // The just-sent note, and the only thing this flow ever says about a success.
+        // The just-sent note; the only thing this flow ever says about a success.
         pushed: computed(() => pushed.value),
-        // Whether anything at all is in flight, what the rail draws its spinner on.
+        // Whether anything is in flight; what the rail draws its spinner on.
         running: computed(() => stage.value !== undefined),
-        // The command being run, for the line that says what is happening. From the run while there is one, from
-        // settings in the moment before the first poll answers.
+        // The command for the line that says what's happening: from the run while there is one, from settings before
+        // the first poll answers.
         command: computed(() => (prepush.run.value.command === `` ? prepushCommandOf(settings.value?.rules ?? []) : prepush.run.value.command)),
-        // The terminal of whichever run the moment is about (currentTerminal), where it exists: absent on a
-        // sandbox with no tmux wrapper, where the command ran in an invisible shell and a button would only
-        // open an empty panel.
+        // The terminal of whichever run the moment is about; absent on a sandbox with no tmux wrapper, where a button
+        // would only open an empty panel.
         terminal: computed(() => currentTerminal()?.session),
         typicalMs: computed(() => typicalMs.value),
         showTerminal: (): void => currentTerminal()?.show(),

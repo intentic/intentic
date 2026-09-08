@@ -1,21 +1,9 @@
 import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
 
-/* The widget's entire stylesheet, as a string injected into its shadow root. A string rather than a .css file
- * because the artifact must stay ONE script: a stylesheet the host page has to fetch is a second request that
- * can 404, be blocked, or arrive after the first paint.
- *
- * `all: initial` on the host is the line that matters. A shadow root stops the host page's selectors reaching
- * in, but inherited properties (font, color, line-height, letter-spacing) still cross the boundary, which is
- * how an embedded widget ends up in a site's 22px display serif. Resetting at the host and restating what we
- * want below is what makes the widget look identical on every site. */
+// Stylesheet as a string, not a .css file, so the embed stays one script with no second request to fail. `all: initial`
+// on :host blocks inherited properties (font, color, line-height) that cross the shadow boundary.
 
-/* Intentic's warm neutral ramp (hue 65), converted from the oklch in @intentic/ui primitive-colors.css to
- * literal hex. Only the steps the roles below actually name.
- *
- * Hex, not oklch(), and not variables read from the host: this sheet ships to a stranger's browser, where
- * neither the app's tokens nor a 2023 colour space is guaranteed. Converting once here keeps the widget's
- * appearance independent of both. The warm greys are the reason the orange sits right, a neutral with no
- * chroma leaves the accent looking pasted on. */
+// Warm neutral ramp, converted to hex: neither oklch nor host tokens are safe in a stranger's browser.
 const NEUTRAL = {
     0: "#fdfbfa",
     50: "#faf8f6",
@@ -29,13 +17,7 @@ const NEUTRAL = {
     200: "#e8e4e0",
 } as const;
 
-/* The app's ROLE tokens, per scheme, a transcription of the `:root` and `[data-mode="dark"]` blocks in
- * @intentic/ui semantic-colors.css, under the same names so the two can be read side by side. Everything
- * visible below is expressed in these, so "does the widget match the app" is a question about this table
- * rather than about forty rules.
- *
- * `overlay === card` in light is not a mistake, it is the app's own value, and the reason intentic's light
- * chat separates its surfaces with hairlines rather than with fills. */
+// Role tokens transcribed from @intentic/ui per scheme; overlay equals card in light on purpose, not a mistake.
 const ROLES = {
     light: {
         card: NEUTRAL[0],
@@ -46,11 +28,7 @@ const ROLES = {
         muted: NEUTRAL[600],
         subtle: NEUTRAL[500],
         danger: "#bb0916", // red-700
-        /* Which way the accent moves to become INK. The app doesn't reuse one orange for fills and for glyphs:
-         * `--role-primary-fill` is brand-700 in light and brand-400 in dark, because a mid-orange that reads as
-         * a button on dark is a 2.6:1 glyph on white. The widget has one configurable accent instead of a ramp,
-         * so it synthesises those two ends by pulling the accent 15% toward the scheme's extreme, which lands
-         * within a step of the ramp values it is imitating (#e47100 → #c26000 light, #e88626 dark). */
+        // Ink shifts toward black in light and white in dark, mimicking the app's separate fill/glyph brand steps.
         inkToward: "#000000",
     },
     dark: {
@@ -68,10 +46,8 @@ const ROLES = {
 
 type Scheme = keyof typeof ROLES;
 
-/* Colour maths in TS rather than in CSS. `color-mix()` landed in browsers the same year `oklch()` did, and it
- * would be carrying BACKGROUNDS here, not a nicety: an unsupported `color-mix()` is invalid at computed-value
- * time, so a bubble would paint nothing at all rather than paint slightly wrong. Evaluated once at render, the
- * sheet ships plain hex and needs no baseline. */
+// Color maths run in TS since an unsupported color-mix()/oklch() is invalid at computed-value time; evaluating once
+// here ships plain hex needing no baseline.
 const parseHex = (value: string): number[] | undefined => {
     const digits = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim())?.[1];
     if (digits === undefined) {
@@ -81,7 +57,7 @@ const parseHex = (value: string): number[] | undefined => {
     return [0, 2, 4].map((at) => Number.parseInt(full.slice(at, at + 2), 16));
 };
 
-/** `color-mix(in srgb, top ${weight}, bottom)`, and, where `bottom` is what sits behind, an alpha composite. */
+/** Emulates `color-mix(in srgb, top ${weight}, bottom)`: an alpha composite of top over the bottom color. */
 const mix = (top: string, bottom: string, weight: number): string => {
     const [over, under] = [parseHex(top), parseHex(bottom)];
     if (over === undefined || under === undefined) {
@@ -91,7 +67,7 @@ const mix = (top: string, bottom: string, weight: number): string => {
     return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 };
 
-// WCAG relative luminance. Unreadable input scores 0, which only decides a label the caller then never uses.
+// WCAG relative luminance; unreadable input scores 0, only ever used to pick a label, never shown.
 const luminance = (color: string): number => {
     const [r, g, b] = (parseHex(color) ?? [0, 0, 0]).map((channel) => {
         const unit = channel / 255;
@@ -102,33 +78,15 @@ const luminance = (color: string): number => {
 
 const contrast = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/* The label that goes ON a solid accent, measured, not assumed. White on intentic's own orange is 3.15:1: it
- * fails AA for text and only scrapes the 3:1 threshold for a glyph, which is why the app pairs its bright fills
- * with a near-black label instead (`--role-fill-content` is surface-900 in dark). Comparing both candidates
- * rather than thresholding the accent's lightness means there is no crossover constant to get wrong, and a
- * customer's brand colour gets the same treatment as ours instead of inheriting a white that suited the default. */
+// Label for a solid accent, measured not assumed: white on intentic's orange is 3.15:1, under AA. Comparing both
+// candidates works for any customer accent, not just the default.
 const onAccent = (accent: string): string => {
     const field = luminance(accent);
     return contrast(field, luminance(NEUTRAL[900])) >= contrast(field, luminance("#ffffff")) ? NEUTRAL[900] : "#ffffff";
 };
 
-/* One scheme's worth of custom properties. Light and dark go through this same function so a value added to one
- * cannot be forgotten in the other, the failure mode of the two hand-written blocks this replaced.
- *
- * The derivations, each a transcription of a rule in the app:
- *
- *   --accent-ink        the accent as glyph and edge, stepped for the scheme (see `inkToward`)
- *   --accent-wash       chat.css .composer-send, a 14% wash of the fill, not a solid block of it, 22% on hover
- *   --accent-line       the visitor bubble's edge: .chat-surface's `primary-500 22%` mixed into the line colour
- *   --accent-ring       ChatPanel's composer, `ring-primary-500/25`, over the panel it sits on
- *   --bubble-agent      .chat-surface-assistant, `overlay 35%` over the scroller's card
- *   --bubble-visitor    .chat-surface, `overlay 55%`, the BRIGHTER of the pair
- *
- * The last two are the whole correction: the transcript says who spoke with a step in surface and a tinted edge,
- * never by dropping a saturated brand block into the middle of the thread.
- *
- * Rationale lives here rather than in the returned string because that string is the payload, this function
- * runs once per scheme, so a comment inside it would ship to every visitor twice to explain TypeScript. */
+// One scheme's tokens; light and dark share this function so no value can be missing from one. Bubbles differ by
+// surface step and tinted edge, not a saturated fill block.
 const tokens = (scheme: Scheme, accent: string): string => {
     const role = ROLES[scheme];
     const ink = mix(accent, role.inkToward, 0.85);
@@ -152,8 +110,7 @@ const tokens = (scheme: Scheme, accent: string): string => {
     --bubble-visitor: ${mix(role.overlay, role.card, 0.55)};`;
 };
 
-// Corner → the two offsets that pin both launcher and panel. Kept together so a new position can't set one and
-// forget the other.
+// Offsets pinning both the launcher and panel per corner, kept together so a new position can't miss one.
 const CORNERS: Record<WebchatPublicConfig["position"], string> = {
     "top-right": "top: var(--gap); right: var(--gap);",
     "top-left": "top: var(--gap); left: var(--gap);",
@@ -169,10 +126,7 @@ const PANEL_ANCHOR: Record<WebchatPublicConfig["position"], string> = {
     "bottom-left": "bottom: calc(var(--gap) + 3.5rem); left: var(--gap);",
 };
 
-/* An accent the maths can read. WebchatConfig validates the field as hex for exactly this reason, so this is
- * the branch that cannot be reached from a stored automation, kept because the wire type is a plain string and
- * a widget rendering with its wash, ring and label silently missing is worse than one rendering in the brand
- * orange the daemon defaults to anyway. */
+// Fallback for an accent parseHex can't read; unreachable in practice since the wire type is a plain string.
 const DEFAULT_ACCENT = "#e47100"; // brand-600
 
 export const styles = (config: WebchatPublicConfig): string => {

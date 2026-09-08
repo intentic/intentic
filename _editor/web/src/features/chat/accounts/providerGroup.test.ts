@@ -1,6 +1,5 @@
-/* WHICH PROVIDERS ARE ONE THING TO A READER. Two surfaces fold on this rule and used to disagree: the model
- * picker drew one "Local models" lane while the Usage tab drew a filter pill per card, labelled with the raw
- * `endpoint/<id>` provider id. The ledger's case is the harder one, because it outlives the cards. */
+// Which providers read as one thing: the model picker's lane and the Usage tab's filter pill must
+// agree. The ledger's case is harder, since it outlives deleted cards.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { beforeEach, expect, it } from "vitest";
 import {
@@ -28,8 +27,7 @@ it(`folds every card running weights on this machine into one group`, () => {
 });
 
 it(`leaves a remote endpoint, the trial and a subscription provider their own groups`, () => {
-    // A server the user pointed us at is not their machine, and it can be metered: on a cost screen that is the
-    // difference between a series worth reading and one that is always $0.
+    // A remote server is not local weights, and can be metered, unlike an always-$0 series.
     expect(providerGroup(`endpoint/vllm-box`)).toBe(`endpoint/vllm-box`);
     // The trial is an endpoint the daemon provisioned, not a model running here.
     expect(providerGroup(TRIAL_PROVIDER)).toBe(TRIAL_PROVIDER);
@@ -37,11 +35,8 @@ it(`leaves a remote endpoint, the trial and a subscription provider their own gr
     expect(isLocalModelProvider(`acp/opencode`)).toBe(false);
 });
 
-/* THE LEDGER OUTLIVES THE CARD. Spend is never pruned (a total that shrinks is worse than one that is stale),
- * so a sandbox that tried three sets of weights over an afternoon and deleted them carries three provider ids
- * nothing can connect any more. Each one drew its own filter pill on the Usage tab. Nothing in a ledger row
- * says which KIND of card minted it, so a deleted id folds with the local models: that is what actually
- * produces dead endpoint ids, and it is a display grouping that nothing routes on. */
+// Spend is never pruned, so a deleted card's provider id lingers in the ledger; since nothing there
+// says what kind of card it was, a dead id folds in with the local models.
 it(`folds an endpoint whose card is gone, which is how the ledger grew a pill per deleted model`, () => {
     expect(providerGroup(`endpoint/llama-test`)).toBe(LOCAL_MODELS_GROUP);
     expect(providerGroup(`endpoint/qwen-3-8-200k`)).toBe(LOCAL_MODELS_GROUP);

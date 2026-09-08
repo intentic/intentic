@@ -1,21 +1,7 @@
-<!-- Design-system single-select: the replacement for native <select> / PrimeVue Select everywhere a choice
-     deserves more than OS chrome: token-styled rows with icon · label · quiet description (or a wrapping hint
-     sentence, for options that have to be taught rather than named) · check, group headers, wrap-around
-     keyboard navigation, and a filter box that appears by itself once the list is long.
-     The closed trigger is a real button (bordered `input` variant for forms/settings rows, borderless `ghost`
-     for toolbars); the open panel is <ResponsiveOverlay>: anchored on desktop, a thumb-reachable sheet on a
-     phone. The #icon scoped slot lets a site draw brand marks (provider logos) the icon set can't.
-
-     THAT OVERLAY WAS EXTRACTED FROM HERE AND THIS COMPONENT KEPT THE COPY, which is the whole reason the note
-     is worth writing down. <Picker> had always done the desktop/mobile swap internally, so when five other
-     menus were found hand-writing the same pair they were given <ResponsiveOverlay> and this one was left
-     alone: it already worked, after all. What it worked WITH was PrimeVue's Popover, and PrimeVue's Popover
-     measures the room around a trigger against the module-scope `window`. In a popped-out chat or terminal
-     panel that is the wrong window: the panel opens off the bottom edge with its top over the pill that owns
-     it, and an overlay covering its own trigger cannot be dismissed by clicking that trigger. The app's own
-     <AnchoredOverlay> exists to fix exactly that, and the design system's own picker was the last thing still
-     carrying the bug. It also carried the two-boolean shape (`popoverOpen`, `sheetOpen`) that
-     ResponsiveOverlay's header comment names as the thing to avoid. One flag now, and one window. -->
+<!--
+    Design-system single-select replacing native <select>/PrimeVue Select: token-styled rows with icon/label/description/check, group headers, and a
+    filter box once the list is long. Opens in <ResponsiveOverlay> (anchored on desktop, a sheet on phone).
+-->
 <script setup lang="ts" generic="T extends string">
 import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs, useSlots } from "vue";
@@ -62,19 +48,13 @@ const selected = computed<PickerOption<T> | undefined>(() =>
         .find((option) => option.value === model.value),
 );
 
-// Class fallthrough lands on the trigger (the component's one element), twMerge'd so a caller's `text-xs
-// py-1.5 w-full` beats the variant base the way ui.* overrides do.
+// Fallthrough class lands on the trigger, twMerge'd so a caller's override beats the variant base.
 const attrs = useAttrs();
 const passAttrs = computed(() => {
     const { class: _class, ...rest } = attrs;
     return rest;
 });
-/* `touch-target` on the trigger, and it is the GHOST variant that needs it: the `input` variant already
- * clears 44px from its own padding (a form row), while the ghost one is a bare word with a caret riding a
- * toolbar: 22px tall, which is what a page's own repository switcher measured at on a phone. The overlay
- * grows the hit area on a coarse pointer and leaves the toolbar's height alone, so nothing this trigger
- * shares a row with moves. Applied to both because twMerge would drop a duplicate anyway and the input
- * variant is already big enough for the rule to be a no-op there. */
+// `touch-target` mainly helps the ghost variant, whose toolbar trigger is too short to tap; a no-op on input.
 const triggerClass = computed(() =>
     twMerge(
         `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default`,
@@ -93,19 +73,10 @@ const triggerClass = computed(() =>
 
 const triggerEl = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
-// The panel never renders narrower than its trigger (a dropdown thinner than its button reads broken), with
-// a floor for tiny ghost triggers whose rows still need room to breathe. Measured at the moment of opening
-// rather than watched: the trigger cannot resize while a modal panel is over it.
+// Panel never renders narrower than its trigger, with a floor for tiny triggers; measured once, on open.
 const panelMinWidth = ref(0);
 
-/* THE CAP HAS TO CLEAR THE FLOOR, and for a long time it did not, which was a clipping bug rather than a
- * sizing preference. The floor above lived on this sizing div; the cap (a flat `max-w-96`) lived on the panel
- * WRAPPER, one element up, inside a surface whose whole job is to clip. So a full-width form field: the
- * automations "Runs as" row is ~40rem: asked for a 40rem list inside a 24rem box, and everything at the right
- * end of every row was simply cut off: the quiet annotation, and the tick marking the current choice. The panel
- * also came out visibly narrower than the control that opened it, which is the tell.
- * One element owns both numbers now, so they cannot contradict: comfortable by default, as wide as its own
- * trigger when that is wider, and never past the edge of the window. */
+// Cap and floor are on the same element, so the max can't fall below the min and clip a wide trigger's panel.
 const PANEL_WIDTH_CAP = 384; // 24rem: the comfortable reading measure for a list of names
 const panelMaxWidth = computed(() => Math.max(PANEL_WIDTH_CAP, panelMinWidth.value));
 
@@ -153,22 +124,18 @@ const applyPick = (option: PickerOption<T>): void => {
     >
         <template v-if="selected !== undefined">
             <slot name="icon" :option="selected">
-                <!-- A face rather than a glyph when the pick is a person, because the closed trigger is the only
-                     thing on screen once the panel shuts and "who is this set to" is the whole question it
-                     answers. Sized to the room the trigger ALREADY has, which is the constraint that settled the
-                     number: this field sits in a two-column form beside plain inputs and other pickers, and 24
-                     grew it two pixels taller than all of them: a persona field visibly out of line with its
-                     neighbours, to make one avatar bigger. 20 changes no height at all, and a toolbar's
-                     borderless pill only has room for 16. Both are under the 28 a panel row gets, which is the
-                     right way round: a list of people is where you recognise a face, and a closed field is where
-                     you confirm one you have already chosen. -->
+                <!--
+                    A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel
+                    shuts. Sized to match the trigger's row height, smaller than a panel row's face.
+                -->
                 <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="variant === `ghost` ? 16 : 20" />
                 <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-sm text-muted" aria-hidden="true" />
             </slot>
         </template>
-        <!-- The label reveals itself only when this span actually clips it. A native `title` on the BUTTON said
-             the same words the button was already showing, in the browser's own box, a second behind the rest of
-             the app's hints, and stayed silent in the one case worth a hover, a name too long for the trigger. -->
+        <!--
+            Tooltip fires only on overflow; a native `title` just repeated visible text and stayed silent when
+            truncated.
+        -->
         <span
             class="min-w-0 flex-1 truncate text-left"
             :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``, labelClass]"
@@ -180,10 +147,8 @@ const applyPick = (option: PickerOption<T>): void => {
     </button>
 
     <ResponsiveOverlay v-model="open" :anchor="triggerEl ?? undefined" :header="header ?? ariaLabel" side="bottom" panel-class="w-max">
-        <!-- The trigger-width floor is the DESKTOP panel's, and only its. A sheet is already as wide as the
-             phone, and a min-width taken from a full-width trigger would push it wider than the screen. -->
-        <!-- The window clamp rides the same declaration rather than a class, because an inline max-width would
-             simply win over one and the panel would hang off the edge of a narrow window. -->
+        <!-- Trigger-width floor applies to the desktop panel only; a mobile sheet is already phone-width. -->
+        <!-- Window clamp is inline, not a class, since an inline max-width always wins the cascade. -->
         <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px`, maxWidth: `min(${panelMaxWidth}px, calc(100vw - 1rem))` }">
             <PickerPanel
                 :options="options"

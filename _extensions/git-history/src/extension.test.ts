@@ -2,9 +2,8 @@ import type { DocumentProviderRegistration, IntenticApi, RepoFacts } from "@inte
 import { describe, expect, it, vi } from "vitest";
 import { activate } from "./extension.js";
 
-/* WHICH ROWS GET THE ICON, and what the palette command opens. Worth a test because both answers are invisible
- * when they go wrong: a `detect()` that returns undefined costs the row its icon with nothing failing, and a
- * command that opens nothing looks exactly like a command that ran. */
+// Pins which rows get the icon and what the palette command opens; both fail silently, a wrong `detect()` or an empty
+// command looks like nothing went wrong.
 
 const facts = (repo: string): RepoFacts => ({
     repo,
@@ -18,8 +17,7 @@ const facts = (repo: string): RepoFacts => ({
     docs: false,
 });
 
-// Accepts every registration `activate` makes and records what it was handed: the same shape the host's real
-// api presents, narrowed to what this extension touches.
+// Records every registration `activate` makes, on a stub shaped like the host's api, narrowed to this extension.
 const capture = (repos: readonly RepoFacts[]) => {
     const documents: DocumentProviderRegistration[] = [];
     const commands = new Map<string, () => unknown>();
@@ -55,16 +53,14 @@ describe(`ext-git-history`, () => {
         expect(provider.detect(`not-a-repo`)).toBeUndefined();
     });
 
-    /* The workspace root is a repository the tree never draws a row for: it is the container every other repo is
-     * discovered inside, so `workspace.repos()` legitimately omits it. If this stops answering, root's history
-     * becomes unreachable rather than merely awkward. */
+    // The workspace root has no tree row (it's the container every other repo is discovered inside), so
+    // `workspace.repos()` omits it; if this breaks, root's history becomes unreachable.
     it(`offers the workspace root's history under the empty path`, () => {
         const { documents } = capture([]);
         expect(documents[0]!.detect(``)).toMatchObject({ title: `History` });
     });
 
-    // The icon has to appear the moment a repo is cloned, and `detect` reads the host's live facts to manage it:
-    // so a repo absent from one call and present in the next must flip the answer with no re-registration.
+    // detect() reads live facts, so a cloned repo must flip from undefined to a result with no re-registration.
     it(`tracks the live repo set rather than a snapshot taken at activation`, () => {
         const repos: RepoFacts[] = [];
         const documents: DocumentProviderRegistration[] = [];

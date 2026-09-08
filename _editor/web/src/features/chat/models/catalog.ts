@@ -3,25 +3,17 @@ import { formatDate } from "@intentic/ui/format";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
 import type { ConversationStatus } from "../session/conversation";
 
-/* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the permission modes
- * and the small presentational helpers (tab status icon, relative time). The provider/harness/model catalog
- * lives in @intentic/sandbox-contract (agent-catalog.ts), shared with the automations dialog; the live
- * per-provider model state, and the effort scale that is a property OF a model, live in conversation.ts. */
+// Chat UI metadata shared across surfaces: permission modes and small presentational helpers (tab status icon,
+// relative time). Model/provider/harness catalog lives in @intentic/sandbox-contract; live per-provider state
+// and effort scale live in conversation.ts.
 
-// How a capability badge renders in the model picker: icon-only chips, the label carried by the tooltip (three
-// text chips per row would starve the description's space). The set is exactly the capability flags a provider
-// reports (see ModelBadgeSchema), vision/agentic badges existed here while badges were hand-assigned by id
-// pattern, but no provider publishes those flags, so claiming them would have been our guess, not the truth.
+// Icon-only chips, label on the tooltip; the set matches the flags a provider actually reports.
 export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> = {
     reasoning: { label: `Reasoning`, icon: `sparkles` },
     fast: { label: `Fast`, icon: `bolt` },
 };
 
-/* How each permission mode reads in the selector. WHICH of them a conversation may pick is not decided here,
- * it is `modesFor(capabilities)` in the contract, because it is a property of the runtime rather than of the
- * menu. This split is the fix for the composer's oldest lie: the four modes were rendered unconditionally, so
- * "Ask before each file edit" sat above Codex, Grok and every ACP agent, none of which have an approval
- * channel at all, and each of which ran every tool call anyway. */
+// How each mode reads in the selector; which modes a runtime may pick is `modesFor(capabilities)`, not here.
 const MODE_META: Record<PermissionMode, { label: string; icon: IconName; description: string }> = {
     default: { label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
     acceptEdits: { label: `Edit automatically`, icon: `check-square`, description: `Apply file edits automatically.` },
@@ -66,13 +58,8 @@ export const statusLabel = (status: ConversationStatus): string => {
     return `Idle`;
 };
 
-// Desktop tab title color by status, layered UNDER statusIcon's glyph rather than replacing it: colour alone
-// is invisible to colourblind users and near-illegible on a truncated 2xs string.
-//
-// COLOUR ONLY, no pulse. `statusIcon` puts a turning spinner immediately to the left of this text, so a title
-// that also breathed was the second animation saying the one thing the first had already said, running for as
-// long as the turn does, in the strip the user looks at most. One live element per state: the spinner moves,
-// the title just changes colour.
+// Desktop tab title colour by status, layered under statusIcon's glyph, not replacing it (colour alone fails
+// colourblind/truncated text). Colour only, no pulse: the spinner already animates.
 export const statusTabClass = (status: ConversationStatus): string => {
     if (status === `streaming`) {
         return `text-link`;
@@ -86,12 +73,8 @@ export const statusTabClass = (status: ConversationStatus): string => {
     return ``;
 };
 
-/* Compact relative time for the history list (e.g. "5m", "3h", "2d", else a short date).
- *
- * `now` is for the callers that hold a TICK (the board's cards, the chat rail): reading the clock here makes the
- * answer invisible to Vue, so a component whose other props are still — a card sitting on a draft nobody is
- * touching — renders the age it was first built with and keeps it forever. Passing the tick in makes the age
- * depend on it. Everyone else omits it and gets the clock, which is what a one-shot render wants. */
+// Compact relative time ("5m", "3h", "2d", else a date). Pass `now` when the caller holds a tick (board
+// cards, chat rail); otherwise a still component's age freezes at first render.
 export const relativeTime = (ms: number, now = Date.now()): string => {
     const diff = now - ms;
     const min = Math.round(diff / 60000);

@@ -4,15 +4,14 @@ import { parseProcStat } from "../resources/proc-stat.js";
 
 const environ = (...pairs: string[]): string => `${pairs.join("\0")}\0`;
 
-// A tree the sweep has to reason about: the CLI, an MCP server under it, and the browser under that, all in one
-// process group and carrying one owner, because both are things a subtree inherits without anyone propagating.
+// A process tree: the CLI, an MCP server under it, and a browser under that, sharing one process group and owner.
 const tree = (owner: string, pgrp = 7): ScannedProcess[] => [
     { pid: 100, ppid: 1, pgrp, owner },
     { pid: 101, ppid: 100, pgrp, owner },
     { pid: 102, ppid: 101, pgrp, owner },
 ];
 
-// The default is this daemon's own group, with nothing of its work still live and no registry of its own.
+// Default policy: this daemon's own group, none of its work still live, no registry entries.
 const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}) => ({
     group: 7,
     ownerLive: () => false,
@@ -23,7 +22,6 @@ const policy = (overrides: Partial<Parameters<typeof leftoverProcesses>[1]> = {}
 
 test("the stamp says whose work it is and nothing else: no daemon identity to misread", () => {
     expect(workloadStamp("conv:with:colons")).toEqual({ [WORKLOAD_ENV]: "conv:with:colons" });
-    // An older sweep keyed on `<bootId>:<owner>` under the old name: nothing here is either.
     expect(WORKLOAD_ENV).not.toBe("INTENTIC_WORKLOAD");
 });
 
@@ -52,32 +50,25 @@ test("nothing goes while the turn is still live", () => {
     expect(leftoverProcesses(tree("conv-1"), policy({ ownerLive: (owner) => owner === "conv-1" }))).toEqual([]);
 });
 
-/* THE ONE THAT COST FOUR TURNS, TWICE, ON 2026-08-11, and the reason identity moved to the process group. This
- * repository is the daemon, so an agent runs it from source to watch a change work; that second daemon is in the
- * group of the shell that started it, and every process of the live daemon's is in another. It cannot mistake
- * them for its own, cannot be talked out of it by a stale checkout of this file, and does not have to be right
- * about anything: the processes are simply not in the set it enumerates. */
 test("another daemon's processes are not this daemon's business, however they are stamped", () => {
     const theirs = tree("conv-1", 4242);
     expect(leftoverProcesses(theirs, policy())).toEqual([]);
-    // Including when their owner is one this daemon would otherwise recognise as finished work of its own.
+    // The second call adds a `conv-1` process in this daemon's own group, to prove only the foreign group is excluded.
     expect(leftoverProcesses([...theirs, ...tree("conv-1")], policy()).map((entry) => entry.pid)).toEqual([100, 101, 102]);
 });
 
-/* The second licence: a pane's processes are forked by the tmux server (their group is the pane's, never this
- * daemon's), so a `setsid` survivor of a killed agent session is stamped, out-of-group, and reachable exactly
- * because its owner is a conversation this daemon's registry knows. */
+// A pane's processes are forked by the tmux server and carry the pane's group, not the daemon's; only the registry can
+// identify them.
 test("an out-of-group survivor whose owner this registry knows is reclaimed once its pane is gone", () => {
     const survivor: ScannedProcess[] = [{ pid: 600, ppid: 1, pgrp: 601, owner: "conv-1" }];
     expect(leftoverProcesses(survivor, policy({ ownerKnown: (owner) => owner === "conv-1" })).map((entry) => entry.pid)).toEqual([600]);
-    // Not while its owner still runs, and never for an owner this registry has no entry for.
     expect(leftoverProcesses(survivor, policy({ ownerKnown: () => true, ownerLive: () => true }))).toEqual([]);
     expect(leftoverProcesses(survivor, policy())).toEqual([]);
 });
 
 test("the reserved owners never pass the registry licence: the pools stay group-ruled", () => {
     const pooled: ScannedProcess[] = [{ pid: 700, ppid: 1, pgrp: 701, owner: "daemon" }];
-    // ownerKnown is the registry's answer, and "daemon" is not a conversation: the composition wires it so.
+    // ownerKnown here treats every owner except "daemon" as known, since "daemon" is not a conversation.
     expect(leftoverProcesses(pooled, policy({ ownerKnown: (owner) => owner !== "daemon" }))).toEqual([]);
 });
 

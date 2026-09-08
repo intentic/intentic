@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { createRequest, resolveRequest, restoreRequest } from "./agent-requests.js";
 
-/* The registry decides what every client will be told about a card's fate, so what matters here is the one
- * distinction only it can draw: an answer a user actually gave versus the stand-in an abort settles with. */
+// The registry decides what every client is told about a card's fate: a real answer versus the abort's stand-in is the
+// one distinction it draws.
 
 const onAbort = { kind: "question", requestId: "", cancelled: true } as const;
 
@@ -25,9 +25,9 @@ test("an abort settles the caller with its stand-in, but resolves the card as an
     controller.abort();
 
     const { reply, resolved } = await settled;
-    // The caller still gets an answer: the SDK's tool handler must never hang holding the turn open...
+    // The caller still gets a reply: the SDK's tool handler must never hang holding the turn open.
     expect(reply).toBe(onAbort);
-    // ...but nobody chose it, so it must not replay as a decision: no reply, and the card freezes cancelled.
+    // But nobody chose it, so it must not replay as a decision: no reply, and the card freezes cancelled.
     expect(resolved).toEqual({ kind: "resolved", requestId: id });
 });
 
@@ -51,8 +51,8 @@ test("a reply for another kind of card settles as the abort value rather than an
     expect(resolved).toEqual({ kind: "resolved", requestId: id });
 });
 
-// The restart path: a card restored from the journal answers to the id it was raised with one process ago:
-// the id every replayed frame and saved answer draft still holds.
+// A card restored from the journal answers to the id it was raised with one process ago, the id a replayed frame and
+// saved draft still hold.
 test("a restored card settles under its original id", async () => {
     const { id, wait } = restoreRequest("r-restored", "question", onAbort, "c-1");
     expect(id).toBe("r-restored");
@@ -76,10 +76,8 @@ test("only the first settle counts: a second reply for the same id finds nothing
     expect(resolved).toEqual({ kind: "resolved", requestId: id, reply: { kind: "question", requestId: id, cancelled: true } });
 });
 
-/* WHO MAY ANSWER, the one card-level check in the registry, and the reason it is here rather than in the
- * reply route: the card holds the list, and a second copy of "who may release this" in the route is the copy
- * that goes stale. A refusal must leave the card standing, or a stranger's click becomes a way to cancel
- * somebody else's parked turn. */
+// Who may answer is a card-level check here, not in the reply route, since a second copy of the list there is the one
+// that goes stale. A refusal must leave the card standing.
 const approver = { email: "bob@corp.com", role: "collaborator" } as const;
 
 test("a caller the card does not name is refused, and the card stays parked for one who is", async () => {
@@ -91,8 +89,7 @@ test("a caller the card does not name is refused, and the card stays parked for 
     expect(resolveRequest({ kind: "credential_offer", requestId: id, approve: true }, { email: "eve@corp.com", role: "maintainer" })).toEqual({
         refused: "Only bob@corp.com can release this credential",
     });
-    // A no from a stranger is refused too: letting one skip a release on the approver's behalf would make the
-    // gate a denial-of-service anybody with a session could aim at a running turn.
+    // A stranger's no is refused too, or skipping a release on the approver's behalf becomes a denial-of-service.
     expect(resolveRequest({ kind: "credential_offer", requestId: id, approve: false }, { email: "eve@corp.com", role: "maintainer" })).toEqual({
         refused: "Only bob@corp.com can release this credential",
     });
@@ -101,8 +98,7 @@ test("a caller the card does not name is refused, and the card stays parked for 
 
     const { reply, caller } = await settled;
     expect(reply).toEqual({ kind: "credential_offer", requestId: id, approve: true });
-    // Who answered rides back on the settlement: it is the only road that name travels, because the reply
-    // itself carries no sender.
+    // Who answered rides back on the settlement; the reply itself carries no sender.
     expect(caller).toEqual(approver);
 });
 
@@ -115,8 +111,7 @@ test("a reply with no verified identity is refused where the card names anybody"
     expect(resolveRequest({ kind: "credential_offer", requestId: id, approve: true })).toBe("missing");
 });
 
-// Every other card in the sandbox has no list, so an anonymous loopback caller still answers it, and nothing
-// is attributed to anybody.
+// Every other card has no list, so an anonymous caller still answers it, with nothing attributed to anybody.
 test("a card with no approver list settles for any caller, and records none", async () => {
     const { id, wait } = createRequest("question", onAbort);
     const settled = wait(new AbortController().signal);

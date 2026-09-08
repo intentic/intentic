@@ -1,21 +1,16 @@
 import { extname } from "node:path";
 import { fileTypeFromFile } from "file-type";
 
-/* WHICH FILES FILEQ CAN TURN INTO MARKDOWN, and how one is recognized. This table is the package's public
- * face twice over: the CLI routes on it, and the daemon imports it (`@intentic/fileq/formats`) to decide
- * which watcher paths are worth a fileq spawn at all — one source, so the daemon's cheap pre-filter and the
- * CLI's real routing can never disagree about what is derivable.
- *
- * Recognition mirrors the daemon's workspace classifier (sandbox/src/workspace/classify.ts): magic bytes
- * first, extension as the fallback for the text-based formats magic is blind to (.html has no signature).
- * Magic wins over a lying extension in BOTH directions — a docx renamed .zip still derives, and a .docx that
- * is really something else is refused rather than fed to a parser that will produce nonsense. */
+// Which files fileq can turn into markdown, shared by the CLI (routes on it) and the daemon (its cheap pre-filter), so
+// the two can never disagree about what's derivable.
+// Recognition mirrors the daemon's workspace classifier: magic bytes first, extension as fallback for formats magic
+// can't see (.html has no signature).
+// Magic wins over a lying extension both ways: a renamed docx still derives, a fake .docx is refused rather than
+// mis-parsed.
 
 export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "epub";
 
-/* file-type's `ext` for every container we handle → the deriver that handles it. file-type resolves OOXML
- * and OpenDocument containers and EPUBs to their own ext (docx/odt/epub, not zip), which is the whole reason
- * to prefer it over sniffing application/zip ourselves. */
+// file-type's ext per container to its format; preferred over sniffing zip since it names OOXML/ODF/EPUB.
 const MAGIC_FORMAT: Record<string, Format> = {
     docx: "docx",
     xlsx: "xlsx",
@@ -43,15 +38,14 @@ const MAGIC_FORMAT: Record<string, Format> = {
     mkv: "media",
 };
 
-// Extension → format, for files magic cannot identify (html) and as the pre-filter the sweep and the daemon
-// run before paying for a magic read. Keys are lowercase extnames WITH the dot, the shape extname() returns.
+// Extension to format, for magic-blind files (html) and as a pre-filter before a magic read.
 export const EXTENSION_FORMAT: Record<string, Format> = {
     ".docx": "docx",
     ".xlsx": "xlsx",
     ".pptx": "pptx",
     ".odt": "odt",
     ".epub": "epub",
-    ".ipynb": "ipynb", // JSON: no magic bytes can name it, so the extension is the whole recognition
+    ".ipynb": "ipynb", // JSON: no magic bytes name it, so the extension is the whole recognition.
     ".pdf": "pdf",
     ".png": "image",
     ".jpg": "image",
@@ -77,20 +71,17 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
     ".htm": "html",
 };
 
-/** The cheap pre-filter: could this path, by name alone, have a derivable format? The daemon runs this over
- * every watcher batch so an ordinary code edit never costs a fileq spawn. */
+/** Cheap pre-filter: could this path, by name alone, have a derivable format? Runs over every watcher batch. */
 export const isCandidatePath = (path: string): boolean => extname(path).toLowerCase() in EXTENSION_FORMAT;
 
-// The zip-underneath formats (OOXML, OpenDocument, EPUB): the one place a plain-container magic verdict
-// defers to the extension, because generators exist whose output file-type can only call "zip" (an
-// OpenDocument whose `mimetype` entry is not first, an EPUB packed by a plain zip tool) while the extension
-// names which container it is. The deriver then fails loudly on a lie instead of this table guessing silently.
+// Zip-underneath formats where magic can only say "zip"; the extension names the real container instead.
 const ZIP_CONTAINERS: ReadonlySet<Format> = new Set(["docx", "xlsx", "pptx", "odt", "epub"]);
 
-/** What a file actually is: magic bytes first, extension only when the bytes say nothing (or say only "some
- * zip" where the extension claims an OOXML container). A file whose magic names a format we do not derive
- * (a .html that is really a png) answers undefined rather than falling back — the extension was lying, and a
- * parser fed the lie produces garbage with a confident face. */
+/**
+ * Magic bytes first, extension only when magic says nothing or just "zip" where the extension claims an OOXML
+ * container.
+ * A magic verdict for a format not derived here answers undefined rather than falling back to a lying extension.
+ */
 export const detectFormat = async (absPath: string): Promise<Format | undefined> => {
     const byExtension = EXTENSION_FORMAT[extname(absPath).toLowerCase()];
     const magic = await fileTypeFromFile(absPath).catch(() => undefined);

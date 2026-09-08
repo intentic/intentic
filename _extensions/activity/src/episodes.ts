@@ -1,33 +1,19 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { formatDayMonth } from "@intentic/extension-ui/format";
 
-/* THE AUDIT LOG READ AS THINGS THAT HAPPENED, not as rows that were appended.
- *
- * The daemon's log is deliberately event-per-append: a turn writes `turn.started`, maybe `turn.plan`, maybe
- * `turn.error`, then `turn.completed`, plus one row per outbound provider call it made. That is the right shape
- * to WRITE (each append is one fact, and a crash mid-turn loses nothing) and the wrong shape to READ, five rows
- * saying "a turn ran" is five times the scrolling and none of the answer. Measured on a real log: 1,929 events
- * for 837 turns, every one of them titled "Turn started"/"Turn completed" over a session UUID.
- *
- * So this module collapses events into EPISODES (one turn, one inbound message, one health event) and events
- * into SOURCES (who set it off). Both are pure functions over the fetched page, no request, no clock, no Vue,
- * because the interesting logic here is the grouping and grouping is exactly what is worth testing.
- *
- * WHO SET IT OFF is the axis the whole view hangs on, and it is NOT the event's `provider`. On a turn, `provider`
- * is the runtime that SERVED it (claude/codex/gemini/kimi); the thing that CALLED is `origin.provider`, or
- * nobody, which means the user typed it. Filing turns under their runtime is what made the old view claim to be
- * about Discord while showing 1,600 rows of the user's own work. */
+// Collapses the daemon's event-per-append log into EPISODES (one turn, message, or event) and SOURCES (who set it off);
+// pure functions over a fetched page, no request, no clock, no Vue. `provider` is the runtime that served a turn; the
+// caller is `origin.provider` or nobody (the user).
 
-// A rail entry. Bounded by how many things can call the agent, never by how much traffic they send, which is
-// the whole reason the rail can stay a list while the timeline cannot.
+// A rail entry: bounded by how many things can call the agent, not by how much traffic they send, so the rail stays a
+// short list while the timeline doesn't.
 export interface Source {
     readonly key: string;
-    // connections: something outside the browser calls in (and may have live gateway state).
-    // direct: the user, typing. Kept apart because it is the one source that is not a connection at all.
+    // connections: something outside the browser calling in, maybe with live gateway state.
+    // direct: the user, typing; the one source that isn't a connection.
     readonly group: "connections" | "direct";
     readonly label: string;
-    // Live gateway state, for a source the daemon is actually holding a connection for. Absent on a source known
-    // only from the log (a provider that has gone quiet, or one that never had a gateway).
+    // Live state for a source the daemon currently holds a connection for; absent for one known only from the log.
     readonly gateway?: ActivityStatus["connections"][number]["gateway"];
     readonly lastError?: string;
     readonly episodes: number;
@@ -35,28 +21,20 @@ export interface Source {
     readonly lastAt?: number;
 }
 
-// One thing that happened. `events` keeps the raw rows so the row can expand to exactly what the daemon wrote,
-// the audit trail must stay inspectable, or collapsing it is hiding it.
+// One thing that happened; `events` keeps the raw rows so a row can expand to exactly what the daemon wrote.
 export interface Episode {
     readonly key: string;
     readonly sourceKey: string;
-    // When it BEGAN (the oldest event in the group), so the timeline orders by when the work started rather than
-    // by when it happened to finish.
+    // When the group began (its oldest event), not when it finished.
     readonly at: number;
     readonly kind: "turn" | "message" | "event";
     readonly label: string;
-    /* WHETHER THE LABEL IS A NAME OR A CLIPPING OF THE CONTENT, which decides whether `detail` is worth
-     * previewing under it. A titled conversation has a name of its own, so its prompt is a second fact; every
-     * other episode takes its label FROM the content via `headline`, so a preview of that content is the same
-     * sentence twice, once clipped and once whole. The row cannot tell the two apart by comparing them: a
-     * headline is a PREFIX of its detail, never equal to it, as soon as the content passes a line break or the
-     * 120-character clip. */
+    // Whether the label is a real name or a clipped preview; only a real name makes `detail` worth showing too.
     readonly titled?: boolean;
-    // The daemon's own event type, humanised, carried only by a single-event episode, where the label is the
-    // event's content and the type is the other half of what happened. A turn's row states its kind by shape.
+    // Humanised event type; only on a single-event episode, where the label is its content instead.
     readonly typeName?: string;
     readonly detail?: string;
-    // The runtime that served a turn, a facet of the row, deliberately not a source of its own.
+    // The runtime that served a turn; a facet of the row, not a source of its own.
     readonly runtime?: string;
     readonly channelId?: string;
     readonly author?: string;
@@ -67,16 +45,15 @@ export interface Episode {
     readonly error?: string;
     readonly durationMs?: number;
     readonly costUsd?: number;
-    // Provider calls the turn made, the "and then it replied" half of a wake, folded into the wake's own row.
+    // Provider calls the turn made, folded into the wake's own row instead of their own.
     readonly outbound: number;
     readonly events: readonly ActivityEvent[];
 }
 
-/* Two reserved source keys for the callers that are not providers. Safe against collision because a provider key
- * comes from a capability's `provider` config or a listener trigger, and neither can be spelled these. */
-// The user, typing. The one source that is not a connection at all.
+// Reserved keys for non-provider callers, safe from collision since a provider key can't be spelled these.
+// The user, typing; the one source that isn't a connection.
 export const DIRECT = `you`;
-// Provider-less automation wakes (a cron fire, a webhook): something called, but no connection received it.
+// Provider-less automation wakes (cron, webhook): something called, but no connection received it.
 export const SCHEDULE = `schedule`;
 
 const SOURCE_LABELS: Readonly<Record<string, string>> = {
@@ -92,9 +69,8 @@ export const sourceLabel = (key: string): string => SOURCE_LABELS[key] ?? key.ch
 
 const isTurn = (event: ActivityEvent): boolean => event.type.startsWith(`turn.`);
 
-/* Which source an event belongs to. A turn goes to whatever WOKE it and falls back to the user; everything else
- * goes to the provider that carried it. The provider-less remainder is an automation nothing external triggered,
- * which is a schedule or a webhook, filed as such rather than dropped into the user's own work. */
+// A turn files under whatever woke it, falling back to the user; everything else files under its provider.
+// Provider-less non-turns are automation nothing external triggered, filed as a schedule rather than the user's work.
 export const sourceKeyOf = (event: ActivityEvent): string => {
     if (isTurn(event)) {
         return event.origin?.provider ?? DIRECT;
@@ -118,8 +94,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
     "voice.session_ended": `Voice session ended`,
     "automation.run": `Automation run`,
     "automation.pending": `Automation held for approval`,
-    // The dependency verifier's chain (workspace/verify-deps.ts): every step after a land drifts the tree
-    // leaves one of these, which is what makes the install→checks→fix chain auditable after the fact.
+    // The dependency verifier's chain (workspace/verify-deps.ts): each step after a land leaves one of these.
     "deps.install_started": `Installing dependencies`,
     "deps.install_failed": `Dependency install failed`,
     "deps.install_lost": `Dependency install unwatched`,
@@ -136,7 +111,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
 
 export const typeLabel = (type: string): string => TYPE_LABELS[type] ?? type;
 
-// First line only, and short: a prompt is up to 2,000 characters and a row is one line tall.
+// First line only, clipped short: a prompt can run to 2,000 characters, a row is one line tall.
 const headline = (text: string): string => {
     const line = text.split(`\n`).find((candidate) => candidate.trim() !== ``) ?? ``;
     return line.length > 120 ? `${line.slice(0, 119)}…` : line;
@@ -157,18 +132,12 @@ const firstOf = <T>(events: readonly ActivityEvent[], pick: (event: ActivityEven
     return undefined;
 };
 
-/* WHO A ROW IS ABOUT, in order of how directly they said it: the outside sender a listener relayed
- * (`origin.author`), the inbound message's own author, or the party the daemon verified asking for the turn
- * (`actor`: a member's email, or `token:<label>` for a control token). One answer for both the folded turn and
- * the single event, so a CI-started turn and a Discord-started one fill the same column. */
+// Who a row is about: the relayed sender (`origin.author`), the message's own author, or the verified actor (an email
+// or `token:<label>`). One answer for both a folded turn and a single event.
 const whoAsked = (event: ActivityEvent): string | undefined => event.origin?.author ?? event.author ?? event.actor;
 
-/* One turn's events → one episode. `events` is that turn's rows, oldest first.
- *
- * The label walks three fallbacks because each one is a real state of a real turn: a titled conversation has a
- * name; a brand-new one does not yet (the auto-namer runs concurrently with the turn, so its first events are
- * written before it has one) and the prompt's first line is the best thing anybody could show; a turn with
- * neither is an internal one-shot with no conversation at all. */
+// One turn's events, oldest first, folded into one episode. Label falls back through conversation title, then the
+// prompt's first line (the auto-namer may not have run yet), then a bare 'Turn' for a one-shot with no conversation.
 const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode => {
     const lifecycle = events.filter(isTurn);
     const outbound = events.filter((event) => event.direction === `out`);
@@ -183,8 +152,7 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
         at: (events[0] as ActivityEvent).at,
         kind: `turn`,
         label: firstOf(events, (event) => event.title) ?? (prompt === undefined ? `Turn` : headline(prompt)),
-        // Only a conversation's own name makes the prompt below it a second fact; a label clipped out of that
-        // same prompt does not.
+        // `titled` only when the label is a real name; a label clipped from the prompt itself is not a second fact.
         ...(firstOf(events, (event) => event.title) !== undefined ? { titled: true } : {}),
         ...(prompt !== undefined ? { detail: prompt } : {}),
         ...(firstOf(lifecycle, (event) => event.provider) !== undefined ? { runtime: firstOf(lifecycle, (event) => event.provider) } : {}),
@@ -196,8 +164,7 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
         ...(firstOf(events, (event) => event.automationIds) !== undefined ? { automationIds: firstOf(events, (event) => event.automationIds) } : {}),
         failed: failure !== undefined,
         ...(failure?.error !== undefined ? { error: failure.error } : {}),
-        // Prefer what the runtime measured; fall back to the span between the marks, which is all an aborted
-        // turn (no completion frame) ever has.
+        // Prefers the runtime's own measurement; falls back to the span between marks for an aborted turn.
         ...(durationMs !== undefined
             ? { durationMs }
             : completed !== undefined && started !== undefined
@@ -205,17 +172,13 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
               : {}),
         ...(numberFrom(completed?.extra, `costUsd`) !== undefined ? { costUsd: numberFrom(completed?.extra, `costUsd`) } : {}),
         outbound: outbound.length,
-        // Already oldest-first (toEpisodes groups in write order), which is the order a turn's story reads in.
+        // Already oldest-first: `toEpisodes` groups in write order.
         events,
     };
 };
 
-/* An event that belongs to no turn: an inbound message, a gateway failure, an automation run, and every event
- * already on disk from before turns carried an id.
- *
- * What it says comes from its CONTENT when it has any, with the type demoted to a chip beside it. A row reading
- * "Turn started" over a hidden prompt is the old view's central failure repeated: the type is the least
- * informative thing on the row, and it is the one thing the row was spending its whole width on. */
+// An event with no turn: an inbound message, a gateway failure, an automation run, or a pre-turnId row. Labelled from
+// its content when there is any, with the type demoted to a secondary fact.
 const looseEpisode = (event: ActivityEvent): Episode => ({
     key: event.id,
     sourceKey: sourceKeyOf(event),
@@ -224,8 +187,7 @@ const looseEpisode = (event: ActivityEvent): Episode => ({
     label: event.content === undefined ? typeLabel(event.type) : headline(event.content),
     ...(event.content !== undefined ? { typeName: typeLabel(event.type) } : {}),
     ...(event.content !== undefined ? { detail: event.content } : {}),
-    // On a turn event `provider` is the runtime that served it, worth showing. On a channel event it is the
-    // channel, already the row's source, so repeating it would just be noise.
+    // Only shown for a turn event; on a channel event, `provider` just repeats the row's own source.
     ...(isTurn(event) && event.provider !== undefined ? { runtime: event.provider } : {}),
     ...(event.channelId !== undefined ? { channelId: event.channelId } : {}),
     ...(whoAsked(event) !== undefined ? { author: whoAsked(event) } : {}),
@@ -237,12 +199,11 @@ const looseEpisode = (event: ActivityEvent): Episode => ({
     events: [event],
 });
 
-// Newest first, matching the order the daemon serves and the order a feed is read in.
+// Newest first, matching the order the daemon serves and a feed is read in.
 export const toEpisodes = (events: readonly ActivityEvent[]): Episode[] => {
     const turns = new Map<string, ActivityEvent[]>();
     const loose: Episode[] = [];
-    // Oldest first while grouping, so each turn's own array is in the order the turn wrote it, which is what
-    // lets `at` be the start and the raw list read forwards.
+    // Grouped oldest first, so a turn's own array reads forwards and `at` is its start.
     for (const event of [...events].toReversed()) {
         if (event.turnId === undefined) {
             loose.push(looseEpisode(event));
@@ -258,11 +219,8 @@ export const toEpisodes = (events: readonly ActivityEvent[]): Episode[] => {
     return [...loose, ...[...turns].map(([turnId, group]) => turnEpisode(turnId, group))].toSorted((a, b) => b.at - a.at);
 };
 
-/* The rail. Every source the log knows about, UNIONED with every connection the daemon is currently holding,
- * a Discord bot that has been quiet all day still has to appear, because "connected and silent" is an answer to
- * the question the rail is asked, and a source that only exists in the log (a provider since disconnected) still
- * has history worth reaching. Sorted by most recent activity within each group, so the rail reorders itself
- * around whatever is live rather than around an alphabet. */
+// Every source in the log, unioned with every currently-held connection, so a quiet-but-connected bot still appears.
+// Sorted by most recent activity, not alphabetically.
 export const toSources = (episodes: readonly Episode[], connections: readonly ActivityStatus["connections"][number][]): Source[] => {
     const tally = new Map<string, { episodes: number; failed: number; lastAt: number }>();
     for (const episode of episodes) {
@@ -273,11 +231,7 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
             lastAt: Math.max(current.lastAt, episode.at),
         });
     }
-    // A provider with several bots reports one connection each; the rail is per PROVIDER, so the worst state wins
-    //, a rail row that reads "ready" while one of its two bots is down would be the one lie that matters here.
-    // Worst first: the representative a provider gets is its HEALTHIEST connection, so a second number that is
-    // still being linked never speaks for one that is already carrying messages. `pairing` sits just above
-    // outright disconnected, the socket is up, but nothing it can do will finish the job.
+    // Per provider: worst bot state wins; `pairing` ranks just above disconnected.
     const RANK: Readonly<Record<ActivityStatus["connections"][number]["gateway"], number>> = {
         disconnected: 0,
         pairing: 1,
@@ -311,8 +265,7 @@ export const toSources = (episodes: readonly Episode[], connections: readonly Ac
     return sources.toSorted((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0) || a.label.localeCompare(b.label));
 };
 
-// Free-text match over what the row actually shows plus the ids it hides, someone pasting a session id from a
-// bug report should find the turn, and someone typing a channel name should find the conversation.
+// Matches against what the row shows plus the ids it hides, so a pasted session id or channel name still finds it.
 export const matches = (episode: Episode, query: string): boolean => {
     const needle = query.trim().toLowerCase();
     if (needle === ``) {
@@ -333,8 +286,7 @@ export const matches = (episode: Episode, query: string): boolean => {
         .includes(needle);
 };
 
-// Day dividers. "Today"/"Yesterday" beat a date for the two days that carry almost all of the traffic, and a
-// date is clearer than "6 days ago" for everything older.
+// "Today"/"Yesterday" for the two most recent days; a date, not a relative count, for anything older.
 const dayLabel = (at: number, now: number): string => {
     const midnight = new Date(now).setHours(0, 0, 0, 0);
     if (at >= midnight) {
@@ -343,7 +295,7 @@ const dayLabel = (at: number, now: number): string => {
     return at >= midnight - 86_400_000 ? `Yesterday` : formatDayMonth(at);
 };
 
-// Episodes grouped into consecutive day runs, order preserved, the timeline renders these as its sections.
+// Episodes grouped into consecutive day runs, order preserved; the timeline renders these as sections.
 export const byDay = (episodes: readonly Episode[], now: number): { label: string; episodes: Episode[] }[] => {
     const days: { label: string; episodes: Episode[] }[] = [];
     for (const episode of episodes) {

@@ -28,10 +28,8 @@ import { landAgent, outstandingConflicts } from "./land/land.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { describeLandingInBackground } from "./land/landed-subject.js";
 
-// The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
-// (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
-// or discard it. An unknown {id} is NOT_FOUND; land/discard/archive while the conversation's turn is running
-// is CONFLICT, the worktree is the turn's live working state.
+// Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
+// discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
     const entryOf = (id: string): PersistedAgent => {
@@ -41,8 +39,8 @@ export const createAgentsRoutes = (services: Services) => {
         }
         return entry;
     };
-    // The branch-backed half of the registry, for the routes that act on a worktree. A workspace conversation is
-    // a legitimate agent that simply cannot answer these, so it is BAD_REQUEST rather than NOT_FOUND.
+    // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
+    // so it's BAD_REQUEST, not NOT_FOUND.
     const isolatedEntryOf = (id: string): IsolatedAgent => {
         const entry = entryOf(id);
         if (!isIsolated(entry)) {
@@ -55,67 +53,20 @@ export const createAgentsRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
         }
     };
-    /* THE LAND GUARD, which is a softer thing than notRunning and deliberately so.
-     *
-     * Discard and archive take the whole worktree away, so a live turn rules them out flatly. A land only READS
-     * that checkout and copies what it finds into the main tree, and the copy arrives as uncommitted changes
-     * the user reviews, so the question is not "is a turn alive" but "is anyone mid-sentence".
-     *
-     * Two of the three answers let it through. A turn PARKED on a question or a permission card is writing
-     * nothing, and refusing there was the sharpest form of the bug: the turn could only end once the user
-     * answered, so "wait for it to finish" asked them to do the very thing they had come here instead of doing.
-     * A turn genuinely mid-write is the one real hazard, half a rename, three files of five, and that is the
-     * user's call to make with the facts in front of them, so it costs an explicit `force` rather than a
-     * refusal. Both halves of that hazard are recoverable, which is why it is a warning and not a wall: the
-     * land is uncommitted, and the remainder of the turn lands on top of it at completion.
-     *
-     * Unforced mid-write still answers CONFLICT, and the message says which of the two states it means, the
-     * old one named the wrong one for a parked agent and sent people to wait on a turn that was waiting on
-     * them. */
+    // Softer than notRunning: a land only reads the checkout, so it asks whether anyone is mid-sentence, not whether
+    // the turn is alive. Parked on a question passes; genuine mid-write needs an explicit `force`.
     const landable = (id: string, force: boolean): void => {
         if (services.agents.writing(id) && !force) {
             throw new ORPCError("CONFLICT", { message: "the agent is still writing, land again to apply its work as it stands" });
         }
     };
-    /* Which SDK session holds this conversation's transcript, asked of the REGISTRY, which recorded it from
-     * the turn's own `session` frame, never re-derived from where the turn happened to run. An isolated turn
-     * runs in a mount namespace where its worktree IS the workspace root (agents/isolation.ts), so the SDK
-     * files the session under the root's project key and the worktree path is not a project key at all.
-     * Probing that directory answered "no session" for every isolated agent, and a card with no transcript
-     * reads as a conversation that never happened.
-     *
-     * `sessionIdOf` and not `entry.sessionId`: the entry is only flushed with the id at finish, so a running
-     * first turn, the one most likely to be opened, would otherwise have none. */
+    // Recorded from the turn's `session` frame, not re-derived from where it ran: an isolated worktree is the workspace
+    // root, so its path has no session. `sessionIdOf`, not `entry.sessionId`, flushed only at finish.
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
         capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
-    /* HOW THIS CONVERSATION'S LAST TURN ENDED, when it left work behind: everything a reopened tab needs to
-     * offer the press instead of asking for the word (AgentTranscriptSchema.ending).
-     *
-     * Off the PROJECTED status, never `entry.status`: the entry carries `interrupted` for the whole of a running
-     * turn, on purpose, so that a daemon dying under it leaves the right mark (agents-store.ts), and reading it
-     * raw would tell every client opening a working agent that its turn had stopped. `get` is the same
-     * projection the roster publishes, so the chat and the card cannot disagree about the same session.
-     *
-     * FOUR ENDINGS, and the two that had to be added are the two that outlive the window that met them.
-     *
-     * A STOP somebody pressed and a turn its DAEMON WAS KILLED UNDER were the whole of this answer while it was
-     * a boolean, and they are the two the record has always been able to state on its own.
-     *
-     * A SPENT ALLOWANCE is the one this was written for. It was left out on the grounds that the strip's
-     * sentence turns on whether the refused turn got anywhere, which the summary does not keep — true, and the
-     * wrong conclusion: `pendingLimit` keeps exactly that, one import away, and the ending that reliably lasts
-     * eight hours was therefore the ending most likely to be met by a window that had not been watching. So it
-     * reached a reopened chat as nothing at all, and the press it wants (a re-run of the held turn, adding
-     * nothing to the transcript) was replaced by a person typing "Continue" into the composer, which is the
-     * appended message the hold exists to avoid.
-     *
-     * A PROVIDER OUTAGE is the same offer with nothing to promise about timing: the daemon's breaker may have
-     * spent its attempts, so what the record can honestly say is that the turn is here and a press picks it up.
-     *
-     * Deliberately not the failures that name something to REPAIR (a dead credential, a seat nobody enabled, a
-     * model the provider does not serve). Continuing those re-fails by construction, and an offer that re-fails
-     * teaches people to stop trusting the offer. */
-    // The held turn as the ending states it: whether it ran, what each way on costs, where a policy is moving it.
+    // Off the projected `get` status, never raw `entry.status`, which stays `interrupted` through a running turn. Adds
+    // reasons stop/kill don't cover (a spent allowance, an outage); repair failures are excluded.
+    // Whether the held turn ran, what each way of moving on costs, and where a policy is sending it.
     const heldEnding = (held: LimitFailure): NonNullable<TurnEnding["held"]> => ({
         ran: held.ran,
         ...(held.contextTokens !== undefined ? { contextTokens: held.contextTokens } : {}),
@@ -130,20 +81,12 @@ export const createAgentsRoutes = (services: Services) => {
         if (summary.status === "stopped" || summary.status === "interrupted") {
             return { reason: "stopped" };
         }
-        // Every reading below describes the failure the card is CURRENTLY reporting, which is the only state
-        // that publishes `failureCode` at all (agents-registry's reportedFailure): a turn since resumed, landed
-        // or overtaken has had the whole account of its death dropped, and answering off a stale one would
-        // offer a press against a turn that is no longer the last word.
+        // Reads the failure the card currently reports; a resumed, landed or overtaken turn has none (agents-registry).
         if (summary.status !== "error") {
             return undefined;
         }
         if (summary.failureCode === "rate_limit") {
-            /* The LIVE hold, not the summary's `limitHeld` flag, and the difference is what the press means. The
-             * flag says the frame carried a hold when the turn died; the map says the daemon can still act on
-             * one now, and it alone carries `ran`. They part company exactly where it matters most — a daemon
-             * restarted overnight drops every held turn (agents-registry strips `limitHeld` on load, and this
-             * map goes with the process), so reading the flag would promise a re-run that answers NOT_FOUND and
-             * send the user back to typing the word. */
+            // Live hold, not the summary's `limitHeld` flag: a restart clears it, so only it backs a re-run.
             const held = pendingLimitFailure(id);
             return {
                 reason: "limit",
@@ -155,62 +98,29 @@ export const createAgentsRoutes = (services: Services) => {
         if (summary.failureCode === "provider-outage") {
             return { reason: "outage" };
         }
-        /* UNCODED ERRORS ARE STOPPED WORK, not repairs: the harness died mid-run, the agent stopped answering,
-         * a turn ended in a subtype nobody has a sentence for ("agent did not complete"), or OpenCode went
-         * silent until the watchdog fired ("turn timed out waiting for OpenCode"). Nothing is broken that the
-         * user could go and fix, the session is intact, and the only thing between the work and its finish is
-         * somebody saying carry on — which is exactly what `{ reason: "stopped" }` offers (turnFailures.ts arms
-         * the same pick-up when `code === undefined`). Named codes above are excluded on purpose. */
+        // Uncoded error is stopped work: nothing to repair, so `{ reason: "stopped" }` offers to just carry on.
         return summary.failureCode === undefined ? { reason: "stopped" } : undefined;
     };
-    // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
-    // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
-    // `archived` was lost, the router kept compiling and the archive door quietly stopped rendering) fails no
-    // build and no test. The router builder types the shape against agentsContract, so the next one is a
-    // typecheck error instead of a 404 the browser swallows.
+    // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
     return i.router({
-        /* Every roster read carries the revision it was taken at, so the browser can tell this answer apart
-         * from the /events snapshots racing it, see AgentsListSchema.
-         *
-         * The refresh first is what makes a roster read SELF-HEALING. Every other trigger fires on something
-         * the daemon did; a hand-merge in a terminal, a rebuild, a sibling agent's land absorbing the same
-         * hunks all move the shas with nothing to hook. Loading the board is the moment the user is asking
-         * about, so it is the honest place to re-ask git, and it also broadcasts, every other open surface
-         * heals with it. */
+        // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
+        // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
         list: i.list.handler(async () => {
             await services.agents.refreshStandings();
-            // The approvals queue rides along as `held`, the wakes waiting at the door belong on the board
-            // beside the agents that got through it. Approve/reject stay the automations routes' verbs.
+            // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs.
             return { agents: services.agents.list(), rev: services.agents.revision(), held: await services.heldWakes.list() };
         }),
-        // The archive's own roster, the other half of the fleet, off `list` by construction and pulled on
-        // demand (the /events stream never carries it). Newest-archived first; see registry.listArchived.
+        // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
+        // (registry.listArchived).
         archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
-        /* The board's filter, and the popped-out rail's. Answers over BOTH halves of the fleet in one pass,
-         * the live roster and the archive, because the board hides by design (its Finished lane windows to a
-         * handful, archived agents are off the roster entirely), and a filter that reports "no matches" while
-         * the agent sits one click away is a lie the user only catches once.
-         *
-         * Matches the TITLE (which is the sanitized first prompt) or anything either side SAID in the
-         * conversation, the user's later prompts and the agent's own replies, while thinking, tool output and
-         * daemon protocol stay out (see AgentSearchQuerySchema for where that line is drawn, and matchLines for
-         * why the user's own words are the snippet when both sides hit). A title match carries no snippet: the
-         * card already shows it.
-         *
-         * A draft agent has no session and so nothing said, and never appears here, the browser matches those
-         * against the title it holds locally, which is all a conversation with no turn yet has.
-         */
+        // Answers over the live roster and the archive, since the board hides finished/archived agents from the live
+        // list. Matches the title or either side's said lines; a title hit carries no snippet.
         search: i.search.handler(async ({ input }) => {
-            // The field's Aa switch, applied by FOLDING once here: the needle and every line it is tested against
-            // meet in the same case, so the whole title test is one substring test either way. The index folds
-            // its own side by the same rule (see search-index.ts on why that fold is JS's and not sqlite's).
+            // Folded once here so needle and haystack share a case; the index folds its side the same way.
             const caseSensitive = input.caseSensitive === true;
             const needle = caseSensitive ? input.query : input.query.toLowerCase();
             const entries = [...services.agents.list(), ...services.agents.listArchived()];
-            /* ONE QUERY FOR THE WHOLE FLEET, rather than a read per entry. This used to be a Promise.all over
-             * every registry entry, each awaiting that conversation's extracted lines: on a real workspace
-             * (1418 entries, 545 MB of records) the first such query was seconds of blocking parse and every
-             * one after it re-scanned 30 572 lines in memory. The index answers all of them at once. */
+            // One query for the whole fleet, not a read per entry.
             const said = await services.saidIndex.search(input.query, "conversation", caseSensitive);
             const matches = entries.flatMap((agent) => {
                 const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
@@ -218,20 +128,13 @@ export const createAgentsRoutes = (services: Services) => {
                     return [{ id: agent.id }];
                 }
                 const indexed = said.get(agent.id);
-                /* The WRITE-LAG OVERLAY: prompts this daemon has routed but no turn has settled yet, so the
-                 * index cannot hold them. Small, in memory, and only for conversations touched since boot.
-                 * Without it the words a user just sent are unsearchable for as long as the turn runs, which is
-                 * precisely when they are most likely to be searched for. */
+                // Write-lag overlay: prompts routed but not settled stay searchable before the index catches up.
                 const pending = matchLines(conversationLines(agent.id, []), needle, caseSensitive);
-                /* THE USER'S OWN WORDS WIN, and among theirs the OLDEST, which is the index's rule too. A
-                 * recorded user line therefore beats a just-sent prompt (it is older), a just-sent prompt beats
-                 * anything the agent said, and with neither the agent's line stands as the evidence. */
+                // A recorded user line beats a just-sent prompt, beats the agent's; ties go to the older line.
                 const snippet = indexed?.speaker === "user" ? indexed : pending?.speaker === "user" ? pending : (indexed ?? pending);
                 return snippet === undefined ? [] : [{ id: agent.id, snippet }];
             });
-            /* `indexing` is the honest half of the answer: while the backfill is still working the index does
-             * not yet hold everything said in this workspace, so this result can still grow. The board says so
-             * rather than presenting a partial list as the whole one. */
+            // `indexing`: true means the backfill hasn't indexed everything yet, so this result can still grow.
             return { matches, scanned: entries.length, indexing: services.saidIndex.indexing() };
         }),
         get: i.get.handler(({ input }) => {
@@ -241,33 +144,15 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The transcript a card redraws, read root-scoped: the workspace root is the working dir every turn
-        // saw, so restored tool locations and attachment paths come back relative to the same tree they
-        // streamed against.
-        /* A conversation's transcript, for a client opening its tab. Answers for EVERY agent, the transcript is
-         * the daemon's own record now (sessions/transcript-record.ts), so it no longer depends on the agent
-         * running a harness that keeps a readable session store. This route used to return `{messages: []}` for
-         * anything `sdkSessionIdOf` had no answer for, which is every codex/grok NATIVE and every ACP agent:
-         * their chats opened blank, permanently, with the work sitting on disk the whole time.
-         *
-         * `sessionId` still comes from the SDK-shaped lookup, because it answers a different question, which
-         * session the client should ADOPT so its next turn resumes the right thread, and only the Claude Code
-         * loop has one of those to hand over. */
+        // Root-scoped: the workspace root is the working dir every turn saw, so restored paths match what streamed.
+        // Answers for every agent from the daemon's own record (sessions/transcript-record.ts), not only ones a harness
+        // keeps a readable session store for. `sessionId` is a separate lookup: which session the client should resume.
         transcript: i.transcript.handler(async ({ input }) => {
             const agent = entryOf(input.id);
             const sessionId = sdkSessionIdOf(agent);
-            /* ONE PAGE, newest turns first time and further back on each `before`. The record is the whole
-             * conversation and a conversation is as long as somebody has been working: served whole it was
-             * megabytes down a tunnel to redraw a screenful, and paid again for every card the board warms
-             * behind it. `from`/`more` are what let the chat go back for the rest. */
+            // One page, newest turns first, walking back on each `before`, not the whole conversation every time.
             const { rows: messages, from, more } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
-            /* WHAT THAT SESSION IS BOUND TO rides with it: the runtime and the credential it was minted under,
-             * which is the entry's own record of the last turn (the registry files the account with the id, see
-             * its `session` case). The client cannot work these out — its tab holds the picks the NEXT turn
-             * would use, and after a mid-chat switch those are exactly the ones the session does NOT belong to,
-             * so a client filling them in itself announced a fresh session for the account actually holding it
-             * and retired a resumable session on the next send. Only sent with a session; there is nothing to
-             * bind otherwise. */
+            // Session/provider/account are the entry's own values, not the client's, which can disagree after a switch.
             return {
                 ...(sessionId !== undefined
                     ? {
@@ -277,44 +162,19 @@ export const createAgentsRoutes = (services: Services) => {
                           ...(agent.account !== undefined ? { account: agent.account } : {}),
                       }
                     : {}),
-                // ...and how the last turn ENDED, which is what lets a tab opened anywhere offer the press the
-                // window that watched it stop used to keep to itself (see endingOf).
+                // How the last turn ended, so any tab opened later can offer the press the prior window kept to itself.
                 ...opt("ending", endingOf(input.id)),
                 messages,
                 from,
                 more,
             };
         }),
-        /* SPEAK AS THE AGENT, the user's words appended to the record as an assistant row, no turn behind them,
-         * no reply. Marked `placed` so a HUMAN re-reading the transcript can tell (the flag never reaches any
-         * agent-facing text, see TranscriptRowSchema).
-         *
-         * The session drop is the half that makes it real. Appending alone would show the line to every reader
-         * but the one that matters: a next turn that RESUMES its provider session never re-reads the record, so
-         * the agent would carry on from a memory the transcript no longer matches. Forgetting the session is
-         * rewind's own move, the next turn then opens a fresh runtime session seeded from the record
-         * (agent.routes.ts → handoffHistory), where the placed line renders exactly like every line the agent
-         * genuinely said.
-         *
-         * OPEN BEFORE APPEND, and not as ceremony: for a conversation still served off the provider-store
-         * backfill the record does not exist yet, and a bare append would create it holding ONLY the placed
-         * line, which, the record being authoritative wherever it exists, would silently disappear the whole
-         * conversation behind it. `open` adopts that history first.
-         *
-         * UNDER THE REWIND LEASE rather than a notRunning check, for rewind's own reason: a turn admitted
-         * between check and append would resume the very session this exists to retire, and the placed line
-         * would sit in a transcript the running turn's memory knows nothing about. The lease is the same mutex
-         * a turn takes, so the two cannot interleave; a held lease answers undefined ⇒ CONFLICT.
-         *
-         * A CHANNEL CONVERSATION'S AUDIENCE IS THE CHANNEL. One woken by an outside message (a Discord mention,
-         * a Telegram chat, origin.channelId names the thread) has two readers: the transcript and whoever is
-         * waiting where the message came from. A placed line that only reached the record answered into the
-         * void, the channel saw nothing, while the transcript claims the agent spoke, so the line is carried
-         * out through the provider's gateway first (extensions/listener-deliver.ts), and carried FIRST: a
-         * delivery that fails refuses the whole place (BAD_GATEWAY, with the gateway's own sentence), leaving
-         * the record untouched rather than holding a sentence its audience never got. Origins with no gateway
-         * (webchat, webhook) have no channel transport and place into the record alone, as every conversation
-         * without an origin does. */
+        // Speaks as the agent: appends the user's words as an assistant row marked `placed` (human-only, never
+        // agent-facing).
+        // - clears the session so the next turn reseeds from the record instead of stale runtime memory
+        // - runs under the rewind lease, not notRunning, so a resuming turn cannot race the clear
+        // - a channel-origin conversation delivers to the provider's gateway before appending; a failed delivery
+        //   refuses the whole place
         place: i.place.handler(async ({ input }) => {
             const agent = entryOf(input.id);
             const origin = agent.origin;
@@ -327,8 +187,7 @@ export const createAgentsRoutes = (services: Services) => {
                         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
                     }
                     if (delivered === "delivered") {
-                        // The outbound trail: the same row an agent's own send leaves, so the activity feed
-                        // shows the channel got this line even though no turn ran.
+                        // Outbound trail: same row an agent's own send leaves, so the feed shows the channel got it.
                         void services.activity
                             .append({
                                 provider: origin.provider,
@@ -352,8 +211,7 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return { ok: true } as const;
         }),
-        // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
-        // entry at begin/finish, so the rename survives a running turn.
+        // Legal mid-turn: a title touches no worktree state, and the registry re-reads the entry at begin/finish.
         rename: i.rename.handler(async ({ input }) => {
             entryOf(input.id);
             const summary = await services.agents.setTitle(input.id, input.title, "user");
@@ -362,8 +220,7 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // Legal mid-turn too (no notRunning): the override is read at turn COMPLETION, so flipping it while
-        // the agent works is exactly "hold THIS turn's work for review", the press that matters most.
+        // Legal mid-turn: the flag is read at completion, so flipping it mid-run holds this turn's work for review.
         autoLand: i.autoLand.handler(async ({ input }) => {
             isolatedEntryOf(input.id);
             const summary = await services.agents.setAutoLand(input.id, input.autoLand);
@@ -372,14 +229,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        /* THIS conversation's outage posture. `entryOf`, not `isolatedEntryOf`, the one place this route
-         * deliberately differs from the one above it: a provider outage kills a workspace chat as readily as a
-         * branch-backed one, and nothing about picking the turn back up touches a worktree.
-         *
-         * Legal mid-turn, and the press that matters most arrives just AFTER one: the offer is raised by the
-         * failure frame of the turn that died, so the ordinary caller is a chat whose turn is still unwinding.
-         * The resume pass re-reads the posture every few seconds, which is what makes arming it then arm the
-         * very turn that bounced. */
+        // Uses `entryOf`, not `isolatedEntryOf`: an outage can hit a workspace chat too. The resume pass re-polls
+        // often, so arming it just after a dying turn arms the very turn that bounced.
         resumeAfterOutage: i.resumeAfterOutage.handler(async ({ input }) => {
             entryOf(input.id);
             const summary = await services.agents.setResumeAfterOutage(input.id, input.resumeAfterOutage);
@@ -388,12 +239,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        /* THIS conversation's spent-allowance posture, the same route one blocker over. `entryOf` for the same
-         * reason the one above uses it: a limit refuses a workspace chat as readily as a branch-backed one.
-         *
-         * Legal mid-turn, and the press that matters most arrives long AFTER one: the window this arms a fire
-         * against is typically hours out, which is exactly why the offer is on the card rather than only in a
-         * transcript somebody would have to still have open. */
+        // Uses `entryOf` for the same reason: a spent allowance can refuse a workspace chat too. The window this arms
+        // can be hours out, which is why the offer lives on the card and not only in an open transcript.
         resumeAfterLimit: i.resumeAfterLimit.handler(async ({ input }) => {
             entryOf(input.id);
             const summary = await services.agents.setResumeAfterLimit(input.id, input.resumeAfterLimit);
@@ -402,8 +249,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The third override of the same grammar: whether a spent allowance moves this conversation's held turn to
-        // another account of the same provider with room (SandboxSettingsSchema.moveAfterLimit has the policy).
+        // Whether a spent allowance moves this conversation's held turn to another account with room
+        // (SandboxSettingsSchema.moveAfterLimit).
         moveAfterLimit: i.moveAfterLimit.handler(async ({ input }) => {
             entryOf(input.id);
             const summary = await services.agents.setMoveAfterLimit(input.id, input.moveAfterLimit);
@@ -412,11 +259,8 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        /* A collaborator's ask for a land they may not perform (role floors put land/discard at maintainer).
-         * Isolated agents only, a workspace conversation has no land for anyone to perform. Legal mid-turn
-         * (no notRunning): the ask is about whatever the branch holds when a maintainer answers it, exactly
-         * like flipping autoLand. Loopback mode has no identity to attribute the ask to, and no collaborators
-         * to make one. */
+        // Isolated agents only, a workspace conversation has no land to ask for. Legal mid-turn, like `autoLand`; needs
+        // a verified identity to attribute the request to.
         requestLand: i.requestLand.handler(async ({ input, context }) => {
             isolatedEntryOf(input.id);
             if (context.identity === undefined) {
@@ -432,8 +276,7 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The read marker behind the card's unread badge. Daemon-side, so the badge stays cleared after a
-        // browser cache wipe and clears on the other devices the moment one of them opens the agent.
+        // Daemon-side read marker: the unread badge survives a browser cache wipe and clears on other devices too.
         seen: i.seen.handler(async ({ input }) => {
             const summary = await services.agents.markSeen(input.id, Date.now());
             if (summary === undefined) {
@@ -445,54 +288,28 @@ export const createAgentsRoutes = (services: Services) => {
             await services.agents.markAllSeen(Date.now());
             return { agents: services.agents.list(), rev: services.agents.revision() };
         }),
-        /* THE USER'S HAND ON THE AGENT'S STANDING ARRANGEMENT. Everything else that ends a watch is the
-         * daemon's or the agent's: it fires, it times out, or a later turn calls `watch stop`. This is the
-         * press for the case none of those cover, the user reading a card that says it is waiting for
-         * something they no longer want waited for.
-         *
-         * Legal in every state, deliberately, including mid-turn. A watch is not the turn's working state (it
-         * is a timer with an env snapshot), nothing is half-written by disarming one, and the moment a person
-         * most wants this press is while the conversation is awake and busy doing the thing they have decided
-         * against.
-         *
-         * The disarm itself republishes the card (watchers.ts `discard` → the projection → a roster
-         * broadcast), so by the time the summary below is read it has already lost its watches. */
+        // The only user-initiated way to end a watch; every other exit is automatic (it fires, times out, or a later
+        // turn stops it). Legal in every state, including mid-turn, since a watch is a timer, not turn state.
         stopWatching: i.stopWatching.handler(async ({ input }) => {
             const entry = entryOf(input.id);
-            // Awaited: the disarm has to reach the watch journal too, or a container recreate moments after
-            // this press would restore at boot the very watch the user has just dismissed.
+            // Awaited: the disarm must reach the watch journal, or a recreate would restore it on boot.
             await cancelWatchersFor(entry.id);
-            // Read back through `get` rather than off the live roster: an ARCHIVED conversation can hold armed
-            // watches (archiving takes a card off the board, it does not disarm anything), and it is the one
-            // that most needs this press, since its watch would wake it straight back onto the board.
+            // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
             const summary = services.agents.get(entry.id);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
             return summary;
         }),
-        /* THE REVIEW IS THE AGENT'S WORK MEASURED AGAINST MAIN AS IT STANDS, asked of the tree at request time
-         * rather than assembled from what the last land recorded (agent-changes.ts presentInMain, which carries
-         * the full argument for why the sha-based reading kept drifting).
-         *
-         * A row survives while it is still a difference: work the user committed leaves the list, because it is
-         * theirs now and their own history is where it lives. Work sitting uncommitted in /work stays, flagged
-         * `landed`, since a clean turn auto-lands within ms of finishing and a list of leftovers would show an
-         * empty panel for work nobody had looked at. Work that landed and was then DISCARDED goes back to
-         * unflagged, which is what puts it under "Land now" again: nothing about it had moved a sha, so nothing
-         * in the old reading could tell.
-         *
-         * The per-file diff underneath keeps its merge-base anchor (see fileDiff below): membership and the
-         * flag answer "how does this stand against main", the diff answers "what did the agent write", and the
-         * two questions have different right answers. */
+        // Measured against main as it stands, not the last land's record. A committed row leaves the list; uncommitted
+        // stays flagged `landed`; discarded-after-land goes back to unflagged.
         diff: i.diff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoChanges[] = [];
             let absorbed = 0;
             for (const composed of entry.repos) {
                 try {
-                    /* The one reading of this agent's delta (agent-changes.ts), the same call the land totals
-                     * for the card's counter, so the two surfaces cannot disagree about what the agent did. */
+                    // Same reading agent-changes.ts uses for the land's totals, so the two cannot disagree.
                     const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
                     if (changes.length === 0) {
                         continue;
@@ -504,17 +321,14 @@ export const createAgentsRoutes = (services: Services) => {
                         changes.map((change) => change.path),
                     );
                     absorbed += present.absorbed.size;
-                    // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
-                    // flag goes onto the objects that are about to be serialized and nothing is copied.
+                    // Object.assign, not a spread: `changes` is this call's own array, so nothing needs copying.
                     const flagged = changes
                         .filter((change) => !present.absorbed.has(change.path))
                         .map((change): AgentChange => Object.assign(change, { landed: present.inWorkspace.has(change.path) }));
                     if (flagged.length === 0) {
                         continue;
                     }
-                    // The tree's own package layout, for the review to group those rows under (agent-changes.ts).
-                    // Read here rather than looked up from /workspace/modules: that read walks /work, which cannot
-                    // see a package living so far only in this agent's worktree.
+                    // Reads the worktree's own layout; /workspace/modules walks /work, missing a new package.
                     const modules = await agentRepoModules(services.agentWorktrees, entry, composed.repo);
                     repos.push({ repo: composed.repo, branch: entry.branch, changes: flagged, modules });
                 } catch (error) {
@@ -522,39 +336,13 @@ export const createAgentsRoutes = (services: Services) => {
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
-            /* The last land's refusal travels with the review it is about: the panel is opened FROM the
-             * conflicted card, so it has to arrive already knowing what blocked and why (see
-             * AgentChangesSchema). Re-derived, not replayed from the entry: the stored report is the refusal
-             * AT LAND TIME, and its `workspace` rows point at uncommitted edits the user may since have
-             * committed, served verbatim, they kept the resolve flow refusing ("commit or stash them") over
-             * a spotless tree. The entry keeps the event; the probes answer for today (outstandingConflicts).
-             * Omitted once nothing refuses anymore, a report with no rows is not a report. */
+            // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed.
             const conflicts = entry.conflicts === undefined ? [] : await outstandingConflicts(services.agentWorktrees, entry);
-            // `absorbed` rides along so an EMPTY list can say which kind of empty it is: an agent that wrote
-            // nothing, or one whose every file the reader has already committed. Two opposite facts that would
-            // otherwise arrive as the same answer (see AgentChangesSchema).
+            // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
             return { repos, absorbed, ...(conflicts.length > 0 ? { conflicts } : {}) };
         }),
-        /* WHERE THE ABSORBED HALF WENT, the read that turns `absorbed` from a count into somewhere to go.
-         *
-         * The rows here are the very rows `diff` above filtered out, read from the SAME pass over the same tree
-         * (agentRepoReview, then presentInMain) rather than from a second reading of the agent's work, because
-         * two surfaces disagreeing about what a conversation did is the exact failure agent-changes.ts exists to
-         * prevent, and a "your history has it" panel disagreeing with the review it replaces would be the worst
-         * possible place for it.
-         *
-         * Its own route rather than more fields on the review: this costs a `git log` per repo and answers
-         * nothing at all until the user has committed something, which is a minority of the times the panel is
-         * opened and never the time it is opened in a hurry. The panel asks once it has been told there is an
-         * answer.
-         *
-         * WHERE THE SPAN STARTS is the whole reliability question, and there are two honest answers. `landedHead`
-         * is where main's HEAD stood when the patch went in, so nothing before it can be the commit that took
-         * this work: the tightest span there is. Its fallback is the merge-base anchor, which is where the branch
-         * left the main line, and is used both for a landing whose recorded head no longer resolves and for
-         * content that reached main without ever passing through a land. That anchor is sound for the same
-         * reason the review is anchored there: a path main already held at the fork point is not a row here at
-         * all, so the commit that made main match this conversation's version cannot sit behind it. */
+        // Reads the same rows `diff` filtered out to absorbed, from the same pass over the tree, so the two routes
+        // can't disagree. Span starts at the recorded `landedHead` when it still resolves, else the merge-base anchor.
         history: i.history.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoHistory[] = [];
@@ -571,8 +359,7 @@ export const createAgentsRoutes = (services: Services) => {
                         composed,
                         changes.map((change) => change.path),
                     );
-                    // Nothing of this repo's work is in history yet, so there is nothing here to place. The
-                    // common case by far, and it costs no git beyond the reading the review takes anyway.
+                    // Nothing of this repo's work is in history yet; the common case, and free to check.
                     const absorbed = changes.filter((change) => present.absorbed.has(change.path));
                     if (absorbed.length === 0) {
                         continue;
@@ -583,8 +370,7 @@ export const createAgentsRoutes = (services: Services) => {
                         unaccounted += absorbed.length;
                         continue;
                     }
-                    // The anchor is read only when the recorded head cannot serve, which is the rare half: one
-                    // merge-base spawn saved on every ordinary landing.
+                    // Anchor read only when the recorded head can't serve: rare, saves a merge-base spawn.
                     const landed = composed.landedHead === undefined ? undefined : await historySpanStart(main, composed.landedHead, head);
                     const from = landed ?? (await anchorOf(main, main, entry.branch, undefined, composed.base));
                     const byPath = new Map(absorbed.map((change) => [change.path, change]));
@@ -613,8 +399,7 @@ export const createAgentsRoutes = (services: Services) => {
                             changes: rows,
                         });
                     }
-                    // Absorbed but placed nowhere: its content reached the main line by some road other than a
-                    // commit in this span. Counted, never guessed at, see AgentHistorySchema.
+                    // Absorbed but placed nowhere: reached main by a road other than a commit in this span.
                     unaccounted += absorbed.length - placed;
                     if (commits.length === 0) {
                         continue;
@@ -622,17 +407,14 @@ export const createAgentsRoutes = (services: Services) => {
                     const modules = await agentRepoModules(services.agentWorktrees, entry, composed.repo);
                     repos.push({ repo: composed.repo, commits, modules });
                 } catch (error) {
-                    // One unreadable repo must not take down the others, the same seam and the same reason as
-                    // the review above.
+                    // One unreadable repo must not take down the others, same reasoning as the review above.
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents history: repo skipped");
                 }
             }
             return { repos, unaccounted };
         }),
-        // Against the same cumulative anchor as the list above: one row means one question, "what did this
-        // agent do to this file", and its answer must not change the moment the work lands. (Diffing from
-        // `landedTip` would silently empty out every already-landed row; diffing from the frozen base would
-        // show other agents' synced-in work, disagreeing with the list.)
+        // Diffs from the same cumulative anchor as the list above, so a file can't drop out of its own row when it
+        // lands, and another agent's synced-in work can't appear as this one's.
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const composed = entry.repos.find((repo) => repo.repo === input.repo);
@@ -640,9 +422,7 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
             }
             const main = services.agentWorktrees.mainDir(input.repo);
-            // Retired checkout: both sides are blobs, read from the main repo, the same per-repo seam as
-            // `diff` above. The path guard still applies, it is validating the REQUEST, not the disk, and a
-            // `..` here would escape into rev-spec territory just as readily.
+            // Retired checkout: both sides are blobs from main, same seam as `diff`; the guard still runs.
             if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
@@ -660,50 +440,31 @@ export const createAgentsRoutes = (services: Services) => {
         land: i.land.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             landable(input.id, input.force === true);
-            // Snapshotted before the land advances every landedTip, the span a chore diffs from, exactly as
-            // the auto-land path captures it before its own land (see streamIsolatedTurn). A cumulative land
-            // reads from the base for the same reason the land itself does: the rung it is putting back is
-            // the one before anything landed, so a chore told otherwise would diff an empty range.
-            /* The same last-moment rebase the auto-land takes (agents/sync.ts syncBeforeLand), and this road
-             * needs it more: "Land now" is clicked minutes or hours after the turn that wrote the work, with
-             * the user having landed other cards in between, which is precisely the main-line movement that
-             * makes a patch refuse over lines this agent never touched.
-             *
-             * Best-effort: the work is finished and on the branch, so a git fault costs the rebase and never
-             * the land the user just asked for. */
+            // Span is snapshotted before the land advances `landedTip`, matching what auto-land captures.
+            // Same pre-land rebase as auto-land; a git fault here lands on the old base instead of failing the land.
             let composition = entry.repos;
             try {
                 composition = [...(await syncBeforeLand(services.agentWorktrees, entry, services.agents.recordWorktree))];
             } catch (error) {
                 services.logger.warn({ err: error, id: entry.id }, "agents: pre-land sync failed, landing on the old base");
             }
-            // Snapshotted AFTER the sync, for the reason the auto-land path spells out: a rebase orphans the
-            // sha a span names, and a chore diffed from it carries every main-line commit underneath.
+            // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
             const span = composition.map(({ repo, base, landedTip }) => ({
                 repo,
                 from: input.span === "cumulative" ? base : (landedTip ?? base),
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
             const result = await landAgent(services.agentWorktrees, { ...entry, repos: composition }, input.mode, input.span);
-            // Both halves of what the card will show: recordLanded stores the tips and the conflict report,
-            // and re-derives the standing from them. `finish` no longer carries a verdict, it clears how the
-            // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to
-            // land must not keep wearing the error), and takes no turn off the counter because none ran.
+            // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
             await services.agents.recordLanded(input.id, result);
-            /* ...but ONLY once the turn it describes is over. `finish` flushes the turn's usage, releases the
-             * conversation's mutex and writes how the turn ended, the right close for a land on a resting
-             * agent, and a lie on a live one. Called under a running turn it would free the mutex a second
-             * turn could then claim beside the first, and stamp an ending on a turn still streaming frames
-             * that will stamp their own. The land itself is complete either way; what waits is the
-             * bookkeeping, and the turn's own completion does it. */
+            // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
             if (!services.agents.running(input.id)) {
                 await services.agents.finish(input.id, Date.now());
             }
             if (result.landed && result.changed) {
-                // What this work DID, drafted from the diff now sitting in the tree, for the Changes panel's
-                // chip to file into the commit box. Not awaited, the card's response does not wait on it.
+                // Drafted from the diff now sitting in the tree, for the Changes panel's commit-box chip; not awaited.
                 describeLandingInBackground(services, entry.id);
-                // The main tree changed under the user, same attribution convention as git.discard.
+                // Main tree changed under the user, same attribution convention as git.discard.
                 services.history.notifyUserWrite();
                 emitWorkspaceEvent(
                     services,
@@ -721,8 +482,7 @@ export const createAgentsRoutes = (services: Services) => {
             return {
                 landed: result.landed,
                 ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
-                // A `merge` land's report of the paths it left carrying conflict markers, dropping this is
-                // how the panel's "Landed with N files to finish" strip went permanently dark.
+                // A `merge` land's leftover-conflict paths; omitting it blanked the panel's finish-N-files strip.
                 ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
                 ...(result.held === true ? { held: true } : {}),
             };
@@ -730,22 +490,16 @@ export const createAgentsRoutes = (services: Services) => {
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
-            /* Its armed watches go with it, and they have to go FIRST, while the conversation they would wake
-             * still exists. A watch outliving its conversation is not a stale readout, it is a timer that will
-             * eventually try to start a turn on an id nothing answers to, hours after the user threw the agent
-             * away. The registry can only forget the card's copy (see its `remove`); this is the disarm. */
+            // Disarmed first, while the conversation exists: an outlived watch would target a removed id.
             await cancelWatchersFor(entry.id);
-            // Resources first, worktree second: a shell or dev server the conversation left running must not
-            // be mid-write in a tree that is being deleted under it (platform/reaper.ts).
+            // Resources before worktree: a running shell or dev server must not be mid-write in a tree being deleted.
             await services.reaper.reapConversation(entry.id, { force: true });
             await services.agentWorktrees.remove(entry.id, entry.repos);
             await services.agents.remove([entry.id]);
             return { ok: true } as const;
         }),
-        // Named ids archive whatever the user pointed at (a card, or a bulk undo's inverse); no ids means
-        // "clear the Finished lane", every agent that is archivable RIGHT NOW, ignoring the retention clock.
-        // Both routes answer with what MOVED and not with the roster afterwards: see AgentsMovedSchema, a
-        // snapshot would let two overlapping requests undo each other's work in the browser.
+        // Named ids archive what the user pointed at; no ids clears the whole Finished lane. Answers with what moved,
+        // not the roster, so overlapping requests can't undo each other.
         archive: i.archive.handler(async ({ input }) => {
             if (input.ids !== undefined) {
                 for (const id of input.ids) {
@@ -753,18 +507,8 @@ export const createAgentsRoutes = (services: Services) => {
                     notRunning(id);
                 }
             }
-            /* THE RE-PROBE IS THE BULK PRESS'S ALONE. "Every agent that is archivable right now" is a question
-             * about the DERIVED half of the status, which is invisible from the persisted entry (see
-             * archive.ts), so "Clear" has to re-ask git before it can decide what qualifies.
-             *
-             * A named archive has already been decided, by the user, about a card they are looking at: the ids
-             * ARE the answer that probe would produce. Awaiting it anyway made one click cost a standing read
-             * over the whole live roster, cheap while every verdict's key still holds, and a git pass per
-             * agent the moment anything moved main (a land, a hand-commit, a restart empties the cache
-             * outright). That is the whole of "archiving one card is sometimes ultra slow" on a board with a
-             * thousand sessions on it: the press paid for the fleet before it did the one thing it was for.
-             * Nothing downstream needs the fresher verdict either, the guards a named archive owes the user
-             * are `notRunning` above, and archiveAgents re-reads each entry as it goes. */
+            // Re-probes standings, since 'archivable right now' isn't visible on the persisted entry (archive.ts). Only
+            // for the bulk clear: a named archive's ids are already the user's own decision.
             const archivableNow = async (): Promise<string[]> => {
                 await services.agents.refreshStandings();
                 return services.agents
@@ -774,13 +518,7 @@ export const createAgentsRoutes = (services: Services) => {
             };
             const targets = input.ids ?? (await archivableNow());
             const { archived, failed } = await archiveAgents(services, targets, Date.now());
-            // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
-            // the revision that applied it, the browser holds these ids off the board until a roster at least
-            // that new arrives, so an in-flight older snapshot can't put them back.
-            //
-            // `failed` rides along rather than becoming an error: an archive that moved nine cards and refused
-            // one is not a failed request, and the one it refused is not "nothing to archive" either, which is
-            // the only thing the board could say while the reason stayed in the log.
+            // Read after the archive: summaries carry a fresh archivedAt and revision; a failed id is only reported.
             return {
                 moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
                 failed,
@@ -791,27 +529,17 @@ export const createAgentsRoutes = (services: Services) => {
             for (const id of input.ids) {
                 entryOf(id);
             }
-            // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch, so putting a
-            // card back is a registry write and nothing else.
+            // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch.
             await services.agents.clearArchived(input.ids);
             return {
                 moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
                 rev: services.agents.revision(),
             };
         }),
-        /* The archive's own exit, and the destructive one: everything filed away is deleted outright, branches
-         * included. Answers with the ids that actually went, a teardown that fails on one agent leaves that one
-         * in the archive rather than failing the press (see purgeArchived).
-         *
-         * The ARCHIVED RUN RECORDS go with them, because an archived run is the row the archive lists its steps
-         * under: leaving it behind would draw a workflow in an emptied archive whose sessions no longer exist,
-         * and clicking it would open nothing. Only archived runs, a run still on the board is not in the pile
-         * this press is about, even if the retention sweep filed some of its steps away on their own.
-         */
+        // Destructive: deletes everything filed away, branches included (purgeArchived). Archived run records go too,
+        // since their steps must not point into an emptied archive.
         purge: i.purge.handler(async () => {
-            // Same disarm-before-delete as `discard` one route up, and the same reason: an archived
-            // conversation can be sitting on armed watches, and a timer that outlives the agent it belongs to
-            // eventually tries to start a turn on an id nothing answers to.
+            // Same disarm-before-delete as `discard`: an outlived watch would try to start a turn on a removed id.
             for (const summary of services.agents.listArchived()) {
                 await cancelWatchersFor(summary.id);
             }

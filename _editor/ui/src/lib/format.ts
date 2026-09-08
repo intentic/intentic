@@ -16,27 +16,13 @@ export const formatBytes = (bytes: number | undefined): string => {
     return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 };
 
-// Token counts, at the width a chip or a summary line can spare: "1.4M" past a million, "142k" once thousands
-// are reached, the exact number below that. The same rounding wherever tokens are quoted (context meter,
-// per-account usage, cleaner savings, the fleet board's per-agent counts), so two surfaces quoting the same
-// number never disagree about it, which is what a second copy in agentStatus.ts had quietly stopped being
-// true: it carried the megabyte tier this one lacked, so a 1.5M-token agent read "1500k" on one screen and
-// "1.5M" on the next.
+// Token counts at chip width: "1.4M" past a million, "142k" past a thousand, exact below that. Used everywhere
+// tokens are quoted so two surfaces never disagree.
 export const formatTokens = (tokens: number): string =>
     tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
-/* A NAME, at the width of a small square, the monogram under every avatar and every brand mark, and the last
- * tier of both ladders: what is drawn for something that has no picture, no logo and no glyph.
- *
- * Splits on every separator a person's name, an email address, a repository and a `publisher.name` all use, so
- * the two letters are word-initials wherever there are words to take them from: "John Doe" → JD,
- * "ada.lovelace@example.com" → AL, "git-history" → GH. One word keeps its first two glyphs ("maintenance" → MA)
- * rather than doubling a letter. Undefined for a name with nothing in it, which is how a caller knows to draw
- * its neutral glyph instead of an empty plate.
- *
- * One rule, because the two copies this replaces had already drifted into two: the rail's split on `[-_\s]`
- * alone, so a dotted repository name gave its first two LETTERS where the same name gave its two INITIALS
- * three components away. */
+// Two-letter monogram, the fallback after a picture, logo or glyph. Splits on the separators a name, email or repo
+// uses ("John Doe"→JD); one word keeps its first two letters; empty input gives `undefined`.
 export const initialsOf = (name: string): string | undefined => {
     const words = name.split(/[\s._@-]+/).filter((word) => word !== ``);
     const [first, second] = words;
@@ -46,17 +32,9 @@ export const initialsOf = (name: string): string | undefined => {
     return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
 };
 
-/* Every absolute date the app shows, in one shape: "Jul 28, 2026", a spelled-out month, because the browser
- * default is numeric and order-ambiguous ("7/28/2026" to one reader, the 7th of August to the next), and no
- * row anywhere carries enough context to disambiguate it.
- *
- * The locale is pinned rather than followed for the same reason the clock is fixed at 24-hour: a screenshot, a
- * bug report, a test fixture and the person reading them should all quote the same string. The *timezone*
- * still isn't pinned, these render the viewer's own wall clock, which is the one thing they do want local.
- * `hour12: false` is the h23 cycle per ECMA-402, so midnight reads 00:05 and never 24:05.
- *
- * Formatters are built once here: constructing an Intl.DateTimeFormat is the expensive half of formatting, and
- * keeping them private is what stops a surface from quietly growing a variant of its own. */
+// Absolute dates always spell the month ("Jul 28, 2026"), never the ambiguous numeric default. Locale and 24-hour
+// format are pinned so the same instant renders identically everywhere; only the timezone stays the viewer's own.
+// Formatters are built once, since constructing an Intl.DateTimeFormat is expensive.
 const DATE = new Intl.DateTimeFormat(`en-US`, { year: `numeric`, month: `short`, day: `numeric` });
 const DAY_MONTH = new Intl.DateTimeFormat(`en-US`, { month: `short`, day: `numeric` });
 const DATE_TIME = new Intl.DateTimeFormat(`en-US`, {
@@ -95,28 +73,16 @@ export const formatTimestamp = (at: number): string => TIMESTAMP.format(at);
 /** Clock time alone, for rows already grouped under a day: "15:45:12". */
 export const formatTime = (at: number): string => TIME.format(at);
 
-/* The wall-clock MINUTE alone: "15:45". The narrowest a "when" label gets, for a surface that has room for five
- * characters beside a row and states the day somewhere else, the chat transcript's per-prompt stamp, which
- * sits in the margin beside the bubble under a marker naming the day (see formatDate). Seconds are left to
- * formatTime: a message was sent at a minute, and the second it landed on is noise at four characters' cost. */
+// Wall-clock minute alone: "15:45". The narrowest "when" label, for a row that states the day separately (e.g.
+// the chat transcript's per-prompt stamp).
 export const formatClock = (at: number): string => CLOCK.format(at);
 
 /** A weekday and time, for instants within the coming week: "Tue 15:45". */
 export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
 
-/* Coarse "time since": "just now" under a minute, then "Nm ago" and "Nh ago". PAST A DAY THE TWO CALLERS WANT
- * DIFFERENT THINGS, which is the whole of `days`, a log or history row wants the absolute local timestamp
- * (three days out, "Jul 28, 2026, 15:45" is the useful answer and "3d ago" is not), while a reading whose age is
- * the point ("measured 3d ago") wants to keep counting. One function with a switch rather than two functions:
- * the second one drifted on every tier BELOW the day, it rounded down where this rounded up and called two
- * minutes "just now", so the same gap read differently on two screens that sit one click apart.
- *
- * IT ROUNDS DOWN, everywhere. An age is a floor, "1h ago" for something 119 minutes old is true and "2h ago"
- * is not, and for the usage readings this labels it is doubly so: utilization only climbs inside a window, so
- * the figure is already a lower bound and its age must not overstate how fresh it is.
- *
- * `now` is injectable for the callers that format a list against one clock (and for tests). Distinct on purpose
- * from chat's compact `relativeTime`, which drops the "ago", different surfaces want different formats. */
+// Coarse relative time ("just now", "Nm ago", "Nh ago"), always rounded down since an age is a floor. `days`
+// switches the day-and-beyond case between a rolling "Nd ago" and the absolute timestamp; `now` is injectable
+// for tests.
 export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: number; days?: boolean } = {}): string => {
     const minutes = Math.floor((now - at) / 60_000);
     if (minutes < 1) {
@@ -132,15 +98,6 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
     return days ? `${Math.floor(hours / 24)}d ago` : formatDateTime(at);
 };
 
-/* Freshness at the width a ROW has for it: `timeAgo`'s phrasing while it stays relative, a bare calendar day
- * once it would not.
- *
- * `timeAgo` past a day falls back to the absolute local timestamp ("Jul 27, 2026, 21:06:40"), three times the
- * width of a list row's whole meta line, and two wrapped lines on a phone. For anything MEASURED IN DAYS AND
- * WEEKS rather than in minutes, a knowledge note, a chore report, that fallback is the common case here and
- * not the rare one, so it would set the width of every row it appeared in.
- *
- * Every caller pairs this with the exact moment in a `title`, so nothing is lost; the age simply stops setting
- * the width of the row it sits in. In the kit rather than beside either reader because the two extensions that
- * wanted it had each written this line out, byte for byte, under a comment giving the same reason. */
+// Relative time under a day old, else a bare calendar day rather than `timeAgo`'s full absolute fallback, which
+// would set the width of every row. Pair with the exact moment in a `title`.
 export const freshness = (at: number): string => (Date.now() - at < 86_400_000 ? timeAgo(at) : formatDate(at));

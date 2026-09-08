@@ -1,8 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 
-// The job a batch pack starts, which decides whose model list pays for it. Maintenance stands in for all of
-// them: what `batchTurnBody` owes is that the role it is handed reaches the turn, not which one it was.
+// Stands in for any role: what's tested is that the role reaches the turn, not which one it is.
 const ROLE = `maintenance-chore` as const;
 import {
     type BatchRunKind,
@@ -19,8 +18,7 @@ import {
 } from "./batch-runs.js";
 import { ConversationIdSchema } from "../schemas/agent.js";
 
-// The two real layouts this substrate had to fit without moving anything already on disk: one that fans out
-// over items under `records/artifacts`, and one where a run IS the item, under `records/chores`.
+// The two real layouts this fits: one fans out over items, one where a run is the item.
 const FANNED: BatchRunKind = { runsDir: `records/artifacts/acceptance`, prefix: `xt`, scanRuns: 10 };
 const SINGLE: BatchRunKind = { runsDir: `records/chores/runs`, prefix: `mt`, scanRuns: 30 };
 
@@ -31,15 +29,12 @@ describe(`batch run ids`, () => {
         expect([earlier < later, earlier.startsWith(`r`)]).toEqual([true, true]);
     });
 
-    /* Sorting has to survive a base-36 digit boundary, which is what an unpadded `toString(36)` gets wrong:
-     * the smaller number is the shorter string, and the shorter string sorts first only by luck. */
+    // Must survive a digit boundary: unpadded toString(36) sorts the shorter string first, not the smaller number.
     it(`still sorts when two moments straddle a digit boundary`, () => {
         const boundary = 36 ** 7;
         expect(batchRunIdAt(boundary - 1) < batchRunIdAt(boundary)).toBe(true);
     });
 
-    /* The drift that made this shared. A surface where one run IS one item mints several inside a millisecond
-     * ("run this chore in every repository"), and the copy without a counter handed them all the same id. */
     it(`does not repeat inside one millisecond`, () => {
         const minted = new Set(Array.from({ length: 50 }, () => batchRunIdAt(1_700_000_000_000)));
         expect(minted.size).toBe(50);
@@ -56,15 +51,12 @@ describe(`batch conversation ids`, () => {
         expect(batchConversationId(SINGLE, `r5k2a`)).toBe(`mt-r5k2a`);
     });
 
-    /* The run id is how a finished card is attributed back to its run, so the ITEM is what gets cut. Measured
-     * against the real schema rather than a copy of its regex: the cap exists because that schema enforces it. */
     it(`cuts the item, never the run id, and still satisfies ConversationIdSchema`, () => {
         const runId = batchRunIdAt(1_700_000_000_000);
         const id = batchConversationId(FANNED, runId, `x`.repeat(200));
         expect([id.startsWith(`xt-${runId}-`), ConversationIdSchema.safeParse(id).success]).toEqual([true, true]);
     });
 
-    // A cut that lands on the separator would leave `xt-r5k2-`, which ConversationIdSchema refuses.
     it(`leaves no trailing separator when the cut lands on one`, () => {
         const runId = `r${`z`.repeat(58)}`;
         const id = batchConversationId(FANNED, runId, `story`);
@@ -81,8 +73,6 @@ describe(`where a run keeps its files`, () => {
         expect(batchResultPath(FANNED, `r5k2`, `checkout-flow`)).toBe(`${STATE_DIR}/records/artifacts/acceptance/r5k2/checkout-flow/result.json`);
     });
 
-    // A run whose item is the run writes beside its manifest rather than one pointless level down: the layout
-    // maintenance already has on disk.
     it(`writes a single-item run's result beside its manifest`, () => {
         expect([batchResultPath(SINGLE, `r5k2a`), batchItemDir(SINGLE, `r5k2a`)]).toEqual([
             `${STATE_DIR}/records/chores/runs/r5k2a/result.json`,
@@ -99,8 +89,6 @@ describe(`reading a file an agent may still be writing`, () => {
         expect(parseBatchFile(`{"outcome":"acted"}`, shape)).toEqual({ outcome: `acted` });
     });
 
-    /* All three failures are the same answer — undefined — because one bad directory must not blank a whole
-     * history, and a half-written file is ordinary here rather than exceptional. */
     it(`skips a file that is truncated, is not an object, or does not fit the shape`, () => {
         expect([parseBatchFile(`{"outcome":`, shape), parseBatchFile(`"acted"`, shape), parseBatchFile(`{"summary":"x"}`, shape)]).toEqual([
             undefined,
@@ -125,8 +113,6 @@ describe(`what the agent is told`, () => {
         expect(clause).toContain(batchResultPath(SINGLE, `r5k2a`));
     });
 
-    /* A turn that concludes there was nothing to do and writes no file is indistinguishable from a turn that
-     * died, and the surface has to show the second as an unknown. */
     it(`asks for the file even when there was nothing to do`, () => {
         expect(clause).toContain(`even if you conclude there was nothing to do`);
     });
@@ -157,8 +143,6 @@ describe(`the turn a run starts`, () => {
         expect([body[`agent`], body[`model`], body[`effort`]]).toEqual([`claude`, `opus`, `high`]);
     });
 
-    /* ABSENT rather than undefined: the body is serialized to JSON and the daemon's fill step reads a missing
-     * key as "the owner's list for this job decides", which is not what an explicit null would say. */
     it(`omits the keys a pick did not pin, rather than sending them empty`, () => {
         const body = batchTurnBody({ prompt: `p`, title: `t`, conversationId: `c`, role: ROLE, pick: { provider: `claude` } });
         expect(Object.keys(body)).not.toContain(`model`);

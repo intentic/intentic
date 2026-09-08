@@ -14,13 +14,12 @@ import {
     writeLoadedSkill,
 } from "./loaded-skills.js";
 
-// The real writer, as the daemon composes it: these tests assert what lands on disk, so the seam is the
-// production one rather than a fake standing in for it.
+// The production write/remove seam, not a fake, since these tests assert what actually lands on disk.
 const FILES: SkillFiles = { write: writeWorkspaceFile, remove: removeWorkspacePath };
 
-/* The filesystem contract of one loaded skill: the canonical file under `.agents/skills/` (Codex reads it
- * directly) and the `.claude/skills/` symlink (Claude Code's loader follows it). Runtimes without either loader
- * receive a catalogue generated from the canonical set, never a third copy in the user's AGENTS.md. */
+// Pins the filesystem contract of one loaded skill: a canonical file under `.agents/skills/`, a `.claude/skills/`
+// symlink for Claude Code, and a generated catalogue for runtimes with neither loader, never a third copy in the user's
+// AGENTS.md.
 
 const SKILL = "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n";
 
@@ -75,8 +74,6 @@ test("the prompt catalogue lists every skill name-ordered and reflects rewrites"
     );
 });
 
-// A real directory under .claude/skills is something a person put there for Claude specifically: the projection
-// must not fight them for the name.
 test("a real directory in .claude/skills is never replaced by the projection", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     const theirs = join(root, ".claude", "skills", "quill");
@@ -86,12 +83,9 @@ test("a real directory in .claude/skills is never replaced by the projection", a
     await writeLoadedSkill(FILES, root, "quill", SKILL);
     expect((await lstat(theirs)).isDirectory()).toBe(true);
     expect(await readFile(join(theirs, "SKILL.md"), "utf8")).toBe("theirs\n");
-    // The canonical copy still landed for every other runtime.
     expect(await readFile(loadedSkillFile(root, "quill"), "utf8")).toBe(SKILL);
 });
 
-// Self-healing: a managed link whose canonical dir vanished out-of-band (an agent's rm, a partial restore) is
-// swept on the next converge instead of dangling in Claude's tree forever.
 test("a stale managed link is swept by the next write", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "gone", SKILL);

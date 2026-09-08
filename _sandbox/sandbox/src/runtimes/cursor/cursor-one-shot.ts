@@ -7,35 +7,13 @@ import { selectionFor } from "./cursor-models.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
 
-/* CURSOR'S ONE-SHOT (agent/adapter.ts oneShot): one prompt in, one string out, on Cursor's own runtime. It
- * exists for one reason: CURSOR HAS NO CLAUDE CODE ROAD AT ALL.
- *
- * There is no translator route to Cursor and Cursor publishes no subscription endpoint the harness could dial.
- * The one-shot helper walk used to fall through resolveHarnessCredentials into the Claude OAuth branch anyway,
- * then runOneShot with a Composer model id on the Claude Code loop, which fails every time and memoizes the
- * refusal for hours. Chat turns already run on @cursor/sdk (cursor-agent.ts); this is that same move one layer
- * down, for the commit subject and every other one-liner that walks the one-shot helper chain.
- *
- * The settings mirror the other runtimes' one-shots: no tools, no MCP, no custom tools, no session worth resuming, and a
- * deadline the chain can step over. A helper is a one-liner nobody is watching. */
+// Cursor's one-shot (agent/adapter.ts oneShot): one prompt in, one string out, on Cursor's own runtime, since Cursor
+// has no translator route or subscription endpoint for the Claude Code one-shot path. Same move as cursor-agent.ts's
+// chat turns, one layer down. No tools, no MCP, no session, and a deadline the chain can step over.
 
 const DEADLINE_MS = 20_000;
 
-/* NO BUILT-IN TOOLS AT ALL, named as an EMPTY ALLOWLIST rather than a list of everything to switch off. A
- * commit subject is a rewrite of material already in the prompt; a tool call here is the model wandering off
- * rather than answering, so the toolset this run wants is the empty one.
- *
- * `tools: []` is the SDK's own spelling for that, and the denylist it replaces is why this rung was never
- * spent: Cursor derives its tool vocabulary from the agent proto at runtime and REJECTS `Agent.create` outright
- * on a name it does not know ("Unknown tool name(s) in `disallowedTools`: write"). The list here carried
- * `write`, which is not in that vocabulary (the file tool is `edit`), so every one-shot helper walk that reached
- * Composer threw before asking it, memoised the refusal for ten minutes, and paid a Claude rung instead — a
- * connected subscription with a full allowance skipped for a typo the type could not catch, since ToolName is
- * open (`string & {}`) for the proto names it cannot enumerate.
- *
- * An allowlist has no names to get wrong, so it cannot drift out of that vocabulary again, and it is closed
- * rather than exhaustive: a tool Cursor adds tomorrow is off by default instead of on until someone remembers
- * to deny it. */
+// Empty allowlist, not a denylist: an unknown tool name in disallowedTools makes Agent.create reject outright.
 const NO_TOOLS: readonly ToolName[] = [];
 
 const textOf = (updates: readonly InteractionUpdate[]): string =>
@@ -76,11 +54,7 @@ export const cursorOneShot = async (services: Pick<Services, "cursorStore" | "cu
         ask.model !== undefined && ask.model !== `` && catalog.models.some((entry) => entry.id === ask.model)
             ? ask.model
             : catalog.default;
-    /* THE PIN'S EFFORT, mapped onto whatever dial this Cursor model publishes, exactly as a chat turn's is
-     * (cursor-models.ts selectionFor). It used to be hardcoded `undefined` on the argument that a helper is a
-     * one-liner with nothing to reason about — which is a good default and was standing in for a rule, so an
-     * owner who pinned a tier to a role got a row that said "X-High" and a call that spent none of it. Absent
-     * still means absent, and lands on the model's own default. */
+    // Effort maps onto whatever dial this model publishes, like a chat turn's; absent still means absent.
     const item = await services.cursorModels.item(modelId);
     const selection: ModelSelection = item === undefined ? { id: modelId } : selectionFor(item, ask.effort);
 

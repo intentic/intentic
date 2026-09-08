@@ -1,9 +1,8 @@
 import { z } from "zod";
 
-/* The three GitHub reads the scan needs, behind an interface so the decision logic in scan.ts can be tested
- * without a network or a token. Plain fetch against the REST API rather than an SDK: three endpoints do not
- * earn a dependency, and this file ships into a registry repo that should stay readable by the people whose
- * listings it decides. */
+// The three GitHub reads the scan needs, behind an interface so scan.ts's decision logic can be tested without a
+// network or a token. Plain fetch, not an SDK: three endpoints don't earn a dependency, and this file ships into a
+// registry repo that should stay readable to the people whose listings it decides.
 
 export interface GithubRepo {
     /** owner/repo */
@@ -45,15 +44,12 @@ const toRepo = (raw: z.infer<typeof RepoSchema>): GithubRepo => ({
     ...(raw.description !== null ? { description: raw.description } : {}),
 });
 
-// Search caps out at 1000 results across 10 pages of 100. Well past that we would need a different discovery
-// mechanism entirely, so stopping here is honest, the caller logs the total it saw against what it read.
+// Caps at 1000 results (10 pages of 100); the caller logs total seen against what it read.
 const PER_PAGE = 100;
 const MAX_PAGES = 10;
 
-// A 404 is an answer, not a failure: an extension repo that has no manifest yet, or a ref that moved. Any
-// other non-OK status is the API telling us something is wrong (rate limit, bad token, outage) and must not
-// be smoothed into "nothing found", a scan that silently reads nothing would propose deleting the world if
-// a later step ever trusted its emptiness.
+// 404 is an answer, not a failure (no manifest yet, or a moved ref); any other non-OK status must not be smoothed into
+// "nothing found", or a scan reading nothing would propose deleting the world.
 const optional = async (response: Response, what: string): Promise<Response | undefined> => {
     if (response.status === 404) {
         return undefined;
@@ -102,7 +98,7 @@ export const githubReader = (token: string, fetchImpl: typeof fetch = fetch): Gi
         },
 
         async readFile(fullName, ref, path) {
-            // The raw media type returns the file body itself rather than base64 in a JSON envelope.
+            // Raw media type returns the file body itself, not base64 in a JSON envelope.
             const response = await optional(
                 await fetchImpl(`https://api.github.com/repos/${fullName}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
                     headers: {

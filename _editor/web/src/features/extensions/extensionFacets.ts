@@ -1,19 +1,8 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 
-/* WHAT AN EXTENSION GIVES YOU, the manifest's `contributes` said in the reader's words instead of the
- * schema's keys.
- *
- * The Extensions tab used to print the keys themselves ("views (2) · files (1) · commands (1) · agent · bin"),
- * which is a count of things the reader cannot see and a vocabulary only this repo uses. Sixteen rows of it is
- * sixteen rows of nothing: it never answers "which one of these puts the Documentation tile in my rail?". A
- * facet answers that, `rail tile` names the PLACE the contribution shows up, and carries the real names behind
- * it (view labels, command titles, connector catalog names) for the row's expanded breakdown.
- *
- * COMPLETE BY CONSTRUCTION, still. The old summary was written by walking `contributes` rather than enumerating
- * the kinds, precisely because the enumerated version it replaced had silently omitted six of them. That
- * property is kept here: `take()` records every kind this file has been taught, and the trailing loop emits a
- * plain `kind (n)` facet for every key it hasn't, so a contribution point added to the schema tomorrow shows
- * up on the row the moment an extension declares it, phrased badly rather than not at all. */
+// Manifest `contributes` entries in the reader's words, not raw schema keys: a facet names where a contribution shows
+// up (e.g. `rail tile`) and carries the real names for the row's breakdown. `take()` marks every kind known; anything
+// else still emits a plain `kind (n)` facet.
 
 type Contributes = NonNullable<ExtensionManifest["contributes"]>;
 
@@ -24,17 +13,13 @@ export interface ExtensionFacet {
     readonly label: string;
     /** The real names behind the noun, for the expanded breakdown, view labels, providers, file extensions. */
     readonly names: readonly string[];
-    /**
-     * Whether the collapsed row carries it. False for wiring with no place of its own: watched files exist so a
-     * view refreshes, and settings are rendered as their own form right below the breakdown.
-     */
+    /** Whether the collapsed row shows it; false for wiring with no place of its own (watched files, settings). */
     readonly surface: boolean;
 }
 
 const counted = (count: number, noun: string, plural = `${noun}s`): string => (count === 1 ? noun : `${count} ${plural}`);
 
-// The three sidebar families a view can claim, named after where the user finds them rather than after the
-// enum. `directory` is the per-repo panel in the Workspace tree; `sandbox` is a tab on this very hub.
+// Sidebar families a view can claim, named for where the user finds it, not the enum.
 const VIEW_SURFACES = {
     rail: { noun: `rail tile`, plural: `rail tiles` },
     sandbox: { noun: `sandbox tab`, plural: `sandbox tabs` },
@@ -45,8 +30,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     const contributes: Contributes = manifest.contributes ?? {};
     const facets: ExtensionFacet[] = [];
     const taught = new Set<string>();
-    // Describes one kind, and marks it taught even when this manifest doesn't declare it, an absent kind still
-    // must not fall through to the generic loop below.
+    // Marks a kind taught even when absent, so it never falls through to the generic loop below.
     const take = <K extends keyof Contributes>(kind: K, describe: (value: NonNullable<Contributes[K]>) => ExtensionFacet[]): void => {
         taught.add(kind);
         const value = contributes[kind];
@@ -73,8 +57,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
             surface: true,
         },
     ]);
-    // Named after the folder rather than the tab: what the reader will notice is an icon appearing on directories
-    // in their file tree, and the tab is what happens when they click it.
+    // Named for the folder, not the tab: the reader notices an icon on directories in their file tree.
     take(`documents`, (documents) => [
         {
             kind: `documents`,
@@ -94,8 +77,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
             surface: true,
         },
     ]);
-    // The provider rides the label rather than the names: "discord listener" is the fact, and the event types
-    // are the detail underneath it.
+    // Provider rides the label; event types are the detail underneath, not part of the name.
     take(`listener`, (listener) => [
         { kind: `listener`, label: `${listener.provider} listener`, names: listener.events.map((event) => event.type), surface: true },
     ]);
@@ -117,7 +99,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     take(`settings`, (settings) => [
         { kind: `settings`, label: counted(settings.length, `setting`), names: settings.map((setting) => setting.title), surface: true },
     ]);
-    // Not a place, it is why a view refreshes without polling. Worth stating once the row is open, never on it.
+    // Not a place; explains why a view refreshes without polling. Worth stating once the row is open, not on it.
     take(`files`, (files) => [{ kind: `files`, label: `watched files`, names: files.map((file) => file.path), surface: false }]);
 
     for (const [kind, value] of Object.entries(contributes)) {
@@ -132,7 +114,7 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
     return facets;
 };
 
-// Everything a reader could reasonably type into the filter to mean THIS extension: its id, the places it shows
-// up, and the real names inside them, so "github" finds the connectors extension and ".docx" finds viewers.
+// Every string a reader might filter by for this extension: its id, where it shows up, and the real names inside those
+// places.
 export const searchTextOf = (manifest: ExtensionManifest, facets: readonly ExtensionFacet[]): string =>
     [`${manifest.publisher}.${manifest.name}`, ...facets.flatMap((facet) => [facet.kind, facet.label, ...facet.names])].join(` `).toLowerCase();

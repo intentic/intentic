@@ -3,9 +3,8 @@ import type { SshExecutor, SshSession, SshTarget } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
 import { isLocalRepo, REPO_VOLUME } from "./backup.js";
 
-// Which part of the control plane to restore. Forgejo and Komodo recover independently; `all` also restores
-// the host-side /opt/intentic state (tokens + secrets) so the recovered databases and their credentials stay
-// consistent.
+// Which part of the control plane to restore; `all` also restores the host-side /opt/intentic state (tokens +
+// secrets) so recovered databases and their credentials stay consistent.
 export type RestoreScope = "forgejo" | "komodo" | "all";
 
 export interface RestoreArgs {
@@ -23,34 +22,29 @@ export interface RestoreArgs {
 // A named host volume restic restores the snapshot into, then the per-service restores copy out of.
 const RESTORE_VOLUME = "intentic-restore";
 
-// The restic image's entrypoint is `restic`; reuse the same pinned image with `--entrypoint sh` for the
-// plain file-copy steps so a restore needs no extra image on the host.
+// The restic image's entrypoint is `restic`; reuse the same pinned image with `--entrypoint sh` for the plain
+// file-copy steps so a restore needs no extra image on the host.
 const resticPrefix = (args: RestoreArgs): string => {
-    // `docker run -e KEY=value` takes the value literally once the shell is done with it, so the shell is the
-    // only layer here, but it IS a layer: these are the same restic password and backend credentials the
-    // backup provider writes, and spliced into bare `'…'` an apostrophe in either ran the remainder on the host.
+    // These are the same restic password and backend credentials the backup provider writes; shellQuote keeps an
+    // apostrophe in either from running the rest of the line as a command.
     const creds = Object.entries(args.credentials ?? {})
         .map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`)
         .join(" ");
-    // A local (on-host) repo lives in REPO_VOLUME, mount it at the repo path so restic can read it. The
-    // migration streams that volume onto this host first, so the repo is present before restore runs.
+    // A local (on-host) repo lives in REPO_VOLUME; mount it at the repo path so restic can read it.
     const repoMount = isLocalRepo(args.repo) ? `-v ${shellQuote(`${REPO_VOLUME}:${args.repo}`)} ` : "";
     return `docker run --rm -e ${shellQuote(`RESTIC_PASSWORD=${args.password}`)} ${creds} ${repoMount}-v ${RESTORE_VOLUME}:/restore ${shellQuote(args.image)} -r ${shellQuote(args.repo)}`;
 };
 
-// Overwrite a host volume from the snapshot's copy of it (the snapshot stored the read-only mount at
-// /volumes/<sub>). Runs as a throwaway sh container over the same restic image.
+// Overwrite a host volume from the snapshot's copy of it (stored read-only at /volumes/<sub>).
 const restoreVolume = (args: RestoreArgs, volume: string, sub: string): string =>
     `docker run --rm --entrypoint sh -v ${volume}:/dest -v ${RESTORE_VOLUME}:/restore ${args.image} ` +
     `-c 'rm -rf /dest/..?* /dest/.[!.]* /dest/* 2>/dev/null; cp -a /restore/volumes/${sub}/. /dest/'`;
 
 const wants = (scope: RestoreScope, part: "forgejo" | "komodo"): boolean => scope === "all" || scope === part;
 
-// Restore the control plane from a restic snapshot, then leave the operator to `intentic deploy apply` so the
-// services are recreated on top of the recovered volumes. This is a deliberate one-shot recovery action, not
-// a reconcile step: it stops the affected containers, overwrites their data volumes from the snapshot, and
-// (for `all`) restores the /opt/intentic host state, none of which is idempotent or convergent. It NEVER
-// runs `restic forget`/deletes the repo: the snapshots are the user's data.
+// Restore the control plane from a restic snapshot; the operator then runs `intentic deploy apply` to recreate
+// services on the recovered volumes. A one-shot recovery action, not a reconcile step, and not idempotent. Never
+// runs `restic forget` or deletes the repo.
 export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
     const executor = args.executor ?? sshExecutor;
     const session: SshSession = await executor.connect(args.target);

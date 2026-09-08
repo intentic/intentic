@@ -4,31 +4,13 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
-/* DID THESE SETTINGS ACTUALLY REACH THE THING, asked while the form is still on screen.
- *
- * Every failure this catches is otherwise discovered LATE and ILLEGIBLY: a token with the wrong scopes, an
- * instance URL that resolves nowhere from inside the container, a service that is not running, all present
- * afterwards as one card reading "not connected", with nothing saying which of six answers was wrong. One
- * request, made the way the connection itself would make it, turns each into a sentence beside the box that
- * caused it.
- *
- * WHAT IS TESTED IS DECLARED, NOT CODED. A cli card carries a `probe` (a URL template, headers, optionally where
- * in the answer the service names its caller), so a new connector is a manifest entry and no daemon change,
- * exactly as the card itself is. Two core kinds are handled here because their check is the PROTOCOL's rather
- * than any vendor's: a model endpoint lists its models, an MCP server answers `initialize`.
- *
- * NOTHING IS WRITTEN AND NOTHING IS APPLIED. The probe takes the config it was handed (with kept credentials
- * already resolved by the route) and touches no manifest, no file and no process: pressing Test can never be
- * the thing that changed the sandbox.
- *
- * node:https rather than fetch, the same reason trial.ts and platform-client.ts give: a self-signed certificate
- * is ORDINARY here (Obsidian's Local REST API ships one, so do most homelab services), and undici cannot skip
- * verification for a single request. */
+// Checks whether a card's settings actually reach the service, turning a generic failure into a specific reason. A cli
+// card declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
+// itself. Read-only, and uses node:https since a self-signed certificate must not fail the request.
 
-// A probe is a question about reachability, not a job: a service that has not answered in this long is a
-// service the reader needs to hear about now, with the timeout itself as the finding.
+// A probe is about reachability, not a job: no answer within this long is itself the finding.
 const PROBE_TIMEOUT_MS = 10_000;
-// A probe reads only enough to name who answered: nobody's Test button should pull a megabyte of JSON.
+// Enough to name who answered; a probe should not pull a large body.
 const MAX_BODY_BYTES = 64 * 1024;
 
 const template = (source: string, config: Record<string, unknown>): string =>
@@ -37,8 +19,7 @@ const template = (source: string, config: Record<string, unknown>): string =>
         return uri === undefined ? value : encodeURIComponent(value);
     });
 
-// The name a service gives its caller, dug out of the JSON answer by the card's declared path. Missing is
-// ordinary: not every service says who you are, and the message reads fine without it.
+// Digs the caller's name out of the JSON body via the card's declared dotted path; missing is ordinary.
 const identityIn = (body: unknown, path: string): string | undefined => {
     let node: unknown = body;
     for (const key of path.split(".")) {
@@ -53,9 +34,8 @@ const identityIn = (body: unknown, path: string): string | undefined => {
     return typeof node === "number" ? String(node) : undefined;
 };
 
-/* WHY A REQUEST DID NOT ARRIVE, in the reader's terms rather than node's. `ENOTFOUND` is the commonest answer
- * on this surface and the least useful printed raw: it means the host does not resolve, which here usually
- * means localhost was typed for a service living outside the container. */
+// Maps a raw error code to the reader's terms; ENOTFOUND usually means localhost was typed for a service outside the
+// container.
 const transportReason = (error: unknown): string => {
     const code = (error as { code?: string } | undefined)?.code;
     if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
@@ -73,7 +53,7 @@ const transportReason = (error: unknown): string => {
     return errorMessage(error);
 };
 
-// What an HTTP answer means for a credential, said once so every card refuses in the same words.
+// What each HTTP status means for a credential, said once so every card refuses in the same words.
 const httpReason = (status: number): string => {
     if (status === 401 || status === 403) {
         return "the credential was refused";
@@ -168,16 +148,14 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
     return { checked: true, ok: true, message: who === undefined ? reached : `Reached ${probe.subject}, authenticated as ${who}.` };
 };
 
-/* NOT TESTABLE IS NOT A FAILURE, and the two must never be drawn alike: an ssh box, a paired device and a
- * signed-in browser are all connections whose check is the thing itself, and a red "could not verify" on one
- * would be the form inventing a problem. */
+// Not tested is not a failure: an ssh box, paired device or signed-in browser has no test besides using it.
 const NO_TEST: CapabilityProbe = {
     checked: false,
     ok: false,
     message: "This one can't be tested from here: add it, and its card will tell you where it stands.",
 };
 
-// The card's declared probe, filled in from the answers on the form.
+// Builds an HTTP probe from the card's declared template, using the submitted config values.
 const contributionProbe = (contribution: ResolvedContribution | undefined, config: Record<string, unknown>): CapabilityProbe | HttpProbe => {
     const spec = contribution?.spec;
     if (spec === undefined || spec.kind !== "cli" || spec.probe === undefined) {
@@ -194,10 +172,8 @@ const contributionProbe = (contribution: ResolvedContribution | undefined, confi
     };
 };
 
-/* The two kinds whose test is the PROTOCOL's rather than a vendor's, so they are core: a model endpoint serves
- * a model list, an MCP server answers `initialize` with its name. Both are exactly what the thing consuming
- * the connection does first, so a pass here means the next turn will work rather than merely that something is
- * listening on the port. */
+// endpoint and mcp are core: their check is the protocol itself (model list, `initialize`), so a pass means the next
+// turn will work.
 const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
     const config = capability.config as Record<string, unknown>;
     if (capability.kind === "endpoint") {
@@ -232,8 +208,8 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
     return NO_TEST;
 };
 
-/* Test one capability's settings. `registry` is the contribution registry the caller already built (the route
- * has it in hand), so this stays a function of its inputs and can be pinned without a daemon around it. */
+// `registry` is the contribution registry the caller already built, kept as a parameter so this stays a pure function
+// of its inputs.
 export const probeCapability = async (registry: Map<string, ResolvedContribution>, capability: Capability): Promise<CapabilityProbe> => {
     const config = capability.config as Record<string, unknown>;
     const plan = capability.kind === "cli" ? contributionProbe(contributionFor(registry, capability.kind, config), config) : coreProbe(capability);

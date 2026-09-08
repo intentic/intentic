@@ -22,12 +22,11 @@ import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
 import { linkSshHosts } from "../ssh-hosts.js";
 import { cliHandler } from "./cli.handler.js";
 
-// The real first-party connectors/discord extensions provide every provider's data (fields/env/skill/fragment).
+// Real first-party connectors/discord extensions: every provider's fields/env/skill/fragment come from here.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
-// A ctx exposing only what cliHandler touches (files + workspace.root + capabilities + extensionsDir + the
-// terminal runner in its no-tmux fallback), over a fresh temp workspace. HOME is a temp dir so the github/gitlab
-// git-access hook never touches the real home.
+// Ctx exposing only what cliHandler touches, over a fresh temp workspace; HOME is a temp dir too, so the git-access
+// hook never touches the real home.
 const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "cli-cap-"));
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "cli-cap-home-"));
@@ -54,7 +53,6 @@ const skillPath = (root: string, id: string): string => join(root, ".agents", "s
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
-        // consume the apply frames
     }
 };
 
@@ -70,48 +68,44 @@ test("apply writes the connector's SKILL.md; discord voice pends only when the g
     expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=1117248");
     expect(skill).toContain("discord-voice");
     expect(skill).not.toContain("FROM ghcr.io");
-    // No gateway status yet ⇒ text tools active; whisper state is unknown, so it doesn't pend.
+    // No gateway status yet: whisper state is unknown, so it reads active, not pending.
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "active" });
-    // Once the gateway reports whisper missing (its /listeners/discord/status post), voice pends on a rebuild.
+    // Gateway reports whisper missing via POST /listeners/discord/status.
     setListenerStatus("discord", { connections: [], whisperReady: false }, Date.now());
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "pending", detail: "voice needs a rebuild (whisper)" });
 });
 
-/* WHATSAPP IS ACTIVE ONLY WHEN A PHONE ACTUALLY LINKED, and every other moment of the ceremony pends. The old
- * rule was the inverse: pend only while a code is in hand, active otherwise, and the four states below were
- * all "active" under it: a green card, an add flow that considered itself finished, and a reader navigated off
- * the only screen that was ever going to show them the code. */
 const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };
 const ready = { capabilityId: "whatsapp", provider: "whatsapp", gateway: "ready" as const };
 
 test("whatsapp pends until a phone links: silence, waiting, the live code, a refusal: then active", async () => {
     const { ctx } = tempCtx();
     await drain(cliHandler.apply(ctx, "whatsapp", whatsapp.config));
-    // Nothing posted yet: the seconds right after the add, and a gateway that has stopped. Not a paired phone.
+    // Covers both a fresh add and a gateway that has since stopped; neither means a paired phone.
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "starting the WhatsApp connection…",
     });
-    // The socket is up, the code hasn't arrived (or died with the socket that minted it).
+    // Socket is up but no code has arrived yet, or the code died with the socket that minted it.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "waiting" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "waiting for WhatsApp to issue a pairing code…",
     });
-    // A live code: carried in its own field so the card can set it big and copyable, not buried in the sentence.
+    // The code has its own field so the card can show it big and copyable, not buried in a sentence.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "code", code: "ABCDEFGH" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.",
         code: "ABCDEFGH",
     });
-    // WhatsApp's own complaint reaches the owner verbatim: the retry behind it is silent.
+    // WhatsApp's own refusal reaches the owner verbatim; the retry behind it stays silent.
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "failed", detail: "Not a WhatsApp account" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
         detail: "WhatsApp refused that number: Not a WhatsApp account",
     });
-    // Paired: no ceremony left for this id, and the gateway reports the session ready.
+    // Paired: nothing left to do, and the gateway reports the session ready.
     setListenerStatus("whatsapp", { connections: [ready], pairing: { other: { state: "waiting" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({ state: "active" });
 });
@@ -187,15 +181,14 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
     };
     expect(await cliEnvOf(hostFor([github]))).toEqual({ GITHUB_TOKEN_GITHUB: "gh" });
     expect(await cliEnvOf(hostFor([gitlab]))).toEqual({ GITLAB_TOKEN_GITLAB: "gl", GITLAB_URL_GITLAB: "https://gitlab.example.com" });
-    // The password passes through byte-exact: no encoding on the env path (curl --user sends it verbatim);
-    // only ${field:uri} templates (postgres below) percent-encode.
+    // No encoding on this path (curl --user sends it verbatim); only ${field:uri} (postgres below) percent-encodes.
     expect(await cliEnvOf(hostFor([imap]))).toEqual({
         IMAP_HOST_IMAP: "imap.example.com",
         IMAP_PORT_IMAP: "993",
         IMAP_USERNAME_IMAP: "u@e.com",
         IMAP_PASSWORD_IMAP: "p#ss@word: &$100%!",
     });
-    // The postgres URL template percent-encodes user/password/database (${field:uri}).
+    // Postgres URL template percent-encodes user/password/database via ${field:uri}.
     expect(await cliEnvOf(hostFor([primary, secondary]))).toEqual({
         POSTGRES_URL_ANALYTICS: "postgresql://app:pw1@a.example.com:5432/metrics",
         POSTGRES_URL_BILLING: "postgresql://app:pw2@b.example.com:5432/invoices",
@@ -206,15 +199,11 @@ test("echoConfig never leaks the secret: the token becomes hasSecret", async () 
     const connectors = await contributionRegistry(hostFor([]));
     expect(echoConfig(discord, connectors)).toEqual({ provider: "discord", hasSecret: true });
     const gitlab: Capability = { id: "gitlab", kind: "cli", config: { provider: "gitlab", token: "gl", url: "https://gitlab.com" } };
-    // Non-secret fields (provider, url) echo; the secret token becomes hasSecret and never its value.
     expect(echoConfig(gitlab, connectors)).toEqual({ provider: "gitlab", url: "https://gitlab.com", hasSecret: true });
 });
 
-/* WHICH FIELDS ARE SECRET IS THE CONNECTOR'S DATA, so an unresolvable connector means the daemon does not
- * know, and "don't know" has to withhold. An extension switched off, uninstalled, or whose manifest stopped
- * parsing all resolve the same way, and the empty secret-key set that used to fall out of that echoed every
- * stored credential onto the /capabilities list, which maintainers can read. The leak depended on unrelated
- * extension state rather than on anything about the credential, which is what made it easy to miss. */
+// Secret fields are the connector's data; an unresolvable connector means the daemon doesn't know, so it withholds
+// everything but the discriminator.
 test("echoConfig withholds everything but the discriminator when the connector cannot be resolved", async () => {
     const noConnectors = new Map();
     const gitlab: Capability = { id: "gitlab", kind: "cli", config: { provider: "gitlab", token: "gl-secret-value", url: "https://gitlab.com" } };
@@ -223,11 +212,8 @@ test("echoConfig withholds everything but the discriminator when the connector c
     expect(JSON.stringify(echoed)).not.toContain("gl-secret-value");
 });
 
-// ---- git access (github/gitlab clone/pull/push in the terminal) ----
-// The account-key REST calls are the injectable seam; keygen + git-config run for real against a temp HOME.
-// Through directExec, NOT the terminal runner: where tmux-run exists (running this suite inside a sandbox) the
-// runner hands the command to the container's tmux server, whose env, and therefore whose HOME: is the real
-// /root, so every `git config --global` here would land in the sandbox's own config instead of the temp home.
+// Account-key REST calls are the injectable seam; keygen and git-config run for real against a temp HOME, through
+// directExec rather than the terminal runner, since tmux's env is the real HOME, not this one.
 
 const gitHome = (): string => {
     const home = mkdtempSync(join(tmpdir(), "git-cap-home-"));
@@ -285,8 +271,7 @@ test("git setup reroutes ssh over https + warns (no throw) when ssh-key registra
 test("git setup wires native ssh anyway when the refused key is already on the account (added by hand)", async () => {
     const home = gitHome();
     const probed: string[] = [];
-    // The token can't manage keys: the state a `repo`-only PAT leaves, but the owner followed the warning and
-    // pasted the public half into their account, so ssh lets the key in.
+    // Mirrors a repo-only PAT: upload refused, but the owner pasted the public half in by hand.
     const deps: GitAccessDeps = {
         uploadKey: async () => {
             throw new Error("GitHub SSH key upload failed (404): Not Found");
@@ -299,8 +284,7 @@ test("git setup wires native ssh anyway when the refused key is already on the a
     expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
 
     expect(probed).toEqual([hostKey(home, "github.com")]);
-    // The alias is what every later boot reads, so writing it here is what makes the hand-added key survive a
-    // rebuild instead of silently dropping back to https.
+    // Writing the alias here is what lets the hand-added key survive a rebuild.
     expect(readFileSync(hostConf(home, "github.com"), "utf8")).toContain("Host github.com");
     expect(await httpsRewrite("github.com")).toEqual([]);
 });
@@ -346,7 +330,7 @@ test("status: a git-access connector pends while the container holds no git cred
     const { ctx, root } = tempCtx();
     await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
 
-    // The skill (on /work) survived the recreate; the credentials (in HOME) did not.
+    // Only the skill file is written here, mimicking a recreate that kept /work but wiped HOME.
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
 
     await setupGitAccess(gitHostOf(gitlabOn), directExec, {
@@ -372,19 +356,19 @@ test("git restore: a recreated container gets its credentials back without regis
     await setupGitAccess(host, directExec, deps);
     expect(uploads).toHaveLength(1);
 
-    // The recreate: a brand-new container filesystem, the volume intact.
+    // Simulates the recreate: fresh container filesystem, the persisted volume untouched.
     const home = gitHome();
     await linkSshHosts(history);
     expect(await gitAccessWired(host)).toBe(false);
 
     expect(await restoreGitAccess(host, directExec, deps)).toBeUndefined();
 
-    // The persisted keypair is already on the account: re-uploading it is exactly what piled up dead keys.
+    // No re-upload on restore: repeating it would pile up dead keys on the account.
     expect(uploads).toHaveLength(1);
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.com");
     expect(readFileSync(join(home, ".ssh", "config"), "utf8")).toContain("Include intentic-hosts/*.conf");
     expect(readFileSync(hostConf(home, "gitlab.com"), "utf8")).toContain("Host gitlab.com");
-    // Native ssh is wired, so ssh-form remotes are NOT rerouted over https.
+    // ssh wired: no https reroute for ssh-form remotes.
     expect(await httpsRewrite("gitlab.com")).toEqual([]);
     expect(await gitAccessWired(host)).toBe(true);
 });
@@ -424,8 +408,7 @@ test("git restore keeps ssh-form remotes on https when the key had never been re
     await linkSshHosts(history);
     await restoreGitAccess(host, directExec, refused);
 
-    // No alias next to the persisted key ⇒ registration had been refused ⇒ the https rewrite comes back, and
-    // the restore doesn't retry the upload (a re-add is what retries it).
+    // No alias beside the persisted key means the upload was refused; restore doesn't retry it (a re-add would).
     expect(uploads).toBe(1);
     expect(await httpsRewrite("gitlab.com")).toEqual(["git@gitlab.com:", "ssh://git@gitlab.com/"]);
     expect(await gitAccessWired(host)).toBe(true);
@@ -439,9 +422,7 @@ test("git access whose ssh alias was taken out from under it pends instead of re
     await setupGitAccess(host, directExec, { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false });
     expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
 
-    // What a second daemon repointing the managed dir at ITS history root leaves behind: the https credential
-    // is untouched in HOME, the alias and key it was written beside are unreachable, and nothing routes
-    // `git@gitlab.com:` anywhere, the card has to say so rather than keep claiming git access works.
+    // Repointing the managed dir strands the alias/key; the https credential in HOME survives but is unreachable.
     await linkSshHosts(mkdtempSync(join(tmpdir(), "git-cap-history-")));
 
     expect(await gitAccessWired(host)).toBe(false);
@@ -452,8 +433,7 @@ test("restoreConnectorHooks walks the manifest: hooked connectors only, one fail
     const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
     gitHome();
     await linkSshHosts(history);
-    // Wire gitlab first, then recreate, so the boot pass takes the offline branch it takes in production
-    // (this is the only call path that uses the real account deps; a persisted key must never reach for one).
+    // Setup then recreate: restore then takes the persisted-key path, which must never call the account API.
     await setupGitAccess(gitHostOf(gitlabOn), directExec, {
         uploadKey: async () => {},
         deleteKey: async () => {},
@@ -475,7 +455,7 @@ test("restoreConnectorHooks walks the manifest: hooked connectors only, one fail
 
     const credentials = readFileSync(join(home, ".git-credentials"), "utf8");
     expect(credentials).toContain("@gitlab.com");
-    // discord has no git hook, and github's git access is off: neither writes a credential.
+    // discord has no git hook; github's git access is off: neither writes a credential.
     expect(credentials).not.toContain("@github.com");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("connector broken:");
@@ -505,15 +485,13 @@ test("npm: apply writes the auth line + templated skill; a wiped HOME pends unti
 
     const skill = await readWorkspaceFile(skillPath(root, "npm"));
     expect(skill).toContain("name: npm");
-    // The skill's otp examples are minted for THIS instance, and its env var carries the instance suffix.
     expect(skill).toContain("$(otp npm)");
     expect(skill).toContain("$NPM_TOKEN_NPM");
     expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe("//registry.npmjs.org/:_authToken=npm-tok-1\n");
     expect(statSync(join(home, ".npmrc")).mode & 0o777).toBe(0o600);
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "active" });
 
-    // A container recreate wipes HOME while the connection survives: the card must say so, and the boot
-    // restore must heal it without a re-add.
+    // HOME wipe survives at the connection but not the credential; status must say so until boot restore heals it.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "npm-cap-home-"));
     expect(await cliHandler.status(ctx, "npm", npm.config)).toEqual({ state: "pending", detail: "npm auth needs a re-add" });
     await restoreConnectorHooks({ list: async () => [npm] } as unknown as CapabilitiesStore, { warn: () => {} });
@@ -537,18 +515,13 @@ test("a cli contribution whose env references a totp field fails to parse", () =
         skill: "skills/x/SKILL.md",
     };
     expect(CapabilityContributionSchema.safeParse(spec).success).toBe(true);
-    // The one thing a totp field must never do: ride the env into the agent's shell.
+    // A totp field must never appear in an env template; the schema rejects it.
     const leaking = CapabilityContributionSchema.safeParse({ ...spec, env: { ...spec.env, X_SEED: "${totpSecret}" } });
     expect(leaking.success ? [] : leaking.error.issues.map((issue) => issue.message)).toEqual([
         'env must not reference the totp field "totpSecret", the daemon mints codes from it instead',
     ]);
 });
 
-/* A SKILL TEMPLATE MAY QUOTE THE FORM, BUT NEVER A SECRET. The `${field}` pass exists so one pack can serve a
- * card that knows nothing about its site (the generic browser session names the page and purpose the user typed).
- * A skill file is plain text in the workspace that the agent reads every turn, so a pack referencing a secret
- * field must render EMPTY rather than copy a token out of the one place that guards it. Same rule as the totp
- * check above, at the other seam where a card's values leave the manifest. */
 test("a skill template's ${field} pass substitutes answers but never a secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "skill-sub-"));
     mkdirSync(join(dir, "skills", "x"), { recursive: true });
@@ -577,15 +550,14 @@ test("a skill template's ${field} pass substitutes answers but never a secret", 
     expect(skill).toContain("id=[mine]");
     expect(skill).toContain("token=[]");
     expect(skill).not.toContain("super-secret");
-    // The frontmatter is substituted too: that line is what the agent routes on.
+    // Frontmatter substitutes too: it's the line the agent routes on.
     expect(skill).toContain("description: for our staging box");
     expect(skill).toContain("name: mine");
 });
 
 test("npm: the totp seed reaches neither the echo nor the agent env", async () => {
     const connectors = await contributionRegistry(hostFor([]));
-    // Both secrets are withheld; hasSecret speaks for the rotatable token, never the seed's value.
+    // hasSecret speaks for the token; the totp seed has no such flag and is withheld too.
     expect(echoConfig(npm, connectors)).toEqual({ provider: "npm", hasSecret: true });
-    // The env template exports the token alone: the manifest schema would reject one referencing totpSecret.
     expect(await cliEnvOf(hostFor([npm]))).toEqual({ NPM_TOKEN_NPM: "npm-tok-1" });
 });

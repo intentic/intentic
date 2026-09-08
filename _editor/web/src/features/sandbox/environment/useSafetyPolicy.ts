@@ -8,15 +8,9 @@ import { SAFETY_LOG, SAFETY_POLICY } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { z } from "zod";
 
-/* The safety policy (.intentic/config/safety.md) and the log of what it decided, read and written through the
- * daemon's /safety routes.
- *
- * NOT PART OF useSandboxSettings, and the separation is deliberate rather than incidental. That composable's
- * whole shape — patch one field, optimistically write the whole object, warn when the daemon drops a key — is
- * built for a bag of flags. This is one long piece of prose somebody types into an editor, so it wants the
- * opposite: no optimistic write per keystroke, an explicit save, and no field-level reconciliation, because
- * there are no fields.
- */
+// The safety policy (.intentic/config/safety.md) and its decision log, read and written via the daemon's /safety
+// routes. Kept out of useSandboxSettings on purpose: that composable optimistically patches a bag of flags, while this
+// is one prose document that wants an explicit save, not a write per keystroke.
 
 const POLICY_KEY = SAFETY_POLICY.of();
 const LOG_KEY = SAFETY_LOG.of();
@@ -30,9 +24,8 @@ export function useSafetyPolicy() {
     const save = useMutation(
         {
             mutationFn: (text: string) => sandboxJson(`/safety/policy`, jsonBody(`POST`, { text })),
-            // Reconcile from the daemon rather than writing optimistically: a save here is an explicit act on a
-            // document the user has been looking at, not a switch flip, so there is no stale-control problem to
-            // solve and the honest thing is to show what was actually stored.
+            // Reconciles from the daemon rather than writing optimistically: a save is an explicit act, not a toggle,
+            // so there's no stale control to protect against.
             onSettled: async () => {
                 await queryClient.invalidateQueries({ queryKey: POLICY_KEY });
             },
@@ -43,9 +36,8 @@ export function useSafetyPolicy() {
     const policy = computed<SafetyPolicy | undefined>(() => query.data.value);
     return {
         policy,
-        // The text as stored, or undefined until it loads. `custom` is false when this is the shipped default,
-        // which is what lets the page offer "reset" honestly and say that an unconfigured sandbox is still
-        // governed by something.
+        // `custom` is false for the shipped default, so 'reset' can be offered honestly and an unconfigured sandbox
+        // still reads as governed.
         text: computed<string>(() => policy.value?.text ?? ``),
         custom: computed<boolean>(() => policy.value?.custom ?? false),
         save: (text: string) => {

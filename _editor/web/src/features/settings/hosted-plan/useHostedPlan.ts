@@ -5,13 +5,9 @@ import { HOSTED_PLAN } from "../../../lib/queryKeys";
 import { apiClient } from "../../../lib/useApi";
 import { hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
-/* THE HOSTED PLAN, read once for the whole app: the Billing page's state, the account menu's badge, the
- * Overview card's line and the chat strip, and whether the platform sells a plan at all (a self-hosted
- * platform does not, and every surface that mentions the plan is absent there).
- *
- * NOT SANDBOX-SCOPED (see HOSTED_PLAN in queryKeys.ts): the plan belongs to the signed-in person, and it is
- * their hosted sandboxes it keeps always on. A platform with no plan answers this route with `enabled: false`
- * rather than an error, so there is nothing to retry hard for. */
+// The hosted plan's state, read once for the whole app: Billing, the account badge, Overview, the chat strip, and
+// whether the platform sells a plan at all. Not sandbox-scoped; a planless platform answers `enabled: false` rather
+// than erroring.
 export function useHostedPlan() {
     const query = useQuery({
         queryKey: HOSTED_PLAN.every,
@@ -24,9 +20,7 @@ export function useHostedPlan() {
     const state = computed<HostedPlanState | undefined>(() => query.data.value);
     const meter = computed(() => hoursMeter(state.value?.hosted?.usage));
 
-    /* HOW MANY HOSTED SANDBOXES THE PLAN COVERS, written on Stripe by the platform and mirrored at once; the
-     * page re-reads afterwards, so the next press sees the truth rather than the cache. One in flight at a
-     * time: two presses racing would send two quantities and keep whichever Stripe answered last. */
+    // Writes to Stripe then refetches; one in-flight call at a time so racing presses can't overwrite each other.
     const slotsWorking = ref(false);
     const setSlots = async (quantity: number): Promise<void> => {
         if (slotsWorking.value) {
@@ -47,7 +41,7 @@ export function useHostedPlan() {
         onPlan: computed(() => state.value?.onPlan === true),
         priceUsd: computed(() => state.value?.priceUsd ?? 0),
         hosted: computed(() => state.value?.hosted),
-        // The free lane's meter, undefined for anyone it does not apply to.
+        // Free lane usage meter; undefined where it doesn't apply.
         meter,
         lowOnHours: computed(() => lowOnHours(meter.value)),
         planBadge: computed(() => planBadge(state.value)),
@@ -60,11 +54,10 @@ export function useHostedPlan() {
     };
 }
 
-/* THE BUY BUTTON'S OWN NAME. The button is the last thing read before a decision, so it says which decision
- * this is: "Resubscribe" for somebody who has been on the plan before. */
+// Button label read right before the decision; "Resubscribe" for someone who has been on the plan before.
 export const subscribeLabel = (state: HostedPlanState | undefined, returning: boolean): string =>
     `${returning ? `Resubscribe` : `Subscribe`} for $${state?.priceUsd ?? 0}/month`;
 
-/* Whether this account has been on the plan before. A lapsed or cancelled plan leaves a `status` behind while
- * `onPlan` is false, the same shape a never-subscriber has, minus that trace. */
+// Whether the account was ever on the plan: a lapsed subscription leaves `status` set while `onPlan` is false, the one
+// trace a never-subscriber lacks.
 export const hasReturned = (state: HostedPlanState | undefined): boolean => state?.onPlan === false && state.status !== undefined;

@@ -3,19 +3,12 @@ import { originPattern, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { currentGrants } from "./tab-access.js";
 
-/* WHO THIS BROWSER IS, WHAT IT MAY TOUCH, AND HOW THE AGENT ASKS FOR MORE.
- *
- * `askAccess` is the interesting one, and the shape of it is forced by Chrome in a way that turns out to be
- * exactly right: `chrome.permissions.request` only resolves true when it is called from a user gesture in an
- * extension page. So the agent CANNOT grant itself a site — not because this extension declines to, but
- * because the browser will not. What it can do is leave a request where the person will see it: a badge on the
- * toolbar icon and a line in the popup, with the reason it gave.
- *
- * One pending request at a time. A queue of permission prompts is a queue nobody reads, and the agent is
- * blocked on the first one anyway. */
+// Who this browser is, what it may touch, and how the agent asks for more. `chrome.permissions.request` only
+// resolves from a user gesture, so the agent cannot grant itself a site; it can only leave a request as a badge
+// and a popup line. One pending request at a time, since a queue of prompts is one nobody reads.
 
-// The badge is the only thing this extension puts in front of somebody who is not looking for it, so it says
-// exactly two things: something is waiting for you, or the agent is stopped.
+// The badge is the only unsolicited thing this extension shows, so it says exactly two things: something's
+// waiting, or the agent is stopped.
 export const refreshBadge = async (): Promise<void> => {
     const [pending, offered, paused] = await Promise.all([store.pending(), store.inbox(), store.paused()]);
     const waiting = pending !== undefined || offered !== undefined;
@@ -38,9 +31,8 @@ export const browserFacts = async (): Promise<WebExtFacts> => {
     return { browser: browserName(), tabs: tabs.length, grants, paused };
 };
 
-/* "Chrome 141 on Windows", from the user-agent string. A worse source than `navigator.userAgentData`, which is
- * not available in a service worker in every Chromium build this supports, and the string only has to be good
- * enough for a person to recognise their own browser on a card. */
+// "Chrome 141 on Windows", parsed from the user-agent string since `navigator.userAgentData` isn't available in
+// a service worker on every supported build; only has to be recognisable, not exact.
 const browserName = (): string => {
     const ua = navigator.userAgent;
     const family = /Edg\/(\d+)/.exec(ua) ?? /OPR\/(\d+)/.exec(ua) ?? /Chrome\/(\d+)/.exec(ua) ?? /Firefox\/(\d+)/.exec(ua);
@@ -57,8 +49,8 @@ const browserName = (): string => {
     return `${name} ${family?.[1] ?? "?"} on ${os}`;
 };
 
-// What the agent is told when it asks what it may touch. Reads as a list of sites rather than match patterns,
-// because a model that echoes this to a person should be echoing something the person recognises.
+// What the agent is told when it asks what it may touch; reads as a list of sites, not match patterns, since a
+// model echoing this should echo something recognisable.
 export const describeAccess = async (): Promise<string> => {
     const facts = await browserFacts();
     const lines = facts.grants.map((grant) => `  ${siteOf(grant.origin)} — ${grant.mode === "act" ? "read and act" : "read only"}`);
@@ -73,8 +65,8 @@ export const describeAccess = async (): Promise<string> => {
         .join("\n");
 };
 
-// Leave a request the person will see. Deliberately says nothing about whether they will grant it: the answer
-// arrives as a changed grant list, and the agent's next call either works or refuses.
+// Leaves a request the person will see; says nothing about whether they'll grant it, since the answer is just a
+// changed grant list on the next call.
 export const askAccess = async (origin: string, reason: string): Promise<string> => {
     const pattern = originPattern(origin.includes("://") ? origin : `https://${origin}`);
     if (pattern === undefined) {

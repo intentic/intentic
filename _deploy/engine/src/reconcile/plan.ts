@@ -7,9 +7,8 @@ import { createStore, type OutputStore, PENDING } from "../store.js";
 import type { EngineConfig, PlanOutcome, Step } from "../types.js";
 import { decideDiff, makeContext, narratedRead, requireProvider } from "./reconcile.js";
 
-// A prefix output ("appWebhook:") names no key of its own, one exists per consumer, so the only keys worth
-// seeding are the ones the graph actually asks for: seed PENDING for every actual $ref in the graph that
-// matches, found by walking each node's inputs with JSON.stringify's replacer.
+// A prefix output ("appWebhook:") names no key of its own, so only seed PENDING for actual $refs in the graph
+// matching it, found by walking each node's inputs.
 const seedPendingRefs = (graph: DesiredStateGraph, store: OutputStore, prefix: string): void => {
     for (const refNode of Object.values(graph.resources)) {
         JSON.stringify(refNode.inputs, (_k, v) => {
@@ -21,10 +20,8 @@ const seedPendingRefs = (graph: DesiredStateGraph, store: OutputStore, prefix: s
     }
 };
 
-// Dry run: read actual state and decide create/update/noop per node WITHOUT mutating. Existing resources
-// seed the store from their real observed outputs; pending creates seed PENDING, so a dependent's lenient
-// resolution never throws. A real diff only ever runs for an already-existing resource (whose deps also
-// exist and resolve to real values), so PENDING can never reach a diff.
+// Dry run: read actual state and decide create/update/noop per node without mutating. Existing resources seed
+// the store from their real observed outputs; pending creates seed PENDING.
 export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Promise<PlanOutcome> => {
     const env = config.env ?? process.env;
     const log = config.log ?? console.log;
@@ -40,13 +37,11 @@ export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Prom
         const type = node.type as ResourceType;
         const provider = requireProvider(config.providers, type, id);
         const ctx = makeContext(id, store, env, log);
-        // Announce the read before it starts (apply already does): reads go over live SSH/HTTP and can take
-        // seconds each, and a consumer showing progress must be able to name the node currently being checked
-        //, especially the one a stalled transport wedges on.
+        // Announce the read before it starts: reads go over live SSH/HTTP and can take seconds, and a progress consumer
+        // needs to name the node currently being checked.
         emit({ kind: "node", phase: "plan", state: "start", id, type });
-        // Resolve leniently before read: a dependency that is itself a pending create has no real output
-        // yet, so its ref resolves to PENDING rather than throwing. read must tolerate that (and return
-        // undefined if it cannot introspect); the same inputs feed diff for an existing resource.
+        // Resolve leniently before read: a dependency that is itself a pending create resolves to PENDING rather than
+        // throwing; read must tolerate that and return undefined if it cannot introspect.
         const inputs = resolveInputs(node.inputs, store, env, { lenient: true });
         const observed = await narratedRead(provider, inputs, ctx, id, log);
 

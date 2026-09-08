@@ -6,25 +6,12 @@ import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
 
-/* THE TRIGGER CATALOGUE, everything that can wake an agent in this sandbox, and everything worth starting from.
- *
- * This file exists because the same list used to be written down twice, in two packages, by two different
- * people's hands: the composer carried a source picker and a gallery of templates naming CI, Komodo, Sentry,
- * Stripe, email, the website widget and every chore in the book, while `upsert` down the hall carried its own
- * list of the providers it would accept. Nothing kept them in step, and worse, an area that gained something
- * worth reacting to had to edit the automations surface to say so, a dependency pointing from the hub to every
- * spoke, which is the shape that guarantees the hub is edited for reasons that have nothing to do with it.
- *
- * WHAT IS DECLARED HERE IS ONLY WHAT THE DAEMON ITSELF EMITS. `webchat` (it holds the widget endpoint) and `ci`
- * (it holds the pipeline webhook receiver and the poller standing in for it), plus the workspace events it
- * raises as the fleet works. Everything else arrives from an extension manifest and leaves with it.
- *
- * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, which is why the front desk and the CI fix are here rather than
- * in the packs that draw those surfaces: a source's starter and a template's prompt describe the same payload,
- * and one payload described in two packages is two descriptions to keep in step. A template on the generic
- * `event` webhook has no source to sit beside, so it goes with the pack carrying the capability card it names,
- * the connector pack for a Sentry or Komodo hook, which is the same pack the user connected to make it work.
- */
+// Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates
+// against, drawn from one list.
+// Declares only what the daemon itself emits (webchat, ci, workspace events); everything else comes from an extension
+// manifest.
+// A template lives beside the source it fires on so payload and prompt stay in one place; a generic-webhook template
+// goes with its connector pack.
 
 const WEBCHAT_PROVIDER = "webchat";
 
@@ -32,7 +19,7 @@ const WEBCHAT_SOURCE: TriggerSource = {
     provider: WEBCHAT_PROVIDER,
     label: "Front Desk",
     icon: "globe",
-    // The widget IS the connection, a website's own <script> tag, nothing to connect here first.
+    // No capability requirement: the chat widget's own `<script>` tag is the connection.
     requires: [],
     enabled: true,
     events: [{ value: "message", label: "Messages" }],
@@ -72,19 +59,12 @@ const CI_SOURCE: TriggerSource = {
         "needed: summarize briefly.",
 };
 
-/* The bug intake, the daemon's other gateway-less browser source: an SDK on the owner's own site POSTs a crash
- * or a written report to /intake/<id>/report, and the daemon groups it before anything wakes.
- *
- * WHAT THE TRIGGER NARROWS IS THE WAKING, NOT THE RECORDING, which is worth saying plainly because it is the
- * one place this source departs from every other one here. Everything admitted lands in the inbox either way,
- * an intake that only wakes on crashes still shows you what people wrote in, so the filters below read as
- * "what is worth interrupting me for" rather than "what to keep". */
+// Filters narrow what wakes an agent, not what the intake records; everything still lands in the inbox.
 const ISSUES_SOURCE: TriggerSource = {
     provider: ISSUES_PROVIDER,
     label: "Bug reports",
     icon: "exclamation-triangle",
-    // The SDK IS the connection, a <script> tag on the customer's own page (or a POST from their app), so
-    // there is nothing to connect here first.
+    // No capability requirement: the SDK's own `<script>` tag or POST is the connection.
     requires: [],
     enabled: true,
     events: [
@@ -111,23 +91,13 @@ const ISSUES_SOURCE: TriggerSource = {
 
 export const CORE_TRIGGER_SOURCES: readonly TriggerSource[] = [WEBCHAT_SOURCE, CI_SOURCE, ISSUES_SOURCE];
 
-/* A change-triggered chore diffs the same way, and getting it wrong is the difference between reviewing the
- * change and reviewing the whole repo: the payload's span is OPEN (`git diff <from>`, no upper bound) precisely
- * so a turn that errored, leaving its work uncommitted in the worktree, still reads as the change it made. */
+// Span is open-ended (`git diff <from>`) so an errored turn's uncommitted work still counts as its change.
 const SPAN_NOTE =
     "$AUTOMATION_PAYLOAD is a JSON object describing what changed. For each entry in its `repos`, " +
     "`git -C <dir> diff <from>` is exactly that repo's change, committed and uncommitted both. Look at nothing else: " +
     "the rest of the workspace is not what this run is about.";
 
-/* The chore book's scheduled forms. One entry per chore that carries an `automation`, the book decides WHICH
- * chores are worth running unattended (a survey has nothing for a guard to test, and a runtime reaching
- * end-of-life is not something a nightly sweep can fix), and this only reshapes them.
- *
- * GENERATED, NEVER WRITTEN TWICE. A chore exists in two modes and both are wanted: the maintenance panel offers
- * a turn against a specific finding you can read first, an automation wakes on a clock at 3am with nobody
- * watching. Hand-written in both places they would drift, the panel recommending one thing and the nightly
- * sweep doing another, in slightly different words, with only one of them fixed when we learn something about
- * how to phrase it. So the book owns the chore and this owns the trigger. */
+// One entry per chore with an `automation`, generated from the book so this and the panel never drift apart.
 const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) => {
     const prompt = choreAutomationPrompt(chore);
     return chore.automation === undefined || prompt === undefined
@@ -136,8 +106,7 @@ const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) =>
               {
                   id: chore.id,
                   title: chore.title,
-                  // The book leaves its icon an open string (it must not depend on the UI kit to name a glyph);
-                  // every id in it is one of the app's, and an unknown name renders the icon set's fallback.
+                  // Icon is an open string from the book; an unknown name falls back to the icon set's default glyph.
                   icon: chore.icon,
                   requires: [],
                   trigger: { kind: "schedule" as const, cron: chore.automation.cron },
@@ -151,33 +120,12 @@ const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) =>
           ];
 });
 
-/* THE DREAMING SESSION, the one job on this shelf that is about the SANDBOX rather than about a codebase, and
- * the only one whose evidence is the fleet's own history.
- *
- * A sandbox accumulates the shape of its own work: which kinds of job keep coming back, which of them open by
- * rediscovering the same thing, which correction the owner has now typed three times. Nothing reads that back.
- * Every other entry here measures a repository and changes a file in it; this one reads the SESSIONS and
- * changes how the next hundred are run, a persona that starts a category of job with the right context, a
- * capability worth asking the owner for, a tool worth baking into the image, a hook that stops a mistake being
- * made a fourth time.
- *
- * WHY IT COUNTS INSTEAD OF JUST RUNNING. Nightly on a quiet week is a turn spent describing the four sessions
- * it described yesterday, and the whole value here is volume: a pattern is what survives thirty sessions, an
- * anecdote is what three of them look like. So the cron only ASKS, and the trigger's afterSessions answers
- * (scheduler.ts, the sessions gate): the daemon counts the conversations somebody has started since this row
- * last woke an agent, records the night as "12 of 30 sessions since the last wake" when the bar is not met,
- * and hands the list itself to the turn under its prompt when it is. That keeps the row honest when it is
- * quiet, and makes the bar a number the owner can read on the row and move in the form, rather than a line
- * of shell nobody opens. */
+// Evidence is the fleet's own session history, not a repo; afterSessions gates the cron on quiet nights.
 const DREAMING_ID = "dreaming-session";
-// How much has to have happened before there is something to see. Sessions, not days: a week of one-line
-// questions is not a week of evidence, and thirty busy hours can be.
+// Threshold is sessions, not days: a quiet week undercounts and a busy day can meet it.
 const DREAMING_SESSIONS_FLOOR = 30;
 
-/* The brief. Four areas, because they are the four things a session can be made better by that a session
- * cannot fix for itself: the context it starts with, what it is allowed to reach, what is installed, and what
- * it is told. Naming the LEVER for each one is the difference between a turn that changes something and a turn
- * that writes an essay about what somebody should change. */
+// Four levers: persona context, allowed reach, what's installed, what it's told.
 const DREAMING_PROMPT =
     `Dream about how this sandbox works, and change one thing about it.\n\n` +
     `Under this brief is the list of sessions somebody has run here since you last did this: id, title, when, how ` +
@@ -215,8 +163,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         requires: [],
         trigger: { kind: "listener", provider: WEBCHAT_PROVIDER, eventType: "message" },
         note: "instant",
-        // Offered on the page itself: nobody opens this page looking for "put a chat on my website". `configure`
-        // rather than `create` because a Front Desk with no allowed sites admits nobody.
+        // `configure`, not `create`: a Front Desk with no allowed sites admits nobody.
         offer: "configure",
         description: "Put a chat bubble on your own site and let visitors talk to this agent.",
         prompt:
@@ -237,9 +184,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         requires: [],
         trigger: { kind: "listener", provider: ISSUES_PROVIDER, eventType: "crash" },
         note: "grouped, so a crash loop is one card",
-        /* `configure` rather than `create`, the Front Desk's reason exactly: an intake with no allowed sites
-         * admits nobody, so a one-click switched-off row would be a thing that cannot work until somebody opens
-         * the dialog anyway. */
+        // `configure`, not `create`: an intake with no allowed sites can't fire until configured.
         offer: "configure",
         description: "Put a crash reporter on your own site or app and have the agent fix what your users hit.",
         prompt:
@@ -257,7 +202,6 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         setup: "Paste the reporter snippet into your site before </body>, on any origin you listed. Held for your approval by default: a bug-fix turn has the run of the repo and its brief was written by a stranger's browser, so the first ones are worth reading before you let them run themselves.",
     },
     {
-        /* Offered only as a template: no automation exists until the owner explicitly picks it from the shelf. */
         id: FIX_DEPS_AUTOMATION.id,
         title: FIX_DEPS_AUTOMATION.title,
         icon: "wrench",
@@ -278,9 +222,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         requires: [],
         trigger: { kind: "workspace", event: "turn.settled" },
         description: "After every isolated agent turn, read its diff and report what it got wrong, before you decide to land it.",
-        // Sub-20-line changes are not worth a turn's spend; the sum is over added + deleted across every repo in
-        // the span. Binary files contribute "-" columns, which awk reads as 0, a binary-only change skips, which
-        // is the right answer anyway.
+        // Sums added+deleted across every repo in the span; binary-only diffs read as 0 and skip the guard.
         guard:
             `printf '%s' "$AUTOMATION_PAYLOAD" | jq -r '.repos[] | "\\(.dir) \\(.from)"' | ` +
             `while read -r dir from; do git -C "$dir" diff --numstat "$from"; done | awk '{ n += $1 + $2 } END { exit !(n >= 20) }'`,
@@ -311,9 +253,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         title: "Fix failing CI",
         icon: "bolt",
         requires: ["github", "gitlab"],
-        // `pipeline_broken` rather than `pipeline_failed` on purpose: a template is a default, and the default
-        // anyone wants is the run that BROKE the branch, not another agent for every push to a branch that has
-        // been red since this morning. The form offers the wider one a click away.
+        // `pipeline_broken`, not `pipeline_failed`: wakes on the run that broke the branch, not every red push.
         trigger: { kind: "listener", provider: CI_PROVIDER, eventType: "pipeline_broken" },
         prompt:
             "A CI pipeline that was green just went red: each payload line is one JSON event with the workspace repo, branch, sha, run url and the " +
@@ -324,10 +264,8 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     ...CHORE_TEMPLATES,
 ];
 
-/* An extension's declared template, met by the real trigger schema. A declaration is loose by construction (the
- * manifest package cannot see the trigger union, the dependency runs the other way), so this is where it stops
- * being loose: whatever does not parse is DROPPED rather than offered, because a gallery entry that `upsert`
- * would refuse is a template that exists only to fail on save. */
+// Validates an extension's declared template trigger against the real schema (the manifest package can't import it).
+// A template whose trigger fails to parse is dropped rather than offered, since `upsert` would refuse it anyway.
 const templateOf = (contribution: AutomationTemplateContribution): AutomationTemplate | undefined => {
     const trigger = TriggerSchema.safeParse(contribution.trigger);
     if (!trigger.success) {
@@ -340,19 +278,14 @@ const templateOf = (contribution: AutomationTemplateContribution): AutomationTem
     };
 };
 
-// One source per provider, first declaration winning, the daemon's own can never be shadowed by an extension
-// claiming `ci`, and two packs claiming one slug is the earlier-listed one, exactly as the listener routes
-// resolve it.
+// One source per provider, first wins: an extension can never shadow the daemon's own (ci, webchat, issues).
 export const automationCatalog = async (services: ExtensionHost): Promise<AutomationCatalog> => {
     const sources: TriggerSource[] = [...CORE_TRIGGER_SOURCES];
     const templates: AutomationTemplate[] = [...CORE_AUTOMATION_TEMPLATES];
     const providers = new Set(sources.map((source) => source.provider));
     const ids = new Set(templates.map((template) => template.id));
 
-    /* INSTALLED, not enabled, a disabled pack keeps its row here on purpose. A stored automation outlives the
-     * pack that supplied its provider, and it must stay readable and editable while that pack is off: with the
-     * source listed and `enabled: false` the editor shows the real label and declines to offer it as a new
-     * choice, where dropping it would degrade the row to a bare slug. */
+    // Lists installed packs regardless of enabled: a stored automation outlives a disabled pack's source.
     for (const extension of await installedExtensions(services)) {
         const listener = extension.manifest.contributes?.listener;
         if (listener !== undefined && !providers.has(listener.provider)) {
@@ -367,15 +300,12 @@ export const automationCatalog = async (services: ExtensionHost): Promise<Automa
                 ...(listener.automation.branchField !== undefined ? { branchField: listener.automation.branchField } : {}),
                 ...(listener.automation.mentionLabel !== undefined ? { mentionLabel: listener.automation.mentionLabel } : {}),
                 starterPrompt: listener.automation.starterPrompt,
-                // A pack's own capability entries are what its source needs connected. None declared ⇒ nothing
-                // to connect, which is the honest answer for a gateway that pairs itself.
+                // `requires` comes from the pack's own capability entries; none declared means nothing to connect.
                 requires: (extension.manifest.contributes?.capabilities ?? []).map((capability) => capability.id),
                 enabled: extension.enabled,
             });
         }
-        /* Templates, unlike sources, are dropped with the switch. A source has to survive being switched off so
-         * the automation standing on it stays readable; a template is a thing you have not made yet, and
-         * offering one from a pack the owner turned off would be offering to create a row that cannot fire. */
+        // Templates drop with a disabled pack, unlike sources: creating a row that can't fire isn't offered.
         if (!extension.enabled) {
             continue;
         }
@@ -390,12 +320,8 @@ export const automationCatalog = async (services: ExtensionHost): Promise<Automa
     return { sources, templates };
 };
 
-/* Provider → the event types it may fire, for `upsert`'s validation. Built from the SAME catalogue the composer
- * draws, which is the whole point: what the editor can offer and what the daemon will accept cannot disagree,
- * because there is no second list to disagree with.
- *
- * A source with an empty `events` narrows to no event type at all (webchat's single kind needs no picker), so
- * the caller checks membership of the provider first and the event type only when one was named. */
+// Provider to allowed event types, for `upsert`'s validation, built from the same catalogue the composer draws.
+// An empty `events` means no event type to check; callers test provider membership first, event type only if given.
 export const triggerSourceEvents = (catalog: AutomationCatalog): Map<string, Set<string>> =>
     new Map(
         catalog.sources.filter((source) => source.enabled).map((source) => [source.provider, new Set(source.events.map((event) => event.value))]),

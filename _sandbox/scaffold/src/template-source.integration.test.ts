@@ -10,12 +10,8 @@ import { addAppsToMonorepo, scaffoldMonorepo, templateArchiveUrl } from "./injec
 
 const exec = promisify(execFile);
 
-/* How the template source is FETCHED, against an origin that behaves the way github.com behaves from
- * datacenter egress: the git endpoint answers an unauthenticated `git-upload-pack` with a Basic-auth
- * challenge, the source archive is served to anyone. That asymmetry is not hypothetical — it is what turned
- * the image build's starter-site layer into `could not read Username for 'https://github.com'` and took the
- * `images` job down. A scaffold that reaches for `git clone` first fails every one of these tests.
- */
+// Origin behaves like github.com from datacenter egress: an unauthenticated git-upload-pack 401s, but the archive
+// endpoint serves anyone; a scaffold reaching for git clone first fails every test here.
 const templateFiles: Readonly<Record<string, string>> = {
     "templates.json": JSON.stringify({
         scope: "@app_/",
@@ -37,7 +33,7 @@ const templateFiles: Readonly<Record<string, string>> = {
     "_apps/landing/package.json": '{ "name": "@app_/landing" }',
 };
 
-// A template checkout on disk + the source archive github.com would serve for it.
+// Writes a template checkout to disk and the source archive github.com would serve for it.
 const writeTemplate = async (dir: string): Promise<string> => {
     for (const [path, contents] of Object.entries(templateFiles)) {
         await mkdir(join(dir, path, ".."), { recursive: true });
@@ -66,7 +62,7 @@ describe("template source fetch", () => {
             const url = request.url ?? "";
             hits.push(url);
             if (url.includes("/info/refs")) {
-                // Exactly what github.com answers an unauthenticated ref advertisement from a datacenter.
+                // What github.com answers an unauthenticated ref advertisement from a datacenter.
                 response.writeHead(401, { "www-authenticate": 'Basic realm="GitHub"' });
                 response.end("Requires authentication\n");
                 return;
@@ -96,10 +92,8 @@ describe("template source fetch", () => {
         expect(templateArchiveUrl("https://github.com/radarsu/00-canonical-repo", "main")).toBe(
             "https://github.com/radarsu/00-canonical-repo/archive/main.tar.gz",
         );
-        // A trailing slash or .git suffix is still the same repo.
         expect(templateArchiveUrl("https://github.com/o/r.git", "v1.2.3")).toBe("https://github.com/o/r/archive/v1.2.3.tar.gz");
         expect(templateArchiveUrl("https://github.com/o/r/", "main")).toBe("https://github.com/o/r/archive/main.tar.gz");
-        // No archive endpoint to reach for: a local checkout and an ssh remote clone as before.
         expect(templateArchiveUrl("/home/user/00-canonical-repo", "main")).toBeUndefined();
         expect(templateArchiveUrl("git@github.com:o/r.git", "main")).toBeUndefined();
     });

@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-// No mocks. laneDrop reads the lane machine from agentStatus: a leaf of pure functions, and its only tie to
-// the fleet store is a type-only import, which the transform erases. Nothing here reaches the app shell.
+// No mocks: laneDrop reads the lane machine from agentStatus, a pure leaf; the fleet store import is type-only and
+// erased.
 import { dropActionFor, dropActionLabel, dropRejection, type DropAction } from "./laneDrop";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
-// A drop can't assign a status: the lanes are projections, so it runs the action that CAUSES one, and most
-// drops have no action behind them at all.
+// A drop can't assign a status; it runs the action that causes one. Most drops have no action behind them at all.
 describe("dropActionFor", () => {
     const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
     const agent = (over: Partial<FleetAgent>): FleetAgent => ({
@@ -22,36 +21,33 @@ describe("dropActionFor", () => {
         unsent: false,
         ...over,
     });
-    // One armed condition watch, as the roster carries it. Only its PRESENCE matters to any rule here.
+    // One armed watch as the roster carries it; only its presence matters to any rule here.
     const watch = { id: `watch-1`, note: `CI run 316`, intervalSeconds: 60, deadlineAt: 2 };
 
     it("stops a running turn dropped on finished", () => {
         expect(dropActionFor(agent({ status: `running` }), `finished`)).toBe(`stop`);
     });
 
-    // An errored turn never reached its auto-land, so the drop has a FIRST land to try. A conflicted one has
-    // already had that land refused, and check mode is atomic: pressing it again against an unchanged
-    // workspace fails identically, which is what made this drop a guaranteed no-op.
+    // An errored turn never reached its auto-land, so the drop is a first attempt; a conflicted one already had its
+    // land refused, and check mode is atomic so retrying is a guaranteed no-op.
     it("lands work whose turn errored out before it could land", () => {
         expect(dropActionFor(agent({ status: `error` }), `finished`)).toBe(`land`);
     });
 
-    // Same shape, different cause: the daemon died under this one, so its auto-land never ran either and its
-    // worktree still holds however far it got.
+    // Same shape, different cause: the daemon died under it, so its auto-land never ran and the worktree holds whatever
+    // it got to.
     it("lands work whose turn was cut off by the daemon dying", () => {
         expect(dropActionFor(agent({ status: `interrupted` }), `finished`)).toBe(`land`);
     });
 
-    // And once more for the turn the USER cut off: the auto-land is skipped for an aborted turn precisely so
-    // half-finished work doesn't land itself, which leaves this drop as the way to say "actually, keep it".
+    // The auto-land is skipped for a user-stopped turn precisely so half-finished work doesn't land itself; this drop
+    // is how the user says "keep it" instead.
     it("lands work whose turn the user stopped", () => {
         expect(dropActionFor(agent({ status: `stopped` }), `finished`)).toBe(`land`);
     });
 
-    // While it is still going out, though, there is nothing to offer: the stop it would send has been sent,
-    // and the worktree is a live turn's until the unwind finishes. Both ways of ending a turn by hand answer
-    // the same, including the one whose card is already drawn in Finished: "Already finished" would be a beat
-    // early over a turn whose generator has not let go yet.
+    // A turn already ending by the user's hand has nothing to offer: the stop it would send has been sent, and the
+    // worktree is the live unwind's until it finishes.
     it("offers nothing for a turn the user has already ended, either way of ending it", () => {
         for (const status of [`stopping`, `dismissing`] as const) {
             expect(dropActionFor(agent({ status }), `finished`)).toBeUndefined();
@@ -84,31 +80,28 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `idle` }), `finished`)).toBeUndefined();
     });
 
-    /* AN ARMED WATCH IS WHAT KEEPS THE CARD OUT OF FINISHED, so disarming it is the action the drop invokes,
-     * exactly as a running turn's drop invokes the stop that ends it. Without this the gesture had no answer
-     * for the one card the lane change put in its way, and refused it with a sentence about answering an agent
-     * that had asked nothing. */
+    // An armed watch is what keeps the card out of Finished, so disarming it is the drop's action, exactly as a running
+    // turn's drop invokes the stop that ends it.
     it("stops the watches of a card dropped on finished", () => {
         expect(dropActionFor(agent({ status: `idle`, watches: [watch] }), `finished`)).toBe(`unwatch`);
     });
 
-    // A watch is a timer, not a worktree: a conversation working in the shared tree arms them exactly as
-    // readily, and has no land, resolve or discard for the branch guard to be protecting.
+    // A watch is a timer, not a worktree: a workspace conversation arms one as readily and has no land, resolve or
+    // discard to refuse.
     it("stops the watches of a workspace conversation too, which has no branch to act on", () => {
         expect(dropActionFor(agent({ status: `idle`, branch: undefined, watches: [watch] }), `finished`)).toBe(`unwatch`);
     });
 
-    // Something more pressing is behind the drop on any card that is BLOCKED, and the rules already know what
-    // each of those is worth. A watch never gets to speak over an unanswered question or a refused land.
+    // Something more pressing outranks a watch on any blocked card; a watch never speaks over an unanswered question or
+    // a refused land.
     it("yields to whatever else the card is blocked on", () => {
         expect(dropActionFor(agent({ status: `error`, watches: [watch] }), `finished`)).toBe(`land`);
         expect(dropActionFor(agent({ status: `conflict`, watches: [watch] }), `finished`)).toBe(`resolve`);
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch] }), `finished`)).toBeUndefined();
     });
 
-    // And the running turn still outranks it: the stop is what that drop has always meant, and the watch is
-    // still armed underneath it afterwards. A turn the daemon is putting back on its feet is refused outright,
-    // watch or no watch, which is what it was refused for before any of this.
+    // A running turn still outranks the watch: the stop is what that drop has always meant, and the watch stays armed
+    // underneath it.
     it("yields to a live turn, whose drop is still the stop or a refusal", () => {
         expect(dropActionFor(agent({ status: `running`, watches: [watch] }), `finished`)).toBe(`stop`);
         expect(dropActionFor(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBeUndefined();
@@ -121,9 +114,8 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `running` }), `discard`)).toBeUndefined();
     });
 
-    // Both client-only standings, because they refuse for one reason: the daemon has no entry for either, so
-    // every action behind a drop addresses an id it has never heard of. A refused send is the one that looks
-    // most like it should work: it sits in Attention, where a drop on Finished otherwise lands the work.
+    // Both client-only standings refuse for one reason: the daemon has no entry for either, so every action addresses
+    // an id it has never heard of.
     it("refuses every target for a draft and a refused send: no registry entry, no worktree, no turn", () => {
         for (const status of [`draft`, `failed`] as const) {
             for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
@@ -140,8 +132,8 @@ describe("dropActionFor", () => {
         }
     });
 
-    // The hint is the only thing that teaches the board's rules, so a refusal must always carry one, and an
-    // accepted drop must never carry one.
+    // A refusal must always carry a hint, and an accepted drop must never carry one: it is the only thing that teaches
+    // the board's rules.
     it("explains exactly the refusals it makes, and only those", () => {
         const cases: readonly FleetAgent[] = [
             agent({ status: `draft` }),
@@ -169,8 +161,8 @@ describe("dropActionFor", () => {
         }
     });
 
-    // The hint is the ghost's whole promise, so an action with no verb of its own would silently borrow
-    // another's, which is how "Discard this agent" came to be the fallback for anything unnamed.
+    // An action with no verb of its own would silently borrow another's, which is how "Discard this agent" became the
+    // fallback for anything unnamed.
     it("names every action it can return", () => {
         const labels = ([`land`, `resolve`, `stop`, `discard`, `unwatch`] as const satisfies readonly DropAction[]).map(dropActionLabel);
         expect(labels).toEqual([`Land the work`, `Ask the agent to resolve it`, `Stop the turn`, `Discard this agent`, `Stop watching`]);
@@ -178,9 +170,8 @@ describe("dropActionFor", () => {
     });
 });
 
-/* A CARD FROM ANOTHER SANDBOX. Three of the five actions are calls addressed by agent id and cross intact; the
- * two that are not need something this browser holds for one daemon at a time, and the refusal has to SAY that
- * rather than springing the card back with a sentence about the lane. */
+// Three of the five actions are calls addressed by agent id and cross sandboxes intact; the two that aren't need
+// something this browser holds for one daemon at a time, and the refusal must say so.
 describe("a card whose agent is in another sandbox", () => {
     const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
     const elsewhere = (over: Partial<FleetAgent>): FleetAgent => ({
@@ -211,8 +202,8 @@ describe("a card whose agent is in another sandbox", () => {
         expect(dropActionFor(elsewhere({}), `discard`)).toBe(`discard`);
     });
 
-    // Asking the agent to rebase SENDS A TURN, which needs the conversation the chat singleton holds for the
-    // active daemon alone. The same card in this box would resolve.
+    // Asking the agent to rebase sends a turn, which needs the conversation the chat singleton holds for the active
+    // daemon alone.
     it("refuses to ask the agent to resolve, and says the sandbox is why", () => {
         const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
         expect(dropActionFor({ ...conflicted, sandboxId: undefined }, `finished`)).toBe(`resolve`);
@@ -221,8 +212,8 @@ describe("a card whose agent is in another sandbox", () => {
         expect(dropRejection(conflicted, `finished`)).not.toEqual(dropRejection(elsewhere({ status: `idle` }), `active`));
     });
 
-    // Ending a watch writes through the fleet store, which IS the active daemon's roster and has no entry for
-    // this agent: the optimistic write would take a card off a list it was never on.
+    // Ending a watch writes through the fleet store, which is the active daemon's roster and has no entry for this
+    // agent.
     it("refuses to end a watch, and says the sandbox is why", () => {
         const watching = elsewhere({ status: `idle`, watches: [watch] });
         const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
@@ -232,8 +223,8 @@ describe("a card whose agent is in another sandbox", () => {
         expect(dropRejection(watching, `finished`)).not.toEqual(dropRejection(conflicted, `finished`));
     });
 
-    // The box is only ever the reason when the drop would OTHERWISE have worked: a card with nothing to offer
-    // this gesture keeps the refusal that is actually true of it.
+    // The box is only ever the reason when the drop would otherwise have worked; a card with nothing to offer keeps its
+    // ordinary refusal.
     it("keeps the ordinary refusal when the box was never the obstacle", () => {
         expect(dropRejection(elsewhere({ status: `idle` }), `active`)).toContain(`message`);
     });

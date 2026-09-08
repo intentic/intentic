@@ -2,30 +2,22 @@ import type { AttachFrame, TranscriptPatch, TranscriptRow } from "@intentic/sand
 import { upsertTool } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
-/* THE TRANSCRIPT AS A VALUE, and every transition it can make, as pure functions.
- *
- * What a chat shows is the daemon's rows (transcript-fold.ts folds them from the turn's frames, once, on the
- * daemon) plus the lines this window writes on its own clock. So the transitions here are small: take a run's
- * rows whole when attaching to it, apply the patches that follow, and pace the agent's prose through the
- * typewriter. Nothing here decides what a frame MEANS; that is settled before a byte reaches this window. */
+// The transcript as a value, with every transition as a pure function. Sources are the daemon's already-folded rows
+// (transcript-fold.ts) plus lines this window writes itself; transitions here only attach a run's rows, apply patches,
+// and pace the typewriter. Frame meaning is decided upstream, not here.
 
 export interface PendingText {
-    // The message the buffered text belongs to. Buffered text NEVER migrates: a delta for a different message
-    // flushes this one first, or prose leaks across a turn boundary.
+    // Message the buffered text belongs to; a delta for a different message flushes this one first.
     readonly id: number;
     readonly text: string;
 }
 
 export interface TranscriptState {
     readonly messages: readonly ChatMessage[];
-    // Monotonic message-id allocator. In the state because allocating an id IS a transition, a reducer that
-    // reached for a counter on `this` would not be replayable.
+    // Monotonic id allocator kept in state, since allocating an id is itself a replayable transition.
     readonly nextId: number;
     readonly pending: PendingText | undefined;
-    /* WHERE THE ATTACHED RUN'S ROWS START in this list: the run's row 0 is `messages[base]`, and every patch
-     * index counts from there. Remembered with the run's id so that attaching to the SAME run again (a stream
-     * that dropped and came back, a tab reopened onto a run still going) replaces the copy this window already
-     * holds rather than drawing the answer a second time under it. */
+    // Where the attached run's rows start; keyed by run id so re-attaching replaces, not duplicates, them.
     readonly attached?: { readonly run: string; readonly base: number };
 }
 
@@ -33,7 +25,7 @@ export const emptyTranscriptState: TranscriptState = { messages: [], nextId: 1, 
 
 export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
-// --- rows this window writes ------------------------------------------------------------------------------------
+// Rows this window writes.
 
 export const appendMessage = (state: TranscriptState, message: Omit<ChatMessage, "id">): TranscriptState => ({
     ...state,
@@ -46,7 +38,7 @@ const mapMessage = (state: TranscriptState, id: number, fn: (message: ChatMessag
     messages: state.messages.map((message) => (message.id === id ? fn(message) : message)),
 });
 
-// --- the attached run -------------------------------------------------------------------------------------------
+// The attached run.
 
 /* A ROW'S CONTENT AS ONE COMPARABLE VALUE, without the two fields this window adds on top of the daemon's row:
  * the id it hands out, and the mark saying this window wrote the row itself.
@@ -114,8 +106,10 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
     return { messages: [...kept, ...rows], nextId, pending: undefined, attached: { run: head.run, base } };
 };
 
-/** Apply one change the daemon made to the attached run's rows. `typewriter` says whether prose should be paced
- *  (a watched, live transcript) or land whole. */
+/**
+ * Applies one daemon change to the attached run's rows. `typewriter` decides whether prose paces out or lands all at
+ * once.
+ */
 export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typewriter: boolean): TranscriptState => {
     const base = state.attached?.base ?? state.messages.length;
     const at = (index: number): ChatMessage | undefined => state.messages[base + index];
@@ -127,8 +121,7 @@ export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typew
             if (target === undefined) {
                 return state;
             }
-            // The daemon's row is whole, its text included, so prose this window was still revealing for it
-            // would land twice: the buffer for that row is dropped, the row already says everything.
+            // The daemon's row already has its full text; drop any buffer still revealing prose for it.
             return {
                 ...mapMessage(state, target.id, () => ({ ...patch.row, id: target.id })),
                 pending: state.pending?.id === target.id ? undefined : state.pending,
@@ -169,10 +162,12 @@ export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typew
     }
 };
 
-// --- typewriter (pure: the caller drives the clock, this owns what a tick means) --------------------------------
+// Typewriter is pure: the caller drives the clock, this only decides what a tick means.
 
-/** Reveal a slice of the buffer, sized to catch up when far behind so bursts type out quickly but a large
- *  backlog never lags. Called from the caller's animation frame; a no-op with nothing buffered. */
+/**
+ * Reveals a slice of the buffer, sized to catch up when far behind so a burst types out quickly without a large backlog
+ * lagging. A no-op with nothing buffered.
+ */
 export const revealPending = (state: TranscriptState): TranscriptState => {
     const pending = state.pending;
     if (pending === undefined || pending.text === ``) {
@@ -187,8 +182,10 @@ export const revealPending = (state: TranscriptState): TranscriptState => {
     };
 };
 
-/** Reveal the WHOLE buffer at once, a turn ended, was stopped, or a card took the bubble over, so no text may
- *  be left mid-type. */
+/**
+ * Reveals the whole buffer at once: a turn ended, was stopped, or a card took the bubble, so nothing may be left
+ * mid-type.
+ */
 export const flushPending = (state: TranscriptState): TranscriptState => {
     const pending = state.pending;
     if (pending === undefined || pending.text === ``) {
@@ -200,8 +197,8 @@ export const flushPending = (state: TranscriptState): TranscriptState => {
     };
 };
 
-// Enqueue prose for the typewriter rather than writing it straight to the message. If the target changed (a
-// fresh bubble below a card), flush the prior buffer first so nothing leaks across bubbles.
+// Buffers prose for the typewriter instead of writing it straight to the message. Flushes the prior buffer first if the
+// target changed, so nothing leaks across bubbles.
 const enqueueText = (state: TranscriptState, id: number, delta: string): TranscriptState => {
     const flushed = state.pending !== undefined && state.pending.id !== id ? flushPending(state) : state;
     return { ...flushed, pending: { id, text: `${flushed.pending?.text ?? ``}${delta}` } };

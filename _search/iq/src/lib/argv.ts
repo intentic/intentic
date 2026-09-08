@@ -1,16 +1,11 @@
-// Grep-dialect argv, absorbed before stricli parses it. Transcript mining (207 calls): `iq search` alone was 44
-// calls, 37 of them hard failures; --include/--path/--max-results account for most of the rest. A redirect
-// message costs the agent a retry turn, a rewrite costs nothing, and the stderr note still teaches the
-// canonical form for the next call.
+// Grep-dialect argv, absorbed before stricli parses it: a rewrite costs nothing, while a redirect message costs the
+// agent a retry turn.
 const VERB_REWRITES: Record<string, string> = {
     search: "q",
     grep: "find",
-    // `skeleton` is the word agents infer from outline's own description. Keep the public vocabulary small,
-    // but do not charge a retry for guessing the descriptive noun instead of the route name.
+    // skeleton is the word agents infer from outline's description; absorbed rather than charged a retry.
     skeleton: "outline",
-    // `ask` shipped as its own verb before the natural-language pipeline became what a bare query does. Removing
-    // it must not turn a habit into an exit-2: the rewrite is the same trade as `search`, free here, one wasted
-    // turn otherwise, and the note teaches the spelling that survives.
+    // `ask` predates the natural-language pipeline query does now; absorbed so the old habit isn't an exit-2.
     ask: "q",
 };
 
@@ -22,17 +17,14 @@ const FLAG_REWRITES: Record<string, string> = {
     "--max-count": "--limit",
     "--top": "--limit",
     "-k": "--limit",
-    // Nobody guesses "--context-lines" first. Left to stricli's edit distance, `--lines` resolves to `--limit`,
-    // which is a different knob answering a different question, so the redirect is not just a wasted turn but a
-    // wrong signpost: it caps result GROUPS when the caller asked to see more of each one.
+    // `--lines` would resolve to `--limit` by edit distance, a different knob (caps result groups, not context).
     "--lines": "--context-lines",
     "--context": "--context-lines",
     "--after-context": "--context-lines",
     "--before-context": "--context-lines",
 };
 
-// Verbs that route to a subcommand rather than taking a query. Their gap is the same one the verb rewrites
-// close: a shape the agent can reasonably infer costs a turn because nothing absorbs it.
+// Verbs that route to a subcommand rather than take a query; same gap the verb rewrites close.
 const SESSIONS_SUBCOMMANDS = new Set(["ingest", "list", "files", "match", "grab", "fork"]);
 const INDEX_SUBCOMMANDS = new Set(["status", "rebuild", "drop"]);
 
@@ -81,20 +73,15 @@ export interface NormalizedArgv {
     readonly hints: string[];
 }
 
-// `find` means filenames to the shell and content to iq, and the collision costs a turn: a session ran
-// `iq find 'Row.vue'`, got the eight files that IMPORT it, and went back to grep. Not a rewrite, searching for
-// the text "Row.vue" is a legitimate thing to ask, so the answer still comes, with the other verb named beside
-// it. A bare filename is the only shape this fires on: an extension, no separator, no regex metacharacter.
+// A bare filename only: extension, no separator or regex char, where shell and iq `find` diverge.
 const BARE_FILENAME = /^[\w-]+\.[a-z]{1,5}$/i;
 const filenameHint = (verb: string | undefined, pattern: string | undefined): string | undefined =>
     verb === "find" && pattern !== undefined && BARE_FILENAME.test(pattern)
         ? `"${pattern}" looks like a filename: \`iq files ${pattern}\` searches names, \`find\` searches content`
         : undefined;
 
-// A router verb's own dialect. `iq "<query>"` searches, so `iq sessions "<query>"` reading as "search the
-// sessions" is the obvious inference, and it was the single most frequent hard failure in the 2026-09 mining:
-// `No command registered for '<the whole question>'`, which names nothing the caller could do next. `iq index
-// --status` is the same mistake in the other direction, a subcommand typed as a flag.
+// A router verb's own dialect: `iq sessions "<query>"` reads as searching sessions, and `iq index --status` is the same
+// mistake in reverse, a subcommand typed as a flag.
 const absorbSubcommand = (out: string[], notes: string[]): void => {
     const next = out[1];
     if (next === undefined) {
@@ -121,7 +108,7 @@ const absorbVerb = (out: string[], notes: string[]): void => {
 };
 
 const absorbFlagNames = (out: string[], notes: string[]): void => {
-    // `log` genuinely takes --path (a git pathspec); everywhere else it is grep dialect for --in.
+    // `log` takes a real --path (a git pathspec); every other verb treats --path as grep dialect for --in.
     const pathTarget = out[0] === "log" ? undefined : "--in";
     for (let i = 0; i < out.length; i += 1) {
         const token = out[i]!;
@@ -134,8 +121,7 @@ const absorbFlagNames = (out: string[], notes: string[]): void => {
     }
 };
 
-// Auto mode used to expose an engine named "lexical" in experiments, so it remains a plausible spelling
-// even though the stable public verb is `find`.
+// "lexical" is accepted as a spelling for the `find` mode, an older engine name that still gets typed.
 const absorbLexicalMode = (out: string[], notes: string[]): void => {
     for (let i = 1; i < out.length; i += 1) {
         if (out[i] === "--mode" && out[i + 1] === "lexical") {
@@ -148,8 +134,8 @@ const absorbLexicalMode = (out: string[], notes: string[]): void => {
     }
 };
 
-// --repo takes a workspace repo NAME. An absolute/cwd-relative filesystem path is unambiguously --in;
-// leaving it as --repo produces a convincing but false zero-result answer.
+// --repo takes a repo name; an absolute or cwd-relative path is unambiguously --in, since leaving it as --repo silently
+// returns zero results.
 const absorbRepoPath = (out: string[], notes: string[]): void => {
     for (let i = 1; i < out.length; i += 1) {
         const token = out[i]!;
@@ -163,8 +149,8 @@ const absorbRepoPath = (out: string[], notes: string[]): void => {
     }
 };
 
-// `files --glob '*.ts'` states a complete filename-search intent but omits the required positional. When
-// there is exactly one glob and no other positional, use it as the exact file pattern as well as the scope.
+// `files --glob '*.ts'` states a complete intent but omits the required positional; with exactly one glob and no other
+// positional, it doubles as the exact pattern.
 const absorbFilesGlob = (out: string[], notes: string[]): void => {
     if (out[0] !== "files" || positionalArgs(out).length > 0) {
         return;
@@ -181,9 +167,8 @@ const absorbFilesGlob = (out: string[], notes: string[]): void => {
     }
 };
 
-// `context` wants `path:line`; a bare path exits 2 with "expected an anchor like path:line", which is a turn
-// spent to learn a colon. But `:1` is not what the caller meant either — someone naming a whole file wants the
-// whole file's shape, and that verb already exists. Same trade as skeleton → outline.
+// `context` wants `path:line`; a bare path would just exit 2 to teach a colon. A whole-file name means the caller wants
+// that file's shape, which `outline` already gives.
 const absorbBareContextPath = (out: string[], notes: string[]): void => {
     if (out[0] !== "context") {
         return;
@@ -198,7 +183,7 @@ const absorbBareContextPath = (out: string[], notes: string[]): void => {
 export const normalizeArgv = (argv: readonly string[]): NormalizedArgv => {
     const out = [...argv];
     const notes: string[] = [];
-    // Order matters: the verb settles first, because every absorber after it keys off out[0].
+    // Order matters: the verb must settle first, since every absorber after it reads out[0].
     absorbVerb(out, notes);
     absorbSubcommand(out, notes);
     absorbFlagNames(out, notes);

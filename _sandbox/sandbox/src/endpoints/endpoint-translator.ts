@@ -5,29 +5,11 @@ import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
 import { endpointConfigOf } from "./local-model.js";
 
-/* AN OPENAI-COMPATIBLE ENDPOINT, EXPRESSED AS A CLIPROXYAPI PROVIDER, the whole of what makes a self-configured
- * model API drivable by a harness that speaks only the Anthropic Messages API.
- *
- * No new adapter, no second turn path: the translator is already in the image and already re-serves four
- * subscription providers this way, and its `openai-compatibility` list is the seam for arbitrary upstreams. An
- * endpoint becomes one entry in that list, and from there it is indistinguishable to the rest of the daemon from
- * a routed provider, same HarnessEndpoint, same ANTHROPIC_BASE_URL, same alias pinning.
- *
- * THE ENTRY IS ALSO THE ROUTING TABLE. A model the entry does not declare is refused with "unknown provider for
- * model", so the declared list is not documentation, it is the set of models the endpoint can actually serve,
- * which is why it is rebuilt from the live catalog rather than written once at add time.
- *
- * `prefix` is what lets several endpoints coexist: two servers both publishing `qwen3-coder` would otherwise
- * collide on one global id. Every model is addressed as `<capability id>/<model>` (endpointModelId).
- *
- * TWO WRITE PATHS, AND BOTH ARE REQUIRED. The Management API's PUT is how a change reaches a running proxy
- * without a restart, but startTranslator re-renders config.yaml from scratch on every spawn AND on every rung
- * of its restart ladder, so anything that lived only in the proxy's memory is erased by the next crash-restart.
- * So the config render is the source of truth and the PUT is the live update; they carry the same entries. */
+// An OpenAI-compatible endpoint expressed as a CLIProxyAPI provider entry, reusing the translator already in the image
+// instead of a new adapter path. `prefix` namespaces models across endpoints as `<capability id>/<model>`. The rendered
+// config is the source of truth; the Management API PUT only pushes it to a running proxy without a restart.
 
-// What a turn hands the translator to reach one endpoint's model, the other half of the `prefix` below, and the
-// reason it lives here rather than beside the credential resolver that sends it: the two have to agree, and this
-// is the module that decides how an endpoint is addressed.
+// Addresses a model as `<capability id>/<model>`; the credential resolver must parse it the same way.
 export const endpointModelId = (id: string, model: string): string => `${id}/${model}`;
 
 export interface CompatModel {
@@ -39,37 +21,22 @@ export interface CompatEntry {
     readonly name: string;
     readonly prefix: string;
     readonly "base-url": string;
-    // Always present, empty when the user declared none, the empty record IS "no extra headers", so there is no
-    // absent state to distinguish and the render simply omits the block.
+    // Empty when no extra headers are declared; never absent, so render can omit the block outright.
     readonly headers: Record<string, string>;
     readonly "api-key-entries": readonly { readonly "api-key": string }[];
     readonly models: readonly CompatModel[];
 }
 
-// Only openai-protocol endpoints ride the translator. An anthropic-protocol one already speaks the harness's own
-// wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list. A localmodel
-// entry arrives here as the derived loopback endpoint it is (endpointConfigOf), openai by construction.
-//
-// The trial is excluded because its entry is STATIC (trialCompatEntry, appended below): deriving it from the
-// capability list would tie the routing table back to the availability probe's timing, which is the
-// fresh-install race that split exists to end, and when the probe HAS answered, the layered capability would
-// mint a second entry on the same prefix.
+// Only openai-protocol endpoints ride the translator: anthropic-protocol goes direct, localmodel derives its own entry.
+// Trial is excluded here since it uses a static entry (trialCompatEntry), independent of the probe.
 export const translatedEndpoints = (capabilities: readonly Capability[]): { id: string; config: EndpointConfig }[] =>
     capabilities.flatMap((capability) => {
         const config = capability.id === TRIAL_ENDPOINT_ID ? undefined : endpointConfigOf(capability);
         return config !== undefined && config.protocol === "openai" ? [{ id: capability.id, config }] : [];
     });
 
-/* One entry per endpoint, its models taken from the live catalog (which falls back to the last list this
- * endpoint answered with, see endpoint-catalog.ts for why that rung has to exist for this caller in particular).
- *
- * An endpoint with no known models is emitted anyway, with an empty model list. It routes nothing, which is
- * correct, but it keeps the provider present and its failure legible as "this endpoint has published no models"
- * rather than as a provider that silently vanished from the picker while the user was looking at its card.
- *
- * `api-key-entries` always carries exactly one entry, empty string included: it is CLIProxyAPI's credential pool
- * for the provider, and an entry with no pool has no credential to select. An unauthenticated model server (the
- * ordinary case for one on the docker host) then receives an empty bearer, which it ignores. */
+// One entry per endpoint, models from the live catalog; an endpoint with no known models is still emitted, empty.
+// `api-key-entries` always holds exactly one entry (possibly empty), CLIProxyAPI's credential pool for the provider.
 export const endpointCompatEntries = async (services: Services): Promise<CompatEntry[]> => {
     const endpoints = translatedEndpoints(await services.capabilities.list());
     const entries = await Promise.all(
@@ -85,15 +52,13 @@ export const endpointCompatEntries = async (services: Services): Promise<CompatE
             };
         }),
     );
-    /* The trial's entry, ALWAYS, on any platform-connected sandbox: never derived from the probe-gated
-     * capability the picker reads. Routability is a constant of the sandbox's configuration; whether the trial
-     * is OFFERED stays the probe's business (trial-endpoint.ts has the whole argument). */
+    // Trial entry is added unconditionally, independent of the probe-gated capability the picker reads.
     const trial = trialCompatEntry(services.config, services.platformTunnel);
     return trial === undefined ? entries : [...entries, trial];
 };
 
-// The `openai-compatibility:` block of the rendered config, or "" when there is nothing to serve. Written as text
-// like the rest of renderConfig, values go through JSON.stringify, which emits valid YAML double-quoted scalars.
+// The `openai-compatibility:` block of the rendered config, or "" when there is nothing to serve; values go through
+// JSON.stringify for valid YAML double-quoted scalars.
 export const compatYaml = (entries: readonly CompatEntry[]): string => {
     if (entries.length === 0) {
         return "";
@@ -113,8 +78,7 @@ export const compatYaml = (entries: readonly CompatEntry[]): string => {
         for (const key of entry["api-key-entries"]) {
             lines.push(`      - api-key: ${JSON.stringify(key["api-key"])}`);
         }
-        // An empty list must still be spelled out: `models:` with nothing under it parses as null, where `[]` is
-        // the empty list the proxy expects.
+        // `models:` with no items parses as null in YAML; `[]` must be written explicitly for the empty list.
         lines.push(entry.models.length === 0 ? "    models: []" : "    models:");
         for (const model of entry.models) {
             lines.push(`      - name: ${JSON.stringify(model.name)}`, `        alias: ${JSON.stringify(model.alias)}`);
@@ -123,13 +87,9 @@ export const compatYaml = (entries: readonly CompatEntry[]): string => {
     return lines.join("\n");
 };
 
-/* Push the current entries to a RUNNING proxy, so an endpoint added or edited from the UI serves turns without
- * waiting for a restart. The Management API replaces the whole list (a bare JSON array, the wrapper shape the
- * GET answers with is rejected), which is right because the daemon owns every entry in it: nothing else writes
- * this list, so a full replace can never clobber a stranger's row.
- *
- * Best-effort and non-throwing, like every other translator call: the proxy may be mid-restart or absent (a bare
- * dev run bakes no translator), and the config render at its next start carries the same entries anyway. */
+// Pushes current entries to a running proxy so a UI change takes effect without a restart; PUT replaces the whole list
+// since the daemon owns every entry. Best-effort: failures are swallowed since the next render carries the same
+// entries.
 export const syncEndpointCompat = async (services: Services): Promise<void> => {
     if (services.config.translator.url === "") {
         return;

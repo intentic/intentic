@@ -25,92 +25,46 @@ import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
 
-/* Dispatches one open file to its surface and owns the fetch.
- *
- * There are exactly THREE surfaces here, and no format-specific branch among them: the editor (code /
- * markdown / big-text), an extension's viewer, and the states with nothing to show (empty / binary /
- * too-large). Every picture, PDF, spreadsheet and recording the app can display is the middle one: a
- * `contributes.viewers` entry the host resolves at open time (openFile.ts). Adding a format is an extension,
- * not an edit to this file; switching that extension off degrades to a download with nothing to unwind.
- *
- * WHAT THE HOST STILL OWNS is the fetch, because that is where the credentials are. Every daemon route is
- * Bearer-authenticated, which a browser-issued <img>/<video> request cannot be, so the viewer never fetches:
- *   text: a bounded window through the same read the editor uses.
- *   blob, bytes through the sandbox client, turned into a blob: object URL and REVOKED on file-change or
- *          unmount via the watcher's cleanup (leak-safe across a fast walk through a folder of images).
- *   url : a /workspace/media URL carrying a short-lived, path-scoped ticket, which the element range-reads
- *          itself. The extension gets a string; the credential is minted and held here.
- * A monotonic seq guard drops stale async results when the user switches files mid-fetch, and an
- * AbortController cancels the request itself so a superseded read stops costing the daemon and the wire.
- *
- * Text is read as a bounded WINDOW (readFileWindow) whose response carries the file's true size, and that size
- * is what decides between an editable buffer and the windowed read-only view. The decision used to be made
- * BEFORE the read, from the tree entry's `size`, which is absent for any file the loaded tree doesn't hold (a
- * tab restored before the tree arrives, anything inside node_modules, an entry the walk's budget cut). With no
- * size, every cap silently passed and the whole file was fetched, whatever it was. */
+// Dispatches an open file to its surface (editor, an extension's viewer, or a can't-show state) and owns the
+// fetch, since daemon routes are Bearer-authenticated and a browser can't do that itself. The read's true size,
+// not the tree entry's, decides editable vs. windowed text; a seq + AbortController drop stale reads.
 
 // `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
 const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
-// The open file was deleted on disk (the read came back with nothing there): the parent closes this tab rather
-// than leaving a "not found" panel. Only fires for a clean read; a dirty file's re-read is skipped (staleOnDisk)
-// so edits survive.
+// Fires when the file is gone on disk, so the parent closes the tab; skipped for a dirty file (staleOnDisk).
 const emit = defineEmits<{ gone: [path: string] }>();
 
-// Which surface is open: starts from resolveOpenFile(), but a `code` file whose bytes contain NUL is switched
-// to `binary` after the read (an unknown-extension binary, shown as a download instead of mojibake), and one
-// over the editable cap to `big-text`.
+// Which surface: from resolveOpenFile(), switched to `binary` on NUL bytes or `big-text` past the cap.
 const open = ref<OpenFile>({ kind: `empty` });
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
-/* Content for the resolved extension viewer: exactly the ONE prop its manifest's `fetch` named, held in the
- * shape the fetch produced rather than split into a slot per kind. The split was a trap. It passed the two
- * kinds a viewer never asked for as `undefined`, and an undefined prop is still a fallthrough ATTR, which Vue
- * merges OVER the bindings of a viewer whose root is itself a component. That is how `src: undefined` reached
- * the image viewer's <ImageView> and erased the object URL it had just minted from the bytes: every .png and
- * .webp opened as an empty transparency checkerboard, with no error anywhere to say why.
- *
- * Nothing here needs revoking: a `blob` viewer owns whatever object URL it makes of the bytes, and a `url`
- * viewer is handed a plain string. */
+// Held in the shape produced, not split into optional props: an unset prop still falls through as an attr.
 const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: string } | undefined>(undefined);
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
 const error = ref<string | null>(null);
-// Set when the open file changed on disk WHILE it has unsaved edits: we keep the buffer and offer Reload instead
-// of silently overwriting the user's work.
+// Set when the file changed on disk with unsaved edits: buffer kept, Reload offered instead of overwriting.
 const staleOnDisk = ref(false);
-// Bumped by Reload to remount the editable code surface (it's uncontrolled, seeded once via :key) from disk text.
+// Bumped by Reload to remount the editable surface (uncontrolled, seeded via :key) from disk text.
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
 const edit = useEditBuffers();
-// Warm Monaco + the file's grammar in parallel with the fetch (below) so the editor paints highlighted the
-// instant CodeView mounts: no plain-text-then-color flash.
+// Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
 const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target })).toString()}`);
 
 let seq = 0;
-/* The current text read. Aborted whenever another one supersedes it: a file switch, or the next change-epoch
- * reconcile. Without this, a file being appended to (a build log, a report an agent is writing) queued a fresh
- * whole-file read every 250ms batch with nothing cancelling the last one: requests piled up in flight, each
- * holding the file's text, and the daemon paid for every one of them. */
+// Current text read, aborted whenever superseded, so an appending file can't queue unbounded reads.
 let reading: AbortController | undefined;
-// The window a big text file opened with, handed to BigTextView so it doesn't re-read what we already have.
+// Window a big-text file opened with, handed to BigTextView so it needn't re-read what's already had.
 const firstWindow = ref<WorkspaceFileWindow | undefined>(undefined);
-/* This file came from the SHARED tree even though the view is scoped to a conversation's copy, which is
- * legitimate and common: a checkout mirrors the /work layout but is not a superset of it (the shared state
- * dir, the reference shelf, anything under /work no repo tracks). The banner says "showing X's copy", so the
- * exceptions have to say so themselves or that sentence quietly becomes false one file at a time.
- *
- * Text reads only, because only they carry the daemon's answer (WorkspaceFileSchema.shared): a binary
- * preview is bytes with no room for it. So the chip appearing is a fact; its absence is not a claim. */
+// True when this file came from the shared tree despite a scoped view; text reads only carry this fact.
 const fromShared = ref(false);
 
-/* THE ONE SURFACE FOR WHICH A MISSING FILE IS EXCEPTIONAL. Everywhere else in the app a read of a path with
- * nothing at it is an ordinary answer (see readFileWindow), and this view is the exception that proves the rule:
- * the file is open in a tab, so it being gone is news. Turning that answer back into a rejection right here
- * means every failure path below handles it in the one place it already handles a failed read, rather than each
- * of the five call sites growing a branch for it. */
+// The one surface where a missing file is exceptional: elsewhere a read of nothing is ordinary, but an open tab
+// going missing is news, handled once here instead of at every call site.
 class FileGone extends Error {}
 const gone = (err: unknown): boolean => err instanceof FileGone;
 
@@ -125,10 +79,8 @@ const readText = async (target: string): Promise<WorkspaceFileWindow> => {
 };
 // An aborted read is this component replacing its own request: never an error to show the user.
 const superseded = (err: unknown): boolean => err instanceof DOMException && err.name === `AbortError`;
-// A same-path re-fire in an editable text view is a POSSIBLE external change, but it's also how the user's own
-// save echoes back (upload → daemon file-watch → /events SSE → changeEpochOf bump). Reconcile by content instead
-// of blindly resetting: re-read quietly (never null `text`, so no flicker), then act only on a real difference
-// from the baseline we last knew on disk. After a save, baseline === disk, so the self-echo is a no-op.
+// A same-path refire is either an external change or the user's own save echo; reconciled by content, not a
+// reset (no flicker), against the last known disk baseline. A save sets baseline = disk, so the echo no-ops.
 const reconcileOpenFile = (currentPath: string): void => {
     const id = ++seq;
     readText(currentPath).then(
@@ -136,12 +88,11 @@ const reconcileOpenFile = (currentPath: string): void => {
             if (id !== seq) {
                 return;
             }
-            // Equal to what we last knew on disk ⇒ our own save echo (or a no-op touch): leave the view alone.
+            // Equal to the last known disk baseline: a save echo or no-op touch, leave the view alone.
             if (content === edit.baselineOf(currentPath)) {
                 return;
             }
-            // Equal to the live buffer ⇒ disk caught up to the user's text (a save echo racing markSaved, or an
-            // external write of identical content): nothing is lost, record it as saved, no warning.
+            // Equal to the live buffer: disk caught up to the user's text; mark saved, no warning needed.
             if (content === edit.bufferOf(currentPath)) {
                 edit.markSaved(currentPath, content);
                 return;
@@ -179,16 +130,11 @@ const reconcileOpenFile = (currentPath: string): void => {
 };
 
 watch(
-    // changeEpochOf(path) is the complete external-change signal: every write to /work echoes over the SSE and
-    // bumps it, so the open file re-reads even when its byte length (the tree entry's size) is unchanged. Size is
-    // deliberately NOT a trigger: it would also fire mid-save from the post-save tree refetch, racing markSaved.
-    // The SCOPE is a trigger for the same reason the path is: the same path in another copy of the workspace is
-    // another file, and leaving the old text on screen would be the silent wrong answer in miniature.
+    // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
+    // race markSaved. Scope is a trigger too: the same path in another copy is a different file.
     () => [path, changeEpochOf(path), workspaceAgent.value] as const,
     ([currentPath], previous, onCleanup) => {
-        // A same-path re-fire in an editable text view reconciles by content (no flicker, no false warning);
-        // everything else (a new file, a scope switch, or a non-text mode) takes the destructive reset + fetch
-        // below.
+        // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
         if (
             previous !== undefined &&
             currentPath === previous[0] &&
@@ -222,9 +168,7 @@ watch(
                 return;
             }
             loading.value = false;
-            // A text read reports "nothing there" in its answer (FileGone). A binary preview and a media ticket
-            // have no envelope to report it in: raw bytes and a mint still 404, and to this view the two mean
-            // exactly the same thing: the tab is open on a file that is not there any more.
+            // Text reports missing via FileGone; a binary/media fetch just 404s instead. Both mean the file is gone.
             if (gone(err) || (err instanceof SandboxHttpError && err.status === 404)) {
                 emit(`gone`, currentPath);
                 return;
@@ -234,9 +178,7 @@ watch(
 
         if (resolution.kind === `code` || resolution.kind === `markdown`) {
             loading.value = true;
-            // Warm Monaco + the file's grammar concurrently with the fetch (CodeView awaits both before painting,
-            // so this just hides the load behind the fetch). Markdown renders as prose (marked), but its Source
-            // toggle is the same editor, and the resolution carries a grammar for it like any other text file.
+            // Warms Monaco/grammar alongside the fetch; markdown's Source toggle is the same editor, grammar and all.
             const textKind = resolution.kind;
             void ensureMonaco().then((monaco) => ensureLanguage(monaco, resolution.lang));
             readText(currentPath).then((window) => {
@@ -251,23 +193,16 @@ watch(
                     open.value = { kind: `binary` };
                     return;
                 }
-                /* Too big to hold as an editable buffer: the editor keeps the whole text plus a baseline to diff
-                 * it against, and a save posts all of it back, none of which a log wants. It opens windowed and
-                 * read-only instead, seeded with the window just read: a 120MB log costs one bounded read. */
+                // Too big for an editable buffer; opens windowed instead, seeded with the window already read.
                 if (window.size > TEXT_EDIT_MAX_BYTES) {
                     firstWindow.value = window;
                     open.value = { kind: `big-text`, lang: lang.value };
                     return;
                 }
-                // With the real size in hand, settle the tokenizer: the extension table, then the shebang the way
-                // VSCode does for an extensionless script, and nothing at all over the highlight cap. Set before
-                // `text` so CodeView mounts already colored.
+                // Settles the tokenizer with the real size now known; set before `text` so CodeView mounts coloured.
                 lang.value = highlightLangFor(currentPath, window.size, content);
                 text.value = content;
-                // Record the on-disk text so the editor can diff it for the dirty state (never clobbers live
-                // edits). Skipped in a scope: buffers are keyed by path alone, so seeding one from a
-                // conversation's copy would leave that text standing in for the shared file the moment the
-                // reader switches back, and nothing scoped is editable anyway.
+                // Skipped in scope, since a path-keyed buffer would mislabel the shared file.
                 if (workspaceAgent.value === undefined) {
                     edit.setBaseline(currentPath, content);
                 }
@@ -275,9 +210,7 @@ watch(
             return;
         }
 
-        /* An extension viewer claimed this file. Its component and its content are resolved TOGETHER, so the
-         * pane paints once instead of flashing an empty viewer while the bytes arrive, and the fetch is
-         * whichever kind the APPROVED MANIFEST declared, never the extension's choice at call time. */
+        // Component and content resolve together, painting once; fetch kind is the manifest's, not the extension's.
         if (resolution.kind === `viewer`) {
             const { viewer } = resolution;
             loading.value = true;
@@ -294,22 +227,18 @@ watch(
                 loading.value = false;
                 viewerComponent.value = component;
                 viewerContent.value = loaded;
-                // `text` doubles as the breadcrumb's Copy-content source, which is the right behaviour for a
-                // viewer whose file IS text (an .svg): copying its markup is what that button should do there.
+                // `text` doubles as the Copy-content source, right for a text-backed viewer (.svg) copying its markup.
                 text.value = `text` in loaded ? loaded.text : null;
             }, fail);
             return;
         }
-        // binary / too-large / empty / locked: nothing to fetch. The last of them is the only one that is a
-        // REFUSAL rather than an inability, and it costs no request to honour, which is the point: a read the
-        // daemon would decline is never issued, so the tab settles on its explanation instead of closing itself.
+        // binary/too-large/empty/locked: nothing fetched; locked is a refusal, not an inability, no request made.
     },
     { immediate: true },
 );
 
-// Adopt the on-disk version after a "changed on disk" warning: re-read, set the buffer + baseline to disk (clears
-// the dirty state), and bump the nonce so the uncontrolled editor remounts and reseeds. Discards the unsaved edits
-//: an explicit choice the user makes by clicking Reload.
+// Adopts the on-disk version after a stale-on-disk warning: re-reads, sets buffer + baseline to disk, bumps the
+// nonce so the editor remounts. Discards unsaved edits, an explicit choice via Reload.
 const reloadFromDisk = (): void => {
     staleOnDisk.value = false;
     readText(path).then(
@@ -324,12 +253,8 @@ const reloadFromDisk = (): void => {
     );
 };
 
-/* Save the file (the binary / too-large states, BigTextView, and any viewer's own can't-render fallback).
- *
- * Through /workspace/media rather than /workspace/raw, and NOT via a Blob: the daemon streams it and marks it
- * as an attachment, so the browser writes it straight to disk. Nothing is held in the tab, which is what
- * removes the 25 MiB ceiling the raw route imposes: a 700 MB recording downloads exactly like a 7 KB one, and
- * the "too large to preview here" state finally has a working button under it. */
+// Via /workspace/media, not /workspace/raw or a Blob: the daemon streams it as an attachment straight to disk,
+// so nothing is held in the tab and the 25 MiB raw-route ceiling doesn't apply.
 const download = async (): Promise<void> => {
     try {
         const anchor = document.createElement(`a`);
@@ -340,40 +265,25 @@ const download = async (): Promise<void> => {
     }
 };
 
-/* Inline editing (text files only). Read and edit are the same Monaco surface (readOnly toggles), seeded from
- * the file's live buffer (edits survive tab switches via useEditBuffers) or its on-disk text. Ctrl+S / Save
- * persists through the daemon's upload route; the tree refetch then refreshes size + the read view. */
+// Inline editing (text only): read and edit share one Monaco surface (readOnly toggles), seeded from the live
+// buffer or disk text. Ctrl+S/Save persists via upload; the tree refetch then refreshes size and the read view.
 const { editMode, setEditMode, hideFileComments, toggleHideFileComments } = useLayout();
 const { saveText, run, canEditFiles } = useWorkspaceTree();
-// The editable CodeView instance: the toolbar Save button saves through its exposed save() so the toolbar and
-// Ctrl+S run the same normalize-then-save path.
+// Editable CodeView instance; toolbar Save calls its exposed save(), so toolbar and Ctrl+S share one path.
 const editorView = ref<InstanceType<typeof CodeView>>();
-// The markdown surface, for the same reason: its Save has to fold the open paragraph back into the document
-// before writing, which only it can do, so the toolbar asks it rather than saving the text behind its back.
+// Markdown surface, same reason: its Save must fold the open paragraph back in first, so only it can do that.
 const markdownView = ref<InstanceType<typeof MarkdownViewer>>();
-// Mobile is read-only: touch code editing is error-prone and the agent (chat) is the edit path there, so the
-// global edit mode is ignored and the Edit affordance hidden below 768px.
+// Mobile is read-only: touch editing is error-prone, and chat is the edit path there; Edit hides below 768px.
 const { mobile } = useDevice();
 
-// A file this surface knows how to put a caret in, scope aside. Split out of `canEdit` because the two answers
-// are needed apart: one decides whether the Edit button appears, the other whether its ABSENCE needs explaining.
+// Whether this surface can put a caret in the file, scope aside; split from `canEdit` since one decides the
+// Edit button, the other whether its absence needs explaining.
 const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
-/* Editing is off while the view is showing a conversation's own copy (workspaceScope). The daemon refuses a
- * write into a checkout by construction: no write route can even name one, so a Save here would silently go
- * to the SHARED tree's file of the same path, which is the exact confusion this scope exists to end. And the
- * agent may be writing to that file right now: two writers on one worktree file lose each other's work with
- * nothing to notice it. */
+// Off in a scope: the daemon can't write into a checkout at all, so a Save here would silently hit the shared
+// file of the same path, possibly racing the agent's own writes to it.
 const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && editableKind.value);
-/* AND THE REASON IS SAID HERE, on the row where the Edit button would have been, because that is where somebody
- * finds out they wanted it. It used to be a clause in a banner across the top of the whole view, which charged
- * every reader of every file for a sentence that only matters to the one who reaches for the keyboard: the
- * textbook trade of a permanent cost against an occasional need. The chip in the tab row says WHICH copy; this
- * says what that means for the file in front of you, at the moment it means anything. */
-/* The same seat now answers for the OTHER reason Edit can be missing, a member whose tier does not write. Two
- * causes, one chip: what a reader needs at that spot is why this file will not take a caret, and the second
- * cause is the more permanent of the two, so leaving it unsaid was the version of this that read as a bug.
- * The tier is asked FIRST because it outranks the scope: a viewer looking at a conversation's copy cannot edit
- * for a reason that no landing will fix. */
+// Reason lives here, on the row where the Edit button would be, since that's where a reader would look for it.
+// Two causes for one chip: tier (checked first, outranks scope) or scope, either can disable Edit.
 const scopedReadOnly = computed(() => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined));
 const scopeTitle = useScopeTitle();
 const readOnlyReason = computed(() =>
@@ -381,34 +291,30 @@ const readOnlyReason = computed(() =>
         ? `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`
         : `Your access to this sandbox is read-only: changing files needs maintainer access.`,
 );
-/* MARKDOWN ANSWERS THE SAME EDIT SWITCH AS EVERY OTHER FILE, and only differs in what it opens INTO: the
- * rendered document becomes typeable (MarkdownViewer), where a `.ts` file opens in the code editor. One button,
- * one meaning, everywhere; the surface behind it is the file type's business. */
+// Markdown answers the same Edit switch as any file, differing only in what it opens into (MarkdownViewer
+// becomes typeable, instead of the code editor).
 const markdownHere = computed(() => open.value.kind === `markdown`);
-// Global edit mode (useLayout), gated per file by canEdit so a viewer's file (and every binary) stays in its
-// viewer, including one whose file is text, like an .svg: an extension viewer renders, it does not edit.
+// Global edit mode, gated by canEdit so a viewer's file (even text-backed, like .svg) stays in its viewer,
+// never the editor.
 const editingThis = computed(() => !mobile.value && editMode.value && canEdit.value && !markdownHere.value);
-// Whether the markdown surface may be written at all: the HOST's permission, which is what `canEdit` is
-// everywhere else. Whether the reader is actually editing is `editMode`, read on the surface itself.
+// Whether markdown may be written at all (the host's permission, `canEdit` elsewhere); whether it's being
+// edited now is `editMode`, read on the surface.
 const markdownEditable = computed(() => !mobile.value && canEdit.value && markdownHere.value);
 // Either text surface, being edited. What the Save/Preview pair in the toolbar is about.
 const editingText = computed(() => editingThis.value || (markdownEditable.value && editMode.value));
-// Save through whichever surface is showing: each has to settle its own buffer first (the markdown one folds in
-// what is on screen; the code one normalizes), so the toolbar asks rather than writing the text behind its back.
+// Saves through whichever surface is showing, since each settles its own buffer first (markdown folds in,
+// code normalizes).
 const saveNow = (): void => (markdownHere.value ? markdownView.value?.save() : editorView.value?.save());
-// Reading the code alone is offered where there is code to isolate: a text file on the editor surface, being
-// READ. Editing shows the file whole: the buffer that gets saved is never the stripped one.
+// Offered only while reading code (not editing): the saved buffer must never be the stripped one.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !editingThis.value);
-// In a scope the file on screen is disk, not a buffer: an unsaved edit to the SHARED file of the same path is
-// somebody else's text, and showing it here (or its dirty dot) would misattribute it to this agent's copy.
+// In a scope the file shown is disk, not a buffer: a dirty dot here would misattribute someone else's edit to
+// this agent's copy.
 const dirtyThis = computed(() => workspaceAgent.value === undefined && edit.isDirty(path));
 const editorSeed = computed(() => (workspaceAgent.value === undefined ? (edit.bufferOf(path) ?? text.value ?? ``) : (text.value ?? ``)));
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
-// markSaved only runs if the write succeeded (run swallows the throw and shows the error instead). The save is
-// GUARDED by the baseline's hash: the daemon 409s when the file changed on disk since we read it (an agent or
-// terminal write the ~250ms SSE echo hasn't surfaced yet), so the save can't clobber that write: the 409 raises
-// the same changed-on-disk banner the echo would, with the user's edits preserved in the buffer.
+// markSaved runs only after a successful write. Guarded by the baseline's hash: the daemon 409s on a
+// since-changed file instead of clobbering it, raising the same stale-on-disk banner.
 const onEditorSave = (value: string): void =>
     void run(async () => {
         const base = edit.baselineOf(path);
@@ -422,20 +328,19 @@ const onEditorSave = (value: string): void =>
             throw err;
         }
         edit.markSaved(path, value);
-        // The read view shows `text`, not the buffer: adopt the saved text too, or switching back to preview
-        // shows the file as it was BEFORE the save (the reconcile echo no-ops against the new baseline).
+        // Read view shows `text`, not the buffer: adopt it too, or Preview shows the pre-save file.
         text.value = value;
     }, `Couldn't save your changes.`);
 </script>
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- Context bar: breadcrumb path + edit actions (text files only). The actions stay put across the
-             post-save refetch via `|| editingThis`; the tab's dirty dot makes an "Unsaved" label redundant. -->
+        <!-- Breadcrumb path + edit actions (text only); actions stay through the post-save refetch via `|| editingThis`. -->
         <FileBreadcrumb :path="path" :meta="meta">
-            <!-- The diff surface's Comments toggle, in the bar that reads a file: same words, same eye, so the
-                 two surfaces are one habit. It reads the other way round here (comments start SHOWN) because
-                 opening a file asks what it says, and the gutter keeps the file's own line numbers either way. -->
+            <!--
+                Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file
+                asks what it says.
+            -->
             <button
                 v-if="canHideComments"
                 type="button"
@@ -448,9 +353,10 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
                 <span class="max-md:hidden">Comments</span>
             </button>
-            <!-- The chip in the tab row says the view is showing an agent's copy; this file is one that copy
-                 doesn't carry, so it comes from the shared workspace. Said here rather than there because it is
-                 a fact about this file, not about the view. -->
+            <!--
+                Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared
+                workspace.
+            -->
             <span
                 v-if="workspaceAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
@@ -459,8 +365,7 @@ const onEditorSave = (value: string): void =>
                 <Icon name="folder" class="text-[0.65rem]" /> Shared
             </span>
             <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
-            <!-- The Edit button's own seat, while the scope is what is keeping it empty: an affordance that is
-                 merely missing reads as a bug, and this is the row where somebody goes looking for it. -->
+            <!-- Edit button's own seat while the scope keeps it empty; a merely-missing affordance reads as a bug otherwise. -->
             <span
                 v-if="scopedReadOnly"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
@@ -548,9 +453,10 @@ const onEditorSave = (value: string): void =>
                     :scroll-to-line="line"
                     :hide-comments="hideFileComments"
                 />
-                <!-- Seeded and re-keyed exactly like the editable CodeView above, and for the same reason: the
-                     surface owns its text from mount onwards, so only a reload, an external write with no local
-                     changes, or a different file may replace what the user has typed. -->
+                <!--
+                    Seeded and re-keyed like the editable CodeView above: the surface owns its text after mount, replaced only
+                    by a reload, a clean external write, or a different file.
+                -->
                 <MarkdownViewer
                     v-else-if="open.kind === 'markdown' && text !== null"
                     ref="markdownView"
@@ -564,18 +470,19 @@ const onEditorSave = (value: string): void =>
                 />
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
                 <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-                <!-- Whatever a viewers extension contributed. It gets the path plus exactly one content prop,
-                     decided by its manifest's `fetch` (viewerContent: never the other kinds as `undefined`);
-                     `download` is the host's, so every viewer's own can't-render fallback reaches the same
-                     authenticated byte fetch the states below use. -->
+                <!--
+                    Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind,
+                    never the others as undefined). `download` is the host's authenticated fetch, shared with the fallback states below.
+                -->
                 <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
-                <!-- The sandbox keeps this one to itself. Nothing was fetched to find that out (resolveOpenFile
-                     answers from the path), so the tab opens straight onto the explanation. -->
+                <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
                 <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
-                <!-- Everything left: a known binary, and the one shape that should be unreachable, a viewer
-                     that resolved but produced no component. Both are files whose bytes we can only hand over. -->
+                <!--
+                    Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both
+                    just hand over bytes.
+                -->
                 <FileUnsupported v-else mode="binary" @download="download" />
             </template>
         </div>

@@ -3,13 +3,12 @@ import type { IntenticLine } from "@intentic/sandbox-contract";
 import { whenAborted } from "../abort.js";
 import { DAEMON_OWNER, workloadStamp } from "../platform/boot/leftovers.js";
 
-// `IntenticLine` (one parsed line from `intentic … --output ndjson`: engine events, provider `log`, the
-// terminal `result`) is the wire shape the daemon streams, so it lives in @intentic/sandbox-contract. It stays
-// structurally decoupled from @intentic/engine: the sandbox runs a pinned intentic binary in a separate
-// process, so it consumes the wire shape, not the engine types.
+// IntenticLine, one parsed line from `intentic ... --output ndjson`, is the wire shape the daemon streams; it lives in
+// @intentic/sandbox-contract. Decoupled from @intentic/engine on purpose: the sandbox runs a pinned intentic binary in
+// a separate process and only consumes this wire shape.
 
-// Parse a single ndjson line. Blank lines yield undefined; a non-object or one without a string `kind` is
-// not a valid event and yields undefined. Malformed JSON throws (it would be a real contract violation).
+// Parses one ndjson line; blank, non-object, or no string `kind` yields undefined. Malformed JSON throws, a real
+// contract violation.
 export const parseIntenticLine = (line: string): IntenticLine | undefined => {
     const trimmed = line.trim();
     if (trimmed === "") {
@@ -23,9 +22,8 @@ export const parseIntenticLine = (line: string): IntenticLine | undefined => {
     return typeof kind === "string" ? (value as IntenticLine) : undefined;
 };
 
-// Split a stream of arbitrary string chunks into newline-delimited lines, carrying a partial line across
-// chunk boundaries and flushing any trailing remainder. Pure async transform, the unit-testable core of
-// reading a subprocess's streamed stdout.
+// Splits arbitrary string chunks into newline-delimited lines, carrying a partial line across chunk boundaries and
+// flushing any remainder at the end.
 export async function* chunksToLines(chunks: AsyncIterable<string>): AsyncGenerator<string> {
     let buffer = "";
     for await (const chunk of chunks) {
@@ -43,14 +41,12 @@ export async function* chunksToLines(chunks: AsyncIterable<string>): AsyncGenera
 }
 
 export interface IntenticRun {
-    // The intentic subcommand + flags, e.g. ["resolve", "--config", "intent/deploy.config.ts"]. The runner
-    // forces INTENTIC_OUTPUT=ndjson, so the command streams structured lines regardless of caller flags.
+    // Subcommand + flags, e.g. ["resolve", "--config", ...]; INTENTIC_OUTPUT=ndjson is forced regardless.
     readonly args: readonly string[];
     readonly cwd: string;
 }
 
-// Ceiling on one streamed CLI run. resolve/plan finish in seconds-to-a-minute when healthy and every network
-// operation below them is individually bounded now, a run still alive after this is wedged, not working.
+// Ceiling on a streamed run: healthy resolve/plan finish fast, so surviving this means wedged, not working.
 const RUN_WATCHDOG_MS = 10 * 60_000;
 
 // The slice of a pino logger the runner needs, structural, so tests pass a plain recorder.
@@ -59,16 +55,12 @@ export interface RunLogger {
     readonly warn: (fields: object, message: string) => void;
 }
 
-// Run the in-sandbox intentic CLI and stream its ndjson lines as they arrive (so the UI sees live
-// resolve/plan progress). A non-zero exit propagates as an error once the stream ends, with captured stderr.
-// The child is KILLED when the caller aborts (browser tab closed, an abandoned SSE must not leak a live
-// `intentic deploy plan` with its SSH connections), when the generator is torn down, or when the watchdog fires.
-// Every run's lifecycle (spawn, kill + reason, exit + duration + stderr head) lands in the daemon log, a
-// crashed or killed run must be attributable from daemon.log alone, not reconstructed from absence.
+// Runs the CLI and streams its ndjson lines live; a non-zero exit throws after the stream ends, with captured stderr.
+// The child is killed on abort, teardown or the watchdog; full lifecycle logs make a crashed run attributable from
+// daemon.log alone.
 export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logger?: RunLogger): AsyncGenerator<IntenticLine> {
     const startedAt = Date.now();
-    // Daemon-owned: this generator kills its own child on abort and on exit, so the stamp is here for the one
-    // case that cannot, a daemon replaced mid-run, whose `intentic` child nothing is left to signal.
+    // Daemon-owned stamp for the one case that can't self-kill: a daemon replaced mid-run, orphaning the child.
     const child = spawn("intentic", [...run.args], {
         cwd: run.cwd,
         env: { ...process.env, INTENTIC_OUTPUT: "ndjson", ...workloadStamp(DAEMON_OWNER) },
@@ -89,8 +81,7 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
         setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
     };
     const onAbort = (): void => kill("the client disconnected");
-    // A client that dropped before the spawn finished leaves an already-aborted signal here, which a bare
-    // listener never hears — the run would hold its locks until the watchdog, long after nobody was reading it.
+    // Catches a signal aborted before spawn finished; a bare listener misses it until the watchdog fires.
     const unwatchAbort = whenAborted(signal, onAbort);
     const watchdog = setTimeout(() => kill(`the run exceeded ${RUN_WATCHDOG_MS / 60_000}m`), RUN_WATCHDOG_MS);
     watchdog.unref();
@@ -114,8 +105,7 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
     } finally {
         clearTimeout(watchdog);
         unwatchAbort();
-        // Generator torn down mid-stream (the oRPC connection dropped without an abort event, or the consumer
-        // stopped iterating) with the child still alive, reap it.
+        // Torn down mid-stream (dropped connection, consumer stopped iterating) with the child still alive: reap it.
         if (child.exitCode === null && child.signalCode === null) {
             kill("the stream consumer went away");
         }

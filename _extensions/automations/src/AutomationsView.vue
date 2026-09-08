@@ -27,48 +27,22 @@ import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
 
-/* Automations: agent wake-ups, native to every sandbox (no capability to enable). One automation = trigger
- * (cron, webhook, a live listener on the daemon's provider connection, or a moment in this workspace's own
- * work) → optional guard (a shell command the daemon runs in the workspace first; non-zero exit skips the
- * wake) → the prompt the agent wakes with. The daemon fires them and records the run history.
- *
- * THE PAGE IS AN OPERATIONS BOARD, and it is laid out top-down as the three questions one gets asked:
- *
- *   1. IS ANYTHING WRONG? — the tally on the title row, before a single row is read. It is the same control
- *      the Pipelines and Deployments boards open with, for the same reason: a page about work that happens
- *      while nobody is watching has to answer "did it" before it answers "what".
- *   2. WHAT IS STANDING? — two labelled groups of two-line rows (chores watch this codebase, integrations are
- *      fired from outside it). Each row says what wakes it, what it is for, and how it has been going; the
- *      prose, the ledger and the editor are behind its own disclosure.
- *   3. WHAT ELSE COULD BE? — one offer section at the foot, because it is an offer and the list is the content.
- *
- * The offers stay VISIBLE rather than folding into a menu: they are the one kind of automation a user is
- * expected to want without knowing it exists. Taking one writes a REAL automation into the list above, with its
- * prompt, model and guard editable like any other — there is deliberately no chore toggle that isn't an
- * automation: a second place to turn something on is a second place for it to disagree with itself.
- *
- * NOTHING ON THIS PAGE AUTHORS AN AUTOMATION IN A DIALOG. Creating opens a panel at the top of the list and
- * editing opens one inside the row, both at page width and both rendering the same <AutomationFields>: an
- * automation is the largest form in the app, and the modal that used to hold it had already been widened once
- * and had its template gallery folded away to cope. Keeping the list on screen is the other half: the questions
- * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
- * the only thing that answers them. */
+// Automations: trigger, then optional guard, then the prompt the agent wakes with; the daemon fires them and records
+// history. The page answers three questions top-down: is anything wrong (the tally), what's standing (two shelves of
+// rows), what else could be (the offers below). Creating and editing happen inline, never in a dialog.
 
 const { automations, isLoading, error: listError, save, setEnabled, remove, run } = useAutomations();
-// Only draw the wait once it has lasted long enough to be worth seeing: see useLoadingReveal.
+// Only draws the wait once it's lasted long enough to be worth seeing.
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `automations`),
 );
 const { sources, templates, error: catalogError } = useCatalog();
-/* The catalogue as this browser can act on it: the daemon says what exists, the live capability facts say what
- * is connected. Resolved once here and handed down, so the row, the composer and the shelves all read one
- * answer instead of each deriving their own. */
+// Resolved once here and handed down, so the row, composer and shelves all read the one answer.
 const listenerSources = computed(() => withAvailability(sources.value, host().workspace.capabilities()));
 const offered = computed(() => availableTemplates(templates.value, host().workspace.capabilities()));
 
-// The filter bar costs a line, so it earns it only once the list is long enough that scanning it by eye stops
-// being instant. Below that the whole list is on screen and a filter is chrome in front of the answer.
+// Below this count, scanning by eye is instant and the filter bar is just chrome.
 const FILTER_FROM = 6;
 
 type View = `all` | `on` | `off` | `failing`;
@@ -78,13 +52,12 @@ const createOpen = ref(false);
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
-// The Front Desk whose install panel is open, by id rather than by object so it survives the list refetching
-// underneath it (the panel polls, which invalidates nothing, but a save from inside it does).
+// By id, not object, so it survives the list refetching under it (a save inside the panel does invalidate).
 const installId = ref<string | undefined>(undefined);
 const installing = computed(() => automations.value.find((automation) => automation.id === installId.value));
 // The chore pill mid-create, so its pill alone shows the wait.
 const enabling = ref<string | undefined>(undefined);
-// The automation awaiting a confirmed delete: a wake's whole run history goes with it, and nothing restores it.
+// Awaiting a confirmed delete: its whole run history goes too, and nothing restores it.
 const confirmRemoveId = ref<string | undefined>(undefined);
 const search = ref(``);
 const view = ref<View>(`all`);
@@ -103,28 +76,22 @@ const counts = computed(() => ({
     off: searched.value.filter((automation) => !automation.enabled).length,
     failing: searched.value.filter(failing).length,
 }));
-/* THE ORIENTATION LINE, and it reads the WHOLE list rather than the filtered one: it sits on the title row,
- * above the control that does the filtering, so a tally that moved when a filter was typed would be answering
- * a different question from the one its position promises ("is anything wrong here", not "in this view").
- *
- * Only "on" is `always`: it is the board's subject, and a board whose tally renders as nothing at all reads as
- * broken. "0 paused" and "0 failing" are facts nobody asked for, and dropping them is what lets the eye land on
- * a count that is not zero. */
+// Reads the whole list, not the filtered one, since it sits above the filter and answers a different question
+// ("anything wrong", not "in this view"). Only `on` is always shown; a zero elsewhere is dropped.
 const tally = computed<readonly TallyItem[]>(() => [
     { label: `on`, value: automations.value.filter((automation) => automation.enabled).length, variant: `success`, always: true },
     { label: `paused`, value: automations.value.filter((automation) => !automation.enabled).length, variant: `neutral` },
     { label: `failing`, value: automations.value.filter(failing).length, variant: `danger` },
 ]);
-// The soonest thing due, across every enabled row: the one fact a page of standing jobs owes a reader that no
-// single row can give them. Absent when nothing here runs on a clock, which is an honest silence.
+// The soonest due time across every enabled row, a fact no single row can give; absent is an honest silence, not a
+// zero.
 const nextFire = computed<number | undefined>(() => {
     const due = automations.value.flatMap((automation) => (automation.enabled && automation.nextRun !== undefined ? [automation.nextRun] : []));
     return due.length === 0 ? undefined : Math.min(...due);
 });
 
-// Errors appears only once something IS failing: the tab showing up is itself the alert, where a permanent
-// "Errors 0" would be a filter that only ever leads to an empty list. It survives while it is the active tab so
-// a fixed run can't strand the user on a vanished filter.
+// The Errors tab appears only once something fails, so its presence is itself the alert; it stays while active so a
+// fixed run can't strand the filter.
 const viewOptions = computed<{ label: string; value: View; badge: number }[]>(() => [
     { label: `All`, value: `all`, badge: counts.value.all },
     { label: `On`, value: `on`, badge: counts.value.on },
@@ -132,8 +99,8 @@ const viewOptions = computed<{ label: string; value: View; badge: number }[]>(()
     ...(counts.value.failing > 0 || view.value === `failing` ? [{ label: `Errors`, value: `failing` as const, badge: counts.value.failing }] : []),
 ]);
 
-// Enabled first, then by name: a FIXED order, so a row never moves under the cursor because a run landed. What
-// needs attention is found through the Errors filter, not by re-sorting the page around it.
+// Fixed order (enabled, then name), so a row never moves under the cursor when a run lands; the Errors filter finds
+// what needs attention instead.
 const shown = computed(() =>
     searched.value
         .filter((automation) =>
@@ -142,19 +109,17 @@ const shown = computed(() =>
         .toSorted((a, b) => Number(b.enabled) - Number(a.enabled) || a.id.localeCompare(b.id)),
 );
 
-// Shelved on the stored `chore` flag, not on the trigger: a nightly dependency sweep and a nightly Stripe poll
-// are both `schedule`, and only one of them is about this codebase.
+// Split by the stored `chore` flag, not the trigger: two nightly schedules need not both concern this codebase.
 const chores = computed(() => shown.value.filter((automation) => automation.chore === true));
 const integrations = computed(() => shown.value.filter((automation) => automation.chore !== true));
-// A chore recipe with no automation of that id yet: what the suggestion strip offers. Matching on id (not on
-// trigger) keeps a user's own second review chore from hiding the stock one.
+// A chore recipe with no automation of that id yet. Matching on id, not trigger, so a user's own second review chore
+// doesn't hide the stock one.
 const availableChores = computed(() =>
     offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
 );
 
-/* The same offer for templates marked `configure`: today just the Front Desk, which nobody arrives at this page
- * looking for. Unlike a `create` one, picking it opens the composer prefilled rather than saving: a Front Desk
- * with no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
+// Templates marked `configure` (today just Front Desk): picking one opens the composer prefilled, not a silent save,
+// since an unconfigured Front Desk would admit nobody.
 const availableSuggestions = computed(() =>
     offered.value.filter((template) => template.offer === `configure` && !automations.value.some((automation) => automation.id === template.id)),
 );
@@ -179,10 +144,8 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
     }
 };
 
-/* Fire one by hand. The daemon acks the moment the fire starts and runs the turn detached, so what lands here is
- * whether it STARTED: the outcome shows up in the row's run history, which the mutation refetches. A schedule
- * fires exactly as its cron would, unattended and in a worktree of its own: a test that proved something else
- * ran would prove nothing about the 3 a.m. one it stands in for. */
+// Only confirms the fire started; the daemon runs it detached, same as its own cron would, so the outcome shows up
+// later in the run history.
 const runNow = async (automation: AutomationSummary): Promise<void> => {
     actionError.value = undefined;
     // Open the row, so the run appears where the user is already looking instead of behind a disclosure.
@@ -194,15 +157,8 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
     }
 };
 
-/* A CHORE IS NO LONGER CREATED BY THE PRESS THAT OFFERS IT, and the function that did it is gone rather than
- * kept for a caller that no longer exists.
- *
- * It used to write the recipe straight to disk, enabled, on one click — the whole appeal of the shelf. An
- * automation now names the models it may spend (contract schemas/automations.ts `models`, required), and a
- * recipe written before this sandbox existed cannot know which providers its owner has connected. The two
- * honest options were to guess one, or to create a row that can never fire; both are worse than the third,
- * which is to open the composer prefilled and leave exactly one choice to make. That is `openFromSuggestion`
- * above, which the Front Desk suggestions already used for the same class of reason. */
+// A chore opens via the composer, never creates directly: a recipe can't know which providers are connected, so the
+// person picks the model instead of it guessing one or creating a row that can't fire.
 
 const removeAutomation = async (): Promise<void> => {
     const id = confirmRemoveId.value;
@@ -228,10 +184,10 @@ const toggleDetail = (id: string): void => {
 <template>
     <Page width="wide">
         <PageHeader title="Automations">
-            <!-- ON THE TITLE ROW, not under it: this board would rather spend that height on its body, and the
-                 tally is short enough to ride beside an h1 (see <StatusTally>, and Pipelines, which does the
-                 same). Hidden while the first read is in flight, because "0 on" is a claim, and it is one the
-                 list underneath is about to contradict. -->
+            <!--
+                On the title row, not under it, to spend that height on the body instead. Hidden while loading, since "0 on" is a claim the list is
+                about to contradict.
+            -->
             <template #info>
                 <StatusTally v-if="!isLoading && automations.length > 0" :items="tally" class="ml-2">
                     <span v-if="nextFire !== undefined" class="text-xs text-subtle">next {{ nextIn(nextFire) }}</span>
@@ -245,8 +201,7 @@ const toggleDetail = (id: string): void => {
         <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
         <div class="flex flex-col gap-6">
-            <!-- Creating, in the list. Keyed on the prefill so picking a different suggestion while the panel is
-                 already open remounts it on that template rather than leaving the previous one's fields up. -->
+            <!-- Keyed on the prefill, so picking a different suggestion while open remounts fresh instead of keeping stale fields. -->
             <AutomationComposer
                 :templates="offered"
                 v-if="createOpen"
@@ -257,8 +212,10 @@ const toggleDetail = (id: string): void => {
                 @close="closeComposer"
             />
 
-            <!-- Filter bar: one line that answers "how many, how many on, is anything broken" before a single row
-                 is read. Only once the list is long enough to need it. -->
+            <!--
+                One line answering how many, how many on, anything broken, before a single row is read; shown only once the list is long enough to
+                need it.
+            -->
             <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <SearchBar
                     v-model="search"
@@ -271,11 +228,10 @@ const toggleDetail = (id: string): void => {
                 <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
             </div>
 
-            <!-- AN UNREAD LIST IS NOT AN EMPTY ONE. `automations` is `[]` both before the read lands and after
-                 it lands empty, so the sentence below used to greet every single visit: including the ones
-                 where the reader already has a page of automations, and then be replaced a moment later by the
-                 list it had just denied. The outline says the same thing the empty state does about how many
-                 rows are coming (nothing), without claiming anything about whether there are any. -->
+            <!--
+                `automations` is `[]` both before the read lands and once it lands truly empty; the skeleton says "rows are coming" without claiming
+                whether any exist, unlike the empty-state text below.
+            -->
             <template v-if="isLoading">
                 <RowGroup v-if="outline" role="status" aria-busy="true">
                     <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
@@ -284,10 +240,10 @@ const toggleDetail = (id: string): void => {
                 </RowGroup>
             </template>
 
-            <!-- The empty state names the two doors out of it and draws neither as a button: "New automation" is
-                 already the page's one accent control, four inches up and to the right, and a second copy of it
-                 here would be the loudest thing on an empty page. The offers under it are the other door, and
-                 they are real controls a click away. -->
+            <!--
+                Names both doors out without drawing either as a button: New automation is already the page's one accent control, and the offers
+                below are real controls a click away.
+            -->
             <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
                 <span class="text-sm text-content">Nothing runs on its own yet.</span>
                 <span>Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.</span>
@@ -340,16 +296,10 @@ const toggleDetail = (id: string): void => {
                 />
             </RowGroup>
 
-            <!-- THE OFFERS, IN ONE SECTION AND ON A GRID.
-                 They were two sections of wrapping PILLS, which is the shape that made the foot of this page
-                 read as debris: a pill is sized by its own text, so eight of them wrap into ragged runs of
-                 different heights with their `· note` suffixes landing in a different place on every line, and
-                 the eye gets no column to travel down. On a grid each offer is the same box, the titles line up,
-                 and the note has a line of its own instead of trailing the title through a middle dot.
-                 One section, two labelled runs — the same split the composer's template gallery draws, because
-                 it is the same catalogue and a reader should meet it in one shape. The runs stay separate
-                 because the sentence over each is genuinely different: a chore costs nothing until its own check
-                 finds something, while the others need a few fields before they do anything at all. -->
+            <!--
+                One section, one grid, not two rows of wrapping pills: a grid keeps every box the same size and lines up the note under the title.
+                Two labelled runs, matching the composer's own template gallery, since a chore's sentence genuinely differs from the rest's.
+            -->
             <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
                 <div class="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
                     <span :class="ui.sectionLabel()">Add an automation</span>
@@ -375,13 +325,10 @@ const toggleDetail = (id: string): void => {
                                     <span class="block truncate font-medium">{{ recipe.title }}</span>
                                     <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
                                 </span>
-                                <!-- A CHEVRON, NOT A PLUS, and it changed with the model ladder. This press used
-                                     to CREATE the chore outright, which it can no longer do honestly: an
-                                     automation names the models it may spend, a recipe written before this
-                                     sandbox existed cannot know which providers its owner has connected, and a
-                                     one-click create would either guess or make a row that cannot fire. So it
-                                     opens the composer prefilled — the same thing the suggestions below do —
-                                     leaving exactly one choice for the person to make. -->
+                                <!--
+                                    A chevron, not a plus: a recipe can't know which providers are connected, so this opens the composer prefilled
+                                    instead of guessing a model or creating a row that can't fire.
+                                -->
                                 <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
                         </div>
@@ -406,8 +353,7 @@ const toggleDetail = (id: string): void => {
                                     <span class="block truncate font-medium">{{ recipe.title }}</span>
                                     <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
                                 </span>
-                                <!-- A chevron rather than a plus, and the difference is real: these OPEN the
-                                     composer prefilled, where a chore is created by the press itself. -->
+                                <!-- A chevron, not a plus: this also opens the composer prefilled, not a one-click create. -->
                                 <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
                         </div>
@@ -416,8 +362,7 @@ const toggleDetail = (id: string): void => {
             </section>
         </div>
 
-        <!-- Keyed on the row so re-opening a different Front Desk remounts the panel rather than showing the
-             previous one's install probes while its own query is still in flight. -->
+        <!-- Keyed on the row, so opening a different Front Desk remounts instead of showing the previous one's probes mid-flight. -->
         <FrontDeskInstallDialog
             v-if="installing"
             :key="installing.id"

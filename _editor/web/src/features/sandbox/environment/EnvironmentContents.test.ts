@@ -1,27 +1,17 @@
 // @vitest-environment jsdom
-//
-// THE SUBJECT IS SPACE, and space is the one thing a projection test cannot see. This tab drew every entry the
-// same way: an icon column that was the same grey box eighteen times, a name line, and a whole second line for
-// a sentence, on a row a thousand pixels wide, which made it two screens long and made the three entries
-// somebody actually decided on the quietest thing on it.
-//
-// So what is pinned here is the shape, not the inventory (contents.integration.test.ts has that): that the
-// staples are a strip you scan rather than thirteen rows you scroll, that a closed row costs one line, that the
-// attribution says nothing three times.
+// Pins EnvironmentContents' shape, not the inventory (contents.integration.test.ts has that): staples as a scannable
+// strip, a closed row costing one line, attribution said once.
 import type { EnvironmentItem } from "@intentic/api-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
-// useDevice reads window.matchMedia; environment.ts reads window.env). The brand CDN is stubbed to refuse, which
-// is also what an offline sandbox does: every mark then paints the tier underneath, and nothing here is waiting
-// on a network round trip.
+// The import chain touches browser globals at import time; stubbing fetch to fail mirrors an offline sandbox, so every
+// mark paints its fallback tier.
 vi.hoisted(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
-    // The clamped install block watches its own width to know whether it has anything left to show; jsdom
-    // ships no ResizeObserver, and nothing measured is what this suite is about.
+    // jsdom ships no ResizeObserver; nothing in this suite depends on measured width.
 });
 
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
@@ -35,8 +25,7 @@ const staple = (name: string, bin: string, version: string, purpose: string): En
     purpose,
 });
 
-// One of each group, as an ordinary sandbox holds them: something an agent added with a rationale behind it,
-// something a capability dragged in, and the staples nobody chose.
+// One of each origin: an agent-added item with a rationale, a capability-dragged item, and the base staples.
 const GROUPS: ContentsGroup[] = [
     {
         origin: `custom`,
@@ -48,8 +37,8 @@ const GROUPS: ContentsGroup[] = [
                 origin: `custom`,
                 state: `active`,
                 tools: [{ name: `ffmpeg`, version: `5.1.9` }],
-                // The row's line is a TRIMMED version of the paragraph below it (the parenthetical dropped), which
-                // is the shape that used to print the opening sentence twice the moment a row was opened.
+                // The row's line trims the paragraph below it (drops the parenthetical), so it doesn't repeat when
+                // expanded.
                 purpose: `ffmpeg, encoding screen recordings.`,
                 detail:
                     `ffmpeg, encoding screen recordings (Playwright records VP8/WebM). The recordings the machine agents ` +
@@ -99,7 +88,7 @@ let app: App | undefined;
 const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin.
+    // Icon and v-tooltip are registered app-wide by installUi; stand-ins avoid pulling in the whole UI plugin.
     app = createApp({ render: () => h(EnvironmentContents, { groups, loading: false }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -107,18 +96,14 @@ const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     return el;
 };
 
-/* Every pill in the staples strip. Row disclosures carry `aria-expanded` and are excluded: they are
- * <DisclosureRow> headers, not staples pills. */
+// Every pill in the staples strip; row-disclosure headers (`aria-expanded`) are excluded.
 const pills = (el: HTMLElement): HTMLButtonElement[] =>
     [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => !button.hasAttribute(`aria-expanded`));
 
-/* THE ROW'S OWN DISCLOSURE, which is what opens it. `.ui-row-select` used to find it: that is the class <Row>
- * paints on a row you can click, and the row was a div with a click handler. The pressable part is now the
- * header BUTTON (chevron, mark, name and sentence in one hit area), and `aria-expanded` is what says so. */
+// The row's own disclosure toggle: the pressable header button, marked by `aria-expanded`.
 const disclosure = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`button[aria-expanded]`)!;
 
-// A pill's words, in order. Read per child because the mark, the name and the version are siblings with no text
-// between them: the gap is a layout gap, so the concatenated textContent runs "Node.js24.18.0".
+// Reads text per child, since the mark/name/version siblings have no whitespace between them in textContent.
 const wordsOf = (element: Element): string =>
     [...element.children]
         .map((child) => child.textContent?.trim() ?? ``)
@@ -133,16 +118,13 @@ afterEach(() => {
 
 it(`draws the staples as a strip whose sentences are one click away`, async () => {
     const el = mount();
-    // One pill per staple, name and version on it: the whole question this group is ever asked.
     expect(pills(el).map(wordsOf)).toEqual([`Node.js 24.18.0`, `Python 3.11.2`, `ripgrep 13.0.0`]);
-    // And thirteen sentences nobody reads are not on screen costing thirteen lines.
     expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
 
     pills(el)[0]!.click();
     await nextTick();
     expect(el.textContent).toContain(`The runtime everything JavaScript in here runs on.`);
 
-    // One at a time: the next pill replaces the sentence rather than pushing the strip apart.
     pills(el)[1]!.click();
     await nextTick();
     expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
@@ -152,7 +134,6 @@ it(`draws the staples as a strip whose sentences are one click away`, async () =
 it(`keeps a closed row to its one line, and opens the comment in place`, async () => {
     const el = mount();
     const row = disclosure(el);
-    // The sentence rides the name; the rationale and the install lines do not exist until asked for.
     expect(el.textContent).toContain(`ffmpeg, encoding screen recordings.`);
     expect(el.textContent).not.toContain(`raw frames until something encodes them`);
 
@@ -162,10 +143,6 @@ it(`keeps a closed row to its one line, and opens the comment in place`, async (
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
 });
 
-/* THE REPEAT THIS TAB SHIPPED WITH. The row's line is a summary of the paragraph: a trailing parenthetical
- * dropped, an over-long sentence cut back to its claim, so a disclosure that stacked "the row's line" above
- * "the rest of the prose" opened every long entry on its own opening sentence twice, once cut and once whole.
- * One of the two, never both. */
 it(`never shows the opening sentence twice`, async () => {
     const el = mount();
     disclosure(el).click();
@@ -173,9 +150,6 @@ it(`never shows the opening sentence twice`, async () => {
     expect(el.textContent?.match(/encoding screen recordings/g)).toHaveLength(1);
 });
 
-/* AND IT DOES NOT LAND FIFTEEN LINES AT ONCE. A rationale runs to bullets and CI history; the reader who
- * clicked a row wants the opening. Cut at the agent's own paragraph break, so the toggle only appears where
- * there genuinely is more, and it does not collapse the row it lives inside. */
 it(`opens on the first paragraph and keeps the rest one click away`, async () => {
     const el = mount();
     const row = disclosure(el);
@@ -187,26 +161,18 @@ it(`opens on the first paragraph and keeps the rest one click away`, async () =>
     more!.click();
     await nextTick();
     expect(el.textContent).toContain(`go out as MP4`);
-    // Still open: the row header closes the row, not anything the disclosure puts inside it.
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
 });
 
 it(`only names the source when it is not already saying the row's own name`, () => {
     const el = mount();
-    // The trailing facts cluster, which is where a row states what pulled it in.
+    // `.tabular-nums`: the trailing facts cluster, where a row states what pulled it in.
     const facts = [...el.querySelectorAll(`.tabular-nums`)].map((meta) => meta.textContent?.trim() ?? ``).join(` `);
-    // "docker capability", on a row called docker, under a heading called From your capabilities.
     expect(facts).not.toContain(`docker capability`);
-    // What nobody could have guessed from the row survives.
     expect(facts).toContain(`workspace extension`);
 });
 
-/* THE LONGEST WAIT IN THE HUB, and until now the least drawn: this view's read asks every tool on the overlay
- * for its version, one process spawn each, so it is measured in seconds where the other tabs pay a round-trip.
- * It showed a spinner and "Checking installed versions…" over an empty card for all of it.
- *
- * Mounted with `loading` rather than through the parent, because the prop IS the state under test: what the
- * card does with the query is EnvironmentCard's business. */
+// Mounted with `loading` directly rather than through the parent, since the prop is the state under test.
 const mountLoading = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -224,14 +190,12 @@ it(`draws the list's outline while it is checking installed versions`, async () 
         vi.advanceTimersByTime(250);
         await nextTick();
         expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
-        // The sentence is not lost: it is what the wait is announced as, to the readers who need it said.
         expect(el.querySelector(`[role="status"]`)?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     } finally {
         vi.useRealTimers();
     }
 });
 
-// The quiet side of the same gate: a sandbox that answers quickly must paint no placeholder at all.
 it(`paints no outline for a probe that answers within the reveal delay`, async () => {
     vi.useFakeTimers();
     try {
@@ -244,7 +208,6 @@ it(`paints no outline for a probe that answers within the reveal delay`, async (
     }
 });
 
-// And the loaded view never draws one, which is what keeps a refetch from blanking a list already on screen.
 it(`draws no outline once the versions are in`, () => {
     expect(mount().querySelector(`.skeleton`)).toBeNull();
 });

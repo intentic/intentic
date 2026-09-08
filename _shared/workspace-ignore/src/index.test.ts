@@ -8,8 +8,8 @@ test("the browser-login profile subtree (auth cookies) is treated as ignored, bu
     expect(isBrowserProfilePath(".intentic/config/environment.Dockerfile")).toBe(false);
 });
 
-// What the browsing PRODUCED, as opposed to the profile it ran under: written once, meant to be opened, and
-// linked to from the chat's tool cards. Graying it out was collateral damage from sharing a parent directory.
+// What the browsing produced, not the profile it ran under: written once, meant to be opened, linked from the chat's
+// tool cards.
 test("browser artifacts are ordinary files, not profile churn", () => {
     expect(isBrowserProfilePath(".intentic/records/artifacts/browser")).toBe(false);
     expect(isBrowserProfilePath(".intentic/records/artifacts/browser/page-2026-07-30T10-00-00.png")).toBe(false);
@@ -35,18 +35,16 @@ test("the reference shelf is the ROOT-level refs/ only, a repo's own refs dir st
 
 test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; leaves tracked source & lone secrets alone", () => {
     const scope = createIgnoreScope();
-    // Junk denylist.
     expect(scope.isIgnored("node_modules", "node_modules", true)).toBe(true);
     expect(scope.isIgnored(".pnpm-store", ".pnpm-store", true)).toBe(true);
     expect(scope.isIgnored("__pycache__", "app/__pycache__", true)).toBe(true);
     expect(scope.isIgnored(".tmp", ".intentic/secrets/auth/codex/.tmp", true)).toBe(true);
-    // `.git` is now a junk-ignored dir (grayed + lazy-loaded), not a security-floor secret.
+    // .git is a junk-ignored dir (grayed + lazy-loaded), not a security-floor secret.
     expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);
-    // The browser-profile subtree is ignored (grayed + lazy) regardless of the inner file names.
+    // The browser-profile subtree is ignored regardless of the inner file names.
     expect(scope.isIgnored("browser", ".intentic/local/browser", true)).toBe(true);
     expect(scope.isIgnored("Cookies", ".intentic/local/browser/reddit/Default/Cookies", false)).toBe(true);
-    // The reference shelf is ignored as a subtree (grayed + lazy, skipped by default search); a repo's own
-    // refs/ dir is not the shelf.
+    // The reference shelf is ignored as a subtree; a repo's own refs/ dir is not the shelf.
     expect(scope.isIgnored("refs", "refs", true)).toBe(true);
     expect(scope.isIgnored("scheduler.js", "refs/react/packages/scheduler.js", false)).toBe(true);
     expect(scope.isIgnored("refs", "myrepo/refs", true)).toBe(false);
@@ -54,45 +52,39 @@ test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; lea
     expect(scope.isIgnored("worktrees", "repo/.claude/worktrees", true)).toBe(true);
     expect(scope.isIgnored("land.ts", "repo/.claude/worktrees/fix/src/land.ts", false)).toBe(true);
     expect(scope.isIgnored("skills", "repo/.claude/skills", true)).toBe(false);
-    // No security floor: a secret file is NOT ignored by name, it only grays if .gitignore'd.
+    // No security floor: a secret file is not ignored by name, it only grays if .gitignore'd.
     expect(scope.isIgnored(".env", "repo/.env", false)).toBe(false);
-    // Ambiguous dirs are NOT on the denylist: left to .gitignore.
+    // Ambiguous dirs are not on the denylist: left to .gitignore.
     expect(scope.isIgnored("build", "repo/build", true)).toBe(false);
     expect(scope.isIgnored("src", "repo/src", true)).toBe(false);
 });
 
-/* The scanner globs are the same rules as isIgnored, and the test is written as that claim rather than as a
- * list of strings: every subtree isIgnored rejects has to be prunable, because the one that wasn't (the
- * reference shelf) cost a two-letter query 1.4 GB of scanner output and 67 seconds. */
+// Written as the claim itself, not a list of strings: every subtree isIgnored rejects must be prunable.
 test("scannerPruneGlobs covers every subtree isIgnored rejects by rule", () => {
     const globs = scannerPruneGlobs(false);
     for (const dir of IGNORED_DIRS) {
         expect(globs).toContain(`!**/${dir}`);
     }
-    // The shelf is ROOT-anchored, matching isReferencePath. A bare `!refs` would match the basename at any
-    // depth and prune a repo's own refs/ directory, which isIgnored admits (see the shelf test above).
+    // Root-anchored, matching isReferencePath; a bare `!refs` would prune a repo's own refs/ too.
     expect(globs).toContain("!/refs");
     expect(globs).not.toContain("!**/refs");
     expect(globs).toContain("!**/.claude/worktrees");
 });
 
-// `--ignored` lifts the attention boundaries together, exactly as isIgnored does: the junk dirs, the shelf and
-// the worktrees all become searchable. `.git` is the one that never does, it is history rather than source.
+// `--ignored` lifts the attention boundaries together, as isIgnored does; `.git` never lifts, since it's history rather
+// than source.
 test("scannerPruneGlobs under includeIgnored keeps only .git", () => {
     expect(scannerPruneGlobs(true)).toEqual(["!**/.git"]);
 });
 
-// The agent plane is deliberately absent: it is the search engine's own default-deny floor, derived from the
-// state table, not an attention boundary this package decides. Pruning it from here would put one half of that
-// floor in a package that cannot see the other half.
+// The agent plane is deliberately absent: it's the search engine's own default-deny floor, derived from the state
+// table, not an attention boundary this package decides.
 test("scannerPruneGlobs leaves the agent plane to the engine's floor", () => {
     expect(scannerPruneGlobs(false).some((glob) => glob.includes(".intentic"))).toBe(false);
 });
 
-// The pointer file a worktree/submodule/--separate-git-dir repo keeps in place of a .git dir is deliberately NOT
-// ignored here: a portability bundle has to carry it (see portability.integration.test.ts, a restore without it
-// is a tree of repos answering `fatal: not a git repository`). Keeping it out of SEARCH is the search sweep's
-// own call; see scan.ts.
+// A git pointer file (worktree, submodule, --separate-git-dir) is deliberately not ignored here: a portability bundle
+// has to carry it. Keeping it out of search is the sweep's own call.
 test("a .git pointer file is left to each caller: this layer only knows the directory", () => {
     const scope = createIgnoreScope();
     expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);

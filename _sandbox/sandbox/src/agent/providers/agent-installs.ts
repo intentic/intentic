@@ -1,60 +1,23 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 
-/* The image boundary, held by the HARNESS rather than by prose.
- *
- * Anything installed outside /work dies with the container. This hook used to answer that with a paragraph —
- * "if it should persist, ALSO draft an overlay step" — and the transcript record is the measurement of how that
- * went: cargo-xwin reinstalled in six sessions, a Windows rustup target in eight, not one draft written. So the
- * model is no longer asked to do the bookkeeping. Every image-scoped install is CLASSIFIED here and recorded
- * silently to the runtime-install ledger (environment/runtime-installs.ts); the drift sweep joins that record
- * with what the container actually has and drafts the overlay step itself (environment/auto-drafts.ts). The
- * model installs and moves on, which is exactly what it was doing anyway.
- *
- * What still speaks to the model is only what changes its behaviour IN THE MOMENT: a browser install is told
- * the browser is already baked (a 250s / 114 MiB detour otherwise), and a project dependency mutation is denied
- * outright — an isolated turn's install is discarded and a shared-tree install races every other mounted turn,
- * so that one is not advice.
- *
- * SILENT RECORDING PUTS THE WHOLE WEIGHT ON THE PARSE. Nothing downstream asks the model to confirm what this
- * file decided, and the recurrence gate is not the safety net it looks like: a misparse repeats across sessions
- * exactly as reliably as a real install, because the command that produced it is the kind of command an agent
- * runs every day. This workspace's own ledger is the evidence — `2>&1` as a playwright browser and as a Debian
- * package, `_sandbox/sandbox/Dockerfile` as a Debian package, a shell installer read out of an `rg` pattern —
- * all of it from reading raw text where a shell reads syntax. Hence one quote-aware tokenizer below, and a
- * plausibility test on every name that leaves it. */
+// Anything installed outside /work dies with the container. Every image-scoped install is classified here and recorded
+// silently to the runtime-install ledger; the drift sweep drafts the overlay step. A browser install is told the
+// browser is already baked; a project dependency mutation is denied outright.
 
-// A venv is the sanctioned way to use pip here (Debian marks the system interpreter externally-managed), and
-// it lands wherever the agent puts it, so a pip install INSIDE one is project scope, not image scope.
+// A pip install inside a venv is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
 const NODE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up", "upgrade", "remove", "rm", "uninstall", "prune", "dedupe"]);
-// Verbs that ADD a package; a global uninstall is not an install and must not enter the ledger.
+// Verbs that add a package; a global uninstall must not enter the ledger.
 const NODE_ADD_VERBS = new Set(["i", "install", "add"]);
 const OPTION_WITH_VALUE = new Set(["--cwd", "--dir", "--filter", "--prefix", "-C"]);
 
-/* ---- READING A COMMAND LINE: one quote-aware tokenizer, and every question below asked of its output ----
- *
- * The splitter this replaces broke the RAW STRING on `&&`, `||`, `;`, `|` and newlines with no idea what was
- * quoted, so a search PATTERN containing those characters became several invocations. Both of these are in this
- * workspace's own ledger, recorded from commands that installed nothing:
- *
- *   rg -n "^FROM|^ARG NODE|apt-get install -y --no-install-recommends" _sandbox/sandbox/Dockerfile
- *     → an apt install whose "package" was the file being searched
- *   rg -n "irm |iex|curl.*\| sh|SANDBOX_URL=" src/inventory/enroll-host.ts
- *     → a shell installer, off a pipe that only ever existed inside a regex
- *
- * The file already HAD a tokenizer that honours quotes. It was used for exactly one thing — unwrapping the tmux
- * runner — while the classifier next to it went on reasoning about raw text. So there is now one reader, it
- * produces WORDS rather than substrings (a caller that re-splits a joined invocation on whitespace has undone
- * the quoting all over again), and it reports the operator each segment ended on, so `curl … | sh` is a question
- * about adjacency instead of a pattern that a quoted pipe can answer. */
+// One quote-aware tokenizer, asked by every question below. Produces words per invocation, not joined strings, and the
+// operator each segment ended on, so a quoted operator character cannot split the command.
 
-/* A HEREDOC BODY IS NOT A COMMAND. `python3 - <<'PY' … PY`, `cat > f <<'EOF' … EOF`: the payload is a SCRIPT,
- * and a tokenizer that treats newlines as separators reads every line of it as an invocation. A probe script
- * whose string literals happened to contain `playwright install chromium-headless-shell` and `apt-get install`
- * put both in the ledger while installing nothing at all. Stripped line-wise, because that is how a heredoc is
- * defined; `<<<` is a here-STRING and stays an ordinary word. */
+// A heredoc body is a script, not a command; stripped line-wise, since that is how a heredoc is delimited. `<<<` is a
+// here-string and stays an ordinary word.
 const HEREDOC = /<<-?(?!<)\s*\\?(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/;
 
 const withoutHeredocs = (command: string): string => {
@@ -76,11 +39,8 @@ const withoutHeredocs = (command: string): string => {
     return kept.join("\n");
 };
 
-/* A REDIRECTION IS NOT AN ARGUMENT, and this is the single biggest source of nonsense in the ledger this fixes.
- * `2>&1` is shell syntax that every ecosystem's package parser swallowed as a package name: it is recorded here
- * as a playwright browser, as a Debian package, as `rustup-component-2>&1`, and — after pip's own `>` specifier
- * split ran over it — as a package called `2`. An operator standing alone takes the NEXT word with it, which is
- * its target; one carrying its own target (`2>&1`, `2>/dev/null`, `>out.log`) takes only itself. */
+// A redirection is not an argument. An operator with no target attached consumes the next word; one carrying its own
+// target (`2>&1`, `>out.log`) takes only itself.
 const REDIRECTION = /^(?:\d+|&)?(?:>>?|<<?)/;
 
 const withoutRedirections = (words: readonly string[]): string[] => {
@@ -98,9 +58,8 @@ const withoutRedirections = (words: readonly string[]): string[] => {
     return kept;
 };
 
-/* Ordinary prefixes that stand in front of the command that matters: env assignments, `env`/`sudo`/`nice`, the
- * loop keywords a `for`/`while` body opens with, and `timeout <n>`, which transcript mining found wrapped
- * around half the slow installs (`timeout 600 npx playwright install chromium`). */
+// Prefixes standing in front of the command that matters: env assignments, env/sudo/nice, a for/while body's loop
+// keywords, and `timeout <n>`.
 const PREFIX_WORDS = new Set(["env", "sudo", "nice", "then", "do"]);
 const DURATION = /^[\d.]+[smhd]?$/;
 
@@ -131,7 +90,7 @@ type Operator = "|" | "&&" | "||" | ";" | "&" | "\n";
 
 interface CommandSegment {
     readonly words: readonly string[];
-    /** The operator this segment ENDED on, absent at the end of the command and around `(`…`)` grouping. */
+    /** The operator this segment ended on; absent at the command's end and around `(`…`)` grouping. */
     readonly next?: Operator;
 }
 
@@ -160,7 +119,7 @@ const tokenize = (command: string): CommandSegment[] => {
         const character = source[index] as string;
         if (escaped) {
             escaped = false;
-            // A backslash-newline is a line continuation: it JOINS the two lines, it does not separate them.
+            // A backslash-newline joins the two lines; it does not separate them.
             if (character !== "\n") {
                 word += character;
             }
@@ -175,7 +134,7 @@ const tokenize = (command: string): CommandSegment[] => {
         } else if (character === "'" || character === '"') {
             quote = character;
         } else if (character === "&" && /[<>]$/.test(word)) {
-            // Mid-redirection: the `&` of `2>&1` binds to the operator before it rather than backgrounding.
+            // Mid-redirection: the `&` of `2>&1` binds to the operator before it, not to backgrounding.
             word += character;
         } else if (character === "|" || character === "&") {
             const doubled = source[index + 1] === character;
@@ -195,12 +154,10 @@ const tokenize = (command: string): CommandSegment[] => {
     return segments;
 };
 
-// The words of each invocation in a command, quotes honoured. What every caller outside this file wants: a
-// joined string they re-split on whitespace is the raw-text reasoning this tokenizer exists to end.
+// The words of each invocation, quotes honoured; callers outside this file want words, not a joined string to re-split.
 export const commandWords = (command: string): string[][] => tokenize(command).map((segment) => [...segment.words]);
 
-// The same, joined, for the handful of tests inside this file that are naturally written as patterns over a
-// whole invocation ("does this start with `poetry add`?") rather than as word arithmetic.
+// The same, joined, for tests here written as patterns over a whole invocation rather than as word arithmetic.
 const commandInvocations = (command: string): string[] => tokenize(command).map((segment) => segment.words.join(" "));
 
 const shellWords = (command: string): string[] => tokenize(command).flatMap((segment) => segment.words);
@@ -250,18 +207,16 @@ const nodeInstall = (command: string): { project: boolean; global: boolean } => 
     return { project: false, global: false };
 };
 
-/* ---- classification: which tools an image-scoped install would put on this container ---- */
+// Classification: which tools an image-scoped install would put on this container.
 
 // A shell a piped installer would be handed to, and the fetchers that hand it over.
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 const FETCHERS = new Set(["curl", "wget"]);
-// Verbs of these that operate on a DIFFERENT container's filesystem than this one.
+// Verbs of these that operate on a different container's filesystem than this one.
 const CONTAINER_RUNNERS = new Set(["docker", "podman", "nerdctl"]);
 const CONTAINER_VERBS = new Set(["run", "exec", "build", "buildx", "compose"]);
 
-// Flags whose NEXT word is a value, not a package. Shared across ecosystems because misreading `--version 1.2`
-// as a package named "1.2" pollutes the ledger the same way everywhere; a flag listed here that some tool does
-// not take merely skips a word that was not a package either.
+// Flags whose next word is a value, not a package; shared since the mistake looks the same everywhere.
 const VALUE_FLAGS = new Set([
     ...OPTION_WITH_VALUE,
     "--version",
@@ -285,7 +240,7 @@ const VALUE_FLAGS = new Set([
     "--python",
 ]);
 
-// Bare package words after a verb: flags skipped, value-flag values skipped.
+// Bare package words after a verb; flags and value-flag values are skipped.
 const packagesAfter = (words: readonly string[], start: number): string[] => {
     const packages: string[] = [];
     for (let index = start; index < words.length; index += 1) {
@@ -305,29 +260,18 @@ const packagesAfter = (words: readonly string[], start: number): string[] => {
     return packages;
 };
 
-/* WHAT CAN BE A PACKAGE NAME AT ALL, checked once on the finished name rather than per ecosystem.
- *
- * Every registry here agrees on the shape — start on a letter or digit, then word characters, dots, plus,
- * underscore and dash — and npm's scopes are the one exception, adding a leading `@` and a slash. A word that
- * fails this is not a package the parse got slightly wrong: it is shell syntax, or a PATH the command was
- * operating on. The ledger this replaces holds `2>&1` three times over and `_sandbox/sandbox/Dockerfile` as a
- * Debian package, and the recurrence gate was no defence — a false entry crosses two sessions exactly as easily
- * as a real one. A digit-only name is rejected with them: no ecosystem has a package called `2`, and pip's
- * specifier split manufactured one out of a redirection.
- *
- * The one name here that is not a package is the shell installer's, which is why it is spelled `shell-installer`
- * rather than as a phrase: it is a tool NAME, it becomes a draft's filename, and a value that cannot survive
- * this test is a value the rest of the pipeline cannot handle either. */
+// What can be a package name at all, checked once on the finished name. A word that fails this is shell syntax or a
+// path, not a package; digit-only names are rejected too.
 const TOOL_NAME = /^@?[A-Za-z0-9][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9][A-Za-z0-9._+-]*)*$/;
 const named = (tool: string): boolean => TOOL_NAME.test(tool) && /[A-Za-z]/.test(tool);
 
-// `pkg@1.2` → pkg, `@scope/pkg@1.2` → @scope/pkg; a bare scope's own @ is position 0 and survives.
+// `pkg@1.2` becomes pkg, `@scope/pkg@1.2` becomes @scope/pkg; a bare scope's own @ sits at position 0 and survives.
 const withoutVersion = (name: string): string => {
     const at = name.lastIndexOf("@");
     return at > 0 ? name.slice(0, at) : name;
 };
 
-// `pillow==9.5` / `requests>=2` → the name pip resolves.
+// `pillow==9.5` or `requests>=2` becomes the name pip resolves.
 const withoutSpecifier = (name: string): string => name.split(/[=<>~!]/, 1)[0] ?? name;
 
 // npx and `pnpm exec` are transparent wrappers; the tool being run sits after them.
@@ -350,18 +294,12 @@ const unwrapped = (words: string[]): string[] => {
     }
 };
 
-/* Every tool an image-scoped install in this command would put on the container, as (kind, tool) pairs the
- * ledger merges on. Precision over recall at the edges — `rustup target list` is not an install, `apt-get
- * install --dry-run` is not an install, and anything inside `docker run` mutates a DIFFERENT container — the
- * drift sweep corroborates against the live filesystem anyway, so a miss here costs one session of memory
- * while a false entry costs the ledger its meaning. */
+// Every tool an image-scoped install would put on the container, as (kind, tool) pairs the ledger merges on. Precision
+// over recall: a miss costs one session's memory, a false entry costs the ledger its meaning.
 export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
     const effective = agentCommand(command);
     const segments = tokenize(effective);
-    // Installs inside another container's filesystem are that container's business; skipping the whole command
-    // over one docker word can only lose entries the corroboration gate would have discarded later. Asked of the
-    // parsed segments rather than of the raw string, so a `docker run` quoted inside a search pattern no longer
-    // silences a real install standing next to it.
+    // Checked on parsed segments, so a quoted `docker run` cannot silence a real install next to it.
     if (segments.some((segment) => CONTAINER_RUNNERS.has(executableOf(segment.words) ?? "") && CONTAINER_VERBS.has(segment.words[1] ?? ""))) {
         return [];
     }
@@ -373,10 +311,7 @@ export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
         }
     };
 
-    /* `curl … | sh`, read as ADJACENCY between two segments rather than as a pattern over the raw command. The
-     * expression this replaces found its pipe inside a quoted `rg` argument (`rg -n "curl.*\| sh|…"`) and put a
-     * shell installer in this workspace's ledger for a command that searched a file. A pipe the tokenizer did
-     * not see is a pipe the shell never ran. */
+    // `curl | sh` read as adjacency between segments; a missed pipe is a pipe the shell never ran.
     for (const [index, segment] of segments.entries()) {
         const next = segments[index + 1];
         if (segment.next !== "|" || next === undefined) {
@@ -444,7 +379,7 @@ export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
                 }
             }
         } else if (executable === "dpkg") {
-            // A local .deb is not necessarily in any repo, so no apt step follows from it mechanically.
+            // A local .deb is not necessarily in any repo; no apt step follows from it mechanically.
             if (words.includes("-i") || words.includes("--install")) {
                 for (const tool of words.filter((word) => word.endsWith(".deb"))) {
                     add("other", tool.split("/").at(-1)?.split("_")[0] ?? tool);
@@ -484,31 +419,19 @@ const BROWSER_ALREADY_BAKED =
     "This sandbox already ships Chromium and browser tools: load them with ToolSearch (`mcp__web__browser_navigate`, " +
     "`mcp__web__browser_take_screenshot`) instead of installing a browser.";
 
-/* The other half of that boundary: the turn that never reaches for an install at all.
- *
- * A missing tool does not present itself as a decision, `command not found` scrolls past inside a tool result
- * and the model quietly picks a worse route. Mining this workspace's transcripts found `file` reached for in
- * eight separate sessions and installed in none of them; the image now ships it and thirty-odd other staples,
- * but the tail is endless and the next one is unknowable. So the failure itself is the trigger, and the notice
- * routes: a project tool through its project, a system tool installed plainly — the ledger and the drift sweep
- * do the durability bookkeeping, so the model is told it need not. */
-/* Ordered most-specific first, and that ordering is not cosmetic: zsh says `zsh: command not found: lsof`,
- * which the bash pattern below reads as "`zsh` was not found". Whichever runs first wins, so the shape that can
- * only mean one thing goes first. */
+// A missing tool does not present itself as a decision; it scrolls past inside a tool result. The failure itself is the
+// trigger, and the notice routes a project tool through its project, a system tool installed plainly.
+// Ordered most specific first: zsh's message also matches the pattern below it, so it must run first.
 const NOT_FOUND = [
     /command not found: ([\w.@+-]+)/, // zsh
-    /(?:^|\s)([\w.@+-]+): command not found/, // bash: `bash: line 1: lsof: command not found`
-    /* dash/sh: `sh: 1: lsof: not found`. THE LINE NUMBER IS LOAD-BEARING and was not always required. Without
-     * it the pattern reads "<word>: not found" anywhere, which is a sentence people write: a turn probing this
-     * very question ran `sh -c 'command -v oxlint || echo "sh: not found"'` and was told that `sh` — the shell
-     * that had just run, sitting at /usr/bin/sh — was missing. Dash always reports through the shell name and
-     * the script line, so the shape it actually emits is the shape to match. */
+    /(?:^|\s)([\w.@+-]+): command not found/, // bash, e.g. `bash: line 1: lsof: command not found`
+    // dash/sh: `sh: 1: lsof: not found`. The line number is load-bearing: without it, an echoed "X: not found" string
+    // reads as a real report too.
     /(?:^|\s)[\w.@+-]+: \d+: ([\w.@+-]+): not found/,
 ];
 
-/* Every name the shell's report could be about, in confidence order. A LIST rather than one answer because the
- * patterns overlap on real output and the caller is the one holding the tie-breaker: `zsh: command not found:
- * lsof` yields `lsof` then `zsh`, and only the command knows which of those it tried to run. */
+// Every name the shell's report could be about, in confidence order. A list, not one answer: the patterns overlap and
+// only the caller knows which name it tried to run.
 const notFoundBinaries = (output: string): string[] => {
     const names: string[] = [];
     for (const rule of NOT_FOUND) {
@@ -520,13 +443,11 @@ const notFoundBinaries = (output: string): string[] => {
     return names;
 };
 
-// The shell's report with no question asked about where the name came from. Exported for the turn-ending gate,
-// which asks this of a CHECK's output: a check legitimately reaches its tools through a package script
-// (`pnpm lint` → `oxlint`), so the command-position guard below would be wrong there and the raw probe is right.
+// The shell's report with no question asked about where the name came from. A check legitimately reaches its tools
+// through a package script, where the command-position guard below would be wrong.
 export const notFoundBinary = (output: string): string | undefined => notFoundBinaries(output)[0];
 
-// The script a shell wrapper carries, or nothing when this invocation is not one. A word off the tokenizer, so
-// the payload arrives already unquoted rather than needing its own quote-matching expression here.
+// The script a shell wrapper carries, or nothing when this invocation is not one; already unquoted off the tokenizer.
 const nestedScript = (words: readonly string[]): string | undefined => {
     if (!SHELLS.has(executableOf(words) ?? "")) {
         return undefined;
@@ -535,10 +456,8 @@ const nestedScript = (words: readonly string[]): string | undefined => {
     return flag === -1 ? undefined : words[flag + 1];
 };
 
-/* Every binary this command runs IN COMMAND POSITION, which is the only place a missing one can be missing
- * from. One level into `sh -c '…'` as well, because that wrapper is how the tmux runner and `timeout` carry a
- * real command and the tool that is actually absent is inside it. Depth-capped: the recursion only ever shrinks
- * the string, but a cap is cheaper than trusting that. */
+// Every binary this command runs in command position, plus one level into `sh -c '…'`, since that wrapper carries the
+// real command. Depth-capped rather than trusted to shrink.
 const invokedBinaries = (command: string, depth = 0): Set<string> => {
     const names = new Set<string>();
     for (const words of commandWords(command)) {
@@ -561,15 +480,8 @@ const MISSING_GUIDANCE =
     "not globally. If it is a system tool, install it and carry on: the sandbox records runtime installs and " +
     "proposes durable image steps to the owner by itself.";
 
-/* The captured name must be something the command actually TRIED TO RUN. A tool result is full of other
- * people's text — a grep over a log, a test asserting on an error string — and the notice has to survive that.
- *
- * This guard used to ask only whether the name appeared ANYWHERE in the command, and a word in a quoted
- * argument satisfies that as easily as a real invocation: a turn searching for the string `ask` in its own test
- * file was told to install `ask`. Command position is the question that was meant all along, and
- * commandInvocations already parses it for the install classifier above. What it gives up is a tool reached
- * through something this cannot see (`xargs foo`, `find -exec`), the same trade the loose version documented
- * and did not actually make. */
+// The captured name must be something the command tried to run in command position, not merely quoted text a tool
+// result echoes. Misses a tool reached through `xargs` or `find -exec`.
 const missingBinary = (output: string, command: string): string | undefined => {
     const invoked = invokedBinaries(command);
     return notFoundBinaries(output).find((name) => invoked.has(name));
@@ -581,14 +493,8 @@ const SUBSTITUTION_GUIDANCE =
     "string you meant to pass silently lost it and the result you are reading answers a different question. " +
     "Single-quote the argument, or escape the backticks (\\`), and run it again.";
 
-/* THE MISTAKE THAT LOOKS LIKE A MISSING TOOL AND IS NOT. `rg -n "kind: \`ask\`|decision" file` reads as one
- * regex and runs as two things: bash substitutes `ask`, reports `command not found`, and rg searches for a
- * pattern with that alternative missing — silently, with a clean exit and plausible hits. It is the most common
- * quoting error in this workspace's transcripts and the old notice answered it with "install `ask`", which is
- * advice pointing exactly away from the bug.
- *
- * Told apart from a genuinely missing tool by where the name sits: inside a backtick pair, not in command
- * position. Asked FIRST for that reason — it is the more specific reading of the same shell message. */
+// Looks like a missing tool and is not: a backtick in a double-quoted argument runs as command substitution, so the
+// search silently loses that term. Told apart by position: inside backticks, not command position.
 const substitutedBacktick = (output: string, command: string): string | undefined => {
     const substituted = new Set<string>();
     for (const [, inner] of command.matchAll(/`([^`]*)`/g)) {
@@ -600,10 +506,8 @@ const substitutedBacktick = (output: string, command: string): string | undefine
     return notFoundBinaries(output).find((name) => substituted.has(name));
 };
 
-// Bash results arrive as a plain string from some harness versions and as a stdout/stderr record from others;
-// the SDK's own content array is the third shape. Read all three rather than bet on one. Exported because the
-// dependency notice reads the same results looking for a different failure (agent-deps.ts), and two copies of
-// this would be two chances to learn about a fourth shape separately.
+// Bash results arrive as a plain string, a stdout/stderr record, or the SDK's content array; reads all three rather
+// than betting on one. Exported so a second reader shares this instead of learning a fourth shape separately.
 export const toolResultText = (response: unknown): string => {
     if (typeof response === "string") {
         return response;
@@ -625,8 +529,7 @@ export const installSteeringHooks = (
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     let browserTold = false;
     let missingTold = false;
-    // Its own latch, because it is its own lesson: a turn that has been told about a missing tool has not been
-    // told anything about its quoting, and the two mistakes are made by different commands.
+    // Its own latch: being told about a missing tool teaches nothing about quoting.
     let substitutionTold = false;
     return {
         PostToolUse: [
@@ -642,8 +545,7 @@ export const installSteeringHooks = (
                             return {};
                         }
                         const output = toolResultText(input.tool_response);
-                        // The specific reading of the shell's message first: a substituted backtick IS a
-                        // `command not found`, and answering it with an install is advice pointing away.
+                        // The more specific reading: an install answer here points away from the actual bug.
                         const substituted = substitutionTold ? undefined : substitutedBacktick(output, command);
                         if (substituted !== undefined) {
                             substitutionTold = true;
@@ -677,8 +579,7 @@ export const installSteeringHooks = (
                         if (input.hook_event_name !== "PreToolUse") {
                             return {};
                         }
-                        // The tmux hook may already have rewrapped this command; classification reads the
-                        // original command carried in its `-c` field before reading actual invocations.
+                        // Reads the original command from the tmux hook's `-c` field, not the rewrapped one.
                         const command = (input.tool_input as { command?: unknown }).command;
                         if (typeof command !== "string") {
                             return {};
@@ -699,8 +600,7 @@ export const installSteeringHooks = (
                         if (installs.length === 0) {
                             return {};
                         }
-                        // The record is the whole point and it is SILENT: the ledger and the drift sweep carry
-                        // the durability question to the owner, so the model is not asked to.
+                        // Silent: the ledger and drift sweep carry the durability question, not the model.
                         onImageInstall?.(installs, agentCommand(command));
                         const browser =
                             installs.some((install) => install.kind === "playwright") || /\bchromium\b|\bgoogle-chrome\b/.test(agentCommand(command));

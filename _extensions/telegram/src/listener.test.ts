@@ -43,9 +43,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
     };
 };
 
-// The three fields Telegram always sends. Cases that are ABOUT an absent field: a photo with no caption, an
-// anonymous channel post: build up from here rather than clearing one off a fuller message, because
-// exactOptionalPropertyTypes has no way to spell "clear this".
+// Telegram's three always-sent fields; built up from here since exactOptionalPropertyTypes can't spell "unset".
 const bare = (over: Partial<TelegramMessage> = {}): TelegramMessage => ({
     message_id: 11,
     chat: { id: -100123, type: "supergroup", title: "eng" },
@@ -59,7 +57,6 @@ const message = (over: Partial<TelegramMessage> = {}): TelegramMessage =>
 test("a media-only message says what it is instead of arriving empty", () => {
     expect(contentOf(bare({ voice: { file_id: "v1", duration: 12 } }))).toBe("[voice note, 12s]");
     expect(contentOf(bare({ document: { file_id: "d1", file_name: "trace.log" } }))).toBe("[file: trace.log]");
-    // A caption is what the person actually wrote, so it wins over any marker.
     expect(contentOf(bare({ caption: "look at this", photo: [{ file_id: "p1" }] }))).toBe("look at this");
 });
 
@@ -74,7 +71,7 @@ test("the biggest photo size is the one worth fetching", () => {
 test("the author is whatever Telegram gave us to call them", () => {
     expect(authorNameOf(message())).toBe("Ada Lovelace");
     expect(authorNameOf(message({ from: { id: 42, username: "ada" } }))).toBe("ada");
-    // An anonymous channel post has no author at all.
+    // Anonymous channel post: no `from` at all.
     expect(authorNameOf(bare({ chat: { id: -1, type: "channel", title: "releases" } }))).toBe("releases");
 });
 
@@ -83,12 +80,11 @@ test("a message addresses us when it names the bot or replies to it, and not oth
     const selfIds = new Set([SELF_ID]);
     expect(addressesUs(message(), usernames, selfIds)).toBe(false);
     expect(addressesUs(message({ text: `hey @${SELF_NAME} look` }), usernames, selfIds)).toBe(true);
-    // Telegram preserves the case a person typed; the bot is the same bot either way.
+    // Telegram preserves typed case; matching must be case-insensitive.
     expect(addressesUs(message({ text: "hey @ACME_Intentic_Bot" }), usernames, selfIds)).toBe(true);
-    // The command form of a mention, which is how a group disambiguates two bots.
+    // `/status@bot` is the command form of a mention, used to disambiguate two bots in a group.
     expect(addressesUs(message({ text: `/status@${SELF_NAME}` }), usernames, selfIds)).toBe(true);
     expect(addressesUs(message({ reply_to_message: message({ from: { id: SELF_ID, is_bot: true } }) }), usernames, selfIds)).toBe(true);
-    // A reply to somebody else is not a reply to us.
     expect(addressesUs(message({ reply_to_message: message({ from: { id: 9, first_name: "Bo" } }) }), usernames, selfIds)).toBe(false);
 });
 
@@ -101,7 +97,7 @@ test("an unaddressed group message dispatches without holding a turn stream", as
     expect(fake.streamed).toHaveLength(0);
     expect(fake.dispatched[0]).toMatchObject({ provider: "telegram", type: "message", channelId: "-100123", content: "deploy is red again" });
     expect(fake.dispatched[0]?.["mentioned"]).toBeUndefined();
-    // Nothing is painted back, so the chat sees no typing indicator either.
+    // No reply painted, so no typing indicator either.
     expect(calls).toEqual([]);
 });
 
@@ -114,7 +110,7 @@ test("a private message is always addressed to us: it shows typing and streams t
     await vi.waitFor(() => expect(calls.map((call) => call.method)).toEqual(["sendChatAction", "sendMessage"]));
     expect(fake.streamed[0]).toMatchObject({ mentioned: true, channelId: "42" });
     expect(calls[1]?.body).toMatchObject({ chat_id: 42, text: "on it" });
-    // A one-to-one chat has nothing to disambiguate, so the reply is not marked as a reply to anything.
+    // Private chat has nothing to disambiguate, so no `reply_parameters`.
     expect(calls[1]?.body).not.toHaveProperty("reply_parameters");
     listener.stopAll();
 });
@@ -164,8 +160,7 @@ test("what the gateway watched go by becomes the history a later mention carries
     await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
     listener.onUpdate(connection, { update_id: 2, message: message({ message_id: 2, text: `@${SELF_NAME} what happened?` }) });
     await vi.waitFor(() => expect(fake.streamed).toHaveLength(1));
-    // A bot cannot read a chat's past, so this ring is the only context there is, and it holds what came
-    // BEFORE this message, not the message itself.
+    // History is only what the gateway saw before; a bot can't read the past, and it excludes this message itself.
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "42", name: "Ada Lovelace" }, content: "the deploy went out at four", timestamp: "2025-08-13T16:20:30.000Z" },
     ]);

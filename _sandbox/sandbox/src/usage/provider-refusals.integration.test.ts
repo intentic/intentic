@@ -5,7 +5,7 @@ import type { ProviderRefusal } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileProviderRefusalStore } from "./provider-refusals.js";
 
-// A store over a fresh temp path whose parent dir doesn't exist yet: the store must create it on write.
+// Path's parent directory doesn't exist yet; the store must create it on write.
 const tempStore = () => {
     const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "history", "provider-refusals.json");
     return { store: fileProviderRefusalStore(path), path };
@@ -24,8 +24,8 @@ test("read is empty when nothing has ever been refused", async () => {
     expect(await store.read()).toEqual({});
 });
 
-// The reason this is a file rather than a variable: a refusal that arrives at 4am against an automation is
-// exactly the one nobody was attached for, and it has to still be there when somebody opens the tab.
+// A refusal at 4am against an automation is exactly the one nobody's watching; it must still be there when somebody
+// opens the tab.
 test("a recorded refusal survives a fresh store over the same path", async () => {
     const { store, path } = tempStore();
     const kimi = refusal();
@@ -43,10 +43,8 @@ test("each provider keeps its own last refusal, and the newest one wins", async 
     expect(read[`claude`]?.account).toBe("claude-1");
 });
 
-/* A TURN THAT RAN IS THE ONLY EVIDENCE some refusals will ever get. An entitlement refusal: an organization
- * that switched Claude Code off for a seat, outlives every reading that could contradict it: the token keeps
- * authenticating and the plan keeps publishing pools the whole time it refuses everything. So without this, an
- * admin turning access back on would leave the alarm standing for the full week the store remembers it. */
+// An entitlement refusal (a seat with Claude Code switched off) outlives every reading that could contradict it, since
+// the token keeps authenticating and pools keep publishing regardless; only a turn that runs proves it's over.
 test("settles the account's refusal when a turn finally runs on it", async () => {
     const { store } = tempStore();
     await store.record("claude", refusal({ kind: "entitlement", message: "organization has disabled", account: "claude-1" }));
@@ -54,10 +52,8 @@ test("settles the account's refusal when a turn finally runs on it", async () =>
     expect(await store.read()).toEqual({});
 });
 
-/* SCOPED TO THE ACCOUNT IT NAMES, which is the whole difficulty: a sandbox holding three Claude accounts runs
- * turns on the healthy ones all day, and letting any of those erase the refused one's record would delete the
- * single fact that stops the picker offering an account that cannot run. The one refusal every success answers
- * is a nameless one: a routed turn, which CLIProxyAPI only refuses once every credential it holds is cooling. */
+// Scoped to the account it names: another healthy account succeeding must not erase this one's refusal. An unattributed
+// refusal (CLIProxyAPI cooling every credential) is the one any success settles.
 test("leaves a refusal that names another account alone, and settles one that names nobody", async () => {
     const { store } = tempStore();
     const claude = refusal({ kind: "entitlement", message: "organization has disabled", account: "claude-1" });
@@ -69,13 +65,12 @@ test("leaves a refusal that names another account alone, and settles one that na
     await store.clear("gemini", "never-refused");
     await store.clear("codex", "codex-file-3");
 
-    // The named account has served nothing, so its refusal stands; the unattributed one is answered by any turn.
+    // Named account has served nothing, so its refusal stands; the unattributed one is settled by any turn.
     expect(await store.read()).toEqual({ claude });
 });
 
-/* Past a week a refusal describes a window that has certainly reopened, so serving it would put a stale alarm
- * under a live meter. Forgotten on READ, because a daemon that never refuses again writes nothing that could
- * prune it: the file keeps the row and the store simply stops reporting it. */
+// Past a week a refusal's window has certainly reopened; serving it would put a stale alarm under a live meter.
+// Forgotten on read, since a daemon that never refuses again writes nothing to prune it.
 test("forgets a refusal old enough to describe a window that has since reopened", async () => {
     const { store } = tempStore();
     await store.record("kimi", refusal({ at: Date.now() - 8 * DAY }));

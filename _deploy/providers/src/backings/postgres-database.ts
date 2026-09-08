@@ -20,11 +20,9 @@ const url = (parsed: DatabaseInputs): string =>
     `postgres://${parsed.role}:${parsed.password}@${parsed.instanceHost}:${parsed.instancePort}/${parsed.database}`;
 
 // Run psql in the instance container as the superuser over the local socket (trust auth), returning trimmed
-// stdout. Throws on a non-zero exit so a real psql/connection error propagates rather than reads as "absent".
+// stdout. Throws on a non-zero exit rather than reading it as "absent".
 const psql = async (session: SshSession, cid: string, sql: string): Promise<string> => {
-    // The statement rides as ONE argv word. It used to be spliced into a shell double-quoted string, which is
-    // why every caller below had to spell its identifiers `\\"name\\"`, interleaving the shell's escaping with
-    // SQL's by hand, in a template, at each site. shellQuote owns the outer layer now; callers write SQL.
+    // The statement rides as one argv word: shellQuote owns the shell-escaping layer, callers write plain SQL.
     const result = await session.exec(`docker exec ${cid} psql -U postgres -tAc ${shellQuote(sql)}`);
     if (result.code !== 0) {
         throw new Error(`psql failed (${result.code}): ${result.stderr.trim()}`);
@@ -35,10 +33,8 @@ const psql = async (session: SshSession, cid: string, sql: string): Promise<stri
 const databaseExists = async (session: SshSession, cid: string, parsed: DatabaseInputs): Promise<boolean> =>
     (await psql(session, cid, `SELECT 1 FROM pg_database WHERE datname=${sqlLiteral(parsed.database)}`)) === "1";
 
-// A per-app Postgres database + owning role on a shared instance (the binding for an app that uses a database
-// capability). read reports it present once the database exists (so the noop re-derives the URL); apply
-// create-or-updates the role (idempotent: CREATE if absent, always ALTER to match the generated password) and
-// CREATEs the database if absent; delete drops both. All identifiers are resolver-sanitized to [a-z0-9_].
+// A per-app Postgres database + owning role on a shared instance. All identifiers are resolver-sanitized to
+// [a-z0-9_].
 export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createInstanceBindingProvider(
         {
@@ -48,8 +44,9 @@ export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecut
             present: async (session, cid, parsed) => ((await databaseExists(session, cid, parsed)) ? { url: url(parsed) } : undefined),
             create: async (session, cid, parsed) => {
                 const roleExists = await psql(session, cid, `SELECT 1 FROM pg_roles WHERE rolname=${sqlLiteral(parsed.role)}`);
-                // ALTER rather than skip on the already-there path: the password is generated and stored in the
-                // graph, so this is what keeps the instance agreeing with the URL the app was handed.
+                // ALTER rather than skip on the already-there path: the password is generated and stored in the graph,
+                // so this
+                // keeps the instance agreeing with the URL the app was handed.
                 const verb = roleExists === "1" ? "ALTER" : "CREATE";
                 await psql(session, cid, `${verb} ROLE ${sqlIdentifier(parsed.role)} LOGIN PASSWORD ${sqlLiteral(parsed.password)}`);
                 if (!(await databaseExists(session, cid, parsed))) {

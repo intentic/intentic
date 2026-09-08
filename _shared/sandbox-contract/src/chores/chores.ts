@@ -4,43 +4,14 @@ import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
 import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG } from "./workspace-scope.js";
 
-/* THE CHORE BOOK, what routine maintenance a repository is owed, and what has to be TRUE before we say so.
- *
- * Everything in here is a standing offer: work that is worth doing eventually, that nobody will ever put on a
- * sprint board, and that a person cannot notice is overdue by looking at their editor. The engineering problem is
- * not finding such work, any linter will hand you a thousand findings, it is deciding which of them is worth
- * interrupting somebody about, on a surface they will still be reading in six months.
- *
- * Three rules, and every entry below obeys all three:
- *
- * 1. DELTAS, NOT ABSOLUTES. "38 packages are undocumented" is a statistic; it will be true every day for a year,
- *    and a tile lit every day teaches the eye to stop seeing the rail. "A package appeared that nothing explains"
- *    is an event. So a chore's `digest` is built from the IDENTITIES of what it found, which packages, which
- *    advisories, which files, and the rail speaks when that set changes, not while it is merely non-empty. The
- *    standing count still shows inside the panel, next to the thing it describes, which is where a statistic
- *    belongs.
- *
- * 2. LEADER-RELATIVE, NOT TUNED. Nowhere in here is there a threshold that would need a different value for a
- *    Rust repo, a fresh scaffold, or a ten-year monolith, with one deliberate exception (duplication's 5%, which
- *    is a percentage of the tree and therefore already scale-free). "Three times the median of its own ranking"
- *    needs no calibration and cannot rot.
- *
- * 3. THE EVIDENCE IS THE TRUTH; THE LEDGER ONLY DEBOUNCES. Nothing here can be ticked off. A chore goes quiet
- *    because the measurement moved, which means someone fixing it by hand, or an unrelated change fixing it by
- *    accident, is registered exactly like a chore turn doing it. The ledger's only power is to stop the rail
- *    repeating itself about evidence a turn has already been spent on (verdict.ts).
- *
- * What is NOT here is as deliberate. There is no composite score, no letter grade, no "health: 78%". Those are
- * not comparable across projects, cannot be checked by the reader, and turn a set of specific, arguable findings
- * into one number nobody can act on. And no chore is ever created enabled-and-hidden: a chore that runs is a
- * turn that spends money and writes to the workspace, so it is either something the owner started or an
- * automation they can see in a list. */
+// Routine maintenance a repo is owed, surfaced only as events: a chore's `digest` is built from the identities of what
+// changed, not a count, so ordinary drift never rebadges. Thresholds are leader-relative, not a per-repo tuned number.
+// A chore goes quiet only because the measurement itself moved; nothing here is manually ticked off.
 
 export type ChoreStance = "act" | "report";
 
-/* WHAT KIND OF CLAIM A CHORE MAKES ON SOMEONE'S ATTENTION. Four of them, ordered from "this is a risk you are
- * carrying right now" to "this is worth thinking about this quarter", see CHORE_KINDS at the foot of this file,
- * which carries the argument and the words the panel groups under. */
+// What kind of claim a chore makes on someone's attention, from an active risk to a periodic review; see CHORE_KINDS
+// for the order and the words the panel groups under.
 export type ChoreKind = "carrying" | "accruing" | "drifting" | "surveying";
 
 export interface ChoreContext {
@@ -53,104 +24,57 @@ export interface ChoreContext {
     readonly nowMs: number;
 }
 
-// What a chore found, when it found anything. `undefined` from `assess` is the healthy case and the common one.
+// What a chore found, when it found anything; `undefined` from `assess` is the healthy, common case.
 export interface ChoreFinding {
-    // One line, in numbers, for the row. The reader decides from this whether to open anything.
+    // One line, in numbers; the reader decides from this alone whether to open anything.
     readonly headline: string;
-    // The evidence itself, one claim per line, what the panel lists under the row, and what makes the headline
-    // checkable rather than something to be believed.
+    // The evidence, one claim per line; what makes the headline checkable, not just believed.
     readonly detail: readonly string[];
-    // The identity of THIS evidence. See digest.ts: it is what the rail's transitions are measured against.
+    // The identity of this evidence; see digest.ts, it is what the rail's transitions are measured against.
     readonly digest: string;
-    // `warning` is for a risk the owner is carrying right now, a live advisory, a runtime past its EOL. Everything
-    // else is `info`, including large and ugly numbers, because "there is a lot of it" is not an emergency.
+    // `warning` is for a risk carried right now (a live advisory, an EOL runtime); everything else is `info`.
     readonly severity: "info" | "warning";
-    // The numbers again, in the agent's terms, for the prompt's "Why:" line. Exact, the agent may recount them.
+    // The numbers again, in the agent's terms, for the prompt's "Why:" line; exact, the agent may recount them.
     readonly why: string;
 }
 
 export interface Chore {
     readonly id: string;
     readonly title: string;
-    // An app icon name. Left as a plain string for the same reason the extension API leaves Activation.icon open:
-    // this library must not depend on the UI kit to name a glyph.
+    // An app icon name, left as a plain string so this library doesn't depend on the UI kit to name a glyph.
     readonly icon: string;
     // The one-line standing description, shown whether or not the chore is currently due.
     readonly description: string;
-    /* WHICH OF THE FOUR KINDS OF CLAIM THIS IS (CHORE_KINDS, at the foot of this file). It decides the book's
-     * order and the panel's grouping, and it is a FIELD rather than a comment above the array for exactly that
-     * reason: the reading order is the one editorial claim this surface makes, and a claim spelled as a comment
-     * beside a hand-maintained list is one nobody can check and the compiler cannot keep. */
+    // A field, not a comment, so the book's reading order is compiler-checked, not hand-maintained.
     readonly kind: ChoreKind;
-    /* THE RULE, in words, what has to be true for this chore to be due, stated so a reader can check it against
-     * the evidence below it and disagree.
-     *
-     * This is not decoration. A row that says "4 majors waiting" and nothing else is asking to be taken on
-     * trust; the same row saying "shown because: a dependency is a major version behind" is a claim someone can
-     * argue with, and arguing with it is how the book gets better. It rides into the prompt too, so the agent is
-     * told the rule it was woken by rather than left to infer it from the numbers.
-     *
-     * Kept as prose next to the code that implements it, which means it can drift from it, the tests below
-     * cannot check English. The rule for writing one: say the THRESHOLD, not the subject. "Duplication is high"
-     * is a topic; "more than 5% of the tree is duplicated" is a criterion. */
+    // The threshold this chore is due by, stated as a criterion a reader can check and disagree with, not a topic.
     readonly criterion: string;
-    /* WHETHER THIS IS A QUESTION WORTH ASKING OF THIS REPOSITORY AT ALL, returns undefined when it is, and what
-     * is MISSING when it is not.
-     *
-     * Distinct from `assess`, and the distinction is the whole point: `assess` asks whether the answer is yes,
-     * this asks whether the question makes sense. "Re-read the documentation against the code" in a repository
-     * with no documentation is not a chore that is currently clear, it is one that will never apply here, and
-     * showing it as clear says we checked something we cannot check. A chore that does not apply is dropped from
-     * the panel entirely; a line under the panel's list records that it was considered.
-     *
-     * A BARE CAUSE, "no Dockerfile", never "this repository ships no Dockerfile, so there is no image to slim".
-     * Same spelling as `ProbeSpec.unavailable`, and for the same reason both surfaces need: one absent
-     * package.json rules out five chores, and five sentences saying so at length is the wall of text this phrasing
-     * exists to prevent. The panel groups by this string, so the CONSEQUENCE, which chores it costs, is the list
-     * beside it rather than a clause repeated inside every entry. Identical causes must be spelled identically or
-     * they group apart.
-     *
-     * Reads `signals` rather than probes on purpose: applicability is about what the repository IS, which is a
-     * fact the daemon holds without measuring anything. If a gate needed a probe it would be describing the
-     * answer rather than the question. */
+    // Whether the question makes sense here, distinct from `assess`; undefined means yes, else a bare cause spelled
+    // identically to group by.
     readonly applies?: (signals: ChoreSignals) => string | undefined;
-    // Whether the turn is allowed to CHANGE anything. Not a hint, it selects the invariants block, and a
-    // report-stance chore is told in words that editing would be a surprise.
+    // Whether the turn may change anything; not a hint, it selects the invariants block and is stated to the agent.
     readonly stance: ChoreStance;
-    // Probes that must have run and succeeded before this chore can be assessed at all. Missing ⇒ `unavailable`:
-    // rendered greyed, never badged, and never mistaken for a clean result.
+    // Probes that must have run and succeeded first; missing means unavailable, shown greyed, never mistaken for clean.
     readonly needs: readonly ProbeId[];
-    /* How long until this is worth doing again REGARDLESS of what changed. For a measured chore this is a backstop
-     * (evidence normally decides); for a survey chore it is the whole trigger, because "read this code with fresh
-     * eyes" has no measurement and its value is entirely in being done periodically. */
+    // How long until this is worth doing again regardless of what changed: a backstop for a measured chore, the whole
+    // trigger for a survey.
     readonly cadenceMs: number;
-    // A survey has no measurement: it is due on its cadence and clear otherwise. Named rather than inferred from
-    // an empty `needs`, because the two are different claims and the panel says which one a row is.
+    // Named rather than inferred from an empty `needs`: a survey has no measurement, and the panel says which kind of
+    // row this is.
     readonly survey?: true;
-    /* THE SCHEDULED FORM, for the chores worth running unattended, what the Automations page offers as a
-     * one-click "code chore", and the second way this book is consumed.
-     *
-     * The two modes are genuinely different and both are wanted. The Maintenance panel is EVIDENCE-driven: it
-     * reads what the daemon already measured and offers a turn against a specific finding you can read first. An
-     * automation is SCHEDULE-driven: it wakes on a clock, at 3am, with nobody watching. So an automation cannot
-     * carry a finding, there is no verdict at fire time, and instead it carries a GUARD: a shell one-liner that
-     * runs for free on the sandbox's own clock and exits non-zero to skip, so the half that costs a turn only
-     * starts when there is something to start it for.
-     *
-     * `report` is where the guard leaves its findings. A guard's stdout is discarded on success (only a FAILING
-     * guard's output survives, as the skip reason), so a file is how the free deterministic half hands what it
-     * found to the expensive half. */
+    // Wakes on a clock, unattended, so it carries a guard (a shell one-liner, exits non-zero to skip) instead of a
+    // finding.
     readonly automation?: {
         readonly cron: string;
         readonly guard: string;
         readonly note: string;
         readonly report: string;
-        // How the woken turn is told what it is looking at, the "Why:" line, in place of a finding.
+        // How the woken turn is told what it is looking at, in place of a finding.
         readonly woke: string;
     };
     readonly assess: (context: ChoreContext) => ChoreFinding | undefined;
-    // The prompt's three variable parts (prompt.ts owns the shape). `diagnosis` says what the numbers MEAN, `goal`
-    // says what shape to move towards, never a design, and `done` is falsifiable by the agent itself.
+    // The prompt's three parts: `diagnosis` explains the numbers, `goal` is the shape to move toward (never a design),
+    // `done` is agent-falsifiable.
     readonly diagnosis: string;
     readonly goal: string;
     readonly done: string;
@@ -158,32 +82,28 @@ export interface Chore {
 
 const DAY_MS = 86_400_000;
 
-/* Where a scheduled chore's guard leaves its report for the woken turn to read. Under /tmp because they are
- * inputs to a turn that starts moments later, never something to keep, and deliberately the SAME paths the
- * probe runner uses, so a workspace that runs both does not keep two copies of the same measurement. */
+// Where a scheduled chore's guard leaves its report; under /tmp since these feed a turn moments later, not kept.
 const AUDIT_REPORT = `/tmp/intentic-chore-audit.json`;
 const KNIP_REPORT = `/tmp/intentic-chore-knip.json`;
 const JSCPD_DIR = `/tmp/intentic-chore-jscpd`;
 const JSCPD_REPORT = `${JSCPD_DIR}/jscpd-report.json`;
 
-// How a repo is named to a person and to an agent. "root" is the wire id the daemon's git and health routes
-// already use for the workspace's own repository, and it is a word an agent would otherwise read as a directory
-// called "root", so it is spelled out here, once, rather than at every call site that builds a prompt.
+// How a repo is named to a person or an agent; "root" (the wire id for the workspace's own repo) reads as a real
+// directory name to an agent, so it is spelled out here once rather than at every call site.
 export const repoLabel = (repo: string): string => (repo === `root` || repo === `` ? `the workspace root repository` : repo);
 
-// The same repository, named for a surface that has a 16rem column or a chip to say it in. `repoLabel` is prose
-// and reads as prose inside a sentence ("update dependencies in the workspace root repository"); a rail row wants
-// the name on its own, and "the workspace root repository" truncates to "the workspace root reposi…" there.
+// The same repository, named for a narrow column or chip; `repoLabel`'s prose truncates badly there ("the
+// workspace root reposi…").
 export const repoName = (repo: string): string => (repo === `root` || repo === `` ? `workspace root` : repo);
 
 const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
 
-// One outdated dependency, as the panel lists it. The semver step leads, because it is what decides whether the
-// row is a morning's work or a project.
+// One outdated dependency, as the panel lists it; the semver step leads, since it decides whether the row is a
+// morning's work or a project.
 const outdatedLine = (entry: OutdatedPackage): string => `${entry.kind} · ${entry.name} ${entry.current} → ${entry.latest}`;
 
-// The `facts` of a probe that actually ran. Anything else, never run, unavailable, failed, reads as absent, so
-// no assess() can accidentally treat an unmeasured repo as a measured clean one.
+// The facts of a probe that actually ran; anything else (never run, unavailable, failed) reads as absent, so
+// assess() can't mistake an unmeasured repo for a clean one.
 const factsOf = <T extends ProbeId>(context: ChoreContext, id: T): Extract<NonNullable<ProbeResult["facts"]>, { id: T }> | undefined => {
     const probe = context.probes.get(id);
     if (probe?.state !== `ok` || probe.facts === undefined || probe.facts.id !== id) {
@@ -196,11 +116,9 @@ const factsOf = <T extends ProbeId>(context: ChoreContext, id: T): Extract<NonNu
 
 const BLOCKING = new Set<Advisory["severity"]>([`critical`, `high`]);
 
-/* SECURITY. The only chore with no cadence at all: an advisory is not something that becomes worth looking at
- * after thirty days, and there is nothing periodic about it. It is also the only one that reaches `warning`
- * routinely, which is exactly why the bar is critical-or-high and production-or-dev is carried through to the
- * prompt rather than flattened, a moderate advisory in a build-time-only tool badging red is how `warning` stops
- * meaning anything within a week. */
+// Security is the only chore with no cadence: an advisory isn't something that becomes worth reading after 30
+// days. Also the only one that reaches `warning` routinely, so the bar is critical-or-high with production/dev carried
+// to the prompt.
 const security: Chore = {
     id: `security-advisories`,
     title: `Patch security advisories`,
@@ -240,13 +158,12 @@ const security: Chore = {
                     (advisory) =>
                         `${advisory.severity} · ${advisory.name}, ${advisory.title}${advisory.patched === undefined ? ` (no patch yet)` : ``}`,
                 ),
-            // Identities, not counts: every advisory that appears or is fixed is genuinely news, and there is no
-            // ordinary drift here to absorb.
+            // Identities, not counts: every advisory that appears or is fixed is genuinely news, with no ordinary drift
+            // to absorb.
             digest: digestOf(...blocking.map((advisory) => `${advisory.name}@${advisory.severity}`).toSorted()),
             severity: production.length > 0 ? `warning` : `info`,
-            // Named, not counted. "1 high advisory" tells an agent nothing it can act on, and the first thing it
-            // would have to do is re-derive the list we already have, badly, because pnpm audit is slow and it
-            // would be reading a different tree by then.
+            // Named, not counted; re-deriving the list itself would be slow, and pnpm audit would read a different tree
+            // by then.
             why:
                 `pnpm audit reports ${plural(blocking.length, `high or critical advisory`, `high or critical advisories`)} against ` +
                 `${repoLabel(context.repo)}, ${production.length} reaching a production dependency path, ${patchable.length} with a published patched range: ` +
@@ -262,10 +179,8 @@ const security: Chore = {
     done: `Done when \`pnpm audit\` reports fewer high/critical advisories than it did, and the repository's type-check and tests pass.`,
 };
 
-/* DEPENDENCIES. Majors are the finding; the total is context. A repo that is forty patch releases behind is a
- * morning's work and does not need a rail tile, while one major on a framework is a project, so the digest is
- * built from WHICH packages have a major waiting, and a new one appearing is the event. The total count rides
- * along bucketed (digest.ts) so that ordinary drift, which is constant, does not read as news. */
+// Majors are the finding, the total is context: the digest is keyed to which packages have a major waiting, with
+// the count riding along bucketed so ordinary drift doesn't read as news.
 const OUTDATED_NOISE_FLOOR = 20;
 
 const dependencies: Chore = {
@@ -285,8 +200,8 @@ const dependencies: Chore = {
             return undefined;
         }
         const majors = facts.packages.filter((entry) => entry.kind === `major`);
-        // Nothing major and a short tail is a healthy repository, not a chore. The floor is on the TOTAL rather
-        // than on any one package because minors and patches are only worth a turn in bulk.
+        // A healthy repo, not a chore: the floor is on the total, since minors and patches are only worth a turn in
+        // bulk.
         if (majors.length === 0 && facts.packages.length < OUTDATED_NOISE_FLOOR) {
             return undefined;
         }
@@ -298,8 +213,8 @@ const dependencies: Chore = {
             detail: majors.toSorted((left, right) => left.name.localeCompare(right.name)).map(outdatedLine),
             digest: digestOf(...majors.map((entry) => `${entry.name}@${entry.latest}`).toSorted(), `total:${bucketOf(facts.packages.length)}`),
             severity: `info`,
-            // The majors are named because they are what the turn is actually about, the minors and patches are a
-            // bulk operation the agent will enumerate itself, and listing four hundred of them here would bury it.
+            // Majors are named since they are what the turn is about; minors and patches are a bulk operation the agent
+            // enumerates itself.
             why:
                 `pnpm outdated reports ${plural(facts.packages.length, `dependency`, `dependencies`)} behind the registry in ` +
                 `${repoLabel(context.repo)}, ${majors.length} of them by a major version` +
@@ -315,9 +230,8 @@ const dependencies: Chore = {
     done: `Done when the repository's type-check and tests pass, and your summary names every major you took and every one you left, with the reason.`,
 };
 
-/* DEAD CODE. knip's counts, folded into one chore rather than split by kind: unused files, unused exports and
- * unused dependencies are the same finding wearing three hats, they are fixed in one pass, and three rows that
- * light together are three chances to teach someone to ignore the rail. */
+// knip's counts folded into one chore rather than split by kind: unused files, exports and dependencies are the
+// same finding, fixed in one pass.
 const deadCode: Chore = {
     id: `dead-code`,
     title: `Clear out dead code`,
@@ -331,9 +245,8 @@ const deadCode: Chore = {
     cadenceMs: 14 * DAY_MS,
     automation: {
         cron: `0 3 * * *`,
-        // Two gates, so the two ways to not run are distinguishable in the run history: knip absent (a repo that
-        // never adopted it) reads differently from knip clean. `pnpm exec` resolves the repo's own devDependency
-        // rather than downloading a floating version that would disagree with its knip.json.
+        // Two gates so a repo that never adopted knip reads differently from one that's clean; `pnpm exec` resolves the
+        // repo's own devDependency.
         guard:
             `pnpm exec knip --version >/dev/null 2>&1 || { echo "knip is not a devDependency of this repo"; exit 1; }; ` +
             `pnpm exec knip --reporter json > ${KNIP_REPORT} && { echo "no dead code"; exit 1; }`,
@@ -354,12 +267,12 @@ const deadCode: Chore = {
         return {
             headline: `${plural(files, `unreferenced file`)}, ${plural(exports + types, `unused export`)}, ${plural(unusedDeps + devDependencies, `unused dependency`, `unused dependencies`)}`,
             detail: sample.map((path) => `unreferenced · ${path}`),
-            // The file identities carry the news (a newly-dead file is an event); the export and dependency counts
-            // ride along bucketed, since they drift by one constantly as code is written.
+            // File identities carry the news (a newly-dead file is an event); export/dependency counts ride along
+            // bucketed, since they drift constantly.
             digest: digestOf(...sample.toSorted(), `exports:${bucketOf(exports + types)}`, `deps:${bucketOf(unusedDeps + devDependencies)}`),
             severity: `info`,
-            // The sample rather than the full list, and the goal tells the agent to re-run knip for the rest: this
-            // measurement is hours old, and sending a turn at a file that has already been deleted wastes it.
+            // The sample, not the full list: this measurement is hours old, and the goal tells the agent to re-run knip
+            // for the rest.
             why:
                 `knip reports ${plural(files, `unreferenced file`)}, ${exports + types} unused exports and ` +
                 `${unusedDeps + devDependencies} unused dependencies in ${repoLabel(context.repo)}` +
@@ -376,11 +289,9 @@ const deadCode: Chore = {
     done: `Done when knip reports fewer findings, the repository's type-check and tests pass, and nothing you deleted is reachable from another package.`,
 };
 
-/* DUPLICATION. Report-stance, and it is the clearest case for why that stance exists at all. Most duplication
- * should not be removed: generated files, tests that repeat on purpose, and two things that merely look alike
- * today but answer to different owners tomorrow. Deciding which copies genuinely have to change together is a
- * design judgement, and an agent that "collapses duplication" unattended produces exactly the abstraction that
- * gets deleted a year later. */
+// Report-stance: most duplication shouldn't be removed (generated files, deliberate test repetition, lookalikes
+// with different owners); deciding which copies must change together is a design judgement no unattended agent should
+// make.
 const DUPLICATION_FLOOR = 5;
 
 const duplication: Chore = {
@@ -395,8 +306,7 @@ const duplication: Chore = {
     cadenceMs: 30 * DAY_MS,
     automation: {
         cron: `0 3 * * 1`,
-        // Gated on the percentage rather than "any clone at all", which every real repository has: below this the
-        // report is noise that would wake an agent every week to say nothing actionable.
+        // Gated on the percentage, not "any clone at all" (which every repo has); below this the report is noise.
         guard:
             `pnpm dlx jscpd ${WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG} --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
             `[ "$(jq '.statistics.total.percentage // 0 | floor' ${JSCPD_REPORT} 2>/dev/null || echo 0)" -ge ${DUPLICATION_FLOOR} ]`,
@@ -413,8 +323,8 @@ const duplication: Chore = {
         return {
             headline: `${percentage.toFixed(1)}% of the tree is duplicated, across ${plural(clones, `clone`)}`,
             detail: top.map((clone) => `${clone.lines} lines · ${clone.first} ↔ ${clone.second}`),
-            // A whole percentage point is the smallest move worth calling news; the biggest clones' identities
-            // carry the rest, so a new large clone appearing is an event even at a flat percentage.
+            // A whole percentage point is the smallest move worth calling news; the biggest clones' identities carry
+            // the rest.
             digest: digestOf(`pct:${Math.round(percentage)}`, ...top.map((clone) => `${clone.first}|${clone.second}`).toSorted()),
             severity: `info`,
             why:
@@ -431,24 +341,9 @@ const duplication: Chore = {
     done: `Done when every clone in the report has either a named extraction or a one-line reason it should stay.`,
 };
 
-/* TEST STRENGTH. The one chore whose evidence is about the tests rather than the code, and it exists because
- * nothing else in this workspace can produce it.
- *
- * A green suite is not evidence that the code is checked. Coverage says a line RAN; it cannot say an assertion
- * depended on what the line produced. The gap between those two is where a model's tests live: they execute
- * everything and assert almost nothing, and every gate here says yes to them — they type-check, they lint, they
- * pass.
- *
- * MEASURED IN THIS REPOSITORY, on sandbox-contract's own chore module: 109 hand-written tests, and 16 of 58
- * injected faults survived. The one worth reading is in `bucketOf`, whose comment in digest.ts argues at length
- * that the zero boundary is load-bearing. Move that boundary and the suite stays green, because the test holding
- * it is written relationally — `expect(bucketOf(0)).not.toBe(bucketOf(1))` — and with the boundary moved the two
- * values are still different. The careful, un-brittle assertion is precisely the one that cannot see the change.
- *
- * THE FLOOR IS LOW ON PURPOSE. 60% is where Stryker's own default report turns red, and it is far under what a
- * well-tested module scores, because this chore is looking for suites that are decorative rather than suites that
- * are imperfect. A threshold near the good number would badge every honest package in the repo, which is how a
- * maintenance surface teaches people to ignore it. */
+// The only chore whose evidence is about the tests, not the code: a green suite proves a line ran, not that
+// anything depended on what it produced. The floor is set low on purpose, to catch decorative suites, not to grade good
+// ones.
 const MUTATION_FLOOR = 60;
 
 const testStrength: Chore = {
@@ -460,11 +355,8 @@ const testStrength: Chore = {
     criterion: `Stryker's mutation score for the repo is under ${MUTATION_FLOOR}%.`,
     stance: `act`,
     needs: [`mutation`],
-    /* Weekly. This was quarterly on the reasoning that a mutation score moves when tests are rewritten and that
-     * is not a weekly event; on 2026-08-31 agents rewrote about 180 test files in an afternoon, and the score is
-     * exactly the number that should have said so. The probe is still the most expensive one here, and
-     * `--incremental` is what makes a weekly cadence affordable: the first run costs a full run, every one after it
-     * costs the mutants whose code or tests changed. */
+    // Weekly: `--incremental` makes this affordable, the first run costs a full run, every one after costs only what
+    // changed.
     cadenceMs: 7 * DAY_MS,
     assess: (context) => {
         const facts = factsOf(context, `mutation`);
@@ -474,13 +366,11 @@ const testStrength: Chore = {
         const { score, killed, survived, survivors } = facts.mutation;
         return {
             headline: `${survived} injected faults went unnoticed, ${score}% of them caught`,
-            // The survivors themselves, not the score. A percentage is a mood; a named line with the change that
-            // nothing objected to is a morning's work with the answer already in it.
+            // The survivors themselves, not the score; a named line with the change nothing objected to is a morning's
+            // work already.
             detail: survivors.map((one) => `${one.file}:${one.line} · ${one.mutator} → ${one.replacement} · survived`),
-            /* Bucketed, via the same helper the other counting chores use, so ordinary drift does not read as
-             * news: a score moving 54 → 55 is not a thing to interrupt anyone about. The survivors' IDENTITIES
-             * ride along, so a NEW weak spot appearing speaks even while the number holds steady — which is the
-             * case that matters, because that is a test somebody just wrote. */
+            // Bucketed so ordinary score drift isn't news; survivors' identities ride along, so a new weak spot speaks
+            // even at a steady score.
             digest: digestOf(`bucket:${bucketOf(100 - score)}`, ...survivors.map((one) => `${one.file}:${one.line}`).toSorted()),
             severity: `info`,
             why:
@@ -498,12 +388,8 @@ const testStrength: Chore = {
     done: `Done when every named survivor has either a new assertion that fails without the change, or a one-line note saying why it cannot be observed.`,
 };
 
-/* DOCUMENTATION. The evidence is a package with no README, which IS its architecture document in this
- * workspace, so this is a stat on the package directory rather than a lookup in a parallel tree. It sounds like
- * a coverage statistic
- * and would be one if the rail read it directly. It does not: the digest is the SET of undocumented package
- * directories, so a long-standing backlog goes quiet after it is seen once, and a package appearing that nothing
- * explains is an event that speaks. That is the whole difference between this being useful and being a nag. */
+// Evidence is a package with no README, which is its architecture document here. The digest is the set of
+// undocumented directories, so a long-standing backlog goes quiet after being seen once.
 const documentation: Chore = {
     id: `documentation-refresh`,
     title: `Document what nothing explains`,
@@ -539,16 +425,9 @@ const documentation: Chore = {
     done: `Done when every package you named has a document that a newcomer could use to find the file they need, and no other file changed.`,
 };
 
-/* COMPLEXITY. The one chore whose evidence comes from the resident index rather than a subprocess, and the one
- * most at risk of being a ranking laundered into a to-do list, there is ALWAYS a top of a hotspot ranking, and
- * "your worst file" is not a finding. So it does not report the ranking. It reports the two shapes within it that
- * are genuinely arguable:
- *
- *   volatile AND depended-on    a hotspot that is also a key module: every edit ripples outward.
- *   out of proportion           branching three times the median of its own ranking: tangled, not merely busy.
- *
- * Both are relative to the same list the user is reading, so nothing here needs tuning per repository or per
- * language, and a healthy repo produces an empty set rather than a top five. */
+// Reports only the two shapes worth arguing about in a hotspot ranking:
+// - volatile and depended-on: a hotspot that is also a key module, every edit ripples outward.
+// - out of proportion: branching three times the median of its own ranking.
 const COMPLEXITY_MULTIPLE = 3;
 
 const median = (values: readonly number[]): number => {
@@ -571,8 +450,8 @@ const complexity: Chore = {
     needs: [],
     cadenceMs: 30 * DAY_MS,
     assess: (context) => {
-        // A half-built index ranks whatever it has finished reading, which is not the repository. Better to say
-        // nothing than to send a turn at the wrong file.
+        // A half-built index ranks whatever it has finished reading, not the repository; better to say nothing than
+        // target the wrong file.
         if (!context.signals.indexed || context.signals.hotspots.length === 0) {
             return undefined;
         }
@@ -605,11 +484,7 @@ const complexity: Chore = {
     done: `Done when \`iq hotspots\` reports materially fewer branch points for that file, the repository's checks pass, and no importer changed meaning.`,
 };
 
-/* RUNTIME. A static table, and it is honest about being one: there is no network call here, so the dates below
- * are a fact about the day this file was last edited rather than a live feed. That is the right trade for a
- * signal that moves twice a year and must work on a box with no outbound access, but it does mean this table is
- * maintenance in its own right, and a major missing from it reads as "not end-of-life", which is the safe way to
- * be wrong. Source: nodejs/Release. */
+// A static table, current only as of this file's last edit; no network call. Source: nodejs/Release.
 const NODE_EOL: Readonly<Record<number, string>> = {
     16: `2023-09-11`,
     18: `2025-04-30`,
@@ -617,8 +492,7 @@ const NODE_EOL: Readonly<Record<number, string>> = {
     22: `2027-04-30`,
     24: `2028-04-30`,
 };
-// How far ahead of an end-of-life date the chore starts speaking. A quarter, because moving a runtime is planned
-// work, telling someone the day security patches stop is telling them too late to do anything but scramble.
+// How far ahead of end-of-life the chore starts speaking; a quarter, since moving a runtime is planned work.
 const EOL_HORIZON_MS = 90 * DAY_MS;
 
 const runtime: Chore = {
@@ -644,7 +518,7 @@ const runtime: Chore = {
         }
         const past = context.nowMs >= eolMs;
         const days = Math.round(Math.abs(eolMs - context.nowMs) / DAY_MS);
-        // Which packages would have to be argued with, so the finding names the work rather than only the fact.
+        // Which packages would have to be argued with, so the finding names the work, not just the fact.
         const pinned = context.signals.packages.filter((entry) => entry.engines?.[`node`] !== undefined);
         return {
             headline: past
@@ -655,7 +529,7 @@ const runtime: Chore = {
                 `end of life · ${eol}`,
                 ...pinned.map((entry) => `pinned · ${entry.name} requires node ${entry.engines?.[`node`] ?? ``}`),
             ],
-            // The state, not the date: a countdown would mint a new digest every single day and badge forever.
+            // The state, not the date: a countdown would mint a new digest, and badge, every single day.
             digest: digestOf(`node:${major}`, past ? `eol` : `approaching`),
             severity: past ? `warning` : `info`,
             why:
@@ -671,11 +545,8 @@ const runtime: Chore = {
     done: `Done when the pins name a supported release, the repository's type-check and tests pass on it, and anything needing a rebuild is named as such.`,
 };
 
-/* LIBRARIES. The one chore here with evidence for a question that usually gets asked as a vibe ("should we be
- * using a library for this?"). Two libraries that solve the same problem in one tree is a fact, not an opinion:
- * somebody added the second one without removing the first, both are now in the bundle, and new code picks
- * whichever the neighbouring file used. The table below is deliberately short and only names categories where
- * having two is genuinely a mistake, not, say, two test runners, which is an ordinary migration. */
+// Evidence for a question usually asked as a vibe: two libraries solving the same problem is a fact, not an
+// opinion. The table is short, naming only categories where having two is a genuine mistake, not an ordinary migration.
 const CATEGORIES: readonly { readonly category: string; readonly members: readonly string[] }[] = [
     { category: `date handling`, members: [`moment`, `dayjs`, `date-fns`, `luxon`, `js-joda`] },
     { category: `HTTP clients`, members: [`axios`, `got`, `node-fetch`, `superagent`, `undici`, `request`] },
@@ -724,61 +595,31 @@ const libraries: Chore = {
     done: `Done when every overlapping pair has a recommendation with a call-site count behind it, or a reason the overlap is fine.`,
 };
 
-/* ---- THE FRONT-END CHORES -------------------------------------------------------------------------------------
- *
- * Four chores that only exist where a UI framework does, kept together because they share one gate and one
- * probe, and split across the reading order in CHORES, since where a row belongs is decided by what KIND of
- * finding it is, not by which file paragraph it was written in.
- *
- * They gate on `shape.deps` rather than on `signals.packages`, and that is not interchangeable. `packages` is
- * populated from pnpm-workspace.yaml, so it is EMPTY for a repository that is not a monorepo, which is what a
- * Vite app, a Next app and an Angular CLI project all are. A framework gate reading it would be permanently dark
- * in the overwhelming majority of the repositories these four were written for, and dark silently: the chores
- * would not appear, the footer would say the repository has no packages, and nothing would look broken.
- *
- * All four also say something the rest of the book does not have to. A component, a class name and a bundle chunk
- * are things nobody sees the whole of, you read one component at a time, and the tenth copy of a button looks
- * exactly like the first nine did. That is the same argument the whole surface rests on, just further from the
- * places a compiler will ever help. */
+// Four chores that only exist where a UI framework does; gated on `shape.deps`, not `signals.packages` (empty
+// for a non-monorepo app, which would leave the gate permanently and silently dark). All four catch things nobody sees
+// the whole of at once: a component, a class name, a bundle chunk.
 
-// How many rows of evidence a UI finding lists before it is a wall rather than a list. The standing count still
-// leads the headline; this only bounds what is enumerated underneath it.
+// How many evidence rows a UI finding lists before it is a wall, not a list; the standing count still leads the
+// headline.
 const DETAIL_LIMIT = 8;
 
 const FRAMEWORK_LABELS = UI_FRAMEWORKS.map((framework) => framework.label).join(`, `);
 
-// One gate, one cause, four chores. Built from the table so that a framework added to stack.ts cannot leave a
-// stale list of names behind in a reason nobody re-reads.
+// One gate, one cause, four chores; built from the framework table so a framework added to stack.ts can't leave
+// a stale name behind in the reason.
 const needsFramework = (signals: ChoreSignals): string | undefined =>
     frameworksOf(signals.shape.deps).length > 0 ? undefined : `no ${FRAMEWORK_LABELS}`;
 
 const bytesLabel = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(bytes / 1024)} kB`);
 
-/* BUNDLE. What a browser downloads before anything appears, which is the fact about a front-end that is furthest
- * from anything visible in an editor: every dependency looks the same size in an import statement.
- *
- * The criterion is a SHARE, and that is deliberate, it is the second exception to the book's leader-relative
- * rule, and it earns the same defence duplication's 5% does. A byte threshold would need a different value for a
- * marketing page and an IDE, would be argued about forever, and would be wrong the moment either one grew. "One
- * chunk is more than half of everything you ship" needs no calibration: it says the build is not split, which is
- * true or false at any size. A well-split app has its largest chunk well under this whatever it weighs, and a
- * small app that genuinely is one chunk trips it and is right to, that IS its entire download.
- *
- * Report-stance. Where the split boundaries go is a routing and product decision, and an agent that lazily
- * imported things unattended at three in the morning would be making it. */
+// The criterion is a share of total size, not a byte threshold, since a byte value would need a different number
+// per app. Report-stance: where to split is a product decision no unattended agent should make.
 const BUNDLE_SHARE_FLOOR = 50;
-// Below this there is no ranking to be an outlier in, two files cannot tell you anything about how a build is
-// divided, and the largest of them is over half by arithmetic rather than by fault.
+// Below this there is no ranking to be an outlier in; the largest asset is over half by arithmetic, not by fault.
 const BUNDLE_MIN_ASSETS = 3;
 
-/* An asset's name with its content hash taken out, `assets/vendor-DlAUqK2U.js` becomes `assets/vendor.js`.
- *
- * Without this the digest changes on every single build, because a content hash changing is the entire point of a
- * content hash. The chore would badge after every `pnpm build` while reporting nothing new, which is precisely
- * the lit-every-day failure the digest exists to prevent.
- *
- * Eight or more characters containing a digit, immediately before the final extension: long enough to leave
- * `vendor-react.js` and `.min.js` alone, specific enough to catch Vite's `-DlAUqK2U` and webpack's `.9f2a1b0c`. */
+// Strips a build asset's content hash (`vendor-DlAUqK2U.js` → `vendor.js`) so the digest doesn't change on every
+// build; long and specific enough to leave `vendor-react.js` alone but catch Vite's and webpack's hash formats.
 const stableAsset = (path: string): string => path.replace(/[.-](?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{8,}(\.[a-z0-9]+)$/, `$1`);
 
 const bundleWeight: Chore = {
@@ -801,8 +642,8 @@ const bundleWeight: Chore = {
         if (assets.length < BUNDLE_MIN_ASSETS || totalGzip === 0) {
             return undefined;
         }
-        // By GZIP, not by raw bytes. What is on disk is not what crosses the wire, and a large but highly
-        // compressible asset, a source map comment, a big JSON blob, is not the download this is about.
+        // By gzip, not raw bytes: what's on disk isn't what crosses the wire, and a compressible asset isn't the
+        // download this is about.
         const ranked = assets.toSorted((left, right) => right.gzip - left.gzip);
         const largest = ranked[0];
         if (largest === undefined) {
@@ -817,8 +658,8 @@ const bundleWeight: Chore = {
             detail: ranked
                 .slice(0, DETAIL_LIMIT)
                 .map((asset) => `${bytesLabel(asset.gzip)} gzipped · ${asset.path} (${bytesLabel(asset.bytes)} on disk)`),
-            // The bucketed total and the hash-stripped identities of the biggest chunks. A rebuild of the same
-            // code is silent; a new heavy chunk appearing, or the whole thing doubling, is not.
+            // The bucketed total and hash-stripped identities of the biggest chunks; a rebuild of the same code stays
+            // silent, a new heavy chunk doesn't.
             digest: digestOf(
                 `total:${bucketOf(totalGzip)}`,
                 ...ranked
@@ -826,7 +667,7 @@ const bundleWeight: Chore = {
                     .map((asset) => stableAsset(asset.path))
                     .toSorted(),
             ),
-            // Not a risk being carried, however large. `warning` is reserved for something with a clock on it.
+            // Not a risk being carried, however large; `warning` is reserved for something with a clock on it.
             severity: `info`,
             why:
                 `The build output in ${dir}/ of ${repoLabel(context.repo)} is ${bytesLabel(totalGzip)} gzipped across ` +
@@ -847,14 +688,8 @@ const bundleWeight: Chore = {
     done: `Done when every recommendation names a specific import boundary and the bytes it would move out of the first download.`,
 };
 
-/* FRAMEWORK IDIOMS. A migration nobody finished, which is the most ordinary state for a front-end of any age: the
- * new way arrived, the new files use it, and the old files keep working, so nothing ever forces the rest.
- *
- * The digest is the one place this chore differs in shape from its neighbours, and it has to. Digesting the file
- * identities, the way the documentation chore does, would re-badge every time anyone touched any of two hundred
- * files, because a migration in progress is a set that changes constantly. So it digests the BUCKETED COUNT per
- * idiom instead: a kind of legacy code appearing where there was none speaks, real progress through a bucket
- * speaks, and one more file drifting in or out of a set of two hundred does not. */
+// Digests the bucketed count per idiom, not file identities: a migration in progress is a set that changes
+// constantly, so a new kind of legacy code appearing, or real progress through a bucket, is what speaks.
 const frameworkIdiom: Chore = {
     id: `framework-idiom`,
     title: `Finish the framework migrations`,
@@ -871,18 +706,9 @@ const frameworkIdiom: Chore = {
         if (facts === undefined) {
             return undefined;
         }
-        /* Two rules are dropped rather than shown, and the second is the one that would have made this chore
-         * embarrassing.
-         *
-         * AN IDIOM THIS BUILD HAS NEVER HEARD OF. The daemon composes the sweep from its own copy of the table, so
-         * a sandbox image ahead of the browser can report a rule that has no label or replacement here, and a row
-         * saying "42 files use react-foo" with no idea what to do about them is worse than no row.
-         *
-         * AN IDIOM BELONGING TO A FRAMEWORK THIS REPOSITORY DOES NOT USE. A probe's command is a fixed string, so
-         * every rule in the table is swept in every repository, and an Angular pattern gets its chance in a Vue
-         * codebase: `RouterModule.forRoot` inside a comment, a `*ngIf` in an example string, and, the case that
-         * caught this, the book's own rule table quoting its own patterns back at it. What the repository
-         * DECLARES is the arbiter, the same `deps` the gate above reads. */
+        // Drops rules for two cases: an idiom this build's daemon doesn't know about (a sandbox ahead of the browser),
+        // and an idiom belonging to a framework this repository doesn't declare using (a probe scans every rule
+        // everywhere).
         const frameworks = new Set(frameworksOf(context.signals.shape.deps).map((framework) => framework.id));
         const found = facts.scan.idioms.flatMap(({ id, files }) => {
             const rule = idiomRule(id);
@@ -917,21 +743,9 @@ const frameworkIdiom: Chore = {
     done: `Done when a re-scan reports fewer files on that idiom, the repository's type-check and tests pass, and every file you skipped has a one-line reason.`,
 };
 
-/* COMPONENTS. Two components that are the same component, which is the `library-overlap` finding turned inward:
- * somebody needed a button, did not find the one that existed, and wrote a second one. It is the most ordinary
- * kind of duplication in a front-end and the one no tool complains about, because both files are perfectly good
- * code and neither knows the other exists.
- *
- * TWO KINDS OF EVIDENCE, and they catch opposite failures. A NAME FAMILY catches components that were written
- * separately and never shared a line, `BaseButton.vue` and `ButtonV2.tsx` reduce to the same stem, and no clone
- * detector will ever connect them. A CLONE PAIR catches the reverse: two components with unrelated names doing
- * the same work, which is what jscpd is actually good at, filtered to the pairs where both sides are components
- * so it is a finding about the UI rather than a slice of the repo-wide duplication chore.
- *
- * It needs jscpd rather than reading it if present. Half a measurement would let the row claim it had looked for
- * shared logic in a repository where that sweep has never run, the exact "measured and found nothing" lie the
- * `unavailable` state exists to make impossible. jscpd is already running weekly for the duplication chore in any
- * Node repository, so the honest choice is also the free one. */
+// Two kinds of evidence: a name family catches components written separately that never shared a line; a clone
+// pair catches unrelated names doing the same work. Needs jscpd rather than reading it if present, so it never claims
+// to have looked when it hasn't.
 const componentOverlap: Chore = {
     id: `component-overlap`,
     title: `Settle on one component per job`,
@@ -960,9 +774,8 @@ const componentOverlap: Chore = {
             .filter(([, paths]) => paths.length > 1)
             .map(([stem, paths]) => ({ stem, paths: paths.toSorted() }))
             .toSorted((left, right) => right.paths.length - left.paths.length);
-        // Only the clones with a component on BOTH sides. A component that shares a block with a utility module
-        // is the duplication chore's finding, not this one, and reporting it here would be two rows lighting for
-        // one fact.
+        // Only clones with a component on both sides; one shared with a utility module is the duplication chore's
+        // finding, not this one.
         const inventory = new Set(ui.scan.components.map(normalizePath));
         const pairs = jscpd.duplication.top.filter(
             (clone) => inventory.has(normalizePath(clone.first)) && inventory.has(normalizePath(clone.second)),
@@ -980,8 +793,8 @@ const componentOverlap: Chore = {
                 ...families.slice(0, DETAIL_LIMIT).map((family) => `${family.stem} · ${family.paths.join(`, `)}`),
                 ...pairs.map((clone) => `${clone.lines} shared lines · ${normalizePath(clone.first)} ↔ ${normalizePath(clone.second)}`),
             ],
-            // Identities on both halves: every component that joins or leaves a family, and every clone pair that
-            // appears, is genuinely a new fact rather than drift in a number.
+            // Identities on both halves: every component joining or leaving a family, and every clone pair, is a new
+            // fact, not drift.
             digest: digestOf(
                 ...families.map((family) => `${family.stem}:${family.paths.join(`+`)}`).toSorted(),
                 ...pairs.map((clone) => `${normalizePath(clone.first)}|${normalizePath(clone.second)}`).toSorted(),
@@ -1011,15 +824,8 @@ const componentOverlap: Chore = {
     done: `Done when every group has either a component to keep with a call-site count, a shared unit to extract with a home, or a reason it is fine.`,
 };
 
-/* TAILWIND. A design system exists to make a decision once; an arbitrary value is that decision being made again,
- * inline, by whoever was in the file. What makes this measurable rather than a matter of taste is that Tailwind
- * spells the bypass out loud, `bg-[#3b82f6]` is the palette being stepped around, in the markup, in a form no
- * reviewer can miss and no linter mentions.
- *
- * Deliberately NOT every arbitrary value. `grid-cols-[1fr_auto]` is the feature working as intended and there is
- * no token it should have been; matching those would make this an objection to Tailwind rather than a finding
- * about this repository. Only colours and pixel sizes, which are the two things the theme definitely already has
- * an answer for. */
+// Only colours and pixel sizes, not every arbitrary value (`grid-cols-[1fr_auto]` is the feature working as
+// intended); those are the two things the theme already has an answer for.
 const tailwindBypass: Chore = {
     id: `tailwind-arbitrary-values`,
     title: `Put hard-coded styles back on the scale`,
@@ -1045,9 +851,8 @@ const tailwindBypass: Chore = {
         return {
             headline: `${plural(total, `hard-coded value`)} across ${plural(bypasses.length, `file`)}`,
             detail: worst.map((entry) => `${entry.path} · ${plural(entry.count, `value`)}`),
-            // The worst files by identity, a new file arriving at the top of this list is the event, with the
-            // spread and the total riding along bucketed, because both drift by one every time anyone writes
-            // markup and neither is worth interrupting somebody about.
+            // Worst files by identity lead; the spread and total ride along bucketed, since both drift by one with
+            // every markup edit.
             digest: digestOf(...worst.map((entry) => entry.path).toSorted(), `files:${bucketOf(bypasses.length)}`, `total:${bucketOf(total)}`),
             severity: `info`,
             why:
@@ -1069,23 +874,9 @@ const tailwindBypass: Chore = {
     done: `Done when a re-scan reports fewer hard-coded values, nothing renders differently, and every value you left has a one-line reason.`,
 };
 
-/* THE SURVEYS. Chores with no measurement at all, and they are here because the absence of a measurement is not
- * the absence of value, these are the reviews a codebase silently rots without, and none of them can be detected
- * by a tool. Their trigger is the calendar, and the ledger is what makes that trigger honest: a survey is due
- * because it has not been done in a quarter, which is a claim the panel can show and the reader can check.
- *
- * All of them are report-stance. A survey that starts editing is the most surprising thing this surface could do,
- * and none of them has a specific enough finding to justify a diff.
- *
- * A SURVEY NEEDS ITS `applies` GATE MORE THAN A MEASURED CHORE DOES, not less, and this is the trap the shape of
- * the thing sets. A measured chore is gated by its own evidence for free: no undocumented packages, no finding,
- * no row. A survey has no evidence to be absent, "90 days have passed" is true of every repository in the
- * world, so without a gate it fires everywhere, forever, including in the repositories where its subject does
- * not exist. "Re-read the documentation against the code" in a repository with no documentation is the exact
- * failure, and it is not a hypothetical: it is what this helper did before the gate existed.
- *
- * An options object rather than the eight positional arguments this grew into: `id, title, icon, description,
- * diagnosis, goal, done, 90` reads as nothing at all at the call site, and the gate would have made it nine. */
+// Chores with no measurement at all, triggered by the calendar; the ledger is what makes that trigger honest.
+// All are report-stance. `applies` matters more here than for a measured chore: a survey has no evidence to be absent,
+// so an ungated one fires everywhere, forever.
 interface SurveySpec {
     readonly id: string;
     readonly title: string;
@@ -1095,9 +886,8 @@ interface SurveySpec {
     readonly goal: string;
     readonly done: string;
     readonly cadenceDays: number;
-    // What must exist in the repository for this review to have a subject. Required, not optional, precisely
-    // because forgetting it is the failure mode above, a survey that genuinely applies everywhere still has to
-    // say so out loud, with `() => undefined`.
+    // What must exist for this review to have a subject; required, not optional, since a survey that applies everywhere
+    // must say so explicitly.
     readonly applies: (signals: ChoreSignals) => string | undefined;
 }
 
@@ -1106,9 +896,8 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
     title,
     icon,
     description,
-    // Not a parameter of SurveySpec, and it never will be: a survey has no measurement, so "due because it has
-    // been that long" IS the surveying kind. The two are the same claim spelled twice, and the test below holds
-    // them to it in both directions.
+    // Not a SurveySpec parameter: a survey has no measurement, so "due because it has been that long" is the surveying
+    // kind.
     kind: `surveying`,
     criterion: `${cadenceDays} days have passed since this review was last run.`,
     applies,
@@ -1116,8 +905,7 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
     needs: [],
     cadenceMs: cadenceDays * DAY_MS,
     survey: true,
-    // A survey's evidence is that time has passed, so the digest is the PERIOD it is due for: one badge per
-    // quarter, and a run inside that quarter settles it until the next one begins.
+    // A survey's evidence is that time passed, so the digest is the period it is due for: one badge per cadence window.
     assess: (context) => ({
         headline: `Not surveyed in ${cadenceDays} days`,
         detail: [`Cadence · every ${cadenceDays} days`],
@@ -1130,9 +918,8 @@ const survey = ({ id, title, icon, description, diagnosis, goal, done, cadenceDa
     done,
 });
 
-// Below this a repository is too small for cross-cutting patterns to have diverged from each other: there is one
-// way things are done because there is barely more than one place doing them. Counted in INDEXED files, so a
-// scaffold that is mostly config and lockfiles does not pass it by accident.
+// Below this a repo is too small for cross-cutting patterns to have diverged; counted in indexed files so a config-only
+// scaffold doesn't pass by accident.
 const PATTERNS_FLOOR = 25;
 
 const patterns = survey({
@@ -1148,8 +935,8 @@ const patterns = survey({
         `estimate the size of the conversion. Do not convert anything.`,
     done: `Done when each concern has a named convention, a reference file, and a count of the sites that diverge from it.`,
     cadenceDays: 90,
-    // The one cause that is a measurement rather than an absence, and it still groups: every chore gated on size
-    // is gated on the SAME size, so the string is the same string.
+    // The one cause that is a measurement, not an absence; every size-gated chore uses this same string so they group
+    // together.
     applies: (signals) => (signals.totals.files >= PATTERNS_FLOOR ? undefined : `only ${signals.totals.files} indexed files`),
 });
 
@@ -1169,15 +956,8 @@ const deprecated = survey({
     applies: (signals) => (signals.shape.packageManifest ? undefined : `no package.json`),
 });
 
-/* THE CHORE THAT NAMED THE PROBLEM. Gated on documents actually EXISTING, which is the whole reason `applies`
- * exists: without it this survey fires on its cadence in every repository, including the ones with nothing to
- * re-read, and the first thing an owner of a fresh workspace sees is an offer to re-read documentation they have
- * never written. That is not a chore being wrong about a threshold, it is the surface admitting it never looked.
- *
- * Note which fact it gates on: the MAP, not the directory. An empty `docs/architecture/` is a directory somebody
- * made and never filled, and a gate on the directory would put the chore back exactly where it started. The
- * survey then reads the package READMEs too, they are the package pages, but a repo with no map has not been
- * documented at all, and that is the case worth staying quiet for. */
+// Gated on the docs map existing, not the directory: an empty docs/architecture/ is undocumented too. Also
+// reads the package READMEs, but a repo with no map hasn't been documented at all.
 const documentationDrift = survey({
     id: `documentation-drift`,
     title: `Re-read the documentation against the code`,
@@ -1193,12 +973,8 @@ const documentationDrift = survey({
     applies: (signals) => (signals.shape.docs.length > 0 ? undefined : `no architecture documents`),
 });
 
-/* THE TWO CHORES THAT ONLY EXIST WHERE THEIR SUBJECT DOES. Both are surveys, nothing here can measure whether a
- * pipeline caches well or an image is bigger than it needs to be without running them, and running someone's CI
- * to find out would be a strange thing for a maintenance panel to do, so both are gated on the artefact itself.
- * Together they are the argument for `applies` being first-class rather than folded into `assess`: neither has
- * any evidence to be absent, and in a repository with no pipeline and no image both would otherwise sit in the
- * list forever, permanently due, describing work that cannot be done. */
+// Both surveys, since nothing here can measure pipeline caching or image bloat without running them; gated on
+// the artefact itself so a repo with neither doesn't sit permanently due.
 const pipelines = survey({
     id: `ci-hygiene`,
     title: `Tighten the CI pipeline`,
@@ -1231,25 +1007,9 @@ const images = survey({
     applies: (signals) => (signals.shape.dockerfiles.length > 0 ? undefined : `no Dockerfile`),
 });
 
-/* THE BOOK'S ORDER, which is the panel's reading order and therefore a product decision rather than whatever
- * order these were written in. It narrows from "this is a risk you are carrying right now" to "this is worth
- * thinking about this quarter".
- *
- * This used to be a comment above a hand-sorted array, the four kinds named in prose, the order maintained by
- * whoever added the last chore, and nothing anywhere that could check the two agreed. It was also thrown away at
- * render: the panel listed every chore in one flat column, so the single editorial claim this surface makes
- * ("a live advisory and a quarterly re-read are not the same kind of thing") was invisible and therefore
- * unarguable, on a page whose whole design is that every claim shows its working.
- *
- * So the kinds are data. They order the book here, they group the rows in the panel, and `caption` is the
- * sentence the panel puts beside each group so the grouping argues for itself.
- *
- * Ordering is by KIND, not by whether a given repository will see them: a chore that does not apply is dropped
- * from that repository's list entirely (verdict.ts), so the reading order never has holes in it. It is also why
- * a block of chores written together does not READ together: the front-end four are one paragraph in this file
- * because they share a gate and a probe, and `kind` is what puts a Vue repository's bundle row next to its
- * dependency row rather than in a "front-end" section at the bottom. Where a chore is written and where it is
- * ranked are two separate facts, and only one of them is a product decision. */
+// The panel's reading order, as data rather than a hand-sorted array: `kind` orders the book and groups the
+// panel's rows, `caption` argues for the grouping. Ordered by kind, not by which repository will see them; a
+// non-applicable chore is dropped entirely, so the order never has holes.
 export interface ChoreKindSpec {
     readonly kind: ChoreKind;
     // Title case, because the panel renders it as a group heading rather than as a sentence.
@@ -1265,8 +1025,8 @@ export const CHORE_KINDS: readonly ChoreKindSpec[] = [
     { kind: `surveying`, label: `Surveying`, caption: `periodic reads with nothing measuring them, due because it has been that long` },
 ];
 
-// Declaration order, which decides nothing but the order WITHIN a kind, the sort below is stable, so the two
-// facts stay separable: this list is where a chore is written down, CHORE_KINDS is where it is ranked.
+// Declaration order decides nothing but order within a kind (the sort below is stable); this is where a chore
+// is written, CHORE_KINDS is where it is ranked.
 const BOOK: readonly Chore[] = [
     security,
     runtime,
@@ -1290,20 +1050,17 @@ const BOOK: readonly Chore[] = [
 
 const KIND_ORDER: readonly ChoreKind[] = CHORE_KINDS.map(({ kind }) => kind);
 
-// Sorted rather than filtered into groups, so no chore can ever be dropped out of the book by a kind the list
-// above forgot, a missing kind sorts to the front, where it is visible, instead of vanishing.
+// Sorted, not filtered into groups, so a kind missing from the list above sorts to the front, visible, instead of
+// vanishing.
 export const CHORES: readonly Chore[] = BOOK.toSorted((left, right) => KIND_ORDER.indexOf(left.kind) - KIND_ORDER.indexOf(right.kind));
 
 export const choreById = (id: string): Chore | undefined => CHORES.find((chore) => chore.id === id);
 
-// The prompt for one chore against one finding. Built here rather than in the view because the panel, the badge's
-// tooltip and the automation that runs unattended must all be describing the same turn.
-/* THE SCHEDULED TURN, for a chore woken by its automation rather than started from the panel. Same four parts and
- * the same invariants, a chore asks for the same work whoever started it, with the guard's own report standing
- * in for the finding, because at 3am there is no verdict to quote and no reader to have checked it first.
- *
- * Workspace-wide rather than per repository: an automation's guard runs at the workspace root on the sandbox's
- * clock, and it has no repo argument to be scoped by. */
+// The prompt for one chore, built here rather than in the view, so the panel, the badge's tooltip and an
+// unattended automation all describe the same turn.
+// Same four parts as a finding-driven turn, with the guard's own report standing in for the finding, since at
+// 3am there is no verdict to quote. Workspace-wide: an automation's guard runs at the root with no repo argument to
+// scope it.
 export const choreAutomationPrompt = (chore: Chore): string | undefined =>
     chore.automation === undefined
         ? undefined
@@ -1319,9 +1076,8 @@ export const choreAutomationPrompt = (chore: Chore): string | undefined =>
 export const chorePrompt = (chore: Chore, finding: ChoreFinding, repo: string): string =>
     composeAsk({
         subject: `${chore.title} in ${repoLabel(repo)}.`,
-        // The RULE before the numbers. An agent told only "4 majors waiting" has to infer why anyone cares; told
-        // the criterion it was woken by, it can also tell us the criterion was wrong, which is the single most
-        // useful thing a chore turn can report back, and the only way the book gets better.
+        // The rule before the numbers: an agent told the criterion, not just the count, can report that the criterion
+        // itself was wrong.
         why: `${finding.why} You were woken because: ${chore.criterion} ${TRIAGE_NOTE}`,
         diagnosis: chore.diagnosis,
         goal: chore.goal,

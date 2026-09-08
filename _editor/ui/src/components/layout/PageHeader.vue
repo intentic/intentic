@@ -1,14 +1,7 @@
-<!-- The standard title block for every rail panel: one h1 with an optional inline info hint / status badge
-     (#info), an optional right-aligned action cluster (#actions), and a muted description line. Unifies the
-     hand-rolled <header> blocks that had drifted across mb-4/mb-5/mb-6 and disagreed on whether the info hint
-     sat inline with the title. Sits inside a <Page>; the page owns width, the header owns nothing but its own
-     rhythm.
-
-     IT ALSO CARRIES THE WAY BACK, on the one form factor that has nowhere else to put it. See pageBack.ts: the
-     mobile shell publishes an exit for every route that is not one of its four tabs, and this is the row that
-     wears it — the title block is already at the top of every full-screen view, so the arrow costs no chrome,
-     where a bar above the view would cost ~40px on every drill-in. Nothing is published on a desktop, so the
-     arrow does not exist there. -->
+<!--
+    The standard title block for a rail panel: h1, optional `#info` (hint/badge), optional `#actions`, and a muted description line. On the mobile
+    shell it also renders the back arrow published by pageBack.ts.
+-->
 <script setup lang="ts">
 import { ui } from "../../lib/ui.js";
 import { usePageBack } from "./pageBack.js";

@@ -2,30 +2,17 @@ import { resolve } from "node:path";
 import { checkProject, type CheckPlacement, findTsconfig } from "./checker.js";
 import type { DiagReport } from "./report.js";
 
-/* The asking side, what the sandbox's post-edit hook imports.
- *
- * There is no resident service to find or to start anymore: every ask runs the native compiler to completion
- * and every byte comes back when it exits. What this module adds over `checkProject` is the shape of the
- * asking: agents edit in bursts (a rename touching six files lands as six PostToolUse hooks in a second), and
- * six edits to one package must not become six whole-project runs racing each other.
- *
- * SINGLE-FLIGHT, WITH ONE TRAILING RERUN. Per project (and per placement, two turns' namespaces are two
- * different trees by the same names), at most one compiler run is ever in flight. An ask that arrives while
- * one is running does not start another: it queues, pooling its files with every other ask that arrives in
- * the window, and ONE rerun after the current run settles answers the whole pool. The rerun is not optional,
- * the queued ask arrived because an edit just landed, and the in-flight run started before that edit, so its
- * answer is stale for the asker by construction.
- *
- * Imported by the sandbox daemon, so nothing here (or below it) pulls in anything but node builtins, the
- * compiler runs in the spawned process, never in the importer's heap. */
+// Asking side the sandbox's post-edit hook imports; no resident service, every ask runs the compiler to completion.
+// Single-flight per project (and per placement): a burst of asks pools into one run plus one trailing rerun for what
+// queued.
+// Pulls in only node builtins; the compiler runs in the spawned process, not this one's heap.
 
 export type { CheckPlacement } from "./checker.js";
 export type { Diagnostic, DiagReport, Unavailable } from "./report.js";
 
 export interface DiagnoseOptions {
     readonly files: readonly string[];
-    // Present when `files` are named for a view of the tree this process is not standing in, the compiler is
-    // entered into that view, and answers in those same names.
+    // Set when `files` name a tree view this process isn't standing in; the compiler is entered into it.
     readonly placement?: CheckPlacement;
 }
 
@@ -42,7 +29,7 @@ interface Flight {
 
 const flights = new Map<string, Flight>();
 
-// Placement objects are per-turn; two placements are two namespaces even when the tsconfig path matches.
+// Placement objects are per-turn; two placements are two namespaces even with the same tsconfig path.
 const placementIds = new WeakMap<CheckPlacement, number>();
 let nextPlacementId = 1;
 const flightKey = (tsconfig: string, placement: CheckPlacement | undefined): string => {
@@ -93,7 +80,7 @@ const checkCoalesced = (tsconfig: string, files: readonly string[], placement: C
     return flight.queued.settle;
 };
 
-// A pooled run answered for the union of everyone's files; each asker gets the slice it asked about.
+// A pooled run answers for the union of files asked; slice each asker's report to its own files.
 const sliceFor = (report: DiagReport, files: readonly string[]): DiagReport => {
     const asked = new Set(files.map((file) => resolve(file)));
     return {
@@ -102,9 +89,8 @@ const sliceFor = (report: DiagReport, files: readonly string[]): DiagReport => {
     };
 };
 
-// Diagnostics for these files, or undefined when there is no answer to be had at all: a file with no tsconfig
-// above it belongs to no TypeScript project, and without a project there is no program to have an opinion.
-// A returned report distinguishes verdicts from refusals, see report.ts, and keep them apart.
+// Diagnostics for `files`, or undefined if none of them sit under a tsconfig project.
+// A report distinguishes verdicts from refusals per file.
 export const diagnose = async (options: DiagnoseOptions): Promise<DiagReport | undefined> => {
     const byProject = new Map<string, string[]>();
     for (const file of options.files) {

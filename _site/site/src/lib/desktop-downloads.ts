@@ -1,13 +1,6 @@
-/* The desktop builds, named once.
- *
- * Two places hand out an installer and they must agree: the download page, which lays every build out side by
- * side, and the hero's button, which picks the one build that matches the visitor's computer. The hrefs are
- * the site worker's vanity paths (worker.ts) rather than release assets, so nothing here needs a bump when a
- * version ships. The glyph rides along because a button that says Windows and draws a penguin is worse than
- * one that draws nothing.
- *
- * macOS is deliberately absent: there is no build, so the hero falls back to the download page, which says so
- * in words and points at the one-line install that does work on a Mac. */
+// Desktop builds, named once for the download page and the hero button so they agree. hrefs are the site worker vanity
+// paths (worker.ts), not release assets, so a new version needs no changes here. No macOS build; the hero falls back to
+// the download page, which points at the one-line install.
 
 export interface DesktopPlatform {
     /** As a person would say it, and as the button reads: "Download for Windows". */
@@ -44,9 +37,7 @@ export interface DesktopRoute {
     asset: (version: string) => string;
 }
 
-/* What each vanity path resolves to. Read by the worker, which serves these paths in production, and by the
- * dev server, which stands in for it (astro.config.mjs), one table, because a path that works on the deployed
- * site and 404s on a developer's machine is how a broken download link reaches production unnoticed. */
+// What each vanity path resolves to; the worker and the dev server (astro.config.mjs) both read this one table.
 export const DESKTOP_ROUTES: Record<string, DesktopRoute> = {
     "/desktop": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },
     "/desktop/windows": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },

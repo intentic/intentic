@@ -1,8 +1,7 @@
 import { isBlank, leadToken, scopedAs, type Grammars, type Token, walkTokens } from "./tokens.js";
 
-/* The two structural readings a review needs from one TextMate walk: the comment-free source it renders and
- * the import lines it may scroll past. Keeping them together matters because tokenizing is overwhelmingly the
- * expensive part; collecting another answer while visiting the same tokens is effectively free. */
+// The two structural readings a review needs from one TextMate walk: the comment-free source, and the lines an import
+// may span. Kept together since tokenizing dominates the cost; a second answer from the same walk is nearly free.
 
 export interface CodeSide {
     readonly text: string;
@@ -17,8 +16,8 @@ export interface CodeAnalysis {
 
 const isComment = (scopes: readonly string[]): boolean => scopedAs(scopes, `comment`);
 
-// The line without its trailing comment, or undefined when the comment was all it held. Only a trailing run is
-// cut: a comment wedged between code (`f(/* n */ 1)`) stays rather than splicing the statement around it.
+// The line without its trailing comment, or undefined when the comment was all it held. Only a trailing run is cut; a
+// comment wedged between code (`f(/* n */ 1)`) stays.
 const stripLine = (line: string, tokens: readonly Token[]): string | undefined => {
     let cut = -1;
     for (const token of tokens.toReversed()) {
@@ -38,8 +37,7 @@ const stripLine = (line: string, tokens: readonly Token[]): string | undefined =
     return kept === `` ? undefined : kept;
 };
 
-/* Scope families that name an import. Matching the dotted family keeps lookalikes such as SCSS's @include
- * mixin and C#'s using statement out; codeLanding.test.ts pins the language-specific cases. */
+// Scope families naming an import; the dotted match excludes lookalikes like SCSS's @include or C#'s using.
 const IMPORT_SCOPES = [
     `meta.import`,
     `keyword.control.import`,
@@ -57,8 +55,8 @@ const CLOSING = `)]}`;
 
 const opensImport = (token: Token): boolean => IMPORT_SCOPES.some((family) => scopedAs(token.scopes, family));
 
-// Brackets this line leaves open. Strings and comments are skipped, so punctuation inside either cannot carry an
-// import onto the next line. An untokenized overlong line opens nothing.
+// Brackets this line leaves open; strings and comments are skipped, so punctuation inside either can't carry an import
+// onward. An untokenized line opens nothing.
 const openedBy = (line: string, tokens: readonly Token[] | undefined): number => {
     let depth = 0;
     for (const token of tokens ?? []) {
@@ -78,8 +76,8 @@ const openedBy = (line: string, tokens: readonly Token[] | undefined): number =>
 };
 
 /**
- * Analyze `text` in one token walk, or return undefined if its grammar is unavailable or abandons the walk.
- * A partial answer is never returned: callers then consistently show the untouched source and git's own stats.
+ * Analyzes `text` in one token walk; undefined if the grammar is unavailable or the walk is abandoned. Never a partial
+ * answer, so callers can fall back to the untouched source.
  */
 export const analyzeCode = async (text: string, lang: string | undefined, grammars: Grammars): Promise<CodeAnalysis | undefined> => {
     const kept: string[] = [];
@@ -97,8 +95,7 @@ export const analyzeCode = async (text: string, lang: string | undefined, gramma
 
         // An untokenized line has no comment we can see, so it stays whole.
         const code = tokens === undefined ? line : stripLine(line, tokens);
-        // A comment block almost always sits between two blank lines. Removing it would leave both behind, so a
-        // blank that follows a removal and another blank collapses into the one already kept.
+        // Collapses a blank after a removed comment into the one already kept, avoiding two blanks in a row.
         if (code === undefined || (dropped && isBlank(code) && isBlank(kept.at(-1) ?? ``))) {
             dropped = true;
             return;

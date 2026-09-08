@@ -1,11 +1,8 @@
 import { isAbsolute, resolve } from "node:path";
 
-/* What a check can say, and how the compiler's stdout becomes it.
- *
- * A report distinguishes three states per file, and the caller must keep them apart: diagnostics (a verdict),
- * absence from both lists ("checked, and clean", also a verdict), and an `unavailable` entry (the checker
- * refusing: it could not load the file's project well enough to vouch for anything, so nothing was checked and
- * nothing should be relayed as if it had been). */
+// What a check can say, and how the compiler's stdout becomes it.
+// Three states per file: diagnostics (a verdict), absence from both lists (checked and clean, also a verdict), and an
+// `unavailable` entry (nothing was checked, so nothing should be relayed as if it had been).
 
 export interface Diagnostic {
     readonly file: string;
@@ -16,8 +13,8 @@ export interface Diagnostic {
     readonly message: string;
 }
 
-// One file the checker would not vouch for, and why: its project's config chain or type foundations failed to
-// load from where the checker runs, so any diagnostics would be artifacts of that failure, not facts about code.
+// One file the checker wouldn't vouch for, and why: its project's config or type foundations failed to load, so any
+// diagnostics would be artifacts, not facts about code.
 export interface Unavailable {
     readonly file: string;
     readonly reason: string;
@@ -28,14 +25,13 @@ export interface DiagReport {
     readonly unavailable: readonly Unavailable[];
 }
 
-// `path(line,col): category TScode: message`, the compiler's own machine format (`--pretty false`). A line
-// that starts with whitespace continues the previous diagnostic's message (related-information indents).
+// Matches the compiler's own machine format (`--pretty false`): `path(line,col): category TScode: message`.
 const DIAGNOSTIC_LINE = /^(.+)\((\d+),(\d+)\): (error|warning|suggestion|message) TS(\d+): (.*)$/;
-// Config-level faults print without a location: `error TS5083: Cannot read file '...'`.
+// Matches a config-level fault, which prints with no location.
 const FILELESS_LINE = /^(error|warning) TS(\d+): (.*)$/;
 
-// Parse the compiler's stdout into diagnostics. Relative paths are the compiler's cwd-relative names; `baseDir`
-// is that cwd, so every parsed path comes out absolute and comparable.
+// Parses the compiler's stdout into diagnostics.
+// Relative paths are relative to the compiler's own cwd (`baseDir`), so every parsed path comes out absolute.
 export const parseCompilerOutput = (output: string, baseDir: string): Diagnostic[] => {
     const diagnostics: Diagnostic[] = [];
     let last: { file: string; line: number; column: number; category: string; code: number; message: string } | undefined;
@@ -59,7 +55,7 @@ export const parseCompilerOutput = (output: string, baseDir: string): Diagnostic
             diagnostics.push(last);
             continue;
         }
-        // Continuation of the previous message (indented related spans); anything else is compiler chatter.
+        // A continuation of the previous message (indented related-info); anything else is compiler chatter.
         if (last !== undefined && /^\s+\S/.test(line)) {
             last.message += `\n${line}`;
         }

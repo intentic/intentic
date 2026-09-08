@@ -1,27 +1,9 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
 
-/* WHAT BECAME OF THE AGENT THIS ROW SENT, as the one fact a red row has room for.
- *
- * The board could only ever say "Fix with agent". Press it and the row went straight back to saying it, on
- * every browser, forever: the conversation existed, was working, was parked on a question nobody would see,
- * or had a finished diff waiting to be landed, and the surface that started it had no way to ask. The join is
- * the derived conversation id (conversation-ids.ts); this is what the answer READS as.
- *
- * THE WORDS ARE THE FLEET'S OWN (web's agentStatus.ts: `Needs you`, `Ready to land`, `Landed`, `Waiting`), and
- * that is a constraint rather than a coincidence. The card this chip stands for is one click away and says
- * something about the same agent, so two vocabularies for one state is the product disagreeing with itself in
- * front of the reader. Where this deviates it is to name the SUBJECT ("Fix ready", not "Ready to land"),
- * because on a CI board the agent is not the thing being read: the pipeline is.
- *
- * IT READS BOTH HALVES OF THE STATE, for the reason that file gives at length: an agent parked on a question is
- * `idle` in the registry with an attention flag raised, so a status-only reading calls it finished while the
- * fleet has it sitting in Attention, and the one state the reader most needs to see is the one that would
- * disappear.
- *
- * A LEAF: pure, no host, no clock, type-only imports. It deliberately carries nothing that needs a `now`, the
- * elapsed and the age belong to the surface that already owns a clock (the row's drawer), and a hint rebuilt
- * every second is a tooltip that changes under the pointer. */
+// Derives what became of the agent a CI row sent, joined by conversation id, reading both status and attention since a
+// parked turn is `idle` with a flag rather than finished. Mirrors the fleet's own labels except naming the subject
+// (`Fix ready`), since here the pipeline is what's read. Pure leaf: no host, no clock.
 
 export type FixStanceKind =
     // A turn is in flight. Nothing is owed by the reader.
@@ -39,23 +21,17 @@ export type FixStanceKind =
 
 export interface FixStance {
     readonly kind: FixStanceKind;
-    /* Whether this agent is still THIS failure's answer, which is what stops a second one being started on the
-     * same breakage (see ciFixes.ts, which carries the reading across a branch's other runs). An ended or
-     * landed fix is not: the first has nothing in flight, the second is done, and in both cases another agent
-     * is a decision the reader is entitled to make. */
+    // True while this agent is still the failure's live answer; false once ended or landed.
     readonly ongoing: boolean;
-    // Whether the row offers to start a turn again instead of drawing a state. Only for an ended fix: the id is
-    // derived, so "again" continues that conversation rather than opening a rival one on a rival branch.
+    // True only for an ended fix; retrying continues that fix's same derived conversation.
     readonly retry: boolean;
     readonly label: string;
     readonly icon: IconName;
     readonly spin: boolean;
-    // The state's own ink, and the chip's border and hover on top of it. Two fields rather than one because
-    // the drawer's line wears the colour without the box; spelled out in full because Tailwind scans source
-    // text, so `text-${tone}` would never reach the stylesheet (statusVisual.ts's note).
+    // Two fields: drawer needs ink without the box; spelled out in full since Tailwind can't read `text-${tone}`.
     readonly ink: string;
     readonly chip: string;
-    // Why the chip says what it says, and what pressing it does. No time words: see the header.
+    // Why the chip says what it says, and what pressing it does; no time-relative words.
     readonly hint: string;
 }
 
@@ -67,15 +43,12 @@ const needsYou = (label: string, hint: string): FixStance => ({
     icon: `exclamation-circle`,
     spin: false,
     ink: `text-primary-500`,
-    // The attention hue the fleet wears for this state, over the app's ORDINARY hover surface: the tinted
-    // fills below are promised per colour ROLE (extension-surface.css), and `primary-500` is a scale step
-    // rather than a role, so a tint in it is a class that only works while this extension is built in-repo.
+    // `primary-500` is a scale step, not a role, so this tint only works while built in-repo.
     chip: `border-primary-500/40 hover:bg-overlay`,
     hint,
 });
 
-// Parked on a person, in the order the fleet ranks the same flags: setup outranks a plain question, because
-// it is the one where waiting blocks the agent outright.
+// Ranks parked flags like the fleet does: setup outranks a plain question since it blocks the agent outright.
 const ATTENTION: readonly { readonly flag: keyof AgentSummary["attention"]; readonly label: string; readonly why: string }[] = [
     { flag: `plan`, label: `Approval needed`, why: `it has proposed a plan and is waiting for a yes` },
     { flag: `capability`, label: `Setup needed`, why: `it needs something connected that is not connected yet` },
@@ -84,8 +57,7 @@ const ATTENTION: readonly { readonly flag: keyof AgentSummary["attention"]; read
     { flag: `conflict`, label: `Land conflict`, why: `its work cannot be merged until somebody resolves a clash` },
 ];
 
-// The turn is live: running, walking out of a Stop, or waiting out something the daemon is already repairing.
-// `awaiting` is deliberately absent, a parked turn is read as the thing it is parked on, one rule earlier.
+// Live turn: running, unwinding a Stop, or waiting on a daemon repair; `awaiting` is handled above.
 const IN_FLIGHT: ReadonlySet<AgentSummary["status"]> = new Set([`running`, `resuming`, `stopping`, `dismissing`]);
 
 const WORKING: FixStance = {
@@ -136,20 +108,13 @@ const WAITING: FixStance = {
     hint: `The fix agent's allowance is spent. Nothing is owed: the turn goes again when the provider's window reopens.`,
 };
 
-/* HELD WORK, whether the fleet called it `ready` (a clean finish with auto-land off) or left it `idle` with a
- * diff still on the branch. Both are the same fact for this row, there is a fix and nobody has landed it, and
- * the difference between them is a setting the reader of a CI board is not thinking about.
- *
- * A CLEAN ENDING ONLY, and that restriction is the whole of the rule. An agent that CRASHED after writing two
- * files also has a diff, and reading that as "Fix ready" is the board promising a fix over a turn that never
- * finished one: the fleet's own lane machine puts such a card in Attention whatever is on its branch, and this
- * has to agree with it. What the half-written diff earns instead is a sentence in the ending's hint. */
+// True only for a clean finish (`ready`, or `idle` with a diff); a crashed turn with files also has a diff, but that
+// belongs in the ending's hint, not here.
 const holdingWork = (agent: AgentSummary): boolean =>
     agent.status === `ready` || (agent.status === `idle` && agent.diff !== undefined && agent.diff.files > 0);
 
-/* The endings, and each says what the reader's move is rather than only what happened. `idle` is here too: a
- * turn that finished and changed no files did not fix anything, and a row reading "finished" over a still-red
- * pipeline would be the board agreeing with itself and with nobody else. */
+// Each ending's label states the reader's next move, not just what happened; `idle` counts too, since finishing with no
+// changed files fixed nothing.
 const ENDINGS: Partial<Record<AgentSummary["status"], { readonly label: string; readonly why: string }>> = {
     error: { label: `Agent failed`, why: `The fix agent's turn failed` },
     interrupted: { label: `Interrupted`, why: `The fix agent's turn was cut off when the sandbox went away` },
@@ -159,8 +124,7 @@ const ENDINGS: Partial<Record<AgentSummary["status"], { readonly label: string; 
 
 const ended = (agent: AgentSummary): FixStance => {
     const ending = ENDINGS[agent.status] ?? { label: `Agent stopped`, why: `The fix agent's turn ended` };
-    // What a turn that died mid-edit left behind. Not a fix, so the row does not offer one, but it is not
-    // nothing either, and the reader deciding whether to go and look is owed the count.
+    // File count left behind by a turn that died mid-edit; not a fix, but worth surfacing.
     const files = agent.diff?.files ?? 0;
     const partial = files === 0 ? `` : ` It left ${files} changed file${files === 1 ? `` : `s`} on its branch.`;
     return {
@@ -172,27 +136,21 @@ const ended = (agent: AgentSummary): FixStance => {
         spin: false,
         ink: `text-warning`,
         chip: `border-warning/40 hover:bg-warning/10`,
-        // The provider's own sentence when there is one: for an unattended run nobody watched, the transcript is
-        // the last place anybody looks and the first place the answer is.
+        // Includes the provider's own failure sentence when present; often the only record of an unwatched run.
         hint: `${ending.why}${agent.failure === undefined ? `` : `: ${agent.failure}`}.${partial} Starting it again carries on in the same conversation.`,
     };
 };
 
-/* THE ORDER IS A VALUE YOU CAN READ, which is the whole reason this is a list and not a chain of ifs: every
- * rule here outranks the ones below it for a stated reason, and a new condition (a state the daemon grows) is
- * a line inserted at the rank it belongs to rather than an if threaded past five near-identical ones.
- *
- * THE SPENT ALLOWANCE LEADS, ahead of the `error` it is filed as. Nothing is broken, nobody has anything to
- * fix, and what changes the outcome is a clock, so it must not wear the failure vocabulary or offer a retry
- * that would spend the same refused allowance again. */
+// List order is priority, so a new status is inserted at its rank rather than appended as a trailing if. A spent
+// allowance is checked first, ahead of `error`, since it is not a failure and must not offer a retry that spends the
+// same allowance again.
 const RULES: readonly ((agent: AgentSummary) => FixStance | undefined)[] = [
     (agent) => (agent.status === `error` && agent.failureCode === `rate_limit` ? WAITING : undefined),
     (agent) => {
         const parked = ATTENTION.find((entry) => agent.attention[entry.flag]);
         return parked === undefined ? undefined : needsYou(parked.label, `The fix agent is waiting on you: ${parked.why}.`);
     },
-    // A bare `awaiting` (or `conflict`) with no flag raised yet: parked, with nothing more specific to say than
-    // that it stopped for you.
+    // Bare `awaiting`/`conflict` with no flag raised: parked, with nothing more specific to say.
     (agent) =>
         agent.status === `awaiting` || agent.status === `conflict`
             ? needsYou(`Needs you`, `The fix agent has stopped and is waiting on you.`)

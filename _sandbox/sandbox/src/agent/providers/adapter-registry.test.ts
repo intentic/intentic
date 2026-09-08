@@ -2,10 +2,8 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 
-/* WHICH BINARIES THE IMAGE CARRIES IS NOT WHAT THIS FILE ASSERTS. The opencode arm's health asks whether the
- * feature pack is installed (engine store or PATH), which makes its answer a property of the machine the suite
- * happens to run on: present on a developer's box, absent in the CI container, and the assertions below are
- * about the CREDENTIAL logic either way. Stubbed present so the unit tests one thing. */
+// opencode's health checks whether the feature pack is installed on the machine running the suite (present locally,
+// absent in CI); stubbed present so the tests only cover the credential logic.
 vi.mock("../../engines/engine-resolve.js", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../../engines/engine-resolve.js")>()),
     engineBinary: async () => "/usr/bin/opencode",
@@ -18,9 +16,8 @@ vi.mock("../../platform/boot/on-path.js", async (importOriginal) => ({
 const { allAdapters, adapterFor } = await import("./adapter-registry.js");
 const ADAPTERS = allAdapters();
 
-/* The guard the registry's own comment promises, and the counterpart to agent-catalog.test.ts: that file
- * demands every (provider, harness) pair have a capability record, this one demands the runtime that record
- * names have somewhere to run. Between them, a provider cannot be added and left half-wired. */
+// Counterpart to agent-catalog.test.ts: that file demands a capability record for every (provider, harness) pair, this
+// one demands the runtime it names actually has an adapter.
 test("every provider × harness pair resolves to an adapter for its declared runtime", () => {
     for (const provider of PROVIDERS) {
         for (const harness of HARNESSES) {
@@ -30,8 +27,7 @@ test("every provider × harness pair resolves to an adapter for its declared run
     }
 });
 
-// An ACP provider is an installed capability id, not a member of PROVIDERS: covered separately because it is
-// the one arm whose provider ids are open-ended.
+// ACP provider ids are open-ended capability ids, not members of PROVIDERS, so this is tested separately.
 test("an installed agent capability's id resolves to the ACP adapter", () => {
     expect(adapterFor("some-installed-agent", "native").runtime).toBe("acp");
 });
@@ -41,11 +37,9 @@ test("each runtime is claimed exactly once", () => {
     expect(new Set(runtimes).size).toBe(runtimes.length);
 });
 
-/* WHICH STORE EACH RUNTIME IS ASKED ABOUT A RESUME. The answer decides whether a turn continues a conversation
- * or opens a blank one, so an arm wired to the wrong store, or to the right one with its arguments the wrong
- * way round, which is why the calls are recorded rather than counted: loses a conversation its context without
- * anything failing. ACP is the deliberate exception: its sessions live inside the agent's own process, where the
- * daemon cannot see them, so it answers yes and lets the agent itself say otherwise at resume time. */
+// Wrong store or wrong arguments loses a conversation's context without anything failing, so calls are recorded, not
+// just counted. ACP is the exception: it always answers yes, since the agent's own process resolves resume, not the
+// daemon.
 test("each runtime is asked about a resume by its own session store", async () => {
     const asked: string[] = [];
     const stores = services({
@@ -71,14 +65,12 @@ test("each runtime is asked about a resume by its own session store", async () =
         await Promise.all(ADAPTERS.map(async (adapter) => [adapter.runtime, await adapter.holdsSession(stores, "s-1", WORKSPACE_ROOT)])),
     );
 
-    // OpenCode is asked TWICE, and that is the correct count rather than a duplicate: Grok and Gemini are two
-    // runtimes sharing one warm `opencode serve`, so they share its session store too. Their split exists for
-    // health and credentials (adapter-registry.ts), which is not a reason to resume against different stores.
+    // Twice is correct, not a duplicate: Grok and Gemini share one warm `opencode serve` and its session store, though
+    // they're split for health and credentials.
     expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work", "opencode:s-1:/work"]);
-    // Pi's store is the filesystem itself: its session id is a session-file path (pi/pi-agent.ts), and a
-    // path that does not exist is a resume that cannot happen. Cursor's is the SDK's own local agent store, and
-    // it answers false for the same shape of reason: nothing has ever opened an agent under this cwd, so the
-    // store holds no row for the id and a resume against it could only fail later and less clearly.
+    // Pi's store is the filesystem: a session-file path that doesn't exist can't resume. Cursor's is the SDK's own
+    // local store: no row for an id that was never opened under this cwd, so false rather than a later, less clear
+    // failure.
     expect(held).toEqual({
         "claude-code": false,
         codex: false,
@@ -90,9 +82,8 @@ test("each runtime is asked about a resume by its own session store", async () =
     });
 });
 
-/* Health is a fact about the daemon's configuration, so it is probed against a stubbed one. What matters here
- * is the THREE-STATE distinction: a probe that fails must answer "unknown", never "unavailable", the latter
- * greys a provider out, and doing that because an account listing blipped is worse than saying nothing. */
+// Health is a fact about configuration, stubbed here. The three-state distinction matters: a failed probe must answer
+// "unknown", never "unavailable" (which greys a provider out on a blip).
 const services = (overrides: Record<string, unknown>) =>
     ({
         config: { translator: { url: "", token: "" }, openaiApiKey: "", anthropicApiKey: "" },

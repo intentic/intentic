@@ -1,65 +1,18 @@
 #!/usr/bin/env node
-/* EVERY BUTTON IN THIS APP IS <Button>, AND THIS IS THE GATE THAT KEEPS IT.
- *
- * The design system has one action button in four tiers and two sizes (_editor/ui/src/lib/ui.ts holds the
- * vocabulary and the argument for it), plus five controls that are deliberately NOT it: `ui.iconButton`,
- * `ui.linkButton`, `ui.textAction`, `ui.overlayChip` and `.ui-chip`. Between them there is nothing left for a
- * hand-styled `<button class="…">` to be.
- *
- * WHY A GATE AND NOT A CONVENTION. The audit that produced this counted 369 <Button> against 117 bare
- * <button>s drawing a button by hand — 68 action buttons, 20 pills and 29 icon affordances — between them
- * using four radii, nine padding pairs and six text colours to mean "a button". "Download" was written four
- * times in four files in two
- * recipes; "Abort" twice; the pair "Done: hand back" / "Can't help now" was duplicated verbatim between
- * Browsers.vue and TerminalPanel.vue in a hardcoded `bg-primary-600 text-white` that ignores the palette,
- * light mode and the skin. None of that was anybody being careless. It is what happens when the cheapest
- * way to get a button is to type one.
- *
- * AND THE COST IS NOT MERELY UNTIDY, WHICH IS THE PART WORTH UNDERSTANDING. A skin (skins/README.md) restyles
- * `.p-button`, so it reaches every real <Button> and NONE of the hand-written ones. In Sanctum that means the
- * app's committing button is a pale carved stone plaque and a hand-styled button beside it is a dark box —
- * the same word, in two materials, permanently, with no call site able to see why. A hand-styled button is
- * not inconsistent by accident; it is inconsistent by construction.
- *
- * WHAT THIS REFUSES:
- *
- *   1. A BARE <button> DRAWN AS AN ACTION BUTTON: a text size, plus a fill or an edge, plus side padding.
- *      That triple is exactly "a labelled control with chrome", which is what <Button> is. Rows, tiles, tabs
- *      and list items do not match it — they set `text-left`, not a size — so this catches buttons and leaves
- *      the controls that merely happen to be <button> elements alone.
- *   2. A HAND-WRITTEN DISABLED FADE (`disabled:opacity-*`). There is one disabled answer, it is not an
- *      opacity, and it is in tokens.css. Four different fades were in the tree when this was written (30, 40,
- *      50 and 60 per cent, across 38 call sites), which is four answers to a question nobody asked twice.
- *   3. A HARDCODED SOLID ACCENT on anything pressable: `bg-primary-600`, `text-white`. The palette is a
- *      runtime choice (the accent picker) and the skins repaint it; a literal step opts that element out of
- *      both, and it is invisible until somebody switches theme.
- *   4. A <Button> THAT OVERRIDES ITS OWN TIER — padding, text size, border, fill, radius or weight in a
- *      `class`. The tier IS the geometry; a call site tuning it has decided its button is a special case,
- *      which is how the app got two sizes of paying CTA. Layout classes (`shrink-0`, `w-full`, `self-start`,
- *      margins) are not geometry and are not refused.
- *   5. A <Button> IN A ROW'S OWN CONTROL CLUSTER THAT IS NOT `size="small"`. In a <Row>'s `#control`,
- *      `#actions`, `#meta` or `#lead` the compact control is the only one that fits 26px of room, and this is
- *      the half of "size is the surface's answer" that can be decided from the markup. What a row EXPANDS to
- *      show is deliberately not this — an edit form's footer nested in a list is a page, and gets the page's
- *      size. The other half of the rule — a page or a dialog taking the default — is what is left over.
- *   7. TWO <Button> SIBLINGS IN ONE ELEMENT AT DIFFERENT SIZES. A row of controls is one surface and takes
- *      one size; a 26px control beside a 38px one is what "the buttons are different sizes" looks like when
- *      somebody reports it. Direct siblings only, so a dialog's footer and its body may still differ.
- *   6. A RETIRED SPELLING: `outlined`, `raised`, `rounded` as <Button> props, and `severity="warning"`.
- *      PrimeVue 4 emits `p-button-warn`, so `warning` falls through every exclusion list in primeng.css and
- *      paints in the BRAND colour — which is what happened to the app's one warning button, for as long as
- *      nobody measured it.
- *
- * HOW AN EXCEPTION IS SPELLED: an entry in ALLOWED, keyed by file and by the exact finding, carrying the
- * reason — the same shape as tailwind-bypass.mjs, and for the same reason. Not a per-file waiver, and not a
- * pragma comment, because these sit inside an opening tag where no comment is legal. An entry that no longer
- * matches anything is reported as stale, so the list cannot outlive the code it excuses. */
+// The design system has one action button (Button, four tiers, two sizes) plus five controls deliberately not it
+// (iconButton, linkButton, textAction, overlayChip, .ui-chip); nothing else may draw one by hand. A skin restyles real
+// Buttons only, so a hand-styled one is inconsistent by construction.
+// 1. A bare <button> with a text size, chrome (border/fill) and side padding: that's an action button, use <Button>.
+// 2. A hand-written disabled fade (disabled:opacity-*): the one disabled state lives in tokens.css.
+// 3. A hardcoded accent (bg-primary-600, text-white) on anything pressable: palette and skins can't reach a literal.
+// 4. A <Button> that restates its own tier's geometry (padding, text size, border, fill, radius, weight) in class.
+// 5. A <Button> in a row's own control cluster (#control/#actions/#meta/#lead) that isn't size="small".
+// 6. A retired spelling: outlined/raised/rounded as props, or severity="warning".
+// 7. Two <Button> siblings in one element at different sizes.
+// Exceptions: an entry in ALLOWED, keyed by file and exact finding, with a reason; a stale entry is reported.
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID, waiverList } from "./lib/templates.mjs";
 
-/* ── WHAT COUNTS AS WHAT ──────────────────────────────────────────────────────────────────────────────────
- * A TEXT SIZE, not `text-left` and not `text-muted`: the scale's own steps. This is the discriminator that
- * separates a button from a row — a row says where its text goes and what colour it is; a button says how big
- * it is, because it is a control with a size rather than a line in a list. */
+// A text size, not text-left or text-muted: the scale's own steps, what makes a control a button, not a row.
 const TEXT_SIZE = /(?:^|\s)(?:[\w@-]+:)*text-(?:4xs|3xs|2xs|xs|sm|base|lg|xl|2xl|3xl)(?:\s|$)/u;
 /** A drawn edge or a fill — the two ways a control gets chrome. `border-none` and `bg-transparent` are removals. */
 const CHROME = /(?:^|\s)(?:[\w@-]+:)*(?:border(?:-[a-z]|\b)(?!-none)|bg-(?!transparent\b)[\w[])/u;
@@ -84,15 +37,10 @@ const TIER_GEOMETRY =
 
 /** The dense surfaces: a list row is 26px of room and the compact control is the one that fits it. */
 const DENSE = new Set([`Row`, `RowGroup`, `DisclosureRow`]);
-/* A row's TRAILING CLUSTER, which is the part of it that is 26px tall. A row also expands — into a form, an
- * editor, a block of prose — and what a row reveals is a page, not a row: an edit form's Cancel/Save footer and
- * a settings field's Check button are page-level controls that happen to be nested inside a list. Naming the
- * slots is what tells the two apart, and without it this rule reports nine of them and is simply wrong. */
+// A row's trailing cluster (26px), not what it expands to: an expanded footer is a page's controls, nested.
 const ROW_CLUSTER = /(?:#|v-slot:)(?:control|actions|meta|lead)\b/u;
 
-/* THE WAIVERS. Keyed by path, then by the exact class string or prop as it appears, with the reason it is not
- * the finding it looks like. Two, and both are geometry that belongs to the SHAPE of a control rather than to
- * its tier — which is the only kind of exception this rule has room for. */
+// Waivers keyed by path then exact class/prop, with a reason; only a control's shape, not its tier, qualifies.
 const ALLOWED = new Map([
     [
         `_editor/ui/src/components/sandbox/AgentRunButton.vue`,
@@ -124,12 +72,8 @@ for (const path of tracked) {
     const stack = [{ name: `#file`, attrs: ``, buttons: [] }];
     const inDense = () => stack.some((frame) => DENSE.has(frame.name)) && stack.some((frame) => frame.cluster);
 
-    /* ── 9 · TWO BUTTONS SIDE BY SIDE AT DIFFERENT HEIGHTS ────────────────────────────────────────────────
-     * Closing an element is where its own children are finally all known, so the sibling check runs there.
-     * DIRECT siblings only, and that narrowness is the whole reason the rule is safe: a dialog's footer and
-     * its body are two surfaces and may legitimately differ, but a `justify-end` row holding a Cancel and a
-     * Save is one row, and a 26px control beside a 38px one in it is the thing a reader actually notices.
-     * `ui-button-loud` is exempt — the money tier is a rank, not a size, and being bigger is part of it. */
+    // Runs on close, once a frame's children are all known: direct Button siblings at different sizes are a visible
+    // mismatch; ui-button-loud is exempt since being bigger is its rank, not a size choice.
     const closed = (frame) => {
         const sizes = new Set(frame.buttons.filter((b) => !b.loud && b.size !== `dynamic`).map((b) => b.size));
         if (sizes.size < 2) {
@@ -143,9 +87,8 @@ for (const path of tracked) {
         }
     };
 
-    /* A <template v-if>/<template v-for> DRAWS NOTHING, so the buttons inside one are the parent's siblings on
-     * screen and have to be folded up rather than judged as their own row. A named slot is the opposite: it is
-     * somebody else's surface, and gets checked as one. */
+    // A `template v-if`/`v-for` draws nothing, so its buttons fold up as the parent's siblings; a named slot is
+    // somebody else's surface and is checked as its own.
     const unwind = (open) => {
         const frame = stack[open];
         if (frame.name === `template` && !/(?:^|\s)(?:#|v-slot)/u.test(frame.attrs)) {
@@ -168,13 +111,7 @@ for (const path of tracked) {
         const classes = classesOf(attrs);
         const pressable = name === `button` || name === `Button`;
 
-        /* ── 1 · a bare <button> drawn as an action button.
-         * `text-left` is the exemption, and it is the discriminator that makes this rule safe to run over an
-         * app this size: a BUTTON centres its label because the label is the whole object, and a ROW aligns it
-         * left because the label is one column of a line. Every menu item, sheet row, picker option and card
-         * tile in the tree says `text-left`, and none of them is what <Button> is for — they are <RowGroup>'s
-         * problem and `.ui-row-select`'s. Without it this rule reports the mobile menu's six sheet rows and
-         * twenty more like them, which is how a check earns the reputation that gets it switched off. */
+        // Rule 1: text-left exempts a row's own label alignment from being read as a button's centred one.
         if (
             name === `button` &&
             TEXT_SIZE.test(classes) &&
@@ -191,10 +128,7 @@ for (const path of tracked) {
             }
         }
 
-        /* ── 7 · a pill drawn by hand. The chip is a control in its own right (.ui-chip, styles/utilities.css)
-         * and the shape is the whole of its meaning, so a rounded-full box with padding is one whether or not
-         * it was built as one. Twenty-one of these existed in six geometries with four different spellings of
-         * "on", two of which said it with a fill and two with a border. */
+        // Rule 7: a rounded-full box with padding is a pill regardless of how it was built; the chip owns that shape.
         if (name === `button` && PILL.test(classes) && PAD_X.test(classes) && !RECIPES.test(classes) && !waived(path, classes)) {
             findings.push({
                 at: where,
@@ -202,14 +136,7 @@ for (const path of tracked) {
             });
         }
 
-        /* ── 8 · an icon affordance drawn by hand. A square box with something centred in it, no text size and
-         * NO CHROME AT REST is `ui.iconButton()` — which, unlike a hand-written one, carries the coarse-pointer
-         * target that turns 24px of ink into a 44px tap without moving a pixel on a desktop.
-         *
-         * The resting-chrome test is what keeps this rule about icon GHOSTS. A square box that draws a border
-         * and a fill of its own is a different object every time — an avatar tile you can replace, a floating
-         * overlay control, a stage circle on a job graph — and it has no business being told it is a toolbar
-         * affordance. `ui.iconButton` is defined by showing nothing until you point at it. */
+        // Rule 8: a square box with no text and no resting chrome is an icon ghost; iconButton bakes in the tap target.
         if (
             name === `button` &&
             ICON_BOX.test(classes) &&
@@ -226,7 +153,7 @@ for (const path of tracked) {
             });
         }
 
-        // ── 2 · a second opinion about what "not right now" looks like
+        // Rule 2: a hand-written disabled fade, a second opinion on what tokens.css already answers.
         const fade = classes.match(/(?:^|\s)!?disabled:opacity-\d+/u);
         if (fade !== null && !waived(path, fade[0].trim())) {
             findings.push({
@@ -235,7 +162,7 @@ for (const path of tracked) {
             });
         }
 
-        // ── 3 · a colour the accent picker and the skin cannot reach
+        // Rule 3: a literal accent color the palette picker and the skin cannot repaint.
         const literal = classes.match(/(?:^|\s)!?(?:[\w@-]+:)*(?:bg-primary-\d{2,3}(?![\w/])|text-white\b)/u);
         if (pressable && literal !== null && !waived(path, literal[0].trim())) {
             findings.push({
@@ -251,7 +178,7 @@ for (const path of tracked) {
                 loud: /ui-button-loud/u.test(classes),
             });
 
-            // ── 4 · a call site restating the tier's own geometry
+            // Rule 4: a call site restating geometry the tier already owns.
             if (classes !== `` && TIER_GEOMETRY.test(classes) && !waived(path, classes)) {
                 findings.push({
                     at: where,
@@ -259,7 +186,7 @@ for (const path of tracked) {
                 });
             }
 
-            // ── 5 · the compact control is the one that fits a list row
+            // Rule 5: a row's own control cluster needs the compact size.
             if (inDense() && !/(?:^|\s):?size=/u.test(attrs) && !waived(path, `size`)) {
                 findings.push({
                     at: where,
@@ -267,7 +194,7 @@ for (const path of tracked) {
                 });
             }
 
-            // ── 6 · a spelling the design system retired
+            // Rule 6: a spelling the design system retired.
             const retired = attrs.match(RETIRED);
             if (retired !== null && !waived(path, retired[0].trim())) {
                 findings.push({

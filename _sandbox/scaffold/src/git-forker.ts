@@ -1,44 +1,24 @@
 import { execFile } from "node:child_process";
 
-/* THE RESIDENT FORKER'S CHILD HALF, exec.ts holds the argument for why it exists. This process does exactly
- * one thing: exec what the parent asks for and send back what came out.
- *
- * Nothing may ever be added to it, and that is the whole design. Its only job is to STAY SMALL: every git the
- * daemon runs is forked from THIS address space instead of the daemon's, and fork() copies page tables in
- * proportion to the resident size of whoever forks. A module imported here to make this file tidier would be
- * paid back on every git call the workspace ever makes.
- */
+// Child half of the resident forker (exec.ts has the rationale): execs what the parent asks and sends back the result.
+// Nothing else may be added; every git the daemon runs forks from this address space, so it must stay minimal.
 
 export interface ForkRequest {
     readonly id: number;
     readonly command: string;
     readonly args: readonly string[];
     readonly maxBuffer: number;
-    // The child's WHOLE environment when the caller needed one (GIT_INDEX_FILE above all); absent ⇒ inherit
-    // this process's, which is the daemon's as of the fork. Shaped like NodeJS.ProcessEnv so it passes straight
-    // through to execFile.
+    // Whole child environment when set (e.g. GIT_INDEX_FILE); absent inherits this process's own at fork time.
     readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
-// `failure` is execFile's error, reduced to the two fields callers actually read on the far side: `message`
-// (gitFailureReason's fallback when stderr is empty) and `code` (politeGit branches on ENOENT). stdout/stderr
-// ride outside it because execFile reports both whether or not the command failed.
+// `failure` reduces execFile's error to `message` and `code`; stdout/stderr ride outside since execFile always reports
+// them.
 export interface ForkResponse {
     readonly id: number;
     readonly stdout: string;
     readonly stderr: string;
-    /* HOW LONG GIT ITSELF RAN, timed HERE and not on the far side, which is the only place the number is true.
-     *
-     * The parent measures a git call as wall clock from its own call site, so whatever it reports includes the
-     * IPC hop and, decisively, however long the parent's event loop was away before it got round to reading
-     * this response. That is not a small correction: this daemon's loop stalls past a second in 11% of its
-     * sampled windows and past ten in 3%, and a stalled loop backdates nothing, it simply adds itself to every
-     * measurement in flight. Every `for-each-ref` in the perf log reading three and a half seconds is a two
-     * millisecond command that was waiting for a garbage collection it had nothing to do with.
-     *
-     * This process is a forking stub with an idle loop, so the gap between these two clocks IS the parent's
-     * own stall, reported rather than inferred. `git.run` minus this is what the daemon spends waiting for
-     * itself, and it is the difference between fixing git and fixing the thing actually holding the loop. */
+    // Timed here, not by the parent; the gap to the parent's clock is its own event-loop stall, not git's time.
     readonly execMs: number;
     readonly failure?: { readonly message: string; readonly code?: number | string };
 }
@@ -60,8 +40,7 @@ process.on("message", (request: ForkRequest) => {
                 stdout,
                 stderr,
                 execMs: Number(process.hrtime.bigint() - from) / 1e6,
-                // A `null` code (killed by a signal) carries nothing the far side can branch on, absent is the
-                // honest spelling, and the message still says what happened.
+                // A null code (signal-killed) carries nothing to branch on; omitted rather than passed through.
                 ...(error === null
                     ? {}
                     : {
@@ -76,5 +55,5 @@ process.on("message", (request: ForkRequest) => {
     );
 });
 
-// The parent going away leaves nothing to serve, exit rather than linger as an orphan holding a dead pipe.
+// Exit rather than linger as an orphan holding a dead pipe once the parent is gone.
 process.on("disconnect", () => process.exit(0));

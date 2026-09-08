@@ -2,15 +2,9 @@ import { HostConfigSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { hostIdFrom, SETUP_HOST_SCOPES } from "./host-seed.js";
 
-/* THE POSTURE OF THE AUTOMATIC CONNECTION.
- *
- * Setting a sandbox up now connects the machine that ran the installer, without anyone ticking a box. That is
- * only defensible because of exactly what it grants, so what it grants is asserted here rather than left to be
- * noticed later: a person who installed a sandbox consented to running a sandbox, not to handing the agent
- * inside it a shell on their laptop.
- *
- * If a switch is ever added to the host scopes, this test fails until someone decides: deliberately, whether a
- * machine that was connected automatically should have it. That failure is the feature. */
+// Setup auto-connects the installer's machine with no explicit consent step, so what it grants is asserted here rather
+// than left implicit. A host scope added later must fail this test until someone deliberately decides whether an
+// auto-connection gets it.
 test("a device connected by setup may manage sandboxes and do nothing else", () => {
     expect(SETUP_HOST_SCOPES).toEqual({
         shell: "off",
@@ -23,24 +17,16 @@ test("a device connected by setup may manage sandboxes and do nothing else", () 
     });
 });
 
-/* The two irreversible grants an automatic connection must never carry. Removal loses a sandbox; `destructive`
- * lets a command delete the machine's own files, and setup does not even grant `shell`, so a machine connected
- * this way could not run one anyway. Both are decisions a person makes on the card, in front of the sentence
- * that says what they do. */
 test("setup never grants removal or destructive commands", () => {
     expect(SETUP_HOST_SCOPES.sandboxRemove).toBe("off");
     expect(SETUP_HOST_SCOPES.destructive).toBe("off");
 });
 
-/* Every switch the card knows about is decided here. A scope added to the contract and forgotten here would be
- * absent from the seeded config, and the schema's own default would quietly answer for it, which is how a
- * default nobody chose ends up on somebody's device. */
 test("the seeded grant answers for every switch the card has", () => {
     const parsed = HostConfigSchema.parse({ platform: "linux", ...SETUP_HOST_SCOPES });
     const decided = new Set(Object.keys(SETUP_HOST_SCOPES));
     for (const key of Object.keys(parsed)) {
-        // `platform` names the card, `roots` is a path list rather than a permission and is meaningless with no
-        // file access granted.
+        // `platform` names the card; `roots` is a path list, meaningless with no file access granted.
         if (key === "platform" || key === "roots") {
             continue;
         }
@@ -50,13 +36,11 @@ test("the seeded grant answers for every switch the card has", () => {
 
 test("the machine's name becomes an id the agent can address it by", () => {
     expect(hostIdFrom("Ada-Laptop")).toBe("ada-laptop");
-    // The leading label only: a box calling itself ada-laptop.lan is ada-laptop here.
     expect(hostIdFrom("ada-laptop.lan")).toBe("ada-laptop");
     expect(hostIdFrom("  Ada's Desktop  ")).toBe("ada-s-desktop");
     expect(hostIdFrom("MACHINE_01")).toBe("machine-01");
 });
 
-// An unnamed card is one nobody can find again, so there is no such thing as an empty id.
 test("a machine that reports no usable name still gets one", () => {
     expect(hostIdFrom("")).toBe("this-device");
     expect(hostIdFrom("   ")).toBe("this-device");

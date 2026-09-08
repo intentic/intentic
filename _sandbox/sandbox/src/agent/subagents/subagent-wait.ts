@@ -5,50 +5,26 @@ import { z } from "zod";
 import type { ChildSupervisor } from "./children.js";
 import { waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
 
-/* "WAIT UNTIL THAT AGENT NEEDS ME", the tool a supervising turn parks on instead of polling — and, beside it,
- * "START ONE", the `spawn` tool, which is what makes the pair a supervision surface rather than a watch: a turn
- * starts a full agent on ANY connected provider (children/children.ts) and parks here until it needs input or
- * reports. Spawn is offered only where the route injected its engine; wait is always offered.
- *
- * A parent that starts other agents, a spawned child on another provider, an Agent-tool child, used to have
- * two ways to follow them: burn turns polling on a timer, or walk away and be told only by the exit. Both miss
- * the one state that matters most, a child sitting on a question, and the polling version spends tokens to
- * miss it. This tool is the third way: one call that returns when the child needs input or finishes, fed by
- * the same signals the roster reads (the child service's own calls, the SDK's task stream), so the parent
- * sleeps for free and wakes exactly once, with the child's own report in hand.
- *
- * ONLY THIS TURN'S OWN CHILDREN, named by the spawning tool call's id (an SDK child) or the spawn tool's
- * returned id, the same key the Subagents area uses. It once also took a sibling fleet agent's conversation
- * id, which cost a second waiting engine with its own idea of what "blocked" means and bought a supervision
- * pattern nobody was asking for. Waiting on your own children is the whole of the problem this solves.
- *
- * An SDK MCP tool rather than a CLI on purpose: a blocking command under Bash would hit the shell's
- * soft-timeout detach and turn the wait into the very tail-polling it replaces, while a tool call parks
- * server-side exactly like a permission hold (guard/command-gate.ts) and settles with the turn's own abort. */
+// Waits on this turn's own children only, keyed by the spawning tool call's id or spawn's returned id. An SDK MCP tool
+// rather than a CLI: a blocking shell command hits the soft-timeout and becomes the very polling this replaces; a tool
+// call parks server-side and settles with the turn's abort.
 
-// The ceiling and default for one wait. The default is long enough for a real delegated run and short enough
-// that a forgotten wait returns within the turn; the cap exists because a tool call is turn time, a parent
-// that wants to wait longer calls again, which also gives steering a seam to land in.
+// Long enough for a real run, short enough to return if forgotten; a longer wait means calling again.
 const DEFAULT_TIMEOUT_S = 600;
 const MAX_TIMEOUT_S = 1800;
 
 export interface SubagentWaitDeps {
-    // The conversation whose children this turn may wait on, a parent only ever supervises its own.
+    // The conversation whose children this turn may wait on; a parent supervises only its own.
     readonly conversationId: string | undefined;
-    // The turn's own abort, so a parked wait settles when the turn is stopped under it.
+    // The turn's own abort; a parked wait settles when the turn is stopped.
     readonly signal: AbortSignal;
-    /* The child-agent supervision engine (children/children.ts): spawn on any connected provider, steer or
-     * follow-up a child, answer its questions. Injected by the route that owns the turn generator
-     * (agent.routes.ts), the same door every other spawned turn goes through; absent for a conversationless
-     * turn (a child needs a parent to file under) and for focused callers with no route behind them, and the
-     * spawn/send/answer tools are then simply not offered. */
+    // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
     readonly children?: ChildSupervisor;
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
 
-// The tool's whole answer as one JSON text block, structured enough for the model to branch on `outcome`
-// without prose parsing.
+// The tool's whole answer as one JSON text block, so the model can branch on `outcome` without parsing prose.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
@@ -56,8 +32,7 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
 export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
         name: "subagents",
-        // In the prompt, not behind tool search: a supervising parent reaches for this mid-flight, and a tool
-        // it has to go looking for is a tool it replaces with a sleep-and-poll loop.
+        // In the prompt, not behind tool search: a supervising parent reaches for this mid-flight.
         alwaysLoad: true,
         tools: [
             ...(deps.children === undefined
@@ -197,8 +172,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         timeoutMs,
                         signal: deps.signal,
                     });
-                    // A blocked child's whole question rides along, options included: the difference between
-                    // a parent that can answer and one that can only report.
+                    // A blocked child's whole question rides along, so the parent can answer rather than only report.
                     const question =
                         result.outcome === "blocked" && result.matched !== undefined ? deps.children?.pendingQuestion(result.matched.id) : undefined;
                     return answer({

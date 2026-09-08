@@ -6,21 +6,16 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { onMounted } from "vue";
 import { extensionSettingsStore } from "../../extensions/useExtensionSettings";
 
-/* One extension's declared settings (contributes.settings), rendered schema-driven: boolean → toggle, enum →
- * select, string/number → input, secret → write-only password box. Values live in the shared per-extension
- * store, so a running extension's api.settings sees an edit here immediately.
- *
- * It is its own component because it is the one part of the Extensions tab that is a FORM. The tab around it is
- * a list to be scanned; a form is read line by line, and mixing the two is what made every settings-bearing row
- * three times the height of its neighbours before the rows learned to expand. */
+// One extension's declared settings, rendered schema-driven by type (boolean, enum, string/number, secret). Values live
+// in the shared per-extension store, so a running extension's api.settings sees an edit immediately. Its own component
+// since it's the one form inside a list meant to be scanned, not read line by line.
 
 const { extensionId, settings } = defineProps<{ extensionId: string; settings: readonly SettingContribution[] }>();
 
 const store = () => extensionSettingsStore(extensionId);
 
-// This component only mounts inside an OPEN row, so mounting is the lazy load: opening the tab no longer costs
-// one daemon round-trip per settings-bearing extension. The store is shared with the extension host, which has
-// already loaded it for any UI extension it activated: hence the guard rather than an unconditional fetch.
+// Mounts only inside an open row, so this is the lazy load: no round-trip per settings-bearing extension until opened.
+// Guarded since an active UI extension's host may have already loaded this store.
 onMounted(() => {
     if (store().values.value === undefined) {
         void store().load();
@@ -43,14 +38,12 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
             <div class="min-w-0 pt-1">
                 <p class="text-xs text-content">{{ setting.title }}</p>
                 <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
-                <!-- The setting the agent's shell will see under this name: the reason a value here reaches a
-                     CLI tool at all, and invisible everywhere else. -->
+                <!-- The env var name the agent's shell sees this value under; invisible everywhere else. -->
                 <p v-if="setting.env" class="text-2xs text-subtle">
                     reaches the agent as <span class="font-mono">{{ setting.env }}</span>
                 </p>
             </div>
-            <!-- Secret settings: write-only. The stored value never reaches the browser; typing a new one
-                 replaces it, clearing the box and saving clears it. -->
+            <!-- Write-only: the stored value never reaches the browser; typing a new one replaces it, and saving empty clears it. -->
             <input
                 v-if="setting.secret === true"
                 type="password"
@@ -60,8 +53,7 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
             />
-            <!-- Compact, like the row switch this form opens under: two sizes of the same control in one
-                 panel reads as two kinds of control. -->
+            <!-- Compact, matching the row switch this form opens under: two switch sizes in one panel would read as two controls. -->
             <ToggleSwitch
                 v-else-if="setting.type === `boolean`"
                 class="ui-switch-sm"

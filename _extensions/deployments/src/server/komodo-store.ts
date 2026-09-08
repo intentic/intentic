@@ -3,25 +3,13 @@ import { dirname, join } from "node:path";
 import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
-/* When the owner last LOOKED at each Komodo connection's deployments, plus their repo→stack links, the
- * extension's own state file in its runtime home (extensionRuntimeDir; it used to sit at the `.intentic` root,
- * where nothing classified it), moved here with the backend that reads it. Backend-side rather than in a browser, on the same reasoning ci-store records its `seenAt`:
- * whether a breakage has been seen is a fact about the work, so clearing site data or picking up the phone
- * must not resurrect a badge already dealt with.
- *
- * Keyed by CAPABILITY id, not one timestamp for the surface: two Komodo connections are two rail tiles and
- * two separate acts of reading. Looking at staging must not silence production.
- *
- * The daemon's json-file store stayed behind (it is core plumbing, not SDK); what this keeps of it is the two
- * properties that matter at this size: a half-written or hand-mangled file reads as empty rather than
- * throwing, and updates are serialized through one queue so two rapid clicks cannot each read the same state
- * and erase the other's write. Writes go through a temp file + rename so a crash mid-write can never leave a
- * torn file where the tolerant read would silently drop everything. */
+// Persisted seenAt and repo→stack links per Komodo connection, backend-side since seen state is a fact about the work.
+// Keyed by capability id: two connections are two separate acts of reading, so staging must not silence production.
+// Tolerant read (a mangled file reads as empty), one write queue, atomic rename.
 
 const KomodoStateSchema = z.object({
     seenAt: z.record(z.string(), z.number()),
-    // capability id → (workspace repo → Komodo stack name). Nested rather than a flat "cap\nrepo" key so that
-    // reading one connection's links is a lookup rather than a scan, and so removing a connection is a delete.
+    // capability → (repo → stack); nested so reading one connection's links is a lookup, not a scan.
     links: z.record(z.string(), z.record(z.string(), z.string())).default({}),
 });
 type KomodoState = z.infer<typeof KomodoStateSchema>;
@@ -29,13 +17,12 @@ type KomodoState = z.infer<typeof KomodoStateSchema>;
 const EMPTY: KomodoState = { seenAt: {}, links: {} };
 
 export interface KomodoStore {
-    // Undefined until that connection's view has been opened once, which reads as "everything is news", the
-    // right answer for a surface the owner has never looked at.
+    // Undefined until that connection's view has opened once; reads as everything being news until then.
     readonly seenAt: (capability: string) => Promise<number | undefined>;
     readonly markSeen: (capability: string, at: number) => Promise<void>;
     // The owner's repo → stack decisions for one connection. Empty until they link something.
     readonly links: (capability: string) => Promise<Record<string, string>>;
-    // An empty `stack` clears the link, the owner unlinking, or replacing one that no longer exists.
+    // An empty `stack` clears the link, whether unlinking or replacing one that no longer exists.
     readonly link: (capability: string, repo: string, stack: string) => Promise<void>;
 }
 

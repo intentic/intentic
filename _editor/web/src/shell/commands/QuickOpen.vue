@@ -12,26 +12,21 @@ import { useWorkspaceTabs } from "../../features/workspace/tabs/useWorkspaceTabs
 import { iconForEntry, type IconName, Modal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 
-/* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type, client-
- * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
- * the daemon's `files` search serves only the include-ignored / truncated-tree fallback, and opens the pick
- * as an editor tab. Mounted once in the desktop shell and opened from its global keydown. Below the search
- * floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips the
- * palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command registry
- * (useCommands) instead of files. */
+// Quick Open (Ctrl/Cmd+P): ranks /work files by name client-side over the cached tree (useFuzzyFiles),
+// so results land in the same frame as the keystroke; the daemon's search only backs the truncated-tree
+// fallback. Below the search floor it lists open tabs; a `>` prefix flips to command mode (useCommands).
 
 const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
 const { tabs } = useWorkspaceTabs();
 const { agentById } = useAgents();
-// Resolve the platform once so command rows can render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
+// Resolved once so command rows render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
 const isMac = isApplePlatform();
-// The chord a row displays is the EFFECTIVE one (user override ?? declared default): reads keymapOverrides
-// reactively, so a live remap re-renders the hint. undefined when the command has no shortcut / was unbound.
+// The effective chord (override or default), read reactively so a live remap updates the hint.
 const chordFor = (entry: RegisteredCommand): string | undefined => effectiveKeybinding(entry.command, entry.keybinding);
 
 const query = ref(``);
-// `>` prefix = command mode; the rest of the text filters registered commands by title or id.
+// `>` prefix means command mode; the rest of the text filters registered commands by title or id.
 const commandMode = computed(() => query.value.trimStart().startsWith(`>`));
 const commandQuery = computed(() => query.value.trimStart().slice(1).trim().toLowerCase());
 const commandRows = computed<readonly RegisteredCommand[]>(() =>
@@ -39,22 +34,12 @@ const commandRows = computed<readonly RegisteredCommand[]>(() =>
         (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
     ),
 );
-/* A PASTED SESSION REFERENCE: the way back into the app from everywhere the id gets carried. An agentic
- * session's name is the join between this app and git, the worktree on disk and the CLI, so it travels: out of
- * a branch chip, through a terminal or a message, and back in here. Until now the return leg did not exist:
- * you held the exact name of a thing the app knows and had no way to spend it.
- *
- * It takes over the palette rather than adding a row to the file list, for the same reason `>` does: a session
- * name has no file matches worth ranking, so a list would be one offer and a page of nothing. Any of the four
- * spellings is accepted (see sessionRef): nobody should have to convert a name they did not choose, and the
- * roster is lent to it so a bare id that is nobody's uuid (a workflow names its steps' sessions) still lands. */
+// A pasted session id takes over the palette; any of its four spellings are accepted (sessionRef).
 const sessionRef = computed(() => (commandMode.value ? undefined : sessionIdFrom(query.value, (id) => agentById(id) !== undefined)));
-// The agent behind it, when this browser has been told about it: the row shows a title where it can, and
-// otherwise still offers the jump: the detail page settles an id the roster has not caught up with yet.
+// The known agent behind it, if any; the jump still works even if the roster hasn't caught up yet.
 const sessionAgent = computed(() => (sessionRef.value === undefined ? undefined : agentById(sessionRef.value)));
 
-// File matching stays idle until the palette is open AND we're not in command mode (a ">foo" query would
-// otherwise match files against the literal text) or holding a session reference (which is not a filename).
+// Idle in command mode or with a session reference, since neither is a filename to match.
 const searchActive = computed(() => isOpen.value && !commandMode.value && sessionRef.value === undefined);
 const { paths: filePaths, floor, searching, pending, truncated, error } = useFuzzyFiles(query, searchActive);
 
@@ -67,8 +52,7 @@ const showingRecents = computed(() => query.value.trim().length < floor.value);
 const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : filePaths.value));
 const rowCount = computed(() => (commandMode.value ? commandRows.value.length : sessionRef.value !== undefined ? 1 : rows.value.length));
 
-// Snap the highlight back to the top whenever the result set changes under it: including the swap to the
-// single session row, whose only index is 0.
+// Resets the highlight to the top whenever the result set changes, including the single session row.
 watch([rows, commandRows, sessionRef], () => (activeIndex.value = 0));
 
 const setRowEl = (path: string, el: unknown): void => {
@@ -80,8 +64,7 @@ const setRowEl = (path: string, el: unknown): void => {
 };
 
 const open = (path: string): void => {
-    // Navigate to the file's workspace URL; the Workspace's useWorkspaceRoute opens it (on mount or via its
-    // route watcher), so this works whether we're already on /workspace or coming from another area.
+    // Navigates to the file's workspace URL; useWorkspaceRoute opens it, whichever area we're coming from.
     void router.push({ name: `workspace`, params: { path: path.split(`/`) } });
     isOpen.value = false;
 };
@@ -125,15 +108,13 @@ const openActive = (): void => {
     }
 };
 
-// Focus the field each time the palette opens (the ChatTabs @show pattern), starting at the top row. Seed the
-// query from the shortcut that opened us: `> ` for the Command Palette (Ctrl/Cmd+Shift+P), empty for Go to File
-// (Ctrl/Cmd+P): a fresh field each open, like VSCode.
+// Focuses the field and resets to the top row each time the palette opens. Seeds the query from the
+// shortcut that opened it: `> ` for the Command Palette, empty for Go to File.
 const onShow = async (): Promise<void> => {
     query.value = mode.value === `commands` ? `> ` : ``;
     await nextTick();
     input.value?.focus();
-    // In command mode the field already holds the `> ` prefix, so drop the caret at the end; a select would let the
-    // next keystroke wipe the prefix and fall the palette back to file mode.
+    // Caret at the end, not selected, so the next keystroke can't wipe the `> ` prefix.
     if (mode.value === `commands`) {
         const end = input.value?.value.length ?? 0;
         input.value?.setSelectionRange(end, end);
@@ -147,14 +128,10 @@ const onShow = async (): Promise<void> => {
 <template>
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
         <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Go to file">
-            <!-- THE FRAME BELONGS TO THE ROW, NOT TO THE FIELD, which is why the input is `field-bare` (the
-                 chat composer's textarea is the same species, for the same reason). A palette's search is not a
-                 box on a page: it is the top band of the panel, edge to edge, and the panel's own border plus
-                 this divider are already its frame. Left to be a field in its own right it collected a second
-                 one — a rim and a soft accent ring drawn tight around a borderless full-width slot, inside the
-                 dialog's rounded edge — which is the doubled border a reader sees and cannot name. A skin that
-                 wants to say something about this field says it on `ui-search-row`, where it lands on the whole
-                 assembly. -->
+            <!--
+                field-bare: the search is the panel's top band, not a boxed field — the panel border and this
+                divider are already its frame. A skin styling this row targets `ui-search-row`, not the input.
+            -->
             <div class="ui-search-row relative border-b border-line">
                 <Icon
                     class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle"
@@ -203,9 +180,7 @@ const onShow = async (): Promise<void> => {
                 </p>
                 <p v-else-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
             </div>
-            <!-- One offer, because there is only ever one thing a session's name can mean. The id is echoed
-                 under the title so the reader can check the string they pasted against the one that matched
-                 before pressing: the whole value of a name is that it is exact. -->
+            <!-- One offer, since a session name means one thing; the id is echoed so the reader can verify the match. -->
             <div
                 v-else-if="sessionRef !== undefined"
                 id="quick-open-list"

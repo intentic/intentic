@@ -2,9 +2,8 @@ import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 import { restClient } from "../core/rest-client.js";
 
-// Thin wrapper over the GitLab REST API v4. Each function takes the instance url + token + the minimum inputs
-// and returns only the fields the providers consume. Like github-api.ts / forgejo-api.ts: pure HTTP, no state,
-// injectable for tests. GitLab is self-hostable, so the base url is per-call (not a module constant like GitHub).
+// Thin wrapper over the GitLab REST API v4: each function takes the instance url + token + minimal inputs,
+// returns only fields consumed. GitLab is self-hostable, so the base url is per-call rather than a module constant.
 
 const headers = (token: string): Record<string, string> => ({ "PRIVATE-TOKEN": token });
 
@@ -107,8 +106,7 @@ export const gitlabApi: GitLabApi = {
     },
 
     commitFile: async ({ url, token, owner, name, path, content, branch, message }) => {
-        // GitLab splits create/update by verb (POST=create, PUT=update, like Forgejo) rather than passing a
-        // sha, so probe existence first to pick the verb.
+        // GitLab splits create/update by verb (POST/PUT) rather than a sha; probe existence first to pick one.
         const exists = (await gitlabApi.readFile({ url, token, owner, name, path, branch })) !== undefined;
         const endpoint = `${base(url)}/projects/${projectPath(owner, name)}/repository/files/${encodeURIComponent(path)}`;
         await json(endpoint, {
@@ -128,9 +126,7 @@ export const gitlabApi: GitLabApi = {
     },
 
     setCiVariable: async ({ url, token, owner, name, key, value }) => {
-        // Plaintext project CI/CD variables, no sealed-box encryption (the big simplification vs GitHub Actions
-        // secrets). Same POST=create / PUT=update split as files. protected:false so all branches see it;
-        // masked:false because multi-line values (SSH keys) fail GitLab's masking constraints.
+        // Plaintext vars; protected:false for all branches, masked:false since multi-line values fail masking.
         const varsBase = `${base(url)}/projects/${projectPath(owner, name)}/variables`;
         const exists = (await maybe(`${varsBase}/${encodeURIComponent(key)}`, { headers: headers(token) })) !== undefined;
         await json(exists ? `${varsBase}/${encodeURIComponent(key)}` : varsBase, {

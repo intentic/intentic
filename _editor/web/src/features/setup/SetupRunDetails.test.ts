@@ -1,15 +1,11 @@
 // @vitest-environment jsdom
-//
-// WHO THIS PANEL IS OFFERING THE DESKTOP APP TO. It sits beside the install command as the alternative to a
-// terminal, which is exactly right in a browser, and nonsense in the app itself, where the reader is already
-// inside the thing the two buttons download. What this panel EXPLAINS (what the command does, and the one line
-// that removes it again) is the same in both windows; only the offer to install it is not.
+// Offers the desktop app install as an alternative to the terminal command; makes no sense inside the desktop
+// app itself. What the panel explains (the command, its removal line) is the same in both windows.
 import { expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Setup.test.ts): ui's useDevice reads matchMedia at module
-// scope, environment.ts reads window.env and throws without it.
+// useDevice reads matchMedia at module scope; environment.ts throws without window.env.
 
 // The one fact that decides this: whether the app has marked this webview as its own.
 const version = { value: undefined as string | undefined };
@@ -46,7 +42,6 @@ it(`offers no installers inside the desktop app, and explains the same command`,
     const text = render();
     expect(text).not.toContain(`Or use the desktop app`);
     expect(text).not.toContain(`Windows`);
-    // Everything this panel is actually for survives the removal.
     expect(text).toContain(`Starts your sandbox in`);
     expect(text).toContain(`Removes all of it`);
 });

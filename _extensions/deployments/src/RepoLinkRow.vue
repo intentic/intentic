@@ -3,21 +3,15 @@ import type { DeployRepoLink } from "./contract";
 import { Button, ui, Icon, Notice, noticeOf, Picker, StatusBadge, type PickerOption } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 
-/* One workspace repo that ships a compose file, and the Komodo stack it belongs to. A hairline row inside the
- * "Your repos" <RowGroup>: it draws no border of its own, for the reason spelled out in ResourceRow.
- *
- * The daemon suggests by name; this is where the owner accepts or overrules. It is deliberately a SUGGESTION
- * and never an automatic binding: only the owner knows that `atlas` is this repo's staging stack, and a guess
- * that silently becomes a fact is worse than no guess. So the accept is one click, the override is a picker
- * over every stack, and unlink is always available. */
+// One workspace repo that ships a compose file, and the Komodo stack it belongs to. The daemon suggests a stack by
+// name; only the owner can confirm it, since a silently wrong guess is worse than none. Accept is one click; override
+// opens a picker; unlink is always available.
 
-// `error` is whatever the link call refused with, shown on this row rather than in a page banner: the same
-// rule ResourceRow follows, and for the same reason.
+// Whatever the link call refused with, shown on this row rather than in a page banner.
 const props = defineProps<{ link: DeployRepoLink; stacks: readonly string[]; busy: boolean; error: string | undefined }>();
 const emit = defineEmits<{ link: [repo: string, stack: string] }>();
 
-// Open the picker on demand rather than always: with a good suggestion the one-click accept is the whole
-// interaction, and a select box beside it would make the easy path look like a decision.
+// Picker opens on demand; a select box always present would make the one-click accept look like a decision.
 const choosing = ref(false);
 const chosen = ref<string | undefined>(props.link.linkedStack);
 
@@ -46,15 +40,14 @@ const apply = (stack: string | undefined): void => {
 
             <span class="ml-auto flex flex-wrap items-center gap-2">
                 <template v-if="link.linkedStack !== undefined && !choosing">
-                    <!-- Linked IS a state, so it wears the app's state pill rather than a hand-drawn tick. -->
+                    <!-- Linked is a state, so it wears the app's state pill rather than a hand-drawn tick. -->
                     <StatusBadge variant="success" size="xs" dot :label="link.linkedStack" />
                     <Button label="Change" size="small" severity="secondary" text :disabled="busy" @click="choosing = true" />
                     <Button label="Unlink" size="small" severity="secondary" text :disabled="busy" @click="emit(`link`, link.repo, ``)" />
                 </template>
 
                 <template v-else-if="!choosing">
-                    <!-- The good case: the daemon found a stack that looks like this repo, so accepting is one
-                         click and the full list stays one click behind it. -->
+                    <!-- Good case: the daemon's suggestion is one click to accept, with the full list one click behind it. -->
                     <template v-if="suggestion !== undefined">
                         <span class="text-2xs text-muted">
                             looks like <span class="font-medium text-content">{{ suggestion }}</span>

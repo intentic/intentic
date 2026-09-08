@@ -10,84 +10,56 @@ import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, type FireOptions, type FireOutcome, type WakeFn } from "./scheduler.js";
 
-/* A PUBLIC DOOR: the routes an ANONYMOUS browser may reach on this daemon, written once for the two things that
- * open one. The Front Desk (webchat/) and the bug intake (issues/) are the inbound-HTTP mirror of the
- * gateway-process pattern: no extension holds a connection, because the connection is a `<script>` tag on
- * someone else's page, so these routes ARE the source. They normalize what arrives and drive `fireAutomation`
- * directly, reusing the automation's guard, requireApproval gate, run history and activity log unchanged.
- *
- * Everything a stranger can do is here plus the one route each door adds for what it is FOR (a message that
- * streams a reply, a report that is filed and only sometimes wakes anyone), which is what makes "the embed
- * can't reach the rest of the daemon" a property of the wiring rather than a permission list someone has to
- * maintain: the visitor never holds a credential at all, and app.ts's auth skip names these paths and nothing
- * else. The embeds' side of the same wire is the contract's embed.ts.
- *
- * THE GATES, in the order a request meets them, cheapest first: who this automation is and whether the caller
- * may reach it (the trigger's origin allowlist, or a door's own key), a fixed rate window per caller, the
- * proof-of-work puzzle where one is configured, and the day's ceiling, spent LAST so a request refused for any
- * other reason has not eaten a turn anybody else could have had. */
+// Public door: routes an anonymous browser reaches directly (Front Desk, bug intake), each a stranger's script tag
+// rather than an extension, driving fireAutomation directly. No credential; app.ts's auth skip names exactly these
+// paths, gated cheapest-first: allowlist or key, rate window, proof-of-work, then the daily ceiling.
 
 export interface PublicDoorSpec<Config> {
     // The listener provider the door's automations name: which `trigger.provider` resolves here.
     readonly provider: string;
     // The path segment the door is served under (/<slug>/:id/config, …/challenge, …/installs, and its own verb).
     readonly slug: string;
-    // The door's stored settings on an automation of its kind, defaults NOT yet applied.
+    // The door's stored settings on an automation of its kind; defaults not yet applied.
     readonly configOf: (automation: AutomationRecord) => Config;
-    // What the embed is told about itself, fully resolved and naming every field it emits, so a secret added to
-    // the config later is invisible to a stranger's browser until somebody deliberately lists it.
+    // What the embed is told about itself, fully resolved; a secret added later stays invisible until listed here.
     readonly publicConfig: (automation: AutomationRecord) => unknown;
     // The refusals, in the door's own words: the id names nothing of this kind; the automation is switched off.
     readonly missing: string;
     readonly disabled: string;
-    /* Whether this caller may reach the automation, or the sentence refusing it. Absent ⇒ the trigger's origin
-     * allowlist alone, the good gate: it cannot be lifted out of a bundle and reused. A door with a second
-     * kind of caller (a phone with no Origin header presenting a key) supplies its own; `keyed` is whether the
-     * key it presented is the one this door was issued (auth/door-tokens.ts), already checked, so the door
-     * decides what a valid key buys and never touches the credential itself. */
+    // Whether this caller may reach the automation, or a refusal message; absent means the origin allowlist alone.
     readonly admit?: (automation: AutomationRecord, config: Config, origin: string | undefined, keyed: boolean) => string | undefined;
     // The fixed window per automation+caller: how many arrivals a minute before the door answers 429.
     readonly rateMax: number;
     // The query parameter the challenge route reads the caller's id from, so a solution cannot be moved.
     readonly challengeParam: string;
-    // Where the install probes are kept. Two doors, two files: the key inside is an automation id, and a Front
-    // Desk's id colliding with an intake's would merge two panels' answers.
-    // Where this door keeps its install probe, off the workspace root.
+    // This door's install probes are kept separately per door, so automation ids across doors can't collide.
     readonly installs: (root: string) => string;
-    // The prefix of the sandbox conversations this door opens, so a thread is recognizable on the board and
-    // in a worktree name.
+    // Prefix of sandbox conversations this door opens, so a thread is recognizable on the board and worktree name.
     readonly conversationPrefix: string;
 }
 
-// The automation this request addresses, or the refusal to answer with. A refusal carries the automation
-// whenever one was found, because the install panel's most useful line is built from exactly that case: a real
-// door, asked for by an origin that is not on its list. Nothing about the RESPONSE changes, the caller still
-// answers with `status` and `error` alone.
+// Automation this request addresses, or the refusal to answer with. A refusal still carries the automation when one was
+// found, since the install panel's most useful case is a real door refused by an origin not on its list.
 export type Resolved<Config> = { readonly automation: AutomationRecord; readonly config: Config } | { readonly status: 403 | 404 | 409; readonly error: string; readonly automation?: AutomationRecord };
 
 const RATE_WINDOW_MS = 60_000;
 const CONVERSATION_ID_MAX = 60;
 
-// The client's address, for Turnstile's optional remoteip check. Behind the tunnel the socket is Cloudflare's,
-// so the forwarded header is the only thing that carries the visitor's, and it is advisory either way.
+// Client address for Turnstile's optional remoteip check; behind the tunnel the socket is Cloudflare's, so only the
+// forwarded header carries the visitor's, advisory either way.
 export const remoteIpOf = (c: Context<AppEnv>): string | undefined => c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
 
 export interface PublicDoor<Config> {
     readonly resolve: (id: string, origin: string | undefined, key?: string) => Promise<Resolved<Config>>;
-    // A fixed window per automation+caller. ponytail: in-memory, per daemon, a restart clears it; swap for a
-    // shared store only if the sandbox ever runs multi-process.
+    // In-memory per daemon; a restart clears it. Swap for a shared store only if the sandbox runs multi-process.
     readonly rateLimited: (key: string, now: number) => boolean;
     // The per-automation daily ceiling. True ⇒ over, and nothing was spent.
     readonly overDailyCeiling: (automationId: string, max: number, now: number) => boolean;
-    // One caller's proof of work, checked against the challenge minted for that caller. `config` is the
-    // door's own settings where the check reads a Turnstile secret out of them; `{}` for a door that has none.
+    // Checks proof of work against the caller's challenge; config carries a Turnstile secret, {} when there's none.
     readonly antiBotPassed: (mode: Parameters<typeof antiBotAccepted>[0], config: Parameters<typeof antiBotAccepted>[1], answer: AntiBotAnswer, callerId: string, c: Context<AppEnv>, now: number) => Promise<boolean>;
-    // A caller's thread key and the conversation id its thread would own: derived, not minted, so a held wake
-    // and a resumed session both find the same one. Bounded and charset-checked like the scheduler's own.
+    // Thread key and conversation id are derived, not minted; a held wake and a resumed session find the same one.
     readonly thread: (automationId: string, channelId: string) => { readonly key: string; readonly conversationId: string };
-    /* Fire the automation on a caller's thread: open (or resume) the sandbox conversation the thread owns,
-     * run, and learn the provider session so the next arrival continues rather than restates. `onOpened` runs
-     * between the open and the fire, for a door with something to stamp at that moment (an issue's run). */
+    // Fires on a caller's thread: opens/resumes the conversation, runs, and learns the session to resume next time.
     readonly fireOnThread: (
         automation: AutomationRecord,
         thread: { readonly key: string; readonly conversationId: string },
@@ -97,23 +69,16 @@ export interface PublicDoor<Config> {
         onOpened?: (conversationId: string) => Promise<void>,
     ) => Promise<FireOutcome>;
     readonly routes: {
-        /* What the embed renders itself from. Origin-gated like the door's own verb so a door's greeting, accent
-         * and sign-in settings aren't readable from anywhere on the internet. This is also the INSTALL PROBE: it
-         * is the one request every embed makes on every page load, so recording it, admitted or refused, is
-         * what lets the app answer "did the snippet land?" instead of showing the same empty history for a
-         * working embed and an unpasted one. */
+        // Embed's own render data, origin-gated; also the install probe, since every page load hits it either way.
         readonly config: (c: Context<AppEnv>) => Promise<Response>;
-        // A proof-of-work challenge for one caller. The salt is self-verifying and signed against that caller,
-        // so nothing is stored here and a solution can't be moved to another thread or reporter.
+        // Proof-of-work challenge for one caller; the salt is self-verifying and signed to them, nothing stored here.
         readonly challenge: (c: Context<AppEnv>) => Promise<Response>;
-        // What the owner's install panel reads: which origins have loaded this door's embed, and which were
-        // turned away. OWNER-ONLY, absent from app.ts's public paths, so it goes through the bearer middleware.
+        // Origins that loaded this door's embed, and which were turned away; owner-only, behind the bearer middleware.
         readonly installs: (c: Context<AppEnv>) => Promise<Response>;
     };
 }
 
-// The door's own gate, or the default one: the trigger's origin allowlist, which a browser on the page satisfies
-// and nothing else can.
+// The door's own gate, or the default: the trigger's origin allowlist, which only a browser on the page satisfies.
 const admission = <Config>(spec: PublicDoorSpec<Config>, automation: AutomationRecord, config: Config, origin: string | undefined, keyed: boolean): string | undefined => {
     if (spec.admit !== undefined) {
         return spec.admit(automation, config, origin, keyed);
@@ -136,16 +101,8 @@ export const createPublicDoor = <Config>(
             return { status: 404, error: spec.missing };
         }
         const config = spec.configOf(automation);
-        /* The public id is the address; the embed-origin allowlist (plus the rate limit) is the real gate, CORS
-         * only keeps browsers from blocking a legit embed. A non-browser client omits Origin and is refused,
-         * unless the door has a key for it.
-         *
-         * These statuses do tell an unknown id (404) from a real one asked for by the wrong origin (403). That
-         * is deliberate rather than overlooked: an automation id is PUBLIC by construction, it sits in the
-         * snippet on the customer's own page, so there is nothing for a uniform answer to protect, and the two
-         * cases are the two different things a site owner has to fix. */
-        // The key is checked against the door's own store BEFORE the spec sees it, and only when one was
-        // presented: a browser on the allowlist never causes a read of the credential it does not hold.
+        // 404 (unknown id) and 403 (wrong origin) stay distinct: the id is public, so both matter to a site owner.
+        // Key is checked against the door's store before the spec sees it, only if presented; the allowlist skips it.
         const keyed = key !== undefined && (await services.doorTokens.verify("intake", automation.id, key));
         const refused = admission(spec, automation, config, origin, keyed);
         if (refused !== undefined) {
@@ -174,8 +131,7 @@ export const createPublicDoor = <Config>(
             await onOpened?.(session.conversationId);
             const settled = await fireAutomation(services as Services, automation, wake, {
                 ...options,
-                // The SAME conversation every time, so a five-message chat or a recurring crash is one card and
-                // one worktree, and a held wake snapshots the conversation the thread already owns.
+                // Same conversation every time, so a chat or a recurring crash stays one card and one worktree.
                 conversationId: session.conversationId,
                 ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
             });

@@ -2,15 +2,9 @@ import { originPattern, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { currentGrants } from "./tab-access.js";
 
-/* WHAT IS OPEN IN THIS BROWSER — and, for most of it, only that.
- *
- * A tab's URL and title arrive from Chrome ONLY for origins this extension holds a permission for. That is not
- * a limitation to work around: it is the property that makes this connector safe to install. Somebody who
- * allows the agent on their Jira does not thereby show it the other eleven tabs, and this listing says so in
- * as many words rather than presenting a suspicious row of blanks.
- *
- * The listing is still worth having in full: knowing that seven tabs exist and one of them is allowed is what
- * lets an agent say "I can work in your Jira tab" instead of opening an eighth. */
+// Lists every open tab. A tab's URL and title come from Chrome only for origins this extension holds permission
+// for, so ungranted tabs show as present but unnamed, not hidden — and the full list still lets the agent target an
+// already-open tab instead of opening a new one.
 
 export const listTabs = async (): Promise<string> => {
     const [tabs, grants, paused] = await Promise.all([chrome.tabs.query({}), currentGrants(), store.paused()]);
@@ -34,8 +28,8 @@ export const listTabs = async (): Promise<string> => {
         .join("\n");
 };
 
-// Bring a tab to the front. Allowed for any tab — switching tabs is not reading one — and the answer says
-// which site it landed on only when that is a site the agent may see.
+// Brings a tab to front; allowed for any tab since switching isn't reading. Names the site only if the agent is
+// allowed to see it.
 export const selectTab = async (id: number): Promise<string> => {
     const tab = await chrome.tabs.update(id, { active: true }).catch(() => undefined);
     if (tab === undefined) {

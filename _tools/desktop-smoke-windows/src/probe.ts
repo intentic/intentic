@@ -1,10 +1,5 @@
-/* Asking the machine under test what is true. Every function here is the IO half of a pure function in
- * `parse.ts`, the shell round trip lives here, the reading of its answer lives there.
- *
- * Nothing in this file asserts. A probe answers a question; whether the answer is a pass is the tier's
- * business, and keeping that line means a probe can be reused by a tier that expects "no" (the doctor's
- * "is the app already installed?", which wants `undefined`) and by one that expects "yes".
- */
+// IO half of parse.ts's pure functions: this shells out, parse.ts reads the answer. Nothing here asserts, so a probe is
+// reusable by a tier expecting yes and one expecting no (the doctor's "already installed?" wants undefined).
 
 import { errorMessage } from "@intentic/base/errors";
 import { desktop, type WindowInfo } from "@intentic/desktop-automation";
@@ -23,21 +18,18 @@ import {
 } from "./parse.js";
 import { powershell, run } from "./run.js";
 
-/* Where Windows lists what is installed. Both hives, because `installMode: currentUser` in the bundle config
- * puts the app in HKCU, but an installer run elevated, or a future switch to a per-machine install, lands in
- * HKLM, and a probe that reads one hive would report a perfectly good install as absent. */
+// Both hives: currentUser install mode puts the app in HKCU, an elevated or per-machine install in HKLM.
 const UNINSTALL_KEYS = [
     `HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*`,
     `HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*`,
     `HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*`,
 ];
 
-// The WebView2 Runtime's fixed client id in the Edge updater's registry. A constant of Microsoft's, not ours.
+// WebView2 Runtime's fixed client id in the Edge updater's registry; Microsoft's constant, not ours.
 const WEBVIEW2_CLIENT = `{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`;
 
 export const findInstalledApp = async (displayName: string): Promise<InstalledApp | undefined> => {
-    // -ErrorAction SilentlyContinue on the whole pipeline: a machine with no WOW6432Node hive is an ordinary
-    // machine, not a broken one, and its error would otherwise be the only thing on stdout.
+    // -ErrorAction SilentlyContinue: no WOW6432Node hive is an ordinary machine, not a broken one.
     const result = await powershell(
         `$ErrorActionPreference='SilentlyContinue'
          Get-ItemProperty ${UNINSTALL_KEYS.map((key) => `'${key}'`).join(`,`)} |
@@ -47,12 +39,8 @@ export const findInstalledApp = async (displayName: string): Promise<InstalledAp
     return installedApp(asList<UninstallEntry>(result.stdout), displayName);
 };
 
-/* What the OS would run for `intentic://…`.
- *
- * The registry is read rather than a link being fired, because these are two different questions and the tier
- * asks both: this one is "is the scheme registered, and to what", which has a meaningful answer BEFORE the app
- * has ever run, the state a user who just installed is in, and the state in which the Linux equivalent of
- * this chain was broken for months while every after-launch assertion passed. */
+// Reads the registry rather than firing a link: this asks whether the scheme is registered at all, true even before the
+// app has ever run.
 export const schemeCommand = async (scheme: string): Promise<string | undefined> => {
     const result = await powershell(
         `$ErrorActionPreference='SilentlyContinue'
@@ -68,7 +56,7 @@ export const schemeCommand = async (scheme: string): Promise<string | undefined>
     return command === `` ? undefined : command;
 };
 
-/** The WebView2 runtime's version, or `undefined` on a machine that has none. Windows Server's usual state. */
+/** WebView2 runtime's version, or undefined on a machine with none (Windows Server's usual state). */
 export const webView2 = async (): Promise<string | undefined> => {
     const result = await powershell(
         `$ErrorActionPreference='SilentlyContinue'
@@ -82,27 +70,15 @@ export const webView2 = async (): Promise<string | undefined> => {
     return webView2Version(asList<{ pv?: string }>(result.stdout));
 };
 
-/* Whether this process can see a desktop at all.
- *
- * The single most valuable line in the doctor, because it is the one precondition whose absence makes EVERY
- * other assertion in tier 1 fail for a reason that has nothing to do with the product. A GitHub Actions runner
- * installed as a Windows service runs in session 0, which has no interactive desktop: the app starts, no window
- * is ever mapped, and a log full of "the workspace window opened (waited 60s)" reads exactly like a broken
- * build. The runner has to be started from a logged-in session. */
+// Whether this process can see a desktop at all: a runner installed as a Windows service runs in session 0, with no
+// window ever mapped, and every assertion after it fails for a reason that isn't the product.
 export const userInteractive = async (): Promise<boolean> => {
     const result = await powershell(`[System.Environment]::UserInteractive`);
     return result.stdout.trim().toLowerCase() === `true`;
 };
 
-/* Whether the listener this job is running inside is the logon task's, and whether that task re-checks it.
- *
- * The repetition is read off the TRIGGERS rather than assumed from the task existing, because the two shapes are
- * a version apart: the task registered before the watchdog was added has one trigger and no repetition, and a
- * machine provisioned then is exactly the one that still needs a person after a crash. `Where-Object` rather
- * than indexing, since which trigger carries the repetition is not fixed.
- *
- * -ErrorAction SilentlyContinue on the whole thing: no such task is an ANSWER here (somebody started the runner
- * by hand), and its error text on stdout would be parsed as the task's state. */
+// Repetition read off the triggers, not assumed from the task's existence: a task from before the watchdog existed has
+// none. -ErrorAction SilentlyContinue since no task is itself an answer (hand-started), not an error.
 export const runnerTask = async (taskName: string): Promise<RunnerTask[]> => {
     const result = await powershell(
         `$ErrorActionPreference='SilentlyContinue'
@@ -118,7 +94,7 @@ export const runnerTask = async (taskName: string): Promise<RunnerTask[]> => {
 /** Whether a docker CLI is on PATH and its daemon answers. Separate from `dockerContainerOs` on purpose. */
 export const dockerReachable = async (): Promise<boolean> => (await run(`docker`, [`info`, `--format`, `{{.OSType}}`])).code === 0;
 
-/** `linux` or `windows`, which kind of container this daemon can run. See `parse.ts` for why it is asked. */
+/** linux or windows, which kind of container this daemon can run. */
 export const dockerContainerOs = async (): Promise<string | undefined> => {
     const result = await run(`docker`, [`info`, `--format`, `{{.OSType}}`]);
     return result.code === 0 ? dockerOsType(result.stdout) : undefined;
@@ -135,10 +111,8 @@ export const sandboxHealth = async (container: string): Promise<string | undefin
     return result.code === 0 ? result.stdout.trim() : undefined;
 };
 
-/* WHICH OF THESE NAMES THE CONTAINER DOES NOT CARRY A VALUE FOR — the record of what the run that created it
- * was actually given, which is the only place a value the setup silently dropped can be seen at all. An
- * inspect that fails answers "all of them": a container nobody can read is not one that carries anything, and
- * the caller's other assertions already say why it could not be read. */
+// Env the run that created this container was actually given; a failed inspect reports every key missing, since a
+// container that can't be read carries nothing as far as this can tell.
 export const missingContainerEnv = async (container: string, keys: readonly string[]): Promise<string[]> => {
     const result = await run(`docker`, [`inspect`, `-f`, `{{range .Config.Env}}{{println .}}{{end}}`, container]);
     return result.code === 0 ? missingEnvNames(result.stdout, keys) : [...keys];
@@ -165,68 +139,34 @@ export const containersPublishing = async (port: number): Promise<string[]> => {
     return result.code === 0 ? containerNames(result.stdout) : [];
 };
 
-/* The window layer. `@intentic/desktop-automation` rather than a P/Invoke of our own: it is this repo's own answer to
- * "drive a Windows desktop from Node", it is the exact counterpart of the `xdotool` the Linux tier leans on,
- * and using it here means the installer tier is also the only place that runs it against a real Windows
- * session, which no unit test of it can be. */
+// @intentic/desktop-automation drives the desktop, this repo's Windows counterpart to the Linux tier's xdotool; this is
+// the only place that runs it against a real session.
 const screen = desktop();
 
 export const windows = async (): Promise<WindowInfo[]> => await screen.windows();
 
 export const windowTitles = async (): Promise<string[]> => (await screen.windows()).map((window) => window.title);
 
-/* THE APP'S OWN WINDOWS, BY THE PROGRAM THAT OWNS THEM, never by title.
- *
- * Every window question this tier asks is about the app under test, and the title is only ever which SCREEN is
- * up. Selecting by title conflates the two, and on any desktop that is not empty it silently answers about
- * somebody else's window: a browser tab reading the product's docs is titled `Intentic …`, which is enough to
- * make "the app closed" never come true and "one window, not two" count to three. It also cuts the other way,
- * on a machine where only the browser is open, "the workspace window opened" passes with no app at all.
- *
- * `app` is the process name Windows reports for the window's owning process (`intentic-desktop`), so this is
- * the same identity `appRunning` uses. Compared case-insensitively because the casing is the OS's business. */
+// Filtered by owning process name, never by title: title only says which screen is up, and a same-titled window
+// elsewhere (a browser tab) would pass as the app's own. Same identity appRunning uses, compared case-insensitively.
 export const appWindows = async (app: string): Promise<WindowInfo[]> =>
     (await screen.windows()).filter((window) => window.app.toLowerCase() === app.toLowerCase());
 
-/** Whether one of the APP's own windows is showing the named screen. */
+/** Whether one of the app's own windows is showing the named screen. */
 export const appWindowTitled = async (app: string, fragment: string): Promise<boolean> =>
     titled(
         (await appWindows(app)).map((window) => window.title),
         fragment,
     );
 
-/* Say yes to the confirmation the app raises for a link it did not watch its own window ask for.
- *
- * Focus first, and assert the focus: text goes to whatever window HAS the keyboard, not to the one most
- * recently created, and a Return sent to the wrong window is a keystroke delivered somewhere in the CI
- * desktop with no trace. Return rather than a click, for the same reason the Linux tier presses Return: the
- * affirmative button's position is the dialog's business and changes with the copy in it, while "the default
- * button" is what the platform promises.
- *
- * Scoped to the app's own windows for the reason above, and here it is not merely a wrong answer: a Return
- * aimed by title alone can land in whatever the person at this desk happens to have open.
- *
- * IT ANSWERS WITH WHY, NOT WITH FALSE. A keystroke that was never delivered is invisible from here on: the
- * assertions after it wait out their deadlines on a screen that was never going to come, and the log blames
- * the setup screen for a Return that landed on somebody's browser. `focusWindow` is the one step that CAN
- * tell, so its refusal is carried out to the tier verbatim rather than collapsed into a boolean, the
- * difference between "this machine would not give the dialog the keyboard" and thirty seconds of silence.
- *
- * AND FOCUS ALONE IS NOT ENOUGH TO TELL, WHICH IS WHY THE DIALOG GOING AWAY IS THE PROOF. `focusWindow`
- * reports the foreground as it stands when it returns; the keystroke is a separate round trip, and in the gap
- * between them the foreground can move. It DOES move, on the one path this matters most: a link that arrives
- * while the app is not running starts the app, the dialog is the first thing that maps, and the app's own main
- * window maps a second or two later and takes the keyboard with it. The Return then lands in the workspace,
- * the dialog stays up untouched, and every assertion after it fails describing a product that was never asked.
- * That is a race, not a machine that refused, so the answer is to look and press again rather than to give up
- *, and the only reading that settles it is the dialog being gone. */
+// Presses Return only after confirming focus, then verifies success by watching the dialog vanish rather than trusting
+// the focus call, since focus can shift (a start-from-cold link's main window stealing it) between the two.
 const ANSWER_ATTEMPTS = 3;
 const ANSWER_SETTLE_MS = 3_000;
 const ANSWER_POLL_MS = 250;
 
-/* The window layer the loop below drives, named so it can be handed a fake. The loop is the only thing in this
- * file that is a DECISION rather than a round trip, when to press again, and which silence is a pass, and
- * `createHarness` sets the precedent for injecting the clock and the sleep to test one. */
+// Window layer the retry loop drives, injectable so tests can fake it; the loop is this file's one real decision (when
+// to press again, what silence means).
 export interface ConfirmOps {
     /** The dialog's window id, or `undefined` when no window of the app's is showing that title. */
     readonly showing: () => Promise<string | undefined>;
@@ -266,8 +206,7 @@ export const answerConfirm = async (
     for (let attempt = 1; attempt <= ANSWER_ATTEMPTS; attempt += 1) {
         const dialog = await ops.showing();
         if (dialog === undefined) {
-            // Gone before the first press is the dialog never having been there to answer; gone after one is
-            // the press that worked, arriving while this was still looking.
+            // Gone before the first press means it was never there; gone after one means the press worked.
             return attempt === 1 ? `no window of ${app}'s is showing "${titleFragment}" any more` : undefined;
         }
         try {

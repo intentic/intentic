@@ -2,19 +2,9 @@ import { type Desktop, DesktopError, type WindowInfo } from "@intentic/desktop-a
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
-/* Operating the machine's APPLICATIONS, as opposed to its pixels.
- *
- * Clicking a coordinate is only useful once the agent knows what is on the screen and which window its typing
- * will reach. Without these, `device` is a blindfolded hand: it can press where a button was in a screenshot,
- * but it cannot tell whether the window moved, whether the app is even open, or whether the keystrokes it just
- * sent went to the browser or to the terminal behind it. That is the difference between a demo and a tool.
- *
- * WHICH SCOPE EACH ONE TAKES follows what the action DOES, not which package implements it:
- *   windows / clipboard read  → `screen`, because both are ways of seeing what is on the machine.
- *   focus / clipboard write   → `control`, because both change what the machine is doing.
- *   open                      → `shell`, because it starts a process, which is what that switch governs.
- * A user who granted "see the screen" and nothing else gets a machine they can inspect and not touch, which is a
- * coherent thing to have granted. */
+// Operating the machine's applications, as opposed to its pixels: knowing what's on screen and which window
+// typing reaches is the difference between a tool and a blindfolded hand. Scope follows what the action DOES:
+// windows/clipboard read -> `screen`, focus/clipboard write -> `control`, open -> `shell`.
 
 // A window list is for choosing between things, so it is rendered for reading rather than as JSON: the model
 // picks by title, and the id it needs to pass back is right there.
@@ -34,9 +24,8 @@ export const listWindows = async (screen: Desktop, scopes: HostScopes): Promise<
     return describeWindows(await screen.windows());
 };
 
-/* Focus is the precondition for typing, so this reports what it left focused rather than answering "ok", the
- * agent's next action depends on it, and a focus that silently did not take is the single most confusing way for
- * a GUI sequence to go wrong. */
+// Focus is the precondition for typing, so this reports what it left focused rather than answering "ok": a
+// focus that silently did not take is the most confusing way for a GUI sequence to go wrong.
 export const focusWindow = async (screen: Desktop, id: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {

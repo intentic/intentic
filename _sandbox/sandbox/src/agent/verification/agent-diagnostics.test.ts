@@ -20,21 +20,20 @@ const UNANCHORED: TurnPlacement = { plan: PLAN };
 
 const RESOLVABLE: ModulesProbe = async () => ({ kind: "installed", missing: [] });
 const MISSING: ModulesProbe = async () => ({ kind: "absent" });
-// A tree that exists and is behind: the state an agent leaves when it adds a dependency and does not install it.
+// A tree that exists and is behind: the state left when a dependency is added but not installed.
 const stale =
     (...missing: string[]): ModulesProbe =>
     async () => ({ kind: "installed", missing });
 
-// Fire one edit at a hook set. Returned separately from runHook so a test can drive the SAME set twice and
-// observe the per-turn state (the missing-dependency notice is told once, not stapled to every edit).
+// Fires one edit at a hook set, separately from runHook, so a test can drive the same set twice and observe per-turn
+// state.
 const fire = async (hooks: ReturnType<typeof editDiagnosticsHooks>, toolInput: unknown) => {
     const [matcher] = hooks.PostToolUse!;
     const input = { hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: toolInput, tool_use_id: "t1" } as unknown as HookInput;
     return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
 };
 
-// Drive the PostToolUse hook directly with a fake lsp runner: no binary, no filesystem. Dependencies are
-// present unless a test says otherwise, which is the case every pre-existing assertion assumes.
+// Drives the PostToolUse hook directly with a fake lsp runner; dependencies are present unless a test says otherwise.
 const runHook = async (diag: DiagRunner, toolInput: unknown, modules: ModulesProbe = RESOLVABLE) =>
     fire(editDiagnosticsHooks(undefined, diag, modules), toolInput);
 
@@ -72,8 +71,7 @@ test("non-TypeScript files are never checked", async () => {
     expect(ran).toBe(false);
 });
 
-// undefined is "there is no answer to be had": no tsconfig above the file, so no project to check, and
-// must read the same as clean to the model rather than inventing a verdict.
+// undefined means there is no answer to be had (no tsconfig above the file); it must read the same as clean.
 test("an unanswerable check stays silent", async () => {
     const result = await runHook(async () => undefined, { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
     expect(result).toEqual({});
@@ -84,9 +82,8 @@ test("a tool input without a file path stays silent", async () => {
     expect(result).toEqual({});
 });
 
-// Without node_modules the compiler can't resolve ANY import, not even node: builtins, whose types ship in
-// @types/node, so it reports errors on lines the edit never touched. Confident wrong feedback is worse than
-// none: an agent transcript shows a turn spent reasoning its way to "every diagnostic was a false positive".
+// Without node_modules the compiler can't resolve any import, even node: builtins, so it would report errors the edit
+// never touched; the check must not run at all.
 test("with no resolvable node_modules the type-check never runs", async () => {
     let ran = false;
     const result = await runHook(
@@ -103,10 +100,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
     );
 });
 
-/* The checker refusing IS the fix for the worst failure in the logs: a worktree project whose config chain the
- * checker cannot load fell back to ES5 defaults and reported Map, Promise and `node:` imports as broken on
- * every edit: thousands of confident, wrong errors injected into turns. The refusal must surface as the same
- * once-per-turn unavailability sentence, never as diagnostics. */
+// A checker refusal surfaces as the once-per-turn unavailability sentence, never as diagnostics.
 test("a checker refusal is told once as unavailability, not injected as errors", async () => {
     const hooks = editDiagnosticsHooks(undefined, async () => ({ kind: "unavailable" }), RESOLVABLE);
     const first = await fire(hooks, { file_path: `${WORKSPACE_ROOT}/src/a.ts` });
@@ -130,9 +124,8 @@ test("the missing-dependency reason is told ONCE per turn, not stapled to every 
 const contextOf = (result: HookJSONOutput): string =>
     (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext ?? "";
 
-/* A PARTIALLY installed tree is the case the old boolean gate could not see: node_modules exists, so it opened,
- * and the one package the agent just added is still missing. The diagnostics are real and must survive: only
- * the reading of the unresolved-import ones is wrong without this sentence. */
+// A partially installed tree (node_modules exists, one added package missing) still type-checks; only the
+// unresolved-import diagnostics need the extra sentence.
 test("a tree missing one package still type-checks, with the cause named alongside the errors", async () => {
     let ran = false;
     const result = await runHook(
@@ -171,8 +164,8 @@ test("a fully installed tree says nothing extra: the diagnostics stand on their 
     expect(contextOf(await runHook(withErrors, { file_path: "/work/src/app.ts" }))).not.toContain("not installed");
 });
 
-// Capture what the runner was ASKED, which is the whole of this fix: the same edit is a different question
-// depending on which view of the tree it is put to.
+// Captures what the runner was asked: the same edit is a different question depending on which view of the tree it's
+// put to.
 const asked = (): { requests: DiagRequest[]; diag: DiagRunner } => {
     const requests: DiagRequest[] = [];
     return {
@@ -184,10 +177,8 @@ const asked = (): { requests: DiagRequest[]; diag: DiagRunner } => {
     };
 };
 
-/* An anchored turn's dependencies exist ONLY inside its namespace: the worktree's node_modules are empty mount
- * points with the installed tree bound in over them, so a check that translates the path and runs out here is
- * not a weaker answer, it is a different tree with nothing installed in it. Ask in the agent's own names, and
- * enter the compiler where those names are true. */
+// An anchored turn's dependencies exist only inside its namespace: the worktree's node_modules are empty mounts bound
+// in over it. Checked in the agent's own names, with the compiler entered where those names are true.
 test("an anchored turn is checked in its own names, by a compiler entered into its namespace", async () => {
     const { requests, diag } = asked();
     await fire(editDiagnosticsHooks(ANCHORED, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
@@ -202,7 +193,7 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
     });
 });
 
-// No namespace was built, so the worktree is reachable from here and the translation is the whole of it.
+// No namespace was built, so the worktree is reachable directly and path translation is the whole of the check.
 test("an unanchored turn is checked on the worktree path, with no compiler to enter", async () => {
     const { requests, diag } = asked();
     await fire(editDiagnosticsHooks(UNANCHORED, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
@@ -210,9 +201,8 @@ test("an unanchored turn is checked on the worktree path, with no compiler to en
     expect(requests[0]?.placement).toBeUndefined();
 });
 
-/* A worktree path is a real path the agent can open and the wrong one to hand it: reaching it directly is what
- * puts a turn's edits outside its own namespace. Whatever the check was asked, the report comes back in the
- * names the agent uses. */
+// A worktree path is real but the wrong one to hand back to the agent. Whatever the check was asked in, the report
+// comes back renamed to the names the agent uses.
 test("an unanchored report is renamed back to the paths the agent knows", async () => {
     const { requests, diag } = asked();
     await fire(editDiagnosticsHooks(UNANCHORED, diag, RESOLVABLE), { file_path: `${WORKSPACE_ROOT}/src/app.ts` });
@@ -225,8 +215,7 @@ test("an anchored report is already in the agent's names and is left alone", asy
     expect(requests[0]?.named("/work/src/app.ts")).toBe("/work/src/app.ts");
 });
 
-/* Agents edit in bursts, and six edits to one file re-check the same program and produce the same list: one
- * report went out verbatim 2,923 times across the transcripts. Saying it again teaches nothing. */
+// Agents edit in bursts; re-checking the same program produces the same report, and repeating it teaches nothing.
 test("a report identical to this file's last one is not sent twice", async () => {
     const hooks = editDiagnosticsHooks(undefined, withErrors, RESOLVABLE);
     expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("error TS2304");
@@ -243,7 +232,7 @@ test("a changed report is always news, even to the same file", async () => {
     expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2322");
 });
 
-// Suppression must not outlive what it suppressed: a file that came clean and breaks the same way again is news.
+// Suppression must not outlive what it suppressed: a clean file that breaks the same way again is news.
 test("a file that goes clean and breaks again is reported again", async () => {
     let lines: string[] = ["src/app.ts:12:5: error TS2304: Cannot find name 'foo'."];
     const hooks = editDiagnosticsHooks(undefined, async () => ({ kind: "checked", lines }), RESOLVABLE);
@@ -254,9 +243,8 @@ test("a file that goes clean and breaks again is reported again", async () => {
     expect(contextOf(await fire(hooks, { file_path: "/work/src/app.ts" }))).toContain("TS2304");
 });
 
-/* THE SHELL IS AN EDITOR TOO. A tracker says which files a Bash command changed (agent-shell-edits.ts); the hooks
- * snapshot before the command and review after it, through the same per-file reviewer an Edit goes through, so
- * the once-per-turn notices and the repeat suppression hold across both doors. */
+// A tracker says which files a Bash command changed; hooks snapshot before the command and review after through the
+// same per-file reviewer an Edit uses, so once-per-turn notices and repeat suppression hold across both doors.
 const tracked = (changed: readonly ShellEdit[]): ShellEditTracker & { readonly calls: string[] } => {
     const calls: string[] = [];
     return {
@@ -344,15 +332,12 @@ test("the same report from an edit and then a command is said once", async () =>
     expect(await bash(hooks, "PostToolUse")).toEqual({});
 });
 
-/* THE SECOND LANGUAGE ON THE SAME SEAM. Everything below drives the python half through a fake runner, for the
- * reason the TypeScript ones above use one: what is being tested is the hook's contract — which checker a file
- * goes to, what rides back, and what is said once — not what ruff or pyright think of a file. The real tools
- * are exercised in python-diagnostics.integration.test.ts, where they can be. */
+// Drives the python half through a fake runner for the same reason the TypeScript ones above do: what's tested is the
+// hook's contract, not what ruff or pyright think. Real tools are exercised in python-diagnostics.integration.test.ts.
 
 const PY = `${WORKSPACE_ROOT}/app/main.py`;
 
-// The TypeScript runner is handed a clean answer throughout, so nothing it says can be mistaken for the python
-// half's.
+// The TypeScript runner is handed a clean answer throughout, so nothing it says can be mistaken for the python half's.
 const pythonHooks = (pythonDiag: DiagRunner) => editDiagnosticsHooks(undefined, checked(), RESOLVABLE, undefined, [], pythonDiag);
 
 test("a python edit is checked by the python runner, and reported as python", async () => {

@@ -1,23 +1,6 @@
-/* A BOOK is one documentation tree with its own root path, its own rail and its own search scope.
- *
- * There are three, and the split is by WHO IS READING rather than by subject: /docs is written for someone
- * using intentic, /developers for someone building on it, /api for someone calling it. The first cut is the one
- * code.visualstudio.com makes, and it exists because the two readers share almost no vocabulary: one is
- * deciding whether to trust an extension, the other is deciding what to put in its manifest, while a single
- * rail forced them to scroll past each other's work.
- *
- * THE THIRD BOOK IS NOT HAND-WRITTEN, and that is the only way it differs. /docs and /developers are pages
- * somebody authored; /api's reference shelf is GENERATED from the daemon's wire contract, one page per route
- * group, so a route added to the contract is a documented route the same day. It is a Book anyway, and takes
- * the same shape, because everything downstream, the rail, the bar, the footer, the breadcrumb, the search
- * index, the sitemap, reads books and nothing else: making the generated tree a fourth kind of thing would
- * have meant teaching all six surfaces about it.
- *
- * Everything below is the shape all three share. The trees themselves are docs.ts, developers.ts and
- * reference.ts, and every derived surface, including the rail, top bar, footer, breadcrumb, previous/next
- * links, page metadata, sitemap and search index, is computed from them here. A page can only appear where its
- * book says it does.
- */
+// A Book is one documentation tree: its own root path, rail and search scope. Split by reader (docs, developers, api);
+// api's reference is generated from the wire contract but shaped like the others so downstream surfaces read all books
+// uniformly. Trees: docs.ts, developers.ts, reference.ts.
 
 export interface BookPage {
     /** Route slug under the book's root; "" is the book's index. */
@@ -26,17 +9,9 @@ export interface BookPage {
     title: string;
     /** One line of scent in the nav menu: shorter than meta.description, which is written for search results. */
     blurb: string;
-    /**
-     * <title>, meta description and publication date. Descriptions stay under 160 characters: past that
-     * a search result truncates mid-sentence and the page loses whatever the tail was carrying.
-     * dateModified is not here: it comes from the page's git history at build time.
-     */
+    /** description ≤160 chars (search truncates past that); dateModified comes from git history, not authored here. */
     meta: { title: string; description: string; datePublished: string };
-    /**
-     * Pages that live UNDER this one: same shelf, indented in the rail. Only for real route nesting, never as
-     * an editorial grouping: that is what a group's label is for, and conflating the two is how "Manifest
-     * reference" once came to look like a peer of "Extensions".
-     */
+    /** Real route nesting only, indented in the rail; editorial grouping belongs in a group's label instead. */
     children?: BookPage[];
 }
 
@@ -49,12 +24,11 @@ export interface BookGroup {
 
 export interface BookSection {
     label: string;
-    /** The nav menu's scent line for this shelf: a few words at most, or omitted for a menu that shows its
-     *  rows as labels alone (the generated API menu does exactly that). */
+    /** Nav menu's scent line: a few words, omitted when a shelf shows its rows as labels alone. */
     tagline?: string;
     /** The nav menu's icon key for this shelf: resolved to a drawing in the site's `navIcons`. */
     icon?: string;
-    /** The page this shelf's nav row points at. Always a real page, so no menu row is a dead heading. */
+    /** The page this shelf's nav row points at; always a real page. */
     entry: string;
     groups: BookGroup[];
 }
@@ -100,42 +74,21 @@ export function bookPlacement(book: Book, id: string): BookPlacement | undefined
 }
 
 /**
- * THE TOP BAR'S MENU and the footer's column for a book: one row per shelf, never one per page.
- *
- * Deriving from SHELVES rather than pages is the whole bargain: there are a handful, a new page never adds a
- * row, and the menu cannot describe a shape the rail has stopped having, which is exactly how the two came to
- * disagree when this was nineteen hand-written rows. Each href is the shelf's own entry page, so no row is a
- * dead heading.
- *
- * `covers` IS WHAT MAKES THE ROW MARKABLE, and it exists because a row's href cannot answer the question the
- * menu is being asked. The row STANDS FOR A SHELF and only POINTS AT that shelf's entry page, so matching the
- * href marks the row on exactly one page of a shelf and leaves it dark on the other nineteen: on
- * /docs/architecture/ the rail lit "Architecture" under an amber "UNDERSTAND" heading while the menu three
- * inches above it marked nothing at all. Matching the book's own root instead is the opposite failure and the
- * one that came first: /docs/ is a prefix of every docs page, so every row of the menu claimed to be current
- * everywhere under Docs.
- *
- * The shelf's pages are the honest answer to both, and the book already knows them.
+ * One row per shelf (not per page), for the top bar menu and footer column. `covers` lists every page under a shelf so
+ * the row can be marked current without the href matching the wrong page.
  */
 export function bookDestinations(book: Book): { label: string; href: string; description?: string; icon?: string; covers: string[] }[] {
     return book.sections.map((section) => ({
         label: section.label,
         href: bookHref(book, section.entry),
-        // The short scent line, carried by the authored books and omitted by the generated API menu, which
-        // shows its shelves as labels alone.
+        // Scent line from authored books; the generated API menu omits it and shows shelves as labels alone.
         description: section.tagline,
         icon: section.icon,
         covers: section.groups.flatMap((group) => group.items.flatMap(walk)).map((page) => bookHref(book, page.id)),
     }));
 }
 
-/**
- * The page before and after this one WITHIN ITS SHELF, plus the shelf they belong to.
- *
- * Shelf-scoped rather than tree-wide on purpose: the flat version walked all twenty pages as one line, so the
- * foot of "Your own machine" offered "Parallel agents" as the next thing to read and the docs claimed to be a
- * book you start at the front of. They are shelves you pick one of.
- */
+/** Previous/next page within this page's shelf, not across the whole tree; also returns the shelf itself. */
 export function bookNeighbours(book: Book, id: string): { section?: BookSection; prev?: BookPage; next?: BookPage } {
     const placements = bookPlacements(book);
     const placement = placements.find((entry) => entry.page.id === id);

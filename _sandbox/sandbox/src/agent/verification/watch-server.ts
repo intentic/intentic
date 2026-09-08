@@ -7,23 +7,15 @@ import { createCredentialOracle } from "../../guard/credential-files.js";
 import { guard } from "../../guard/guard.js";
 import { armWatcher, cancelWatcher, DEFAULT_INTERVAL_S, DEFAULT_TIMEOUT_S, listWatchers, type WatcherTurnSeed } from "./watchers.js";
 
-/* THE AGENT'S DOOR TO THE CONDITION WATCH (agent/watchers.ts), an SDK MCP server for the same reasons
- * subagent-wait.ts is one: the handler runs in the daemon (where the watch must live, since the turn's own
- * process dies with the turn), and `alwaysLoad` keeps it in the prompt, a tool the model has to go looking
- * for is a tool it replaces with the sleep-and-poll loop this exists to retire.
- *
- * THE CHECK IS GATED AT ARM TIME, ONCE, with the same rulebook Bash runs under (guard/command-gate.ts). The
- * check will run repeatedly, later, with nobody there to answer a card, so a command whose class the owner
- * holds or denies is refused here outright, worded so the agent runs it through Bash instead (where a hold can
- * actually be asked). The classifier is regex over shell text and this is friction, not a boundary, the same
- * honest reading command-gate gives of itself. */
+// The agent's door to the condition watch (watchers.ts): an SDK MCP server since the handler must run in the daemon,
+// where the watch outlives the turn, and `alwaysLoad` keeps it in the prompt so it isn't replaced by a sleep-and-poll
+// loop. The check is gated once at arm time under the same rulebook Bash runs under, since nobody will be there later
+// to answer a card; a held or denied class is refused outright, worded to send the agent through Bash instead.
 
 export interface WatchServerDeps {
-    // Absent for a conversationless turn (the bench): the tools then refuse, a watch with no conversation has
-    // nowhere to deliver its wake.
+    // Absent for a conversationless turn (the bench): a watch with no conversation has nowhere to deliver its wake.
     readonly conversationId: string | undefined;
-    // The tree the check runs in (the turn's effective checkout) and the capability credentials it runs with,
-    // snapshotted into the watch, because the turn they belong to will be long gone at check time.
+    // The tree and credentials the check runs with, snapshotted since the turn will be long gone at check time.
     readonly cwd: string;
     readonly env: Readonly<Record<string, string>>;
     // The turn identity the wake must reproduce, see WatcherTurnSeed.
@@ -34,21 +26,11 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
 
-/* THE HARD RULE, APPLIED AT ARM TIME, and deliberately nothing more than that.
- *
- * A watch check is not judged by the safety judge, and the reason is what a watch IS: a command the daemon runs
- * later, repeatedly, on its own, long after the turn that armed it has ended. Every input the judge weighs is a
- * property of a turn that will not exist when the check fires — whether anybody is watching, what the turn had
- * read, what it was working on — so a verdict reached now would be a verdict about the wrong moment. And the one
- * answer a judge might reach that this door cannot honour is `ask`: there is nobody to ask at 3 a.m., which is
- * exactly when a watch fires.
- *
- * So the check is held to the rule that never depended on any of that. Everything else arms, and the refusal
- * says what to do instead rather than merely saying no. */
+// A watch check is judged only against the hard rule, never the safety judge: every judge input is a property of a turn
+// that won't exist when the check fires, and `ask` has nobody to answer it at 3am. Everything else arms; the refusal
+// says what to do instead.
 const ruleRefusal = (command: string, cwd: string): string | undefined => {
-    // The same fact-check the command gate runs, for the same reason: a check that reads a `.env` of ports must
-    // not be refused as a credential read, least of all with a message telling the agent to go and ask about it.
-    // A watch check runs in this container, so it is read at the sandbox locus like everything the gate sees.
+    // Same fact-check the command gate runs, at the sandbox locus, so a `.env` of ports isn't refused as secret.
     for (const match of matchCommand(command, { locus: "sandbox", holdsSecret: createCredentialOracle(cwd) })) {
         const verdict = guard(commandRun, { commandClass: match.commandClass, locus: "sandbox", live: match.live });
         if (verdict.effect !== "allow") {
@@ -150,8 +132,8 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     if (args.watchId === undefined) {
                         return answer({ outcome: "listed", watches: listWatchers(deps.conversationId) });
                     }
-                    // Awaited: the disarm reaches the watch journal as well as the timer, so a stop the agent
-                    // makes cannot be undone by a container recreate a moment later (agent/watch-journal.ts).
+                    // Awaited: the disarm reaches the watch journal too, so a container recreate can't undo a stop
+                    // moments later.
                     const stopped = await cancelWatcher(deps.conversationId, args.watchId);
                     return stopped
                         ? answer({ outcome: "stopped", watchId: args.watchId })

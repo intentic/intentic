@@ -1,8 +1,7 @@
-<!-- One authored figure → the component that draws it. The switch lives here rather than in Markdown.vue so the
-     prose surface stays about prose, and so a new figure kind is one branch in one file.
-
-     The author supplies meaning; the components below supply the picture. Nothing here reads a coordinate, a
-     colour or a size from the document: that is the whole reason figures are data instead of HTML. -->
+<!--
+    Dispatches one authored figure fence to the component that draws it. Nothing here reads colour or coordinates from the document, which is what
+    makes a figure data rather than HTML.
+-->
 <script setup lang="ts">
 import { defineAsyncComponent } from "vue";
 import type { Figure } from "../../markdown/figures.js";

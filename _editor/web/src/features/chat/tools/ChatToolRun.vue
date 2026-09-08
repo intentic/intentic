@@ -4,20 +4,13 @@ import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatToolRows from "./ChatToolRows.vue";
 import { summarizeRun } from "./toolRun";
 
-/* WHAT A TURN'S TOOL CALLS LOOK LIKE WHEN THEY ARE HIDDEN: a soft rule running out to the right of the
- * transcript, ending in a mark that says how many calls there were and what the most notable of them was.
- *
- * It is a JOIN, not a row. A turn's narration is the thing being read; the calls behind it are an aside, and an
- * aside drawn at the weight of a row competes with the sentences on either side of it, which is the whole
- * reason they are hidden. So: no fill, no box, a hairline that fades in from the left and leads the eye out to
- * the one mark that carries information. Everything about it is quiet except the fact that it is there.
- *
- * Opened, it shows the very same rows the shown mode draws (ChatToolRows): for this run only, and only until
- * it is clicked shut. There is no third rendering of a tool call anywhere in the app. */
+// A hidden turn's tool calls: a fading rule leading to a mark with the count and the most notable call's icon.
+// Quiet by design, since an aside must not compete with the narration beside it. Opened, it shows the exact
+// rows the shown mode draws (ChatToolRows); there's no third rendering of a tool call.
 
 const props = defineProps<{
     tools: readonly TranscriptTool[];
-    // Whether the turn this run belongs to is still streaming: the only state in which the mark may animate.
+    // Whether the turn is still streaming: the only state the mark may animate in.
     live: boolean;
 }>();
 
@@ -37,10 +30,10 @@ const hint = computed(() => {
 
 <template>
     <div v-if="run" class="flex w-full flex-col">
-        <!-- The whole join is the target, not just the mark on the end of it: the rule is part of the same
-             affordance, and a badge-sized hit area between two paragraphs is a thing you miss. Where the two
-             stand relative to each other, and what happens to the line when the run opens: is chat.css's,
-             because it is a question about the width of the pane rather than about this run. -->
+        <!--
+            The whole join is the hit target, not just the end mark, since a badge-sized area between paragraphs is easy
+            to miss. Layout relative to the line, and what happens when it opens, is chat.css's.
+        -->
         <button
             type="button"
             class="chat-run-bar group/run relative flex w-full items-center gap-2"
@@ -49,22 +42,15 @@ const hint = computed(() => {
             :aria-label="hint"
             @click="toggle"
         >
-            <!-- Fades in from the left and arrives at the mark: the gradient is what makes this read as a line
-                 LEADING somewhere rather than as a divider cutting the transcript in half. -->
+            <!-- Fades in from the left toward the mark, reading as a line leading somewhere rather than a divider. -->
             <span
                 class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
                 :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
             ></span>
-            <!-- The ring is PAINTED, not a border: `border-width` never renders below one CSS pixel, Chromium
-                 clamps a 0.5px border back up to 1px, whereas a box-shadow spread is rasterized, so half a
-                 pixel is half a pixel wherever the display can resolve one (measured: one device pixel against
-                 a 1px border's two, at 2×). Below that it rounds up to the single pixel it always was, so the
-                 hairline needs no media query to degrade. Weight is the whole point here: at this size a
-                 full-pixel ring is heavier than the line the mark stands on, which makes an aside read as a
-                 control.
-                 A painted ring is out of the LAYOUT, though, where the border it replaced was in it, so the
-                 padding takes back the pixel the border used to occupy at each edge (2 + 1/4 and 3/4 against
-                 the old 2 and 1/2). The pill is the size it has always been; only its edge got finer. -->
+            <!--
+                Ring is painted (box-shadow), not a border, since borders can't render below 1px and would outweigh the
+                hairline it sits on. Padding compensates for the pixel a border would have taken from layout.
+            -->
             <span
                 class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-(length:--ring-hairline) transition-colors"
                 :class="[
@@ -76,20 +62,16 @@ const hint = computed(() => {
                     'group-hover/run:bg-overlay group-hover/run:text-content group-hover/run:ring-line-strong',
                 ]"
             >
-                <!-- While the turn is live the mark spins in place of its icon: a run that is still filling up
-                     is the one thing about it worth animating, and the count beside it is already moving. -->
+                <!-- Spins only while live: a run still filling up is the one thing here worth animating. -->
                 <Icon v-if="run.running && live" name="spinner" :spin="true" class="text-2xs" />
                 <Icon v-else :name="run.icon" class="text-2xs" />
                 {{ run.count }}
             </span>
         </button>
-        <!-- The calls arrive by growing into place rather than appearing whole: opening a run moves everything
-             below it down by however tall the run happens to be, and a jump that size, under the sentence you
-             are reading, costs you your place. The reveal is short enough not to be a wait (see chat.css).
-             Still `v-if`, not a hidden block: a transcript holds hundreds of runs and only the opened one has
-             any business being in the DOM: the rows are mounted when the run opens and dropped when it shuts.
-             The grid wrapper is the mechanism: a single row that transitions from no height to its content's,
-             which is the one way to animate to a height nobody knows in advance. -->
+        <!--
+            Grows into place rather than popping in, so it doesn't jump the text below mid-read; still `v-if`, not
+            hidden, since only the opened run belongs in the DOM. The grid wrapper animates to an unknown content height.
+        -->
         <Transition name="chat-run-reveal">
             <div v-if="expanded" class="grid">
                 <div class="min-h-0 overflow-hidden">

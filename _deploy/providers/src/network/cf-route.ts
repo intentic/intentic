@@ -8,17 +8,12 @@ import { cloudflareApi } from "./cloudflare-api.js";
 
 const cfRouteSchema = z.object({ hostname: z.string(), zoneId: z.string(), apiToken: z.string(), cname: z.string() });
 const parse = (inputs: ResolvedInputs): z.infer<typeof cfRouteSchema> => parseInputs(cfRouteSchema, inputs, "cf-route");
-// Delete tears down by hostname alone, parsed separately so it also works from a ListedResource's inputs
-// (which carry no cname; the target of an orphaned record is irrelevant to removing it).
+// Parsed separately from cname, so delete also works from a ListedResource's inputs (no cname there).
 const deleteSchema = cfRouteSchema.omit({ cname: true });
 
-// Wait until a freshly-created proxied record is globally resolvable BEFORE any downstream provider (repo,
-// app, deployment) resolves the hostname. This matters because the control-plane providers hit the public
-// url from wherever the CLI runs: if they resolve the name during its propagation window the lookup fails
-// AND the resolver caches NXDOMAIN for the zone's SOA negative-TTL (30 min on a Cloudflare zone), wedging
-// every later attempt. We probe over DoH (an HTTPS call to Cloudflare's resolver) rather than the OS
-// resolver, precisely so this readiness check never pollutes the cache the consumers depend on. Best-effort:
-// if DoH itself is unreachable we log and proceed rather than block the apply.
+// Waits until a fresh proxied record resolves before downstream providers hit it; a premature lookup would
+// cache NXDOMAIN for the zone's negative TTL. Probes over DoH so the check itself never pollutes that cache;
+// best-effort.
 export type DnsPropagationWait = (hostname: string, log: (message: string) => void) => Promise<void>;
 
 const dohResolves = async (hostname: string): Promise<boolean> => {
@@ -44,20 +39,14 @@ const waitForDnsPropagation: DnsPropagationWait = async (hostname, log) => {
     }
 };
 
-// A cf-route owns one public hostname's proxied DNS CNAME pointing at the host tunnel's cfargotunnel
-// hostname (the tunnel owns the ingress mapping the hostname to the internal service). read returns the
-// route if a CNAME for the hostname exists, surfacing its current target via detail; diff reports drift
-// when that target differs from the tunnel cname; apply upserts the proxied CNAME (stamped so it is
-// attributable) and waits for it to propagate. The url output is derived from the hostname.
+// One public hostname's proxied CNAME, pointed at the host tunnel's cfargotunnel hostname. `read` surfaces the
+// current target; `diff` compares it to the tunnel's cname; `apply` upserts the stamped CNAME and awaits propagation.
 export const createCfRouteProvider = (
     api: CloudflareApi = cloudflareApi,
     awaitPropagation: DnsPropagationWait = waitForDnsPropagation,
 ): Provider => ({
     read: async (inputs) => {
-        // On a fresh plan the cname ($ref to the tunnel's output) and even zoneId ($ref to the cf node) can
-        // still be PENDING symbols, read must tolerate that (it's the engine's read contract), so it parses
-        // only what it actually uses (the deleteSchema fields) and never touches cname. A PENDING zoneId
-        // means the zone itself is a pending create, nothing to introspect yet.
+        // cname and zoneId may still be PENDING $refs; parses only deleteSchema's fields, never cname.
         if (typeof inputs["zoneId"] !== "string") {
             return undefined;
         }
@@ -69,8 +58,7 @@ export const createCfRouteProvider = (
         return { outputs: { url: `https://${hostname}` }, detail: { content: record.content } };
     },
     diff: (inputs, observed) => {
-        // The route exists but its tunnel is a pending create, the target cname is not derivable yet.
-        // Report drift; apply resolves the real cname once the tunnel exists.
+        // Tunnel is still a pending create, so the target cname isn't derivable yet; report drift instead.
         if (typeof inputs["cname"] !== "string") {
             return { action: "update", reason: "tunnel not created yet, its cname is not derivable" };
         }
@@ -101,8 +89,8 @@ export const createCfRouteProvider = (
         }
         await api.deleteDnsRecord({ apiToken, zoneId, recordId: record.id });
     },
-    // Scan the zone for records stamped through their comment. The zone id is re-resolved from the
-    // cloudflare source's authored (apiToken, zone), a scan runs without any read pass to seed outputs.
+    // Scans the zone for stamped records; zone id is re-resolved from the cloudflare source since a scan has no read
+    // pass to seed it.
     list: async (sources, ctx) => {
         const account = sources.find((source) => source.type === "cloudflare");
         if (account === undefined) {

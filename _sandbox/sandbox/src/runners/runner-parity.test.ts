@@ -6,10 +6,8 @@ import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../
 import { runnerParity } from "./runner-parity.js";
 import { runnerSummaries } from "./runner-peer.js";
 
-/* What a runner's row is allowed to say about its build. Every case here decides a badge and an update button,
- * and the two wrong answers cost opposite things: a false "outdated" nags about a machine that is fine, and a
- * false "current" leaves a runner months behind the parent looking healthy while its link errors read as
- * network trouble. */
+// What a runner's row may say about its build: a badge and an update button. A false "outdated" nags about a healthy
+// machine; a false "current" hides one that's actually behind.
 
 const parent = { image: "ghcr.io/intentic/sandbox:2.3.1", channel: "stable", overlayHash: "abc123" };
 
@@ -23,8 +21,6 @@ test("any one axis moving is outdated, because each decides what code the turn r
     expect(runnerParity(parent, { ...parent, overlayHash: "def456" })).toBe("outdated");
 });
 
-/* An overlay the owner added to the parent and not to the runner differs in exactly the way a turn notices,
- * when the tool it installed is missing. Neither side having one is agreement, not a gap. */
 test("an overlay on one side only is a difference; neither side having one is not", () => {
     const stock = { image: parent.image, channel: parent.channel };
     expect(runnerParity({ ...stock }, { ...stock })).toBe("current");
@@ -32,8 +28,7 @@ test("an overlay on one side only is a difference; neither side having one is no
     expect(runnerParity(stock, parent)).toBe("outdated");
 });
 
-/* UNKNOWN IS A REAL ANSWER, twice over: a runner that has never connected has told us nothing to compare, and
- * a dev parent cannot name its own image, so a warning drawn from either would be one nobody can act on. */
+// Twice over: a runner that never connected has nothing to compare, and a dev parent can't name its own image either.
 test("nothing to compare, or nothing to compare against, reads as unknown rather than as a warning", () => {
     expect(runnerParity(parent, undefined)).toBe("unknown");
     expect(runnerParity(parent, { image: "" })).toBe("unknown");
@@ -41,17 +36,14 @@ test("nothing to compare, or nothing to compare against, reads as unknown rather
     expect(runnerParity({ image: "dev" }, { image: "dev" })).toBe("unknown");
 });
 
-/* The container name the update and rebuild flows address a runner by. It has to be `ic`'s own spelling
- * (runner.rs SLUG_PREFIX): a mismatch sends the flow at a container that does not exist and reports "no such
- * sandbox" about a runner sitting right there in the list. */
+// Must match ic's own spelling (runner.rs SLUG_PREFIX), or the update/rebuild flow addresses a container that doesn't
+// exist.
 test("a runner's container is its name under ic's prefix", () => {
     expect(runnerSlug("rig")).toBe("runner-rig");
 });
 
-/* THE PARITY LOOP, both halves without a socket: the parent's drift lines (what a runner's card says when its
- * environment or settings differ from this sandbox's) and the runner's adopt (what the sync door does to its
- * settings store). Together they are the loop's invariant: adopt what the parent would send, and the drift
- * lines go empty. */
+// The parity loop's two halves, tested without a socket: the parent's drift lines, and the runner's adopt. Adopting
+// what the parent would send is what makes the drift go empty.
 
 const summaryServices = (input: {
     parentSettings?: Record<string, unknown>;
@@ -64,8 +56,7 @@ const summaryServices = (input: {
         sandboxSettings: { get: async () => ({ ...input.parentSettings }) },
         runners: { list: async () => [{ id: "rig" }] },
         runnerHub: {
-            // A runner that never connected has announced nothing; one that did carries its hello's claim,
-            // the settings-only definition included, beside the socket (runner-peer.ts).
+            // Never connected announces nothing; a connected runner carries its hello's claim beside the socket state.
             state: () =>
                 input.state?.["image"] === undefined
                     ? { online: false }
@@ -89,8 +80,6 @@ test("agreement is an EMPTY drift list, distinct from the absent one a silent ru
     );
     expect(agreeing[0]?.drift).toEqual([]);
 
-    // Never connected: no image in the state, nothing to compare — absent, so the card stays quiet instead
-    // of claiming an agreement nobody measured.
     const silent = await runnerSummaries(summaryServices({ state: {} }));
     expect(silent[0]?.drift).toBeUndefined();
 });
@@ -107,8 +96,7 @@ test("a differing overlay hash and a differing setting each earn their line, wit
     );
     const drift = summaries[0]?.drift ?? [];
     expect(drift.map((line) => line.subject)).toEqual(["Environment overlay", "Setting hashlineEdits"]);
-    // The overlay's remedy is a rebuild (remove and re-add); the setting's is the sync door, which the UI
-    // keys off the "Setting " subject prefix.
+    // Overlay's remedy is a rebuild; the setting's is the sync door, keyed off the "Setting " subject prefix.
     expect(drift[0]?.detail?.length).toBeGreaterThan(0);
     expect(drift[1]?.detail?.length).toBeGreaterThan(0);
     expect(drift[0]?.detail).not.toBe(drift[1]?.detail);
@@ -130,13 +118,12 @@ test("adopt REPLACES: an omitted key returns to its default, and adopting the pa
         },
     } as unknown as Services;
 
-    // The parent stopped setting iqSearch and turned hashlineEdits on; the runner had the opposite.
+    // The parent's claim omits iqSearch and sets hashlineEdits; the runner starts with the opposite.
     const parentClaim = await runnerClaim({ hashlineEdits: true });
     const applied = await adoptDefinitionSettings(runner, parseDefinitionToml(parentClaim));
     expect(applied).toEqual(["hashlineEdits"]);
     expect(stored?.["hashlineEdits"]).toBe(true);
     expect(stored?.["iqSearch"]).toBe(SandboxSettingsSchema.parse({}).iqSearch);
 
-    // And the loop closes: the runner's next claim equals the parent's, so the drift lines are gone.
     expect(await runnerClaim(stored ?? {})).toBe(parentClaim);
 });

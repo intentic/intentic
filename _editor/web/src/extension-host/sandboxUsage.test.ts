@@ -5,9 +5,9 @@ vi.mock(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 
-/* The ledger's job is to turn concrete calls back into the manifest lines that permitted them, and to lose
- * nothing on the way to the daemon. Both are properties nobody would notice breaking: a miscounted route reads
- * exactly like an unused one. */
+// Ledger turns concrete calls back into the manifest lines that permitted them, and must lose none on the way to the
+// daemon.
+// Both properties fail silently: a miscounted route reads exactly like an unused one.
 
 const PERMISSIONS = [`GET /panels`, `POST /panels/*/start`, `GET /workspace/file`];
 
@@ -19,9 +19,8 @@ beforeEach(async () => {
 });
 
 test(`counts against the declared entry, not the path that was called`, async () => {
-    // The point of the whole design: a wildcard entry and a query string collapse onto the manifest line an
-    // author would delete. Counting concrete paths would make the figures unbounded AND make them a record of
-    // what the owner was doing rather than of what the extension needs.
+    // Concrete paths (a wildcard entry, a query string) collapse onto the manifest line that permitted them.
+    // Counting the raw path would be unbounded and record what the owner did, not what the extension needs.
     recordSandboxCall(`repo-apps`, PERMISSIONS, `POST`, `/panels/my-app/start`);
     recordSandboxCall(`repo-apps`, PERMISSIONS, `POST`, `/panels/other-app/start`);
     recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/workspace/file?path=src/main.ts`);
@@ -59,8 +58,7 @@ test(`keeps the counts when the daemon is unreachable`, async () => {
     recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/panels`);
     await flushSandboxUsage();
 
-    // Re-queued, not lost: this measures whether a permission is used at all, and a minute of downtime must not
-    // read afterwards as a minute of the extension not needing it.
+    // Re-queued, not lost: downtime must not read afterward as the extension not needing the permission.
     recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/panels`);
     await flushSandboxUsage();
 
@@ -74,8 +72,7 @@ test(`reports nothing at all when nothing was called`, async () => {
 });
 
 test(`ignores a call no declared entry covers`, async () => {
-    // Unreachable through the gate, which throws first, so this only happens if the two matchers ever disagree,
-    // and an unattributable call is worse than no call: it would credit a permission that did not permit it.
+    // The gate throws first in practice; this guards against ever crediting an uncovered call.
     recordSandboxCall(`repo-apps`, PERMISSIONS, `DELETE`, `/panels`);
     await flushSandboxUsage();
     expect(sandboxJson).not.toHaveBeenCalled();

@@ -1,10 +1,8 @@
 export { clipboardOf } from "./lib/clipboard.js";
-// "The browser is opening this one itself, stand down": the one test every navigational row, tile and menu
-// item in the app runs before it also does app work on a click, and the pair of anchor attributes that applies
-// it for the surfaces with no router to reach. See lib/link.ts.
+// `browserOwnsClick` is the check a navigational row/tile/menu item runs before also doing app work on a click;
+// `appLink` applies the matching anchor attributes for surfaces with no router.
 export { appLink, browserOwnsClick } from "./lib/link.js";
-// Waiting on a freshly-minted preview hostname, and the tab-opening dance around a forwarded port. Three
-// surfaces had written the same loop, one of them an extension that could reach neither of the others.
+// Waiting for a freshly minted preview hostname, and the tab-opening dance for a forwarded port.
 export {
     type ForwardedPortTab,
     openForwardedPort,
@@ -24,27 +22,20 @@ export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anch
 export { default as BarChart } from "./components/charts/BarChart.vue";
 export { type BarItem } from "./components/charts/barChart.js";
 export { default as BottomSheet } from "./components/layout/BottomSheet.vue";
-// <Avatar> for things rather than people: the logo → glyph → initials ladder every surface that LISTS
-// something needs, and that four call sites had each got a different amount of right.
+// <Avatar> for things rather than people: the logo, then glyph, then initials fallback ladder.
 export { default as BrandMark } from "./components/brand/BrandMark.vue";
-/* THE APP'S ACTION BUTTON, and the reason nothing should import `primevue/button` directly any more. It is
- * PrimeVue's, pixel for pixel, with the one thing a bare button cannot do: a press whose handler returns a
- * promise locks the button in the same tick and draws itself working if the wait outlives a beat. Every
- * "I clicked Approve twice and got an error" is that lock missing, and a design system is the only place to
- * fix it once for three hundred call sites. `v-action` is the same behaviour for hand-styled elements. */
+// PrimeVue's Button wrapped so a press whose handler returns a promise locks the button and shows a working state
+// once the wait outlasts a beat. `v-action` gives hand-styled elements the same behaviour.
 export { default as Button } from "./components/primitives/Button.vue";
 export { vAction } from "./lib/pressAction.js";
 export { default as Card } from "./components/layout/Card.vue";
-// The two halves of a changed-file row, shipped together because they are always drawn together: git's status
-// letter in its fixed-width cell, and the +/- line-count badge beside it. Six surfaces had each written both by
-// hand, and the seventh caller was an extension, which could reach none of the six.
+// Git's status letter and the +/- line-count badge for a changed file row, shipped together since they're always
+// drawn together.
 export { default as ChangeStatusMark } from "./components/feedback/ChangeStatusMark.vue";
 export { type ChangeStatus } from "./components/feedback/changeStatus.js";
 export { default as DiffStat } from "./components/charts/DiffStat.vue";
 export { default as Code } from "./components/primitives/Code.vue";
-// The writing half of <Code>, the same colours, with a caret in them. Ships beside it for the reason <Row>
-// ships beside <RowGroup>: the read-only block on its own is what made every surface that also had to EDIT
-// the file fall back to a bare grey <textarea> next to it.
+// Editable counterpart to <Code>: same styling, with a caret.
 export { default as CodeField } from "./components/forms/CodeField.vue";
 export { default as ConfirmDialog } from "./components/overlays/ConfirmDialog.vue";
 export { default as ContextMenu } from "./components/overlays/ContextMenu.vue";
@@ -52,44 +43,31 @@ export { default as CopyButton } from "./components/primitives/CopyButton.vue";
 export { type TallyItem, default as StatusTally } from "./components/charts/StatusTally.vue";
 export { default as DagEditor } from "./components/charts/DagEditor.vue";
 export { default as DagGraph } from "./components/charts/DagGraph.vue";
-/* The app's ONE expandable record row: <Row> plus the chevron, the ARIA, the open tint and the indented rail
- * beneath. It ships because fourteen lists had each answered those four questions alone and arrived at five
- * chevron spellings, four indents and four tints — and, on the ports list, at an `(i)` that toggled, thirty
- * pixels below an <InfoHint> whose `(i)` does not. */
+// <Row> plus the expand chevron, ARIA state, open tint and indented rail: the app's one expandable record row.
 export { default as DisclosureRow } from "./components/rows/DisclosureRow.vue";
-/* <Row>'s tier table, exported because <DisclosureRow> draws the lead cluster a SECOND time (hidden) to
- * offset the block below it, and a mirror built from restated numbers is a mirror that goes stale.
- *
- * `useRowDensity` is the other half: the tier is declared once on a <RowGroup> and read by every row, outline
- * and note on its surface. A view needs it only for a row it draws itself and cannot express as a <Row>. */
+// Row's tier constants (padding, gaps, tones), plus `useRowDensity`: a tier is declared once on <RowGroup> and
+// read by every row on that surface. Needed only for a row that can't be expressed as a <Row>.
 export { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone, useRowDensity } from "./components/rows/row.js";
-// Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
-// does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
-// DOM with it) to call one. See the note above renderMarkdown's subpath.
-// `layoutDag` ships beside the types because a caller sometimes needs to know WHERE the graph put things,
-// the chat panel groups a run's steps into the columns the reader can see, and computing that from the
-// dependency depth instead would be a second opinion about a layout dagre has already decided.
+// Types only; the layout functions ship as `@intentic/ui/dag` so a plain unit test avoids this barrel's component
+// graph. `layoutDag` is exported here too since callers need to know where the graph placed nodes.
 export { type DagEdge, type DagNode, layoutDag } from "./components/charts/dagLayout.js";
-// The instrument above a list, free text, the controls that narrow it, and any bare action. In the kit rather
-// than in any one view because six views had written the row by hand and no two of them agreed.
+// Free-text search, narrowing controls and a bare action row above a list.
 export { default as FilterBar } from "./components/forms/FilterBar.vue";
-// A textarea as tall as its content, for the composers <ProseField>'s grid replica is not a drop-in for. Four
-// of them had each measured it themselves, and had three different answers to the same two edge cases.
+// Grows a textarea to fit its content; for cases <ProseField>'s grid replica doesn't cover.
 export { growTextarea } from "./lib/growTextarea.js";
 export { default as Icon } from "./components/primitives/Icon.vue";
-// THE surface that shows a picture, the workspace file viewer's images (through the viewers extension), the
-// SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
-// transparency checkerboard behave identically wherever an image appears.
+// Shared image viewer (zoom, pan, transparency checkerboard): the workspace file viewer, the SVG preview and both
+// sides of a binary diff all use it.
 export { default as ImageView } from "./components/primitives/ImageView.vue";
 export { type ImageViewState, isRenderableImage } from "./components/primitives/imageView.js";
 export { default as InfoDialog } from "./components/overlays/InfoDialog.vue";
 export { default as InfoHint } from "./components/feedback/InfoHint.vue";
 export { default as InfoTable } from "./components/feedback/InfoTable.vue";
-// One device's desktop-sync detail, folders, localhost ports, watcher liveness. The BODY only: the desktop
-// app and the web's Devices tab frame it differently and state exactly the same facts inside.
+// Body of one device's sync detail (folders, localhost ports, watcher liveness); the desktop app and web Devices
+// tab frame it differently.
 export { default as DeviceDetail } from "./components/sandbox/DeviceDetail.vue";
-// The pane under a working row: the machine's own output, verbatim. Shared for the same reason the row above
-// it is, both apps drive the same containers and had grown their own.
+// Verbatim machine output pane under a working row; shared by the desktop app and web, which drive the same
+// containers.
 export { default as DeviceRunLog } from "./components/sandbox/DeviceRunLog.vue";
 export {
     type GroupSummary,
@@ -101,23 +79,19 @@ export {
     type DeviceSandboxResources,
     type DeviceSandboxRow,
     type DeviceAgentState,
-    // Whether that device is off this sandbox's ports, for a caller that has to decide which way its own
-    // button points: the Devices tab offers Stop or Start mirroring off exactly this answer.
+    // Whether the device is off this sandbox's ports; decides which way a Stop/Start button points.
     mirroringOff,
-    // One sandbox's share of its machine as one line, for a caller that says it somewhere the row does not.
+    // One sandbox's machine-resource share as a single line, for display outside the row.
     resourcesSummary,
-    // The same grouping the view draws, for a caller that has to COUNT what it is about to draw, the
-    // Devices tab's folded machine line says how many sandboxes are under it and how many want attention.
+    // The view's own grouping, for a caller that needs to count sandboxes and attention flags before drawing.
     sandboxGroups,
 } from "./components/sandbox/deviceDetail.js";
-/* The form behind the row's Resources… verb: a sandbox's memory and CPU caps, privileged, GPU, applied as a
- * recreate onto the same image. Shared for the reason the row is, and its arithmetic ships beside it (and as
- * `@intentic/ui/sandbox-resources`, so the tests that pin it need no DOM): the caller hands over the container's
- * share and the machine's engine, and forwards the ask that comes back without reading it. */
+// Sandbox Resources… dialog: memory/CPU caps, privileged mode, GPU, applied as a recreate onto the same image.
+// Its arithmetic also ships DOM-free as `@intentic/ui/sandbox-resources`.
 export { default as SandboxResourcesDialog } from "./components/sandbox/SandboxResourcesDialog.vue";
 export { type EngineFacts, type ResourcesAsk } from "./components/sandbox/sandboxResources.js";
-// The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
-// Here because the desktop manager and the web Devices tab render the same row and had drifted apart.
+// Verb row (buttons, order, labels, which one is destructive) for one sandbox's line; shared by the desktop
+// manager and the web Devices tab.
 export { default as SandboxVerbs } from "./components/sandbox/SandboxVerbs.vue";
 export {
     DESTRUCTIVE_VERB,
@@ -129,114 +103,85 @@ export {
     VERB_LABEL,
 } from "./components/sandbox/sandboxVerbs.js";
 export { default as Markdown } from "./components/markdown/Markdown.vue";
-/* THE ONE SURFACE A MARKDOWN CONFIG IS WRITTEN ON: rendered prose you type straight into, with the app's only
- * two save policies behind one status line. Exported and <MarkdownDocumentSurface> deliberately is NOT: the
- * surface is the engine (a `contenteditable` that owns its own DOM and has no opinion about persistence), and
- * shipping it alongside would offer a second, worse answer to the question this component exists to settle.
- * A caller that wants a frame around one builds it, or reuses <NoteEditor>, which is exactly that. */
+// Editable markdown surface with the app's two save policies behind one status line. The underlying engine (a
+// bare contenteditable) is not exported; use <NoteEditor> or build a frame around this.
 export { default as MarkdownDocument } from "./components/markdown/MarkdownDocument.vue";
 export { default as MarkdownFigure } from "./components/charts/MarkdownFigure.vue";
-// A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
-// because a view holding a diagram outside prose (a stored architecture note, a generated report) should not
-// have to wrap it in a markdown document to get one.
+// Renders a mermaid diagram from fence-body text in the app's tokens, for diagrams outside prose that shouldn't
+// need wrapping in a markdown document.
 export { default as MermaidDiagram } from "./components/charts/MermaidDiagram.vue";
-// THE centred box, and the only thing that should reach for PrimeVue's Dialog. Seventeen dialogs had each
-// typed their own width into a style attribute, thirteen different ones, and exactly one of the seventeen
-// carried the viewport clamp that stops a modal running off the side of a phone. The width is a named size
-// here and the clamp is not the caller's to remember. <ConfirmDialog> and <InfoDialog> are built on it.
+// Centred modal wrapping PrimeVue's Dialog, with a named width and a viewport clamp built in. <ConfirmDialog> and
+// <InfoDialog> build on it.
 export { default as Modal } from "./components/overlays/Modal.vue";
-// The index column: a filter, pinned rows, grouped selectable rows, a footnote. Owns the chrome; the row stays
-// the caller's, because a rail's rows differ for good reasons and its scrollbar never did.
+// Index-column chrome (filter, pinned rows, grouped selection, footnote); the row itself stays the caller's.
 export { default as NavRail } from "./components/layout/NavRail.vue";
 export { type NavGroup } from "./components/layout/navRail.js";
-// One markdown note, read and curated: the action cluster, the delete confirmation, the error strip, and the
-// one surface a file is both read and written on. Two extensions had each built the frame around <ScrollFrame>;
-// `useNoteDraft` is the lifecycle underneath it, which they had each built too.
+// Read/curate one markdown note: action cluster, delete confirmation, error strip, built on <ScrollFrame>.
+// `useNoteDraft` is its lifecycle.
 export { default as NoteEditor } from "./components/forms/NoteEditor.vue";
 export { type NoteDraft, type NoteDraftOptions, useNoteDraft } from "./composables/useNoteDraft.js";
-// Where those unsaved edits live while the pane above them is reused: the draft map the note lifecycle asks
-// its caller for, held once instead of in every view that opens one.
+// Draft map for unsaved note edits, held once rather than per view, for a pane that gets reused.
 export { useKeyedDraft } from "./composables/useKeyedDraft.js";
-// How the app says something went wrong: a sentence it wrote, the raw cause underneath, at most one way out.
-// The stack is what a view with more than one thing wrong renders, it ranks by severity and collapses repeats,
-// so the reading order stops being an accident of where the boxes sit in the template.
+// Notice: a written sentence, the raw cause, and at most one way out. NoticeStack ranks multiple notices by
+// severity and collapses repeats.
 export { default as Notice } from "./components/feedback/Notice.vue";
 export { default as NoticeStack } from "./components/feedback/NoticeStack.vue";
 export { type NoticeAction, type NoticeModel, type NoticeTone } from "./components/feedback/notice.js";
 export { default as Page } from "./components/layout/Page.vue";
-// The button that goes in <PageHeader #actions>, and the only thing that should, the named recipe that keeps
-// PrimeVue Button's variant matrix out of the one slot every view fills.
+// The only button for <PageHeader #actions>: a named recipe that keeps Button's variant matrix out of callers.
 export { default as PageAction } from "./components/layout/PageAction.vue";
 export { default as PageHeader } from "./components/layout/PageHeader.vue";
-/* The way out of a full-screen view, which <PageHeader> wears and the mobile shell publishes. Exported because
- * the shell that provides it lives in the web app, not here; nothing else should need either half. */
+// Escape hatch for a full-screen view; <PageHeader> consumes it, the mobile shell (in the web app) provides it.
 export { type PageBack, providePageBack, usePageBack } from "./components/layout/pageBack.js";
-/* <Avatar>'s counterpart for a name nobody has a photograph of: a cartoon character assembled from the name
- * itself, so a persona looks like somebody rather than like a label. It sat in the web app until the two
- * surfaces where you CHOOSE a persona turned out to be extensions, which could reach nothing in there, the
- * same reason <BrandMark> and <SplitView> ended up here. A face is identity, and identity has to be the same
- * drawing on every surface or it is not identity. */
+// <Avatar>'s counterpart when there's no photo: a cartoon assembled from the name, so a persona reads as the same
+// face on every surface.
 export { default as PersonaFace } from "./components/brand/PersonaFace.vue";
 export { type PersonaLike } from "./components/brand/personaFace.js";
-// A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
-// component because every caller of the header wrapped it in the frame, and the min-h-0/overflow-hidden scroll
-// contract it owns is the failure three views had each rediscovered, one of them incorrectly.
-//
-// NAMED FOR THE CONTRACT, not for the shape, and renamed from `Panel` to get there. Thirteen files in this repo
-// end in `Panel`. ChatPanel, TerminalPanel, ReviewPanel, AccountPanel, and every one of them means "a region
-// of the screen", which is a word this component cannot own. It also meant the one name a view could not learn:
-// none of those thirteen used it, and thirty-nine files hand-wrote the scroll contract instead. `ScrollFrame`
-// says what it does and collides with nothing (not even Vue Flow's own <Panel>, which DagEditor imports).
+// Bordered surface: own header, own interrupting strips, one scrolling body (the min-h-0/overflow-hidden
+// contract). Named for the contract, not the shape; avoids the ambiguous `Panel` name used elsewhere in the app.
 export { default as ScrollFrame } from "./components/layout/ScrollFrame.vue";
 export { default as Picker } from "./components/forms/Picker.vue";
 export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/forms/picker.js";
 export { default as ProgressRing } from "./components/charts/ProgressRing.vue";
-// The writing field, `ui.input()`'s counterpart for text read in sentences. Borderless, and as tall as what
-// has been typed into it.
+// Borderless writing field, `ui.input()`'s counterpart for prose; grows with its content.
 export { default as ProseField } from "./components/forms/ProseField.vue";
 export { default as PullToRefresh } from "./components/layout/PullToRefresh.vue";
-// "Which repository", as the narrowing column two workspace-wide boards had each written: the pinned "all" row,
-// one number per repository, and the same rail folded into a <Picker> once the split is too narrow for it.
+// Repository-narrowing rail: a pinned "all" row, one count per repository, folds into a <Picker> when the split
+// is too narrow.
 export { default as RepoRail } from "./components/layout/RepoRail.vue";
 export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/layout/repoRail.js";
-// The drag strip between two panes. Four screens had written it by hand before this existed, and the fifth
-// caller was an extension, which could not have reached any of the four.
+// Drag strip between two panes.
 export { default as ResizeSeam } from "./components/layout/ResizeSeam.vue";
-// The app's standard touch swap, anchored panel on desktop, bottom sheet on a phone, behind one open flag.
-// <Picker> had encapsulated it internally without exposing it, so five other menus wrote the pair out by hand.
+// Anchored panel on desktop, bottom sheet on a phone, behind one open flag.
 export { default as ResponsiveOverlay } from "./components/overlays/ResponsiveOverlay.vue";
 export { default as Row } from "./components/rows/Row.vue";
 export { default as RowGroup } from "./components/rows/RowGroup.vue";
-// The lines on a group's surface that are not records: its empty state, its explanatory sentence, its "add one".
-// Draws at the group's own tier, which is what the 58 hand-written ones could not do. See the component's note.
+// Non-record lines on a group's surface (empty state, explanatory sentence, add-one prompt), drawn at the
+// group's own tier.
 export { default as RowNote } from "./components/rows/RowNote.vue";
 export { default as SearchBar } from "./components/forms/SearchBar.vue";
 export { default as SegmentedControl } from "./components/forms/SegmentedControl.vue";
-// The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds
-// authored accents (a documentation map's components, say) has to paint them the way a figure would.
+// Accent to palette-slot resolver, for a view with authored accents (e.g. a documentation map) to paint them the
+// way a figure would.
 export { seriesColor } from "./components/charts/seriesAccent.js";
-// The shape of a list that is still loading, built out of real <Row>s so it cannot drift from the list it
-// stands in for. The single-bar case needs no component, that is the `skeleton` class on any box.
+// Loading placeholder built from real <Row>s so it can't drift from the list it stands in for. A single bar
+// needs no component: use the `skeleton` class directly.
 export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue";
-// The index-and-body screen, five views were four implementations of it, and the one that had solved it
-// (HubLayout) lived in the web app where no extension could reach it.
+// Index-and-body screen layout.
 export { default as SplitView } from "./components/layout/SplitView.vue";
-// Whether that screen has folded its index above its body, what a rail asks so its own compact form arrives at
-// the same width the shell's does.
+// Whether the screen has folded its index above its body; lets a rail match the shell's compact-width breakpoint.
 export { useCompact } from "./components/layout/splitView.js";
 export { default as StatStrip } from "./components/charts/StatStrip.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/feedback/StatusBadge.vue";
 export { default as StepSection } from "./components/layout/StepSection.vue";
-/* ONE MEASURED ANSWER — the figure, its unit, what qualifies it, what it was measured over — in the three ranks
- * a card, a settings row and a second reading of the same experiment are drawn at. It ships because the app
- * reports the SAME A/B experiments on two tabs and had two languages for them: a 2xl figure in a <SavingsCard>
- * on Usage, and a `bg-canvas` well inside a <Row>'s `#below` on Agent, each with its own copy of the tone map. */
+// A measured figure (value, unit, qualifier, sample) drawn at one of three ranks (card, settings row, inline).
+// Used where the app reports the same experiment result on more than one tab.
 export { default as Verdict } from "./components/charts/Verdict.vue";
 export { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./components/charts/verdict.js";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
-// The markdown ENGINE is not re-exported here, it ships as `@intentic/ui/markdown` so plain .ts modules
-// and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
+// Markdown engine ships separately as `@intentic/ui/markdown`, so plain-TypeScript callers and tests avoid this
+// barrel's component graph.
 export { vTw } from "./lib/tw.js";
 export { type CodeToken, useHighlighter } from "./composables/useHighlighter.js";
 export {
@@ -252,28 +197,11 @@ export {
     initialsOf,
     timeAgo,
 } from "./lib/format.js";
-// The app's one "how far back" vocabulary, the 1h/24h/7d/All pills, the cutoff they mean, and the words a
-// caller says about them. Activity and Logs had each written all three.
+// Time-window vocabulary (1h/24h/7d/All): the cutoff each pill means and the words to show for it.
 export { sinceOf, TIME_WINDOWS, type TimeWindow, timeWindowWords, withinWindow } from "./lib/timeWindow.js";
-// Path splitting is NOT re-exported here, it ships as `@intentic/ui/path`, for the same reason the
-// markdown engine does: `fileType.ts` and `explorerPaste.ts` are unit-tested plain TypeScript, and neither
-// should have to boot this barrel's component graph (and a DOM with it) to split a string on "/".
-//
-// The Shiki grammar table is NOT re-exported here either, and ships as `@intentic/ui/langs`. Same reason,
-// same caller: `fileType.ts` maps every extension the app knows onto a `ShikiLang`, and that is the module the
-// mapping has to be checked against.
-//
-// `seriesColor` above is the one export that ships BOTH ways, and deliberately. A Vue caller reaches it here
-// (the documentation sidebar paints an authored accent, and it has already booted this graph to render at
-// all); a plain-TypeScript caller reaches the same function at `@intentic/ui/series`, because the
-// usage/savings projections are unit-tested in a node environment and this barrel pulls Picker.vue →
-// useDevice → `window` in behind it. One implementation, two doors, and the subpath is the one that must
-// stay open, a test that has to stub matchMedia to compute a colour is a test about the wrong thing.
-// The name vocabulary and the set switcher. Asking whether an OPEN string (a manifest's `icon`, an
-// `Activation.icon`) is one of these names is `isIconName`, and it lives at `@intentic/ui/icons` rather than
-// here: its callers are pure-TypeScript, a renderer's fallback ladder, and the tests that read our own
-// extensions' manifests off disk, and reaching it through this barrel boots Picker.vue and wants a DOM.
-// Renderers should keep using <Icon name="…">.
+// Path splitting, the Shiki grammar table and `seriesColor` also ship as plain-TypeScript subpaths
+// (`@intentic/ui/path`, `@intentic/ui/langs`, `@intentic/ui/series`) so DOM-free callers and tests avoid this
+// barrel's component graph. Icon names live at `@intentic/ui/icons` for the same reason; render with <Icon name="…">.
 export { type IconName } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export {
@@ -287,44 +215,31 @@ export {
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { commandLang, type CommandOs, OS_OPTIONS, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
-/* Is THIS ELEMENT too narrow for the layout it wants, the pane-shaped question, and almost always the one a
- * view means. `useDevice` answers about the screen, and a view that renders between the rail and a draggable
- * chat panel is never as wide as the screen. */
+// Whether this element, not the screen, is too narrow for its layout; useDevice answers about the screen only.
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
-/* Every draggable divider in the app: the chat's left edge, the terminal's top, the explorer's and the review
- * list's, the agent rail's right. The pointer-capture dance is identical in all five and only the setter is not. */
+// Every draggable divider in the app; only the per-surface setter differs.
 export { type PointerResize, usePointerResize } from "./composables/usePointerResize.js";
-/* The scroll position belongs to the reader, but only for as long as it is ABOUT something. On a page-scrolling
- * surface, changing what a view is showing leaves the old document's offset pointing into the new one. */
+// Resets a page-scrolling surface's scroll position when the shown document changes; otherwise the old offset
+// points into the new content.
 export { useScrollReset } from "./composables/useScrollReset.js";
-/* The other half of a pinned stack: what the SECOND sticky thing has to clear. Measured rather than written
- * down, because the height of a bar carrying a field and two pickers is a fact about its width. */
+// What a second sticky element must clear below the first; measured, since a filter bar's height depends on its
+// width.
 export { type StickyTop, useStickyTop } from "./composables/useStickyTop.js";
-/* The other half of a narrowing rail: where the reader left it. Four surfaces grew one of these menus and all
- * four forgot the pick the moment you clicked away, because the choice lives in the URL and the rail tile opens
- * a view at its bare address. Shipped as one composable rather than solved four times, for the same reason
- * <SplitView> is here at all. */
+// Remembers where a narrowing rail was left, since its choice lives only in the URL and a rail tile opens a view
+// at its bare address.
 export { useRailMemory } from "./composables/useRailMemory.js";
-/* The wall clock and the mutation-report shape moved here from the web app when the drafts queue became an
- * extension: both are exactly what every view with a live readout or a user-facing mutation hand-rolls, and the
- * app's four independent `now` intervals were the original argument for the first one. */
+// Shared wall clock and mutation-report shape, for any view with a live readout or a user-facing mutation.
 export { useNow } from "./composables/useNow.js";
-/* WHEN A WAIT IS ALLOWED TO BE SEEN, the gate every <SkeletonRows> and every hand-drawn outline belongs
- * behind, and the half of a loading state that is invisible in a screenshot. A warm read answers under the
- * reveal delay, so the common case paints no placeholder at all; without the gate a 90ms round-trip flashes a
- * field of grey bars and the eye reads it as a fault. It moved here from the web app for the reason <Row>
- * ships beside <RowGroup>: the outline was already in the kit and the rule about when to draw it was not, so
- * every extension that grew a placeholder drew it ungated, three of them, all flashing. */
+// Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
+// flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";
 export { errorMessage, noticeFrom, noticeOf, useAsyncAction } from "./composables/useAsyncAction.js";
-/* HOW AN ACCOUNT PREFERENCE IS DECLARED, and the only way one should be: read, write, apply and hear it change
- * in another window are one definition, so a setting cannot be live in the window it was changed in and stale in
- * the popped-out panel on the second screen. See composables/preference.ts. */
+// Declares an account preference: read, write, apply and cross-window change notification in one definition, so
+// a setting can't be live in one window and stale in another.
 export { definePreference, type PreferenceOptions, receivePreferenceChange, storedPreference } from "./composables/preference.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
-// The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns
-// the picked colour into the ramps every surface, border and link resolves through), a caller only ever
-// needs the picker and `useTheme().accent`.
+// Accent-colour control; the ramp maths stays in themeColor.ts, callers just use the picker and
+// `useTheme().accent`.
 export { default as ColorPicker } from "./components/forms/ColorPicker.vue";
 export { type TextSize, useTextSize } from "./composables/useTextSize.js";

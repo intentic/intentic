@@ -1,30 +1,5 @@
-/* A `<template>` THAT VUE DOES NOT COMPILE AWAY, anywhere in the app: the one defect class that every other
- * check in this repo passes straight through.
- *
- * WHAT HAPPENED. The mobile Workspace wrapped its file listing in a bare `<template>`:
- *
- *     <div class="pb-24">
- *         <template>                       <!-- no v-if / v-for / v-slot -->
- *             <button v-for="node in listing" …
- *
- * Vue removes a `<template>` only when it carries a structural directive (`v-if`, `v-else-if`, `v-else`,
- * `v-for`, `v-slot`). Without one it is passed through as a REAL HTML `<template>` element, which the browser
- * renders `display: none` and never paints. So every file row was in the DOM, with the right text, at 0×0. The
- * Files tab was a blank rectangle. So were its empty state, its loading line and its "N more entries" notice,
- * because all four lived inside the dead wrapper.
- *
- * WHY A COMPILE-LEVEL TEST RATHER THAN A MOUNTED ONE. Nothing about that code is type-incorrect, lint-worthy or
- * absent from the render tree: typecheck passed, oxlint passed, and a mounted test asserting "the row exists"
- * passes too: the row does exist. Only its GEOMETRY was wrong, and geometry needs a real layout engine, which
- * is what `_tools/e2e/mobile/audit.mts` brings (it gates the same route on a phone-shaped browser).
- *
- * This is the cheap half of that pair, and it is the one that scales: it reads the templates directly, so it
- * covers every view in the app at once, needs no browser, no fixture and no mocks, and it cannot go stale as
- * routes are added. The e2e gate proves the app draws; this proves nobody can reintroduce the cause.
- *
- * A directive-less `<template>` is ALWAYS a mistake in this codebase: there is no case where shipping a real
- * `<template>` element to the browser is the intent (nothing here uses one as a client-side cloning source), so
- * the rule needs no exceptions and no allowlist to drift out of date. */
+// Pins that every nested `<template>` in the app carries a structural directive (v-if/else/for/slot); one that
+// doesn't compiles to a real, hidden HTML element instead of being removed.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
@@ -32,8 +7,7 @@ import { parse } from "vue/compiler-sfc";
 
 const SRC = join(import.meta.dirname, `..`);
 
-// The directives that make Vue treat a `<template>` as a fragment rather than as an element. `v-slot` covers
-// its `#name` shorthand, which the parser reports under the same directive name.
+// Directives that make `<template>` a fragment; `v-slot`'s `#name` shorthand reports under the same name.
 const STRUCTURAL = new Set([`if`, `else-if`, `else`, `for`, `slot`]);
 
 const vueFiles = (dir: string): string[] =>
@@ -50,33 +24,21 @@ interface DeadTemplate {
     readonly line: number;
 }
 
-/* WHICH FILES ARE WORTH PARSING, because the whole tree is not, and this rule is cheap to write and was
- * expensive to run: ~13ms of compiler per file across 259 components, 3.4s of CPU, 9.6s of it inside vitest,
- * where it is half the hang-detector budget the suite allows a test and it went over on a loaded box. Every one
- * of those parses but three answered a question the raw text had already answered.
- *
- * An offender is a NESTED `<template>` whose opening tag carries no structural directive. So a file can hold
- * one only if, after the first `<template` in it (the SFC's root block, which `parse` does not put in the AST
- * anyway, see below), some opening tag does not so much as MENTION one. Text rather than syntax, and read in
- * the forgiving direction on purpose: a mention inside a comment or a string counts as a candidate and is
- * parsed, which costs one parse and can change no verdict. Three files pass it today and all three are comments
- * discussing this very rule. The AST is still the only thing that decides. */
+// Text scan, not syntax: over-matching a comment or string costs an extra parse, never a wrong verdict.
 const STRUCTURAL_ATTR = /(^|\s)(v-if|v-else-if|v-else|v-for|v-slot|#)/;
 
 const mayHoldNested = (source: string): boolean =>
     [...source.matchAll(/<template\b([^>]*)>/g)].slice(1).some((tag) => !STRUCTURAL_ATTR.test(tag[1] ?? ``));
 
-/* Walks the template AST looking for element nodes named `template`. The ROOT `<template>` of an SFC is not in
- * here: `parse` hands back its children, so every hit is a nested one, which is exactly the population the
- * rule is about. Node type 1 is ELEMENT; `props` type 7 is DIRECTIVE. Compared numerically rather than through
- * the compiler's enums so this test does not import Vue's internal AST types. */
+// Walks the template AST for nested `<template>` elements; the SFC's root template isn't in the returned AST. Node
+// type 1 is ELEMENT, prop type 7 is DIRECTIVE, compared numerically to avoid importing Vue's internal AST types.
 const deadTemplates = (file: string): DeadTemplate[] => {
     const source = readFileSync(file, `utf8`);
     if (!mayHoldNested(source)) {
         return [];
     }
     const { descriptor, errors } = parse(source, { filename: file });
-    // A file the compiler cannot read is a different failure, and the build reports it far more loudly.
+    // A file the compiler can't parse is a different failure; the build already reports it loudly.
     if (errors.length > 0 || descriptor.template === null) {
         return [];
     }

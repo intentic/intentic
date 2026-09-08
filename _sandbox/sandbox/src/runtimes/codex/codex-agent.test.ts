@@ -12,8 +12,8 @@ const createTestAgent = (runner: CodexRunner, codexHome = "/home") => createCode
 
 const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
-// Collect all events; `onPlan`/`onQuestion` (when given) schedule an answer for each card AFTER the generator has
-// parked on the pending-request bridge (the yield suspends before wait() registers, hence the macrotask).
+// Collects all events; onPlan/onQuestion schedule their answer after the generator parks on the pending-request bridge,
+// hence the setTimeout (the yield suspends before wait() registers).
 const collect = async (
     agent: ReturnType<typeof createCodexAgent>,
     turnRequest: Parameters<ReturnType<typeof createCodexAgent>>[0],
@@ -92,7 +92,7 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.options).toEqual({
         workingDirectory: "/work",
         sandboxMode: "danger-full-access",
-        // "untrusted" on every turn now: the standing floor means there is always something that could refuse.
+        // untrusted on every turn: the standing floor means something could always refuse.
         approvalPolicy: "untrusted",
         model: "gpt-5-codex",
         // Claude's top effort level maps onto Codex's scale ceiling.
@@ -220,9 +220,7 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
-        // The card's release, carrying the id it went up with: what tells the fleet the turn stopped waiting,
-        // and the approval itself, which is what stops a client replaying this run from rebuilding the plan
-        // card and asking to have it approved all over again.
+        // requestId lets a replaying client skip rebuilding and re-asking for the same plan card.
         {
             kind: "resolved",
             requestId: expect.any(String) as string,
@@ -263,8 +261,6 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
 });
 
 test("a plan turn that fails after holding a message emits the error and NO plan frame", async () => {
-    // The plan phase held an agent_message, then the turn failed (e.g. out of credits). A failed turn must surface
-    // only the error: never a "plan" built from the pre-error message, and must not run the execute turn.
     const { runner, calls } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-7" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
@@ -276,13 +272,7 @@ test("a plan turn that fails after holding a message emits the error and NO plan
     expect(calls).toHaveLength(1);
 });
 
-/* THE FAILURE THAT COST A TEN-MINUTE TURN. The provider refused its OWN cache-retention default at the end of a
- * long run, in a sentence ending "on this model", and the turn died with a red line: nothing was resumed,
- * because a 400 reads as the request's fault, and nothing here sends that parameter to fix. Coded as the outage
- * it is, the daemon's breaker re-runs the turn from the session it already built (turn-resume.ts).
- *
- * The sentence ending in "this model" is also why the ORDER is pinned here: the model-invalid branch would have
- * claimed it and made the client drop the user's pinned model over a fault that was never the pick's. */
+// A 400 naming a parameter never sent; coded a provider outage, not model-invalid, so it retries.
 const UNSENT_PARAMETER_400 =
     '{"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
 
@@ -294,14 +284,13 @@ test("a parameter the turn never sent is coded as an outage, so the turn comes b
     const events = await collect(createTestAgent(runner), request);
     const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
     expect(failure?.code).toBe("provider-outage");
-    // The provider's own words are kept, so the reader sees what was refused, not just our gloss on it.
+    // Provider's own words are kept, not a gloss, so the reader sees what was refused.
     expect(failure?.message).toContain("prompt_cache_retention");
-    // NOT the bad-pick code: that one makes the client throw away a pinned model that had nothing to do with it.
+    // Not the bad-pick code, which would make the client drop a pinned model that wasn't at fault.
     expect(failure?.code).not.toBe("codex-model-invalid");
 });
 
-// Codex's fallback-metadata warning lands before turn.started, after which the turn answers normally. Every
-// model the subscription serves but the pinned CLI has no compiled-in metadata for emits one.
+// Codex's fallback-metadata warning; lands before turn.started for any uncompiled model.
 const ADVISORY = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";
 
 test("a non-fatal advisory is tagged rather than surfaced as a failure, and the turn's answer still lands", async () => {
@@ -322,8 +311,8 @@ test("a non-fatal advisory is tagged rather than surfaced as a failure, and the 
 });
 
 test("a plan turn survives an advisory and still proposes its plan", async () => {
-    // The regression this covers: the advisory marked the planning phase errored, so plan-emulation abandoned the
-    // turn: picking any gpt-5.6 model in Plan mode produced a red line, no plan card, and no execution.
+    // An advisory must not mark the planning phase errored, or plan-emulation would abandon a turn that produced a
+    // plan.
     const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-10" },
@@ -352,13 +341,11 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
     expect(calls[1]!.options.sandboxMode).toBe("danger-full-access");
 });
 
-// Codex's in-turn stream retry arrives as an app-server error notification carrying the retry counters its own
-// loop minted and the transport reason in parentheses. The turn keeps going.
+// Codex's stream retry arrives as an error notification with retry counters and the reason in parens.
 const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
 const PROCESS_EXIT = "Codex app-server exited (1): connection closed";
 
 test("an in-turn stream retry is a wait, not a failure: the turn's answer still lands", async () => {
-    // The incident: this frame put a red error line under a turn that then answered normally four minutes later.
     const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-11" },
         { type: "error", message: STREAM_RETRY },
@@ -366,8 +353,7 @@ test("an in-turn stream retry is a wait, not a failure: the turn's answer still 
     ]);
     expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-11" },
-        // The same frame the Claude path emits for its own in-turn retries: the chat's loader line says the turn
-        // is waiting, and the next frame retires it.
+        // Same frame the Claude path emits for its own retries, so the loader line behaves the same across runtimes.
         { kind: "provider_retry", attempt: 1, maxAttempts: 5 },
         { kind: "delta", text: "back" },
         { kind: "text_end" },
@@ -404,8 +390,7 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
 });
 
 test("a stream retry doesn't stand in for the real failure when the retries run out", async () => {
-    // Codex retries five times and then fails for real. The retry notices must not count as this turn's surfaced
-    // error, or the failure that follows them would arrive silent.
+    // Retry notices must not count as this turn's surfaced error, or the real failure that follows would arrive silent.
     const runner: CodexRunner = async function* () {
         yield { type: "error", message: STREAM_RETRY } as CodexEvent;
         throw new Error(PROCESS_EXIT);
@@ -418,8 +403,7 @@ test("a stream retry doesn't stand in for the real failure when the retries run 
 });
 
 test("an advisory doesn't stand in for the real failure when the turn then dies", async () => {
-    // surfacedError exists to stop the process transport's generic exit wrapper from clobbering an actionable message.
-    // An advisory is not that message: counting it as one would leave a genuinely failed turn silent.
+    // surfacedError stops the exit wrapper from clobbering an actionable message; an advisory must not count as one.
     const runner: CodexRunner = async function* () {
         yield { type: "error", message: ADVISORY } as CodexEvent;
         throw new Error(PROCESS_EXIT);
@@ -432,8 +416,6 @@ test("an advisory doesn't stand in for the real failure when the turn then dies"
 });
 
 test("a context-compaction item is the compact lifecycle frame, and the turn's answer still lands", async () => {
-    // The incident: every long Sol turn ended with the red error line, directly under the answer it had just
-    // produced: a thread that auto-compacts at ~90% of the window earns one of these for each compaction.
     const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-13" },
         { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
@@ -441,8 +423,7 @@ test("a context-compaction item is the compact lifecycle frame, and the turn's a
     ]);
     expect(await collect(createTestAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "thr-13" },
-        // The frame the Claude path already yields off compact_boundary: one muted "context compacted" notice in
-        // the chat for both providers, and nothing on the error channel to write turn.error or redden the card.
+        // Same frame the Claude path yields off compact_boundary: a muted notice, nothing on the error channel.
         { kind: "compact", trigger: "auto" },
         { kind: "delta", text: "carrying on" },
         { kind: "text_end" },
@@ -451,8 +432,8 @@ test("a context-compaction item is the compact lifecycle frame, and the turn's a
 });
 
 test("a plan turn survives a compaction and still proposes its plan", async () => {
-    // A compaction that marked the phase errored would have plan-emulation drop a plan the turn really produced:
-    // and a plan turn is exactly the long, tool-heavy kind that reaches the compaction threshold.
+    // A compaction marking the phase errored would drop a plan the turn really produced; plan turns are exactly the
+    // long kind that hits the threshold.
     const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-14" },
@@ -480,8 +461,8 @@ test("a plan turn survives a compaction and still proposes its plan", async () =
 });
 
 test("a compaction doesn't stand in for the real failure when the turn then dies", async () => {
-    // A turn can compact and THEN die for a real reason. The compact frame never touches surfacedError, so the
-    // app-server process-exit wrapper still gets to speak rather than the turn ending silent.
+    // The compact frame never touches surfacedError, so a turn that compacts and then really dies still gets the exit
+    // wrapper's message.
     const runner: CodexRunner = async function* () {
         yield { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } } as CodexEvent;
         throw new Error(PROCESS_EXIT);
@@ -495,9 +476,7 @@ test("a compaction doesn't stand in for the real failure when the turn then dies
 
 test("turn failures and thrown runners become error events followed by done", async () => {
     const failing = fakeCodexRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
-    // A spent-allowance message is coded rate_limit so the client treats it as a muted notice with a reset
-    // countdown rather than a red crash line, and auto-continue schedules at the reset instead of retrying
-    // every 5 seconds into a closed window.
+    // Coded rate_limit for a muted reset countdown; auto-continue waits for the reset, not a hammering retry.
     expect(await collect(createTestAgent(failing.runner), request)).toEqual([
         { kind: "error", code: "rate_limit", message: "usage limit reached" },
         { kind: "done" },
@@ -515,8 +494,7 @@ test("turn failures and thrown runners become error events followed by done", as
 });
 
 test("a streamed error survives the app-server process-exit throw", async () => {
-    // Codex streams the real cause (e.g. out of credits), then exits non-zero. The generic process wrapper must
-    // not overwrite the actionable message already surfaced.
+    // The generic process-exit wrapper must not overwrite an actionable message Codex already streamed.
     const runner: CodexRunner = async function* () {
         yield { type: "thread.started", thread_id: "thr-5" } as CodexEvent;
         yield { type: "turn.failed", error: { message: "Your workspace is out of credits." } } as CodexEvent;
@@ -671,8 +649,7 @@ test("each turn gets a steering channel, and one typed while the plan is read re
     );
 
     await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const, steering: queue }, () => {
-        // Typed while the plan card is up: the planning phase's channel has already closed, so this message
-        // belongs to the phase that has not started yet.
+        // Typed while the plan card is up; that phase's channel already closed, so it belongs to the next one.
         queue.push("use fastify");
         return { approve: true };
     });
@@ -681,14 +658,8 @@ test("each turn gets a steering channel, and one typed while the plan is read re
     expect(steered).toEqual([[], ["use fastify"]]);
 });
 
-/* THE OWNER'S SAFETY POLICY ON CODEX, over `item/commandExecution/requestApproval`. Before this, the policy was
- * silently a Claude Code setting: a turn on this runtime was never asked and never refused.
- *
- * The judge is a stub in every test below. What is under test is that a Codex turn reaches the same pipeline
- * and honours the same verdicts; whether a real model reads a policy correctly is command-judge.test.ts's.
- *
- * The approval event is built by hand rather than through fakeCodexRunner's list, because what is being checked
- * is the VERDICT that travels back on its `respond`. */
+// Owner's safety policy on Codex, over item/commandExecution/requestApproval. The judge is a stub throughout; approval
+// events are hand-built since what's checked is the verdict on respond.
 const approvalTurn = (command: string, respond: (allow: boolean) => void): CodexRunner =>
     async function* () {
         yield { type: "thread.started", thread_id: "thr-a" };
@@ -696,7 +667,7 @@ const approvalTurn = (command: string, respond: (allow: boolean) => void): Codex
         yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "done" } };
     };
 
-// A stub judge, as the request carries it: one constant verdict for whatever it is shown.
+// Stub judge: returns one constant verdict for whatever it's shown.
 const judging = (decision: "allow" | "ask" | "refuse"): AgentRequest["judge"] => async () => ({ decision, sentence: "It does the thing." });
 
 test("a refused command declines rather than cancelling the turn", async () => {
@@ -719,12 +690,8 @@ test("an unclassified command is approved, so an ordinary turn is untouched", as
     expect(decisions).toEqual([true]);
 });
 
-/* Codex raises approvals whenever the gate has something it could refuse, which is EVERY turn: triage and the
- * hard rule are facts about the command rather than the owner's configuration, so there is no turn on which
- * nothing could refuse. That is the cost this design accepts and the reason it is written down twice
- * (guard/turn-gate.ts states it too) — an approval round-trip per command execution, in exchange for a policy
- * that binds on every runtime rather than only on the one whose hook is always wired. Most of those round-trips
- * end in a yes without a model being asked at all, because triage matches nothing. */
+// Approvals fire on every turn, since triage and the hard rule are facts about the command, not the owner's config;
+// most round-trips resolve to yes without the judge ever being asked.
 test("approvals are requested on every turn, configured or not", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     const agent = createTestAgent(runner);
@@ -735,14 +702,13 @@ test("approvals are requested on every turn, configured or not", async () => {
     await collect(agent, { ...request, judge: judging("ask") });
     expect(calls[1]!.options.approvalPolicy).toBe("untrusted");
 
-    // A turn a stranger woke is gated too, which was already true: that is the taint floor's condition.
+    // A turn woken by a stranger is gated too, which was already true under the taint floor.
     await collect(agent, { ...request, outsideWake: "discord" });
     expect(calls[2]!.options.approvalPolicy).toBe("untrusted");
 });
 
-/* AN ASK PARKS THE CODEX TURN on the same permission card a Bash hook raises, which is the behaviour that could
- * not exist before: app-server is blocked on the approval request, so nothing of the turn's arrives while a
- * person reads it. */
+// An ask parks the Codex turn on the same permission card a Bash hook raises; app-server blocks on the request, so
+// nothing else arrives while it's read.
 test("an asked command raises a permission card and approves it when the user allows", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
@@ -756,8 +722,7 @@ test("an asked command raises a permission card and approves it when the user al
     }
 
     const card = events.find((event) => event.kind === "permission");
-    // The vendor's command reaches the card as a PROGRAM, marked where the classifier fired, under the judge's
-    // own sentence — exactly as the Claude path's does: one gate, one card, whichever runtime carried the call.
+    // Reaches the card as a program, marked where the classifier fired, same shape as the Claude path's card.
     expect(card).toMatchObject({
         title: "It does the thing.",
         program: { text: "rm -rf build", language: "bash", spans: [{ start: 0, end: 12 }] },
@@ -779,7 +744,6 @@ test("declining the card refuses the command", async () => {
     expect(decisions).toEqual([false]);
 });
 
-// Nobody is at a composer, so the ask is delivered as a refusal instead of a card that would hang the turn.
 test("an unattended turn refuses rather than raising a card", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));

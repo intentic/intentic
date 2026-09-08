@@ -20,37 +20,20 @@ import { detectHermes, planHermes } from "./hermes.js";
 import { probeHost, scanHost } from "./host-scan.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
-/* THE TWO FOREIGN SOURCES an arrival can come from, as a PARSER rather than a surface of its own.
- *
- * This file used to hold a whole import feature: its own held upload, its own token, its own plan/apply pair
- * and its own routes, beside two other features doing the same four things to different artifacts. What is
- * left here is only the part that is particular to a foreign assistant — recognizing one, reading it off an
- * upload or straight off a connected device, translating it, and writing it through native paths. The
- * holding, the token, the ticked ids and the report belong to the arrival pipeline
- * (portability/arrival.ts), which does them once for all four sources.
- *
- * WHAT MUST NOT BE LOST IN THE MOVE, and is not:
- *
- * A SETUP IS HELD IN MEMORY, NEVER ON DISK. The upload is a credential store (an .env, an auth.json), so it
- * lives in the pipeline's pending object until the apply consumes it, the abandon drops it, or the daemon
- * restarts (in which case the owner re-reads; a plan costs seconds). The pipeline spools a BUNDLE to disk
- * because a bundle is too large to hold — it deliberately does not spool these.
- *
- * NOTHING FOREIGN IS EXECUTED OR COPIED VERBATIM into daemon state; every item lands through the same write
- * paths the settings/skills/automations/capabilities surfaces use, which is what keeps an imported setup
- * editable and deletable in the ordinary UI the day after (docs/assistant-import-design.md). */
+// Recognizes and reads a foreign assistant setup (upload or connected device), translating it; the arrival pipeline
+// (portability/arrival.ts) owns holding, tokens, and the report for all sources. A setup lives in memory only, never
+// disk (it's a credential store); every item lands through the same write paths ordinary surfaces use.
 
-/* One foreign setup, read and recognized: which tool laid it out, its files, and what the reader declined to
- * hold. The pipeline holds THIS, and re-derives the plan from it at apply. */
+// One foreign setup, recognized: which tool, its files, what the reader declined. The pipeline holds this and
+// re-derives the plan from it at apply.
 export interface AssistantSetup {
     readonly source: AssistantSource;
     readonly files: Files;
     readonly skipped: readonly string[];
 }
 
-/* The source registry: an anchor file that proves where the home directory starts, a detect that says "this is
- * mine", and the pure planner. Order matters only in that the first recognizing adapter wins, the anchors are
- * disjoint today, and a future archive that somehow carries both is answered by whichever is listed first. */
+// Source registry: an anchor file marking the home directory, a detect, and a pure planner, per source. First
+// recognizing adapter wins; anchors are disjoint today.
 const ADAPTERS = [
     { source: "hermes", anchor: "config.yaml", detect: detectHermes, plan: planHermes },
     { source: "openclaw", anchor: "openclaw.json", detect: detectOpenclaw, plan: planOpenclaw },
@@ -64,23 +47,8 @@ const ADAPTERS = [
 // What a reader declined to hold, worded for the plan's refused list.
 export const skippedLines = (skipped: readonly string[]): string[] => skipped.map((entry) => `${entry} (not read)`);
 
-/* WHAT A MIGRATED CRON JOB RUNS ON, decided here because here is the first place it CAN be. The adapters are
- * pure over the archive and the archive was written by another product on another machine: it knows the
- * schedule and the prompt, and nothing whatever about which providers this sandbox has connected.
- *
- * The answer is this sandbox's own spendable catalogue (agent/subagents/spawn-catalog.ts), one rung per
- * connected provider, best-first, capped at the schema's ceiling. That is a real reading rather than a guess —
- * every rung is a model this sandbox can actually start right now, and the models whose accounts are at their
- * cap are already left out of it. It is also a LADDER, which is what an imported job most needs: nobody is
- * watching the 6am sweep that came over from someone else's laptop.
- *
- * IT IS A PROPOSAL, NOT A DEFAULT, and that is what makes it consistent with `Automation.models` being
- * required. The owner ticks the row to import it, the automation lands `requireApproval: true` on top of that,
- * and the ladder is on its card to edit. What the requirement forbids is a model chosen silently at FIRE time,
- * which is exactly what this is not.
- *
- * An empty answer (nothing connected) is left empty: the upsert then refuses on the schema, and the migration
- * reports that row as failed with the reason, which beats importing a job that could never fire. */
+// This sandbox's own spendable ladder (spawn-catalog.ts), best-first per connected provider, since the archive can't
+// know what's connected. A proposal, not a default: still lands requireApproval; empty just fails the row.
 const migratedLadder = async (services: Services): Promise<ModelPin[]> => {
     const providers = await spawnableProviders(services).catch(() => []);
     return providers.flatMap((provider) => {
@@ -100,8 +68,7 @@ const recognize = (raw: Files): { source: AssistantSource; files: Files } | unde
     return undefined;
 };
 
-// The translated checklist, derived fresh from the held files every time, so the plan the owner reviewed and
-// the plan the apply honors cannot disagree.
+// Derived fresh from the held files each time, so the reviewed plan and the applied plan can't disagree.
 export const assistantPlan = (setup: AssistantSetup): SourcePlan =>
     (ADAPTERS.find((adapter) => adapter.source === setup.source) ?? ADAPTERS[0]).plan(setup.files);
 
@@ -119,8 +86,7 @@ export const readAssistantArchive = async (body: ReadableStream<Uint8Array>, lim
 const hostCapabilities = async (services: Services): Promise<Extract<Capability, { kind: "host" }>[]> =>
     (await services.capabilities.list()).filter((capability): capability is Extract<Capability, { kind: "host" }> => capability.kind === "host");
 
-/* Every enrolled machine with a one-call probe each, run concurrently: the card renders this before the owner
- * has read anything, so a sleeping laptop must cost the render nothing but a row that says so. */
+// Probes every enrolled machine concurrently; a sleeping laptop costs the render nothing but a row saying so.
 export const assistantHosts = async (services: Services): Promise<ArrivalHost[]> =>
     await Promise.all(
         (await hostCapabilities(services)).map(async (capability): Promise<ArrivalHost> => {
@@ -168,10 +134,8 @@ const migrationDeps = (services: Services): MigrationDeps => {
     return {
         readWorkspaceFile: (relPath) => services.files.read(workspacePath(relPath)),
         writeWorkspaceFile: (relPath, content) => services.files.write(workspacePath(relPath), content),
-        // The same trio the skills route performs, in the same order, text, enabled list, reconcile, so a
-        // migrated skill is indistinguishable from one saved on the Skills page. The adapter already renamed
-        // around baked names; an existing OWN skill of the same name is overwritten, which is the upsert the
-        // route itself performs and is idempotent across a re-run.
+        // Same trio the skills route performs (write, enable, reconcile), so a migrated skill is indistinguishable from
+        // one saved by hand. An existing own skill of the same name is overwritten, idempotent across a re-run.
         saveSkill: async (skill) => {
             await writeOwnSkill(services, skill);
             const settings = await services.sandboxSettings.get();
@@ -180,8 +144,8 @@ const migrationDeps = (services: Services): MigrationDeps => {
             await reconcileSkills(services, skills);
         },
         upsertAutomation: async (automation) => services.automations.upsert({ ...automation, models: await migratedLadder(services) }),
-        // The capability route's core sequence (handler apply, then the manifest entry), minus its streaming
-        // frames. Existing ids are refused, a foreign setup lands beside nothing, never over something.
+        // Capability route's core sequence (handler apply, then the manifest entry) minus streaming frames; an existing
+        // id is refused, never overwritten.
         addCapability: async (capability) => {
             if ((await services.capabilities.get(capability.id)) !== undefined) {
                 throw new Error(`a "${capability.id}" connection already exists: rename or remove it first`);
@@ -191,8 +155,8 @@ const migrationDeps = (services: Services): MigrationDeps => {
             }
             await services.capabilities.upsert(capability);
         },
-        // The secrets route's own write, byte for byte: parse/re-serialize round-trip into desired-state/.env,
-        // mode 0600. Gated the same way too, no DevOps checkout, no env store.
+        // Secrets route's own write, byte for byte: parses and re-serializes into desired-state/.env at mode 0600,
+        // gated the same way (no DevOps checkout, no store).
         setSecret: async (key, value) => {
             const desiredState = services.workspace.repos["desired-state"];
             if (!existsSync(desiredState)) {
@@ -206,18 +170,16 @@ const migrationDeps = (services: Services): MigrationDeps => {
     };
 };
 
-/* Land the ticked rows of a re-derived plan. The pipeline has already dropped the held setup by the time this
- * returns: the failures a re-run can fix are about the TARGET (activate DevOps, free disk), not about the held
- * bytes, and holding a credential store past its use would be a lifetime somebody has to remember. */
+// Lands the ticked rows of a re-derived plan; the pipeline has already dropped the held setup by now, since a fixable
+// failure is about the target (activate DevOps, free disk), not the held bytes.
 export const applyAssistantSetup = async (
     services: Services,
     setup: AssistantSetup,
     selection: { readonly items: readonly string[]; readonly includeSecrets: boolean },
 ): Promise<ArrivalReport> => {
     const report = await applyMigration(migrationDeps(services), assistantPlan(setup), selection);
-    /* The same convergence the capability add route runs, once, after the loop: fold any fragments into the
-     * composed overlay and teach the translator about new endpoints. Imported env secrets mirror to CI the way
-     * the secrets route mirrors them, fire and forget, warn on failure. */
+    // Same convergence the capability-add route runs, once after the loop: folds fragments into the overlay and updates
+    // the translator's endpoints. Imported secrets mirror to CI the same fire-and-forget way the secrets route does.
     if (report.applied.some((entry) => entry.group === "capability")) {
         await composeEnvironment(services);
         await syncEndpointCompat(services);

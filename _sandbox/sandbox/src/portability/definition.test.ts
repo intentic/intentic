@@ -2,18 +2,15 @@ import type { SandboxDefinition } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift } from "./definition.js";
 
-/* The format's promises, held without a daemon: what the emitter writes, the parser reads back IDENTICALLY
- * (a definition is reviewed and committed, so a lossy round-trip is a corrupted review); emission is
- * deterministic byte for byte (drift detection diffs the text); and a document that is not a definition fails
- * with a message naming the field, never by half-parsing. */
+// Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming
+// the field.
 
 const definition: SandboxDefinition = {
     schemaVersion: 1,
     name: "wilson",
     environment: {
         baseImage: "ghcr.io/intentic/sandbox:stable",
-        // Backslashes and double quotes on purpose: the multi-line literal block must carry them verbatim,
-        // this is the content class (a Dockerfile) the format exists to hold.
+        // Backslashes and double quotes must survive the multi-line literal block verbatim.
         dockerfile: 'RUN apt-get update \\\n  && apt-get install -y ffmpeg\nENV GREETING="hello world"\n',
     },
     workspace: { remote: "https://github.com/example/workspace.git", ref: "main" },
@@ -65,7 +62,7 @@ test("not-TOML and TOML-but-not-a-definition each fail with a named reason", () 
     expect(() => parseDefinitionToml("= this is not toml")).toThrow(DefinitionFormatError);
     expect(() => parseDefinitionToml("schemaVersion = 2\n")).toThrow(/schemaVersion/);
     expect(() => parseDefinitionToml("schemaVersion = 3\n")).toThrow(/schemaVersion/);
-    // An unknown capability kind is refused rather than guessed at, the manifest rule everywhere else.
+    // An unknown capability kind is refused, not guessed at.
     expect(() => parseDefinitionToml('schemaVersion = 1\n[[capabilities]]\nid = "x"\nkind = "warp-drive"\nconfig = { }\n')).toThrow(
         DefinitionFormatError,
     );
@@ -108,8 +105,7 @@ test("diff answers empty for agreement and one line per real difference", () => 
 
 test("the workspace section drifts in three directions, and a definition without one is not silence", () => {
     const { workspace: _dropped, ...unpublished } = definition;
-    // Not naming a workspace against a published one is a real difference, not agreement by omission: it is
-    // the difference between a document that carries the sandbox's own content and one that does not.
+    // Omitting a workspace against a published one is a real difference, not agreement by omission.
     expect(definitionDiff(definition, unpublished as SandboxDefinition)).toEqual([
         {
             subject: "Workspace",
@@ -128,19 +124,17 @@ test("a setting spelled at its default is no drift against one that omits it", (
     expect(definitionDiff(definition, explicit)).toEqual([]);
 });
 
-/* ---- the runner-scoped surfaces: the settings-only definition and its drift lines ---- */
-
 test("settingsDefinition is settings-only: non-defaults in, every other section empty", async () => {
     const services = { sandboxSettings: { get: async () => ({ hashlineEdits: true, iqSearch: false }) } };
     const scoped = await settingsDefinition(services as unknown as Parameters<typeof settingsDefinition>[0]);
     expect(scoped.settings).toEqual({ hashlineEdits: true });
-    // No workspace either: a runner's tree arrives through the parent's git door, never by cloning a remote.
+    // A runner's tree arrives through the parent's git door, never by cloning a remote.
     expect(scoped.workspace).toBeUndefined();
     expect(scoped.repositories).toEqual([]);
     expect(scoped.capabilities).toEqual([]);
     expect(scoped.secrets).toEqual([]);
     expect(scoped.environment).toEqual({});
-    // And it rides the ordinary emitter/parser unchanged — the property the hello and the sync door lean on.
+    // The settings-only definition still round-trips through the ordinary emitter and parser.
     expect(parseDefinitionToml(emitDefinitionToml(scoped))).toEqual(scoped);
 });
 
@@ -153,7 +147,7 @@ test("settingsDrift names each differing key once, with defaults meaning agreeme
         secrets: [],
         settings,
     });
-    // Agreement, spelled two ways: both omit, and one side states the default the other omits.
+    // Agreement holds two ways: both omit the key, or one states the default the other omits.
     expect(settingsDrift(scoped({}), scoped({}))).toEqual([]);
     expect(settingsDrift(scoped({ iqSearch: false }), scoped({}))).toEqual([]);
     const lines = settingsDrift(scoped({ hashlineEdits: true }), scoped({}));

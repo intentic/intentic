@@ -1,26 +1,7 @@
-<!-- ═══════════════════════════════════════════════════════════════════════════════════════════════════
-     THE DOOR, BUILT OUT OF THE SAME STONE AS THE PAGE IT IS REACHED FROM.
-
-     A visitor arrives here by pressing "Create your workspace" on intentic.dev, and the two screens used to
-     share nothing but an orange: the marketing page is a photographed temple wall with engraved display type
-     and gold rules, this one was a dark gradient, a dot grid and a bulleted feature list. So the whole
-     vocabulary comes across — the plate behind the first screen, the carved headline with an ember full stop
-     on each beat, the gold hairlines, the turned corners, the lotus finial and the cast-bronze cartouche.
-
-     THE MATERIAL IS NO LONGER THIS FILE'S. It lives in `styles/entry.css`, because `/setup` — the screen
-     immediately behind this one — is built out of the same stone and cannot be built out of a copy of it.
-     What stays here is this screen's COMPOSITION, which is the thing the two legitimately differ on.
-
-     IT IS CENTRED, WHERE THE APP'S OTHER ENTRY SCREENS ARE SPLIT. The art behind it is a framed plaque with a
-     figure standing in each outer third and a deliberately empty middle, and the site composes its own first
-     screen on that axis. A two-column layout would put the copy over one of the figures, and the second
-     column existed to hold a feature list nobody reads with a sign-in in front of them.
-
-     IT IS ALWAYS DARK, whatever scheme the app is in. Everything the visitor has seen up to this point is,
-     the materials are built for a near-black ground, and this is the last stretch before the app's own look
-     takes over. Having one ground rather than two is also what decides the sign-in button's theme; the note
-     over the render call has that argument.
-     ═══════════════════════════════════════════════════════════════════════════════════════════════════ -->
+<!--
+    Sign-in screen; shares its visual material with /setup via styles/entry.css so the two stay in one style. Centred layout, unlike the app's other
+    entry screens, which split. Always renders dark, regardless of the app's theme.
+-->
 <script setup lang="ts">
 import { Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
@@ -37,36 +18,19 @@ const { getIdToken, renderButton } = useGoogleIdentity();
 const router = useRouter();
 const route = useRoute();
 
-/* THE PAGE THAT SENT THEM HERE, which this screen used to forget. Both ways out of it hardcoded `/`, so a
- * guard that turned somebody away from a deep link signed them in and then dropped them in the workspace,
- * with the address they had asked for gone. Sanitised on the way in: it is spent both as a router navigation
- * and as an OAuth callback on this origin (router/signIn.ts holds that, and why it is narrow). */
+// Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (router/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
 
-// The site's faces, on this route and the setup route only — see composables/useSiteFaces.ts.
+// The site's faces, only on this route and /setup; see composables/useSiteFaces.ts.
 useSiteFaces();
 
-/* Inside the desktop app, the button below CANNOT work: Google refuses OAuth from an embedded webview, and
- * the redirect would dead-end on a `disallowed_useragent` page with no way back. So the app gets a different
- * button that hands the whole sign-in to the user's real browser and receives the result over a deep link
- * (see environments/desktop.ts). Same account, same session: just not in this window. */
+// True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
 
 const year = new Date().getFullYear();
 
-/* WHAT HAPPENS AFTER THE PRESS, WHICH IS THE QUESTION A SIGN-IN SCREEN LEAVES UNANSWERED. The same three
- * beats the site's "Getting started" band walks through, in its words, so a reader who scrolled that far
- * meets them again rather than something new. The first is what the button above does, and it is marked as
- * the one happening now: this is a progress rail, not a feature list, and the order carries the meaning.
- * The second beat's title is repeated verbatim as the setup page's own eyebrow, so the next screen a visitor
- * sees announces itself as the station they were just shown rather than as a new subject. */
-/* …AND THE THIRD BEAT HAS TO BE THE ONE THIS VISITOR WILL ACTUALLY GET. It read "Paste one command / One line
- * starts it on your own machine" for everybody, which is the promise the setup page then breaks for the two
- * platforms we ship a build for: they are handed a Download button and never see a command at all. It is the
- * product's first description of itself, so the version a Windows or Linux visitor read was "there will be a
- * terminal" — the single thing this flow spent a release removing, advertised on the way in, to the exact
- * reader most likely to be put off by it. Same `desktopInstaller()` the setup page decides with, so the two
- * screens cannot promise different things. */
+// Mirrors the site's 'Getting started' band, in order; the current step makes this a rail, not a list.
+// The third step must match `desktopInstaller()`, the same call the setup page uses, so the two screens agree.
 const install = desktopInstaller();
 const steps: readonly { title: string; body: string }[] = [
     { title: `Sign in with Google`, body: `No forms and no card.` },
@@ -76,26 +40,11 @@ const steps: readonly { title: string; body: string }[] = [
         : { title: `Install the app`, body: `One click starts it on your own machine. No terminal.` },
 ];
 
-/* ONE GOOGLE SIGN-IN, NOT TWO.
- *
- * The redirect below proves the user to the platform and leaves this window holding nothing, which is why
- * the sandbox then asked for Google all over again: the daemon authenticates people against Google itself and
- * only the browser can hand it a Google-signed token. Minting that token HERE, and spending it on the
- * platform as well, means the second ask never happens.
- *
- * The credential the sandbox eventually receives is byte-for-byte what it receives today, so a daemon that is
- * older, forked, or deliberately built to distrust the platform is not affected by any of this.
- *
- * Google's own button is the control, because it is the one surface that works when One Tap does not. Four
- * things can go wrong. Three are observable and each answers with the redirect rather than a dead page:
- * Google's script never arrives (nothing renders), the user dismisses whatever Google shows, or the platform
- * refuses the token. The fourth: a button that renders but cannot work, behind a blocked frame or a popup
- * policy: is invisible from here, which is why the escape link below it is unconditional. */
+// Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
+// credential the sandbox gets is unchanged. The escape link is unconditional because one failure mode (a button
+// that renders but can't be clicked) is invisible from here.
 const googleButton = ref<HTMLElement>();
-/* Whether Google's own button is standing there. Starts true so the container is in the DOM for the very
- * first render: a button cannot be rendered into an element that does not exist, and flips to false when
- * the render is refused (Google's script absent, or this being the desktop webview, where the mechanism
- * refuses on every surface's behalf) or when the platform rejects what Google signed. */
+// Whether Google's button shows; true so the container exists to render into, false once refused or rejected.
 const googleReady = ref(true);
 const error = ref<string>();
 
@@ -107,29 +56,27 @@ const redirectSignIn = async (): Promise<void> => {
     await signInWithGoogle(destination.value);
 };
 
-/* The mint, started on mount so a click has something to resolve, and so a returning user is signed in with
- * no click at all, which is what Google's automatic re-authentication is for. It can only fire for someone
- * who has signed in this way here BEFORE, so a first-ever account still passes a visible Google surface and
- * the consent line under it. */
+// Started on mount so a click has something to resolve, and a returning user needs none at all (Google's silent
+// re-auth). Only fires for someone who's signed in this way before; a first-time visitor still sees the visible
+// button and consent line.
 const signInWithCredential = async (): Promise<void> => {
-    // The mechanism would refuse this window anyway; not starting is just not booting Google's script in a
-    // window that can never use it.
+    // The mechanism refuses this window anyway; skip loading Google's script where it can never be used.
     if (desktop.value) {
         return;
     }
     try {
-        // `gate: false`, this page's own button IS the gate; the shared overlay would be a second one.
+        // `gate: false`: this page's own button is the gate; the shared overlay would be a second one.
         const idToken = await getIdToken({ gate: false });
         if (idToken === undefined) {
-            return; // Dismissed, or Google unavailable. The fallback below is already on screen.
+            return; // Dismissed, or Google unavailable; the fallback is already on screen.
         }
         await signInWithGoogleCredential(idToken);
         await router.push(destination.value);
     } catch {
-        /* The platform would not take a token Google did in fact sign: a build without the endpoint, or a
-         * client-id mismatch between this app and that platform. The redirect does not depend on either, so
-         * hand the user that rather than a dead end. The Google credential stays cached on purpose: the
-         * sandbox may well accept what the platform just refused, and re-minting would be a third ask. */
+        // The platform can refuse a token Google actually signed (no endpoint, client-id mismatch); the redirect
+        // doesn't
+        // depend on it, so offer that instead of a dead end. The credential stays cached, since the sandbox may accept
+        // what the platform just refused.
         googleReady.value = false;
         error.value = `Couldn't finish that sign-in. Continue with Google below instead.`;
     }
@@ -137,14 +84,8 @@ const signInWithCredential = async (): Promise<void> => {
 
 onMounted(() => void signInWithCredential());
 
-/* Google's button, rendered as soon as its container exists. A click resolves the mint above.
- *
- * ITS LIGHT THEME, ALWAYS, AND THAT IS NOT AN OVERSIGHT. This screen has one ground and it is near-black,
- * so it never has a scheme to follow; and Google's dark button on it is a dark box inside a warm rule,
- * which is also the description of the frame around it, the socket under it and every other edge here. The
- * eye finds differences of LIGHTNESS before it finds anything else, so the one thing a visitor has to press
- * would be the quietest object on the page. Light, it is the only light-on-dark thing here, which is the
- * same trade the site makes with its own primary. */
+// Always rendered in light theme, never following the app's scheme: this screen has one near-black ground, and a
+// light button is the only light-on-dark object needing the visitor's attention.
 watch(
     googleButton,
     async () => {
@@ -159,16 +100,17 @@ watch(
 
 <template>
     <div class="entry door">
-        <!-- The plaque, pinned to its own 16:9 across the full width so the two figures are always whole and
-             what runs out instead is the bottom, where the fade below is already waiting. No veil on this
-             screen: it is the one page composed against the art rather than laid over it. -->
+        <!--
+            Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into
+            the
+            fade below.
+        -->
         <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
 
         <main class="shell">
             <header class="mark"><AppBrand /></header>
 
-            <!-- The greeting, flanked rather than underlined: a band eyebrow elsewhere trails a hairline to
-                 the right, which on a centred axis tips the whole block sideways. -->
+            <!-- Flanked, not underlined: a trailing hairline would tip sideways on this centred axis. -->
             <p class="entry-eyebrow">
                 <span class="entry-lozenge"></span>
                 <span>Welcome to intentic</span>
@@ -182,9 +124,10 @@ watch(
 
             <p class="hero-sub">A workspace for coding agents.</p>
 
-            <!-- THE GATE. The one framed object on the screen, and the only place the site's turned corner and
-                 lotus finial are drawn here: an ornament earns its keep on a panel big enough to carry it and
-                 becomes noise everywhere else. -->
+            <!--
+                The one framed object here; the turned corner and lotus finial only appear on a panel big enough to
+                carry them.
+            -->
             <section class="entry-frame gate">
                 <span class="entry-corner entry-corner-tl"></span>
                 <span class="entry-corner entry-corner-tr"></span>
@@ -194,19 +137,19 @@ watch(
 
                 <p v-if="error" class="gate-error">{{ error }}</p>
 
-                <!-- Google's own button, which is also where the credential the sandbox needs comes from: one
-                     sign-in doing both jobs. It cannot be restyled, so it is given a socket cut for it rather
-                     than left to float: a recessed strip with a hairline round it, which reads as an inlay
-                     instead of as a control from another design. Kept mounted (hidden) rather than removed
-                     when it fails to render, so nothing can race the container away from under it. -->
+                <!--
+                    Google's button also supplies the sandbox credential, one sign-in for both. Kept mounted (hidden)
+                    rather than
+                    removed on failure, so nothing races the container out from under it.
+                -->
                 <div v-show="googleReady" class="socket">
                     <div ref="googleButton" class="socket-slot"></div>
                 </div>
 
-                <!-- The cast-bronze cartouche, the site's own primary, drawn by the entry kit's top button
-                     tier (styles/entry.css) rather than by a recipe of this page's own. It stands here only
-                     when Google's embedded button could not, which is exactly when this page needs one lit
-                     object on it. -->
+                <!--
+                    The site's primary button style (styles/entry.css), shown only when Google's embedded button could
+                    not render.
+                -->
                 <Button
                     v-if="!googleReady"
                     :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
@@ -216,19 +159,18 @@ watch(
                     <template #icon><Icon name="google" /></template>
                 </Button>
 
-                <!-- The escape hatch, always there while the embedded button is. Some of the ways that button
-                     can fail are invisible from here: an extension that blocks its frame, a policy that lets
-                     it render but not open, and every one of them looks to the visitor like a sign-in page
-                     that does nothing. This is the way in that depends on none of it. -->
+                <!--
+                    Some failures of the embedded button (blocked frame, restrictive policy) are invisible here and
+                    look like a dead
+                    page; this path needs none of that machinery.
+                -->
                 <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
                     Trouble signing in? Use Google's own page.
                 </button>
 
                 <p class="fine">
                     We keep your email address and your workspace's address, and nothing else. By continuing you agree to our
-                    <!-- Acceptable Use is named here rather than left to the Terms that incorporate it: it is
-                         the document whose breach destroys a hosted machine without notice, and consent to a
-                         rule with that consequence should be given to the rule itself. -->
+                    <!-- Named separately from Terms since breaching it can destroy a hosted machine without notice. -->
                     <a href="https://intentic.dev/terms/" target="_blank" rel="noopener">Terms</a>,
                     <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener">Acceptable Use Policy</a> and
                     <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
@@ -252,10 +194,10 @@ watch(
 </template>
 
 <style scoped>
-/* THE MATERIAL IS IN `styles/entry.css` — the metals, the ink, the faces, the plate, the eyebrow, the carved
- * display type, the frame kit and both button plaques. Everything below is this screen's own composition:
- * where the column sits, how wide the gate is, and the three things only the door has (Google's socket, the
- * escape line and the progress rail). */
+/*
+ * Shared material (metals, faces, plate, type, frame kit, buttons) lives in styles/entry.css; below is only this
+ * screen's own layout: column position, gate width, and its three unique parts (socket, escape line, rail).
+ */
 .door {
     display: flex;
     flex-direction: column;
@@ -263,9 +205,10 @@ watch(
     padding: clamp(1.5rem, 4vw, 3rem) 1.5rem;
 }
 
-/* ── THE COLUMN ────────────────────────────────────────────────────────────────────────────────────
- * Everything on the axis the art leaves empty. `margin: auto` on the block rather than `justify-content`
- * on the page, so a short window scrolls instead of clipping the gate off the bottom. */
+/*
+ * The empty axis in the art. `margin: auto` instead of `justify-content`, so a short window scrolls rather than
+ * clipping the gate.
+ */
 .shell {
     display: flex;
     flex-direction: column;
@@ -281,10 +224,10 @@ watch(
     margin-bottom: clamp(2rem, 7vh, 4rem);
 }
 
-/* ── THE HEADLINE ──────────────────────────────────────────────────────────────────────────────────
- * Two beats, one sentence each, the full stop carrying the only ember above the fold. Capped well below the
- * site's own display size: that page gives the headline a whole screen and this one has a door to fit
- * under it. */
+/*
+ * Two one-sentence beats; capped well below the site's own display size, since this screen has a door to fit
+ * under it, not a whole screen.
+ */
 .headline {
     margin: 1.5rem 0 0;
     font-family: var(--face-display);
@@ -292,14 +235,13 @@ watch(
     line-height: 1.24;
     font-weight: 600;
 }
-/* One sentence per line, and each one wraps as a block of its own rather than reflowing into the next:
-   splitting on the sentence is what keeps the ember stops at the ends of thoughts. */
+/* Splits on the sentence, not just wraps, so each ember stop lands at the end of a thought. */
 .beat {
     display: block;
     text-wrap: balance;
 }
 
-/* THE LINE UNDER THE HEADLINE — ported verbatim from `.home .hero-sub` in home.css. */
+/* Ported verbatim from `.home .hero-sub` in home.css. */
 .hero-sub {
     margin: 1.4rem auto 0;
     max-width: 36ch;
@@ -309,9 +251,7 @@ watch(
     text-wrap: balance;
 }
 
-/* ── THE GATE ──────────────────────────────────────────────────────────────────────────────────────
- * The kit's frame at this screen's size. Only the box is here; the double rule, the plate and the drop are
- * `.entry-frame`'s. */
+/* The frame kit's box at this screen's size; the double rule, plate, and drop belong to `.entry-frame`. */
 .gate {
     width: 100%;
     max-width: 27rem;
@@ -330,10 +270,10 @@ watch(
     color: var(--ink);
 }
 
-/* A slot cut into the plate rather than a box laid on it: the hairline is the cut's lit edge and the inner
-   shadow is its depth, so the one control here that cannot be restyled reads as an inlay somebody made room
-   for. `color-scheme: light` matches Google's light-theme iframe, so the browser paints no second canvas of
-   its own behind it. */
+/*
+ * A cut slot, not a box: the hairline is its lit edge, the inset shadow its depth. color-scheme: light matches
+ * Google's iframe so the browser paints no second canvas behind it.
+ */
 .socket {
     padding: 0.85rem;
     border: 1px solid var(--rule);
@@ -343,8 +283,7 @@ watch(
         0 1px 0 rgba(201, 160, 92, 0.1);
     color-scheme: light;
 }
-/* A block, not a flex item: this is the box Google measures itself against, and a shrink-to-fit item is
-   0px wide until something is already inside it. */
+/* A block, not a flex item: a shrink-to-fit item is 0px wide until Google renders something inside it. */
 .socket-slot {
     display: flex;
     justify-content: center;
@@ -380,9 +319,7 @@ watch(
     text-decoration: underline;
 }
 
-/* ── THE RAIL ──────────────────────────────────────────────────────────────────────────────────────
- * Three stations on one hairline, and the mark on each says which one you are standing on: ember for the
- * step this page is, quiet gold for the two ahead of it. */
+/* Three stations on one hairline; ember marks the current step, quiet gold marks the ones ahead. */
 .rail {
     width: 100%;
     margin-top: clamp(2.75rem, 8vh, 4.5rem);
@@ -402,9 +339,7 @@ watch(
 .step {
     position: relative;
 }
-/* The station's mark sits ON the rail rather than under it, which is what makes the row read as one line
-   with three stops instead of three cards that happen to be adjacent. The hairline runs behind it, the way
-   the site's own divider is knotted with the same diamond. */
+/* The mark sits on the rail, not under it, so the row reads as one line with three stops rather than separate cards. */
 .step .entry-lozenge {
     position: absolute;
     top: calc(-1.5rem - 0.325rem);
@@ -447,8 +382,7 @@ watch(
         gap: 1.5rem;
         padding-top: 0;
         border-top: 0;
-        /* One column has no rail to hang marks off, so each station carries its own left-hand rule and the
-           lozenge returns to the flow beside its title. */
+        /* No rail to hang marks off in one column, so each station gets its own left-hand rule instead. */
         border-left: 1px solid var(--rule);
         padding-left: 1.5rem;
     }
@@ -457,8 +391,10 @@ watch(
         top: 0.3rem;
         left: calc(-1.5rem - 0.275rem);
     }
-    /* The slot narrows step by step down here so Google's own button, which sizes itself and is the widest
-       fixed thing on the page, keeps a comfortable measure on a phone. */
+    /*
+     * Google's own button sizes itself and is the widest fixed element; narrowing the slot keeps it a comfortable width
+     * on a phone.
+     */
     .door {
         padding-left: 1rem;
         padding-right: 1rem;

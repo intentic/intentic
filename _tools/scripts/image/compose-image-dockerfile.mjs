@@ -1,17 +1,9 @@
 #!/usr/bin/env node
-// Compose a sandbox image Dockerfile for a profile: the core Dockerfile (_sandbox/sandbox/Dockerfile) with
-// each of the profile's feature packs (packs/<name>.Dockerfile: the SAME fragments the daemon composes into
-// the environment overlay on demand, see src/environment/packs.ts) spliced at its marker line, each followed
-// by a stamp RUN writing the pack's content hash to /opt/packs/<name>: how a running daemon knows what its
-// base image bakes, and therefore which fragments an overlay still needs.
-//
-//   node _tools/scripts/image/compose-image-dockerfile.mjs <profile>     # composed Dockerfile on stdout
-//
-// Profiles live in image-packs/profiles.json. The `core` profile is empty: composing it returns the core
-// Dockerfile unchanged. Two splice points, matching how the core file orders its layers:
-//   packs:pre-trees   pinned installs, ABOVE the tree COPYs (a source change never evicts a pack download)
-//   packs:post-trees  packs that read the daemon tree (/opt/sandbox) or COPY from the `trees` context
-// Placement is inferred from pack content: the same inference packs.ts uses, so it cannot rot.
+// Composes a Dockerfile for a profile: the core Dockerfile with each pack spliced at its marker, each followed by a RUN
+// stamping the pack's content hash to /opt/packs/<name>, so a daemon knows what its base image already bakes. Placement
+// (pre- or post-trees) is inferred from pack content, mirroring src/environment/packs.ts.
+// packs:pre-trees pinned installs, above the tree COPYs
+// packs:post-trees packs that read /opt/sandbox or COPY --from=trees
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -47,8 +39,8 @@ if (unknown.length > 0) {
     process.exit(2);
 }
 
-// One spliced section per pack: the fragment verbatim, then the base stamp. The hash is sha256 of the TRIMMED
-// content: identical to packs.ts's, or the daemon would see every baked pack as "not baked" and re-propose it.
+// Fragment verbatim, then a stamp RUN; hash is sha256 of the trimmed content, matching packs.ts's, or a baked pack
+// reads as not baked.
 const section = (name) => {
     const content = readFileSync(join(packsDir, `${name}.Dockerfile`), "utf8").trim();
     const hash = createHash("sha256").update(content).digest("hex");
@@ -74,8 +66,7 @@ const splice = (lines, marker, texts) => {
 };
 
 let lines = readFileSync(corePath, "utf8").split("\n");
-// Post-trees first: splicing pre-trees first would shift the post marker's index, and order between the two
-// marker searches must not matter.
+// Post-trees first: splicing pre-trees first would shift the post marker's line index.
 lines = splice(
     lines,
     POST_MARKER,

@@ -10,44 +10,18 @@ import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 
-/* ONE SECRET, on one line until asked otherwise: the extension row's shape, for the extension row's reason:
- * this is a list read by scanning, and everything below the fold was being paid for on every row of it.
- *
- * THE LINE ANSWERS "WHICH ONE IS THIS", AND NOTHING ELSE. A mark, the name, what tells it apart (what uses it,
- * or whose account it is), and (only when there is one) the fact that something is owed. The provenance, the
- * revealed value and the editor open below it. A healthy row carries no badge and no dot: the tab used to print
- * a green dot beside every one of nineteen connected credentials, which is nineteen pixels of ink saying
- * "normal" and nothing left to notice the one that isn't.
- *
- * THE FOUR BUTTONS WAIT TO BE REACHED FOR. Reveal, copy, set and remove are identical on every row and rarely
- * the reason anyone opened the tab, so at twenty rows they are eighty pieces of furniture between the reader and
- * the name they came to find. They fade in on hover and on keyboard focus, and they are simply THERE on a touch
- * screen and on an open row, so the path that never needs a pointer (tap the row, act in the panel) is whole.
- *
- * EXPANSION IS THE PARENT'S, not the row's: the tab keeps one row open at a time, so a list being scanned never
- * grows unpredictably under the pointer. Everything the row opened WITH: a revealed value, a half-typed
- * replacement, a remove waiting to be confirmed: is dropped when it closes, because none of those should be
- * lying in wait behind a chevron the next time somebody clicks it. */
+// One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
+// badge. Reveal/copy/set/remove fade in on hover, focus or touch rather than crowding a scanned list. Expansion
+// belongs to the parent (one row open at a time); closing drops whatever the row opened with.
 
 const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
 const emit = defineEmits<{ "update:expanded": [expanded: boolean] }>();
 
 const { remove } = useSecrets();
 
-/* THE APPROVAL BLOCK. Editing a gate is the OWNER's alone, enforced at the daemon's route because a
- * maintainer is exactly who a gate is sometimes written about; what this file does is render the read-only
- * form for everybody else rather than offering controls that would 403 (secrets/credential-gate.ts).
- *
- * The DRAFT is local until Save, unlike every other control on this row. A gate is three decisions that only
- * make sense together — on/off, who, and how far one release goes — and writing each keystroke through would
- * mean a moment where a credential is gated to nobody, which the route rightly refuses (a gate with an empty
- * approver list is a lock, not a gate). So the draft is assembled here and sent once.
- *
- * THE SWITCH SHOWS THE DRAFT, NOT ONLY THE POLICY. It used to be bound to "a gate is stored", so flipping it on
- * changed nothing it was bound to: the editor below it appeared only if the roster had somebody to pre-select,
- * and the sentence explaining an empty roster sat behind the same condition and could never render. An owner
- * whose Access tab was still empty flipped a switch, watched nothing happen, and reasonably concluded there was
- * no way to name anybody. `draftOn` is the switch's own state until a gate exists to speak for it. */
+// Editing a gate is owner-only (enforced by the daemon's route); this renders the read-only view for everyone else.
+// The draft stays local until Save, since a gate's three decisions only make sense sent together, and the switch
+// reflects the draft rather than only a stored gate.
 const { gateFor, approverChoices, isOwner, setGate, removeGate } = useCredentialGates();
 
 const gate = computed(() => (row.gateSubject === undefined ? undefined : gateFor(row.gateSubject)));
@@ -58,9 +32,8 @@ const gateError = ref<NoticeModel | undefined>(undefined);
 // On when a gate is stored, or when the owner has opened the editor to write one.
 const gateOn = computed(() => gate.value !== undefined || draftOn.value);
 
-/* The draft follows the SERVER's answer whenever the row opens or the policy changes under it, which is what
- * keeps a second tab's edit from being silently overwritten by a stale draft sitting behind a chevron. A
- * session-shaped credential opens on `conversation` because that is the only scope it can have. */
+// Draft re-syncs to the server's answer whenever the row opens or the policy changes, so a stale draft can't
+// overwrite another tab's edit.
 watch(
     [() => expanded, gate],
     () => {
@@ -72,9 +45,8 @@ watch(
     { immediate: true },
 );
 
-/* Flipping on opens the editor with the obvious first answer already picked (the owner, who the roster lists
- * first), so the common gate is one more click. Flipping off is two different acts: with a gate stored it is a
- * removal the daemon has to hear about; with only a draft it is a change of mind, and nothing is sent. */
+// Turning on pre-picks the roster's first approver; turning off either removes a stored gate or just discards an
+// unsaved draft.
 const toggleGate = (on: boolean): void => {
     if (on) {
         draftOn.value = true;
@@ -96,8 +68,7 @@ const toggleApprover = (email: string): void => {
         : [...draftApprovers.value, email];
 };
 
-// Saveable only with somebody on it, and only when something actually changed: the route refuses an empty
-// list, and re-sending the gate that is already stored is a write nobody asked for.
+// Saveable only with somebody on it and only when something actually changed (the route refuses an empty list).
 const gateDirty = computed(
     () =>
         draftApprovers.value.length > 0 &&
@@ -203,34 +174,23 @@ const removeKey = async (): Promise<void> => {
     }
 };
 
-/* The app's bare icon button rather than a tenth hand-rolled spelling of it, and here that is a fix, not
- * tidying. A glyph left to INLINE layout rides the row's text baseline, and Icon.vue nudges every svg down
- * 0.125em so an icon sits right beside words; in a button whose only child is that icon there are no words, so
- * the nudge is just a drop of a pixel or two: by an amount that moves with whatever font-size the button
- * happens to inherit. The copy button beside these already centred its glyph with flex, so the four actions in
- * one cluster did not agree on where the middle was. `ui.iconButton` centres with flex in a fixed 24px box,
- * which is exactly zero offset under every type scale, so they cannot drift apart again. */
+// Centres its glyph in a fixed 24px box via flex, matching CopyButton's centring, so icon buttons in one cluster
+// don't visually drift apart.
 const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-subtle`);
 </script>
 
 <template>
-    <!-- Header and panel share one tint while open, so an expanded row reads as a single block rather than as a
-         row that happens to have grown something under it. That wash, the chevron, the ARIA and the rail under
-         the name are <DisclosureRow>'s; the four hand-rolled copies of them that used to be here are the reason
-         `pl-9` in this file, `pl-10` next door and `pl-8` in the automations list were three answers to one
-         question. `body="rail"`: what opens is the secret's RECORD — where it lives, what last spent it — and
-         evidence hangs off the name it is about.
-
-         No `density`: the <RowGroup> this row is dropped into says `compact` once for the whole list, and the
-         row, its outline and every note between them read it from there. -->
+    <!--
+        Header and panel share one tint while open, reading as a single block; the wash, chevron and rail are
+        <DisclosureRow>'s. `body="rail"` since what opens is the secret's record.
+    -->
     <DisclosureRow class="@container" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
-            <!-- The only thing on the row that is not words, and the only one that can be found without
-                 reading: sixteen accounts of the same person differ solely in their last character.
-
-                 Sized by the row's tier rather than by this file, which had it at 20 while the extensions and
-                 environment lists one tab away had the same mark at 22: near enough to look like a mistake and
-                 far enough to be one. The tier itself comes from the <RowGroup> this row is dropped into. -->
+            <!--
+                The only non-text element, findable without reading (accounts differing only in a last character).
+                Sized by the
+                row's tier (from the enclosing <RowGroup>), not fixed here.
+            -->
             <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
         </template>
 
@@ -242,8 +202,10 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     :class="row.mono ? `font-mono` : ``"
                     >{{ row.title }}</span
                 >
-                <!-- Dropped rather than wrapped at rail width: the name is what the row is for, and the
-                     panel below states everything this line was carrying. -->
+                <!--
+                    Dropped rather than wrapped at rail width: the name is what the row is for; the panel below repeats
+                    the detail.
+                -->
                 <span
                     v-if="row.detail"
                     v-tooltip.top.overflow="row.detail"
@@ -326,8 +288,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 <span class="font-mono text-subtle">{{ row.entry.storedAt }}</span>
                 <template v-if="row.entry.ci !== undefined"> · CI {{ row.entry.ci.synced ? `synced` : `out of date` }}</template>
             </p>
-            <!-- The use ledger's newest row: when the agent last actually spent this, put into a command, or
-                 typed into a page, and where it went. Absent for a secret that has only ever sat here. -->
+            <!-- Use ledger's newest row: when the agent last spent this and where; absent for a secret never yet used. -->
             <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
                 used by the agent {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
                 <template v-if="row.entry.lastUse.detail">
@@ -336,10 +297,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
-            <!-- WHO HAS TO RELEASE THIS. Off for nearly everything, which is the design: gating is for the few
-                 credentials where one wrong use is the incident, and a sandbox where everything asks is one
-                 where nobody reads the cards. Only the owner can change it (the daemon's route is the rule,
-                 this is the courtesy), and only rows with something to release carry the block at all. -->
+            <!--
+                Who has to release this: off for nearly everything by design, since gating is for the few credentials
+                where one
+                wrong use is the incident. Owner-only to change; shown only on rows with something to release.
+            -->
             <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
                 <div class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Needs approval</span>
@@ -356,8 +318,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     />
                 </div>
 
-                <!-- Not the owner: the state, and why the controls are not here. Said rather than hidden — a
-                     maintainer who can see a gate but not change it needs to know which of those it is. -->
+                <!--
+                    Not the owner: states the gate's status and that only the owner can change it, rather than hiding
+                    the controls
+                    silently.
+                -->
                 <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
                     <template v-if="gate">
                         Only {{ gate.approvers.join(` or `) }} can release this, and
@@ -368,9 +333,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 </p>
 
                 <template v-else-if="gateOn">
-                    <!-- The approvers, as an exact list rather than a role floor: "only Bob" is the sentence
-                         people mean, and a floor cannot say it. The owner appears here like anybody else,
-                         because they are not an implicit approver — the list is exactly who may click. -->
+                    <!--
+                        Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since
+                        they aren't an
+                        implicit approver.
+                    -->
                     <p class="pt-1 text-2xs text-muted">Who can release it</p>
                     <div class="flex flex-wrap gap-1 pt-1">
                         <button
@@ -385,10 +352,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             {{ email }}
                         </button>
                     </div>
-                    <!-- WHERE THE NAMES COME FROM, said on the row rather than left to be discovered: the list
-                         is the Access roster plus the owner, and the daemon refuses anybody else (a gate to
-                         someone who can never sign in is a lock). An owner alone on a fresh sandbox sees only
-                         themselves here, and this is the line that tells them that is not the whole feature. -->
+                    <!--
+                        Names come from the Access roster plus the owner; the daemon refuses anyone else. Tells an
+                        owner alone on a fresh
+                        sandbox that this isn't the whole feature.
+                    -->
                     <p v-if="approverChoices.length === 0" class="pt-1 text-2xs text-muted">
                         Nobody can be named yet. Give somebody access on the
                         <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> first.
@@ -398,10 +366,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> can be named here.
                     </p>
 
-                    <!-- HOW FAR ONE RELEASE GOES, and the one control that is sometimes not a choice: a
-                         signed-in browser profile or a running MCP server is mounted for a whole turn, so
-                         there is no "one use" to release. The daemon forces those, and saying so is better
-                         than offering a switch that gets overridden. -->
+                    <!--
+                        How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP
+                        server is mounted
+                        for a whole turn, so the daemon forces that scope regardless of the switch.
+                    -->
                     <p class="pt-2 text-2xs text-muted">How long one release lasts</p>
                     <p v-if="row.sessionShaped" class="pt-0.5 text-2xs text-subtle">
                         For the rest of the conversation. A signed-in account is loaded for a whole turn, so it cannot be released for a single use.

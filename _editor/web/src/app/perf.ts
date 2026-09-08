@@ -1,54 +1,35 @@
-/* WHERE THE BROWSER'S TIME GOES, the daemon's platform/perf.ts, on this side of the wire.
- *
- * The daemon can only ever account for the half of a slow interaction that it served. When the user says the
- * /agents board stutters or a floating chat lags, the daemon's log is often completely clean, because
- * nothing was wrong with it: the time went into a query the browser fired six times, a stream frame that
- * rebuilt a thousand-message transcript, or a persist that structured-cloned the whole query cache. None of
- * that was measured anywhere, and "the UI feels slow" has no next step without it.
- *
- * Three outputs, mirroring the daemon's:
- *
- *  - SLOW spans warn to the console as they happen, ALWAYS, not behind the verbose toggle. A stall the user
- *    only notices once has to leave a trace without having been armed for in advance, which is the entire
- *    difference between this being useful and being a thing nobody remembers to turn on.
- *  - Every span at debug, behind `__intenticPerf.verbose(true)` (persisted, so it survives the reload you are
- *    about to do). That is the trace you turn on once you know which interaction to watch.
- *  - A ranked table from `__intenticPerf.table()`, ordered by TOTAL time rather than worst case, because a
- *    bottleneck is what consumed the most time, not what took longest once. A 12ms reducer call is nothing; the
- *    same call 900 times during one streamed answer is ten seconds of dropped frames.
- *
- * The ring buffer records unconditionally (it is an array write), so the spans leading up to a stall are still
- * there afterwards, `__intenticPerf.dump()` in the console after the fact is the intended workflow. */
+// Measures browser-side time the daemon's own perf.ts can't see (a query fired six times, a stream frame
+// rebuilding a huge transcript), since "the UI feels slow" has no next step without it. Three outputs: slow spans
+// always warn to the console (armed by default, not opt-in); every span at debug behind
+// `__intenticPerf.verbose(true)` (persisted); a table from `__intenticPerf.table()` ranked by total time, since a
+// bottleneck is what consumed the most time, not what took longest once. The ring buffer records unconditionally,
+// so `__intenticPerf.dump()` after a stall still shows what led into it.
 
-// A span slower than this warns. The browser's budget is a frame, not a request: past ~50ms of main-thread work
-// the user sees a dropped frame, and past ~200ms an interaction feels detached from the click that caused it.
+// Default slow-span threshold; past ~200ms an interaction starts to feel detached from the click that caused it.
 const DEFAULT_SLOW_MS = 200;
 
-/* Per-op floors. Network ops get room (a daemon round-trip over a tunnel is not the browser's fault, and this
- * table is about finding the browser's own problems); anything on the main thread gets a frame budget, because
- * that is what it is spending. */
+// Per-op thresholds: network ops get room (a round-trip isn't the browser's fault); main-thread ops get a frame
+// budget, since that's what they spend.
 const SLOW_MS: Readonly<Record<string, number>> = {
-    // A daemon round-trip. Generous: the tunnel and the daemon's own work are both inside it, and the daemon's
-    // http.request line is what says which side was responsible.
+    // A daemon round-trip; generous since the tunnel and the daemon's own work are both inside it (its own
+    // http.request span says which side was slow).
     "rpc.request": 1_500,
     // One vue-query fetch, including its queryFn, so the gap between this and rpc.request is the cache/query
     // machinery's own cost.
     "query.fetch": 1_500,
-    // Folding the agent frames that arrived since the last paint into the transcript. Main thread, once per
-    // paint rather than once per frame (Conversation buffers them), so its `frames` field says how many it
-    // carried. Its budget IS a frame: past this a streaming turn cannot hold 60fps.
+    // Folding buffered agent frames into the transcript, once per paint; its budget is a frame, since past this a
+    // streaming turn can't hold 60fps.
     "chat.frame": 16,
-    // The typewriter's reveal, on the same tick as the fold above. Runs on every paint of an answer whether
-    // frames arrived or not, and pays a whole transcript rebuild to append a few characters to one bubble.
+    // The typewriter's reveal; runs every paint of an answer, paying a full transcript rebuild to append a few
+    // characters.
     "chat.type": 8,
     // Mirroring a transcript to IndexedDB.
     "chat.persist": 300,
-    // Dehydrating + writing the whole vue-query cache to IndexedDB. A structured clone of megabytes.
+    // Dehydrating and writing the whole vue-query cache to IndexedDB, a structured clone of megabytes.
     "query.persist": 500,
 };
 
-// How many spans the ring buffer keeps. Enough to cover the seconds around a stall (a streaming turn produces
-// a few hundred spans a second at worst), small enough to be free.
+// Ring buffer size: enough to cover the seconds around a stall, small enough to stay free.
 const RING = 1_000;
 
 export type PerfFields = Readonly<Record<string, string | number | boolean | undefined>>;
@@ -71,8 +52,8 @@ export interface PerfStat {
 const ring: PerfSpan[] = [];
 const stats = new Map<string, PerfStat>();
 
-// Persisted so it survives the reload that usually follows deciding to look. localStorage rather than a ref:
-// this is read on paths that must not take a reactivity dependency on it.
+// Persisted so it survives the reload that usually follows deciding to look. `localStorage`, not a ref, since it's
+// read on paths that must not take a reactivity dependency on it.
 const VERBOSE_KEY = `intentic.perf.verbose`;
 let verbose = ((): boolean => {
     try {
@@ -85,27 +66,25 @@ let verbose = ((): boolean => {
 
 const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
 
-// A span's fields minus the `undefined`s, which PerfFields allows and the report schema does not. Dropped
-// rather than stringified: "undefined" in a log line reads as a value somebody meant to set.
+// Drops `undefined` fields (PerfFields allows them, the report schema doesn't) rather than stringifying them,
+// which would read as an intended value.
 const primitives = (fields: PerfFields): Record<string, string | number | boolean> =>
     Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined));
 
-/* WHERE A SLOW SPAN GOES BESIDES THE CONSOLE, injected rather than imported.
- *
- * This module is imported by the daemon client itself (sandboxRpc wraps every call in `trackPerf`), so it is on
- * the hot path and near the root of the import graph. Importing the reporter here would point it at
- * clientDiagnostics → sandboxAuthFetch → sandboxSession → useSandbox, back into the app's own graph, and a cycle
- * at module-init time resolves to `undefined` at exactly the moment nobody is looking for it. Inversion keeps
- * the arrow pointing outward: main.ts hands the sink in (installPerfReporter), and until it does, or in a test
- * that never calls it, a slow span costs one comparison. */
+// Injected, not imported: this module sits near the root of the import graph (sandboxRpc wraps every call in
+// `trackPerf`), and importing the reporter directly would cycle back through clientDiagnostics → sandboxAuthFetch
+// → sandboxSession → useSandbox into the app's own graph. `main.ts` hands the sink in (installPerfReporter); until
+// then, or in a test that never calls it, a slow span costs one comparison.
 type SlowReporter = (op: string, ms: number, fields: Record<string, string | number | boolean>, requestId: string | undefined) => void;
 let reportSlow: SlowReporter | undefined;
 export const installPerfReporter = (reporter: SlowReporter): void => {
     reportSlow = reporter;
 };
 
-/** File a span. Called from the timing helpers below and from the two places that measure by hand (the stream
- *  reducer and the typewriter, which are synchronous and re-enter too often to afford a closure each). */
+/**
+ * Files a span. Also called by hand from the stream reducer and the typewriter, which re-enter too often to
+ * afford a closure each.
+ */
 export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): void => {
     const stat = stats.get(op) ?? { op, count: 0, totalMs: 0, maxMs: 0, slowCount: 0 };
     stat.count += 1;
@@ -119,16 +98,12 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
         ring.shift();
     }
     if (slow) {
-        // `seen`/`slowSeen` answer the question the single line otherwise raises, is this the first time, or
-        // has it been doing this all along, without needing the table.
+        // `seen`/`slowSeen` answer whether this is the first occurrence or an ongoing one, without needing the table.
         console.warn(`[perf] slow ${op} ${round(ms)}ms`, { ...fields, seen: stat.count, slowSeen: stat.slowCount });
-        /* …and durably, at `warn`, because "the UI feels slow" is a complaint nobody can act on from a console
-         * line in a browser nobody was watching. The reporter coalesces by (event, message) and caps itself, so
-         * a span stalling every frame sends the first few and a count rather than a flood, and it never throws.
-         *
-         * Only the SLOW ones leave the browser. Every span still lands in the ring buffer and in the table; a
-         * durable copy of all of them would be a few hundred lines a second during a streaming turn, which is
-         * how a diagnostic channel becomes the thing that needs diagnosing. */
+        // Durable, at `warn`: a slow-UI complaint is unactionable from a console line nobody was watching. Only slow
+        // spans
+        // leave the browser (every span still lands in the ring buffer and table); reporting all of them would itself
+        // flood the diagnostic channel during a streaming turn.
         reportSlow?.(
             op,
             round(ms),
@@ -142,8 +117,10 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
     }
 };
 
-/** Measure an async operation. Returns what it returns, rethrows what it throws, a failed call is still a
- *  span, and a slow failure is the most interesting kind. */
+/**
+ * Measures an async op; rethrows what it throws, since a failed call is still a span, and a slow failure is the
+ * most interesting kind.
+ */
 export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Promise<T>): Promise<T> => {
     const from = performance.now();
     try {
@@ -153,18 +130,17 @@ export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Pr
     }
 };
 
-// Ranked by total time, see the module comment for why that and not max.
+// Ranked by total time, not worst case: what consumed the most time overall is the bottleneck.
 const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
 
-/* The console handle. Attached to the window rather than exported for a component, because the moment it is
- * wanted is the moment something is already going wrong and the only tool in reach is devtools:
- *
- *   __intenticPerf.table()          ranked, start here, the top row is your bottleneck
- *   __intenticPerf.dump()           the last 1000 spans, newest last, what led up to a stall
- *   __intenticPerf.dump('chat')     …filtered to ops starting with 'chat'
- *   __intenticPerf.verbose(true)    log every span from now on (survives reload)
- *   __intenticPerf.reset()          zero the table before reproducing something deliberately
- */
+// Console handle, attached to the window rather than exported, since the moment it's needed the only tool in reach
+// is devtools:
+//
+//   __intenticPerf.table() ranked, start here, the top row is your bottleneck
+//   __intenticPerf.dump() the last 1000 spans, newest last, what led up to a stall
+//   __intenticPerf.dump('chat') …filtered to ops starting with 'chat'
+//   __intenticPerf.verbose(true) log every span from now on (survives reload)
+//   __intenticPerf.reset() zero the table before reproducing something deliberately
 export const installPerfConsole = (): void => {
     (globalThis as unknown as Record<string, unknown>)[`__intenticPerf`] = {
         table: (): void => {

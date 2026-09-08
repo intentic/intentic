@@ -11,58 +11,40 @@ import { freePort } from "./free-port.js";
 const execFileAsync = promisify(execFile);
 
 export interface ProcessSpec {
-    // Run inside a detached tmux session in `cwd` with PORT (assigned by the manager) + `env` in the
-    // environment. `port` is filled in by the manager before the runner sees it.
+    // Runs in a detached tmux session in `cwd`, with PORT (manager-assigned) and `env` set.
     readonly command: string;
     readonly cwd: string;
     readonly env?: Record<string, string>;
-    // Extra env var names that ALSO get the assigned port, for a dev server that reads a non-PORT var (e.g. the
-    // Hono API reads API_PORT). PORT is always injected; these mirror it under the app's own name.
+    // Extra env vars that also get the assigned port, for servers that read a non-PORT var (e.g. API_PORT).
     readonly portEnv?: readonly string[];
-    // A one-shot job (infra-apply): launched like any panel (command typed into the interactive shell), but
-    // the sweep flips `running` → false once the shell is back at its prompt, how the job reports completion
-    // (InfraDeclare polls exactly that). Default (dev servers) stays running until the session ends.
+    // A one-shot job reports done once its shell returns to prompt; default panels run until session end.
     readonly oneShot?: true;
 }
 
-// Every managed process (panel/app dev server, docker daemon, local model server, infra-apply job) runs inside
-// tmux session `panel-<key>` so the owner can attach the existing /system/terminal WebSocket to it, live output
-// with full scrollback replaces the old captured-tail logs. The `panel-` prefix predates the generic manager and
-// is wire data (session names reach the browser and are string-built in web/_extensions), do not rename.
-// Extension-declared processes do NOT ride this manager: they are supervised daemon children
-// (service-processes.ts), which is the right shape for a service and the wrong one for these interactive and
-// daemon-restart-surviving surfaces.
+// Wire data: session names reach the browser and are string-built there; never rename this prefix.
 export const PANEL_SESSION_PREFIX = "panel-";
 
-/* WHERE A START HAS GOT TO, as far as a tmux pane's foreground command can say (the contract's PanelLaunch):
- *   launching   the session exists and its shell has not run the command yet (oh-my-zsh on a cold volume, a
- *               throttled CPU: this can be seconds)
- *   installing  the command is running and node_modules was missing when it started, so `pnpm install` goes
- *               first; ends when the package manager writes its completion file
- *   starting    the dev command is running and nothing has bound a port yet (the panels route, which sees
- *               the listeners, drops the state entirely once the preview proxy has something to serve)
- *   exited      the command returned to a prompt without the session ending: a dev server that crashed on
- *               start, the one case a person must be told at once rather than left on a spinner */
+// launching: session exists, shell hasn't run the command yet
+// installing: node_modules was missing at start, so pnpm install runs first, until its completion file appears
+// starting: command is running, but nothing has bound a port yet
+// exited: command returned to a prompt without the session ending, e.g. crashed at start
 export type PanelLaunch = "launching" | "installing" | "starting" | "exited";
 
-// The file the package manager writes LAST: pnpm's current lockfile, npm's hidden lockfile. node_modules itself
-// appears within the install's first second, so its presence says nothing about whether the install finished.
+// The file the package manager writes last (pnpm/npm lockfile); node_modules itself appears within the first second, so
+// it says nothing about completion.
 const installFinished = (cwd: string): boolean =>
     existsSync(join(cwd, "node_modules", ".pnpm", "lock.yaml")) || existsSync(join(cwd, "node_modules", ".package-lock.json"));
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
 
-// The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every panel pane's
-// foreground command (session name → pane_current_command) in one call; an absent session is a dead one.
+// The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every pane's foreground
+// command in one call; absence means dead.
 export interface ProcessRunner {
     readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
     readonly kill: (session: string) => void | Promise<void>;
     readonly states: () => Promise<Map<string, string>>;
 }
 
-// How often the manager sweeps pane liveness while anything is tracked. The `-d` tmux client exits the moment
-// the session is created, so there is no child "exit" event, session state is only observable by asking tmux.
-// Prompt signals (terminal/prompt-signal.ts) run the same sweep on every preexec and precmd, so a one-shot
-// install that finishes in milliseconds is not held until the next tick.
+// Sweep interval; tmux gives no exit event, so liveness is only observable by asking, not pushed.
 const POLL_MS = 2000;
 
 export interface ManagedProcessesOptions {
@@ -114,15 +96,7 @@ const defaultRunner: ProcessRunner = {
         // A lingering same-name session is a previous run's leftover, clear it before creating fresh.
         // `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
         await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
-        // Every panel runs INSIDE an interactive shell (the image's default-command zsh, same as a web-* shell):
-        // the command is typed via send-keys so it goes through the line editor and lands in HISTORY. Ctrl+C
-        // then returns to a live prompt and ↑ re-runs it, the `-e` session env keeps PORT, so the re-run binds
-        // the same port and the preview proxy keeps forwarding. The keys buffer in the pty while the shell
-        // boots; `-l` sends the command literally (no key-name lookup). No remain-on-exit: a shell exit destroys
-        // the session like any other terminal, and a crashed server's output sits in scrollback above the prompt.
-        // The trailing ":" is required: send-keys takes a target-PANE, and tmux (3.3a) never resolves a bare
-        // exact-match `=name` as a pane target ("can't find pane") even though the session exists, the window
-        // form `=name:` resolves to the window's active pane.
+        // Sent via send-keys so Ctrl+C/↑ still work; trailing `:` is required for tmux to resolve the pane.
         await execFileAsync("tmux", [
             "new-session",
             "-d",
@@ -147,9 +121,8 @@ const defaultRunner: ProcessRunner = {
     kill: async (session) => {
         await execFileAsync("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
     },
-    // One call for all sessions: pane_current_command is the pane's foreground process (the shell itself at a
-    // prompt), how the sweep sees a oneShot job finish. A shell exit destroys its single-pane session, which
-    // reports as absence. No tmux server yet ⇒ non-zero exit ⇒ no sessions.
+    // One call for all sessions; pane_current_command at the prompt is how a oneShot's completion is seen. A shell exit
+    // destroys the session, reporting as absence; no tmux server means no sessions.
     states: async () => {
         const states = new Map<string, string>();
         try {
@@ -167,12 +140,8 @@ const defaultRunner: ProcessRunner = {
     },
 };
 
-// Sessions outlive a daemon restart (the tmux server is container-scoped, not daemon-scoped), kill leftovers
-// at boot so the documented "panels are stopped after a restart" semantics hold and no orphan dev server squats
-// a port the manager no longer tracks. agent-* sessions (the Claude agent's tmux Bash terminals) and job-*
-// sessions (terminal-run jobs whose owning stream died with the daemon) are equally orphaned after a restart.
-// `exempt` names sessions that must SURVIVE the sweep: a running infra apply that main.ts re-adopted instead
-// of truncating mid-mutation.
+// The tmux server outlives a daemon restart; panel/agent-*/job-* sessions are killed at boot so 'stopped after a
+// restart' holds. `exempt` spares a session main.ts re-adopted instead of truncating.
 export const killStaleManagedSessions = async (exempt: readonly string[] = []): Promise<void> => {
     try {
         const { stdout } = await execFileAsync("tmux", ["list-sessions", "-F", "#{session_name}"]);
@@ -190,30 +159,23 @@ export const killStaleManagedSessions = async (exempt: readonly string[] = []): 
 };
 
 export interface ManagedProcesses {
-    // Assigns a free PORT and starts the panel's dev server in tmux session `panel-<key>`. No-op when already
-    // running; a previous run's lingering session is replaced.
+    // Assigns a free port and starts the panel; no-op if already running, replacing a lingering session.
     readonly start: (repo: string, spec: ProcessSpec) => Promise<void>;
-    // Re-track a session that outlived a daemon restart (a live one-shot job the boot sweep must not kill):
-    // registers it so `running` reports it and the sweep watches it to completion. False when no such session.
+    // Re-tracks a session that survived a restart (a live one-shot the boot sweep spared); false if none exists.
     readonly adopt: (repo: string, spec: Pick<ProcessSpec, "oneShot">) => Promise<boolean>;
     // Kills the session (including a finished oneShot's lingering shell).
     readonly stop: (repo: string) => void | Promise<void>;
     readonly running: (repo: string) => boolean;
-    // The port the running panel was assigned (undefined when not running), the preview proxy's forward target.
+    // The assigned port, undefined when not running; the preview proxy's forward target.
     readonly portOf: (repo: string) => number | undefined;
-    // Where a running dev-server panel's start has got to (see PanelLaunch); undefined when not running, and for
-    // one-shot jobs, whose completion is their own story (`running`).
+    // Start progress for a dev-server panel (PanelLaunch); undefined when not running or for a one-shot job.
     readonly launchOf: (repo: string) => PanelLaunch | undefined;
     // SIGTERM shutdown path, kill every managed panel.
     readonly stopAll: () => void;
 }
 
-// Manages the sandbox's long-running tmux sessions (operator panels, app dev servers, dockerd, local model
-// servers, one-shot infra jobs), keyed by process key. A session
-// that ends (its shell exited or was ×-killed) drops out of `running` on the next liveness sweep, `running`
-// means "session alive", not "dev process alive": a Ctrl+C'd dev server sits at a usable prompt and stays
-// running. A oneShot job additionally completes when its shell is back at the prompt; the session lingers
-// attachable, output in scrollback above a live prompt.
+// Manages long-running tmux sessions (panels, dev servers, dockerd, one-shot jobs) by key. `running` means
+// session-alive, not process-alive; a oneShot also completes once its shell returns to prompt.
 export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, options: ManagedProcessesOptions = {}): ManagedProcesses => {
     const watchPrompts = options.onPromptWatch ?? watchPromptSignals;
     const current = new Map<
@@ -224,8 +186,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             startedAt: number;
             sawJob: boolean;
             promptStreak: number;
-            // For the launch state: where the command runs, whether its dependencies were there when it was
-            // typed, and the pane's foreground command as of the last sweep.
+            // For launch state: where the command runs, whether deps existed at start, last-seen foreground command.
             cwd: string;
             installed: boolean;
             lastCommand: string | undefined;
@@ -234,16 +195,11 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
     let timer: NodeJS.Timeout | undefined;
     let unwatchPrompts: (() => void) | undefined;
 
-    // Before this many ms, a oneShot sitting at the prompt is treated as "shell still booting, buffered
-    // send-keys not consumed yet" rather than "job finished", unless the job was already observed running
-    // (sawJob). ponytail: a job that finishes before any sweep samples it AND a shell boot slower than this
-    // grace would still read as a false completion; widen the grace if that ever materializes.
+    // Before this, a prompt sighting reads as a booting shell, not completion, unless the job was seen running.
     const ONE_SHOT_GRACE_MS = 10_000;
 
-    /* Untrack a key and say so. `running` is what /panels draws a repo's dev server from and what the terminals
-     * list reports each panel row's status from, so both go stale together, a dev server that died and a
-     * one-shot that finished are the two ways a panel stops without anybody clicking Stop, and until this push
-     * existed they were only ever discovered by the browser asking again. */
+    // Untracks a key and publishes the change, since /panels and the terminals list both read `running` from here. A
+    // died dev server and a finished oneShot are the two ways a panel stops without a Stop click.
     const untrack = (key: string): void => {
         current.delete(key);
         publishRuntimeChange("panels", "terminals");
@@ -271,9 +227,8 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 untrack(key);
                 continue;
             }
-            // The launch state's inputs, for every kind of panel: the first non-shell sighting is the command
-            // starting, a later shell sighting is it having exited. A change is pushed so the screen watching
-            // a start moves with it rather than on the next unrelated frame.
+            // First non-shell sighting is the command starting; a later shell sighting is it exiting. Published on
+            // change so a watching screen updates immediately.
             if (command !== SHELL) {
                 entry.sawJob = true;
             }
@@ -289,11 +244,9 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 entry.promptStreak = 0;
                 continue;
             }
-            /* One prompt after a job the sweep saw is enough: precmd IS the shell saying the command finished,
-             * which is what prompt-signal.ts exists to surface without waiting for this tick. Two consecutive
-             * prompt sightings stay for the cases precmd cannot distinguish: a shell still booting before its
-             * send-keys land (never sawJob), and the ms-window between two commands in a `&&` chain that a poll
-             * can read as zsh between forks. */
+            // One prompt is enough once a job was seen, since precmd itself says the command finished. Two consecutive
+            // sightings cover what precmd can't tell apart: a still-booting shell, or the gap between chained `&&`
+            // commands.
             entry.promptStreak += 1;
             const graceOk = Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS;
             if ((fromPrompt && entry.sawJob && entry.promptStreak >= 1) || (entry.promptStreak >= 2 && (entry.sawJob || graceOk))) {
@@ -311,7 +264,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 return;
             }
             const port = await freePort();
-            // A concurrent start of the same key won the race while we awaited the port, leave the winner be.
+            // A concurrent start of the same key won the race during the port await; leave it be.
             if (current.has(key)) {
                 return;
             }
@@ -326,8 +279,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 installed: existsSync(join(spec.cwd, "node_modules")),
                 lastCommand: undefined,
             });
-            // The session exists now; it is not SERVING yet. This frame draws the row as starting, and the port
-            // sampler's frame, seconds later, when the dev server actually binds, is what turns it healthy.
+            // The session exists but isn't serving yet; the port sampler's later frame is what turns the row healthy.
             publishRuntimeChange("panels", "terminals");
             ensureWatching();
         },
@@ -337,9 +289,8 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 return false;
             }
             if (!current.has(key)) {
-                // sawJob from the live pane: a job currently in the foreground counts as observed, so a
-                // shell-at-prompt sighting after it finishes completes the one-shot without the boot grace.
-                // Adopted mid-life: no cwd to read an install off, and nothing of its start left to narrate.
+                // sawJob is true if the pane's current command isn't the shell, so a later prompt completes it without
+                // the boot grace. Adopted mid-life: no cwd, nothing of its start to narrate.
                 current.set(key, {
                     port: 0,
                     oneShot: spec.oneShot,

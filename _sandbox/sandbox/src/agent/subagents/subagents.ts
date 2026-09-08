@@ -14,41 +14,14 @@ import { publishRuntimeChange } from "../../system/runtime-watch.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { turnRunOf } from "../run/turn/turn-runs.js";
 
-/* THE AGENTS AN AGENT STARTS, AS THINGS THE DAEMON CAN NAME.
- *
- * A turn that delegates used to be almost invisible. The SDK reports a subagent's whole life on the stream,
- * task_started, task_progress, task_updated, task_notification, and every one of those was dropped for having
- * "no UI mapping", so the only trace of a child was the tool rows the client nested under its Agent card. That
- * is thin for a foreground child and nothing at all for a BACKGROUNDED one, which is the Agent tool's default:
- * the parent fires it and walks away, so the card sits on a spinner for minutes with no status, no spend, and no
- * way to see what it is doing.
- *
- * This module is the record those surfaces read, and it is deliberately the third of its kind rather than a new
- * idea: the agent's shell (terminal/terminal-session.ts) and the agent's browser (browser/browser-sessions.ts)
- * are already daemon-held registries with a /system list route, an appear-on-content rail tile, and a door from
- * the tool card that spawned them. A subagent is the same kind of fact, something a turn started that the
- * operator may want to look at, so it lists the same way, ages out the same way, and is named by the same rule.
- * Its retention window is its own, and much shorter; RETAIN_FINISHED_MS says why.
- *
- * WHAT IS DIFFERENT is what "look at it" means. A shell is one stream of bytes and a browser is a live page; a
- * subagent has neither. What it has is a TRANSCRIPT, so there is no third WebSocket here, sessions/
- * subagent-transcript.ts serves one: an SDK child live from the parent turn's frame log and settled from the
- * SDK's own per-child store, a spawned child from the conversation it IS (its own pump, then its own record).
- *
- * A RECORD IS KEYED BY THE SPAWNING TOOL CALL'S ID for an SDK child (the one key its meta file, its task
- * messages and the client's `parentToolUseId` nesting all carry), and by the child's own conversation id for a
- * spawned one (the spawn tool returns it, so both sides hold it). The ids the transcripts are actually read
- * with (the SDK's agent id) never reach the wire, because no surface asks a question they answer. */
+// The registry of subagents the daemon can name, read by the Subagents area and the rail; the third registry of its
+// kind after terminal and browser sessions, with its own short retention window. An SDK child is keyed by the spawning
+// tool call's id, a spawned one by its own conversation id.
 
-/* A finished subagent stays listable this long, so its report is still readable just after the turn that ran it
- * ended, then it goes. SHORT on purpose, and shorter than the browsers' two hours: a turn spawns children at a
- * rate nothing else on the rail comes close to (a single verification pass can start a dozen), so a window sized
- * for "what did the agent open today" turns this list into a log nobody prunes. What a finished child is worth
- * looking at for is the minutes right after it reports; past that the parent's own transcript is the record. */
+// Short on purpose: a turn can spawn a dozen children at once, far faster than browsers age (two hours).
 const RETAIN_FINISHED_MS = 5 * 60_000;
 
-// How much of a child's report rides on a card and in a list row: the whole of it is the transcript's job,
-// not the summary's.
+// Report text kept in the summary and list row; the rest is the transcript's job.
 const REPORT_TAIL = 500;
 
 interface SubagentRecord {
@@ -58,10 +31,7 @@ interface SubagentRecord {
     agentType: string | undefined;
     description: string | undefined;
     model: string | undefined;
-    /* A `spawned` child's provider and harness, undefined for every other kind, whose provider is implied.
-     * Held because they are the child conversation's transcript key: reading a settled spawned child back
-     * means asking the transcript record under the same (id, provider, harness) its turns were filed under
-     * (sessions/turn-transcript.ts transcriptAgentOf). */
+    // A spawned child's provider, paired with harness below; together with id, its transcript lookup key.
     provider: AgentProvider | undefined;
     harness: AgentHarness | undefined;
     spawnDepth: number | undefined;
@@ -75,35 +45,24 @@ interface SubagentRecord {
     lastTool: string | undefined;
     summary: string | undefined;
     error: string | undefined;
-    /* Whether anything checked the work behind that summary (child-verification.ts), stamped once, at the
-     * moment the child ends. Not while it runs: a standing read mid-flight says "unproven" about every child
-     * that has not reached its tests yet, which is a verdict on a job half done. */
+    // Stamped once, when the child ends; a mid-run read would call unfinished work unproven.
     verification: SubagentVerification | undefined;
-    /* --- how its transcript is READ. Daemon-side only; see the header. ---
-     * The TURN itself rather than a copy of what it knew when the child was born: its session id is filled from
-     * the stream's first frame and the directory below from the first child's start hook, both of which can land
-     * after a record is opened. A snapshot taken at `open` froze whichever of them had not arrived yet. */
+    // Live reference, not a snapshot: sessionId and subagentsDir fill in after the record opens.
     readonly turn: SubagentTurn;
-    // The SDK's own id for the child, half of what getSubagentMessages reads a transcript with, and the half
-    // only the child's meta file can pair to the tool call that spawned it. Cached here once resolved; see
-    // subagentAgentId for when that happens and why it cannot happen sooner.
+    // The SDK's own agent id, resolved via subagentAgentId and cached here once known.
     agentId: string | undefined;
-    // WHERE the current summary came from, so a weaker source arriving later cannot overwrite a stronger one
-    // (see `ending`). Undefined ⇒ nothing final has spoken yet: a progress digest or a blocked reason, both of
-    // which anything may replace.
+    // Where the current summary came from, so a weaker source can't overwrite a stronger one (see `ending`).
     summarySource: SummarySource | undefined;
 }
 
 const records = new Map<string, SubagentRecord>();
 
-// Drop what has aged out. Called on every list and every write, so a quiet sandbox does not hold a finished
-// turn's children forever (the browser registry's rule).
+// Drop records aged past RETAIN_FINISHED_MS; called on every list and every write.
 const sweep = (now: number): void => {
     for (const [id, record] of records) {
         if (record.endedAt !== undefined && now - record.endedAt > RETAIN_FINISHED_MS) {
             records.delete(id);
-            // The verification ledger's life is the record's: its verdict was stamped onto the record when the
-            // child ended, so what is left here is the working record nobody can ask about any more.
+            // The verification ledger's life matches the record's; its verdict was already copied onto the record.
             forgetChild(id);
         }
     }
@@ -112,11 +71,8 @@ const sweep = (now: number): void => {
 const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "running", "blocked", "paused"]);
 export const subagentRunning = (record: Pick<SubagentSession, "status">): boolean => LIVE.has(record.status);
 
-/* WHO IS WAITING ON THE ROSTER, notified synchronously on every open() and every effective patch(), which is
- * what makes waitForSubagent race-free: a listener added BEFORE the current state is read cannot miss a
- * transition, and a state a child only flickers through (blocked for the second an approval takes) still ran
- * every listener while it held. The runtime-watch bus next door is deliberately NOT this seam: it rate-limits
- * per domain, and a coalesced flicker is exactly the missed wake this set exists to prevent. */
+// Notified synchronously on every open() and patch(), which makes waitForSubagent race-free: a listener added before
+// the read cannot miss a transition. Not the runtime-watch bus, which rate-limits per domain.
 const waiters = new Set<() => void>();
 const notifyChanged = (): void => {
     for (const listener of waiters) {
@@ -124,19 +80,11 @@ const notifyChanged = (): void => {
     }
 };
 
-/* WHICH CHILDREN THE PARENT WALKED AWAY FROM, marked by the spawning tool call, because nothing else says so.
- *
- * The SDK models it as `is_backgrounded` on a task_updated patch, and that patch does not come: a child started
- * with `run_in_background` was watched through its whole life here, born, worked, reported, finished, without
- * the field ever being set once. So the card's "background" pill, the one label that explains why a call can sit
- * unfinished while the turn moves on underneath it, could never render.
- *
- * Marked BEFORE the record exists, which is the ordering the stream actually has: the tool_use block arrives
- * ahead of the `task_started` that opens one (the client's reducer leans on the same fact). `open` consumes the
- * mark, so the flag rides the BORN frame, the only frame that carries it. */
+// Which children the parent walked away from, marked by the spawning tool call since the SDK's own `is_backgrounded`
+// patch never arrives for one. Marked before the record exists; `open` consumes the mark onto the born frame.
 const backgrounded = new Set<string>();
 
-/** The tool call that spawned a child, as it streams: whether the parent walked away from this one. */
+/** Marks a spawning tool call id as backgrounded, ahead of the task_started that will read it. */
 export const noteSubagentSpawn = (id: string): void => {
     backgrounded.add(id);
 };
@@ -163,8 +111,7 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.verification !== undefined ? { verification: record.verification } : {}),
 });
 
-/** Every subagent this sandbox knows about, live first, then most recently active, which is the order a roster
- *  of "what is happening / what just happened" is read in (browsersQuery sorts the browsers the same way). */
+/** Every known subagent, live first then most recently active, the same order browsersQuery uses for browsers. */
 export const listSubagentSessions = (): SubagentSession[] => {
     sweep(Date.now());
     return [...records.values()]
@@ -172,8 +119,10 @@ export const listSubagentSessions = (): SubagentSession[] => {
         .toSorted((left, right) => Number(subagentRunning(right)) - Number(subagentRunning(left)) || right.activityAt - left.activityAt);
 };
 
-/** How to READ one subagent's transcript, everything sessions/subagent-transcript.ts needs and nothing the
- *  wire carries. Undefined ⇒ no such record (never started, or aged out of retention). */
+/**
+ * Everything subagent-transcript.ts needs to read one child's transcript, nothing the wire carries. Undefined: no such
+ * record (never started, or aged out).
+ */
 export const subagentSource = (
     id: string,
 ):
@@ -183,12 +132,10 @@ export const subagentSource = (
           readonly cwd: string;
           readonly running: boolean;
           readonly startedAt: number;
-          // What it was asked to do, the opening user bubble of a transcript rendered from frames, which have no
-          // prompt of their own to start from.
+          // Shown as the opening user bubble; frames carry no prompt of their own.
           readonly description: string | undefined;
           readonly sessionId: string | undefined;
-          // A `spawned` child's transcript key: its conversation id (= the record's own id), and the provider
-          // and harness its turns were filed under. Undefined for every other kind.
+          // A spawned child's transcript key, alongside its conversation id; undefined for every other kind.
           readonly provider: AgentProvider | undefined;
           readonly harness: AgentHarness | undefined;
       }
@@ -210,13 +157,14 @@ export const subagentSource = (
     };
 };
 
-/** Whether any live child of this conversation is working IN THE PARENT'S OWN TREE, the quiet-worktree gate's
- *  question (agent.ts syncOnAnswer): an SDK subagent edits the turn's checkout, so rebasing under one swaps
- *  files mid-read; a spawned child has a worktree of its own and holds nothing here. */
+/**
+ * Whether a live child is working in the parent's own checkout, the rebase gate's question: an SDK subagent edits it
+ * directly, a spawned child has its own worktree.
+ */
 export const subagentInParentTree = (conversationId: string): boolean =>
     [...records.values()].some((record) => record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record));
 
-/** How many of a conversation's children are live, and how many it has had, the fleet card's count chip. */
+/** Live and total child counts for a conversation, the fleet card's count chip. */
 export const subagentCountsOf = (conversationId: string): { readonly running: number; readonly total: number } => {
     let running = 0;
     let total = 0;
@@ -232,13 +180,8 @@ export const subagentCountsOf = (conversationId: string): { readonly running: nu
     return { running, total };
 };
 
-/* What a turn knows about itself when it spawns something, one handle, held for the turn's life and pointed at
- * by every child it opens, so a fact the turn learns late reaches the children born before it.
- *
- * Both of the mutable fields are learned late, and neither can be waited for. `sessionId` is filled from the
- * stream's first frame, the hooks are wired before the SDK has said which session this turn runs under.
- * `subagentsDir` is filled by the first child's start hook, which is the only place the SDK ever names the
- * directory it files this session's children in. */
+// One handle per turn, held for its life and shared by every child it opens, so a late-learned fact reaches children
+// born earlier. `sessionId` fills from the stream's first frame; `subagentsDir` from the first child's start hook.
 export interface SubagentTurn {
     readonly conversationId: string;
     readonly cwd: string;
@@ -276,9 +219,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         ...fields,
     };
     records.set(id, record);
-    // A child was born. The rail's count and the Subagents area both read the roster, and neither should learn
-    // about it on its own clock, this is the same roster the AgentEvent stream carries, for the surfaces that
-    // are not watching a conversation.
+    // Tells surfaces not watching this conversation, the rail, the Subagents area, that a child was born.
     publishRuntimeChange("subagents");
     notifyChanged();
     return record;
@@ -295,8 +236,8 @@ const bornFrame = (record: SubagentRecord): AgentEvent => ({
     ...(record.background !== undefined ? { background: record.background } : {}),
 });
 
-// Apply a patch and report it, or report nothing when the record is gone or nothing actually moved, a frame per
-// no-op progress message would be a stream of updates the client re-renders for free.
+// Applies a patch and reports it; reports nothing if the record is gone or nothing actually changed, so a repeated
+// no-op update produces no frame.
 const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefined => {
     const record = records.get(id);
     if (record === undefined) {
@@ -310,18 +251,12 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
     }
     Object.assign(record, Object.fromEntries(changed));
     record.activityAt = Date.now();
-    /* THE ONE MOMENT A CHILD ENDS, whichever of the five roads it came down: a task_notification, the
-     * SubagentStop hook, the spawn service's own settle, the turn-end sweep, a failure. Each of those is a
-     * different caller and only this line sees all of them, which is why the verdict is read HERE and not at
-     * any of them. Read once and kept: the ledger goes on existing until the record is swept, but a standing
-     * that changed afterwards would be work done by something that is no longer this child. */
+    // The one place a child's end is recorded, whichever arrival got here first; read once, never re-stamped.
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
         record.verification = childVerification(record.id);
     }
-    // Every real move: a status, a token count, the tool it just used. This is the chattiest publisher in the
-    // daemon by a distance, which is exactly why the bus rate-limits per domain rather than asking each caller
-    // to decide what is worth a frame, a no-op patch has already returned above, so what reaches here changed.
+    // Fires only on real change; a no-op patch already returned above.
     publishRuntimeChange("subagents");
     notifyChanged();
     const update: Extract<AgentEvent, { kind: "subagent_update" }> = { kind: "subagent_update", id };
@@ -333,30 +268,13 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
         ...(fields.lastTool !== undefined ? { lastTool: record.lastTool } : {}),
         ...(fields.summary !== undefined ? { summary: record.summary } : {}),
         ...(fields.error !== undefined ? { error: record.error } : {}),
-        // Off the RECORD rather than off `fields`, because nothing patches it: it is stamped by the ending
-        // above, on the same frame that carries the report it qualifies.
+        // Read off the record, not `fields`: verification is stamped by the ending logic above, not passed in.
         ...(record.verification !== undefined ? { verification: record.verification } : {}),
     };
 };
 
-/* ---- HOW A SUBAGENT ENDS, decided in one place ---------------------------------------------------------------
- *
- * Three arrivals can each be the first to know a child is over, and for any given child only some of them ever
- * come: a foreground delegation's own tool_result, the delegate's `report` signal (the only news a BACKGROUNDED
- * run gives while its process is still alive), and the SDK's task notification when that process finally exits.
- * They race, and they carry last words of very different worth, the child's own sign-off, a tail of stdout, the
- * SDK's progress digest.
- *
- * One rule here rather than a guard at each door, because a guard per door is what the first version had and a
- * guard is only as wide as the door it is on: the one protecting a delegate's report from the SDK's digest knew
- * nothing about SDK children, so for those the digest went on overwriting the child's own sign-off. So instead:
- *
- *   - the FIRST arrival ends it, and a later one may only turn a finished child into a FAILED one, an exit code
- *     landing after the delegate's own sign-off knows the half of the story the sign-off did not;
- *   - the summary is kept by SOURCE, not by arrival order.
- *
- * The text is bounded by the CALLER, because where to cut differs by source and the difference is meaningful: a
- * report is cut at its head (it opens with the answer), a stdout tail at its end (it closes with one). */
+// Whichever of three racing sources arrives first ends the child; a later one may only turn a finished child into
+// failed. Summary is kept by source, not arrival order; each caller cuts its own text where it makes sense.
 
 type SummarySource = "notification" | "report";
 const SUMMARY_RANK: Record<SummarySource, number> = { notification: 1, report: 2 };
@@ -375,31 +293,16 @@ const ending = (
     };
 };
 
-/* ---- the SDK's own subagents: the task_* stream, keyed by tool_use_id ---------------------------------------
- *
- * The four messages say different things and only one of them opens a record. `task_started` carries the
- * tool_use id, so it is the only one that can, and a task with no tool_use id is not a subagent at all (an
- * ambient/housekeeping task the SDK asks consumers to keep out of the transcript), so it is skipped rather than
- * listed as an agent nobody started. `task_updated` names only its task_id, which is why `tasks` remembers the
- * pairing that `task_started` established.
- *
- * NOT EVERY TASK IS AN AGENT, and reading the stream as though it were is what first shipped here. The SDK runs
- * one task machine for all of its background work, `local_bash`, `local_agent`, `monitor_ws`, `local_workflow`
- * and the rest, so a Bash command sent to the background arrives as a `task_started` with a tool_use id like any
- * other, and filing it listed a shell command as an agent, under its Bash description, with a transcript door
- * that opened on nothing (there is no per-child JSONL for something that was never a child). Hence
- * isSubagentTask: the two fields the SDK sets only for Task-tool children, either of which is enough. */
+// task_started is the only message with a tool_use id, so only it opens a record; task_updated pairs back via `tasks`.
+// Not every task is an agent: the stream also carries shell/monitor/workflow work, filtered by `isSubagentTask`.
 
-// The narrow shape of the SDK's task messages, declared here because the daemon reads a handful of fields off a
-// union of four types (agent.ts does the same for the stream events it maps).
+// The fields the daemon reads off the SDK's four task_* message shapes.
 export interface SubagentTaskMessage {
     readonly subtype: string;
     readonly task_id?: string;
     readonly tool_use_id?: string;
     readonly description?: string;
-    // The CLI's own raw discriminant, `local_agent` | `in_process_teammate` | `local_workflow` | `local_bash` |
-    // `monitor_ws` | `monitor_mcp` | `remote_agent`, see isSubagentTask. Left an open string because the SDK
-    // types it as one and adds to the set without notice.
+    // The CLI's raw discriminant; an open string since the SDK adds values to it without notice.
     readonly task_type?: string;
     readonly subagent_type?: string;
     readonly prompt?: string;
@@ -413,32 +316,19 @@ export interface SubagentTaskMessage {
 
 const tasks = new Map<string, string>();
 
-/* Is this task an AGENT, as opposed to the shell/monitor/workflow work the same stream carries? Either field
- * answers yes on its own: `subagent_type` is documented as set only for Task-tool subagents, and `local_agent`
- * is what the machine's own discriminant calls one. Deliberately a whitelist, an unknown task type the SDK adds
- * later is left off this surface rather than filed as an agent, which is the failure that produced a Subagents
- * list of backgrounded shell commands.
- *
- * SPELL THE DISCRIMINANT THE WAY THE CLI EMITS IT. This clause used to read `"subagent"`, which the CLI has
- * never sent, so the whitelist was one live test resting entirely on `subagent_type`. It held here (that field
- * is set for every Task child), and the same wrong vocabulary in the turn-end hold next door did not
- * (sdk-stream.ts UNHELD_TASK_TYPES): there it silently stopped waiting for backgrounded agents and killed them.
- *
- * A real child that somehow reached us unlabelled is still not lost: the SubagentStop hook adopts it from its
- * own meta file, and that hook fires for nothing else. */
+// True only when `subagent_type` is set or `task_type` is `local_agent`, deliberately a whitelist so an unknown future
+// type is left off. Adopted later anyway via SubagentStop's meta file if unlabelled.
 const isSubagentTask = (message: SubagentTaskMessage): boolean => message.subagent_type !== undefined || message.task_type === "local_agent";
 
-// The SDK's task status vocabulary is our own (SubagentStatusSchema), so a value it adds that we have never heard
-// of leaves the status where it was rather than being coerced into a wrong one.
+// SubagentStatusSchema's own vocabulary; an SDK status we don't recognize leaves the record's status unchanged.
 const STATUSES: ReadonlySet<string> = new Set<SubagentStatus>(["pending", "running", "completed", "failed", "killed", "paused"]);
 const statusOf = (value: string | undefined): SubagentStatus | undefined =>
     value !== undefined && STATUSES.has(value) ? (value as SubagentStatus) : undefined;
 
-// A task_notification's terminal status, which is NOT the task vocabulary: "stopped" is what the SDK calls a
-// child the user or the parent cut short, and `killed` is that in ours.
+// Maps task_notification's own status words, not the task vocabulary, to ours; 'stopped' becomes `killed`.
 const NOTIFIED: Record<string, SubagentStatus> = { completed: "completed", failed: "failed", stopped: "killed" };
 
-/** One SDK task message, folded into the registry. Returns the frame it produced, if any. */
+/** Folds one SDK task message into the registry; returns the frame it produced, if any. */
 export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessage): AgentEvent | undefined => {
     if (message.subtype === "task_started") {
         const id = message.tool_use_id;
@@ -480,8 +370,7 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
     if (message.subtype === "task_notification") {
         const id = message.tool_use_id ?? (message.task_id !== undefined ? tasks.get(message.task_id) : undefined);
         const record = id !== undefined ? records.get(id) : undefined;
-        // The weakest of the three endings, a digest of whatever the command printed, so it says its piece
-        // through `ending` and loses to a report the delegate or the stop hook already delivered.
+        // Weakest of the three endings; routed through `ending` so a report already delivered wins over it.
         return record === undefined
             ? undefined
             : patch(record.id, {
@@ -497,25 +386,8 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
     return undefined;
 };
 
-/* ---- the SubagentStart / SubagentStop hooks: the ids the TRANSCRIPT is read with ----------------------------
- *
- * The task stream names a subagent by the tool call that spawned it; only the hooks name it by its own agent id,
- * which is half of what getSubagentMessages needs. Neither hook carries the tool_use id, so the join runs
- * through the SDK's own per-subagent meta file, which also hands over the description, type, model and spawn
- * depth in one read, and is the authoritative pairing rather than an inference from arrival order (parallel
- * children would break that immediately).
- *
- * WHAT EACH HOOK CAN ACTUALLY DO IS DECIDED BY WHEN THE META FILE EXISTS, and it does not exist at
- * SubagentStart: that hook's return is what lets the child begin, so the file it would be read from is written
- * after it resolves. Waiting there deadlocks against the very write being waited for. So Start does the one
- * thing it uniquely can, name the DIRECTORY this session files its children in, which no other input carries
- *, and the pairing is resolved from that directory later, on demand (subagentAgentId).
- *
- * Stop is the other half and keeps its full read: it hands over the child's own transcript path, so the meta
- * sibling is exact, and by then the file is long written.
- *
- * These hooks are pure record-keeping, they emit no frame. The card already learned the child exists from
- * `task_started`, and the ids landing here are ones no surface reads. */
+// SubagentStart cannot read a child's meta file yet (written only once it resolves), so it just records the session's
+// child directory; SubagentStop can, and does the full read. Neither hook emits a frame.
 
 interface SubagentMeta {
     readonly agentType?: string;
@@ -529,19 +401,16 @@ const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => 
     try {
         return JSON.parse(await readFile(metaPath, "utf8")) as SubagentMeta;
     } catch {
-        // No meta file (an SDK that stopped writing one), or unreadable. The child stays listed off its task
-        // messages; only the transcript door closes, which is better than failing the hook and the turn with it.
+        // Missing or unreadable meta: the child stays listed from its task messages, only the transcript door closes.
         return undefined;
     }
 };
 
-// A session's children live beside its transcript, in a directory named after it:
-// `<projects>/<slug>/<session>.jsonl` → `<projects>/<slug>/<session>/subagents/`.
+// A session's children live in `<session-dir-without-.jsonl>/subagents/`, beside its transcript.
 const subagentsDirOf = (sessionTranscriptPath: string): string => join(sessionTranscriptPath.replace(/\.jsonl$/u, ""), "subagents");
 
-// What the meta file says about a child, onto the record it names. Everything but the agent id is `??=`: the
-// task stream got there first with the same facts more often than not, and the one that arrived live is the one
-// to keep.
+// Copies the meta file's facts onto the record; all but agentId use `??=` since the task stream usually got there
+// first.
 const fill = (record: SubagentRecord, meta: SubagentMeta, agentId: string): void => {
     record.agentId = agentId;
     record.agentType ??= meta.agentType;
@@ -550,9 +419,8 @@ const fill = (record: SubagentRecord, meta: SubagentMeta, agentId: string): void
     record.spawnDepth ??= meta.spawnDepth;
 };
 
-// Adopt what the meta file says about a child, from the hook that found it. The record may not exist yet (a hook
-// can beat its task_started), in which case the meta is enough to open one: `toolUseId` is the key, and
-// everything else the card wants is right there.
+// Adopts a child from its meta file; if no record exists yet (a hook beating task_started), opens one keyed by
+// `toolUseId`.
 const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void => {
     const id = meta.toolUseId;
     if (id === undefined) {
@@ -561,16 +429,8 @@ const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void =>
     fill(records.get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
 };
 
-/* WHICH SDK AGENT A CHILD IS, resolved from the session's own meta files, on demand.
- *
- * This is the pairing SubagentStart cannot do (see the note above it) and SubagentStop only does for a child
- * that stops while its parent's session is still alive. A BACKGROUNDED child, the Agent tool's default, often
- * does not: the parent fires it and walks away, the turn ends, closeSubagents settles it, and the stop hook
- * never comes. Those children were listed with their tokens and their tool counts and then opened on "No
- * transcript was recorded", with the JSONL sitting on disk beside the parent's, complete.
- *
- * Asked at READ time, so every meta file of that turn is long written; cached on the record, because the answer
- * cannot change. The scan is one session's children, and a meta file is a few hundred bytes. */
+// Which SDK agent a child is, resolved from the session's meta files at read time (a backgrounded child often outlives
+// SubagentStop, so that hook cannot always do the pairing). Cached once resolved.
 export const subagentAgentId = async (id: string): Promise<string | undefined> => {
     const record = records.get(id);
     if (record === undefined || record.agentId !== undefined) {
@@ -594,20 +454,15 @@ export const subagentAgentId = async (id: string): Promise<string | undefined> =
     return undefined;
 };
 
-/** Whether anything checked one child's work. The stamped verdict where the child has ended, and the live
- *  standing where it has not: a FOREGROUND child's tool result can reach its parent before the task stream
- *  says the child is over, and a stamp that lost that race would be a stamp the parent never sees. */
+/**
+ * Whether anything checked a child's work: the stamped verdict once it has ended, else the live standing (a foreground
+ * child's result can reach its parent before the task stream marks it over).
+ */
 export const subagentVerification = (id: string): SubagentVerification | undefined => records.get(id)?.verification ?? childVerification(id);
 
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
-    /* THE VERDICT, ONTO THE REPORT, at the one moment the parent is reading it: the Task tool's own result,
-     * on its way into the parent's context. `tool_use_id` IS the child's record id, so there is nothing to
-     * correlate.
-     *
-     * additionalContext rather than updatedToolOutput: the child's report is the child's, and rewriting it
-     * would make the daemon a co-author of something the parent will quote. This appends a fact ABOUT it,
-     * which is the whole distinction this mechanism exists to draw. Nothing is appended when there is nothing
-     * to warn about (child-verification.ts says why), so a clean fan-out costs no context at all. */
+    // Appends the verification verdict to the Task tool's result as the parent reads it, via `additionalContext` rather
+    // than rewriting the report itself. Nothing is appended when there is nothing to warn about.
     PostToolUse: [
         {
             matcher: "Task",
@@ -650,12 +505,8 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                         return { continue: true };
                     }
                     adopt(turn, meta, input.agent_id);
-                    /* The child's own last words, which is the one thing about a finished subagent a person
-                     * actually reads, so it goes in as a `report`, the strongest source, and the task stream's
-                     * digest can no longer land on top of it whichever way round the two arrive.
-                     *
-                     * Status is NOT set here: a stop hook fires for every way a child can end, and the task
-                     * stream is what distinguishes finishing from failing from being cut short. */
+                    // Child's own last words go in as `report`, the strongest source; status is not set here since only
+                    // the task stream distinguishes finishing, failing, or being cut short.
                     const child = meta.toolUseId !== undefined ? records.get(meta.toolUseId) : undefined;
                     if (child !== undefined && input.last_assistant_message !== undefined) {
                         patch(child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
@@ -667,22 +518,10 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
     ],
 });
 
-/* ---- spawned children: full agents the daemon itself runs (children/children.ts) ---------------------------
- *
- * The third source, and the simplest by construction: the other two reconstruct a child's life from outside
- * (task messages off a stream, hook spools and stdout tails around a CLI), where here the daemon drives the
- * child's turn itself and reports each move by direct call. Nothing is sniffed, nothing is raced, and the
- * summary is the child's own closing text rather than a tail of whatever it printed.
- *
- * The record's id IS the child's conversation id, minted by the service, so the spawn tool's answer, the wait
- * tool's target, the roster row and the child's own conversation all name each other with one string.
- *
- * `background: true` always: the spawn tool returns the moment the child is running, the parent supervises
- * through `wait`, and the child's turn outlives the parent's exactly like a backgrounded delegation's process
- * does, which is also why closeSubagents leaves these records alone. */
+// The daemon runs these children directly and reports each move by call, not by sniffing a stream. The record's id is
+// the child's own conversation id, so spawn, wait, and the roster all name it the same way.
 
-// What reaches the parent's live frame log: the in-chat card renders from streamed frames, and a service
-// call has no stream of its own.
+// Feeds the parent's live frame log; a service call has no stream of its own to draw from.
 const pushToParentRun = (conversationId: string, frame: AgentEvent | undefined): void => {
     if (frame === undefined) {
         return;
@@ -691,10 +530,10 @@ const pushToParentRun = (conversationId: string, frame: AgentEvent | undefined):
 };
 
 export interface SpawnedChildBirth {
-    // The child's conversation id, and therefore the record's id.
+    // The child's conversation id; also the record's id.
     readonly id: string;
     readonly description?: string;
-    // The provider's display label ("Cursor", "Codex"), the row's `Cursor · Port the parser` half.
+    // Provider display label ("Cursor", "Codex"); the first half of the row's `Cursor · Port the parser`.
     readonly agentType?: string;
     readonly model?: string;
     readonly provider?: AgentProvider;
@@ -702,10 +541,10 @@ export interface SpawnedChildBirth {
     readonly spawnDepth?: number;
 }
 
-/** A child the service just started: opened on the roster and announced into the parent's live stream. A
- *  SETTLED record under the same id is replaced whole — that is a follow-up `send` reopening the child for
- *  another turn — where a LIVE one stands: two turns cannot run on one conversation, and the pump refuses the
- *  second anyway. */
+/**
+ * Opens a roster record for a child the service just started, and announces it into the parent's live stream. A settled
+ * record under the same id is replaced whole, a follow-up `send`; a live one is left alone.
+ */
 export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): void => {
     const existing = records.get(birth.id);
     if (existing !== undefined && subagentRunning(existing)) {
@@ -724,14 +563,15 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): 
     pushToParentRun(turn.conversationId, bornFrame(record));
 };
 
-/** A live move in the child's own turn: working (with the tool it reached for), blocked on a question with the
- *  reason, or its running totals. Dropped once the record is settled, a late frame from a finished child. */
+/**
+ * A live move in the child's own turn: working, blocked with a reason, or running totals; dropped once the record is
+ * settled.
+ */
 export const noteSpawnedChild = (
     id: string,
     move: {
         readonly status?: "running" | "blocked";
-        // On `blocked`, WHAT it waits on. Rides `summary` raw (source unset) exactly like a delegation's
-        // blocked reason, so the child's real report replaces it the moment the wait is over.
+        // On `blocked`, what it waits on; unset source so the real report replaces it once unblocked.
         readonly summary?: string;
         readonly lastTool?: string;
         readonly toolUses?: number;
@@ -745,7 +585,7 @@ export const noteSpawnedChild = (
     pushToParentRun(record.conversationId, patch(id, move));
 };
 
-/** The child's turn ended: its closing text is the report, cut at its head because it opens with the answer. */
+/** The child's turn ended; its closing text becomes the report, cut at the head where the answer is. */
 export const settleSpawnedChild = (id: string, outcome: { readonly failed: boolean; readonly report: string; readonly error?: string }): void => {
     const record = records.get(id);
     if (record === undefined) {
@@ -766,17 +606,13 @@ export const settleSpawnedChild = (id: string, outcome: { readonly failed: boole
     );
 };
 
-/* ---- the wait: sleep until a child needs you --------------------------------------------------------------
- *
- * The primitive the wait tool (subagent-wait.ts) parks on. Race-free by construction: the listener is added
- * BEFORE the first evaluation, so a transition landing in between wakes the re-check rather than falling into
- * the gap, and because notifyChanged runs synchronously inside every patch, a state the child only passes
- * through still gets its evaluation while it holds. */
+// Race-free wait primitive behind the wait tool (subagent-wait.ts): the listener is added before the first evaluation,
+// and notifyChanged runs synchronously inside every patch, so a flickering state still gets evaluated while it holds.
 
 export type SubagentWaitUntil = "blocked" | "finished";
 
 export interface SubagentWaitOptions {
-    // A child's spawning tool-call id; absent ⇒ any child of the conversation.
+    // The child's id; absent means any child of the conversation.
     readonly target?: string;
     readonly until: readonly SubagentWaitUntil[];
     readonly timeoutMs: number;
@@ -785,7 +621,7 @@ export interface SubagentWaitOptions {
 
 export interface SubagentWaitOutcome {
     readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target";
-    // The child that satisfied the wait, or, on a timeout, the target's current snapshot if it has one.
+    // The child that satisfied the wait, or the target's current snapshot on a timeout.
     readonly matched?: SubagentSession;
 }
 
@@ -825,11 +661,7 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
                     return;
                 }
             }
-            /* NOTHING MATCHED AND NOTHING CAN, answer now rather than sleep out the timeout. A terminal record
-             * never moves again, and the candidate set cannot GROW during the wait: the only thing that opens a
-             * child of this conversation is its own turn, and that turn is the one parked in here. So a set with
-             * no live member is a wait that would end in nothing but a timeout, whether the target was never on
-             * the roster, has already finished, or aged out of retention, one answer, said straight away. */
+            // No live candidate remains and none can appear mid-wait; answer unknown-target now, not after a timeout.
             if (!found.some(subagentRunning)) {
                 settle({ outcome: "unknown-target", ...(found.length === 1 ? { matched: wire(found[0]!) } : {}) });
             }
@@ -844,21 +676,19 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
             settle({ outcome: "timeout", ...(snapshot !== undefined ? { matched: wire(snapshot) } : {}) });
         }, options.timeoutMs);
         timer.unref();
-        // Listener first, then the first look, the order the race-freedom comment above is about.
+        // Listener added before the first look, the ordering that makes this race-free.
         waiters.add(evaluate);
         evaluate();
     });
 
-/** Every child of this turn that is still marked live, settled as the turn ends. A subagent the SDK never
- *  reported a terminal status for (the turn was stopped, the CLI died under it) would otherwise sit "running"
- *  in the list forever, and a permanently-running child is exactly the lie this registry exists to remove. */
+/**
+ * Settles every still-live child of this turn as it ends, so one the SDK never reported a terminal status for does not
+ * sit 'running' forever.
+ */
 export const closeSubagents = (conversationId: string): AgentEvent[] => {
     const frames: AgentEvent[] = [];
     for (const record of records.values()) {
-        /* NOT the spawned ones: a spawned child is a conversation of its own whose turn genuinely outlives its
-         * parent's (the same life a backgrounded delegation's process has), and the service that runs it settles
-         * its record from the child's own ending, which always comes, the pump folds even a thrown child turn
-         * into an error frame and a done. Marking it killed here would report a working agent as dead. */
+        // Not spawned children: their turn outlives the parent's, and the service settles them from their own ending.
         if (record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record)) {
             const frame = patch(record.id, { status: "killed" });
             if (frame !== undefined) {
@@ -869,7 +699,7 @@ export const closeSubagents = (conversationId: string): AgentEvent[] => {
     return frames;
 };
 
-// Tests drive the registry through its real entry points, so they need a way back to empty between cases.
+// Resets all module state; tests drive the registry through its real entry points and need to start empty.
 export const resetSubagents = (): void => {
     records.clear();
     tasks.clear();

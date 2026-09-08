@@ -10,26 +10,20 @@ import type { IngressPair } from "./route.js";
 import { exposeRoute } from "./route.js";
 import { serviceMcp } from "./service.js";
 
-// A provisioned service a workspace exposes to its agent as a tool, resolved to what the wiring needs: its
-// id (the MCP server name), its kind (to look up the MCP endpoint path), and its routed domain (the URL base).
+// Provisioned service a workspace exposes as an agent tool: id (MCP server name), kind (to look up the endpoint
+// path), and routed domain (URL base).
 export interface WorkspaceTool {
     readonly id: string;
     readonly kind: ServiceKind;
     readonly domain: string;
 }
 
-// The sandbox's preview-proxy port (the app preview the host's wildcard `*.<zone>` tunnel ingress routes to,
-// ordered last so it loses to every explicit host; apps declare their own ports behind it) and the daemon's
-// HTTP port (host-internal
-// only, the server workspace is preview-only; the browser-direct path is connect.sh, not this).
-// The shared internal docker network the sandbox attaches to.
+// Shared internal docker network the sandbox attaches to.
 const NETWORK = "intentic-workspace";
 
-// The per-host AI-agent workspace: one sandbox container deployed onto the host over SSH (like the platform's
-// Forgejo/Komodo) from the pinned sandbox image, plus its WILDCARD `*.<zone>` Cloudflare route to the
-// sandbox's own preview proxy. The node carries the host SSH creds + internal ip; it gates on the daemon's
-// host-internal /health so readiness passes before the tunnel + DNS route exist. Returns the exposure's ingress
-// pair so the caller aggregates it onto the host's tunnel, the sandbox is just another service on that tunnel.
+// Per-host AI-agent workspace: one sandbox container deployed over SSH from the pinned image, plus its wildcard
+// `*.<zone>` route to its preview proxy. Readiness gates on the daemon's host-internal /health. Returns the
+// exposure's ingress pair to aggregate onto the host's tunnel.
 export const resolveWorkspace = (
     intent: WorkspaceIntent,
     host: HostInput,
@@ -40,9 +34,7 @@ export const resolveWorkspace = (
     const ssh = sshOf(host);
     const domain = previewDomain(zone);
     const exposure = exposeRoute(intent.expose, intent.on, domain, PREVIEW_PORT, apiToken);
-    // Each exposed service becomes a remote MCP endpoint at its routed domain, with an intentic-generated
-    // scoped bearer the sandbox forwards into the agent. The same secret key is what the tool itself
-    // authenticates against, so client and server share it through the secret store.
+    // Each service becomes an MCP endpoint at its domain; its bearer secret key is shared with the tool itself.
     const toolEntries = tools.map((tool) => {
         const mcp = serviceMcp(tool.kind);
         if (mcp === undefined) {
@@ -70,8 +62,8 @@ export const resolveWorkspace = (
                 ...(intent.agentBaseUrl !== undefined ? { agentBaseUrl: intent.agentBaseUrl } : {}),
                 // The agent's MCP tools (intent-declared internal services); omitted when none are exposed.
                 ...(toolEntries.length > 0 ? { tools: toolEntries } : {}),
-                // The approved overlay Dockerfile content; the provider builds + runs it instead of `image`.
-                // It lands in desired-state.json verbatim, the git review there IS the server-path approval.
+                // Approved overlay Dockerfile; provider builds+runs it instead of `image`, git-reviewed via
+                // desired-state.json.
                 ...(intent.dockerfile !== undefined ? { dockerfile: intent.dockerfile } : {}),
             },
             explicitDependsOn: [],

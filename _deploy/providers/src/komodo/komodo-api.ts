@@ -2,19 +2,15 @@ import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 import { responseDetail } from "../core/response-detail.js";
 
-// A Komodo Core resource summary (id + unique name) and the typed Alerter config the CD-notify provider
-// reconciles. Komodo's API is POST /{auth|read|write|execute}/{Operation} with a {type, params} body; it
-// returns the operation result JSON directly and signals errors with a non-2xx status + {message,...}.
-// Read responses are validated against the fields we consume (extra fields dropped); write/execute ops
-// ignore the body (only the status matters).
+// Resource summary (id + unique name). Komodo's API is POST /{auth|read|write|execute}/{Operation} with a
+// {type,params} body, non-2xx on error; read responses are validated, write/execute ignore the body.
 
 export interface KomodoResource {
     readonly id: string;
     readonly name: string;
 }
 
-// A Komodo user: its mongo id (needed to set permissions), login name, and whether it is enabled. A user
-// created via CreateLocalUser lands disabled, so the provider checks `enabled` to decide whether to enable it.
+// Komodo user: mongo id, login name, and enabled; CreateLocalUser lands a new user disabled.
 export interface KomodoUser {
     readonly id: string;
     readonly username: string;
@@ -24,11 +20,8 @@ export interface KomodoUser {
 // The Komodo permission level a grant carries (None is never sent, an absent grant is the same as None).
 export type KomodoPermissionLevel = "Read" | "Execute" | "Write";
 
-// The slice of a Deployment's config the deployment provider diffs against, the one authored MUTABLE field
-// it converges, `environment`. server_id and the build image are fixed at creation (like the deterministic
-// ports); branch is a Build concept that a Deployment does not carry (GetDeployment never returns it). Komodo
-// stores `environment` as a multiline string ("K = V\n") but also accepts the array-of-{variable,value} form
-// we send, so read must tolerate both; other fields Komodo returns (server_id/image/ports/...) pass through.
+// Slice of a Deployment's config the provider diffs: only `environment` is mutable here. Komodo stores it as a
+// multiline "K = V\n" string but also accepts the {variable,value} array this sends, so reads must tolerate both.
 const deploymentConfigSchema = z.looseObject({
     environment: z.union([z.string(), z.array(z.object({ variable: z.string(), value: z.string() }))]).default(""),
 });
@@ -47,9 +40,7 @@ export type AlerterEndpoint = z.infer<typeof alerterEndpointSchema>;
 export type ResourceTarget = z.infer<typeof resourceTargetSchema>;
 export type AlerterConfig = z.infer<typeof alerterConfigSchema>;
 
-// ListX returns ResourceListItem<Info>[]; we validate id/name (+ deployment run state from info) and drop
-// the rest. The login result is the JwtOrTwoFactor enum, internally tagged: {"type":"Jwt","data":{"jwt"}}
-// on success, {"type":"Totp"|"Passkey",...} when 2FA is required.
+// ListX returns id/name (+ state) per item, extra fields dropped; login's JwtOrTwoFactor is tagged {type,data}.
 const listItemSchema = z.object({ id: z.string(), name: z.string() });
 // Komodo's User serializes its mongo id as "_id"; enabled defaults false (CreateLocalUser lands disabled).
 const rawUserSchema = z.object({ _id: z.string(), username: z.string(), enabled: z.boolean().default(false) });
@@ -57,13 +48,9 @@ const loginSchema = z.object({ type: z.string(), data: z.object({ jwt: z.string(
 const getAlerterSchema = z.object({ config: alerterConfigSchema });
 const getDeploymentSchema = z.object({ config: deploymentConfigSchema });
 
-// The slice of the Komodo Core API the app/deployment/komodo-notify providers use, injected so the
-// providers are unit-testable with a fake; the default `komodoApi` below talks to a Komodo Core over
-// native fetch. Auth is a JWT minted per provider call via local-admin login (never baked in). Build and
-// deployment configs are provider-built and passed through opaquely (their exact v2 JSON shapes are
-// confirmed at integration time); the alerter config is typed because the notify provider diffs it. Builds
-// are gone. CI builds + pushes the image and the workflow's notify step triggers Deploy, so this surface is
-// just login + deployment reconciliation + alerters.
+// Slice of the Komodo Core API the providers use, injected so they're testable with a fake, with `komodoApi`
+// below as the real implementation. Deployment configs pass through opaquely; the alerter config is typed since notify
+// diffs it.
 export interface KomodoApi {
     // POST /auth/LoginLocalUser {username,password} -> jwt (local auth must be enabled).
     readonly login: (args: { readonly baseUrl: string; readonly username: string; readonly password: string }) => Promise<string>;
@@ -87,9 +74,9 @@ export interface KomodoApi {
     readonly deleteDeployment: (args: { readonly baseUrl: string; readonly jwt: string; readonly id: string }) => Promise<void>;
     // read/ListUsers {service_users:"Include"} -> every user (id from "_id", username, enabled).
     readonly listUsers: (args: { readonly baseUrl: string; readonly jwt: string }) => Promise<readonly KomodoUser[]>;
-    // write/DeleteUser {id}, remove a user account (used by prune). The exact op is confirmed at integration time.
+    // write/DeleteUser {id}, remove a user account (used by prune).
     readonly deleteUser: (args: { readonly baseUrl: string; readonly jwt: string; readonly userId: string }) => Promise<void>;
-    // write/CreateLocalUser {username,password}; admin-only, creates the user DISABLED (enable separately).
+    // write/CreateLocalUser {username,password}; admin-only, creates the user disabled (enable separately).
     readonly createUser: (args: {
         readonly baseUrl: string;
         readonly jwt: string;
@@ -134,8 +121,7 @@ interface PostArgs {
     readonly jwt?: string;
 }
 
-// POST the {type, params} envelope; throw on a non-2xx status. Write/execute ops use this directly and
-// ignore the body; read ops layer response validation on top via `read`.
+// POSTs the {type,params} envelope, throwing on non-2xx; `read` layers response validation on top of this.
 const post = async (args: PostArgs): Promise<Response> => {
     const response = await fetch(`${args.baseUrl}/${args.module}`, {
         method: "POST",
@@ -162,8 +148,7 @@ const project = (items: readonly z.infer<typeof listItemSchema>[]): readonly Kom
 
 export const komodoApi: KomodoApi = {
     login: async ({ baseUrl, username, password }) => {
-        // Auth is the external mogh_auth surface: POST /auth/login/<Operation> with the BARE params (not the
-        // {type,params} envelope of /read|/write|/execute), and the JWT comes back internally tagged under .data.
+        // Auth POSTs bare params to /auth/login/<Operation>, not the {type,params} envelope used elsewhere.
         const response = await fetch(`${baseUrl}/auth/login/LoginLocalUser`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

@@ -4,26 +4,16 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Capability, WebExtSessionImport } from "@intentic/sandbox-contract";
 import { acquireProfileLock, isProfileOpen, markConnected, profileOwner, releaseProfileLock, sessionDir } from "../browser/sessions/session-store.js";
 
-/* THE ONE PLACE A SESSION CROSSES FROM THE PERSON'S BROWSER INTO THE SANDBOX'S.
- *
- * The owner clicks "Connect this site" in their extension; the extension POSTs that site's cookies straight to
- * this daemon (never through the socket, never as a tool result — webext-protocol.ts's webextSessionUrl says
- * why), and this writes them into the Chromium profile of a `browser` capability that already exists.
- *
- * WHY WRITE THEM WITH CHROMIUM RATHER THAN INTO ITS FILES. A profile's cookie jar is a SQLite database whose
- * values are encrypted with a key the OS keyring holds; a writer that edited it by hand would be reimplementing
- * Chromium's own storage format, on the wrong side of a version bump, for a feature whose failure mode is a
- * corrupted profile. So the profile's own browser does the writing: launch it on that directory, hand it the
- * cookies through CDP, close it. Headless is right here and nowhere else in this daemon — nothing is browsed,
- * no site sees this window, and it is the fastest way to open and shut a profile.
- *
- * WHAT THIS DOES NOT DO is decide whether it was allowed. That switch (`cookies` on the browser's capability
- * card) is enforced in the extension, with the rest of them, because a grant about somebody's browser belongs
- * where their browser is — and because a second implementation here is a second thing to drift. What this door
- * checks is what only it can: that the caller holds an enrollment, and that the account it names exists. */
+// Where a session crosses from the person's browser into the sandbox's: the extension POSTs cookies straight to this
+// daemon (never through the socket or as a tool result) and writes them into an existing browser capability's Chromium
+// profile.
+// Writes go through Chromium itself, not its files: the cookie jar is a SQLite database encrypted with an OS-keyring
+// key, so a hand-edit would reimplement Chromium's storage format across a version bump.
+// Whether the caller was allowed is enforced in the extension (the `cookies` switch on the capability card), not
+// duplicated here; this door only checks that the enrollment and the account exist.
 
-// Playwright's own cookie shape. Declared rather than imported so this module does not pull the type surface of
-// a package it loads dynamically (and that may be absent altogether on a core image).
+// Playwright's own cookie shape, declared rather than imported, so this module doesn't pull in a package it loads
+// dynamically (and may be absent on a core image).
 interface ChromiumCookie {
     name: string;
     value: string;
@@ -37,13 +27,11 @@ interface ChromiumCookie {
 
 export interface SessionImportResult {
     readonly ok: boolean;
-    // The sentence the extension shows the owner and the agent reads back. Never carries a cookie name or a
-    // value: the whole point of this door is that neither the model nor a log ever sees one.
+    // Shown to the owner and read by the agent; never carries a cookie name or value.
     readonly message: string;
 }
 
-// Chromium's "session cookie" sentinel. A cookie with no expiry dies with the browser that holds it, which for
-// an imported session means the next time the agent's browser restarts — worth knowing, not worth failing over.
+// A no-expiry cookie dies when the agent's browser next restarts; worth knowing, not worth failing over.
 const SESSION_COOKIE = -1;
 
 export const importBrowserSession = async (
@@ -61,9 +49,7 @@ export const importBrowserSession = async (
         };
     }
     const owner = profileOwner(account);
-    /* Chromium locks a --user-data-dir, so this cannot run while the owner's own profile window or a turn's
-     * browser tools hold it. Refusing with the reason beats waiting: the person is standing in front of the
-     * extension, and "close the window and click again" is an instruction they can act on in two seconds. */
+    // Chromium locks the profile dir; refusing beats waiting, since closing the window is a two-second fix.
     if (isProfileOpen(owner) || !acquireProfileLock(owner)) {
         return { ok: false, message: `The sandbox's browser for "${payload.account}" is open right now. Close it and hand the session over again.` };
     }
@@ -91,20 +77,17 @@ export const importBrowserSession = async (
         try {
             await browser.addCookies(cookies);
         } finally {
-            // Closing is what FLUSHES them: Chromium writes its cookie store on shutdown, so a context left
-            // open would leave a profile that looks imported and is not.
+            // Closing flushes the cookies on shutdown; left open, the profile looks imported but isn't.
             await browser.close();
         }
-        // The account counts as connected from here: the sandbox's browser can now open that site as them,
-        // which is exactly what the marker means everywhere else (browser/session-store.ts).
+        // Counts as connected from here on, the same meaning the marker has everywhere else (browser/session-store.ts).
         await markConnected(context.workspaceRoot, payload.account);
         return {
             ok: true,
             message: `Handed ${payload.cookies.length} cookie${payload.cookies.length === 1 ? "" : "s"} for ${payload.origin} to "${payload.account}". The sandbox's own browser is signed in there now.`,
         };
     } catch (error) {
-        // The error's own text, never the payload: a failure here must not become the one log line that holds
-        // a session.
+        // The error's own text, never the payload: a failure here must not log a session.
         return {
             ok: false,
             message: `Could not write the session into "${payload.account}": ${errorMessage(error)}`,

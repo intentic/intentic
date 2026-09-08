@@ -6,13 +6,8 @@ import { agentRepoModules } from "./land/agent-changes.js";
 import type { IsolatedAgent } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 
-/* WHICH TREE NAMES AN AGENT'S PACKAGES: the whole subject here, because getting it wrong is invisible until
- * the moment it matters most. The review groups an agent's changed files under the package each one lives in;
- * an agent writes in a worktree; and a package it has just CREATED exists only there. Answering from /work then
- * leaves every file of that package, which is all of its files: in the unnamed "loose in this repo" bucket.
- *
- * Real directories rather than a mocked fs: the thing under test is a filesystem walk, so a fake fs would only
- * be testing the fake. No git, though: the seam is `attached`, and these tests own both sides of it. */
+// A package an agent just created exists only in its worktree, not /work, so package names come from there. Real
+// directories, not a mocked fs; git is stubbed via `attached`.
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -26,8 +21,8 @@ const manifest = async (dir: string, name: string): Promise<void> => {
     await writeFile(join(dir, "package.json"), JSON.stringify({ name }));
 };
 
-/* A workspace and a worktree that DISAGREE: the main tree has the package the agent started from, the worktree
- * has that one plus the one this turn created. Only the worktree's reading contains both. */
+// Main tree and worktree disagree: the worktree has the package the agent started from plus one created this turn; the
+// main tree has only the first.
 const setup = async (): Promise<{ worktrees: AgentWorktrees; attached: boolean[] }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-agent-modules-"));
     tempDirs.push(base);
@@ -36,7 +31,7 @@ const setup = async (): Promise<{ worktrees: AgentWorktrees; attached: boolean[]
     await manifest(join(main, "_libs/auth"), "@shop/auth");
     await manifest(join(worktree, "_libs/auth"), "@shop/auth");
     await manifest(join(worktree, "_libs/billing"), "@shop/billing");
-    // One flag both the stub and the assertions read, so a test says which state it is in by setting it.
+    // Shared flag: the stub reads it, the test sets it to choose the state under test.
     const attached = [true];
     return {
         attached,
@@ -56,9 +51,7 @@ test("names the packages of the agent's own checkout, including one the main tre
     expect(names(await agentRepoModules(worktrees, ENTRY, "root"))).toEqual(["@shop/auth", "@shop/billing"]);
 });
 
-/* A RETIRED checkout has no worktree left to read, so the main repo answers: the same per-repo seam the file
- * diff beside it uses. By then the agent's work has normally landed, which is what makes that the right
- * fallback rather than merely the only cheap one. */
+// Mirrors the attached/main fallback `agentRepoScope` uses.
 test("falls back to the main tree once the checkout is gone", async () => {
     const { worktrees, attached } = await setup();
     attached[0] = false;

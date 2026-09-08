@@ -6,34 +6,22 @@ import type { CursorStore } from "./cursor-credentials.js";
 import { SEED_CURSOR_MODELS, seedCatalog, toCatalog } from "./cursor-models.js";
 import { cursorSdk } from "./cursor-sdk.js";
 
-/* THE CURSOR MODEL CATALOG SERVICE, on the shared ladder (agent/model-catalog.ts). Answers "what can a Cursor
- * turn run", ALWAYS non-empty, which matters more here than anywhere else in this repo, because the SDK REQUIRES
- * a model for a local agent and has no default of its own to fall back to. The live source is
- * `Cursor.models.list()` with a connected account's key, which is the account's real entitlement, not a general
- * list: two accounts on different plans genuinely see different rows. The floor is the one id `auto`.
- *
- * THE RAW ITEMS ARE KEPT, not just the mapped rows (the ladder's `live`). A turn needs more than an id: it needs
- * the model's parameter definitions to translate an effort tier into the `params` Cursor accepts
- * (cursor-models.ts). Re-fetching the list per turn to recover them would put a network round-trip on the turn
- * path for something already in memory. */
+// Cursor's model catalog on the shared ladder; always non-empty since the SDK requires a model with no default. Live
+// source is Cursor.models.list() with a connected account's key (real entitlement, accounts can differ); floor is
+// "auto". Keeps raw items, not just mapped rows, so effort-tier translation (cursor-models.ts) needs no per-turn round
+// trip.
 export interface CursorCatalog {
-    // The models (+ default id), never empty.
+    // Never empty; models plus the default id.
     readonly models: () => Promise<{ models: Model[]; default: string }>;
-    /* The vendor's own record for one id, when the live list is what is currently in hand. Undefined for a
-     * seeded or persisted rung, which carries ids and nothing else: the caller then sends the bare id, which
-     * is exactly right, an effort tier we cannot translate is one we must not guess at. */
+    // Vendor record for one id from the live list; undefined for a seeded/persisted rung, so the bare id is sent.
     readonly item: (id: string) => Promise<ModelListItem | undefined>;
 }
 
 const MODELS_TTL_MS = 60_000;
 
 export const createCursorCatalog = (store: CursorStore, persistPath: string): CursorCatalog => {
-    /* Ask Cursor, through the FIRST usable account rather than through all of them.
-     *
-     * Two accounts can genuinely see different lists (different plans, different team policy), so a union
-     * would offer rows that only one of them can actually run and a turn picking the other would fail on a
-     * model the picker had promised. One account's answer is at least internally consistent, and the first
-     * connected one is the same account a turn with no explicit choice will spend. */
+    // Uses the first usable account, not all: accounts can see different lists (plan, policy), and a union would
+    // promise models the other can't run. The first connected account is also the one an unrouted turn spends.
     const discover = async (): Promise<ModelListItem[]> => {
         const sdk = await cursorSdk();
         if (sdk === undefined) {

@@ -31,8 +31,7 @@ const commit = async (dir: string, name: string, body: string): Promise<void> =>
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", body);
 };
 
-// A clone with a real (local, bare) origin: enough for fetch/pull/push to exercise the actual git paths
-// without a network. Returns the clone; the bare repo is its origin.
+// A clone with a real (local, bare) origin, enough to exercise fetch/pull/push without a network.
 const cloned = async (): Promise<{ clone: string; origin: string }> => {
     const source = await temp();
     await sh(source, "init", "-q", "-b", "main");
@@ -65,7 +64,7 @@ test("remoteState counts local commits as ahead", async () => {
 
 test("remoteState counts upstream commits as behind, but only after a fetch", async () => {
     const { clone, origin } = await cloned();
-    // Push a commit to origin from a SECOND clone, so our clone's tracking ref is stale.
+    // Pushes from a second clone, so our clone's tracking ref goes stale.
     const other = await temp();
     await exec("git", ["clone", "-q", origin, other]);
     await sh(other, "config", "user.name", "t");
@@ -73,8 +72,7 @@ test("remoteState counts upstream commits as behind, but only after a fetch", as
     await commit(other, "c.txt", "three");
     await sh(other, "push", "-q", "origin", "main");
 
-    // Nothing fetched yet: the tracking ref still points where it did, so we read as in sync. This is git's
-    // real semantics and the reason the panel has a Fetch button at all.
+    // Not fetched yet, so the tracking ref hasn't moved: reading as in sync is real git semantics.
     expect(await remoteState(clone)).toMatchObject({ ahead: 0, behind: 0 });
 
     expect(await fetchRemote(clone)).toEqual({ ok: true });
@@ -84,8 +82,7 @@ test("remoteState counts upstream commits as behind, but only after a fetch", as
 test("remoteState is total on a repo with no remote and no commits", async () => {
     const dir = await temp();
     await sh(dir, "init", "-q");
-    // No remote and no upstream, counts zero, no throw. The branch name IS reported: git names the unborn
-    // branch from init.defaultBranch, because pushBranch reads its refspec from here.
+    // Branch name is still reported (from init.defaultBranch); pushBranch reads its refspec from it.
     const state = await remoteState(dir);
     expect(state.remote).toBeUndefined();
     expect(state.upstream).toBeUndefined();
@@ -101,8 +98,7 @@ test("remoteState reports a remote but no upstream for a branch never pushed", a
     expect(state.upstream).toBeUndefined();
 });
 
-// `git remote` sorts ALPHABETICALLY, so a repo that moved hosts and kept its old remote lists that one first.
-// Falling back to the first line would publish new branches to the host the repo moved off.
+// git lists remotes alphabetically; falling back to the first line would pick whichever name sorts first.
 test("remoteState falls back to origin, not to whichever remote name sorts first", async () => {
     const { clone } = await cloned();
     await sh(clone, "remote", "add", "abandoned", "git@gitlab.com:acme/web.git");
@@ -122,9 +118,8 @@ test("remoteState still falls back to the only remote there is when it isn't nam
     expect((await remoteState(clone)).remote).toBe("upstream");
 });
 
-/* WHAT THIS COSTS, not just what it answers. remoteState runs for every repo on every Changes scan, so a
- * spawn here is a scan-wide multiplier: these pin the read order that makes the steady state one spawn, and
- * would fail the moment a config read crept back in front of it. */
+// remoteState runs per repo on every Changes scan, so a spawn here multiplies across the scan; these pin the read order
+// that keeps the steady state to one spawn.
 const counted =
     (calls: string[][]): GitRunner =>
     (dir, args, env) => {
@@ -135,11 +130,11 @@ const counted =
 test("a tracking branch costs ONE spawn: no branch read, no remote listing", async () => {
     const { clone } = await cloned();
     const calls: string[][] = [];
-    // The Changes scan holds the branch already: it comes off the same status pass that produced the rows.
+    // The Changes scan already has the branch, from the same status pass that built the rows.
     const state = await remoteState(clone, { branch: "main" }, counted(calls));
 
     expect(state).toMatchObject({ remote: "origin", branch: "main", upstream: "origin/main", ahead: 0, behind: 0 });
-    // for-each-ref alone: it carries the tracking ref, its remote AND the ahead/behind counts.
+    // for-each-ref alone carries the tracking ref, its remote, and the ahead/behind counts.
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe("for-each-ref");
 });
@@ -176,14 +171,13 @@ test("pullRemote fast-forwards, and reports a non-fast-forward as a reason rathe
     expect(await pullRemote(clone)).toEqual({ ok: true });
     expect(existsSync(join(clone, "c.txt"))).toBe(true);
 
-    // Now diverge: a local commit plus another upstream commit means the pull cannot fast-forward.
+    // Diverges: a local commit plus a separate upstream commit means the pull can't fast-forward.
     await commit(clone, "local.txt", "local");
     await commit(other, "d.txt", "four");
     await sh(other, "push", "-q", "origin", "main");
 
     const result = await pullRemote(clone);
     expect(result.ok).toBe(false);
-    // A value with git's own reason: the panel renders it and offers rebase/merge from the graph.
     expect(result.ok === false && result.reason.length > 0).toBe(true);
     // Nothing half-applied: the local commit is still the tip.
     expect(await sh(clone, "log", "-1", "--format=%s")).toBe("local");
@@ -204,8 +198,7 @@ test("pushBranch publishes a never-pushed branch, so it comes back with a readab
     await commit(clone, "f.txt", "feature work");
     expect((await remoteState(clone)).upstream).toBeUndefined();
 
-    // Naming the remote and branch explicitly means git would happily push WITHOUT tracking, leaving
-    // ahead/behind permanently unreadable. Publishing on this first push is what avoids that dead end.
+    // Without publishing, a push here would leave ahead/behind permanently unreadable (no tracking ref).
     expect(await pushBranch(clone, {})).toEqual({ ok: true });
     expect(await remoteState(clone)).toMatchObject({ upstream: "origin/feature", ahead: 0, behind: 0 });
 });
@@ -219,9 +212,8 @@ test("pushBranch never repoints an upstream the user already has", async () => {
     expect(await sh(clone, "config", "--get", "branch.main.merge")).toBe("refs/heads/main");
 });
 
-// A fork: `origin` (where you push) plus `upstream` (where you pull from). `git remote` lists them
-// alphabetically, so the FIRST remote is not the one `main` tracks, and pushing to it would land the commits
-// on the wrong repo while reporting ok and leaving `ahead` stuck at 1 forever.
+// A fork: `origin` (push target) plus `upstream` (pull source); git lists them alphabetically, so picking the first
+// remote would push to the wrong repo while reporting ok.
 const forked = async (): Promise<{ clone: string; origin: string; upstream: string }> => {
     const { clone, origin } = await cloned();
     const upstream = await temp();
@@ -245,18 +237,14 @@ test("pushBranch pushes to the remote the branch tracks, not the first one git l
     expect(await remoteState(clone)).toMatchObject({ ahead: 1 });
 
     expect(await pushBranch(clone, {})).toEqual({ ok: true });
-    // The commit landed on the tracked remote…
     expect(await sh(upstream, "log", "-1", "--format=%s", "main")).toBe("two");
-    // …and NOT on the alphabetically-first one, which is the failure this guards: a push that reports ok while
-    // the ahead count never moves.
     expect(await sh(origin, "log", "-1", "--format=%s", "main")).toBe("one");
     expect(await remoteState(clone)).toMatchObject({ ahead: 0, behind: 0 });
 });
 
 test("pushBranch publishes a never-pushed branch to the repo's configured remote", async () => {
     const { clone, origin } = await forked();
-    // A brand-new branch tracks nothing, so there is no remote of its own to honour: it publishes to the
-    // repo's first configured remote, which is the only defensible default.
+    // A brand-new branch tracks nothing, so it publishes to the repo's first configured remote by default.
     await createBranch(clone, "feature", undefined, true);
     await commit(clone, "f.txt", "work");
 
@@ -274,8 +262,8 @@ test("pushBranch reports a missing remote as a reason, not a throw", async () =>
 
 test("listBranches reports current, upstream and per-branch ahead/behind", async () => {
     const { clone } = await cloned();
-    await commit(clone, "b.txt", "two"); // main is now 1 ahead
-    await createBranch(clone, "feature", undefined, false); // created at HEAD, not checked out
+    await commit(clone, "b.txt", "two");
+    await createBranch(clone, "feature", undefined, false); // Created at HEAD, not checked out.
 
     const branches = await listBranches(clone);
     const main = branches.find((branch) => branch.name === "main");
@@ -300,8 +288,7 @@ test("createBranch can check out immediately, and deleteBranch refuses unmerged 
     await commit(clone, "f.txt", "unmerged work");
 
     await sh(clone, "checkout", "-q", "main");
-    // git refuses to drop a branch whose commits are nowhere else: that refusal propagates so the UI can
-    // offer the deliberate force retry rather than the daemon silently discarding commits.
+    // The refusal propagates so the UI offers a forced retry, rather than the daemon discarding commits silently.
     await expect(deleteBranch(clone, "feature", false)).rejects.toThrow();
     await deleteBranch(clone, "feature", true);
     expect((await listBranches(clone)).some((branch) => branch.name === "feature")).toBe(false);
@@ -311,11 +298,10 @@ test("listBranches flags a branch whose upstream was deleted on the remote as go
     const { clone, origin } = await cloned();
     await createBranch(clone, "feature", undefined, true);
     await commit(clone, "f.txt", "work");
-    // No options: the first push of an untracked branch publishes it, which is what gives it an upstream to
-    // lose in the first place.
+    // First push of an untracked branch publishes it, giving it the upstream to later lose.
     await pushBranch(clone, {});
 
-    // Delete it on the "remote", then prune: the tracking ref disappears but the config still names it.
+    // Deletes on the "remote", then fetches: the tracking ref vanishes but the config still names it.
     await sh(origin, "branch", "-D", "feature");
     await fetchRemote(clone);
 

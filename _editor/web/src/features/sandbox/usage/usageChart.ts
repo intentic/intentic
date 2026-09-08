@@ -3,22 +3,20 @@ import type { BarItem } from "@intentic/ui";
 import { seriesColor } from "@intentic/ui/series";
 import type { UsageRollupRow } from "@intentic/sandbox-contract";
 
-/* Every number and every mark on the Usage tab, as pure functions over the daemon's rollup rows. The screen
- * itself only binds; the projections live here so the arithmetic that a money readout stands on is testable
- * without mounting a component, the same split as toolPresentation.ts. */
+// Every number and mark on the Usage tab, as pure functions over the daemon's rollup rows; the screen only binds.
+// Same split as toolPresentation.ts, so a money readout's arithmetic is testable without mounting a component.
 
 const DAY_MS = 86_400_000;
 const dayToMs = (day: string): number => Date.parse(`${day}T00:00:00Z`);
 const msToDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
-// The UTC day an instant falls in, the same bucket the daemon stamps rows with (usage-store.ts), so the
-// browser's window bounds and the ledger's days are the same calendar.
+// UTC day of an instant, matching the daemon's own row-stamping bucket (usage-store.ts).
 export const todayUtc = (now: number = Date.now()): string => msToDay(now);
 export const shiftDay = (day: string, days: number): string => msToDay(dayToMs(day) + days * DAY_MS);
 // Inclusive day count: a from/to pair covering one day is 1, not 0.
 export const daySpan = (from: string, to: string): number => Math.round((dayToMs(to) - dayToMs(from)) / DAY_MS) + 1;
 
-// ---- the window ------------------------------------------------------------------------------------------
+// the window
 
 export type RangePreset = "7d" | "30d" | "90d" | "all";
 // Mutable by design: <SegmentedControl> takes its options array as-is.
@@ -29,8 +27,8 @@ export const RANGE_PRESETS: { label: string; value: RangePreset }[] = [
     { label: `All time`, value: `all` },
 ];
 
-// An inclusive UTC day range. `from` absent ⇒ unbounded start (All time), deliberately NOT a sentinel date,
-// because "since the ledger began" and "since some very old day" differ the moment a comparison is drawn.
+// Inclusive UTC range. Absent `from` means unbounded (All time), not a sentinel date: the two read differently
+// once compared.
 export interface DayWindow {
     readonly from?: string;
     readonly to: string;
@@ -41,9 +39,7 @@ const PRESET_DAYS: Record<Exclude<RangePreset, "all">, number> = { "7d": 7, "30d
 export const windowFor = (preset: RangePreset, today: string): DayWindow =>
     preset === `all` ? { to: today } : { from: shiftDay(today, -(PRESET_DAYS[preset] - 1)), to: today };
 
-// The equally-long window immediately before this one, what a delta compares against. Undefined for All time:
-// there is nothing before "everything", and inventing a baseline would put a confident ±% under a number that
-// has none.
+// Equal-length window just before this one, for deltas; undefined for All time (no baseline to compare).
 export const previousWindow = (window: DayWindow): DayWindow | undefined => {
     if (window.from === undefined) {
         return undefined;
@@ -55,7 +51,7 @@ export const previousWindow = (window: DayWindow): DayWindow | undefined => {
 export const inWindow = (rows: readonly UsageRollupRow[], window: DayWindow): UsageRollupRow[] =>
     rows.filter((row) => (window.from === undefined || row.day >= window.from) && row.day <= window.to);
 
-// ---- totals ----------------------------------------------------------------------------------------------
+// totals
 
 export interface UsageTotals {
     readonly costUsd: number;
@@ -95,35 +91,25 @@ export const totalsOf = (rows: readonly UsageRollupRow[]): UsageTotals =>
 export const totalTokens = (totals: UsageTotals): number =>
     totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheCreationTokens;
 
-// The share of PROMPT input that came off the provider's cache, how well prefix caching is working. Cache
-// creation is excluded from the denominator on purpose: it is the cost of filling the cache, not a lookup that
-// could have hit. Undefined when nothing was sent, so an idle window reads as "-" rather than a confident 0%.
+// Prefix-cache hit over prompt input (creation excluded); undefined when idle, not a false 0%.
 export const cacheHitRate = (totals: UsageTotals): number | undefined => {
     const lookups = totals.cacheReadTokens + totals.inputTokens;
     return lookups === 0 ? undefined : (100 * totals.cacheReadTokens) / lookups;
 };
 
-// Signed percent change against the previous window. Undefined when there is no baseline (All time) or the
-// baseline is zero, a jump from nothing to something is not "+∞%", it is a first period.
+// Signed % change vs. previous window; undefined with no or zero baseline (not a false +Inf%).
 export const deltaPercent = (current: number, previous: number | undefined): number | undefined =>
     previous === undefined || previous === 0 ? undefined : (100 * (current - previous)) / previous;
 
-// ---- series identity -------------------------------------------------------------------------------------
+// series identity
 
-/* The categorical slot order. This IS the validated palette order (primitive-colors.css): the colorblind
- * checks measure ADJACENT pairs, so the sequence is part of the result, not a display preference, swapping
- * kimi and grok here drops the worst pair from ΔE 12.5 to 4.0 and fails the check. Charts render series in
- * this order for that reason. A provider outside the list (an installed ACP agent) takes the achromatic tail
- * slot rather than a sixth generated hue. */
+// Slot order is the validated palette order (primitive-colors.css): colorblind checks measure adjacent pairs, so
+// reordering (e.g. swapping kimi/grok) fails them. An unlisted provider takes the achromatic tail slot, not a new hue.
 export const PROVIDER_SERIES = [`claude`, `codex`, `kimi`, `grok`, `gemini`] as const;
 
-/* Colour follows the ENTITY, for good: the slot comes from the provider's identity, never from its rank in the
- * current filter, so hiding a provider can't repaint the survivors.
- *
- * Named for the provider it keys on, not for the palette it lands in, as `seriesColor` it collided with the
- * design system's own `seriesColor` (a figure's authored slot → the same CSS var). Two functions of one name
- * mapping different domains into one palette is a collision an import line cannot show you. This one owns the
- * provider→slot half only; the slot→var half stays where it always was. */
+// Colour follows the provider's identity, not its rank in the current filter, so hiding one can't repaint
+// survivors. Named apart from the design system's own `seriesColor` (which owns slot -> CSS var); this owns provider ->
+// slot only.
 const providerAccent = (key: string): FigureAccent => {
     const slot = PROVIDER_SERIES.indexOf(key as (typeof PROVIDER_SERIES)[number]);
     return slot === -1 ? `neutral` : (String(slot + 1) as FigureAccent);
@@ -131,16 +117,12 @@ const providerAccent = (key: string): FigureAccent => {
 
 export const providerColor = (key: string): string => seriesColor(providerAccent(key));
 
-/* WHICH SERIES A ROW BELONGS TO, injected rather than read here. A ledger row names the provider that billed
- * it; whether two of those provider ids are ONE thing to a reader (every locally-run model is) depends on the
- * live capability list, which this module deliberately cannot see: everything in here is a pure function over
- * rows so the arithmetic a money readout stands on is testable without mounting anything. The tab passes
- * `providerGroup` (providerCatalog.ts), the same fold the model picker's lanes use; a test passes identity or
- * whatever fold it is asserting about. */
+// Which series a row belongs to, injected rather than read here: this module stays a pure function over rows,
+// with no access to the live capability list. The tab passes `providerGroup` (providerCatalog.ts, same fold as the
+// model picker); tests pass identity or whatever fold they assert.
 export type ProviderGroup = (provider: string) => string;
 
-// The series actually present in these rows, in slot order (unknown providers last, alphabetical). Drives the
-// filter pills, the stack order and the legend, so none of the three can disagree.
+// Series present, slot-ordered (unknowns last, alphabetical); drives the pills, stack and legend alike.
 export const providersIn = (rows: readonly UsageRollupRow[], groupOf: ProviderGroup): string[] => {
     const present = new Set(rows.map((row) => groupOf(row.provider)));
     const known = PROVIDER_SERIES.filter((provider) => present.has(provider));
@@ -148,10 +130,9 @@ export const providersIn = (rows: readonly UsageRollupRow[], groupOf: ProviderGr
     return [...known, ...unknown];
 };
 
-// ---- the time series -------------------------------------------------------------------------------------
+// the time series
 
-// How the columns are bucketed. A day per column is the honest grain, but 365 columns in a card is a smear,
-// past a quarter the bucket widens so a column stays a readable mark instead of a hairline.
+// Bucket widens past a quarter (365 daily columns would smear) so each column stays a readable mark.
 export type Bucket = "day" | "week" | "month";
 export const bucketFor = (days: number): Bucket => (days <= 92 ? `day` : days <= 730 ? `week` : `month`);
 
@@ -159,11 +140,9 @@ export interface SpendBucket {
     // The bucket's first day (YYYY-MM-DD), its identity and sort key.
     readonly start: string;
     readonly label: string;
-    // Every measure for the bucket, so the columns and the stat tiles' trends come off ONE pass, and can't
-    // drift into disagreeing about the same period.
+    // Every measure for the bucket, so columns and stat-tile trends share one pass and can't disagree.
     readonly totals: UsageTotals;
-    // Cost split by provider: one entry per provider present in the window, in slot order. Zero-value segments
-    // are kept so the stack's colour order is identical in every column.
+    // Cost by provider, slot-ordered; zero-value segments kept so the stack's colour order matches every column.
     readonly segments: readonly { readonly key: string; readonly value: number }[];
 }
 
@@ -171,8 +150,7 @@ const MONTHS = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `
 const monthLabel = (day: string): string => `${MONTHS[Number(day.slice(5, 7)) - 1] ?? ``} ${day.slice(0, 4)}`;
 const dayLabel = (day: string): string => `${MONTHS[Number(day.slice(5, 7)) - 1] ?? ``} ${Number(day.slice(8, 10))}`;
 
-// The bucket a day belongs to: days anchor to themselves, weeks to a fixed grid running back from the window's
-// last day (so the newest bucket is always a full-width one), months to the first of the month.
+// Days anchor to themselves; weeks grid back from the window's last day; months to the 1st.
 const bucketStart = (day: string, bucket: Bucket, window: { from: string; to: string }): string => {
     if (bucket === `day`) {
         return day;
@@ -184,8 +162,7 @@ const bucketStart = (day: string, bucket: Bucket, window: { from: string; to: st
     return shiftDay(window.to, -(offset - (offset % 7)) - 6);
 };
 
-// Usage over time, zero-filled: a period nothing ran is a gap in the columns, not a missing column, so the
-// shape tells the truth about idle stretches. `window.from` absent (All time) spans the data itself.
+// Zero-filled: an idle period is a gap, not a missing column. Absent `window.from` spans the data itself.
 export const usageSeries = (
     rows: readonly UsageRollupRow[],
     window: DayWindow,
@@ -224,8 +201,7 @@ export const usageSeries = (
         }));
 };
 
-// Down-sample a series to at most `count` points for a stat tile's sparkline, a shape cue, not a readable
-// plot, so averaging is the right compression (a max would make one spike look like a plateau).
+// Down-samples to a shape cue, not a plot; averages (not max) so a spike doesn't read as a plateau.
 export const sparkPoints = (values: readonly number[], count = 12): number[] => {
     if (values.length <= count) {
         return [...values];
@@ -237,30 +213,23 @@ export const sparkPoints = (values: readonly number[], count = 12): number[] => 
     });
 };
 
-// ---- ranked bars -----------------------------------------------------------------------------------------
+// ranked bars
 
-/* One bar. `kind` rather than a sentinel key, so a real model or agent literally named "other" can't be
- * mistaken for the fold bucket, and so the two special rows are distinguishable in code without string
- * matching. `unattributed` covers rows carrying no value for this dimension (a provider default served the
- * turn, a main-tree turn has no agent): named rather than dropped, because that spend is real and hiding it
- * makes the bars sum to less than the headline above them. */
+// `kind`, not a sentinel key, so an entity actually named "other" can't collide with the fold bucket.
+// `unattributed` covers rows with no value for this dimension; kept, not dropped, since that spend is real.
 export interface RankedEntry {
     readonly key: string | undefined;
     readonly kind: "value" | "unattributed" | "other";
     readonly label: string;
     readonly value: number;
-    // The distinct series whose turns make up this bar (providers, folded by the tab's grouping). A model or an
-    // agent almost always has exactly one, which lets the bar wear that provider's series colour, identity, not
-    // a value ramp on bar length. More than one (or none) falls back to the achromatic slot rather than picking
-    // a winner.
+    // Distinct providers behind this bar; exactly one colours it, more than one falls back to achromatic.
     readonly providers: readonly string[];
 }
 
 // A stable, collision-free v-for key, the kind disambiguates, so no reserved string is needed.
 export const rankedKey = (entry: RankedEntry): string => `${entry.kind}:${entry.key ?? ``}`;
 
-// Cost by <dimension>, biggest first, tail folded. Never more slots than the palette has, and the fold is
-// explicit so a reader can see how much is in it.
+// Cost by dimension, biggest first, tail folded so a reader sees how much was folded in.
 export const rankByCost = (
     rows: readonly UsageRollupRow[],
     keyOf: (row: UsageRollupRow) => string | undefined,
@@ -304,13 +273,10 @@ export const rankByCost = (
     ];
 };
 
-// The bar's palette SLOT: its provider's when the bar belongs to exactly one provider, the achromatic tail
-// otherwise. Never a ramp keyed to the bar's own length, that double-encodes what the length already says.
-// A slot rather than a colour, because <BarChart> takes accents and owns the slot→var step for every figure.
+// Palette slot, not a colour (`<BarChart>` owns slot->var): the provider's if singular, else achromatic.
 export const rankedAccent = (entry: RankedEntry): FigureAccent => (entry.providers.length === 1 ? providerAccent(entry.providers[0]!) : `neutral`);
 
-// One ranked cost list → the shared bar figure's items. The money formatting, the fold/unattributed rows'
-// quieter type and the collision-proof key all live here, where the domain is, rather than in the chart.
+// Money formatting, muted fold/unattributed styling, and the key all live here, not in the chart.
 export const rankedBars = (entries: readonly RankedEntry[]): BarItem[] =>
     entries.map((entry) => ({
         label: entry.label,
@@ -321,10 +287,9 @@ export const rankedBars = (entries: readonly RankedEntry[]): BarItem[] =>
         muted: entry.kind !== `value`,
     }));
 
-// ---- axis ------------------------------------------------------------------------------------------------
+// axis
 
-// Round a maximum up to a clean axis top (1 / 2 / 2.5 / 5 × a power of ten) so the ticks read as numbers a
-// person would say. Zero data still yields a positive top, a chart with a 0-height axis has nowhere to draw.
+// Rounds up to a clean top (1/2/2.5/5 x10^n); zero data still yields a positive top to draw against.
 export const niceMax = (max: number): number => {
     if (max <= 0) {
         return 1;
@@ -335,20 +300,15 @@ export const niceMax = (max: number): number => {
     return step * magnitude;
 };
 
-// ---- formatting ------------------------------------------------------------------------------------------
+// formatting
 
-// Money, always two decimals so a column of costs aligns. A non-zero amount that rounds to nothing says so
-// rather than printing $0.00, which reads as free.
+// Always two decimals for column alignment; a nonzero amount rounding to $0.00 prints "<$0.01" instead.
 export const formatUsd = (value: number): string =>
     value > 0 && value < 0.005 ? `<$0.01` : `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/* Money at hero size, where WIDTH is a constraint the tile can't negotiate away: at 48px a stray thousands
- * group is the difference between a number and a number that has left its card. So precision steps down with
- * magnitude, cents below $10k (where they're the difference between "$36.62" and a shrug), whole dollars to
- * $1M, then compacted. Nine glyphs, worst case, at any amount a sandbox can reach.
- *
- * Nothing is lost by this: the chart header, the table and the CSV all carry the exact figure, and this is the
- * one place where a reader is looking at the ORDER of a number rather than reconciling it. */
+// Precision steps down with magnitude (cents below $10k, whole dollars to $1M, then compacted) to fit hero-size
+// width; at most nine glyphs. The exact figure lives in the header, table and CSV; this view is only for the number's
+// order.
 export const formatUsdHero = (value: number): string => {
     if (value < 10_000) {
         return formatUsd(value);
@@ -356,8 +316,7 @@ export const formatUsdHero = (value: number): string => {
     return value < 1_000_000 ? `$${Math.round(value).toLocaleString()}` : `$${formatCompact(value)}`;
 };
 
-// Counts, compacted past a thousand: 999 / 1.3K / 18.4M / 124M. Three significant digits, a tenth is what
-// separates "18.4M tokens" from a flat "18M", and past 100 that digit is noise.
+// Compacted past 1,000 (999 / 1.3K / 18.4M); one decimal below 100 scaled, none above (noise past there).
 export const formatCompact = (value: number): string => {
     if (value < 1_000) {
         return String(Math.round(value));
@@ -372,7 +331,7 @@ export const formatPercent = (value: number | undefined): string => (value === u
 export const formatDelta = (value: number | undefined): string | undefined =>
     value === undefined ? undefined : `${value >= 0 ? `+` : `−`}${Math.abs(value) < 10 ? Math.abs(value).toFixed(1) : Math.round(Math.abs(value))}%`;
 
-// ---- export ----------------------------------------------------------------------------------------------
+// export
 
 const CSV_COLUMNS = [
     `day`,
@@ -390,17 +349,13 @@ const CSV_COLUMNS = [
     `durationMs`,
 ] as const;
 
-// RFC-4180 quoting: a field is wrapped only when it contains a delimiter, a quote or a newline, and an inner
-// quote is doubled. Model and agent ids are provider/user data, assuming they're comma-free is how an export
-// silently shifts every later column.
+// RFC-4180 quoting: wraps only fields with a delimiter, quote or newline (ids are user data, not comma-free).
 const csvField = (value: string | number | undefined): string => {
     const text = value === undefined ? `` : String(value);
     return /[",\r\n]/.test(text) ? `"${text.replaceAll(`"`, `""`)}"` : text;
 };
 
-// The filtered rollup as CSV, the escape hatch for anyone who wants to reconcile a number themselves. Exports
-// exactly what the screen is showing, filters included; a file that quietly held more than the view would be a
-// different kind of lie.
+// Exports exactly what the screen shows, filters included; more than the view would be its own kind of lie.
 export const usageCsv = (rows: readonly UsageRollupRow[]): string =>
     [
         CSV_COLUMNS.join(`,`),

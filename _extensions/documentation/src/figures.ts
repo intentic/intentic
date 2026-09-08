@@ -1,24 +1,10 @@
 import type { DocIndex, DocIndexEntry, RepoDoc } from "./docModel.js";
 
-/* THE FIGURES NOBODY WRITES.
- *
- * Every figure on a package page is built here, from the derived index, and rendered above the prose. None of it
- * is authored, and that is the point: the layout this replaced had agents hand-writing line counts, file counts
- * and neighbour lists into `doc.md` as JSON fences. Those were 62% of the bytes in the document tree and the
- * single largest source of rot in it, a number typed into a page is wrong the next time anyone commits, and
- * nothing about reviewing a page catches it.
- *
- * So the split the rest of this extension already draws, a script computes facts, a model authors judgement,
- * finally reaches the figures too. An author writes a `dag` fence only for something the dependency graph cannot
- * say (a request's path, a state machine, an ordering), and those still render inline exactly where they are
- * written. Everything measurable is drawn from here and cannot go stale.
- *
- * The output is markdown, not components, because the page is already a <Markdown> render and the figure fences
- * are already a thing that renderer knows how to draw. Emitting text keeps this module pure and testable and
- * lets a figure fail the way any other fence does, as a code block, costing itself and not the page. */
+// Every figure on a package page is computed here from the derived index, never authored, so it cannot go stale like a
+// hand-written number would. Output is markdown text, not components, so a malformed fence fails as an isolated code
+// block, not a page crash.
 
-// Enough neighbours to show the shape, few enough to stay readable. A package everything depends on would
-// otherwise draw a diagram nobody can follow, and the title says exactly what was left out.
+// Enough neighbours to show the shape without drawing an unreadable diagram for a package everything depends on.
 const MAX_NEIGHBOURS = 5;
 
 const compact = (value: number): string => (value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${value}`);
@@ -33,8 +19,7 @@ const accents = (repoDoc: RepoDoc | undefined): ReadonlyMap<string, string> => {
     return byDir;
 };
 
-// The last segment of a package dir. `_deploy/graph` is "graph" on a node label, the prefix is the same for every
-// package in the group and spends width saying nothing.
+// Last segment of a package dir, for node labels; the shared prefix within a group spends width saying nothing.
 const leaf = (dir: string): string => dir.slice(dir.lastIndexOf(`/`) + 1);
 
 const statsFigure = (entry: DocIndexEntry, usedBy: number): string =>
@@ -51,8 +36,8 @@ const statsFigure = (entry: DocIndexEntry, usedBy: number): string =>
         "```",
     ].join(`\n`);
 
-/* The neighbourhood: what this package uses, and what uses it. Direction is always "an arrow points at what a
- * package depends on", so the reader learns one rule and every diagram in the set obeys it. */
+// What this package uses and what uses it; an arrow always points at what is depended on, the one rule every diagram
+// obeys.
 const neighbourFigure = (dir: string, index: DocIndex, repoDoc: RepoDoc | undefined): string | undefined => {
     const accentOf = accents(repoDoc);
     const uses = index.edges.filter((edge) => edge.from === dir);
@@ -75,8 +60,7 @@ const neighbourFigure = (dir: string, index: DocIndex, repoDoc: RepoDoc | undefi
     return ["```dag", JSON.stringify({ title, direction: `LR`, nodes, edges }), "```"].join(`\n`);
 };
 
-// How big this package is next to the others in its component. Skipped when the component is unknown or has
-// nothing to compare against, a bar chart of one bar is a number wearing a costume.
+// Size next to siblings in its component; skipped when the component is unknown or has nothing to compare against.
 const sizeFigure = (entry: DocIndexEntry, index: DocIndex, repoDoc: RepoDoc | undefined): string | undefined => {
     const component = repoDoc?.components.find((candidate) => candidate.packages.includes(entry.dir));
     if (component === undefined) {
@@ -103,9 +87,8 @@ const sizeFigure = (entry: DocIndexEntry, index: DocIndex, repoDoc: RepoDoc | un
     ].join(`\n`);
 };
 
-/* Everything drawn above a package's prose, as one markdown string, or "" when the index has nothing to say
- * about this directory, which is the ordinary state of a page whose index has not been regenerated yet. The view
- * renders it as its own <Markdown>, so a malformed fence here cannot disturb the README below it. */
+// Everything drawn above a package's prose, as markdown, or "" when the index says nothing about this directory yet.
+// Rendered as its own `<Markdown>`, so a bad fence can't disturb the README below it.
 export const packageFigures = (dir: string, index: DocIndex | undefined, repoDoc: RepoDoc | undefined): string => {
     const entry = index?.entries.find((candidate) => candidate.dir === dir);
     if (index === undefined || entry === undefined) {

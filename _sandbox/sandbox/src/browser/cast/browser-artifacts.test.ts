@@ -10,8 +10,7 @@ const hooks = browserArtifactHooks(OUTPUT);
 
 const fire = async (toolName: string, toolInput: Record<string, unknown>) => {
     const [matcher] = hooks.PreToolUse!;
-    // The matcher is a regex the harness applies to the tool name; the callback itself sees every call, so a
-    // test that fires it directly has to honour the same gate or it proves nothing about what runs in a turn.
+    // Matcher is a regex the harness applies; the callback sees every call, so a direct test must honor the gate.
     if (!new RegExp(matcher!.matcher!).test(toolName)) {
         return {};
     }
@@ -45,7 +44,6 @@ test("the agent is told the absolute path, since the tool answers with a relativ
     );
 });
 
-// A logged-in capability's browser gets no --output-dir at all, so its named files need this even more.
 test("a capability's own browser is redirected too", async () => {
     expect(rewritten(await fire("mcp__reddit-main__browser_take_screenshot", { filename: "thread.png" }))).toBe(
         "/work/.intentic/records/artifacts/browser/thread.png",
@@ -59,7 +57,6 @@ test.each([
     expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename }))).toBe(expected);
 });
 
-// The agent asking for structure inside the output dir is a request about naming, not about placement.
 test("a subdirectory the agent asked for is honoured inside the output dir", async () => {
     expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "before/nav.png" }))).toBe(
         "/work/.intentic/records/artifacts/browser/before/nav.png",
@@ -70,7 +67,6 @@ test("a name already resolved into the output dir is left as it is", async () =>
     expect(await fire("mcp__web__browser_take_screenshot", { filename: "/work/.intentic/records/artifacts/browser/shot.png" })).toEqual({});
 });
 
-// Unnamed artifacts are the case --output-dir already owns; touching them would only fight the tool.
 test("an unnamed screenshot is not touched", async () => {
     expect(await fire("mcp__web__browser_take_screenshot", { type: "png" })).toEqual({});
 });
@@ -79,9 +75,8 @@ test.each(["mcp__web__browser_navigate", "Write", "mcp__web__browser_snapshot"])
     expect(await fire(toolName, { filename: "shot.png" })).toEqual({});
 });
 
-/* The other direction: the tool's ANSWER back into a picture the chat can show. @playwright/mcp replies with a
- * markdown link relative to the agent's cwd, which for a repo cwd climbs out of the repo: useless to fetch
- * until it is put back into the workspace-root-relative route space. */
+// screenshotImage: turns the tool's answer, a markdown link relative to the agent's cwd, back into a
+// workspace-root-relative path the chat can render.
 test("a screenshot's answer becomes a workspace path the chat can render", () => {
     const answer = "### Result\n- [Screenshot of viewport](../.intentic/records/artifacts/browser/page-2026-07-30.png)\n";
     expect(screenshotImage(answer, "/work/myrepo", OUTPUT)).toEqual({
@@ -95,8 +90,6 @@ test("a screenshot taken at the workspace root resolves the same way", () => {
     expect(screenshotImage(answer, "/work", OUTPUT)).toEqual({ type: "image", path: ".intentic/records/artifacts/browser/shot.png" });
 });
 
-// A link we can't place inside the output dir is a file this module never dictated: claiming it would put an
-// arbitrary path from tool output in front of the user as "the screenshot".
 test.each([
     ["a link outside the output dir", "- [Something](../src/index.ts)"],
     ["no link at all", "Took the screenshot."],

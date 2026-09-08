@@ -5,41 +5,28 @@ import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { BROWSERS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 
-/* The ONE roster of the agent's browsers, shared by the rail tile and the Browsers view, the same single-cache
- * shape terminalsQuery has, and for the same reason: the tile's count and the view's tab strip must not be able
- * to disagree, which they would the moment each held its own copy.
- *
- * There is no pending-claim half here, unlike the terminals. A `web-*` shell exists because THIS browser asked
- * for it, so the client knows about it before the daemon does; an agent browser is the opposite, the daemon
- * mints it from a hook on the agent's own tool call, and the client's first knowledge of it is this list. There
- * is simply no window to paper over.
- *
- * Which is also why nothing here polls: the daemon owns every one of these records, so it knows the roster
- * changed before this browser could have asked. It pushes the `browsers` domain from the same lines that mint,
- * navigate and finish a session (runtime-watch.ts), and the agent opening a page repaints the tile as it
- * happens rather than up to ten seconds later. */
+// One shared roster of the agent's browsers for the rail tile and the Browsers view (like terminalsQuery), so they
+// can't disagree. No pending-claim half like terminals need: the daemon mints an agent browser itself, so this
+// list is the client's first knowledge of it. Nothing polls; the daemon pushes the `browsers` domain on
+// mint/navigate/finish (runtime-watch.ts).
 
 const QUERY_KEY = BROWSERS.of();
 
-// Named for the background loader (composables/prefetch), which warms this list into the very entry the tile
-// and the view read.
+// Named for the background loader (prefetch), which warms this into the same entry the tile and view read.
 export const browsersKey = QUERY_KEY;
 export const fetchBrowsers = async (): Promise<BrowserSession[]> => BrowsersListSchema.parse(await sandboxJson(`/system/browsers`)).sessions;
 
 export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; refetch: () => Promise<unknown> } => {
     const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchBrowsers });
-    // Live browsers first, a running one is what someone opening this came for, then the most recently
-    // finished, because a record is read newest-first.
+    // Live browsers first (what someone came for), then most recently finished, newest-first like a record.
     const sessions = computed(() =>
         (query.data.value ?? []).toSorted((left, right) => Number(right.running) - Number(left.running) || right.activityAt - left.activityAt),
     );
     return { sessions, refetch: () => query.refetch() };
 };
 
-// Close one browser. The row drops from the shared list the moment the kill is ISSUED (the terminal strip's
-// rule, see removeTerminal): without it the rail tile would keep counting a browser the user just closed for a
-// tunnel round-trip, which is exactly what makes a close feel unacknowledged. The refetch puts it back if the
-// daemon disagreed.
+// Drops the row from the shared list the moment the kill is issued, like removeTerminal, so the rail tile doesn't
+// keep counting a browser the user just closed. Refetch restores it if the daemon disagreed.
 export const closeBrowser = async (name: string): Promise<void> => {
     queryClient.setQueryData<BrowserSession[]>(QUERY_KEY, (listed) => listed?.filter((session) => session.name !== name));
     try {

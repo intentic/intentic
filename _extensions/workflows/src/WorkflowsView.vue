@@ -31,59 +31,23 @@ import { STEP_TONE } from "./workflowDag";
 import { loopIdFrom, useLoopDesigns } from "./useLoopDesigns";
 import { useWorkflows } from "./useWorkflows";
 
-/* WORKFLOWS AND LOOPS: the two shapes you keep and point at a job.
- *
- * A workflow is a designed graph of agent sessions, each producing a declared output. A loop is one session
- * repeated until a bar you can state is cleared. They share this page because they are the same KIND of thing
- *: a design you author once, pick from a composer, and hand today's sentence to, and differ only in their
- * answer: a workflow spreads the message across sessions that are not this one, a loop repeats it in one.
- *
- * The page says what neither of them is by what it does NOT have. An automation has an enabled switch, because
- * something fires it. Nothing here fires on its own: a design runs when somebody says run it.
- *
- * A LOOP DID NOT USED TO HAVE A PAGE, and the sentence that justified that was "it is started against a
- * conversation and then it is history": true of a RUNNING loop and false of the thing a person actually
- * wanted to keep. Every loop was configured from scratch, in a modal over the composer, whose first field
- * asked for a goal already typed in the box behind it. What is saved here is the machinery without the goal;
- * the goal stays where it always was, in the message.
- *
- * A GALLERY OF CARDS RATHER THAN A LIST OF ROWS, which is the one place this page departs from every other
- * list in the product. A row is right for a thing whose identity is its NAME and whose interest is its STATE:
- * an automation, a secret, a file. A workflow's identity is its shape, and a shape needs two dimensions: the
- * row this replaced spent its width on a name, a shape described in three words, a description truncated to
- * whatever was left, a status and three controls, all on one line and all in the same grey. Nothing on it was
- * legible except the buttons. The card gives the graph a picture, the description two lines, and the controls
- * one loud one (Run) with the rest under the pointer.
- *
- * THE TEMPLATE IS UNDER THE LIST, not in the create dialog, and that is the one deliberate difference from the
- * automations page. Automation recipes are prefill for a form whose shape you already understand; a workflow
- * template is the only way most people will learn what shapes are POSSIBLE: that a reviewer should be a
- * different session, that two steps can run on two different models, that a step can be made to produce data
- * the next one consumes. So it stays visible on the page rather than hiding one level in, and it is drawn as
- * the SAME card as a saved workflow, dashed, because "one of those, ready-made" is the whole proposition and
- * the old bare-bordered box under a bare "Start from" label said none of it.
- */
+// Workflows (a graph of sessions, each with a declared output) and loops (one session repeated until a stated bar
+// clears) are the same kind of design, authored once and handed a job later; unlike an automation, nothing here fires
+// on its own. Shown as cards, not rows, since a workflow's identity is its shape, and templates stay visible under the
+// list as the same dashed card.
 
 const { workflows, isLoading, runs, runsLoaded, error: listError, remove } = useWorkflows();
-// Only drawn once the wait has earned it: see useLoadingReveal for the two thresholds.
+// Skeleton only appears once the wait has earned it (useLoadingReveal's thresholds).
 const outline = useLoadingReveal(
     isLoading,
     computed(() => `workflows`),
 );
-// The page's second kind of design: see the saved-loops block below for what one is and why it lives here.
+// The page's second kind of design, alongside workflows.
 const { loops, error: loopsError, save: saveLoop, remove: removeLoop } = useLoopDesigns();
 
-/* WHICH OF THE THREE SCREENS THIS IS, and it is read from the URL rather than held in a ref.
- *
- * `?edit=<id>` is the designer, `?run=<runId>` is a run, neither is the list. The query is an extension view's
- * whole route space (IntenticApi.route), so this buys Back, reload and a linkable address for free, and it is
- * why the designer stopped being a dialog: a modal cannot be any of those things, and a graph needs a page.
- *
- * A DRAFT IS NOT IN THE URL. `?edit=new` names an unsaved workflow whose content is held here, because a
- * document nobody has saved has no address to link to. Held in a shallowRef: it is only read and handed to the
- * designer, which takes its own copy, and deep reactivity would wrap it in a proxy on the way out (see
- * workflowDraft.ts for what that cost).
- */
+// Screen is read from the URL query, not a ref: `?edit=<id>` opens the designer, `?run=<runId>` a run, giving Back,
+// reload, and a linkable address for free. `?edit=new` names an unsaved draft with no address, held in a `shallowRef`
+// so the designer's own copy isn't proxy-wrapped.
 const query = computed(() => host().route.query());
 const editing = computed(() => query.value[`edit`]);
 const watchingId = computed(() => query.value[`run`]);
@@ -94,19 +58,11 @@ const actionError = ref<string | undefined>();
 
 const topError = computed(() => actionError.value ?? listError.value ?? loopsError.value);
 const watching = computed(() => runs.value.find((run) => run.runId === watchingId.value));
-/* `?run=` naming a run the ledger no longer holds. Reachable rather than theoretical: the workflow mark on a
- * fleet card is never cleared (which run a conversation came out of is what its card is read for a week later),
- * while the ledger keeps only the last 50 runs, so the card outlives the record it links to. Falling through
- * to the list silently reads as the link having done nothing, which is the one thing it must not look like.
- * Gated on the ledger having actually been READ, so a slow first load cannot accuse a good link. */
+// True when `?run=` outlives the ledger's last-50 window, gated on the ledger having actually loaded.
 const lostRunId = computed(() => (watchingId.value !== undefined && watching.value === undefined && runsLoaded.value ? watchingId.value : undefined));
-/* The workflow the designer is on: a saved one by id, or the draft that `?edit=new` stands for.
- *
- * The draft ALSO answers for its own id once it has been saved, and that is not belt-and-braces: it closes a
- * real gap. Saving navigates to `?edit=<id>` the moment the POST resolves, but the list query is only
- * invalidated then, so for one refetch there is no saved workflow under that id yet. Without this the designer
- * would unmount and flick back to the list at the exact moment the user pressed Save. Scoped by id rather than
- * left as a general fallback, so `?edit=<something-deleted>` cannot quietly open a stale draft instead. */
+// Falls back to the draft by id even once saved, so the designer doesn't flicker to the list for the one refetch
+// between the save resolving and the list query invalidating. Scoped by id, not a general fallback, so a deleted
+// `?edit=<id>` can't reopen a stale draft.
 const designing = computed<Workflow | undefined>(() => {
     if (editing.value === undefined) {
         return undefined;
@@ -116,18 +72,11 @@ const designing = computed<Workflow | undefined>(() => {
 });
 const live = computed(() => runs.value.filter((run) => run.state === `running`));
 const past = computed(() => runs.value.filter((run) => run.state !== `running`).slice(0, 12));
-/* THE GALLERY OFFERS EVERY TEMPLATE, INCLUDING ONE ALREADY SAVED under its own id, which it used to hide, on
- * the reasoning that the gallery is for shapes you do not have.
- *
- * That reasoning had a hole, and it is the one people fall down: a template is PREFILL, so a saved copy is a
- * fork taken at the moment it was picked. When the template moves on: a step removed, a prompt rewritten:
- * the saved workflow does not, and hiding the card left no way to take the new version short of deleting the
- * old one first. Somebody watching the template change and their own run not change has no way to connect the
- * two. Picking it still costs nothing: it opens the DESIGNER prefilled, and nothing is written until Save.
- */
+// True even for a template already saved under its own id: a saved copy is a fork that may have drifted, and picking it
+// only opens the designer prefilled.
 const savedAlready = (template: WorkflowTemplate): boolean => workflows.value.some((workflow) => workflow.id === template.workflow.id);
 
-// A saved workflow opens by id; anything unsaved is parked in `drafted` first and opens as `new`.
+// A saved workflow opens by id; an unsaved one is parked in `drafted` first and opens as `new`.
 const openSaved = (id: string): void => host().route.setQuery({ edit: id, run: undefined }, { push: true });
 const openDraft = (workflow: Workflow): void => {
     drafted.value = workflow;
@@ -137,18 +86,15 @@ const mintWorkflowId = (): string => `workflow-${crypto.randomUUID()}`;
 const watchRun = (runId: string): void => host().route.setQuery({ run: runId, edit: undefined }, { push: true });
 const backToList = (): void => host().route.setQuery({ edit: undefined, run: undefined });
 
-// A template opens the designer PREFILLED rather than creating the workflow: a graph that costs money to run
-// is not something to create by accident, and looking at the picture before saving is the whole point.
-// Handed over uncloned: the designer copies whatever it is given, so the module constant is only ever read.
+// Opens the designer prefilled rather than creating the workflow outright. Handed over uncloned; the designer copies
+// it, so the template constant is only ever read.
 const fromTemplate = (template: WorkflowTemplate): void => openDraft({ ...template.workflow, id: mintWorkflowId() });
 
 const blank = (): void =>
     openDraft({
         id: mintWorkflowId(),
         name: `New workflow`,
-        // No goal and no prompt: the step does whatever the run is asked to do and is measured against it. A
-        // blank workflow is therefore RUNNABLE the moment it is named, which is the point: the author adds
-        // structure (a second step, a check, a declared output) rather than filling in boilerplate to begin.
+        // No goal or prompt, so a blank workflow is runnable the moment it's named.
         steps: [
             {
                 id: `step-1`,
@@ -163,21 +109,12 @@ const blank = (): void =>
         maxParallel: 2,
     });
 
-/* RUN HANDS THE START OVER RATHER THAN PERFORMING IT. Pressing it opens a new agent session with this design
- * named on the composer's workflow badge, and that is where the run begins, when the user types what they
- * want and presses send.
- *
- * It used to start the run here, behind a dialog with its own prompt box, and that was two ways to begin agent
- * work: the one everybody knows (a composer) and this one, which looked like nothing else in the product and
- * put a text box inside a modal on a list page. Starting a workflow is starting agent work; the difference is
- * only that the message fans out. So the composer is the place, and this button's job is to get you there
- * with the design already picked. Nothing is spent until the send.
- */
+// Opens a composer session with this design badged, rather than starting the run itself; nothing is spent until the
+// user sends.
 const runNow = (workflow: WorkflowSummary): void => host().chat.composeWorkflow(workflow.id);
 
-/* THE GATE BADGE'S PANEL: the URL and the paste-ready CI step, on the card, because the card is where the
- * owner is standing months after the save that minted them (the automations row keeps its webhook on the row
- * for the same reason). One overlay for the whole list, anchored to whichever badge was pressed. */
+// Gate badge's panel: the webhook URL and CI step, shown on the card via one overlay anchored to whichever badge was
+// pressed.
 const gateShown = ref<{ workflow: WorkflowSummary; anchor: HTMLElement }>();
 const gateOpen = computed({
     get: () => gateShown.value !== undefined,
@@ -205,24 +142,14 @@ const removeWorkflow = async (): Promise<void> => {
     }
 };
 
-/* --- SAVED LOOPS -------------------------------------------------------------------------------------
- * The page's second kind of design, and a deliberate neighbour rather than a page of its own. A loop and a
- * workflow are one question with two answers: what is the next message run THROUGH, and everything about how
- * they are used is shared: authored here, picked from the composer's badge row, pointed at whatever you type.
- *
- * THE FORM IS A DIALOG HERE AND WAS ONE ON THE COMPOSER, which sounds like the same thing moved sideways and is
- * not. On a composer it interrupted a sentence somebody was in the middle of writing, opened in the app window
- * while the chat was popped out into another, and asked for a goal that was already typed behind it. On a page
- * it interrupts nothing, and every question in it is about the loop rather than about today's job.
- */
+// Saved loops: a deliberate neighbor to workflows, not a page of its own, since both are designs picked from the
+// composer's badge row. The loop form lives here as a page rather than a composer dialog, so it no longer interrupts a
+// message in progress.
 const loopEditing = ref<LoopDesign | undefined>();
 const loopFormOpen = ref(false);
 const confirmRemoveLoopId = ref<string | undefined>();
 
-/* `?loop=new` from the composer's empty picker opens the form on arrival, `?loop=list` just lands here. That is
- * the whole of this view's loop route space: a saved loop has no canvas and no run of its own to link to, so
- * unlike a workflow it needs no screen: only this page, and a form over it. The query is cleared as it is
- * consumed, so a reload does not reopen a dialog the user has closed. */
+// `?loop=new` opens the form on arrival; the query is cleared immediately so a reload doesn't reopen a closed dialog.
 watch(
     () => query.value[`loop`],
     (want) => {
@@ -251,8 +178,7 @@ const persistLoop = async (fields: Omit<LoopDesign, "id">): Promise<void> => {
     actionError.value = undefined;
     const existing = loopEditing.value;
     try {
-        // An edit keeps its id even when the name changes: a composer badge pointing at this loop must not be
-        // orphaned by a rename, which is exactly the sort of breakage nobody connects back to the edit.
+        // Keeps the existing id on rename, so a composer badge pointing at this loop isn't orphaned.
         const design: LoopDesign = { ...fields, id: existing?.id ?? loopIdFrom(fields.name, loops.value) };
         await saveLoop.mutateAsync({ design, create: existing === undefined });
         loopFormOpen.value = false;
@@ -275,28 +201,17 @@ const deleteLoop = async (): Promise<void> => {
     }
 };
 
-// Aim a fresh session at this loop, the same handover Run performs for a workflow: the composer opens with the
-// loop on its badge and nothing is spent until the user types what they want done and presses send.
+// Same handover as a workflow's Run: opens the composer badged with this loop, nothing spent until send.
 const loopNow = (design: LoopDesign): void => host().chat.composeLoop(design.id);
 
 const doneSteps = (run: WorkflowRun): number => run.steps.filter((step) => step.state === `done`).length;
 const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0);
 
-// A run's headline: how far it got, and what it cost. Both numbers, because "3 of 7" and "$4.10" answer the
-// two different questions a person has about a run they were not watching. WHEN it ran is not in here: it gets
-// a column of its own, because a date only scans when it lines up with the one above it.
+// Progress and cost, the two questions about a run you weren't watching; when it ran gets its own column instead.
 const runLine = (run: WorkflowRun): string =>
     [`${doneSteps(run)}/${run.steps.length} steps`, spentOn(run) > 0 ? `$${spentOn(run).toFixed(2)}` : ``].filter((part) => part !== ``).join(` · `);
 
-/* One vocabulary for run state, everywhere it is shown, and it is a <StatusBadge> rather than a tinted word.
- *
- * The word alone was doing two jobs it could not do at once: on a card it had to survive sitting between a
- * description and a Run button, and in the history it had to be scannable down a column. A pill is the app's
- * answer to both, and using it means "failed" reads the same here as it does on every other surface.
- *
- * `stopped` IS NOT AN ERROR COLOUR: the user did that on purpose (the same rule the graph's step tones keep).
- * `running` takes the brand tint rather than a status colour, because it is not an outcome, it is a live thing.
- */
+// `stopped` isn't an error color, the user chose it; `running` gets the brand tint, not a status color.
 const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
     running: `primary`,
     done: `success`,
@@ -308,13 +223,11 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 </script>
 
 <template>
-    <!-- THREE SCREENS, ONE VIEW. The designer and a run each need the whole page (a graph does not fit in a
-         dialog), and an extension's route space is the query, so this switches on it rather than layering
-         modals over the list. `h-full` because both of those are canvas pages that must not scroll. -->
-    <!-- SAVING GOES BACK TO THE LIST. It used to navigate `?edit=new` → `?edit=<id>`, which is the same
-         screen at a different address, and since `editing` is this component's `:key`, the designer was torn
-         down and rebuilt in place: a flicker, then the form you were already looking at. Nothing about the
-         press was legible as having worked. A save is finishing with the document, so it closes it. -->
+    <!-- Switches on the query rather than layering modals, since the designer and a run each need the whole page; `h-full` since neither scrolls. -->
+    <!--
+        Closes to the list on save rather than navigating `?edit=new` to `?edit=<id>`, which would remount the designer (`editing` is its `:key`) as
+        a visible flicker.
+    -->
     <WorkflowDesigner
         v-if="designing"
         :key="editing"
@@ -328,9 +241,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
     <Page v-else width="wide">
         <PageHeader title="Workflows">
             <template #actions>
-                <!-- Two kinds of design, two ways in. The loop is the secondary one because it is the smaller
-                     idea, not the lesser one: a workflow is what most people come here for, and a loop is what
-                     they reach for once they have a bar they can state. -->
+                <!-- Loop is the secondary action, not lesser: most people come here for a workflow first. -->
                 <PageAction icon="repeat" label="New loop" @click="newLoop()" />
                 <PageAction icon="plus" label="New workflow" primary @click="blank()" />
             </template>
@@ -338,18 +249,13 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 
         <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
 
-        <!-- A link to a run that has rolled off the ledger. Not an error: nothing failed and nothing is wrong
-             with the card that sent you here, so it states the fact and leaves the page usable beneath it. -->
+        <!-- Link to a run that rolled off the ledger; not an error, just a fact, so the page stays usable underneath. -->
         <Notice v-if="lostRunId !== undefined" tone="info" class="mb-4">
             Run <span class="font-mono">{{ lostRunId }}</span> is no longer on the record: the ledger keeps the last 50 runs.
         </Notice>
 
         <div class="flex flex-col gap-6">
-            <!-- Runs in flight sit at the top, above the designs: while something is going, that is the page.
-                 It carries a PROGRESS BAR rather than a sentence, because the question asked of a live run is
-                 never "what is it" (the name answers that) it is "how far, and is it still moving". One
-                 segment per step in the workflow's own order, tinted by the same table the graph uses, so the
-                 strip here and the canvas behind it are the same reading at two sizes. -->
+            <!-- Live runs sit above saved designs. A progress bar, not a sentence, per-step and tinted by the same table the canvas uses. -->
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <Icon name="spinner" spin class="text-2xs text-link" />
@@ -376,18 +282,13 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 :class="STEP_TONE[step.state].bar"
                             ></span>
                         </span>
-                        <!-- What this run was ASKED to do. The design is a shape; the sentence is the job, and it
-                             is the only thing that tells two runs of the same workflow apart. -->
+                        <!-- What this run was asked to do; the only thing distinguishing two runs of the same design. -->
                         <span v-if="run.request" class="w-full truncate text-2xs text-muted">{{ run.request }}</span>
                     </button>
                 </div>
             </section>
 
-            <!-- The saved library, as the cards that are coming. A workflow card is a title, a two-line
-                 description and a diagram frame, and the frame is most of its height, so an outline that drew
-                 only the text would promise a card a third of the size of the one that lands, and the
-                 templates below it would jump down the page as the real ones arrive. Two, because two is the
-                 shortest library worth drawing and a reader with twenty is no worse served by seeing two. -->
+            <!-- Skeleton matches the real card's height (mostly the diagram frame), so nothing jumps down the page once it lands. -->
             <section v-if="isLoading && outline" role="status" aria-busy="true">
                 <span class="sr-only">Reading your workflows…</span>
                 <div class="mb-2 flex items-center gap-2 px-0.5" aria-hidden="true">
@@ -402,16 +303,10 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </div>
                             <span class="skeleton block h-6 w-16 shrink-0" />
                         </div>
-                        <!-- THE FRAME IS THE FRAME, NOT A GREY SLAB. Filled edge to edge with a skeleton, the
-                             picture area came out darker and heavier than the real one, so the outline read as
-                             a card with a hole in it rather than a card about to hold a diagram. The frame
-                             keeps its own wash (WorkflowCard draws the same one) and the bars go INSIDE it, at
-                             a node's size, which is also the honest amount to promise: that a picture is
-                             coming, not what it will be a picture of.
-
-                             h-36 is 9rem, the frame's own height for the two-node graph most saved workflows
-                             are, and on the scale rather than an arbitrary value because an extension may only
-                             use classes the surface promises (see extensionSurface.test.ts). -->
+                        <!--
+                            Keeps the frame's own wash instead of filling it with skeleton; `h-36` matches WorkflowCard's frame height for a two-node
+                            graph, and must stay on the surface's allowed scale.
+                        -->
                         <div class="flex h-36 w-full flex-col items-center justify-center gap-3 rounded-lg bg-content/4">
                             <span v-for="node in 2" :key="node" class="skeleton block h-14 w-52 rounded-md" />
                         </div>
@@ -432,8 +327,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         :description="workflow.description"
                         @open="openSaved(workflow.id)"
                     >
-                        <!-- The gate badge is a DOOR, not an ornament: it opens the URL and the CI step a
-                             pipeline is wired with, which otherwise only exist inside the designer. -->
+                        <!-- Opens the webhook URL and CI step, otherwise only visible inside the designer. -->
                         <template v-if="workflow.gate" #badges>
                             <button
                                 type="button"
@@ -448,10 +342,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 </StatusBadge>
                             </button>
                         </template>
-                        <!-- ONE LOUD CONTROL PER CARD. Run is what the page is for and is always there; edit and
-                             delete come up under the pointer, because reading the gallery is the common act and
-                             three buttons of equal weight is what made the old row unreadable. They stay put
-                             below `md`, where there is no hover to reveal them. -->
+                        <!-- Run always shows; edit and delete appear on hover only, staying put below `md` where there's no hover. -->
                         <template #actions>
                             <Button
                                 label="Run"
@@ -480,8 +371,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 <Icon name="trash" />
                             </button>
                         </template>
-                        <!-- The last run, as a FACT in the meta line rather than as a fourth control competing
-                             with Run. The card is a design, not a run; clicking through is how you read one. -->
+                        <!-- Last run as a fact in the meta line, not a fourth control competing with Run. -->
                         <template #meta>
                             <button
                                 v-if="workflow.runs[0]"
@@ -499,11 +389,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </div>
             </section>
 
-            <!-- SAVED LOOPS: rows, where a workflow gets a card, and the difference is honest rather than a
-                 downgrade. A card exists to give a workflow's SHAPE two dimensions: that is what a graph needs
-                 and what a row could never show. A loop has no shape: it is one session, repeated, and
-                 everything worth knowing about it is three facts on a line: what ends it, how far it may go,
-                 what it is for. That is a row, and pretending otherwise would be a picture of nothing. -->
+            <!-- Rows, not cards: a loop has no shape to draw, just three facts on a line (what ends it, how far, what it's for). -->
             <RowGroup
                 v-if="loops.length > 0"
                 label="Your loops"
@@ -516,9 +402,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                         Ends on {{ loopDesignLine(design) }}{{ design.context === `continue` ? ` · keeps context` : `` }}
                         <span v-if="design.description">: {{ design.description }}</span>
                     </template>
-                    <!-- Use is the loud one, for the reason Run is loud on a workflow card: reading this
-                             list is the common act, and starting one is what the list is FOR. Edit and delete
-                             come up under the pointer, and stay put below `md` where there is no hover. -->
+                    <!-- Use is the loud control, like Run on a workflow card; edit and delete appear on hover only. -->
                     <template #control>
                         <Button
                             label="Use"
@@ -551,19 +435,14 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </Row>
             </RowGroup>
 
-            <!-- THE GALLERY, drawn as the same card as a saved workflow and dashed. That is the whole fix: the
-                 old block was a bare box under the words "Start from", which named neither what it held nor what
-                 pressing it would do, and it sat under a list whose items looked nothing like it, so there was
-                 no reading in which the two were the same kind of thing.
-                 Full width and stacked rather than a grid: there are two of these, they differ by how much
-                 machinery they carry, and that is a difference you read along the row, not one you spot in a
-                 column of thumbnails. The first is the plain one, and it is the one to click first. -->
+            <!--
+                Same dashed card as a saved workflow, not a bare box, so it reads as one of those, ready-made. Stacked, not gridded: the two
+                templates differ in machinery, best read down a row rather than spotted in thumbnails.
+            -->
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">Start from a template</span>
-                    <!-- "Nothing saved yet" is a claim about the reader's own library, and an unread library
-                         answers `[]` exactly like an empty one, so while the read is in flight the caption
-                         says only the part that is true of every visit. -->
+                    <!-- Avoids claiming an empty library while the read is still in flight; `[]` looks the same either way. -->
                     <span class="min-w-0 text-2xs text-subtle">
                         {{
                             workflows.length > 0 || isLoading
@@ -595,9 +474,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
                         </template>
-                        <!-- You already have one of these. Said plainly, because a card that looks like "add a
-                             new thing" while it is really "take the current version of a thing you forked" is
-                             the difference between a save you meant and one you did not. -->
+                        <!-- Said plainly: this looks like adding new but really re-forks an existing copy. -->
                         <template v-if="savedAlready(template)" #meta>
                             <span class="text-warning">You have a copy: saving from here replaces it.</span>
                         </template>
@@ -615,8 +492,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 >
                     <StatusBadge :variant="RUN_VARIANT[run.state]" size="xs" :label="run.state" class="w-20 shrink-0 justify-center" />
                     <span class="shrink-0 truncate text-xs text-content">{{ run.workflow.name }}</span>
-                    <!-- What it was asked to do, which is the only thing telling two runs of one design apart:
-                         and the first question anybody has of a row in a history. -->
+                    <!-- What it was asked to do, the only thing telling two runs of one design apart. -->
                     <span v-if="run.request" class="min-w-0 flex-1 truncate text-2xs text-muted">{{ run.request }}</span>
                     <span v-else class="flex-1"></span>
                     <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ runLine(run) }}</span>
@@ -657,8 +533,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             @save="persistLoop($event)"
         />
 
-        <!-- The gate badge's panel: the same <GateAccess> the designer shows, so the two copies of the one
-             string a pipeline is taught cannot disagree. -->
+        <!-- Same `<GateAccess>` the designer shows, so the two copies of the webhook string can't disagree. -->
         <AnchoredOverlay v-model="gateOpen" :anchor="gateShown?.anchor" side="bottom" cross="start">
             <div class="w-pop p-3">
                 <GateAccess v-if="gateShown" :workflow="gateShown.workflow" />

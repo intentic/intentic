@@ -7,26 +7,12 @@ import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
 import { type HostLink, rememberScopes } from "./config.js";
 import { createHostRouter } from "./router.js";
 
-/* The one socket, this device's instance of the peer dial (sandbox-contract's peer-dial.ts: the two-phase
- * socket, the handler-before-hello rule, the backoff ladder and the 1008 rule all live there). What is this
- * machine's own is WHERE IT DIALS and what it serves.
- *
- * WHERE IT DIALS is resolved per attempt rather than fixed to the link's public URL (../daemon-base.ts, the
- * same resolver the sync half's watcher uses): the sandbox's own container on this machine's loopback when
- * /health there names the sandbox this link is for, the public URL as the floor. It matters here for a
- * different reason than it does for a Mutagen stream. A socket carries kilobytes, so the edge costs it
- * nothing worth saving; what it costs is REACHABILITY. A sandbox running on this very machine whose tunnel is
- * down — a dev box, an ingress mid-move, an edge answering 502 for an hour — used to read "offline" on its own
- * Devices tab while the sync half of this same process was polling the container a loopback hop away, and
- * every control on that tab hangs on this socket being up. Asked on EVERY attempt, never once at startup,
- * because the answer is exactly what a reconnect is about: the container this socket was on went away, or one
- * appeared where there was none. The ordinary case costs nothing (a loopback port with no listener refuses in
- * under a millisecond), and the one that costs a probe's budget is a hung socket, which is the case worth
- * spending it on. */
+// This device's one instance of sandbox-contract's peer-dial (the socket, handler-before-hello, backoff, the
+// 1008 rule). What's local: WHERE it dials, resolved per attempt (../daemon-base.ts) so a sandbox on this
+// machine's own loopback is reached even when its public tunnel is down, and what it serves.
 
-/* The two things between this loop and the network, injectable together because a test of WHICH address gets
- * dialled needs to stand in for both: the answer to "where is the daemon" and the socket that answer is
- * handed to. Production wires the real resolver and the runtime's own WebSocket. */
+// The two things between this loop and the network, injectable together: where the daemon is, and the socket
+// that answer is handed to. Production wires the real resolver and the runtime's own WebSocket.
 export interface Dial {
     readonly resolveBase: (sandboxUrl: string) => Promise<DaemonBase>;
     readonly socket: (url: string) => WebSocket;
@@ -35,20 +21,17 @@ export interface Dial {
 const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new WebSocket(url) };
 
 export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial): PeerLink => {
-    /* The live grant. Starts as whatever the last session cached and is replaced by the sandbox's `setScopes`,
-     * which arrives immediately after every connect, so a scope the owner turned off is enforced from the first
-     * call of the new session, not from the next restart of this agent. */
+    // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
+    // from the new session's first call.
     let scopes: HostScopes = config.scopes;
     const handler = new RPCHandler(
         createHostRouter({
             scopes: () => scopes,
             setScopes: (next) => {
                 scopes = next;
-                /* …AND THE CACHE FOR THIS LINK ALONE. The router used to write it, which was fine while a
-                 * device answered to exactly one sandbox and is wrong now that it answers to a list: the
-                 * router has no idea which of them pushed. The connection does, because it IS one link, so the
-                 * persistence moved to the side that holds the identity. Best-effort and unawaited for the
-                 * reason it always was: the live grant above is already enforcing. */
+                // The persistence for this link's cache alone: the router doesn't know which of several sandboxes
+                // pushed, so
+                // the connection, which owns the identity, writes it. Unawaited: the live grant above already enforces.
                 void rememberScopes(config.sandboxUrl, next);
             },
             log,
@@ -63,8 +46,8 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
             }
             return {
                 socket: dial.socket(hostConnectUrl(base)),
-                // The loopback case is said, because it is the one a reader of this log cannot infer from the
-                // link's own address, and the one that explains a machine that is "connected" with its tunnel down.
+                // The loopback case is logged; it's the one fact about this connection the link's own address doesn't
+                // carry.
                 said: `connected to ${config.sandboxUrl}${local ? ` over loopback (${base})` : ""} as "${config.id}"`,
             };
         },

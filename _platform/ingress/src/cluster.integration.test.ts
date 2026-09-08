@@ -10,11 +10,9 @@ import type { Peer, PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, DISPLACED_CODE } from "./registry.js";
 import { createIngressServer, type IngressServer } from "./server.js";
 
-/* TWO MACHINES, ONE SANDBOX, THE WRONG ONE ASKED. This is the situation the cluster exists for, run on real
- * sockets: a container dials machine A, a browser arrives at machine B, and the request has to come out of the
- * container's front door with its Host intact — then an upgrade, then the container moving to B and A learning
- * it, then the two ways a forward can fail and what the browser sees for each. Everything between A and B is
- * the real holds protocol over real HTTP; nothing is faked but the clock nobody waits on. */
+// Two machines, one sandbox, the request landing on the wrong one — exercised over real sockets and the real holds
+// protocol end to end, nothing faked. Covers the forward, the upgrade, the container moving, and both forward-failure
+// modes.
 
 const ZONE = `sbx.example.test`;
 const SANDBOX_ID = `abcdef012345`;
@@ -29,7 +27,7 @@ const portOf = (server: Server): number => (server.address() as AddressInfo).por
 const listen = (server: Server): Promise<void> => new Promise((resolve) => server.listen(0, `127.0.0.1`, resolve));
 const closeServer = (server: Server): Promise<void> => new Promise((resolve) => server.close(() => resolve()));
 
-// Bounded, not a sleep: polls until the cluster has learned what a peer just told it, or fails by name.
+// Polls until the cluster has learned what a peer told it, or fails by name rather than hanging.
 const waitFor = async (what: string, condition: () => boolean, deadlineMs = 3_000): Promise<void> => {
     const start = Date.now();
     while (!condition()) {
@@ -51,7 +49,7 @@ const get = (port: number, host: string, path = `/`, headers: Record<string, str
         request.end();
     });
 
-// A discovery the test moves by hand: both machines start alone, then are introduced, then one meets a ghost.
+// Peer discovery moved by hand: both machines start alone, then are introduced, then one meets a ghost.
 const movable = () => {
     let peers: readonly Peer[] = [];
     const listeners = new Set<(next: readonly Peer[]) => void>();
@@ -90,7 +88,7 @@ const machine = async (name: string): Promise<Machine> => {
     const self: Peer = { host: `127.0.0.1`, port: 0, internalPort: 0 };
     const cluster: Cluster = createCluster({
         instanceId: name,
-        // Ports are filled in below once the listeners have them; the cluster reads `self` by reference.
+        // Ports fill in below once the listeners have them; the cluster reads `self` by reference.
         self,
         peers: discovery,
         registry,
@@ -127,7 +125,7 @@ const machine = async (name: string): Promise<Machine> => {
     };
 };
 
-// A container's front door: answers with the Host and the headers it saw, and echoes an upgrade.
+// Container's front door: answers with the Host and headers it saw, and echoes an upgrade.
 const frontDoor = async (): Promise<{ readonly server: Server; readonly seen: () => IncomingHttpHeaders | undefined }> => {
     let headers: IncomingHttpHeaders | undefined;
     const server = createServer((request, response) => {
@@ -144,7 +142,7 @@ const frontDoor = async (): Promise<{ readonly server: Server; readonly seen: ()
     return { server, seen: () => headers };
 };
 
-// A container dialling a machine, the way the daemon does.
+// Container dialing a machine, the way the daemon does.
 const dial = async (
     edge: IngressServer,
     targetPort: number,
@@ -190,8 +188,6 @@ describe(`two machines behind one address`, () => {
         expect(b.edge.registry.ids()).toEqual([]);
     });
 
-    /* THE CASE THE CLUSTER EXISTS FOR. The browser is on b, the tunnel is on a, and the request comes out of
-     * the container's front door with its Host intact and the hop header stripped. */
     test(`a request to the wrong machine is served by the right one, Host intact, hop stripped`, async () => {
         const answer = await get(portOf(b.edge.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/health`);
         expect(answer).toEqual({ status: 200, body: `served sandbox-${SANDBOX_ID}.${ZONE}/health` });
@@ -234,8 +230,7 @@ describe(`two machines behind one address`, () => {
         expect(healthB).toMatchObject({ instance: `b`, tunnels: 0, peers: 1, remote: 1 });
     });
 
-    // AT MOST ONE HOP. A request a peer handed over that misses here is the peer's mistake to correct, and
-    // forwarding it again is how a loop would start.
+    // A second hop would be how a forwarding loop starts.
     test(`a hop-marked request that misses is a 502, never forwarded again`, async () => {
         b.cluster.receive({ from: a.self, instance: `a`, op: `add`, ids: [NOBODY_ID] });
         const answer = await get(portOf(b.edge.server), `sandbox-${NOBODY_ID}.${ZONE}`, `/`, { [HOP_HEADER]: `1` });
@@ -243,17 +238,15 @@ describe(`two machines behind one address`, () => {
         expect(answer.body).toContain(`sandbox-${NOBODY_ID}`);
     });
 
-    /* A HOLDER THAT WAS WRONG. b believes a holds NOBODY; a does not. The forward reaches a, a answers its own
-     * 502 on the hop-marked request, and b relays it — a readable answer, not a hang — and keeps the entry,
-     * since the peer was there and simply said no. */
+    // Distinguishes a peer that answered no from one that's unreachable (below): the entry survives because the peer
+    // responded.
     test(`a stale holder answers 502 through the peer, and stays until a peer says otherwise`, async () => {
         const answer = await get(portOf(b.edge.server), `sandbox-${NOBODY_ID}.${ZONE}`, `/`);
         expect(answer.status).toBe(502);
         expect(b.cluster.holder(NOBODY_ID)).toEqual(a.self);
     });
 
-    // A HOLDER THAT IS GONE. The machine b was told holds GHOST is not listening; the browser gets 502 and b
-    // forgets the holder rather than trying it on every request until the entry expires.
+    // Forgotten immediately rather than retried on every request until the entry naturally expires.
     test(`an unreachable holder is a 502 and is forgotten`, async () => {
         const ghost: Peer = { host: `127.0.0.1`, port: 1, internalPort: 1 };
         b.move([a.self, ghost]);
@@ -266,9 +259,8 @@ describe(`two machines behind one address`, () => {
         b.move([a.self]);
     });
 
-    /* THE CONTAINER MOVES. It redials and lands on b this time. b registers it, tells a, and a closes the
-     * session it still held with the displacement code — so the old socket knows it was replaced rather than
-     * dropped — and from then on a forwards to b. Newest wins, on whichever machine it landed. */
+    // Old socket closes with the displacement code, so it knows it was replaced rather than dropped; newest
+    // registration wins, whichever machine it landed on.
     test(`a redial that lands on the other machine displaces the first, and the first machine forwards`, async () => {
         second = await dial(b.edge, portOf(door.server));
         expect(await first.closedWith).toBe(DISPLACED_CODE);

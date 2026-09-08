@@ -1,24 +1,20 @@
 // @vitest-environment jsdom
+// jsdom: the subject is what reaches the screen; data is pinned in chatCapacity.test.ts. This covers two ways the
+// column stops being readable at its width:
 //
-// jsdom because the subject is what reaches the SCREEN, which a projection test cannot see. The rail's data is
-// pinned next door in composables/chat/chatCapacity.test.ts; what is pinned here are the two ways this column
-// stops being readable at the width it has to live at:
-//
-//   1. a pool of thirty-one sign-ins nobody chooses between, drawn one row per gmail address, which is 31
-//      restatements of one fact in a column 240px wide;
-//   2. a provider that has quietly fallen off the list, so "spent until Sunday" and "never connected" render as
-//      the same nothing — in a window with no shell around it, and therefore no Usage tab to go and check in.
+// 1. a pool of many sign-ins nobody chooses between, drawn one row per account, restating one fact across a
+//    column too narrow for it
+// 2. a provider that has fallen off the list, so "spent" and "never connected" render as the same nothing, with
+//    no Usage tab in this window to check
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The rail's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
-// useDevice reads window.matchMedia; environment.ts reads window.env).
+// Import chain pulls in app-wide singletons reading browser globals at import time (matchMedia, window.env).
 const { default: ChatCapacityRail } = await import("./ChatCapacityRail.vue");
 const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../accounts/providerAccounts");
-// The app's own reset formatter, not a second copy of it: what is asserted below is that the sentence CARRIES
-// the reset, and a transcribed "Mon 05:00" would fail in another timezone while proving nothing about that.
+// The app's own reset formatter, not a copy: assertions check it carries the reset, not a fixed timezone string.
 const { formatReset } = await import("../session/usageStatus");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
@@ -51,21 +47,17 @@ afterEach(() => {
     providerRefusals.value = {};
 });
 
-// The bars, by the width each was actually given: the one thing about this column that is drawn rather than
-// written, and the one a reader compares between rows without reading a digit.
+// The bars, by the width each was given, the one part of this column drawn rather than written.
 const barWidths = (el: HTMLElement): string[] =>
     [...el.querySelectorAll<HTMLElement>(`.bg-current`)].map((bar) => bar.style.width).filter((width) => width !== ``);
 
-/* WHAT THE COLUMN DRAWS, without the sentence spoken beside it. The two are meant to carry the same facts —
- * the row is decoration and hidden from the tree, the sr-only sentence is the content — so `textContent` holds
- * every line twice by design, and counting a phrase across the whole subtree counts the medium, not the
- * repetition. Anything asking "is this said once?" is asking it of one medium at a time. */
+// Reads only the drawn (aria-hidden) row, not the sr-only sentence beside it: `textContent` holds every fact
+// twice by design, so counting across the whole subtree would count the medium, not a repetition.
 const drawn = (el: HTMLElement): string => [...el.querySelectorAll(`[aria-hidden="true"]`)].map((node) => node.textContent ?? ``).join(` `);
 
 const spoken = (el: HTMLElement): string[] => [...el.querySelectorAll(`.sr-only`)].map((node) => node.textContent ?? ``);
 
-// The name each bar is drawn under: the length of the window it measures, which is the whole of what makes two
-// bars per account fit in 240px.
+// The name each bar is drawn under: the window length it measures, fitting two bars per account.
 const lanes = (el: HTMLElement): string[] => [...el.querySelectorAll(`.text-3xs`)].map((node) => node.textContent?.trim() ?? ``);
 
 it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, () => {
@@ -83,17 +75,14 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
 
     // One bar, at the pool's roomiest reading: what a turn routed to this provider would land on.
     expect(barWidths(el)).toEqual([`4%`]);
-    // And not one address among them: the reader cannot pick between these, so naming one would read as
-    // "this account is what you have".
+    // Not one address shown: the reader can't pick among these, so naming one would read as the account in use.
     expect(el.textContent).not.toContain(`radarsuspam`);
-    // The depth of the pool is what the count carries instead. Five of six: one credential is exhausted, which
-    // is the only reading of "spent" that takes a sign-in off this column (chatCapacity's spentOutright).
+    // The pool's depth is carried by the count instead; 5/6 means one credential is exhausted (spentOutright).
     expect(el.textContent).toContain(`5/6`);
 });
 
-/* "Most room" NAMES A COMPARISON, and a plan that publishes no limits has had none made. Two Grok connections
- * drew it directly above "no published limits" — one line contradicting the next, and both describing a reading
- * that does not exist. */
+// "Most room" names a comparison; a plan that publishes no limits has had none made, so it must not appear beside
+// "no published limits".
 it(`does not claim a pool has the most room when nothing in it was measured`, () => {
     const el = mount([], {
         ...NO_ROUTED,
@@ -103,14 +92,11 @@ it(`does not claim a pool has the most room when nothing in it was measured`, ()
         ],
     });
 
-    // In neither medium: the drawn line and the spoken sentence are built separately, so the claim has to be
-    // absent from both or it is only half withdrawn.
+    // Absent from both media: the drawn line and the spoken sentence are built separately.
     expect(el.textContent).not.toContain(`most room`);
-    // And the one true thing exactly once on the drawn line, not once as the row's name and again as the line
-    // under it, which is how it read before: "most room" over "no published limits" over "no published limits".
+    // The one true fact appears once on the drawn line, not once as the row's name and again below it.
     expect(drawn(el).match(/no published limits/g)).toHaveLength(1);
-    // The sentence a screen reader gets says it too, and says only it: with no figure there is nothing else to
-    // report about this pool, and "most room of 2" would be a comparison of two unknowns.
+    // The screen-reader sentence says only that: with no figure there's nothing else to report.
     expect(spoken(el)).toEqual([`no published limits`]);
 });
 
@@ -119,18 +105,16 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
         { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
-    // No offer, so no bar: an empty track over a spent account is the claim this rail exists not to make.
+    // No offer, so no bar: an empty track over a spent account is what this rail exists not to draw.
     expect(barWidths(el)).toEqual([]);
     expect(el.textContent).toContain(`Unavailable`);
     expect(el.textContent).toContain(`Claude Code`);
-    // The absence is dated rather than merely stated: waiting is the whole of what there is to do about it.
+    // The absence is dated, not merely stated: waiting is the only thing left to do about it.
     expect(el.querySelector(`[aria-label="Plan headroom"]`)?.textContent).toMatch(/Nothing has room right now/);
 });
 
-/* AND WHAT STANDS IN FOR THE HIDING THAT USED TO HAPPEN HERE. An account past the app's red line but not yet
- * exhausted keeps its row, so the steering is done by the TONE rather than by an absence — 96% in danger red,
- * on a rail that is still offering it, says both true things at once: you can start this, and not for long.
- * Dropping it said neither, and read on screen as an account that had gone missing. */
+// An account past the red line but not yet exhausted keeps its row; steering is by tone (danger red) rather than
+// by dropping it, which read as the account having gone missing.
 it(`draws an account that is nearly spent in the danger tone rather than dropping it`, () => {
     const el = mount([
         { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] } },
@@ -146,18 +130,14 @@ it(`spells out for a screen reader what the bar says by its width`, () => {
         { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] } },
     ]);
 
-    // A bar is decoration to a screen reader and a hover never reaches one, so every part the column shortens
-    // or drops — the pool's whole name behind the two characters the lane wears, when it reopens — is spoken
-    // here or nowhere.
+    // Every part the column shortens or drops is spoken here or nowhere; a bar is decoration to a screen reader.
     expect(spoken(el)).toContain(`Weekly · all models 41% (resets ${formatReset(1_700_090_000)})`);
-    // And spoken ONCE: the drawn row is hidden from the tree, or a reader hears the truncated line and then
-    // the whole one.
+    // Spoken once: the drawn row is hidden from the tree, or a reader would hear both the truncated and full line.
     expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`41%`);
 });
 
-/* THE DEFECT THIS COLUMN WAS REPORTED FOR. Both of an account's allowances are drawn, each beside the length of
- * the window it measures, because one bar showing the tightest of them left "87%" meaning either an hour's wait
- * or a week's rationing with nothing on screen to say which. */
+// Both of an account's allowances are drawn, each beside its own window's length: one bar at the tighter of the
+// two hid whether 87% meant an hour's wait or a week's rationing.
 it(`draws both the session and the week, each named by its own window`, () => {
     const el = mount([
         {
@@ -175,8 +155,7 @@ it(`draws both the session and the week, each named by its own window`, () => {
 
     // A bar each, at its own pool's reading, rather than one bar at the worse of the two.
     expect(barWidths(el)).toEqual([`12%`, `87%`]);
-    // Each standing beside the length of the window it is a fraction of, in a form short enough to need no
-    // legend, and the 5-hour session first because that is the one that bites soonest.
+    // Each stands beside its window's length, short enough to need no legend; the 5-hour session comes first.
     expect(lanes(el)).toEqual([`5h`, `wk`]);
     expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`12%`, `87%`]);
 });

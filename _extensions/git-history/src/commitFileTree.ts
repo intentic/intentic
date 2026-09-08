@@ -1,9 +1,8 @@
 import type { GitChange } from "@intentic/sandbox-contract";
 
-/* Turn a commit's flat changed-file list into a collapsible directory tree (the shape GitHistoryTab.vue's detail
- * renders), with VSCode-style "compact folders": a directory that holds nothing but a single subdirectory is
- * joined with it into one row ("sandbox / src"), so deep single-child chains don't waste vertical space.
- * Pure + unit-tested; the component owns only the collapse state and the SVG-free row rendering. */
+// Turns a commit's flat changed-file list into a collapsible directory tree with VSCode-style compact folders: a
+// directory holding only one subdirectory merges into one row ("sandbox / src"). Pure and unit-tested; the caller owns
+// only collapse state and rendering.
 
 interface FileNode {
     readonly type: "file";
@@ -20,9 +19,8 @@ interface DirNode {
 }
 export type TreeNode = FileNode | DirNode;
 
-// A flattened row for rendering: directories first (alpha), then files (alpha), each with its nesting depth. A
-// discriminated union so the template narrows `expanded` / `file` off `kind`. `path` is the dir path (collapse
-// key) for a dir, or the file path (diff target) for a file.
+// Flattened render row, dirs then files, alphabetical, with nesting depth; a discriminated union narrowed by `kind`.
+// `path` is the collapse key for a dir, the diff target for a file.
 export type FileTreeRow =
     | { readonly kind: "dir"; readonly depth: number; readonly name: string; readonly path: string; readonly expanded: boolean }
     | { readonly kind: "file"; readonly depth: number; readonly name: string; readonly path: string; readonly file: GitChange };

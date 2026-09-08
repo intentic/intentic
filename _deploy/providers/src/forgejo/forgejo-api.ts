@@ -2,21 +2,15 @@ import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 import { responseDetail } from "../core/response-detail.js";
 
-/* THE ADMIN CONNECTION, which every call on this surface carries: where the instance is, and the admin
- * credentials it is reached with. Auth flows per-call as HTTP Basic rather than being baked into the adapter
- * at construction, so one process can drive several instances and no long-lived object holds a password.
- *
- * Named because it was spelled out in full on all eighteen methods below, which is where a surface stops
- * reading as "the same connection, eighteen operations" and starts reading as eighteen unrelated functions. */
+// Admin connection every call carries: instance location and admin credentials. Auth flows per-call as HTTP
+// Basic rather than baked into the adapter, so one process can drive several instances.
 export interface ForgejoAdmin {
     readonly baseUrl: string;
     readonly user: string;
     readonly password: string;
 }
 
-// A Forgejo repo and one of its webhooks. Forgejo's REST surface returns the resource JSON directly (no
-// success envelope); errors arrive with a non-2xx status, and otherwise the body is validated against the
-// fields we consume (extra fields like timestamps are dropped).
+// A repo's clone and ssh urls. Forgejo returns resource JSON directly, no envelope; unread fields are dropped.
 export interface ForgejoRepo {
     readonly cloneUrl: string;
     readonly sshUrl: string;
@@ -33,7 +27,7 @@ const rawCommitSchema = z.object({ sha: z.string() });
 const rawContentSchema = z.object({ sha: z.string() });
 const rawTeamSchema = z.object({ id: z.number(), permission: z.string() });
 
-// Percent-encode each path segment but keep the slashes, so a nested file path stays a valid URL path.
+// Percent-encodes each path segment; slashes are kept as path separators.
 const encodePath = (path: string): string => path.split("/").map(encodeURIComponent).join("/");
 
 export const forgejoHookSchema = z.object({
@@ -45,10 +39,8 @@ export const forgejoHookSchema = z.object({
 });
 export type ForgejoHook = z.infer<typeof forgejoHookSchema>;
 
-// The slice of the Forgejo v4 API the repo/ci/notify providers use, injected so the providers
-// are unit-testable with a fake; the default `forgejoApi` below talks to a Forgejo instance over native
-// fetch. Auth flows per-call as HTTP Basic with the admin user + password (both resolved node inputs),
-// never baked into the adapter at construction.
+// Slice of the Forgejo v4 API the repo/ci/notify providers use; injected so they're testable with a fake, with
+// `forgejoApi` below as the default implementation over native fetch.
 export interface ForgejoApi {
     // A repo under `owner`; undefined if it does not exist (404).
     readonly findRepo: (
@@ -57,10 +49,8 @@ export interface ForgejoApi {
             readonly name: string;
         },
     ) => Promise<ForgejoRepo | undefined>;
-    // Create a repo owned by `owner`. `ownerIsOrg` picks the endpoint: an org repo (POST /orgs/{owner}/repos)
-    // when the owner is a team's organization, or an admin-for-user repo (POST /admin/users/{owner}/repos) for
-    // the single-admin fallback owner. `autoInit` makes Forgejo write an initial commit (so an app repo can be
-    // cloned immediately); pass false to get an EMPTY repo when local history will be pushed in.
+    // Creates a repo owned by `owner`; `ownerIsOrg` picks org vs admin-for-user endpoint. `autoInit` writes an
+    // initial commit; pass false for an empty repo when local history will be pushed in.
     readonly createRepo: (
         args: ForgejoAdmin & {
             readonly owner: string;
@@ -76,8 +66,8 @@ export interface ForgejoApi {
             readonly username: string;
         },
     ) => Promise<boolean>;
-    // Create a git account. `mustChangePassword` is forced false so the generated password works for the API +
-    // git push immediately (Forgejo defaults it true, which would lock the account out until a rotation).
+    // Creates a git account; `mustChangePassword` forced false, or Forgejo defaults it true and locks the account out
+    // until a rotation.
     readonly createUser: (
         args: ForgejoAdmin & {
             readonly username: string;
@@ -91,8 +81,8 @@ export interface ForgejoApi {
             readonly org: string;
         },
     ) => Promise<boolean>;
-    // Create an organization owned by the admin `user` (so the admin stays in its Owners team and its tokens
-    // retain full access to the org's private repos, what Komodo clones and pulls with).
+    // Create an organization owned by the admin `user`, keeping full access to the org's private repos that Komodo
+    // clones and pulls.
     readonly createOrg: (args: ForgejoAdmin & { readonly org: string }) => Promise<void>;
     // A team in an org (by name); undefined if absent. Returns the numeric id member/repo grants need.
     readonly findTeam: (
@@ -116,7 +106,7 @@ export interface ForgejoApi {
             readonly username: string;
         },
     ) => Promise<void>;
-    // Attach a repo to a team so its members get the team's permission on it (idempotent PUT).
+    // Attach a repo to a team, granting its members the team's permission on it (idempotent PUT).
     readonly addTeamRepo: (
         args: ForgejoAdmin & {
             readonly teamId: number;
@@ -179,8 +169,8 @@ export interface ForgejoApi {
             readonly message: string;
         },
     ) => Promise<void>;
-    // Create or replace a repo Actions secret (consumed by the CI workflow). Forgejo takes the PLAINTEXT value
-    // as `data` (unlike GitHub's libsodium sealed box), create-or-replaced in place with a single PUT.
+    // Create or replace a repo Actions secret consumed by the CI workflow; Forgejo accepts the plaintext value directly
+    // as `data`.
     readonly setRepoSecret: (
         args: ForgejoAdmin & {
             readonly owner: string;
@@ -189,8 +179,8 @@ export interface ForgejoApi {
             readonly data: string;
         },
     ) => Promise<void>;
-    // The teardown surface prune drives. Each is idempotent: a 404 (the resource is already gone) is success.
-    // Delete a repo (and all its content). `owner` is the org or admin user the repo lives under.
+    // Teardown surface prune drives; each call is idempotent, a 404 counts as success. Deletes a repo (and all
+    // content); `owner` is the org or admin user it lives under.
     readonly deleteRepo: (
         args: ForgejoAdmin & {
             readonly owner: string;
@@ -376,8 +366,7 @@ export const forgejoApi: ForgejoApi = {
     commitFile: async ({ baseUrl, user, password, owner, name, branch, path: filePath, content, message }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contents/${encodePath(filePath)}`;
         const base64 = Buffer.from(content).toString("base64");
-        // Forgejo's contents API creates with POST and replaces with PUT (which requires the current blob
-        // sha), so look the file up first and branch on whether it already exists.
+        // Creates with POST, replaces with PUT (needs the current blob sha); look up the file first to choose.
         const existing = await request({ method: "GET", baseUrl, path: `${path}?ref=${encodeURIComponent(branch)}`, user, password });
         if (existing.status === 404) {
             await ok(await request({ method: "POST", baseUrl, path, user, password, body: { content: base64, message, branch } }), "POST", path);
@@ -392,7 +381,7 @@ export const forgejoApi: ForgejoApi = {
     },
     setRepoSecret: async ({ baseUrl, user, password, owner, name, secretName, data }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/actions/secrets/${encodeURIComponent(secretName)}`;
-        // PUT is create-or-replace; Forgejo accepts the plaintext value as `data`. 201 (created) / 204 (updated) both ok().
+        // PUT is create-or-replace; Forgejo accepts the plaintext value as `data`; 201/204 both ok().
         await ok(await request({ method: "PUT", baseUrl, path, user, password, body: { data } }), "PUT", path);
     },
     deleteRepo: async ({ baseUrl, user, password, owner, name }) => {

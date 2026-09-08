@@ -2,9 +2,8 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { afterEach, expect, test, vi } from "vitest";
 import { createManagedProcesses, launchEnv, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
 
-// A runner that records launches (with the manager-assigned port) and lets the test drive each session's pane
-// foreground command, mirroring what tmux would report. An absent entry models a destroyed session; a launch
-// starts at the job command ("node"): tests drive it back to "zsh" (the prompt) to simulate completion.
+// Records launches and lets a test drive each session's foreground command, mirroring tmux. Absent means destroyed; a
+// launch starts at "node", tests set "zsh" to simulate completion.
 const fakeRunner = () => {
     const launches: { session: string; spec: ProcessSpec & { port: number } }[] = [];
     const killed: string[] = [];
@@ -36,7 +35,7 @@ test("start launches tmux session panel-<key> with the assigned port, exposed vi
     expect(launches[0]?.session).toBe("panel-app");
     expect(launches[0]?.spec.command).toBe("pnpm dev");
     expect(launches[0]?.spec.cwd).toBe("/work/app/operator");
-    // The manager assigned a real free port and injected it (runner sees it, portOf reports it).
+    // The manager assigns a real free port; the runner sees it and portOf reports it.
     const port = panels.portOf("app");
     expect(port).toBeGreaterThan(0);
     expect(launches[0]?.spec.port).toBe(port);
@@ -168,7 +167,7 @@ test("a single prompt sighting between chained commands does not complete a oneS
     await vi.advanceTimersByTimeAsync(2000);
     cmd.set("panel-job", "zsh");
     await vi.advanceTimersByTimeAsync(2000);
-    // The streak reset when the next chained command was seen; one fresh sighting is again not completion.
+    // The streak reset on the next chained command; one fresh sighting is again not completion.
     expect(panels.running("job")).toBe(true);
     await vi.advanceTimersByTimeAsync(2000);
     expect(panels.running("job")).toBe(false);
@@ -213,18 +212,15 @@ test("a launch failure propagates to the caller and leaves nothing tracked", asy
     expect(panels.running("app")).toBe(false);
 });
 
-/* WHERE A START HAS GOT TO, narrated off the pane's foreground command. The screen watching a start used to have
- * one sentence for the whole wait; these are the four states it can now say, and `exited` is the one that turns
- * a spinner into a verdict. One-shot jobs stay out of it: their completion is their own story. */
 test("launchOf narrates a start: launching until the command is seen, starting while it runs, exited once it returns to a prompt", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner, { onPromptWatch: () => () => undefined });
-    // The fake runner reports the job command from the first sweep on; before any sweep nothing has been seen.
+    // The fake reports the job command only from the first sweep on; before that nothing's been seen.
     await panels.start("app", SPEC);
     expect(panels.launchOf("app")).toBe("launching");
     await vi.advanceTimersByTimeAsync(2_000);
-    // SPEC's cwd has no node_modules on this machine, and the install's completion file is absent: installing.
+    // SPEC's cwd has no node_modules and no install-completion file, so this reads as installing.
     expect(panels.launchOf("app")).toBe("installing");
     cmd.set("panel-app", "zsh");
     await vi.advanceTimersByTimeAsync(2_000);

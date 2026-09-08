@@ -1,15 +1,7 @@
-<!-- The markdown preview's outline: a document's own headings, as a column of places to go.
-
-     WHY A LIST OF WORDS AND NOT A MINIMAP. The code surface beside this one has a minimap and is right to: code
-     has a silhouette: indentation, line-length variance, colour, so a shrunken page is still recognisable.
-     Rendered prose is a uniform slab; every paragraph looks like every other paragraph, and the only landmarks
-     in it are the headings. A minimap would show those as unreadable grey bars, where this shows them as their
-     own words. That is the same answer GitHub, VS Code and Obsidian arrived at for the same reason.
-
-     THE SPINE. Each row carries a left border, so the rows stack into one continuous line down the rail and the
-     current section lights its own segment of it. A tinted row-fill (ui-row-select-on, what the file tree uses)
-     would be wrong here: the tree is a list you act on, this is chrome beside prose, and a filled block in the
-     margin competes with the paragraph it is meant to be helping you read. -->
+<!--
+    Outline of a rendered markdown document's own headings, as a list of places to jump to — not a minimap, since prose has no visual silhouette the
+    way code does. Each row's left border joins into one spine; the current section lights its own segment.
+-->
 <script setup lang="ts">
 import { ui, SearchBar } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
@@ -22,27 +14,21 @@ const { headings, active } = defineProps<{
 }>();
 const emit = defineEmits<{ jump: [index: number] }>();
 
-/* Past this many sections the list is its own navigation problem: you are scanning a column of forty names for
- * one word, which is the scrolling you came here to avoid. Under it, a filter box is a control nobody needs
- * taking the room two more headings could have used. */
+// Past this many sections, scanning the list becomes its own search; under it, a filter box just wastes room.
 const FILTER_FROM = 12;
 
 const query = ref(``);
 const filterable = computed(() => headings.length >= FILTER_FROM);
 const rows = computed(() => matchHeadings(headings, filterable.value ? query.value : ``));
 
-/* Indentation is relative to the document's OWN shallowest heading, not to h1. A README opens with a title and
- * sections under it; a fragment lifted out of one may start at h2 or h3 and never hold anything shallower.
- * Measuring from the top of what is actually there means the second kind reads as a flat list of sections
- * rather than as a column shoved three steps to the right for no reason the reader can see. */
+// Indentation is relative to the document's own shallowest heading, not h1: a fragment starting at h2/h3 reads
+// as a flat list, not shoved right for no visible reason.
 const shallowest = computed(() => headings.reduce((top, heading) => Math.min(top, heading.level), 6));
-// Capped: past three steps the words have no room left, and a document nested that deep is not navigated by
-// indentation anyway.
+// Capped at three steps; words run out of room past that, and such nesting isn't read by indentation anyway.
 const inset = (heading: OutlineHeading): string => `${0.75 + Math.min(heading.level - shallowest.value, 3) * 0.7}rem`;
 
-// Keep the current section on screen in a rail longer than the pane. `nearest` is deliberately the least
-// disruptive scroll there is: a row already visible does not move at all, so reading a long document does not
-// come with a column twitching in the corner of the eye.
+// Keeps the current section on screen in a rail longer than the pane. `nearest` never moves an already-visible
+// row, so reading doesn't come with the column twitching in the corner of the eye.
 const list = ref<HTMLElement>();
 watch(
     () => active,

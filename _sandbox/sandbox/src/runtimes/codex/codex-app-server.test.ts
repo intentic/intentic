@@ -12,16 +12,14 @@ interface RequestCall {
     readonly params: unknown;
 }
 
-/* What the fake app-server sends the runner, in order: a notification as it arrives on the wire, a
- * server-initiated request whose answer the test then reads off `answered`, or a BARRIER: a promise the stream
- * waits on before going any further. The barrier is what makes something the runner does mid-turn (a steer
- * landing on the running turn) happen before the frames that come after it, instead of racing them. */
+// What the fake app-server sends, in order: a notification, a server request answered via answered, or a barrier
+// promise the stream waits on before continuing (so a mid-turn steer lands before the frames after it).
 type Incoming = AppServerNotification | { readonly request: string; readonly params: unknown } | { readonly await: Promise<unknown> };
 
 interface FakeAppServerOptions {
-    // What `skills/list` answers with: the SkillMetadata array of the one cwd entry.
+    // What skills/list answers with: the SkillMetadata array of the one cwd entry.
     readonly skills?: readonly unknown[];
-    // The turn id `turn/steer` reports the message landed on. Defaults to the turn already running.
+    // The turn id turn/steer reports the message landed on. Defaults to the turn already running.
     readonly steeredTurnId?: string;
 }
 
@@ -435,8 +433,7 @@ test("a steering message reaches the running turn, and the run follows the turn 
     });
     const steering = (async function* () {
         yield "use fetch instead";
-        // The pump only comes back for a second message once `turn/steer` has answered, so reaching this line is
-        // the steer having landed: no timer, and nothing to race the frames below.
+        // Only resumes for a second message after turn/steer answers, so reaching here means the steer has landed.
         released();
     })();
     const appServer = fakeAppServer(

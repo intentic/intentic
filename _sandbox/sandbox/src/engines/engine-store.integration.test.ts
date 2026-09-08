@@ -14,9 +14,8 @@ import {
     readEngineState,
 } from "./engine-store.js";
 
-/* WHAT THE POINTER MEANS, which is the whole of the store's correctness: what runs, what going back means, and
- * what this daemon has refused. The directories are cheap to fake, so these cases are about the state file
- * rather than about npm. */
+// Pins the state file's meaning: what runs, what going back means, and what this daemon has refused; directories are
+// cheap to fake, so these cases are about the file, not npm.
 
 const AT = "2026-09-01T00:00:00.000Z";
 
@@ -36,9 +35,8 @@ test("a fresh store runs the image's copy and has nothing to go back to", async 
     expect(state.quarantined).toEqual([]);
 });
 
-/* Activating over the IMAGE leaves `previous` empty on purpose: "go back" there means "stop using the store",
- * which clearing `active` already says. Only a store version replaced by another store version is a step worth
- * keeping the way back to. */
+// Only a store version replacing another store version sets `previous`; activating over the image leaves it empty,
+// since "going back" would mean "stop using the store" anyway.
 test("the version a store version replaces becomes the way back", async () => {
     await activateVersion("claude", "0.3.250");
     expect((await readEngineState("claude")).previous).toBeUndefined();
@@ -55,8 +53,6 @@ test("re-activating what is already active is not a step back to itself", async 
     expect((await readEngineState("claude")).previous).toBeUndefined();
 });
 
-/* A refusal has to do two things at once, and doing only the first is the bug worth a test: record the reason,
- * AND stop serving turns from the version it is about. */
 test("quarantining the running version falls back to the image and says why", async () => {
     await activateVersion("claude", "0.3.257");
     await quarantineVersion("claude", "0.3.257", "would not launch", AT);
@@ -82,8 +78,6 @@ test("the refusal list is bounded, newest first", async () => {
     expect(quarantined[0]?.version).toBe("0.3.8");
 });
 
-// Reverting to the image is a pointer move and deliberately keeps `previous`: an owner who goes back to stock
-// and changes their mind again still has the download.
 test("going back to the image keeps the store's own history", async () => {
     await activateVersion("claude", "0.3.250");
     await activateVersion("claude", "0.3.257");
@@ -94,8 +88,8 @@ test("going back to the image keeps the store's own history", async () => {
     expect(state.previous).toBe("0.3.250");
 });
 
-/* Two copies of a 300 MB binary is the price of an instant revert; a fifth is an old download nobody will
- * choose. The GC runs after an install, so what it must never delete is the pair the state names. */
+// GC runs after install and must keep exactly the active/previous pair; a third, older version is the one nobody would
+// choose back to.
 test("collection keeps what runs and what going back means, and nothing else", async () => {
     for (const name of ["0.3.240", "0.3.250", "0.3.257"]) {
         version(name);

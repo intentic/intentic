@@ -4,24 +4,12 @@ import { AGENT_GIT_AUTHOR, gitFailureReason, identity } from "../git.js";
 import { operationInProgress } from "./operation.js";
 import { pushBranch, remoteState } from "../remote/remote.js";
 
-/* PUTTING ONE FILE WHERE THE PUBLIC INTERNET CAN READ IT, write, commit that path alone, push, and say how
- * far it got.
- *
- * The publisher claim is what this exists for. Proving a publisher name means committing a challenge file to a
- * repository the official registry already lists, and until now that was a chore the creator did by hand in a
- * terminal: copy a token, find the repo, write the file, commit, push, come back and press verify. Every step
- * of that is something the daemon already does, for a repo it can already see, so it does all of them.
- *
- * THE ONE THING THAT MAKES IT DIFFERENT FROM COMMIT-THEN-PUSH. A proof is only a proof if it is on the DEFAULT
- * branch: the verifier reads `raw.githubusercontent.com/<repo>/HEAD/<file>`, and HEAD there resolves to
- * whatever branch the remote calls default. Committing to the side branch the creator happens to be on would
- * push a real commit that can never verify, and leave them with a stray file to clean up. So the branch is
- * checked BEFORE anything is written, and a mismatch is a refusal that names both branches. */
+// Writes one file, commits that path alone, pushes it, and reports how far it got — automating the publisher-claim flow
+// a creator would otherwise do by hand. A proof only counts on the DEFAULT branch (the verifier reads `HEAD/<file>`),
+// so the branch is checked before anything is written.
 
-// The remote's default branch, the one a public `HEAD` read resolves to. `origin/HEAD` is a symbolic ref git
-// writes at clone time, so the answer is usually local and free. A repo that was pushed rather than cloned has
-// no such ref, and `ls-remote --symref` asks the remote itself; on a public repo that needs no credentials.
-// Undefined ⇒ genuinely unknown, which is NOT the same as "does not match", see publishFile's use of it.
+// The remote's default branch. `origin/HEAD` (local, free) covers a clone; a pushed-not-cloned repo falls back to
+// `ls-remote --symref`. Undefined means genuinely unknown, not "does not match".
 export const defaultBranchOf = async (dir: string, remote: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
     const prefix = `${remote}/`;
     const local = await git(dir, ["symbolic-ref", "--short", `refs/remotes/${remote}/HEAD`]).catch(() => undefined);
@@ -35,9 +23,8 @@ export const defaultBranchOf = async (dir: string, remote: string, git: GitRunne
     return advertised === undefined || advertised === "" ? undefined : advertised;
 };
 
-// Does the worktree differ from HEAD at this one path? Asked AFTER the write, to decide whether there is a
-// commit to make at all, a creator who clicks twice, or who committed the file themselves and only failed to
-// push it, must reach the push rather than a "nothing to commit" failure.
+// Does the worktree differ from HEAD at this path? Checked after the write, so a repeat click or an already-committed
+// file still reaches the push instead of failing on "nothing to commit".
 const pathIsDirty = async (dir: string, path: string, git: GitRunner): Promise<boolean> => {
     const { stdout } = await git(dir, ["status", "--porcelain", "--untracked-files=all", "--", path]);
     return stdout.trim() !== "";
@@ -49,10 +36,8 @@ export interface PublishFileInput {
     readonly message: string;
 }
 
-/* `write` is injected rather than done here so the path stays the router's business: it is the layer holding
- * `guardRepoPath`, and a file surface that resolves its own paths is one more place an escape has to be
- * re-proved. Everything else, the refusals, the ordering, the partial-run report, is the same everywhere
- * this is called from. */
+// `write` is injected so path resolution (guardRepoPath) stays the router's job; refusals, ordering and the partial-run
+// report are the same for every caller.
 export const publishFile = async (
     dir: string,
     file: PublishFileInput,
@@ -62,9 +47,8 @@ export const publishFile = async (
     // Every refusal below happens BEFORE the write, which is what lets them all share this: nothing moved.
     const idle = { ok: false as const, wrote: false, committed: false, pushed: false };
 
-    // Mid-sequence is checked first and refused rather than worked around: a partial commit is exactly what git
-    // rejects while MERGE_HEAD exists, and it rejects it only after staging, so trying costs the user a moved
-    // index for nothing (see changes-index.ts commitIndex, which was rewritten for the same reason).
+    // Checked first: git rejects a partial commit while MERGE_HEAD exists, but only after staging, so trying would cost
+    // a moved index for nothing.
     const operation = await operationInProgress(dir);
     if (operation !== undefined) {
         return { ...idle, reason: `this repo is part-way through a ${operation}, finish or abort that first` };
@@ -78,10 +62,8 @@ export const publishFile = async (
         return { ...idle, branch: state.branch, reason: `this repo has no remote, so nothing in it can be published` };
     }
     const defaultBranch = await defaultBranchOf(dir, state.remote, git);
-    /* An UNKNOWN default branch is not a refusal. It happens on a repo whose `origin/HEAD` was never written and
-     * whose remote cannot be reached right now, and refusing there would block a creator whose branch is very
-     * probably the right one. The publish proceeds, the answer carries no `defaultBranch`, and the verify step
-     * downstream is the one that gets to be sure. */
+    // An unknown default branch isn't a refusal (unwritten `origin/HEAD`, unreachable remote); the publish proceeds
+    // without `defaultBranch`, and verify downstream is what confirms it.
     if (defaultBranch !== undefined && defaultBranch !== state.branch) {
         return {
             ...idle,
@@ -94,22 +76,13 @@ export const publishFile = async (
     const at = { wrote: true, branch: state.branch, ...(defaultBranch !== undefined ? { defaultBranch } : {}) };
     await write(file.content);
 
-    /* Nothing dirty after the write means the file is ALREADY there, byte-identical and committed. That is the
-     * second click, and the repeat of a run whose push failed, both of which must fall through to the push
-     * rather than die on git's "nothing to commit". Idempotence is not a nicety here: this button's whole
-     * promise is that pressing it again is safe. */
+    // Nothing dirty after the write means the file is already committed (a second click, or a retry after a failed
+    // push); both must reach the push, not die on git's "nothing to commit".
     let committed = false;
     if (await pathIsDirty(dir, file.path, git)) {
         try {
-            /* `--only <path>` commits this path's worktree state and NOTHING else, whatever the creator has
-             * staged stays staged. That is the whole reason this does not reuse the panel's commit route, which
-             * deliberately records the entire index.
-             *
-             * The `add` in front of it is not optional: `--only` refuses a path git has never heard of
-             * ("pathspec did not match any file(s) known to git"), and the first run of this is always adding a
-             * brand-new untracked file. Adding it moves ONE index entry, which the commit then clears, a
-             * commit that fails in between leaves the claim file staged and visible in Changes, which is both
-             * recoverable and exactly what `wrote: true, committed: false` is reported for. */
+            // `--only` commits just this path, leaving other staged work untouched (why this skips the panel's
+            // whole-index commit route). `add` first is required: `--only` refuses a path git's never heard of.
             await git(dir, ["add", "--", file.path]);
             await git(dir, [...identity(AGENT_GIT_AUTHOR), "commit", "-q", "--only", "-m", file.message, "--", file.path]);
             committed = true;
@@ -120,8 +93,7 @@ export const publishFile = async (
 
     const pushed = await pushBranch(dir, { branch: state.branch }, git);
     if (!pushed.ok) {
-        // The commit is real and local; saying so is the difference between a creator retrying the push and a
-        // creator hunting for a file they think never got written.
+        // The commit is real and local; reporting that spares a retry from turning into a hunt for a lost file.
         return { ok: false, ...at, committed, pushed: false, reason: pushed.reason };
     }
     return { ok: true, ...at, committed, pushed: true };

@@ -2,9 +2,8 @@ import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { REDACTED, shareTranscript } from "./share-payload.js";
 
-/* WHAT LEAVES THE MACHINE: the only tests in this feature that are about safety rather than behaviour, and
- * the reason share-payload.ts is a pure function over plain values: every claim the share dialog makes to the
- * person about to publish a conversation is checked here, against the payload itself. */
+// Pins what leaves the machine: the safety tests for a pure function whose payload is checked directly, since every
+// claim the share dialog makes to a publisher is verified here.
 
 const conversation: TranscriptRow[] = [
     {
@@ -40,14 +39,12 @@ describe("a messages-only share", () => {
         const { messages } = shareTranscript(conversation, "messages");
         expect(messages).toHaveLength(2);
         expect(messages[1]?.text).toBe("Fixed.");
-        // The three things that ARE the agent's work, none of which may appear.
         expect(messages[1]?.tools).toBeUndefined();
         expect(messages[1]?.thinking).toBeUndefined();
         expect(JSON.stringify(messages)).not.toContain("auth/guard.ts");
     });
 
-    /* An attached screenshot is part of the PROMPT, not part of the agent's work: leaving it out would cut
-     * the user's own message in half, so it rides both levels. */
+    // An attachment belongs to the prompt, not the agent's work, so it survives at every detail level.
     it("keeps what the user attached to their own message", () => {
         const { messages, pictures } = shareTranscript(conversation, "messages");
         expect(messages[0]?.attachments).toEqual(["files/1-screenshot.png"]);
@@ -55,9 +52,8 @@ describe("a messages-only share", () => {
     });
 });
 
-/* The one row-level flag that SURVIVES a share, at every detail level: a line the owner placed wearing the
- * agent's voice must not read as the agent's to a recipient: the share page is a human audience, which is the
- * only audience the mark exists for. (The agent-facing handoff stays blind to it; see TranscriptRowSchema.) */
+// `placed`: an owner-written line in the agent's voice must not read as the agent's to a human reader of the share page
+// (the agent-facing handoff stays blind to it; see TranscriptRowSchema).
 describe("a placed row", () => {
     it("keeps its mark in the shared payload", () => {
         const placed: TranscriptRow[] = [{ role: "assistant", text: "I verified it myself.", placed: true }];
@@ -78,7 +74,6 @@ describe("an everything share", () => {
         const { messages, pictures } = shareTranscript(conversation, "everything");
         expect(messages[1]?.tools?.[0]?.content?.[1]).toEqual({ type: "image", path: "files/2-after.png" });
         expect(pictures.map((picture) => picture.published)).toEqual(["files/1-screenshot.png", "files/2-after.png"]);
-        // The one claim that matters: no workspace path survives anywhere in what gets published.
         expect(JSON.stringify(messages)).not.toContain(".intentic/");
     });
 
@@ -104,9 +99,8 @@ describe("an everything share", () => {
 });
 
 describe("both levels", () => {
-    /* A conversation is where credentials get pasted: into a prompt, into a diff, into a command's output.
-     * The outbox would REFUSE a file containing one (public-files.ts rule 5); a page that was refused reads to
-     * its owner as a broken feature, so a share is rewritten to the same rule instead of being blocked by it. */
+    // The outbox refuses a file containing a credential (public-files.ts rule 5); a share rewrites to that same rule
+    // instead of being blocked by it.
     it.each(["messages", "everything"] as const)("strips a self-identifying secret from a %s share", (detail) => {
         const published = JSON.stringify(shareTranscript(conversation, detail).messages);
         expect(published).not.toContain("sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345");
@@ -118,16 +112,15 @@ describe("both levels", () => {
         expect(published).not.toContain("AKIAIOSFODNN7EXAMPLE");
     });
 
-    // Both are the daemon's own bookkeeping: one addresses this machine's rewind state, the other is text the
-    // published page has no surface for. Neither means anything to a recipient.
+    // `checkpointId` addresses this machine's rewind state; `notes` has no surface on the published page. Neither means
+    // anything to a recipient.
     it.each(["messages", "everything"] as const)("drops the daemon's own bookkeeping from a %s share", (detail) => {
         const [first] = shareTranscript(conversation, detail).messages;
         expect(first?.checkpointId).toBeUndefined();
         expect(first?.notes).toBeUndefined();
     });
 
-    // A picture is only a picture if the page can draw it; anything else named in an image entry is not
-    // copied out of the workspace, which is what stops an image entry being a way to publish a file.
+    // An image entry only ever copies an actual image; nothing else it names leaves the workspace.
     it("publishes nothing that is not an image, however a tool labelled it", () => {
         const { messages, pictures } = shareTranscript(
             [
@@ -143,8 +136,7 @@ describe("both levels", () => {
         expect(messages[0]?.tools?.[0]?.content).toEqual([]);
     });
 
-    // Two files can share a basename; a share that quietly showed the wrong one would be worse than one that
-    // showed none.
+    // A silently wrong picture is worse than a missing one.
     it("keeps two pictures of the same name apart", () => {
         const { pictures } = shareTranscript(
             [
@@ -168,7 +160,6 @@ describe("both levels", () => {
             ],
             "everything",
         );
-        // Three references, two distinct files, one copy each.
         expect(pictures.map((picture) => picture.published)).toEqual(["files/1-shot.png", "files/2-shot.png"]);
     });
 });

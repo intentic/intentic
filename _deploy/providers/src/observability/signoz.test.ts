@@ -8,18 +8,15 @@ const CLICKHOUSE_IMAGE = "clickhouse/clickhouse-server:25.5.6@sha256:aaaa";
 const SIGNOZ_IMAGE = "signoz/signoz:v0.129.0@sha256:bbbb";
 const OTEL_IMAGE = "signoz/signoz-otel-collector:v0.144.5@sha256:cccc";
 const ZOOKEEPER_IMAGE = "signoz/zookeeper:3.7.1@sha256:dddd";
-// The service=image lines `docker inspect` reports for the running compose project (the one-shot
-// init-clickhouse + telemetrystore-migrator have exited, so they are absent; the migrator's image tracks the
-// otel collector's).
+// service=image lines `docker inspect` reports; the one-shot init/migrator steps are absent, having exited.
 const DEFAULT_IMAGES = { zookeeper: ZOOKEEPER_IMAGE, clickhouse: CLICKHOUSE_IMAGE, signoz: SIGNOZ_IMAGE, "otel-collector": OTEL_IMAGE };
 const composeImages = (images: Record<string, string>): string =>
     Object.entries(images)
         .map(([service, image]) => `${service}=${image}`)
         .join("\n");
 
-// Drives the signoz provider entirely over SSH: docker ps reports the UI container, the project inspect
-// reports each service's image, the wget reports liveness, docker compose up can be made to fail, and the
-// register curl reports an HTTP status.
+// Drives the provider entirely over SSH: docker ps/inspect, wget health, compose up, and the register curl are all
+// mocked.
 const fakeSsh = (
     opts: { running?: boolean; upFails?: boolean; healthy?: boolean; register?: string; images?: Record<string, string> } = {},
 ): { executor: SshExecutor; commands: string[] } => {
@@ -27,10 +24,8 @@ const fakeSsh = (
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            /* Ordered matchers, first hit answers. A file write is matched BEFORE the probes: the templates
-             * this stack writes mention `wget` (the UDF fetch) and compose's own labels, so a heredoc carrying
-             * them would otherwise read as a failing health check — and an apply whose config write fails now
-             * throws, as it should. */
+            // Ordered matchers, first hit wins; writes match before probes, since written templates mention
+            // wget/labels.
             const answers: readonly (readonly [RegExp, () => SshResult])[] = [
                 [/^(?:mkdir -p|cat >|test -f)/u, () => res("")],
                 [/com\.docker\.compose\.project/u, () => res(opts.running ? composeImages(opts.images ?? DEFAULT_IMAGES) : "")],

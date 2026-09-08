@@ -6,16 +6,11 @@ import { RPCHandler } from "@orpc/server/websocket";
 import { expect, test } from "vitest";
 import { createHostRouter } from "./router.js";
 
-/* Both ends of the socket, meeting over a real oRPC handler and a real oRPC link.
- *
- * This is the test that would catch the two halves drifting: the machine's router and the daemon's client are
- * built from the same `hostContract`, so a procedure renamed on one side or an input schema tightened on the
- * other fails HERE rather than on somebody's laptop. It also stands in for the correlation tests this file
- * replaced: two calls in flight at once used to need a hand-rolled id remap in the daemon's hub, and the point
- * of moving to oRPC was that the link does it. */
+// Both ends of the socket, over a real oRPC handler and link built from the same `hostContract`, so a
+// procedure renamed or a schema tightened on one side fails here rather than on somebody's laptop.
 
-// A pair of sockets wired to each other, carrying whatever `send` is given. Enough of the WebSocket surface for
-// both adapters: the handler wants addEventListener + send, the link also wants removeEventListener + readyState.
+// A pair of sockets wired to each other. Enough of the WebSocket surface for both adapters: the handler wants
+// addEventListener + send, the link also wants removeEventListener + readyState.
 class FakeSocket {
     readyState = 1;
     peer!: FakeSocket;
@@ -30,8 +25,7 @@ class FakeSocket {
         this.listeners.get(type)?.delete(fn as (event: unknown) => void);
     }
     send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-        // A microtask hop, so a call is never answered synchronously inside its own send: the shape a real
-        // socket has, and the one that would expose an ordering assumption if the code made any.
+        // A microtask hop, so a call is never answered synchronously inside its own send.
         queueMicrotask(() => this.peer.emit("message", { data }));
     }
     close(): void {
@@ -93,8 +87,7 @@ test("the daemon can ask a machine what it is", async () => {
 test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
     expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
-    // The schema fills every switch the push left out, and each one it fills is off: a grant that arrives
-    // partial must not read as a grant of whatever it forgot to mention.
+    // The schema fills every switch the push left out, and each one it fills is off.
     expect(scopesNow()).toEqual({
         shell: "off",
         write: "off",
@@ -139,15 +132,14 @@ test("concurrent calls do not cross: the link owns correlation now", async () =>
         client.describe(),
         client.mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     ]);
-    // Same JSON-RPC id on two different MCP calls, in flight together: the daemon used to need its own id remap
-    // for exactly this, because two conversations both start counting at 1.
+    // Same JSON-RPC id on two different MCP calls, in flight together: the link owns correlation, not a hand-rolled
+    // remap in the daemon's hub.
     expect((first as { result: unknown }).result).toEqual({});
     expect((second as { shell: string }).shell).toBeTypeOf("string");
     expect((third as { result: { tools: unknown[] } }).result.tools.length).toBeGreaterThan(0);
 });
 
-// The MCP notification path: nothing to answer, so the procedure resolves with nothing. Worth pinning because
-// "returns undefined over the wire" is exactly the case a schema layer can quietly reject at runtime.
+// The MCP notification path: nothing to answer, so the procedure resolves with nothing.
 test("a notification round-trips as an empty answer rather than an error", async () => {
     const { client } = connectedPair();
     expect(await client.mcp({ jsonrpc: "2.0", method: "notifications/initialized" })).toBeUndefined();

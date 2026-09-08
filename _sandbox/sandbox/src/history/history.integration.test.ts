@@ -36,8 +36,8 @@ const subcommand = (args: readonly string[]): string => {
     return "";
 };
 
-// A root-scope-only history over a fake git that models refs/snapshots/head + commit trees in memory. The
-// scope git dir is pre-created so ensureScope skips `init --bare` (the fake creates no real dirs).
+// Root-scope-only history over a fake git modeling refs/snapshots/head and commit trees in memory. The scope git dir is
+// pre-created so ensureScope skips `init --bare` (the fake creates no real dirs).
 const fakeHistory = async () => {
     const base = await tempBase();
     const work = join(base, "work");
@@ -103,7 +103,6 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     expect(commitCalls()[0]?.join(" ")).toContain(`snapshot ${first} turn`);
     expect(calls.some((call) => call.includes("update-ref") && call.includes("refs/snapshots/head") && call.includes("c1"))).toBe(true);
 
-    // Same tree ⇒ no commit, no id.
     expect(await history.snapshot("interval")).toBeUndefined();
     expect(commitCalls()).toHaveLength(1);
 
@@ -118,18 +117,16 @@ test("groups are cached between reads and recomputed only after a changed snapsh
     await history.snapshot("turn");
     const logCount = () => calls.filter((call) => subcommand(call) === "log").length;
 
-    // First read computes groups once (one `git log` per known scope: here just root).
+    // One `git log` per known scope; here just root, so the first read costs exactly one.
     await history.list();
     const afterFirst = logCount();
     expect(afterFirst).toBe(1);
 
-    // Repeated reads hit the cache: no extra `git log`, even across list/diff/fileDiff.
     await history.list();
     await history.diff("snap-1");
     await history.fileDiff("snap-1", "root", "hello.txt");
     expect(logCount()).toBe(afterFirst);
 
-    // A snapshot that changes the tree invalidates the cache; the next read re-runs `git log`.
     setTree("tree-2");
     expect(await history.snapshot("interval")).toEqual(expect.any(String));
     await history.list();
@@ -138,8 +135,7 @@ test("groups are cached between reads and recomputed only after a changed snapsh
 
 test("notifyUserWrite debounces a burst of pings into ONE user-triggered snapshot", async () => {
     const { history, calls } = await fakeHistory();
-    // Fake timers only to fire the debounce deterministically; the snapshot chain itself awaits real fs IO, so
-    // restore real timers and use a follow-up snapshot as the serialization barrier (it skips: same tree).
+    // Fake timers for the debounce only; a same-tree snapshot after resuming real timers serves as the barrier.
     vi.useFakeTimers();
     try {
         history.notifyUserWrite();
@@ -176,8 +172,6 @@ test("repoGitDir derives the protected git dir path, URI-encoding nested ids", (
     expect(repoGitDir("/history", "clients/foo")).toBe("/history/gits/clients%2Ffoo");
 });
 
-// End-to-end over a REAL git: snapshot → mutate (root file, new file, nested-repo edit, secret) → snapshot →
-// diff → fileDiff → restore, asserting secrets stay out of history and the nested repo's own git is untouched.
 test("integration: snapshot, diff, and restore a workspace with a nested repo and secrets", async () => {
     const base = await tempBase();
     const work = join(base, "work");
@@ -188,7 +182,7 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     await writeFile(join(work, ".env"), "SECRET=x\n");
     await writeFile(join(intent, "deploy.config.ts"), "v1\n");
 
-    // A real nested repo with its own commit; the agent's branch/HEAD must survive everything below.
+    // Real nested repo with its own commit, whose branch/HEAD must survive everything below.
     const sh = async (cwd: string, ...args: string[]) => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
     await sh(intent, "init", "-q");
     await sh(intent, "add", "-A");
@@ -199,7 +193,7 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const first = await history.snapshot("user");
     expect(first).toEqual(expect.any(String));
 
-    // A hidden interval capture lands between the two visible checkpoints: the turn's diff must span it.
+    // An interval capture between the two labeled checkpoints; the turn's diff must span it.
     await writeFile(join(work, "hello.txt"), "two\n");
     const hidden = await history.snapshot("interval");
     expect(hidden).toEqual(expect.any(String));
@@ -209,7 +203,6 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const second = await history.snapshot("turn", "  Fix the\n\tgreeting  ");
     expect(second).toEqual(expect.any(String));
 
-    // Interval captures stay off the timeline and aren't addressable; the turn carries its sanitized label.
     const listed = await history.list();
     expect(listed.map((snapshot) => snapshot.id)).not.toContain(hidden);
     expect(await history.diff(hidden ?? "")).toBeUndefined();
@@ -227,7 +220,6 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     expect(await readFile(join(work, "hello.txt"), "utf8")).toBe("one\n");
     expect(existsSync(join(work, "later.txt"))).toBe(false);
     expect(await readFile(join(intent, "deploy.config.ts"), "utf8")).toBe("v1\n");
-    // The ignored secret survives the restore's clean, and the nested repo's own git never moved.
     expect(await readFile(join(work, ".env"), "utf8")).toBe("SECRET=x\n");
     expect(await sh(intent, "rev-parse", "HEAD")).toBe(nestedHead);
 
@@ -236,8 +228,6 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
 });
 
-// A repo nested below the top level: its id carries a slash, its scope dir the encoded form, and a full
-// deletion is recoverable from history.
 test("integration: a nested repo scopes under its slash id and restores after deletion", async () => {
     const base = await tempBase();
     const work = join(base, "work");
@@ -253,22 +243,20 @@ test("integration: a nested repo scopes under its slash id and restores after de
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
     const first = await history.snapshot("user");
     expect(first).toEqual(expect.any(String));
-    // One filesystem entry per scope: the slash is URI-encoded in the bare dir name.
+    // The slash in a nested repo's id is URI-encoded in its bare scope dir name.
     expect(existsSync(join(historyRoot, "scopes", "clients%2Ffoo.git"))).toBe(true);
 
     await writeFile(join(nested, "readme.md"), "v2\n");
     const second = await history.snapshot("turn");
     expect(await history.diff(second ?? "")).toContainEqual({ scope: "clients/foo", path: "readme.md", status: "modified" });
 
-    // rm -rf the whole repo: the deleted scope stays known (bare dir survives) and restore rebuilds the files.
+    // Deleting the whole repo leaves its bare scope dir intact; restore rebuilds the files from it.
     await rm(nested, { recursive: true, force: true });
     expect(await history.restore(first ?? "")).toBe(true);
     expect(await readFile(join(nested, "readme.md"), "utf8")).toBe("v1\n");
 });
 
-// The heal-vs-reap boundary, over REAL git dirs parked the daemon's way (--separate-git-dir, pointer file in
-// the worktree). Healing is for accidents; a deletion must reap the parked git dir to /history/trash instead of
-// resurrecting the repo as phantom deletions forever.
+// Heal is for accidents; a deletion reaps the parked git dir to /history/trash instead of resurrecting it.
 test("integration: heal rewrites an accidentally deleted pointer; deletions reap the parked git dir", async () => {
     const base = await tempBase();
     const work = join(base, "work");
@@ -288,20 +276,19 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
     const gone = await makeRepo("gone");
     const emptied = await makeRepo("emptied");
     const lingering = await makeRepo("lingering");
-    // Ordinary hidden tool state beside the git dirs is not a repo and must not enter the reap loop.
+    // A non-repo tool-state dir beside the git dirs; must not enter the reap loop.
     await mkdir(join(historyRoot, "gits", ".turbo", "cache"), { recursive: true });
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
 
-    // keep: only the pointer went missing, the tracked file is still on disk, an accident, healed.
+    // keep: only the pointer is missing; the tracked file is still there, so it heals.
     await rm(join(keep, ".git"));
-    // gone: the whole worktree went, reaped outright.
+    // gone: the whole worktree is gone, so it reaps outright.
     await rm(gone, { recursive: true, force: true });
-    // emptied: tracked files AND pointer deleted; only a sync-ignored remnant keeps the dir alive, reaped.
+    // emptied: tracked files and pointer both gone; only an ignored remnant keeps the dir alive, so it reaps.
     await rm(join(emptied, "readme.md"));
     await rm(join(emptied, ".git"));
     await mkdir(join(emptied, "node_modules"), { recursive: true });
-    // lingering: tracked files deleted but the pointer survived (sync can't remove ignored paths), held for a
-    // grace cycle first, then reaped with the pointer.
+    // lingering: pointer survives (sync can't remove ignored paths); held one grace cycle, then reaped.
     await rm(join(lingering, "readme.md"));
     await mkdir(join(lingering, "node_modules"), { recursive: true });
 
@@ -310,10 +297,10 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
     expect(existsSync(repoGitDir(historyRoot, "keep"))).toBe(true);
     expect(existsSync(repoGitDir(historyRoot, "gone"))).toBe(false);
     expect(existsSync(repoGitDir(historyRoot, "emptied"))).toBe(false);
-    // Still within the grace window: nothing reaped yet, and crucially the pointer was NOT healed away.
+    // Within the grace window: nothing reaped yet, and the pointer is not healed away either.
     expect(existsSync(repoGitDir(historyRoot, "lingering"))).toBe(true);
 
-    // The grace window elapses (Date only: git still runs for real) and the next cycle reaps.
+    // Grace window elapses; only Date.now is mocked, git still runs for real.
     const realNow = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(realNow + 120_000);
     try {
@@ -325,7 +312,7 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
     expect(existsSync(join(lingering, ".git"))).toBe(false);
     expect(existsSync(join(historyRoot, "gits", ".turbo", "cache"))).toBe(true);
 
-    // Every reaped git dir is parked under trash, recoverable: never erased.
+    // Reaped git dirs land in trash, recoverable, never erased.
     const trash = await readdir(join(historyRoot, "trash"));
     expect(trash.some((entry) => entry.startsWith("gone-"))).toBe(true);
     expect(trash.some((entry) => entry.startsWith("emptied-"))).toBe(true);

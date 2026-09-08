@@ -4,15 +4,9 @@ import { useCapabilities } from "../features/capabilities/connect/useCapabilitie
 import { usePanels } from "../features/extensions/usePanels";
 import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath } from "../core-views/registry";
 
-/* WHERE THE MOBILE TAB BAR POINTS, as one statement two components read.
- *
- * MobileTabBar draws the four tabs; ShellMobile has to know the same four ADDRESSES, because a route that is
- * one of them is already reachable in one thumb press and must not also grow a back arrow (see pageBack.ts).
- * Three of the four are constants and the fourth is not: Review is the approvals extension's tile when the pack is
- * on and the workspace's own Changes panel when it is off, so "is this route a tab" cannot be answered by a
- * literal list. Hence one module: the tile is resolved once, and the bar and the shell cannot drift about where
- * Review lives — which is the exact failure this bar already had once, when the tab matched a package id
- * against a list of view ids and never reached the queue it is named for. */
+// The four tab destinations MobileTabBar and ShellMobile both need. Three are constants; Review is the approvals
+// extension's tile when that pack is on, else the workspace's own Changes panel, so it can't be a literal list.
+// Resolved once here so the bar and shell can't drift on where Review lives.
 
 export interface ApprovalsTile {
     readonly to: string;
@@ -29,9 +23,8 @@ export function useApprovalsTile(): ComputedRef<ApprovalsTile | undefined> {
     });
 }
 
-/* The four tab destinations as PATHS — no query, because the question this answers is "is the reader on a tab's
- * own screen", and `/workspace?panel=changes` is the Files tab's path with a panel chosen on it. Both workspace
- * tabs collapse to `/workspace` here, which is right: either way the tab bar is the way out. */
+// The four tab destinations as paths, no query: this answers whether the reader is on a tab's own screen, and
+// both workspace tabs collapse to `/workspace`.
 export function useTabRootPaths(): ComputedRef<readonly string[]> {
     const approvalsTile = useApprovalsTile();
     return computed(() => {

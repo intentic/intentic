@@ -9,8 +9,7 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
         webOrigin: `https://app.test`,
-        // Unconfigured mail logs the link instead of sending, so these tests exercise the real send path's
-        // ordering without a network stub standing in for Resend.
+        // Unconfigured mail logs the link instead of sending, so tests exercise the real send path, no Resend stub.
         email: { apiKey: ``, from: `` },
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: { flyApiToken: `fly`, flyOrg: `intentic`, appPrefix: `intentic-sbx`, idleDays: 21, idleWarnDays: 14, ...over },
@@ -33,15 +32,14 @@ const machine = (over: Record<string, unknown> = {}) => ({
 const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
     ({
         hostedMachine: { findMany: vi.fn().mockResolvedValue(rows), update: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue({}) },
-        // Ending a machine writes two rows together (forgetHostedMachine): the machine goes and the sandbox's
-        // address goes with it. The stub settles what the model calls already returned, as the hosted suite's does.
+        // Ending a machine writes two rows together (forgetHostedMachine); settled like the rest of the hosted suite.
         sandbox: { update: vi.fn().mockResolvedValue({}) },
         $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         ...over,
     }) as unknown as PrismaClient;
 
-// Fly's read of the machine, plus a recorder for the app teardown the sweep may follow it with.
+// Fly's read of the machine, plus a recorder for any app-teardown call the sweep follows it with.
 const stubFly = (state: string) => {
     const calls: { method: string; url: string }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
@@ -64,12 +62,8 @@ describe(`collecting the machines nobody came back to`, () => {
         const prisma = prismaWith([machine()]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
-        // The MACHINE row goes; the SANDBOX stays, so its name and sharing survive and its owner can give it a
-        // new machine rather than finding the workspace itself gone.
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
-        /* …and the address goes WITH the machine, because it only ever was the machine's: the edge replays it
-         * to an app that no longer exists. Leaving it is what made "coming back means picking a machine again"
-         * false in practice — the shell opened, dialled the dead address, and sat on a reconnect spinner. */
+        // The address goes with the machine, since it was only ever the machine's; the edge would replay to a dead app.
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
@@ -110,7 +104,6 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: expect.any(Date) } });
     });
 
-    // The stamp is what stops one warning becoming seven: the sweep runs daily across the whole notice period.
     it(`does not warn a second time while the first notice stands`, async () => {
         stubFly(`stopped`);
         const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(1), sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);
@@ -118,8 +111,6 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.hostedMachine.update).not.toHaveBeenCalled();
     });
 
-    /* Membership is what is being sold; it is not an alarm clock. A member's machine is never collected
-     * however long it sits, which is also what makes "your data stays" a real difference between the tiers. */
     it(`never touches a member's machine`, async () => {
         const calls = stubFly(`stopped`);
         const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
@@ -127,20 +118,16 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(calls).toHaveLength(0);
     });
 
-    /* THE FALSE POSITIVE THIS SWEEP EXISTS TO AVOID. `lastSeenAt` is the daemon's BOOT announce, so a machine
-     * that has been up for a month (a long-lived dev server, a job nobody restarted) looks untouched while
-     * being exactly the opposite. Fly is asked before anything is destroyed. */
+    // lastSeenAt is the daemon's boot announce, not a heartbeat; a long-lived machine looks stale but runs fine.
     it(`spares a machine that is actually running, however stale its last announce`, async () => {
         const calls = stubFly(`started`);
         const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(2) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
-        // And its notice is withdrawn, so a full warning period runs again whenever it does stop.
+        // Notice is withdrawn too, so a full warning period runs again whenever it does stop.
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: null } });
     });
 
-    // A machine that never announced at all is measured from its own creation: a provision that failed to come
-    // up and was then abandoned is exactly the case that leaves a disk billing for nothing.
     it(`measures a machine that never announced from when it was created`, async () => {
         stubFly(`stopped`);
         const prisma = prismaWith([machine({ createdAt: daysAgo(40), sandbox: { ...machine().sandbox, lastSeenAt: null } })]);
@@ -154,14 +141,13 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(calls).toHaveLength(0);
     });
 
-    // Either day at zero switches the whole thing off: the setting a platform that collects nothing uses.
+    // Either day at zero switches the whole sweep off.
     it(`does nothing when the sweep is disabled`, async () => {
         const prisma = prismaWith([machine()]);
         expect(await reapIdleHosted(prisma, config({ idleDays: 0 }), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(prisma.hostedMachine.findMany).not.toHaveBeenCalled();
     });
 
-    // One machine's failure must not cost the rest of the sweep; the next day retries it.
     it(`carries on past a machine that fails, and still collects the others`, async () => {
         let first = true;
         vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {

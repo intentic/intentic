@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
 import { gitFailureReason, pushRefusal, pushRefusalReason } from "./git.js";
 
-// Verbatim stderr from real git failures: the shapes the panel actually has to render.
+// Stderr fixtures below are copied verbatim from real git failures.
 test("gitFailureReason keeps git's verdict rather than the advice paragraph trailing it", () => {
-    // The one that shipped a sentence fragment to the panel: git's advice couplet wraps across two lines, so
-    // the LAST line is "and the repository exists.": a clause, with the diagnosis two lines above it.
+    // git's advice wraps two lines; the last line is a clause ("and the repository exists."), with the diagnosis above
+    // it.
     const unreachable = {
         stderr: "ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n",
     };
@@ -25,8 +25,7 @@ test("gitFailureReason keeps a hint block out of the panel", () => {
     expect(gitFailureReason(diverged, "git failed")).toBe("fatal: Not possible to fast-forward, aborting.");
 });
 
-// A commit-msg hook's output, relayed by git with no verdict of its own: the shape that reached the panel as
-// commitlint's help link and nothing else.
+// Raw commitlint output relayed with no git verdict of its own.
 test("gitFailureReason names the rules a commit message broke rather than the help link under them", () => {
     const rejected = {
         stderr: "⧗   --- input ---\nFix: Something.\n✖   subject may not end with full stop [subject-full-stop]\n✖   type must be lower-case [type-case]\n\n✖   found 2 problems, 0 warnings\nⓘ   Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint\n",
@@ -40,15 +39,13 @@ test("gitFailureReason reads a single-line failure and an execFile rejection wit
     expect(gitFailureReason({ stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled\n" }, "git failed")).toBe(
         "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
     );
-    // A spawn failure carries no stderr and no git prefix: the message's last line is all there is.
+    // A spawn failure: no stderr, no git prefix, just the Error's own message.
     expect(gitFailureReason(new Error("Command failed: git fetch --prune\nspawn git ENOENT"), "git failed")).toBe("spawn git ENOENT");
     expect(gitFailureReason(new Error(""), "git failed")).toBe("git failed");
 });
 
-/* WHO REFUSED A PUSH, over transcripts git actually printed (captured by push-run.integration.test.ts's real
- * runs, and pasted here so the reading is pinned without a clone per case). The one that matters is the
- * hook's: a suite that prints `fatal:` on the way to its own verdict must not be filed under "check your
- * credentials", which is why the reading is of git's LAST word and the exit code, not of any line. */
+// Transcripts are real git output, captured by push-run.integration.test.ts's runs and pasted here to skip a clone per
+// case; pushRefusal reads git's last word and the exit code, not any specific line.
 test("pushRefusal files a ref the remote rejected under remote, whatever else was printed", () => {
     const diverged =
         "To /tmp/origin.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to '/tmp/origin.git'\nhint: Updates were rejected because the remote contains work that you do\nhint: not have locally.\n";

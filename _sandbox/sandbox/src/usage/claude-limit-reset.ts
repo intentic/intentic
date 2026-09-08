@@ -33,10 +33,9 @@ const headers = (token: string): Record<string, string> => ({
     "User-Agent": CLAUDE_CLI_USER_AGENT,
 });
 
-// A probe must never outlive the strip that asked for it: the button either appears while somebody is reading
-// the refusal or it is no use to them.
+// Probe must never outlive the strip that asked for it.
 const PROBE_TIMEOUT_MS = 8_000;
-// The claim is the press itself, so it is given room to land. Upstream waits 25s on the same call.
+// The claim is the press itself, given room to land; upstream waits 25s on the same call.
 const CLAIM_TIMEOUT_MS = 25_000;
 
 // A known absence of a grant. A failed probe returns undefined instead: caching a 429 as this answer hid
@@ -80,12 +79,8 @@ export const readLimitReset = async (store: ClaudeStore, id: string, fetchFn: ty
     }
 };
 
-/* WHICH ORGANISATION IS BEING RESET, which the claim is addressed to and the stored credential does not carry.
- *
- * Anthropic answers the token endpoint with the organisation's NAME, which is what the account row shows, and
- * the uuid the claim needs is only on the profile. Fetched at claim time rather than stored: it costs one round
- * trip on a press somebody made deliberately, and it cannot be stale, whereas a copy written at connect time
- * would go on naming the organisation an account was moved out of. */
+// uuid is on the profile, not the stored credential (which only has the organisation's name). Fetched at claim time so
+// it can't go stale, at the cost of one round trip on a deliberate press.
 const organizationUuid = async (token: string, fetchFn: typeof fetch): Promise<string | undefined> => {
     const response = await fetchFn(PROFILE_ENDPOINT, { headers: headers(token), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     if (!response.ok) {
@@ -94,9 +89,7 @@ const organizationUuid = async (token: string, fetchFn: typeof fetch): Promise<s
     return asString(asRecord(asRecord(await response.json())?.[`organization`])?.[`uuid`]);
 };
 
-// Everything the provider can say, kept as it said it (LimitResetClaimSchema has why they stay apart). A word
-// we don't know reads as `unavailable`, which is the outcome that means "nothing happened, try again": the one
-// safe reading of an answer we cannot interpret, since it neither claims a reset nor blames the account.
+// Unrecognised result reads as unavailable: safe, since it neither claims a reset nor blames anyone.
 const RESULTS = new Set(["reset", "already_used", "not_limited", "ineligible", "unavailable"]);
 
 const claimFrom = (body: Record<string, unknown> | undefined): LimitResetClaim => {
@@ -108,8 +101,8 @@ const claimFrom = (body: Record<string, unknown> | undefined): LimitResetClaim =
     };
 };
 
-// A refused claim spent nothing, so every one of these is safe to try again, and 429 says so out loud: the
-// endpoint is asking for a moment, not reporting that the week's grant is gone.
+// A refused claim spent nothing, so every one is safe to retry; 429 means the endpoint wants a moment, not that the
+// grant is gone.
 const refused = (status: number): LimitResetClaim => ({
     result: status === 429 ? "unavailable" : "error",
     detail: `The provider answered ${status}.`,

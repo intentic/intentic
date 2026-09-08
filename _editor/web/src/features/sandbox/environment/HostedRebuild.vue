@@ -4,19 +4,13 @@ import { useAsyncAction } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useHostedBuild } from "../secrets/useHostedBuild";
 
-/* REBUILDING A HOSTED SANDBOX'S ENVIRONMENT, the counterpart of HostRecreate for the one lane with no host.
- * A sandbox on the owner's own device rebuilds by a command or a button that runs `ic` THERE; a hosted
- * sandbox is a machine the platform runs, so the platform builds the approved overlay on a machine of its
- * own and switches the sandbox to the result. One button, then the three things a build can be doing:
- * running (minutes, the sandbox stays up throughout), built (the sandbox is restarting onto it), failed
- * (the reason and the log's tail, which is the one thing the owner needs from a failed RUN).
- *
- * The build the card looks at is the one for THIS content's hash. An older build's failure is history the
- * moment the owner approves something else, so it is not shown against the new recipe. */
+// Rebuilds a hosted sandbox's environment, the counterpart of HostRecreate for the lane with no host device: the
+// platform builds the approved overlay itself and switches the sandbox to the result. Only shows the build for this
+// content's hash, so an older failure doesn't linger against a new recipe.
 
 const props = defineProps<{
     sandboxId: string;
-    // The approved overlay's hash and content, both read off the daemon: the platform re-hashes the content.
+    // Both read off the daemon; the platform re-hashes the content itself.
     hash: string;
     content: string;
 }>();
@@ -26,8 +20,7 @@ const { busy, notice, run } = useAsyncAction();
 
 const current = computed(() => (build.value?.hash === props.hash ? build.value : undefined));
 const building = computed(() => current.value?.state === `building`);
-// Built, and the platform has already pointed the machine at it: the daemon's own "applied" is what ends
-// this state, once the restarted sandbox answers again.
+// Ends once the daemon's own `applied` matches, after the restarted sandbox answers again.
 const switching = computed(() => current.value?.state === `built` && applied.value === props.hash);
 const failed = computed(() => (current.value?.state === `failed` ? current.value : undefined));
 
@@ -54,13 +47,12 @@ const start = (): Promise<void> =>
                 <Code v-if="failed.log" :code="failed.log" label="Build log (tail)" />
             </template>
             <p class="text-xs font-medium text-content">To finish, build it on the machine we host for you:</p>
-            <!-- Wrapping, and the button never shrinks: in a narrow column the sentence goes under the button
-                 rather than squeezing its label to a fragment. -->
+            <!-- Wraps without shrinking the button: in a narrow column the sentence drops below it instead of squeezing the label. -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div class="shrink-0">
                     <Button :label="failed ? `Try the build again` : `Rebuild now`" size="small" :loading="busy" @click="start" />
                 </div>
-                <!-- The one fact worth a sentence: minutes spent building count like minutes spent awake. -->
+                <!-- The one fact worth stating: build time counts against this sandbox's awake hours. -->
                 <p class="text-2xs text-subtle">Build minutes count against this sandbox's awake hours. Your files in /work are kept.</p>
             </div>
         </template>

@@ -3,16 +3,9 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { processIdentity, type ProcessIdentity, sameProcess } from "../resources/proc-stat.js";
 
-/* Make a daemon death loud AFTER the fact. The daemon has died silently many times a day, a V8 fatal error
- * or an outside kill goes to the container's stderr, which `docker rm -f` takes to the grave, and pino's
- * async destination loses even the lines it was handed. So the /history volume carries a tiny marker instead:
- * boot writes "running", every deliberate exit rewrites it synchronously, and the NEXT boot reads what it
- * finds. A marker still saying "running" is a death certificate: the previous process never reached its own
- * exit handler, which means a kill -9, an OOM, or a native crash, and the log line naming it is the
- * difference between "the sandbox restarted six times today" being invisible and being an incident report.
- *
- * Sync writes on purpose, both of them: the boot write is once before serving, and the exit write happens
- * where the loop is already dying, an async write there is exactly the write that gets lost. */
+// Marker file for whether the daemon exited cleanly. Boot writes "running" and a deliberate exit rewrites it
+// synchronously; a marker still saying "running" at the next boot means the previous process was killed without
+// warning.
 
 const MARKER_FILE = "daemon-exit.json";
 
@@ -23,8 +16,7 @@ interface ExitMarker extends ProcessIdentity {
     readonly exitCode?: number;
 }
 
-// Diagnostic reports --report-on-fatalerror leaves next to the logs (report.<date>.<pid>.json): name the ones
-// the dead run could have written, so the death certificate points straight at the evidence.
+// Diagnostic reports --report-on-fatalerror writes next to the logs (report.<date>.<pid>.json) for a given pid.
 const fatalReports = (dir: string, pid: number): string[] => {
     try {
         return readdirSync(dir).filter((name) => name.startsWith("report.") && name.endsWith(`.${pid}.0.json`));
@@ -33,18 +25,13 @@ const fatalReports = (dir: string, pid: number): string[] => {
     }
 };
 
-// Read the previous run's fate, log it when it died unannounced, and take over the marker for this run.
-// Returns the writer the exit handler uses. Never throws: a sandbox that cannot write its marker (read-only
-// dev run) is a working sandbox with worse forensics.
+// Reads the previous run's fate, logs it if it died unannounced, and claims the marker for this run. Never throws: a
+// sandbox that cannot write its marker still runs, just with worse forensics.
 export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: (code: number) => void } => {
     const path = join(logsDir, MARKER_FILE);
     try {
         const previous = JSON.parse(readFileSync(path, "utf8")) as ExitMarker;
-        /* A MARKER STILL SAYING RUNNING, WHOSE PROCESS IDENTITY STILL IS. Not a death at all: another daemon has
-         * this history root open right now, and the certificate this function exists to write would be an
-         * obituary for the living, which is exactly what it wrote on 2026-08-11, naming the live daemon as
-         * OOM-killed while it served four turns. Nothing is claimed either: the marker belongs to that run, and
-         * overwriting it would lose the only record of how it ends. */
+        // Not a death: a live daemon owns this history root; leave its marker alone and claim nothing.
         if (previous.state === "running" && sameProcess(previous)) {
             logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root, leaving its boot marker alone");
             return { markExited: () => undefined };
@@ -53,8 +40,8 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             const reports = fatalReports(logsDir, previous.pid);
             logger.error(
                 {
-                    // Not `pid`, that key is the logger's own base field (THIS process), and the collision
-                    // would silently relabel the dead run's pid as the live one's.
+                    // Not `pid`, the logger's own base field names this process; reusing it would mislabel the dead
+                    // run's pid.
                     diedPid: previous.pid,
                     startedAt: new Date(previous.startedAt).toISOString(),
                     ...(reports.length > 0 ? { fatalReports: reports } : {}),
@@ -72,7 +59,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             mkdirSync(logsDir, { recursive: true });
             writeFileSync(path, JSON.stringify(marker));
         } catch {
-            // Best-effort by design.
+            // Best-effort: a failed write is not surfaced.
         }
     };
     const identity = processIdentity();

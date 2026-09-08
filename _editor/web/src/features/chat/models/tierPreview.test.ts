@@ -3,16 +3,14 @@ import { SandboxSettingsSchema } from "@intentic/api-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { ref } from "vue";
 
-/* WHAT THE COMPOSER PROMISES BEFORE SEND. The judge itself is pinned in the contract; what this file is about
- * is the three rules that decide whether the chip appears at all, because each one is a way for an honest
- * mechanism to become noise: a chip in a mode where nothing happens, a chip naming a model that isn't cheaper
- * than the pick, and a chip on a turn the daemon will judge standard anyway. */
+// The judge itself is pinned in the contract; this file tests the three rules deciding whether the chip appears at
+// all: a chip in a mode where nothing happens, one naming a model no cheaper than the pick, or one on a turn the
+// daemon judges standard anyway.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
-// The picker's catalog: what Auto is allowed to reach for. Haiku under Opus is a rung down; nothing here is
-// cheaper than Haiku itself, which is the "already on the cheap rung" case below.
+// Haiku sits a rung below Opus; nothing here is cheaper than Haiku itself (the "already cheapest" case below).
 vi.mock(`../accounts/providerCatalog`, () => ({
     providerModels: ref({ claude: [{ value: `claude-opus-5` }, { value: `claude-sonnet-5` }, { value: `claude-haiku-4-5` }] }),
     modelLabelFor: (_provider: string, model: string) => model,
@@ -21,8 +19,7 @@ vi.mock(`../accounts/providerCatalog`, () => ({
 const { useTierPreview } = await import("./tierPreview");
 type Chat = Parameters<typeof useTierPreview>[0] extends () => infer C ? C : never;
 
-// Only the fields the preview reads. A real Conversation drags a transcript, a stream and a registry behind it,
-// and none of that is what decides whether a draft looks simple.
+// Only the fields the preview reads; a real Conversation also carries a transcript, stream and registry.
 const chatWith = (over: Partial<Record<string, unknown>> = {}): Chat =>
     ({
         attachments: ref([]),
@@ -45,24 +42,21 @@ afterEach(() => {
 });
 
 test("measuring previews nothing, because nothing is going to happen to the turn", () => {
-    /* Measure is the DEFAULT (SandboxSettingsSchema), so this is the state most people are in, and it used to
-     * be the state that put an inert "Looks simple" on the composer with its only explanation on a hover
-     * title. The mode judges and records; the composer is not where a non-event gets announced. */
+    // Measure is the default (SandboxSettingsSchema); the mode judges and records without announcing anything on the
+    // composer.
     expect(settings.value.autoTier).toBe(`shadow`);
     expect(preview(`what is a closure?`)).toBeUndefined();
 });
 
 test("switched on, it names both models: what the turn runs, and what it was going to", () => {
-    // Both, because each of the chip's two sentences needs the other's model — "runs on Haiku instead of
-    // Opus", "kept on Opus rather than Haiku".
+    // Both models are needed: each of the chip's two sentences names the other's model.
     settings.value = { ...settings.value, autoTier: `on` };
 
     expect(preview(`what is a closure?`)).toEqual({ kind: `route`, cheap: `claude-haiku-4-5`, pick: `claude-opus-5` });
 });
 
 test("a standing hold reads as the veto it is, still naming what it declined", () => {
-    // Naming the declined model is what makes the control legible: a hold that said only "my pick" would leave
-    // the user unable to tell whether it was doing anything.
+    // Naming the declined model makes the hold legible, not just "my pick".
     settings.value = { ...settings.value, autoTier: `on` };
 
     expect(preview(`what is a closure?`, chatWith({ tierHold: ref(true) }))).toEqual({
@@ -88,8 +82,7 @@ test("a pick with nothing cheaper under it draws no chip, rather than a chip tha
 });
 
 test("the last turn's verdict reaches the preview, so a deceptive follow-up is not promised cheap", () => {
-    // The one judge input a draft cannot contain: "now do the same for the other file" is nine easy words
-    // carrying the whole weight of the task before them.
+    // The one judge input a draft cannot contain: a short follow-up can carry the whole weight of prior context.
     settings.value = { ...settings.value, autoTier: `on` };
 
     expect(preview(`list the exports`)).toEqual({ kind: `route`, cheap: `claude-haiku-4-5`, pick: `claude-opus-5` });

@@ -31,10 +31,9 @@ import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.te
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
 
-/* The workspace routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
- * one file that two agents working on unrelated features collided in every time. The fakes and the client
- * are shared (route-services.testing.ts and its siblings); what lives here is what these routes do. */
+// Workspace routes, driven over the daemon's HTTP surface exactly as the browser drives them; split out of
+// app.integration.test.ts, which every route collided in. Fakes and client are shared (route-services.testing.ts and
+// siblings).
 
 test("workspace dependency installs join the coordinator queue instead of starting a panel directly", async () => {
     const requested: string[][] = [];
@@ -94,8 +93,7 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
         caseSensitive: "true",
     });
     expect(result.groups).toEqual(groups);
-    // The search box's switches reach the engine as verb options, and the echo names them: it seeds the
-    // pagination cursor, so two searches that differ only by a switch must not share one.
+    // The echo seeds the pagination cursor, so two searches differing only by a switch must not share one.
     expect(requests).toEqual([
         {
             verb: "find",
@@ -136,8 +134,7 @@ test("workspace.search asks for a LIST page, capped at the GUI file limit whatev
         ),
     );
     await client.workspace.search({ query: "the", limit: 100_000 });
-    // `list` is what tells the engine the caller renders its own rows: it sizes the page in rows and skips the
-    // text capsule, the packed bodies, the symbol-context enrichment and the continuation spool.
+    // `list` means the caller renders its own rows, skipping the text capsule and symbol enrichment.
     expect(requests[0]?.render).toEqual({ budget: 2_000, list: { hits: 1_000, files: 300 } });
 });
 
@@ -166,12 +163,11 @@ test("workspace.health scopes the resident engine to one repo: 'root' is the wor
     expect(await client.workspace.health({ repo: "root" })).toEqual({ repo: "root", ...report });
     await client.workspace.health({ repo: "app", since: "30d", limit: 5 });
     expect(requests).toEqual([
-        // The sweep tags a workspace-root file with the empty repo id, so "root" narrows to exactly those files
-        //, not to everything, which would fold every nested repo's churn into the root repo's report.
+        // The sweep tags root files with the empty repo id, so "root" means exactly those, not everything nested.
         { scope: { repo: "" }, limit: HEALTH_LIMIT },
         { scope: { repo: "app" }, since: "30d", limit: 5 },
     ]);
-    // A report for a repo that isn't there would read as a healthy repo, so it is an error instead.
+    // A missing repo would otherwise read as a healthy empty one, so it's an error instead.
     expect(await errorCode(client.workspace.health({ repo: "ghost" }))).toBe("NOT_FOUND");
     expect(await errorCode(client.workspace.health({ repo: "../escape" }))).toBe("BAD_REQUEST");
 });
@@ -235,7 +231,7 @@ test("workspace.file reads any contained file (former-secret paths included), an
         size: 15,
         offset: 0,
         bytes: 15,
-        // No conversation named ⇒ the shared tree answered, which is what `shared` reports (workspace-scope.ts).
+        // No conversation named means the shared tree answered, which `shared` reports.
         shared: true,
     });
     // No security floor: a former-secret file reads through like any other contained file.
@@ -248,15 +244,13 @@ test("workspace.file reads any contained file (former-secret paths included), an
         bytes: 8,
         shared: true,
     });
-    // Nothing at that path is an ANSWER, not a failure: the reads that ask "is it there?" outnumber every other
-    // read in the product, and a rejection put a failed request in the browser's console for each one.
+    // Nothing at the path is an answer, not a failure: "is it there" is the most common read in the product.
     expect(await client.workspace.file({ path: "app/nope.ts" })).toEqual({ present: false, path: "app/nope.ts" });
     // A read the caller was never allowed to make still fails.
     expect(await errorCode(client.workspace.file({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
 });
 
-// The window arguments reach the reader as numbers (they arrive as query strings), and the reader's answer:
-// including where it actually landed: is what the response carries.
+// Window args arrive as query strings but reach the reader already coerced to numbers.
 test("workspace.file passes the requested window through and reports the range it served", async () => {
     const asked: { offset?: number; limit?: number }[] = [];
     const client = clientFor(
@@ -283,8 +277,8 @@ test("workspace.file passes the requested window through and reports the range i
     expect(asked).toEqual([{ offset: -8, limit: 64 }]);
 });
 
-// Search is backed by the resident in-process iq engine. Round-trip against a REAL engine over a real tmp
-// workspace (rg on PATH); the min-length rejection is contract validation and never reaches the engine.
+// Round-trips against a real resident engine over a real tmp workspace (needs `rg` on PATH); the min-length rejection
+// is contract validation that never reaches the engine.
 test("workspace.search round-trips the WorkspaceSearchResult from the resident engine; rejects a too-short query", async () => {
     const root = await mkdtemp(join(tmpdir(), "iq-daemon-"));
     await writeFile(join(root, "notes.md"), "the needle is here\n");
@@ -327,7 +321,7 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect(ok.status).toBe(200);
     expect(ok.headers.get("content-type")).toBe("image/png");
     expect(new Uint8Array(await ok.arrayBuffer())).toEqual(new Uint8Array(png));
-    // No security floor: a former-secret file now streams through like any other contained file.
+    // No security floor: a former-secret file streams through like any other contained file.
     expect((await app.request("/workspace/raw?path=desired-state/.env")).status).toBe(200);
     // Oversize is refused on the size check, before the bytes are loaded.
     expect((await app.request("/workspace/raw?path=app/huge.png")).status).toBe(413);
@@ -335,14 +329,12 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect((await app.request("/workspace/raw?path=../../etc/passwd")).status).toBe(400);
 });
 
-/* /workspace/media against a REAL tmp file, because the thing under test is the byte window: the route streams
- * off disk with createReadStream rather than through services.files, so a fake would only be testing the fake. */
+// Real tmp file, since the route streams via createReadStream, not services.files; a fake would only test the fake.
 test("GET /workspace/media serves byte ranges off disk, and refuses one past the end", async () => {
     const root = await mkdtemp(join(tmpdir(), "media-"));
     const bytes = Buffer.from("0123456789");
     await writeFile(join(root, "clip.mp4"), bytes);
-    // No `auth` ⇒ loopback mode, where the ticket gate passes through like the WebSocket upgrades' does. The
-    // real `size` because the route pairs it with a real read: a faked size would describe a different file.
+    // No `auth` means loopback mode, so the ticket gate passes through; `size` must be real to match the real read.
     const app = createApp(services({ workspace: workspacePaths(root), files: fakeFiles({ size: statWorkspaceFileSize }) }));
     try {
         const whole = await app.request("/workspace/media?path=clip.mp4");
@@ -363,7 +355,7 @@ test("GET /workspace/media serves byte ranges off disk, and refuses one past the
         expect(tail.headers.get("content-range")).toBe("bytes 7-9/10");
         expect(await tail.text()).toBe("789");
 
-        // Suffix: the last n bytes, which is how a player finds an MP4 index written after the media data.
+        // Suffix: the last n bytes, how a player finds an MP4 index written after the media data.
         const suffix = await app.request("/workspace/media?path=clip.mp4", { headers: { range: "bytes=-3" } });
         expect(suffix.status).toBe(206);
         expect(suffix.headers.get("content-range")).toBe("bytes 7-9/10");
@@ -383,7 +375,7 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
     const root = await mkdtemp(join(tmpdir(), "media-auth-"));
     await writeFile(join(root, "clip.mp4"), "video");
     await writeFile(join(root, "other.mp4"), "other");
-    // WITH auth configured: the ticket gate only exists there; loopback has no identity to bind and no gate.
+    // With auth configured: the ticket gate only exists there, since loopback has no identity to bind.
     const app = createApp(
         services({
             workspace: workspacePaths(root),
@@ -394,12 +386,12 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
     try {
         const { ticket } = await clientFor(app).workspace.mediaTicket({ path: "clip.mp4" });
         expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
-        // Replayable BY DESIGN: a playback redeems the same ticket for every range it asks for.
+        // Replayable by design: playback redeems the same ticket for every range it asks for.
         expect((await app.request(`/workspace/media?path=clip.mp4&ticket=${ticket}`)).status).toBe(200);
-        // …but only for its own file: the binding is what bounds a credential that lives in a URL.
+        // But only for its own file: the binding is what bounds a credential living in a URL.
         expect((await app.request(`/workspace/media?path=other.mp4&ticket=${ticket}`)).status).toBe(401);
         expect((await app.request("/workspace/media?path=clip.mp4")).status).toBe(401);
-        // A mint for a file that isn't there fails at the mint, not as an opaque stall in the player.
+        // A mint for a missing file fails at the mint, not as an opaque stall in the player.
         expect(await errorCode(clientFor(app).workspace.mediaTicket({ path: "missing.mp4" }))).toBe("NOT_FOUND");
     } finally {
         await rm(root, { recursive: true, force: true });
@@ -426,21 +418,19 @@ test("POST /workspace/upload streams any contained path to disk, 400s escape, 41
     expect(writes[0]?.path).toBe("/work/app/assets/logo.png");
     expect(writes[0]?.content).toEqual(body);
 
-    // No WRITE floor: former-secret paths write through; only a climb-out is refused (400, no write).
+    // No write floor: former-secret paths write through; only a climb-out is refused.
     expect((await app.request("/workspace/upload?path=desired-state/.env", { method: "POST", body })).status).toBe(200);
     expect(writes.at(-1)?.path).toBe("/work/desired-state/.env");
     expect((await app.request("/workspace/upload?path=../../etc/passwd", { method: "POST", body })).status).toBe(400);
     expect(writes).toHaveLength(2);
 
-    // `.git` writes through as well (a dropped repo keeps its remote).
+    // .git writes through as well: a dropped repo keeps its remote.
     const git = await app.request("/workspace/upload?path=app/.git/config", { method: "POST", body });
     expect(git.status).toBe(200);
     expect(writes).toHaveLength(3);
     expect(writes[2]?.path).toBe("/work/app/.git/config");
 
-    // A body past the cap surfaces as UploadTooLargeError from the streaming write → 413 (the write itself deletes
-    // the partial; here the fake just throws). The declared-length short-circuit + real cap are unit-tested in
-    // workspace-files-upload.integration.test.ts / workspace-archive.integration.test.ts.
+    // Over-cap body becomes 413 via UploadTooLargeError from the write; the real cap is tested elsewhere.
     const capped = createApp(
         services({
             files: fakeFiles({
@@ -468,12 +458,7 @@ test("the daemon's control plane is unreachable through the generic file API; it
     );
     const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
-    // owner.json/members.json ARE the answer to "who may drive this sandbox" (re-read from disk per request), and
-    // the rest hold provider tokens, private conversations, or logged-in browser sessions, so a member could
-    // otherwise take the sandbox or read/write private runtime state. Answered as if nothing were there, and
-    // nothing is written.
-    // The root's own .git joins them: it is the --separate-git-dir pointer to the shadow history repo on /history,
-    // and a FILE, so a drop of a repo's CONTENTS at the root would aim a directory at it and 500 the whole upload.
+    // Each path is sandbox control state or the root's own .git (a file, not a dir); both answer as if absent.
     const controlPlane = [
         `${STATE_DIR}/identity/owner.json`,
         `${STATE_DIR}/identity/members.json`,
@@ -496,9 +481,7 @@ test("the daemon's control plane is unreachable through the generic file API; it
     }
     expect(writes).toHaveLength(0);
 
-    // The root .intentic's other subtrees are ordinary workspace content driven through this very API: chat
-    // attachments and a directory's own UI, and a repo's nested .intentic is not the control plane at all. Nor is
-    // a NESTED .git: a dropped repo keeps its own and stays connected to its remote.
+    // Root .intentic's other subtrees, a nested .intentic, and a nested .git are ordinary content, not control plane.
     const open = [
         ".intentic/records/artifacts/attachments/u1/pic.png",
         ".intentic/ui/index.html",
@@ -524,7 +507,7 @@ test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and
             }),
         }),
     );
-    // sha256 of "hello", hardcoded to pin the wire algorithm (utf8 text → sha256 hex) the browser must speak.
+    // sha256 of "hello", hardcoded to pin the wire algorithm (utf8 text → sha256 hex) the browser speaks.
     const match = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
     const ok = await app.request("/workspace/upload?path=app/index.ts", {
         method: "POST",
@@ -534,8 +517,7 @@ test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and
     expect(ok.status).toBe(200);
     expect(writes).toEqual(["/work/app/index.ts"]);
 
-    // The file changed since the browser read it (hash mismatch) → 409, nothing written: the guarded save must
-    // never clobber a concurrent agent/terminal write.
+    // Hash mismatch: the file changed since it was read, so 409 and nothing written, never clobbering a live write.
     const stale = await app.request("/workspace/upload?path=app/index.ts", {
         method: "POST",
         body: "edited",
@@ -551,7 +533,7 @@ test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and
     expect(gone.status).toBe(409);
     expect(writes).toHaveLength(1);
 
-    // No hash = the unguarded path (drag-drop upload, new-file create): overwrites like before.
+    // No hash is the unguarded path (drag-drop upload, new file): overwrites like before.
     expect((await app.request("/workspace/upload?path=app/index.ts", { method: "POST", body: "edited" })).status).toBe(200);
     expect(writes).toHaveLength(2);
 });
@@ -609,11 +591,11 @@ test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes",
         ["copy", "/work/app/a.ts", "/work/app/nested/c.ts"],
     ]);
 
-    // No security floor: former-secret paths now resolve and act like any other contained path.
+    // No security floor: former-secret paths resolve and act like any other contained path.
     expect(await client.workspace.delete({ path: "desired-state/.env" })).toEqual({ ok: true });
     expect(calls.at(-1)).toEqual(["remove", "/work/desired-state/.env"]);
 
-    // Only a climb-out of /work is refused now (BAD_REQUEST), on either endpoint, before the fs is touched.
+    // Only a climb-out of /work is refused, on either endpoint, before the filesystem is touched.
     expect(await errorCode(client.workspace.mkdir({ path: "../evil" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.move({ from: "app/a.ts", to: "../escape" }))).toBe("BAD_REQUEST");
     expect(calls).toHaveLength(5);
@@ -649,7 +631,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
             separateGitDir: join(testConfig.historyRoot, "gits", "extra"),
         },
     ]);
-    // A reserved role (one of the three fixed repos) cannot be clobbered, and a path-escape name is rejected.
+    // A reserved repo name can't be clobbered, and a path-escape name is rejected.
     expect(await errorCode(client.workspace.addRepo({ name: "intent", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.addRepo({ name: "../evil", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
     expect(clones).toHaveLength(1);
@@ -686,9 +668,7 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
             ],
         }),
     ).toEqual({ ok: true });
-    // One detached one-shot job, keyed <repo>--add_apps (underscore ⇒ never collides with an app panel key
-    // <repo>--<app>), running the CLI over the same @intentic/scaffold path: each arg shell-quoted, and the
-    // template-key entry (api) collapses to a bare key while the renamed one (shop-web) keeps template:name.
+    // `<repo>--add_apps` (underscore) never collides with an app panel's `<repo>--<app>` key.
     expect(jobs).toEqual([
         {
             key: "shop--add_apps",
@@ -699,19 +679,18 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
             },
         },
     ]);
-    // An unknown monorepo is NOT_FOUND (before any job is launched).
+    // An unknown monorepo is NOT_FOUND, before any job is launched.
     expect(await errorCode(client.workspace.addApps({ repo: "ghost", apps: [{ template: "api", name: "api" }] }))).toBe("NOT_FOUND");
     expect(jobs).toHaveLength(1);
 });
 
-// The binary side of a diff, which the JSON file-diff routes can only FLAG. Two things are load-bearing and
-// neither is visible from the JSON side: the blob comes back as BYTES (a utf8 decode would replace every byte
-// above 0x7f, which is most of a PNG), and the rev-spec pair matches the row the reviewer clicked.
+// The binary side of a diff, which the JSON routes can only flag: the blob must come back as raw bytes (a utf8 decode
+// would corrupt a PNG), and the rev-spec pair must match the clicked row.
 test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk for the worktree side", async () => {
     const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-"));
     const git = (...args: string[]): Promise<unknown> =>
         promisify(execFile)("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-C", root, ...args]);
-    // Bytes git cannot round-trip as text: a NUL, a lone 0x80 (invalid utf8 on its own), and 0xff.
+    // Bytes git can't round-trip as text: a NUL, a lone 0x80 (invalid utf8 alone), and 0xff.
     const committed = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x80, 0xff]);
     const edited = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x81, 0xfe, 0x01]);
     try {
@@ -733,21 +712,19 @@ test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk f
         );
         const raw = async (query: string): Promise<Response> => app.request(`/diff/raw?source=working&repo=root&path=logo.png&${query}`);
 
-        // Unstaged: before is the index blob, after is the file on disk, the same pair unstagedFileDiff reads.
+        // Unstaged: before is the index blob, after is the file on disk, the pair unstagedFileDiff reads.
         const before = await raw("side=unstaged&which=before");
         expect(before.status).toBe(200);
         expect(before.headers.get("content-type")).toBe("image/png");
         expect(new Uint8Array(await before.arrayBuffer())).toEqual(new Uint8Array(committed));
         expect(new Uint8Array(await (await raw("side=unstaged&which=after")).arrayBuffer())).toEqual(new Uint8Array(edited));
 
-        // Staged: nothing has been staged, so the index still holds the committed blob on BOTH sides, which is
-        // exactly what a staged row would diff (HEAD↔index), and not what the unstaged row above showed.
+        // Staged with nothing staged: index holds the committed blob on both sides (HEAD↔index), unlike unstaged above.
         expect(new Uint8Array(await (await raw("side=staged&which=after")).arrayBuffer())).toEqual(new Uint8Array(committed));
 
-        // A side the file never had (this path is in no commit) is a 404, not an empty body a browser would
-        // render as a corrupt image.
+        // A side the file never had is 404, not an empty body a browser would render as a corrupt image.
         expect((await app.request("/diff/raw?source=working&repo=root&path=fresh.png&side=unstaged&which=before")).status).toBe(404);
-        // The guards every file surface here applies, plus the two this route adds of its own.
+        // The guards every file surface applies here, plus two this route adds of its own.
         expect((await raw("side=unstaged&which=sideways")).status).toBe(400);
         expect((await raw("side=nonsense&which=before")).status).toBe(400);
         expect((await app.request("/diff/raw?source=nonsense&repo=root&path=logo.png&which=before")).status).toBe(400);
@@ -758,8 +735,8 @@ test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk f
     }
 });
 
-// A commit's own two sides, from the graph. The sha is the one identifier that reaches git's rev-spec parser
-// from the wire, so it is held to the contract's sha shape before it gets there.
+// A commit's two sides from the graph; the sha is the one identifier that reaches git's rev-spec parser from the wire,
+// so it's validated against the contract's sha shape first.
 test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that isn't one", async () => {
     const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-commit-"));
     const git = (...args: string[]): Promise<{ stdout: string }> =>

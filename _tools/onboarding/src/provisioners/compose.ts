@@ -6,22 +6,11 @@ import type { Provisioner, ProvisionContext } from "../provisioner.js";
 import { copyBlockFor, openRunTab } from "../run-step.js";
 import { sh } from "../shell.js";
 
-/* THE DOCKER COMPOSE PATH, the bytes the wizard renders, run the way a user runs them.
- *
- * Not "call `composeFile()` the way the page calls it". That function already has a unit test
- * (`setupCompose.test.ts`), and a second caller of it would prove the same thing twice while leaving the
- * actual path uncovered: the wizard minting a code, the file it renders being valid compose, the claim
- * redeeming that code into a `.env` the file reads, and the container that comes up announcing itself back.
- * Each of those is a different piece of the product and none of them is a function call.
- *
- * The bytes are taken from the CLIPBOARD, through the page's own copy buttons. That is not a flourish, it is
- * the only way to get exactly what a user would paste, including whatever the copy button decides to put
- * there, rather than a re-derivation that happens to agree today.
- */
+// Drives the wizard's rendered path end to end (mint, render, claim redemption, container announce), not
+// `composeFile()` directly, which already has a unit test and would leave the real path uncovered. Bytes come from the
+// clipboard through the page's own copy buttons, to get exactly what a user would paste, not a re-derivation.
 
-/* Read a copy button's payload. The label sits beside the button in the same block, which is how the two
- * blocks on this tab are told apart, they are otherwise identical widgets (run-step.ts holds the locator and
- * the account of why it names the button as well as the label). */
+// Reads a copy button's payload; the label beside it is what tells the tab's two otherwise-identical blocks apart.
 const copiedText = async (context: ProvisionContext, label: string): Promise<string> => {
     const block = copyBlockFor(context.page, label);
     await block.getByRole(`button`, { name: `Copy` }).click();
@@ -43,17 +32,14 @@ export const composeProvisioner = (): Provisioner => {
 
             await page.goto(`${world.webUrl ?? ``}/setup`);
 
-            /* The wizard opens with step 1 already done, the platform mints the sandbox and its address behind
-             * it, so the RUN step is what this waits for — behind the fold the app-first page puts it, and
-             * patiently, both of which run-step.ts owns for the lane beside this one as well. */
+            // Step 1 is already done (sandbox minted); this waits on the RUN step, which the wizard renders behind a
+            // fold.
             await openRunTab(page, /Docker Compose|^Compose$/u, `Docker Compose`);
 
             const yaml = await copiedText(context, `Add these services to your docker-compose.yml`);
             const bootstrap = await copiedText(context, `claim your .env, then start`);
 
-            /* A guard on the ONE thing that silently makes this path untestable: the wizard only points the
-             * bootstrap at a local platform when the api is served on localhost, and otherwise renders the
-             * hosted default. Running that would redeem this run's setup code against the real platform. */
+            // Guards the one silent failure: the wizard only targets a local platform when the api is on localhost.
             if (!bootstrap.includes(world.apiUrl ?? `\u0000`)) {
                 throw new Error(
                     `the wizard rendered a bootstrap that does not name this run's platform (${world.apiUrl}): ` +
@@ -70,17 +56,7 @@ export const composeProvisioner = (): Provisioner => {
             // Exactly the two commands the tab tells the user to run, in the folder holding the file.
             await sh(bootstrap, projectDir, `the compose bootstrap the wizard rendered`, 600_000);
 
-            /* WAIT FOR THE PLATFORM'S REGISTRY, not for words on a screen.
-             *
-             * The obvious assertion is the wizard's own step 2 advancing, and it was the first thing tried: a
-             * regex for "connected" matched `Chat is available once your sandbox is connected.`, copy about
-             * the state we were waiting for, and the whole provision went green in seven seconds without a
-             * daemon ever having announced. A loose text match on a screen full of sentences about the thing
-             * being waited for is a false green waiting to happen.
-             *
-             * `daemonUrl` on the row is the platform's own record that a daemon reached it and was accepted,
-             * which is what "connected" means and is not a phrase anyone can accidentally match. The screen's
-             * side of it belongs to the half of the journey that can talk to the box. */
+            // Waits on the platform's registry (daemonUrl), not wizard screen text, which false-greened in 7s once.
             await waitForAnnounce(world.databaseUrl ?? ``, startedAt, 300_000);
         },
 
@@ -88,9 +64,7 @@ export const composeProvisioner = (): Provisioner => {
             if (projectDir === undefined) {
                 return;
             }
-            /* `ONBOARDING_KEEP=1` leaves the stack and the folder standing. Debugging this path means reading
-             * the `.env` the claim wrote and the daemon's log, and both are gone the instant teardown runs,
-             * which is how the first three attempts at it were spent reproducing rather than reading. */
+            // ONBOARDING_KEEP=1 leaves the stack and folder up, so the .env and daemon log survive for debugging.
             if (process.env[`ONBOARDING_KEEP`] === `1`) {
                 return;
             }

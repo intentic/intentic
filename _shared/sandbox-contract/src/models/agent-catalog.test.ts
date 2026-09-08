@@ -19,16 +19,8 @@ import {
 import type { AgentCapabilities } from "./agent-runtimes.js";
 import type { AgentHarness, AgentProvider, PermissionMode } from "../schemas/agent.js";
 
-/* THE MATRIX GUARD.
- *
- * Four runtimes serve turns behind one seam, and for a long time the only record of what each could do was a
- * comment inside its own adapter. The surfaces above them could not read those, so they offered the same
- * controls to all four: a permission mode to a runtime with no approval channel, an effort scale to one that
- * drops the field. The record is what fixed that, and this is what keeps it honest.
- *
- * By SHAPE, not by a list: PROVIDERS × HARNESSES comes from the catalog itself, so a provider added tomorrow is
- * covered the day it is added. If a pair fails here, the answer is a row in capabilitiesOf: never a special
- * case in the surface that asked. */
+// Every provider × harness pair, generated from the catalog itself, must declare what it can do. A failing pair means a
+// missing row in capabilitiesOf, never a special case in the caller.
 
 const pairs: { provider: AgentProvider; harness: AgentHarness }[] = PROVIDERS.flatMap((provider) =>
     HARNESSES.map((harness) => ({ provider: provider.value as AgentProvider, harness: harness.value })),
@@ -38,12 +30,9 @@ describe("every provider/harness pair declares what it can do", () => {
     it.each(pairs)("$provider on the $harness harness", ({ provider, harness }) => {
         const capabilities = capabilitiesOf(provider, harness);
 
-        // Nothing may be left to inference: a `permissions` a surface can't read, or a runtime nobody serves,
-        // is the drift this record exists to end.
         expect(["claude-code", "codex", "cursor", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "tools", "browser", "http", "none"]).toContain(capabilities.mcp);
-        // Every runtime executes SOMETHING: a record listing no backend would hide the shell every loop has.
         expect(capabilities.execution).toContain("shell");
         for (const backend of capabilities.execution) {
             expect(["shell", "js"]).toContain(backend);
@@ -52,31 +41,25 @@ describe("every provider/harness pair declares what it can do", () => {
         expect(["replace", "append", "none"]).toContain(capabilities.instructions);
         expect(["hooks", "approval", "refuse-only", "none"]).toContain(capabilities.rulebook);
         expect(["masked", "none"]).toContain(capabilities.secrets);
-        /* Masking is a PostToolUse hook and nothing else can edit what a model reads, so a record claiming
-         * masked without hooks would be claiming a seam that does not exist (see the axis doc). The one
-         * direction that IS legal is hooks without masking, which is why this is an implication and not
-         * equality. */
+        // Masking is a PostToolUse hook and nothing else can edit what a model reads; hooks without masking is the one
+        // legal direction, so this is an implication, not an equality.
         if (capabilities.secrets === "masked") {
             expect(capabilities.rulebook).toBe("hooks");
         }
-        // The permission modes offered must include the mode a clamp falls back to: a floor that isn't in the
-        // list would leave the composer showing a posture the runtime can't hold.
+        // The modes offered must include the mode a clamp falls back to, or the composer could show a posture the
+        // runtime can't hold.
         expect(modesFor(capabilities)).toContain(clampMode("default", capabilities));
     });
 });
 
-// An ACP provider is an installed capability's id: any string that isn't a native provider. It gets the ACP
-// floor whatever harness the client happened to send, because the agent IS its own loop.
 test("an unknown provider id is an ACP agent, on either harness", () => {
     for (const harness of HARNESSES) {
         expect(capabilitiesOf("some-installed-agent", harness.value).runtime).toBe("acp");
     }
 });
 
-/* THE `pi` ID IS RESERVED for the Pi coding agent's own RPC runtime: an `agent`-kind capability like any ACP
- * agent, but served over Pi's JSONL protocol, which carries abilities the ACP floor cannot: real mid-turn
- * steering, the thinking-level scale, a published command list. Falling to the ACP record instead would strip
- * exactly the abilities that justify a fifth runtime. */
+// The `pi` id is reserved for the Pi coding agent's own RPC runtime: real mid-turn steering, an effort scale and a
+// published command list, none of which the plain ACP floor carries.
 describe("the pi provider", () => {
     it("runs the pi runtime on either harness: pi is its own loop", () => {
         for (const harness of HARNESSES) {
@@ -103,28 +86,17 @@ describe("the pi provider", () => {
     });
 });
 
-/* The harness axis is real for exactly two providers, and the three exceptions are each a different shape of
- * "there is nothing to choose". Claude is always its own Claude Code loop. Kimi has no native runtime at all
- * (Moonshot speaks the Anthropic protocol directly), so it runs Claude Code whatever the client sent. Gemini is
- * Kimi's mirror: it has no CLAUDE CODE road, because that loop announces itself in every request and Google's
- * Antigravity channel refuses on the announcement: every account, every time, reported as a spent quota it
- * never was. */
 test("only codex and grok change runtime with the harness", () => {
     const switched = PROVIDERS.filter((provider) => capabilitiesOf(provider.value, "native") !== capabilitiesOf(provider.value, "claude-code"));
 
     expect(switched.map((provider) => provider.value)).toEqual(["codex", "grok"]);
 });
 
-/* THE RULE THAT KEEPS CLAUDE CODE TRAFFIC AWAY FROM GOOGLE, asserted where it is decided rather than at each of
- * the surfaces that obey it. Everything downstream: the adapter that serves a turn, the transcript store, the
- * quick helper's choice of loop: reads the runtime off this record, so a Gemini turn asking for Claude Code and
- * getting it back would put the refused loop on the road again everywhere at once. */
 test("gemini answers with its own runtime whatever harness is asked for", () => {
     const native = capabilitiesOf("gemini", "native");
 
     expect(native.runtime).toBe("opencode-gemini");
     expect(capabilitiesOf("gemini", "claude-code")).toEqual(native);
-    // Same abilities as the Grok loop it shares: only the runtime id, which keys adapter health, differs.
     expect({ ...native, runtime: "opencode" }).toEqual(capabilitiesOf("grok", "native"));
 });
 
@@ -134,8 +106,6 @@ test("codex and grok under the Claude Code harness get the full ceiling, it is t
     }
 });
 
-// The composer's four modes describe behaviours the Claude Code loop actually has. A runtime whose every tool
-// call is pre-approved has two postures, so it is offered two names, not four names for two behaviours.
 test("a plan-only runtime offers the two postures it has", () => {
     expect(modesFor(capabilitiesOf("codex", "native"))).toEqual(["plan", "bypassPermissions"]);
     expect(modesFor(capabilitiesOf("claude", "native"))).toEqual(["default", "acceptEdits", "plan", "bypassPermissions"]);
@@ -149,8 +119,6 @@ test("a mode the runtime can't hold falls back to the one it runs; one it can ho
     expect(clampMode("acceptEdits", capabilitiesOf("claude", "native"))).toBe("acceptEdits");
 });
 
-/* The user-facing half. The full ceiling says nothing: an empty list is what hides the picker's block, and
- * every axis the record carries has a sentence here, because a capability nobody can read is how this started. */
 test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(limitationsOf(capabilitiesOf("claude", "native"))).toEqual([]);
 
@@ -193,17 +161,11 @@ test("every axis a record can lack has words for it", () => {
         secrets: "none",
     };
 
-    // Thirteen DISCLOSABLE axes, thirteen sentences: an axis added to the interface without one would silently
-    // never be disclosed. fastMode is the deliberate exception: a record alone can't tell the truth about it (a
-    // translator-routed turn reads true here and still can't go fast), so it is answered by fastAllowed
-    // instead. Anything else added to the interface has to move this number.
+    // Thirteen disclosable axes, thirteen sentences; `fastMode` is the exception, disclosed via fastAllowed.
     expect(limitationsOf(nothing)).toHaveLength(13);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
 });
 
-/* The two safety axes, checked the same way the instruction axis is below and for the same reason: `rulebook`
- * has a middle value, and disclosing the floor's words for it would tell a Codex user their rules are ignored
- * when they are in fact being applied to everything Codex asks about. */
 test("the safety axes disclose the middle answer differently from the floor", () => {
     const claudeCaps = capabilitiesOf("claude", "native");
     const codexCaps = capabilitiesOf("codex", "native");
@@ -229,9 +191,6 @@ test("the safety axes disclose the middle answer differently from the floor", ()
     }
 });
 
-/* The instruction axis has THREE values and only two of them are worth a sentence, which is the one shape the
- * count above cannot check: a middle value that discloses the same words as the floor would tell a Grok user
- * their prompt is ignored when it is in fact being sent. */
 test("the instruction axis discloses its two weaker answers, differently", () => {
     const grokCaps = capabilitiesOf("grok", "native");
     const acpCaps = capabilitiesOf("some-installed-agent", "native");
@@ -245,9 +204,6 @@ test("the instruction axis discloses its two weaker answers, differently", () =>
     expect(limitationsOf(acpCaps).length).toBeGreaterThan(limitationsOf(codexCaps).length);
 });
 
-/* The JS backend is hosted by the one loop the daemon can put its own execution seam through. Pinned as a test
- * rather than left to the records because turn planning gates the backend on this axis: a runtime gaining it
- * here without a seam behind it would advertise code runs that can never execute. */
 test("only the Claude Code loop hosts the js execution backend", () => {
     for (const { provider, harness } of pairs) {
         const capabilities = capabilitiesOf(provider, harness);
@@ -255,36 +211,26 @@ test("only the Claude Code loop hosts the js execution backend", () => {
     }
 });
 
-// The mode vocabulary is the contract's own PermissionMode, so a mode added to the wire can't be quietly absent
-// from the runtime that owns them all.
 test("the Claude Code loop offers every PermissionMode the wire has", () => {
     const wire: PermissionMode[] = ["default", "acceptEdits", "plan", "bypassPermissions"];
 
     expect([...modesFor(capabilitiesOf("claude", "native"))].toSorted()).toEqual(wire.toSorted());
 });
 
-/* `max` + thinking-off is a 400 that kills the turn before the model sees it, and a session met it as "every
- * web search fails". The picker cannot be the only guard: a route, an extension or a restored tab assembles a
- * turn without ever passing through it. What the rule is NOT is a claim about who HAS the tier, and reading it
- * as one took Max off every surface that pins no thinking of its own. */
+// `effortAllowed` is not a claim about who has the max tier: the picker isn't the only assembler of a turn, so the rule
+// is checked wherever one is built, not just there.
 describe("the max-effort rule", () => {
     it("takes the top rung from one pair only: Claude with extended thinking switched off", () => {
         expect(effortAllowed("max", "claude", true)).toBe(true);
         expect(effortAllowed("max", "claude", false)).toBe(false);
-        // Nothing pinned, which is what every run button sends. Absent is not off: the turn carries no thinking
-        // field, the model's own default answers, and sendableThinking names it on the way out.
         expect(effortAllowed("max", "claude", undefined)).toBe(true);
-        // Another vendor's scale is that vendor's business. Kimi K3 publishes 'max' on its own catalog rows, so
-        // filtering it here would offer a shorter ladder than the provider already told us about.
         expect(effortAllowed("max", "kimi", false)).toBe(true);
-        // Every other tier is a property of the model's own scale, and nothing here constrains it.
         expect(effortAllowed("high", "kimi", false)).toBe(true);
     });
 
     it("is repaired, not refused, on the way to the API: the tier drops, the user's thinking choice does not", () => {
         expect(sendableEffort("max", false)).toBe("high");
         expect(sendableEffort("max", true)).toBe("max");
-        // A turn that said nothing about thinking is not the refused pair, so the tier the user picked survives.
         expect(sendableEffort("max", undefined)).toBe("max");
         expect(sendableEffort("high", false)).toBe("high");
         expect(sendableEffort(undefined, false)).toBeUndefined();
@@ -294,18 +240,13 @@ describe("the max-effort rule", () => {
         expect(sendableThinking("max", undefined)).toBe(true);
         expect(sendableThinking("max", false)).toBe(false);
         expect(sendableThinking("max", true)).toBe(true);
-        // Every other tier is sendable either way, so there is nothing to name.
         expect(sendableThinking("xhigh", undefined)).toBeUndefined();
         expect(sendableThinking(undefined, undefined)).toBeUndefined();
     });
 });
 
-/* AN `endpoint/<id>` PROVIDER is a model API the user configured, and the one thing this record has to get right
- * about it is that it is NOT an ACP agent. Both are minted by installing a capability and both are unknown to
- * NATIVE_PROVIDERS, so the id is the only thing that tells them apart, and they want opposite records: an ACP
- * agent brings its own loop and gets the documented floor, while an endpoint is driven BY the Claude Code loop
- * and gets its full ceiling. Getting this backwards would strip steering, per-tool approvals, MCP and the mount
- * namespace from every turn on a user's own model. */
+// An `endpoint/<id>` provider is a user's own model API, told apart from an ACP agent only by its id: it runs the
+// Claude Code loop at full ceiling, never the ACP floor.
 describe("a configured model endpoint", () => {
     it("runs the Claude Code loop at full ceiling, on either harness", () => {
         for (const harness of HARNESSES.map((entry) => entry.value)) {
@@ -323,36 +264,27 @@ describe("a configured model endpoint", () => {
         expect(endpointProvider("gpu-box")).toBe("endpoint/gpu-box");
         expect(endpointIdOf(endpointProvider("gpu-box"))).toBe("gpu-box");
         expect(isEndpointProvider("endpoint/gpu-box")).toBe(true);
-        // A bare id that merely starts with the word is not one: the separator is what makes the namespace.
         expect(isEndpointProvider("endpoints-r-us")).toBe(false);
         expect(endpointIdOf("claude")).toBeUndefined();
-        // Its credential was configured with the endpoint, so there is nothing left for a connect gate to offer.
         expect(accessFor("endpoint/gpu-box")).toBeUndefined();
     });
 });
 
-/* FAST SPEED IS OFFERED ON THREE CONDITIONS AT ONCE, and the interesting cases are the ones where two of them
- * hold. A translator-routed provider runs the Claude Code loop: same record, same ceiling, and still cannot go
- * fast, because the harness refuses a non-Anthropic endpoint; a Claude model that publishes no `fast` badge
- * cannot either. Both would be silent failures if the composer offered the control anyway: the turn runs, the
- * answer arrives, and only the bill says it was standard speed. */
+// Fast speed needs all three conditions at once; a translator-routed provider or a Claude model with no `fast` badge
+// fails silently otherwise: the turn runs at standard speed and only the bill shows it.
 describe("offering fast speed", () => {
     it("is offered for a Claude model that publishes the badge", () => {
         expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", ["reasoning", "fast"])).toBe(true);
     });
 
     it("is refused for a routed provider on the Claude Code loop, whose endpoint is not first-party", () => {
-        // Grok under the claude-code harness reads the FULL Claude Code record: the capability alone would say
-        // yes. It is served through the sandbox's translator, so the harness would report `not_first_party`.
         expect(capabilitiesOf("grok", "claude-code").fastMode).toBe(true);
         expect(fastAllowed(capabilitiesOf("grok", "claude-code"), "grok", ["fast"])).toBe(false);
-        // A user's own model endpoint is the same story for the same reason.
         expect(fastAllowed(capabilitiesOf("endpoint/gpu-box", "native"), "endpoint/gpu-box", ["fast"])).toBe(false);
     });
 
     it("is refused for a Claude model whose catalog row doesn't publish it", () => {
         expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", ["reasoning"])).toBe(false);
-        // The seed floor and any provider that reports ids only: no capabilities published, nothing claimed.
         expect(fastAllowed(capabilitiesOf("claude", "native"), "claude", undefined)).toBe(false);
     });
 
@@ -364,10 +296,8 @@ describe("offering fast speed", () => {
     });
 });
 
-/* THE FREE ROW IS THE PRODUCT'S FRONT DOOR, so the list of free providers is derived from the access table and
- * guarded here rather than typed out where it is used. Two things can break it and both are silent: the table
- * losing its last `free` row (the connect gate then has no headline and quietly falls back to pitching a paid
- * subscription to a user who has none), and a `free` row acquiring a requirement that costs money. */
+// The free-provider list is derived from the access table, not hand-typed, so a lost `free` row or one gaining a cost
+// silently breaks the connect gate's headline.
 describe("the free providers", () => {
     it("is exactly the access table's free rows, and is never empty", () => {
         expect(FREE_PROVIDERS.length).toBeGreaterThan(0);
@@ -378,12 +308,8 @@ describe("the free providers", () => {
     });
 
     it("carries the words the connect gate puts on screen", () => {
-        // The gate names the provider and states what connecting it runs; a row with either missing would put an
-        // empty headline or a dangling sentence in front of the user who has connected nothing.
         for (const provider of FREE_PROVIDERS) {
             const access = accessFor(provider);
-            // Both are sentences the gate PUTS ON SCREEN, so what they have to be is text with something in
-            // it. Truthiness passes a whitespace-only string, which renders as the empty headline this is about.
             expect(access?.requirement).toEqual(expect.stringMatching(/\S/));
             expect(access?.runs).toEqual(expect.stringMatching(/\S/));
         }

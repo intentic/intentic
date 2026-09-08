@@ -3,7 +3,8 @@ import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { buildChoiceParser, numberParser } from "@stricli/core";
 import { canonicalLang, type RenderOptions, type Scope, type Verb, type VerbOptions } from "@intentic/iq-engine";
 
-// Unknown lang tokens are usage errors, never silent empty filters (exts and canonical names both accepted).
+// Unknown --lang tokens are usage errors, never a silent empty filter; both extensions and canonical names are
+// accepted.
 export const parseLangs = (value: string): string[] => {
     const tokens = value.split(",").map((token) => token.trim());
     for (const token of tokens) {
@@ -39,8 +40,7 @@ export interface OutputFlags {
 
 export type SearchFlags = ScopeFlags & OutputFlags;
 
-// Shared parameter fragments, spread into each command's `parameters.flags` so every verb narrows and renders
-// identically. The kebab scanner maps --not-glob → notGlob, --files-only → filesOnly, --context-lines (-C).
+// Shared flag fragments in each command's parameters; kebab flags map to camelCase (--not-glob → notGlob).
 export const scopeFlagParameters = {
     in: { kind: "parsed", parse: String, variadic: true, optional: true, brief: "Restrict to subtree(s); repeatable" },
     repo: { kind: "parsed", parse: String, optional: true, brief: "Restrict to one repo of the workspace" },
@@ -66,11 +66,8 @@ export const outputFlagParameters = {
 
 export const outputAliases = { C: "contextLines" } as const;
 
-// Agents address paths in whatever frame they were thinking in, root-relative (the canonical form),
-// cwd-relative (they just cd'd into a subdirectory), or absolute (a subagent handed one over). Transcript
-// mining showed all three in live use, the latter two silently zero-hitting under a misleading "scope too
-// narrow" hint. Resolve every frame to root-relative; a path that resolves nowhere is a loud usage error,
-// never an empty result. Returns "" when the path IS the root (scope no-op).
+// Resolves a path in whatever frame the caller used (root-relative, cwd-relative, or absolute) to root-relative; an
+// unresolvable path is a loud usage error, never an empty result. Returns "" when the path is the root.
 export const rootRelativePath = (raw: string, root: string): string => {
     const trimmed = raw.replace(/\/+$/, "");
     const candidates = isAbsolute(trimmed) ? [trimmed] : [resolve(root, trimmed), resolve(process.cwd(), trimmed)];
@@ -119,8 +116,8 @@ export const toRender = (flags: OutputFlags): RenderOptions => ({
 
 const quote = (value: string): string => (/^[\w./:@*?[\]-]+$/.test(value) ? value : `"${value.replaceAll('"', '\\"')}"`);
 
-// The verb + args echoed into truncation footers as the literal continuation command. Scope + verb flags only,
-// output flags (budget/after/json) are the caller's per-invocation choice.
+// Verb and args echoed into truncation footers as the literal continuation command; scope and verb flags only, not
+// output flags (budget/after/json).
 export const echoOf = (verb: Verb, query: string, flags: ScopeFlags, options: VerbOptions): string => {
     const parts = [verb === "q" ? quote(query) : `${verb} ${quote(query)}`];
     for (const path of flags.in ?? []) {

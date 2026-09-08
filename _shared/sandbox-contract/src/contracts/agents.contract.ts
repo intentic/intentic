@@ -26,30 +26,9 @@ import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// The fleet: every registered conversation-agent (see AgentSummarySchema). Registry-level actions (read,
-// rename, seen, archive) apply uniformly. For branch-backed conversations, `diff` is the worktree's CUMULATIVE
-// multi-repo delta vs its recorded per-repo bases, one flat change set per repo
-// (AgentChanges), each file flagged `landed` or not, deliberately not the working tree's staged/unstaged
-// shape: a worktree the user never checks out has no index they could stage into. `land` merges the worktree
-// branches into the main tree (per-repo, conflicts reported, nothing lost on failure); `discard` removes
-// worktrees + branches + registry entry. Those branch actions reject workspace conversations explicitly. An
-// unknown {id} is NOT_FOUND; land/discard while the turn runs is CONFLICT.
-// `rename` sets the user-chosen display title, legal mid-turn (it touches no worktree state).
-// `seen`/`seenAll` stamp the read marker behind the cards' unread badge (AgentSummarySchema.seenAt), also
-// legal mid-turn, and like `rename` they never bump `updatedAt` (reading is not activity).
-//
-// ARCHIVE is the non-destructive counterpart to discard, and the one the board leans on: for an isolated
-// conversation, `archive` commits whatever the worktree still holds onto agent/<id> and drops the CHECKOUT;
-// for a workspace conversation it has no git teardown. Both keep the entry and transcript. `list` stops carrying it and
-// `archived` does; `unarchive` puts it back, and either way the next turn re-attaches a worktree from the
-// surviving branch. Archiving a running agent is CONFLICT, same as land/discard.
-//
-// PURGE empties the archive, and it is `discard` applied to every agent already in there: worktree remnants,
-// branches and entries all go. Deliberately the whole archive and not a list of ids, the archive is the pile
-// of agents the user has already decided are over, so "clean it up" is one act with one confirmation, and a
-// per-id purge would be `discard`, which already exists. Never touches a running agent (a turn un-archives its
-// own agent, so there should be none) and answers with what it actually deleted: a teardown that fails on one
-// agent's repo leaves that one behind rather than taking the batch down with it.
+// Every registered conversation-agent (AgentSummarySchema); an unknown {id} is NOT_FOUND across this whole family.
+// `archive` is the non-destructive counterpart to `discard` (worktree committed, entry kept); `purge` is `discard`
+// applied to every already-archived agent.
 export const agentsContract = {
     list: oc
         .route({
@@ -69,10 +48,7 @@ export const agentsContract = {
                 "The same shape as the live fleet, for the conversations somebody has decided are finished. Their work is kept, and any one of them can be brought back.",
         })
         .output(AgentsListSchema),
-    // The board's filter. Answers over BOTH halves of the fleet, the live roster and the archive, because
-    // the board hides by design (the Finished lane windows to a handful, archived agents are off the roster
-    // entirely), and a filter that reports "no matches" while the agent sits one click away is a lie. The
-    // never-carded conversations that are neither are `sessions.list`'s query, which matches by the same rule.
+    // Never-carded conversations (neither live nor archived) are `sessions.list`'s query, matching by the same rule.
     search: oc
         .route({
             method: "GET",
@@ -102,12 +78,8 @@ export const agentsContract = {
         })
         .input(AgentTranscriptQuerySchema)
         .output(AgentTranscriptSchema),
-    /* SPEAK AS THE AGENT, append the user's words to the conversation's record as an assistant row, with no
-     * turn behind them and no reply. The row is marked `placed` for human readers (TranscriptRowSchema); the
-     * provider session is FORGOTTEN in the same breath, rewind-style, so the next real turn opens a fresh
-     * runtime session seeded from the record, where the placed line reads as the agent's own words, because
-     * the handoff renders every assistant row identically. A running turn is CONFLICT: the illusion can only be
-     * established between turns, and a concurrent turn would resume the very session this exists to retire. */
+    // Also forgets the provider session, rewind-style, so the next fresh session reads the placed line as the agent's
+    // own.
     place: oc
         .route({
             method: "POST",
@@ -128,9 +100,6 @@ export const agentsContract = {
         })
         .input(AgentRenameSchema)
         .output(AgentSummarySchema),
-    // This agent's own land-at-completion posture, an override of the sandbox-wide `autoLand` setting; null
-    // clears it back to "inherit". Legal mid-turn on purpose: the setting is read at turn COMPLETION, so
-    // flipping it while the agent works is exactly "hold THIS turn's work for review", the press that matters.
     autoLand: oc
         .route({
             method: "POST",
@@ -141,13 +110,7 @@ export const agentsContract = {
         })
         .input(AgentAutoLandSchema)
         .output(AgentSummarySchema),
-    /* THIS conversation's answer to a provider outage, an override of the sandbox-wide `resumeAfterOutage`
-     * setting; null clears it back to "inherit". The chat's offer at the moment a turn dies writes this and
-     * never the global: the press happens inside one conversation and means "finish this piece of work", so
-     * its honest scope is that conversation. Sandbox > Agent owns the default for everything else.
-     *
-     * Legal mid-turn, and unlike autoLand it is legal for a WORKSPACE conversation too, an outage kills a
-     * main-tree chat exactly as readily as an isolated one, and there is no branch involved either way. */
+    // Legal for a workspace conversation too (unlike autoLand): an outage kills a main-tree chat just as readily.
     resumeAfterOutage: oc
         .route({
             method: "POST",
@@ -158,13 +121,7 @@ export const agentsContract = {
         })
         .input(AgentResumeAfterOutageSchema)
         .output(AgentSummarySchema),
-    /* THIS conversation's answer to a spent allowance, the same override in the same shape as the outage one
-     * above; null clears it back to "inherit". Offered on the CARD as well as in the chat, which is the one
-     * placement difference worth stating: an outage is over in minutes and is met by whoever is in the room,
-     * while a limit reopens hours later, so the person deciding is usually looking at a board rather than at a
-     * transcript.
-     *
-     * Legal mid-turn, and for a workspace conversation, for the same two reasons its neighbour is. */
+    // Also offered on the card, not just chat: a limit reopens hours later, so the decider is usually at a board.
     resumeAfterLimit: oc
         .route({
             method: "POST",
@@ -175,9 +132,7 @@ export const agentsContract = {
         })
         .input(AgentResumeAfterLimitSchema)
         .output(AgentSummarySchema),
-    /* THIS conversation's answer to a spent allowance that does not wait: move the held turn to another account
-     * of the same provider that has room, the moment the refusal lands. Same three states, same scope argument
-     * as its two neighbours; SandboxSettingsSchema.moveAfterLimit says what it costs and why it is a policy. */
+    // Moves the held turn the moment the refusal lands, not on the next attempt.
     moveAfterLimit: oc
         .route({
             method: "POST",
@@ -198,17 +153,7 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentSummarySchema),
-    /* DISARM EVERY CONDITION WATCH THIS CONVERSATION IS PARKED ON (AgentSummary.watches), the way off the one
-     * standing arrangement an agent can enter into on the user's behalf without being asked again.
-     *
-     * ALL OF THEM, NOT ONE. The id of an individual watch is on the card, but the press a person makes about a
-     * card means "stop this conversation waking itself up", and picking watches off a submenu one at a time is a
-     * chore invented by the data shape rather than wanted by anybody. A conversation that should go on watching
-     * one thing and not another can be told so in the chat, which is where the watches were armed.
-     *
-     * No wake fires for what this disarms, which is the whole point: a watch left armed keeps a hosted machine
-     * awake and eventually starts a turn nobody is expecting. Nothing else about the conversation moves, so the
-     * card it hands back differs only by having lost its watches. */
+    // A finer-grained ask (watch this, not that) goes through the chat, not a per-watch id here.
     stopWatching: oc
         .route({
             method: "POST",
@@ -237,11 +182,8 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentChangesSchema),
-    // The other side of `diff`: the work that is no longer a difference because it is in your own history, and
-    // the commits holding it. Asked for only once `diff` reports something absorbed, since it costs a `git log`
-    // per repo and answers nothing until then. Reading one of these files is the SAME call as reading a
-    // reviewable one (`fileDiff` below): the question "what did this conversation do to this file" has one
-    // answer whether or not you have since committed it.
+    // Costs a `git log` per repo: ask only once `diff` reports something absorbed. Reading a file here reuses
+    // `fileDiff`.
     history: oc
         .route({
             method: "GET",
@@ -271,9 +213,7 @@ export const agentsContract = {
         })
         .input(AgentLandSchema)
         .output(LandResultSchema),
-    // A collaborator's ask for the land they may not perform themselves (role floors put `land`/`discard` at
-    // maintainer). Stamps AgentSummarySchema.landRequested with the caller's identity and re-frames the fleet,
-    // so every maintainer's board carries the request; the land or discard that answers it clears the stamp.
+    // Stamps `AgentSummarySchema.landRequested` with the caller's identity.
     requestLand: oc
         .route({
             method: "POST",

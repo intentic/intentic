@@ -9,15 +9,13 @@ import { createCloudflareProvider } from "./cloudflare.js";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
 import { createTunnelProvider } from "./tunnel.js";
 
-// A stateful in-memory Cloudflare account: owns one zone, remembers the tunnel/ingress/DNS records the
-// providers create so a second apply finds everything and reports noop.
+// Stateful in-memory Cloudflare account; remembers what providers create so a second apply reports noop.
 const fakeCloudflare = (): CloudflareApi => {
     const tunnels = new Map<string, string>();
     const records = new Map<string, { id: string; content: string }>();
     let ingress: IngressRule[] | undefined;
     let seq = 0;
-    // `satisfies` keeps the literal contextually typed (so each method's args are inferred and checked)
-    // while `unstubbed` supplies the rest of the interface: this fake models the calls the engine drives.
+    // `satisfies` keeps each method's args checked; `unstubbed` fills in the rest of the interface.
     const modelled = {
         getZone: async () => ({ id: "zone-123", accountId: "acct-1" }),
         listZones: async () => [{ id: "zone-123", name: "example.com", accountId: "acct-1" }],
@@ -49,8 +47,7 @@ const fakeCloudflare = (): CloudflareApi => {
     return unstubbed("cloudflare", modelled);
 };
 
-// A stateful host shared by the host + tunnel providers: Docker-ready, default route -> 10.0.0.5, and it
-// remembers the connector container once `docker run` has executed.
+// Stateful host shared by the host + tunnel providers: Docker-ready at 10.0.0.5, remembers the connector once run.
 const fakeSsh = (): SshExecutor => {
     let running: string | undefined;
     let image: string | undefined;
@@ -81,8 +78,7 @@ const fakeSsh = (): SshExecutor => {
     };
 };
 
-// host + cloudflare inventory, the host's tunnel (ingress -> internal service), and one cf-route whose
-// CNAME targets the tunnel. Built by hand because i.want.app would pull in providerless platform nodes.
+// Host + cloudflare + tunnel + cf-route, built by hand: i.want.app pulls in providerless platform nodes.
 const graph: DesiredStateGraph = {
     version: 1,
     resources: {

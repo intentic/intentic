@@ -1,25 +1,12 @@
-/* What the search box's second field MEANS. VSCode's "files to include" grammar, read the way VSCode reads it
- * (its queryBuilder's parseSearchPaths + expandGlobalGlob), and answered as the two path-glob lists the search
- * engine takes.
- *
- * The rules that make it feel like the editor's field, each one required:
- *
- *   `package.json`  a bare name is a FILE as well as a folder, every segment expands to BOTH `**\/p` and
- *                   `**\/p/**`. Reading it as a folder alone is what made a file name find nothing.
- *   `src/db`        a path is still matched at any depth, not anchored, `**\/src/db`. VSCode only anchors
- *   `./src/db`      when the segment starts with `./` (or `/`), which is how you say "the one at the root".
- *   `.ts`           a leading dot is shorthand for the extension: it becomes `*.ts`.
- *   `docs/`         a trailing slash is noise; the folder form is generated either way.
- *   `*.{ts,vue}`    commas separate patterns EXCEPT inside `{…}` or `[…]`, which are one pattern's own syntax.
- *   `!**\/*.spec.ts` a leading `!` excludes. This is ours, not VSCode's, the editor spends a second box on
- *                   exclusions and the explorer's sidebar has room for one field.
- *
- * It lives in the contract package because both ends run it: the daemon turns it into engine scope, and the
- * recorded demo answers /workspace/search itself. Two readings of one field would make the same text mean
- * different things depending on which one answered. */
+// What the search box's second field means: VSCode's "files to include" grammar, read the same way everywhere it runs
+// (the daemon, the recorded demo):
+// - a bare name matches both the file and the folder (`p` and `p/**`)
+// - a path matches at any depth unless it starts with `./` or `/` (anchored to the root)
+// - a leading dot is an extension shorthand (`.ts` becomes `*.ts`); a trailing slash is dropped
+// - commas split patterns, except inside `{...}` or `[...]`
+// - a leading `!` excludes; this app's own addition, not VSCode's
 
-// VSCode's splitGlobAware: the split character is inert inside a brace group or a character class, so
-// `*.{ts,py}` and `f[a,b].ts` survive as single patterns.
+// VSCode's splitGlobAware: the split character is inert inside a brace group or character class.
 const splitPatterns = (include: string, splitChar: string): string[] => {
     const segments: string[] = [];
     let current = ``;
@@ -39,11 +26,8 @@ const splitPatterns = (include: string, splitChar: string): string[] => {
     return segments.map((segment) => segment.trim()).filter((segment) => segment !== ``);
 };
 
-/* One typed segment → the globs that answer it. The pair is the whole trick: `p` matches the file, `p/**`
- * matches everything under a folder of that name, and either may be what the reader meant.
- *
- * `./p` and `/p` anchor at the workspace root; the `./` is kept on the way out because that is exactly how the
- * engine's glob distinguishes an anchored pattern from a name it should look for at any depth. */
+// One typed segment maps to two globs: the file itself, and everything under a folder of that name. An anchored form
+// (`./p`, `/p`) keeps its `./` prefix, since that's how the engine tells "anchored" from "any depth".
 const expand = (segment: string): string[] => {
     const trimmed = segment.replace(/\/+$/, ``);
     if (trimmed === ``) {
@@ -54,7 +38,7 @@ const expand = (segment: string): string[] => {
         const path = trimmed.replace(/^\.?\//, ``).replace(/^\/+/, ``);
         return path === `` ? [] : [`./${path}`, `./${path}/**`];
     }
-    // ".ts" is how people write an extension filter; VSCode reads it as "*.ts" rather than as a hidden file.
+    // ".ts" is how people write an extension filter; VSCode reads it as "*.ts" rather than a hidden file.
     const pattern = trimmed.startsWith(`.`) ? `*${trimmed}` : trimmed;
     return [`**/${pattern}`, `**/${pattern}/**`];
 };

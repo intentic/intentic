@@ -29,7 +29,7 @@ test("topic query surfaces the session's files; ubiquitous files are idf-zeroed 
     const paths = files.map((file) => file.path);
     expect(paths).toContain("src/auth/token.ts");
     expect(paths).toContain("src/auth/login.ts");
-    // package.json was touched in every session: ln((2+1)/(1+2)) = 0 kills it.
+    // package.json is touched in every session; idf's ln((2+1)/(1+2)) is 0.
     expect(paths).not.toContain("package.json");
     expect(paths).not.toContain("src/web/file-tabs.ts");
 });
@@ -68,8 +68,6 @@ test("file overlap lifts the score when caller passes known-relevant files", () 
     const without = matchSessions(db, "improve the token rotation");
     const withFiles = matchSessions(db, "improve the token rotation", { files: ["src/auth/token.ts", "src/auth/login.ts"] });
     const scoreOf = (matches: typeof without): number => matches.find((match) => match.sessionId === SESSION_A)!.score;
-    // LIFTS, which is the comparison the test is named for and the one it was not making: `without` was
-    // computed and never read, so a scorer that ignored `files` entirely passed here.
     expect(scoreOf(withFiles)).toBeGreaterThan(scoreOf(without));
 });
 
@@ -108,8 +106,7 @@ test("grab tolerates empty and operator-only queries", () => {
     expect(grabExcerpts(db, '(" OR ')).toEqual([]);
 });
 
-/* Bookends: a hit in the middle of a session carries what that session opened and closed on. Session A has two
- * turns, so its first and last differ, which is the case the field exists for. */
+// Session A has two turns, so its first and last prompts differ.
 test("grab carries the session's bookends so a mid-session hit has provenance", () => {
     const top = grabExcerpts(db, "JWT refresh token rotation")[0]!;
     expect(top.bookends?.turns).toBe(2);
@@ -117,9 +114,7 @@ test("grab carries the session's bookends so a mid-session hit has provenance", 
     expect(top.bookends?.last).not.toBe(top.bookends?.first);
 });
 
-/* Repeat collapse: the starvation guard. Five sessions running the same nightly prompt must not take five of
- * the ten slots: they collapse to their best instance, which carries the count. Rows are inserted directly
- * (the FTS triggers index them) with a vocabulary no other test queries, so the shared fixture is undisturbed. */
+// Rows inserted directly with vocabulary (zzquux) no other test uses, keeping the fixture undisturbed.
 test("near-identical prompts across sessions collapse to one row carrying the repeat count", () => {
     const base = Date.now() - 60 * 60 * 1000;
     for (let i = 0; i < 5; i += 1) {
@@ -149,7 +144,6 @@ test("near-identical prompts across sessions collapse to one row carrying the re
     expect(excerpts[0]?.repeats).toBe(4);
 });
 
-// A genuinely distinct prompt is never folded into another, however similar the topic.
 test("distinct prompts on the same topic stay separate rows", () => {
     const excerpts = grabExcerpts(db, "JWT refresh token rotation");
     expect(excerpts.every((excerpt) => excerpt.repeats === 0)).toBe(true);

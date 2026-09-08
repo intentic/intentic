@@ -6,23 +6,9 @@ import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../extensions/me
 import { useSandbox } from "../../client/useSandbox";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 
-/* THE TWO MEMORY FILES, AND THE ONE PLACE THEY COULD NOT BE EDITED.
- *
- * `CLAUDE.md` and `AGENTS.md` are read at the top of every turn — they are the standing instructions this
- * workspace carries — and this card was the only surface in the app that touched them. It could only APPEND:
- * paste an export from another assistant and it merged a fenced block in. Everything else you might want to do
- * to your own standing instructions (read them, fix a line, delete a paragraph that stopped being true) had to
- * happen by finding the file in the workspace tree and knowing that was where it lived.
- *
- * So the files are here, on the same surface every other markdown config in the app is written on, and the
- * import is what it always was: a second, narrower way in, kept because the work happens in another app's chat
- * window and pasting an export is not editing.
- *
- * ONE DOCUMENT AT A TIME, picked by name. The two files hold the same content for two different readers, and
- * showing both at once would be two long documents down one card with no way to tell at a glance which is
- * which. `save="explicit"` for the reason the system prompt has it: every turn reads this, and a half-typed
- * sentence going live seven hundred milliseconds after it is typed is not a convenience.
- */
+// CLAUDE.md and AGENTS.md are read at the top of every turn; this card can read, edit and delete them, not just
+// append via import. Shows one file at a time, picked by name; save is explicit since a half-typed sentence going
+// live would be read on the next turn.
 
 const sandbox = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
@@ -31,13 +17,12 @@ const FILES = MEMORY_FILES.map((name) => ({ label: name, value: name }));
 const picked = ref<string>(MEMORY_FILES[0]);
 
 const draft = ref(``);
-// What the file said when it was last read or written: what the document measures "unsaved" against.
+// The file's last-read/written content; draft is compared against it for unsaved state.
 const onDisk = ref<string | undefined>(undefined);
 const saving = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
-// A file nobody has written yet reads as empty rather than as a failure: these two are created on first save,
-// and a fresh workspace has neither.
+// A missing file reads as empty, not a failure; both files are created on first save.
 const load = async (name: string): Promise<void> => {
     error.value = undefined;
     onDisk.value = undefined;
@@ -66,11 +51,7 @@ const commit = async (text: string): Promise<void> => {
 onMounted(() => void load(picked.value));
 watch(picked, (name) => void load(name));
 
-/* ── Bringing memory in from another assistant ───────────────────────────────────────────────────────────────
- *
- * A two-step copy-paste rather than a setting, which is why it keeps its own block: the work happens in another
- * app's chat window, and the paste box is the whole surface. It writes BOTH files, because the block is the
- * same context for two readers, and it merges rather than overwrites (memoryImport.ts holds the fences). */
+// Writes both files and merges rather than overwrites; memoryImport.ts holds the fence markers.
 const importText = ref(``);
 const importing = ref(false);
 
@@ -83,12 +64,12 @@ const importMemory = async (): Promise<void> => {
     error.value = undefined;
     try {
         for (const file of MEMORY_FILES) {
-            // No file yet is the first import, which starts from empty rather than failing.
+            // Missing file starts as empty rather than failing (first import).
             const current = (await readFile(file)) ?? ``;
             await saveText(file, mergeMemory(current, text));
         }
         importText.value = ``;
-        // The document on screen is one of the two files just written, so it has to say so.
+        // Reloads since the visible document may be one of the files just written.
         await load(picked.value);
     } catch (caught) {
         error.value = noticeFrom(caught, `Couldn't save memory.`);
@@ -129,9 +110,7 @@ const importMemory = async (): Promise<void> => {
             </MarkdownDocument>
         </div>
 
-        <!-- THE IMPORT, under the document rather than instead of it: it is the narrow path (bring a block over
-             from another assistant) and editing is the wide one. It was the whole of this card until the files
-             themselves could be opened here. -->
+        <!-- Import sits under the document; editing is the primary path, this is the narrow one. -->
         <div class="flex flex-col gap-3 border-t border-line/60 pt-3">
             <span class="text-sm font-medium text-content">Bring memory over from another assistant</span>
 

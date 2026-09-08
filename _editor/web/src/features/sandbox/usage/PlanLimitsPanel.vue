@@ -21,53 +21,31 @@ import {
     usageTone,
 } from "../../chat/session/usageStatus";
 
-/* HOW MUCH OF YOUR PLANS IS LEFT: the Usage tab's second subject, and the one that does not scale with a row
- * per account. This sandbox holds 36 connections, 31 of them Google, and the flat list this replaced spent
- * 2,300px restating "No reading yet." while the three accounts with real numbers scrolled off the top.
- *
- * The redesign is a hierarchy, and each level exists because a different question is asked at it:
- *
- *   1. CAPACITY, can I start work at all? Counts of accounts by band, never a mean utilization: averaging 31
- *      separate pools describes no account and hides the one that is spent. Plus the soonest reopen, which is
- *      the only number that answers "and if not, when".
- *   2. PROVIDERS, where do I run? The provider is the unit because the provider is the CHOICE: the translator
- *      balances turns across a provider's accounts, so "which of my 31 Google accounts" is not a decision a
- *      person makes. Small providers keep their meters inline (three of anything is not worth folding); large
- *      ones show the distribution as bars and hand the detail to the roster.
- *   3. ATTENTION, what is BROKEN, which is narrower than what is unavailable: a credential that can no longer
- *      be refreshed, and nothing else. A spent pool is not broken: it reopens on its own, the translator routes
- *      around it meanwhile, and since spend is the steady state of a 36-account fleet, listing it here made this
- *      section longest at the exact moment nothing was wrong. Level 1 already counts it and dates its return.
- *   4. ROSTER: reconcile one account. A filterable table, because 36 near-identical gmail addresses are only
- *      navigable by search, and because a number a reader distrusts must be findable.
- *
- * Encoding note: the distribution is BARS (fill height = utilization), not coloured cells. This design system's
- * severity ramp is link → warning → danger = brand orange → amber → red, three warm hues that a red-weak reader
- * cannot separate. Beside a printed percentage that is fine, which is why the meters keep it; as a colour-only
- * strip of 31 cells it would carry the whole message in the one channel that fails. Height says it instead, and
- * colour agrees with it. */
+// How much of your plans is left, the section that must scale to a 36-connection fleet rather than one row per
+// account. A hierarchy, each level answering a different question:
+//   1. CAPACITY: can I start work? Counts by band (never a mean of many pools), plus the soonest reopen.
+//   2. PROVIDERS: where do I run? The provider is the unit, since the translator picks the account, not the user.
+//      Small providers show inline meters; large ones show a distribution and a roster link.
+//   3. ATTENTION: what's broken (unrefreshable), narrower than "unavailable": a spent pool reopens on its own
+//      and is already counted at level 1.
+//   4. ROSTER: a filterable table to reconcile one account.
+// Distribution uses bar height, not colour-only cells: this system's severity ramp (orange/amber/red) is
+// unreadable as colour alone to a red-weak reader.
 
-/* Ask for the readings this panel exists to draw, rather than drawing whichever ones the page happened to load
- * with. A plan's pools are ACCOUNT-wide: the desktop app, another Claude Code and claude.ai itself spend the
- * same allowance, so a percentage is only ever as true as it is recent, and a browser left open all afternoon
- * has an afternoon-old one. The connection read is what refreshes them (the daemon waits on a quota sweep
- * before answering it), so arriving on this tab is exactly the moment to ask. AiAccountSection does the same
- * for the rings it draws. */
+// Refreshes on arrival since plan pools are account-wide (other clients spend the same allowance), so a stale
+// read looks confidently wrong. Same pattern as AiAccountSection's rings.
 onMounted(() => void refreshConnections());
 
-// The connection read is a module-level flag rather than a query, but the wait is the same one and gets the same
-// gate: nothing is drawn for a read that lands in the first beat.
+// Module-level flag, not a query, but gated the same way: nothing draws for a read landing in the first beat.
 const outline = useSandboxOutline(computed(() => !accountsLoaded.value));
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
 const groups = computed(() => planLimitGroups(rows.value));
 const summary = computed(() => planLimitSummary(rows.value));
 
-// ---- capacity ------------------------------------------------------------------------------------------------
+// capacity
 
-/* The bar covers every account whose headroom is KNOWABLE. A plan that publishes no limits is not a degree of
- * fullness and gets a sentence instead of a segment: two achromatic segments side by side would read as one
- * fact split in half. */
+// Excludes unpublished-limit accounts (not a degree of fullness); shown as a count, not an achromatic segment.
 const CAPACITY_BANDS = PLAN_LIMIT_BANDS.filter((band) => band !== `none`);
 const capacityTotal = computed(() => CAPACITY_BANDS.reduce((sum, band) => sum + summary.value.counts[band], 0));
 const capacity = computed(() =>
@@ -79,19 +57,15 @@ const capacity = computed(() =>
     })),
 );
 
-// ---- groups --------------------------------------------------------------------------------------------------
+// groups
 
-/* Up to three accounts render as the meters themselves. Folding three rows behind a click hides something that
- * already fits, and a "distribution" of three bars is just three bars: the aggregate only starts paying for
- * itself when the list stops fitting on screen. */
+// Up to 3 accounts render inline; folding what already fits hides it for no gain.
 const INLINE_LIMIT = 3;
 const isInline = (group: PlanLimitGroup): boolean => group.rows.length <= INLINE_LIMIT;
-// A provider with ONE account has no list to head: the group row IS that account's row, so it carries the label
-// and the read age itself. Rendering both produced "Kimi Code · 1 account" directly above a lone "kimi".
+// A single-account provider has no list to head; the group row is that account's row.
 const single = (group: PlanLimitGroup): PlanLimitRow | undefined => (group.rows.length === 1 ? group.rows[0] : undefined);
 
-// What the provider line says after the provider's name: the lone account it holds, named, and identified when
-// the name alone doesn't: else how many there are. "1 account" is a fact nobody came here for.
+// Names the lone account (with identity if needed), or the count; "1 account" tells nobody anything.
 const groupNote = (group: PlanLimitGroup): string => {
     const account = single(group);
     if (account === undefined) {
@@ -100,14 +74,12 @@ const groupNote = (group: PlanLimitGroup): string => {
     return account.identity === undefined ? account.label : `${account.label} · ${account.identity}`;
 };
 
-// Never all 31: past this the bars are hairlines and the roster is the better answer. Rows arrive tightest-first,
-// so a truncated strip keeps the accounts that gate a turn, and says that it truncated.
+// Caps the strip (past this, bars are hairlines); tightest-first order keeps what matters when truncated.
 const MAX_BARS = 24;
 const barsOf = (group: PlanLimitGroup): readonly PlanLimitRow[] => group.rows.slice(0, MAX_BARS);
 
-/* What a FOLDED group states in place of a percentage of its own: the account that gates it first, or, when
- * nothing in it has been read, which kind of nothing that is. An inline group says nothing here: its meters are
- * directly below, and a summary of three visible rows is the same sentence twice. */
+// What a folded group states instead of an aggregate: its tightest account, or which kind of nothing
+// (unread/no limits). Inline groups say nothing here, their meters are already visible below.
 const groupState = (group: PlanLimitGroup): string => {
     if (group.tightest?.percent !== undefined) {
         return `tightest ${formatUtilization(group.tightest.percent, group.tightest.stale)} · ${group.tightest.label}`;
@@ -123,24 +95,21 @@ const barTooltip = (row: PlanLimitRow): string =>
         ? `${row.label} · no reading yet`
         : `${row.label} · ${row.binding?.label ?? ``} ${formatUtilization(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
 
-// ---- attention -------------------------------------------------------------------------------------------------
+// attention
 
-/* A cap, because "every credential in the fleet expired at once" is a real morning: a laptop that slept through
- * a token rotation, a provider that revoked a batch, and it must not turn the section back into the column this
- * redesign removed. Generous enough that the ordinary case (one or two) never trips it. */
+// Caps a fleet-wide expiry (real: a slept laptop, a mass revoke) from reverting this to a long column.
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
 const attentionShown = computed(() => (attentionExpanded.value ? summary.value.attention : summary.value.attention.slice(0, ATTENTION_SHOWN)));
 const attentionHidden = computed(() => summary.value.attention.length - attentionShown.value.length);
 
-// ---- the roster ------------------------------------------------------------------------------------------------
+// the roster
 
 const rosterOpen = ref(false);
 const rosterProvider = ref<string | undefined>(undefined);
 const rosterQuery = ref(``);
 
-// A group's "view accounts" opens the ONE detail view rather than a second inline copy of it: the table is where
-// per-account facts live, so a reader who drills in from two places lands in the same place.
+// Opens the one roster table rather than a second inline copy; every drill-in path lands in the same place.
 const openRoster = (provider: string): void => {
     rosterProvider.value = provider;
     rosterOpen.value = true;
@@ -157,15 +126,12 @@ const roster = computed(() => {
 </script>
 
 <template>
-    <!-- A @container over the whole section: every column below thins out against the PANEL, which is a hub
-         section inside the workspace pane and never the width of the window. -->
+    <!-- `@container` over the section: columns thin against the panel, not the window's width. -->
     <RowGroup v-if="rows.length > 0" id="accounts" class="@container" label="Plan limits">
-        <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
-             on" is the question, and it survives having 31 of them. -->
+        <!-- 1. CAPACITY: headline is a count, not a percentage, since that question survives having 31 accounts. -->
         <RowNote variant="block">
             <div class="flex flex-col gap-2">
-                <!-- The headline answers the question the section is opened with: can I start work, and if not,
-                 when: rather than counting connections, which the roster below does anyway. -->
+                <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <span class="text-sm text-content">
                         {{ summary.counts.room }} of {{ summary.accounts }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
@@ -175,8 +141,7 @@ const roster = computed(() => {
                     </span>
                 </div>
 
-                <!-- Segments are ACCOUNT COUNTS. A 2px surface gap does the separating, so no segment needs a
-                 border, and a band with one account still draws a visible sliver. -->
+                <!-- Segments are account counts; a surface gap separates them, so even a single account draws a visible sliver. -->
                 <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
                     <div
                         v-for="segment in capacity"
@@ -188,8 +153,7 @@ const roster = computed(() => {
                     />
                 </div>
 
-                <!-- The legend IS the sentence: every band is a swatch AND its count AND its word, so nothing here
-                 is carried by colour alone. -->
+                <!-- Legend is the sentence: swatch, count and word together, nothing carried by colour alone. -->
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
                     <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
                         <span class="size-2 shrink-0 rounded-2xs bg-current" :class="planLimitBandTone(segment.band)" />
@@ -201,28 +165,18 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-        <!-- 2 · PROVIDERS. The provider is the CHOICE a reader makes here — the translator balances turns
-             across a provider's accounts, so "which of my 31 Google accounts" is nobody's decision — which
-             makes it the tier that has to be separated, and the separator is ALIGNMENT rather than a frame.
-             Each provider's mark sits in a rail of its own; its NAME is the only thing on the column beside
-             that rail; everything the provider holds hangs off a spine under the mark, one step further in.
-             Read down the left edge and you get the list of providers, and nothing else on the panel.
-
-             A BORDERED CARD PER PROVIDER IS WHAT THIS REPLACED, and it blended the tiers rather than parting
-             them. The panel is already one bordered surface (RowGroup), so a card per provider is a second
-             frame inside it and an inset panel per account a third — and at three accounts those inner panels
-             read as cards in their own right, directly under cards they were nested in: an email came out
-             looking exactly like a provider, which is the confusion the boxes were drawn to fix. The tint
-             doing that work (`bg-overlay`) is also `bg-card`'s own colour in the LIGHT scheme, so half of it
-             was invisible there. Whitespace and a left edge cost no ink, work in both schemes, and cannot be
-             mistaken for one another. -->
+        <!--
+            2. PROVIDERS: the unit a reader actually chooses (the translator picks the account). Separated by alignment,
+            not framing: a rail with the mark, the name beside it, everything else hanging off a spine one step in, since nested bordered cards read
+            as false hierarchy (an account card reading as a provider).
+        -->
         <RowNote variant="block">
             <div class="flex flex-col gap-6">
                 <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-                    <!-- THE RAIL: the mark, and under it the line that says how far this provider reaches. The
-                     chip is the meter track's own tint of the TEXT colour, because that is the one inset that
-                     exists in both schemes — `bg-overlay` and `bg-canvas` are within a percent of `bg-card` in
-                     light, which is a grouping cue that disappears for half the app's readers. -->
+                    <!--
+                        Rail: the mark plus a line showing how far the provider reaches. Uses the text colour's own tint, not
+                        bg-overlay/bg-canvas, both near-identical to bg-card in light mode.
+                    -->
                     <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
                         <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
                             <ProviderLogo :provider="group.provider" class="text-xs" />
@@ -231,8 +185,7 @@ const roster = computed(() => {
                     </div>
 
                     <div class="flex min-w-0 flex-1 flex-col gap-2">
-                        <!-- `min-h-5` is the mark's own height, so the name keeps its line beside the mark however
-                         the metadata after it wraps. -->
+                        <!-- `min-h-5` matches the mark's height, so the name's line holds steady whatever the metadata wraps to. -->
                         <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
                             <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
                             <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
@@ -243,34 +196,31 @@ const roster = computed(() => {
                             <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
                         </div>
 
-                        <!-- ONE STEP IN FROM THE PROVIDER'S NAME. The name then owns its column outright, and an
-                         account heading — set smaller and lighter, and with no mark of its own — cannot be
-                         read as another provider, which is exactly what three emails under "Claude Code" used
-                         to be read as. -->
+                        <!--
+                            Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read
+                            as another provider.
+                        -->
                         <div class="flex flex-col gap-3 pb-1 pl-3">
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
-                                <!-- A hairline between accounts, and none above the first: three accounts of three pools each
-                                 is nine meters in one column, and without a break the reader has to count rows to know
-                                 which account a "95%" belongs to. It is the FAINT line and it starts inside the indent,
-                                 where the panel's own section dividers are full-bleed: a separator that is subordinate
-                                 has to look subordinate, or the panel reads as nine sections instead of four. -->
+                                <!--
+                                    Hairline between accounts (none above the first): nine pooled meters in one column need a break, or a "95%"
+                                    can't be traced to its account. Faint and indented, unlike the panel's own full-bleed dividers, so it stays
+                                    subordinate.
+                                -->
                                 <div
                                     v-for="(row, index) in group.rows"
                                     :key="row.id"
                                     class="flex flex-col gap-1.5"
                                     :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
                                 >
-                                    <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over
-                                     the pools it heads. It used to be set exactly like a pool label, same size and same
-                                     colour, directly above three of them: an email read as a fourth pool that happened
-                                     to have no meter, and the eye had nothing to group the meters by. -->
+                                    <!--
+                                        Account is its own tier, between the provider heading and the pools it heads, styled to not be mistaken for
+                                        either.
+                                    -->
                                     <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                         <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
-                                        <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
-                                         user's to rename and starts as whatever the provider offered, so one row reads
-                                         "Claude" beside two emails and identifies nothing: the same rule, and the same
-                                         answer, as the Agent tab's identity note. -->
+                                        <!-- Shown only when the renamable label doesn't already identify the account; same rule as the Agent tab. -->
                                         <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{
                                             row.identity
                                         }}</span>
@@ -291,18 +241,17 @@ const roster = computed(() => {
                                         }}
                                     </p>
 
-                                    <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is
-                                     the number this is opened for: by wrapping the meter onto its own full-width line;
-                                     with room, everything sits on one line in fixed columns so rows align. Measured on
-                                     the panel, not the window: this is a hub section inside the workspace pane. -->
+                                    <!--
+                                        Narrow: wraps the meter to its own line rather than dropping the reset date, the number this opens for.
+                                        Measured against the panel, not the window.
+                                    -->
                                     <div
                                         v-for="pool in row.pools"
                                         :key="pool.kind"
                                         class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                     >
                                         <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
-                                        <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
-                                         pool this screen has no reading for, and those mean opposite things. -->
+                                        <!-- A 0% pool still draws a sliver; an empty track would read the same as no reading at all, opposite facts. -->
                                         <div
                                             class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
                                         >
@@ -322,9 +271,7 @@ const roster = computed(() => {
                                 </div>
                             </template>
 
-                            <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track
-                             and never a zero-height bar: "0% used" and "we have no idea" are opposite claims, and the
-                             second one is what is true. -->
+                            <!-- Large provider: bars. No reading draws an empty track, never a zero-height bar; those are opposite claims. -->
                             <template v-else>
                                 <div class="flex h-5 items-end gap-0.5">
                                     <span
@@ -357,19 +304,14 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-        <!-- 3 · ATTENTION. One condition, so the FIX IS STATED ONCE and the list is nothing but accounts.
-             Every entry used to carry its own copy of "sign-in expired: reconnect it on the Agent tab", which
-             on a fleet meant the same eleven words down the whole column and the only part that varied, which
-             account: wedged between two repetitions of the part that didn't. The heading holds the condition
-             and the instruction; the rows hold names. -->
+        <!-- 3. ATTENTION: one condition, stated once in the heading; the fix stays there too, so rows hold nothing but names. -->
         <RowNote v-if="summary.attention.length > 0" variant="block">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span class="text-2xs font-medium text-danger">Sign-in expired · {{ summary.attention.length }}</span>
                     <span class="text-2xs text-subtle"> reconnect {{ summary.attention.length === 1 ? `it` : `them` }} on the Agent tab </span>
                 </div>
-                <!-- Names wrap as a set rather than stacking one per line: they are short, unordered and read by
-                 scanning for the one you recognise, so a column of them is height spent on nothing. -->
+                <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                     <span v-for="row in attentionShown" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
                         <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
@@ -425,8 +367,7 @@ const roster = computed(() => {
                         </thead>
                         <tbody class="text-muted">
                             <tr v-for="row in roster" :key="row.id" class="border-b border-line/50">
-                                <!-- Name over sign-in identity, because this table is where a reader comes to
-                                 reconcile ONE account and a name it can't place is the whole reason they came. -->
+                                <!-- Name over sign-in identity: reconciling an unplaceable name is exactly why a reader opens this table. -->
                                 <td class="max-w-56 py-1.5 pr-3">
                                     <span class="block truncate text-content">{{ row.label }}</span>
                                     <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
@@ -447,10 +388,10 @@ const roster = computed(() => {
         </RowNote>
     </RowGroup>
 
-    <!-- An unread state is not an empty one: until the connection read lands, this says nothing about having no
-         accounts. It used to say that in words ("Reading your connections…"), which is a sentence where a panel
-         goes, so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
-         its legend, which is the whole of what lands here. -->
+    <!--
+        An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a
+        "Reading..." sentence in its place.
+    -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
         <span class="sr-only">Reading your connections…</span>
@@ -460,9 +401,7 @@ const roster = computed(() => {
                     <span class="skeleton block h-4 w-52" />
                     <span class="skeleton ml-auto block h-2.5 w-32" />
                 </div>
-                <!-- The band strip is a single 1.5px-tall rule of segments, so its outline is one bar of that
-                 height rather than blocks: a placeholder thicker than the thing it stands for is a promise the
-                 panel then breaks. -->
+                <!-- Matches the strip's actual 1.5px height; a thicker placeholder would promise more than the real thing. -->
                 <span class="skeleton block h-1.5 w-full rounded-full" />
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />

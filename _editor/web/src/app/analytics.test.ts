@@ -2,16 +2,16 @@ import type { User } from "@intentic/api-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
 
-// Plain refs stand in for useAuth's module singletons; the mock factory closes over them so re-imported
-// analytics modules (vi.resetModules per test) keep watching the same instances.
+// Plain ref stands in for useAuth's module singleton; the mock closure keeps re-imported analytics modules
+// (vi.resetModules per test) watching the same instance.
 const user = ref<User | null>(null);
 vi.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
 vi.mock("posthog-js", () => ({
     default: { init: vi.fn(), identify: vi.fn(), reset: vi.fn(), capture: vi.fn(), register: vi.fn() },
 }));
 
-// `desktop` stands in for the app's initialization script (windows.rs), which is the only thing that tells this
-// SPA it is running inside the desktop app rather than a browser tab.
+// `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
+// the desktop app rather than a browser tab.
 const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }) => {
     vi.resetModules();
     vi.stubGlobal(`window`, {
@@ -40,8 +40,8 @@ describe(`initAnalytics`, () => {
 
     it(`identifies on session resolve and resets on sign-out`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
-        // The proxied api_host is what keeps replay alive past an ad blocker, and sessionStorage is what keeps
-        // one visit in one recording across reloads: both are load-bearing enough to pin here.
+        // Proxied `api_host` keeps replay alive past an ad blocker; `sessionStorage` keeps one visit as one recording
+        // across reloads.
         expect(posthog.init).toHaveBeenCalledWith(
             `phc_test`,
             expect.objectContaining({ api_host: `https://app.intentic.dev/wire`, persistence: `sessionStorage` }),
@@ -56,9 +56,8 @@ describe(`initAnalytics`, () => {
         expect(posthog.reset).toHaveBeenCalledTimes(1);
     });
 
-    /* The desktop app loads THIS SPA, so without a client tag on every event an app user and a browser user are
-     * the same row, and PostHog's own breakdown would call the app "Safari" on Linux and "Edge" on Windows.
-     * The install id is the join to what the app's own screens report about the same install. */
+    // Without a client tag, the desktop app (which loads this SPA) and a browser tab look like the same row, broken
+    // down by user agent instead. The install id joins this to what the app's own screens report.
     it(`tags every event with the client, and names the app when it is running inside one`, async () => {
         const { posthog: browser } = await bootAnalytics(`phc_test`);
         expect(browser.register).toHaveBeenCalledWith({ client: `browser` });
@@ -67,14 +66,15 @@ describe(`initAnalytics`, () => {
         expect(app.register).toHaveBeenCalledWith({ client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` });
     });
 
-    // reset() empties the store super properties live in, so a sign-out would otherwise strip the client tag off
-    // every event that follows it: on the desktop app, off exactly the sessions this exists to count.
+    // `reset()` empties the store super properties live in, so without re-registering, every event after a sign-out
+    // would lose its client tag, on desktop exactly the sessions this exists to count.
     it(`says which client it is again after a sign-out has cleared it`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
-        // Counted rather than asserted outright: `user` is a module singleton, so every boot in this file leaves
-        // a live watcher on it and a sign-out here runs all of them. What matters is that this one said it again.
+        // Counted, not asserted outright: `user` is a module singleton, so every boot in this file leaves a live
+        // watcher
+        // that a sign-out here also triggers.
         const said = vi.mocked(posthog.register).mock.calls.length;
 
         user.value = null;
@@ -86,9 +86,8 @@ describe(`initAnalytics`, () => {
         ]);
     });
 
-    // EasyPrivacy carries bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` rules that match on
-    // any host, so proxying alone still loses replay behind Brave/uBlock: the prefix is what misses them,
-    // and nginx.conf's `rewrite ^/wire/(.*/)sdk\.([^/]+)$` is what puts the name back.
+    // EasyPrivacy blocks bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` on any host, so proxying alone
+    // still loses replay to Brave/uBlock; the `sdk.` prefix misses those rules, and nginx.conf strips it back off.
     it(`prefixes SDK script filenames so filename-anchored blocker rules miss them`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
         const { prepare_external_dependency_script: prepare } = vi.mocked(posthog.init).mock.calls[0]![1]!;

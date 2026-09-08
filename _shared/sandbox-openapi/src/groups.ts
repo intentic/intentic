@@ -1,24 +1,6 @@
-/* THE 38 GROUPS OF THE DAEMON'S SURFACE, IN READING ORDER, each with the one line that says what it is FOR,
- * and the shelf it sits on.
- *
- * This is the only hand-written content in the generated document, and it is hand-written because it is the
- * one thing the contract cannot state: a route declares its own shape, but nothing in `oc.route` knows that
- * `agent` is the group most readers arrive for and `providers` is plumbing almost nobody calls directly.
- *
- * ORDER IS EDITORIAL AND ALPHABETICAL ORDER IS NOT AN OPTION. A reader opening the reference wants the agent
- * surface, then the tree it works on, then the machinery around both. Alphabetised, `activity` (an audit feed)
- * opens the document and `agent` (the reason the API exists) is third.
- *
- * SHELVES ARE CONSECUTIVE RUNS OF THAT ORDER, never a second ordering laid over the first. The reference site
- * builds its rail from `SPEC_SHELVES`, and the generated document orders its paths by this list; if a shelf
- * could gather groups from anywhere, the rail and the document would present two different books with the same
- * contents. `spec.test.ts` fails a shelf whose groups are not contiguous, so the two orders are one order.
- *
- * COMPLETENESS IS GUARDED, NOT TRUSTED. The tests walk the contract and fail if a group here has no routes or
- * a group in the contract has no entry, so adding a contract file is a build error until it is described. That
- * is the repo's discovery-over-enumeration rule applied to the one enumerated list that has to exist: a list of
- * 38 prose paragraphs cannot be derived, but its AGREEMENT with the code can be.
- */
+// The 38 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
+// contract group missing here or an entry with no routes.
 
 /** The shelves the reference rail is built from, in reading order. */
 export interface SpecShelf {
@@ -82,7 +64,7 @@ export interface SpecGroup {
 }
 
 export const SPEC_GROUPS: readonly SpecGroup[] = [
-    // ── Agents ────────────────────────────────────────────────────────────────────────────────────────
+    // Agents
     {
         name: "agent",
         shelf: "agents",
@@ -131,7 +113,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Scheduled and triggered work: what can trigger one here, what is configured, and switching one on or off, deleting it or firing it by hand. The other half is the approval queue — an automation set to ask first lands there each time it would have run.",
     },
 
-    // ── The workspace ─────────────────────────────────────────────────────────────────────────────────
+    // The workspace
     {
         name: "workspace",
         shelf: "workspace",
@@ -180,7 +162,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         description: "The ports something is answering on, and giving one an address on the outside or taking that away.",
     },
 
-    // ── Agent setup ───────────────────────────────────────────────────────────────────────────────────
+    // Agent setup
     {
         name: "personas",
         shelf: "kit",
@@ -222,7 +204,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Settings next door are read by a parser; this one is read by a model. The policy is prose about which of the things an agent may already do are worth interrupting you about, and the two policy routes read and replace it whole. The third is the log every verdict lands in, including the ones nobody was interrupted for, and it is what makes the document writable: an owner can only author a rule for behaviour they can see.",
     },
 
-    // ── Connected systems ─────────────────────────────────────────────────────────────────────────────
+    // Connected systems
     {
         name: "capabilities",
         shelf: "connections",
@@ -272,7 +254,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Runs the sandbox's own command-line tool and streams its output line by line. The reconcile is separated out because it takes minutes: it starts a background job and answers at once, and its event stream replays from the beginning and then follows live, so a page refresh does not lose the progress.",
     },
 
-    // ── Models and accounts ───────────────────────────────────────────────────────────────────────────
+    // Models and accounts
     {
         name: "accounts",
         shelf: "models",
@@ -314,7 +296,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "One read: the spending record over a range of days, grouped finely enough that every cost screen is a rearrangement of it rather than a second call.",
     },
 
-    // ── Ship and share ────────────────────────────────────────────────────────────────────────────────
+    // Ship and share
     {
         name: "ci",
         shelf: "ship",
@@ -364,7 +346,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "The owner's side of the bug intake, and the counterpart to the pipelines group: an inbox of failures with one route that hands a failure to an agent rather than to you. Reports arrive at the public /intake/… endpoints from the reporter embedded on your sites — a separate prefix precisely because any browser on the internet can reach those and none of these — and the daemon groups them by fingerprint, so a crash that hit a thousand browsers is one row with a count. These routes read that inbox, move a row between open, resolved and ignored, start a turn on one, throw one away, and answer which sites have actually loaded the reporter. Nothing here creates an issue.",
     },
 
-    // ── The sandbox itself ────────────────────────────────────────────────────────────────────────────
+    // The sandbox itself
     {
         name: "system",
         shelf: "daemon",

@@ -7,12 +7,12 @@ import type { HostBindings } from "./apiImpl";
 import { loadExtensions, retireExtensions } from "./loader";
 
 let started = false;
-// The live host bindings, captured at boot so a later reconcile can re-run the loader without rebuilding them
-//, they close over composables that need the shell's vue-query context, which only this file runs inside.
+// Host bindings, captured at boot so a later reconcile can rerun the loader without rebuilding them.
 let bindings: HostBindings | undefined;
 
-// Re-read the daemon's extension list and converge the shell onto it: the Extensions tab calls this after
-// flipping a switch, and the loader activates, supersedes or retires each extension accordingly.
+// Re-reads the daemon's extension list and converges the shell onto it.
+// Called by the Extensions tab after a switch is flipped; the loader activates, supersedes, or retires each extension
+// accordingly.
 export async function reloadExtensions(): Promise<void> {
     if (bindings === undefined) {
         throw new Error(`the extension host has not booted`);
@@ -20,23 +20,10 @@ export async function reloadExtensions(): Promise<void> {
     await loadExtensions(bindings);
 }
 
-/* Boots every extension as soon as the active sandbox is reachable, including the first-party ones compiled
- * into this bundle, because which extensions exist and which the owner left on is the daemon's list to answer
- * (loader.ts). That waits one local round-trip before the rail gains its extension tiles, and it is the right
- * wait: each of those views is a daemon client, and a list that fails still lands them via the loader's
- * unlisted path. Called from WorkspaceShell, the facts composables need its vue-query context, and the shell
- * is the persistent post-login surface whose lifetime the loaded extensions share.
- *
- * PER SANDBOX, NOT PER PAGE LOAD, and that used to be the other way around. The extensions a box has installed,
- * which of them its owner switched on, and everything each one has read are all one sandbox's answers, so
- * carrying them across a switch put the previous box's tiles in the rail, its numbers on their badges and its
- * document icons on this box's file tree, none of which corrected until a poll happened to come round (ten
- * minutes, for the slowest). The switch is therefore a full re-scope: retire, then load against the new list.
- *
- * The two watches are deliberately separate. Retiring must happen the INSTANT the id changes, whether or not
- * the new box is reachable yet, a stale tile is worse than an absent one, and a box that never connects must
- * not leave the previous one's rail standing in its place. Loading has to wait for reachability, and also has
- * to fire on a plain reconnect (the initial load, an outage recovering), which is not a switch at all. */
+// Boots extensions once the active sandbox is reachable; a switch does a full re-scope (retire, then reload) rather
+// than carrying the previous box's state across.
+// The two watches are separate on purpose: retiring fires the instant the id changes even if the new box isn't
+// reachable yet, while loading waits for reachability and also fires on a plain reconnect.
 export function useExtensionHost(): void {
     if (started) {
         return;
@@ -50,8 +37,7 @@ export function useExtensionHost(): void {
         capabilities: () => capabilities.value,
     };
 
-    // Which sandbox the extensions currently on screen belong to. `loading` alone can't answer that: it means
-    // "a pass has been started", and after a switch the pass that was started is the wrong sandbox's.
+    // Which sandbox the on-screen extensions belong to; loading can't say, once a switch invalidates the pass.
     let loadedFor: string | undefined;
     let loading = false;
 

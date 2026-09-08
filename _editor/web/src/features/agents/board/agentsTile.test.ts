@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject mounts: `watchAgentsScope` holds a subscription for a component's lifetime, and
-// the property worth pinning is that it lets go. The rest is derivation and would run anywhere.
+// jsdom: the subject mounts and holds a subscription for the component's lifetime; the property under test is that it
+// lets go.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, ref } from "vue";
 
-/* WHAT THE AGENTS TILE SAYS. Two facts are pinned here and neither can be read off the code:
- *
- * THE COUNT FOLLOWS THE BOARD'S SCOPE. This is the §9 rule that shipped unwired: a rail badge of 2 opening onto
- * a board showing 5 is worse than no badge, and so is a silent rail over an agent blocked in the box the board
- * is currently about. Both directions are tested, because the bug was one number serving two scopes.
- *
- * AND IT SAYS WHAT IT COULD NOT SEE. A badge is one digit and cannot be partly unknown, so a box that did not
- * answer has to be named in words beside it, or the digit reads as the whole answer. */
+// Two facts pinned: the badge count follows the board's scope (both directions), and it says what it could not see
+// (silent boxes), since a badge is one digit and cannot be partly unknown.
 
 const attention = ref(0);
 vi.mock("../fleet/useAgents", () => ({ useAgents: () => ({ attention }) }));
@@ -24,8 +17,7 @@ vi.mock("../../sandbox/live/fleetAcross", () => ({ silentBoxes, subscribe }));
 
 const readingAcross = ref(false);
 const acrossAttention = ref(0);
-// The read-marker watch is the scope module's own (fleetScope), tested there against a real conversation; here
-// it only has to be registered, so it is a spy the mount assertions can ignore.
+// The read-marker watch is fleetScope's own, tested there; here it is a spy the mount assertions can ignore.
 const watchRemoteSeen = vi.fn();
 vi.mock("../fleet/fleetScope", () => ({
     readingAcross,
@@ -36,7 +28,7 @@ vi.mock("../fleet/fleetScope", () => ({
 
 const { agentsAttention, agentsBadge, agentsScopeNote, watchAgentsScope } = await import("./agentsTile");
 
-// The composable under a real component, since its whole contract is "for as long as this is mounted".
+// The composable inside a real component: its whole contract is "for as long as this is mounted".
 const mount = (): { unmount: () => void } => {
     const app = createApp(
         defineComponent({
@@ -67,7 +59,7 @@ describe("what the badge counts", () => {
         expect(agentsBadge.value).toMatchObject({ count: 2 });
     });
 
-    // The half that was missing: with the board wide, the tile is about every box the board is about.
+    // With the board wide, the tile counts every box the board is about.
     it("counts every sandbox the board is reading", () => {
         attention.value = 2;
         acrossAttention.value = 3;
@@ -76,7 +68,7 @@ describe("what the badge counts", () => {
         expect(agentsBadge.value).toMatchObject({ count: 5 });
     });
 
-    // …and the other direction, which is the case a box-local badge is silent about entirely.
+    // The other direction: a badge for work that is only in another sandbox.
     it("badges for work that is only in another sandbox", () => {
         acrossAttention.value = 1;
         readingAcross.value = true;
@@ -88,8 +80,8 @@ describe("what the badge counts", () => {
         expect(agentsBadge.value).toBeUndefined();
     });
 
-    /* THE SPLIT IS THE NUMBER THAT DECIDES THE NEXT PRESS: open the board, or cross to that box. One sentence
-     * on the tile's own label, never a second badge. */
+    // The split is the number that decides the next press: open the board, or cross to that box. One sentence, never a
+    // second badge.
     it("says how much of the total is elsewhere", () => {
         attention.value = 2;
         acrossAttention.value = 3;
@@ -115,8 +107,8 @@ describe("what the tile says about its own scope", () => {
         expect(agentsScopeNote.value).toBe(`Counting every sandbox`);
     });
 
-    // A count over boxes that did not all answer is partial, and the tile has one digit and no way to show it:
-    // so it names them. Rendering the silence as nothing is the `live: true` failure this design keeps catching.
+    // A count over boxes that didn't all answer is partial; the tile has one digit, so it names them instead of staying
+    // silent.
     it("names the boxes it could not reach", () => {
         readingAcross.value = true;
         silentBoxes.value = [{ sandbox: { name: `Laptop` } }, { sandbox: { name: `Pi` } }];
@@ -143,7 +135,7 @@ describe("keeping the other boxes live", () => {
         app.unmount();
     });
 
-    // Narrowing the scope stops the poll: the store's whole claim is that it is inert when nothing reads it.
+    // Narrowing the scope stops the poll: the store is inert when nothing reads it.
     it("lets go when the scope narrows again", async () => {
         const app = mount();
         readingAcross.value = true;
@@ -164,7 +156,7 @@ describe("keeping the other boxes live", () => {
         app.unmount();
     });
 
-    // A shell that goes away takes the poll with it, whatever the scope was when it left.
+    // An unmounted shell takes the poll with it, whatever the scope was.
     it("releases on unmount", async () => {
         const app = mount();
         readingAcross.value = true;

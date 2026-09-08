@@ -18,15 +18,11 @@ import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { publishRuntimeChange } from "./runtime-watch.js";
 
-/* The system routes, driven over the daemon's HTTP surface exactly as the browser drives them.
- * Split out of app.integration.test.ts, which had grown to 116 tests across every route in the daemon:
- * one file that two agents working on unrelated features collided in every time. The fakes and the client
- * are shared (route-services.testing.ts and its siblings); what lives here is what these routes do. */
+// System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
+// (route-services.testing.ts and siblings); what lives here is what these routes do.
 
 test("system.terminals reports an empty list, not an error, when there is no tmux server to ask", async () => {
-    // Pointed at a socket directory that holds no server: `list-panes` exits non-zero and that is an empty list.
-    // Both vars matter: TMUX_TMPDIR picks the socket, and $TMUX (set whenever the suite itself runs inside tmux)
-    // would otherwise send the query to the REAL server, where this machine's own agent-* sessions live.
+    // Points at an empty socket dir; TMUX_TMPDIR picks it, and clearing $TMUX keeps the query off the real server.
     vi.stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
     vi.stubEnv("TMUX", undefined);
     const client = clientFor(createApp(services()));
@@ -154,7 +150,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
     });
     expect((await app.request("/system/control/tokens/ct-9", { method: "DELETE" })).status).toBe(200);
     expect((await app.request("/system/control/tokens/nope", { method: "DELETE" })).status).toBe(404);
-    // Not the owner → the gate closes the whole surface.
+    // Not the owner: the gate closes the whole surface.
     const denied = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
     expect((await denied.request("/system/control/tokens", { method: "POST" })).status).toBe(401);
 });
@@ -165,8 +161,7 @@ test("minting without a usable scope is refused rather than defaulted", async ()
     );
     const mintWith = (body: unknown) =>
         app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    // Absent, misspelled, and not-a-string all land the same way: a 400 naming the scopes that exist. No
-    // default, because every default here is wrong for somebody (see the route).
+    // Absent, misspelled, and non-string scopes all land as a 400 naming valid scopes; no default exists here.
     expect((await mintWith({ label: "zed" })).status).toBe(400);
     expect((await mintWith({ label: "zed", scope: "editorr" })).status).toBe(400);
     expect((await mintWith({ label: "zed", scope: 7 })).status).toBe(400);
@@ -185,8 +180,7 @@ test("system.info reports the sandbox image tag and exact bundled version", asyn
 });
 
 test("presence: an /events connection joins the roster and a /system/presence report fans back out", async () => {
-    // Fake auth resolving a full identity, exercises the whole seam: middleware → context → handler →
-    // registry → stream.
+    // Fake auth resolving a full identity, exercising the whole seam: middleware, context, handler, registry.
     const app = createApp(
         services({
             auth: {
@@ -232,8 +226,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
 });
 
 test("events: the first frame is the workspace-identity hello, stable across connections", async () => {
-    // An in-memory files seam so the id minted by the first connection persists to the second (the default
-    // fake forgets writes): the browser relies on this stability to tell a surviving workspace from a wiped one.
+    // In-memory files seam: the id from the first connection persists; the default fake forgets writes.
     const disk = new Map<string, string>();
     const app = createApp(
         services({
@@ -268,8 +261,7 @@ test("events: the hello names the daemon's build and where its boot is, then str
     const controller = new AbortController();
     const frames = (await client.system.events({}, { signal: controller.signal }))[Symbol.asyncIterator]();
 
-    // /events answers BEFORE the gate on purpose: this frame is the only thing telling a browser that a daemon
-    // it can reach is not a daemon it can read yet.
+    // /events answers before the gate: this frame is the only sign a reachable daemon isn't yet a readable one.
     const hello = (await frames.next()).value;
     expect(hello).toMatchObject({
         kind: "hello",
@@ -278,9 +270,8 @@ test("events: the hello names the daemon's build and where its boot is, then str
         boot: { ready: false, steps: [{ key: "registry", state: "pending" }] },
     });
 
-    // …and each transition re-frames it, so a browser connected mid-boot follows along rather than guessing.
-    // The presence + fleet subscriptions push their own immediate snapshots onto this stream, so pull past
-    // whatever the connect produced rather than assuming an order the contract never promised.
+    // Each transition re-frames the boot state; presence and fleet also push their own snapshots on connect, so don't
+    // assume a fixed frame order.
     const nextBoot = async () => {
         for (;;) {
             const { value, done } = await frames.next();
@@ -301,12 +292,8 @@ test("events: the hello names the daemon's build and where its boot is, then str
     controller.abort();
 });
 
-/* WHO IS ENROLLED FOR DESKTOP SYNC, READ OFF THE DEVICE LIST, which is where that fact lives now.
- *
- * /system/sync used to answer it as `syncingFrom` plus `mirroredBy`: the enrollment store flattened into one
- * holder and the names of everybody else, the shape a card wanted when it presented desktop sync as a single
- * property of the sandbox. It is a property of each DEVICE, so each row carries its own, and these tests ask
- * the same question of the same route the view does. */
+// Enrollment is a property of each device, read off the device list, not one syncingFrom/mirroredBy pair on the
+// sandbox; these tests ask the same route the view does.
 const enrollments = async (app: { request: (path: string) => Promise<Response> | Response }): Promise<{ machine: string; mode: string }[]> => {
     const body = (await (await app.request("/system/devices")).json()) as { devices: { sync?: { machine: string; mode: string } }[] };
     return body.devices.flatMap((row) => (row.sync === undefined ? [] : [{ machine: row.sync.machine, mode: row.sync.mode }]));
@@ -315,8 +302,7 @@ const enrollments = async (app: { request: (path: string) => Promise<Response> |
 test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {
     const svc = services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } });
     const app = createApp(svc);
-    // Empty body: a valid pairing must get past auth and fail on key validation (400), never on auth (401):
-    // the regression was the global bearer middleware 401ing before the route's own pairing check ran.
+    // Empty body: a valid pairing must fail on key validation (400), not on auth (401).
     const post = (headers: Record<string, string> = {}) =>
         app.request("/system/authorized-key", {
             method: "POST",
@@ -328,10 +314,7 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
 
-/* A sandbox on the platform's own reachability fabric: the default, and the one that could not sync at all.
- * Its shares are HTTP, so there was no `ssh-<id>` name to hand Mutagen and the enroll answered 409 on the ONE
- * path the setup wizard offers. The transport is the daemon's own HTTPS surface now, so this sandbox enrolls
- * like any other and the card reads `available`. */
+// A fabric sandbox has HTTP shares, not an ssh-<id> name; sync now goes over the daemon's own HTTPS surface.
 test("a sandbox on intentic's own fabric enrolls for sync like every other one", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-home-"));
     const svc = services({
@@ -357,10 +340,9 @@ test("a sandbox on intentic's own fabric enrolls for sync like every other one",
 });
 
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
-    // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it: point both at
-    // temp dirs so neither lands on the real /history nor in the real home.
+    // Enrollment writes under historyRoot and derives ~/.ssh/authorized_keys from it; point both at temp dirs.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
-    // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
+    // connectToken and publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
     const svc = services({
         config: {
             ...testConfig,
@@ -370,7 +352,7 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
         },
     });
     const app = createApp(svc);
-    // A fresh single-use SYNC pairing per call (the owner's file-sync path); the key's comment is the machine label.
+    // A fresh single-use SYNC pairing per call; the key's comment is the machine label.
     const enroll = (key: string, extra: Record<string, string> = {}) =>
         app.request("/system/authorized-key", {
             method: "POST",
@@ -390,10 +372,7 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     // An explicit takeover replaces the key; the status route now reports the new holder.
     expect((await enroll(KEY_B, { "x-intentic-sync-takeover": "1" })).status).toBe(200);
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true });
-    /* WHO HOLDS SYNC IS A FACT ABOUT A DEVICE, so it is read off the device list rather than off the sync
-     * status, which used to flatten the enrollment store into one `syncingFrom` name for a card that thought a
-     * sandbox has one desktop sync. The displaced machine is gone from the list entirely: a takeover revokes
-     * its key, so it is no longer a device of this sandbox's at all. */
+    // Sync holder is read off the device list, not sync status; a takeover revokes the displaced machine's key too.
     expect(await enrollments(app)).toEqual([{ machine: "machine-b", mode: "sync" }]);
 });
 
@@ -420,8 +399,7 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll: n
     const c = await enrollMirror("ssh-ed25519 CCC laptop-c");
     expect(c.status).toBe(200);
     expect(await c.json()).toMatchObject({ ok: true, mode: "mirror" });
-    // Three rows, each mirroring, none of them holding file sync: the list IS the answer now, one entry per
-    // enrolled device, rather than a holder plus the names of everybody else.
+    // Three mirroring rows, none holding file sync: one entry per enrolled device is the whole answer.
     expect(await enrollments(app)).toEqual([
         { machine: "laptop-a", mode: "mirror" },
         { machine: "laptop-b", mode: "mirror" },
@@ -475,9 +453,7 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
     // A stale token that matches nothing is a 404.
     expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(404);
 
-    /* THE OWNER'S REVOKE, WHICH IS PER MACHINE. What it replaced cleared the whole store, because the only
-     * surface that could reach it treated desktop sync as one property of the sandbox: unpairing one old laptop
-     * cost every other device its access. Now the name of the row IS the address of the revoke. */
+    // The owner's revoke is per machine, addressed by the row's name, not a whole-store clear.
     expect((await app.request("/system/authorized-key/laptop-b", { method: "DELETE" })).status).toBe(200);
     expect(await enrollments(app)).toEqual([]);
     // A machine nobody is enrolled under is a 404 rather than a cheerful no-op.
@@ -485,22 +461,14 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
 });
 
 test("events: every runtime domain that moves reaches the browser's stream", async () => {
-    /* THE FEED THAT REPLACED THE POLLS, over the wire the browser actually reads.
-     *
-     * Terminals, panels, ports, browsers and subagents each used to carry their own timer because none of them
-     * has a file for the watcher to see. They have no timer now, so this frame is their whole live feed, which
-     * makes "the frame arrives" the property the whole change rests on. */
+    // Terminals, panels, ports, browsers, subagents have no watcher file; this frame is their whole live feed.
     const client = clientFor(createApp(services()));
     const controller = new AbortController();
     const frames = (await client.system.events({ clientId: "runtime-1" }, { signal: controller.signal }))[Symbol.asyncIterator]();
 
-    /* Read until the wanted domains have all been seen. Deliberately not "the next frame carries both": the bus
-     * rate-limits PER DOMAIN, so a domain still inside its window rides the following frame instead of holding
-     * the other one back, which is the property that keeps a panel starting from feeling as slow as the
-     * chattiest thing in the sandbox, and would make a single-frame assertion flaky against the sampler running
-     * beside it. What must hold is that everything published arrives. */
-    // Returns what it actually saw arrive, so the caller can assert on it rather than on the absence of a
-    // throw: a test whose only failure mode is an exception says nothing about what it proved.
+    // Reads until every wanted domain has been seen, not until one frame carries them all: the bus rate-limits per
+    // domain, so one can ride a later frame without the other waiting on it.
+    // Returns what it actually saw arrive, so the caller can assert on it rather than the absence of a throw.
     const awaitDomains = async (wanted: readonly string[]): Promise<readonly string[]> => {
         const outstanding = new Set(wanted);
         const delivered: string[] = [];
@@ -520,11 +488,7 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
         return delivered;
     };
 
-    /* Wait for the stream to be LIVE before publishing anything. The route sends its hello frame before it
-     * subscribes to any feed, and a change published with nobody subscribed is dropped rather than queued
-     * (runtime-watch.ts), so a publish issued between the two waits forever for a frame nobody made. A browser
-     * is never in that gap; it holds a pull open. The presence frame is the proof of arrival: the route enqueues
-     * it from inside the same block that registers the runtime listener. */
+    // Waits for stream to go live before publishing, since a publish with nobody subscribed is dropped, not queued.
     let live = false;
     while (!live) {
         const { value, done } = await frames.next();
@@ -542,23 +506,15 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
 });
 
 test("events: the beat states the fleet revision it was sent at, so a browser can tell a roster went missing", async () => {
-    /* WHY A LIVENESS FRAME CARRIES A NUMBER. The fleet roster is push-only: this stream frames it on every
-     * registry change and the browser applies what arrives. Nothing in that arrangement can report the snapshot
-     * that never arrived — dropped by the browser's revision guard, delivered into a store instance nothing
-     * renders any more, lost with a consumer that stopped pulling — so the board simply stopped moving at that
-     * instant and only a reload put it right.
-     *
-     * The beat is where the answer belongs because of WHEN it is sent: only with this connection's queue empty,
-     * so everything the daemon meant to say has already gone out. That is what makes the number a promise
-     * ("this is what you should be holding") rather than a race, and what lets the browser answer a
-     * disagreement with one read instead of a reload (useAgents-registry's auditRoster). */
+    // The fleet roster is push-only, so a missed snapshot has no other way to surface; the heartbeat carries the roster
+    // revision, sent only once the connection's queue is empty, so a mismatch tells the browser to re-read rather than
+    // reload.
     const svc = services();
     const client = clientFor(createApp(svc));
     const controller = new AbortController();
     const frames = (await client.system.events({ clientId: "beat-1" }, { signal: controller.signal }))[Symbol.asyncIterator]();
 
-    // Read to the next beat, keeping the revision of the last roster this connection was sent on the way. The
-    // pair is the whole invariant: what the beat says, and what it was actually told before saying it.
+    // Reads to the next beat, tracking the last roster revision actually sent; the pair is the invariant under test.
     const toBeat = async (roster: number | undefined): Promise<{ beat: number; roster: number }> => {
         let last = roster;
         for (;;) {
@@ -571,8 +527,7 @@ test("events: the beat states the fleet revision it was sent at, so a browser ca
             }
             if (value.kind === "heartbeat") {
                 if (last === undefined) {
-                    // Every connection is sent the roster on subscribe, before it can ever go idle enough to
-                    // beat. A beat arriving first would mean the number below stands for nothing.
+                    // Every connection gets the roster on subscribe, before it can go idle enough to beat.
                     throw new Error(`the connection beat before it was ever sent a roster`);
                 }
                 return { beat: value.rev, roster: last };
@@ -580,8 +535,7 @@ test("events: the beat states the fleet revision it was sent at, so a browser ca
         }
     };
 
-    // The immediate snapshot every connection opens with, then a published change on top of it: an empty
-    // archive moves no agent and broadcasts anyway, so what this measures is the beat rather than the archiving.
+    // An immediate snapshot on open, then a no-op archive call: it broadcasts anyway, so this measures the beat.
     const opened = await toBeat(undefined);
     expect(opened.beat).toBe(opened.roster);
 

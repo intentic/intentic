@@ -3,67 +3,24 @@ import { Button, Icon, type IconName, InfoHint, useDevice } from "@intentic/ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { type Notification, type NotificationAction, type NotificationTone, useNotifications } from "./notifications";
 
-/* THE ONE PLACE THIS APP FLOATS ANYTHING OVER ITSELF.
- *
- * The store (composables/notifications.ts) says what is on screen and why. What lives here is the LANE: one
- * bottom-right column, one card shape, one z-tier, and the timing — because the timing depends on the pointer,
- * which is a view's business and not a store's.
- *
- * WHY BOTTOM RIGHT AND WHY ONLY ONE. Before this there were four anchors (top centre, bottom centre, bottom
- * centre plus a hardcoded 64px, and a bottom-right corner that three unrelated components each believed was
- * theirs alone). None of that was legible: position said nothing about what kind of message it was, and two
- * cards choosing the same corner simply overlapped, because no one of them could know about the others. A lane
- * fixes both at once. Everything is in one place, so there is one place to look; and everything is in one
- * component, so stacking is arithmetic instead of luck.
- *
- * IT GROWS UPWARD FROM THE CORNER, which is the whole reason the store orders items the way it does: the last
- * child is anchored and the first child is the one that moves. Receipts are first, so the thing that comes and
- * goes several times a minute never shifts a card someone is reading or reaching for; questions are last, so
- * the thing still owed an answer sits at the fixed point the eye already knows.
- *
- * THE WRAPPER IS INERT AND THE CARDS ARE NOT, or the lane would eat clicks on whatever it floats over — the
- * chat panel and the workspace tree both run all the way into this corner.
- *
- * ON MOBILE IT CLEARS THE TAB BAR rather than sitting on it. The bar is the app's primary navigation at that
- * width; a card parked over it would cover a destination, and a card that covers a destination is a card people
- * learn to close before reading. */
+// The one place the app floats anything over itself: the store decides what and why, this file is the lane
+// (layout, card shape, timing). The wrapper is inert; only the cards catch pointer events. It grows upward from
+// the bottom-right, last item anchored, so receipts (frequent) come first and questions (fixed point) last.
 
 const { notifications, receipt, dismissReceipt } = useNotifications();
 const { mobile } = useDevice();
 
-// Long enough to read a short sentence and reach for the Undo, short enough that it reads as "that just
-// happened" rather than as a new thing on screen.
+// Long enough to read the sentence and reach for Undo; short enough to read as something that just happened.
 const RECEIPT_MS = 7_000;
-// A problem gets longer, because its sentence is longer and it is doing more work: a completion confirms
-// something the user already expected, while this one is telling them why the thing they asked for did not
-// arrive, and if it expires unread they are back to a button that did nothing.
+// Longer than RECEIPT_MS: a problem's sentence is longer, and expiring unread leaves a button that did nothing.
 const PROBLEM_MS = 12_000;
 
-/* A receipt PAUSES while hovered. Vanishing under the cursor that came for its Undo would fail the affordance
- * at the only moment it is ever wanted. The window restarts on each new receipt: the watch reads the ref
- * itself, so replacing it re-arms the full dwell rather than inheriting the tail of the one before.
- *
- * WHICH receipt is under the pointer, not WHETHER one is, and the difference is the whole correctness of the
- * pause. A card is hovered by an event and un-hovered by its pair, but the card is also the thing that GOES
- * AWAY: pressing Undo retires the receipt, and a hovered element that is removed fires no mouseleave (Chromium
- * dispatches enter on whatever replaces it and never leave on it). A plain boolean therefore came to rest on
- * `true` with nothing under the pointer at all, and since only a mouseleave could ever clear it, every later
- * receipt was born paused and stood on screen for good. One press on one Undo switched the lane's whole
- * self-retirement off for the session.
- *
- * Holding the id instead makes a stale mark inert by construction: it names a receipt that no longer exists, so
- * it cannot match the one on screen and cannot pause it. The pointer resting on a card that is REPLACED is
- * still handled, because the incoming card gets its own mouseenter. And the leave clears the mark only while it
- * is still about that entry, so a browser that does deliver leave-on-removal cannot undo the enter that
- * followed it. */
+// Holds the hovered receipt's id: a boolean could stick true if Undo removes the card without a mouseleave.
 const hoveredId = ref<string>();
 const announcement = ref(``);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-/* `immediate`, because a receipt can already be standing when this mounts and a receipt with no timer under it
- * never leaves. The old host got away without it by being mounted before anything could report; that was a fact
- * about the component tree rather than a guarantee, and it stops being true the moment a module-scoped watcher
- * (draftingReceipts.ts) reports during another component's setup. */
+// `immediate`: a receipt can already be standing when this mounts, and one with no timer under it never leaves.
 watch(
     [receipt, hoveredId],
     () => {
@@ -81,8 +38,7 @@ watch(
 
 onBeforeUnmount(() => clearTimeout(timer));
 
-/* ONE GLYPH AND ONE COLOUR APART, and nothing else. Every card here is the same box: a message that changed
- * shape with its severity would be the five separate components this file replaced. */
+// Tone changes only the glyph and colour; every card is otherwise the same box.
 const GLYPH: Record<NotificationTone, IconName> = {
     done: `check`,
     problem: `exclamation-circle`,
@@ -98,31 +54,21 @@ const TINT: Record<NotificationTone, string> = {
     danger: `text-danger`,
 };
 
-/* A receipt shrinks to its sentence; everything else takes the lane's width, and a card carrying a body that
- * needs room (a proposed agent turn, a per-folder upload breakdown) takes more. All three right-align, so the
- * stack has one edge however mixed it is.
- *
- * Below `sm` they all span the lane instead, because a 22rem card on a 390px phone leaves 12px of margin on one
- * side and 26px on the other, which reads as a misalignment rather than as a width. */
+// Receipt width fits its sentence; other cards take the lane's width or more if they carry a body. All
+// right-align, but below `sm` they span the full lane so a narrow phone doesn't misalign.
 const widthOf = (entry: Notification): string =>
     entry.kind === `receipt` ? `w-full sm:w-auto sm:max-w-[22rem]` : entry.wide ? `w-full sm:w-[32rem]` : `w-full sm:w-[22rem]`;
 
-/* ONE LINE OR TWO ROWS, decided by whether the card has anything to say under its sentence. "3 files deleted"
- * with its Undo banished to a row of its own is a two-line card carrying three words, which is the shape that
- * made the old receipt a pill instead: it read as a new thing on screen rather than as a footnote to the press
- * that caused it. A card with a detail line or a body has the height already, and its buttons want the
- * bottom-right corner where buttons belong. */
+// Whether the card is a single line or has a detail row below: a bare sentence stays one line, keeping actions on
+// the same row rather than reading as a new item.
 const compact = (entry: Notification): boolean => entry.detail === undefined && entry.body === undefined;
 
-/* WHAT EACH CARD IS TO A SCREEN READER, and the receipt's silence here is deliberate. A question INTERRUPTS
- * (`alert`), because it is the one thing on screen the user still owes something to. A condition is announced
- * politely, when there is a gap. A receipt gets NO role at all: it is already read out by the one live region
- * below, and a card that carries `status` as well would say every completion twice — once as a region update
- * and once as the card mounting. */
+// A question interrupts (`alert`); a condition is announced politely (`status`); a receipt gets no role since the
+// live region below already reads it, avoiding a double announcement.
 const roleOf = (entry: Notification): string | undefined => (entry.kind === `question` ? `alert` : entry.kind === `condition` ? `status` : undefined);
 
-// An action retires the receipt it belongs to: the thing it was reporting is no longer true. A held item is not
-// the host's to remove — its source decides when it stops being true (see `hold` in the store).
+// An action retires its own receipt: what it reported is no longer true. A held item isn't the host's to remove;
+// its source decides when it stops being true.
 const press = (entry: Notification, action: NotificationAction): void => {
     if (entry.kind === `receipt`) {
         dismissReceipt();
@@ -132,22 +78,19 @@ const press = (entry: Notification, action: NotificationAction): void => {
 </script>
 
 <template>
-    <!-- CAPPED AT THE VIEWPORT, clipping from the TOP, which is the other half of why the store orders items the
-         way it does. A bottom-anchored column with nothing stopping it simply grows off the top of the screen,
-         and what it takes with it is whatever it was told about last. Clipping instead of scrolling because a
-         scrollbar here would be a notification centre, and clipping the FIRST item is the cheap end: that is the
-         receipt, which retires by itself in seconds, while the question in the corner cannot be pushed anywhere. -->
+    <!--
+        Clipped by the viewport from the top, not scrolled, so an overflowing lane loses the receipt first (it retires
+        itself) while the fixed question stays reachable.
+    -->
     <div
         class="pointer-events-none fixed inset-x-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col items-end justify-end gap-2 overflow-hidden sm:left-auto sm:right-3 sm:max-w-[calc(100vw-1.5rem)]"
         :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
     >
         <Transition v-for="entry in notifications" :key="entry.id" name="lane">
-            <!-- TWO COLUMNS, NOT AN ICON BESIDE A STACK. The glyph is a grid item in the TITLE'S OWN ROW, so
-                 `self-center` centres it against that row's real height and nothing has to guess an offset — the
-                 nudge this was (`mt-0.5`, then `mt-1`) could only ever be right for one combination of type
-                 scale and dismiss-button size, and it was wrong for the one shipping. Everything under the title
-                 is `col-start-2`, which is what keeps the body indented past the glyph now that the text is no
-                 longer wrapped in a column of its own. -->
+            <!--
+                Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`); everything
+                below is `col-start-2` to stay indented past it.
+            -->
             <div
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
@@ -163,8 +106,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                     aria-hidden="true"
                 />
                 <div class="flex min-w-0 items-center gap-2">
-                    <!-- A completion is three words and wrapping it never bites; a problem or a condition
-                         has to say what and why, so it wraps rather than ending in an ellipsis mid-reason. -->
+                    <!-- Wraps rather than truncating: a problem or condition needs the full reason, not an ellipsis mid-sentence. -->
                     <p class="min-w-0 flex-1 break-words text-xs font-medium text-content">{{ entry.title }}</p>
                     <!-- The one-line card keeps its press on the sentence's own row. -->
                     <Button
@@ -177,20 +119,11 @@ const press = (entry: Notification, action: NotificationAction): void => {
                         v-tooltip.top="action.hint"
                         @click="press(entry, action)"
                     />
-                    <!-- The paragraph nobody needs but somebody will want, kept off the card until it is
-                         asked for. -->
+                    <!-- The paragraph nobody needs but somebody will want, kept off the card until asked for. -->
                     <InfoHint v-if="entry.hint" class="shrink-0" :label="entry.title">
                         <span class="block text-xs text-content">{{ entry.hint }}</span>
                     </InfoHint>
-                    <!-- Dismiss is the OWNER'S to record, never the host's to fake: it runs their callback
-                         and the card leaves on the next tick because their source has gone quiet.
-
-                         THESE TWO RIDE THE TITLE'S ROW rather than the card's full height, which is not a
-                         cosmetic choice. As siblings of the whole text column they took a 24px gutter down
-                         the ENTIRE card: the progress bar of an upload stopped 24px short of the padding it
-                         was supposed to meet, every detail line wrapped early against nothing, and the card
-                         had a ragged right edge that no amount of padding could explain. They are one line
-                         tall, so they may only cost one line's width. -->
+                    <!-- Kept to one line's height: as a full-height sibling it stretches a gutter down the whole card. -->
                     <button
                         v-if="entry.dismiss"
                         type="button"
@@ -202,8 +135,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                     </button>
                 </div>
                 <p v-if="entry.detail" class="col-start-2 mt-0.5 break-words text-2xs text-muted">{{ entry.detail }}</p>
-                <!-- The escape hatch, under the text where a caption belongs: the items whose content is not
-                     two strings (a composed agent turn, an upload's per-folder progress). -->
+                <!-- Escape hatch for content that isn't two strings, e.g. a composed turn or per-folder upload progress. -->
                 <component :is="entry.body" v-if="entry.body" class="col-start-2 mt-2" />
                 <div v-if="!compact(entry) && entry.actions && entry.actions.length > 0" class="col-start-2 mt-2 flex items-center justify-end gap-1">
                     <Button
@@ -219,16 +151,12 @@ const press = (entry: Notification, action: NotificationAction): void => {
             </div>
         </Transition>
     </div>
-    <!-- What the lane cannot tell a screen reader. Polite: a completion never interrupts. Questions carry
-         `role="alert"` on the card itself, which is the one thing here allowed to. -->
+    <!-- Announces what the cards can't: politely, since only a question's own `role="alert"` may interrupt. -->
     <span class="sr-only" aria-live="polite">{{ announcement }}</span>
 </template>
 
 <style scoped>
-/* Rises into place and sinks out of it: the same direction both ways, so a card that expires on its own and one
- * dismissed by a press read as the same object leaving. Each card owns the transition: Vue's TransitionGroup
- * probes move support by inserting a clone after every notification update, which makes DevTools rebuild its
- * Styles pane while network-backed conditions change. */
+/* Same direction in and out, so an expiring card and a dismissed one read as the same object leaving. */
 .lane-enter-active,
 .lane-leave-active {
     transition:

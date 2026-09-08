@@ -8,40 +8,17 @@ import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { writeJsonFile } from "../../store/json-file.js";
 
-/* PREWARM: the boot a pool machine runs before anybody owns it (SANDBOX_PREWARM=1, env.config.ts).
- *
- * The hosted lane's warm pool used to warm one thing, the image: a pool machine's first boot ran `/bin/true`,
- * which pulled the rootfs onto the host and stopped. Everything else a first boot does was left for the user's
- * clock — copying the starter site and its node_modules onto an empty volume, initialising its repo, taking
- * the root baseline, converging skills, and only then starting the dev server they were brought here to see —
- * on a shared-CPU machine whose burst allowance is spent five seconds in. Measured from a screenshot: the copy
- * alone was still running at 26 seconds, and the preview took minutes.
- *
- * None of that work depends on who the owner is. So a pool machine now boots the REAL daemon with this flag
- * set, runs the ordinary boot chain onto its volume (the same code, the same order, nothing prewarm-specific
- * in any step), waits for the starter's dev server to answer once so its dependency caches are on the volume
- * too, writes the marker below, and exits 0 — which under the hosted restart policy stops the machine. What
- * the platform then hands a new user is a stopped machine whose volume already holds everything a first boot
- * would have built, and the claimed boot finds every step already done: the root repo exists (not fresh), the
- * site repo exists (the seed skips), the baseline is committed, and the `autostart` step starts the server.
- *
- * NOTHING THAT NAMES AN OWNER RUNS, by construction rather than by branching: a pool machine's env carries no
- * CONNECT_TOKEN, no OWNER_EMAIL, no grant, no platform URL and no Google client id, so the announce, the
- * ingress dial, the idle stop and the trial refresh are all already off by their own gates, `owner.json` is
- * never written (first-bind needs a Google proof), and the setup pairings have no tokens to arm. The claim
- * replaces the machine's whole env, so the flag is gone before the owner's boot.
- *
- * A PREWARM THAT FAILS DEGRADES TO TODAY, never to breakage: the seed stages its copy and renames it in, so a
- * boot killed mid-copy leaves nothing behind; the marker is written last, so a volume without it is simply an
- * empty volume the claimed boot prepares as it always has. */
+// Boots a pool machine (SANDBOX_PREWARM=1) through the ordinary boot chain before anyone owns it, so a claimed
+// machine's volume already has the starter copied, caches warmed, and a baseline committed. The env carries no owner
+// identity, so owner-gated steps stay off on their own; a failed prewarm just leaves the marker unwritten, never
+// breakage.
 
 export const PREWARM_MARKER = "prewarm.json";
 
 export interface PrewarmMarker {
-    // The image this volume was prepared under. Informational: the pool already replaces a machine whose image
-    // moved (hosted-pool.ts), so a claimed boot never meets a marker from another image.
+    // Image this volume was prepared under; informational, since the pool replaces a machine whose image has moved.
     readonly image: string;
-    // Whether the starter's dev server answered during the prewarm, i.e. whether its caches are on the volume.
+    // True when the starter's dev server answered during prewarm, meaning its caches are already on the volume.
     readonly warmedUp: boolean;
     readonly at: string;
 }
@@ -57,11 +34,8 @@ export const readPrewarmMarker = async (historyRoot: string): Promise<PrewarmMar
     }
 };
 
-/* DID THIS WORKSPACE ARRIVE AS A PREPARED VOLUME rather than as somebody's content. `workspaceArrivedEmpty`
- * (scaffold/starter-site.ts) reads the starter repo as content, which is right for a user who brought a repo
- * called `site` and wrong for a volume the platform seeded: everything gated on "did the user bring work"
- * (the definition seed) must read a prewarmed volume as empty. The marker says the daemon put the site there;
- * the directory listing says nothing else has been added since. */
+// Whether this workspace arrived as a volume the daemon prepared rather than as a user's own content: the marker says
+// the daemon seeded it, and the directory listing confirms nothing else has been added since.
 export const arrivedPrewarmed = async (root: string, historyRoot: string): Promise<boolean> => {
     if ((await readPrewarmMarker(historyRoot)) === undefined) {
         return false;
@@ -73,28 +47,22 @@ export const arrivedPrewarmed = async (root: string, historyRoot: string): Promi
     }
 };
 
-// How long the prewarm waits for the starter's dev server to answer before giving up on the warm-up. Generous:
-// this machine's CPU is throttled and its first framework start builds a dependency cache. A miss costs the
-// claimed boot that cache and nothing else.
+// Longest the prewarm waits for the starter's dev server to answer; generous, since a first framework start builds a
+// cache.
 const WARMUP_MAX_MS = 120_000;
 const WARMUP_POLL_MS = 2_000;
 
-/* THE TWO THINGS THIS WARM-UP IS HANDED INSTEAD OF IMPORTING, and why that is the shape rather than ceremony:
- * `platform` sits UNDER `ports` and `workspace` in the daemon's import graph — port-scan.ts reaches down here
- * for proc-stat, workspace-setup.ts for on-path — so importing a panel-key builder and a dial back up would tie
- * all three into one knot and make none of them liftable without the others (daemon-boundaries.mjs holds this).
- * main.ts sits above all three and already knows both, so it names them at the one call site. */
+// Passed in rather than imported: platform sits below ports and workspace in the import graph, and main.ts is the one
+// place that already knows both.
 export interface StarterProbe {
-    // The process-manager key the starter's dev server runs under (workspace/app-previews.ts `appPanelKey`).
+    // Process-manager key the starter's dev server runs under (workspace/app-previews.ts `appPanelKey`).
     readonly starterKey: string;
-    // Whether anything is answering HTTP on a local port (ports/port-probe.ts `answers`).
+    // Whether anything answers HTTP on a local port (ports/port-probe.ts `answers`).
     readonly answers: (port: number) => Promise<boolean>;
 }
 
-/* Wait until the starter's dev server answers on its assigned port, once. The point is the side effect: a
- * framework's first `dev` writes its pre-bundled dependencies next to node_modules, and that write is what a
- * claimed boot would otherwise pay. False when nothing was started (a seed that skipped), when the server died
- * (the manager untracks a dead session), or when the deadline passed. */
+// Waits until the starter's dev server answers once, so its first-run dependency cache is written now instead of during
+// a claimed boot. False if nothing was started, the server died, or the deadline passed.
 export const warmUpStarter = async (deps: StarterProbe & { readonly processes: ManagedProcesses; readonly logger: Logger }): Promise<boolean> => {
     const { starterKey: key, logger } = deps;
     const deadline = Date.now() + WARMUP_MAX_MS;
@@ -115,8 +83,8 @@ export const warmUpStarter = async (deps: StarterProbe & { readonly processes: M
     return false;
 };
 
-/* The prewarm's last act: warm the starter, stamp the volume, and let the caller stop the daemon. The marker
- * goes last on purpose (see the module note): a volume is prepared when it says so, and never before. */
+// Warms the starter, stamps the volume, and lets the caller stop the daemon. The marker is written last: a volume
+// counts as prepared only once this returns.
 export const finishPrewarm = async (
     deps: StarterProbe & {
         readonly historyRoot: string;

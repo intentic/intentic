@@ -18,32 +18,19 @@ import { hostedSlotsOf, onHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import { hostedBudgetOf } from "../sandbox/hosted/hosted-usage.js";
 import { DAY_MS } from "../durations.js";
 
-/* THE MONEY PATH AS ONE SYSTEM. hosted-plan.test.ts pins each module against a hand-written Prisma; this
- * suite runs the real api (createApp, the real router, Better Auth's real session and deletion hook) on a
- * real Postgres, with Stripe stood in for by @intentic/testing/stripe-fake at the one seam the client has
- * (HOSTED_PLAN_STRIPE_API_URL). What it proves is the chain nothing else can: a checkout the real client
- * encoded, completed on "Stripe", delivered as a signed webhook to the real route, mirrored by the real
- * `updateMany` guard into a real row, and READ BACK as the entitlement the rest of the platform acts on: the
- * wake that was refused is allowed, the offer says "on your plan", the meter comes off. Then every way the
- * plan changes afterwards: a slot bought with proration, a cancel in the portal, a failed charge, an ended
- * plan, the same customer buying again, and the account being deleted with its subscription.
- *
- * HERMETIC. A Docker daemon is the whole requirement (the Postgres is a testcontainer), which is what earns it
- * a run on every merge request beside the CLI's hermetic tier rather than nightly. It reads that tier's own
- * switch and no secret. Stripe's own shapes are the one thing it cannot vouch for; hosted-plan-stripe.e2e.test.ts
- * is the gated tier that does. */
+// Runs the real api and router on real Postgres, Stripe stood in for at its one seam: checkout to webhook to mirrored
+// row to entitlement read back. Hermetic (Docker only, no secret); the gated tier covers Stripe's own shapes.
 const tier = e2eTier(`the hosted plan, end to end: the real api on Postgres, Stripe stood in for`, { enabledBy: `INTENTIC_E2E_HERMETIC` });
 
 const exec = promisify(execFile);
 
-// The pin the platform's own compose file and the migrations job run, so the guard is checked on the database
-// production replays into.
+// The pin the platform's own compose file and migrations job run, so the guard matches production's database.
 const POSTGRES_IMAGE = `postgres:18.4-alpine3.24`;
 
 const API_ORIGIN = `http://api.test`;
 const WEB_ORIGIN = `http://web.test`;
 const BETTER_AUTH_SECRET = `hosted-plan-e2e-secret`;
-// An http api origin means Better Auth's plain cookie name, no __Secure- prefix (the browser tier has that one).
+// An http api origin means Better Auth's plain cookie name, no __Secure- prefix (the browser tier has one).
 const SESSION_COOKIE = `better-auth.session_token`;
 const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e_hosted_plan`, priceId: `price_e2e_hosted` };
 const MONTHLY_HOURS = 40;
@@ -60,7 +47,7 @@ const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
         email: { apiKey: ``, from: `` },
         intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
         ingress: testIngressConfig,
-        // The hosted lane on, so the offer, the wake and the slot gate exist; Fly is answered by the stub below.
+        // The hosted lane on, so the offer, wake and slot gate exist; Fly itself is answered by the stub below.
         hosted: { flyApiToken: `fly-e2e`, flyOrg: `e2e`, monthlyHours: MONTHLY_HOURS, perUser: 1 },
         hostedPlan: {
             ...STRIPE,
@@ -80,8 +67,7 @@ interface Person {
     readonly cookie: string;
 }
 
-// Better Auth's session cookie as the server signs it (better-call signCookieValue): the token, a dot, and
-// HMAC-SHA256(secret, token) in base64. Proven against the real session read before any test rests on it.
+// Better Auth's session cookie exactly as the server signs it (better-call signCookieValue).
 const sessionCookie = (token: string): string =>
     `${SESSION_COOKIE}=${token}.${createHmac(`sha256`, BETTER_AUTH_SECRET).update(token).digest(`base64`)}`;
 
@@ -94,8 +80,8 @@ const seedPerson = async (prisma: PrismaClient, name: string): Promise<Person> =
     return { id, email, cookie: sessionCookie(token) };
 };
 
-// A sandbox with a hosted machine under it, asleep with no open stretch. The same digest-derived ids the api
-// mints (sandboxIdFromToken), so the row is one a URL could name.
+// A sandbox with a hosted machine under it, asleep with no open stretch, using the same digest-derived ids the api
+// mints.
 const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: string): Promise<{ id: string }> => {
     const token = randomBytes(16).toString(`base64url`);
     const digest = createHash(`sha256`).update(token).digest(`hex`);
@@ -115,9 +101,7 @@ const seedHostedSandbox = async (prisma: PrismaClient, owner: Person, name: stri
     return sandbox;
 };
 
-/* FLY, ANSWERED. The wake is the one route here that reaches the provider after the gate, and it is the route
- * whose gate is under test, so the provider answers "started" to everything and the calls are kept for the
- * assertion. Everything else the api fetches (the Stripe stand-in) goes through untouched. */
+// Fly, stubbed to answer started to everything past the gate under test; every other fetch goes through untouched.
 const stubFly = (): string[] => {
     const realFetch = globalThis.fetch;
     const calls: string[] = [];
@@ -190,7 +174,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         container = await new GenericContainer(POSTGRES_IMAGE)
             .withEnvironment({ POSTGRES_USER: `app`, POSTGRES_PASSWORD: `app`, POSTGRES_DB: `app`, POSTGRES_INITDB_ARGS: `--no-sync` })
             .withExposedPorts(5432)
-            // Twice: the entrypoint's temporary server during init says it first, the real one second.
+            // Twice: the entrypoint's temporary init server says it first, the real one second.
             .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/, 2))
             .start();
         const databaseUrl = `postgresql://app:app@${container.getHost()}:${container.getMappedPort(5432)}/app`;
@@ -278,7 +262,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(delivered.status).toBe(200);
         subscriptionId = subscription.id;
         customerId = subscription.customer;
-        // The subscription was read fresh off "Stripe" rather than trusted from the event.
+        // The subscription was read fresh off Stripe rather than trusted from the event.
         expect(lastCall(stripe, `GET`, `/subscriptions/${subscriptionId}`)?.authorized).toBe(true);
 
         const row = await planRow();
@@ -304,7 +288,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await hostedBudgetOf(prisma, config, alice.id)).toMatchObject({ metered: false });
         expect(await hostedSlotsOf(prisma, config, alice.id)).toBe(1);
 
-        // And the wake that was refused a minute ago goes through to the provider.
+        // The wake refused a minute ago now goes through to the provider.
         const woken = await wake();
         expect(woken.status).toBe(200);
         expect(woken.body).toEqual({ ok: true });
@@ -337,8 +321,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await hostedSlotsOf(prisma, config, alice.id)).toBe(2);
         expect((await offer()).body.remaining).toBe(1);
 
-        // Stripe's own `customer.subscription.updated` for the change followed the api's write and was
-        // accepted: the row is the same state either way, and the guard did not roll it back.
+        // Stripe's own event for the change followed the api's write and was accepted; the guard did not roll it back.
         expect((await planRow())?.quantity).toBe(2);
 
         // A second machine now stands on the second slot: the slot cannot be sold back under it.
@@ -394,7 +377,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(unsigned.status).toBe(400);
         expect((await stripe.emit(`customer.subscription.updated`, object, { secret: `whsec_somebody_else` })).status).toBe(400);
         expect((await stripe.emit(`customer.subscription.updated`, object, { at: new Date(Date.now() - 10 * 60_000) })).status).toBe(400);
-        // None of them moved the row.
+        // None of the three refusals moved the row.
         expect((await planRow())?.status).toBe(`past_due`);
     });
 
@@ -402,8 +385,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await stripe.update(subscriptionId, { status: `active` })).status).toBe(200);
         expect((await planRow())?.status).toBe(`active`);
 
-        // An event Stripe emitted two minutes ago carrying a state it has since left: the row follows what
-        // Stripe SAYS NOW, which is what the webhook reads, not what the event said then.
+        // A stale event from two minutes ago: the row follows what Stripe says now, not what the event said then.
         const stale = { id: subscriptionId, object: `subscription`, customer: customerId, status: `past_due` };
         expect((await stripe.emit(`customer.subscription.updated`, stale, { createdAt: new Date(Date.now() - 120_000) })).status).toBe(200);
         expect((await planRow())?.status).toBe(`active`);
@@ -414,7 +396,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await stripe.update(subscriptionId, { status: `active` })).status).toBe(200);
         expect((await planRow())?.status).toBe(`active`);
 
-        // An event of a shape that is not a subscription is acknowledged and ignored, so Stripe stops sending it.
+        // A non-subscription-shaped event is acknowledged and ignored, so Stripe stops sending it.
         expect((await stripe.emit(`customer.subscription.updated`, `not an object`)).status).toBe(200);
         expect((await planRow())?.status).toBe(`active`);
     });

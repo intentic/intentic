@@ -4,22 +4,15 @@ import { describe, expect, it } from "vitest";
 import { analyzeInApp } from "../files/appGrammars";
 import { landingChange, type ImportSide } from "./codeLanding";
 
-// Against the real grammars: the point of reading TextMate scopes is that the answer is the tokenizer's, so a
-// test with a hand-rolled fake grammar would be testing nothing. The languages below are the ones whose import
-// syntax the scope families were derived from, and the traps are the lines that LOOK like imports to a regex.
+// Tests against real grammars, not a hand-rolled fake, so the answer comes from the tokenizer itself. The
+// languages below are picked for import syntax that could trip a naive regex.
 
-/* The grammar is COMPILED first, so that the walk under test is not the one paying for it. The tokenizer compiles
- * a rule's regexes the first time a line reaches them, once per language per session: C++'s come to ~0.6s on an
- * idle machine against ~4ms a line once compiled, and that compile is charged to the walk's hang guard
- * (codeTokens' TIME_BUDGET). On a runner busy enough, the guard is what fires: the walk abandons the file, and the
- * empty set it hands back reads here as the grammar's ANSWER rather than as a busy machine. That is exactly how
- * the C++ case below failed on CI, where every package's suite runs at once and a walk measures ~10× an idle one.
- * The warm-up runs the same lines through the same grammar under no limit at all: the 0 the tokenizer reads as
- * unbounded, so the walk that follows spends only the per-line cost these assertions are about. */
+// Compiles the grammar before the walk, so first-use regex compilation isn't charged to the walk's own
+// hang-guard budget (TIME_BUDGET in codeTokens); an uncompiled grammar under load can silently return an empty set.
 const lines = async (source: readonly string[], lang: string): Promise<ReadonlySet<number>> => {
     const grammar = (await useHighlighter().ensureLang(lang))?.getLanguage(lang);
     if (grammar !== undefined) {
-        // Carried, like the walk's own stack: a line inside an open statement reaches rules a fresh one doesn't.
+        // Carried like the walk's own stack; a line inside an open statement reaches rules a fresh line wouldn't.
         let stack: Parameters<typeof grammar.tokenizeLine>[1] = null;
         for (const line of source) {
             stack = grammar.tokenizeLine(line, stack, 0).ruleStack;
@@ -50,8 +43,7 @@ describe(`import analysis`, () => {
     });
 
     it(`carries a bracketed import onto the lines the grammar leaves as plain code`, async () => {
-        // Go's import block lists bare strings and Python's bare names: neither is scoped as an import, so the
-        // unclosed bracket is the only thing that says those lines are still the statement above them.
+        // Go's import block lists bare strings, Python's bare names; only the bracket marks those lines as import.
         const go = [`package main`, ``, `import (`, `    "os"`, `    m "math"`, `)`, ``, `func main() {}`];
         expect(await lines(go, `go`)).toEqual(new Set([3, 4, 5, 6]));
 
@@ -59,9 +51,8 @@ describe(`import analysis`, () => {
         expect(await lines(python, `python`)).toEqual(new Set([1, 2, 3, 4, 5]));
     });
 
-    // Six grammars compiled from cold in one test, C++ among them, is seconds of real work rather than the
-    // milliseconds every other test here spends, and the suite-wide timeout is sized for the milliseconds. Its
-    // own budget, then, big enough that only a hang reaches it on a runner shared with every other suite.
+    // Six cold grammar compiles (C++ among them) cost real seconds; the timeout is sized for a hang, not the normal
+    // cost.
     it(`covers the other languages we ship a grammar for`, async () => {
         expect(await lines([`use std::collections::HashMap;`, `pub fn main() {}`], `rust`)).toEqual(new Set([1]));
         expect(await lines([`package a;`, `import java.util.List;`, `class A {}`], `java`)).toEqual(new Set([2]));
@@ -72,8 +63,7 @@ describe(`import analysis`, () => {
     }, 60_000);
 
     it(`leaves alone the lines that only LOOK like imports`, async () => {
-        // A C# using STATEMENT is a scoped resource, not a directive; SCSS's @include invokes a mixin; Ruby's
-        // `include` mixes a module into a class. All three would fall to a regex over the first word.
+        // A C# `using` statement is a resource, SCSS's `@include` a mixin, Ruby's `include` mixes in a module.
         const csharp = [`using System;`, `class A {`, `    void m() { using var x = f(); }`, `}`];
         expect(await lines(csharp, `csharp`)).toEqual(new Set([1]));
 
@@ -90,8 +80,8 @@ describe(`import analysis`, () => {
     });
 });
 
-// A hunk as Monaco reports it. An END of 0 is how it says a side wasn't touched: `hunk(0, 0, 4, 4)` is a pure
-// insertion at line 4 of the modified file, `hunk(4, 4, 3, 0)` a deletion of original line 4, after modified 3.
+// A hunk as Monaco reports it; an end of 0 means that side wasn't touched, e.g. hunk(0, 0, 4, 4) is a pure
+// insertion at line 4.
 const hunk = (originalStart: number, originalEnd: number, modifiedStart: number, modifiedEnd: number): Monaco.editor.ILineChange => ({
     originalStartLineNumber: originalStart,
     originalEndLineNumber: originalEnd,
@@ -106,7 +96,7 @@ const sideOf = async (source: readonly string[]): Promise<ImportSide> => ({
 });
 
 describe(`landing past the imports`, () => {
-    // The file from the report: an import gains a symbol at the top, and the change worth reading is far below.
+    // Import gains a symbol at the top; the change worth reading is further down.
     const before = [`import { a } from "./a";`, `import { b } from "./b";`, ``, `const x = 1;`, `const y = 2;`];
     const after = [`import { a, c } from "./a";`, `import { b } from "./b";`, ``, `const x = 1;`, `const y = 3;`];
 
@@ -123,7 +113,7 @@ describe(`landing past the imports`, () => {
     });
 
     it(`stops on a hunk that adds an import AND the code under it`, async () => {
-        // One hunk, because the two changed lines are adjacent: skipping it would hide a real change.
+        // One hunk, because the two changed lines are adjacent; skipping it would hide a real change.
         const grown = [`import { a } from "./a";`, `import { c } from "./c";`, `const x = 2;`];
         const changes = [hunk(2, 2, 2, 3)];
 
@@ -157,9 +147,7 @@ describe(`landing past the imports`, () => {
 });
 
 describe(`landing on the biggest change`, () => {
-    /* One small edit near the top, one big block further down: the shape the setting exists for, and the one
-     * where it disagrees with both other strategies. Line numbers are the same on both sides here, the big
-     * block is a replacement rather than an insertion, so a hunk covers the same run in each. */
+    // Small edit near the top, big block below; line numbers match since the block replaces rather than inserts.
     const before = [
         `import { a } from "./a";`, //  1
         ``, //                          2
@@ -205,7 +193,7 @@ describe(`landing on the biggest change`, () => {
     });
 
     it(`does not let blank lines pad a hunk into the biggest one`, async () => {
-        // Left: four lines, three of them empty. Right: two lines of real code. The dense hunk wins.
+        // Left is four lines, three blank; right is two lines of real code. The denser hunk wins.
         const padded = [`const a = 1;`, ``, ``, ``, `const b = 2;`, `const c = 3;`];
         const tightened = [`const a = 9;`, ``, ``, ``, `const b = 8;`, `const c = 7;`];
         const changes = [hunk(1, 4, 1, 4), hunk(5, 6, 5, 6)];

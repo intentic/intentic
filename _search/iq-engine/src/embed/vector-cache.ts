@@ -2,21 +2,13 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-/* VECTORS OUTLIVE THE INDEX, because they are a pure function of (model, chunk text) and the index is not.
- *
- * The index dir is dropped wholesale on schema drift or corruption, correct for everything in it EXCEPT the
- * embeddings, which cost ~30 minutes of 4-core CPU on this workspace and are byte-identical after the rebuild
- * because the text they were computed from did not change. This sidecar lives NEXT TO the index dir, keyed by
- * the same sha256-of-chunk-text the chunks table already carries, so a recreated index refills its vectors from
- * here at SQLite speed and only genuinely new text ever reaches the model.
- *
- * It is itself a pure cache with the same recovery rule as the index: corruption or a schema bump deletes the
- * file and starts empty, the only cost is one re-embed, which is exactly the world before this file existed. */
+// Vectors outlive the index: a pure function of (model, chunk text), unlike the index itself. Dropped index dirs
+// rebuild from this sidecar, keyed by the same sha256-of-chunk-text the chunks table carries, so only new text reaches
+// the model. Same recovery rule as the index: corruption or a schema bump deletes the file and starts empty.
 
 const CACHE_SCHEMA = "1";
 
-// LRU ceiling. A vector row is ~1.6 kB (384 × f32 + hash + key overhead), so this bounds the file near 300 MB,
-// roughly three of this workspace's whole backlogs, enough that day-to-day churn never evicts anything warm.
+// LRU ceiling; at ~1.6 kB/row this bounds the file near 300 MB, enough that daily churn evicts nothing warm.
 const MAX_ROWS = 200_000;
 
 const DDL = `
@@ -39,14 +31,13 @@ export interface VectorCache {
     close(): void;
 }
 
-/** The cache file for the index at `indexDir`, a SIBLING, so dropping the index dir never touches it. */
+/** The cache file for the index at `indexDir`, a sibling path, so dropping the index dir never touches it. */
 export const vectorCachePath = (indexDir: string): string => `${indexDir}-vectors.db`;
 
 const open = (path: string, modelId: string, maxRows: number): VectorCache => {
     mkdirSync(dirname(path), { recursive: true });
     const db = new DatabaseSync(path);
-    // Same open order as the index: busy_timeout before anything that wants the write lock, auto_vacuum only
-    // while the file is still empty (it must precede the first table), then WAL for writer/reader coexistence.
+    // Same open order as the index: busy_timeout, then auto_vacuum only while still empty, then WAL.
     db.exec("PRAGMA busy_timeout = 5000;");
     const pageCount = Number((db.prepare("PRAGMA page_count").get() as { page_count?: number | bigint } | undefined)?.page_count ?? 0);
     if (pageCount === 0) {
@@ -65,7 +56,7 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
         throw new Error(`iq vector cache schema ${version} != ${CACHE_SCHEMA}`);
     }
     setMeta("cache_version", CACHE_SCHEMA);
-    // A model swap makes every stored vector wrong, not stale, same rule as syncModel applies to the index.
+    // A model swap makes every stored vector wrong, not stale; same rule syncModel applies to the index.
     if (meta("model_id") !== modelId) {
         db.exec("DELETE FROM vectors");
         setMeta("model_id", modelId);
@@ -120,8 +111,8 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
     };
 };
 
-// Open the cache, treating any failure as cache loss: delete the file and start empty. A cache that cannot open
-// twice stays off (undefined), the semantic tier still works, it just pays the model for every vector again.
+// Treats any open failure as cache loss: deletes the file and retries once. Failing twice returns undefined; the
+// semantic tier still works, just re-embedding everything.
 export const openVectorCache = (path: string, modelId: string, maxRows = MAX_ROWS): VectorCache | undefined => {
     try {
         return open(path, modelId, maxRows);

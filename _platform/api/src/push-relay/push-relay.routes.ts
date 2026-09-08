@@ -8,19 +8,10 @@ import { createApnsForwarder, type ApnsForwarder } from "./apns.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-/* THE PUSH RELAY, the platform's half of notifying a native install (the contract file has the shape of the
- * whole handshake; apns.ts has the Apple half). What this file owns is the capability model:
- *
- *   register    signed-in web app inside the iOS shell. Mints the send secret, stores its HASH, answers with
- *               the grant the app stores on the DAEMON. The plaintext secret exists nowhere else, ever.
- *   unregister  the same app turning the toggle off, scoped to the caller's own rows.
- *   send        a daemon, sessionless, proving itself with the secret alone. The relay learns a device took a
- *               notification; it never learns which sandbox sent it.
- *
- * Refusals speak the daemon's dead-channel codes on purpose: 404 for a device row that does not exist, 403
- * for a secret that can never match again (re-registration rotates it). Both make the daemon prune, which is
- * exactly right, either way this channel will refuse every future send. APNs saying the device is gone
- * deletes the row AND answers 410, so the two halves of the channel die together. */
+// The push relay: the platform's half of notifying a native install (apns.ts is Apple's half).
+// register: mints the send secret and stores only its hash; the plaintext exists nowhere else.
+// unregister: the same app turning the toggle off, scoped to its own rows.
+// send: sessionless; a daemon proves itself with the secret alone, learning nothing about the sandbox.
 
 const hashSecret = (secret: string): string => createHash("sha256").update(secret).digest("hex");
 
@@ -30,8 +21,7 @@ const secretsMatch = (presented: string, storedHash: string): boolean => {
     return a.length === b.length && timingSafeEqual(a, b);
 };
 
-// The forwarder is per-process state (it caches a signed provider token); one per config object, built on
-// first use so tests can hand the factory a fake without ever loading a key.
+// Per-process cached forwarder, one per config, built on first use so tests can hand it a fake.
 const forwarders = new WeakMap<Config, ApnsForwarder>();
 const forwarderFor = (config: Config, build: (config: Config) => ApnsForwarder): ApnsForwarder => {
     const existing = forwarders.get(config);
@@ -43,8 +33,7 @@ const forwarderFor = (config: Config, build: (config: Config) => ApnsForwarder):
     return built;
 };
 
-// Routes 404 when no APNs key is configured, matching the platform's other credential-switched lanes
-// (hosted, pool, wallet): a relay that cannot forward must say it does not exist, not accept and drop.
+// 404s with no APNs key configured, like the platform's other credential-switched lanes.
 const requireRelay = (forwarder: ApnsForwarder): void => {
     if (!forwarder.enabled) {
         throw new ORPCError("NOT_FOUND", { message: "this platform has no push relay" });
@@ -57,9 +46,7 @@ export const pushRelayRoutes = (build: (config: Config) => ApnsForwarder = creat
         requireRelay(forwarderFor(context.config, build));
         // 32 random bytes is the capability; base64url so it rides JSON and logs greppably-opaque.
         const secret = randomBytes(32).toString("base64url");
-        // Upsert by (user, token): a reinstalled app re-registering must replace its row, two rows for one
-        // device would fire twice per notification, and every re-registration rotates the secret, which is
-        // what retires any daemon rows still holding the old one.
+        // Upsert by (user, token): a reinstalled app replaces its row rather than firing twice per notification.
         const row = await context.prisma.pushDevice.upsert({
             where: { userId_token: { userId: user.id, token: input.token } },
             create: { userId: user.id, platform: input.platform, token: input.token, secretHash: hashSecret(secret) },
@@ -68,22 +55,19 @@ export const pushRelayRoutes = (build: (config: Config) => ApnsForwarder = creat
         return {
             deviceId: row.id,
             secret,
-            // Absolute on purpose: the daemon stores it verbatim and never needs to know any platform's
-            // layout, a self-hosted platform's grants point home automatically.
+            // Absolute on purpose: the daemon stores it verbatim, so a self-hosted platform's grant points home itself.
             url: `${context.config.api.url}${API_BASE_PATH}/push/send`,
         };
     }),
 
     unregister: os.push.unregister.handler(async ({ input, context }) => {
         const user = requireUser(context);
-        // deleteMany because the ownership check IS the where-clause: someone else's deviceId deletes zero
-        // rows and learns nothing.
+        // deleteMany because the ownership check is the where-clause: someone else's id deletes zero rows.
         await context.prisma.pushDevice.deleteMany({ where: { id: input.deviceId, userId: user.id } });
         return { ok: true } as const;
     }),
 
-    /* SESSIONLESS, and that is the whole point: the caller is a daemon on the owner's own hardware, which has
-     * no platform session and never will. Possession of the per-device secret is its entire proof. */
+    // Sessionless: the caller is a daemon with no platform session, proven only by the per-device secret.
     send: os.push.send.handler(async ({ input, context }) => {
         const forwarder = forwarderFor(context.config, build);
         requireRelay(forwarder);
@@ -96,13 +80,12 @@ export const pushRelayRoutes = (build: (config: Config) => ApnsForwarder = creat
         }
         const verdict = await forwarder.send(row.token, input.notification);
         if (verdict === "dead") {
-            // Apple says this device can never be reached again. Drop our half and answer with a code the
-            // daemon prunes on, so no half-dead channel lingers on either side.
+            // Apple says this device can never be reached again; drop our half too, so no half-dead channel lingers.
             await context.prisma.pushDevice.delete({ where: { id: row.id } }).catch(() => undefined);
             throw new ORPCError("GONE", { status: 410, message: "the device is no longer reachable" });
         }
         if (verdict === "transient") {
-            // Our problem or a passing one, never the device's. The daemon logs and keeps the channel.
+            // Our problem or a passing one, never the device's; the daemon logs this and keeps the channel.
             throw new ORPCError("BAD_GATEWAY", { status: 502, message: "the push service refused the send" });
         }
         return { delivered: true };

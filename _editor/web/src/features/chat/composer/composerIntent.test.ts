@@ -1,10 +1,6 @@
-/* WHAT THE NEXT PRESS OF SEND MEANS, asserted as a table, because the four surfaces that answer that question
- * used to answer it four times over, and the bug they produced is the one shape a unit test can pin: two of them
- * disagreeing about the same chat.
- *
- * So the assertions here are mostly about PRECEDENCE. Every state below can hold at the same time as the ones
- * under it: a plan can be pending while a turn streams while an edit is armed, and each of those pairs was
- * reachable in the app before this was one decision. */
+// What the next Send press means, asserted as precedence: every state below can hold alongside the
+// ones under it (a plan pending while a turn streams while an edit is armed), and these tests pin the
+// order that resolves them.
 import { expect, it } from "vitest";
 import {
     type ComposerSituation,
@@ -47,10 +43,9 @@ it(`names the press by the most specific thing armed, in one order`, () => {
     expect(sendIntentOf(chat({ streaming: true, steerable: true, awaitingDecision: true }))).toBe(`parked`);
     // A plan awaiting an answer turns the composer into the revision field, whatever the turn is doing.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true }))).toBe(`plan`);
-    // The user pointed at one message in this transcript: the most specific act of the lot, so it wins over
-    // every standing posture below it.
+    // The most specific act of the lot: pointing at a message wins over every standing posture below it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true }))).toBe(`edit`);
-    // …and the agent's voice is not a turn at all, so nothing about a turn can outrank it.
+    // The agent's voice is not a turn at all, so nothing about a turn can outrank it.
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true, voiceAgent: true }))).toBe(`place`);
 });
 
@@ -59,8 +54,7 @@ it(`gives every intent its own sentence in both slots`, () => {
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
     const hints = intents.map((intent) => sendHintFor(intent, WORDS));
 
-    // The point of the tables: no intent can be added without words for it, and no two share a sentence, the
-    // reader learns what the press does from either slot, and they cannot contradict each other.
+    // No intent can be added without words for it, and no two share a sentence.
     expect(new Set(placeholders).size).toBe(intents.length);
     expect(new Set(hints).size).toBe(intents.length);
 });
@@ -82,8 +76,7 @@ it(`refuses only what the daemon would, and only with something staged`, () => {
 
     expect(sendRefusal(chat({ staged: true, uploading: true }))).toContain(`uploading`);
     expect(sendRefusal(chat({ staged: true, uploadFailed: true }))).toContain(`failed to upload`);
-    // A rewind cannot be spent while a turn holds the conversation. The edit stays armed: this is the sentence
-    // that says so, in place of a Send greying itself out with no cause on screen anywhere.
+    // A rewind can't be spent while a turn holds the conversation; the edit stays armed and this names why.
     expect(sendRefusal(chat({ staged: true, editing: true, streaming: true }))).toContain(`once the turn ends`);
     expect(sendRefusal(chat({ staged: true, editing: true }))).toBeUndefined();
 });
@@ -112,15 +105,13 @@ it(`offers to continue a stopped turn only when the press could mean nothing els
     expect(continueOffered({ ...stopped, connected: false })).toBe(false);
 });
 
-/* THE TWO READINGS OF ONE STOPPED TURN, and the whole reason there are two. A spent allowance stops the turn
- * and names the instant its own press starts working: before that instant the strip has plenty to say and the
- * press has nothing to do, so the sentence is visible and the key is not. The old code had one predicate, which
- * forced that ending to choose between an offer that re-fails and no offer at all, and it chose neither. */
+// Two readings of one stopped turn: before the instant a spent allowance's press starts working, the
+// strip has something to say but the press has nothing to do.
 it(`says what happened while the press is still waiting, without arming it`, () => {
     const waiting = chat({ pickUp: { ready: false } });
     expect(continueVisible(waiting)).toBe(true);
     expect(continueOffered(waiting)).toBe(false);
-    // ...and the bare press sends nothing while it waits: Enter falls back to what it always did.
+    // The bare press sends nothing while it waits: Enter falls back to what it always did.
     expect(sendable(waiting, sendIntentOf(waiting), sendRefusal(waiting))).toBe(false);
 
     // Everything that silences the offer silences the strip with it: the box is the user's answer now.
@@ -133,11 +124,11 @@ it(`sends the box, the queue or the continuation, but spends an edit or a placem
 
     expect(sends(SETTLED)).toBe(false);
     expect(sends(chat({ staged: true }))).toBe(true);
-    // The bare presses that send something OTHER than the draft.
+    // The bare presses that send something other than the draft.
     expect(sends(chat({ pickUp: { ready: true } }))).toBe(true);
     expect(sends(chat({ queued: 2 }))).toBe(true);
-    // …and neither of them may spend an armed edit or the agent's voice: an empty box would drop the turns and
-    // then ask nothing, or place a blank line into the transcript.
+    // Neither may spend an armed edit or the agent's voice, which would drop turns silently or place a
+    // blank line.
     expect(sends(chat({ pickUp: { ready: true }, editing: true }))).toBe(false);
     expect(sends(chat({ queued: 2, voiceAgent: true }))).toBe(false);
     // A refusal outranks all of it.

@@ -1,37 +1,19 @@
 import type { z } from "zod";
 import { jsonFile } from "./json-file.js";
 
-/* A JSON FILE HOLDING A LIST OF THINGS WITH IDS, read per entry so one bad row costs only itself.
- *
- * The two manifests under `.intentic/config` — capabilities.json and personas.json — are the same store with a
- * different schema in it, and they need the same three properties, none of which is obvious:
- *
- *   ONE BAD ENTRY COSTS ITSELF. A hand-edited card must not take every other one down with it, least of all on
- *   the turn path, where the answer decides what an unattended wake is allowed to touch. So entries are
- *   validated one at a time and a failure is skipped, not thrown.
- *
- *   A SKIPPED ENTRY IS REPORTED TWICE, because its two audiences are in different places: `onInvalid` puts it
- *   in the daemon log for whoever is reading logs, and the manifest-problem registry puts it on the screen the
- *   entry vanished from. Until the second existed, "never silent" was only true of the log.
- *
- *   A WRITE PRESERVES WHAT THIS BUILD CANNOT READ. The file is held as the RAW array, so an entry written by a
- *   newer build survives a rollback instead of being quietly dropped by the next edit — which a validated
- *   array could not express. Entries are validated INSIDE `parse`, because that is the only point with a
- *   `report` channel; `read` then validates a second time to produce the typed list. That second pass is over
- *   a file already read off disk and JSON-parsed, and it buys one obvious validation site per concern instead
- *   of a shared one that has to smuggle its findings between the two. */
+// JSON file store for entries keyed by id: an invalid entry is skipped and reported rather than thrown, and writes
+// preserve unknown fields so an entry from a newer build survives a rollback.
 export interface IdListStore<T> {
-    // Every entry, in file order, minus any that did not validate.
+    // All entries that validated, in file order.
     readonly list: () => Promise<T[]>;
     readonly get: (id: string) => Promise<T | undefined>;
-    // Upsert by id (re-adding the same id edits the entry).
+    // Matches by id; upserting an existing id replaces its entry.
     readonly upsert: (value: T) => Promise<void>;
-    // True when an entry of that id existed and was removed.
+    // True if an entry with that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
 }
 
-// An entry's id without trusting its shape: enough to key the raw read-modify-write, and to name the entry in
-// the warning when it does not validate.
+// Extracts an entry's id without validating its shape, to key the raw read-modify-write and to name it in warnings.
 const rawId = (entry: unknown): string | undefined => {
     const id = (entry as { id?: unknown } | null)?.id;
     return typeof id === "string" ? id : undefined;
@@ -43,8 +25,7 @@ export const idListFile = <T extends { readonly id: string }>(
     onInvalid?: (id: string, reason: string) => void,
 ): IdListStore<T> => {
     const file = jsonFile<unknown[]>(path, {
-        // The check here is only "is this a JSON array at all"; anything else reads as empty, which is what a
-        // torn file used to read as before jsonFile made torn files unobservable.
+        // Only checks that the value is an array; anything else is treated as empty.
         parse: (raw, report) => {
             if (!Array.isArray(raw)) {
                 return undefined;
@@ -79,7 +60,7 @@ export const idListFile = <T extends { readonly id: string }>(
             await file.update((entries) => {
                 const next = entries.filter((entry) => rawId(entry) !== id);
                 removed = next.length !== entries.length;
-                // Unchanged by reference when nothing matched, so a remove of an absent id writes nothing.
+                // Returned unchanged by reference when nothing matched, so removing an absent id writes nothing.
                 return removed ? next : entries;
             });
             return removed;

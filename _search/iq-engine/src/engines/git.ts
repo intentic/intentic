@@ -39,15 +39,12 @@ const git = async (root: string, repo: string, args: string[]): Promise<string> 
 };
 
 const toWorkspacePath = (repo: string, repoRel: string): string => (repo === "" ? repoRel : `${repo}/${repoRel}`);
-// The inverse, for handing a workspace path back to `git -C <repo>`. The workspace root can itself be a repo
-// (id ""), where the two forms are the same string, slicing a prefix length there would eat the first
-// character. A path that is already repo-relative passes through untouched.
+// Inverse of toWorkspacePath; repo "" means the workspace root, where the two forms are identical so nothing is
+// stripped, and an already-relative path passes through unchanged.
 const toRepoPath = (repo: string, path: string): string => (repo !== "" && path.startsWith(`${repo}/`) ? path.slice(repo.length + 1) : path);
 
-// What the working tree has changed against HEAD, across every repo in the sweep, the seed set `impact` uses
-// when the caller names no paths, which is the question people actually have ("what does what I am doing right
-// now touch?"). Untracked files count: a brand-new file is exactly the kind of change whose reach someone
-// wants, and a plain `git diff` cannot see it.
+// Files changed in the working tree against HEAD across the sweep; the seed set `impact` uses when given no paths.
+// Untracked files count too, since a plain `git diff` cannot see them.
 export const changedFiles = async (root: string, entries: readonly FileEntry[]): Promise<string[]> => {
     const inSweep = new Set(entries.map((entry) => entry.path));
     const paths = new Set<string>();
@@ -62,9 +59,7 @@ export const changedFiles = async (root: string, entries: readonly FileEntry[]):
                 continue;
             }
             const path = toWorkspacePath(repo, repoRel);
-            // A change to something outside the sweep, floor-denied, ignored, unindexed, has no reachable
-            // graph node, so it is not a seed. It is still a real change, which is why the caller is told the
-            // seed set it got rather than left to assume its diff was read whole.
+            // Outside the sweep (floor-denied, unindexed) has no graph node, so it is skipped as a seed.
             if (inSweep.has(path)) {
                 paths.add(path);
             }
@@ -74,7 +69,7 @@ export const changedFiles = async (root: string, entries: readonly FileEntry[]):
 };
 
 export interface ChurnOptions {
-    // Omitted means all of history, what `hotspots` wants, where `recent` always has a window.
+    // Omitted means all of history; `hotspots` wants that, `recent` always sets a window.
     readonly since?: string;
     readonly author?: string;
 }
@@ -86,13 +81,12 @@ export interface FileChurn {
     dels: number;
 }
 
-// Per-file committed activity from `git log --numstat`, the shared substrate of `recent` (activity in a window)
-// and `hotspots` (activity over all history). Paths outside the sweep, floor-denied, out of scope, deleted,
-// are dropped here, so no caller has to re-check them.
+// Per-file committed activity from `git log --numstat`; shared by `recent` (windowed) and `hotspots` (all history).
+// Paths outside the sweep or floor-denied are dropped here so callers need not recheck.
 export const churnOf = async (root: string, entries: readonly FileEntry[], options: ChurnOptions): Promise<Map<string, FileChurn>> => {
     const allowed = new Set(entries.map((entry) => entry.path));
     const churn = new Map<string, FileChurn>();
-    // One read-only `git log` per repo, spawn them concurrently (repos are few), fold in repo order.
+    // One `git log` per repo, spawned concurrently, folded back in repo order.
     const repos = reposOf(entries);
     const logs = await Promise.all(
         repos.map((repo) => {
@@ -142,8 +136,8 @@ interface FileActivity extends FileChurn {
     uncommitted: boolean;
 }
 
-// `iq recent`, per-file change summary inside the window: committed activity from git log --numstat, plus
-// uncommitted files by mtime. Paths outside the sweep (floor, scope) never surface.
+// `iq recent`: per-file change summary within the window, committed activity from `git log --numstat` plus uncommitted
+// files by mtime. Paths outside the sweep never surface.
 export const recentFiles = async (root: string, entries: readonly FileEntry[], options: RecentOptions): Promise<RankedGroup[]> => {
     const since = options.since ?? DEFAULT_SINCE;
     const windowMs = parseSince(since);
@@ -179,10 +173,10 @@ export interface LogOptions {
     readonly path?: string;
 }
 
-// `iq log "<pattern>"`, pickaxe across repos: commits whose diffs add/remove the pattern. Commit metadata only,
-// never patch bodies (a denied file's content can't leak through here).
+// `iq log "<pattern>"`: pickaxe across repos for commits whose diffs add or remove the pattern. Commit metadata only,
+// never patch bodies, so a denied file's content cannot leak through.
 export const logSearch = async (root: string, entries: readonly FileEntry[], pattern: string, options: LogOptions): Promise<RankedGroup[]> => {
-    // One pickaxe spawn per repo, concurrent (repos are few); groups fold in repo order so ranks stay stable.
+    // One pickaxe spawn per repo, concurrent; groups fold in repo order so ranks stay stable.
     const repos = reposOf(entries);
     const outputs = await Promise.all(
         repos.map((repo) => {

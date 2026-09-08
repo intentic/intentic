@@ -12,19 +12,13 @@ export interface SshResult {
 }
 
 export interface SshSession {
-    // `onOutput` taps stdout+stderr chunks as they arrive (a long `docker compose up` streams its pull
-    // progress live), the full collected result still resolves as before.
+    // `onOutput` streams stdout+stderr chunks as they arrive; the returned result still resolves in full.
     readonly exec: (command: string, onOutput?: (chunk: string) => void) => Promise<SshResult>;
     readonly dispose: () => Promise<void>;
-    // Streamed binary file transfer over SFTP, the real executor only; test fakes may omit. Used to relay a
-    // restic-repo tarball between two hosts THROUGH the CLI during a host migration, where neither host can
-    // reach the other directly (a NAT'd local host opens no inbound ports). Streamed to/from a file, so a
-    // multi-GB repo never buffers in memory the way `exec`'s string-collected stdout would.
+    // SFTP-streamed transfer; real executor only, test fakes may omit.
     readonly download?: (remotePath: string, localPath: string) => Promise<void>;
     readonly upload?: (localPath: string, remotePath: string) => Promise<void>;
-    // A local loopback listener whose every connection is piped to remoteHost:remotePort dialed FROM the
-    // host (ssh2 direct-tcpip), how the engine reaches the control-plane HTTP services (Forgejo :3000,
-    // Komodo :9120) without touching their public Cloudflare routes. Real executor only; fakes may omit.
+    // Loopback listener piped to remoteHost:remotePort via ssh2 direct-tcpip; real executor only, fakes may omit.
     readonly forward?: (remoteHost: string, remotePort: number) => Promise<{ readonly port: number; readonly close: () => Promise<void> }>;
 }
 
@@ -33,31 +27,24 @@ export interface SshTarget {
     readonly user: string;
     readonly privateKey: string;
     readonly port: number;
-    // How to reach the host. "direct" (default) dials address:port over TCP. "cloudflared" reaches a NAT'd
-    // host's SSH through its Cloudflare tunnel: the executor runs `cloudflared access tcp` to bridge the
-    // tunnel hostname (address) to a local port and dials that instead. See createSshExecutor.
+    // "direct" dials address:port; "cloudflared" bridges through a cloudflared access tcp tunnel.
     readonly via?: "direct" | "cloudflared";
 }
 
-// The transport the host provider runs commands over. Injected so the provider is unit-testable with a
-// fake; the default is the ssh2-backed executor below. `dispose` tears down any cloudflared forwarders the
-// executor started (a no-op for direct-only runs); the CLI calls it when a command finishes.
+// Injectable transport for host commands, unit-testable with a fake. `dispose` tears down any cloudflared forwarders; a
+// no-op for direct-only runs.
 export interface SshExecutor {
     readonly connect: (target: SshTarget) => Promise<SshSession>;
     readonly dispose?: () => Promise<void>;
 }
 
-// Persists the public key each host presented, keyed by address:port, the trust store behind host-key
-// verification. The CLI backs this with a committed `.known-hosts.json`; an embedded control plane injects
-// its own per-tenant (DB/vault) implementation. Keys are the host's public key as base64.
+// Trust store behind host-key verification, keyed by address:port; keys are the host's public key as base64.
 export interface HostKeyStore {
     readonly get: (host: string, port: number) => Promise<string | undefined>;
     readonly set: (host: string, port: number, key: string) => Promise<void>;
 }
 
-// A process-lifetime store: trusts the first key seen per host and verifies later connects against it, but
-// nothing survives the process. The default for `sshExecutor`, and the safe baseline for tests/e2e (fresh
-// hosts re-pin per run).
+// Trusts each host's first key and pins it; nothing persists across process restarts.
 const hostKeyId = (host: string, port: number): string => `${host}:${port}`;
 
 export const inMemoryHostKeyStore = (): HostKeyStore => {
@@ -71,9 +58,7 @@ export const inMemoryHostKeyStore = (): HostKeyStore => {
     };
 };
 
-// Trust-on-first-use + pinning. An unseen host's key is recorded and trusted; a seen host must present the
-// exact same key, or it is a mismatch (a possible MITM, or the host was rebuilt). Pure but for the store,
-// unit-testable without a live SSH server.
+// Trust-on-first-use: records an unseen host's key, or checks a seen host's key for a match/mismatch.
 export const verifyHostKey = async (store: HostKeyStore, host: string, port: number, presented: string): Promise<"ok" | "mismatch"> => {
     const known = await store.get(host, port);
     if (known === undefined) {
@@ -83,7 +68,7 @@ export const verifyHostKey = async (store: HostKeyStore, host: string, port: num
     return known === presented ? "ok" : "mismatch";
 };
 
-// Drain a readable stream into a boxed string sink (a box avoids reassigning a captured binding).
+// Drains a readable stream into a boxed string sink.
 const collect = (stream: Readable, sink: { value: string }, onOutput?: (chunk: string) => void): void => {
     stream.on("data", (chunk: Buffer) => {
         const text = chunk.toString("utf8");
@@ -92,19 +77,17 @@ const collect = (stream: Readable, sink: { value: string }, onOutput?: (chunk: s
     });
 };
 
-// A running `cloudflared access tcp` forwarder: a local listener on `port` that bridges to a host's SSH over
-// its Cloudflare tunnel. One per tunnel hostname, reused across the many SSH sessions an apply opens.
+// A running `cloudflared access tcp` forwarder: a local listener bridged to the host's SSH through its tunnel; one per
+// hostname, shared across sessions.
 interface CloudflaredForwarder {
     readonly port: number;
     readonly child: ChildProcess;
-    // A bounded tail of cloudflared's stderr. cloudflared logs per-connection origin failures (e.g. the tunnel
-    // hostname could not be resolved/reached) here for the forwarder's whole lifetime, surfaced when an ssh
-    // connect through this forwarder fails, so a bare `read ECONNRESET` becomes an actionable cause.
+    // Bounded tail of cloudflared's stderr, appended to a failed connect's error for context.
     readonly stderr: () => string;
 }
 
-// Reserve a free loopback port by briefly binding :0, then release it for cloudflared to claim. A tiny race
-// window (the port could be taken in between), acceptable for a one-shot per-host forwarder.
+// Binds a loopback socket on port 0 to reserve a free port, then releases it for cloudflared to claim; a small race
+// window is acceptable.
 const reserveLocalPort = (): Promise<number> =>
     new Promise((resolve, reject) => {
         const probe = createServer();
@@ -130,8 +113,7 @@ const tcpProbe = (port: number): Promise<boolean> =>
         });
     });
 
-// Poll a loopback port until it accepts; fail fast if cloudflared exited first (reported via `failure`),
-// the probe throws, which ends the wait then and there rather than after the whole deadline.
+// Polls the port until it accepts, or fails immediately once `failure()` reports cloudflared has already exited.
 const waitForPort = async (port: number, failure: () => string | undefined, timeoutMs = 20000): Promise<void> => {
     const up = await pollUntil(
         async () => {
@@ -148,15 +130,14 @@ const waitForPort = async (port: number, failure: () => string | undefined, time
     }
 };
 
-// Start `cloudflared access tcp --hostname <hostname> --url 127.0.0.1:<port>` and resolve once the local
-// listener accepts. cloudflared must be on PATH (the sandbox image ships it). Rejects if the binary is
-// missing or the listener never comes up.
+// Starts `cloudflared access tcp` for `hostname` and resolves once its local listener accepts; rejects if cloudflared
+// is missing from PATH or the listener never comes up.
 const startCloudflaredForwarder = async (hostname: string): Promise<CloudflaredForwarder> => {
     const port = await reserveLocalPort();
     const child = spawn("cloudflared", ["access", "tcp", "--hostname", hostname, "--url", `127.0.0.1:${port}`], {
         stdio: ["ignore", "ignore", "pipe"],
     });
-    // Keep only the tail, cloudflared is chatty over a long apply; the last couple KB carry the relevant error.
+    // Keeps only cloudflared's most recent stderr; older output is dropped.
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
         stderr = (stderr + chunk.toString("utf8")).slice(-2000);
@@ -177,30 +158,18 @@ const startCloudflaredForwarder = async (hostname: string): Promise<CloudflaredF
     return { port, child, stderr: () => stderr };
 };
 
-// How long to keep retrying a connect that fails on tunnel warm-up, and how often. A host reached over a
-// freshly-minted cloudflared tunnel is not reachable the instant its DNS is created, the record must propagate
-// and the connector must join Cloudflare's edge, during which the dial fails (NXDOMAIN → ECONNRESET).
+// Retry budget for a connect during cloudflared tunnel warm-up, before DNS/edge propagation finishes.
 const REACHABLE_TIMEOUT_MS = 60_000;
 const REACHABLE_INTERVAL_MS = 3_000;
 
-// Transport liveness + command ceilings. A connect (TCP + handshake + auth) is bounded by readyTimeout; once
-// connected, keepalive probes every 5s and gives up after 3 misses, so a transport that dies mid-command (the
-// host's tunnel connector restarting, a dropped link) fails the session in ~15s instead of hanging forever,
-// this exact hang wedged `intentic deploy plan` for 8+ minutes when a host tunnel restarted mid-read. The per-exec
-// ceiling is deliberately generous: image pulls and restic backups legitimately run for many minutes, and
-// nothing in a single exec should outlive the 30-minute apply lock, it exists to bound a genuinely wedged
-// remote command (a stuck dockerd), not to police slow-but-alive work (keepalive already proves liveness).
+// Keepalive fails a dead transport in ~15s; the exec ceiling only bounds a wedged remote command.
 const READY_TIMEOUT_MS = 20_000;
 const KEEPALIVE_INTERVAL_MS = 5_000;
 const KEEPALIVE_COUNT_MAX = 3;
 const EXEC_TIMEOUT_MS = 30 * 60_000;
 
-// Connect over SSH, waiting out a transient warm-up failure. Retry until a session opens or the deadline
-// elapses; on timeout the last connect error propagates UNCHANGED (the actionable `cloudflared tunnel …` one).
-// Only for the connect that precedes a MUTATION, read/probe connects stay single-shot so `plan` never blocks
-// on an unreachable host. Reuses the executor's memoized forwarder across attempts (a failed SSH connect keeps
-// the forwarder cached, and cloudflared re-resolves DNS per connection, so a reused forwarder succeeds once the
-// record propagates).
+// Retries connecting until it succeeds or the deadline elapses, propagating the final error unchanged on timeout. Only
+// for the connect before a mutation; probes stay single-shot.
 export const connectWithRetry = async (
     executor: SshExecutor,
     target: SshTarget,
@@ -224,11 +193,8 @@ export const connectWithRetry = async (
     }
 };
 
-// ssh2 is CommonJS with named exports (no default), so `import { Client }` is the correct interop form.
-// Every connection verifies the host key against `store` (trust-on-first-use + pinning) before proceeding.
-// A target with via:"cloudflared" is dialed through a per-host `cloudflared access tcp` forwarder (memoized
-// so the many sessions of one apply share it); ssh2 connects to the local forwarder port, but the host-key
-// store stays keyed on the LOGICAL address:port, so TOFU pinning is stable across runs.
+// Verifies the host key via `store` before connecting; a cloudflared target dials a memoized per-host forwarder, but
+// the store stays keyed on the logical address:port.
 export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()): SshExecutor => {
     const forwarders = new Map<string, Promise<CloudflaredForwarder>>();
 
@@ -240,7 +206,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
         if (forwarder === undefined) {
             forwarder = startCloudflaredForwarder(target.address);
             forwarders.set(target.address, forwarder);
-            // A failed start must not poison the cache, drop it so a later connect can retry.
+            // Evict the entry immediately if the forwarder fails to start.
             forwarder.catch(() => forwarders.delete(target.address));
         }
         const resolved = await forwarder;
@@ -252,11 +218,8 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
             const endpoint = await dial(target);
             return new Promise<SshSession>((resolve, reject) => {
                 const client = new Client();
-                // Connect/auth failures surface here; removed once ready so a later disconnect can't reject twice.
-                // For a cloudflared target the transport error (e.g. ECONNRESET) hides the real cause, cloudflared
-                // could not resolve/reach the tunnel origin, which is only in its stderr. Append that tail so the
-                // failure is actionable. A short flush delay lets cloudflared log the origin failure it just hit
-                // before we read the tail (the ssh error and cloudflared's log line race on the event loop).
+                // Removed once ready to avoid a double reject; appends cloudflared's stderr so a bare ECONNRESET is
+                // actionable.
                 const onError = (error: Error): void => {
                     if (endpoint.stderr === undefined) {
                         reject(error);
@@ -272,10 +235,8 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                 client.on("error", onError);
                 client.on("ready", () => {
                     client.removeListener("error", onError);
-                    // In-flight exec failers. A transport that dies mid-command (keepalive timeout, tunnel
-                    // drop) must REJECT the command: the channel's own "close" would otherwise resolve it as a
-                    // silent code-0 success. The post-ready "error" listener also keeps a keepalive failure
-                    // from crashing the process as an unhandled Client error event.
+                    // Tracks in-flight execs so a dropped transport can reject them instead of resolving as a silent
+                    // close.
                     const inflight = new Set<(error: Error) => void>();
                     const failInflight = (error: Error): void => {
                         // Each failer removes only itself from the set, safe during direct Set iteration.
@@ -308,8 +269,8 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                                     resolveExec(result);
                                 };
                                 inflight.add(fail);
-                                // Backstop against a genuinely wedged remote command on a live transport; the
-                                // session is unusable after (the channel can't be reclaimed), so end it.
+                                // Backstop for a wedged remote command on a live transport; the session is unusable
+                                // after, so end it.
                                 const timer = setTimeout(() => {
                                     fail(new Error(`ssh exec timed out after ${EXEC_TIMEOUT_MS / 60_000}m: ${command}`));
                                     client.end();
@@ -340,8 +301,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                                 });
                                 client.end();
                             }),
-                        // SFTP get/put over the same connection. ssh2 streams the transfer to/from the local path,
-                        // so the bytes never pass through `exec`'s utf8 string sink (which would corrupt binary).
+                        // SFTP get/put streamed directly to/from the local path, not through `exec`'s string sink.
                         download: (remotePath, localPath) =>
                             new Promise<void>((resolveTransfer, rejectTransfer) => {
                                 client.sftp((sftpError, sftp) => {
@@ -400,9 +360,8 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                     readyTimeout: READY_TIMEOUT_MS,
                     keepaliveInterval: KEEPALIVE_INTERVAL_MS,
                     keepaliveCountMax: KEEPALIVE_COUNT_MAX,
-                    // ssh2 hands us the host's public key (Buffer, since no hostHash is set) and waits for the
-                    // callback. A mismatch rejects the connect with a clear error before any command runs; a store
-                    // read failure also fails closed. Keyed on the LOGICAL address:port, not the local forwarder.
+                    // Rejects on a key mismatch or store failure; keyed on the logical address:port, not the
+                    // forwarder's port.
                     hostVerifier: (key: Buffer, callback: (valid: boolean) => void) => {
                         verifyHostKey(store, target.address, target.port, key.toString("base64"))
                             .then((outcome) => {

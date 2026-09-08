@@ -48,10 +48,9 @@ import {
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
 
-// Per-repo git ops over the workspace repos: "root" (the /work repo) plus every discovered repo under /work
-// ({repo} is the repo's root-relative dir, URL-encoded). An unknown {repo} is a handler-thrown
-// NOT_FOUND; a path that escapes the repo is a BAD_REQUEST. `changes` is the workspace-wide review set the
-// Changes panel renders; commit/discard take optional `paths` for per-file actions.
+// Per-repo git ops over the workspace repos; `root` is /work, others are discovered under it, and {repo} is the
+// root-relative dir, URL-encoded. Unknown {repo} throws NOT_FOUND, an escaping path throws BAD_REQUEST. `changes` is
+// the workspace-wide review set; commit/discard take optional `paths`.
 export const gitContract = {
     changes: oc
         .route({
@@ -62,9 +61,7 @@ export const gitContract = {
                 "The workspace's whole review set in one answer: every repo that has something uncommitted, and within it every changed file with its status and line counts. This is what the Changes panel draws, and it is the call to make when you want to know whether a workspace is clean without walking the repos yourself.",
         })
         .output(GitChangesSchema),
-    // The git-history graph over one repo's real commits: the repo list (for the tree affordance + switcher),
-    // one repo's commit log, and lazy per-commit detail (changed files, then a file's before/after AT the
-    // commit). Read-only, commit/discard on the working tree stay the write path (above).
+    // Read-only: repo list, commit log, lazy per-commit diff; commit/discard on the tree are a separate write path.
     repos: oc
         .route({
             method: "GET",
@@ -74,8 +71,7 @@ export const gitContract = {
                 "The repos the daemon found under the workspace root, each with the id every other call in this group expects as its `{repo}` segment. The workspace root itself is always present as `root`.",
         })
         .output(GitReposSchema),
-    // The same repos with the host + project their remote names, how a caller recognises a workspace repo in a
-    // list of `owner/name` strings that came from somewhere else. Kept off `repos` (a `git remote -v` per repo).
+    // Same repos with the remote's host and `owner/name`; kept off `repos` since it costs a lookup per repo.
     remoteRepos: oc
         .route({
             method: "GET",
@@ -115,13 +111,8 @@ export const gitContract = {
         })
         .input(GitCommitFileDiffQuerySchema)
         .output(FileDiffSchema),
-    // Write actions from the graph's commit context menu (VSCode "Git Graph" parity). Non-destructive refs
-    // (branch/tag) return Ok and let git's errors propagate; the sequence + HEAD-moving ops return a
-    // GitActionResult so a conflict/clean-apply failure is a value, not a 500. Read routes above.
-    /* The halted-operation pair. `operation` is a READ every git surface can use to explain a worktree it cannot
-     * otherwise act on; `abort` is the single way out, and it is git's own `--abort` rather than anything
-     * clever. Neither is reachable from the daemon's own verbs, those abort themselves, so this exists purely
-     * for what a terminal left behind. */
+    // Non-destructive writes return Ok; HEAD-moving ops return a GitActionResult, a conflict is a value not 500.
+    // `abort` is git's own `--abort`, the only way out of what `operation` reports; daemon verbs self-abort.
     operation: oc
         .route({
             method: "GET",
@@ -142,10 +133,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
-    /* Walk the current branch back to where it was before its last action, off the branch's own reflog. The
-     * complement to the Checkpoints timeline, not a duplicate of it: a checkpoint restores the working tree,
-     * this moves the ref. The read carries `previousSha`, which the write sends back as a concurrency token,
-     * an undo prepared against a stale view is refused rather than landing somewhere unlooked-at. */
+    // Moves the branch ref via reflog; requires `previousSha` from the matching read as a concurrency token.
     undoable: oc
         .route({
             method: "GET",
@@ -166,9 +154,7 @@ export const gitContract = {
         })
         .input(GitUndoSchema)
         .output(GitActionResultSchema),
-    /* The stash. Read as a list plus a per-entry diff, mirroring the commit log and commit-diff pair above,
-     * because a stash entry is a commit and the graph renders it as one. The writes are git's own four verbs;
-     * only `drop` is unrecoverable, and the route checkpoints before it. */
+    // A stash entry is a commit, read like the log/diff pair; only `drop` is unrecoverable and checkpoints first.
     stashes: oc
         .route({
             method: "GET",
@@ -237,7 +223,6 @@ export const gitContract = {
         })
         .input(GitTagCreateSchema)
         .output(OkSchema),
-    // The other two things one does with a tag, so the graph's tag pills are not a create-only affordance.
     deleteTag: oc
         .route({
             method: "POST",
@@ -367,13 +352,7 @@ export const gitContract = {
         })
         .input(DiscardSchema)
         .output(OkSchema),
-    /* Index moves. The worktree is untouched, so they need no checkpoint and can't fail destructively; git's
-     * own error (an unmatched pathspec) propagates.
-     *
-     * Both take a TARGET rather than a path list, and that is the point of them: a scope covers every matching
-     * file in the repository, including the ones the review had to truncate past its per-repo budget, and it
-     * costs one status read however many there are. A caller that enumerates instead can only ever act on the
-     * rows it managed to draw. */
+    // Take a scope, not a path list, so it covers files the caller never enumerated; the worktree is untouched.
     stage: oc
         .route({
             method: "POST",
@@ -394,9 +373,7 @@ export const gitContract = {
         })
         .input(GitIndexMoveSchema)
         .output(OkSchema),
-    // Local branch management for the switcher. `branches` also carries per-branch ahead/behind, so the list
-    // is enough to render sync state without a call per branch. Checkout is above (it moves HEAD, so it is
-    // checkpointed with the other HEAD-movers).
+    // `branches` includes per-branch ahead/behind, so the switcher renders sync state without a call per branch.
     branches: oc
         .route({
             method: "GET",
@@ -427,9 +404,7 @@ export const gitContract = {
         })
         .input(GitBranchDeleteSchema)
         .output(OkSchema),
-    // Remote sync. All three report a GitActionResult rather than throwing: no remote, no credentials and a
-    // non-fast-forwardable pull are ORDINARY outcomes the panel renders, not 500s. `remote` is the read
-    // (ahead/behind as of the last fetch, hence the Fetch button) the sync bar polls.
+    // Reflects the last fetch, not a live check; writes below report a GitActionResult, not a throw, on failure.
     remote: oc
         .route({
             method: "GET",
@@ -460,11 +435,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
-    /* THE PUSH IS A RUN, the pre-push check's three verbs over again (prepush.contract.ts), for the same reason:
-     * a push runs the repository's own pre-push hook, which for a workspace with a real gate is the whole suite,
-     * and a request held open for minutes dies at the first proxy and at the browser's own header deadline. So
-     * `push` starts it and answers at once, `pushState` is polled for the verdict, and the output is a terminal
-     * the owner can watch. Addressed by repo, unlike the check: there is one working tree but many remotes. */
+    // Starts the push and returns at once; poll `pushState` for the verdict, since it runs the pre-push hook.
     push: oc
         .route({
             method: "POST",
@@ -523,9 +494,7 @@ export const gitContract = {
         })
         .input(GitFileWriteSchema)
         .output(OkSchema),
-    // Write + commit-that-path-only + push, as one step with one answer. Reports rather than throws for the
-    // same reason the remote trio above does: no remote, no credentials and "you are on a side branch" are
-    // ordinary outcomes a screen renders, not 500s.
+    // Writes, commits only this path, and pushes in one call; no remote, no credentials, wrong branch are reported.
     publishFile: oc
         .route({
             method: "POST",

@@ -26,13 +26,8 @@ import {
     withoutRuntimeDirectives,
 } from "./environment.js";
 
-/* THE MODE EVERY COMPOSE BELOW MEANS: a base image that bakes NO feature pack, so a capability naming one
- * contributes its fragment to the overlay. Stated, because the alternative is reading it off whichever machine
- * happens to run this file — `/opt/packs` does not exist on CI and does exist inside an agent sandbox, where
- * it holds the current hash of the very packs these capabilities name, and the suite then asserted the
- * opposite of what it does on CI. Pointed at an empty directory rather than deleted from the assertions,
- * because "the base does not bake it" is the case that makes composing a fragment the right answer; the stamp
- * protocol's other two cases are packs.integration.test.ts's, with a stamps dir of its own. */
+// Pins PACK_STAMPS_DIR to an empty directory so every compose here means "no base image bakes this pack," regardless of
+// whether the machine running the suite has /opt/packs (CI does not, a sandbox does).
 process.env["INTENTIC_PACK_STAMPS_DIR"] = mkdtempSync(join(tmpdir(), "environment-stamps-"));
 
 // A proposal is custom-section content only: the daemon owns the FROM.
@@ -47,8 +42,8 @@ const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
     unstubbed<Services>("services", {
         config: unstubbed<Services["config"]>("config", {
-            // `sandbox` is DATA, so it is spelled out whole rather than stood in for: a stand-in answering every
-            // unread field with a throwing function would make `publicUrl` read as set.
+            // `sandbox` is spelled out whole, not stubbed: a throw-on-read stand-in would make an unread field look
+            // set.
             sandbox: {
                 profile: "container",
                 port: 8787,
@@ -72,13 +67,11 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "environment-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath }),
-        // A real store on the same throwaway root: readEnvironment folds the ledger into every payload and
-        // reject tombstones through it, so a stand-in would throw on the first ordinary read.
+        // Real store on the throwaway root; readEnvironment folds the ledger in, so a stub would throw immediately.
         runtimeInstalls: fileRuntimeInstallsStore(join(tmpdir(), `runtime-installs-${Math.random().toString(36).slice(2)}.json`)),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
-        // The other two provider-pack predicates: an empty auth dir (no translator subscriptions on disk) and
-        // no xAI sign-in: compose then carries no provider fragments, which is what these tests are shaped for.
+        // Empty auth dir plus no xAI sign-in means compose carries no provider fragments, which these tests assume.
         authRoot: mkdtempSync(join(tmpdir(), "environment-auth-")),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
@@ -92,11 +85,10 @@ const discord: Capability = { id: "discord", kind: "cli", config: { provider: "d
 
 test("baseImageOf prefers the runner-named base, else an official running image, else the release tag", () => {
     const latest = "ghcr.io/intentic/sandbox:latest";
-    // Fresh connect.sh run: no base named, and the running image IS the base.
+    // Fresh connect.sh run: no base named, so the running image is the base.
     expect(baseImageOf("", latest)).toBe(latest);
     expect(baseImageOf("", "ghcr.io/intentic/sandbox:sha-abc1234")).toBe("ghcr.io/intentic/sandbox:sha-abc1234");
-    // After a rebuild the running image is the overlay's own tag, which is not a base: the named base wins.
-    // Getting this wrong is what produced the endless rebuild prompt AND rolled the sandbox back each time.
+    // After a rebuild the running image is the overlay's own tag, not a base; the named base wins instead.
     expect(baseImageOf(latest, "intentic-sandbox-env-demo:abc123def456")).toBe(latest);
     // The dev loop: an unofficial ref is honoured only because the runner named it explicitly.
     expect(baseImageOf("intentic-sandbox:dev", "intentic-sandbox-dev-env-demo:abc123def456")).toBe("intentic-sandbox:dev");
@@ -104,12 +96,10 @@ test("baseImageOf prefers the runner-named base, else an official running image,
     expect(baseImageOf("", "")).toBe(RELEASE);
     expect(baseImageOf("", "intentic-sandbox:dev")).toBe(RELEASE);
     expect(baseImageOf("", "evil.example.com/sandbox:latest")).toBe(RELEASE);
-    // An overlay tag is not a base, so an overlaid sandbox with no base named falls through to the release
-    // rather than extending its own last build: composing again is byte-identical and does NOT greet the owner
-    // with a spurious "rebuild required". Same rule as the unofficial refs above, on the shape that hits it most.
+    // An overlay tag is not a base, so it falls to the release rather than a spurious rebuild prompt.
     expect(baseImageOf("", "intentic-sandbox-env-demo:abc123def456")).toBe(RELEASE);
     expect(baseImageOf("", "intentic-sandbox-env:abc123def456")).toBe(RELEASE);
-    // Unset/blank must never reach the FROM line verbatim: `FROM undefined` is an overlay that cannot build.
+    // Unset/blank must never reach the FROM line verbatim: FROM undefined is an overlay that cannot build.
     expect(baseImageOf(undefined, undefined)).toBe(RELEASE);
     expect(baseImageOf("   ", "")).toBe(RELEASE);
 });
@@ -123,9 +113,7 @@ test("a rebuild is version-preserving: composing again after one is byte-identic
     expect(approved).toContain(`FROM ${latest}`);
     expect(hasOfficialBase(approved)).toBe(true);
 
-    // Recompose as the daemon does on boot AFTER a rebuild: the container now runs the overlay's own tag, with
-    // the base named by recreate.sh and the applied hash stamped. Identical content and hash ⇒ the Environment
-    // card stays quiet instead of asking for another rebuild.
+    // Simulates post-rebuild boot: running the overlay's own tag; identical hash keeps the card quiet.
     const rebuilt = stubServices(first!, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
     expect(await composeEnvironment(rebuilt)).toBe(first);
     expect(await rebuilt.files.read(approvedPath(rebuilt))).toBe(approved);
@@ -135,7 +123,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
     const services = stubServices();
     expect(await readEnvironment(services)).toEqual({ container: "intentic-sandbox-demo" });
 
-    // The agent's Write of the proposal file IS the proposal.
+    // The agent's write of the proposal file is the proposal.
     await services.files.write(proposalPath(services), CUSTOM);
     const hash = sha256Hex(CUSTOM);
     expect(await readEnvironment(services)).toEqual({ proposal: { content: CUSTOM, hash }, container: "intentic-sandbox-demo" });
@@ -172,7 +160,7 @@ test("approve refuses a missing proposal, a reviewed-content mismatch, a FROM li
     await services.files.write(proposalPath(services), withDirective);
     expect(await approveEnvironment(services, sha256Hex(withDirective))).toBe("invalid");
 
-    // No failure wrote the custom or approved files.
+    // No failure path writes the custom or approved files.
     const state = await readEnvironment(services);
     expect(state.custom).toBeUndefined();
     expect(state.approved).toBeUndefined();
@@ -204,12 +192,7 @@ test("compose folds a capability's fragment (install + runtime directives) into 
 });
 
 test("compose dedupes identical fragments and orders distinct ones canonically", async () => {
-    /* Two vpn entries share one fragment, so it rides once. Discord's cli connector NAMES the whisper pack
-     * rather than carrying a fragment of its own, so that content rides the overlay exactly when the running
-     * base does not already bake that pack version. Asked through packFragment(), the way the compose itself
-     * asks, so this holds in a dev checkout AND inside a stamped standard image, where the honest answer is
-     * "nothing to compose". Lexicographic content order is manifest-independent: the vpn blocks open with
-     * "# The container ..." / "# vpn capability ...", the whisper pack with "# whisper.cpp ...". */
+    // Discord names the whisper pack instead of carrying one; rides only when the base doesn't bake it.
     const whisper = await packFragment("whisper");
     const services = stubServices("", [vpn("office"), discord, vpn("home-lab")]);
     await composeEnvironment(services);
@@ -224,8 +207,7 @@ test("compose dedupes identical fragments and orders distinct ones canonically",
 
     const reordered = stubServices("", [discord, vpn("office")]);
     await composeEnvironment(reordered);
-    // Same content (and so same hash) regardless of manifest order or duplicate count — the canonical
-    // ordering guarantee, asserted as byte equality instead of spot-checked marker positions.
+    // Same content and hash regardless of manifest order or duplicate count, asserted as byte equality.
     expect(await services.files.read(approvedPath(reordered))).toBe(approved);
 });
 
@@ -257,8 +239,8 @@ test("an empty approved proposal clears the custom section", async () => {
     expect(await services.files.read(approvedPath(services))).toBeUndefined();
 });
 
-// Agents draft into environment.d/<tool>.Dockerfile rather than into the proposal, because worktree-isolated
-// agents run in parallel and a shared proposal file loses one of two concurrent drafts outright.
+// Agents draft into environment.d/<tool>.Dockerfile, not the proposal, since parallel worktree-isolated agents writing
+// one shared file would lose a concurrent draft.
 test("drafts from parallel agents compose into one proposal, in a stable order", async () => {
     const services = stubServices();
     const dir = draftsDir(services);
@@ -268,17 +250,12 @@ test("drafts from parallel agents compose into one proposal, in a stable order",
     const { proposal } = await readEnvironment(services);
     expect(proposal?.content).toContain("ffmpeg");
     expect(proposal?.content).toContain("cowsay");
-    // Sorted by filename, so the same set of drafts always hashes the same: an unstable order would ask the
-    // owner to re-approve identical content on every read.
+    // Sorted by filename so the same set of drafts always hashes the same; no re-approve for nothing new.
     expect(proposal!.content.indexOf("cowsay")).toBeLessThan(proposal!.content.indexOf("ffmpeg"));
 });
 
-/* Folding drafts in happens on a READ, so it may write only when the fold produces something new.
- *
- * An unconditional write is a change as far as the workspace watcher can tell, and the browser binds
- * `.intentic/environment.` to the `environment` query (WORKSPACE_STATE_FILES), so GET /environment pushed a
- * frame that invalidated the query that refetched GET /environment, forever, paced by the watcher's 250ms
- * debounce. Four requests a second, each frame also dragging a tree walk and a `git status` behind it. */
+// Folding drafts happens on read, writing only when something changed: an unconditional write would look like a change
+// to the workspace watcher, retriggering the very GET /environment query that just ran.
 test("re-reading unchanged drafts writes nothing, so the watcher has no change to report", async () => {
     const services = stubServices();
     await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
@@ -381,15 +358,12 @@ test("a one-session install that is not live in this container stays off the car
     expect((await readEnvironment(services)).recurring).toBeUndefined();
 });
 
-/* ---- the owner answering ONE line of that list ----
- *
- * Until this existed, rejecting a whole PROPOSAL was the only route to a tombstone, and the ecosystems with no
- * mechanical template had no route to a draft at all: their entries were reported, corroborated and unanswerable
- * for as long as the ledger remembered them. */
+// Lets the owner answer one recurring entry directly (adopt, dismiss, restore), for ecosystems with no mechanical
+// template that would otherwise have no route to a draft or a tombstone.
 
 test("adopting writes the tool's overlay draft on the owner's say-so, without the sweep's gates", async () => {
     const services = stubServices();
-    // ONE session and no corroboration: the sweep would refuse this, and refusing it is right when nobody asked.
+    // One session, no corroboration: the sweep would refuse this, rightly, since nobody asked.
     await services.runtimeInstalls.record([{ kind: "cargo", tool: "cargo-xwin" }], "cargo install --locked cargo-xwin", "s1", 1_000);
 
     expect(await decideRuntimeInstall(services, { tool: "cargo-xwin", decision: "adopt" })).toBeUndefined();
@@ -410,8 +384,7 @@ test("dismissing tombstones one tool and takes its auto-draft with it; undoing c
     const services = stubServices();
     await services.runtimeInstalls.record([{ kind: "apt", tool: "nsis" }], "apt-get install -y nsis", "s1", 1_000);
     await services.files.write(join(draftsDir(services), "nsis.Dockerfile"), `${AUTO_MARKER} nsis\nRUN apt-get install -y nsis\n`);
-    // An agent's own draft carries no marker and is not the machine repeating itself: dismissing a ledger line
-    // does not answer a question an agent asked in person.
+    // An agent's own draft carries no marker; dismissing a ledger line doesn't answer an agent's own ask.
     await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
 
     await decideRuntimeInstall(services, { tool: "nsis", decision: "dismiss" });
@@ -453,9 +426,7 @@ test("a drift snapshot from a container that no longer exists is not reported", 
     expect((await readEnvironment(services)).drift).toBeUndefined();
 });
 
-/* A VM honours no runtime directive: the hosted lane's machine is already root over the whole box, so a
- * fragment that is only a `# intentic:runtime` comment (the docker capability on a standard image) must not
- * compose into an overlay the card then reports as pending. A real install beside such a line still rides. */
+// A directive-only fragment must vanish entirely: a hosted VM honours no runtime directive at all.
 test("withoutRuntimeDirectives drops the directive lines and any fragment with no instruction left", () => {
     const directiveOnly = "# docker capability: this directive grants dockerd the privileges it needs\n# intentic:runtime --privileged";
     const install =

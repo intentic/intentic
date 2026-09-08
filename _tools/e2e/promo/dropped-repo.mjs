@@ -1,11 +1,6 @@
-// The repository the video drags in. Written to disk at record time rather than committed, because the drop is a
-// real one: Chromium hands the page actual FileSystemEntry roots for this directory, the app's own walker recurses
-// it, and the fixture daemon writes what arrives. So the tree the viewer sees grow is the tree that is here.
-//
-// Deliberately a Go service: `acme-shop` already has a TypeScript api and web, a third language says "any repo",
-// and no package.json means the upload queue never offers to install dependencies: a subprocess the recorded
-// workspace has no honest answer for. Kept under 20 files so the queue takes its per-file XHR path (the one the
-// demo's transport shim serves) instead of streaming a tar.
+// Written to disk, not committed: the drop drags real FileSystemEntry roots the app's walker recurses. A Go service on
+// purpose, so no package.json triggers the install-dependencies flow; kept under 20 files to take the per-file XHR
+// path, not a tar stream.
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -281,7 +276,7 @@ ENTRYPOINT ["worker"]
 `,
 };
 
-/** Write the repo to `dir` (replacing whatever is there) and return its path plus the file count the drop carries. */
+/** Writes the repo to `dir` (replacing what is there); returns the path and file count. */
 export const writeDroppedRepo = (dir) => {
     rmSync(dir, { recursive: true, force: true });
     for (const [path, content] of Object.entries(FILES)) {

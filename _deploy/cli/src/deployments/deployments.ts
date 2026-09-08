@@ -6,9 +6,8 @@ import { z } from "zod";
 import { loadEnvFile, readArtifact } from "../lib/artifact.js";
 import { readGeneratedSecrets } from "../secrets/generated-secrets.js";
 
-// One app deployment as the platform's Apps view renders it: the desired config the resolver baked into the
-// graph (image/env/url) plus whether Komodo currently has it registered, with a deep-link into Komodo for the
-// runtime detail (logs, status) a dashboard should not rebuild.
+// One app deployment as the Apps view renders it: the resolved config (image/env/url) plus whether Komodo has it
+// registered, with a deep-link for runtime detail.
 export interface DeploymentView {
     readonly name: string;
     readonly image: string;
@@ -22,13 +21,11 @@ export interface DeploymentView {
     readonly komodoDeploymentUrl?: string;
 }
 
-// A scalar field is surfaced only when present with the right type; anything else (missing, wrong type, a
-// $ref/$secret object) reads as undefined, `.catch(undefined)` keeps the view best-effort instead of throwing.
+// Surfaces a scalar field only if present with the right type; anything else reads as undefined.
 const optionalString = z.string().optional().catch(undefined);
 const optionalNumber = z.number().optional().catch(undefined);
 
-// A deployment node's `env` input is a serialized record; surface keys with their scalar values, blanking any
-// $ref/$secret value so a secret never leaves the sandbox. Missing/invalid env reads as {}.
+// Surfaces `env` keys with scalar values only, blanking any $ref/$secret so a secret never leaves the sandbox.
 const envInput = z
     .record(z.string(), z.unknown())
     .transform((record) =>
@@ -41,8 +38,7 @@ const envInput = z
     )
     .catch({});
 
-// The `{$secret:{key}}` shape the resolver emits for generated/admin passwords; the key is the env var holding
-// the value.
+// The `{$secret:{key}}` shape the resolver emits for generated/admin passwords: key names the env var.
 const secretInput = z
     .object({ $secret: z.object({ key: z.string() }) })
     .optional()
@@ -62,9 +58,8 @@ const deploymentInputs = z.object({
 // The komodo control-plane node's inputs needed to log in.
 const komodoInputs = z.object({ domain: optionalString, adminUser: optionalString, adminPassword: secretInput });
 
-// Resolve the Komodo control plane's public URL + admin login from the graph's `komodo` node. The admin
-// password is a generated secret: env-first (the apply pipeline injects it), else the local .secrets.json the
-// resolve step wrote in the sandbox.
+// Resolves the Komodo control plane's URL and admin login from the graph's `komodo` node. The admin password is
+// env-first, falling back to the local .secrets.json the resolve step wrote.
 const komodoAccess = (graph: DesiredStateGraph, generated: Record<string, string>): { url: string; user: string; password: string } | undefined => {
     const node = Object.values(graph.resources).find((resource) => resource.type === "komodo");
     if (node === undefined) {
@@ -79,9 +74,8 @@ const komodoAccess = (graph: DesiredStateGraph, generated: Record<string, string
     return { url: `https://${domain}`, user, password };
 };
 
-// Build the Apps view for every `deployment` node in the artifact. Liveness is best-effort: when Komodo can be
-// reached we confirm each deployment is registered (and capture its id for the deep-link); when it cannot, the
-// configured deployments still surface with `live:false` so the view shows what is declared.
+// Builds the Apps view for every `deployment` node. Liveness is best-effort: registered deployments get a Komodo id and
+// deep-link when reachable; otherwise they surface with `live:false`.
 export const collectDeployments = async (
     artifact: string,
     log: (message: string) => void,
@@ -97,10 +91,7 @@ export const collectDeployments = async (
     const access = komodoAccess(graph, generated);
     const komodoUrl = access?.url ?? "";
     const liveIds = new Map<string, string>();
-    // Tri-state: undefined = no komodo in the graph (services-only intents deploy via compose and have NO
-    // deployment engine, "unreachable" would be a false alarm); true/false = the declared engine answered
-    // or didn't. Surfaced on the result (not just the log line) so the UI can show "Komodo is down on your
-    // host" instead of silently painting every deployment as not-live.
+    // Tri-state: undefined means no komodo node; true/false is whether the reachable engine answered.
     let komodoReachable: boolean | undefined = access === undefined ? undefined : true;
     if (access !== undefined) {
         try {

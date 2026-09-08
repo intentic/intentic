@@ -1,27 +1,8 @@
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 
-/* WHETHER A BRANCH IS RED RIGHT NOW, judged on its LAST COMMIT rather than on its last run.
- *
- * A push fires every workflow the repo has: on this workspace's own main, three. They start within the same
- * second, so which one carries the newest `createdAt` is a coin toss, and reading the branch off the single
- * newest run meant a green `docs` run could sit in front of a failed `test` run from the same push and report
- * the branch as fine. The badge blinked out while main was broken, the failed row lost its primary "Fix with
- * agent", and the repo's standing read "Nothing failing" with a red run on screen. So the unit is the COMMIT:
- * every terminal run for one sha is one verdict, and ANY failure in it makes that commit red.
- *
- * IT IS A STATE, NOT A PIECE OF NEWS. This used to be an edge, it badged when a branch went red and went quiet
- * again once the view had been opened, on the reasoning that after the first look the user already knows. What
- * that actually produced is a rail that says nothing while CI is broken: you glance at Pipelines once, and the
- * only surface that tells you main is still red goes dark until somebody pushes a fresh breakage. The badge
- * now stands for the CONDITION and clears the only way the condition does, a later commit that passes.
- *
- * The anti-spam property that motivated the edge is kept where it belongs, in the SHAPE of the number rather
- * than in a read marker: a streak is one per broken branch, so a breakage three commits deep still says "1",
- * and `openFailures` flags only the head commit's failures, so one breakage is one demand and not six.
- *
- * Derived from the runs list rather than the daemon's own conclusions record, deliberately: that record is
- * written only by the webhook receiver, so a sandbox whose hook never registered (the `hookWarning` case)
- * would silently never badge. The runs list is filled by the REST backfill too, so this works either way. */
+// Whether a branch is red right now, judged on its last commit rather than its last run: near-simultaneous workflows
+// mean a green one can hide a red one. A state, not a one-time edge: it clears only when a later commit passes, never
+// on merely being viewed. One streak per branch, however many commits deep, keeps the count from becoming noise.
 
 export interface FailureStreak {
     readonly repo: string;
@@ -30,24 +11,19 @@ export interface FailureStreak {
     readonly sha: string;
     // When the branch WENT red: the oldest failure in the unbroken run of red commits at the head.
     readonly since: number;
-    // How bad it has got, for the tooltip: how many commits in a row are red, and how many runs failed across
-    // them (one commit can contribute several, which is the whole reason the commit is the unit).
+    // For the tooltip: commits in a row that are red, and how many runs failed across them.
     readonly commits: number;
     readonly runs: number;
 }
 
-// Only results count. Canceled and skipped are outcomes, not verdicts (the daemon's webhook receiver draws the
-// same line), and a run still going hasn't said anything yet, neither may break a streak or start one, so a
-// push that supersedes a running pipeline can't fake a recovery. A commit whose runs are ALL non-verdicts is
-// therefore not a commit at all here, and the walk passes straight over it to the last one that spoke.
+// Only failed/success count as verdicts; canceled, skipped and running can't start or break a streak. A commit with no
+// verdicted run at all isn't a commit here; the walk skips straight over it.
 const isTerminal = (run: PipelineRun): boolean => run.status === `failed` || run.status === `success`;
 
 const branchKey = (run: PipelineRun): string => `${run.repo}\n${run.branch}`;
 
-/* A branch that looks like a semver version tag: v1.2.3, v1.245.0, v0.0.1-alpha, etc. GitHub workflow_dispatch
- * runs triggered from a release tag carry the TAG as head_branch (not the actual branch the tag points at),
- * creating pseudo-branches that should not participate in auto-open logic, a running or failed npm-publish on
- * v1.245.0 is not the user's current work, and opening it buries the board under stale release runs. */
+// A semver-looking tag (v1.2.3, ...): workflow_dispatch runs from a release tag carry the tag as head_branch, not the
+// real branch. Excluded from auto-open, or stale release runs bury the board.
 const isTagRef = (branch: string): boolean => /^v\d+\.\d+\.\d+/.test(branch);
 
 // One commit's verdict on one branch: what every derivation below walks.
@@ -66,10 +42,8 @@ const commitOf = (sha: string, group: readonly PipelineRun[]): BranchCommit | un
     return newest === undefined ? undefined : { sha, runs, newest, failed: runs.filter((run) => run.status === `failed`) };
 };
 
-/* Each branch's commits, newest first. Ordered by the newest run in each, which is the closest thing a run list
- * carries to push order: the runs name their commit but nothing here knows which commit is that commit's
- * parent. Two pushes seconds apart can therefore tie, and the same second is also exactly when their verdicts
- * are least likely to disagree. */
+// Each branch's commits, newest first, ordered by their newest run: the closest proxy to push order this data has
+// (commit parentage isn't known).
 const commitsByBranch = (runs: readonly PipelineRun[]): BranchCommit[][] => {
     const byBranch = new Map<string, Map<string, PipelineRun[]>>();
     for (const run of runs.filter(isTerminal)) {
@@ -96,9 +70,7 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
         if (head === undefined || head.failed.length === 0) {
             continue;
         }
-        // The streak runs from the head back to the last commit that passed (or to the end of what we can see:
-        // a breakage older than the run window reads as starting at the oldest run we have, which only ever
-        // makes it look older, never newer).
+        // Runs back to the last passing commit, or the window's oldest run; never looks newer than it is.
         const recovered = commits.findIndex((commit) => commit.failed.length === 0);
         const red = recovered === -1 ? commits : commits.slice(0, recovered);
         const failed = red.flatMap((commit) => [...commit.failed]);
@@ -115,18 +87,13 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
     return streaks.toSorted((a, b) => b.since - a.since);
 };
 
-/* The failures on each red branch's HEAD COMMIT, the open problems that branch has. Deliberately not "every
- * failed run with nothing green after it": inside a three-commit breakage all of them are unfixed, but the
- * thing to fix is what the branch's current code does, and a view that flags all of them turns one breakage
- * into six identical demands. Two failed workflows on the SAME commit are two of them, because they are two
- * pipelines with two logs, and the fix button acts on a run.
- *
- * THESE ROWS ALSO ARRIVE EXPANDED, half of `arrivesOpen` below, where the reasoning for that lives. */
+// Only the head commit's failures are open: a breakage three commits deep is one demand, not three. Two workflows on
+// the same commit are still two: a fix button acts on one run.
 export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
     const open = new Set<PipelineRun>();
     for (const [head] of commitsByBranch(runs)) {
         for (const failure of head?.failed ?? []) {
-            // Tag refs (v1.2.3) are release dispatch runs, not the user's current work: see isTagRef.
+            // Tag refs (v1.2.3) are release dispatch runs, not the user's current work.
             if (!isTagRef(failure.branch)) {
                 open.add(failure);
             }
@@ -135,30 +102,8 @@ export const openFailures = (runs: readonly PipelineRun[]): ReadonlySet<Pipeline
     return open;
 };
 
-/* WHAT IS IN FLIGHT ON THE CODE AS IT STANDS: the unfinished runs on the newest commit each branch has.
- *
- * Half of what the board opens for you (`arrivesOpen` below); `openFailures` above is the other half. A run that
- * is still going has a job graph worth the vertical space unasked, it is the answer arriving, and somebody who
- * came to watch it should not have to click for it. The freshness half is what keeps that from becoming noise: a
- * re-run somebody started on last week's commit is unfinished too, and its diagram is not what anyone opened the
- * board for.
- *
- * QUEUED COUNTS AS IN FLIGHT HERE, and it is the case that pays for the graph most: on a run stuck waiting for a
- * runner the diagram is the answer to the only question there is, which jobs are held and on what, and a rule
- * that opened a run the moment a runner picked it up would keep it shut for exactly as long as it was stuck.
- *
- * DELIBERATELY NOT `commitsByBranch` ABOVE, which is why this is a second walk rather than another reader of
- * that one. That walk keeps only the runs that reached a VERDICT, which is right for judging a branch and wrong
- * here: a push whose pipelines are all still going has no terminal run at all, so its commit would not be in
- * that list, and the head would be the commit BEFORE it, exactly at the moment this has to fire.
- *
- * So the head is read off every run, by the newest `createdAt` on the branch, the same push-order proxy the walk
- * above settles for and with the same limit: a re-run of an older commit carries a newer timestamp than the
- * commit that followed it, so it reads as that branch's head. That run is the one somebody just pressed Re-run
- * on, so opening its graph is the right answer either way.
- *
- * Per BRANCH, not one commit for the whole board: two branches building at once are two answers arriving, and a
- * board that opened only the later push would hide a live run for no reason a reader could see. */
+// Unfinished runs (queued counts too) on each branch's newest commit. Its own walk, not `commitsByBranch`: that keeps
+// only verdicted runs, so an all-still-going push wouldn't have a commit in it at all.
 export const inFlightOnHead = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => {
     const heads = new Map<string, PipelineRun>();
     for (const run of runs) {
@@ -171,43 +116,16 @@ export const inFlightOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipeli
     return new Set(runs.filter((run) => isPipelineInFlight(run.status) && heads.get(branchKey(run))?.sha === run.sha && !isTagRef(run.branch)));
 };
 
-/* WHAT THE BOARD OPENS FOR YOU (PipelineRunRow's `autoOpen`): everything the newest commit on a branch has to
- * say that is not "fine". The runs still going on it, and the failures it left open.
- *
- * The two are ONE event either side of its ending. A live run's graph is on screen because the answer is
- * arriving; when the answer turns out to be red, that same graph is WHICH JOB BROKE, which is the question
- * anybody looking at a failed row is here to answer, and the evidence the "Fix with agent" button beside it acts
- * on. A board that drew the diagram while the pipeline ran and hid it the moment it failed would be closing at
- * the one moment there was something to read, and would leave a reader who arrived after the run finished, which
- * is most of them, clicking to find out what a red row is red about.
- *
- * BOTH HALVES ARE HEAD-COMMIT RULES, and that is what stops this unrolling the whole list. A re-run somebody
- * left going on last week's code is not opened, a failure behind a newer one is not opened, a failure a later
- * commit closed is not opened, and a breakage six commits deep opens ONE row on that branch rather than six, the
- * same shape that keeps `openFailures` to one demand per breakage.
- *
- * A UNION AND NOT A PRECEDENCE: a commit whose first workflow has already failed while its second is still
- * running is two rows worth opening, and picking one of them would hide either the breakage or the run that
- * might add to it. Note the two halves read `head` differently on purpose, off every run here and off the runs
- * with a verdict there, so a push that is still building shows its live graph AND the failure the last commit
- * left open, which is the branch's most recent word until this push has one of its own. */
+// Union, not precedence: a commit can have a live run and a failure worth showing both. Both halves are head-commit
+// rules, so a breakage six commits deep still opens one row, not six.
 export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...inFlightOnHead(runs), ...openFailures(runs)]);
 
-/* For each failed run, the run that put its branch back to green, the EARLIEST one on a LATER COMMIT that
- * passed clean, which is the one that actually recovered the branch rather than whichever green happens to be
- * newest. A green run beside it on its OWN commit closes nothing: that is a different workflow passing on the
- * same broken code, which is precisely the confusion the head-commit rule above exists to end.
- *
- * Keyed by the run object, not by an id: a run's identity across vendors takes host+project+runId to spell, and
- * every caller already holds the very objects this walked. They come from one query cache, so the row rendering
- * a run and the map built from the same list hold the same instance.
- *
- * Absent from the map ⇒ nothing has passed since, so the failure is still the branch's last word. */
+// Earliest later commit that passed clean, not just the newest green; a green on the failure's own commit doesn't
+// count. Keyed by run object identity (shared from one query cache); absent means nothing has passed since.
 export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<PipelineRun, PipelineRun> => {
     const superseded = new Map<PipelineRun, PipelineRun>();
     for (const commits of commitsByBranch(runs)) {
-        // Walking backwards in time, every clean commit we meet is earlier than the last one we saw, so this
-        // always holds the earliest recovery newer than the failure being visited.
+        // Walking backwards, this always holds the earliest recovery newer than the failure visited.
         let recovery: PipelineRun | undefined;
         for (const commit of commits) {
             if (commit.failed.length === 0) {
@@ -224,9 +142,8 @@ export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<Pipeline
     return superseded;
 };
 
-// What the rail says. Named per branch while there is only one, because "main is broken" is a fact the user
-// can act on and "1" is not. One commit is the ordinary case and names the commit; more than one says how long
-// it has been going, which is the part that changes what you do about it.
+// Names the branch while there's only one breakage; 'main is broken' is actionable, '1' is not. Single-commit says the
+// sha; more than one says how deep, which is what changes the response.
 export const streakTooltip = (streaks: readonly FailureStreak[]): string => {
     const [only] = streaks;
     if (streaks.length === 1 && only !== undefined) {

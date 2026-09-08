@@ -4,14 +4,8 @@ import type { Config } from "../config.js";
 import { sendMail } from "../mail.js";
 import { adminAttention } from "./admin-attention.js";
 
-/* THE OPERATOR'S MORNING MAIL — the attention feed, pushed once a day instead of waiting to be pulled. The
- * panel answers "what needs me" only when somebody opens it; a stuck setup on a week the operator is busy
- * elsewhere waits exactly as long as their curiosity does, which is the failure mode this closes.
- *
- * Sends ONLY when there is something to say (an empty feed mails nobody), only to the ADMIN_EMAILS list,
- * and at most once per UTC day — the latch is the rollup row's `digestAt`, stamped before the send so a
- * crash mid-send costs one digest rather than sending doubles forever. Rides the same Resend path as
- * invites; an unconfigured mailer logs and moves on, exactly like every other mail on this platform. */
+// Attention feed pushed once a day rather than waiting to be pulled. Sends only when there is something to say, only to
+// ADMIN_EMAILS, at most once per UTC day (latched on the rollup row's `digestAt`, stamped before send).
 
 const TOP_ITEMS = 12;
 
@@ -29,8 +23,7 @@ export const sendAdminDigest = async (
     if (admins.length === 0) {
         return;
     }
-    // The once-per-day latch. A conditional update wins exactly once even if two replicas raced past the
-    // job lock; losing it means somebody else is sending, which is the desired outcome.
+    // A conditional update wins the once-per-day latch exactly once even if two replicas raced past the job lock.
     const latch = await prisma.adminDailyStat.updateMany({ where: { day, digestAt: null }, data: { digestAt: now() } });
     if (latch.count === 0) {
         return;

@@ -11,8 +11,7 @@ import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createPublicRoutes, type PublicRoutesDeps } from "./public.routes.js";
 
-/* The owner's side of the outbox. `unpublish` is the destructive one: it takes a path from the browser and hands
- * it to a recursive rm, so what it refuses matters more than what it removes. */
+// The owner's side of the outbox; unpublish feeds a browser path to a recursive rm, so refusals matter most.
 
 // A workspace with an outbox holding one ordinary file and one published conversation.
 const outboxWorkspace = async (): Promise<ReturnType<typeof workspacePaths>> => {
@@ -31,10 +30,8 @@ const publicDeps = (workspace: ReturnType<typeof workspacePaths>, overrides: Par
 
 const client = (workspace: ReturnType<typeof workspacePaths>) => routesClient(publicContract, createPublicRoutes(publicDeps(workspace)));
 
-/* Shared conversations live in the outbox but are withdrawn by their own action, which also drops the row that
- * promises the link. The guard compared the raw input against the reserved name while the rm took the RESOLVED
- * path, so the two disagreed about every spelling but the literal one, and `./conversations` recursively removed
- * every published page while the /share rows survived to promise links that answer nothing. */
+// Must compare the resolved path, not the raw input, or a spelling like `./share` would bypass the guard while rm
+// removes it and the link row still promises it.
 test("unpublish refuses the share directory however the path is spelled", async () => {
     const workspace = await outboxWorkspace();
     const shared = join(workspace.root, PUBLIC_DIR, SHARE_DIR, "index.html");
@@ -60,8 +57,7 @@ test("unpublish refuses a path that leaves the outbox", async () => {
     expect(existsSync(outside)).toBe(true);
 });
 
-// The list is the owner's honest inventory, and the shared conversations are deliberately not in it: they have
-// their own list, with their own titles and their own withdraw action.
+// Shared conversations aren't in this list; they have their own list, titles, and withdraw action.
 test("list reports published files and omits the shared conversations", async () => {
     const workspace = await outboxWorkspace();
     const listed = await client(workspace).list();

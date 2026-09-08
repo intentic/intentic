@@ -1,16 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* THE COMPOSER'S PICKS ARE ONE ANSWER PER ACCOUNT, NOT PER WINDOW, and this suite is the two-window proof.
- *
- * The app runs a full copy per browser window (chat/summon.ts), and the chat panel routinely sits in one of its
- * own (composables/floating.ts) while the fleet board sits in another. Read once at load into a private ref, the
- * remembered model/effort/account were a different COPY per window: a pick made in the popped-out chat was
- * invisible to the board's window, so "New agent" pressed on the board built the conversation from whatever that
- * window had loaded with and broadcast it to everyone. Both stores are `definePreference`s now, so the pick
- * travels.
- *
- * The other half is the rule those preferences share with rememberedAccountFor: a catalog read is not a verdict
- * on the user's choice. A provider whose models answer thinly must cost one substitution, not the pick. */
+// The composer's picks are one answer per account, not per browser window; this suite proves it
+// across two window copies of the app via `definePreference`. Shares a rule with
+// rememberedAccountFor: a thin catalog read costs one substitution, never the pick itself.
 
 vi.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxRequest: vi.fn(),
@@ -25,10 +17,8 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
 
-/* ONE STORAGE PAIR SHARED BY EVERY "WINDOW", which is what makes this two windows rather than two runs, plus the
- * browser's own cross-window notification over it. A `storage` event fires in every other same-origin window the
- * moment localStorage changes, and `definePreference` listens for it; delivering to the writer as well is the
- * superset the primitive already tolerates (adopting a value a window holds changes nothing there). */
+// One storage pair shared by every mocked window, plus the `storage` event `definePreference`
+// listens for.
 const windows: ((note: { key: string | null; raw: string | null }) => void)[] = [];
 
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
@@ -63,9 +53,8 @@ const TWO = [
     { id: `second`, label: `Claude two`, connectedAt: 2 },
 ];
 
-// The daemon this suite talks to: two Claude accounts, a Cursor one (so a pick on a SECOND provider is one the
-// sandbox could actually run — an unrunnable pick resolves to a connected provider at read, by design, which
-// would hide whether the pick was remembered at all), and a Claude catalog carrying the model the user picks.
+// Two Claude accounts, a Cursor one so a second-provider pick is actually runnable (an unrunnable
+// pick would resolve elsewhere and hide whether it was remembered), and a Claude catalog.
 const mockDaemon = (claudeModels = [`claude-fable-5`, `claude-opus-4-6`]): void => {
     sandboxJsonMock.mockImplementation((path: string) =>
         Promise.resolve(
@@ -91,8 +80,8 @@ const mockDaemon = (claudeModels = [`claude-fable-5`, `claude-opus-4-6`]): void 
     );
 };
 
-// One browser window's copy of the app: a fresh module graph over the SAME storage, listening for the changes
-// the others make to it.
+// One browser window's copy of the app: a fresh module graph over the same storage, listening for
+// changes others make to it.
 const openWindow = async () => {
     vi.resetModules();
     const { receivePreferenceChange } = await import("@intentic/ui/preference");
@@ -122,24 +111,22 @@ describe(`the composer's remembered picks`, () => {
         floating.chat.useChat().effort.value = `high`;
         floating.chat.useChat().selectAccount(`second`);
 
-        // "New agent", pressed on the board: the conversation is built THERE and broadcast, so the board's copy
-        // of the picks is what every window's composer ends up wearing.
+        // "New agent" builds the conversation on the board and broadcasts it, so its copy of the picks wins
+        // everywhere.
         const fresh = new board.Conversation();
         expect(fresh.model.value).toBe(`claude-opus-4-6`);
         expect(fresh.effortPick.value).toBe(`high`);
         expect(fresh.account.value).toBe(`second`);
     });
 
-    /* A PICK IS A PAIR — this provider, this model — and both halves travel. The provider used to be recorded
-     * only by a pick that MOVED the chat off another one, so choosing a second model from the provider a chat
-     * already sat on recorded the model and left the pointer where some other tab had put it: the next New agent
-     * opened on that provider, wearing a model nobody had chosen. */
+    // A pick is a pair, provider and model, and both halves travel; picking a second model on the same
+    // provider must still record the provider.
     it(`carries the provider of the pick, not only its model`, async () => {
         const board = await openWindow();
         const floating = await openWindow();
 
         floating.chat.useChat().selectModel({ provider: `cursor`, value: `composer-2.5` });
-        // The second pick keeps the provider, which is the ordinary case and the one that used to be lost.
+        // The second pick keeps the provider, the ordinary case.
         floating.chat.useChat().selectModel({ provider: `cursor`, value: `composer-2.5-fast` });
 
         const fresh = new board.Conversation();
@@ -150,15 +137,13 @@ describe(`the composer's remembered picks`, () => {
         const window = await openWindow();
         window.chat.useChat().selectModel({ provider: `claude`, value: `claude-opus-4-6` });
 
-        /* The catalog comes back without it, which is what a provider serves while its own model discovery is
-         * still coming up. Rewriting the preference from that answer is how a deliberate pick used to be spent
-         * for good: every chat afterwards opened on the daemon's default with nothing left to say otherwise. */
+        // A thin catalog is what a provider serves while its own model discovery is still coming up.
         mockDaemon([`claude-fable-5`]);
         const thin = await openWindow();
-        // The chat cannot send on a model this list does not offer, so it opens on the default...
+        // The chat cannot send on a model this list doesn't offer, so it opens on the default.
         expect(new thin.Conversation().model.value).toBe(`claude-fable-5`);
 
-        // ...and the pick behind it is untouched, so the full catalog restores it.
+        // The pick behind it is untouched, so the full catalog restores it.
         mockDaemon();
         const full = await openWindow();
         expect(new full.Conversation().model.value).toBe(`claude-opus-4-6`);

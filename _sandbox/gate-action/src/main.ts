@@ -1,11 +1,8 @@
-/* The process around action.ts: environment in, appended runner files and an exit code out, the same
- * relationship gate's cli.ts has to gate.ts. Bundled whole to dist/index.mjs and synced to the public action
- * repository, where the runner executes it directly; nothing here may assume node_modules exists.
- *
- * EXIT 2 IS NEVER A VERDICT, here as in the CLI: 0/1 (and blocked's mapping) come from the verdict's own
- * outcome, and 2 means the exchange itself broke, wrong token, no such door, the daily ceiling, a network
- * that ate the reply. Both fail the step the same way on GitHub; the code and the message keep the two
- * apart for whoever reads the log, because they need opposite responses from whoever is on call. */
+// Process around action.ts: environment in, appended runner files and an exit code out; bundled whole to dist/index.mjs
+// for the public action repo, so nothing here may assume node_modules exists.
+// Exit 2 is never a verdict: 0/1 (and blocked's mapping) come from the verdict's own outcome, 2 means the exchange
+// itself broke (wrong token, no such door, the daily ceiling, a dead network).
+// Both fail the step the same way on GitHub; the code and message tell on-call which kind of failure it was.
 
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -24,17 +21,16 @@ import {
     summaryOf,
 } from "./action.js";
 
-// A runner file is append-only shared state; absent (running outside a runner) the write is simply skipped,
-// the log lines below carry the same facts.
+// A runner file is append-only; missing outside a runner, the write is skipped and logged instead.
 const appendTo = (file: string | undefined, content: string): void => {
     if (file !== undefined && file !== "") {
         appendFileSync(file, content);
     }
 };
 
-// A function declaration, not the file's usual const arrow: control-flow analysis only treats a call as
-// terminal when the callee is a declaration (or an explicitly typed const), and everything below relies on
-// "wiring() was called" meaning "this path ended".
+// A function declaration, not the file's usual const arrow, since control-flow analysis only treats a call as terminal
+// for a declared function.
+// Everything below relies on `wiring()` meaning this path ended.
 function wiring(message: string): never {
     console.error(`::error::${message.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`);
     process.exit(2);
@@ -46,8 +42,7 @@ if (parsed.kind === "error") {
 }
 const { inputs } = parsed;
 
-// The event payload the runner already wrote to disk, the same JSON a GitHub webhook would have delivered,
-// which is exactly what an event automation's prompt was written against. Unreadable means no payload.
+// Event payload the runner wrote to disk, the same JSON a webhook would deliver; unreadable means no payload.
 const eventText = ((): string => {
     const path = process.env["GITHUB_EVENT_PATH"];
     if (path === undefined || path === "") {
@@ -60,9 +55,8 @@ const eventText = ((): string => {
     }
 })();
 
-/* THE RUN: the API with a control token, no door involved. Start the turn, wait for the card to settle, land if
- * asked, and say how it ended in the runner's own vocabulary (run.ts in @intentic/gate is the exchange; this is
- * the process around it, like the two doors below). */
+// API with a control token, no door: starts the turn, waits for the card to settle, lands if asked.
+// Reports how it ended in the runner's own vocabulary; run.ts in @intentic/gate is the exchange itself.
 if (inputs.door === "run") {
     const call = {
         origin: new URL(inputs.url).origin,
@@ -94,7 +88,7 @@ if (inputs.door === "fire") {
     const body = inputs.request !== "" ? inputs.request : eventText;
     let response: Response;
     try {
-        // The fire route answers immediately, the minute is for the network, not for the agent.
+        // Fire answers immediately; the minute bounds the network, not the agent.
         const dial = dialOf(inputs.url);
         response = await fetch(dial.url, { method: "POST", headers: dial.headers, body, signal: AbortSignal.timeout(60_000) });
     } catch (error) {
@@ -148,8 +142,7 @@ if (verdict === undefined) {
 
 appendTo(process.env["GITHUB_OUTPUT"], outputLines(verdict, randomUUID()));
 appendTo(process.env["GITHUB_STEP_SUMMARY"], summaryOf(verdict));
-// The same two lines the CLI prints, the reason IS the product of this whole exchange, and the run id is
-// what a person pastes into the sandbox when the one line is not enough.
+// Same two lines the CLI prints: the reason is the exchange's product, the run id gets pasted into the sandbox.
 console.log(`${verdict.outcome}: ${verdict.reason}`);
 console.log(`run ${verdict.runId}`);
 const annotation = annotationOf(verdict, inputs.blockedAsFailure);

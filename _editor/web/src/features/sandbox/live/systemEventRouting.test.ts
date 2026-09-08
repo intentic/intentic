@@ -53,8 +53,7 @@ describe(`daemonRebuilt`, () => {
     });
 
     it(`a daemon that advertises no build neither reports nor forgets`, () => {
-        // Too old to interrogate: the silence must not read as a change, and must not overwrite what a newer
-        // daemon on the same sandbox already told us.
+        // Too old to interrogate: silence must not read as a change or overwrite what a newer daemon told us.
         daemonRebuilt(`sbx-1`, `0.0.0:1000`);
         expect(daemonRebuilt(`sbx-1`, undefined)).toBe(false);
         expect(daemonRebuilt(`sbx-1`, `0.0.0:2000`)).toBe(true);
@@ -90,7 +89,7 @@ describe(`dropSandboxLocalState`, () => {
     });
 
     it(`sweeps the window's own sessionStorage copy too`, () => {
-        // windowStore reads sessionStorage FIRST: a sweep that missed it would restore the swept tabs anyway.
+        // windowStore reads sessionStorage first, so a sweep that missed it would restore the swept tabs.
         sessionStorage.setItem(`intentic.workspaceTabs.sbx-1`, `{}`);
         dropSandboxLocalState(`sbx-1`);
         expect(sessionStorage.getItem(`intentic.workspaceTabs.sbx-1`)).toBeNull();
@@ -111,7 +110,7 @@ describe(`sandboxQueryPredicate`, () => {
         const matches = sandboxQueryPredicate(`sbx-1`);
         expect(matches({ queryKey: [`workspace`, `tree`, `all`, `sbx-1`] })).toBe(true);
         expect(matches({ queryKey: [`workspace`, `tree`, `all`, `sbx-2`] })).toBe(false);
-        // The id is APPENDED by sandboxKey, so an id appearing anywhere else is a different query's data.
+        // The id is appended by sandboxKey, so an id appearing anywhere else is a different query's data.
         expect(matches({ queryKey: [`sbx-1`, `something`] })).toBe(false);
     });
 });

@@ -6,18 +6,13 @@ import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
 import { DAEMON_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
 
-/* The Pi RPC transport: spawn `<command> --mode rpc` and speak its strict-LF JSONL protocol over stdio.
- * Commands go down stdin one JSON object per line; every one carries a minted `id`, and the matching
- * `{type:"response", id}` line resolves it. Everything else on stdout is an EVENT, handed to the turn loop
- * unparsed beyond JSON, the mapping onto AgentEvent frames lives in pi-events.ts, not here.
- *
- * Framing is deliberately hand-rolled on `indexOf("\n")`: Pi's own protocol doc rules out generic line
- * readers (Node readline also splits on U+2028/U+2029, which are valid inside JSON strings), and the
- * StringDecoder keeps a multi-byte character split across chunks from corrupting a record. */
+// Pi RPC transport: spawns `<command> --mode rpc` and speaks its strict-LF JSONL protocol over stdio. Commands carry a
+// minted `id`; the matching `{type:"response", id}` line resolves it, everything else on stdout is an event handed
+// unparsed to the turn loop (mapping lives in pi-events.ts). Framing is hand-rolled on `indexOf("\n")`, since Node's
+// readline also splits on U+2028/U+2029, which are valid inside JSON strings.
 
-// One process serves one turn (sessions persist as files, so there is nothing to keep warm between turns,
-// unlike ACP, whose sessions live inside the process). The stderr tail is folded into surfaced errors, the
-// acp-spawn precedent: a bare "exited" without the reason is undebuggable.
+// One process serves one turn, unlike ACP's warm sessions (Pi's persist as files). The stderr tail folds into surfaced
+// errors (acp-spawn precedent): a bare "exited" is undebuggable.
 const STDERR_TAIL = 2000;
 
 export interface PiResponse {
@@ -26,7 +21,7 @@ export interface PiResponse {
     readonly data?: unknown;
 }
 
-// A stdout line that is not a response: `{type: "agent_settled"}`, `{type: "message_update", …}`, ….
+// A stdout line that is not a response: {type: "agent_settled"}, {type: "message_update", …}, ….
 export type PiEvent = { readonly type: string } & Record<string, unknown>;
 
 export interface PiProcessHandlers {
@@ -36,8 +31,8 @@ export interface PiProcessHandlers {
 }
 
 export interface PiProcess {
-    // Send a correlated command and await its response line. Rejects only when the process is gone,
-    // a refused command is an ordinary `{success: false}` response, never a throw.
+    // Send a correlated command and await its response line. Rejects only when the process is gone; a refused command
+    // is an ordinary {success: false} response, never a throw.
     readonly request: (command: Record<string, unknown>) => Promise<PiResponse>;
     // Fire-and-forget write (extension_ui_response has no response line of its own).
     readonly send: (command: Record<string, unknown>) => void;
@@ -49,8 +44,8 @@ export interface PiProcess {
 // The seam tests inject through: production is spawnPiProcess below, a fixture is a scripted object.
 export type PiSpawn = (config: AcpAgentConfig, cwd: string, handlers: PiProcessHandlers) => PiProcess;
 
-// Split a stream into LF-terminated records, tolerating \r\n and multi-byte splits. Shared shape with Pi's
-// own reference client.
+// Splits a stream into LF-terminated records, tolerating \r\n and multi-byte splits. Shared shape with Pi's own
+// reference client.
 const attachJsonlReader = (stream: Readable, onLine: (line: string) => void): void => {
     const decoder = new StringDecoder("utf8");
     let buffer = "";
@@ -73,8 +68,8 @@ const attachJsonlReader = (stream: Readable, onLine: (line: string) => void): vo
     });
 };
 
-// Build the production spawner for one sessions directory (created eagerly. Pi writes session files there,
-// and a missing dir should fail here, at composition, not inside a turn).
+// Builds the production spawner for one sessions directory, created eagerly: a missing dir should fail here, at
+// composition, not inside a turn.
 export const piSpawner = (sessionDir: string): PiSpawn => {
     mkdirSync(sessionDir, { recursive: true });
     return (config, cwd, handlers) => {
@@ -84,8 +79,8 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             [...rest, "--mode", "rpc", "--session-dir", sessionDir],
             {
                 cwd,
-                // Daemon-owned, like the ACP pool it mirrors: kept warm across turns on purpose, so only a
-                // previous daemon's copy is ever a leftover (platform/leftovers.ts).
+                // Daemon-owned, like the ACP pool it mirrors: kept warm across turns on purpose, so only a previous
+                // daemon's copy is ever a leftover (platform/leftovers.ts).
                 env: { ...process.env, ...parseEnvBlock(config.env), ...workloadStamp(DAEMON_OWNER) },
                 stdio: ["pipe", "pipe", "pipe"],
             },

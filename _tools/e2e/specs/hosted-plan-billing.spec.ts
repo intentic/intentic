@@ -1,19 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { FAKE_STRIPE, readStackState } from "../stack.js";
 
-/* THE BILLING JOURNEY, in the browser: the one page in the product about money, walked the way a buyer walks it.
- * Subscribe leaves for "Stripe" (a stand-in this run started, @intentic/testing/stripe-fake, behind the REAL
- * api and its real Stripe client), paying sends the browser home before the webhook lands, and the page owns
- * that gap rather than asking anybody to reload. Then what the page says afterwards, in each state Stripe can
- * put the subscription in: the date it renews, the date it ENDS after a cancel in the portal, the card it
- * needs after a failed charge, and the offer again once the plan is over.
- *
- * Every word asserted here is a sentence SettingsBilling.vue chose on purpose (docs/design/billing-view.md):
- * "ends" rather than "renews" to somebody who just cancelled is the kind of thing that costs a person money
- * when it drifts, and no unit test reads the page.
- *
- * Stands down on a reused dev API: only a stack THIS run booted has the stand-in behind it, and a Subscribe
- * against somebody's real test-mode key would leave for checkout.stripe.com and never come back. */
+// Billing journey against the real API and Stripe client, with @intentic/testing/stripe-fake standing in for Stripe;
+// skipped unless this run booted that stand-in. Wording matters (ends vs renews) since no unit test reads the page.
 test.describe.configure({ mode: `serial` });
 
 test.beforeAll(() => {
@@ -36,7 +25,7 @@ test(`the offer, then a paid checkout the page turns into an active plan while t
     await expect(page.getByRole(`heading`, { name: `Fake Stripe checkout` })).toBeVisible();
     await page.getByRole(`button`, { name: `Pay` }).click();
 
-    // Home first, plan later: the page says so and polls, rather than showing the offer to somebody who just paid.
+    // Redirects home before the webhook lands; the page polls rather than requiring a reload.
     await expect(page).toHaveURL(/\/settings\/billing\?plan=welcome$/);
     await expect(page.getByText(`Payment received, activating your plan`)).toBeVisible();
     await expect(page.getByText(/Your hosted sandbox(es)? (is|are) always on/)).toBeVisible({ timeout: 20_000 });
@@ -55,7 +44,7 @@ test(`a cancel made in Stripe's portal is said as an end date, never as a renewa
     await page.goto(`/settings/billing`);
     await page.getByRole(`button`, { name: `Manage on Stripe` }).click();
     await expect(page.getByRole(`heading`, { name: `Fake Stripe portal` })).toBeVisible();
-    // The portal's cancel: the subscription stays active until the period ends, and the webhook says so.
+    // Subscription stays active until the period ends; the webhook reports that, not an immediate cancel.
     await page.getByRole(`button`, { name: `Cancel plan` }).click();
 
     await expect(page).toHaveURL(/\/settings\/billing$/);
@@ -78,7 +67,7 @@ test(`a failed charge asks for a card, and an ended plan is offered again as a r
     await expect(page.getByText(`Stripe reports this plan as "past_due".`)).toBeVisible();
     await expect(page.getByRole(`heading`, { name: `Keep your hosted sandbox always on.` })).toHaveCount(0);
 
-    // Given up on: customer.subscription.deleted. The offer is back, and it knows this is a return.
+    // Fully given up on: customer.subscription.deleted; the offer returns, phrased as a resubscription.
     await request.post(`${control}/update/${live?.id}`, { data: { patch: { status: `canceled` } } });
     await page.goto(`/settings/billing`);
     await expect(page.getByText(`Your previous plan has ended.`)).toBeVisible();

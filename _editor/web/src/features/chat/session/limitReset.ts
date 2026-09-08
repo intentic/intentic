@@ -3,42 +3,20 @@ import { ref } from "vue";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJsonVia } from "../../sandbox/client/sandboxClient";
 
-/* THE WAY PAST A SPENT SESSION WINDOW THAT IS NOT WAITING FOR IT, on the client side: what the provider says
- * about one account, and the press that spends it.
- *
- * Anthropic reopens a spent five-hour window on demand, once a week per account, leaving the WEEKLY allowance
- * exactly where it was. So the commonest refusal in this app — a session pool at 100% with a weekly pool a
- * third full — has an answer that costs nothing but a grant the user is already paying for, and until now the
- * only thing on screen was a countdown. (claude-limit-reset.ts on the daemon side has the mechanism, and why
- * the answer is the provider's rather than something to infer from a 100% meter.)
- *
- * ASKED ONCE PER ACCOUNT, and never on a timer. The daemon's probe tells the provider the account is at the
- * wall, which is a claim about the account and is only true while a refusal is on screen; the endpoint behind
- * it also rate limits reads hard enough that a poller would cost the meters next door their freshness. One
- * strip appearing asks once, several strips for the same account share that one answer, and nothing re-asks
- * until a claim has actually changed something.
- *
- * A FAILED ASK IS NOT AN ANSWER, and is deliberately not cached as one: the entry stays absent, so the next
- * strip for that account tries again, whereas a cached "unavailable" would suppress a real grant for the life
- * of the page. Absent and "not available" render identically (no button), so this costs nothing on screen. */
+// Client side of the session-limit reset: the provider can reopen a spent five-hour window once a week per account
+// without touching the weekly allowance. Asked once per account, never on a timer — the endpoint rate-limits hard.
+// A failed ask is not cached, so the next strip for that account tries again.
 
 const answers = ref(new Map<string, LimitResetStatus>());
-// One request per account however many strips ask at once. Keyed the same as the answers, and cleared as each
-// settles, so a retry after a failure is a fresh request rather than a joined dead one.
+// One in-flight request per account; cleared on settle so a retry after a failure isn't joined to a dead one.
 const asking = new Map<string, Promise<void>>();
 
 /** What the provider said about this account, or undefined while nobody has asked or the ask failed. */
 export const limitResetFor = (account: string | undefined): LimitResetStatus | undefined =>
     account === undefined ? undefined : answers.value.get(account);
 
-/* Ask, unless this account has been asked already. `at` is the sandbox the conversation is homed in, because a
- * conversation on another box holds its accounts over there: asking the box in front of the user about an
- * account it does not have would answer "no grant" about a perfectly eligible connection.
- *
- * Hands back the request it joined or started, which no caller in the app needs — a strip renders off the map
- * above and does not wait for anything. It is here because "the answer is not cached and the entry is gone"
- * are two states one settle apart, and a caller with no way to await the settle can only distinguish them by
- * sleeping. Returning it costs nothing and makes that observable. */
+// Asks once per account; `at` targets the conversation's own sandbox, since another box wouldn't hold this account.
+// Returns the in-flight promise so a caller can tell "not cached" from "still asking" without polling.
 export const askLimitReset = async (account: string | undefined, at?: string): Promise<void> => {
     if (account === undefined || answers.value.has(account)) {
         return;
@@ -52,7 +30,7 @@ export const askLimitReset = async (account: string | undefined, at?: string): P
             answers.value.set(account, status);
         })
         .catch(() => {
-            // Left unanswered on purpose, see the header: an unreachable daemon must not become a durable "no".
+            // Left unanswered on purpose: an unreachable daemon must not become a durable "no".
         })
         .finally(() => {
             asking.delete(account);
@@ -61,14 +39,7 @@ export const askLimitReset = async (account: string | undefined, at?: string): P
     return request;
 };
 
-/* Spend the grant.
- *
- * WHETHER THE OFFER SURVIVES THE PRESS depends on what the press proved. A claim that reset the window, or that
- * the provider answered about the account (`already_used`, `ineligible`, `not_limited`), has just made the
- * cached "available" false or moot, and leaving the button up would invite a second press that cannot work. A
- * claim that never got an answer, a 429, a 503, an unreachable daemon, proves nothing about the grant and
- * spent nothing, so the offer stands and the press stays available: an error that removes the only way to
- * retry it is the worst of the two mistakes here. */
+// Marks results that proved nothing, so a network or server error leaves the cached offer up for retry.
 const RETRYABLE = new Set([`unavailable`, `error`]);
 
 export const claimLimitReset = async (account: string, at?: string): Promise<LimitResetClaim> => {
@@ -81,10 +52,8 @@ export const claimLimitReset = async (account: string, at?: string): Promise<Lim
     return claim;
 };
 
-/* WHAT A CLAIM THAT CHANGED NOTHING SAYS, one short line each, because they are read by somebody who has just
- * pressed a button and is owed the difference between "come back next week" and "try that again".
- *
- * `reset` has no line: the window is open and the turn is already going again, which is the answer. */
+// One line of feedback per claim result, for someone who just pressed the button. `reset` returns none: the window
+// is already open and the turn is going again.
 export const limitResetNote = (claim: LimitResetClaim): string => {
     switch (claim.result) {
         case `reset`:

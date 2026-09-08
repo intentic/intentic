@@ -1,50 +1,25 @@
 import { type DayWindowQuery, FAST_CEILING, isCheaperRung, type TierReport, type UsageTurn } from "@intentic/sandbox-contract";
 import type { UsageStore } from "./usage-store.js";
 
-/* AUTOMATIC TIER SELECTION'S READOUT, the read half of the shadow ledger the judge has been writing since it
- * shipped (UsageTurn.tierScore/tierRules/tierRouted/tierDenied). docs/model-routing-design.md §4 names the
- * numbers the feature cannot be defended without — the fast share, the money involved, and the escalation
- * rate — and until this file existed they were recorded and unreadable, which is a settings row promising a
- * spend history nobody built.
- *
- * A TALLY, NOT AN EXPERIMENT, and the distinction is why this does not reuse turn-experiments.ts: those compare
- * two randomized arms of one population, while routing follows the settings mode, which follows time. Dressing
- * these counts in arms and margins would claim a control group that does not exist. What CAN be said honestly
- * is what was observed and what was done: how many turns looked simple, what the ones that stayed on the pick
- * cost there, what the moved ones cost on the cheap rung, and how often the user overruled the judge.
- *
- * NO COUNTERFACTUAL, deliberately. The ledger holds what turns cost, never what they would have cost on a model
- * they did not run, so `atStakeUsd` is labelled as the money the fast-judged turns actually spent — an upper
- * bound on any saving — rather than dressed up as one.
- *
- * THE ESCALATION READ is §4's strongest label: a fast-judged turn whose conversation's very NEXT row asks for a
- * dearer model is the user reaching for the picker right after a turn the judge called simple, inside the
- * product, in the direction that matters. It is derived here at read time rather than stored, because it is a
- * relationship between two rows and the rows are already on one ledger. */
+// Read half of automatic tier selection's shadow ledger (docs/model-routing-design.md §4): fast share, money at stake,
+// escalation rate. A tally, not an experiment: routing follows settings mode, not a randomized control, so `atStakeUsd`
+// is an upper bound on saving, never a counterfactual.
 
-// The same population rule the experiments use, for the same reason: a turn that died measures nothing, and a
-// burst of auth refusals must not read as a flood of simple turns. A cancelled turn's judgement likewise
-// describes how long the user waited, not the work. Absent outcome (old rows) stays.
+// Same population rule the experiments use: a dead turn measures nothing, so refusals don't read as simple turns, and a
+// cancelled turn's judgement describes the wait, not the work.
 const measurable = (turn: UsageTurn): boolean => turn.outcome !== "error" && turn.outcome !== "cancelled";
 
-/* WAS THIS TURN CALLED SIMPLE. The recorded verdict where there is one, and the old derivation where there is
- * not: rows written before the eagerness knob existed carry a score and no verdict, and every one of them was
- * judged at the balanced cutoff, which is exactly what FAST_CEILING still is. So the fallback is not a guess,
- * it is the same arithmetic those rows were actually judged by, and the two eras stay one population.
- *
- * The derivation cannot serve the new rows: their cutoff is whatever the owner had the dial on, and a fast
- * verdict additionally requires a positively-easy signal, which a score does not carry. */
+// Recorded verdict if there is one; rows from before the eagerness knob only carry a score, judged at the balanced
+// cutoff FAST_CEILING still is, so the fallback matches how they were actually judged, not a guess.
 const judgedFast = (turn: UsageTurn): boolean =>
     turn.tierFast ?? (turn.tierScore !== undefined && turn.tierScore <= (turn.tierCeiling ?? FAST_CEILING));
 
-// What the row ran, then what it asked for: `model` is resolved past every substitution, so it is the honest
-// base for "did the next turn ask for something dearer than THIS one got".
+// What the row ran, or else what it asked for; `model` is resolved past every substitution, the honest base for
+// comparing to the next turn's ask.
 const ranModel = (turn: UsageTurn): string | undefined => turn.model ?? turn.modelRequested;
 
-/* Fast-judged turns whose conversation's next measurable row asked for a strictly dearer rung. `isCheaperRung`
- * answers "is the left a cheaper rung than the right", so a bump is exactly "what this turn ran is cheaper than
- * what the next turn asked for". Unrecognized families answer false on either side, which under-counts rather
- * than accuses — the correct direction for a guardrail read by a person deciding whether to trust the judge. */
+// Fast-judged turns whose conversation's next row asked for a strictly dearer rung (isCheaperRung). Unrecognised
+// families answer false either way, under-counting rather than accusing.
 const escalationsOf = (turns: readonly UsageTurn[]): number => {
     const byConversation = new Map<string, UsageTurn[]>();
     for (const turn of turns) {
@@ -79,8 +54,8 @@ const escalationsOf = (turns: readonly UsageTurn[]): number => {
 
 const spend = (rows: readonly UsageTurn[]): number => rows.reduce((total, turn) => total + turn.costUsd, 0);
 
-// Undefined ⇒ nothing was judged in the window (autoTier "off" throughout, or no turns at all), which the
-// screen renders as absence: "not measured" is the truth, zeros would read as "measured, found nothing".
+// Undefined means nothing was judged in the window (autoTier off throughout, or no turns), rendered as absence: "not
+// measured" rather than zeros reading as "measured, found nothing".
 export const readTierReport = async (usage: UsageStore, window: DayWindowQuery): Promise<TierReport | undefined> => {
     const turns = (await usage.turns(window)).filter(measurable);
     const judged = turns.filter((turn) => turn.tierScore !== undefined);

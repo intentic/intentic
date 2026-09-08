@@ -1,11 +1,6 @@
-// The ownership-stamp contract: defined ONCE in the protocol, applied per-provider in its native mechanism.
-// A provider stamps every resource it creates with the resource node's id, so a later stateless
-// read (introspect) can attribute it without any local state file. The KEY is canonical here; the
-// stamp value is always the compiled ResourceNode.id.
-//
-// Mechanisms differ per backend: a single-string field (a Cloudflare DNS record comment) carries the
-// `formatStamp` encoding, while a key/value mechanism (a Docker label) uses STAMP_KEY as the label key
-// and the id as the value directly. parseStamp recovers the id from the single-string form.
+// The ownership-stamp contract: a provider stamps every resource with the resource node's id, so a stateless
+// read can attribute it without a state file. A single-string field uses `formatStamp`; a key/value mechanism (a
+// Docker label) uses STAMP_KEY directly. `parseStamp` recovers the id from the single-string form.
 
 import { createHash } from "node:crypto";
 import type { SerializedValue } from "./types.js";
@@ -19,11 +14,7 @@ export const parseStamp = (encoded: string): string | undefined => {
     return encoded.startsWith(prefix) ? encoded.slice(prefix.length) : undefined;
 };
 
-// The drift-stamp: a provider stamps each resource with the hash of its node's SERIALIZED inputs (the
-// artifact form: $secret/$ref placeholders, never values, so the stamp is safe in world-readable
-// metadata) and reports it back on read; the engine flags a mismatch as an update without any provider
-// diff code. Value drift behind a ref/secret is invisible by design, providers' own diffs cover the
-// fields that legitimately drift live (image pins).
+// Hash of the node's serialized inputs, stamped + read back; a mismatch flags update without provider diff code.
 export const HASH_KEY = "intentic.hash";
 
 const sortKeys = (value: SerializedValue): SerializedValue => {

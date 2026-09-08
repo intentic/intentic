@@ -1,15 +1,8 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-/* THE ONE CENTRAL RE-SCOPE, held to its list.
- *
- * sandboxScope is a watch and a set of calls, so what can go wrong with it is not logic: it is OMISSION. A
- * singleton gains a home in `composables/`, nothing here learns about it, and it quietly carries one
- * workspace's data into the next: the outgoing push offered from the wrong repositories, tree rows flashing for
- * edits made in the box you left. Every reset that was missing when this file was written had been missing
- * since the day the state was added.
- *
- * So each reset is asserted to FIRE, by name, on a switch, and asserted not to fire when the id is merely
- * re-set to what it already was, which happens on every restore from storage. */
+// Pins sandboxScope's reset list by name, since the failure mode is a new singleton added elsewhere that this
+// file never learns to reset. Asserts each reset fires on a real switch and not when the id is merely re-set to
+// itself.
 
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
@@ -26,9 +19,7 @@ vi.mock(`../../workspace/changes/useWorkspaceLive`, () => ({ resetWorkspaceLive:
 vi.mock(`../../workspace/tabs/useWorkspaceTabs`, () => ({ resetWorkspaceTabs: record(`resetWorkspaceTabs`) }));
 vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ resetWorkspaceTreeState: record(`resetWorkspaceTreeState`) }));
 
-/* The two refs the module actually reads. Standing in for useSandbox rather than driving the real one is the
- * point of sandboxScope living apart from it: it can be exercised without the platform client, the sandbox
- * list, or a connection, which is also why the switch it watches for is reproducible in a test at all. */
+// Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
 const { activeSandboxId, reachable } = await vi.hoisted(async () => {
     const { ref } = await import(`vue`);
     return { activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) };
@@ -42,8 +33,7 @@ beforeEach(() => {
     calls.length = 0;
 });
 
-// Every reset the switch is responsible for. Named rather than counted: a failure should say WHICH one stopped
-// being called, since that is the whole failure mode this guards.
+// Every reset the switch owns, named rather than counted, so a failure says which one stopped firing.
 const ON_SWITCH = [
     `resetChat`,
     `resetEditBuffers`,
@@ -88,10 +78,7 @@ test(`re-setting the same id resets nothing: a restore from storage is not a swi
     expect(calls).toEqual([]);
 });
 
-/* The pull-only half: what the daemon holds and no stream frame carries. Held wakes are NOT among them and
- * that is deliberate: a roster read fired from this seam lands on a revision line the incoming hello is about
- * to replace, so it discards its own answer. sandboxScope's closing comment carries the reasoning; the read
- * itself lives in systemEvents, after the hello. */
+// Held wakes are pull-only too, but are read after the hello in systemEvents, not from this seam.
 test(`becoming reachable reloads what lives on the daemon, without resetting anything`, async () => {
     activeSandboxId.value = `alpha`;
     await nextTick();
@@ -109,8 +96,7 @@ test(`switching between two reachable sandboxes still re-reads it`, async () => 
     await nextTick();
     calls.length = 0;
 
-    // `reachable` never flips here, so the seam has to notice the ID instead: otherwise a switch between two
-    // healthy boxes shows the first one's archive against the second one's name.
+    // `reachable` never flips here; the seam must notice the id instead, or two healthy boxes would share state.
     activeSandboxId.value = `beta`;
     await nextTick();
 

@@ -1,11 +1,6 @@
 // @vitest-environment jsdom
-//
-// THE PRESS LOCK: what a control does between the click and the answer. Three surfaces, one state machine, so
-// all three are pinned here rather than each proving its own half.
-//
-// The case that started it is the one at the bottom: two clicks 50ms apart on the same button used to send two
-// requests, the second of which the daemon answered with a 404 because the first had already un-parked the
-// turn, and the card put "the turn may have ended" on screen for a decision that had landed perfectly.
+// Tests what a control does between click and answer, across three surfaces (state machine, Button,
+// directive) sharing one press lock contract.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, withDirectives, type App } from "vue";
 import { Button, vAction } from "@intentic/ui";
@@ -26,7 +21,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// A promise the test decides when to settle, standing in for a round trip.
+// A promise the test settles on demand, standing in for a round trip.
 const deferred = (): { promise: Promise<void>; settle: () => void } => {
     let settle = (): void => undefined;
     const promise = new Promise<void>((resolve) => {
@@ -51,14 +46,13 @@ const button = (): HTMLButtonElement => {
     return found;
 };
 
-/* THE STATE MACHINE ------------------------------------------------------------------------------------- */
+// State machine
 
 it(`locks in the same tick as the press, before anything is awaited`, () => {
     const states: PressState[] = [];
     const lock = createPressLock((state) => states.push({ ...state }));
     lock.hold(deferred().promise);
-    // Not after a microtask, not on the next frame: the second click arrives ~50ms behind the first and has to
-    // find a control that is already spoken for.
+    // Not after a microtask or next frame: a second click ~50ms later must find the control already locked.
     expect(states).toEqual([{ locked: true, working: false }]);
 });
 
@@ -69,7 +63,7 @@ it(`draws nothing for a wait short enough to read as instant`, async () => {
     lock.hold(work.promise);
     work.settle();
     await vi.advanceTimersByTimeAsync(199);
-    // A spinner shown for 40ms is a flinch, not information.
+    // A spinner shown too briefly is a flinch, not information.
     expect(states.some((state) => state.working)).toBe(false);
     expect(states.at(-1)).toEqual({ locked: false, working: false });
 });
@@ -85,7 +79,7 @@ it(`shows the wait once it outlives the reveal delay, and holds it long enough t
 
     work.settle();
     await vi.advanceTimersByTimeAsync(10);
-    // Still working, and still locked with it: a control that is visibly spinning must not answer a press.
+    // Still working and locked: a visibly spinning control must not answer a second press.
     expect(states.at(-1)).toEqual({ locked: true, working: true });
 
     await vi.advanceTimersByTimeAsync(400);
@@ -106,7 +100,7 @@ it(`reports work from every handler a template stacked on one click, and none fr
     expect(firePress([() => undefined, () => work.promise], new Event(`click`))).toBeInstanceOf(Promise);
 });
 
-/* THE BUTTON -------------------------------------------------------------------------------------------- */
+// Button
 
 it(`disables the button for as long as its handler is unfinished, and re-enables it after`, async () => {
     const work = deferred();
@@ -174,8 +168,7 @@ it(`hangs a spinner over a slot-bodied button once the wait is worth drawing, wi
     await vi.advanceTimersByTimeAsync(200);
     await nextTick();
     expect(host.querySelector(`.ui-press-spinner`)).not.toBeNull();
-    // The words are hidden, not removed: the button keeps the width it had, so answering one cannot reflow
-    // the row of answers it sits in.
+    // Hidden, not removed: the button keeps its width, so answering doesn't reflow the row it sits in.
     expect(host.querySelector(`.invisible`)?.textContent).toBe(`Approve`);
 });
 
@@ -185,7 +178,7 @@ it(`keeps the caller's own disabled state`, async () => {
     expect(button().disabled).toBe(true);
 });
 
-/* THE DIRECTIVE ----------------------------------------------------------------------------------------- */
+// Directive
 
 it(`holds a hand-styled control the same way, and marks it busy for a screen reader`, async () => {
     const work = deferred();

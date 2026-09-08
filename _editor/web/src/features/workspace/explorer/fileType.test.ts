@@ -23,10 +23,8 @@ describe(`resolveFile empty files`, () => {
     });
 });
 
-/* Both TEXT modes carry a grammar, not just `code`. Markdown renders its source through the same editor, so a
- * viewer that shows source, and the DIFF surface, which is one component for both: gets the language from the
- * resolution rather than hardcoding one per mode. Markdown used to resolve with no `lang` at all, which is
- * exactly how .md diffs ended up as uncolored plaintext while the file viewer looked fine. */
+// Markdown and code both carry a grammar (not just `code`): the diff view is one shared component and needs the
+// language from resolution, not per-mode.
 describe(`resolveFile text modes carry a lang`, () => {
     it(`resolves a grammar for markdown`, () => {
         expect(resolveFile(`ARCHITECTURE.md`, 1000)).toEqual({ mode: `markdown`, lang: `markdown` });
@@ -36,13 +34,11 @@ describe(`resolveFile text modes carry a lang`, () => {
 
     it(`resolves svg markup as xml`, () => {
         expect(resolveFile(`icon.svg`, 1000)).toEqual({ mode: `code`, lang: `xml` });
-        // The same answer for a path, whichever surface asks: this is what the chat's Read card colors from too.
+        // Same answer whichever surface asks; the chat's Read card colors from this too.
         expect(codeLangForPath(`icon.svg`)).toBe(`xml`);
     });
 
-    /* The component formats, whose one file holds markup, script and styles together. `.astro` had no row at
-     * all while its siblings did, so a component that reads as three languages in its editor came out of the
-     * DIFF surface as undivided grey text: the same failure as markdown's, one extension along. */
+    // Component formats hold markup, script and styles in one file; each needs its own grammar for the diff view too.
     it(`resolves a grammar for component files`, () => {
         expect(codeLangForPath(`Card.vue`)).toBe(`vue`);
         expect(codeLangForPath(`Card.svelte`)).toBe(`svelte`);
@@ -65,8 +61,8 @@ describe(`resolveFile dotenv`, () => {
     });
 });
 
-// Config dotfiles carry no usable extension (dot at index 0), so langFor matches them by name: generically
-// for the ".xxxignore" family, exactly for the rest.
+// Config dotfiles have no usable extension, so langFor matches by name: generic for the `.xxxignore` family, exact for
+// the rest.
 describe(`resolveFile config dotfiles`, () => {
     it(`highlights ignore files as gitignore`, () => {
         expect(resolveFile(`.gitignore`, 100)).toEqual({ mode: `code`, lang: `gitignore` });
@@ -89,10 +85,8 @@ describe(`resolveFile config dotfiles`, () => {
     });
 });
 
-/* The formats a VIEWERS EXTENSION renders. The core's answer for all of them is `binary`: opaque bytes, and
- * a download, with no size gate and no per-format branch: which of them is actually showable, and what the
- * ceiling is, belongs to the extension that claims the extension (viewers/openFile.ts). Listing them here is
- * what makes switching that extension off degrade to a download rather than to mojibake. */
+// Formats a viewers extension renders: the core just answers `binary` (opaque, download, no size gate), so disabling
+// that extension degrades to a download, not mojibake.
 describe(`resolveFile leaves extension-owned formats binary`, () => {
     it(`claims no picture, document, or recording for itself`, () => {
         for (const name of [`logo.png`, `photo.jpeg`, `anim.gif`, `doc.pdf`, `report.docx`, `budget.xlsx`]) {
@@ -109,9 +103,8 @@ describe(`resolveFile leaves extension-owned formats binary`, () => {
 });
 
 
-// Which diffs the byte viewer takes over. The daemon's `binary` flag answers for a file whose extension says
-// nothing; the PATH answers for the case that flag misses entirely: an image over the 512 KiB text-diff cap,
-// which arrives flagged `truncated` and is nonetheless perfectly showable.
+// Which diffs the byte viewer takes over: the daemon's `binary` flag decides for extension-less files; the path decides
+// when that flag misses, e.g. an oversized image flagged `truncated`, not `binary`.
 describe(`rendersAsBytes`, () => {
     it(`takes the daemon's word when a file has NUL bytes and no telling extension`, () => {
         expect(rendersAsBytes(`data`, true)).toBe(true);
@@ -119,7 +112,7 @@ describe(`rendersAsBytes`, () => {
     });
 
     it(`claims every non-text path regardless of what the response said`, () => {
-        // The case this exists for: a big screenshot, reported truncated rather than binary.
+        // Case this exists for: a big screenshot reported `truncated`, not `binary`.
         expect(rendersAsBytes(`shots/rg-2.png`, undefined)).toBe(true);
         expect(rendersAsBytes(`doc.pdf`, undefined)).toBe(true);
         expect(rendersAsBytes(`fonts/Inter.woff2`, undefined)).toBe(true);
@@ -129,18 +122,16 @@ describe(`rendersAsBytes`, () => {
     it(`leaves text to the text diff, including the genuinely oversized kind`, () => {
         expect(rendersAsBytes(`src/main.ts`, undefined)).toBe(false);
         expect(rendersAsBytes(`README.md`, undefined)).toBe(false);
-        // SVG is text and gets a source toggle in the viewer: it is diffable as lines.
+        // SVG is text, diffable as lines; the viewer offers a source toggle.
         expect(rendersAsBytes(`icon.svg`, undefined)).toBe(false);
-        // …and a recording is not, however many viewers claim it.
+        // A recording is not diffable as text, however many viewers can play it.
         expect(rendersAsBytes(`clip.mp4`, undefined)).toBe(true);
         expect(rendersAsBytes(`LICENSE`, undefined)).toBe(false);
     });
 });
 
-/* Text no longer dead-ends on size. It used to resolve to `too-large`: a panel offering nothing but a Download
- * that itself 413s above RAW_MAX_BYTES, so a big log could be neither read nor saved. And because the size came
- * from a tree entry, a file the loaded tree didn't hold resolved with `size: undefined` and skipped every cap.
- * Text now always resolves to text; FileViewer decides editable-vs-windowed from the size the daemon reports. */
+// Text always resolves to text regardless of size; FileViewer decides editable vs. windowed from the size the daemon
+// reports.
 describe(`resolveFile large text`, () => {
     it(`resolves text to text at any size`, () => {
         expect(resolveFile(`build.log`, TEXT_EDIT_MAX_BYTES * 60)).toEqual({ mode: `code` });

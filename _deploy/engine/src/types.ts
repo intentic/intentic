@@ -2,8 +2,8 @@ import type { ResourceType } from "@intentic/resources";
 import type { Providers } from "./provider.js";
 import type { ReadinessProbe } from "./readiness.js";
 
-// Inputs after $secret/$ref substitution: still a value tree, but with no $ref/$secret nodes left.
-// A bare ref becomes the dependency's id string; an output ref becomes its resolved value.
+// Inputs after $secret/$ref substitution: a value tree with no $ref/$secret nodes left. A bare ref becomes the
+// dependency's id string; an output ref becomes its resolved value.
 export type ResolvedInputs = Readonly<Record<string, unknown>>;
 
 export type Action = "create" | "update" | "noop";
@@ -20,8 +20,7 @@ export interface Orphan {
     readonly type: ResourceType;
 }
 
-// An orphan plus the inputs its provider's `delete` acts on (from the ListedResource that found it).
-// Inputs carry connection secrets, plumb entries to pruneOrphans or strip to Orphan, never serialize.
+// An orphan plus the inputs its provider's `delete` acts on.
 export interface OrphanEntry extends Orphan {
     readonly inputs: Readonly<Record<string, unknown>>;
     readonly protected?: boolean;
@@ -48,9 +47,8 @@ export interface PruneOutcome {
     readonly skipped: readonly PrunedResource[];
 }
 
-// Structured lifecycle events the engine emits as it runs, the machine-readable counterpart to `log`
-// (which carries providers' free-form strings). A driver (the CLI, a control plane) renders these into a
-// live progress stream; the final result is built from the returned outcomes, not from events.
+// Structured lifecycle events the engine emits, the machine-readable counterpart to `log`. A driver renders these
+// into a live progress stream; the final result comes from the returned outcomes, not events.
 export type EngineEvent =
     | {
           readonly kind: "node";
@@ -68,7 +66,7 @@ export type EngineEvent =
           readonly state: "deleted" | "skipped";
           readonly id: string;
           readonly type: ResourceType;
-          // Why a skipped resource was left in place: "no-delete" (provider cannot tear it down) or "protected".
+          // Why a skipped resource was left in place: "no-delete" or "protected".
           readonly reason?: "no-delete" | "protected";
       }
     | { readonly kind: "orphan"; readonly id: string; readonly type: ResourceType };

@@ -1,23 +1,22 @@
 import { expect, it, vi } from "vitest";
 
-/* A REAL page refresh, which no amount of resetChat() quite models: the module graph is new, so useChat's
- * restore runs at module scope against nothing but what is on disk: before any daemon has answered, before
- * `accountsLoaded` is anything but false. That is the exact window the account pick used to be lost in, and the
- * only way to sit in it is to seed the stores and then import the singleton fresh. */
+// Simulates a real page refresh, which resetChat() can't: a fresh module graph means useChat's
+// restore runs at module scope before any daemon has answered. The only way to test that window is
+// to seed the stores, then import the singleton fresh.
 
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
 vi.mock("../../sandbox/client/useSandbox", async () => {
     const { ref } = await import("vue");
-    // Already bound when the module graph loads: the ordinary case for a refresh of an open sandbox.
+    // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
 });
 
-// The node test environment has neither storage; a refresh reads both (sessionStorage holds this window's tabs,
-// localStorage the account preference).
+// Node's test env has neither storage; a refresh reads both (sessionStorage: tabs, localStorage:
+// account preference).
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
     const entries = new Map<string, string>();
     Object.defineProperty(globalThis, name, {
@@ -34,8 +33,7 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-// What the window wrote before it was closed: two chats, each on its own Claude account, and "second" as the
-// last pick: the preference a brand-new tab should open on.
+// What the window wrote before closing: two chats on different accounts, "second" as the last pick.
 session.set(
     `intentic.chatTabs.sb1`,
     JSON.stringify({
@@ -49,8 +47,7 @@ session.set(
                 provider: `claude`,
                 account: `first`,
                 harness: `native`,
-                // Stored with the whole of what minted it: a session read back without its runtime is dropped
-                // rather than completed from the tab's own picks (tabSnapshot.readSession).
+                // A session missing its runtime is dropped, not completed from the tab's own picks.
                 session: { id: `sess-a`, provider: `claude`, harness: `native`, account: `first` },
                 attachments: [],
                 queued: [],
@@ -92,8 +89,7 @@ vi.mocked(sandboxJson).mockImplementation((path: string) =>
 const { useChat } = await import("../run/useChat");
 const { draftConversation, reveal } = await import("../panel/useChat-reveal");
 const { loadAccountStatus } = await import("./useChat-accounts");
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// The store half of "New agent"; the fixture these tests use to open extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -105,14 +101,13 @@ it(`comes back from a refresh on the accounts the tabs were using, and opens a n
     const accountOf = (id: string): string | undefined =>
         chat.conversations.value.find((conversation) => conversation.conversationId === id)?.account.value;
 
-    // Before the daemon has said a word: the frame the user actually looks at first, and the one that used to
-    // show every chat reset to the provider's first account.
+    // Before the daemon has answered: the frame the user looks at first.
     expect(accountOf(`tab-a`)).toBe(`first`);
     expect(accountOf(`tab-b`)).toBe(`second`);
     // The session keeps its own, so the next send resumes it instead of retiring it over a forged mismatch.
     expect(chat.conversations.value.find((c) => c.conversationId === `tab-a`)?.session.value?.account).toBe(`first`);
 
-    // ...and the list agreeing changes nothing, because it agreed with the user all along.
+    // The list agreeing changes nothing; it agreed with the user all along.
     await loadAccountStatus();
     expect(accountOf(`tab-a`)).toBe(`first`);
     expect(accountOf(`tab-b`)).toBe(`second`);

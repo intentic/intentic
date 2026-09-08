@@ -1,28 +1,11 @@
 import { assessReport, digestOf, ledgerKey } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract";
 
-/* MAINTENANCE, RECORDED, the evidence `GET /chores` carries for acme-shop, and the ledger of what has already
- * been done about it.
- *
- * The daemon measures and the browser decides: this route answers with MEASUREMENTS (probe results, package
- * facts, the hotspot ranking) and never with verdicts, because the chore book that turns those into "due" or
- * "clear" ships in the app. So the fixture's job is to be a plausible repository, not to choose what the panel
- * says, every row a visitor reads is computed from the numbers below by the same function that runs against a
- * real daemon.
- *
- * WHAT THE NUMBERS ARE CHOSEN TO PRODUCE is one row of each kind the surface distinguishes, because the
- * distinctions are the design:
- *   due            a high advisory reaching production, two majors waiting, dead code, a tangled hotspot
- *   snoozed        the API's dependency drift, the owner said "not this cycle"
- *   clear          duplication in the API, checked by an agent that reported the findings did not hold up
- *   unavailable    knip is not a devDependency of the API, so its dead code is UNMEASURED, not clean
- *   not applicable no Dockerfile in the storefront, no packages to document one by one, no docs in the API
- *
- * The two `clear` states are the ones worth having: a maintenance panel that can only show complaints cannot be
- * used to check that there are none. */
+// Evidence `GET /chores` returns for acme-shop, plus its ledger. The route answers only with measurements (probes,
+// package facts, hotspots); the app turns them into verdicts. Numbers are chosen so due, snoozed, clear, unavailable
+// and not-applicable each have one example.
 
-// What this sandbox runs. A supported LTS, so the runtime chore reads `clear`, a recording that opened on an
-// end-of-life warning would be shouting about the box rather than about the code.
+// Supported Node LTS, so the runtime chore reads `clear`.
 const NODE = `v22.14.0`;
 
 const DAY = 86_400_000;
@@ -35,9 +18,8 @@ const probe = (id: ProbeResult["id"], ranAtDaysAgo: number, tookMs: number, fact
     facts,
 });
 
-/* THE STOREFRONT'S EVIDENCE. Two majors waiting behind a long tail of ordinary drift, one advisory that actually
- * reaches a running page, some code nothing references any more, and a checkout panel that both churns and is
- * imported by everything, which is the shape of a repository somebody is actively shipping. */
+// Storefront evidence: two majors pending, one advisory reaching a live page, unreferenced code, and a panel that both
+// churns and is imported everywhere.
 const webRepo = (now: number) => ({
     repo: `web`,
     probes: [
@@ -112,13 +94,7 @@ const webRepo = (now: number) => ({
             },
             now,
         ),
-        /* THE FRONT-END SWEEP. A storefront that has been shipped for a few years: mostly migrated to hooks with
-         * a corner that never was, a price card somebody rebuilt rather than found, and colours typed straight
-         * into the markup on the pages that were in a hurry.
-         *
-         * The clone above between PricingPage and LegacyPlanTable is deliberately left in the jscpd result rather
-         * than restated here, both sides are in the inventory below, which is exactly how component-overlap
-         * turns a generic duplication finding into a front-end one. */
+        // Front-end drift: mostly hooks, a price card rebuilt not found, inline colors on rushed pages.
         probe(
             `ui`,
             0.3,
@@ -148,8 +124,7 @@ const webRepo = (now: number) => ({
             },
             now,
         ),
-        // One vendor chunk carrying two thirds of the download, which is what a Vite app looks like before anyone
-        // has split a route, and the reason this reads off disk is that nobody rebuilt anything to find out.
+        // One vendor chunk carries two thirds of the download; no route has been split yet.
         probe(
             `bundle`,
             0.3,
@@ -172,19 +147,16 @@ const webRepo = (now: number) => ({
         ),
     ],
     signals: {
-        // Single-package repo: `packages` is empty, exactly as the daemon reports it, which is what makes the
-        // document and library chores read "not applicable" rather than inventing one pseudo-package.
+        // `packages` stays empty, matching how the daemon reports a single-package repo.
         packages: [],
         shape: {
-            // The MAP is what `docs` carries; package pages are READMEs, counted per package by `packages`.
+            // `docs` is the architecture map; per-package READMEs are counted separately, via `packages`.
             docs: [`docs/architecture/repo.md`],
             dockerfiles: [],
             ci: [`.github/workflows/ci.yml`],
             lockfile: true,
             packageManifest: true,
-            // A React storefront on Tailwind, which is what makes the four front-end chores apply here at all.
-            // Read from the root manifest rather than from `packages` above, which is empty, and would have
-            // left every one of them silently dark in exactly the kind of repository they were written for.
+            // React + Tailwind here (root manifest, not empty `packages`) is what turns on the four front-end chores.
             deps: [`react`, `react-dom`, `react-router`, `tailwindcss`, `vite`, `image-resize`, `esbuild`],
         },
         hotspots: [
@@ -193,8 +165,7 @@ const webRepo = (now: number) => ({
             { path: `src/lib/api.ts`, commits: 12, adds: 190, dels: 84, complexity: 11, score: 0.38, latestMs: now - 6 * DAY },
             { path: `tests/signup.spec.ts`, commits: 9, adds: 260, dels: 180, complexity: 8, score: 0.29, latestMs: now - 2 * DAY },
         ],
-        // CheckoutPanel is in both rankings, it churns AND everything imports it, which is the one shape the
-        // complexity chore reports rather than laundering a leaderboard into a to-do list.
+        // CheckoutPanel appears in both rankings: high churn and heavily imported, the shape this chore flags.
         keyModules: [
             { path: `src/pricing/CheckoutPanel.tsx`, exports: 6 },
             { path: `src/lib/api.ts`, exports: 4 },
@@ -204,8 +175,8 @@ const webRepo = (now: number) => ({
     },
 });
 
-/* THE API'S EVIDENCE. Quieter, and unmeasured in one place on purpose: knip is not a devDependency here, so its
- * dead-code chore has no answer at all, which the panel renders greyed and can never badge. */
+// API evidence, quieter than web's. knip isn't a devDependency here, so dead-code has no answer and renders
+// unavailable.
 const apiRepo = (now: number) => ({
     repo: `api`,
     probes: [
@@ -223,14 +194,14 @@ const apiRepo = (now: number) => ({
             },
             now,
         ),
-        // Measured, and genuinely clean, the state this surface most needs to be able to show.
+        // The one clean, fully measured probe this fixture needs to demonstrate.
         probe(`audit`, 0.6, 7_400, { id: `audit` as const, advisories: [] }, now),
         {
             id: `knip` as const,
             state: `unavailable` as const,
             ranAt: now - 0.6 * DAY,
             tookMs: 120,
-            // Verbatim what the daemon records for an unavailable probe, the spec's own `unavailable` clause.
+            // Matches the daemon's own wording for an unavailable probe.
             reason: `knip is not a devDependency`,
         },
         probe(
@@ -253,10 +224,7 @@ const apiRepo = (now: number) => ({
     ],
     signals: {
         packages: [],
-        // No architecture documents in the repo: the API's set is still a DRAFT (fixture/docs.ts), so the
-        // documentation-drift survey has nothing to re-read and says so rather than firing on its cadence.
-        // No UI framework here, so the four front-end chores read "not applicable" against the API and the
-        // footer says why, the same distinction the missing Dockerfile draws for the storefront.
+        // No arch docs and no UI framework here: doc-drift and the four front-end chores read `not applicable`.
         shape: {
             docs: [],
             dockerfiles: [`Dockerfile`],
@@ -270,8 +238,7 @@ const apiRepo = (now: number) => ({
             { path: `src/db/schema.ts`, commits: 11, adds: 210, dels: 60, complexity: 9, score: 0.31, latestMs: now - DAY },
         ],
         keyModules: [{ path: `src/db/migrations.ts`, exports: 3 }],
-        // Under the cross-cutting-patterns floor (25 indexed files), so that survey reads "not applicable here"
-        //, a repository this small has one way of doing things because there is barely more than one place.
+        // Below the cross-cutting-patterns floor (25 indexed files): that survey reads `not applicable`.
         totals: { files: 18, symbols: 142, complexity: 38, hotspots: 2 },
         indexed: true,
     },
@@ -279,12 +246,8 @@ const apiRepo = (now: number) => ({
 
 const evidence = (now: number): ChoresReport["repos"] => [webRepo(now), apiRepo(now)];
 
-/* THE LEDGER, what has already been run, and the one snooze the owner set.
- *
- * Seeded from the verdicts the evidence above actually produces, never from hand-typed digests: a digest that
- * misses is invisible (the row simply reads as never-run), and the two entries that matter here are the two
- * whose whole point is that the digest MATCHES, the settled `clean` verdict and the snooze. Deriving them with
- * the same function the panel uses is the only way that cannot rot when a number above changes. */
+// Digests come from `assessReport` on the evidence above, not hand-typed, so a digest match (the `clean` row, the
+// snooze) can't silently rot.
 const seedLedger = (now: number): ChoreLedgerEntry[] => {
     const verdicts = assessReport({ repos: evidence(now), ledger: [], running: [], node: NODE }, now);
     const digestFor = (repo: string, chore: string): string =>
@@ -305,35 +268,25 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
         ...extra,
     });
     return [
-        // Surveys that were read recently enough to be clear, and whose rows say when, which is the only thing
-        // "nothing to do" can honestly mean for a review that measures nothing.
+        // Surveys read recently enough to be `reported`: the only honest 'nothing to do' for an unmeasured review.
         entry(`web`, `standardize-patterns`, 12, `reported`),
         entry(`web`, `deprecated-apis`, 34, `reported`),
         entry(`web`, `documentation-drift`, 40, `reported`),
         entry(`api`, `deprecated-apis`, 20, `reported`),
         entry(`api`, `ci-hygiene`, 61, `reported`),
-        // The agent looked at exactly this duplication and reported it was generated code and deliberately
-        // repetitive tests. `clean` is what makes that verdict stick until the evidence moves.
+        // Agent judged this duplication as generated/repetitive test code; `clean` holds until evidence changes.
         entry(`api`, `duplication`, 3, `clean`),
-        /* ANSWERED, AND STILL DUE, which is the state a real board spends most of its time in and the one this
-         * fixture had no example of. An agent looked at the storefront's two majors and reported back that
-         * react-router 7 is a routing rewrite rather than a bump: nothing changed, the evidence has since been
-         * re-measured and has not moved, so the row is `due` and `settled`. It keeps its place and its evidence,
-         * carries a `reported` mark, and stops being counted as this morning's work. Older than the `outdated`
-         * probe above it on purpose: a run NEWER than the measurement is the `stale` case, which is a different
-         * row and already tells a different story. */
+        // Reported due, still due: react-router 7 needs work; run predates the probe, so it's `settled` not `stale`.
         entry(`web`, `dependencies-outdated`, 5, `reported`),
-        // "Not this cycle", the drizzle major is a project, and the owner said so from the panel.
+        // Owner snoozed the drizzle major from the panel: 'not this cycle'.
         entry(`api`, `dependencies-outdated`, 8, `reported`, { snoozedUntil: now + 22 * DAY }),
     ];
 };
 
-// Built once and then LIVE: snoozing from the panel and promoting a finished run both write here, and every
-// later read reflects it, a fixture that answered read-only would have controls that spring back on next poll.
+// Built once, then live: snoozes and promoted runs write here and persist across reads.
 let ledger: ChoreLedgerEntry[] | undefined;
 
-// Nothing measuring: the demo has no runner behind it, and a spinner that never resolves is a worse tour of the
-// surface than a board of settled evidence.
+// No runner behind this demo; `running` stays empty rather than spin forever.
 export const choresReport = (now: number): ChoresReport => ({
     repos: evidence(now),
     ledger: (ledger ??= seedLedger(now)),
@@ -352,13 +305,8 @@ export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {
     rows[index] = written;
 };
 
-/* THE RUN HISTORY, a chore turn that already happened, as the files it leaves behind. The manifest is what makes
- * a run discoverable and the result is what the agent wrote when it finished; the panel promotes the pair into a
- * ledger row itself, which is exactly what it will do on this recording's first poll.
- *
- * Its digest is the evidence as it stood THEN, and the storefront's dead code has moved since (the agent deleted
- * two files, knip now reports different ones), so the row shows what was done without the chore going quiet
- * about what is true now. */
+// Files a finished chore run leaves behind (manifest + result); the panel promotes them into a ledger row on first
+// poll. Digest reflects evidence as it stood then, which has since moved.
 export const choreFiles = (now: number): [string, string][] => {
     const createdAt = now - 2 * DAY;
     const runId = `r${createdAt.toString(36)}0`;

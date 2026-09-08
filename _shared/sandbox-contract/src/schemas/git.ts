@@ -5,42 +5,23 @@ import { CommandRunSchema } from "./ci.js";
 import { RefNameSchema } from "./internal.js";
 import { RepoParamSchema } from "./shared.js";
 
-// Which of the working tree's diffs a row (or a scope, below) is about, the same split the Changes panel lists
-// under. A path that is staged AND edited again has genuinely different diffs, so a side is never defaulted: a
-// caller that doesn't say which one it means doesn't know what it is showing.
-//   staged     ⇒ index vs HEAD      (what a bare `git commit` would record)
-//   unstaged   ⇒ worktree vs index  (untracked ⇒ no before side)
-//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included, an unmerged path
-//                                    has no stage 0, so the index is not a side it can be diffed against)
+// Which of the working tree's diffs a row is about; a path can be both staged and edited again, so a side is never
+// defaulted.
+// staged: index vs HEAD.
+// unstaged: worktree vs index (untracked ⇒ no before side).
+// conflicted: HEAD vs worktree, markers included (no stage 0 to diff against).
 export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 
-/* WHAT A BULK GIT ACTION APPLIES TO, and the whole reason it is not simply a list of paths.
- *
- * A review surface enumerates: it draws rows, and it has to stop somewhere (RepoChanges.truncated — a cloned
- * monorepo or a directory overhaul runs to five and six figures, which no browser should hold and no screen can
- * draw). An ACTION must not inherit that ceiling. When it did, every bulk button in the Changes panel meant
- * "the rows we happened to ship": "Stage all" over 5,000 changes staged 500, and, because staging anything
- * takes the panel out of its stage-everything shape, the user was then locked into recording the work 500 files
- * at a time for as long as it took. The cap was right; defining the verb in terms of it was not.
- *
- * So a target is one of two things, never both:
- *   paths ⇒ exactly these, the rows a person picked off the list. Bounded, because a browser built the list.
- *   scope ⇒ a DESCRIPTION the daemon resolves against the repository's live status, which is the only reading
- *           that cannot be stale and the only one whose cost does not grow with the answer. `git add -A` names
- *           no paths at all; a side or an origin costs one status read and a handful of chunked spawns.
- *
- * Neither ⇒ the whole repository, which is what the discard route has always meant by an absent `paths`. */
+// What a bulk git action applies to, never simply a list of paths (unbounded, unlike a review's rows).
+// paths: exactly these, from a list a browser already drew.
+// scope: a description the daemon resolves against live status, so nothing here can be stale.
+// neither: the whole repository.
 export const GitScopeSchema = z.object({
-    // Which of the three lists RepoChanges splits a repo into. Absent ⇒ every side (the whole repo).
     side: GitDiffSideSchema.optional().describe(
         "Narrow to one of the three lists a repository's changes split into. Leave it out for all of them, which is the whole repository.",
     ),
-    /* WHICH CONVERSATION LANDED IT, the same attribution `RepoChanges.origins` carries, resolved daemon-side
-     * against the same registry the review reads it from. This is the scope behind the panel's "From <agent>"
-     * chip, and it is exactly the one a path list cannot express honestly: an agent that landed a directory
-     * overhaul has thousands of files in the tree and at most a few hundred rows on screen, so a client-built
-     * list would have committed a fraction of its work under a message describing all of it. */
+    // Same attribution as `RepoChanges.origins`; a path list would miss files beyond what's on screen.
     origin: z
         .string()
         .min(1)
@@ -49,11 +30,7 @@ export const GitScopeSchema = z.object({
 });
 export type GitScope = z.infer<typeof GitScopeSchema>;
 
-/* How many paths one request may name explicitly. A WIRE bound, not a git one: the daemon splits whatever it
- * resolves across as many invocations as the operating system's argv ceiling requires (changes-index.ts), so
- * nothing downstream cares how long a list is. What this bounds is a request body a browser builds out of rows
- * it drew, which is a different question and has a different right answer — past a few hundred rows a client
- * should be naming a scope, not enumerating. */
+// Wire bound on an explicit path list, not a git/argv limit; past a few hundred rows, name a scope instead.
 export const MAX_ACTION_PATHS = 1000;
 
 const ActionPathsSchema = z
@@ -61,8 +38,8 @@ const ActionPathsSchema = z
     .max(MAX_ACTION_PATHS)
     .describe("Exactly these repository-relative paths. For anything bigger than a hand-picked selection, describe a scope instead.");
 
-// The target as it rides on a request. Deliberately two optional fields rather than a union: `{}` is a
-// meaningful value (the whole repository), which a discriminated union has no way to spell.
+// Two optional fields rather than a union: `{}` (the whole repository) is a meaningful value a discriminated union
+// cannot spell.
 export const GitTargetSchema = z.object({
     paths: ActionPathsSchema.optional(),
     scope: GitScopeSchema.optional().describe(
@@ -71,22 +48,17 @@ export const GitTargetSchema = z.object({
 });
 export type GitTarget = z.infer<typeof GitTargetSchema>;
 
-// Both together is a caller that has not decided which one it means, and silently preferring either would make
-// the other a lie. Refused at the door instead.
+// Both together is refused: silently preferring one would make the other a lie.
 const ONE_TARGET = { message: "name paths or a scope, not both" } as const;
 const oneTarget = (target: GitTarget): boolean => target.paths === undefined || target.scope === undefined;
 
-/* What a commit records. The index IS git's mechanism for choosing that, so `stage` is not a second
- * path-selection channel alongside it: it says what to `git add` FIRST, and the commit that follows records the
- * whole index either way.
- *
- *   stage absent           ⇒ commit whatever is already staged (plain `git commit`)
- *   stage: {}              ⇒ stage every change in the repository, then commit (VSCode's "stage all and commit")
- *   stage: { scope }       ⇒ stage everything the scope describes, then commit
- *   stage: { paths }       ⇒ stage exactly those paths, then commit
- *
- * Never `commit --only`. A partial commit over a half-staged file records the WORKTREE content while the row
- * the user picked showed the INDEX content, and git refuses one outright mid-merge — after moving the index. */
+// What a commit records; the index already does path selection, so `stage` only says what to add first.
+// absent: commit whatever is already staged.
+// {}: stage everything, then commit.
+// { scope }: stage what the scope names, then commit.
+// { paths }: stage exactly those paths, then commit.
+// Never `commit --only`: a partial commit over a half-staged file would record the worktree while the row showed the
+// index.
 export const CommitSchema = RepoParamSchema.extend({
     message: z.string().min(1).describe("The commit message."),
     stage: GitTargetSchema.refine(oneTarget, ONE_TARGET)
@@ -98,14 +70,13 @@ export const CommitSchema = RepoParamSchema.extend({
 export const DiscardSchema = RepoParamSchema.extend(GitTargetSchema.shape)
     .describe("What to throw away. Neither paths nor a scope discards every uncommitted change in the repository.")
     .refine(oneTarget, ONE_TARGET);
-// Index moves. Neither touches the worktree, so they are always safe and need no checkpoint. An empty target is
-// the whole repository, which for staging is `git add -A` and for unstaging is the entire index.
+// Index-only moves; nothing on disk changes, so neither needs a checkpoint. An empty target means the whole repository
+// (`git add -A`, or the entire index).
 export const GitIndexMoveSchema = RepoParamSchema.extend(GitTargetSchema.shape)
     .describe("What to move across the index. Nothing on disk changes either way.")
     .refine(oneTarget, ONE_TARGET);
-// `branch` defaults to the checked-out one. There is deliberately no "set upstream" flag: the daemon publishes
-// (`push -u`) exactly when the branch has no upstream yet, which is never destructive and is the only way the
-// result is coherent, see pushBranch.
+// No separate "set upstream" flag: the daemon runs `push -u` exactly when the branch has none yet, which is never
+// destructive.
 export const PushSchema = RepoParamSchema.extend({
     branch: z
         .string()
@@ -113,23 +84,15 @@ export const PushSchema = RepoParamSchema.extend({
         .optional()
         .describe("Which branch to push. Leave it out for the checked-out one. A branch with no upstream yet gets one set on this push."),
 });
-/* WHO SAID NO to a push, read off git's final words (git/git.ts pushRefusal), because the three answers ask
- * three different things of the owner and only one of them is an agent's to fix:
- *   hook      , this repository's own pre-push hook refused it: the code is known to be wrong, the hook's
- *               output says how, and a fix is worth proposing.
- *   remote    , the server rejected the refs: a non-fast-forward, a protected branch. Pull first, or push
- *               somewhere else; nothing about the code has been judged.
- *   transport , it never got there: credentials, a host that does not answer, a remote that is not a
- *               repository. The same again, and a retry is the only sensible button. */
+// Who said no to a push, read off git's own words (`pushRefusal`); the three answers ask three different things of the
+// owner.
+// hook: this repo's own pre-push hook refused it; the code is known wrong, worth a fix.
+// remote: the server rejected the refs (non-fast-forward, protected branch); pull first or push elsewhere.
+// transport: it never got there (credentials, unreachable host); a retry is the only useful button.
 export const PushRefusalSchema = z.enum(["hook", "remote", "transport"]);
 export type PushRefusal = z.infer<typeof PushRefusalSchema>;
-/* THE PUSH AS A RUN: the pre-push check's shape (CommandRunSchema) with the three things a push adds. A push is
- * a command that runs this repository's pre-push hook, which for a workspace with a real gate is the whole
- * suite, minutes of output; it is a terminal to watch and a verdict to poll for exactly as the check is, and
- * NOT a request held open for its duration (the browser's header deadline is seconds, and a push that ran a
- * suite inside its own request reported "failed" over a push that had gone). One shape for both halves of
- * the push flow is what lets the browser render a refused push with the card, the terminal link and the
- * proposed fix it already has for a red check. */
+// A push runs this repo's pre-push hook (minutes of output); it streams like `CommandRunSchema`, never held open on the
+// request, since the browser's header deadline is seconds.
 export const PushRunSchema = CommandRunSchema.extend({
     repo: z.string().describe("The repository this run is about, the same id the routes take."),
     reason: z
@@ -164,25 +127,20 @@ export const GitFileSchema = z.object({
     path: z.string().describe("The path, as asked for."),
     content: z.string().describe("The file's contents as they stand on disk."),
 });
-// CommitResultSchema is declared further down, after the RepoChanges/OriginAgent shapes a commit answers with.
 
-// One repo's slice of a workspace-wide git action: a target (above) with the repo it belongs to. git cannot
-// span repositories, so a caller that does fans out into one of these per repo, and each carries its own
-// answer to what the action covers there.
+// One repo's slice of a workspace-wide action: git cannot span repositories, so a caller fans out into one of these per
+// repo.
 export const RepoTargetSchema = z
     .object({ repo: z.string().min(1).describe("Which repository.") })
     .extend(GitTargetSchema.shape)
     .refine(oneTarget, ONE_TARGET);
 export type RepoTarget = z.infer<typeof RepoTargetSchema>;
-// One change to a file, an uncommitted working-tree change (status vs HEAD, untracked included), an agent
-// worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
-// undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).
+// One change to a file: an uncommitted working-tree change, an agent worktree's delta vs its base, or a file in a
+// commit. `additions`/`deletions` are numstat counts, absent for binary or untracked files.
 export const GitChangeSchema = z.object({
-    // Repo-relative path with forward slashes; for "renamed" the NEW path (`from` carries the old one).
+    // Forward slashes; for a rename this is the new path (`from` holds the old one).
     path: z.string().describe("The path, relative to the repository root. For a rename this is the new one."),
-    // "conflicted" is git's unmerged state (`U`), and it is not a kind of modification: the index holds "ours"
-    // and "theirs" at stages 2/3 with NO stage 0, so there is nothing a commit could record for this path and
-    // git refuses to commit while one exists. It belongs to neither side, see RepoChanges.conflicted.
+    // Git's unmerged state (`U`): stages 2/3 hold "ours"/"theirs", no stage 0 to commit.
     status: z
         .enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"])
         .describe("What happened to it. Conflicted is not a kind of edit: nothing can be committed anywhere in the repository while one exists."),
@@ -192,16 +150,7 @@ export const GitChangeSchema = z.object({
         .optional()
         .describe("Lines added. Absent for a binary file, and for an untracked one, which has nothing to compare against."),
     deletions: z.number().optional().describe("Lines removed. Absent for the same reasons additions is."),
-    /* THE SAME CHANGE WITH THE COMMENTS TAKEN OUT, computed here rather than by whoever renders the row, and
-     * that is the whole point of it being on the wire. A review's diffs open on code alone, so the numbers beside
-     * them are the code's; working those out needs both whole sides of the file and a TextMate walk over each,
-     * which the app used to do per file, as the files were read — so a row arrived showing git's count and
-     * changed to this one the moment anything read it, which moved the row under the reader when the list was
-     * sorted by size. Shipped with the list, the number a reader sees first is the number it stays.
-     *
-     * Absent, not zero, when there is nothing to say: a binary file, one side too large to read, a path whose
-     * grammar this build does not ship, or a list too long to count whole (see git/code-counts.ts). The caller
-     * then shows git's own counts, which for such a file are the only honest reading anyway. */
+    // Precomputed once and shipped with the list, so a row's number never changes under the reader as it renders.
     code: z
         .object({ additions: z.number(), deletions: z.number() })
         .optional()
@@ -210,37 +159,30 @@ export const GitChangeSchema = z.object({
         ),
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
-// Where a repo's checked-out branch stands against its remote. Every field is optional-or-zero because every
-// one of them is legitimately absent in a healthy repo: no remote configured yet, a branch created locally and
-// never pushed, a detached HEAD. `ahead` = commits only we have; `behind` = commits only the upstream has,
-// which is meaningful only as of the last fetch, the panel's Fetch button is what refreshes it.
+// Where the checked-out branch stands against its remote; every field can legitimately be absent (no remote, unpushed
+// branch, detached HEAD). `behind` is only as fresh as the last fetch.
 export const GitRemoteStateSchema = z.object({
-    // The remote this branch pushes to: its OWN remote when it tracks one, else the first `git remote` lists
-    // (where a never-pushed branch would publish). Those differ in a fork, `origin` and `upstream` both
-    // configured, and pushing to the wrong one succeeds while leaving `ahead` stuck. Absent ⇒ no remote.
     remote: z
         .string()
         .optional()
         .describe(
             "The remote this branch pushes to. Absent means none is configured. In a fork with two remotes, pushing to the wrong one succeeds and leaves the count stuck, which is why this says which.",
         ),
-    // The checked-out branch; absent on a detached HEAD or an unborn repo.
     branch: z.string().optional().describe("The checked-out branch. Absent when the repository is on a bare commit, or has no commits yet."),
-    // The tracking ref ("origin/main"); absent ⇒ this branch has no upstream, so the next push publishes it.
+    // Full ref, e.g. "origin/main".
     upstream: z.string().optional().describe("The branch on the remote this one follows. Absent means the next push will publish it."),
     ahead: z.number().describe("Commits you have that the remote does not."),
     behind: z.number().describe("Commits the remote has that you do not, as of the last fetch. Fetch before trusting it."),
 });
 export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
-// One local branch, for the switcher. `at` is its tip's committer time in ms (the list sorts newest-first).
+// One local branch, for the switcher.
 export const GitBranchSchema = z.object({
     name: z.string().describe("The branch name."),
     current: z.boolean().describe("Whether this is the one checked out."),
     upstream: z.string().optional().describe("The branch on the remote it follows, if any."),
     ahead: z.number().describe("Commits this branch has that its remote counterpart does not."),
     behind: z.number().describe("Commits its remote counterpart has that it does not."),
-    // The configured upstream no longer exists on the remote (a merged PR's deleted branch), distinct from
-    // "no upstream", and the signal that this local branch is safe to delete.
+    // Distinct from no upstream: the configured one existed and was deleted remotely.
     gone: z
         .boolean()
         .optional()
@@ -250,12 +192,8 @@ export const GitBranchSchema = z.object({
     at: z.number().describe("When its tip was committed, in milliseconds. Lists are newest first."),
 });
 export type GitBranch = z.infer<typeof GitBranchSchema>;
-/* One REMOTE-TRACKING branch, somebody else's tip, as this repo last saw it.
- *
- * A separate shape from GitBranch rather than the same one with optional fields, because the two genuinely
- * differ: a remote-tracking branch has no upstream of its own and no ahead/behind, and giving it those fields
- * as zeroes would make it look like a synced local branch. `name` is the full `origin/main`; `remote` and
- * `branch` are it split, so a selector can group by remote without re-parsing. */
+// A remote-tracking branch, not GitBranch with optionals: it has no upstream/ahead/behind of its own, and zeros there
+// would look like a synced local branch. `remote`/`branch` are `name` pre-split for grouping.
 export const GitRemoteBranchSchema = z.object({
     name: z.string().describe("The full name, such as origin/main."),
     remote: z.string().describe("Just the remote part, so a picker can group by it without re-parsing."),
@@ -263,15 +201,14 @@ export const GitRemoteBranchSchema = z.object({
     at: z.number().describe("When its tip was committed, in milliseconds, as this repository last saw it."),
 });
 export type GitRemoteBranch = z.infer<typeof GitRemoteBranchSchema>;
-// Locals and remote-tracking branches in one response: the switcher pairs them, and two round trips to draw one
-// list would only ever show a half-populated one first.
+// Locals and remote-tracking branches together, so the switcher never draws a half-populated list from two round trips.
 export const GitBranchesSchema = z.object({
     branches: z.array(GitBranchSchema).describe("Branches in this repository."),
     remotes: z
         .array(GitRemoteBranchSchema)
         .describe("Branches on its remotes, as last seen. Sent together with the locals so a switcher never draws a half-filled list."),
 });
-// Create at `start` (a sha or ref; absent ⇒ HEAD); `checkout` switches to it immediately (`git switch -c`).
+// Creates at `start` (sha or ref; absent means HEAD); `checkout` switches to it immediately.
 export const GitBranchCreateAtSchema = RepoParamSchema.extend({
     name: RefNameSchema.describe("The new branch's name."),
     start: z.string().min(1).optional().describe("Where to start it: a commit or another branch. Leave it out to start from where you are."),
@@ -285,13 +222,8 @@ export const GitBranchDeleteSchema = RepoParamSchema.extend({
         .optional()
         .describe("Delete it even though it holds work that was never merged. The deliberate retry after the first attempt refuses."),
 });
-/* THE OPERATION A REPO IS HALTED IN THE MIDDLE OF, a merge, rebase, cherry-pick or revert that stopped on a
- * conflict and was never finished or aborted.
- *
- * Every verb the daemon runs itself aborts cleanly on failure, so this is never something the UI started. It is
- * what an agent or a user left behind in a terminal, and it is a state git refuses to do almost anything else
- * from, so a surface listing the conflicted files without naming it leaves the reader with no way out.
- * Absent means the worktree is not mid-anything. */
+// A merge/rebase/cherry-pick/revert left stopped on a conflict, never finished or aborted; the daemon's own verbs
+// always abort cleanly, so this is only ever something a person or agent left behind in a terminal.
 export const GitOperationSchema = z.enum(["merge", "rebase", "cherry-pick", "revert"]);
 export type GitOperation = z.infer<typeof GitOperationSchema>;
 export const GitOperationStateSchema = z.object({
@@ -304,44 +236,28 @@ export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
-    // Absent on an unborn HEAD (a repo initialized but never committed).
+    // Absent on an unborn HEAD (initialized, never committed).
     branch: z.string().optional().describe("The checked-out branch. Absent in a repository that has no commits yet."),
-    // Unmerged paths, a merge, rebase, cherry-pick or pull that git could not finish. First, because until
-    // they are resolved nothing else in this repo can be committed at all: git refuses outright. Held apart
-    // from the two sides rather than listed in them, because "staged or not" is not a question an unmerged path
-    // has an answer to. Staging one (`git add`) is exactly how you tell git it is resolved.
+    // Staging a conflicted path (`git add`) is how you tell git it is resolved.
     conflicted: z
         .array(GitChangeSchema)
         .describe(
             "Paths a merge or rebase could not finish. First, because nothing anywhere in this repository can be committed until they are resolved. Held apart from the two lists below, because staged or not is not a question one of these has an answer to.",
         ),
-    /* The merge/rebase/cherry-pick/revert this repo is halted in the middle of, when it is. Carried on the SCAN
-     * rather than fetched per repo because it belongs beside `conflicted`: the panel already lists the files,
-     * and this is the sentence that says why they are conflicted and what ends it. Absent = not mid-anything,
-     * which is every repo almost all of the time. */
+    // Absent means not mid-anything, the case for almost every repo.
     operation: GitOperationSchema.optional().describe(
         "What halted, when something did. This is the sentence that explains the conflicts above and names the way out of them.",
     ),
-    // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
-    // (a staged edit that was then edited again, the classic `MM`). `staged` is index-vs-HEAD: exactly what a
-    // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
-    // additions/deletions describe the diff it is listed under, never a conflation of the two.
+    // Kept apart because a path can appear on both with different statuses (the classic `MM`); each side's counts
+    // describe only its own diff.
     staged: z.array(GitChangeSchema).describe("What a plain commit would record right now."),
     unstaged: z
         .array(GitChangeSchema)
         .describe(
             "Edits on disk that are not staged, plus untracked files. A path can be in both lists at once with different line counts, which is why they are separate.",
         ),
-    /* How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a mass
-     * delete carries six-figure change lists, a payload no panel can render and no browser should hold, so past
-     * the daemon's per-repo budget the lists arrive truncated and this says what fell off. Absent ⇒ complete.
-     *
-     * PER SIDE, not one total, because the two answer different questions and the readouts that matter are the
-     * per-side ones. "How much would a commit record right now" is `staged.length` plus this side's share, and
-     * with a single figure a caller could not work out which side it belonged to: it would read a repo with
-     * five thousand staged files as five hundred, directly beside the button about to record all of them.
-     * Which side loses rows is the daemon's business (staged outranks unstaged), and it is not derivable from
-     * the lists, so it is stated. */
+    // Per side, not one total: which side loses rows first is the daemon's own choice (staged outranks unstaged) and
+    // cannot be derived from the lists, so it is stated.
     truncated: z
         .object({
             staged: z.number().describe("Staged changes not listed above."),
@@ -351,23 +267,16 @@ export const RepoChangesSchema = z.object({
         .describe(
             "How many changes were cut from each of the two lists above. A freshly cloned monorepo or a mass delete runs to six figures, which no screen can draw, so past a budget the lists arrive short and this says by how much on each side. Absent means they are complete.",
         ),
-    // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
+    // 0 for `ahead`/`behind` with no remote or no upstream.
     remote: GitRemoteStateSchema.optional().describe("Where this repository stands against its remote."),
-    // WHICH AGENT PUT IT THERE: repo-relative path → the agent ids that landed it, newest land first. Keyed by
-    // PATH rather than carried on each GitChange because a path can be listed on two sides at once (staged and
-    // edited again) and its origin is the same fact for both. Only branch-backed agents whose work passed
-    // through land can appear here; workspace conversations, terminal edits and the user's typing are absent
-    // (see agents/origins.ts), so the panel badges an attributable agent and says nothing for anyone else.
-    // Ids, not titles: the identity for every id named here rides the response once, in `originAgents`.
+    // Keyed by path, not on each change, since one path can appear on two sides with the same origin. Ids only; look up
+    // identity in `originAgents`.
     origins: z
         .record(z.string(), z.array(z.string()))
         .optional()
         .describe(
             "Which conversation put each path here, newest first, keyed by path. Only work that went through a merge can appear: edits made in the shared tree, in a terminal, or by a person are simply absent rather than guessed at.",
         ),
-    // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
-    // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
-    // vanished from the panel with nothing to act on; it now arrives with empty change lists and this set instead.
     error: z
         .string()
         .optional()
@@ -376,61 +285,35 @@ export const RepoChangesSchema = z.object({
         ),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// WHO AN ORIGIN ID IS, the display identity of one agent named in `origins`, carried BY THE RESPONSE rather
-// than looked up in the client's fleet roster. The roster is the LIVE board and deliberately drops archived
-// agents (AgentsRegistry.list), while a landing outlives the agent that made it: archiving a finished agent
-// does not commit its lines, so the very common case, land, archive the card, review at leisure, is exactly
-// the one a roster lookup cannot answer, and the panel fell back to "Agent 1a2b3c" with a generic icon for it.
-// The daemon reads attribution and identity from the same registry in the same pass, so it is the one place
-// they cannot disagree. Per response, not per repo: one agent commonly lands into several.
+// Display identity for an id in `origins`, carried here rather than looked up in the roster: the roster drops archived
+// agents, but a landing outlives them. Read from the same pass as the attribution, so the two cannot disagree.
 export const OriginAgentSchema = z.object({
-    // Absent for an entry that never got a title (a turn that failed before one was derived).
     title: z.string().optional().describe("The conversation's title. Absent for one that never got as far as having a title."),
     provider: AgentProviderSchema.describe("Which model provider it ran on."),
-    /* WHAT THE LANDED WORK DID, the same drafted message the agent's own card carries (LandedMessage), on the
-     * road that outlives the card. The panel reads the roster's copy first and this one when the roster has no
-     * entry left to read, which is the case this whole schema exists for: an archived agent's lines are still
-     * in the tree, and the sentence about them has to be too.
-     *
-     * Absent for a landing nothing was written about, and, for the seconds after a land, for one whose
-     * sentence is still being drafted. Those two are told apart by `landedMessageDraft` on the agent's card, and
-     * neither has a title-shaped fallback: guessing a subject from the ask is exactly the habit this replaced,
-     * so a chip with no message files nothing and simply filters. */
+    // Absent means nothing was written, or (see `landedMessageDraft` on the agent's card) it still is; never fall back
+    // to guessing a title from the ask.
     landedMessage: LandedMessageSchema.optional().describe(
         "What the merged work did, drafted by the conversation itself. Carried here as well as on its card, because merged lines outlive the card: archiving a finished conversation does not uncommit its work.",
     ),
 });
 export type OriginAgent = z.infer<typeof OriginAgentSchema>;
-// The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes,
-// when it is out of sync with its remote, or when it failed to scan.
+// Aggregated review set across every repo (root + every discovered repo).
 export const GitChangesSchema = z.object({
     repos: z
         .array(RepoChangesSchema)
         .describe(
             "One entry per repository that has something pending, is out of step with its remote, or could not be read. A clean repository is simply absent.",
         ),
-    // Keyed by agent id; covers every id any repo's `origins` names, and only those. Absent when nothing in
-    // the review is attributable. An id can still be missing from it, the retention sweep can retire an
-    // entry whose landed lines are somehow still uncommitted, and the panel keeps its id-shaped fallback for
-    // exactly that, rather than dropping the chip and re-attributing the file to the user.
+    // An id can still be missing here (a retired retention-sweep entry); the panel keeps its id-shaped fallback rather
+    // than reattributing to the user.
     originAgents: z
         .record(z.string(), OriginAgentSchema)
         .optional()
         .describe(
             "Who each conversation named above is, keyed by id, so a caller need not look them up. Absent when nothing in the review can be attributed.",
         ),
-    /* WHICH REPOS HAVE A COMMIT RUNNING RIGHT NOW, the daemon's answer, not the browser's.
-     *
-     * A commit is one request that outlives the tab that fired it. Reload the page mid-commit and that tab's
-     * "a git action is running" flag went with it: the button re-armed itself over rows the commit was already
-     * recording, the panel invited a second click at the exact moment it could do the least good, and the rows
-     * then changed under the user a second later with nothing having said why. A second device watching the
-     * same workspace never knew at all.
-     *
-     * So the fact lives where the commit does. Read at RESPONSE time rather than folded into the scan, because
-     * the scan is memoized for half a second and this must describe the instant it is sent. Absent ⇒ nothing is
-     * committing, which is the overwhelmingly common case and the reason it is optional rather than an empty
-     * array on every response. */
+    // Sandbox-wide, not per-tab, so a reload or another device still knows a commit is running. Read at response time,
+    // not from the memoized scan. Absent means nothing is committing.
     committing: z
         .array(z.string())
         .optional()
@@ -439,18 +322,8 @@ export const GitChangesSchema = z.object({
         ),
 });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
-/* WHAT THE COMMIT LEFT BEHIND, the committed repo's review row, re-read inside the same repo lock that made
- * the commit, so the panel replaces that repo's rows from THIS answer instead of asking for a fresh
- * workspace-wide scan afterwards.
- *
- * That scan is the daemon's most expensive read (a repo walk plus a `git status` per repo, ~11 git spawns each,
- * for every repo including the ones the commit never touched) and the user sat watching the rows they had just
- * committed until it returned. The commit itself is milliseconds of git; the wait was this.
- *
- * `changes` ABSENT means the repo has nothing the panel would show any more, the same inclusion rule the scan
- * applies, decided in the same place, so a repo the scan would have dropped drops here too. `originAgents`
- * covers the ids this repo's `origins` names and only those, on GitChangesSchema's terms; the panel merges it
- * over what it already holds rather than replacing, since the other repos' rows still name their own agents. */
+// Re-read inside the same lock the commit used, so the caller redraws from here instead of a full rescan. `changes`
+// absent follows the scan's own drop rule; merge `originAgents` over what you hold, don't replace it.
 export const CommitResultSchema = z.object({
     committed: z.boolean().describe("Whether a commit was actually recorded."),
     changes: RepoChangesSchema.optional().describe(
@@ -464,15 +337,8 @@ export const CommitResultSchema = z.object({
         ),
 });
 export type CommitResult = z.infer<typeof CommitResultSchema>;
-/* One module a changed file can be grouped under in the review panels: a repo-relative dir ("_editor/web", or ""
- * for a repo that is itself one package) and the name its package.json declares. Distinct from
- * WorkspacePackage, which is the DEPENDENCY graph's node, that one is pnpm's view of the workspace and carries
- * the grouping axis its diagram colours by; this one is a filesystem fact about where a path lives.
- *
- * Stated HERE, above both readings of it, because there are two trees a review can be of and each groups by its
- * own: the workspace read below (/workspace/modules, the Changes panel) speaks for /work, and every agent's
- * diff carries its own (AgentRepoChanges.modules) because an agent's files live in a worktree /work cannot
- * see. */
+// Repo-relative dir + package name for grouping changed files; distinct from WorkspacePackage (the dependency graph's
+// node), a filesystem fact, not a graph position.
 export const WorkspaceModuleSchema = z.object({
     dir: z.string().describe("Where the package lives, relative to its repository. Empty when the repository is itself one package."),
     name: z.string().describe("The name the package declares for itself."),
@@ -485,20 +351,11 @@ export const RepoModulesSchema = z.object({
 export type RepoModules = z.infer<typeof RepoModulesSchema>;
 export const WorkspaceModulesSchema = z.object({ repos: z.array(RepoModulesSchema).describe("Every repository with the packages inside it.") });
 export type WorkspaceModules = z.infer<typeof WorkspaceModulesSchema>;
-/* One file an agent touched AND STILL DIFFERS FROM MAIN ON, plus whether the main working tree is already
- * holding it. The list is what the conversation wrote measured against the main line as it stands right now,
- * which takes three states to say and each one decides a different next move for the reader:
- *
- *   · main's history has this content: the user accepted it, it is their commit, and it is no longer a
- *     difference against main. There is no row (see `absorbed` on the response).
- *   · the main working tree has it, uncommitted: the steady state seconds after a land, waiting in the Changes
- *     panel. A row, `landed: true`.
- *   · neither: never landed, or landed and then discarded. A row, `landed: false`, and this is exactly what
- *     "Land now" would apply.
- *
- * Landed work keeps its row on purpose: a clean turn auto-lands within milliseconds, so a list scoped to the
- * outstanding remainder would show an empty panel for work nobody had looked at yet. What retires a row is the
- * user committing it, which is the one act that says they are done reviewing it. */
+// One file an agent touched that still differs from main, plus whether main's working tree already holds it:
+// in main's history: accepted, no longer a difference — no row (see `absorbed`).
+// in main's tree, uncommitted: `landed: true`.
+// neither (never landed, or landed then discarded): `landed: false` — what "Land now" applies to.
+// A landed row stays until committed; that is the only act that retires it.
 export const AgentChangeSchema = GitChangeSchema.extend({
     landed: z
         .boolean()
@@ -507,21 +364,13 @@ export const AgentChangeSchema = GitChangeSchema.extend({
         ),
 });
 export type AgentChange = z.infer<typeof AgentChangeSchema>;
-// An agent conversation-worktree's delta vs its recorded base, deliberately NOT RepoChanges. There is no index
-// side to speak of here: the question a fleet review answers is "what did this agent write", which is one flat
-// set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
-// row and invited the panel to render a staging affordance that cannot work on a worktree the user never checks out.
+// An agent worktree's delta vs its base, deliberately not RepoChanges: no index here, so sharing that shape would force
+// an empty `staged` and a staging affordance that cannot work on a worktree nobody checks out.
 export const AgentRepoChangesSchema = z.object({
     repo: z.string().describe("Which repository."),
     branch: z.string().optional().describe("The branch this conversation's work sits on."),
     changes: z.array(AgentChangeSchema).describe("What it changed there."),
-    /* THE PACKAGE LAYOUT OF THE TREE THESE CHANGES CAME FROM, so the review can group them by module the way
-     * the workspace's Changes panel does. It rides the changes rather than being fetched beside them, because
-     * an agent works in a worktree the main tree cannot see: a package the agent has just created exists only
-     * there, so the workspace-wide read (/workspace/modules) does not know its name and every one of its files
-     *, which for a new package is all of them, fell into the unnamed "loose in this repo" bucket.
-     *
-     * Same read, same instant, same tree as the rows it groups: that is what stops the two from disagreeing. */
+    // Read from the same tree at the same instant as the rows it groups, so the two cannot disagree.
     modules: z
         .array(WorkspaceModuleSchema)
         .describe(
@@ -529,21 +378,11 @@ export const AgentRepoChangesSchema = z.object({
         ),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
-/* The review, plus WHY the last land refused, because a conflict is discovered by the daemon (a clean turn
- * auto-lands the moment it finishes) and acted on in the browser, possibly hours later, on a surface the user
- * reaches by clicking the card's "Resolve conflict". Carrying the report only in the land RESPONSE meant the
- * one path that opens the review already knowing there is a conflict was the one path that could not show it:
- * the panel opened with an empty report, no explanation, and no merge affordance, a dead end at the exact
- * moment the UI had promised something to resolve. It rides the review because that is the surface that
- * resolves it, and it refreshes with it: every land invalidates this query, so the report is never staler
- * than the last attempt. */
+// The review, plus why the last land refused: a conflict is found when the turn ends but resolved later on this
+// surface, so it rides here rather than only in the land response, and refreshes on every land.
 export const AgentChangesSchema = z.object({
     repos: z.array(AgentRepoChangesSchema).describe("One entry per repository the conversation touched."),
-    /* HOW MUCH OF THE WORK IS NO LONGER A DIFFERENCE, so an empty list can say WHICH kind of empty it is. An
-     * agent that has written nothing and an agent whose every file the user committed both answer with no rows,
-     * and they are opposite facts: one is "ask it for something", the other is "it is all in your history". A
-     * count rather than the rows themselves, because that is the whole of what the surface needs to pick a
-     * sentence, and carrying the rows would put the list back where it started. */
+    // Disambiguates two opposite reasons for an empty list: nothing written, versus everything already committed.
     absorbed: z
         .number()
         .describe(
@@ -558,20 +397,8 @@ export const AgentChangesSchema = z.object({
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
-/* WHERE THE WORK WENT once it stopped being a difference, the other half of the sentence `absorbed` above can
- * only start. The review is what still differs from main, so a reader who committed an agent's every file
- * arrives at an empty panel; the count lets it say WHICH kind of empty, and this says where to go and shows
- * the work, which is what the reader actually came for.
- *
- * Deliberately its OWN read rather than more fields on the review. The review is on the panel's hot path and
- * this is a `git log` per repo that only matters once history has taken something, so it is asked for exactly
- * when there is an answer to have. That also keeps the review's shape honest: its rows are differences against
- * main, and these are not.
- *
- * A COMMIT CARRIES the work, it did not necessarily author it: a path is attributed to the newest commit that
- * left the agent's content there, which is where a reader should be sent to read it now. See the daemon's
- * agents/landed-history.ts for the span this is measured over and for why an unattributable path is counted
- * rather than assigned to a plausible commit. */
+// Own read (a `git log` per repo), not folded into the review, whose rows are differences against main and these are
+// not. A commit CARRIES the work without authoring it: a path is attributed to the newest commit that left it there.
 export const AgentHistoryCommitSchema = z.object({
     sha: z.string().describe("The commit."),
     short: z.string().describe("Its abbreviated hash, which is what a reader recognises it by."),
@@ -588,19 +415,12 @@ export type AgentHistoryCommit = z.infer<typeof AgentHistoryCommitSchema>;
 export const AgentRepoHistorySchema = z.object({
     repo: z.string().describe("Which repository."),
     commits: z.array(AgentHistoryCommitSchema).describe("The commits carrying this conversation's work there, newest first."),
-    /* Carried for the same reason the review's rows carry it, and read from the same tree at the same instant:
-     * a package the conversation created lives only in its own copy, so the shared tree cannot name it, and
-     * without this every file of a brand-new package groups under no package at all. */
+    // Same reason as the review's rows: a new package lives only in its own copy and is otherwise ungroupable.
     modules: z.array(WorkspaceModuleSchema).describe("The packages of the tree these files came from, so a review can group them by package."),
 });
 export type AgentRepoHistory = z.infer<typeof AgentRepoHistorySchema>;
 export const AgentHistorySchema = z.object({
     repos: z.array(AgentRepoHistorySchema).describe("One entry per repository holding committed work of this conversation."),
-    /* FILES HISTORY HOLDS THAT NO COMMIT HERE ACCOUNTS FOR, reported rather than hidden. Content reaches the
-     * main line by roads that do not pass through a commit since the land: a cherry-pick from elsewhere,
-     * another conversation landing the same lines, the user typing them by hand before this one landed. Those
-     * files are absorbed and unattributable at once, and a surface that quietly dropped them would be claiming
-     * the commits it names are the whole story. */
     unaccounted: z
         .number()
         .describe(

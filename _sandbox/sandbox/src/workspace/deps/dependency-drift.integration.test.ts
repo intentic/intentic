@@ -12,8 +12,8 @@ const write = async (root: string, path: string, content = "{}"): Promise<void> 
     await writeFile(full, content);
 };
 
-// An installed package is a directory with a manifest, which is what both node_modules layouts produce (pnpm
-// symlinks one in, npm copies one).
+// An installed package is a directory with a manifest, produced by either node_modules layout (pnpm symlinks it in, npm
+// copies it).
 const installed = (root: string, dir: string, name: string): Promise<void> => write(root, join(dir, "node_modules", name, "package.json"));
 
 const workspaceFile = (root: string, globs: readonly string[]): Promise<void> =>
@@ -64,9 +64,8 @@ test("a hoisted tree satisfies a member too: npm and yarn put almost everything 
     expect(await unresolvedDependencies(root)).toEqual([]);
 });
 
-/* The case a lockfile comparison gets wrong, and the reason this module reads the tree instead. A package that
- * IS an importer in the lockfile, so manifest and lockfile agree perfectly: can still have no installed tree
- * at all, which is exactly the state two packages of this workspace were found in. */
+// What a lockfile comparison would miss, and why this module reads the tree instead: a package can be a lockfile
+// importer with no installed tree at all.
 test("a member with no node_modules at all is drift, however well its manifest agrees with the lockfile", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"root"}`);
@@ -102,9 +101,8 @@ test("modulesNear separates a tree that was never installed from one that is mer
     expect(await modulesNear(join(root, "src/main.ts"))).toEqual({ kind: "installed", missing: [] });
 });
 
-// The shape an isolated turn presents to the daemon: the overlay is mounted inside the turn's namespace, so
-// from outside every node_modules on the path is present and empty. Read as an install root it made a fully
-// installed package look like one missing every dependency it declares.
+// An empty node_modules on the path is a turn's isolation overlay, not an install: read as one, it made a fully
+// installed package look like it was missing everything.
 test("an EMPTY node_modules is a mount point, not an install: the walk goes past it", async () => {
     const root = await project();
     await write(root, "package.json", `{"name":"app","dependencies":{"vue":"^3"}}`);
@@ -121,7 +119,6 @@ test("modulesNear answers for the package that OWNS the file, not the install ro
     await installed(root, "", "turbo");
     await write(root, "packages/web/package.json", `{"name":"web","dependencies":{"vue":"^3"}}`);
     await write(root, "packages/web/src/main.ts", "");
-    // The root's own tree satisfies the root, and says nothing about what `web` declares.
     expect(await modulesNear(join(root, "packages/web/src/main.ts"))).toEqual({ kind: "installed", missing: ["vue"] });
     await installed(root, "packages/web", "vue");
     expect(await modulesNear(join(root, "packages/web/src/main.ts"))).toEqual({ kind: "installed", missing: [] });
@@ -135,8 +132,8 @@ test("the summary names a few and counts the rest: the decision is made by the t
             { dir: "x", names: ["d", "e", "f"] },
         ]),
     ).toBe("a, b, c, d and 2 more");
-    // One shared workspace library missing from six packages is six entries and ONE thing to say: without this
-    // the sample spends its slots repeating a name the reader already read.
+    // One shared dependency missing from several packages is one name, not six: dedup keeps the sample from repeating
+    // what the reader already read.
     expect(
         unresolvedSummary([
             { dir: "a", names: ["shared"] },

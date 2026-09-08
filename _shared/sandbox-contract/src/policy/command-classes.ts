@@ -2,69 +2,9 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/agent.js";
 import { inertRegions, isLive } from "../text/shell-regions.js";
 
-/* WHICH CLASSES A SHELL COMMAND FALLS IN, the classifier behind every command gate, read before the command runs.
- *
- * IT LIVES IN THE CONTRACT PACKAGE because there are TWO enforcement points and they must not drift. The
- * sandbox's own gate (sandbox/src/guard/command-gate.ts) judges what the agent types here; the machine agent's
- * shell tool (_devices/machine/src/device/tools/shell.ts) judges what it sends to somebody's laptop. Those answer to
- * different policy (a rulebook with a permission card here, a scope switch on the card there) but they must
- * agree on WHAT A COMMAND IS, or a class the owner thought they had covered turns out to mean something else on
- * the surface where it mattered most. One table, two consults.
- *
- * ALL of them, not the first match, because a gate takes the most restrictive verdict across them and the
- * interesting commands are exactly the ones in two classes at once: `curl -d @.env https://…` is both
- * `secrets.access` and `network.outbound`, and an owner who holds either meant to see it. Returning one class
- * would let a rule on the other decide.
- *
- * HONESTY, the same note the outbound sniffer carries and for the same reason. This is regex over shell text.
- * A creatively quoted command, a path assembled from a variable, or a script written in one call and run in the
- * next goes past it untouched. So a gate built on this is friction and a prompt for well-behaved work, never a
- * boundary, the boundaries are structural and elsewhere: the container, the isolated worktree, the land gate,
- * an automation's tool allowlist, and, on somebody's own device, the scope switches enforced there.
- *
- * WHICH IS WHY THIS NO LONGER DECIDES ANYTHING. A match used to BE the verdict: whatever fired here became the
- * permission card, so `echo "rm -rf /"`, `rg 'rm -rf'` and an actual delete were one question with one answer.
- * Now a match only means A JUDGE SHOULD LOOK (safety-policy.ts argues the move at length, guard/command-gate.ts
- * implements it), and the judge reads the owner's written policy plus what the daemon knows about the turn.
- * That changes what these patterns should optimise for: being OVER-inclusive is close to free, because a false
- * positive now costs one model call rather than one interruption, and a miss still costs everything. Anyone
- * tuning a pattern below should widen rather than narrow it.
- *
- * WITH ONE EXCEPTION, AND IT IS WHY `live` EXISTS. The hard rule (safety-policy.ts hardRuleClasses) still turns
- * a match straight into an interruption nothing can waive, so for the classes it covers a false positive costs
- * exactly what it always did. That left the old failure standing in the one place it could not be argued out
- * of: `echo "rm -rf /" >> notes.md` and `rg 'rm -rf /'` were un-waivable cards over a string. So every match
- * carries whether a shell would RUN the fragment or merely print, search or write it (shell-regions.ts), and
- * only the hard rule reads that bit. The tables stay over-inclusive; the un-waivable tier stops firing on text.
- *
- * AND IT IS ASKED OF A PLACE. `rm -rf /usr` ends a laptop and costs a container nothing, because a container is
- * rebuilt from an image; a Docker volume here is a dev database the agent made and there is the owner's data.
- * Half the tables below therefore have two answers, chosen by CommandContext.locus, and the caller must say
- * which machine it is asking about. schemas/agent.ts CommandLocus argues the split.
- *
- * Matching is deliberately UNANCHORED, substrings, not line starts. Another PreToolUse hook may have rewrapped
- * the command by the time this reads it (agent-terminals.ts wraps every Bash call in bin/tmux-run), and the
- * agent's own line survives verbatim inside that wrapper. Nothing the wrapper adds is in any class below.
- *
- * `[^|;&]*` in a pattern keeps a flag tied to the verb before it, so a later command in a pipeline cannot lend
- * its flags to an earlier one, `git push origin | grep -f patterns` is not a force-push.
- *
- * IT REPORTS WHERE, not just whether (matchCommand below). A permission card holding four hundred characters of
- * shell has to answer one question before anything else on it can be read: which part of this is the part that
- * stopped it. That answer only exists here, at the moment a pattern fires, and re-deriving it in the browser
- * would be a second classifier with all the ways to disagree with this one. So every table hands back offsets
- * and the card marks them; `classifyCommand` is the same walk with the offsets dropped.
- *
- * AND IT TAKES A FACT WHERE THE CALLER HAS ONE (CommandContext below). Every table here is a pattern over text,
- * which is exactly the right instrument for a verb — `git push --force` means what it says, and no amount of
- * looking at the repository makes it mean less. It is the WRONG instrument on its own for a class defined by a
- * FILE: `secrets.access` fires on `~/.npmrc` because that path usually holds a token, and "usually" left this
- * raising cards over registry config, over `.env` files holding a port number, over `~/.ssh/known_hosts`, and
- * over files that were not there at all. Those cards are not near misses, they are noise, and noise is what
- * teaches an owner to answer a card without reading it. A caller that can open the file (guard/credential-
- * files.ts, on the sandbox that is about to run the command) answers the question the pattern could only guess
- * at, and only ever in the direction of dropping a class it positively cleared — see credentialReads.
- */
+// Classifies a shell command, shared by the sandbox gate and the machine agent's shell tool so they can't drift on what
+// a class means. A match now only means a judge should look, not a verdict, so tables should be over-inclusive, except
+// the hard-rule classes, which read `live` instead.
 
 // A half-open slice of the command text, in UTF-16 code units, the offsets a renderer slices with.
 export interface CommandSpan {
@@ -72,62 +12,35 @@ export interface CommandSpan {
     readonly end: number;
 }
 
-/* One class the command fell in, and the fragments that put it there. `spans` is never empty: a class with
- * nothing to point at is a class this walk does not report. */
+// One class the command fell in, and the fragments that put it there. `spans` is never empty: a class with nothing to
+// point at is not reported.
 export interface CommandMatch {
     readonly commandClass: CommandClass;
     readonly spans: readonly CommandSpan[];
-    /* Would a shell RUN any of those fragments, or are they all text — a heredoc body, a comment, a quoted
-     * argument to echo or a grep (shell-regions.ts says how that is decided and how wrong it is allowed to be)?
-     *
-     * ONLY THE HARD RULE READS THIS, and that is the whole point of it being a flag on the match rather than a
-     * filter over the tables. A mention still puts the command in the class, still reaches the judge, and is
-     * still marked on the card: the judge is the tier that can tell a README from a delete, and taking the
-     * class away would take the question away from it. What a mention must NOT do is trip the one tier that
-     * cannot be argued with, which is what `echo "rm -rf /" >> notes.md` used to do. */
+    // Whether a shell would run the fragment, vs text; only the hard rule ever reads this bit.
     readonly live: boolean;
 }
 
-/* WHAT THE CALLER CAN CHECK THAT THE PATTERNS CANNOT. Optional everywhere: absent ⇒ every table answers from
- * the command text alone, which is what the browser, the machine agent and every test that does not care get. */
+// What the caller can check that the patterns cannot. Optional everywhere: absent means every table answers from the
+// command text alone.
 export interface CommandContext {
-    /* WHERE THIS COMMAND WOULD RUN, and it is the one field with no default. Half this catalog means something
-     * different on a disposable container than on somebody's laptop — which directories are roots, whether a
-     * Docker volume is a dev database or their data — and a default would be one of those two answers applied
-     * silently to the other machine. Callers state it; schemas/agent.ts CommandLocus argues the split. */
+    // Where this command would run, with no default: half this catalog means something different per machine.
     readonly locus: CommandLocus;
-    /* Does the file at this path — as the command spells it, `~/.npmrc`, `.env`, `/work/app/.env.local` — hold
-     * credential material? (credential-material.ts says what that means; the caller says how to read a file.)
-     *
-     * THREE ANSWERS, and the third is the important one. `true` ⇒ it does. `false` ⇒ it was opened and read and
-     * there is no credential in it, or there is no such file. `undefined` ⇒ COULD NOT TELL: a path built from a
-     * variable, a glob, a directory, a file on another machine, an unreadable one. Only `false` drops a class;
-     * a rule that fell back to "no" whenever nobody could look would be a rule that quietly stopped applying
-     * exactly where checking was hardest. */
+    // true/false/undefined for holding a credential; only false drops a class, undefined still counts as a hit.
     readonly holdsSecret?: (path: string) => boolean | undefined;
 }
 
-/* The `g` twin of a table's patterns, built once. The tables are written WITHOUT `g` because a lastIndex that
- * survives a call is the classic way a shared regex starts skipping every other match, and `test` is what the
- * verdict path wants. `matchAll` demands one, so the twins live here instead of being flagged in place.
- * (`matchAll` clones the regex it is given, so these stay stateless too.) */
+// The `g` twin of a table's patterns, built once: the tables stay flag-free since a surviving lastIndex is how a shared
+// regex starts skipping matches, and `test` (the verdict path) wants that. matchAll demands `g`.
 const globally = (patterns: readonly RegExp[]): readonly RegExp[] => patterns.map((pattern) => new RegExp(pattern.source, `${pattern.flags}g`));
 
-// Every occurrence of every pattern, as spans over `command`. The WHOLE match, not a capture group: a pattern
-// here is written to span the consequence (`git push … --force`, `curl … https://`), and cutting it back to a
-// group would point at the flag while leaving the verb it belongs to unmarked.
+// Every occurrence of every pattern, as spans over `command`. The whole match, not a capture group: a pattern spans the
+// consequence (`git push … --force`), and a group would leave the verb it belongs to unmarked.
 const spansOf = (patterns: readonly RegExp[], command: string): CommandSpan[] =>
     patterns.flatMap((pattern) => [...command.matchAll(pattern)].map((match) => ({ start: match.index, end: match.index + match[0].length })));
 
-/* Sorted, with overlaps folded together. Two patterns firing on one fragment is ordinary here (a script's
- * recursive delete matches both the with-a-literal-path pattern and the any-path one), and handing a renderer
- * overlapping ranges makes it either double-paint or reinvent this. Adjacency is NOT merged: touching spans
- * from genuinely different fragments read correctly as two marks.
- *
- * EXPORTED because a caller that marks SEVERAL classes at once needs it too, and the overlap it has to fold is
- * across classes rather than within one: `rm -rf /work` is both files.destructive and system.destructive on the
- * same characters, and a card that painted both would hand its renderer two ranges over one fragment. The
- * command gate marks every matched class now (guard/command-gate.ts says why), so this is the second caller. */
+// Sorted, with overlaps folded (not adjacency: touching spans from different fragments stay two marks). Exported since
+// a caller marking several classes at once must also fold overlap across classes, not just within one.
 export const mergeSpans = (spans: readonly CommandSpan[]): CommandSpan[] => {
     const merged: CommandSpan[] = [];
     for (const span of [...spans].sort((left, right) => left.start - right.start || left.end - right.end)) {
@@ -150,46 +63,22 @@ const GIT_DESTRUCTIVE = [
     /\bgit\s+filter-branch\b/,
 ];
 
-/* THE CREDENTIAL THAT IS IN THE COMMAND, not in some file the command names. `{{secret:NAME}}` becomes the real
- * value on the way into the process (agent/agent-secrets.ts), so a command carrying one is reading a credential
- * by definition and there is nothing for a filesystem to add: this half of the class is never fact-checked.
- *
- * Without it the outside-content floor in guard/actions.ts is bypassed by writing a reference into a curl
- * instead of reading a dotenv, which is the shorter route to the same place: `curl -d @.env` is held,
- * `curl -d '{"t":"{{secret:X}}"}'` was not. The alphabet is REFERENCE's, from secrets/secret-registry.ts,
- * respelled rather than imported to keep this table free of a dependency on the stores it describes. */
+// The credential is IN the command, not in a file; there is nothing for a filesystem to fact-check here.
 const SECRET_REFERENCES = [/\{\{secret:[A-Za-z0-9_./-]+\}\}/];
 
-/* A PATH THAT USUALLY HOLDS A CREDENTIAL — a guess about a FILE, which is why every entry here is subject to
- * CommandContext.holdsSecret and the table above is not. Each pattern spans as much of the path as it can, so
- * the card marks `.ssh/id_ed25519` rather than `.ssh`, and so the word around it (enclosingPath) resolves.
- *
- * WHAT IS DELIBERATELY NOT HERE is as much of the definition as what is: the public half of a keypair, the
- * host list beside it, and the checked-in templates that ship next to the real file in every repo. None of
- * those is credential material in any file, so no fact-check is needed to know they do not belong — and each
- * of them was, before this, an ordinary setup command earning a card that said "read credential material". */
-/* The directory part in front of a filename, so a pattern spans `~/.aws/credentials` rather than the
- * `.aws/credentials` inside it: what the card marks then reads as the file, and the word handed to the
- * fact-check IS the file. Permissive about `~` and `${HOME}` on purpose — expanding those is the checker's job
- * (guard/credential-files.ts), and a path this over-reaches on resolves to nothing, which changes nothing. */
+// A path that usually holds a credential, a guess about a FILE, so every entry here is subject to holdsSecret.
+// The directory in front of a filename, so a pattern spans the whole path, not just the file inside it.
 const LEADING_PATH = String.raw`[\w~$.{}/\\-]*`;
 
 const CREDENTIAL_PATHS = [
-    /* A dotenv file: `.env`, `.env.production`, `-d @.env`. NOT the checked-in templates that sit beside it in
-     * every repo, and not `process.env`, the lookbehind is what excludes the latter, which is otherwise the
-     * single most common string in this workspace's own commands and would hold every grep for it. */
+    // A dotenv file, not the checked-in templates beside it and not `process.env` (excluded by the lookbehind).
     /(?<![\w.])\.env(?!\.(?:example|sample|template))(?:\.[\w-]+)?\b/,
-    /* The ssh directory and what is under it, EXCEPT the three members that are public by design.
-     * `ssh-keyscan github.com >> ~/.ssh/known_hosts` is the first thing an agent does on a fresh box, `.pub` is
-     * the half of a keypair you are supposed to hand out, and `~/.ssh/config` is host aliases. The bare
-     * directory still counts (`cp -r ~/.ssh /tmp` is the copy that matters, and it names no file at all), which
-     * is why the lookaheads sit outside the optional path tail rather than inside it: an exclusion inside an
-     * optional group is one the regex backtracks around, matching `.ssh` and reporting the class anyway. */
+    // The ssh directory and what's under it, except the three public-by-design members (.pub, known_hosts, config).
     /\.ssh(?!\w)(?!\/(?:known_hosts|config|authorized_keys|environment)(?!\w))(?!\/[\w.-]*\.pub(?!\w))(?:\/[\w.\-/]*)?/,
-    // A private key by its conventional name. `.pub` beside it is the public half and is not this.
+    // A private key by its conventional name; `.pub` beside it is the public half and is not this.
     /\bid_(?:rsa|dsa|ecdsa|ed25519)\b(?!\.pub\b)/,
     new RegExp(String.raw`${LEADING_PATH}\.aws/credentials\b`),
-    // An npmrc, but not the checked-in template beside it — the `.env` exclusion, which this had been missing.
+    // An npmrc, but not the checked-in template beside it, the same exclusion `.env` has.
     new RegExp(String.raw`${LEADING_PATH}\.npmrc(?!\.(?:example|sample|template))\b`),
     new RegExp(String.raw`${LEADING_PATH}\.git-credentials\b`),
     new RegExp(String.raw`${LEADING_PATH}\.credentials\.json\b`),
@@ -203,50 +92,28 @@ const PACKAGE_PUBLISH = [
     /\btwine\s+upload\b/,
 ];
 
-/* The loopback hosts, as a WHOLE HOST rather than a prefix. `localhost\b` reads as an exemption for
- * `localhost.attacker.com`, because a `.` is a word boundary, and for `localhost@attacker.com`, where the
- * loopback name is a URL's userinfo and curl connects to whatever follows the `@`. Either one is a host an
- * attacker registers, so a prefix test hands it the exemption meant for this container talking to itself, and
- * with it the outside-content envelope and the turn's taint bit: outsideSourceOf (guard/outside-results.ts) is
- * built on this class, so a response judged loopback is never wrapped and never marks the turn. The trailing
- * lookahead is what makes it a whole host, the port is optional, and a URL's authority can only end at one of
- * `/?#`, whitespace, or a closing quote. */
+// The loopback hosts, as a whole host not a prefix: localhost.attacker.com must not inherit the exemption.
 const LOOPBACK = String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?=[/?#\s'"\x60]|$)`;
 
-// The sandbox talks to itself over loopback constantly, the host bridge, a dev server the agent just started,
-// and none of that leaves the container, so the class is about reaching OUT rather than about curl.
+// Loopback traffic never leaves the container, so this class means reaching OUT, not curl specifically.
 const NETWORK_OUTBOUND = [
     new RegExp(String.raw`\b(?:curl|wget)\b[^|;&]*\bhttps?://(?!${LOOPBACK})`),
-    /* The JS execution backend's curl: a literal non-loopback URL handed to `fetch(`. The classifier reads
-     * scripts with the same substring honesty it reads shell (the gate feeds it both, see command-gate's
-     * EXECUTION_SOURCES), so an owner's rule about reaching out covers both ways of doing it, and the
-     * outside-content seam wraps what a fetching script brings back exactly as it wraps a fetching curl's. A
-     * URL assembled at runtime walks past this, as the header already admits for shell variables. */
+    // The JS backend's own curl: a literal non-loopback URL handed to fetch(); a runtime-built URL walks past it.
     new RegExp(String.raw`\bfetch\(\s*['"\x60]https?://(?!${LOOPBACK})`),
 ];
 
-/* --- rm, parsed once ------------------------------------------------------------------------------------
- *
- * ONE PARSE, TWO CLASSES. `rm -rf build` and `rm -rf /` are the same verb with the same flags and wildly
- * different consequences, and the whole reason the second is a class of its own is that its default differs:
- * deleting a build directory is ordinary work in a disposable container, and deleting the root it sits in is
- * the thing nothing here undoes. Splitting them needs the OPERANDS, not just the flags, so the invocation is
- * taken apart once and both classes read the same result rather than two regexes drifting apart.
- *
- * An invocation ends at a pipeline separator: everything after `|`, `;`, `&`, or a newline belongs to the next
- * command and must not be read as this one's targets. */
+// One parse feeds both rm classes, since only the operand tells build-dir from root apart.
 const RM_INVOCATION = /\brm\s+([^|;&\n]*)/g;
 
 interface RmInvocation {
     readonly recursive: boolean;
     readonly force: boolean;
     readonly operands: readonly string[];
-    // Where this invocation sits in the command, so a card can point at `rm -rf /work` rather than at the whole
-    // line it was buried in. The invocation as matched, verb through last operand.
+    // Where this invocation sits, verb through last operand, so a card can point at just this delete.
     readonly span: CommandSpan;
 }
 
-// A shell word with its quoting removed, so `"/work"`, `'/work'` and `/work` are one operand and not three.
+// A shell word with its quoting removed, so "/work", '/work' and /work are one operand, not three.
 const unquote = (word: string): string => word.replace(/^['"`]|['"`]$/g, "");
 
 const parseRm = (command: string): RmInvocation[] => {
@@ -259,8 +126,7 @@ const parseRm = (command: string): RmInvocation[] => {
             if (word === "") {
                 continue;
             }
-            // A long flag is one whole word; a short cluster is a bag of letters. `--force` must not be read as
-            // the letters f-o-r-c-e, or every `rm --force` would look recursive too.
+            // A long flag is one whole word; a short cluster is a bag of letters, so --force isn't read as f-o-r-c-e.
             if (word.startsWith("--")) {
                 recursive ||= word === "--recursive";
                 force ||= word === "--force";
@@ -278,35 +144,12 @@ const parseRm = (command: string): RmInvocation[] => {
     return parsed;
 };
 
-/* A TARGET THAT IS A ROOT RATHER THAN SOMETHING INSIDE ONE. This is the whole difference between the two
- * deletion classes, so it is deliberately a short, closed list of whole names rather than a clever heuristic.
- *
- * AND IT IS A DIFFERENT LIST PER LOCUS, because "root" means "the thing nothing here brings back" and the two
- * machines answer that very differently. Everything below is measured against one question: after this delete,
- * what restores it?
- *
- * `/tmp` is deliberately absent from both. It is scratch by definition and emptying it is a chore, not an
- * incident. */
+// A target that is a root vs inside one: a closed list per locus, since "root" differs per machine.
 
-/* IN THIS SANDBOX: two entries, and the shortness is the point rather than an oversight.
- *
- *   ``        the filesystem root itself (what trimTarget normalizes `/` to). Nothing restores it.
- *   /history  every OTHER conversation's worktrees and logs. THIS turn cannot recreate them at any price,
- *             which is exactly what makes it a root here and the reason it outranks anything in /work.
- *
- * WHAT IS DELIBERATELY NOT HERE, and each was hard-ruled before this: `/usr`, `/etc`, `/bin`, `/var`, `/opt`
- * and the rest of the container's OS come back with the image — recreating this sandbox is a documented
- * operation, not a catastrophe. `/work` is a git worktree whose delta lands as uncommitted changes, and it is
- * also the directory an agent has the most legitimate reason to clear. `/Users`, `/Applications`, `/System`,
- * `/Library` and a Windows drive do not exist in this container at all, so holding them here bought nothing and
- * cost a card. All of them are still files.destructive, still triaged, still judged — they have simply stopped
- * being un-waivable. */
+// Two entries: the root itself, and /history, since no other conversation's data is recoverable here.
 const SANDBOX_ROOTS = new Set(["", HISTORY_ROOT]);
 
-/* ON THE OWNER'S OWN COMPUTER: the full list, because nothing there is rebuilt from an image and there is no
- * checkpoint under any of it. The filesystem root, the top-level directories an OS keeps, both of this
- * product's own trees (a device may be running one), a home directory however it is spelled, and a Windows
- * drive. Unchanged from what this catalog held before the split. */
+// The full list: nothing on a real machine is rebuilt from an image, so every top-level OS directory counts.
 const DEVICE_ROOTS = new Set([
     "",
     WORKSPACE_ROOT,
@@ -339,82 +182,39 @@ const rootsAt = (locus: CommandLocus): ReadonlySet<string> => (locus === "sandbo
 const HOME_ALIAS = /^(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%)$/;
 const WINDOWS_DRIVE = /^[A-Za-z]:$/;
 
-/* `/work`, `/work/` and `/work/*` are one target said three ways: a trailing separator or wildcard says
- * "everything in it", which is what deleting the directory means anyway. A BARE `*` is left alone on purpose,
- * it is relative to whatever the shell is standing in, and `rm -rf *` in a build directory is the ordinary
- * case this class exists to stay out of the way of. */
+// A trailing separator or wildcard means "everything in it"; a bare * is left alone (relative to cwd).
 const trimTarget = (operand: string): string => operand.replace(/[/\\]\*+$/, "").replace(/[/\\]+$/, "");
 
 const isRootTarget = (operand: string, locus: CommandLocus): boolean => {
     const target = trimTarget(operand);
-    /* A home directory and a Windows drive are roots on a DEVICE only. In the container `~` is the agent's own
-     * scratch home, rebuilt with the image, and `C:` is not a path that exists. */
+    // Home directory/Windows drive are roots only on a device: the sandbox's ~ is scratch, rebuilt with the image.
     if (HOME_ALIAS.test(target) || WINDOWS_DRIVE.test(target)) {
         return locus === "device";
     }
-    // Only an absolute path can name a root, and `""` is the root itself. A relative path is inside whatever
-    // the shell is standing in, which this cannot know and must not guess about.
+    // Only an absolute path can be a root; a relative path is relative to a cwd this cannot know or guess.
     return target === "" ? operand.startsWith("/") || operand.startsWith("\\") : rootsAt(locus).has(target);
 };
 
-/* --- the JS execution backend's own deletes -------------------------------------------------------------
- *
- * THE SAME CONSEQUENCE, SPELLED IN NODE. The gate feeds this classifier the `mcp__code__run` script as well as
- * the shell line (command-gate's EXECUTION_SOURCES), so `execSync("rm -rf /work")` inside a script already
- * lands in the shell patterns above by substring. `fs.rmSync("/work", { recursive: true, force: true })` did
- * not, and it is the shorter way to write the same afternoon's worth of lost work: the rule an owner wrote
- * about deleting recursively has to mean the same thing on both backends or it does not mean much.
- *
- * RECURSIVE ALONE IS ENOUGH HERE, where the shell form needs recursive AND force. That is not an inconsistency:
- * `rm -r` without `-f` stops on the first prompt and a script has no terminal to answer one, so the shell's
- * recoverable spelling really is recoverable. `fs.rm(p, { recursive: true })` prompts nobody and deletes the
- * tree, so the recoverable spelling does not exist on this side.
- *
- * TWO PATTERNS PER SPELLING, and the split matters: whether the script deletes recursively AT ALL is a
- * different question from WHICH PATH it deletes, and only the first can be answered when the path is a
- * variable. `rm(target, { recursive: true })` is files.destructive with no literal to read, and demanding one
- * (as the first draft did) let exactly the ordinary way of writing it through.
- *
- * The header's honesty note applies here too, and one limit is worth naming: `[^)]*` cannot cross a closing
- * paren, so `fs.rmSync(join(a, b), { recursive: true })` walks past. Same class of gap as a shell path built
- * from a variable, and the same answer: this is friction for well-behaved work, not a boundary. */
+// Node spellings of the same deletes; recursive alone is enough, since a script has no prompt to interrupt it.
 const NODE_RECURSIVE_RM = /\b(?:rm|rmSync|rmdir|rmdirSync)\s*\([^)]*?recursive\s*:\s*true/;
 const NODE_RECURSIVE_RM_PATH = /\b(?:rm|rmSync|rmdir|rmdirSync)\s*\(\s*(['"`])([^'"`]*)\1[^)]*?recursive\s*:\s*true/g;
 // rimraf's whole purpose is the recursive force delete, so the call itself is the match; no options to read.
 const RIMRAF = /\brimraf(?:\.sync|Sync|\.native|\.rimraf)?\s*\(/;
 const RIMRAF_PATH = /\brimraf(?:\.sync|Sync|\.native|\.rimraf)?\s*\(\s*(['"`])([^'"`]*)\1/g;
 
-// Where a script deletes a tree, however the path reaches it. Empty ⇒ it does not.
+// Where a script deletes a tree, however the path reaches it. Empty means it does not.
 const recursiveDeletes = (program: string): CommandSpan[] => spansOf(globally([NODE_RECURSIVE_RM, RIMRAF]), program);
 
-/* The literal paths a script hands to a recursive delete, each with the call it sits in. Empty when every path
- * it deletes is computed, which is the honest answer rather than a guess: the class above already holds, only
- * the root question goes unasked.
- *
- * The two `_PATH` patterns are already global, so they are used directly; matchAll clones them either way. */
+// The literal paths a script hands to a recursive delete, each with its call. Empty when every path is computed, the
+// honest answer: the class above still holds, only the root question goes unasked.
 const nodeDeleteTargets = (program: string): { readonly target: string; readonly span: CommandSpan }[] =>
     [...program.matchAll(NODE_RECURSIVE_RM_PATH), ...program.matchAll(RIMRAF_PATH)].map((match) => ({
         target: match[2] as string,
         span: { start: match.index, end: match.index + match[0].length },
     }));
 
-/* --- state nothing brings back -------------------------------------------------------------------------
- *
- * THE CLASS WITH A FLOOR UNDER IT (guard/actions.ts commandRun holds it even where the owner wrote no rule),
- * so its membership is chosen against a hard question: does anything in this product bring the state back?
- *
- * A worktree is restored from git, a checkpoint restores the tree, a container is recreated from its image,
- * an npm package is re-installed. None of that reaches a formatted disk, a deleted Docker volume, or a home
- * directory that is no longer there. Those are the members. Deliberately NOT members: `docker rm` (recreate
- * it), `docker image prune` (pull it again), `git reset --hard` (that is git.destructive, and the reflog has
- * it), `rm -rf node_modules` (install it again). The point of a floor is that it is rare enough to be worth
- * stopping for; a floor that fires on ordinary work is one people learn to click through. */
-/* A BLOCK DEVICE, FORMATTED, WIPED OR OVERWRITTEN. The only membership of system.destructive that does not
- * depend on where the command runs: there is no image, checkpoint or worktree behind a disk at either locus,
- * and this is what the shipped safety policy has always told the owner it holds unconditionally.
- *
- * `dd` only counts when it is pointed AT a device: reading one into a file is how an image is taken, and
- * holding a backup would be exactly the wrong lesson. */
+// Membership: does anything here bring the state back? A worktree, checkpoint or image restore doesn't count.
+// A block device wiped or overwritten, independent of locus; dd only counts writing to it, not reading one.
 const BLOCK_DEVICE = [
     /\bmkfs(?:\.\w+)?\b/,
     /\bwipefs\b/,
@@ -422,23 +222,11 @@ const BLOCK_DEVICE = [
     /\bsgdisk\b[^|;&]*\s(?:--zap-all|-Z)\b/,
     /\bdd\b[^|;&]*\bof=(?:\/dev\/|['"`]\/dev\/)/,
     /\bshred\b[^|;&]*\s\/dev\//,
-    // A redirect straight onto a disk device, which is the same wipe without the ceremony.
+    // A redirect straight onto a disk device: the same wipe without the ceremony.
     />\s*\/dev\/(?:[shv]d[a-z]|nvme\d|disk\d|mmcblk\d)/,
 ];
 
-/* CONTAINER STATE THAT IS DATA RATHER THAN IMAGE, its own class (container.state) because the two loci
- * disagree about it more sharply than about anything else in this catalog.
- *
- * IN THIS SANDBOX these reach the NESTED engine — the host's Docker socket is never mounted, see
- * capabilities/handlers/docker.ts — so the volumes in reach are the ones the agent itself created, and tearing
- * down a smoke-test stack it just brought up is ordinary work. Holding it as an un-waivable card was the
- * concrete complaint that produced this split: `docker volume rm` on a throwaway test container is not the
- * class of thing a person needs woken for.
- *
- * ON SOMEBODY'S OWN COMPUTER a named volume IS the database, and the owner's policy says never. It stays
- * hard-ruled there (safety-policy.ts hardRuleClasses), and the machine's own `destructive` scope sits under
- * that (machine/src/device/tools/shell.ts GATED_CLASSES), which is the part that is a boundary rather than
- * friction. */
+// Container data, not image: ordinary here (the agent's own nested volumes); still hard-ruled on a real device.
 const CONTAINER_STATE = [
     /\b(?:docker|podman)\s+volume\s+(?:rm|remove|prune)\b/,
     /\b(?:docker|podman)\s+system\s+prune\b/,
@@ -450,9 +238,8 @@ const recursiveForceRms = (command: string): CommandSpan[] =>
         .filter((invocation) => invocation.recursive && invocation.force)
         .map((invocation) => invocation.span);
 
-/* A recursive delete aimed at a root, in either spelling the gate can be handed: the shell's `rm -rf /` and
- * the script's `fs.rmSync("/", { recursive: true })`. Which targets count as roots is the locus's answer, so
- * `rm -rf /usr` is this class on a laptop and merely files.destructive in a container built from an image. */
+// A recursive delete aimed at a root, in either spelling the gate is handed (shell or script). Which targets count as
+// roots is the locus's answer.
 const rootDeletes = (program: string, locus: CommandLocus): CommandSpan[] => [
     ...parseRm(program)
         .filter((invocation) => invocation.recursive && invocation.force && invocation.operands.some((operand) => isRootTarget(operand, locus)))
@@ -462,8 +249,7 @@ const rootDeletes = (program: string, locus: CommandLocus): CommandSpan[] => [
         .map((delete_) => delete_.span),
 ];
 
-// The `g` twins, built once at load rather than per call: a card is minted per held command and a classify runs
-// per command the agent types, so recompiling seven tables of patterns each time is work with no reader.
+// The g twins, built once at load: a card is minted per command held, classify runs per command typed.
 const GIT_DESTRUCTIVE_G = globally(GIT_DESTRUCTIVE);
 const SECRET_REFERENCES_G = globally(SECRET_REFERENCES);
 const CREDENTIAL_PATHS_G = globally(CREDENTIAL_PATHS);
@@ -472,16 +258,8 @@ const NETWORK_OUTBOUND_G = globally(NETWORK_OUTBOUND);
 const BLOCK_DEVICE_G = globally(BLOCK_DEVICE);
 const CONTAINER_STATE_G = globally(CONTAINER_STATE);
 
-/* THE PATH A MATCHED FRAGMENT SITS IN, so the oracle is asked about the file the command would actually open
- * rather than about the suffix that fired: `sed 's/…/' ~/.npmrc` fires on `.npmrc` and must ask about
- * `~/.npmrc`, `curl -d @.env` fires on `.env` and must ask about `.env`.
- *
- * The shell word around the span, widened to whitespace or a separator on both sides, with the decoration a
- * shell puts in FRONT of a path removed: a redirect's arrow, curl's `@` file-body marker, a `--flag=` prefix.
- *
- * DELIBERATELY DUMB, and it can afford to be: a word this gets wrong resolves to a path the caller cannot read,
- * which is `undefined`, which leaves the class exactly where the pattern put it. The failure mode is the old
- * behaviour, not a hole. */
+// The word a matched fragment sits in, so the fact-check asks about the file the command would actually open, not the
+// suffix that fired. A wrong guess just resolves to an unreadable path, the old behaviour, not a hole.
 const WORD_EDGE = /[\s'"`;|&()]/;
 const enclosingPath = (command: string, span: CommandSpan): string => {
     let start = span.start;
@@ -498,29 +276,8 @@ const enclosingPath = (command: string, span: CommandSpan): string => {
         .replace(/^[@<>=]+/, "");
 };
 
-/* A WORD THAT IS A PATTERN RATHER THAN A PATH, dropped before the table's guess about a FILE is believed at all.
- *
- * The table reads shell text looking for filenames, and a search command carries something that looks exactly
- * like one and is not: `rg 'process\.env\.(INTENTIC_[A-Z]+)' --type ts .` names no file and opens nothing, and
- * it earned a card reading "this command would read credential material" over a grep of this workspace's own
- * source. The `.env` in it survives the dotenv pattern's `process.env` exclusion for one reason: the lookbehind
- * sees the REGEX'S BACKSLASH rather than the `s` of `process`, and a backslash is neither a word character nor a
- * dot. Every credential-shaped name has the same hole — `rg '\.npmrc'`, `rg '\.ssh/id_ed25519'` — so it is fixed
- * once here rather than seven times in the table.
- *
- * THE ESCAPED DOT IS THE TELL. `\.` is how a regex spells a literal dot, and a POSIX path never needs it. The
- * one thing that spells `\.` and IS a path is Windows (`type C:\Users\me\.env`), which the machine agent's shell
- * really does see — and there the other backslashes are SEPARATORS, each followed by a path segment rather than
- * by the character it escapes. That is the whole discrimination.
- *
- * A CHARACTER CLASS and a CLASS ESCAPE are the other two tells, and both are nearly free: `[…]` is legal in a
- * filename and never in one anybody writes, and `\w`, `\d`, `\b` mean nothing to a shell. The class escapes are
- * matched only where a word character does NOT follow, which is what keeps `\dev` and `\swap` (Windows
- * directories) out of them. The word edges (WORD_EDGE) already cut a word at the `(`, `|` and quotes carrying
- * the rest of a regex's syntax, so these are what is left of it by the time a word reaches here.
- *
- * Judged on the ENCLOSING WORD, the same word the fact-check would have asked the filesystem about, so a
- * pattern and a path are told apart once and both consults see the same answer. */
+// Tells a search pattern from a real path before trusting the table's filename guess: an escaped dot, a character
+// class, or a class escape marks a regex, not a path, except on a Windows path spelled the same way.
 const CHARACTER_CLASS = /\[[^\]]*\]/;
 const CLASS_ESCAPE = /\\[wdsbWDSB](?!\w)/;
 const ESCAPED_DOT = /\\\./;
@@ -528,12 +285,8 @@ const PATH_SEPARATOR = /\\\w/;
 const namesAPattern = (word: string): boolean =>
     CHARACTER_CLASS.test(word) || CLASS_ESCAPE.test(word) || (ESCAPED_DOT.test(word) && !PATH_SEPARATOR.test(word));
 
-/* WHERE A COMMAND READS CREDENTIAL MATERIAL: every secret reference in it, plus every credential-shaped path the
- * context did not positively clear.
- *
- * `!== false` is the whole fact-check, and the comparison is written against `false` rather than for `true` on
- * purpose: `undefined` (nobody could look) has to behave like `true` (there is a credential in there), or the
- * class would evaporate on every caller without a filesystem. */
+// Every secret reference plus every credential-shaped path the context didn't positively clear. Compared against
+// `false`, not `true`: an `undefined` (could not check) must still count as a hit.
 const credentialReads = (command: string, context: CommandContext): CommandSpan[] => [
     ...spansOf(SECRET_REFERENCES_G, command),
     ...spansOf(CREDENTIAL_PATHS_G, command).filter((span) => {
@@ -542,8 +295,7 @@ const credentialReads = (command: string, context: CommandContext): CommandSpan[
     }),
 ];
 
-// WHERE each class fires, one entry per class. Empty ⇒ the command is not in it, so membership and evidence are
-// the same walk and cannot disagree: there is no way to be held for a class with nothing to show for it.
+// One function per class; empty means the command is not in it, so membership and evidence are the same walk.
 const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandContext) => CommandSpan[]>> = {
     "git.destructive": (command) => spansOf(GIT_DESTRUCTIVE_G, command),
     "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command)],
@@ -554,15 +306,8 @@ const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandC
     "network.outbound": (command) => spansOf(NETWORK_OUTBOUND_G, command),
 };
 
-/* Every class the command falls in AND the fragments that put it there, in the catalog's own order so a card and
- * a log name them the same way twice. The primitive; classifyCommand is this with the offsets dropped.
- *
- * `context` is REQUIRED, unlike before: its `locus` decides what half of this catalog means (see
- * CommandContext), and the fact-check is the optional part of it.
- *
- * THE INERT SCAN RUNS ONCE, here, and is handed to every class rather than being redone per table: it walks the
- * whole command, and seven walks would be six more than the answer needs. A class with no live span is still
- * reported — `live` rides on the match and only the hard rule reads it (shell-regions.ts argues why). */
+// Every class the command falls in, with its fragments, in the catalog's own order. `context` is now required: its
+// locus decides what half the catalog means, and the inert scan runs once, shared by every class.
 export const matchCommand = (command: string, context: CommandContext): CommandMatch[] => {
     const regions = inertRegions(command);
     return CommandClassSchema.options.flatMap((commandClass) => {
@@ -571,12 +316,11 @@ export const matchCommand = (command: string, context: CommandContext): CommandM
     });
 };
 
-// Every class the command falls in, for the callers that only take a verdict from it (the gate's rulebook
-// consult, the machine agent's scope switch).
+// Every class the command falls in, for callers that only need a verdict (a rulebook consult, a scope switch).
 export const classifyCommand = (command: string, context: CommandContext): CommandClass[] =>
     matchCommand(command, context).map((match) => match.commandClass);
 
-// What the card says the command would DO. The class name is a settings key, not a sentence to show a person.
+// What the card says the command would do. The class name is a settings key, not a sentence to show a person.
 export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
     "git.destructive": "rewrite or discard git history",
     "files.destructive": "delete files recursively",
@@ -587,23 +331,8 @@ export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {
     "network.outbound": "send a request out to the internet",
 };
 
-/* ONE FRAGMENT THAT FIRES A CLASS, split down the middle, and the split is the whole reason this type exists.
- *
- * `code` IS SHELL OR SCRIPT AND NOTHING ELSE, so a renderer can hand it to a syntax highlighter and get an
- * answer worth looking at. These used to be one string each — "rm -rf aimed at a root directory", "a
- * {{secret:NAME}} reference in the command" — which is a sentence with a command inside it, and a sentence with
- * a command inside it is the one input a shell grammar cannot colour: `aimed`, `at`, `a`, `root` tokenize as
- * arguments to `rm`, so the highlighting lands on the prose and the reader learns nothing from it. Half the
- * entries in this table were that shape, which is why the Safety page rendered the lot as grey prose joined by
- * dots and read as a wall.
- *
- * `qualifier` IS EVERYTHING THAT NARROWS IT, in words, unhighlighted. It carries what the fragment overstates
- * ("rm -rf /" is only this class when the target is a ROOT) and the spellings not worth a chip of their own
- * (podman beside docker, pnpm beside npm). Absent ⇒ the fragment says it all.
- *
- * STILL PROSE RATHER THAN THE REGEXES THEMSELVES. A `/\b(?:docker|podman)\s+volume\s+(?:rm|remove|prune)\b/` on
- * a settings page is a worse answer to "what stops my commands" than `docker volume rm` is, and rendering source
- * at somebody implies they can edit it. */
+// One fragment that fires a class, split so `code` is shell or script alone (highlightable) and `qualifier` carries
+// what narrows it, in prose: a sentence with a command inside it is unhighlightable.
 export interface CommandPattern {
     /** The literal a shell or a script would carry. Highlightable on its own; never a sentence. */
     readonly code: string;
@@ -611,16 +340,7 @@ export interface CommandPattern {
     readonly qualifier?: string;
 }
 
-/* THE PATTERNS BEHIND EACH CLASS, for the one reader that is a person rather than a gate: the Safety page's
- * "What gets stopped" panel (editor/web/.../AgentSafetyRules.vue). A card says which class fired; this says what
- * the class is, so an owner can see the whole catalog without reading this file.
- *
- * ONE FRAGMENT PER ENTRY, not one line per regex. `git push --force / -f / --force-with-lease` was three
- * spellings of one thing crammed into a chip that then had to be read left to right; as four entries they are
- * four chips a reader's eye picks the relevant one out of. The cost is more entries and it buys scanning.
- *
- * Pinned to the tables by the conformance test in safety-policy.test.ts, so a pattern added without a line here
- * fails the suite rather than going unlisted. */
+// The catalog's patterns for the Safety page's human panel; one fragment per entry, not one line per regex.
 export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly CommandPattern[]>> = {
     "git.destructive": [
         { code: "git push --force", qualifier: "also -f and --force-with-lease" },
@@ -672,9 +392,4 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
     ],
 };
 
-/* No verdict set lives here any more. Which classes are worth stopping for is a POLICY question now, and it is
- * answered in two places that are honest about being different: safety-policy.ts's hardRuleClasses for the
- * things nothing recovers at a given locus, and the owner's own written policy for everything else. The machine
- * agent keeps its own set beside its scope switches (machine/src/device/tools/shell.ts), because "which
- * commands need the destructive switch" is a question about that capability card rather than about this
- * catalog. */
+// No verdict set lives here: which classes stop a command is now a policy question, answered elsewhere.

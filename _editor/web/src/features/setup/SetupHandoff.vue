@@ -1,16 +1,8 @@
-<!-- THE PHONE'S WAY OFF STEP 3.
-     Setup's third step hands over a command for a terminal, and a phone is the one device that cannot finish
-     it. Not because the screen is small: the page already reflows for that, but because the goal itself is
-     unreachable there: there is no shell to paste into, and the clipboard the Copy button writes to belongs to
-     the wrong machine. Every affordance on the step used to point at that dead end, with the correction
-     arriving forty seconds later as a warning banner, after the user had already committed to it.
-     So on a phone this replaces Copy as the thing to press. It sends the one artefact that travels between
-     devices: the address of this very page, and the laptop that opens it resumes the same sandbox at the same
-     step with the command already on screen. The mail carries no code and no command (see setup-email.ts); it
-     is a bookmark the user posts to themselves.
-     The command is still there, one tap below this (see Setup.vue's disclosure). Copying it on a phone is not
-     always a mistake: people drive servers from Termius and Blink, and for them the phone IS the terminal.
-     That path is simply folded away until someone says it is theirs. -->
+<!--
+    Replaces the Copy button on setup step 3 for phones, which have no shell to run the command in. Sends this page's own URL by mail, so the device
+    that opens it resumes the same sandbox at the same step. The command stays available one tap below, for anyone who does drive a shell from their
+    phone.
+-->
 <script setup lang="ts">
 import { Button, ui, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";

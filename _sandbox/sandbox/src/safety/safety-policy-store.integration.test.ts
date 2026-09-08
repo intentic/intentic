@@ -11,9 +11,8 @@ const store = async () => {
     return { path, policy: fileSafetyPolicyStore(path) };
 };
 
-/* ABSENT IS NOT UNCONFIGURED. A workspace nobody has opened is still governed by something, and the shipped
- * text describes the posture it already has — so the judge reads a real policy on the very first turn rather
- * than an empty string that would mean "ask about nothing". */
+// Absent is not unconfigured: the shipped text describes the posture a workspace already has, so the judge reads a real
+// policy on the first turn rather than an empty string meaning "ask about nothing".
 test("with no file, it reads as the shipped default and says it is not the owner's own", async () => {
     const { policy } = await store();
     expect(await policy.get()).toEqual({ text: DEFAULT_SAFETY_POLICY, custom: false });
@@ -26,17 +25,16 @@ test("what the owner wrote comes back verbatim, and is reported as theirs", asyn
     expect(await policy.get()).toEqual({ text: `Ask me before anything.\n`, custom: true });
 });
 
-/* AN EMPTY FILE IS A POLICY, not a missing one: it means "ask about nothing beyond the hard rule", which is a
- * posture an owner is entitled to choose. Falling back to the default here would silently reinstate rules they
- * deleted on purpose. */
+// An empty file is a policy, not a missing one: it means "ask about nothing beyond the hard rule". Falling back to the
+// default here would silently reinstate rules the owner deleted on purpose.
 test("an emptied file is the owner's own policy, not a fallback to the default", async () => {
     const { path, policy } = await store();
     await writeFile(path, ``, "utf8");
     expect(await policy.get()).toEqual({ text: ``, custom: true });
 });
 
-// Every write ends in exactly one newline: a document that gets appended to has to know where its last line
-// ended, and "sometimes" is how two headings end up on one line three appends later.
+// Every write ends in exactly one newline: a document that gets appended to has to know where its last line ended, and
+// "sometimes" is how two headings end up on one line three appends later.
 test("a save is newline-terminated exactly once", async () => {
     const { path, policy } = await store();
     await policy.set(`One line.`);
@@ -45,9 +43,8 @@ test("a save is newline-terminated exactly once", async () => {
     expect(await readFile(path, "utf8")).toBe(`One line.\n`);
 });
 
-/* THE CARD'S ALWAYS BUTTON, END TO END. It appends to the SHIPPED text when there is no file yet, rather than
- * leaving a file holding one line: the owner clicked a button on a card, they did not ask to throw away the
- * default posture. */
+// The card's Always button, end to end: appends to the shipped text when there's no file yet, since clicking a card
+// button isn't asking to throw away the default posture.
 test("appending to a workspace with no file keeps the default and adds the line under it", async () => {
     const { policy } = await store();
     await policy.append(`Deleting build directories under /work is fine.`);
@@ -66,10 +63,8 @@ test("a second line joins the first instead of starting a second section", async
     expect(text.indexOf(`- First thing.`)).toBeLessThan(text.indexOf(`- Second thing.`));
 });
 
-/* WHERE A LINE LANDS, and why it is placed rather than simply appended. This document's sections address
- * different subjects — the disposable container, and the owner's own laptop — so a line meant for the sandbox
- * that fell under "On my devices" would not read as a mistake to the judge. It would read as a rule about
- * the laptop. */
+// Placed by section, not simply appended: sections address different subjects (the disposable container vs. the owner's
+// own laptop), so a sandbox line landing under "On my devices" would read as a rule about the laptop, not a mistake.
 test("a line lands in its own section even when another section was written after it", () => {
     const policy = [`## In this sandbox`, ``, `Ordinary work is fine.`, ``, `## Added from permission cards`, ``, `- First.`, ``, `## On my devices`, ``, `Ask before anything.`, ``].join(`\n`);
     const next = withAddedLine(policy, `Second.`);

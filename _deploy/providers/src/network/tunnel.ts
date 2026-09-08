@@ -18,17 +18,11 @@ const tunnelSchema = sshSchema.extend({
 type TunnelInputs = z.infer<typeof tunnelSchema>;
 const parse = (inputs: ResolvedInputs): TunnelInputs => parseInputs(tunnelSchema, inputs, "tunnel");
 
-// Cloudflare requires every ingress list to end with a catch-all rule (no hostname). The provider owns
-// this policy so the API adapter stays a dumb transport.
+// Cloudflare requires every ingress list to end with a catch-all; owned here, not in the API adapter.
 const CATCH_ALL: IngressRule = { service: "http_status:404" };
 
-// Each public hostname routes to a co-located service on loopback at its fixed port. The connector runs
-// --network host on the same host as every service it fronts, so 127.0.0.1 always reaches their published
-// ports, and unlike the host's LAN ip, loopback works even where a container netns cannot reach that ip
-// (e.g. WSL2 published-port hairpin). cloudflared matches rules top-down, first-match-wins, so wildcard
-// hostnames (the preview `*.<zone>`, which overlaps every explicit host on the zone) must sink to the end,
-// after all explicit rules and before the catch-all 404. toSorted is stable, so order within each group
-// is preserved.
+// Routes each hostname to its service on loopback (the connector runs --network host, so 127.0.0.1 always
+// reaches it). cloudflared matches top-down, so wildcard hostnames must sort after explicit ones, before the catch-all.
 const desiredRules = (parsed: TunnelInputs): IngressRule[] => [
     ...parsed.ingress
         .toSorted((a, b) => Number(a.hostname.startsWith("*")) - Number(b.hostname.startsWith("*")))
@@ -49,9 +43,8 @@ const ingressEqual = (a: readonly IngressRule[], b: readonly IngressRule[]): boo
     });
 };
 
-// Is the cloudflared connector running on the host, and on which image? A read-only SSH check; a host that
-// is not reachable is reported as not-running (and logged) so a plan proceeds rather than aborting, apply
-// will surface the connection failure as a hard error. The image lets diff recreate on a version bump.
+// Whether the cloudflared connector is running, and on which image; read-only SSH check. An unreachable host
+// reads as not-running so a plan can proceed; apply still surfaces the connection failure as a hard error.
 const checkConnector = async (
     executor: SshExecutor,
     parsed: TunnelInputs,
@@ -78,14 +71,12 @@ const checkConnector = async (
     }
 };
 
-// A freshly-run connector registers with the edge asynchronously; until it does, every public hostname on
-// the host answers Cloudflare error 1033, including control-plane urls a later node in the SAME apply may
-// dial. Poll the tunnel's edge-side status so apply returns only once the tunnel actually serves.
+// A freshly-run connector registers with the edge asynchronously; until then every public hostname on the host
+// answers Cloudflare 1033. Polls edge-side status so apply returns only once the tunnel actually serves.
 const CONNECT_TIMEOUT_MS = 120_000;
 const CONNECT_INTERVAL_MS = 3_000;
 const waitConnected = async (api: CloudflareApi, parsed: TunnelInputs, tunnelId: string, log: (message: string) => void): Promise<void> => {
-    // The last status seen, so the give-up message names what the edge was actually reporting rather than
-    // "not healthy".
+    // Last status seen, so the give-up message names what the edge actually reported.
     let status = "unknown";
     const connected = await pollUntil(
         async () => {
@@ -103,10 +94,8 @@ const waitConnected = async (api: CloudflareApi, parsed: TunnelInputs, tunnelId:
     }
 };
 
-// (Re)start the cloudflared connector on the host. Idempotent: remove any prior container, then run a
-// fresh one, the connector is stateless (its ingress lives in Cloudflare). --network host lets it dial
-// the services' internal urls. Waits out a booting host's tunnel warm-up, then propagates the connection
-// failure as the hard error for a host that never comes up.
+// (Re)starts the cloudflared connector: idempotent rm-then-run, since the connector is stateless (ingress lives
+// in Cloudflare). --network host lets it dial services' internal urls; waits out a booting host's warm-up.
 const runConnector = async (
     executor: SshExecutor,
     parsed: TunnelInputs,
@@ -129,14 +118,11 @@ const runConnector = async (
     }
 };
 
-// The Cloudflare Tunnel for one host: a remotely-managed cfd_tunnel whose connector (cloudflared) runs on
-// the host and whose ingress maps the host's public hostnames to their internal service urls. read finds
-// the tunnel and surfaces the actual ingress + connector state via detail so the pure diff can detect
-// drift; apply ensures the tunnel exists, the connector runs, and the ingress matches.
+// Cloudflare Tunnel for one host: a remotely-managed cfd_tunnel whose connector runs on the host and maps public
+// hostnames to internal service urls. `read` surfaces ingress + connector state for `diff`; `apply` reconciles both.
 export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
-        // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
+        // A pending dependency means this resource cannot be introspected yet; parsing would crash on the symbol.
         if (hasPendingRef(inputs, "accountId")) {
             return undefined;
         }
@@ -172,19 +158,17 @@ export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executo
         const parsed = parse(inputs);
         const existing = await api.findTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name });
         const tunnel = existing ?? (await api.createTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name }));
-        // Set the ingress in Cloudflare BEFORE any connector (re)start: a remotely-managed cloudflared
-        // fetches its config on startup and receives later edits as live pushes from the edge.
+        // Ingress goes first: cloudflared fetches config on startup; later edits arrive as live edge pushes.
         await api.putTunnelIngress({
             accountId: parsed.accountId,
             apiToken: parsed.apiToken,
             tunnelId: tunnel.id,
             ingress: desiredRules(parsed),
         });
-        // A running connector on the desired image needs no restart, the ingress PUT above reaches it as a
-        // live config push, with zero downtime. Restarting here would blackhole every public hostname on the
-        // host (Cloudflare 1033) for the re-registration window, including control-plane urls later nodes in
-        // this same apply dial. Restart only when the connector is missing or its image drifted, and then
-        // wait until the edge reports the tunnel serving before letting dependents proceed.
+        // A running connector needs no restart; the ingress PUT above reaches it as a live, zero-downtime push.
+        // Restarting
+        // would blackhole every hostname on the host for the re-registration window, so it happens only when missing or
+        // stale.
         const detail = observed?.detail;
         const connectorCurrent = detail?.["connectorRunning"] === true && detail["image"] === parsed.image;
         if (!connectorCurrent) {

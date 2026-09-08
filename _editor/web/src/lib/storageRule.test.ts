@@ -1,30 +1,14 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is the app's real key builders, and reaching them pulls in composables that touch
-// browser globals at import time. The rule itself is one predicate; what is worth pinning is that the three
-// heavy reads actually carry the mark, which can only be asserted against the builders themselves.
+// Needs jsdom: reaching the app's real key builders pulls in composables that touch browser globals at import time. The
+// rule is one predicate; what's pinned is that the three heavy reads actually carry the mark.
 import { describe, expect, it } from "vitest";
 import { mirrors, UNPERSISTED } from "./queryPersistence";
-// Statically imported, not awaited inside a hook: these builders' graph is app-wide, and compiling it cold on a
-// runner with every core busy takes longer than a hook is allowed to (vitest's hookTimeout): the same work at
-// import time is simply the file's load, paid during collection. The browser globals that graph reads at module
-// scope (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env) are already in
-// place: vitest.setup.ts installs them for the package, before any test file is loaded.
 import { agentTranscriptKey } from "../features/chat/transcript/agentTranscript";
 import { agentFileDiffKey } from "../features/agents/review/useAgentChanges";
 import { changesKey, fileDiffKey } from "../features/workspace/changes/useChanges";
 
-/* THE STORAGE RULE, ASSERTED.
- *
- * The query cache is mirrored to disk WHOLE: one structured clone of everything the app has ever cached, per
- * write, so a single megabyte-scale entry that slips into it is charged to every other write for the rest of
- * the session, and shows up as the app stuttering every couple of seconds while apparently doing nothing. The
- * marker on the key is what keeps such an entry out, and a marker is exactly the kind of thing that gets
- * dropped in a refactor by someone who has no way to know what it was for.
- *
- * Now that a background loader fills this cache on the app's behalf rather than only the screen in front of the
- * user, the volume is no longer bounded by what someone clicked, which is what makes this worth a test rather
- * than a comment. */
+// The cache mirrors to disk whole, one clone per write, so an unmarked heavy entry taxes every other write and reads as
+// random stuttering. A background loader now fills it unpredictably, worth testing rather than only commenting.
 
 const keys = {
     workingDiff: fileDiffKey(`root`, `src/app.ts`, `unstaged`),

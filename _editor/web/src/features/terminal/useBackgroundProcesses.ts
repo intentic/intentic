@@ -4,40 +4,30 @@ import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";
 
-/* The managed background processes, as rows any surface can render: the installed extensions' DECLARED
- * processes (listed even while stopped, a gated-off gateway shows as a startable row, pm2-style) merged with
- * the live "process" rows the daemon's terminal list reports (running state + the session name the log view
- * opens: a supervised service's `svc-*` log tail, or dockerd's tmux session; whatever maps to no declared
- * process is dockerd or a local model server).
- * Extension rows start/stop through their /extensions process routes; session-only rows can only be stopped
- * (dockerd is daemon-owned, part of the base sandbox, so its converge path is the daemon's boot).
- *
- * State comes from the shared terminals query, NOT from a mounted terminal panel: a process's health is a
- * sandbox fact, and the surface that should answer "is my Discord bot alive?" is the Discord capability card,
- * which has no tab machinery. The panel's popover is one more caller of the same rows. */
+// Background-process rows: extensions' declared processes (listed even while stopped) merged with the daemon's live
+// `process` sessions. Extension rows start/stop via /extensions routes; session-only rows can only be stopped. Backed
+// by the shared terminals query, not a mounted panel: health is a sandbox fact any surface can ask.
 
 export interface BackgroundProcessRow {
     // Stable row key: `${extensionId}/${processName}` for declared rows, the session name otherwise.
     readonly id: string;
-    // Primary display: the declared process name ("gateway"), or the session's panel key ("docker").
+    // Display name: the declared process name, or the session's panel key.
     readonly name: string;
-    // The owning extension, present iff the row is start/stoppable through the extensions routes.
+    // Owning extension; present only if the row is start/stoppable via the extensions routes.
     readonly extensionId?: string;
     readonly processName?: string;
-    // The live tmux session (log view target); absent while the process isn't started.
+    // Live tmux session (log-view target); absent while the process isn't started.
     readonly session?: string;
     readonly running: boolean;
 }
 
-// One delayed relist after an action: a supervised service reports running the moment it spawns, so this
-// only ever catches the instant-crash case (started, then dead by the time anyone looks).
+// Delayed relist after an action, to catch a service that reports running then crashes instantly.
 const SETTLE_MS = 1500;
 const processRoute = (row: BackgroundProcessRow, action: string): string =>
     `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
 
-// Open a row's read-only logs. Plain action, not composable state, and routed through the GLOBAL panel channel
-// rather than a local tab call so it works from a page with no panel mounted: focus() recognises a process
-// session and opens its read-only log view rather than tabbing it directly.
+// Opens a row's read-only logs via the global panel channel rather than a local tab call, so it works with no panel
+// mounted.
 export const viewProcessLogs = (row: BackgroundProcessRow): void => {
     if (row.session !== undefined) {
         useTerminalPanel().openFocused(row.session);
@@ -46,7 +36,7 @@ export const viewProcessLogs = (row: BackgroundProcessRow): void => {
 
 export function useBackgroundProcesses(): {
     rows: ComputedRef<BackgroundProcessRow[]>;
-    // The row an action is in flight for, its buttons disable so a double-click can't double-restart.
+    // Row an action is in flight for; its buttons disable while set to block a double-click restart.
     busy: Ref<string | undefined>;
     start: (row: BackgroundProcessRow) => Promise<void>;
     stop: (row: BackgroundProcessRow) => Promise<void>;
@@ -83,7 +73,7 @@ export function useBackgroundProcesses(): {
         window.setTimeout(() => void refetch(), SETTLE_MS);
     };
 
-    // Every action holds `busy` for its own row, so no caller has to wrap it.
+    // Holds `busy` for the row across one action, so callers don't have to manage it themselves.
     const act = async (row: BackgroundProcessRow, run: () => Promise<void>): Promise<void> => {
         busy.value = row.id;
         try {
@@ -94,9 +84,8 @@ export function useBackgroundProcesses(): {
         }
     };
 
-    // Always stop→start (both idempotent): the supervisor's start no-ops on a tracked key — including one it
-    // is mid-backoff on — so a bare start of a crashed-and-retrying service would change nothing. Stop first
-    // covers fresh, crashed, and running alike, so Start and Restart are the same call.
+    // Always stop then start, both idempotent: a plain start no-ops on a tracked (even backoff-retrying) key, so this
+    // covers fresh, crashed, and running alike with one call.
     const start = (row: BackgroundProcessRow): Promise<void> =>
         act(row, async () => {
             await sandboxJson(processRoute(row, `stop`), { method: `POST` });

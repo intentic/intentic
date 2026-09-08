@@ -3,15 +3,12 @@ import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { composeEnvironment } from "../../environment/environment.js";
 import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credentials.js";
 
-/* CURSOR'S ACCOUNT DOOR (agent/provider-module.ts). Its PKCE verifier is redeemable on its own, so it never
- * leaves the daemon: `start` begins the flow, keeps the verifier in memory, polls Cursor until the browser
- * completes the sign-in, mints a 90-day user key and writes it as an account. From the caller's side that is a
- * device flow with nothing to type: open the page, then watch the account list. Cursor publishes no plan-wide
- * headroom, so `force` on the list has nothing to re-measure and answers at once. */
+// Cursor's account door (agent/provider-module.ts): start begins a device-style flow, keeps the PKCE verifier in memory
+// (never leaves the daemon), polls until sign-in completes, then mints a 90-day user key. `force` on `list` answers at
+// once: Cursor publishes no plan-wide headroom to re-measure.
 
-// The name this sandbox's key carries in Cursor's own dashboard API-keys list. It has to be recognisable
-// there and it has to distinguish one sandbox from the owner's laptop, because revoking the right key is a
-// thing people do at exactly the moment they cannot ask anyone which one it is.
+// Name shown in Cursor's own dashboard API-keys list; must distinguish this sandbox from the owner's laptop so revoking
+// the right key doesn't require guessing.
 const keyName = (): string => `intentic sandbox (${process.env["INTENTIC_WORKSPACE_NAME"] ?? "workspace"})`;
 
 export const cursorAccountDoor = (services: Services): AccountDoor => ({
@@ -27,14 +24,13 @@ export const cursorAccountDoor = (services: Services): AccountDoor => ({
             return undefined;
         }
         const typed = label.trim();
-        // A blank label CLEARS the override rather than storing an empty string, so the row falls back to the
-        // sign-in identity instead of becoming nameless (displayLabel owns that ladder).
+        // A blank label clears the override, not an empty string, so the row falls back to displayLabel's identity.
         const renamed = typed === "" ? { ...stored, label: undefined } : { ...stored, label: typed };
         await services.cursorStore.write(renamed);
         return toAccount(renamed);
     },
-    // Recompose after the credential goes: on every published image that is what makes the SDK's bootstrap
-    // follow the accounts it has.
+    // Recomposes after the credential is gone: what makes the SDK bootstrap follow current accounts on a published
+    // image.
     disconnect: async (id) => {
         await services.cursorStore.clear(id);
         await composeEnvironment(services);

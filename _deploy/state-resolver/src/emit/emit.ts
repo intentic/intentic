@@ -16,24 +16,20 @@ import type { IngressPair } from "../resolvers/route.js";
 import { resolveService } from "../resolvers/service.js";
 import { resolveWorkspace } from "../resolvers/workspace.js";
 
-// One concrete choice of option per need: `${capability}:${scope}` -> option id. The state resolver
-// builds this from the catalog; emit turns it into the support stack it describes.
+// One concrete choice of option per need: `${capability}:${scope}` -> option id. The resolver builds it from the
+// catalog; emit turns it into the support stack.
 export interface Assignment {
     readonly byNeed: ReadonlyMap<string, string>;
 }
 
-// The option set the emitter knows how to build. Source control varies by stack (forgejo/github/gitlab);
-// komodo, ssh-linux, and cloudflare-tunnel are shared by all of them.
+// Options the emitter can build; source control varies by stack, komodo/ssh-linux/cloudflare-tunnel are shared.
 const supportedOptions = new Set(["forgejo", "github", "gitlab", "komodo", "ssh-linux", "cloudflare-tunnel"]);
 
 // The GitLab instance defaults to gitlab.com; a self-hosted instance sets its own url.
 const GITLAB_DEFAULT_URL = "https://gitlab.com";
 
-// Build the concrete RawNodes for one assignment. One shared control plane. Komodo on every stack, plus
-// Forgejo + its runner when no hosted forge is declared, is derived onto the control-plane host (first
-// declared host with apps). Worker hosts get Komodo Periphery in outbound mode and are registered as Komodo
-// Servers. Each host with ingress gets its own Cloudflare Tunnel. All apps share one git/CI/deploy platform
-// regardless of which host they run on.
+// Builds RawNodes for one assignment. One control-plane host (first host with apps) gets Komodo, plus Forgejo+runner
+// absent a hosted forge; worker hosts get Periphery+Server; hosts with ingress get their own tunnel.
 export const emit = (intent: IntentSet, assignment: Assignment, zone: string | undefined): ResolvedNode[] => {
     for (const optionId of assignment.byNeed.values()) {
         if (!supportedOptions.has(optionId)) {
@@ -55,8 +51,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         );
     }
 
-    // Identities are Forgejo-stack concepts: a declared user/team becomes a Forgejo account/org, which the
-    // hosted forges manage themselves.
+    // Identities are Forgejo-only; hosted forges (GitHub/GitLab) manage users/teams themselves.
     if ((intent.github !== undefined || intent.gitlab !== undefined) && (intent.users.length > 0 || intent.teams.length > 0)) {
         throw new Error("users/teams (i.want.user/team) are not supported on the GitHub/GitLab stacks; use the Forgejo stack");
     }
@@ -68,11 +63,9 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
 
     const apiToken = cloudflare.input.apiToken;
     const hostById = new Map(intent.hosts.map((h) => [h.id, h]));
-    // Services keyed by id, so a workspace can resolve its tool ids back to kind + domain for MCP wiring.
+    // Services keyed by id, so a workspace can resolve its tool ids to kind + domain for MCP wiring.
     const serviceById = new Map(intent.services.map((service) => [service.id, service]));
-    // The backing instances apps may bind, keyed by id, each with the host it runs on. Validates each backing
-    // targets a declared host (apps reference these by id in their `use`). Passed into resolveApp so a binding
-    // node can be emitted onto the instance's host.
+    // Backing instances apps may `use`, keyed by id with their host; validated here for resolveApp.
     const backingById = new Map<string, { intent: (typeof intent.backings)[number]; host: HostInput }>();
     for (const backing of intent.backings) {
         const host = hostById.get(backing.on);
@@ -82,13 +75,11 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         backingById.set(backing.id, { intent: backing, host: host.input });
     }
     const cpHost = hostById.get(cpId)!;
-    // Restic is on-by-default: when the operator declares no i.have.backup(), synthesize a default
-    // destination (on-host repo + generated password) so a snapshot can always be taken and the host-move
-    // path always exists. A declared backup is used verbatim.
+    // Restic is on-by-default; no i.have.backup() synthesizes an on-host repo + generated password instead.
     const backupInput: BackupInput = intent.backup?.input ?? defaultBackupInput();
     const nodes: ResolvedNode[] = [];
 
-    // Emit ALL host inventory nodes.
+    // Emits every host inventory node.
     for (const host of intent.hosts) {
         nodes.push({
             id: host.id,
@@ -106,8 +97,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         explicitDependsOn: [],
     });
 
-    // The hosted-forge inventory node (i.have.github / i.have.gitlab): resolves the PAT's authenticated
-    // user (or the explicit owner) as the repo + image namespace all downstream nodes use.
+    // Hosted-forge inventory node; resolves the PAT's user (or explicit owner) as the shared namespace.
     if (intent.github !== undefined) {
         nodes.push({
             id: intent.github.id,
@@ -132,8 +122,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         });
     }
 
-    // The Discord back-communication channel: guild + categories + channels + webhooks. Emitted when
-    // the operator declares i.have.discord(). The apps input lists only apps that wire notify: discord.
+    // Discord channel, emitted when i.have.discord() is declared; apps lists only those wiring notify: discord.
     if (intent.discord !== undefined) {
         const notifiedApps = intent.apps.filter((app) => app.notify === intent.discord!.id).map((app) => app.id);
         nodes.push({
@@ -148,8 +137,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         });
     }
 
-    // An external SaaS integration (i.have.stripe). A standalone inventory node like discord: the provider
-    // validates the API key during reconcile. The key stays a $secret env, never an output ref.
+    // Stripe (i.have.stripe): standalone inventory node; apiKey stays a $secret env, never an output ref.
     if (intent.stripe !== undefined) {
         nodes.push({
             id: intent.stripe.id,
@@ -162,17 +150,15 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
     // Per-host ingress buckets (for tunnel aggregation).
     const ingressByHost = new Map<string, IngressPair[]>();
 
-    // --- Shared control plane on the CP host ---
+    // Shared control plane on the CP host.
 
     const serviceIds = new Set(intent.services.map((service) => service.id));
 
     if (intent.apps.length > 0) {
-        // Guarded updates need a restic repo to snapshot into; enabled when the host opts in (a backup
-        // destination is always present now, the provider reuses its on-host restic.env for the password).
+        // Guarded updates need a restic repo; enabled only when the host opts in via updatePolicy.
         const guard = cpHost.input.updatePolicy === "guarded" ? { repo: backupInput.repo, resticImage: IMAGES.backup } : undefined;
 
-        // The forge sourcing the apps and its Komodo pull account. The Forgejo stack derives the full git+CI
-        // platform; the hosted forges derive only the Komodo slice. CI runs at the forge, Komodo deploys.
+        // Forge sourcing the apps: Forgejo derives the full platform, hosted forges derive only the Komodo slice.
         let forge: AppForge;
         let deployRefs: DeployRefs;
         if (intent.github !== undefined) {
@@ -219,8 +205,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
             if (app.observe !== undefined && serviceById.get(app.observe)?.kind !== "signoz") {
                 throw new Error(`app "${app.id}" observes "${app.observe}", which is not a signoz service`);
             }
-            // Validate app -> backing references: the target must be a declared backing AND its capability must
-            // match what the app recorded (guards a stale id reused across capabilities).
+            // Validates app -> backing refs: target must exist and its capability must match (guards a stale id).
             for (const binding of app.use ?? []) {
                 const backing = backingById.get(binding.target);
                 if (backing === undefined) {
@@ -232,7 +217,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
             }
         }
 
-        // --- Worker hosts: Periphery + Server registration ---
+        // Worker hosts: Periphery + Server registration.
 
         const workerHostIds = new Set([...intent.apps.map((a) => a.on), ...intent.services.map((s) => s.on)].filter((id) => id !== cpId));
         for (const hostId of workerHostIds) {
@@ -255,8 +240,8 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
             nodes.push({
                 id: serverId,
                 type: "komodo-server",
-                // Queries Core over the CP host's SSH; still gated on the deploy route because Periphery's
-                // registration (what it waits for) dials Core's PUBLIC url from the worker host.
+                // Queries Core over the CP host's SSH; gated on the deploy route since Periphery dials Core's public
+                // url.
                 inputs: {
                     ...sshOf(cpHost.input),
                     adminUser: adminUsername,
@@ -272,25 +257,24 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
             }
         }
 
-        // --- Apps: all go through the shared platform ---
+        // Apps: all go through the shared platform.
 
         for (const app of intent.apps) {
             const resolved = resolveApp(app, forge, deployRefs, apiToken, zone, cpId, cpHost.input, backingById);
             nodes.push(...resolved.nodes);
-            // Route ingress goes to the host the app runs ON (its tunnel), not the CP host.
+            // Route ingress goes to the host the app runs on (its tunnel), not the CP host.
             const hostIngress = ingressByHost.get(app.on) ?? [];
             hostIngress.push(...resolved.ingress);
             ingressByHost.set(app.on, hostIngress);
         }
 
-        // The declared people + teams and the cross-cutting grant graph. One Forgejo, one Komodo, one set of
-        // identity accounts, all scoped to the control-plane host. Forgejo stack only (rejected above).
+        // Declared people/teams and the grant graph; one Forgejo, one Komodo, one identity set, scoped to the CP host.
         if (forge.kind === "forgejo") {
             nodes.push(...resolveIdentities(intent, forge.platform, cpId, cpHost.input));
         }
     }
 
-    // --- Services: placed on the specified host ---
+    // Services: placed on the specified host.
 
     for (const service of intent.services) {
         const host = hostById.get(service.on)!;
@@ -301,7 +285,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         ingressByHost.set(service.on, hostIngress);
     }
 
-    // --- Workspaces: the per-host AI-agent sandbox, exposed via a wildcard *.<zone> route (ordered last) ---
+    // Workspaces: per-host AI-agent sandbox, exposed via wildcard *.<zone>; ordered last.
 
     for (const workspace of intent.workspaces) {
         const host = hostById.get(workspace.on)!;
@@ -317,9 +301,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         ingressByHost.set(workspace.on, hostIngress);
     }
 
-    // --- Backing instances: each deployed onto its host over SSH. Internal-only (database/cache) contribute
-    // no ingress; exposed ones (auth, Phase 2) aggregate onto the host's tunnel like services. The per-app
-    // binding nodes are emitted inside resolveApp (they require an app), not here. ---
+    // Backing instances deploy onto their host; per-app binding nodes are emitted inside resolveApp, not here.
     for (const backing of intent.backings) {
         const host = hostById.get(backing.on)!;
         const resolved = resolveBacking(backing, host.input, apiToken);
@@ -331,9 +313,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         }
     }
 
-    // --- Backup on the control-plane host (where the control plane's data lives). On-by-default: emitted for
-    // every control plane so a snapshot can always be taken (and the host-move path always exists), using
-    // the operator's declared destination or the synthesized on-host default. ---
+    // Backup on the control-plane host, on-by-default, using the declared destination or synthesized default.
 
     if (intent.apps.length > 0) {
         const signozService = intent.services.find((service) => service.kind === "signoz");
@@ -341,7 +321,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         nodes.push(resolveBackup(cpId, cpHost.input, backupInput, signozService?.id, controlPlane));
     }
 
-    // --- One Cloudflare Tunnel per host that has ingress ---
+    // One Cloudflare Tunnel per host that has ingress.
 
     for (const [hostId, ingress] of ingressByHost) {
         if (ingress.length === 0) {

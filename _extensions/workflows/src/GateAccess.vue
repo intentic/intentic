@@ -5,17 +5,10 @@ import { curlLine, gatePath, githubStep } from "./gateSnippets";
 import { host } from "./host";
 import { useWorkflows } from "./useWorkflows";
 
-/* THE GATE'S DOOR, AS THE TWO STRINGS A PIPELINE NEEDS: the URL and a paste-ready step.
- *
- * Rendered in the designer's gate panel AND under the card's badge, for the reason the automations row shows
- * its webhook beside the dialog that created it: the moment somebody actually wants this string is months
- * after the save that minted it, standing in a CI settings page. Only ever rendered once the token exists:
- * before the first save there is no URL to show, and a placeholder would be a string someone pastes. */
+// Renders the gate's webhook URL and a paste-ready CI snippet, in both the designer's gate panel and the card's badge.
+// Shown only once the token exists; there is no URL to show before the first save.
 
-/* THE TOKEN IS NOT ON THE DESIGN. The daemon keeps it with the door and attaches it to the listed summary and to
- * the save's answer for a maintainer or the owner (`gateToken`); a viewer opening the badge sees that a gate
- * exists and not the string that opens it. So this takes the two facts it renders and the token beside them,
- * whichever surface has them: the list's summary, or the designer's draft plus what its last save answered. */
+// Token lives on the daemon's summary or last save, never on the design; rendered from whichever the caller has.
 const { workflow } = defineProps<{ workflow: { readonly id: string; readonly name: string; readonly gateToken?: string } }>();
 
 const { rotateGateToken } = useWorkflows();
@@ -28,7 +21,7 @@ const url = computed<string | undefined>(() => {
     return `${host().sandbox.origin() ?? ``}${gatePath(workflow.id, token)}`;
 });
 
-// Two presses, like every press here that cannot be undone: the old URL dies the moment the daemon answers.
+// Two-step confirm: rotating kills the old URL the instant the daemon answers.
 const confirmingRotate = ref(false);
 const rotate = async (): Promise<void> => {
     confirmingRotate.value = false;

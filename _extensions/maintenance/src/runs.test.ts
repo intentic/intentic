@@ -2,19 +2,14 @@ import { describe, expect, test } from "vitest";
 import { ANY_RUN_PREFIX, conversationIdOf, parseManifest, parseResult, reportingClause, resultPath, runIdAt, summarySpans } from "./runs";
 
 describe(`run identity`, () => {
-    // The conversation id is the JOIN to the fleet: `GET /agents` filtered by prefix is how a run finds its
-    // agent, so this is a wire contract, not a naming convention.
     test(`a run's conversation id is derived from its run id and carries the fleet prefix`, () => {
         const runId = runIdAt(1_700_000_000_000);
         expect(conversationIdOf(runId).startsWith(ANY_RUN_PREFIX)).toBe(true);
         expect(conversationIdOf(runId)).toContain(runId);
-        // The contract's ConversationIdSchema bounds ids at 64 characters: they land in branch names and paths.
+        // Bounded at 64 chars: ids land in branch names and paths.
         expect(conversationIdOf(runId).length).toBeLessThanOrEqual(64);
     });
 
-    /* "Run this chore in every repository" starts several within the same millisecond. Acceptance can get away
-     * without a counter because its runs fan out over slugs that differ; here one run IS one chore, so a
-     * collision would put two turns in one conversation and lose one of them. */
     test(`two runs minted in the same millisecond do not collide`, () => {
         expect(runIdAt(1_700_000_000_000)).not.toBe(runIdAt(1_700_000_000_000));
     });
@@ -31,8 +26,6 @@ describe(`reading what is on disk`, () => {
         expect(parseManifest(JSON.stringify(manifest))).toEqual(manifest);
     });
 
-    // One bad directory must not blank the whole history: a manifest half-written, or written by a build whose
-    // shape has since changed, is skipped rather than thrown on.
     test(`a manifest missing its identity is skipped, and a partial one defaults`, () => {
         expect(parseManifest(`{"createdAt":5}`)).toBeUndefined();
         expect(parseManifest(`not json`)).toBeUndefined();
@@ -46,9 +39,6 @@ describe(`reading what is on disk`, () => {
         });
     });
 
-    /* A result the agent never wrote reads as undefined rather than as an outcome: the panel shows the fleet's
-     * live status for those instead of inventing one. An outcome outside the three we know is treated the same
-     * way: guessing which of ours the agent meant would be putting words in its mouth. */
     test(`an absent, malformed or improvised outcome is no result at all`, () => {
         expect(parseResult(``)).toBeUndefined();
         expect(parseResult(`{"summary":"did some things"}`)).toBeUndefined();
@@ -60,8 +50,7 @@ describe(`reading what is on disk`, () => {
     });
 });
 
-/* THE SUMMARY IS PROSE AN AGENT WROTE, and agents write literals in backticks. Drawn raw, the marks were two
- * characters of noise around every package name in a paragraph the panel already struggles to keep short. */
+// Pins how backticked literals in an agent's prose summary are split into spans.
 describe(`reading the agent's summary`, () => {
     test(`backticked literals come back as their own spans, and the prose between them as plain`, () => {
         expect(summarySpans("Added a `mysql2` override to `pnpm-workspace.yaml`.")).toEqual([
@@ -73,8 +62,6 @@ describe(`reading the agent's summary`, () => {
         ]);
     });
 
-    // Half a delimiter is not markup. Splitting on it anyway would put the rest of the sentence in a code chip,
-    // which is a worse misreading than showing the one mark the agent typed.
     test(`an unbalanced mark leaves the sentence exactly as it was written`, () => {
         expect(summarySpans("The lockfile bump needs `pnpm install to land")).toEqual([
             { text: "The lockfile bump needs `pnpm install to land", code: false },
@@ -95,9 +82,8 @@ describe(`what we ask the agent to write back`, () => {
         expect(resultPath(`r1`).startsWith(`.intentic/records/chores/runs/`)).toBe(true);
     });
 
-    /* `clean` is the outcome that makes the ledger a debounce rather than a nag, and a model that reads it as an
-     * admission of having done nothing useful will avoid it and report `reported` instead: after which the chore
-     * never goes quiet. Saying it is a good outcome is load-bearing, not politeness. */
+    // Load-bearing, not politeness: a model that reads 'clean' as failure will report 'reported' instead, and the chore
+    // never goes quiet.
     test(`spells out all three outcomes and says that "clean" is a good one`, () => {
         for (const outcome of [`acted`, `reported`, `clean`]) {
             expect(clause).toContain(outcome);

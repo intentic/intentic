@@ -31,7 +31,6 @@ describe("outsideSourceOf, what counts as outside", () => {
         }
     });
 
-    // The browser is ours; the page is not. This is the case a name-based allowlist gets wrong.
     test("browser servers are wrapped: Playwright is ours, the page is the internet", () => {
         expect(outsideSourceOf("mcp__web__browser_snapshot", {})).toBe("web");
         expect(outsideSourceOf("mcp__reddit__browser_read", {})).toBe("reddit");
@@ -60,10 +59,7 @@ describe("outsideSourceOf, what counts as outside", () => {
         });
     });
 
-    /* The JS execution backend, under Bash's rule word for word: the script is the agent's own program, the
-     * page a fetching one brings back is the internet. The `code` server being INTERNAL is what makes the
-     * explicit branch the only wrapper: without it every `console.log(2+2)` result would arrive wrapped,
-     * telling the model its own platform is a stranger and tainting the turn on its own arithmetic. */
+    // The `code` server is internal by default; only this check marks a fetching script's output as outside.
     describe("JS runs: only when the script actually reached out", () => {
         test("a script fetching the open internet is outside", () => {
             expect(outsideSourceOf("mcp__code__run", { code: 'const r = await fetch("https://example.com/api");' })).toBe("code-fetch");
@@ -137,26 +133,18 @@ describe("sealResult: the content fields, not the shape", () => {
     });
 });
 
-/* THE CONFORMANCE FLOOR. INTERNAL_SERVERS is an exception list, so the failure it can suffer is silent: a new
- * daemon control server ships, nobody adds it, and its results arrive wrapped: telling the model the platform
- * is a stranger. This reads the server keys out of the two files that mount them and asserts each is either
- * classified internal or deliberately left to be wrapped. Adding a server without deciding fails here. */
+// Guards against a new daemon-mounted MCP server shipping unclassified: reads server keys from the two mount files and
+// asserts each is INTERNAL or WRAPPED_ON_PURPOSE.
 describe("conformance: every daemon-mounted MCP server is classified", () => {
     const SRC = join(import.meta.dirname, "..");
-    /* Deliberately wrapped despite being daemon-mounted. Keyed by the literal that mounts them.
-     *
-     * `web`: the browser servers, whose whole job is to bring the internet's text back.
-     *
-     * `diagnostics`: reads the daemon's own log and ledger, which sounds internal and is not. Two of its four
-     * tools relay a PROVIDER'S OWN SENTENCE verbatim, `errors` through the failed-turn line's `reason` and
-     * `turns` through the ledger's `errorMessage`, and a third party's words arriving dressed as the platform's
-     * own log is exactly the shape the envelope exists for. Wrapping costs nothing here: the surrounding text
-     * is the daemon's, and a model that treats a relayed refusal as data rather than instruction is the point. */
+    // Daemon-mounted servers wrapped on purpose:
+    // web: browsers bring back the internet's text.
+    // diagnostics: two tools relay a provider's own sentence verbatim.
     const WRAPPED_ON_PURPOSE = new Set(["web", "diagnostics"]);
 
-    /* Keys at the TOP level of the mount block: depth-aware rather than indentation-aware, because a server
-     * is mounted as `name: server(...)` whose arguments carry keys of their own (`conversationId:`), and those
-     * are not servers. Strings and comments are skipped so a brace inside either does not move the depth. */
+    // Reads server keys at the mount block's top level, depth-aware rather than indentation-aware, since a mounted
+    // call's own arguments carry keys too. Strings and comments are skipped so a brace inside either doesn't shift the
+    // depth.
     const mountedIn = (file: string, block: RegExp): string[] => {
         const region = (block.exec(readFileSync(join(SRC, file), "utf8"))?.[0] ?? "").replace(/^[^{]*\{/, "");
         const keys: string[] = [];
@@ -177,12 +165,9 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
                 depth--;
                 continue;
             }
-            /* Only at depth 0, a nested call's own arguments (`subagentWaitServer({ conversationId: … })`,
-             * `...(input.agent ? { agent: … })` inside one) sit deeper and are not servers. Both mount forms
-             * are read here, where the depth that distinguishes them is known. */
+            // Only at depth 0: a nested call's own arguments sit deeper and are not servers.
             if (depth === 0) {
-                // The conditionally-mounted form, either polarity: `...(cond ? { name: s } : {})` and
-                // `...(cond ? {} : { name: s })`, up to the first object literal that actually carries a key.
+                // The conditionally-mounted form, either polarity, up to the first object literal that carries a key.
                 const spread = /^\.\.\.\([^;]*?\{\s*([a-z][a-zA-Z0-9-]*)\s*:/.exec(rest);
                 if (spread !== null) {
                     keys.push(spread[1] as string);
@@ -204,8 +189,7 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
             ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
             ...mountedIn("agent/run/turn/turn-plan.ts", /const sdkServers = \{[\s\S]*?\n {4}\};/),
         ];
-        // Sanity: the scan found the blocks at all, so a refactor that moves them fails loudly here rather
-        // than passing vacuously.
+        // Sanity: the scan found the blocks at all, so a moved block fails loudly here instead of passing vacuously.
         expect(mounted.length, "server-mount scan found nothing — the blocks moved").toBeGreaterThan(5);
         for (const server of mounted) {
             expect(

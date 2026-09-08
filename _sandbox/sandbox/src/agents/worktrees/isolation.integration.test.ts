@@ -21,10 +21,8 @@ import {
     nsenterPrefix,
 } from "./isolation.js";
 
-/* The namespace itself needs CAP_SYS_ADMIN, which no test runner is guaranteed to have, so what is asserted
- * here is the PLAN: the ordering that makes the mounts correct, and the path translation the daemon depends
- * on. A wrong order fails silently at runtime (the agent writes into a tree that looks right), which is
- * exactly the class of bug worth pinning down in a unit test. */
+// Pins the mount plan and path translation, not the real namespace (CAP_SYS_ADMIN is not guaranteed here); a wrong
+// order fails silently at runtime, which is what this catches instead.
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -44,7 +42,7 @@ test("the namespace is made private before anything is mounted", () => {
     const lines = isolationScript(plan).split("\n");
     expect(lines[0]).toBe("set -e");
     expect(lines[1]).toBe("mount --make-rprivate /");
-    // Every mount comes after it: otherwise the "isolated" turn rewrites the daemon's own /work.
+    // Otherwise an 'isolated' turn would rewrite the daemon's own /work.
     expect(lines.findIndex((line) => line.startsWith("mount --bind"))).toBeGreaterThan(1);
 });
 
@@ -58,21 +56,16 @@ test("the main root is bound aside before the worktree shadows it", () => {
 
 test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
     const script = isolationScript(plan);
-    // Sourcing these from /work would name the worktree's own (empty) copy: the mount would succeed and the
-    // agent would silently lose the transcript store. A BIND, not an overlay: a transcript written here has
-    // to reach the daemon. Every untracked group, and the one untracked entry inside the tracked one.
+    // From /work this would silently mount the worktree's empty copy; a bind, not overlay, reaches the daemon.
     const shared = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, ""));
     expect(shared).toContain(".intentic/records");
     expect(shared).toContain(".intentic/config/docs");
     for (const rel of shared) {
         expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
-        // Mount points on BOTH sides: a fresh checkout has none for an untracked dir, and a sandbox that has
-        // never staged a doc or stored a secret has no source dir yet either, which under `set -e` would be a
-        // dead anchor rather than an empty mount.
+        // Both sides may not exist yet; `set -e` needs them created first, not just mounted.
         expect(script).toContain(`mkdir -p ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
     }
-    // The tracked slice is the worktree's own checkout. Binding the whole dir over it, or the slice itself, is
-    // exactly what put the owner's configuration outside `land` and forced every worktree to sparse-exclude it.
+    // The tracked slice is the worktree's own; binding over it would put the owner's config outside `land`.
     const targets = script
         .split("\n")
         .filter((line) => line.startsWith("mount --bind "))
@@ -83,65 +76,54 @@ test("shared state is re-bound from the aside mount, not from the shadowed path"
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
     const script = isolationScript(plan);
-    // Without this a turn asked to "compare against refs/nimbalyst" finds no /work/refs at all and spends a
-    // call rediscovering that the shelf only exists at MAIN_MOUNT.
+    // Without this, a turn comparing against a ref finds no /work/refs at all.
     expect(script).toContain(`if [ -d ${shellQuote(`${MAIN_MOUNT}/refs`)} ]; then`);
     expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/refs`)} ${shellQuote("/work/refs")}`);
-    // `ro` is ignored on the bind itself: it takes only on the remount, and the shelf is read-only by contract.
+    // `ro` is ignored on the bind itself; it only takes on the remount.
     expect(script).toContain(`mount -o remount,bind,ro ${shellQuote("/work/refs")}`);
-    // Guarded, because most workspaces have no shelf and `set -e` would kill the namespace over its absence.
+    // Guarded: most workspaces have no shelf, and `set -e` would kill the namespace over its absence.
     expect(script).toContain(`fi`);
 });
 
 test("a mirrored tree is an overlay over the main checkout, never a writable bind onto it", () => {
     const script = isolationScript(plan);
-    // The whole point: pnpm hardlinks workspace sources into node_modules, so a WRITABLE bind here let a
-    // write through the node_modules name rewrite the main checkout's tracked file. Reads still come from
-    // the main tree (lowerdir); writes land in this turn's own upper layer.
+    // pnpm hardlinks sources into node_modules; a writable bind would let a write rewrite the main checkout.
     expect(script).toContain(
         `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work`)} ${shellQuote("/work/node_modules")}`,
     );
-    // One layer per mount, keyed by the package path: a nested tree must not share (or nest inside) the
-    // root's layer, and upper/work must be siblings.
+    // One overlay layer per package path; a nested tree must not share or nest inside the root's layer.
     expect(script).toContain(
         `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work`)} ${shellQuote("/work/_apps/web/node_modules")}`,
     );
-    // Both layer dirs have to exist before the mount that names them.
+    // Both layer dirs must exist before the mount that names them.
     expect(script).toContain(
         `mkdir -p ${shellQuote("/work/node_modules")} ${shellQuote("/history/overlays/abc/node_modules/upper")} ${shellQuote("/history/overlays/abc/node_modules/work")}`,
     );
-    // Nothing binds a dependency tree any more: a single leftover bind is the whole hole reopened.
+    // No leftover bind: a single one would reopen the whole hole.
     expect(script).not.toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/node_modules`)}`);
-    // Build output rides the same mechanism: without it a worktree resolves third-party imports but not its
-    // own siblings', and every suite that crosses a package boundary dies at collection.
+    // Build output uses the same mechanism, or cross-package imports fail to resolve at collection.
     expect(script).toContain(
         `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/dist,upperdir=/history/overlays/abc/_apps%2Fweb%2Fdist/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fdist/work`)} ${shellQuote("/work/_apps/web/dist")}`,
     );
 });
 
 test("a path that would corrupt the overlay option string is refused rather than mounted wrong", () => {
-    // The kernel splits these options on "," and ":", so a path carrying either would mount something other
-    // than what was asked for, which is exactly the silent-wrong-tree failure this module exists to prevent.
+    // The kernel splits overlay options on `,`/`:`; either character in a path would mount the wrong thing silently.
     expect(() => isolationScript({ ...plan, overlays: "/history/overlays/a,b" })).toThrow(/cannot contain/);
 });
 
 test("the anchor announces readiness only after the mounts, then becomes the namespace's inhabitant", () => {
     const lines = isolationScript(plan).split("\n");
-    // Readiness AFTER the last mount: a caller that starts work on the announcement must never find a
-    // half-built namespace writing through to the shared tree.
+    // Readiness comes after the last mount, so a caller starting on it never finds a half-built namespace.
     expect(lines.at(-2)).toBe(`echo ${ANCHOR_READY}`);
     expect(lines.at(-1)).toBe("exec sleep infinity");
     expect(lines.findLastIndex((line) => line.startsWith("mount -t overlay"))).toBeLessThan(lines.length - 2);
-    // `exec`, so the sleep IS the pid nsenter targets: a shell waiting on a child would hold the namespace
-    // under a different pid than the one handed out.
+    // `exec`, so the sleep is the pid nsenter targets, not a shell waiting on it under a different one.
     expect(lines.at(-1)?.startsWith("exec ")).toBe(true);
 });
 
-/* The flag is the assertion. `--wd` resolves before setns and lands the entrant on the daemon's own /work,
- * the shared checkout, whose mount has no path at all inside the namespace: relative writes leak there
- * silently, and getcwd answers `(unreachable)/work`, which is what killed the Codex app-server at startup.
- * `--wdns` resolves after setns, so "/work" means the worktree. Pinning the spelling is what keeps the
- * enforcement layer from being undone by a one-word change. */
+// `--wd` resolves before setns and lands on the daemon's own /work, unreachable inside the namespace (this killed Codex
+// at startup); `--wdns` resolves after, so /work means the worktree.
 test("entrants join the anchor's namespace by pid and start at the workspace root AS THE NAMESPACE SEES IT", () => {
     const { command, args } = nsenterArgv(4321, WORKSPACE_ROOT, "/usr/bin/claude", ["--flag", "value"]);
     expect(command).toBe("nsenter");
@@ -149,11 +131,8 @@ test("entrants join the anchor's namespace by pid and start at the workspace roo
     expect(args).not.toContain(`--wd=${WORKSPACE_ROOT}`);
 });
 
-/* THE OTHER HALF OF THE SAME GUARANTEE, and the one that cost two turns' checks to find: `--wdns` moves the
- * kernel's cwd, and `PWD` rides in from the daemon naming the worktree's own path. Bash keeps a stale `$PWD`
- * whenever it still names the current directory, which a bind mount of that worktree over /work guarantees, so
- * `cd intentic` resolved under `/history/worktrees/<id>` where no mirror is mounted and `pnpm verify` died on
- * `prisma: not found` in a fully installed workspace. Unset, every shell falls back to `getcwd()`. */
+// `--wdns` moves the kernel's cwd, but a stale `$PWD` from the daemon still names the old path, and bash trusts it over
+// getcwd(); unsetting it forces the real cwd instead.
 test("an entrant cannot bring the daemon's own PWD in with it", () => {
     const { args } = nsenterArgv(4321, WORKSPACE_ROOT, "node", []);
     expect(args.slice(args.indexOf("--") + 1)).toEqual(["env", "-u", "PWD", "-u", "OLDPWD", "node"]);
@@ -166,23 +145,22 @@ test("the shell-string form quotes its working dir so a path with a space cannot
 
 test("a path the agent reports is translated back to the worktree for the daemon", () => {
     expect(inWorktree("/work/intentic/src/x.ts", plan)).toBe("/history/worktrees/abc/intentic/src/x.ts");
-    // Outside the root: the same file in both namespaces.
+    // Outside the root, the same file in both namespaces.
     expect(inWorktree("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
-    // Not isolated at all.
+    // Not isolated: the path is left untouched.
     expect(inWorktree("/work/intentic/src/x.ts", undefined)).toBe("/work/intentic/src/x.ts");
 });
 
-/* The same mapping backwards, for quoting a daemon-side answer into the conversation: a type diagnostic above
- * all. The worktree path is real and openable, and reaching it directly is what puts a turn's edits outside its
- * own namespace, so a report that names it reads as an instruction to go there. */
+// The same mapping backwards, so a daemon-side answer quoted back to the agent never names the real worktree path
+// directly, which would read as an instruction to leave the namespace.
 test("a path the daemon reports is translated back to the name the agent uses", () => {
     expect(fromWorktree("/history/worktrees/abc/intentic/src/x.ts", plan)).toBe("/work/intentic/src/x.ts");
     expect(fromWorktree("/history/worktrees/abc", plan)).toBe("/work");
-    // Already in the agent's naming, outside the root, or not isolated: left exactly as it is.
+    // Already in the agent's naming, outside the root, or not isolated: left as is.
     expect(fromWorktree("/work/intentic/src/x.ts", plan)).toBe("/work/intentic/src/x.ts");
     expect(fromWorktree("/root/.claude/memory/x.md", plan)).toBe("/root/.claude/memory/x.md");
     expect(fromWorktree("/history/worktrees/abc/intentic/src/x.ts", undefined)).toBe("/history/worktrees/abc/intentic/src/x.ts");
-    // A sibling worktree whose path merely starts the same way is a different conversation's tree.
+    // A sibling worktree sharing a name prefix is still a different conversation's tree.
     expect(fromWorktree("/history/worktrees/abcd/intentic/src/x.ts", plan)).toBe("/history/worktrees/abcd/intentic/src/x.ts");
 });
 
@@ -191,27 +169,24 @@ test("translating a worktree path out and back is the path it started as", () =>
 });
 
 test("re-bound subtrees resolve to the main tree in both namespaces and are never translated", () => {
-    // Translating these would send the daemon looking in a worktree that has no such file.
+    // Translating these would send the daemon looking in a worktree with no such file.
     expect(inWorktree("/work/.intentic/records/artifacts/attachments/a.png", plan)).toBe("/work/.intentic/records/artifacts/attachments/a.png");
     expect(inWorktree("/work/_apps/web/node_modules/vue/index.js", plan)).toBe("/work/_apps/web/node_modules/vue/index.js");
-    // The staged docs tree is the untracked entry INSIDE the tracked group, and shared like the groups are.
+    // The staged docs tree is the untracked entry inside the tracked group, shared the same way.
     expect(inWorktree("/work/.intentic/config/docs/root/repo.json", plan)).toBe("/work/.intentic/config/docs/root/repo.json");
-    // A path that merely STARTS like one of them is still worktree content.
+    // A path that only starts like a shared one is still worktree content.
     expect(inWorktree("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");
 });
 
 test("the tracked state slice is the worktree's own, so it moves with the root like any other file", () => {
-    // A daemon-side reader handed `/work/.intentic/config/settings.json` by an isolated agent must open the
-    // agent's copy; the redirect layer must write there. Left untranslated, the edit would reach the live
-    // tree with no branch, no land and no author, which is the very bug this boundary exists to close.
+    // Left untranslated, the edit reaches the live tree with no branch, no land and no author.
     expect(inWorktree("/work/.intentic/config/settings.json", plan)).toBe("/history/worktrees/abc/.intentic/config/settings.json");
     expect(inWorktree("/work/.intentic/config/approvals/post-1.json", plan)).toBe("/history/worktrees/abc/.intentic/config/approvals/post-1.json");
     expect(inWorktree("/work/.intentic/config", plan)).toBe("/history/worktrees/abc/.intentic/config");
     expect(fromWorktree("/history/worktrees/abc/.intentic/config/settings.json", plan)).toBe("/work/.intentic/config/settings.json");
 });
 
-// A checked-out worktree of `root`: tracked source only, which is precisely why the dirs below are missing
-// from it and have to be mirrored.
+// A worktree of `root`; tracked source only, which is why the mirrored dirs are missing from it.
 const checkout = async (): Promise<string> => {
     const worktree = await mkdtemp(join(tmpdir(), "isolation-wt-"));
     tempDirs.push(worktree);
@@ -227,12 +202,11 @@ test("dependency and build-output dirs are discovered shallowest-first so a pare
     await mkdir(join(root, "node_modules"), { recursive: true });
     await mkdir(join(root, "_apps", "web", "node_modules"), { recursive: true });
     await mkdir(join(root, "_libs", "ui", "node_modules"), { recursive: true });
-    // Build output is untracked the same way an install is, and a sibling package's import resolves through it.
+    // Build output is untracked the same way an install is; a sibling package's import resolves through it.
     await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });
     // Never descended into: the walk must not plant a mount inside a dependency tree.
     await mkdir(join(root, "node_modules", "pkg", "node_modules"), { recursive: true });
-    // A build CACHE is deliberately not mirrored: main's tsbuildinfo would tell the turn's incremental build
-    // that the mirrored dist already covers sources the turn has since changed.
+    // A build cache is deliberately not mirrored: main's tsbuildinfo would wrongly claim to cover it.
     await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
 
     expect(await mirroredDirs(root, await checkout(), { intoNestedRepos: true })).toEqual([
@@ -249,8 +223,7 @@ test("a dir the checkout fills is never mirrored: a tracked build output stays t
     await mkdir(join(root, "_libs", "ui", "dist"), { recursive: true });
     await mkdir(join(root, "_libs", "ui", "node_modules"), { recursive: true });
 
-    // The repo TRACKS its dist, so the checkout carries it. Mounting the main tree's over it would hide the
-    // very files the agent's branch exists to change.
+    // The repo tracks this dist already; mirroring it would hide the files the branch exists to change.
     const worktree = await checkout();
     await mkdir(join(worktree, "_libs", "ui", "dist"), { recursive: true });
     await writeFile(join(worktree, "_libs", "ui", "dist", "index.js"), "the agent's own\n");
@@ -258,21 +231,15 @@ test("a dir the checkout fills is never mirrored: a tracked build output stays t
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["_libs/ui/node_modules"]);
 });
 
-/* THE TWO HALVES OF THE MIRROR-ROOT INVARIANT, PINNED TO EACH OTHER. Every name in MIRRORED_DIRS becomes an
- * overlay whose lowerdir is the main checkout's directory, and an overlay resolves that lowerdir once: a
- * main-tree command that REPLACES one of these directories rather than emptying it leaves every live turn's
- * merged view of it reading empty (see @intentic/constants/mirror-roots, and the TS6307 on prisma's freshly
- * generated `client.ts` that it cost). `_tools/checks/mirror-roots.mjs` refuses that shape for every name in
- * the same set, so a name discovered here that the gate does not read would be a directory nothing protects.
- * Derived from the set rather than transcribed, which is what makes adding a fourth name mean adding coverage. */
+// Every name in MIRRORED_DIRS becomes an overlay, and `_tools/checks/mirror-roots.mjs` refuses a main-tree command that
+// replaces (not empties) any of them; derived from the same set, so a name missed here is a directory nothing protects.
 test("every name the shared set carries is discovered as a mirror, and nothing else is", async () => {
     const root = await mkdtemp(join(tmpdir(), "isolation-"));
     tempDirs.push(root);
     for (const dir of MIRRORED_DIRS) {
         await mkdir(join(root, "_libs", "ui", dir), { recursive: true });
     }
-    // A neighbour that is untracked build output too, and deliberately NOT mirrored: main's tsbuildinfo would
-    // tell the turn's incremental build that the mirrored dist already covers sources the turn has changed.
+    // Also untracked, but deliberately not mirrored, for the same tsbuildinfo reason as a cache.
     await mkdir(join(root, "_libs", "ui", ".cache"), { recursive: true });
 
     expect(await mirroredDirs(root, await checkout(), { intoNestedRepos: true })).toEqual(
@@ -288,35 +255,16 @@ test("a nested repo's dirs belong to its own worktree, not the parent's", async 
     await mkdir(join(root, "intent", "node_modules"), { recursive: true });
 
     const worktree = await checkout();
-    // The PLAN spans the workspace: each nested worktree is mounted under the same root, so it wants both.
+    // The plan spans the whole workspace; a nested worktree wants both its own dirs and the parent's.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: true })).toEqual(["node_modules", "intent/node_modules"]);
-    // The symlink mirror runs per repo, and planting `intent/node_modules` from here would put the nested
-    // repo's link inside the PARENT's checkout.
+    // The symlink mirror runs per repo; including nested dirs here would plant the link inside the parent's checkout.
     expect(await mirroredDirs(root, worktree, { intoNestedRepos: false })).toEqual(["node_modules"]);
 });
 
-/* AGAINST A REAL OVERLAY, because the rule the rest of this repository is now shaped around is a claim about
- * the kernel and nothing else can settle it.
- *
- * An overlay resolves its lowerdir ONCE, at mount time. Every mirror above is mounted with the MAIN checkout's
- * directory as that lower, and the main tree keeps being built on while turns are open, so what the main tree
- * is allowed to do to those directories is the whole safety argument. The measured answer, below, is that
- * emptying one is free and REPLACING one is fatal: after `rm -rf dist && mkdir dist` on the lower, the merged
- * directory reads as completely empty — not even the file the turn itself wrote into the upper layer, which is
- * still `stat`-able by name — and no remount inside the namespace brings it back.
- *
- * That is what `_platform/prisma`'s `rm -rf ./generated` did to every open conversation at once: a `client.ts`
- * that `prisma generate` had just written, sitting in a directory `readdir` swore was empty, so the tsconfig's
- * `./generated/**` include matched nothing and the declarations emit failed TS6307 on the turn-ending check of
- * every agent, whatever it had changed. `_tools/scripts/build/clean-outputs.mjs` is the remedy and is driven here
- * rather than imitated: this test fails if that script ever starts replacing what it is supposed to empty.
- *
- * THE MODE: a real mount namespace with a real overlayfs, which needs CAP_SYS_ADMIN, and an upperdir on a
- * filesystem that is not itself an overlay — a container's own root usually is one, which is why this uses the
- * history volume exactly as isolationAvailable's probe does. Skipped where either is missing (CI, a dev host),
- * and the shape it protects is guarded there by _tools/checks/mirror-roots.mjs instead. */
-/* The measurement as one shell program, because the mount only exists inside the namespace it is made in: put
- * the overlay up, then run whatever the caller wants to say about it. */
+// Verified against a real overlay: emptying a mirror root's lowerdir is safe, replacing it is fatal and unrecoverable
+// in the namespace. Needs CAP_SYS_ADMIN; skipped otherwise, guarded there by mirror-roots.mjs.
+// One shell program, since the mount only exists inside the namespace that creates it: build the overlay, then run the
+// caller's assertions.
 const overlayShell = (dir: string, trailer: string): string =>
     [
         "set -e",
@@ -332,14 +280,12 @@ const overlayScratch = (): string | undefined => {
     for (const part of ["lower/dist", "upper", "work", "merged"]) {
         mkdirSync(join(dir, part), { recursive: true });
     }
-    // The mount IS the probe: seccomp can refuse the syscall with the capability present, and overlayfs is its
-    // own kernel gate. Made and torn down in one namespace, so nothing is left holding the directory busy.
+    // The mount is the probe: seccomp can still refuse it even with the capability present.
     const probe = spawnSync("unshare", ["--mount", "--propagation", "private", "sh", "-c", overlayShell(dir, "true")], { timeout: 10_000 });
     if (probe.status === 0) {
         return dir;
     }
-    // Nothing else will ever hear about this directory, so it is reclaimed here rather than by the afterEach,
-    // which only sees a scratch a running test took ownership of.
+    // Reclaimed here, not by `afterEach`, which only owns a scratch a test actually claimed.
     rmSync(dir, { recursive: true, force: true });
     return undefined;
 };
@@ -369,17 +315,16 @@ test.skipIf(OVERLAY_SCRATCH === undefined)("emptying a mirror root keeps the tur
             overlayShell(
                 dir,
                 [
-                    // The turn's own emit, landing in this conversation's upper layer.
+                    // The turn's own write, landing in its upper layer.
                     `printf turn > ${shellQuote(`${merged}/turn.js`)}`,
-                    // The main tree clears and rewrites its dist underneath, the sanctioned way, through the
-                    // very script every build script in this repository now calls.
+                    // The sanctioned way to clear a dist: the same script every build in this repo now calls.
                     `node ${shellQuote(clean)} ${shellQuote(lower)} > /dev/null`,
                     `printf main > ${shellQuote(`${lower}/main.js`)}`,
                     `echo "emptied: $(ls ${shellQuote(merged)} | tr '\\n' ' ')"`,
-                    // And the way that used to be written, which gives the path a new inode.
+                    // The old way: gives the path a new inode.
                     `rm -rf ${shellQuote(lower)} && mkdir ${shellQuote(lower)} && printf main > ${shellQuote(`${lower}/main.js`)}`,
                     `echo "replaced: $(ls ${shellQuote(merged)} | tr '\\n' ' ')"`,
-                    // The upper layer is untouched by either: the file is there, only readdir stopped saying so.
+                    // The upper layer is untouched either way; only readdir stops naming the file.
                     `echo "stat: $(cat ${shellQuote(`${merged}/turn.js`)} 2>&1)"`,
                 ].join("\n"),
             ),
@@ -387,12 +332,10 @@ test.skipIf(OVERLAY_SCRATCH === undefined)("emptying a mirror root keeps the tur
         { encoding: "utf8", timeout: 30_000 },
     );
     expect(result.stderr).toBe("");
-    // Emptied in place: the lower's new output and the turn's own file, both there, which is what makes
-    // mirroring a directory the main tree keeps rebuilding workable at all.
+    // Emptied in place: the lower's new file and the turn's own both survive.
     expect(listing(result.stdout, "emptied")).toEqual(["main.js", "turn.js"]);
-    // Replaced: nothing at all, the turn's own upper-layer file included. This is the outage.
+    // Replaced: nothing at all survives, not even the turn's own file. This is the outage.
     expect(listing(result.stdout, "replaced")).toEqual([]);
-    // And it is a readdir failure, not a data loss: the same file still opens by name, which is exactly why
-    // TS6307 was the symptom rather than a missing file.
+    // A readdir failure, not data loss: the file still opens by name, which is why TS6307 was the symptom.
     expect(result.stdout).toContain("stat: turn");
 });

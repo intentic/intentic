@@ -6,10 +6,8 @@ import { cancelHostedPlan, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js"
 import type { StripeGateway } from "./hosted-plan-stripe.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
 
-/* THE PLAN IS THE ONE THING SOLD, so what is pinned is what a buyer would call betrayal if it drifted: being
- * on the plan meaning a paid, current row (or the operator's own comp list) and nothing less; the webhook
- * refusing an unsigned event while honouring a signed one and never rolling the mirror back to a state Stripe
- * has left; a deleted account's subscription ending with it; and the slot count being the plan's quantity. */
+// Pins what a buyer would call betrayal if it drifted: on-plan means a paid row or the comp list, the webhook never
+// rolls the mirror back, a deleted account's subscription ends with it, and slots equal the plan's quantity.
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -61,8 +59,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 Object.assign(existing, update);
                 return existing;
             }),
-            // Honours the ordering guard the way Postgres would: a row whose last sync is newer than the event
-            // is not a hit.
+            // Honors the ordering guard like Postgres would: a row synced later than the event is not a hit.
             updateMany: vi.fn(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
                 const hits = plans.filter(
                     (plan) =>
@@ -88,7 +85,7 @@ const row = (status: string, over: Partial<PlanRow> = {}): PlanRow => ({
     ...over,
 });
 
-// A subscription as the gateway answers it, one slot, not cancelling.
+// A subscription as the gateway answers it: one slot, not cancelling.
 const subscription = (over: Record<string, unknown> = {}) => ({
     id: `sub_9`,
     customer: `cus_9`,
@@ -118,7 +115,7 @@ describe(`the hosted plan`, () => {
         const comped = configWith({ compEmails: ` Dev@Example.com , other@example.com` });
         const { prisma } = fakePrisma({ users: [{ id: `user-1`, email: `dev@example.com` }] });
         expect(await onHostedPlan(prisma, comped, `user-1`)).toBe(true);
-        // Off the list, back to the paid rule: nothing was ever written down.
+        // Off the list: falls back to the paid rules, with nothing ever written down.
         expect(await onHostedPlan(prisma, baseConfig, `user-1`)).toBe(false);
     });
 
@@ -172,42 +169,36 @@ describe(`the hosted plan`, () => {
         ]);
     });
 
-    /* THE PORTAL'S CANCEL. Stripe keeps `status` active until the period ends and says so in
-     * cancel_at_period_end; a mirror that did not read it told people who had just cancelled that they would
-     * renew. */
+    // Stripe keeps status active until the period ends; cancel_at_period_end is what says otherwise.
     it(`mirrors a cancellation that has not ended yet`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`, { syncedAt: new Date(NOW.getTime() - 60_000) })] });
         const gateway = {
             subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active`, cancelAtPeriodEnd: true, itemId: `si_1`, quantity: 3 })),
         } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
-        // The event's own copy is a trimmed one with nothing in it; the state comes from the read.
+        // The event's own copy is trimmed to nothing useful; state comes from the fresh read.
         const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription` } } });
         expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
         expect(plans[0]).toMatchObject({ status: `active`, cancelAtPeriodEnd: true, quantity: 3, stripeItemId: `si_1`, syncedAt: NOW });
     });
 
-    /* WEBHOOKS ARRIVE IN NO PARTICULAR ORDER, so no event's copy of the subscription is ever mirrored: the
-     * row follows what Stripe says when asked. A cancel that landed a minute ago is therefore not undone by
-     * the "active" event delivered late (the read says canceled), and two deliveries racing each other end on
-     * the newer read, never the one that happened to land last. */
     it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`canceled`, { syncedAt: NOW })] });
         const gateway = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
-        // The late event still says "active"; what Stripe says now is what gets written.
+        // The late event still says active; what Stripe says now is what gets written.
         const late = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription`, status: `active` } } });
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         expect((await app.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
 
-        // A delivery whose read happened two minutes before the row's last write (two handlers racing, this
-        // one slower): its state is stale by construction and is dropped, whatever it says.
+        // A read two minutes older than the row's last write (a slower, racing handler): stale by construction,
+        // dropped.
         const active = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })) } as unknown as StripeGateway;
         const slower = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() - 120_000) });
         expect((await slower.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
 
-        // The same read a moment later than the row: applied.
+        // The same read, now a moment newer than the row: applied.
         const newer = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() + 1) });
         expect((await newer.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`active`);
@@ -224,9 +215,8 @@ describe(`the hosted plan`, () => {
     });
 });
 
-/* A DELETED ACCOUNT'S SUBSCRIPTION ENDS WITH IT. Both deletions cascade the plan row; the Stripe subscription
- * is not a row of ours, and before this it kept charging a customer with no account left to open the portal
- * from. Called before the cascade, so the row still names the subscription. */
+// Both deletions cascade the plan row, but the Stripe subscription doesn't cancel itself with it; called before the
+// cascade, while the row still names the subscription.
 describe(`cancelling the plan with its account`, () => {
     it(`cancels a live subscription`, async () => {
         const gateway = { cancelSubscription: vi.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
@@ -248,7 +238,7 @@ describe(`cancelling the plan with its account`, () => {
         expect(gateway.cancelSubscription).not.toHaveBeenCalled();
     });
 
-    // An erasure must not be held hostage by a payment API; the log line is what names the manual cancel.
+    // An erasure must not be held hostage by a payment API; the log line names the manual follow-up.
     it(`lets the deletion proceed when Stripe refuses, and says so at error level`, async () => {
         const gateway = { cancelSubscription: vi.fn(async () => { throw new Error(`Stripe refused: down`); }) } as unknown as StripeGateway;
         const errors = vi.fn();
@@ -257,8 +247,8 @@ describe(`cancelling the plan with its account`, () => {
     });
 });
 
-/* SLOTS: how many hosted sandboxes an account may have. The plan's quantity while it is live, the free lane's
- * one otherwise, and never fewer than the free lane gives. */
+// How many hosted sandboxes an account may have: the plan's quantity while live, the free lane's otherwise, never fewer
+// than the free lane gives.
 describe(`hosted slots`, () => {
     const config = { ...baseConfig, hosted: { ...baseConfig.hosted, perUser: 1 } };
 

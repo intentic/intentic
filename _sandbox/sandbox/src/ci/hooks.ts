@@ -5,25 +5,14 @@ import type { CiStore } from "./ci-store.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
-/* The webhook reconciler: every mapped repo gets a hook delivering completed pipelines to this sandbox's
- * public receiver, so `ci` automations wake instantly and the runs cache stays fresh without polling. Runs on
- * an interval (and once at boot) because the things it reconciles against all drift on their own clock, repos
- * appear via clone, capabilities connect/disconnect, a hook gets hand-deleted on the provider.
- *
- * Registration is best-effort per repo, the setupGitAccess posture: a refusal (github classic PAT without
- * admin:repo_hook / fine-grained without "Webhooks: write"; gitlab below Maintainer) or a sandbox with no
- * public URL degrades that repo to a WARNING carrying the manual recipe, the exact URL + secret to paste into
- * the repo's webhook settings, surfaced on GET /ci/runs where the Pipelines view renders it inline.
- *
- * A repo that unmaps while its account is still connected gets its hook removed on the next pass. A REMOVED
- * capability keeps its hooks on the provider (no token left to delete them with); deliveries then fail and the
- * provider auto-disables the hook, the same "stale key on the account" trade teardownGitAccess accepts when
- * the network is gone. */
+// Reconciles each mapped repo's CI webhook against this sandbox's public receiver, on an interval and at boot since
+// repos, accounts and hooks drift independently. A failed registration or missing public URL degrades a repo to a
+// WARNING with the manual recipe (GET /ci/runs); an unmapped repo's hook is removed only while its account stays
+// connected.
 
 const RECONCILE_INTERVAL_MS = 10 * 60_000;
 
-// One vendor-kind receiver path, the webhook route verifies per vendor, and the project is identified from
-// the payload, so every repo of a host shares the same delivery URL (which is also each hook's identity).
+// One receiver URL per vendor host; every repo of that host shares it, and it doubles as the hook's identity.
 export const webhookUrlFor = (publicUrl: string, host: "github" | "gitlab"): string => `${publicUrl.replace(/\/+$/, "")}/ci/webhook/${host}`;
 
 const manualRecipe = (project: CiProject, url: string, secret: string): string => {
@@ -41,11 +30,8 @@ const scopeHint = (project: CiProject): string =>
         ? `creating webhooks needs admin:repo_hook on a classic PAT (or the "Webhooks: write" repo permission on a fine-grained token)`
         : `creating webhooks needs the api scope and at least the Maintainer role on the project`;
 
-/* Why a repo's hook is not live, in two halves with two audiences. `reason` is what happened and what it costs
- * (the sandbox polls instead), for everyone who can see the board. `recipe` is the manual wiring, the receiver
- * URL and the SECRET the sandbox signs deliveries with, and it is for an operator only: the secret is what makes
- * a delivery trusted, so it travels to a maintainer's screen and never to a viewer's or a read token's
- * (ci.routes.ts attaches it under that gate). Absent when there is nothing to paste (no public URL). */
+// reason (why the hook isn't live) is visible to any viewer; recipe carries the signing secret and is operator-only
+// (ci.routes.ts gates it), absent when there is no public URL to paste it into.
 export interface HookWarning {
     readonly reason: string;
     readonly recipe?: string;
@@ -54,8 +40,7 @@ export interface HookWarning {
 export interface CiHookReconciler {
     readonly start: () => void;
     readonly stop: () => void;
-    // One reconcile pass; `start` runs it immediately and then on the interval. Exposed for tests and callers
-    // that just changed what a pass reconciles against (a capability apply).
+    // One reconcile pass; start runs it immediately then on the interval, also for tests and capability changes.
     readonly reconcile: () => Promise<void>;
     // repo → why its hook isn't live (+ the manual recipe). Empty ⇒ every mapped repo is wired.
     readonly warnings: () => ReadonlyMap<string, HookWarning>;
@@ -72,7 +57,7 @@ export const createCiHookReconciler = (
     fetchFn: FetchFn = fetch,
 ): CiHookReconciler => {
     const warnings = new Map<string, HookWarning>();
-    // What the previous pass had wired, keyed host+project, how an unmapped repo's hook gets noticed.
+    // Previous pass's wired hooks, keyed by host+project; diffing against it finds an unmapped repo's hook.
     let wired = new Map<string, CiProject>();
     let timer: NodeJS.Timeout | undefined;
     let pass: Promise<void> = Promise.resolve();
@@ -99,8 +84,7 @@ export const createCiHookReconciler = (
                 });
             }
         }
-        // Unmapped while the account survived: the hook would keep delivering events for a repo the workspace
-        // no longer has, so it goes. Account gone too ⇒ nothing to delete with; the provider disables it.
+        // Removes the hook only if its account is still connected; otherwise there is no token to delete it with.
         for (const [key, project] of wired) {
             if (!next.has(key) && publicUrl !== "") {
                 await ciClientFor(project.account.provider, fetchFn)
@@ -111,7 +95,8 @@ export const createCiHookReconciler = (
         wired = next;
     };
 
-    // Serialized: a manual reconcile during the interval's pass must not race two hook lists.
+    // Serializes reconcile calls; a manual call during the interval's pass chains after it instead of racing two hook
+    // lists.
     const reconcile = (): Promise<void> => {
         const run = pass.then(reconcileOnce, reconcileOnce);
         pass = run.catch(() => undefined);

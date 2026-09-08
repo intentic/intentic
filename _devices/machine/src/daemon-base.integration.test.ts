@@ -10,28 +10,21 @@ import {
     resolveDaemonBase,
 } from "./daemon-base.js";
 
-/* WHICH ADDRESS THE AGENT DIALS, exercised against real daemons on real loopback ports, because the property
- * under test is not "does the code branch" but "does an HTTP answer from a port convince it".
- *
- * INTEGRATION-named for the reason tunnel's suite is: the adoption cases have to serve on the port the
- * derivation actually lands on (a candidate on any other port is not the candidate), which is a fixed number on
- * the shared machine, and one case deliberately waits out the real probe budget. Neither belongs under a hang
- * detector sized for pure functions. */
+// Exercises daemon resolution against real daemons on real loopback ports; the question is whether an HTTP answer
+// convinces it, not whether the code branches. Cases must serve on the exact derived port, and one waits out the real
+// probe budget, hence integration-named.
 
-// A sandbox on the intentic-provided path: the public URL's leading label IS the daemon's 12-hex id, which is
-// what makes both halves of the shortcut derivable (the port to dial, and the id /health must answer with).
+// The URL's leading label is the daemon's 12-hex id, deriving the port to dial and the id /health answers.
 const ID = `0738cd6b5027`;
 const pairing: DaemonTarget = { sandboxId: `sandbox-${ID}-example-dev`, sandboxUrl: `https://sandbox-${ID}.example.dev` };
-// Derived, never transcribed: the port is the run contract's to decide (@intentic/sandbox-run), and a copy of
-// the arithmetic here would keep passing after the band moved.
+// Derived, not transcribed: the port is @intentic/sandbox-run's contract to decide.
 const LOCAL = `http://127.0.0.1:${localDaemonPort(ID)}`;
 const PUBLIC = pairing.sandboxUrl;
 
 const servers: Server[] = [];
 
 afterEach(async () => {
-    // closeAllConnections as well as close: the hung-daemon case leaves a socket the probe abandoned, and
-    // `close` alone waits for it, which would hold the port the next test derives the same number for.
+    // closeAllConnections plus close: hung-daemon case leaves an abandoned socket that close alone would wait on.
     await Promise.all(
         servers.splice(0).map(async (server) => {
             server.closeAllConnections();
@@ -40,10 +33,8 @@ afterEach(async () => {
     );
 });
 
-/* A daemon on the port a sandbox id derives, answering /health the way the real one does. `answersAs` is whose
- * id it claims: the whole point of the probe is that this is not always the sandbox we asked about. `hang`
- * accepts the connection and never replies, which is what a container mid-boot or a wedged process looks like
- * from here — and is NOT the same as a dead port, which refuses instantly. */
+// A daemon on a port, answering /health like the real one. `answersAs` sets which sandbox id it claims (not always the
+// one asked about); `hang` accepts and never replies, unlike a dead port which refuses instantly.
 const daemonOn = async (port: number, { answersAs, hang = false }: { answersAs?: string; hang?: boolean }): Promise<void> => {
     const server = createServer((request, response) => {
         if (hang) {
@@ -60,8 +51,7 @@ const daemonOn = async (port: number, { answersAs, hang = false }: { answersAs?:
     await new Promise<void>((resolve) => server.listen(port, `127.0.0.1`, resolve));
 };
 
-// Real fetch, with a record of every URL it was asked for: how the tests prove what was NOT probed, which is
-// half of what this module promises.
+// Real fetch that records every URL asked, to prove what was NOT probed.
 const countingFetch = (): { readonly impl: typeof fetch; readonly asked: string[] } => {
     const asked: string[] = [];
     return {
@@ -78,14 +68,12 @@ describe(`daemonIdOf`, () => {
         expect(daemonIdOf(PUBLIC)).toBe(ID);
     });
 
-    /* The own-Cloudflare path, and the reason this is a gate rather than a nicety: the leading label there is a
-     * subdomain the owner chose, so it derives a port nothing published AND leaves nothing to check an answer
-     * against. An unprovable candidate is worse than no candidate — a daemon replying on that port could not be
-     * shown to be the right one, and the sync token is what would go to it. */
+    // An unprovable candidate (a subdomain the owner chose, not a derived port) is worse than none: nothing could
+    // confirm a daemon answering there is the right one to trust with the sync token.
     it(`refuses a label that is not a daemon id, so those pairings get no shortcut at all`, () => {
         expect(daemonIdOf(`https://myshop.example.com`)).toBeUndefined();
         expect(daemonIdOf(`https://sandbox-myshop.example.com`)).toBeUndefined();
-        // Twelve hex is the shape; eleven and thirteen are not it.
+        // Twelve hex is the shape; eleven and thirteen characters are not it.
         expect(daemonIdOf(`https://sandbox-0738cd6b502.example.dev`)).toBeUndefined();
         expect(daemonIdOf(`https://sandbox-0738cd6b50270.example.dev`)).toBeUndefined();
     });
@@ -100,14 +88,12 @@ describe(`candidateBases`, () => {
         expect(candidateBases(`https://myshop.example.com`)).toEqual([`https://myshop.example.com`]);
     });
 
-    // The base is compared as a string (the tunnel pool rebinds when it changes), so a trailing slash must not
-    // read as a different address.
+    // The resolved base is compared as a string, so a trailing slash must not read as a different address.
     it(`normalizes the public address, because the resolved base is compared as a string`, () => {
         expect(candidateBases(`${PUBLIC}/`)).toEqual([LOCAL, PUBLIC]);
     });
 
-    // A dev box whose public URL already IS the shortcut would otherwise probe an address it is about to fall
-    // back to anyway.
+    // A public URL that's already the shortcut should not also be probed as a separate candidate.
     it(`collapses to one candidate when the public address is the shortcut`, () => {
         expect(candidateBases(LOCAL)).toEqual([LOCAL]);
     });
@@ -119,17 +105,15 @@ describe(`resolveDaemonBase`, () => {
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: LOCAL, local: true });
     });
 
-    /* THE LEAK THE IDENTITY CHECK PREVENTS, and the single most important case in this file. A port is not a
-     * sandbox: a second sandbox on this machine, a leftover container or an unrelated dev server can be holding
-     * the number. Adopting it would present this enrollment's sync token to a stranger and then push the user's
-     * workspace at it. A live, healthy, wrong daemon must therefore lose to the public URL. */
+    // A port isn't a sandbox: an unrelated daemon holding it must lose to the public URL, or its enrollment token goes
+    // to a stranger.
     it(`refuses a daemon that answers as a DIFFERENT sandbox`, async () => {
         await daemonOn(localDaemonPort(ID), { answersAs: `bce57bb9fe3b` });
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
-    // The daemon that has no id to claim at all (no connect token: the local/test shape) is equally unprovable.
-    // Named by OMITTING the claim rather than sending `undefined`, which is what such a daemon actually serves.
+    // A daemon with no id to claim (no connect token) is equally unprovable; the claim is omitted, not sent as
+    // `undefined`.
     it(`refuses a daemon that names no sandbox`, async () => {
         await daemonOn(localDaemonPort(ID), {});
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
@@ -139,24 +123,20 @@ describe(`resolveDaemonBase`, () => {
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
     });
 
-    /* A candidate that accepts the connection and never answers is the one failure a refused port does not
-     * cover, and the one that could cost a whole watcher pass: the loop is sequential, so an unbounded wait here
-     * stalls every later pairing's ports and commits behind it. It must cost the budget and then fall through. */
+    // An accepting-but-silent daemon is the one failure a refused port misses, and the costliest since the loop is
+    // sequential: it must cost its budget and fall through, not hang the whole pass.
     it(`gives up on a daemon that accepts and never answers, and falls back`, async () => {
         await daemonOn(localDaemonPort(ID), { hang: true });
         const started = Date.now();
 
         expect(await resolveDaemonBase(PUBLIC)).toEqual({ base: PUBLIC, local: false });
 
-        // Bounded, not unbounded: asserted as an upper bound well clear of the 1.5s budget, so this reads as a
-        // hang detector rather than a latency measurement of a machine under load.
+        // Asserted well clear of the 1.5s budget: a hang detector, not a latency measurement.
         expect(Date.now() - started).toBeLessThan(10_000);
     });
 
-    /* THE FLOOR IS NEVER PROBED. It is the registry's own answer and the address the enrollment was performed
-     * against, so qualifying it would spend a request to choose between it and nothing — and on a pairing with
-     * no shortcut it is the only candidate there has ever been. Proved by what was asked for, since a public
-     * hostname that does not resolve would "pass" a weaker assertion by failing. */
+    // The floor address is never probed: it's the registry's own answer, so qualifying it would spend a request
+    // choosing between it and nothing.
     it(`asks the shortcut and never the public address`, async () => {
         const { impl, asked } = countingFetch();
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
@@ -164,14 +144,14 @@ describe(`resolveDaemonBase`, () => {
         await resolveDaemonBase(PUBLIC, impl);
         expect(asked).toEqual([`${LOCAL}/health`]);
 
-        // …and with no shortcut to try, nothing is asked at all.
+        // With no shortcut to try, nothing is asked at all.
         await resolveDaemonBase(`https://myshop.example.com`, impl);
         expect(asked).toEqual([`${LOCAL}/health`]);
     });
 });
 
-/* THE CACHE, which is what lets the watcher re-resolve on its own tick cadence (every few seconds) without
- * probing on it. The two verdicts age differently on purpose, and these pin which is which. */
+// The cache lets the watcher re-resolve on its tick cadence without probing every time; the two verdicts (loopback,
+// fallback) age differently, pinned here.
 describe(`createDaemonBases`, () => {
     const said: string[] = [];
     const log = (line: string): void => void said.push(line);
@@ -183,7 +163,7 @@ describe(`createDaemonBases`, () => {
     it(`resolves a loopback verdict once and then holds it: the best address there is, nothing to re-ask`, async () => {
         const { impl, asked } = countingFetch();
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
-        // Far past the promotion interval, to show it is the KIND of verdict that settles it, not the clock.
+        // Far past the promotion interval, to show the verdict itself settles this, not the clock.
         let clock = 0;
         const bases = createDaemonBases(log, impl, () => clock);
 
@@ -192,7 +172,7 @@ describe(`createDaemonBases`, () => {
         expect(await bases.resolve(pairing)).toBe(LOCAL);
 
         expect(asked).toHaveLength(1);
-        // Said once, because a user reading mirror.log is entitled to know their sync stopped leaving the machine.
+        // Said once: a user reading the log is entitled to know sync stopped leaving the machine.
         expect(said).toHaveLength(1);
         expect(said[0]).toContain(LOCAL);
     });
@@ -207,14 +187,12 @@ describe(`createDaemonBases`, () => {
         expect(await bases.resolve(pairing)).toBe(PUBLIC);
 
         expect(asked).toHaveLength(1);
-        // Nothing is said: the public address is the ordinary case and it is already on every other log line.
+        // Nothing is said: the public address is the ordinary case, already on every other log line.
         expect(said).toEqual([]);
     });
 
-    /* THE CASE THE INTERVAL EXISTS FOR: the laptop starts the sandbox AFTER the watcher. Docker comes up second
-     * at login, or the user runs `docker compose up` an hour in. Nothing re-asks on its own — the watcher is
-     * resident for the whole session — so without this the pairing spends the rest of the day pushing gigabytes
-     * through the edge while the container sits one loopback hop away. */
+    // The case the interval exists for: a container starting after the watcher. Nothing re-asks on its own, so without
+    // this the pairing stays on the public address indefinitely.
     it(`promotes a pairing onto loopback once the container appears, with no restart`, async () => {
         const { impl, asked } = countingFetch();
         let clock = 0;
@@ -230,8 +208,8 @@ describe(`createDaemonBases`, () => {
         expect(said.join("\n")).toContain(`syncing over loopback`);
     });
 
-    /* THE OTHER DIRECTION: the container goes away (stopped, deleted, recreated onto another port). The dialler
-     * says so, and the pairing must fall back to an address that works rather than failing. */
+    // The other direction: the container disappears, and the dialler's failure must demote the pairing back to a
+    // working address.
     it(`demotes to the public address when a loopback base stops answering`, async () => {
         const { impl } = countingFetch();
         await daemonOn(localDaemonPort(ID), { answersAs: ID });
@@ -239,7 +217,7 @@ describe(`createDaemonBases`, () => {
         const bases = createDaemonBases(log, impl, () => clock);
         expect(await bases.resolve(pairing)).toBe(LOCAL);
 
-        // The container is gone, and the ports poll that noticed reports it.
+        // The container is gone; the ports poll that noticed reports it.
         await Promise.all(
             servers.splice(0).map(async (server) => {
                 server.closeAllConnections();
@@ -247,15 +225,14 @@ describe(`createDaemonBases`, () => {
             }),
         );
         bases.failed(pairing.sandboxId);
-        clock += 1; // the very next tick, not a minute later: a dead base is not something to sit on
+        clock += 1; // the very next tick, not later: a dead base shouldn't be sat on.
 
         expect(await bases.resolve(pairing)).toBe(PUBLIC);
         expect(said.join("\n")).toContain(`stopped answering as this sandbox`);
     });
 
-    /* A FAILING FALLBACK IS LEFT ALONE, which is the asymmetry worth pinning: there is nothing under the public
-     * address to fall to, so re-probing on every failure would buy a probe per tick for a sandbox that is merely
-     * asleep — the ordinary state of a laptop — and change nothing about the answer. */
+    // A failing fallback is left alone: nothing exists under the public address to fall to, so re-probing on every
+    // failure would waste a probe on a merely-asleep sandbox.
     it(`keeps a fallback verdict when the dialler reports a failure`, async () => {
         const { impl, asked } = countingFetch();
         let clock = 0;
@@ -269,8 +246,7 @@ describe(`createDaemonBases`, () => {
         expect(asked).toHaveLength(1);
     });
 
-    // One verdict per sandbox: a machine syncing a fleet resolves each independently, and one sandbox's dead
-    // container says nothing about another's.
+    // One verdict per sandbox: a fleet resolves independently, so one dead container says nothing about another's.
     it(`keeps a verdict per sandbox`, async () => {
         const { impl } = countingFetch();
         await daemonOn(localDaemonPort(ID), { answersAs: ID });

@@ -2,24 +2,21 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { extensionRuntimeDir } from "@intentic/sandbox-contract";
 
-// The per-account resume state: the highest UID already dispatched for one capability instance's watched
-// mailbox. Persisted as a small JSON file so mail that arrived while the gateway (or the whole sandbox) was
-// down is dispatched on reconnect instead of lost, the catch-up is the whole point of keeping it on disk.
-// uidValidity is a string because imapflow reports it as a bigint, which JSON can't hold.
+// Per-account resume state: highest UID dispatched for one capability's watched mailbox, persisted so mail from
+// downtime is recovered on reconnect. uidValidity is a string because imapflow reports it as a bigint, which JSON can't
+// hold.
 export interface Watermark {
     readonly mailbox: string;
     readonly uidValidity: string;
     readonly lastUid: number;
 }
 
-// Plain node:fs under the workspace (extensions can't import daemon internals), composed through the
-// contract's extensionRuntimeDir so the layout is spelled once. Capability ids are validated slugs, the
-// replace is defense in depth.
+// Plain node:fs under the workspace (extensions can't import daemon internals); the layout comes from the contract's
+// extensionRuntimeDir. Capability id characters are sanitized to a safe filename.
 export const watermarkPath = (workspaceRoot: string, capabilityId: string): string =>
     join(workspaceRoot, extensionRuntimeDir("imap"), `${capabilityId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
 
-// Missing or corrupt file reads as "no watermark", the caller re-baselines; a broken file must never crash
-// the gateway or replay history.
+// Missing or corrupt file reads as no watermark; a broken file must never crash the gateway or replay history.
 export const readWatermark = async (path: string): Promise<Watermark | undefined> => {
     let raw: string;
     try {
@@ -46,10 +43,8 @@ export const writeWatermark = async (path: string, mark: Watermark): Promise<voi
     await writeFile(path, JSON.stringify(mark));
 };
 
-// Where to resume for a freshly opened mailbox. A UIDVALIDITY change means every stored UID is meaningless
-// (the server renumbered), and a changed watched mailbox means the stored UIDs belong to another folder, both
-// re-baseline at the current end of the mailbox and dispatch nothing, so a reset can never flood the agent
-// with the whole mailbox history. `uidNext` is the server's next-to-assign UID at open time.
+// Resume point for a freshly opened mailbox: a UIDVALIDITY change or a changed watched mailbox re-baselines to the
+// current end and dispatches nothing. uidNext is the server's next-to-assign UID at open time.
 export const resumePoint = (
     stored: Watermark | undefined,
     current: { mailbox: string; uidValidity: string; uidNext: number },

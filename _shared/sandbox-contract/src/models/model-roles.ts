@@ -1,125 +1,32 @@
 import { z } from "zod";
 
-/* EVERY JOB IN THIS SANDBOX THAT PICKS A MODEL, LISTED BY THE JOB IT IS, one row per answer the owner is
- * entitled to give differently.
- *
- * WHAT THIS REPLACED, and why it had to go. Model settings used to be grouped by how HARD the work was assumed
- * to be: a "quick model" for the small automatic jobs, an "agent runs" tier for the big ones. Both names
- * described an intensity rather than a job, and an intensity is a guess somebody else made about work the owner
- * knows better. A commit message written by a frontier model is not a mistake, it is a preference, and the
- * grouping made it unsayable: pinning Opus to get better commit subjects also pinned it to session titles, to
- * every loop verdict, and to the safety judge. One bundled row could not say the thing anyone actually wanted
- * to say.
- *
- * SO THE UNIT IS THE ROLE. Each entry here is one place a model gets chosen, and each gets its own ordered list
- * in settings.modelRoles. Fourteen rows is more than four, and that is the point rather than a cost being
- * absorbed: the configuration and the UI both already existed per use-case, and collapsing them was the only
- * thing standing between the owner and a choice the machinery could already honour. A simpler face over this
- * (presets: "cheap everywhere", "frontier everywhere") is a thing that can be built ON TOP of a true model, and
- * cannot be unpicked from a lossy one.
- *
- * A ROLE IS ONLY A ROW HERE IF SOMETHING WOULD REALLY READ IT, and four rows that could not have been are gone.
- * Each was a settings row promising a model switch its own caller never performed:
- *
- *   automation-wake — an automation now carries its OWN ordered ladder (schemas/automations.ts `models`,
- *                     required), because a job that fires at 3am against somebody's allowance is exactly the one
- *                     nobody should be able to configure by accident. A tier shared by every automation in the
- *                     sandbox was a default wearing a settings row, and the wake resolves that ladder before the
- *                     turn is built, so there is no silence here left to fill.
- *
- *   watch-wake and verify-nudge — both FOLLOW THE TURN THEY CONTINUE, and always did: the wake copies the
- *                     arming turn's provider, model and knobs and resumes its session, the nudge copies the turn
- *                     it is nudging. That is not a fallback, it is the point — a follow-up on a different model
- *                     is a different agent asked about somebody else's edits, and it throws away a warm cache to
- *                     do it. The rows could only ever have bound for a turn that was unattended AND named no
- *                     model AND no provider AND no role, which nothing in this repo starts.
- *
- *   child-agent     — a spawn now NAMES its provider and its model or it is refused (agent/subagents/children.ts),
- *                     with the spendable catalogue one call away (spawn-catalog.ts). A parent that delegates
- *                     without saying where the work runs was picking an owner's model by omission.
- *
- * The shape of that argument is the rule: a row belongs here when a real caller has a real silence to fill. A
- * caller that already knows the answer does not get a row for the answer it already has.
- *
- * EVERY LIST IS AN ORDERED LADDER, whatever the role, and for one reason: the interesting failure of a pinned
- * model is not that it is wrong, it is that it is CONNECTED AND WILL NOT ANSWER TODAY. The account's allowance
- * went on the chat this morning, and one spent provider takes the role down for hours while three others sit
- * idle. Written in order, the next entry catches it.
- *
- * AN EMPTY LIST IS THE JOB SWITCHED OFF, and NOTHING IS DERIVED FOR IT. A helper role used to fall to an
- * "Auto ladder" worked out from whatever was connected — every provider's cheapest row, best-first — so a
- * sandbox that had never been configured still spent somebody's account on commit messages and safety
- * verdicts, on a recommendation this table invented, which re-ranked itself the day another account was
- * connected. Not set now means not set: no auto-selection, no recommendation, and the owner names the models
- * for a job or the job does not happen.
- *
- * TWO KINDS, and what separates them is what the CALLER does with that empty answer. It is declared per role
- * because it is a property of the job:
- *
- *   helper — a one-shot. One prompt, no tools, one string back, and it is over. With no list the job does not
- *            run at all: no commit subject is drafted, no session is renamed, no command is judged. Every one
- *            of them already had a road for "the model could not answer" (the derived title stands, the
- *            commit box stays empty, the gate falls to its standing rule), so an owner who wants none of them
- *            leaves the row empty and pays nothing.
- *
- *   run    — a whole session with tools and a worktree, started by a surface rather than by a person at a
- *            composer. With no list the caller's own floor answers: the model the owner picked for their chat.
- *            That is not this table recommending anything — it is a choice they already made, in front of
- *            them, on the composer they work in.
- *
- * EVERY ENTRY IS A FULL PIN (ModelPinSchema): which model, and how it runs — effort, thinking, speed, harness.
- * The helper roles carry them too, which they did not use to: a one-shot ran with reasoning forcibly off, so
- * pinning a reasoning model to commit messages bought the price of one and the behaviour of neither. The knobs
- * now ride through the one-shot path (the daemon's role-model.ts), so an entry means what it says wherever it
- * is written.
- *
- * ADDING A ROLE IS ONE ROW HERE. The settings key, the resolver's floor, the daemon's lookup and the settings
- * page's row all read this table, so a job that starts picking a model tomorrow becomes configurable by saying
- * what it is. That is the property the old grouping cost: a new surface inherited "agent runs" by being
- * unattended, which is how a documentation sweep and a production incident came to share one tier. */
+// Every job that picks a model, one row per job; the unit is the role, not a difficulty tier. Each list is an ordered
+// fallback ladder; empty means the job is off (helper) or falls back to the caller's own chat model (run). Adding a
+// role is one row here, settings, resolver and daemon all read this table.
 
 export const ModelRoleKindSchema = z.enum(["helper", "run"]);
 export type ModelRoleKind = z.infer<typeof ModelRoleKindSchema>;
 
-/* WHAT STARTS A RUN, declared for the run roles alone.
- *
- * It is not a wire value and never has been: it decides which BLOCK a job is read in, and the argument for
- * reading them apart is the same one that separates a helper from a run — an owner holds a session nobody is
- * watching to a different budget from one they are sitting in front of. The settings page used to make that
- * argument in a comment over a thirteen-row list ("the ones somebody presses ahead of the ones that fire on
- * their own"), which is a claim no reader can check and no row has to honour. Declared, it draws the page.
- *
- * A HELPER DECLARES NONE, and that is the honest answer rather than a gap: nobody presses "write me a commit
- * subject". It happens because something else did. */
+// Which block a run role sorts into on the settings page: pressed by the owner, or started unprompted; helpers declare
+// none.
 export type ModelRoleTrigger = "pressed" | "unprompted";
 
-/* The shape of a row. `id` is a bare string HERE and narrowed on the exported type below, because the id union
- * is derived from this very table: a self-referential `satisfies` would be a type that has to know its own
- * answer before it can check it. */
+// `id` is a bare string here; narrowed to the role union on `ModelRoleSpec` below, since that union derives from this
+// table via `satisfies`.
 interface ModelRoleRow {
     readonly id: string;
-    // What the settings row is called. A JOB, in the owner's words, never a tier.
+    // The owner's own words for the job; never a difficulty tier.
     readonly label: string;
-    // The row's one line: what this model is asked to do. Read beside the label, so it says what the label
-    // cannot rather than restating it.
+    // Must add information beyond the label, not restate it.
     readonly blurb: string;
     readonly kind: ModelRoleKind;
-    /** Runs only, and required for every one of them: see `ModelRoleTrigger`. */
+    /** Required when `kind` is "run"; unset for helpers. */
     readonly trigger?: ModelRoleTrigger;
-    // The row's glyph, from the shared icon set. Here rather than in a web-side map because the whole value of
-    // this table is that a role is declared ONCE; a second table keyed by the same ids is the drift this
-    // replaced, moved one layer up.
+    // Icon name from the shared icon set; kept here, not in a separate web-side map keyed by id.
     readonly icon: string;
 }
 
-/* THE TABLE. Ordered as the settings page draws it, and the order is an argument about reach: the one-shots
- * first, because nobody chose a model for them and they run constantly; then the runs somebody's click starts;
- * then the runs that start themselves, which are the ones an owner is least likely to be watching and most
- * likely to want held to a budget. Those three are BLOCKS now (see MODEL_ROLE_BLOCKS) rather than an ordering
- * this comment asserts and nothing holds to.
- *
- * The ids are the wire vocabulary: a turn carries one (AgentTurn.runRole), so they are kebab-case and stable,
- * and renaming one is a breaking change to the setting rather than a cosmetic edit. */
+// Ids are wire-stable (`AgentTurn.runRole`); order matches the settings page's block grouping below.
 export const MODEL_ROLES = [
     {
         id: "commit-message",
@@ -136,10 +43,7 @@ export const MODEL_ROLES = [
         icon: "pencil",
     },
     {
-        /* THE ONE HELPER WHOSE INPUT IS ADVERSARIAL, and the reason the old bundling was worst here. Its prompt
-         * contains a command the agent is about to run, which may have arrived from a stranger's web page, and a
-         * small model can be talked round by it. Being wrong is expensive in both directions: a needless card
-         * teaches the owner to click through the next one. */
+        // Prompt includes the command about to run, which may be attacker-controlled; a small model can be swayed.
         id: "safety-judge",
         label: "Safety judge",
         blurb: "Which model reads your safety policy before a flagged command runs.",
@@ -154,10 +58,7 @@ export const MODEL_ROLES = [
         icon: "check-square",
     },
     {
-        /* THE ONE HELPER THAT ANSWERS A CLASSIFICATION rather than writing prose: one card id, or none, from the
-         * owner's own short list (schemas/personas.ts `brief`). Cheap by construction, once per chat, and the
-         * job a small model does well, which is the whole argument for routing chats onto static cards rather
-         * than asking a model to compose a context per session. */
+        // Picks one persona id or none from a fixed list; a classification, not free text.
         id: "persona-router",
         label: "Persona routing",
         blurb: "Which model reads a new chat's first message and picks the persona for it.",
@@ -213,9 +114,7 @@ export const MODEL_ROLES = [
         icon: "cloud-upload",
     },
     {
-        /* PRESSED, ON THE STRENGTH OF THE APPROVAL. Nothing here runs until somebody reads the item and says
-         * yes, and that press is the start of this turn as much as Fix is the start of a pipeline run — the
-         * queue between the two is machinery, not a second decision. */
+        // Pressed trigger: the owner's approval click starts this turn; the queue between is just machinery.
         id: "approval-queue",
         label: "Approvals queue",
         blurb: "The turn that publishes or acts on what you approved.",
@@ -246,45 +145,17 @@ export type ModelRoleSpec = ModelRoleRow & { readonly id: ModelRole };
 
 export const MODEL_ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly ModelRole[];
 
-/* The wire form. An enum rather than a string, unlike most ids in this contract, because there is no case for
- * an unknown one: a role is a place in THIS codebase where a model gets chosen, so a value outside the table
- * names nothing, and a settings file or a turn carrying one is a typo worth a clean error rather than a list
- * silently ignored. */
+// Enum, not a string: an id outside this table names nothing, so it should fail loudly rather than be ignored.
 export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole[]]);
 
-/* ═══ THE BLOCKS THE SETTINGS PAGE READS IN ═══
- *
- * FOURTEEN JOBS IN ONE LIST IS A TABLE, NOT A PAGE. The unit being the role is right and is not in question —
- * it is what lets an owner pin Opus to commit subjects without pinning it to every session title — but the cost
- * lands on whoever opens the page: one unbroken run of fourteen rows, each with a name, a sentence, a control
- * and a list under it, with no landmark to say where you are in it or which rows are like the one you came for.
- *
- * SO THE BLOCKS ARE DECLARED, AND THEY ARE THE DISTINCTIONS THE TABLE ALREADY MAKES. Nothing here is a fresh
- * taxonomy invented for the layout: `kind` was always the difference between a one-shot and a whole session,
- * and `trigger` is the sentence the old table wrote in a comment about its own ordering. A block is what those
- * two answers already separate, given a name and a heading.
- *
- * THE LABELS LIVE HERE, beside the role labels, for the same reason those do: a heading kept in a web-side map
- * keyed by the same ids is the drift a single table exists to stop. What is NOT here is anything about how the
- * page draws them — that is the page's, and it changes on its own schedule.
- *
- * A BLOCK IS A LABEL AND ITS ROLES, AND NOTHING ELSE. Each one used to carry a `caption` too — a line the page
- * printed beside the heading saying what its jobs had in common ("One prompt, no tools, one answer back."). The
- * header is a CONTROL STRIP now: the group's rows collapse into a single shared list or open into one row per
- * job, and that switch sits where the sentence did. A caption nothing renders is the drift this table exists to
- * stop, so it is gone rather than kept for a reader that no longer exists.
- *
- * ORDER IS REACH, and it is the order of the table itself: jobs nobody picked a model for, then sessions a
- * click of yours starts, then sessions that start without one. Every role belongs to exactly one block and
- * every block keeps the table's order, which is what makes a role added upstairs appear on the page by
- * existing. */
+// Groups MODEL_ROLES for the settings page by kind and trigger; each role belongs to exactly one block, in table order.
 export type ModelRoleBlockId = "helper" | "pressed" | "unprompted";
 
 export interface ModelRoleBlock {
     readonly id: ModelRoleBlockId;
-    /** The group's heading on the settings page. */
+    /** Heading shown on the settings page. */
     readonly label: string;
-    /** Its roles, in table order. */
+    /** Its roles, in MODEL_ROLES order. */
     readonly roles: readonly ModelRoleSpec[];
 }
 

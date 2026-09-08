@@ -15,11 +15,10 @@ let repoCwd: string;
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
     process.env["WORKSPACE_ROOT"] = root;
-    // Run FROM the fixture, like an agent working in it: a cwd outside the pinned root deliberately re-roots
-    // (see workspaceRoot), which is its own test below.
+    // Runs from the fixture like an agent would; a cwd outside the pinned root re-roots, tested separately below.
     repoCwd = process.cwd();
     process.chdir(root);
-    // The sandbox sets IQ_MODEL_DIR globally; the degradation test below needs the no-model path.
+    // Sandbox sets IQ_MODEL_DIR globally; the degradation test below needs no model present.
     modelDir = process.env["IQ_MODEL_DIR"];
     delete process.env["IQ_MODEL_DIR"];
 });
@@ -91,7 +90,7 @@ test("scope flags pass through (--lang)", async () => {
 test("a natural-language query degrades to the lexical fallback; usage errors exit 2 with one line", async () => {
     const natural = await invoke(["q", "how are widgets built?"]);
     expect(natural.out).toContain("no embedding backend, BM25 only");
-    // The retired `ask` verb is absorbed rather than rejected, and reaches the same pipeline.
+    // The retired `ask` verb is absorbed, not rejected, and reaches the same pipeline.
     expect(normalizeArgv(["ask", "how are widgets built?"]).argv).toEqual(["q", "how are widgets built?"]);
     const absorbed = await invoke(normalizeArgv(["ask", "how are widgets built?"]).argv);
     expect(absorbed.out).toContain("no embedding backend, BM25 only");
@@ -132,8 +131,6 @@ test("normalizeArgv recovers former engine names, path-shaped repos, and glob-on
     expect(normalizeArgv(["files", "--glob", "*.ts", "--limit", "5"]).argv).toEqual(["files", "--glob", "*.ts", "--limit", "5", "*.ts", "--exact"]);
 });
 
-// Router verbs took a positional the way the bare verb does, and paid a turn for it: `No command registered
-// for '<the whole question>'` was the most frequent hard failure in the 2026-09 transcript mining.
 test("normalizeArgv absorbs router-verb dialect: a bare sessions query, and a subcommand typed as a flag", () => {
     expect(normalizeArgv(["sessions", "limit-reset handling UI"])).toEqual({
         argv: ["sessions", "grab", "limit-reset handling UI"],
@@ -148,8 +145,7 @@ test("normalizeArgv absorbs router-verb dialect: a bare sessions query, and a su
     expect(normalizeArgv(["index", "--json"]).argv).toEqual(["index", "--json"]);
 });
 
-// `--context-lines` is nobody's first guess, and stricli's edit distance sent `--lines` to `--limit`, a
-// different knob: it caps result groups when the caller asked to see more of each one.
+// `--limit` caps result groups, a different knob from `--context-lines`.
 test("normalizeArgv routes context-window spellings to --context-lines, and a bare context path to outline", () => {
     expect(normalizeArgv(["context", "src/app.ts:48", "--lines", "40"]).argv).toEqual(["context", "src/app.ts:48", "--context-lines", "40"]);
     expect(normalizeArgv(["find", "x", "--context=5"]).argv).toEqual(["find", "x", "--context-lines=5"]);
@@ -158,7 +154,7 @@ test("normalizeArgv routes context-window spellings to --context-lines, and a ba
         notes: ["context <path> (no :line) → outline"],
         hints: [],
     });
-    // An anchor, in either shape, is what context is for: untouched.
+    // An anchor, in either shape, is what context is for; left untouched.
     expect(normalizeArgv(["context", "src/app.ts:48"]).notes).toEqual([]);
     expect(normalizeArgv(["context", "src/app.ts:48-60"]).notes).toEqual([]);
 });
@@ -170,7 +166,6 @@ test("a glob-only file search reaches the engine with that glob as its exact pat
     expect(result.out).toContain("alpha/src/widget.ts");
 });
 
-// Shell `find` means filenames, iq `find` means content: the collision cost a session a turn.
 test("normalizeArgv hints at `files` when `find` is handed a bare filename, without rewriting the verb", () => {
     expect(normalizeArgv(["find", "Row.vue"])).toEqual({
         argv: ["find", "Row.vue"],
@@ -273,8 +268,6 @@ test("zero hits always carry a diagnostic hint", async () => {
     expect(def.out).toContain("iq sym 'zz_never_zz*'");
 });
 
-// The most repeated zero-hit shape in the transcripts: prose typed at a verb that matches literally. Recover in
-// the same call; explicit --literal remains the way to ask for a real exact-string miss.
 test("a zero-hit phrase given to find is answered semantically unless literal intent is explicit", async () => {
     const phrase = await invoke(["find", "how are widgets built for the registry?"]);
     expect(phrase.exitCode).toBe(0);
@@ -285,7 +278,7 @@ test("a zero-hit phrase given to find is answered semantically unless literal in
     expect(literal.exitCode).toBe(1);
     expect(literal.out).toContain("that query is a phrase");
 
-    // A deliberate regex is a pattern however many words it spans, and keeps the older diagnosis.
+    // A regex is still a pattern no matter how many words it spans; same diagnosis as before.
     const regex = await invoke(["find", "zz_never_zz|zz_also_never_zz", "--lang", "py"]);
     expect(regex.out).toContain("scope may be too narrow");
 });

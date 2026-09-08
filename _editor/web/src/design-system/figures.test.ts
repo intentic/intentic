@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { type BarsFigure, type DagFigure, parseFigure, splitFigureSegments, type StatsFigure } from "@intentic/ui/markdown";
 
-/* The figure fences generated documentation is authored with. Lives here rather than in @intentic/ui
- * because the design system ships no test runner and the markdown engine's other tests (renderMarkdown.test.ts)
- * are already in this suite. The module is pure: no DOM, so this file stays on the default `node` environment.
- *
- * The invariant under nearly every case below: a figure that cannot be understood must DEGRADE to a code block,
- * never throw and never vanish. A reader who sees the JSON source can still act on it; a reader who sees a blank
- * space cannot, and an author cannot tell that anything is wrong. */
+// The figure fences generated documentation is authored with; lives here since @intentic/ui ships no test runner. The
+// invariant under nearly every case: a figure that cannot be understood must degrade to a code block, never throw and
+// never vanish.
 
 const dag = (body: unknown): DagFigure | undefined => parseFigure(`dag`, JSON.stringify(body)) as DagFigure | undefined;
 const bars = (body: unknown): BarsFigure | undefined => parseFigure(`bars`, JSON.stringify(body)) as BarsFigure | undefined;
@@ -43,8 +39,7 @@ describe(`parseFigure`, () => {
     });
 
     it(`labels an unlabelled node by its id rather than dropping it`, () => {
-        // Dropping it would silently break every edge pointing at it, turning one missing label into a
-        // structurally wrong diagram.
+        // Dropping an unlabelled node would silently break every edge pointing at it.
         expect(dag({ nodes: [{ id: `graph` }] })?.nodes[0]).toMatchObject({ id: `graph`, label: `graph` });
     });
 
@@ -81,7 +76,7 @@ describe(`parseFigure`, () => {
     });
 
     it(`drops a bar with no magnitude and a negative one`, () => {
-        // A negative value is not clamped to zero: a zero-length bar claims a measurement that was not made.
+        // A negative value is not clamped to zero: a zero-length bar would claim a measurement that was not made.
         expect(
             bars({
                 items: [
@@ -127,10 +122,9 @@ describe(`parseFigure`, () => {
         expect(parseFigure(`dag`, ``)).toBeUndefined();
     });
 
-    /* Mermaid is the one kind this module does not read: its body is a diagram language, and only mermaid's own
-     * parser (a lazy import, so nowhere near here) can say whether it is valid. So the body is carried whole and
-     * the ONLY thing rejected is emptiness. Syntax that is obvious nonsense still becomes a figure here, and
-     * degrades to a code block at render time instead: same contract, later. */
+    // Mermaid's own parser is the only thing that can validate its body, and it is a lazy import nowhere near here, so
+    // the body is carried whole and only emptiness is rejected. Obvious nonsense still becomes a figure and degrades to
+    // a code block at render time.
     it(`carries a mermaid body through verbatim and rejects only an empty one`, () => {
         const diagram = `flowchart LR\n    a["One"] --> b["Two"]`;
         expect(parseFigure(`mermaid`, diagram)).toEqual({ kind: `mermaid`, code: diagram });
@@ -171,7 +165,7 @@ describe(`splitFigureSegments`, () => {
     });
 
     it(`ignores an indented fence, which belongs to the list item containing it`, () => {
-        // Cutting the document there would split the list in half, so an indented figure stays a code block.
+        // Cutting the document here would split the list in half, so an indented figure stays a code block.
         const source = `- item\n\n    \`\`\`dag\n    { "nodes": [{ "id": "a" }] }\n    \`\`\``;
         expect(figureCount(source)).toBe(0);
     });

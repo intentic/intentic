@@ -26,70 +26,34 @@ import { INCIDENT_TONE } from "./stateVisual";
 import IncidentRow from "./IncidentRow.vue";
 import { useDeploymentBoard } from "./useDeploymentBoard";
 
-/* The Deployments view: is what is running healthy, and what changed?
- *
- * That is deliberately a DIFFERENT question from the Live status core view, which asks whether reality matches
- * what you declared (drift against the desired-state repo). This one is operations, and it is gated on the
- * Komodo connection rather than on a repo, so it exists for someone who simply runs Komodo and has no
- * intentic-managed infra at all.
- *
- * Reading order is worst-first, because nothing an outage needs may sit below the fold:
- *   1. the incident strip: the reason the rail badged, with the buttons already on it
- *   2. one tally on the title row: "is anything wrong right now", before you read anything else (same slot
- *      as Automations and Pipelines)
- *   3. the list GROUPED BY SERVER: the highest-value framing call in the design. The question at 2am is
- *      "is this one app, or is it the box?", and grouping by host answers it in the layout rather than making
- *      the operator correlate it. Komodo's own UI groups by resource type, which reads worst exactly here.
- *   4. the repo → stack mapping, which is SETUP rather than operations and so goes under the thing you came for
- *
- * ONE BORDER PER GROUP, NOT PER ROW. Every level of this page used to draw its own box: a <RowGroup> surface
- * per host, a card per resource inside it, a card per repo, a framed pill around the tally: nested rectangles
- * all the way down, until a border said nothing except "something is here". <RowGroup> already owns the
- * surface and the hairlines between its children, so its children are plain rows and the page is quiet enough
- * that the one panel that IS boxed (the incident strip) reads as the alarm it is.
- */
+// Is what's running healthy, and what changed, a different question from Live status's drift-against-declared-state;
+// gated on the Komodo connection rather than a repo. Reading order is worst-first:
+// 1. the incident strip
+// 2. one tally on the title row
+// 3. resources grouped by host
+// 4. the repo → stack mapping (setup, not operations)
 
 const props = defineProps<{ capability?: string }>();
-// The rail passes the capability id through the activation's props; a directly-mounted view with none falls
-// back to the conventional default id, which is what a single connection is named.
+// Rail passes the capability id via props; a directly-mounted view with none falls back to the default id.
 const capability = computed(() => props.capability ?? `komodo`);
 const { board, error, isPending, act, link, logs, fix, refetch } = useDeploymentBoard(toRef(capability));
 
-// Opening the view IS reading it: stamp read state so the rail stops flagging incidents now on screen. Only
-// on mount: re-stamping as the board polls would swallow a breakage that lands while the tab sits in the
-// background, which is exactly the one the badge exists for.
+// Opening the view counts as reading it; only on mount, or a background poll would swallow a new breakage.
 onMounted(() => void markDeploymentsSeen(capability.value));
 
 const open = computed(() => topTier(incidents(board.value?.alerts ?? [])));
-// topTier returns one tier, so the strip's colour is the first entry's: undefined when nothing is open,
-// which is also what hides the strip.
+// topTier returns one tier; undefined when nothing is open, which also hides the strip.
 const worst = computed(() => open.value[0]?.tone);
 const resources = computed(() => board.value?.resources ?? []);
 const servers = computed(() => board.value?.servers ?? []);
 const repos = computed(() => board.value?.repos ?? []);
 const stackNames = computed(() => resources.value.filter((resource) => resource.kind === `stack`).map((resource) => resource.name));
 
-/* The header's one way out, and it lands on Komodo's STACKS rather than its front door. `komodoUrl` is the
- * instance root, which is a level above everything on this page, and stacks are the level this view is
- * really about: they head the resource list, and the whole "Your repos" half exists to bind a repo to one.
- * Same route family the daemon already builds every row's deep link from (${baseUrl}/stacks/${id}), minus
- * the id. Per-resource links stay on the rows, where they can name the resource they open.
- *
- * It wears `box` and not the generic outward arrow: the icon on an icon-only link is the only thing that says
- * where it goes, and "leaves the app" is not a destination. There is no Komodo glyph in the set, so the next
- * truest thing is what the page is a list of. */
+// Links to Komodo's stacks list: the level this view is really about, same route family as each row's link.
 const stacksUrl = computed(() => (board.value === undefined ? undefined : `${board.value.komodoUrl}/stacks`));
 
-/* WHY AN EMPTY BOARD IS NOT AUTOMATICALLY AN EMPTY KOMODO.
- *
- * Komodo filters every list by the caller's permissions, so an API key minted on a service user with no grants
- * gets 200 and an empty array: byte-identical to a Komodo with nothing deployed. This view shipped once
- * saying "no stacks or deployments yet" to someone whose Komodo had four stacks, which is the worst kind of
- * wrong: confidently, and about the one thing they came here to check. `viewer` is what tells the two apart.
- *
- * THREE cases, not two, because `viewer` can be absent for a second reason: a daemon older than the field.
- * Claiming an empty Komodo on that evidence would reintroduce the same confident wrong answer through the
- * back door, so the unknown case says what it knows and points at the thing the owner can actually check. */
+// Empty resources doesn't mean an empty Komodo: a permission-less key gets an empty array from Komodo too. `viewer`
+// absent might just mean an older daemon, so that gets its own case rather than assuming emptiness.
 const emptyReason = computed(() => {
     if (resources.value.length > 0 || board.value === undefined || !board.value.reachable) {
         return undefined;
@@ -116,8 +80,8 @@ const emptyReason = computed(() => {
     return { title: `Komodo has no stacks or deployments yet`, detail: `Once you add one there, it appears here.` };
 });
 
-// The orientation line. `running` renders at zero because a tally that is entirely silent reads as a broken
-// view; the other three are news or nothing, so they stay out of the way until there is something to say.
+// Orientation tally: `running` always shows, even at zero, since an entirely silent tally reads as broken; the other
+// three stay hidden until there's something to say.
 const counts = computed<TallyItem[]>(() => {
     const tally = { running: 0, stopped: 0, unhealthy: 0, updates: 0 };
     for (const resource of resources.value) {
@@ -140,8 +104,7 @@ const counts = computed<TallyItem[]>(() => {
     ];
 });
 
-// Grouped by host, then anything Komodo has not placed. A resource whose server we do not know still has to
-// appear: during an incident, a row missing from the board is the worst outcome.
+// Host groups, then anything Komodo hasn't placed; an unknown-server resource must still appear on the board.
 const UNPLACED = `Not on a server`;
 interface ServerGroup {
     readonly label: string;
@@ -158,37 +121,21 @@ const groups = computed<ServerGroup[]>(() => {
     const known = new Set(servers.value.map((server) => server.name));
     return [
         ...servers.value.map((server) => ({ label: server.name, server, resources: byServer.get(server.name) ?? [] })),
-        // A resource whose host Komodo does not list still has to appear: during an incident, a row missing
-        // from the board is the worst possible outcome.
         ...[...byServer.entries()].filter(([name]) => !known.has(name)).map(([name, list]) => ({ label: name, server: undefined, resources: list })),
     ];
 });
 
-/* THE BOARD IS THE HOSTS THAT CARRY SOMETHING; the rest are one list at the bottom.
- *
- * A Komodo with three registered-but-empty boxes used to render three consecutive sections whose entire
- * content was the sentence "Nothing deployed on this host" inside a full-width panel: three loud ways to say
- * nothing, pushing the only group with containers in it under the fold, in a view whose reason for existing is
- * that something may be wrong right now.
- *
- * An empty host is still worth listing: it is where a container is MISSING from, and its own state and disk
- * are facts. So it keeps its state badge and its gauges: it just does that as one row among its peers rather
- * than as a section of its own. The unplaced bucket never lands here, since it only exists when it has rows. */
+// An empty host gets one row, not a full section, or several empty hosts read as walls of "nothing deployed".
 const carrying = computed(() => groups.value.filter((group) => group.resources.length > 0));
 const idle = computed(() => groups.value.flatMap((group) => (group.resources.length === 0 && group.server !== undefined ? [group.server] : [])));
 
-// Which row is mid-action, so its buttons disable without freezing the whole board.
+// Row currently mid-action; its buttons disable without freezing the rest of the board.
 const busyId = ref<string | undefined>(undefined);
 const logsFor = ref(new Map<string, { stdout: string; stderr: string }>());
 const logsPendingId = ref<string | undefined>(undefined);
 
-/* Failures, keyed by the thing that failed: a resource id, a repo dir, an incident id.
- *
- * Komodo's own words reach the operator because the daemon passes a refusal through as BAD_GATEWAY precisely
- * so this can say WHY rather than "something went wrong". What it may NOT do is say it at the top of the page:
- * a 500 about one stack rendered as a full-width red slab above a board of forty rows, hundreds of pixels from
- * the button that caused it and giving no clue which row it was about. An action's refusal belongs beside the
- * button that asked for it. */
+// Failures keyed by what failed (resource id, repo dir, incident id) so each shows beside the button that caused it,
+// not as a page-wide banner. Komodo's own refusal reaches the operator via the daemon's BAD_GATEWAY passthrough.
 const failures = ref(new Map<string, string>());
 const clearFailure = (key: string): void => {
     const next = new Map(failures.value);
@@ -223,14 +170,13 @@ const loadLogs = async (resource: DeployResource): Promise<void> => {
     }
 };
 
-// `key` is where a failure lands: the row when the click came from the board, the incident when it came from
-// the strip: either way, next to the button that was pressed.
+// `key` is where the failure lands: the row if the click came from the board, the incident if from the strip.
 const askAgent = async (resource: DeployResource, key: string, pick?: AgentRunChoice | undefined): Promise<void> => {
     busyId.value = resource.id;
     clearFailure(key);
     try {
         const { conversationId } = await fix.mutateAsync({ resource, pick });
-        // The conversation id IS the fleet card id: land the board on the card that just started.
+        // The conversation id is the fleet card id, so this lands the board on the card that just started.
         window.location.assign(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (cause) {
         recordFailure(key, cause);
@@ -239,7 +185,7 @@ const askAgent = async (resource: DeployResource, key: string, pick?: AgentRunCh
     }
 };
 
-// The incident strip's fix button addresses the resource the alert names, when that resource is on the board.
+// Resolves the alert's named resource, when it's on the board, for the incident strip's fix button.
 const resourceFor = (name: string | undefined): DeployResource | undefined =>
     name === undefined ? undefined : resources.value.find((resource) => resource.name === name);
 
@@ -258,16 +204,10 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
 </script>
 
 <template>
-    <!-- No scroller of its own: the shell's router-view wrapper is the scroll container, and a second one nested
-         inside it is a scrollbar inside a page that also has one. It bought nothing here (there is no header this
-         was holding still, and no index it was keeping beside a body) and cost the two things a private scroller
-         always costs: `scroll-margin` and `:target` stop working, because a fragment link resolves against the
-         page and the content is in a different scrollport, and the reader's place is lost on every remount.
-         AcceptanceView and AutomationsView are the same shape and were already written this way. -->
+    <!-- No nested scroller: it breaks `scroll-margin` and `:target`, and loses the reader's place on remount. -->
     <Page width="wide">
         <PageHeader title="Deployments">
-            <!-- ON THE TITLE ROW, not under it: same slot as Automations and Pipelines. Hidden while the first
-                 read is in flight, because "0 running" is a claim the list underneath is about to contradict. -->
+            <!-- Hidden while the first read is in flight: "0 running" would be a claim the list is about to contradict. -->
             <template #info>
                 <StatusTally
                     v-if="!isPending && board?.reachable && resources.length > 0"
@@ -280,21 +220,14 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
             </template>
         </PageHeader>
 
-        <!-- A poll that failed while a board is already on screen. Kept at the top and kept SMALL: the rows
-                 below are the last good answer and still worth reading, so this says the board has stopped
-                 refreshing rather than replacing it. -->
+        <!-- A poll failure with a board already shown; small, since the rows below are still the last good answer. -->
         <Notice v-if="error && board !== undefined" :of="noticeOf(error)" class="mb-4" />
 
-        <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
-                 fetch. Show the board's shape rather than a line of text that everything then jumps under. -->
+        <!-- Nothing back yet, including while the handshake still gates the fetch; shows the board's shape, not text. -->
         <DeploymentsSkeleton v-if="isPending" />
 
-        <!-- The daemon call itself failed (an old daemon with no /komodo routes, a dropped connection).
-                 It gets its own branch because the alternative is what actually shipped: `board` undefined fell
-                 through to the board below, whose zero resources rendered "Komodo has no stacks or deployments
-                 yet": a confident wrong answer about the one thing the reader came to check. -->
-        <!-- Title, cause and the one thing to do about it: the three parts <Notice> is shaped around, so
-                 they arrive in the app's own order and wording rather than this view's. -->
+        <!-- Daemon call failed outright (old daemon, dropped connection); its own branch, not the empty-board case. -->
+        <!-- Title, cause, and the one action: the three parts <Notice> expects, in the app's order and wording. -->
         <Notice
             v-else-if="board === undefined"
             :of="{
@@ -305,9 +238,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
             }"
         />
 
-        <!-- The single most important thing this view can say, and it can only say it by rendering.
-                 Deliberately a WARNING and not an error: not being able to see production is not the same as
-                 production being broken, and drawing it red would cry wolf on every network blip. -->
+        <!-- Warning, not error: not seeing Komodo isn't the same as it being down; red would cry wolf on every blip. -->
         <Notice
             v-else-if="!board.reachable"
             class="px-4 py-3"
@@ -322,10 +253,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
         </Notice>
 
         <template v-else>
-            <!-- ---- 1. Needs you ----
-                     Only when something is open. This is the reason the rail badged, and it carries the
-                     buttons rather than making the operator find the row. The one boxed panel on the page:
-                     everything else lives on a hairline, so the frame here means "this is the alarm". -->
+            <!-- 1. Needs you: only when something is open; the one boxed panel, so its frame reads as the alarm. -->
             <div v-if="worst" class="mb-6 rounded-lg border px-4 py-3" :class="INCIDENT_TONE[worst].panel">
                 <div class="flex items-center gap-2">
                     <Icon name="exclamation-circle" class="text-sm" :class="INCIDENT_TONE[worst].text" />
@@ -370,8 +298,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                         />
                     </RowGroup>
 
-                    <!-- Hosts with nothing on them: one list, one surface, still carrying the state and
-                             the gauges that make an empty box worth knowing about. -->
+                    <!-- Empty hosts: one shared list, still carrying the state and gauges that make an empty box worth knowing. -->
                     <RowGroup v-if="idle.length > 0" label="Other hosts" caption="Connected to this Komodo with nothing deployed on them.">
                         <div v-for="server in idle" :key="server.id" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
                             <span class="text-sm font-medium text-content">{{ server.name }}</span>
@@ -380,12 +307,7 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                     </RowGroup>
                 </template>
 
-                <!-- ---- 4. Your repos ----
-                         SETUP rather than operations, so it sits under the board an operator opened this view
-                         for. It still leads on a first connection, because that is exactly when the board
-                         above it is one short empty-state paragraph, and it renders whether or not Komodo
-                         returned resources, since a workspace with a compose file and nothing linked yet is
-                         the state where this section matters most. -->
+                <!-- 4. Your repos: setup, not operations; still renders with no resources, since that's when it matters most. -->
                 <RowGroup v-if="repos.length > 0" label="Your repos" caption="Which Komodo stack each repo in this workspace deploys to.">
                     <RepoLinkRow
                         v-for="repoLink in repos"

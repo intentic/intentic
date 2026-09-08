@@ -8,21 +8,10 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 
-/* THE USER'S OWN BROWSER as a peer door (peers/), through the extension installed in it: the extension dials
- * this sandbox and serves `webextContract` back over that socket. The host door's shape, with the differences
- * that come straight from what a browser is:
- *
- *   · THE HEARTBEAT IS TIGHTER, and the number is not a taste: an MV3 service worker is killed after 30 seconds
- *     of inactivity, and WebSocket traffic is what counts as activity. A heartbeat at or above Chrome's own
- *     limit would race the browser into shutting the extension down between beats.
- *   · FACTS ARE RE-ASKED when a card reads them. A machine's OS and shell are true until it reboots into
- *     another one; a browser's answer includes which sites the person has allowed and how many tabs are open,
- *     and both change without this daemon being told (a grant can be revoked in Chrome's own settings).
- *   · THE BRIDGE IS NOT A PURE PIPE. A connected computer answers with its own filesystem and its own commands:
- *     material the owner put there. A connected browser answers with WEBSITES, the single largest supply of
- *     text written specifically to be read by a model and act on it. So page-derived text is wrapped in the
- *     same envelope the Front Desk and the listeners use, and it is done HERE rather than in the extension so
- *     that an old, un-updated or tampered extension build cannot deliver unsealed page text into a turn. */
+// The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
+// Heartbeat stays under an MV3 service worker's 30s idle kill, and facts are re-asked per read since allowed sites and
+// tab count change without the daemon being told.
+// Page-derived text is wrapped as outside content here, not in the extension, so a tampered build can't skip the seal.
 
 export type WebExtClient = ContractRouterClient<typeof webextContract>;
 export interface WebExtAnnounced {
@@ -31,9 +20,7 @@ export interface WebExtAnnounced {
 export type WebExtHub = PeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>;
 export type WebExtStore = PeerStore<Record<string, never>>;
 
-// How long a card's live `describe` may take before the reader gets the last known answer instead. A browser
-// answers in milliseconds when it is there at all, and this read sits behind a page: a person waiting on a
-// capability card must not wait out a tool-call timeout because a laptop went to sleep mid-request.
+// How long `describe` may run before falling back to the last answer, so a sleeping laptop can't stall a card.
 const DESCRIBE_TIMEOUT_MS = 3_000;
 
 export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, never>> = {
@@ -58,12 +45,8 @@ export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, n
     expired: "that code has expired, click Connect again in your sandbox for a fresh one.",
 };
 
-/* THE TOOLS WHOSE ANSWER IS THE EXTENSION'S OWN VOICE. Everything else is sealed as outside content on the way
- * back, and the list is written this way round — an allowlist, fail-closed — on purpose.
- *
- * Note what is not on the list: `tabs`. A tab's title and URL are page-controlled strings, and a title is the
- * cheapest injection surface on the web. `describe` is, because every field in it is the extension's own
- * account of itself; the two grant tools are, because their answer is a sentence this connector wrote. */
+// Tools whose answer is the extension's own voice, unsealed; everything else is sealed as outside content. An
+// allowlist, fail-closed: notably `tabs` is excluded, since a tab's title/URL are page-controlled strings.
 const OWN_VOICE = new Set(["describe", "ask_access", "connect_site", "lend_site"]);
 
 // One MCP result, sealed. Text blocks only: an image has no marker to forge, and the model reads it as pixels.
@@ -90,10 +73,8 @@ export const sealAnswer = (id: string, tool: string, answer: unknown): unknown =
     };
 };
 
-// The owner's view of their browsers: the manifest's webext capabilities, each with whatever the hub can say
-// about it right now, its facts asked fresh where it is up. Enrollment state is part of it: "added but never
-// paired" is the state the connect card exists to resolve, and it must be distinguishable from "paired but the
-// browser is shut".
+// The owner's view of their browsers: manifest capabilities plus whatever the hub can say right now, facts asked fresh.
+// Enrollment state (added-but-unpaired vs paired-but-shut) must stay distinguishable.
 export const webextSummaries = async (services: Services): Promise<WebExtSummary[]> =>
     await Promise.all(
         (await services.capabilities.list()).flatMap((capability) =>

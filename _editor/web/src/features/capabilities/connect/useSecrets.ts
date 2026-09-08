@@ -15,14 +15,9 @@ import { SANDBOX_MEMBERS, SECRET_GATES, SECRETS, SECRETS_INVENTORY } from "../..
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useSandboxSession } from "../../sandbox/client/sandboxSession";
 
-/* User-supplied env-var secrets (Cloudflare token, GitHub PAT, another-host SSH key), written straight to the
- * sandbox daemon's /secrets routes (never through the platform). Split by consumer so a surface only observes
- * the server state it reads (an observer mount refetches its query, so bundling made every SecretEntryRow
- * refire both): `useSecretKeys` is the KEYS-ONLY list (hasKey checks in credential forms), `useSecretInventory`
- * the unified view (env + generated + capabilities + AI providers, with status/provenance/CI state, never
- * values), `useMissingSecretCount` that same inventory reduced to the one number the always-mounted chrome
- * shows, `useSecrets` the mutations; `reveal` is the single value-returning call, owner-only, and
- * deliberately NOT a query so a secret value never enters the query cache or its IndexedDB persistence. */
+// User-supplied env-var secrets, written straight to the daemon's /secrets routes, split by consumer so each
+// surface only observes the server state it reads (an observer mount refetches its query). `reveal` is owner-only
+// and deliberately not a query, so a value never enters the cache.
 
 // Owner-only; a member gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
 export const reveal = async (key: string): Promise<string> =>
@@ -48,9 +43,8 @@ export function useSecretKeys() {
 
 const fetchInventory = async (): Promise<SecretInventoryEntry[]> => SecretInventorySchema.parse(await sandboxJson(`/secrets/inventory`)).entries;
 
-// The one definition of "missing" every surface shouts about: a secret the INTENT declares that the sandbox
-// does not have. Generated values (the first deploy produces them) and capability/provider entries are not the
-// user's to set, so an unset one is not an outstanding task, counting those would make the chrome cry wolf.
+// "Missing" means a secret the intent declares that the sandbox lacks; generated and capability/provider entries
+// aren't the user's to set, so they don't count.
 const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
     entries.filter((entry) => entry.kind === `env` && entry.requiredBy.length > 0 && entry.status === `missing`).length;
 
@@ -62,22 +56,18 @@ export function useSecretInventory() {
     return {
         inventory,
         missingRequiredCount: computed(() => missingRequired(inventory.value)),
-        // isPending, not isLoading: true from mount until the FIRST data (even while `reachable` still gates the
-        // fetch), so the page shows its reading placeholder instead of fake empty states during the handshake.
+        // isPending, not isLoading: true until the first data lands, so the page shows a reading placeholder instead of
+        // a
+        // fake empty state.
         inventoryPending: computed(() => query.isPending.value),
         refreshInventory: (): void => void queryClient.invalidateQueries({ queryKey: inventoryKey }),
     };
 }
 
-// Just the attention count, for the AMBIENT chrome, the rail's sandbox chip, the mobile menu row, the sandbox
-// overview, which is mounted app-wide rather than on a secrets surface. Same query, deliberately different
-// observer options: /secrets/inventory is a fan-out (a digest per secret over the desired-state repo, the
-// capability list, the connector registry, an HTTP call to the cliproxy's account API), and the client's
-// default freshness is staleTime 0 + refetch-on-focus, so a permanently mounted observer would re-run that
-// aggregate on every window focus of every page, for every user, secrets surface open or not. Every write
-// invalidates the key (useSecrets below), so the badge still moves the instant a value is set; only the
-// ambient POLLING is dropped. Kept a separate hook, not an option on the one above, for the same reason the
-// keys/inventory/mutations split exists at all: a surface observes only the server state it actually reads.
+// Attention count for app-wide chrome, mounted regardless of whether a secrets surface is open. Same query as the
+// inventory but with its own staleTime/no-refetch-on-focus, since /secrets/inventory is an expensive fan-out that a
+// permanently mounted observer would otherwise re-run on every window focus. Writes still invalidate it, so the
+// badge updates immediately; only ambient polling is skipped.
 const AMBIENT_STALE_MS = 5 * 60 * 1000;
 export function useMissingSecretCount() {
     const { query } = useSandboxQuery({
@@ -92,25 +82,17 @@ export function useMissingSecretCount() {
     };
 }
 
-/* WHO MAY RELEASE WHAT, and who could be named: the Secrets tab's approval editor reads both, so they are one
- * hook. The POLICY is the daemon's `/secrets/gates`; the ROSTER is `/members`, which answers the granted
- * members and the bound owner (the owner rides along precisely so they can name themselves, which is the
- * obvious first gate somebody writes and was the one that could not be expressed).
- *
- * Its own hook rather than options on the inventory above, on this file's own rule: a surface observes only
- * the server state it reads, and the ambient chrome that watches the missing-secret count must not start
- * polling an approval policy it never renders.
- *
- * ONLY THE OWNER MAY WRITE, enforced in the daemon's route (a maintainer is exactly who a gate is sometimes
- * written about, so the /secrets maintainer floor is not enough). `isOwner` is what the UI reads to render the
- * editor read-only instead of offering controls that will 403; it is a courtesy, and the route is the rule. */
+// Who may release what, and who could be named: the approval editor needs both, so one hook covers policy
+// (`/secrets/gates`) and roster (`/members`). Only the owner may write (enforced by the daemon); `isOwner` just
+// renders the editor read-only instead of offering controls that would 403.
 export function useCredentialGates() {
     const queryClient = useQueryClient();
     const gatesKey = SECRET_GATES.of();
     const { query: gatesQuery } = useSandboxQuery({
         queryKey: gatesKey,
-        // A daemon whose policy has never been written answers an empty list; anything else (an unreadable
-        // policy) is a real error, and the tab surfaces it rather than drawing a sandbox with no gates.
+        // An unwritten policy answers an empty list; anything else is a real error, surfaced rather than drawing a
+        // sandbox
+        // with no gates.
         queryFn: async (): Promise<CredentialGate[]> => CredentialGatesSchema.parse(await sandboxJson(`/secrets/gates`)).gates,
     });
     const { query: rosterQuery } = useSandboxQuery({
@@ -132,15 +114,14 @@ export function useCredentialGates() {
     return {
         gates: computed<CredentialGate[]>(() => gatesQuery.data.value ?? []),
         gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value ?? []).find((gate) => gate.subject === subject),
-        /* Everybody who could be named, owner first: the owner is the answer people reach for most and the
-         * roster below them is alphabetical wherever the daemon put it. Deduplicated because an owner who is
-         * also on the members file (a re-grant, an older sandbox) must not appear twice in a picker. */
+        // Owner first (the answer people reach for most), then the roster alphabetically; deduplicated since an owner
+        // also
+        // on the members file must not appear twice.
         approverChoices: computed<string[]>(() => {
             const roster = rosterQuery.data.value;
             return [...new Set([...(roster?.owner === undefined ? [] : [roster.owner]), ...(roster?.members ?? []).map((member) => member.email)])];
         }),
-        // Compared lowercased for the roster's own reason: every write to it normalizes, while a Google claim
-        // may preserve case.
+        // Compared lowercased: the roster normalizes on write, but a Google claim may preserve case.
         isOwner: computed<boolean>(() => {
             const me = presentedEmail.value?.toLowerCase();
             return me !== undefined && owner.value?.toLowerCase() === me;

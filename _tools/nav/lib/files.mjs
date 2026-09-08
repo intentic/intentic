@@ -1,29 +1,13 @@
-/* WHICH FILES COUNT, AND WHAT A LINE OF ONE IS.
- *
- * Every number this harness reports depends on two boring decisions that are easy to get quietly wrong, so
- * they are made once, here, and nowhere else.
- *
- * WHICH FILES. `git ls-files` against the tree being measured, never a directory walk. A walk picks up
- * `node_modules`, `dist`, build caches and whatever the last test run left behind, and it picks up a DIFFERENT
- * set of those on the two trees you are comparing, which is how a refactor "removes" 40,000 lines that were
- * never source. Tracked files are the same set on both sides by construction.
- *
- * WHAT IS SOURCE. First-party TypeScript, Vue and Node scripts. Not `.d.ts` (generated or hand-written type
- * surface, not code an agent navigates), not fixtures, not snapshots. Tests are LISTED but held separately:
- * they are the workload for the bench and they are excluded from the shape metrics, because "we deleted tests"
- * is not a simplification and must never be able to move the headline number.
- *
- * WHAT A LINE IS. Three counts, always reported together: physical, code, and comment/blank. A refactor that
- * compacts docstrings moves physical lines a long way and code lines hardly at all, and a report that gives
- * only the first is flattering itself. The split is what lets a reader see which one happened. */
+// Files are `git ls-files` in the tree, never a directory walk, so both sides of a comparison see the same set. Source
+// is first-party TS/Vue/Node script, excluding `.d.ts`, fixtures and snapshots; tests are listed but held out of the
+// shape metrics. Every count reports physical, code, and comment/blank lines together.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx", ".vue", ".mjs", ".js"]);
 
-// Paths that are tracked but are not code anybody navigates. Kept narrow on purpose: every entry here is a
-// number somebody could hide a regression behind, so each has to earn its place.
+// Tracked paths that are not navigable code; kept narrow.
 const EXCLUDED = [
     /(^|\/)node_modules\//,
     /(^|\/)dist\//,
@@ -52,8 +36,8 @@ const extensionOf = (path) => {
     return dot === -1 ? "" : path.slice(dot);
 };
 
-/* Everything git knows about in a tree, unfiltered. Source selection filters this down, but workspace import
- * resolution needs the package.json manifests that the filter drops, so the raw list is its own export. */
+// All git-tracked paths in a tree, unfiltered; workspace import resolution needs the package.json manifests that source
+// filtering drops.
 export const listTracked = (root, ref) => {
     const args = ref ? ["ls-tree", "-r", "--name-only", ref] : ["ls-files"];
     return execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })
@@ -61,8 +45,8 @@ export const listTracked = (root, ref) => {
         .filter(Boolean);
 };
 
-/* Every tracked file in a tree, split into source and test. `ref` measures a git ref instead of the working
- * tree, which is how a baseline is captured without checking anything out. */
+// Splits tracked files into source and test. `ref` reads a git ref instead of the working tree, for a baseline without
+// checkout.
 export const listFiles = (root, ref) => {
     const all = listTracked(root, ref);
 
@@ -80,7 +64,6 @@ export const listFiles = (root, ref) => {
     return { source: source.sort(), tests: tests.sort() };
 };
 
-// Reading from a ref rather than the working tree, so a baseline never needs a second checkout.
 export const readAt = (root, path, ref) => {
     if (!ref) {
         try {
@@ -100,9 +83,8 @@ export const readAt = (root, path, ref) => {
     }
 };
 
-/* A Vue single-file component's script block. The template and style are real content but they are not what a
- * symbol lookup lands in, and running a TypeScript parser over a template produces noise rather than an error.
- * Returned with the offset so line numbers still refer to the whole file. */
+// Extracts a Vue SFC's `<script>` block; a TS parser run over the template produces noise, not an error. Includes
+// `lineOffset` so line numbers still refer to the whole file.
 export const vueScript = (text) => {
     const match = /<script\b[^>]*>([\s\S]*?)<\/script>/u.exec(text);
     if (!match) {
@@ -112,15 +94,8 @@ export const vueScript = (text) => {
     return { code: match[1], lineOffset: before.split("\n").length - 1 };
 };
 
-/* Physical / code / comment / blank, for one file. A single pass tracking block-comment state, classifying a
- * line by what it STARTS with — which is how every LOC counter worth trusting does it, and is deliberately not
- * a parse.
- *
- * WHAT IT GETS WRONG, so nobody reads more into these numbers than they hold: a block-comment opener inside a
- * string literal starts a comment it should not, and a line that closes a block and then continues with real
- * code is counted as comment. Both are rare, both round the comment count UP, and rounding up is the safe
- * direction: this number's job is to stop a comment-compacting refactor being reported as a code reduction, so
- * over-counting comments can only make that claim more conservative, never less. */
+// Classifies each line as code, comment or blank by what it starts with, not a parse; edge cases (a marker inside a
+// string, code after a closing `*/`) always round toward comment, never under it.
 export const classifyLines = (text) => {
     const lines = text.split("\n");
     let code = 0;
@@ -139,7 +114,6 @@ export const classifyLines = (text) => {
             comment += 1;
             if (line.includes("*/")) {
                 inBlock = false;
-                // Code after the close on the same line makes it a code line too; rare enough to round down.
             }
             continue;
         }
@@ -157,8 +131,7 @@ export const classifyLines = (text) => {
             continue;
         }
 
-        // A line that OPENS a block comment after real code counts as code, but the block still has to be
-        // tracked or every line until the close is miscounted.
+        // Opening a block comment still counts the line as code; `inBlock` must still flip or later lines miscount.
         const open = line.lastIndexOf("/*");
         if (open !== -1 && !line.slice(open).includes("*/")) {
             inBlock = true;

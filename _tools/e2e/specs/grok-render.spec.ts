@@ -1,14 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-// Grok chat must render a streamed turn without crashing the assistant bubble. This is the regression guard for
-// the `undefined is not an object (evaluating 'W.type')` class of failure: the Grok adapter streams chunky
-// PARTIAL-markdown snapshots, and ChatMessageView re-runs the markdown renderer on every delta, so a single
-// throw in that render path blanks the turn. The daemon is fully mocked here (no real xAI account, no live
-// agent): we drive the real Vue app + real render pipeline against canned Grok frames that deliberately stress
-// the renderer with mid-table / unclosed-code-fence / mid-list partial states.
+// Regression guard for `undefined is not an object (evaluating 'W.type')`: Grok's partial markdown re-renders every
+// delta, and a throw mid-render blanks the bubble. Mocked daemon; frames stress mid-table/fence/list states.
 
-// The frames the daemon's Grok adapter emits (see intentic/_sandbox/sandbox/src/grok/grok-agent.ts), split so each
-// accumulated prefix is INVALID/partial markdown at the moment it renders.
+// Mirrors grok-agent.ts's frames, split so each accumulated prefix is invalid, partial markdown.
 const DELTA_CHUNKS = [
     "Yes, I'm here and wired into chat. Quick status:\n\n| Piece | St", // mid table header
     "ate |\n|-------|---", // mid separator row
@@ -29,7 +24,7 @@ const sseBody = (): string => {
         { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 },
         { kind: "done" },
     ];
-    // The client's consumer splits on a blank line and reads the `data:` line (it ignores oRPC's event:/id: lines).
+    // The client's consumer splits on a blank line and reads the `data:` line, ignoring oRPC's event:/id: lines.
     return frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join("");
 };
 
@@ -44,8 +39,7 @@ test("a streamed Grok turn renders (partial markdown, table, code, tool) without
         }
     });
 
-    // Mock only the provider endpoints + the turn: Grok connected with a live model; the other providers empty
-    // so the composer auto-selects Grok. Everything else (liveness, /system/*) hits the real loopback daemon.
+    // Only Grok is connected; empty rosters elsewhere auto-select it, though liveness still hits the real daemon.
     await page.route("**/grok/accounts", (route) => route.fulfill({ json: { accounts: [{ id: "grok-1", label: "Grok" }] } }));
     await page.route("**/providers/grok/models", (route) =>
         route.fulfill({ json: { models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" } }),
@@ -61,27 +55,23 @@ test("a streamed Grok turn renders (partial markdown, table, code, tool) without
 
     await page.goto("/workspace");
 
-    // The composer only renders once a provider is connected; with only Grok connected the unlocked conversation
-    // auto-switches to it. name="draft" is the stable handle regardless of the placeholder text.
+    // name="draft" is the stable composer handle, regardless of placeholder text, once a provider connects.
     const composer = page.locator('textarea[name="draft"]');
     await expect(composer).toBeVisible({ timeout: 30_000 });
 
     await composer.fill("U there Grok?");
     await page.getByRole("button", { name: "Send" }).click();
 
-    // The turn was sent as a Grok turn (proves the mock served the real send path, not a different provider).
+    // Confirms the send hit the real Grok path, not a different provider's mock.
     await expect.poll(() => agentBody?.agent, { timeout: 15_000 }).toBe("grok");
 
-    // The assistant bubble renders the streamed markdown: the final text lands AND the table became real HTML.
     const assistant = page.locator(".chat-surface-assistant").last();
     await expect(assistant).toContainText(FINAL_TEXT, { timeout: 20_000 });
     await expect(assistant.locator("table")).toBeVisible();
     await expect(assistant.locator("code")).toContainText("const ok = true;");
 
-    // The tool card rendered too (Grok's tool/tool_result frames).
     await expect(page.getByText("echo hi")).toBeVisible();
 
-    // No red error line, and, the point of this test, no render crash surfaced anywhere.
     await expect(page.locator("p.text-danger")).toHaveCount(0);
     expect(pageErrors, `uncaught page errors:\n${pageErrors.join("\n")}`).toEqual([]);
     expect(vueErrors, `Vue render/lifecycle errors:\n${vueErrors.join("\n")}`).toEqual([]);

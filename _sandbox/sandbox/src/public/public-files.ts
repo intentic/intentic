@@ -4,49 +4,27 @@ import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import type { Refusal } from "../panels/interstitial.js";
 import { escapeHtml } from "../panels/interstitial.js";
 
-/* THE OUTBOX'S RULES, what a request for a published file resolves to, and what the /public route lists.
- *
- * Everything under the workspace's `public/` directory is served to anyone who has the URL, with no auth in
- * front of it (public-serve.ts). The directory's existence is the user's decision to publish; these rules are
- * the part that has to hold even when a file landed there by accident, because the write path cannot be
- * trusted, a `cp -r` from an agent that misread a task writes files just as effectively as the user does.
- * So every guard below runs at SERVE time against the bytes on disk, not once at the moment something was
- * copied in: the same file can be safe on Monday and a credential dump on Tuesday.
- *
- * The guards, in the order a request meets them:
- *   1. Containment, through realpath. A symlink is the one way a path inside `public/` addresses bytes outside
- *      it (`ln -s ~/.aws/credentials public/x`), so the resolved REAL path is re-checked against the real root.
- *   2. Hidden segments. Any path component starting with "." is refused, which retires `.env`, `.git`, `.ssh`
- *      and `.npmrc` in one rule rather than a list that has to keep up.
- *   3. Credential-shaped names, the high-RECALL half: `*.pem`, `*.key`, `id_rsa`, `credentials`. Cheap, and it
- *      catches the files whose whole content is a secret.
- *   4. No directory listing, ever. A directory serves its `index.html` (the static-site case is the point) or
- *      nothing. Without a listing, an outsider needs the 12-hex hostname slot AND the filename to reach
- *      anything, which is the difference between "unguessable" and "one leaked link exposes the folder".
- *   5. A content sniff, the high-PRECISION half. Only patterns that are self-identifying (a PEM block, an AWS
- *      AKIA, a `ghp_`/`sk-`/`xox…` token) qualify. The tempting generic rule, `secret|token|password` followed
- *      by a long value, is deliberately absent: it fires on a Firebase config, on a form field, on any docs page
- *      that quotes a fake key, and a publisher whose legitimate page is refused for no visible reason learns to
- *      distrust the whole feature. Recall lives in rules 2 and 3, where a false positive costs a rename.
- *   6. A size ceiling. A backstop against a public URL becoming someone's CDN, not a policy about file types. */
+// Everything under public/ is served to anyone with the URL, no auth. Every guard runs at serve time against the bytes
+// on disk, since the write path can't be trusted and a file safe today may not be tomorrow.
+// 1. Containment: the resolved realpath is checked against the root, since a symlink can name bytes outside public/.
+// 2. Hidden segments: any path component starting with "." is refused (.env, .git, .ssh, .npmrc).
+// 3. Credential-shaped names (*.pem, *.key, id_rsa, credentials): high recall, catches files that are wholly a secret.
+// 4. No directory listing, ever: a directory serves only its index.html.
+// 5. Content sniff, high precision: only self-identifying patterns (PEM block, AWS key, gh_/sk-/xox token), never a
+//    generic secret-near-a-value rule.
+// 6. A size ceiling, so the outbox can't become someone's CDN.
 
-// The outbox on disk. Absent by definition until the user publishes something, its existence IS the switch.
+// The outbox on disk; its existence is the publish switch, absent until the user publishes something.
 export const publicRoot = (workspaceRoot: string): string => join(workspaceRoot, PUBLIC_DIR);
 
-// Beyond this a file is refused rather than streamed. Generous on purpose: a screen recording is a normal thing
-// to hand someone, and this exists to stop a dev box quietly becoming a download mirror.
+// Files past this are refused; generous, since this only stops the outbox becoming a download mirror.
 const MAX_BYTES = 512 * 1024 * 1024;
 
-// Bounds on the listing walk (the /public route), not on serving: a published `dist/` is thousands of files and
-// the view showing them is not where that has to be paginated.
+// Bounds the listing walk, not serving; a published dist/ can be thousands of files.
 const MAX_ENTRIES = 2000;
 const MAX_DEPTH = 8;
 
-// Extension → what the browser is told, and whether it may render it inline. Everything absent from this map is
-// served as an attachment: an unknown type is either a download (a .zip, a .tar.gz) or something whose renderer
-// nobody has audited, and "download it" is the honest answer for both. The one type worth calling out is `.svg`,
-// which is a document that can carry script, it is served with a CSP that leaves presentation intact and takes
-// scripting away, because publishing a diagram must not also publish an execution context on the outbox origin.
+// Unlisted extensions download as attachments; `.svg` gets a CSP stripping script, since it can carry one.
 const TYPES: Record<string, { readonly type: string; readonly inline: boolean }> = {
     ".html": { type: "text/html; charset=utf-8", inline: true },
     ".htm": { type: "text/html; charset=utf-8", inline: true },
@@ -80,17 +58,12 @@ const TYPES: Record<string, { readonly type: string; readonly inline: boolean }>
 };
 const DOWNLOAD = { type: "application/octet-stream", inline: false } as const;
 
-// Rule 3: names whose content is a credential by construction. Matched on the file name alone, case-insensitive.
+// Rule 3: names that are a credential by construction, matched case-insensitively on the name alone.
 const CREDENTIAL_NAMES = /^(?:id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.?netrc|\.?htpasswd)$/i;
 const CREDENTIAL_EXTS = new Set([".pem", ".key", ".p12", ".pfx", ".ppk", ".jks", ".keystore", ".kdbx", ".asc", ".gpg"]);
 
-/* Rule 5: self-identifying secrets only, every pattern here names its own issuer, so a match is evidence
- * rather than a guess. Deliberately NOT a general `key = <long string>` rule; see the header.
- *
- * Exported because a conversation published as a page (src/share) has to be held to the SAME rule, and from
- * the other direction: a file is REFUSED for matching one of these, but a shared page is rewritten to remove
- * them. The two have to be one list, a share redacted against a shorter list would be a page the outbox then
- * refuses to serve, which reads to its owner as a broken feature rather than as a guard doing its job. */
+// Rule 5: self-identifying patterns only, each naming its own issuer. Exported so src/share redacts against this same
+// list, not a shorter one that would leave a redacted page still refused.
 export const SECRET_PATTERNS = [
     /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/,
     /\bAKIA[0-9A-Z]{16}\b/,
@@ -100,15 +73,12 @@ export const SECRET_PATTERNS = [
     /\bAIza[0-9A-Za-z_-]{35}\b/,
     /\bglpat-[A-Za-z0-9_-]{20,}\b/,
 ];
-// How much of a file the sniff reads. A credential dump announces itself in its first lines; reading further
-// would turn every request into a full scan of a file we are about to stream anyway.
+// How much of a file the sniff reads; a credential dump announces itself in its first lines.
 const SNIFF_BYTES = 8192;
-// Which types are sniffed at all: a PNG cannot contain a PEM block in any sense that matters, and scanning
-// binaries would only produce false positives on compressed bytes.
+// Only text-like types are sniffed; scanning binaries would only false-positive on compressed bytes.
 const sniffable = (type: string): boolean => type.startsWith("text/") || type.startsWith("application/json") || type.startsWith("application/xml");
 
-// Why a file that IS in the outbox still isn't served. Reported per entry by the listing so the Public view can
-// say so next to the file, instead of the user discovering it from a stranger's 404.
+// Why a file in the outbox still isn't served; the listing reports it per entry for the Public view.
 export type PublicBlock = "hidden" | "credential-name" | "credential-content" | "too-large" | "escapes";
 
 export const BLOCK_REASON: Record<PublicBlock, string> = {
@@ -119,8 +89,7 @@ export const BLOCK_REASON: Record<PublicBlock, string> = {
     escapes: "a symlink pointing outside the folder",
 };
 
-// Rules 2 + 3, on a single path, the checks that need only the name, so the listing can apply them without
-// opening anything.
+// Rules 2 and 3: name-only checks, so the listing can apply them without opening the file.
 export const blockByName = (relPath: string): PublicBlock | undefined => {
     const segments = relPath.split("/").filter((segment) => segment.length > 0);
     if (segments.some((segment) => segment.startsWith("."))) {
@@ -163,9 +132,8 @@ export type PublicResolution =
       }
     | ({ readonly kind: "refused" } & Refusal);
 
-// Every refusal answers 404 with the same sentence, whatever the reason. A viewer is not owed the difference
-// between "no such file" and "that one is a private key", and telling them would turn the outbox into an oracle
-// for probing what the folder holds. The publisher gets the real reason, in the Public view, where it belongs.
+// Every refusal answers 404 identically; telling a stranger which reason would turn the outbox into an oracle for
+// probing the folder. The publisher gets the real reason in the Public view.
 const notFound = (): PublicResolution => ({
     kind: "refused",
     status: 404,
@@ -173,8 +141,7 @@ const notFound = (): PublicResolution => ({
     message: "This address doesn't point at a published file.",
 });
 
-// The request path, minus query/fragment and percent-decoded. undefined for malformed encoding or an embedded
-// NUL, both are only ever an attempt to confuse the path resolution below.
+// Path minus query/fragment, percent-decoded; undefined for bad encoding or an embedded NUL.
 const requestPath = (url: string | undefined): string | undefined => {
     const raw = (url ?? "/").split("?")[0]?.split("#")[0] ?? "/";
     let decoded: string;
@@ -186,15 +153,13 @@ const requestPath = (url: string | undefined): string | undefined => {
     return decoded.includes("\0") ? undefined : decoded;
 };
 
-/* One request → what to serve. `root` is the outbox directory; it not existing is the ordinary "publishing is
- * off" state and answers exactly like a missing file. */
+// One request to what to serve; a missing `root` is just "publishing is off", answered like a missing file.
 export const resolvePublicFile = async (root: string, url: string | undefined): Promise<PublicResolution> => {
     const requested = requestPath(url);
     if (requested === undefined) {
         return notFound();
     }
-    // realpath the root once: with the workspace on a symlinked mount, comparing a real file path against a
-    // symlinked root would fail containment for every legitimate request.
+    // Resolved once, or a symlinked workspace mount would fail containment for every legitimate request.
     const realRoot = await realpath(root).catch(() => undefined);
     if (realRoot === undefined) {
         return notFound();
@@ -219,12 +184,8 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
     if (real === undefined || !real.startsWith(realRoot + sep)) {
         return notFound();
     }
-    /* Rules 2, 3 and 5 judge the RESOLVED name, not the requested one. Rule 1 above only asks that the bytes
-     * are inside the outbox, so a symlink whose target is also inside it would otherwise launder both name
-     * rules: `logo.png -> .env` is refused as `/.env` and served as `/logo.png`, and because the content type
-     * decides what gets sniffed at all, naming the link `.png` would opt its bytes out of rule 5 too. For every
-     * ordinary file `real === target` and this is the same string. The requested spelling is what a refusal
-     * quotes back, so a symlink's target is never named to whoever asked for it. */
+    // Rules 2, 3 and 5 judge the resolved name, not the requested one, or a same-outbox symlink launders both:
+    // `logo.png -> .env` would serve, and its `.png` extension would skip the sniff too.
     const relPath = relative(realRoot, target).split(sep).join("/");
     const realRel = relative(realRoot, real).split(sep).join("/");
     if (blockByName(realRel) !== undefined) {
@@ -247,22 +208,19 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
 
 // One published file, as the Public view lists it.
 export interface PublicEntry {
-    // Outbox-relative, forward-slash ("report.pdf", "site/index.html"), the path that rides the public URL.
+    // Outbox-relative, forward-slash path; the path that rides the public URL.
     readonly path: string;
     readonly size: number;
     readonly modifiedAt: number;
-    // Absent when the file is served. Present with the reason when a guard refuses it, so the publisher learns
-    // it from their own screen rather than from a stranger reporting a 404.
+    // Absent when served; present with the reason when a guard refuses it.
     readonly blocked?: PublicBlock;
 }
 
-/* Everything in the outbox, with each file's verdict. Runs the same guards the serve path runs, including the
- * content sniff, which is why this is the honest answer to "what did I publish?" rather than a directory
- * listing with a different opinion. An absent outbox lists as empty: publishing is simply off. */
+// Every outbox file with its verdict, running the same guards (including the content sniff) the serve path runs. An
+// absent outbox lists as empty.
 export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
     const entries: PublicEntry[] = [];
-    // The root resolved once, for the reason the serve path resolves it: with the workspace on a symlinked
-    // mount, measuring real file paths against a symlinked root would call every legitimate file an escape.
+    // Resolved once, same as the serve path, or a symlinked workspace mount would call every file an escape.
     const realRoot = await realpath(root).catch(() => undefined);
     if (realRoot === undefined) {
         return entries;
@@ -287,9 +245,8 @@ export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
                 continue;
             }
             const entry = { path, size: stats.size, modifiedAt: stats.mtimeMs };
-            /* Judged on the resolved name, the same way the serve path judges it, so this view and a stranger's
-             * request can never disagree about a symlink: a link whose bytes leave the outbox is refused there
-             * and reported here as `escapes`, the reason this type has always declared and nothing produced. */
+            // Judged on the resolved name, like the serve path, so the two can never disagree about a symlink; one
+            // whose bytes escape reports here as `escapes`.
             const real = await realpath(abs).catch(() => undefined);
             if (real === undefined || !real.startsWith(realRoot + sep)) {
                 entries.push({ ...entry, blocked: "escapes" });

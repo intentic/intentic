@@ -8,14 +8,9 @@ import { createWebSocketStream, WebSocket } from "ws";
 import type { Reachability } from "./revocation.js";
 import { createIngressServer, REPLAY_CACHE_TTL_SECS, type IngressServer } from "./server.js";
 
-/* THE EDGE, DRIVEN THE WAY A BROWSER AND A CONTAINER ACTUALLY DRIVE IT — a real socket dialling the real
- * tunnel door, and real HTTP requests routed by real Host headers.
- *
- * The pieces are unit-tested next door; what only an end-to-end run can show is that the two halves agree:
- * that a grant this key signs is one the edge accepts, that a request for `sandbox-<id>` comes out of the
- * daemon-side session with its Host intact (which is the whole of how a container tells its own address apart
- * from a preview's), and that the refusals are refusals rather than hangs.
- */
+// End-to-end: a real socket dials the tunnel door and real HTTP requests route by real Host headers.
+// Proves the daemon and the edge agree: a signed grant is accepted, Host survives the hop, and refusals are refusals,
+// not hangs.
 
 const SANDBOX_ID = `abcdef012345`;
 const ZONE = `sbx.example.test`;
@@ -27,8 +22,7 @@ const publicKey = keys.publicKey.export({ type: `spki`, format: `pem` }).toStrin
 
 const portOf = (server: Server): number => (server.address() as AddressInfo).port;
 
-// One request through the edge, with a Host of the test's choosing — which `fetch` will not allow and is the
-// only input that decides routing here.
+// Sends one request with a chosen Host, since fetch won't allow spoofing it; Host is the only routing input.
 const get = (port: number, host: string, path = `/`): Promise<{ status: number; body: string }> =>
     new Promise((resolve, reject) => {
         const request = h1Request({ host: `127.0.0.1`, port, path, headers: { host } }, (response) => {
@@ -47,8 +41,7 @@ describe(`the ingress edge`, () => {
     let daemon: IngressSessionServer | undefined;
 
     beforeAll(async () => {
-        // The container's front door: answers with the Host it was reached by, which is what the daemon-side
-        // dispatch reads and therefore the one thing worth proving survives the hop.
+        // Echoes the Host it was reached by, to prove that value survives the hop to the daemon-side dispatch.
         target = createServer((request, response) => {
             response.writeHead(200, { "content-type": `text/plain` });
             response.end(`served ${request.headers.host}${request.url}`);
@@ -81,8 +74,6 @@ describe(`the ingress edge`, () => {
         expect(answer.status).toBe(404);
     });
 
-    /* 502 RATHER THAN 404, and the body names the label. The browser's availability flow reads any 5xx as
-     * "the sandbox is unreachable" and drives the wake; a 404 reads as "no such thing" and stops it. */
     test(`502s a sandbox with no tunnel, naming its address`, async () => {
         const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
@@ -111,8 +102,6 @@ describe(`the ingress edge`, () => {
         expect(error).toContain(`401`);
     });
 
-    /* THE WHOLE CHAIN. A container dials, presents a grant the platform signed, and from then on its own
-     * hostname is served out of its own process. */
     test(`registers a validly-signed tunnel and routes the sandbox's hostname down it`, async () => {
         const grant = mintReachabilityGrant(privateKey, SANDBOX_ID, Date.now());
         socket = new WebSocket(`ws://127.0.0.1:${portOf(ingress.server)}/tunnel/v1`, {
@@ -130,30 +119,25 @@ describe(`the ingress edge`, () => {
 
         const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/health`);
         expect(answer.status).toBe(200);
-        // The Host survives the whole hop: that is what lets one tunnel serve a daemon and its previews.
         expect(answer.body).toBe(`served sandbox-${SANDBOX_ID}.${ZONE}/health`);
     });
 
-    // Every public name a sandbox serves ends in its own id, so a preview rides the same registration with no
-    // second name to claim anywhere.
     test(`routes a preview hostname down the same tunnel`, async () => {
         const answer = await get(portOf(ingress.server), `preview-web-${SANDBOX_ID}.${ZONE}`, `/`);
         expect(answer.status).toBe(200);
         expect(answer.body).toBe(`served preview-web-${SANDBOX_ID}.${ZONE}/`);
     });
 
-    // Ownership is a parse, so a host carrying somebody else's id can never reach this tunnel.
     test(`will not route another sandbox's hostname down this tunnel`, async () => {
         const answer = await get(portOf(ingress.server), `sandbox-${OTHER_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
     });
 });
 
-/* THE EDGE AS A ROUTER. A hosted sandbox is a Fly app in the same org and dials no tunnel; a request for its
- * hostname is answered with the headers that make Fly's proxy deliver the request to that app — and keep
- * doing so for the hostname without asking again. What these pin is the decision: which ids are replayed,
- * to which app, and that a sandbox on somebody's own machine still gets the 502 its wake flow reads. The
- * proxy's half (carrying the bytes) is Fly's, and is proved against Fly rather than here. */
+// A hosted sandbox is a Fly app in the same org with no tunnel; a request for its hostname gets the headers that make
+// Fly's proxy replay it there.
+// Pins which ids replay, to which app, and that a tunnel-lane sandbox still gets its 502; Fly's own proxying is not
+// tested here.
 describe(`the ingress edge replaying hosted sandboxes`, () => {
     const HOSTED_ID = `feedfacecafe`;
     const NAMED_ID = `0badf00dbeef`;
@@ -182,7 +166,7 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         await router.close();
     });
 
-    // A request through the edge with its response HEADERS, which are the whole of a replay.
+    // Like `get`, but returns response headers, since headers are the whole of a replay.
     const head = (host: string, path = `/`): Promise<{ status: number; headers: Record<string, string | string[] | undefined> }> =>
         new Promise((resolve, reject) => {
             const request = h1Request({ host: `127.0.0.1`, port: portOf(router.server), path, headers: { host } }, (response) => {
@@ -197,12 +181,11 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         const answer = await head(`sandbox-${HOSTED_ID}.${ZONE}`, `/events`);
         expect(answer.status).toBe(200);
         expect(answer.headers[`fly-replay`]).toBe(`app=intentic-sbx-${HOSTED_ID}`);
-        // Spelled with the hostname, so the cached decision can never apply to another sandbox's name.
+        // Spelled with the full hostname, so the cached decision can't apply to another sandbox's name.
         expect(answer.headers[`fly-replay-cache`]).toBe(`sandbox-${HOSTED_ID}.${ZONE}/*`);
         expect(answer.headers[`fly-replay-cache-ttl-secs`]).toBe(String(REPLAY_CACHE_TTL_SECS));
     });
 
-    // Previews, ports and the outbox ride the same replay: every name ends in the id, and the id names the app.
     test(`replays a preview hostname to the same app`, async () => {
         const answer = await head(`preview-web-${HOSTED_ID}.${ZONE}`);
         expect(answer.headers[`fly-replay`]).toBe(`app=intentic-sbx-${HOSTED_ID}`);
@@ -214,32 +197,25 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         expect(answer.headers[`fly-replay`]).toBe(`app=renamed-app`);
     });
 
-    /* FAIL OPEN. A platform that cannot say which lane an id is on leaves it unknown, and unknown replays: a
-     * wrong replay costs one proxy error for a sandbox that was unreachable anyway, a wrong refusal costs a
-     * working hosted sandbox its whole outage. */
     test(`replays an id whose lane the platform could not name`, async () => {
         const answer = await head(`sandbox-${UNKNOWN_ID}.${ZONE}`);
         expect(answer.headers[`fly-replay`]).toBe(`app=intentic-sbx-${UNKNOWN_ID}`);
     });
 
-    // A sandbox on somebody's own machine is reached only through the tunnel it dials; with none held, the
-    // answer stays the 502 whose body names the address — the browser's wake flow reads that, not a replay.
     test(`keeps the 502 for a tunnel-lane sandbox that is not connected`, async () => {
         const answer = await get(portOf(router.server), `sandbox-${SANDBOX_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
         expect(answer.body).toContain(`sandbox-${SANDBOX_ID}`);
     });
 
-    // Deleting the row is the revocation on this lane too: a sandbox that no longer exists is replayed nowhere.
     test(`replays nothing for a sandbox the platform says is gone`, async () => {
         const answer = await head(`sandbox-${GONE_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
         expect(answer.headers[`fly-replay`]).toBeUndefined();
     });
 
-    /* An upgrade is replayed by NOT upgrading: Fly's rule is that the app answering with the replay headers
-     * must not negotiate the WebSocket itself; the target does. So the edge writes a plain head on the
-     * hijacked socket, and the 101 comes from the sandbox. */
+    // Replayed by not upgrading: Fly requires the app sending replay headers not negotiate the WebSocket itself.
+    // The edge writes a plain HTTP head on the hijacked socket; the 101 comes from the sandbox.
     test(`replays a websocket upgrade the same way, without upgrading it`, async () => {
         const answer = await new Promise<string>((resolve, reject) => {
             const socket = netConnect(portOf(router.server), `127.0.0.1`, () => {

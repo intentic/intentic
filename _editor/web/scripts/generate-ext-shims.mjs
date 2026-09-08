@@ -5,19 +5,11 @@ import { pathToFileURL } from "node:url";
 import { packageRoot } from "@intentic/constants/node";
 import { extensionUiNames } from "../../../_shared/extension-ui/names.mjs";
 
-// Generates public/ext-shims/*.js: the static ESM shims that re-export the host's module instances from
-// globalThis.__intenticHost (published by src/extension-host/hostModules.ts). The import map in index.html
-// points extension bundles' bare specifiers at these files, so a bundle shares the app's one instance of each.
-// Export names come from importing the package in node: except @intentic/extension-ui, whose runtime is a
-// .vue component graph node can't load: its names ride names.mjs (hostModules asserts the list in dev).
-// Committed output; re-run when any package's export surface changes:
-//   node scripts/generate-ext-shims.mjs
-//
-// The generation is a pure function so the committed files can be CHECKED rather than trusted
-// (extShims.test.ts). A shim that drifts from its package fails silently and late: the bundle imports a name
-// the shim never declares, the host hands back `undefined`, and the extension dies at render with no clue
-// pointing here. That is exactly what a `cmp` → `ui` rename did: the source moved, the committed shim did
-// not, and nothing said so until a screen went blank.
+// Generates public/ext-shims/*.js: ESM shims re-exporting the host's module instances (globalThis.__intenticHost,
+// populated by src/extension-host/hostModules.ts) so bundles share the app's one instance of each. Regenerate with
+// `node scripts/generate-ext-shims.mjs` after any package's export surface changes; extShims.test.ts checks the
+// committed output against this script. @intentic/extension-ui's export names come from names.mjs, since its
+// runtime (a .vue graph) can't be imported in node.
 const targets = [
     { specifier: "vue", file: "vue.js" },
     { specifier: "@intentic/extension-api", file: "extension-api.js" },

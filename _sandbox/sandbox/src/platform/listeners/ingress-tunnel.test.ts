@@ -3,15 +3,10 @@ import type { IngressSessionServer } from "@intentic/sandbox-contract/ingress-pr
 import { describe, expect, test, vi } from "vitest";
 import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tunnelUrl, type TunnelSocket } from "./ingress-tunnel.js";
 
-/* WHAT THE RECONNECT LOOP OWES, tested against a fake socket because every property worth pinning here is
- * about WHEN it dials again, and none of them is about bytes: the protocol's own end-to-end test covers those.
- *
- * The three that matter are the three that have gone wrong in a tunnel loop before: a refused dial that
- * hammers, a displaced tunnel that flaps against its replacement, and a long-lived tunnel that reconnects at
- * the ceiling after one blip because nothing ever reset the counter.
- */
+// Reconnect-loop timing against a fake socket; byte-level behavior is covered by the protocol's own test. Pins
+// refused-dial backoff, displaced-tunnel standoff, and backoff reset after a stable session.
 
-// A stand-in for `ws`: records listeners so a test can drive the socket's whole lifecycle by hand.
+// Stand-in for `ws`; records listeners so a test can drive the socket's lifecycle by hand.
 class FakeSocket implements TunnelSocket {
     private readonly listeners = new Map<string, ((...args: never[]) => void)[]>();
     public readonly close = vi.fn<(code?: number, reason?: string) => void>();
@@ -29,8 +24,8 @@ class FakeSocket implements TunnelSocket {
     }
 }
 
-// One dial's worth of scaffolding: the sockets handed out, the waits asked for, and a gate that holds each
-// backoff open until the test lets it through.
+// One dial's worth of scaffolding: sockets handed out, waits asked for, and a gate holding each backoff open until the
+// test releases it.
 const harness = (options?: { readonly now?: () => number }) => {
     const sockets: FakeSocket[] = [];
     const waits: number[] = [];
@@ -56,13 +51,12 @@ const harness = (options?: { readonly now?: () => number }) => {
                 release = resolve;
             });
         },
-        // Full jitter with random() === 1 lands exactly on the ceiling, so the assertions read the schedule
-        // rather than a sample from it.
+        // Full jitter with random() === 1 lands exactly on the ceiling, so assertions read the schedule directly.
         random: () => 1,
         ...(options?.now === undefined ? {} : { now: options.now }),
     });
 
-    // Let the pending microtasks (the async open handler, the loop's own awaits) drain.
+    // Drains pending microtasks: the async open handler and the loop's own awaits.
     const settle = async (): Promise<void> => {
         for (let i = 0; i < 6; i++) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- draining a microtask queue is sequential by definition
@@ -78,13 +72,10 @@ describe(`tunnelUrl`, () => {
         expect(tunnelUrl(`https://ingress.sbx.intentic.dev`)).toBe(`wss://ingress.sbx.intentic.dev/tunnel/v1`);
     });
 
-    // A developer's edge on plain http must not be dialled as wss, which fails in a way that reads as a
-    // certificate problem rather than a scheme one.
     test(`keeps a plaintext edge plaintext`, () => {
         expect(tunnelUrl(`http://localhost:8080`)).toBe(`ws://localhost:8080/tunnel/v1`);
     });
 
-    // The base may carry a path; the door is absolute and replaces it rather than nesting under it.
     test(`ignores a path on the base address`, () => {
         expect(tunnelUrl(`https://edge.example.test/ignored`)).toBe(`wss://edge.example.test/tunnel/v1`);
     });
@@ -101,8 +92,6 @@ describe(`startIngressTunnel`, () => {
         expect(world.handle.connected()).toBe(true);
     });
 
-    /* A DISPLACED TUNNEL STANDS BACK. Redialing straight into 4001 is how two containers sharing a connect
-     * token evict each other forever, with neither serving a request in between. */
     test(`waits a long interval when a newer tunnel takes the address`, async () => {
         const world = harness();
         world.sockets[0]?.emit(`open`);
@@ -114,8 +103,6 @@ describe(`startIngressTunnel`, () => {
         expect(world.handle.connected()).toBe(false);
     });
 
-    // A dial that never became a working tunnel — a bad grant, an edge that is down — must back off rather
-    // than spin.
     test(`doubles the backoff while dials keep failing`, async () => {
         const world = harness();
         world.sockets[0]?.emit(`close`, 1006);
@@ -128,10 +115,7 @@ describe(`startIngressTunnel`, () => {
         expect(world.waits).toEqual([2_000, 4_000]);
     });
 
-    /* …AND A TUNNEL THAT ACTUALLY WORKED EARNS THE FLOOR BACK. Without this, a container up for a week
-     * reconnects at the ceiling after one blip, because the counter still remembers a bad afternoon. The floor
-     * is the same jittered first rung a fresh container dials on: a fleet whose edge deployed under it must
-     * not all redial at exactly one second either. */
+    // Each case names the one piece missing; the three are fixed in three different places.
     test(`resets the backoff after a session that lasted`, async () => {
         let clock = 0;
         const world = harness({ now: () => clock });
@@ -148,7 +132,6 @@ describe(`startIngressTunnel`, () => {
         expect(world.waits).toEqual([2_000, 2_000]);
     });
 
-    // The tunnel is this sandbox's reachability, so shutdown is the only thing that ends the loop.
     test(`stops dialling once closed`, async () => {
         const world = harness();
         world.sockets[0]?.emit(`close`, 1006);
@@ -165,7 +148,6 @@ describe(`startIngressTunnel`, () => {
 describe(`startIngressTunnelWhenConfigured`, () => {
     const base = { url: `https://ingress.example.test`, grant: `ig1.a.b`, targetPort: 5173, frontDoor: true, vm: false };
 
-    // Each refusal names the piece that is missing, because the three are fixed in three different places.
     test.each([
         [`no front door`, { ...base, frontDoor: false }, `front door`],
         [`no edge`, { ...base, url: `` }, `INGRESS_URL`],
@@ -177,9 +159,6 @@ describe(`startIngressTunnelWhenConfigured`, () => {
         expect(log.mock.calls[0]?.[0]).toContain(reason);
     });
 
-    /* A HOSTED MACHINE DIALS NOTHING, whatever else its env says: the platform's edge replays requests for its
-     * hostname to the Fly app it is, so a tunnel would be a second, worse path to the same machine. Said as
-     * the posture it is, never as something missing. */
     test(`a Fly machine is reached directly and dials no tunnel`, () => {
         const log = vi.fn();
         expect(startIngressTunnelWhenConfigured({ ...base, vm: true, log })).toBeUndefined();
@@ -194,7 +173,6 @@ describe(`reachPosture`, () => {
         expect(reachPosture(base)).toEqual({ by: `tunnel` });
     });
 
-    // The VM switch wins over everything else: a hosted machine with a stray grant in its env still dials nothing.
     test(`is direct on a Fly machine, whatever else is configured`, () => {
         expect(reachPosture({ ...base, vm: true }).by).toBe(`direct`);
         expect(reachPosture({ ...base, vm: true, grant: `` }).by).toBe(`direct`);

@@ -4,72 +4,55 @@ import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../platform/boot/leftovers.js";
 import { createRequest, type MayAnswer } from "../tools/agent-requests.js";
 import { soleLiveConversation, turnRunOf } from "./turn/turn-runs.js";
 
-/* AN OFFER CARD is a card raised from OUTSIDE the turn generator: the agent's CLI call arrives as an HTTP
- * request while the turn sits inside its Bash tool, or a tool call crosses a bridge on its way to somebody's
- * laptop, and the daemon parks that call on a card in the conversation's live turn. Five gates do it (a
- * payment, a capability ask, a gated credential, a command headed for a machine), and
- * the plumbing under all five is this one shape: find the live run the caller may draw in, mint the request,
- * push the raised frame into the run's frame log AND mirror it to the registry by hand (the pump's own
- * parked-card journalling never sees an externally pushed frame, deliberately: the waiter is a held
- * connection that dies with the daemon, and a restored card would offer buttons nothing waits behind), wait
- * with a deadline, push the resolution frame the same way, and tell an answer from the abort stand-in.
- *
- * What a gate still owns is everything on the card that is judgment rather than plumbing: its offer, its
- * refusal sentences, what a yes releases, and the receipt it writes under the settled card. */
+// A card raised outside the turn generator (an HTTP call mid-turn, a bridged tool call) parks on the conversation's
+// live turn: mint the request, push the raised and resolution frames to the run, and mirror them to the registry by
+// hand (the pump never sees an external frame). Each gate owns its offer, refusal text, and what a yes releases.
 
-// How long an unanswered offer holds the agent's call before settling as "nobody answered". Long enough for an
-// owner who stepped away from a chat they are in; bounded so an unattended turn's offer cannot park forever.
+// How long an unanswered offer waits before settling as unanswered; bounds how long an unattended turn can park.
 export const OFFER_DEADLINE_MS = 10 * 60_000;
 
-// The agent's why, capped: one line of rationale is the card's design, not a second request body.
+// Cap on the agent's rationale string on a card: one line of reasoning, not a second request body.
 const WHY_MAX = 280;
 
 export const whyOf = (why: string | undefined): { readonly why?: string } => (why !== undefined && why !== "" ? { why: why.slice(0, WHY_MAX) } : {});
 
-// The live turn a card lands in: which conversation, and where its frames go.
+// The live turn a card lands in: which conversation, and where to push its frames.
 export interface LiveCard {
     readonly conversationId: string;
     readonly push: (event: AgentEvent) => void;
 }
 
-/* THE TWO SEAMS EVERY GATE TAKES, so its tests drive it with a fake turn and no registry. `liveRun` is the
- * named conversation's run, or, when the caller could not name one, the sole live run; undefined refuses the
- * offer outright. `observe` is the registry's frame observer (agents-registry.ts): externally pushed frames
- * bypass the turn pump that usually feeds it, so a gate mirrors its own frames there to light and clear the
- * Attention lane. */
+// The two seams a gate needs for testing: `liveRun` finds the turn to raise a card in (undefined refuses outright);
+// `observe` mirrors frames to the registry, since externally pushed frames bypass the turn pump.
 export interface CardDeps {
     readonly liveRun: (conversationId: string | undefined) => LiveCard | undefined;
     readonly observe: (conversationId: string, event: AgentEvent) => void;
 }
 
-// The real `liveRun`, over turn-runs.ts: `soleLiveConversation` covers the door where the caller could not
-// name a conversation and exactly one is running, and refuses to guess between two.
+// The real `liveRun`: falls back to the sole live conversation when the caller named none, and refuses to guess between
+// two live runs.
 export const liveCardRun = (conversationId: string | undefined): LiveCard | undefined => {
     const id = conversationId ?? soleLiveConversation();
     const run = id === undefined ? undefined : turnRunOf(id);
     return id === undefined || run === undefined || run.done ? undefined : { conversationId: id, push: (event) => run.push(event) };
 };
 
-// The run a caller may raise a card in, from the conversation its shell was stamped with (INTENTIC_TURN_OWNER).
-// The two reserved owner names are "no conversation" here: a pooled process or a one-shot has no chat to
-// draw a card in, and the sole live run is what it gets, if there is one.
+// The run a caller may raise a card in. The two reserved owner names (pooled process, one-shot) mean 'no conversation';
+// such a caller gets the sole live run, if there is one.
 export const cardRun = (deps: Pick<CardDeps, "liveRun">, conversationId: string | undefined): LiveCard | undefined =>
     deps.liveRun(conversationId === DAEMON_OWNER || conversationId === ONE_SHOT_OWNER ? undefined : conversationId);
 
 export interface Card<K extends AgentReply["kind"]> {
     readonly kind: K;
-    // The reply synthesized when the card settles without a person: `requestId: ""` is the registry's
-    // convention (it fills in the real id), and the no in it is what makes an aborted call read honestly.
+    // The reply synthesized when the card settles unanswered; `requestId` is filled in by the registry.
     readonly onAbort: Extract<AgentReply, { kind: K }>;
-    // The frame that draws the card, built around the minted id.
+    // The frame that draws the card, built around the minted request id.
     readonly raised: (requestId: string) => AgentEvent;
     // Who may click, when the card is addressed to a named list rather than to whoever is looking.
     readonly mayAnswer?: MayAnswer;
-    // Buzz the owner's devices once the card is up, for the one card that waits for somebody who may not
-    // know a turn is running.
+    // Buzz the owner's devices once the card is up, for someone who may not know a turn is running.
     readonly notify?: (conversationId: string) => void;
-    // The caller's own lifetime (a held CLI connection): its abort settles the card cancelled instead of
-    // leaving it parked in a conversation nothing waits behind.
+    // The caller's own lifetime; its abort settles the card cancelled instead of leaving it parked unattended.
     readonly signal?: AbortSignal;
     readonly deadlineMs: number;
 }
@@ -77,19 +60,16 @@ export interface Card<K extends AgentReply["kind"]> {
 export interface SettledCard<K extends AgentReply["kind"]> {
     readonly requestId: string;
     readonly reply: Extract<AgentReply, { kind: K }>;
-    // Who answered, when the daemon verified an identity on the reply's request (agent-requests.ts).
+    // Who answered, when the daemon verified an identity on the reply's request.
     readonly caller: Caller | undefined;
-    /* WHETHER A PERSON ANSWERED AT ALL. False is the abort stand-in (the deadline fired, or the caller died
-     * under the card), and a gate reading that as "the owner declined" would put words in the mouth of
-     * somebody who never saw the card: the two no's earn different sentences everywhere. */
+    // Whether a person answered at all: false is the deadline firing or the caller dying, never a decline.
     readonly answered: boolean;
-    // Push a follow-up frame under the settled card (a receipt, an outcome), to the run and the registry both.
+    // Push a follow-up frame under the settled card, to the run and the registry both.
     readonly say: (event: AgentEvent) => void;
 }
 
-// Raise one card and hold the call until it settles. Every parked card owes the stream its resolution frame:
-// it is what stops a client rendering the card as live, and the only honest account of how long the call was
-// parked, so it is pushed here, unconditionally, before the caller sees the answer.
+// Raises one card and holds the call until it settles; the resolution frame is pushed unconditionally before the caller
+// sees the answer, since it is what stops a client rendering the card as live.
 export const raiseCard = async <K extends AgentReply["kind"]>(deps: Pick<CardDeps, "observe">, run: LiveCard, card: Card<K>): Promise<SettledCard<K>> => {
     const say = (event: AgentEvent): void => {
         run.push(event);

@@ -3,9 +3,8 @@ import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { adoptRepos } from "./adopt.js";
 
-// A git runner that records every invocation and answers the two queries adopt makes (the staged-index read
-// that gates its commit, + remote) from the supplied maps, defaulting to empty (nothing to commit, no remotes)
-// so the happy path is the default.
+// Fake git runner answering adopt's two queries (staged diff, remote list) from the given maps;
+// defaults to empty so the happy path needs no answers.
 const recordingGit = (answers: { staged?: string; remotes?: string } = {}): { git: GitRunner; calls: string[][] } => {
     const calls: string[][] = [];
     const git: GitRunner = async (dir, args) => {
@@ -21,7 +20,7 @@ const recordingGit = (answers: { staged?: string; remotes?: string } = {}): { gi
     return { git, calls };
 };
 
-// The transport authority (an SSH-forwarded loopback in the field) vs the durable public origin.
+// Transport authority (SSH-forwarded loopback) vs the durable public origin.
 const baseUrl = "http://127.0.0.1:9999";
 const originBaseUrl = "https://git.example.com";
 const repos = [{ dir: "/w/intent", name: "intent" }] as const;
@@ -39,13 +38,10 @@ test("creates the repo when missing, commits a dirty tree, adds the public origi
     const pushed = await adoptRepos({ baseUrl, originBaseUrl, user: "intentic", password: "pw", repos, log: () => {}, api, git });
 
     expect(created).toMatchObject({ owner: "intentic", name: "intent", private: true, autoInit: false });
-    // Staging is scaffold's gitStageAll: `--ignore-errors` so one unstageable path (an embedded repo with no
-    // commit) is skipped rather than aborting the whole adopt, and the embedded-repo advice off because nested
-    // repos are ordinary here.
+    // --ignore-errors skips one unstageable path; embedded-repo advice off since nested repos are ordinary here.
     expect(calls).toContainEqual(["/w/intent", "-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
     expect(calls.some((c) => c.includes("commit"))).toBe(true);
-    // origin carries the durable public url; the push targets the transport url directly, so adopt works
-    // with the tunnel down or before public DNS exists.
+    // origin carries the public url; push targets the transport url directly, so it works without tunnel or DNS.
     expect(calls).toContainEqual(["/w/intent", "remote", "add", "origin", "https://git.example.com/intentic/intent.git"]);
     const push = calls.find((c) => c.includes("push"));
     expect(push).toContain("http://127.0.0.1:9999/intentic/intent.git");

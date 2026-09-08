@@ -3,28 +3,8 @@ import { Button, Icon, vAction } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
 
-/* THE PLAYER: audio and video, one component, streaming.
- *
- * WHY IT DOESN'T USE `controls`. The native control bar is the browser's, not the app's: five different
- * chromes across five browsers, none of them themable, none of them showing what a workspace reader actually
- * wants (what has BUFFERED, which is the only honest read on "is this streaming or is it stalled?"), and no
- * keyboard map worth the name. So the transport below is ours, and the element is a decoder we drive.
- *
- * WHY ONE ELEMENT FOR BOTH. It is always a <video>, even for an .mp3: a video element plays audio perfectly
- * well, and the alternative is deciding audio-vs-video from the file EXTENSION, which is wrong twice over: an
- * .mp4 is frequently audio-only (the container an AAC recording arrives in), and a .webm may be either. So the
- * element decodes, and the LAYOUT follows `videoWidth > 0` once metadata lands: a picture fills the pane, a
- * soundtrack gets the centred card. One code path, and it is never wrong about what it is playing.
- *
- * WHY IT STREAMS. `src` is a /workspace/media URL the host minted (fetch: "url"), and the element range-reads
- * it: first frame paints in a couple of hundred milliseconds whatever the file weighs, a drag to 40:00 fetches
- * the bytes at 40:00, and nothing is ever held in the tab. A blob: URL, the way every other viewer here gets
- * its content, cannot do any of that: it means downloading the file before the first frame, and it means a
- * 25 MiB ceiling, which is roughly ten seconds of screen recording.
- *
- * NOT EVERY FILE PLAYS, and that is not this component's fault to hide: no browser decodes Matroska or AVI.
- * The element's own `error` is the signal: its verdict, not our guess from the extension, and it resolves to
- * the download the reader wanted anyway. */
+// Audio and video share one component, always a `<video>` element; layout follows `videoWidth > 0` once metadata loads.
+// `src` streams via range reads, not a blob; unplayable containers surface through the element's own `error` event.
 
 const { path, src } = defineProps<{ path: string; src: string }>();
 const emit = defineEmits<{ download: [] }>();
@@ -35,12 +15,11 @@ const stage = ref<HTMLElement>();
 const playing = ref(false);
 const waiting = ref(false);
 const failed = ref(false);
-// Set from loadedmetadata. 0 ⇒ no picture: the file is a soundtrack, whatever its container is called.
+// Set in `loadedmetadata`; 0 means audio-only regardless of container.
 const videoWidth = ref(0);
 const duration = ref(0);
 const currentTime = ref(0);
-// Buffered ranges as fractions of the duration, painted under the progress fill. The one thing a native
-// control bar will not show you, and the only way to tell a slow network from a stalled one.
+// Buffered ranges as fractions of duration, for the progress-bar fill.
 const buffered = ref<readonly { readonly from: number; readonly to: number }[]>([]);
 const volume = ref(1);
 const muted = ref(false);
@@ -49,36 +28,31 @@ const looping = ref(false);
 const pictureInPicture = ref(false);
 const fullscreen = ref(false);
 const speedOpen = ref(false);
-// Pointer is down on the timeline: the element's own timeupdate is ignored so the thumb tracks the finger
-// rather than fighting it, and `scrubTime` is what everything renders from until release.
+// Set while dragging the timeline; `timeupdate` is ignored and display renders from this until release.
 const scrubTime = ref<number>();
-// Where the pointer is hovering on the timeline, for the time bubble. Undefined = not over it.
+// Pointer position on the timeline for the hover time bubble; undefined when not hovering.
 const hoverTime = ref<number>();
-// Video only: the controls fade out during playback and come back on any pointer movement. Never for audio,
-// where the transport IS the view and there is nothing behind it to reveal.
+// Video only: controls fade during playback and reappear on pointer movement; audio controls never hide.
 const idle = ref(false);
 
 const hasVideo = computed(() => videoWidth.value > 0);
-// A stream whose duration the container never declared (a .webm with no cues). Everything that divides by it
-// has to survive that, and seeking is meaningless until it resolves.
+// True once `duration` is a finite positive number; some containers report it late or not at all.
 const seekable = computed(() => Number.isFinite(duration.value) && duration.value > 0);
 const displayTime = computed(() => scrubTime.value ?? currentTime.value);
 const progress = computed(() => (seekable.value ? Math.min(1, displayTime.value / duration.value) : 0));
 const filename = computed(() => path.slice(path.lastIndexOf(`/`) + 1));
-// Controls hide only while a VIDEO is actually playing and the pointer has gone quiet. A paused frame is one
-// the reader is looking at deliberately, and hiding the way back to play would be a puzzle, not a feature.
+// Hides only while video is playing and the pointer is idle; paused or audio always shows controls.
 const controlsVisible = computed(() => !hasVideo.value || !playing.value || !idle.value || speedOpen.value);
 
 const el = (): HTMLVideoElement | undefined => media.value;
 
-// ── transport ────────────────────────────────────────────────────────────────────────────────────────────
+// Transport controls.
 const togglePlay = (): void => {
     const node = el();
     if (node === undefined || failed.value) {
         return;
     }
-    // A play() rejection is the autoplay policy or a decode failure; both already surface elsewhere (the
-    // element stays paused, or `error` fires), so there is nothing here to report twice.
+    // A play() rejection already surfaces via `error` or the paused state; nothing more to report here.
     if (node.paused) {
         void node.play().catch(() => {});
         return;
@@ -103,8 +77,7 @@ const setVolume = (value: number): void => {
         return;
     }
     node.volume = Math.min(Math.max(value, 0), 1);
-    // Nudging the volume up off zero is an unmute: the two controls are one intent and should not need two
-    // clicks to undo one.
+    // Raising volume off zero also unmutes.
     node.muted = node.volume === 0;
 };
 
@@ -113,7 +86,7 @@ const toggleMute = (): void => {
     if (node === undefined) {
         return;
     }
-    // Unmuting something that was dragged to silence has to give it a level back, or the button does nothing.
+    // Unmuting from zero volume restores an audible level.
     if (node.muted && node.volume === 0) {
         node.volume = 0.5;
     }
@@ -138,11 +111,10 @@ const togglePictureInPicture = async (): Promise<void> => {
     if (node === undefined || !hasVideo.value) {
         return;
     }
-    // Best-effort: a browser without the API, or one refusing outside a user gesture, simply stays inline.
+    // Best-effort; a browser without the API or refusing outside a user gesture stays inline.
     try {
         await (document.pictureInPictureElement === node ? document.exitPictureInPicture() : node.requestPictureInPicture());
     } catch {
-        /* stays inline */
     }
 };
 
@@ -151,16 +123,14 @@ const toggleFullscreen = async (): Promise<void> => {
     if (box === undefined) {
         return;
     }
-    // The STAGE goes fullscreen, not the <video>: fullscreening the element itself hands the browser's native
-    // chrome back, which is the thing this component exists to replace.
+    // Fullscreens the stage element, not the video, to avoid the browser's native chrome.
     try {
         await (document.fullscreenElement === null ? box.requestFullscreen() : document.exitFullscreen());
     } catch {
-        /* stays inline */
     }
 };
 
-// ── the element's own events, which are the source of truth for everything above ─────────────────────────
+// Element event handlers; source of truth for the state above.
 const onLoadedMetadata = (): void => {
     const node = el();
     if (node === undefined) {
@@ -198,11 +168,10 @@ const onVolumeChange = (): void => {
     }
 };
 
-// ── the timeline ─────────────────────────────────────────────────────────────────────────────────────────
+// Timeline scrubbing.
 const timeline = ref<HTMLElement>();
 
-// Where along the bar a pointer is, as a time. Clamped, so a drag that leaves the bar sideways pins to an end
-// instead of jumping.
+// Pointer position on the bar as a time, clamped to the track so a drag past either end pins there.
 const timeAt = (clientX: number): number | undefined => {
     const rect = timeline.value?.getBoundingClientRect();
     if (rect === undefined || rect.width === 0 || !seekable.value) {
@@ -216,8 +185,7 @@ const onTimelineDown = (event: PointerEvent): void => {
     if (at === undefined) {
         return;
     }
-    // Captured so the drag survives leaving the bar: the pointer ends up anywhere while scrubbing a 3-hour
-    // file, and losing the gesture at the edge is what makes a scrubber feel cheap.
+    // Captures the pointer so dragging past the bar's edge keeps scrubbing instead of ending it.
     timeline.value?.setPointerCapture(event.pointerId);
     scrubTime.value = at;
 };
@@ -237,9 +205,8 @@ const onTimelineUp = (): void => {
     }
 };
 
-// ── keyboard ─────────────────────────────────────────────────────────────────────────────────────────────
-// The map every video player has taught people, so nothing here has to be discovered. Handled on the stage
-// (which is focusable) rather than the document, so a player in a background tab never steals a keystroke.
+// Standard video-player key map. Handled on the stage element, not the document, so a backgrounded player doesn't steal
+// keystrokes.
 const onKeyDown = (event: KeyboardEvent): void => {
     if (event.altKey || event.ctrlKey || event.metaKey) {
         return;
@@ -251,7 +218,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
         skip(jump);
         return;
     }
-    // 0–9 jump to that tenth of the file, the one shortcut that needs the duration to mean anything.
+    // Digit keys 0-9 jump to that tenth of the file's duration.
     if (/^[0-9]$/.test(key) && seekable.value) {
         event.preventDefault();
         seekTo((Number(key) / 10) * duration.value);
@@ -283,7 +250,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
         case `end`:
             seekTo(duration.value);
             break;
-        // Speed down / up through the same ladder the menu offers, so the two never disagree.
+        // Steps playback speed through the same SPEEDS ladder as the menu.
         case `,`:
         case `<`:
             setRate(SPEEDS[Math.max(SPEEDS.indexOf(rate.value) - 1, 0)] ?? rate.value);
@@ -298,7 +265,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
     event.preventDefault();
 };
 
-// ── idle fade, and the listeners that have to live on the document ───────────────────────────────────────
+// Idle fade and document-level listeners.
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 const wake = (): void => {
     idle.value = false;
@@ -308,8 +275,8 @@ const wake = (): void => {
     }, 2200);
 };
 
-// Fullscreen and PiP can be left by means this component never sees (Esc, the OS window's own close button),
-// so the flags follow the DOCUMENT rather than our own toggles.
+// Fullscreen and PiP can exit without this component's toggles (Esc, OS controls), so these flags track `document`
+// state.
 const syncFullscreen = (): void => {
     fullscreen.value = document.fullscreenElement !== null;
 };
@@ -327,8 +294,7 @@ onBeforeUnmount(() => {
     document.removeEventListener(`leavepictureinpicture`, syncPip, true);
 });
 
-// A new file in the same pane starts over: otherwise the next clip inherits the last one's position, its
-// error state, and its "this is audio" layout.
+// Resets all playback state when `src` changes, so a new file doesn't inherit the previous one's position or layout.
 watch(
     () => src,
     () => {
@@ -355,7 +321,7 @@ watch(
         @keydown="onKeyDown"
         @pointermove="wake"
     >
-        <!-- The decoder. Always a <video>: see the header, the layout, not the element, is what adapts. -->
+        <!-- Always a `<video>` element; layout adapts to it, not the reverse. -->
         <video
             ref="media"
             :src="src"
@@ -378,14 +344,14 @@ watch(
             @dblclick="toggleFullscreen"
         ></video>
 
-        <!-- No browser decodes this container (Matroska, AVI, WMV). The element said so; we hand over the bytes. -->
+        <!-- Unsupported containers (Matroska, AVI, WMV) fall back to a download link. -->
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">This format can't be played in the browser. Download it to open in a media player.</p>
             <Button severity="secondary" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> Download </Button>
         </div>
 
-        <!-- Audio: the file itself is the subject, so it gets the pane. -->
+        <!-- Audio files get a centered filename card instead of a picture. -->
         <div v-else-if="!hasVideo" class="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <div class="flex h-20 w-20 items-center justify-center rounded-2xl bg-overlay text-3xl text-subtle">
                 <Icon name="wave-pulse" />
@@ -393,12 +359,12 @@ watch(
             <p class="max-w-md truncate text-center text-sm text-content">{{ filename }}</p>
         </div>
 
-        <!-- Buffering, over the picture. Not shown for audio, where the transport already says it. -->
+        <!-- Buffering spinner; shown for video only, audio's transport already indicates it. -->
         <div v-if="waiting && hasVideo && !failed" class="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Icon name="spinner" class="text-3xl text-white/80" spin />
         </div>
 
-        <!-- Big play affordance on a stopped picture: the one control that should never need to be found. -->
+        <!-- Large play button shown over a stopped, non-buffering video frame. -->
         <button
             v-if="hasVideo && !playing && !waiting && !failed"
             type="button"
@@ -413,7 +379,7 @@ watch(
             </span>
         </button>
 
-        <!-- The transport. Overlaid on video (and faded while it plays untouched), a plain footer under audio. -->
+        <!-- Transport bar: overlaid and fading on video, a static footer under audio. -->
         <div
             v-if="!failed"
             class="transition-opacity duration-200"
@@ -428,8 +394,7 @@ watch(
                 controlsVisible ? `opacity-100` : `pointer-events-none opacity-0`,
             ]"
         >
-            <!-- Timeline. Buffered ranges under the fill, so "nothing is happening" and "it is still arriving"
-                 stop looking the same. -->
+            <!-- Buffered ranges render under the progress fill, distinguishing idle from still-loading. -->
             <div
                 ref="timeline"
                 class="group/bar relative -mx-1 cursor-pointer px-1 py-2"
@@ -463,7 +428,7 @@ watch(
                         :style="{ left: `${progress * 100}%` }"
                     ></div>
                 </div>
-                <!-- Time under the pointer, so a drag to a specific moment is aimed rather than guessed. -->
+                <!-- Shows the time under the pointer while hovering the timeline. -->
                 <div
                     v-if="hoverTime !== undefined && seekable"
                     class="pointer-events-none absolute bottom-6 -translate-x-1/2 rounded bg-card px-1.5 py-0.5 text-2xs tabular-nums text-content shadow"
@@ -490,7 +455,7 @@ watch(
                     <Icon name="forward" />
                 </button>
 
-                <!-- Volume: the slider widens on hover so the row stays compact until it is wanted. -->
+                <!-- Volume slider widens on hover; collapsed otherwise to save row space. -->
                 <div class="group/bar flex items-center">
                     <button type="button" class="media-btn" :aria-label="muted ? `Unmute` : `Mute`" v-tooltip.top="'Mute (M)'" @click="toggleMute">
                         <Icon :name="muted || volume === 0 ? `volume-off` : `volume-up`" />
@@ -513,7 +478,7 @@ watch(
 
                 <span class="flex-1"></span>
 
-                <!-- Speed reads as its own value, which no glyph does better than the number. -->
+                <!-- Shows the numeric playback speed rather than an icon. -->
                 <div class="relative">
                     <button
                         type="button"
@@ -580,8 +545,7 @@ watch(
 </template>
 
 <style scoped>
-/* One shape for every button in the transport: the row is a dozen of them, and spelling the classes out per
-   button is how they drift apart. Scoped, so it cannot leak into a host surface that reuses these names. */
+/* Shared shape for every transport button. Scoped to avoid colliding with class names on the host page. */
 .media-btn {
     display: inline-flex;
     height: 1.75rem;
@@ -598,8 +562,7 @@ watch(
 .media-btn:hover {
     background-color: color-mix(in srgb, currentColor 15%, transparent);
 }
-/* The volume slider, themed to match the timeline: a native range input looks like neither light nor dark
-   mode, and inherits none of the app's colours. */
+/* Themes the native range input to match the timeline and the app's color scheme. */
 .media-range {
     height: 0.25rem;
     cursor: pointer;

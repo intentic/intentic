@@ -35,9 +35,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
     },
     async func(this: CommandContext, flags: { artifact?: string; baseUrl?: string }) {
         const config = loadConfig();
-        // As the second half of the daemon's `apply && adopt` job, adopt appends its events (and terminal
-        // {kind:"exit",command:"adopt"}) to the same durable file apply wrote, the web's whole-job completion
-        // signal. The sink appends and never truncates, so apply's record is preserved.
+        // Second half of `apply && adopt`: appends to the same events file apply wrote (never truncates).
         const primary = createOutput(withRunLog(this.process.stdout, "adopt"), config.intenticOutput);
         const out =
             config.intenticEventsFile === ""
@@ -45,18 +43,17 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
                 : teeOutput(primary, createOutput(createEventsFileSink(config.intenticEventsFile, "adopt"), "ndjson"));
         const artifact = flags.artifact ?? ARTIFACT_PATH;
         const targetDir = dirname(artifact);
-        // The scaffold layout: the intent repo is a sibling of the desired-state repo (`init` makes both).
+        // Intent repo is a sibling of the desired-state repo; `init` creates both.
         const intentDir = join(dirname(targetDir), INTENT_DIR);
         loadEnvFile(targetDir);
         const graph = await readArtifact(artifact);
-        // Services-only (and github/gitlab-backed) intents provision no Forgejo control plane, nothing to adopt.
+        // Services-only (and github/gitlab-backed) intents provision no Forgejo control plane: nothing to adopt.
         if (!Object.values(graph.resources).some((node) => node.type === "forgejo")) {
             out.text("no forgejo in the artifact (no control plane): nothing to adopt");
             out.result({ repos: [], reason: "no control plane" });
             return;
         }
-        // Forgejo is what hosts the repos; its node carries the public domain + admin identity we push with,
-        // and the CP host's SSH block the default transport forwards through.
+        // Forgejo hosts the repos: its node carries the public domain, admin identity, and the CP host's SSH block.
         const { domain, user, adminPasswordRef: ref, ssh } = forgejoIdentity(graph);
         const generatedValues = await readGeneratedSecrets(targetDir);
         const secretValue = (source: string, key: string): string | undefined => (source === "generated" ? generatedValues[key] : process.env[key]);
@@ -65,9 +62,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             throw new Error(`forgejo admin password (${ref.source} secret ${ref.key}) is not available`);
         }
 
-        // Resolve the graph's secret values (env from the loaded process.env, generated from .secrets.json).
-        // These move into Forgejo Actions secrets so the pipelines authenticate without the files (which never
-        // leave the operator's machine).
+        // Secret values from env or generated secrets, pushed to Forgejo Actions so pipelines don't need the files.
         const desiredStateSecrets = collectSecretValues(graph, process.env, generatedValues);
 
         const inputs: PipelineInputs = {
@@ -81,11 +76,10 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             applySecretKeys: Object.keys(desiredStateSecrets).toSorted(),
             forgejoPasswordKey: ref.key,
         };
-        // Seed the pipelines into the repo dirs BEFORE the push, so adopt's normal commit/push carries them.
+        // Seeds the pipelines into the repo dirs before the push, so the push carries them.
         await writeControlPlaneWorkflows(intentDir, targetDir, inputs);
 
-        // The apply pipeline needs every secret; the resolve pipeline needs the Cloudflare token (for zone
-        // discovery) plus the git-push credential it pushes the artifact to the desired-state repo with.
+        // Apply needs every secret; resolve needs only the Cloudflare token and the git-push credential.
         const intentSecrets: Record<string, string> = { [GIT_USER_SECRET]: user, [GIT_TOKEN_SECRET]: password };
         if (desiredStateSecrets["CLOUDFLARE_API_TOKEN"] !== undefined) {
             intentSecrets["CLOUDFLARE_API_TOKEN"] = desiredStateSecrets["CLOUDFLARE_API_TOKEN"];
@@ -108,8 +102,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             return repos;
         };
 
-        // Default transport: an SSH port-forward to Forgejo on the host, adopt works with the tunnel down
-        // or before public DNS exists at all, and never depends on the route apply may be reconciling.
+        // Default transport: an SSH port-forward to Forgejo on the host, usable before public DNS exists or apply runs.
         let repos: { readonly name: string; readonly cloneUrl: string }[];
         if (flags.baseUrl !== undefined) {
             repos = await run(flags.baseUrl);
@@ -125,8 +118,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
                 run,
             );
         }
-        // Record what was pushed so `secrets list` can report CI staleness and `secrets push` only re-pushes
-        // values that actually changed.
+        // Records what was pushed so `secrets list`/`secrets push` can detect staleness and skip unchanged values.
         const pushedAt = new Date().toISOString();
         await writeSyncState(
             targetDir,

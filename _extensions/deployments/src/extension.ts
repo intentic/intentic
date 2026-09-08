@@ -2,15 +2,9 @@ import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host";
 import { deployBadge, startDeployAttention, watchConnections } from "./attention";
 
-/* ext-deployments activation: bind the host handle, start the badge's background poll, then register the
- * "Deployments" rail view.
- *
- * Capability-driven, not repo-driven, the ext-pipelines shape, and for the same reason. The two existing
- * infra surfaces (Infrastructure, Live status) are gated on the intent and desired-state repos, so someone who
- * simply connects a Komodo they already run gets nothing in the rail. Gating on the connection fixes that, and
- * ONE TILE PER CONNECTION is right rather than one for the extension: two Komodos are two production estates,
- * and looking at staging must not silence the other.
- */
+// Binds the host, starts the badge poll, then registers the Deployments rail view. Capability-driven, not repo-driven
+// (mirrors ext-pipelines): an owner who only connects Komodo, with no intent or desired-state repo, still gets a tile.
+// One tile per connection, since two Komodos are two production estates and must not share a badge.
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
     // Before the registration, so a tile can badge on its first render rather than a minute later.
@@ -24,21 +18,17 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                 const connections = capabilities
                     .filter((capability) => capability.kind === `cli` && capability.config[`provider`] === `komodo`)
                     .map((capability) => capability.id);
-                // detect() runs on every facts poll, which makes it the one place that knows which Komodos are
-                // connected right now, so it is also what tells the badge poller what to watch.
+                // detect() runs every facts poll, the only place that knows which Komodos are connected right now.
                 watchConnections(connections);
                 return connections.map((capability) => ({
                     key: capability,
-                    // The capability id names the instance the owner chose ("production", "staging"). With a
-                    // single default-named connection that reads as plain "Deployments", which is what one
-                    // Komodo should look like.
+                    // Capability id is the owner's instance name; a single default connection just reads "Deployments".
                     title: connections.length === 1 ? `Deployments` : `Deployments · ${capability}`,
                     icon: `box`,
                     props: { capability },
                 }));
             },
-            // Unacknowledged incidents only, see incidents.ts for why this reads Komodo's alert log rather
-            // than counting what is currently down.
+            // Unacknowledged incidents only: reads Komodo's alert log rather than counting what's currently down.
             badge: (activation) => deployBadge(activation.key),
             view: async () => (await import(`./DeploymentsView.vue`)).default,
         }),

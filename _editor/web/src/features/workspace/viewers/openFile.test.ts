@@ -4,10 +4,8 @@ import { registerViewer } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
 import { resolveOpenFile } from "./openFile";
 
-/* The order between the core's text resolver and the extensions' viewer registry: the whole reason FileViewer
- * has no per-format branches. Registrations are made and disposed per test against the real registry (a
- * module-level singleton, the app's no-Pinia convention): the disposal path is half of what is under test,
- * since it is what "switch the extension off" runs. */
+// Order between the core's text resolver and the extensions' viewer registry: FileViewer itself has no per-format
+// branches. Registrations are made/disposed per test against the real registry, a module-level singleton (no-Pinia).
 
 const component = async (): Promise<never> => {
     throw new Error(`never rendered in these tests`);
@@ -27,8 +25,6 @@ describe(`resolveOpenFile without any viewer extension`, () => {
     it(`opens text as the editor and everything else as bytes`, () => {
         expect(resolveOpenFile(`src/app.ts`, 1000)).toEqual({ kind: `code`, lang: `typescript` });
         expect(resolveOpenFile(`README.md`, 1000)).toEqual({ kind: `markdown`, lang: `markdown` });
-        // The behaviour this whole split is built to guarantee: no viewers extension ⇒ a download, not a crash
-        // and not mojibake.
         expect(resolveOpenFile(`clip.mp4`, 1000)).toEqual({ kind: `binary` });
         expect(resolveOpenFile(`logo.png`, 1000)).toEqual({ kind: `binary` });
     });
@@ -36,14 +32,12 @@ describe(`resolveOpenFile without any viewer extension`, () => {
 
 describe(`resolveOpenFile over the daemon's control plane`, () => {
     it(`refuses the entries the file API refuses, from the path alone`, () => {
-        // Answered before anything is fetched, so a locked row never opens a tab and closes it again.
         expect(resolveOpenFile(`${STATE_DIR}/records/sessions/claude/projects/x.jsonl`, 1000)).toEqual({ kind: `locked` });
         expect(resolveOpenFile(`${STATE_DIR}/config/capabilities.json`, 1000)).toEqual({ kind: `locked` });
     });
 
     it(`opens a plan document as the document it is`, () => {
-        // The card that asks the reader to approve a plan links to its file, and that link used to land on the
-        // padlock: the plans directory sits inside the locked session store and is not itself locked.
+        // Plan documents live inside the locked session store but are not themselves locked.
         expect(resolveOpenFile(`${PLAN_DOCUMENTS_DIR}/twinkly-soaring-floyd.md`, 1000)).toEqual({ kind: `markdown`, lang: `markdown` });
     });
 });
@@ -52,9 +46,7 @@ describe(`resolveOpenFile with viewers registered`, () => {
     it(`lets a viewer claim an extension the core called binary`, () => {
         register(`image`, [`png`, `jpg`], `blob`);
         expect(resolveOpenFile(`logo.png`, 1000)).toMatchObject({ kind: `viewer`, viewer: { id: `image`, fetch: `blob` } });
-        // Case-insensitively: a screenshot off a phone is as likely to be .PNG.
         expect(resolveOpenFile(`shots/Logo.PNG`, 1000)).toMatchObject({ kind: `viewer` });
-        // An extension nobody claimed is untouched.
         expect(resolveOpenFile(`bundle.zip`, 1000)).toEqual({ kind: `binary` });
     });
 
@@ -79,9 +71,8 @@ describe(`resolveOpenFile with viewers registered`, () => {
     });
 });
 
-/* Only a `blob` viewer can be beaten by size, and that is the point of the fetch kinds: it is served by
- * /workspace/raw, which holds the whole answer in memory and 413s past the cap. A `url` viewer range-reads
- * /workspace/media, which is exactly why video was unopenable before it existed. */
+// A `blob` viewer is refused past the size cap since /workspace/raw holds the whole answer in memory; a `url` viewer
+// range-reads /workspace/media and isn't size-gated.
 describe(`resolveOpenFile size gates follow the fetch kind`, () => {
     it(`refuses an oversize blob and streams an oversize url`, () => {
         register(`docx`, [`docx`], `blob`);
@@ -96,7 +87,7 @@ describe(`resolveOpenFile size gates follow the fetch kind`, () => {
     });
 });
 
-// Last registration wins, so a later-loaded extension can override a builtin viewer for the same type.
+// Last registration wins: a later-loaded extension can override a builtin viewer for the same type.
 describe(`resolveOpenFile viewer precedence`, () => {
     it(`gives the file to the most recently registered claimant`, () => {
         register(`image`, [`png`], `blob`);

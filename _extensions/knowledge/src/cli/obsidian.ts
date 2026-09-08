@@ -20,21 +20,9 @@ import {
 import { type Args, flag, flagAll, has, number, parseArgs } from "./args.js";
 import { linkFields, slugify } from "./note-shape.js";
 
-/* `obsidian`, the owner's own Obsidian vault, live, on the AGENT's path (contributes.bin, beside `kb`).
- *
- * TWO KNOWLEDGE BASES, ONE FORMAT. `kb` reads the folder of notes in this workspace; this reads the vault in
- * the Obsidian window on the owner's machine, over the Local REST API plugin. They are different places and
- * stay different places, but a note is the same object in both, so this command parses vault notes with the
- * knowledge base's own parser, writes them with its own writer, and carries them between the two with `pull`
- * and `push`. The agent therefore never has to learn a second idea of what a note is, and a note that crosses
- * does not stop being a typed node with relationships when it lands.
- *
- * WRITING IS OFF UNTIL THE OWNER TURNS IT ON. The card carries the switch; every verb that changes the vault
- * checks it here. Reaching somebody's vault and being allowed to edit it are separate permissions, and the
- * default for the second one is no, these are notes a person keeps, not a scratch directory.
- *
- * Exit codes as `kb` uses them, because the agent already reasons in them: 0 found something, 1 found nothing,
- * 2 could not run. */
+// The `obsidian` CLI, live access to the owner's Obsidian vault over its Local REST API, beside `kb` on the agent's
+// PATH. It parses and writes vault notes with the knowledge base's own parser, so `pull`/`push` keep a note the same
+// typed object. Writing needs the owner's write switch on; exit codes match `kb`'s.
 
 const USAGE = `obsidian: your Obsidian vault, live, through its Local REST API.
 
@@ -58,7 +46,7 @@ does, since it only writes here.
 
 Add --json to any of these. --vault <name> picks one when more than one is connected.`;
 
-// ---- shaping an answer -------------------------------------------------------------------------------------
+// Shaping an answer.
 
 const out = (value: string): void => {
     process.stdout.write(`${value}\n`);
@@ -77,8 +65,7 @@ const fail = (run: Run, message: string, code = 2): number => {
     return code;
 };
 
-// A vault path as a note the knowledge parser can read. Every field of NoteFile except the text is bookkeeping
-// the vault does not send, and nothing downstream of a single-note read uses it.
+// A vault path read as a note the knowledge parser understands; only the text matters here.
 const asNote = (path: string, content: string): ParsedNote => parseNote({ path, content, modifiedAt: 0, sizeBytes: content.length });
 
 const chips = (note: ParsedNote): string =>
@@ -104,9 +91,8 @@ const noteJson = (note: ParsedNote): unknown => ({
     body: note.body,
 });
 
-// A path the vault will accept for a note the caller named loosely: "Ada" becomes "<card folder>/Ada.md", and
-// anything that already looks like a path is left exactly as typed. Guessing less than this would make every
-// write a two-step ceremony; guessing more would move somebody's notes around behind their back.
+// A path the vault accepts from a loosely named note: "Ada" becomes "<card folder>/Ada.md"; anything already
+// path-shaped is left as typed.
 const vaultPath = (run: Run, name: string): string => {
     const into = flag(run.args, "into") ?? run.vault.folder;
     const withExtension = name.toLowerCase().endsWith(".md") ? name : `${name}.md`;
@@ -116,7 +102,7 @@ const vaultPath = (run: Run, name: string): string => {
     return `${into}/${withExtension}`;
 };
 
-// ---- the verbs that read -------------------------------------------------------------------------------------
+// The verbs that read.
 
 const statusVerb = async (run: Run): Promise<number> => {
     const info = await vaultInfo(run.vault);
@@ -210,10 +196,9 @@ const openVerb = async (run: Run): Promise<number> => {
     return 0;
 };
 
-// ---- the verbs that write to the vault ------------------------------------------------------------------------
+// The verbs that write to the vault.
 
-// The one gate that matters here. Stated as the switch the owner actually sees, so the agent relays something
-// the person can act on rather than "permission denied".
+// The one gate that matters: named after the switch the owner actually sees, not "permission denied".
 const refuseReadOnly = (run: Run, verb: string): number =>
     fail(run, `this vault is connected read-only: turn on "Let the agent write notes" in the Obsidian card to ${verb}.`);
 
@@ -229,8 +214,7 @@ const writeVerb = async (run: Run): Promise<number> => {
     const path = vaultPath(run, name.includes("/") || name.toLowerCase().endsWith(".md") ? name : slugify(name));
     const type = flag(run.args, "type");
     const tags = flagAll(run.args, "tag");
-    // The same header shape `kb new` writes, so a note this agent puts in somebody's vault is a note the
-    // knowledge base can read back later without a translation step.
+    // Same header shape `kb new` writes, so the knowledge base can read this note back without translation.
     const fields = new Map<string, string[]>([
         ...(type === undefined ? [] : ([["type", [type]]] as [string, string[]][])),
         ["title", [title]],
@@ -281,15 +265,10 @@ const removeVerb = async (run: Run): Promise<number> => {
     return 0;
 };
 
-// ---- the bridge to the knowledge folder -----------------------------------------------------------------------
+// The bridge to the knowledge folder.
 
-/* WHY THESE TWO VERBS EXIST. The Knowledge section of this sandbox reads a folder in the workspace; the vault
- * is on somebody's laptop and is only readable while Obsidian is open. Neither is going to become the other,
- * so the honest thing is a copy, in either direction, that keeps the note intact.
- *
- * The vault-relative path is kept as the workspace-relative path (and the other way round), so a `[[link]]`
- * between two notes that both crossed still resolves: the knowledge base resolves links by title, alias,
- * filename or path, and all four survive a copy that does not rename anything. */
+// A copy in either direction: the workspace folder and the vault can't become each other (the vault only exists while
+// Obsidian is open). Paths are kept as-is, so a `[[link]]` between two crossed notes still resolves.
 
 const pullVerb = async (run: Run, root: string): Promise<number> => {
     const explicit = run.args.positionals.filter((positional) => positional !== "");
@@ -343,15 +322,13 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     for (const name of names) {
         const note = index.resolve(name) ?? index.byPath.get(name);
         if (note === undefined) {
-            // Never a silent miss: what was asked for comes back with the closest names the knowledge folder
-            // does hold, which is the difference between a retry and a guess.
+            // Never a silent miss: the closest names found come back too, so a retry beats a guess.
             const near = search(index, { query: name, limit: 3 }).map((hit) => hit.path);
             failed.push({ name, error: `no note by that name${near.length === 0 ? "" : `, closest: ${near.join(", ")}`}` });
             continue;
         }
         const target = into === "" ? note.path : `${into.replace(/^\/+|\/+$/g, "")}/${note.path}`;
-        // The bytes the index was built from, not a re-serialisation: a round trip through the writer would
-        // reorder somebody's header and reflow their prose for no reason anyone asked for.
+        // The bytes the index was built from, not a re-serialisation, so nothing reorders or reflows on its own.
         const result = await vaultWrite(run.vault, target, note.content);
         if (isVaultError(result)) {
             failed.push({ name, error: result.error });
@@ -371,13 +348,11 @@ const pushVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     return written.length === 0 ? 1 : 0;
 };
 
-// ---- wiring ------------------------------------------------------------------------------------------------
+// Wiring.
 
 const workspaceRoot = (): string => process.env["WORKSPACE_ROOT"] ?? "/work";
 
-// Verbs that only touch the vault never read the workspace, and verbs that only touch the workspace never dial
-// Obsidian, so a closed Obsidian does not stop `obsidian vaults`, and an empty knowledge folder does not stop
-// a read of somebody's vault.
+// Verbs needing the workspace index; others skip it, so neither side blocks the other.
 const NEEDS_KNOWLEDGE = new Set(["push"]);
 
 const main = async (): Promise<number> => {
@@ -412,7 +387,7 @@ const main = async (): Promise<number> => {
         out(json ? JSON.stringify(selected, undefined, 2) : `obsidian: ${selected.error}`);
         return 2;
     }
-    // Before the first request and only for https: see rest.ts for why this is a process-level switch.
+    // Before the first request, https only; see rest.ts for why this is process-level.
     relaxTlsFor(selected.vault.url, process.env);
     const run: Run = { args, vault: selected.vault, json };
     const workspace = workspaceRoot();
@@ -465,8 +440,7 @@ const main = async (): Promise<number> => {
     }
 };
 
-// A crash must still name the vault and the verb, and must not look like "found nothing" (exit 1), an agent
-// acts very differently on those two. `kb`'s ending, for the same reason.
+// A crash still names the vault and verb, and exits 2, distinct from 1 (found nothing), like `kb`.
 main().then(
     (code) => {
         process.exitCode = code;

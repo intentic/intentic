@@ -1,16 +1,9 @@
 import type { WebExtGrant } from "@intentic/sandbox-contract";
 import type { PopupCommand, PopupState } from "../background/messages.js";
 
-/* THE 340 PIXELS THAT MAKE THIS INSTALLABLE.
- *
- * A person opens this to answer one of three questions, and it is laid out in that order: is it connected,
- * what can it touch, and how do I stop it. Everything else — the activity list, the pairing box — sits below.
- *
- * THE POPUP IS ALSO WHERE PERMISSION ACTUALLY HAPPENS. `chrome.permissions.request` resolves true only when a
- * user gesture is on the stack, and a service worker has no gestures, so every widening of what this extension
- * may reach is a click in HERE: allowing a site the agent asked for, and allowing the sandbox's own origin
- * while pairing. The worker is told afterwards. That is not a workaround — it is the property that makes the
- * grant list trustworthy, since nothing the sandbox says can add to it. */
+// Answers three questions in order: is it connected, what can it touch, how to stop it. Every permission widening
+// happens here, not in the worker: chrome.permissions.request needs a user gesture, which only the popup has, so
+// nothing the sandbox says can add to the grant list on its own.
 
 const send = async <T>(command: PopupCommand): Promise<T> => (await chrome.runtime.sendMessage(command)) as T;
 
@@ -53,8 +46,8 @@ const ago = (at: number): string => {
     return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds / 3600)}h`;
 };
 
-/* Ask the browser for a site, then tell the worker which mode the person picked. The order matters: Chrome's
- * dialog is the decision, and the mode is only recorded once it said yes. */
+// Requests the site from Chrome first, then records the mode; the mode is only saved once Chrome's own dialog says
+// yes.
 const allow = async (origin: string, mode: WebExtGrant["mode"]): Promise<void> => {
     const granted = await chrome.permissions.request({ origins: [origin] });
     if (granted) {
@@ -64,8 +57,7 @@ const allow = async (origin: string, mode: WebExtGrant["mode"]): Promise<void> =
 };
 
 const pair = async (code: string, url: string): Promise<HTMLElement | undefined> => {
-    // The sandbox's own origin, so this extension may `fetch` it at all. Asked here, with the click that got
-    // us here still on the stack.
+    // Requests the sandbox's own origin while the triggering click is still on the stack.
     const origin = `${new URL(url).origin}/*`;
     if (!(await chrome.permissions.request({ origins: [origin] }))) {
         return el("div", { className: "muted", text: `Without access to ${site(origin)} this extension cannot reach that sandbox.` });
@@ -82,7 +74,7 @@ const renderStatus = (state: PopupState): void => {
     const node = section("status");
     const brand = el("div", { className: "brand" });
     const mark = document.createElement("img");
-    // The icon the extension already installs with (static/icons), not a second copy of the logo.
+    // Reuses the extension's own installed icon, not a separate copy of the logo.
     mark.src = "icons/icon-32.png";
     mark.alt = "";
     mark.width = 18;
@@ -132,7 +124,7 @@ const renderStatus = (state: PopupState): void => {
 
 const renderPending = (state: PopupState): void => {
     const node = section("pending");
-    // A pairing a sandbox page offered. One click finishes it, which is the whole point of the handoff.
+    // A pairing offered by a sandbox page; one click finishes it.
     if (state.offered !== undefined && state.sandbox === undefined) {
         node.append(el("h1", { text: "A sandbox wants to connect" }));
         node.append(el("div", { className: "site", text: site(state.offered.url) }));
@@ -142,8 +134,7 @@ const renderPending = (state: PopupState): void => {
                 el("span", { className: "muted", text: "It will be able to work on the sites you allow below." }),
                 button("Connect", true, () => {
                     void pair(
-                        // Re-encoded rather than stored raw: the worker parked the two fields, and this is the
-                        // one place that turns them back into what `pair` takes.
+                        // Re-encodes the two parked fields into the format `pair` expects.
                         btoa(JSON.stringify({ url: offered.url, token: offered.token }))
                             .replaceAll("+", "-")
                             .replaceAll("/", "_")
@@ -162,8 +153,7 @@ const renderPending = (state: PopupState): void => {
     if (state.pending === undefined) {
         return;
     }
-    // A site the agent asked for. The reason it gave is shown verbatim, because that is what the person is
-    // deciding about — and because an agent that has to justify itself in one sentence asks for less.
+    // Shows the agent's reason verbatim; that's what the person is deciding about.
     node.append(el("h1", { text: "Your agent is asking" }));
     node.append(el("div", { className: "site", text: site(state.pending.origin) }));
     node.append(el("div", { className: "muted", text: state.pending.reason }));
@@ -197,7 +187,7 @@ const renderSites = (state: PopupState): void => {
         controls.append(toggle, drop);
         node.append(row(el("span", { className: "site", text: site(grant.origin) }), controls));
     }
-    // Adding the tab you are on: the other half of `ask_access`, for when the person gets there first.
+    // Lets the person add the current tab directly, without the agent calling ask_access first.
     void chrome.tabs.query({ active: true, currentWindow: true }).then(async (tabs) => {
         const url = tabs[0]?.url;
         if (url === undefined || !/^https?:/.test(url)) {

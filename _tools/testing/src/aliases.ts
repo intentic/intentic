@@ -1,23 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/* A WORKSPACE PACKAGE'S SOURCE, THE WAY ITS OWN EXPORTS MAP SAYS IT, for the vitest configs that must read a
- * sibling's source rather than whatever its `dist` happens to hold.
- *
- * WHY THIS EXISTS RATHER THAN ONE ALIAS PER CONFIG. Aliasing the package DIRECTORY —
- * `"@intentic/sandbox-contract": "…/src"` — works only while every subpath export is a file at the top of
- * `src/`: `@intentic/sandbox-contract/session-names` lands on `src/session-names.ts` by coincidence of layout,
- * not by the manifest. The day that file moves into `src/ids/`, the alias resolves to nothing and every suite
- * in the package fails to LOAD, pointing at the importer rather than at the alias. That is exactly what
- * happened when the contract's 96 loose modules were grouped, and it is silent under a typecheck, because
- * tsc reads the exports map that vitest was told to bypass.
- *
- * So the map comes from the manifest: every subpath the package publishes, aimed at the `@intentic/src`
- * condition every workspace package declares. Move a file inside the package, repoint its export, and the
- * suites follow with no config edit at all.
- *
- * ORDER MATTERS. A string alias also matches `<key>/…`, so the barrel has to come LAST or it swallows every
- * subpath and resolves `…/session-names` to `src/index.ts/session-names`, a path that cannot exist. */
+// Aliases each of a package's subpath exports to its source, from the manifest's `@intentic/src` condition, not the
+// whole package directory, since a directory alias breaks silently once a file moves out of `src`'s top level. The `.`
+// (barrel) alias must sort last: a string alias also matches `<key>/…` and would swallow every subpath into it.
 type ExportEntry = string | { readonly [condition: string]: ExportEntry | undefined };
 
 const SOURCE_CONDITION = "@intentic/src";

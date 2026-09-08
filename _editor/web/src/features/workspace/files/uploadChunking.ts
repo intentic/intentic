@@ -1,16 +1,13 @@
-// Split a drop into bounded upload chunks, pure and framework-free (unit-checkable, see
-// scripts/uploadChunking.check.mjs). Each chunk becomes its own request in useUploadQueue, so a stall or reset
-// costs one chunk (retried), not the whole tree, and every request stays short enough to dodge intermediary
-// timeouts (e.g. Cloudflare's ~100s origin cap).
+// Splits a drop into bounded upload chunks, pure and framework-free (see scripts/uploadChunking.check.mjs).
+// Each chunk is its own request, so a stall costs one chunk, not the whole tree, and stays short enough to
+// avoid intermediary timeouts.
 
-// ponytail: 200 files / 32 MB per chunk keeps a request a few seconds even on a slow uplink, well under
-// Cloudflare's ~100s origin timeout, so a chunk never sits long enough to be reset. Tune if resets persist.
+// 200 files / 32 MB per chunk keeps a request within Cloudflare's ~100s origin timeout even on a slow uplink.
 const CHUNK_FILES = 200;
 export const CHUNK_BYTES = 32 * 1024 * 1024;
 
-// One drop can yield two entries destined for the SAME path (same-named files dragged from different folders).
-// Uploading both through the parallel pool would interleave their offset writes into one destination file, so
-// only the LAST occurrence survives (later write wins, matching overwrite intent); survivor order is preserved.
+// When two entries target the same path (dragged from different folders), only the last occurrence survives;
+// survivor order is preserved.
 export const dedupeByPath = <T>(items: readonly T[], pathOf: (item: T) => string): T[] => {
     const seen = new Set<string>();
     const kept: T[] = [];
@@ -26,8 +23,8 @@ export const dedupeByPath = <T>(items: readonly T[], pathOf: (item: T) => string
     return kept.toReversed();
 };
 
-// Greedily fill chunks up to BOTH caps. A single item larger than the byte cap forms its own chunk (it can't fit
-// anywhere smaller, and it still streams, never buffered), so one big binary never blocks the rest of the drop.
+// Greedily fills chunks up to both the file-count and byte caps. An item larger than the byte cap gets its own
+// chunk, since it can't fit anywhere smaller and streams rather than buffers.
 export const chunkItems = <T extends { readonly size: number }>(items: readonly T[]): T[][] => {
     const chunks: T[][] = [];
     let current: T[] = [];

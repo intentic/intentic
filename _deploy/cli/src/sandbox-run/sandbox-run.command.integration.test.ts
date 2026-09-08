@@ -5,24 +5,18 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { expect, test } from "vitest";
 
-/* The verb is a thin shell over @intentic/sandbox-run (where the shape itself is unit-tested); what needs
- * proving here is the PROTOCOL a calling script actually experiences: NUL-framed env on stdin surviving a
- * multi-line key, the allowlist applied on this side of the pipe, and a bad directive failing the process
- * rather than printing a command minus a privilege. Driven through the real bin, argv to stdout, like the
- * scripts drive it. */
+// Proves the protocol a caller sees: NUL-framed env, allowlist here, a directive failure killing the process.
 
 const exec = promisify(execFile);
 const packageRoot = join(import.meta.dirname, "..", "..");
 const TSX = join(packageRoot, "node_modules", ".bin", "tsx");
 const CLI = join(packageRoot, "src", "cli.ts");
 
-/* A failed spawn must never look like a verb that legitimately refused: `code` distinguishes the two and
- * `stderr` carries the reason, so an ENOENT or an unbuilt dependency reads as itself instead of as an empty
- * stdout the assertions then misattribute. */
+// A failed spawn must never look like a legitimate refusal: `code` distinguishes the two, `stderr` carries the reason.
 const runProbes = async (args: string[]): Promise<{ stdout: string }> => exec(TSX, [CLI, "sandbox", "host-probes", ...args]);
 
-/* `env` is the probe's OWN environment, which is how a runner seeds a standing ask (see `seeded` in the verb):
- * merged over the test runner's so tsx still finds node, and never read by anything but the seed names. */
+// `env` is the probe's own environment (how a runner seeds a standing ask), merged over the test runner's so tsx still
+// finds node.
 const runVerb = async (args: string[], stdin: string, env: Record<string, string> = {}): Promise<{ stdout: string; stderr: string; code: number }> => {
     const child = exec(TSX, [CLI, "sandbox", "run-command", ...args], { env: { ...process.env, ...env } });
     child.child.stdin?.end(stdin);
@@ -47,23 +41,21 @@ test("prints the canonical run command: replayed env filtered here, multi-line k
     expect(stdout).toContain("--cap-add=SYS_ADMIN");
     expect(stdout).toContain("-v shared:/agent-auth");
     expect(stdout).toContain("-e OWNER_EMAIL=a@b.c");
-    // The multi-line key rides as ONE quoted word: the whole reason the env channel is NUL-framed.
+    // Multi-line key rides as one quoted word: the reason the env channel is NUL-framed.
     expect(stdout).toContain("'HOST_SSH_KEY=l1\nl2'");
-    // Image identity is never replayed from the container being replaced, and empty vars are dropped.
+    // Image identity is never replayed from the replaced container; empty vars are dropped.
     expect(stdout).not.toContain("old:tag");
     expect(stdout).not.toContain("CONNECT_TOKEN");
 });
 
-/* The seed's round trip through the verb: base64 in on the argv (how `ic runner up` carries a definition
- * file's content), base64 out on the emitted container env — with a decode/encode in between, so the
- * contract's `definition` field stays the TOML text every OTHER caller hands it. A corrupted trip here is a
- * runner that boots, serves, and silently opens as a bare workspace. */
+// base64 round-trips through the verb (argv in, container env out) via a decode/encode step, so `definition` stays the
+// same TOML text every other caller hands it. A corrupted trip would boot a silently-bare workspace.
 test("--definition-b64 rides through to SANDBOX_DEFINITION_SEED on the emitted command", async () => {
     const toml = "schemaVersion = 1\n\n[settings]\nautoLand = false\n";
     const b64 = Buffer.from(toml, "utf8").toString("base64");
     const { stdout } = await runVerb(["--slug", "s9", "--image", "i", "--base-image", "i", "--definition-b64", b64], "");
     expect(stdout).toContain(`-e SANDBOX_DEFINITION_SEED=${b64}`);
-    // Absent means absent: a sandbox with no seed must not carry an empty one for the daemon to trip on.
+    // Absent means absent: no seed must not carry an empty one for the daemon to trip on.
     const bare = await runVerb(["--slug", "s9", "--image", "i", "--base-image", "i"], "");
     expect(bare.stdout).not.toContain("SANDBOX_DEFINITION_SEED");
 });
@@ -76,42 +68,32 @@ test("--format json prints the argv for PowerShell to splat", async () => {
     expect(argv.at(-1)).toBe("i");
 });
 
-/* The loopback shortcut is derived, never passed: the verb already receives CONNECT_TOKEN on the env channel,
- * so the port a browser will probe falls out of the same digest that names the tunnel. Proving it end-to-end
- * here (rather than only in the shape unit test) is what stops a flow from having to compute an address. */
+// The loopback port is derived from CONNECT_TOKEN already on the env channel (same digest that names the tunnel), so no
+// flow has to compute an address itself.
 test("the loopback publish is derived from the connect token the env channel already carries", async () => {
     const port = localDaemonPort(sandboxIdFromToken("s3cret")!);
     const { stdout } = await runVerb(["--slug", "s4", "--image", "i", "--base-image", "i"], "CONNECT_TOKEN=s3cret\0");
-    // The loopback listener (8788), never the tunnel origin (8787): that one must stay plain HTTP for the
-    // connector, while this one carries the TLS the browser needs.
+    // Loopback listener (8788), not the tunnel origin (8787), which must stay plain HTTP for the connector.
     expect(stdout).toContain(`-p 127.0.0.1:${port}:8788`);
-    // Bound to the id, not the slug: two sandboxes sharing a slug shape still get their own port.
+    // Bound to the id, not the slug: two sandboxes sharing a slug shape still get distinct ports.
     expect(port).not.toBe(localDaemonPort(sandboxIdFromToken("other")!));
 });
 
 test("--no-local-publish drops only the shortcut, so a port docker refused can't fail the launch twice", async () => {
     const { stdout } = await runVerb(["--slug", "s5", "--image", "i", "--base-image", "i", "--no-local-publish"], "CONNECT_TOKEN=s3cret\0");
     expect(stdout).not.toContain("-p ");
-    // Everything else about the run is untouched: the retry is the same sandbox, minus one optimization.
+    // Rest of the run is untouched: same sandbox, minus one optimization.
     expect(stdout).toContain("--cap-add=SYS_ADMIN");
     expect(stdout).toContain("-v intentic-workspace-s5:/work");
 });
 
-/* The two halves of the preflight protocol, end to end through the real bin: this is how a creation flow
- * negotiates an optional directive without knowing any token's name:
- *   1. `host-probes` says WHAT to ask this host (the table, shipped as data).
- *   2. `run-command --unsupported` takes the answer and emits a run without the flag but WITH the reason.
- * Anything less and the daemon inside would have to guess whether missing hardware means "not rebuilt yet" or
- * "this machine cannot", which are opposite instructions to give a person. */
+// Two halves of the preflight protocol: `host-probes` says what to ask the host; `run-command --unsupported` emits the
+// run without the flag but with the reason, so the daemon never has to guess why.
 test("host-probes names what to ask the host, and only for what the overlay asked", async () => {
-    // Two independent invocations, so they go out together: the same reason the test below takes its three that
-    // way. A tsx start is the only real cost this file has, and on a loaded runner one has been measured at 20s
-    // against a local 0.4s; a test that spends two in sequence pays that twice for nothing, because neither call
-    // reads what the other returned.
+    // Independent invocations run concurrently: tsx startup is this file's cost, neither reads the other's result.
     const [asked, allOrNothing] = await Promise.all([
         runProbes(["--runtime", "# intentic:runtime --privileged --gpus=all"]),
-        // --privileged is all-or-nothing: there is nothing to ask, because a host that refuses it has broken the
-        // capability and the launch should fail rather than limp.
+        // --privileged is all-or-nothing: a host that refuses it must fail the launch outright, not limp.
         runProbes(["--runtime", "# intentic:runtime --privileged"]),
     ]);
 
@@ -121,28 +103,22 @@ test("host-probes names what to ask the host, and only for what the overlay aske
 
 test("--unsupported drops those directives and records why, leaving the rest of the run intact", async () => {
     const args = ["--slug", "s6", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --privileged --gpus=all"];
-    // Three independent invocations, so they go out together. Nothing here depends on the one before it, and a
-    // tsx start is the only real cost this file has: taken in sequence this test pays it three times over, which
-    // is how it used to exhaust a budget its one-spawn siblings passed inside. Every multi-spawn test here goes
-    // out this way.
+    // Independent invocations run concurrently (nothing depends on the others); every multi-spawn test follows this.
     const [honoured, unsupported, detached] = await Promise.all([
         runVerb(args, ""),
-        // ATTACHED, and this test is the reason the flows write it that way: the values are themselves docker
-        // flags, so the detached spelling makes the parser read `--gpus=all` as a flag of ours that doesn't exist.
+        // Attached: the value is a docker flag itself; a detached spelling would misparse it as one of ours.
         runVerb([...args, "--unsupported=--gpus=all"], ""),
-        // Detached, it is refused outright rather than silently ignored: a flow that regresses to it prints
-        // nothing, and every caller here treats an empty run command as a hard failure.
+        // Detached is refused outright, not silently ignored: an empty run command is a hard failure.
         runVerb([...args, "--unsupported", "--gpus=all"], ""),
     ]);
 
-    // The FLAG, space-delimited on the command line: the same token also appears inside the overlay's
-    // provenance stamp (SANDBOX_OVERLAY_RUNTIME), which records what was ASKED whatever became of it.
+    // Same token appears in the overlay's provenance stamp (SANDBOX_OVERLAY_RUNTIME), recording what was asked.
     expect(honoured.stdout).toMatch(/ --gpus=all /u);
     expect(honoured.stdout).toContain("SANDBOX_GPU=all");
 
     expect(unsupported.stdout).not.toMatch(/ --gpus=all /u);
     expect(unsupported.stdout).toContain("SANDBOX_GPU=unsupported");
-    // The privilege the nested engine actually needs is not collateral damage: only the optional one comes off.
+    // The privilege the nested engine needs isn't collateral damage; only the optional one comes off.
     expect(unsupported.stdout).toContain("--privileged");
 
     expect(detached.stdout).toBe("");
@@ -155,13 +131,12 @@ test("an unallowlisted runtime directive fails the whole verb: never a command m
     );
     expect(code).not.toBe(0);
     expect(stdout).toBe("");
-    // Named, so the refusal is the allowlist speaking, not any other crash that happens to exit non-zero.
+    // Named, so the refusal is the allowlist speaking, not some other crash that exits non-zero.
     expect(stderr).toContain("--cap-add=SYS_PTRACE");
 });
 
-/* THE SEED PROTOCOL through a real `-e`: a value on the probe's env replaces what stdin carried, an EMPTY one
- * clears it, and either way the answer is re-emitted onto the container — which is what makes `ic sandbox
- * reshape` a standing change rather than a one-run argument. Three spawns, so they go out together. */
+// A value on the probe's env replaces what stdin carried; empty clears it; either way it's re-emitted onto the
+// container, which is what makes `sandbox reshape` a standing change.
 test("a seed on the probe's env replaces or clears what the old container carried, and is re-emitted", async () => {
     const args = ["--slug", "s7", "--image", "i", "--base-image", "i"];
     const carried = "SANDBOX_MEMORY=10g\0SANDBOX_CPUS=2\0SANDBOX_RUNTIME=--privileged\0";
@@ -174,12 +149,12 @@ test("a seed on the probe's env replaces or clears what the old container carrie
     expect(replayed.stdout).toContain("--cpus 2");
     expect(replayed.stdout).toContain("-e SANDBOX_CPUS=2");
     expect(replayed.stdout).toContain("--privileged");
-    // Replaced: the fresh ask wins, once, and the new directive is probed-shaped like any other.
+    // Replaced: the fresh ask wins once; the new directive is probed like any other.
     expect(replaced.stdout).toContain("--cpus 1");
     expect(replaced.stdout).not.toContain("SANDBOX_CPUS=2");
     expect(replaced.stdout).toContain("-e 'SANDBOX_RUNTIME=--privileged --gpus=all'");
     expect(replaced.stdout).toContain("--gpus=all");
-    // Cleared: no CPU ceiling, no owner directives, and the memory cap back to the derived one (not 10g).
+    // Cleared: no CPU ceiling, no owner directives, memory back to the derived default.
     expect(cleared.stdout).not.toContain("--cpus");
     expect(cleared.stdout).not.toContain("--privileged");
     expect(cleared.stdout).not.toContain("SANDBOX_RUNTIME");
@@ -188,11 +163,10 @@ test("a seed on the probe's env replaces or clears what the old container carrie
 });
 
 test("host-probes asks about the owner's optional directives exactly as the overlay's", async () => {
-    // ATTACHED, like `--unsupported`: the values are docker flags, and the detached spelling reads `--gpus=all`
-    // as a flag of ours that does not exist. The flows write it this way for the same reason.
+    // Attached, like --unsupported: the values are docker flags, so a detached spelling would misparse them as ours.
     const [owner, both] = await Promise.all([
         runProbes(["--host-runtime=--privileged --gpus=all"]),
-        // One line, not two: the union is deduped before it is probed.
+        // One line, not two: the union is deduped before probing.
         runProbes(["--runtime", "# intentic:runtime --gpus=all", "--host-runtime=--gpus=all"]),
     ]);
     expect(owner.stdout.trim().split("\n")).toEqual(["--gpus=all\truntime\tnvidia"]);

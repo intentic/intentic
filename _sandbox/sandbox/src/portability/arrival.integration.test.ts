@@ -13,14 +13,8 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { createArrivals } from "./arrival.js";
 import { packBundle } from "./bundle.js";
 
-/* ONE PICKER, EVERY FORMAT — the claim the arrival pipeline exists to make, tested where it is decided.
- *
- * Three surfaces once: a definition had its own route, a bundle another, a foreign assistant a third, and the
- * browser had to know which of the three it was holding before it could hand it over. It does not any more:
- * the daemon reads two bytes and, when they say gzip, the tar's first entry name. This suite is that
- * disambiguation, with a REAL artifact of each kind rather than a hand-written header, because the whole risk
- * of sniffing is that it works on fixtures and not on what the exporters actually emit.
- */
+// One picker for every format (definition, bundle, foreign home), tested with real artifacts from the real
+// packers/exporters, not hand-written headers — sniffing that only works on fixtures is the risk.
 
 const roots: string[] = [];
 const makeRoots = async (): Promise<{ work: string; history: string }> => {
@@ -53,7 +47,7 @@ const servicesFor = (paths: { work: string; history: string }) =>
 
 const streamOf = (text: string): ReadableStream<Uint8Array> => new Blob([text]).stream();
 
-// A real bundle, out of the real packer, so the sniff meets the bytes production emits.
+// Real bundle from the real packer, so the sniff meets what production actually emits.
 const realBundle = async (): Promise<ReadableStream<Uint8Array>> => {
     const source = await makeRoots();
     await writeFile(join(source.work, "notes.md"), "# hello\n");
@@ -70,7 +64,7 @@ const realBundle = async (): Promise<ReadableStream<Uint8Array>> => {
     return new Blob(chunks.map((chunk) => new Uint8Array(chunk))).stream();
 };
 
-// A packed foreign home, the way the card's own instructions tell people to make one.
+// Packed foreign home, built the way the card's own instructions tell people to.
 const hermesHome = (): ReadableStream<Uint8Array> => {
     const packer = pack();
     packer.entry({ name: ".hermes/config.yaml", type: "file" }, "mcp_servers:\n  linear:\n    url: https://mcp.linear.app/sse\n");
@@ -84,19 +78,19 @@ const DEFINITION = ["schemaVersion = 1", 'name = "somewhere-else"', "", "[settin
 test("one picker reads all three formats, and says which it found", async () => {
     const arrivals = createArrivals(servicesFor(await makeRoots()));
 
-    // Not gzip ⇒ a document. The name rides through to the checklist's badge.
+    // Not gzip means a document; its name rides through to the checklist's badge.
     const definition = await arrivals.plan(streamOf(DEFINITION), LIMIT);
     expect(definition.source).toBe("definition");
     expect(definition.name).toBe("somewhere-else");
-    // A definition carries secret NAMES and never a value, so the second consent is not even a question.
+    // A definition carries secret names, never values, so there's no second consent to ask for.
     expect(definition.carriesSecrets).toBe(false);
 
-    // Gzip whose first tar entry is our manifest ⇒ a bundle, with a row per thing in it.
+    // Gzip whose first tar entry is the manifest means a bundle, with a row per thing inside.
     const bundle = await arrivals.plan(await realBundle(), LIMIT);
     expect(bundle.source).toBe("bundle");
     expect(bundle.items.map((item) => item.id)).toContain("bundle:files");
 
-    // Gzip that is any other tar ⇒ somebody's home directory, recognized by its anchor file.
+    // Gzip that's any other tar means a foreign home, recognized by its anchor file.
     const hermes = await arrivals.plan(hermesHome(), LIMIT);
     expect(hermes.source).toBe("hermes");
     expect(hermes.items.some((item) => item.group === "memory")).toBe(true);
@@ -104,9 +98,6 @@ test("one picker reads all three formats, and says which it found", async () => 
     await cleanup();
 });
 
-/* ONE HELD ARRIVAL AT A TIME, ACROSS FORMATS, which is the property that made a single pipeline worth having
- * rather than three that each happened to hold their own: reading a second artifact must retire the first,
- * whatever kinds they were, or a token minted for a Hermes folder could apply against a spooled bundle. */
 test("a second read retires the first, whatever the two formats were, and drops its spool", async () => {
     const target = await makeRoots();
     const arrivals = createArrivals(servicesFor(target));
@@ -115,8 +106,7 @@ test("a second read retires the first, whatever the two formats were, and drops 
     const definition = await arrivals.plan(streamOf(DEFINITION), LIMIT);
     expect(definition.token).not.toBe(bundle.token);
 
-    // The bundle's token is dead, and it is dead as STALENESS rather than as a bad file: the card's answer to
-    // one is "read it again", to the other "that is not a bundle".
+    // Dead as staleness, not a bad file: the card's answer differs, "read it again" vs "that is not a bundle".
     await expect(arrivals.apply({ token: bundle.token, items: [], includeSecrets: false })).rejects.toThrow(/no held arrival/);
 
     await cleanup();

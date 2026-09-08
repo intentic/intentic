@@ -3,34 +3,20 @@ import { z } from "zod";
 import { engineDescriptor } from "./engine-descriptors.js";
 import { type EngineState, isQuarantined } from "./engine-store.js";
 
-/* WHICH VERSION AN ENGINE SHOULD BE ON, which is two questions with two very different trust stories.
- *
- * WHAT UPSTREAM PUBLISHES is read straight from the registry that publishes it — npm for four engines, GitHub
- * releases for the translator. That is a fact about the world and needs no intermediary.
- *
- * WHAT THIS PROJECT HAS RUN ITS SUITE AGAINST is the blessed list, a JSON file in the intentic repository. It
- * is deliberately DATA rather than an image or a release: a version becomes blessed with one commit, and every
- * running sandbox picks it up within the hour, which is the whole point of this mechanism. It is fetched from
- * the raw file rather than the API so it costs nothing against the hourly budget version-check.ts and
- * release-notes.ts already share, and it is overridable by env so a self-hosted fleet can bless its own.
- *
- * NEITHER READ IS ALLOWED TO THROW. An unreachable registry, a rewritten list, a 500 — each keeps the last good
- * answer and, failing that, means "nothing on offer", which leaves the sandbox running exactly what it runs
- * now. The version-check.ts precedent, for the same reason: an update mechanism that can break a working
- * sandbox by being offline is worse than no update mechanism. */
+// What upstream publishes is read straight from its registry (npm or GitHub releases); what this project has blessed is
+// a JSON file in the intentic repo, fetched raw and overridable by env. Neither read may throw: failure keeps the last
+// good value or answers "nothing on offer", never breaking a running sandbox.
 
 const LIST_URL = (): string =>
     process.env["INTENTIC_ENGINES_LIST_URL"] ?? "https://raw.githubusercontent.com/intentic/intentic/main/engines.json";
 
-// Hourly, beside the two GitHub reads the daemon already makes. A blessing is not urgent enough to poll for,
-// and the Update button on the card reads the list directly, so nobody waits an hour for a version they can see.
+// Refreshed hourly; the card's Update button reads the list directly, bypassing the wait.
 const LIST_TTL_MS = 60 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 const BlessedEntrySchema = z.object({
     blessed: z.string(),
-    // The floor upstream itself enforces (a model that refuses older clients). Advisory here: it is what the
-    // card compares against when a turn dies on a version floor, so the reason it names is the real one.
+    // Floor upstream enforces itself; advisory here, shown when a turn dies on a version floor.
     minimum: z.string().optional(),
     notes: z.string().optional(),
 });
@@ -54,8 +40,7 @@ const fetchList = async (): Promise<ListCache | undefined> => {
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             headers: list?.etag === undefined ? {} : { "if-none-match": list.etag },
         });
-        // 304 is the ordinary answer once the list has been read once: the previous value stands, and only its
-        // freshness stamp moves.
+        // 304 means the list is unchanged since last read; only the freshness stamp moves forward.
         if (response.status === 304 && list !== undefined) {
             return { ...list, at: Date.now(), readAt: new Date().toISOString() };
         }
@@ -74,9 +59,8 @@ const fetchList = async (): Promise<ListCache | undefined> => {
     }
 };
 
-/* The blessed list, refreshed when the cached copy is older than an hour. A failed refresh keeps the previous
- * value rather than clobbering it, so a sandbox that read the list this morning still knows what is blessed
- * when GitHub is down this afternoon. */
+// Refreshed when the cached copy is older than an hour; a failed refresh keeps the previous value instead of clobbering
+// it.
 export const blessedList = async (force = false): Promise<ListCache | undefined> => {
     if (!force && list !== undefined && Date.now() - list.at < LIST_TTL_MS) {
         return list;
@@ -87,12 +71,11 @@ export const blessedList = async (force = false): Promise<ListCache | undefined>
 
 export const blessedEntry = async (id: EngineId): Promise<BlessedEntry | undefined> => (await blessedList())?.entries[id];
 
-// When the list was last actually read, for the card. Undefined on a sandbox that has never reached it, which
-// is a different claim from "the list blesses nothing" and has to stay tellable.
+// Read time for the card; undefined means never reached, distinct from a list that blesses nothing.
 export const blessedListReadAt = (): string | undefined => list?.readAt;
 export const blessedListSource = (): string => LIST_URL();
 
-// Test seam: forget the cached list so a suite can move INTENTIC_ENGINES_LIST_URL between cases.
+// Test seam: clears the cached list so a suite can change INTENTIC_ENGINES_LIST_URL between cases.
 export const forgetBlessedList = (): void => {
     list = undefined;
 };
@@ -101,8 +84,7 @@ const npmMetadata = async (packageName: string): Promise<{ latest?: string; vers
     try {
         const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`, {
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-            // The abbreviated document: dist-tags and version keys without every version's full manifest,
-            // which for a package this old is the difference between kilobytes and megabytes per check.
+            // Abbreviated document: dist-tags and version keys only, without each version's full manifest.
             headers: { accept: "application/vnd.npm.install-v1+json" },
         });
         if (!response.ok) {
@@ -130,28 +112,25 @@ const githubReleases = async (repo: string): Promise<{ latest?: string; versions
             .filter((release) => release.prerelease !== true && release.draft !== true)
             .map((release) => (typeof release.tag_name === "string" ? release.tag_name.replace(/^v/, "") : undefined))
             .filter((version): version is string => version !== undefined);
-        // The API answers newest-first, so the first row is `latest` without a second request for it.
+        // GitHub releases return newest-first; the first entry is `latest`, no extra request needed.
         return { ...(versions[0] === undefined ? {} : { latest: versions[0] }), versions };
     } catch {
         return undefined;
     }
 };
 
-// What upstream publishes for this engine, or undefined when upstream could not be reached at all. The
-// difference matters to every caller: "no newer version" and "we could not ask" must not read the same.
+// What upstream publishes for this engine, or undefined when upstream could not be reached; "no newer version" and "we
+// could not ask" must not read the same.
 const publishedVersions = async (id: EngineId): Promise<{ latest?: string; versions: string[] } | undefined> => {
     const { source } = engineDescriptor(id);
     return source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
 };
 
-/* The lowest published version at or above a floor, which is what "an upstream floor moved and this sandbox
- * has to get past it" wants: the smallest step that works, not the newest thing on the registry. Used by the
- * card's Update-anyway action, where the owner is deliberately taking a version nobody has blessed and has
- * every reason to want the least of it. */
+// Lowest published version at or above the floor, the smallest step that clears it. Used by the card's Update-anyway
+// action, which wants the least-unblessed version available.
 export const lowestSatisfying = async (id: EngineId, floor: string): Promise<string | undefined> => {
     const descriptor = engineDescriptor(id);
-    // Claude's floors arrive in the CLI's vocabulary rather than npm's, which is the descriptor's business and
-    // not this module's (engine-descriptors.ts states the assumption and what checks it).
+    // Claude's floors are in the CLI's vocabulary, not npm's; the descriptor is responsible for the mapping.
     const satisfies = descriptor.satisfiesFloor ?? ((published: string, bound: string) => published === bound || isNewer(published, bound));
     const published = await publishedVersions(id);
     return published?.versions
@@ -160,11 +139,8 @@ export const lowestSatisfying = async (id: EngineId, floor: string): Promise<str
         .at(0);
 };
 
-/* WHAT THE CHANNEL SAYS THIS ENGINE SHOULD BE ON, given the owner's policy and what the store already knows.
- *
- * Quarantine is applied HERE rather than at install time, so a version this daemon has already refused is not
- * offered again on every check — an upstream that publishes a broken `latest` would otherwise produce a card
- * that asks for the same failed download forever. */
+// What the channel says this engine should be on, given the owner's policy and the store's quarantine list. Quarantine
+// is applied here, not at install time, so a version already refused is not offered on every check.
 export const targetVersion = async (id: EngineId, channel: EngineChannel, state: EngineState): Promise<string | undefined> => {
     const target = await targetOf(id, channel);
     return target === undefined || isQuarantined(state, target) ? undefined : target;

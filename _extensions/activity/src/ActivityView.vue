@@ -19,25 +19,13 @@ import { host } from "./host";
 import SourceFilter from "./SourceFilter.vue";
 import { useActivity } from "./useActivity";
 
-/* THE ACTIVITY SURFACE: what reached the agent, what it did about it, and how that went.
- *
- * ONE PANE, AND IT IS A SECTION OF THE SANDBOX HUB. This was a page of its own behind a rail tile, laid out as an
- * index of sources beside the feed. It is a hub section now (see extension.ts for why it left the rail), so the
- * page chrome (the title, the description, the index column) is the hub's, and what is left here is the
- * instrument and the feed. The three filters are unchanged and now sit in one row: WHO (the source picker), WHEN
- * (the window) and free text. The window is not cosmetic: it decides how far back the feed pages, so picking 7d
- * fetches until 7 days are actually covered.
- *
- * The timeline is WHAT HAPPENED, one row per thing that happened rather than one per row the daemon appended: a
- * turn's four lifecycle marks and every provider call it made are one entry (see episodes.ts, which owns all of
- * that and is where the tests are).
- *
- * Every filter lives in the URL, so a view of a bad hour on one connection is a link somebody can be sent.
- * Read-only throughout: the log is daemon-written, outside the agent's own reach. */
+// Activity surface: what reached the agent, what it did, and how that went. A hub section, not its own page: the hub
+// draws page chrome, this owns the instrument and feed. Filters (source, window, text) live in the URL; read-only,
+// since the log is daemon-written.
 
 const api = host();
 
-// Derived from the query rather than mirrored into refs: one direction of flow, and Back/Forward work for free.
+// Derived from the route query, not mirrored into refs, so Back/Forward keep working.
 const query = computed(() => api.route.query());
 const window = computed<TimeWindow>({
     get: () => {
@@ -57,8 +45,7 @@ const search = computed<string>({
 
 const { events, status, error, isLoading, truncated } = useActivity(window);
 
-// The window bounds the feed; the rail and the search bound it further. Sources are tallied on the WINDOWED set,
-// so a rail count always agrees with the timeline it opens.
+// Sources are tallied on the windowed set, so the rail's counts always match what the timeline shows.
 const windowed = computed(() => {
     const since = sinceOf(window.value, Date.now());
     return toEpisodes(events.value).filter((episode) => episode.at >= since);
@@ -74,18 +61,11 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
 </script>
 
 <template>
-    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both, and a section that drew
-         its own would sit as a page inside a page. -->
+    <!-- No page header or own frame here: the hub draws both around this section. -->
     <div class="flex flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
 
-        <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above the
-             instrument rather than inside the feed it would otherwise scroll away with.
-             A CARD MASTHEAD IS A <Row>, which is the anatomy this had spelled out by hand: a glyph, a name, a
-             line of explanation and a badge on the right. <Row>'s own notes count fourteen cards that wrote it
-             out themselves and disagreed about the glyph's size and alignment every time; this was the
-             fifteenth, at its own `px-3 py-2` and its own `text-sm font-medium`. `flush` is the prop for exactly
-             this: the bordered box outside owns the padding. -->
+        <!-- Sits above the feed so it doesn't scroll away with it; `flush` is set since the bordered box outside already owns the padding. -->
         <div v-if="status?.voice" class="rounded-lg border border-line bg-card px-3 py-2">
             <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
                 <template #description>
@@ -95,10 +75,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             </Row>
         </div>
 
-        <!-- THE FILTER SITS ON THE THING IT FILTERS, and all three of them narrow the FEED, so all three are in
-             its instrument, in the order a question is asked of a log: who, when, and what did it say. The source
-             picker was a column beside the feed until this view became a hub section; the hub's own index column
-             is where a second one would have gone (see SourceFilter). -->
+        <!-- All three filters narrow the feed, so all three live in the instrument, ordered who, when, what. -->
         <FilterBar v-model="search" placeholder="Filter by text, channel, session…" :count="visible.length" :busy="isLoading">
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
@@ -117,14 +94,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             </template>
         </FilterBar>
 
-        <!-- UNBOUNDED, so the feed scrolls WITH THE PAGE like every other section of this hub. It used to be
-             clamped to 60dvh with a scroller of its own, on the reasoning that a long log would push the hub's
-             section index off screen: it doesn't, the index is `sticky` in this layout and stays reachable, and
-             the clamp bought that at the price of a scrollbar inside a card inside a page, the one thing the
-             hub picked page-scrolling to avoid. Two scroll surfaces in one view is also the worse bargain for
-             the reader: a wheel over the feed and a wheel two pixels outside it did different things, and the
-             feed's own scrollbar was invisible until the pointer was already inside it. The day signposts still
-             stick, to the page now rather than to a box (see ActivityTimeline). -->
+        <!-- Unbounded height: the feed scrolls with the page, since the section index is sticky and stays reachable without an inner scroller. -->
         <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
     </div>
 </template>

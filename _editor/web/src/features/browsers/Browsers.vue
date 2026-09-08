@@ -10,45 +10,16 @@ import BrowserSelectMenu from "../capabilities/connect/BrowserSelectMenu.vue";
 import { relativeTime } from "../chat/models/catalog";
 import { postTurnControl } from "../chat/run/turnStream";
 
-/* THE AGENT'S BROWSER, AS A BROWSER. A live view of the Chromium a turn is driving through its
- * @playwright/mcp tools, with the pages it has open as a tab strip, because the agent's browser IS a browser,
- * and the shape a person already knows how to read is the shape it should be shown in.
- *
- * It is a route rather than a pane in the terminal panel, which is the whole point of the surface: a browser
- * holds several pages at once, and a strip that can only show one stream has no way to ask which. The rail tile
- * appears when a turn starts browsing (ShellDesktop's browserTile) and this is where it lands.
- *
- * ONE ROW OF CHROME, AND IT IS THE WIDTH OF THE PICTURE. This used to be three stacked strips (session pills,
- * page tabs, address line), each with its own border, plus two more when an agent was parked asking for hands:
- * five full-width bands over a shrinking picture, in an app that already spends two bars on its own chrome and
- * sits inside the reader's real browser, which spends two more. So the questions those bands answered are
- * folded into one line: WHICH BROWSER is a chip with a menu behind it (the pills only ever mattered when
- * several existed, and a menu says "several exist" in the width of a caret), WHICH PAGE keeps the tab strip it
- * has earned, and WHERE IT IS rides the same line as an address rather than a band of its own.
- *
- * THE ROWS WERE ALSO WHAT PUT BLACK DOWN BOTH SIDES. The remote picture has a fixed shape whatever this pane's
- * shape is — the browser's whole window when it is grabbed off an X display, one page's surface when it is not
- * (live-view.ts) — and the leftover is a letterbox. Every band removed gives its height back to the picture, and a taller picture is a WIDER one:
- * dropping four of the five bands is most of the gutter gone. What is left is not painted black across the
- * whole pane any more: the chrome and the picture are sized together into one window that sits on the app's
- * canvas, so the space around it reads as the matting of a window rather than as a stream that failed to fill.
- *
- * ASKS RIDE THE PICTURE. The agent parking on `request_help` used to raise a band above the stage, and every
- * OTHER parked browser a second one, so the moment the view had something urgent to say was the moment the
- * thing it was saying it about got smallest. They are cards over the bottom of the picture now: nearer what
- * they are asking about, collapsible when they cover it, and costing the stage nothing when there is no ask.
- *
- * A FINISHED BROWSER IS A RECORD, NOT A BROKEN ONE. The daemon keeps a session listable for a couple of hours
- * after its Chromium goes away, and switches its strip from the tabs it had OPEN to every tab it ever had:
- * which is the answer to the only question left about a browser that has stopped. So the window's body becomes
- * that record rather than a socket dialling something that isn't there. */
+// Live view of the agent's Chromium (@playwright/mcp) with open pages as a tab strip; a route, not a terminal pane,
+// since a browser holds several pages and one stream can't show which. One line of chrome (browser chip, tabs,
+// address) leaves the rest of the height to the picture; asks are cards over it, and a finished session keeps its
+// tab list as a record rather than dialling a dead socket.
 
 const route = useRoute();
 const { sessions } = useBrowsersQuery();
 
-// The session in the URL, so a reload (or a shared link) reopens the same browser. Falls back to a browser
-// asking for help before the first listed: someone landing here unaddressed almost certainly came for the
-// banner (the rail badge, the push, the chat card all point at it), and the plain fallback is live-first.
+// The session in the URL, so reload or a shared link reopens it. Falls back to a browser asking for help, else the
+// first listed.
 const selected = computed<string | undefined>(() => {
     const named = typeof route.params[`session`] === `string` ? route.params[`session`] : undefined;
     if (named !== undefined && sessions.value.some((session) => session.name === named)) {
@@ -58,15 +29,12 @@ const selected = computed<string | undefined>(() => {
 });
 const current = computed(() => sessions.value.find((session) => session.name === selected.value));
 
-/* ONLY A RUNNING BROWSER IS DIALLED. A finished one is kept listable for a couple of hours because its tab list
- * is the record of where the agent went, but there is no Chromium behind it, so opening a socket could only ask
- * a dead question and get an error chip over a black rectangle back. Passing undefined here is what turns the
- * body into that record instead: the composable tears its socket down and stops trying. */
+// Only a running browser is dialled; a finished one keeps its tab list as a record, but there's no Chromium behind
+// it. Undefined here tears the socket down instead of erroring.
 const watchable = computed(() => (current.value?.running === true ? current.value.name : undefined));
 const view = useBrowserView(watchable);
 
-// The page the user picked. Cleared whenever the browser changes: a page id is only meaningful inside its own
-// session, and carrying one across would bind to a stranger.
+// The page the user picked; cleared on browser change, since a page id only means something inside its own session.
 const pickedPage = ref<string | undefined>();
 
 // Which tab reads as selected: see activePageOf for the rule.
@@ -77,13 +45,12 @@ const pickPage = (page: BrowserPage): void => {
     view.bindPage(page.id);
 };
 
-// Each browser is a URL of its own: that is how a reload, a chat card and the rail all reach one, so the
-// switcher's rows and the queue's are links rather than buttons that pushed the router. Ctrl/⌘-click then
-// opens a second browser beside the one on screen, which is exactly what a list of them invites.
+// Each browser has its own URL, which is why switcher rows and the queue are links rather than pushing the router;
+// Ctrl/Cmd-click then opens a second browser beside this one.
 const sessionAt = (name: string): string => `/browsers/${name}`;
 
-// A tab's text: the page's own title, else its host, else the raw url, the same ladder the daemon uses for the
-// session label, so a tab and the chip above it never disagree about what a page is called.
+// A tab's text: title, else host, else raw url, the same ladder the daemon uses for the session label, so a tab
+// and its chip never disagree.
 const hostOf = (url: string): string => {
     try {
         return new URL(url).host;
@@ -93,21 +60,17 @@ const hostOf = (url: string): string => {
 };
 const pageLabel = (page: BrowserPage): string => page.title ?? hostOf(page.url);
 
-/* WHOSE BROWSER THIS IS, which the view never used to say out loud. `web` is the credential-free one: anything
- * else is a capability's own profile, signed in as the owner, and that is the single most important thing to
- * know in the seconds before taking the wheel and typing into a page. Undefined for the throwaway browser,
- * where there is no account to name and a chip saying "none" would be furniture. */
+// Whose browser this is: `web` is credential-free, anything else is a capability's own signed-in profile. Undefined
+// for the credential-free case, where there's no account to name.
 const CREDENTIAL_FREE = `web`;
 const accountOf = (session: BrowserSession | undefined): string | undefined =>
     session === undefined || session.server === CREDENTIAL_FREE ? undefined : session.server;
 
-// Liveness as one dot, the switcher's whole shorthand: a browser asking for help outranks "running", because
-// that is the one the reader came to find.
+// One dot of liveness; a browser asking for help outranks "running", since that's the one the reader came to find.
 const dotOf = (session: BrowserSession): string => (session.help !== undefined ? `bg-warning` : session.running ? `bg-success` : `bg-line-strong`);
 
-// The second line of a switcher row: who it is signed in as, and whether it is still open. The account is
-// named only when there IS one: "no account" on every row of a list where most browsers are credential-free
-// is noise standing where the exception should be.
+// Second line of a switcher row: account (only when there is one) and open/closed state; naming "no account" on
+// every credential-free row would be noise.
 const sessionMeta = (session: BrowserSession): string =>
     [
         accountOf(session),
@@ -118,15 +81,14 @@ const sessionMeta = (session: BrowserSession): string =>
         .filter((part) => part !== undefined)
         .join(` · `);
 
-/* THE ADDRESS, SPLIT WHERE IT MATTERS. The host is what says which site this is and it is never truncated; the
- * path is context and gives way first. Both are on one line with the tabs now, so the whole thing is also a
- * tooltip and a copy button: nothing about the address is only readable by widening the window. */
+// The host (never truncated, names the site) and the path (gives way first) share one line with the tabs, so the
+// address doubles as its own tooltip and copy target.
 const address = computed(() => activePage.value?.url ?? `about:blank`);
 const addressParts = computed<{ host: string; rest: string; secure: boolean | undefined }>(() => {
     try {
         const url = new URL(address.value);
         if (url.host === ``) {
-            // about:blank, and anything else without an authority: there is no site to vouch for.
+            // about:blank, or anything else without an authority: no site to vouch for.
             return { host: address.value, rest: ``, secure: undefined };
         }
         return { host: url.host, rest: `${url.pathname === `/` ? `` : url.pathname}${url.search}${url.hash}`, secure: url.protocol === `https:` };
@@ -135,28 +97,20 @@ const addressParts = computed<{ host: string; rest: string; secure: boolean | un
     }
 });
 
-/* THE ELEMENT THE PICTURE IS IN, whichever picture it is. There are two: a canvas the video is decoded into,
- * and an <img> for the frames a browser with no display to grab falls back to. Pointer coordinates are measured
- * against whichever is painting (viewportCoords), so it has to be that element rather than the stage around it,
- * which is a different shape whenever the two aspect ratios disagree. Both carry `object-contain`, so one
- * geometry rule covers them. */
+// Two picture elements: canvas for decoded video, img for frames when there's no display to grab. Pointer
+// coordinates measure against whichever is painting (viewportCoords), not the stage around it; both use
+// `object-contain`.
 const frameEl = ref<HTMLElement | undefined>();
 const canvasEl = ref<HTMLCanvasElement | undefined>();
 const stageEl = ref<HTMLElement | undefined>();
-// Whichever of the two is currently painting. Every pointer handler measures against this, so neither kind of
-// picture needs its own copy of the geometry.
+// Whichever of the two is painting; every pointer handler measures against this instead of its own copy.
 const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value);
-// The canvas mounts and unmounts with the picture kind; the decoder outlives it, so they are connected here.
+// The canvas mounts/unmounts with the picture kind; the decoder outlives it, so they're connected here.
 watch(canvasEl, (canvas) => view.attachCanvas(canvas));
 
-/* WATCHING AND DRIVING ARE TWO STATES, AND THE BUTTON HAS TO NAME THE ONE IT IS IN. It used to read "Take
- * control" while watching and "Watching only" while driving: an action on one side and a state on the other,
- * so the reader had to work out which of the two it was being told. Driving now says both ("You're driving"
- * and how to stop), in the app's accent, and the window it applies to wears a ring while it lasts, because a
- * keystroke going somewhere unexpected is the one mistake this surface can actually make.
- *
- * Escape is deliberately NOT a way out: keyIntent forwards it to the page (a modal the agent opened is closed
- * with it), and a shortcut that steals it would break the very thing the wheel was taken for. */
+// The button names the state it's in ("You're driving · hand back", not an action-only label); the window rings
+// while driving, since a stray keystroke is the one real mistake here. Escape is not an exit, keyIntent forwards
+// it to the page.
 const takeControl = (): void => {
     view.driving.value = !view.driving.value;
     if (view.driving.value) {
@@ -166,21 +120,14 @@ const takeControl = (): void => {
 
 const close = (name: string): void => void closeBrowser(name);
 
-/* THE HELP REQUEST'S ANSWERING END. The agent parked its turn on `request_help` and the daemon flagged this
- * session; the card over the picture renders that flag, and its two buttons settle the parked card over the
- * same /agent/reply side channel the chat's cards use. The card comes down when the daemon publishes the
- * cleared flag: the same push that raised it, so nothing here mutates the list. `helpNote` rides back to the
- * agent either way ("typed the password, don't touch remember-me"). */
+// The card renders the daemon's `help` flag and answers over the same /agent/reply channel the chat cards use; it
+// closes when the daemon clears the flag, not from any local mutation. `helpNote` goes back to the agent either way.
 const helpNote = ref(``);
-// The ask is a card ON the picture, so it can cover the field it is asking about: this folds it to a chip
-// without answering it, which is the one thing a banner in a band never needed and a card always does.
+// A card on the picture folds to a chip without answering it, so it can stop covering what it's asking about.
 const helpOpen = ref(true);
 
-/* THE QUEUE OF ASKS. One browser's request renders as the card over its own picture, but the agent can be
- * stuck in several browsers at once (two identities mid-signup, each on its own captcha), and the switcher's
- * warning dot is one click away rather than in front of the reader. So every OTHER browser waiting for hands
- * counts on a chip beside that card, one click from its own stage. The selected browser's own ask stays out of
- * it: that one is the card right above. */
+// Other browsers waiting for hands surface as a chip beside the current ask, since the agent can be stuck in
+// several at once; the selected browser's own ask is the card above, not counted here.
 const queuedHelp = computed(() => sessions.value.filter((session) => session.help !== undefined && session.name !== selected.value));
 
 const switcherOpen = ref(false);
@@ -189,8 +136,7 @@ const moreOpen = ref(false);
 const moreTrigger = ref<HTMLElement | undefined>();
 const queueOpen = ref(false);
 
-// Everything that was about the browser being left behind goes with it: a pinned page id, a half-typed note,
-// and any menu hanging off a chip that is about to describe something else.
+// Everything tied to the browser being left behind (picked page, draft note, open menus) resets with it.
 watch(selected, () => {
     pickedPage.value = undefined;
     helpNote.value = ``;
@@ -206,33 +152,20 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
         return;
     }
     const note = helpNote.value.trim();
-    // `undefined`: this box. A browser session is a property of the machine it runs on and this view only ever
-    // lists the active sandbox's, so the reply goes where the browser is (see postTurnControl).
+    // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
+    // active sandbox's (see postTurnControl).
     await postTurnControl(undefined, `/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
     helpNote.value = ``;
-    // Handing back while still driving would leave the owner's keystrokes racing the agent's next move.
+    // Handing back while still driving would race the owner's keystrokes against the agent's next move.
     if (helped) {
         view.driving.value = false;
     }
 };
 
-/* THE WINDOW IS SIZED, NOT STRETCHED. The picture's shape is decided at the far end, so the only question is
- * how big a rectangle of that shape fits in what is left after the chrome, and the answer is the width of
- * BOTH: a chrome bar wider than the picture under it is the thing that made the old strips read as app
- * furniture rather than as this browser's own.
- *
- * THE SHAPE IS NO LONGER A CONSTANT, which is why this reads it off the view. There are two pictures now and
- * they are not the same rectangle: video grabbed off the browser's own X display is the WHOLE WINDOW, chrome
- * included (1280x880), while the CDP frames a display-less browser falls back to are the page alone
- * (1280x800). The daemon says which in its `ready`, so the numbers arrive a moment after the socket does and
- * this recomputes — which is the point, since sizing a window to the wrong rectangle is a letterbox down two
- * sides, the very thing the measuring below exists to remove.
- *
- * Measured rather than derived in CSS: an `aspect-ratio` box can size its width off a definite height, but the
- * height here is "whatever is left after a bar whose own height moves with the reader's text scale", and one
- * observer answering both is less machinery than the layout gymnastics that avoids it. The matte's CONTENT box
- * is what the window has to fit inside (its padding is the matting), and the chrome's BORDER box is what it
- * costs, hence the two different reads below. */
+// The window is sized to fit the matte, matching the video's actual shape, which differs by capture mode (an
+// X-display grab is the whole window at 1280x880; CDP frames are the page alone at 1280x800) and arrives with the
+// daemon's `ready`. Measured via ResizeObserver rather than CSS `aspect-ratio`, since the available height depends
+// on the chrome bar's own text-scaled height.
 const matteEl = ref<HTMLElement | undefined>();
 const chromeEl = ref<HTMLElement | undefined>();
 const matte = ref<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -261,8 +194,7 @@ watch([matteEl, chromeEl], ([matteNow, chromeNow]) => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 
-// Full width until the first measurement lands: one frame of a too-tall window, clipped by the matte, beats a
-// frame of nothing at all.
+// Full width until the first measurement lands: a too-tall frame clipped by the matte beats showing nothing.
 const windowWidth = computed<string>(() => {
     const { width, height } = matte.value;
     if (width === 0 || height === 0) {
@@ -272,15 +204,12 @@ const windowWidth = computed<string>(() => {
     return `${Math.floor(Math.min(width, (room * view.viewWidth.value) / view.viewHeight.value))}px`;
 });
 
-/* WHEN THE ROW HAS TO GIVE SOMETHING UP. Read off the measured window rather than a viewport breakpoint: this
- * pane is as wide as whatever is left after the icon rail and a docked chat, so a `sm:` class here would keep a
- * chip on a 500px window because the SCREEN behind it is 1600. What goes first is the account chip and the
- * long form of the wheel's label; the tabs and the address never do, they are the row's two questions. */
+// Read off the measured window, not a viewport breakpoint, since this pane's width has nothing to do with the
+// screen's. Only the account chip and the wheel's long label give way; tabs and address never do.
 const compact = computed(() => matte.value.width > 0 && matte.value.width < 640);
 
-/* THE SELECTED TAB IS ALWAYS THE ONE YOU CAN SEE. The strip scrolls, and in a narrow window the agent moving to
- * a new page would otherwise select a tab off the right-hand end: a strip showing three tabs, none of them the
- * one being watched. Nothing to clean up on unmount, `scrollIntoView` is a one-shot. */
+// Keeps the selected tab scrolled into view, so a narrow strip can't leave the active page off-screen when the
+// agent switches pages. `scrollIntoView` is one-shot; nothing to clean up.
 const stripEl = ref<HTMLElement | undefined>();
 watch(
     () => activePage.value?.id,
@@ -294,8 +223,7 @@ watch(
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- Nothing has browsed yet. Not an error: most turns never open a browser, so this reads as a
-             description of the surface rather than as something having gone wrong. -->
+        <!-- Not an error: most turns never open a browser. -->
         <div v-if="sessions.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="globe" class="text-2xl text-muted" />
             <div class="text-sm text-content">No browsers open</div>
@@ -304,18 +232,20 @@ watch(
             </div>
         </div>
 
-        <!-- THE MATTE: the canvas the window sits on, and what the window is measured against. -->
+        <!-- The canvas the window sits on and is measured against. -->
         <div v-else ref="matteEl" class="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3">
             <div
                 class="flex max-h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-lg transition-colors"
                 :class="view.driving.value ? 'border-primary-600 ring-1 ring-primary-600' : 'border-line'"
                 :style="{ width: windowWidth }"
             >
-                <!-- THE ONE ROW OF CHROME: which browser, which page, where it is, and the wheel. -->
+                <!-- Which browser, which page, where it is, and the wheel. -->
                 <div ref="chromeEl" class="flex shrink-0 items-center gap-1 border-b border-line px-1.5 py-1">
-                    <!-- WHICH BROWSER. A chip rather than a row of pills: with one browser open it is a label,
-                         and with six it is the same label plus a caret, instead of a band that grows a
-                         horizontal scrollbar. -->
+                    <!--
+                        A chip instead of a row of pills: with several browsers it's a label plus caret rather than a
+                        band with its own
+                        scrollbar.
+                    -->
                     <button
                         ref="switcherTrigger"
                         type="button"
@@ -329,8 +259,11 @@ watch(
                     >
                         <span v-if="current" class="size-1.5 shrink-0 rounded-full" :class="dotOf(current)" />
                         <span class="max-w-32 truncate">{{ current?.label }}</span>
-                        <!-- The warning rides the chip when a browser OTHER than this one is parked: the queue
-                             chip below says how many, but the switcher is what opens them. -->
+                        <!--
+                            Rides here when a browser other than this one is parked; the queue chip below says how
+                            many, this is what opens
+                            them.
+                        -->
                         <Icon v-if="queuedHelp.length > 0" name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
                         <Icon v-if="sessions.length > 1" name="chevron-down" class="shrink-0 text-3xs text-muted" />
                     </button>
@@ -356,8 +289,11 @@ watch(
                         </div>
                     </AnchoredOverlay>
 
-                    <!-- WHOSE IT IS. Only for a signed-in profile: see accountOf. The switcher's rows carry
-                         the same fact, which is where it stays when the row is too narrow to spend on it. -->
+                    <!--
+                        Only for a signed-in profile (see accountOf); the switcher's rows carry the same fact when this
+                        is too narrow
+                        for it.
+                    -->
                     <span
                         v-if="accountOf(current) && !compact"
                         class="flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-3xs text-muted"
@@ -369,8 +305,10 @@ watch(
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
 
-                    <!-- WHICH PAGE. The agent's own tab strip, in the shape a person already reads. Capped at
-                         half the row: the address beside it has to stay legible with eight tabs open. -->
+                    <!--
+                        The agent's own tab strip; capped at half the row so the address stays legible with many tabs
+                        open.
+                    -->
                     <div ref="stripEl" class="scrollbar-none flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
                         <button
                             v-for="page in current?.pages ?? []"
@@ -390,7 +328,7 @@ watch(
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
 
-                    <!-- WHERE IT IS. The host carries the padlock and never truncates; the path gives way. -->
+                    <!-- The host carries the padlock and never truncates; the path gives way first. -->
                     <div class="group flex min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 py-0.5" v-tooltip.bottom="address">
                         <Icon
                             v-if="addressParts.secure !== undefined"
@@ -402,8 +340,11 @@ watch(
                             <span class="text-content">{{ addressParts.host }}</span
                             ><span class="text-muted">{{ addressParts.rest }}</span>
                         </span>
-                        <!-- No tooltip of its own: the address line above it already carries one, and a
-                             tooltipped control inside a tooltipped box opens a second box on the first. -->
+                        <!--
+                            No tooltip of its own: the address line above already has one, and nesting tooltips would
+                            open a second box on
+                            the first.
+                        -->
                         <CopyButton
                             :text="address"
                             class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
@@ -411,7 +352,7 @@ watch(
                         />
                     </div>
 
-                    <!-- THE WHEEL, and what happens to it when the browser is gone. -->
+                    <!-- The wheel, and what happens to it when the browser is gone. -->
                     <button
                         v-if="current?.running"
                         type="button"
@@ -432,9 +373,11 @@ watch(
                         Closed{{ current?.finishedAt === undefined ? "" : ` ${relativeTime(current.finishedAt)}` }}
                     </span>
 
-                    <!-- Everything that is not watching or driving. Closing a browser lives here rather than
-                         beside the wheel: it ends work the agent is mid-way through, and a destructive verb
-                         does not belong one pixel from the control people click every visit. -->
+                    <!--
+                        Everything besides watching/driving; closing lives here, not beside the wheel, since it ends
+                        the agent's work
+                        and shouldn't sit next to an everyday control.
+                    -->
                     <button
                         ref="moreTrigger"
                         type="button"
@@ -477,13 +420,13 @@ watch(
                     </AnchoredOverlay>
                 </div>
 
-                <!-- THE BODY: exactly the remote viewport's shape, so the picture fills it and the chrome above
-                     is the picture's own width. It keeps that shape with nothing to show, so switching between
-                     a live browser and a closed one doesn't resize the window under the pointer.
-
-                     The terminal surface (dark in BOTH modes) is for the PICTURE, which is a photograph of
-                     someone else's screen and belongs on a dark mat. A closed browser has no photograph: it is
-                     a note, and a note on a black slab reads as a stream that failed rather than as a record. -->
+                <!--
+                    Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize
+                    the window
+                    under the pointer. The dark terminal surface is for the photograph; a closed browser has no
+                    photograph, just a
+                    note.
+                -->
                 <div
                     class="relative min-h-0 w-full"
                     :class="current?.running ? 'bg-terminal' : ''"
@@ -502,21 +445,24 @@ watch(
                         @paste="view.onPaste"
                         @contextmenu.prevent
                     >
-                        <!-- VIDEO: the whole browser window, decoded from H.264 grabbed off its own X display,
-                             so the cursor, an open <select>, the autofill drop-down and the file picker are all
-                             IN the picture. Nothing here draws a pointer — the one you see is the X server's
-                             own, at the place the owner moved it, in the shape Chromium gave it, so
-                             `cursor-none` hides the local arrow rather than showing two half a frame apart. -->
+                        <!--
+                            The whole browser window, decoded off its own X display, so selects/autofill/file-pickers
+                            are all in the
+                            picture. No pointer is drawn here; `cursor-none` just hides the local arrow so it doesn't
+                            sit next to the X
+                            server's own.
+                        -->
                         <canvas
                             v-if="view.kind.value === 'video'"
                             ref="canvasEl"
                             class="h-full w-full object-contain"
                             :class="view.driving.value ? 'cursor-none' : ''"
                         />
-                        <!-- FRAMES: one page's compositor surface, which is all a browser with no display to
-                             grab can offer. No cursor in it, so the shape the remote page would have shown is
-                             reported separately and worn by the operator's own pointer — and only while
-                             driving, since an arrow is the honest shape over a picture you are just watching. -->
+                        <!--
+                            One page's compositor surface, all a display-less browser can offer; no cursor in it, so
+                            the operator's own
+                            pointer wears the remote shape, only while driving.
+                        -->
                         <img
                             v-else
                             v-show="view.frame.value"
@@ -530,9 +476,11 @@ watch(
                         <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                             <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                         </div>
-                        <!-- An open drop-down the picture cannot show, which is only ever the FRAMES path: on
-                             video the native menu is on the display, so it is photographed and clickable, and
-                             the daemon never sends one of these. See BrowserSelectMenu. -->
+                        <!--
+                            An open drop-down the picture itself can't show; only happens on the frames path, since a
+                            native menu on video
+                            is already photographed and clickable. See BrowserSelectMenu.
+                        -->
                         <BrowserSelectMenu
                             v-if="view.select.value && view.driving.value"
                             :menu="view.select.value"
@@ -544,9 +492,11 @@ watch(
                         />
                     </div>
 
-                    <!-- A browser that has closed. Not a failed stream: there is nothing to stream, so it reads
-                         as the record it is, and the strip above it (which lists every tab a finished session
-                         ever had, not just the ones open at the end) is the actual content. -->
+                    <!--
+                        Not a failed stream, there's nothing to stream: this reads as the record it is, and the strip
+                        above (every tab
+                        the session ever had) is the real content.
+                    -->
                     <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
                         <Icon name="globe" class="text-2xl text-muted" />
                         <div class="text-sm text-content">This browser has closed</div>
@@ -556,14 +506,17 @@ watch(
                         </div>
                     </div>
 
-                    <!-- THE ASKS, over the picture rather than above it. The stack takes no pointer events of
-                         its own, so the page underneath stays clickable everywhere the cards are not. -->
+                    <!--
+                        Cards over the picture, not above it; the stack itself takes no pointer events, so the page
+                        stays clickable
+                        around them.
+                    -->
                     <div
                         v-if="current?.help !== undefined || queuedHelp.length > 0"
                         class="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2 p-3"
                     >
                         <template v-if="current?.help !== undefined">
-                            <!-- Folded: still says an agent is waiting, covers nothing. -->
+                            <!-- Folded: still names the waiting agent, covers nothing. -->
                             <button
                                 v-if="!helpOpen"
                                 type="button"
@@ -580,10 +533,11 @@ watch(
                             >
                                 <div class="flex items-start gap-2">
                                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
-                                    <!-- The agent's own words first, then what to do about them on a line of
-                                         their own: run together they used to collide into "…I can't do. :
-                                         take control", since a message ending in a full stop is the norm and
-                                         a clause starting with a colon cannot follow one. -->
+                                    <!--
+                                        Kept on separate lines from the instruction below it: joined, a message ending
+                                        in a period collides with a
+                                        clause starting with a colon.
+                                    -->
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs text-content">
                                             <span class="font-medium">The agent needs your help:</span>
@@ -617,11 +571,11 @@ watch(
                             </div>
                         </template>
 
-                        <!-- Other browsers waiting for hands: a count, not a list, until it is asked for.
-                             Expanded INLINE rather than in a popover: the chip is already at the bottom of the
-                             stage with the ask card right above it, so an anchored panel had nowhere to open
-                             except over that card, hiding the very buttons it was queued behind. The list
-                             grows the stack upward instead, which is the one direction that covers nothing. -->
+                        <!--
+                            Expands inline, not in a popover: an anchored panel here would open right over the ask card
+                            it's queued behind.
+                            Growing the stack upward is the one direction that covers nothing.
+                        -->
                         <div v-if="queuedHelp.length > 0" class="pointer-events-auto flex w-full max-w-2xl flex-col items-center gap-2">
                             <div v-if="queueOpen" class="flex w-full flex-col gap-0.5 rounded-lg border border-line bg-card p-1 shadow-lg">
                                 <RouterLink

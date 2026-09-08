@@ -7,18 +7,9 @@ import { RouterLink } from "vue-router";
 import { type ControlToken, useControlTokens } from "./useControlTokens";
 import { useSandbox } from "../client/useSandbox";
 
-/* API TOKENS: the credential a PROGRAM presents to this sandbox, minted here by the owner. One component, two
- * mounts. The Access tab mounts it whole (every scope, the roster, every snippet) because "what may reach this
- * sandbox" is that tab's subject and a token is one more thing that may. The Devices tab mounts the editor
- * slice of it (one scope, no roster, the editor snippet), because pairing an editor is a thing you do from the
- * page about your own machine, and the token it needs is a means rather than the subject.
- *
- * THE SCOPE IS TAUGHT WHERE IT IS CHOSEN. The picker's rows carry short "Can…" hints in the same voice as the
- * member-role picker on the Access tab; CONTROL_SCOPE_REACH stays the long form for OpenAPI and the site.
- *
- * SHOWN ONCE. The daemon returns the raw value at mint and keeps only its hash, so the token is on screen
- * exactly until this component is left. The snippets under it are the three ways a program holds one, each
- * paste-ready for the place it goes: a shell, a GitHub workflow's secret store, an editor's agent settings. */
+// Program credential minted here by the owner, one component with two mounts: Access shows every scope, roster and
+// snippet; Devices shows only the editor slice, since pairing is about the machine, not tokens broadly. Shown once —
+// the daemon keeps only the hash — with paste-ready snippets for a shell, CI, and an editor.
 
 const {
     scopes = [`read`, `drive`, `land`, `editor`],
@@ -44,8 +35,7 @@ const isOwner = computed(() => active.value?.role === `owner`);
 
 const SCOPE_ICONS: Record<ControlScope, PickerOption[`icon`]> = { editor: `code`, read: `eye`, drive: `play`, land: `check-circle` };
 
-/* Short "Can…" sentences for the picker, in the same voice as the member-role picker on this tab. The contract's
- * CONTROL_SCOPE_REACH rows stay long for OpenAPI and the site; here the choice is taught in two lines. */
+// Short picker hints, same voice as the member-role picker; CONTROL_SCOPE_REACH stays long for OpenAPI/site.
 const SCOPE_HINTS: Record<ControlScope, string> = {
     editor: `Can run one conversation: turns, cards, transcripts. Can't see the fleet or land work.`,
     read: `Can watch everything a viewer sees. Can't change anything.`,
@@ -53,7 +43,7 @@ const SCOPE_HINTS: Record<ControlScope, string> = {
     land: `Can land and purge conversation worktrees. The broadest credential a program holds.`,
 };
 
-// The picker's rows ARE the model: label (lowercase scope, capitalized in CSS), then the teaching sentence.
+// Picker rows are the model: label is the lowercase scope (capitalized via CSS), hint is the teaching sentence.
 const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
     CONTROL_SCOPE_REACH.filter((entry) => scopes.includes(entry.scope)).map((entry) => ({
         value: entry.scope,
@@ -90,7 +80,7 @@ const submit = async (): Promise<void> => {
     label.value = ``;
 };
 
-// ---- the paste-ready forms ----
+// The paste-ready forms
 
 const origin = computed(() => daemonUrl.value ?? `https://sandbox-….intentic.dev`);
 
@@ -104,8 +94,8 @@ const curlSnippet = computed(() =>
           ].join(`\n`),
 );
 
-/* The GitHub step runs the Marketplace action's run door (intentic/gate-action): the token goes in the repo's
- * secret store once and the workflow names it. The URL is the sandbox's own address, which is not a secret. */
+// Runs via the Marketplace action (intentic/gate-action); token goes in the repo's secret store once. URL is the
+// sandbox's own address, not a secret.
 const githubSnippet = computed(() =>
     [
         `- name: Run the intentic agent`,
@@ -142,16 +132,14 @@ const shownSnippets = computed(() => {
     return snippets.filter((kind) => (kind === `acp` ? rung === `editor` : kind === `github` ? rung === `drive` || rung === `land` : true));
 });
 
-// ---- the roster ----
+// The roster
 
 const now = ref(Date.now());
 
 const expired = (token: ControlToken): boolean => token.expiresAt !== undefined && token.expiresAt <= now.value;
 
-/* ONE SENTENCE UNDER THE LABEL, not facts in the row's meta column. The meta column does not shrink, so at a
- * phone's width two dates and a button there squeezed the headline to forty pixels and wrapped "nightly CI"
- * onto two lines and its description onto five. A sentence wraps where it needs to and the row keeps one
- * control on the right; the one fact that earns colour, an expired token, stays in the column as a single word. */
+// One sentence under the label, not facts in the meta column, which doesn't shrink and would squeeze the row at a
+// phone's width. Only "expired" earns the meta column, as a single coloured word.
 const lifetime = (token: ControlToken): string => {
     if (expired(token)) {
         return `expired ${formatDate(token.expiresAt ?? 0)}`;
@@ -174,9 +162,7 @@ const describe = (token: ControlToken): string =>
     <RowGroup v-if="isOwner" label="API tokens" :count="roster && tokens.length > 0 ? tokens.length : undefined">
         <template v-if="roster">
             <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
-                <!-- The same pill the member roster draws two groups up, because it is the same word about the
-                     same thing. Written as bare `text-danger` text it was "Expired" against that list's
-                     "expired", one tab, one fact column, two spellings. -->
+                <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
                 <template v-if="expired(token)" #meta>
                     <StatusBadge variant="danger" label="expired" size="xs" />
                 </template>
@@ -195,15 +181,14 @@ const describe = (token: ControlToken): string =>
             <div class="flex flex-col gap-3">
                 <Notice v-if="notice" :of="notice" />
                 <form class="flex flex-col gap-2" @submit.prevent="submit">
-                    <!-- WRAPS BY THE COLUMN, NOT THE VIEWPORT. A `sm:` breakpoint put the field beside the pickers on
-                         any wide screen, and with the chat docked this column is a phone's width on a wide screen,
-                         which squeezed the field to a black stub. The field keeps a minimum and takes the remaining
-                         width; the controls drop to their own line when that remainder is too small to type in. -->
-                    <!-- THE COMPACT TIER, the same call the invite form makes one group up, and for the same
-                         reason: this is a LIST'S FOOTER, under rows whose Revoke button is 26px, and both of
-                         this component's mounts are dense (the Access tab's roster, the Devices tab's card,
-                         which sizes its own folder field at `ui.inputSm`). Field, pickers and button take one
-                         height, so the strip is one control tall instead of three boxes of two sizes. -->
+                    <!--
+                        Wraps by the column's width, not the viewport's, since a docked chat can make this column phone-width on a wide screen. Field
+                        keeps a minimum and takes the rest; controls drop to their own line below that.
+                    -->
+                    <!--
+                        Compact tier, like the invite form above it: this sits under rows with a 26px Revoke button, in mounts that are both dense.
+                        Field, pickers and button share one height instead of mixing sizes.
+                    -->
                     <div class="flex flex-wrap items-center gap-2">
                         <input
                             v-model="label"

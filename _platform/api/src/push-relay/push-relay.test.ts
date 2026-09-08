@@ -5,17 +5,14 @@ import type { OrpcContext } from "../context.js";
 import type { ApnsForwarder, ApnsVerdict } from "./apns.js";
 import { pushRelayRoutes } from "./push-relay.routes.js";
 
-/* The relay's guarantees, which are the only things about it worth testing: the plaintext secret exists once
- * (the register response) and its hash is what a send is judged by; refusals speak the daemon's dead-channel
- * codes so pruning works end to end; and Apple's verdicts translate to exactly the right daemon-facing
- * statuses: in particular a misconfigured relay must read as "down", never as "prune every iPhone". */
+// The plaintext secret exists once (the register response); refusals speak the daemon's dead-channel codes, and a
+// misconfigured relay reads as down, never as prune every iPhone.
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
 
-// Each test builds routes with its own forwarder; the config is a fresh object per context so the module's
-// per-config forwarder cache can never leak one test's fake into another.
+// Each test builds its own forwarder; a fresh config per context keeps the module's per-config cache from leaking.
 const forwarder = (verdict: ApnsVerdict): ApnsForwarder & { send: ReturnType<typeof vi.fn> } => ({
     enabled: true,
     send: vi.fn().mockResolvedValue(verdict),
@@ -41,9 +38,9 @@ describe(`register`, () => {
         const grant = await call(pushRelayRoutes(() => forwarder(`delivered`)).register, { platform: `ios`, token: `tok-1` }, { context: ctx });
 
         expect(grant.deviceId).toBe(`d1`);
-        // The url is absolute and points at THIS platform: a self-hosted deployment's grants point home.
+        // Absolute and points at this platform: a self-hosted deployment's grants point home.
         expect(grant.url).toBe(`https://platform.example/rpc/push/send`);
-        // The row holds a hash; the grant holds the secret; they must correspond and never coincide.
+        // The row holds a hash, the grant holds the secret; they must correspond and never coincide.
         const stored = upsert.mock.calls[0]?.[0];
         expect(stored.create.secretHash).not.toBe(grant.secret);
         expect(stored.create.secretHash).toMatch(/^[0-9a-f]{64}$/);

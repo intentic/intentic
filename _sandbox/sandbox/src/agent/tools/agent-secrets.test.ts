@@ -6,17 +6,13 @@ import { syncHookOutput } from "../../testing.js";
 import { resolveCommandSecrets, type SecretAccess, secretCommandHooks, type SecretUseReport } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
 
-/* THE SHELL EXIT. A `{{secret:name}}` reference in the agent's command becomes the stored value in the line
- * the pane EXECUTES, and only there: the `-c` copy the cleaners and the ledger read keeps the agent's own
- * reference-form words. An unknown name refuses the command outright, because a reference that survives as
- * literal text is a config with a hole where a credential should be. */
+// A `{{secret:name}}` reference resolves to its value only in the line the pane executes; the ledger/`-c` copy keeps
+// the reference text. An unknown name refuses outright, since a literal reference surviving is a config hole.
 
 const TOKEN = "cf_live_0011223344ff";
 
-/* The gate's answer, as the exit sees it. `release` defaults to the ungated sandbox — no gate covers
- * anything, so every name passes and nothing is attributed — and a test that cares hands in its own. `asked`
- * records what the exit asked about, which is how the batching rule (one question per credential, not per
- * name) is asserted rather than assumed. */
+// `release` defaults to ungated (everything passes, nothing attributed); a test overrides it. `asked` records what was
+// asked, which is how the one-question-per-credential batching rule gets asserted.
 type Release = SecretAccess["release"];
 const allowAll: Release = async () => ({ ok: true });
 
@@ -73,7 +69,7 @@ test("resolveCommandSecrets splices the value in and reports the use with the re
 });
 
 test("a command with no reference never reads the registry", async () => {
-    // The overwhelmingly common case must not pay a vault read per Bash call.
+    // The common case must not pay a vault read per Bash call.
     const { bundle, reads } = access();
     expect(await resolveCommandSecrets("echo hi", bundle)).toEqual({ command: "echo hi" });
     expect(reads).toEqual([]);
@@ -103,9 +99,9 @@ test("inside the tmux wrapper, the pane executes the value while -c keeps the ag
     const agentLine = 'curl -d \'{"token":"{{secret:CLOUDFLARE_API_TOKEN}}"}\' https://api';
     const output = await outputOf(fire({ command: agentLine, description: "call api" }, bashTmuxHooks([], undefined, undefined, bundle)));
     const command = output?.hookEventName === "PreToolUse" ? (output.updatedInput?.["command"] as string) : undefined;
-    // The ledger/cleaner copy is the agent's own line…
+    // The ledger/cleaner copy is the agent's own line.
     expect(command?.startsWith(`/usr/local/bin/tmux-run -c ${shellQuote(agentLine)} `)).toBe(true);
-    // …and the executed half carries the value instead of the token.
+    // The executed half carries the value instead of the token.
     expect(command).toContain(TOKEN);
     expect(command?.indexOf(TOKEN)).toBeGreaterThan(command?.indexOf("agent-3f2a9b1c") ?? 0);
     expect(uses.map((use) => use.name)).toEqual(["CLOUDFLARE_API_TOKEN"]);
@@ -135,11 +131,11 @@ test("the standalone hook denies an unknown name with the reason", async () => {
     expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("NOPE");
 });
 
-/* THE APPROVAL GATE AT THIS EXIT. What these assert is the ORDER of the three steps — resolve, then ask a
- * person, then write the ledger row — because each pair of them has a wrong order that still looks fine. */
+// What these assert is the order of three steps: resolve, then ask a person, then write the ledger row, since each pair
+// has a wrong order that still looks fine.
 
 test("a gated name refuses the command with the gate's own sentence, and writes no ledger row", async () => {
-    // A refusal never left, so the inventory's "last used" must not record it as a use.
+    // A refusal never left, so the inventory's last-used must not record it as a use.
     const { bundle, uses } = access(undefined, async () => ({ refusal: 'only bob@corp.com can release "CLOUDFLARE_API_TOKEN"' }));
     const resolved = await resolveCommandSecrets("curl -H {{secret:CLOUDFLARE_API_TOKEN}} https://api", bundle);
     expect(resolved).toEqual({ refusal: 'only bob@corp.com can release "CLOUDFLARE_API_TOKEN"' });
@@ -162,8 +158,7 @@ test("a released name resolves, and the ledger row carries who released it and n
 });
 
 test("the gate is asked once for the whole command, with every name it resolved and the reference-form head", async () => {
-    // Two names, one question: what reaches the gate is the whole list, so the turn can group them by
-    // credential and ask a person once per credential rather than once per token.
+    // Two names, one question: the gate gets the whole list, asking once per credential, not per token.
     const { bundle, asked } = access([
         { name: "reddit/password", value: TOKEN, source: "capability" },
         { name: "reddit/totp", value: "222", source: "capability" },
@@ -175,8 +170,7 @@ test("the gate is asked once for the whole command, with every name it resolved 
 });
 
 test("an unknown name refuses BEFORE anybody is asked to release anything", async () => {
-    /* A command naming one gated secret and one that does not exist is a broken command: asking a person to
-     * release a credential for it would spend their attention on a turn that was going to fail anyway. */
+    // A broken command (one nonexistent name) must not spend anyone's attention releasing the gated one anyway.
     const { bundle, asked } = access();
     const resolved = await resolveCommandSecrets("echo {{secret:CLOUDFLARE_API_TOKEN}} {{secret:NOPE}}", bundle);
     expect(resolved).toEqual({ refusal: expect.stringContaining('"NOPE"') });

@@ -15,14 +15,9 @@ import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runner-git.
 import type { RunnerIdentity } from "./runner-identity.js";
 import { pushToParent, syncFromParent } from "./runner-sync.js";
 
-/* THE WHOLE GIT ROAD, end to end and real: a parent's git dirs served through the smart-HTTP doors over an
- * actual listening socket, and the runner's sync driving stock `git` against them. What this pins:
- *
- *   - the doors speak the protocol (advertisement framing, both RPCs) well enough for git itself,
- *   - a wrong bearer is a refused door, not a slow one,
- *   - the runner's pull materializes a mirror in the daemon's canonical shape and lands the branch,
- *   - the push arrives at refs/runner-incoming/<id> — and a push at the CHECKED-OUT main branch is refused
- *     by git's own denyCurrentBranch, which is the safety property the incoming ref exists around. */
+// End-to-end against a real parent: git dirs served over a live socket through the smart-HTTP doors, driven by the
+// runner's sync using stock git. A wrong bearer refuses outright, and a push to the checked-out branch is refused by
+// git.
 
 const execFileAsync = promisify(execFile);
 const git = async (cwd: string, args: string[]): Promise<string> =>
@@ -89,12 +84,10 @@ test("pull materializes the mirror: main line checked out, branch landed, git di
     await syncFromParent({ workspaceRoot: runnerWork, historyRoot: runnerHistory, worktrees: worktreesStub }, identity, sync("pull"), (line) =>
         lines.push(line),
     );
-    // The parent's tracked content is the runner's working tree, on the parent's own branch name.
     await expect(access(join(runnerWork, "readme.md"))).resolves.toBeUndefined();
     expect(await git(runnerWork, ["symbolic-ref", "--short", "HEAD"])).toBe(mainBranch);
-    // The canonical shape: the real git dir sits on the runner's /history, the working dir holds a pointer.
+    // The real git dir lives on /history; the working dir just holds a pointer to it.
     await expect(access(join(runnerHistory, "gits", "root"))).resolves.toBeUndefined();
-    // The conversation's branch is here at the parent's sha.
     expect(await git(runnerWork, ["rev-parse", "agent/conv1"])).toBe(await git(parentWork, ["rev-parse", "agent/conv1"]));
     expect(lines.some((line) => line.includes("up to date"))).toBe(true);
 });
@@ -107,7 +100,6 @@ test("push lands on the incoming ref, and the checked-out main branch refuses a 
     const tip = await git(runnerWork, ["rev-parse", "HEAD"]);
     await pushToParent({ workspaceRoot: runnerWork, historyRoot: runnerHistory, worktrees: worktreesStub }, identity, sync("push"), () => undefined);
     expect(await git(parentWork, ["rev-parse", runnerIncomingRef("conv1")])).toBe(tip);
-    // The safety pin the incoming ref exists around: pushing the checked-out branch is git's own refusal.
     const env = { ...process.env, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: `Authorization: Bearer ${TOKEN}` };
     await expect(
         execFileAsync("git", ["push", `${identity.parentUrl}/system/runners/git/root`, `+agent/conv1:refs/heads/${mainBranch}`], {
@@ -117,10 +109,7 @@ test("push lands on the incoming ref, and the checked-out main branch refuses a 
     ).rejects.toThrow();
 });
 
-/* THE OTHER PARENT SHAPE, and the one a real run found missing: a LOCAL-profile parent never reshapes the
- * user's repos, so there is no gits/<id> on its history root and the door has to ask git where the repo
- * actually lives. Before this, every fetch against such a parent answered "no such repository" and no remote
- * turn could reach its workspace at all. */
+// A local-profile parent keeps no gits/<id> on its history root; the door must ask git where the repo actually lives.
 test("the door also serves a parent whose repo keeps its in-tree .git (the local profile)", async () => {
     const localWork = mkdtempSync(join(tmpdir(), "runner-local-work-"));
     const localHistory = mkdtempSync(join(tmpdir(), "runner-local-hist-"));
@@ -146,7 +135,7 @@ test("the door also serves a parent whose repo keeps its in-tree .git (the local
         });
         expect(response.status).toBe(200);
         expect(await response.text()).toContain("service=git-upload-pack");
-        // And a repo id that climbs out of the workspace is still nobody's repository.
+        // A repo id that climbs out of the workspace (`../../etc`) is nobody's repository.
         const escaped = await fetch(`${url}/system/runners/git/${encodeURIComponent("../../etc")}/info/refs?service=git-upload-pack`, {
             headers: { authorization: `Bearer ${TOKEN}` },
         });
@@ -157,11 +146,10 @@ test("the door also serves a parent whose repo keeps its in-tree .git (the local
 });
 
 test("a second pull is incremental and reconciles the branch onto what the parent has", async () => {
-    // The parent moves (a land, say): the next pull moves the runner's mirror with it.
     await writeFile(join(parentWork, "second.md"), "the parent moved\n");
     await git(parentWork, ["add", "."]);
     await git(parentWork, ["commit", "-m", "second"]);
-    // The runner's checkout went back to the main branch between turns, as the real flow leaves it.
+    // The runner's checkout sits back on the main branch between turns, as the real flow leaves it.
     await git(runnerWork, ["switch", mainBranch]);
     await syncFromParent({ workspaceRoot: runnerWork, historyRoot: runnerHistory, worktrees: worktreesStub }, identity, sync("pull"), () => undefined);
     expect(await git(runnerWork, ["rev-parse", mainBranch])).toBe(await git(parentWork, ["rev-parse", mainBranch]));

@@ -1,18 +1,7 @@
-/* What the machine says, turned into facts, every one of them a pure function beside the call that produced
- * it, for the reason `_sandbox/ic` states about its own decisions: this is the logic most likely to be wrong
- * and least likely to be noticed when it is, and it is the only part of a Windows tier that can be asserted
- * without a Windows machine.
- *
- * THE POWERSHELL JSON FOOTGUN, ONCE, HERE. `ConvertTo-Json` is not stable in its shape: a pipeline that yields
- * nothing produces the empty string, one object produces an OBJECT, and two produce an ARRAY. Reading it as
- * `T[]` therefore works on a developer machine with two matches and throws on the CI box with one, which is
- * a failure that reads as "the app is not installed" when the truth is "the app is installed exactly once".
- * `asList` is that asymmetry absorbed in one place, and it is why every probe here parses through it.
- */
+// Facts parsed from what the machine says, each a pure function so it can be tested without a Windows machine.
+// `ConvertTo-Json` returns nothing/an object/an array for 0/1/N results; `asList` absorbs that asymmetry once, for
+// every probe here.
 
-// `posix`, not the platform's own: every path these build is a path INSIDE the Linux container, written by a
-// tool whose own process is running on Windows. `dirname` off the default namespace would read a backslash as
-// a separator on the machine this actually runs on.
 import { posix } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -73,19 +62,8 @@ export interface InstalledApp {
     readonly uninstallString: string;
 }
 
-/* The app as Windows lists it. Matched on DisplayName rather than on the registry key, because the key is the
- * bundler's business: Tauri has spelled it the product name and the bundle identifier in different versions,
- * and a tier pinned to either one reports "not installed" the day that changes, the single most misleading
- * thing this file could say, since it is also what a genuinely failed install looks like.
- *
- * An entry with no InstallLocation is dropped rather than defaulted: the whole point of reading this key is to
- * be told where the app went, and guessing %LOCALAPPDATA%\<name> would turn a bundler regression into a set of
- * downstream "file not found" failures that name the wrong cause.
- *
- * `installLocation` is UNQUOTED and `uninstallString` deliberately is not. Windows writes both with surrounding
- * quotes, and they are consumed differently: the location is handed to `readdir`, which reads a quote as an
- * ordinary path character and then resolves the whole thing relative to the working directory, while the
- * uninstall string is handed to a shell that needs the quotes to survive a space in the path. */
+// Matched on DisplayName, not the registry key, since the bundler has spelled that differently across versions.
+// installLocation is unquoted (for readdir); uninstallString stays quoted for the shell that needs it.
 export const installedApp = (entries: readonly UninstallEntry[], displayName: string): InstalledApp | undefined => {
     const match = entries.find((entry) => entry.DisplayName === displayName && unquote(entry.InstallLocation ?? ``) !== ``);
     if (match === undefined) {
@@ -102,37 +80,25 @@ export const installedApp = (entries: readonly UninstallEntry[], displayName: st
 /** Strips one layer of surrounding double quotes, which is how Windows stores a path that may contain spaces. */
 const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
 
-/* WHAT IS KEEPING THIS RUNNER ALIVE, which is a different question from "is it in a desktop session".
- *
- * Both were the same question while the only two shapes were "a service" (session 0, fails everything) and "the
- * logon task" (a desktop, passes). There is a third, and it is the one a machine drifts into: somebody starts
- * `run.cmd` in a console window by hand. That runner has a desktop and passes every assertion in tier 1, so
- * nothing here has ever objected to it — and it dies with the window, with the sign-out and with the reboot, and
- * nothing brings it back. What that looks like from the outside is jobs queueing against `windows-desktop`
- * forever with no failure anywhere to read, which is the least diagnosable state this machine has.
- *
- * So it is reported, and NOT as a failure: this runner is running the job that is asking, and failing the job
- * would be the tier punishing a machine for something that is about the next reboot rather than about this run.
- * A line in a passing log is the right weight — it is there to be found by whoever asks "why did CI stop?".
- */
+// What's keeping this runner alive, not just whether it has a desktop: a hand-started console passes every assertion
+// here but dies at the next reboot or sign-out. Reported, not failed, since that's about the next run.
 export interface RunnerTask {
-    /** As Windows reports it: `Running` when the task is what started this listener, `Ready` when it is not. */
+    /** As Windows reports it: `Running` when this task started the listener, `Ready` when it did not. */
     readonly State?: string;
-    /** How often the watchdog trigger re-runs the task, as an ISO 8601 duration, or absent if there is none. */
+    /** How often the watchdog re-runs the task, as an ISO 8601 duration, or absent without one. */
     readonly Repetition?: string;
 }
 
 export type RunnerSupervision =
-    /** The logon task started this listener and re-checks it: a reboot, a crash and a sign-out all heal. */
+    /** Logon task started this listener and re-checks it: a reboot, crash or sign-out all heal. */
     | { readonly kind: `supervised`; readonly repetition: string }
-    /** The task started it, but nothing re-checks it: a crash needs a sign-out and back in. */
+    /** Task started it, but nothing re-checks it; a crash needs a sign-out and back in. */
     | { readonly kind: `no-watchdog` }
-    /** A console somebody opened. Runs this job perfectly and is gone at the next reboot. */
+    /** A console somebody opened; runs this job fine, gone at the next reboot. */
     | { readonly kind: `hand-started` };
 
-/* `Running` is the whole test for "the task started this", and it is exact rather than a heuristic: the doctor
- * runs INSIDE the listener, so if the task were not the thing hosting this process the task would not be in a
- * running state. A missing task and a task sitting at Ready are the same answer — something else started this. */
+// `Running` is exact, not a heuristic: the doctor runs inside the listener, so the hosting task can't be anything but
+// Running. A missing task and one sitting at Ready are the same answer: something else started this.
 export const runnerSupervision = (tasks: readonly RunnerTask[]): RunnerSupervision => {
     const running = tasks.find((task) => (task.State ?? ``).toLowerCase() === `running`);
     if (running === undefined) {
@@ -142,10 +108,8 @@ export const runnerSupervision = (tasks: readonly RunnerTask[]): RunnerSupervisi
     return repetition === `` ? { kind: `no-watchdog` } : { kind: `supervised`, repetition };
 };
 
-/* An ISO 8601 duration as a person reads it. Task Scheduler speaks PT3M and nothing else, and "every PT3M" in
- * a CI log is a line the reader has to decode to know whether it says three minutes or three months. Only the
- * shapes this actually produces are handled, and anything else is passed through verbatim rather than guessed
- * at: a wrong number here would be a confident lie about how long this machine takes to heal. */
+// Only the H/M/S shapes Task Scheduler actually produces are parsed; anything else passes through verbatim rather than
+// risk a wrong, confidently-stated duration.
 export const humanDuration = (iso: string): string => {
     const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso.trim());
     if (match === null) {
@@ -161,22 +125,17 @@ export const humanDuration = (iso: string): string => {
     return parts.length === 0 ? iso.trim() : parts.join(` `);
 };
 
-/* `docker info --format {{.OSType}}`, the question `connect.ps1` and `ic` both skip.
- *
- * Both of them establish that a daemon ANSWERS and go straight on to pulling a Linux image. On Windows those
- * are different questions: Docker Desktop can be running perfectly in Windows-container mode, where `docker
- * info` is a clean exit 0 and the sandbox image then fails to pull with a manifest error that names no remedy.
- * That is not a hypothetical shape of bug, it is the default state of the Docker that ships preinstalled on
- * a Windows CI image, so any Windows runner reaches it before any user does. */
+// Docker answering isn't enough: Windows-container mode exits 0 too, then fails the sandbox's Linux image pull with an
+// unrelated error. It's Windows CI's default Docker mode, so every runner hits it before any user does.
 export const dockerOsType = (stdout: string): string | undefined => {
     const value = stdout.trim().toLowerCase();
     return value === `` ? undefined : value;
 };
 
-/** What every sandbox container this product creates is called, whatever hostname produced its slug. */
+/** Prefix every sandbox container name carries, whatever hostname produced its slug. */
 export const SANDBOX_CONTAINER_PREFIX = `intentic-sandbox-`;
 
-/** The container name every later flow addresses, recreate, cleanup and the launcher's docker reads all key off it. */
+/** Container name every later flow (recreate, cleanup, the launcher's docker calls) keys off. */
 export const sandboxContainerName = (hostname: string): string => `${SANDBOX_CONTAINER_PREFIX}${sandboxSlug(hostname)}`;
 
 /** `docker ps --format {{.Names}}` (or any one-name-per-line docker output), as the list it prints. */
@@ -186,14 +145,8 @@ export const containerNames = (stdout: string): string[] =>
         .map((line) => line.trim())
         .filter((line) => line !== ``);
 
-/* WHICH OF THE NAMES A CONTAINER DOES NOT CARRY A VALUE FOR, over `docker inspect`'s printed environment
- * (`{{range .Config.Env}}{{println .}}{{end}}`) — the record of what the run that created it was given, and
- * the only place a value the setup silently dropped can be seen from outside.
- *
- * A NAME WITH AN EMPTY VALUE COUNTS AS MISSING, which is not pedantry: an empty var is exactly how a creation
- * flow spells "this was never set", and every consumer in the product reads it that way (the daemon's own
- * config treats an empty grant as "dial no tunnel"). Reporting `SANDBOX_GRANT=` as present would be reporting
- * the bug as fixed. */
+// Names from `docker inspect`'s printed env with no value, or none at all: an empty value counts as missing, matching
+// how every consumer here reads it (an empty grant means dial no tunnel).
 export const missingEnvNames = (stdout: string, keys: readonly string[]): string[] => {
     const carried = new Set(
         containerNames(stdout)
@@ -204,14 +157,8 @@ export const missingEnvNames = (stdout: string, keys: readonly string[]): string
     return keys.filter((key) => !carried.has(key));
 };
 
-/* `docker port <container> <port>/tcp`, which answers `127.0.0.1:28122` for a published port and NOTHING AT
- * ALL for one that is not published, exit 0 either way on some engines.
- *
- * That silence is the whole reason this exists. `ic` treats the loopback shortcut as the one part of a launch
- * whose failure does not mean a broken sandbox: docker refuses the entire `run` when the derived port is held,
- * so connect retries without the `-p` and says so in a note nobody's exit code carries. The sandbox is then
- * healthy, reachable through its tunnel, and absent from the address a browser on this machine derives, which
- * is exactly the state tier 3 exists to catch and cannot catch by asking whether SOMETHING answers there. */
+// Docker answers an address for a published port and nothing for one that isn't, exit 0 either way. A missing port here
+// means the sandbox is healthy through its tunnel but absent from the address a local browser would derive.
 export const publishedPort = (stdout: string): number | undefined => {
     const first = containerNames(stdout)[0];
     if (first === undefined) {
@@ -221,10 +168,8 @@ export const publishedPort = (stdout: string): number | undefined => {
     return Number.isNaN(port) ? undefined : port;
 };
 
-/* Whether the store that came back out of the container is the one that went in, compared as the daemon reads
- * it (parsed JSON) rather than byte for byte: what matters is that `auth/control-tokens.ts` will find the hash,
- * not that the bytes survived unshuffled, and a heredoc that arrived with CRLF line endings is a store the
- * daemon accepts. Unparseable, on either side, is never the same store. */
+// Compares parsed JSON, not bytes: what matters is the daemon can find the hash inside, not that CRLF or formatting
+// survived. Unparseable on either side is never a match.
 export const sameStore = (written: string, readBack: string): boolean => {
     try {
         return JSON.stringify(JSON.parse(written)) === JSON.stringify(JSON.parse(readBack));
@@ -233,45 +178,27 @@ export const sameStore = (written: string, readBack: string): boolean => {
     }
 };
 
-/** The slug rule the app's launcher relies on: everything before the first dot. */
+/** Launcher's own slug rule: everything before the first dot. */
 export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 
-/* Whether a window title is the one being waited for. Substring, case-sensitive, on the distinctive half,
- * the same contract the Linux tier's `SETUP_TITLE="Setting up"` has, and for the same reason: these titles are
- * user-facing copy, and an assertion that pins the whole string turns a wording change into a red build. */
+// Whether a window title is the one being waited for: substring match on the distinctive half, so a wording change
+// doesn't turn into a red build.
 export const titled = (titles: readonly string[], fragment: string): boolean => titles.some((title) => title.includes(fragment));
 
-/* The control-token store, as `auth/control-tokens.ts` persists it: sha256 of the raw token, never the token.
- *
- * Here rather than beside the tier that writes it, for the reason everything else in this file is here, it is
- * a decision (what shape the daemon reads) separated from the IO that acts on it (a `docker exec` writing a
- * file), and it is the only part of tier 3's credential seeding that can be asserted from a Linux machine.
- * The coupling to that file's schema is real and deliberate: the day it changes, this is what fails, and its
- * name says what it was trying to do. */
+// Control-token store shape as auth/control-tokens.ts persists it: sha256 of the raw token, never the token. Kept as a
+// pure decision, separate from the docker exec that writes it.
 export const controlTokenStore = (digest: string): string =>
     JSON.stringify({
         tokens: [{ id: `windows-smoke`, label: `windows smoke`, scope: `drive`, hash: digest, createdAt: 0 }],
     });
 
-/* The sh that puts that store on disk inside the container, here, and not spliced into the `docker exec`
- * beside it, for one reason: the directory it creates is DERIVED from the path it writes.
- *
- * The two used to be written down separately, and the day the daemon moved its identity files into
- * `.intentic/identity/` the `mkdir` kept naming the parent the store used to have. Every write after that
- * failed with "nonexistent directory", and the tier said only "could not seed a drive-scoped control token",
- * a red Windows build whose message pointed at the credential rather than at the rename that broke it. A path
- * and the directory it needs cannot disagree when only one of them is written down.
- *
- * `<<'STORE'` is quoted, so the JSON reaches the file byte for byte with no expansion of anything inside it. */
+// mkdir's directory is derived from the same path being written, so the two cannot drift apart. `<<'STORE'` is quoted
+// so the JSON reaches the file byte for byte, with no expansion.
 export const controlTokenSeedScript = (storePath: string, store: string): string =>
     `mkdir -p ${shellQuote(posix.dirname(storePath))} && cat > ${shellQuote(storePath)} <<'STORE'\n${store}\nSTORE`;
 
-/* The WebView2 runtime's version, from the Edge updater's client key.
- *
- * Worth a probe of its own rather than being left to surface as "the window never opened": Windows 11 carries
- * the runtime, Windows Server does not, and Tauri's installer is configured to fetch it at install time. So on
- * a Server-based runner this is the difference between a real product bug and a machine that was never able to
- * show a window, and those two must not produce the same log line. */
+// Probed separately from a window failing to open: Windows 11 ships the runtime, Server doesn't (the installer fetches
+// it), and those are different failures to report.
 export const webView2Version = (entries: readonly { readonly pv?: string }[]): string | undefined => {
     const found = entries.find((entry) => (entry.pv ?? ``) !== ``);
     return found?.pv;

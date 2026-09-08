@@ -5,16 +5,9 @@ import { host } from "./host.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-/* WHETHER THIS REPO IS HALTED MID-OPERATION, and the way out.
- *
- * The graph is where a stuck repo is most visible and least explicable: HEAD sits somewhere unexpected, a rebase
- * has replayed half its commits, and none of it says why. Nothing this extension starts can cause it, every
- * write it makes aborts cleanly on failure daemon-side, so this is always what a terminal left behind, which is
- * exactly why the graph has to surface it rather than assume its own actions are the only ones.
- *
- * Refreshed off the ref push rather than polled: the markers this reads are written in the git dir, so starting
- * or aborting an operation moves refs (or the in-progress markers the watcher also watches) and the frame
- * arrives on its own. */
+// Whether this repo is halted mid-operation (a stuck rebase, HEAD somewhere unexpected), and the way out. Nothing this
+// extension does can cause it, since its own writes always abort cleanly, so this always reflects something a terminal
+// left behind. Refreshed off the ref push, since starting or aborting an operation moves refs.
 
 export function useOperation(repo: Ref<string>) {
     const api = host();
@@ -30,14 +23,13 @@ export function useOperation(repo: Ref<string>) {
 
     const { busy, error: actionError, run } = useAsyncAction();
 
-    // Aborting rewrites the worktree AND moves HEAD, so the log goes with it, the ref push covers every other
-    // browser, but this one should not wait a round trip to see its own click land.
+    // Aborting rewrites the worktree and moves HEAD, so the log needs refreshing too; other tabs get that via the ref
+    // push, but this one shouldn't wait a round trip for its own click.
     const abort = (): Promise<void> =>
         run(async () => {
             const result = await api.sandbox.rpc.git.abort({ repo: repo.value });
             if (!result.ok) {
-                // Someone else finished or aborted it between the render and the click. Nothing to report as a
-                // failure, refreshing below simply drops the banner.
+                // Someone else already finished or aborted it; refreshing here just drops the banner.
                 await queryClient.invalidateQueries({ queryKey: key.value });
                 return;
             }

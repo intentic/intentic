@@ -1,36 +1,19 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-/* ASKING THE SANDBOX WHAT IT ACTUALLY HAS.
- *
- * The Environment tab's contents view shows a version beside each tool, and there are two places it could come
- * from: the install line in the recipe, or the tool itself. It has to be the tool. A recipe pins nothing at all
- * for half these entries (`bun`, and a rustup line whose toolchain is `stable`), and where it DOES pin a number
- * that number describes what the next rebuild would install, so an overlay that is approved and not yet built
- * would report versions for tools the container does not have. Reading them back from the binaries makes the
- * whole view true by construction, and it makes per-item state exact for free: an item the recipe contains and
- * this module cannot find is precisely one that arrives with the next rebuild.
- *
- * A probe is one of the reads that terminal-run.ts exempts from the visible-tmux rule, nothing here is a user
- * action, and forty version checks in the terminals panel would be noise, not transparency. */
+// Versions are read from the binaries themselves, not recipe pins: a pin describes what the next rebuild installs, not
+// what the container has now. Exempted from the visible-tmux rule in terminal-run.ts, since this is not a user action.
 
 const execFileAsync = promisify(execFile);
 
-// The flags tools answer a version on, in the order worth trying. `-version` is second because it is ffmpeg's
-// (and java's) spelling and nothing else's; a tool that takes neither is reported as having no version, never as
-// missing, the difference decides whether the row says "arrives after rebuild".
+// Flags tried in order; `-version` (ffmpeg, java's spelling) is checked second since nothing else uses it.
 const VERSION_FLAGS = ["--version", "-version"];
 
-/* Long enough for a JVM-ish cold start on a machine that is busy, the whole view probes dozens of commands at
- * once, and a box already running a build spawns them far slower than an idle one. A probe that times out reads
- * as "no version", the same as one that answers nothing, so a deadline set for an idle machine quietly turns a
- * present tool into a versionless one; that is a wrong statement, not a slow one, which is why this is generous
- * and why a timeout is never cached (see probeVersion). Still bounded, so a hung binary cannot hold the view. */
+// Generous: a slow probe must read as slow, not missing; timeouts are never cached (see probeVersion).
 const PROBE_TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 64 * 1024;
 
-// Re-probed after this, so a tool an agent installed mid-session stops being reported as pending forever. The
-// applied environment cannot otherwise change without a container recreate, which restarts this process anyway.
+// Re-probed after this so a tool installed mid-session stops reading as pending without a container recreate.
 const CACHE_TTL_MS = 5 * 60 * 1_000;
 
 interface Probe {
@@ -41,21 +24,15 @@ interface Probe {
 
 const cache = new Map<string, Probe>();
 
-// The card's refresh button clears this, so "it says missing but I just installed it" has an answer that is one
-// click rather than a restart.
+// Cleared by the card's refresh button, so a fresh install doesn't need a restart to show up.
 export const clearVersionCache = (): void => cache.clear();
 
-/* The version out of whatever the tool printed. Tools are wildly inconsistent here, `rustc 1.90.0`,
- * `ffmpeg version 6.1.1-3`, `Docker version 27.3.1, build ce1223035a`, a bare `1.2.4` from bun, but they all
- * lead with a dotted number, so the first one is the answer. Build metadata after it is dropped: the row has
- * space for a version, and "6.1.1" is the part anyone compares. */
+// First dotted number in the tool's output (`rustc 1.90.0`, `ffmpeg version 6.1.1-3`, a bare `1.2.4` from bun); build
+// metadata after it is dropped.
 export const parseVersion = (output: string): string | undefined => /(\d+\.\d+(?:\.\d+)?)/.exec(output)?.[1];
 
-/* ONE TOOL'S VERSION, or undefined when it has none to give. `found` is the half that matters: a binary that is
- * not on PATH throws ENOENT, and everything else, a non-zero exit, an unknown flag, a timeout, still proves
- * the command exists, which is why those fall through to the next flag and then to "present, version unknown"
- * rather than to "missing". Reporting a tool as absent because it dislikes `--version` would put a working
- * toolchain behind a "needs a rebuild" badge. */
+// One tool's version, or undefined if it has none; `found` distinguishes that from missing entirely. Any failure but
+// ENOENT/EACCES still proves the binary exists, so it falls through to the next flag.
 const probeOnce = async (bin: string): Promise<Probe & { readonly timedOut: boolean }> => {
     let found = false;
     let timedOut = false;
@@ -68,8 +45,7 @@ const probeOnce = async (bin: string): Promise<Probe & { readonly timedOut: bool
             }
             found = true;
         } catch (error) {
-            // ENOENT is the only answer that means "no such command"; a tool that exits non-zero on an unknown
-            // flag still printed its usage from a real binary, and often its version with it.
+            // ENOENT/EACCES is the only case that means no such command; other errors still came from a real binary.
             const code = (error as { code?: unknown }).code;
             if (code === "ENOENT" || code === "EACCES") {
                 return { version: undefined, found: false, at: Date.now(), timedOut: false };
@@ -93,16 +69,14 @@ const probeVersion = async (bin: string): Promise<Probe> => {
         return cached;
     }
     const { timedOut, ...probe } = await probeOnce(bin);
-    // A timeout is an unanswered question rather than an answer, so it is not kept: caching it would hold a
-    // present tool at "version unknown" for the rest of the window over one busy moment.
+    // Timeouts are not cached, or one busy moment holds a present tool at 'unknown' for the rest of the window.
     if (!timedOut) {
         cache.set(bin, probe);
     }
     return probe;
 };
 
-// Every distinct command, probed once. Callers hand in overlapping candidate lists (two blocks can both install
-// `cargo`), so deduping here is what keeps the view's cost proportional to the sandbox rather than to the recipe.
+// Deduplicates candidates (callers' lists overlap) so cost scales with distinct binaries, not the recipe.
 export const probeAll = async (bins: Iterable<string>): Promise<Map<string, Probe>> => {
     const unique = [...new Set(bins)];
     const probes = await Promise.all(unique.map(async (bin) => [bin, await probeVersion(bin)] as const));

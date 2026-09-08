@@ -1,20 +1,7 @@
 #!/usr/bin/env node
-/* Put this machine's development CA into the trust stores that decide whether the browser shows a lock.
- *
- * WHY THIS EXISTS AS A COMMAND. Minting a root and printing "now go trust it" is where the old setup stopped,
- * and the gap between those two sentences is a browser warning on every `pnpm dev`: the instructions differ
- * per OS, Firefox keeps a store of its own that no OS instruction touches, and on WSL the file is on one side
- * of the machine while the browser that has to believe it is on the other. All of that is mechanical, so it is
- * done here instead of in a README nobody finishes.
- *
- * IT IS SAFE TO RUN AGAIN. Every store is cleared of our own previous entry before the current root goes in,
- * so re-running after the root is regenerated replaces it rather than stacking a second one, and a stale root
- * left behind in a store is exactly the confusion this is meant to end.
- *
- * WHAT IT DELIBERATELY DOES NOT DO. It never installs anything but the root this checkout would serve under,
- * and it touches only the current user's stores unless the OS has no such thing. The system-wide store needs
- * elevation; if you want the root there too, that is your call to make and your sudo to type.
- */
+// Puts this machine's dev CA into every trust store that decides the browser's lock icon: OS store, Firefox's separate
+// one, and the WSL boundary, each with its own quirks. Safe to re-run: clears its own earlier entry before adding the
+// current root. Touches only the current user's stores; system-wide needs your own sudo.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
@@ -38,14 +25,8 @@ const found = (command) => attempt(process.platform === `win32` ? `where` : `whi
 const done = [];
 const skipped = [];
 
-/* ── Windows, natively or from WSL ─────────────────────────────────────────────────────────────────────────
- * `certutil -addstore -user Root` writes the current user's root store: the one Chrome and Edge read, and
- * Firefox too via enterprise roots, and unlike the machine-wide store it needs no elevation.
- *
- * WHETHER WINDOWS IS REACHABLE IS A QUESTION ABOUT INTEROP, NOT ABOUT THE KERNEL. The obvious test: does
- * `/proc/version` mention Microsoft: is also true inside any container running on a WSL2 kernel, where there
- * is no Windows to hand a certificate to and the answer is confidently wrong. Finding the binary and getting a
- * store listing out of it asks the same question in a way that cannot lie. */
+// Windows, natively or via WSL: certutil -addstore -user Root writes the user root store Chrome/Edge read, no elevation
+// needed. Detected by finding the binary, not /proc/version, which lies inside a WSL2 container.
 const windowsCertutil = () => {
     if (process.platform === `win32`) {
         return `certutil`;
@@ -56,10 +37,8 @@ const windowsCertutil = () => {
     return [`certutil.exe`, `/mnt/c/Windows/System32/certutil.exe`].find((candidate) => attempt(candidate, `-store`, `-user`, `Root`));
 };
 
-/* The root, at a path the Windows side can open. Its own filesystem needs no help; from WSL the Linux path is
- * meaningless to a Windows binary, so `wslpath -w` translates it, and because that yields a `\\wsl.localhost`
- * UNC path, which certutil reads only when the WSL file server is willing, the caller falls back to putting a
- * copy on the Windows filesystem where no share is involved. */
+// Translates the Linux path via wslpath -w for a Windows binary; that yields a \\wsl.localhost UNC path certutil
+// doesn't always read, so the caller falls back to copying the file onto the Windows filesystem.
 const windowsReadable = (scratch) => {
     if (process.platform === `win32`) {
         return CA_CRT;
@@ -72,8 +51,7 @@ const windowsReadable = (scratch) => {
 };
 
 const addToWindowsStore = (certutil, scratch) => {
-    // Drop our own earlier root first, matched on the organisation the generator stamps on it, so that
-    // re-running after a regenerated root replaces it instead of leaving two that both look valid.
+    // Drops our earlier root (matched by its stamped org) first, so a regenerated root replaces it, not doubles it.
     attempt(certutil, `-delstore`, `-user`, `Root`, CA_NICKNAME);
     return attempt(certutil, `-addstore`, `-user`, `Root`, windowsReadable(scratch));
 };
@@ -84,10 +62,8 @@ const trustWindows = () => {
         return false;
     }
 
-    /* Windows puts up a Security Warning dialog for a new root and blocks until it is answered: correctly,
-     * since a root is exactly the thing nothing should be able to install behind your back. Say so first: an
-     * unannounced wait on a dialog that may be behind other windows reads as a hang, and from WSL the dialog
-     * appears on the Windows desktop with nothing in the terminal to explain it. */
+    // Windows blocks on a Security Warning dialog for a new root; said here first so the wait doesn't read as a hang,
+    // especially from WSL where the dialog appears on the Windows desktop.
     console.log(`localhost-https: Windows will ask you to confirm the new root, answer Yes on the Security Warning dialog.`);
     if (addToWindowsStore(certutil, undefined)) {
         done.push(`Windows (current user)`);
@@ -109,9 +85,8 @@ const trustWindows = () => {
     return false;
 };
 
-/* ── macOS ─────────────────────────────────────────────────────────────────────────────────────────────────
- * The login keychain, not the System one: `-d` marks it as an admin-trusted root for this user without asking
- * for sudo. It does prompt for the login password once, which is the OS insisting a human authorised it. */
+// macOS: the login keychain, not System; -d marks it admin-trusted for this user without sudo (a one-time
+// login-password prompt is the OS's authorization check).
 const trustMacos = () => {
     const keychain = join(homedir(), `Library`, `Keychains`, `login.keychain-db`);
     if (attempt(`security`, `add-trusted-cert`, `-d`, `-r`, `trustRoot`, `-k`, keychain, CA_CRT)) {
@@ -121,10 +96,8 @@ const trustMacos = () => {
     }
 };
 
-/* ── Linux ─────────────────────────────────────────────────────────────────────────────────────────────────
- * The system anchor directory is the only store there is, and writing it needs root. Rather than surprising
- * anyone with a sudo prompt inside `pnpm install`, this prints the two lines to run and moves on: the browser
- * on a desktop Linux machine reads Firefox's or Chrome's own NSS store anyway, which is handled below. */
+// Linux: the system anchor dir needs root, so this prints the two lines to run instead of sudo-prompting inside pnpm
+// install. Desktop browsers usually read Firefox/Chrome's own NSS store anyway (handled below).
 const linuxAnchor = () => {
     if (existsSync(`/etc/ca-certificates/trust-source/anchors`)) {
         return { dir: `/etc/ca-certificates/trust-source/anchors`, refresh: `update-ca-trust` };
@@ -149,13 +122,8 @@ const trustLinux = () => {
     skipped.push(`Linux system store: needs root:\n      sudo cp ${CA_CRT} ${target} && sudo ${anchor.refresh}`);
 };
 
-/* ── Firefox ───────────────────────────────────────────────────────────────────────────────────────────────
- * Firefox ships its own trust store and, on Linux, ignores the system one entirely, so a root that every
- * other browser accepts still produces a warning there. Each profile is a separate database. On Windows and
- * macOS it reads OS roots by default, so this is a bonus rather than the thing that matters.
- *
- * The tool is NSS's `certutil`, which shares a name with the unrelated Windows one; on Windows we would be
- * calling the wrong binary, so this only runs where they cannot be confused. */
+// Firefox keeps its own store (ignoring Linux's system one) per profile; a bonus on Windows/macOS, which read OS roots
+// anyway. Uses NSS's certutil, distinct from the same-named Windows tool; runs only where they can't be confused.
 const firefoxProfileRoots = () => {
     const home = homedir();
     if (process.platform === `darwin`) {
@@ -202,9 +170,7 @@ const reachedWindows = trustWindows();
 if (process.platform === `darwin`) {
     trustMacos();
 }
-// Only where Windows is not the thing looking at the certificate. On WSL the browser is on the other side of
-// the boundary and already handled, so a sudo hint for the Linux store here would be noise about a store no
-// browser on this machine reads.
+// Skipped when Windows already handles it (WSL): a Linux-store sudo hint would be noise no local browser reads.
 if (process.platform === `linux` && !reachedWindows) {
     trustLinux();
 }
@@ -222,8 +188,5 @@ if (done.length === 0) {
     console.error(`localhost-https: nothing was trusted. The root is at ${CA_CRT}, add it by hand, as a certificate authority.`);
     process.exit(1);
 }
-/* A browser that has already been clicked through to a warning for localhost keeps showing "Not secure" for
- * the rest of its run even once the certificate verifies: the exception is remembered per session, and it
- * outlives the reason for it. Restarting is what clears it, and without saying so the command looks like it
- * did nothing. */
+// A browser already showing the warning keeps it all session even after the cert verifies; a restart clears it.
 console.log(`Restart the browser: one already running remembers having been told to ignore the old warning.`);

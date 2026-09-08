@@ -2,20 +2,14 @@ import { errorMessage } from "@intentic/base/errors";
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 
-/* The gateway's Slack connections, one Socket Mode socket plus one Web API client per configured app, alive
- * only while the daemon says an enabled slack listener automation exists. A module singleton map, like
- * ext-discord's: the reconcile loop and the listener both reach it directly.
- *
- * Socket Mode is why this works in a sandbox at all: the connection is OUTBOUND, so Slack needs no public URL
- * to reach the agent and there is no request signature to verify. @slack/socket-mode owns the reconnect and
- * ping/pong lifecycle; what this file adds is the pool, the identity probe, and turning a start() rejection
- * into a sentence the owner can act on. */
+// One Socket Mode socket + Web API client per configured Slack app, alive while the daemon reports an enabled listener
+// automation; a module singleton reached by the reconcile loop and the listener. Socket Mode's outbound connection
+// needs no public URL; this file adds the pool, identity probe, and an actionable message for a failed start().
 
 export interface SlackConnection {
     readonly socket: SocketModeClient;
     readonly web: WebClient;
-    // The bot's own user id, from auth.test at connect. Needed on every inbound message: it is how the listener
-    // recognizes a mention (`<@id>`) and how it drops the bot's own posts instead of waking on them.
+    // Bot's own user id (from auth.test); how the listener recognizes a mention and ignores its own posts.
     readonly selfUserId: string;
 }
 
@@ -25,8 +19,8 @@ const connections = new Map<string, SlackConnection>();
 export const slackConnection = (appToken: string): SlackConnection | undefined => connections.get(appToken);
 export const slackConnections = (): ReadonlyMap<string, SlackConnection> => connections;
 
-// Fatal: retrying with the same token and portal state can never succeed, so the caller pauses this token
-// instead of hammering Slack. The message names the field the owner has to fix.
+// Fatal: retrying with the same token can never succeed; the caller should pause this token rather than retry. Message
+// names the field to fix.
 export class FatalSlackError extends Error {}
 
 export const openSlackConnection = async (appToken: string, botToken: string): Promise<SlackConnection> => {
@@ -39,8 +33,8 @@ export const openSlackConnection = async (appToken: string, botToken: string): P
         throw new FatalSlackError("Slack accepted the bot token but returned no bot user: reinstall the app to your workspace");
     }
     const socket = new SocketModeClient({ appToken });
-    // start() resolves on the `connected` frame and rejects on a refused handshake. Past that point the client
-    // reconnects itself, so this await is the ONE place a bad app token can be diagnosed.
+    // Resolves on `connected`, rejects on a refused handshake; past this point the client reconnects itself, so this is
+    // the only place to catch a bad app token.
     await socket.start().catch(async (error: unknown) => {
         await socket.disconnect().catch(() => undefined);
         throw authFailure(error, "appToken", "xapp-");
@@ -59,9 +53,7 @@ export const closeSlackConnection = async (appToken: string): Promise<void> => {
     await connection.socket.disconnect().catch(() => undefined);
 };
 
-// Map a Slack auth rejection onto a message a user can act on. Slack's own codes for a dead credential
-// (invalid_auth, not_authed, account_inactive, token_revoked, token_expired) are all fatal in the same way;
-// anything else is a transient network/API failure the caller should simply retry.
+// Slack's dead-credential codes are always fatal; anything else is a transient failure to retry.
 const FATAL_CODES = ["invalid_auth", "not_authed", "account_inactive", "token_revoked", "token_expired", "team_disabled"];
 
 const authFailure = (error: unknown, field: string, prefix: string): Error => {

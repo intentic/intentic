@@ -4,27 +4,12 @@ import { ORPCError } from "@orpc/server";
 import { isIsolated, type PersistedAgent } from "../../agents/registry/agents-store.js";
 import { isControlPlanePath, realWithin, resolveWithin } from "../files/workspace-files-paths.js";
 
-/* WHOSE COPY OF THE WORKSPACE A READ MEANS, resolved once, here, for every route that serves a file.
- *
- * The daemon has always had more than one workspace and only ever admitted to one. There is the shared /work
- * tree, and there is a private checkout per isolated conversation; a workspace read named a PATH and nothing
- * else, so it could only answer from /work. That is why a link to a file an agent had just created opened a
- * not-found page, and why a link to a file it had EDITED opened something worse: the shared version of the
- * same path, different text, with nothing on screen to say the reader was looking at a different file than
- * the one the agent had described.
- *
- * So the conversation rides the request (WorkspaceScopeSchema) and lands here. Everything downstream, the
- * escape guard, the control-plane denylist, the ignore rules, the tree walk, already takes a root as an
- * argument, so scoping is a matter of choosing that root rather than of teaching each of them a second mode.
- *
- * READS ONLY, BY CONSTRUCTION. No write route accepts a scope: the schemas do not carry the field, so there is
- * no runtime refusal to get wrong and no screen that can talk the daemon into writing into a checkout its
- * agent may be mid-turn on. Two writers on one worktree file is exactly the silent-loss failure that
- * agents/worktree-redirect.ts exists to prevent, and it is not worth reintroducing through a file API.
- */
+// Resolves whose copy of the workspace a read means, for every file-serving route; downstream just takes the chosen
+// root.
+// Reads only: no write route's schema carries a scope field, so the file API can't write into a checkout mid-turn.
 
 export interface WorkspaceScopeDeps {
-    // The shared /work tree, the answer when no conversation is named, and the fallback below.
+    // The shared /work tree: the answer when no conversation is named, and the fallback.
     readonly main: string;
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly worktreeDir: (id: string) => string;
@@ -39,16 +24,9 @@ const present = async (path: string): Promise<boolean> => {
     }
 };
 
-/* Resolve a root-relative path to an absolute one inside `root`, applying the read routes' guards: a
- * `../`/absolute path that climbs out is BAD_REQUEST, and the daemon's own private state is not reachable
- * through the generic file API, read, write, move or delete. NOT_FOUND rather than FORBIDDEN for
- * the second: the file API simply has nothing there, and a distinct code would confirm what it holds.
- *
- * The escape guard is asked TWICE, of two different things: once of the path as a string (resolveWithin), and
- * once of the disk, which is the only one of the two that can see a symlink pointing out of the workspace
- * (realWithin). Both answer BAD_REQUEST, from the caller's side they are one rule, "that path is not in this
- * workspace", and which of the two noticed is not the caller's business.
- */
+// Resolves relPath inside root: an escaping path is BAD_REQUEST, the daemon's private state is NOT_FOUND (not
+// FORBIDDEN).
+// The escape guard runs twice: lexically (resolveWithin) and on disk (realWithin, for a symlink); both are BAD_REQUEST.
 export const containedIn = async (root: string, relPath: string): Promise<string> => {
     const target = resolveWithin(root, relPath);
     if (target === undefined) {
@@ -63,24 +41,13 @@ export const containedIn = async (root: string, relPath: string): Promise<string
     return target;
 };
 
-/* The root a scope names.
- *
- * A conversation that is NOT isolated resolves back to the shared tree rather than failing: /work genuinely is
- * its tree, and a surface linking to a file should not have to know which mode a conversation runs in to
- * produce a working link.
- *
- * A retired checkout is the one hard stop. Archiving an agent commits what its worktree held onto agent/<id>
- * and drops the checkout (agents/worktrees.ts), so the work survives as branch state with no directory to read
- *, a distinct condition from "no such file", and the browser branches on the status to explain it rather than
- * showing a not-found page for a file that demonstrably exists.
- */
+// A non-isolated conversation resolves to the shared tree rather than failing; /work genuinely is its tree.
+// A retired checkout is the hard stop: archiving keeps the branch but drops the checkout, distinct from a missing file.
 export const workspaceRootFor = async (deps: WorkspaceScopeDeps, agent: string | undefined): Promise<string> => {
     if (agent === undefined) {
         return deps.main;
     }
-    // The oRPC routes validate the id through the contract, but the raw/media byte routes read it off a query
-    // string, and it becomes a path segment below. The guard lives here so it cannot be the one route that
-    // forgot it; a registry hit alone would make containment depend on how the registry was populated.
+    // Byte routes read the id off a query string themselves; the guard lives here so no route can skip it.
     if (!ConversationIdSchema.safeParse(agent).success) {
         throw new ORPCError("BAD_REQUEST", { message: "invalid agent" });
     }
@@ -100,18 +67,8 @@ export const workspaceRootFor = async (deps: WorkspaceScopeDeps, agent: string |
     return dir;
 };
 
-/* WHERE A SCOPED READ ACTUALLY LANDS, the conversation's checkout when the path is there, the shared tree
- * when it is not.
- *
- * The fallback is not a hedge, it is the difference between a usable view and a maze. A conversation's
- * checkout mirrors the /work layout but is not a superset of it: the dirs an isolated turn reaches through the
- * namespace (node_modules, the reference shelf, the shared .intentic state) are bare mount points from outside
- * it, and anything under /work that no repo tracks was never in the checkout at all. Refusing those would mean
- * a reader who followed one link into an agent's copy then found half the workspace missing, with no
- * explanation that would make sense.
- *
- * `shared` travels back with the answer so the reader is never guessing which of the two they got.
- */
+// Falls back to the shared tree when the path isn't in the checkout: it mirrors /work's layout but isn't a superset.
+// `shared` reports which tree answered, so the reader is never guessing.
 export const scopedTarget = async (
     deps: WorkspaceScopeDeps,
     agent: string | undefined,

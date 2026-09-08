@@ -14,25 +14,8 @@ import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
-/* EVERY RUNTIME IS TOLD THE TREE IS BEHIND: BY WHATEVER SEAM IT HAS. Asserted here rather than in the unit
- * suite because the only way to earn a dependency notice is to have a tree that has earned one.
- *
- * The fact itself is the one a turn cannot deduce and will otherwise be misled by: an unresolved import is the
- * install being behind, not the code being wrong. It used to live in the harness arm, so a Codex or Grok session
- * read a wall of true-looking type errors with nothing telling it why; honoured() is the one point all four arms
- * pass through, which is why the decision lives there and why this walks more than one arm.
- *
- * WHAT DIFFERS PER RUNTIME IS THE DELIVERY, on the rule this function already applies to the worktree note: a
- * note is second-best to a mechanism, and belongs only where the mechanism cannot go. A `full` runtime is handed
- * readiness TOOLS and two hooks that fire on a real failure, each addressed to the turn that actually went near
- * a drifted project, so pushing the paragraph as well would charge every other turn in the conversation for
- * three facts it never needed, on every turn, for as long as the drift lasted. The native runtimes have no seam
- * for either, so for them the paragraph is still the whole of the defence and still arrives.
- *
- * The cost is that a brief run on Claude and on Codex is no longer byte-identical while something is behind.
- * That is a real loss and a deliberate one: it is bounded to a state the reconciler's heartbeat now repairs
- * between turns, and the alternative was paying for it on every turn of every conversation forever.
- */
+// Every runtime is told the tree is behind, but the delivery differs: a full runtime gets readiness tools and hooks,
+// native runtimes (with no such seam) get the prose note instead.
 
 // The harness arm's credential resolution, which is a question about the owner's accounts rather than about the
 // tree: stubbed so the Claude case below can reach the part this file is actually asserting on. The native arms
@@ -43,15 +26,14 @@ vi.mock("../../providers/harness-credentials.js", () => ({
 
 const workspaceWithMissingDeps = async (): Promise<string> => {
     const root = await mkdtemp(join(tmpdir(), "turn-plan-"));
-    // A manifest and no install: `node_modules` is the recipe's marker, so its absence is the whole state.
+    // A manifest with no install: `node_modules`'s absence is the whole signal.
     await writeFile(join(root, "package.json"), `{"name":"app","dependencies":{"left-pad":"^1.0.0"}}`);
     await writeFile(join(root, "pnpm-lock.yaml"), "");
     return root;
 };
 
-/* An ISOLATED turn's tree as the DAEMON reaches it: the source is checked out, and every installed dependency
- * is an empty directory. That is not a broken worktree, it is the ordinary one: the real tree arrives as an
- * overlay mounted inside the turn's own namespace (agents/worktrees.ts), which the daemon is not in. */
+// Mimics an isolated turn's tree as the daemon sees it: dependencies are empty directories, since the real tree is an
+// overlay mounted inside the turn's own namespace, not the daemon's.
 const daemonSideWorktree = async (): Promise<string> => {
     const worktree = await mkdtemp(join(tmpdir(), "turn-plan-wt-"));
     await writeFile(join(worktree, "package.json"), `{"name":"app","dependencies":{"left-pad":"^1.0.0"}}`);
@@ -69,7 +51,7 @@ const contextIn = (root: string, localCwd = root): TurnContext => ({
     steering: undefined,
 });
 
-// A translator holding the ChatGPT subscription, which is what both native arms below authenticate against.
+// A translator holding the ChatGPT subscription, which both native arms below authenticate against.
 const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
@@ -80,17 +62,15 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
             issueAt: async () => undefined,
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
-        // Nothing gated: planTurn narrows the manifest once for every runtime, so the approval policy is
-        // read on every turn whether or not a gate exists (secrets/credential-gating.ts).
+        // Nothing gated: planTurn reads the approval policy on every turn whether or not a gate exists.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        // Every turn resolves a persona now, above the provider split, so every arm below reaches this: a
-        // workspace with no cards is the open attended posture these tests already assume.
+        // Every turn resolves a persona now; an empty list is the open, attended posture these tests assume.
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
-        // A measurement seam, not a behavioural one: pass the work through and time nothing.
+        // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
-        // Snapshotted for the judge on every planned turn, so every arm below reaches it too.
+        // Snapshotted for the judge on every planned turn, so every arm below needs it too.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
@@ -101,8 +81,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         ...overrides,
     });
 
-// What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
-// function dispatch uses (agent.routes.ts, composeWirePrompt).
+// What the model actually reads: the plan's notes serialized in front of the prompt, via the same function dispatch
+// uses (composeWirePrompt).
 const promptOf = async (services: Services, agentTurn: AgentTurn, turnContext: TurnContext): Promise<string> => {
     const plan = await planTurn(services, agentTurn, turnContext);
     expect(plan).toMatchObject({ ok: true });
@@ -110,16 +90,13 @@ const promptOf = async (services: Services, agentTurn: AgentTurn, turnContext: T
     return composeWirePrompt(request.notes ?? [], request.prompt);
 };
 
-/* The harness arm, which is the one that got the mechanism, and so the one that must no longer get the prose.
- *
- * A workspace this size regularly sits a few packages behind for hours at a time, and the paragraph was
- * re-stapled to the front of every message in every conversation for the whole of it. Nothing in it was untrue;
- * it was addressed to every turn instead of to the one that tripped over something. */
+// The harness arm gets the readiness mechanism now, not a paragraph re-stapled to every message in the conversation
+// regardless of which turn actually needs it.
 test("a Claude turn gets the readiness tools instead of the paragraph, however far behind the tree is", async () => {
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        // The delegation note asks which other coding agents this sandbox can hand work to; none, here.
+        // The delegation note asks which other coding agents this sandbox can hand off to; none, here.
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         async *codexAgent() {},
         async *agent() {},
@@ -131,16 +108,14 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
 
     expect(request.prompt).toBe("do the thing");
     expect(Object.keys(request.sdkServers ?? {})).toContain("deps");
-    // And the daemon's own records, so the answer to "why did that fail" is a tool call rather than a rebuild
-    // of the instrumentation (logs/diagnostics-tools.ts).
+    // And the daemon's own records, so "why did that fail" is a tool call, not a rebuild of the instrumentation.
     expect(Object.keys(request.sdkServers ?? {})).toContain("diagnostics");
-    // The daemon-side readers still have to be able to find the real tree: an isolated turn's cwd names its
-    // worktree, where every dependency directory is an empty mount point.
+    // Daemon-side readers still need the real tree: the isolated turn's cwd names a worktree with empty mounts.
     expect(request.workspaceRoot).toBe(root);
 });
 
-/* A card that may not read the workspace may not read the daemon's log either. Withheld whole rather than
- * degraded: half an answer about why something failed is worse than being told to ask the owner. */
+// A persona that can't read the workspace can't read the daemon's log either: withheld whole, since half an answer
+// about a failure is worse than none.
 test("a persona with no file reads does not get the diagnostic tools", async () => {
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {
@@ -221,12 +196,8 @@ test("an installed tree earns no notice, so an ordinary turn is the user's messa
     expect(prompt).toBe("do the thing");
 });
 
-/* THE PROBE HAS TO ASK ABOUT THE TREE THE TURN RESOLVES THROUGH, which for an isolated turn is never the
- * worktree the daemon can see. Everything a worktree's imports resolve through is mounted into the turn's own
- * namespace and is an empty directory anywhere else, so a probe run daemon-side found the marker, walked it,
- * found nothing, and declared the whole workspace uninstalled. Against this repository that was 663 phantom
- * dependencies and three paragraphs of untrue instruction in front of every isolated turn, telling the model to
- * distrust type errors that were fine and to expect imports to fail that did not. */
+// The probe must ask about the tree the turn itself resolves through, not the daemon's worktree view: a daemon-side
+// probe sees only empty mount points and misreports the whole workspace as uninstalled.
 test("an isolated turn is not told its dependencies are missing just because the daemon cannot see them", async () => {
     const main = await mkdtemp(join(tmpdir(), "turn-plan-"));
     const services = servicesIn(main, {
@@ -238,22 +209,16 @@ test("an isolated turn is not told its dependencies are missing just because the
 
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(main, await daemonSideWorktree()));
 
-    // Neither half of it: a worktree read daemon-side has the marker, so it earns the STALE wording rather
-    // than the never-installed one, and that is the half nothing was anchored on.
+    // Neither fires here: the worktree read daemon-side has the marker, so at most STALE applies, never
+    // never-installed.
     expect(prompt).not.toContain(STALE_NOTICE_HEADER);
     expect(prompt).not.toContain(SETUP_NOTICE_HEADER);
     // The worktree note is a different fact and still belongs: this runtime reaches its branch by cwd alone.
     expect(prompt.endsWith("do the thing")).toBe(true);
 });
 
-/* A SKILL CATALOGUE IS A SKILL.md ON DISK OR IT IS NOTHING, which is why this case belongs here rather than
- * beside the other planning rules: it is the one of them that cannot be asserted against a root that does not
- * exist. It reads the shared seams from turn-plan.testing.ts and points them at a real tree, the same shape
- * every other case in this file takes.
- *
- * What it pins is the ASYMMETRY between runtimes. A runtime with no skill loader of its own has to be told the
- * catalogue in the prompt, once, on the conversation's first turn; the runtimes that load skills themselves
- * must not be told at all, or the same list arrives twice and the second copy is the one that is wrong. */
+// Needs a real SKILL.md on disk, hence integration rather than unit. Pins the asymmetry: a runtime with no skill loader
+// gets the catalogue once; native loaders that load skills themselves are never told, to avoid a duplicate list.
 test("a runtime without a skill loader receives the catalogue once; native loaders are not told twice", async () => {
     const root = await mkdtemp(join(tmpdir(), "turn-skills-"));
     const skillDir = join(root, ".agents", "skills", "quill");

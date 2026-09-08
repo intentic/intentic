@@ -20,7 +20,7 @@ const gitlabProject: CiProject = {
     } as GitHost,
 };
 
-// A scripted fetch: match by "METHOD url-substring", record every call, answer with the scripted body.
+// A scripted fetch: matches by "METHOD url-substring", records every call, answers with the scripted body.
 const scriptedFetch = (script: Record<string, unknown>, calls: { method: string; url: string; body?: string }[]): FetchFn =>
     (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -50,7 +50,6 @@ test("status mapping collapses both vendors' vocabularies onto the six buckets",
     expect(gitlabStatus("skipped")).toBe("skipped");
 });
 
-// The distinction the board is drawn from: waiting for a runner is not the same news as being on one.
 test("waiting for a runner is queued, not running", () => {
     for (const status of ["queued", "waiting", "requested", "pending"]) {
         expect(githubStatus(status, null)).toBe("queued");
@@ -58,8 +57,6 @@ test("waiting for a runner is queued, not running", () => {
     for (const status of ["created", "waiting_for_resource", "preparing", "pending", "manual", "scheduled"]) {
         expect(gitlabStatus(status)).toBe("queued");
     }
-    // A non-terminal word neither vendor has shipped yet still reads as moving, which is the reading every
-    // status had before `queued` existed.
     expect(githubStatus("some_new_phase", null)).toBe("running");
     expect(gitlabStatus("some_new_phase")).toBe("running");
 });
@@ -74,7 +71,7 @@ test("a queued run carries no duration: the span since it was queued is a wait, 
         html_url: "https://github.com/acme/web/actions/runs/9",
         created_at: "2026-07-29T10:00:00Z",
         run_started_at: "2026-07-29T10:00:00Z",
-        // An hour of sitting in the queue, which Actions reports by bumping updated_at.
+        // Actions reports queue wait via updated_at, not a separate field.
         updated_at: "2026-07-29T11:00:00Z",
     });
     expect(run.status).toBe("queued");
@@ -180,7 +177,6 @@ test("github client lists runs and reruns/cancels via the vendor endpoints", asy
     expect(calls[0]?.url).toBe("https://api.github.com/repos/acme/web/actions/runs?per_page=5");
     await client.rerun(githubProject, 1);
     await client.cancel(githubProject, 1);
-    // A vendor refusal surfaces with its status and words.
     await expect(client.rerun(githubProject, 2)).rejects.toThrow(/github rerun failed \(404\)/);
 });
 
@@ -209,8 +205,7 @@ const gitlabPipelines = [
     { id: 43, ref: "main", sha: "sha-b", status: "failed", web_url: "u43", created_at: "2026-07-29T11:00:00Z", updated_at: "2026-07-29T11:01:00Z" },
 ];
 
-// The project-wide jobs feed: every job restates its pipeline's commit and triggering user, which is how one
-// call dresses a whole page of runs.
+// Every job restates its pipeline's commit and user; one call dresses a whole page of runs.
 const projectJob = (pipelineId: number, sha: string, title: string) => ({
     commit: { id: sha, title, author_name: "Ada Lovelace" },
     user: { name: "Ada Lovelace", username: "ada", avatar_url: "https://gitlab.example.com/avatar/ada.png" },
@@ -226,7 +221,7 @@ test("gitlab listRuns dresses a whole page from the single project jobs call", a
                 "GET /pipelines?": gitlabPipelines,
                 "GET /jobs?": [
                     projectJob(42, "sha-a", "feat: draw the job graph"),
-                    // A second job of the same pipeline must not re-derive anything.
+                    // Two jobs for pipeline 42: a repeat must not be re-derived as separate work.
                     projectJob(42, "sha-a", "feat: draw the job graph"),
                     projectJob(43, "sha-b", "fix: the build"),
                 ],
@@ -243,7 +238,6 @@ test("gitlab listRuns dresses a whole page from the single project jobs call", a
         trigger: "push",
     });
     expect(runs[1]).toMatchObject({ runId: 43, title: "fix: the build", authorName: "Ada Lovelace" });
-    // The whole page was covered, so the commits fallback must never be reached.
     expect(calls.some((call) => call.url.includes("/repository/commits"))).toBe(false);
     expect(calls.filter((call) => call.url.includes("/jobs?")).length).toBe(1);
 });
@@ -255,7 +249,7 @@ test("gitlab listRuns falls back to the commits join only for pipelines the jobs
         scriptedFetch(
             {
                 "GET /pipelines?": gitlabPipelines,
-                // Only pipeline 42 appears: 43 is older than the jobs page reaches.
+                // Only pipeline 42 appears; 43 is older than the jobs page reaches.
                 "GET /jobs?": [projectJob(42, "sha-a", "feat: draw the job graph")],
                 "GET /repository/commits": [{ id: "sha-b", title: "fix: the build", author_name: "Grace Hopper" }],
             },
@@ -263,16 +257,14 @@ test("gitlab listRuns falls back to the commits join only for pipelines the jobs
         ),
     );
     const runs = await client.listRuns(gitlabProject, 15);
-    // Covered by the jobs feed: keeps its avatar.
     expect(runs[0]).toMatchObject({ runId: 42, title: "feat: draw the job graph", authorAvatarUrl: "https://gitlab.example.com/avatar/ada.png" });
-    // Recovered by the fallback: subject and author, but no avatar to be had from a commit.
     expect(runs[1]).toMatchObject({ runId: 43, title: "fix: the build", authorName: "Grace Hopper" });
     expect(runs[1]?.authorAvatarUrl).toBeUndefined();
     expect(calls.some((call) => call.url.includes("/repository/commits?all=true"))).toBe(true);
 });
 
 test("gitlab listRuns still lists when both enrichments are refused", async () => {
-    // Neither enrichment endpoint is scripted, so both answer 404: the run list must survive that.
+    // Neither enrichment endpoint is scripted; unscripted calls answer 404 and the list must survive that.
     const runs = await ciClientFor("gitlab", scriptedFetch({ "GET /pipelines?": gitlabPipelines }, [])).listRuns(gitlabProject, 15);
     expect(runs).toHaveLength(2);
     expect(runs[0]).toMatchObject({ runId: 42, status: "success", branch: "main" });
@@ -291,9 +283,7 @@ test("gitlab client addresses the project by its url-encoded path", async () => 
     expect(created?.body).toContain(`"token":"S"`);
 });
 
-/* The job graph's enrichment. `scriptedFetch` answers JSON, and a workflow file is text, so these use their
-   own two-endpoint stub, which also makes the CALL SHAPE visible, since the point of fetching the run first
-   is to learn the path and sha the contents call needs. */
+// githubJobsFetch is its own stub: a workflow file is text, and the call shape (path, sha) matters.
 const CI_YAML = `
 jobs:
   preflight: {}
@@ -304,8 +294,7 @@ jobs:
     needs: verify-core
 `;
 
-// The file `verify-core` calls. A run reports its jobs under the calling job's name (`verify-core / verify`),
-// and this file is the only place that says what they waited on, so it has to be fetched too.
+// The file verify-core calls via a reusable workflow; the only place naming what verify-core waited on.
 const VERIFY_YAML = `
 on:
   workflow_call:
@@ -334,7 +323,7 @@ const githubJobsFetch = (options: { workflow?: string; runOk?: boolean }): { fet
             if (options.workflow === undefined) {
                 return new Response("nope", { status: 404 });
             }
-            // Per path, because the run's workflow calls a second file and the graph now depends on both.
+            // Per path: the run's workflow calls a second file, so both must resolve.
             return new Response(url.includes("verify.yml") ? VERIFY_YAML : options.workflow, { status: 200 });
         }
         if (options.runOk === false) {
@@ -353,17 +342,15 @@ test("github allJobs resolves needs from the run's own workflow file, pinned to 
     const jobs = await ciClientFor("github", fetchFn).allJobs(githubProject, 7);
 
     expect(jobs.map((job) => job.needs)).toEqual([[], ["preflight"], ["verify-core / verify"]]);
-    // The reusable-workflow call reported one job under a name `needs` never mentions; `release` still reaches it.
+    // The reusable-workflow call reports its job under a name `needs` never mentions; `release` still resolves it.
     expect(jobs[1]?.name).toBe("verify-core / verify");
-    // The sha, not HEAD: an old run must be drawn with the graph it actually ran. Both files, at that sha:
-    // a called workflow read at the wrong revision is a graph from a different run.
+    // Pinned to the run's sha, not HEAD, for both files: an old run must be drawn from the graph it actually ran.
     expect(urls.some((url) => url.includes("/contents/.github/workflows/ci.yml?ref=deadbee"))).toBe(true);
     expect(urls.some((url) => url.includes("/contents/.github/workflows/verify.yml?ref=deadbee"))).toBe(true);
 });
 
 test("github allJobs still returns the jobs when the workflow file cannot be read", async () => {
-    // A token without `contents`, a deleted workflow, a run owned by another repo's reusable workflow. The
-    // graph is an enrichment; losing it must not cost the caller the job list.
+    // Enrichment failure (no read access, deleted workflow) must not cost the caller the job list.
     for (const options of [{}, { runOk: false }]) {
         const jobs = await ciClientFor("github", githubJobsFetch(options).fetchFn).allJobs(githubProject, 7);
         expect(jobs).toHaveLength(3);
@@ -372,10 +359,8 @@ test("github allJobs still returns the jobs when the workflow file cannot be rea
     }
 });
 
-/* THE PHANTOM START. Actions reports a `started_at` on a job that has never started, set to the moment the RUN
- * was queued, so a job waiting on an offline self-hosted runner comes back looking like an hour of work in
- * progress. The view reads a present `startedAt` as "this began" — it lays the run out by it and clocks the
- * elapsed time from it — so the lie is dropped at the edge rather than worked around six places downstream. */
+// Actions sets started_at to the run's queue time even for a job that never started; that value must not reach the view
+// as an elapsed-time anchor.
 test("github allJobs drops the started_at Actions reports for a job that never started", async () => {
     const queuedAt = "2026-09-05T07:15:42Z";
     const fetchFn = (async (input: RequestInfo | URL) => {
@@ -383,7 +368,7 @@ test("github allJobs drops the started_at Actions reports for a job that never s
         if (url.includes("/jobs?")) {
             const jobs = [
                 { id: 1, name: "ci-audit", status: "completed", conclusion: "success", started_at: queuedAt, completed_at: "2026-09-05T07:17:31Z" },
-                // Held for a self-hosted runner: never picked up, and still handed a started_at.
+                // Held for a self-hosted runner: never picked up, yet still handed a started_at.
                 { id: 2, name: "e2e", status: "queued", conclusion: null, started_at: queuedAt, completed_at: null },
             ].map((job) => ({ ...job, html_url: null }));
             return new Response(JSON.stringify({ jobs }), { status: 200, headers: { "content-type": "application/json" } });
@@ -398,9 +383,8 @@ test("github allJobs drops the started_at Actions reports for a job that never s
     expect(waiting?.durationSeconds).toBeUndefined();
 });
 
-/* THE FIX CONVERSATION'S EVIDENCE. A runner prints for a terminal: a coloured verdict, a progress line that
- * rewrites itself, and this log tail is quoted into a prompt the user edits and a model reads, where those
- * bytes are litter with the failure buried in it. Both vendors, because both traces carry them. */
+// Runner logs carry ANSI color and self-overwriting progress lines, stripped because the tail is quoted into a prompt a
+// model reads; both vendors carry them.
 const logsFetch = (log: string): FetchFn =>
     (async (input: RequestInfo | URL) => {
         const url = String(input);

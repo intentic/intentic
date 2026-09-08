@@ -28,43 +28,24 @@ export const PAYLOAD_MAX = 64_000;
 // The contract's cap on AgentTurn.title, a surfaced wake's title is built from a message, so it's clamped here.
 export const TITLE_MAX = 80;
 
-// "Wake the agent", streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
-// would put this module downstream of agent.routes, which is itself an emitter of the workspace events
-// workspace-events.ts turns back into fireAutomation calls: a cycle. Same reason turn-runs takes its TurnFn.
+// Wake-the-agent shape (streamAgent's), injected by every caller rather than imported, since importing it would create
+// a cycle through agent.routes and workspace-events.ts back into fireAutomation.
 export type WakeFn = (services: Services, input: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
-/* A live sink for a turn's assistant text. The Discord source backs it with a channel message it edits as token
- * deltas arrive, so a mention reply appears as it's written instead of only when the turn ends. undefined ⇒ no
- * live delivery: the agent sends its own reply (per its provider skill), as before.
- *
- * `failed` is the third frame because a turn that produces NO text is otherwise indistinguishable from a turn
- * that errored, and the two are opposite things to say to whoever is waiting. Every sink used to end on `end`
- * alone, so a Front Desk visitor whose wake died on a revoked credential watched the typing dots disappear and
- * got nothing at all, while the daemon had the provider's exact sentence and wrote it to a row nobody was
- * looking at. It carries the RAW reason: what an audience may be told differs per sink (a stranger on a
- * customer's website and the owner's own Discord channel are not owed the same sentence), so the redaction
- * belongs to each implementation rather than here. Always followed by `end`. */
+// Live sink for a turn's assistant text; undefined means the agent sends its own reply. `failed` distinguishes no
+// output from an error, carrying the raw reason for each sink to redact; always followed by `end`.
 export interface TurnStream {
     readonly delta: (text: string) => void;
     readonly failed: (reason: string) => void;
     readonly end: () => void;
 }
 
-// Prepended to a streamed wake's prompt so the model doesn't ALSO send the reply itself (which would duplicate
-// the streamed message). Provider-neutral: the daemon delivers the assistant text; tools are for other actions.
+// Prepended to a streamed wake's prompt so the model doesn't also send the reply itself via a tool.
 const STREAM_NOTE =
     "Your reply is delivered to the user live as you type it: just answer normally in plain text. Do NOT send it yourself with any tool (no curl/API post of your reply); use provider send tools only to act elsewhere (react, or post to a different channel).";
 
-/* THE SPIN-LOOP GUARD. An automation that fails is normal; one that fails EVERY time is misconfigured, and the
- * scheduler will otherwise keep spending a turn's worth of tokens on it on every tick, nightly, hourly, or
- * once a minute, until a human happens to look at the row.
- *
- * So after `automationFailureLimit` consecutive errors the job is disabled rather than fired again. Disabled,
- * not deleted and not marked broken: `enabled` is the field the user's own toggle writes, so re-enabling it is
- * the switch they already know, and the run history that earned the quarantine stays on the row underneath it.
- *
- * Returns the sentence to put on the run's activity record, or undefined when nothing was quarantined, the
- * guard is off (0), the streak is short, or the automation was edited away underneath this fire. */
+// Disables, not deletes, an automation after `automationFailureLimit` consecutive failures; re-enabling reuses the
+// `enabled` toggle. Returns undefined when the guard is off, the streak is short, or the automation changed.
 const quarantineIfSpinning = async (services: Services, id: string): Promise<string | undefined> => {
     const { automationFailureLimit } = await services.sandboxSettings.get();
     if (automationFailureLimit <= 0) {
@@ -84,10 +65,8 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
     return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
 };
 
-// Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
-// guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
-// the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
-// sandbox scripts, not agent turns.
+// Runs the guard command in the workspace root; exit 0 wakes the agent, with the payload in AUTOMATION_PAYLOAD. On
+// failure, the stderr/stdout tail becomes the run's detail.
 const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
     try {
         await execFileAsync("sh", ["-c", command], {
@@ -107,55 +86,27 @@ const runGuard = async (command: string, cwd: string, payload: string | undefine
     }
 };
 
-// An automation never overlaps itself, but what happens to the fire that arrives while one is running depends
-// on who sent it (see FireOptions.overlap), so the entry is the run in PROGRESS rather than a bare mark: it is
-// what a queued fire waits on. A module singleton (like agent-requests' bridge) so the scheduler's tick, the
-// listener dispatchers and the /automations/{id}/fire route all share one lock per automation.
+// Run in progress per automation; a queued fire awaits it. Shared by the tick, dispatchers and fire route.
 const inFlight = new Map<string, Promise<unknown>>();
 
-// A conversation id is a branch name (agent/<id>) and a worktree dir, so it is bounded and charset-checked by
-// the contract's ConversationIdSchema, this builds one that satisfies it from the automation's id. Room for
-// the "a-" prefix and the suffix is bought out of the automation id, which is the part that repeats.
+// Branch/worktree name bounded by ConversationIdSchema, built from the automation id with prefix/suffix room.
 const AUTOMATION_ID_IN_CONVERSATION = 40;
-// Every fire's conversation carries this prefix. It is the one mark a schedule wake leaves in the registry (a
-// listener or webhook wake records an origin as well), which is what the sessions gate below reads back.
+// Prefix every fire's conversation carries; the mark a schedule wake leaves, read by the sessions gate.
 const AUTOMATION_CONVERSATION_PREFIX = "a-";
-// Two fires of one automation can't share a millisecond (fires are serialized per automation), but the counter
-// costs nothing and makes the id unique per PROCESS regardless of who calls this.
+// Fires of one automation can't share a millisecond; this makes the id unique per process regardless of caller.
 let fireSeq = 0;
 export const mintConversationId = (automationId: string, now: number): string =>
     `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
 
-/* Did THIS automation mint that conversation? The id above is the only mark a fire leaves in the registry, so
- * reading it back is how a row recognises its own work. The minted suffix is base36, so a remaining "-" means a
- * row whose id merely begins with this one's ("dream" must not read "dream-2"'s nights as its own).
- *
- * Two callers, and they want it for opposite reasons. The sessions gate measures "since I last woke" and must
- * not count itself as fleet activity. The chore dispatcher (workspace-events.ts) must not let a chore fire on
- * the workspace event its own turn just raised: now that every wake works in a worktree, a chore's turn settles
- * like any other agent's and emits `turn.settled`, so a chore triggered on that event would answer its own
- * echo, forever, one whole agent turn at a time. */
+// Whether this automation minted that conversation id; a leftover "-" after the base36 suffix means only a prefix
+// match. Used to exclude a job's own wakes from its sessions gate and its own `turn.settled`.
 export const firedBy = (automationId: string, conversationId: string): boolean => {
     const mine = `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-`;
     return conversationId.startsWith(mine) && !conversationId.slice(mine.length).includes("-");
 };
 
-/* THE SESSIONS GATE (a schedule trigger's afterSessions): a due occurrence fires only once enough NEW sessions
- * have been run since this automation last woke an agent. Both halves are read from the fleet registry.
- *
- * LAST TIME IS THE CONVERSATION THE LAST FIRE OPENED, not the run ledger. The ledger keeps a bounded number of
- * runs per automation (automations-store.ts RUNS_KEPT), so a nightly job that skips for three weeks pushes its
- * own last completed run off the end and forgets it ever ran, after which "since last time" quietly means
- * "ever" and the bar is cleared on the next tick. Every fire mints a conversation named `a-<automation>-<time>`
- * (mintConversationId above) and the registry keeps conversations, archived ones included, so the newest of
- * those IS the last wake and no amount of skipping erases it. A row that has never woken measures from the
- * start of the registry, which is the right first night on both kinds of sandbox: a fresh one has three
- * sessions and skips, an old one has the whole history and plenty to read.
- *
- * WHAT COUNTS IS WHAT SOMEBODY ASKED FOR AND GOT: a conversation with no automation origin, not minted by a
- * fire, and with at least one turn behind it. The fleet's robotic half (a Front Desk answering visitors all
- * afternoon, the nightly sweeps, this job itself) cannot push the counter up, and neither can a conversation
- * opened and abandoned before its first turn finished. */
+// Sessions gate for afterSessions: fires once enough new sessions ran since the last wake, read from the newest
+// conversation this automation minted, not the bounded run ledger.
 interface SessionsSinceWake {
     // Epoch ms of the last wake's conversation; 0 when this automation has never woken an agent.
     readonly since: number;
@@ -182,14 +133,11 @@ const sessionsSinceLastWake = (services: Services, automationId: string): Sessio
     return { since, sessions };
 };
 
-// How many of the counted sessions the wake is shown by name. The count is the whole number; the list is what
-// the turn opens first, and `agents ls --all` has the rest.
+// How many counted sessions are listed by name; the count is the whole total, `agents ls --all` has the rest.
 const SESSIONS_LISTED = 200;
 
-/* What a gated wake reads under its prompt, in place of an event payload: the count that cleared the bar, the
- * moment it was measured from, and the sessions themselves, one per line, in the fields a turn picks one to
- * open by. Persisted with the fire like any payload (the journal, a held snapshot), so a re-fire or an approved
- * replay reads the list that woke it rather than a fresh count that may have moved. */
+// What a gated wake reads under its prompt: the count, when it was measured from, and the sessions, one per line.
+// Persisted with the fire so a re-fire or replay reads the same list, not a fresh count.
 const sessionsListing = ({ since, sessions }: SessionsSinceWake): string => {
     const measuredFrom =
         since === 0
@@ -211,8 +159,8 @@ const sessionsListing = ({ since, sessions }: SessionsSinceWake): string => {
     return [`${sessions.length} sessions ${measuredFrom}. Newest first:`, ...lines, ...more].join("\n");
 };
 
-// The gate as one step of runFire. Not gated, or the bar cleared ⇒ the listing to carry as the fire's payload
-// (absent when not gated); short of the bar ⇒ what the skipped run says.
+// One step of runFire: not gated or bar cleared returns the listing to carry as payload; short of the bar returns what
+// the skipped run says.
 const sessionsGate = (services: Services, automation: AutomationRecord): { readonly skipped: string } | { readonly listing?: string } => {
     const bar = automation.trigger.kind === "schedule" ? automation.trigger.afterSessions : undefined;
     if (bar === undefined) {
@@ -225,72 +173,44 @@ const sessionsGate = (services: Services, automation: AutomationRecord): { reado
     return { listing: sessionsListing(counted).slice(0, PAYLOAD_MAX) };
 };
 
-// Everything a fire needs beyond the automation itself. An options object rather than five positional flags:
-// the external dispatchers set a different subset than the tick does, and `payload, wake, false, undefined,
-// origin` reads as nothing at all at the call site.
+// Everything a fire needs beyond the automation itself; an options object since dispatchers and the tick each set a
+// different subset.
 export interface FireOptions {
     // The trigger's payload, appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
     readonly payload?: string;
-    /* Which of the two pre-wake gates this fire has ALREADY satisfied and so must not put itself through again.
-     * One field rather than a flag per gate, because the gates are not independent in practice, every caller
-     * that clears the guard has also cleared the approval, and `preApproved, byHand` at a call site reads as
-     * neither.
-     *
-     * "approval", the owner has approved THIS fire: they pressed Run now (the click is the approval, and holding
-     *   it in their own queue for their own approval is a queue entry that says nothing), or a restart is
-     *   re-firing a wake that was already past the gate and running when the daemon died. The guard still runs,
-     *   deliberately: it is the check on whether the work is still wanted, and "skipped by guard" is the single
-     *   most useful thing a by-hand fire can report about an automation that appears to do nothing.
-     * "both", the approve route replaying a held wake. Its guard ran and passed when the wake was held; running
-     *   it a second time would be asking a question already answered. */
+    // Which pre-wake gate this fire already satisfies, so it is not put through again:
+    // - `approval`: the owner clicked Run now, or a restart is re-firing a wake already past the gate; the guard still
+    //   runs.
+    // - `both`: replaying a held wake whose guard already ran and passed.
     readonly cleared?: "approval" | "both";
-    // How many times a boot has already re-fired this wake, carried through the journal so an interrupted fire
-    // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
+    // How many times a boot re-fired this wake, so one that keeps dying isn't re-fired forever. First fire is 0.
     readonly attempts?: number;
-    /* Set by the restart path, and by any dispatcher that owns a CONTINUING thread rather than a one-off wake:
-     * the Front Desk hands the same id every time a visitor writes, so their whole chat is one conversation,
-     * one fleet card, one worktree, one agent that remembers the last message. A first fire mints its own
-     * identity after the guard/approval gates clear. */
+    // Set by the restart path or a dispatcher owning a thread, so repeated messages share one conversation.
     readonly conversationId?: string;
-    // The provider session that conversation last ran on, resumed so the turn continues rather than restarts.
-    // Only meaningful alongside conversationId, and only for a thread that has already completed a turn.
+    // Provider session the conversation last ran on; meaningful only alongside conversationId.
     readonly sessionId?: string;
-    // Narrows the wake's toolbox (AgentTurn.allowedTools), the automation's own allowlist, carried in by the
-    // dispatcher so the turn a stranger's message drives can be smaller than the one the owner's own is.
+    // Narrows the wake's toolbox to the automation's allowlist, so a stranger's message drives a smaller turn.
     readonly allowedTools?: readonly string[];
-    // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
+    // When set, text deltas stream here live and the agent is told (STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
-    /* Set by dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
-     * webhook). PROVENANCE ONLY: it says who spoke, so the card is placed on the board as a Discord or Front
-     * Desk agent and the guard layer knows a stranger's words started the turn. It no longer decides WHERE the
-     * turn runs — every fire gets its own worktree (see the turn literal in runFire). */
+    // Set by dispatchers on an outside message; provenance only, for the board and guard layer, not where it runs.
     readonly origin?: AgentOrigin;
-    // The card/tab title for a surfaced wake, the inbound message's first line, which is the only thing that
-    // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
+    // Card/tab title, since the prompt repeats across fires and can't tell two apart; derived below if absent.
     readonly title?: string;
-    /* What to do when this automation is ALREADY running. "drop" (the default) suits a trigger that fires again
-     * on its own: a cron occurrence or a workspace event landing on top of the previous run is not wanted
-     * twice, and the next tick comes round regardless.
-     *
-     * "queue" is for an inbound MESSAGE, and the difference is that there is no next tick. Somebody is waiting
-     * for an answer and the dispatcher holds the only copy of what they said, so a drop loses it outright,
-     * a Discord mention that arrived while an unrelated fire of the same automation happened to be running was
-     * never answered and never retried, and the channel saw nothing at all. A queued fire waits for the run in
-     * progress and then takes its turn, keeping its reply sink open across the wait. */
+    // What happens when this automation is already running:
+    // - `drop` (default): a cron or workspace-event re-fire is not wanted twice; the next tick comes anyway.
+    // - `queue`: for an inbound message with no next tick; waits for the run in progress, keeping its reply sink open.
     readonly overlap?: "drop" | "queue";
 }
 
-// What a fire leaves behind for a caller that has to run ANOTHER one on the same conversation: the provider
-// session the turn ran on, so the next fire resumes it instead of starting over. Absent whenever no turn ran
-// (dropped as overlapping, skipped by the guard, held for approval) or the provider minted no session.
+// What a fire leaves for a caller running another one on the same conversation: the provider session to resume, absent
+// when no turn ran or none was minted.
 export interface FireOutcome {
     readonly sessionId?: string;
 }
 
-/* Fire one automation now, one turn at a time. This half owns only the overlap policy, whether a fire that
- * meets a running one is refused or made to wait, and `runFire` below is the fire itself.
- *
- * Callers run it detached from their tick/request lifecycles; tests await it directly. */
+// Fires one automation, one turn at a time; owns only the overlap policy (refuse or wait), with `runFire` doing the
+// fire itself. Callers run it detached; tests await it directly.
 export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
@@ -299,15 +219,12 @@ export const fireAutomation = async (
 ): Promise<FireOutcome> => {
     const running = inFlight.get(automation.id);
     if (running !== undefined && options.overlap !== "queue") {
-        // Dropped as overlapping, which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink, and
-        // runFire's finally is never reached from here, so this exit closes the sink itself or nothing does.
-        // A QUEUED fire keeps its sink open instead: it is still going to answer, just not yet.
+        // Dropped as overlapping means no reply is coming; runFire's finally never runs here, so this closes the sink.
         options.stream?.failed("this automation is already running, so the message was not picked up");
         options.stream?.end();
         return {};
     }
-    // The chain IS the lock: each fire runs after the one before it, and a fire that fails still lets the next
-    // one start (`.then(job, job)`, the same queue the web-chat route runs its visitor turns through).
+    // The chain is the lock: each fire runs after the last; failure still lets the next start (`.then(job, job)`).
     const turn = (running ?? Promise.resolve()).then(
         () => runFire(services, automation, wake, options),
         () => runFire(services, automation, wake, options),
@@ -318,8 +235,7 @@ export const fireAutomation = async (
     );
     inFlight.set(automation.id, settled);
     void settled.then(() => {
-        // Only the LAST fire in the chain clears the slot. An earlier one finishing must not unlock an
-        // automation whose next turn is already queued behind it, that is the overlap this exists to prevent.
+        // Only the last fire in the chain clears the slot; an earlier one must not unlock a turn queued behind it.
         if (inFlight.get(automation.id) === settled) {
             inFlight.delete(automation.id);
         }
@@ -327,30 +243,14 @@ export const fireAutomation = async (
     return turn;
 };
 
-/* Wait for whatever fire is running for one automation, if any. The tick fires DETACHED, so seeing a run
- * recorded is not the same as the automation being free again: the record is written inside the fire, and the
- * overlap lock only releases once the fire returns. Anything that must fire the same automation a second time
- * and mean it (a test's next tick, a caller driving two fires in a row) awaits this in between, otherwise the
- * second fire lands in that window and is dropped as overlapping. */
+// Waits for a running fire of this automation. A recorded run isn't the same as free again, since the lock releases
+// only when the fire returns; firing the same automation twice in a row must await this in between.
 export const automationIdle = async (id: string): Promise<void> => {
     await inFlight.get(id);
 };
 
-/* THE RESOLVED RUNG AS TURN FIELDS, WHOLE. Not just which model: how hard it thinks, whether it reasons at all,
- * whether this wake pays for speed, and which agentic loop runs it. Those four used to be unsayable per
- * automation — the manifest carried a bare `model` string beside a `harness`, and the tier came from whatever
- * the provider defaulted to — so an owner who pinned a reasoning model to a nightly review paid its price and
- * got its default behaviour.
- *
- * ABSENT STAYS ABSENT, never an invented default: a knob the owner did not pin is a knob the provider answers
- * for itself, which is the same contract every other reader of a pin keeps (turn-resume.ts `pinnedKnobs`).
- *
- * A function rather than four conditional spreads at the call site, because the call site is a turn literal
- * inside an already very long function and each `?:` is one more branch in it.
- *
- * The return type names its six fields rather than widening to `Partial<AgentTurn>`: spread into a turn literal,
- * a partial of the whole turn tells the compiler this call might also be re-answering `conversationId` with
- * undefined, which is exactly the field the literal above it is not allowed to lose. */
+// Resolved model pin as turn fields (model, effort, thinking, fast, harness); an unpinned knob stays absent. Named
+// return type, not Partial<AgentTurn>, so spreading it can't re-answer conversationId.
 const pinFields = (
     pin: ModelPin,
 ): Pick<Required<AgentTurn>, "agent" | "model"> & Partial<Pick<AgentTurn, "effort" | "thinking" | "fast" | "harness">> => ({
@@ -362,47 +262,10 @@ const pinFields = (
     ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
 });
 
-/* WHAT THIS WAKE RUNS ON, WALKED BEFORE ANYTHING IS SPENT OR WRITTEN DOWN. Undefined ⇒ it does not run, and the
- * refusal is already recorded and already said to whoever was waiting on the sink.
- *
- * The automation's own ladder (contract schemas/automations.ts `models`), through the same walk every other
- * pinned list in this daemon goes through (agent/models/run-role-model.ts): readiness and the recorded quota, in
- * the owner's order, stopping at the first rung this sandbox can actually start.
- *
- * NO LADDER MEANS NO WAKE, and this is the one place that is said. There is no sandbox-wide tier under an
- * automation any more, and deliberately none: there used to be an `automation-wake` model role standing behind
- * every automation in the manifest, and the composer's own model standing behind that. Both are defaults, and a
- * default is the wrong shape for this job specifically — an automation is the one thing here that spends an
- * allowance with nobody in the room, on a schedule its owner set once and does not re-read. A nightly sweep
- * quietly inheriting whatever the chat was set to last Tuesday is a bill arriving from a decision nobody made.
- *
- * The schema already requires a rung, so what actually reaches the refusal is a ladder whose every provider has
- * been DISCONNECTED since it was written: a configuration fact the owner has to see rather than a silence to
- * paper over, which is why it is an `error` run carrying the reason and not a quiet `skipped`. It therefore
- * counts towards the failure streak (`automationFailureLimit`), which is the intended reading — an automation
- * that cannot run should go visibly quiet rather than erroring into the log every minute forever.
- *
- * ASKED HERE rather than left to the detached turn's own fill step (turn-resume.ts withRoleModel), because that
- * step answers for a turn that named NOTHING and this turn has named a whole ladder. It also puts the refusal in
- * front of the journal: a wake that cannot run should not first be written down as in flight and then mint a
- * conversation to die in. */
+// Walks the automation's model ladder for the first rung this sandbox can run; undefined means no wake, already
+// recorded. A fully disconnected ladder is an `error` run, counted toward the failure streak.
 const wakeModel = async (services: Services, automation: AutomationRecord, stream: TurnStream | undefined): Promise<ModelPin | undefined> => {
-    /* ONE RUNG IS NOT A LADDER, and the walk has nothing to do on it. The walk exists to CHOOSE between
-     * entries — to step over a provider that is disconnected or an allowance the recorded quota already calls
-     * spent, and take the next one. With a single entry there is no next one, so the only two answers it can
-     * give are that entry and nothing, and NOTHING here means refusing a fire the owner explicitly configured
-     * on the strength of a local probe rather than of the provider's own reply. Fire it: a provider that has
-     * since been disconnected fails the run in its own words on the card, which is both actionable and exactly
-     * what happened before ladders existed.
-     *
-     * The shortcut lives here rather than inside `pinnedRunModel` because it is an argument about AUTOMATIONS,
-     * not about ladders. A run role that resolves to nothing has a floor to fall to — the owner's own composer
-     * pick — so paying for the sweep to reach it is worth it there. An automation has no floor by design, so
-     * the same answer would be a refusal, and refusing is the expensive mistake.
-     *
-     * It also keeps the coupling proportional: the sweep reaches into every provider module's readiness rung
-     * and the capability store, and the common automation names one model. Only an owner who asked for a
-     * fallback pays for the reading that finds it. */
+    // A single-rung ladder fires as configured regardless: no next entry, and automations have no floor to fall to.
     const [only, ...rest] = automation.models;
     if (only !== undefined && rest.length === 0) {
         return only;
@@ -417,8 +280,8 @@ const wakeModel = async (services: Services, automation: AutomationRecord, strea
     return undefined;
 };
 
-// Guard (payload visible) → wake the agent (payload appended to the prompt) → record the run. Reached only
-// through fireAutomation, which guarantees no two runs of one automation are ever inside this at once.
+// Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
+// automation overlap here.
 const runFire = async (
     services: Services,
     automation: AutomationRecord,
@@ -437,11 +300,7 @@ const runFire = async (
 ): Promise<FireOutcome> => {
     try {
         let capped = payload?.slice(0, PAYLOAD_MAX);
-        /* ADMISSION, the session.start guard, consulted on EVERY fire including approved replays. A deny
-         * refuses even a `cleared` fire (the checks re-run live, so approve-then-tighten does not execute); a
-         * hold is what `cleared` satisfies, the owner's click, or the approve route's replay, already answered
-         * it. The verdict folds the workspace admission floor and the automation's own requireApproval /
-         * holdForSeconds into one decision (guard/actions.ts owns the precedence). */
+        // Admission runs on every fire, even cleared: a deny still refuses; a hold is what `cleared` already answered.
         const { admission } = await services.sandboxSettings.get();
         const verdict = guard(sessionStart, {
             source: wakeSourceOf(automation.trigger),
@@ -455,23 +314,19 @@ const runFire = async (
                 outcome: "skipped",
                 detail: verdict.reason,
             });
-            // Refused by policy is the workspace working as configured, but to whoever is waiting on the
-            // sink it is still a reply that never arrives, so it is said rather than left silent.
+            // A policy refusal is still a reply that never arrives, so it's said to the sink, not left silent.
             stream?.failed(verdict.reason);
             return {};
         }
         if (cleared !== "both") {
-            /* The sessions gate, ahead of the guard: it is the cheaper check, and a guard that scans the shelf
-             * for findings has nothing to scan for on a night the fleet has not earned. Not on a re-fire (a
-             * resumed conversation id): that fire cleared the bar once and, having minted its conversation,
-             * would now measure zero sessions since ITSELF. Not on "both" either, for the guard's own reason. */
+            // Sessions gate runs before the guard, cheaper to check; skipped on a re-fire, measuring zero since itself.
             const gate = resumedConversationId === undefined ? sessionsGate(services, automation) : {};
             if ("skipped" in gate) {
                 await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "skipped", detail: gate.skipped });
                 stream?.failed(gate.skipped);
                 return {};
             }
-            // The sessions ARE a gated fire's payload: what woke it, read by the guard and appended under the prompt.
+            // The sessions are a gated fire's payload: what woke it, read by the guard and appended under the prompt.
             capped = gate.listing ?? capped;
             if (automation.guard !== undefined) {
                 const precheck = await runGuard(automation.guard, services.workspace.root, capped);
@@ -481,30 +336,25 @@ const runFire = async (
                         outcome: "skipped",
                         ...(precheck.detail !== undefined ? { detail: precheck.detail } : {}),
                     });
-                    // A guard saying no is the automation working as configured, but to whoever is waiting on
-                    // the sink it is still a reply that never arrives, so it is said rather than left silent.
+                    // A guard refusal is still a reply that never arrives to the sink, so it's said, not left silent.
                     stream?.failed(precheck.detail ?? "this automation's guard skipped the run");
                     return {};
                 }
             }
-            // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
-            // finally, so the lock is NOT held while it waits for the owner, the approve route runs it later,
-            // or (a countdown hold) the scheduler's own tick does once the countdown passes unanswered.
+            // Holds the wake instead of running; inFlight releases in the finally, so the lock isn't held during the
+            // wait.
             if (verdict.effect === "hold" && cleared === undefined) {
                 await services.heldWakes.add({
                     automationId: automation.id,
-                    // Only a pure-countdown hold carries autoRunAfterS (guard/actions.ts): "ask me", whether
-                    // the automation's own requireApproval or the admission floor, never auto-runs.
+                    // Only a pure-countdown hold carries autoRunAfterS; an "ask me" hold never auto-runs.
                     ...(verdict.autoRunAfterS !== undefined ? { autoRunAt: Date.now() + verdict.autoRunAfterS * 1_000 } : {}),
                     ...(capped !== undefined ? { payload: capped } : {}),
-                    // Snapshotted with the payload so the approved run opens the same conversation this fire
-                    // would have, an approved Discord mention lands on the board as a Discord agent, not as
-                    // an anonymous turn.
+                    // Snapshotted so the approved run opens the same conversation, keeping origin rather than turning
+                    // anonymous.
                     ...(origin !== undefined ? { origin } : {}),
                     ...(title !== undefined ? { title } : {}),
-                    // …and the THREAD it would have continued, for the same reason. A dispatcher that owns a
-                    // running conversation (the Front Desk, a Discord channel) resolved it before firing; without
-                    // carrying it here the approve route has nothing to resume and mints a fresh one.
+                    // The thread it would have continued: without it, approve has nothing to resume and mints a fresh
+                    // one.
                     ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
                     ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
                     createdAt: Date.now(),
@@ -517,8 +367,7 @@ const runFire = async (
                         ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
-                // A held wake goes nowhere until the owner acts, and nothing else will tell them, an
-                // automation fires precisely when they are not looking. notifyIfAway keeps it quiet if they are.
+                // A held wake needs the owner to act; notifyIfAway pings them only if they're away.
                 void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
                 return {};
             }
@@ -528,11 +377,7 @@ const runFire = async (
         if (pin === undefined) {
             return {};
         }
-        /* This fire is now in flight, written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
-         * the resolved turn: a re-fire goes back through this same function (see turn-resume's boot pass), which
-         * is what keeps the overlap guard, the run record and the activity append, and re-reads a prompt the
-         * owner may have fixed in the meantime. Awaited, unlike the chat-turn journal: nothing is waiting on a
-         * response here, and a wake that outlives the write by a millisecond is worth nothing. */
+        // Journals the fire's trigger inputs, not the resolved turn, so a re-fire re-reads a prompt since fixed.
         const conversationId = resumedConversationId ?? mintConversationId(automation.id, Date.now());
         await services.turnJournal
             .recordFire({
@@ -546,68 +391,26 @@ const runFire = async (
                 attempts,
             })
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
-        /* The wake's prompt is the automation's configured one plus the context that woke it, which is exactly
-         * a chat's opening message, written by the configuration instead of by a person. A LISTENER's payload is
-         * a stranger's words (a Discord message, a webchat visitor), so it rides inside the outside-content
-         * envelope, wrapped HERE, at the one point every listener provider's payload joins a prompt, and only
-         * here: the guard's AUTOMATION_PAYLOAD env, the held snapshot and the journal keep the raw payload, so a
-         * guard command parses what arrived and an approved replay wraps freshly on its way back through. A
-         * schedule/event/workspace payload is the workspace talking to itself and rides bare. */
+        // A listener payload is wrapped in the outside-content envelope here only; guard env and journal keep it raw.
         const sealed = automation.trigger.kind === "listener" ? wrapOutsideContent(capped ?? "", { source: automation.trigger.provider }) : capped;
         // Nothing hands a schedule a payload but its own sessions gate, so the heading can say what the list is.
         const heading = automation.trigger.kind === "schedule" ? "Sessions since the last wake" : "Event payload";
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- ${heading} ---\n${sealed}` : automation.prompt;
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
-        /* Every fire lands in a CONVERSATION and therefore on a fleet card. WHICH conversation is the
-         * dispatcher's call: a listener channel and a Front Desk visitor each own one for as long as they stay
-         * active (thread-sessions.ts), so a run of messages is one reviewable agent; a schedule or chore wake
-         * has no thread and mints a fresh one above. */
+        // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
         const turn: AgentTurn & { conversationId: string } = {
-            // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
-            // the journal entry above. A re-fire has no live sink to write into, the Discord message the deltas
-            // were being edited into died with the daemon, and a wake still told "your reply is delivered live,
-            // don't send it yourself" would answer into nothing. Without the note it sends its own reply, which
-            // is exactly what an unstreamed wake does.
+            // STREAM_NOTE is applied here, not folded into `body`, so it belongs to this fire, not the journal entry.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             conversationId,
-            /* NOBODY IS AT A COMPOSER FOR THIS ONE, which is what the flag means (AgentTurn.unattended names a
-             * Maintenance chore among its examples), and every module downstream already assumed it: the
-             * command gate's unattended branch exists so an automation turn gets a refusal instead of a
-             * permission card nobody can answer, and the plan/ask tools are withheld for the same reason. The
-             * dispatchers simply never said it, so a wake fired at 3am could still park itself on a question.
-             *
-             * It also decides what this turn is worth retrieving workspace context for: the pre-turn search is
-             * scoped to the opening message of a conversation a PERSON started (turn-plan.ts), and a schedule
-             * that mints a fresh conversation on every fire looks exactly like one until the flag says
-             * otherwise. Its prompt is the automation's standing brief, whose first 400 characters are a brief
-             * about being a brief. */
+            // Marks nobody is at a composer: the command gate refuses instead of prompting, plan/ask withheld.
             unattended: true,
-            /* SOMEBODY ELSE'S WORDS STARTED THIS TURN, set for a listener wake only, and named by the provider
-             * that carried it. It is the same fact the envelope above states to the model, said once more to
-             * the guard layer, which does not depend on the model believing it (guard/turn-taint.ts). A
-             * schedule, a workspace event and a webhook are the workspace talking to itself and set nothing. */
+            // Names the provider when a listener started this turn, for the guard layer; other triggers set nothing.
             ...(automation.trigger.kind === "listener" ? { outsideWake: automation.trigger.provider } : {}),
-            // A continuing thread resumes its provider session, so the agent answers the follow-up rather than
-            // meeting the visitor again. Absent on a first turn and on every one-off wake.
+            // Resumes the provider session on a continuing thread; absent on a first turn or any one-off wake.
             ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
             ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
-            /* IN A WORKTREE OF ITS OWN, like every other agent this daemon starts, and unconditionally.
-             *
-             * This used to key off `origin`: an outside message got a checkout so the owner could open it, follow
-             * it live and keep talking in, while a schedule or a chore ran directly on /work. Nothing about the
-             * WAKE justified that split — it was a fact about who sent the message being read as a fact about
-             * where the work belongs — and the shared-tree half was the worse half of it in every way that
-             * matters. A nightly sweep edited the tree the owner and every live conversation were reading, with
-             * no branch to diff, nothing to hold back when its verdict was wrong, and no `land` step to record
-             * who did it, so its edits turned up in the Changes panel with no agent attribution at all
-             * (agents/origins.ts). It also made one chore mean two different things: the same maintenance job
-             * run from the panel is isolated (_extensions/maintenance), run from its cron it was not.
-             *
-             * So placement is now uniform, and every wake arrives the way the rest of the fleet does — its own
-             * branch, its own diff, provenance through `land`, and whatever the owner's landing rules say about
-             * unattended work (rules/rules.ts). The one thing that genuinely differs between fires stays where
-             * it was: `origin` says who spoke, not where the turn stands. */
+            // Every wake runs in its own worktree, unconditionally; `origin` says who spoke, not where the turn runs.
             isolated: true,
             ...(origin !== undefined
                 ? {
@@ -615,46 +418,16 @@ const runFire = async (
                       title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
                   }
                 : {}),
-            /* THE RUNG THE LADDER RESOLVED TO, WHOLE. Not just which model: how hard it thinks, whether it
-             * reasons at all, whether this wake pays for speed, and which agentic loop runs it. Those four used
-             * to be unsayable per automation — the manifest carried a bare `model` string beside a `harness`,
-             * and the tier came from whatever the provider defaulted to — so an owner who pinned a reasoning
-             * model to a nightly review paid its price and got its default behaviour.
-             *
-             * Spread verbatim rather than through turn-resume's fill step, which deliberately only answers a
-             * turn that named NOTHING (`withRoleModel`): this turn has named its whole ladder and already
-             * walked it, so there is nothing left for that step to decide. */
+            // Resolved rung spread verbatim, not through turn-resume's fill step, since this turn walked its ladder.
             ...pinFields(pin),
-            /* THE PINNED ACCOUNT, WHEN IT BELONGS TO THE PROVIDER THAT ACTUALLY WON.
-             *
-             * An account id is one provider's store key, so it is only meaningful beside that provider — the
-             * same reason a model id is (ModelPinSchema). While an automation named ONE provider that was never
-             * in question; a ladder can span them, and sending a Claude account id along with a Codex rung
-             * would pin the wake to an account that provider has never heard of, failing at 3am on a credential
-             * error rather than on anything the owner did.
-             *
-             * So it rides only while every rung agrees about the provider, which is exactly when the pin is
-             * unambiguous, and is dropped the moment the ladder crosses providers — leaving the resolution
-             * where it was for an automation that names no account at all: the connected account with the most
-             * headroom (harness-credentials.ts), which is the better answer for unwatched work anyway. The form
-             * clears the field on the same rule, so what is stored and what is spent cannot disagree. */
+            // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
             ...(automation.account !== undefined && automation.models.every((rung) => rung.provider === pin.provider)
                 ? { account: automation.account }
                 : {}),
-            /* The persona this wake shows the outside world, and, unlike `account` on the line above, absence here
-             * is a DECISION rather than a deferral. `unattended: true` is already set, which means the resolver
-             * (personas/personas.ts) reads a missing persona as "no logged-in account at all" rather than
-             * "all of them". So an automation the owner never pinned cannot post as anybody, and one they did
-             * pin reaches exactly the accounts on that card.
-             *
-             * Spread the same way as the rest for consistency, though the absent case is what carries the
-             * meaning: what makes the default strict is the resolver, not this line. */
+            // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
             ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
         };
-        // The wake's transcript, folded as it streams exactly as a composer's turn is inside its run
-        // (turn-runs.ts): a wake has no run, its frames are consumed here, so the fold runs here too. It opens
-        // with the wake's prompt stamped with when the turn began, not with when the append below runs, which on
-        // a long turn is many minutes later (see TranscriptRow.sentAt).
+        // Transcript folds as it streams; opens stamped with when the turn began, not when appended, minutes later.
         const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()));
         // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
@@ -678,24 +451,19 @@ const runFire = async (
             fold.finish("settled");
             await recordTurnTranscript(services, turn, fold.rows, fold.steerRows);
         }
-        /* Tell the sink the turn is not going to answer, BEFORE the finally closes it. The daemon has always
-         * known this, it is on the run record below and in the activity feed, and used to keep it: a wake
-         * that died on a revoked credential closed the stream with no text, which every audience reads as the
-         * agent having nothing to say. The raw reason goes out; each sink decides what its audience is told. */
+        // Tells the sink the turn failed before the finally closes it, so a dead wake doesn't read as silence.
         if (failure !== undefined) {
             stream?.failed(failure);
         }
-        // The stable conversation rides onto the run record, which makes every wake that reached a turn
-        // openable from its row, even when the provider never minted a runtime session.
+        // Conversation id rides on the run record so a wake that reached a turn is openable with no runtime session.
         await services.automations.recordRun(automation.id, {
             at: Date.now(),
             ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
             conversationId,
         });
-        // Read AFTER recording so this fire's own outcome is part of the streak the guard weighs.
+        // Read after recording so this fire's own outcome is part of the streak the guard weighs.
         const quarantined = failure === undefined ? undefined : await quarantineIfSpinning(services, automation.id);
-        // The runtime session is the activity feed's join key between an inbound trigger and the outbound calls its
-        // wake produced (the sniffer stamps the same id on them).
+        // Runtime session is the activity feed's join key between the trigger and the outbound calls the wake produced.
         void services.activity
             .append({
                 direction: "system",
@@ -704,20 +472,16 @@ const runFire = async (
                 ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                 ...(runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {}),
                 outcome: failure === undefined ? "ok" : "error",
-                // The quarantine rides the run's own activity row rather than a second event: it is the reason
-                // this fire was the last one, and the feed is where someone asks why an automation went quiet.
+                // Quarantine rides this run's activity row, not a second event; the feed is where someone asks why.
                 ...(failure !== undefined ? { error: quarantined === undefined ? failure : `${failure}\n\n${quarantined}` } : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
-        // Handed back so a dispatcher owning a continuing thread (the Front Desk) can resume this exact session
-        // on the visitor's next message. Everyone else ignores it.
+        // Handed back so a dispatcher on a continuing thread can resume this session; everyone else ignores it.
         return runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {};
     } finally {
         // Flush the final buffered text (the deltas after the last rate-limited edit). No-op if nothing streamed.
         stream?.end();
-        // No longer in flight, by whatever road it left: a completed wake, a failed one, a guard that skipped it
-        // (which never journalled) and a thrown one all reached a state the row can show. Only the fire that got
-        // no chance to reach one leaves its entry behind, which is the whole signal the boot pass reads.
+        // Clears the journal entry regardless of outcome; only a fire with no end state leaves one, for the boot pass.
         await services.turnJournal
             .clearFire(automation.id)
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not cleared"));
@@ -731,11 +495,8 @@ export interface AutomationsScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
-/* Run a wake the approvals queue was holding, with everything the hold snapshotted: `cleared: "both"` (its
- * guard ran when it was held, and whoever calls this holds the release, the owner's click or a countdown
- * that ran out), and the thread it belonged to settled afterwards so the next message resumes the same
- * conversation. One function because there are now two releases, the approve route and the scheduler's
- * countdown scan, and the thread-settling half is exactly the part a second copy would forget. */
+// Runs a held wake with its snapshot (`cleared: "both"`, guard already ran), then settles its thread so the next
+// message resumes it. Shared by both releases, the approve route and the countdown scan.
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
     const settled = await fireAutomation(services, automation, wake, {
         cleared: "both",
@@ -752,9 +513,8 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
 };
 
-// Polls the automations manifest and fires whatever came due since the last pass, so edits are picked up with
-// no resync bookkeeping. Fires run detached from the tick (an agent turn can outlast many polls). Event-kind
-// automations don't tick; they fire from the /automations/{id}/fire route.
+// Polls the manifest and fires whatever came due since the last pass, with no resync bookkeeping; fires run detached,
+// since a turn can outlast many polls. Event automations fire from the fire route instead.
 export const createAutomationsScheduler = (services: Services, wake: WakeFn, intervalMs = 30_000): AutomationsScheduler => {
     let since = Date.now();
     let timer: NodeJS.Timeout | undefined;
@@ -780,11 +540,7 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
                 services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
             );
         }
-        /* Countdown holds whose deadline passed unanswered, silence is consent (holdForSeconds), but only
-         * while no turn is live: the wake edits the tree, and the countdown's whole point is not starting
-         * work under someone. A busy fleet just leaves the hold for a later tick; the row keeps showing it.
-         * The entry is removed BEFORE the run so a wake that fails cannot re-fire on every tick, and an
-         * automation deleted or disabled while its countdown ran is read as the cancel it is. */
+        // Releases countdown holds past deadline while no turn is live; removed before running so it can't re-fire.
         for (const held of await services.heldWakes.list()) {
             if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
                 continue;

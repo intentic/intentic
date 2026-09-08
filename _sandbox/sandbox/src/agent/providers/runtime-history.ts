@@ -1,10 +1,6 @@
-// A provider/harness/account switch starts a fresh runtime session. Carry the conversation's transcript in the
-// opening prompt so the new runtime can continue the same conversation, then reverse that envelope when the SDK
-// stores it: protocol must never become one giant user bubble on restore.
-//
-// The transcript comes from the DAEMON's own record (sessions/transcript-record.ts), not from the client, it is
-// the authoritative account of what was streamed, it holds tool calls and attachments the client's text mirror
-// drops, and it is keyed by conversationId, which is exactly the identity a retired session leaves behind.
+// Carries a conversation's transcript in the new runtime's opening prompt across a provider/harness/account switch,
+// then reverses the envelope on store so it never becomes one giant user bubble. Built from the daemon's own transcript
+// record, not the client's, since it holds tool calls and attachments the client's mirror drops.
 
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { formatAnswers } from "../tools/question-answers.js";
@@ -17,34 +13,19 @@ export interface RuntimeHistoryMessage {
 const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
-/* What an OLDER assistant message may keep, in characters. The newest exchanges carry the decisions the next
- * runtime needs whole (the last answer, the question it was asked); an assistant message from ten turns back
- * is mostly narration of work whose result is on the tree, and the note that rides beside this envelope
- * (agent/prompt/handoff-state.ts) says where that tree stands. So the two most recent exchanges keep the
- * full cap above, and everything older keeps its opening, which is where a message says what it did. The
- * user's own words are never cut by this: they are the shorter half and the half nothing else records. */
+// Char cap for an assistant message outside the newest RECENT_ROWS; user messages are never cut by this.
 const OLDER_ASSISTANT_CHAR_CAP = 1_500;
 // How many of the newest user/assistant rows keep the full cap: two exchanges, four rows.
 const RECENT_ROWS = 4;
-/* What the whole preamble may spend, in characters, roughly 8k tokens. A handoff is orientation, not an archive:
- * tool output is already excluded and the newest turns carry the decisions the next runtime needs. The old
- * 120k cap let this optional note consume ~30k tokens before the current request, enough to crowd out small
- * models and to make a runtime switch more expensive than continuing the old session.
- *
- * Fixed rather than derived from the incoming model's context window because the switch happens before that
- * runtime has produced a usage frame. Context-window preflight still owns the total request; this local ceiling
- * prevents history from claiming an unbounded share of it. */
+// Total preamble budget, in characters; fixed since the incoming model's context window isn't known yet.
 const HISTORY_CHAR_CAP = 32_000;
-// Tool calls are carried as a trailing one-line index per assistant turn. WHAT the agent did, never the tool
-// output, which is the bulk of a transcript and is re-readable from the workspace itself.
+// Max tool calls listed per assistant turn; never the tool output, which is re-readable from the workspace.
 const TOOLS_PER_MESSAGE = 8;
 
 const toolLabel = (call: TranscriptTool): string => (call.target !== undefined && call.target !== "" ? `${call.name} ${call.target}` : call.name);
 
-/* WHAT THE USER DECIDED at a question this row asked, the one thing on a card the next runtime cannot do
- * without: the picks steered everything the agent did afterwards, and the ask tool's result that carried them
- * is tool output, which this preamble excludes. Worded by the same function the model read them through live
- * (formatAnswers), on one line. A card with no reply was stopped under, and says nothing here. */
+// What the user decided at a question this row asked, worded through the same formatAnswers the model read live. A card
+// with no reply says nothing.
 const decisionLabel = (message: TranscriptRow): string | undefined => {
     const question = message.question;
     if (question === undefined || question.status !== "answered") {
@@ -53,9 +34,8 @@ const decisionLabel = (message: TranscriptRow): string | undefined => {
     return formatAnswers(question.questions, { kind: "question", requestId: question.requestId, answers: question.answers }).replaceAll("\n", " ");
 };
 
-// The trailer that says what a turn touched: tool calls and the answer to a question it asked for an assistant
-// message, attached files for a user's. Empty when there is nothing to say, so a plain text exchange renders
-// exactly as it always did.
+// Trailer for what a turn touched: tools and question answer for an assistant row, attachments for a user row; empty
+// otherwise.
 const trailerOf = (message: TranscriptRow): string => {
     if (message.role === "user") {
         const attachments = message.attachments ?? [];

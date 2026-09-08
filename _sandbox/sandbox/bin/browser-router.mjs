@@ -1,28 +1,7 @@
 #!/usr/bin/env node
-// browser-router <manifest.json>: ONE stdio MCP server standing in for every signed-in browser a turn may
-// drive. The harness used to mount one @playwright/mcp server per connected account, which cost twice: every
-// turn started one process per account before the agent said a word (solved once by a socket mux), and every
-// account pinned its own copy of ~21 tool schemas into the prompt: the schemas multiplied even after the
-// processes stopped doing so. This process is the schema fix and the process fix in one shape: the harness
-// spawns it as the single server `browser`, its tools each take an `account` parameter, and the real
-// per-profile @playwright/mcp backend is spawned lazily on the first call that names it.
-//
-// initialize and tools/list are answered locally from a version-keyed schema cache (probed once per
-// @playwright/mcp version from a throwaway isolated server), with `account` injected into every tool's input
-// schema. A tools/call resolves `account` through the manifest: account ids and identity ids alike map to the
-// PROFILE OWNER, because an identity and every account born from it are one browser: strips the parameter,
-// and pipes the call to that owner's backend. An id the manifest does not carry is refused with the granted
-// set named: the manifest is built from the persona-filtered capability list, so this refusal IS the
-// enforcement, and it reads as an answer rather than as a tool that mysteriously does not exist.
-//
-// LIFECYCLE: a direct child of the harness, like any stdio MCP server, stdin closing is the turn ending, and
-// the backends are children of this process that are killed on the way out. No sockets, no bridges, no idle
-// timers: the process tree is the lifecycle.
-//
-// The wire protocol is stdio MCP verbatim (newline-delimited JSON-RPC). After a backend is up its pipe is
-// nearly transparent; the only messages this process keeps parsing are the ones it must route: client
-// requests to the right backend, and the rare backend-initiated request back out under a prefixed id so two
-// backends' own ids can never collide on the shared client.
+// browser-router <manifest.json>: one stdio MCP server standing in for every signed-in browser. Each tool takes an
+// `account`, resolved through the manifest to an owner whose real backend spawns lazily on first use; an unrecognised
+// account is refused. Backends are children of this process: stdin closing ends the turn and kills them.
 
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -38,8 +17,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 //   owners: { <owner>: { command, args, env } } }
 
 const PROBE_TIMEOUT_MS = 30_000;
-// The id namespace for requests a BACKEND initiates toward the client: prefixed so ids minted independently
-// by two backends stay distinct on the shared wire, and so the client's answer can be routed home.
+// Prefix for backend-initiated request ids, so two backends' ids can't collide and answers route home.
 const BACKEND_ID_PREFIX = "browser-router:";
 
 // ---- newline-delimited JSON-RPC framing, shared by the client pipe and the backend pipes -------------------
@@ -84,8 +62,8 @@ const toolSchemas = () => {
         try {
             return JSON.parse(readFileSync(manifest.schemaCachePath, "utf8"));
         } catch {
-            // First router of this version: derive from a throwaway isolated server. Racing routers both probe
-            // and both write: the rename is atomic and the contents identical, so last-writer-wins is harmless.
+            // First probe for this version: two racing routers may both write, but rename is atomic and contents match,
+            // so last-writer-wins is harmless.
         }
         const tools = await probeTools();
         try {
@@ -139,10 +117,8 @@ const probeTools = () =>
         send(probe.stdin, { jsonrpc: "2.0", method: "notifications/initialized" });
     });
 
-/* Every tool gains the parameter that says WHOSE browser: required, because a call that names nobody would
- * have this process guessing between signed-in profiles, which is the wrong-account mistake the parameter
- * exists to prevent. The granted ids are deliberately NOT enumerated per tool (that would re-multiply the very
- * schemas this process exists to collapse once per account); the skills and the roster tool carry them. */
+// Required, so a call can't leave this process guessing the profile. Granted ids are not enumerated per tool, to avoid
+// re-multiplying the schemas this process exists to collapse.
 const ACCOUNT_PROPERTY = {
     type: "string",
     description:
@@ -198,8 +174,8 @@ const backendFor = (owner) => {
                 }
                 return;
             }
-            // A request the BACKEND initiates (elicitation, sampling): re-minted under a prefixed id so two
-            // backends can never collide on the shared client, and so the answer routes home (below).
+            // Backend-initiated request (elicitation, sampling); re-minted under a prefixed id so backends can't
+            // collide.
             if (message.method !== undefined && message.id !== undefined) {
                 const outbound = `${BACKEND_ID_PREFIX}${owner}:${backend.nextId}`;
                 backend.nextId += 1;
@@ -207,13 +183,12 @@ const backendFor = (owner) => {
                 toClient({ ...message, id: outbound });
                 return;
             }
-            // Responses to the client's own calls (their ids are the client's, unique across backends because
-            // one client minted them all) and notifications pass through verbatim.
+            // Client-originated responses and notifications pass through verbatim; their ids are already unique.
             toClient(message);
         }),
     );
-    // Replay the handshake this process already answered, so the backend joins the conversation mid-sentence
-    // believing it started it. The client's own initialize params ride along: protocol version included.
+    // Replays the handshake this process already answered, so the backend starts believing it began the conversation;
+    // the client's own initialize params ride along.
     send(child.stdin, {
         jsonrpc: "2.0",
         id: "router-init",
@@ -328,8 +303,7 @@ process.stdin.on(
                 return;
             }
             callRoutes.set(message.id, owner);
-            // Bounded by forgetting settled routes opportunistically: a route only matters while its call is
-            // in flight, and the map would otherwise grow by one entry per browser action for the whole turn.
+            // Trimmed opportunistically: a route matters only while its call is in flight.
             if (callRoutes.size > 512) {
                 for (const key of [...callRoutes.keys()].slice(0, 256)) {
                     callRoutes.delete(key);

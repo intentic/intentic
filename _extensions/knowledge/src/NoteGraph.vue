@@ -4,18 +4,9 @@ import { computed, ref, toRef } from "vue";
 import { toneOfType } from "./knowledgeNote";
 import { useGraph } from "./useKnowledge";
 
-/* THE MAP AROUND ONE NOTE: everything within a couple of steps of it, and what each connection is called.
- *
- * This is the picture a folder of files cannot give you: which people touch which projects, what a decision was
- * about, what supersedes what. It is drawn around the OPEN NOTE rather than over everything, because a picture
- * of a whole knowledge base past fifty notes is a hairball: pretty, and unable to answer a question. The
- * neighbourhood answers the question you actually have, which is "what is this connected to".
- *
- * Laid out left-to-right by the same dagre renderer the pipeline graphs use. A knowledge graph is not a DAG:
- * relationships go both ways and around in circles, and the layout handles that by choosing an order to draw
- * the cycle in, which is fine here: the reader is being shown WHAT is connected, and the arrow on each edge
- * carries the direction the layout gave up. `magnify` is off and the zoom floor is low, because a hub section
- * is a wide short band and a five-note map blown up to fill it reads as five billboards. */
+// The neighbourhood around one note, with what each connection is called: what a folder of files can't show. Drawn
+// around the open note, not the whole knowledge base, since a full graph is an unreadable hairball past a few dozen
+// notes. Left-to-right with dagre; edges keep their direction though the graph isn't a DAG.
 
 const { path, depth = 2 } = defineProps<{ path: string | undefined; depth?: number }>();
 const emit = defineEmits<{ open: [path: string] }>();
@@ -38,23 +29,21 @@ const nodes = computed<DagNode<Card>[]>(
         graph.value?.nodes.map((node) => ({
             id: node.path,
             data: { title: node.title, type: node.type, focus: node.path === graph.value?.focus, path: node.path },
-            // The path is what a reader needs to go find the file, and it is the one thing that does not fit on
-            // a card this size.
+            // The path, for finding the file; the one thing that doesn't fit on a card this size.
             tooltip: node.path,
-            // Depth is drawn as fade rather than as a number: the further out, the less it is about this note.
+            // Depth shown as fade, not a number: further out matters less to this note.
             dimmed: node.depth > 1,
         })) ?? [],
 );
 
-// A relationship's name rides its edge, since the name is most of what an edge means here: "works_on" and
-// "supersedes" between the same two notes are entirely different facts.
+// A relationship's name rides its edge, since two notes can carry entirely different relations.
 const edges = computed<DagEdge[]>(
     () =>
         graph.value?.edges.map((edge) => ({
             from: edge.from,
             to: edge.to,
             kind: edge.relation ?? `mentions`,
-            // A link written in the prose is a weaker claim than one the header names, and reads as one.
+            // A link written in prose is a weaker claim than one the header names, and reads as one.
             dashed: edge.relation === undefined,
         })) ?? [],
 );
@@ -68,11 +57,7 @@ const openSelected = (): void => {
 </script>
 
 <template>
-    <!-- A DEFINITE HEIGHT, not a grown one. The canvas measures its parent to lay the graph out, so a box sized
-         by its contents measures as zero and renders nothing at all: no error, no empty state, just a blank
-         rectangle. It sits inside a scrolling panel body, which cannot give it one, so the height is stated
-         here: enough for three ranks of cards, and bounded by the viewport so a short window still shows the
-         note's own frame around it. -->
+    <!-- A definite height, not a grown one: the canvas measures its parent, and content-sized zero renders nothing. -->
     <div class="relative flex h-figure w-full flex-col">
         <p v-if="error" class="px-4 py-3 text-xs text-danger">{{ error }}</p>
         <p v-else-if="isLoading" class="px-4 py-6 text-xs text-subtle">Drawing the map…</p>
@@ -85,13 +70,7 @@ const openSelected = (): void => {
             </p>
         </div>
 
-        <!-- TOP-TO-BOTTOM, because of the shape of the box rather than the shape of the graph: this pane is a
-             narrow column beside a list, and a left-to-right layout wants width it does not have: six notes
-             laid out sideways fit only by shrinking to where the labels stop resolving.
-
-             `readable-zoom` is the other half of that. A fit nobody can read is not a fit: below this the
-             canvas stops shrinking and shows the graph's leading edge at a size with legible labels, and the
-             rest is one drag away. Without it a well-connected note drew a row of grey smudges. -->
+        <!-- Top-to-bottom for this column's shape, not the graph's; `readable-zoom` stops shrinking before labels blur. -->
         <DagGraph
             v-else
             v-model="selected"
@@ -117,8 +96,7 @@ const openSelected = (): void => {
                 </button>
             </template>
 
-            <!-- One control, and it is the one a reader wants after clicking a card: go there. Double-clicking
-                 a card does the same, so the gesture works before anybody finds the button. -->
+            <!-- One control, the one thing wanted after picking a card; double-click does the same before it's found. -->
             <template #overlay>
                 <div class="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2 text-2xs text-subtle">
                     <span v-if="graph?.omitted" class="rounded bg-surface/80 px-1.5 py-0.5">{{ graph.omitted }} more not shown</span>

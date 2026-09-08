@@ -4,89 +4,33 @@ import { computed, type Ref, ref } from "vue";
 import { host } from "./host";
 import { targetKeyOf } from "./stories";
 
-/* WHERE THE TESTS POINT, a dev SERVER per repo, an ADDRESS per story group.
- *
- * Those two are different questions and this file is where they stop being confused with each other. The daemon
- * runs one dev server per repository, so starting, watching and reading its state is a repo-level fact. But a
- * repository can serve more than one application, a monorepo's marketing site and its web app are two ports
- * behind one `pnpm dev`, and the group is the only thing in a stories tree that already says which is which. So
- * a run resolves one ADDRESS per (repo, group) pair, and the great majority of those addresses are simply "the
- * repo's dev server".
- *
- * A run may carry the web app's stories and the API's in the same fan-out, so this is a single `/panels` query
- * with per-repo accessors over it rather than a composable instantiated per repo: the view needs every repo's
- * state at once, and N queries for one list is N times the same request.
- *
- * THE AGENTS RUN INSIDE THE SANDBOX, so the direct loopback address of the repo's dev server is the answer
- * whenever there is one. Its preview URL is deliberately NOT offered as a fallback: it routes every request out
- * through the Cloudflare tunnel and back, carries the tunnel's own auth surface into a test of the app's, and,
- * the part that made this actively wrong, a panel that is stopped or still booting answers it with a 502.
- * Suggesting it while the server was down is how a run came to be pointed at an unreachable address.
- *
- * RUNNING IS NOT SERVING. `POST /panels/:repo/start` returns as soon as it has spawned the tmux session; the
- * command behind it is `test -d node_modules || pnpm install && pnpm dev`, so a first start can take minutes.
- * `running` says the process exists, `servers` says what is answering, and only the second one means a test can
- * be pointed at it. Conflating them is what made "Start" look like it had done nothing.
- *
- * AND SERVING IS NOT ONE THING. The daemon reports every dev server it can attribute to the repo, so a repo whose
- * `pnpm dev` fans a turbo run out across packages arrives here as three addresses, not one. A server at the repo
- * ROOT is the repo's address and every group under it aims there unasked; a server a PACKAGE bound is one app of
- * several, and which app a group's stories walk is not an ambiguity to resolve by picking the lowest port, or by
- * picking whichever came up first, which is the same guess wearing a stopwatch. The cost of getting it wrong is a
- * fan-out of agent sessions walking marketing stories through a sign-in screen, so each group says which, once,
- * and the run manifests remember it. */
+// One dev server per repo, one address per (repo, group) pair; a repo can serve several apps, so the group states
+// which. A single `/panels` query with per-repo accessors, since a run spans many repos. Loopback is the answer inside
+// the sandbox; the preview URL is never a fallback, since a stopped panel answers it with a 502.
 
-// While a start is in flight, and only then. Once every panel has settled (healthy, or never started) there is
-// no transition left to watch, and this composable lives on a view that stays open.
+// Polls only while a panel is starting; nothing left to watch once every panel has settled.
 const POLL_MS = 2000;
 
 // What a repo can offer as a target, in the order the view reasons about it.
 export type PanelState =
-    // The daemon runs no dev server for this repo, an address has to come from the user.
+    // No dev server for this repo; an address must come from the user.
     | "none"
-    // It has one and it is not running. The offer is a Start button.
+    // Has a dev server, not running; the offer is Start.
     | "stopped"
-    // Spawned, nothing answering yet: installing, compiling, or wedged. Not a target.
+    // Spawned but nothing answering yet: installing, compiling, or wedged.
     | "starting"
-    // Something is answering. The only state that yields an address, though a repo serving several apps yields
-    // one per GROUP rather than one for the repo.
+    // Something is answering; the only state that yields an address, one per group when a repo serves several apps.
     | "ready";
 
-/* THE TMUX SESSION THE DEV SERVER RUNS IN. `panel-<key>`, where the key is the repo id with its slashes
- * flattened, the daemon's PANEL_SESSION_PREFIX (processes/managed-processes.ts) over its panelKey
- * (panels/panels.ts). Session names are wire vocabulary the browser is expected to build; this is the same
- * string repo-apps builds for its own launches. */
+// Tmux session name for a repo's dev server: `panel-<repo>` with slashes flattened, matching the daemon's
+// PANEL_SESSION_PREFIX over panelKey.
 export const panelSessionOf = (repo: string): string => `panel-${repo.replaceAll(`/`, `--`)}`;
 
-/* A loopback address IS the repo's own dev server. The daemon serves nothing else on localhost, so `localhost:*`
- * remembered from a past run names the very process whose state we already have, it is not a second app. */
+// A loopback address always names this repo's own dev server; the daemon serves nothing else on localhost.
 const LOOPBACK = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i;
 
-/* WHERE ONE GROUP AIMS, or undefined when there is nothing to point at yet. Undefined is the gate: a run costs
- * one agent session per story, and every one of them would otherwise spend minutes rediscovering that the app is
- * down. Pure, because it is the single rule the whole surface is built on, see useTargets.test.ts.
- *
- * Typed wins, and a typed blank means blank: someone who clears the field is saying "not there", not "surprise me".
- * With nothing typed the group's own history is consulted before the dev server, which is what saves a marketing
- * site's group from being re-aimed every run.
- *
- * WHAT A GROUP MAY INHERIT WITHOUT BEING ASKED IS THE REPO'S OWN SERVER, and that is a narrower thing than "the
- * only address answering right now". A dev server at the repo ROOT (no `dir`) is the repo: there is no second app
- * under it for a group to be confused with, so every group takes it, and a port it moved to is still the same app.
- * A server a PACKAGE bound (`_editor/web`, `_site/site`) is one app among the repo's several, and the count of
- * them answering is a snapshot of a boot, not a fact about the repo, one `pnpm dev` fans out and the apps come up
- * seconds apart. Inheriting "the only one up so far" is how a marketing group came to be aimed at the web app:
- * the run started in that window, the app's sign-in screen was walked as if it were the landing page, and because
- * the run manifests ARE the memory, every later run confirmed the wrong address.
- *
- * AND A REMEMBERED LOOPBACK ADDRESS IS ONLY WORTH KEEPING WHILE IT IS STILL BEING SERVED. `http://localhost:5173`
- * remembered from a past run names a port, not a place: if it is one of the addresses this repo is serving right
- * now it is the marketing site's own port, picked once and rightly not asked about again, and if it is not, it is
- * a dead socket, and pointing a fan-out at it is the exact failure this gate exists to prevent. What a dead memory
- * falls back to is the repo's own server and NEVER a sibling app: a group that was once aimed somewhere is a group
- * whose address is not the repo's to guess, and substituting another app for a port that went away is a wrong
- * answer that looks exactly like a right one. With nothing safe to fall back to the group says it needs an
- * address, which is a question with a one-click answer on its own row. */
+// Resolves one address for (repo, group): typed wins (blank means nothing); else the group's own live remembered pick;
+// else the repo's own server if it alone serves the repo; otherwise undefined.
 export const aimOf = (input: {
     readonly typed: string | undefined;
     readonly remembered: string | undefined;
@@ -97,11 +41,10 @@ export const aimOf = (input: {
         return input.typed.trim() === `` ? undefined : input.typed.trim();
     }
     if (input.state === `none`) {
-        // There is no dev server, so the only address this group has ever had is one somebody typed.
+        // No dev server; the only address this group could have is one that was remembered.
         return input.remembered;
     }
-    // The repo's own address: one server, bound at the repo root. Anything else is a particular app, and which
-    // app a group's stories belong to is the group's own fact to state.
+    // The repo's own address: exactly one server, bound at the repo root (no `dir`).
     const only = input.servers.length === 1 ? input.servers[0] : undefined;
     const inheritable = only !== undefined && only.dir === undefined ? only.url : undefined;
     if (input.remembered === undefined) {
@@ -111,9 +54,7 @@ export const aimOf = (input: {
 };
 
 export function useTargets(
-    /* The address each target key was last actually RUN against, newest run first, read straight off the run
-     * manifests on disk rather than stored as a preference. A group aimed somewhere other than its repo's dev
-     * server should be typed once, not once per run, and a run's own history is what remembers. */
+    // Last address each target key was actually run against, read from the run manifests, not a stored preference.
     remembered: Ref<Readonly<Record<string, string>>>,
 ) {
     const api = host();
@@ -124,39 +65,27 @@ export function useTargets(
         queryKey: key,
         enabled: computed(() => api.sandbox.reachable()),
         queryFn: async (): Promise<PanelSummary[]> => PanelsListSchema.parse(await api.sandbox.json(`/panels`)).panels,
-        // Read the query's own data, never an outer const, a closure that reaches outward from a vue-query
-        // option runs during setup, before that const exists. See useStories.test.ts.
+        // Reads the query's own data; a vue-query option runs during setup, before an outer const would exist.
         refetchInterval: (state) => ((state.state.data ?? []).some((panel) => panel.running && !panel.healthy) ? POLL_MS : false),
     });
 
-    /* Where a group has been aimed BY HAND, keyed by targetKeyOf, and kept for groups whose stories are no longer
-     * ticked: unticking a story and re-ticking it must not lose an address that was typed. Absent means the
-     * default, which is derived on every read rather than seeded here, so a repo that gains a running dev server
-     * while this view is open stops being stranded on a stale answer with no watcher to keep in sync. */
+    // Group addresses typed by hand, keyed by `targetKeyOf`; absent means the default, derived live.
     const aimed = ref<Record<string, string>>({});
 
     const panelOf = (repo: string): PanelSummary | undefined => query.data.value?.find((entry) => entry.repo === repo);
 
-    /* What the repo is actually serving, in the daemon's order (by port). Empty is the honest answer for a repo
-     * that is stopped, still installing, or has no panel at all.
-     *
-     * Each carries the terminal it runs in, which is the only thing that makes an occupied port actionable,
-     * and which is ABSENT for a server answering from outside this sandbox's terminals. Both cases look
-     * identical from the address alone, and telling them apart is the difference between a button that opens
-     * the boot log and one that opens nothing. */
+    // What the repo is serving, in the daemon's order; empty is honest for a stopped, installing, or panel-less repo.
+    // Each server carries its terminal, absent when it answers from outside this sandbox.
     const serversOf = (repo: string): readonly { url: string; dir?: string; session?: string }[] => panelOf(repo)?.servers ?? [];
 
-    // The repo's ONE server, when it has exactly one, the case where the repo itself has an answer to give
-    // rather than each group stating its own.
+    // The repo's one server, when it has exactly one; only then does the repo itself have an address to give.
     const soleServer = (repo: string): { url: string; dir?: string; session?: string } | undefined => {
         const found = serversOf(repo);
         return found.length === 1 ? found[0] : undefined;
     };
 
-    /* Answering beats spawned, in both directions. A repo with something serving is `ready` even when the daemon
-     * did not start it, a dev server run by hand in a terminal is exactly as walkable, and offering Start for it
-     * would collide on the very ports it pinned. A repo the daemon spawned that is serving nothing yet is
-     * `starting`, however long its install takes. */
+    // Answering beats spawned: a repo with anything serving is `ready` even if the daemon didn't start it. One the
+    // daemon spawned but nothing answers yet is `starting`, however long the install takes.
     const stateOf = (repo: string): PanelState => {
         const panel = panelOf(repo);
         if (panel?.hasPanel !== true) {
@@ -168,10 +97,7 @@ export function useTargets(
         return panel.running ? `starting` : `stopped`;
     };
 
-    // THE REPO's address, what the heading above the group rows already says, and therefore what a group
-    // pointing THERE has no need to repeat (see isElsewhere). Defined only when the repo serves exactly one
-    // thing; with several there is no repo-level answer to show, and each group states its own. Not the same
-    // question as what a group may inherit unasked, which is narrower, see aimOf.
+    // The repo's address, shown on the heading; defined only when the repo serves exactly one thing, not per group.
     const localUrl = (repo: string): string | undefined => soleServer(repo)?.url;
 
     const addressOf = (repo: string, group: string): string | undefined => {
@@ -180,8 +106,7 @@ export function useTargets(
             typed: aimed.value[target],
             remembered: remembered.value[target],
             state: stateOf(repo),
-            // Whole servers, not just their addresses: the package that bound one is what says whether it is the
-            // repo's answer or one app's.
+            // Whole servers, not just addresses: the `dir` on each says repo-level or one app's.
             servers: serversOf(repo),
         });
     };
@@ -191,33 +116,19 @@ export function useTargets(
         serversOf,
         localUrl,
         addressOf,
-        /* THE TERMINAL BEHIND THE REPO'S ONE ADDRESS, or undefined when there is nothing to open.
-         *
-         * The chip used to send everyone to `panel-<repo>`, the session a Start WOULD have created, whoever
-         * had actually started the server. A repo serving from a terminal the user opened themselves, or from
-         * outside the sandbox entirely, is `ready` all the same (answering beats spawned, above), so the button
-         * was offered against a session that had never existed and the terminals panel opened onto nothing.
-         * The daemon now says which session each address is served from; undefined means say so, not guess. */
+        // Terminal behind the repo's one address, undefined when there's nothing to open; the daemon says which session
+        // serves each address, so this never guesses.
         terminalOf: (repo: string): string | undefined => soleServer(repo)?.session,
-        // What a group's chip shows: nothing when it points at the repo's own dev server, because the heading
-        // above it already says where that is and at what state.
+        // True when a group's address differs from the repo's own; that one is already shown by the heading.
         isElsewhere: (repo: string, group: string): boolean => {
             const address = addressOf(repo, group);
             return address !== undefined && address !== localUrl(repo);
         },
-        /* THIS GROUP HAS NOWHERE TO GO, AND THIS ROW IS WHERE IT IS FIXED. The chip is quiet by default, the
-         * heading above already says where the repo's dev server is, so an un-aimed group has to say so out
-         * loud, or the run refuses with its only remedy hidden behind a hover.
-         *
-         * A repo whose server is merely STOPPED OR STILL STARTING is deliberately not this. That blocks the run
-         * too, but the fix is Start, Start lives on the heading, and raising the alarm here would put it where
-         * the remedy isn't. What is left is the case that stranded a real run: a repo serving SEVERAL apps with
-         * this group pointed at none of them, plainly up, green on its heading, and unrunnable until this row
-         * says which app it walks. */
+        // True only when a repo serving several apps has this group aimed at none of them; a stopped or starting repo
+        // is not this, since Start on the heading is the fix.
         needsAddress: (repo: string, group: string): boolean =>
             addressOf(repo, group) === undefined && ![`stopped`, `starting`].includes(stateOf(repo)),
-        // Undefined hands the group back to its repo's dev server; a blank string is the deliberate "not there"
-        // an emptied field means, and stays blank.
+        // `undefined` restores the repo's dev server; an emptied field (blank string) means nothing, deliberately.
         aimAt: (repo: string, group: string, url: string | undefined): void => {
             const target = targetKeyOf({ repo, group });
             const { [target]: _dropped, ...rest } = aimed.value;
@@ -225,16 +136,13 @@ export function useTargets(
         },
         isLoading: query.isLoading,
         error: computed(() => query.error.value?.message),
-        // A panel may have been started from Preview since this list was read, and the poll only runs while
-        // something is mid-start, so the page's own Refresh reaches here too.
+        // Lets the page force a refetch outside the poll, e.g. after a panel is started elsewhere.
         refresh: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey: key });
         },
         startPanel: async (repo: string): Promise<void> => {
-            /* Open the panel BY NAME before the POST, then again after. The session does not exist until the
-             * POST lands, and a panel opened with no name on an empty strip fills the gap with its own `web-*`
-             * shell, naming it makes the panel wait for this session instead. The second call focuses it once
-             * it is really there. Same sequence repo-apps uses, and for the same reason. */
+            // Opens the named panel before the POST so it waits for this session instead of filling an empty strip with
+            // its own shell; the second call focuses it once the session exists.
             api.terminal.open(panelSessionOf(repo));
             await api.sandbox.json(`/panels/${encodeURIComponent(repo)}/start`, { method: `POST` });
             api.terminal.open(panelSessionOf(repo));

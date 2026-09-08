@@ -4,8 +4,8 @@ import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
-// The translator answers two endpoints per discovery: /v1/models for the channel each id belongs to, and the
-// Gemini-shaped /v1beta/models for the vendor's own display names and accepted input modalities.
+// Fakes the translator's two discovery endpoints: /v1/models (which channel each id belongs to) and /v1beta/models
+// (Gemini's own display names and modalities).
 const translator = (
     models: { id: string; owned_by: string }[],
     published: { name: string; displayName?: string; supportedInputModalities?: string[] }[] = [],
@@ -16,7 +16,7 @@ const translator = (
         if (target.endsWith("/v1beta/models")) {
             return jsonResponse({ models: published });
         }
-        // The trailing slash on the configured URL is normalized away.
+        // Trailing slash on the configured URL is normalized away.
         expect(target).toBe("http://127.0.0.1:8788/v1/models");
         return jsonResponse({ data: models });
     }) as unknown as typeof fetch;
@@ -34,9 +34,6 @@ test("isChatModel drops the image/audio/embedding endpoints the channel ships be
 });
 
 test("keeps every model the Google channel vends, Claude and GPT-OSS included", async () => {
-    // The point of the `owned_by` rule: Antigravity serves Claude Opus and GPT-OSS on the same plain Google
-    // sign-in as Gemini, and an id-prefix filter dropped exactly those: the strongest models a free account can
-    // reach, while another subscription's models, on a different channel, must still stay out.
     const fake = translator([
         { id: "gemini-pro-agent", owned_by: "antigravity" },
         { id: "claude-opus-4-6-thinking", owned_by: "antigravity" },
@@ -54,8 +51,7 @@ test("keeps every model the Google channel vends, Claude and GPT-OSS included", 
 });
 
 test("labels a model as its vendor publishes it, since no rule recovers that name from the id", async () => {
-    // `gemini-pro-agent` humanizes to "Gemini Pro Agent": a model that does not exist. The translator publishes
-    // "Gemini 3.1 Pro (High)", which is what the picker must show.
+    // gemini-pro-agent humanizes to a model that doesn't exist; the translator's own display name is what shows.
     const fake = translator(
         [
             { id: "gemini-pro-agent", owned_by: "antigravity" },
@@ -66,17 +62,13 @@ test("labels a model as its vendor publishes it, since no rule recovers that nam
 
     expect((await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).map((model) => model.label)).toEqual([
         "Gemini 3.1 Pro (High)",
-        // An id the name endpoint says nothing about falls back to the humanized form rather than dropping out.
+        // Unpublished id falls back to the humanized form rather than dropping out.
         "Gemini 3 Flash",
     ]);
 });
 
-/* THE REGRESSION THAT MADE EVERY GOOGLE MODEL BLIND.
- *
- * The OpenCode runtime registers this channel as a custom provider, so every capability the config omits
- * defaults to false, and a model whose input modalities lack "image" has images stripped out of the request.
- * A user's screenshot never arrived and the model said it could not see it. So discovery has to carry what the
- * translator publishes, per model, rather than leaving the runtime to assume. */
+// OpenCode registers this channel as a custom provider: an omitted capability defaults to false, so a model whose
+// modalities lack "image" has images stripped from the request.
 test("carries each model's published input modalities, so the runtime is not left assuming text-only", async () => {
     const fake = translator(
         [
@@ -86,8 +78,7 @@ test("carries each model's published input modalities, so the runtime is not lef
         ],
         [
             { name: "models/claude-opus-4-6-thinking", supportedInputModalities: ["text", "image"] },
-            // "3d" is not a modality OpenCode's config understands; an unknown name is dropped rather than
-            // passed through, because one bad word there fails the whole runtime's boot, Grok included.
+            // Unknown modality names are dropped, not passed through: one bad word here fails the whole runtime's boot.
             { name: "models/gemini-pro-agent", supportedInputModalities: ["text", "image", "audio", "video", "3d"] },
             { name: "models/gpt-oss-120b-medium", supportedInputModalities: ["text"] },
         ],
@@ -96,19 +87,11 @@ test("carries each model's published input modalities, so the runtime is not lef
     expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([
         { id: "claude-opus-4-6-thinking", label: "Claude Opus 4 6 Thinking", inputModalities: ["text", "image"] },
         { id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text", "image", "audio", "video"] },
-        /* A text-only model on the channel stays text-only: the point is to publish the truth, not to turn
-         * everything on.
-         *
-         * The label is also where this channel used to differ from Codex's over the same id: three copies of
-         * the humanizer, one of which knew `gpt` was an acronym. They are one function now (model-discovery),
-         * so the row reads the same wherever it is served from. */
         { id: "gpt-oss-120b-medium", label: "GPT OSS 120b Medium", inputModalities: ["text"] },
     ]);
 });
 
 test("a model the channel publishes nothing about is assumed to take images, because the other guess fails silently", async () => {
-    // Being wrong toward text-only is invisible: the image vanishes and the model says it cannot see. Being
-    // wrong the other way is an upstream rejection the user can read. On this channel images are also the norm.
     const fake = translator([{ id: "kimi-k3", owned_by: "antigravity" }], [{ name: "models/kimi-k3", displayName: "Kimi K3" }]);
 
     expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([
@@ -124,8 +107,7 @@ test("discoverGeminiModels returns [] on a non-ok response so the caller falls t
 test("the seed floor is non-empty and passes its own filter, so a turn always resolves a usable model", () => {
     expect(SEED_GEMINI_MODELS.length).toBeGreaterThan(0);
     expect(SEED_GEMINI_MODELS.every((model) => isChatModel(model.id))).toBe(true);
-    // The floor is what a turn runs on before discovery lands, so it has to declare modalities too, or the
-    // first turn of a fresh sandbox is the blind one.
+    // The floor serves a turn before discovery lands, so it must declare modalities, or the first turn is blind.
     expect(SEED_GEMINI_MODELS.every((model) => model.inputModalities.includes("text"))).toBe(true);
     expect(SEED_GEMINI_MODELS.some((model) => model.inputModalities.includes("image"))).toBe(true);
 });

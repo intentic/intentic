@@ -1,10 +1,6 @@
 // @vitest-environment jsdom
-//
-/* THE CHIP AS A PERSON MEETS IT: whether it is there at all, what it says, and what pressing it does. Mounted
- * rather than projected, because the claims under test are the ones the preview composable cannot make on its
- * own — that the default mode draws NOTHING on the composer, and that the state it does draw names its own
- * press. Both are the fix for the same complaint: a label appeared beside the model, meant something the UI
- * never said, and could only be explained by a hover title that a touch screen and a keyboard never see. */
+// Mounted, not projected, because default mode must draw nothing on the composer, and the chip's own state
+// must name its own press rather than rely on a hover-only title.
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import { afterEach, expect, test, vi } from "vitest";
@@ -53,9 +49,7 @@ afterEach(() => {
 });
 
 test("the default mode draws nothing, because nothing is going to happen to the turn", () => {
-    /* Measure is the shipped default, so this was the state most people were in, and it spent a slot on the
-     * composer's model row saying "Looks simple" about a turn that would then run exactly the model they
-     * picked. A control that reports a non-event teaches people to stop reading the row it sits in. */
+    // `shadow` is the shipped default; the chip must draw nothing for it.
     expect(settings.value.autoTier).toBe(`shadow`);
 
     expect(mount(chatWith()).textContent).toBe(``);
@@ -86,7 +80,7 @@ test("a hold says which model it kept AND what the press does, rather than leavi
 });
 
 test("both states are a real button carrying the whole sentence, for a reader with no pointer", () => {
-    // `title` alone is a mouse-only affordance: no touch screen shows it and no screen reader announces it.
+    // `title` alone is mouse-only: no touch screen shows it, no screen reader announces it.
     settings.value = { ...settings.value, autoTier: `on` };
     const routing = mount(chatWith()).querySelector(`button`)!;
 
@@ -102,9 +96,7 @@ test("both states are a real button carrying the whole sentence, for a reader wi
 });
 
 test("a narrow pane costs the chip its words, never its mark", () => {
-    /* The one control on that row announcing that the chosen model is about to be substituted. Hiding it whole
-     * on a split pane or a phone would make the substitution silent on exactly the layouts where the model row
-     * is hardest to read, so only the label folds away and the icon (plus its hover text) carries the state. */
+    // Narrow panes fold away the label, not the icon (plus its hover text): the substitution stays visible.
     settings.value = { ...settings.value, autoTier: `on` };
     const host = mount(chatWith());
 

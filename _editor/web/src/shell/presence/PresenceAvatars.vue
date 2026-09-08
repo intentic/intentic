@@ -4,19 +4,13 @@ import { computed } from "vue";
 import { identityHue } from "../../lib/identityHue";
 import { type PresenceMember, presenceActivity } from "./usePresence";
 
-/* WHO ELSE IS HERE: the app's one co-presence roster, in both the shapes it is needed in.
- *
- * This was two components (`PresenceAvatars` and `PresenceStack`) that had the same body: take up to three
- * members, overlap their avatars, hang a "+N" off the end, name everyone in a tooltip. They differed in size,
- * in whether they ran down or across, and in nothing else: including a character-identical copy of the
- * broken-image handler, comment and all. So they are one component with an axis, and the two call shapes are
- * two prop sets rather than two files:
- *
- *   column · 28px  the rail's live roster under the sandbox switcher (was PresenceStack)
- *   row    · 16px  who is on THIS thing: a file-tree row, a chat session (was PresenceAvatars)
- *
- * Renders nothing when the list is empty, which is what keeps a solo user's screen free of presence chrome:
- * the callers pass `presenceOthers` (never themselves), so "empty" and "alone" are the same state. */
+// Co-presence roster, unified into one component (was PresenceAvatars + PresenceStack) with an axis instead of
+// two files:
+//
+// 1. column, 28px — the rail's live roster under the sandbox switcher
+// 2. row, 16px — who's on this file-tree row or chat session
+//
+// Renders nothing when empty; callers pass `presenceOthers` (never themselves), so empty means alone.
 
 const {
     members,
@@ -27,9 +21,7 @@ const {
     members: readonly PresenceMember[];
     direction?: `row` | `column`;
     size?: number;
-    /* What the roster is a roster OF ("viewing this file", "in this chat"), appended to the names. The rail's
-     * roster leaves it out and lets each member's own activity speak instead: it is the whole sandbox, so
-     * there is no one thing to name. */
+    // What the roster is of ("viewing this file"); the rail leaves it out since there's nothing single to name.
     label?: string;
 }>();
 
@@ -38,7 +30,7 @@ const shown = computed(() => members.slice(0, MAX_AVATARS));
 const overflow = computed(() => members.length - shown.value.length);
 
 const nameOf = (member: PresenceMember): string => member.name ?? member.email;
-// Per-avatar, so a stack of three answers "who is that one" rather than only "who is here".
+// Per-avatar, so a stack of three still answers "who is that one", not just "who is here".
 const tooltipFor = (member: PresenceMember): string =>
     label === undefined ? `${nameOf(member)}, ${presenceActivity(member)}${member.idle ? ` · away` : ``}` : `${nameOf(member)}, ${label}`;
 const overflowNames = computed(() => members.slice(MAX_AVATARS).map(nameOf).join(`, `));
@@ -61,8 +53,7 @@ const overflowNames = computed(() => members.slice(MAX_AVATARS).map(nameOf).join
             :ring="size >= 24 ? 2 : 1"
             v-tooltip="tooltipFor(member)"
         />
-        <!-- The tail count wears the neutral chrome, never a member's hue: it stands for several people, and
-             borrowing one of their colours would say it stands for that one. -->
+        <!-- Neutral chrome, never a member's hue: the count stands for several people, not one. -->
         <span
             v-if="overflow > 0"
             class="flex shrink-0 items-center justify-center font-semibold text-muted"

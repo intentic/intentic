@@ -6,35 +6,21 @@ import { useAuth } from "../features/auth/useAuth";
 import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
 
-/* The rail's bottom account control: an avatar that opens a popover scoped to the account (email, name and the
- * lane it is on) and the account actions (Settings, Sign out). The sandbox and its status live in the rail's
- * top switcher; personal preferences (theme) live on the /settings page. */
+// The rail's bottom account control: an avatar opening a popover with account identity (email, name,
+// plan) and actions (Settings, Sign out). The sandbox switcher lives above; theme lives on /settings.
 
 const { user, signOut } = useAuth();
 const route = useRoute();
 
-/* THE PLAN, AS A CHIP BESIDE THE NAME rather than a row among the verbs: `free`, `hosted`, `trial`, `ending`,
- * `complimentary`, or `payment failed` in danger. Absent where the platform sells no plan.
- *
- * It was a row until it wasn't: a link to Billing carrying "12 h of 40 h left this month", amber when the
- * month ran short. Everything that made it worth interrupting for now happens where the reader already is
- * (the composer's low-hours strip, the wake gate's refusal), which left a menu row that was either a copy of
- * an alarm or, for a subscriber and a comped account, news with nothing in it. See hostedHours.ts for the
- * whole argument. A chip states what the account IS, next to whose account it is, and is not clickable: the
- * hours, the date, the machines and the slots are Billing's, and Settings is the row directly below. */
+// A chip stating the account's plan, not a clickable row; absent where the platform sells no plan.
 const { planBadge } = useHostedPlan();
 
-/* THE SETTINGS PAGES HAVE NO TILE, SO THE CONTROL THAT OPENS THEM IS THE TILE. /settings and its tabs are
- * reached from this avatar's menu and from nowhere else in the rail, which left the whole area as the one place
- * in the app where the frame said nothing about where you were standing. Lit on the same terms as a navigation
- * tile (route AND any sub-path, so a tab keeps it), in the same accent: the avatar is round and bordered
- * rather than a plate, so the accent lands on its ring and its glyph. */
+// Settings has no rail tile; this control lights up like one, matching on the route and any sub-path.
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
 const accountHint = `Account`;
 
-/* Anchored rather than PrimeVue's Popover: this rail sits beside panels that can be popped out, and the app
- * has one overlay that measures its room against the window its ANCHOR is in. Using two was the divergence. */
+// AnchoredOverlay, not PrimeVue's Popover: shares the one overlay that measures against its anchor's window.
 const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 const avatarFailed = ref(false);
@@ -45,12 +31,8 @@ const avatarLoadFailed = (): void => {
     avatarFailed.value = true;
 };
 
-/* Settings is a PLACE, so its row is an anchor and not a button that pushed the router, which is what buys
- * back the address in the status bar, the browser's own "Open in new tab", and Ctrl/⌘-click. Sign out stays a
- * button: it is a thing that happens, not somewhere to go.
- *
- * The menu closes on the plain click alone. A modified click opens another tab; folding up the menu still
- * under the pointer is not part of what was asked for. */
+// Settings is a place, so its row is a RouterLink anchor, keeping the address bar, Ctrl/Cmd-click and
+// "open in new tab"; sign out is a button, since it happens rather than goes somewhere.
 const dismiss = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         open.value = false;
@@ -59,23 +41,17 @@ const dismiss = (event: MouseEvent): void => {
 
 const logout = async (): Promise<void> => {
     await signOut();
-    // A full navigation, not a router push: the environment's landing may live outside this SPA entirely (the
-    // demo's is the site's homepage).
+    // Full navigation, not a router push: afterSignOut may point outside this SPA.
     globalThis.location.href = environment.afterSignOut;
 };
 </script>
 
 <template>
-    <!-- The dot sits OUTSIDE the avatar's clipping circle, so the wrapper carries the position and the button
-         keeps its overflow-hidden (an avatar image has to be clipped round; a marker must not be). -->
-    <!-- THE "YOU ARE HERE" MARK IS A LIT PLATE BEHIND THE AVATAR: the same plate every navigation tile above
-         wears while you stand on its view, in the same accent, at the same corner radius. Anything drawn ON the
-         avatar fails twice over: a photo fills the circle edge to edge, so a border under it is invisible, and
-         a ring around it puts a coloured collar on somebody's face: a decoration of the person, not a
-         statement about the app's frame. Behind it, the rail is doing the talking, which is whose job it is.
-
-         The plate is a sibling, absolutely positioned, so the avatar keeps its own round clip and its size: the
-         control does not grow, shift the column, or move by a pixel between the two states. -->
+    <!-- The dot sits outside the avatar's clip circle; the wrapper positions it, the button keeps overflow-hidden. -->
+    <!--
+        The active-tile plate sits behind the avatar as an absolutely positioned sibling, since a border or
+        ring drawn on the avatar itself would decorate the photo, not the frame, and the avatar keeps its own size.
+    -->
     <div class="account-control relative mt-auto shrink-0">
         <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
@@ -101,13 +77,10 @@ const logout = async (): Promise<void> => {
         </button>
     </div>
 
-    <!-- Same inset as the sandbox switcher above it in the rail: the theme's popover padding is a content
-         card's, and these are menu rows that carry their own. -->
+    <!-- Same inset as the sandbox switcher above; the popover's default padding is a content card's, not a menu's. -->
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end">
         <div class="flex w-60 flex-col p-1">
-            <!-- Central account: email, name, and the lane. The chip sits INSIDE the identity block, under the
-                 name, because that is what it is about: this person's plan, not an errand to run. It is a
-                 <span>, not a link and not a row, so nothing here competes with the two verbs below. -->
+            <!-- Chip sits inside the identity block, as a `<span>`, not a link or row competing with the actions below. -->
             <div class="flex items-center gap-2 px-2 py-1.5">
                 <Avatar :size="28" :src="avatarImage" />
                 <div class="min-w-0 flex-1">

@@ -4,42 +4,22 @@ import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
 import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
-// Realtime agent wake-ups: provider sources hold a live connection (e.g. the Discord gateway) and dispatch
-// normalized messages here; `listener`-kind automations fire from them through the same guard/wake/run-history
-// path as schedule and event automations. The reconciler below connects/disconnects each source on a poll
-// tick, so the daemon holds a provider connection ONLY while an enabled listener automation and the
-// provider's capability both exist.
-//
-// Each fire opens or CONTINUES a real conversation (see FireOptions.origin): the message rides in as the
-// opening context of an isolated agent that shows up on the fleet board and opens as a chat tab, so an inbound
-// Discord mention is the same object as a chat the user started, only the first prompt comes from the
-// automation's config and the message rather than from a person. That's why the batcher carries provenance, a
-// title and a thread key alongside the payload: they are what the conversation is created with, and which one
-// it is.
-//
-// A channel is a THREAD (sessions/thread-sessions.ts), not a series of strangers: every message in it resumes
-// the same conversation and provider session until the channel goes quiet past CHANNEL_SESSION_TTL_MS, after
-// which the next one starts fresh. Without that, tagging the bot five times in #eng was five fleet cards, five
-// worktrees, and five agents that had never heard of each other.
+// Provider sources hold a live connection (Discord gateway) and dispatch normalized messages here; listener automations
+// fire through the same guard/wake/run-history path as schedule and event automations.
+// The daemon holds a provider connection only while an enabled listener automation and its capability both exist; the
+// reconciler connects/disconnects on a poll tick.
+// A channel is a thread (sessions/thread-sessions.ts): messages resume the same conversation and session until quiet
+// past CHANNEL_SESSION_TTL_MS, then start fresh.
 
-// How long a quiet gap ends a burst, rapid-fire messages batch into one wake. The timer restarts on
-// every message, so bursts still coalesce; a lone mention just stops paying dead time before it fires.
-// ponytail: 750ms floor tuned for snappy single mentions; raise if real bursts start firing mid-typing.
+// Quiet gap that ends a burst; the timer restarts on every message so a burst keeps coalescing into one wake.
 export const DEBOUNCE_MS = 750;
 
-// The normalized inbound event (ListenerMessage) and its schema live in the contract now
-// (listener-protocol.ts), so the gateway processes compile against the same declaration the dispatch route
-// parses with.
-
-// What the message that triggers a fire contributes to the conversation that fire opens or CONTINUES: where it
-// came from, what to call it on the board, which thread it belongs to, and (when the source wants the turn
-// streamed back) the live reply sink.
+// What a triggering message contributes to the conversation it opens or resumes: origin, board title, thread key, and
+// the live reply sink when the source streams back.
 export interface MessageContext {
     readonly origin: AgentOrigin;
     readonly title: string;
-    // The channel this message arrived in, as a thread-sessions key. Computed at push time (where the message
-    // is) rather than at fire time, because one automation can watch every channel, the batch's key is the
-    // newest message's, exactly as its origin and title are.
+    // Thread-sessions key for this message's channel, computed at push time; a batch's key is its newest message's.
     readonly thread: string;
     readonly stream?: TurnStream;
 }
@@ -48,19 +28,16 @@ export interface MessageBatcher {
     readonly push: (line: string, context: MessageContext) => void;
 }
 
-// Batches payload lines into one wake: a burst debounces into one fire, and lines arriving mid-run accumulate
-// and fire once more when it finishes (no debounce on the follow-up; they waited long enough). Fires this
-// batcher did not start are handled a level down, the fire itself asks to QUEUE rather than be dropped, so a
-// message never loses a race with an approved wake or a restart's re-fire.
+// Batches lines into one wake per debounce window; lines arriving mid-run accumulate and fire once more, immediately,
+// when it finishes.
+// A fire already running elsewhere is queued rather than dropped, by the fire itself.
 export const createMessageBatcher = (
     fire: (payload: string, context: MessageContext) => Promise<void>,
     onError: (error: unknown) => void,
     debounceMs = DEBOUNCE_MS,
 ): MessageBatcher => {
     let pending: string[] = [];
-    // The context of the next fire, the most recent message in the batch wins, so the conversation it opens is
-    // named after what actually asked for it (a burst spanning channels attributes to the latest; rare enough
-    // not to split). undefined ⇒ nothing is batched right now.
+    // Context for the next fire; the newest message in the batch wins. Undefined means nothing is batched.
     let pendingContext: MessageContext | undefined;
     let running = false;
     let timer: NodeJS.Timeout | undefined;
@@ -87,13 +64,11 @@ export const createMessageBatcher = (
             pending.push(line);
             const carried = pendingContext?.stream;
             if (context.stream !== undefined) {
-                // End the sink this one supersedes so its consumer (the dispatch route's held-open ndjson
-                // response) isn't left hanging on a stream that will never fire, the batch keeps only the newest
-                // reply target, and a burst of two messages before a flush must not orphan the first's response.
+                // Ends the superseded sink so its held-open response isn't left hanging on a stream that won't fire.
                 carried?.end();
             }
-            // The reply sink is the newest one that HAS a sink, while everything else is simply the newest: a
-            // plain follow-up message must not silently drop an earlier mention's held-open response.
+            // Reply sink carries from the newest message with one; a follow-up can't drop an earlier held-open
+            // response.
             pendingContext = context.stream === undefined && carried !== undefined ? { ...context, stream: carried } : context;
             clearTimeout(timer);
             timer = setTimeout(() => void flush(), debounceMs);
@@ -112,14 +87,12 @@ const joinNewestWithin = (lines: string[], max: number): string => {
     return kept.length > 0 ? kept.join("\n") : (lines.at(-1) as string).slice(0, max);
 };
 
-// Per-automation queues. A module singleton (like scheduler's inFlight) so every dispatcher, a source's
-// event handler, a voice session's end, shares the same serialization.
+// Per-automation queues, a module singleton so every dispatch path shares the same serialization.
 const batchers = new Map<string, MessageBatcher>();
 
-// What the conversation this message opens is CALLED on the board and in the chat tab list. Every fire of one
-// automation carries the identical configured prompt, so a title derived from the prompt would give a column of
-// indistinguishable cards, the message's own first line is the only thing that says which mention this is.
-// A content-less event (a voice utterance) falls back to naming what happened.
+// Board/tab title for the conversation this message opens: the message's first line, since every fire of an automation
+// shares the same configured prompt.
+// A content-less event falls back to naming what happened.
 const titleOf = (message: ListenerMessage): string => {
     const line = message.content
         .split("\n")
@@ -128,17 +101,14 @@ const titleOf = (message: ListenerMessage): string => {
     return (line !== undefined ? `${message.author.name}: ${line}` : `${message.provider} ${message.type}`).slice(0, TITLE_MAX);
 };
 
-// Route one event to every matching enabled listener automation's batcher. Matching re-reads the manifest so
-// an edit/disable/delete is honored immediately; the batcher's fire re-reads once more at wake time.
+// Routes one event to every matching enabled listener automation's batcher. Matching re-reads automations so an edit,
+// disable or delete is honored immediately; the fire re-reads once more at wake time.
 export const dispatchListenerMessage = async (
     services: Services,
     message: ListenerMessage,
     wake: WakeFn = streamAgent,
     debounceMs = DEBOUNCE_MS,
-    // Builds a fresh live reply sink for a matched automation when the source wants the turn streamed back (e.g. a
-    // Discord mention → a channel message edited as the model types). Called per matched automation with its id so
-    // the dispatch route can tag each frame by automationId. undefined / returns undefined ⇒ the agent sends its own
-    // reply as before. Returns the ids that matched so a streaming caller knows which reply sinks to await.
+    // Builds a live reply sink per matched automation; undefined or no return means the agent replies normally.
     makeStream?: (automationId: string) => TurnStream | undefined,
 ): Promise<string[]> => {
     const line = JSON.stringify(message);
@@ -167,15 +137,13 @@ export const dispatchListenerMessage = async (
                 async (payload, context) => {
                     const fresh = await services.automations.get(id);
                     if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
-                        // Disabled/deleted between dispatch and this debounced wake, end the reply sink so a
-                        // streamed dispatch doesn't hang awaiting a turn that will never run.
+                        // Disabled or deleted since dispatch: end the sink so a streamed caller isn't left awaiting a
+                        // dead turn.
                         context.stream?.end();
                         return;
                     }
-                    /* The channel's LIVE conversation, or a fresh one when it has been quiet past the TTL. This
-                     * is what makes a run of mentions in one channel one agent that remembers what it just said,
-                     * instead of a fleet card and a worktree per message: the same shape the Front Desk gives a
-                     * visitor's chat, keyed by channel instead of by visitor. */
+                    // Reuses the channel's live conversation, or starts fresh past the TTL, keyed like the Front Desk's
+                    // chat.
                     const openedAt = Date.now();
                     const session = await services.threadSessions.open(
                         context.thread,
@@ -185,14 +153,11 @@ export const dispatchListenerMessage = async (
                     );
                     const settled = await fireAutomation(services, fresh, wake, {
                         payload,
-                        // Somebody is waiting in a channel and this batch is the only copy of what they said, so
-                        // a fire that meets a run already going WAITS rather than being thrown away. The
-                        // batcher's own serialization only covers fires it started; the run in the way can just
-                        // as easily be an approved wake or one re-fired by a restart.
+                        // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire,
+                        // not the batcher's.
                         overlap: "queue",
                         conversationId: session.conversationId,
-                        // Resume the provider session the last message in this channel ran on, so a follow-up
-                        // continues the thread rather than meeting the same people again.
+                        // Resumes the provider session the channel's last message ran on.
                         ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
                         origin: context.origin,
                         title: context.title,
@@ -231,8 +196,7 @@ export const dispatchListenerMessage = async (
         });
         matched.push(automation.id);
     }
-    // Only messages that actually woke an automation land in the activity log, the gateway sees every channel
-    // message, and logging them all would be surveillance, not an activity feed.
+    // Only messages that woke an automation are logged; the gateway sees every channel message, not just matches.
     if (matched.length > 0) {
         void services.activity
             .append({
@@ -250,9 +214,8 @@ export const dispatchListenerMessage = async (
     return matched;
 };
 
-// Surface a fatal source failure where the user already looks: an error run on each of the provider's
-// listener automations (the row's run history in the UI), plus one system event in the activity feed, which
-// is also where the /activity/status probe reads lastError from.
+// Records a fatal source failure as an error run on each of the provider's listener automations, plus one activity
+// event that /activity/status reads lastError from.
 export const reportListenerFailure = async (services: Services, provider: ListenerMessage["provider"], detail: string): Promise<void> => {
     void services.activity
         .append({ provider, direction: "system", type: "gateway.login_failed", outcome: "error", error: detail })

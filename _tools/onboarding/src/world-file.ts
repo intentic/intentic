@@ -1,26 +1,19 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/* WHAT THE SPECS ARE TOLD ABOUT THE WORLD, and why it is a file rather than a variable.
- *
- * Playwright's global setup runs in the runner process and the specs run in workers, so nothing an object holds
- * survives the trip. Every address in this tier is also decided at run time, ports are reserved rather than
- * fixed, and the host they sit on is probed for (docker.ts), so there is no constant a spec could import.
- *
- * A stood-down run writes this file too, carrying the reason. That is what lets a spec say "no Docker here" in
- * its own skip message rather than failing on an address that was never going to exist.
- */
+// Global setup runs in the runner process and specs run in workers, so nothing an object holds survives; a file does.
+// Addresses are decided at run time (ports reserved, host probed), so no constant could work. A stood-down run writes
+// this file too, carrying the reason, so a spec can skip with it.
 
 const CACHE = join(import.meta.dirname, `..`, `.cache`);
 
-// Named here rather than in the config so the two cannot drift: playwright.config.ts reads this path before
-// global setup has run, which is why global setup must write the file even when the tier stands down.
+// Named here, not in the config, so the two can't drift; global setup must write it even standing down.
 export const STORAGE_STATE = join(CACHE, `storage-state.json`);
 
 const FILE = join(CACHE, `world.json`);
 
 export interface WorldFile {
-    /** Set when the tier did not run. Every spec skips with this sentence as its reason. */
+    /** Set when the tier did not run; every spec skips with this sentence as its reason. */
     readonly standDown?: string;
     readonly apiUrl?: string;
     /** The api as a container elsewhere on this machine reaches it, what the compose bootstrap curls. */

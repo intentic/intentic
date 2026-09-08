@@ -1,10 +1,7 @@
 // @ts-check
-// The site's OpenGraph card: brand colours, a section eyebrow, and the page's own title/description.
-// Everything AROUND the picture (reading the built page, running satori/resvg, naming the PNG, asserting the
-// og:image tag agrees with it) belongs to astro-opengraph-images; this module is only what the card looks like.
-//
-// The card is a plain satori element tree rather than JSX: satori takes `{ type, props }` directly, so the site
-// describes a card without a JSX toolchain it has no other use for.
+// The card's look (brand colours, eyebrow, title/description); everything around the picture -- reading the page,
+// running satori/resvg, naming and asserting the PNG -- belongs to astro-opengraph-images. A plain satori element tree,
+// `{ type, props }`, not JSX: no toolchain needed for one file.
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,18 +10,15 @@ import { fileURLToPath } from "node:url";
 const REGULAR = fileURLToPath(new URL("./fonts/Inter-Regular.ttf", import.meta.url));
 const BOLD = fileURLToPath(new URL("./fonts/Inter-Bold.ttf", import.meta.url));
 
-/* The card's ink, taken from global.css: warm near-black, cream, the muted step under it, and ember for the
- * two accents. The FACE stays Inter, and that is a constraint rather than a choice: satori reads ttf/otf/woff
- * and the site's three faces are shipped as woff2 only, which it cannot parse. A card 1200px wide, seen at
- * thumbnail size in a chat client, carries the brand in its colour far more than in its typeface. */
+// Colours match global.css; Inter is forced, since satori can't parse woff2, the site's other faces' format.
 const BG = "#0c0907";
 const FG = "#efe3cd";
 const MUTED = "#b7a68d";
 const ACCENT = "#e07b27";
 
 /**
- * The two Inter faces satori needs, or undefined when they are not on disk. The TTFs are not committed, so a
- * checkout without them still builds: the site falls back to the static logo card (see BaseLayout).
+ * The two Inter faces satori needs, or undefined if the TTFs aren't on disk (an uncommitted checkout still builds;
+ * BaseLayout falls back to the static logo).
  * @returns {import("astro-opengraph-images").SatoriFontOptions[] | undefined}
  */
 export function ogFonts() {
@@ -38,9 +32,8 @@ export function ogFonts() {
 }
 
 /**
- * The line above the title, naming the section the page belongs to. Astro hands the hook a pathname with no
- * leading slash ("docs/quickstart/"), so normalize before matching: prefix tests silently fail otherwise and
- * every card falls through to the site name.
+ * The line above the title, naming the page's section. Astro hands the hook a pathname with no leading slash; normalize
+ * before matching or prefix tests silently fail.
  * @param {string} pathname
  */
 function eyebrowFor(pathname) {
@@ -90,8 +83,8 @@ export function ogCard({ pathname, title, description }) {
         [
             box({ fontSize: 24, color: ACCENT, letterSpacing: 4, textTransform: "uppercase", fontWeight: 600 }, eyebrowFor(pathname)),
             box({ fontSize: 64, fontWeight: 700, marginTop: 32, lineHeight: 1.15, maxWidth: 1040 }, title),
-            // A page whose description repeats its title arrives here without one: drop the block rather than
-            // rendering the same sentence twice at two sizes.
+            // A page whose description repeats its title arrives without one; drop the block, don't repeat the
+            // sentence.
             ...(description === undefined ? [] : [box({ fontSize: 26, color: MUTED, marginTop: 32, lineHeight: 1.4, maxWidth: 1040 }, description)]),
             box({ marginTop: "auto", fontSize: 24, color: ACCENT, fontWeight: 600 }, "intentic.dev"),
         ],

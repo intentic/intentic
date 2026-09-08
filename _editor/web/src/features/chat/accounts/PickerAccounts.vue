@@ -8,48 +8,21 @@ import { providerDisplayLabel } from "./providerCatalog";
 import { formatAge } from "../session/usageStatus";
 import ProviderLogo from "./ProviderLogo.vue";
 
-/* WHO SERVES THE TURN, the model picker's footer block: which connected account, and which agentic loop.
- *
- * It is a component of its own because there are two pickers, not one. The composer's is bound to a conversation
- * and the shell's (HostModelPicker) to a run an extension is about to start; both ask exactly this pair of
- * questions, and the answer needs a usage ring, a stale-credential mark and a standing-refusal line to be worth
- * asking at all. The extension surfaces that hand-rolled their own asked it with a flat row of chips, which
- * cannot say that the account it is about to pin has no headroom left.
- *
- * IT PICKS, IT DOES NOT APPLY, the same contract as the list above it (ModelPicker): the selection arrives as
- * props and leaves as an event, so the composer can write it to a conversation and the host can resolve it to a
- * promise. `account` is the caller's explicit PIN: absent means the first, which is what the daemon resolves to
- * anyway, so the highlight always names what will actually run rather than nothing.
- *
- * IT IS A FOOTER, AND IT HAS TO KEEP BEING ONE. A sandbox pointed at a pool of thirty-four sign-ins drew
- * thirty-four rows here, and since the block sits under a list that is allowed to shrink, the rows took the whole
- * panel: the model catalog (the reason the panel opens) was squeezed to nothing and the picker became an
- * account list with a search box on top. So past ACCOUNT_LIST_LIMIT each list folds to the one row that answers
- * "who serves the turn", plus a line saying how many others there are and what shape they are in; opening the
- * fold gives a filter and a capped, scrolling column rather than an unbounded one. Short lists are untouched:
- * three accounts are three rows, one click each, which is the case that was never broken. */
+// Footer of the model picker: which connected account, and which agentic loop. Used by both the
+// composer's and shell's pickers; it picks (selection is prop in, event out), never applies. Past
+// ACCOUNT_LIST_LIMIT each list folds to the active row plus a count, so the account list can't swallow the panel.
 
 const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness]; navigate: [] }>();
 const { provider, harness, model, account, accountsLocked, harnessLocked } = defineProps<{
     provider: AgentProvider;
     harness: AgentHarness;
-    // The model the rings measure headroom FOR (pickerAccounts.ts says why a ring is about a model). Absent ⇒
-    // the account's tightest pool.
+    // Model the headroom rings measure against; absent means the account's tightest pool.
     model?: string | undefined;
     // The explicitly pinned account, if there is one. Absent ⇒ the provider's first, the daemon's own default.
     account?: string | undefined;
-    /* THE TWO AXES LOCK SEPARATELY, because the chat's mid-turn rule is not one rule.
-     *
-     * Both writes land on the NEXT turn, but they are refused at different moments: the account may be re-pointed
-     * while a turn sits parked on a card (an allowance refusal is answered by switching accounts, and the card is
-     * exactly when a person needs to), while the harness waits for the turn to be over. The rows still render
-     * under either lock: what they say about headroom is worth reading whether or not it can be acted on.
-     *
-     * A LOCK HAS TO LOOK LIKE ONE, hence `ui-off` on both sets of controls. Since the two axes now disagree, a
-     * block where a dead row and a live one are drawn identically is worse than one where everything was dead:
-     * the reader clicks the account, nothing happens, and the panel has no way to say which of the two rules
-     * turned them away. The house fade is the whole answer — `.ui-off` keys on `:disabled`, so the prop above
-     * is still the single source of the rule and the styling follows it. */
+    // The two axes lock independently: the account may switch mid-turn (an allowance refusal is answered
+    // by switching), the harness only between turns. Disabled styling always follows these props via
+    // `.ui-off`.
     accountsLocked?: boolean;
     harnessLocked?: boolean;
 }>();
@@ -74,21 +47,14 @@ const {
 
 const { mobile } = useDevice();
 
-// A pin the provider no longer holds falls to the first row rather than to nothing: the highlight has to name
-// something, and a folded list showing the pinned row has to have a row to show. It is the list's own first
-// guess and nothing more — an unnamed turn is served by whichever account has headroom, which is the daemon's
-// to decide (agent/harness-credentials.ts) and is reported back on the turn's own session frame.
+// An unheld pin falls back to the first row; the highlight must always name something.
 const activeAccountId = computed(() => {
     const pinned = accountRows.value.find((row) => row.id === account);
     return (pinned ?? accountRows.value[0])?.id;
 });
 
-/* ---- the fold ---------------------------------------------------------------------------------------------
- *
- * Two lists, one behaviour, deliberately written twice rather than abstracted: they fold for the same reason but
- * around different anchors. The choosable list keeps the ACTIVE row visible while folded: it is the answer to
- * the block's own question and hiding it would leave a header over a disclosure, while the routed list keeps
- * nothing, because nothing in it is chosen and the sentence under it already says so. */
+// Two folds, one behaviour, written separately: the choosable list keeps its active row visible while
+// folded, the routed list keeps none.
 
 const accountsOpen = ref(false);
 const accountsQuery = ref(``);
@@ -123,10 +89,8 @@ const closeFold = (open: Ref<boolean>, query: Ref<string>): void => {
     query.value = ``;
 };
 
-/* ESC BACKS OUT OF THE FILTER, NOT OUT OF THE PICKER: one layer per press, the same rule the model search above
- * follows (ModelPicker.onEsc). The host binds Escape in the bubble phase precisely so content that wants it first
- * can stop it (AnchoredOverlay), and without this a keystroke aimed at clearing three characters closed the whole
- * panel and threw away the model the reader had come to keep. */
+// Escape backs out of the filter first, not the whole picker: one layer per press. The host binds it
+// in the bubble phase so content can claim it first.
 const escapeFold = (event: KeyboardEvent, open: Ref<boolean>, query: Ref<string>): void => {
     event.stopPropagation();
     if (query.value !== ``) {
@@ -136,9 +100,8 @@ const escapeFold = (event: KeyboardEvent, open: Ref<boolean>, query: Ref<string>
     closeFold(open, query);
 };
 
-/* OPENING A FOLD IS A SEARCH GESTURE, so it hands over the keyboard: someone unfolding thirty-four addresses is
- * looking for one of them, and the alternative is scrolling a column where every row differs by a digit. Mobile
- * keeps its keyboard down: the software one would cover the list it was raised to filter. */
+// Opening a fold hands over the keyboard: unfolding a long list means searching it, not scrolling.
+// Mobile skips the focus, since its keyboard would cover the list.
 const openFold = async (open: Ref<boolean>, filter: Ref<{ focus: (select?: boolean) => void } | null>): Promise<void> => {
     open.value = true;
     await nextTick();
@@ -147,9 +110,8 @@ const openFold = async (open: Ref<boolean>, filter: Ref<{ focus: (select?: boole
     }
 };
 
-/* The choosable list also puts the CURRENT account under the reader's eye rather than at whatever offset it
- * happens to sit at: the row that serves the turn is both the one being compared against and the one you would
- * otherwise have to go looking for. `nearest` so the panel around it never moves. */
+// Scrolls the current account into view on open, since it's both the row being compared against and
+// the one worth finding first. `nearest` keeps the panel from moving.
 const toggleAccounts = async (): Promise<void> => {
     if (accountsOpen.value) {
         closeFold(accountsOpen, accountsQuery);
@@ -167,13 +129,12 @@ const toggleRouted = async (): Promise<void> => {
     await openFold(routedOpen, routedFilter);
 };
 
-// The two Escapes the template binds, named here so it can stay refs-free (a template unwraps them, which is
-// exactly what the shared helpers above need NOT to happen).
+// Named bindings so the template stays refs-free; the shared helpers need the raw refs, not unwrapped values.
 const escapeAccounts = (event: KeyboardEvent): void => escapeFold(event, accountsOpen, accountsQuery);
 const escapeRouted = (event: KeyboardEvent): void => escapeFold(event, routedOpen, routedQuery);
 
-// A pick answers the block's question, so the fold closes behind it: the row that now serves is the one row left
-// on screen, and the model list gets its height back without a second click.
+// A pick closes the fold behind it, so the chosen row is what's left on screen and the model list
+// regains its height.
 const pickAccount = (id: string): void => {
     emit(`selectAccount`, id);
     closeFold(accountsOpen, accountsQuery);
@@ -181,22 +142,20 @@ const pickAccount = (id: string): void => {
 </script>
 
 <template>
-    <!-- WHOSE SETTINGS THESE ARE. The list above is a BROWSE surface: the rail filters it across every provider
-         without touching the selection, while everything here configures what you picked. The two disagree
-         whenever the rail is pointed elsewhere, and unlabelled they read as one screen: a column of Claude
-         sign-ins under a list of GPT models looks like ChatGPT's account list. The provider's own mark and name,
-         at the head of the block, is what keeps the footer legible as the selection it belongs to. -->
+    <!--
+        The list above browses across providers; this footer configures what's selected. Labelled with the
+        provider's own mark so the two don't read as one screen when they disagree.
+    -->
     <div class="flex items-center justify-between gap-2">
         <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
             <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
             <span class="truncate">{{ providerDisplayLabel(provider) }} session</span>
         </span>
         <span class="flex shrink-0 items-center gap-2">
-            <!-- HOW OLD THESE READINGS ARE, and the button that makes them new: one control, because a
-                 re-measure with nothing to compare against is a button whose effect is invisible, and an age
-                 with no way to act on it is a complaint. The age is the label: pressing it and watching "14m
-                 ago" become "just now" is the whole confirmation. It staying put is the other answer, and an
-                 honest one: this account cannot be read right now, whatever its ring still says. -->
+            <!--
+                One control for age and re-measure: the age is the label, and watching it reset to "just now" is
+                the confirmation that the press worked.
+            -->
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
@@ -214,29 +173,24 @@ const pickAccount = (id: string): void => {
         </span>
     </div>
 
-    <!-- The refusal that belongs to this selection but to no row in it (see unplacedRefusal). Directly under the
-         header, above every control it qualifies: it is the reason the numbers below may be beside the point, so
-         a reader who stops here has still been told. -->
+    <!--
+        The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every
+        control it qualifies.
+    -->
     <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
         <Icon name="exclamation-triangle" class="mt-px shrink-0 text-[0.6rem]" aria-hidden="true" />
         <span class="line-clamp-2">{{ unplacedRefusal }}</span>
     </p>
 
-    <!-- Labelled as a group: the header above names the PROVIDER, which is what a sighted reader needs beside a
-         screen of another provider's models, and these rows still have to announce what they are.
-
-         NO FRAME PER ROW. Boxing each account drew three hard rectangles into a panel that already has a border,
-         a header rule and a model list above it, and the frames carried no meaning: every row had one, chosen or
-         not. What actually needs marking is the one row in effect, and the tint does that alone. Hover is what
-         says the rest are choosable.
-
-         These ARE the model list's rows, one panel down, so they are drawn by the same utility at the same
-         metrics: `.ui-row-select` full-bleed at `px-3 py-1.5`, square rather than rounded. An inset pill under a
-         run of full-width rows reads as a different KIND of list, which is the one thing these are not. -->
+    <!--
+        No frame per row: only the tint marks the active one, hover shows the rest are choosable. Same row
+        style as the model list above (`.ui-row-select`, square not rounded) so they read as one list.
+    -->
     <template v-if="accountRows.length > 1">
-        <!-- The filter, only once the list has folded. It sits ABOVE the rows and inside the fold, so it appears
-             with the thing it filters and leaves with it: a field standing over a five-row list is a control
-             asking to be used on something that can be read at a glance. -->
+        <!--
+            Shown only once the list is folded and long; a filter over a short, readable list would be a
+            control looking for a reason to exist.
+        -->
         <SearchBar
             v-if="accountsLong && accountsOpen"
             ref="accountsFilter"
@@ -248,9 +202,10 @@ const pickAccount = (id: string): void => {
             @keydown.esc="escapeAccounts"
         />
 
-        <!-- Capped and scrolling ONLY while unfolded: the cap is what keeps an open list from doing the very
-             thing the fold exists to prevent, and a max-height on a three-row list would be a scrollbar with
-             nothing to scroll. -->
+        <!--
+            Capped and scrolling only while unfolded; a max-height on a short, unfolded list would be a
+            scrollbar with nothing to scroll.
+        -->
         <div
             id="picker-account-list"
             ref="accountsList"
@@ -269,28 +224,23 @@ const pickAccount = (id: string): void => {
                 :disabled="accountsLocked"
                 @click="pickAccount(a.id)"
             >
-                <!-- Name over identity, both truncating: the row grows by a line only for accounts that need one,
-                     so the common single-account case is the same 8-high row it always was.
-
-                     THE REFUSAL TAKES THE SECOND LINE when there is one, rather than adding a third. The line it
-                     displaces exists to tell two similar accounts apart, and that is a strictly smaller question
-                     than "this one turned your last turn away", which the name above still answers well enough to
-                     pick by. Three lines in a popover row would also push the ring out of the reader's line, and
-                     the ring is the thing this line exists to argue with. -->
+                <!--
+                    Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line
+                    over the subtitle, since telling a turn-refusing account apart matters more.
+                -->
                 <span class="flex min-w-0 flex-col items-start leading-tight">
                     <span class="max-w-full truncate text-content">{{ a.label }}</span>
-                    <!-- Truncated on the row and whole on hover: the line leads with the condition and its age,
-                         which is what decides the click, and tails into the provider's own sentence, which is the
-                         part that says what to do about it. -->
+                    <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
                     <span v-if="a.refused" class="flex max-w-full items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
                         <Icon name="exclamation-triangle" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                         <span class="truncate">{{ a.refused }}</span>
                     </span>
                     <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                 </span>
-                <!-- How much of this account's tightest limit pool is spent, so the switch decision is informed
-                     before it costs a turn. Absent ⇒ no reading at all (never measured, and not obtainable for
-                     this plan), which is a different thing from a measured zero. -->
+                <!--
+                    Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from
+                    a measured zero.
+                -->
                 <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                 <Icon
                     v-if="a.needsReauth"
@@ -300,16 +250,14 @@ const pickAccount = (id: string): void => {
                     v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
                 />
             </button>
-            <!-- A filter that matches nothing still has to say so INSIDE the list, where the rows would have
-                 been: the alternative reads as a list that lost its accounts. -->
+            <!-- Says so inside the list, where the rows would be; otherwise it reads as a list that lost its accounts. -->
             <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">No accounts match.</p>
         </div>
 
-        <!-- THE FOLD'S OWN LINE, at the boundary where the list visibly stops: the same place and the same words
-             the model list puts its group disclosure (ModelPicker), because they are the same gesture one panel
-             apart. It carries the count AND the shape of what is hidden, so folding costs no information worth
-             having: thirty-four arcs answer one question between them, how many of these can I run on, and
-             "28 with room · 6 spent" answers it in a line that survives being folded. -->
+        <!--
+            Carries the count and shape of what's hidden (e.g. "28 with room · 6 spent"), so folding costs no
+            information worth having.
+        -->
         <button
             v-if="accountsLong"
             type="button"
@@ -328,11 +276,12 @@ const pickAccount = (id: string): void => {
         </button>
     </template>
 
-    <!-- The connections behind a routed provider: shown, not offered. See routedRows. -->
+    <!-- The connections behind a routed provider: shown, not offered. -->
     <template v-if="routedRows.length > 0">
-        <!-- Folded first and unfolded on demand, like the choosable list above, and with more reason, since
-             there is nothing to decide here: a pool of thirty-four addresses nobody picks between is the purest
-             case of rows that cost height and return nothing. -->
+        <!--
+            Folded like the choosable list above, with more reason: nobody picks between these, so open rows
+            cost height for nothing.
+        -->
         <SearchBar
             v-if="routedLong && routedOpen"
             ref="routedFilter"
@@ -344,12 +293,10 @@ const pickAccount = (id: string): void => {
             @keydown.esc="escapeRouted"
         />
 
-        <!-- Unframed like the account rows above, and for a second reason on top of the weight: these are not
-             controls. A box that looks exactly like the one you can click, but doesn't, is worse than no box.
-
-             Rendered even while folded (it is empty then, and draws nothing): the disclosure below points at it
-             with `aria-controls`, and a control naming an element that does not exist is worse for a screen
-             reader than one naming an empty list. -->
+        <!--
+            Unframed since these aren't clickable controls. Rendered even while folded (empty then) so
+            `aria-controls` below always names a real element.
+        -->
         <div
             id="picker-routed-list"
             class="-mx-3 flex flex-col"
@@ -381,13 +328,14 @@ const pickAccount = (id: string): void => {
             </span>
         </button>
 
-        <!-- Only the multi-account case earns a line: with one connection there is nothing to explain, and a
-             caption restating the header above it is read once and skipped from then on. -->
+        <!-- Shown only past one connection; with a single one there's nothing to explain. -->
         <p v-if="routedRows.length > 1" class="text-2xs text-subtle">Turns are spread across these automatically</p>
     </template>
 
-    <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code harness.
-         Separate from the model: the same subscription ids run under either. -->
+    <!--
+        Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same
+        subscription ids run under either.
+    -->
     <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
         <div class="flex items-center gap-1">

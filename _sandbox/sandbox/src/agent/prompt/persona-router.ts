@@ -5,40 +5,13 @@ import { askRoleModel } from "../models/role-model.js";
 import type { Services } from "../../composition.js";
 import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
-/* WHICH PERSONA A NEW CHAT BELONGS TO, decided once, from its first message, before the first turn.
- *
- * THIS IS THE ONE PER-CHAT DECISION THE CONTEXT LAYER MAKES, and it is deliberately a classification rather
- * than a composition. A model asked to assemble a context per session (pick the repositories, the skills, the
- * tools) either does it cheaply and badly, so the session walks outside its context anyway, or does it well at
- * the price of a second strong run and a hand-off of everything it decided. A model asked to pick ONE card off
- * the owner's own short list, each card a line the owner wrote (schemas/personas.ts `brief`), is cheap by
- * construction, is the job a small model does reliably, and hands the session a context that was written once,
- * tested by use, and identical for every session that wears it. The card is the static context; this file only
- * says which one.
- *
- * THE ANSWER IS ONE ID OR `none`, and `none` is a real answer rather than a failure: a chat with no persona
- * reaches everything, so routing nowhere costs nothing, while routing onto the wrong card hides the repositories
- * the work needs. The prompt says so, the reply contract enforces it, and every road out of here that is not a
- * confident id (no cards, no model, a rung that named a card that does not exist, a deadline) is `none` with a
- * reason the chip can show. Nothing here ever throws to the composer.
- *
- * ATTENDED CHATS ONLY. The route is asked by the composer under settings.personaRouting; nothing in the daemon
- * asks it for a wake, because a persona GRANTS an unattended turn accounts, and the rule that a wake reaches
- * only what its own form named (personas/personas.ts turnPersona) must not be undone by a model's guess.
- *
- * IT LIVES HERE, beside the other helper asks (title-namer.ts), rather than under personas/: it spends the
- * one-shot seam, which is this subsystem's, and personas/ must not reach into agent/ for a value while agent/
- * already reads personas/ for the turn's card. The persona routes take it as a parameter (router.ts wires it),
- * which is the type-only port that keeps the two subsystems one-way.
- *
- * ONE DETERMINISTIC SHORTCUT, taken before any model is asked: a chat opened in a folder that exactly one card
- * starts in or carries is that card's chat, no reading required. Several cards or none, and the words decide. */
+// Routes a new chat to one persona card by classification (pick one of N), not composition; `none` is a real, safe
+// default, never a failure. Attended chats only — an unattended wake must not gain a persona's accounts from a model's
+// guess. A folder match is tried before asking any model.
 
-// Retrieval's rule (agent/turn-context.ts): an opening message front-loads the ask, and a long one is a spec
-// whose tail dilutes the question it opens with.
+// Opening message front-loads the ask; a long message's tail only dilutes the question it opens with.
 const MESSAGE_MAX_CHARS = 600;
-// The composer's chip waits on this; a rung that has not answered in this long is a rung that is not going to,
-// and the chat opens as it would have without routing. The walk itself is bounded per rung by the helper seam.
+// Composer's chip waits on this; past it, the chat opens unrouted as if nothing had been asked.
 const ROUTE_DEADLINE_MS = 6_000;
 const NONE = "none";
 
@@ -47,9 +20,8 @@ const excerpt = (text: string): string => {
     return clean.length <= MESSAGE_MAX_CHARS ? clean : `${clean.slice(0, MESSAGE_MAX_CHARS)}\n… (truncated)`;
 };
 
-/* ONE CARD, ON ONE LINE, everything about it a reader could match a message against: its own sentence first,
- * then the facts (what it carries, where it starts, which sites it speaks through). Account IDS are not on the
- * line, only their sites: `reddit-work` says nothing a message can echo, `reddit` does. */
+// One line per card: its own brief, then what it carries, where it starts, and which sites it speaks through — words a
+// message could echo. Account ids are excluded; only their sites are (`reddit`, not `reddit-work`).
 export const candidateLine = (card: Persona, siteOf: (capability: string) => string | undefined): string => {
     const facts = [
         ...(card.brief === undefined ? [] : [card.brief.trim().replace(/\.$/u, "")]),
@@ -87,21 +59,18 @@ export const routerPrompt = (ask: PersonaRouteAsk, lines: readonly string[]): st
         `Reply with the id or \`${NONE}\` only: no quotes, no explanation.`,
     ].join(`\n`);
 
-// Wrappers a model reaches for even when told not to: a fence, a label, a bullet, quotes, a trailing period.
+// Wrapper words a model reaches for anyway: a fence, a label, a bullet, quotes, a trailing period.
 const LABEL = /^(?:persona|id|answer)\s*:\s*/iu;
 
 export interface RouteVerdict {
-    // The card named, or undefined for `none`.
+    // Card named, or undefined when the reply was `none`.
     readonly persona: string | undefined;
-    // What the reply actually said, for the sentence that refuses one that named nothing on the list.
+    // Reply's literal answer, for the refusal sentence when it named nothing on the list.
     readonly token: string;
 }
 
-/* THE REPLY, AS A VERDICT. A card id on the list is that card; `none` is no card; anything else is a rung that
- * did not follow the list (a hallucinated id, a paragraph, a question back) and is stepped over for the next
- * rung (role-answer.ts UnusableAnswerError), because a card the workspace does not have is not a softer kind of
- * answer, it is a model that did not read the list. Ids are matched case-insensitively: the list is the
- * authority on spelling, and a rung that lowercased one still named it. */
+// A listed id or `none` is a real verdict; anything else is a rung that ignored the list and is stepped over as
+// unusable. Matched case-insensitively; the list itself is the authority on spelling.
 export const routeAnswer = (ids: ReadonlySet<string>): RoleAnswer<RouteVerdict> => {
     const byLower = new Map([...ids].map((id) => [id.toLowerCase(), id]));
     return {
@@ -128,8 +97,7 @@ export const routeAnswer = (ids: ReadonlySet<string>): RoleAnswer<RouteVerdict> 
     };
 };
 
-// The site an account id belongs to, for the candidate line. Only browser accounts have one; anything else is
-// named by its id.
+// Site an account id belongs to; only browser accounts have one, everything else is named by its id.
 const siteLookup = (
     capabilities: readonly { readonly id: string; readonly kind: string; readonly config: unknown }[],
 ): ((id: string) => string | undefined) => {
@@ -142,7 +110,7 @@ const siteLookup = (
     return (id) => sites.get(id);
 };
 
-// The cards whose folder the chat was opened in: the ones that start there, or carry it as a repository.
+// Cards whose folder the chat was opened in: those that start there or carry it as a repository.
 const homedIn = (cards: readonly Persona[], folder: string): Persona[] =>
     cards.filter((card) => card.workspace?.startIn === folder || card.context?.repos.includes(folder) === true);
 
@@ -174,8 +142,7 @@ export const routePersona = async (services: Services, ask: PersonaRouteAsk, sig
             ? { reason: `No persona fits this message.` }
             : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.` };
     } catch (error: unknown) {
-        // A spent chain, no account, the deadline: the chat opens as it would have without routing, and the
-        // chip says why nothing was picked rather than showing nothing at all.
+        // A spent chain, no account, or the deadline: the chat opens unrouted, with a reason the chip can show.
         services.logger.warn({ err: error }, "persona router: no answer, the chat stays open");
         return { reason: `Could not route: ${errorMessage(error)}` };
     }

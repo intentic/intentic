@@ -7,9 +7,8 @@ import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork, startVerifyNudgeRuntime, type VerifyNudgeRuntime } from "./verify-nudge.js";
 
-/* THE PROOF FOLLOW-UP ON A RUNTIME WITH NO STOP HOOKS. The decision is the same one the Claude arm makes in a
- * hook (rules/turn-ending.ts); what is tested here is that it is made at all off the frame ledger, and that
- * the guards around SPENDING A TURN to deliver it hold. */
+// Tests the proof follow-up made off the frame ledger on a runtime with no Stop hooks, and the guards around spending a
+// turn to deliver it.
 
 const rule: Rule = { id: "verify", label: "Prove the edits", moment: "turn.ending", action: { kind: "builtin", name: "verify-edits" }, enabled: true };
 const seed: AgentTurn = { prompt: "fix the parser", agent: "codex", model: "gpt-5.1-codex", effort: "high" };
@@ -27,8 +26,7 @@ const proved = (path: string): FrameLedger => {
     return ledger;
 };
 
-// Built from the constant rather than spelled, which is the rule for anything new here: the literals above are
-// older than it and held by the path-literals baseline, and adding to that baseline is what it exists to stop.
+// Built from the constant, not spelled: a new literal here is what the path-literals baseline exists to stop.
 const PARSER = `${WORKSPACE_ROOT}/src/parser.ts`;
 
 const logger = { info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
@@ -60,21 +58,14 @@ test("a turn that changed code and proved nothing is sent a follow-up, as its ow
 
     expect(message).toContain("/work/src/parser.ts");
     await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    /* It runs WHERE THE WORK RAN and picks the thread back up: a follow-up on another provider, or against a
-     * fresh session, is asking a different agent about somebody else's edits. */
+    // Runs where the work ran and picks the thread back up; a new provider or session asks the wrong agent.
     expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7" });
     expect(started[0]?.prompt).toBe(message);
 });
 
-/* IT FOLLOWS THE TURN IT NUDGES IN EVERY FIELD, not in most of them. This copy used to carry provider,
- * harness, account, model and effort, and silently drop `thinking`, `fast` and `actsAs` — so a nudge on a
- * reasoning-off turn came back reasoning (a different behaviour at a different price, on work the agent was
- * told to continue), and a nudge on a persona's turn came back as NOBODY, losing that card's toolbox and
- * signed-in accounts in a follow-up whose whole job is to go and run something.
- *
- * `runRole` rides along as the nudged turn's own, and there is no `verify-nudge` role under it: the role could
- * only ever have bound for a turn that was unattended AND named no model AND no provider, which is the exact
- * opposite of the turn this is continuing. */
+// Carries every field of the turn it nudges, not just provider/model/effort: `thinking`, `fast`, `actsAs` too, or a
+// persona's follow-up loses its toolbox and accounts. Inherits `runRole` from the nudged turn; a `verify-nudge` role
+// would only ever bind to an unattended, model-less turn, the opposite of this one.
 test("the follow-up carries the whole identity of the turn it nudges, and invents no role of its own", async () => {
     const { started } = runtimeWith();
     const persona: AgentTurn = {
@@ -104,8 +95,7 @@ test("the follow-up carries the whole identity of the turn it nudges, and invent
     });
 });
 
-// A turn that named no job leaves the follow-up naming none either: absent stays absent, rather than becoming
-// a role that would send this turn somewhere its predecessor never went.
+// A turn with no job leaves the follow-up with none either: absent stays absent.
 test("a nudged turn with no job gives the follow-up no job", async () => {
     const { started } = runtimeWith();
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited(PARSER) });
@@ -120,16 +110,14 @@ test("a turn whose check passed after its last edit is left alone", async () => 
     expect(started).toHaveLength(0);
 });
 
-// Nothing here is on by default: without the owner's rule standing at this moment, an unproven turn is simply
-// a turn that ended.
+// Nothing here is on by default: with no rule standing, an unproven turn is just a turn that ended.
 test("no rule standing means no follow-up, however unproven the work", async () => {
     const { started } = runtimeWith();
     expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [], ledger: edited("/work/src/parser.ts") })).toBeUndefined();
     expect(started).toHaveLength(0);
 });
 
-// The rule's own conditions are read HERE, against what the turn actually touched, which is the only moment
-// they can be: a turn is planned before it runs, so nothing earlier knows which files it will edit.
+// The rule's conditions are read here, against what the turn touched, since nothing earlier knows that yet.
 test("a rule narrowed to paths this turn never touched stays quiet", async () => {
     const { started } = runtimeWith();
     const narrowed: Rule = { ...rule, when: { paths: ["docs/**"] } };
@@ -137,9 +125,8 @@ test("a rule narrowed to paths this turn never touched stays quiet", async () =>
     expect(started).toHaveLength(0);
 });
 
-/* THE LOOP GUARD, and the reason it has to exist: the follow-up runs as its own turn, and that turn is watched
- * by the same code that sent it. A model that answers the nudge without running anything would be nudged
- * again, and again, spending the owner's allowance arguing with itself. */
+// The loop guard: the follow-up runs as its own watched turn, so a model that answers it without running anything would
+// be nudged again and again.
 test("a nudge never answers a nudge", async () => {
     const { started } = runtimeWith();
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
@@ -149,14 +136,13 @@ test("a nudge never answers a nudge", async () => {
     expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") })).toBeUndefined();
     expect(started).toHaveLength(1);
 
-    // …and the conversation is free again from the turn after that.
+    // The conversation is free again from the turn after that.
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
     await vi.waitFor(() => expect(started).toHaveLength(2), SETTLES);
 });
 
-/* THE OTHER LEDGER, on the same road. `verify-ui-edits` reads what the turn DREW against whether it looked,
- * and it has to reach a Codex or Cursor turn the same way `verify-edits` does, off frames rather than a hook
- * that runtime does not have. */
+// The other ledger on the same road: `verify-ui-edits` reads what the turn drew against whether it looked, reaching a
+// Codex or Cursor turn off frames, the way `verify-edits` does.
 const viewRule: Rule = {
     id: "verify-ui-edits",
     label: "Look at what it changed",
@@ -204,16 +190,15 @@ test("a turn that looked after its last surface edit is left alone", async () =>
     expect(started).toHaveLength(0);
 });
 
-/* A caller that keeps no view ledger must not fire this rule on an empty one: "you never looked" is true of an
- * empty record for the wrong reason, and it would be told to every turn on every runtime that has not been
- * wired up yet. */
+// A caller with no view ledger must not fire this rule on an empty one: "you never looked" would be true of an empty
+// record for the wrong reason, on every unwired runtime.
 test("the rule cannot fire without the ledger it reads", async () => {
     const { started } = runtimeWith();
     expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [viewRule], ledger: edited("/work/src/App.vue") })).toBeUndefined();
     expect(started).toHaveLength(0);
 });
 
-// Two rules standing is two things to say and ONE turn to say them in: the follow-up is the expensive half.
+// Two rules standing is two things to say in one turn: the follow-up is the expensive half.
 test("both builtins standing produce a single follow-up carrying both", async () => {
     const { started } = runtimeWith();
     const message = await nudgeUnverifiedWork({
@@ -229,7 +214,7 @@ test("both builtins standing produce a single follow-up carrying both", async ()
     await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 
-// A conversation whose follow-up never landed must not be left holding a guard against one that is not coming.
+// A conversation whose follow-up never started must not be left guarding one that isn't coming.
 test("a follow-up that cannot start releases the conversation instead of blocking it forever", async () => {
     const attempts: string[] = [];
     runtimeWith({

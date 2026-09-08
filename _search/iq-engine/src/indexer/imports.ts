@@ -1,14 +1,9 @@
 import { NON_CODE } from "./languages.js";
 import { scriptBlocksOf } from "./sfc.js";
 
-// Module specifiers a file imports, the edges of `iq map`'s reference graph. An import is the one statement in
-// a file that unambiguously says "this file depends on that one", which is why the map is built on these rather
-// than on symbol-name text matches: a name like `App` or `Host` occurs everywhere and proves nothing.
-//
-// Extraction is deliberately lexical rather than per-grammar AST rules. Module specifiers are quoted strings in
-// a handful of rigid syntactic positions, and, the reason this is safe, a specifier that isn't real simply
-// fails to resolve to an indexed file and vanishes. Resolution is the filter, so a permissive scanner costs
-// nothing and spares us six per-language kind tables that would drift on grammar upgrades.
+// Module specifiers a file imports, the edges of `iq map`'s reference graph, built on imports rather than symbol-name
+// matches since a name like `App` proves nothing. Extraction is lexical, not per-grammar AST: a specifier that fails to
+// resolve to an indexed file simply vanishes, so a permissive scanner costs nothing.
 
 const PATTERNS: readonly RegExp[] = [
     // import x from "m" · export { x } from "m" · import type { x } from "m"

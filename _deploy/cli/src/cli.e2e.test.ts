@@ -13,24 +13,7 @@ import { GenericContainer, type StartedTestContainer, Wait } from "testcontainer
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readGeneratedSecrets } from "./secrets/generated-secrets.js";
 
-// The realistic Tier-1 run: boot a Docker-in-Docker "host", then drive the REAL CLI (pnpm intentic
-// init/resolve/apply) exactly as an operator would: scaffold, author a deploy.config.ts pointed at the
-// DinD host's mapped SSH port, fill desired-state/.env, resolve, apply. Phase 1 stands up the platform
-// (Forgejo + runner + Komodo) and exposes git.<zone>/deploy.<zone> through a real Cloudflare tunnel. Then we
-// push a tiny Dockerfile to the app repo and, in phase 2, author an environment so apply WIRES CI/CD (a
-// Forgejo Actions workflow + a Komodo registry deployment): intentic does not build or deploy. The workflow
-// then builds + pushes the image and Komodo rolls it out live at app.<zone>. Gated behind INTENTIC_E2E because
-// it needs a privileged Docker daemon + live Cloudflare credentials (with DNS-edit + tunnel-edit scopes) on a
-// zone you own, so `pnpm test` never reaches it, and in CI only the nightly does, and only when it holds a
-// token to reach Cloudflare with.
-//
-// The host SSH key is generated per-run and written into the .env the CLI loads; the Forgejo/Komodo admin
-// passwords are intentic-generated (read back from desired-state/.secrets.json to sign in).
-//
-// The TOKEN gates the tier alongside INTENTIC_E2E, the same way every other gated suite names its own
-// credentials. That is the nightly job's whole contract (.github/workflows/nightly.yml `e2e`): it sets INTENTIC_E2E=1
-// for every tier and each suite decides for itself whether its secrets are present. Asserting the token inside
-// instead turned "this project has no Cloudflare credentials" into a red pipeline every night.
+// Manual, real-infra E2E: gates on `secrets`, not the token, so a missing credential skips only this tier.
 const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)", {
     enabledBy: "INTENTIC_E2E",
     secrets: ["CLOUDFLARE_API_TOKEN"],
@@ -38,33 +21,25 @@ const tier = e2eTier("intentic CLI end-to-end (manual, real Cloudflare + DinD)",
 
 const exec = promisify(execFile);
 
-// The Cloudflare zone this suite deploys under. The config no longer authors it: the CLI discovers it from
-// the app domains + token, but the harness still needs it to build the expected public hostnames and to
-// purge DNS on teardown. Read from env so the suite can target any zone you own (the account is discovered
-// from the token); use a token scoped to this zone so the platform-only phase (no app domains) can resolve it.
+// Zone this suite deploys under; builds the expected hostnames and purges DNS on teardown. Read from env.
 const ZONE = process.env["CLOUDFLARE_ZONE"] ?? "atlas-protocol.com";
-const ADMIN = "intentic"; // the platform admin user + repo owner (adminUsername in the resolver)
+const ADMIN = "intentic"; // platform admin user and repo owner (resolver's adminUsername).
 const APP = "app";
 const ENV = "production";
 const APP_DOMAIN = `${APP}.${ZONE}`;
 const GIT_DOMAIN = `git.${ZONE}`;
 const KOMODO_DOMAIN = `deploy.${ZONE}`;
-// The workspace sandbox exposes a single-label wildcard preview route to its own dev server. The cf-route owns
-// a proxied `*.<zone>` CNAME (purged on teardown); `probe` is a concrete host under it the test curls (a
-// non-`preview-` host, so the proxy answers 404: enough to prove DNS + tunnel + proxy are wired).
+// Sandbox's wildcard preview route (`*.<zone>`); `probe` (non-preview) 404s but still proves the wiring.
 const WILDCARD_PREVIEW = `*.${ZONE}`;
 const PREVIEW_PROBE = `probe.${ZONE}`;
 
 const repoRoot = findRepoRoot(import.meta.url);
 const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 
-// The deterministic host port the resolver assigns this environment's deployment; the seeded app must listen
-// on it (Komodo runs the container on the host network, so it binds this port directly) and the tunnel routes
-// app.<zone> to it.
+// Deterministic port the resolver assigns; the app must listen on it for Komodo and the tunnel to reach it.
 const appPort = deploymentPort(deploymentId(APP, ENV));
 
-// A trivial buildable app: busybox httpd serving a known body on $PORT. The Forgejo Action builds this into
-// an image and pushes it to the registry; Komodo deploys it with PORT set to the resolver's deterministic port.
+// Trivial busybox httpd app serving a known body on $PORT; CI builds it, Komodo deploys with that PORT.
 const APP_BODY = "intentic-e2e-live";
 const DOCKERFILE = `FROM busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
 RUN mkdir -p /www && printf '%s' '${APP_BODY}' > /www/index.html
@@ -106,9 +81,8 @@ const envFile = (privateKey: string): string =>
 CLOUDFLARE_API_TOKEN=${tier.secrets.CLOUDFLARE_API_TOKEN}
 `;
 
-// Poll a public URL through the tunnel until it answers from the origin (not a Cloudflare edge error),
-// then return the final status + body. Edge/tunnel-not-ready responses (5xx + the cloudflared error page)
-// are retried until the deadline since DNS + connector propagation takes seconds.
+// Polls a url through the tunnel until it answers from the real origin, not a Cloudflare edge/tunnel error, retrying
+// until the deadline.
 const pollUrl = async (url: string, timeoutMs: number, bodyIncludes?: string): Promise<{ status: number; body: string }> => {
     const deadline = Date.now() + timeoutMs;
     let last: { status: number; body: string } | undefined;
@@ -121,8 +95,7 @@ const pollUrl = async (url: string, timeoutMs: number, bodyIncludes?: string): P
             const body = (await response.text()).slice(0, 4000);
             last = { status: response.status, body };
             const edgeDown = [502, 521, 522, 523, 525, 530].includes(response.status) || /Error 10\d\d|Argo Tunnel|cloudflare/i.test(body);
-            // When a body marker is required (the app must serve its real content, not CI's seeded
-            // placeholder), keep polling until it appears; otherwise any live-origin response is enough.
+            // When `bodyIncludes` is set, keep polling until it appears; otherwise any live-origin response is enough.
             if (!edgeDown && (bodyIncludes === undefined || body.includes(bodyIncludes))) {
                 return last;
             }
@@ -159,19 +132,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 300_000);
 
     afterAll(async () => {
-        // Stop the host FIRST so cloudflared dies: Cloudflare refuses to delete a tunnel with active
-        // connections, so the connector must be gone before we purge the tunnel below.
+        // Stops the host first so cloudflared dies; Cloudflare refuses to delete a tunnel with active connections.
         await host?.stop().catch(() => {});
 
-        // Purge the live Cloudflare resources this run created: the engine has no destroy path. The account id
-        // comes back from resolving the zone (the same discovery the CLI does), so it is not configured here.
+        // Purges Cloudflare resources this run created (engine has no destroy path); account id comes from the zone.
         const zone = await cloudflareApi.getZone({ apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, zone: ZONE }).catch(() => undefined);
         if (zone !== undefined) {
             const tunnel = await cloudflareApi
                 .findTunnel({ accountId: zone.accountId, apiToken: tier.secrets.CLOUDFLARE_API_TOKEN, name: "intentic-host" })
                 .catch(() => undefined);
             if (tunnel !== undefined) {
-                // Force-close any lingering connections (cloudflared just died with the host) so the delete sticks.
+                // Force-closes lingering connections (cloudflared just died) so the tunnel delete sticks.
                 await fetch(`https://api.cloudflare.com/client/v4/accounts/${zone.accountId}/cfd_tunnel/${tunnel.id}/connections`, {
                     method: "DELETE",
                     headers: { Authorization: `Bearer ${tier.secrets.CLOUDFLARE_API_TOKEN}` },
@@ -196,8 +167,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     }, 180_000);
 
-    // Run a real `pnpm intentic <args>` from the repo root; surface stdout+stderr on failure so a broken
-    // apply is debuggable from the test output.
+    // Runs a real `pnpm intentic <args>` from the repo root; surfaces stdout+stderr on failure for debugging.
     const intentic = async (...args: string[]): Promise<string> => {
         try {
             const { stdout } = await exec("pnpm", ["intentic", ...args], { cwd: repoRoot, env: process.env, maxBuffer: 64 * 1024 * 1024 });
@@ -229,24 +199,22 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const configPath = join(tmp, "intent", "deploy.config.ts");
         const artifactPath = join(tmp, "desired-state", "desired-state.json");
 
-        // 2. Author the intent (host + Cloudflare + the app's production environment) + the secrets apply resolves.
+        // 2. Authors the intent (host, Cloudflare, the app's environment) and the secrets apply resolves.
         await writeFile(configPath, config(address, port));
         await writeFile(join(tmp, "desired-state", ".env"), envFile(privateKey));
 
-        // 3. Resolve + apply: brings up Forgejo + its Actions runner + Komodo + the workspace sandbox + the
-        // tunnel/routes, and wires the app's CI/CD. The workspace provider PULLS the published sandbox image
-        // (ghcr.io/intentic/sandbox) from GHCR: it must be published under that name + public.
+        // 3. Resolve+apply: brings up Forgejo/Komodo/tunnel/CI-CD and the sandbox (public ghcr.io image).
         await intentic("deploy", "resolve", "--config", configPath, "--out", artifactPath);
         await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 
-        // The admin password intentic generated (in desired-state/.secrets.json): what bootstrapped Forgejo.
+        // Admin password intentic generated, in desired-state/.secrets.json.
         const forgejoPassword = (await readGeneratedSecrets(join(tmp, "desired-state")))["FORGEJO_ADMIN_PASSWORD"] ?? "";
 
         // The platform containers actually came up on the host.
         const running = await sshRun("docker ps --format '{{.Names}}'");
         expect(running).toContain("intentic-forgejo");
         expect(running).toContain("intentic-forgejo-runner");
-        // Komodo runs as a docker compose stack, so its core container is named "komodo-core-1".
+        // Komodo's compose stack names its core container komodo-core-1 (matched here as a substring).
         expect(running).toContain("komodo-core");
         expect(running.split("\n").some((name) => name.startsWith("intentic-tunnel-"))).toBe(true);
         // The workspace sandbox came up too (apply gated on its daemon /health before converging).
@@ -258,9 +226,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const komodo = await pollUrl(`https://${KOMODO_DOMAIN}`, 120_000);
         expect([200, 301, 302, 303, 401, 403, 404]).toContain(komodo.status);
 
-        // The wildcard preview route resolves end-to-end: DNS (`*.<zone>`) -> the host tunnel ingress -> the
-        // sandbox's preview proxy (port 5173, bound to the host's internal ip). A non-`preview-` host gets a
-        // 404 from the proxy: that still proves the route is wired through.
+        // Wildcard preview resolves end-to-end: DNS -> tunnel -> sandbox proxy; a non-preview 404 still proves it.
         const preview = await pollUrl(`https://${PREVIEW_PROBE}`, 240_000);
         expect([200, 301, 302, 303, 401, 403, 404]).toContain(preview.status);
 
@@ -277,12 +243,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             message: "seed e2e app",
         });
 
-        // 5. The app's CI/CD was already wired by the apply above (Forgejo Actions workflow + Komodo deployment);
-        // CI seeded a placeholder Dockerfile, so pushing the real one above triggers the Action: build -> push to
-        // the registry -> notify Komodo, which rolls it out, replacing the placeholder.
+        // CI/CD was already wired by the apply above; pushing the real Dockerfile replaces CI's seeded placeholder.
 
-        // CI builds + pushes and Komodo deploys asynchronously, and the placeholder may serve briefly first, so
-        // poll until the app serves its real body (allow generous time for the first rollout).
+        // CI/Komodo deploy asynchronously; poll until the real body appears (a placeholder may serve briefly first).
         const app = await pollUrl(`https://${APP_DOMAIN}`, 300_000, APP_BODY);
         expect(app.status).toBe(200);
         expect(app.body).toContain(APP_BODY);

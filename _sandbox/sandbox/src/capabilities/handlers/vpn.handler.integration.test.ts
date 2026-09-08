@@ -8,10 +8,8 @@ import { interfaceName } from "../../vpn/vpn-paths.js";
 import type { CapabilityCtx } from "../capability.js";
 import { vpnHandler } from "./vpn.handler.js";
 
-// A ctx exposing only what vpnHandler touches, over a fresh temp workspace. HOME is pointed at a temp dir so
-// the handler's ~/.intentic-vpn writes land there. Every case here runs with the VPN tooling ABSENT (an empty
-// PATH where it matters, and no wg/openconnect on the test host anyway), which is the pre-rebuild state the
-// handler must survive: an add has to land in the manifest even when it cannot dial.
+// Ctx over a fresh temp workspace; HOME is a temp dir too, so ~/.intentic-vpn writes land there. Every test runs with
+// the VPN tooling absent, the pre-rebuild state an add must survive.
 const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: string; home: string } => {
     const root = mkdtempSync(join(tmpdir(), "vpn-cap-ws-"));
     const home = mkdtempSync(join(tmpdir(), "vpn-cap-home-"));
@@ -37,12 +35,11 @@ const skillPath = (root: string): string => join(root, ".agents", "skills", "vpn
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
-        // consume the apply frames
     }
 };
 
-// The tooling is absent on the test host, so a probe reads "unavailable" → the capability's "needs a rebuild"
-// pending state. Runs the assertion with an empty PATH so the result is host-independent either way.
+// Empty PATH makes the probe read "unavailable" (pending, needs a rebuild), independent of what's actually on the test
+// host.
 const withoutTooling = async <T>(body: () => Promise<T>): Promise<T> => {
     const path = process.env["PATH"];
     process.env["PATH"] = mkdtempSync(join(tmpdir(), "vpn-nopath-"));
@@ -60,13 +57,12 @@ test("apply stores a 0600 wireguard conf named for its interface, plus the share
     // The conf holds the interface's private key: never group/world-readable.
     expect(readFileSync(confPath(home, "office"), "utf8")).toBe(`${CONF}\n`);
     expect(statSync(confPath(home, "office")).mode & 0o777).toBe(0o600);
-    // One shared skill teaches the agent to drive every tunnel through the daemon-backed `vpn` command rather
-    // than the underlying clients: that is what keeps agent-initiated and UI-initiated state identical.
+    // Skill teaches the daemon-backed `vpn` command, not the raw clients, so agent and UI state can't diverge.
     const skill = await readWorkspaceFile(skillPath(root));
     expect(skill).toContain("name: vpn");
     expect(skill).toContain("vpn connect <name>");
     expect(skill).toContain("vpn disconnect <name>");
-    // It must NOT teach the raw clients: those would bypass the daemon and desync the UI.
+    // Raw clients bypass the daemon and desync the UI, so the skill must not mention them.
     expect(skill).not.toContain("wg-quick");
 });
 
@@ -78,7 +74,7 @@ test("an id too long to be an interface name still gets a legal, deterministic i
     const name = interfaceName(longId);
     expect(name.length).toBeLessThanOrEqual(15);
     expect(name).not.toBe(longId);
-    // The conf is named for the interface, because wg-quick derives the interface from the file name.
+    // wg-quick derives the interface name from the conf's file name.
     expect(statSync(confPath(home, longId)).mode & 0o777).toBe(0o600);
     expect(interfaceName(longId)).toBe(name);
 });
@@ -92,7 +88,7 @@ test("status reports pending (rebuild required) while the VPN tooling is not ins
 });
 
 test("apply with auto-connect on but no tooling stores the connection instead of failing", async () => {
-    // The add MUST land: the manifest entry is what puts the fragment into the overlay that installs the client.
+    // The add must land: this entry is what puts the fragment into the overlay that installs the client.
     const { ctx, home } = tempCtx();
     const auto = wireguard("office", "on");
     await withoutTooling(() => drain(vpnHandler.apply(ctx, "office", auto.config)));
@@ -108,8 +104,7 @@ test("a fortinet connection's password never reaches disk", async () => {
     };
     await withoutTooling(() => drain(vpnHandler.apply(ctx, "hq", fortinet.config)));
 
-    // The credential reaches openconnect over stdin at dial time (and never via argv), so the capability's
-    // state directory must hold no copy of it: the manifest is the single place it lives.
+    // Password reaches openconnect over stdin at dial time, never argv or disk; the manifest is its only home.
     const dir = join(home, ".intentic-vpn");
     const spilled = readdirSync(dir).filter((entry) => readFileSync(join(dir, entry), "utf8").includes("s3cret"));
     expect(spilled).toEqual([]);
@@ -118,17 +113,14 @@ test("a fortinet connection's password never reaches disk", async () => {
 
 test("fragment carries every client and both runtime directives, once, in two separate blocks", async () => {
     const returned = (await vpnHandler.fragment!(office.config))!;
-    /* TWO blocks, not one, and the split is load-bearing rather than cosmetic. Fragments are deduped by exact
-     * content at compose time, and the `exit` kind needs the SAME tun privilege: keeping the directives in
-     * their own byte-identical block (handlers/net-privileges.ts) is what stops a sandbox with both kinds
-     * composing an overlay that hands `docker run` the same --device twice. */
+    // Split is load-bearing: fragments dedupe by exact content, and exit's tun block must byte-match this one.
     const blocks = typeof returned === "string" ? [returned] : [...returned];
     expect(blocks).toHaveLength(2);
     const [tools, privileges] = blocks as [string, string];
     expect(tools).toContain("wireguard-tools");
     expect(tools).toContain("openconnect");
     expect(tools).toContain("strongswan");
-    // The clients block asks for nothing privileged; the privileges block installs nothing.
+    // Clients block asks for nothing privileged; privileges block installs nothing.
     expect(tools).not.toContain("intentic:runtime");
     expect(privileges).not.toContain("apt-get");
     expect(privileges.split("# intentic:runtime --device=/dev/net/tun").length - 1).toBe(1);
@@ -136,14 +128,13 @@ test("fragment carries every client and both runtime directives, once, in two se
 });
 
 test("remove drops the conf but keeps the shared skill while another vpn remains", async () => {
-    // Store still holds office + home-lab during removal of office.
+    // Store still lists both office and home-lab while office is being removed.
     const { ctx, root, home } = tempCtx([office, wireguard("home-lab")]);
     await withoutTooling(async () => {
         await drain(vpnHandler.apply(ctx, "office", office.config));
         await vpnHandler.remove!(ctx, "office", office.config);
     });
     expect(() => readFileSync(confPath(home, "office"), "utf8")).toThrow();
-    // home-lab remains → skill stays.
     expect(await readWorkspaceFile(skillPath(root))).toContain("name: vpn");
 });
 

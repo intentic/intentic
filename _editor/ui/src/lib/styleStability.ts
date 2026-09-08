@@ -1,29 +1,9 @@
-/* AN IDENTICAL STYLESHEET WRITE IS NOT A NO-OP TO THE BROWSER, AND THAT IS THE WHOLE PROBLEM.
- *
- * Assigning `style.textContent` replaces the element's text node whether or not a single byte differs, and
- * Chrome answers that by tearing the stylesheet down and building a new one: the document repaints, and every
- * client of the old sheet loses its handle on it. With DevTools open that client is the Styles editor, which
- * rebuilds from scratch — closing the colour picker mid-drag, which is how this is actually met ("I open the
- * picker, the CSS flickers, I start again").
- *
- * TWO WRITERS IN THIS APP MAKE IDENTICAL ASSIGNMENTS AS A MATTER OF COURSE, and neither can be told not to:
- *
- *   · PrimeVue reloads its directive styles from every `updated` hook, so ordinary request state (a loading
- *     label, a disabled button, a notification) rewrites the same bytes over and over.
- *   · Vite's dev client re-pushes the Tailwind-generated stylesheet whenever ANY scanned source file changes
- *     — Tailwind registers each one as a watch dependency of styles.css — and a code edit almost never moves a
- *     utility, so what arrives is the ~900 KB sheet the page already has, byte for byte (client.mjs's
- *     `updateStyle` ends in a bare `style.textContent = content`).
- *
- * So the guard goes on the ELEMENT, where both writers meet: an assignment equal to what is already there is
- * dropped, anything else is passed straight through. A genuinely changed preset, a real CSS edit and a new
- * component's first stylesheet all behave exactly as before; only the writes that were never going to change
- * anything stop costing a repaint.
- */
+// Assigning `style.textContent` tears down and rebuilds the stylesheet even when the bytes are identical, which
+// resets any open DevTools Styles editor mid-edit. PrimeVue's `updated` hook and Vite's dev client both make such
+// no-op writes routinely; this guards the element itself, dropping an assignment equal to the current value.
 
 const stabilized = new WeakSet<HTMLStyleElement>();
-// One observer per (document, selector): a second call for the same pair must not stack another listener, and
-// two different selectors in one document are two independent watches.
+// One observer per (document, selector); a second call for the same pair does not stack another listener.
 const observers = new WeakMap<Document, Set<string>>();
 
 /** Make identical `textContent` assignments on this one element a no-op. Idempotent. */
@@ -57,8 +37,10 @@ const stabilizeStylesIn = (root: ParentNode, selector: string): void => {
     root.querySelectorAll<HTMLStyleElement>(selector).forEach(stabilizeStyleElement);
 };
 
-/** Hold every `<style>` matching `selector` — those in `document.head` now, and those a later import,
- *  lazy view or hot update appends — stable against writes that change nothing. Idempotent per selector. */
+/**
+ * Holds every `<style>` matching `selector` stable against no-op writes: those already in `document.head`, and
+ * any appended later (a lazy import, a hot update). Idempotent per selector.
+ */
 export const stabilizeStyleWrites = (selector: string): void => {
     if (typeof document === `undefined`) {
         return;
@@ -79,8 +61,6 @@ export const stabilizeStyleWrites = (selector: string): void => {
         }
     });
     observer.observe(document.head, { childList: true });
-    /* The sweep covers what is already there, the observer what arrives next. A microtask rather than a call
-     * here, because the caller may be installing this DURING the synchronous work that inserts the first
-     * batch (PrimeVue's plugin does exactly that, inside `app.use`). */
+    // Deferred to a microtask: the caller may install this during the sync work that inserts the first batch.
     queueMicrotask(() => stabilizeStylesIn(document.head, selector));
 };

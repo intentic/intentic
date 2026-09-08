@@ -11,16 +11,13 @@ import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import UsageRing from "../../../components/UsageRing.vue";
 
-/* THE PANE'S STATUS BAR: the readouts under the composer, and the one part of the footer that stays OUT of the
- * scroller: it is about the pane (how full the context is, how much of the subscription is left, what the send
- * is waiting for), not about the message being written.
- *
- * The left slot is the composer's to fill: a refusal it is holding, or the shortcut worth teaching, so it
- * arrives as words rather than being worked out again here; everything to the right is measured off this pane's
- * own conversation and the signed-in person's allowance. */
+// The pane's status bar: readouts under the composer, the one part of the footer outside the scroller — about the
+// pane (context fill, subscription headroom, what send is waiting for), not the message being written. The left
+// slot is the composer's own words (a refusal, a shortcut hint); everything right of it is measured off this
+// pane's conversation and account.
 
 const { block, hint } = defineProps<{
-    /** Why Send will not go, if it won't: this owns the slot whenever there is one. */
+    /** Why Send won't go, if it won't; owns the slot whenever set. */
     block?: string;
     /** What the composer would rather say when nothing is refusing. */
     hint: string;
@@ -29,18 +26,9 @@ const { block, hint } = defineProps<{
 const { contextUsage, provider, account, model } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
 
-/* THE SANDBOX'S STATE AS A READER SHOULD HAVE IT, which is NOT `reachable`.
- *
- * `reachable` is transport truth: may a daemon call be made THIS INSTANT. The liveness stream is always on and
- * reconnects for ordinary reasons (a frame missed, a proxy hop dropped, a retarget onto the loopback shortcut),
- * and the reconnect ladder's first rung is one second, so `reachable` goes false for a second or two on an
- * otherwise idle workspace, over and over. Rendered raw, that painted "The sandbox is busy" under the composer
- * every minute or two of a perfectly healthy session, which is the flicker `availability.ts` was written to
- * prevent and which every other surface in the app already avoids by reading this projection instead: a retry
- * shorter than SANDBOX_BUSY_AFTER_MS is `stale`, and `stale` deliberately looks live.
- *
- * The row still goes inert with the transport (Send is disabled off `reachable`, where instant truth is exactly
- * what is wanted), it just stops ANNOUNCING a stall the app is healing on its own. */
+// The sandbox's state as a reader should see it, not raw `reachable`: the liveness stream reconnects for ordinary
+// reasons every minute or two, so a fast retry reads as `stale` and stays looking live (availability.ts) instead
+// of flashing "busy". Send still gates on raw `reachable`.
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
@@ -60,25 +48,18 @@ const contextRing = computed(() => {
     };
 });
 
-// Subscription headroom for this conversation's account, from the shared map every surface reads (a turn's own
-// frame, the daemon's push, the account lists): a small ring once the account has a reading, tinted as the
-// binding pool fills. Keyed by account so switching accounts shows the right one. The ring tracks the pool that
-// will gate THIS conversation's model (a Google sign-in spent for Gemini still has a week for Claude Opus); its
-// card lists them all, because which one is binding shifts between turns and models.
+// Subscription headroom for this conversation's account, from the shared usage map; a small ring once there's a
+// reading, tinted as the binding pool fills, keyed by account. Tracks the pool that gates this conversation's
+// model specifically (its card lists all of them).
 const usageChip = computed(() => {
-    // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
-    // first, and the usage map is keyed by that real id: looking up `undefined` kept this chip invisible on
-    // every single-account setup.
+    // Resolved through effectiveAccount: an unpicked conversation runs on the daemon's first, keyed the same way.
     const modelRef = model.value === `` ? undefined : { id: model.value };
     const headroom = planHeadroom(usageStatusFor(provider.value, effectiveAccount(provider.value, account.value), modelRef), modelRef);
-    // No binding pool ⇒ nothing measured, or everything has reset. Unlike an account ROW, a chat's chip stays
-    // out of the way rather than pinning a 0% to the composer for a session that has not asked for anything.
+    // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false 0%.
     if (headroom?.binding === undefined) {
         return undefined;
     }
-    // Once a pool is effectively spent the question flips from "how much is left" to "when can I go again", so
-    // the binding pool's reset joins the VISIBLE label instead of waiting behind a hover: the chat view is
-    // where a limit bites.
+    // Once a pool is effectively spent, its reset joins the visible label instead of waiting behind a hover.
     const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
     return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
 });
@@ -86,36 +67,34 @@ const usageChip = computed(() => {
 </script>
 
 <template>
-    <!-- It carries the mobile keyboard inset for the whole footer: growing the bottom-most row in the flow
-         shortens the scroller, and the composer stuck to its bottom edge rides up with it. Only rendered where
-         the composer is, so the inset can never be needed while the row is absent. -->
+    <!--
+        Carries the mobile keyboard inset for the whole footer, so the bottom-stuck composer rides up with it; rendered
+        only where the composer is.
+    -->
     <div
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
-        <!-- The refusal owns this slot whenever there is one: a Send that won't go has to say what it is waiting
-             for, and the tooltip alone never reaches a touch device. Every form factor and width, unlike the
-             keyboard hint it displaces.
-             Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there), and doesn't earn its
-             width in a narrow panel. An empty composer is the one moment message recall is available, so the
-             slot advertises it instead. -->
+        <!--
+            The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard
+            hint, which is meaningless on a virtual keyboard and not worth the width in a narrow panel.
+        -->
         <span v-if="block !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
-            <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS (ChatToolCallsToggle, which the Subagents area's
-                 pane draws too, on a strip of its own along the same bottom edge: one control, both places a
-                 transcript is read, in the same corner of the screen). Here it joins the readouts under the
-                 composer: the strip that already says what this chat is doing. -->
+            <!--
+                Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the
+                other readouts under the composer.
+            -->
             <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>
-            <!-- The chip answers "am I about to get rate-limited": hovering it opens the pool-by-pool card
-                 beside the composer, and a click goes to the screen that answers "and what has it cost me". -->
+            <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
             <RouterLink
                 v-if="usageChip"
                 to="/sandbox/usage"
@@ -125,12 +104,15 @@ const usageChip = computed(() => {
                     ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
                 >
             </RouterLink>
-            <!-- Every chip on this line names a page, so every one of them is a link: the address shows on
-                 hover, and Ctrl/⌘-click opens it without taking the conversation off screen. -->
+            <!--
+                Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without
+                leaving the chat.
+            -->
             <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-                <!-- One spelling and one colour for the sandbox's state, the same pair the rail chip and the
-                     switcher draw (availability.ts). A short retry keeps the healthy dot and the healthy word:
-                     changing either is itself the alarm, and there is nothing here for the reader to do. -->
+                <!--
+                    One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short
+                    retry keeps the healthy look.
+                -->
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
                 {{ availabilityVisual.label }} · Manage
             </RouterLink>

@@ -2,28 +2,8 @@ import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from 
 import { expect, test } from "vitest";
 import { partitionSecretValues } from "./secret-fields.js";
 
-/* THE INVARIANT THAT TIES THE VAULT TO THE SCHEMA: an entry that has been through the vault must still be a
- * valid entry.
- *
- * The two halves are individually sound and were silently incompatible. `secret-fields.ts` derives the
- * credential keys as the COMPLEMENT of a kind's `echo`, so a field nobody thought to echo is vaulted and the
- * manifest keeps VAULTED in its place. `capabilities-store.ts` validates each entry against CapabilitySchema on
- * READ, before the vault is consulted: correctly, because the store must not need the vault to know whether a
- * file is a manifest. Put together, a vaulted field whose schema refuses the marker string produces an entry
- * that can be written and never read again: it fails validation, and one bad entry is SKIPPED so the rest
- * survive (the right blast radius, and the reason this is silent).
- *
- * What that cost: the extension kind did not echo `registry`, and the Discover page attaches the
- * registry it browsed to every install. So every extension installed from Discover was vaulted into an entry
- * whose `registry` was no longer a url, dropped from the capability list on the next read, and therefore absent
- * from the extension inventory that list is built from: no row, no on/off switch, no view, no settings, no
- * CLI on the agent's PATH, and Discover still offering "Install" for something already on disk. The ipsec vpn
- * arm had the same shape waiting in three enum-and-CIDR dial parameters.
- *
- * So the guard is per KIND rather than per bug, and total over CapabilityKind: a new kind with an incomplete
- * echo fails here instead of in somebody's sandbox a release later. Arms of a discriminated union get their own
- * sample, because the echo branches on the discriminant and so does the schema. Samples are deliberately
- * MAXIMAL: every optional field populated, since an unpopulated field is not vaulted and proves nothing. */
+// Pins that a vaulted entry (secret fields replaced by VAULTED) still passes CapabilitySchema; a kind whose echo omits
+// a non-secret field would vault it silently and drop the entry on the next read.
 
 const SHA = "9305c108986b03875ea559a7e59f9004df550e7f";
 
@@ -88,10 +68,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
-    /* All three exit arms, each with `country` populated, which is the field this guard is actually about
-     * here: it is the only non-secret one on the tor and vpngate arms, so if it were ever dropped from the
-     * echo the vault would replace it with VAULTED, CountryCodeSchema would refuse that on the next read, and
-     * the whole exit would vanish from the manifest rather than one label going missing. */
+    // country is the only non-secret field on tor/vpngate; a dropped echo there loses the whole exit entry.
     exit: [
         { id: "tor-exit", kind: "exit", config: { provider: "tor", country: "DE", autoStart: "on" } },
         { id: "vpngate-exit", kind: "exit", config: { provider: "vpngate", country: "JP", autoStart: "off" } },
@@ -133,8 +110,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
-    // A connected browser, like a connected device: every field is a permission and none is a credential, so
-    // the echo must be total or a switch would be vaulted and the entry unreadable afterwards.
+    // Every webext field is a permission, not a credential; the echo must be total or a switch is vaulted.
     webext: [
         {
             id: "my-chrome",
@@ -146,8 +122,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     endpoint: [
         { id: "ollama", kind: "endpoint", config: { baseUrl: "https://x.example.com", protocol: "openai", apiKey: "sk-x", headers: "X-A: b" } },
     ],
-    // Nothing here is a credential (public weights, an unauthenticated loopback server), so the echo must
-    // cover every field — `url` included, the one an incomplete echo would silently vault.
+    // Nothing here is a credential; the echo must cover every field including `url`.
     localmodel: [
         {
             id: "qwen",
@@ -155,9 +130,7 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             config: { model: "custom", gpu: "on", url: "https://example.com/m.gguf", context: "custom", contextTokens: 98_304 },
         },
     ],
-    // Maximal like every sample here, and the kind with the least to hide: the wallet's signing key never
-    // enters this container, so its config is an address and the owner's own policy numbers: every one of
-    // which the handler echoes, which is exactly what this guard is checking it still does.
+    // The wallet's signing key never enters this container; every config field is public and must be echoed.
     wallet: [
         {
             id: "wallet",
@@ -175,8 +148,8 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     ],
 };
 
-// Exactly what withSecretVault's upsert writes: the vaulted keys replaced by the marker, everything else as it
-// came in. Reproduced rather than driven through the store so the failure names the kind and not a file path.
+// Reproduces what withSecretVault's upsert writes (vaulted keys replaced by the marker) without going through the
+// store.
 const asWritten = (capability: Capability): Capability => {
     const { values } = partitionSecretValues(capability, new Map());
     const config = { ...(capability.config as Record<string, unknown>) };
@@ -191,16 +164,11 @@ test.each(Object.entries(SAMPLES).flatMap(([kind, samples]) => samples.map((samp
     (_name, sample) => {
         const written = asWritten(sample);
         const parsed = CapabilitySchema.safeParse(written);
-        // The marker's own contract (capabilities-store.ts) is that the entry STILL SATISFIES the schema with it
-        // in place. A failure here names the field whose echo is missing.
         expect(parsed.error?.issues.map((issue) => issue.path.join("."))).toBeUndefined();
         expect(parsed.success).toBe(true);
     },
 );
 
-// The vault is not a place to hide config: what leaves the manifest must be a credential, and the only way this
-// stays true is that nothing NON-secret is in the complement of the echo. Pinned for the kind whose echo the
-// install path depends on, with the two fields that were missing named outright.
 test("an extension's registry stays in the manifest: it is a catalogue fact, not a credential", () => {
     const sample = SAMPLES.extension[0];
     expect(sample).toEqual(expect.any(Object));

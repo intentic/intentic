@@ -15,12 +15,10 @@ const parse = (inputs: ResolvedInputs): DiscordInputs => parseInputs(discordSche
 const WEBHOOK_NAME = "intentic";
 const guildName = (zone: string): string => `intentic – ${zone}`;
 
-// The category/channel layout intentic owns inside the guild.
 const CATEGORY_INTENTIC = "intentic";
 const CATEGORY_APPS = "apps";
 const CHANNEL_RECONCILE = "reconcile";
 
-// Build the webhook URL from its id + token (the format Discord documents).
 const webhookUrl = (webhook: DiscordWebhook): string => `https://discord.com/api/webhooks/${webhook.id}/${webhook.token}`;
 
 // Find or create a channel by name + type + optional parent in a guild.
@@ -57,9 +55,8 @@ interface DiscordDetail {
     readonly webhookNames: readonly string[];
 }
 
-// Discord (the back-communication channel) as a managed guild + categories + channels + webhooks.
-// read returns the guild if the bot owns one named "intentic – <zone>"; diff detects missing channels
-// or webhooks for declared apps; apply creates/reconciles the full structure.
+// Discord as a managed guild + categories + channels + webhooks. `read` finds the guild named "intentic – <zone>";
+// `diff` checks for missing channels/webhooks; `apply` creates or reconciles the full structure.
 export const createDiscordProvider = (api: DiscordApi = discordApi): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
@@ -73,14 +70,12 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
             const channels = await api.getGuildChannels(parsed.botToken, guild.id);
             const channelNames = channels.filter((ch) => ch.type === CHANNEL_TYPE_TEXT).map((ch) => ch.name);
 
-            // Collect webhook names across all text channels.
             const webhookNames: string[] = [];
             for (const ch of channels.filter((c) => c.type === CHANNEL_TYPE_TEXT)) {
                 const webhooks = await api.getChannelWebhooks(parsed.botToken, ch.id);
                 webhookNames.push(...webhooks.map((wh) => `${ch.name}:${wh.name}`));
             }
 
-            // Resolve the reconcile webhook URL for the outputs.
             const reconcileChannel = channels.find((ch) => ch.name === CHANNEL_RECONCILE && ch.type === CHANNEL_TYPE_TEXT);
             let reconcileWebhookUrl = "";
             if (reconcileChannel !== undefined) {
@@ -91,7 +86,6 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
                 }
             }
 
-            // Resolve per-app webhook URLs for the outputs.
             const appWebhooks: Record<string, string> = {};
             for (const appId of parsed.apps) {
                 const appChannel = channels.find((ch) => ch.name === appId && ch.type === CHANNEL_TYPE_TEXT);
@@ -119,17 +113,14 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
         if (detail === undefined) {
             return { action: "update", reason: "discord detail missing" };
         }
-        // Check for the reconcile channel.
         if (!detail.channelNames.includes(CHANNEL_RECONCILE)) {
             return { action: "update", reason: `missing #${CHANNEL_RECONCILE} channel` };
         }
-        // Check for per-app channels.
         for (const appId of parsed.apps) {
             if (!detail.channelNames.includes(appId)) {
                 return { action: "update", reason: `missing #${appId} channel` };
             }
         }
-        // Check for webhooks on the reconcile channel + each app channel.
         const requiredWebhooks = [CHANNEL_RECONCILE, ...parsed.apps].map((name) => `${name}:${WEBHOOK_NAME}`);
         for (const required of requiredWebhooks) {
             if (!detail.webhookNames.includes(required)) {
@@ -142,8 +133,7 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
         const parsed = parse(inputs);
         const name = guildName(parsed.zone);
 
-        // Find or create the guild. Discord restricts POST /guilds for most bots (error 20001),
-        // so we try to create and fall back to the first guild the bot is already in.
+        // Most bots can't create guilds (Discord error 20001); missing one after this means inviting the bot manually.
         const guilds = await api.listGuilds(parsed.botToken);
         let guild = guilds.find((g) => g.name === name) ?? guilds[0];
         if (guild === undefined) {
@@ -161,14 +151,12 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
         // Fetch current channels (including the defaults Discord creates).
         let channels = await api.getGuildChannels(parsed.botToken, guild.id);
 
-        // Ensure categories.
         const intenticCategory = await ensureChannel(api, parsed.botToken, guild.id, channels, CATEGORY_INTENTIC, CHANNEL_TYPE_CATEGORY);
-        // Refresh channel list after potential creation.
+        // Refreshes the channel list, since ensureChannel above may have just created one.
         channels = await api.getGuildChannels(parsed.botToken, guild.id);
         const appsCategory = await ensureChannel(api, parsed.botToken, guild.id, channels, CATEGORY_APPS, CHANNEL_TYPE_CATEGORY);
         channels = await api.getGuildChannels(parsed.botToken, guild.id);
 
-        // Ensure the #reconcile channel under the "intentic" category.
         const reconcileChannel = await ensureChannel(
             api,
             parsed.botToken,
@@ -180,10 +168,8 @@ export const createDiscordProvider = (api: DiscordApi = discordApi): Provider =>
         );
         channels = await api.getGuildChannels(parsed.botToken, guild.id);
 
-        // Ensure its webhook.
         const reconcileWh = await ensureWebhook(api, parsed.botToken, reconcileChannel.id);
 
-        // Ensure per-app channels under "apps" category + their webhooks.
         const appWebhooks: Record<string, string> = {};
         for (const appId of parsed.apps) {
             const appChannel = await ensureChannel(api, parsed.botToken, guild.id, channels, appId, CHANNEL_TYPE_TEXT, appsCategory.id);

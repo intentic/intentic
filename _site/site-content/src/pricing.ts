@@ -3,15 +3,9 @@ import { hosted, idleWeeks } from "./hosted";
 import { landingContent } from "./landing";
 import { APP_URL } from "./site";
 
-/* /pricing. The product is free; the one paid thing is a hosted sandbox. "Pricing" is the highest-intent click
- * on a developer-tool site, and a visitor who finds no link assumes the price is hidden, so the page says
- * "free" where the question is asked (decision 2026-09-06, landing-blueprint.md). The landing page carries no
- * pricing band. Every figure comes from hosted.ts; none is typed here.
- *
- * THE QUESTION THAT SEPARATES THE COLUMNS IS WHOSE MACHINE THE AGENTS RUN ON, the same question the
- * positioning doc asks first. Money changes whose machine, never what you can do (docs/design/pricing-model.md).
- * The two column notes are parallel for that reason: AI accounts are the reader's own in BOTH, so neither note
- * may put "you pay your AI providers" on one column alone, which reads as the hosted plan covering inference. */
+// /pricing: the product is free, a hosted sandbox is the only paid thing; every figure comes from hosted.ts, none typed
+// here. Columns split on whose machine the agents run on; money changes that, never what you can do. Both column notes
+// say "your AI accounts", since AI plans are the reader's own either way.
 
 export interface PricingColumn {
     eyebrow: string;
@@ -19,7 +13,7 @@ export interface PricingColumn {
     price: string;
     priceNote: string;
     includes: string[];
-    // `primary` is on the FREE column on purpose: the emphasised call is the one that costs nothing.
+    // `primary` is on the Free column: the emphasised call is the one that costs nothing.
     cta: { label: string; href: string; primary?: boolean };
     note: string;
 }

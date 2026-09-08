@@ -8,19 +8,13 @@ import {
     type WorkflowStepState,
 } from "@intentic/sandbox-contract";
 
-/* THE GRAPH, as both the designer and the run view draw it, one derivation, two consumers, so what you author
- * and what you watch can never be different pictures of the same workflow. That is the whole reason this is a
- * module and not two components' worth of computed properties: a designer whose preview lays out differently
- * from the run is worse than no preview at all, because you would trust it.
- *
- * The node payload carries everything a card renders. `run` is absent in the designer, that absence IS the
- * mode, and it is why one component can draw both.
- */
+// Shared graph derivation for both the designer and the run view, so what's authored and what's watched can never be
+// different pictures of the same workflow. `run` is absent on a node in the designer; that absence is what makes it the
+// designer rather than a separate mode flag.
 
 export interface WorkflowNode {
     readonly step: WorkflowStep;
-    // The step's position in the workflow, 1-based. Shown on the node because a graph with no numbers is hard
-    // to talk about ("the third one" needs a third one).
+    // 1-based position in the workflow, shown so a step can be pointed to by number.
     readonly index: number;
     // How this step is going, when there is a run. Absent in the designer.
     readonly run: WorkflowStepRun | undefined;
@@ -34,14 +28,7 @@ export interface StepTone {
     readonly label: string;
 }
 
-/* What each state looks like, and the two decisions in here that matter:
- *
- * `skipped` IS NOT AN ERROR COLOUR. A skipped step did nothing wrong, something upstream did, and painting a
- * cascade of them red makes one failure look like nine. Muted, so the eye lands on the one red node.
- *
- * `stopped` IS NOT AN ERROR COLOUR EITHER. The user did that on purpose, and telling them off for it is how a
- * status vocabulary loses its meaning: if everything that is not `done` is red, red stops saying anything.
- */
+// `skipped` and `stopped` are muted, not red, since neither is a failure.
 export const STEP_TONE: Record<WorkflowStepState, StepTone> = {
     pending: { icon: `clock`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `Waiting` },
     running: { icon: `spinner`, text: `text-link`, bar: `bg-link`, spin: true, label: `Running` },
@@ -51,8 +38,7 @@ export const STEP_TONE: Record<WorkflowStepState, StepTone> = {
     stopped: { icon: `stop`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `Stopped` },
 };
 
-// The designer's own tone: a step that has never run has no state to show, so it reads as neutral rather than
-// as `pending`, "waiting" would be a lie about a workflow that is not going.
+// Neutral, not `pending`: an unrun step in the designer has no state to lie about waiting on.
 const DESIGN_TONE: StepTone = { icon: `sitemap`, text: `text-subtle`, bar: `bg-line`, spin: false, label: `` };
 
 export const toneFor = (node: WorkflowNode): StepTone => (node.run === undefined ? DESIGN_TONE : STEP_TONE[node.run.state]);
@@ -62,14 +48,8 @@ export interface WorkflowDag {
     readonly edges: readonly DagEdge[];
 }
 
-/* Build the graph. `run` is optional: with one, nodes carry live state and the edges into finished work are
- * tinted; without one, this is the designer's preview.
- *
- * A DANGLING `needs` IS DROPPED RATHER THAN DRAWN. The save route refuses those, but the designer renders on
- * every keystroke, including the keystroke halfway through renaming a step id, when half the edges point at a
- * name that does not exist yet. Dropping them keeps the preview stable while you type; the fault list below
- * the canvas is what tells you about it.
- */
+// `run` is optional: without one this is the designer's preview. A dangling `needs` is dropped, not drawn, since the
+// designer renders on every keystroke, including mid-rename.
 export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun): WorkflowDag => {
     const ids = new Set(workflow.steps.map((step) => step.id));
     const runById = new Map((run?.steps ?? []).map((step) => [step.stepId, step]));
@@ -80,19 +60,11 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
             index: index + 1,
             run: runById.get(step.id),
         },
-        /* The node's hover text is the step's own goal, and ABSENT when it has none rather than filled in with
-         * something else. A step that inherits is measured against the run's request, which the run bar above
-         * the graph is already showing, repeating it on every node would put the same sentence under all of
-         * them and say nothing about which node is which. `undefined` leaves the node with no tooltip, which is
-         * the honest answer to "what is this step's own bar" when it has not set one. */
+        // Tooltip is the step's own goal, left absent (not the run's request) so nodes don't all repeat one sentence.
         ...(step.goal === undefined ? {} : { tooltip: step.goal }),
     }));
-    /* A continued handoff draws solid and tinted, a fresh one dashed: the solid line says "this is the same
-     * agent carrying on", the dash says "this is a handover to someone new". It is the one structural fact
-     * about a workflow you cannot read off the node titles.
-     *
-     * Everything downstream of a step that never finished is dimmed, so a live graph reads as "here is what is
-     * still actually happening" rather than as a full map with some colour on it. */
+    // Continued handoff draws solid and tinted, a fresh one dashed; the one structural fact node titles don't show.
+    // Edges downstream of an unfinished step are dimmed.
     const edgeFrom = (step: WorkflowStep, need: string): DagEdge => {
         const continued = step.handoff === `continue` && step.needs.length === 1;
         const stalledUpstream = runById.get(need)?.state === `skipped` || runById.get(need)?.state === `failed`;
@@ -109,24 +81,15 @@ export const workflowDag = (workflow: Pick<Workflow, "steps">, run?: WorkflowRun
     return { nodes, edges };
 };
 
-/* THE GRAPH AS ONE COLUMN PER GENERATION, steps that wait on nothing, then everything they unblock.
- *
- * NOT A SECOND PICTURE. The list card draws the real graph through DagGraph like everything else; what it needs
- * from here is the one measurement dagre's own output cannot give it before layout runs, how WIDE the widest
- * rank is, which in an LR graph is what decides how tall the frame has to be, and whether a design has any
- * parallelism worth mentioning in words ("up to 2 at once").
- *
- * A CYCLE CANNOT HANG IT. Nothing being ready means every remaining step waits on another one, which the save
- * route refuses, but a template is authored by hand, and a page that spins forever over a typo is not a
- * trade worth taking. What is left goes in one last column.
- */
+// Columns by generation (steps waiting on nothing, then what they unblock), for the frame height and parallelism label
+// before dagre lays out. A cycle can't hang it: whatever is left goes in one final column.
 export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][] => {
     const ids = new Set(steps.map((step) => step.id));
     const placed = new Set<string>();
     const layers: WorkflowStep[][] = [];
     let waiting = [...steps];
     while (waiting.length > 0) {
-        // A `needs` naming nothing is dropped rather than waited on, exactly as the graph above drops the edge.
+        // A `needs` naming nothing is dropped, not waited on, matching the graph above.
         const ready = waiting.filter((step) => step.needs.every((need) => !ids.has(need) || placed.has(need)));
         const layer = ready.length > 0 ? ready : waiting;
         layer.forEach((step) => placed.add(step.id));
@@ -136,14 +99,8 @@ export const workflowLayers = (steps: readonly WorkflowStep[]): WorkflowStep[][]
     return layers;
 };
 
-/* One line under a node's title: who runs it, what it produces, and what gates it, in the fewest words that
- * still say which.
- *
- * THE PROVIDER LEADS when a step pins one, and it is the only part of this line that is about the AGENT rather
- * than the work. It has to be on the card because there is one design where the model is the whole point, the
- * same brief built by two of them, side by side, and a graph that draws those two steps identically would be
- * hiding the only thing that differs between them. Absent for the ordinary step, which pins nothing.
- */
+// One line: who runs it (only if pinned), what it produces, what gates it. The provider matters most when two steps
+// race on different models.
 export const stepSubtitle = (step: WorkflowStep): string => {
     const output =
         step.output.kind === `json`

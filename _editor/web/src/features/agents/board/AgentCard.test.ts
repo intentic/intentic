@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is what the card actually PUTS ON SCREEN: a press is only what the user sees come
-// back, and a stat is only what renders. Landing an agent's work is a round trip to a daemon that has to
-// commit, diff and patch-apply before the card can change lane, and for that whole span the only honest report
-// is on the control that was pressed. Three properties are pinned here, and none can be read off the code: the
-// Land button states its own progress; it states it for ITS action only: the card is equally busy while an
-// archive is out, and a Land button spinning through one would be reporting work nobody asked for; and the
-// stat row shows a fact the moment the agent has it, rather than waiting on numbers a turn only produces when
-// it ends.
+// jsdom: the subject is what the card renders (a press, a stat), not something readable off the code.
+// Pins that the Land button reports progress only for its own action (not archiving), and that the stat row shows a
+// fact as soon as the agent has it, not only when a turn ends.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
@@ -15,13 +9,11 @@ import type { PendingAction } from "./laneDrop";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { IconStub } from "@intentic/ui/testing";
 
-// The card's import chain pulls in app-wide singletons that read browser globals at import time, stood up
-// for the package by vitest.setup.ts, whose matches:false keeps the device DESKTOP, the form factor that
-// renders the drill-in affordance beside the button.
+// Import chain reads browser globals at import time; setup keeps the device desktop for the drill-in affordance.
 
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../../../router");
-// The window's connected accounts, module state the card reads to turn the id a session recorded into a name.
+// Connected accounts module state; the card reads it to turn a session's account id into a name.
 const { providerAccounts } = await import("../../chat/accounts/providerAccounts");
 const NO_ACCOUNTS = providerAccounts.value;
 
@@ -33,8 +25,7 @@ const NO_ATTENTION: AgentSummary[`attention`] = {
     credential: false, conflict: false,
 };
 
-// An agent holding finished work on its branch: auto-land off, nothing refused, the one state the card offers
-// "Land now" for.
+// Agent holding finished work on its branch, auto-land off; the one status the card offers "Land now" for.
 const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     id: `a1`,
     status,
@@ -49,8 +40,8 @@ const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     unsent: false,
 });
 
-/* AN AGENT ON ITS FIRST TURN, delegating. Nothing is counted yet: no cost, no tokens, no completed turns, no
- * diff, because a turn produces all four when it ENDS, and this one is still running eight children. */
+// Agent on its first turn, delegating: no cost/tokens/turns/diff yet, since those exist only once a turn ends; still
+// running eight children.
 const delegating = (): FleetAgent => ({
     id: `a2`,
     status: `running`,
@@ -68,8 +59,8 @@ const delegating = (): FleetAgent => ({
 });
 
 let app: App | undefined;
-// Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin. Icon
-// prints the glyph it was handed, because WHICH glyph is what says "in flight" on the button.
+// Icon and v-tooltip are registered app-wide by installUi; stand-ins here avoid pulling in the whole UI plugin.
+// IconStub prints the glyph it's given, since which glyph is what shows a button is in flight.
 const mount = (
     agent: FleetAgent,
     pending?: PendingAction,
@@ -100,8 +91,8 @@ afterEach(() => {
     providerAccounts.value = NO_ACCOUNTS;
 });
 
-/* A CONVERSATION THE FLEET NEVER REGISTERED, because the daemon refused its send. No branch, no diff, no entry
- * to address, which is what made this card the one the board could do nothing at all with. */
+// A conversation the daemon refused to register: no branch, no diff, no entry to address.
+// The one card the board can do nothing with by id.
 const refused = (): FleetAgent => ({
     id: `a3`,
     status: `failed`,
@@ -131,35 +122,29 @@ it(`answers the press on the button that was pressed, glyph and words`, () => {
     expect(button.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
 });
 
-// The card dims for every action the board runs against it, archiving included, and the whole reason
-// `pending` carries the action rather than a flag is that a Land button spinning through an archive would be
-// reporting a land nobody asked for.
+// The card dims for any pending action (archiving included); `pending` carries which action, not just a flag.
+// Otherwise a Land button would spin through an archive, reporting a land nobody asked for.
 it(`leaves the land button alone while some other action holds the card`, () => {
     expect(landButton(mount(ready(), `archive`))?.textContent?.trim()).toBe(`Land now`);
 });
 
-// The end of the press, and the point of the whole exercise: the standing the daemon re-derives after a land
-// takes the button off the card. Nothing about it is a local edit: the card simply has no land left to offer.
+// Once the daemon re-derives status after a land, the button is simply gone, not locally hidden.
 it(`drops the button once the work is in the workspace`, () => {
     expect(landButton(mount(ready(`landed`)))).toBeUndefined();
 });
 
-/* THE STAT ROW CARRIES WHAT THE AGENT HAS NOW. Its chips were gated on tokens/cost/diff/turns, and all four
- * only exist once a turn has ended, so an agent whose FIRST turn delegated ran eight children with the board
- * saying nothing, which is the exact case the count was added for. The row is the only surface that outlives
- * the turn (the live line below it goes with the spinner), so this is not a duplicate of that line. */
-// A LINK rather than a button, because the count names a list with an address: the Subagents area narrowed to
-// this agent's children. That is what lets it be hovered, copied and Ctrl/⌘-clicked into its own tab.
+// Stat chips (tokens, cost, diff, turns) only exist once a turn ends; an agent whose first turn delegates shows none,
+// though it's running eight children.
+// The row is the only surface that outlives the turn once the live line with the spinner goes.
+// A link, not a button, since the count names an addressable list (Subagents narrowed to this agent's children) you can
+// hover, copy, or Ctrl/Cmd-click into its own tab.
 it(`counts the agents it started while its first turn is still running`, () => {
     const chip = [...mount(delegating()).querySelectorAll(`a`)].find((link) => link.textContent?.trim() === `8 / 8`);
     expect(chip).toEqual(expect.any(Object));
 });
 
-/* THE CARD THE BOARD COULD DO NOTHING WITH. A refused send leaves a conversation the daemon never registered,
- * and every exit on this board goes through the daemon by id: archive, discard, land and each drop are refused
- * for it, correctly and unanimously. What that left was a card offering a rename and nothing else: permanent,
- * because the tab behind it is restored on every reload. So the exit it DOES have, closing that tab, is offered
- * on the card itself instead of only on the chat rail, which the board never points at. */
+// A refused send has no daemon entry, so every id-based exit (archive, discard, land) is unavailable, correctly.
+// Closing the tab is the only exit possible, so it's offered on the card itself, not only on the chat rail.
 it(`offers a close on a card the daemon has no entry for: the only way it can leave the board`, () => {
     expect(buttonLabelled(mount(refused()), `Close agent`)).not.toBeUndefined();
 });
@@ -170,9 +155,9 @@ it(`asks the board to close it on the press`, () => {
     expect(closed).toHaveBeenCalledTimes(1);
 });
 
-// The two never appear together, which is what lets them share one slot: an agent the daemon knows is ARCHIVED
-// (its branch, diff and transcript all kept), and one it has never heard of is CLOSED, because there is nothing
-// to keep. Offering the wrong one is worse than offering neither: an archive here posts an id that 404s.
+// Archive and Close never appear together and share one slot: registered work gets Archive (kept), an unregistered
+// conversation gets Close (nothing to keep).
+// Offering the wrong one is worse than neither: an archive here would post an id that 404s.
 it(`withholds the archive from a card with no entry to archive`, () => {
     expect(buttonLabelled(mount(refused()), `Archive agent`)).toBeUndefined();
 });
@@ -183,26 +168,17 @@ it(`withholds the close from a registered agent, which archives instead`, () => 
     expect(buttonLabelled(landed, `Archive agent`)).not.toBeUndefined();
 });
 
-/* THE CARD OF A TURN THAT IS COMING BACK. A rotated credential 401s every turn holding it at once, and the
- * daemon re-mints and re-runs them within a scheduler pass, so what the card has to draw for those seconds is
- * work still in progress. It read `idle` instead, which is the Finished lane: the board filed the agent away
- * and then took it back out, in front of a user who had done nothing and was owed nothing.
- *
- * Asserted on the RENDERED card rather than on laneOf alone, because the two halves have to agree: a lane that
- * says "still working" under a resting glyph is the same contradiction one surface further in. The archive goes
- * with it: the worktree belongs to a turn that is about to run in it again, which is what turnInFlight means. */
+// A `resuming` agent (its turn restarting after e.g. a credential rotation) must render as work in flight, not as
+// idle/finished.
+// Archive is withheld too: the worktree belongs to a turn about to run in it again.
 it(`draws an agent whose turn is being resumed as work still in flight`, () => {
     const card = mount(ready(`resuming`));
     expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
     expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
 });
 
-/* THE CARD OF A TURN THAT HAS GONE AND HAS NOT BEEN FILED YET.
- *
- * It was drawn from the four identity fields alone, so the board showed a title under a spinner and nothing
- * else: no model, no elapsed, and the click that was supposed to open it took it off the board instead. What
- * is pinned here is the half the user reads: the card says it is starting, its elapsed runs from the send, and
- * the exit stays on it. */
+// A sent turn the daemon hasn't filed yet: drawn from identity fields alone, showing just a title under a spinner.
+// Pinned here: it shows starting, elapsed runs from send, and the close exit stays available.
 const starting = (): FleetAgent => ({
     id: `a4`,
     status: `starting`,
@@ -237,40 +213,30 @@ it(`ticks its own elapsed readout without a clock prop from the transition group
     expect(card.textContent).toContain(`1s`);
 });
 
-/* The exit, on the state that most needs one. Its turn is genuinely running daemon-side, so the daemon has no
- * entry to archive and no id these buttons could address, and a card with neither affordance is the trap this
- * pair of rules exists to prevent. */
+// A `starting` turn has no daemon entry yet, so archive is unavailable; close must stay, or the card would offer no
+// exit at all.
 it(`keeps a close on it and withholds the archive it has no entry for`, () => {
     const card = mount(starting());
     expect(buttonLabelled(card, `Close agent`)).not.toBeUndefined();
     expect(buttonLabelled(card, `Archive agent`)).toBeUndefined();
 });
 
-/* WHY IT DIED, ON THE CARD. An unattended session refused on its first request: an organization with Claude
- * Code switched off, a spent plan, a model an endpoint has never heard of: used to reach the board as the word
- * "Error" and a link into a transcript whose entire content was the sentence the card should have carried. The
- * fan-out that provoked this ran ten sessions at once and lost every one of them the same way, so the reader's
- * only route to the reason was ten separate conversations. */
+// A session refused on its first request (access disabled, spent plan, unknown model) shows its failure reason directly
+// on the card, not just an opaque "Error".
 it(`says why a session died, on the card that reports it died`, () => {
     const failure = `Your organization has disabled Claude subscription access for Claude Code`;
     const card = mount({ ...ready(`error`), failure });
     expect(card.textContent).toContain(failure.slice(0, 40));
 });
 
-// The daemon carries `failure` only while the card still reads as failed, so presence IS the state and the card
-// needs no second check, but a healthy card must not grow an empty red line out of the same markup.
+// `failure` is present only while the card reads as failed; a healthy card must not render an empty line from the same
+// markup.
 it(`keeps the line off a card with nothing to explain`, () => {
     expect(mount(ready()).querySelector(`[data-icon="exclamation-circle"]`)).toBeNull();
 });
 
-/* THE DISCARD CASE: landed work the user has since taken back out of the workspace.
- *
- * It is the one state on this board the card could not previously report, and the reason is structural: every
- * other reading here is taken between commits, and discarding uncommitted changes moves no commit. So the card
- * went on wearing `Landed` over a tree holding none of it. Four properties are pinned: the card SAYS so; it
- * offers the way back; the offer is not the primary press (a discard is very often a rejection, and a bright
- * green button would be arguing with it); and where a plain land would also apply, this one replaces it:
- * "Land now" carries the remainder and would leave the missing half exactly as missing. */
+// Landed work later discarded from the workspace: the card must say so, offer a way back (not as the primary/green
+// press), and this replaces "Land now" rather than sitting beside it where both would apply.
 const discarded = (present: number, landed: number, status: FleetAgent[`status`] = `landed`): FleetAgent => ({
     ...ready(status),
     landedPresence: { landed, present },
@@ -285,13 +251,12 @@ it(`says so when the whole of a land has left the workspace`, () => {
     expect(card.textContent).toContain(`on branch`);
 });
 
-// The fraction, not the remainder: what the user is deciding is whether enough survived to leave it be.
+// Shows the fraction that survived, not the remainder: the question is whether enough survived to leave it.
 it(`counts what survived when only part of a land was discarded`, () => {
     expect(mount(discarded(9, 12)).textContent).toContain(`9/12`);
 });
 
-/* The half that stops "removed" reading as work destroyed. The branch genuinely still holds all of it, and
- * that fact is what makes the discard safe to have made. */
+// Pairs with 'Removed' so it doesn't read as destroyed: the branch still holds all of it.
 it(`says the work is not lost, in the same breath`, () => {
     expect(mount(discarded(0, 4)).textContent ?? ``).toContain(`on branch`);
 });
@@ -315,37 +280,26 @@ it(`asks the board to re-land on the press`, () => {
     expect(relanded).toHaveBeenCalledTimes(1);
 });
 
-/* THE TWO NEVER SHARE A CARD. An agent whose first land was discarded and which has since written more is
- * `ready` AND missing work, and the two presses are not interchangeable: "Land now" applies the outstanding
- * remainder and leaves the discarded half untouched: a land that reports success and fixes nothing, which is
- * the hardest kind of wrong to notice. "Land again" measures from the branch's base and covers both. */
+// Land now and Land again never share a card: Land now applies only the new remainder and leaves the discarded half
+// untouched.
+// Land again measures from the branch's base and covers both, so it replaces Land now rather than sitting beside it.
 it(`replaces the plain land rather than sitting beside it`, () => {
     const card = mount(discarded(0, 4, `ready`));
     expect(relandButton(card)?.textContent?.trim()).toBe(`Land again`);
     expect(landButton(card)).toBeUndefined();
 });
 
-// Nothing missing is the steady state and says NOTHING: a card that announced the ordinary landed agent would
-// be spending a line on nearly every card on the board.
+// The steady state (nothing missing) says nothing; announcing it would cost a line on nearly every card.
 it(`stays quiet when the landed work is where it was left`, () => {
     const card = mount(ready(`landed`));
     expect(relandButton(card)).toBeUndefined();
     expect(card.textContent).not.toContain(`your workspace`);
 });
 
-/* THE WAY OFF AN ARMED WATCH, ON THE CARD THAT ANNOUNCES ONE.
- *
- * A watch is an arrangement the AGENT entered into on the user's behalf: the conversation reads as finished,
- * keeps a hosted machine awake, and starts working again by itself hours later. The card said all of that in
- * its corner and offered nothing to press: the exits were a right-click menu and a drag onto Finished, two
- * gestures you have to know about before you can find them, and the tooltip explaining the mechanism named
- * neither. `agents.stopWatching` was there the whole time; what was missing was a press beside the fact.
- *
- * Four properties are pinned. The press exists where the readout is; it asks the board rather than acting
- * locally (the store's optimistic write is what moves the card out of Active, and only the board holds it); it
- * goes with the readout when a turn takes the corner back, since a working agent is not waiting for anything;
- * and it survives into the archive, alone among this card's presses, because an armed watch is precisely what
- * drags a filed-away agent back onto the board. */
+// A watch keeps a hosted machine awake and lets the agent resume by itself later; the stop press sits beside the
+// readout that announces it.
+// It asks the board rather than acting locally, disappears once a turn resumes, and survives into the archive since a
+// watch can pull a filed-away agent back.
 const watching = (over: Partial<FleetAgent> = {}): FleetAgent => ({
     ...ready(`idle`),
     watches: [{ id: `watch-1`, note: `pnpm verify gate in /work/intentic`, intervalSeconds: 30, deadlineAt: 2 + 13 * 60 * 1000 }],
@@ -366,42 +320,37 @@ it(`asks the board to disarm on the press`, () => {
     expect(unwatched).toHaveBeenCalledTimes(1);
 });
 
-// Nearly every card on this board is waiting for nothing, and a Stop on one of those would be an offer to end
-// something that isn't happening.
+// Most cards aren't watching anything; a Stop button there would offer to end something not happening.
 it(`shows no such press on a card that is waiting for nothing`, () => {
     expect(stopWatchButton(mount(ready(`idle`)))).toBeUndefined();
 });
 
-/* The readout yields the corner to a running turn (see AgentCard.watch), and the press goes with it rather
- * than being left behind pointing at a line that is no longer on the card. */
+// The watch readout yields its corner to a running turn; the stop press goes with it rather than pointing at a line no
+// longer on the card.
 it(`withdraws it while a turn is in flight, with the readout it belongs to`, () => {
     const card = mount(watching({ status: `running`, startedAt: 1 }));
     expect(card.textContent).not.toContain(`pnpm verify gate`);
     expect(stopWatchButton(card)).toBeUndefined();
 });
 
-// The exception to this card's rule about the archive. Every other press is withheld there so that filing
-// something away is not undone by housekeeping; this is the press that KEEPS it filed away.
+// The one exception to withholding presses on an archived card: every other press could undo the filing, but Stop keeps
+// it filed.
 it(`keeps it on an archived card, the one press that stops one waking back onto the board`, () => {
     expect(stopWatchButton(mount(watching({ archivedAt: 5 })))).toEqual(expect.any(Object));
 });
 
-/* WHERE THE WORK IS HAPPENING, on the card, and only when that is somewhere other than here. A fleet places
- * its own fan-out across machines without anybody choosing per agent (runners/runner-scheduler.ts), so the
- * board is where "this one is on the desktop" stops being invisible — and where its absence keeps every card
- * on an ordinary sandbox exactly as it was. */
+// Names the machine an agent runs on, since the fleet places fan-out across machines without a per-agent choice
+// (runners/runner-scheduler.ts).
+// Silent when it runs here, so every ordinary card is unchanged.
 it(`names the machine an agent runs on, and says nothing when it runs here`, () => {
     expect(mount({ ...ready(), runner: `rig` }).textContent ?? ``).toContain(`rig`);
     expect(mount(ready()).textContent ?? ``).not.toContain(`rig`);
 });
 
-/* WHICH LOGIN THE TURNS ARE CHARGED TO, beside the session name on the card's revealed line. A sandbox holding
- * a personal plan and a work one spends a real choice per session, made once in the composer and readable
- * nowhere afterwards, and the board is the surface that reads forty sessions at once.
- *
- * The id the summary carries is a UUID, so the name comes from the window's own account list: an id it cannot
- * resolve (a login disconnected since the turn ran, a provider whose pooled subscription nobody picks from)
- * draws nothing, because a UUID on a card names less than silence does. */
+// Names which login a session's turns are charged to, since the choice (personal vs work plan) is made once in the
+// composer and otherwise unreadable afterward.
+// The summary carries only a UUID; an id the account list can't resolve (a disconnected login) draws nothing, since a
+// bare UUID names less than silence.
 it(`names the login a session's turns run on, and stays silent about one it cannot name`, () => {
     providerAccounts.value = { ...NO_ACCOUNTS, claude: [{ id: `acct-1`, label: `acme-work@acme.com`, connectedAt: 1 }] };
     expect(mount({ ...ready(), account: `acct-1` }).textContent ?? ``).toContain(`acme-work`);

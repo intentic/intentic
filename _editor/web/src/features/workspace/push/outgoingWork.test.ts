@@ -2,11 +2,10 @@ import type { RepoChanges } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { ahead, behind, outgoingMark, outgoingSummary, outgoingWork, syncable, unpublished } from "./outgoingWork";
 
-/* The remote-state reads the rail tile, the workspace banner and the review panel all share. What is being
- * pinned here is the RULE, not the arithmetic: a clean tree is not the same thing as a tree with nothing to do,
- * and the surfaces that say so must say it in one voice. */
+// Pins the rule the rail tile, workspace banner, and review panel all share: a clean tree isn't the same as
+// nothing to do.
 
-// A repo with no changes and no remote: override only the remote facts a case is about.
+// A repo with no changes and no remote; override only the remote facts a case is about.
 const repo = (remote?: RepoChanges["remote"]): RepoChanges => ({
     repo: `intentic`,
     conflicted: [],
@@ -17,8 +16,7 @@ const repo = (remote?: RepoChanges["remote"]): RepoChanges => ({
 
 describe(`a repo's standing against its remote`, () => {
     it(`reads a repo with no remote configured as unsyncable rather than as zero`, () => {
-        // The distinction the panel hangs its controls off: nothing to sync WITH is not the same as in sync,
-        // and a purely local repo must get no dead push button.
+        // Nothing to sync with isn't the same as in sync; a purely local repo must get no dead push button.
         expect(syncable(repo())).toBe(false);
         expect(unpublished(repo())).toBe(false);
     });
@@ -32,8 +30,8 @@ describe(`a repo's standing against its remote`, () => {
     });
 
     it(`treats a branch that tracks nothing as unpublished, not as zero commits ahead`, () => {
-        // git reports no ahead count for a branch with no upstream, so "0" here is an absence of an answer.
-        // Publishing is its own state precisely because the amount is unsayable.
+        // git reports no ahead count without an upstream: 0 here is an absence, not a fact; publishing is its own
+        // state.
         const fresh = repo({ remote: `origin`, ahead: 0, behind: 0 });
         expect(unpublished(fresh)).toBe(true);
         expect(ahead(fresh)).toBe(0);
@@ -46,8 +44,8 @@ describe(`what a clean tree still owes`, () => {
     });
 
     it(`says nothing about a repo that is only BEHIND`, () => {
-        // The rule this module exists for. `behind` is true only as of the last fetch, so it is wrong in both
-        // directions: it would announce work already taken and stay silent about work that just arrived.
+        // The core rule: `behind` is only as fresh as the last fetch, so acting on it would announce work already
+        // taken and miss work that just arrived.
         expect(outgoingWork([repo({ remote: `origin`, upstream: `origin/main`, ahead: 0, behind: 7 })])).toBeUndefined();
     });
 
@@ -64,8 +62,7 @@ describe(`what a clean tree still owes`, () => {
     });
 
     it(`ignores a repo git could not scan`, () => {
-        // Its remote state is as unknown as everything else about it, and the panel reports the scan failure
-        // itself: badging the rail off a number we do not have would be inventing one.
+        // Remote state is as unknown as everything else here; the panel reports the scan failure, not a guessed number.
         const torn: RepoChanges = { ...repo({ remote: `origin`, upstream: `origin/main`, ahead: 4, behind: 0 }), error: `not a git repository` };
         expect(outgoingWork([torn])).toBeUndefined();
     });
@@ -90,8 +87,7 @@ describe(`what the surfaces say about outgoing work`, () => {
     });
 
     it(`describes a mixed publish-and-ahead set by its commits alone`, () => {
-        // The per-repo fan-out publishes untracked branches on the way through, so the user has one click:
-        // spelling out both would describe two actions.
+        // The per-repo fan-out publishes untracked branches on the way through, so one click covers both actions.
         const mixed = { commits: 2, repos: 2, publish: true };
         expect(outgoingSummary(mixed)).toContain(String(mixed.commits));
         expect(outgoingSummary(mixed)).toBe(outgoingSummary({ commits: 2, repos: 2, publish: false }));
@@ -104,7 +100,7 @@ describe(`what the surfaces say about outgoing work`, () => {
 
     it(`wears the cloud only when publishing is all there is to do`, () => {
         expect(outgoingMark({ commits: 0, repos: 1, publish: true })).toBe(`cloud-upload`);
-        // Both unpublished AND ahead: the same push sends it, so it wears the same arrow as any other.
+        // Both unpublished and ahead; the same push sends it, so it wears the same arrow as any other.
         expect(outgoingMark({ commits: 2, repos: 1, publish: true })).toBe(`arrow-up-right`);
         expect(outgoingMark({ commits: 2, repos: 1, publish: false })).toBe(`arrow-up-right`);
     });

@@ -7,21 +7,9 @@ import type { Services } from "../../composition.js";
 import { pendingQuestionOf, supervisorFor } from "./children.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 
-/* The `agents` CLI's routes (bin/agents), the SHELL door onto the child-agent service — what makes the whole
- * supervision surface (spawn, wait, send, answer, list) work from every runtime that has a shell and no tool
- * seam: a native Codex, OpenCode, Kimi, Pi or ACP turn runs `agents spawn` exactly where it would run any
- * other command, and lands on the same engine the Claude loop's tools and Cursor's custom tools call
- * in-process. Scoped to the agent token in auth/grants.ts like `services` and `capabilities`.
- *
- * THE GATE IS THE ARMING, not the token. The agent token names the sandbox, not a persona, so the route
- * cannot re-derive "may this conversation supervise" from the request; planTurn already decided it, once,
- * where the persona was in hand, and recorded the decision as the ready-to-use supervisor itself
- * (children.ts armSupervisor). A conversation no qualifying turn ever planned gets a refusal that says so,
- * not a fallback.
- *
- * WHOSE conversation: the `x-intentic-conversation` header (the CLI sends INTENTIC_TURN_OWNER, the same stamp
- * the services CLI rides), falling back to the sole live turn — the services gate's own rule, for a shell
- * whose environment predates the stamp. */
+// The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
+// Scoped to the agent token; the real gate is the arming planTurn already recorded (children.ts armSupervisor), not the
+// token. Conversation comes from `x-intentic-conversation`, else the sole live turn.
 
 const conversationOf = (c: Context<AppEnv>): string | undefined => {
     const named = c.req.header("x-intentic-conversation");
@@ -31,18 +19,16 @@ const conversationOf = (c: Context<AppEnv>): string | undefined => {
 const SpawnBodySchema = z.object({
     prompt: z.string().min(1),
     description: z.string().max(200).optional(),
-    // Both required, and the refusal below names what is spendable rather than merely saying "required": see
-    // ChildSpawnSpec for why a child may not be pointed nowhere, and spawn-catalog.ts for the answer.
+    // Both required: a child may not be pointed nowhere.
     provider: z.string().min(1),
     model: z.string().min(1),
     harness: z.enum(["native", "claude-code"]).optional(),
     effort: z.string().min(1).optional(),
-    // Which machine runs it: a runner's name, or "here" for this sandbox. Absent ⇒ the fleet scheduler picks.
+    // Which machine runs it: a runner's name, or "here" for this sandbox; absent lets the fleet scheduler pick.
     on: z.string().min(1).optional(),
 });
 
-// One wait's ceiling and default, the tool's numbers (agent/subagent-wait.ts): long enough for a real child,
-// short enough that a forgotten wait returns; a caller that wants longer calls again.
+// Wait's default and ceiling: long enough for a real child, short enough that a forgotten wait still returns.
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 1800;
 
@@ -82,10 +68,7 @@ export const createChildrenRoutes = (services: Services) => ({
         }
         const parsed = SpawnBodySchema.safeParse(await c.req.json().catch(() => undefined));
         if (!parsed.success) {
-            /* The refusal carries the CATALOGUE, not just the rule. A model that has just been told "provider
-             * and model are required" still does not know which ones this sandbox can reach or which still have
-             * allowance left, so a bare validation error costs it another round trip to find out — or, worse,
-             * invites a guess. This is the same listing `agents providers` prints (spawn-catalog.ts). */
+            // The refusal includes the live catalogue, so a model isn't left guessing what's actually connected.
             const catalog = spawnCatalogText(await spawnableProviders(services));
             return c.json(
                 {
@@ -131,8 +114,7 @@ export const createChildrenRoutes = (services: Services) => ({
             timeoutMs: Math.round((parsed.data.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000),
             signal: c.req.raw.signal,
         });
-        // A blocked child's whole question rides along, options included: the difference between a caller
-        // that can answer and one that can only report.
+        // A blocked child's whole question rides along, options included, so the caller can actually answer it.
         const question = result.outcome === "blocked" && result.matched !== undefined ? pendingQuestionOf(result.matched.id) : undefined;
         return c.json({
             outcome: result.outcome,
@@ -157,7 +139,7 @@ export const createChildrenRoutes = (services: Services) => ({
         const result = await supervisor.send(parsed.data.child, parsed.data.message);
         return c.json(result, result.ok ? 200 : 409);
     },
-    /** POST /children/answer — settle a child's QUESTION; consent cards refuse, they are the owner's. */
+    /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */
     answer: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(c);
         if (conversationId === undefined) {
@@ -172,10 +154,7 @@ export const createChildrenRoutes = (services: Services) => ({
             return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…", "answers": {"<question>": ["<pick>"]}} or {"child": "sub-…", "text": "…"}.' }, 400);
         }
         const { child, text } = parsed.data;
-        /* A bare text answer is mapped onto the pending question's own key, so a shell one-liner can answer
-         * the common one-question card without quoting the question back. A multi-question card wants the
-         * keyed form; the text lands on the FIRST question and the rest read as unanswered, which the child's
-         * runtime words as such. */
+        // A bare `text` answer maps onto the question's own key; on a multi-question card the rest are unanswered.
         const answers =
             parsed.data.answers ??
             ((): Record<string, string[]> => {

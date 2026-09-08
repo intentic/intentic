@@ -1,28 +1,12 @@
-/* WHAT A *SKILLED* AGENT PAYS — the number that stops this harness rewarding the wrong refactor.
- *
- * `bench.mjs` charges the naive cost: open the defining file, read it. Split a god file and that number falls
- * through the floor. But a good agent does not read whole files. It greps for the definition, reads a small
- * window around the hit, and pages forward only while the definition is still going. Against THAT policy, file
- * size barely matters — grep already dodged it — and what moves the cost is the definition getting shorter and
- * the surrounding code getting denser.
- *
- * Those two numbers pull in opposite directions and a refactor can improve one while hurting the other. In the
- * campaign this reproduces, the naive mean halved while the median skilled lookup got about 20% WORSE, because
- * stripping comments made every line denser and a fixed window costs more per line. Both were true. Reporting
- * only the first would have been a lie told with real data, which is the most durable kind.
- *
- * So this exists to be the check on the headline. If `bench` improves 60% and this improves 2%, the refactor
- * moved files around; if this improves too, the code actually got simpler.
- *
- * THE SAMPLE IS SEEDED AND RECORDED so a before/after pair can be intersected on symbol name and compared like
- * for like, rather than comparing two different random draws and calling the difference progress. */
+// Simulates a skilled agent's read cost, grep then a window then paging forward only while the definition continues, as
+// a check on bench.mjs's naive whole-file cost. The sample is seeded and recorded so a before/after pair intersects on
+// symbol name, not two different random draws.
 import { mean, percentile } from "./lib/files.mjs";
 
 const GREP_WINDOW = 60;
 const PAGE_WINDOW = 2000;
 
-// mulberry32: a tiny seeded PRNG. Determinism is the requirement — two runs of this harness on the same tree
-// must draw the same sample, or the "paired" comparison is not paired.
+// mulberry32 seeded PRNG; must be deterministic so two runs on the same tree draw the same sample.
 const rng = (seed) => () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -31,8 +15,7 @@ const rng = (seed) => () => {
 };
 
 export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7 } = {}) => {
-    // Every exported top-level symbol in the tree, in a stable order, so the draw depends on the seed and not
-    // on filesystem ordering.
+    // Every exported top-level symbol, sorted for a stable order; the draw must depend on the seed, not file order.
     const candidates = [];
     for (const path of tree.source) {
         const file = tree.files.get(path);
@@ -67,8 +50,7 @@ export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7 } = {}
         const lines = file.text.split("\n");
         const defLines = declaration.endLine - declaration.startLine + 1;
 
-        // Call 1: grep. Charged as the matching lines it returns — cheap, but not free, and a symbol whose
-        // name appears everywhere costs more here, which is a real property of a bad name.
+        // Call 1: grep, charged by matching line count; a name that appears everywhere costs more here.
         const hits = lines.filter((line) => line.includes(declaration.name)).length;
         let tokens = countTokens(`${path}:${declaration.startLine}:`.repeat(Math.min(hits, 40)));
         let calls = 1;
@@ -78,8 +60,7 @@ export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7 } = {}
         tokens += countTokens(lines.slice(windowStart, windowStart + GREP_WINDOW).join("\n"));
         calls += 1;
 
-        // Calls 3+: page forward, but only while the definition is genuinely still running. This is the term
-        // that a god FUNCTION punishes and a god FILE does not.
+        // Pages forward only while the definition is still running: a god function costs here, a god file does not.
         let covered = windowStart + GREP_WINDOW;
         while (covered < declaration.endLine) {
             tokens += countTokens(lines.slice(covered, covered + PAGE_WINDOW).join("\n"));
@@ -109,7 +90,7 @@ export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7 } = {}
         needingExtraWindow: results.filter((result) => result.calls > 2).length,
         definitionLines: stat((result) => result.defLines),
         hostFileLines: stat((result) => result.fileLines),
-        // Kept so `compare` can intersect on names and produce a genuinely paired delta.
+        // Kept so `compare` can intersect on names for a paired delta.
         perSymbol,
     };
 };

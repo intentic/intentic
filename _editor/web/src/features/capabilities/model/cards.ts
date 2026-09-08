@@ -4,17 +4,12 @@ import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 
-/* WHAT A CARD IS, AND WHICH OF YOUR CONNECTIONS CAME FROM IT.
- *
- * The capabilities page is two questions wearing one grid, "what could I add" and "what have I got", and both
- * are answered by joining a catalog entry to the live instances that match it. That join is the part with rules
- * in it: which field tells two cards of one kind apart, what a free name for the next connection is, which glyph
- * stands in when a brand has no logo. Kept here as plain functions over their inputs so each one can be read,
- * and pinned, without a page around it. */
+// A card's facts and which live connections came from it: the catalog and connected-inventory questions both join a
+// catalog entry to matching instances. That join's rules (which field distinguishes two cards of one kind, a free
+// name for the next connection, the fallback glyph) live here as plain functions.
 
-// A category's glyph. It is not in CAPABILITY_CATEGORIES because a category is a fact about the catalog and this
-// is a fact about the rail that slices it, the same list is rendered as plain headings elsewhere. A
-// contribution declaring an unknown category lands under `extend` (contributionCard), so the record stays total.
+// Rail glyph per category, kept separate from CAPABILITY_CATEGORIES since it's a fact about the rail, not the
+// catalog. An unknown category lands under `extend` (contributionCard), keeping the record total.
 export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
     platform: `sitemap`,
     code: `code`,
@@ -28,9 +23,8 @@ export const CATEGORY_ICONS: Readonly<Record<CapabilityCategory, IconName>> = {
     extend: `th-large`,
 };
 
-// The glyph tier <BrandMark> falls to when a card has no simple-icons logo (or the slug fails to load). A card
-// is never left to the initials tier, its KIND is always known, and "some connector" drawn as a bolt beats it
-// drawn as two letters. A kind with no entry here takes the bolt.
+// Fallback glyph tier when a card has no logo (or it fails to load): a kind's own icon, never bare initials, since
+// the kind is always known. No entry here falls to the bolt.
 const KIND_ICONS: Readonly<Record<string, IconName>> = {
     devops: `server`,
     monorepo: `sitemap`,
@@ -44,10 +38,9 @@ const KIND_ICONS: Readonly<Record<string, IconName>> = {
 
 export const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? KIND_ICONS[entry.kind] ?? `bolt`;
 
-/* THE CARDS THE ENABLED EXTENSIONS CONTRIBUTE, first declaration of a kind+id winning, the daemon
- * contributionRegistry's precedent. Enabled, not installed: a switched-off extension stays listed so its switch
- * is reachable, but the daemon wires none of its contributions up, so a card from one would fail the add it
- * advertises. */
+// Cards the enabled extensions contribute, first declaration of a kind+id winning (contributionRegistry's
+// precedent). Enabled, not installed: a switched-off extension still lists so its switch is reachable, but its
+// contributions aren't wired up.
 export const contributedCards = (extensions: readonly ExtensionSummary[]): CapabilityCatalogEntry[] => {
     const seen = new Set<string>();
     const cards: CapabilityCatalogEntry[] = [];
@@ -64,11 +57,9 @@ export const contributedCards = (extensions: readonly ExtensionSummary[]): Capab
     return cards;
 };
 
-/* The browser cards' core `identity` field, narrowed to what this sandbox can actually answer: a picker over the
- * identities that exist, or nothing at all when none do. The catalog declares the field without options because
- * the manifest cannot know instance state; a free-text id here would only mint dangling references the daemon
- * then rejects. "Standalone" is the empty value, buildConfig drops empty answers, so the config carries no
- * `identity` key rather than an empty one. */
+// Browser cards' `identity` field narrowed to identities that actually exist (a picker, or no field at all), since
+// the manifest can't know instance state and a free-text id would only mint dangling references. `Standalone` is
+// the empty value; buildConfig then drops it rather than storing an empty key.
 export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: readonly string[]): CapabilityCatalogEntry => {
     if (entry.kind !== `browser`) {
         return entry;
@@ -80,18 +71,13 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 
-// The live connections a card is answerable for, the card↔instance join, shared with the daemon's capability
-// ask gate (it lives in the catalog package so the two sides cannot drift on the discriminator rules).
+// Card↔instance join, shared with the daemon's capability ask gate so the two sides can't drift on discriminator
+// rules.
 export { instancesOf } from "@intentic/capability-catalog";
 
-/* WHICH CARD A LIVE CONNECTION CAME FROM, instancesOf run backwards, and the reason one account is named and
- * drawn the same way on every surface that lists it. A kind's cards pin their own id into the instance's config
- * (contributionDiscriminator, `provider` for the CLI cards, `platform` for browsers and computers), so that
- * field is the lookup; a kind with no discriminator has exactly one card, which is why the static catalog is
- * asked by kind alone.
- *
- * The card's FACE rather than the whole entry, because that is all any of the callers want: what to call the
- * thing this connection is one of, and what to draw it as. */
+// Which card a live connection came from (instancesOf run backwards): a kind's cards pin their own id into the
+// instance's config (contributionDiscriminator), so that field is the lookup; a kind with no discriminator has
+// exactly one card. Returns the card's face only, since that's all any caller wants.
 export interface CapabilityFace {
     /** The card's id, a connection that never got a name of its own took it (suggestName). */
     readonly id: string;
@@ -114,10 +100,9 @@ export const capabilityCard = (capability: CapabilitySummary, extensions: readon
     return card === undefined ? undefined : { id: card.id, name: card.name, logo: card.logo, icon: card.icon };
 };
 
-/* Just the mark, for the rows that draw a connection but name it something of their own (a skill's title, a
- * secret's key). Either half may be absent and the caller's own tiers fill the gap, a card with a brand and no
- * glyph still needs something painted under the brand while it loads, so a card declaring NEITHER answers
- * undefined rather than an empty object: "ask the next tier", never a hole. */
+// Just the mark, for rows that name a connection with something of their own (a skill's title, a secret's key).
+// Either half may be absent for the caller's own tiers to fill; a card declaring neither answers undefined, never
+// an empty object.
 export const capabilityMark = (
     capability: CapabilitySummary,
     extensions: readonly ExtensionSummary[],
@@ -129,11 +114,11 @@ export const capabilityMark = (
     return { logo: card.logo, icon: card.icon };
 };
 
-// A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, … so repeat adds create
-// distinct connections instead of upserting the same id (the silent-overwrite trap).
+// A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, ... so repeat adds create distinct
+// connections instead of upserting one (the silent-overwrite trap).
 export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly CapabilitySummary[]): string => {
-    // A one-per-sandbox card never bumps: the id IS the instance, so re-picking the card lands on the entry that
-    // exists and the submit reads "Update" instead of quietly minting a second one.
+    // A singleton card never bumps: the id is the instance, so re-picking lands on the existing entry and submit reads
+    // "Update".
     if (entry.singleton === true) {
         return entry.id;
     }
@@ -148,11 +133,8 @@ export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly C
     return `${entry.id}-${n}`;
 };
 
-/* WHAT THE FILTER BOX MATCHES A CARD ON. The kind is searched alongside the words a reader can see, because it
- * is what somebody typing "mcp" or "ssh" means, those are the names of the things, and no card's prose repeats
- * them. The HINT is searched for the mirror reason: a tile's description is one line, so the words that identify
- * a card to the person looking for it ("webauthn", "socket mode", "botfather") live in prose the grid no longer
- * prints. Searching only what is visible would make the catalog findable exactly to the extent it is already
- * scannable, which is backwards. */
+// Kind is searched alongside visible words, since that's what typing "mcp" or "ssh" means and no card's prose
+// repeats them. Hint is searched too, since a tile's one-line description drops identifying terms ("webauthn",
+// "botfather") that used to be visible.
 export const cardHaystack = (entry: CapabilityCatalogEntry): string =>
     `${entry.name} ${entry.description} ${entry.kind} ${entry.hint ?? ``}`.toLowerCase();

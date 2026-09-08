@@ -1,31 +1,9 @@
 import type { TodoItem } from "@intentic/sandbox-contract";
 import type { StoredTask } from "./task-store.js";
 
-/* The agent's working checklist, reconstructed from the Task tool family.
- *
- * Claude Code 2.1.220 DISABLED TodoWrite: its `isEnabled()` is `!tasksEnabled() && ...`, and tasks are on
- * unless CLAUDE_CODE_ENABLE_TASKS=false, so under the Agent SDK the checklist is TaskCreate/TaskUpdate/
- * TaskList, and a TodoWrite call never arrives.
- *
- * 2.1.233 then put a SECOND predicate in front of both halves, a model-version gate that hides the whole family
- * from every model this sandbox runs, which is how this reducer came to receive nothing at all for two weeks
- * rather than receiving TodoWrite instead. agent.ts pins it back on (CHECKLIST_ENV), so the paragraph above
- * still describes what arrives here; without that pin, nothing does. There is no structured SDK message for
- * any of it (the
- * SDKTask*Message family carries BACKGROUND agent tasks, subagent_type, output_file, not the checklist),
- * so the state lives only in the tool calls and their results, and this is where it gets reassembled.
- *
- * The three shapes, verbatim off the wire:
- *   TaskCreate {subject, description, activeForm?} -> "Task #1 created successfully: Gamma one"
- *   TaskUpdate {taskId, status?, subject?, activeForm?} -> "Updated task #1 status" | "Updated task #1 deleted"
- *   TaskList {} -> "#1 [pending] Gamma one\n#2 [in_progress] Delta two"   (deleted tasks omitted)
- *
- * A create only learns its id from its RESULT, so creates are applied there; an update names its id in its
- * INPUT, so those apply at call time and the list moves the instant the agent says so. TaskList is the
- * authoritative resync, it heals any drift. A resumed session's earlier tasks, which this process never saw
- * created, arrive by `seed` off the CLI's own store before the turn's first update can name one
- * (task-store.ts): an update to a row the fold has never seen is ignored, and a turn that only ever updated
- * used to move nothing here while the CLI's list moved. */
+// The agent's working checklist, rebuilt from the Task tool family (TaskCreate/TaskUpdate/TaskList), since no SDK
+// message carries it. A create learns its id from its result; an update names its id in its input and applies
+// immediately; TaskList is the authoritative resync, and a resumed session's tasks arrive via `seed` first.
 
 const CREATED = /^Task #(\d+) created successfully/;
 const LISTED = /^#(\d+) \[(pending|in_progress|completed)] (.+)$/;
@@ -34,8 +12,8 @@ type Status = TodoItem["status"];
 
 const isStatus = (value: unknown): value is Status => value === "pending" || value === "in_progress" || value === "completed";
 
-// The text of a tool_result block, whose content is a bare string for every Task verb (the array form carries
-// tool_reference blocks, which no Task verb emits).
+// The text of a tool_result block, a bare string for every Task verb (the array form carries tool_reference blocks,
+// which no Task verb emits).
 const resultText = (content: unknown): string | undefined => (typeof content === "string" ? content : undefined);
 
 const stringField = (input: unknown, key: string): string | undefined => {
@@ -44,14 +22,13 @@ const stringField = (input: unknown, key: string): string | undefined => {
 };
 
 export class TaskChecklist {
-    // Insertion-ordered: the list renders in the order the agent created the tasks, which is the order it
-    // intends to work them.
+    // Insertion-ordered: the list renders in the order the agent created the tasks.
     private readonly tasks = new Map<string, TodoItem>();
     // TaskCreate tool_use id -> the subject/activeForm it asked for, held until its result names the task id.
     private readonly pending = new Map<string, TodoItem>();
 
-    // A fresh array, but the items themselves are shared: every mutation below REPLACES a task rather than
-    // patching one in place, so an already-emitted list can never change under the UI.
+    // A fresh array, but the items are shared: every mutation REPLACES a task rather than patching it in place, so an
+    // already-emitted list can't change under the UI.
     private snapshot(): TodoItem[] {
         return [...this.tasks.values()];
     }
@@ -66,8 +43,8 @@ export class TaskChecklist {
         this.pending.set(toolUseId, { content, status: "pending", ...(activeForm !== undefined ? { activeForm } : {}) });
     }
 
-    // The result of a TaskCreate: `Task #N created successfully`. Returns the updated list, or undefined when
-    // this result belongs to some other tool (or a create whose subject never parsed).
+    // The result of a TaskCreate: `Task #N created successfully`. Undefined when this result belongs to another tool,
+    // or a create whose subject never parsed.
     resolved(toolUseId: string, content: unknown): TodoItem[] | undefined {
         const task = this.pending.get(toolUseId);
         if (task === undefined) {
@@ -82,9 +59,8 @@ export class TaskChecklist {
         return this.snapshot();
     }
 
-    // A TaskUpdate call. `status: "deleted"` drops the task; every other field patches in place. An update
-    // naming a task this process never saw is ignored, inventing a row from a patch would render a checklist
-    // item with no subject.
+    // A TaskUpdate call. `status: "deleted"` drops the task; every other field patches in place. An update naming an
+    // unseen task is ignored rather than inventing a row with no subject.
     updated(input: unknown): TodoItem[] | undefined {
         const id = stringField(input, "taskId");
         if (id === undefined) {
@@ -107,10 +83,8 @@ export class TaskChecklist {
         return this.snapshot();
     }
 
-    /* The rows the session already holds, off the CLI's own store (task-store.ts), for a turn that resumes a
-     * session. Replaces everything, like `listed`, and for the same reason: it is the authoritative set as of
-     * the moment this turn starts, keyed by the ids this turn's updates will name. Nothing to adopt renders
-     * nothing, and leaves the fold as empty as it was. */
+    // The rows a resumed session already holds (task-store.ts). Replaces everything, like `listed`, since it is the
+    // authoritative set as of turn start.
     seed(rows: readonly StoredTask[]): TodoItem[] | undefined {
         if (rows.length === 0) {
             return undefined;
@@ -126,8 +100,8 @@ export class TaskChecklist {
         return this.snapshot();
     }
 
-    // The result of a TaskList: the authoritative set. Replaces everything, so tasks created before this
-    // process attached (a resumed session) appear, and anything deleted elsewhere disappears.
+    // The result of a TaskList: the authoritative set. Replaces everything, so tasks created before this process
+    // attached appear, and anything deleted elsewhere disappears.
     listed(content: unknown): TodoItem[] | undefined {
         const text = resultText(content);
         if (text === undefined) {
@@ -138,11 +112,11 @@ export class TaskChecklist {
             .map((line) => LISTED.exec(line.trim()))
             .filter((match) => match !== null);
         if (rows.length === 0) {
-            // An empty list is a real state, but so is a result this parser does not recognise; only the
-            // former says "no tasks", and it is the one the harness spells exactly this way.
+            // An empty list is real, but so is an unrecognised result; only the former says "no tasks", spelled this
+            // way.
             return text.trim() === "" ? [] : undefined;
         }
-        // TaskList does not echo activeForm, so carry the spinner label forward from what we already know.
+        // TaskList does not echo activeForm, so carry the spinner label forward from what is already known.
         const known = new Map(this.tasks);
         this.tasks.clear();
         for (const row of rows) {

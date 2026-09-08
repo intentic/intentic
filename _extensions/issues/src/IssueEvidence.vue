@@ -3,21 +3,14 @@ import type { IssueSummary } from "@intentic/sandbox-contract";
 import { Code, formatTimestamp, ui } from "@intentic/extension-ui";
 import { computed } from "vue";
 
-/* THE EVIDENCE, opened under a row: the most recent occurrence in full.
- *
- * ORDERED BY WHAT A PERSON READS FIRST WHEN THEY ARE DECIDING WHAT TO DO, which is not the order the fields
- * arrive in. What a user wrote comes above the stack, because a sentence in somebody's own words is worth more
- * than any trace when there is one; the stack next, because that is where a fix starts; the breadcrumbs last,
- * because they are how you reproduce it once you have decided to.
- *
- * EVERYTHING HERE CAME FROM SOMEBODY ELSE'S BROWSER. It is rendered as text and never as markup, and the stack
- * goes in a <Code> block rather than a paragraph, which is both the readable choice and the one that cannot be
- * mistaken for the app talking. */
+// Evidence panel for one issue row: the most recent occurrence, in full. Fields are ordered by what a reader decides
+// from first: description, then stack, then breadcrumbs. Rendered as text, never markup, since it all comes from
+// someone else's browser.
 
 const { issue } = defineProps<{ issue: IssueSummary }>();
 
 const sample = computed(() => issue.sample);
-// Oldest first, the order they happened in, which is the order a person retraces them.
+// Breadcrumbs are oldest first, the order they happened in.
 const breadcrumbs = computed(() => sample.value.breadcrumbs ?? []);
 const context = computed(() => Object.entries(sample.value.context ?? {}));
 const reporter = computed(() => {
@@ -28,21 +21,18 @@ const reporter = computed(() => {
 
 <template>
     <div class="space-y-4 pt-1">
-        <!-- What a person wrote, first and set as prose: it is the only part of this that somebody chose to say. -->
+        <!-- What they wrote is shown first, as prose: the only part of this someone chose to say. -->
         <section v-if="sample.description !== undefined">
             <h3 :class="ui.sectionLabel(`mb-1`)">What they wrote</h3>
             <p class="max-w-read whitespace-pre-wrap">{{ sample.description }}</p>
-            <!-- Labelled for what it is. Nobody signed anything to get here, and a name rendered without that
-                 word is a name somebody could use to be believed. -->
+            <!-- Labelled unverified: nobody signed in to submit this, so a name here could be impersonated. -->
             <p v-if="reporter !== ''" class="mt-1 text-sm text-muted">Says they are {{ reporter }} (unverified)</p>
         </section>
 
         <section>
             <h3 :class="ui.sectionLabel(`mb-1`)">The error</h3>
             <p class="max-w-read font-mono text-sm break-words">{{ sample.message }}</p>
-            <!-- Clamped rather than scrolled in a box of its own: a framework stack runs to fifty frames, and
-                 the section under it (what led up to the crash) is the one people actually scroll for. The kit's
-                 clamp keeps the copy button working on the whole thing, so nothing is lost by folding it. -->
+            <!-- Clamped, not scrolled: a stack can run to dozens of frames; the clamp still keeps copy working on all of it. -->
             <Code v-if="sample.stack !== undefined" :code="sample.stack" :clamp-lines="14" copyable class="mt-2" />
         </section>
 
@@ -59,10 +49,7 @@ const reporter = computed(() => {
 
         <section v-if="context.length > 0 || sample.userAgent !== undefined">
             <h3 :class="ui.sectionLabel(`mb-1`)">Where</h3>
-            <!-- `grid-cols-facts` is the design system's label/value pair (tokens.css: `max-content 1fr`), and
-                 the same class the other extensions' fact lists use. A column template written inline as an
-                 arbitrary value works only while this extension is built inside this repo: the surface an
-                 extension compiles against can promise a NAME, never a value nobody named. -->
+            <!-- `grid-cols-facts` is the shared label/value grid class; extensions can't use an inline arbitrary column value. -->
             <dl class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-sm">
                 <template v-if="sample.url !== undefined">
                     <dt class="text-muted">Page</dt>

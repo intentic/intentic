@@ -5,15 +5,9 @@ import { host } from "./host.js";
 import { useAsyncAction } from "./useAsyncAction.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-/* THIS REPO'S STASHES, work set aside without committing it.
- *
- * Shown in the graph because a stash entry IS a commit: it has a sha, a time, a subject and a diff, and its
- * first parent is the commit it was taken on. Until this existed, a `git stash` in a terminal made the work
- * invisible everywhere in this workspace, not listed, not diffable, not recoverable except by remembering it
- * was there.
- *
- * `ref` is POSITIONAL (`stash@{0}`, `stash@{1}`…), and dropping one renumbers the rest, so every verb here
- * invalidates the list rather than assuming the refs it was rendered from still mean the same entries. */
+// This repo's stashes: shown because a stash entry is a commit (sha, time, subject, diff) whose first parent is the
+// commit it was taken on. `ref` is positional (`stash@{0}`, `stash@{1}`...) and dropping one renumbers the rest, so
+// every verb here invalidates the list rather than trusting old refs.
 
 export function useStashes(repo: Ref<string>) {
     const api = host();
@@ -25,7 +19,7 @@ export function useStashes(repo: Ref<string>) {
         queryFn: () => api.sandbox.rpc.git.stashes({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
-    // `refs/stash` is a ref like any other, so stashing in a terminal arrives on the same push as a commit.
+    // `refs/stash` is an ordinary ref, so stashing in a terminal arrives on the same push as a commit.
     useRefRefresh(repo, [`stashes`]);
 
     const stashes = computed<readonly StashEntry[]>(() => query.data.value?.stashes ?? []);
@@ -33,8 +27,8 @@ export function useStashes(repo: Ref<string>) {
 
     const files = (ref: string): Promise<GitCommitDiff> => api.sandbox.rpc.git.stashDiff({ repo: repo.value, ref });
 
-    // Applying or popping rewrites the worktree, and dropping changes the list, all three invalidate both, since
-    // a renumbered list rendered against old refs would act on the wrong entry.
+    // Applying, popping and dropping all invalidate both caches, since a renumbered list read against old refs would
+    // act on the wrong entry.
     const invalidate = (): Promise<unknown> =>
         Promise.all([
             queryClient.invalidateQueries({ queryKey: key.value }),
@@ -46,8 +40,8 @@ export function useStashes(repo: Ref<string>) {
         files,
         busy,
         actionError,
-        // `pop` puts it back and consumes the entry; `apply` keeps it. A conflict comes back as `ok: false` with
-        // the entry intact, the work is never lost, so it is worth saying rather than throwing.
+        // `pop` consumes the entry, `apply` keeps it; a conflict comes back as `ok: false` with the entry intact, worth
+        // reporting rather than throwing.
         apply: (ref: string, pop: boolean): Promise<void> =>
             run(async () => {
                 const result = await api.sandbox.rpc.git.stashApply({ repo: repo.value, ref, pop });

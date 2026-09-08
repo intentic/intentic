@@ -1,29 +1,17 @@
 import type { WindowInfo } from "./types.js";
 
-/* Turning what a platform's window lister prints into WindowInfo.
- *
- * Pure functions, apart from the rest of this package, because they are the only part of window enumeration that
- * can be tested without a desktop: the IO is `wmctrl` or PowerShell producing text, and the bugs live in reading
- * that text, a title containing spaces, a single window arriving as an object rather than an array, a hex id
- * where a decimal one is expected. Each of those has cost somebody an afternoon somewhere. */
+// Turns platform window-lister output (wmctrl/PowerShell text or JSON) into WindowInfo. Pure functions, testable
+// without a desktop.
 
-/* `wmctrl -lGpx` prints fixed columns and then the title, which is everything left on the line:
- *
- *   0x03400007  0 4242   0    0    1920 1080 code.Code            hostname Some. Title. With Spaces
- *   ^id         ^d ^pid  ^x   ^y   ^w   ^h   ^class               ^host    ^title
- *
- * So the split is "nine fields, then the remainder", never a plain whitespace split, which would truncate every
- * title at its first space. The class is `instance.Class`; the part after the dot is the one a person recognises
- * ("Code", "Google-chrome"), so that is what becomes `app`. */
+// wmctrl -lGpx columns: nine fields, then the title is everything remaining on the line. `app` is the part of
+// `instance.Class` after the dot.
 export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
     output
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line !== "")
         .flatMap((line) => {
-            // Nine whitespace-delimited fields, then the title as EVERYTHING left, matched in one pattern rather
-            // than split-and-rejoin, because the columns are padded with runs of spaces that a rejoin cannot
-            // reproduce, and a title is far more likely to contain spaces than not.
+            // One regex instead of split-and-rejoin: padded columns cannot be rejoined and titles often contain spaces.
             const fields = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/.exec(line);
             if (fields === null) {
                 return [];
@@ -40,8 +28,7 @@ export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
                     title,
                     app,
                     bounds: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) },
-                    // X11 ids come out of wmctrl as 0x0340_0007 and out of xdotool as decimal, compared as
-                    // numbers so the two spellings of the same window are recognised as the same window.
+                    // wmctrl ids are hex, xdotool ids are decimal; compared as numbers so both spellings match.
                     focused: focusedId !== undefined && Number(id) === Number(focusedId),
                 },
             ];
@@ -58,16 +45,14 @@ interface SwayNode {
     readonly floating_nodes?: readonly SwayNode[];
 }
 
-/* sway (and other wlroots compositors that speak the i3 IPC) answers `swaymsg -t get_tree` with a nested tree of
- * outputs → workspaces → containers. A window is a leaf that has a name and a geometry; everything above it is
- * scaffolding. Recursion rather than a flat scan because the depth varies with how the user has split their
- * workspace, and floating windows hang off a different child list than tiled ones. */
+// get_tree is a nested tree; a window is a leaf with a name and geometry, everything above is scaffolding. Recurses
+// since depth varies and floating windows are a separate child list.
 const walkSwayNode = (node: SwayNode): WindowInfo[] => {
     const children = [...(node.nodes ?? []), ...(node.floating_nodes ?? [])];
     const descendants = children.flatMap(walkSwayNode);
     const name = node.name ?? "";
     const app = node.app_id ?? node.window_properties?.class ?? "";
-    // A container with children is a split, not a window, however it is named.
+    // A container with children is a split, not a window, regardless of its name.
     if (children.length > 0 || name === "" || node.rect === undefined || node.id === undefined) {
         return descendants;
     }
@@ -91,9 +76,8 @@ export const parseSwayTree = (json: string): WindowInfo[] => {
     }
 };
 
-/* Windows' lister is a PowerShell pipeline into ConvertTo-Json, whose one infuriating habit is emitting a bare
- * OBJECT when the pipeline produced exactly one item, and an ARRAY otherwise. Rather than fight it with
- * `-AsArray` (PowerShell 7 only, and 5.1 is still what many machines have), both shapes are accepted here. */
+// ConvertTo-Json emits a bare object for one item, an array otherwise; both shapes are accepted here instead of
+// relying on -AsArray (PowerShell 7 only).
 export const parseWindowsJson = (json: string): WindowInfo[] => {
     let parsed: unknown;
     try {
@@ -125,7 +109,6 @@ export const parseWindowsJson = (json: string): WindowInfo[] => {
     });
 };
 
-// Whether a launch target is something to OPEN (a URL, or a path that exists) rather than a program to run. The
-// distinction decides between `xdg-open`/`Start-Process <url>` and spawning a command, and getting it wrong is
-// the difference between the user's browser opening and a "command not found".
+// Whether a launch target should be opened (a URL, or an existing path) rather than run as a command; picks between
+// xdg-open/Start-Process and spawning it directly.
 export const looksLikeUrl = (target: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(target) || /^(www\.|mailto:)/i.test(target);

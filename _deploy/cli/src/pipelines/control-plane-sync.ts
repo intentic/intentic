@@ -4,8 +4,8 @@ import { ARTIFACT_FILE, CONFIG_FILE, INTENT_DIR, TARGET_DIR } from "../lib/artif
 import { collectSecrets } from "../secrets/secrets.js";
 import { APPLY_WORKFLOW_PATH, applyWorkflowYaml, type PipelineInputs, setRepoSecrets, writeWorkflow } from "./adopt-pipelines.js";
 
-// The control-plane host's SSH connection block as the forgejo node carries it: literal address/user, the
-// key as a secret ref the caller resolves, and the optional port/via transport selectors.
+// SSH connection block for the control-plane host, as the forgejo node carries it: literal address/user, the key as a
+// secret ref, optional port/via transport.
 export interface ForgejoSsh {
     readonly address: string;
     readonly user: string;
@@ -14,9 +14,8 @@ export interface ForgejoSsh {
     readonly via?: "direct" | "cloudflared";
 }
 
-// The Forgejo node carries the public git domain + admin identity the control plane authenticates with, and
-// the CP host's SSH block, how `adopt` reaches Forgejo (an SSH port-forward, never the public route).
-// Shared by `adopt` (the one-shot push) and the post-adopt resolve sync (this file).
+// Forgejo's public domain, admin identity, and CP host SSH block; how `adopt` and the post-adopt resolve sync both
+// reach it (an SSH port-forward, never the public route).
 export const forgejoIdentity = (
     graph: DesiredStateGraph,
 ): {
@@ -60,28 +59,22 @@ export const forgejoIdentity = (
     };
 };
 
-// Keep Forgejo the live secret store after `adopt`: when a resolve in the control-plane pipeline introduces a
-// secret the previous artifact did not have, push the new GENERATED ones into Forgejo and regenerate apply.yaml
-// so the apply pipeline injects the full current set. "New" is decided by diffing the previous artifact (the
-// one already in the cloned desired-state repo) against the freshly resolved graph, never by env presence, so
-// secrets that already exist in Forgejo are never re-minted or overwritten (e.g. the Forgejo admin password,
-// which a stale value would rotate and lock everyone out of). New `env` (user-supplied) secrets cannot be
-// valued here; they are returned for the caller to warn about, apply then fails loudly until they are set.
+// Pushes newly-added generated secrets to Forgejo and regenerates apply.yaml, diffed against the previous artifact so
+// existing secrets are never overwritten. New `env` secrets are returned for the caller to warn about.
 export const syncControlPlaneSecrets = async (args: {
     readonly previousGraph: DesiredStateGraph | undefined;
     readonly newGraph: DesiredStateGraph;
     readonly env: Readonly<Record<string, string | undefined>>;
-    // The desired-state repo checkout root, apply.yaml is regenerated under <dir>/.forgejo/workflows/.
+    // Desired-state repo checkout root; apply.yaml regenerates under <dir>/.forgejo/workflows/.
     readonly dir: string;
-    // The Forgejo admin password the secret PUTs authenticate with (HTTP Basic, same as `adopt`).
+    // Forgejo admin password the secret PUTs authenticate with (HTTP Basic, same as adopt).
     readonly password: string;
     // Pinned into the regenerated apply.yaml's `pnpm dlx @intentic/cli@<version>`.
     readonly cliVersion: string;
     readonly log: (message: string) => void;
     readonly api?: ForgejoApi;
 }): Promise<{ readonly pushed: readonly string[]; readonly newEnv: readonly string[] }> => {
-    // Without a previous artifact every key looks new and we would overwrite the correct Forgejo values with
-    // freshly-minted ones. `adopt` always commits the artifact, so this only guards misuse, skip safely.
+    // Without a previous artifact every key looks new; skip rather than overwrite Forgejo's values.
     if (args.previousGraph === undefined) {
         args.log("sync-control-plane: no previous artifact to diff against, skipping secret sync");
         return { pushed: [], newEnv: [] };
@@ -96,7 +89,7 @@ export const syncControlPlaneSecrets = async (args: {
     if (addedGenerated.length > 0) {
         const secrets: Record<string, string> = {};
         for (const key of addedGenerated) {
-            // `ensureGeneratedSecrets` minted these into env before this call; a missing value is a caller bug.
+            // ensureGeneratedSecrets minted these into env before this call; a missing value is a caller bug.
             const value = args.env[key];
             if (value === undefined || value === "") {
                 throw new Error(`generated secret ${key} has no value to push to Forgejo`);
@@ -109,7 +102,7 @@ export const syncControlPlaneSecrets = async (args: {
         );
     }
 
-    // Regenerate apply.yaml with the full current key set so the apply pipeline injects any newly-added keys.
+    // Regenerates apply.yaml with the full current key set so newly-added keys get injected.
     const inputs: PipelineInputs = {
         cliVersion: args.cliVersion,
         user,

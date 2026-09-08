@@ -12,13 +12,11 @@ import {
     supportsRoute,
 } from "./useDaemonRoutes";
 
-// A daemon level with this browser advertises the whole contract; an older one is that set minus what it
-// predates. Both are supported states: the point of the store is telling them apart.
+// This browser's full route set, and the same set with vpn routes removed (an older daemon).
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
 const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
 
-// The shapes a level daemon publishes, and the same set with named routes shaped differently: an image built
-// before a field was added to them.
+// This browser's shape fingerprints, and a helper to reshape named routes (an image with a changed field).
 const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 
@@ -32,8 +30,6 @@ describe(`useDaemonRoutes`, () => {
     });
 
     it(`assumes support from a daemon too old to advertise routes at all`, () => {
-        // A daemon built before the hello frame carried `routes` sends none. Silence is not evidence of a gap,
-        // so nothing may be gated on it: the pre-existing 404 behaviour is what such a daemon gets.
         setDaemonRoutes(undefined);
         expect(supportsRoute(`vpn.list`)).toBe(true);
         expect(daemonBehind.value).toBe(false);
@@ -54,7 +50,6 @@ describe(`useDaemonRoutes`, () => {
     });
 
     it(`treats a daemon NEWER than this browser as level, not behind`, () => {
-        // The released app plane can lag a freshly-pulled image. Routes we never ask about are not our problem.
         setDaemonRoutes([...LEVEL, `future.feature`]);
         expect(missingRoutes.value).toEqual([]);
         expect(daemonBehind.value).toBe(false);
@@ -64,7 +59,6 @@ describe(`useDaemonRoutes`, () => {
         setDaemonRoutes(withoutVpn);
         expect(supportsRoute(`vpn.list`)).toBe(false);
         resetDaemonRoutes();
-        // Another sandbox runs another image: attributing the old one would hide a feature it really has.
         expect(supportsRoute(`vpn.list`)).toBe(true);
     });
 });
@@ -78,7 +72,6 @@ describe(`driftedRoutes`, () => {
     });
 
     it(`reports no drift from a daemon too old to advertise shapes`, () => {
-        // It sent route names but no shapes: silence is not evidence, exactly as for the names themselves.
         setDaemonRoutes(LEVEL);
         expect(driftedRoutes.value).toEqual([]);
         expect(daemonDrifted.value).toBe(false);
@@ -103,16 +96,13 @@ describe(`driftedRoutes`, () => {
     });
 
     it(`compares only where BOTH sides published a fingerprint`, () => {
-        // A streaming route has no expressible shape on either side, and a route the daemon simply omitted is
-        // no evidence either. Neither may be reported as a disagreement.
+        // Filtering out vpn entries simulates a route the daemon omitted a shape for.
         const partial = Object.fromEntries(Object.entries(SHAPES).filter(([name]) => !name.startsWith(`vpn.`)));
         setDaemonRoutes(LEVEL, partial);
         expect(driftedRoutes.value).toEqual([]);
     });
 
     it(`throws away a near-total disagreement rather than blaming every feature`, () => {
-        /* Two builds on different zod versions can render the same schema differently and disagree about every
-         * route at once. That is a fact about their toolchains, not about anything a user can act on. */
         const allDifferent = Object.fromEntries(Object.keys(SHAPES).map((name) => [name, `different`]));
         setDaemonRoutes(LEVEL, allDifferent);
         expect(driftedRoutes.value).toEqual([]);
@@ -146,9 +136,6 @@ describe(`driftedRouteReason`, () => {
     });
 
     it(`offers reloading the page too, because drift never says which side moved`, () => {
-        /* Two builds disagreeing about a payload is symmetric evidence: a page open since before the change is
-         * as likely to be the stale one as the daemon. Sending someone to reload a sandbox that was already
-         * current is the failure this wording exists to avoid. */
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/reload this page/i);
     });
@@ -177,9 +164,6 @@ describe(`staleDaemonReason`, () => {
     });
 
     it(`names the daemon as the older side, which a missing route proves`, () => {
-        // Unlike drift, this direction is known: a daemon NEWER than the app advertises extra names nobody asks
-        // about, so a name the app has and the daemon lacks can only mean the daemon predates it. No hedging,
-        // and no suggestion to reload a page that is not the problem.
         setDaemonRoutes(withoutVpn);
         const reason = staleDaemonReason(`GET`, `/vpn`);
         expect(reason).toMatch(/sandbox/i);

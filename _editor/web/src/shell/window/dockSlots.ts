@@ -1,33 +1,13 @@
 import { shallowRef } from "vue";
 
-/* WHERE THE SHELL LENDS THE FLOATING PANELS A PLACE TO SIT.
- *
- * The chat and the sandbox-global terminal are mounted ABOVE the router (shell/PoppablePanels.vue), not inside
- * the workspace shell, because a panel is a PAGE-level surface: its lifetime is this window's, not the current
- * route's. They used to be children of ShellDesktop, and that made every route outside the shell: /setup, which
- * is where "Add sandbox" goes, an invite link, the desktop sign-in handoff, tear the chrome down and take a
- * mid-conversation panel with it.
- *
- * So the shell no longer OWNS the panels; it publishes a place for them. An empty element in the chat grid
- * column, another below the workspace where the terminal docks, and the panel is teleported into whichever slot
- * is published, or into the parking stage when there is none. It is never unmounted, so a trip to /setup costs
- * nothing: not the streaming turn, not the attached xterm, not even a scroll position. A floating window
- * publishes the very same slots from its own copy of the app (pages/FloatingArea.vue), which is why "the panel
- * is out in its own window" needs no case of its own here.
- *
- * Both slots are `display: contents` elements, they generate no box at all, so the panel itself stays the grid
- * item its own classes were written against and this indirection changes no layout.
- *
- * Module refs rather than props because publisher and consumer sit on opposite sides of the router outlet, and
- * the publisher is the half that comes and goes. Null is the honest empty value: it is what Vue writes into a
- * template ref when the element it named goes away. */
+// Publishes an empty slot (`display: contents`) for the shell to lend a floating panel a place to sit, above the
+// router, since a panel's lifetime is the window's, not the route's. It teleports into whichever slot is
+// published, or the parking stage otherwise. Module refs, not props: publisher and consumer sit on opposite sides of
+// the router outlet.
 
 export const chatDock = shallowRef<HTMLElement | null>(null);
-// The chat's FULL-WINDOW home, published by the /chat area (pages/ChatArea.vue) while it is on screen, and
-// preferred over the docked column when both exist: standing in the chat area IS the ask to see the chat fill
-// it. The pop-out window still outranks both (PoppablePanels holds the priority in one place).
+// Chat's full-window home, published by the /chat area; preferred over the column, but outranked by a pop-out.
 export const chatFullDock = shallowRef<HTMLElement | null>(null);
-// The preview panel's only in-shell home, published by the /preview area (pages/PreviewArea.vue). It has no
-// side-column slot: the panel is either filling this area, floating in its own window, or parked.
+// Preview's only in-shell home; no side-column slot, so it fills this area, floats, or waits parked.
 export const previewDock = shallowRef<HTMLElement | null>(null);
 export const terminalDock = shallowRef<HTMLElement | null>(null);

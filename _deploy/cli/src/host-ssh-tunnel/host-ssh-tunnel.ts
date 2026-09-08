@@ -3,8 +3,7 @@ import { CATCH_ALL, cfargotunnelCname, hostSshTunnelName, sshHostname } from "@i
 import { hostSshIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { resolveZone, upsertCname } from "../lib/cf-tunnel.js";
 
-// The host's sshd port the connector bridges to. connect.sh installs sshd on the standard port; the tunnel
-// reaches it only over the host's localhost (the connector runs on the host), so it is never exposed publicly.
+// connect.sh installs sshd on the standard port; the tunnel reaches it only via the host's own localhost.
 const HOST_SSH_PORT = 22;
 
 export interface HostSshTunnelResult {
@@ -12,18 +11,12 @@ export interface HostSshTunnelResult {
     readonly hostname: string;
 }
 
-// Create (or refresh, idempotently) the per-host Cloudflare tunnel + proxied DNS that exposes THIS machine's
-// sshd at `ssh-<id>.<zone>` as an `ssh://localhost:22` ingress, and return the connector token connect.sh runs
-// cloudflared with. `<id>` is a stable per-host digest of (connection token + host name), so re-runs reuse the
-// same tunnel/hostname and each enrolled host gets a distinct one. The sandbox then SSH-deploys to this host with
-// `cloudflared access tcp --hostname ssh-<id>.<zone>` (host registered via:"cloudflared"), a NAT'd machine it
-// can't reach by IP. This is a SEPARATE tunnel from the sandbox's: its connector runs ON the host to reach
-// localhost:22, whereas the sandbox connector runs on the workspace bridge, one Cloudflare tunnel cannot mix
-// connectors on different networks (the edge load-balances across them).
+// Creates or refreshes the per-host Cloudflare tunnel exposing this host's sshd at `ssh-<id>.<zone>`, returning the
+// connector token. Separate from the sandbox's own tunnel; one Cloudflare tunnel can't mix connectors on two networks.
 export const createHostSshTunnel = async (args: {
     readonly apiToken: string;
     readonly connectToken: string;
-    // Salts the tunnel id so each enrolled host gets its OWN ssh-<id>.<zone> (many deploy targets, no collision).
+    // Salts the tunnel id so each enrolled host gets its own ssh-<id>.<zone>, no collisions.
     readonly hostName: string;
     readonly zone?: string;
     readonly log: (message: string) => void;

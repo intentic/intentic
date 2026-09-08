@@ -1,33 +1,7 @@
 #!/usr/bin/env node
-/* `node _tools/nav/gate.mjs` — THE PROOF THAT A REFACTOR SLICE CHANGED NOTHING.
- *
- * WHAT THIS DELIBERATELY DOES NOT DO. It does not typecheck, lint or run tests. `pnpm verify:turn` already
- * does all three over the affected closure and does them better than a second implementation would. Running
- * them again from here would be a slower copy that drifts.
- *
- * WHAT IT DOES INSTEAD is the half a test suite structurally cannot catch. A test suite proves that the code
- * paths it exercises still work. It says nothing about a public export that no in-tree caller uses — and
- * during a decomposition, "no in-tree caller" is exactly the signal a sweep uses to decide something is dead.
- * That is not a hypothetical failure mode: in the campaign this harness reproduces, about twenty public names
- * were deleted for having no in-tree callers, a wheel shipped missing seventeen modules, and none of it was
- * caught by a green suite. It was caught by people reading the diff, twice, over two days.
- *
- * So this gate asserts two things a green suite cannot:
- *
- *   1. THE PUBLIC SURFACE DID NOT SHRINK. Every exported name that existed before still exists somewhere.
- *      Deliberately location-independent: moving a definition between files is the entire point of the
- *      exercise and must be free. Removing one must be loud.
- *   2. THE FROZEN FILES ARE BYTE-IDENTICAL. Wire contracts, schemas, SQL, and anything else whose content IS
- *      the behavior. A refactor has no business touching these, so any change is a finding, not a diff to
- *      skim past.
- *
- * ADDITIONS ARE REPORTED, NOT FAILED. A decomposition legitimately adds exports: a helper lifted out of a god
- * function has to be exported to be imported by its new siblings. Growth is normal; shrinkage is the bug.
- *
- * Usage:
- *   gate.mjs snapshot --ref main --out _tools/nav/baselines/surface.json    before you start
- *   gate.mjs check _tools/nav/baselines/surface.json                        after every slice
- */
+// Proves a refactor slice changed nothing that verify:turn's typecheck/lint/tests can't see: every export that existed
+// before still exists somewhere (moving is free, deleting is loud), and frozen files (wire contracts, schemas, SQL) are
+// byte-identical. Growth is expected; only shrinkage is a finding.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -40,9 +14,7 @@ import { arg } from "./lib/args.mjs";
 
 const root = repoRoot(import.meta.url);
 
-/* FILES WHOSE CONTENT IS THE BEHAVIOR. Kept as an explicit list rather than inferred, because the cost of
- * forgetting one is a silent wire-format change and the cost of an extra one is a moment spent explaining a
- * legitimate edit. Add to it freely; that direction is safe. */
+// Explicit list, not inferred: forgetting one breaks a wire format silently; an extra just needs explaining.
 const FROZEN = [
     /\.sql$/,
     /\.prisma$/,
@@ -56,9 +28,8 @@ const FROZEN = [
 
 const sha = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);
 
-/* One package entry point's export surface, following re-export edges. This is the set an external consumer
- * can see, which is a stricter thing than "names declared in the package" and the one that actually breaks
- * somebody when it shrinks. */
+// A package's export surface as an external consumer sees it, following re-export edges; stricter than 'names declared
+// in the package', and the one that breaks somebody when it shrinks.
 const entrySurface = (tree, entry, depth = 0, seen = new Set()) => {
     if (depth > 10 || seen.has(entry)) {
         return new Set();

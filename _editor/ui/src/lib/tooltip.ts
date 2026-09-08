@@ -117,8 +117,7 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                 if (state.label === undefined || (state.overflowOnly && !isClipped(el))) {
                     return;
                 }
-                // The anchor's OWN document, the pop-out's while the panel floats out there, this page's
-                // otherwise. Everything below (append, measure, dismiss listeners) follows from it.
+                // Uses the anchor's own document/window, whether it's on the page or a popped-out panel.
                 const doc = el.ownerDocument;
                 const view = doc.defaultView;
                 if (view === null) {
@@ -136,8 +135,8 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                 box.classList.add(`ui-tooltip-${place(box, el.getBoundingClientRect(), state.side, view)}`);
                 box.style.visibility = ``;
                 state.box = box;
-                // A scroll or resize moves the anchor out from under a fixed box; capture catches the
-                // scrolling ancestor, whichever it is.
+                // Scroll or resize moves the anchor from under a fixed box; capture catches whichever ancestor
+                // scrolled.
                 doc.addEventListener(`scroll`, state.hide, true);
                 view.addEventListener(`resize`, state.hide);
             },
@@ -156,8 +155,8 @@ export const vTooltip: Directive<HTMLElement, string | undefined, Modifier> = {
                     state.hide();
                 }
             },
-            // Keyboard focus earns the same label a hover gets; a click-focus does not, or every button
-            // would keep its tooltip up after being pressed.
+            // Keyboard focus shows the label too; click-focus doesn't, or every pressed button would keep its tooltip
+            // up.
             onFocus: () => {
                 if (el.matches(`:focus-visible`)) {
                     state.show();

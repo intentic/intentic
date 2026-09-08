@@ -9,21 +9,14 @@ import { publishShare, unpublishShare, viewerDist } from "./share-publish.js";
 import { shareTranscript } from "./share-payload.js";
 import type { StoredShare } from "./share-store.js";
 
-/* The /share routes: turning a conversation into a page anyone with its link can read, and taking it back.
- *
- * Every one of these is a deliberate act by the owner on one named conversation, there is no route here that
- * publishes anything by default, and nothing about a conversation changes when it is shared. What lands in the
- * outbox is a rendering (share-payload.ts decides what of it travels); the conversation itself is untouched
- * and keeps running.
- *
- * A share is FROZEN. `create` takes a snapshot, `update` takes another under the same id, and therefore the
- * same link, which has already been sent, and nothing else moves a published page. That is what makes the
- * feature safe to use on a conversation you intend to keep working in: the next turn is private until you say
- * otherwise. */
+// Turns a conversation into a page anyone with the link can read, and takes it back; every route is a deliberate act on
+// one named conversation, and nothing about the live conversation changes when it's shared. A share is frozen: `create`
+// and `update` snapshot under the same id and link, and nothing else moves a published page, so the next turn stays
+// private until asked.
 
 export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "shares" | "transcripts" | "workspace">;
 
-// 64 bits of the address, and the only thing between a stranger and the conversation, see share-paths.ts.
+// 64 bits of the share address, the only thing between a stranger and the conversation (share-paths.ts).
 const RANDOM_BYTES = 8;
 
 export const createShareRoutes = (services: ShareRoutesDeps) => {
@@ -33,17 +26,16 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
     const slot = publicSlotFromToken(services.config.connectToken);
     const base = publicUrl(slot, zone, sandboxId);
 
-    // A share's address. Trailing slash: the page is `<id>/index.html`, and the outbox serves a directory's
-    // index (public-files.ts rule 4), so the link people paste names the conversation, not a file.
+    // Trailing slash, since the page is `<id>/index.html`, and the outbox serves a directory's index; the link names
+    // the conversation, not a file.
     const urlOf = (id: string): string | undefined => (base === undefined ? undefined : `${base}/${SHARE_DIR}/${encodeURIComponent(id)}/`);
     const withUrl = (share: StoredShare): SharedConversation => {
         const url = urlOf(share.id);
         return url === undefined ? share : { ...share, url };
     };
 
-    /* Take the snapshot and write the page. The one path both create and update run, because they differ only
-     * in where the id comes from, which is exactly the difference between a new link and the one already in
-     * somebody's messages. */
+    // Takes the snapshot and writes the page; the one path both create and update run, differing only in where the id
+    // comes from.
     const snapshot = async (id: string, conversationId: string, title: string, detail: ShareDetail): Promise<SharedConversation> => {
         const agent = services.agents.entry(conversationId);
         if (agent === undefined) {
@@ -54,9 +46,8 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation has nothing to share yet" });
         }
         const sharedAt = Date.now();
-        // Resolved here, per share, rather than when these routes are built, see viewerDist. A sandbox image
-        // that somehow shipped without the page bundle fails this one call with a message the owner can act
-        // on, instead of failing to boot.
+        // Resolved per share, not at route build time, so a sandbox image missing the page bundle fails one call with a
+        // message instead of failing to boot.
         let viewer: string;
         try {
             viewer = viewerDist();
@@ -78,9 +69,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
                 throw new ORPCError("BAD_REQUEST", { message: "a shared conversation needs a title" });
             }
             const id = shareId(title, randomBytes(RANDOM_BYTES).toString("hex"));
-            // The stem is the user's title, so the guard is real rather than ceremonial: it is what stands
-            // between a title and a directory name. A title that survives shareStem's alphabet cannot fail
-            // this, which is why a failure here is a bug in the minting rather than bad input.
+            // Not ceremony: a title surviving shareStem's alphabet can't fail this, so a failure here is a minting bug.
             if (!SHARE_ID.test(id)) {
                 throw new ORPCError("BAD_REQUEST", { message: "that title can't be used as a link name" });
             }
@@ -92,20 +81,16 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             if (existing === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown share" });
             }
-            // Title and detail level are the share's, not re-decided here: Update means "same link, same
-            // terms, later state". Changing what a link shows under someone's feet is a new share.
+            // Title and detail are the share's own; update means the same link and terms, later state.
             return snapshot(existing.id, existing.conversationId, existing.title, existing.detail);
         }),
 
         remove: i.remove.handler(async ({ input }) => {
-            // The id addresses a directory, so it is checked before it is joined onto one, even though it can
-            // only have come from this daemon's own minting.
+            // Checked before being joined into a path, even though it can only ever be this daemon's own minted id.
             if (!SHARE_ID.test(input.id)) {
                 throw new ORPCError("BAD_REQUEST", { message: "not a share" });
             }
-            // The page goes first. A crash between the two leaves a row pointing at nothing, which the view
-            // can still act on; the other order leaves a page on the internet with nothing in the app that
-            // knows how to withdraw it.
+            // Page removed first: a crash after leaves a dangling row, not a live page nothing can withdraw.
             await unpublishShare(services.workspace.root, input.id);
             await services.shares.remove(input.id);
             return { ok: true } as const;

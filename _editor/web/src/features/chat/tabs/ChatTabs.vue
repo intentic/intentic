@@ -21,27 +21,9 @@ import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
 
-/* THE CHAT PANEL'S OWN BAR: one line that says which conversation you are in, and drops the list of every
- * other one on click. Docked it is a header across the top of the chat column; floating it stands up the
- * window's left edge as a rail, with that same list permanently open in it.
- *
- * IT USED TO BE A TAB STRIP, and the strip was the wrong shape for this column. Tabs wrapped to a second row
- * and then scrolled, so a fleet of a dozen showed two or three truncated titles ("Migrate the users tab…",
- * "Migrate the users tab…": derived titles share their prefixes), the rows reflowed on every open and close
- * so no tab kept its place, and the whole thing cost up to 96px of the narrowest column in the app to be a
- * strictly worse version of the switcher /agents already is. What the strip really earned was the other two
- * jobs: saying which chat the transcript below belongs to, and being the one place outside /agents that knows
- * you have other sessions running at all. Both fit on one 2.25rem line: the same line mobile has always used
- *: with the counts as marks (`spinner 2`, `! 1`) rather than as three shrunken titles.
- *
- * So the switcher wears: status glyph · origin · title · viewers · running / attention counts · chevron. The
- * list it opens is ChatTabList, the fleet board's three lanes in miniature: the same component the rail
- * shows, so the docked sheet and the floating rail cannot drift apart.
- *
- * The strip reads the conversation list from the useChat singleton and emits select / close / open rather
- * than writing it: this bar is a view of the tabs, and the panel it lives in is what hands each verb to the
- * store. "New agent" is not one of them: it means the same thing here as on the fleet board, so both call the
- * one startAgent action (agents/agentActions.ts) instead of each surface assembling its own half of it. */
+// The chat panel's own bar: names the active conversation and drops the full list (ChatTabList) on click.
+// Docked it's a header over a sheet; floating it's a rail with the list always open. Reads the conversation
+// list from useChat and emits select/close/open rather than writing it.
 
 const emit = defineEmits<{
     select: [id: string];
@@ -54,28 +36,17 @@ const { conversations, active, activeId, panes, openBeside, closePane, sessions,
 const { agentById, rename } = useAgents();
 const { floats } = useChatFloating();
 const router = useRouter();
-// The toolbar button's tooltip AND its accessible name, one string: the control the pointer finds is what
-// teaches the chord that makes the trip unnecessary. Never shown where the panel already floats, so it never
-// has to say the way back.
+// Tooltip and accessible name in one string; hidden where the panel already floats.
 const floatHint = computed(() => withShortcut(`Move chat into new window`, `chat.toggleFloating`));
-// Its sibling on the docked header: moving the chat's home to the RAIL (a tile, full-window when opened).
-// The ways back live on the tile itself (its right-click menu, ShellDesktop) and on this bar's own menu, so
-// the rail form carries no window-management chrome of its own.
+// Moves the chat's home to the rail (a tile); return paths live on the tile itself and this bar's own menu.
 const railHint = computed(() => withShortcut(`Dock chat to rail: full window, behind a rail tile`, `chat.toggleHome`));
 
-/* On a WIDE surface (the floating window, or the /chat area filling the main one) the bar stands up the LEFT
- * EDGE as a resizable rail with the chat list always open in it (ChatPanel says why that side).
- * A wide surface has the width to keep the list open beside the transcript, and a top bar there would spend
- * the one axis the chat is short of (height) on a row that has width to burn, while a rail has room to be a
- * slice of the fleet board. Docked, the chat column is ~22rem: a permanent rail there would halve the
- * transcript, so the list lives in a sheet the header drops and takes back. */
+// On a wide surface the bar stands up as a left rail with the list always open, trading width the chat has for
+// the height it's short of. Docked (~22rem) is too narrow for a permanent rail, so the list lives in a sheet.
 const vertical = computed(() => chatWide.value);
 
-/* --- The counts the header carries -------------------------------------------------------------
- * The one thing the strip did that /agents cannot: from inside the workspace, a terminal or settings, say
- * that other sessions are alive. Two numbers, over the chats open in THIS window (the set this bar switches
- * between): how many are working, and how many have stopped to ask you something. Each is absent at zero, so
- * a quiet fleet leaves a quiet header and the marks mean something when they do appear. */
+// The one thing the old strip did that /agents can't: say from elsewhere (a terminal, settings) that other
+// chats are alive. Counts are over chats open in this window, and each mark disappears at zero.
 const runningCount = computed(
     () =>
         conversations.value.filter((conversation) => {
@@ -87,26 +58,16 @@ const attentionCount = computed(
     () => conversations.value.filter((conversation) => laneOfTab(conversation, agentById(conversation.conversationId)) === `attention`).length,
 );
 
-/* --- The sheet ---------------------------------------------------------------------------------
- * Docked, the list drops out of the header as a panel pinned to the chat column's own width: the shape the
- * composer's pickers already use (see ComposerPopover), and for the same reason: this is not a menu hanging
- * off a small trigger with room to flip around, it is a sheet the width of the column it belongs to. It also
- * keeps the row menus working, which an <AnchoredOverlay> would not: that closes on any pointerdown outside
- * its own box, and a right-click menu is teleported outside by construction, so choosing "Rename" would
- * dismiss the sheet a beat before the row it renames could show its input.
- *
- * Dismissal is therefore ours: Escape, a second press on the header, picking a chat, or a pointerdown outside
- * the header: except inside an open context menu, which is the one "outside" that is still this sheet. */
+// Not an AnchoredOverlay: that dismisses on any outside pointerdown, including the row menu's teleported
+// target, before Rename shows its input. Closed by Escape, a second header press, a pick, or an outside click
+// (context menus excepted).
 const listOpen = ref(false);
-/* The sheet is a child of the bar, so one ref answers both "is this click ours" and "which document are we in".
- * Set through a function because the bar is a plain <header> docked and a RailColumn on a wide surface, and a
- * component gives back an instance rather than an element: the rail form leaves this null, which is exactly
- * right, since the sheet exists only in the docked one (out there the list IS the surface). */
+// One ref answers both "is this click ours" and "which document"; null on the rail (no sheet there).
 const bar = ref<HTMLElement | null>(null);
 const setBar = (element: Element | ComponentPublicInstance | null): void => {
     bar.value = element instanceof HTMLElement ? element : null;
 };
-// The rail's list, for the one thing the host has to reach into it for: see the rename command below.
+// The rail's list, reached only for the rename command below.
 const rail = ref<InstanceType<typeof ChatTabList> | null>(null);
 
 const onDocumentPointerDown = (event: Event): void => {
@@ -124,7 +85,7 @@ const onDocumentKeydown = (event: KeyboardEvent): void => {
         listOpen.value = false;
     }
 };
-// Armed on the bar's OWN document, so a docked panel and a floating one can never listen in the wrong window.
+// Armed on the bar's own document, so a docked and a floating panel never listen in the wrong window.
 let armedDocument: Document | undefined;
 const disarmSheet = (): void => {
     armedDocument?.removeEventListener(`pointerdown`, onDocumentPointerDown, true);
@@ -137,14 +98,14 @@ watch(listOpen, (open) => {
         return;
     }
     armedDocument = bar.value?.ownerDocument;
-    // Capture, so a panel that stops its own clicks from bubbling cannot also stop this from closing.
+    // Capture, so a panel that stops its own bubbling can't also stop this from closing.
     armedDocument?.addEventListener(`pointerdown`, onDocumentPointerDown, true);
     armedDocument?.addEventListener(`keydown`, onDocumentKeydown);
 });
 onBeforeUnmount(disarmSheet);
 
-// Picking from the sheet is the end of the errand: switch, and give the column back to the transcript. The
-// rail is not a sheet and stays put: out there the list IS the surface.
+// Picking from the sheet ends the errand: switch, then hand the column back to the transcript. The rail isn't
+// a sheet and stays put.
 const pick = (id: string): void => {
     listOpen.value = false;
     emit(`select`, id);
@@ -154,10 +115,8 @@ const pickNotOpen = (id: string): void => {
     emit(`open`, id);
 };
 
-/* --- Renaming the active chat --------------------------------------------------------------------
- * The header's title is the rename surface for the chat you are IN (F2, the app-wide rename key, and the
- * header's own double-click); a card in the list renames itself in place, where the pointer already is. Same
- * createInlineRename both times, so a chat renamed on either surface renames its agent registry entry too. */
+// The header title renames the chat you're in (F2, double-click); a list card renames itself in place. Both
+// use createInlineRename, so either renames the agent registry entry too.
 const renaming = ref(false);
 const edit = createInlineRename(
     () => active.value.title.value ?? undefined,
@@ -168,7 +127,7 @@ const beginRename = (): void => {
     renaming.value = true;
     edit.begin();
 };
-// The input is torn down by the edit's own end (commit, cancel, blur), not by a second flag to keep in sync.
+// The input is torn down by the edit's own end (commit/cancel/blur), not a second flag kept in sync.
 watch(
     () => edit.editing,
     (editing) => {
@@ -178,16 +137,13 @@ watch(
     },
 );
 
-/* The history panel and WHICH button it is hanging off: the docked header's glyph or the rail's "Past chats"
- * button, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
- * document, viewport and dismissal from it), and those two buttons live in different ones: the rail's is in the
- * pop-out window, the header's in the app. */
+// Anchored to whichever button opened it (docked header glyph or rail's "Past chats"); the anchor also picks
+// the window it opens in, since AnchoredOverlay derives document and viewport from it.
 const historyOpen = ref(false);
 const historyAnchor = ref<HTMLElement>();
 const searchInput = ref<InstanceType<typeof SearchBar> | null>(null);
 
-// The history search box. Filters the list by chat title or content (content scanned server-side over recent
-// sessions). Debounced so a keystroke burst becomes one request; the list binds directly to `sessions`.
+// Filters sessions by title or content (server-side); debounced so a keystroke burst becomes one request.
 const query = ref(``);
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 watch(query, (value) => {
@@ -196,12 +152,8 @@ watch(query, (value) => {
 });
 onBeforeUnmount(() => clearTimeout(searchTimer));
 
-/* --- Right-click menu on the bar's chrome ----------------------------------------------------------
- * A right-click anywhere on this bar that isn't a text field opens the sweeps that name no particular chat
- * (Close Finished, Close All, the pop-out toggle) rather than popping the chat out on the spot: an
- * accidental right-click near the header shouldn't tear the panel into its own window. A CARD's menu is the
- * list's own and acts on the card under the pointer; this one is the chrome's, and the keyboard commands
- * below act on the ACTIVE chat: the split the workspace's file tabs make. */
+// Right-click on the bar's chrome opens window-wide sweeps (Close Finished/All, pop-out), not a pop-out on the
+// spot. A card's own menu acts on that card; this one and the keyboard commands act on the active chat.
 const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barMenuItems = computed<MenuItem[]>(() => [
     {
@@ -212,9 +164,7 @@ const barMenuItems = computed<MenuItem[]>(() => [
     },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
-    // The chat's other two homes, in the header buttons' order (move within this window, then leave it). The
-    // dock row is the shell command's move (toggleChatHome: from a floating window it docks AND navigates,
-    // which is exactly what those words ask for there).
+    // The chat's other two homes, in the header buttons' own order: move within this window, then leave it.
     {
         label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
         shortcut: commandShortcut(`chat.toggleHome`),
@@ -228,25 +178,14 @@ const barMenuItems = computed<MenuItem[]>(() => [
 ]);
 const onBarContextMenu = (event: MouseEvent): void => {
     if (event.target instanceof Element && event.target.closest(`input, textarea`) !== null) {
-        return; // a text field keeps the browser's own editing menu (the rename box, the list's filter)
+        return; // A text field keeps the browser's own editing menu (the rename box, the list's filter).
     }
     event.preventDefault();
     barMenu.value?.show(event);
 };
 
-/* --- Commands ------------------------------------------------------------------------------------
- * Registered while THIS bar is mounted: the desktop bar and the mobile one are exclusive, so the ids can't
- * double-register.
- *
- * Every chord here is the SHELL-WIDE tab family (tabSurface.ts): the same Ctrl+Shift+{X , . Backspace} the
- * workspace's file tabs carry and the same Alt+PageUp/PageDown cycling, claimed only while the focus is inside
- * the chat panel. Two surfaces are on screen at once, so one chord per verb resolved by focus beats two chords
- * per verb memorized: it's what F2/rename has always done here. Each is rebindable in Settings →
- * Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
- *
- * They all act on the ACTIVE chat, which is the one this header names. Cycling emits `select` rather than
- * writing activeId, so it takes the same road as a click on a card: through the panel, which routes it to the
- * store's one writer of the tab list and of the focus (see useChat.setActive). */
+// Registered while this bar is mounted (desktop/mobile are exclusive). Uses the shell-wide tab chords, all
+// acting on the active chat; cycling emits `select`, the same path a card click takes.
 let commandDisposables: readonly Disposable[] = [];
 const cycleTab = (delta: number): void => {
     const list = conversations.value;
@@ -259,9 +198,8 @@ const cycleTab = (delta: number): void => {
         emit(`select`, next.conversationId);
     }
 };
-// The chord's half of Open Beside: the first chat AFTER the focused one that isn't already in a column, else
-// the first anywhere that isn't, so repeated presses fill the window rather than re-opening the same chat.
-// Tab order, like cycleTab, since both answer "the next chat" and must not mean two different things.
+// Chord half of Open Beside: the next chat after the focused one not already in a column, else the first free
+// one, so repeats fill the window instead of reopening one chat.
 const splitBeside = (): void => {
     if (!chatWide.value) {
         return;
@@ -284,10 +222,9 @@ onMounted(() => {
             when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (edit.editing) {
-                    return; // already renaming: a second F2 would wipe the draft
+                    return; // Already renaming; a second F2 would wipe the draft.
                 }
-                // Renamed where the user can see it happen: the header line docked, and the active card itself
-                // out in the rail, which has no header to put an input in.
+                // Renamed where it's visible: the header docked, or the active card on the rail (no header there).
                 if (vertical.value) {
                     rail.value?.beginRename(activeId.value);
                     return;
@@ -330,10 +267,8 @@ onMounted(() => {
             },
         },
         {
-            // Unbound by default: the shell-wide tab family (Ctrl+Shift+{X , . Backspace}) is the set the
-            // workspace's file tabs share, and "finished" is a fact only an agent chat has: there is no file-tab
-            // verb to pair a chord with. It reaches the palette and Settings → Keybindings like any other command,
-            // and the menu row shows a chord the moment one is bound.
+            // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
+            // Keybindings.
             command: `chat.closeFinishedTabs`,
             title: `Close Finished Chats`,
             icon: `times`,
@@ -356,10 +291,7 @@ onMounted(() => {
         { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
         { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: `tabSurface == 'chat'`, handler: () => cycleTab(-1) },
         {
-            /* VSCode's split-editor chord doing the chat's version of it: give the next chat a column of its
-             * own beside this one. NOT a second view of the same conversation, which is what VSCode splits to
-             *: a chat carries a composer, and two of them writing into one transcript is a worse answer than
-             * the question deserves. Wide surfaces only, where the width for a second column exists (ChatPanel). */
+            // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
             command: `chat.splitView`,
             title: `Open Next Chat Beside`,
             keybinding: `Mod+\\`,
@@ -367,24 +299,21 @@ onMounted(() => {
             handler: () => splitBeside(),
         },
         {
-            // Unbound, like Close Finished: the verb is one press away on the row's own menu, and every chord
-            // worth spending here is already spent. Takes the focused chat's column back: the chat stays open.
+            // Unbound, like Close Finished, reachable from the row menu; takes back the column, the chat stays open.
             command: `chat.closePane`,
             title: `Close Pane`,
             when: `tabSurface == 'chat'`,
             handler: () => closePane(activeId.value),
         },
         {
-            // Unbound by default, like Close Finished: every chord this surface could claim is either taken
-            // (Mod+Shift+P is the palette this command is reached FROM) or worth more to the file tabs. The
-            // pointer trip is one click on a header that is always on screen.
+            // Unbound: every free chord here is already spent, and the header is one click away regardless.
             command: `chat.switchTab`,
             title: `Switch Chat…`,
             icon: `comments`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
                 if (vertical.value) {
-                    return; // the rail is already the list: there is nothing to open
+                    return; // The rail is already the list; there's nothing to open.
                 }
                 listOpen.value = !listOpen.value;
             },
@@ -411,23 +340,24 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <!-- Docked: one line across the top of the chat column, with the list on a sheet beneath it. Undocked: a
-         resizable rail down the window's left edge with the list always open, over a foot that carries the
-         same ✚ / history pair the header wears beside it: there as two bare glyphs, here as a labelled
-         "Past chats" row and a filled "New agent". -->
-    <!-- The rail form is not this file's box to draw: RailColumn is the column every list of agents stands in
-         (its width, its gutter and its drag), so the rail here and the one on /subagents cannot come apart. -->
+    <!--
+        Docked: one line across the column top, with the list on a sheet below it. Undocked: a resizable left rail
+        with the list always open, over a foot carrying the same +/history pair as labelled rows.
+    -->
+    <!--
+        The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping
+        this rail and /subagents' in step.
+    -->
     <component
         :is="vertical ? RailColumn : 'header'"
         :ref="setBar"
         :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
         @contextmenu="onBarContextMenu"
     >
-        <!-- THE SWITCHER. Docked only: the rail below already IS the list, and a header naming the active chat
-             above it would say a third time what the ringed card and the transcript already say.
-             Renaming REPLACES it rather than nesting a field inside it: an input in a button is neither valid
-             markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty or unchanged name
-             silently cancels: the WorkspaceTree convention, via createInlineRename. -->
+        <!--
+            The switcher, docked only — the rail below already is the list. Renaming replaces it rather than nesting a
+            field in it: Enter/blur commit, Esc cancels, an empty or unchanged name silently cancels (createInlineRename).
+        -->
         <template v-if="!vertical">
             <input
                 v-if="edit.editing && renaming"
@@ -454,18 +384,18 @@ const openHistory = (event: Event): void => {
                 @click="listOpen = !listOpen"
                 @dblclick.prevent.stop="beginRename()"
             >
-                <!-- What THIS chat is doing, in the leading slot every surface gives it. Rendered for idle too
-                     (a dim dot, not nothing) so the row's left edge never shifts as a turn starts and ends. -->
+                <!-- What this chat is doing; rendered (dim) even when idle so the row's left edge never shifts. -->
                 <Icon v-bind="statusIcon(active.status.value)" :aria-label="statusLabel(active.status.value)" class="shrink-0" />
                 <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                 <OriginMark :origin="originOf(active)" compact />
-                <!-- Off the board, still open: the box glyph is the whole message, the same one the cards wear. -->
+                <!-- Off the board but still open; the box glyph is the same one the cards wear. -->
                 <span v-if="isArchived(active)" class="flex shrink-0 items-center" aria-label="Archived">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
-                <!-- Italic while this chat is only being LOOKED at (Conversation.peek), the mark the rail's
-                     cards and the workspace's preview tab both wear. The press that keeps it is the pin in the
-                     toolbar below, beside the other things this bar does to the chat it is naming. -->
+                <!--
+                    Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the
+                    workspace preview tab wear. Kept by the pin button below.
+                -->
                 <span
                     class="min-w-0 flex-1 truncate text-left font-medium"
                     :class="[statusTabClass(active.status.value), { italic: active.peek.value }]"
@@ -478,8 +408,7 @@ const openHistory = (event: Event): void => {
                     :members="viewersOfSession(active.session.value.id)"
                     label="in this chat"
                 />
-                <!-- THE OTHER SESSIONS, as two marks. This is the whole of what the old tab strip told you from
-                     inside the workspace or a terminal, in the space one truncated title used to take. -->
+                <!-- The other sessions (running, attention) as two compact marks instead of a truncated title. -->
                 <span
                     v-if="runningCount > 0"
                     class="flex shrink-0 items-center gap-1 text-subtle"
@@ -500,7 +429,7 @@ const openHistory = (event: Event): void => {
             </button>
         </template>
 
-        <!-- THE RAIL'S LIST: always open, taking the height the window gives it. -->
+        <!-- The rail's list: always open, filling the height the window gives it. -->
         <ChatTabList
             v-if="vertical"
             ref="rail"
@@ -510,22 +439,16 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!-- Docked: the ✚ / history / dock-to-rail / pop-out run beside the switcher, a header row has width
-             to spare and no room for labels.
-             THE LAST TWO GLYPHS ARE THE POINT OF THIS BAR HAVING A TOOLBAR AT ALL: the chat's other two homes.
-             The expand moves the chat's home to the RAIL (a tile, full-window when opened, no column beside
-             other views); the pop-out moves it into its own window, a several-times-an-hour act for anyone
-             running it beside an editor or on a second screen that used to live only behind a right-click on
-             chrome the tabs kept eating. They sit last in that order: move within this window, then leave it:
-             hard against the window edge where window controls live, and each tooltip teaches its command's
-             chord so the pointer trip is one a hand only has to make until it remembers. Both are absent from
-             the rail form (which is already one of the places they lead: out there the ways back are the
-             Chat tile's own right-click menu, the window's ×, F9, or this bar's menu rows). -->
+        <!--
+            Docked toolbar: new chat, history, then the chat's other two homes (dock to rail, pop out to a window) in
+            that order — move within the window, then leave it. Tooltips name each chord; absent on the rail, which
+            already leads to both.
+        -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
-            <!-- KEEP THIS CHAT, and only while there is something to keep: the docked column shows one tab at a
-                 time, so a peeked chat has no card of its own here to carry the rail's pin. It leads the group
-                 because it is about the title beside it rather than about the panel, and it disappears the
-                 moment the chat is the reader's (by this press, or by anything they do in the chat). -->
+            <!--
+                Shown only while there's something to keep: the docked column has no card of its own to carry the rail's
+                pin. Disappears once the chat is kept, by this press or anything else in it.
+            -->
             <button
                 v-if="active.peek.value"
                 type="button"
@@ -549,8 +472,7 @@ const openHistory = (event: Event): void => {
                 v-tooltip.bottom="railHint"
                 :aria-label="railHint"
             >
-                <!-- A panel docked at the left edge: the rail, not `expand`, whose fullscreen glyph promised
-                     a maximise this press doesn't do. -->
+                <!-- A rail docked at the left edge, not `expand`, whose glyph would promise a maximise this press doesn't do. -->
                 <Icon name="layout-left" class="text-sm" />
             </button>
             <button
@@ -564,29 +486,11 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- FOOT OF THE RAIL: the two ways out of the list (one more session, or an older one) as ONE
-             centred row under it. Both controls are LABELLED, which is what the two 28px glyphs this
-             replaced never were, and both are sized to their labels: stacked full-width rows made a footer
-             slab, and at the rail's width the primary was exactly a card, wearing a tinted border in the
-             same colour as the ring on the active card above it. Two competing rectangles, both chrome, in
-             a window whose job is to be read. Rank is carried by the fill alone now: the primary keeps the
-             fleet board's fill, glyph and wording (one "New agent" across the product), the archive is the
-             quiet ghost beside it.
-             CENTRED rather than pushed into the bottom-left corner. The corner is the better Fitts target
-             and that is what this row was first built as, but a pair of small controls held against the
-             left of a rail that can be dragged to 480px reads as two things left over at the end of a list
-            : the width they are not using is the loudest thing about them. A band across the foot is what
-             the eye expects under a column, and the filled button is a big enough target either way.
-             The label says "Past chats", not "Past chats…": the ellipsis is the convention for "this opens
-             a chooser", but beside a button that has none it reads as a truncated label rather than as a
-             promise, which is exactly how it was read.
-             No divider: that went with the border down the rail's right edge, since with no edge to end
-             against a hairline over a half-empty column is a line to nowhere. Gaps hold this row off
-             instead, and the one BELOW it is the point: the rail's own padding alone left a control sitting
-             on the window's bottom edge. Both are ~1rem, so the row sits in a band of its own rather than
-             at the end of the window.
-             Note the division of labour with the filter at the top of the list: typing SEARCHES past the
-             open chats already (the "Not open" group), so History is for BROWSING: newest first. -->
+        <!--
+            Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no
+            ellipsis (there's no chooser to promise). The list's own filter already searches open chats; this browses
+            history, newest first.
+        -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <Button size="small" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
@@ -595,13 +499,10 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!-- THE SHEET. Pinned to the column's width under the header, capped so the transcript is never
-             completely covered by the list of things it is one of.
-             ON CANVAS, not on the panel's card colour: the list draws its lanes as slabs mixed FROM canvas
-             (`.lane`), so a host that paints anything else leaves them floating a shade off their own
-             surroundings. The rail out in the floating window is a canvas body; this paints one. The strong
-             edge and the shadow are what make it a sheet floating over the transcript: the fill was never
-             carrying that. -->
+        <!--
+            Pinned to the column's width, capped so the transcript is never fully covered. Painted on canvas, matching
+            the rail's own body, since the list's lanes are slabs mixed from canvas (`.lane`).
+        -->
         <div
             v-if="listOpen && !vertical"
             class="lane-ground-canvas absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
@@ -609,9 +510,10 @@ const openHistory = (event: Event): void => {
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
         </div>
 
-        <!-- Anchored to whichever button was pressed, and capped by AnchoredOverlay to the room that button's
-             own window has: the rail's trigger sits at the foot of the floating window, where the room above is
-             whatever the user has dragged it to. The session list gives way; the search box holds its size. -->
+        <!--
+            Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. The session
+            list yields room; the search box keeps its size.
+        -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
                 <SearchBar
@@ -636,8 +538,7 @@ const openHistory = (event: Event): void => {
             </div>
         </AnchoredOverlay>
 
-        <!-- Right-click menu for the bar's own chrome (the cards have their own, inside the list), rendered
-             into the floating window while the chat floats there. -->
+        <!-- Right-click menu for the bar's own chrome; cards have their own, inside the list. -->
         <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" />
     </component>
 </template>

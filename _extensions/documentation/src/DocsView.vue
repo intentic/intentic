@@ -1,18 +1,7 @@
-<!-- The Documentation area. One component serves both surfaces: the rail's workspace-wide tile (which picks a
-     repo) and the Workspace tree's per-repo panel (which arrives with `repo` already bound by the host).
-
-     The reading experience is the point, so the layout gives the page the room and keeps the machinery: runs,
-     staleness counts, publishing: to a strip and a sidebar. Everything shown here is a file that exists; there is
-     no documentation service and no server-side state to be out of step with.
-
-     THE PAGE SCROLLS THE DOCUMENT, and this is the one screen in the set where `panes` had a real argument: a
-     long document beside a 54-entry contents list is the shape that contract was written for. It loses anyway,
-     for the reason every docs site on the web is built the other way round — including this project's own
-     marketing docs (_site/site DocsLayout.astro: `sticky top-20` sidebar, page-scrolled article). A document read
-     through a pane-shaped window is a document whose length is capped by the chrome above it, and the chrome
-     here is a page title, a run strip and a frame header. What `panes` was protecting is the contents list, and
-     `sticky` protects it better: it stays put AND keeps its own scroller AND keeps its own place, which is all
-     three of the things the clamp was buying, without spending the document's height on them. -->
+<!--
+    Documentation area, serving both the rail's workspace-wide tile (picks its own repo) and the Workspace tree's per-repo panel (`repo` bound by the
+    host). The page scrolls with the document; the contents list is `sticky`, not a separately paned or clamped column.
+-->
 <script setup lang="ts">
 import {
     type AgentRunChoice,
@@ -48,37 +37,19 @@ const { repo: pinned } = defineProps<{ repo?: string }>();
 const api = host();
 
 const repos = computed(() => api.workspace.repos().map((facts) => facts.repo));
-// Repo names are paths, so they read as machine names rather than prose: `mono` is what the kit's row uses to say so.
+// Repo names are paths; shown `mono` so they read as machine names, not prose.
 const repoOptions = computed<PickerOption[]>(() => repos.value.map((name) => ({ value: name, label: name, mono: true })));
 
-/* WHICH DOCUMENT IS OPEN LIVES IN THE URL, so a page can be linked to.
- *
- * Derived from the query, never mirrored into a ref: a ref would need one watcher to follow the URL and another
- * to write it, and those two fight: the classic symptom being Back moving the URL while the view stays put. With
- * the URL as the only source, Back and forward work for nothing, and a reload lands where you were.
- *
- * `repo` is here too (a link to another repo's docs is as useful as one to a page), but the published/draft toggle
- * is NOT: a draft is one person's unreviewed work in progress, so a link carrying "show me your draft" would
- * either mislead the recipient or show them nothing. */
+// Which document is open lives in the query, never mirrored into a ref, so back/forward stay correct.
 const query = computed(() => api.route.query());
-/* What this browser last opened, honoured only while the workspace still has it: see repoChoice.ts for why the
- * area remembers at all, and why the fallback prefers a repository that has something to read. Not the mirror the
- * paragraph above warns about: it is written FROM the URL and never back to it, so nothing here can fight the URL
- * over what is open: it only answers when the URL says nothing.
- *
- * A ref rather than a read at mount because the rail's tile links to this same view without a query: clicking it
- * while already here empties `repo` from the URL without remounting anything, and the answer then has to be the
- * choice just made. */
+// Last-opened repo, honored while the workspace still has it; a ref so re-emptying the URL updates it too.
 const remembered = ref(rememberedRepo());
 const repo = computed(() => pinned ?? query.value[`repo`] ?? openingRepo(repos.value, remembered.value, (name) => documentAt(name) !== undefined));
 const label = computed(() => (repo.value === `` ? `the workspace root` : repo.value));
-// undefined ⇒ the repository's own overview page, which is where a reader should land.
+// undefined ⇒ the repository's own overview page.
 const page = computed(() => query.value[`doc`]);
 
-/* A REPOSITORY IN THE URL IS A CHOICE: the picker below puts it there, and so does a link someone followed to
- * another repo's documents. A fallback is not a choice and is deliberately not remembered: writing one back would
- * freeze whichever repo happened to be first before the presence map had answered. Pinned means the host bound
- * the repo for a directory panel, which says nothing about where the rail's tile should open. */
+// Remembers only an explicit repo choice from the URL, never a fallback, which would freeze the first guess.
 watch(
     () => query.value[`repo`],
     (chosen) => {
@@ -90,17 +61,15 @@ watch(
     { immediate: true },
 );
 
-/* Presence is a sixty-second poll, so when it is what decides the opening repository: no link, nothing
- * remembered: ask for a fresh read instead of opening on a minute-old answer and then moving the page under the
- * reader when the poll lands. */
+// Forces a fresh presence read when nothing else decides the opening repo, avoiding a shift once it lands.
 if (pinned === undefined && remembered.value === undefined) {
     refreshDocumentPresence();
 }
 
-// Pushed, not replaced: moving to another document is exactly what Back should undo. Selecting the overview drops
-// the key rather than writing an empty one, so the tidy URL is the one you get by default.
+// Pushed, not replaced, so Back undoes moving to another document; selecting the overview drops the key rather than
+// writing an empty one.
 const openPage = (dir: string | undefined): void => api.route.setQuery({ doc: dir }, { push: true });
-// Replaced, and it clears the page: a document path only means something inside its own repository.
+// Replaced (not pushed), and clears the page: a document path only makes sense within its own repo.
 const chooseRepo = (next: string): void => api.route.setQuery({ repo: next, doc: undefined });
 
 const source = ref<DocSource>(`published`);
@@ -115,9 +84,7 @@ const outline = useLoadingReveal(isLoading, repo);
 const { rows, start, advance, stop } = useRuns(repo);
 const { preflight, publish, discard } = usePublish();
 
-/* A fresh draft is what the rail badged, so opening the area should show it: otherwise the user is told something
- * is waiting and then shown the old version of it. Switching happens once per repo, not on every change of
- * `hasStaged`, so a publish (which clears the draft) does not fight the user back to a tree that no longer exists. */
+// Switches to staged once per repo per new draft, not per `hasStaged` change, so publish can't pull it back.
 const offered = ref<string | undefined>(undefined);
 watch(
     [hasStaged, repo],
@@ -130,8 +97,7 @@ watch(
     { immediate: true },
 );
 
-// Reviewing IS the acknowledgement: the badge clears when the draft has actually been looked at, not when the
-// area was opened for some other repo.
+// Viewing the draft is the acknowledgement; the badge clears only when actually looked at, not merely opened.
 watch([source, repo, hasStaged], ([which, at, staged]) => {
     if (which === `staged` && staged) {
         void acknowledgeStaged(at);
@@ -144,8 +110,7 @@ const index = computed(() => set.value?.index);
 const entries = computed(() => index.value?.entries ?? []);
 const activeRun = computed(() => rows.value.find((row) => row.running));
 
-// Advancing a run is idempotent and derived, so it is safe to attempt whenever the fleet or the draft moves: see
-// useRuns. This is what carries a run from its map phase into the fan-out without any stored phase to corrupt.
+// advance() is idempotent and safe on any fleet/draft change; carries a run from its map phase into the fan-out.
 watch(
     () => [rows.value.map((row) => `${row.manifest.runId}:${row.mapDone}:${row.done}`).join(`|`)],
     () => void advance(),
@@ -181,8 +146,7 @@ const onStart = (dirs: readonly string[], pick: AgentRunChoice | undefined): voi
         label: label.value,
         // An explicit subset only when the user narrowed it; otherwise the map discovers the scope.
         ...(dirs.length === 0 ? {} : { packages: dirs }),
-        // The caret's choice, when they used it. Recorded on the run so the map agent and every package agent
-        // after it open on the same model, at the same tier.
+        // The caret's choice, if used, recorded on the run so every later agent opens on the same model and tier.
         ...(pick === undefined
             ? {}
             : { pick: { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } }),
@@ -210,11 +174,10 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
         </template>
 
         <template #strips>
-            <!-- A live run is the one piece of machinery that earns space at the top: it is the answer to "why is
-                 this page not here yet". Progress is read off the documents on disk, not from a counter.
-
-                 Both strips here are a WASH, not an outlined box: they sit between a page title and a document,
-                 and an outline at that position reads as a third panel competing with both. -->
+            <!--
+                The run strip's progress is read off documents on disk, not a counter. Both strips render as a wash, not a bordered box, so they
+                don't compete with the title and document as separate panels.
+            -->
             <div v-if="activeRun !== undefined" class="flex items-center gap-3 rounded-lg bg-content/4 px-3 py-2 text-xs">
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
@@ -236,8 +199,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
                 </div>
             </div>
 
-            <!-- The draft banner. Publishing is a deliberate act with a named consequence, so the button says what
-                 it will do and the count of unrelated changes is on the confirmation, not hidden. -->
+            <!-- Publishing is deliberate: the button names the action, and unrelated changes are counted at confirmation. -->
             <div v-if="source === `staged` && hasStaged" class="flex flex-wrap items-center gap-3 rounded-lg bg-primary-600/10 px-3 py-2 text-xs">
                 <Icon name="file-edit" class="shrink-0 text-link" />
                 <span class="text-content">This is a draft. Nothing is in the repository until you publish it.</span>
@@ -248,19 +210,18 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
             </div>
         </template>
 
-        <!-- Coverage, filtering and the grouping all live inside <DocsNav>; this view only says which page is
-             open. The two scrollers (a 54-entry contents list and a long document) are <SplitView>'s doing. -->
+        <!--
+            Coverage, filtering and grouping live in `<DocsNav>`; this view just tracks which page is open. The two scrollers are `<SplitView>`'s
+            doing.
+        -->
         <template #rail>
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
         </template>
 
-        <!-- THE WAY BACK, and only while there is nothing to go back TO on screen. This is the app's one `swap`
-             split: once the pane is too narrow for a contents list beside a document, opening a page REPLACES the
-             list, and without this the reader holds a document with no visible route to the next one. Wide enough
-             for both, the list is right there and a back button would point at something already in view.
-
-             Above the prose rather than inside it: it belongs to the pane's frame, and a control that scrolls away
-             with the document is one the reader loses exactly when they want it. -->
+        <!--
+            Shown only in the compact `swap` layout, where opening a page replaces the contents list and this is the only way back. Sits above the
+            prose, in the frame, so it doesn't scroll away with the document.
+        -->
         <template #detail="{ compact }">
             <button v-if="compact && page !== undefined" type="button" :class="ui.textAction(`mb-2 shrink-0`)" @click="openPage(undefined)">
                 <Icon name="arrow-left" class="text-2xs" />
@@ -268,13 +229,10 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
             </button>
 
             <DocSkeleton v-if="isLoading && outline" />
-            <!-- A held space while the wait is too short to draw an outline for. `min-h-figure` rather than
-                 `flex-1`: there is no clamped parent to take a share of any more, so `flex-1` resolved to zero
-                 and the page collapsed to its header for the length of every fetch. -->
+            <!-- `min-h-figure`, not `flex-1`: there is no clamped parent to share, so `flex-1` would resolve to zero. -->
             <div v-else-if="isLoading" class="min-h-figure" />
 
-            <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting
-                 point and this view is where the first set gets made. -->
+            <!-- An invitation, not an error: no documents yet is the ordinary starting point, generated from here. -->
             <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined">
                 <div :class="ui.emptyState()">
                     <p class="text-sm">{{ label }} has no documentation yet.</p>
@@ -286,18 +244,10 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
                 </div>
             </div>
 
-            <!-- A FRAMED BODY, because this screen is an index and a body: the contents list beside it is chrome
-                 and never boxes itself, so the document is what has to say "this is the thing you are reading".
-                 The frame belongs to the SURFACE and is written here rather than inside <DocPage>: the same page
-                 in a Workspace tab is the tab's whole content and wants no box at all.
-
-                 IT NO LONGER OWNS A SCROLL AREA (`:scroll="false"`, and no `grow`, which would resolve to zero
-                 here anyway): the page is the scrollport, so the frame is as tall as the document and draws its
-                 edges around the whole of it rather than around a window onto it.
-
-                 STILL KEYED BY PAGE, and now for one reason rather than two. The scroll position is the split's
-                 business (`scroll-key` above) and no longer needs a remount to reset; what the remount is still
-                 for is the figures, which fit themselves to their container on init and want a clean one. -->
+            <!--
+                The frame lives here, not in `<DocPage>`, since a Workspace tab wants no box. `:scroll="false"`: the page is now the scrollport;
+                keyed by page only so figures re-init on their own container.
+            -->
             <ScrollFrame v-else :key="page ?? `overview`" :scroll="false">
                 <DocPage
                     v-if="page === undefined"
@@ -328,15 +278,12 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
             @start="onStart"
         />
 
-        <!-- Publishing writes files and commits them, so the confirmation names both the number of files and the
-             one thing the wire cannot rule out: anything already staged in this repo rides along. -->
+        <!-- Confirmation names the file count and flags that anything already staged here rides along with the commit. -->
         <div v-if="publishState !== undefined" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div class="flex w-full max-w-md flex-col gap-3 rounded-xl border border-line bg-overlay p-4">
                 <h2 class="text-sm font-semibold">Publish to {{ label }}</h2>
                 <p class="text-xs text-muted">
-                    <!-- Not "under docs/architecture/" any more: a package page is written onto the package as its
-                         README, and only the map lands in the docs directory. Naming one destination for both
-                         would understate what a publish touches. -->
+                    <!-- A package page is written as its own README; only the map lands under `docs/architecture/`. -->
                     {{ publishState.tails.length }} file{{ publishState.tails.length === 1 ? `` : `s` }} will be written, each package's
                     <span class="font-mono">README.md</span> and the map under <span class="font-mono">docs/architecture/</span>, and committed<span
                         v-if="publishState.branch !== ``"

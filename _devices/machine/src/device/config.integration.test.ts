@@ -4,18 +4,9 @@ import { join } from "node:path";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
-/* THE FILE THAT DECIDES WHICH SANDBOXES MAY DRIVE THIS DEVICE, and the one regression worth pinning.
- *
- * `setup` used to write this file wholesale, so connecting a device to a second sandbox silently disconnected
- * it from the first. That is not an exotic path: the last step of onboarding runs `intentic-machine device setup`, so
- * setting up a NEW sandbox on a device that already had one took the device away from the old one — with
- * no prompt, nothing about it on the progress screen, and every scope on the replacement starting `off`. It was
- * found by doing it: a machine dropped off its owner's sandbox mid-install and had to be re-paired by hand.
- *
- * `homedir` is stubbed rather than the config path parameterised, because the path is the thing under test: the
- * real one is computed once at module load from `agentHome("host")`, and a test that passed its own path would
- * be exercising a different function from the one that runs on somebody's machine. Hence the dynamic import
- * below — the mock has to be in place before the module body runs. */
+// Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
+// link when connecting a second sandbox). homedir is stubbed, not the path parameterised, since the real path is
+// computed at module load from agentHome; hence the dynamic import below.
 let home: string;
 let config: typeof import("./config.js");
 
@@ -58,7 +49,7 @@ test("connecting a second sandbox keeps the first", async () => {
 });
 
 test("re-running setup against a sandbox already connected rotates it in place rather than duplicating it", async () => {
-    // Which is what a token rotation and a re-enrollment after a revoke both look like from here.
+    // Also covers what a token rotation, or a re-enrollment after a revoke, looks like from here.
     const links = await config.upsertLink({ ...link("https://one.example", "laptop"), token: "rotated" });
     expect(links.filter((entry) => entry.sandboxUrl === "https://one.example")).toHaveLength(1);
     expect(links.find((entry) => entry.sandboxUrl === "https://one.example")?.token).toBe("rotated");
@@ -91,20 +82,18 @@ test("disconnecting with no sandbox named drops every link", async () => {
 
 test("the credential file is written so only this user can read it", async () => {
     await config.upsertLink(link("https://one.example", "laptop"));
-    // The token in here is a durable grant to somebody's sandbox; the floor belongs to @intentic/local-agent
-    // and this asserts the host agent actually goes through it.
+    // The floor is @intentic/local-agent's; this only asserts the host agent actually goes through it.
     const { mode } = await import("node:fs/promises").then(async (fs) => await fs.stat(config.configPath));
     expect(mode & 0o077).toBe(0);
-    // …and that what landed is the list shape every reader above expects.
+    // ...and that what landed matches the shape every reader expects.
     expect(JSON.parse(await readFile(config.configPath, "utf8"))).toEqual({
         links: [expect.objectContaining({ sandboxUrl: "https://one.example" })],
     });
 });
 
 test("the background-download switch defaults to on, and survives every link writer", async () => {
-    /* The regression this pins is the same one the file's header pins for links: a writer that rebuilds the
-     * file from the piece it knows about drops every piece it doesn't. The switch is the first field to share
-     * the file with `links`, so each of the three link writers gets to prove it passes the setting through. */
+    // Same regression as the file header: a writer rebuilding from what it knows drops what it doesn't. The switch
+    // shares the file with links, so each writer proves it passes the setting through.
     expect(await config.readPrepareUpdates()).toBe(true);
     await config.writePrepareUpdates(false);
     await config.upsertLink(link("https://four.example", "laptop"));

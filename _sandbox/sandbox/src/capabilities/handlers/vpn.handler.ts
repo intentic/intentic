@@ -4,21 +4,11 @@ import { vpnDrivers } from "../../vpn/vpn-drivers.js";
 import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
 import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 
-// The `vpn` capability: STORE a connection (credentials + whether it dials itself on boot). Everything about
-// dialling lives in the vpn/ subsystem behind a per-protocol driver, the live surface is the /vpn routes, and
-// the handler's shape is the tunnel kind's (tunnel/tunnel-handler.ts), so what is here is this kind's data.
-//
-// The tooling for all three protocols, and the container privileges they need, arrive via this capability's
-// environment-overlay fragment + runtime directives, applied by an owner-run rebuild; until then a link reads
-// "unavailable". The daemon runs as root, so no sudo is involved.
+// Stores a VPN connection (credentials, autoconnect on boot); dialing lives in vpn/ behind a per-protocol driver.
+// Tooling and container privileges arrive via this capability's fragment, applied by an owner rebuild; until then a
+// link reads unavailable.
 
-// ONE fragment for every provider rather than one per protocol, so adding a second kind of VPN later does not
-// cost a second container rebuild. Composition dedupes fragments by exact content, so N vpn capabilities still
-// contribute this one block.
-//
-// The container PRIVILEGES are deliberately not in here: they live in net-privileges.ts and are returned
-// alongside this, because the `exit` kind needs the same ones and a second copy of those directive lines would
-// hand `docker run` the same --device twice. See CapabilityHandler.fragment.
+// One fragment for every provider, so a new kind costs no rebuild; privileges live in net-privileges.ts.
 const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols.
 # WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
 # FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
@@ -31,8 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
         wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins \\
     && rm -rf /var/lib/apt/lists/*`;
 
-// The agent drives VPNs through the `vpn` CLI, never the underlying clients: the CLI calls the daemon, so a
-// tunnel the agent dials shows up in the operator's UI (and vice versa) instead of the two drifting apart.
+// Agent drives VPNs through the `vpn` CLI, never the clients directly, so agent and UI state can't drift apart.
 const VPN_SKILL = `---
 name: vpn
 description: Inspect, connect and disconnect this sandbox's VPN tunnels. Use when the user asks about VPN status, asks to connect or disconnect a VPN, or when a private/internal host, git remote or API is only reachable through a VPN.
@@ -70,11 +59,8 @@ Notes:
 export const vpnHandler = tunnelHandler<VpnConfig>({
     kind: "vpn",
     skill: { name: "vpn", text: VPN_SKILL },
-    /* The credential a user ROTATES, one per provider: /secrets reveals and replaces exactly this field.
-     * wireguard's whole conf is secret (it holds the private key); fortinet has one password. An ipsec tunnel
-     * carries two (the group PSK and, when XAuth is on, the per-user password): the per-user one is the rotatable
-     * half, so it wins when present. Rotating the PSK of an XAuth tunnel is a re-add of the capability (same name
-     * ⇒ update), not a /secrets edit. */
+    // The field /secrets rotates: wireguard's whole conf (it holds the key), fortinet's password, or ipsec's per-user
+    // XAuth password when set (else the group PSK). Rotating an XAuth tunnel's PSK is a re-add, not a /secrets edit.
     secret: (config) => {
         const vpn = config as VpnConfig;
         if (vpn.provider === "wireguard") {
@@ -83,23 +69,14 @@ export const vpnHandler = tunnelHandler<VpnConfig>({
         if (vpn.provider === "fortinet") {
             return "password";
         }
-        /* Not a ternary: `"password" : "presharedKey"` in the emitted JS trips Open VSX's secret scanner
-         * (gitleaks hashicorp-tf-password reads quote-word-colon-quote-value as a hardcoded password) and
-         * blocks the publish. Two returns emit no such adjacency. */
+        // Not a ternary: that exact string adjacency trips Open VSX's secret scanner and blocks the publish.
         if (vpn.username !== undefined && vpn.password !== undefined) {
             return "password";
         }
         return "presharedKey";
     },
-    /* An explicit allowlist per provider, never a spread of config, so neither the wireguard conf nor either
-     * ipsec credential can reach the browser by being forgotten in a new field.
-     *
-     * The allowlist must therefore be COMPLETE over the non-credential fields, which is the other half of the
-     * same bargain: secret-fields.ts vaults the complement of this echo, so a tunnel parameter left out here is
-     * replaced in the manifest by the vault marker, and `pfs`, `dhGroup` and `routedNetworks` are an enum, an
-     * enum and a CIDR list, none of which the marker satisfies. The entry then fails CapabilitySchema on the
-     * next read and the whole tunnel disappears from the manifest rather than one label going missing. Every
-     * dial parameter is echoed for that reason, and because the card should show what it will dial with. */
+    // Explicit per-provider allowlist, never a spread: a credential can't leak by being forgotten in a new field. The
+    // rest must stay complete too, or a left-out field like `pfs` fails schema and drops the whole tunnel.
     echo: (config) => {
         const vpn = config as VpnConfig;
         return {
@@ -128,7 +105,7 @@ export const vpnHandler = tunnelHandler<VpnConfig>({
                     }),
         };
     },
-    // Two blocks: this kind's clients, and the tun privilege shared with `exit` as one identical string.
+    // Two blocks: this kind's clients, and the tun privilege shared byte-for-byte with `exit`.
     fragment: () => [VPN_FRAGMENT, TUN_PRIVILEGES_FRAGMENT],
     driverOf: (config) => vpnDrivers[config.provider],
     wanted: (config) => config.autoConnect === "on",

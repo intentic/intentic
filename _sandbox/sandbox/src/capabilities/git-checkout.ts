@@ -2,24 +2,21 @@ import { join } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { CapabilityCtx } from "./capability.js";
 
-// Basic auth every major git host accepts for PATs (GitHub, GitLab). Rides the runner's env (GIT_CONFIG_* →
-// tmux -e pairs), so the token never lands in the URL, .git/config, the visible command line, or the persisted
-// pane logs.
+// Basic auth accepted for PATs by GitHub/GitLab. Passed via GIT_CONFIG_* env pairs so the token never lands in the URL,
+// .git/config, or a persisted pane log.
 export const gitAuthHeader = (token: string): string => `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
 
-// A staging name that can never collide with a checkout dir: entry ids must start alphanumeric, this starts
-// with a dot. Cloning lands here first so a reader never sees a half-cloned checkout at the live dir.
+// Dot-prefixed so it can never collide with an id (ids start alphanumeric); cloning lands here so a half-cloned
+// checkout is never visible at the live dir.
 const stagingName = (id: string): string => `.${id}.cloning`;
 
-// Where `keepPrevious` sets the outgoing checkout aside, the one-version-back that makes an update revertible
-// after validation stops being able to help (validation catches broken; it can't catch wrong). Dot-prefixed
-// for the same collision-proofing as the staging name.
+// Where `keepPrevious` sets the outgoing checkout aside: one version back, revertible once validation (which only
+// catches broken, not wrong) can no longer help. Dot-prefixed like the staging name.
 export const previousDir = (root: string, id: string): string => join(root, `.${id}.previous`);
 
-// Clone `url` into `<root>/<id>` through the visible job session: stage → optional pinned detached checkout →
-// optional validate → quiesce → swap. A pinned ref is checked out detached after a full clone (a shallow clone
-// can't reach an arbitrary sha). A failed clone/checkout/validate leaves no debris, and on an update the
-// previous checkout stays live until the swap. Shared by the plugin and extension handlers.
+// Clones `url` into `<root>/<id>`: stage, optional detached checkout of a pinned ref (full clone; a shallow one can't
+// reach an arbitrary sha), optional validate, quiesce, swap. A failure leaves no debris; the previous checkout stays
+// live until the swap.
 export const checkoutInto = async (
     ctx: CapabilityCtx,
     session: string,
@@ -29,21 +26,17 @@ export const checkoutInto = async (
         readonly url: string;
         readonly ref?: string | undefined;
         readonly token?: string | undefined;
-        // Inspect the staged checkout before it replaces the live dir; throw to abort the swap.
+        // Inspects the staged checkout before it replaces the live dir; throw to abort the swap.
         readonly validate?: ((staging: string) => Promise<void>) | undefined;
-        /* Runs after validation succeeds and before the live dir is touched, the update transaction's quiesce
-         * step. This is where the extension handler stops the outgoing checkout's declared processes: stopping
-         * them earlier would punish a failed validation (the old version stays live but its processes are
-         * down), and not stopping them at all leaves them executing code whose directory is about to vanish. */
+        // Runs after validation, before the live dir changes; stops the outgoing processes only once validation passes.
         readonly beforeSwap?: (() => Promise<void>) | undefined;
-        // Set the outgoing live checkout aside at previousDir() instead of deleting it, so a release that
-        // validates but misbehaves at runtime can be reverted. A first install has nothing to keep.
+        // Keeps the outgoing checkout at previousDir() instead of deleting it, so a bad release can be reverted.
         readonly keepPrevious?: boolean | undefined;
     },
 ): Promise<void> => {
     const staging = join(root, stagingName(id));
     await ctx.files.mkdir(root);
-    // A crashed earlier run may have left a stale staging dir; clean slate before cloning.
+    // A crashed earlier run may leave a stale staging dir; clear it before cloning.
     await ctx.files.remove(staging);
     try {
         await ctx.terminalRun.run(session, `git clone ${shellQuote(options.url)} ${shellQuote(stagingName(id))}`, {
@@ -66,8 +59,7 @@ export const checkoutInto = async (
     if (options.keepPrevious === true) {
         const previous = previousDir(root, id);
         await ctx.files.remove(previous);
-        // ENOENT means a first install, there is no outgoing checkout to keep. Anything else is a real
-        // filesystem failure and must abort rather than quietly discard the one copy a revert would need.
+        // ENOENT means a first install with nothing to keep; other errors must abort rather than drop the revert copy.
         try {
             await ctx.files.move(live, previous);
         } catch (error) {

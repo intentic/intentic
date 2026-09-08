@@ -1,19 +1,6 @@
 // @vitest-environment jsdom
-//
-// THE RAIL IS MOUNTED ONCE AND LIVES FOR HOURS. Docked, the open-chat list is a sheet the header drops: built
-// and torn down on every open, so anything it only gets right at mount time still looks right. Popped out it
-// is the window's left edge for as long as that window is open, and every lane it draws has to follow the store
-// with no remount to fall back on. That is what this file holds it to, by mounting the list ONCE and then
-// opening chats the way the fleet board does.
-//
-// The bug it exists for: the lanes were hidden with `v-show` over the constant LANES list. A `v-for` over a
-// compile-time constant compiles to a STABLE fragment whose <section>s carry no patch flag, so Vue patched
-// their children through the block tree and never the sections themselves: `v-show` ran once at mount and
-// `display` froze there. A chat opened from the board arrived in a lane still set to `display:none`, and the
-// floating rail sat looking empty while the panel beside it had the conversation open ("I keep clicking cards
-// in /agents and the floating window doesn't react"). Every assertion here is about what is ON SCREEN rather
-// than what is rendered, because that was the whole gap: the section was in the DOM the entire time, with the
-// right cards in it, invisible.
+// Pins lane visibility as on-screen state (display, not just rendered), for a rail mounted once and never
+// remounted. Regression: `v-show` on a `v-for` over a constant list applies once at mount and freezes.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -27,22 +14,18 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat component needs (see chatTabsReveal.test.ts): useDevice reads
-// matchMedia at module scope, environment.ts reads window.env, and jsdom implements neither ResizeObserver nor
-// scrollIntoView (the list asks for one on every focus).
+// Globals a mounted chat needs that jsdom lacks: matchMedia, window.env, ResizeObserver, scrollIntoView.
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
 let app: App | undefined;
 
-// Mounted ONCE per test and never again: the floating window's own lifetime, and the condition every assertion
-// below is made under.
+// Mounted once per test, mirroring the floating window's own lifetime; every assertion below assumes this.
 const mountList = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    // Wired the way ChatPanel wires it: the list emits verbs and its host performs them, so a press on a close
-    // affordance here has the same consequence it does in the app.
+    // Wired like ChatPanel: the list emits verbs, the host performs them (here, useChat().closeTabs).
     app = createApp({ render: () => h(ChatTabList, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -72,9 +55,8 @@ const settle = async (): Promise<void> => {
     await nextTick();
 };
 
-// Two agents the board could hand this list, one per lane it is not already showing: a question waiting on the
-// user (Attention) and a landed run (Finished). Seeded at a high revision so the list's own roster read, which
-// reaches a daemon that is not there: cannot be mistaken for a newer one.
+// Two agents, one per lane not already shown (Attention, Finished). Seeded at a high revision so the roster
+// read isn't mistaken for one from a live daemon.
 const seed = (): void =>
     setAgents(
         [
@@ -100,19 +82,18 @@ const seed = (): void =>
         100,
     );
 
-// A card on /agents, which is the traffic this file is about: the same call the board's own click makes.
+// Same call the board's own card click makes.
 const openFromBoard = (id: string): void => {
     openAgentConversation({ id, provider: `claude`, harness: `native` });
 };
 
-// The lanes a user could actually read off the rail: rendered AND not hidden. A section left in the DOM under
-// `display:none` counts as absent here, which is the whole point.
+// Lanes actually visible: rendered and not `display:none`. A section left in the DOM but hidden counts as absent.
 const lanesOnScreen = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)]
         .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
         .map((section) => section.querySelectorAll(`header span`)[1]?.textContent?.trim() ?? ``);
 
-// The chats on screen under those lanes: the answer to "did the card I just clicked turn up in the list".
+// Chats visible under those lanes, to check a clicked card actually appears.
 const cardsOnScreen = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)]
         .filter((section) => section instanceof HTMLElement && section.style.display !== `none`)
@@ -121,10 +102,10 @@ const cardsOnScreen = (el: HTMLElement): string[] =>
 it(`shows a chat opened from the board in a lane the rail was not drawing`, async () => {
     seed();
     const el = await mountList();
-    // A fresh window: one untouched draft, which is an Active chat and the only lane with anything in it.
+    // A fresh mount starts with one untouched draft, the only chat in Active.
     expect(lanesOnScreen(el)).toEqual([`Active`]);
 
-    openFromBoard(`waiting`); // the click on /agents — the draft it leaves behind is swept by the same write
+    openFromBoard(`waiting`);
 
     await settle();
     expect(lanesOnScreen(el)).toEqual([`Attention`]);
@@ -159,10 +140,8 @@ it(`drops a lane the last chat left, so no empty header is left standing`, async
     expect(cardsOnScreen(el)).toEqual([`waiting`]);
 });
 
-/* THE FINISHED LANE IS THE ONLY ONE THAT GROWS. Attention and Active empty themselves: a card leaves them the
- * moment its turn settles, so on the surface that is mounted for hours, an uncapped Finished lane is a column
- * of every agent the day produced. The board has always capped its own (windowFinished); this list drew the
- * same lane with no cap at all, which is the "my Finished lane keeps growing" report. */
+// Finished never empties itself the way Active/Attention do, so this rail needs its own cap on it, matching
+// the board's windowFinished.
 const seedFinished = (count: number): void =>
     setAgents(
         Array.from({ length: count }, (_, at) => ({
@@ -171,15 +150,14 @@ const seedFinished = (count: number): void =>
             status: `landed`,
             provider: `claude`,
             harness: `native`,
-            // Newest first, so `done0` leads the lane and `done${count - 1}` is the one furthest behind the fold.
+            // Newest first, so `done0` leads and `done${count - 1}` is furthest behind the fold.
             updatedAt: 2_000 - at,
             attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
         })) satisfies AgentSummary[],
         100,
     );
 
-// Opening them oldest-first leaves the NEWEST as the focused chat: inside the window, so these cases are about
-// the cap alone and not about the pin.
+// Opens oldest first, leaving the newest as the focused chat: these cases test the cap, not the pin.
 const openFinished = (count: number): void => {
     for (let at = count - 1; at >= 0; at--) {
         openFromBoard(`done${at}`);
@@ -199,7 +177,6 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
 
     await settle();
     expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
-    // The header still counts the whole lane: the row below is what accounts for the difference.
     expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
     expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
 });
@@ -222,24 +199,19 @@ it(`opens the rest in place, and folds them back`, async () => {
     expect(cardsOnScreen(el)).toHaveLength(7);
 });
 
-// The list is the switcher for the panel beside it, so the one card it may never drop is the chat that panel is
-// showing: the board's own exception, and the reason the window takes a selection at all.
 it(`pins the chat being read into the window, however far down the lane it is`, async () => {
     seedFinished(10);
     const el = await mountList();
     openFinished(10);
     await settle();
 
-    openFromBoard(`done9`); // the oldest finished chat, three rows behind the fold
+    openFromBoard(`done9`); // done9 is the oldest finished chat, three rows behind the fold.
 
     await settle();
     expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`, `done9`]);
-    // Eight on screen out of ten: the row may only claim the two it actually hides.
     expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
 });
 
-// The exit the lane never had. It was reachable only by right-clicking a card: a hunt for a target to perform
-// an action whose target is the lane, which is what left "Close finished" being described as a manual chore.
 it(`clears the whole lane from its header, whatever the window is showing`, async () => {
     seedFinished(10);
     const el = await mountList();
@@ -250,8 +222,7 @@ it(`clears the whole lane from its header, whatever the window is showing`, asyn
     clearButton(el)?.click();
 
     await settle();
-    // Every finished chat is closed, not just the six that were on screen, and the list is left with the fresh
-    // chat closeTabs installs rather than nothing at all.
+    // Closes every finished chat, not just the six on screen; closeTabs leaves one fresh chat behind.
     expect(lanesOnScreen(el)).toEqual([`Active`]);
     expect(cardsOnScreen(el).filter((id) => id.startsWith(`done`))).toEqual([]);
 });

@@ -2,21 +2,11 @@ import type { IntenticApi } from "@intentic/extension-api";
 import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { README_TAIL, stagingDir } from "./paths.js";
 
-/* What a repo's STAGED document set actually contains, as tails relative to the set's root (`repo.json`,
- * `_deploy/graph/README.md`, …).
- *
- * Two callers need exactly this, which is why it is one function rather than two walks: PUBLISH copies every tail
- * into the repo, and a generation run's ADVANCE step asks "which packages already have a document?" to decide
- * which agents still need starting. Deriving that from the filesystem rather than from bookkeeping is what makes
- * advancing a run idempotent, it can run on every poll, in any browser, after any interruption, and start each
- * package's agent exactly once.
- *
- * The daemon's bounded-depth children read returns this small subtree as one flat list. That matters here: the
- * old browser-side walk issued one request per discovered directory, and a wide monorepo turned the minute
- * presence poll into a synchronized request fan-out. */
+// Staged document tails relative to the set's root, for two callers: publish (copies each tail) and a run's advance
+// step (derives which packages already have a page, making it idempotent since nothing is bookkept). One bounded-depth
+// request, not one per directory.
 
-// `_editor/web` is two levels; a monorepo nesting packages three deep under a group directory is the realistic
-// worst case. Past that the set is not shaped like anything this extension writes.
+// Covers a package nested three deep under a group directory, the realistic worst case here.
 const MAX_DEPTH = 5;
 
 export const listStagedTails = async (api: IntenticApi, repo: string): Promise<readonly string[]> => {
@@ -34,7 +24,7 @@ export const listStagedTails = async (api: IntenticApi, repo: string): Promise<r
     }
 };
 
-// Which package dirs the staged set holds a page for, a `README.md` tail's directory part. The map's own tails
-// sit at the root of the set and have no directory part, so they cannot be mistaken for a package.
+// Package dirs with a staged page: a README tail's directory part. The map's own tails sit at the root, with no
+// directory part, so they can't be mistaken for one.
 export const documentedDirs = (tails: readonly string[]): readonly string[] =>
     tails.filter((tail) => tail.endsWith(`/${README_TAIL}`)).map((tail) => tail.slice(0, -`/${README_TAIL}`.length));

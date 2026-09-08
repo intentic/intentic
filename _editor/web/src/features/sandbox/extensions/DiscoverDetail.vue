@@ -4,19 +4,9 @@ import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intenti
 import { computed } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 
-/* ONE LISTING, READ BEFORE IT IS RUN, and the surface where this product's actual argument about trust gets
- * made instead of implied.
- *
- * The source identity pins what runs, a deterministic scanner and the registry's agent gate inspect that exact
- * object, and a verified row additionally had a human read it. The manifest is NOT a browser sandbox: it gates
- * cooperative daemon API calls while the bundle shares the app's JavaScript realm. These are different
- * guarantees, so they are separate lines rather than one safety badge.
- *
- * THE STRONGEST MOVE IS OFFERED WHERE IT IS MOST NEEDED. The owner's own agent can read the exact commit cold
- * and report back before anything is installed, which is the only thing on this screen that can answer "does
- * the code do what the description says". On a reviewed listing that is a secondary offer beside Install. On an
- * listing with no human review it is the PRIMARY button and Install steps back to a plain one: the registry's
- * automated gate is baseline admission, while the owner's own agent is an independent second read. */
+// One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source
+// identity, scanner, agent gate and human review are separate guarantees shown as separate lines, not one badge. The
+// owner's own agent read is offered as primary where no human has reviewed the code, secondary otherwise.
 
 const { listing, canInstall, installing } = defineProps<{
     listing: DiscoverListing;
@@ -41,24 +31,20 @@ const sourceHref = computed(() => {
     if (url === undefined) {
         return undefined;
     }
-    // A GitHub pointer can link at the exact commit, which is the only link worth having here: the branch
-    // shows code that is not what would be installed.
+    // Links at the exact commit: a branch link could show code that isn't what would be installed.
     return repo.value !== undefined && ref40.value !== undefined ? `https://github.com/${repo.value}/tree/${ref40.value}` : url.replace(/\.git$/, ``);
 });
 
-// An audit reads a commit, so it is offered exactly when there is one to read. Everything else on this panel
-// renders regardless: a listing nobody can install is still a listing somebody may want to understand.
+// Offered exactly when there's a commit to read; everything else on the panel renders regardless of installability.
 const auditable = computed(() => ref40.value !== undefined && listing.state.kind !== `blocked`);
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
-// The audit leads wherever the registry has not vouched for the code. See the block comment above.
+// Leads wherever the registry hasn't vouched for the code.
 const auditLeads = computed(() => auditable.value && !verified.value);
 
 </script>
 
 <template>
-    <!-- The footer WRAPS, which is not cosmetic: its primary label is a sentence ("Have my agent read the code
-         first") because that is the offer this panel exists to make, and on a phone that sentence plus Install
-         is wider than the dialog: unwrapped, the one control that matters most is the one that gets clipped. -->
+    <!-- The footer wraps on purpose: the primary label is a full sentence, and unwrapped on a phone the control that matters most would get clipped. -->
     <Modal v-model:open="open" size="md">
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
@@ -73,8 +59,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
         <div class="flex flex-col gap-4">
             <p v-if="listing.entry.description" class="text-sm leading-relaxed text-muted">{{ listing.entry.description }}</p>
 
-            <!-- The facts that are just facts, in one line: what it calls itself, what it costs, how popular it
-                 is. Everything that is a CLAIM about safety is below, where it can be stated in full. -->
+            <!-- Plain facts only (name, cost, popularity); anything that's a safety claim is stated in full below. -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
                 <span v-if="listing.entry.version">{{ listing.entry.version }}</span>
                 <span v-if="listing.entry.stars !== undefined" class="inline-flex items-center gap-0.5"
@@ -92,8 +77,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 </a>
             </div>
 
-            <!-- Where the state of this row is not "here it is to install", it is said before anything else on
-                 the panel: a reader looking at a blocked listing must not have to reach the button to find out. -->
+            <!-- A non-default state is said before anything else, so a reader never has to reach the button to learn it. -->
             <Notice v-if="listing.state.kind === `blocked`" tone="danger">
                 <b>Blocked.</b> {{ listing.state.reason }} It stays listed rather than disappearing, because anyone who already installed it is the
                 person this most concerns.
@@ -108,8 +92,10 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
             </Notice>
 
-            <!-- THE TRUST BLOCK. Three different parties guarantee three different things; a single badge
-                 would blur which. Ordered by how much each actually settles. -->
+            <!--
+                Three different parties guarantee three different things, kept as separate lines rather than one badge, ordered by how much each
+                actually settles.
+            -->
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
                 <div :class="ui.sectionLabel()">What you'd be trusting</div>
 
@@ -169,8 +155,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                     </span>
                 </div>
 
-                <!-- The scan's cold re-read. Evidence, not endorsement, and silent where there is none: a
-                     registry that runs no scanner has not failed a check. -->
+                <!-- Evidence, not endorsement, and silent when there's none: a registry with no scanner hasn't failed a check. -->
                 <div v-if="loads" class="flex items-start gap-2 text-xs">
                     <Icon name="check" class="mt-0.5 shrink-0 text-success" />
                     <span class="text-muted">Re-checked at this exact commit by the registry's nightly scan: the manifest parses and it loads.</span>
@@ -203,8 +188,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
         </div>
 
         <template #footer>
-            <!-- Order follows what the listing has actually earned: where the code has been read by somebody,
-                 Install leads; where it has not, the read leads and Install stands beside it. -->
+            <!-- Order follows what's been earned: where the code's been read, Install leads; where it hasn't, the read leads instead. -->
             <Button
                 v-if="auditable"
                 :label="auditLeads ? `Have my agent read the code first` : `Read the code first`"

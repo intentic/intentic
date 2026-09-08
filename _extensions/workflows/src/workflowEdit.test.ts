@@ -2,13 +2,7 @@ import { type Workflow, workflowFaults, WorkflowSchema, type WorkflowStep } from
 import { expect, test } from "vitest";
 import { addStep, connectSteps, disconnectSteps, removeStep, toggleHandoff, updateStep } from "./workflowEdit";
 
-/* THE GRAPH EDITS, and one property above all the individual cases: NO EDIT MAY LEAVE THE WORKFLOW FAULTY.
- *
- * `workflowFaults` is the same function the save route refuses with and the designer shows under the canvas,
- * so asserting it stays empty after every mutation is the strongest thing these tests can say: it holds for
- * edits nobody thought to write a case for, which is exactly the class of bug a canvas produces (you can draw
- * a cycle in one gesture, and delete a step three others depend on in another).
- */
+// No edit below may leave the workflow faulty; `workflowFaults` is the same check the save route and designer use.
 
 const base = (): Workflow => ({
     id: `wf`,
@@ -17,7 +11,7 @@ const base = (): Workflow => ({
     maxParallel: 2,
 });
 
-// Build a workflow of `n` chained steps through the real API, so the fixtures are themselves an edit trace.
+// Builds a chain of `n` steps through the real API so the fixtures are themselves edit traces.
 const chain = (n: number): { workflow: Workflow; ids: string[] } => {
     let workflow = base();
     const ids: string[] = [];
@@ -26,7 +20,7 @@ const chain = (n: number): { workflow: Workflow; ids: string[] } => {
         workflow = added.workflow;
         ids.push(added.stepId);
     }
-    // Prose is the user's job and the faults list does not check it; fill it so the fixture is a legal save.
+    // workflowFaults does not check step prose; fill it in so the fixture parses as a legal save.
     for (const id of ids) {
         workflow = updateStep(workflow, id, { goal: `${id} is done`, prompt: `do ${id}` });
     }
@@ -45,7 +39,6 @@ test("a new step is chained onto the one it came from, and starts the run when i
 
 test("a new step is runnable on its defaults alone: the whole premise of hiding the advanced fields", () => {
     const { workflow } = chain(1);
-    // Parses AND has no faults: a user who filled in only the two prose fields can press Run.
     expect(WorkflowSchema.safeParse(workflow).success).toBe(true);
     expect(workflowFaults(workflow)).toEqual([]);
 });
@@ -58,7 +51,6 @@ test("connecting backwards is refused rather than allowed to close a cycle", () 
     expect(attempted).toBe(workflow);
     expect(workflowFaults(attempted)).toEqual([]);
 
-    // And the trivial self-edge, which a canvas makes very easy to draw.
     expect(connectSteps(workflow, b, b)).toBe(workflow);
 });
 
@@ -83,7 +75,7 @@ test("removing a step takes its edges with it rather than leaving its dependents
 
     const without = removeStep(workflow, b);
     expect(without.steps.map((step) => step.id)).toEqual([a, c]);
-    // `c` used to need `b`. A dangling need is a fault the save route refuses with: the delete must not create one.
+    // The delete must not leave `c` needing `b`, which would be a fault the save route refuses with.
     expect(stepOf(without, c).needs).toEqual([]);
     expect(workflowFaults(without)).toEqual([]);
 });
@@ -94,12 +86,11 @@ test("a step that loses its only predecessor stops claiming to continue a sessio
     const continued = toggleHandoff(workflow, b);
     expect(stepOf(continued, b).handoff).toBe(`continue`);
 
-    // Disconnecting leaves it a root, where "continue" has nothing to continue: demoted, not left faulty.
     const orphaned = disconnectSteps(continued, a, b);
     expect(stepOf(orphaned, b).handoff).toBe(`fresh`);
     expect(workflowFaults(orphaned)).toEqual([]);
 
-    // Same repair by the other road: deleting the predecessor.
+    // Same repair via deleting the predecessor instead of disconnecting.
     expect(workflowFaults(removeStep(continued, a))).toEqual([]);
 });
 
@@ -110,8 +101,6 @@ test("a step that gains a second predecessor stops claiming to continue a sessio
     const other = addStep(workflow, undefined);
     workflow = updateStep(other.workflow, other.stepId, { goal: `g`, prompt: `p` });
 
-    // Two upstream sessions cannot both be continued into one, so the handoff gives way: the user's gesture
-    // was about the dependency.
     const merged = connectSteps(workflow, other.stepId, b);
     expect(stepOf(merged, b).needs).toHaveLength(2);
     expect(stepOf(merged, b).handoff).toBe(`fresh`);

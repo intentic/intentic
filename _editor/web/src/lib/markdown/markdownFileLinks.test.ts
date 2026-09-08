@@ -1,10 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 // @vitest-environment jsdom
-//
-// Both the linkifier and DOMPurify need a real document (see renderMarkdown.test.ts for why jsdom rather than
-// happy-dom). Asserted end-to-end through renderMarkdown, because the seam being pinned is the ORDER: marked
-// parses, DOMPurify sanitizes, then the file links go in, and a unit test of the walker alone would not catch
-// it moving.
+// Needs jsdom: the linkifier and DOMPurify require a real document. Asserted end-to-end through renderMarkdown since
+// the order (parse, sanitize, then linkify) is what's pinned.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The container-root lookup reads the workspace-tree query; `queryData` is that seam.
@@ -16,16 +13,16 @@ vi.mock("../queryPersistence", () => ({
 const { fileLinkDecorator, renderMarkdown } = await import("./renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 
-// A previewed FILE renders through the kit's <Markdown> with the app's decorator (see MarkdownViewer), which is
-// the only surface that knows a directory to resolve against, so the document cases below go in the same way.
+// A previewed file renders through the kit's <Markdown> with the app's decorator, the only surface that knows a
+// directory to resolve against.
 const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator({ dir }));
 
 beforeEach(() => {
     queryData = [];
 });
 
-// The rendered anchor for `path`, or undefined: parsed back out of the HTML so the assertions read as "what
-// the DOM ends up being" rather than as string matching.
+// The rendered anchor for `path`, or undefined; parsed from the HTML so assertions read as DOM shape, not string
+// matching.
 const linkTo = (html: string, path: string): HTMLAnchorElement | undefined => {
     const holder = document.createElement(`div`);
     holder.innerHTML = html;
@@ -35,7 +32,6 @@ const linkTo = (html: string, path: string): HTMLAnchorElement | undefined => {
 describe(`file mentions in agent prose`, () => {
     it(`linkifies a bare path, carrying the workspace route and the line`, () => {
         const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
-        // Shown by filename: the path is addressing, and it stays in the href and the tooltip.
         expect(link?.textContent).toBe(`foo.ts:42`);
         expect(link?.getAttribute(`title`)).toBe(`src/foo.ts:42`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
@@ -46,11 +42,9 @@ describe(`file mentions in agent prose`, () => {
     it(`linkifies a path in backticks: the form agents reach for most`, () => {
         const html = renderMarkdown("See the `src/chat/useChat.ts` singleton.");
         const link = linkTo(html, `src/chat/useChat.ts`);
-        // The inline-code styling survives: the anchor goes INSIDE the <code>, not around it.
         expect(link?.closest(`code`)).not.toBeNull();
     });
 
-    // Nothing asks the model for a notation, so every one it might reach for has to land on the same link.
     it(`reads the line off whichever notation the reference arrived in`, () => {
         const forms = [`src/foo.ts:42`, `src/foo.ts(42,7)`, `[the config](src/foo.ts#L42)`, `[the config](src/foo.ts#L42-L58)`];
         for (const form of forms) {
@@ -68,7 +62,6 @@ describe(`file mentions in agent prose`, () => {
     });
 
     it(`retargets a relative markdown link at the workspace route, line tail and all`, () => {
-        // Left alone this would be a browser navigation to a relative URL the SPA has no route for.
         const link = linkTo(renderMarkdown(`[the config](./src/foo.ts:42)`), `src/foo.ts`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
         expect(link?.dataset[`line`]).toBe(`42`);
@@ -77,7 +70,6 @@ describe(`file mentions in agent prose`, () => {
     it(`keeps the prose as the link text when markdown named the file`, () => {
         const link = linkTo(renderMarkdown(`[the config](src/foo.ts)`), `src/foo.ts`);
         expect(link?.textContent).toBe(`the config`);
-        // The path is only visible on hover, so it has to be in the tooltip.
         expect(link?.getAttribute(`title`)).toBe(`src/foo.ts`);
     });
 
@@ -93,9 +85,9 @@ describe(`file mentions in agent prose`, () => {
         expect(html).not.toContain(`md-file-link`);
     });
 
-    // Resolved at RENDER time so the href is the real file too: ⌘-click and "copy link address" have to land
-    // where a plain click does. A reference the cached tree can't place keeps its literal href and is resolved
-    // daemon-side on click instead (see openFileRef.test.ts).
+    // Resolved at render time so the href is the real file too, since middle-click and "copy link address" must land
+    // where a plain click does. An unmatched reference keeps its literal href and resolves daemon-side on click
+    // instead.
     it(`points an abbreviated mention at the file it names`, () => {
         queryData = [
             {
@@ -144,9 +136,8 @@ describe(`file mentions in agent prose`, () => {
     });
 });
 
-/* A markdown FILE names its neighbours relative to itself, so the same reference means a different file
- * depending on where the document lives: the distinction agent prose (always workspace-root-relative) does
- * not have. Resolving it wrong is worse than not linking at all: the click lands on a file that isn't there. */
+// A previewed file resolves neighbours relative to itself, unlike agent prose (always workspace-root-relative);
+// resolving it wrong is worse than not linking, since the click lands on the wrong file.
 describe(`references inside a previewed document`, () => {
     it(`resolves a relative reference against the document's own directory`, () => {
         const html = renderIn(`docs/`, `see [b](./b.md) and docs/deep/c.md`);
@@ -168,16 +159,13 @@ describe(`references inside a previewed document`, () => {
     });
 });
 
-/* The three ways a link to an agent's own file used to go wrong. Each of these is a real report: the file the
- * agent had just written opened a not-found page, the file it had edited opened the shared tree's different
- * text under the same name, and the whole address it wrote opened a second browser tab on both. */
 describe(`links into a conversation's own copy of the workspace`, () => {
     const renderAs = (agent: string, source: string): string => renderEngine(source, fileLinkDecorator({ agent }));
 
     it(`carries the conversation in the href, so a new tab lands in the same tree`, () => {
         const link = linkTo(renderAs(`c-1`, `Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts?agent=c-1`);
-        // The click path reads it back from here: the href is for the gestures the browser owns.
+        // The click handler reads the dataset; the href covers browser-native gestures instead.
         expect(link?.dataset[`agent`]).toBe(`c-1`);
         expect(link?.dataset[`line`]).toBe(`42`);
     });
@@ -189,8 +177,6 @@ describe(`links into a conversation's own copy of the workspace`, () => {
     });
 
     it(`unwraps our OWN address written out in full, instead of treating it as another website`, () => {
-        // What a model writes once it has seen the app's address anywhere. Read as external it opened a second
-        // tab, reloaded the app, dropped the line, and landed on the shared tree.
         const link = linkTo(renderMarkdown(`[the plan](${window.location.origin}/workspace/docs/plan.md#L12)`), `docs/plan.md`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/docs/plan.md`);
         expect(link?.getAttribute(`target`)).toBeNull();

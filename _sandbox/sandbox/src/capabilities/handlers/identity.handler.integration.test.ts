@@ -8,10 +8,8 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../.
 import type { CapabilityCtx } from "../capability.js";
 import { identityHandler, identityLoginUrl } from "./identity.handler.js";
 
-/* The browser handler's harness, one directory over: a ctx exposing only what identityHandler touches, on a
- * fresh temp workspace. `capabilities` carries the store the converge derives the SHARED `identities` skill
- * from: mutable, because the routes upsert after apply and the second identity's converge must still see the
- * first (the delta covers only the entry mid-apply). */
+// Ctx exposing only what identityHandler touches. `capabilities` is mutable: converge derives the shared `identities`
+// skill from it plus the entry mid-apply, so a second identity's converge still sees the first.
 const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: string; capabilities: Capability[] } => {
     const root = mkdtempSync(join(tmpdir(), "identity-cap-"));
     const ctx = {
@@ -26,7 +24,6 @@ const config = (extra: Partial<IdentityConfig> = {}): IdentityConfig => ({ email
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
-        // consume the apply frames
     }
 };
 
@@ -38,16 +35,16 @@ test("apply lands the identity on the shared identities skill; status is pending
 
     await drain(identityHandler.apply(ctx, "main", config()));
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
-    // ONE skill for every identity (never a per-identity clone) with this identity as a roster line.
+    // One shared skill for every identity, never a per-identity clone.
     expect(skill).toContain("name: identities");
     expect(skill).toContain("- `main`: studio@gmail.com");
-    // The tools are the routed browser server's, addressed by account: the id every roster line leads with.
+    // Tools are the routed browser server's, addressed by `account`, the id each roster line leads with.
     expect(skill).toContain("mcp__browser__browser_");
     expect(skill).toContain("`account`");
-    // The switch is off, and the skill says so out loud rather than leaving the agent to hit the tool's refusal.
+    // Explicit "NOT open accounts" beats leaving the agent to discover it via a tool refusal.
     expect(skill).toMatch(/NOT open accounts/i);
 
-    // No session yet: pending either way (with or without the browser pack, the detail differs, never the state).
+    // Pending either way; browser-pack presence changes the detail, never the state.
     expect((await identityHandler.status(ctx, "main", config())).state).toBe("pending");
 });
 
@@ -69,8 +66,7 @@ test("two identities are two roster lines on one skill, and each keeps its own s
     const skill = await readWorkspaceFile(identitiesSkillPath(root));
     expect(skill).toContain("- `main`: studio@gmail.com · may NOT open accounts");
     expect(skill).toContain("- `scout`: scout@gmail.com · may open accounts");
-    // Both route from the one catalog line, by id. The addresses stay on the roster lines: the description is
-    // read on every call of every session, and sixteen identities once put 836 characters of e-mail there.
+    // Catalog line routes by id only; addresses stay on roster lines, since the description loads on every call.
     expect(skill).toMatch(/^description: .*\(main, scout\)/m);
     expect(skill).not.toMatch(/^description: .*@/m);
 });
@@ -81,9 +77,6 @@ test("apply rejects a non-address and a dangling mailbox reference at the form, 
     await expect(drain(identityHandler.apply(ctx, "main", config({ mailbox: "imap-main" })))).rejects.toThrow(/no capability "imap-main"/);
 });
 
-/* The refusal that keeps a shared browser from vanishing under its accounts: their sessions live in the
- * identity's profile, so removing it would sign every one of them out as a side effect. The message names the
- * accounts because the fix is per-account and the reader is about to go do it. */
 test("remove refuses while accounts still name this identity, then tears the whole session down", async () => {
     const born: Capability = { id: "reddit-main", kind: "browser", config: { platform: "reddit", identity: "main" } };
     const { ctx, root } = tempCtx([born]);
@@ -93,7 +86,7 @@ test("remove refuses while accounts still name this identity, then tears the who
     await expect(identityHandler.remove?.(ctx, "main", config())).rejects.toThrow(/reddit-main/);
     expect(hasSession(root, "main")).toBe(true);
 
-    // With the account gone, removing the LAST identity takes the shared skill and the session with it.
+    // No account this time: removing the last identity takes the shared skill and session with it.
     const empty = tempCtx();
     await drain(identityHandler.apply(empty.ctx, "main", config()));
     await markConnected(empty.root, "main");
@@ -117,7 +110,7 @@ test("removing one identity of two keeps the shared skill, minus its roster line
 test("the guided login starts at the provider's own sign-in, guessed from the address", () => {
     expect(identityLoginUrl(config())).toBe("https://accounts.google.com/");
     expect(identityLoginUrl(config({ email: "ops@outlook.com" }))).toBe("https://login.live.com/");
-    // An unknown (hosted) domain falls back to the domain itself; an explicit loginUrl beats every guess.
+    // Unknown domain falls back to itself; an explicit loginUrl always wins.
     expect(identityLoginUrl(config({ email: "me@acme.dev" }))).toBe("https://acme.dev/");
     expect(identityLoginUrl(config({ loginUrl: "https://sso.acme.dev/start" }))).toBe("https://sso.acme.dev/start");
 });

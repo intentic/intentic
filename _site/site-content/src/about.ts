@@ -1,29 +1,18 @@
 import { productHref } from "./product";
 import { githubProfileUrl, githubUrl, linkedinProfileUrl, personalSiteUrl } from "./site";
 
-/* Who builds this, as data: shared by the landing page's trust band and by /about/.
- *
- * It exists because the site asks for an unusual amount of trust: a visitor is about to run a container
- * on their own machine and hand it a GitHub token, a database password and write access to a repo.
- * "The platform architecturally cannot reach in" answers half of that, and since the ownership band was
- * retired the first card below is the only place on the landing page that says it; the other half is
- * *who is making that promise*, and until now the founder existed only in the page's JSON-LD: told to
- * Google, never to the reader.
- *
- * The rule for everything in this file: it must be checkable. No testimonials, no logo wall, no
- * "trusted by N developers": the product is weeks old and the honest version of that is a strength
- * only if we say it plainly. Every claim below is either linkable to a public profile or measured from
- * this repository at build time (`gitStats()`), never authored as a number.
- */
+// Who builds this, as data, shared by the landing page's trust band and /about/. Every claim here must be checkable:
+// linkable to a public profile, or measured from this repo at build time (`gitStats()`), never authored as a number. No
+// testimonials, logo walls, or vague claims.
 
-/** A link out to a profile a reader can check. `logo` keys into the glyph map in AboutLinks.astro. */
+/** Link to a profile a reader can check; `logo` keys into AboutLinks.astro's glyph map. */
 export interface AboutLink {
     label: string;
     href: string;
     logo: "github" | "linkedin" | "globe";
 }
 
-/** One checkable claim, rendered as a card. `stat` is filled at build time, never authored. */
+/** One checkable claim as a card; `stat` is filled at build time, never authored. */
 export interface TrustCard {
     title: string;
     body: string;
@@ -61,9 +50,7 @@ export interface OpenSourceProject {
 export const CREATOR_NAME = "Artur Kurowski";
 export const CREATOR_HANDLE = "radarsu";
 
-/* Split so no `\S+@\S+` exists anywhere in the served HTML: the address is assembled in the browser.
- * See AboutContact.astro: a human reads the parts, a harvester's regex finds nothing, and with
- * JavaScript off the address is still legible, just not clickable. */
+// Split so no `\S+@\S+` exists in served HTML; assembled in the browser to dodge harvesters.
 export const CONTACT_EMAIL_PARTS = { user: "radarsu", domain: "gmail.com" } as const;
 
 export const creatorLinks: AboutLink[] = [
@@ -76,11 +63,7 @@ export const creatorRole = "Full-stack engineer, DevOps, and 15+ years of shippi
 
 export const creatorBio = "Developer's job has changed. We're now AI operators. It requires different toolset.";
 
-/* The hero, which the landing band deliberately does NOT have.
- *
- * A reader arrives here from "More about who builds this →", so the one thing this page cannot do is repeat
- * the band they just clicked out of. The band leads with the name because it is a panel beside other panels;
- * the page leads with the claim, and lets the portrait and the byline carry the name. */
+// Leads with the claim, not the name, since the band a reader just left already led with the name.
 export const aboutHero = {
     eyebrow: "About the creator",
     headline: "Built in the open, by one engineer and his agents.",
@@ -88,8 +71,7 @@ export const aboutHero = {
     portraitAlt: `${CREATOR_NAME}, the creator of intentic`,
 };
 
-/* Four cards, and the fourth is the one that makes the other three believable. A trust section with no
- * admission in it reads as marketing; this product is new, and saying so is the position. */
+// Fourth card admits the product is new; a trust section with no admission reads as marketing.
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
@@ -116,9 +98,7 @@ export const trustCards: TrustCard[] = [
     },
 ];
 
-/* Read top to bottom as a spine rather than five bullets: the marker is what the timeline prints in the
- * margin, so the eye gets a span before it gets a sentence. Ordered as a career runs, the degree it started
- * from, the work, the shape of the work, and what all of it left behind, not as a ranked list of claims. */
+// Ordered as a career runs, not as a ranked list; `marker` is the timeline's margin span.
 export const background: BackgroundItem[] = [
     { marker: "Education", lead: "CS degree", body: "from the Polish-Japanese Academy of Information Technology (PJATK), Warsaw." },
     {
@@ -131,9 +111,7 @@ export const background: BackgroundItem[] = [
     { marker: "Specialties", lead: "Backend to bare metal", body: "TypeScript, NestJS, P2P protocols, CI/CD, and clean architecture." },
 ];
 
-/* The band under the hero: three figures a reader can go and check, and only one of them is authored here.
- * The commit split is measured from git at build time and simply does not render when git cannot answer,
- * which is the same rule every other number on this site follows. */
+// Only the commit figure is measured at build time; it simply doesn't render if git can't answer.
 export const aboutFigures: AboutFigure[] = [
     { stat: "commits", detail: "commits written by agents, in public" },
     { value: "15+ years", detail: "shipping production systems" },

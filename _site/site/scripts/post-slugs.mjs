@@ -2,16 +2,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/* The published posts' slugs, for the Astro CONFIG, which is the one consumer that cannot ask `posts.ts`.
- *
- * `src/lib/posts.ts` reads the same directory with `import.meta.glob`, which is a Vite transform applied to
- * the module graph of the site — and the config is loaded before that graph exists. So this reads the files
- * off disk instead. It is deliberately the smallest thing that can answer the question: which posts will be
- * built, in what order. Everything else about a post — its title, its description, the fact that a missing
- * one is a build error — stays in `posts.ts`, which is where the pages read it from.
- *
- * The one rule duplicated here is `draft: true`, and the reason it must be is that a draft has no page, so
- * naming it in llms.txt would point a machine reader at a 404. */
+// Published posts' slugs, for astro.config, which can't use `posts.ts`'s `import.meta.glob` (not built yet when config
+// loads); reads the directory directly instead. Only which posts build and in what order; everything else stays in
+// `posts.ts`. Duplicates `draft: true`, since a draft has no page and would 404 in llms.txt.
 
 const postsDir = fileURLToPath(new URL("../content/posts", import.meta.url));
 

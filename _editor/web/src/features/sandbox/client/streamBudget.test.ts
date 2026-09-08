@@ -13,13 +13,13 @@ beforeEach(() => {
     resetStreamBudget();
 });
 
-// A slot taken and immediately dropped on the floor: the shape most of these assertions need. The tests run
-// without Web Locks (no such thing in the DOM stand-in), which is exactly the single-realm fallback path.
+// Acquires and discards a slot, the shape most assertions need. Runs without Web Locks in this DOM stand-in,
+// exercising the single-realm fallback path.
 const take = async (signal?: AbortSignal): Promise<(() => void) | undefined> => acquireStreamSlot(`attach`, signal);
 
 describe(`streamCapacity`, () => {
     it(`only caps the transport that cannot multiplex`, () => {
-        // h2 carries ~100 streams on one connection, so capping there would serialize for nothing.
+        // h2 multiplexes many streams on one connection, so capping there would serialize for nothing.
         expect(streamCapacity(`local`)).toBe(Number.POSITIVE_INFINITY);
         expect(streamCapacity(`public`)).toBe(Number.POSITIVE_INFINITY);
         expect(streamCapacity(undefined)).toBe(Number.POSITIVE_INFINITY);
@@ -28,23 +28,20 @@ describe(`streamCapacity`, () => {
     });
 
     it(`leaves the browser room for ordinary requests`, () => {
-        // The whole point: six connections exist, and the streams may not have all of them. Two spare slots are
-        // what keeps a file read answerable while four agents stream.
+        // The point: connections are shared with ordinary requests, so streams may not claim all of them.
         expect(streamCapacity(`local-insecure`)).toBeLessThan(6);
     });
 });
 
 describe(`streamPermits`, () => {
     it(`splits the capped budget into pools that spend it exactly`, () => {
-        // Disjoint and exhaustive: every permit belongs to one pool, and no permit is invented. A split that
-        // summed to MORE than the capacity would hand out connections the browser does not have.
+        // Disjoint and exhaustive: every permit belongs to one pool, and pools must never sum past capacity.
         const pools = streamPermits(`local-insecure`, `events`) + streamPermits(`local-insecure`, `attach`);
         expect(pools).toBe(streamCapacity(`local-insecure`));
     });
 
     it(`keeps a permit for liveness that the attaches cannot take`, () => {
-        // /events is what makes a window live at all. Sharing one queue with the unbounded kind is how a
-        // popped-out window ends up rendering a photograph of the workspace.
+        // /events makes a window live; sharing its queue with attaches is how a window ends up frozen on a stale view.
         expect(streamPermits(`local-insecure`, `events`)).toBeGreaterThan(0);
         expect(streamPermits(`local-insecure`, `attach`)).toBeGreaterThan(0);
     });
@@ -76,9 +73,7 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`counts each kind against its own pool`, async () => {
-        // The regression this file exists for: /events used to take a connection off the books entirely, so the
-        // two held back for ordinary requests were really one. Saturating the attaches must not cost liveness
-        // its permit.
+        // Saturating the attaches must not cost /events its own permit.
         setStreamCapacity(() => 1);
         expect(await acquireStreamSlot(`attach`)).toEqual(expect.any(Function));
         expect(await acquireStreamSlot(`events`)).toEqual(expect.any(Function));
@@ -96,9 +91,8 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`serves waiters in the order they asked, the order Web Locks grants in`, async () => {
-        /* One queueing policy whichever primitive the browser provides, or the app behaves differently on a
-         * browser with Web Locks than on one without. Which order is not the interesting property (nobody
-         * waits long enough for it to hurt: see the deadline below); having only ONE of them is. */
+        // One queueing policy regardless of the browser's primitive; the order itself isn't the point, having just one
+        // is.
         setStreamCapacity(() => 1);
         const held = await take();
         const order: string[] = [];
@@ -124,7 +118,7 @@ describe(`acquireStreamSlot`, () => {
         const first = await take();
         first?.();
         first?.();
-        // A double release that decremented twice would let TWO streams past a capacity of one.
+        // A double release that decremented twice would let two streams past a capacity of one.
         expect(await take()).toEqual(expect.any(Function));
         let extra = false;
         void take().then(() => (extra = true));
@@ -151,10 +145,8 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`leaves the transport rather than waiting forever on a permit that is not coming`, async () => {
-        /* The deadline, and the reason it exists: waiting was the OLD answer and it is the wrong one. The
-         * tunnel is sitting there speaking h2 with no cap, so a window that wants more streams than this
-         * transport has moves to it (useEndpoint demotes) and opens anyway. Waiting instead is how a fifth
-         * agent, or a third window, reads as "the workspace froze". */
+        // The tunnel has no cap, so a stuck window demotes to it and opens instead of waiting; waiting instead reads as
+        // a frozen workspace.
         vi.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
@@ -165,8 +157,7 @@ describe(`acquireStreamSlot`, () => {
             const queued = take();
             await vi.advanceTimersByTimeAsync(10_000);
             expect(overflowed).toHaveBeenCalledOnce();
-            // Admitted, not refused: undefined means "stand down", and the caller is about to open on a
-            // transport where there is nothing to ration.
+            // Admitted, not refused: the caller opens on a transport with nothing to ration.
             expect(await queued).toEqual(expect.any(Function));
         } finally {
             vi.useRealTimers();
@@ -174,8 +165,9 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`does not read a stream that gave up as an abort`, async () => {
-        // The two refusals are told apart by re-reading the signal, and only one of them is the caller's own
-        // doing. Confusing them would demote the endpoint every time a conversation was closed mid-queue.
+        // Told apart by re-reading the signal; confusing a caller's own abort with an overflow would demote the
+        // endpoint
+        // on every closed conversation.
         vi.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
@@ -195,12 +187,10 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`answers the free path without queuing: the abort gap there is the caller's to close`, async () => {
-        /* Deliberately NOT "refuses a caller aborted during the acquire". On the unbounded path this function
-         * runs to completion before the caller resumes, so an abort landing in that hop cannot be seen from in
-         * here, no check inside would help. Closing it is the CALLER's job: conversation.ts re-reads the
-         * signal after awaiting, because attaching on an already-aborted one parks forever instead of failing
-         * (its producer wired teardown to an event that has already fired). This asserts the half that IS this
-         * module's: the free path hands back a slot immediately, and releasing returns the capacity. */
+        // On the unbounded path, an abort during the synchronous acquire can't be observed here; closing that gap is
+        // the
+        // caller's job (conversation.ts re-checks after awaiting). This only asserts that release returns capacity on
+        // the free path.
         setStreamCapacity(() => Number.POSITIVE_INFINITY);
         const controller = new AbortController();
         const release = await take(controller.signal);

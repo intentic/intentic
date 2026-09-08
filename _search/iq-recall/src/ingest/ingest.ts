@@ -24,13 +24,13 @@ interface Touch {
     lastTs: number;
 }
 
-// Head-cap on the stored per-turn response, answers lead with their point; the transcript keeps the rest.
+// Head-cap on the stored per-turn response; the transcript keeps the rest.
 const RESPONSE_CAP = 4000;
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
-// Everything one incremental pass over a single transcript produces, applied later in one sync transaction
-// (parsing is async, the db seam is not).
+// Everything one incremental pass over a transcript produces; applied later in a single sync transaction since parsing
+// is async and the db writes are not.
 interface Delta {
     slug: string | undefined;
     version: string | undefined;
@@ -40,11 +40,9 @@ interface Delta {
     maxTs: number | undefined;
     byteOffset: number;
     newTurns: NewTurn[];
-    // Keyed by turn ordinal, including the still-open turn restored from a previous pass.
+    // Keyed by turn ordinal, including a still-open turn restored from an earlier pass.
     touches: Map<number, Map<string, Touch>>;
-    // Ordinal → the turn's latest assistant text message so far. Last-write-wins twice over: within a turn the
-    // closing message is the answer (progress narration and dead branches precede it in append order), and a
-    // later incremental pass overwrites the still-open turn's stored response with the newer closing message.
+    // Ordinal → latest assistant text; last-write-wins, so a later pass overwrites a still-open turn's response.
     responses: Map<number, string>;
 }
 
@@ -131,8 +129,7 @@ const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, del
         delta.title ?? null,
         delta.version ?? null,
         delta.gitBranch ?? null,
-        // A timestamp-less delta (e.g. only a late ai-title line) must not move the session's time range:
-        // min() ignores now, max() ignores 0.
+        // A timestamp-less delta must not move the session's range: min() ignores now(), max() ignores 0.
         delta.minTs ?? Date.now(),
         delta.maxTs ?? 0,
     );
@@ -184,18 +181,8 @@ const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, del
     );
 };
 
-// Incrementally mirror the workspace's transcript dir into the recall index: unchanged files are skipped via
-// (mtime, size), grown files are parsed from their stored byte offset, vanished files lose their rows.
-/* HOW LONG INGEST MAY SPEND, and why a budget rather than a faster parse.
- *
- * This is incremental and self-managing by design: every transcript carries a byte offset, so work not done now
- * is done next time and nothing is lost by stopping early. What it did not have was anyone allowed to stop it.
- * On the UserPromptSubmit path that mattered — a workspace with ~1000 transcripts and dozens of agents
- * appending to them concurrently has a lot of changed bytes at any instant, and the hook was killed at its 10s
- * ceiling on 21 of 43 prompts in one day, delivering nothing after stalling the prompt for the full ten.
- *
- * So the caller says how long it has. Absent a deadline, nothing changes: `iq sessions ingest` run for its own
- * sake still walks everything, which is what the SessionStart hook backgrounds it to do. */
+// Incrementally mirrors the transcript dir into the recall index: unchanged files are skipped by (mtime, size), grown
+// files resume from their stored byte offset. `deadlineMs` bounds how long a pass may run; absent, it walks everything.
 export const ingest = async (db: RecallDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
     const onDisk = new Map<string, { mtimeMs: number; size: number }>();
     let entries: string[];
@@ -224,10 +211,7 @@ export const ingest = async (db: RecallDb, options: { root: string; projectsDir:
             db.run("DELETE FROM transcripts WHERE path = ?", path);
         });
     }
-    /* NEWEST FIRST, which only starts to matter once a run can end early. readdir order is arbitrary, so a
-     * budgeted ingest walking it would spend its whole budget on whichever transcripts happen to sort first and
-     * could miss the same recent ones every time. Recency is also simply the right order for recall: the
-     * session someone is about to be reminded of is a recent one. */
+    // Newest first: a budgeted, arbitrarily-ordered walk could always miss the same recent transcripts.
     const pending = [...onDisk]
         .filter(([path, stat]) => {
             const row = known.get(path);
@@ -236,15 +220,14 @@ export const ingest = async (db: RecallDb, options: { root: string; projectsDir:
         .sort(([, a], [, b]) => b.mtimeMs - a.mtimeMs);
     for (const [path, stat] of pending) {
         const row = known.get(path);
-        // Out of time: what is left keeps its byte offset and is picked up by the next run, which is the same
-        // contract as a transcript that grew after this one started.
+        // Out of time: what's left keeps its byte offset, picked up next run like a transcript that grew afterward.
         if (options.deadlineMs !== undefined && Date.now() >= options.deadlineMs) {
             break;
         }
         const sessionId = basename(path, ".jsonl");
         let fromByte = row === undefined ? 0 : Number(row["byte_offset"]);
         if (fromByte > stat.size) {
-            // Shrunk transcripts should not exist (append-only), treat as a rewrite and reparse fully.
+            // A shrunk transcript shouldn't exist (append-only); treated as a rewrite and reparsed fully.
             db.transaction(() => {
                 db.run("DELETE FROM sessions WHERE session_id = ?", sessionId);
                 db.run("DELETE FROM transcripts WHERE path = ?", path);

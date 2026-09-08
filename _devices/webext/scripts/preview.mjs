@@ -1,29 +1,16 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-/* THE POPUP, OPENABLE IN AN ORDINARY TAB — for looking at, and for the store listing's screenshots.
- *
- * A popup is 340 pixels that exist for about four seconds, inside a browser that will not let you inspect it
- * comfortably, in a state (paired, three sites allowed, a pending request) that takes a working sandbox and a
- * real browser to reach. That is a bad loop for design work and an impossible one for a screenshot somebody
- * has to retake whenever the listing changes.
- *
- * So: the same popup.js the extension ships, over the same popup.html, with `chrome` replaced by a stub that
- * answers with a plausible state. Nothing about the popup itself is mocked — if a button is wired to the wrong
- * message, this shows it.
- *
- *   pnpm --filter @intentic/webext build && node _devices/webext/scripts/preview.mjs
- *   → dist/preview.html, to open in any browser
- *
- * NOT SHIPPED: it is written into dist/ (so the relative `popup.js` resolves) and pack.mjs skips it by name,
- * which is the one thing that keeps a debugging surface out of a signed artifact.
- */
+// The popup, opened in an ordinary tab for design work and store screenshots: the same popup.js/popup.html the
+// extension ships, `chrome` replaced by a stub, so a wiring bug still shows. Not shipped: pack.mjs excludes it by name.
+// pnpm --filter @intentic/webext build && node _devices/webext/scripts/preview.mjs → dist/preview.html, to open in any
+// browser
 
 const here = import.meta.dirname;
 const dist = join(here, "..", "dist");
 
-// The state a listing screenshot should show: connected, working, with something waiting for the person — the
-// three things the popup exists to say, all visible at once.
+// The state a listing screenshot should show: connected, working, and something waiting for the person, all
+// visible at once.
 const STATE = {
     sandbox: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "" },
     link: "open",
@@ -61,13 +48,9 @@ const html = readFileSync(join(dist, "popup.html"), "utf8").replace(
 );
 writeFileSync(join(dist, "preview.html"), html);
 
-/* THE STORE SHOT: the same popup, at the exact 1280×800 a listing screenshot has to be, on a backdrop that
- * says in three lines what the extension is. An iframe rather than a second render, so what a reviewer sees is
- * the real popup at its real width and not an artist's impression of it.
- *
- * Screenshot it with any browser at 1280×800, or:
- *   (cd dist && python3 -m http.server 8791) then capture http://127.0.0.1:8791/store-shot.html
- */
+// The store shot: the same popup at the exact 1280×800 a listing needs, in an iframe so a reviewer sees the real
+// popup, not an artist's impression.
+// Screenshot at 1280×800, or: (cd dist && python3 -m http.server 8791), capture http://127.0.0.1:8791/store-shot.html
 const shot = `<!doctype html>
 <html lang="en">
     <head>

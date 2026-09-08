@@ -1,26 +1,13 @@
-/* THE CROSS-RUNTIME SPAWN TEACHING, one short note naming the `agents` CLI (bin/agents), for the runtimes that
- * have a shell but no seam the spawn TOOL can mount through.
- *
- * Who hears what, and why, is the whole design:
- *   · the Claude Code loop gets the `spawn`/`wait` MCP tools (agent/subagent-wait.ts), always in the prompt,
- *     so a note would say the same thing twice;
- *   · Cursor gets the same pair as custom tools (cursor/cursor-tools.ts), self-describing for the same reason;
- *   · everything else with a shell — Codex, OpenCode, Kimi, Pi, ACP agents — hears THIS, once, on the
- *     conversation's opening turn (the iq teaching's rule: the provider session carries it thereafter).
- *
- * Offered only where planTurn actually armed the conversation (children/children.ts armSpawn), the delegation
- * note's own law: an agent told it may spawn on a sandbox whose persona withheld it is worse than one never
- * told. */
+// The `agents` CLI teaching for runtimes with a shell but no seam to mount the spawn tool (Codex, OpenCode, Kimi, Pi,
+// ACP agents); Claude Code and Cursor get MCP/custom tools instead, so this would repeat them. Sent once, on the
+// opening turn, only where children.ts armSpawn actually allowed it.
 
 export const SPAWN_NOTE_HEADER = "## Spawning child agents";
-// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+// Chat-row title; kept in sync with SPAWN_NOTE_HEADER.
 export const SPAWN_NOTE_TITLE = "Spawning child agents";
 
-/* THE MODELS ARE NOT NAMED HERE, and that is deliberate rather than an omission. This note is composed once, on
- * the conversation's opening turn, and the provider session carries it for every turn after — so a listing baked
- * into it would be a set of allowance figures going stale from the moment it was written, read by an agent
- * deciding what to spend an hour later. `agents providers` is the same answer, taken when the question is
- * actually asked. */
+// Models are not named here: the note is composed once on the opening turn and carried for every turn after, so a
+// listing would go stale; `agents providers` answers that when actually asked.
 export const spawnNote = (): string =>
     `${SPAWN_NOTE_HEADER}\n\n` +
     "This sandbox can start full agents on any connected provider from your shell:\n" +

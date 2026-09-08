@@ -5,21 +5,13 @@ import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { PANELS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 
-/* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
- * registry detects on, read via the daemon's /panels routes. Discovery is convention-only, no manifest, so
- * there are just list, start, and stop; a panel's lifecycle lives in the daemon, which is also why this holds no
- * clock. This is the source for the rail's extension activations and every extension view.
- *
- * Both halves of "start → healthy" are pushed, from the two places that actually know. The process manager says
- * so when it launches or reaps a session; the daemon's port sampler says so when the dev server finally binds,
- * which is the moment `starting` becomes `healthy` (panel health is read off the listening sockets). A dev
- * server left running for a week used to keep every open tab asking every four seconds for that flip long after
- * it had happened. */
+// Workspace repos' runtime status and content facts, via the daemon's /panels routes; list/start/stop only, since
+// discovery is convention-only and panel lifecycle lives in the daemon (no clock here). Source for the rail's extension
+// activations and every extension view.
 
 const QUERY_KEY = PANELS.of();
 
-// Named for the background loader (composables/prefetch): the rail's extension tiles are detected from these
-// facts, so having them early is what lets a tile open filled in rather than empty.
+// Named for the background loader (composables/prefetch), so a rail tile opens already filled in.
 export const panelsKey = QUERY_KEY;
 export const fetchPanels = async () => PanelsListSchema.parse(await sandboxJson(`/panels`));
 
@@ -42,15 +34,13 @@ export function usePanels() {
 
     return {
         panels: computed<PanelSummary[]>(() => query.data.value?.panels ?? []),
-        // The list has actually arrived (or definitively failed), what the rail waits on before deciding an
-        // extension tile is absent rather than late, since every repo-driven tile is detected from these facts.
+        // List has arrived or failed for good; the rail waits on this before calling a tile absent rather than late.
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,
         isLoading: query.isLoading,
         start,
         stop,
-        // Ask again, for the one surface that has to be able to: the preview's wait on a start it is watching,
-        // which the push normally settles and a dropped frame otherwise leaves standing (PreviewPanel.vue).
+        // Re-fetch on demand, for PreviewPanel.vue's wait on a start whose push notification got dropped.
         invalidate,
     };
 }

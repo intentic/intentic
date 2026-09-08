@@ -23,40 +23,31 @@ import { useApplyProgress } from "./useApplyProgress";
 import { usePlanPreview } from "./usePlanPreview";
 import { wantedApps } from "./wanted";
 
-/* Infra → the authoring half of the page, organized want-first: the user declares WHAT THEY WANT (apps +
- * self-hosted services, via the one Add catalog dialog) and applies; the i.have.* side is demoted to a
- * collapsed "What you have" section. When a want needs a have that isn't there yet (a server to run on,
- * Cloudflare for a domain), a requirement card appears inline to define it just-in-time: haves are pulled
- * in by wants, never asked for up-front. Apply changes resolves in the sandbox (pausing on missing secrets),
- * then runs apply → adopt as a detached tmux job whose terminal-panel tab is the durable log; on completion
- * the state + deployments queries are invalidated so the Live status block below refreshes in place.
- * Everything is read/written THROUGH the sandbox (CLAUDE.md). */
+// Want-first authoring: declare apps/services via one Add dialog; haves (server, Cloudflare) are demoted to
+// 'What you have' and pulled in just-in-time by a requirement card, never asked up front. Apply resolves in
+// the sandbox, then runs as a detached tmux job whose terminal tab is the durable log.
 
 const { entries, error: queryError, isLoading, add, remove } = useInventory();
 const { set: setSecret } = useSecrets();
 const { state } = useWorkspaceState();
 const { deployments, komodoReachable } = useDeployments();
 
-// The pre-apply preview (resolve → plan, read-only) and the live apply progress, instantiated once here and
-// passed down to ChangePreview / ApplyProgress. Adding a want stages a pending change and refreshes the preview;
-// Apply is a separate, explicit action gated on a fresh preview.
+// The pre-apply preview and live apply progress, instantiated once and passed to ChangePreview / ApplyProgress.
 const preview = usePlanPreview();
 const progress = useApplyProgress();
 
-// "Add server" in What-you-have opens the same ConnectHost command flow the requirement card uses.
+// "Add server" in What-you-have opens the same ConnectHost flow the requirement card uses.
 const showConnect = ref(false);
 const addOpen = ref(false);
 
-// Services: apps (declared i.want.app entries ∪ resolved plan ∪ live deployments) and the declared
-// i.want.service entries.
+// Apps: declared i.want.app entries union resolved plan union live deployments; tools: declared i.want.service.
 const apps = computed(() => wantedApps(entries.value, state.value?.resources ?? [], deployments.value));
 const tools = computed(() => entries.value.filter((entry) => entry.kind === `service`));
-// Apps with an i.want.app entry in intent: the removable ones (a merely resolved/live app has no entry to delete).
+// Apps with an i.want.app entry: the removable ones (a merely resolved/live app has no entry to delete).
 const declaredApps = computed(() => new Set(entries.value.filter((entry) => entry.kind === `app`).map((entry) => entry.name)));
 
-// Connections: the servers the services run on. Cloudflare, GitHub/GitLab and Stripe are credentials with
-// their own cards below (Cloudflare needs a token + zone, so it gets the CloudflareConnect step), so they're
-// all excluded from this bare server list.
+// Servers the services run on. Cloudflare, GitHub/GitLab and Stripe are credentials with their own cards
+// below, so they're excluded from this list.
 const backends = computed(() =>
     entries.value.filter(
         (entry): entry is Extract<InventoryEntry, { kind: `backend` }> =>
@@ -74,14 +65,13 @@ const hasGithub = computed(() => entries.value.some((entry) => entry.kind === `b
 const hasGitlab = computed(() => entries.value.some((entry) => entry.kind === `backend` && entry.provider === `gitlab`));
 const hasStripe = computed(() => entries.value.some((entry) => entry.kind === `backend` && entry.provider === `stripe`));
 const wantsSomething = computed(() => apps.value.length > 0 || tools.value.length > 0);
-// Requirements the declared wants pull in: every want runs on a server and is exposed through Cloudflare.
-// ponytail: two hardcoded checks; generalise to a requirements list if more have-kinds become prerequisites.
+// Requirements a want pulls in: a server to run on, Cloudflare for exposure.
 const needsHost = computed(() => wantsSomething.value && !hasHost.value);
 const needsCloudflare = computed(() => wantsSomething.value && !hasCloudflare.value);
-// The first apply (desired state still empty) is what stands up the deployment tooling; later runs just reconcile.
+// The first apply (desired state still empty) stands up the deployment tooling; later runs just reconcile.
 const isFirstProvision = computed(() => (state.value?.resources.length ?? 0) === 0);
 
-// The collapsed "What you have" one-liner: servers + the connected accounts.
+// The collapsed "What you have" one-liner: servers plus the connected accounts.
 const haveSummary = computed(() => {
     const parts = [`${backends.value.length} ${backends.value.length === 1 ? `server` : `servers`}`];
     if (hasCloudflare.value) {
@@ -107,8 +97,8 @@ const topError = computed<NoticeModel | undefined>(
         (queryError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your inventory.`, detail: queryError.value }),
 );
 
-// The display chip for an entry: the service label for an i.want.service, "App" for an i.want.app, else
-// "Server" (the backends list excludes every credential provider, so what remains is hosts).
+// The display chip for an entry: the service label for i.want.service, "App" for i.want.app, else "Server"
+// (backends excludes every credential provider).
 const entryLabel = (entry: InventoryEntry): string => {
     if (entry.kind === `service`) {
         return INVENTORY_SERVICES.find((service) => service.service === entry.service)?.label ?? entry.service;
@@ -128,7 +118,7 @@ const removeEntry = async (entryName: string): Promise<void> => {
     actionError.value = null;
     try {
         await remove.mutateAsync(entryName);
-        // Removing a want stages a pending change like adding one: refresh the preview (never auto-applies).
+        // Removing a want stages a pending change like adding one: refresh the preview, never auto-apply.
         if (hasHost.value) {
             void preview.run();
         }
@@ -137,13 +127,9 @@ const removeEntry = async (entryName: string): Promise<void> => {
     }
 };
 
-// Removing a SERVER is two distinct acts, communicated before anything happens: forgetting it here (the
-// inventory entry + stored SSH key) vs wiping the machine itself, which only the cleanup one-liner run ON
-// the server can do. The dialog shows both so nobody is left with a machine full of orphaned containers.
+// Removing a server is two acts: forgetting it here, or wiping the machine via the on-host cleanup command.
 const removingServer = ref<string | undefined>();
-// Computed, not a constant: in local dev the script's delivery is the developer's choice (scriptSource), and a
-// command built once when the screen mounted would go on offering the checkout path after they asked for the
-// released one: on the single command here that is guaranteed to be run somewhere the checkout is not.
+// Computed, not constant: the command must track scriptSource's currently selected delivery form.
 const cleanupHostCommand = computed(() => bashCommand(`cleanupHost`, `sudo `, ``));
 const confirmRemoveServer = async (): Promise<void> => {
     const name = removingServer.value;
@@ -154,8 +140,8 @@ const confirmRemoveServer = async (): Promise<void> => {
     await removeEntry(name);
 };
 
-// Source control: link GitHub as an alternative to self-hosted Forgejo. Browser-driven, the PAT goes straight to
-// the sandbox's .env (never the platform), then i.have.github is declared so the resolver skips Forgejo.
+// Source control: link GitHub as an alternative to self-hosted Forgejo. PAT goes to the sandbox's .env,
+// then i.have.github is declared.
 const showGithub = ref(false);
 const ghToken = ref(``);
 const ghSubmitting = ref(false);
@@ -177,8 +163,7 @@ const submitGithub = async (): Promise<void> => {
     }
 };
 
-// GitLab: same browser-driven shape as GitHub. The PAT goes to the sandbox's .env as GITLAB_TOKEN; the optional
-// instance url (self-hosted GitLab) is a non-secret value on the i.have.gitlab entry, defaulting to gitlab.com.
+// GitLab: same shape as GitHub. PAT goes to .env as GITLAB_TOKEN; the optional URL defaults to gitlab.com.
 const showGitlab = ref(false);
 const glToken = ref(``);
 const glUrl = ref(``);
@@ -203,8 +188,7 @@ const submitGitlab = async (): Promise<void> => {
     }
 };
 
-// Stripe: same browser-driven shape as GitHub, the API key goes to the sandbox's .env, then i.have.stripe
-// is declared so the resolver validates it and injects it into consuming apps on the next apply.
+// Stripe: same shape as GitHub; the API key goes to .env, then i.have.stripe lets the resolver inject it.
 const showStripe = ref(false);
 const stripeKey = ref(``);
 const stripeSubmitting = ref(false);
@@ -226,22 +210,18 @@ const submitStripe = async (): Promise<void> => {
     }
 };
 
-// Cloudflare: the domain/tunnel backend. Unlike a server it needs a token + zone, so it's added via the shared
-// CloudflareConnect step (writes CLOUDFLARE_API_TOKEN to the sandbox .env, then declares i.have.cloudflare("cf")).
+// Cloudflare needs a token + zone, so it's added via the shared CloudflareConnect step, not inline here.
 const showCloudflare = ref(false);
 const onCloudflareConnected = (): void => {
     showCloudflare.value = false;
 };
 
-// Fold the Live-status "up to date / changes pending" pill onto this page, beside the wants.
+// Folds the Live-status "up to date / changes pending" pill onto this page, beside the wants.
 const convergence = computed(() => convergedBadge(state.value?.converged));
-// The deployment engine is down on the host: komodo is DECLARED (tri-state false, never undefined, a
-// services-only intent has no engine to be down) AND a previous apply actually recorded state (converged is
-// only present once status.json exists): "it was up and now isn't", never first-run noise. Applying repairs
-// it (the komodo provider re-ups the stack), so say that instead of leaving the page silently wrong.
+// True only once a previous apply recorded state and komodo is unreachable now: "it was up and now isn't",
+// not first-run noise.
 const komodoDown = computed(() => komodoReachable.value === false && state.value?.converged !== undefined);
-// ...and link out to the full Live-status board (its own rail route on the desired-state repo, resolved the
-// same way the rail resolves it).
+// Links to the full Live-status board, resolved the same way the rail resolves its own route.
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const liveStatusRoute = computed(() => {
@@ -249,28 +229,24 @@ const liveStatusRoute = computed(() => {
     return found === undefined ? undefined : extensionPath(found.extension, found.activation);
 });
 
-// Apply is enabled only against a fresh, non-stale preview: the daemon's apply job consumes the desired-state
-// the preview's resolve wrote and needs its required secrets set, so a stale/awaiting preview must be re-run
-// first. This is the "review before it changes" gate.
+// Apply is gated on a fresh, non-stale preview with its required secrets set: "review before it changes".
 const applying = computed(() => progress.applying.value);
 const canApply = computed(() => preview.ran.value && !preview.stale.value && !preview.awaitingSecrets.value && !progress.applying.value);
 const needsPreview = computed(() => !preview.ran.value || preview.stale.value);
 const showApplyProgress = computed(() => progress.applying.value || progress.error.value !== undefined || progress.applyPhaseDone.value);
 
-// Any inventory change (a want added/removed, a requirement connected) invalidates a shown preview.
+// Any inventory change invalidates a shown preview.
 watch(entries, () => preview.markStale());
 
-// A want was just added: refresh the preview when a server exists (otherwise the requirement card takes over).
-// It never deploys: staging the change is all Add does now.
+// A want was just added: refresh the preview when a server exists (otherwise the requirement card takes
+// over). Never deploys; Add only stages.
 const onAdded = (): void => {
     if (hasHost.value) {
         void preview.run();
     }
 };
 
-// A refresh/navigation during a run: the tmux job survived it, recover "Applying…" and resume watching. No
-// teardown to pair with it any more: what watches the run is a scope-bound watcher on the shared terminals
-// list, which retires with this component the way every other watcher here does.
+// A refresh mid-run recovers "Applying…" from the surviving tmux job and resumes watching it.
 onMounted(progress.recover);
 </script>
 
@@ -286,7 +262,7 @@ onMounted(progress.recover);
         </span>
     </div>
 
-    <!-- WHAT YOU WANT, the center of the page: the apps + self-hosted services the user declares; one Add entry point. -->
+    <!-- What you want, the center of the page: apps + self-hosted services, declared through one Add entry point. -->
     <section class="@container mb-6">
         <div class="mb-3 flex items-end justify-between gap-3">
             <div class="flex items-center gap-2">
@@ -307,7 +283,7 @@ onMounted(progress.recover);
         </div>
 
         <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
-            <!-- Apps: declared i.want.app entries ∪ resolved plan ∪ live deployments (see wanted.ts). -->
+            <!-- Apps: declared i.want.app entries union resolved plan union live deployments (see wanted.ts). -->
             <div class="flex flex-col gap-2">
                 <span :class="ui.sectionLabel()">Apps</span>
                 <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
@@ -361,7 +337,7 @@ onMounted(progress.recover);
         </div>
     </section>
 
-    <!-- REQUIREMENTS: the haves the declared wants pull in, defined inline right where they block the apply. -->
+    <!-- Requirements: the haves declared wants pull in, defined inline right where they block the apply. -->
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
         <Card v-if="needsHost" class="flex flex-col gap-3">
             <ConnectHost>
@@ -377,7 +353,7 @@ onMounted(progress.recover);
         </Card>
     </section>
 
-    <!-- WHAT YOU HAVE, optional, collapsed: the servers + accounts the wants run on. Never asked for up-front. -->
+    <!-- What you have, optional, collapsed: the servers + accounts the wants run on. Never asked for up-front. -->
     <details class="group mb-6">
         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open:rotate-90" />
@@ -391,7 +367,7 @@ onMounted(progress.recover);
                 </Button>
             </div>
 
-            <!-- Source control: where the DevOps repos live, self-hosted Forgejo by default, or link GitHub/GitLab to skip it. -->
+            <!-- Source control: self-hosted Forgejo by default, or link GitHub/GitLab to skip it. -->
             <Card class="mb-3 flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -505,8 +481,7 @@ onMounted(progress.recover);
                 </form>
             </Card>
 
-            <!-- Cloudflare: the domain/tunnel backend. Needs a token + zone, so it's connected inline via the shared
-             CloudflareConnect step (writes the secret + declares i.have.cloudflare): no separate flow. -->
+            <!-- Cloudflare needs a token + zone, so it's connected inline via the shared CloudflareConnect step. -->
             <Card class="mb-3 flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -563,11 +538,13 @@ onMounted(progress.recover);
         </div>
     </details>
 
-    <!-- APPLY CHANGES: review the plan, then apply. The first run also installs the deployment tooling (Komodo +
-         Forgejo); later runs reconcile. Adding a want only STAGES a change: this is where it becomes real. -->
+    <!--
+        Review the plan, then apply. The first run also installs the deployment tooling (Komodo + Forgejo);
+        later runs reconcile. Adding a want only stages a change: this is where it becomes real.
+    -->
     <div class="mb-8 flex flex-col items-center gap-3 border-y border-line py-6">
         <template v-if="hasHost && wantsSomething">
-            <!-- What applying will do, BEFORE anything changes (resolve → plan, read-only). -->
+            <!-- What applying will do, before anything changes (resolve to plan, read-only). -->
             <ChangePreview :preview="preview" />
 
             <Button
@@ -587,8 +564,10 @@ onMounted(progress.recover);
                 <template v-else>Builds what you configured on your server.</template>
             </p>
 
-            <!-- Live apply progress from the durable event stream: replaces the old spinner + terminal-only view;
-                 it survives a refresh and keeps the terminal reachable via "View logs". -->
+            <!--
+                Live apply progress from the durable event stream; survives a refresh and keeps the terminal reachable
+                via "View logs".
+            -->
             <ApplyProgress v-if="showApplyProgress" :progress="progress" />
         </template>
         <p v-else-if="!wantsSomething" class="max-w-lg text-center text-sm text-muted">
@@ -599,8 +578,10 @@ onMounted(progress.recover);
 
     <AddWantDialog v-model:visible="addOpen" @added="onAdded" />
 
-    <!-- Server removal: forgetting the server here vs wiping the machine are separate acts, spell out both,
-         with the cleanup one-liner front and center, BEFORE the entry disappears. -->
+    <!--
+        Server removal is two separate acts: forgetting it here vs wiping the machine, spelled out with the
+        cleanup command front and center before the entry disappears.
+    -->
     <ConfirmDialog
         :open="removingServer !== undefined"
         header="Remove server"

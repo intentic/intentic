@@ -1,15 +1,11 @@
 import type { IntenticLine, VpnConfig, VpnState } from "@intentic/sandbox-contract";
 
-// The per-protocol SPI behind the `vpn` capability. A driver owns exactly one question, "how does THIS kind of
-// tunnel get written down, dialled, dropped and observed", and nothing about the manifest, the routes or the
-// UI, which is why adding a protocol is a new file plus one line in vpn-drivers.ts.
-//
-// The key rule is that `probe` reads the OS, never daemon memory: a tunnel the agent dropped from a
-// shell, one the UI dropped, and one that died with its gateway all have to read identically, and a daemon
-// restart has to observe the truth rather than a remembered guess.
+// The per-protocol SPI behind the `vpn` capability: a driver owns writing, dialling, dropping and observing one kind of
+// tunnel, nothing about the manifest, routes or UI.
+// `probe` reads the OS, never daemon memory, so a tunnel dropped from a shell, the UI, or a dead gateway all read
+// identically, and a daemon restart observes the truth.
 
-// What a driver can see about a live tunnel. The manifest supplies the rest of a VpnLink (id, provider,
-// autoConnect); everything here comes off the machine.
+// What a driver can see about a live tunnel; the manifest supplies the rest of a VpnLink (id, provider, autoConnect).
 export interface VpnProbe {
     readonly state: VpnState;
     readonly interface?: string | undefined;
@@ -25,19 +21,17 @@ export interface VpnDialOptions {
 }
 
 export interface VpnDriver {
-    // The gateway a stored connection dials, for display. Never a secret.
+    // The gateway a stored connection dials, for display; never a secret.
     readonly gateway: (config: VpnConfig) => string | undefined;
     // Persist credentials + client config (0600). Idempotent; called on every capability apply.
     readonly write: (id: string, config: VpnConfig) => Promise<void>;
     // Undo `write`. Called after the tunnel is already down.
     readonly erase: (id: string, config: VpnConfig) => Promise<void>;
-    // The executable this driver needs, when it is NOT on PATH, the pre-rebuild state, which reads as
-    // "unavailable" rather than an error because the capability's image fragment has not been applied yet.
+    // The executable missing from PATH, if any; reads as unavailable, not an error, pre-rebuild.
     readonly missingTool: () => Promise<string | undefined>;
-    // Dial the tunnel, streaming the client's progress. Throws with the client's own message on failure,
-    // a wrong password and an untrusted gateway certificate are things the user has to read.
+    // Dials the tunnel, streaming progress; throws with the client's own message on failure.
     readonly connect: (id: string, config: VpnConfig, options: VpnDialOptions) => AsyncGenerator<IntenticLine>;
-    // Drop the tunnel. Must tolerate an already-down one: the contract is "make it not be up".
+    // Drops the tunnel; must tolerate one already down, since the contract is "make it not be up".
     readonly disconnect: (id: string, config: VpnConfig) => Promise<void>;
     readonly probe: (id: string, config: VpnConfig) => Promise<VpnProbe>;
 }

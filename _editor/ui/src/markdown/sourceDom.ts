@@ -1,47 +1,15 @@
 import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
 
-/* A MARKDOWN DOCUMENT AS EDITABLE DOM, where the document's own source text is the DOM's text.
- *
- * This is the editing half of the markdown surface, and the whole design is one invariant:
- *
- *      blockBody(element) === that block's markdown source, exactly, byte for byte.
- *
- * Every character of the file is in a text node, in document order, including the markup: the `##` of a heading,
- * the `**` around a bold run, the `- ` of a list item. What makes it look like a rendered document rather than a
- * screen of source is that those marker characters are wrapped in spans the CSS can hide, and that the content
- * around them is still marked up (`<strong>`, `<em>`, `<code>`, `<a>`) so it is still styled.
- *
- * WITH ONE EXCEPTION, WHICH THE BROWSER FORCED. A newline that ends a line is whitespace at a line boundary, so
- * it is not rendered, and a `contenteditable` deletes what it does not render: typing at the end of a list item
- * welded it to the item below. Those newlines therefore live in the block's SHAPE (one element per line) rather
- * than in its text, and `blockBody` puts them back. Whitespace between words is rendered, and is safe, which is
- * why a paragraph's own soft wrap stays an ordinary character in an ordinary text node.
- *
- * THREE THINGS FALL OUT OF THAT INVARIANT, and they are the three things that were wrong with the surface this
- * replaces:
- *
- *   Reading an edit back is `blockBody`. No serializer, no rich model, no rewriting a file the moment somebody
- *   fixes a typo in it. `contenteditable` mutates text nodes; the text nodes are the source.
- *
- *   A caret position IS a source offset, found by counting text-node lengths in document order. The previous
- *   surface had to GUESS where a click landed by searching the rendered words back through the markdown; that
- *   guess is gone, along with the class of bug where it guessed wrong.
- *
- *   Activating a block is a CSS class, not a swap. The markers are already there, taking their space; revealing
- *   them changes their visibility, not the layout. Nothing is torn down, nothing is rebuilt, nothing flickers,
- *   and the text does not move. That is the property VS Code's hybrid editor is built around, and the reason
- *   its markers hang in the gutter rather than sitting in the line.
- *
- * WHEN THE MARKUP CANNOT BE READ, THE TEXT STILL CAN. Every builder below is checked against the invariant
- * before it is returned: if the pieces do not reassemble the source exactly, the block falls back to one plain
- * text node holding its source. That block then looks like source rather than like prose, which is a cosmetic
- * loss; the alternative, a DOM whose text is not the file, is a corrupted save. Same trade as the block
- * splitter's whole-document fallback, one level down. */
+// This block's DOM text is its markdown source, byte for byte (`blockBody(element) === source`), so
+// `contenteditable` edits the source directly; markers sit in text nodes wrapped in spans CSS can hide. Line-end
+// newlines are the exception: the browser drops them, so they live in the block's shape (one row per line) and
+// `blockBody` restores them. A builder that can't reassemble its source exactly falls back to one plain text node
+// holding it verbatim.
 
 // Markup, as opposed to words: hidden while the block is at rest, revealed when the caret is in it.
 const MARKER = `md-marker`;
-// The leading markup of a line (`## `, `- `, `> `), which hangs in the gutter so revealing it never moves the
-// text it introduces. See markdown-editing.css.
+// The leading markup of a line (`## `, `- `, `> `), which hangs in the gutter so revealing it never moves the text
+// after it.
 const GUTTER = `md-marker-gutter`;
 
 const span = (text: string, ...classes: string[]): HTMLSpanElement => {
@@ -51,10 +19,8 @@ const span = (text: string, ...classes: string[]): HTMLSpanElement => {
     return node;
 };
 
-/* The children of a token, as the contiguous run of source they cover. Returned with where that run SITS inside
- * the parent's own source, which is how the parent's markers are found: everything before it opens the token,
- * everything after closes it. Derived by subtraction rather than by re-deriving the lexer's delimiter rules,
- * so a construct this file has never heard of still comes out with its markers in the right place. */
+// Where a token's children sit in its own source, so the parent's markers are found by subtraction rather than by
+// re-deriving the lexer's delimiter rules.
 const innerSpan = (token: MarkdownToken): { readonly at: number; readonly text: string } | undefined => {
     const children = token.tokens;
     if (children === undefined || children.length === 0) {
@@ -64,35 +30,28 @@ const innerSpan = (token: MarkdownToken): { readonly at: number; readonly text: 
     if (text === ``) {
         return undefined;
     }
-    /* Searched from 1, never 0: every token that HAS an opening marker has at least one character of it, and a
-     * link whose text is also its target (`[a](a)`) would otherwise match at the destination instead of at the
-     * label. A token whose children start at 0 (marked wraps some plain runs that way) is found by the fallback
-     * search below rather than mis-anchored here. */
+    // Searched from 1, not 0, so a link whose text equals its target (`[a](a)`) matches its label, not its destination.
     const at = token.raw.indexOf(text, 1);
     return at === -1 ? (token.raw === text ? { at: 0, text } : undefined) : { at, text };
 };
 
-// The element an inline token is drawn as. `undefined` ⇒ its content is drawn without a wrapper of its own.
+// The element an inline token draws as; undefined means its content gets no wrapper of its own.
 const inlineTag = (type: string): string | undefined =>
     ({ strong: `strong`, em: `em`, del: `del`, codespan: `code`, link: `a`, image: `span` })[type];
 
-/* A leaf with no markup of its own (plain text, an escape, a raw-HTML run): its source IS its text. Split from
- * the walk below so each reads as one job — this one is "a token with no children", that one is "a token that
- * wraps some". */
+// A leaf with no markup of its own; its source is its text. Split from the tokens-with-children walk so each
+// function has one job.
 const appendLeaf = (parent: Node, token: MarkdownToken, tag: string | undefined): void => {
     if (tag === undefined) {
         parent.appendChild(document.createTextNode(token.raw));
-        /* A HARD BREAK is the one place a newline in this document really does break the line, so it is the one
-         * place an element is added that carries no source of its own. The `<br>` contributes nothing to
-         * `textContent`, so the invariant holds; the two trailing spaces (or the backslash) that asked for it
-         * stay in the text, where they can be deleted to take the break away. */
+        // A hard break: added with no text of its own so the invariant holds; the markup that requested it stays in the
+        // text.
         if (token.type === `br`) {
             parent.appendChild(document.createElement(`br`));
         }
         return;
     }
-    /* A codespan has no child tokens (its body is not markdown) but does have delimiters, so its backticks are
-     * split off by length: the run of them that opens it is the run that closes it. */
+    // A codespan has no child tokens but has delimiters; the backtick run that opens it is the run that closes it.
     const ticks = /^`+/u.exec(token.raw)?.[0] ?? ``;
     const element = document.createElement(tag);
     element.appendChild(span(ticks, MARKER));
@@ -111,8 +70,7 @@ const appendInline = (parent: Node, tokens: readonly MarkdownToken[]): void => {
         }
         const element = tag === undefined ? parent : document.createElement(tag);
         if (element !== parent && element instanceof HTMLAnchorElement) {
-            // Inert while editing: the href is in the source the user is looking at, and a click here places a
-            // caret. The surface opens links from the PREVIEW rendering, which is the one you read.
+            // Inert while editing: a click here places a caret. Links open from the preview rendering instead.
             element.removeAttribute(`href`);
         }
         element.appendChild(span(token.raw.slice(0, inner.at), MARKER));
@@ -124,8 +82,8 @@ const appendInline = (parent: Node, tokens: readonly MarkdownToken[]): void => {
     }
 };
 
-/* An empty marker span is markup that is not there (an unwrapped run's absent delimiters). Removing them keeps
- * the DOM honest about what the file contains and stops the caret finding places to sit that hold nothing. */
+// An empty marker span is markup that isn't there. Removed so the DOM stays honest about the file's contents and
+// the caret has nowhere empty to land.
 const dropEmptyMarkers = (root: HTMLElement): void => {
     for (const node of root.querySelectorAll(`.${MARKER}`)) {
         if (node.textContent === ``) {
@@ -144,21 +102,12 @@ const appendText = (parent: Node, text: string): void => {
     appendInline(parent, tokens);
 };
 
-/* WHY LISTS AND QUOTES ARE BUILT FROM LINES, not from the token tree the way headings and paragraphs are.
- *
- * The block lexer RE-INDENTS the source of a nested construct: a nested list written with four spaces comes back
- * as a token whose raw carries two, because indentation is relative to the item it sits in. That is right for
- * rendering and fatal here, where the DOM has to account for every original character. Every nested list failed
- * the invariant and fell back to showing its source verbatim.
- *
- * Splitting the block's own text by line and taking each line's leading markup by position never loses a
- * character, because nothing is re-derived: the prefix is a slice, and the rest is a slice. It also collapses
- * four cases into one, ordered, unordered, task and nested items are all "a line with a marker in front of it",
- * and their indentation hangs in the gutter along with the bullet, which is what keeps the nesting columns lined
- * up whether or not the markers are showing. */
-/* A task item's `[ ]` is part of the line's opening markup, not part of its words, so it hangs in the gutter
- * with the bullet. At rest the CSS draws a checkbox there instead, which is what the rendered document shows, so
- * the item's text sits at the same place whichever of the two is on screen. */
+// Lists/quotes are built by line, not from the token tree: the block lexer re-indents nested source, so the tree
+// doesn't preserve every original character. Splitting each line by its leading markup is lossless (pure slices)
+// and treats ordered, unordered, task, and nested items alike, with indentation in the gutter to keep nesting
+// aligned.
+// A task item's `[ ]` is part of the line's opening markup, not its words, so it hangs in the gutter with the
+// bullet; CSS draws a checkbox there at rest.
 const LIST_LINE = /^(\s*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)(.*)$/su;
 const TASK_LEAD = /\[([ xX])\][ \t]+$/u;
 const QUOTE_LINE = /^(\s*>[ \t]?)(.*)$/su;
@@ -167,13 +116,9 @@ const HEADING_LINE = /^(#{1,6}[ \t]+)(.*)$/su;
 // The block's lines, each keeping the newline that ends it, so joining them back gives the source unchanged.
 const sourceLines = (source: string): string[] => source.split(/(?<=\n)/u);
 
-/* A block whose lines are rows, and whose LINE ENDINGS are not in the DOM.
- *
- * A `\n` at the end of a row is whitespace at a line boundary, which a browser does not render and therefore
- * feels free to delete inside a `contenteditable`: typing at the end of a list item silently welded it to the
- * item below. (Whitespace BETWEEN words is rendered, as the space markdown turns a soft break into, and is safe;
- * this is only ever about the boundary.) So a rows block carries its structure in its shape instead, and
- * `blockBody` reads it back by joining the rows with the newlines that separate them. */
+// Line endings live in the block's shape, not its DOM text: a trailing newline is boundary whitespace a browser
+// won't render, and `contenteditable` deletes what it can't render. `blockBody` restores them by joining rows with
+// newlines.
 const ROWS = `mdRows`;
 
 /** The source of one block, read back from the element that draws it. */
@@ -184,8 +129,7 @@ export const blockBody = (element: Element): string =>
 const appendPrefixedRow = (row: HTMLElement, body: string, pattern: RegExp): void => {
     const match = pattern.exec(body);
     if (match === null) {
-        // A continuation line (the second line of a wrapped item, a loose item's own paragraph): no marker of
-        // its own, so its leading whitespace is the indent and hangs like one.
+        // A continuation line has no marker of its own; its leading whitespace is the indent and hangs like one.
         const indent = /^[ \t]*/u.exec(body)?.[0] ?? ``;
         row.appendChild(span(indent, MARKER, GUTTER));
         appendText(row, body.slice(indent.length));
@@ -194,8 +138,8 @@ const appendPrefixedRow = (row: HTMLElement, body: string, pattern: RegExp): voi
     const lead = match[1] ?? ``;
     const task = TASK_LEAD.exec(lead);
     if (task !== null) {
-        // Read by the stylesheet, which draws the checkbox this markup stands for while the item is at rest.
-        // `1`/`0` rather than the character, so the CSS does not have to know markdown.
+        // Read by the stylesheet to draw the checkbox at rest; `1`/`0` rather than the character, so CSS need not know
+        // markdown.
         row.dataset[`task`] = (task[1] ?? ` `) === ` ` ? `0` : `1`;
     }
     row.appendChild(span(lead, MARKER, GUTTER));
@@ -239,10 +183,8 @@ const listElement = (source: string, ordered: boolean): HTMLElement => linePrefi
 
 const quoteElement = (source: string): HTMLElement => linePrefixed(source, `blockquote`, `div`, QUOTE_LINE, `md-src-quote`);
 
-/* Everything this file does not model as prose: a fenced block, a table, raw HTML, a rule. Its source is shown
- * verbatim in a box that keeps the shape the rendered form had, which for a code block is very nearly the same
- * picture (a code block already IS its source; only the fences appear). A table becomes its pipes, which is the
- * honest answer: there is no way to edit a rendered table's markdown except as markdown. */
+// Anything not modeled as prose (fenced block, table, raw HTML, a rule): shown verbatim, since there is no way to
+// edit a rendered table or code block except as its markdown.
 const verbatimElement = (source: string, kind: string): HTMLElement => {
     const element = document.createElement(`pre`);
     element.className = kind === `code` ? `md-code-block md-src-verbatim` : `md-src-verbatim`;
@@ -264,10 +206,8 @@ const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefin
 };
 
 /**
- * One block of markdown, as an element whose `textContent` is that block's source.
- *
- * `source` is the block's text WITHOUT the blank lines that separate it from the next (see `blockText`): those
- * are the document's structure, not the block's content, and the surface holds them separately.
+ * One block of markdown as an element whose `textContent` is that block's source. `source` excludes the blank
+ * lines separating it from the next block; those are document structure, held separately by the surface.
  */
 export const buildBlockElement = (source: string): HTMLElement => {
     const tokens = lexBlocks(source);
@@ -275,8 +215,8 @@ export const buildBlockElement = (source: string): HTMLElement => {
     const built = token === undefined ? undefined : buildProse(token, source);
     if (built !== undefined) {
         dropEmptyMarkers(built);
-        // THE INVARIANT, checked rather than trusted. A block whose pieces do not reassemble its source is shown
-        // as its source: less pretty, and still exactly the file.
+        // The invariant, checked rather than trusted: a block that doesn't reassemble its source exactly is shown as
+        // source instead.
         if (blockBody(built) === source) {
             return built;
         }
@@ -294,8 +234,8 @@ const textOffset = (root: Element, node: Node, offset: number): number => {
         }
         total += text.textContent?.length ?? 0;
     }
-    /* The caret is on an ELEMENT rather than in text, which is what a browser reports for an empty line or the
-     * boundary between two blocks. Its offset counts child nodes, so the answer is everything before it. */
+    // Caret is on an element, not text (what the browser reports for an empty line or block boundary); its offset
+    // counts child nodes.
     const range = document.createRange();
     range.setStart(root, 0);
     range.setEnd(node, offset);
@@ -319,17 +259,15 @@ const textCaret = (root: Element, offset: number): { readonly node: Node; readon
 
 const rowsOf = (element: HTMLElement): Element[] | undefined => (ROWS in element.dataset ? [...element.children] : undefined);
 
-/** The offset into a BLOCK's source that a caret sits at, given the node and offset a selection reports. */
+/** The offset into a block's source that a caret sits at, given the node/offset a selection reports. */
 export const offsetOfCaret = (element: HTMLElement, node: Node, offset: number): number => {
     const rows = rowsOf(element);
     if (rows === undefined) {
         return textOffset(element, node, offset);
     }
-    // A caret reported on the BLOCK itself, which is what a browser gives for the seam between two rows: its
-    // offset counts rows, not characters, so the answer is everything in the rows before it.
+    // Caret on the block itself is the seam between two rows; its offset counts rows, not characters.
     const upTo = node === element ? offset : rows.length;
-    // A row's own text, plus one for each line ending crossed to reach it. Those newlines are not in the DOM
-    // (see `blockBody`), so they are counted here instead.
+    // A row's text plus one per line ending crossed to reach it; those newlines aren't in the DOM (see `blockBody`).
     let total = 0;
     for (const [index, row] of rows.entries()) {
         if (index >= upTo) {

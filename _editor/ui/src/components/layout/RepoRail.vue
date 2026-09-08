@@ -1,24 +1,7 @@
-<!-- WHICH REPOSITORY: the narrowing column two workspace-wide boards had each built, and the reason their
-     bodies can stay a list.
-
-     IT NARROWS, IT DOES NOT SELECT. "All repositories" is where these pages open and where they return to,
-     because the first question a cross-repo board answers is "is anything wrong anywhere": a menu you have to
-     walk repository by repository to answer that is not a monitoring surface, it is a filing cabinet. That is
-     why the pinned row belongs to no group and cannot be grouped or filtered out of reach: a row you cannot get
-     back to is a filter you cannot clear.
-
-     WHY A COLUMN AND NOT A DROPDOWN, given it narrows: it shows a per-repository number while you scan, which is
-     what makes "all" and "one" the same glance. A closed dropdown shows one name and no numbers. Below the width
-     <SplitView> folds at, there is no column to scan and it swaps itself for a <Picker> carrying the same
-     numbers as each row's quiet annotation.
-
-     ONE NUMBER PER ROW, and any second fact is its COLOUR rather than a second number: two numbers in a 16rem
-     column read as "1 5" with nothing saying which is which, and the reader who needs the distinction is
-     scanning, not hovering. The tooltip is where the whole state is spelled out. What the number COUNTS is the
-     caller's: branches failing, chores due, and so is the colour rule; this owns the shape they are said in.
-
-     Bounded by how many repositories a workspace holds, never by how much they are owed. That is the whole
-     answer to what these pages grow into. -->
+<!--
+    The repository-narrowing column: a pinned "All repositories" row plus grouped per-repository rows, each showing one count so scanning "all" and
+    "one" is the same glance. Below <SplitView>'s fold width it becomes a <Picker> instead.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRailMemory } from "../../composables/useRailMemory.js";
@@ -42,15 +25,13 @@ const { groups, all, memory } = defineProps<{
 // undefined = every repository. Kept undefined rather than a sentinel so the URL simply omits the parameter.
 const selected = defineModel<string | undefined>();
 
-/* Which repository you were last reading about, kept across visits: a rail is where these pages are steered
- * from, and re-picking the same row on arrival was the cost of a URL that starts empty every time. "All" is
- * remembered as readily as one of them: somebody who deliberately widened the scope should find it wide. */
+// Remembers the last repository across visits, so the URL doesn't start empty; "All" is remembered too.
 useRailMemory(memory, selected, () => groups.flatMap((group) => group.rows.map((row) => row.value)));
 
 const shown = computed<readonly RepoRailGroup[]>(() => groups.filter((group) => group.rows.length > 0));
 const navGroups = computed<NavGroup<RepoRailRow>[]>(() => shown.value.map((group) => ({ key: group.key, label: group.label, items: group.rows })));
 
-// Asked of the split above, not of the screen: the board beside this rail is only as wide as the workspace pane.
+// Asked of the split above, not the screen: the board beside this rail is only as wide as the workspace pane.
 const compact = useCompact();
 
 // The same model as options, with each row's number as the quiet right-hand annotation.

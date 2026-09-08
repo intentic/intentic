@@ -1,30 +1,8 @@
-/* THE FRONTMATTER SUBSET A NOTE IS ALLOWED TO USE, and its total parser.
- *
- * Deliberately not YAML. Three reasons, in order of how much they cost:
- *
- * 1. THE AGENT WRITES THESE FILES. Full YAML has a dozen ways to mean the same thing and several ways to mean
- *    something else entirely, `no` is false, `2026-08-09` is a Date, `1.0` is a number and `1.0.0` is a string,
- *    an unquoted `[[Ada]]` is a nested sequence. A knowledge note's fields are names of things, and a format
- *    that silently turns the name of a thing into a boolean is a format that loses facts.
- * 2. A MALFORMED HEADER MUST DEGRADE, NEVER THROW. This runs inside a render and inside a CLI the agent calls
- *    mid-task; a hand-edited note with one stray character must cost that note its chips, not the panel.
- * 3. It keeps the CLI and the backend bundles small and dependency-free.
- *
- * So: keys map to STRINGS, and every value is normalised to an array of them, one shape for the whole index,
- * so nothing downstream has to ask whether `tags` came back as a scalar or a list. What is understood:
- *
- *     type: person                     a scalar
- *     title: "Ada Lovelace"            quoted, when the value has a colon or leading spaces in it
- *     aliases: [Ada, "Countess"]       a flow list
- *     tags:                            a block list
- *       - colleague
- *       - math
- *     works_on: ["[[Intentic]]"]       links are ordinary strings, see note.ts for what makes one a relation
- *
- * Anything else in the header, a nested map, an anchor, a multi-line scalar, is SKIPPED rather than guessed
- * at, and `kb check` reports the keys it could not read so a note never fails silently. */
+// The frontmatter subset a note may use, not YAML (an unquoted `[[Ada]]` or `no` would parse as something other than a
+// string). Every value normalises to a list of strings; malformed input is skipped, never thrown, and `kb check`
+// reports what it couldn't read.
 
-// The `---` fenced header, at the very top of the file. \r\n tolerated: these files round-trip through editors.
+// The `---` fenced header at the top of the file; \r\n tolerated for editor round-trips.
 const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 export interface Frontmatter {
@@ -38,15 +16,14 @@ export interface Frontmatter {
     readonly present: boolean;
 }
 
-// A scalar value: quotes stripped, a trailing `# comment` left ALONE. Tags are written `#colleague` in bodies
-// and turn up in values often enough that treating `#` as a comment introducer here would eat real data.
+// Quotes stripped; a trailing `# comment` is left alone, since tags like `#colleague` show up in real values.
 const scalar = (raw: string): string => {
     const value = raw.trim();
     const quoted = /^"(.*)"$/s.exec(value) ?? /^'(.*)'$/s.exec(value);
     return (quoted?.[1] ?? value).trim();
 };
 
-// The items of a flow list `[a, "b, still b", c]`, split on commas OUTSIDE quotes, so a quoted item may hold one.
+// Items of a flow list `[a, "b, still b", c]`, split on commas outside quotes.
 const flowItems = (inner: string): string[] => {
     const items: string[] = [];
     let current = "";
@@ -111,8 +88,7 @@ export const parseFrontmatter = (content: string): Frontmatter => {
     const lines = (match[1] ?? "").split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? "";
-        // A full-line comment or a blank. Anything indented at this point belongs to a key that has already
-        // consumed what it wanted (a block list) or to a shape this parser skipped, either way, not ours.
+        // A full-line comment or blank; an indented line belongs to an already-consumed block list or an unread shape.
         if (line.trim() === "" || line.trimStart().startsWith("#") || /^[ \t]/.test(line)) {
             continue;
         }
@@ -130,7 +106,7 @@ export const parseFrontmatter = (content: string): Frontmatter => {
             fields.set(name, [scalar(inline)]);
             continue;
         }
-        // A key with nothing after the colon: either a block list under it, or a nested map we cannot read.
+        // Nothing after the colon: either a block list follows, or it's a nested map this parser can't read.
         const items: string[] = [];
         let j = i + 1;
         for (; j < lines.length; j++) {
@@ -157,11 +133,8 @@ export const parseFrontmatter = (content: string): Frontmatter => {
     return { fields, unreadable, body: content.slice(match[0].length), present: true };
 };
 
-/* Write a header back. Used by `kb new` and `kb set`, so the shape the agent produces is the shape this parser
- * reads by construction rather than by the agent remembering it. Order is the caller's, a note reads better
- * with `type` first than alphabetically, and a value is quoted only when leaving it bare would change it.
- *
- * The BODY is passed through untouched. An edit to one field must never reflow somebody's prose. */
+// Writes a header back for `kb new`/`kb set`, in the shape this parser reads by construction. Order is the caller's; a
+// value is quoted only when bare would change it. Body passes through untouched.
 const needsQuotes = (value: string): boolean => value === "" || /^[[\-#&*!|>%@`'"]/.test(value) || /:\s|\s#|^\s|\s$/.test(value);
 
 const emit = (value: string): string => (needsQuotes(value) ? `"${value.replace(/(["\\])/g, "\\$1")}"` : value);
@@ -172,13 +145,9 @@ export const formatFrontmatter = (fields: ReadonlyMap<string, readonly string[]>
         if (values.length === 0) {
             continue;
         }
-        // A single value stays a scalar: `type: person` rather than `type: [person]`, because that is what a
-        // human writes and what every other knowledge base would render. Multi-valued keys use the flow form, which is
-        // one line per key and survives a round trip through this parser unchanged.
+        // A single value stays a scalar (`type: person`, not `type: [person]`); multi-valued keys use the flow form.
         lines.push(values.length === 1 ? `${key}: ${emit(values[0] ?? "")}` : `${key}: [${values.map(emit).join(", ")}]`);
     }
-    // No blank line after the fence, and that is a contract rather than a preference: `parseFrontmatter` stops
-    // at the fence, so anything written past it IS body, and a writer that added a courtesy newline would make
-    // every round trip through these two functions grow the note by one.
+    // No blank line after the fence: `parseFrontmatter` stops there, so anything past it is body.
     return `---\n${lines.join("\n")}\n---\n${body.replace(/^\n+/, "")}`;
 };

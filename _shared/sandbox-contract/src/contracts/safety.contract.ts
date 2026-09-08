@@ -3,16 +3,9 @@ import { SafetyLogEntrySchema, SafetyPolicySchema } from "../policy/safety-polic
 import { OkSchema } from "../schemas/shared.js";
 import { z } from "zod";
 
-/* The owner's safety policy (.intentic/config/safety.md) and the log of what it decided.
- *
- * ITS OWN ROUTES RATHER THAN A FIELD ON /settings, and the split is the same one `rule-firings` already draws
- * next door: the policy is a DOCUMENT edited at human speed, and the log is a value that changes on its own
- * several times a turn. Folding either into the settings object would put a self-changing value inside the
- * thing a screen optimistically patches, and would make every judged command a settings write.
- *
- * The policy is also the only config file here whose reader is a model rather than a parser, so it travels as
- * text and is never parsed on the way through: whatever the owner wrote is what the judge reads.
- */
+// Owner's safety policy (.intentic/config/safety.md) and the log of what it decided. Own routes, not a /settings field:
+// the policy is a document edited at human speed, the log changes on its own mid-turn. The policy travels as text,
+// never parsed, since its reader is a model, not a parser.
 export const safetyContract = {
     policy: oc
         .route({
@@ -33,9 +26,7 @@ export const safetyContract = {
         })
         .input(z.object({ text: z.string().describe("The policy, as you want it written.") }))
         .output(OkSchema),
-    // What the policy actually did, newest first. The half of the Safety page that makes the other half
-    // writable: nobody can author a policy for behaviour they cannot see, and a column of verdicts is what
-    // teaches an owner which line to add next.
+    // Verdicts teach the owner which policy line to add next; answers why you weren't asked about something.
     log: oc
         .route({
             method: "GET",

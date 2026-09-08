@@ -1,32 +1,11 @@
 import { PREVIEW_PORT } from "@intentic/constants";
 
-/* THE HOSTED FLAVOR OF THE RUN CONTRACT, the same sandbox, emitted as a Fly Machine config instead of a
- * docker-run argv.
- *
- * A hosted sandbox is not a container on someone's Docker: the machine IS the box (a microVM booting the
- * sandbox image), so everything docker-shaped in index.ts falls away, no names to derive (the app name is
- * the outer identity), no capabilities to add (a VM's root already has them all), no ports to publish to a
- * host (nothing shares a host with the browser). What remains IS the contract: the image pair, the env pairs
- * in the same canonical order, and one persistent disk.
- *
- * The disk is the shape's one real translation. Docker runs mount three named volumes (/work, /history,
- * /var/lib/docker); a Fly machine mounts exactly one volume, so all three live under FLY_VOLUME_PATH and the
- * entrypoint's VM mode links the canonical paths onto it. That indirection lives HERE and in the entrypoint
- * and nowhere else, the daemon still sees /work and /history, which is what keeps every other flow's
- * assumptions true on this one.
- *
- * THE FRONT DOOR is the shape's other translation, and the one that makes a hosted machine different from
- * every docker-run sandbox in how it is REACHED. A container on somebody's machine dials the platform's edge
- * and serves through a tunnel, because nothing on the internet can dial it. A Fly machine is on the internet
- * already: the edge answers a request for its hostname with a Fly replay (`fly-replay: app=<this app>`), and
- * Fly's proxy delivers the request — and every byte after it — to the service declared below, with no
- * intentic process carrying traffic in between. So the machine declares one service, the preview proxy that
- * is already the container's single front door (it routes `sandbox-<id>`, previews, ports and the outbox by
- * Host), and dials no tunnel at all: its env carries no grant and no edge address. */
+// The hosted flavor of the run contract: same sandbox, emitted as a Fly Machine config instead of docker-run argv. One
+// persistent volume replaces docker's three, linked to the canonical paths by the entrypoint's VM mode. Reached via a
+// Fly replay to one declared service, the preview proxy, since a Fly machine is already on the internet.
 
-// Where the machine's single volume mounts, and the directories the entrypoint carves out of it. Exported so
-// the entrypoint contract test and the platform's provisioning read the same words instead of agreeing by
-// coincidence.
+// Where the machine's one volume mounts and the dirs carved from it; exported so the entrypoint test and provisioning
+// agree.
 export const FLY_VOLUME_PATH = "/data";
 export const FLY_VOLUME_LAYOUT = {
     workspace: `${FLY_VOLUME_PATH}/work`,
@@ -35,38 +14,29 @@ export const FLY_VOLUME_LAYOUT = {
 } as const;
 
 export interface FlyMachineRun {
-    // What the daemon should call itself, the docker flavors pass the container name; hosted passes the app
-    // name so logs and the switcher agree with the Fly console.
+    // What the daemon calls itself: hosted passes the app name, so logs match the Fly console.
     readonly name: string;
     readonly image: string;
-    // Same two-image story as SandboxRun: what runs, and what overlays compose FROM.
+    // Same two-image story as SandboxRun: what runs, and what overlays compose from.
     readonly baseImage: string;
-    // The approved overlay's hash when `image` was built from one, stamped as SANDBOX_ENVIRONMENT_HASH so the
-    // daemon reports the overlay as applied (SandboxRun carries the same field for the docker lanes).
+    // The approved overlay's hash when `image` was built from one, stamped as SANDBOX_ENVIRONMENT_HASH.
     readonly environmentHash?: string;
-    // The Fly guest, in the platform's config units (memory in MB, shared CPUs, the starter shape).
+    // The Fly guest in the platform's config units: memory in MB, shared CPUs, the starter shape.
     readonly guest: { readonly cpus: number; readonly memoryMb: number };
     // The created volume's id (vol_…) this machine mounts at FLY_VOLUME_PATH.
     readonly volumeId: string;
-    // Wizard/platform env pairs, already allowlist-filtered where they came from (replayableEnv's stance:
-    // empties are dropped here too, an empty secret must not shadow the workspace .env).
+    // Wizard/platform env pairs, allowlist-filtered; empties dropped too, a secret must not shadow .env.
     readonly env?: readonly (readonly [string, string])[];
-    /* The hostname this machine answers under, which is what declares its front door (the service and the
-     * check below). Absent on a warm pool machine: it has no identity yet, its one boot is a no-op that runs
-     * nothing, and a service on a machine that listens on nothing is a health check that can only ever fail. */
+    // The hostname this machine answers under; absent on a warm pool machine, whose boot runs nothing at all.
     readonly frontDoor?: { readonly hostname: string };
 }
 
-/* One public-facing service, in the Machines API's own vocabulary. The proxy terminates TLS on 443 under the
- * certificate of whichever app the request ARRIVED at (the edge's wildcard, for a replayed request) and hands
- * plaintext to `internal_port`; 80 exists only to send a plain-http visitor to https. */
+// One public-facing service, in the Machines API's own vocabulary: the proxy terminates TLS on 443 under whichever
+// app's certificate the request arrived at, and hands plaintext to internal_port; 80 only redirects to https.
 export interface FlyMachineService {
     readonly protocol: "tcp";
     readonly internal_port: number;
-    /* The platform starts a stopped machine, never the proxy: a wake is where the free lane's hour ceiling is
-     * checked (sandbox.routes wake), and a proxy that started machines on arrival would start them past it.
-     * The daemon stops the machine itself when idle (its clean exit under the on-failure restart policy), so
-     * the proxy's own stop loop stays out of it too. */
+    // The platform starts a stopped machine, never the proxy, to respect the free lane's hour cap.
     readonly autostart: boolean;
     readonly autostop: "off" | "stop" | "suspend";
     readonly concurrency: { readonly type: "connections" | "requests"; readonly soft_limit: number; readonly hard_limit: number };
@@ -78,8 +48,7 @@ export interface FlyMachineService {
     }[];
 }
 
-// A named, machine-level check. Fly's proxy routes to a machine only while its checks pass, which is what keeps
-// a request off a machine that has started but not yet listened.
+// A named, machine-level check; Fly's proxy routes to a machine only while its checks pass.
 export interface FlyMachineCheck {
     readonly type: "http";
     readonly port: number;
@@ -91,8 +60,7 @@ export interface FlyMachineCheck {
     readonly headers: readonly { readonly name: string; readonly values: readonly string[] }[];
 }
 
-// A file written into the machine before its process starts, in the Machines API's own vocabulary: an
-// absolute guest path and the content base64-encoded. How a builder machine receives the Dockerfile it builds.
+// A file written into the machine before its process starts: an absolute guest path, content base64-encoded.
 export interface FlyMachineFile {
     readonly guest_path: string;
     readonly raw_value: string;
@@ -104,37 +72,21 @@ export interface FlyMachineConfig {
     readonly guest: { readonly cpu_kind: "shared" | "performance"; readonly cpus: number; readonly memory_mb: number };
     readonly env: Record<string, string>;
     readonly mounts: readonly { readonly volume: string; readonly path: string }[];
-    /* on-failure is the idle-stop policy's other half: a crash restarts (bounded), while the daemon's clean
-     * idle exit stops the machine, which is the whole point of the hosted lane's economics. `no` is for a
-     * machine whose exit IS its answer (an overlay build): Fly rerunning a failed build would cost the platform
-     * the same failure again and bury the exit code the platform reads. */
+    // on-failure restarts a crash (bounded); idle exit stops it. `no` is for an exit that is the answer.
     readonly restart: { readonly policy: "on-failure"; readonly max_retries: number } | { readonly policy: "no" };
-    // Always false: the platform destroys every machine itself, a sandbox's on delete and a builder once it has
-    // read the exit code off the stopped machine, which a machine that destroyed itself no longer has.
+    // Always false: the platform destroys every machine itself, after a builder's exit code is read.
     readonly auto_destroy: false;
-    /* Replace what the image would run. `flyMachineConfig` never sets it, a sandbox machine runs the image's
-     * own entrypoint, but the warm pool's first boot does: a no-op exec pulls the image onto the host and
-     * exits clean, so the machine stops holding a warm rootfs and nothing sandbox-shaped ever ran without an
-     * identity. Machine updates REPLACE the whole config, so the claim's config (built by flyMachineConfig,
-     * no init) is also what erases the override. A builder overrides the entrypoint instead: the platform's
-     * build script runs in place of the buildkit image's own daemon. */
+    // Overrides the entrypoint: unset for a sandbox, a no-op exec at warm-pool boot, a builder's script.
     readonly init?: { readonly exec?: readonly string[]; readonly entrypoint?: readonly string[] };
     readonly files?: readonly FlyMachineFile[];
-    /* Fly's own key/value bag on a Machine, the only label the provider can be ASKED about, since an app
-     * cannot be renamed and a Machine's name is fixed at birth. `flyMachineConfig` never sets it; the hosted
-     * lane writes what the machine currently is (warm stock vs. somebody's sandbox) and, because updates
-     * replace the whole config, the claim that brands a warm machine re-stamps this in the same call. */
+    // Fly's own key/value bag on a Machine, the only queryable label since an app can't be renamed.
     readonly metadata?: Record<string, string>;
     // The front door (see the header). Present exactly when the run names a hostname to answer under.
     readonly services?: readonly FlyMachineService[];
     readonly checks?: Readonly<Record<string, FlyMachineCheck>>;
 }
 
-/* CONNECTIONS, NOT REQUESTS, and the numbers are high on purpose. Fly's default counts in-flight requests, and
- * most of what a sandbox serves never finishes: one /events stream per open browser window, an attach per
- * live agent turn, a terminal, a dev server's HMR socket. Counted as requests they are permanently in flight,
- * a machine walks up to the hard limit, and the proxy stops routing to a daemon that is perfectly healthy —
- * the same trap the edge's own fly.toml names. A few windows and a handful of agents is an ordinary day. */
+// Connections, not requests: most of what a sandbox serves (streams, attaches, HMR) never finishes.
 export const FRONT_DOOR_CONCURRENCY = { type: "connections", soft_limit: 1000, hard_limit: 2000 } as const;
 
 const frontDoorService = (): FlyMachineService => ({
@@ -144,17 +96,14 @@ const frontDoorService = (): FlyMachineService => ({
     autostop: "off",
     concurrency: FRONT_DOOR_CONCURRENCY,
     ports: [
-        // h2 first: the browser holds long-lived streams, and HTTP/1.1's six connections per origin is the
-        // freeze the editor's stream budget exists to ration around.
+        // h2 first: the browser holds long-lived streams; HTTP/1.1 allows only six connections per origin.
         { port: 443, handlers: ["tls", "http"], tls_options: { alpn: ["h2", "http/1.1"] } },
         { port: 80, handlers: ["http"], force_https: true },
     ],
 });
 
-/* The daemon's own unauthenticated /health, asked THROUGH the front door under the sandbox's hostname: the
- * preview proxy answers 404 to any Host it does not recognise (by design, a stray subdomain is nobody's), so
- * a check without the header would fail on a healthy machine. The grace period covers the daemon's listen,
- * which comes up before its boot chain (main.ts, "listen first"). */
+// The daemon's own /health, asked through the front door under the sandbox's hostname: the proxy 404s any Host it
+// doesn't recognize, so the check needs the header to pass. The grace period covers the daemon's listen-first boot.
 const frontDoorCheck = (hostname: string): FlyMachineCheck => ({
     type: "http",
     port: PREVIEW_PORT,
@@ -174,9 +123,7 @@ export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
         ["SANDBOX_IMAGE", run.image],
         ["SANDBOX_BASE_IMAGE", run.baseImage],
         ...(run.environmentHash === undefined ? [] : [["SANDBOX_ENVIRONMENT_HASH", run.environmentHash] as const]),
-        // The entrypoint's VM switch: we are the whole machine, count as privileged (nested dockerd on the
-        // volume), and the daemon reads it too: a machine is reached through its front door, so it dials no
-        // tunnel and orders no loopback certificate (nothing is ever on the same machine as a browser).
+        // The whole machine, privileged, nested dockerd; the daemon skips a tunnel and loopback cert too.
         ["SANDBOX_VM", "1"],
         ...(run.env ?? []).filter(([, value]) => value !== ""),
     ]),
@@ -186,20 +133,12 @@ export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
     ...(run.frontDoor === undefined ? {} : { services: [frontDoorService()], checks: { "front-door": frontDoorCheck(run.frontDoor.hostname) } }),
 });
 
-/* THE OTHER MACHINE A HOSTED SANDBOX EVER RUNS: a builder, created in the sandbox's own app to build its
- * approved environment overlay and push the result to the app's registry path, where the sandbox machine
- * boots it from next. The platform is the executor on this lane the way `ic sandbox rebuild` is on a docker
- * host, so the shape is the platform's to compose, and it is a different shape from the sandbox's: no volume,
- * no front door, no restart (the exit code IS the answer), and the recipe delivered as files rather than
- * baked into an image. Its minutes are metered to the owner like the sandbox's own awake minutes, and the
- * platform bounds them with a timeout, so a builder is never free compute for whoever approved the recipe. */
+// The other machine a hosted sandbox runs: a builder that builds the approved overlay and pushes it to the app's
+// registry. No volume, no front door, no restart; minutes are metered like the sandbox's own.
 export interface FlyBuildRun {
     // The buildkit image, pinned by the platform's config.
     readonly image: string;
-    /* The CPU kind is the platform's call, not this composer's. A build is mostly a package manager waiting
-     * on the network, where shared CPUs cost a fraction of performance ones and finish about as fast; and a
-     * builder runs whatever RUN steps the recipe carries for as long as the timeout allows, so the cheaper
-     * kind is also the one worth less to anybody who approved a recipe in order to mine on it. */
+    // CPU kind is the platform's call: shared costs less and is about as fast for a network-bound build.
     readonly guest: { readonly cpuKind: "shared" | "performance"; readonly cpus: number; readonly memoryMb: number };
     // Plain text here, base64 on the wire: the Dockerfile, the build script, the registry credential.
     readonly files: readonly { readonly path: string; readonly content: string }[];

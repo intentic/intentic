@@ -3,24 +3,12 @@ import { type ArrivalReport, type Capability, type SkillDraft, CapabilitySchema 
 import type { MigratedAutomation, PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
 
-/* THE APPLY LOOP, the ticked items of a re-derived plan, landed one by one through the same write paths the
- * ordinary surfaces use, into a report that says what landed, what did not, and what still needs a person.
- *
- * PER-ITEM FAILURE IS THE UNIT. A migration walks a lived-in home directory, and any one item can be the odd
- * one out, a skill whose text trips a filesystem limit, an env store that is not there yet. Failing the whole
- * import over it would throw away the forty items that were fine; each failure becomes a `failed` row with the
- * reason instead, and the loop keeps walking.
- *
- * THE WHOLE THING IS RE-RUNNABLE, and that is a property to preserve when extending it: memory lands through
- * idempotent fences, skills and automations are upserts, an existing capability id is refused rather than
- * overwritten. So "fix the blocker and run the import again, ticking what failed" is always a safe answer.
- *
- * Deliberately narrow deps rather than Services: everything here is decided by the plan, and the six functions
- * below are the complete surface a migration is allowed to write through, auditable at a glance, stubbable in
- * a test without composing a daemon. */
+// Applies a plan's ticked items one by one into a report of what landed, failed, or needs a person. Per-item failure is
+// the unit, so one bad item never costs the rest; re-runnable, since fences and upserts are idempotent and an existing
+// capability id refuses rather than overwrites. Deps are narrowed to six auditable functions, not full Services.
 
-// Thrown by `setSecret` when there is no env store to write into (DevOps inactive). Typed so the loop can word
-// the failure as the precondition it is, rather than as breakage.
+// Thrown by `setSecret` when there's no env store to write into (DevOps inactive); typed so the loop reports it as a
+// precondition, not breakage.
 export class SecretsInactiveError extends Error {
     constructor() {
         super("there is no env secret store until DevOps is active: activate it, then run the import again with just the secret items");
@@ -33,13 +21,9 @@ export interface MigrationDeps {
     readonly writeWorkspaceFile: (relPath: string, content: string) => Promise<void>;
     // Write + enable + reconcile in one call, the same trio the skills route refuses to let a caller sequence.
     readonly saveSkill: (skill: SkillDraft) => Promise<void>;
-    /* Takes the job MINUS its model ladder and completes it. The archive knows the schedule, the prompt and
-     * whether the job was on; it cannot know which providers this sandbox has connected, and an automation may
-     * not exist without naming what it spends. So the implementation (assistants.ts) asks what is actually
-     * connected and lands the ladder with the job — the first point in this chain that can. */
+    // Fills the job's model ladder, unknowable to the archive, from what this sandbox has connected (assistants.ts).
     readonly upsertAutomation: (automation: MigratedAutomation) => Promise<void>;
-    // Runs the kind's handler apply and records the manifest entry. Must refuse an id that already exists,
-    // a migration lands beside nothing, never over something.
+    // Applies the kind's handler and records the manifest entry; must refuse an existing id rather than overwrite it.
     readonly addCapability: (capability: Capability) => Promise<void>;
     readonly setSecret: (key: string, value: string) => Promise<void>;
 }
@@ -47,8 +31,8 @@ export interface MigrationDeps {
 // The same two files the web's paste importer writes. Claude reads one, everything AGENTS-shaped the other.
 export const MEMORY_FILES = ["CLAUDE.md", "AGENTS.md"] as const;
 
-// A capability with its credential fields withheld, re-parsed, because the schema is what says the keyless
-// remainder is still a valid config (they are optional fields on every kind the adapters emit).
+// Re-parses a capability with credential fields withheld; the schema is what confirms the keyless remainder is still
+// valid.
 const withoutSecrets = (capability: Capability, secretFields: readonly string[]): Capability =>
     CapabilitySchema.parse({
         ...capability,
@@ -113,8 +97,7 @@ export const applyMigration = async (
         if (!wanted.has(planned.item.id)) {
             continue;
         }
-        // Withheld, not failed: the owner said "without secrets", and this is that choice landing, reported
-        // once below rather than as a row of red per key.
+        // Withheld, not failed: the owner chose no secrets; reported once below, not as a red row per key.
         if (planned.apply.target === "secret" && !selection.includeSecrets) {
             withheld.push(planned.apply.key);
             continue;

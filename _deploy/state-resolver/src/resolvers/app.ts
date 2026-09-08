@@ -23,10 +23,8 @@ import type { DeployRefs, PlatformRefs } from "./platform.js";
 import type { IngressPair } from "./route.js";
 import { exposeRoute } from "./route.js";
 
-// Which forge sources the app. The Forgejo stack carries its platform refs (self-hosted git + CI); the
-// hosted forges carry their inventory node + PAT. The forge selects the repo/CI node types and the registry
-// the image lives in; the Komodo deployment + route emission below is identical across all three. CI only
-// builds and pushes, Komodo rolls out.
+// Which forge sources the app: Forgejo carries platform refs, hosted forges carry their inventory node + PAT.
+// Selects repo/CI node types and registry; Komodo deployment + route emission is identical across all three.
 export type AppForge =
     | { readonly kind: "forgejo"; readonly platform: PlatformRefs }
     | { readonly kind: "github"; readonly githubId: string; readonly token: SecretRef }
@@ -44,14 +42,9 @@ export const forgeRegistry = (forge: AppForge, zone: string): string => {
     }
 };
 
-// The app resolver: everything shipping an app beyond the shared deploy orchestrator, a repo, and per
-// environment a CI node (commits the build-and-push workflow + repo secrets), a Komodo deployment pointed at
-// the registry image, and its Cloudflare route. intentic does NOT build or deploy: the CI workflow builds +
-// pushes the image on a developer push and Komodo rolls it out (auto_update polling, plus the workflow's
-// notify). The config nodes talk to the forge/Komodo HTTP APIs, so each carries its backend url + login.
-// Returns each environment's ingress pair so the caller can aggregate the host's tunnel ingress.
-// `controlPlaneHost` is the id of the host running the deploy orchestrator (and Forgejo, on that stack);
-// identity nodes (forgejo-org) are scoped under it, not `intent.on` (which may be a worker host).
+// Builds everything an app needs beyond the shared deploy orchestrator: repo, per-env CI node, Komodo deployment,
+// route. intentic never builds or deploys; CI builds+pushes, Komodo rolls out. Identity nodes scope under
+// controlPlaneHost, not intent.on.
 export const resolveApp = (
     intent: AppIntent,
     forge: AppForge,
@@ -59,26 +52,19 @@ export const resolveApp = (
     apiToken: SecretRef,
     zone: string,
     controlPlaneHost: string,
-    // The control-plane host's connection block: the engine-side Forgejo/Komodo API nodes (repo, ci,
-    // deployment, notify) reach their services over an SSH port-forward to this host, never the public routes.
+    // Control-plane host's connection block; API nodes reach it via SSH port-forward, never public routes.
     cpHost: HostInput,
-    // The backing instances this app may consume, keyed by instance id, each with the host it runs on (the
-    // binding nodes deploy onto that host over SSH). emit builds this from intent.backings + the host map.
+    // Backing instances this app may consume, keyed by id with their host; bindings deploy there over SSH.
     backings: ReadonlyMap<string, { readonly intent: BackingIntent; readonly host: HostInput }>,
 ): { nodes: ResolvedNode[]; ingress: IngressPair[] } => {
     const repo = repoId(intent.id);
     const cpSsh = sshOf(cpHost);
-    // The PUBLIC Komodo url, content for the hosted forges' CI only (their notify step runs on a hosted
-    // runner, off the host); the engine itself never dials it.
+    // Public Komodo url, for the hosted forges' CI only (their notify runs on a hosted runner, off the host).
     const komodoUrl = makeRef<string>(deploy.deploy, "url");
     const komodoAdmin = { adminUser: adminUsername, adminPassword: generated("KOMODO_ADMIN_PASSWORD") };
     const registry = forgeRegistry(forge, zone);
 
-    // The repo + registry namespace. Forgejo: the first team grant's org owns the app, falling back to the
-    // single admin owner (the admin still authenticates every call, it owns the org). Hosted forges: the
-    // forge account's owner output (teams are a Forgejo-stack concept; emit rejects them on hosted stacks).
-    // Komodo pulls with the admin's packages token (Forgejo) or the forge PAT (its [[docker_registry]]
-    // account is keyed by the same owner).
+    // Repo/registry owner: Forgejo's first team org, else admin; hosted forges use the account's owner output.
     const ownerTeam = forge.kind === "forgejo" ? intent.teams?.[0] : undefined;
     const owner: Input<string> =
         forge.kind === "forgejo"
@@ -89,17 +75,13 @@ export const resolveApp = (
     const ownerDeps = ownerTeam !== undefined ? [forgejoOrgId(controlPlaneHost, ownerTeam.team)] : [];
     const registryAccount: Input<string> = forge.kind === "forgejo" ? adminUsername : owner;
 
-    // Telemetry wiring: when the app observes a service, every deployment exports OTLP to that service's
-    // host-internal endpoint. Spread before the author's own env so an explicit OTEL_* can still override.
+    // Observe wires OTLP to the service's host-internal endpoint; spread before the author's env so overrides win.
     const otel =
         intent.observe !== undefined
             ? { OTEL_EXPORTER_OTLP_ENDPOINT: makeRef<string>(intent.observe, "otlpEndpoint"), OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf" }
             : undefined;
 
-    // Backing wiring: for each capability the app uses, emit a per-app binding node that mints the app's
-    // isolated credentials on the instance, inject its connection env vars (DATABASE_URL, VALKEY_URL, …) into
-    // every deployment, and gate each deployment on the binding so the credentials exist before it registers.
-    // The app's public domains across environments, the auth binding whitelists OIDC redirects under them.
+    // Binding mints credentials and gates the deployment; appDomains let auth whitelist OIDC redirects.
     const appDomains = Object.values(intent.environments).map((environment) => environment.domain);
     const bindingNodes: ResolvedNode[] = [];
     const bound: Record<string, Ref<string>> = {};
@@ -129,8 +111,7 @@ export const resolveApp = (
                       domain: gitDomain(zone),
                       ...forgejoAdmin,
                   },
-                  // Reaches Forgejo over the CP host's SSH, so only Forgejo itself must be up; and after
-                  // the owning org exists when the app is team-owned.
+                  // Depends on Forgejo (reached over the CP host's SSH) and, if team-owned, the owning org.
                   explicitDependsOn: [forge.platform.forgejo, ...ownerDeps],
               }
             : forge.kind === "github"
@@ -150,8 +131,7 @@ export const resolveApp = (
     const nodes: ResolvedNode[] = [...bindingNodes, repoNode];
     const ingress: IngressPair[] = [];
 
-    // GitLab wires ONE .gitlab-ci.yml per app (a job per environment); the other forges commit one workflow
-    // file per environment inside the loop below.
+    // GitLab wires one .gitlab-ci.yml per app (a job per env); other forges commit one workflow file per env.
     if (forge.kind === "gitlab") {
         nodes.push({
             id: glCiId(intent.id),
@@ -162,7 +142,7 @@ export const resolveApp = (
                 repoName: intent.id,
                 token: forge.token,
                 registry,
-                // The notify step runs on a hosted runner, so it reaches Komodo through its PUBLIC url.
+                // Notify step runs on a hosted runner, so it reaches Komodo through its public url.
                 komodoUrl,
                 ...komodoAdmin,
                 environments: Object.entries(intent.environments).map(([name, environment]) => ({
@@ -183,8 +163,7 @@ export const resolveApp = (
         const merged = { ...otel, ...bound, ...environment.env };
         const env = Object.keys(merged).length > 0 ? merged : undefined;
 
-        // CI/CD wiring: commits the build → push → notify-Komodo workflow + the secrets it consumes, and
-        // seeds a starter Dockerfile if the repo has none.
+        // Commits the build→push→notify workflow + secrets; seeds a starter Dockerfile if the repo has none.
         let ciDep: string;
         if (forge.kind === "forgejo") {
             ciDep = ciId(intent.id, name);
@@ -201,13 +180,11 @@ export const resolveApp = (
                     registry,
                     tag: name,
                     packagesToken: makeRef<string>(forge.platform.forgejo, "packagesToken"),
-                    // The workflow's notify step runs ON the host (runner is --network host), so it reaches
-                    // Komodo at its internal url directly, the public url would hairpin through the tunnel.
+                    // Notify runs on the host (--network host); uses Komodo's internal url, avoiding a tunnel hairpin.
                     komodoUrl: makeRef<string>(deploy.deploy, "internalUrl"),
                     deployment: id,
                 },
-                // Commits over the CP host's SSH and bakes Komodo's internal url into the workflow (waits on
-                // Komodo being up); the repo it commits into is owned by the org.
+                // Commits over the CP host's SSH; waits on Komodo being up and the repo's owning org.
                 explicitDependsOn: [forge.platform.forgejo, deploy.deploy, repo, ...ownerDeps],
             });
         } else if (forge.kind === "github") {
@@ -221,7 +198,7 @@ export const resolveApp = (
                     branch: environment.branch,
                     tag: name,
                     token: forge.token,
-                    // The notify step runs on a hosted runner, so it reaches Komodo through its PUBLIC url.
+                    // Notify step runs on a hosted runner, so it reaches Komodo through its public url.
                     komodoUrl,
                     ...komodoAdmin,
                     deployment: id,
@@ -236,9 +213,8 @@ export const resolveApp = (
             id,
             type: "deployment",
             inputs: {
-                // The Komodo Server to target: worker hosts use the host id (registered by komodo-server);
-                // the CP host omits this so the schema default "Local" is used (auto-created by Komodo's
-                // KOMODO_FIRST_SERVER_NAME).
+                // Komodo Server to target: worker hosts use the host id; the CP host omits it, defaulting to Komodo's
+                // "Local".
                 ...(intent.on !== controlPlaneHost ? { server: intent.on } : {}),
                 owner,
                 repoName: intent.id,
@@ -252,11 +228,8 @@ export const resolveApp = (
                 ...komodoAdmin,
                 ...(env !== undefined ? { env } : {}),
             },
-            // Depends on ci so the workflow + secrets exist first; on Komodo being up (registered over the CP
-            // host's SSH, no public route in the path); and on each backing binding so the app's credentials
-            // exist before it registers. No default readyWhen: apply only registers the deployment (it does
-            // not go live until CI pushes an image), so an httpOk gate would hang forever, honour only an
-            // author-supplied one.
+            // No default readyWhen: apply only registers the deployment; a default gate would hang until CI pushes an
+            // image.
             explicitDependsOn: [ciDep, deploy.deploy, ...(intent.observe !== undefined ? [intent.observe] : []), ...bindingDeps],
             ...(environment.readyWhen !== undefined ? { readyWhen: environment.readyWhen } : {}),
         });
@@ -265,9 +238,7 @@ export const resolveApp = (
         ingress.push(exposure.ingress);
     }
 
-    // CI/CD notifications: when the app wires a Discord handle (notify: discord), derive a Komodo alerter
-    // scoped to this app's deployments on deploy results (CD), all stacks, and a Forgejo repo webhook on
-    // build results (CI) on the Forgejo stack (the hosted forges own their build notifications).
+    // notify: discord derives a Komodo alerter on deploy (all stacks) and, on Forgejo, a webhook on build results.
     if (intent.notify !== undefined) {
         const webhook = makeRef<string>(intent.notify, `appWebhook:${intent.id}`);
         if (forge.kind === "forgejo") {

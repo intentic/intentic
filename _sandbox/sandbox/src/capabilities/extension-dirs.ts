@@ -4,30 +4,25 @@ import { errorMessage } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-// Where GIT-INSTALLED extension checkouts live: .intentic/local/extensions/<id>, daemon-owned state beside
-// capabilities.json (outside the three repos, outside .claude/). Baked extensions live at EXTENSIONS_DIR
-// instead. Both are daemon-owned dirs read with a RAW fs read (extensionRead), never the agent-facing
-// workspace-scoped read, which refuses paths outside /work (where the baked dir lives).
+// Git-installed extension checkouts live at .intentic/local/extensions/<id>; baked extensions live at EXTENSIONS_DIR.
+// Both use the raw extensionRead, never the workspace-scoped read that refuses paths outside /work.
 export const extensionsRoot = (root: string): string => statePath(root, ".intentic/local/extensions/");
 export const extensionDir = (root: string, id: string): string => join(extensionsRoot(root), id);
 
-// Where WORKSPACE extensions live: one directory per extension, consumed in place, no clone, no capability
-// entry, no install moment. Deliberately a sibling of the checkout root above: that one is daemon-owned and
-// keyed by capability ids, this one is authored with the agent's file tools (the approvals precedent) and keyed
-// by nothing but its manifest.
+// Workspace extensions live here, one dir per extension, consumed in place with no clone, capability entry, or install
+// moment. Authored by the agent's tools, keyed only by its manifest.
 export const workspaceExtensionsRoot = (root: string): string => statePath(root, ".intentic/config/workspace-extensions/");
 
-// The manifest's directory inside a checkout, `config.path` for extensions hosted in a marketplace/monorepo.
+// Directory holding an extension's manifest: the checkout root, or the checkout root joined with `config.path` in a
+// marketplace/monorepo.
 export const extensionRootOf = (dir: string, path: string | undefined): string => (path === undefined ? dir : join(dir, path));
 
-// A raw read of a daemon-owned extension file (manifest / skill / fragment). These are real filesystem paths
-// (git checkout under /work, or the baked dir at /opt/extensions), not agent-supplied, so no path-escape guard.
+// Raw read of a daemon-owned extension file (manifest/skill/fragment): real filesystem paths (checkout under /work, or
+// /opt/extensions), never agent-supplied, so no path-escape guard.
 export const extensionRead = async (absPath: string): Promise<string | undefined> => readFile(absPath, "utf8").catch(() => undefined);
 
-// Read + validate a directory's intentic-extension.json, KEEPING the failure. For checkouts the failure is
-// only a filter (install-time validation already rejected bad manifests; a rotted one is skipped), but for a
-// workspace extension it is the author's whole feedback channel, there is no install moment to reject a bad
-// manifest, so the message rides the extensions list instead.
+// Reads and validates intentic-extension.json, keeping the failure: a checkout treats it as a filter, but a workspace
+// extension (no install moment) surfaces it as the author's only feedback.
 export const parseExtensionManifest = async (dir: string): Promise<{ manifest: ExtensionManifest } | { error: string }> => {
     const raw = await extensionRead(join(dir, "intentic-extension.json"));
     if (raw === undefined) {
@@ -40,7 +35,7 @@ export const parseExtensionManifest = async (dir: string): Promise<{ manifest: E
     }
 };
 
-// The filtering read for the callers that only act on directories that DO parse.
+// Discards the error, for callers that only care about directories that parse.
 export const readExtensionManifest = async (dir: string): Promise<ExtensionManifest | undefined> => {
     const result = await parseExtensionManifest(dir);
     return "manifest" in result ? result.manifest : undefined;

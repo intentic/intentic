@@ -2,13 +2,9 @@
 import type { IconName } from "@intentic/ui";
 import type { TodoItem } from "@intentic/sandbox-contract";
 
-/* The agent's task checklist (TodoWrite / the Task tool family) as it stood at ONE point in the turn.
- *
- * Every block in a transcript is a snapshot, not a live view: the agent writes a fresh one each time the list
- * moves, so a long turn leaves a trail of them and a finished session leaves the whole trail behind. Which is
- * why `live` exists: a spinner is a claim about right now, and the row that was underway when a snapshot was
- * taken stays that way forever. Scrolled back to, an animated row reads as an agent still working on a session
- * that ended hours ago; frozen, it keeps its highlight as a static dot and reads as the record it is. */
+// A snapshot of the agent's task checklist (TodoWrite) at one point in the turn; the agent writes a fresh block each
+// time the list changes. `live` marks the snapshot still being written: only it may animate, so a scrolled-back settled
+// snapshot reads as a static record instead of work still in progress.
 
 const props = defineProps<{
     todos: readonly TodoItem[];
@@ -26,8 +22,8 @@ const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: stri
     return { name: `circle`, class: `text-subtle` };
 };
 
-// `activeForm` is the row's present-tense phrasing ("Serializing…"), which only tells the truth while the row
-// is actually active: a settled snapshot reads back in the same imperative form as the rows around it.
+// activeForm is present-tense phrasing, true only while the row is actually active; a settled snapshot uses the
+// imperative form instead.
 const todoText = (todo: TodoItem): string => (props.live && todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 </script>
 

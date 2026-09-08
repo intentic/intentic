@@ -11,32 +11,17 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
 
-/* PACKING A SANDBOX'S ENVIRONMENT, a gzipped tar of the two volumes that hold it, driven entirely by the
- * state manifests so that adding a store is what adds it to the bundle.
- *
- * Layout, and why it is three prefixes rather than a mirror of the filesystem:
- *
- *   intentic-bundle.json   the manifest, written FIRST so a reader knows the shape before the bytes
- *   workspace/…           `/work`, minus junk (the tree view's own ignore scope) and minus what the
- *                         manifests class as identity/derived/secret-the-owner-withheld
- *   history/…             the portable slice of `/history`, in particular `history/gits/…`, every repo's REAL
- *                         git dir, without which the restored tree is a pile of files whose `.git` pointers
- *                         name a path that does not exist on the target
- *
- * Nothing is buffered. Entries stream file-by-file through the packer into gzip, so a workspace of any size
- * costs the daemon one file handle at a time, the same discipline the upload route holds on the way in.
- *
- * MODES AND SYMLINKS ARE PRESERVED, which the existing /workspace/upload-archive path does not do (it writes
- * every entry with the default mode and drops symlinks entirely). For a folder drop that is survivable; for a
- * bundle whose whole promise is "the same environment" it is not, a restored tree whose scripts lost +x is a
- * different environment, and silently so.
- */
+// Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
+// the bundle.
+// - intentic-bundle.json: the manifest, written first so a reader knows the shape before the bytes
+// - workspace/…: /work, minus ignored junk and minus what the manifests mark identity/derived/secret
+// - history/…: the portable slice of /history, including every repo's real git dir (gits/…)
+// Streamed file-by-file, one handle at a time; modes and symlinks are preserved, unlike /workspace/upload-archive.
 
 export const BUNDLE_MANIFEST_ENTRY = "intentic-bundle.json";
 
-// Pack one regular file, streaming its bytes. `size` must be exact or tar-stream throws, so it comes from the
-// same lstat that decided this was a file, a file the agent rewrites mid-walk is the one race here, and it
-// fails the export loudly rather than producing a corrupt member.
+// Pack one file, streaming its bytes; `size` must be exact or tar-stream throws, so it comes from the same lstat that
+// decided this was a file.
 const packFile = (packer: Pack, name: string, absPath: string, size: number, mode: number, mtime: Date): Promise<void> =>
     new Promise((resolve, reject) => {
         const entry = packer.entry({ name, size, mode, mtime, type: "file" }, (error) => (error === null ? resolve() : reject(error)));
@@ -48,16 +33,13 @@ const packSymlink = (packer: Pack, name: string, linkname: string): Promise<void
         packer.entry({ name, linkname, type: "symlink" }, (error) => (error === null ? resolve() : reject(error)));
     });
 
-// One tree, walked depth-first, every entry asked of `decide` before it is packed. Returns what it wrote so the
-// report can state a size rather than a shrug. Directories are packed only when EMPTY: a directory with files
-// under it is implied by their paths, and the restorer creates parents anyway, so emitting every one of them
-// would double the entry count of a deep tree for nothing.
+// Depth-first walk; `decide` gates every entry, and totals come back for the report. A directory is packed only when
+// empty — one with files inside is implied by their paths, and the restorer creates parents anyway.
 const packTree = async (
     packer: Pack,
     root: string,
     prefix: string,
-    // Two questions, not one: `carry` decides a FILE, `enter` decides whether to look inside a directory. See
-    // mayContainCarried, a directory that does not itself travel can hold one that does.
+    // Two questions, not one: `carry` decides a file, `enter` whether to look inside a directory.
     decide: { readonly carry: (relPath: string) => boolean; readonly enter: (relPath: string) => boolean },
     scope?: IgnoreScope,
 ): Promise<{ files: number; bytes: number }> => {
@@ -101,8 +83,7 @@ const packTree = async (
             bytes += stats.size;
             wrote = true;
         }
-        // An empty directory that survived every filter is content in its own right (a scaffold's placeholder,
-        // the reference shelf), and only an explicit entry can carry it.
+        // An empty directory that survived every filter is content in its own right, and needs an explicit entry.
         if (!wrote && relDir !== "") {
             packer.entry({ name: `${prefix}${relDir}/`, type: "directory" }).end();
         }
@@ -113,9 +94,8 @@ const packTree = async (
     return { files, bytes };
 };
 
-// The manifest's `excluded` list: every declared entry this export is leaving behind, with the manifest's own
-// note. Derived from the same tables the walk consults, so it can never describe a different bundle than the
-// one being written.
+// The manifest's `excluded` list, derived from the same tables the walk consults, so it can never describe a different
+// bundle than the one written.
 const excludedEntries = (secrets: boolean): BundleManifest["excluded"] =>
     [
         ...WORKSPACE_STATE_FILES.filter((file) => !carries(file.portability, secrets)),
@@ -128,24 +108,18 @@ const excludedEntries = (secrets: boolean): BundleManifest["excluded"] =>
         )
         .toSorted((left, right) => left.path.localeCompare(right.path));
 
-/* One credential sweep, best-effort. The thunk is what makes it best-effort in BOTH directions: a seam that
- * throws where it stands rather than rejecting (a fake that was never given this member) becomes a rejection
- * here, so an export can never fail on the way to protecting itself. */
+// One credential sweep, best-effort in both directions: a seam that throws (a fake never given this member) becomes a
+// caught rejection, so an export can never fail while protecting itself.
 const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> => {
     try {
         await run();
     } catch {
-        // Deliberately silent: the export proceeds, and whatever the sweep could not move is packed only for the
-        // entries whose classification already keeps them out of a secret-less bundle.
+        // Deliberately silent: classification already keeps an unswept file out of a secrets-off bundle.
     }
 };
 
-/* Stream a bundle of this sandbox's environment. `secrets` is the owner's choice at the export dialog and the
- * ONLY thing that varies what is packed, everything else is the manifests.
- *
- * `now` is injected rather than read here so the manifest is deterministic under test; production passes
- * Date.now() at the route.
- */
+// `secrets` is the owner's export-dialog choice, the only thing that varies what's packed; everything else follows the
+// manifests. `now` is injected so the manifest is deterministic under test.
 export const packBundle = (services: Services, options: { readonly secrets: boolean; readonly now: number }): ReadableStream<Uint8Array> => {
     const packer = pack();
     const gzip = createGzip();
@@ -153,28 +127,13 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
 
     void (async () => {
         try {
-            /* SWEEP BEFORE PACKING, and this is the step the two credential splits made necessary rather than
-             * merely tidy. The capability manifest and the extension settings file both `carry` now, they hold
-             * the shape of a connection and no longer its credential, which is only true of the bytes on disk
-             * while nothing has hand-written a real token back into them. The boot sweep is what normally keeps
-             * that so, and between a boot and an export there is a whole session in which the agent (for whom
-             * both files are deliberately readable and writable) can put one back.
-             *
-             * Everywhere else that gap costs a value the agent could already read. HERE it costs the promise the
-             * export dialog makes: "without secrets" is what the owner believes when they email the bundle, and
-             * a carried file is packed by its bytes, not by its classification. So the vaults are filled first
-             * and the packer reads what the sweep left. Best-effort by the same argument as at boot: a manifest
-             * this daemon cannot rewrite must not be the thing that fails an export. */
+            // Capability manifests and settings `carry` now only while nothing has rewritten a credential into them
+            // since boot; an agent session can. Swept first, or "without secrets" is broken by the bytes, not the
+            // classification.
             await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
-            /* The manifest EMBEDS the sandbox definition, the same document GET /definition emits: a bundle is
-             * definition + state, so the arrival report reasons over facts either export door delivers. What
-             * the definition could not express (a remoteless repo) is no loss HERE, the bundle's own tar
-             * carries those repos' git dirs whole.
-             *
-             * `repos` is the same walk the pack below is filtered by, so the manifest and the tar can never
-             * disagree about which repositories are inside. That agreement is what makes a bundle previewable:
-             * the arrival offers one tick per repository, and it can only name them because this list arrives
-             * before the entries do (definition.ts argues the field on the schema). */
+            // Manifest embeds the same definition GET /definition emits, so a bundle is definition + state. `repos` is
+            // the same list the pack below is filtered by, so the manifest and the tar can never disagree about what's
+            // inside.
             const manifest: BundleManifest = {
                 version: 3,
                 ...(services.config.sandbox.name === "" ? {} : { sandbox: { name: services.config.sandbox.name } }),
@@ -187,8 +146,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             const body = Buffer.from(`${JSON.stringify(manifest, undefined, 2)}\n`);
             packer.entry({ name: BUNDLE_MANIFEST_ENTRY, size: body.byteLength, type: "file" }).end(body);
 
-            // The workspace, filtered by the tree view's own ignore rules (node_modules, build output, browser
-            // profiles, agent worktrees, the reference shelf) and then by the state manifests.
+            // Workspace filtered first by the tree view's own ignore rules, then by the state manifests.
             await packTree(
                 packer,
                 services.workspace.root,
@@ -199,8 +157,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                 },
                 createIgnoreScope(),
             );
-            // The daemon volume, filtered by its manifest alone, nothing here is .gitignore'd or junk-named,
-            // and `gits/` deliberately contains the very `.git` dirs the workspace scope would have skipped.
+            // History filtered by its manifest alone; `gits/` holds the .git dirs the workspace scope would skip.
             await packTree(packer, services.config.historyRoot, "history/", {
                 carry: (relPath) => carries(historyPortability(relPath), options.secrets),
                 enter: (relPath) => historyMayContain(relPath, options.secrets),

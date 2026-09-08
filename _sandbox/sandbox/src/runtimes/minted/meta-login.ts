@@ -1,20 +1,10 @@
 import { z } from "zod";
 import type { MintedCredential, MintedLoginAttempt, MintedLoginContext, MintedLoginDriver } from "./minted-login.js";
 
-/* META'S SIGN-IN: the Muse Code device flow, then the exchange that turns its token into a key that can
- * actually run a turn.
- *
- * It is RFC 8628 by the book — ask for a device code, show the user a short code and a page, poll the token
- * endpoint until they approve — with one vendor-specific step at the end. The token the device flow issues is a
- * `dca:` device credential, and Meta's model endpoint refuses it; the official Muse Code client posts it to
- * `/muse-code/key`, which answers with the `LLM|…` key the plan's requests are actually made with. That
- * exchange is the reason this provider can be connected without anybody visiting a dashboard, and it is also
- * where we find out whose account it is and whether the plan is live, because the mint answers with both.
- *
- * The client id below is Meta's own CLI's, and the user agent is that CLI's too: the endpoint is the one the
- * vendor ships for a terminal to sign in through, and it answers a request that looks like one. Both are
- * VENDOR FACTS, not configuration — nothing here is a knob for an owner to turn — so they are constants, and the
- * hosts are overridable in one place for the tests alone. */
+// Meta's sign-in: RFC 8628 device flow, then an exchange that turns the dca: device token (which Meta's model endpoint
+// refuses) into the LLM|… key a turn actually runs on, via Muse Code's own /muse-code/key. The client id and user agent
+// are Meta's official CLI's, vendor facts rather than configuration, so they're constants; the hosts are overridable in
+// one place for tests.
 
 export interface MetaLoginHosts {
     readonly deviceAuthorization: string;
@@ -28,19 +18,15 @@ export const META_LOGIN_HOSTS: MetaLoginHosts = {
     mint: "https://api.meta.ai/muse-code/key",
 };
 
-// Muse Code's own client id and user agent. The device endpoints are the vendor's terminal sign-in road, and
-// this is the client that road exists for.
+// Muse Code's own client id and user agent; the vendor's terminal sign-in road exists for this client.
 const CLIENT_ID = "1031625952748946";
 const USER_AGENT = "muse-code/1.0.2";
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 
-// The floor for how often the token endpoint is asked, and the step a `slow_down` adds. RFC 8628 says the
-// server's own `interval` governs; these are what we do when it says nothing, and what we add when it says we
-// are asking too fast.
+// Used when the server's RFC 8628 `interval` says nothing, and added when it says `slow_down`.
 const MIN_POLL_INTERVAL_MS = 5_000;
 const SLOW_DOWN_STEP_MS = 5_000;
-// One control request against a vendor's auth server. Generous for a cold edge, bounded so a hung socket cannot
-// hold a poll tick open past the next one.
+// Bounded so a hung socket can't hold a poll tick open past the next one.
 const REQUEST_TIMEOUT_MS = 30_000;
 
 const DeviceCodeSchema = z.object({
@@ -58,11 +44,8 @@ const TokenSchema = z.object({
     error_description: z.string().default(""),
 });
 
-/* What the mint answers, and the three fields past the key are why this is worth parsing rather than reading
- * `api_key` and moving on. `user_email` is the only thing that can name the row (a minted key says nothing
- * about whose it is), and `require_payment` is Meta telling us the account has no live plan — which is worth
- * refusing on, because storing that key would draw a connected row whose every turn is refused for a reason
- * the row cannot show. */
+// user_email is the only way to name the row (a key says nothing about whose it is); require_payment means the account
+// has no live plan, worth refusing on rather than storing a row that fails every turn silently.
 const MintedKeySchema = z.object({
     api_key: z.string().default(""),
     user_email: z.string().default(""),
@@ -70,16 +53,8 @@ const MintedKeySchema = z.object({
     require_payment: z.boolean().optional(),
 });
 
-/* WHAT ONE POLL TICK MEANT, as four answers rather than a chain of ifs inside the loop, and every ending said
- * in the vendor's own terms — because "the sign-in failed" is the one answer that helps nobody. An expired code
- * means start again, a declined one means the person said no on the page, a `slow_down` means keep going more
- * slowly, and anything else is Meta's own words passed through.
- *
- * A body that will not parse reads as `pending`, deliberately: a proxy's error page on one tick is not the
- * vendor declining a sign-in, and the deadline is what ends the wait.
- *
- * Exported for the test, which is the only way to assert the RFC's own vocabulary is honoured without standing
- * up a device flow per case. */
+// One poll tick's outcome, in the vendor's own terms rather than a generic failure. An unparseable body reads as
+// `pending`, not a decline: a proxy error on one tick isn't a vendor refusal, and the deadline ends the wait.
 export type MetaPollVerdict =
     | { readonly kind: "granted"; readonly deviceToken: string }
     | { readonly kind: "pending" }
@@ -149,8 +124,7 @@ export const metaLoginDriver =
             throw new Error("Meta's sign-in service answered with no page to open.");
         }
 
-        // The poll: one tick a time, until the vendor's own deadline. What a tick MEANT is verdictOf's
-        // business, so this reads as the three things that can happen and nothing else.
+        // Polls one tick at a time until the vendor's deadline; verdictOf decides what a tick meant.
         const settle = async (): Promise<MintedCredential> => {
             let intervalMs = Math.max(MIN_POLL_INTERVAL_MS, interval * 1_000);
             const deadline = Date.now() + expires_in * 1_000;
@@ -165,8 +139,8 @@ export const metaLoginDriver =
                     body: form({ grant_type: DEVICE_CODE_GRANT, device_code, client_id: CLIENT_ID }),
                     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                 }).catch(() => undefined);
-                // A blip on one tick is not an outcome: the next tick asks again, and the vendor's own deadline
-                // is what ends this loop.
+                // A blip on one tick is not an outcome: the next tick asks again, and the vendor's own deadline is what
+                // ends this loop.
                 const verdict =
                     response === undefined ? ({ kind: "pending" } as const) : verdictOf(response.ok, await response.json().catch(() => undefined));
                 if (verdict.kind === "granted") {
@@ -185,9 +159,8 @@ export const metaLoginDriver =
         return { url, code: user_code, state: "", expiresAt: Date.now() + expires_in * 1_000, settle };
     };
 
-/* THE EXCHANGE. Named as its own step because it is the one that fails in a way the user can do something
- * about: the device flow succeeding proves they signed in, and this failing means the account behind that
- * sign-in has no live Muse Code plan. Saying which of the two happened is the whole value of the message. */
+// The exchange: a separate step because it fails differently than the device flow. Success there proves sign-in;
+// failure here means the account has no live Muse Code plan.
 const mintKey = async (input: {
     readonly fetchImpl: typeof fetch;
     readonly hosts: MetaLoginHosts;
@@ -216,8 +189,8 @@ const mintKey = async (input: {
         throw new Error("Signed in, but Meta issued no key for that account.");
     }
     if (minted.data.require_payment === true) {
-        // The vendor is saying the account has to pay before it can run anything. Storing the key anyway would
-        // draw a connected row that refuses every turn, with the reason living only in the refusal.
+        // Storing the key anyway would draw a connected row that refuses every turn, the reason visible only in that
+        // refusal.
         throw new Error("That Meta account has no active Muse Code plan: subscribe, then connect it here.");
     }
     return { apiKey: minted.data.api_key, ...(minted.data.user_email !== "" ? { email: minted.data.user_email } : {}) };

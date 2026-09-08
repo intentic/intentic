@@ -16,29 +16,9 @@ import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 
-/* THE INBOUND HALF OF <MoveCard>: one file picker, one checklist, one report — for all four things that can
- * arrive in a sandbox.
- *
- * THREE CARDS ONCE, split by ARTIFACT: "Restore from a bundle" lived on the move card, "Apply a definition" on
- * the definition card, and a whole third card asked which foreign assistant you were leaving. Read together
- * they were the same four moves on different bytes, and the differences between them were drift rather than
- * design — one of the three wrote on file pick with no preview at all, and the one that did was the bundle,
- * the only artifact that lands OVER a workspace instead of beside it.
- *
- * SO THE PICKER DOES NOT ASK WHAT THE FILE IS. The daemon can tell from two bytes and the first tar header
- * (portability/arrival.ts), and whoever is uploading already knows what they have; making them choose a button
- * for it was work with nothing on the other side. What is left is the question that actually matters, and the
- * panel asks it in the order it becomes cheap:
- *
- *   1. Is the machine already connected here? Then there is nothing to pack: one click reads it. This renders
- *      FIRST because it deletes every step below it.
- *   2. Otherwise, drop the file in — whatever it is.
- *   3. And only for the reader who has neither: which assistant, then one command to make the file.
- *
- * PREVIEW-FIRST, WHATEVER CAME IN. Every source becomes a plan, never a change: the owner unticks, and only
- * the apply writes. Credentials are a second, separate consent, and both directions now ask for it the same
- * way and in the same shape — a lock in a box, at the moment of the commit rather than standing beside it. See
- * <ExportBundleDialog> for the outbound one. */
+// Inbound half of <MoveCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
+// the source from the file itself, so the picker never asks; every source becomes a plan first, and only Apply writes.
+// Credentials are a separate consent, the same lock-in-a-box as <ExportBundleDialog>'s.
 
 const hosts = ref<ArrivalHost[]>([]);
 const picked = ref<AssistantSource | undefined>(undefined);
@@ -49,10 +29,8 @@ const report = ref<ArrivalReport | undefined>(undefined);
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 
-/* Probed on mount, and again whenever the owner asks, not polled: enrolling a device is not something that
- * happens while this panel is open, but WAKING one is. A laptop is asleep more often than not, so the row for
- * an offline machine carries its own re-check rather than making the owner reload the page to use the very
- * shortcut the panel just told them about. */
+// Probed on mount and on demand, never polled: enrolling happens elsewhere, but waking a sleeping laptop happens right
+// here, so an offline row carries its own recheck instead of a page reload.
 const probing = ref(false);
 const probe = async (): Promise<void> => {
     if (probing.value) {
@@ -82,8 +60,7 @@ const SOURCE_LABELS: Record<ArrivalPlan["source"], string> = {
 
 const adopt = (parsed: ArrivalPlan): void => {
     plan.value = parsed;
-    // Everything applicable starts ticked at the adapter's own recommendation: an artifact is taken for its
-    // whole shape far more often than for a slice, and the rows that advise against themselves say so.
+    // Starts ticked at the adapter's own recommendation; a row advising against itself says so.
     ticked.value = Object.fromEntries(parsed.items.filter((item) => item.applicable).map((item) => [item.id, item.recommended]));
     withSecrets.value = false;
     report.value = undefined;
@@ -113,8 +90,7 @@ const readFile = (event: Event): Promise<void> =>
             return;
         }
         report.value = undefined;
-        // One continuous body, like the folder-drop archive route: the daemon streams it, and a bundle far
-        // larger than this tab's memory never passes through it.
+        // Streamed as one body, like the folder-drop route; a huge bundle never passes through this tab's memory.
         adopt(ArrivalPlanSchema.parse(await sandboxJson(`/arrivals/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit)));
     }, `Could not read that file.`);
 
@@ -150,13 +126,10 @@ const cancel = (): Promise<void> =>
 <template>
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
-            <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected device needs no archive, no transfer and
-                 no file dialog, so it goes above everything and reads as the answer rather than as a shortcut.
-                 EVERY CONNECTED MACHINE GETS A ROW, not only the ones holding a setup: an owner whose laptop is
-                 simply ASLEEP (the ordinary state of a laptop) would otherwise see a panel that had never heard
-                 of their devices and no reason to think reading one was possible at all. A row saying
-                 "asleep, wake it and check again" is not a dead-end offer; it is the difference between a
-                 feature that is missing and one that is waiting. -->
+            <!--
+                Connected devices go first, since a connected machine needs no archive or file dialog. Every connected machine gets a row, even
+                asleep ones, so an offline device reads as waiting, not unsupported.
+            -->
             <RowGroup v-if="hosts.length > 0" flat label="Your devices">
                 <Row
                     v-for="host in hosts"
@@ -186,7 +159,7 @@ const cancel = (): Promise<void> =>
                 </Row>
             </RowGroup>
 
-            <!-- ONE PICKER, NO QUESTION. The daemon tells the formats apart, so the reader never declares one. -->
+            <!-- One picker, no format question: the daemon tells the formats apart. -->
             <div class="flex flex-wrap items-center gap-2">
                 <Button
                     :label="ready.length > 0 ? `Or choose a file` : `Choose a file`"
@@ -210,8 +183,7 @@ const cancel = (): Promise<void> =>
                 </template>
             </div>
 
-            <!-- One command, what it prints, where the file lands. Never two commands: the reader has already
-                 told us which one is theirs. -->
+            <!-- One command only: the reader already named which assistant is theirs. -->
             <div v-if="guide" class="flex flex-col gap-3">
                 <div class="flex items-center justify-between gap-2">
                     <p class="text-xs text-content">Run on {{ guide.label }}:</p>
@@ -221,8 +193,7 @@ const cancel = (): Promise<void> =>
                 </div>
                 <Code :code="guide.command" lang="bash" :wrap="true" :copyable="true" />
 
-                <!-- The three cliffs, each answered where a reader hits it. Folded shut so the person whose
-                     assistant runs right here never reads past the command. -->
+                <!-- Folded shut by default, so a reader whose command just works never reads past it. -->
                 <div class="flex flex-col gap-1">
                     <details v-for="topic in help" :key="topic.title" class="text-2xs">
                         <summary class="cursor-pointer text-subtle">{{ topic.title }}</summary>
@@ -242,8 +213,7 @@ const cancel = (): Promise<void> =>
             </div>
         </template>
 
-        <!-- THE PLAN, and it is the same checklist whichever of the four this was. Nothing below this writes
-             until Apply. -->
+        <!-- Same checklist regardless of source; nothing below writes until Apply. -->
         <template v-else>
             <div class="flex items-center gap-2">
                 <StatusBadge variant="info" :label="plan.name ?? SOURCE_LABELS[plan.source]" />
@@ -270,14 +240,10 @@ const cancel = (): Promise<void> =>
                 </Row>
             </RowGroup>
 
-            <!-- THE SECOND CONSENT, asked on the way IN for every source, and only when the artifact actually
-                 holds values (`carriesSecrets`): a definition carries secret NAMES and never a value, so asking
-                 would be a question about something that is not in the file.
-                 A BOX, NOT A FULL-BLEED BAND, and that is the merge's doing rather than a preference. This half
-                 now sits inside a <RowNote block> on a shared card, so bleeding to the card's edge would mean
-                 restating that block's padding as a negative margin here — a design token copied by hand into a
-                 view, stale the day the token moves. The box also makes the pair legible: the same lock, in the
-                 same frame, on the way out (<ExportBundleDialog>) and on the way in. -->
+            <!--
+                Asked only when the plan actually carries secret values, not just names. Boxed, not full-bleed, since the shared card's RowNote block
+                already owns the padding; matches the export dialog's own lock-in-a-box.
+            -->
             <div v-if="plan.carriesSecrets" class="overflow-hidden rounded-lg border border-line">
                 <Row
                     flush
@@ -320,15 +286,13 @@ const cancel = (): Promise<void> =>
             </div>
         </template>
 
-        <!-- THE REPORT, written once. It was three near-identical blocks with three different headings for the
-             same list ("Finish the move", "Finish the arrival", "Finish the move" again). -->
+        <!-- One shared report for all four sources. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
                 <StatusBadge variant="success" label="arrived" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }}.</p>
             </div>
-            <!-- The failure group wears the tone its heading always did: <RowGroup>'s label is a slot precisely
-                 so a group whose subject is a failure can say so without the component learning about tones. -->
+            <!-- Label is a slot so a failure group can wear its own tone without RowGroup knowing about tones. -->
             <RowGroup v-if="report.failed.length > 0" flat>
                 <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
                 <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />

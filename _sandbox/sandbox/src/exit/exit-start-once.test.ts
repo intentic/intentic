@@ -1,29 +1,17 @@
 import type { ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-// Statically imported even though the mock below has to win: vitest hoists `vi.mock` above every import, so
-// this still gets the fake drivers. Dynamic `await import()` inside the test would work too, and would charge
-// this module graph's load time to the test's own timeout, which is what made these fail under a full run.
 import { startExitOnce } from "./exit-links.js";
 
-/* SHARING ONE START, which stopped being a nicety the moment a caller could WALK AWAY from one.
- *
- * A turn's browser setup gives an exit a few seconds to come up and then gets on with the turn (see
- * resolveProfileExit's budget). The start it abandoned keeps running, so the next turn asking the same
- * question must JOIN that attempt rather than begin a second one against the same interface, the same conf
- * and the same derived proxy port, where the loser's failure would tear down the winner's working exit.
- */
+// A turn's browser setup gives an exit a budget, then moves on; the abandoned start keeps running. A later call for the
+// same exit must join that attempt, not begin a second one against the same interface and port.
 
-// HOME decides where the observation this start writes would land; pinned to a temp dir, as tor.test.ts does,
-// so a test run leaves nothing in the real one.
+// HOME decides where this start's observation lands; pinned to a temp dir so a test run leaves nothing real.
 process.env["HOME"] = "/tmp/exit-start-once-home";
 
 const started: string[] = [];
 
-/* A HANDOFF, NOT A POLL. Each parked dial queues its resolver and `parked()` takes the next one, waiting on a
- * promise if it has not happened yet. Two properties matter and a polled flag has neither: dials are matched
- * to waiters IN ORDER, so releasing one start can never fire the previous one's resolver, and there is no
- * iteration budget to starve, which is what made the polled version fail only when the rest of the suite was
- * running beside it. */
+// A handoff, not a poll: dials are matched to waiters in order, so releasing one start can never fire a different one's
+// resolver, and there's no iteration budget to starve.
 const dials: (() => void)[] = [];
 const waiters: ((release: () => void) => void)[] = [];
 
@@ -46,8 +34,7 @@ vi.mock("./exit-drivers.js", () => ({
         tor: {
             missingTool: async () => undefined,
             probe: async () => ({ state: "down" }),
-            // Parked until the test lets it go, which is what makes "a second call while one is in flight"
-            // expressible at all.
+            // Parked until the test releases it, which is what makes a second call while one is in flight testable.
             async *start(id: string): AsyncGenerator<IntenticLine> {
                 started.push(id);
                 await new Promise<void>((resolve) => onDial(resolve));
@@ -73,9 +60,8 @@ test("a second start joins the one already in flight, and a new one is allowed o
     await first;
     expect(started).toEqual(["berlin"]);
 
-    /* And the sharing does NOT outlive the attempt. An exit that went down after a successful start has to be
-     * startable again; a map entry left behind would hand every later caller a promise that resolved to a
-     * tunnel which no longer exists. */
+    // The sharing must not outlive the attempt: an exit that went down after a successful start must be startable
+    // again, not resolve to a tunnel that no longer exists.
     const later = startExitOnce(entry, "DE");
     expect(later).not.toBe(first);
     (await parked())();

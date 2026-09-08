@@ -2,35 +2,22 @@ import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { jsonBody } from "../features/sandbox/client/jsonBody";
 import { sandboxJson } from "../features/sandbox/client/sandboxClient";
 
-/* WHICH DECLARED ROUTE A CALL USED, counted here and reported to the daemon in batches.
- *
- * The permission gate in apiImpl already decides, for every api.sandbox call, whether some entry in the
- * extension's `permissions.sandbox` covers it. This keeps that answer instead of throwing it away, and it has to
- * live in the browser for the same reason the gate does: the daemon receives an extension's traffic as ordinary
- * authenticated requests on the owner's session and cannot tell which extension, let alone which declared entry
- *, any of it belongs to.
- *
- * IT COUNTS THE ENTRY, NOT THE PATH. `GET /workspace/file?path=…` collapses onto the manifest line
- * `GET /workspace/file` that permitted it. That is what makes a figure actionable (the line is what an author
- * deletes) and it is also the difference between evidence and a log of what the owner was reading.
- *
- * BATCHED, because the alternative is a request per request. A view that polls would otherwise double the
- * traffic it costs, to record a counter nobody watches change, so calls accumulate in memory and go out on a
- * timer, and on the way out of the page. Losing the last few seconds of counts to a hard close is a cost worth
- * paying: this measures whether a permission is used at all, over days, and no decision it feeds turns on one
- * call. */
+// Counts which declared permissions.sandbox entry a call used, batched and reported to the daemon; lives in the browser
+// because the daemon can't attribute an authenticated request to an extension or entry.
+// Counts the entry, not the path: `GET /workspace/file?path=...` collapses onto the manifest line `GET /workspace/file`
+// that permitted it.
+// Batched on a timer to avoid a request per call; losing the last few seconds to a hard close is acceptable since this
+// measures usage over days.
 
-// Long enough that a burst of calls costs one request, short enough that the figures are there when someone
-// opens the tab a moment after using the extension.
+// Long enough to fold a burst into one request, short enough that figures are fresh when the tab opens.
 const FLUSH_MS = 15_000;
 
 // extension routing id → declared entry → calls since the last successful report.
 const pending = new Map<string, Map<string, number>>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-/* Which declared entry permitted this call. Asked one entry at a time rather than by teaching the SDK's matcher
- * to report its match: the list is a handful of strings, this runs after the gate has already said yes, and the
- * alternative is a new export on a published package for the benefit of one caller. */
+// Which declared entry permitted this call, found by asking one entry at a time rather than extending the SDK's matcher
+// to report its match.
 const matchedEntry = (permissions: readonly string[], method: string, path: string): string | undefined =>
     permissions.find((entry) => sandboxRouteAllowed([entry], method, path));
 
@@ -39,8 +26,7 @@ export const flushSandboxUsage = async (): Promise<void> => {
         clearTimeout(timer);
         timer = undefined;
     }
-    // Taken before awaiting anything, so calls made during the flush queue for the next one instead of being
-    // dropped by a clear that raced them.
+    // Taken before awaiting, so calls made during the flush queue for the next one instead of being dropped.
     const batches = [...pending.entries()];
     pending.clear();
     if (batches.length === 0) {
@@ -52,10 +38,9 @@ export const flushSandboxUsage = async (): Promise<void> => {
             jsonBody(`POST`, { reports: Object.fromEntries(batches.map(([id, batch]) => [id, Object.fromEntries(batch)])) }),
         );
     } catch {
-        /* Put it back. A daemon that was briefly unreachable must not cost the evidence, and the counts are
-         * bounded by the manifests' own lists, so re-queuing cannot grow without limit however long it lasts.
-         * Swallowed rather than surfaced: this is bookkeeping behind someone else's feature, and extensions
-         * whose calls are working should not report an error because their tally did not. */
+        // Re-queues on failure: a briefly unreachable daemon must not cost the evidence, and counts are bounded by the
+        // manifests' own lists so this can't grow without limit.
+        // Swallowed rather than surfaced, since this is bookkeeping behind someone else's feature.
         for (const [id, batch] of batches) {
             const again = pending.get(id) ?? new Map<string, number>();
             for (const [entry, calls] of batch) {
@@ -66,11 +51,9 @@ export const flushSandboxUsage = async (): Promise<void> => {
     }
 };
 
-/* Record one permitted call. Called from the gate, so it is on the path of every api.sandbox call an extension
- * makes and does nothing but two map lookups and an increment.
- *
- * An undeclared call never reaches here, the gate throws first, so `matchedEntry` returning nothing means the
- * two matchers disagreed, and recording an unattributable call is worse than recording none. */
+// Called from the gate on every api.sandbox call; cheap, two map lookups and an increment.
+// An undeclared call never reaches here (the gate throws first); matchedEntry returning nothing means the two matchers
+// disagreed, so nothing is recorded.
 export const recordSandboxCall = (id: string, permissions: readonly string[], method: string, path: string): void => {
     const entry = matchedEntry(permissions, method, path);
     if (entry === undefined) {
@@ -82,10 +65,9 @@ export const recordSandboxCall = (id: string, permissions: readonly string[], me
     timer ??= setTimeout(() => void flushSandboxUsage(), FLUSH_MS);
 };
 
-/* The last chance to report. `pagehide` rather than `beforeunload` (which a bfcache-eligible page may never
- * fire) and `visibilitychange` for the mobile case, where a page is backgrounded and killed without ever
- * "unloading". Registered once at module load, beside the app rather than inside a component, because the thing
- * being flushed outlives every component that caused it. */
+// pagehide, not beforeunload (a bfcache-eligible page may never fire it); visibilitychange covers a backgrounded mobile
+// page killed without unloading.
+// Registered once at module load, since the state being flushed outlives every component that caused it.
 if (typeof document !== `undefined`) {
     addEventListener(`pagehide`, () => void flushSandboxUsage());
     document.addEventListener(`visibilitychange`, () => {

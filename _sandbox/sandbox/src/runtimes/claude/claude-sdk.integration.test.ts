@@ -7,15 +7,8 @@ import { forgetEngineResolution } from "../../engines/engine-resolve.js";
 import { activateVersion, engineVersionDir, forgetEngineStates, readEngineState } from "../../engines/engine-store.js";
 import { claudeCliPath, forgetClaudeSdk, refreshClaudeSdk, sdk } from "./claude-sdk.js";
 
-/* THE LOADER, which is the piece with the most to lose: it decides which copy of the SDK every turn in this
- * sandbox runs on, and its wrong answers are not cosmetic. Two of them matter enough to pin.
- *
- * A STORE COPY IS TAKEN WHOLE. The JS half and the CLI binary come from the same installed prefix, because a
- * store binary under an image SDK is a pairing nobody upstream has ever run.
- *
- * A BAD COPY IS REFUSED, PERMANENTLY, AND THE IMAGE KEEPS SERVING TURNS. An SDK that has dropped an export the
- * daemon calls would otherwise fail deep inside a turn, at whichever call site got there first, on every turn
- * until somebody noticed. */
+// The loader decides which SDK copy every turn runs on. A store copy is taken whole (JS + CLI binary from one prefix);
+// a bad copy (missing an export the daemon calls) is refused permanently rather than failing mid-turn.
 
 const writeStoreSdk = (version: string, exports: readonly string[]): void => {
     const pkgDir = join(engineVersionDir("claude", version), "node_modules", "@anthropic-ai", "claude-agent-sdk");
@@ -23,7 +16,7 @@ const writeStoreSdk = (version: string, exports: readonly string[]): void => {
     mkdirSync(pkgDir, { recursive: true });
     mkdirSync(binDir, { recursive: true });
     writeFileSync(join(binDir, "claude"), "#!/bin/sh\necho fixture\n", { mode: 0o755 });
-    // A stand-in module: what is being tested is the loader's contract with a version, not the SDK's behaviour.
+    // A stand-in module; tests the loader's contract with a version, not the SDK's own behavior.
     writeFileSync(
         join(pkgDir, "sdk.mjs"),
         `${exports.map((name) => `export const ${name} = ${name === "USAGE_LIMIT_ERROR_PREFIXES" ? `["fixture"]` : `() => "${version}"`};`).join("\n")}\n`,
@@ -61,9 +54,8 @@ test("an active store version supplies both halves from the one prefix", async (
     );
 });
 
-/* The refusal is what makes tracking upstream safe: the daemon calls these names, so a version that has stopped
- * exporting one of them can never serve a turn. It is quarantined rather than merely skipped, or the same
- * failed import would be paid, and logged, once per turn forever. */
+// Quarantined rather than skipped, or the same failed import would be paid and logged once per turn forever, since the
+// daemon calls these names on every turn.
 test("a version missing an export the daemon calls is refused and recorded", async () => {
     writeStoreSdk(
         "0.3.998",
@@ -80,7 +72,7 @@ test("a version missing an export the daemon calls is refused and recorded", asy
     expect(sdk().query).toBeTypeOf("function");
 });
 
-// Going back to the image is a refresh away, so a revert on the card reaches the next turn without a restart.
+// A revert on the card reaches the next turn without a restart; going back to the image is just a refresh away.
 test("dropping the store's version returns the process to the image's copy", async () => {
     writeStoreSdk("0.3.999", CLAUDE_SDK_EXPORTS);
     await activateVersion("claude", "0.3.999");

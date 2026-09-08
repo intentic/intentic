@@ -73,9 +73,7 @@ export const apply = buildCommand<ApplyFlags>({
     async func(this: CommandContext, flags: ApplyFlags) {
         const config = loadConfig();
         const redactor = createRedactor();
-        // Apply renders to the human tmux pane (text) AND, when the daemon points INTENTIC_EVENTS_FILE at a
-        // per-run file, mirrors the same lifecycle events as ndjson so the web can tail structured progress.
-        // Both sinks share the one redactor, so a value registered by redactor.add below is masked in both.
+        // Renders to the tmux pane and, if INTENTIC_EVENTS_FILE is set, mirrors ndjson events; both share one redactor.
         const primary = createOutput(redactor.wrap(withRunLog(this.process.stdout, "apply")), config.intenticOutput);
         const eventsSink = config.intenticEventsFile === "" ? undefined : createEventsFileSink(config.intenticEventsFile, "apply");
         const out = eventsSink === undefined ? primary : teeOutput(primary, createOutput(redactor.wrap(eventsSink), "ndjson"));
@@ -89,16 +87,11 @@ export const apply = buildCommand<ApplyFlags>({
             .filter((id) => id !== "");
         const graph = targetIds === undefined ? full : subgraph(full, targetIds);
         const ssh = createSshExecutor(createKnownHostsStore(dir));
-        // The last successfully-applied artifact: the shared baseline for host-migration detection (a host
-        // whose address changed moved machines) and for prune below. A moved host is migrated before reconcile
-        // so its data lands on the new machine; its old machine is also locked so no concurrent run mutates it.
+        // Baseline for host-migration detection and prune; a moved host's old machine gets locked too.
         const previousPath = flags.previous ?? join(dir, LAST_APPLIED_FILE);
         const previous = existsSync(previousPath) ? await readArtifact(previousPath) : undefined;
         const hostMoves = previous !== undefined ? detectHostMoves(previous, graph) : [];
-        // Readiness gates target host-internal urls (http://<internalIp>:<port>) reachable only from the host
-        // itself, never from this CLI process. Build SSH probes from every host node in the graph so apply
-        // gates on each host's own view; resolveInputs substitutes SSH_KEY secrets from the env loaded above.
-        // The composite probe tries each host until one can reach the URL (the wrong host simply fails wget).
+        // Readiness probes host-internal urls via SSH per host node; the composite probe tries each until one succeeds.
         const targets = Object.values(graph.resources)
             .filter((node) => node.type === "host")
             .map((node) => hostTarget(resolveInputs(node.inputs, createStore(), process.env, { lenient: false })));
@@ -114,53 +107,35 @@ export const apply = buildCommand<ApplyFlags>({
                       }
                       return false;
                   };
-        // Deploy targets brought up as part of this flow may still be booting when apply runs, a freshly-minted
-        // ssh-<id>.<zone> tunnel needs its DNS to propagate and its connector to join the edge, during which the
-        // dial fails transiently (NXDOMAIN → ECONNRESET). Wait for each host to accept SSH before locking, so the
-        // lock (and the prune it guards) is held for the whole run instead of skipped, and the cloudflared
-        // forwarder is warm when reconcile reuses it. A host that never comes up fails here after the deadline
-        // with the same actionable error. Only current-graph hosts are gated, a migrated-away old machine may
-        // legitimately be gone.
-        // Warm every host concurrently, the worst case is one slow host's tunnel warm-up, not the sum of all.
+        // Waits for each host to accept SSH before locking, so a warming tunnel can't shrink the lock's run coverage.
         await Promise.all(
             targets.map(async (target) => {
                 const session = await connectWithRetry(ssh, target, { log: out.log });
                 await session.dispose();
             }),
         );
-        // Serialize this apply (and the prune that follows) against every host the graph touches, so a
-        // concurrent run cannot interleave mutations. Released in `finally`; a hard crash leaves the lock to
-        // free via its TTL. A SIGINT/SIGTERM handler releases on Ctrl-C before exiting.
-        // Lock every host the graph touches PLUS the old machine of any moved host, so neither end of a
-        // migration can be mutated by a concurrent run.
+        // Locks every host the graph touches plus a moved host's old machine, so neither migration end is mutated.
         const oldMoveTargets = hostMoves.map((move) =>
             hostTarget(resolveInputs(move.oldNode.inputs, createStore(), process.env, { lenient: false })),
         );
         const lock = await acquireApplyLock(ssh, [...targets, ...oldMoveTargets], { log: out.log });
         const onSignal = (): void => {
-            // Release the lock and tear down any cloudflared SSH forwarders before exiting on Ctrl-C.
             void Promise.allSettled([lock.release(), ssh.dispose?.()]).finally(() => process.exit(130));
         };
         process.once("SIGINT", onSignal);
         process.once("SIGTERM", onSignal);
-        // tmux kill-session delivers SIGHUP, a killed pane (the terminal tab's ×, a stale-session sweep) must
-        // release the host lock too, not orphan it for the 30-minute TTL.
+        // tmux kill-session (or closing a tab) sends SIGHUP; release the lock instead of orphaning it for the TTL.
         process.once("SIGHUP", onSignal);
         try {
-            // Mint/read generated secrets UNDER the lock, against the host-authoritative store (backfill on, so a
-            // value minted locally before the host existed is promoted to it). Under the lock this is the only
-            // run minting, so two operators can never bake divergent admin passwords into Forgejo/Komodo.
+            // Mints secrets under the lock (backfill on) so two concurrent runs never bake divergent admin passwords.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, true, out.log), collectSecrets(graph).generated, process.env);
-            // Every secret value the run can resolve is now in process.env, mask them out of all output.
+            // Every secret the run resolved is now in process.env; mask all of it from output.
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
-            // A host whose address changed moved machines: snapshot the old host and stream its data to the new
-            // one BEFORE reconcile, so its services come up on the new machine atop migrated data, not an empty
-            // disk. RESTIC_PASSWORD is in env now (ensureGeneratedSecrets above), so restore decrypts the repo.
+            // Migrates a moved host's data before reconcile; needs RESTIC_PASSWORD from the secrets step above.
             if (hostMoves.length > 0) {
                 await migrateHosts(hostMoves, { next: graph, ssh, env: process.env, tmpDir: tmpdir(), log: out.log });
             }
-            // Consume any authored renames BEFORE reconcile: re-stamp each moved resource in place so reconcile
-            // sees it as already-present (a noop) instead of orphaning the old id and recreating the new one.
+            // Applies authored renames before reconcile, so a moved resource reads as present, not orphan+recreate.
             const movedApplied = await applyMoves(graph, {
                 providers: createProviders({ ssh }),
                 log: out.log,
@@ -175,17 +150,14 @@ export const apply = buildCommand<ApplyFlags>({
                     { maxIterations: flags.maxIterations ?? DEFAULT_MAX_ITERATIONS },
                 );
             } catch (error) {
-                // A readiness timeout means "the service came up but the gate can't see it", sweep every
-                // host over SSH (docker state, the node's logs, listeners, addresses, one verbose probe) so
-                // the failure self-explains, then rethrow the same error.
+                // A readiness timeout means the service is up but the gate can't see it; sweep hosts, then rethrow.
                 if (error instanceof ReadinessTimeoutError && targets.length > 0) {
                     out.log(await readinessDiagnostics(targets, ssh, error));
                 }
                 throw error;
             }
             const access = collectAccess(graph, result.outcome.outputs, process.env);
-            // status.json is committed, so its access entries are VALUE-FREE ({source, key} refs only), the
-            // web renders them and reveals generated values through the daemon's owner-gated reveal route.
+            // status.json is committed: access entries stay value-free (refs only); the web reveals values via a gate.
             await writeStatus(join(dir, STATUS_FILE), {
                 converged: result.converged,
                 iterations: result.iterations,
@@ -194,16 +166,10 @@ export const apply = buildCommand<ApplyFlags>({
                     entry.password === undefined ? entry : { ...entry, password: { source: entry.password.source, key: entry.password.key } },
                 ),
             });
-            // Prune AFTER convergence (reconcile throws if it never converges, so a failed apply never
-            // deletes). Two sources feed it: the baseline diff (resources in the last-applied artifact the
-            // new one no longer declares, covers types without `list`) and the collection scan (live
-            // stamped resources absent from the graph, drift the baseline cannot see: a lost
-            // .last-applied.json, a crashed apply). Rewrite the baseline for in-place renames so prune
-            // treats a moved id as "became", not "removed".
+            // Prunes only after convergence (a failed apply never deletes); a baseline diff and scan feed it.
             let pruned: PruneOutcome = { deleted: [], skipped: [] };
             if (targetIds !== undefined) {
-                // A targeted apply reconciles a slice; the baseline diff and the collection scan are only
-                // meaningful against the full graph (untargeted declared resources would read as removed).
+                // A targeted apply reconciles only a slice; baseline diff and collection scan need the full graph.
                 out.text("targeted apply: prune and orphan scan skipped");
             } else {
                 const pruneConfig = { providers: createProviders({ ssh }), log: out.log, onEvent: out.onEvent, env: process.env };
@@ -211,8 +177,7 @@ export const apply = buildCommand<ApplyFlags>({
                 const removed =
                     baseline === undefined ? [] : Object.values(baseline.resources).filter((node) => graph.resources[node.id] === undefined);
                 const orphans = await collectOrphans(graph, pruneConfig);
-                // Deletions actually on the table: protected resources are never deleted, so they don't demand
-                // confirmation, they surface as skipped when the prune runs.
+                // Protected resources are excluded from confirmation; they show up as skipped once prune actually runs.
                 const pending = [
                     ...removed.filter((node) => node.inputs["protect"] !== true),
                     ...orphans.filter((orphan) => orphan.protected !== true),
@@ -224,8 +189,7 @@ export const apply = buildCommand<ApplyFlags>({
                     out.text(`${pending.length} deletion(s) pending: re-run \`intentic deploy apply --yes\` to prune`);
                 } else {
                     if (pending.length > 0) {
-                        // The destructive phase: push the takeover deadline out for a long apply, then confirm we
-                        // still hold every lock before deleting anything (abort if another run took over).
+                        // Renews the lock before deleting, then verifies it's still held (aborts if taken over).
                         await lock.renew();
                         await lock.verify();
                     }
@@ -239,8 +203,7 @@ export const apply = buildCommand<ApplyFlags>({
                             `pruned ${pruned.deleted.length} resource(s)${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
                         );
                     }
-                    // Snapshot the current artifact so the next apply can prune against it, only after the prune
-                    // actually ran, so an unconfirmed removal is not silently dropped from the baseline.
+                    // Snapshots the baseline only after prune ran, so a pending removal isn't silently dropped from it.
                     await writeFile(join(dir, LAST_APPLIED_FILE), await readFile(artifact, "utf8"));
                 }
             }
@@ -257,7 +220,7 @@ export const apply = buildCommand<ApplyFlags>({
                 pruned,
                 access,
             });
-            // Post a reconcile summary to the Discord #reconcile channel if the graph has a discord resource.
+            // Posts a reconcile summary to Discord if the graph declares a discord resource.
             const reconcileWebhook = result.outcome.outputs["discord"]?.["reconcileWebhook"];
             if (typeof reconcileWebhook === "string" && reconcileWebhook !== "") {
                 const creates = result.outcome.steps.filter((s) => s.action === "create").length;
@@ -273,7 +236,7 @@ export const apply = buildCommand<ApplyFlags>({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ content: summary }),
-                        // Non-fatal nicety, a stalled webhook must not hold the whole apply open.
+                        // Non-fatal nicety: a stalled webhook must not hold the whole apply open.
                         signal: AbortSignal.timeout(15_000),
                     });
                 } catch {
@@ -284,11 +247,10 @@ export const apply = buildCommand<ApplyFlags>({
             process.removeListener("SIGINT", onSignal);
             process.removeListener("SIGTERM", onSignal);
             process.removeListener("SIGHUP", onSignal);
-            // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too, a throw must not eat output.
+            // Flushes buffered secret-prefix bytes so the last output line isn't dropped; runs on the error path too.
             redactor.flush();
             await lock.release();
-            // Tear down any cloudflared SSH forwarders this run started (no-op for direct-only applies).
+            // No-op for direct-only applies; otherwise tears down cloudflared SSH forwarders.
             await ssh.dispose?.();
         }
     },

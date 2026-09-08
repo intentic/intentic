@@ -10,18 +10,10 @@ export { looksLikeUrl, parseSwayTree, parseWindowsJson, parseWmctrl } from "./pa
 export { capture, frame, hasGraphicalSession, isWayland, pngSize } from "./screen.js";
 export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFrame, type ScrollDirection, type WindowInfo } from "./types.js";
 
-/* The desktop of the machine this process is running on.
- *
- * Platform dispatch happens once, here, rather than inside every method: the two backends have genuinely
- * different shapes (Windows needs the virtual-desktop origin, Linux needs to know Wayland from X11) and mixing
- * them behind per-method branches is how a backend ends up half-implemented without anyone noticing.
- *
- * The pointer backends take the frame's `origin` because screenshot pixels and OS coordinates are not the same
- * space on Windows. Reading the frame per action costs a PowerShell round trip, so it is read once per call
- * here, a monitor rearranged mid-action is not a case worth paying for on every click. */
+// Windows pointer methods take the frame's origin: screenshot pixels and OS coordinates differ there. The frame is
+// read once per call, not per action, to avoid a PowerShell round trip each time.
 
-// macOS and the rest: capture would work, but input would not, and a Desktop that silently cannot click is worse
-// than one that says so.
+// macOS and others: capture would work but input would not, so this errors instead of behaving partially.
 const unsupported = async (): Promise<never> => {
     throw new DesktopError(`Controlling the screen is not supported on ${process.platform} yet: only Windows and Linux.`);
 };

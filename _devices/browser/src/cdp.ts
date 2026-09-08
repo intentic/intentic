@@ -1,21 +1,12 @@
 import { pollUntil } from "@intentic/base/async";
 import { BrowserError } from "./types.js";
 
-/* The Chrome DevTools Protocol, as much of it as driving a page needs: an HTTP handshake to find the tabs, then
- * one WebSocket per tab carrying JSON-RPC.
- *
- * Hand-rolled rather than puppeteer/playwright, for a reason that was measured rather than assumed, and NOT the
- * one you would guess. Bundling is not the obstacle: Playwright packs into the `bun build --compile` binary this
- * ships inside for about 6 MB. What it cannot do is reach a browser from Bun. `connectOverCDP` fetches the
- * debugger's WebSocket URL over HTTP and then stalls on the upgrade until it times out, compiled and uncompiled
- * alike, while the same script on Node drives the page fine. Bun's global `WebSocket` does connect, which is
- * what the rest of this file is built on. The README carries the versions and says when to re-test.
- *
- * Correlation is the only real machinery: every request gets an id and the matching response resolves it. Events
- * (a message with a `method` and no `id`) are dropped, this package asks questions and does not subscribe. */
+// Chrome DevTools Protocol subset for driving a page: HTTP handshake to find tabs, then one WebSocket per tab
+// carrying JSON-RPC. Hand-rolled because Bun's `connectOverCDP` cannot reach a browser (stalls on the WebSocket
+// upgrade); Bun's global WebSocket does connect. Correlates by request id; events (no `id`) are dropped since this only
+// asks questions.
 
-// A page that stops answering would otherwise hold a tool call until something far upstream gave up. Generous
-// enough for a slow navigation, short enough to be a legible failure.
+// Generous enough for a slow navigation, short enough to fail legibly instead of hanging upstream.
 const CALL_TIMEOUT_MS = 30_000;
 
 export interface CdpTarget {
@@ -33,8 +24,7 @@ export interface CdpSession {
 
 const endpoint = (port: number, path: string): string => `http://127.0.0.1:${port}${path}`;
 
-// Whether anything is listening as a DevTools endpoint. Used both to decide "is a browser already up" and to
-// wait for one that is starting.
+// Whether anything is listening as a DevTools endpoint; used both to check "already up" and to wait for start.
 export const probe = async (port: number): Promise<boolean> => {
     try {
         const response = await fetch(endpoint(port, "/json/version"), { signal: AbortSignal.timeout(1000) });
@@ -55,8 +45,7 @@ export const listTargets = async (port: number): Promise<CdpTarget[]> => {
     if (response === undefined || !response.ok) {
         throw new BrowserError(`No browser is answering on the debugging port (${port}).`);
     }
-    // Only real pages: a browser also exposes service workers, extension backgrounds and its own devtools UI,
-    // none of which anyone means by "the page".
+    // Only real pages; a browser also exposes service workers, extension backgrounds, and its own devtools UI.
     return ((await response.json()) as CdpTarget[]).filter((target) => target.type === "page" && !target.url.startsWith("devtools://"));
 };
 

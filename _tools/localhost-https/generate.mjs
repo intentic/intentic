@@ -1,26 +1,7 @@
 #!/usr/bin/env node
-/* Mint this machine's development CA and the localhost leaf under it, on install. Both land outside the
- * repository, in this user's own data directory: see paths.mjs for why they belong together there.
- *
- * WHY THE CA IS NOT COMMITTED. A CA certificate is only useful once it is in a trust store, and this one is
- * meant to go into yours: that is the whole reason it exists. A CA whose private key is published is a CA
- * that anyone can sign with: clone the repository, mint a certificate for any hostname you like, and every
- * machine that trusted the committed root accepts it. The key that used to live here was `CA:TRUE`, carried
- * no name constraints, and was valid until 2035, so it vouched for the entire DNS namespace on behalf of
- * every developer who followed the README. Generating per machine makes the private half never leave it.
- *
- * The name constraints are the second half: even on the machine that holds the key, this root is only
- * permitted to vouch for localhost and the loopback addresses. A mis-signed certificate for anything else is
- * rejected by the validator rather than by our good intentions.
- *
- * THE ROOT AND THE LEAF RENEW SEPARATELY, which is the difference between "approve it once" being true and
- * being nearly true. The root is good for ten years and is the only thing a trust store ever sees; the leaf
- * lives 825 days under it and is re-signed in place. Throwing the root away with the leaf would silently
- * revoke the approval you gave it and hand you back the browser warning, so nothing here does that unless the
- * root itself is missing or genuinely expiring, and when it does, it says so.
- *
- * Idempotent, and run from `prepare`, so `pnpm install` is all anyone does.
- */
+// Mints a per-machine dev CA and localhost leaf on install, kept outside the repo. Never committed: a shared CA private
+// key can forge a cert for any hostname on any machine that trusts it; name constraints also cap it to
+// localhost/loopback. Root and leaf renew independently so a leaf re-sign never revokes browser trust.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,20 +9,14 @@ import { join } from "node:path";
 import { CA_CRT, CA_DIR, CA_KEY, LEAF_CRT, LEAF_KEY } from "./paths.mjs";
 
 const CA_DAYS = 3650;
-// 825 days is the longest a leaf can live without tripping the validity ceilings browsers apply to server
-// certificates. Well inside the CA's own life, and renewed automatically below.
+// Longest a leaf can live under browsers' certificate-validity ceilings; well inside the CA's own life.
 const LEAF_DAYS = 825;
 const RENEW_WITHIN_DAYS = 30;
 
-// Only the names this root will ever be asked to vouch for. A validator that understands the constraint
-// refuses anything else signed by it: including anything signed by a copy of the key.
+// Only names this root may vouch for; a constraint-aware validator refuses anything else it signs.
 const PERMITTED = `permitted;DNS:localhost,permitted;DNS:localhost.com,permitted;IP:127.0.0.1/255.255.255.255,permitted;IP:::1/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff`;
 
-/* WHY THIS SAYS SO MUCH ABOUT A MISSING BINARY. Every other machine that runs this already has `openssl`: the
- * dev images here, macOS, every Linux distribution. Windows is the one that does not ship it on PATH, and this
- * runs from `prepare`, so what a first-time Windows install sees is `pnpm install` dying on
- * `spawnSync openssl ENOENT` inside a package nobody has heard of. The fix is one directory on PATH, and Git
- * for Windows has already put the binary there. */
+// Windows lacks openssl on PATH by default, so pnpm install would otherwise die on an opaque ENOENT here.
 const MISSING_OPENSSL = [
     `localhost-https: needs \`openssl\` on PATH to mint this machine's development certificate, and did not find it.`,
     `  Windows: Git for Windows ships one — add C:\\Program Files\\Git\\usr\\bin to PATH, or run the install from Git Bash.`,
@@ -80,8 +55,7 @@ const fresh = (path) => {
 
 const mintCa = () => {
     mkdirSync(CA_DIR, { recursive: true, mode: 0o700 });
-    // `-addext` rather than a config file: `openssl req -config` wants a whole req section before it will
-    // read an extension one, and every line of that is boilerplate this does not otherwise need.
+    // -addext, not -config: openssl req -config needs a whole req section just to read one extension.
     openssl(
         `req`,
         `-x509`,
@@ -106,13 +80,11 @@ const mintCa = () => {
 };
 
 const mintLeaf = () => {
-    // The directory already exists whenever the root does; creating it here covers the leaf-only path, where a
-    // pair was minted before and only the certificate needs re-signing.
+    // Covers the leaf-only path: the dir exists whenever the root does, but a re-sign-only run needs it too.
     mkdirSync(CA_DIR, { recursive: true, mode: 0o700 });
     const scratch = mkdtempSync(join(tmpdir(), `localhost-https-`));
     try {
-        // The leaf the API and Vite actually serve. The browser matches on the SAN; the subject CN has not been
-        // consulted by anything shipping for years.
+        // Browser matches on the SAN; no shipping browser still consults the subject CN.
         writeFileSync(
             join(scratch, `leaf.ext`),
             [
@@ -145,16 +117,8 @@ const mintLeaf = () => {
     }
 };
 
-/* Is the leaf on disk actually serveable? Freshness is not enough, and two different things go wrong:
- *
- * It may not chain: a checkout carrying a leaf signed by a root this machine no longer has (a workspace
- * copied from elsewhere, a root that was regenerated) serves a chain the browser cannot build, which looks
- * exactly like the warning this package exists to prevent.
- *
- * Or the pair may not match. A certificate and a key that came from different mintings verify perfectly well
- * on their own and fail only when a TLS handshake tries to use them together, which surfaces as the dev server
- * refusing to start with an error about the key: far from anything that suggests certificates. Comparing the
- * public halves catches it here, where the fix is to re-sign. */
+// Checks two ways a fresh-looking leaf can still be broken: signed by a root this machine no longer has (won't chain),
+// or paired with a key from a different minting (verifies alone, fails only at the TLS handshake).
 const leafUsable = () => {
     if (!existsSync(LEAF_CRT) || !existsSync(LEAF_KEY)) {
         return false;

@@ -10,15 +10,15 @@ const ghCiSchema = z.object({
     repoName: z.string(),
     // The env branch the workflow triggers on (production -> "main").
     branch: z.string(),
-    // The image tag = the environment name, so co-located environments publish to distinct tags.
+    // Image tag; the environment name, so co-located environments publish to distinct tags.
     tag: z.string(),
     token: z.string(),
-    // Komodo's PUBLIC url the notify step logs into (GitHub-hosted runners reach it through the tunnel).
+    // Komodo's public url the notify step logs into; GitHub-hosted runners reach it through the tunnel.
     komodoUrl: z.string(),
-    // The Komodo admin the workflow's notify step logs in with (the password is stored as a repo secret).
+    // Komodo admin the notify step logs in with; the password is stored as a repo secret.
     adminUser: z.string(),
     adminPassword: z.string(),
-    // The Komodo deployment id the notify step redeploys (auto_update polling is the backstop).
+    // Komodo deployment id the notify step redeploys; auto_update polling is the backstop.
     deployment: z.string(),
 });
 type GhCiInputs = z.infer<typeof ghCiSchema>;
@@ -27,10 +27,8 @@ const parse = (inputs: ResolvedInputs): GhCiInputs => parseInputs(ghCiSchema, in
 const workflowPath = (tag: string): string => `.github/workflows/build-${tag}.yml`;
 const DOCKERFILE_PATH = "Dockerfile";
 
-// The GitHub Actions workflow: on a push to the env branch it builds the Dockerfile, pushes the image to
-// GHCR (with the job's own GITHUB_TOKEN, no extra registry secret), then logs into Komodo and triggers an
-// immediate Deploy. Mirrors the Forgejo stack's workflow: CI only builds + pushes; Komodo rolls out. The
-// host is never SSHed from CI, its Periphery pulls outbound.
+// GitHub Actions workflow: on push to the env branch, builds the Dockerfile, pushes to GHCR with the job's own
+// GITHUB_TOKEN, then logs into Komodo and triggers a Deploy. The host is never SSHed from CI; Periphery pulls outbound.
 const workflowYaml = (parsed: GhCiInputs): string => {
     const image = `ghcr.io/${parsed.owner}/${parsed.repoName}`;
     return [
@@ -70,10 +68,8 @@ const workflowYaml = (parsed: GhCiInputs): string => {
     ].join("\n");
 };
 
-// The app's CI/CD wiring for the GitHub path: commits the build-and-push workflow and sets the Komodo-login
-// secret its notify step consumes. Mirrors forgejo/ci.ts with GitHub Actions + GHCR. The secret cannot be
-// read back, so it is re-set every apply, idempotently; PENDING-guards on owner (the github node's output)
-// and komodoUrl so a plan proceeds before the forge account and Komodo are up.
+// GitHub-path CI/CD wiring: commits the build-and-push workflow and sets the Komodo-login secret its notify step
+// consumes. The secret can't be read back, so it's re-set every apply; guards on owner and komodoUrl until both are up.
 export const createGhCiProvider = (api: GitHubApi = githubApi): Provider => ({
     read: async (inputs, ctx) => {
         if (typeof inputs["token"] !== "string" || typeof inputs["owner"] !== "string" || typeof inputs["komodoUrl"] !== "string") {
@@ -123,7 +119,7 @@ export const createGhCiProvider = (api: GitHubApi = githubApi): Provider => ({
             });
         }
 
-        // Commit the workflow LAST so its first run already sees the Dockerfile + secret.
+        // Commits the workflow last, so its first run already sees the Dockerfile and secret.
         const existing = await api.readFile({ ...common, path: workflowPath(parsed.tag), branch: parsed.branch });
         await api.commitFile({
             ...common,

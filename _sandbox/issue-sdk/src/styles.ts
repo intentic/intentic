@@ -1,16 +1,9 @@
-/* The dialog's styles, as a template string injected into its shadow root.
- *
- * `all: initial` ON THE HOST IS LOAD-BEARING, and it is the lesson the Front Desk widget paid for first: a
- * shadow root blocks the page's SELECTORS but not inherited properties, so without this line the dialog wears
- * the host site's font, colour and line height, and looks broken on exactly the sites that care most about
- * looking right.
- *
- * NO EXTERNAL FONT AND NO EXTERNAL ANYTHING. A system font stack, so the artifact stays one file, the dialog
- * paints on the first frame, and nothing here can be blocked by a Content-Security-Policy the site is entitled
- * to have. */
+// The dialog's styles as a template string injected into its shadow root. `all: initial` is load-bearing: a shadow root
+// blocks the page's selectors but not inherited properties, so without it the dialog inherits the host's font and
+// color. System fonts only, so the artifact stays one file and nothing is blocked by the site's CSP.
 
-// The accent arrives as a hex colour (the contract refuses anything else) precisely so channels can be read out
-// of it: a wash for the focus ring, a darker step for hover, and a label colour that stays legible on top.
+// The accent arrives as a hex colour so channels can be read out of it: a wash for the focus ring, a darker step for
+// hover, a legible label colour.
 const channels = (hex: string): { r: number; g: number; b: number } => {
     const full = hex.length === 4 ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}` : hex;
     return {
@@ -20,10 +13,8 @@ const channels = (hex: string): { r: number; g: number; b: number } => {
     };
 };
 
-/* Whether the accent is light enough that black text belongs on it. The sRGB luminance approximation rather
- * than the exact one: this decides between two colours, and being one percent off the boundary changes nothing
- * anyone can see. Without it a yellow accent gets white text on it, which is the one combination that reads as
- * a broken widget rather than as a bold choice. */
+// Whether the accent is light enough for black text; the sRGB luminance approximation is enough since this only decides
+// between two colours.
 const readableOn = (hex: string): string => {
     const { r, g, b } = channels(hex);
     return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#111827" : "#ffffff";

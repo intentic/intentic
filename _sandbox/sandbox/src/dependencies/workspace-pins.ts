@@ -4,23 +4,9 @@ import { parse } from "yaml";
 import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
 import type { Ecosystem } from "./registry-freshness.js";
 
-/* WHAT THIS WORKSPACE ALREADY USES, which is the difference between a check worth having on and one that gets
- * switched off in a day.
- *
- * The freshness hook's single largest source of false alarms is also its most legitimate case: a new package
- * inside a monorepo should pin the version the rest of the tree pins, not whatever the registry published this
- * morning. Measured over this workspace's own history, most version literals an agent wrote that were "behind"
- * were behind for exactly that reason and were CORRECT. A notice that could not tell them apart would report
- * the whole catalog as a problem every time somebody scaffolded a package.
- *
- * So a version that already appears somewhere in this workspace is treated as a decision the project has
- * already made, and the hook says nothing about it. The cost is real and accepted: a workspace that is
- * uniformly a year behind is never nagged about it. That is the right trade — internal consistency beats
- * chasing latest, a bump is a deliberate piece of work somebody asks for, and the case this feature exists for
- * is the package NOTHING here has an opinion about yet.
- *
- * Built once, lazily, and only if a pin is actually seen: a turn that never touches a manifest never pays the
- * walk, and a turn that touches five pays it once. */
+// A version pin already used anywhere in this workspace is treated as a decision already made; the freshness hook stays
+// silent about it, even at the cost of never nagging a uniformly stale workspace. Built once per turn, lazily, only if
+// a pin is actually looked up.
 
 export type WorkspacePins = (ecosystem: Ecosystem, name: string) => ReadonlySet<string>;
 
@@ -31,7 +17,7 @@ const record = (into: Map<string, Set<string>>, name: string, specifier: unknown
         return;
     }
     const version = specifier.replace(/^[\^~>=<\s]+/, "").trim();
-    // A range with no concrete version, or a workspace/catalog reference, says nothing about what is pinned.
+    // A range with no concrete version, or a workspace/catalog reference, pins nothing.
     if (!/^\d+\.\d+/.test(version)) {
         return;
     }
@@ -45,9 +31,8 @@ const record = (into: Map<string, Set<string>>, name: string, specifier: unknown
 
 const DEPENDENCY_BLOCKS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
 
-/* The pnpm catalog, which in a workspace like this one is where nearly every version actually lives. Read
- * straight from the file rather than through the manifest reader: a catalog entry is not a dependency of any
- * package, so nothing that walks packages would ever see it, and it is the one place most worth seeing. */
+// The pnpm catalog, where most versions in a workspace like this actually live; read from the file directly since a
+// catalog entry is not a package dependency.
 const catalogVersions = (root: string, into: Map<string, Set<string>>): void => {
     const file = join(root, "pnpm-workspace.yaml");
     if (!existsSync(file)) {
@@ -83,14 +68,12 @@ export const createWorkspacePins = (root: string): WorkspacePins => {
                 }
             }
         } catch {
-            // An unreadable tree means no opinion, which errs toward reporting. A missed suppression is one
-            // notice too many; a walk that threw here would be a hook that failed in front of a tool call.
+            // An unreadable tree means no opinion, erring toward reporting rather than failing a hook mid tool-call.
         }
         return built;
     };
     return (ecosystem, name) => {
-        // npm only, deliberately: the catalog and the manifests this reads are npm's, and pretending to answer
-        // for PyPI from them would suppress a real notice on the strength of a name collision.
+        // npm only: catalog and manifests here are npm's; answering for PyPI risks a false suppression by name.
         if (ecosystem !== "npm") {
             return EMPTY;
         }

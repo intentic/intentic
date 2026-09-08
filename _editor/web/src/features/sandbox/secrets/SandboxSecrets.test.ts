@@ -1,18 +1,13 @@
 // @vitest-environment jsdom
-//
-// jsdom because the whole complaint about this tab was a fact about the rendered page: nineteen credentials one
-// under another, each with the same furniture, burying the three rows that were actually work. What is pinned
-// here is that the page stays short as the account list grows, that what is owed rises to the top of it, and
-// that the accounts are still reachable: truncated is not gone, and a filter must reach every match or the
-// search box would quietly lie about what this sandbox holds.
+// needs jsdom: renders the real page. Pins that the list stays short as accounts grow, what's owed rises to the
+// top, and a truncated or filtered account stays reachable, never silently dropped.
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The tab's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
-// useDevice reads window.matchMedia; environment.ts reads window.env).
+// Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const inventory = ref<SecretInventoryEntry[]>([]);
 vi.mock(`../../capabilities/connect/useSecrets`, () => ({
@@ -23,9 +18,8 @@ vi.mock(`../../capabilities/connect/useSecrets`, () => ({
         refreshInventory: () => {},
     }),
     useSecrets: () => ({ set: { mutateAsync: vi.fn() }, remove: { mutateAsync: vi.fn() } }),
-    /* NOTHING GATED and NOT THE OWNER: the state of nearly every sandbox, and the one that keeps these cases
-     * about what this suite is for — which rows the tab shows and how it names them. The approval editor's own
-     * behaviour is asserted where the rule lives (secretRows.test.ts for what a gated row says). */
+    // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
+    // itself is asserted in secretRows.test.ts.
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: () => undefined,
@@ -49,7 +43,7 @@ vi.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabl
 // Reached only by the CI push, which nothing here presses: mocked because the client has no environment here.
 vi.mock(`../client/sandboxClient`, () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 
-// The two "Manage …" controls are links now, so the mock carries a stand-in for them.
+// The two "Manage..." controls are links now, so the mock carries a stand-in for them.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push: vi.fn() }) as never,
@@ -72,8 +66,7 @@ const capability = (id: string, kind: string, config: Record<string, string> = {
 const credential = (id: string): SecretInventoryEntry =>
     entry({ key: id, kind: `capability`, status: `connected`, storedAt: `.intentic/config/capabilities.json` });
 
-// The sandbox in the report: sixteen identities the owner opened, three connectors, and a handful of real
-// secrets underneath them.
+// Mirrors a real sandbox: sixteen identities, three connectors, a handful of real secrets.
 const IDENTITIES = Array.from({ length: 16 }, (_, index) => `radarsuspam${index + 2}`);
 
 let app: App | undefined;
@@ -100,7 +93,7 @@ const mount = (): HTMLElement => {
 const text = (el: HTMLElement): string => el.textContent ?? ``;
 const moreAccountsToggle = (el: HTMLElement): HTMLElement | null => {
     const all = ([...el.querySelectorAll(`*`)] as HTMLElement[]).filter((node) => node.textContent?.includes(`more accounts`));
-    // The deepest element is the one actually rendering the toggle — clicking it bubbles up to the Row's @click handler.
+    // Deepest matching element renders the toggle; the click bubbles up to the Row's handler.
     return all.at(-1) ?? null;
 };
 const filterField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="search"], input`)!;
@@ -165,10 +158,8 @@ it(`pins what is owed above everything, instead of a banner counting it`, () => 
     const el = mount();
     const heading = text(el).indexOf(`Needs attention`);
     expect(heading).toBeGreaterThanOrEqual(0);
-    // The two debts, and the summary strip they replaced.
     expect(text(el)).toContain(`CF_API_TOKEN`);
     expect(text(el)).not.toContain(`required secret`);
-    // Above the group it was lifted out of.
     expect(heading).toBeLessThan(text(el).indexOf(`Required by your intent`));
 });
 

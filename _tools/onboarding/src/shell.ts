@@ -2,20 +2,9 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 
-/* HOW THIS TIER RUNS THE THINGS A USER RUNS — one fresh shell, shared by every provisioner.
- *
- * A FRESH TERMINAL, not this process's environment, and that distinction cost an afternoon.
- *
- * Compose interpolates `${CONNECT_TOKEN}` from the `.env` the claim wrote, but the SHELL's environment
- * outranks that file. This harness runs inside a sandbox that happens to export a `CONNECT_TOKEN` of its own,
- * so compose quietly started the box with somebody else's credential: the container came up perfectly, the
- * platform answered every announce with 404, and nothing anywhere said the word "token".
- *
- * A user pasting a command is in a fresh terminal, so that is what they get. The allowlist is what a shell
- * needs to find `curl` and reach Docker, and nothing else; a denylist would only ever be as good as the next
- * variable somebody adds to the compose file. The CLI lane inherits the same floor for the same reason —
- * `ic sandbox connect` reads CONNECT_TOKEN, SANDBOX_IMAGE and PLATFORM_URL off its own environment too.
- */
+// Runs commands in a fresh shell, not this process's env: this sandbox's own `CONNECT_TOKEN` would silently outrank the
+// claim's `.env` and start a box with the wrong credential. An allowlist, not a denylist, since a denylist is only as
+// good as the next compose-file variable; the CLI lane shares the same floor.
 
 const run = promisify(execFile);
 
@@ -45,14 +34,12 @@ export const sh = async (command: string, cwd: string, what: string, timeoutMs =
 export interface Completed {
     /** The exit status. -1 when the process was killed (a timeout) rather than exiting on its own. */
     readonly code: number;
-    /** stdout and stderr as the terminal saw them, interleaved: this is read by a person diagnosing a run. */
+    /** stdout and stderr, interleaved as the terminal saw them. */
     readonly output: string;
 }
 
-/* A tool run whose NON-ZERO EXIT IS AN ANSWER rather than a throw — which `sh` above cannot give, because a
- * failed exec rejects with a message and drops the output that explains it. The CLI lane needs both halves: a
- * setup can end non-zero for a reason that is this world's (no edge exists here to answer a public address)
- * and the only way to tell that apart from a real failure is to READ what the checklist printed. */
+// A non-zero exit is an answer here, not a throw, unlike `sh` above, which drops the output a failed exec needs
+// explained. The CLI lane must read what the checklist printed to tell an expected failure from a real one.
 export const runTool = async (
     file: string,
     args: readonly string[],

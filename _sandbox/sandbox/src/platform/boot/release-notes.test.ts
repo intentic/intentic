@@ -6,7 +6,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-// The body publish-github.sh writes: the user-facing section first, then the commit-subject grouping under it.
+// The body shape publish-github.sh writes: the user-facing section first, the commit-subject grouping under it.
 const RELEASE_BODY = [
     "## What's new",
     "",
@@ -26,8 +26,6 @@ const RELEASE_BODY = [
 const releasesResponse = (releases: unknown): Response => new Response(JSON.stringify(releases), { status: 200 });
 
 test("reads the user-facing section and stops at the commit list under it", () => {
-    // The three "### Features" bullets are subjects, not notes: taking them would put "audit rail icons" in
-    // front of a user, which is the whole thing this section exists to keep out.
     expect(parseReleaseNotes(RELEASE_BODY)).toEqual(["Your models stay in the order you set them.", "The commit box keeps a full message."]);
 });
 
@@ -36,12 +34,11 @@ test("a release with nothing a user would notice yields no notes", () => {
     expect(parseReleaseNotes("")).toEqual([]);
 });
 
-// The body publish-github.sh writes when a commit declared a break: its own section, above What's new.
+// The body publish-github.sh writes when a commit declares a break: its own section, above What's new.
 const BREAKING_BODY = ["## Breaking changes", "", "- The old picker layout is gone — use the new list.", "", ...RELEASE_BODY.split("\n")].join("\n");
 
 test("reads the breaking section apart from the notes", () => {
     expect(parseBreakingNotes(BREAKING_BODY)).toEqual(["The old picker layout is gone — use the new list."]);
-    // Each parser sees only its own section: a break is not a note, and a note is not a warning.
     expect(parseReleaseNotes(BREAKING_BODY)).toEqual(["Your models stay in the order you set them.", "The commit box keeps a full message."]);
     expect(parseBreakingNotes(RELEASE_BODY)).toEqual([]);
 });
@@ -54,10 +51,8 @@ test("collects every breaking sentence in the gap, and a release that only break
         ]),
     );
     await refreshReleaseNotes();
-    // v1.188.0 carries no What's new at all: it must still be cached, or the warning never reaches the card.
     expect(breakingNotes("1.186.0")).toEqual(["The export command is gone."]);
     expect(updateNotes("1.186.0")).toEqual(["Middle thing."]);
-    // Past the break, nothing to warn about.
     expect(breakingNotes("1.188.0")).toEqual([]);
 });
 
@@ -71,12 +66,12 @@ test("collects the notes for every release newer than this sandbox, and none of 
     );
     await refreshReleaseNotes();
     expect(updateNotes("1.186.0")).toEqual(["Newest thing.", "Middle thing."]);
-    // Nothing newer than the newest: the card shows no notes rather than repeating the last release's.
+    // Nothing is newer than the newest release itself.
     expect(updateNotes("1.188.0")).toEqual([]);
 });
 
 test("says one change once, however many releases carried it", async () => {
-    // Work that lands in pieces repeats its sentence across releases; three copies on one card reads as a bug.
+    // The fixture differs only in case, to prove the same-sentence check ignores it.
     vi.stubGlobal("fetch", async () =>
         releasesResponse([
             { tag_name: "v1.188.0", body: "## What's new\n\n- The same thing.\n" },
@@ -121,7 +116,7 @@ test("a dev build never fetches, for the same reason it is never offered an upda
         fetched = true;
         return releasesResponse([]);
     });
-    // The repo's own package.json carries the unstamped sentinel, so a test run IS a dev build.
+    // The repo's own package.json carries the unstamped sentinel, so running tests counts as a dev build.
     expect(isDevBuild).toBe(true);
     startReleaseNotesCheck().stop();
     await Promise.resolve();

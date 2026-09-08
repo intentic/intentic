@@ -4,33 +4,15 @@ import { packageRoot } from "@intentic/constants/node";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
-/* THE GUARD THAT THE PREVIOUS TABLE DIDN'T HAVE: now only half a guard, because the compiler took the other half.
- *
- * `.intentic/config/approvals/` went missing from the browser's invalidation table for one reason: the test that covered
- * that table asserted the entries it already had. A list checked against itself can only ever confirm what
- * someone remembered to write down, which is the failure AGENTS.md names: "a hardcoded file list repeats the
- * miss it exists to prevent", so this recognizes violations by their SHAPE instead.
- *
- * "Every path the daemon builds is declared" is no longer checked here: `statePath` (workspace/layout/state-paths.ts)
- * takes `WorkspaceStatePath`, the literal union of the table's own paths, so an undeclared path does not compile.
- * That is a stronger statement than a regex sweep can make: it holds for computed call sites, generated leaves
- * and shapes this pattern would never have matched, but it holds only for paths that go THROUGH statePath. So
- * the first test below has changed job: it enforces that they all do.
- *
- * The second direction is still this file's alone. Nothing in the type system notices a table entry whose store
- * was deleted, and that entry would quietly keep invalidating a query for a file that can no longer change.
- *
- * Scope is deliberately the WORKSPACE ROOT's .intentic/. A repo's own `<repo>/.intentic/ui/` (panels.routes) is a
- * different space entirely: it is not what the watcher reports and not what these queries read, so the root
- * expression is part of the pattern rather than something to filter out afterwards. */
+// Checks every workspace-root .intentic path is built through statePath, whose WorkspaceStatePath union makes an
+// undeclared path a compile error; this file now only checks declared entries are actually used.
 
-// The identifiers the daemon builds workspace-root paths from. A `join(dir, ".intentic", …)` where `dir` is a
-// REPO is out of scope by construction, which is why this matches on the expression rather than on ".intentic".
+// Matched by expression, not by ".intentic", so a `join(<repoDir>, ".intentic", …)` stays out of scope.
 const ROOT_EXPRESSIONS = new Set(["workspace.root", "services.workspace.root", "workspaceRoot", "root", "config.workspaceRoot"]);
 
 const SOURCE_ROOT = join(packageRoot(import.meta.url), "src");
 
-// The module that REPLACES the raw spelling has to quote it to explain itself, and a doc comment is not a call.
+// state-paths.ts itself must quote the raw spelling to define it; that's not a bypass to flag.
 const EXEMPT = "workspace/layout/state-paths.ts";
 
 const sourceFiles = async (dir: string): Promise<string[]> => {
@@ -47,19 +29,12 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
     return found.flat();
 };
 
-/* `join(<root>, ".intentic"|STATE_DIR, …)`: the raw spellings `statePath` replaced. STATE_DIR is in the
- * pattern because it was the hole: the literal-only regex let `join(root, STATE_DIR, "whisper", …)` and a
- * `${STATE_DIR}/records/chores` template mint undeclared trees for months while this test passed. Segments may be
- * identifiers (`join(root, STATE_DIR, FILE)`), so the tail matches expressions, not just strings. A bare
- * `join(root, ".intentic")` (the AI-credential root, not a manifest) has no segments and is legitimately not a
- * table entry. */
+// Matches `join(<root>, ".intentic"|STATE_DIR, …)`, the raw spellings statePath replaces; segments may be identifiers,
+// not just string literals.
 const RAW_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*(?:"\.intentic"|STATE_DIR)\s*((?:,\s*(?:"[^"]+"|[A-Za-z_][\w.]*)\s*)+)(?=[,)])/g;
-// The template spelling of the same bypass: `${STATE_DIR}/<segment>` composes a state path outside the union
-// wherever it appears: a module const later joined, a glob, a prompt. Bare `${STATE_DIR}` (git exclude lines,
-// segment lookups) composes nothing and stays legal.
+// Matches `${STATE_DIR}/<segment>` template composition; bare `${STATE_DIR}` with nothing appended stays legal.
 const RAW_TEMPLATE = /\$\{STATE_DIR\}\/[\w.-]/g;
-// `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")`: the declared spellings. Only the
-// table path matters; any `tail` after it is a leaf beneath a declared directory prefix.
+// Matches the declared spellings `statePath(<root>, ".intentic/…")` and `stateRelPath(".intentic/…")`.
 const STATE_PATH = /statePath\(\s*[A-Za-z_.]+\s*,\s*"(\.intentic\/[^"]+)"|stateRelPath\(\s*"(\.intentic\/[^"]+)"/g;
 
 const scanSources = async (): Promise<{ rawJoins: string[]; statePaths: string[] }> => {
@@ -99,10 +74,8 @@ test("every workspace-root .intentic path goes through statePath, where the tabl
 });
 
 test("every declared entry is actually built somewhere in the daemon", async () => {
-    // The direction the compiler cannot see: an entry left behind after its store was deleted is a rule nothing
-    // exercises, and it would quietly keep invalidating a query for a file that can no longer change. Entries
-    // with an `outsideWriter` are exempt by their own declaration: the daemon can never build them, and the
-    // entry names who does.
+    // Catches an entry left behind after its store was deleted; entries with `outsideWriter` are exempt since the
+    // daemon itself never builds them.
     const { statePaths } = await scanSources();
     const unused = WORKSPACE_STATE_FILES.filter(
         (file) => file.outsideWriter === undefined && !statePaths.some((path) => path === file.path || path.startsWith(file.path)),

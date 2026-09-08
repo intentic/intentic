@@ -8,29 +8,11 @@ import { SETTLES } from "@intentic/testing/vitest";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
 import type { CapabilityCtx } from "../capability.js";
 
-/* WHAT THE ADD PROMISES ABOUT A DOWNLOAD IT DOES NOT WAIT FOR.
- *
- * These two are the whole reason the handler stopped streaming its weights to the caller. The card that used to
- * hold a spinner for forty minutes had no way to say how far along it was, and a browser that walked away took
- * the download with it, so both facts are pinned against a real file on a real disk rather than against the
- * shape of the code: apply RETURNS while the bytes are still arriving, `status` can say how far along they are
- * while it does, and a part file left by a stopped daemon is CONTINUED rather than fetched again.
- *
- * The custom-URL source is used throughout because it is the branch a test can serve itself; the Hugging Face
- * branch differs only in who hands over the stream (hub's blob, sliced to the same offset). */
+// Pins that apply returns while the download is still running, status reports progress meanwhile, and an interrupted
+// download resumes from its part file instead of refetching.
 
-/* `llama-server --version` answers, so the handler takes its real path on a runner that has no llama-server:
- * without this the whole suite would exercise the "stored, rebuild required" branch and assert nothing.
- *
- * IT CARRIES `promisify.custom`, and leaving that off is not a detail: the handler promisifies `execFile`
- * once at module load, and the REAL one defines that symbol to resolve `{ stdout, stderr }`. A bare callback
- * function has no such symbol, so `promisify` falls back to the plain convention and resolves the first
- * callback value instead, a bare string. Every caller reading `.stdout` off that then reads `undefined`.
- *
- * It cost this file seven failures that only appear on a machine with a GPU. `gpuMemoryCapacity` returns early
- * unless SANDBOX_GPU is `all`, so on a GPU-less runner the mock is never promisified at all and the suite is
- * green; where the sandbox HAS one, `result.stdout.split` threw, the download job swallowed it into
- * `logger.warn`, and every test that waits for the server to start timed out with nothing naming the cause. */
+// Must define `promisify.custom`, like the real execFile does; without it promisify falls back to the bare-callback
+// convention and every `.stdout` read comes back undefined instead of throwing.
 vi.mock("node:child_process", async (importOriginal) => {
     const actual = await importOriginal<typeof import("node:child_process")>();
     const execFile = (_file: string, _args: readonly string[], done: (error: Error | null, stdout: string, stderr: string) => void): void => {
@@ -64,9 +46,8 @@ interface Context {
     readonly syncEndpoints: ReturnType<typeof vi.fn>;
 }
 
-// `panelRunning` is what the serving watcher polls alongside /health, so a test that wants the watcher to keep
-// looking has to say the server is up; the default is the dead-panel exit, which is what stops every test that
-// is not about the watcher from leaving one running.
+// `panelRunning` is what the serving watcher polls alongside /health; a test wanting it to keep looking must say the
+// panel is up. Defaults to dead, so unrelated tests don't leave one running.
 const context = (root: string, panelRunning = false): Context => {
     const panels: Panels = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
     const syncEndpoints = vi.fn(async () => undefined);
@@ -81,8 +62,8 @@ const context = (root: string, panelRunning = false): Context => {
     return { ctx, panels, syncEndpoints };
 };
 
-// The health probe answers "not serving" unless a test says otherwise: most of these are about the weights
-// arriving, and a card that claimed to be serving would just hide the states being asserted on.
+// Health defaults to not-serving unless a test opts in; most of these tests are about the weights arriving, not the
+// serving state.
 const serve = (body: ReadableStream<Uint8Array>, headers: Record<string, string>, status: number): Response =>
     new Response(body, { status, headers });
 
@@ -96,7 +77,7 @@ const stubFetch = (onModel: (init: RequestInit | undefined) => Response, healthy
     });
 };
 
-// Whole weights in one chunk, the shape every test that isn't about resuming wants.
+// Whole weights in a single chunk, what every non-resume test wants.
 const wholeFile = (): Response =>
     serve(
         new ReadableStream<Uint8Array>({
@@ -109,9 +90,8 @@ const wholeFile = (): Response =>
         200,
     );
 
-/* The add, run to the end of its (now short) stream. The window is a parameter because it is a parameter of the
- * card: the tests about the download pass none and get the default, the ones about the flag pass the rung or the
- * typed number they are asserting on. */
+// Runs apply to the end of its stream. `rung`/`typed` are parameters because the window is a parameter of the card;
+// download tests omit them for the default.
 const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["context"] = LOCAL_MODEL_WINDOW_DEFAULT, typed?: number): Promise<void> => {
     const config: LocalModelConfig = {
         model: "custom",
@@ -128,9 +108,6 @@ const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["con
 const statusOf = (ctx: CapabilityCtx, id: string) =>
     localModelHandler.status(ctx, id, { model: "custom", gpu: "off", url: MODEL_URL, context: LOCAL_MODEL_WINDOW_DEFAULT });
 
-/* The add's own promise: it comes back while the bytes are still moving, and what it leaves behind is a card
- * that can be asked. This is the regression that mattered, an apply that streamed to the end of the download
- * left the form with a spinner and the reader with no way to tell a working download from a wedged one. */
 test("apply returns while the weights are still arriving, and the card reports the progress", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
@@ -153,11 +130,10 @@ test("apply returns while the weights are still arriving, and the card reports t
         ),
     );
 
-    // Returns at all, with the download deliberately wedged open: the assertion is that this line is reached.
+    // The wedged stream never closes; reaching this line at all is the assertion.
     await drain("held-open", ctx);
     expect(existsSync(modelPath(root))).toBe(false);
 
-    // …and the card, which is the surface that survives a page refresh, can say how far along it is.
     await vi.waitFor(async () => {
         const status = await statusOf(ctx, "held-open");
         expect(status.state).toBe("pending");
@@ -172,9 +148,7 @@ test("apply returns while the weights are still arriving, and the card reports t
     await rm(root, { recursive: true, force: true });
 });
 
-/* WHAT A RESTART COSTS. The part file is named after the model rather than after the attempt precisely so the
- * next attempt can find it: a daemon that stopped nineteen gigabytes into a twenty-gigabyte download must ask
- * for the twentieth, not for all twenty. Asserted through the bytes on disk, the prefix has to survive. */
+// Part file is named after the model, not the attempt, so a resumed download can find it.
 test("an interrupted download resumes from the part file rather than fetching it again", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
@@ -201,21 +175,12 @@ test("an interrupted download resumes from the part file rather than fetching it
     await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     expect(ranges).toEqual([`bytes=${already}-`]);
-    // The whole model, which is only true if the three chunks already on disk were kept and appended to.
+    // Full equality only holds if the on-disk prefix was kept and appended to, not overwritten.
     expect(await readFile(modelPath(root))).toEqual(WEIGHTS);
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
-/* THE REGRESSION THAT MADE EVERY LOCAL MODEL UNUSABLE, and the reason this file asserts on a sync at all.
- *
- * The capability route syncs the translator's routing table when the entry is ADDED, which for this kind is
- * minutes before it can serve: the weights are still arriving, the endpoint publishes no models, and the route
- * writes `models: []`. Nothing else in the daemon watches for that to stop being true, so the table kept saying
- * the endpoint served nothing while llama-server sat healthy on loopback, and every turn came back "unknown
- * provider for model <id>/<model>" against a card reading "active".
- *
- * So: the sync must happen AFTER the server answers /health, not when the download was handed off. */
 test("the translator is re-synced once the server actually serves, not when the download starts", async () => {
     const root = await workspace();
     const { ctx, panels, syncEndpoints } = context(root, true);
@@ -230,12 +195,9 @@ test("the translator is re-synced once the server actually serves, not when the 
     await rm(root, { recursive: true, force: true });
 });
 
-/* The other half of the same rule: a server that never comes up must not be announced as routable. A sync on
- * spawn rather than on readiness would publish the endpoint's model list from a catalog read that answers
- * nothing, which is the empty-list entry this whole watcher exists to stop being written. */
 test("a server that never serves leaves the routing table alone", async () => {
     const root = await workspace();
-    // Panel dead and /health refusing: the watcher's two exits, neither of which may reach a sync.
+    // Both watcher exits: panel dead, and /health refusing; neither should trigger a sync.
     const { ctx, panels, syncEndpoints } = context(root);
     stubFetch(wholeFile);
 
@@ -248,20 +210,8 @@ test("a server that never serves leaves the routing table alone", async () => {
     await rm(root, { recursive: true, force: true });
 });
 
-/* THE MEMORY THE CARD PROMISED, PINNED AS A COMMAND LINE. This is the assertion that stops the card's RAM
- * figures drifting away from what the server actually reserves, because the drift is invisible from either side
- * on its own: the label is a string in the catalog and the allocation is a flag here.
- *
- * TWO BUGS ARE LOCKED OUT AND THEY PULL IN OPPOSITE DIRECTIONS. Asking the server for the model's native
- * context ("as much as it was trained for", which reads like generosity) sizes the conversation cache off a
- * 128K-256K window, and that cache is then bigger than the weights: a 3B whose card said "~4 GB" reserved 14 GB
- * of it, a 30B whose card said "~24 GB" reserved 24 GB on top of 17 GB of weights. Both numbers are measured
- * off the GGUF metadata of models on the curated list, and neither machine described by those labels can serve
- * what it was sold. The other direction is the flat 32,768 that replaced it, which no full agent turn fits in:
- * that is why the window is now the card's own field and why the flag has to FOLLOW it rather than ignore it.
- *
- * The quantized cache is asserted alongside because it is what makes any of the rungs affordable, and the
- * native-window spelling is asserted absent, because it is the one value that makes every figure unachievable. */
+// Native context sizes the KV cache off the model's max window (128K-256K), bigger than the weights; the card's own
+// window avoids that.
 test("the server is started with the window the card chose, and a quantized cache to fit it", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
@@ -274,21 +224,15 @@ test("the server is started with the window the card chose, and a quantized cach
     expect(command).toContain("--ctx-size 131072");
     expect(command).toContain("--cache-type-k q8_0");
     expect(command).toContain("--cache-type-v q8_0");
-    /* ONE SLOT, which is the other multiplier on the same reservation and the one nobody had looked at: the
-     * default is auto, auto is four slots on this image, each slot gets the whole --ctx-size, and a server with
-     * one caller can use one of them. A live entry was measured reserving 4 x 32,768 against a card that had
-     * priced 32,768. Without this flag every memory figure on the card is out by 4x again. */
+    // --parallel 1 pins slot count: auto defaults to four on this image, each reserving the full --ctx-size again.
     expect(command).toContain("--parallel 1");
-    // The regression itself: "read it from the model" is the one value that makes every figure unachievable.
+    // `--ctx-size 0` means "read it from the model": the one value every card figure can't survive.
     expect(command).not.toContain("--ctx-size 0");
 
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
-/* THE TYPED NUMBER, which is the field's whole reason for existing: the rungs are for people who want to be
- * told what to pick, and this is for somebody who already knows their machine. It reaches the flag verbatim,
- * because a number silently rounded to the nearest rung is a card lying about a value it accepted. */
 test("a custom window reaches the server as the number that was typed", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
@@ -303,9 +247,7 @@ test("a custom window reaches the server as the number that was typed", async ()
     await rm(root, { recursive: true, force: true });
 });
 
-/* "CUSTOM" WITH NOTHING TYPED, which the form cannot submit and a hand-edited manifest can. It lands on the
- * default rung rather than refusing (the window has a perfectly good answer available, unlike a card that cannot
- * name which bytes to fetch) and the apply says which number it landed on, so the fallback is visible. */
+// Only a hand-edited manifest reaches this: the form itself cannot submit "custom" with nothing typed.
 test("a custom window with no number falls back to the default rung, out loud", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
@@ -324,9 +266,7 @@ test("a custom window with no number falls back to the default rung, out loud", 
     await rm(root, { recursive: true, force: true });
 });
 
-/* WHAT A WINDOW TOO SMALL FOR THE LOOP MUST SAY, at the moment the choice is still fresh rather than after the
- * download and a refused message. Not an error: the entry will serve, and as a one-shot helper it is a fine trade.
- * Silence is the failure mode, because from the row alone a 16k entry and a 64k one look identical. */
+// Silence would be the real failure: without this message, a 16k entry and a 64k one look identical from the row.
 test("a window under the agent floor is served, and says what it is still good for", async () => {
     const root = await workspace();
     const { ctx } = context(root);

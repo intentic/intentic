@@ -14,87 +14,51 @@ import { registerUrlLinks } from "./terminalUrlLinks";
 import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
-/* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket, the shared core under the
- * terminal panel's tabs (useTerminal).
- *
- * xterm here IS the terminal. The daemon attaches a tmux CONTROL-MODE client to the session (its
- * terminal/tmux-control.ts) and forwards the pane's bytes raw, as binary frames, before tmux has interpreted
- * them: so this buffer holds the real scrollback, the wheel scrolls it here with nothing crossing the socket,
- * a drag is a native selection over all of it, and the search addon searches all of it. A program that wants
- * the mouse (vim, htop) asks xterm for it through that same stream and gets its reports back the same way. tmux
- * is the persistence on the far side: the session, its shell and whatever runs there outlive this socket, and
- * every attach opens with the daemon's REPLAY (a reset, then the pane's history and screen as tmux has them),
- * so a fresh xterm, after a reload, a reconnect or a sandbox switch, shows what the pane shows without anything
- * having been kept on this side.
- *
- * Each session owns a persistent host div (xterm 6 must be open()ed exactly once, so the div moves between
- * containers instead of being rebuilt), auto-reconnects a dropped socket with backoff, and pings every 30s
- * against tunnel idle-reaping. The daemon's `exit` frame (the tmux client ended: shell exited, session killed,
- * or an attach-only `panel-*` session doesn't exist) is TERMINAL, it stops reconnection and hands off to
- * `onExit`, so a dead session can't spin an attach-fail loop. */
+// One xterm bound to one tmux session over the daemon's /system/terminal WebSocket. Raw frames from tmux control-mode
+// give xterm real scrollback and search locally; every attach replays the pane's history and screen. Each session owns
+// a persistent host, reconnects with backoff, and pings to catch a half-open socket.
 
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
 const MAX_RETRY_MS = 30_000;
-// A panel drag fires a fit per frame, and every grid change is a round trip to tmux and a SIGWINCH to the shell,
-// which redraws its prompt. The local xterm still reflows live; the pane learns the size once the drag settles.
+// Debounces resize sends during a panel drag; xterm itself reflows every frame regardless.
 const RESIZE_SETTLE_MS = 120;
-// A connection that lived this long was healthy, its drop resets the backoff. Shorter lives (refused,
-// accept-then-crash) keep doubling, so a broken daemon is never hammered on a tight loop.
+// A connection alive this long resets the backoff on drop; shorter lives keep doubling the retry delay.
 const STABLE_MS = 5000;
-// The server answers every ping with a pong, so a healthy connection ALWAYS sees a frame within PING_MS,
-// silence this long means half-open; close() hands the socket to the normal reconnect path.
+// Silence this long past a healthy ping cadence means half-open; close() reconnects normally.
 const STALE_MS = 90_000;
 
 export type TerminalSession = {
-    // Marks a cached pane as a terminal, and single-member on purpose: the agent's browser is NOT a session in
-    // this cache. browser/useBrowserView.ts is plain reactive state over an ordinary <img>, a browser view has
-    // no scrollback to preserve across an unmount, so it needs none of the persistent-host-element machinery
-    // below, and that is what lets the Browsers view be a route rather than a pane in this tab machine. The one
-    // thing it borrows from here is the reconnect backoff.
+    // Single-member on purpose: the agent's browser view is a separate, simpler kind of cache entry.
     readonly kind: `terminal`;
     readonly name: string;
     readonly term: Terminal;
-    // Find over the whole buffer (the panel's Ctrl+F bar drives it).
+    // Search addon; the panel's Ctrl+F bar searches the buffer through this.
     readonly search: SearchAddon;
-    // Persistent xterm mount, moves in/out of containers as the surface shows/hides it.
+    // Persistent xterm mount; moves between containers as the surface shows or hides it.
     readonly host: HTMLElement;
-    // The GPU renderer, held only while the session is on screen (attachRenderer).
+    // GPU renderer, present only while the session is on screen (attachRenderer).
     webgl?: WebglAddon;
-    // Tears down the fit triggers (ResizeObserver + window resize listener) for the WINDOW the host last lived
-    // in, rebuilt whenever a mount lands it somewhere new, since both are per-window machinery that stops
-    // tracking an element adopted into another document.
+    // Tears down the host's fit observers for its current window; rebuilt on every mount into a new one.
     unobserve?: () => void;
-    /* The document of the LAST mount, mountTerminalSession's move signal, and the first mount's "this is new".
-     * It stays a document rather than a boolean because the app does still render into more than one (the
-     * preview's iframe, the extension host's), and because getting this wrong is expensive: a host whose
-     * observers belong to a document it has left refits nothing. The panel itself no longer crosses documents,
-     * a floating terminal is its own window running its own copy of the app (composables/floating.ts), where
-     * this session is opened fresh and the daemon replays the pane on attach. */
+    // Document of the last mount; a change signals mountTerminalSession to rebuild window-scoped fit machinery.
     mountedDocument: Document;
-    // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice. Mutable because a
-    // cached session outlives the tabs instance that created it, each instance rebinds it on cache hit, so an
-    // exit always updates the LIVE surface's tab state, not a destroyed one's.
+    // Session-over handoff (exit frame or dispose), called once; rebound per tabs instance on cache hit.
     onExit: (name: string) => void;
     socket?: WebSocket;
     reconnect?: number;
-    // Pending pane resize frame, the drag-settle timer (scheduleResizeFrame).
+    // Pending resize-settle timer id (scheduleResizeFrame).
     resizeSettle?: number;
-    // The reconnect ladder, uptime-keyed: a connection that lived past STABLE_MS drops back to a 1s retry.
+    // Reconnect ladder, uptime-keyed: a connection past STABLE_MS drops back to a 1s retry.
     backoff: Backoff;
-    // Set by dispose (and the exit frame) so the socket's close handler stops reconnecting.
+    // Set by dispose or the exit frame so the socket's close handler stops reconnecting.
     closing: boolean;
-    // True while the connection is known-down, gates the disconnect/not-reachable banner to once per outage.
+    // True while the connection is known down; gates the disconnect banner to once per outage.
     down: boolean;
 };
 
-// Ctrl/Cmd+click opens a link (VSCode's terminal gesture), a plain click stays a click/selection gesture. The
-// linkifier's mouseup is the trusted event: real modifier state, and the user activation that keeps popup
-// blockers quiet. A coarse pointer has no modifier to hold and no way to select wrapped text, so there a tap IS
-// the gesture, otherwise the link a phone needs most (the agent's OAuth URL) is the one it can't reach. A
-// localhost link names the SANDBOX's loopback (the printing process runs inside the remote container), so it
-// opens as a forwarded-port preview instead of a dead tab. Any other URI is arbitrary program output, the new
-// tab gets no opener.
+// Ctrl/Cmd+click (or any tap on a coarse pointer) opens a link, from the linkifier's trusted mouseup. A sandbox
+// loopback URL opens as a port preview instead of a dead tab; anything else opens with no opener.
 const openLink = (event: MouseEvent, uri: string): void => {
     if (!event.ctrlKey && !event.metaKey && !useDevice().coarse.value) {
         return;
@@ -113,27 +77,14 @@ const send = (s: TerminalSession, message: TerminalClientMessage): void => {
     }
 };
 
-// Give the GPU context back. xterm reinstates its own DOM renderer as the addon disposes, so a detached
-// session keeps painting, that is what makes remounting one instant.
+// Releases the GPU context; xterm's DOM renderer takes back over, so a detached session keeps painting.
 const detachRenderer = (s: TerminalSession): void => {
     s.webgl?.dispose();
     s.webgl = undefined;
 };
 
-// Swap xterm's default DOM renderer for the GPU one, the DOM renderer repaints per cell and pegs the main
-// thread under the flooding output this terminal sees (docker pulls, pnpm install, turbo/vite). Must run AFTER
-// term.open() (the addon needs the canvas).
-//
-// Held only WHILE A SESSION IS ON SCREEN, because the addon is one WebGL2 context and a page gets about
-// sixteen before the browser starts force-losing them, oldest first, which is the terminal the user has had
-// open longest, i.e. the one they are working in. That terminal then draws nothing at all for the three
-// seconds the addon spends waiting on a restore that is never coming for an evicted context, and every
-// relayout (a panel drag reallocates each live context's drawing buffer) is what tips the page over the line.
-// Scoped to the mount, the count follows what is VISIBLE, a split group, four at the very most, rather than
-// every session ever opened, so the cap is never approached and a resize can't blank the screen.
-//
-// A context lost anyway (GPU sleep, a blocklisted driver) drops back to the DOM renderer, as does a missing
-// WebGL2, which throws on load.
+// Swaps xterm's DOM renderer for WebGL so heavy output doesn't peg the main thread. Held only while on screen, since a
+// page gets a small, fixed budget of WebGL2 contexts; falls back to DOM on context loss or a missing WebGL2.
 const attachRenderer = (s: TerminalSession): void => {
     if (s.webgl !== undefined) {
         return;
@@ -144,14 +95,12 @@ const attachRenderer = (s: TerminalSession): void => {
         s.term.loadAddon(webgl);
         s.webgl = webgl;
     } catch {
-        // No WebGL2 available, xterm keeps its default DOM renderer.
+        // No WebGL2 available; xterm keeps its default DOM renderer.
     }
 };
 
-// Build the authenticated wss URL for one session, or undefined if the sandbox isn't reachable / not signed in.
-// The auth half is a one-shot ticket (wsTicket.ts) so no bearer rides the query string; the URL resolves through
-// the endpoint picker, so a same-machine sandbox's terminal takes loopback rather than the tunnel, keystroke
-// latency is the thing a user feels most directly.
+// Authenticated wss URL for one session, or undefined if unreachable or signed out. A one-shot ticket keeps the bearer
+// off the query string, and the endpoint picker prefers loopback on a same-machine sandbox.
 const socketUrl = (name: string, cols: number, rows: number): Promise<string | undefined> =>
     wsSocketUrl(`/system/terminal`, { session: name, cols: String(cols), rows: String(rows) });
 
@@ -159,22 +108,20 @@ const scheduleRetry = (s: TerminalSession, uptimeMs = 0): void => {
     s.reconnect = window.setTimeout(() => void connectSocket(s), s.backoff.next(uptimeMs));
 };
 
-// Open (or re-open) one session's socket. Reconnects reuse the xterm; the daemon's replay resets it and paints
-// the pane as it is now, so the disconnect banners below go with the reset and the running processes were
-// never touched. Runs whether or not the host is mounted.
+// Opens or reopens a session's socket; the daemon's replay repaints the pane on reconnect, so a reset never touches
+// running processes. Runs regardless of whether the host is mounted.
 const connectSocket = async (s: TerminalSession): Promise<void> => {
     window.clearTimeout(s.reconnect);
     if (s.closing) {
         return;
     }
     const url = await socketUrl(s.name, s.term.cols, s.term.rows);
-    // Disposed during the token fetch, don't resurrect a socket for a dead session.
+    // Disposed during the token fetch; don't resurrect a socket for a dead session.
     if (s.closing) {
         return;
     }
     if (url === undefined) {
-        // Usually a transient startup state (panel opened before sign-in / daemon discovery resolved), retry
-        // on the same backoff as a dropped socket instead of parking the session forever.
+        // Usually a transient startup state; retries on the normal backoff instead of parking the session forever.
         if (!s.down) {
             s.down = true;
             s.term.writeln(`\x1b[31mSandbox isn't reachable, or you're not signed in: finish setup and sign in with Google.\x1b[0m`);
@@ -182,37 +129,20 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         scheduleRetry(s);
         return;
     }
-    /* ONE PERMIT FOR THIS SOCKET, because it is a long-lived connection like any other and the budget's whole
-     * premise is that every one of them is counted (sandbox/streamBudget.ts).
-     *
-     * It was not counted. `/events` and the agent attaches took permits while every open terminal quietly took
-     * a seventh connection, an eighth, so on the plain-http loopback — HTTP/1.1, six per origin — two terminals
-     * were enough to consume the two connections held back for ordinary requests, and the file tree, the git
-     * status and the reconnect itself queued behind sockets that never end on their own. That is the same
-     * client-side freeze the budget was written to prevent, reached by the one stream it did not know about.
-     *
-     * Terminals share the `attach` pool rather than getting one of their own: same shape of stream (one per
-     * live thing the user is watching, unbounded in number, a lost one costs a reconnect and not a blind
-     * window), and reusing it keeps the four-stream ceiling exactly where it already was.
-     *
-     * Over budget the acquire still returns — a terminal that renders nothing is worse than one that opens
-     * late — and asks useEndpoint for a multiplexed transport, where the whole budget goes away. */
+    // Counted against the shared `attach` stream budget; over budget it still connects, via a multiplexed transport.
     const release = await acquireStreamSlot(`attach`);
-    // Disposed while queueing for the permit: hand it straight back rather than opening a socket for a dead
-    // session, which is the same reason the token fetch above re-checks.
+    // Disposed while queuing for the permit: hand it back rather than open a socket for a dead session.
     if (s.closing) {
         release?.();
         return;
     }
     const ws = new WebSocket(url);
-    // The pane's bytes come as binary frames; as ArrayBuffers they go to xterm without a copy through a Blob.
+    // Binary frames arrive as ArrayBuffers, straight to xterm with no Blob copy.
     ws.binaryType = `arraybuffer`;
-    // Supersede any straggler socket (its close handler sees s.socket !== ws, clears its own ping, releases its
-    // own permit, and stays silent).
+    // Supersedes any straggler socket; its close handler sees a mismatched `s.socket` and stays silent.
     s.socket?.close();
     s.socket = ws;
-    // Socket-scoped state lives in this closure so it cannot outlive the socket: every close event (including a
-    // superseded straggler's) clears its OWN ping interval before anything else.
+    // Socket-scoped state lives in this closure, so each close event clears only its own ping interval.
     let ping: number | undefined;
     let openedAt = 0;
     let lastFrameAt = 0;
@@ -224,8 +154,7 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         s.down = false;
         openedAt = Date.now();
         lastFrameAt = openedAt;
-        // send() drops frames while CONNECTING, so push the live grid now, a refit during the handshake window
-        // would otherwise leave the pane at its attach-time size until the next resize.
+        // send() drops frames while CONNECTING; push the live grid now so a mid-handshake resize isn't lost.
         send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
         ping = window.setInterval(() => {
             if (Date.now() - lastFrameAt > STALE_MS) {
@@ -238,8 +167,7 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     ws.addEventListener(`message`, (event) => {
         // Any bytes from the server prove liveness, parseable or not.
         lastFrameAt = Date.now();
-        // A binary frame is the pane, as its program wrote it. xterm decodes the bytes itself, which is what
-        // keeps a UTF-8 character split across two frames whole.
+        // Binary frame is raw pane bytes; xterm decodes it, keeping a UTF-8 char split across frames whole.
         if (event.data instanceof ArrayBuffer) {
             s.term.write(new Uint8Array(event.data));
             return;
@@ -251,50 +179,40 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
             return;
         }
         if (message.type === `exit`) {
-            // The tmux client ended (shell exited / session killed / attach-only session missing), terminal,
-            // never a reconnect: `-A` would recreate a session the user just ended, and a missing panel session
-            // would fail-loop.
+            // Session ended; never reconnects, since `-A` would recreate it and a missing session would fail-loop.
             s.closing = true;
             s.onExit(s.name);
         }
     });
     ws.addEventListener(`close`, (event) => {
         window.clearInterval(ping);
-        /* Before the identity guard, so EVERY socket hands its permit back: a superseded straggler and a
-         * disposed session both leave through the return below, and a permit released on only the surviving
-         * path leaks the pool one terminal at a time until nothing can open. Releasing twice is harmless
-         * (streamBudget hands out a once-only release), releasing not at all is not. */
+        // Runs before the identity guard, so every socket, including a superseded straggler, releases its permit once.
         release?.();
         if (s.socket !== ws || s.closing) {
             return;
         }
-        // Banner once per outage, the retries themselves are silent, and a successful reattach replays over it.
+        // Disconnect banner once per outage; retries stay silent, and a reattach replays over it.
         if (!s.down) {
             s.down = true;
             s.term.writeln(`\r\n\x1b[90m[disconnected (${event.code}${event.reason === `` ? `` : `: ${event.reason}`})]\x1b[0m`);
             s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
         }
-        // Uptime-keyed: a stable connection's drop retries at 1s; one that never opened or died young keeps
-        // the escalated delay.
+        // Uptime-keyed: a stable connection's drop retries at 1s; one that died young keeps the escalated delay.
         scheduleRetry(s, openedAt === 0 ? 0 : Date.now() - openedAt);
     });
 };
 
 // The private cell-metrics the fit needs, READ-ONLY, the same access @xterm/addon-fit makes (its own TODO
-// admits it), since xterm exposes no public cell-metrics API. Nothing here drives the renderer: a fit that
-// reached in to clear() before resizing was wiping the rendered screen a frame ahead of a repaint it did not
-// control, which is a blank terminal for as long as the repaint is deferred (and at an idle prompt, where no
-// output follows to force one, that is until the user types).
+// Private cell metrics the fit reads, since xterm exposes no public API for them; read-only, never used to mutate the
+// renderer.
 type XtermCore = { _renderService: { dimensions: { css: { cell: { width: number; height: number } } } } };
 const coreOf = (term: Terminal): XtermCore => (term as unknown as { _core: XtermCore })._core;
 
-// xterm's viewport reserves this much for its native scrollbar (ViewportConstants.DEFAULT_SCROLL_BAR_WIDTH).
+// xterm's viewport reserves this much width for its native scrollbar.
 const SCROLLBAR_PX = 14;
 
-// Fit the grid to the host's box, measured in the HOST'S OWN realm (clientWidth/Height). Not @xterm/addon-fit:
-// its proposeDimensions measures through the GLOBAL window's getComputedStyle, which is cross-realm for a host
-// living in any other document (an iframe's), where it can silently misresolve, no-oping every fit and leaving
-// the pane at a grid the panel no longer has.
+// Fits the grid to the host's box using its own realm's clientWidth/Height, not @xterm/addon-fit, whose cross-realm
+// measurement can silently no-op in another document (an iframe's).
 const fitSession = (s: TerminalSession): void => {
     const cell = coreOf(s.term)._renderService.dimensions.css.cell;
     if (cell.width === 0 || cell.height === 0) {
@@ -307,9 +225,7 @@ const fitSession = (s: TerminalSession): void => {
     }
 };
 
-// Hand the settled grid to the pane. Debounced because the fit runs per frame of a panel drag and each frame's
-// resize is a round trip and a prompt redraw, one drag used to be dozens of them. xterm reflows locally on
-// every step regardless, so the panel still tracks the pointer; only the pane waits.
+// Debounces the resize send to the pane; xterm itself reflows immediately on every frame.
 const scheduleResizeFrame = (s: TerminalSession): void => {
     window.clearTimeout(s.resizeSettle);
     s.resizeSettle = window.setTimeout(() => {
@@ -318,12 +234,8 @@ const scheduleResizeFrame = (s: TerminalSession): void => {
     }, RESIZE_SETTLE_MS);
 };
 
-// (Re)build the session's fit triggers against the window its host currently lives in. A ResizeObserver, and
-// the rAF that coalesces its fits (the panel's drag handle fires it per pointermove), is per-window machinery
-// that stops tracking an element adopted into another document, so both are rebuilt from the host's own view on
-// every move. The window resize listener doubles the observer on purpose: an OS-level window resize (the reader
-// maximizing a floating terminal, or dragging its frame) must refit even where the observer's delivery proves
-// unreliable; a duplicate trigger collapses in the rAF and a same-size fit is a no-op.
+// (Re)builds fit triggers against the host's current window: a ResizeObserver plus a window resize listener, since both
+// stop tracking an element moved to another document. The listener also catches OS-level resizes the observer may miss.
 const observeHost = (s: TerminalSession): void => {
     s.unobserve?.();
     const view = s.host.ownerDocument.defaultView ?? window;
@@ -331,8 +243,7 @@ const observeHost = (s: TerminalSession): void => {
     const schedule = (): void => {
         view.cancelAnimationFrame(raf);
         raf = view.requestAnimationFrame(() => {
-            // Skip while detached (hidden host) or mid-drag at zero size, fit measures against a laid-out
-            // element. A disposed session's removed host also measures 0, so a stray queued frame is inert.
+            // Skips while detached or mid-drag at zero size; a disposed session's removed host also measures zero.
             if (s.host.clientWidth === 0 || s.host.clientHeight === 0) {
                 return;
             }
@@ -348,15 +259,10 @@ const observeHost = (s: TerminalSession): void => {
     };
 };
 
-// The terminal's type, stated at the app's base text size and converted on use, xterm paints its own glyphs
-// from a number, so it is one of the few things CSS does not carry along when that size changes.
+// Base terminal font size; xterm paints its own glyphs, so CSS text-size changes don't scale it.
 const FONT_PX = 12;
 
-// Pre-measurement cell estimate (fontSize 12 JetBrains Mono ≈ 7.2×16 css px) for the ATTACH grid only, the
-// first real fit corrects it by at most a row or two. Without it the pane is attached at xterm's 80x24 default
-// and the daemon's opening replay is captured at that width, wrapped for a grid the panel does not have, and
-// the immediate shrink to the real one then reflows it once more in front of the user. Scaled with the font it
-// is an estimate OF, or the guess is wrong by the text size on every attach.
+// Pre-measured cell size (JetBrains Mono, 12px) for the attach grid only; the first fit corrects any drift.
 const EST_CELL_W = 7.2;
 const EST_CELL_H = 16;
 const estCell = (): { width: number; height: number } => {
@@ -364,10 +270,8 @@ const estCell = (): { width: number; height: number } => {
     return { width: EST_CELL_W * factor, height: EST_CELL_H * factor };
 };
 
-// Re-type a LIVE session after the app's text size changed. A terminal's font size is a number it was built
-// with, so an open shell would otherwise keep yesterday's type until it was killed and reopened, and because
-// the glyphs change size, the grid that fits the same box changes with them: refit, then tell the pane, or the
-// shell keeps drawing for a grid that is no longer that many columns wide.
+// Re-types a live session after the app's text size changes, then refits and resends the grid so the shell doesn't keep
+// drawing for a stale column count.
 export const retypeTerminalSession = (s: TerminalSession): void => {
     const size = toScreenPx(FONT_PX);
     if (s.term.options.fontSize === size) {
@@ -378,11 +282,8 @@ export const retypeTerminalSession = (s: TerminalSession): void => {
     scheduleResizeFrame(s);
 };
 
-// The two clipboard verbs, both routed through the TERMINAL's own window (clipboardOf) for the same reason the
-// OSC 52 handler is: in an iframe or a second surface, this realm's document may be the unfocused one, and
-// Chrome refuses a clipboard call from it. A denied read (no permission, or a browser that only exposes the
-// clipboard through a real paste event) leaves the terminal untouched. Ctrl+V, which arrives as that event,
-// always works.
+// Both clipboard verbs route through the terminal's own window: elsewhere this realm's document may be unfocused and
+// Chrome refuses the call. A denied read just leaves the terminal untouched; Ctrl+V (a real paste event) still works.
 export const copySelection = (s: TerminalSession): void => {
     const selection = s.term.getSelection();
     if (selection === ``) {
@@ -398,64 +299,43 @@ export const pasteIntoTerminal = (s: TerminalSession): void => {
         .readText()
         .then((text) => {
             s.term.paste(text);
-            // The paste came from the context menu, whose click took the keyboard: hand it back, so the
-            // cursor sits right after the pasted text instead of the next keystroke landing nowhere.
+            // Context menu's click took focus; hand it back so the cursor lands after the pasted text.
             s.term.focus();
         })
         .catch(() => {});
 };
 
-// Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
-// `readOnly` makes it a log view (a background process's tab): stdin is disabled and keystrokes never reach
-// the pane, resize/ping still flow. `spawnWithin` is the surface the session will mount into, its box sizes the
-// pane at attach (see EST_CELL_*).
+// Builds one session's xterm, host, and socket; the host stays out of the DOM until mountTerminalSession. `readOnly`
+// makes it a log view with no stdin; `spawnWithin` sizes the attach grid.
 export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false, spawnWithin?: HTMLElement): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
     const term = new Terminal({
-        // The search addon paints its matches with xterm's decoration API, which xterm still files under
-        // "proposed" and refuses (throws, on the first keystroke into the find bar) unless this is on.
+        // Needed for the search addon's match decorations, which xterm gates behind this flag.
         allowProposedApi: true,
         cursorBlink: !readOnly,
         disableStdin: readOnly,
         fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
         fontSize: toScreenPx(FONT_PX),
-        // OSC 8 hyperlinks (CLIs that emit explicit link escapes), without this, xterm falls back to a
-        // blocking confirm() dialog on activation.
+        // OSC 8 hyperlink support; without it xterm falls back to a blocking confirm() dialog.
         linkHandler: { activate: openLink },
-        // THE scrollback, the one the wheel moves through: the daemon's attach replay seeds it with the pane's
-        // history (a few thousand lines, tmux-control.ts says how many) and live output grows it from there.
-        // Deeper than the replay so a long build's output stays reachable without a reattach.
+        // Scrollback depth; deeper than the daemon's replay so long output stays reachable without reattaching.
         scrollback: 30_000,
-        // A right-click on a word with nothing selected selects the word, so the context menu's Copy has
-        // something to copy: the gesture VSCode's terminal has.
+        // Right-click on a bare word selects it first, so the context menu's Copy has something to copy.
         rightClickSelectsWord: true,
-        // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
+        // Snapshotted at creation; fine while --color-terminal is constant across themes.
         theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
     });
-    // Shell keybindings beat the shell-in-the-terminal: a chord bound to a registered command (Ctrl+`, the
-    // terminal split/kill/new shortcuts, anything the user remapped) must reach the global dispatcher, not the
-    // pane, without this, xterm feeds the shell the raw keystroke FIRST and the command fires on top of it
-    // (VSCode uses this same hook). Returning false makes xterm ignore the keydown; it still propagates to the
-    // window. boundCommand honors each command's `when` gate, so a contextual chord (the terminal panel's own
-    // commands, gated on this panel having focus) steps aside here and the raw keystroke stays with the shell.
+    // A bound shell command takes a chord before the pane; returning false stops xterm, not propagation.
     const isMac = isApplePlatform();
     term.attachCustomKeyEventHandler((event) => event.type !== `keydown` || boundCommand(event, isMac) === undefined);
     const search = new SearchAddon();
     term.loadAddon(search);
-    // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link, an agent's OAuth URL)
-    // become Ctrl/Cmd+clickable, including the ones a program hard-wrapped across rows, which xterm's own
-    // web-links addon cannot rejoin (see terminalUrlLinks).
+    // Makes plain-text URLs Ctrl/Cmd-clickable, including ones a program hard-wrapped across rows.
     registerUrlLinks(term, openLink);
-    // File references in output (tsc/eslint/vitest errors, node stack traces) become Ctrl/Cmd+clickable, opening
-    // in the workspace editor at the referenced line. Registered after the URL provider so a URL's path tail
-    // stays owned by it.
+    // Makes file references Ctrl/Cmd-clickable, opening the editor at that line; registered after the URL provider.
     registerFilePathLinks(term);
-    // A program's own copy, OSC 52 with a base64 payload (a CLI's "copied to clipboard", an editor's yank),
-    // reaches xterm raw and would otherwise be ignored: land it in the browser clipboard. `?` asks to READ the
-    // clipboard; that stays unanswered. Guarded: the payload is arbitrary program output. The write goes through
-    // the TERMINAL's own window (clipboardOf): elsewhere, this realm's document is the unfocused one behind, and
-    // Chrome refuses a clipboard write from it.
+    // OSC 52 forwards a clipboard copy to the browser via the terminal's window; reads go unanswered.
     term.parser.registerOscHandler(52, (data) => {
         const payload = data.slice(data.indexOf(`;`) + 1);
         if (payload === `?`) {
@@ -466,7 +346,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
                 .writeText(new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))))
                 .catch(() => {});
         } catch {
-            // not valid base64, drop it rather than kill the parser
+            // Not valid base64; drop it rather than kill the parser.
         }
         return true;
     });
@@ -490,19 +370,12 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         down: false,
     };
     observeHost(s);
-    // Keystrokes → pane; xterm's resize (from fitSession) → pane resize. Wired once, send() targets the current
-    // socket, so these survive reconnects. A read-only session wires no input path at all (disableStdin already
-    // drops keystrokes; this also covers programmatic term.input, e.g. the touch extra-keys row).
+    // Wires input/resize to the pane once; send() always targets the current socket, so this survives reconnects.
     if (!readOnly) {
         term.onData((data) => send(s, { type: `input`, data }));
     }
     term.onResize(() => scheduleResizeFrame(s));
-    // COPY ON SELECT, at the end of the gesture. A primary-button press on the grid arms one mouseup listener on
-    // the document (xterm's own selection ends there too, a drag that leaves the host still finishes), and
-    // whatever is selected when the button comes up is copied: a drag, a double-clicked word, a triple-clicked
-    // line. The mouseup is what makes it work at all, a clipboard write needs the transient user activation a
-    // pointer event carries. Not onSelectionChange: xterm fires that when arriving output re-lays a selection
-    // too, and copying those silently overwrote whatever the user had on their clipboard from elsewhere.
+    // Copies on mouseup after a selection gesture; onSelectionChange also fires when output re-lays one.
     host.addEventListener(
         `mousedown`,
         (event) => {
@@ -521,33 +394,24 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         },
         true,
     );
-    // Connect immediately, even before the host is mounted: a hidden session keeps streaming. xterm buffers
-    // writes made before open(), so the replay and whatever follows accrue until the first mount open()s the
-    // renderer and fit() sends the real size.
+    // Connects immediately even unmounted; xterm buffers pre-open() writes so nothing is lost before mount.
     void connectSocket(s);
     return s;
 };
 
-// Mount a session into a container: xterm must be open()ed against an in-DOM element, so the first mount
-// open()s it there; later mounts just move the persistent host across. `focus: false` mounts without stealing
-// the keyboard, the non-focused cells of a split group.
+// Mounts a session into a container; the first mount open()s xterm against it, later mounts just move the host. `focus:
+// false` mounts without stealing the keyboard.
 export const mountTerminalSession = (s: TerminalSession, container: HTMLElement, focus = true): void => {
     const moved = s.mountedDocument !== container.ownerDocument;
     s.mountedDocument = container.ownerDocument;
     container.append(s.host);
-    // Idempotent: the first call builds xterm against the host, and every later one is xterm 6's documented
-    // cross-window move, it short-circuits to re-pointing the core's window binding (char measurement,
-    // renderer scheduling, event realms) at the host's current window, a no-op when nothing changed. Not keyed
-    // on `moved`: parking re-homes the binding to the main realm between mounts, so even a same-document
-    // remount may need the re-point. The GPU renderer is built AFTER it, against the window that just won.
+    // Idempotent: first call builds xterm, later calls just re-point its window binding; else a no-op.
     s.term.open(s.host);
     attachRenderer(s);
     fitSession(s);
     if (moved) {
         observeHost(s);
-        // A move leaves xterm's grid laid out for wherever the host was, and the fit above may have measured
-        // mid-layout: snap the viewport back to the live screen and refit on the next frame once layout is real.
-        // xterm's own buffer is the picture, so nothing needs redrawing from the far side.
+        // A move can leave the grid laid out mid-transition; snap to bottom and refit once layout settles.
         s.term.scrollToBottom();
         s.host.ownerDocument.defaultView?.requestAnimationFrame(() => {
             if (s.host.clientWidth !== 0 && s.host.clientHeight !== 0) {
@@ -556,24 +420,17 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
             }
         });
     }
-    // Unconditional resync: onResize only fires on a dimension CHANGE, so a pane that drifted while hidden (or
-    // fitted off-DOM at 80x24) would never converge otherwise. A same-size resize is a server no-op.
+    // Unconditional resync: onResize fires only on a dimension change, so a hidden pane's drift needs telling.
     send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
     if (focus) {
         s.term.focus();
     }
 };
 
-// Unmount a session's host WITHOUT losing it to a document that may go away. A host merely .remove()d stays
-// ADOPTED by whatever document last held it, and if that document dies the WebGL context is lost inside it and
-// the fallback DOM renderer rebuilds against it, leaving the terminal a blank white pane. Adopting the detached
-// host into THIS document (and re-open()ing to re-point xterm's window binding) keeps every hidden session
-// anchored where its realm is. mountedDocument is deliberately NOT updated: the next mount must still read as a
-// move so it rebuilds the observer.
+// Unmounts a host without losing it to a dying document, which would blank the pane. Adopts it into this document
+// instead; mountedDocument stays stale so the next mount rebuilds its observer.
 export const parkTerminalSession = (s: TerminalSession): void => {
-    // The GPU context goes back to the browser the moment a session leaves the screen (see attachRenderer),
-    // which also means the context above never survives to be carried into another document at all: the next
-    // mount builds a fresh one against whichever window won.
+    // GPU context returns to the browser once the session leaves the screen; the next mount builds a fresh one.
     detachRenderer(s);
     s.host.remove();
     if (s.host.ownerDocument === document) {
@@ -587,7 +444,7 @@ export const parkTerminalSession = (s: TerminalSession): void => {
     }
 };
 
-// Fully dispose one session's client state. Does NOT kill the tmux session server-side.
+// Fully disposes one session's client state; does not kill the tmux session server-side.
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     window.clearTimeout(s.reconnect);

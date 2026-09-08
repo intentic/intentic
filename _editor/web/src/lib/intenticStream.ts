@@ -1,22 +1,8 @@
 import { sseData, sseFrames } from "@intentic/sandbox-contract";
 import { acquireStreamSlot } from "../features/sandbox/client/streamBudget";
 
-/* Reads a daemon `/intentic` SSE stream as parsed ndjson objects: the daemon emits one `data: <JSON>` frame
- * per line. Shared by the live-plan and the deployments reads (both consume `intentic` ndjson over the
- * sandbox client). Malformed frames are skipped.
- *
- * ONE PERMIT PER READ, because these are the app's LONGEST connections and nothing was counting them. A
- * capability apply, a VPN dial, an infra apply and, worst of all, `manageDeviceSandbox` rebuilding a sandbox
- * all hold a socket for the MINUTES their image takes to pull, and a browser has six per origin on http/1.1.
- * A rebuild started from the UI was therefore enough, on its own, to take the last connection the workspace had
- * left and freeze every other read in every window until it finished, which is precisely the report this
- * answers ("everything hangs after a rebuild").
- *
- * Taken here rather than around the request, because here is the one place all eight consumers pass through,
- * and the request→headers hop is not where the minutes are. It is an accounting fix as much as a rationing one:
- * the NEXT stream now sees the pool is spent and moves the window to the tunnel instead of queueing behind an
- * image pull. Released by the generator's own `finally`, which runs when a consumer breaks out of its loop as
- * well as when the stream ends. */
+// Reads a daemon `/intentic` SSE stream as parsed ndjson; malformed frames are skipped. One connection-pool permit
+// per read, since these can hold a socket for minutes; released in the generator's `finally`, even on early break.
 export async function* readIntenticLines(body: ReadableStream<Uint8Array>): AsyncGenerator<Record<string, unknown>> {
     const slot = await acquireStreamSlot(`attach`);
     try {
@@ -33,9 +19,7 @@ async function* framesOf(body: ReadableStream<Uint8Array>): AsyncGenerator<Recor
             continue;
         }
         const record = parsed as Record<string, unknown>;
-        // An oRPC event-iterator failure arrives as an `event: error` frame (the stream's terminal error, not
-        // a normal ndjson line). Normalize it to a kind:"error" line so callers surface it and stop, even
-        // when the daemon couldn't emit its own error line (e.g. a failure before the CLI ran).
+        // An oRPC failure arrives as an `event: error` frame; normalized to a kind:"error" line so callers stop.
         if (
             frame
                 .split(`\n`)

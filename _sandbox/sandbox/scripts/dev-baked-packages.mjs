@@ -1,22 +1,18 @@
-// Which workspace packages the sandbox image bakes beside the daemon, and where each one's source lives.
-//
-// Shared by the two scripts that have to agree about that set: dev-mounts.mjs, which binds each package's
-// compiled output over the baked copy, and dev-manifest-drift.mjs, which checks the baked manifest still
-// describes what is being mounted. They disagreed once and the container ran a dist its own package.json
-// refused to resolve, so the list has one definition.
+// Which workspace packages the sandbox image bakes beside the daemon, and where each lives. Single source of truth
+// shared by dev-mounts.mjs (binds compiled output over the baked copy) and dev-manifest-drift.mjs (checks the baked
+// manifest matches).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 
 export const REPO_ROOT = repoRoot(import.meta.url);
 
-// Where the image puts the daemon, and where it puts the workspace packages pruned in beside it.
+// Where the image installs the daemon and the workspace packages baked in beside it.
 export const SANDBOX_ROOT = "/opt/sandbox";
 export const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
 
-// Every workspace package in the repo, by its declared name: the mapping from `@intentic/sandbox-contract` to
-// `_shared/sandbox-contract` is read, never assumed (`@intentic/lsp` lives in `_search/lsp`, not `_sandbox/lsp`).
-// Groups are discovered, not listed: every `_`-prefixed root directory is a package group (pnpm-workspace.yaml).
+// Maps every workspace package's declared name to its directory, read from package.json rather than assumed (e.g.
+// `@intentic/lsp` lives in `_search/lsp`). Package groups are discovered: every `_`-prefixed root directory is one.
 export const workspacePackages = () => {
     const found = new Map();
     const groups = readdirSync(REPO_ROOT, { withFileTypes: true })
@@ -42,15 +38,15 @@ export const workspacePackages = () => {
                     found.set(name, dir);
                 }
             } catch {
-                // An unparseable manifest is not this module's problem: it just can't contribute a package.
+                // An unparseable manifest just can't contribute a package.
             }
         }
     }
     return found;
 };
 
-// Which packages the image actually bakes beside the daemon. Read from the daemon's own dependency list rather
-// than hardcoded, so a new workspace dependency becomes hot-reloadable without touching this file.
+// Packages the image bakes beside the daemon, read from the daemon's own `workspace:` dependencies rather than
+// hardcoded here.
 export const bakedPackageNames = () => {
     const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "_sandbox/sandbox/package.json"), "utf8"));
     return Object.entries(manifest.dependencies ?? {})

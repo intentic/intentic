@@ -3,26 +3,19 @@ import { computed } from "vue";
 import { providerGroupLabel } from "../../chat/accounts/providerCatalog";
 import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChart";
 
-/* Spend over time, as columns. One series when a single provider ran in the window (the card title names it:
- * a one-swatch legend box would only restate the title); stacked with a legend the moment there are two.
- *
- * Hand-rolled in HTML rather than SVG or a chart library: percentage heights inside a flex row are already a
- * responsive column chart, so there is no width to measure and no resize observer, and every colour is a CSS
- * custom property that flips with the theme for free. Four chart forms is well under the point where a library
- * pays for itself. */
+// Spend over time as columns; a single series shows no legend (the title already names it), two or more get one.
+// Hand-rolled in HTML, not SVG or a library: percentage heights in a flex row are already responsive (no resize
+// observer needed), and colours are theme-aware CSS variables.
 
-// `providers` are SERIES keys, not necessarily provider ids: the tab folds every locally-run model into one
-// (providerGroup), so the labels here go through the matching group label rather than the contract's.
+// `providers` are series keys, not provider ids (locals folded into one); labelled via the group label.
 const { series, providers } = defineProps<{ series: readonly SpendBucket[]; providers: readonly string[] }>();
 
-// A clean axis top, so the gridline labels read as numbers a person would say. Never derived from the stacked
-// segments: the column's own total is what the axis measures.
+// Axis top from the column's own total, never the stacked segments, for gridlines that read as round numbers.
 const max = computed(() => niceMax(Math.max(0, ...series.map((bucket) => bucket.totals.costUsd))));
 
 const stacked = computed(() => providers.length > 1);
 
-// Segments top-first, because a flex column paints its first child at the top. Zero-value segments are dropped
-// here (not upstream) so a provider that didn't run on a given day contributes no 2px gap to that column.
+// Reversed (flex paints first child on top); zero segments dropped here so an idle provider adds no gap.
 const stackOf = (bucket: SpendBucket): { key: string; value: number }[] => bucket.segments.filter((segment) => segment.value > 0).toReversed();
 
 const tooltipFor = (bucket: SpendBucket): string =>
@@ -58,8 +51,7 @@ const PLOT_HEIGHT = `10rem`;
                 <div v-for="tick in [0, 50, 100]" :key="tick" class="absolute inset-x-0 border-t border-line-subtle" :style="{ top: `${tick}%` }" />
 
                 <div class="absolute inset-0 flex items-end gap-0.5">
-                    <!-- The hit target is the whole column band, not the mark: a $0.02 day is 1px tall and
-                         would otherwise be unhoverable. The band's tint doubles as the crosshair. -->
+                    <!-- Hit target is the whole band, not the mark: a $0.02 day is 1px tall and otherwise unhoverable. -->
                     <div
                         v-for="bucket in series"
                         :key="bucket.start"
@@ -82,8 +74,7 @@ const PLOT_HEIGHT = `10rem`;
             </div>
         </div>
 
-        <!-- Only the ends are labelled: a tick under every column is unreadable, and the tooltip names the one
-             the reader is actually pointing at. -->
+        <!-- Only the ends are labelled; a tick per column is unreadable, and the tooltip names the hovered one. -->
         <div v-if="series.length > 0" class="flex justify-between pl-13 text-2xs text-subtle">
             <span>{{ series[0]?.label }}</span>
             <span v-if="series.length > 1">{{ series.at(-1)?.label }}</span>

@@ -1,13 +1,9 @@
-/* WHOSE KEYBOARD IS IT. Every keystroke over a live browser picture goes to exactly one of two places, and the
- * bug this module was written for is what happens when the split is drawn in the wrong place: Ctrl+A used to be
- * left to the host, where it selected the whole of Intentic instead of the field the person was looking at.
- *
- * So each case here is one half of that decision, and the ones left to the HOST matter as much as the ones sent
- * on: a window that swallowed Ctrl+W or Ctrl+V would be a worse bug than the one it fixed. */
+// Every keystroke over a live browser picture goes to exactly one of two places (host or remote page); each case
+// here is one half of that split, and what stays with the host matters as much as what's forwarded.
 import { describe, expect, test } from "vitest";
 import { keyIntent } from "./keyIntent";
 
-// A keydown as the host browser reports it. Only the fields the decision reads.
+// A keydown as the host reports it; only the fields the decision reads.
 const press = (key: string, held: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean } = {}): KeyboardEvent =>
     ({
         key,
@@ -20,7 +16,7 @@ const press = (key: string, held: { ctrl?: boolean; meta?: boolean; shift?: bool
 describe("typing", () => {
     test("a character is inserted rather than synthesized as a keystroke", () => {
         expect(keyIntent(press(`k`))).toEqual({ kind: `text`, text: `k` });
-        // Shift is already applied to the character the host reported, so a capital needs nothing extra.
+        // Shift is already applied to the reported character, so a capital needs nothing extra.
         expect(keyIntent(press(`K`, { shift: true }))).toEqual({ kind: `text`, text: `K` });
     });
 
@@ -29,9 +25,8 @@ describe("typing", () => {
         expect(keyIntent(press(`Tab`))).toEqual({ kind: `key`, frame: { type: `key`, key: `Tab` } });
     });
 
-    /* THE QUIET HALF OF THE SAME BUG. Arrow keys were forwarded already, so Shift+ArrowLeft did reach the page:
-     * with the Shift dropped, where it moved the caret instead of extending a selection. Doing the wrong thing
-     * rather than nothing, which is the harder kind to notice. */
+    // Shift already reached arrow keys, just without the flag: it moved the caret instead of extending a selection,
+    // the wrong thing rather than nothing.
     test("shift travels with an arrow, or a selection collapses into a caret move", () => {
         expect(keyIntent(press(`ArrowLeft`, { shift: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `ArrowLeft`, shift: true } });
         expect(keyIntent(press(`End`, { shift: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `End`, shift: true } });
@@ -47,8 +42,8 @@ describe("editing chords", () => {
         expect(keyIntent(press(`a`, { ctrl: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `a`, ctrl: true } });
     });
 
-    // A Mac's ⌘ is the same chord in a person's hands, and the browser at the far end is a Linux one where Meta
-    // means nothing, so it travels as ctrl rather than as a modifier that would be ignored on arrival.
+    // A Mac's Cmd is the same chord as Ctrl in a person's hands, and the remote browser is Linux where Meta means
+    // nothing, so it's sent as ctrl.
     test("command on a Mac is control on the wire", () => {
         expect(keyIntent(press(`a`, { meta: true }))).toEqual({ kind: `key`, frame: { type: `key`, key: `a`, ctrl: true } });
     });
@@ -69,17 +64,15 @@ describe("editing chords", () => {
 });
 
 describe("the clipboard", () => {
-    // Copy and cut need the round trip: the selection has to come back and be written to the clipboard of the
-    // machine the person is sitting at, because the one they'd otherwise reach is inside the sandbox.
+    // Copy/cut round-trip since the selection has to land in the clipboard of the machine the person is sitting at,
+    // not the sandbox's.
     test("copy and cut are a round trip, not a forward", () => {
         expect(keyIntent(press(`c`, { ctrl: true }))).toEqual({ kind: `clipboard`, frame: { type: `key`, key: `c`, ctrl: true } });
         expect(keyIntent(press(`x`, { ctrl: true }))).toEqual({ kind: `clipboard`, frame: { type: `key`, key: `x`, ctrl: true } });
     });
 
-    /* PASTE IS THE ONE CHORD DELIBERATELY LEFT ALONE. Forwarding it would paste whatever the sandbox's Chromium
-     * last copied rather than what the person meant; leaving it produces a paste event on the host carrying the
-     * real clipboard, which each surface turns into an insert. Swallowing it here would silently break every
-     * sign-in that pastes a password. */
+    // Left alone deliberately: forwarding it would paste the sandbox's own clipboard instead of the host's real one,
+    // silently breaking password paste.
     test("paste stays with the host, whose clipboard is the real one", () => {
         expect(keyIntent(press(`v`, { ctrl: true }))).toEqual({ kind: `host` });
         expect(keyIntent(press(`v`, { meta: true }))).toEqual({ kind: `host` });
@@ -87,8 +80,8 @@ describe("the clipboard", () => {
 });
 
 describe("what the host keeps", () => {
-    // These would be lost either way: a remote page driven this way ignores window-level chords, so taking
-    // them would only cost the user their own browser.
+    // These are lost either way: a remote page driven this way ignores window-level chords, so taking them only costs
+    // the user their own browser.
     test("window shortcuts are not the page's to take", () => {
         for (const key of [`t`, `w`, `n`, `r`, `f`, `p`, `s`]) {
             expect(keyIntent(press(key, { ctrl: true }))).toEqual({ kind: `host` });
@@ -96,9 +89,8 @@ describe("what the host keeps", () => {
         expect(keyIntent(press(`F5`))).toEqual({ kind: `host` });
     });
 
-    /* Adding Shift moves a letter chord into the browser's own territory: devtools, reopen tab, incognito:
-     * and `i` sits in both worlds: Ctrl+I italicizes, Ctrl+Shift+I opens devtools. Redo is the exception the
-     * caret keeps. */
+    // Shift moves a letter chord into the browser's own territory (devtools, reopen tab, incognito); `i` sits in both
+    // worlds (Ctrl+I italicizes, Ctrl+Shift+I opens devtools), and redo is the exception that stays on the page.
     test("shifted letter chords are the browser's, redo excepted", () => {
         expect(keyIntent(press(`I`, { ctrl: true, shift: true }))).toEqual({ kind: `host` });
         expect(keyIntent(press(`T`, { ctrl: true, shift: true }))).toEqual({ kind: `host` });
@@ -109,7 +101,7 @@ describe("what the host keeps", () => {
         });
     });
 
-    // But Shift with a control key is a selection, not a browser shortcut: that half has to survive.
+    // Shift with a control key is still a selection, not a browser shortcut, so it must reach the page.
     test("shift still reaches the page on the control keys", () => {
         expect(keyIntent(press(`ArrowLeft`, { ctrl: true, shift: true }))).toEqual({
             kind: `key`,

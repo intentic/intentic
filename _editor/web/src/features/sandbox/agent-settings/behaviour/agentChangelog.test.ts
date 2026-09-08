@@ -1,20 +1,12 @@
 // @vitest-environment jsdom
-//
-// THE ONE CLAIM: a repo keeps a changelog only because somebody said so, per repo, and the switch writes exactly
-// that. Everything downstream of this setting, whether the commit drafter asks for a `Release-Note:` line at
-// all: reads the list this component writes, and the daemon runs on the user's own repositories, so a switch
-// that wrote the wrong name (or wrote every name) would turn a convention on in somebody else's project.
-//
-// Mounted rather than projected, on the same reasoning as agentRules.test.ts next door: what is under test is
-// the round trip a person performs: press the switch, read what the settings object now holds.
+// Pins that toggling a repo's changelog switch writes exactly that repo's name to `changelogRepos`, never
+// another. Mounted (not projected), since what's under test is the click-then-read round trip.
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-
-// Same app-wide singletons the sibling test stands in for: read at import time, before any test runs.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {
@@ -25,8 +17,7 @@ vi.mock(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
-// A workspace with a second repo in it, because the per-repo half of this is the half worth proving: one row
-// must not write the other's name.
+// Two repos, since the per-repo half is what's worth proving: one row must not write the other's name.
 vi.mock(`../../../workspace/explorer/useRepos`, () => ({
     useRepos: () => ({
         options: computed(() => [`root`, `vendor/widget`]),
@@ -69,7 +60,6 @@ const toggleAt = (host: HTMLElement, index: number): HTMLElement => {
 test(`every repo starts off: nothing changes in anybody's repository until they ask for it`, () => {
     const host = mount(AgentChangelog);
     expect(settings.value.changelogRepos).toEqual([]);
-    // One row per repo, "root" first.
     expect(host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)).toHaveLength(2);
 });
 

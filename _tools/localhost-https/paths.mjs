@@ -1,23 +1,6 @@
-/* Where the development root and the certificate under it live.
- *
- * BOTH LIVE OUTSIDE THE REPOSITORY, TOGETHER, in the OS's own per-user data directory, and the two halves of
- * that sentence fix two different bugs.
- *
- * OUTSIDE, because the root is the thing you put in a trust store, and a trust store belongs to a machine. A
- * root that lived beside the code would mean re-approving a browser warning for every clone, worktree and
- * sandbox workspace on the same laptop.
- *
- * TOGETHER, because a certificate is worthless without the root that signed it, and keeping the certificate in
- * the repository while the root moved out made them separable in the one way that matters. A workspace folder is
- * shared with every container mounted on it; each container has its own home directory, so each resolves its own
- * root. One agent running the installer inside a sandbox minted a root in the container, re-signed the
- * certificate in the shared folder with it, and left the host's dev server serving a chain whose root died with
- * the container: a browser warning with nothing on the machine able to explain it. Now a container writes only
- * its own pair in its own home, and the host's is untouched.
- *
- * The consequence is that no consumer can hardcode the location any more, since it differs per user and per OS.
- * Vite, the API and the tests import these constants instead; nothing writes a certificate into this package.
- */
+// Dev root and leaf live outside the repo, in the OS's per-user data directory, and together. Outside: the root belongs
+// to a trust store per machine, not per clone. Together: each container has its own home dir and mints or resigns its
+// own pair, not a shared one. Vite, the API and tests import these constants; nothing hardcodes the path.
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -39,6 +22,5 @@ export const CA_CRT = join(CA_DIR, `localhost-com-ca.crt`);
 export const LEAF_KEY = join(CA_DIR, `localhost.key`);
 export const LEAF_CRT = join(CA_DIR, `localhost.crt`);
 
-// The name the root goes into a trust store under, so `cert:trust` can find and replace its own earlier entry
-// rather than stacking duplicates.
+// Trust-store entry name; lets cert:trust replace its own earlier entry instead of stacking duplicates.
 export const CA_NICKNAME = `intentic development`;

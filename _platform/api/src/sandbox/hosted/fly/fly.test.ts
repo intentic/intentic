@@ -14,7 +14,7 @@ import {
     updateMachine,
 } from "./fly.js";
 
-// The fetch stub: route by method + URL substring, record calls for payload assertions.
+// Routes by method + URL substring; records each call for payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
@@ -58,7 +58,7 @@ describe(`fly`, () => {
             },
         ]);
         expect(await createVolume(`tok`, `intentic-sbx-abc`, `iad`, 20)).toEqual({ volumeId: `vol_1` });
-        // The instance id is the version this create made: what a build row records to tell its builder's run apart.
+        // instanceId is what a build row records to distinguish builder runs.
         expect(await createMachine(`tok`, `intentic-sbx-abc`, { name: `intentic-sbx-abc`, region: `iad`, config })).toEqual({
             machineId: `mach_1`,
             instanceId: `inst_1`,
@@ -90,9 +90,6 @@ describe(`fly`, () => {
         expect(calls).toHaveLength(2);
     });
 
-    /* THE OUTAGE THIS PINS SHUT: posting `skip_launch: true` and starting the machine afterwards raced Fly's
-     * own `replacing` state and lost every time (412 "machine getting replaced"), so no warm machine was ever
-     * claimable and every sign-up paid the cold build. The launch must ride with the config. */
     it(`launches the machine with the replaced config, never as a separate start`, async () => {
         const config = flyMachineConfig({
             name: `app`,
@@ -106,14 +103,9 @@ describe(`fly`, () => {
         expect(calls[0]?.body).toEqual({ config });
     });
 
-    /* A DEADLINE ON EVERY CALL, and the one property that makes it safe to have. Node's fetch has none, so a
-     * connection Fly never closed used to hold its caller forever — a browser's wake, and the daily sweep that
-     * runs every hosted reconcile in sequence while holding the jobs advisory lock. The verdict must be "could
-     * not ask", never "it is gone": a status-less FlyError is what keeps `isFlyGone` false, and with it the pool
-     * keeps its stock, the meter leaves its stretch open, and the reaper destroys nothing. */
     it(`fails a hung Fly call as a status-less FlyError, so nothing reads it as "gone"`, async () => {
         vi.stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
-            // What `AbortSignal.timeout` produces once it fires, which is what undici rejects with.
+            // What AbortSignal.timeout produces when it fires; undici rejects with this shape.
             const aborted = new Error(`The operation was aborted due to timeout`);
             aborted.name = `TimeoutError`;
             expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -136,11 +128,8 @@ describe(`fly`, () => {
         await expect(createApp(`tok`, `intentic`, `app`)).rejects.toThrow(/HOSTED_FLY_API_TOKEN/);
     });
 
-    /* "THERE ARE NO MORE MACHINES", told apart from every other refusal, because everything above answers it
-     * differently: the lane says so in plain words instead of handing somebody a gateway error, the pool stops
-     * building into a wall, and the admins get mail. Matched on what Fly says, since they publish no status for
-     * it and the wording differs by call — the org allowance, the region's hardware and a volume that cannot be
-     * placed are all the same fact to a reader waiting for a sandbox. */
+    // isFlyCapacity matches on Fly's error text, since it has no status code for out-of-capacity refusals across org,
+    // region, and volume placement.
     describe(`isFlyCapacity`, () => {
         it(`recognises the provider having nothing left, however it says it`, async () => {
             stubFetch([
@@ -174,8 +163,7 @@ describe(`fly`, () => {
             const gone = await getMachine(`tok`, `app`, `m1`).catch((error: unknown) => error);
             expect(isFlyCapacity(rejected)).toBe(false);
             expect(isFlyCapacity(gone)).toBe(false);
-            /* AND NEVER A CALL THAT DID NOT LAND. A timeout carries no status, and reading "we could not ask"
-             * as "we are full" would take the lane off a page over one bad minute at the provider. */
+            // A timeout carries no status text and must never be read as a capacity refusal.
             expect(isFlyCapacity(new FlyError(`Fly did not answer POST /machines within 30s`))).toBe(false);
         });
     });

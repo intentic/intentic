@@ -22,9 +22,8 @@ import { extensionHandler } from "./extension.handler.js";
 const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
-// A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.handler.integration.test.ts pattern).
-// `stopped` records ctx.serviceProcesses.stop calls for the remove/update quiesce tests; `stored` is the capability store
-// the update path reads the OUTGOING config from (empty ⇒ a first install).
+// Ctx exposing only what extensionHandler touches, over a fresh temp workspace. `stopped` records serviceProcesses.stop
+// calls; `stored` is what the update path reads the outgoing config from (empty means a first install).
 const tempCtx = (): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability> } => {
     const root = mkdtempSync(join(tmpdir(), "extension-cap-"));
     const stopped: string[] = [];
@@ -49,7 +48,7 @@ const MANIFEST = {
     contributes: { agent: {}, processes: [{ name: "worker", command: "node worker.js" }] },
 };
 
-// A local "remote" carrying an intentic extension; `commit` returns the FULL sha (the config schema pins on it).
+// A local "remote" holding an intentic extension; returns the full sha, which the schema requires.
 const fixtureRepo = async (manifest: object | undefined, withEntry: boolean): Promise<{ url: string; sha: string }> => {
     const dir = mkdtempSync(join(tmpdir(), "extension-remote-"));
     await git(dir, "init", "-q");
@@ -68,7 +67,6 @@ const fixtureRepo = async (manifest: object | undefined, withEntry: boolean): Pr
 
 const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     for await (const _ of gen) {
-        // consume the apply frames
     }
 };
 
@@ -107,7 +105,7 @@ test("remove stops the manifest's declared processes, then deletes the checkout"
     expect(await extensionHandler.status(ctx, "demo", config)).toEqual({ state: "inactive" });
 });
 
-// A second commit on the fixture "remote": what an author publishing an update looks like to the handler.
+// A second commit on the fixture remote: what an author's published update looks like to the handler.
 const publishUpdate = async (url: string, manifest: object): Promise<string> => {
     await writeWorkspaceFile(join(url, "intentic-extension.json"), JSON.stringify(manifest));
     await git(url, "add", "-A");
@@ -121,15 +119,12 @@ test("an update quiesces the outgoing checkout's processes and keeps it one vers
     const v1 = { url: remote.url, ref: remote.sha };
     await drain(extensionHandler.apply(ctx, "demo", v1));
     stored.set("demo", { id: "demo", kind: "extension", config: v1 });
-    // A first install quiesced nothing: there was nothing running to stop.
     expect(stopped).toEqual([]);
 
     const sha2 = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0" });
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: sha2 }));
 
-    // The OLD manifest's declared process was stopped at the swap: the post-apply seam restarts on new code.
     expect(stopped).toEqual(["ext-demo-worker"]);
-    // The live checkout is the update; the outgoing version is kept one back, revert's whole subject.
     expect(JSON.parse((await readWorkspaceFile(join(extensionDir(root, "demo"), "intentic-extension.json")))!).version).toBe("1.1.0");
     expect(JSON.parse((await readWorkspaceFile(join(previousDir(extensionsRoot(root), "demo"), "intentic-extension.json")))!).version).toBe("1.0.0");
 });
@@ -152,11 +147,11 @@ test("a broken update never replaces the working install: the old version stays 
     await drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: remote.sha }));
     stored.set("demo", { id: "demo", kind: "extension", config: { url: remote.url, ref: remote.sha } });
 
-    // The author ships a release whose manifest names an entry that isn't committed.
+    // "broken" means a manifest naming dist/missing.js, a file never committed.
     const broken = await publishUpdate(remote.url, { ...MANIFEST, version: "1.1.0", entry: "dist/missing.js" });
     await expect(drain(extensionHandler.apply(ctx, "demo", { url: remote.url, ref: broken }))).rejects.toThrow(/prebuilt bundle/);
 
-    // Validation failed BEFORE the quiesce: nothing was stopped, and the working version is untouched.
+    // Validation fails before the quiesce step, so nothing here was ever stopped.
     expect(stopped).toEqual([]);
     expect(JSON.parse((await readWorkspaceFile(join(extensionDir(root, "demo"), "intentic-extension.json")))!).version).toBe("1.0.0");
 });

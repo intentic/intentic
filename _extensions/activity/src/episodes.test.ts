@@ -3,16 +3,15 @@ import { formatDayMonth } from "@intentic/extension-ui/format";
 import { expect, test } from "vitest";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
 
-/* The grouping IS the feature: a wrong join here renders somebody else's turn under your Discord bot, which is
- * worse than the flat list it replaced. Fixtures are the shapes real appends produce (agent.routes.ts's record(),
- * outbound.ts's sniffer, listeners.ts's inbound), including the two that made the old view unreadable: a
- * turn.started that has no sessionId yet, and a turn whose title only exists by the time it completes. */
+// Fixtures mirror real event shapes: agent.routes.ts's record(), outbound.ts's sniffer, listeners.ts's inbound.
+// Includes a turn.started with no sessionId yet and a turn titled only at completion, the shapes that broke the old
+// view.
 
 const at = (minutes: number): number => Date.UTC(2026, 7, 2, 12, 0, 0) + minutes * 60_000;
 
 const event = (fields: Partial<ActivityEvent> & Pick<ActivityEvent, "id" | "at" | "direction" | "type">): ActivityEvent => fields;
 
-// One turn as the daemon writes it, newest first: the order /activity serves.
+// One turn's events as the daemon writes and serves them: newest first.
 const TURN: ActivityEvent[] = [
     event({
         id: `e4`,
@@ -28,8 +27,7 @@ const TURN: ActivityEvent[] = [
     }),
     event({ id: `e3`, at: at(3), direction: `out`, type: `message.send`, provider: `discord`, turnId: `t1`, channelId: `999`, content: `on it` }),
     event({ id: `e2`, at: at(2), direction: `out`, type: `messages.read`, provider: `discord`, turnId: `t1`, channelId: `999` }),
-    // The prompt-bearing mark: no sessionId (the runtime has not reported one) and no title yet (the auto-namer
-    // is still running). Both absences are why the log had to grow turnId.
+    // No sessionId or title yet: the reasons the log had to grow turnId.
     event({
         id: `e1`,
         at: at(0),
@@ -58,7 +56,6 @@ test("a turn's lifecycle marks and its outbound calls collapse into one episode 
         costUsd: 7.24,
         outbound: 2,
     });
-    // Every raw row stays reachable, oldest first: collapsing must not mean discarding.
     expect(episode?.events.map((entry) => entry.id)).toEqual([`e1`, `e2`, `e3`, `e4`]);
 });
 
@@ -67,10 +64,8 @@ test("a titleless turn falls back to the prompt's first line, not to a uuid", ()
     expect(toEpisodes(untitled)[0]?.label).toBe(`Go for it.`);
 });
 
-/* The row previews `detail` under the headline only where `titled` says the headline came from somewhere else.
- * It cannot decide that by comparing the two: a headline is a PREFIX of its detail, so a prompt that runs past
- * one line or past the 120-character clip is not equal to its own clipping, and the row printed the same
- * sentence twice, once truncated and once whole. */
+// `titled` can't be inferred by comparing label to detail: a headline is a prefix of its own detail once clipped or
+// wrapped, never exactly equal.
 test("only a turn named by its conversation is `titled`, whatever the prompt's length or shape", () => {
     expect(toEpisodes(TURN)[0]).toMatchObject({ titled: true, label: `Redesign the activity view`, detail: `Go for it.` });
 
@@ -78,8 +73,7 @@ test("only a turn named by its conversation is `titled`, whatever the prompt's l
         event({ id: `e1`, at: at(0), direction: `system`, type: `turn.started`, provider: `claude`, turnId: `t1`, content }),
     ];
 
-    // The two shapes that defeated the old `detail !== label` guard: a clipped prompt and a multi-line one. Both
-    // leave label a strict PREFIX of detail, so comparing them said "these differ, print both".
+    // Two shapes where label is a strict prefix of detail: a clipped prompt and a multi-line one.
     const clipped = toEpisodes(prompted(`x`.repeat(200)))[0];
     expect(clipped?.titled).toBeUndefined();
     expect(clipped?.label).not.toBe(clipped?.detail);
@@ -89,7 +83,7 @@ test("only a turn named by its conversation is `titled`, whatever the prompt's l
     expect(multiline?.label).toBe(`first`);
     expect(multiline?.detail).toBe(`first\nsecond`);
 
-    // The case the old guard did handle, kept honest: one short line is label AND detail, and stays unpreviewed.
+    // One short line: label equals detail exactly, so it stays unpreviewed.
     const short = toEpisodes(prompted(`Go for it.`))[0];
     expect(short?.titled).toBeUndefined();
     expect(short).toMatchObject({ label: `Go for it.`, detail: `Go for it.` });
@@ -133,8 +127,7 @@ test("events written before turns carried an id stay one episode each, labelled 
     const legacy = TURN.map(({ turnId: _turnId, ...rest }) => rest as ActivityEvent);
     const episodes = toEpisodes(legacy);
     expect(episodes).toHaveLength(4);
-    // The prompt-bearing mark leads with the prompt and demotes "Turn started" to a chip; the bare completion has
-    // no content and so is named by its type.
+    // The completion has no content, so it's named by type; the others use their content as label.
     expect(episodes.map(({ label, typeName }) => ({ label, typeName }))).toEqual([
         { label: `Turn completed`, typeName: undefined },
         { label: `on it`, typeName: `Message sent` },

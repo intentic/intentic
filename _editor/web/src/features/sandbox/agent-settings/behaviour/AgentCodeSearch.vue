@@ -10,26 +10,17 @@ import { verdictsOf } from "../../usage/savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
 
-/* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Three settings that compose and are easy to confuse, which
- * is exactly why they share a group: the first teaches the assistant to search with iq instead of grep, the
- * second hands over the shape of the project before there is a question to ask, the third keeps the files no
- * search can see into (docx, pdf, images, audio) pre-rendered as text so both of the others reach them.
- *
- * Ordered by when each one happens: search on demand, the map that comes before there is anything to search
- * for, and the background pass that runs before either. */
+// Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
+// a question), and document shadows (a background pass rendering non-text files so both others can reach them).
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
 
-// Search teaching is session state, so this holdout flips whole conversations and never individual turns.
+// Session state: the holdout flips whole conversations, never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 
-/* WHAT THE EXPERIMENT SAYS SO FAR, worded exactly as the Savings card words it: the two screens read the same
- * report and a settings row that paraphrased it would be a second opinion.
- *
- * Through `verdictsOf` rather than mapping every metric as a peer: this experiment reports TWO readings of one
- * subject (searches per turn, and searches before the first file), and drawn at equal weight they read as two
- * findings. <MeasurementPanel> gives the first the headline and the second a line under it. */
+// Mirrors how the Savings card reports the same experiment, via `verdictsOf` rather than treating each metric
+// as a peer: two readings of one subject would otherwise read as two findings.
 const readingsOf = (experiment: TurnExperiment | undefined): PanelReading[] => {
     if (experiment === undefined) {
         return [];
@@ -43,8 +34,7 @@ const readingsOf = (experiment: TurnExperiment | undefined): PanelReading[] => {
 
 const searchReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.search));
 
-/* The map's holdout flips whole conversations for the same reason the teaching's does, and is READ on their
- * opening turns, which is the turn the note was sent to. Same two arms, same shape, one function. */
+// Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
 const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map));
 </script>
@@ -53,10 +43,11 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
     <RowGroup label="Code search">
         <template #info><CodeSearchInfo /></template>
 
-        <!-- iq code search: loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
-             of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
-        <!-- `spine`: the measurement block hangs off this row's name rather than starting at the group's edge.
-             See <Row>'s own note for why the rule sits under the mark and not down the text column. -->
+        <!--
+            Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. Opt-in per sandbox;
+            the browser Search box always uses iq.
+        -->
+        <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" title="iq code search" description="Use iq search CLI instead of grep/find/glob.">
             <template #control>
                 <ToggleSwitch
@@ -65,10 +56,7 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
                     @update:model-value="(value: boolean) => patch({ iqSearch: value })"
                 />
             </template>
-            <!-- The measurement block for the search teaching experiment, and the same one line about it. Why the arm
-                 has to stay pinned for a whole conversation is a paragraph, and it now lives in the (i) where a
-                 paragraph can be read: on the row it was three lines of 11px text between a switch and its
-                 own result. -->
+            <!-- The rationale for why the arm must stay pinned for a whole conversation lives in the info tooltip, not inline. -->
             <template v-if="settings?.iqSearch === true" #below>
                 <MeasurementPanel
                     :percent="iqSearchHoldoutPercent"
@@ -81,12 +69,10 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
             </template>
         </Row>
 
-        <!-- The project map: one question earlier than search. Search answers \"where is this thing\"; this
-             answers \"what is this and which part of it am I in\", which every new conversation has to buy for
-             itself and, left to itself, buys with a folder listing. Read off disk each time a conversation
-             opens rather than written down anywhere, which is the whole reason it is a switch here and not a
-             paragraph somebody maintains by hand. -->
-        <!-- `spine` for the same reason its neighbour has one: the measurement block hangs off this row's name. -->
+        <!--
+            Answers "what is this and where am I in it", one question earlier than search. Read off disk on each new
+            conversation rather than a maintained document, hence a switch rather than a file kept in sync by hand.
+        -->
         <Row spine icon="sitemap" title="Project map" description="Provide project structure overview to new conversations.">
             <template #control>
                 <ToggleSwitch
@@ -95,14 +81,10 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-            <!-- THIS ROW USED TO SAY A SPLIT COULD NOT ANSWER, and the reasoning was half right: what the map
-                 removes is one or two calls on a conversation's first message, which is too small a slice of a
-                 turn for any cost or search figure to resolve. What that missed is that the map is not a
-                 quantity of searching, it is a CHOICE of one, and a choice shows up in a rate: measured over
-                 468 mapped conversations of this workspace against 497 unmapped ones, searches before the
-                 first file did not move (+7.6% ±17.6pp) while the share that opened by listing a directory
-                 fell from 46.3% to 32.1%. So the arms are read on the opening turn, and on the listings rather
-                 than the searches. The method itself is a paragraph and lives in the (i). -->
+            <!--
+                The map changes a choice (list vs. search), not a quantity of searching, so the arms are read by whether the
+                opening turn lists a directory, not by search count. Full method lives in the info tooltip.
+            -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
                     :percent="mapHoldoutPercent"
@@ -115,10 +97,10 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
             </template>
         </Row>
 
-        <!-- Document shadows: the background pass keeping every binary file (docx, pdf, images, audio)
-             pre-rendered as markdown the moment it lands, so a mid-task read costs a file open instead of a
-             parse. The fileq CLI itself is always available (its skill governs whether the assistant is told);
-             this switch is only about spending background CPU unasked, which is the owner's call. -->
+        <!--
+            Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a
+            later read is a file open, not a parse. Only gates background CPU spend; fileq itself is always available.
+        -->
         <Row icon="file" title="Document shadows" description="Keep documents, images and audio pre-rendered as text, updated as files change.">
             <template #control>
                 <ToggleSwitch

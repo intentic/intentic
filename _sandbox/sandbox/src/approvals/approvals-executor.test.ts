@@ -2,10 +2,8 @@ import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 
-/* The executor's two jobs, tested where getting them wrong is expensive: WHEN it wakes, and WHICH door each
- * item goes through. Both are decided from the queue on disk rather than from anything held in memory, so the
- * fake below is a real store's worth of behaviour: read, write, read back, and nothing else is stubbed
- * except the two doors themselves. */
+// Tests when the executor wakes and which door each item goes through, both decided from the queue on disk.
+// The fake store below behaves like the real one (read, write, read back); only the two doors themselves are stubbed.
 
 const startTurn = vi.fn(async () => undefined);
 const sendDiscord = vi.fn(async () => ({ url: "https://discord.com/channels/1/2/3" }));
@@ -14,8 +12,7 @@ vi.mock("../agent/routes/agent.routes.js", () => ({ streamAgent: vi.fn() }));
 vi.mock("../agent/run/turn/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
 vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: vi.fn() }));
 vi.mock("./discord-post.js", async (importOriginal) => ({
-    // The real predicate, whether a post can go the fast way is part of what is under test: with only the
-    // network call replaced.
+    // Whether a post can go the fast way is itself under test; only the network call is replaced.
     ...(await importOriginal<typeof import("./discord-post.js")>()),
     postToDiscord: (...args: unknown[]) => sendDiscord(...(args as [])),
 }));
@@ -24,8 +21,7 @@ const { createApprovalsExecutor, nextDueAt } = await import("./approvals-executo
 
 const NOW = 1_700_000_000_000;
 
-// `actsAs` is on the default because the default platform is a browser one, and a browser post without a
-// persona is not the ordinary case: it is its own failure, tested on its own below.
+// `actsAs` defaults on since a browser post with no persona is its own failure case, tested separately below.
 const post = (overrides: Partial<PostApprovalSummary> & { id: string }): PostApprovalSummary => ({
     kind: "post",
     platform: "reddit",
@@ -44,7 +40,7 @@ const action = (overrides: Partial<ActionApprovalSummary> & { id: string }): Act
     ...overrides,
 });
 
-// The turn a call to startConversationTurn was given: the third argument, which is the whole request.
+// The third argument to a startConversationTurn call: the whole request.
 const turnOf = (call: number): { prompt: string; actsAs?: string; conversationId: string; title?: string } =>
     (startTurn.mock.calls[call] as unknown as [unknown, unknown, { prompt: string; actsAs?: string; conversationId: string; title?: string }])[2];
 
@@ -58,8 +54,7 @@ const servicesWith = (...seed: ApprovalSummary[]) => {
             remove: async (id: string) => rows.delete(id),
         },
         capabilities: { get: async () => ({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } }) },
-        // The cast the executor checks `actsAs` against: the fixture's default face plus the ones the
-        // multi-persona tests use.
+        // The cast the executor checks `actsAs` against: the default face plus the ones the multi-persona tests use.
         personas: {
             list: async () => [
                 { id: "poster", capabilities: [] },
@@ -81,8 +76,7 @@ beforeEach(() => {
 test("the next wake is the soonest approved item, and there is none when nothing is approved", () => {
     expect(nextDueAt([post({ id: "a" }), post({ id: "b", status: "done" })], NOW)).toBeUndefined();
     expect(nextDueAt([post({ id: "a", status: "approved", scheduledAt: NOW + 5_000 })], NOW)).toBe(NOW + 5_000);
-    // Soonest wins, and anything already past due answers `now`: a queue that came due while the daemon was
-    // down has to go out on the next arm, not at whatever future time happens to sort first.
+    // Soonest wins; anything already past due answers `now`, so a stale queue fires on the next arm, not later.
     expect(
         nextDueAt(
             [post({ id: "a", status: "approved", scheduledAt: NOW + 5_000 }), post({ id: "b", status: "approved", scheduledAt: NOW - 60_000 })],
@@ -112,8 +106,7 @@ test("a browser-only platform gets one turn for the whole batch", async () => {
     expect(turnOf(0).prompt).toContain("r1.json");
     expect(turnOf(0).prompt).toContain("r2.json");
     expect(turnOf(0).prompt).toContain(".intentic/config/approvals/");
-    // And it wakes wearing the face the posts named. Without this the turn is unattended and unpinned, which
-    // is denied every logged-in account, so it could not reach the Reddit login these posts need.
+    // It wakes wearing the face the posts named; unpinned, it would be denied the Reddit login these posts need.
     expect(turnOf(0).actsAs).toBe("poster");
     // Marked before the turn starts: a turn that dies must leave a stuck item, never a due one.
     expect(services.rows.get("r1")?.status).toBe("running");
@@ -122,16 +115,14 @@ test("a browser-only platform gets one turn for the whole batch", async () => {
 test("a browser post that names no persona is failed unsent, with a reason the owner can act on", async () => {
     const services = servicesWith(post({ id: "orphan", actsAs: undefined, status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
-    // No turn at all. Waking one would wake it without accounts, and it would report the login as missing:
-    // which is exactly the wrong sentence to leave in front of the owner.
+    // No turn at all: waking one with no account would report a missing login, the wrong message to show the owner.
     expect(startTurn).not.toHaveBeenCalled();
     expect(services.rows.get("orphan")?.status).toBe("failed");
     expect(services.rows.get("orphan")?.error).toContain("actsAs");
 });
 
 test("a persona no card carries is failed unsent too, and named in the reason", async () => {
-    // A card renamed on one side only, or a workspace cloned before its personas were committed. The turn would
-    // arrive with no account at all, so this is the same failure as naming nobody: said in the queue instead.
+    // A card renamed on one side, or cloned before personas committed, is the same failure as naming nobody.
     const services = servicesWith(post({ id: "ghost", actsAs: "deleted-card", status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
     expect(startTurn).not.toHaveBeenCalled();
@@ -149,8 +140,7 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(startTurn).toHaveBeenCalledTimes(2);
     const byFace = new Map([0, 1].map((call) => [turnOf(call).actsAs, turnOf(call)]));
     expect([...byFace.keys()].toSorted()).toEqual(["alice", "bob"]);
-    // Alice's turn carries both of hers and none of Bob's: a turn wears one face, so a batch that mixed them
-    // would hand a post to an account that cannot send it.
+    // A turn wears one face: mixing posts across faces would hand one to an account that cannot send it.
     expect(byFace.get("alice")?.prompt).toContain("a2.json");
     expect(byFace.get("alice")?.prompt).not.toContain("b1.json");
     expect(byFace.get("bob")?.prompt).toContain("b1.json");
@@ -169,8 +159,7 @@ test("a Discord post needs no persona: the daemon sends it with a stored key, no
 
 test("a Discord post the fast path cannot carry falls back to the turn instead of failing", async () => {
     const services = servicesWith(
-        // An attachment needs a multipart upload, and a channel named rather than numbered needs a lookup:
-        // both are work only the turn can do.
+        // An attachment needs a multipart upload; a named (not numbered) channel needs a lookup: turn-only work.
         post({ id: "media", platform: "discord", target: "123456789", media: ["a.png"], status: "approved", scheduledAt: NOW - 1 }),
         post({ id: "named", platform: "discord", target: "#releases", status: "approved", scheduledAt: NOW - 1 }),
     );
@@ -217,8 +206,7 @@ test("an action naming a persona nobody carries is failed like a post would be",
 });
 
 test("posts and actions due together are separate turns, even under the same face", async () => {
-    // Two briefs, two turns: a publish turn is told to post exact words, an action turn to follow instructions,
-    // and one prompt cannot honestly say both.
+    // Two briefs, two turns: a publish turn posts exact words, an action turn follows instructions.
     const services = servicesWith(
         post({ id: "r1", actsAs: "alice", status: "approved", scheduledAt: NOW - 1 }),
         action({ id: "act", actsAs: "alice" }),

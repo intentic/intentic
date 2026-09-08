@@ -1,25 +1,6 @@
-/* WHAT THE PROJECT MAP DID, RECOMPUTED FROM THE TRANSCRIPTS. The measuring behind `bench:map`, kept apart from
- * the printing so it can be imported by a test: a module that scanned a whole corpus on import could not be.
- * map-stats.ts says how to read what this returns.
- *
- * WHY IT EXISTS. The map is a note injected into a conversation's opening message, and until the holdout has
- * run for a fortnight the ledger cannot say anything about it. The transcripts can, today, because the
- * TREATMENT LABELS ITSELF: the note rides the user message, so a session that got one has the map's own header
- * sitting in its first message and a session that did not, does not. That makes every past conversation a
- * sample, and it is the only reading of the map that exists before the arms fill up.
- *
- * IT IS NOT THE HOLDOUT AND MUST NOT BE READ AS ONE. Sessions that carry a map differ from sessions that do not
- * by more than the map: mostly by when they ran, and forks and continuations never carry one. Two populations
- * compared across a change of era is evidence, not a controlled experiment, and the arms (usage/turn-experiments.ts)
- * are what settle it. What this answers that the arms cannot: whether the map's PAYLOAD is worth its lines,
- * which is a question about the note's content rather than about anybody's behaviour.
- *
- * THE PREDICATES ARE THE PRODUCTION ONES, imported rather than reimplemented, so a figure quoted for the map
- * cannot drift away from what the daemon counts. `isRootListing` in particular: this file and the ledger score
- * a directory listing the same way or the two numbers are about different things.
- *
- * SCOPE. Claude Code transcripts only. Codex, Grok, Gemini, Cursor, Pi and ACP turns keep their history
- * elsewhere, so every share here is a share OF THE CLAUDE ARM, even though the map itself reaches all six. */
+// Recomputes what the project map did, from transcripts, separate from printing so a test can import it. Not the
+// holdout: populations differ by era too, so this is evidence about the map's payload, not a controlled comparison.
+// Predicates are the production ones, so figures cannot drift from the daemon's; scope is Claude Code transcripts only.
 
 import { readFileSync } from "node:fs";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -29,8 +10,7 @@ import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/tur
 import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/prompt/workspace-map.js";
 import { transcriptFiles } from "./transcripts.js";
 
-/* The workspace root as the AGENT saw it, which is what the paths in these transcripts are written against and
- * what decides which listings were orientation. A corpus captured from another sandbox passes its own. */
+// Workspace root as the agent saw it; transcript paths are written against this root.
 export const DEFAULT_AGENT_ROOT = WORKSPACE_ROOT;
 
 /* ---- the note, read back off the message it rode in on --------------------------------------------------- */
@@ -38,37 +18,26 @@ export const DEFAULT_AGENT_ROOT = WORKSPACE_ROOT;
 export interface MapNoteArea {
     readonly name: string;
     readonly files: number;
-    // Whether the row carried a line saying what the area is for. Absent for an area whose own files say nothing.
+    // Whether the area's row has a purpose line beneath it.
     readonly purpose: boolean;
     readonly here: boolean;
-    // A package inside an expanded area, rather than an area of the project.
+    // True for a package inside an expanded area, not a top-level area of the project.
     readonly child: boolean;
 }
 
 export interface MapNote {
     readonly chars: number;
-    /* The project the map described, root-relative, empty when the workspace itself was the project.
-     *
-     * It is here because an area name is PROJECT-relative while every path in a transcript is
-     * WORKSPACE-relative, and the two coincide only when the run started at the workspace root. Without it a
-     * conversation opened inside a repo has a map naming `_editor` and a session reading `intentic/_editor/…`,
-     * and every one of its files scores as outside the map: on this workspace that was 77 sessions read as
-     * misses, against a coverage figure of 39.6%. */
+    // Project name, root-relative; prefix area names with this before matching workspace-relative paths.
     readonly project: string;
     readonly areas: readonly MapNoteArea[];
-    // The area the run was standing in, or undefined when it was standing at the project root.
+    // Area the run was standing in; undefined when standing at the project root.
     readonly here: string | undefined;
-    // The note said it was leaving something out: areas past the budget, or a shed the renderer counted.
+    // True when the note omitted areas: past budget, or a count the renderer shed.
     readonly truncated: boolean;
 }
 
-/* THE NOTE'S STRUCTURE, which is what this anchors on. Its PROSE is not: the head has been three different
- * paragraphs in a month, and a parser that recognised the note by its opening sentence read every older
- * revision as a map with no areas at all and diluted every share below it silently, which is a statistics tool
- * failing in the one way statistics tools fail. The rows below have had the same shape throughout, because the
- * shape is what the renderer computes rather than what anyone writes.
- *
- * `SUMMARY_ROW` takes either separator for the same reason: the wording moved, the reading should not. */
+// Anchors on the rows' structure, not the note's prose, which has changed wording before; SUMMARY_ROW accepts either
+// separator for that reason.
 const AREA_ROW = /^ {2,6}(\S+) {2,}(\d+) files?\b(.*)$/;
 const PURPOSE_ROW = /^ {8,}\S/;
 const SUMMARY_ROW = /^(?:`(.+?)`|the workspace)[,—-] \d+ areas?/;
@@ -76,8 +45,7 @@ const STRUCTURAL = [AREA_ROW, PURPOSE_ROW, /^ {2}… and \d+ more$/, /^Also unde
 
 const structural = (line: string): boolean => STRUCTURAL.some((shape) => shape.test(line));
 
-// One area row, or undefined for a line that is not one. A purpose line is attached to the row above it by the
-// caller, which is the only place that knows what "above" was.
+// One area row, or undefined if the line is not one; purpose lines are attached by the caller, not here.
 const areaRowOf = (line: string): MapNoteArea | undefined => {
     const row = AREA_ROW.exec(line);
     if (row?.[1] === undefined || row[2] === undefined) {
@@ -88,16 +56,13 @@ const areaRowOf = (line: string): MapNoteArea | undefined => {
         files: Number(row[2]),
         purpose: false,
         here: row[3]?.includes("← you are here") === true,
-        // An expanded package is indented four further than an area of the project (workspace-map.ts areaBlock).
+        // Expanded package rows are indented four spaces more than a top-level area (workspace-map.ts areaBlock).
         child: line.startsWith("      "),
     };
 };
 
-/* The note's own lines: its header, whatever prose that revision opened with, and the rows, ending at the
- * first line after the rows that is neither blank nor one of them. That last line is the user's message.
- *
- * Undefined ⇒ no map here at all, or a header with no rows under it, which is not a note this can read and
- * must not be counted as a map with nothing in it. */
+// Header, opening prose, and rows, ending just before the first non-blank non-row line (the user's message). Undefined:
+// no map, or a header with no rows — not the same as a map listing nothing.
 const noteLinesOf = (message: string): string[] | undefined => {
     const start = message.indexOf(WORKSPACE_MAP_NOTE_HEADER);
     if (start === -1) {
@@ -147,7 +112,7 @@ export const parseMapNote = (message: string): MapNote | undefined => {
 
 /* ---- the corpus ------------------------------------------------------------------------------------------ */
 
-// The one frame shape this file rebuilds: a tool call as the daemon's ledger and predicates read it.
+// Tool-call frame shape rebuilt to match what the daemon's ledger and predicates read.
 type CallFrame = Extract<AgentEvent, { kind: "tool_call" }>;
 
 interface TranscriptLine {
@@ -160,16 +125,14 @@ interface TranscriptLine {
 export interface Session {
     readonly day: string;
     readonly note: MapNote | undefined;
-    // The OPENING turn's behaviour, scored by the daemon's own ledger, since that is the turn the map is sent
-    // to and the only one it could have changed. Plus what the turn reached for first, which no ledger keeps.
+    // Opening turn's behaviour, from the daemon's ledger, plus its first action (which no ledger keeps).
     readonly opening: TurnMetricsReading & { readonly firstAction: string | undefined };
-    // Paths the WHOLE session touched, resolved against the note's areas. Empty for a session that opened none.
+    // Paths the whole session touched, resolved against the note's areas; empty if it opened nothing.
     readonly touched: {
         readonly areas: readonly string[];
         readonly outside: number;
-        // The first file the session opened, and the listed area holding it. Both undefined for a session that
-        // opened none, which is not the same as one whose first file fell outside every area: a coverage share
-        // that counted those as misses would be reporting how often sessions read files.
+        // First file opened, and the area holding it; both undefined only if nothing was opened — distinct from a first
+        // file that fell outside every area.
         readonly firstFile: string | undefined;
         readonly firstArea: string | undefined;
         readonly entered: boolean;
@@ -186,13 +149,8 @@ const textOf = (content: readonly Record<string, unknown>[] | string | undefined
         .join("\n");
 };
 
-/* ONE SESSION, read to the end of its opening turn for behaviour and to the end of the file for coverage.
- *
- * The opening turn ends at the SECOND user message that carries no tool_result, which is the only turn
- * boundary this format has. Everything after it still counts toward which areas the session used, because a
- * map's area line is worth its characters if the session ever goes there, whichever turn it goes there on. */
-// The lines worth parsing: a user message, or an assistant line carrying a call. Everything else in a
-// transcript is prose, and JSON.parse over 3 GB of it is most of what a run of this costs.
+// Parses only lines that could hold a user message or a tool_use call; skipping the rest avoids JSON.parse over most of
+// a transcript.
 const eventOf = (line: string): TranscriptLine | undefined => {
     if (!line.includes(`"tool_use"`) && !line.includes(`"type":"user"`)) {
         return undefined;
@@ -204,16 +162,15 @@ const eventOf = (line: string): TranscriptLine | undefined => {
     }
 };
 
-// A real prompt, as opposed to a user line carrying tool results, which is the only turn boundary the format
-// has. Undefined for anything else.
+// A real prompt, not a user line carrying tool results — the only turn boundary this format has.
 const promptOf = (event: TranscriptLine): string | undefined => {
     const blocks = event.message?.content;
     const list = Array.isArray(blocks) ? blocks : [];
     return event.type === "user" && !list.some((block) => block["type"] === "tool_result") ? textOf(blocks) : undefined;
 };
 
-// One assistant line's calls, as the tool_call frames the daemon's own ledger reads. Building the frame rather
-// than a shape of this file's own is what lets the bench count with `createTurnMetrics` instead of a copy of it.
+// Rebuilds one assistant line's calls as tool_call frames, so createTurnMetrics can score them directly, without a
+// duplicate implementation.
 const callsOf = (event: TranscriptLine, agentRoot: string): CallFrame[] => {
     const blocks = event.message?.content;
     if (event.type !== "assistant" || !Array.isArray(blocks)) {
@@ -244,21 +201,12 @@ const callsOf = (event: TranscriptLine, agentRoot: string): CallFrame[] => {
 const firstActionOf = (call: CallFrame): string =>
     call.name === "Bash" && call.target !== undefined ? `bash:${(call.target.trim().split(/\s+/)[0] ?? "").split("/").pop()}` : call.name;
 
-/* ONE SESSION, read to the end of its opening turn for behaviour and to the end of the file for coverage.
- *
- * The opening turn ends at the SECOND real prompt. Everything after it still counts toward which areas the
- * session used, because a map's area line is worth its characters if the session ever goes there, whichever
- * turn it goes there on.
- *
- * THE OPENING TURN IS SCORED BY `createTurnMetrics`, the daemon's own ledger, fed frames rebuilt from the
- * transcript. So the corpus and the holdout report the same four numbers computed by the same code, and a
- * change to how a listing is recognised moves both or neither. */
-/* WHICH OF THE NOTE'S AREAS THE SESSION ACTUALLY WENT INTO. The deepest listed area that prefixes a path wins,
- * so an expanded package beats the area holding it, and a path under none of them is counted as outside: on
- * this workspace that is `.intentic/`, `refs/` and the dotfiles, which the map hides on purpose. */
+// Opening turn (behaviour) ends at the second real prompt; coverage reads to end of file. Scored by createTurnMetrics,
+// the daemon's own ledger, so corpus and holdout agree on the same numbers.
+// Deepest listed area whose prefix matches wins, so a nested package beats the area holding it; no match counts as
+// outside.
 const coverageOf = (note: MapNote | undefined, paths: readonly string[], files: readonly string[]): Session["touched"] => {
-    // Area names are project-relative and these paths are workspace-relative, so the project prefix goes back
-    // on before anything is compared. See MapNote.project.
+    // Re-adds the project prefix so area names (project-relative) match paths (workspace-relative).
     const prefix = note === undefined || note.project === "" ? "" : `${note.project}/`;
     const names = (note?.areas ?? []).map((area) => `${prefix}${area.name}`);
     const areaOf = (path: string): string | undefined =>
@@ -267,15 +215,8 @@ const coverageOf = (note: MapNote | undefined, paths: readonly string[], files: 
     return {
         areas: [...new Set(inside.filter((area) => area !== undefined))],
         outside: inside.filter((area) => area === undefined).length,
-        /* THE AREA HOLDING THE FIRST FILE THE SESSION OPENED, which is the map's aim: did the note name the
-         * place the session went to first.
-         *
-         * Files rather than every path a call carried, and that distinction cost a reading. A Grep's `path`
-         * argument is a place the session LOOKED, not a place it went, and counting those as the first
-         * destination read 39.4% over this workspace where the first file opened reads 98.1%: the same map,
-         * two questions, and only one of them is about where the session was heading.
-         *
-         * `entered` is the loose companion, over every path: did the note name anywhere the session ever went. */
+        // firstArea: area holding the first file opened (read/edit), not the first path any call carried — a Grep's
+        // `path` is looked at, not visited. `entered` is the loose version, over every path touched.
         firstFile: files[0],
         firstArea: files.length === 0 ? undefined : areaOf(files[0] ?? ""),
         entered: inside.some((area) => area !== undefined),
@@ -290,7 +231,7 @@ export const readSession = (file: string, agentRoot: string): Session | undefine
     let firstAction: string | undefined;
     const edited: string[] = [];
     const paths: string[] = [];
-    // Paths a call OPENED, as opposed to searched under: the destinations, in the order the session reached them.
+    // Paths a call opened, not searched under; the destinations, in the order reached.
     const files: string[] = [];
     // The opening turn's calls go to the ledger; every turn's paths go to the coverage reading.
     const noteCall = (call: CallFrame): void => {
@@ -305,7 +246,7 @@ export const readSession = (file: string, agentRoot: string): Session | undefine
         metrics.note(call);
     };
     for (const line of readFileSync(file, "utf8").split("\n")) {
-        // A subagent's transcript is not a session: it was never sent a map and never asked to open one.
+        // A subagent's transcript is not a session: never sent a map.
         if (line.includes(`"isSidechain":true`)) {
             return undefined;
         }
@@ -351,9 +292,8 @@ const openingOf = (sessions: readonly Session[]) => {
         openedWithListing: share(sessions.filter((session) => session.opening.openingListings > 0).length, sessions.length),
         searchesBeforeFirstFile: round1(mean(sessions.map((session) => session.opening.openingSearches))),
         searchesPerOpeningTurn: round1(mean(sessions.map((session) => session.opening.searchCalls))),
-        /* How far the turn walked before touching a file it went on to edit, over the sessions that edited
-         * anything: the value reading, and the one that says whether the map bought targeting rather than
-         * only compliance. `reached` is how many sessions could answer at all. */
+        // Calls before touching a file later edited, over sessions that edited anything — whether the map bought
+        // targeting, not just compliance. `reached` counts how many sessions could answer at all.
         callsBeforeTarget: round1(mean(sessions.flatMap((session) => session.opening.callsBeforeTarget ?? []))),
         reached: sessions.filter((session) => session.opening.callsBeforeTarget !== undefined).length,
         firstActions: Object.fromEntries(
@@ -365,13 +305,12 @@ const openingOf = (sessions: readonly Session[]) => {
     };
 };
 
-// An area as a path from the workspace root, which is the space every reading here is in. See MapNote.project.
+// Area name as a path from the workspace root, the space every reading here uses.
 const fullName = (note: MapNote | undefined, area: MapNoteArea): string =>
     note === undefined || note.project === "" ? area.name : `${note.project}/${area.name}`;
 
-/* WHETHER THE NOTE'S LINES WERE WORTH THEIR CHARACTERS, which is the reading the holdout cannot produce. An
- * area line is paid for by every session that receives it and used by the ones that go there, so the ratio of
- * the two says where the map is spending and where it is answering. */
+// Whether the note's lines earned their characters: an area line is paid for by every session that gets it, used by the
+// ones that go there.
 const payloadOf = (sessions: readonly Session[]) => {
     const withNote = sessions.filter((session) => session.note !== undefined);
     const worked = withNote.filter((session) => session.touched.areas.length + session.touched.outside > 0);
@@ -389,13 +328,11 @@ const payloadOf = (sessions: readonly Session[]) => {
     }
     const usedArea = (session: Session, name: string | undefined): MapNoteArea | undefined =>
         session.note?.areas.find((area) => fullName(session.note, area) === name);
-    // Coverage is asked of the sessions that opened a file, since a session that opened none has no destination
-    // for the map to have named, and counting it as a miss would report how often sessions read files.
+    // Coverage counts only sessions that opened a file; one that opened none has no destination to have named.
     const opened = worked.filter((session) => session.touched.firstFile !== undefined);
     const landed = opened.filter((session) => session.touched.firstArea !== undefined);
     return {
-        // Two coverage readings, and the gap between them is the finding: whether the note named where the
-        // session went FIRST, and whether it named anywhere the session went at all.
+        // Two readings: named the session's first destination, vs named anywhere it went at all.
         everEnteredAListedArea: share(worked.filter((session) => session.touched.entered).length, worked.length),
         openedAFile: opened.length,
         worked: worked.length,
@@ -407,11 +344,10 @@ const payloadOf = (sessions: readonly Session[]) => {
             worked.reduce((sum, session) => sum + (session.note?.areas.length ?? 0), 0),
         ),
         firstFileInsideAListedArea: share(landed.length, worked.length),
-        // Of the areas sessions actually entered, how many had a line saying what they were for. The healthy
-        // shape: a manifest edit that drops a description takes a purpose line away silently, and this sees it.
+        // Share of entered areas that had a purpose line; a dropped manifest description shows up here.
         purposeOnTheAreaUsed: share(landed.filter((session) => usedArea(session, session.touched.firstArea)?.purpose === true).length, landed.length),
         purposeOnAnyRow: share(rows.filter((area) => area.purpose).length, rows.length),
-        // The zoom: how often the run was standing inside an area at all, which is what expands a container.
+        // How often the run stood inside an area, which is what expands a container in the note.
         standingInAnArea: share(withNote.filter((session) => session.note?.here !== undefined).length, withNote.length),
         expandedRows: share(rows.filter((area) => area.child).length, rows.length),
         omittedSomething: share(withNote.filter((session) => session.note?.truncated === true).length, withNote.length),
@@ -442,9 +378,7 @@ export const mapStats = (root: string, options: MapStatsOptions = {}) => {
     return {
         root,
         corpus: { sessions: sessions.length, mapped: mapped.length, from: days[0] ?? "", to: days.at(-1) ?? "" },
-        /* The behaviour comparison, and the figures it stood at when this was written, so drift is visible at a
-         * glance. Read `claimed` as a date rather than as a target: nothing fails when it moves, but a number
-         * that has moved is an invitation to go and read the mechanism. */
+        // Snapshot from when this was written; read as a date, not a target, so a moved number isn't a failure.
         opening: {
             claimed: "2026-09-05: mapped 28.3% opened with a listing, unmapped 44.7%, and searches did not move (1.5 either way)",
             mapped: openingOf(mapped),

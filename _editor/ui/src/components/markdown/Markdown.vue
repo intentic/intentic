@@ -1,27 +1,8 @@
-<!-- Rendered markdown. The design system's ONE prose surface: sanitized HTML (see markdown/render.ts) styled
-     by prose.css, with Shiki-coloured fenced blocks whose copy buttons are wired here.
-
-     A component rather than a bare `v-html`, because every caller otherwise has to remember the same three
-     things: sanitize before binding, carry the `md-prose` class, and delegate the code-block copy, on the
-     press as well as the click, since a re-render between the two loses the button (see copyCodeFromEvent);
-     the blocks live inside v-html, so they can hold no component of their own. Extension views get it through
-     the kit, so third-party UI renders agent prose exactly like the chat does.
-
-     Type scale and measure come from prose.css's `--prose-*` tokens: set them on this element to tune a
-     surface (`style="--prose-measure: 68ch"`); attributes fall through to the root.
-
-     TWO SHAPES, ONE ROOT. A document with figure fences (markdown/figures.ts) cannot be one v-html string:
-     a figure is a component. So such a document renders as alternating prose runs and figures, while a document
-     without any renders EXACTLY as it always did: one element, one v-html, byte-identical DOM. That is not an
-     optimisation, it is the safety property: `.md-prose > :first-child` is a direct-child rule, so quietly
-     wrapping every chat bubble's prose in a run div would have shifted the spacing on every surface in the app.
-     Attribute fallthrough is explicit (`inheritAttrs: false` + `v-bind="$attrs"`) because the two shapes are two
-     template roots, and the documented `style="--prose-*"` contract has to hold for both.
-
-     THIS IS THE READING SURFACE, and there is a separate writing one. The workspace file viewer's edit mode
-     builds its own DOM from the document's source, so that the text it holds IS the file and a caret in it is a
-     position in that file (viewers/markdownSourceDom.ts). The two agree because they are styled by the same
-     prose.css and emit the same tags; nothing here needs to know about it. -->
+<!--
+    The design system's one prose surface: sanitized HTML (markdown/render.ts) styled by prose.css, with Shiki-coloured code blocks whose copy
+    buttons are wired here. A document with figure fences renders as alternating prose runs and figure components; one without renders as a single
+    byte-identical v-html.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import { copyCodeFromEvent } from "../../markdown/code.js";

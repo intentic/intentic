@@ -6,20 +6,15 @@ import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, 
 import { createDiscordListener, deliverToChannel } from "./listener.js";
 import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } from "./voice.js";
 
-// The Discord gateway process: a baked extension's autoStart process (contributes.processes). It reconciles a
-// discord.js connection per bot token against the daemon's /listeners/discord/state, dispatches every inbound
-// message (painting mention replies back), holds voice sessions across turns, and exposes a loopback control
-// surface the `discord-voice` CLI hits (join/leave/status). The daemon holds no Discord connection, this does.
-// The reconcile/status/health/shutdown shell is the shared connector runtime; what's here is only what Discord
-// IS: a refcounted client per bot token (shared with voice), a login failure that retrying can't fix, and the
-// voice control routes.
+// Discord gateway: a baked extension's autoStart process. Reconciles a discord.js connection per bot token, dispatches
+// messages, holds voice sessions, and exposes the loopback surface `discord-voice` hits; the daemon holds no Discord
+// connection itself. The connector runtime shares reconcile/status/shutdown; this file is only what's Discord-specific.
 
 void runConnectorGateway<DiscordConnectorConfig, Client>({
     provider: "discord",
     publishGatewayUrl: true,
     create: (ctx) => {
-        // The listener's live view of connected bots, maintained by open/close below. Keyed by TOKEN, which is
-        // also the slot key: two capabilities sharing one bot token share one client and one subscription.
+        // Listener's live view of connected bots, keyed by token; two capabilities sharing a token share one client.
         const subscribed = new Map<string, Client>();
         const listener = createDiscordListener(ctx, subscribed);
         // The voice control surface reads the first connector's config; multi-bot voice is a ponytail.
@@ -54,19 +49,17 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 subscribed.delete(token);
                 releaseDiscordClient(token, "listener");
             },
-            // Every login failure is fatal, a bad token or missing intent can only be fixed portal-side, and
-            // client.ts has already mapped it onto a sentence the owner can act on.
+            // Every login failure is fatal; only fixable portal-side, and client.ts already phrases it actionably.
             fatal: (error) => errorMessage(error),
             phase: (connector) => discordGatewayState(connector.config.botToken),
             statusExtras: () => {
                 const voice = activeVoiceSession();
                 return { ...(voice !== undefined ? { voice } : {}), whisperReady };
             },
-            // The daemon's outbound door: a message the owner placed in a channel conversation, posted through
-            // whichever connected bot can see the channel (shell route /deliver).
+            // Daemon's outbound door: posts an owner-placed message through whichever connected bot can see the
+            // channel.
             deliver: (channelId, text) => deliverToChannel(subscribed, channelId, text),
-            // The loopback control surface for the `discord-voice` CLI. Loopback + same-container only; the bot
-            // token the CLI would need to talk to Discord itself is already in the agent's env, so no extra auth.
+            // Loopback control surface for the discord-voice CLI; same-container only, so no extra auth beyond that.
             routes: async (req, body) => {
                 const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
                 if (path === "/voice/status") {

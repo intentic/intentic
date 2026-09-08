@@ -1,22 +1,12 @@
 // @vitest-environment jsdom
-//
-// The open-chat list is a SCROLL BOX: a lane-grouped column of cards, in a sheet the docked header drops or in
-// the floating rail, and almost nothing that focuses a chat is inside it: a card on /agents, a history row, a
-// chord, a brand-new agent appended to the end. Each of those lands on the store's setActive, and unless the
-// list follows, the card it is highlighting can sit scrolled out of sight while the panel swaps its transcript
-// underneath. The docked case is worse still: the sheet mounts on open, so the card it must show is one that
-// was chosen long before this list existed.
-// Driven through setActive and through mounting rather than through a mounted /agents board: the board's card,
-// the history row and the panel's own select all reach the list through that one write. jsdom lays nothing out,
-// so what is asserted is the CALL, which card the list asked to reveal, and that it asked for the cheapest
-// scroll (`nearest`, a no-op on a card already visible).
+// Pins that any focus write (board card, history row, chord, new agent) scrolls the list's card into view via
+// `nearest`, including the docked sheet's first frame after mount.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// Store half of "New agent" (agentActions.startAgent); this suite's fixture for extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -28,8 +18,7 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat component needs (see startAgent.test.ts), plus the one this file is
-// about: jsdom implements no scrollIntoView at all, so it is installed as the recorder the assertions read.
+// jsdom has no scrollIntoView; installed here as the recorder the assertions read.
 const { reveals } = vi.hoisted(() => {
     const recorded: { tab: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
@@ -41,8 +30,8 @@ const { reveals } = vi.hoisted(() => {
     return { reveals: recorded };
 });
 
-// Mounted per test, because MOUNTING is half of what is under test here: the docked sheet is built and torn
-// down with every open. The list registers no commands, so nothing objects to being stood up twice.
+// Mounted per test since mounting itself is under test (the docked sheet rebuilds on every open); registers
+// no commands, so remounting is safe.
 let app: App | undefined;
 const mountList = async (): Promise<void> => {
     const el = document.createElement(`div`);
@@ -65,14 +54,13 @@ beforeEach(async () => {
     await nextTick();
 });
 
-// The list reveals on the tick AFTER the focus write, so the card it reveals is one the DOM already holds.
+// Reveals fire a tick after the focus write, once the DOM already holds the card.
 const settle = async (): Promise<void> => {
     await nextTick();
     await nextTick();
 };
 
-// Each chat is opened WITH composer text: an untouched "New agent" tab is the one thing the strip won't hold
-// two of, so empty presses would collapse into a single reused draft instead of a column of cards.
+// Each tab opens with composer text, since an untouched draft is the one tab useChat won't duplicate.
 const openTabs = (count: number): string[] => {
     const chat = useChat();
     return Array.from({ length: count }, (_unused, at) => {
@@ -88,7 +76,7 @@ it(`scrolls a chat focused from outside the list back into view`, async () => {
     await mountList();
     reveals.length = 0;
 
-    // The first card is rows above the focus that opening six left on the last one: this is the /agents click.
+    // ids[0] is scrolled away: opening six left the focus on the last one.
     chat.setActive(ids[0]!);
     await settle();
 
@@ -102,8 +90,7 @@ it(`reveals again when the chat already in focus is selected once more`, async (
     await mountList();
     reveals.length = 0;
 
-    // Clicking the board card of the chat you are ALREADY in, having scrolled the list elsewhere since. The id
-    // doesn't move, so only the store's reveal counter can carry this one.
+    // Same id as before; only the reveal counter (not the id) can signal this.
     chat.setActive(ids[0]!);
     await settle();
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-// No mocks and no mount. Every rule takes rows and a viewed set and returns a value: the panel's own reactivity
-// is what these were extracted OUT of, so a group here is just a list of keys.
+// No mocks, no mount: every rule is a pure function of rows and a viewed set, so a group here is just a list of
+// keys.
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 
 const rows = (...keys: readonly string[]): readonly { key: string }[] => keys.map((key) => ({ key }));
@@ -13,8 +13,7 @@ describe("viewedIn", () => {
     });
 });
 
-// The tri-state click. The middle case is the one that matters: it is what makes "I read three, the rest of the
-// package is fine" a single gesture.
+// Tri-state click: the middle case is what makes "read three, skip the rest of the package" a single gesture.
 describe("groupPassOn", () => {
     it("ticks the rest off from a partly-read group", () => {
         expect(groupPassOn(rows(`a`, `b`, `c`), seen(`a`))).toBe(true);
@@ -24,7 +23,7 @@ describe("groupPassOn", () => {
         expect(groupPassOn(rows(`a`, `b`), seen())).toBe(true);
     });
 
-    // Without this the control has no undo, and a mis-click costs N row clicks to walk back.
+    // Without this, a mis-click has no undo short of N row clicks.
     it("un-ticks a fully-read group, so a second click is the first click's undo", () => {
         expect(groupPassOn(rows(`a`, `b`), seen(`a`, `b`))).toBe(false);
     });
@@ -41,8 +40,8 @@ describe("groupCountLabel", () => {
     });
 });
 
-/* Where ⇧V lands. `visible` is render order across every repo, so these cases are the real ones: a group in the
- * middle of the list, the group at the tail, and a group that is drawing nothing because its repo is collapsed. */
+// `visible` is render order across every repo; cases cover a mid-list group, the tail group, and one whose repo
+// is collapsed.
 describe("rowAfterGroup", () => {
     const visible = rows(`a1`, `a2`, `b1`, `b2`, `c1`);
 
@@ -54,13 +53,12 @@ describe("rowAfterGroup", () => {
         expect(rowAfterGroup(visible, rows(`c1`))).toBeUndefined();
     });
 
-    // Ticking a collapsed repo's group off is legitimate: the selection survives a collapse, and moves nothing.
+    // Ticking a collapsed group's rows off is legitimate; the selection survives collapse and moves nothing.
     it("stays put when the group draws no visible rows at all", () => {
         expect(rowAfterGroup(visible, rows(`hidden1`, `hidden2`))).toBeUndefined();
     });
 
-    // Grouping reorders a repo's rows, so a group's rows need not be contiguous in render order; the row after
-    // the last one is still the honest place to land.
+    // Group rows need not be contiguous in render order; landing after the last one is still correct.
     it("measures from the last row even when the group is not contiguous", () => {
         expect(rowAfterGroup(visible, rows(`a1`, `b2`))?.key).toBe(`c1`);
     });

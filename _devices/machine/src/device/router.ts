@@ -6,29 +6,22 @@ import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
 import { manageSandbox, removeSandbox, reshapeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
 
-/* What this device answers, as the oRPC SERVER on the socket it dialled out.
- *
- * The inversion is the interesting part: the machine placed the call, and the machine is also the one being
- * asked. That works because oRPC's websocket adapter attaches a handler to any socket-like object, so which peer
- * dialled is independent of which peer serves.
- *
- * `scopes` is a live reference, not a copy: `setScopes` replaces what the whole agent enforces, and the MCP
- * handler reads it per call, so a switch the owner turns off is in force on the very next tool call rather than
- * at the next reconnect. */
+// What this device answers, as the oRPC server on the socket it dialled out; the peer that dials and the peer
+// that serves are independent, oRPC's websocket adapter attaches to any socket-like object. `scopes` is a live
+// reference: `setScopes` takes effect on the very next tool call, not at the next reconnect.
 export interface HostRuntime {
     readonly scopes: () => HostScopes;
     readonly setScopes: (scopes: HostScopes) => void;
     readonly log: (message: string) => void;
 }
 
-// A flow's callback-reported lines as the stream the browser reads (@intentic/base's `narrate` says why
-// the flows report that way and why lines are queued). What is here is only this wire's terminal frame.
+// A flow's callback-reported lines as the stream the browser reads (@intentic/base's `narrate`); this is only
+// this wire's terminal frame.
 const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): AsyncGenerator<DeviceFlowLine> =>
     narrate(run, (outcome): DeviceFlowLine => (outcome.ok ? { kind: "result", message: outcome.value } : { kind: "error", message: outcome.error }));
 
-// Which function each op is. Start/stop/restart are a docker call and say one sentence, `logs` is a read whose
-// lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a
-// single answer to "what does this op mean".
+// Which function each op is. Start/stop/restart are a docker call, `logs` is a read, the rest run `ic` and
+// narrate themselves for minutes.
 const flowFor = (
     { op, slug, hash, resources, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
     scopes: HostScopes,
@@ -39,9 +32,8 @@ const flowFor = (
         // The same image with a different share of this machine: the one op with a payload of its own.
         case "reshape":
             return (onLine) => reshapeSandbox(slug, resources, scopes, onLine);
-        // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name.
-        // The parent's shape (a settings definition, its approved overlay + pinning hash) rides to `ic` as
-        // files, so the runner starts as the asking sandbox's twin instead of a bare base image.
+        // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The
+        // parent's shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
         case "runner-up":
         case "runner-remove":
             return (onLine) =>
@@ -77,21 +69,20 @@ export const createHostRouter = (runtime: HostRuntime) => {
         setScopes: os.setScopes.handler(({ input }) => {
             runtime.setScopes(input);
             runtime.log(`permissions updated: commands ${input.shell}, writes ${input.write}, screen ${input.screen}`);
-            // Caching it on disk belongs to whoever knows WHICH sandbox pushed, which is the connection and not
-            // this router (see connection.ts): a device answers to a list of sandboxes now, each with its own
-            // grant, and a writer that could not name the link would have to guess which one to overwrite.
+            // Caching it on disk belongs to the connection (see connection.ts), not this router: a device answers to a
+            // list of sandboxes now, and the router can't name which one pushed.
             return { ok: true };
         }),
         ping: os.ping.handler(() => ({ ok: true })),
-        // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and by the tool it names,
-        // not by this contract, and deliberately not by the daemon (see the contract for why).
+        // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and the tool it names, not by
+        // this contract or the daemon.
         mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, runtime.scopes())),
-        // The scopes are read HERE, per call, exactly as the MCP handler reads them, a stream opened before the
-        // owner flipped a switch must not outlive the decision.
+        // Read here, per call, exactly as the MCP handler reads them: a stream opened before the owner flipped a
+        // switch must not outlive the decision.
         runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes()))),
-        /* The agent's own update and restart, through the same adapter — and the one stream whose ENDING is not
-         * its answer: both ops stop the process serving this socket, so it dies mid-narration by design. The
-         * work is detached before that happens (tools/agent.ts), and the reader confirms by the version. */
+        // The agent's own update/restart, through the same adapter, and the one stream whose ending is not its answer:
+        // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
+        // confirms by the version.
         runAgentFlow: os.runAgentFlow.handler(({ input }) => streamFlow((onLine) => runAgentOp(input.op, runtime.scopes(), onLine))),
     });
 };

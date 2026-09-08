@@ -2,15 +2,8 @@ import type { PipelineJob } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { jobLineage, pipelineDag, pipelineStages } from "./pipelineDag";
 
-/* What the expanded job graph claims about a run: which cards fade, which edges light, and, the part that
- * matters most: that a run arriving WITH its dependencies declared is drawn from those and not from a guess
- * about what overlapped in time. The two sources of shape are tested side by side because the fallback has to
- * keep working exactly as it did for every run whose workflow file we cannot read.
- *
- * The graph groups identically-wired jobs into one compound card, so the assertions below cover both halves of
- * that: fewer cards and fewer edges than there are jobs, and a trace that still counts JOBS. The count is the
- * half worth guarding, it is what the caption says out loud, and grouping is the one change that could quietly
- * turn "four ran before" into "one". */
+// Pins how a run's job graph draws: node/edge shape from declared dependencies (falling back to time overlap), and that
+// clustering groups jobs without losing per-job counts.
 
 const staged = (name: string, stage: string): PipelineJob => ({ name, status: `success`, stage });
 const declared = (name: string, needs: string[], startedAt: number): PipelineJob => ({
@@ -30,9 +23,7 @@ const stageRun = pipelineStages([
     staged(`ship`, `deploy`),
 ]);
 
-/* The shape that prompted all of this: the user's own ci.yml, which the wave layering rendered as a flat
- * line. Every job here starts at a DIFFERENT time and none overlap, so timestamps alone would put all six in
- * six sequential steps; `needs` is what makes it branch. */
+// Every job starts at a different, non-overlapping time; branching comes only from `needs`, not timestamps.
 const declaredRun = pipelineStages([
     declared(`preflight`, [], 0),
     declared(`changes`, [], 10_000),
@@ -44,7 +35,7 @@ const declaredRun = pipelineStages([
 
 describe(`pipelineStages`, () => {
     it(`layers a declared run by dependency depth, not by when things happened to start`, () => {
-        // Six jobs that never overlap would be six waves. Declared, they are four levels that branch.
+        // Six non-overlapping jobs would make six waves; dependency depth makes four.
         expect(declaredRun.map((stage) => stage.jobs.map((job) => job.name))).toEqual([
             [`preflight`, `changes`],
             [`verify-core / verify`, `verify-site / verify`],
@@ -66,10 +57,7 @@ describe(`pipelineStages`, () => {
         expect(pipelineStages(overlapping).map((stage) => stage.jobs.map((job) => job.name))).toEqual([[`a`, `b`], [`c`]]);
     });
 
-    /* A RUN HELD AT THE RUNNER, which is the shape a nightly takes when its self-hosted workers are down: the
-     * cloud-hosted jobs finish in two minutes and the rest sit unclaimed for as long as the runners stay
-     * offline. The queued jobs carry no start (providers.ts drops the phantom one Actions reports), so the wave
-     * layering files them where they belong: one trailing layer of work that has not happened. */
+    // Queued jobs carry no start time; they still land in a trailing wave.
     it(`puts the jobs still waiting for a runner in a trailing wave`, () => {
         const held: PipelineJob[] = [
             { name: `ci-audit`, status: `success`, startedAt: 0, finishedAt: 100 },
@@ -78,13 +66,13 @@ describe(`pipelineStages`, () => {
         ];
         const stages = pipelineStages(held);
         expect(stages.map((stage) => stage.jobs.map((job) => job.name))).toEqual([[`ci-audit`], [`e2e`, `images`]]);
-        // And the circle over them says so, rather than spinning: nothing in that wave is executing.
+        // Circle, not spinner: nothing in a queued wave is executing.
         expect(stages.map((stage) => stage.status)).toEqual([`success`, `queued`]);
     });
 
     it(`reads a half-started stage as started, and a failure still dominates both`, () => {
         const worstOf = (jobs: PipelineJob[]): string | undefined => pipelineStages(jobs)[0]?.status;
-        // One leg of a matrix on a runner while its siblings wait is a stage in progress.
+        // One leg running while its siblings queue still counts as the stage running.
         expect(worstOf([{ name: `a`, status: `running`, stage: `test` }, { name: `b`, status: `queued`, stage: `test` }])).toBe(`running`);
         expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `success`, stage: `test` }])).toBe(`queued`);
         expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `failed`, stage: `test` }])).toBe(`failed`);
@@ -93,16 +81,15 @@ describe(`pipelineStages`, () => {
 
 describe(`pipelineDag with declared dependencies`, () => {
     it(`draws one edge per declared dependency, not a stage-wide join`, () => {
-        // Every job in declaredRun has a unique edge signature, so no clustering happens and each job is
-        // its own cluster node. The edges are identical to the pre-clustering output.
+        // Every job has a unique edge signature, so each stays its own cluster node; edges match the unclustered graph.
         const edges = pipelineDag(declaredRun).edges.map((edge) => `${edge.from}>${edge.to}`);
         expect(edges.toSorted()).toEqual([`0:0>1:0`, `0:0>1:1`, `0:1>3:0`, `1:0>2:0`, `2:0>3:0`]);
     });
 
     it(`traces one leg of a fan-out without lighting its sibling's parents`, () => {
-        // Hovering `verify-site / verify` (1:1): its parent preflight and nothing of the images/release line.
+        // `1:1` is `verify-site / verify`: traces its parent `preflight`, not the images/release line.
         const dag = pipelineDag(declaredRun, `1:1`);
-        // Each job is its own cluster, so dimmed cluster nodes map 1:1 to dimmed jobs.
+        // Each job is its own cluster, so dimmed clusters equal dimmed jobs directly.
         const dimmedNames = dag.nodes
             .filter((node) => node.dimmed === true)
             .flatMap((node) => node.data.jobs.map((m) => m.job.name))
@@ -112,24 +99,24 @@ describe(`pipelineDag with declared dependencies`, () => {
     });
 
     it(`reaches transitively both ways from a job in the middle`, () => {
-        // `images` (2:0): preflight → verify-core → images → release.
+        // `2:0` is `images`: chain is preflight → verify-core → images → release.
         const dag = pipelineDag(declaredRun, `2:0`);
         expect(dag.trace).toMatchObject({ before: 2, after: 1 });
         const traced = dag.edges.filter((edge) => edge.accent === `text-link`).map((edge) => `${edge.from}>${edge.to}`);
         expect(traced.toSorted()).toEqual([`0:0>1:0`, `1:0>2:0`, `2:0>3:0`]);
-        // `changes → release` has both ends related to nothing on this line and must stay dark.
+        // `changes → release` sits off this trace's line, so it stays dimmed.
         expect(dag.edges.find((edge) => edge.from === `0:1`)?.dimmed).toBe(true);
     });
 });
 
 describe(`pipelineDag with only stages`, () => {
     it(`clusters jobs with identical edges into compound nodes`, () => {
-        // build[lint, compile] share incoming=none, outgoing={1:0, 1:1} → one cluster.
-        // test[unit, e2e] share incoming={0:0, 0:1}, outgoing={2:0} → one cluster.
-        // deploy[ship] is alone.
+        // build[lint, compile]: incoming none, outgoing {1:0, 1:1} → one cluster.
+        // test[unit, e2e]: incoming {0:0, 0:1}, outgoing {2:0} → one cluster.
+        // deploy[ship]: alone.
         const dag = pipelineDag(stageRun);
         expect(dag.nodes).toHaveLength(3);
-        // Cluster 0:0 holds both build jobs, 1:0 holds both test jobs, 2:0 is ship.
+        // Cluster 0:0 is the build jobs, 1:0 the test jobs, 2:0 is ship.
         expect(dag.nodes.map((n) => n.data.jobs.map((m) => m.job.name))).toEqual([[`lint`, `compile`], [`unit`, `e2e`], [`ship`]]);
         // Only two edges: build-cluster → test-cluster → deploy-cluster.
         expect(dag.edges).toHaveLength(2);
@@ -140,11 +127,10 @@ describe(`pipelineDag with only stages`, () => {
     });
 
     it(`fades unrelated clusters when a job is focused`, () => {
-        // Focusing unit (1:0): the test cluster contains the focus, so it stays lit. The build and deploy
-        // clusters are on the line too (build → test → deploy), so nothing fades in this linear pipeline.
+        // Focusing `1:0` (test): build and deploy are also on this linear line, so nothing fades.
         const dag = pipelineDag(stageRun, `1:0`);
         expect(dag.nodes.filter((node) => node.dimmed === true)).toEqual([]);
-        // Lineage counts individual jobs, not clusters: 2 build jobs before, 1 deploy job after.
+        // Lineage counts jobs, not clusters: 2 build jobs before, 1 deploy job after.
         expect(dag.trace).toMatchObject({ before: 2, after: 1 });
     });
 
@@ -182,7 +168,7 @@ describe(`pipelineDag invariants`, () => {
     });
 
     it(`draws a run with no edges at all as one card rather than a row of unrelated boxes`, () => {
-        // A single stage: nothing waited on anything, so every job carries the same (empty) edge signature.
+        // No job waits on anything, so all three share the same empty edge signature.
         const run = pipelineStages([staged(`unit`, `test`), staged(`e2e`, `test`), staged(`lint`, `test`)]);
         const dag = pipelineDag(run);
         expect(dag.nodes.map((node) => node.data.jobs.map((member) => member.job.name))).toEqual([[`unit`, `e2e`, `lint`]]);
@@ -190,7 +176,6 @@ describe(`pipelineDag invariants`, () => {
     });
 
     it(`preserves every job inside cluster nodes`, () => {
-        // Every job that went in must appear exactly once in some cluster's members.
         for (const run of [stageRun, declaredRun]) {
             const allJobs = run.flatMap((stage) => stage.jobs.map((job) => job.name)).toSorted();
             const clusteredJobs = pipelineDag(run)
@@ -203,8 +188,7 @@ describe(`pipelineDag invariants`, () => {
 
 describe(`jobLineage`, () => {
     it(`collects the edges it walked, not every edge between related nodes`, () => {
-        // a → b → c and a → c: the bypass a→c is real, and IS on a path through neither b nor... it is on a
-        // path through `a` and `c` themselves, so focusing `b` must leave it out.
+        // a→b→c plus a bypass a→c: focusing `b` must exclude the bypass, since it passes through neither.
         const links = [
             { from: `a`, to: `b` },
             { from: `b`, to: `c` },

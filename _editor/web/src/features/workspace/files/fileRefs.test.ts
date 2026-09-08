@@ -1,9 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The module reaches for the workspace-tree query (container root + the file index a reference is matched
-// against): stub it so the path helpers can be exercised without the app graph. `queryData` is the seam both
-// lookups read.
+// Stubs the workspace-tree query (root + file index) so path helpers run without the app graph; `queryData` is the seam
+// both lookups read.
 let queryData: { root?: string; tree?: unknown[] }[] = [];
 vi.mock("../../../lib/queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
@@ -50,8 +49,6 @@ describe(`parseRef`, () => {
         expect(parseRef(`src/foo.ts`)).toEqual({ path: `src/foo.ts` });
     });
 
-    // The GitHub anchor a model writes when it reaches for the markdown-link form. Unparsed, the fragment goes
-    // into the path and the link opens nothing.
     it(`reads a #L anchor, range and all`, () => {
         expect(parseRef(`src/foo.ts#L12`)).toEqual({ path: `src/foo.ts`, line: 12 });
         expect(parseRef(`src/foo.ts#L12-L20`)).toEqual({ path: `src/foo.ts`, line: 12 });
@@ -61,7 +58,7 @@ describe(`parseRef`, () => {
 
 describe(`toWorkspacePath`, () => {
     it(`strips git-diff side prefixes so a copied diff path opens the real file`, () => {
-        // Default a/ b/, mnemonicPrefix i/ w/ c/ o/, and --no-index 1/ 2/.
+        // a/b are git's default prefixes, i/w/c/o mnemonicPrefix, 1/2 --no-index.
         for (const prefix of [`a`, `b`, `i`, `w`, `c`, `o`, `1`, `2`]) {
             expect(toWorkspacePath(`${prefix}/src/foo.ts`)).toBe(`src/foo.ts`);
         }
@@ -70,9 +67,9 @@ describe(`toWorkspacePath`, () => {
     it(`leaves a bare relative path and an explicit ./ path untouched (no false prefix strip)`, () => {
         expect(toWorkspacePath(`src/foo.ts`)).toBe(`src/foo.ts`);
         expect(toWorkspacePath(`./src/foo.ts`)).toBe(`src/foo.ts`);
-        // A real single-char first segment that isn't a diff marker survives.
+        // A real single-char first segment, not a diff marker, survives untouched.
         expect(toWorkspacePath(`x/foo.ts`)).toBe(`x/foo.ts`);
-        // An explicit ./a/ is a tool-relative path, not a diff side: only the ./ is stripped.
+        // `./a/` is tool-relative, not a diff side: only the `./` strips, the `a` stays.
         expect(toWorkspacePath(`./a/foo.ts`)).toBe(`a/foo.ts`);
     });
 
@@ -80,13 +77,12 @@ describe(`toWorkspacePath`, () => {
         queryData = [treeOf(WORKSPACE_ROOT)];
         expect(toWorkspacePath(`/work/src/foo.ts`)).toBe(`src/foo.ts`);
         expect(toWorkspacePath(`/usr/lib/node.js`)).toBeUndefined();
-        // A sibling directory whose name merely starts with the root is not inside it, and nothing in the
-        // workspace ends in that path either, so it stays unmapped.
+        // A sibling dir starting with the root's name isn't inside it; nothing else matches, so it stays unmapped.
         expect(toWorkspacePath(`/workspace/src/foo.ts`)).toBeUndefined();
     });
 
     it(`maps an isolated turn's worktree path onto the file it mirrors`, () => {
-        // An isolated agent runs in /history/worktrees/<id>, which mirrors the workspace layout below its lead.
+        // Isolated agent worktree lives at /history/worktrees/<id>, mirroring the workspace layout below it.
         queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/src/foo.ts`)];
         expect(toWorkspacePath(`/history/worktrees/agent-7/_editor/web/src/foo.ts`)).toBe(`_editor/web/src/foo.ts`);
     });
@@ -96,8 +92,7 @@ describe(`toWorkspacePath`, () => {
     });
 });
 
-/* The fix for the way models actually write paths: having established an area, an answer names a file by the
- * tail of its path, and read literally that opens nothing. */
+// Models name a file by the tail of its path once an area's established; read literally, that opens nothing.
 describe(`resolveInTree`, () => {
     it(`matches an abbreviated path onto the file it names`, () => {
         queryData = [treeOf(WORKSPACE_ROOT, `_editor/web/src/pages/workspace/WorkspaceDesktop.vue`)];
@@ -124,8 +119,8 @@ describe(`resolveInTree`, () => {
     });
 });
 
-/* The grammar is shared by the terminal's link addon and the chat's markdown linkifier, so what it does and
- * does NOT match is a contract of its own: too loose and ordinary prose sprouts dead links. */
+// Grammar shared by the terminal's link addon and chat's markdown linkifier: too loose and ordinary prose sprouts dead
+// links.
 describe(`FILE_REF`, () => {
     const matchOf = (text: string): string | undefined => FILE_REF.exec(text)?.[0];
 

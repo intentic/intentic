@@ -2,8 +2,8 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, test } from "vitest";
 import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "./child-verification.js";
 
-/* The feeder is fed FRAMES, which is the whole point of it: these are the shapes every adapter normalizes to
- * (agent/tool-calls.ts), so a case written here is a case that holds for a child on any provider. */
+// The feeder is fed frames, the shapes every adapter normalizes to (agent/tool-calls.ts); a case here holds for any
+// provider.
 
 const editCall = (id: string, path: string): Extract<AgentEvent, { kind: "tool_call" }> => ({
     kind: "tool_call",
@@ -50,8 +50,6 @@ describe("what a child's frames prove", () => {
         });
     });
 
-    /* The exit code outranks the tool's own status, and this is the case that makes the difference: a suite
-     * that printed its failures and exited 1 is a `completed` tool call, because the TOOL worked. */
     test("a suite that exits non-zero is failing, whatever the tool call says", () => {
         noteChildWork(editCall("c1", "src/parser.ts"), "child-1");
         noteChildWork(shellCall("c2", "pnpm test"), "child-1");
@@ -59,7 +57,6 @@ describe("what a child's frames prove", () => {
         expect(childVerification("child-1")?.state).toBe("failing");
     });
 
-    // No footer to read (output filtering off, a truncated tail), so the frame's own status is the answer.
     test("without a footer the frame's status decides", () => {
         noteChildWork(editCall("c1", "src/parser.ts"), "child-1");
         noteChildWork(shellCall("c2", "pnpm test"), "child-1");
@@ -67,16 +64,13 @@ describe("what a child's frames prove", () => {
         expect(childVerification("child-1")?.state).toBe("failing");
     });
 
-    /* An edit that was REFUSED or that failed changed nothing, so it is not work waiting for proof: counting
-     * it would warn the parent about a child that did nothing at all. */
     test("a failed edit is not work", () => {
         noteChildWork({ ...editCall("c1", "src/parser.ts"), status: "in_progress" }, "child-1");
         noteChildWork({ kind: "tool_call_update", id: "c1", status: "failed" }, undefined);
         expect(childVerification("child-1")?.state).toBe("no-code");
     });
 
-    // Some adapters name the file only on the structured diff (an ACP agent sends the change, not the input
-    // it came from), so reading `locations` alone would see that child edit nothing.
+    // Some adapters name the file only on the diff, not `locations`, so this must count too.
     test("an edit known only by its diff still counts", () => {
         noteChildWork(
             {
@@ -98,13 +92,11 @@ describe("what a child's frames prove", () => {
         expect(childVerification("child-1")).toEqual({ state: "no-code" });
     });
 
-    // Prose is not code, and a turn that only wrote markdown is done when it says it is (the ledger's rule).
     test("editing only prose is no-code", () => {
         noteChildWork(editCall("c1", "docs/architecture/repo.md"), "child-1");
         expect(childVerification("child-1")?.state).toBe("no-code");
     });
 
-    // The ordering the ledger's counter exists for, arriving here as frames rather than as hooks.
     test("checking and then editing again leaves the new edit unproven", () => {
         noteChildWork(editCall("c1", "src/parser.ts"), "child-1");
         noteChildWork(shellCall("c2", "pnpm test"), "child-1");
@@ -122,9 +114,7 @@ describe("what a child's frames prove", () => {
         expect(childVerification("child-2")?.state).toBe("verified");
     });
 
-    /* A frame the daemon cannot attribute must not invent a child: the parent's OWN tool calls arrive at the
-     * same seam carrying no parent id, and a ledger opened for them would report the parent's work as a
-     * child's verdict. */
+    // No parent id must not open a ledger, or the parent's own calls would report as a child's verdict.
     test("an unattributable call opens no ledger", () => {
         noteChildWork(editCall("c1", "src/parser.ts"), undefined);
         noteChildWork(shellResult("c1", "--- [exit 0, 1s]"), undefined);
@@ -139,7 +129,7 @@ describe("what a child's frames prove", () => {
         noteChildWork(editCall("c1", "src/parser.ts"), "child-1");
         noteChildWork(shellCall("c2", "pnpm test"), "child-1");
         forgetChild("child-1");
-        // The result of a call whose owner is gone settles nothing, rather than reopening a ledger for it.
+        // A call whose owner is forgotten settles nothing, rather than reopening a ledger.
         noteChildWork(shellResult("c2", "--- [exit 0, 1s]"), undefined);
         expect(childVerification("child-1")).toBeUndefined();
     });
@@ -157,8 +147,7 @@ describe("what the parent is told", () => {
         expect(childVerificationNote({ state: "failing", paths: ["src/a.ts"], check: "pnpm test" })).toContain("`pnpm test`");
     });
 
-    /* The deliberate silence: these two ride the wire for anyone who asks, and spend none of the parent's
-     * context. An Explore child that edited nothing is the commonest child there is. */
+    // Deliberate: these ride the wire for callers that ask, but cost nothing in the parent's context.
     test.each(["verified", "no-code"] as const)("%s says nothing in the parent's context", (state) => {
         expect(childVerificationNote({ state, check: "pnpm test" })).toBeUndefined();
     });

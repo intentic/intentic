@@ -3,8 +3,8 @@ import { expect, test } from "vitest";
 import { syncHookOutput } from "../../testing.js";
 import { dependencyDirForCommand, depsNoticeHooks } from "./agent-deps.js";
 
-// A tree that is genuinely missing `vue` and nothing else: the only thing that decides whether this hook has
-// anything to say. `walks` counts how often it is asked, because not re-asking is half the design.
+// Fake tree probe reporting exactly these names missing; `walks` counts calls, since not re-asking is half of what's
+// tested.
 const treeMissing = (names: string[], walks: { count: number } = { count: 0 }) => {
     const probe = async () => {
         walks.count += 1;
@@ -39,9 +39,6 @@ test.each([
     expect(context(await fire(depsNoticeHooks(probe, true), output))).toMatch(/install being behind/i);
 });
 
-/* THE PROPERTY THE WHOLE HOOK RESTS ON. A name lifted out of a failure is a claim, and excusing one the tree can
- * answer for would teach a model to distrust every unresolved import it ever sees: the same failure this exists
- * to prevent, arrived at from the other side. */
 test("a mistyped import stays the agent's own problem, because the tree has that package", async () => {
     const { probe } = treeMissing(["left-pad"]);
     expect(await fire(depsNoticeHooks(probe, true), `Error: Cannot find module 'vuee'`)).toEqual({});
@@ -55,7 +52,6 @@ test("an unresolved relative path is never excused: it cannot be a declared depe
 test("a command that failed for any other reason is left alone", async () => {
     const { probe, walks } = treeMissing(["vue"]);
     expect(await fire(depsNoticeHooks(probe, true), "3 tests failed: expected 2 to be 3")).toEqual({});
-    // Not even asked: the walk costs a stat per declared dependency and no candidate means no question.
     expect(walks.count).toBe(0);
 });
 
@@ -65,7 +61,6 @@ test("searching a build log that quotes an unresolved import does not count as r
     expect(walks.count).toBe(0);
 });
 
-// A subpath resolves through the package's own installed directory, which is what a manifest declares.
 test("a scoped subpath import is answered for by its package", async () => {
     const { probe } = treeMissing(["@intentic/sandbox-contract"]);
     const told = context(await fire(depsNoticeHooks(probe, true), `Cannot find module '@intentic/sandbox-contract/chores'`));
@@ -79,9 +74,6 @@ test("the reason is given once per package, not stapled to every retry", async (
     expect(await fire(hooks, `Cannot find module 'vue'`)).toEqual({});
 });
 
-/* The negative answer is remembered too. A genuinely wrong import fails on every retry inside one turn, and
- * re-walking the workspace for it each time would spend this hook's whole cost on the one case it has nothing
- * to say about. */
 test("a name the tree has already answered for is not looked up twice", async () => {
     const { probe, walks } = treeMissing(["vue"]);
     const hooks = depsNoticeHooks(probe, true);
@@ -116,8 +108,6 @@ test("a negative answer for one command does not hide a later failure in another
     expect(context(await fire(hooks, `Cannot find module 'vue'`, "cd app && pnpm test"))).toMatch(/install being behind/i);
 });
 
-// Silence is the safe answer: an unreadable tree cannot settle the claim, and guessing in either direction is
-// worse than saying nothing until the next failure asks again.
 test("a tree that cannot be read produces no notice rather than a guessed one", async () => {
     const hooks = depsNoticeHooks(async () => {
         throw new Error("EACCES");

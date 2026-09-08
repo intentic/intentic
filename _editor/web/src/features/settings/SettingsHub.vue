@@ -11,23 +11,11 @@ import SettingsKeybindings from "./SettingsKeybindings.vue";
 import SettingsNotifications from "./SettingsNotifications.vue";
 import SettingsProfile from "./SettingsProfile.vue";
 
-/* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Built on the
- * same <HubLayout> as the sandbox hub: the symmetry was the point when both were tab strips, and it is more of
- * one now that the layout is shared code rather than two copies of the same forty lines.
- *
- * ONE UNLABELLED GROUP. Five rows is not a set that needs sorting into piles, and <NavRail> omits the heading
- * for a single run precisely so a short index does not wear a line of chrome that says nothing. It still earns
- * the column over the strip it replaced: these five fit a row today, but the reason the sandbox hub's did not
- * is that a hub's sections accumulate, and having the two answer differently is what put a scrollbar on one of
- * them without anyone deciding to.
- *
- * Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
+// Personal preferences for the signed-in account, cross-sandbox; reached from the account avatar. Built on the same
+// <HubLayout> as the sandbox hub, one unlabelled group since NavRail omits the heading for a single group.
+// Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here.
 
-/* BILLING is the one page about money, and it is named for the errand rather than for the product: a person
- * who wants to stop paying looks for "Billing", and "Hosted" between Profile and Appearance read as a
- * preference. It exists only on a platform that sells the hosted plan (off by default, and self-hosted
- * platforms keep it off). Until the answer lands the tab is simply absent, which is also the right rendering
- * for a platform where it will never land: a failed read costs nothing but the row. */
+// Named "Billing" for the errand, not the product; the tab is absent until offered resolves true.
 const { offered: planOffered } = useHostedPlan();
 
 const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [

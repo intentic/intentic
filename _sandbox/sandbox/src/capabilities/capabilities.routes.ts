@@ -23,27 +23,13 @@ import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
 
-/* WHAT ELSE IN THE SANDBOX SPELLS A CONNECTION'S NAME, and therefore what a rename has to follow.
- *
- * Three places, and they are three because a capability id is how one stored thing points at another: an
- * account says which identity's browser it lives in, an identity says which mailbox reads its codes, and a
- * persona card names the accounts it may speak through. Left behind, each becomes a dangling reference that
- * fails quietly and late, an account whose browser has no profile, a persona that has stopped being able to
- * post. The alternative to following them is refusing to rename anything another entry points at, which is a
- * worse answer to "what is this connection called".
- *
- * Deliberately here rather than in the handlers: none of these is a fact about the kind being renamed. A cli
- * connector knows nothing about personas, and it is a persona that has to change when one is renamed. */
+// Follows a capability id everywhere else it's stored by name: an account's identity, an identity's mailbox, a
+// persona's capabilities list. Kept out of the handlers, since none of these is a fact about the kind being renamed.
 const repointCapabilityReferences = async (services: Services, ctx: CapabilityCtx, from: string, to: string): Promise<void> => {
-    // Re-parsed rather than spread onto the narrowed type: a manifest entry is a union over sixteen config
-    // shapes, and the schema is both what puts the edited entry back on its own arm and what says it is still
-    // a valid one.
+    // Re-parsed rather than spread: the schema both narrows the entry to its own arm and validates it.
     const repointed = (entry: Capability, key: "identity" | "mailbox"): Capability =>
         CapabilitySchema.parse({ ...entry, config: { ...entry.config, [key]: to } });
-    /* Stored AND re-applied, because a reference is not only in the manifest: an account's skill file tells the
-     * agent whose browser it lives in, by name. Re-applying rewrites that sentence, otherwise the manifest
-     * would be right and the thing the agent actually reads would still name a connection that no longer
-     * exists. Both kinds here are cheap and idempotent to apply (each writes one skill file). */
+    // Re-applies as well as stores: an account's skill file names its connection by hand, and only apply rewrites it.
     const restore = async (entry: Capability, key: "identity" | "mailbox"): Promise<void> => {
         const next = repointed(entry, key);
         await services.capabilities.upsert(next);
@@ -52,11 +38,8 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
                 void line;
             }
         } catch (error) {
-            /* Best-effort, and only here: this entry is not the one being renamed. Its apply can fail for
-             * reasons that have nothing to do with the rename, the extension declaring its platform was
-             * uninstalled, its provider's checkout rotted, and failing the rename over it would leave the
-             * connection the user actually asked about half-moved to punish them for an unrelated fault. The
-             * reference itself is already saved, which is the part that would otherwise dangle. */
+            // Best-effort: this entry isn't the one being renamed, so an unrelated apply failure must not fail the
+            // rename.
             services.logger.warn(
                 `capabilities: renamed "${from}" but could not refresh "${next.id}" (${errorMessage(error)}), re-add it from its card`,
             );
@@ -77,23 +60,8 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
     }
 };
 
-/* WHAT AN EDIT SENDS WHERE A CREDENTIAL WOULD GO, resolved back into the credential before anything runs.
- *
- * `add` is the upsert, so it is also how an existing connection is CHANGED, and the browser editing one has
- * never been shown its secrets (the list route echoes the shape of a connection and drops every value in it).
- * Left to send what it holds, a form could only send empty, which the schema either rejects or, worse, accepts
- * as the new value: changing a tunnel's routed networks would erase its pre-shared key. So a field the user did
- * not touch comes back as VAULTED, meaning "whatever is already stored", and that is resolved HERE, before the
- * handler's apply, which writes the real conf files and dials the real gateway.
- *
- * The storage layer already refuses to write the marker over a real value, which covers a caller that reads
- * without rehydrating and writes back. This is the other half: a caller that deliberately says "keep it", whose
- * apply must still see the credential itself.
- *
- * A marker with nothing behind it is a REFUSAL rather than a pass-through. It means the form believed a
- * credential was stored and none is, a fresh add that sent one, an entry removed mid-edit, an id reused for a
- * different kind, and letting it through would write the literal marker into an ssh key file and fail later,
- * somewhere that cannot say which box to go back and fill in. */
+// Resolves a VAULTED field (the edit form never sees existing secrets) back to the stored value before apply runs. A
+// marker with nothing stored behind it is refused, not passed through, so it can't land in a real config file.
 const withKeptSecrets = async (services: Services, input: Capability): Promise<Capability> => {
     const config = input.config as Record<string, unknown>;
     const kept = Object.keys(config).filter((key) => isVaulted(config[key]));
@@ -101,7 +69,7 @@ const withKeptSecrets = async (services: Services, input: Capability): Promise<C
         return input;
     }
     const stored = await services.capabilities.get(input.id);
-    // A different kind under the same name is not this connection, its credentials are not the ones being kept.
+    // A different kind stored under the same id is not this connection; its config is not the secret being kept.
     const storedConfig = (stored?.kind === input.kind ? stored.config : {}) as Record<string, unknown>;
     const missing = kept.filter((key) => typeof storedConfig[key] !== "string" || isVaulted(storedConfig[key]));
     if (missing.length > 0) {
@@ -112,14 +80,12 @@ const withKeptSecrets = async (services: Services, input: Capability): Promise<C
     return CapabilitySchema.parse({ ...input, config: { ...config, ...Object.fromEntries(kept.map((key) => [key, storedConfig[key]])) } });
 };
 
-// The unified capability manifest routes. `add` streams its apply (mirroring /intentic): the handler yields
-// progress frames, then the manifest entry is recorded, then a terminal `result`. A `requires` precondition
-// (service/integration → devops) is checked before apply. `list` fans each handler's status() concurrently.
+// `add` streams progress frames, then records the manifest entry, then a terminal `result`, after checking any
+// `requires` precondition. `list` fans each handler's status() out concurrently.
 export const createCapabilitiesRoutes = (services: Services) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
     const ctx = capabilityCtx(services);
-    // One add per id at a time: a concurrent same-id add would interleave two handler runs in the same visible
-    // job session (and race the manifest upsert), reject the second instead.
+    // One add per id at once, or a concurrent same-id add interleaves handler runs and races the manifest upsert.
     const adding = new Set<string>();
     return {
         list: i.list.handler(async () => {
@@ -135,9 +101,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
                         kind: capability.kind,
                         status: await registry[capability.kind].status(ctx, capability.id, capability.config),
                         config: echoConfig(capability, connectors),
-                        // The NAMES of the credentials this entry holds, so an edit form can show dots where it
-                        // may not show a value, the complement of the echo above, which is the same rule the
-                        // vault splits on (secret-fields.ts).
+                        // Names of the credentials this entry holds, so an edit form can show dots without showing a
+                        // value.
                         secrets: [...secretFieldsOf(capability, connectors)],
                     })),
                 ),
@@ -150,8 +115,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
-            // Extensions ship code that runs trusted in the browser shell and the agent's turns, so installing
-            // one requires the operating tier (mirrors /environment/approve).
+            // Extensions run trusted code in the browser shell and agent turns; installing one needs the operating
+            // tier.
             if (input.kind === "extension" && services.auth !== undefined) {
                 try {
                     await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
@@ -165,35 +130,32 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     throw new ORPCError("PRECONDITION_FAILED", { message: `activate ${required} first` });
                 }
             }
-            // An edit keeps the credentials it was never shown, resolved before apply, and before the id is
-            // claimed below, so a form that asked to keep something that isn't there gets a plain refusal
-            // rather than an error frame in the middle of a stream.
+            // Resolved before the id is claimed, so a bad "keep" request refuses plainly instead of erroring
+            // mid-stream.
             const entry = await withKeptSecrets(services, input);
             adding.add(input.id);
             try {
                 yield* handler.apply(ctx, entry.id, entry.config);
                 await services.capabilities.upsert(entry);
-                // A fresh extension checkout brings its declared autoStart processes up (the same post-apply
-                // seam composeEnvironment uses, full Services, so the narrow handler ctx stays narrow).
+                // Brings the extension's declared autoStart processes up, the same post-apply seam composeEnvironment
+                // uses.
                 if (input.kind === "extension") {
                     const installed = (await enabledExtensions(services)).find((extension) => extension.id === input.id);
                     if (installed !== undefined) {
                         await startAutoStartProcesses(services, installed);
                     }
-                    // …and its `server` bundle joins the backend host, a restart, because loaded code
-                    // cannot be joined by, only replaced with, a process that loads the new set.
+                    // Loaded code can't be joined, only replaced; restarting is how its `server` bundle joins the
+                    // backend host.
                     services.extensionBackend.restart();
                 }
-                // A connector add/remove flips whether its provider's gateway process is wanted (a cli discord
-                // entry is what makes ext-discord run), converge listener extensions on the new manifest.
+                // A connector add or remove flips whether its provider's gateway is wanted; this converges listener
+                // extensions.
                 void reconcileListenerProcesses(services);
-                // An endpoint is only drivable once the translator knows how to reach it, awaited, not fired and
-                // forgotten, so the "added" the user reads means the next turn on it will actually route. A
-                // local model is an endpoint to the translator (mintsEndpointProvider), so it syncs the same way.
+                // Awaited, not fire-and-forget: "added" must mean the next turn on this endpoint actually routes.
                 if (mintsEndpointProvider(input.kind)) {
                     await syncEndpointCompat(services);
                 }
-                // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
+                // Folds this entry's image fragments into the overlay; upsert happens first so compose can see them.
                 const composedHash = await composeEnvironment(services);
                 if (
                     (await capabilityFragments(services, entry)).length > 0 &&
@@ -215,31 +177,15 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 adding.delete(input.id);
             }
         }),
-        /* TRY THE SETTINGS BEFORE SAVING THEM (see ./probe.ts for what is actually dialled and why it is
-         * declared rather than coded). Nothing is written, nothing is applied and no id is claimed: this route
-         * is a question, and it must stay one, or the Test button becomes a way to change the sandbox.
-         *
-         * Kept credentials resolve here exactly as they do for `add`, and for the same reason: an edit's form
-         * has never been shown the connection's key, so testing one after changing its host would otherwise
-         * mean re-typing the credential first, which is the trap the whole VAULTED path exists to close. */
+        // Tries the settings without saving them: nothing is written, applied, or claimed, so this stays a pure
+        // question. Kept credentials resolve the same way `add` does, for the same reason (the form never saw them).
         probe: i.probe.handler(async ({ input }) => {
             const entry = await withKeptSecrets(services, input);
             return probeCapability(await contributionRegistry(services), entry);
         }),
-        /* GIVE A CONNECTION A DIFFERENT NAME, a migration, not a label edit.
-         *
-         * The id is the agent's handle for the thing: its skill file, its tool prefix, the `$VAR_<NAME>` its
-         * credential arrives in, the alias `ssh <name>` resolves, the directory its logged-in browser lives in.
-         * Add-and-remove would produce the right manifest and lose all of it, signing an account out of every
-         * site, un-pairing a device, re-cloning an extension. So each kind says what its own name keys
-         * (capability.ts `rename`): what has to be carried by hand, and whether re-running `apply` is how the
-         * derived half gets rewritten.
-         *
-         * ORDER IS CHOSEN FOR WHAT A FAILURE LEAVES BEHIND. The state moves first, then the manifest follows it,
-         * and only then is the new name applied. A failure in the apply therefore leaves manifest and state
-         * agreeing on the new name, with a status that says what is wrong and a card whose Update button re-runs
-         * exactly the step that failed, where applying first would leave the state under one name and the
-         * manifest under the other. */
+        // A migration, not a label edit: the id is the agent's handle in its skill file, tool prefix, env var, ssh
+        // alias and browser directory; add-and-remove would lose all of it. State moves first, then the manifest, then
+        // apply, so a failed apply leaves them agreeing and the Update button retries exactly that step.
         rename: i.rename.handler(async ({ input }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
@@ -256,8 +202,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: handler.rename.refuse });
             }
             await handler.rename.carry?.(ctx, capability.id, input.to, capability.config);
-            // Parsed, not spread: the id is the one field of a stored entry this daemon ever rewrites, and the
-            // schema is what says the result is still a capability of that kind.
+            // Parsed, not spread: id is the only field a rename rewrites, and the schema confirms it's still valid.
             const renamed = CapabilitySchema.parse({ ...capability, id: input.to });
             await services.capabilities.upsert(renamed);
             await services.capabilities.remove(capability.id);
@@ -267,27 +212,26 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     void line;
                 }
             }
-            // The same convergence an add runs, for the same reasons, the fragment set is keyed by entry id, a
-            // connector's gateway by the capability serving it, the translator by the endpoint's name.
+            // Same convergence as `add`: fragments key on entry id, gateways on the capability, translator on endpoint
+            // name.
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);
             if (mintsEndpointProvider(renamed.kind)) {
                 await syncEndpointCompat(services);
             }
-            // The warm ACP subprocess is keyed by the old name; dropping it is what an edit already does, and
-            // the next turn respawns it under the new one.
+            // The warm ACP subprocess is keyed by the old name; dropping it lets the next turn respawn under the new
+            // one.
             if (renamed.kind === "agent") {
                 services.acpConnections.drop(capability.id);
             }
-            // An extension's server bundle is loaded under its name, the same replacement an install performs.
+            // Loaded under its name, same as an install; the replacement (restart) is what picks up the new one.
             if (renamed.kind === "extension") {
                 services.extensionBackend.restart();
             }
             return { ok: true } as const;
         }),
-        // Replace just the capability's secret field and re-run its idempotent apply (ssh/vpn rewrite their
-        // credential files, plugin re-clones with the new token, cli/mcp are cheap). No composeEnvironment: a
-        // secret can't change a fragment. Apply-before-upsert keeps the old secret if the apply fails.
+        // Replaces one secret field and re-runs the idempotent apply; no composeEnvironment, since a secret can't
+        // change a fragment. Apply runs before upsert, so a failed apply keeps the old secret stored.
         setSecret: i.setSecret.handler(async ({ input }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
@@ -303,7 +247,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             await services.capabilities.upsert(updated);
             void reconcileListenerProcesses(services);
-            // A rotated endpoint key is a new upstream credential, the translator holds the old one until told.
+            // A rotated key is a new upstream credential; the translator keeps the old one until told to sync.
             if (mintsEndpointProvider(updated.kind)) {
                 await syncEndpointCompat(services);
             }
@@ -319,20 +263,18 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability can't be removed` });
             }
             await handler.remove(ctx, capability.id, capability.config);
-            // A removed ACP agent's warm subprocess dies with its capability (re-adds respawn lazily; a
-            // config edit respawns on the next turn via the pool's config-key check).
+            // The warm subprocess dies with a removed agent capability; a re-add respawns lazily on the next turn.
             if (capability.kind === "agent") {
                 services.acpConnections.drop(capability.id);
             }
             await services.capabilities.remove(input.id);
-            // Removed AFTER the manifest drops it, so the rebuilt list can't put the endpoint straight back.
+            // Removed only after the manifest drops it, so the rebuilt list can't put the endpoint straight back.
             if (mintsEndpointProvider(capability.kind)) {
                 await syncEndpointCompat(services);
             }
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);
-            // A removed extension's backend retires with it (no-op for every other kind, the supervisor
-            // re-enumerates and finds the same set).
+            // A removed extension's backend retires with it; a no-op for other kinds, whose set is unchanged.
             if (capability.kind === "extension") {
                 services.extensionBackend.restart();
             }
@@ -345,12 +287,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             return registry[capability.kind].status(ctx, capability.id, capability.config);
         }),
-        /* One capability's stored config, secrets included, the extension BACKENDS' credential read (see the
-         * contract's note). The identity check is the whole gate: the bearer middleware sets `identity` for
-         * every member it verifies, and this route serves precisely the callers it never does, the daemon's
-         * own header grants, of which the extension token is the only one that must also DECLARE this route.
-         * Secrets echoing as hasToken booleans everywhere else on this surface is unchanged: this route is
-         * unreachable from anything that renders. */
+        // One capability's stored config with secrets included, for an extension backend's credential read. The gate is
+        // the identity check: this route serves only callers the bearer middleware never sets `identity` for, and is
+        // unreachable from anything that renders.
         connection: i.connection.handler(async ({ input, context }) => {
             if (context.identity !== undefined) {
                 throw new ORPCError("FORBIDDEN", { message: "the connection read serves extension backends, never a signed-in browser" });
@@ -359,9 +298,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            // Only the string-valued fields: a connection is env-shaped by construction (a cli's url/key pair,
-            // a browser platform's urls), and a structured value leaking through would only confuse a caller
-            // that expects to put these into headers.
+            // Only string fields survive; a connection is env-shaped, so a structured value would confuse a header
+            // caller.
             const config = Object.fromEntries(Object.entries(capability.config).filter(([, value]) => typeof value === "string")) as Record<
                 string,
                 string
@@ -369,9 +307,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             return { id: capability.id, kind: capability.kind, config };
         }),
         marketplace: i.marketplace.handler(async ({ input }) => browseMarketplace(ctx, input.url, input.token)),
-        // "Not needed", recorded against the evidence the card is CURRENTLY recommended on, re-derived here
-        // rather than taken from the client, so the dismissal answers the claim that was actually on screen and
-        // lapses by itself when the workspace moves. A card that is no longer recommended has nothing to record.
+        // Re-derives the recommendation here rather than trusting the client, so the dismissal matches what was
+        // actually on screen and lapses when the workspace changes.
         dismiss: i.dismiss.handler(async ({ input }) => {
             const recommendations = await capabilityRecommendations(
                 services.workspace.root,
@@ -385,12 +322,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
             await services.capabilityDismissals.dismiss({ card: input.card, evidence: recommendation.evidence });
             return { ok: true } as const;
         }),
-        // An agent capability's interactive sign-in: run its loginCommand in a live window of the capability's
-        // job session, typed via send-keys (the managed-processes pattern) so the USER completes the flow in
-        // the attached terminal panel, device codes, browser links, pasted tokens all work. Deliberately not
-        // terminalRun (a run-to-completion capture): the route returns immediately and the pane IS the UI.
-        // The capability's env block is NOT injected, inline exports would print secrets into the persisted
-        // pane logs; login flows establish the agent's own stored credential interactively instead.
+        // Runs loginCommand in the capability's job session via send-keys so the user finishes an interactive sign-in
+        // (device code, browser link, pasted token) in the terminal panel; the route returns immediately. The
+        // capability's env block is not injected, since inline exports would print secrets into the persisted pane log.
         login: i.login.handler(async ({ input }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined || capability.kind !== "agent") {
@@ -405,39 +339,31 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             const session = capabilityJobSession(input.id);
             const run = promisify(execFile);
-            // Attach-or-create keeps any prior job windows' scrollback; the trailing ":" targets the window's
-            // active pane (a bare exact-match `=name` never resolves as a pane target, see managed-processes).
+            // Attach-or-create keeps prior scrollback; the trailing ":" targets the active pane, a bare `=name`
+            // doesn't.
             await run("tmux", ["new-session", "-A", "-d", "-s", session, "-c", services.workspace.root]);
             await run("tmux", ["new-window", "-t", `=${session}:`, "-n", "login", "-c", services.workspace.root]);
             await run("tmux", ["send-keys", "-t", `=${session}:`, "-l", loginCommand]);
             await run("tmux", ["send-keys", "-t", `=${session}:`, "Enter"]);
             return { session };
         }),
-        // One TOTP code off the capability's stored seed, the `otp` command's whole backend. The seed field is
-        // whichever one the capability's card marks `totp`; the code is minted here so the seed never crosses
-        // the wire (this route is the single capability read the per-boot agent token is admitted to).
+        // Mints one TOTP code from the stored seed so the seed itself never crosses the wire; this is the only
+        // capability read the per-boot agent token is admitted to. The seed field is whichever one the capability's
+        // card marks `totp`.
         otp: i.otp.handler(async ({ input, context, signal }) => {
             const capability = await services.capabilities.get(input.id);
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            /* A ONE-TIME CODE IS A USE OF THE STORED SEED, so a gated capability's `otp` asks like every other
-             * exit (secrets/credential-gate.ts). This lane is per-use by nature — a code is derived, expires
-             * within its period, and cannot be "kept" — but the SCOPE is still the gate's own: a
-             * conversation-scoped release already answered covers this code without a second card, and an
-             * ungranted one raises one.
-             *
-             * The conversation comes off the header every agent CLI in this sandbox sends from
-             * INTENTIC_TURN_OWNER (bin/otp), and its absence is a detached shell, which the gate refuses
-             * rather than guessing a chat to draw the card in. */
+            // conversationId comes from the INTENTIC_TURN_OWNER header; absent means a detached shell, refused rather
+            // than guessed.
             const verdict = await services.credentialGate.check({
                 subject: input.id,
                 kind: "capability",
                 lane: "otp",
                 detail: `a one-time code for ${input.id}`,
                 conversationId: context.headers.get("x-intentic-conversation") ?? undefined,
-                // A code is only ever asked for from a turn's own shell; whether anybody is watching is the
-                // gate's to discover from the live run, not something this route can claim.
+                // Always false: whether anyone is watching is for the gate to discover, not for this route to claim.
                 unattended: false,
                 signal: signal ?? new AbortController().signal,
             });

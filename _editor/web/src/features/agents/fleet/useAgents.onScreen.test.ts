@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The same edges useAgents.test.ts cuts: importing the fleet store pulls useChat and the app shell behind it.
+// Same edges useAgents.test.ts cuts: importing the fleet store pulls in useChat and the app shell behind it.
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
 vi.mock("../../sandbox/client/useSandbox", async () => {
@@ -21,20 +21,16 @@ import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { resetAgents } from "./useAgents";
 import { setAgents } from "./useAgents-registry";
 
-/* READING A CHAT IS READING IT. A turn that lands while you are watching its conversation is not news, so the
- * card must not badge under your cursor, and what counts as watching is this window being on screen with that
- * chat focused. Each window answers that for itself, the floating chat's window included, since it runs its own
- * copy of the app (composables/floating.ts). */
+// A turn landing while its conversation is watched is not news; the card must not badge. Watching means this
+// window is on screen with that chat focused, answered per window, including a floating chat's own copy.
 
-// jsdom answers `visible` for the page's own document and it cannot be set, so it is dressed by hand, the way
-// the browser would report it.
+// jsdom's `visibilityState` can't be set directly, so it's dressed by hand the way the browser would report it.
 const show = (doc: Document, visible: boolean): void => {
     Object.defineProperty(doc, `visibilityState`, { value: visible ? `visible` : `hidden`, configurable: true });
     doc.dispatchEvent(new Event(`visibilitychange`));
 };
 
-// An agent opened once (seenAt) that has worked since (updatedAt), with no turn of its own in flight: the
-// "Updated" badge, and the one state this gate decides the fate of.
+// An agent opened once (seenAt) that worked since (updatedAt) with no turn in flight: the state this gate decides.
 const worked = (id: string): AgentSummary => ({
     id,
     status: `landed`,
@@ -74,8 +70,7 @@ describe(`the unread badge`, () => {
         setAgents([worked(`a2`)], 1);
         await nextTick();
 
-        // What the badge is FOR: a turn that landed with nobody looking is news whichever conversation was
-        // technically the active one.
+        // What the badge is for: a turn landing with nobody looking is news, whichever conversation was active.
         expect(sandboxJson).not.toHaveBeenCalledWith(...seen(`a2`));
     });
 });

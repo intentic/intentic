@@ -5,10 +5,8 @@ import { computed } from "vue";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
-/* CI runs across the workspace repos' github/gitlab remotes, via the daemon's /ci routes. The daemon serves a
- * webhook-freshened cache and backfills it from the vendors when stale, so plain polling here costs one daemon
- * call, the vendors are only hit when the picture is actually stale. Actions address a run by repo + vendor
- * id; the daemon re-resolves the project and token per call. All daemon access goes through the host api. */
+// CI runs across the workspace's github/gitlab remotes, via the daemon's /ci routes (webhook-freshened, backfilled from
+// vendors when stale). Runs are addressed by repo + vendor id; the daemon re-resolves the project and token per call.
 
 const POLL_MS = 30_000;
 
@@ -40,17 +38,8 @@ export function usePipelines() {
         mutationFn: (run: PipelineRun) => api.sandbox.json(`/ci/runs/cancel`, body(run)),
         onSuccess: invalidate,
     });
-    /* Starts an isolated agent seeded with the failure context; resolves to its conversation id, which is the
-     * fleet's card id, the view hands it to /agents?focus= and the board lands on the card.
-     *
-     * `pick` is the run button's caret: absent on the ordinary click, in which case the daemon opens the session
-     * on the sandbox's own agent-run list. Nothing here reads that list, `api.models.agentRun()` already names
-     * it for the button, and a second reading of the same setting is how a button comes to promise one model
-     * while the daemon spends another.
-     *
-     * THE TIER TRAVELS WITH THE MODEL, because the daemon fills a pinned entry's knobs in only for a run that
-     * named no model at all: a pick that dropped the effort would run the frontier model somebody reached for
-     * at whatever tier the provider defaults to, which is the cheaper half of what they asked for. */
+    // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
+    // own named default; effort travels with the model so a pick can't silently drop to the provider's default tier.
     const fix = useMutation({
         mutationFn: async ({ run, pick }: { run: PipelineRun; pick?: AgentRunChoice | undefined }): Promise<CiFixResponse> =>
             CiFixResponseSchema.parse(
@@ -70,10 +59,7 @@ export function usePipelines() {
         repos: computed(() => query.data.value?.repos ?? []),
         runs: computed(() => query.data.value?.runs ?? []),
         error: computed(() => query.error.value?.message),
-        // isPending, not isLoading: true from mount until the FIRST response, INCLUDING the window where
-        // `enabled` still gates the fetch on the sandbox handshake. isLoading is false in that window (nothing
-        // is in flight yet), which is how the view came to flash "no repo maps to a connected account" at
-        // someone whose repos were about to load.
+        // isPending, not isLoading: true until the first response, including while `enabled` still gates the fetch.
         isPending: query.isPending,
         rerun,
         cancel,

@@ -1,22 +1,7 @@
-<!-- THE POST, set to be read. The one thing on this page that is not chrome: the words a reviewer is being
-     asked to approve, plus whatever goes out attached to them.
-
-     A MEASURE, BEFORE ANYTHING ELSE. The queue's rows are as wide as the window, and a paragraph run across
-     them is ~110 characters a line: past roughly 75 the eye loses its place on the return sweep, which is
-     what made this page "unreadable" rather than merely plain. The column here is capped in `ch`, so it holds
-     at any window width and on any theme's font. The review body uses the design system's compact prose scale:
-     smaller than the old 16px post treatment, but still large enough to read as paragraphs rather than chrome.
-
-     MARKDOWN IS SUPPORTING STRUCTURE HERE. Posts are authored as Markdown, and asking for approval against a
-     slab containing literal `**`, list markers and links makes their intended shape needlessly hard to read.
-     <Markdown> is the shared sanitized renderer, so headings, emphasis, lists, links and code all use the same
-     prose rules as the rest of the app. The editor remains the source view: opening the pencil reveals and
-     edits the exact Markdown that will be posted.
-
-     LONG POSTS FOLD. A YouTube description is a screenful on its own; three of them push everything else in
-     the queue below the fold, including the section that owes a decision. Past LONG_POST the body clamps with
-     a fade and a toggle, the same shape <Code> uses for a long command, for the same reason: a hard cut reads
-     as a rendering bug. -->
+<!--
+    Renders the post text under review via the shared <Markdown> component, so approvals see the same formatting the platform will. Column width is
+    capped in `ch` to keep lines readable. Posts longer than LONG_POST clamp with a fade and a toggle.
+-->
 <script setup lang="ts">
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { ui, Markdown } from "@intentic/extension-ui";

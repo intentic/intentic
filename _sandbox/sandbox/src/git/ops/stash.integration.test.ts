@@ -6,8 +6,8 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./stash.js";
 
-/* Against real repositories, because the whole module is a reading of git's own stash bookkeeping: how it
- * numbers entries, what it writes into a reflog subject, and which of its verbs keep the entry. */
+// Against real repos: the module reads git's own stash bookkeeping (entry numbering, reflog subject spelling, which
+// verbs keep the entry).
 
 const run = promisify(execFile);
 const dirs: string[] = [];
@@ -45,11 +45,10 @@ test("stashing sets the tree aside, and the entry carries the message and the br
 
     const [entry, ...rest] = await stashList(dir);
     expect(rest).toEqual([]);
-    // git writes "On main: my wip" for a named stash, the scaffolding is stripped, the message is not.
+    // git writes "On main: my wip"; the scaffolding is stripped from `subject`, the message isn't.
     expect(entry).toMatchObject({ ref: "stash@{0}", subject: "my wip", branch: "main" });
     expect(entry?.sha).toMatch(/^[0-9a-f]{40}$/);
-    // A stash commit's first parent is the commit it was taken on, which is the edge the graph draws back into
-    // the history.
+    // A stash commit's first parent is the commit it was taken on, the edge the graph draws into history.
     expect(entry?.parents.length).toBeGreaterThanOrEqual(2);
 });
 
@@ -59,7 +58,7 @@ test("an unnamed stash keeps git's own WIP subject, minus the scaffolding", asyn
     await stashPush(dir, {});
 
     const [entry] = await stashList(dir);
-    // "WIP on main: <sha> base" → the branch is lifted out and the rest is what a reader would recognise.
+    // "WIP on main: <sha> base": the branch is lifted out, the rest kept as the readable remainder.
     expect(entry?.branch).toBe("main");
     expect(entry?.subject).toContain("base");
 });
@@ -70,7 +69,7 @@ test("stashing a clean tree reports nothing to stash rather than failing", async
     expect(await stashList(dir)).toEqual([]);
 });
 
-// Untracked files are the usual reason a stash "did not stash everything": git leaves them behind by default.
+// git leaves untracked files out of a stash by default.
 test("includeUntracked sweeps up files git has never seen", async () => {
     const dir = await repo();
     await writeFile(join(dir, "new.txt"), "brand new\n");
@@ -101,26 +100,23 @@ test("apply keeps the entry and pop drops it: git's own distinction, both offere
     // Applied, not consumed.
     expect(await stashList(dir)).toHaveLength(1);
 
-    // Reset the tree so the pop applies cleanly, then pop: same content back, entry gone.
+    // Resets the tree first so the pop applies cleanly.
     await git(dir, ["checkout", "--", "a.txt"]);
     expect(await stashApply(dir, "stash@{0}", true)).toEqual({ ok: true });
     expect(await clean(dir)).toBe(false);
     expect(await stashList(dir)).toEqual([]);
 });
 
-/* A CONFLICTING APPLY IS NOT A LOST STASH. Git leaves markers in the tree and keeps the entry, which is the
- * right behaviour: the work is still recoverable, so this reports a value rather than throwing. */
 test("an apply that conflicts reports it and leaves the entry in place", async () => {
     const dir = await repo();
     await writeFile(join(dir, "a.txt"), "stashed line\n");
     await stashPush(dir, { message: "wip" });
 
-    // Move the same line on the branch, so putting the stash back cannot apply cleanly.
+    // Moves the same line on the branch, so the stash can't apply cleanly.
     await writeFile(join(dir, "a.txt"), "committed line\n");
     await git(dir, ["commit", "-am", "conflicting"]);
 
     expect(await stashApply(dir, "stash@{0}", true)).toEqual({ ok: false, reason: "conflict" });
-    // The entry survives a failed pop, which is what makes the failure recoverable.
     expect(await stashList(dir)).toHaveLength(1);
 });
 
@@ -135,7 +131,7 @@ test("dropping removes one entry and renumbers the rest", async () => {
 
     await stashDrop(dir, "stash@{0}");
     const remaining = await stashList(dir);
-    // The survivor is renumbered to stash@{0}, which is why a caller must re-read rather than hold an index.
+    // Renumbered to stash@{0}: a caller must re-read rather than hold an index.
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toMatchObject({ ref: "stash@{0}", subject: "first" });
 });

@@ -72,14 +72,14 @@ const {
     icon?: IconName | undefined;
     loading?: boolean;
     disabled?: boolean;
-    // The caller's own reason for the button, shown on the primary half. What the run costs is the caret's
-    // business, so the two never fight over one tooltip.
+    // The caller's own reason for the button, shown on the primary half; what the run costs is the caret's
+    // own tooltip, so the two never share one.
     hint?: string | undefined;
 }>();
 const emit = defineEmits<{ run: [] }>();
 
-// The caret's own DOM node, which is what the picker anchors to. PrimeVue's Button types its instance without
-// `$el`, so the ref is taken as the generic public instance the runtime actually hands back.
+// The caret's own DOM node, for the picker to anchor to; taken as the generic instance since PrimeVue's
+// Button doesn't type `$el`.
 const caret = ref<ComponentPublicInstance>();
 
 const overridden = computed(() => picker.overridden.value);
@@ -130,9 +130,10 @@ const openPicker = (): void => {
 
 <template>
     <span class="inline-flex items-stretch gap-px">
-        <!-- The inner edges are trimmed on the BORDERLESS variant only. With no fill to join them, the two lots
-             of horizontal padding read as a gap between two separate controls rather than as one split button.
-             A filled button needs no help, and taking its padding would sit the divider against the label. -->
+        <!--
+            Inner edges trimmed only on the borderless `text` variant: a filled button needs no help, and trimming
+            its padding would sit the divider against the label.
+        -->
         <Button
             :label="label"
             :size="size"
@@ -146,9 +147,10 @@ const openPicker = (): void => {
         >
             <template v-if="icon" #icon><Icon :name="icon" /></template>
         </Button>
-        <!-- Disabled with the primary half and never on its own: a caret that stayed live while the run it
-             configures could not be started would let someone choose a model for a click that does nothing.
-             It does NOT take the loading spinner, though: one spinner per action is the whole point of it. -->
+        <!--
+            Disabled together with the primary half, never on its own, so nobody can configure a model for a click
+            that can't run. Takes no spinner of its own: one spinner per action.
+        -->
         <Button
             ref="caret"
             :size="size"
@@ -160,14 +162,11 @@ const openPicker = (): void => {
             v-tooltip.top="caretHint"
             @click="openPicker"
         >
-            <!-- The deviation, spelled out where the chevron alone would have been: the model AND the tier, since
-                 a run re-pointed to Max on the model it was already on is a deviation that costs money and would
-                 otherwise be invisible.
-                 THE MODEL IS THE HALF THAT TRUNCATES, and the cap is on it alone. A model name is the one part
-                 of this control with no fixed length ("GPT-5.6 Codex Mini High Fidelity"), while a tier is one
-                 short word — and it is the half that is NEWS, since it was invisible before and is what the
-                 caret was reached for. One capped string would have cut the tier off the end of every long
-                 name. The whole of it stays one hover away on the tooltip above. -->
+            <!--
+                The deviation spelled out where a bare chevron would be. Only the model half truncates (unbounded
+                length); the tier is one short word and is never cut. The full text stays one hover away on the
+                tooltip.
+            -->
             <span class="flex items-center gap-1">
                 <template v-if="overridden">
                     <Icon name="sparkles" class="shrink-0 text-2xs" />

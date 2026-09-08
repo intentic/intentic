@@ -4,9 +4,8 @@ import { z } from "zod";
 import { packageRoot } from "../repos.js";
 import { type RunRecord, RunRecordSchema } from "../schema.js";
 
-// Where the tokens actually go: mined from the stream-json transcripts each run already saves. The categories
-// drive three decision metrics, reads-after-search (the round-trip `pack` must delete), search thrash, and
-// iq-adoption failures (arm b/c runs that never called iq).
+// Where tool calls go, mined from each run's stream-json transcript; drives reads-after-search, search thrash and
+// iq-adoption metrics.
 type Category = "iq" | "search" | "read" | "probe" | "test" | "git" | "edit" | "other";
 
 const HEAD_CATEGORY: ReadonlyMap<string, Category> = new Map([
@@ -43,24 +42,22 @@ const TOOL_CATEGORY: ReadonlyMap<string, Category> = new Map([
     ["NotebookEdit", "edit"],
 ]);
 
-// npx/npm/pnpm/yarn mostly launch test runners in these tasks ("npx vitest run …").
+// npx/npm/pnpm/yarn mostly launch test runners in these tasks ("npx vitest run ...").
 const RUNNER_HEADS = new Set(["npx", "npm", "pnpm", "yarn", "bun"]);
 
 export interface ToolEvent {
     readonly tool: string;
     readonly category: Category;
-    // Bash only: "<verb> <query…>" of an iq invocation.
+    // Bash only: "<verb> <query...>" of an iq invocation.
     readonly iqCall?: string;
-    // iq calls only, from the tool result: returned nothing / errored, the hardening KPI.
+    // iq calls only, from the tool result: returned nothing or errored, the hardening KPI.
     readonly iqZeroHit?: boolean;
     readonly iqUsageError?: boolean;
 }
 
 const classifyBash = (command: string): { category: Category; iqCall?: string } => {
-    /* A command to the right of `||` is a fallback, not evidence it ran. Transcript mining found nine calls
-     * where iq appeared only there; crediting all nine as adoption made a grep-first policy look like iq use.
-     * Keep every unconditional statement, but within each `;`/newline statement classify only the path that is
-     * always attempted. This is deliberately conservative: shell text alone cannot prove a fallback executed. */
+    // A command right of `||` is a fallback, not proven execution; only the always-attempted path per statement is
+    // classified. Shell text alone cannot prove a fallback ran, so this stays conservative.
     const attempted = command
         .split(/;|\n/)
         .map((statement) => statement.split("||", 1)[0] ?? "")
@@ -167,7 +164,7 @@ export const toolEvents = (transcript: string): ToolEvent[] => {
 export interface RunAnalytics {
     readonly counts: Readonly<Record<Category, number>>;
     readonly iqCalls: readonly string[];
-    // Read-class call immediately following an iq / non-iq search call, the round-trip pack should remove.
+    // Read-class call immediately following an iq or search call; what the round-trip pack should remove.
     readonly readsAfterIq: number;
     readonly readsAfterSearch: number;
     // Bursts of ≥3 consecutive search/probe calls with no read/edit between, the grep-loop signature.

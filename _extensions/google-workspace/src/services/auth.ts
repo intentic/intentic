@@ -8,8 +8,7 @@ import { scopesFor } from "../google/scopes.js";
 import { exchangeCode } from "../google/token.js";
 
 const CONSENT = "https://accounts.google.com/o/oauth2/v2/auth";
-// A fixed port so the redirect URI printed by `login` is the one `exchange` assumes, and so an owner who has
-// to register it by hand registers it once.
+// Fixed so the redirect URI `login` prints is the one `exchange` assumes, registered by hand once.
 const DEFAULT_PORT = 9004;
 const WAIT_MS = 5 * 60 * 1000;
 
@@ -21,15 +20,13 @@ const consentUrl = (clientId: string, port: number, scopes: readonly string[]): 
         redirect_uri: redirectUri(port),
         response_type: "code",
         scope: scopes.join(" "),
-        // Without both of these Google issues no refresh token on a client that has been approved before, and
-        // a refresh token is the entire point of this flow.
+        // Without both, Google issues no refresh token on a client approved before, the entire point of this flow.
         access_type: "offline",
         prompt: "consent",
     }).toString()}`;
 
-// A pasted `http://127.0.0.1:9004/?code=…&scope=…` is what an owner who approved in their OWN browser has in
-// front of them, the redirect failed to connect, but the address bar holds the answer. Both that and a bare
-// code are accepted, because which one arrives depends on whose browser it was.
+// Accepts either a bare code or a full redirect URL, since an owner approving in their own browser lands on a page that
+// failed to connect but still carries `?code=` in the address bar.
 const codeFrom = (input: string): string => {
     const value = input.trim();
     if (!value.includes("://")) {
@@ -59,7 +56,7 @@ const waitForCode = async (port: number): Promise<string | undefined> =>
             server.close();
             resolve(undefined);
         }, WAIT_MS);
-        // The timer must not be what keeps the process alive once the code has landed.
+        // Must not be what keeps the process alive once the code has already landed.
         timer.unref();
     });
 
@@ -116,8 +113,7 @@ const token: Command = {
     usage: "gw auth token [--account name]",
     run: async (ctx) => {
         const value = await ctx.session.token();
-        // tokeninfo is a convenience, not the answer: a token that works but whose introspection is refused
-        // must still report the account it belongs to.
+        // tokeninfo is a convenience; a token that works but refuses introspection must still report its account.
         const info: { scope?: string; expires_in?: number } = await call<{ scope?: string; expires_in?: number }>(ctx.session, {
             url: "https://www.googleapis.com/oauth2/v3/tokeninfo",
             query: { access_token: value },

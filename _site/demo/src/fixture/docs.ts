@@ -1,26 +1,13 @@
 import { STATE_DIR } from "@intentic/constants";
-/* DOCUMENTATION, RECORDED, what agents wrote about acme-shop, and one draft still waiting to be read.
- *
- * Like every other surface in this recording, the documents ARE the state: a published set is
- * `<repo>/docs/architecture/**` (in the repo, reviewable in the same diff as the code it describes) and a draft
- * is `.intentic/config/docs/<repo>/**` mirroring the same tails. So this module contributes files and nothing else, and
- * the extension reads them exactly as it would against a real sandbox.
- *
- * BOTH TREES ARE PRESENT ON PURPOSE. `web` is published, it is what the area looks like once a set has landed:
- * a map, a reading order, a page per part, and one page marked stale because the code moved under it (the
- * checkout agent is editing that very directory in the fleet board next door). `api` is staged, which is what
- * makes the rail badge and the draft banner real: an agent generated it, nobody has read it, and the choice to
- * publish is still the owner's.
- *
- * WHAT IS DELIBERATELY ABSENT is a run manifest. A run that is still in flight is one the extension would try to
- * ADVANCE, starting a turn per undocumented package, which is the one thing a recording must never do. The
- * documents are the finished artifact; the run that made them is over. */
+// Documents agents wrote for acme-shop: a published set at `<repo>/docs/architecture/**`, a draft at
+// `.intentic/config/docs/<repo>/**`. `web` is published (map, reading order, one page marked stale); `api` is staged,
+// generated but unread. No run manifest: an in-flight run would make the extension try to advance it.
 
 const ARCHITECTURE = `docs/architecture`;
 const STAGING = `${STATE_DIR}/config/docs`;
 
-/* What a page carries before it becomes a README. Authored here only so the fixture can compose the page and the
- * index from ONE source; neither shape exists on disk in a real repository. */
+// What a page carries before becoming a README; exists only so the fixture can build the page and index from one
+// source.
 interface PageDoc {
     readonly dir: string;
     readonly oneLiner: string;
@@ -29,8 +16,6 @@ interface PageDoc {
 
 const WEB_REV = `4f1c8ab2d9e6f0713c5a8b47d1e2f9c0a6b3d84e`;
 const API_REV = `9b2d10e4c7a1f3b85d6e0c29a4f7b1d3e8c05a26`;
-
-// ---- web: the published set ---------------------------------------------------------------------------------
 
 const WEB_REPO_DOC = (generatedAt: number): string =>
     `${JSON.stringify(
@@ -231,9 +216,8 @@ for exactly this and is the reason the fixture waits on a rendered price rather 
     },
 ];
 
-/* The index is GENERATED in a real repository, `intentic-docs check` reads each README and the package graph and
- * writes this. The recording has no tool run, so it is authored here, but every field is one the tool would have
- * computed: the one-liners come from the pages above, and the measures are what the app draws its figures from. */
+// In a real repo, `intentic-docs check` generates this from the READMEs and package graph; here it's authored by hand,
+// but every field is what that tool would compute.
 const WEB_INDEX = (generatedAt: number): string =>
     `${JSON.stringify(
         {
@@ -250,8 +234,7 @@ const WEB_INDEX = (generatedAt: number): string =>
                     hasTests: false,
                     readmeRev: WEB_REV,
                     updatedAt: generatedAt,
-                    // The one page the recording marks stale, because the fleet board next door is editing exactly
-                    // this directory, which is what staleness looks like when it is honest rather than decorative.
+                    // The one page marked stale: the fleet board is editing this directory right now.
                     stale: true,
                     reason: `3 commits have touched this package since its README was written`,
                     behind: 3,
@@ -293,8 +276,6 @@ const WEB_INDEX = (generatedAt: number): string =>
         undefined,
         2,
     )}\n`;
-
-// ---- api: the draft nobody has read yet ---------------------------------------------------------------------
 
 const API_REPO_DOC = (generatedAt: number): string =>
     `${JSON.stringify(
@@ -462,13 +443,8 @@ const API_INDEX = (generatedAt: number): string =>
         2,
     )}\n`;
 
-/* One page → one file, because a package's document IS its README. The authored `doc` is not written anywhere:
- * in a real repository the tool READS the one-liner and the anchors back out of the README, so the fixture
- * composes them INTO the page rather than shipping them beside it. That keeps the recording honest about where
- * this data comes from, and it means the fixture's index cannot disagree with its pages.
- *
- * The one-liner goes directly under the heading, which is the position the parser takes it from, and the anchors
- * become a `## Key files` section with package-relative links, the same links that have to work on GitHub. */
+// One page, one README file; `doc` isn't written separately, a real tool reads the one-liner and anchors back out of
+// the README. One-liner sits under the heading; anchors become a `## Key files` section with package-relative links.
 const pageFiles = (base: string, pages: readonly { readonly dir: string; readonly doc: PageDoc; readonly prose: string }[]) =>
     pages.map((page): [string, string] => {
         const [heading, ...rest] = page.prose.split(`\n\n`);
@@ -481,21 +457,20 @@ const pageFiles = (base: string, pages: readonly { readonly dir: string; readonl
     });
 
 export const documentationFiles = (now: number): [string, string][] => {
-    // Published two days ago; the draft came out of a run twenty minutes before the visitor arrived, which is why
-    // nobody has read it yet.
+    // Published two days ago; the draft is twenty minutes old, before the visitor arrives.
     const published = now - 2 * 86_400_000;
     const drafted = now - 20 * 60_000;
     return [
         [`web/${ARCHITECTURE}/repo.json`, WEB_REPO_DOC(published)],
         [`web/${ARCHITECTURE}/repo.md`, WEB_REPO_PROSE],
         [`web/${ARCHITECTURE}/index.json`, WEB_INDEX(published)],
-        // A PUBLISHED package page sits on the package, not under the docs directory, that is the layout.
+        // Published package pages sit on the package itself, not under the docs directory.
         ...pageFiles(`web`, WEB_PAGES),
 
         [`${STAGING}/api/repo.json`, API_REPO_DOC(drafted)],
         [`${STAGING}/api/repo.md`, API_REPO_PROSE],
         [`${STAGING}/api/index.json`, API_INDEX(drafted)],
-        // A STAGED one still mirrors under the staging root, which is what makes publishing a copy per tail.
+        // Staged package pages mirror under the staging root instead.
         ...pageFiles(`${STAGING}/api`, API_PAGES),
     ];
 };

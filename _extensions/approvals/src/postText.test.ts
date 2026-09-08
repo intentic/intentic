@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { countdownWords, destinationOf, isReply, limitOf, LONG_POST, postEdit, postsATitle } from "./postText";
 
-// No mocks: postText is a leaf of pure functions over a post's own fields, which is why the page can ask the
-// same questions from four sections without four answers.
+// No mocks: pure functions over a post's own fields, so the page can ask the same question from four sections.
 
 describe("limitOf", () => {
     it("answers for platforms with a hard cap and stays quiet for the rest", () => {
         expect(limitOf(`x`)).toBe(280);
         expect(limitOf(`X`)).toBe(280);
         expect(limitOf(`discord`)).toBe(2_000);
-        // Reddit's cap is far past anything an agent writes, and an unknown platform has no cap to state:
-        // both get a plain character count instead of a made-up denominator.
+        // Reddit's cap is far past anything written; an unknown platform has none either, so both get a plain count.
         expect(limitOf(`reddit`)).toBeUndefined();
         expect(limitOf(`some-new-network`)).toBeUndefined();
     });
@@ -22,9 +20,8 @@ describe("postsATitle", () => {
         expect(postsATitle(`youtube`, undefined)).toBe(true);
     });
 
-    /* THE TWO CASES WHERE `title` IS THE AGENT TALKING, not the post's headline: a platform with no titles at
-     * all, and a reply: comments carry no headline anywhere, whatever the platform. Both used to render as a
-     * three-line bold block above the post they had no business outweighing. */
+    // The two cases where `title` is the agent's note, not a headline: a platform with no titles, and any reply
+    // (comments have no headline).
     it("is a note on a platform without titles, and on any reply", () => {
         expect(postsATitle(`x`, undefined)).toBe(false);
         expect(postsATitle(`discord`, `#releases`)).toBe(false);
@@ -47,9 +44,8 @@ describe("destinationOf", () => {
         expect(destinationOf(`https://reddit.com/r/webdev/comments/abc/title/`).label).toBe(`r/webdev`);
     });
 
-    /* TALKING TO THE ROOM VS TALKING TO ONE PERSON: the same URL with one more segment on it, and a different
-     * decision for the reviewer. Both of reddit's permalink shapes say so, and a `?context=` on a thread does
-     * not: that is still the thread's own address. */
+    // One more URL segment means replying to a comment, not the thread; both of reddit's permalink shapes count, but
+    // `?context=` on a thread doesn't.
     it("says when the target is one comment rather than the thread", () => {
         expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/some_slug/kx9y8z7/`).verb).toBe(`reply to a comment in`);
         expect(destinationOf(`https://www.reddit.com/r/mcp/comments/1abc23/comment/kx9y8z7/`).verb).toBe(`reply to a comment in`);
@@ -94,11 +90,11 @@ describe("postEdit", () => {
         expect(postEdit(reply, { content: `rewritten`, title: `` })).toEqual({ content: `rewritten` });
     });
 
-    // The one that would be got wrong and never noticed: on a reply, `title` is the AGENT'S NOTE about the
-    // post. The editor draws no box for it, so sending the field back would post an empty headline over it.
+    // On a reply, `title` is the agent's own note, not a headline the editor has a box for; saving it back would post
+    // an empty headline.
     it("never touches a title the platform does not publish", () => {
         expect(postEdit(reply, { content: `rewritten`, title: `` })).not.toHaveProperty(`title`);
-        // Even a title that somehow arrived changed is not a reason to save: the post itself is untouched.
+        // Even a changed title isn't a reason to save when the post itself is untouched.
         expect(postEdit(reply, { content: `as written`, title: `something else` })).toBeUndefined();
     });
 
@@ -109,8 +105,7 @@ describe("postEdit", () => {
         });
     });
 
-    // An identical re-post would still rewrite the file, refetch the queue and flash the row: a click that did
-    // nothing, reported as if it did.
+    // An identical re-post still rewrites the file and flashes the row: a no-op click reported as if it did something.
     it("is not a save when nothing changed", () => {
         expect(postEdit(article, { content: `as written`, title: `Ship it on Friday` })).toBeUndefined();
         expect(postEdit(reply, { content: `as written`, title: `` })).toBeUndefined();
@@ -120,14 +115,14 @@ describe("postEdit", () => {
 describe("countdownWords", () => {
     it("counts the hold down in the unit the decision is made in", () => {
         expect(countdownWords(43_000)).toBe(`43s`);
-        // Rounded UP, so a countdown never shows a second the post still has: 0.4s left reads as 1s, not 0s.
+        // Rounds up, so the countdown never shows a second the post still has left.
         expect(countdownWords(400)).toBe(`1s`);
         expect(countdownWords(59_000)).toBe(`59s`);
     });
 
     it("never counts to zero", () => {
-        // By the time a "0s" rendered next to a Stop button, the publisher already has the post: the button
-        // would be promising something nobody can deliver.
+        // By the time "0s" renders next to Stop, the publisher already has the post; the button can't deliver on that
+        // promise.
         expect(countdownWords(0)).toBe(`any moment now`);
         expect(countdownWords(-5_000)).toBe(`any moment now`);
     });
@@ -140,8 +135,8 @@ describe("countdownWords", () => {
 });
 
 describe("LONG_POST", () => {
-    // The fold threshold is a real screenful, not a stray small number: a tweet, a Discord note and an ordinary
-    // reply have to stay whole, or every row in the queue grows a "show the whole post" toggle.
+    // A real screenful, not an arbitrary number: an ordinary post must stay whole, or every row grows a show-more
+    // toggle.
     it("leaves an ordinary post unfolded", () => {
         expect(LONG_POST).toBeGreaterThan(600);
     });

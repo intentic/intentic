@@ -1,35 +1,21 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Services } from "../composition.js";
 
-/* SENDING A DISCORD POST WITHOUT AN AGENT TURN, the whole reason the publisher splits by platform.
- *
- * Discord hands out a bot token and a documented endpoint, so posting is one authenticated request that either
- * returned 200 or did not. Everything an agent turn brings to a browser-driven platform, reading the page,
- * finding the box, noticing the dialog, is dead weight here, and it is weight measured in a whole model turn
- * per post. This is the fast path: milliseconds, no tokens, and an error you can put in front of the owner
- * verbatim instead of a transcript to read.
- *
- * IT IS DELIBERATELY NOT A DISCORD CLIENT. There is a full typed v10 wrapper in the deploy providers package
- * (guilds, channels, webhooks) and the sandbox does not depend on it, correctly: publishing needs exactly one
- * endpoint, and taking the dependency to reach it would drag the deploy engine's surface into the daemon for
- * the sake of a POST. What IS worth copying from it is the rate-limit dance below, which is the one piece of
- * Discord you cannot skip and get right by accident.
- *
- * MEDIA IS NOT SENT HERE. An attachment is a multipart upload of a workspace file, which is a second shape of
- * request, a second failure mode and a file-path trust boundary, so a post carrying media is handed to the
- * turn instead (canPublishDirectly below). One endpoint, honestly scoped, beats two half-supported ones. */
+// Posts to Discord without an agent turn: one authenticated request to a documented endpoint, instead of a
+// browser-driven turn.
+// Not a full Discord client on purpose: only one endpoint is needed, though the rate-limit handling below is worth
+// getting right.
+// Media isn't sent here either: an attachment is a multipart upload with its own trust boundary, so it goes to the turn
+// instead.
 
 const API_BASE = `https://discord.com/api/v10`;
 
-// Discord's own ceiling. A longer post is refused before the request rather than by it, so the owner gets a
-// sentence about length instead of a 400 with a JSON body in it.
+// Discord's own ceiling; refused up front so the owner gets a plain sentence, not a 400 with a JSON body.
 const MESSAGE_LIMIT = 2_000;
 
 const MAX_RETRIES = 3;
 
-// A channel id is a snowflake, digits, nothing else. Worth checking because `target` is free text written by
-// the agent, and "#releases" reaching the URL builder is a 404 whose message says nothing about the real
-// mistake.
+// A channel id is digits only; target is agent text, and an unchecked "#releases" would 404 unhelpfully.
 const CHANNEL_ID = /^\d{5,}$/;
 
 export interface DirectPostResult {
@@ -37,16 +23,15 @@ export interface DirectPostResult {
     readonly url: string;
 }
 
-/* WHETHER THIS PARTICULAR DRAFT CAN GO THE FAST WAY. Platform alone is not enough: the same connector that
- * posts a line of text in one request needs a different one to carry a picture, and a post addressed to
- * "#releases" instead of a channel id has nowhere to go. Both fall back to the turn, which can read the
- * server, find the channel by name, and upload the file, so a "no" here costs money rather than the post. */
+// Whether this draft can go the fast way: platform alone isn't enough, since media or a non-id target need the turn
+// instead.
+// Both fall back to the turn, which can read the server, find the channel by name, and upload the file; a "no" here
+// costs money, not the post.
 export const canPublishDirectly = (post: { readonly target?: string | undefined; readonly media?: readonly string[] | undefined }): boolean =>
     post.target !== undefined && CHANNEL_ID.test(post.target) && (post.media ?? []).length === 0;
 
-/* The token that posts as this workspace's bot. `cli` capability configs are a plain string map (the manifest
- * is on the secret denylist rather than encrypted), and `discord` is the id the connector registers under,
- * the same read the extension host does to hand the gateway its token. */
+// The token that posts as this workspace's bot, read from the `discord` cli capability's config.
+// `cli` configs are a plain string map (the manifest sits on the secret denylist, not encrypted).
 const botTokenOf = async (services: Pick<Services, `capabilities`>): Promise<string | undefined> => {
     const capability = await services.capabilities.get(`discord`);
     if (capability?.kind !== `cli`) {
@@ -56,13 +41,13 @@ const botTokenOf = async (services: Pick<Services, `capabilities`>): Promise<str
     return token === undefined || token === `` ? undefined : token;
 };
 
-/* Discord answers 429 with the seconds to wait, and it means it, a retry that ignores the header earns a
- * longer ban than the one it skipped. Sleep exactly what it asked for plus a hair, up to MAX_RETRIES, then
- * give up and let the failure be the post's error string. Every other non-2xx is final: a 403 is a permission
- * the owner has to grant, and hammering it changes nothing. */
+// Discord answers 429 with the seconds to wait, and means it: ignoring the header earns a longer ban than the one it
+// skipped.
+// Sleeps exactly what it asked plus a hair, up to MAX_RETRIES; every other non-2xx is final (e.g. a 403 needs an
+// owner-granted permission).
 const send = async (url: string, init: RequestInit): Promise<Response> => {
     for (let attempt = 0; ; attempt++) {
-        // Bound a stalled connection, undici would otherwise wait about five minutes on headers.
+        // Bounds a stalled connection; undici would otherwise wait about five minutes on headers.
         const response = await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
         if (response.status === 429 && attempt < MAX_RETRIES) {
             const body = (await response.json().catch(() => ({}))) as { retry_after?: number };
@@ -76,8 +61,8 @@ const send = async (url: string, init: RequestInit): Promise<Response> => {
     }
 };
 
-/* POST one post into one channel. Throws with a sentence the queue can show as-is, this runs with nobody
- * watching, so the error IS the report. */
+// Posts one message into one channel.
+// Throws with a sentence the queue can show as-is: nobody is watching, so the error is the report.
 export const postToDiscord = async (
     services: Pick<Services, `capabilities`>,
     post: { readonly content: string; readonly target?: string | undefined },
@@ -100,8 +85,7 @@ export const postToDiscord = async (
         headers: { Authorization: `Bot ${botToken}`, "Content-Type": `application/json` },
         body: JSON.stringify({ content: post.content }),
     });
-    // The id and the guild are what build a link a person can click. Discord always returns both on a send;
-    // a body that somehow lacks them still posted, so the post is not failed over a missing URL.
+    // The id and guild build a clickable link; a response somehow missing them still means the post succeeded.
     const sent = (await response.json().catch(() => ({}))) as { id?: string; guild_id?: string };
     const guild = sent.guild_id ?? `@me`;
     return { url: sent.id === undefined ? `${API_BASE}/channels/${channelId}` : `https://discord.com/channels/${guild}/${channelId}/${sent.id}` };

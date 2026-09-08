@@ -1,18 +1,6 @@
-/* Is this machine able to answer the question the tiers ask?
- *
- * Every line here exists because its absence produces a FAILURE THAT NAMES THE WRONG THING. A runner installed
- * as a service maps no windows, and reads as "the app never started". A Docker in Windows-container mode
- * answers every probe and then fails an image pull. A machine with the app already installed passes an install
- * tier that installed nothing. None of those are product bugs and all of them look like one.
- *
- * So this runs FIRST, on its own, and reports the machine rather than the product. On a new box it is the
- * cheapest possible first move: seconds, no artifacts, no Docker pulls, and its output is the setup checklist
- * with the boxes already ticked.
- *
- * It reports; it does not fix. A doctor that installed Docker or killed a stray app would be making the machine
- * pass rather than telling you what it is, and on a snapshot-reset runner the honest answer to "the app is
- * already installed" is that the snapshot did not reset, which no amount of uninstalling addresses.
- */
+// Whether this machine can answer what the tiers ask, checked first so a bad symptom names the machine and not the
+// product (a runner-as-service maps no windows; a Windows container answers every Docker probe). Reports only, never
+// fixes: installing or killing something would mask a snapshot that didn't reset.
 
 import { PRODUCT_NAME, RUNNER_TASK_NAME, SCHEME } from "./constants.js";
 import type { Harness } from "./harness.js";
@@ -20,7 +8,7 @@ import { humanDuration, runnerSupervision } from "./parse.js";
 import { dockerContainerOs, dockerReachable, findInstalledApp, runnerTask, schemeCommand, userInteractive, webView2, windows } from "./probe.js";
 
 export interface DoctorOptions {
-    /** Whether Docker is needed, tier 1 does not need it, tiers 2 and 3 do. */
+    /** Whether Docker is needed; tier 1 doesn't, tiers 2 and 3 do. */
     readonly needsDocker: boolean;
 }
 
@@ -45,12 +33,8 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
         );
     }
 
-    /* WILL THIS RUNNER STILL BE HERE TOMORROW. Not an assertion either, and deliberately: a runner somebody
-     * started in a console window has a desktop and passes everything below it, so failing the run would be
-     * this tier objecting to something that is about the NEXT reboot rather than about this build. But it is
-     * the state that takes the Windows leg of the pipeline down for a day at a time, with jobs queueing against
-     * a label nothing answers and no failure anywhere to read, so it is said out loud in the log of a run that
-     * passed — which is the only place anyone asking "why did CI stop?" will find it. */
+    // Not an assertion: this is about the next reboot, not this build, but it's the only state that takes CI down for a
+    // day with nothing to read, so it's logged even on a passing run.
     const supervision = runnerSupervision(await runnerTask(RUNNER_TASK_NAME));
     if (supervision.kind === `supervised`) {
         harness.pass(`the runner is the logon task's, re-checked every ${humanDuration(supervision.repetition)}`);
@@ -67,8 +51,7 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
         );
     }
 
-    // Not an assertion: a machine with no windows open is normal, and this is here so the log says what the
-    // desktop looked like when something later could not find a window on it.
+    // Not an assertion: an empty desktop is normal; this just records it for a later failure to reference.
     const open = await windows();
     harness.pass(`${open.length} window(s) currently open`);
 

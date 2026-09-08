@@ -7,27 +7,9 @@ import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-/* PICKING A FOLDER BY LOOKING AT THE FOLDERS: the control behind both of a persona's location questions.
- *
- * Both of them used to be a bare text input with a greyed-out sentence in it, which asks the reader to know two
- * things the screen was not telling them: what the workspace actually contains, and how this field wants a path
- * spelled. A typo produced a persona fenced to a folder that does not exist: silently, because a fence naming
- * nothing refuses everything, and the comma-separated variant made that failure mode plural.
- *
- * SO THE TREE IS THE FIELD. Directories only: this is a question about WHERE, and a file in the list is a row
- * that cannot be picked and still costs a line. Ignored ones (node_modules, .git, anything gitignored) are out
- * for the same reason: the daemon already knows which they are, nobody fences a persona to a dependency tree,
- * and on a workspace with four repos they are most of what a walk returns.
- *
- * IT SHOWS WHAT IS STORED, not what it can resolve. A card naming `app/api` keeps that chip whether or not this
- * workspace has that folder: a persona written against a repo nobody has cloned here yet is an ordinary thing,
- * and dropping the chip would quietly rewrite what the card fences the next time somebody pressed Save. Same
- * rule the account chips follow one section up, for the same reason.
- *
- * THE EXPANSION STATE IS THIS COMPONENT'S OWN, deliberately. The obvious economy is to reach for
- * useWorkspaceTree, which already walks /work, but its expanded set is the file EXPLORER's, persisted per
- * sandbox, and drilling into a folder here would silently reorganise the sidebar the user left open behind
- * this page. What is shared is the cache entry the walk lands in, which costs nothing and is the same bytes. */
+// Folder picker as a tree, not a text field, so a typo can't fence a persona to a nonexistent folder.
+// Directories only; ignored ones (node_modules, .git, gitignored) are excluded. Shows what is stored, not what
+// resolves — an absent folder keeps its chip — and keeps its own expansion state, separate from the explorer's.
 
 const {
     multiple = false,
@@ -36,7 +18,7 @@ const {
 } = defineProps<{
     /** Several folders (a fence), or exactly one (where a session starts). */
     multiple?: boolean;
-    /** What no selection MEANS: never "pick something", because empty is a valid, common answer to both. */
+    /** What no selection means; never "pick something" — empty is a valid, common answer. */
     placeholder: string;
     /** Names the trigger for a screen reader; the visible label is the form row's. */
     label: string;
@@ -44,27 +26,24 @@ const {
 
 const picked = defineModel<string[]>({ required: true });
 
-/* The shared workspace's own walk, under the key the explorer's shared-tree read uses, so opening this picker
- * on a page that has already drawn the tree costs no request at all. Pointedly NOT scoped through scopeQuery: a
- * card's folders are workspace-relative and mean the same thing in every copy, so the tree to choose them from
- * is the real one, not whichever conversation's checkout the workspace view happens to be pointed at. */
+// Shared workspace tree, keyed like the explorer's read so opening this picker after the tree has drawn costs
+// nothing. Not scoped via scopeQuery: folders are workspace-relative regardless of which checkout is active.
 const { query } = useSandboxQuery<WorkspaceTreeResponse>({
     queryKey: WORKSPACE_TREE.of(`shared`),
     queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
 });
 
-/* Whether the wait is worth drawing. Sandbox-scoped like every other read behind these panels, so switching
- * sandboxes drops the outline rather than holding one workspace's shape over another's. */
+// Sandbox-scoped like other reads behind these panels, so switching sandboxes drops the outline.
 const outline = useSandboxOutline(query.isPending);
 
-// Only what can be picked, and only what is worth showing: see the header for why ignored dirs are out.
+// Only directories, and only non-ignored ones (node_modules, .git, gitignored).
 const foldersIn = (entries: readonly WorkspaceTreeEntry[]): readonly WorkspaceTreeEntry[] =>
     entries.filter((entry) => entry.type === `dir` && entry.ignored !== true);
 
 const roots = computed(() => foldersIn(query.data.value?.tree ?? []));
 
-// Children for the dirs the daemon's breadth-first budget stopped above. `shallowRef` because the map is
-// replaced wholesale on every landing and its contents are never mutated in place.
+// Children for dirs past the daemon's breadth-first budget. `shallowRef`: the map is replaced wholesale, never
+// mutated in place.
 const lazy = shallowRef(new Map<string, readonly WorkspaceTreeEntry[]>());
 const loading = ref(new Set<string>());
 const opened = ref(new Set<string>());
@@ -83,8 +62,7 @@ const load = async (path: string): Promise<void> => {
         const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${new URLSearchParams({ path }).toString()}`);
         lazy.value = new Map(lazy.value).set(path, body.entries);
     } catch {
-        /* A folder that will not list is not an error worth a banner here: the row simply stops offering to
-         * open, every other folder still picks, and the field it belongs to takes typed text besides. */
+        // A folder that won't list isn't worth a banner here: it simply stops offering to expand.
         lazy.value = new Map(lazy.value).set(path, []);
     } finally {
         const next = new Set(loading.value);
@@ -107,8 +85,8 @@ const expand = async (entry: WorkspaceTreeEntry): Promise<void> => {
     }
 };
 
-/* The visible rows, flattened with their depth rather than drawn by a component that recurses into itself. One
- * list is what the keyboard and the scroll container both want, and the nesting a reader needs is an indent. */
+// Visible rows flattened with depth, rather than a self-recursing component: one list for keyboard and scroll,
+// and depth becomes an indent.
 interface FolderRow {
     readonly entry: WorkspaceTreeEntry;
     readonly depth: number;
@@ -127,8 +105,7 @@ const rows = computed<readonly FolderRow[]>(() => {
     return out;
 });
 
-// A dir the walk listed as empty has nothing to open; one it never descended into might, and says so until it
-// has been asked. Undefined children ⇒ not loaded yet, which is the distinction the contract keeps for this.
+// Undefined children means not loaded yet; treated as openable until proven empty.
 const openable = (entry: WorkspaceTreeEntry): boolean => {
     const listed = childrenOf(entry);
     return listed === undefined || listed.length > 0;
@@ -141,8 +118,7 @@ const anchor = ref<HTMLElement | undefined>(undefined);
 
 const choose = (path: string): void => {
     if (!multiple) {
-        // Picking IS the answer to a single-folder question, so the panel closes on it. Clicking the folder
-        // that is already picked clears back to the placeholder's meaning rather than being a no-op.
+        // Picking answers a single-folder question, so the panel closes; picking the current folder clears it instead.
         picked.value = isPicked(path) ? [] : [path];
         open.value = false;
         return;
@@ -157,8 +133,7 @@ const remove = (path: string): void => {
 
 <template>
     <div class="flex min-w-0 flex-1 flex-col gap-1">
-        <!-- THE ANSWER IS THE CONTROL. What is chosen sits in the trigger as removable chips, so the common
-             journey (see it, drop one) never opens the tree at all. -->
+        <!-- Picked folders sit in the trigger as removable chips, so seeing and dropping one never opens the tree. -->
         <div ref="anchor" :class="ui.input('flex min-h-[2.25rem] flex-wrap items-center gap-1.5 py-1.5')" role="group" :aria-label="label">
             <button
                 v-for="path in picked"
@@ -186,14 +161,12 @@ const remove = (path: string): void => {
             </button>
         </div>
 
-        <!-- Drops DOWN from the field, the way a form control opens: the overlay's own default is above, which
-             is right for a toolbar pill hanging off the top of a panel and wrong here: it lands the tree over
-             the section heading the field belongs to. It still flips up by itself when the window is too short
-             for it, which is the one case above is better. -->
+        <!--
+            Opens downward rather than the overlay's own default (above), which would land the tree over the field's own
+            section heading. Still flips up if the window is too short.
+        -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" header="Choose a folder" panel-class="w-80 p-1">
-            <!-- A SPINNER AND A SENTENCE where a tree goes: the panel opened at the height of one line and
-                 then jumped to the height of a folder list, under a pointer already on its way to where the
-                 first row was about to be. The rows that are coming hold the panel open instead. -->
+            <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. -->
             <div v-if="query.isPending.value" role="status" aria-busy="true">
                 <span class="sr-only">Reading your workspace…</span>
                 <SkeletonRows v-if="outline" :rows="5" density="dense" :control="false" />
@@ -201,9 +174,10 @@ const remove = (path: string): void => {
             <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
             <div v-else class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
-                    <!-- Opening a folder and choosing it are different intents, so they are different targets.
-                         A row with nothing under it keeps the same indent from a spacer, so the names stay in
-                         one column instead of stepping left wherever a leaf appears. -->
+                    <!--
+                        Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer
+                        so names stay in one column.
+                    -->
                     <button
                         v-if="openable(row.entry)"
                         type="button"

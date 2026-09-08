@@ -101,15 +101,13 @@ test("a manager that isn't in this sandbox is `unsupported`, not an install that
     const root = await workspace();
     await write(root, "app/package.json", `{"packageManager":"bun@1.4.0-canary.20260903.1"}`);
     const [project] = await discoverProjects(root);
-    // bun is deliberately not baked into the sandbox image; detection still names it, so the UI can say which
-    // binary is missing rather than offering an install that would exit 127 in a terminal.
+    // bun isn't part of the sandbox image; detection still names it so the UI can report the missing binary.
     expect(project!.recipe.manager).toBe("bun");
     expect(await stateOf(root, project!, processes(), absent)).toBe("unsupported");
 });
 
-/* The state the marker alone could never see: installed once, and since outgrown. This is what an agent leaves
- * behind when it adds a dependency and does not install it, and what every turn after it inherits, because an
- * isolated turn overlays the main checkout's node_modules rather than making its own. */
+// An import outgrowing its installed tree is what an agent leaves behind by adding a dependency without installing it.
+// An isolated turn inherits it too, since it overlays the main checkout's node_modules rather than making its own.
 test("a project whose manifest has outgrown its installed tree is stale, not ready", async () => {
     const root = await workspace();
     await write(root, "app/package.json", `{"name":"app","dependencies":{"left-pad":"^1.3.0"}}`);
@@ -119,7 +117,6 @@ test("a project whose manifest has outgrown its installed tree is stale, not rea
     const status = await setupStateOf(root, project!, processes(), installed);
     expect(status.state).toBe("stale");
     expect(status.unresolved).toEqual([{ dir: "", names: ["left-pad"] }]);
-    // Installing it is what clears the state: the same command that would have served a fresh import.
     await write(root, "app/node_modules/left-pad/package.json");
     expect(await stateOf(root, project!, processes(), installed)).toBe("ready");
 });
@@ -168,13 +165,7 @@ test("a fully-installed workspace adds nothing to the turn", () => {
     expect(setupNoticeFor([])).toBeUndefined();
 });
 
-/* The stale notice asks the turn for nothing. It exists to stop one specific waste: the model reading an
- * unresolved import as a mistake in code that is fine, and editing working source to satisfy it, so it names
- * the cause and explicitly takes the install off the table.
- *
- * It must also say WHEN the tree is fixed, and the answer is next turn. "Once it is idle" was true and useless:
- * the reconciler defers while a turn is live, so the agent reading it is the reason it cannot fire. Told to
- * wait with no end to the wait, a model stops verifying anything and reports on reasoning alone. */
+// NEXT turn, not "once idle": the reconciler defers while a turn runs, so idle depends on the agent that's waiting.
 test("a stale project tells the turn why an import fails, and asks it to do nothing about it", () => {
     const deps = ["left-pad", "zod"] as const;
     const project = status({ state: "stale", unresolved: [{ dir: "", names: [...deps] }] });
@@ -182,11 +173,9 @@ test("a stale project tells the turn why an import fails, and asks it to do noth
     expect(notice).toContain(`${project.dir}: ${deps.length} declared dependencies are not installed (${deps.join(", ")})`);
     expect(notice).toContain("do not run an install");
     expect(notice).toContain("NEXT turn");
-    // The wait has to end somewhere the agent can act on. A promise keyed to the workspace going idle is keyed
-    // to the reader stopping, which is the one thing it cannot observe.
     expect(notice).not.toContain("once it is idle");
-    // Never the fresh-import wording: this project HAS been set up, and saying otherwise sends the model looking
-    // for a first-run step that already happened.
+    // Never the fresh-import wording: this project has already been set up, unlike a project that has never been
+    // installed.
     expect(notice).not.toContain(SETUP_NOTICE_HEADER);
 });
 

@@ -8,28 +8,11 @@ import { listPacks } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { probeAll } from "./version-probe.js";
 
-/* WHAT THIS SANDBOX HAS, assembled from the recipe's words and the container's own answers.
- *
- * Composed from the SAME sources composeEnvironment uses rather than by parsing the file it wrote, which is what
- * buys attribution: a fragment's contributor is known here, where the composed overlay has already flattened,
- * deduped and sorted every fragment into one anonymous run of text. The custom section is the exception and
- * needs no help, the daemon writes it as named blocks, one per thing an agent asked for.
- *
- * Three groups, because "why is this here" has three different answers and only one of them is the reader's
- * decision to revisit: what an agent asked for and they approved, what a capability they turned on costs, and
- * what every sandbox ships with. The third is the one an inventory built from the overlay alone would miss
- * entirely, the overlay is a DELTA, so without it this view would state that the sandbox has ffmpeg and no
- * Node, which is worse than showing nothing.
- */
+// What this sandbox has: composed from the same fragment sources composeEnvironment uses, for attribution, plus the
+// container's own answers. Three groups: what an agent asked for and the owner approved, what a capability costs, and
+// what every sandbox ships with — the last is what a delta-only overlay view would otherwise miss.
 
-/* THE STAPLES, named by hand because the image's own comments explain why it BAKES each one (layer caching,
- * node-gyp) rather than what it does for the reader.
- *
- * A list, and therefore the one thing here that can go stale, but it stales safely in both directions. Only
- * entries whose command actually answers are shown, so a tool dropped from the image disappears from the view
- * with no edit; a tool ADDED to the image is missing from the view until someone adds it here, which is a gap in
- * a supplementary group rather than a wrong statement in it. Order is the order they are worth reading in.
- */
+// Named by hand; the image explains why each is baked, not what it does; only shown when the command answers.
 const STAPLES: readonly { readonly bin: string; readonly name: string; readonly purpose: string }[] = [
     { bin: "node", name: "Node.js", purpose: "The runtime everything JavaScript in here runs on." },
     { bin: "pnpm", name: "pnpm", purpose: "Installs and runs workspace packages." },
@@ -63,10 +46,8 @@ interface Candidate {
     readonly state?: EnvironmentItem["state"];
 }
 
-/* Every fragment in the approved overlay, each still attached to whatever contributed it. Pack names are
- * recovered by CONTENT rather than tracked: a pack's fragment is the pack file's own text, so hashing what came
- * back and looking it up names it exactly, and keeps naming it after a pack is renamed or a new provider starts
- * contributing one. */
+// Every overlay fragment, attached to its contributor. Pack names are recovered by hashing the fragment's own content
+// and looking it up, so a rename or a new provider does not lose the label.
 const capabilityCandidates = async (services: Services): Promise<Candidate[]> => {
     const packs = new Map((await listPacks()).map((pack) => [pack.hash, pack.name]));
     const named = (content: string, fallback: string): OverlayBlock => ({ name: packs.get(sha256Hex(content.trim())) ?? fallback, body: content });
@@ -85,11 +66,8 @@ const capabilityCandidates = async (services: Services): Promise<Candidate[]> =>
     return candidates;
 };
 
-/* The custom section's blocks, plus anything a proposal adds on top of them. A proposal carries the approved
- * section forward verbatim (approval REPLACES it wholesale, see mergeProposalDrafts), so a block that differs
- * from the approved one of the same name, or has no approved counterpart at all, is exactly what the owner is
- * being asked to decide on. Marking those rather than hiding them is the point: this view is where an owner who
- * cannot read a Dockerfile finds out what they are approving. */
+// Custom blocks plus what a proposal adds on top; a block that differs from its approved counterpart, or has none, is
+// exactly what the owner is being asked to decide on.
 const customCandidates = async (services: Services): Promise<Candidate[]> => {
     const approved = splitBlocks(((await services.files.read(customPath(services))) ?? "").trim());
     const proposed = splitBlocks(((await services.files.read(proposalPath(services))) ?? "").trim());
@@ -101,11 +79,8 @@ const customCandidates = async (services: Services): Promise<Candidate[]> => {
     ];
 };
 
-/* THE ROW'S TITLE. A block named after a command it installs keeps that name EXACTLY, `ffmpeg` is spelled
- * `ffmpeg`, and title-casing it to "Ffmpeg" would both look wrong and stop being the word you type. Anything
- * else is a slug (`rust-tauri`), which reads as a file name until the shape is fixed. No table of proper names:
- * one would need an entry per tool and would rot the moment a new block appeared, and the version chips beside
- * the title carry the precision anyway. */
+// A block named after the exact command it installs keeps that spelling (`ffmpeg`, never "Ffmpeg"); anything else is a
+// slug, title-cased into words. No lookup table: it would rot with every new block.
 const displayName = (name: string, tools: readonly { readonly name: string }[]): string => {
     if (tools.some((tool) => tool.name === name)) {
         return name;
@@ -130,8 +105,7 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
     // One probe per distinct command across the whole view, staples included.
     const probes = await probeAll([...tooling.flatMap((tools) => tools.candidates), ...STAPLES.map((staple) => staple.bin)]);
 
-    // Whether the container matches the overlay at all, the fallback state for a block that installs nothing
-    // probeable (a runtime directive, an ENV-only fragment), where there is nothing to observe.
+    // Fallback state for a block with nothing probeable to check (a runtime directive, ENV-only fragment).
     const built = services.config.sandbox.environmentHash !== "";
 
     const items: EnvironmentItem[] = [];
@@ -143,8 +117,7 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
         const purpose = purposeOf(prose);
         const detail = detailOf(prose, purpose);
         const commands = blockCommands(candidate.block.body);
-        // Observed beats inferred: a block whose commands answer is here, whatever the hashes say. Only a block
-        // with nothing to ask falls back to "the container was built from some overlay".
+        // Observed beats inferred: a block whose commands answer is active regardless of hashes.
         const state = candidate.state ?? (tools.length > 0 ? "active" : bins.length > 0 ? "after-rebuild" : built ? "active" : "after-rebuild");
         items.push({
             id: `${candidate.origin}:${candidate.block.name}`,
@@ -160,8 +133,7 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
         });
     }
 
-    // A staple the recipe already accounts for is not listed twice, the overlay's own entry says more about it
-    // (it has a rationale and an owner), so that one wins and this group keeps only what nobody chose.
+    // A staple the recipe already claims is not listed twice; the overlay's own entry wins.
     const claimed = new Set(items.flatMap((item) => item.tools.map((tool) => tool.name)));
     for (const staple of STAPLES) {
         const tool = claimed.has(staple.bin) ? undefined : toolOf(staple.bin, probes.get(staple.bin));

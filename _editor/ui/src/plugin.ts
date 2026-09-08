@@ -16,10 +16,9 @@ import { vLongpress } from "./lib/longPress.js";
 import { stabilizeStyleWrites } from "./lib/styleStability.js";
 import { vTooltip } from "./lib/tooltip.js";
 
-/* Every `primevue/<component>/style` entry ends in `export { XStyle as default }`, but its shipped declaration
- * names only the class-name enum: no default, and the `BaseStyle` interface it does declare is missing the
- * loader methods the runtime object carries. A default import therefore types as the module NAMESPACE, and
- * every property read below is an error. This is the shape those modules actually export. */
+// Every `primevue/<component>/style` module exports a default at runtime, but its declared types omit it (and the
+// loader methods `BaseStyle` doesn't declare), so a default import types as the namespace. This interface is the
+// shape those modules actually export.
 interface PrimeComponentStyle {
     name: string;
     getComponentTheme: () => { css?: string | undefined; style?: string | undefined };
@@ -29,10 +28,9 @@ interface PrimeComponentStyle {
 const asComponentStyle = (style: unknown): PrimeComponentStyle => style as PrimeComponentStyle;
 const primeComponentStyles = [ButtonStyle, CheckboxStyle, ContextMenuStyle, DialogStyle, DrawerStyle, PopoverStyle, ToggleSwitchStyle].map(asComponentStyle);
 
-/* PrimeVue owns component theme CSS at runtime rather than in the app stylesheet. A component first reached
- * through a lazy route therefore appends two <style> nodes while DevTools is open, which replaces every row in
- * its Styles editor. These are all PrimeVue value imports in app and extension source; load their themes at
- * boot, alongside PrimeVue's common theme, so navigating cannot change stylesheet ownership. */
+// PrimeVue writes component theme CSS at runtime, not in the app stylesheet, so a component first reached via a
+// lazy route would append its `<style>` nodes late. Preload every PrimeVue import here at boot, alongside the
+// common theme, so navigation never changes stylesheet ownership.
 const preloadPrimeComponentStyles = (): void => {
     for (const style of primeComponentStyles) {
         const component = style.getComponentTheme();
@@ -41,10 +39,8 @@ const preloadPrimeComponentStyles = (): void => {
     }
 };
 
-/* Single entry point for the design system: wires the bridged PrimeVue preset, the dark-mode selector
- * (kept in sync by useTheme), and the cssLayer order so the cascade is deterministic:
- * `utilities` is last, so Tailwind utility classes always beat PrimeVue's component styles. Call it once
- * from the app's main.ts as `installUi(app)`. */
+// Design system's single entry point: wires the PrimeVue preset, dark-mode selector, and `cssLayer` order
+// (`utilities` last, so Tailwind always beats PrimeVue). Call once from the app's main.ts.
 export function installUi(app: App): void {
     // Register the bundled icon sets so every <Icon> resolves locally, no runtime Iconify API fetch.
     BUNDLED_ICONS.forEach((collection) => addCollection(collection));
@@ -61,21 +57,16 @@ export function installUi(app: App): void {
             },
         },
     });
-    /* PrimeVue 4.5 reloads its directive styles from every `updated` hook: its loader finds the existing
-     * `<style data-primevue-style-id="base">` and assigns the same bytes again, which replaces the sheet and
-     * flashes the document (styleStability.ts carries the full argument). Ordinary request state — a loading
-     * label, a disabled button, a notification — is enough to trigger it, so hold PrimeVue's own nodes stable
-     * before its first one is written. */
+    // PrimeVue re-writes its style nodes' bytes on every `updated` hook, flashing the document; hold them stable before
+    // the first write.
     stabilizeStyleWrites(`style[data-primevue-style-id]`);
     preloadPrimeComponentStyles();
-    // Register the tooltip directive globally so `v-tooltip` works in any component (the rail, composer, …).
-    // Ours, not PrimeVue's, see lib/tooltip.ts for why a popped-out panel forces the issue.
+    // Registers `v-tooltip` globally so it works in any component; this is the app's own directive, not PrimeVue's.
     app.directive(`tooltip`, vTooltip);
     // Touch counterpart of the context menu: `v-longpress` opens bottom sheets on coarse-pointer devices.
     app.directive(`longpress`, vLongpress);
-    /* `v-action` is <Button>'s behaviour for the hand-styled controls that are not it: a press that starts
-     * async work locks its element and shows the wait. Global for the same reason the tooltip is — the
-     * elements that need it are spread across every view, and a per-file import is a thing to forget. */
+    // `v-action` gives hand-styled controls (non-`<Button>`) Button's press-to-lock-and-wait behavior; global since
+    // call sites are spread across every view.
     app.directive(`action`, vAction);
     // Register the icon primitive globally so every `<Icon name="…">` resolves without a per-file import.
     app.component(`Icon`, Icon);

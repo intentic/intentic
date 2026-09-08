@@ -1,20 +1,12 @@
 import { expect, test } from "vitest";
 import { answerConfirm, type ConfirmOps } from "./probe.js";
 
-/* Answering the confirmation, asserted against a fake desktop: the one piece of `probe.ts` that decides
- * something rather than asking the machine a question, and the piece a real Windows session can only exercise
- * one outcome of per run. The case that matters is the RACE: `focusWindow` proves the dialog had the keyboard
- * when it returned, and the Return is a separate round trip, so a window that maps in between takes the
- * keystroke with it. The app's own main window does exactly that on a cold start, which is how a dialog that
- * was never answered came back as "the setup screen never appeared".
- *
- * The clock only moves when the loop sleeps, as in `harness.test.ts`, so a test controls how many presses
- * happen rather than waiting out real seconds.
- */
+// Answers the confirmation against a fake desktop, exercising the race where a window mapping between focus and Return
+// steals the keystroke. Clock advances only when the loop sleeps, so a test controls press count without real seconds.
 
 interface Fake {
     readonly ops: ConfirmOps;
-    /** One entry per press, saying which window id had the keyboard when it went out. */
+    /** One entry per press, the window id that had the keyboard when it went out. */
     readonly presses: string[];
 }
 

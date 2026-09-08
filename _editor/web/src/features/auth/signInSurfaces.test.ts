@@ -1,24 +1,12 @@
 // @vitest-environment jsdom
-//
-// EVERY SIGN-IN SURFACE, IN BOTH WINDOWS IT CAN BE OPENED IN: the one table this app did not have, and the
-// absence of which shipped a screen that could not be got past.
-//
-// There are three surfaces (the login screen, the workspace's sandbox gate, the desktop hand-off page) and
-// two windows (an ordinary browser, and the desktop app's embedded webview). Google refuses OAuth from an
-// embedded webview and Identity Services is FedCM-based, which that webview does not implement, so Google's
-// button RENDERS there, ACCEPTS CLICKS, and does nothing whatsoever. Each surface answered that separately.
-// Two answered it right, one did not, and the one that did not was the screen between a fresh install and a
-// working workspace.
-//
-// The rule now lives in the mechanism (useGoogleIdentity refuses to render in that window) and this is the
-// table that holds every surface to it. A fourth surface added later belongs in `SURFACES` below; what it
-// costs to add is one line, and what it buys is never shipping that dead end again.
+// Every sign-in surface (login, sandbox gate, desktop hand-off) crossed with both windows (ordinary browser,
+// desktop webview), where Google's button renders and accepts clicks but does nothing. The rule lives in
+// useGoogleIdentity; add a new surface to `SURFACES` below to hold it to the same rule.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
-// environment.ts reads window.env and throws without it.
+// Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -26,17 +14,15 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 
-/* The real mechanism, with only its edges faked. `renderButton` answers the way the real one does: false in
- * the desktop window, true elsewhere, because THAT is the behaviour under test here: what each surface does
- * with the refusal. The mechanism's own half of the rule is asserted in useGoogleIdentity.desktop.test.ts. */
+// renderButton mimics the real mechanism (false in the desktop window, true elsewhere), since what's under test is
+// each surface's response to that. The mechanism's own half is asserted in useGoogleIdentity.desktop.test.ts.
 const desktopVersion = vi.fn<() => string | undefined>();
 const signInThroughBrowser = vi.fn();
 vi.mock(`../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     DESKTOP_DOWNLOADS: {},
     desktopVersion: () => desktopVersion(),
-    // Which build this machine could install, which the login screen reads only to decide whether its third
-    // step promises a pasted command or an installer. Nothing here is about that step, so it answers "none".
+    // Which build this machine could install; irrelevant here, so it always answers none.
     desktopInstaller: () => undefined,
     desktopSetupLink: () => ``,
     openDesktopLink: vi.fn(),
@@ -64,8 +50,8 @@ const { default: Login } = await import("./Login.vue");
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");
 const { default: GoogleSigninGate } = await import("../sandbox/gates/GoogleSigninGate.vue");
 
-/* THE TABLE. A surface belongs here the moment it can put a sign-in in front of someone: that is the whole
- * membership rule, and it is deliberately not "pages that import Google", which would have missed the gate. */
+// Membership rule: any surface that can put a sign-in in front of someone, not just ones that import Google (which
+// would miss the gate).
 const SURFACES = [
     { name: `the login screen`, component: Login },
     { name: `the workspace's sandbox gate`, component: GoogleSigninGate },
@@ -85,8 +71,8 @@ const mount = async (component: (typeof SURFACES)[number][`component`]): Promise
     return el;
 };
 
-// Something a person can press: the minimum a sign-in screen owes its reader. jsdom reports no layout, so
-// visibility cannot be asserted here; presence and enabled-ness are what a dead end fails on anyway.
+// The minimum a sign-in screen owes: something pressable. jsdom has no layout, so presence and enabled-ness stand
+// in for visibility.
 const pressable = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll(`button`)].filter((button) => !button.disabled);
 
 beforeEach(() => {
@@ -121,8 +107,8 @@ describe(`in the desktop app's own window`, () => {
             }
             await nextTick();
 
-            // The ONE thing this window can complete. A surface that offers anything else offers a dead end,
-            // however convincing its button looks.
+            // The one thing this window can complete; anything else is a dead end no matter how convincing the button
+            // looks.
             expect(signInThroughBrowser, `${name} never reached the browser hand-off`).toHaveBeenCalledTimes(1);
         });
     }

@@ -1,14 +1,9 @@
 // @ts-check
-// Markdown mirrors for machine readers, generated from the pages that were just built.
-//
-// Three artefacts, all derived: none hand-maintained, so none can drift from the site:
-//   /llms.txt        the llmstxt.org index: what this site is, and every page as a titled link
-//   /llms-full.txt   the same pages inlined, so one fetch is the whole site
-//   /<page>.md       a Markdown mirror of each page, linked from its HTML as rel="alternate"
-//
-// An LLM that fetches a page gets prose instead of 80 KB of Tailwind-classed markup, and a crawler
-// that only reads llms.txt still learns the whole structure. noindex pages are excluded: what is not
-// for a search engine is not for a model either.
+// Markdown mirrors for machine readers, generated from the just-built pages, all derived so none can drift:
+// - /llms.txt: the llmstxt.org index, every page as a titled link
+// - /llms-full.txt: the same pages inlined, so one fetch is the whole site
+// - /<page>.md: a Markdown mirror of each page, linked from its HTML as rel="alternate"
+// noindex pages are excluded: what isn't for a search engine isn't for a model either.
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -96,8 +91,7 @@ export default function llmsText(options) {
                     mkdirSync(path.dirname(outPath), { recursive: true });
                     writeFileSync(outPath, markdown);
 
-                    // Point the HTML at its own mirror, here rather than in the layout: this is the only
-                    // place that knows the file was actually written, so the link cannot 404.
+                    // Points the HTML at its own mirror here: the only place that knows the file was written.
                     const link = `<link rel="alternate" type="text/markdown" href="${mdPath}" title="Markdown">`;
                     writeFileSync(htmlPath, html.replace("</head>", `${link}</head>`));
 
@@ -124,7 +118,7 @@ export default function llmsText(options) {
                 }
                 writeFileSync(path.join(distDir, "llms.txt"), `${index.join("\n")}\n`);
 
-                // Landing page first, then the sections in reading order: the order a human would read them.
+                // Landing page first, then sections in reading order, the order a human would read them.
                 const order = [...new Set(["/", ...sections.flatMap((section) => section.paths), ...unlisted])];
                 const full = [`# ${options.name}`, "", `> ${options.summary}`, ""];
                 for (const pathname of order) {

@@ -1,22 +1,17 @@
 import { graphlib, layout } from "@dagrejs/dagre";
 
-/* The DagGraph component's data model + its dagre layout step. Nodes carry an opaque `data` payload rendered
- * by the caller's #node slot; edges reference node ids. Layout is dagre's layered algorithm (LR by default),
- * which replaced the hand-rolled longest-chain layering this lib's consumers used before, dagre also breaks
- * cycles instead of needing a visiting guard. */
+// DagGraph's data model and dagre layout step. Nodes carry an opaque `data` payload for the #node slot; edges reference
+// node ids. Layout uses dagre's layered algorithm (LR by default), which also breaks cycles.
 
 export interface DagNode<T = unknown> {
     readonly id: string;
     // Opaque payload handed to the #node slot.
     readonly data: T;
-    // Tooltip content for the node's card (DagGraph owns the card wrapper, so the caller
-    // can't attach a directive itself).
+    // Tooltip content for the node's card; DagGraph owns the card wrapper, so callers can't attach a directive.
     readonly tooltip?: string;
     // Closure highlighting: fade this node without removing it from the layout.
     readonly dimmed?: boolean;
-    // Per-node size overrides: when set, dagre lays this node out at these dimensions instead of the
-    // caller's default nodeWidth/nodeHeight. Used for compound nodes (e.g. a pipeline stage grouping
-    // several jobs into one card) whose height scales with the number of items inside.
+    // Per-node size override for dagre, not the default nodeWidth/nodeHeight; e.g. a card sized by its rows.
     readonly width?: number;
     readonly height?: number;
 }
@@ -30,8 +25,7 @@ export interface DagEdge {
     // e.g. dev deps.
     readonly dashed?: boolean;
     readonly dimmed?: boolean;
-    // A text color class (e.g. `text-warning`), the edge path strokes with currentColor at full opacity,
-    // used to tint a selection's closure by direction.
+    // Text-color class (e.g. `text-warning`) the edge strokes at full opacity, to tint a selection's closure.
     readonly accent?: string;
 }
 
@@ -39,34 +33,17 @@ export interface DagLayoutOptions {
     readonly direction: `LR` | `TB`;
     readonly nodeWidth: number;
     readonly nodeHeight: number;
-    /* HOW MUCH AIR THE PICTURE GETS: between two columns, and between two cards in one. The defaults suit a
-     * graph of few large cards, which is what a note's map or a designer's canvas is. A card that is a LIST
-     * wants both tighter: a run's card is a stack of 26px rows, and spacing measured for a 64px card leaves a
-     * 26-job run twice as wide as it needs to be, which is the whole difference between a diagram that fits its
-     * frame legibly and one that has to be panned. */
+    // Air between columns and cards in one; defaults suit few large cards, tighter needed for list-row cards.
     readonly rankSep?: number;
     readonly nodeSep?: number;
 }
 
-// The air a graph gets when its caller names none: dagre is told both, and the turn a line makes on its way out
-// of a column is placed halfway across the first of them.
+// Default column/card spacing when unset; an edge's outbound turn sits halfway across the rank gap.
 const RANK_SEP = 88;
 const NODE_SEP = 28;
 
-/* WHICH GRAPH IS ON SCREEN, everything that decides where the nodes end up, as one comparable string.
- *
- * DagGraph refits its viewport when this changes. It used to watch the node COUNT instead, which is not an
- * identity: two different six-node graphs share a count, so navigating between them left the previous graph's
- * pan and zoom applied to the new one. Where that bit hardest was a small graph followed by a large one, the
- * small one's fit had clamped to maxZoom, and the large one then rendered at 2×, which reads as "zoomed in way
- * too much" rather than as a stale transform.
- *
- * It stays a string rather than a structural compare because a watcher needs a cheap, stable value, and it
- * covers exactly the layout inputs: ids and their order, the edges between them, the direction, and each
- * node's box, which is the caller's default unless the node overrode it. A box belongs here because it moves
- * everything downstream of it: a compound card that grows a row re-ranks its whole column, and a fit measured
- * for the old height leaves the new one clipped. Node LABELS are deliberately absent, re-rendering the same
- * shape with new text must not throw away a pan the user chose. */
+// Comparable string of everything that decides node positions (ids/order, edges, direction, each node's box); DagGraph
+// refits when it changes. Excludes labels, so a text-only change keeps the reader's pan.
 export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): string =>
     [
         options.direction,
@@ -81,33 +58,17 @@ export interface DagPoint {
 }
 
 export interface DagPlacement {
-    // Each node's TOP-LEFT corner, by id, which is what a renderer positions with. dagre yields centres.
+    // Each node's top-left corner, by id; dagre itself yields centers.
     readonly nodes: ReadonlyMap<string, DagPoint>;
-    /* WHERE EACH EDGE TURNS, keyed by `laneKey`, in the same coordinates as the nodes: the LAST gap before its
-     * target, so a line keeps its source's row across the picture and changes row only on arrival.
-     *
-     * Every edge leaving one card therefore starts on the same row and they overlap into one stroke that peels
-     * apart near its targets, which is what makes a fan-out read as one line rather than a dozen diagonals, and
-     * it is what the vendors' own run graphs draw. An edge whose row is blocked carries a second turn (see
-     * turnPoints). */
+    // Where each edge turns, keyed by `laneKey`, in node coords: the last gap before its target.
     readonly lanes: ReadonlyMap<string, readonly DagPoint[]>;
 }
 
-// Edges are keyed by their endpoints alone: dagre is given one edge per pair, so two DagEdges that differ only
-// by `kind` were laid out as one and share its lane.
+// Keyed by endpoints alone: dagre gets one edge per pair, so two DagEdges differing only by `kind` share a lane.
 export const laneKey = (from: string, to: string): string => `${from}>${to}`;
 
-/* WHICH COLUMN EACH NODE BELONGS IN: one past its deepest dependency, and column 0 for anything that has none.
- *
- * dagre does not rank a node by its depth. Network simplex minimises the TOTAL length of the edges, so a node is
- * free to drift later than its dependencies require whenever that shortens the lines around it, and a root whose
- * consumers all sit far to the right drifts with them. On the workspace's own CI run that put `preflight`, which
- * waits for nothing at all, one column right of `changes` and shifted everything downstream of it a column too,
- * which reads as "preflight waits for changes" and is exactly wrong.
- *
- * Depth is the ranking a reader assumes and the one the vendors' own run graphs draw: column N holds the jobs
- * that could not have started before N others finished. Cycles cannot be ranked this way, so the first node that
- * a cycle would leave unplaced is cut loose and placed from whatever of its dependencies did resolve. */
+// Column is one past the deepest dependency, 0 if none: true depth, not dagre's own simplex ranking, which a reader
+// expects. Cycles: the first blocked node is placed from whichever dependencies resolved.
 const columnsOf = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[]): Map<string, number> => {
     const parents = new Map<string, string[]>();
     const children = new Map<string, string[]>();
@@ -159,19 +120,8 @@ const boxOf = (node: DagNode<never>, options: DagLayoutOptions): { width: number
 // A card nothing waits on has no continuation to be ordered by, and sorts after every card that has one.
 const LAST_IN_COLUMN = Number.MAX_SAFE_INTEGER;
 
-/* WHERE IN ITS COLUMN EACH CARD SITS, which is the difference between a flow you follow along the top of the
- * picture and one you have to hunt down and back up again.
- *
- * dagre's crossing minimisation is the seed and the tiebreak, not the answer. It optimises a NUMBER, and two
- * orders with equally few crossings do not read equally: on this workspace's own CI run it put `ci-base` last in
- * its column while the job it feeds sat at the top of the next one, and left the run's dead ends (`migrations`,
- * the e2e pair, the two nothing waits on) in the middle of the spine. Following one branch meant zig-zagging
- * across the whole diagram.
- *
- * So a column is ordered by WHERE ITS LINE CONTINUES. Sweeping right to left, a card sits above another when its
- * nearest continuation sits above the other's: nearest by column first, then by place within it, and a card
- * nothing waits on sinks to the bottom. Ties keep dagre's order, so its work survives wherever this rule is
- * indifferent. On the run above it reproduces GitHub's own ordering column for column. */
+// Orders each column by where its line continues: sweeping right to left, a card sits above another when its nearest
+// continuation does; ties keep dagre's order, nothing-waits-on sinks to the bottom.
 const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagEdge[], seeded: readonly string[]): Map<string, number> => {
     const targets = new Map<string, string[]>();
     for (const edge of edges) {
@@ -184,8 +134,7 @@ const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagE
     }
 
     const place = new Map<string, number>();
-    // The nearest place this card's line continues to. Only columns already ordered (strictly to the right) can
-    // answer, so an edge inside a column or back across one is no continuation and simply does not count.
+    // Nearest column+place this card's line continues to; only already-ordered columns strictly to the right count.
     const continuation = (id: string): readonly [number, number] =>
         (targets.get(id) ?? []).reduce<readonly [number, number]>(
             (best, to) => {
@@ -208,16 +157,8 @@ const orderColumns = (columns: ReadonlyMap<string, number>, edges: readonly DagE
     return place;
 };
 
-/* dagre's COORDINATE along a column is thrown away, and that is the whole of this pass.
- *
- * dagre places a node near the average of its neighbours so that edges come out straight, and pays for it in
- * empty space. On the workspace's own CI run it left gaps of 121, 204 and 391 pixels INSIDE one column, started
- * the second column four hundred pixels below the first, and drew 500px of content in a picture 944px tall.
- * Six columns each beginning somewhere different read as a scatter rather than as a flow.
- *
- * So every column is packed from the same top, one gap between cards, in the order orderColumns settled, which
- * is what GitHub's and GitLab's own run graphs do. Edges give up their straightness and gain a step, which the
- * elbow routing draws as a step; the reader gains a block that can be taken in at once. */
+// Discards dagre's cross-axis coordinate; packs each column from the same top edge, one gap between cards, in
+// orderColumns' order.
 const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number, order: ReadonlyMap<string, number>): Map<string, DagPoint> => {
     const columns = new Map<number, PlacedNode[]>();
     for (const entry of placed) {
@@ -238,39 +179,21 @@ const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: nu
     return packed;
 };
 
-/* A box on the two axes the FLOW names rather than the two the screen does, so one implementation of the
- * routing below serves a left-to-right graph and a top-to-bottom one. `along` runs with the flow (the columns
- * march along it), `across` is the one a column is stacked on and a lane runs along. */
+// Flow-relative axes so one routing implementation serves LR and TB layouts: `along` runs with the flow, `across` is
+// what a column stacks on.
 const along = (box: PlacedNode, horizontal: boolean): { start: number; end: number } =>
     horizontal ? { start: box.at.x, end: box.at.x + box.width } : { start: box.at.y, end: box.at.y + box.height };
 const across = (box: PlacedNode, horizontal: boolean): { start: number; end: number } =>
     horizontal ? { start: box.at.y, end: box.at.y + box.height } : { start: box.at.x, end: box.at.x + box.width };
 
-/* WHICH ROW A LONG EDGE TRAVELS ON, and the answer is ITS SOURCE'S, for as far as it can.
- *
- * A line leaves a card and keeps that card's row until the last moment, then makes one turn into its target.
- * Everything about how a graph reads follows from that:
- *
- *   - A FAN-OUT IS ONE LINE. Six edges out of one card all start on its row, so they overlap into a single
- *     stroke and peel off one at a time as each target arrives. Turning early instead gave six separate lines
- *     leaving one card, which is the "spaghetti" a reader means.
- *   - A LINE STAYS NEAR WHAT IT CONNECTS. Turning early and running at the TARGET's row puts the long stroke
- *     wherever the target happens to sit, so an edge to a card at the top of the picture hauled a line up and
- *     across the whole diagram, far from either end. Nothing on screen explained where it came from.
- *
- * It is also, exactly, what GitHub's own run graph draws, which is the reference that keeps being right here.
- *
- * WHEN THE SOURCE'S ROW IS BLOCKED, and only then, the edge shifts to a lane: the row that hits the FEWEST
- * cards standing between the two columns, nearest to the source's row. Fewest rather than none, honestly:
- * columns are packed independently, so their gaps do not line up and a lane free the whole way often does not
- * exist. A line entering a card and leaving the other side reads as going THROUGH it whatever the z-order says
- * (the cards paint on top, so it really passes behind), and nineteen of forty edges did that before any of
- * this. */
+// Row stays the source's until the last possible turn (see turnPoints); if blocked, shifts to whichever row blocks
+// fewest cards, nearest the source.
+// - fan-out: edges leaving one card overlap into a single stroke, peeling apart near their targets
+// - locality: a line stays near what it connects, never jumping early to the target's row
 const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly PlacedNode[], horizontal: boolean, gap: number): number => {
     const mid = (box: PlacedNode): number => (across(box, horizontal).start + across(box, horizontal).end) / 2;
     const home = mid(source);
-    // Only what stands BETWEEN them: a box whose whole span sits after the source's column and before the
-    // target's. The two endpoints are not obstacles to their own edge.
+    // Only boxes fully between the two columns; the endpoints are never obstacles to their own edge.
     const between = boxes.filter(
         (box) => along(box, horizontal).start >= along(source, horizontal).end && along(box, horizontal).end <= along(target, horizontal).start,
     );
@@ -279,12 +202,7 @@ const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly Plac
     if (between.length === 0 || blocked(home) === 0) {
         return home;
     }
-    /* The gaps those cards leave, one candidate in the middle of each, plus the row the edge would have taken.
-     *
-     * Bounded by the WHOLE picture's rows, so a lane outside it is never offered: past the topmost card or the
-     * bottom one is always free of obstacles and always the wrong answer, a stroke sailing along the outside of
-     * the diagram with nothing beside it to say what it belongs to. Bounded by the obstruction instead, one
-     * card between two columns would rule out its own two gaps, which are the only lanes there are. */
+    // Candidate lanes are gaps around blocking boxes, bounded by the picture's rows; none sits past top or bottom.
     const first = Math.min(...boxes.map((box) => across(box, horizontal).start));
     const last = Math.max(...boxes.map((box) => across(box, horizontal).end));
     const gaps = between
@@ -297,16 +215,8 @@ const laneAcross = (source: PlacedNode, target: PlacedNode, boxes: readonly Plac
     }, home);
 };
 
-/* WHERE EACH EDGE TURNS, and it is LATE: in the last gutter before its target, not the first one after its
- * source.
- *
- * The ordinary edge therefore has ONE turn. It keeps its source's row all the way across, steps to the target's
- * row in the gutter immediately before it, and goes in — so a fan-out leaves its card as a single stroke that
- * peels apart near its targets, and no line is ever drawn far from both of its ends (see laneAcross).
- *
- * An edge whose source row is BLOCKED gets two turns instead: out into its lane in the first gutter, along the
- * lane past whatever stands in the way, then to the target's row in the last gutter. `lanePath` renders any
- * number of turns; these are the only two shapes this produces. */
+// Turn sits in the last gutter before the target, not the first after the source, so a fan-out leaves as one stroke. A
+// blocked source row adds an earlier turn into the lane, then along it to the target's gutter.
 const turnPoints = (
     edges: readonly DagEdge[],
     boxes: ReadonlyMap<string, PlacedNode>,
@@ -325,13 +235,11 @@ const turnPoints = (
             continue;
         }
         const leaves = along(source, horizontal).end + gutter / 2;
-        // The gutter the line turns in, which is the LAST one: `max` because a backwards edge (a cycle dagre
-        // reversed, a graph laid out against its own flow) would otherwise be told to turn behind its source.
+        // Last gutter before target; `max` guards a reversed edge from turning behind its own source.
         const arrives = Math.max(along(target, horizontal).start - gutter / 2, leaves);
         const lane = laneAcross(source, target, all, horizontal, gap);
         const handle = (across(source, horizontal).start + across(source, horizontal).end) / 2;
-        // Keeping its own row all the way is one turn. Shifting to a lane is two: into the lane early, out of it
-        // late, so the detour is only as long as the obstruction that caused it.
+        // Same row all the way is one turn; a lane detour is two turns, kept as short as the obstruction.
         turns.set(laneKey(edge.from, edge.to), lane === handle ? [at(arrives, lane)] : [at(leaves, lane), at(arrives, lane)]);
     }
     return turns;
@@ -348,13 +256,7 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
         graph.setNode(node.id, boxOf(node, options));
     }
     const drawn = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-    /* THE COLUMNS ARE DICTATED TO DAGRE, as the one length each edge is allowed to have.
-     *
-     * `minlen` is dagre's floor on how many ranks an edge spans, and network simplex minimises the total edge
-     * length subject to those floors. Set every floor to the distance the columns above already say the edge
-     * covers and the depth ranking becomes the only assignment that meets them all at their floor, so it is the
-     * one dagre returns, no ranker of its own choosing involved. Everything else it does is left alone: the order
-     * WITHIN a column is still its crossing minimisation, which is the part worth having. */
+    // Sets each edge's `minlen` to its column span, forcing simplex onto the depth order; crossing stays dagre's.
     const columns = columnsOf(nodes, drawn);
     for (const edge of drawn) {
         graph.setEdge(edge.from, edge.to, { minlen: Math.max(1, (columns.get(edge.to) ?? 0) - (columns.get(edge.from) ?? 0)) });
@@ -369,24 +271,17 @@ export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagE
     // dagre's own cross-axis order seeds the ordering pass, which is where its crossing work is kept.
     const seeded = placed.toSorted((one, other) => (horizontal ? one.at.y - other.at.y : one.at.x - other.at.x)).map((entry) => entry.id);
     const packed = packColumns(placed, horizontal, nodeSep, orderColumns(columns, drawn, seeded));
-    // The turns are measured off the PACKED boxes, not dagre's: a line has to leave the card where it now is.
+    // Turns are measured off the packed boxes, not dagre's, since a line must leave the card where it now sits.
     const boxes = new Map(placed.map((entry): [string, PlacedNode] => [entry.id, { ...entry, at: packed.get(entry.id) ?? entry.at }]));
     return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep, nodeSep) };
 };
 
-/* ONE EDGE AS A RIGHT-ANGLED PATH THROUGH ITS TURNS, with the corners rounded.
- *
- * Right angles rather than a curve because a layered graph is read as a flow: every line leaves its card
- * horizontally, changes row at a turn in the gap between two columns, and arrives horizontally. Parallel edges
- * then SHARE their horizontals instead of splaying into a dozen separate arcs, and a crossing reads as a
- * crossing. It is the shape every CI vendor's own graph uses, and the reason theirs look ordered at thirty jobs.
- *
- * `from` and `to` are the handle positions the renderer measured; `via` is the layout's turns (see
- * DagPlacement.lanes). With no turn given, one is taken in the middle, which is the classic elbow. */
+// Right-angled path through `via`'s turns, rounded at the corners, so parallel edges share horizontal runs instead of
+// splaying into curves. `from`/`to` are handle positions; no `via` takes one turn at the midpoint.
 export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 8): string => {
     const turns = via.length > 0 ? via : [{ x: (from.x + to.x) / 2, y: from.y }];
 
-    // Horizontal first for every turn but the last, which turns vertical first so the line ARRIVES horizontal.
+    // Horizontal-first for every turn but the last, which goes vertical first so the line arrives horizontal.
     const waypoints = [from, ...turns, to];
     const corners: DagPoint[] = [];
     const push = (point: DagPoint): void => {

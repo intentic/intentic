@@ -1,22 +1,19 @@
 import type { IntentSet } from "@intentic/need-resolver";
 
-// Every domain the author declared across apps and services, the hostnames the deployment routes through
-// Cloudflare. The derived platform domains (git.<zone>/deploy.<zone>) are NOT included: they hang off the
-// zone, they don't determine it.
+// Every domain the author declared across apps and services; derived platform domains
+// (git.<zone>/deploy.<zone>) are excluded, since they hang off the zone rather than determine it.
 export const collectDomains = (intent: IntentSet): string[] => [
     ...intent.apps.flatMap((app) => Object.values(app.environments).map((environment) => environment.domain)),
     ...intent.services.map((service) => service.domain),
 ];
 
-// True when `domain` belongs to the zone `name`: the apex itself, or a subdomain matched on a label boundary
-// (so "notexample.com" does not match zone "example.com").
+// True when `domain` belongs to zone `name`: the apex itself, or a subdomain matched on a label
+// boundary (e.g. "notexample.com" doesn't match "example.com").
 const inZone = (domain: string, name: string): boolean => domain === name || domain.endsWith(`.${name}`);
 
-// Pick the single Cloudflare zone every authored domain lives under, given the zones the token can see.
-// intentic exposes everything through one zone, so all domains must resolve to the same one; the most
-// specific (longest) matching zone wins per domain, which handles subdomain zones. With no authored domains
-// (e.g. a platform-only deploy) it falls back to the token's single zone. Throws if the token sees no zones,
-// the zone is ambiguous (no domains + several zones), a domain matches none, or the domains span >1 zone.
+// Picks the single Cloudflare zone every domain lives under (longest match wins); falls back to the
+// token's zone if none declared. Throws on no zones, ambiguous zone, an unmatched domain, or domains spanning more than
+// one zone.
 export const selectZone = (zoneNames: readonly string[], domains: readonly string[]): string => {
     const [firstZone, ...restZones] = zoneNames;
     if (firstZone === undefined) {

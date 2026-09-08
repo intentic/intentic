@@ -6,8 +6,7 @@ import { sshExecutor } from "../core/ssh.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const invoiceninjaSchema = serviceSchema.extend({
-    // Invoice Ninja seeds its first account from IN_USER_EMAIL/IN_PASSWORD on first boot (idempotent: the
-    // entrypoint skips it once an account exists), so the intentic admin identity rides the write-once .env.
+    // Seeds Invoice Ninja's first account from IN_USER_EMAIL/IN_PASSWORD; idempotent once an account exists.
     adminUser: z.string(),
     adminPassword: z.string(),
     invoiceninjaImage: z.string(),
@@ -16,16 +15,12 @@ const invoiceninjaSchema = serviceSchema.extend({
 });
 type InvoiceninjaInputs = z.infer<typeof invoiceninjaSchema>;
 
-// 8000/8080/8082 are taken (paperless/signoz/openproject), so Invoice Ninja publishes on 8083.
+// 8000/8080/8082 are taken by paperless/signoz/openproject.
 const PORT = 8083;
 
-// The Octane/FrankenPHP image is self-serving (the -debian variant is php-fpm behind an nginx sidecar); one
-// image runs three roles, the entrypoint picks the artisan command from LARAVEL_ROLE, so app/worker/
-// scheduler share the &env anchor, the .env secrets and the storage volume. --port=80 matches the image's
-// baked healthcheck (curl http://localhost/health). MySQL/MariaDB only (no Postgres); cache/queue/session
-// ride the redis-compatible valkey. TLS terminates at Cloudflare, so REQUIRE_HTTPS stays off while APP_URL
-// advertises the public https origin. APP_KEY/DB_PASSWORD/IN_PASSWORD reach the containers via env_file,
-// so no secret lands in this file.
+// One image serves app/worker/scheduler, selected by LARAVEL_ROLE; they share the &env anchor and storage volume.
+// TLS terminates at Cloudflare, so REQUIRE_HTTPS stays off while APP_URL is https; secrets ride env_file, not this
+// file.
 const composeYaml = (parsed: InvoiceninjaInputs, id: string, hash: string): string =>
     [
         "x-env: &env",
@@ -110,8 +105,7 @@ const composeYaml = (parsed: InvoiceninjaInputs, id: string, hash: string): stri
         "",
     ].join("\n");
 
-// Invoice Ninja (invoicing). /health answers 200 once migrated and serving; the first boot runs the full
-// Laravel migration + seed before that, hence the 600s ready budget (the openproject pattern).
+// /health answers 200 once first-boot migration and seeding finish; readyTimeoutMs is 600s to cover that.
 export const createInvoiceninjaProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createComposeServiceProvider(
         {
@@ -122,9 +116,8 @@ export const createInvoiceninjaProvider = (executor: SshExecutor = sshExecutor):
             readyTimeoutMs: 600_000,
             files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
             env: (parsed) => [
-                // Laravel requires the "base64:" key form (32 bytes), which the host-side hex generator can't
-                // produce, minted here; the write-once guard keeps the first apply's value (the outline
-                // bcrypt-hash pattern).
+                // APP_KEY needs a base64: prefixed 32-byte key; minted here since the standard generator only produces
+                // hex.
                 { key: "APP_KEY", value: `base64:${randomBytes(32).toString("base64")}` },
                 { key: "DB_PASSWORD" },
                 { key: "DB_ROOT_PASSWORD" },

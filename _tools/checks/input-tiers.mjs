@@ -1,85 +1,28 @@
 #!/usr/bin/env node
-/* EVERY FIELD IN THIS APP IS `ui-field-box`, AND THIS IS THE GATE THAT KEEPS IT.
- *
- * The design system has one field in three variants and two sizes (_editor/ui/src/lib/ui.ts holds the
- * vocabulary, styles/primeng.css holds the rules, docs/input-audit.md holds the sweep). Between the framed box,
- * the chrome-less `field-bare` whose frame belongs to a `ui-field-shell` around it, and the `ui-field-inline`
- * that stands where a line of text stood, there is nothing left for a hand-styled `<input class="…">` to be.
- *
- * WHY A GATE AND NOT A CONVENTION. The audit that produced this counted 128 fields, 46 of them drawn by hand,
- * and the axes did not agree: fourteen answers for height, eleven for type size, five for background, four for
- * radius and four for the rim. The expensive one was focus, at NINE answers — and the one on 90 of the 128,
- * `focus:border-line-strong focus:outline-none`, is byte-identical to the same field's HOVER state while also
- * discarding the browser's own ring. Eight more fields suppressed focus with nothing put back, nineteen had no
- * focus rule at all, and five wore a `ring-1` that was never focus-scoped, so it was lit the whole time the
- * field existed. None of that was anybody being careless. It is what happens when the cheapest way to get a
- * field is to type one.
- *
- * AND, AS WITH THE BUTTONS, THE COST IS NOT MERELY UNTIDY. A skin repaints fields (skins/README.md), and it can
- * only reach the ones it can select. sanctum.css used to ask for them by element and type — text, search, email,
- * password, number — a list that had already lapsed: the app ships `url`, `time` and `datetime-local` too, so
- * four fields sat on a carved-stone surface as flat dark boxes and no call site could see why. A hand-drawn
- * field is not inconsistent by accident; it is inconsistent by construction.
- *
- * WHAT THIS REFUSES:
- *
- *   1. A FIELD THAT IS NOT ON THE DESIGN SYSTEM. An `<input>` or `<textarea>` a person types into, wearing none
- *      of the field classes. Checkboxes, radios, ranges, colour wells and file pickers are different controls
- *      and are not asked; a visually hidden input is not a field on screen and is not asked either.
- *   2. A HAND-WRITTEN FOCUS ANSWER — `focus:border-*`, `focus:ring-*`, `focus:bg-*`, `focus-within:border-*`,
- *      or a bare `outline-none` with nothing put back. There is one focus state, it is in primeng.css, and it
- *      is the axis this whole sweep was about.
- *   3. A FOCUS RING THAT PAINTS OUTSIDE THE BOX — `ring-*`, a positive `outline-offset`, or a focus-scoped
- *      `shadow-*`. THIS IS THE RULE WORTH READING TWICE, because it is invisible until it is somebody else's
- *      screen. An outward ring lands on top of whatever sits a few pixels away in a tight row, and it is CUT
- *      OFF by any ancestor with `overflow: hidden` or `auto` — every scroll pane, rounded card and dialog body
- *      in this app. Both were shipping: five `ring-1`s on inline renames, and a `ring-2` on the chat composer,
- *      which is pinned to the bottom of a scroll pane. A half-drawn focus ring reads as a rendering bug, and
- *      the call site can never see the ancestor that clipped it. Drawn inward it is the same signal, correct in
- *      every container, and it adds no layout size. A resting `shadow-*` is untouched: a drop shadow is a
- *      decoration on a floating surface, not a focus state.
- *   4. A CALL SITE RESTATING THE FIELD'S OWN GEOMETRY — padding, a type size, a radius, a rim or a fill on a
- *      framed field. The variant IS the geometry; a call site tuning it has decided its field is a special
- *      case, which is how one recipe ended up with 33 of its 82 call sites passing a size back in.
- *   5. AN ARBITRARY TYPE SIZE (`text-[0.8125rem]`) on a framed field. The scale has steps, and a value that is
- *      not one of them cannot be promised to an extension (opt-in/extension-surface.css).
- *   6. A RETIRED SPELLING: `ui-field-input-error` (now `ui-field-error-box`, which re-points the focus tokens
- *      instead of winning a `!important` fight over one border), and `ui.input()` carrying geometry.
- *
- * WHAT IT DELIBERATELY DOES NOT ASK. `field-bare` and `ui-field-inline` are exempt from 4 and 5, and that is a
- * decision rather than a gap: what those two replace is not one shape. A bare field's box belongs to the shell
- * around it, and an inline one stands where a tree node, a pill, a whole rail card or a heading beside a hidden
- * sizer twin stood. `ui.addTile()` is the same call one control over, and the note there says why.
- *
- * HOW AN EXCEPTION IS SPELLED: an entry in ALLOWED, keyed by file and by the exact finding, carrying the
- * reason — the same shape as button-tiers.mjs and tailwind-bypass.mjs, and for the same reason. An entry that
- * no longer matches anything is reported as stale, so the list cannot outlive the code it excuses. */
+// Enforces the app's one field system (`ui-field-box`, in three variants and two sizes): no hand-styled
+// `<input>`/`<textarea>`, one focus state (primeng.css), no ring painted outside the border box, and no call site
+// restating a framed field's own geometry. Exceptions live in ALLOWED, keyed by file and exact class.
 import { at, blank, classWordsOf, finishFindings, tags, templateSource, templatesUnder, waiverList } from "./lib/templates.mjs";
 
-/* ── WHAT COUNTS AS WHAT ──────────────────────────────────────────────────────────────────────────────────*/
+// What counts as what.
 
-/** The design system's field classes, however they are spelled — as a class, or through the `ui.*` recipe. */
+/** Design system field classes, spelled as a class or through a `ui.*` recipe. */
 const ON_SYSTEM = /(?:^|\s)(?:ui-field-box|ui-field-shell|field-bare)(?:\s|$)|\bui\.input(?:Sm|Inline)?\s*\(/u;
-/* The variants whose box is the caller's, for the reason in the header — plus `ui-field-shell`, which is a
- * FRAME rather than a control: what it contributes is the focus state for an assembly, and its rim, fill,
- * radius and padding are defaults that the thing inside legitimately moves. The chat composer is a rounded-2xl
- * pill on `bg-overlay`; a glob row is a rounded-md box on canvas; a prompt box has no padding at all because
- * the field inside it supplies its own. Rules 2 and 3 still apply to all of them, which is the part that has
- * to be uniform. */
+// Variants whose box belongs to the caller; `ui-field-shell` is a frame, not a control.
 const CALLER_GEOMETRY = /(?:^|\s)(?:field-bare|ui-field-inline|ui-field-shell)(?:\s|$)|\bui\.inputInline\s*\(/u;
 /** An element that IS a field, or is the box drawn around one. Scopes the focus rules off buttons and rows. */
 const FIELDISH = /(?:^|\s)(?:ui-field-box|ui-field-shell|ui-field-lit|ui-field-inline|field-bare)(?:\s|$)/u;
 
-/** `type=` values that are a different control entirely. A slider and a tick share nothing with a text box. */
+/** `type=` values that are a different control entirely, not a text field. */
 const NOT_A_FIELD = new Set([`checkbox`, `radio`, `range`, `color`, `file`, `hidden`, `submit`, `reset`, `button`, `image`]);
 
-/** A focus state written at a call site. There is one, and it is not here. */
+/** A focus state written at a call site; there is exactly one, and it lives in primeng.css. */
 const HAND_FOCUS = /(?:^|\s)!?(?:[\w@-]+:)*focus(?:-visible|-within)?:(?:border-|ring|bg-|shadow-|outline-)[\w./[\]()-]*/u;
-/** Focus suppressed with nothing put back — the eight fields that had no indicator at all. */
+/** Focus suppressed with nothing put back. */
 const BARE_OUTLINE_NONE = /(?:^|\s)!?(?:[\w@-]+:)*outline-none(?:\s|$)/u;
-/** A ring drawn OUTSIDE the border box. The one rule that is about behaviour rather than looks. */
+/** A focus ring drawn outside the border box, not inside it. */
 const OUTWARD_RING = /(?:^|\s)!?(?:[\w@-]+:)*(?:ring(?:-[\w./[\]()-]+)?|outline-offset-(?!0(?:\s|$))[\w.[\]-]+)(?:\s|$)/u;
-/** Geometry the variant owns. Side padding is NOT here: `pl-8` is room for an adornment only the caller sees. */
+/** Geometry the variant owns. Side padding is excluded: `pl-*` is room for an adornment only the caller sees. */
 const FIELD_GEOMETRY =
     /(?:^|\s)!?(?:[\w@-]+:)*!?(?:p[xytb]?-[\w.[\]/]+|h-\d[\w.[\]/]*(?![\w-])|rounded(?:-[\w[\]./]+)?|border(?:-[\w[\]./]+)?|bg-[\w[\]./-]+|text-(?:4xs|3xs|2xs|xs|sm|base|lg|xl)(?![\w-]))(?:\s|$)/u;
 /** A type size that is not a step on the scale. */
@@ -87,12 +30,9 @@ const ARBITRARY_TEXT = /(?:^|\s)!?(?:[\w@-]+:)*text-\[[^\]]+\]/u;
 /** Spellings the design system retired. */
 const RETIRED = /(?:^|\s)ui-field-input-error(?:\s|$)/u;
 
-/* There is NO TAG STACK here, unlike button-tiers.mjs, and the difference is worth stating: that gate has to
- * know whether a button sits inside a row's control cluster, so it tracks ancestry. Every rule here is about
- * one element's own classes, so the walk is flat and a void element needs no special case. */
+// No tag-stack tracking here: every rule is about one element's own classes, so the walk stays flat.
 
-/* THE WAIVERS. Keyed by path, then by the exact class string as it appears, with the reason it is not the
- * finding it looks like. Two, and both are a field whose box is pinned to something outside itself. */
+// Waivers keyed by path, then by the exact class string, with the reason it isn't the finding it looks like.
 const ALLOWED = new Map([
     [
         `_editor/ui/src/components/forms/SearchBar.vue`,
@@ -156,7 +96,7 @@ for (const path of tracked) {
             });
         }
 
-        // The remaining rules are about fields and the boxes drawn around them, not about buttons or rows.
+        // Remaining rules apply only to fields and the boxes drawn around them, not buttons or rows.
         if (!isField && !FIELDISH.test(classes)) {
             continue;
         }
@@ -187,9 +127,7 @@ for (const path of tracked) {
         }
 
         // ── 4/5 · geometry and type the variant owns
-        /* EVERY offending token, waived one at a time. Reporting only the first would make a field that pins
-         * three of them (the sandbox title, below) take three passes to excuse, and each waiver would read as
-         * if it were the whole exception. */
+        // Reports each offending token separately: waiving one should not require waiving the whole class list.
         if (!CALLER_GEOMETRY.test(classes)) {
             const geometry = classes
                 .split(` `)

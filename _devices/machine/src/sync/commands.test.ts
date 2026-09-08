@@ -40,10 +40,9 @@ describe("enrollKey", () => {
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    /* The sync token IS the enrollment: it authorizes the port read, the machine report and the SSH transport
-     * this agent listens for locally. A daemon that enrolls the key and hands back nothing to use it with has
-     * produced a pairing that can never connect, so that fails at setup rather than as a Mutagen session which
-     * silently never comes up. */
+    // The sync token IS the enrollment: it authorizes the port read, the machine report and the SSH transport. A
+    // daemon that enrolls the key and hands back nothing to use it with fails here rather than as a Mutagen session
+    // that silently never comes up.
     it("refuses an enrollment that comes back without a credential", async () => {
         const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ok: true, mode: "sync" }));
         vi.stubGlobal("fetch", fetchMock);
@@ -71,9 +70,8 @@ describe("enrollKey", () => {
     });
 });
 
-/* Which sandbox a command acts on. With a fleet on one machine, `pause`/`resume`/`uninstall` need to name one:
- * and a real id is `sandbox-<hex>-<zone>`-shaped, so a human names it by the fragment they recognize. An ambiguous
- * or unknown fragment must refuse rather than guess: guessing here unpairs the wrong sandbox. */
+// Which sandbox a command acts on. With a fleet on one machine, a real id is `sandbox-<hex>-<zone>`-shaped, so
+// a human names it by the fragment they recognize; an ambiguous or unknown fragment must refuse rather than guess.
 describe("selectPairings", () => {
     const pairing = (sandboxId: string): Pairing => ({
         sandboxUrl: `https://${sandboxId}/`,
@@ -105,23 +103,22 @@ describe("selectPairings", () => {
     });
 });
 
-/* THE STATUS LINES, pinned as sentences. This is the one output a user reads to find out whether their machine is
- * doing what they think it is, and each of these assertions is a way it has actually lied. */
+// The status lines, pinned as sentences: this is the one output a user reads to find out whether their machine
+// is doing what they think, and each assertion below is a way it has actually lied.
 describe("pairingLine", () => {
     const synced = (overrides: Partial<DevicePairing> = {}): DevicePairing => ({
         sandboxId: "sandbox-0738cd6b5027-intentic-dev",
         mode: "sync",
         localDir: "/home/me/intentic/work",
         mutagenStatus: "watching",
-        // A healthy pairing runs BOTH sessions, so the default fixture has to have both: otherwise every
-        // assertion below would be reading a line that is already shouting about a missing backup.
+        // A healthy pairing runs BOTH sessions, so the default fixture has both: otherwise every assertion below would
+        // read a line already shouting about a missing backup.
         backupStatus: "watching",
         ...overrides,
     });
 
-    /* Mutagen omits an empty conflict list, so `conflicts` is absent on every healthy session, and the count was
-     * interpolated whenever it wasn't zero. Every well-behaved sync on every machine printed
-     * "[watching, undefined conflict(s)]", which reads as a fault on the line whose job is to say there is none. */
+    // Mutagen omits an empty conflict list, so `conflicts` is absent on every healthy session; every well-behaved
+    // sync used to interpolate it as "undefined conflict(s)".
     it("says nothing about conflicts when Mutagen reported none", () => {
         const pairing = synced();
         const line = pairingLine(pairing);
@@ -138,10 +135,8 @@ describe("pairingLine", () => {
         expect(pairingLine(synced({ conflicts }))).toContain("conflict");
     });
 
-    /* THE BACKUP HAS ITS OWN WORD, and its own shout. The two sessions fail independently: the workspace one
-     * going quiet stops the owner's edits moving and they notice within minutes, while the state backup going
-     * quiet costs them nothing at all until the day the sandbox is gone and their personas, skills, automations
-     * and transcripts turn out never to have been copied. That is the failure the line has to be loud about. */
+    // The backup has its own word and its own shout: the workspace session going quiet is noticed within minutes,
+    // the state backup going quiet costs nothing until the sandbox is gone and nothing was ever copied here.
     it("shouts when the state backup is not running, even though the folder syncs fine", () => {
         const line = pairingLine(synced({ backupStatus: undefined }));
         expect(line).toContain("watching");
@@ -153,8 +148,8 @@ describe("pairingLine", () => {
         expect(pairingLine(synced({ backupStatus: "halted-on-root-emptied" }))).toContain("backup halted-on-root-emptied");
     });
 
-    /* The failure this whole line exists for: a pairing whose session was never created has no status, and an
-     * empty bracket put "this folder is not syncing at all" one space away from "this folder is fine". */
+    // The failure this line exists for: a pairing whose session was never created has no status, and an empty
+    // bracket put "not syncing at all" one space from "fine".
     it("shouts when a sync pairing has no session at all", () => {
         const withoutSession = pairingLine(synced({ mutagenStatus: undefined }));
         const withSession = pairingLine(synced());
@@ -166,15 +161,14 @@ describe("pairingLine", () => {
         expect(pairingLine(synced({ paused: true }))).toContain("[paused]");
     });
 
-    // A mirror-only enrollment has no file sync to have an opinion about, so the absent status is a fact about
-    // the mode: it must not read as a missing session.
+    // A mirror-only enrollment has no file sync to have an opinion about, so the absent status is a fact about the
+    // mode, not a missing session.
     it("leaves a ports-only enrollment alone", () => {
         expect(pairingLine({ sandboxId: "friend", mode: "mirror" })).toBe("  friend  (ports only)");
     });
 
-    /* MIRRORING OFF IS SAID ON THE LINE, because the only other evidence of it is an empty port list, which is
-     * also what a sandbox serving nothing looks like. The file sync's own words stay beside it: turning ports off
-     * does not stop the folder, and a line that dropped them would say it had. */
+    // Mirroring off is said on the line, since the only other evidence is an empty port list, which is also what a
+    // sandbox serving nothing looks like.
     it("says so when this device's port mirroring is switched off", () => {
         const line = pairingLine(synced({ mirroring: "off" }));
         expect(line).toContain("port mirroring OFF");
@@ -191,9 +185,8 @@ describe("pairingLine", () => {
     });
 });
 
-/* A PID IS NOT A PULSE. The agent keeps its own tunnel listeners on the event loop, so a rejection that escapes
- * the loop leaves the process alive with mirroring, the git bridge and any not-yet-created file sync stopped:
- * observed twice, reported as "running" both times, by this line. */
+// A pid is not a pulse. The agent keeps its own tunnel listeners on the event loop, so a rejection that escapes
+// it leaves the process alive with mirroring, the git bridge and file sync all stopped.
 describe("agentLine", () => {
     const NOW = 1_700_000_000_000;
 
@@ -215,8 +208,8 @@ describe("agentLine", () => {
         expect(line).toContain(`${Math.round(sinceMs / 1000)}s ago`);
     });
 
-    // Neither a stall nor a clean bill of health: an agent too old to stamp, or one whose first pass hasn't
-    // landed. Saying which is the point: picking either is how a silent stall reads as green.
+    // Neither a stall nor a clean bill of health: an agent too old to stamp, or one whose first pass hasn't landed.
+    // Saying which is the point, since picking either lets a silent stall read as green.
     it("says so when no pass has been reported yet, rather than assuming either way", () => {
         const pid = 4242;
         const withoutTick = agentLine({ running: true, pid }, NOW);
@@ -234,9 +227,8 @@ describe("agentLine", () => {
     });
 });
 
-/* THE MACHINE IS UPDATED AND STILL SERVING THE OLD AGENT, which this output had no way to say: the version on its
- * first line is the FILE's, the loop keeps whatever build it started with, and a machine that was upgraded
- * without a restart therefore printed a clean bill of health with the old agent's behaviour underneath it. */
+// The machine is updated and still serving the old agent, which this output had no way to say: the version on
+// its first line is the FILE's, and the loop keeps whatever build it started with.
 describe("buildSkewLine and the status summary", () => {
     const NOW = 1_700_000_000_000;
     const report = (agent: Omit<DeviceReport["agent"], "installed">, installed: string | undefined): DeviceReport => ({
@@ -261,10 +253,8 @@ describe("buildSkewLine and the status summary", () => {
         expect(buildSkewLine(report({ ...serving, build: "1.240.0" }, "1.240.0"))).toBeUndefined();
     });
 
-    /* AN UNSTAMPED LOOP IS THE LOUDEST CASE, not a missing one, and reading it as "nothing to say" is what let
-     * this check go quiet on the machines it was written for. The loop stamps its build into the pidfile it
-     * claims, so one reporting none predates the stamp: it is serving, something newer is installed beside it,
-     * and it is further behind than any build it could have named. */
+    // An unstamped loop is the loudest case, not a missing one: the loop stamps its build into the pidfile it
+    // claims, so one reporting none predates the stamp and is further behind than any build it could have named.
     it("names the machines too far behind to say which build they are on", () => {
         const unstamped = report({ running: true, pid: 4242 }, "1.240.0");
         const line = buildSkewLine(unstamped);
@@ -273,23 +263,19 @@ describe("buildSkewLine and the status summary", () => {
         expect(statusSummary(4242, 0, unstamped, NOW)).toContain("OLD BUILD RUNNING");
     });
 
-    /* Silence is kept for the two kinds of genuinely not knowing, the same rule the version chip follows: a
-     * machine with no installed agent to compare against, and a working-tree build, which is not a version at
-     * all — a developer running the agent they just compiled is behind nothing, and a nag nobody can satisfy is
-     * worse than the fact being absent. */
+    // Silence is kept for the two kinds of genuinely not knowing: no installed agent to compare against, and a
+    // working-tree build, which is not a version at all.
     it("says nothing when there is no release to be behind", () => {
         expect(buildSkewLine(report(serving, undefined))).toBeUndefined();
         expect(buildSkewLine(report({ running: true, pid: 4242 }, DEV_VERSION))).toBeUndefined();
     });
 
-    // A stopped loop is not serving an old build, it is not serving anything, and the line above it says so in
-    // louder words.
+    // A stopped loop is not serving an old build, it is not serving anything, and the line above it says so louder.
     it("says nothing about a loop that is not running", () => {
         expect(buildSkewLine(report({ running: false, build: "1.233.0" }, "1.240.0"))).toBeUndefined();
     });
 
-    /* The tray reads the summary and nothing else, so the skew has to reach that one line too — otherwise the app
-     * whose whole premise is not needing a terminal is the one surface that cannot tell you. */
+    // The tray reads the summary and nothing else, so the skew has to reach that one line too.
     it("ranks the skew above a healthy line and below the two failures", () => {
         const skewed = report(serving, "1.240.0");
         expect(statusSummary(4242, 0, skewed, NOW)).toContain("OLD BUILD RUNNING");
@@ -300,11 +286,8 @@ describe("buildSkewLine and the status summary", () => {
     });
 });
 
-/* THE PATHS UNDER THE COUNT, on the one output that has ever printed the word "conflict".
- *
- * The count is a symptom and was the whole message: "[watching, 10 conflict(s)]" and then the next machine. The
- * paths are the only part anybody can act on, and the browser's device card now lists the same ones from the
- * same field, so these two surfaces cannot disagree about one machine. */
+// The paths under the count, on the one output that has ever printed the word "conflict": the count was the
+// whole message, but the paths are the only part anybody can act on.
 describe("conflictLines", () => {
     const stuck = (overrides: Partial<DevicePairing> = {}): DevicePairing => ({
         sandboxId: "sandbox-0738cd6b5027-intentic-dev",
@@ -337,9 +320,8 @@ describe("conflictLines", () => {
         expect(lines).toContain("making both copies the same");
     });
 
-    /* The remainder is counted against the pairing's OWN total, because two caps sit between Mutagen and this
-     * line: what Mutagen reports and what the report carries. A tail computed from the rows would say nothing
-     * about either. */
+    // The remainder is counted against the pairing's OWN total, since two caps sit between Mutagen and this line:
+    // what Mutagen reports and what the report carries.
     it("counts what it is not showing against the machine's own total", () => {
         const conflictedPaths = Array.from({ length: 12 }, (_, at) => ({ path: `f-${at}.ts` }));
         const lines = conflictLines(stuck({ conflicts: 40, conflictedPaths }));

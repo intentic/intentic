@@ -5,15 +5,12 @@ import { renderMarkdown } from "@intentic/webq/markdown";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 import { attributeOf, decodeEntities } from "../xml.js";
 
-/* OpenDocument text: a zip whose content.xml is the document, in ODF's own vocabulary (text:h, text:p,
- * text:list, table:table). Rather than a second markdown pen, that vocabulary is rewritten tag-for-tag into
- * the HTML it corresponds to and handed to webq's writer — the same road a docx takes through mammoth, so an
- * .odt and a .docx of the same letter cannot disagree about what a heading or a table looks like in
- * markdown. The rewrite is a tag-name substitution over well-formed, machine-written XML; no XML parser is
- * needed to rename elements, and every namespaced tag the table does not name is unwrapped (its text kept,
- * its tag dropped), so an unfamiliar wrapper can never swallow a paragraph. */
+// ODF's content.xml is rewritten tag-for-tag into HTML and handed to webq's writer, the same road docx takes through
+// mammoth, so an .odt and .docx of the same letter render the same markdown.
+// A tag-name substitution over well-formed XML, no parser needed to rename elements; every namespaced tag the table
+// doesn't name is unwrapped, keeping its text but dropping the tag.
 
-// ODF element → HTML element. An empty string is a void marker to drop (its text is nothing).
+// ODF element to HTML element; an empty value is a void marker to drop, since its text is nothing.
 const TAG: Record<string, string> = {
     "text:p": "p",
     "text:list": "ul",
@@ -32,8 +29,7 @@ const TAG: Record<string, string> = {
     "table:table-columns": "colgroup",
 };
 
-// Subtrees that are not the document's text: reviewer comments, tracked-change records, drawings' metadata,
-// and index/TOC machinery whose visible entries ODF stores separately anyway.
+// Subtrees that aren't the document's text: comments, tracked changes, drawing metadata, TOC machinery.
 const DROP_SUBTREE = [
     "office:annotation",
     "text:tracked-changes",
@@ -46,22 +42,22 @@ const DROP_SUBTREE = [
 const dropSubtrees = (xml: string): string =>
     DROP_SUBTREE.reduce((text, tag) => text.replaceAll(new RegExp(`<${tag}\\b[^>]*?(?:/>|>[\\s\\S]*?</${tag}>)`, "g"), ""), xml);
 
-/** content.xml's `<office:text>` body as the HTML webq's writer understands. Exported for the tests. */
+/** content.xml's <office:text> body as the HTML webq's writer understands; exported for tests. */
 export const odfToHtml = (xml: string): string => {
     const start = xml.indexOf("<office:text");
     const end = xml.lastIndexOf("</office:text>");
     const body = dropSubtrees(start === -1 || end === -1 ? xml : xml.slice(start, end));
     return (
         body
-            // Headings carry their level as an attribute, so the pair is rewritten together (headings never nest).
+            // Headings carry level as an attribute, so tag and level are rewritten together (headings never nest).
             .replaceAll(/<text:h\b([^>]*)>([\s\S]*?)<\/text:h>/g, (_, attributes: string, inner: string) => {
                 const level = Math.min(6, Math.max(1, Number(attributeOf(attributes, "text:outline-level") ?? "1") || 1));
                 return `<h${level}>${inner}</h${level}>`;
             })
-            // Whitespace elements: ODF writes runs of spaces and tabs as elements so XML cannot collapse them.
+            // ODF writes runs of spaces/tabs as elements, since XML would otherwise collapse them.
             .replaceAll(/<text:s\b([^>]*)\/>/g, (_, attributes: string) => " ".repeat(Number(attributeOf(attributes, "text:c") ?? "1") || 1))
             .replaceAll(/<text:tab\b[^>]*\/>/g, " ")
-            // Everything namespaced: mapped tags become their HTML, the rest are unwrapped.
+            // Namespaced tags: mapped ones become their HTML, the rest are unwrapped.
             .replaceAll(
                 /<(\/?)([a-zA-Z0-9]+:[a-zA-Z0-9-]+)((?:\s[^>]*?)?)(\/?)>/g,
                 (_, close: string, name: string, attributes: string, selfClosing: string) => {
@@ -79,10 +75,8 @@ export const odfToHtml = (xml: string): string => {
                     return selfClosing === "/" && mapped !== "br" && mapped !== "col" ? `<${mapped}></${mapped}>` : `<${mapped}>`;
                 },
             )
-            // ODF puts every list item's text in a paragraph; in HTML a <p> inside <li> is a block, and the
-            // writer renders it as a bullet on one line and the text on the next. Single-paragraph items are
-            // the norm, so their paragraph is unwrapped; a rarer multi-paragraph item degrades to an indented
-            // continuation, which reads correctly.
+            // A list item's single paragraph is unwrapped, since <p> inside <li> would render as bullet then text
+            // below.
             .replaceAll(/<li>\s*<p>/g, "<li>")
             .replaceAll(/<\/p>\s*<\/li>/g, "</li>")
     );

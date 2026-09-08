@@ -96,22 +96,9 @@ import { startRepoWatch, subscribeRepoChanges } from "./workspace/watch/repo-wat
 import { startRefWatch, subscribeRefChanges } from "./git/remote/ref-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/watch/workspace-watch.js";
 
-// The sandbox container's entrypoint. Config comes from env set at `docker run`, by connect.sh (your PC) or
-// the workspace provider (a server); the workspace (the repos) and agent credentials are injected there,
-// never baked in.
-//
-// LISTEN FIRST, CONVERGE BEHIND THE GATE. The boot chain below (state links, git-dir healing, the registry
-// load) used to run before serve(), so every daemon death cost its crash PLUS a couple of minutes of
-// connection-refused while sweeps re-walked a fleet of worktrees, the browser sat on the reconnect screen
-// for all of it. The listeners now come up immediately: /health and /events answer at once (the UI paints,
-// heartbeats flow), and every data route waits on the readiness gate (app.ts), which resolves when the chain
-// finishes, the same ordering guarantees, minus the outage.
-//
-// The chain NAMES ITSELF, in the table below. Every awaited step is declared here before any of it runs, so
-// /health and /events can report which one is in flight and how far along the boot is, the browser holds its
-// reads and shows the wait rather than painting an operable workspace over a daemon that answers nothing (see
-// platform/boot.ts). A step added below without an entry here does not compile: the `boot` alias in main() is
-// narrowed to these keys, so an undeclared one is a type error rather than a throw that strands the gate shut.
+// Sandbox container's entrypoint; config comes from env injected at run time, never baked in. Listeners come up
+// immediately (`/health`, `/events`); data routes wait behind the readiness gate below until the boot chain finishes.
+// Steps are declared in BOOT_STEPS; an undeclared step is a type error, not a silent gap.
 const BOOT_STEPS = [
     { key: "authorizedKeys", label: "Restoring desktop enrollments" },
     { key: "claudeState", label: "Linking conversation state" },
@@ -131,23 +118,8 @@ const BOOT_STEPS = [
     { key: "agentToken", label: "Writing the agent token" },
 ] as const;
 
-/* THE ONE SWITCH THAT MUST NOT FAIL OPEN.
- *
- * `google.clientId` is what builds the authorizer (composition.ts). Empty is a legitimate mode, the tests and
- * the host-internal server preview run loopback with no auth at all, but it is legitimate only for a daemon
- * nothing outside can reach. Set it empty on a daemon that HAS a tunnel and every gate in app.ts disappears at
- * once: no bearer middleware, `ownerDenied` answers "you are the owner", /enroll takes any caller, and
- * /system/terminal hands out a root PTY. Nothing in the logs distinguishes that from a healthy boot.
- *
- * A connect token or a public URL is the daemon saying it is reachable from outside, so the two together are
- * the contradiction: refuse to serve rather than serve everything. Dying here costs a misconfigured sandbox a
- * restart loop with the reason in its logs, which is the failure everyone wants over the silent one.
- *
- * SANDBOX_ALLOW_UNAUTHENTICATED is the single acknowledged exception, and it is loud rather than quiet: the e2e
- * tiers need a connect token (nothing else derives a sync ssh hostname) on a daemon they drive with no
- * credential, which no amount of inference can distinguish from the misconfiguration above, so the harness
- * says it in the container env and the daemon repeats it in `docker logs` on every boot. env.config.ts carries
- * the full note, including the caller list it must stay at. */
+// Refuses to serve unauthenticated: an empty google.clientId is safe only when this daemon is unreachable. Reachable
+// with it empty opens every gate in app.ts silently; SANDBOX_ALLOW_UNAUTHENTICATED is the one loud exception.
 const requireAuthWhenReachable = (config: Config): void => {
     if (config.google.clientId !== "" || (config.connectToken === "" && config.sandbox.publicUrl === "")) {
         return;
@@ -169,68 +141,50 @@ const requireAuthWhenReachable = (config: Config): void => {
     process.exit(78); // EX_CONFIG
 };
 
-// A workspace-relative path that is extension SOURCE, the three places a backend extension's code or its
-// enablement can arrive from. Module scope so the watcher's callback doesn't rebuild it on every change batch.
+// Workspace-relative path is extension source (code or enablement) if it matches one of three locations. Module-scope
+// so the watcher doesn't rebuild this on every change batch.
 const extensionSource = (path: string): boolean =>
     path.startsWith(`${stateRelPath(".intentic/config/workspace-extensions/")}/`) ||
     path.startsWith(`${stateRelPath(".intentic/local/extensions/")}/`) ||
     path === stateRelPath(".intentic/config/extension-enablement.json");
 
 const main = async (): Promise<void> => {
-    /* Runner mode, validated before anything else builds: a misassembled runner container (one env value
-     * without the other, runners/runner-mode.ts) crashes here with the reason in `docker logs` rather than
-     * booting as something it half is. A well-formed runner boots as any loopback sandbox does — its env
-     * simply carries no tunnel, no Google client, no connect token — and the parent link starts after the
-     * boot chain converges, far below. */
+    // Runner mode is validated before anything else builds: a misassembled runner (runner-mode.ts) crashes here with
+    // the reason logged, rather than half-booting. A well-formed runner otherwise boots like any loopback sandbox.
     const runnerEnv = runnerModeRequested(process.env);
     const config = loadConfig();
     requireAuthWhenReachable(config);
     requireLocalContract(config);
-    // Every profile difference below reads a named trait, never the profile value, see platform/profile.ts.
+    // Profile differences below read a named trait, never the profile value directly (platform/profile.ts).
     const traits = profileTraits(config);
     const host = listenHost(config);
     if (!traits.sharedTmux) {
-        // No tmux server of our own to wrap agent shell commands into, the existing env contract the Bash
-        // rewrite honors (agent-terminals.ts), defaulted rather than forced so an operator can still override.
+        // No shared tmux server for agent commands; defaults INTENTIC_AGENT_TMUX off, not forced, so an operator can
+        // override.
         process.env["INTENTIC_AGENT_TMUX"] ??= "0";
     }
-    // Every intentic CLI run spawned in here (the /intentic routes, the panel-infra-apply tmux session) tees
-    // its output to the daemon-owned logs tree, the same INTENTIC_LOG_DIR contract as an operator shell.
+    // intentic CLI runs spawned here tee output to the daemon-owned logs tree via INTENTIC_LOG_DIR.
     process.env["INTENTIC_LOG_DIR"] ??= join(logsRoot(config.historyRoot), "intentic-runs");
-    // The agent env spreads process.env (agent.ts baseOptions), so bin/tmux-run and the output filter
-    // inherit where the pipe-pane hooks persist raw pane logs, the filter footer's escape hatch.
+    // Inherited by bin/tmux-run and the output filter via the agent env, so both agree where raw pane logs live.
     process.env["INTENTIC_TERMINAL_LOGS_DIR"] ??= terminalLogsDir(config.historyRoot);
     const logger = createLogger(config);
-    // ponytail: log-and-continue, don't exit. The daemon's whole job is to stay up for /agent + /events; a
-    // rejected best-effort boot job (the void reconnectVpns/composeEnvironment/… below)
-    // must not take the origin down. A genuinely fatal state is rare, and --restart unless-stopped still
-    // catches a hard crash. The pre-logger config-load throw stays unguarded, a bad config should crash loudly.
+    // Logs and continues rather than exiting: the daemon must stay up for /agent and /events even when a best-effort
+    // boot job rejects. The config-load throw above this stays unguarded on purpose; a bad config should crash loudly.
     process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled rejection"));
     process.on("uncaughtException", (err) => logger.error({ err }, "uncaught exception"));
-    // Death forensics: name the previous run's unannounced death (with its fatal report, when V8 wrote one)
-    // and stamp this run's marker; the exit hook below is what flips it to "exited" on every deliberate path.
-    // Skipped without a history volume (dev, tests), same opt-out as the file log destination.
+    // Names the previous run's unannounced death (with its fatal report, if V8 wrote one) and stamps this run's marker;
+    // the exit hook flips it to "exited" on a deliberate stop. Skipped with no history volume (dev, tests).
     if (config.historyRoot !== "") {
         const bootMarker = claimBootMarker(logsRoot(config.historyRoot), logger);
         process.on("exit", (code) => bootMarker.markExited(code));
     }
-    /* EVERYTHING THIS DAEMON HAS TO PUT DOWN, collected where it is picked up.
-     *
-     * This was twenty-five `.stop()` calls in a row at the bottom of this file, and nothing connected that list
-     * to the subsystems it covered: adding a watcher, a poller or an interval meant remembering to add a line,
-     * and forgetting cost nothing visible, the process was exiting anyway. A missed stop only ever showed up
-     * where it actually hurts, in the tests and the long-lived dev sandbox, as a handle keeping the event loop
-     * alive or a timer firing against a service that is already gone.
-     *
-     * Registering next to the creation is the whole fix: the line that starts a thing and the line that stops
-     * it are one line apart, so the two cannot drift, and shutdown below has nothing left to enumerate. */
+    // Every subsystem registers its own teardown at creation; nothing here enumerates what to stop.
     const shutdown = new DisposableStore();
-    // The stall detector: any future freeze, a synchronous path in here, or the whole VM thrashing under a
-    // fleet of builds, leaves a log line with the lag and the machine's pressure numbers attributing it.
+    // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
-    // Provider SDKs spawn their CLIs internally, outside the polite Bash/git wrappers. Keep every direct child
-    // below the control plane so a newly introduced workload cannot compete equally with /events heartbeats.
+    // Keeps direct children (provider SDKs spawn CLIs outside the Bash/git wrappers) below /events heartbeats in
+    // priority.
     const workloadPriority = startWorkloadPriorityGovernor();
     shutdown.push(() => workloadPriority.stop());
     const services = createServices(config, logger);
@@ -240,38 +194,24 @@ const main = async (): Promise<void> => {
     shutdown.push(() => services.reach.stop());
     shutdown.push(() => services.history.stop());
     shutdown.push(() => services.processes.stopAll());
-    // The extension gateways are supervised direct children (SIGTERM to each group ⇒ every gateway flushes
-    // its own in-flight voice transcript on the way down), stopped here or they outlive the daemon in their
-    // own process groups — killOrphanServiceProcesses at the next boot is the backstop, not the plan.
+    // Extension gateways are direct children; stopped here or they outlive the daemon (the orphan sweep is only a
+    // backstop).
     shutdown.push(() => services.serviceProcesses.stopAll());
     // The backend host is a direct child, not a tmux session, stopped here or it outlives the daemon.
     shutdown.push(() => services.extensionBackend.stop());
-    /* AM I THIS SANDBOX'S DAEMON, OR A RUN OF ITS CODE, asked before anything is claimed, swept or announced,
-     * because every one of those is container-wide and a container can hold more than one of us. This repository
-     * IS the daemon: agents working in it start one from source to watch a change work, and twice on 2026-08-11
-     * that second daemon's first sweep killed every turn the live one had in flight. A guest serves its own
-     * routes and owns nothing that was here before it, see platform/container-owner.ts for the whole list and
-     * the two days that wrote it.
-     *
-     * The LOCAL profile never asks: the claim file lives in HOME, which is the user's and not this daemon's to
-     * touch, and there is no container to own, each local engine has its own roots and every container-wide
-     * surface the `container` role gates is off in this profile by design. Its role is pinned instead of
-     * derived, which is also what keeps a local engine that happens to be alone on a machine from claiming
-     * "the container" and waking furniture the local posture promises never to run. */
+    // Claims container ownership before anything container-wide runs, since a container can hold more than one daemon
+    // (container-owner.ts). LOCAL never claims: it owns nothing container-wide, and its role is pinned, not derived.
     const role = traits.convergeHome
         ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
         : { container: false, roots: true };
-    /* A POOL MACHINE PREPARING ITS VOLUME FOR A FUTURE OWNER (platform/prewarm.ts). Nothing below branches on
-     * it except the very end: the chain runs exactly as it would for an owner, and every identity-bearing
-     * subsystem is already off by its own gate because the env names no owner. Container role only: a guest
-     * daemon or a local folder has no volume to prepare. */
+    // Pool machine preparing its volume for a future owner (prewarm.ts); nothing below branches on it except the very
+    // end. Container-only: a guest or local folder has no volume to prepare.
     const prewarm = config.sandbox.prewarm && role.container;
     if (prewarm) {
         logger.info({ image: config.sandbox.image }, "prewarm boot: preparing this volume, then stopping");
     }
-    /* The last invariant companion, wired here rather than in composition because its subject is the answer just
-     * computed: everything downstream trusts this role forever, and the claim it rests on is a file a second
-     * daemon's boot overwrites (platform/invariant.ts). */
+    // Wired here, not in composition, since its subject (`role`) was just computed; everything downstream trusts it
+    // forever, resting on a claim file a second daemon's boot can overwrite.
     services.invariants.register(
         containerOwner,
         containerChecks({ role, roots: { workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot } }),
@@ -284,67 +224,42 @@ const main = async (): Promise<void> => {
             turnRuns: turnRunMetrics(),
             browserSessions: browserSessionMetrics(),
             reaper: services.reaper.metrics(),
-            // The one place a broken promise is visible without reading the log: the durable resource series
-            // already runs every minute and is already where "what is this daemon holding" is answered.
+            // Surfaces invariant violations in the same resource series already asked "what is this daemon holding".
             invariants: { violations: services.invariants.violations().length },
         }),
     });
     shutdown.push(() => resourceMetrics.stop());
-    /* Point the scaffold's git seam at the perf tracker, so every git this daemon runs, the Changes scan's
-     * hundreds of reads, a land's checkout, the history snapshots, is attributable. Git is where the reported
-     * slowness lives and it was the one subsystem with no measurement at all.
-     *
-     * `dir` is trimmed to a workspace-relative name: absolute paths make every line wrap and the prefix is the
-     * same on all of them. `args` keeps the subcommand and its flags but drops trailing operands, which are
-     * pathspecs, a `checkout -- <400 paths>` would otherwise put 400 paths in a log line, and the subcommand
-     * is what identifies the op anyway. */
+    // Every git run is attributed to the perf tracker. `dir` is trimmed workspace-relative to keep lines short; `args`
+    // drops trailing pathspecs (could be hundreds) but keeps the subcommand.
     observeGitCommands(({ dir, args, ms, execMs, attempts, failed, forked, queueDepth }) => {
         const fields = {
             git: args.slice(0, 3).join(" "),
             repo: dir.startsWith(services.workspace.root) ? dir.slice(services.workspace.root.length + 1) || "root" : dir,
             ...(attempts > 1 ? { lockRetries: attempts - 1 } : {}),
-            // Only worth a field when it is FALSE: a direct exec pays the parent's page-table copy on every
-            // call (~27ms at this daemon's resident size), which is a whole class of slowness on its own.
+            // Recorded only when false: a direct exec (not forked) pays a page-table copy, a real source of slowness.
             ...(forked ? {} : { forked: false }),
             ...(queueDepth > 0 ? { queueDepth } : {}),
         };
         services.perf.record("git.run", ms, { ...fields, execMs: Math.round(execMs) }, failed);
-        /* AND THE PART THAT WASN'T GIT, filed as its own op so the ranked summary carries both numbers side by
-         * side. `git.run` alone is the measurement that sent a performance review after the repo layer: it read
-         * "86,070 calls, mean 77ms" and concluded git was slow, when the same commands are 1-9ms at a shell and
-         * the difference is this process's event loop being away (p99 stall 10s, max 239s). One glance at the
-         * two rows now says which subsystem to open. Never negative: the two clocks are read on opposite sides
-         * of an IPC hop, so a sub-millisecond call can report a hair more exec than wall. */
+        // Filed as its own op so the summary separates git's own time from wait. Never negative: the two clocks are
+        // read across an IPC hop, so a fast call can show a hair more exec time than wall time.
         services.perf.record("git.run.wait", Math.max(0, ms - execMs), fields, failed);
     });
 
-    /* Every provider's boot tasks — the Codex config write, Cursor's command-gate socket, Claude's refresh
-     * timers, the OpenCode warm-up — declared by each provider's own module and iterated here
-     * (agent/provider-registry.ts). One loop instead of four blocks scattered through this function, so a new
-     * provider's boot is a field on its module rather than a block a reviewer has to find the right place for.
-     * Each task is fire-and-forget and best-effort by the seam's contract: a provider that cannot start is its
-     * own log line, never a failed daemon. */
+    // Every provider's boot task, declared by its own module, runs through one loop instead of a block per provider.
+    // Each is fire-and-forget and best-effort: a provider that can't start is a log line, never a failed daemon.
     startProviderBoot(services, role, logger);
 
-    // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
-    // No-op once that token has been redeemed, the burn is recorded on /history, so the copy living in the
-    // container's env cannot be replayed by a restart (store/enrollment.ts says why). Detached: the connect script's agent
-    // retries its enroll, so nothing here needs to hold the boot.
+    // Arms the setup pairing token so the connect script's agent can enroll; no-op once redeemed (the burn is recorded
+    // so a restart can't replay it). Detached: the connect script retries on its own.
     if (config.syncPairToken !== "") {
         void services.syncPairings
             .arm(config.syncPairToken, "sync")
             .catch((error: unknown) => logger.warn({ err: error }, "setup pairing not armed, enable desktop sync from the browser instead"));
     }
 
-    /* Setup-time CONNECTED DEVICE: create the card for the machine that ran the installer and arm its pairing,
-     * so the agent that same flow installed can enroll. The CARD is written on the first boot only — the id is
-     * remembered on /history, so a device the owner deleted is not offered back to them at the next restart
-     * (host-seed.ts) — while the pairing is re-armed every boot, since a machine agent that comes up late still
-     * needs a live token to enroll against.
-     *
-     * Detached like the sync seed above: the machine agent retries its enroll on its own backoff, so nothing here
-     * needs to hold the boot. A failure leaves the device unconnected and the Devices view saying so, which
-     * is exactly what it said before this existed. */
+    // Creates the connected-device card once (its id is remembered so a deleted device isn't re-offered) and re-arms
+    // its pairing every boot, since a late machine agent still needs a live token. Detached like the sync seed above.
     if (config.hostPairToken !== "") {
         void seedSetupHost(services, { token: config.hostPairToken, platform: config.hostPlatform, label: config.hostLabel })
             .then(({ offered, id }) => {
@@ -360,16 +275,13 @@ const main = async (): Promise<void> => {
             );
     }
 
-    // Close the readiness gate the data routes await (app.ts) and name what it is waiting for. A request that
-    // arrives early WAITS a few seconds instead of reading half-built state; a browser that arrives early is
-    // told which step is running and holds its reads until the last one lands.
+    // Declares the readiness gate data routes await (app.ts): an early request waits instead of reading half-built
+    // state, and a browser is told which step is running.
     services.boot.declare(BOOT_STEPS);
 
     const app = createApp(services);
-    // The interactive-terminal WebSocket (/system/terminal) rides node-server's native WS support: `ws` in
-    // noServer mode handles the upgrade, node-server routes it through Hono's upgradeWebSocket to the terminal.
-    // `ws`'s WebSocketServer types its options.noServer as `boolean | undefined`; node-server's WebSocketServerLike
-    // wants a plain boolean under exactOptionalPropertyTypes. The shapes match at runtime, assert the interface.
+    // `/system/terminal`'s WebSocket rides node-server's native upgrade support. Cast bridges a type-only mismatch
+    // between ws's `boolean | undefined` and node-server's plain-boolean option; the shapes match at runtime.
     const terminalSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
     const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: host, websocket: { server: terminalSockets } });
     shutdown.push(() => server.close());
@@ -378,26 +290,11 @@ const main = async (): Promise<void> => {
         "intentic sandbox daemon listening",
     );
 
-    /* THE LOOPBACK LISTENER, the same app on a second port, and the only one ever published to the host, so a
-     * browser on this machine reaches the daemon directly instead of crossing to a Cloudflare edge and back.
-     *
-     * A second listener rather than TLS on the one above, because the two ports answer to different callers:
-     * the tunnel connector dials this daemon in plain HTTP over the container network and would break the
-     * moment 8787 spoke TLS, while the browser needs TLS or Safari refuses the address as mixed content.
-     *
-     * The certificate is whatever is already on disk, issuance is a CA validating DNS, far slower than a boot
-     * should wait, so it happens in the background and is handed to the listener the moment it lands.
-     *
-     * BOTH protocols, on this one port, chosen per connection by sniffing the first byte (loopback-listener.ts).
-     * The certified address is a public name and costs a public DNS lookup, so serving TLS *instead of* plain
-     * HTTP once issuance landed left the shortcut dependent on the internet being up to reach a daemon on the
-     * same machine. Offering both is what makes it survive the connection dropping. Its own WebSocket server:
-     * `ws` in noServer mode is bound per HTTP server, so sharing the instance above would leave terminals on
-     * this port unupgradeable. */
+    // Same app on a second, loopback-only port, so a local browser skips the tunnel round trip. HTTP and TLS share this
+    // one port by sniffing the first byte; its own WebSocket server, since `ws` binds one per HTTP server.
     const localCertificate = traits.extraListeners ? readLocalCertificate(config) : undefined;
     const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
-    // A tunnel-avoiding shortcut is meaningless when the ONLY listener is already loopback, the local
-    // profile serves one plain port and nothing else (traits.extraListeners).
+    // Meaningless when the only listener is already loopback; the local profile serves just one plain port.
     const localServer = !traits.extraListeners
         ? undefined
         : createLoopbackListener({
@@ -411,14 +308,9 @@ const main = async (): Promise<void> => {
     if (localServer !== undefined) {
         logger.info({ port: config.local.port, tls: localServer.tls(), hostname: localCertificate?.hostname }, "loopback listener ready");
     }
-    /* Obtain/renew in the background, and give the listener what comes back rather than waiting for a restart
-     * to read it off disk. Never rejects: a sandbox with no certificate is a working sandbox, just one whose
-     * shortcut is plain HTTP/1.1, which is the transport the editor has to ration connections on.
-     *
-     * NEVER ON A FLY MACHINE. The certificate exists for a browser on the same machine as the sandbox, and
-     * nothing is ever on the same machine as a hosted one (the editor knows it: endpoint.ts probes no
-     * loopback for a hosted sandbox). Ordering one there spent a Let's Encrypt certificate from the zone's
-     * shared weekly allowance and a DNS write per machine boot, for a name no browser would ever dial. */
+    // Renews in the background and hands the listener whatever comes back, never rejecting. Never on a hosted machine
+    // (SANDBOX_VM): there is no same-machine browser to serve, and issuing one there wastes a shared cert quota for
+    // nothing.
     const localCertRenewal =
         role.container && traits.extraListeners && !config.sandbox.vm
             ? startLocalCertificateRenewal(config, logger, (certificate) => {
@@ -428,24 +320,15 @@ const main = async (): Promise<void> => {
             : undefined;
     shutdown.push(() => localCertRenewal?.stop());
 
-    // The preview proxy: preview-<panel>-<id>.<zone>, port-<slot>-<id>.<zone> and public-<slot>-<id>.<zone>
-    // land here (the tunnel's fixed origin) and the Host header's first label routes to the panel's running
-    // port, the slot's forwarded port, or the workspace's outbox. Always listening, with nothing up it answers
-    // 502, not connection-refused. Everything it serves is public, no owner-gating.
-    //
-    // The outbox needs the connect token for its salted slot, so a token-less daemon (tests, loopback) simply
-    // has no address to publish at. The handler is bound to public/ whether or not that directory exists: the
-    // dir's existence is the switch, and it is checked per request, so `mkdir public` starts publishing without
-    // a restart and `rm -rf public` stops it just as immediately.
+    // Routes preview-, port-, and public- subdomains by the Host header to a panel, a forwarded port, or the outbox;
+    // always listening, answering 502 rather than refusing. public/'s existence is checked per request.
     const previewProxy = !traits.extraListeners
         ? undefined
         : createPreviewProxy({
               panelOf: services.panelUpstreamOf,
               slotTargetOf: services.portForwards.targetOf,
               sandboxId: sandboxIdFromToken(config.connectToken),
-              // …and the daemon's own address, which makes this proxy the container's single front door. The
-              // edge routes to a SANDBOX and forwards down one tunnel to one port, so which port inside the
-              // container serves a given hostname is decided here rather than out there.
+              // Daemon's own address; makes this proxy the container's one front door.
               daemonPort: config.sandbox.port,
               outbox:
                   config.connectToken === ""
@@ -483,11 +366,8 @@ const main = async (): Promise<void> => {
     });
     shutdown.push(() => ingressTunnel?.close());
 
-    // Phone home: announce this sandbox's URL to the platform registry (once per boot, retried until acked,
-    // see platform/announce.ts), so the setup wizard sees it come online without any browser→sandbox probing.
-    // Needs all three env values, headless/test runs without them just don't announce. Started with the
-    // listeners, not after the boot chain: the announcement is how a waiting browser learns the daemon is
-    // back, and it must not queue behind the very sweeps it would be reporting through.
+    // Announces this sandbox's URL to the platform registry once per boot, retried until acked, so the setup wizard
+    // sees it online unprompted. Started with the listeners so it can't queue behind the sweeps it reports through.
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
         if (role.container) {
             services.announcer.start();
@@ -500,41 +380,28 @@ const main = async (): Promise<void> => {
         }
     }
 
-    // The hosted flavor's idle-stop (system/idle-stop.ts): after the configured quiet window, nobody
-    // connected, no turn, no live delegate, no terminal saying anything, the daemon takes the graceful exit
-    // so its machine can stop; the platform starts it again on the next visit. 0 (every non-hosted flavor)
-    // means always-on, exactly as before.
+    // Hosted idle-stop: after a quiet window (nobody connected, no turn, no terminal activity) the daemon exits
+    // gracefully so its machine can stop; the platform restarts it on the next visit. 0 means always-on.
     if (config.idleStopMinutes > 0 && role.container) {
         shutdown.push(startIdleStop({ minutes: config.idleStopMinutes, logger }));
     }
 
-    /* Ask the platform whether this sandbox gets a free trial, and how much of today's allowance is left. The
-     * answer IS the trial endpoint's existence (trial/trial-endpoint.ts), so this runs beside the announce
-     * rather than inside the boot chain: a user whose first act is to open the chat must find the trial already
-     * there, not appear a sweep later. Unawaited and self-swallowing, a platform that never answers leaves the
-     * sandbox with no trial, which is the failure that costs the user nothing. */
+    // Asks the platform for this sandbox's trial allowance so it's ready before the user's first chat, not a sweep
+    // later. Unawaited and self-swallowing: a platform that never answers just means no trial offered.
     if (role.container) {
         void services.trial.refresh();
     }
 
-    // Every awaited step below runs through the tracker: it stamps the step's state and elapsed time, logs the
-    // slow ones (a boot that takes minutes has ONE slow step, and until it is named every slow boot reads as
-    // "the daemon is just slow"), and streams the transition to whatever browser is watching. Narrowed to the
-    // declared keys so the table above is enforced at compile time, a step whose entry someone forgot used to
-    // throw on its first run, which aborts the chain, leaves the gate shut forever and reads to the user as a
-    // browser stuck on the boot screen behind a daemon whose log says only "unhandled rejection".
+    // Every awaited step below runs through this tracker: stamps state and elapsed time, logs slow ones, streams
+    // progress to any watching browser. Narrowed to BOOT_STEPS' keys, so an undeclared step is a compile error.
     const boot: BootTracker<(typeof BOOT_STEPS)[number]["key"]> = services.boot;
 
-    // ~/.ssh and ~/.claude are the CONTAINER's filesystem, shared by every process in it, so the jobs below that
-    // converge them onto THIS run's roots (the three steps here, plus the git-access restore further down) run
-    // only for the daemon that owns the container. A second daemon started in here, a dev run rooted under /tmp
-    //, would otherwise repoint the live daemon's git keys and conversation state at its own empty roots, and
-    // nothing would notice until a push was refused: see platform/container-owner.ts for the day that happened.
+    // ~/.ssh and ~/.claude are shared by every process in the container; only the daemon that owns it may converge them
+    // onto its roots, or a second daemon here would repoint the live daemon's git keys and conversation state.
     const ownsHome = role.container;
 
-    // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
-    // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
-    // reconnect. Ordered before the gate resolves, a rebuild otherwise leaves every enrollment valid but unauthorized.
+    // Enrollments live on /history and outlive the container; authorized_keys (container-local) is rebuilt from the
+    // store before sshd serves a reconnect. Ordered before the gate, or enrollments stay valid but unauthorized.
     await boot.step("authorizedKeys", async () => {
         if (!ownsHome) {
             return;
@@ -544,10 +411,8 @@ const main = async (): Promise<void> => {
         );
     });
 
-    // Claude conversation state (transcripts, plans, backups, task outputs, todos) lives under the SDK's
-    // ~/.claude, ephemeral container fs. Converge every store onto /work BEFORE the gate opens (turns wait on
-    // it, so the CLI can never race this). Awaited, unlike the best-effort steps below, because a turn
-    // spawning the CLI mid-link would fork stores.
+    // Claude session state (transcripts, plans, todos) lives under the SDK's ephemeral ~/.claude; converged onto /work
+    // before the gate opens so no turn can race it. Awaited: a CLI spawned mid-link would fork the stores.
     await boot.step("claudeState", async () => {
         if (!ownsHome) {
             return;
@@ -557,11 +422,8 @@ const main = async (): Promise<void> => {
         );
     });
 
-    // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
-    // container's ephemeral HOME, point it at the /history volume before anything reads or writes an alias, so
-    // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
-    // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
-    // pre-existing local dir in place rather than the daemon down.
+    // ssh dir (git-provider keys, capability keys) also lived in ephemeral HOME; pointed at /history before anything
+    // reads or writes an alias, or a rebuild silently drops git and ssh access. Awaited for that ordering.
     await boot.step("sshHosts", async () => {
         if (!ownsHome) {
             return;
@@ -571,11 +433,8 @@ const main = async (): Promise<void> => {
         );
     });
 
-    /* The capability manifest is meant to be readable and editable by the agent, so the credential VALUES are
-     * kept out of it and in a store off /work. Only a SAVE moves them, though, which leaves every service
-     * connected before the split, and any entry the agent pasted a real token back into, sitting in a file a
-     * plain Read hands to the model. Sweep them in before the gate opens, so no turn can read the file first.
-     * Best-effort: a manifest this daemon cannot rewrite is a warning, never a boot failure. */
+    // Capability credential values live out of the agent-readable manifest, in a separate store; only a save moves
+    // them, so an entry connected before the split can still be exposed. Swept before the gate opens; best-effort.
     await boot.step("vaultSecrets", async () => {
         const moved = await services.vaultManifestSecrets().catch((error: unknown) => {
             logger.warn({ err: error }, "capability credentials: could not be moved out of the manifest, they stay readable to the agent");
@@ -584,10 +443,8 @@ const main = async (): Promise<void> => {
         if (moved.length > 0) {
             logger.info({ capabilities: moved }, "capability credentials moved out of the workspace manifest into the private store");
         }
-        /* The same sweep for extension settings, in the same step because it is the same guarantee: a value an
-         * extension declared `secret` must not be sitting in a file a turn can Read. It matters more here, and
-         * that is why it runs before the gate rather than lazily, the settings file is TRACKED, so an unswept
-         * token would not merely be readable, it would be committed. */
+        // Same sweep for extension settings: unlike the manifest, this file is tracked, so an unswept secret would be
+        // committed, not just readable.
         const settings = await services.vaultExtensionSettingSecrets().catch((error: unknown) => {
             logger.warn({ err: error }, "extension setting secrets: could not be moved out of the tracked file, they stay readable to the agent");
             return [];
@@ -595,11 +452,8 @@ const main = async (): Promise<void> => {
         if (settings.length > 0) {
             logger.info({ extensions: settings }, "extension setting secrets moved out of the tracked settings file into the private store");
         }
-        /* Both sweeps above move credentials somewhere a Read cannot reach, and masking (agent-redaction.ts)
-         * is what covers the rest: a value this sandbox stores is replaced by its `{{secret:name}}` reference
-         * in every tool result. Except that masking has a length floor it cannot safely go below, so a short
-         * stored value is quietly outside all of it, and nothing anywhere says so, which makes an unprotected
-         * credential look exactly like a protected one. Say so, by name, once per boot. */
+        // Masking (agent-redaction.ts) replaces a stored value with its `{{secret:name}}` reference in every tool
+        // result, but has a length floor below which a value is silently unmasked. Warned by name here, once per boot.
         const unmaskable = unmaskableSecrets(await services.secretRegistry().catch(() => []));
         if (unmaskable.length > 0) {
             logger.warn(
@@ -609,16 +463,8 @@ const main = async (): Promise<void> => {
         }
     });
 
-    // Panel/agent/job tmux sessions outlive a daemon restart (the tmux server is container-scoped), kill
-    // leftovers so "panels are stopped after a restart" holds and no orphan dev server squats an untracked
-    // port. EXCEPT a live infra apply (killing it would truncate the host mutation mid-run, orphan the host
-    // apply lock for its TTL, and report the run complete, when the event log records a started-but-not-exited
-    // run and its session survives, re-adopt it; the web reattaches through the same event log) and a live
-    // dockerd (panel-docker keeps serving containers across daemon restarts, adopt it back). The sweep is
-    // ORDERED before the gate opens so the capability restores below can't race a kill of the session they
-    // just started, and BEFORE ANY STEP THAT STARTS A PROCESS OF ITS OWN: it kills every panel-* session it
-    // finds, and when it ran after the starter-site seed it killed the dev server that seed had just started,
-    // so every fresh sandbox opened on "site isn't running" (main-boot-order.test.ts holds the order).
+    // Kills leftover panel/agent/job tmux sessions from a previous daemon, except a live infra apply or dockerd,
+    // re-adopted instead. Runs before any step that starts its own process (main-boot-order.test.ts pins the order).
     await boot.step("staleSessions", async () => {
         // Container-wide: the tmux server is shared, so these sessions belong to whoever owns the container.
         if (!role.container) {
@@ -628,8 +474,8 @@ const main = async (): Promise<void> => {
             (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
             (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
         const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
-        // A live llama-server is adopted for the dockerd reason, with a heavier price for getting it wrong:
-        // killing one throws away a loaded model, and reloading a large one costs minutes of dead picker.
+        // Adopted for the same reason as dockerd, but pricier to get wrong: killing a live model server discards a
+        // loaded model, costing minutes to reload.
         const modelKeys = (await services.capabilities.list().catch(() => [])).flatMap((capability) =>
             capability.kind === "localmodel" ? [localModelPanelKey(capability.id)] : [],
         );
@@ -644,16 +490,13 @@ const main = async (): Promise<void> => {
             ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
             ...modelsAlive,
         ]).catch(() => undefined);
-        // Service children (extension gateways) of a daemon that died WITHOUT unwinding: they live in their
-        // own process groups, so they survived it, holding provider connections the restore below would
-        // duplicate. A clean shutdown already stopped them; this only ever finds crash leftovers.
+        // Catches extension-gateway children of a daemon that died without unwinding; they survive in their own process
+        // groups, holding connections the restore below would duplicate. A clean shutdown already stopped them.
         await killOrphanServiceProcesses(logger).catch(() => undefined);
     });
 
-    // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
-    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down, a
-    // failure reads as "not fresh" so we skip the baseline commit below.
-    // Local roots are the user's own folder: taken as they stand, never reshaped, see ensureLocalRootRepo.
+    // Inits the /work repo once, heals the .git pointer, converges excludes; a failure reads as not-fresh, so the
+    // baseline commit below is skipped. Local roots are taken as they stand (ensureLocalRootRepo).
     const freshRoot = await boot.step("rootRepo", async () =>
         !role.roots
             ? false
@@ -666,14 +509,8 @@ const main = async (): Promise<void> => {
               }),
     );
 
-    /* THE STARTER SITE, on a fresh workspace only: the baked one-page site copied in and its dev server
-     * started, so the first screen a new user sees has something of theirs running on it (scaffold/starter-site.ts).
-     *
-     * Awaited, and BEFORE the baseline commit: the seed creates a nested repo, and root's excludes and its
-     * "Initialize workspace" commit both have to be taken with that repo already on disk, or the starter's
-     * files surface as a phantom add in the Changes review. It costs a fresh boot one file copy and nothing at
-     * all on every later boot; a failure is logged and the sandbox opens with an empty workspace, exactly as it
-     * did before this existed. */
+    // Copies the starter site and starts its dev server on a fresh workspace only, before the baseline commit: the
+    // seed's repo must exist first, or its files show as a phantom add. A failure just opens the workspace empty.
     await boot.step("starterSite", async () => {
         if (!role.roots || !freshRoot || !traits.ownsWorkspaceConfig) {
             return;
@@ -689,20 +526,13 @@ const main = async (): Promise<void> => {
             logger.info({ repo: outcome.repo }, "starter site seeded");
             return;
         }
-        /* A SKIP SAYS WHY, and only here. The gate above already narrowed this to the first boot of a workspace
-         * the daemon owns, so this is one line on the one boot that was supposed to seed, not noise on every
-         * later start. It is worth the line because the evidence is otherwise gone: the boot happens once, and
-         * a sandbox that opened empty because of a wrong verdict looks identical to one that opened empty
-         * because the user brought their own code. */
+        // Logged only here (the one boot meant to seed), since the reason for an empty workspace is otherwise
+        // unrecoverable.
         logger.info({ why: outcome.skipped }, "starter site not seeded, the workspace opens as it arrived");
     });
 
-    /* START WHAT THE WORKSPACE SAYS SHOULD BE RUNNING (scaffold/autostart.ts): the starter's dev server on a
-     * first boot, and on every boot after it. Panels do not survive a restart (the sweep above kills them on
-     * purpose), so without this a woken hosted machine and a pool volume the platform prepared ahead of demand
-     * both opened on "isn't running" with a Start button. After the seed, which writes the first entry, and
-     * after the sweep, which would kill what this starts. Idempotent: a key the manager already tracks is a
-     * no-op, and an entry whose folder is gone is one log line. */
+    // Restarts whatever the workspace declares should be running, since panels never survive a restart (the sweep above
+    // kills them on purpose). Runs after both the seed (which writes the first entry) and the sweep; idempotent.
     await boot.step("autostart", async () => {
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
@@ -716,12 +546,8 @@ const main = async (): Promise<void> => {
         }
     });
 
-    // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic, its presence
-    // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
-    // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
-    // stays gone until the next boot re-ensures an empty one.
-    // ownsWorkspaceConfig beside role.roots: the shelf convention is workspace furniture, not the daemon's
-    // to place in a folder it doesn't own. A local agent asked to fetch a reference creates the dir then.
+    // Reference shelf dir is furniture like .intentic: its presence on disk is the affordance, since scanners already
+    // exclude it. Gated like other config writes: not the daemon's to place in a folder it doesn't own.
     await boot.step("referenceShelf", async () =>
         !role.roots || !traits.ownsWorkspaceConfig
             ? undefined
@@ -730,16 +556,8 @@ const main = async (): Promise<void> => {
               ),
     );
 
-    /* Both ends of the portability volume, swept together because a restart is what invalidates both.
-     *
-     * An environment export half-written when the daemon stopped: only a LIVE process can be writing a
-     * `.part`, so one that survived a restart will never finish, and it is marked failed here so the card
-     * shows a reason instead of a progress bar that never moves again (portability/exports.ts).
-     *
-     * A bundle spooled for an arrival nobody finished reviewing: the token that named it lived in the process
-     * that died, so every file in `arrivals/` is by definition abandoned and the owner re-reads their file
-     * (portability/bundle-arrival.ts). Deleted rather than marked, because unlike an export it is not an
-     * artifact anybody came here for. */
+    // Sweeps both ends of the portability volume, which a restart invalidates: a half-written export is marked failed
+    // instead of a frozen progress bar, and an arrival bundle whose review token died with the process is deleted.
     await boot.step("staleExports", async () =>
         !role.roots
             ? undefined
@@ -753,38 +571,26 @@ const main = async (): Promise<void> => {
               ]).then(() => undefined),
     );
 
-    // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
-    // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
-    // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
-    // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
-    // relocateGitDirs beside role.roots: the out-of-tree shape serves namespace isolation, which local never
-    // builds, and locally the repos are the user's own, not the daemon's to reshape.
+    // Moves a repo's git dir out of /work so it resolves identically inside an isolated turn (agents/isolation.ts);
+    // runs after rootRepo, before worktrees load. Skipped locally: those repos are the user's own.
     await boot.step("repoGitDirs", async () =>
         role.roots && traits.relocateGitDirs ? ensureRepoGitDirs(services.workspace, config.historyRoot, logger) : undefined,
     );
 
-    /* Seed a definition into an EMPTY workspace, the fleet door: a runner that stamped SANDBOX_DEFINITION_SEED
-     * gets its repos cloned, its connections listed (unauthenticated), its settings set and its overlay parked
-     * as a proposal before anyone opens the app. Guarded by workspaceArrivedEmpty so a rebuild replaying the
-     * env can never run it over work, and by ownsWorkspaceConfig for the same reason every config write above
-     * is. Log-and-continue like every boot step: a bad seed costs its report, never the daemon. */
+    // Seeds a runner's SANDBOX_DEFINITION_SEED into an empty workspace: repos cloned, connections listed, settings set,
+    // overlay proposed. Guarded by workspaceArrivedEmpty so a replayed env can never run over real work.
     await boot.step("definitionSeed", async () => {
         if (!role.roots || !traits.ownsWorkspaceConfig || config.sandbox.definitionSeed === "") {
             return;
         }
-        // A prewarmed pool volume holds the starter and nothing of the user's, which is as empty as this gate
-        // means (platform/prewarm.ts): the seed is still the fleet door's first and only chance.
+        // A prewarmed volume (starter only, nothing the user's) still counts as empty for this gate.
         if (!services.workspaceArrivedEmpty && !(await arrivedPrewarmed(config.workspaceRoot, config.historyRoot))) {
             return;
         }
         try {
             const definition = parseDefinitionToml(Buffer.from(config.sandbox.definitionSeed, "base64").toString("utf8"));
-            /* On a RUNNER, settings only, whatever the seed carries: a runner has no owner to reconnect a
-             * capability, approve an overlay proposal, or fill a secret slot, so those items would land as
-             * dead weight wearing "needs action" nobody can take. The parent scopes the seed before sending
-             * (hosts/device-reports.ts); this filter is the belt to that braces, holding even for a seed
-             * stamped by hand. Repos stay out too — a runner's repos arrive through the parent's git door
-             * (runner-sync.ts), which carries the parent's exact branches where a remote clone cannot. */
+            // On a runner, only `settings` items apply: no owner here to reconnect a capability or fill a secret. Repos
+            // arrive separately through the parent's own git sync, carrying exact branches a clone can't.
             const pick = runnerEnv !== undefined ? (item: ArrivalItem): boolean => item.group === "settings" : (): boolean => true;
             const report = await applyDefinitionItems(services, definition, pick);
             logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
@@ -793,22 +599,18 @@ const main = async (): Promise<void> => {
         }
     });
 
-    // The fleet registry: load persisted conversations and broadcast the roster (an /events stream opened
-    // during boot is already holding an empty fleet). Awaited, the /agents routes assume a loaded registry,
-    // but a failure degrades to an empty fleet, never a dead daemon. The worktree sweeps run DETACHED below.
+    // Loads persisted conversations and broadcasts the roster, so an /events stream opened mid-boot doesn't see an
+    // empty fleet. Awaited (routes assume it's loaded), but a failure just leaves the fleet empty, not the daemon dead.
     await boot.step("agentsRegistry", () =>
         services.agents.init().catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized, the fleet starts empty")),
     );
 
-    // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
-    // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
-    // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
-    // - the approvals skill: how the agent writes posts and actions for approval, so its prose tracks the daemon.
-    // - the baked-tool skills, per the settings `skills` list, each present only when named (the CLIs are
-    //   always on PATH; the skill file is what surfaces one to the agent).
+    // Converges daemon-owned /work skill files before the baseline commit, so a fresh sandbox reads clean instead of a
+    // phantom add.
+    // - the approvals skill: how the agent writes posts/actions for approval
+    // - the baked-tool skills named in settings
     await boot.step("skills", async () => {
-        // ownsWorkspaceConfig beside role.roots: a folder the daemon doesn't own gets no unasked-for writes
-        // (or deletes) under .agents/skills, and the baked-tool skills teach container-only CLIs anyway.
+        // Gated like other config writes: an unowned folder gets no writes under .agents/skills.
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
@@ -819,8 +621,7 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
     });
 
-    // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
-    // files exist, so the Changes review starts with zero pending changes.
+    // Commits "Initialize workspace" once on a fresh sandbox, after daemon-owned files exist, so Changes starts clean.
     await boot.step("baseline", async () => {
         if (freshRoot) {
             await commitRootBaseline(services.workspace).catch((error: unknown) =>
@@ -834,21 +635,17 @@ const main = async (): Promise<void> => {
         void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
     }
 
-    // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
-    // below so a tunnel the agent dials during boot already has a token to present.
+    // vpn CLI reads this to reach the daemon's /vpn routes; written before the restores below need it.
     await boot.step("agentToken", async () => {
-        // The token file lives at a fixed container path (/run) for the in-container vpn/otp CLIs, container
-        // furniture a local daemon has neither the path nor the callers for.
+        // Token lives at a fixed container path (/run) for in-container vpn/otp CLIs; a local daemon has neither.
         if (!traits.containerCapabilities) {
             return;
         }
         await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
     });
 
-    /* Reserve dependency maintenance before the data gate opens. The workspace watcher itself starts below,
-     * but its subscriber set is intentionally usable before then; registering now also starts the boot scan.
-     * A turn arriving the instant boot finishes therefore queues behind an already-reserved repair instead of
-     * becoming the race that discovers the stale tree. */
+    // Wired before the data gate opens, though the watcher itself starts below: registering now means a turn arriving
+    // the instant boot finishes queues behind an already-reserved repair, instead of racing to discover the stale tree.
     const dependencyChecks: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
@@ -901,44 +698,25 @@ const main = async (): Promise<void> => {
     });
     services.dependencies.watch(subscribeWorkspaceChanges);
 
-    // The state the data routes serve is converged, open the gate. Everything below is background machinery
-    // that no queued request depends on.
+    // Converged state opens the gate; everything below is background machinery no queued request depends on.
     boot.finish();
-    // With the host's throttling so far beside it: on a shared-CPU machine a slow chain is usually the quota's
-    // doing, not the steps', and this is the line that tells the two apart (platform/cpu-throttle.ts).
+    // Logs CPU throttle alongside boot time, since on a shared-CPU host a slow chain is usually the quota, not the
+    // steps.
     logger.info({ ms: Date.now() - boot.progress().startedAt, cpu: readCpuThrottle() }, "boot: chain converged");
 
-    /* THE PARENT LINK, when this container is a runner (or ever was: an identity on /history outlives a
-     * rebuild that stripped the env). After the gate on purpose: the first thing a parent does with a live
-     * link is dispatch a turn at machinery the boot chain just built. Never fatal — a failed enrollment logs
-     * its sentence once instead of crash-looping against an already-burned pairing. */
+    // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
+    // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.
     void startRunnerMode(services, runnerEnv).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
 
-    /* THE PROMISES THIS DAEMON MAKES TO ITSELF (invariants/), driven from here because this is the file that
-     * knows the moments. Detached and never awaited: a check is a diagnostic, and a boot that waited on one
-     * would have made the diagnostic capable of causing the outage it exists to describe.
-     *
-     * The `boot` pass runs AFTER the gate opens, on purpose, the boot steps are what establish several of these
-     * relationships (the vault sweep, the registry load), so a pass before them would report the state they were
-     * about to fix. The sweep interval is the standing patrol for everything nothing in particular disturbs;
-     * `turn-settled` catches the two records of a turn disagreeing at the moment one of them changes. */
+    // Invariant checks are driven from here since this file knows the boot moments. Detached, so a check can't cause
+    // the outage it diagnoses; run after the gate, since the boot steps establish the state being checked.
     void services.invariants.run("boot");
     const invariantSweep = setInterval(() => void services.invariants.run("sweep"), 300_000);
     shutdown.push(() => clearInterval(invariantSweep));
     shutdown.push(onTurnSettled(() => void services.invariants.run("turn-settled")));
 
-    /* BRING THE PHRASE INDEX LEVEL, detached and AFTER the gate, which is the whole point of it existing.
-     *
-     * Settling turns write this index forward, so in steady state this pass finds nothing to do and says
-     * nothing. It is here for the first run (or a schema bump), for turns recorded while this daemon was not
-     * running, and for the runtime sessions, which are the SDK's files and so can only be checked by looking.
-     *
-     * Detached because a search does not need it to have finished: the routes answer from what is indexed and
-     * report `indexing` so a screen can say the list can still grow. Holding the gate on it would trade a fast
-     * incomplete search for a slow boot, which is the trade this change exists to stop making.
-     *
-     * The interval catches session files the SDK appends to without telling us, on the same cadence as the
-     * other standing patrols. `unref` so it never keeps the process up on its own. */
+    // Backfills the search index after the gate: turns write it forward in steady state, so this matters only on first
+    // run, a schema bump, or downtime. Detached; routes report `indexing` meanwhile.
     const backfillSaid = (): void => {
         void services.saidIndex.backfill().catch((error: unknown) => logger.warn({ err: error }, "search index backfill failed"));
     };
@@ -947,23 +725,19 @@ const main = async (): Promise<void> => {
     saidSweep.unref();
     shutdown.push(() => clearInterval(saidSweep));
 
-    /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
-     * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per
-     * repo per conversation) and it used to hold serve(), after a crash, on a machine still thrashing, that
-     * was most of the outage. It reads the registry through callbacks and takes the per-repo locks, so turns
-     * that start while it walks are safe from it. */
+    // Detached: archives entries whose checkout vanished, prunes orphaned dirs, parks off-board branches. Reads the
+    // registry through callbacks and takes per-repo locks, so a turn starting mid-walk is safe.
     void (async () => {
         const vanished: string[] = [];
         const archived: string[] = [];
         for (const id of services.agents.ids()) {
             const entry = services.agents.entry(id);
-            // Workspace conversations deliberately own no checkout. They participate in the roster, not in
-            // worktree repair or pruning, so absence on disk is not a vanished isolated agent.
+            // Workspace conversations own no checkout by design; missing on disk doesn't mean vanished here.
             if (entry?.branch === undefined) {
                 continue;
             }
-            // An ARCHIVED entry is *supposed* to have no worktree, that is what archiving reclaimed. It is
-            // held by its commits instead, so it must never look like the vanished-worktree case below.
+            // An archived entry has no worktree by design (reclaimed); held by its commits, not this vanished-case
+            // check.
             if (entry.archivedAt !== undefined) {
                 archived.push(id);
                 continue;
@@ -972,18 +746,14 @@ const main = async (): Promise<void> => {
                 vanished.push(id);
             }
         }
-        // A live entry with no checkout is an ARCHIVED agent in every way that matters, off the board,
-        // held by its branch, so that is what it becomes. This sweep used to `remove()` these outright,
-        // and it was the fleet's quietest data loss: a rebuild that lost worktree dirs, or an unarchive
-        // whose re-attach failed mid-way, left live entries with no checkout, and the next boot deleted
-        // the user's only handle on their branches and transcripts. Deletion stays where the user can see
-        // it: discard, and the archive's own purge. One write for the whole sweep either way.
+        // A live entry with no checkout becomes archived, held by its branch; deletion stays where the user can see it
+        // (discard, or the archive's own purge).
         if (vanished.length > 0) {
             await services.agents.setArchived(vanished, Date.now());
             logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
         }
-        // Membership is re-read per decision inside prune (the callbacks), so a conversation the user opens
-        // mid-sweep is never judged by this pre-sweep snapshot.
+        // Membership is re-read per decision inside prune, so a conversation opened mid-sweep isn't judged by this
+        // snapshot.
         await services.agentWorktrees.prune(
             () => services.agents.ids().filter((id) => services.agents.entry(id)?.branch !== undefined),
             () =>
@@ -993,9 +763,8 @@ const main = async (): Promise<void> => {
         );
     })().catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
 
-    // Keep the Finished lane from becoming the sandbox's permanent record: archive agents that have sat
-    // finished past the retention window (settings.agentRetentionDays; 0 ⇒ never). Once at boot, then hourly,
-    // the window is measured in days, so nothing finer is worth a timer. Losslessly: see agents/archive.ts.
+    // Archives Finished agents past the retention window (agentRetentionDays; 0 disables) so the lane doesn't become a
+    // permanent record. Once at boot, then hourly; losslessly (agents/archive.ts).
     const sweepArchive = (): Promise<void> =>
         services.sandboxSettings
             .get()
@@ -1005,8 +774,8 @@ const main = async (): Promise<void> => {
     if (role.roots) {
         void sweepArchive();
         setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
-        // The state dir's own garbage, scratch, retired derived roots, aged captures (state-janitor.ts).
-        // Same cadence and guard as the agent sweeps: only the daemon that owns the roots collects them.
+        // State dir's own garbage (scratch, retired derived roots, aged captures); same cadence and ownership guard as
+        // the agent sweeps above.
         void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) =>
             logger.warn({ err: error }, "state janitor: boot sweep failed"),
         );
@@ -1019,71 +788,50 @@ const main = async (): Promise<void> => {
         ).unref();
     }
 
-    /* The tmux server, forked HERE so every pane in this container inherits the daemon's mounts and not some
-     * conversation's private `/work` (terminal/tmux-server.ts says what that cost). Before any turn can run,
-     * because the whole point is to be the first client. Then checked on a slow loop: a server that predates
-     * this daemon cannot be pinned retroactively, and a wrong one is invisible from inside the terminals it
-     * serves. */
+    // Forks the tmux server here so every pane inherits this daemon's mounts, not a conversation's private /work; must
+    // happen before any turn runs. Rechecked on a slow loop; a pre-existing server can't be pinned after the fact.
     if (role.roots) {
         void pinTmuxServer(logger).then(() => reportTmuxServerNamespace(logger));
         setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000).unref();
     }
 
-    // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,
-    // and keep the commit-graph current. Never awaited, it is the one boot step whose whole point is to run
-    // while nothing is waiting on it, and a repo mid-relocation simply gets maintained an hour later.
+    // Packs refs and loose objects, keeps the commit-graph current. Never awaited: its whole point is to run while
+    // nothing is waiting, so a repo mid-relocation is simply maintained an hour later.
     const maintain = (): Promise<void> => runGitMaintenance(services.workspace, logger);
     if (role.roots) {
         void maintain();
         setInterval(() => void maintain(), 60 * 60 * 1000).unref();
     }
 
-    // Recompose the environment overlay from the manifest, converges fragment drift (a daemon update that
-    // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
-    // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline above.
+    // Recomposes the environment overlay from the manifest, converging drift when a capability's fragment changed;
+    // no-op on a fresh sandbox. Writes stay under .intentic/, so this never touches the baseline above.
     if (role.container) {
         void composeEnvironment(services);
     }
 
-    // Auto-connect VPN tunnels die with the container while the manifest survives on /work, dial them again
-    // AFTER the sweep; dockerd starts the same way when a docker capability is enabled (the engine is baked
-    // into every image but dormant without it). Both best-effort: a failure lands in the VPN link's state /
-    // the daemon log, not the boot path.
+    // VPN tunnels and dockerd die with the container while their manifests survive on /work; both are reconnected here,
+    // after the sweep, best-effort (failures land in state or the log, not the boot path).
     const bootCtx = capabilityCtx(services);
     if (role.container) {
         void reconnectVpns(services.capabilities, services.logger);
-        /* Geo exits, restored the same way and with one extra job the VPNs do not have. An auto-start exit is
-         * down and wants starting, the familiar half. But a tunnel-based exit's CLIENT survives the daemon
-         * while the SOCKS proxy that published it does not, because that listener lived in this process: so
-         * there can be a live tunnel with nothing serving it, and restoreExits re-publishes the proxy without
-         * disturbing the tunnel. Best-effort like the VPNs, a dead relay must not take the boot path with it. */
+        // Geo exits restore the same way, plus one step: a tunnel exit's client survives the daemon dying, but the
+        // SOCKS proxy publishing it lived in this process, so this republishes it without disturbing the tunnel.
         void restoreExits(services.capabilities, services.logger);
     }
-    // Connector hooks' side effects die with the container the same way: the git keypair is on /history
-    // (linked above), but the credential helper, the https line, the ssh-config Include and npm's ~/.npmrc
-    // auth line were in HOME, re-derive them from the manifest so the owner's first `git pull` and the
-    // agent's first clone or publish authenticate. HOME-level like the links they ride on, so it is the
-    // owning daemon's to write (see the claim above).
+    // Connector side effects (credential helper, ssh Include, npmrc auth) lived in HOME and die with the container;
+    // re-derived from the manifest so the first git or npm call authenticates. The owning daemon's job.
     if (ownsHome) {
         void restoreConnectorHooks(services.capabilities, services.logger);
     }
     if (role.container) {
         void startDockerdIfEnabled(bootCtx);
     }
-    // Local model servers die with the container the same way dockerd does, while the manifest and the
-    // downloaded weights survive on /work: bring every ready one back. Best-effort like its siblings.
+    // Model servers die with the container like dockerd; weights survive on /work, so every ready one comes back.
     if (role.container) {
         void startLocalModelsIfEnabled(bootCtx);
     }
-    /* The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": serves those providers on
-     * their connected subscription OAuth, plus the user's own openai-protocol endpoints.
-     *
-     * GATED ON THE BINARY BEING IN THIS IMAGE, because it is a feature pack now (image-packs/translator.Dockerfile)
-     * and a core image doesn't carry it. TRANSLATOR_URL is runner-set either way, so the URL alone stopped
-     * meaning "there is a translator here". Ungated, the spawn fails ENOENT and the restart ladder retries it
-     * for the daemon's lifetime, filling the log with a failure that is really just an image without the pack.
-     * Starts whenever the binary is present so the Management API is listening for connect handshakes (Google,
-     * Grok, Kimi) before an account has been stored. */
+    // Backs "Codex/Grok under the Claude Code harness" via CLIProxyAPI. Gated on the binary being in this image (a
+    // feature pack, not core): TRANSLATOR_URL alone no longer implies it's present.
     void (async () => {
         if (config.translator.url === "" || !role.container) {
             return;
@@ -1098,15 +846,14 @@ const main = async (): Promise<void> => {
     if (role.container) {
         void startAllExtensionProcesses(services);
     }
-    // Extension BACKENDS (manifest `server` bundles) come up in their own supervised host process, proxied
-    // under /x/<id>/, see extensions/backend/. Best-effort like the processes: a failure is the host's row
-    // on the Extensions tab, never a boot failure.
+    // Extension backends (manifest `server` bundles) come up in their own supervised host process, proxied under
+    // /x/<id>/. Best-effort: a failure is a row on the Extensions tab, not a boot failure.
     if (role.container) {
         services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
     }
 
-    // Debug-log upkeep: re-arm the tmux pipe-pane hooks on a tmux server that outlived a daemon restart
-    // (best-effort; the image's tmux.conf covers server start) and sweep historyRoot/logs at boot + hourly.
+    // Re-arms tmux pipe-pane hooks on a server that outlived a daemon restart; tmux.conf covers server start, this is
+    // best-effort.
     if (role.container) {
         void applyTmuxLogHooks(config.historyRoot);
     }
@@ -1117,11 +864,8 @@ const main = async (): Promise<void> => {
     const logsSweep = role.roots ? setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000) : undefined;
     shutdown.push(() => clearInterval(logsSweep));
 
-    // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
-    // because they're the user's own, plus the job-* sessions of flows that finished hours ago and that the
-    // panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to run
-    // unattended: a job whose runner still has something queued has only dead panes but is not finished, the
-    // same fact system.routes reports as `running`. agent-* sessions belong to the reaper below.
+    // Reaps abandoned web-* shells and finished job-* sessions, at boot and hourly. `keep` makes this safe unattended:
+    // a job still queued has only dead panes but isn't finished. agent-* belongs to the reaper below.
     const stillWorking = (session: string): boolean => services.terminalRun.running(session);
     if (role.container) {
         void reapFinishedSessions(stillWorking);
@@ -1129,10 +873,8 @@ const main = async (): Promise<void> => {
     const sessionSweep = role.container ? setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000) : undefined;
     shutdown.push(() => clearInterval(sessionSweep));
 
-    /* THE REAPER (platform/reaper.ts): everything a stopped conversation still holds, the provider CLI tree
-     * with its MCP servers and browsers, its agent-* tmux sessions live panes included, its browser records,
-     * and the temp state turns mint, reclaimed on the conversation's own stop clock, seeded by the settle
-     * event. Container-role only, exactly like the sweeps it replaced: a guest daemon owns none of this. */
+    // Reclaims everything a stopped conversation still holds: its provider CLI tree, MCP servers and browsers, its
+    // agent-* sessions, browser records, temp state, on its own stop clock. Container-role only.
     if (role.container) {
         services.reaper.start();
         void services.reaper.sweep();
@@ -1146,202 +888,149 @@ const main = async (): Promise<void> => {
         scheduler.start();
     }
 
-    // The condition watches (agent/watchers.ts): agent-armed checks the daemon polls between turns, waking the
-    // arming conversation when one fires. Wired here because the wake is a turn and the turn generator cannot
-    // be imported from under turn-plan, where the arming tool lives. Stop clears the timers and leaves the
-    // watch journal alone: a daemon on its way down cannot check anything, but what it was checking is exactly
-    // what the next one picks up (restoreWatchers, below).
+    // Agent-armed condition checks, polled between turns. Wired here since a wake is itself a turn. Stop clears the
+    // timers only; the watch journal survives for the next boot to restore.
     shutdown.push(startWatchers(services, streamAgent));
 
-    /* The proof follow-up for every runtime without SDK Stop hooks (agent/verify-nudge.ts): a turn that changed
-     * code and ran no check after its last edit gets one bounded follow-up, delivered as its own turn because a
-     * Codex or ACP loop has nowhere to put one mid-flight. Wired here for the same reason the watches are, the
-     * follow-up IS a turn and the turn generator cannot be imported from under the route that owns it. Only ever
-     * fires where the owner has stood the `verify-edits` rule. */
+    // Follow-up for runtimes with no SDK Stop hook: a turn that edited code and never checked it gets one bounded
+    // follow-up turn. Wired here since the turn generator can't be imported from under the caller.
     shutdown.push(startVerifyNudges(services, streamAgent));
 
-    /* The approvals executor, armed rather than polled: it reads the queue, works out the soonest approved
-     * item's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart, a
-     * post approved a minute before the daemon went down is due the moment it is back, and this is the read
-     * that notices. Nothing approved means no timer at all. */
+    // Armed, not polled: reads the queue and sleeps until the soonest approved item is due. Arming here is what
+    // survives a restart, since the deadline is the item's own scheduledAt on disk, not this timer.
     const approvalsExecutor = approvalsExecutorFor(services);
-    // Nothing is lost by dropping the armed timer: the deadline it was holding is the item's own
-    // scheduledAt on disk, and the next boot arms from that.
+    // Dropping the timer loses nothing: the deadline lives in the item's own scheduledAt, and the next boot re-arms
+    // from it.
     shutdown.push(() => approvalsExecutor.stop());
-    // A pre-push check is a suite running on the main tree, a daemon that exits without killing it
-    // leaves it burning CPU with nothing left to report the result to.
+    // A pre-push check runs a suite on the main tree; left alone at exit it burns CPU with nothing to report to.
     shutdown.push(() => prepushCheck(services).cancel());
     if (role.container) {
         void approvalsExecutor.arm().catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
     }
 
-    // CI webhooks: keep every mapped workspace repo's github/gitlab hook pointing at this sandbox (boot pass +
-    // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
+    // Keeps every mapped repo's CI webhook pointed at this sandbox (boot + interval), so pipelines wake `ci`
+    // automations.
     if (role.container) {
         services.ciHooks.start();
     }
 
-    // And the fallback under it: poll the repos whose hook could NOT be registered (no public URL, a token
-    // without hook scope) so their `ci` automations still fire. Its first pass is a silent seed, so starting it
-    // before the reconciler's first warnings have landed costs nothing. See ci/poller.ts.
+    // Polls repos whose CI hook could not be registered (no public URL, a scopeless token) so their `ci` automations
+    // still fire. Its first pass is a silent seed, so starting it early costs nothing (ci/poller.ts).
     const ciPoller = createCiPoller(services, streamAgent);
     shutdown.push(() => ciPoller.stop());
     if (role.container) {
         ciPoller.start();
     }
 
-    // Maintenance probes: refresh expired measurements (pnpm outdated/audit, knip, jscpd) so the rail can tell
-    // the owner something they did not already know. Serialized across the sandbox, skipped entirely while any
-    // turn is live, and behind a warm-up, a probe racing the boot's `pnpm install` measures a tree that does not
-    // exist yet. See chores/probe-runner.ts for why none of it is allowed to be urgent.
+    // Refreshes expired maintenance measurements (pnpm outdated/audit, knip, jscpd) for the rail. Serialized, skipped
+    // while any turn is live, and held behind a warm-up so it never races the boot's own pnpm install.
     if (role.container) {
         services.probeRunner.start();
     }
 
-    // Environment drift: what the live container has that the image did not put there, and the auto-drafted
-    // overlay steps recurring runtime installs earn. Same manners as the probe runner (idle-only, allowed to
-    // fail, unref'd timers so no shutdown hook), one cheap pass per tick; see environment/drift-sweep.ts.
-    // Container-only for the probe's own reason: outside a container there is no image to drift from.
+    // Detects what the live container has that the image didn't, drafting overlay steps to capture it. Same manners as
+    // the probe runner: idle-only, allowed to fail, unref'd. Container-only: there's no image to drift from otherwise.
     if (role.container) {
         services.driftSweep.start();
     }
 
-    // Resume scheduler: credential refusals and provider outages re-run the turn they killed, see
-    // turn-resume.ts. A spent usage limit re-runs nothing unless the owner's policy says so: sent again at the
-    // reset (resumeAfterLimit), or moved to another account with room (moveAfterLimit), each off by default.
+    // Re-runs a turn killed by a credential refusal or provider outage. A spent usage limit re-runs only if the owner
+    // opted in: resumeAfterLimit (retry at reset) or moveAfterLimit (another account), both off by default.
     const turnResume = createTurnResumeScheduler(services, streamAgent);
     shutdown.push(() => turnResume.stop());
     if (role.roots) {
         turnResume.start();
     }
 
-    // Restart auto-resume, the third condition in turn-resume.ts: the turn journal on /history holds every turn
-    // and automation fire that was in flight, so whatever survived to here is what the daemon died under, a
-    // rebuild, an environment approval, a dev-sandbox.sh swap, an OOM kill. Re-run once each, gated by
-    // autoResumeOnRestart (off by default) and bounded by an attempt count so a turn that kills the daemon cannot
-    // loop the boot. Detached: an interrupted turn is a whole agent turn and must not hold the daemon's start.
+    // Restart resume: the turn journal holds every turn in flight, so whatever survived to here is what killed the
+    // daemon. Re-run once each, gated and attempt-bounded. Detached: an interrupted turn is a whole turn.
     void resumeInterruptedTurns(services, streamAgent).catch((error: unknown) =>
         logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"),
     );
 
-    /* The same restart story for the condition watches (agent/watchers.ts), and the reason they need one is
-     * sharper than a turn's: a watch's whole life happens BETWEEN turns, so a rebuild lands in the middle of
-     * one far more often than it lands in the middle of a turn. The journal on /history holds every watch that
-     * was armed, so whatever survived to here is what the daemon died under. Each is RE-CHECKED once before
-     * anything is decided, since the thing being watched is exactly the kind of thing that resolves during a
-     * rebuild: a check that passes now wakes its conversation immediately, one whose deadline passed while we
-     * were down wakes with the restart ending, and the rest are re-armed with the time they have left.
-     * Ungated by autoResumeOnRestart, which is a policy about re-running the USER's turn and spending on it;
-     * putting back a watchdog the agent armed and then honouring the wake it was already promised is this
-     * daemon finishing its own sentence. Detached: a wake is a whole agent turn and must not hold up the boot. */
+    // Same restart story for condition watches, sharper here since a watch's whole life is between turns. Each is
+    // re-checked once, since it may have resolved during the rebuild, and re-armed with its remaining time.
     void restoreWatchers().catch((error: unknown) => logger.error({ err: error }, "armed condition watches could not be restored"));
 
-    // The same restart story for loops and workflow runs, coordinated because every workflow step IS a loop.
-    // Two independent passes can both claim the same persisted loop and race its conversation/worktree; the
-    // coordinator reserves workflow-owned conversations before generic loop recovery sees the remainder.
+    // Same restart story for loops and workflow runs, coordinated since every workflow step is itself a loop: the
+    // coordinator reserves workflow-owned conversations before generic loop recovery sees the rest.
     void resumeWorkflowExecution(services, streamAgent).catch((error: unknown) =>
         logger.error({ err: error }, "loops and workflow runs could not be resumed"),
     );
 
-    // Stamp this workspace with the newest version that ever ran it (forward-only), what lets a manifest
-    // problem after a rollback read as "written by a newer intentic" instead of "your file is broken"
-    // (store/newest-run.ts). Backgrounded: the stamp only sharpens a sentence, it gates nothing.
+    // Stamps the workspace with the newest version that ever ran it (forward-only), so a post-rollback manifest issue
+    // reads as "written by a newer intentic", not "your file is broken". Backgrounded; gates nothing.
     if (role.roots) {
         void recordNewestRun(config.workspaceRoot).catch(() => undefined);
     }
 
-    // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
-    // update without ever fetching on the request path. Channel-aware: a stable sandbox is offered the
-    // promoted release, a beta one the newest (version-check.ts explains the two pointers).
-    // Container-image update offers: meaningless for a local daemon, whose host application owns updates.
+    // Warms the "latest released version" cache so /info can offer an update without fetching on the request path.
+    // Channel-aware: stable gets the promoted release, beta the newest; meaningless for a local daemon.
     const versionCheck = traits.containerUpdates ? startVersionCheck() : undefined;
     shutdown.push(() => versionCheck?.stop());
 
-    // …and what that update would actually give them, on the same cadence: the offer and the reason to take it
-    // come from two different reads (the Release's "latest" pointer for the version, the Release bodies for
-    // the notes) and neither may hold up the /info that shows them.
+    // What an update would actually give: a separate read (the release's notes, not just its version pointer), same
+    // cadence, neither blocking the /info that shows them.
     const releaseNotesCheck = traits.containerUpdates ? startReleaseNotesCheck() : undefined;
     shutdown.push(() => releaseNotesCheck?.stop());
 
-    // The same courtesy for installed EXTENSIONS: compare each pinned sha against its registry (updates,
-    // advisories) shortly after boot and daily after, the Extensions tab's own reads keep it fresher.
+    // Same courtesy for installed extensions: compares each pinned sha against its registry shortly after boot and
+    // daily after; the Extensions tab's own reads keep it fresher still.
     const extensionUpdateWatch = traits.extensionHost ? startExtensionUpdateWatch(services) : undefined;
     shutdown.push(() => extensionUpdateWatch?.stop());
 
-    /* And for the AGENT ENGINES themselves — the Claude Code CLI and its SDK, codex, @cursor/sdk, opencode,
-     * the translator. Each engine's channel says where its version comes from (blessed by this project, or
-     * upstream's newest, or a pin), and this is what acts on that answer without waiting for a new image.
-     * Started only where this daemon owns the container's furniture: two daemons on one volume converging the
-     * same store would be two downloads racing for one pointer. */
+    // Same for the agent engines (Claude Code, Codex, Cursor, OpenCode, the translator): each engine's channel decides
+    // its version source, acted on without a new image. Runs only where this daemon owns the container.
     const engineWatch = startEngineWatch(services, role);
     shutdown.push(() => engineWatch.stop());
 
-    // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
-    // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.
+    // Probes whether each runtime can serve a turn off the turn path, so a missing subscription surfaces before a
+    // prompt is written.
     startRuntimeHealth(services);
-    // The headroom service's idle floor: every account's plan limits are re-read on what happens (a turn, a
-    // refusal, a screen), and this is the long backstop for a sandbox where nothing has.
+    // Idle backstop for plan-limit headroom, re-read on every turn, refusal, or screen; this covers a sandbox where
+    // nothing happens.
     services.headroom.start();
 
-    // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
-    // process that holds the connection and drives the daemon's /listeners/<provider> routes, the daemon holds
-    // no gateway of its own. The process exists only while its provider is wanted (a connector or an enabled
-    // listener automation): startAllExtensionProcesses gates the boot start, reconcileListenerProcesses
-    // converges on every automations/capabilities mutation.
+    // Realtime wake-ups run as provider-gateway extension processes (e.g. ext-discord) driving /listeners/<provider>;
+    // the daemon holds no gateway of its own, started and kept in sync by the extension process machinery.
 
     // Workspace history: an immediate snapshot plus the interval sweep (turn snapshots ride on streamAgent).
     services.history.start();
 
-    // Live file-change push: watch /work so the browser's tree + open file refresh the instant the agent (or a
-    // Bash command / the terminal) touches a file, over the /events stream, no manual Refresh.
+    // Watches /work so the browser's tree and open file refresh instantly over /events, no manual refresh needed.
     startWorkspaceWatch(services.workspace.root, logger);
-    // The resident search engine revalidates on the same watch stream, so a query never pays re-indexing for
-    // the agent's latest writes inline, it serves the current index and the refresh happens between queries.
+    // Search index revalidates on the same watch stream; a query serves the current index while reindexing happens
+    // between queries.
     subscribeWorkspaceChanges(() => services.iq.markDirty());
-    /* Extension backends converge on the same stream: an edit to a workspace extension (an agent authoring one
-     * with its own file tools, the whole point of that load path), a fresh git-installed checkout, or a flip
-     * of the enablement file restarts the backend host so the new code is what serves. Loaded code cannot be
-     * unloaded, so the restart IS the reload, debounced in the supervisor, and a no-op while no extension
-     * ships a backend. */
+    // Restarts the extension backend host when its source changes (an edit, a fresh checkout, an enablement flip):
+    // loaded code can't be unloaded, so a debounced restart is the reload. No-op while no extension ships a backend.
     subscribeWorkspaceChanges((paths) => {
         if (paths.some(extensionSource)) {
             services.extensionBackend.restart();
         }
     });
-    /* The markdown shadows of binary files converge on the same stream: a docx/pdf/image/audio file that
-     * lands or changes gets its sidecar re-derived by a spawned `fileq`, so a later read is pre-parsed.
-     * Gated per-run by the `sidecars` setting (read fresh each pass, so the switch works without a restart);
-     * spelled like the other sweeps here rather than composed, it holds no state a route reads. */
+    // Re-derives a binary file's markdown shadow (docx/pdf/image/audio) via a spawned `fileq` whenever it lands or
+    // changes. Gated by the `sidecars` setting, read fresh each pass so the switch works without a restart.
     shutdown.push(startSidecarService({ enabled: async () => (await services.sandboxSettings.get()).sidecars, logger }, subscribeWorkspaceChanges));
-    // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
-    // discovered repo list on /events (the watcher itself never sees .git paths).
+    // Reframes the discovered repo list on /events when a repo is cloned or deleted under /work (the file watcher
+    // itself ignores .git).
     startRepoWatch(services.workspace.root, logger);
-    // Ref-move push, riding the repo set the line above maintains: a commit, checkout, branch, tag or rebase in
-    // ANY workspace repo re-frames the surfaces built on the commit graph. Neither watcher above can carry it,
-    // git dirs live off /work entirely (repo-git-dirs.ts) and the file watcher ignores .git besides.
+    // Reframes commit-graph-derived surfaces on any ref move (commit, checkout, branch, tag, rebase) in any repo;
+    // neither the file watcher (ignores .git) nor the repo watcher above can carry this.
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
-    // Health rankings include committed churn. A ref can move without changing one workspace byte, so the
-    // workspace-index feed above cannot invalidate this cache; the ref feed does it without forcing a parse.
+    // Health rankings include committed churn; a ref can move without a workspace byte changing, so only the ref feed
+    // can invalidate this.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
-    // The agent plane converges on the same feed, in the one direction a conversation's FROZEN composition
-    // cannot absorb by itself: a repo that has been deleted is taken out of every composition that still names
-    // it, and its stranded checkouts are reclaimed (agents/vanished-repos.ts explains what leaving them costs).
+    // Removes a deleted repo from every composition still naming it and reclaims its stranded checkouts: the one
+    // correction a frozen composition can't make for itself (agents/vanished-repos.ts).
     shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
 
-    // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a ready
-    // index. Incremental, a valid on-disk index survives boot instead of being dropped and rebuilt, and it runs
-    // on the engine's own worker thread: this used to be minutes of parse/chunk/SQLite work on THIS loop, which
-    // put every browser request behind it (seconds each, for 0.4 kB reads) for as long as a boot re-index took.
-    // Awaiting it is just an observation point; nothing here blocks on it.
+    // Warms the search index (sweep, symbols, embedding backlog) on its own worker thread so the first search is ready;
+    // incremental, so a valid on-disk index survives a boot. Awaited only as an observation point.
     void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"));
 
-    /* Nothing to enumerate: every subsystem registered itself where it was created. The store keeps going past
-     * a member that throws and reports the failures together, so one misbehaving stop cannot strand the ports
-     * and child processes behind it in the list.
-     *
-     * `finally`, because the exit must happen whatever the teardown did. The old list had the same exposure and
-     * worse odds, a throwing stop skipped every stop after it AND the exit, leaving a daemon that answered
-     * SIGTERM by hanging with its marker unstamped, which the next boot reads as a crash. */
+    // Nothing to enumerate: every subsystem registered its own teardown. Keeps going past a throwing member and reports
+    // failures together. `finally`, since the exit must happen whatever the teardown did.
     const stop = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
         try {
@@ -1349,26 +1038,22 @@ const main = async (): Promise<void> => {
         } catch (error) {
             logger.error({ err: error }, "shutdown: one or more subsystems failed to stop");
         } finally {
-            // process.exit fires the "exit" hook above, which stamps the marker "exited", the next boot's death
-            // check reads a deliberate shutdown, not a crash.
+            // Fires the exit hook above, stamping the marker exited so the next boot reads a deliberate stop.
             process.exit(0);
         }
     };
     process.on("SIGTERM", stop);
     process.on("SIGINT", stop);
 
-    /* A POOL MACHINE'S BOOT ENDS HERE. The chain above prepared the volume and the autostart step started the
-     * starter; the machine has nothing else to be until somebody claims it. Warm the server once, stamp the
-     * volume, and take the same graceful exit SIGTERM takes, which is what stops the machine. After every
-     * handler above is installed on purpose: the exit must be the ordinary one, marker stamped and all. */
+    // A pool machine's boot ends here: the volume is prepared and the starter running, so it warms once, stamps the
+    // volume, and takes the same exit SIGTERM would. Placed after every handler above, so the exit is the ordinary one.
     if (prewarm) {
         void finishPrewarm({
             historyRoot: config.historyRoot,
             image: config.sandbox.image,
             processes: services.processes,
             logger,
-            // Named here rather than imported down there: platform sits under both of these subsystems, and
-            // this file is the one place above all three (platform/prewarm.ts `StarterProbe` says why).
+            // Named here, not imported below: this file sits above both subsystems StarterProbe needs.
             starterKey: appPanelKey(STARTER_REPO, STARTER_APP),
             answers: (port) => answers("http", port),
         })

@@ -7,22 +7,12 @@ import { createNetwork, IPS, isRunning, logsOf, removeContainer, removeNetwork, 
 import { dockerAvailable, freePort, HOST, plainUrlFor, requireLoopback, urlFor } from "./docker.js";
 import { IMAGES } from "./images.js";
 
-/* THE HALF OF THE WORLD EVERY ONBOARDING PATH SHARES: postgres, the stand-in model, the platform api, and the
- * SPA. What differs between the four paths a user can take is only how they end up with a connected sandbox,
- * so that is a provisioner, and this is everything underneath it, stood up once.
- *
- * The api and the SPA are the BRANCH's images (images.ts), because a gate that tests the last release is not a
- * gate. Everything else is a published image pinned the way the rest of the repository pins them.
- */
+// Stands up everything every onboarding path shares (postgres, the stand-in model, the platform api, the SPA); only
+// getting a connected sandbox differs, which lives in a provisioner. Api and SPA are the branch's own images
+// (images.ts); everything else is a pinned published image.
 
-// Pinned the way the self-hosted platform's compose file pins it, the same database this product is run on.
-/* The SPA is served through a TLS front rather than straight off its own image.
- *
- * The image serves plain http on 80 and is fronted by a TLS terminator in production; here that terminator is
- * this container. It exists because the api MUST be https (certs.ts says why) and same-site comparison
- * includes the scheme, so an http SPA calling an https api would be cross-site, and the session cookie would
- * stop riding. The product's own nginx still serves every byte; this only wraps it.
- */
+// Pinned to match the self-hosted platform's own compose file.
+// SPA fronted by TLS here, not its own image, since the api is https and same-site includes scheme.
 const NGINX_IMAGE = `nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46`;
 
 const TLS_FRONT_CONF = `server {
@@ -42,52 +32,31 @@ const POSTGRES_IMAGE = `postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fd
 // Not secrets: this database exists for the length of one run, on a network of its own.
 const DB = { user: `app`, password: `app`, name: `app` } as const;
 
-/* The trial's switch. Any non-empty value turns it ON, the platform reads it as a pool of keys to spend, and
- * the stand-in upstream accepts any key not in its refusal list, so the value only has to be a value. The trial
- * is OFF by default in this product, which is exactly why the world has to say this: without it every model
- * list is empty and the journey's last step has nothing to send to.
- */
+// Trial switch: any non-empty value turns it on; off by default, so without this every model list is empty.
 const TRIAL_KEY = `onboarding-trial-key`;
-/* THE REACHABILITY SWITCH, and the reason this world has one fewer container than it used to.
- *
- * The platform mints a sandbox's reachability by SIGNING a grant with this key — no call to anything — so the
- * whole of what a world needs to hand out working setup codes is a key, and there is no service left to stand
- * in for. (A platform with no key is the other legitimate mode: every provisioning route 404s and setup offers
- * only the attach lane. It is simply not a mode a journey through the install paths can walk.) Minted per run
- * and thrown away with it, so nothing here is a credential.
- *
- * The ingress it names is on `.test`, an RFC 2606 reserved TLD resolvable by nobody: the box's tunnel dial
- * therefore fails and retries in the background exactly as it would against an ingress that is down, which is
- * harmless twice over — the entrypoint does not gate the daemon on the tunnel, and the journey reaches the box
- * over loopback anyway (the app's own preference for a sandbox on this machine).
- */
+// A signing key alone hands out setup codes; `.test` is unroutable, so the tunnel dial fails harmlessly.
 const INGRESS_SIGNING_KEY = generateKeyPairSync(`ed25519`).privateKey.export({ type: `pkcs8`, format: `pem` }).toString();
 export const SANDBOX_ZONE = `sbx.onboarding.test`;
 const INGRESS_URL = `https://ingress.${SANDBOX_ZONE}`;
 export const TRIAL_MODEL = `fake-flash-latest`;
-// What the journey asserts it read on screen. Distinctive enough that no UI copy could be mistaken for it.
+// What the journey asserts it read on screen; distinctive enough that no UI copy could match it.
 export const TRIAL_REPLY = `The onboarding journey reached the model.`;
 
 export interface World {
     readonly apiUrl: string;
-    /** The platform api as a container on ITS OWN network reaches it, what the compose bootstrap curls. */
+    /** The platform api as a container on its own network reaches it; what the compose bootstrap curls. */
     readonly apiHostUrl: string;
     readonly webUrl: string;
     readonly databaseUrl: string;
     readonly networkName: string;
-    /** The api as a CONTAINER reaches it, what a provisioned sandbox is told to announce to. */
+    /** The api address a container reaches; what a provisioned sandbox is told to announce to. */
     readonly apiInternalUrl: string;
     readonly betterAuthSecret: string;
     stop(): Promise<void>;
 }
 
-/* Wait for a service to answer, and give up the moment waiting has stopped being useful.
- *
- * Bounded, naming what it waited for and what it last saw, every wait in this package does, because a gate
- * that blocks a release has to be fixable and a timeout with no subject is the opposite of that. `container`
- * is what makes the budget generous without being slow: an exited container is checked for on every poll and
- * reported immediately with its log, so a crash reads as a crash instead of as a service that "never started".
- */
+// Waits for a service, naming what it waited for and what it last saw, so a timeout is fixable, not a mystery.
+// `container` checks for an exit on every poll, so a crash reports immediately instead of hanging out the full budget.
 export const waitForHttp = async (url: string, what: string, timeoutMs: number, container?: string): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
     let last = `never attempted`;
@@ -155,8 +124,7 @@ export const startWorld = async (): Promise<World> => {
         });
         started.push(names.postgres);
 
-        /* The tier's one environmental requirement, checked once against the first container up, so an
-         * environment that cannot meet it says so here rather than as four services that never started. */
+        // This tier's one environmental check, done once here, so a bad environment fails with one message, not four.
         await requireLoopback(dbPort, `postgres`);
         const apiUrl = urlFor(apiPort);
         const webUrl = urlFor(webPort);
@@ -174,8 +142,7 @@ export const startWorld = async (): Promise<World> => {
         started.push(names.upstream);
         await waitForHttp(`${plainUrlFor(upstreamPort)}/health`, `the stand-in model`, 60_000, names.upstream);
 
-        // At least 32 characters, because Better Auth warns below that and a warning in this log is noise
-        // between whoever is reading it and the failure they came for.
+        // At least 32 characters; shorter triggers a Better Auth warning that's noise in this log.
         const betterAuthSecret = `onboarding-journey-secret-0123456789abcdef`;
         await startContainer({
             name: names.api,
@@ -186,23 +153,21 @@ export const startWorld = async (): Promise<World> => {
             env: {
                 DATABASE_URL: `postgresql://${DB.user}:${DB.password}@postgres:5432/${DB.name}`,
                 BETTER_AUTH_SECRET: betterAuthSecret,
-                // Both are BROWSER-facing, so both carry the outside addresses even though this is a container.
+                // Both are browser-facing, so both carry the outside address even though this is a container.
                 API_URL: apiUrl,
                 WEB_ORIGIN: webUrl,
-                // The trial, switched on. Its base ends in `/openai` so the platform derives the native model
-                // listing beside it, the discovery path the stand-in exists to feed.
+                // Trial switched on; base ends in `/openai` so the platform derives the native model listing too.
                 TRIAL_KEYS: TRIAL_KEY,
                 TRIAL_BASE_URL: `http://upstream:8099/v1beta/openai`,
                 TRIAL_MODELS: TRIAL_MODEL,
-                // Reachability, which is what lets the wizard mint a setup code at all. A key and two strings:
-                // the platform signs, the box carries the grant, nothing on this network is called.
+                // Reachability: lets the wizard mint a setup code. Platform signs, box carries the grant, nothing is
+                // called.
                 INGRESS_SIGNING_KEY,
                 INGRESS_URL,
                 INGRESS_ZONE: SANDBOX_ZONE,
-                // SECRETS_KEY stays unset so a sandbox's connect token is stored in plain text, the seed and
-                // the provisioners read it back, exactly as the browser tier's stack does.
+                // SECRETS_KEY stays unset, so a sandbox's connect token is stored in plain text and read back directly.
                 LOG_PRETTY: `false`,
-                // The api serves its own TLS, exactly as a dev run does. Nothing verifies this pair, see certs.ts.
+                // Api serves its own TLS, as a dev run does; nothing verifies this pair.
                 API_HTTPS_KEY: `/tls/key.pem`,
                 API_HTTPS_CERT: `/tls/cert.pem`,
             },
@@ -210,10 +175,7 @@ export const startWorld = async (): Promise<World> => {
             ports: { 6480: apiPort },
         });
         started.push(names.api);
-        /* Generous, because this is not waiting for a boot. The image applies every migration in the repository
-         * to an empty database before it serves a single request, and then proves the result matches the schema
-         * it was compiled against, on a cold run that is minutes, and all of it is work the image is supposed
-         * to be doing. The ceiling is here to catch a hang. */
+        // Generous: not a boot wait, but every migration applying to an empty db, then a schema-match check.
         await waitForHttp(`${apiUrl}/api/auth/ok`, `the platform api`, 420_000, names.api);
 
         await startContainer({
@@ -243,10 +205,7 @@ export const startWorld = async (): Promise<World> => {
 
         return {
             apiUrl,
-            /* What a container elsewhere on this machine curls. The compose bootstrap runs on the "user's"
-             * side of the fence, so it reaches the platform through the docker host exactly as a real one
-             * does. The wizard only writes a local platform into that command when the api is served on
-             * loopback, which this tier's addressing already guarantees (docker.ts). */
+            // What a container elsewhere curls; reaches the platform via the docker host, like a real one.
             apiHostUrl: `https://host.docker.internal:${apiPort}`,
             webUrl,
             databaseUrl: `postgresql://${DB.user}:${DB.password}@${HOST}:${dbPort}/${DB.name}`,

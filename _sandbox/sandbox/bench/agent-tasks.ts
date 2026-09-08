@@ -2,26 +2,11 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
-/* The tasks agent-bench runs, and the only thing that decides whether a run passed. Every task grades
- * MECHANICALLY, an exact grid, an exact integer, because an LLM judge would put the thing under test on both
- * sides of the measurement, and because a benchmark you re-run weekly has to be free.
- *
- * Two tasks, picked for the two claims imp mode makes:
- *
- *   arc  , does splitting thinking from doing make the pair SMARTER? One task from the ARC-AGI-2 public
- *           evaluation set (Apache-2.0, fetched by id, never vendored). That set is deliberately brutal for
- *           frontier models, and it is a fair test of the split rather than a pure-reasoning quiz because the
- *           only strategy that works agentically is: guess the rule, write a program, run it against the
- *           training pairs, look at what broke, revise. The guessing is the architect's; the writing and
- *           running is the imp's.
- *
- *   sweep, is the pair more TOKEN-EFFICIENT on the retrieval-heavy work it was built for? "Count this
- *           identifier across the codebase, excluding comments" over a real, large TypeScript tree. Naive
- *           grepping gets it wrong (comments and word boundaries), so it needs a small program written and run
- *          , again, reasoning on one side, mechanics on the other, and the answer is one integer either
- *           right or wrong. This stands in for a CursorBench-style "real request over a real codebase with a
- *           curated answer": CursorBench itself is Cursor-internal and not published, so it cannot be run here.
- */
+// Tasks agent-bench runs and grades mechanically (exact grid or integer, never an LLM judge). Two tasks:
+// - arc: an ARC-AGI-2 puzzle (Apache-2.0, fetched by id); needs guessing the rule, then writing and running code
+//   against the training pairs
+// - sweep: count an identifier across a real TypeScript tree, excluding comments; naive grepping gets it wrong, so it
+//   needs a small program
 
 const HERE = import.meta.dirname;
 const SANDBOX_SRC = resolve(HERE, "../src");
@@ -45,19 +30,19 @@ interface PreparedTask {
 export interface BenchTask {
     readonly id: string;
     readonly title: string;
-    // Materialize the workspace for ONE run. Called per run, so every arm and repetition starts identical.
+    // Materializes the workspace for one run; called per run so every arm and repetition starts identical.
     readonly prepare: (dir: string) => Promise<PreparedTask>;
 }
 
-// ---- shared helpers ----------------------------------------------------------------------------------------
+// Shared helpers.
 
 const readJson = async (path: string): Promise<unknown> => JSON.parse(await readFile(path, "utf8"));
 
-// The agent's answer file, or undefined when it never wrote one / wrote something unparseable. Not an error:
-// "didn't answer" is a legitimate benchmark outcome and must score 0 rather than crash the run.
+// The agent's answer file, or undefined if it never wrote one or wrote something unparseable; not an error, since
+// "didn't answer" is a real outcome that scores 0.
 const readAnswer = async (dir: string, name: string): Promise<unknown> => readJson(join(dir, name)).catch(() => undefined);
 
-// ---- arc: one ARC-AGI-2 evaluation task --------------------------------------------------------------------
+// arc: one ARC-AGI-2 evaluation task.
 
 interface ArcPair {
     readonly input: number[][];
@@ -69,8 +54,7 @@ interface ArcTask {
 }
 
 const ARC_BASE = "https://raw.githubusercontent.com/arcprize/ARC-AGI-2/main/data/evaluation";
-// Cached outside the repo: the corpus is Apache-2.0 and public, but it is not ours to vendor, and a benchmark
-// that re-downloads on every run is a benchmark that fails offline for a silly reason.
+// Cached outside the repo: public but not ours to vendor; re-downloading every run would fail offline.
 const ARC_CACHE = join(tmpdir(), "intentic-arc-agi-2");
 
 const fetchArcTask = async (id: string): Promise<ArcTask> => {
@@ -94,8 +78,8 @@ const sameGrid = (a: unknown, b: number[][]): boolean =>
     a.length === b.length &&
     a.every((row, y) => Array.isArray(row) && row.length === b[y]!.length && row.every((cell, x) => cell === b[y]![x]));
 
-// How much of the grid is right, for partial credit: 0 when the shape itself is wrong, since a differently
-// shaped grid has no cell-wise correspondence to score against.
+// How much of the grid is right, for partial credit; 0 when the shape itself is wrong, since a differently shaped grid
+// has no cell-wise correspondence.
 const gridScore = (a: unknown, b: number[][]): number => {
     if (!Array.isArray(a) || a.length !== b.length || a.some((row, y) => !Array.isArray(row) || row.length !== b[y]!.length)) {
         return 0;
@@ -114,8 +98,7 @@ const arcTask = (id: string): BenchTask => ({
         if (expected === undefined) {
             throw new Error(`ARC task ${id} has no test pair`);
         }
-        // The fixture carries the training pairs and the test INPUT only. The expected output never touches the
-        // workspace, otherwise the "solution" is a file read.
+        // The fixture carries the training pairs and the test input only; the output never touches the workspace.
         await writeFile(join(dir, "task.json"), `${JSON.stringify({ train: task.train, test: [{ input: task.test[0]!.input }] }, undefined, 2)}\n`);
         return {
             prompt: [
@@ -143,12 +126,10 @@ const arcTask = (id: string): BenchTask => ({
     },
 });
 
-// ---- sweep: exhaustive retrieval over a real TypeScript tree ------------------------------------------------
+// sweep: exhaustive retrieval over a real TypeScript tree.
 
-// Strip // line comments and /* */ block comments, leaving string and template literals intact. Deliberately a
-// scanner rather than a regex: `"http://x"` and `` `a /* b */ c` `` are exactly the cases a regex gets wrong,
-// and they are what makes the task worth setting. This is the rule the prompt states, so the agent is being
-// asked to reimplement THIS, not to guess at an ambiguous one.
+// Strips // and /* */ comments, leaving strings and template literals intact; a scanner rather than a regex, since
+// `"http://x"` and a template holding `/* */` text are exactly what a regex gets wrong.
 export const stripComments = (source: string): string => {
     let out = "";
     let index = 0;
@@ -216,13 +197,11 @@ const walkFiles = async (dir: string, keep: (path: string) => boolean): Promise<
     return found;
 };
 
-// The identifier to count. Picked for the shape of the problem rather than the number: it appears all over the
-// daemon in BOTH code and prose, so the comment rule actually bites, and a plain `grep -c` is wrong.
+// Picked since it appears in both code and prose, so comment-stripping matters and grep -c is wrong.
 const SWEEP_WORD = "sessionId";
 
-// A COPY of the real sources, never the live checkout: the agent may write anywhere in its workspace, and this
-// repo is routinely being edited by someone else while a bench runs. Tests are left out, they would skew both
-// the identifier count and the import graph, and they are not what either question is about.
+// A copy of the real sources, never the live checkout, since this repo may be edited elsewhere while a bench runs;
+// tests are excluded, since they'd skew the identifier count and the import graph.
 const copyDaemonFixture = async (dir: string): Promise<string> => {
     const workspace = join(dir, "daemon");
     await mkdir(workspace, { recursive: true });
@@ -231,21 +210,20 @@ const copyDaemonFixture = async (dir: string): Promise<string> => {
     return workspace;
 };
 
-// ---- deps: hold a large import graph in your head ----------------------------------------------------------
+// deps: hold a large import graph in your head.
 
-// The entry point whose transitive closure is the answer. Chosen because it sits at the top of the daemon's
-// deepest subsystem: reaching every file it pulls in means opening roughly half the tree.
+// The entry point whose closure is the answer, chosen for sitting atop the daemon's deepest subsystem.
 const DEPS_ENTRY = "src/agent/routes/agent.routes.ts";
 
-// Relative import specifiers in a source file: `from "./x.js"` and `await import("../y/z.js")`. Bare
-// specifiers (`@intentic/…`, `node:fs`) are deliberately not followed, the graph is this tree's own.
+// Relative import specifiers (`from "./x.js"`, `import("../y/z.js")`); bare specifiers like `@intentic/…` or `node:fs`
+// are not followed.
 const relativeSpecifiers = (text: string): string[] => [
     ...[...text.matchAll(/from\s+"(\.[^"]+)"/g)].map((match) => match[1]!),
     ...[...text.matchAll(/import\("(\.[^"]+)"\)/g)].map((match) => match[1]!),
 ];
 
-// NodeNext source imports the EMITTED name, so `./agent.js` is `agent.ts` on disk. A specifier that resolves
-// outside the copied tree (or to an excluded test) simply has no node in this graph.
+// NodeNext imports the emitted name, so `./agent.js` is `agent.ts` on disk. A specifier resolving outside the copied
+// tree, or to an excluded test, has no node in this graph.
 const resolveSpecifier = (workspace: string, from: string, specifier: string, present: ReadonlySet<string>): string | undefined => {
     const path = relative(workspace, resolve(dirname(join(workspace, from)), specifier))
         .replaceAll("\\", "/")
@@ -272,11 +250,7 @@ const importClosure = async (workspace: string, entry: string): Promise<Set<stri
     return reached;
 };
 
-// The task frontier models are expected to struggle with, and the one imp mode should be best placed to win:
-// the ANSWER is a single number, but reaching it means opening ~93 of the tree's 198 files and keeping a
-// running graph straight, so a single context fills with source it must then reason over. Answering from the
-// entry file alone gives 25, so a run that never went transitive is unmistakable in the result rather than
-// merely wrong.
+// Answering from the entry file alone gives 25, so a shallow run is unmistakably wrong, not just off.
 const depsTask: BenchTask = {
     id: "deps",
     title: `count the transitive relative-import closure of ${DEPS_ENTRY}`,
@@ -312,16 +286,10 @@ const depsTask: BenchTask = {
     },
 };
 
-// ---- defects: read a large codebase and notice what is WRONG in it ----------------------------------------
+// defects: read a large codebase and notice what's wrong.
 
-// Four deliberate defects planted into the copied tree. Each is syntactically valid, semantically wrong, and
-// contradicted by intent that is visible right where it sits, a comment, a name, or the obvious purpose of the
-// function. None is findable by pattern: no regex knows that truncating a descriptive window slug to zero
-// characters contradicts the function's purpose, so an agent has to READ and UNDERSTAND, across a tree far
-// too large to hold at once.
-//
-// Anchors are exact source strings, and prepare() THROWS if one no longer matches, so an edit upstream breaks
-// the benchmark loudly instead of silently planting three defects and grading against four.
+// Four deliberate defects, each syntactically valid but wrong in a way only reading reveals. Anchored to exact source
+// strings; prepare() throws if one no longer matches, so drift fails loudly.
 interface Defect {
     readonly file: string;
     readonly find: string;
@@ -383,8 +351,8 @@ const plantDefects = async (workspace: string): Promise<PlantedDefect[]> => {
     return planted;
 };
 
-// A reported defect matches a planted one when it names the same file and lands within a couple of lines,
-// close enough that the agent clearly found THIS defect, loose enough not to punish an off-by-one.
+// A reported defect matches a planted one when it names the same file and lands within a couple of lines: close enough
+// to know it found this defect, loose enough not to punish an off-by-one.
 const LINE_TOLERANCE = 2;
 const matches = (claim: { file?: unknown; line?: unknown }, planted: PlantedDefect): boolean =>
     typeof claim.file === "string" &&
@@ -392,10 +360,7 @@ const matches = (claim: { file?: unknown; line?: unknown }, planted: PlantedDefe
     (claim.file === planted.file || claim.file.endsWith(planted.file.replace("daemon/", ""))) &&
     Math.abs(claim.line - planted.line) <= LINE_TOLERANCE;
 
-// How many files the agent is actually asked to read. Sized on purpose: large enough that holding all of it
-// while judging each line is real work (~46k tokens of dense code), small enough that a careful agent FINISHES.
-// An unscoped version of this task had a run read all 235 files of the tree and still have no answer at 600s,
-// a benchmark nobody completes produces no comparison at all, only timeouts.
+// Large enough to be real work, small enough to finish; unscoped, a run read all 235 files and timed out.
 const DEFECT_SCOPE = "src/agent";
 
 const defectsTask: BenchTask = {
@@ -404,7 +369,7 @@ const defectsTask: BenchTask = {
     prepare: async (dir) => {
         const workspace = await copyDaemonFixture(dir);
         const planted = await plantDefects(workspace);
-        // Counted from the fixture rather than hardcoded, so the prompt cannot drift from what is on disk.
+        // Counted from the fixture rather than hardcoded, so the prompt can't drift from what's on disk.
         const scopeFiles = (await walkFiles(join(workspace, DEFECT_SCOPE), isCountedFile)).length;
         return {
             prompt: [
@@ -418,8 +383,8 @@ const defectsTask: BenchTask = {
                 const answer = (await readAnswer(dir, "answer.json")) as { defects?: unknown } | undefined;
                 const claims = Array.isArray(answer?.defects) ? (answer.defects as { file?: unknown; line?: unknown }[]) : [];
                 const found = planted.filter((defect) => claims.some((claim) => matches(claim, defect)));
-                // F1, so both misses and padding cost: a run that lists twenty candidates to cover four defects
-                // has not found them, it has declined to choose.
+                // F1, so padding costs too: twenty guesses covering four defects hasn't found them, only declined to
+                // choose.
                 const precision = claims.length === 0 ? 0 : found.length / claims.length;
                 const recall = found.length / planted.length;
                 const score = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
@@ -443,8 +408,7 @@ const sweepTask: BenchTask = {
     prepare: async (dir) => {
         const workspace = await copyDaemonFixture(dir);
 
-        // Ground truth is computed from the fixture the agent is looking at, not hardcoded, so the task stays
-        // valid as this repo changes, and the expected number can never silently rot.
+        // Ground truth computed from the fixture itself, not hardcoded, so it can't silently rot as the repo changes.
         const files = await walkFiles(workspace, isCountedFile);
         let expected = 0;
         for (const file of files) {
@@ -468,8 +432,7 @@ const sweepTask: BenchTask = {
                 const count = typeof answer?.count === "number" ? answer.count : undefined;
                 // Partial credit by relative error, so "off by 3" and "off by 300" don't read the same.
                 const score = count === undefined || expected === 0 ? 0 : Math.max(0, 1 - Math.abs(count - expected) / expected);
-                // The expected count rides the line either way: a run that answered nothing is the case where
-                // you most want to know what it was supposed to say.
+                // The expected count rides along either way, which matters most exactly when nothing was answered.
                 return {
                     solved: count === expected,
                     score,
@@ -480,10 +443,9 @@ const sweepTask: BenchTask = {
     },
 };
 
-// ---- registry ----------------------------------------------------------------------------------------------
+// Registry.
 
-// The default ARC task. Any id from the ARC-AGI-2 public evaluation set works, pass `arc:<id>` to swap it,
-// which is how you check that a result is about imp mode rather than about one puzzle.
+// The default ARC task; pass `arc:<id>` to check a result is about imp mode and not one puzzle.
 const DEFAULT_ARC_ID = "0934a4d8";
 
 export const taskFor = (spec: string): BenchTask => {

@@ -22,82 +22,21 @@ import ModelPinList from "./ModelPinList.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
 import ModelRoleRow from "./ModelRoleRow.vue";
 
-/* EVERY MODEL CHOICE THIS SANDBOX MAKES, in one place, because "where do I set a model" may only have one
- * answer. It sits directly under the AI accounts because every row is a choice OVER them: a model pinned here
- * can never name a provider this sandbox has no credential for, which is exactly the promise a cross-sandbox
- * preference in personal Settings could not make.
- *
- * ONE ROW PER JOB, DRAWN FROM THE CONTRACT'S OWN CATALOG (model-roles.ts). The page used to hold four rows
- * grouped by how hard the work was assumed to be — a "quick model" for the small automatic jobs, an "agent
- * runs" tier for the big ones, plus two that already named a job. That grouping was a guess about work its
- * owner knows better, and it was a guess there was no way to talk around: pinning Opus to get better commit
- * subjects also pinned it to every session title and every loop verdict, and one "agent runs" tier covered a
- * documentation sweep and a red production pipeline alike. A row per job is more to read than four; it is also
- * the first version of this page where the thing somebody wants to say can be said.
- *
- * FOUR GROUPS, AND THE CATALOG DECIDES WHICH IS WHICH. Fourteen jobs on one surface is a table, not a page:
- * one unbroken run of rows with no landmark to say where you are in it or which rows are like the one you came
- * for. The blocks are declared upstairs (MODEL_ROLE_BLOCKS) rather than assembled here, so they are the
- * distinctions the table ALREADY makes — a one-shot against a whole session, and a session your click starts
- * against one that starts without you — rather than a second taxonomy this file would have to keep in step. The
- * page's job is to draw them; a role added to the catalog joins the right group by saying what it is.
- *
- * AND EACH GROUP IS READ IN ONE OF TWO VIEWS, WHICH IS THE REST OF THAT COST PAID BACK. Advanced is the page's
- * true shape, a row per job. Simple collapses the block into ONE ordered list — the sentence most owners
- * actually have ("these five, on this, in this order") said once instead of five times. Nothing is stored for
- * it: the collapsed list reads what every job of the block holds and writes back to all of them, so the switch
- * cannot lose a distinction that the rows would show (see `groupList` and <ModelGroupRow>). A group opens in
- * the view its own setting asks for — collapsed while its jobs agree, apart the moment they do not.
- *
- * AND THE ORDER OF THE GROUPS IS REACH, which is the argument the single list used to make in prose: jobs
- * nobody picked a model for come first, because they run constantly and their bill turns up without a click;
- * then the sessions somebody presses for; then the sessions that fire on their own, which are the ones an owner
- * is least likely to be watching and most likely to want held to a budget; then automatic tier, the only
- * setting here that can override a model chosen a second ago. The chat's own model is not on this page at all:
- * it lives in the composer, where it is chosen per turn and per conversation.
- *
- * THE ROWS ARE SELECTABLE, and that is the honest cost of a true per-job model being paid back. The commonest
- * thing anyone wants to say — "all of these, on this model, at this tier" — took one trip through the same
- * panel PER JOB, and the catalog grows (a role added to the table appears here by existing, which is the
- * point). That is a UI problem rather than a modelling one, and it is solved on top of the true model rather
- * than by collapsing it: tick the jobs, open ONE picker, and the model and its tier land on every one of them
- * (see `applyToSelection`). The grouping the page threw away was a fixed guess about which jobs belong
- * together; a selection is the same saving made by the person who knows.
- *
- * AN EMPTY ROW IS THE JOB AT ITS FLOOR, AND NOTHING IS RECOMMENDED FOR IT. A one-shot row used to read
- * "Auto: Gemini 3 Flash Lite, then Claude Haiku 4.5, then …" — a ladder derived from whatever happened to be
- * connected, re-ranking itself the day an account was added, spending accounts the owner had connected for
- * something else. It was presented as discoverability and it was really a default nobody chose. Now a row with
- * no models says so in a word: a one-shot with none is `off` and does not run, a whole session with none opens
- * on the model the owner picked for their own chat. Both are chips beside the name rather than the two-line
- * paragraphs they used to be — <ModelRoleRow> says why.
- *
- * EVERY ENTRY IS EDITED IN THE APP'S OWN MODEL PICKER (ModelPinPicker → the composer's ModelPicker), which is
- * what replaced the 14rem dropdown these rows used to offer and the single effort control that used to sit
- * beside the agent-run list. That control asked ONE question of a list whose entries are chosen precisely
- * because they differ — a frontier head, a cheap account under it — and a reasoning scale is a property of the
- * model, so any answer to it was off-scale for half the list. Effort, thinking, speed and the harness now
- * belong to the entry that will actually run, on every row. */
+// Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLES/MODEL_ROLE_BLOCKS), grouped by
+// the catalog rather than by hand here. A block's Simple view stores nothing of its own, it reads and writes the same
+// per-job settings as Advanced, so switching views never changes what's saved.
 
 const { settings, patch } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
 
-/* THE TIER JUDGE'S OWN RECORD, the numbers the Measure state exists to produce, drawn where the switch is so
- * "switch to On once the spend history says so" points at something on the same screen instead of at a promise.
- * Thirty days, fixed: long enough for the shares to mean something, short enough that a re-fitted judge isn't
- * graded on its predecessor's verdicts forever. */
+// Fixed window: long enough to mean something, short enough not to grade a since-changed judge forever.
 const TIER_WINDOW_DAYS = 30;
 const tierWindow = computed(() => ({ from: new Date(Date.now() - TIER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }));
 const { savings } = useSavings(tierWindow);
 const tierReport = computed(() => savings.value?.tier);
 const pct = (part: number, whole: number): string => `${Math.round((part / whole) * 100)}%`;
 
-/* THE REPORT AS A <Verdict>, which is the shape every other measured answer in the app is drawn in: the figure,
- * what it is a figure of, and the evidence under it.
- *
- * THE SENTENCES ARE ASSEMBLED HERE rather than in the template, because written inline each needs a
- * `<template v-if>` mid-sentence and the whitespace gymnastics that go with it (`}}<template …></template\n>·`)
- * — which is unreadable, and one stray newline away from printing a space before a middot. */
+// Built here, not in the template, to avoid inline `v-if`s mid-sentence for the optional share.
 const tierUnit = computed<string>(() => {
     const report = tierReport.value;
     if (report === undefined) {
@@ -106,8 +45,7 @@ const tierUnit = computed<string>(() => {
     const share = report.judged > 0 ? ` (${pct(report.fast, report.judged)})` : ``;
     return `of ${report.judged} turns judged simple${share} · last ${TIER_WINDOW_DAYS} days`;
 });
-/* What became of those judgements. Empty when nothing has happened yet, which <Verdict> reads as absent: a row
- * of zeroes is a claim that three things were measured and came to nothing, and none of them were measured. */
+// Empty until something has happened; `<Verdict>` reads empty as absent, not as a measured zero.
 const tierEvidence = computed<string>(() => {
     const report = tierReport.value;
     if (report === undefined) {
@@ -122,17 +60,14 @@ const tierEvidence = computed<string>(() => {
         .join(` · `);
 });
 
-/* THE ONE WRITE PATH FOR EVERY ROLE LIST ON THIS PAGE, and it sends the WHOLE record every time, because the
- * settings patch merges at the TOP level only: a row that sent its own key alone would drop every other role's
- * list with it. The bulk editor below writes several keys through this same call, in one patch, so a selection
- * of nine jobs is one save rather than nine racing ones. */
+// Sends the whole `modelRoles` record every time: the settings patch merges only at the top level, so writing one
+// role's key alone would drop the others. The bulk editor batches several keys through here in one patch.
 const writeRoles = (next: Partial<Record<ModelRole, ModelPin[]>>): void => patch({ modelRoles: { ...settings.value?.modelRoles, ...next } });
 
 const listOf = (role: ModelRole): readonly ModelPin[] => settings.value?.modelRoles[role] ?? [];
 
-/* ONE EDITOR PER ROLE, BUILT FROM THE CATALOG rather than written out. Every row stores the same thing — an
- * ordered list of pins under settings.modelRoles[role] — so the only per-row facts left are the ones the
- * catalog already holds, and a role added there gets a working row here by existing. */
+// Built from the catalog: every role stores the same shape (an ordered pin list), so a new role gets a working row for
+// free.
 const editorFor = (role: ModelRole): PinnedList =>
     pinnedList({
         read: () => listOf(role),
@@ -143,59 +78,28 @@ const editorFor = (role: ModelRole): PinnedList =>
         knobs: true,
     });
 
-/* EVERY JOB OF A SET, WRITTEN TOGETHER, so a group of nine is one save rather than nine racing ones: the
- * settings patch merges at the TOP level, so nine separate writes would each carry a record read before the
- * last one landed. Both of this page's multi-job gestures go through it — the collapsed list just below, and
- * the selection's own verbs further down. */
+// Writes a whole set of roles in one patch, avoiding the top-level-merge race of separate writes; used by both the
+// collapsed list and the selection verbs.
 const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
     writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
 
-/* ═══ THE ONE JOB THAT CAN BE SWITCHED OFF FROM SOMEWHERE ELSE ═══
- *
- * A special case in a page otherwise drawn entirely from a table, and it earns that: the judge is the only job
- * here with a switch of its own (settings.commandJudge, on the Safety tab), so it can go inert while every
- * neighbour stays live. A disabled control with no explanation is the thing a settings page owes an answer for,
- * and a row may not ask for a press it has just refused — so while the judge is off its row says so and points
- * at the switch instead of inviting a pin.
- *
- * AND NOTHING ELSE ON THIS PAGE MAY WRITE TO IT EITHER, which is the half that used to be missing. The refusal
- * was the ROW'S alone: the collapsed list still wrote all five jobs including the one it had just greyed out,
- * the master box still ticked it, and — the failure that gave this away — a block whose four live jobs held
- * identical lists still read `jobs differ`, because the fifth was empty for a reason nobody could act on from
- * this page. A job that cannot run is not a disagreement, and a chip that says otherwise sends its reader
- * looking for a difference to fix in a row that refuses to be fixed.
- *
- * So an inert job drops out of its block's GROUP gestures entirely: not counted, not named, not written, not
- * tickable. Its own list is left exactly as the owner wrote it, for the day the judge comes back on — which is
- * the other reason not to fold it in. Of every job here it is the one most likely to be pinned deliberately
- * (see the note its row carries), and a collapsed row that quietly overwrote that while the feature was off
- * would spend the owner's best model's absence on their behalf. */
+// The judge is the one job switchable off elsewhere; while off it must drop out of every group gesture, not just refuse
+// its own row, or a collapsed write could overwrite it and `jobsDiffer` could misfire.
 const JUDGE = `safety-judge`;
 const judgeOff = computed(() => settings.value?.commandJudge === `off`);
 const inert = (role: ModelRole): boolean => role === JUDGE && judgeOff.value;
 
-// A set of jobs as it stands right now, which is what every gesture over SEVERAL jobs acts on: the collapsed
-// list, the differ test that words its chip and opens its view, and the selection's own box and verbs.
+// Jobs actually reachable right now; what every multi-job gesture (collapsed list, differ check, selection) acts on.
 const live = (ids: readonly ModelRole[]): readonly ModelRole[] => ids.filter((role) => !inert(role));
 const liveRoles = (roles: readonly ModelRoleSpec[]): readonly ModelRoleSpec[] => roles.filter((role) => !inert(role.id));
 
-/* ═══ A WHOLE BLOCK AS ONE LIST, WHICH IS ALL THE SIMPLE VIEW IS ═══
- *
- * NOTHING IS STORED PER BLOCK. The setting is one ordered list per job and stays that way — it is the entire
- * reason this page exists in this shape — so a block's list is DERIVED from its jobs on the way in and fanned
- * back out to every one of them on the way out. Switch a group to Advanced afterwards and the rows say exactly
- * what the collapsed row wrote, which is the property that makes the view safe to offer at all.
- *
- * TWO ENTRIES ARE THE SAME WHEN EVERY FIELD MATCHES, not merely the model: a job running Haiku at `max` and one
- * running it at the provider's own default are two different settings, and a collapsed row that called them
- * equal would draw one of them and silently re-point the other on the next press. */
+// Nothing is stored per block: its list is derived from jobs and fanned back out, so Advanced later shows exactly what
+// was written. Identity needs every field to match, not just the model, or a re-point could silently hit a lookalike.
 const pinIdentity = (pin: ModelPin): string =>
     [modelPinKey(pin), pin.effort ?? ``, pin.thinking ?? ``, pin.fast ?? ``, pin.harness ?? ``].join(`|`);
 
-/* WHAT EVERY JOB OF A BLOCK HOLDS, in the first job's order. An INTERSECTION rather than a union, because the
- * row is read as "what these jobs run": a union would name a model on a row most of whose jobs do not have it,
- * which is the one lie a collapsed view is in a position to tell. Where the jobs agree — the ordinary case, and
- * the only case this view opens itself for — it is simply their list. */
+// Intersection, not union: a union would show a model on jobs that don't actually have it, the one lie a collapsed view
+// could tell.
 const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
     const [first, ...rest] = ids.map((role) => listOf(role));
     if (first === undefined) {
@@ -205,13 +109,10 @@ const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
     return first.filter((pin) => others.every((held) => held.has(pinIdentity(pin))));
 };
 
-// Whether a block's jobs disagree at all: the same entries in the same order is one answer, anything else is
-// not. It words the collapsed row's chip, and it decides which view the group opens in. Asked of the LIVE jobs
-// alone — a job nothing on this page can write to may not be the reason a block reads as split.
+// Same entries, same order, across the live jobs only; an inert job may not be the reason a block reads as split.
 const jobsDiffer = (ids: readonly ModelRole[]): boolean => new Set(live(ids).map((role) => listOf(role).map(pinIdentity).join(`\n`))).size > 1;
 
-// One editor over a whole block, offering a row's own four gestures: whatever the list becomes is written to
-// every live job of that block, in one patch.
+// One editor over a whole block: whatever it becomes is written to every live job of it, in one patch.
 const groupList = (ids: readonly ModelRole[]): PinnedList =>
     pinnedList({
         read: () => sharedPins(live(ids)),
@@ -222,18 +123,13 @@ const groupList = (ids: readonly ModelRole[]): PinnedList =>
         knobs: true,
     });
 
-/* THE GROUPS, EACH WITH ITS ROWS' EDITORS AND ITS OWN COLLAPSED ONE ATTACHED. Built once: the editors close
- * over the settings ref, so they stay live without being rebuilt, and the block a role sits in is the catalog's
- * answer rather than a filter kept in step here. */
+// Built once: editors close over the settings ref and stay live; block membership is the catalog's answer.
 const blocks = MODEL_ROLE_BLOCKS.map((block) => {
     const ids = block.roles.map((role) => role.id) as readonly ModelRole[];
     return { ...block, ids, rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })), group: groupList(ids) };
 });
 
-/* THE CHEAPER-TIER LIST, the one model setting here that is NOT a role and should not become one. It names a
- * substitution automatic tier selection makes on a turn the user started themselves, so it is a property of
- * that feature rather than a job of its own — and it stores `${provider}:${model}` keys, without knobs, because
- * the turn it substitutes into already carries its own effort. */
+// Not a role: a property of automatic tier selection, storing plain `${provider}:${model}` keys with no knobs.
 const fast = pinnedList({
     read: () => settings.value?.autoFastModels ?? [],
     write: (keys) => patch({ autoFastModels: [...keys] }),
@@ -241,71 +137,38 @@ const fast = pinnedList({
     encode: (pin) => modelPinKey(pin),
 });
 
-/* ═══ SETTING SEVERAL JOBS AT ONCE, ONE BLOCK AT A TIME ═══
- *
- * WHAT IS TICKED, as an ordered list rather than a Set, because it is also read as "how many" and iterated to
- * write; the catalog is a couple of dozen rows at most, so `includes` is cheaper than the reactivity a Set proxy
- * costs. It is per-visit state and deliberately not persisted: a selection is a gesture in progress, and one
- * restored from last week would have the next pick land on jobs nobody is looking at.
- *
- * THE GESTURE BELONGS TO A BLOCK, NOT TO THE PAGE, and that is what the split changed rather than a detail of
- * where the control was parked. While this was one list of eighteen, "all of these on one model" was the only
- * sentence available and a page-wide bar was the honest place for it. With the blocks named, the sentence
- * somebody actually wants is a block's: put the one-shot helpers on something cheap, hold the runs nobody is
- * watching to a budget. A page-wide select-all now spans three claims that have nothing to do with each other,
- * and the verbs beside it would be acting on a set spread over three surfaces, only one of which is on screen.
- *
- * So every job group carries its own master box and its own verbs, on the right of its own heading, and each
- * acts on THAT block's rows and no others. A tick still means the same thing everywhere — one flat list of
- * ticked roles underneath — but nothing offers to act on more of it than the group you are looking at. */
+// Ordered list, not a Set (also read as a count); per-visit only, never persisted.
 const selected = ref<readonly ModelRole[]>([]);
 const isSelected = (role: ModelRole): boolean => selected.value.includes(role);
 const selectRole = (role: ModelRole, on: boolean): void => {
     selected.value = on ? [...selected.value.filter((held) => held !== role), role] : selected.value.filter((held) => held !== role);
 };
 
-/* What is ticked WITHIN one block, in the block's own order rather than in the order they were ticked: it is
- * what the header counts, what the verbs write, and what the panel's header names. It is the page's one choke
- * point for "which jobs is this gesture about", so it is where an inert job leaves the set — a bulk write may
- * not reach a row whose own Add button is refusing presses. */
+// The page's one choke point for "which jobs is this gesture about", in the block's own order; drops inert jobs, since
+// a bulk write can't reach a row whose own Add button already refuses presses.
 const selectedIn = (ids: readonly ModelRole[]): readonly ModelRole[] => live(ids).filter((role) => selected.value.includes(role));
 const allSelectedIn = (ids: readonly ModelRole[]): boolean => selectedIn(ids).length === live(ids).length;
 const someSelectedIn = (ids: readonly ModelRole[]): boolean => {
     const picked = selectedIn(ids).length;
     return picked > 0 && picked < live(ids).length;
 };
-// All or nothing, from the group's own header: "every one-shot helper on this model" is the shape a sandbox
-// actually wants, and it is one press. Untick drops every id of the block, live or not; tick takes the live
-// ones, so the box can reach `all` on a block holding a job that is switched off.
+// Untick drops every id of the block; tick takes only the live ones, so the box can still read `all` when one job is
+// switched off.
 const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
     selected.value = on
         ? [...selected.value.filter((held) => !ids.includes(held)), ...live(ids)]
         : selected.value.filter((held) => !ids.includes(held));
 };
 
-/* ═══ SIMPLE OR ADVANCED, ONE ANSWER PER GROUP ═══
- *
- * THE SWITCH IS THE GROUP'S, and that is the same argument the selection's verbs just made: "every one-shot
- * helper on something cheap" and "hold the runs nobody is watching to a budget" are decisions with different
- * amounts of care behind them. An owner who has pinned four different models across the runs they start still
- * wants the helpers as one line, and a page-wide toggle would make them choose one reading for all eighteen.
- *
- * WHICH VIEW A GROUP OPENS IN IS DERIVED FROM THE SETTING ITSELF rather than defaulted: a block whose jobs
- * already hold different lists opens Advanced, because collapsing it would fold away a distinction somebody
- * made on purpose; a block whose jobs agree opens Simple, because there is nothing to see apart.
- *
- * DERIVED ONCE, WHEN THE RECORD LANDS, and this is the part that has to be deliberate. Read continuously, a
- * group would re-fold itself mid-gesture — set the last of five jobs to match its neighbours in Advanced and
- * the rows you are working in would collapse under the cursor. So the setting decides how the page OPENS, and
- * from then on the reader decides. */
+// Per-group, not a page toggle: opens Advanced if jobs already disagree (collapsing would hide that), Simple if they
+// agree. Derived once when settings land, not continuously, or a group could refold itself under the cursor.
 type ModelView = `simple` | `advanced`;
 const VIEWS: readonly { readonly label: string; readonly value: ModelView }[] = [
     { label: `Simple`, value: `simple` },
     { label: `Advanced`, value: `advanced` },
 ];
 
-// What the record asked for when it arrived, and what the reader has asked for since. Two refs rather than one
-// because a press that lands before the settings do may not be undone by the seeding that follows it.
+// Two refs: what settings opened with, and what's chosen since, so a late seed can't undo an early press.
 const openedIn = shallowRef<Partial<Record<ModelRoleBlockId, ModelView>>>({});
 const chosenView = ref<Partial<Record<ModelRoleBlockId, ModelView>>>({});
 watch(
@@ -319,8 +182,7 @@ watch(
 );
 const viewOf = (id: ModelRoleBlockId): ModelView => chosenView.value[id] ?? openedIn.value[id] ?? `simple`;
 
-// Collapsing a group drops its ticks with it: a selection is a gesture over ROWS, and its rows have just gone.
-// Left standing, the next Advanced visit would open with jobs ticked that nobody on this screen selected.
+// Collapsing a group drops its ticks too, or the next Advanced visit would open with rows ticked that nobody chose.
 const setView = (block: { readonly id: ModelRoleBlockId; readonly ids: readonly ModelRole[] }, view: ModelView): void => {
     chosenView.value = { ...chosenView.value, [block.id]: view };
     if (view === `simple`) {
@@ -328,28 +190,19 @@ const setView = (block: { readonly id: ModelRoleBlockId; readonly ids: readonly 
     }
 };
 
-/* THE PIN THE OPEN BULK PANEL HAS WRITTEN, or undefined before it has written one. It is what turns a bulk
- * add into an entry the picker can draw its KNOBS for: the footer only appears over a pin that exists
- * (ModelPinPickerBody), and "the model plus its tier, for all of these" is the whole point of the gesture, so
- * the model lands first and the panel stays up on it. */
+// The bulk panel's written pin so far, if any; lets the picker draw knobs once one exists.
 const bulkPin = shallowRef<ModelPin | undefined>(undefined);
 
-/* Models already written into EVERY job of the set being edited, which is the only honest reading of "already
- * taken" for a selection: one that is in some of the lists and not others still has somewhere to land, and
- * greying it out would refuse a press that would have done something. */
+// Taken only if every job in the set already has it; a model held by some but not others still has somewhere to land.
 const sharedTaken = (roles: readonly ModelRole[]): readonly string[] => {
     const lists = roles.map((role) => listOf(role).map((pin) => modelPinKey(pin)));
     return lists.length === 0 ? [] : lists.reduce((shared, keys) => shared.filter((key) => keys.includes(key)));
 };
 
-/* ONE JOB'S LIST WITH THIS PIN IN IT, which is an UPSERT rather than an append, in three cases and in this
- * order:
- *   - `replacing` is the pin this same panel wrote a moment ago, and a second pick supersedes the first: the
- *     user is re-pointing the entry they just made, exactly as pressing a row and picking again re-points that
- *     one. Dropped first, so re-pointing never leaves the abandoned model behind in nine lists.
- *   - an entry already naming this model is written THROUGH, keeping its place in the order, so a tier chosen
- *     in the panel lands on the entry rather than beside it as a duplicate.
- *   - otherwise it joins the end of the order, which is what adding means everywhere else on this page. */
+// Upsert, not append, in order:
+// - drops the pin this same panel just wrote, if the entry is being re-pointed
+// - writes through an entry that already names this model, keeping its place
+// - otherwise appends to the end
 const withPin = (list: readonly ModelPin[], pin: ModelPin, replacing: ModelPin | undefined): ModelPin[] => {
     const key = modelPinKey(pin);
     const kept =
@@ -358,32 +211,21 @@ const withPin = (list: readonly ModelPin[], pin: ModelPin, replacing: ModelPin |
     return at === -1 ? [...kept, pin] : kept.map((held, index) => (index === at ? pin : held));
 };
 
-// The model, and every knob turned after it, onto every job of the set (`acrossRoles`, upstairs, is the one
-// writer for both this and the collapsed list).
+// The model plus every knob set after it, onto every job in the set; `acrossRoles` is the one writer for both this and
+// the collapsed list.
 const applyToRoles = (roles: readonly ModelRole[], pin: ModelPin): void => {
     const replacing = bulkPin.value;
     bulkPin.value = pin;
     acrossRoles(roles, (role) => withPin(listOf(role), pin, replacing));
 };
 
-/* EMPTYING THE TICKED JOBS OF ONE GROUP, which is a real gesture rather than a destructive convenience: an
- * empty list is a one-shot switched off and a session handed back to the composer, so this is how a sandbox
- * says "stop choosing models for these" in one press instead of one per job. No confirmation, for the same
- * reason removing the last entry of one row needs none — the models are named on screen and adding them back is
- * the gesture beside it. */
+// A real gesture, not just a destructive one: an empty list means switched off (or handed back to the composer); no
+// confirmation, same as removing a row's last entry.
 const clearRoles = (ids: readonly ModelRole[]): void => acrossRoles(selectedIn(ids), () => []);
 
-/* ═══ THE ONE PICKER ═══
- *
- * ONE PANEL FOR THE PAGE, over whichever entry raised it, which is the shape the shell's own picker already
- * has (hostModelPicker.ts) and for the same reason: a second ask supersedes the first, because a panel still
- * open belongs to a trigger the user has already moved away from.
- *
- * WHAT IT IS OPEN OVER is a TARGET rather than a (list, index) pair, and that is what lets one panel serve two
- * gestures that answer differently. A row's target writes one entry of one list; the selection's target writes
- * one pin across every ticked job. Both are read LIVE — `pin` and `taken` are functions, not values — because
- * a knob written through the panel changes the entry underneath it, and a panel redrawing the value it opened
- * with would show the tier the user just moved away from. */
+// One panel for the page, since a second ask supersedes the first. Its target is abstracted, not a (list, index) pair,
+// so one panel serves both a row's write and the selection's; `pin`/`taken` stay live so a knob change never shows
+// stale.
 interface PickerTarget {
     readonly anchor: HTMLElement;
     readonly header: string;
@@ -392,12 +234,9 @@ interface PickerTarget {
     readonly taken: () => readonly string[];
     // Answers the panel's question: a model row picked from the list.
     readonly apply: (pin: ModelPin) => void;
-    // Writes a knob through. Distinct from `apply` only for a row being ADDED to, which has no entry to
-    // configure until the pick has made one.
+    // Writes a knob through; differs from `apply` only while adding, where there's no entry yet to configure.
     readonly configure: (pin: ModelPin) => void;
-    /* Whether the panel survives its own answer. A row's does not — the pick IS the answer, and the entry it
-     * made opens the same panel again with its knobs in it. The selection's does, because the tier is the
-     * other half of one gesture and cannot be drawn until there is an entry to draw it for. */
+    // Whether the panel survives its answer: a row's doesn't; the selection's does, still needing a tier drawn.
     readonly stayOpen: boolean;
 }
 
@@ -422,18 +261,14 @@ const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTML
     };
 };
 
-/* THE BULK PANEL, RAISED BY ONE GROUP'S HEADER AND BOUND TO THAT GROUP'S TICKS.
- *
- * The set is CAPTURED at open rather than read live, and that is what keeps the header honest: it names a
- * number, the panel stays open across a model and then a tier, and a set that grew underneath it would leave
- * "Model for 3 jobs" writing to four. Ticking more while it is open is answered by opening it again. */
+// The set is captured at open, not read live, so the header's count stays honest even if more gets ticked while it's
+// open; ticking more is answered by reopening the panel.
 const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void => {
     bulkPin.value = undefined;
     const roles = selectedIn(ids);
     editing.value = {
         anchor,
-        // The header is the safeguard against the one mistake this panel can make: it looks exactly like the
-        // one a single row opens, and a pick from it spends across every job it holds.
+        // The safeguard against this panel's one mistake: it looks like a single row's, but spends across every job.
         header: `Model for ${roles.length} ${roles.length === 1 ? `job` : `jobs`}`,
         knobs: true,
         pin: () => bulkPin.value,
@@ -444,10 +279,8 @@ const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void =>
     };
 };
 
-/* THE ONE-SHOT SWALLOWED CLOSE. The picker's body answers a model row by emitting `pick` and then `close`,
- * which is right for every row on this page and wrong for the selection, whose gesture is not finished at the
- * model. So a target that says `stayOpen` arms this, and the close that arrives on the same tick is swallowed
- * once — every other close (the ×, a press outside, the next trigger) still lands. */
+// The picker emits `pick` then `close`, right for a row but wrong for a `stayOpen` target whose gesture isn't finished
+// at the model pick; the close arriving on the same tick is swallowed once, every other close still lands.
 let swallowClose = false;
 const pick = (pin: ModelPin): void => {
     const target = editing.value;
@@ -470,20 +303,14 @@ const setPickerOpen = (open: boolean): void => {
     bulkPin.value = undefined;
 };
 
-/* Three states, in the order they escalate, and the middle one is the point of the control rather than a
- * halfway house: nobody can name a sensible cutoff for "easy enough" before there is traffic to fit it against,
- * so measuring first is how the third state stops being a guess. Worded for what each DOES, not for what it is
- * called internally: "Measure" is the honest name for a mode whose whole content is that nothing happens. */
+// Middle state is the point, not a halfway house: measuring first ends the guessing about a cutoff.
 const autoTierOptions = [
     { label: `Off`, value: `off` },
     { label: `Measure`, value: `shadow` },
     { label: `On`, value: `on` },
 ];
 
-/* THE ONE DIAL, and it is named rather than numbered: the cutoff behind it is meaningless to anybody who has
- * not read the weights, while these three are sentences somebody can have an opinion about. Offered in both
- * live states, not only On, because it changes what MEASURE counts too, which is the whole point of measuring:
- * try a stop, read the share it produces, then decide whether to act on it. */
+// Named, not numbered: the cutoff is meaningless unread; offered live in both Measure and On.
 const eagernessOptions = [
     { label: `Cautious`, value: `cautious` },
     { label: `Balanced`, value: `balanced` },
@@ -492,22 +319,17 @@ const eagernessOptions = [
 </script>
 
 <template>
-    <!-- `id` so the chat can send someone straight here: the model picker's "Turn it off for every chat" is the
-         only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
-         on the top of a long settings page has not answered the question that was asked. -->
+    <!-- `id` so a chat's "Turn it off everywhere" link can land here directly, not at the top of a long settings page. -->
     <div id="models" class="flex flex-col gap-6">
-        <!-- ONE GROUP PER BLOCK, from the catalog. The heading is the block's own, so a group cannot end up
-             describing a set of rows it no longer holds.
-             STICKY, because the header now carries CONTROLS over the rows rather than only their name, which
-             is exactly what <RowGroup>'s own `sticky` is for: the rows you are ticking are the ones that carry
-             you away from the button that acts on them. -->
+        <!--
+            One group per catalog block; heading is the block's own, so it can't describe rows it no longer holds. Sticky, since the header now
+            carries controls over rows that scroll away from the button acting on them.
+        -->
         <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" sticky>
-            <!-- THE VIEW SWITCH, BUTTED AGAINST THE HEADING, where a row count and the block's own caption used
-                 to sit. Both were furniture on a page that has to be read: the count restated a list already on
-                 screen, and the caption said in a sentence what the heading says in two words. What belongs
-                 beside a group's name is the one control that changes what the group IS.
-                 IT STAYS ON A PHONE, unlike the selection cluster below: collapsing eighteen rows into three is
-                 worth more on a 390px screen than anywhere else, and switching a view spends nothing. -->
+            <!--
+                Replaces the row count and caption that used to sit here, both restating what's on screen; this is the control that changes what the
+                group is. Stays on phone, unlike the selection cluster, since collapsing rows helps most there.
+            -->
             <template #info>
                 <SegmentedControl
                     :model-value="viewOf(block.id)"
@@ -518,17 +340,10 @@ const eagernessOptions = [
                 />
             </template>
 
-            <!-- THE SELECTION, IN THIS GROUP'S OWN HEADER AND ACTING ON THIS GROUP ALONE. It used to be one bar
-                 over the whole page, which was the right shape while this page was one list of eighteen: "all of
-                 these on one model" was then the only sentence available. With the blocks named it is the wrong
-                 one — a page-wide select-all spans three claims with nothing to do with each other, and its
-                 verbs would write to rows on two surfaces you cannot see from the one you are on. The sentence
-                 somebody wants is a block's, so the control is a block's.
-                 NOT ON A PHONE, with the ticks it commands. The mark column is a job's glyph there and never a
-                 box (see <ModelRoleRow>): a bulk edit is not a gesture anybody performs on a 390px screen, and
-                 every row still sets its own model. What is withheld is the shortcut.
-                 AND NOT IN THE COLLAPSED VIEW, where there are no rows to tick and one list to write: a
-                 select-all over rows nobody can see is a promise about a surface that is not on screen. -->
+            <!--
+                Per-group, acting on that group alone (a page-wide select-all would span blocks with nothing in common). Hidden on phone (no tick
+                column there) and in the collapsed view (there are no rows to tick).
+            -->
             <template #actions>
                 <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 max-md:hidden">
                     <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
@@ -542,10 +357,7 @@ const eagernessOptions = [
                         />
                         <span>{{ selectedIn(block.ids).length > 0 ? `${selectedIn(block.ids).length} selected` : `Select jobs` }}</span>
                     </label>
-                    <!-- The verbs appear WITH a selection rather than sitting greyed: there is nothing to act on
-                         until something is ticked, and a disabled pair of buttons in three headers is furniture
-                         on every other visit to this page. The first carries its own element up as the panel's
-                         anchor, the same contract <AddModelButton> has. -->
+                    <!-- Appears only once something's ticked; disabled buttons on every visit would just be furniture. -->
                     <template v-if="selectedIn(block.ids).length > 0">
                         <Button
                             size="small"
@@ -553,18 +365,16 @@ const eagernessOptions = [
                             :disabled="!loaded"
                             @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement, block.ids)"
                         />
-                        <!-- Emptying is the other half of the vocabulary, and with an empty list meaning "off" it
-                             is how a sandbox switches several jobs off at once. -->
+                        <!-- The other half of the vocabulary: an empty list means off, so this switches several jobs off in one press. -->
                         <Button size="small" severity="danger" text label="Clear models" :disabled="!loaded" @click="clearRoles(block.ids)" />
                     </template>
                 </div>
             </template>
 
-            <!-- THE WHOLE GROUP AS ONE ROW. Not a summary of the rows below it — there are no rows below it —
-                 but the same setting read and written a block at a time. It is handed the jobs that can
-                 actually run rather than the block's whole roster: a job switched off elsewhere is one this row
-                 may not count, name or write, and while it was counted a block whose live jobs all agreed
-                 still read `jobs differ` over the one nobody could set. -->
+            <!--
+                The same per-job setting, read and written a block at a time, not a summary (there are no rows under it). Handed only jobs that can
+                actually run, so an inert one can't make an otherwise-agreeing block misreport as differing.
+            -->
             <ModelGroupRow
                 v-if="viewOf(block.id) === `simple`"
                 :block="block"
@@ -575,9 +385,7 @@ const eagernessOptions = [
                 :loaded="loaded"
                 @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(block.group, index, anchor)"
             >
-                <!-- …and it says which job it left out, because a count that drops from five to four with no
-                     word for it reads as a page that has lost a row. Same sentence and same link as the judge's
-                     own row in Advanced: what is inert, and where the switch that revives it lives. -->
+                <!-- Names the job the count leaves out, and links to the same switch the Advanced row does. -->
                 <template v-if="block.ids.includes(JUDGE) && judgeOff" #note>
                     <p class="text-2xs text-subtle">
                         Safety judge is off, so it is not one of these and nothing here writes to it.
@@ -591,9 +399,7 @@ const eagernessOptions = [
                 </template>
             </ModelGroupRow>
 
-            <!-- …or one row per job, which is what the setting actually is. `v-for` inside a <template v-else>
-                 rather than beside a `v-else` of its own: the two directives on one element are a precedence
-                 puzzle nobody should have to solve while reading a settings page. -->
+            <!-- One row per job, the setting's true shape; `v-for` sits inside `v-else` to avoid combining both directives. -->
             <template v-else>
                 <ModelRoleRow
                     v-for="row in block.rows"
@@ -607,14 +413,12 @@ const eagernessOptions = [
                     @select="(on: boolean) => selectRole(row.role.id, on)"
                     @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
                 >
-                    <!-- THE SLOT IS OFFERED TO ONE ROW IN EIGHTEEN, and the `v-if` is on the <template> so the
-                         other seventeen are handed no slot at all rather than an empty one: a slot that exists
-                         but renders nothing still opens the block under the row, which is 12px of dead space per
-                         row on a page whose whole point this round was to stop spending lines on nothing. -->
+                    <!--
+                        `v-if` sits on the `<template>`, not inside the slot, so the other seventeen rows get no slot at all: an empty slot still
+                        opens dead space below the row.
+                    -->
                     <template v-if="row.role.id === JUDGE" #note>
-                        <!-- Where the switch is. This is the only row on the page whose feature can be off from
-                             somewhere else, and a disabled control with no explanation is the thing a settings
-                             page owes an answer for. -->
+                        <!-- Points at the switch: the only row here whose feature can be off elsewhere needs to explain why it's disabled. -->
                         <p v-if="judgeOff" class="text-2xs text-subtle">
                             Nothing is judging commands at the moment, so this is not in use.
                             <RouterLink
@@ -624,9 +428,10 @@ const eagernessOptions = [
                             >
                             under Safety.
                         </p>
-                        <!-- The one thing worth saying about this choice, and it is not "pick a cheap one": of
-                             every job on this page, the judge is the only one whose input may have been written
-                             by whoever the agent was reading. -->
+                        <!--
+                            Not "pick something cheap": the judge is the only job here whose input may have been written by whatever the agent was
+                            reading, arguing for its own approval.
+                        -->
                         <p v-else class="text-2xs text-subtle">
                             Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
                             something from outside, that text may be arguing for its own approval.
@@ -636,20 +441,16 @@ const eagernessOptions = [
             </template>
         </RowGroup>
 
-        <!-- THE CHAT'S OWN TURNS, which no job above ever touches, and the reason this is a group of its own
-             rather than a nineteenth row: it is not a job, so it is not selectable, and inside a list of ticked
-             rows it had to hold the selection column open with an invisible box to keep its mark in line. A
-             heading says what that hack was trying to say. It is LAST because it is the only setting here that
-             can override a choice the user made a second ago, and a settings page owes that ordering: read down
-             and the reach grows, from jobs nobody picked a model for, to runs somebody started, to the
-             conversation in front of you. -->
+        <!--
+            Not a job (not selectable), so its own group rather than a nineteenth row needing a placeholder tick column. Last, since it's the only
+            setting that can override a choice made a second ago; the page reads in order of growing reach.
+        -->
         <RowGroup label="Cheaper turns" caption="Not a job: a substitution made inside a turn you started.">
             <Row spine title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
-                <!-- ITS MARK IS THE SAME BOX THE JOB ROWS DRAW, and it is a `#lead` rather than the `icon` prop
-                     for exactly that reason: a bare glyph measures the tier's type size (15px) where a job's
-                     mark measures the tier's `mark` (22px), so this row's title landed 8px left of every title
-                     above it and the page's one text column stepped sideways in its last group. Measured, not
-                     guessed. No tick, because this is not a job and cannot be selected. -->
+                <!--
+                    Uses `#lead` like the job rows, not the `icon` prop, so its mark matches their size instead of the smaller type-sized glyph that
+                    would misalign the title column. No tick: not selectable.
+                -->
                 <template #lead="{ mark }">
                     <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                         <Icon name="credit-card" aria-hidden="true" class="text-sm text-subtle" />
@@ -669,9 +470,7 @@ const eagernessOptions = [
                             Simple turns run on the cheaper model. Each conversation can veto it.
                         </p>
 
-                        <!-- WHAT THE JUDGE HAS RECORDED, in the app's one shape for a measured answer and with no
-                             surface of its own: the row's `#below` is already inside the row's hairline, and a
-                             fill here would split the setting down a colour change. See <Verdict>. -->
+                        <!-- The app's standard shape for a measured answer; no background, since `#below` is inside the row's hairline. -->
                         <Verdict
                             v-if="settings?.autoTier !== `off` && tierReport !== undefined"
                             tone="content"
@@ -719,10 +518,10 @@ const eagernessOptions = [
         </RowGroup>
     </div>
 
-    <!-- ONE PANEL, STANDING BY, opened over whichever trigger raised it. It is mounted rather than created per
-         open because the overlay hosts inside it measure and place themselves in a watcher on that flag: a host
-         that arrives already open never places, and parks off-screen (ResponsiveOverlay's header). Its CONTENT
-         is what remounts per open, which is what resets the search box and refreshes the catalogs. -->
+    <!--
+        Mounted once; the overlay inside places itself on an `open` watcher, so an already-open host would never place and would park off-screen. Its
+        content remounts per open, resetting the search box and catalogs.
+    -->
     <ModelPinPicker
         :open="editing !== undefined"
         :anchor="editing?.anchor"

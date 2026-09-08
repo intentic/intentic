@@ -1,30 +1,14 @@
 // @vitest-environment jsdom
-//
-// What a ```mermaid fence does once it is mounted. figures.test.ts covers the fence as data; this file covers the
-// half of the contract that only exists at render time, because mermaid's own parser is the validator and it
-// arrives behind a lazy import: a body it accepts is drawn, a body it refuses becomes an ordinary code block
-// with the source still in it.
-//
-// Mermaid is the REAL one here, not a stub. Mocking it would have left the interesting half untested: whether a
-// diagram draws at all is the entire point of the feature, and a mock that resolves with an <svg> string proves
-// only that v-html works. What the mock would have bought (a jsdom that can render SVG) costs three lines of
-// text metrics instead (below).
+// What a ```mermaid fence does once mounted: figures.test.ts covers the fence as data, this file covers render time,
+// since mermaid's own parser is the validator and arrives behind a lazy import. Mermaid is the real library here, not a
+// stub: whether a diagram draws at all is the point of the feature.
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
-/* jsdom gaps. None of them is the code's fault, and each one left unstubbed fails in a way that reads as a
- * figure bug. The first two are filled for the whole package by vitest.setup.ts, which runs before this file is
- * loaded, where a beforeAll would run too late; the rest are this file's own, below.
- *
- * `matchMedia`: the design-system barrel has import-time side effects (useDevice reads it while Picker's module
- * body evaluates), which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
- * component, so it pays the barrel's cost. `ResizeObserver`: Vue Flow measures its container on mount.
- *
- * The SVG metrics are what mermaid lays a diagram out with: it measures every label by rendering it and asking
- * for its box. jsdom has no layout, so it ships none of these, and without them every diagram takes the refusal
- * path. The boxes are fictional, which is fine: what is asserted below is that a diagram is DRAWN, never where
- * anything landed. `getContext` is stubbed to null (jsdom's own answer, minus the "not implemented" noise):
- * that is the no-canvas path in mermaidTheme.ts, where mermaid's built-in palette stands in for the app's. */
+// jsdom gaps, none the code's fault. `matchMedia`/`ResizeObserver` are filled package-wide by vitest.setup.ts. The SVG
+// metrics below are what mermaid lays a diagram out with (it measures labels by rendering and asking their box); jsdom
+// ships none, so they are stubbed with fictional boxes. `getContext` stubs to null, the no-canvas path in
+// mermaidTheme.ts.
 
 import { Markdown } from "@intentic/ui";
 
@@ -40,24 +24,16 @@ const render = (source: string): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     const app = createApp({ render: () => h(Markdown, { source }) });
-    // The real app registers `v-tooltip` globally in installUi(); registered as a no-op rather than installing
-    // the whole design system, which would drag PrimeVue's theme in for a directive nothing here asserts on.
+    // The real app registers `v-tooltip` globally; registered here as a no-op instead of installing the whole design
+    // system, which would drag in PrimeVue's theme for a directive nothing here asserts on.
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;
 };
 
-// A diagram is a queued dynamic import followed by an awaited render, so the DOM settles some way after mount
-// rather than synchronously.
-//
-// The budget bounds a HANG; it does not measure that latency, which is why it sits far above the ~0.4s the
-// first diagram costs on an idle machine. Almost all of that 0.4s is mermaid's megabyte of grammars arriving
-// on this test's own clock: the second diagram, drawn once the module is in the registry, costs a tenth of
-// it. `vi.waitFor` defaults to 1s, so the first test was the only budget in this package still sized for an
-// idle machine while vitest.config.ts had already raised every other one for exactly this reason: a full run
-// loads 242 files at once, and an import with every core busy costs roughly ten times its idle self. It duly
-// passed alone and lost the race in the suite. Kept under `testTimeout` so a genuine hang still fails on the
-// assertion below, which names the selector that never arrived, rather than as a bare test timeout.
+// A diagram is a queued dynamic import followed by an awaited render, so the DOM settles some time after mount. The
+// timeout bounds a hang rather than measuring latency: a busy CI runner can make the import itself cost far more than
+// idle.
 const settled = (host: HTMLElement, selector: string): Promise<void> =>
     vi.waitFor(
         () => {
@@ -67,14 +43,8 @@ const settled = (host: HTMLElement, selector: string): Promise<void> =>
     );
 
 describe(`<Markdown> with a mermaid fence`, () => {
-    /* One throwaway diagram, drawn before anything is asserted, purely to pay for mermaid.
-     *
-     * The lazy import only fires at MOUNT, so unlike a heavy static import it cannot be moved to collection, and
-     * whichever test mounted first was charged the megabyte of grammars plus the first layout: a fraction of a
-     * second idle, and on a runner with every core busy enough of the 20s a test is allowed (vitest.config.ts)
-     * that the wait below never got to report what was missing, the test simply ran out. Paid here instead,
-     * against the roomier hook budget, once for the file; every diagram after this one draws from the registry
-     * at a tenth of the cost. Torn down so no assertion can see it. */
+    // One throwaway diagram, drawn before anything is asserted, purely to pay for mermaid's import cost once for the
+    // file rather than charging it to whichever test happens to mount first. Torn down so no assertion can see it.
     beforeAll(async () => {
         const host = render('```mermaid\nflowchart LR\n    warm["Warm"] --> up["Up"]\n```');
         await settled(host, `.md-mermaid svg`);
@@ -84,8 +54,8 @@ describe(`<Markdown> with a mermaid fence`, () => {
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
         const host = render(`Before.\n\n\`\`\`mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n\`\`\`\n\nAfter.`);
         await settled(host, `.md-mermaid svg`);
-        // A flowchart, not mermaid's error card, which this build cannot produce anyway (suppressErrorRendering),
-        // but the class is what says the fence was understood as the diagram type it named.
+        // A flowchart, not mermaid's error card (this build cannot produce one, see suppressErrorRendering); the class
+        // says the fence was understood as the diagram type it named.
         expect(host.querySelector(`.md-mermaid svg`)?.getAttribute(`class`)).toContain(`flowchart`);
         expect(host.querySelector(`.md-mermaid`)?.textContent).toContain(`One`);
         const runs = host.querySelectorAll(`.md-run`);

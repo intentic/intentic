@@ -1,21 +1,13 @@
 // @vitest-environment jsdom
-//
-// THE RAIL'S GESTURES ON THE PANE SET: the floating window's left edge is a multi-selecting list (Ctrl adds
-// a column, Shift takes a run of rows), and this is what its PLAIN click means: that row, alone.
-//
-// Driven through the mounted list rather than against the store, because the store verb is not the part that
-// was wrong, `chat panes` in useChat.test.ts already pins it. What this file holds is the WIRING: which of
-// the click's branches the reset lives in. Put in the wrong one it either fires on a modified click (making
-// Ctrl+click a swap and the split unreachable) or fires while DOCKED, where the split is stored but not drawn
-// and collapsing one nobody can see quietly loses the arrangement the pop-out returns to.
+// Pins which click-handler branch resets the split to a plain click, through the real mounted list; `chat
+// panes` in useChat.test.ts already covers the store verb itself.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// Store half of "New agent" (agentActions.startAgent); this suite's fixture for extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -28,9 +20,7 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat component needs (see chatTabsLanes.test.ts, which mounts this same
-// list): useDevice reads matchMedia at module scope, environment.ts reads window.env, and jsdom implements
-// neither ResizeObserver nor the scrollIntoView the list asks for on every focus.
+// Globals a mounted chat needs that jsdom lacks: matchMedia, window.env, ResizeObserver, scrollIntoView.
 vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
@@ -62,7 +52,7 @@ const mountList = async (): Promise<HTMLElement> => {
     return el;
 };
 
-// Three chats with content, so none of them is the untouched draft the strip reaps under a focus move.
+// Three chats with content, so none is the untouched draft a focus move would reap.
 const openThree = (): readonly string[] => {
     const chat = useChat();
     const ids: string[] = [];
@@ -81,8 +71,7 @@ beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
     resetChat();
     resetAgents();
-    // A published full-window slot IS the wide surface (chatSurface.chatWide), and panes are offered
-    // there only: standing in the /chat area, or in the chat's own window, which publish the same slot.
+    // A published full-window slot is the wide surface (chatSurface.chatWide); panes are offered only there.
     chatFullDock.value = document.createElement(`div`);
     await nextTick();
 });
@@ -107,13 +96,10 @@ it(`collapses the split to the row clicked without a modifier`, async () => {
 
     expect(useChat().panes.value).toEqual([ids[2]]);
     expect(useChat().activeId.value).toBe(ids[2]);
-    // The columns were given back, not closed: every chat is still a row in this list.
+    // Panes are given back, not closed: every chat is still a row in this list.
     expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(ids);
 });
 
-/* BOTH COLUMNS, ONE MARK. The rail used to rank a split: the focused chat's card at full strength, the rest a
- * step fainter, which asked the reader to read a hierarchy into two chats they had put up to read together.
- * Every chat with a column wears the same card now, and the row for a chat with no column still wears none. */
 it(`marks every chat on screen the same, whichever one holds the keyboard`, async () => {
     const ids = openThree();
     const el = await mountList();
@@ -137,9 +123,8 @@ it(`still gives a row a column of its own when Ctrl says so`, async () => {
     expect(useChat().panes.value).toEqual([ids[0], ids[2]]);
 });
 
-// Docked, the panel draws the focused chat alone whatever the pane set says, and the pane gestures are not
-// offered at all, so a click here is only a focus move, and the split the reader left in the window is theirs
-// to come back to.
+// Docked, the panel draws only the focused chat and offers no pane gestures, so a click here only moves focus;
+// the split stays as the reader left it.
 it(`leaves a stored split alone when the panel is docked`, async () => {
     const ids = openThree();
     useChat().openBeside(ids[1]!);

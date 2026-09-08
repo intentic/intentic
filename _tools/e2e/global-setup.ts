@@ -25,17 +25,14 @@ import {
     WEB_URL,
 } from "./stack.js";
 
-// Boots the WHOLE stack (compose postgres → migrate → published sandbox daemon in loopback → https API under
-// bun → https web under vite), seeds the authenticated world, verifies the minted session cookie against the
-// real /api/auth/get-session, and writes the Playwright storage state. Owning it all here (instead of
-// playwright's webServer) keeps the ordering explicit: the API needs postgres, the specs need the daemon and
-// the seed. Anything already running (dev machine) is reused, not restarted.
+// Boots postgres, the sandbox daemon, the API and the web SPA in order, seeds an authenticated session, and writes
+// Playwright storage state; anything already running is reused, not restarted.
 
 const run = promisify(execFile);
 const root = repoRoot(import.meta.url);
 const cacheDir = join(import.meta.dirname, `.cache`);
 
-// Every server in this stack rides this machine's own localhost cert, whose root CI has no reason to trust.
+// Every server here uses this machine's localhost cert, which CI does not trust.
 process.env[`NODE_TLS_REJECT_UNAUTHORIZED`] = `0`;
 
 const up = async (url: string): Promise<boolean> => {
@@ -57,7 +54,7 @@ const waitUp = async (url: string, what: string, logHint: string | undefined, ti
     throw new Error(`${what} never came up at ${url}${logHint === undefined ? `` : `, see ${logHint}`}`);
 };
 
-// Detached so the whole process group can be torn down (vite/bun spawn children), logging to .cache/<name>.log.
+// Detached so vite/bun's spawned children tear down with the process group; logs to .cache/<name>.log.
 const spawnServer = (name: string, command: string, args: string[], cwd: string, env: Record<string, string>): number => {
     const log = openSync(join(cacheDir, `${name}.log`), `w`);
     const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, stdio: [`ignore`, log, log], detached: true });
@@ -72,15 +69,11 @@ export default async (): Promise<void> => {
     mkdirSync(cacheDir, { recursive: true });
     const state: StackState = {};
 
-    // Postgres + schema. Compose is idempotent; a CI-provided postgres just makes this a no-op that fails soft.
+    // Idempotent: a CI-provided postgres makes this a no-op that fails soft.
     await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: root }).catch(() => undefined);
     await run(`pnpm`, [`--filter`, `@intentic/prisma`, `migrate:deploy`], { cwd: root, env: { ...process.env, DATABASE_URL } });
 
-    // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL,
-    // that IS the mode). CONNECT_TOKEN + ZONE make GET /system/sync report an sshHostname, which the desktop-
-    // sync card requires before it offers Enable, and that same token is what the daemon's auth floor reads as
-    // "reachable from outside", so SANDBOX_ALLOW_UNAUTHENTICATED is the acknowledgement that lets this pair boot
-    // (env.config.ts carries the note; without it the daemon exits 78 and this waits out its 180s).
+    // Without SANDBOX_ALLOW_UNAUTHENTICATED the daemon exits 78 without GOOGLE_CLIENT_ID/PLATFORM_URL, as here.
     if (!(await up(`${DAEMON_URL}/health`))) {
         await run(`docker`, [`rm`, `-f`, DAEMON_CONTAINER]).catch(() => undefined);
         await run(`docker`, [
@@ -103,12 +96,9 @@ export default async (): Promise<void> => {
         await waitUp(`${DAEMON_URL}/health`, `sandbox daemon (${DAEMON_IMAGE})`, `docker logs ${DAEMON_CONTAINER}`, 180_000);
     }
 
-    // The API (bun, https via the minted cert, the exact dev shape, so the session cookie is __Secure-).
+    // Bun over https with the minted cert, matching dev, so the session cookie keeps its __Secure- prefix.
     if (!(await up(`${API_URL}/api/auth/ok`))) {
-        /* Stripe, stood in for, in THIS process: it outlives global-setup because the runner does, and the
-         * teardown closes it. Webhooks go to the API's https port over the same loopback the browser uses; the
-         * checkout page holds `checkout.session.completed` back a few seconds after sending the browser home,
-         * which is the production shape (the redirect wins the race) and what the Billing page's polling is for. */
+        // checkoutWebhookDelayMs mimics production (redirect wins the race); Billing page polling depends on it.
         const fakeStripe = await startFakeStripe({
             port: FAKE_STRIPE.port,
             secretKey: FAKE_STRIPE.secretKey,
@@ -124,14 +114,11 @@ export default async (): Promise<void> => {
             BETTER_AUTH_SECRET,
             API_URL,
             WEB_ORIGIN: WEB_URL,
-            // The minted pair, from the package that mints it. It used to be named by a path inside that
-            // package, and the certificate has since moved OUT of the repository to the OS's per-user data
-            // directory (localhost-https/paths.mjs says at length why), leaving this pointing at a file
-            // nothing writes any more, so the API died on ENOENT before a single spec ran.
+            // Minted certs live in the OS per-user data directory, not the repo.
             API_HTTPS_KEY: LEAF_KEY,
             API_HTTPS_CERT: LEAF_CRT,
             LOG_PRETTY: `false`,
-            // The hosted plan on sale, against the stand-in above (stack.ts FAKE_STRIPE).
+            // Keys and price come from stack.ts's FAKE_STRIPE; the API URL points at the fake Stripe just started.
             HOSTED_PLAN_STRIPE_SECRET_KEY: FAKE_STRIPE.secretKey,
             HOSTED_PLAN_STRIPE_WEBHOOK_SECRET: FAKE_STRIPE.webhookSecret,
             HOSTED_PLAN_STRIPE_PRICE_ID: FAKE_STRIPE.priceId,
@@ -140,7 +127,7 @@ export default async (): Promise<void> => {
         await waitUp(`${API_URL}/api/auth/ok`, `api`, join(cacheDir, `api.log`), 60_000);
     }
 
-    // The web SPA (vite dev, https :47145).
+    // Vite dev server over https on :47145.
     if (!(await up(WEB_URL))) {
         state.webPid = spawnServer(`web`, `pnpm`, [`--filter`, `@intentic/web`, `dev`], root, {});
         await waitUp(WEB_URL, `web`, join(cacheDir, `web.log`), 120_000);
@@ -148,8 +135,7 @@ export default async (): Promise<void> => {
 
     writeFileSync(STACK_STATE_FILE, JSON.stringify(state));
 
-    // Seed, then prove the cookie recipe against the real server BEFORE any spec runs, a Better Auth upgrade
-    // that changes the signing fails here with a clear message, not as a blank login page in every spec.
+    // Verified before specs run: a Better Auth signing change fails here, not as blank logins later.
     const { sessionToken } = await seed();
     const cookieValue = signedSessionCookie(sessionToken);
     const response = await fetch(`${API_URL}/api/auth/get-session`, { headers: { cookie: `${SESSION_COOKIE_NAME}=${cookieValue}` } });
@@ -175,8 +161,7 @@ export default async (): Promise<void> => {
                     sameSite: `Lax`,
                 },
             ],
-            // The cached Google ID token: sandboxClient refuses daemon calls without one, and a valid cached
-            // token means no FedCM prompt / sign-in gate ever renders (see stack.ts fakeGoogleIdToken).
+            // Without a cached Google ID token, sandboxClient refuses daemon calls and the FedCM sign-in gate renders.
             origins: [{ origin: WEB_URL, localStorage: [{ name: GOOGLE_TOKEN_STORAGE_KEY, value: fakeGoogleIdToken() }] }],
         }),
     );

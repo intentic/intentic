@@ -6,35 +6,15 @@ import type { Config } from "../../env.config.js";
 import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "./acme.js";
 import { postToPlatform } from "../platform-client.js";
 
-/* THE LOOPBACK CERTIFICATE, what lets a browser on this machine reach the daemon without Cloudflare.
- *
- * The shortcut needs HTTPS (Safari refuses http loopback from an HTTPS page as mixed content), HTTPS needs a
- * certificate, and a certificate needs a name a public CA will sign. `<id>.local.<zone>` is that name, and it
- * resolves to 127.0.0.1 under ONE wildcard record for the whole zone, so a sandbox asking for a certificate
- * costs the zone nothing permanent (@intentic/sandbox-contract localHostname says what that bought). The key
- * is generated here and never leaves; the platform is asked only for the DNS it alone holds the token for
- * (POST /sandbox/local-dns: the wildcard, asserted, and this order's own challenge).
- *
- * FAILURE IS ORDINARY AND MUST BE QUIET. No zone, no platform, an own-Cloudflare sandbox, a CA that is down, a
- * rate limit, in every case the daemon serves the loopback listener in plain HTTP instead, the browser's
- * probe notices, and Chrome and Firefox still take the shortcut while Safari uses the tunnel. Nothing here is
- * allowed to delay boot or fail a sandbox, which is why it runs detached and logs rather than throws.
- *
- * ponytail: renewal is checked on boot and daily; a sandbox left running for months renews in place, one that
- * is restarted often renews at boot. */
+// Loopback certificate: lets a browser on this machine reach the daemon over HTTPS without Cloudflare, using
+// `<id>.local.<zone>` (one wildcard record) resolving to 127.0.0.1. Failure (no zone, CA down, rate limit) is quiet:
+// the daemon falls back to plain HTTP rather than delay boot or fail the sandbox.
 
-// Renew this far ahead of expiry. Let's Encrypt issues for 90 days and asks for renewal at 30 remaining; the
-// margin also means a daemon that only restarts weekly still never serves an expired certificate.
+// Renew this far before expiry; the margin covers a daemon that only restarts weekly.
 const RENEW_BEFORE_MS = 30 * 24 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/* How soon to try again after a FAILED issuance, as opposed to the daily check that follows a good one. A
- * sandbox that has no certificate at all is serving its shortcut over plain http, which Safari refuses, so a
- * day is far too long to sit on a failure that is usually transient.
- *
- * The floor on this interval is the CA's memory rather than politeness: a validation that missed leaves the
- * CA's resolvers holding the NXDOMAIN for the zone's SOA minimum, 1800s on Cloudflare, and retrying inside
- * that window fails again on cached evidence no matter how correct the retry is. */
+// Floor is the CA's own negative-cache window (the zone's SOA minimum), not politeness.
 const RETRY_INTERVAL_MS = 45 * 60 * 1000;
 
 export interface LocalCertificate {
@@ -43,17 +23,14 @@ export interface LocalCertificate {
     readonly privateKey: string;
 }
 
-// Daemon-private and persistent, beside the session secret: outside /work (never the agent's to read or an
-// agent turn's to commit) and on the volume that survives a recreate, so a restart does not re-issue.
+// Outside /work and on the volume that survives a recreate, so a restart doesn't re-issue.
 const pathsFor = (config: Config): { dir: string; cert: string; key: string; account: string } => {
     const dir = join(config.historyRoot, "local-cert");
     return { dir, cert: join(dir, "fullchain.pem"), key: join(dir, "key.pem"), account: join(dir, "account-key.pem") };
 };
 
-/* The certificate on disk, if it still has life in it and is for the name given. `hostname` undefined means
- * "whatever this was issued for", which is what BOOT needs: the authoritative name comes from the platform and
- * boot must not wait on a network call to serve TLS it already has. A certificate for a name that has since
- * changed is caught by the renewal loop, which does know the answer, and replaced there. */
+// Certificate on disk if it still has life and matches `hostname`; undefined means whatever it was issued for, since
+// boot must not wait on the network to serve TLS it already has.
 const readUsable = (config: Config, hostname: string | undefined, now: number): LocalCertificate | undefined => {
     const paths = pathsFor(config);
     try {
@@ -63,21 +40,19 @@ const readUsable = (config: Config, hostname: string | undefined, now: number): 
         if (Date.parse(parsed.validTo) - now < RENEW_BEFORE_MS) {
             return undefined;
         }
-        // The subject's own CN when the caller has no name to check against: a certificate always knows what it
-        // is for, and reporting that is more honest than reporting a guess.
+        // Falls back to the cert's own CN when there's no name to check against.
         const own = /CN=([^\n,]+)/.exec(parsed.subject)?.[1];
         if (hostname === undefined) {
             return own === undefined ? undefined : { hostname: own, certificate, privateKey };
         }
-        // checkHost covers the SAN properly, a substring match on the PEM would not.
+        // checkHost covers the SAN properly; a substring match on the PEM would not.
         return parsed.checkHost(hostname) === undefined ? undefined : { hostname, certificate, privateKey };
     } catch {
         return undefined;
     }
 };
 
-// The ACME account key, reused across issuances so the CA sees one account per sandbox rather than a new
-// registration on every renewal (which is itself rate-limited).
+// Reused across issuances, so the CA sees one account per sandbox, not a new registration each renewal.
 const accountKeyOf = (config: Config): KeyObject => {
     const paths = pathsFor(config);
     try {
@@ -90,17 +65,8 @@ const accountKeyOf = (config: Config): KeyObject => {
     }
 };
 
-/* Ask the platform to write (or withdraw) the DNS-01 record. The hostname is derived platform-side from our
- * connect token, so this carries only the value, a sandbox cannot ask for records outside its own name.
- *
- * RETURNS THE NAME TO CERTIFY, and it is the only source of it. The platform owns the zone the wildcard and
- * the challenge are written in, so it is the only side that can say which zone this certificate belongs to.
- * This daemon used to hold a second opinion, `<id>.local.<zoneFromUrl(publicUrl)>`, and the two stop agreeing
- * the moment reachability moves to the tunnel hub: a sandbox then answers at `sandbox-<id>.sbx.<zone>`, so the
- * derived name was `<id>.local.sbx.<zone>` while the platform kept writing under `<zone>`. Validation asked for
- * a TXT at a name nothing ever wrote, every order timed out, and the listener stayed on plain HTTP — which is
- * HTTP/1.1, six connections per origin, for every window of the app. Undefined means the platform declined to
- * name one (the loopback-certificate path is off for this sandbox), which is a normal state, not a failure. */
+// Writes/withdraws the DNS-01 record via the platform, keyed off our connect token. Also the only source of the name to
+// certify, since the platform alone owns the zone; undefined means the loopback path is off.
 const relayChallenge = async (config: Config, value: string | undefined): Promise<string | undefined> => {
     const { status, json } = await postToPlatform(config, "/sandbox/local-dns", value === undefined ? {} : { challenge: value });
     if (status < 200 || status >= 300) {
@@ -111,15 +77,13 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
     return typeof answered === `string` && answered !== `` ? answered : undefined;
 };
 
-/* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one,
- * every branch is a normal state, never an error the caller has to handle. */
+// Obtains or renews the certificate; undefined means the sandbox cannot or need not have one — every branch here is a
+// normal state, not an error.
 const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
     if (config.platform.url === "" || config.connectToken === "") {
         return undefined;
     }
-    /* Assert the wildcard and learn the authoritative name in the SAME call, before anything is compared
-     * against it. It is one request either way (the record has to be re-asserted on every check regardless,
-     * see below), so asking costs nothing and settles which zone this certificate belongs in. */
+    // Learns the name while asserting the wildcard; a check reasserts anyway, so this call costs nothing extra.
     const hostname = await relayChallenge(config, undefined).catch((error: unknown) => {
         logger.warn({ err: error }, "could not reach the platform for the loopback DNS record");
         return undefined;
@@ -129,25 +93,7 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
     }
     const existing = readUsable(config, hostname, Date.now());
     if (existing !== undefined) {
-        /* A CERTIFICATE ON DISK IS NOT A NAME THAT RESOLVES, and conflating the two is how the shortcut dies
-         * quietly for months.
-         *
-         * `<id>.local.<zone>` needs two things: a certificate, which lives here and lasts 90 days, and an A
-         * record pointing at 127.0.0.1, which lives in the platform's zone and is written as a side effect of
-         * asking for that certificate. So a valid certificate used to mean this function returned before ever
-         * mentioning DNS, and the record was re-asserted only when the certificate was next reissued.
-         *
-         * Anything that removed the record in between therefore broke the shortcut until expiry, with nothing
-         * to notice: the daemon has a certificate, serves TLS with it, logs a healthy listener, and the name it
-         * is serving under resolves nowhere. The zone's own orphan reaper does exactly this to a sandbox whose
-         * platform no longer lists it, which is the ordinary consequence of the owner moving to another
-         * platform deployment, and a hand-edited zone or a write that failed at issuance get there too.
-         *
-         * Re-asserting is idempotent (the platform upserts) and costs one request per check, so the record is
-         * now kept alive by the same daily loop that keeps the certificate alive, and a deleted one comes back
-         * within a day rather than within a quarter. Failure is not fatal to anything: the certificate is
-         * still good, the tunnel still works, and the plain-HTTP half of the loopback listener needs no DNS at
-         * all, so this warns and carries on. */
+        // A valid cert doesn't mean its DNS record still resolves; re-asserted every check, not only at issuance.
         await relayChallenge(config, undefined).catch((error: unknown) => {
             logger.warn({ err: error, hostname }, "could not re-assert the loopback DNS record, the certified shortcut may not resolve");
         });
@@ -166,36 +112,21 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
     });
     const privateKey = certificateKey.export({ type: "pkcs8", format: "pem" }).toString();
     mkdirSync(paths.dir, { recursive: true });
-    // The key first and 0600: a certificate on disk without its key is merely useless, the reverse is a race
-    // where a concurrent read could pick up a key that does not match.
+    // Key first, and 0600: a cert without its key is useless, but the reverse risks a mismatched concurrent read.
     writeFileSync(paths.key, privateKey, { mode: 0o600 });
     writeFileSync(paths.cert, certificate);
     logger.info({ hostname }, "loopback certificate issued");
     return { hostname, certificate, privateKey };
 };
 
-/* The certificate to serve the loopback listener with RIGHT NOW: whatever is already on disk, without waiting
- * on the network. Issuance is slow (a CA validating DNS takes tens of seconds) and the listener must be up
- * long before that, so boot reads and `startLocalCertificateRenewal` issues, the sandbox serving plain HTTP in
- * the meantime rather than nothing. What issuance produces is handed to the listener as it lands (`onIssued`),
- * so the wait is for the CA and not for the next restart. */
+// Whatever is already on disk, without waiting on the network: issuance is slow, and the listener must be up long
+// before a CA validates. `onIssued` hands the listener whatever issuance later produces.
 export const readLocalCertificate = (config: Config): LocalCertificate | undefined =>
-    // No name to check against on purpose: the authoritative one is the platform's and boot does not wait on
-    // the network to serve TLS it already holds. The certificate reports what it was issued for, and the
-    // renewal loop replaces it if that has since changed.
+    // No name to check on purpose: the authoritative one is the platform's, not worth a network wait at boot.
     readUsable(config, undefined, Date.now());
 
-/* Keep the certificate fresh in the background: once at boot (which is what issues the first one), then on a
- * cadence that depends on how the last attempt went, daily when there is a certificate to renew, far sooner
- * when there is none to serve. Never rejects: a sandbox whose certificate cannot be obtained is a working
- * sandbox on plain HTTP.
- *
- * `onIssued` receives every certificate this loop is satisfied with, including the one already on disk (which
- * the caller is by definition already serving, and re-offering costs nothing next to the branch that would
- * have to work out whether it was new). It used to receive nothing at all: the loop wrote the file and the
- * listener read that file once, at boot, so a sandbox's FIRST certificate did not take effect until something
- * restarted the daemon. A fresh sandbox has no certificate, which made "serves its shortcut over plain HTTP/1.1
- * until further notice" the normal state of every new sandbox rather than a brief window at boot. */
+// Keeps the certificate fresh in the background, daily once issued and sooner if not; never rejects, so a failure just
+// means plain HTTP. `onIssued` fires for every certificate this is satisfied with, including one already on disk.
 export const startLocalCertificateRenewal = (
     config: Config,
     logger: Logger,
@@ -214,8 +145,7 @@ export const startLocalCertificateRenewal = (
     function attempt(): void {
         void ensureLocalCertificate(config, logger)
             .then((certificate) => {
-                // A handover that throws must not be read as a failed issuance: the certificate is on disk and
-                // good, and re-running the CA over a listener's bad day would spend a rate limit on nothing.
+                // A handover that throws isn't a failed issuance: the cert is already good.
                 if (certificate !== undefined) {
                     try {
                         onIssued(certificate);

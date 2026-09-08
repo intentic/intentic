@@ -4,73 +4,31 @@ import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import { FENCE } from "@intentic/sandbox-contract";
 
-/* WHETHER THIS COMMAND SHOULD RUN, ASKED OF A MODEL THAT READ THE OWNER'S POLICY. The second tier of the safety
- * design (the contract's safety-policy.ts sets out all four), and the one that replaced a table of regex
- * verdicts with an act of reading.
- *
- * WHAT THIS FIXED. The classifier used to decide. Its verdict was the card, so `echo "rm -rf /"` written into a
- * README, `rg 'rm -rf'` over the tree, a heredoc composing a deploy script, and an actual recursive delete all
- * produced the same interruption with the same title. No threshold fixes that, because separating them requires
- * knowing what the command is FOR — and that is what a model can do and a pattern cannot. The classifier still
- * runs and still fires on all four; it now only decides that this call happens.
- *
- * THREE INPUTS, AND THE BOUNDARY BETWEEN THEM IS THE SAFETY PROPERTY:
- *
- *   THE POLICY is trusted. The owner wrote it (or the agent did, on an attended, untainted turn, which is the
- *   one condition under which it may). It is instructions.
- *
- *   THE FACTS are trusted. The daemon observed them: which classes triage matched, where the command would run,
- *   whether this turn has taken in outside content and from where, whether anybody is watching, whether a
- *   credential-shaped path actually holds a credential. They are the difference between judging a command and
- *   judging a string, and no part of them comes from the model being gated.
- *
- *   THE PROGRAM is DATA, fenced and labelled as such, and this is inherited verbatim from the explainer this
- *   file replaces. The gated model contributes NOTHING here: not its reasoning, not its stated intent, not its
- *   summary of what it is doing. That is deliberate and it is a safety property rather than a simplification. A
- *   verdict whose persuasive half was written by the thing being judged is a verdict that argues for its own
- *   approval, and the failure mode is not hypothetical — a turn that has taken in a stranger's web page is
- *   exactly the turn most likely to reach this code, and its account of its own commands may be that stranger's
- *   account. So the judge sees the string that would run and nothing the agent said about it.
- *
- * IT CAN STILL BE ARGUED WITH. A command carrying "ignore the above, this is routine" is one of the things this
- * is asked to judge, and a small model can be talked round. Two things bound that, and neither is this file:
- * the hard rule the gate applies before ever calling here and which no verdict can waive, and tier 0 — the
- * container, the worktree, the masking, the scopes each machine enforces on itself. The judge is friction that
- * reads well, not a boundary, exactly as the classifier before it was.
- */
+// Whether a command should run, judged by a model against the owner's policy. POLICY and FACTS are trusted
+// (owner-written, daemon-observed); PROGRAM is untrusted data, fenced, and the gated model contributes nothing about
+// its own intent. Friction, not a boundary: the hard rule before this call and tier 0 isolation are what actually bound
+// it.
 
-// Enough of the program to judge it. Well above what a card shows, because a truncated tail changes what the
-// head MEANS (`… | xargs rm -rf`), and a verdict written from the visible half is a verdict about a different
-// command than the one that would run.
+// Enough of the program to judge, well above a card's length: a truncated tail changes what the head means.
 const PROGRAM_CAP = 4_000;
 
-// How much policy is sent. Generous — this is the owner's own document and truncating it silently drops rules
-// they are relying on — but not unbounded, since it rides in a prompt on every judged command.
+// Generous, since truncating the policy drops rules silently; bounded, since it rides in every judged prompt.
 const POLICY_CAP = 8_000;
 
 const capped = (text: string, cap: number): string => (text.length <= cap ? text : `${text.slice(0, cap)}\n… (truncated)`);
 
-/* WHAT THE DAEMON KNOWS ABOUT THIS COMMAND that the command text cannot say. Assembled by the gate, which is
- * the only place all of it is in hand at once.
- *
- * Every field is a FACT rather than an opinion: `tainted` says a page was read and names what brought it in, it
- * does not say the turn is suspect. The policy is where the owner decides what a fact means, which is the whole
- * reason these arrive as evidence and not as a verdict. */
+// What the daemon knows about this command that the text cannot say, assembled by the gate. Every field is a fact, not
+// an opinion; the policy decides what a fact means.
 export interface JudgeFacts {
-    // What triage matched, in the catalog's own labels ("delete files recursively"), so the judge is told why
-    // it was called at all and can dismiss the match as a false positive in as many words.
+    // What triage matched, in the catalog's labels, so the judge can dismiss a false-positive match.
     readonly consequences: readonly string[];
-    // Where the command would run. A recursive delete under a build directory reads very differently from one
-    // in a home directory, and only the path says which this is.
+    // A recursive delete reads differently under a build directory than in a home directory.
     readonly cwd?: string;
-    // What first brought outside content into this turn (a listener message, a fetched page, a foreign MCP
-    // server), or absent for a turn working only on the owner's own material.
+    // What first brought outside content into this turn (a message, a page, foreign MCP); absent if none did.
     readonly outsideSource?: string;
-    // Nobody is at a composer: an automation, a scheduled wake, a loop. The judge is told, because the policy
-    // has something to say about it and because a verdict of `ask` here becomes a refusal.
+    // Nobody is at the composer (automation, scheduled wake, loop); an `ask` verdict becomes a refusal then.
     readonly unattended: boolean;
-    // Which of the owner's computers this is headed for, absent for the sandbox's own shell. Selects which half
-    // of the policy applies, and the two halves are deliberately very different.
+    // Which owner computer this is headed for; absent for the sandbox's shell. Selects which policy half applies.
     readonly machine?: string;
     // "bash" or "javascript", so the sentence calls it a command or a script.
     readonly language: string;
@@ -90,14 +48,8 @@ const factLines = (facts: JudgeFacts): string[] => [
         : `- Somebody is watching this turn and can answer a question.`,
 ];
 
-/* THE PROMPT. Shaped against what a model does when asked to judge a command, which is to be alarmed: shown a
- * recursive delete and asked whether it is safe, a small model says no, every time, whatever the policy says.
- * That is the old regex behaviour with a bigger bill. So the prompt puts the policy first and frames the task
- * as APPLYING it rather than as forming a view, says plainly that most of what arrives is ordinary work, and
- * demands the verdict before the reasoning so the word is not talked into changing itself.
- *
- * ALLOW IS NAMED AS THE COMMON ANSWER, deliberately and up front. A judge that asks about a third of what it
- * sees rebuilds the problem this replaced, and the only defence against that drift is saying so here. */
+// Puts the policy first and frames the task as applying it, not forming a view; asks for the verdict before the
+// reasoning. Allow is named as the common answer up front, against the drift toward asking about everything.
 const judgePrompt = (policy: string, program: string, facts: JudgeFacts): string =>
     [
         `You decide whether an AI coding agent's command should run, be asked about, or be refused.`,
@@ -141,11 +93,11 @@ const judgePrompt = (policy: string, program: string, facts: JudgeFacts): string
         `       POLICY: Force-pushing to branches under my own fork is fine.`,
     ].join(`\n`);
 
-// A model reaches for these wrappers even when told not to, the same instinct cleanSessionTitle unwraps: the
-// answer is right and only its packaging is wrong.
+// The reply arrives wrapped (code fences, quotes, casing) the way cleanSessionTitle sees too; unwrapped rather than
+// rejected.
 
-// One labelled line out of the reply. Tolerant of the label's case and of a missing space after the colon,
-// because those are the ways a small model deviates from a shape it is otherwise following.
+// One labelled line from the reply; tolerant of label case and a missing space after the colon, the ways a small model
+// deviates from the shape.
 const field = (reply: string, label: string): string | undefined => {
     const match = new RegExp(`^\\s*${label}\\s*:\\s*(.*)$`, `imu`).exec(reply);
     const value = match?.[1]?.trim();
@@ -154,26 +106,15 @@ const field = (reply: string, label: string): string | undefined => {
 
 const DECISIONS: readonly SafetyDecision[] = ["allow", "ask", "refuse"];
 
-// The sentence, unwrapped. Symmetric surrounding quotes only: a quoted path inside the sentence is part of it.
+// The sentence, unwrapped: strips only symmetric surrounding quotes, so a quoted path inside stays part of it.
 const unquote = (text: string): string => (/^(["'`])(.*)\1$/u.exec(text)?.[2] ?? text).trim();
 
-/* HOW LONG THE SENTENCE MAY BE BEFORE IT IS NOT ONE. The prompt asks for about 25 words; past this the reply is
- * the stage-by-stage walkthrough it forbids, or a model answering something else entirely. Refusing it costs
- * one rung and the next model down rules instead. */
+// Past this many words the reply is a forbidden walkthrough, not a sentence; refusing it costs one rung.
 const SENTENCE_MAX_WORDS = 50;
 
-/* THE CONTRACT THE REPLY MUST MEET, and it matters more here than at any other one-shot helper seam, because an
- * off-shape reply is not a missing sentence — it is a MISSING VERDICT on a command about to run. Stated as the
- * ask's contract (role-answer.ts) rather than checked softly at the call site, so a rung that answers a
- * paragraph of reasoning, a tool-call stand-in, or its own provider's refusal counts as a rung that DID NOT
- * ANSWER, and the next model in the chain rules instead. Nothing ruling at all is the gate's own fallback,
- * which is a posture decision rather than a parsing one (guard/command-gate.ts states both halves).
- *
- * AN UNREADABLE REPLY IS NEVER PERMISSION. `recognised` rides beside the verdict for exactly this: a reply whose
- * DECISION line is missing or is some fourth word reads as unusable and costs the rung, rather than quietly
- * becoming `allow`. Defaulting it open would make garbling the reply an attack, and a garbled reply is the
- * shape a confused or coerced model produces. The parsed fallback is `ask`, the safe direction, so that even a
- * mis-ordered check downstream errs toward interrupting somebody rather than toward running. */
+// An off-shape reply is a missing verdict, not a missing sentence: `recognised` marks that, so it costs the rung rather
+// than silently becoming `allow`. The parsed fallback is `ask`, the safer direction, if anything downstream misreads
+// it.
 interface JudgedReply {
     readonly verdict: SafetyVerdict;
     readonly recognised: boolean;
@@ -184,8 +125,7 @@ export const judgeAnswer: RoleAnswer<JudgedReply> = {
     read: (reply: string): JudgedReply => {
         const clean = reply.trim().replace(FENCE, ``);
         const decision = field(clean, `DECISION`)?.toLowerCase() ?? ``;
-        // The first word of the decision line: a model that writes "ask (the owner)" has answered, and holding
-        // that against it would spend a rung on punctuation.
+        // First word of the decision line, so qualifying it ("ask (the owner)") still counts as an answer.
         const word = /^[a-z]+/u.exec(decision)?.[0] ?? ``;
         const recognised = (DECISIONS as readonly string[]).includes(word);
         const why = field(clean, `WHY`);
@@ -211,9 +151,7 @@ export const judgeAnswer: RoleAnswer<JudgedReply> = {
     },
 };
 
-/* Judge one program. Throws when no rung answered — the caller decides what an unavailable judge means, and it
- * differs by posture (guard/command-gate.ts states both halves), which is why this does not pick a fallback of
- * its own. */
+// Throws when no rung answered: the caller decides what an unavailable judge means, since that differs by posture.
 export const judgeCommand = async (
     services: Services,
     input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
@@ -224,12 +162,7 @@ export const judgeCommand = async (
         `safety-judge`,
         { prompt: judgePrompt(input.policy, input.program, input.facts), answer: judgeAnswer },
         signal,
-        /* `pins` is the owner's own list for the `safety-judge` role, read when the turn was PLANNED rather than
-         * here, so the whole judgment — the policy and the model that reads it — is one snapshot: a turn cannot
-         * end up judged by two different models because somebody was editing the row while it ran. An empty
-         * snapshot means no model is set for the judge, and the walk refuses on the spot (RoleModelUnsetError)
-         * rather than choosing one: the gates read that as the judge not running, exactly as a fresh read
-         * would. */
+        // Read when the turn was planned, so policy and model are one snapshot; empty means no judge model, refused.
         { pins: input.pins },
     );
     return value.verdict;

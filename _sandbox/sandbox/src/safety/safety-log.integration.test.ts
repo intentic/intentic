@@ -29,8 +29,8 @@ test("reads back newest first, which is the only order anybody scans a log in", 
     expect((await safety.recent()).map((row) => row.at)).toEqual([3, 2, 1]);
 });
 
-/* THE VERDICT IS WRITTEN WHEN IT IS REACHED and amended when the person answers, because a turn stopped while a
- * card is up would otherwise leave a verdict the owner can never find out about. */
+// Written when reached, amended when answered, since a turn stopped while a card is up would otherwise leave no record
+// at all.
 test("amends the card entry with how it was answered", async () => {
     const { log: safety } = await log();
     await safety.record(entry({ at: 5, decision: "ask", outcome: "asked" }));
@@ -38,9 +38,8 @@ test("amends the card entry with how it was answered", async () => {
     expect(await safety.recent()).toMatchObject([{ at: 5, outcome: "refused", answer: "declined" }]);
 });
 
-/* `Date.now()` REPEATS, and a turn running a handful of flagged commands in a row hits the same millisecond
- * routinely. Amending by timestamp alone would rewrite the neighbour as though somebody had answered it —
- * turning a command that quietly ran into one the owner is recorded as having declined. */
+// `Date.now()` repeats routinely within one turn; amending by timestamp alone would rewrite a neighbour as though the
+// owner had declined a command that actually ran.
 test("an answer amends only the card, never a neighbour judged in the same millisecond", async () => {
     const { log: safety } = await log();
     const neighbour = entry({ at: 7, decision: "allow", outcome: "allowed", program: "rm -rf dist" });
@@ -48,16 +47,15 @@ test("an answer amends only the card, never a neighbour judged in the same milli
     await safety.record(entry({ at: 7, decision: "ask", outcome: "asked", program: "rm -rf build" }));
     await safety.answered(7, "declined", "refused");
     const rows = await safety.recent();
-    // Whole-object equality on the neighbour: it must come back exactly as it was written, `answer` absent and
-    // not merely undefined, because a row claiming the owner declined a command that quietly ran is the bug.
+    // Whole-object equality: the neighbour must come back with `answer` absent, not merely undefined, or it would read
+    // as declined.
     expect(rows.find((row) => row.program === "rm -rf dist")).toEqual(neighbour);
     expect(rows.find((row) => row.program === "rm -rf build")).toEqual(
         entry({ at: 7, decision: "ask", outcome: "refused", answer: "declined", program: "rm -rf build" }),
     );
 });
 
-/* BOUNDED. This is written several times a turn and nothing reads it back to decide anything, so it trims
- * itself to what a page can render rather than growing a tail nobody will ever scroll to. */
+// Nothing reads this log back to decide anything, so it trims to what a page can render rather than growing forever.
 test("keeps the most recent entries and drops the oldest", async () => {
     const { log: safety } = await log();
     for (let at = 1; at <= 205; at += 1) {
@@ -76,8 +74,8 @@ test("an unreadable file reads as an empty log rather than throwing", async () =
     expect(await safety.recent()).toEqual([]);
 });
 
-/* The whole program is in the transcript beside the tool call either way, so the log holds an excerpt: storing
- * every heredoc in full would be the sandbox keeping a second copy of everything it ran. */
+// The whole program is in the transcript beside the tool call either way, so the log holds an excerpt rather than a
+// second copy of everything it ran.
 test("a long program is excerpted, and says how much it dropped", () => {
     const short = "rm -rf build";
     expect(excerptProgram(short)).toBe(short);

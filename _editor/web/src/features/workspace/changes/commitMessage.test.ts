@@ -1,22 +1,14 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { nextTick, ref } from "vue";
 
-/* The draft store is a module singleton whose only edge is the active sandbox (it keys the persisted draft), and
- * it reads that id when it is IMPORTED, so both of these have to exist before the imports below, which is what
- * `vi.hoisted` is for. A mock factory closing over an ordinary `let` reads it in its temporal dead zone.
- *
- * `active.sandboxId` undefined switches every localStorage path off, which is what the first suite wants: its
- * rules are about who owns the box, not where it is kept. The reload suite sets a real id to switch them on.
- * `stored` is storage as the browser's minus the browser: enough for one instance to persist a record and the
- * next to read it back, which is the whole of what a reload is here. */
+// vi.hoisted lets these exist before the mocked imports below, which read them at import time.
 const { active, stored } = vi.hoisted(() => {
     const state = { active: { sandboxId: undefined as string | undefined }, stored: new Map<string, string>() };
     return state;
 });
 
 vi.mock("../../sandbox/client/useSandbox", async () => {
-    // Imported inside the factory (a mock is hoisted above this file's own imports) and named apart from the
-    // `ref` above it, which is the same import under a name the linter can tell from this one.
+    // Imported inside the factory since mocks hoist above this file's own imports; renamed to avoid shadowing `ref`.
     const { ref: vueRef } = await import("vue");
     return { useSandbox: () => ({ activeSandboxId: vueRef<string | undefined>(active.sandboxId) }) };
 });
@@ -55,7 +47,6 @@ describe(`the commit box`, () => {
         expect(commitMessage.value).toBe(``);
     });
 
-    // The whole reason the fill records what it wrote: everything below is a box the user has made theirs.
     test(`a typed message is never overwritten by a fill`, () => {
         commitMessage.value = `chore: my own subject`;
         fillCommitMessage(`fix: cascading markers`);
@@ -68,9 +59,6 @@ describe(`the commit box`, () => {
         expect(commitMessage.value).toBe(`chore: my own subject`);
     });
 
-    /* WHITESPACE IS NOT WRITING, and reading it as writing was a silent permanent lockout: a box left holding
-     * one stray character looks exactly like an empty one, so every From chip was refused from then on with
-     * nothing on screen to explain it, and no amount of waiting, re-clicking or reloading could clear it. */
     test.each([[` `], [`\n`], [`   \n  `]])(`a box holding only %j is still fillable`, (blank) => {
         commitMessage.value = blank;
         fillCommitMessage(`fix: cascading markers`);
@@ -92,23 +80,20 @@ describe(`the commit box`, () => {
         expect(commitMessage.value).toBe(`fix: cascading markers in the tree`);
     });
 
-    /* THE PANEL'S VIEW OF THAT SAME RULE: what it reads to say "keeping your message" instead of refusing a
-     * click in silence. It has to answer exactly when the fill declines, so these walk the same four states the
-     * tests above walk and check the two never disagree. */
+    // Must walk the same four states fillCommitMessage declines on, so the two can never disagree.
     test(`the box says whose it is`, () => {
-        expect(boxIsYours.value).toBe(false); // empty: free to fill
+        expect(boxIsYours.value).toBe(false);
 
         fillCommitMessage(`fix: cascading markers`);
-        expect(boxIsYours.value).toBe(false); // the fill's own line, which it may replace
+        expect(boxIsYours.value).toBe(false);
 
         commitMessage.value = `fix: cascading markers in the tree`;
-        expect(boxIsYours.value).toBe(true); // edited by hand: theirs
+        expect(boxIsYours.value).toBe(true);
 
         commitMessage.value = `   `;
-        expect(boxIsYours.value).toBe(false); // whitespace is not writing
+        expect(boxIsYours.value).toBe(false);
     });
 
-    // What a successful commit does. The box is empty again, so the legend is free to name the next one.
     test(`clearing the box releases it back to the legend`, () => {
         fillCommitMessage(`fix: cascading markers`);
         commitMessage.value = ``;
@@ -117,9 +102,8 @@ describe(`the commit box`, () => {
     });
 });
 
-/* The chip is lit BEFORE the sentence about that work exists: the drafting starts at the land and answers
- * seconds later, so what these pin is that the box is still listening when it does. A one-shot fill on the
- * click passes every test above and none of these. */
+// The chip lights before the drafted sentence exists; these pin that the box still fills when it arrives late.
+// A one-shot fill on the click alone would pass the suite above and fail every test here.
 describe(`the box following a lit From chip`, () => {
     beforeEach(() => {
         commitMessage.value = ``;
@@ -145,7 +129,6 @@ describe(`the box following a lit From chip`, () => {
         expect(commitMessage.value).toBe(``);
     });
 
-    // A second land rewrites the sentence about the same session: the chip's own line, replaced by the chip.
     test(`a rewritten message replaces the line the same chip filed`, async () => {
         const message = ref<string | undefined>(`fix: cascading markers`);
         followFilledMessage(message);
@@ -156,7 +139,6 @@ describe(`the box following a lit From chip`, () => {
         expect(commitMessage.value).toBe(`fix: cascading markers and their counts`);
     });
 
-    // The box the user typed in while waiting is still theirs: arriving late buys the fill nothing.
     test(`a message that arrives late never overwrites what the user typed`, async () => {
         const message = ref<string | undefined>(undefined);
         followFilledMessage(message);
@@ -168,10 +150,8 @@ describe(`the box following a lit From chip`, () => {
     });
 });
 
-/* WHO THE COMMIT IS BEING NAMED AFTER, once the panel that asked is gone. The Changes panel is destroyed by the
- * Files|Changes|History switch, so everything above dies with it, and the sentence it is waiting for was
- * measured arriving up to seventy seconds after the land, which is far longer than anyone stares at a file list.
- * These pin the ask itself, which is what has to survive that trip for the box ever to be filled. */
+// The ask must outlive the Changes panel, since it's destroyed by the Files|Changes|History switch before a
+// landed message may finish drafting.
 describe(`the ask to name a commit after a session`, () => {
     beforeEach(() => {
         commitMessage.value = ``;
@@ -183,8 +163,6 @@ describe(`the ask to name a commit after a session`, () => {
         expect(namedAfter.value).toBe(`agent-1`);
     });
 
-    // The delivery the panel cannot make: by the time the sentence exists, the component that took the click has
-    // been destroyed and rebuilt: possibly several times, and the box must still end up holding it.
     test(`is still answerable after the panel is gone`, () => {
         nameCommitAfter(`agent-1`);
         fillCommitMessage(`fix: cascading markers`);
@@ -200,8 +178,7 @@ describe(`the ask to name a commit after a session`, () => {
         expect(commitMessage.value).toBe(``);
     });
 
-    // Moving to another session is one gesture, not a withdrawal followed by an ask: the line the last chip
-    // filed is still the fill's own, so the next sentence may replace it.
+    // Moving the ask is one gesture, not a withdrawal then a new ask; the last chip's line stays fillable.
     test(`moving the ask to another session leaves the box fillable`, () => {
         nameCommitAfter(`agent-1`);
         fillCommitMessage(`fix: cascading markers`);
@@ -212,7 +189,6 @@ describe(`the ask to name a commit after a session`, () => {
         expect(commitMessage.value).toBe(`feat: second session`);
     });
 
-    // Withdrawing may never touch a keystroke, the same rule every other road into the box answers to.
     test(`withdrawing leaves a message the user typed alone`, () => {
         nameCommitAfter(`agent-1`);
         commitMessage.value = `chore: my own subject`;
@@ -222,9 +198,8 @@ describe(`the ask to name a commit after a session`, () => {
     });
 });
 
-/* A RELOAD IS A FRESH MODULE INSTANCE reading what the last one left, so these re-import the singleton rather
- * than reaching into it: nothing else can say what the box comes back HOLDING, and coming back holding a line
- * no click could replace is the bug this pins. */
+// A reload is a fresh module instance reading what the last one left; these re-import the module rather than
+// reaching into the live singleton.
 describe(`the commit box after a reload`, () => {
     const load = async (): Promise<typeof import("./commitMessage")> => {
         vi.resetModules();
@@ -236,7 +211,7 @@ describe(`the commit box after a reload`, () => {
         active.sandboxId = `sandbox-1`;
     });
 
-    // The first suite runs against no sandbox at all; leave it that way for anything that follows.
+    // Resets for suites after this one, which run with no active sandbox.
     afterAll(() => {
         active.sandboxId = undefined;
     });
@@ -262,8 +237,6 @@ describe(`the commit box after a reload`, () => {
         expect(after.commitMessage.value).toBe(``);
     });
 
-    // The other half, and the one that must not regress: a reload cannot turn something typed into something a
-    // click may overwrite.
     test(`a line the user typed comes back theirs`, async () => {
         const before = await load();
         before.commitMessage.value = `chore: my own subject`;
@@ -274,7 +247,7 @@ describe(`the commit box after a reload`, () => {
         expect(after.commitMessage.value).toBe(`chore: my own subject`);
     });
 
-    // An edited fill is a typed line, and the edit is what ends the claim: including the record on disk.
+    // Editing a filled line ends its claim in the persisted record too, not just in memory.
     test(`a filled line the user edited comes back theirs`, async () => {
         const before = await load();
         before.fillCommitMessage(`fix: cascading markers`);
@@ -286,10 +259,6 @@ describe(`the commit box after a reload`, () => {
         expect(after.commitMessage.value).toBe(`fix: cascading markers in the tree`);
     });
 
-    /* A BLANK BOX IS NOT A DRAFT, so a reload has nothing to bring back. This is the half that made the
-     * lockout permanent: the stray character was written to storage like a real message, so reloading, the
-     * one thing a user does when a control looks stuck: put it straight back, and the box refused every chip
-     * again on a fresh page. */
     test(`whitespace is never carried across a reload`, async () => {
         const before = await load();
         before.commitMessage.value = ` `;
@@ -302,8 +271,6 @@ describe(`the commit box after a reload`, () => {
         expect(after.commitMessage.value).toBe(`fix: cascading markers`);
     });
 
-    // And it takes a real message away with it: emptying the box is how a user discards a draft, and a trailing
-    // newline left behind must not resurrect the line they just deleted.
     test(`clearing a real message down to whitespace discards it`, async () => {
         const before = await load();
         before.commitMessage.value = `chore: my own subject`;

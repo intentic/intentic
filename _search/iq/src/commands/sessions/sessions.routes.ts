@@ -60,19 +60,15 @@ const list = buildCommand({
                 this.process.stdout.write(`${JSON.stringify(sessions, undefined, 4)}\n`);
             } else {
                 for (const session of sessions) {
-                    /* WHAT NAMES THE ROW. A session an agent turn produced belongs to a conversation, and the
-                     * conversation's own id and title are what a reader can act on — `agents show <id>` takes
-                     * exactly that id. Without the join every agent-run row printed a bare uuid and the word
-                     * "(untitled)", which is how one spelling of a conversation stopped leading to the other. */
+                    // The conversation's id and title are what `agents show <id>` can act on; without it, a bare uuid.
                     const named =
                         session.conversation === undefined
                             ? (session.title ?? "(untitled)")
                             : `${session.conversation.id}${session.conversation.title === undefined ? "" : ` · ${session.conversation.title}`}`;
                     this.process.stdout.write(`${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${named}\n`);
                 }
-                /* The breadcrumb, printed where the confusion happens rather than as a standing line in a
-                 * prompt: someone reading this list is one step from wanting the conversation behind a row,
-                 * and this is the verb that answers it whole. */
+                // Printed here rather than as a standing prompt line, for a reader one step from wanting the
+                // conversation.
                 if (sessions.some((session) => session.conversation !== undefined)) {
                     this.process.stdout.write("conversations: agents show <id> · agents ls · agents find '<text>'\n");
                 }
@@ -124,8 +120,8 @@ const readStdin = (): Promise<string> =>
         process.stdin.on("error", reject);
     });
 
-// The prompt is "first" when the session transcript doesn't exist yet, or its only typed prompt is the one
-// being submitted (the hook may fire before or after claude-code appends it, both orders occur).
+// "First" means the transcript doesn't exist yet, or its only typed prompt is the one being submitted; the hook may
+// fire either before or after claude-code appends it.
 const isFirstPrompt = async (transcriptPath: string, prompt: string): Promise<boolean> => {
     let seen = 0;
     try {
@@ -154,18 +150,12 @@ const forkCommandOf = (recall: Recall, match: SessionMatch, prompt: string): str
     return `iq sessions fork ${match.sessionId}${point === undefined ? "" : ` --at ${point.turnUuid}`}`;
 };
 
-/* WHAT THIS HOOK MAY SPEND, given that it stands between the user pressing enter and the model reading their
- * prompt. Nothing here is worth a visible pause: a recall that arrives late is worth less than no recall.
- *
- * Both numbers sit under the 10s the hook is configured with in plugin/hooks/hooks.json, because being killed
- * at that ceiling is the failure this replaces — over one day it happened on 21 of 43 prompts, each one costing
- * the full ten seconds and delivering nothing. Staying inside our own budget means the outer timeout becomes
- * what it should be, a backstop nobody reaches. */
+// Bounded so a slow recall never delays the prompt; kept safely under the hook's own outer timeout.
 const INGEST_BUDGET_MS = 2_500;
 const HOOK_BUDGET_MS = 5_000;
 
-// Resolves to `undefined` if `work` has not finished in time. The work itself is left running: it is a SQLite
-// write we would rather see finish than abort, and the process exits either way.
+// Resolves to `undefined` if `work` hasn't finished in time; the work itself keeps running, a SQLite write better
+// finished than aborted, and the process exits either way.
 const withinBudget = async <T>(budgetMs: number, work: Promise<T>): Promise<T | undefined> => {
     let timer: NodeJS.Timeout | undefined;
     const expiry = new Promise<undefined>((resolve) => {
@@ -186,8 +176,8 @@ interface HookPayload {
     prompt?: string;
 }
 
-// A payload worth answering, or nothing. Malformed input, an empty prompt and a prompt that is not the
-// session's first all come back the same way: this hook's only failure mode may be silence.
+// A payload worth answering, or nothing: malformed input, an empty prompt, and a non-first prompt all return undefined
+// alike.
 const hookPayloadOf = async (input: string): Promise<HookPayload | undefined> => {
     let payload: HookPayload;
     try {
@@ -205,8 +195,8 @@ const hookPayloadOf = async (input: string): Promise<HookPayload | undefined> =>
     return payload;
 };
 
-// UserPromptSubmit payload → hookSpecificOutput JSON on a strong first-prompt match, silence otherwise.
-// Exported for tests; never throws on malformed input, a broken hook must not block the user's prompt.
+// UserPromptSubmit payload to hookSpecificOutput JSON on a strong first-prompt match, silence otherwise. Never throws:
+// a broken hook must not block the user's prompt.
 export const runHookMatch = async (input: string, write: (chunk: string) => void): Promise<void> => {
     const payload = await hookPayloadOf(input);
     if (payload === undefined) {
@@ -218,8 +208,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
     const recall = recallFor(root);
     const deadline = Date.now() + HOOK_BUDGET_MS;
     try {
-        // A stale index still answers: matching is the point, indexing is upkeep, and the SessionStart hook
-        // already backgrounds an unbudgeted `iq sessions ingest` to do the rest.
+        // A stale index still answers; the SessionStart hook already backgrounds a full, unbudgeted ingest.
         await withinBudget(INGEST_BUDGET_MS, recall.ingest({ budgetMs: INGEST_BUDGET_MS }));
         if (Date.now() >= deadline) {
             return;
@@ -229,11 +218,8 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         if (top === undefined || !top.strong) {
             return;
         }
-        /* THE EXCERPTS ARE THE PAYLOAD; the fork is an aside. This lead used to open by instructing the model to
-         * "suggest they fork it instead of rebuilding context", which is advice about an action only the user
-         * can take, addressed to the party who cannot take it: offered on 22 prompts in one day and acted on
-         * zero times, while the excerpts underneath it were read and used. So the recall leads, and the fork
-         * command rides along as something to mention if the work really is a continuation. */
+        // The excerpts are the payload; the fork command only rides along as a mention, not an instruction to the
+        // model.
         const lead = `Related past session "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). Use what follows as background. If this prompt is genuinely continuing that work, you can tell the user they may resume it with \`${forkCommandOf(recall, top, prompt)}\` rather than rebuilding the context here.`;
         // Same 45-day window as the strong-match gate; the current session never quotes itself.
         const excerpts = recall.grab(prompt, {
@@ -325,13 +311,11 @@ const grab = buildCommand({
                 let shown = 0;
                 for (const excerpt of excerpts) {
                     const block = [
-                        // `×N` marks a prompt that recurs, a scheduled job or a repeated ask. Saying it on the
-                        // one row it collapsed to is the point: the alternative is N rows that say it N times.
+                        // `×N` marks a recurring prompt collapsed to one row instead of N rows saying the same thing.
                         `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
                         `    asked: ${cap(collapse(excerpt.prompt), 240)}`,
                         ...(excerpt.fragment === "" ? [] : [`    answered: ${cap(collapse(excerpt.fragment), 480)}`]),
-                        // What the session around the hit opened and closed on, so a mid-session match carries
-                        // the shape of the conversation it came from rather than only its own sentence.
+                        // What the session around the hit opened and closed on, giving a mid-session match its context.
                         ...(excerpt.bookends === undefined
                             ? []
                             : [

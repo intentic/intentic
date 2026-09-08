@@ -11,12 +11,8 @@ import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { exportsDir, isReadyExport, listExports, openExport, removeExport, startExport, sweepStaleExports } from "./exports.js";
 
-/* AN EXPORT OUTLIVES THE CLICK THAT ASKED FOR IT.
- *
- * These cover the property the first cut did not have: the export is a file, so its state is readable by anyone
- * who asks later: a second tab, a reload, the same tab after ten minutes elsewhere. Every assertion below is
- * about what the DIRECTORY says, because that is the only thing the UI is allowed to believe.
- */
+// An export outlives the request that made it: its state lives in the directory, readable by any later reader. The UI
+// trusts only what the directory says.
 
 const roots: string[] = [];
 const makeRoots = async (): Promise<{ work: string; history: string }> => {
@@ -42,12 +38,8 @@ const exportServices = (work: string, history: string): Services =>
         files: fakeFiles({ read: async (absPath) => readFile(absPath, "utf8").catch(() => undefined) }),
     } as Parameters<typeof services>[0]);
 
-/* The pack is detached by design, so a test waits for the DIRECTORY to settle rather than awaiting a promise:
- * exactly the position the browser is in, and the reason the list is the only source of truth.
- *
- * Asserted on the NAMED export rather than over the whole list, because "no export is packing" is trivially
- * true of an empty directory: the first version of this helper settled before the `.part` file had even been
- * created, and every test using it then read a half-packed export as a finished one. */
+// Polls the directory for the named export's status, since the pack runs detached; checking the named entry, not the
+// whole list, avoids a false idle read.
 const settled = async (history: string, name: string): Promise<void> => {
     await vi.waitFor(async () => {
         const found = (await listExports(history)).find((entry) => entry.name === name);
@@ -60,8 +52,7 @@ test("an export survives the request that started it: it is named at once and fi
     await writeFile(join(source.work, "file.txt"), "content");
 
     const name = await startExport(exportServices(source.work, source.history), { secrets: false, now: 1_700_000_000_000 });
-    // Named immediately: the row can render before a single byte is packed, which is what the card needs to
-    // show "packing" instead of a button that looks untouched.
+    // Named immediately, before any byte is packed, so the card can render a packing row right away.
     expect(name).toMatch(/^intentic-demo-.*\.tar\.gz$/);
 
     await settled(source.history, name);
@@ -87,7 +78,7 @@ test("status is the filename, so any reader derives the same answer without bein
     expect(byName.get("intentic-b-2026-01-02-00-00-00.tar.gz")?.status).toBe("packing");
     const failed = byName.get("intentic-c-2026-01-03-00-00-00.tar.gz");
     expect(failed?.status).toBe("failed");
-    // The reason travels with the marker, so the card explains itself rather than just going red.
+    // The failure reason travels with the marker file itself.
     expect(failed?.error).toContain(errorLog);
     await cleanup();
 });
@@ -113,8 +104,7 @@ test("a second export is refused while one is packing rather than racing it", as
 });
 
 test("a .part left by a daemon that died is swept to failed, not left packing forever", async () => {
-    // The one state the filename cannot express on its own: only a LIVE process can be writing a `.part`, so
-    // one that outlived a restart would otherwise render as a progress bar that never moves again.
+    // A .part alone can't tell a live pack from a dead one; sweeping is what catches a stale one.
     const source = await makeRoots();
     const dir = exportsDir(source.history);
     await mkdir(dir, { recursive: true });
@@ -148,14 +138,13 @@ test("deleting an export takes every trace of it, whatever state it was in", asy
     await writeFile(join(dir, "intentic-a-2026-01-01-00-00-00.tar.gz.failed"), "nope\n");
     expect(await removeExport(source.history, "intentic-a-2026-01-01-00-00-00.tar.gz")).toBe(true);
     expect(await listExports(source.history)).toEqual([]);
-    // A name that is not there answers false, so the route can 404 instead of pretending it deleted something.
+    // A missing name answers false, letting the route 404 rather than claim a delete.
     expect(await removeExport(source.history, "intentic-a-2026-01-01-00-00-00.tar.gz")).toBe(false);
     await cleanup();
 });
 
 test("a finished bundle is a real bundle: the restore side reads what the export side wrote", async () => {
-    // The end-to-end shape: pack to a file, then open that file and check it is the gzipped tar the restorer
-    // expects, rather than trusting that a stream that ended was a stream that worked.
+    // End-to-end: packs to a file, then opens it and checks the bytes are the gzipped tar the restorer expects.
     const source = await makeRoots();
     await writeFile(join(source.work, "file.txt"), "content");
     const name = await startExport(exportServices(source.work, source.history), { secrets: false, now: 1_700_000_000_000 });
@@ -164,7 +153,7 @@ test("a finished bundle is a real bundle: the restore side reads what the export
     const opened = await openExport(source.history, name);
     expect(opened?.size).toBeGreaterThan(0);
     const first = await opened?.body.getReader().read();
-    // gzip's magic bytes: what the browser will be handed, and what restoreBundle gunzips on the way back in.
+    // gzip's magic bytes; what restoreBundle expects when it gunzips this on the way back in.
     expect(first?.value?.[0]).toBe(0x1f);
     expect(first?.value?.[1]).toBe(0x8b);
     await cleanup();

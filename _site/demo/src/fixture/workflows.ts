@@ -1,20 +1,12 @@
 import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
 
-/* THE WORKFLOW the demo has designed, and the run of it that is going on right now.
- *
- * It is the SAME run the fleet fixture's two review cards are steps of, `wf-a3f19c22-review-perf` and
- * `wf-a3f19c22-review-security` are named in both files, so clicking a card's workflow mark lands on the graph
- * those exact cards are nodes of. Two surfaces agreeing about one run is the whole point of the mark; a demo
- * where the link goes somewhere plausible-but-unrelated would be teaching the wrong thing.
- *
- * The shape is the one the feature exists for: a chain that carries ONE session through plan → build, then a
- * fan-out to two reviewers that are `fresh`, different sessions, because the session that made the change is
- * the worst available judge of it. Steps 1 and 2 share a conversation (`continue`); 3 and 4 each get their own.
- */
+// Same run as the fleet fixture's two review cards (`wf-a3f19c22-review-perf`/`-security`), so a card's workflow mark
+// opens this graph. Chain carries one session through plan → build (`continue`), then fans out to two `fresh` reviewer
+// sessions.
 
 const minutes = (count: number): number => count * 60_000;
 
-// The chain's own conversation, steps 1 and 2 ran on it, which is what `continue` means.
+// Conversation steps 1 and 2 share via `continue`.
 const CHAIN_CONVERSATION = `wf-a3f19c22-plan`;
 
 const demoWorkflow = (): Workflow => ({
@@ -96,10 +88,7 @@ const demoWorkflow = (): Workflow => ({
     ],
 });
 
-/* The run in flight: the chain is done, both reviewers are going. That is the state worth showing, a graph
- * with settled nodes behind it and live ones in front reads as a picture of progress, which a run that has
- * only just started does not.
- */
+// Run in flight: chain done, both reviewers still going, so the graph shows settled nodes behind live ones.
 export const demoRuns = (now: number): WorkflowRun[] => [
     {
         runId: `a3f19c22`,
@@ -157,6 +146,5 @@ export const demoRuns = (now: number): WorkflowRun[] => [
     },
 ];
 
-// The design, carrying whatever runs of it the board is showing, which is the daemon's call, not this file's:
-// a demo mode that leaves the two review agents off the board leaves their run off it too (daemon.ts).
+// Carries whatever runs the board is showing; which runs to include is demo mode's call, not this file's.
 export const demoWorkflows = (runs: WorkflowRun[]): WorkflowSummary[] => [{ ...demoWorkflow(), runs }];

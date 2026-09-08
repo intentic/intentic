@@ -1,36 +1,15 @@
 // oxlint-disable unicorn/consistent-function-scoping -- the rule is exactly wrong for this file: every helper
-// here is nested INSIDE the function that uses it because these functions are serialized and re-parsed inside a
-// page, where nothing else in this module exists. Hoisting one to the outer scope is how this file acquires a
-// ReferenceError that only appears on somebody else's website. See the header below.
+// Each helper is nested inside the function that uses it, since executeScript serializes and re-parses that
+// function inside the page, where nothing else in this module exists.
 import { sleep } from "@intentic/base/async";
 import type { PageElement } from "@intentic/browser/page";
 
-/* WHAT RUNS INSIDE SOMEBODY'S PAGE.
- *
- * THE RULE FOR EVERY FUNCTION IN THIS FILE, and it is not a style preference: each one is handed to
- * `chrome.scripting.executeScript` as a `func`, which SERIALIZES it with `Function.prototype.toString` and
- * re-parses it in the tab. Nothing it references from this module exists over there. So every helper a function
- * needs is defined INSIDE it, every constant is inlined, and nothing here may be refactored into shared
- * top-level helpers however much it wants to be. A bundler that hoists a shared function would produce code
- * that type-checks, builds, and throws `ReferenceError` on somebody's bank page.
- *
- * They run in the ISOLATED world: the same DOM as the page, a different JavaScript heap. So the page cannot
- * read the ref table or tamper with the banner, and we cannot see the page's own variables — which is the right
- * side of that trade for both parties.
- *
- * THE REF TABLE lives on `window.intenticPageRefs` in that isolated world (an ordinary name, not a
- * `__private` one: nothing else can see this world, so there is nobody to collide with). It survives between calls on the same
- * document and dies with a navigation, which is exactly the lifetime a reference should have: a `[e4]` from
- * before a click that navigated is refused rather than pointing at whatever now sits in slot four.
- *
- * The walk is this package's own rather than the CDP driver's (@intentic/browser), because it can be: it has
- * real DOM types, it pierces shadow roots, and it can ask the page for its own accessible names. What it
- * ANSWERS is the shared vocabulary — same PageElement, same `[e…]` rendering — so an agent that learned to
- * drive one browser has nothing new to learn for the other. */
+// Runs inside the tab via chrome.scripting.executeScript, in the isolated world: same DOM as the page, separate JS
+// heap, so neither side can see the other's variables. Refs live in window.intenticPageRefs, scoped to the
+// document and dead on navigation, so a stale ref is refused rather than resolved to whatever now fills that slot.
 
-// The snapshot, as it comes back from the tab. Mirrors @intentic/browser's RawSnapshot, plus the one thing only
-// a real browser can tell us: whether the document is still loading, which is the difference between "nothing
-// on this page" and "not yet".
+// Snapshot as it comes back from the tab; mirrors @intentic/browser's RawSnapshot plus `loading`, the one thing
+// only a real browser knows (nothing on the page vs. not yet).
 export interface DriverSnapshot {
     readonly url: string;
     readonly title: string;
@@ -39,8 +18,8 @@ export interface DriverSnapshot {
     readonly elements: PageElement[];
 }
 
-// What one element IS, for the moment before acting on it. `sensitive` is the extension's own judgement, made
-// where the DOM is: this element, or the form around it, deals in passwords, money or deletion.
+// Describes an element before acting on it. `sensitive` is judged locally: this element or its enclosing form
+// deals in passwords, money, or deletion.
 export interface RefDescription {
     readonly ok: boolean;
     readonly role: string;
@@ -50,8 +29,8 @@ export interface RefDescription {
 
 /* ---- the injected functions ---- */
 
-// Walk the page (piercing shadow roots) and park the ref table. 150 elements, the CDP driver's ceiling, for the
-// same reason: past that a model has lost the thread anyway, and silent truncation is worse than a note.
+// Walks the page (piercing shadow roots), parks the ref table, and caps at 150 elements — matching the CDP
+// driver's ceiling — noting truncation rather than silently dropping it.
 export const collectPage = (): DriverSnapshot => {
     const MAX = 150;
     const refs: Element[] = [];
@@ -122,10 +101,8 @@ export const collectPage = (): DriverSnapshot => {
             el.getAttribute("placeholder"),
             el.getAttribute("title"),
             el.getAttribute("name"),
-            // innerText, then textContent. Not interchangeable: innerText is what a person SEES (it respects
-            // display:none and inserts the line breaks the layout implies) and textContent is every character
-            // in the subtree, visible or not. The fallback exists because innerText needs a layout engine, so
-            // it is undefined in a headless DOM — and a name derived from textContent is worse but not wrong.
+            // innerText (what's visible) falls back to textContent (headless DOM has no layout, so innerText is
+            // undefined).
             (el as HTMLElement).innerText ?? el.textContent ?? "",
             (el as HTMLInputElement).value ?? "",
         ];
@@ -137,8 +114,7 @@ export const collectPage = (): DriverSnapshot => {
         return "";
     };
 
-    // Shadow roots are walked, iframes are not: a cross-document ref could not be acted on from here anyway,
-    // and an agent told about elements it cannot click is worse off than one told the frame exists.
+    // Shadow roots are walked; iframes are not, since a cross-document ref couldn't be acted on from here.
     const selector =
         'a[href], button, input, textarea, select, summary, [role], [onclick], [contenteditable=""], [contenteditable="true"], h1, h2, h3';
     const found: Element[] = [];
@@ -165,7 +141,7 @@ export const collectPage = (): DriverSnapshot => {
         }
         const role = roleOf(el);
         const name = nameOf(el);
-        // A nameless non-input is something a caller could never ask for by name, so it is noise.
+        // A nameless non-input can't be asked for by name, so it's skipped.
         if (name === "" && role !== "textbox" && role !== "password" && role !== "checkbox" && role !== "file") {
             continue;
         }
@@ -173,8 +149,7 @@ export const collectPage = (): DriverSnapshot => {
         refs.push(el);
         const value = (el as HTMLInputElement).value;
         const entry: { ref: string; role: string; name: string; value?: string } = { ref, role, name };
-        // A password's contents are never reported. The field is listed (an agent has to know the form has one)
-        // and what it holds is not this extension's to read back into a transcript.
+        // A password's value is never reported; only that the field exists.
         if (role !== "password" && typeof value === "string" && value !== "" && role !== "button") {
             entry.value = value.slice(0, 120);
         }
@@ -192,8 +167,8 @@ export const collectPage = (): DriverSnapshot => {
     };
 };
 
-// The page as a person reading it would get it. `innerText` rather than `textContent` because it respects
-// display:none and line breaks, which is the difference between prose and a wall of concatenated nav labels.
+// Reads the page as a person would see it: innerText (not textContent) respects display:none and line breaks,
+// avoiding a wall of concatenated nav labels.
 export const readPageText = (): { url: string; title: string; text: string; truncated: boolean } => {
     const LIMIT = 40_000;
     const main = document.querySelector("main") ?? document.querySelector("article") ?? document.body;
@@ -202,9 +177,8 @@ export const readPageText = (): { url: string; title: string; text: string; trun
     return { url: location.href, title: document.title, text: text.slice(0, LIMIT), truncated: text.length > LIMIT };
 };
 
-// What a ref points at, and whether acting on it deserves a human. The "sensitive" test is deliberately broad
-// and cheap: this decides whether to ASK, and the cost of asking too often is a click, while the cost of asking
-// too rarely is somebody's money.
+// Resolves what a ref points at and whether acting on it needs confirmation. The sensitivity test is broad and
+// cheap: over-asking costs a click, under-asking costs money.
 export const describeRef = (ref: string): RefDescription => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
@@ -215,11 +189,7 @@ export const describeRef = (ref: string): RefDescription => {
     const text = ((el as HTMLElement).innerText ?? el.textContent ?? el.getAttribute("value") ?? el.getAttribute("aria-label") ?? "")
         .trim()
         .slice(0, 120);
-    /* Two independent tells, and the enclosure one is deliberately SCOPED rather than page-wide. Asking "does
-     * this document contain a password field anywhere" would mark every button on any site with a sign-in box
-     * in its header, which trains people to click through the prompt — the failure that makes a confirmation
-     * worthless. The nearest enclosure that a designer would call one thing is the right unit: a form, a
-     * dialog, a section. An element with no enclosure at all is judged on its own words. */
+    // Credential check is scoped to the nearest enclosing form/dialog/section, not page-wide.
     const scope = el.closest("form, dialog, [role='dialog'], [role='form'], section, article, main");
     const credentials = 'input[type="password"], input[autocomplete*="cc-"], input[name*="card" i], input[autocomplete="one-time-code"]';
     const money = /\b(pay|buy|checkout|order|purchase|donate|transfer|withdraw|subscribe|send money)\b/i;
@@ -228,9 +198,8 @@ export const describeRef = (ref: string): RefDescription => {
     return { ok: true, role: el.tagName.toLowerCase(), name: text, sensitive };
 };
 
-// Click, the way a person's click behaves. The pointer/mouse sequence first (frameworks that listen on
-// pointerdown never see a bare .click()), then the element's own click(), which is what actually follows a link
-// or submits a form.
+// Clicks like a person would: dispatches the pointer/mouse sequence first (some frameworks listen on pointerdown,
+// not .click()), then calls the element's own click().
 export const clickRef = (ref: string): { ok: boolean; message: string } => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
@@ -260,10 +229,8 @@ export const clickRef = (ref: string): { ok: boolean; message: string } => {
     return { ok: true, message: `clicked` };
 };
 
-/* Type into a field. The native value setter is the load-bearing part: React (and every framework that tracks
- * an input's value on its own) overrides the `value` property on the element, so assigning `el.value = x`
- * updates what the browser shows and NOT what the framework believes, and the form submits empty. Calling the
- * prototype's setter writes the real one, and the `input` event that follows is what the framework listens for. */
+// Types into a field via the prototype's native value setter, not `el.value =`: frameworks like React override
+// that property, so a direct assign updates the display but not what the framework tracks.
 export const fillRef = (ref: string, text: string, submit: boolean): { ok: boolean; message: string } => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
@@ -291,8 +258,7 @@ export const fillRef = (ref: string, text: string, submit: boolean): { ok: boole
         const key = { bubbles: true, cancelable: true, composed: true, key: "Enter", code: "Enter", keyCode: 13, which: 13 };
         target.dispatchEvent(new KeyboardEvent("keydown", key));
         target.dispatchEvent(new KeyboardEvent("keyup", key));
-        // A form whose only submit path is the button (no default submission) still needs one: requestSubmit
-        // runs validation and fires `submit`, where form.submit() would skip both.
+        // requestSubmit (not form.submit()) runs validation and fires the submit event.
         const form = el.closest("form");
         if (form !== null) {
             form.requestSubmit();
@@ -301,8 +267,7 @@ export const fillRef = (ref: string, text: string, submit: boolean): { ok: boole
     return { ok: true, message: submit ? `typed and submitted` : `typed` };
 };
 
-// Choose in a <select>. By VALUE or by visible label, because a model reading a snapshot has the label and
-// rarely the value, and refusing the thing it can actually see would be a puzzle rather than a control.
+// Selects by value or by visible label, since a model reading a snapshot usually has the label, not the value.
 export const selectRef = (ref: string, values: string[]): { ok: boolean; message: string } => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
@@ -347,10 +312,8 @@ export const scrollPage = (direction: string, amount: number): { ok: boolean; me
     return { ok: true, message: `scrolled ${direction}` };
 };
 
-/* Wait for the page to say something (or stop saying it). Poll rather than MutationObserver: the condition is
- * "does this text appear anywhere", which an observer would re-derive on every mutation of a busy page anyway,
- * and a 200ms poll is invisible next to the network wait it is standing in for. The deadline is passed in
- * rather than hardcoded because the caller is the one holding a tool-call timeout. */
+// Polls for text rather than using MutationObserver, since the condition would be re-derived on every mutation
+// anyway. Deadline is passed in by the caller, which owns the tool-call timeout.
 export const waitForText = async (needle: string, gone: boolean, deadlineMs: number): Promise<{ ok: boolean; message: string }> => {
     const started = Date.now();
     const present = (): boolean => (document.body.innerText ?? document.body.textContent ?? "").includes(needle);
@@ -370,14 +333,11 @@ export const waitForText = async (needle: string, gone: boolean, deadlineMs: num
     }
 };
 
-/* THE THING THE PERSON SEES. Every action this extension takes flashes a line in the corner of the tab it
- * happened in, which is the whole difference between an agent using your browser and an agent using your
- * browser behind your back. It is a shadow root with `all: initial` for the widget's reason: a host page's
- * stylesheet must not be able to hide it, restyle it into invisibility, or inherit its font. */
+// Flashes a message in the corner of the tab so actions are visible, not silent. Uses a shadow root with
+// `all: initial` so the host page's styles can't hide or restyle it.
 export const flashBanner = (message: string): void => {
     const ID = "intentic-agent-banner";
-    // Replaced rather than updated: an element is cheap, and rebuilding is what keeps the timeout below owning
-    // exactly one banner instead of racing a previous action's disappearance.
+    // Replaces rather than updates, so the timeout below always owns exactly one banner.
     document.getElementById(ID)?.remove();
     const host = document.createElement("div");
     host.id = ID;
@@ -408,12 +368,8 @@ export const flashBanner = (message: string): void => {
     setTimeout(() => host.remove(), 4000);
 };
 
-/* THE HUMAN IN THE LOOP, rendered in the page the action is about to happen on — not in the popup, and not as
- * a `window.confirm`. In the page, because that is where the person is looking and where the context is: the
- * question is about THIS button on THIS page. Not `confirm()`, because it blocks the page's own event loop and
- * a blocked page cannot finish loading the thing being confirmed.
- *
- * Resolves false on timeout. A question nobody answered is a no. */
+// Confirms in the page itself, not the popup or window.confirm() (which blocks the page's event loop). Resolves
+// false on timeout: an unanswered question is a no.
 export const askConfirm = async (question: string, timeoutMs: number): Promise<boolean> => {
     return await new Promise<boolean>((resolve) => {
         const host = document.createElement("div");

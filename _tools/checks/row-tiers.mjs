@@ -1,70 +1,33 @@
 #!/usr/bin/env node
-/* EVERY LIST IN THIS APP IS ONE SIZE, AND THIS IS THE GATE THAT KEEPS IT.
- *
- * <Row>, <DisclosureRow> and <SkeletonRows> draw from one table of three tiers (_editor/ui/src/components/rows/row.ts),
- * and the tier is the <RowGroup>'s: a group is a list, a list is `compact`, and no call site says anything. That
- * is the second version of this rule. The first one kept the old taxonomy — "comfortable for settings rows,
- * compact for record lists" — and merely made it inheritable, which fixed the mechanism and left the JUDGEMENT
- * to drift exactly as before. Measured across the build at that point: 51 groups compact, 33 comfortable, and
- * all 33 of those had never stated a tier at all. Not one group in the app had ever chosen it on purpose.
- *
- * WHAT THAT LOOKED LIKE, which is how it was reported: the Sandbox hub changed row language as you tabbed
- * through it. Personas, Extensions, Environment and Access drew their titles at 14px/500; Agent, Status and
- * Devices drew theirs at 16px/600 with a 18px glyph against a 14px one. Settings did the same — Keybindings
- * against Appearance, Notifications and Data. Agent contradicted itself inside one tab: Skills and Rules
- * compact, Models and Instructions not. The taxonomy was never decidable ("Models" is three rows with a picker;
- * "Devices" is machines with switches), so it was decided by whoever edited the file last.
- *
- * The other three families the first pass fixed, kept here because they are the ways the size can still drift:
- *
- *   · a row's lead mark was a number typed at the call site — 22 on three lists, 20 on two, 24 on a sixth, 32
- *     on a seventh, all of them meaning "a mark on a record row";
- *   · 58 lines that live on a group's surface without being rows (an empty state, a sentence, an "add one", a
- *     form) picked their own padding, in six spellings, four of which matched no tier at all;
- *   · outlines promised one height and landed another, so lists visibly jumped as they arrived.
- *
- * WHAT THIS REFUSES:
- *
- *   1. A DIRECT CHILD OF A <RowGroup> THAT SETS ITS OWN PADDING. It is sharing a surface with rows drawn from
- *      the tier table, so a hand-picked `px-4 py-3` is a line that sits a few pixels off them for good. Use
- *      <RowNote> (`note` / `empty` / `action` / `block`), which reads the group's tier.
- *   2. A ROW INSIDE A <RowGroup> THAT DECLARES ITS OWN `density`. The group already said it; a second answer is
- *      either redundant or a disagreement nobody can see from the group's own markup. `flush` rows are exempt:
- *      a card masthead outranks the rows under it and is comfortable by RANK rather than by list.
- *   3. A <RowGroup> THAT RESTATES THE DEFAULT (`density="compact"`). A group IS compact; writing it down invites
- *      the next reader to wonder when it should be omitted, which is the doorway the taxonomy came in through.
- *   4. A LITERAL `:size` ON A MARK INSIDE `#lead`. <Row> and <DisclosureRow> hand the tier's mark size to that
- *      slot — `<template #lead="{ mark }">` — so there is nothing left to type, and typing it is how 20/22/24/32
- *      happened. Marks elsewhere on a row (a `#meta` cluster of platform logos) are not this and are not checked:
- *      they are facts beside the name, deliberately a notch under it.
- *   5. A ROW COMPONENT USED OUTSIDE A <RowGroup>. A `*Row.vue` whose own root takes no `density` is relying on
- *      the group to supply one; mounted anywhere else it silently falls back to `comfortable`, which is the
- *      original bug wearing the new mechanism. Either put it in a group or pass `density` at the usage.
- *
- * A group that genuinely needs another tier may still say so — rule 3 only refuses the one that says `compact`,
- * which is what it already is. That leaves the exception possible and visible, and makes not-thinking land on
- * the answer every other list in the app gives. */
+// Every list draws from one tier table via <RowGroup> (_editor/ui/src/components/rows/row.ts); a group is a list and a
+// list is `compact`, with no call site stating otherwise.
+// Refuses:
+// a <RowGroup> child that sets its own padding — use <RowNote> instead
+// a row inside a <RowGroup> that declares its own `density` (flush rows excepted)
+// a <RowGroup> that restates the default `density="compact"`
+// a literal `:size` on a mark inside `#lead`, where the tier already hands one out
+// a row component (relying on its group for density) mounted outside any <RowGroup>
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
-// Any Tailwind padding utility, at any breakpoint. `p-0`/`py-0` are a deliberate reset, not a geometry choice.
+// Any Tailwind padding utility, at any breakpoint; `p-0`/`py-0` are a deliberate reset, not geometry.
 const PADDING = /(?:^|\s)(?:sm:|md:|lg:|xl:|2xl:|@\w+:|max-\w+:)?(?:p|px|py|pt|pb|pl|pr)-(?!0(?:\s|$))[\w.[\]/-]+/;
-// The components that read the tier, plus the app's own `*Row` components, which wrap one of them.
+// Components that read the tier, plus the app's own `*Row` components wrapping one of them.
 const ROW_LIKE = (name) => name === `Row` || name === `DisclosureRow` || name === `SkeletonRows` || name === `RowNote` || /.Row$/.test(name);
 const MARKS = new Set([`BrandMark`, `Avatar`, `PersonaFace`]);
 
 const tracked = templatesUnder(`_editor/web/src`, `_editor/ui/src`, `_shared/extension-ui/src`);
 const findings = [];
 
-// Which components are "a row that expects a group to size it": root is a bare <Row>/<DisclosureRow>, no density.
+// Components whose root is a bare <Row>/<DisclosureRow> with no density: they expect a group to size them.
 const inheritingRows = new Set();
-// Where each component is used, and whether that usage had a <RowGroup> above it.
+// Where each component is used, and whether that usage sat under a <RowGroup>.
 const usages = new Map();
 
 for (const path of tracked) {
     const scan = blank(templateSource(path));
     const stack = [];
-    /* <template v-if>/<template v-for> draw nothing, so a row inside one is still the group's child. A
-     * <template #slot> is the opposite: it is somebody else's content, and its own component owns what is in it. */
+    // `<template v-if>`/`v-for` draw nothing, so a row inside one is still the group's child; `<template #slot>` is
+    // somebody else's content, owned by its own component.
     const parent = () => stack.findLast((frame) => !frame.transparent);
     const inGroup = () => stack.some((frame) => frame.name === `RowGroup`);
     const inLead = () => stack.some((frame) => frame.lead);
@@ -97,9 +60,8 @@ for (const path of tracked) {
             });
         }
 
-        /* ── 3 · a group restating what a group already is. Only `compact` is refused: another tier here is a
-         * real, visible exception, and this rule exists to stop the DEFAULT being written down — which is what
-         * reopens "so when do I leave it off?", and from there the taxonomy that split the app in two. */
+        // Only `compact` is refused: another tier here is a real, visible exception, and this only stops the default
+        // from being written down.
         if (name === `RowGroup` && /(?:^|\s)density="compact"/u.test(attrs)) {
             findings.push({
                 at: where,
@@ -115,7 +77,7 @@ for (const path of tracked) {
             });
         }
 
-        // Where every non-native component is used, for rule 5 below.
+        // Every non-native component's usages, for rule 5 below.
         if (/^[A-Z]/u.test(name)) {
             (usages.get(name) ?? usages.set(name, []).get(name)).push({ at: where, inGroup: inGroup(), sized: /(?:^|\s):?density="/u.test(attrs) });
         }
@@ -125,8 +87,8 @@ for (const path of tracked) {
         }
     }
 
-    /* Does THIS file define a row that leans on a group for its size? Its template's first element is the test:
-     * a `*Row.vue` is one row, so its root is the <Row>/<DisclosureRow> in question. */
+    // Whether this file defines a row that leans on a group for its size: a `*Row.vue`'s template root is the
+    // <Row>/<DisclosureRow> in question.
     const template = scan.indexOf(`<template>`);
     if (template !== -1) {
         const [first] = tags(scan, template + `<template>`.length);

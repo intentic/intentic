@@ -25,60 +25,37 @@ import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES }
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "./hosted.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "./hosted-usage.js";
 
-/* THE HOSTED LANE'S `ic sandbox rebuild`. On a docker host the owner runs that command on the machine the
- * container lives on: it copies the approved overlay out, refuses it unless it still hashes to what was
- * reviewed, builds it, and recreates the container with the hash stamped. A hosted sandbox is a Fly microVM
- * with no host, so the platform is the executor: it builds the same bytes on a BUILDER machine it creates
- * inside the sandbox's own Fly app, pushes the result to that app's registry path, and replaces the sandbox
- * machine's config with the new image, volume intact, the same replacement a restart is.
- *
- * Every build spends the platform's money on whatever RUN steps an approved recipe carries, and sign-in is
- * Google, so accounts are free. That shapes this module more than anything else:
- *   • ONLY THE OWNER, from a browser session, may start one, and the platform itself on a base image update.
- *     Nothing that holds the connect token can: an agent drafts and waits.
- *   • ONE IN FLIGHT per sandbox, won by a conditional update on the machine row (the pool claim's pattern).
- *   • PER-OWNER limits with PLATFORM-WIDE ceilings behind them (config.hosted.builds*): builds per day per
- *     owner, concurrent builds and builder minutes per day across the platform.
- *   • BUILDER MINUTES ARE AWAKE MINUTES: charged to the owner's month like the sandbox's own running time,
- *     and refused up front when the owner's remaining minutes are under the timeout. A free account cannot
- *     farm builds without spending the hours its sandbox would have run on.
- *   • A TIMEOUT enforced twice, by the script's own `timeout` and by the reconcile below, which force-destroys
- *     a builder that outlives it.
- *   • THE ONLY CREDENTIAL IN THE BUILDER is a deploy token scoped to the sandbox's own app, minted per build
- *     and revoked when the builder reports (fly-tokens.ts). The reconcile also enforces that an app holds one
- *     sandbox machine and at most one builder, destroying anything else, which bounds what a leaked token
- *     could buy to the token's lifetime.
- *
- * The builder reports its own exit, digest and log tail (hosted-build-script.ts) to the report route, which
- * is the primary completion signal and the only source of a log. The reconcile is the fallback for a builder
- * that never reports: it reads the machine's exit event off Fly, fails the row, and cleans up. */
+// Executes `ic sandbox rebuild` for hosted sandboxes: builds the approved overlay in a builder machine inside the
+// sandbox's own Fly app, then swaps the sandbox machine's config like a restart. Money-relevant rules:
+// - only the owner, or the platform on a base image move, may start one; one in flight per sandbox
+// - per-owner and platform-wide ceilings (config.hosted.builds*); builder minutes charge like awake time
+// - timeout enforced twice (the script's own `timeout`, and the reconcile below)
+// - the builder holds only a deploy token scoped to its app, revoked once it reports
 
 const BUILD_STATES = { building: `building`, built: `built`, failed: `failed` } as const;
 
-// Fly's registry, where the sandbox app's own path lives and where a machine in the org pulls from unaided.
+// Fly's registry; the sandbox app's own path, which any machine in the org can pull from unaided.
 const REGISTRY = `registry.fly.io`;
 
-// One moving tag per sandbox: the machine boots the DIGEST the builder reports, so re-pushing the tag frees
-// the previous image from any row and leaves nothing for a later push to hijack.
+// One moving tag per sandbox: the machine boots the digest the builder reports, so re-pushing frees the previous image
+// for later pushes.
 const overlayImageTag = (appName: string): string => `${REGISTRY}/${appName}:env`;
 const overlayCacheTag = (appName: string): string => `${REGISTRY}/${appName}:env-cache`;
 
-// The states Fly reports while a machine still costs something; anything else is a machine that has ended.
+// Fly states that still cost money vs. states for a machine that has ended.
 const RUNNING_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
 const ENDED_STATES = new Set([`stopped`, `failed`, `destroyed`, `suspended`]);
 
-// How long past its timeout a builder gets before the reconcile stops waiting for its report and destroys
-// it: the script's own `timeout` fires at the limit, then the report and the exit take seconds, not minutes.
+// Grace after timeout before the reconcile destroys a builder; report and exit take seconds once it fires.
 const TIMEOUT_GRACE_MS = 5 * 60 * 1000;
-// A builder observed stopped for this long with no report is one whose report is not coming.
+// A builder stopped this long with no report is one whose report isn't coming.
 const REPORT_GRACE_MS = 2 * 60 * 1000;
 const TICK_MS = 60 * 1000;
 
 const utcDayStart = (now: Date): Date => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-/* WHY A BUILD WAS NOT STARTED, in the words the route answers and the card shows. Every code is a refusal
- * that spent nothing: the checks run in order of cost, and the first that fails ends the request before a
- * token is minted or a machine created. */
+// Why a build wasn't started, in the words the route/card show. Every code means nothing was spent: checks run
+// cheapest-first, and the first failure stops before a token or machine exists.
 export type HostedBuildRefusal = "off" | "no-machine" | "mismatch" | "invalid" | "busy" | "daily" | "ceiling" | "budget" | "capacity";
 
 export class HostedBuildRefused extends Error {
@@ -110,7 +87,7 @@ export interface HostedBuildRequest {
     readonly requestedBy: string;
 }
 
-// The build row with everything the swap needs: the machine, its sandbox's token and its owner.
+// The build row with everything a swap needs: the machine, its sandbox's token, and its owner.
 const withMachine = {
     machine: { include: { sandbox: { include: { owner: { select: { id: true, email: true } } } } } },
 } as const;
@@ -127,9 +104,8 @@ type BuildRow = HostedBuild & {
     };
 };
 
-/* The checks before anything is spent, cheapest first. The content ones are the same verification `ic` makes
- * on a docker host: only bytes that still hash to what the owner reviewed are built, the base is pinned to
- * the image the platform runs, and the grammar is RUN/ENV under one official FROM. */
+// Checks before anything is spent, cheapest first: content still hashes to what was reviewed, the base is pinned to the
+// platform's image, and the grammar is RUN/ENV under one official FROM.
 const verifiedContent = (config: Config, hash: string, content: string): string => {
     if (sha256Hex(content) !== hash) {
         throw new HostedBuildRefused(`mismatch`, `the overlay changed since it was reviewed: re-read and approve it on the Environment card`);
@@ -146,9 +122,8 @@ const verifiedContent = (config: Config, hash: string, content: string): string 
     return pinned;
 };
 
-/* The brakes, read in one pass. Per-owner first (the common refusal), then the platform-wide ceilings, then
- * the owner's own hours. `running` builds are counted at the full timeout against the day's minutes, so the
- * ceiling is never crossed by builds that have not finished yet. */
+// Brakes read in one pass: per-owner limit first, then platform-wide ceilings, then the owner's hours. Running builds
+// count at the full timeout against the day's minutes.
 const assertWithinLimits = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date): Promise<void> => {
     const { buildsPerDay, buildConcurrency, buildMinutesPerDay, buildTimeoutMinutes } = config.hosted;
     const dayStart = utcDayStart(now);
@@ -167,11 +142,7 @@ const assertWithinLimits = async (prisma: PrismaClient, config: Config, ownerId:
     if (buildMinutesPerDay > 0 && minutesToday + buildTimeoutMinutes > buildMinutesPerDay) {
         throw new HostedBuildRefused(`ceiling`, `the platform's environment builds for today are spent; try again tomorrow`);
     }
-    /* AND A MACHINE HAS TO FIT. A builder is a real machine on the provider for the minutes of one build, so
-     * it spends the same finite allowance a person's sandbox does — which makes a full fleet the one brake
-     * that has to be checked here as well as at provisioning, or an environment build would quietly take the
-     * slot the next sign-up needs. Refused, not queued: the owner's machine keeps running exactly as it is
-     * (the overlay is an addition, never a repair), so "later" costs them nothing. */
+    // A builder is a real machine too; refused, not queued, so the owner's own sandbox is unaffected.
     if ((await hostedCapacity(prisma, config)).headroom === 0) {
         throw new HostedBuildRefused(`capacity`, `we have no room on our provider for a build machine right now; your sandbox is unaffected, try again a little later`);
     }
@@ -191,11 +162,8 @@ const provisionArgsOf = (config: Config, row: BuildRow[`machine`]): HostedProvis
     region: row.region,
 });
 
-/* BOOT THE MACHINE ONTO A BUILT IMAGE: the config replacement a restart is, with the overlay's digest and
- * hash in it. A running machine takes the new version up in place (Fly restarts it, the volume stays); a
- * stopped one is left stopped, and boots the new image on its next wake through the same budget gate every
- * wake passes, so applying a build is never a way to start a machine without one. The row records what the
- * machine now runs, which is what a later restart preserves and a later base update compares against. */
+// The config replacement a restart is: a running machine takes it up in place, a stopped one boots it on next wake
+// through the normal budget gate. The row records what now runs, for later restarts and base-update comparisons.
 const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Logger, build: BuildRow, digest: string): Promise<void> => {
     const { machine } = build;
     const image = `${REGISTRY}/${machine.appName}@${digest}`;
@@ -217,10 +185,8 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
     logger.info({ app: machine.appName, build: build.id, running }, `hosted build: applied`);
 };
 
-/* Everything a build's end does, whoever declares it (the builder's report or the reconcile's verdict): the
- * row's verdict and minutes, the owner's month charged, the builder destroyed, its token revoked, the machine
- * row's guard released, and on success the swap. Best-effort on every side effect but the row, so a Fly bad
- * minute never leaves a build both finished and building. */
+// Everything a build's end does, whoever declares it: verdict and minutes, owner's month charged, builder destroyed and
+// token revoked, guard released, and on success the swap. Best-effort on every side effect but the row.
 const finishHostedBuild = async (
     prisma: PrismaClient,
     config: Config,
@@ -242,7 +208,7 @@ const finishHostedBuild = async (
                 ? `the build exited ${outcome.exitCode} without pushing an image`
                 : `the build exited ${outcome.exitCode}`));
     const { flyApiToken } = config.hosted;
-    // The verdict first: everything below may fail and be retried, this may not be written twice.
+    // The verdict first: everything below may fail and retry, this may not be written twice.
     const updated = await prisma.hostedBuild.updateMany({
         where: { id: build.id, state: BUILD_STATES.building },
         data: {
@@ -272,8 +238,8 @@ const finishHostedBuild = async (
         try {
             await applyHostedBuild(prisma, config, logger, build, outcome.digest);
         } catch (err) {
-            // Built but not booted: the image is there and a restart applies it (refreshHosted keeps the row's
-            // overlay), so the row stays `built` with the reason on it rather than lying about a failure.
+            // Built but not booted: a restart still applies the image, so the row stays `built` with the reason
+            // attached.
             logger.error({ err, build: build.id }, `hosted build: applying the built image failed`);
             await prisma.hostedBuild.update({
                 where: { id: build.id },
@@ -284,10 +250,8 @@ const finishHostedBuild = async (
     logger.info({ build: build.id, ok, minutes, exitCode: outcome.exitCode }, `hosted build: finished`);
 };
 
-/* THE SPENDING HALF OF STARTING A BUILD, after every refusal above it has passed and the machine row's guard
- * is won: a scoped deploy token, a builder machine carrying the recipe, and the row that owns both. Its own
- * function because it is also the only half with cleanup — anything that fails here must leave nothing
- * running and nothing reserved, since the caller has already told the row a build is in flight. */
+// The spending half of starting a build, once every refusal has passed and the row's guard is won: mints a scoped
+// token, creates the builder, writes the row. Anything that fails here must leave nothing running or reserved.
 const startBuilder = async (
     prisma: PrismaClient,
     config: Config,
@@ -353,8 +317,7 @@ const startBuilder = async (
         logger.info({ app: machine.appName, build: id, requestedBy: request.requestedBy }, `hosted build: builder created`);
         return buildStateOf(row);
     } catch (error) {
-        // Nothing was recorded, so nothing may be left running or reserved: the builder (if it got made) goes,
-        // and the row's guard opens again for the next request.
+        // Nothing was recorded: destroy the builder if it was made, and reopen the row's guard.
         if (builderMachineId !== undefined) {
             await destroyMachine(flyApiToken, machine.appName, builderMachineId, { force: true }).catch((err: unknown) =>
                 logger.warn(
@@ -364,10 +327,7 @@ const startBuilder = async (
             );
         }
         await prisma.hostedMachine.updateMany({ where: { id: machine.id, buildingId: id }, data: { buildingId: null } });
-        /* THE PROVIDER REFUSING THE BUILDER FOR CAPACITY is the brake above arriving one call later — the org
-         * filled up between the count and the create, or this platform runs without a ceiling of its own. Same
-         * refusal, so the card says "no room right now" rather than showing its owner a gateway error over a
-         * build that spent nothing, and latched so provisioning knows before the next arrival asks. */
+        // Same brake arriving one call later (the org filled up meanwhile): surfaced as capacity, not a gateway error.
         if (isFlyCapacity(error)) {
             noteProviderAtCapacity(machine.region);
             logger.error({ err: error, app: machine.appName }, `hosted build: the provider has no machine left for a builder`);
@@ -380,9 +340,8 @@ const startBuilder = async (
     }
 };
 
-/* START A BUILD: verify, brake, win the row, then spend, in that order, so every refusal costs nothing and
- * every failure after the guard releases it. Answers the build's state as started, which is what the card
- * polls from then on. */
+// Verify, brake, win the row, then spend, in that order, so every refusal costs nothing and every failure after the
+// guard releases it. Answers the build's state as started; the card polls from there.
 export const requestHostedBuild = async (
     prisma: PrismaClient,
     config: Config,
@@ -414,7 +373,7 @@ export const requestHostedBuild = async (
     if (hosted.buildingId !== null) {
         throw new HostedBuildRefused(`busy`, `this sandbox's environment is already being built`);
     }
-    // The same recipe on the same base, built before and still there: a swap, not a build.
+    // Same recipe, same base, already built and still there: a swap, not a build.
     const reusable = await prisma.hostedBuild.findFirst({
         where: { hostedMachineId: hosted.id, hash: request.hash, baseImage: config.hosted.image, state: BUILD_STATES.built, digest: { not: null } },
         orderBy: { createdAt: `desc` },
@@ -433,9 +392,8 @@ export const requestHostedBuild = async (
     return startBuilder(prisma, config, logger, hosted, request, pinned, id);
 };
 
-/* THE BUILDER'S OWN REPORT, authenticated by the secret only it and the row (hashed) hold. A report can only
- * ever END a build, never start or change one: an unknown id, a wrong secret and a build already finished
- * are each answered without touching anything. */
+// The builder's own report, authenticated by the secret only it and the row (hashed) hold. Can only end a build, never
+// start or change one: unknown id, wrong secret, or an already-finished build are all answered untouched.
 export type HostedBuildReportAnswer = "unknown" | "forbidden" | "stale" | "done";
 
 export const reportHostedBuild = async (
@@ -466,11 +424,8 @@ export const reportHostedBuild = async (
     return `done`;
 };
 
-/* THE BASE IMAGE MOVED UNDER AN OVERLAY: the platform's image is newer than the one this machine's overlay
- * was built on. A restart keeps the overlay it has (the tools must not vanish), and this puts the same
- * approved recipe through a build on the new base, the platform asking on the owner's behalf, under the
- * owner's limits. Nothing to do for a stock machine or one already on the current base; a refusal (a limit,
- * a build in flight) is logged and left for the owner's next visit, never surfaced as a restart failure. */
+// The platform's image moved past this machine's overlay base: rebuilds the same approved recipe on the new base, under
+// the owner's limits. A restart keeps the current overlay; a refusal here is logged, not surfaced as a restart failure.
 export const rebuildOnMovedBase = async (
     prisma: PrismaClient,
     config: Config,
@@ -478,8 +433,7 @@ export const rebuildOnMovedBase = async (
     hosted: { id: string; sandboxId: string; image: string | null; baseImage: string | null; environmentHash: string | null },
     owner: { id: string; email: string },
 ): Promise<void> => {
-    // Falsy rather than `=== null`: a row read without these columns (an older caller's select, a fixture)
-    // has no overlay to rebuild either, and reading it as one would ask for a build of nothing.
+    // Falsy, not `=== null`: a row missing these columns has no overlay to rebuild either.
     if (!hosted.image || !hosted.environmentHash || hosted.baseImage === config.hosted.image) {
         return;
     }
@@ -508,7 +462,7 @@ export const rebuildOnMovedBase = async (
     }
 };
 
-// The build in flight or the last one finished, and what the platform last booted the machine with.
+// The build in flight or last finished, and what the platform last booted the machine with.
 export const hostedBuildStatus = async (prisma: PrismaClient, hostedMachineId: string): Promise<HostedBuildStatus> => {
     const [latest, machine] = await Promise.all([
         prisma.hostedBuild.findFirst({ where: { hostedMachineId }, orderBy: { createdAt: `desc` } }),
@@ -517,9 +471,8 @@ export const hostedBuildStatus = async (prisma: PrismaClient, hostedMachineId: s
     return { build: latest === null ? null : buildStateOf(latest), applied: machine?.environmentHash ?? null };
 };
 
-/* THE FLEET INVARIANT, checked while a build's token is alive: a sandbox's app holds its machine and at most
- * this build's builder. Anything else is what a leaked deploy token would have made, and it is destroyed
- * and said out loud. One list call per active build, which is normally none. */
+// The fleet invariant while a build's token is alive: the app holds only its sandbox machine and this build's builder.
+// Anything else is what a leaked token would have made; destroyed and logged.
 const enforceAppShape = async (config: Config, logger: Logger, build: BuildRow): Promise<void> => {
     const machines = await listMachines(config.hosted.flyApiToken, build.machine.appName).catch(() => undefined);
     if (machines === undefined) {
@@ -540,8 +493,8 @@ const enforceAppShape = async (config: Config, logger: Logger, build: BuildRow):
     }
 };
 
-/* One reconcile pass over every build in flight: the fallback for a builder that never reports, the timeout
- * nobody else enforces, and the app-shape invariant. Sequential and per-row guarded, the pool's stance. */
+// One reconcile pass over every build in flight: the fallback for a builder that never reports, the timeout nobody else
+// enforces, and the app-shape invariant. Sequential and per-row guarded.
 export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config, logger: Logger, now: () => number = Date.now): Promise<void> => {
     const building = await prisma.hostedBuild.findMany({ where: { state: BUILD_STATES.building }, include: withMachine });
     const { flyApiToken, buildTimeoutMinutes } = config.hosted;
@@ -554,7 +507,7 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             isFlyGone(error) ? (`gone` as const) : undefined,
         );
         if (detail === undefined) {
-            // Fly could not be asked: not a verdict, asked again next tick.
+            // Fly couldn't be asked: not a verdict, retried next tick.
             continue;
         }
         if (detail === `gone`) {
@@ -563,8 +516,7 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             continue;
         }
         if (ENDED_STATES.has(detail.state)) {
-            // The report arrives before the builder exits, so a builder that has been stopped for a while and
-            // is still `building` here is one whose report is not coming. Its exit event is the next best word.
+            // A builder stopped this long and still `building` has no report coming; its exit event is next best.
             if (age < REPORT_GRACE_MS) {
                 continue;
             }
@@ -585,7 +537,7 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             await finishHostedBuild(prisma, config, logger, build, { error: `the build ran past ${buildTimeoutMinutes} minutes and was stopped` });
         }
     }
-    // A guard whose build is no longer building (a crash between the verdict and the release) opens again.
+    // A guard whose build is no longer building (a crash between verdict and release) opens again.
     const guarded = await prisma.hostedMachine.findMany({ where: { buildingId: { not: null } }, select: { id: true, buildingId: true } });
     for (const row of guarded) {
         // oxlint-disable-next-line eslint/no-await-in-loop
@@ -600,8 +552,8 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
     }
 };
 
-// Boot wiring (main.ts): every minute, one replica at a time. Started even when builds are off, so a build
-// that was in flight when the feature was switched off still ends and its builder is still collected.
+// Boot wiring (main.ts): one replica at a time, every minute. Runs even with builds off, so an in-flight build still
+// ends and its builder is collected.
 export const startHostedBuilds = (prisma: PrismaClient, config: Config, logger: Logger): void => {
     const tick = (): void => {
         void runExclusive(config, JOB_HOSTED_BUILD, () =>
@@ -612,8 +564,7 @@ export const startHostedBuilds = (prisma: PrismaClient, config: Config, logger: 
     setInterval(tick, TICK_MS);
 };
 
-/* THE DAILY SWEEP (retention.ts): build rows are disposable. Everything older than the window goes except the
- * newest built one per machine, which is what a restart re-applies and a base update rebuilds from. */
+// Daily sweep (retention.ts): keeps only the newest built row per machine, which restarts and rebuilds read.
 const BUILD_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const sweepHostedBuilds = async (prisma: PrismaClient, now: () => number = Date.now): Promise<number> => {

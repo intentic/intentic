@@ -30,12 +30,11 @@ import {
     windowFor,
 } from "./usageChart";
 
-/* The Usage tab is a money screen, and every number on it is one of these functions. The cases that matter are
- * the ones where a plausible implementation lies: a window that silently drops its edges, a delta with no
- * baseline, a rank whose bars sum to less than the headline, a CSV that shifts a column on a comma. */
+// Pins the cases where a plausible implementation would lie: a window dropping its edges, a delta with no
+// baseline, ranked bars not summing to the headline, a CSV shifting columns on a comma.
 
-/* The tab injects its provider→series fold (providerGroup, which needs the live capability list). These are the
- * two ends of it: no fold at all, and the one the tab actually applies, every locally-run model as one series. */
+// Two ends of the injected provider fold: `asIs` (none) and `folded` (the tab's own, collapsing local models
+// into one series).
 const asIs = (provider: string): string => provider;
 const folded = (provider: string): string => (provider.startsWith(`endpoint/`) ? `local-models` : provider);
 
@@ -109,8 +108,7 @@ describe(`totals`, () => {
     });
 
     it(`rates cache hits against prompt input only, excluding the cost of filling the cache`, () => {
-        // 300 read against 100 uncached input = 75%. The 20 creation tokens are what it cost to populate the
-        // cache, not a lookup that could have hit, so they stay out of the denominator.
+        // 300 read / (300 read + 100 input) = 75%; the 20 creation tokens are excluded from the denominator.
         expect(cacheHitRate(totalsOf([row()]))).toBeCloseTo(75);
     });
 
@@ -132,11 +130,8 @@ describe(`series identity`, () => {
         expect(providerColor(`some-acp-agent`)).toBe(`var(--color-series-other)`);
     });
 
-    /* Every slot the chart can ASK for must exist in the shipped stylesheet, and `@theme static` is what makes
-     * that true. Tailwind emits a theme variable only where it can see it used, and these names are assembled at
-     * runtime, so without `static` the bundle kept the three slots whose names happened to appear in some source
-     * file and dropped the rest, leaving Kimi and Grok asking for a variable that wasn't there and painting
-     * nothing. Read from the stylesheet rather than a rendered page, because that is where the guarantee lives. */
+    // `@theme static` stops Tailwind from tree-shaking runtime-assembled variable names; without it, only slots
+    // whose names appear literally in source would ship.
     it(`declares a colour for every slot, in a block Tailwind cannot tree-shake`, () => {
         const sheet = readFileSync(join(repoRoot(import.meta.url), `_editor/ui/src/styles/semantic-colors.css`), `utf8`);
         const block = sheet.slice(sheet.indexOf(`@theme static`));
@@ -151,9 +146,8 @@ describe(`series identity`, () => {
         expect(providersIn(rows, asIs)).toEqual([`claude`, `gemini`, `acme`, `zed`]);
     });
 
-    /* Every locally-run model is ONE series, however many cards ever billed a turn. The ledger is never pruned,
-     * so a sandbox that tried three sets of weights and deleted them keeps three provider ids for good, and
-     * without the fold each one took its own filter pill, its own legend entry and its own stack segment. */
+    // The ledger is never pruned: a since-deleted local model keeps its own row and, without the fold, its own
+    // pill/legend/segment forever.
     it(`draws every locally-run model as one series`, () => {
         const rows = [
             row({ provider: `endpoint/llama-test` }),
@@ -227,7 +221,7 @@ describe(`usage series`, () => {
     it(`anchors weekly buckets so the newest one ends on the window's last day`, () => {
         const long = { from: `2026-01-01`, to: `2026-07-26` };
         const series = usageSeries([row({ day: `2026-07-26`, costUsd: 4 }), row({ day: `2026-07-20`, costUsd: 1 })], long, [`claude`], asIs);
-        // Both days land in the final 7-day bucket (Jul 20–26), which is the one ending on `to`.
+        // Jul 20 and Jul 26 both fall in the final week bucket (Jul 20-26), the one ending on `to`.
         expect(series.at(-1)).toMatchObject({ start: `2026-07-20`, totals: { costUsd: 5 } });
         expect(series.every((bucket) => bucket.start <= long.to)).toBe(true);
     });
@@ -250,7 +244,7 @@ describe(`sparkline`, () => {
             12,
         );
         expect(points).toHaveLength(12);
-        // Averaging, not sampling: the first pair (0,1) averages to 0.5.
+        // Averaged, not sampled: the first pair (0,1) -> 0.5.
         expect(points[0]).toBeCloseTo(0.5);
     });
 });
@@ -273,14 +267,13 @@ describe(`ranked bars`, () => {
         const [single] = rankByCost([row({ model: `opus-5` })], (entry) => entry.model, label, `default`, asIs);
         expect(rankedAccent(single!)).toBe(`1`);
 
-        // A dimension value served by two providers (a routed model, say) has no single identity to wear.
+        // A dimension value served by two providers (e.g. a routed model) has no single identity to colour it.
         const rows = [row({ model: `shared` }), row({ model: `shared`, provider: `codex` })];
         const [mixed] = rankByCost(rows, (entry) => entry.model, label, `default`, asIs);
         expect(mixed?.providers).toEqual([`claude`, `codex`]);
         expect(rankedAccent(mixed!)).toBe(`neutral`);
 
-        // Two cards folded to one series ARE one identity, so the bar keeps that series' colour rather than
-        // falling to the achromatic slot the way a genuinely mixed bar does.
+        // Folded to one series, this counts as one identity, unlike a genuinely mixed bar.
         const local = [row({ model: `qwen`, provider: `endpoint/qwen-3-8` }), row({ model: `qwen`, provider: `endpoint/qwen-3-8-200k` })];
         expect(rankByCost(local, (entry) => entry.model, label, `default`, folded)[0]?.providers).toEqual([`local-models`]);
     });
@@ -326,8 +319,6 @@ describe(`axis and formatting`, () => {
     });
 
     it(`keeps the hero amount inside its tile by stepping precision down with magnitude`, () => {
-        // Cents where they carry meaning, then whole dollars, then compacted: nine glyphs at worst, so the
-        // number can't grow out of the card the way a fixed 48px "$1,234.56" does.
         expect(formatUsdHero(36.62)).toBe(`$36.62`);
         expect(formatUsdHero(9_999.99)).toBe(`$9,999.99`);
         expect(formatUsdHero(12_480.4)).toBe(`$12,480`);
@@ -360,7 +351,7 @@ describe(`csv export`, () => {
     it(`quotes a field containing a comma or a quote, so a model id can't shift every later column`, () => {
         const [, line] = usageCsv([row({ model: `weird,"name"` })]).split(`\n`);
         expect(line).toContain(`"weird,""name"""`);
-        // Still 13 columns once the quoted field is accounted for.
+        // 13 columns still, the quoted comma doesn't split them.
         expect(line?.split(`","`)).toHaveLength(1);
     });
 });

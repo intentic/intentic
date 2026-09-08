@@ -8,36 +8,23 @@ import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSource
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 
-/* The single add-a-server flow: shown by InfraDeclare and the Add dialog as the requirement card when
- * something the user wants needs a deploy target (the parent unmounts it once a host registers), and by
- * InfraDeclare's "What you have" section behind its Add server button. Run a single connect-host
- * command on each host you want to deploy onto: it sets up the host (service user + SSH key + its own
- * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token): no
- * sandbox recreate, no keys pasted here.
- *
- * The command carries the user's OWN Cloudflare token, always: a deploy target is reached over SSH, and
- * intentic's own tunnels carry web traffic only, so the platform has nothing to hand out here. This runs in the
- * browser workspace, so the sandbox self-context (daemon URL, connect token) comes from the platform's sandbox
- * registry (useSandbox); the install command from scriptCommand (deploy curls intentic.dev, dev runs the repo
- * script by path). */
+// Shared connect-a-server flow, shown as InfraDeclare's requirement card and behind its Add-server button.
+// One command sets up the host and self-registers via /enroll; no sandbox recreate, no keys pasted here.
+// Always carries the user's own Cloudflare token: intentic's tunnels carry web traffic only.
 const { refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
-// The connect-host one-liner: SANDBOX_URL (the daemon) + CONNECT_TOKEN (which also authorizes /enroll) +
-// CF_TOKEN (entered here; the daemon writes it via /enroll), with ZONE when we know one. The command shape comes
-// from scriptCommand (deploy vs local-dev-by-path); the sandbox URL + token from the active sandbox.
+// SANDBOX_URL, CONNECT_TOKEN, CF_TOKEN and ZONE when known; url/token come from the active sandbox.
 const cfToken = ref(``);
 const hostName = ref(``);
-// Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); the connect-host script does the real verify.
+// Lenient check (Cloudflare tokens are [A-Za-z0-9_-]); the connect-host script does the real verify.
 const cfTokenValid = computed(() => /^[A-Za-z0-9_-]{30,}$/.test(cfToken.value.trim()));
 const cfTokenTouched = ref(false);
 const hostNameTouched = ref(false);
 const rawHostName = computed(() => hostName.value.trim());
 const canonicalHostName = computed(() => normalizeHostName(hostName.value));
 const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostName.value !== ``);
-/* The zone to create this host's tunnel in, derived client-side from the daemon URL: right when the sandbox is
- * behind the user's OWN domain (same account, same zone). A sandbox we connect answers under intentic's zone,
- * which the user's token cannot touch: pass no ZONE there and let the host resolve the token's own zone. */
+// Derived from the daemon URL, only on the user's own domain; else the host resolves its own zone.
 const zone = computed(() => (active.value?.providedAddress === true ? undefined : zoneFromUrl(daemonUrl.value)));
 
 const commandReady = computed(() => {
@@ -76,9 +63,8 @@ const connectHostCommand = computed(() => {
     );
 });
 
-// The PowerShell equivalent (Windows deploy target). Same reactive inputs as the bash one-liner above, but the
-// connect-host.ps1 form: `$env:X='…'; … irm <hostPs1> | iex`. The script stands up a Docker-in-Docker host
-// container on the machine (Windows can't be a native SSH+Docker target).
+// PowerShell equivalent: same reactive inputs as the bash command, via connect-host.ps1. Stands up a
+// Docker-in-Docker host container, since Windows can't be a native SSH+Docker target.
 const connectHostCommandPs = computed(() => {
     const sandbox = active.value;
     const url = daemonUrl.value;
@@ -110,7 +96,7 @@ onUnmounted(() => clearInterval(timer));
                 </InfoHint>
             </div>
             <p class="mt-0.5 text-xs text-muted">
-                <!-- Placement-specific motivation (the requirement cards say why a server is being asked for). -->
+                <!-- Placement-specific: the requirement cards say why a server is being asked for. -->
                 <slot name="reason"></slot>
                 One command, run on the target host as root. Cloudflare is set up as part of it.
             </p>
@@ -162,8 +148,10 @@ onUnmounted(() => clearInterval(timer));
             <template v-else>
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <SegmentedControl v-model="cmdOs" :options="OS_OPTIONS" />
-                    <!-- The strongest case for the switch in the app: this command is run on a SERVER, which
-                         never has the developer's checkout, so a dev build's repo-path form cannot work there. -->
+                    <!--
+                        The strongest case for the switch: this runs on a SERVER, which never has the developer's
+                        checkout.
+                    -->
                     <ScriptSourceSwitch />
                 </div>
                 <Code

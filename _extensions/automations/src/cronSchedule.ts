@@ -1,7 +1,6 @@
-/* The structured schedule the automations dialog edits instead of raw cron. `cronOf` composes the wire cron
- * string; `parseCron` inverts it for exactly the shapes the builder can produce (plus dow ranges like 1-5) and
- * falls back to freq "custom" carrying the raw string for anything else, so cron syntax only ever surfaces in
- * the explicit Custom mode. `scheduleLabel` renders the human badge for the automations list. */
+// The structured schedule the automations dialog edits instead of raw cron. `cronOf` composes the cron string;
+// `parseCron` inverts it for the shapes the builder produces, falling back to freq "custom" with the raw string.
+// `scheduleLabel` renders the human badge for the automations list.
 
 export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly` | `custom`;
 
@@ -14,7 +13,7 @@ export interface ScheduleState {
     cron: string; // custom only
 }
 
-// Every field carries a sensible default so parseCron results can be Object.assign'ed over a reactive state.
+// Baseline used as the spread target when a parseCron result overwrites a reactive state.
 export const defaultSchedule = (): ScheduleState => ({
     freq: `daily`,
     everyMinutes: 5,
@@ -144,9 +143,7 @@ const ordinal = (day: number): string => {
     return `${day}th`;
 };
 
-// The list's two time COLUMNS. Both stay narrow enough to align down the page, the exact timestamp rides the
-// tooltip, which is why neither is the kit's `timeAgo`: that one falls back to a full date and time past a
-// day, and three of those in a column is the end of scanning it.
+// Keeps `since`/`nextIn` narrow instead of using the kit's `timeAgo`, which falls back to full dates.
 const MINUTES_PER_DAY = 60 * 24;
 
 /** How long ago a run happened: "just now", "5m ago", "3h ago", "2d ago". */
@@ -164,9 +161,10 @@ export const since = (at: number): string => {
     return `${Math.round(minutes / MINUTES_PER_DAY)}d ago`;
 };
 
-/** How long until the next fire: "due", "in 5m", "in 3h", "in 2d". A nextRun that has just slipped into the
- *  past reads as "due" rather than as a miss, the daemon's scheduler picks changes up on a poll, so being a
- *  few seconds behind the clock is its normal state. */
+/**
+ * How long until the next fire: "due", "in 5m", "in 3h", "in 2d"; a nextRun just in the past still reads "due" since
+ * the scheduler polls and can lag behind the clock.
+ */
 export const nextIn = (at: number): string => {
     const minutes = Math.round((at - Date.now()) / 60_000);
     if (minutes < 1) {
@@ -181,9 +179,7 @@ export const nextIn = (at: number): string => {
     return `in ${Math.round(minutes / MINUTES_PER_DAY)}d`;
 };
 
-// The whole rule of a schedule trigger in one phrase, "Daily 05:00 · after 30 sessions". The bar rides the
-// clock rather than hiding in the form, because a row that said only the clock would read as a nightly job
-// that mostly skips for no reason.
+// Full trigger rule as one phrase, e.g. "Daily 05:00 · after 30 sessions".
 export const scheduleTriggerLabel = (trigger: { readonly cron: string; readonly afterSessions?: number }): string =>
     trigger.afterSessions === undefined ? scheduleLabel(trigger.cron) : `${scheduleLabel(trigger.cron)} · after ${trigger.afterSessions} sessions`;
 

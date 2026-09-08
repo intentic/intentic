@@ -4,10 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
 import { desktopRoutes } from "./desktop.routes.js";
 
-/* The handoff's two guarantees, which are the only things about it worth testing: a redeem SPENDS the row
- * (so a replayed link is inert), and an expired row is refused with the same answer an unknown one gets. The
- * encryption round-trip is crypto.ts's own test; with no SECRETS_KEY it is the identity, which is what makes
- * the assertions here readable. */
+// A redeem spends the row (a replay is inert); an expired row is refused exactly like an unknown one. No SECRETS_KEY
+// makes encryption the identity, so round-tripped values are readable here.
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 
@@ -40,7 +38,7 @@ describe(`desktop handoff`, () => {
         });
 
         await expect(call(desktopRoutes.handoff, { idToken: `google-jwt`, challenge }, { context: ctx })).resolves.toEqual({ handoff: `h1` });
-        // The caller's OWN headers, not a fresh request: the token has to belong to the session that asked.
+        // The caller's own headers, not a fresh request: the token has to belong to the session that asked.
         expect(generateOneTimeToken).toHaveBeenCalledWith({ headers });
         expect(create.mock.calls[0]?.[0]?.data).toMatchObject({ ott: `ott-1`, idToken: `google-jwt`, challenge });
     });
@@ -57,7 +55,7 @@ describe(`desktop handoff`, () => {
             prisma: fakePrisma({
                 desktopHandoff: { findUnique: vi.fn().mockResolvedValue(row(new Date(Date.now() + 60_000))), deleteMany: remove },
             }),
-            user: null, // sessionless on purpose — the webview has no session yet; that is what this route is for
+            user: null, // sessionless on purpose; the webview has no session yet, which is what this route is for
         });
 
         await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: ctx })).resolves.toEqual({
@@ -83,10 +81,6 @@ describe(`desktop handoff`, () => {
         expect(remove).not.toHaveBeenCalled();
     });
 
-    /* The credential the platform already holds, which is what lets the hand-off page finish without putting a
-     * Google button in front of someone who has just signed in twice. Session-scoped, and never an error when
-     * there is nothing to give: the caller's fallback IS the Google button, and a 500 would replace a page
-     * that still works with one that does not. */
     it(`hands back the Google token already on file for this session`, async () => {
         const getAccessToken = vi.fn().mockResolvedValue({ accessToken: `at`, idToken: `google-jwt`, scopes: [] });
         const headers = new Headers({ cookie: `session=abc` });
@@ -104,8 +98,6 @@ describe(`desktop handoff`, () => {
         await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: undefined });
     });
 
-    // A sign-in that left no refresh token, or an account since unlinked. Both are "we hold nothing", and the
-    // page answers them the same way it always did: by showing Google's button.
     it(`says it holds nothing rather than failing when the refresh is refused`, async () => {
         const ctx = context({
             auth: {

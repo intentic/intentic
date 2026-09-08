@@ -1,28 +1,15 @@
 // @vitest-environment jsdom
-//
-// jsdom because the contract here is the header AgentDetail actually renders. It cannot calculate flexbox, but
-// it can pin WHAT IS ALLOWED IN THE HEADER ROW, which is what two measured production failures came down to.
-//
-// The first: the status words and Chat | Changes both sat in that row, so a longer status ("Idle" → "Running")
-// left the title a four-pixel box. The words were made to stand down below the header's @md width, keeping
-// their accessible name: that is the `hidden @md:inline` pair below.
-//
-// The second, measured at 390px: even with the words gone the row held a back arrow, the title, a rename
-// pencil, the session chip, the status glyph, the ~120px switch and the actions menu, and the title got 55px
-// for a string needing 250: "Add Stripe checkout to the pricing page" rendered "Add St…". The switch moved to
-// a full-width row of its own beneath the header, so THE SWITCH BEING OUTSIDE `.view-header` is now the
-// contract, and it is asserted as such rather than merely "present somewhere in the component", which is
-// what the old assertion said, and which stayed true throughout the failure it was meant to prevent.
+// jsdom pins what the header row is allowed to hold, per two measured failures: a longer status word squeezed the
+// title (fixed by hiding words below @md), and at 390px the mode switch left no room for the title (fixed by
+// moving it outside `.view-header`). Asserted structurally, not just as "present somewhere".
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The header's way back to the board is a link now, so this mock has to carry a <RouterLink>: the real one
-// resolves its href out of a router this bare mount never installs.
+// The header's back link is a real RouterLink now, which needs a router this bare mount never installs.
 vi.mock(import("vue-router"), async (importOriginal) => ({
     ...(await importOriginal()),
-    // `query` as well as `params`: the page reads `?sandbox=` to decide whether this review is of an agent in
-    // another box, and a route object without one is a shape vue-router never produces.
+    // `query` too: the page reads `?sandbox=`, and vue-router never produces a route object without one.
     useRoute: () => ({ params: { id: `agent-1` }, query: {} }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
     RouterLink: (await import("../../../testing/routerLinkStub")).RouterLinkStub as never,
@@ -33,8 +20,7 @@ vi.mock("@intentic/ui", async () => {
     const empty = (name: string) => vue.defineComponent({ name, render: () => null });
     return {
         ui: { iconButton: () => `` },
-        // The app's action button comes from the kit now rather than straight from PrimeVue, so the stub does
-        // too: this mount only cares where the buttons ARE, not what they do when pressed.
+        // Button comes from the kit, not PrimeVue; this mount only cares where buttons are, not what they do.
         Button: empty(`Button`),
         Modal: empty(`Modal`),
         ResponsiveOverlay: empty(`ResponsiveOverlay`),
@@ -75,9 +61,9 @@ vi.mock("../../chat/run/useChat", async () => {
     const { ref } = await import("vue");
     return {
         useChat: () => ({
-            // The fields the page reads off a conversation, on the real Conversation's terms: `peek` and
-            // `unsent` are what the phone's focus-leave sweep asks about on the way out (AgentDetail.sweepPeek),
-            // and this agent is one the reader walked into rather than glanced at.
+            // `peek`/`unsent` are what the phone's focus-leave sweep checks (AgentDetail.sweepPeek); this agent is one
+            // the
+            // reader walked into, not merely glanced at.
             conversations: ref([
                 {
                     conversationId: `agent-1`,
@@ -92,8 +78,7 @@ vi.mock("../../chat/run/useChat", async () => {
         }),
     };
 });
-// The strip fleetScope reads for the page's fleet: nothing open, and stubbed rather than real so this mount does
-// not stand up the whole tab store behind a header test.
+// Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
 vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
 
 vi.mock("../../../lib/inlineRename", async () => {
@@ -155,7 +140,7 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
     const status = header.querySelector<HTMLElement>(`[aria-label="Running"]`)!;
     const words = [...status.querySelectorAll(`span`)].find((node) => node.textContent === `Running`)!;
 
-    // The switch is rendered, and it is rendered OUTSIDE the header: the header has no width to spare for it.
+    // The switch renders, and outside the header: it has no width to spare for it.
     expect(el.querySelector(`[data-mode-switch]`)).not.toBeNull();
     expect(header.querySelector(`[data-mode-switch]`)).toBeNull();
     expect(title.textContent).toBe(`Readable mobile title`);

@@ -5,15 +5,13 @@ import { type BridgeConfig, readSessions, resolveConfig, writeSessions } from ".
 import { createDaemonClient, type DaemonClient } from "./daemon-client.js";
 import { createTranslator } from "./translate.js";
 
-/* The ACP agent the editor spawns: a thin stdio bridge onto the intentic sandbox daemon. One ACP session =
- * one daemon conversation (bridge-minted id); each session/prompt starts a turn and watches it over
- * /agent/attach, translating the daemon's rows into session/update notifications. Control flow the daemon models as side channels maps onto
- * ACP's one interactive primitive, request_permission: a plan frame becomes a "Review plan" tool call with
- * Approve/Keep-planning options (the claude-code-acp ExitPlanMode pattern), an AskUserQuestion frame becomes
- * one permission request per question (multiSelect collapses to a single choice, documented loss). Modes:
- * [code, plan] map to the daemon's per-turn permissionMode, which is exactly what the web sends too. */
+// Thin stdio ACP bridge onto the intentic sandbox daemon: one ACP session is one daemon conversation, watched over
+// /agent/attach and translated into session/update notifications.
+// The daemon's side-channel control flow maps onto ACP's one interactive primitive, request_permission: a plan frame
+// becomes a "Review plan" tool call, an AskUserQuestion frame becomes one permission request per question.
+// Modes [code, plan] map to the daemon's per-turn permissionMode, same as the web client sends.
 
-// The daemon constrains conversation ids (branch/filesystem safety); this always satisfies its regex.
+// Daemon constrains conversation ids for branch/filesystem safety; this id always satisfies that regex.
 const mintSessionId = (): string =>
     `acp-${randomBytes(9)
         .toString("base64url")
@@ -37,14 +35,14 @@ const MODES = {
 };
 
 export interface BridgeOptions {
-    // Injectable for tests: the resolved config (env/file otherwise) and the daemon-client factory.
+    // Injectable for tests: the resolved config and the daemon-client factory.
     readonly config?: BridgeConfig;
     readonly clientFor?: (url: string, token: string) => DaemonClient;
     readonly configDir?: string;
     readonly version?: string;
 }
 
-// A plan frame → a "Review plan" tool call + permission prompt; the outcome rides the decision channel.
+// Turns a plan frame into a "Review plan" tool call and permission prompt; the outcome rides the reply channel.
 const reviewPlan = async (
     ctx: AgentContext,
     sessionId: string,
@@ -72,10 +70,7 @@ const reviewPlan = async (
         ],
     });
     const approved = response.outcome.outcome === "selected" && response.outcome.optionId === "approve";
-    // Rejection feedback is canned, permission prompts carry no free text (documented loss; the daemon
-    // loops another planning turn on the same stream).
-    // The reply names no posture because there is none to name: an approved plan executes with permissions
-    // bypassed, which is exactly what this single-option card can promise.
+    // Rejection feedback is canned (no free text); approval executes with permissions bypassed.
     await daemon.postReply({
         kind: "plan",
         requestId: event.requestId,
@@ -88,7 +83,7 @@ const reviewPlan = async (
     });
 };
 
-// AskUserQuestion → one permission request per question; multiSelect collapses to a single choice.
+// Turns AskUserQuestion into one permission request per question; multiSelect collapses to a single choice.
 const askQuestions = async (
     ctx: AgentContext,
     sessionId: string,
@@ -165,8 +160,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
             protocolVersion: 1,
             agentInfo: { name: "intentic", version: options.version ?? "0.0.0" },
             agentCapabilities: {
-                // Only Claude transcripts are readable from the daemon's session store today, an honest,
-                // provider-conditional capability, not a lie.
+                // Only Claude transcripts are readable from the daemon's store; other agents honestly report false.
                 loadSession: (configured()?.agent ?? "claude") === "claude",
                 promptCapabilities: { image: false, audio: false, embeddedContext: false },
             },
@@ -221,14 +215,13 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                 conversationId: stored.conversationId,
                 cwd: params.cwd,
                 mode: "code",
-                // Resume only on the same provider, a switched INTENTIC_AGENT starts fresh (the daemon would
-                // reject a foreign runtime's session id anyway; this fails cleanly earlier).
+                // Resumes only on the same provider; a switched INTENTIC_AGENT starts fresh, not on a foreign session
+                // id.
                 providerSessionId: stored.agent === config.agent ? stored.providerSessionId : undefined,
                 abort: undefined,
                 cancelled: false,
             });
-            // Replay the transcript (role/text only, tool calls are not persisted in the readable store) as
-            // message chunks BEFORE returning, per the spec.
+            // Replays the transcript (role/text only, no persisted tool calls) as chunks before returning, per spec.
             if (stored.providerSessionId !== undefined && stored.agent === "claude") {
                 const messages = await daemonFor(config)
                     .getSession(stored.providerSessionId)
@@ -258,8 +251,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
             if (state === undefined) {
                 return;
             }
-            // Soft cancel, browser parity: abort the SSE fetch (the daemon turn may finish server-side; its
-            // idle reaping covers it), a daemon hard-cancel route is the listed follow-up.
+            // Soft cancel: aborts the SSE fetch only; the daemon's own idle reaping ends the turn server-side.
             state.cancelled = true;
             state.abort?.abort();
         })
@@ -289,8 +281,8 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                     state.abort.signal,
                 );
                 const translate = createTranslator(state.cwd);
-                // The cards this turn has already handed the editor, by requestId: a card's row is replaced
-                // again as it settles, and only its first, pending appearance is a question to ask.
+                // Cards already handed to the editor, by requestId; only a card's first pending appearance is asked
+                // again.
                 const asked = new Set<string>();
                 for await (const frame of turn) {
                     if (frame.kind === "end") {
@@ -302,9 +294,8 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                         continue;
                     }
                     if (frame.kind === "fact" && frame.fact.kind === "error") {
-                        // Remember the failure but keep draining: the daemon writes the failure into the rows
-                        // and ends the stream after it, and partial updates already rendered should not be
-                        // interleaved with a hung stream.
+                        // Keeps draining after a failure, since the daemon still writes it into the rows before ending
+                        // the stream.
                         failure = RequestError.internalError({ details: frame.fact.message });
                         continue;
                     }

@@ -2,9 +2,7 @@ import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "./translator.js";
 
-/* The shared account-usage store, in memory. Every client in this file gets one: `accounts` reads it on every
- * call now that a row's headroom travels with the row, so a test that skipped it would be exercising a client
- * the daemon never builds. */
+// In-memory account-usage store every client in this file shares; `accounts` reads it on every call.
 const memoryStore = () => {
     const snapshots: Record<string, AccountUsage> = {};
     return {
@@ -21,31 +19,16 @@ const memoryStore = () => {
     };
 };
 
-/* ONE REQUEST MAY NOT COST THE WHOLE FLEET. CLIProxyAPI retries a refusal on the next credential, and its own
- * default (0) means "every auth file you hold": correct only if a refusal is always about the account it came
- * from. Google's is not: it answers a request it objects to with the same RESOURCE_EXHAUSTED as a spent quota,
- * so one unservable request walked all 31 connected accounts, 44–62 upstream calls, ~60 seconds, every one of
- * them at ~0% utilization.
- *
- * Asserted on the rendered file because that is the only surface this repo owns: the walk happens inside a
- * separate binary that reads it. A missing key is not a neutral omission here: it unmarshals to Go's zero, which
- * is the unbounded walk, which is how this went unnoticed. */
+// Asserted on the rendered config, since the retry walk runs inside a separate binary that reads it; a missing key
+// unmarshals to Go's zero, i.e. unbounded.
 test("bounds how many accounts one request may be retried on", () => {
     const config = renderConfig({ port: 8789, authDir: "/agent-auth/cliproxy", token: "t", compat: "" });
 
     expect(config).toContain("max-retry-credentials: 5");
 });
 
-/* THE FIELD THAT KILLED A TEN-MINUTE TURN, filtered at the proxy's edge rather than trusted to it.
- *
- * `400 prompt_cache_retention is not supported on this model` ended a Codex turn at its last request. Nothing
- * here sends that parameter; the proxy's own Codex paths each strip it separately, and the compaction call, which
- * is exactly the request a long turn makes at the end, did not. A filter rule runs ahead of all of those paths,
- * so the guarantee holds whatever version is pinned and whoever else points a client at this loopback endpoint.
- *
- * Asserted on the rendered file for the same reason as the walk above: the stripping happens inside a separate
- * binary that reads it, so the file IS the surface. `prompt_cache_key` must survive, it is what keeps a session's
- * cache warm, and filtering it would turn a fix into a bill. */
+// Filtered at the proxy's edge since the upstream paths don't all strip it themselves; asserted on the rendered config
+// for the same reason as above. `prompt_cache_key` must survive: filtering it would cost the session's warm cache.
 test("strips the cache-retention parameter nothing here sends, for every model the proxy serves", () => {
     const config = renderConfig({ port: 8789, authDir: "/agent-auth/cliproxy", token: "t", compat: "" });
 
@@ -105,10 +88,8 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
     });
 });
 
-/* A PROXY THAT DIDN'T ANSWER IS TWO DIFFERENT SITUATIONS, and the user's next move differs in each, so the
- * pair is pinned together. This used to be one test asserting the rebuild sentence for BOTH, which is how a
- * sandbox whose translator was merely mid-boot told its owner to go and rebuild the image: slow, and it changes
- * nothing, because the binary was there all along. Only the absence of the binary earns that instruction. */
+// Builds a client whose proxy never answers, with or without the binary present; the two cases need different advice to
+// the user.
 const unreachableClient = (binaryPresent: boolean) => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
     return createCliProxyClient({
@@ -132,9 +113,8 @@ test("asks the user to wait when the translator is present but not answering yet
     await expect(failure).rejects.not.toThrow(TRANSLATOR_BINARY_MISSING);
 });
 
-// The other half of "unreachable is not empty": that a proxy which cannot be asked still yields the accounts on
-// disk: needs a real auth-dir, so it lives in translator.integration.test.ts under the budget for suites that
-// touch the machine.
+// The other half — accounts on disk when the proxy is unreachable — lives in translator.integration.test.ts, which
+// needs a real auth dir.
 
 test("completes Google's redirect login via oauth-callback", async () => {
     const fetchMock = vi.fn(async () => Response.json({ status: "ok" }));
@@ -213,10 +193,8 @@ test("projects CLIProxyAPI's Kimi auth files as connected subscription accounts"
     });
 });
 
-/* The routed accounts' quota path, end to end through the client. Two things are being pinned, and they are the
- * two that were actually broken: the rows have to carry `usage` at all (a green dot for a spent account is the
- * bug this exists to fix), and reading them must never put an upstream round-trip on `accounts`, which is the
- * routed-turn credential gate as well as the settings list. */
+// Pins two things about the routed accounts' quota path: rows carry `usage`, and reading them from `accounts` never
+// triggers an upstream round-trip.
 describe("translator subscription usage", () => {
     const cliProxyFetch = (calls: { url: string; body?: Record<string, unknown> }[]) =>
         (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -240,9 +218,9 @@ describe("translator subscription usage", () => {
                             auth_index: "google-index",
                             project_id: "google-project",
                         },
-                        // Grok has no readable quota: it must never reach the api-call path.
+                        // Grok has no readable quota; must never reach the api-call path.
                         { name: "grok-a.json", provider: "xai", email: "grok@example.com", auth_index: "grok-index" },
-                        // Benched by the proxy itself, the shape CLIProxyAPI's /auth-files lists it in.
+                        // Benched by the proxy itself, in the shape /auth-files lists it.
                         {
                             name: "kimi-a.json",
                             provider: "kimi",
@@ -281,11 +259,11 @@ describe("translator subscription usage", () => {
             fetchFn: cliProxyFetch(calls),
         });
 
-        // The headroom service reads every target the client publishes; here the reads are driven directly.
+        // Targets are read directly here, as the headroom service would read them.
         const targets = await client.headroom.targets();
         for (const target of targets) {
             const reading = await target.read();
-            // As the service does: a read that found no pool leaves nothing behind.
+            // Mirrors the service: no pool read leaves nothing recorded.
             if (reading.windows.length > 0) {
                 await store.record(target.key, { windows: [...reading.windows], measuredAt: Date.now() });
             }
@@ -293,8 +271,7 @@ describe("translator subscription usage", () => {
         const accounts = await client.accounts();
 
         expect(() => TranslatorAccountsSchema.parse(accounts)).not.toThrow();
-        // Every readable file is a target, the benched Kimi one included: the bench is the proxy's, the quota
-        // is still the plan's to report.
+        // Benched, not excluded: Kimi is still a target since the bench is the proxy's, not the plan's.
         expect(targets.map((target) => [target.provider, target.key])).toEqual([
             ["codex", "codex:codex-a.json"],
             ["kimi", "kimi:kimi-a.json"],
@@ -311,8 +288,7 @@ describe("translator subscription usage", () => {
             // A group naming neither family is the plan's own allowance and gates everything.
             usage: { windows: [{ kind: "google:weekly", utilization: 70, gates: "all" }] },
         });
-        // Namespaced by provider, because the store is shared with the native accounts and an auth-file name is
-        // only unique within its own provider.
+        // Namespaced by provider: shared with native accounts; a file name is unique only per provider.
         expect(Object.keys(snapshots).toSorted()).toEqual(["codex:codex-a.json", "gemini:google-a.json"]);
 
         const proxied = calls.filter((call) => call.url.endsWith("/api-call")).map((call) => call.body!);
@@ -323,16 +299,14 @@ describe("translator subscription usage", () => {
         expect(proxied.find((call) => call[`auth_index`] === "google-index")).toMatchObject({
             data: JSON.stringify({ project: "google-project" }),
         });
-        // The credential-scoped proxy substitutes the token server-side; ours must never travel in the request.
+        // The proxy substitutes the token server-side; ours must never appear in the request.
         expect(JSON.stringify(proxied)).not.toContain("management-secret");
         // Grok is not merely unmapped: it is never asked.
         expect(proxied.some((call) => call[`auth_index`] === "grok-index")).toBe(false);
         expect(accounts.grok[0]).not.toHaveProperty("usage");
     });
 
-    /* `accounts` is the routed-turn credential gate. It answers from the store and never asks upstream, so the
-     * round-trip can never land on a turn's startup path; the headroom service reads the targets on its own
-     * triggers and the next `accounts` read is drawn from what it recorded. */
+    // `accounts` never awaits upstream; the headroom service populates the store on its own triggers instead.
     test("answers from the store rather than awaiting upstream, and carries the proxy's own bench of a credential", async () => {
         const calls: { url: string; body?: Record<string, unknown> }[] = [];
         const { store } = memoryStore();
@@ -345,27 +319,21 @@ describe("translator subscription usage", () => {
             fetchFn: cliProxyFetch(calls),
         });
 
-        // Cold store: the rows come back at once, unmeasured, and nothing was asked upstream.
+        // Store starts cold: rows return unmeasured, nothing asked upstream yet.
         const first = await client.accounts();
         expect(first.codex[0]).not.toHaveProperty("usage");
         expect(calls.filter((call) => call.url.endsWith("/api-call"))).toHaveLength(0);
-        // The proxy benched the Kimi file (a quota 429 it is routing around): the row says so, with the
-        // proxy's retry instant, whatever the last reading said.
+        // A benched file's row reports the proxy's retry instant, overriding whatever the last reading said.
         expect(first.kimi[0]).toMatchObject({ name: "kimi-a.json", cooling: { until: 1_800_000_600, reason: "quota exceeded" } });
         expect(first.gemini[0]).not.toHaveProperty("cooling");
-        // …and the fleet reads it as spent for the model it would have served.
         await expect(client.turnLimit("kimi", "kimi-k2")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_800_000_600 });
-        // A file the provider holds alone is the one a pushed reading can be filed under; a fleet is not.
+        // A file the provider holds alone is what a pushed reading can be filed under; a fleet is not.
         await expect(client.sharedUsageKey("codex")).resolves.toBe("codex:codex-a.json");
     });
 
-    /* WHETHER A SPENT PROVIDER CAN SERVE THIS MODEL, and when it next can: the question a routed 429 leaves
-     * unanswered, because CLIProxyAPI balances across its whole credential set and reports only the last word on
-     * it ("All credentials … are cooling down"), naming no account and carrying no per-account reset. These
-     * snapshots are the only place either survives, so the lookup is pinned on the ordering, the abstention,
-     * and (the correction these tests exist for) the POOL the turn's model actually spends. */
-    // The gates the Google reader gives its two groups (translator-usage.ts googleGates), spelled out here
-    // because these snapshots are recorded by hand rather than read.
+    // Whether a spent provider can still serve a model, and when it reopens: CLIProxyAPI's own 429 names no account and
+    // no per-account reset. Pins the correction: the pool the turn's model actually spends.
+    // The gates the Google reader gives its two groups (googleGates), recorded here by hand.
     const GEMINI: Pick<UsageWindow, "label" | "gates"> = { label: "Gemini models", gates: { models: ["gemini"] } };
     const THIRD_PARTY: Pick<UsageWindow, "label" | "gates"> = { label: "Claude and GPT models", gates: { models: ["claude", "gpt"] } };
 
@@ -385,8 +353,6 @@ describe("translator subscription usage", () => {
             fetchFn: filesNamed(provider, names),
         });
 
-    // Exhausted only, and the earliest of them: any ONE account reopening unblocks the turn, so the soonest is
-    // the answer.
     test("reports the earliest reset among a provider's exhausted accounts", async () => {
         const { store } = memoryStore();
         const windows = {
@@ -408,12 +374,8 @@ describe("translator subscription usage", () => {
         await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
     });
 
-    /* THE POOL THE MODEL SPENDS, which is the correction the rest of this rests on.
-     *
-     * One Google sign-in meters Gemini separately from the Claude and GPT models, on separate clocks. Reading
-     * both as one allowance answered a Claude Opus turn with the GEMINI pool's instant: on a pool that turn
-     * never touched, while the pool it WAS spending still had room. Same store, same account, same moment, two
-     * models, two different answers. */
+    // One Google sign-in meters Gemini separately from Claude/GPT models, on separate clocks; a turn reads the pool its
+    // own model spends.
     test("answers from the pool the turn's model spends, not from the account's fullest one", async () => {
         const { store } = memoryStore();
         await store.record("gemini:spent-for-gemini.json", {
@@ -435,10 +397,7 @@ describe("translator subscription usage", () => {
         await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 1, roomMeasuredAt: 0 });
     });
 
-    /* ONE ACCOUNT WITH ROOM AMONG THIRTY SPENT ONES IS NOT A SPENT PLAN: the translator balances across all of
-     * them, so the one with room can serve the turn. No reset is reported for the same reason: the quota is not
-     * what refused it, and naming a wall days out over a cooldown that clears in seconds is the lie this
-     * replaces. */
+    // The translator balances across every account, so one with room can still serve the turn among many spent ones.
     test("reports headroom rather than a reset while any account can still serve the pool", async () => {
         const { store } = memoryStore();
         for (const name of ["spent-1.json", "spent-2.json"]) {
@@ -455,8 +414,7 @@ describe("translator subscription usage", () => {
         });
     });
 
-    // Nothing measured ⇒ no claim, and the two zeroes are how the caller is told so. A bucket the provider has
-    // since renamed lands here too, which costs the caller its counts rather than handing it another pool's reset.
+    // An unmeasured or renamed bucket counts as nothing, not another pool's reading.
     test("counts an account with no reading for this pool in neither tally", async () => {
         const { store } = memoryStore();
         await store.record("gemini:unread.json", { windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }], measuredAt: 0 });
@@ -465,8 +423,6 @@ describe("translator subscription usage", () => {
         await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
     });
 
-    // Codex and Kimi sell one undivided plan, so EVERY window gates every model: a spent 5-hour throttle stops a
-    // turn the weekly pool would have allowed, and there is no pool to name in a sentence.
     test("treats an undivided plan's every window as gating, with no pool to name", async () => {
         const { store } = memoryStore();
         await store.record("codex:one.json", {
@@ -481,8 +437,6 @@ describe("translator subscription usage", () => {
         await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_000 });
     });
 
-    // Dropping an account asks the proxy to drop it, by name. Its snapshot is the route's to forget
-    // (translator.routes.ts, through the headroom service, so every window hears).
     test("asks the proxy to drop the account it is told to disconnect", async () => {
         const calls: { url: string; body?: Record<string, unknown> }[] = [];
         const { store } = memoryStore();

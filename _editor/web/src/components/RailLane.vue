@@ -1,27 +1,8 @@
-<!-- ONE LANE OF A RAIL: the fleet board's kanban column at one card's width, and the frame every list of
-     sessions in this app is drawn in: the floating chat's open chats (ChatTabList), the agents this
-     sandbox's agents started (pages/Subagents.vue).
-
-     It is a SLAB rather than a heading over loose cards (see .lane in styles.css): a rounded surface the
-     lane's cards lie on, capped by its own header, separated from the next lane by a gap instead of by a
-     colour change. The header is the slab's cap: full-bleed to the rounded top,
-     painted in the lane's own fill so the two never seam, and PINNED while the lane scrolls, because a column
-     this tall is read a screen at a time and a card only means "finished" while the lane it belongs to is
-     still on screen. Its text starts where a card's content does, so the lane reads down one left edge.
-
-     THE CAP'S CORNERS SURVIVE PINNING ONLY BECAUSE THE SURFACE DECLARES ITS GROUND. A radius shows what is
-     behind it, and behind a pinned cap is the lane's own fill, so the corners are painted back on in the
-     ground's colour (`.lane-header` in styles.css). That colour is `--lane-ground`, set by the surface that
-     paints it — `lane-ground-card` on the floating chat's panel and /subagents, canvas everywhere else. A new
-     host of this component either paints canvas or says what it paints.
-
-     THE SCROLLER A LANE SITS IN MUST NOT CARRY TOP PADDING. A scroll container's padding insets where its
-     sticky children come to rest but not where it clips, so a padded scroller pins this header below its own
-     top edge and leaves a strip the cards scroll through in full view above the cap. Pad the frame AROUND the
-     scroller instead: RailColumn does it for every rail, ChatTabs for the docked sheet.
-
-     The count is a STRING because a filtered lane says "3 of 12": the denominator is the lane, not what
-     survived the query, and a lane that silently shrinks is a lane that has stopped saying anything. -->
+<!--
+    One lane of a rail (a kanban-style column), used by the fleet board and every session list. Its header stays pinned while the lane scrolls; the
+    host must set `--lane-ground` (lane-ground-card, or canvas) so the pinned corners repaint correctly. Do not pad the scroller's top — pad the
+    surrounding frame instead.
+-->
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
 

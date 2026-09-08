@@ -13,28 +13,24 @@ import { adminUsers } from "./admin-users.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
-/* The admin namespace's one rule, enforced by shape: every handler below opens with `audited`, which is
- * requireAdmin (the ADMIN_EMAILS gate, guards.ts) plus the audit line. The log is the operator's own
- * accountability record — admin reads are rare and each one names who asked for what, so "what did the
- * admin surface serve and to whom" is always answerable from the platform's ordinary logs. */
+// Enforces the admin namespace's one rule by shape: every handler opens with `audited` (requireAdmin plus a log line
+// naming who asked for what).
 const audited = (context: OrpcContext, route: string) => {
     const admin = requireAdmin(context);
     context.logger.info({ admin: admin.email, route }, `admin api`);
     return admin;
 };
 
-// The mutation surface's deployment switch: off (the default) until the panel's bytes are a pinned install,
-// per the trust note in the extension's README. FORBIDDEN rather than 404 — the caller is a verified admin
-// reading why their click did nothing, and the honest answer is "this deployment has mutations off".
+// The mutation surface's deployment switch, off by default until the panel's bytes are a pinned install. Forbidden
+// rather than 404: the caller is a verified admin.
 const requireMutations = (context: OrpcContext) => {
     if (!context.config.admin.mutations) {
         throw new ORPCError(`FORBIDDEN`, { message: `admin mutations are disabled on this deployment (ADMIN_MUTATIONS)` });
     }
 };
 
-/* The shared gate for every mutation but userDelete (whose confirmation is the email, checked in its own
- * handler): admin + audit, the deployment switch, and the typed confirmation naming the target exactly.
- * A mistyped confirmation is a 400 the panel shows verbatim — the retype-it pattern, not a warning. */
+// The shared gate for every mutation but userDelete: admin + audit, the deployment switch, and a typed confirmation
+// naming the target exactly.
 const mutating = (context: OrpcContext, route: string, confirm: string, target: string) => {
     const admin = audited(context, route);
     requireMutations(context);
@@ -89,8 +85,7 @@ export const adminRoutes = {
         if (target === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `no account with that id` });
         }
-        // The strongest confirmation on the surface: the account's email, retyped. Case-insensitive —
-        // an address's case is presentation — but nothing less than the whole address.
+        // The strongest confirmation on the surface: the account's email, retyped, case-insensitively but in full.
         if (input.confirmEmail.trim().toLowerCase() !== target.email.toLowerCase()) {
             throw new ORPCError(`BAD_REQUEST`, { message: `confirmation must repeat the account's email exactly` });
         }

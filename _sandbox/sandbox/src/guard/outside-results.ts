@@ -3,46 +3,12 @@ import { classifyCommand } from "@intentic/sandbox-contract";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 
-/* WRAPPING WHAT THE AGENT PULLS IN MID-TURN, the second seam, beside the one that wraps a stranger's message
- * at turn birth (automations/scheduler.ts). Same envelope, same reason; the difference is only that nobody
- * chose to start this turn, the agent reached for it.
- *
- * It rides the SAME hook event masking does (agent/agent-redaction.ts) and for the same reason: PostToolUse
- * fires for every tool the model calls, including the ones nobody has written yet, and `updatedToolOutput`
- * replaces the result before the model is shown it. A list of ingestion points maintained by hand is a list of
- * the ones somebody remembered, which is the gap this exists to close, so the default here is WRAP and the
- * exceptions are named.
- *
- * WHICH TOOLS. The rule is about where the BYTES came from, not who ran the tool:
- *
- *   · WebFetch / WebSearch     , the open internet, plainly.
- *   · every MCP server except the daemon's own control servers (INTERNAL below), a user-configured server is
- *     somebody else's process answering with somebody else's data. Wrap-unless-allowlisted, so a server added
- *     tomorrow is wrapped by default and a new INTERNAL one has to be named (and the conformance test says so).
- *   · the browser servers, which are NOT in INTERNAL on purpose. Playwright is ours, the PAGE is the
- *     internet, and the whole point of a browser tool is to bring that page's text back.
- *   · Bash output, but only when the command reached OUT: the `network.outbound` class of the same classifier
- *     the command gate consults (sandbox-contract's command-classes.ts), so `curl https://example.com` is wrapped, and `ls`
- *    , or a curl at loopback, which is this container talking to itself, is not.
- *
- * WHAT IS NOT WRAPPED, said plainly rather than left to be discovered:
- *   · Read/Grep/Glob of workspace files, the agent's own material. A hostile file in the workspace arrived
- *     through some other seam, and wrapping every file read would wrap the codebase.
- *   · shell output that fetched without looking like it (`git pull`, `gh issue view`), the classifier is
- *     regex over shell text and carries the same honesty note as sandbox-contract's command-classes.ts.
- *   · what a delegated CLI read inside its own context, its harness, its seams, not ours.
- *
- * The wrap is applied to the FIELDS that carry content, never to the whole result object: a tool's result is a
- * shape its caller parses (`stdout` for Bash, `result` for WebFetch, a content array for MCP), and stringifying
- * that into an envelope would break every reader downstream to make a point to one of them. Image and other
- * non-text parts ride through untouched.
- */
+// Wraps tool results that pull outside content into the turn mid-run, the counterpart to automations/scheduler.ts's
+// turn-birth wrap. Runs on PostToolUse, which fires for every tool including ones not yet written, so the default is
+// wrap and exceptions are named explicitly. Wraps only the fields that carry content, never the whole result object.
 
-/* The daemon's OWN control servers, the exceptions to wrap-by-default. Every one of these is the daemon
- * talking to the agent about the turn itself: a question card, a park, a dependency probe, a file edit. None
- * carries content from outside this container, and wrapping them would tell the model its own platform is a
- * stranger. Browser servers are deliberately absent (see the header). Pinned by the conformance test in
- * outside-results.test.ts, so a new control server added without a decision here fails the suite. */
+// Daemon's own control servers, the exceptions to wrap-by-default: none carries content from outside this container.
+// Browser servers are deliberately absent. Pinned by the conformance test in outside-results.test.ts.
 export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
     // agent/agent.ts mounts these two directly.
     "ui", // AskUserQuestion
@@ -53,27 +19,19 @@ export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
     "subagents", // the `wait` park
     "watch", // condition watches
     "deps", // dependency readiness
-    // terminal/terminal-help.ts, the handover park. Internal because the SERVER is the daemon talking about
-    // the turn (an ask raised, an owner's answer), but its hand-back also carries the PANE's recent output,
-    // which is a command's bytes and can be anyone's. That one field wraps itself at the tool, so the
-    // daemon's own sentence and the owner's note stay plain while the screen text carries the envelope,
-    // the "wrap the fields that carry content, not the whole result" rule this module's header states.
+    // Internal for the server itself; the pane output it carries back wraps separately, at the tool.
     "terminal",
-    /* execution/js-tool.ts, the JS execution backend, mounted from AgentRequest.jsExecution. Internal for
-     * the same reason Bash is not wrapped by default: the output is the agent's OWN script's, running in this
-     * container. The Bash exception applies to it too, and by the same classifier, a script whose text
-     * reached the open internet has its result wrapped (see the explicit branch in outsideSourceOf, ahead of
-     * the server fallback this listing bypasses). */
+    // Same as Bash: the agent's own in-container script; wrapped only when it fetches, via its own branch.
     "code",
 ]);
 
-// `mcp__<server>__<tool>`, the SDK's naming for every MCP tool. Anything else is a native tool.
+// `mcp__<server>__<tool>`, the SDK's naming for an MCP tool; anything else is a native tool.
 const MCP_TOOL = /^mcp__([^_](?:[^_]|_[^_])*)__/;
 
 export const mcpServerOf = (toolName: string): string | undefined => MCP_TOOL.exec(toolName)?.[1];
 
-/* What, if anything, this tool result should be wrapped as, the source label the envelope carries, or
- * undefined to leave the result alone. Pure, so the whole matrix is a table test. */
+// What this tool result should be wrapped as, the envelope's source label, or undefined to leave it alone. Pure, so the
+// whole matrix is a table test.
 export const outsideSourceOf = (toolName: string, toolInput: unknown): string | undefined => {
     if (toolName === "WebFetch") {
         return "web";
@@ -86,13 +44,10 @@ export const outsideSourceOf = (toolName: string, toolInput: unknown): string | 
         if (typeof command !== "string") {
             return undefined;
         }
-        // The same classifier the command gate runs BEFORE the command: if it reached the open internet, what
-        // came back is the open internet's words. Loopback is excluded by the class itself.
+        // Same classifier the command gate runs before the command; loopback is excluded by the class itself.
         return classifyCommand(command, { locus: "sandbox" }).includes("network.outbound") ? "shell-fetch" : undefined;
     }
-    // The JS execution backend, by the same rule word for word: the script is the agent's own program, the
-    // PAGE a fetching one brings back is the internet. Checked ahead of the server fallback because the `code`
-    // server is INTERNAL, this branch is the one place its results are ever wrapped.
+    // Same rule as Bash, checked before the server fallback since the `code` server is INTERNAL.
     if (toolName === JS_TOOL_NAME) {
         const code = (toolInput as { code?: unknown } | null)?.code;
         if (typeof code !== "string") {
@@ -107,13 +62,12 @@ export const outsideSourceOf = (toolName: string, toolInput: unknown): string | 
     return server;
 };
 
-// Wrap a string field in place, leaving anything that is not a non-empty string alone.
+// Wraps a string field in place; anything that is not a non-empty string is left alone.
 const sealed = (value: unknown, source: string): unknown =>
     typeof value === "string" && value !== "" ? wrapOutsideContent(value, { source }) : value;
 
-/* Apply the envelope to the content-bearing parts of one tool result. Returns the SAME reference when nothing
- * changed, which is how the hook tells "unchanged" from "rewritten" without re-comparing a large result,
- * the same convention agent-redaction.ts maskDeep uses next door. */
+// Applies the envelope to a tool result's content-bearing parts. Returns the same reference when nothing changed, the
+// convention agent-redaction.ts maskDeep also uses.
 export const sealResult = (toolName: string, result: unknown, source: string): unknown => {
     if (typeof result === "string") {
         // Some tools answer with a bare string; the whole of it is the content.
@@ -123,8 +77,7 @@ export const sealResult = (toolName: string, result: unknown, source: string): u
         return result;
     }
     const record = result as Record<string, unknown>;
-    /* An MCP result: `{ content: [{ type: "text", text }, { type: "image", … }] }`. Only text parts are
-     * wrapped, an image part's data is not prose and an envelope around a base64 blob helps nobody. */
+    // MCP result shape `{ content: [{ type, text }] }`; only text parts are wrapped, not image data.
     if (Array.isArray(record["content"])) {
         const parts = record["content"] as unknown[];
         const wrapped = parts.map((part) => {
@@ -140,8 +93,7 @@ export const sealResult = (toolName: string, result: unknown, source: string): u
         });
         return wrapped.some((part, index) => part !== parts[index]) ? { ...record, content: wrapped } : result;
     }
-    // The native tools whose content sits in a known field. Bash's stderr is wrapped alongside stdout, a
-    // server's error body is as much its words as its output is.
+    // Native tools' content fields; Bash's stderr wraps alongside stdout, an error is still its words.
     const FIELDS: Readonly<Record<string, readonly string[]>> = {
         Bash: ["stdout", "stderr"],
         WebFetch: ["result"],
@@ -155,7 +107,7 @@ export const sealResult = (toolName: string, result: unknown, source: string): u
         if (!(field in record)) {
             return [];
         }
-        // WebSearch answers with an ARRAY of hits and commentary strings; wrap the strings in it.
+        // WebSearch answers with an array of hits and commentary strings; wrap the strings in it.
         const current = record[field];
         const next = Array.isArray(current) ? current.map((item) => sealed(item, source)) : sealed(current, source);
         const changed = Array.isArray(current) ? (next as unknown[]).some((item, index) => item !== current[index]) : next !== current;
@@ -164,13 +116,12 @@ export const sealResult = (toolName: string, result: unknown, source: string): u
     return entries.length === 0 ? result : { ...record, ...Object.fromEntries(entries) };
 };
 
-/* The hook. `onWrapped` is how the turn learns it has taken content in from outside, the taint bit the
- * command gate reads (guard/turn-taint.ts). Fired only when a result was actually rewritten, so a turn that
- * merely HAS a browser is not tainted by owning one. */
+// `onWrapped` marks the turn's taint bit (guard/turn-taint.ts), fired only when a result was actually rewritten, not
+// merely eligible.
 export const outsideResultHooks = (onWrapped: (source: string) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PostToolUse: [
         {
-            // No matcher, every tool, including the ones nobody has written yet. See the header.
+            // No matcher: every tool, including ones nobody has written yet.
             hooks: [
                 async (input) => {
                     if (input.hook_event_name !== "PostToolUse") {
@@ -188,8 +139,7 @@ export const outsideResultHooks = (onWrapped: (source: string) => void): Partial
                         onWrapped(source);
                         return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: wrapped } };
                     } catch {
-                        // A result shape this did not expect is a reason to leave it alone, never to fail the
-                        // tool call that produced it, the same guard masking keeps next door.
+                        // An unexpected result shape is left alone rather than failing the tool call that produced it.
                         return {};
                     }
                 },

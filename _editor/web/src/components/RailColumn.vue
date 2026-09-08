@@ -1,21 +1,7 @@
-<!-- THE RAIL: the column a list of agents is drawn in, and the frame around RailLane and RailCard.
-
-     Two surfaces put one on screen: the chat's open conversations (chat/ChatTabs in its vertical form, in a
-     floating window or in the /chat area) and the agents this sandbox's agents started (pages/Subagents.vue).
-     They were two hand-rolled columns holding the same cards on the same lanes: one 288px and fixed, the other
-     320px and resizable, one padded at 12px and the other at 6, the two scrollers a half-step apart in their
-     lane spacing. Nothing about that was a decision, and it read as two components rather than one list in two
-     places. So the column is a component, and the only thing a host decides is what goes in it.
-
-     THE WIDTH IS SHARED, not merely equal (composables/rail.ts): dragging either rail is dragging THE rail.
-
-     THE GUTTER IS ON THIS FRAME, NEVER ON THE SCROLLER INSIDE IT, and that is load-bearing rather than
-     stylistic: a scroll container's padding insets where its sticky children COME TO REST but not where it
-     CLIPS, so a padded scroller pins a lane's cap below its own top edge and every card scrolls through the
-     strip above it, selection ring and all. Hosts put their scroller in bare.
-
-     It resizes off its RIGHT edge (pointer capture, double-click resets), since it stands at the left of
-     whatever surface hosts it. -->
+<!--
+    Column frame for a list of agents (wraps RailLane and RailCard), used by the chat rail and Subagents. Width is shared via composables/rail.ts:
+    dragging either rail resizes both. Pad this frame, never the inner scroller — scroller padding breaks sticky lane headers.
+-->
 <script setup lang="ts">
 import { computed } from "vue";
 import { ResizeSeam } from "@intentic/ui";

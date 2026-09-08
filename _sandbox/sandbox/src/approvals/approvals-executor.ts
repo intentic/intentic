@@ -7,42 +7,18 @@ import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { canPublishDirectly, postToDiscord } from "./discord-post.js";
 
-/* THE EXECUTOR, what carries out an approved item, and when.
- *
- * IT SLEEPS UNTIL THE EXACT MOMENT, which is the whole difference from what it replaces. Publishing was a cron
- * automation: a wake every few minutes that ran a shell guard over the queue directory and, essentially
- * always, found nothing to do. That is a poll asking a question only this process could already answer, the
- * daemon writes the files, so it knows the earliest due time down to the millisecond. So it arms ONE timer for
- * that instant and holds nothing else: nothing approved means no timer at all, and a queue of ten due at
- * different times is still one timer, re-armed as each passes.
- *
- * RE-ARMED FROM DISK, NEVER FROM MEMORY. `arm()` re-reads the queue every time rather than tracking a due time
- * alongside it, because the directory has two writers, this daemon, and the agent's own file tools, and a
- * cached deadline is exactly the thing that goes stale when the other one writes. Reading a directory of
- * kilobyte files to answer "what is next" costs nothing next to being wrong about it. The same call re-arms
- * after every pass and at boot, which is what makes a hold survive a restart: the deadline lives in the item's
- * own scheduledAt, so a daemon that was down through it acts the moment it is back rather than losing the item.
- *
- * DISPATCHED BY KIND, and the kinds pick their door (approvals-execution.ts). A post to Discord takes an
- * authenticated POST, so the daemon makes it: milliseconds, no model, and a failure that is an HTTP status
- * rather than a transcript. A post to Reddit or X is a logged-in browser session with no API behind it, so it
- * needs an agent turn, and it gets ONE turn for the whole batch, named files and all, because the expensive
- * thing about a turn is that it exists, not how many posts it carries. An ACTION is always a turn: there is no
- * typed door for "whatever it is", and the instructions the proposing agent left are the whole brief.
- *
- * RUNNING IS MARKED BEFORE IT HAPPENS. `running` is written to the file before any path acts, so a daemon that
- * dies mid-way comes back to an item that is visibly stuck rather than one that looks due and gets done twice.
- * Doing it twice is the only failure here that cannot be taken back. */
+// Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
+// agent write the queue.
+// Dispatched by kind: a Discord post takes an authenticated POST, other posts and all actions need an agent turn.
+// `running` is written before any action starts, so a mid-death daemon leaves a stuck item rather than one done twice.
 
-// How long a turn may sit before another pass is allowed to reconsider its items. A turn that dies without
-// writing a status leaves `running` on disk forever otherwise, and nothing would ever retry it.
+// How long a turn may sit before another pass reconsiders it; else a dead turn leaves `running` forever.
 const RUNNING_STALE_MS = 30 * 60_000;
 
 const isDue = (item: ApprovalSummary, now: number): boolean => item.status === `approved` && (item.scheduledAt ?? 0) <= now;
 
-/* WHEN THIS PROCESS NEXT HAS SOMETHING TO DO, the soonest approved item's due time, or undefined when the
- * queue holds nothing approved. Items that are already due answer `now`, so a queue that came due while the
- * daemon was down fires immediately on the next arm rather than waiting for a future one. */
+// The soonest approved item's due time, or undefined if nothing is approved.
+// Already-due items answer `now`, so a queue that came due while the daemon was down fires on the next arm immediately.
 export const nextDueAt = (items: readonly ApprovalSummary[], now: number): number | undefined => {
     const due = items.filter((item) => item.status === `approved`).map((item) => Math.max(item.scheduledAt ?? 0, now));
     return due.length === 0 ? undefined : Math.min(...due);
@@ -56,10 +32,10 @@ export interface ApprovalsExecutor {
     readonly runDue: (now?: number) => Promise<void>;
 }
 
-/* ONE TURN PER PERSONA, not one per batch. A turn wears exactly one face, so two items going out under
- * different names are two turns however close together they came due, batching them would hand the second to
- * an account that cannot act on it. Within one face the batch still holds, because the expensive thing about a
- * turn is that it exists. `` is the key for no face at all. */
+// One turn per persona, not per batch: a turn wears exactly one face, so items under different names never share a
+// turn.
+// Within one face the batch still holds, since what's expensive about a turn is that it exists; `` is the key for no
+// face.
 const byPersona = <T extends ApprovalSummary>(items: readonly T[]): Map<string, T[]> => {
     const groups = new Map<string, T[]>();
     for (const item of items) {
@@ -77,8 +53,7 @@ const actionTitle = (actions: readonly ActionApprovalSummary[]): string =>
 
 export const createApprovalsExecutor = (services: Services, wake: WakeFn = streamAgent): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
-    // One pass at a time. Two overlapping passes would both read the same `approved` item before either wrote
-    // `running`, the read-modify-write race that ends in the same thing done twice.
+    // One pass at a time: two overlapping passes could read `approved` before either writes `running`, twice.
     let running = false;
 
     const mark = async <T extends ApprovalSummary>(item: T, changes: Partial<T>): Promise<void> => {
@@ -86,9 +61,9 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
     };
     const fail = (item: ApprovalSummary, error: string): Promise<void> => mark(item, { status: `failed`, error });
 
-    /* Send one post through the API its platform actually offers. Returns whether the post is now settled,
-     * false hands it to the turn instead, which is the answer for a Discord post carrying an attachment or
-     * addressed to a channel by name rather than by id (discord-post.ts). */
+    // Sends one post through the API its platform actually offers; returns whether it's now settled.
+    // False hands it to the turn instead: the answer for a Discord post with an attachment or a channel named rather
+    // than numbered.
     const sendDirect = async (post: PostApprovalSummary): Promise<boolean> => {
         if (!DIRECT_PUBLISH_PLATFORMS.has(post.platform.toLowerCase()) || !canPublishDirectly(post)) {
             return false;
@@ -98,20 +73,17 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
             const { url } = await postToDiscord(services, post);
             await mark(post, { status: `done`, finishedAt: Date.now(), result: url });
         } catch (error: unknown) {
-            // The message is written for the owner to read in the queue's failed row, so it is kept whole
-            // rather than reduced to a code, this is the only account of the failure anyone will get.
+            // The message is written for the owner's failed row, kept whole rather than reduced to a code.
             await fail(post, error instanceof Error ? error.message : `The post did not go through.`);
             services.logger.error({ err: error, approval: post.id }, `direct publish failed`);
         }
         return true;
     };
 
-    /* The same detached boundary POST /agent uses, it registers the run, journals it so a daemon death resumes
-     * it, and gives the work an ordinary card in the fleet instead of something that happens invisibly.
-     * Detached on purpose: this is a timer callback with no request waiting. `running` goes on every item
-     * before the turn starts for the same reason the direct path writes it before its request: the turn is
-     * detached and may die, and an item still reading `approved` after that would be done again by the next
-     * pass. */
+    // The same detached boundary POST /agent uses: registers the run, journals it so a daemon death resumes it, and
+    // gives it an ordinary fleet card.
+    // `running` goes on before the turn starts for the same reason the direct path does: a detached turn can die, and
+    // `approved` would be redone by the next pass.
     const startTurn = async (items: readonly ApprovalSummary[], turn: AgentTurn & { conversationId: string }): Promise<void> => {
         await Promise.all(items.map((item) => mark(item, { status: `running`, startedAt: Date.now() })));
         void startConversationTurn(services, wake, turn).catch((error: unknown) =>
@@ -119,11 +91,9 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
         );
     };
 
-    /* WHO CAN BE WORN. A name that resolves to nobody is a failure for every kind, and deliberately not a softer
-     * one: turnPersona answers an unknown card by denying everything, so the turn arrives with no account
-     * exactly as an unpinned one does. A card can go missing for ordinary reasons, renamed on one side only, a
-     * workspace cloned before its personas were committed, which is why this is worth saying in the queue rather
-     * than leaving to be rediscovered from inside a turn. Returns the items that CAN go. */
+    // A name that resolves to nobody fails every kind: turnPersona denies an unknown card entirely, same as an unpinned
+    // turn.
+    // Said here in the queue rather than left to be rediscovered from inside a turn; returns the items that can go.
     const settleGhosts = async <T extends ApprovalSummary>(items: readonly T[], cast: ReadonlySet<string>): Promise<T[]> => {
         const ghosts = items.filter((item) => item.actsAs !== undefined && !cast.has(item.actsAs));
         for (const item of ghosts) {
@@ -135,19 +105,10 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
         return items.filter((item) => !ghosts.includes(item));
     };
 
-    /* A POST THAT NEEDS A TURN AND NAMES NOBODY IS FAILED, NOT SENT. The turn this would wake is unattended, and
-     * an unattended turn with no persona is denied every logged-in account (personas.ts spells out why: at 3am
-     * the prompt's wording is the only thing standing between a stranger and a public post). So the turn would
-     * open the platform in a browser signed into nothing, meet the wall a cold profile always meets, and report
-     * the account as disconnected, which is what happened before this check existed, and it cost two approved
-     * posts and an afternoon to trace.
-     *
-     * Failing here says the true thing in the one place the owner reads. Guessing the persona instead is the
-     * alternative worth naming and rejecting: one site is often connected several times over, and a post that
-     * goes out under the wrong face is public and has no undo.
-     *
-     * AN ACTION WITHOUT A PERSONA IS NOT THE SAME CASE: it runs with no accounts, which is exactly right for
-     * work that needs none, and the skill says so. Returns the posts that CAN go. */
+    // A post that needs a turn and names nobody is failed, not sent: an unattended turn with no persona is denied every
+    // logged-in account.
+    // An action without a persona is not the same case: it runs with no accounts, which is right for work that needs
+    // none.
     const settleUnnamed = async (posts: readonly PostApprovalSummary[]): Promise<PostApprovalSummary[]> => {
         for (const post of posts.filter((entry) => entry.actsAs === undefined)) {
             await fail(
@@ -182,8 +143,7 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
             const actions = await settleGhosts(due.filter(isAction), cast);
 
             let batch = 0;
-            // Short by construction: a persona id may be 60 characters and a conversation id may be 64, so the
-            // batch counter distinguishes the turns rather than the name they act as.
+            // Short by construction: a persona id may run 60 chars, a conversation id 64, so a counter names the turn.
             const conversationId = (kind: string): string => `approvals-${kind}-${now.toString(36)}-${(batch += 1).toString(36)}`;
 
             for (const [actsAs, wearing] of byPersona(posts)) {
@@ -192,7 +152,7 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
                     conversationId: conversationId(`post`),
                     unattended: true,
                     runRole: `approval-queue`,
-                    // The whole point of this pass: the turn wakes holding that persona's accounts.
+                    // The turn wakes holding this persona's accounts.
                     actsAs,
                     title: wearing.length === 1 ? `Publish 1 post` : `Publish ${wearing.length} posts`,
                 });
@@ -208,12 +168,11 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
                 });
             }
 
-            // The queue on screen has just changed status under the owner without them touching anything.
+            // The queue on screen just changed status without the owner touching anything.
             publishRuntimeChange(`approvals`);
         } finally {
             running = false;
-            // Whatever just happened, the next deadline is a fresh question, a failed item is no longer
-            // approved, and a `running` one is nobody's deadline until it goes stale.
+            // The next deadline is fresh: a failed item is no longer approved, a running one isn't due till stale.
             void arm();
         }
     };
@@ -226,10 +185,10 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
         const now = Date.now();
         const { approvals } = await services.approvals.list();
 
-        /* An item left `running` by a turn that died is unreachable: it is not approved, so no pass will take
-         * it, and nothing will ever write its outcome. After long enough that no live turn could still be
-         * working it, it is put back to failed with a sentence saying so, visible, retryable, and never
-         * silently redone. */
+        // An item left `running` by a dead turn is unreachable: not approved, so no pass retries it and nothing writes
+        // its outcome.
+        // After long enough that no live turn could still be working it, it's put back to failed, visible and
+        // retryable, never silently redone.
         for (const item of approvals) {
             if (item.status === `running` && now - (item.startedAt ?? now) > RUNNING_STALE_MS) {
                 await fail(
@@ -244,8 +203,7 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
             return;
         }
         timer = setTimeout(() => void runDue(), Math.max(0, at - now));
-        // Never a reason to hold the process open: a due item is done when the daemon is up, and the deadline
-        // is on disk for when it is not.
+        // Never a reason to hold the process open: the deadline lives on disk for whenever the daemon comes back.
         timer.unref();
     };
 
@@ -261,11 +219,9 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
     };
 };
 
-/* ONE EXECUTOR PER SANDBOX, reached from the two places that need the same one: the approvals routes, which
- * re-arm it on every write, and boot, which arms it once so a hold that expired while the daemon was down is
- * acted on. Two instances would each hold a timer for the same deadline and both wake for it, the double-post
- * this whole module is arranged to prevent, so the instance is keyed to the services object that owns the
- * queue rather than constructed at each call site. Held weakly: a torn-down sandbox's executor goes with it. */
+// One executor per sandbox, keyed to the services object that owns the queue: two instances would both arm a timer for
+// the same deadline and double-post.
+// Held weakly: a torn-down sandbox's executor goes with it.
 const executors = new WeakMap<Services, ApprovalsExecutor>();
 
 export const approvalsExecutorFor = (services: Services): ApprovalsExecutor => {

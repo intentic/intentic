@@ -4,7 +4,7 @@ import { closeTabs, type EditorStrip, emptyPane, moveTab, normalizeStrip, paneOf
 const file = (path: string): WorkspaceTab => ({ kind: `file`, id: path, path });
 const diff = (id: string, path: string): WorkspaceTab => ({ kind: `diff`, id, label: path, status: `modified`, path });
 
-// a.ts, b.ts, then a diff tab whose id is NOT its path, so we can tell forgetPaths uses file paths only.
+// a.ts, b.ts, then a diff whose id isn't its path, so forgetPaths can be shown to use file paths only.
 const tabs: readonly WorkspaceTab[] = [file(`a.ts`), file(`b.ts`), diff(`diff:1:s/c.ts`, `c.ts`)];
 const ids = (list: readonly WorkspaceTab[]): string[] => list.map((tab) => tab.id);
 // One pane holding the three tabs above, and nothing beside it: the unsplit editor.
@@ -50,8 +50,6 @@ describe(`closeTabs`, () => {
         expect(result.strip.main.preview).toBeNull();
     });
 
-    // Closing the last diff in the companion pane is how a reader ends a split, so it must not leave an empty
-    // column and a focus pointing into it.
     it(`closes the split when the side pane's last tab goes, and gives the focus back`, () => {
         const result = closeTabs(split(), `side`, new Set([`diff:1:s/c.ts`]));
         expect(result.strip.side.tabs).toEqual([]);
@@ -59,8 +57,6 @@ describe(`closeTabs`, () => {
         expect(ids(result.strip.main.tabs)).toEqual([`a.ts`, `doc:git`]);
     });
 
-    // The other way round: the reader closes the document they were reading FROM, and the diff they were
-    // reading is the only thing left. It takes the whole editor rather than sitting in a right-hand column.
     it(`promotes the side pane when the main pane empties`, () => {
         const result = closeTabs(split(), `main`, new Set([`a.ts`, `doc:git`]));
         expect(ids(result.strip.main.tabs)).toEqual([`diff:1:s/c.ts`]);
@@ -79,8 +75,7 @@ describe(`moveTab`, () => {
         expect(result.focused).toBe(`side`);
     });
 
-    // Sending the ONLY tab across is a move to nowhere: normalizeStrip folds it straight back, so the gesture
-    // cannot produce an empty main pane beside a full side one.
+    // The only tab crossing over: normalizeStrip folds a would-be-empty main pane straight back.
     it(`refuses to leave the main pane empty`, () => {
         const one: EditorStrip = { main: { tabs: [file(`a.ts`)], active: `a.ts`, preview: null }, side: emptyPane() };
         const result = moveTab(one, `a.ts`, `side`);
@@ -124,8 +119,6 @@ describe(`placeTab`, () => {
         expect(ids(placeTab(tabs, incoming, null))).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`, `diff:2:s/d.ts`]);
     });
 
-    // The preview slot keeps its POSITION as the user reads down a list: a tab that jumped to the end on every
-    // click would move the thing being looked at out from under the pointer.
     it(`takes the replaced tab's place in the strip`, () => {
         expect(ids(placeTab(tabs, incoming, `b.ts`))).toEqual([`a.ts`, `diff:2:s/d.ts`, `diff:1:s/c.ts`]);
     });
@@ -134,7 +127,6 @@ describe(`placeTab`, () => {
         expect(ids(placeTab(tabs, incoming, `closed.ts`))).toEqual([`a.ts`, `b.ts`, `diff:1:s/c.ts`, `diff:2:s/d.ts`]);
     });
 
-    // Re-opening what is already open refreshes it where it is: one tab per id, always, whatever is being replaced.
     it(`refreshes an already-open tab in place`, () => {
         const refreshed = diff(`diff:1:s/c.ts`, `c.ts`);
         const result = placeTab(tabs, refreshed, `a.ts`);

@@ -28,17 +28,9 @@ export * from "./settings.js";
 export * from "./viewers.js";
 export * from "./views.js";
 
-/* EVERYTHING A MANIFEST MAY DECLARE. `contributes` is assembled from this list (manifest.ts), the authoring
- * JSON Schema is generated from it (json-schema.ts), and the SDK's surface guard reads the point names back out
- * of it, so the three cannot disagree about what this build supports.
- *
- * Collected explicitly rather than by a module-load side effect, because two readers need the answer to be the
- * same every time it is asked: the wire contract's lock file, which is a committed document a diff has to be
- * able to guard, and the generated schema, which is committed too. A registry that filled itself as modules
- * happened to load would make both of those depend on import order.
- *
- * Adding a point is a file in this directory and a line here, points.test.ts fails when a file appears without
- * the line, so the pair cannot come apart. */
+// Everything a manifest may declare. `contributes` (manifest.ts), the authoring schema (json-schema.ts) and the SDK's
+// surface guard are all generated from this list, so the three can't disagree about what this build supports. Adding a
+// point is a file plus a line here; points.test.ts fails if they come apart.
 export const CONTRIBUTION_POINTS = [
     viewsPoint,
     filesPoint,
@@ -55,19 +47,14 @@ export const CONTRIBUTION_POINTS = [
     binPoint,
 ] as const satisfies readonly ContributionPoint[];
 
-// The `contributes` shape those points assemble to: each point's key, its schema, optional. A mapped type
-// rather than a widened record so `manifest.contributes.views` keeps its exact type at every call site, the
-// whole point of the schema being typed at all.
+// The `contributes` shape those points assemble to. A mapped type rather than a widened record, so
+// `manifest.contributes.views` keeps its exact type at every call site.
 type ContributesShape = {
     [Point in (typeof CONTRIBUTION_POINTS)[number] as Point["name"]]: z.ZodOptional<Point["schema"]>;
 };
 
-/* The `contributes` object, assembled rather than hand-written, which is what makes adding a point a file plus
- * a line above, instead of an edit to a schema thirteen unrelated features share.
- *
- * Each point's description rides `z.describe` onto its own key, so it survives into the generated authoring
- * schema and reaches the author as hover text. The cast is the one place the value side and the type side meet:
- * `Object.fromEntries` can only say `Record<string, …>`, and ContributesShape is that said precisely. */
+// The `contributes` object, assembled rather than hand-written, so adding a point is a file plus a line above. Each
+// point's description rides `z.describe` onto its own key, reaching the generated authoring schema as hover text.
 export const contributesSchema = z.object(
     Object.fromEntries(CONTRIBUTION_POINTS.map((point) => [point.name, point.schema.describe(point.description).optional()])) as ContributesShape,
 );

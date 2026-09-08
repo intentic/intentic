@@ -1,21 +1,7 @@
 #!/usr/bin/env node
-/* A SHRUNK WIRE CONTRACT ARRIVES DECLARED. contract.lock.json is the sandbox-contract package's exported
- * schemas as one comparable document; this diffs the committed lock against its merge-base and, when something
- * that EXISTED is gone or different, insists some commit in the range says so, a `type!:` subject or a
- * `Breaking-Note:` trailer, the two spellings the release pipeline majors and warns on. The comparison itself is
- * @intentic/constants/contract-shrink, the one copy the landing drafter also reads.
- *
- * Compared against merge-base rather than the worktree so it gates the PUSH (pre-push hook, PR preflight): on
- * main itself the merge-base IS HEAD and the check stands down, which is honest: by then the declaration either
- * landed or the moment for it has passed. No base, no lock at base, no git: stand down rather than guess.
- *
- * A LINKED WORKTREE STANDS DOWN TOO. Every conversation runs in one, and a conversation is the one place this
- * gate can never be satisfied: landing carries work to the main tree as PATCHES, so a declaring commit written
- * on a conversation's branch never joins any range a push is checked on. The declaration is the landing draft's
- * to write (git/changes/contract-shrink.ts detects the shrink in the claim, agents/land/landed-subject.ts forces
- * the `!` and the Breaking-Note into the message), and the commit that draft becomes joins a range this gate
- * still checks.
- * Recognized by shape: a checkout whose git dir is not its common dir is a linked worktree. */
+// Diffs the committed contract.lock.json against merge-base; a shrunk surface must be declared in the range (a type!:
+// subject or Breaking-Note: trailer). Gates the push and stands down on main itself, and in a linked worktree too,
+// since landing carries work as patches and the declaration is the landing draft's job.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { shrunkSurfaces } from "../constants/src/contract-shrink.mjs";
@@ -38,10 +24,8 @@ if (!conversation && existsSync(join(root, LOCK_FILE))) {
         const messages = git("log", "--format=%B", `${mergeBase}..HEAD`) ?? "";
         const declared = /^[a-z]+(\([^)]*\))?!:/m.test(messages) || /^Breaking-Note:/m.test(messages);
         if (gone.length > 0 && !declared) {
-            /* The remedy, PASTEABLE, because five sessions in a row proved what happens without it: agents asked
-             * to "fix the failing test" each wrote the declaring commit on their own conversation branch, where
-             * landing can never carry it to the range this check reads. The declaration has to be a commit on
-             * THIS checkout, made by whoever is about to push. */
+            // Pasteable remedy: the declaring commit must be on this checkout, not a branch landing cannot carry
+            // forward.
             undeclaredBreaks.push(
                 ...gone.slice(0, 10).map((path) => `${LOCK_FILE}: ${path}`),
                 ...(gone.length > 10 ? [`…and ${gone.length - 10} more`] : []),

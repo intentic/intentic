@@ -1,15 +1,7 @@
-<!-- THE OUTLINE OF AN INDEX-AND-BODY SCREEN whose code has not arrived yet: what asyncView draws for a
-     <SplitView>-shaped route (the hubs, Capabilities) while its chunk is in flight. The title and description
-     are the page's own words, passed in at registration: they are static strings the route already knows, so
-     the reader gets the real heading in the first frame and only the rows arrive as skeletons.
-
-     IT RENDERS THE REAL SHELL. The frame is <SplitView> itself and the rows are <SkeletonRows>, for the same
-     reason SkeletonRows renders real <Row>s: an outline that merely resembles the page drifts from it the
-     first time a width or a density changes, and the page then jumps as it lands. Folded, the rail's stand-in
-     is a strip of pill skeletons: the shape of the segmented control every folded hub shows.
-
-     The reveal-delay/minimum-hold gating lives in asyncView, not here: this component draws the outline
-     whenever it is mounted, and whether the wait deserves to be SEEN is its caller's one decision. -->
+<!--
+    Loading outline for a <SplitView>-shaped route (asyncView) while its chunk loads; title and description are passed in at registration. Renders
+    the real <SplitView> and <SkeletonRows>, not an approximation. Reveal-delay and minimum-hold timing live in asyncView, not here.
+-->
 <script setup lang="ts">
 import { SkeletonRows, SplitView } from "@intentic/ui";
 

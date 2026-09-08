@@ -1,29 +1,16 @@
 // @vitest-environment jsdom
-//
-// The chat bar's CLOSE surfaces, driven through the real component: a card's own × and the right-click menu the
-// workspace's file tabs have carried
-// Close / Close Others / Close to the Right / Close All for a while, and a chat now offers the same set:
-// plus Close Finished, which only an agent chat can mean anything by.
-// Mounted rather than unit-tested against the store, because the interesting part is the wiring, which chat the
-// menu acts on (the RIGHT-CLICKED one, not the active one), where on the bar the right-click is even heard,
-// which rows go disabled at the ends of the list, and that a mass close fires with no confirm even over a
-// running agent: closing detaches from the turn (Conversation.abort is soft), it doesn't stop it.
-// There are TWO menus now, which is the split the surfaces made: cards live in the sheet the header drops and
-// carry their own (acting on the card under the pointer), while the header's chrome carries the sweeps that
-// name no card at all.
+// Pins the chat bar's close surfaces (card ×, right-click menus) through the real mounted component: which
+// chat a menu acts on, where right-click is heard, which rows disable, and that a mass close never confirms.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
-// Statically imported, not awaited inside the hook: this graph is the whole app's, PrimeVue, the router, the
-// chat store, and compiling it cold takes longer than a hook is allowed to (vitest's hookTimeout), where the
-// same work at import time is simply the file's load. The browser globals that graph reads are already in
-// place: vitest.setup.ts installs them for the package, before any test file is loaded.
+// Statically imported: this graph (app, PrimeVue, router, chat store) compiles too slowly for a hook's timeout,
+// but is fine at module load. vitest.setup.ts installs the browser globals it needs before any file loads.
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
-// The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
-// suites open extra tabs with.
+// The store half of "New agent" (agentActions.startAgent), used as this suite's fixture for extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
     reveal({ verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
@@ -33,14 +20,10 @@ const newChat = () => {
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 
-// The import-time globals a mounted chat component needs (see startAgent.test.ts): ui's useDevice reads
-// window.matchMedia at module scope, environment.ts reads window.env, and jsdom ships no ResizeObserver.
-// matches:false keeps the device DESKTOP: the only form factor this strip renders on.
-// window.open is stubbed to null: jsdom opens nothing, and the assertion here is only that the pop-out row
-// CALLS it; a real window handed back would send the panel teleporting into a document jsdom never laid out.
+// Globals a mounted chat needs that jsdom lacks: matchMedia (kept desktop via matches:false), window.env,
+// ResizeObserver. window.open is stubbed to null; assertions only check that the pop-out row calls it.
 const { open } = vi.hoisted(() => {
-    // The strip scrolls its focused tab back into view on every focus write, and jsdom implements no
-    // scrollIntoView: without this stub every tab switch below ends in an unhandled rejection.
+    // scrollIntoView runs on every focus write and jsdom has none; without this stub a tab switch rejects.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
     const openWindow = vi.fn(() => null);
     globalThis.window.open = openWindow;
@@ -49,11 +32,8 @@ const { open } = vi.hoisted(() => {
 
 let strip: HTMLElement;
 
-// Mounted ONCE for the file: ChatTabs registers the chat.* commands on mount and the registry throws on a
-// duplicate id, so each test resets the conversation list instead of remounting. installUi rather than
-// startAgent.test.ts's stub Icon: the menu IS a PrimeVue overlay, so it needs the real plugin. vue-query goes
-// on too: the strip carries the agents filter, whose daemon tier is a useQuery.
-// `onClose` stands in for ChatPanel, which hands the emitted set straight to the store's closeTabs.
+// Mounted once for the file: ChatTabs registers chat.* commands on mount and a duplicate id throws, so tests
+// reset the conversation list instead. installUi (not a stub Icon) since the menu is a real PrimeVue overlay.
 beforeAll(() => {
     strip = document.createElement(`div`);
     document.body.appendChild(strip);
@@ -66,27 +46,23 @@ beforeAll(() => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    // `open` is hoisted once for the module and stands in for window.open, so without this its calls accumulate
-    // across tests and every count assertion below reads whatever ran before it. The `.not.toHaveBeenCalled()`
-    // in the menu test was only true because it happened to run first.
+    // `open` is hoisted once for the module, so its calls accumulate across tests unless cleared here.
     open.mockClear();
     resetChat();
     await nextTick();
     await openSheet();
 });
 
-// jsdom reports no transition duration, so Vue tears a hidden overlay down on a TIMER rather than a microtask:
-// without a macrotask wait the previous menu's rows are still in the document beside the new menu's.
+// jsdom reports no transition duration, so Vue tears down a hidden overlay on a timer, not a microtask; without
+// this macrotask wait the previous menu's rows are still in the document beside the new one's.
 const flush = async (): Promise<void> => {
     await nextTick();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
 };
 
-// Tabs here exist to be closed by the MENU, so each is opened WITH composer text. An untouched "New agent" tab
-// is the one thing the strip won't hold two of (useChat's setConversations keeps at most one, and only as the
-// focused tab), so four empty presses would collapse into a single reused draft; and a closed tab has to be a
-// tab first. The last one opened is the active one, the way a press leaves it.
+// Each tab needs composer text: an untouched "New agent" draft is the one tab useChat won't duplicate, so
+// empty presses would collapse into one reused draft. The last one opened ends up active.
 const openTabs = (count: number): string[] => {
     const chat = useChat();
     const ids: string[] = [];
@@ -99,21 +75,18 @@ const openTabs = (count: number): string[] => {
 };
 
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
-/* Cards live in the SHEET the header drops, so every test here opens it first: the bar itself is one line
- * naming the active chat. Idempotent, and it has to be: the component is mounted once for the whole file, so
- * the sheet survives between tests unless something in one of them closed it. */
+// Cards live in the sheet the header drops, so every test opens it first. Idempotent: the component is mounted
+// once for the whole file, so the sheet survives between tests unless a test closed it.
 const openSheet = async (): Promise<void> => {
     if (strip.querySelector(`[data-chat-tab]`) === null) {
         strip.querySelector<HTMLElement>(`[data-chat-switcher]`)!.click();
         await flush();
     }
 };
-// The menu teleports out of the strip, so it is read off the document rather than the strip's own subtree.
+// The menu teleports out of the strip, so it's read off the document, not the strip's own subtree.
 const menuRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(`.p-contextmenu-item`)];
-/* The row's own label, without the shortcut hint the same <a> carries in a <kbd>. Selected by the label span's
- * own class rather than by position: <ContextMenu> reserves the leading icon/check gutter only for menus whose
- * model actually uses one, so the label is the first child in the strip menu (no icons anywhere) and the second
- * in the tab menu (Rename and Close carry one). Which of those a menu is, is not what these tests are about. */
+// The row's own label, without the shortcut's `<kbd>`. Selected by the label span's class, not position:
+// <ContextMenu> only reserves an icon gutter for menus that use one, shifting the label's child index.
 const labelOf = (item: HTMLElement): string => item.querySelector(`a > span.flex-1`)?.textContent?.trim() ?? ``;
 const labels = (): string[] => menuRows().map(labelOf);
 const row = (label: string): HTMLElement => {
@@ -129,13 +102,12 @@ const openMenuOn = async (index: number): Promise<void> => {
     tabs()[index]!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The bar's own chrome: a right-click that lands on IT rather than on a card is the no-card-named gesture.
+// A right-click that lands on the bar's chrome rather than a card: the no-card-named gesture.
 const openBarMenu = async (): Promise<void> => {
     strip.querySelector<HTMLElement>(`header`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The ✚ / history pair beside the switcher. Right-clicking it is the same chat-management gesture as
-// right-clicking anywhere else on the bar: it just used to land on nothing.
+// The +/history pair beside the switcher; right-clicking it is the same bar gesture as elsewhere on the header.
 const openMenuOnNewChatButton = async (): Promise<boolean> => {
     const event = new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true });
     strip.querySelector<HTMLElement>(`[aria-label="New agent"]`)!.dispatchEvent(event);
@@ -143,11 +115,6 @@ const openMenuOnNewChatButton = async (): Promise<boolean> => {
     return event.defaultPrevented; // the strip took the gesture instead of leaving the browser its own menu
 };
 
-/* The × the tab wears is a HIT TARGET carrying the glyph, not the glyph with a handler on it: at text-2xs the
- * svg is an 11px square, and a click that misses one lands on the tab instead, which, on the tab being closed
- * (the one the user is looking at), selects an already-selected tab and so reads as a close that did nothing.
- * The reachable size is layout, which jsdom has none of; what is assertable here is that the target exists as its
- * own labelled element and that hitting it closes THAT tab without also selecting it. */
 it(`closes a tab from the × it wears, without selecting it on the way`, async () => {
     const chat = useChat();
     const ids = openTabs(3);
@@ -160,12 +127,12 @@ it(`closes a tab from the × it wears, without selecting it on the way`, async (
     await flush();
 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
-    expect(chat.activeId.value).toBe(ids[0]); // the click never reached the tab under it
+    expect(chat.activeId.value).toBe(ids[0]);
 });
 
 it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () => {
     const chat = useChat();
-    const ids = openTabs(4); // the LAST tab is active — every close below is aimed elsewhere
+    const ids = openTabs(4); // The last tab is active; every close below is aimed elsewhere.
     await nextTick();
     expect(tabs()).toHaveLength(4);
 
@@ -187,7 +154,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     // The active tab was one of the closed ones, so focus falls to the last survivor.
     expect(chat.activeId.value).toBe(ids[1]);
 
-    // Right-click the FIRST tab: "Close Others" keeps that one, not the active one.
+    // Right-click the first tab: "Close Others" keeps that one, not the active one.
     await openMenuOn(0);
     await clickRow(`Close Others`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
@@ -202,8 +169,8 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     await openMenuOn(1);
     expect(row(`Close Others`).className).not.toContain(`p-disabled`);
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
-    // Every row teaches its chord: rename on the app-wide F2, the closes on the shell-wide tab family the
-    // workspace and terminal strips register too (tabSurface.ts): the chat's were unbound until it joined it.
+    // Every row teaches its own chord: rename on the app-wide F2, closes on the shell-wide tab family shared with
+    // the workspace and terminal strips (tabSurface.ts).
     expect(row(`Rename`).querySelector(`kbd`)?.textContent).toBe(`F2`);
     expect(row(`Close All`).querySelector(`kbd`)?.textContent).toBe(`Ctrl+Shift+Backspace`);
 
@@ -218,9 +185,8 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
     const ids = openTabs(2);
     await nextTick();
 
-    // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
-    // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
-    // under the pointer; the panel's other two homes (the /chat area, the floating window) are two of them.
+    // Right-click used to toggle the pop-out on the spot; it opens this menu instead, carrying the rows that need
+    // no tab under the pointer.
     await openBarMenu();
     expect(labels()).toEqual([`Close Finished`, `Close All`, `Dock chat to rail`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
@@ -236,11 +202,8 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
     expect(open).toHaveBeenCalledTimes(1);
 });
 
-/* THE POP-OUT'S OWN BUTTON, beside the ✚ / history pair. The action had no visible control at all: it lived
- * behind a right-click on strip chrome that the tabs themselves eat (they `grow` into every pixel of slack), so
- * the target shrank as sessions were opened: hardest to hit exactly when a floating chat is most wanted. The
- * label doubles as the tooltip and carries the chord once one is bound, which is not the case here: this file
- * mounts the strip alone, and `chat.toggleFloating` belongs to the shell's registration. */
+// The pop-out action has no other visible control: it lived behind a right-click that tab chrome ate before
+// this button existed. `chat.toggleFloating`'s chord isn't shown since this file mounts the strip alone.
 it(`moves the chat into its own window from the strip's own button`, async () => {
     openTabs(2);
     await nextTick();
@@ -253,10 +216,8 @@ it(`moves the chat into its own window from the strip's own button`, async () =>
     expect(open).toHaveBeenCalledTimes(1);
 });
 
-/* The ✚ and history buttons are siblings of the tab scroll box: they stay put while the tabs scroll, so the
- * empty-space handler used to sit on the box and miss them entirely: the one patch of the strip that looks like
- * tab chrome and behaved like a web page, handing back the browser's own menu. The handler lives on the whole
- * header now. */
+// The +/history buttons don't scroll with the tabs, so the empty-space handler lives on the whole header, not
+// the tab scroll box, or right-clicking them fell through to the browser's own menu.
 it(`opens the tab menu from the ✚ / history pair beside the strip, not the browser's own`, async () => {
     openTabs(2);
     await nextTick();
@@ -265,16 +226,13 @@ it(`opens the tab menu from the ✚ / history pair beside the strip, not the bro
     expect(labels()).toEqual([`Close Finished`, `Close All`, `Dock chat to rail`, `Move chat into new window`]);
 });
 
-/* "Clear the done ones" is the sweep a long session actually wants, and neither Close Others nor Close to the
- * Right can say it: the finished tabs are scattered through the strip between the running ones. Finished means
- * exactly what the rail's Finished lane means: has messages, isn't streaming (or, for a fleet-carded tab, the
- * board's own lane), so the row can't close a card the rail still shows as Active. */
+// "Clear the done ones" can't be said by Close Others or Close to the Right, since finished tabs are scattered
+// among running ones. Finished means what the rail's Finished lane means, so it can't close an Active card.
 it(`closes every finished tab and leaves the working ones, disabled when nothing has finished`, async () => {
     const chat = useChat();
     const ids = openTabs(4);
-    // Two are done: a plain (non-isolated) chat with a transcript and no live turn, no card on the board, and
-    // nothing running. The other two are the two ways a tab reads as Active: an untouched isolated draft (which
-    // the fleet cards as `draft`) and a tab mid-turn.
+    // Two are done (a plain chat, transcript, no live turn, no board card); the other two are the two ways a tab
+    // reads Active: an untouched isolated draft, and a tab mid-turn.
     for (const at of [0, 2]) {
         chat.conversations.value[at]!.isolated.value = false;
         chat.conversations.value[at]!.registered.value = true;
@@ -290,7 +248,6 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
     await clickRow(`Close Finished`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1], ids[3]]);
 
-    // Nothing left that has finished: the row goes disabled rather than quietly closing nothing.
     await openBarMenu();
     expect(row(`Close Finished`).className).toContain(`p-disabled`);
 });
@@ -298,8 +255,7 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
 it(`mass closes past a running agent with no confirm: closing detaches from the turn, it doesn't stop it`, async () => {
     const chat = useChat();
     const ids = openTabs(2);
-    // The second tab is mid-turn. Its run is detached daemon-side, so closing the tab leaves the agent working
-    // and the chat reopenable from History mid-turn: there is nothing to warn about.
+    // The second tab is mid-turn.
     chat.conversations.value[1]!.streaming.value = true;
     await nextTick();
 

@@ -1,20 +1,7 @@
 import type { LoopDesign } from "@intentic/sandbox-contract";
 
-/* THE SAVED LOOPS the demo workspace keeps, the other half of the composer's run-through picker.
- *
- * A loop and a workflow are the two answers to "what is this message run THROUGH", and the composer offers
- * them in one list under two headings. A demo daemon that served only the workflows half showed a visitor a
- * control with one section and no hint that the other exists, which teaches the opposite of what the merged
- * picker is for.
- *
- * TWO, and deliberately one of each KIND OF ENDING, because that is the distinction the picker's per-row line
- * exists to draw: one ends on a command whose exit code nobody can argue with, one ends on a reviewer agreeing.
- * A visitor reading the two rows side by side learns that "what stops it" is a thing a loop declares, before
- * they ever open the form that declares it.
- *
- * Both carry a spend ceiling for the reason the real picker puts one on the row: this is the one pick in the
- * composer that goes on spending after the person who armed it has looked away.
- */
+// Saved loops for the composer's run-through picker, alongside workflows. Two loops, one per ending kind: a command's
+// exit code, or a reviewer agreeing. Both carry a spend ceiling since a loop keeps spending after it's armed.
 export const demoLoops = (): LoopDesign[] => [
     {
         id: `until-green`,

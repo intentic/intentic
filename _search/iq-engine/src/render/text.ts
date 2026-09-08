@@ -6,14 +6,13 @@ import { encodeCursor } from "./cursor.js";
 export interface RenderRequest {
     readonly verb: string;
     readonly echo: string;
-    // What one hit is called in headers/footers: "matches", "refs", "symbols", "hits", "files", …
+    // Word for one hit in headers/footers: "matches", "refs", "hits", …
     readonly unit: string;
-    // "hits" = line-anchored hits per file group; "paths" = one line per file (iq files, iq recent);
-    // "plain" = hit text without line prefixes (iq log, iq who, line numbers are synthetic there).
+    // "hits": per-file line-anchored hits; "paths": one line per file; "plain": hit text, no line prefixes.
     readonly style: "hits" | "paths" | "plain";
     readonly showTags: boolean;
     readonly groups: readonly RankedGroup[];
-    // Groups already delivered by an earlier page, skipped here, but counted in the totals.
+    // Groups already sent in an earlier page; skipped here but counted in the totals.
     readonly offset: number;
     readonly freshness: WorkspaceSearchFreshness;
     readonly budget: number;
@@ -22,14 +21,13 @@ export interface RenderRequest {
     readonly count?: boolean;
     readonly headerNote?: string;
     readonly hint?: string;
-    // Code-graph neighbor lines, rendered (and budget-reserved) like hint.
+    // Code-graph neighbor lines; rendered and budgeted like hint.
     readonly related?: readonly string[];
-    // Whether the capsule opens with an `answer:` anchor, true for the "where is it" verbs, false where the
-    // ranking itself is the answer (path lists, git history, whole-file skeletons).
+    // True if the capsule opens with an `answer:` anchor; false where the ranking itself is the answer.
     readonly lead?: boolean;
-    // Whether the top result stands out from the field, when a reranker was there to judge it.
+    // Whether the top result clearly stands out, when a reranker was present to judge it.
     readonly confidence?: "confident" | "ambiguous";
-    // Spool id for continuation cursors; the renderer only formats it, the caller persists the spool.
+    // Spool id for continuation cursors; the caller persists the spool, this only formats it.
     readonly cursorId: string;
 }
 
@@ -39,16 +37,14 @@ export interface Rendered {
     readonly shownHits: number;
     readonly truncated: boolean;
     readonly cursor?: string;
-    // The paths the candidates line named, so the structured result can report exactly what the text did instead
-    // of re-deriving it from a shown-count and drifting the moment the budget rules change.
+    // Paths named in the candidates line; kept in step with the text rather than re-derived from counts.
     readonly candidates?: readonly string[];
     readonly exitCode: 0 | 1;
 }
 
-// How many unshown paths the candidates line names, benchmarked, the true answer often sits at rank 5–13,
-// invisible behind the packed top groups.
+// How many unshown paths the candidates line names.
 const CANDIDATE_COUNT = 12;
-// Ceiling on what the capsule's optional lines may take, so the code they point at still fits beside them.
+// Fraction of the budget the capsule's optional lines may use, leaving room for the code body.
 const CAPSULE_SHARE = 0.5;
 
 const tagText = (tags: readonly WorkspaceSearchTag[]): string =>
@@ -59,8 +55,7 @@ const freshnessText = (freshness: WorkspaceSearchFreshness): string => {
         return `index building ${Math.round((freshness.progress ?? 0) * 100)}%`;
     }
     if (freshness.state === "stale") {
-        // Naming the lag is the difference between a fact and an alarm: transcript analytics found 69% of answers
-        // led with a bare "index stale" while the answer was correct, and text matches are read from disk anyway.
+        // Naming the lag, not just "stale", since matches are read live from disk regardless.
         const behind = freshness.behind ?? 0;
         return behind > 0 ? `index ${behind} files behind (text matches are live)` : "index catching up (text matches are live)";
     }
@@ -75,7 +70,7 @@ const hitLine = (hit: RankedHit, showTags: boolean, plain: boolean): string => {
 
 const pathLine = (group: RankedGroup, showTags: boolean): string => {
     const tags = showTags ? (group.hits[0]?.tags ?? []) : [];
-    // iq recent carries a change summary in the hit text, show it beside the path.
+    // iq recent's hit text holds a change summary; shown beside the path here.
     const summary = group.hits[0] !== undefined && group.hits[0].text !== group.path ? `   ${group.hits[0].text}` : "";
     return `  ${group.path}${summary}${tags.length > 0 ? `    ${tagText(tags)}` : ""}`;
 };
@@ -85,21 +80,15 @@ const candidateLine = (anchors: readonly string[]): string => `candidates: ${anc
 const bestHit = (group: RankedGroup): RankedHit | undefined =>
     group.hits.reduce<RankedHit | undefined>((best, hit) => (best === undefined || hit.score > best.score ? hit : best), undefined);
 
-// A candidate names its best hit's line, not just its file. Four more characters buy the one thing that decides
-// whether the reader opens the file at the right place or greps it again, and a bare path was the only anchor iq
-// ever handed back without a line, in the line-anchored response format the whole tool is built on.
+// A candidate names its best hit's line, not just its file, so the reader can open straight to it instead of grepping
+// again.
 const candidateAnchor = (group: RankedGroup): string => {
     const hit = bestHit(group);
     return hit === undefined ? group.path : `${group.path}:${hit.line}`;
 };
 
-// The one line that answers the question: where the top-ranked evidence sits, what symbol encloses it, whether
-// it stands out, and which engines agreed. Everything else in the response elaborates on it.
-//
-// The anchor is the enclosing symbol's DECLARATION when symctx found one, not the best-scoring line: line scores
-// peak in the middle of a symbol, so the raw best line is routinely a brace or a `continue;` a hundred lines
-// below the definition the reader was asking for. The matching line follows as `match :N`, because it is the
-// evidence and a tight budget may drop the body that would otherwise carry it.
+// The one line answering where the top evidence sits, its enclosing symbol, and whether it stands out. Anchor is the
+// symbol's declaration when found, not the best-scoring line, which lands mid-symbol; that line follows as `match :N`.
 const answerLine = (group: RankedGroup, confidence: RenderRequest["confidence"]): string | undefined => {
     const hit = bestHit(group);
     if (hit === undefined) {
@@ -122,15 +111,14 @@ const answerLine = (group: RankedGroup, confidence: RenderRequest["confidence"])
     return `answer: ${parts.join(" · ")}`;
 };
 
-// Render ranked groups under a hard token budget. The capsule, answer anchor, graph neighbours, the paths that
-// did NOT fit, and the continuation command, is reserved first and printed BEFORE the body, because transcript
-// analytics found 90% of answers piped through `head`/`sed`: anything below the code was never read.
+// Renders ranked groups under a hard token budget. The capsule (answer anchor, candidates, continuation) is reserved
+// first and printed before the body, since callers may truncate output.
 export const renderText = (request: RenderRequest): Rendered => {
     const { groups, offset, unit, style } = request;
     const totalHits = style === "paths" ? groups.length : groups.reduce((sum, group) => sum + group.hits.length, 0);
     const totalFiles = groups.length;
     const pending = groups.slice(offset, request.limit !== undefined ? offset + request.limit : undefined);
-    // A path list, a commit log and a --files-only sweep already ARE their own candidate map.
+    // A path list, a commit log or a --files-only sweep is already its own candidate map.
     const wantsCandidates = style === "hits" && request.filesOnly !== true && request.count !== true;
 
     const header = (shown: number, note?: string): string => {
@@ -143,14 +131,11 @@ export const renderText = (request: RenderRequest): Rendered => {
             ? `more: ${remainingHits} ${unit}, iq ${request.echo} --after ${cursor}`
             : `more: ${remainingHits} ${unit} in ${remainingFiles} files, iq ${request.echo} --after ${cursor}`;
 
-    // Reserve with worst-case widths so the final assembly can only shrink: the totals are the widest counts, the
-    // cursor the widest offset, and the candidates line the longest paths it could possibly name. The header and
-    // the continuation command are unconditional, an answer nobody can page through is a dead end.
+    // Reserved with worst-case widths so assembly only shrinks; header and continuation are always included.
     const worstCursor = encodeCursor(request.cursorId, offset + pending.length);
     let remaining =
         request.budget - estimateTokens(header(totalHits, request.headerNote)) - estimateTokens(moreLine(totalHits, totalFiles, worstCursor));
-    // The capsule must not crowd out the code it describes, so its optional lines share a fraction of the budget
-    // and each is admitted only if it fits, in priority order, because a 100-token budget can afford some.
+    // Optional capsule lines share a fraction of the budget; each is admitted only if it fits, in priority order.
     let allowance = Math.floor(request.budget * CAPSULE_SHARE);
     const admit = (line: string): boolean => {
         const cost = estimateTokens(line);
@@ -212,7 +197,7 @@ export const renderText = (request: RenderRequest): Rendered => {
             break;
         }
         if (groupTokens > remaining) {
-            // Not even the first group fits whole: trim its hit lines to the remaining budget.
+            // First group doesn't fit whole; trim its lines to what remains of the budget.
             const trimmed: string[] = [];
             let used = 0;
             for (const line of lines) {

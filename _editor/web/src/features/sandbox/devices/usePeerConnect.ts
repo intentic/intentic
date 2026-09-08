@@ -2,22 +2,11 @@ import { ref, shallowRef } from "vue";
 import { onRuntimeChanged } from "../live/runtimeEvents";
 import { sandboxRequest } from "../client/sandboxClient";
 
-/* Drives "Connect this <peer>" on a peer capability's card: a device (host-kind) or a browser (webext-kind).
- * The daemon's peer doors are one shape (its peers/ directory), and so is the browser's side of them.
- *
- * Connect mints a single-use pairing token BOUND TO THIS CAPABILITY, so what it produces — a one-liner for a
- * machine, a code for an extension — can only ever connect the peer the user is looking at. The peer coming
- * online is the thing the user is standing there waiting for and it happens out-of-band, so the daemon PUSHES
- * it: the moment their socket lands, the door's domain frame arrives and this card re-reads itself, without a
- * refresh and without a timer. What stood here was a three-second timer, which meant a machine that came up
- * promptly still looked absent for up to three seconds, on the one screen whose entire content is whether it
- * came up.
- *
- * The token is shown once and never stored: a re-click mints a fresh one, which is cheaper than keeping a live
- * credential in a browser tab for ten minutes. What the dialog builds FROM the token (the command, the code)
- * is the dialog's own, since that is the one thing the two doors genuinely differ in. */
+// Drives Connect for a peer capability (host or browser) sharing one door shape. Connect mints a single-use
+// token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates
+// without a timer. The token is shown once and never stored.
 export interface PeerDoor {
-    // The path segment the daemon serves the door under: /system/<slug>, /system/<slug>/pair, /system/<slug>/:id.
+    // The path segment this door is served under: /system/<slug>, /system/<slug>/pair, /system/<slug>/:id.
     readonly slug: "hosts" | "webext";
     // The runtime-change domain the daemon announces the door's liveness on.
     readonly domain: "hosts" | "webext";
@@ -27,11 +16,9 @@ export interface PeerDoor {
 }
 
 export function usePeerConnect<Summary extends { readonly id: string; readonly online: boolean }>(door: PeerDoor) {
-    // Shallow: a roster is replaced whole on every read, never edited in place, and a deep ref would unwrap the
-    // generic summary type into something the dialogs cannot name.
+    // Shallow: the roster is replaced whole on each read; a deep ref would unwrap the generic Summary type.
     const peers = shallowRef<readonly Summary[]>([]);
-    // The capability id the last Connect click minted for, and its token, the pair the dialog builds from.
-    // Cleared when the dialog closes, so a stale command can never be copied from a reopened card.
+    // The id/token pair the last Connect click minted; cleared on close so a stale command can't be copied.
     const pairId = ref<string | undefined>(undefined);
     const pairToken = ref<string | undefined>(undefined);
     const minting = ref(false);
@@ -83,8 +70,8 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
         error.value = undefined;
     };
 
-    // Revoke: the peer's key is dropped and its socket cut. The capability stays, so the card can offer Connect
-    // again; reconnecting is a fresh pairing, not a recovered one.
+    // Drops the peer's key and cuts its socket; the capability itself stays, so Connect can be offered again
+    // as a fresh pairing, not a resume.
     const revoke = async (id: string): Promise<void> => {
         await sandboxRequest(`/system/${door.slug}/${encodeURIComponent(id)}`, { method: `DELETE` });
         await refresh();

@@ -37,8 +37,6 @@ const fakeDeps = (root: string, entry: PersistedAgent | undefined, worktree: str
 
 const isolated = (id: string): PersistedAgent => ({ id, branch: "agent/x", repos: [{ repo: "root", base: "0000" }] }) as PersistedAgent;
 
-/* WHAT THE NOTE SAYS, from readings rather than recall: git for the branch, the ledger for the proof, the CLI's
- * own task store for the checklist. Paths and counts, never contents. */
 test("measures the branch, the proof and the checklist, and points rather than pastes", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
     const worktree = join(root, "wt");
@@ -62,10 +60,8 @@ test("measures the branch, the proof and the checklist, and points rather than p
     // Two files changed on the tree (the edit and the untracked one), counted from git's own status.
     expect(text).toMatch(/`root`: 2 files changed \(\+\d+ −\d+; 2 unstaged\)/u);
     expect(text).toContain("src.ts, new.ts");
-    // What the interrupted turn touched and whether anything proved it.
     expect(text).toContain("Edited by the interrupted turn: wt/src.ts");
     expect(text).toContain("Verification: unproven, no check ran after the last edit");
-    // The checklist as the store keeps it, with the open items to re-create.
     expect(text).toContain("(1 of 2 open)");
     expect(text).toContain("- [x] Read the schema");
     expect(text).toContain("- [ ] Wire the route (was in progress)");
@@ -74,7 +70,6 @@ test("measures the branch, the proof and the checklist, and points rather than p
     expect(text).not.toContain("fresh");
 });
 
-// The main tree is everybody's, so only the paths the turn itself edited are read, grouped by repository.
 test("on the main tree reads only what the turn edited", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
     repoWithChange(root);
@@ -92,8 +87,6 @@ test("on the main tree reads only what the turn edited", async () => {
     expect(text).toContain("Verification: passed, `pnpm test` ran green after the last edit.");
 });
 
-// A checklist the fold saw stands in when no session store is readable; a failing check is named from the
-// registry when no ledger survives the hand-off.
 test("falls back to the fold's checklist and the registry's failed check", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
     const entry = { id: "c3", repos: [], unfinished: { at: 1, check: "verify:turn" } } as unknown as PersistedAgent;
@@ -106,19 +99,16 @@ test("falls back to the fold's checklist and the registry's failed check", async
     expect(text).toContain("the end-of-turn check `verify:turn` was still failing");
 });
 
-// Nothing measured is no note at all, not an empty one.
 test("says nothing when there is nothing to measure", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
     expect(await handoffStateNote(fakeDeps(root, { id: "c4", repos: [] } as unknown as PersistedAgent, root), { conversationId: "c4" })).toBeUndefined();
 });
 
-// Past the cap the paths go first; the counts and verdicts stay.
 test("drops paths before facts when the note would exceed its cap", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
     const worktree = join(root, "wt");
     repoWithChange(worktree);
-    // Forty paths of this length per section is past the cap on its own: the fixture has to exceed it, or the
-    // test measures the full render and says nothing about the terse one.
+    // Path lengths and count are chosen to exceed the cap; a smaller fixture would test the untrimmed render instead.
     const name = (index: number): string => `a-very-long-file-name-that-takes-a-great-deal-of-room-on-the-line-and-then-some-more-${index}.ts`;
     for (let index = 0; index < 60; index += 1) {
         writeFileSync(join(worktree, name(index)), "x\n");

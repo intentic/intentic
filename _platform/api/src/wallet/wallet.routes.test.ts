@@ -6,12 +6,9 @@ import { type Config, configSchema } from "../config.js";
 import type { CustodyGateway } from "./wallet-custody.js";
 import { walletHttpRoutes } from "./wallet.routes.js";
 
-/* THE SIGNER IS THE ONLY REAL FENCE around an agent's spending: the daemon's own checks are UX, and the
- * container they run in is not a trust boundary, so what is pinned here is what a compromised or
- * prompt-injected sandbox must NOT be able to obtain: a signature over more than the owner's per-payment
- * ceiling, one that passes the day's cap, one that spends somebody else's wallet, one over a token that is
- * not USDC, or one whose validity window is long enough to be worth stealing. Each of those is a request
- * this route family answers with a refusal rather than a signature. */
+// The signer is the only real fence around an agent's spending; the daemon's own checks are UX. Pins every signature a
+// compromised sandbox must never obtain: over the ceiling, past the daily cap, on someone else's wallet, on non-USDC,
+// or too long-lived.
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 const NOW = new Date(`2026-08-19T12:00:00Z`);
@@ -55,9 +52,8 @@ interface StoredPayment {
     payTo: string;
 }
 
-// Enough Prisma for these routes: the sandbox token lookup, the wallet row, and the payment ledger the
-// daily cap is computed from: with $transaction running its callback for real, since the cap check and the
-// row write happening together is exactly the property under test.
+// Enough Prisma for these routes: token lookup, wallet row, payment ledger. `$transaction` runs its callback for real,
+// since the cap check and the row write happening together is the property under test.
 const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[] }) => {
     const wallets = seed?.wallets ?? [];
     const payments = seed?.payments ?? [];
@@ -136,7 +132,7 @@ const seededWallet: StoredWallet = {
     dailyCapUsd: `5.00`,
 };
 
-// A well-formed authorization for $0.10, inside every default cap: the baseline each test perturbs.
+// A well-formed $0.10 authorization inside every default cap; the baseline each test perturbs.
 const signBody = (over: Record<string, unknown> = {}, authOver: Record<string, unknown> = {}) => ({
     network: `eip155:8453`,
     asset: USDC_BASE,
@@ -161,7 +157,7 @@ it("signs a payment inside the caps, and records it against the day", async () =
     const response = await app({ prisma })(`/sign`, signBody());
     expect(response.status).toBe(200);
     expect(((await response.json()) as { signature: string }).signature).toMatch(/^0x[0-9a-f]{130}$/);
-    // The row is what tomorrow's cap arithmetic reads, and it is written with the payment, not after it.
+    // Written with the payment, not after it: tomorrow's cap arithmetic reads this row.
     expect(payments).toHaveLength(1);
     expect(payments[0]).toMatchObject({ day: `2026-08-19`, amountUsd: `0.10`, host: `api.example.com`, payTo: PAY_TO });
 });
@@ -180,8 +176,8 @@ it("signs exactly the EIP-3009 typed data, in the token's own domain", async () 
     })(`/sign`, signBody());
     expect(seen[0]).toMatchObject({
         primaryType: `TransferWithAuthorization`,
-        // chainId and verifyingContract come from the PLATFORM's own table, never from the caller: a
-        // challenge cannot redirect a signature onto another chain or another contract.
+        // chainId and verifyingContract come from the platform's own table, never the caller: a challenge can't
+        // redirect the signature to another chain or contract.
         domain: { name: `USD Coin`, version: `2`, chainId: 8453, verifyingContract: USDC_BASE },
         message: { from: ADDRESS, to: PAY_TO, value: `100000` },
     });
@@ -225,7 +221,8 @@ it("refuses a token that is not USDC, however well-formed the request is", async
 
 it("refuses when the stated amount and the authorization's value disagree", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
-    // Says ten cents, moves ten dollars: the mismatch the caps would otherwise be checked against.
+    // States ten cents, moves ten dollars — the mismatch caps would otherwise be checked against instead of caught
+    // here.
     const response = await app({ prisma })(`/sign`, signBody({}, { value: `10000000` }));
     expect(response.status).toBe(400);
 });

@@ -5,21 +5,11 @@ import { PUBLIC } from "../../../lib/queryKeys";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
-/* THE WORKSPACE OUTBOX, read from the app rather than from the preview extension, the Preview area lists the
- * served page as its "Public site" target, so the app needs its own read of what is actually published.
- *
- * IT REGISTERS UNDER THE EXTENSION'S OWN KEY (see PUBLIC in queryKeys). The preview extension's manifest binds
- * `public/` to the name `public`, so the daemon's file watcher already pushes staleness for this exact key on
- * every write into the directory, this read inherits that for free, and the two surfaces can never disagree
- * about what is published.
- *
- * `live` IS A CLOCK, AND IT IS THE ONE EXCEPTION. That push is unioned from the ACTIVATED extensions, so on a
- * sandbox where the preview extension never activated there may be nothing carrying it. Rather than teach the
- * core table about one extension's directory, a caller that cannot rely on the push asks for a tick, and only
- * while it is genuinely waiting for a file to appear. Everything else here is push-driven and holds no clock. */
+// Reads the workspace outbox from the app, since Preview's own target needs its own read. Registered under the
+// preview extension's query key (PUBLIC), so its staleness push covers this read too. `live` is the one
+// exception: a caller that can't rely on the push asks for a tick, only while waiting for a file to appear.
 
-// While a build is in flight. Fast enough that the page appears to land the moment it is written, and running
-// only inside the seconds the screen is actually watching for it.
+// While a build is in flight; fast enough the page seems to land the moment it's written, only while watched.
 const WATCH_MS = 1500;
 
 export function usePublicOutbox(live: MaybeRefOrGetter<boolean> = false) {
@@ -34,8 +24,7 @@ export function usePublicOutbox(live: MaybeRefOrGetter<boolean> = false) {
 
     return {
         files: computed(() => query.data.value?.files ?? []),
-        /* The outbox's own address. Absent on a sandbox with no tunnel, which is the honest signal that nothing
-         * here can be published at all, a screen promising a public link on such a box would be lying. */
+        // The outbox's address; absent on a sandbox with no tunnel, the honest signal that nothing here can publish.
         url: computed(() => query.data.value?.url),
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

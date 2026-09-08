@@ -10,24 +10,16 @@ import {
 import type { Story } from "./stories";
 import { type AgentRunPick, AgentRunPickSchema, isConversationId } from "@intentic/sandbox-contract";
 
-/* A RUN is the set of stories the user selected at one moment. The machinery under it — the directory layout,
- * the run id, the conversation id derived from it — is the core's batch-run substrate, shared with maintenance
- * and documentation (sandbox-contract/batch-runs.ts), and its header argues the two properties this surface
- * depends on: a run backed by FILES survives archiving the agents, closing the browser and rebuilding the
- * image, and conversation ids that are DERIVED make joining a run to the fleet a filter over `GET /agents`
- * rather than bookkeeping that can drift. Only a launch refusal is recorded here: no session exists for the
- * roster to describe in that case.
- *
- * What stays in this file is what is about STORIES: the promise as tested, the criteria parsed out of it, the
- * targets each story was walked against, and the evidence a report may reference. */
+// A run is the set of stories selected at one moment; its directory layout, run id and conversation ids are the shared
+// batch-run substrate (sandbox-contract/batch-runs), file-backed to survive archiving and rebuilds, with ids derived so
+// joining to the fleet is a filter over GET /agents. This file covers what's story-specific: the promise, criteria,
+// targets, evidence.
 
 const KIND: BatchRunKind = {
     runsDir: `records/artifacts/acceptance`,
     prefix: `xt`,
-    /* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be tested: only
-     * the newest runs carry news, and a workspace with hundreds of run directories must not spend a request per
-     * story to render a list or to light a badge. Shared by the rail badge's background scan and the view's own
-     * tally so the two can never disagree about what "recent" means. */
+    // Depth of the walk for reading results, not a testing limit; shared by the badge and the view so "recent" means
+    // the same thing to both.
     scanRuns: 10,
 };
 
@@ -39,31 +31,26 @@ export const runManifestPath = (runId: string): string => batchRunManifestPath(K
 export const resultPath = (runId: string, slug: string): string => batchResultPath(KIND, runId, slug);
 export const reportPath = (runId: string, slug: string): string => `${storyDir(runId, slug)}/report.md`;
 
-// What the rail's badge has already been shown. A file rather than an extension setting: the badge is derived
-// from run files, so its acknowledgement belongs in the same tree, it survives a reload, is shared across the
-// owner's browsers, and adds no user-visible setting for a value no user would ever type.
+// A file, not an extension setting, so acknowledgement lives beside the run files, survives reload, and needs no
+// user-facing setting.
 export const SEEN_PATH = `${RUNS_DIR}/seen.json`;
 
 const RUN_ID = /^r[0-9a-z]+$/;
 const STORY_SLUG = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const SHOT_PATH = /^shots\/[^/]+\.png$/i;
 
-// The only report-relative image path that can be resolved back through /workspace/raw. Shared by structured
-// result validation and rendered Markdown so the two evidence surfaces have one path boundary.
+// The only report-relative image path resolvable through /workspace/raw; shared by result validation and rendered
+// markdown.
 export const isShotPath = (path: string): boolean => SHOT_PATH.test(path);
 
 export const runIdAt = (epochMs: number): string => batchRunIdAt(epochMs);
 
-/* The fleet conversation id for one story of one run. The substrate cuts the SLUG rather than the run id when
- * the two together would overflow, which matters here: a truncated slug can collide with a sibling's, and
- * storiesOf() has already made slugs unique by suffixing digits — the suffix sits at the end, exactly where the
- * cut lands, so uniqueness is preserved only if the cut leaves it. It does: slugs are capped at 40 characters
- * and run ids are ~10, well inside 64. */
+// Cuts the slug, not the run id, when the two would overflow; safe since storiesOf already suffixes slugs for
+// uniqueness at the end, exactly where the cut lands, and both stay well inside 64 characters.
 export const conversationIdOf = (runId: string, slug: string): string => batchConversationId(KIND, runId, slug);
 
-// One story's entry in run.json. `conversationId` is stored rather than re-derived so a future change to the id
-// scheme cannot orphan the runs already on disk; `repo` and `group` because together they name the address the
-// story was walked against (stories.ts targetKeyOf), and a report is unreadable without knowing which app that was.
+// `conversationId` is stored, not re-derived, so a future id-scheme change can't orphan runs on disk; `repo`/`group`
+// together name the address a story was walked against (targetKeyOf).
 export interface RunStory {
     readonly slug: string;
     readonly repo: string;
@@ -71,8 +58,8 @@ export interface RunStory {
     readonly path: string;
     readonly title: string;
     readonly conversationId: string;
-    // The promise AS TESTED. A path is not a revision: keeping the text and its parsed criteria makes the run
-    // self-contained, and lets the stories list refuse to paint an edited promise with an old green verdict.
+    // The promise as tested, not as a path; keeps the run self-contained and lets an edited story outrun its old
+    // verdict.
     readonly content: string;
     readonly criteria: readonly string[];
 }
@@ -85,12 +72,10 @@ export interface StorySnapshot extends Story {
 export interface RunManifest {
     readonly runId: string;
     readonly createdAt: number;
-    /* What the agents were pointed at, keyed by stories.ts targetKeyOf, kept because a report is unreadable a
-     * week later without it. A map rather than one URL: a run can walk the marketing site's stories at :4321 and
-     * the app's at :5173, and one field could only ever describe one of them. */
+    // What the agents were pointed at, keyed by targetKeyOf; a map, since one run can walk two apps in the same repo at
+    // different ports.
     readonly targets: Readonly<Record<string, string>>;
-    // Project-specific instructions that shaped the turns, by repo. Kept with the evidence so Retry runs the
-    // same brief even when the repo's .acceptance.md changes later.
+    // Project instructions that shaped the turns, by repo; kept with the evidence so Retry reuses the same brief later.
     readonly notes: Readonly<Record<string, string>>;
     /* WHAT EVERY SESSION IN THIS RUN OPENS ON, as the wire spells it (contract AgentRunPickSchema): the pair,
      * and the account, harness, tier, thinking and speed the reader configured with it.
@@ -102,8 +87,8 @@ export interface RunManifest {
      * the model's default is not one run. */
     readonly pick: NonNullable<AgentRunPick>;
     readonly stories: readonly RunStory[];
-    // A POST that was refused before the fleet registered a session. Persisted because roster absence alone
-    // cannot tell "not launched" from "finished and archived", and because these are the stories Retry can resume.
+    // A POST refused before a session registered; kept since roster absence alone can't distinguish never-launched from
+    // finished-and-archived, and Retry resumes from these.
     readonly launchFailures: Readonly<Record<string, string>>;
 }
 
@@ -133,36 +118,25 @@ export const runManifestOf = (params: {
     launchFailures: {},
 });
 
-// Every repo a run touched, first-appearance order, the run row's subtitle, and what the report joins
-// `targets` against.
+// Every repo a run touched, first-appearance order: the run row's subtitle and what a report joins targets against.
 export const reposOf = (manifest: RunManifest): readonly string[] => [...new Set(manifest.stories.map((story) => story.repo))];
 
-// Whether a historical verdict still describes the promise on disk now. Unknown text is not a match: painting a
-// story green requires evidence, while withholding a badge until its bounded prefetch has read the file is honest.
+// Whether a past verdict still describes the story on disk; unknown text never matches, so a badge waits rather than
+// guesses.
 export const matchesStoryRevision = (story: Pick<RunStory, "content">, current: string | undefined): boolean =>
     current !== undefined && story.content === current;
 
-// The verdict an agent writes into result.json. `blocked` is distinct from `fail` on purpose: "the app is broken
-// upstream of this story" is a different report to the author than "this story's behaviour is wrong".
+// `blocked` differs from `fail` on purpose: the app being broken upstream is a different report than the story itself
+// misbehaving.
 export type Verdict = "pass" | "fail" | "blocked";
 
-/* The colour a verdict reads as, in the one place both the run's report and the story list can share it,
- * `blocked` is warning rather than danger because the run never got to judge the story, and a list that painted
- * "we could not reach the app" the same red as "this promise is broken" would send someone to the wrong file.
- * Plain strings: this module stays free of the UI kit, and the names are its StatusVariant's. */
+// `blocked` reads as warning, not danger, since the run never judged the story; painting it the same red as a failed
+// promise would misdirect the reader. Plain strings, so this module stays free of the UI kit.
 const verdictTone = (verdict: Verdict): "success" | "danger" | "warning" =>
     verdict === `pass` ? `success` : verdict === `fail` ? `danger` : `warning`;
 
-/* WHERE ONE STORY OF ONE RUN STANDS, from the two facts that answer it: what the agent WROTE, and what its
- * session is doing. Shared by the run's report and the stories list because they were deriving it separately and
- * had drifted into disagreeing about the case that matters, a session that DIED. The report called it a neutral
- * "error" beside a plain "no report was written", and the list said nothing at all, leaving a story whose test
- * never ran looking exactly like one nobody had ever tested. Both were the same wrong answer: silence.
- *
- * A verdict outranks the session, always: a story the agent judged is judged, whatever became of the session
- * afterwards. Below that, a live session is progress and a dead one is a failure of the RUN, `untested` rather
- * than `fail`, because the promise was never examined and calling that a broken promise would send the reader to
- * a file that may be perfectly fine. Undefined ⇒ nothing to show: no verdict, no session, nothing happening. */
+// A verdict always outranks the session: a judged story stays judged whatever happened to it after. Otherwise a live
+// session is progress and a dead one is `untested`, not `fail`, since the promise itself was never examined.
 export const storyStanding = (
     verdict: Verdict | undefined,
     status: string | undefined,
@@ -265,9 +239,8 @@ const parsedArray = <T>(value: unknown, parse: (entry: unknown) => T | undefined
     return parsed.some((entry) => entry === undefined) ? undefined : (parsed as T[]);
 };
 
-/* A result is MODEL OUTPUT, not a trusted wire response. The shape in the brief is enforced here, including the
- * authored criteria recorded in the manifest: a bare `{ "verdict": "pass" }` is not acceptance evidence, and
- * neither is a result that silently dropped or paraphrased one of the promises it was asked to judge. */
+// Validates model output, not a trusted response: a bare `{verdict:"pass"}`, or one that dropped or paraphrased an
+// authored criterion, is not acceptance evidence.
 export const parseResult = (source: string, expected: Pick<RunStory, "slug" | "title" | "criteria">): StoryResult | undefined => {
     try {
         const parsed = record(JSON.parse(source));
@@ -343,9 +316,8 @@ const stringRecord = (value: unknown): Readonly<Record<string, string>> | undefi
     return found === undefined || Object.values(found).some((entry) => typeof entry !== `string`) ? undefined : (found as Record<string, string>);
 };
 
-/* A run.json that is half-written or malformed is skipped rather than allowed to manufacture paths, sessions or
- * verdicts. There is no permissive fallback: a run is evidence, so all of the facts needed to interpret it must
- * have been written atomically in the manifest. */
+// A half-written or malformed manifest is skipped, never given a permissive fallback, since every fact needed to
+// interpret a run must already be atomic in the file.
 export const parseManifest = (text: string): RunManifest | undefined => {
     try {
         const parsed = record(JSON.parse(text));

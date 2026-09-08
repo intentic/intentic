@@ -2,16 +2,9 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { pictureRect } from "../../browsers/viewportCoords";
 
-/* THE DROP-DOWN THE PICTURE CANNOT SHOW, drawn on this side of the wire instead.
- *
- * Chromium renders an open <select> as a native menu belonging to the browser rather than to the page, so it
- * never reaches a screencast frame: the owner clicks the control, sees nothing happen, and the click they aim
- * at the option they wanted lands on whatever the page has underneath. The daemon reads the options out of the
- * page (readSelect) and this draws them where the control is, so picking one is an ordinary click again.
- *
- * It is a REAL menu in the operator's own browser, not a picture of one, so it is sharp at any zoom, scrolls a
- * twelve-year list of birth years properly, and answers the arrow keys. Nothing is injected into the page to
- * achieve that, which matters: the agent's next snapshot must not find an overlay we left in its DOM. */
+// An open <select>'s native menu never reaches the screencast, so the daemon reads its options (readSelect) and
+// this draws a real menu on this side of the wire: sharp at any zoom, scrollable, keyboard-driven, with nothing
+// injected into the page's DOM.
 
 const props = defineProps<{
     menu: {
@@ -19,7 +12,7 @@ const props = defineProps<{
         selected: number;
         rect: { x: number; y: number; width: number; height: number };
     };
-    // The <img> the frame paints into: the menu is placed against the picture, not against the pane.
+    // The <img> the frame paints into; the menu is placed against the picture, not the pane.
     frame: HTMLElement | undefined;
     viewWidth: number;
     viewHeight: number;
@@ -28,7 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{ pick: [index: number]; close: [] }>();
 
 const listEl = ref<HTMLElement | undefined>();
-// Which row the keyboard is on. Starts at the page's own current choice, so Enter alone changes nothing.
+// Which row the keyboard is on; starts at the page's current choice so Enter alone changes nothing.
 const active = ref(props.menu.selected);
 
 const box = computed(() =>
@@ -37,8 +30,8 @@ const box = computed(() =>
         : pictureRect(props.frame, props.viewWidth, props.viewHeight, props.menu.rect),
 );
 
-/* Below the control, or above it when there is no room: the rule every native menu follows, and the one that
- * keeps a year list from opening off the bottom of a pane. Measured against the picture's own box. */
+// Below the control, or above when there's no room, measured against the picture's own box, so a long list doesn't
+// open off the pane.
 const placement = computed(() => {
     const paneHeight = props.frame?.getBoundingClientRect().height ?? 0;
     const below = paneHeight - (box.value.top + box.value.height);
@@ -63,7 +56,7 @@ const move = (delta: number): void => {
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-    // Every key belongs to the menu while it is open: none of them may fall through to the page behind it.
+    // Every key belongs to the open menu; none fall through to the page behind it.
     event.preventDefault();
     event.stopPropagation();
     if (event.key === "Escape" || event.key === "Tab") {
@@ -81,7 +74,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     }
 };
 
-// Open focused and scrolled to the current choice: a birth year is a long way down a list that opens at the top.
+// Opens focused and scrolled to the current choice, since a birth-year list opens far from the top.
 watch(
     () => props.menu,
     async () => {
@@ -95,7 +88,7 @@ watch(
 </script>
 
 <template>
-    <!-- Swallows the click that would otherwise reach the picture underneath and move the page's focus. -->
+    <!-- Swallows the click that would otherwise reach the picture underneath and move its focus. -->
     <div class="absolute inset-0 z-20" @mousedown.stop.prevent="emit('close')" @wheel.stop @contextmenu.prevent></div>
     <div
         ref="listEl"

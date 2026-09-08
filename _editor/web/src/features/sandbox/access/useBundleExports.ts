@@ -6,22 +6,12 @@ import { useEndpoint } from "../secrets/useEndpoint";
 import { BUNDLE_EXPORTS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-/* THE EXPORTS THAT EXIST, read off the daemon's export directory, never remembered in a component.
- *
- * This is the whole fix for "I started an export, switched view, and the button forgot". Packing a real
- * workspace takes minutes; a `busy` ref inside a card cannot survive that, because the card does not. So the
- * daemon owns the work and this query owns nothing at all: it asks what is in the directory, and whatever the
- * answer is, that is the truth on every tab, after every refresh, tomorrow morning.
- *
- * The poll follows the work rather than the clock. While something is packing the list is the only channel
- * carrying its progress (a `.part` file's size, which no watcher reports: /history is deliberately outside the
- * one that pushes), so it ticks every couple of seconds. With nothing packing there is nothing to learn: a
- * finished bundle does not change, so the poll stops entirely and the card costs one request per open.
- */
+// The list of exports, read off the daemon's export directory rather than tracked in component state, so it
+// stays correct across tabs and reloads. Polls only while something is packing.
 
 const BUNDLE_EXPORTS_KEY = BUNDLE_EXPORTS.of();
 
-// Fast enough that a growing bundle looks alive, slow enough to be free next to the packing itself.
+// How often the list re-polls while a bundle is packing.
 const PACKING_POLL_MS = 2_000;
 
 export function useBundleExports() {
@@ -33,13 +23,12 @@ export function useBundleExports() {
     });
 
     const exports = computed(() => query.data.value?.exports ?? []);
-    // What the card gates its start button on, and what makes a refresh mid-pack land on "still packing"
-    // rather than on a button that looks untouched.
+    // The in-flight export, if any; gates the start button so a mid-pack refresh doesn't look idle.
     const packing = computed(() => exports.value.find((entry) => entry.status === `packing`));
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: BUNDLE_EXPORTS_KEY });
 
-    // Kick one off. Answers as soon as the daemon has NAMED it, not when it finishes, the row appears
-    // immediately and fills in as the bytes land.
+    // Starts an export. Resolves once the daemon has named it, not once packing finishes, so the row appears
+    // immediately and fills in as bytes land.
     const start = async (secrets: boolean): Promise<void> => {
         await sandboxJson(`/bundles${secrets ? `?secrets=1` : ``}`, { method: `POST` });
         await invalidate();
@@ -53,11 +42,8 @@ export function useBundleExports() {
     return { query, error, exports, packing, start, remove, invalidate };
 }
 
-/* The download URL a browser can NAVIGATE to, so the bytes stream to disk through its own download manager
- * instead of through the tab's memory. Same trick as mediaUrl and for the same reason: a navigation cannot
- * carry a bearer, so the credential becomes a short-lived ticket scoped to this one bundle.
- *
- * Outside the composable because it needs nothing from it, a bundle's name is all there is to know. */
+// Download URL for a browser to navigate to directly, so bytes stream via its own download manager, not tab memory.
+// The ticket is a short-lived credential scoped to this bundle, since a navigation can't carry a bearer header.
 export const bundleDownloadUrl = async (name: string): Promise<string> => {
     const { ticket } = await sandboxJson<{ ticket: string }>(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: `POST` });
     const base = useEndpoint().daemonBase.value;

@@ -12,26 +12,17 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* TWO FILES, because the two halves have nothing in common but a name.
- *
- * `.intentic/config/workflows.json` is a MANIFEST, a handful of designs the user authors and edits, the same shape
- * and lifecycle as automations.json, changing at human speed.
- *
- * `.intentic/records/workflow-runs.json` is a LEDGER, append-mostly, written several times per step by the scheduler,
- * bounded by count and never edited by a person. Keeping it out of the manifest is what stops a run's fourth
- * step-state write from rewriting the user's designs, and what lets a run of a since-deleted workflow stay
- * readable (it snapshotted its definition; see WorkflowRunSchema.workflow).
- */
+// Two files: `workflows.json` is a manifest the user edits by hand; `workflow-runs.json` is an append-mostly ledger the
+// scheduler writes many times per step, bounded and never user-edited. Kept apart so a step write can't clobber a
+// design; a deleted workflow's run stays readable since it snapshots its own definition.
 
-// How many ENDED runs the ledger remembers, newest first. Running records are never retention candidates: a
-// scheduler still writing one must not lose its journal because enough newer runs happened to start.
+// Ended runs the ledger remembers, newest first; a still-running record is never a retention candidate.
 const RUNS_KEPT = 50;
 
 export interface WorkflowsStore {
     readonly list: () => Promise<Workflow[]>;
     readonly get: (id: string) => Promise<Workflow | undefined>;
-    // Atomic create-or-update with the caller's intent made explicit. This is the collision guard: a create
-    // never overwrites and an update never invents a missing design.
+    // Atomic create-or-update: create never overwrites, update never invents a missing design.
     readonly save: (workflow: Workflow, create: boolean) => Promise<"saved" | "conflict" | "missing">;
     // True when a workflow of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
@@ -69,40 +60,25 @@ export const fileWorkflowsStore = (path: string): WorkflowsStore => {
     };
 };
 
-// What one step-state write changes. Every field is optional because the scheduler writes this at three
-// different moments, the step starting, the step ending, a step being skipped, and each knows a different
-// subset. Omitting is not the same as clearing: an absent key leaves what was there.
+// Every field optional: the scheduler writes this at three different moments (start, end, skip) and each knows a
+// different subset. Omitting doesn't clear a key; only writing over it does.
 export type StepPatch = Partial<Omit<WorkflowStepRun, "stepId">>;
 
 export interface WorkflowRunsStore {
-    // Newest-started first, the order the list route serves and the UI renders.
+    // Newest-started first, the order the list route and UI use.
     readonly list: () => Promise<WorkflowRun[]>;
     readonly get: (runId: string) => Promise<WorkflowRun | undefined>;
-    // Open a run with every step already recorded `pending`, so the graph is complete from the first frame.
+    // Opens a run with every step already `pending`, so the graph is complete in the first frame.
     readonly start: (run: WorkflowRun) => Promise<WorkflowRun>;
     readonly patchStep: (runId: string, stepId: string, patch: StepPatch) => Promise<void>;
-    // Set several steps to one state at once, what "everything downstream of the failure is skipped" is, and
-    // one write rather than one per node.
+    // Sets several steps to one state in a single write, e.g. everything downstream of a failure becoming skipped.
     readonly markSteps: (runId: string, stepIds: readonly string[], state: WorkflowStepState, detail?: string) => Promise<void>;
     readonly settle: (runId: string, state: WorkflowRunState, now: number, detail?: string) => Promise<void>;
-    /* File an ended run away, or bring it back, `now` stamps the archive, `undefined` clears it. The run stays
-     * in the ledger either way, which is the difference between this and `forget` below: an archived run is
-     * still the thing that stands for its steps' conversations, and a record that had gone could not be
-     * restored or draw the row the archive lists them under.
-     */
+    // Archives or restores a run without deleting it (unlike `forget`); `undefined` clears the archive stamp.
     readonly setArchived: (runId: string, at: number | undefined) => Promise<void>;
-    /* Drop a run from the ledger outright, what emptying the archive does to the runs in it, alongside the
-     * agents it deletes.
-     *
-     * A run record is a SCHEDULING artifact (which step ran where, and how it ended); the work itself is the
-     * steps' conversations, their branches and their transcripts, which this does not touch. Purging deletes
-     * those separately and for its own reasons, this is only the row that pointed at them. The ledger is
-     * already transient by design (it keeps the last RUNS_KEPT and rolls the rest off), so dropping one early
-     * is the same event happening on purpose.
-     */
+    // Drops a run from the ledger outright; its conversations, branches and transcripts are untouched.
     readonly forget: (runId: string) => Promise<void>;
-    // Count one boot-time resume against the run, so a workflow whose step reliably kills the daemon cannot be
-    // resurrected forever. Returns the run as it now stands, or undefined when it went away underneath.
+    // Counts one boot resume against the run, so a repeatedly-crashing step can't be resurrected forever.
     readonly countResume: (runId: string) => Promise<WorkflowRun | undefined>;
 }
 
@@ -111,8 +87,8 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
         parse: (raw) => z.array(WorkflowRunSchema).safeParse(raw).data,
         fallback: () => [],
     });
-    // Every mutation is "find this run, replace it". A run that isn't there is a no-op rather than an error,
-    // the ledger rolls, and a scheduler still writing to a run that has rolled off the end must not resurrect it.
+    // Find this run, replace it; a run not found is a no-op, not an error, since a scheduler may still be writing to
+    // one that already rolled off the ledger.
     const amend = async (runId: string, change: (run: WorkflowRun) => WorkflowRun): Promise<void> => {
         await file.update((runs) => {
             const existing = runs.find((run) => run.runId === runId);

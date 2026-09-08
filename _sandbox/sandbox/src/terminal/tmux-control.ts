@@ -1,54 +1,20 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
-/* THE BROWSER'S TMUX CLIENT IS A CONTROL-MODE CLIENT, and this is the whole of what that takes.
- *
- * A normal `tmux attach` is a screen: tmux draws the pane onto the alternate screen of whatever terminal it is
- * attached from, and owns everything about that picture: the wheel (mouse mode, remote copy-mode, its own
- * `[12/3400]` position tag), the scrollback (tmux's, on the far side of the socket, never in the browser), and
- * a selection (tmux's, not the browser's). Rendered into xterm.js, that made a browser terminal that could
- * neither scroll nor copy nor search like a local one, because xterm was only ever shown one screenful.
- *
- * `tmux -C` is the other client tmux has. It draws nothing. It speaks a line protocol on stdout: every byte a
- * pane's program writes arrives as a `%output %<pane> <escaped>` notification, RAW, before tmux has interpreted
- * it, and everything tmux would tell a screen about the session (windows added, the active one changing) is a
- * `%…` line too. Commands go in on stdin, one per line, each answered by exactly one `%begin`/`%end` (or
- * `%error`) block. It is what iTerm2's tmux integration is built on, and it turns the roles the right way
- * round: xterm in the browser IS the terminal, with its own scrollback, selection and search over the whole
- * buffer, and the wheel and a drag never leave the page; tmux is the thing that keeps the shell alive between
- * attaches, lists it, logs it, and hands its history back on the next attach.
- *
- * Three things follow from "raw":
- *   · A program that wants the mouse (vim, htop) asks xterm for it directly, its `?1000h` rides the stream, and
- *     xterm reports back into the pane through send-keys below. tmux's own mouse mode is off (the image's
- *     tmux.conf), nothing here needs it.
- *   · Keystrokes are injected into the PANE (`send-keys -H`, literal bytes), never fed to tmux as keys, so the
- *     prefix key and every tmux binding are simply not reachable from a tab. The panel does its own splits.
- *   · On attach xterm holds nothing, so the pane's history is read back (`capture-pane -e -J`, colour kept,
- *     wrapped lines rejoined so xterm re-wraps them at its own width) and written as the buffer's opening
- *     bytes, then the cursor and the pane's modes are re-stated from tmux's formats (a reattach into a running
- *     vim lands on its alternate screen with the mouse on, as it should). The same replay is the answer to a
- *     browser that fell behind: drop, let it drain, replay (terminal.ts).
- *
- * Two layers here, both without a tty. `createControlParser` is the wire (pure, tested on its own); the client
- * over it owns one child process and one FIFO of command replies; `attachControlTerminal` is the thing a
- * WebSocket wants: follow ITS OWN session's active pane (tmux's notices are broadcast to every control client,
- * so which session each one is about is a thing to check), keep it in sync, take bytes in and hand bytes out.
- */
+// Browser tmux client uses `tmux -C`: a line protocol, not a screen, so xterm owns scrollback/selection/search while
+// tmux keeps the shell alive between attaches. Keystrokes go straight into the pane, never to tmux, so bindings are
+// unreachable. attachControlTerminal follows its own session's pane, since notices broadcast to every client.
 
-// ------------------------------------------------------------------------------------------------------------
 // The wire.
 
 export type ControlEvent =
-    // A pane wrote these bytes. Already unescaped; UTF-8 is NOT decoded here, a chunk boundary can split a
-    // character, and xterm's own decoder is the one that has to see the halves in order.
+    // Already unescaped; UTF-8 not decoded here, a chunk boundary can split a character before xterm decodes it.
     | { readonly kind: "output"; readonly pane: string; readonly bytes: Buffer }
-    // One command's answer. `initial` is the block tmux emits for the command the client was STARTED with (the
-    // attach itself), which nobody here asked for: it is flagged 0 where every command sent later is flagged 1.
+    // One command's reply; `initial` flags the attach's own unrequested block (0), later commands are 1.
     | { readonly kind: "reply"; readonly ok: boolean; readonly initial: boolean; readonly lines: readonly string[] }
-    // Any other `%…` line: `%session-changed $1 name`, `%session-window-changed $1 @3`, `%window-pane-changed`…
+    // Any other `%…` line (session or window state changes).
     | { readonly kind: "notice"; readonly name: string; readonly args: string }
-    // The client is ending: the session was destroyed, or an empty line detached it.
+    // Client is ending: the session was destroyed, or an empty line detached it.
     | { readonly kind: "exit"; readonly reason: string };
 
 export interface ControlParser {
@@ -56,15 +22,13 @@ export interface ControlParser {
     readonly feed: (chunk: Buffer) => ControlEvent[];
 }
 
-// `-CC` prefixes the very first line with this DCS so a terminal knows control mode began; `-C` does not, but
-// the parser strips it either way rather than depend on which flag spawned it.
+// `-CC` prefixes the first line with this DCS; `-C` does not, but it is stripped either way.
 const DCS_PREFIX = "\x1bP1000p";
 
 const NEWLINE = 0x0a;
 
-// `%output`'s escaping is one rule: every byte below 0x20 and the backslash itself become `\ooo` octal, and
-// every other byte, including all of UTF-8's upper range, is passed as itself. The line is handled as LATIN1 so
-// that one char is one byte throughout; the result is bytes, and stays bytes.
+// Below-0x20 bytes and the backslash itself become `\ooo` octal; everything else, including UTF-8's upper range, passes
+// through. Handled as latin1 so one char is one byte.
 export const decodeOutput = (value: string): Buffer => {
     const out = Buffer.allocUnsafe(value.length);
     let length = 0;
@@ -93,7 +57,7 @@ const isOctal = (value: string, at: number): boolean => {
     return true;
 };
 
-// `%begin 1788688249 476510 0` → the stamp tmux repeats on the matching `%end`/`%error`, and the flag.
+// Captures the stamp the matching %end/%error must repeat, and the initial-block flag.
 const BLOCK_LINE = /^%(begin|end|error) (\d+ \d+) (\d+)$/;
 
 interface BlockLine {
@@ -117,7 +81,7 @@ const parseNotification = (text: string): ControlEvent => {
     const args = space === -1 ? "" : text.slice(space + 1);
     if (name === "output") {
         const gap = args.indexOf(" ");
-        // `%output %5 ` with an EMPTY payload is a real line (a pane wrote nothing decodable); still a pane.
+        // Empty payload after `%output %5 ` is a real line (pane wrote nothing decodable), not a missing one.
         const pane = gap === -1 ? args : args.slice(0, gap);
         return { kind: "output", pane, bytes: decodeOutput(gap === -1 ? "" : args.slice(gap + 1)) };
     }
@@ -131,8 +95,7 @@ export const createControlParser = (): ControlParser => {
     let rest: Buffer = Buffer.alloc(0);
     let block: { readonly stamp: string; readonly initial: boolean; readonly lines: string[] } | undefined;
 
-    // Inside a block only its OWN terminator ends it: the stamp is what keeps a pane line that happens to read
-    // `%end …` (a capture of someone else's control-mode transcript, say) from closing it early.
+    // Only the block's own stamp closes it, so a captured line that itself reads `%end …` can't end it early.
     const inBlock = (open: NonNullable<typeof block>, text: string): ControlEvent | undefined => {
         const line = parseBlockLine(text);
         if (line !== undefined && line.verb !== "begin" && line.stamp === open.stamp) {
@@ -149,7 +112,7 @@ export const createControlParser = (): ControlParser => {
             return inBlock(block, text);
         }
         if (!text.startsWith("%")) {
-            // Nothing outside a block is unprefixed; tmux does not do this, so it is noise to skip, not data.
+            // Nothing outside a block is unprefixed in tmux's own output; skip as noise, not data.
             return undefined;
         }
         const line = parseBlockLine(text);
@@ -159,7 +122,7 @@ export const createControlParser = (): ControlParser => {
         if (line.verb === "begin") {
             block = { stamp: line.stamp, initial: line.initial, lines: [] };
         }
-        // A stray %end/%error with no open block: nothing to close.
+        // Stray %end/%error with no open block: nothing to close.
         return undefined;
     };
 
@@ -176,29 +139,18 @@ export const createControlParser = (): ControlParser => {
                 data = data.subarray(at + 1);
                 at = data.indexOf(NEWLINE);
             }
-            // Copy rather than keep a view: the caller may reuse the chunk's memory.
+            // Copies rather than keeps a view, since the caller may reuse the chunk's memory.
             rest = Buffer.from(data);
             return events;
         },
     };
 };
 
-// ------------------------------------------------------------------------------------------------------------
-// The client: one `tmux -C …` child, its replies matched to the commands that asked.
+// The client: one tmux -C child, replies matched to the commands that asked.
 
 export interface ControlClient {
-    /* Send commands. Several at once go out in ONE write, so tmux parses and runs them back to back with no
-     * pane read between them, which is what makes a "state, then screen" pair read as one moment. One promise
-     * per command, in order; a `%error` rejects with its text. Commands must be single lines: a newline would
-     * be a second command.
-     *
-     * `onSettled` fires as the batch's LAST reply is PARSED, synchronously, inside the stdout handler and
-     * before any `.then` on these promises can run. That distinction is the whole point of it: one stdout chunk
-     * routinely carries a reply block AND the `%output` lines that follow it, and the handler walks the chunk
-     * to the end in one synchronous pass, so by the time a promise continuation runs, output that tmux emitted
-     * strictly AFTER the reply has already arrived. Anything that needs to divide the stream at the reply — the
-     * attach's "this is in the capture, that is new" cut — has to be told here. Not fired when the client ends
-     * with the batch outstanding: nothing was answered, so there is no point to cut at. */
+    // Batched commands go out in one write so tmux runs them back to back; one promise per command in order, `%error`
+    // rejects. `onSettled` fires synchronously as the last reply is parsed, before any `.then` runs.
     readonly send: (commands: readonly string[], onSettled?: () => void) => Promise<readonly string[]>[];
     readonly close: () => void;
 }
@@ -206,8 +158,7 @@ export interface ControlClient {
 export interface ControlClientHandlers {
     readonly onOutput: (pane: string, bytes: Buffer) => void;
     readonly onNotice: (name: string, args: string) => void;
-    // Once. `reason` is tmux's own words where it had any: the attach's error ("can't find session: x"), or
-    // the `%exit` argument.
+    // Fires once; `reason` is tmux's own words when it had any (the attach's error, or the `%exit` argument).
     readonly onExit: (code: number, reason: string) => void;
 }
 
@@ -216,13 +167,12 @@ type ControlChild = ChildProcessByStdio<Writable, Readable, Readable>;
 interface Pending {
     readonly resolve: (lines: readonly string[]) => void;
     readonly reject: (error: Error) => void;
-    // Set on the last command of a batch: the caller's synchronous cut point (see ControlClient.send).
+    // Set on a batch's last command: the caller's synchronous cut point (see ControlClient.send).
     readonly settled?: (() => void) | undefined;
 }
 
 export const spawnControlClient = (argv: readonly string[], handlers: ControlClientHandlers): ControlClient => {
-    // A `$TMUX` in this process's environment (the daemon started from inside a pane, or a test run by an
-    // agent whose shell is one) makes tmux refuse to attach as "nested"; a control client is not a nesting.
+    // $TMUX in this process's env makes tmux refuse to attach as nested; a control client is not nesting.
     const { TMUX: _ignored, ...env } = process.env;
     const child: ControlChild = spawn("tmux", ["-C", ...argv], { stdio: ["pipe", "pipe", "pipe"], env });
     const parser = createControlParser();
@@ -245,8 +195,7 @@ export const spawnControlClient = (argv: readonly string[], handlers: ControlCli
 
     const reply = (event: Extract<ControlEvent, { kind: "reply" }>): void => {
         if (event.initial) {
-            // The attach's own answer. Its failure is the one that matters: tmux follows it with a bare `%exit`,
-            // so the words are kept for that.
+            // The attach's own answer; a failure here is followed by a bare `%exit`, so its words are kept for that.
             if (!event.ok) {
                 attachError = event.lines.join(" ").trim();
             }
@@ -261,8 +210,7 @@ export const spawnControlClient = (argv: readonly string[], handlers: ControlCli
         } else {
             entry.reject(new Error(event.lines.join(" ").trim() || "tmux command failed"));
         }
-        // After settling, still synchronously: the caller's cut lands exactly here, between this reply and
-        // whatever the rest of this stdout chunk holds.
+        // Still synchronous after settling: the cut lands exactly between this reply and the rest of the chunk.
         entry.settled?.();
     };
 
@@ -312,11 +260,9 @@ export const spawnControlClient = (argv: readonly string[], handlers: ControlCli
     };
 };
 
-// ------------------------------------------------------------------------------------------------------------
-// Re-stating a pane into an empty xterm: what tmux knows about its screen, and the bytes that say the same.
+// Re-stating a pane into an empty xterm.
 
-/* The pane's screen state as tmux formats, one line, space-separated in THIS order (parsePaneState reads it
- * back positionally). Every one of these exists on tmux 3.3a; bracketed paste has no format, see below. */
+// Space-separated, in this exact order; parsePaneState reads it back positionally.
 export const PANE_STATE_FORMAT = [
     "#{cursor_x}",
     "#{cursor_y}",
@@ -345,7 +291,7 @@ export interface PaneState {
     readonly cursorX: number;
     readonly cursorY: number;
     readonly alternate: boolean;
-    // The normal screen's cursor while the alternate is up (tmux reports UINT_MAX when there is none saved).
+    // Normal screen's cursor while the alternate is up; tmux reports UINT_MAX (UNSET) when nothing is saved.
     readonly savedX: number | undefined;
     readonly savedY: number | undefined;
     readonly cursorVisible: boolean;
@@ -400,20 +346,18 @@ export const parsePaneState = (line: string): PaneState | undefined => {
         scrollBottom: num(17),
         height: num(18),
         width: num(19),
-        // The command may itself contain spaces in theory; everything from field 20 on is it.
+        // Command may itself contain spaces; everything from field 20 on is it.
         command: fields.slice(20).join(" "),
     };
 };
 
-// Shells turn bracketed paste on at every prompt and no format says whether it is on now; assume it for a
-// shell at the prompt on the normal screen, which is the state a reattach almost always lands in, and the one
-// where a pasted newline running early would be the costly mistake.
+// No format reports live bracketed-paste state; assumed for a shell at the prompt on the normal screen.
 const SHELLS = new Set(["zsh", "bash", "fish", "sh", "dash"]);
 
 const ESC = "\x1b";
 const cup = (row: number, col: number): string => `${ESC}[${String(row + 1)};${String(col + 1)}H`;
 
-// Each pane mode tmux tracks, and the sequence that turns it on (or, for the two that default ON, off).
+// Each pane mode tmux tracks, and the sequence that turns it on (or off, for the two that default on).
 const MODE_SEQUENCES: readonly (readonly [(state: PaneState) => boolean, string])[] = [
     [(s) => !s.cursorVisible, `${ESC}[?25l`],
     [(s) => s.insert, `${ESC}[4h`],
@@ -428,8 +372,8 @@ const MODE_SEQUENCES: readonly (readonly [(state: PaneState) => boolean, string]
     [(s) => !s.alternate && SHELLS.has(s.command), `${ESC}[?2004h`],
 ];
 
-// Where the cursor goes, with the scroll region stated first (DECSTBM homes the cursor) and origin mode after
-// it, because origin mode changes what a row number means: relative to the region's top.
+// Scroll region is stated first (DECSTBM homes the cursor), origin mode after: it changes what a row number means,
+// relative to the region's top.
 const cursorSequence = (state: PaneState): string => {
     let out = "";
     const fullRegion = state.scrollTop === 0 && state.scrollBottom >= state.height - 1;
@@ -442,18 +386,8 @@ const cursorSequence = (state: PaneState): string => {
     return out + cup(state.cursorY, state.cursorX);
 };
 
-/* The bytes that make an empty xterm show what the pane shows. `normal` is `capture-pane -e -J` of the normal
- * screen with as much history as is wanted (or, while the alternate is up, `capture-pane -a` of the saved
- * one); `alternate` is the alternate screen's own capture, only when it is up. Both are line ARRAYS as the
- * block delivered them, latin1 byte-strings.
- *
- * It opens with RIS: whatever xterm held (a previous life's screen, a disconnect banner) is not this pane, and
- * a reset is the only thing that also empties the scrollback the replay is about to refill. Lines are joined
- * with CRLF and never terminated, so the cursor is left ON the last captured row rather than one below it, and
- * the absolute cursor move that follows is exact provided the row count matched, which `-J` arranges: a line
- * tmux wrapped is captured whole and xterm wraps it again at the same width. The scroll region is stated before
- * the final cursor move because DECSTBM homes the cursor; origin mode after it because it changes what a row
- * number means. */
+// Opens with RIS to clear whatever xterm held; CRLF-joined and unterminated lines leave the cursor on the last captured
+// row, matching `-J`'s rejoined wrapping. Scroll region precedes the cursor move, origin mode after.
 export const synthesizeScreen = (normal: readonly string[], alternate: readonly string[] | undefined, state: PaneState): Buffer => {
     let out = `${ESC}c`;
     out += normal.join("\r\n");
@@ -473,7 +407,6 @@ export const synthesizeScreen = (normal: readonly string[], alternate: readonly 
     return Buffer.from(out, "latin1");
 };
 
-// ------------------------------------------------------------------------------------------------------------
 // The terminal a socket drives: the session's active pane, kept in step.
 
 export interface ControlTerminalSink {
@@ -482,31 +415,26 @@ export interface ControlTerminalSink {
 }
 
 export interface ControlTerminal {
-    // Bytes from the browser (keystrokes, a paste, xterm's mouse reports), into the followed pane as they are.
+    // Bytes from the browser (keystrokes, paste, mouse reports) into the followed pane as-is.
     readonly input: (bytes: Buffer) => void;
     readonly resize: (cols: number, rows: number) => void;
-    // Replay the followed pane from tmux's copy: for a browser that fell behind and has drained (terminal.ts).
+    // Replays the followed pane from tmux's copy, for a browser that fell behind and drained (terminal.ts).
     readonly resync: () => void;
     readonly close: () => void;
 }
 
-// How much history rides along on an attach. tmux keeps 100k lines a pane; all of them through the tunnel on
-// every reload, coloured, would be tens of MB before the prompt appears. This is every line a person scrolls
-// back for in practice, and the panel's "Full scrollback" view is there for the rest.
+// tmux keeps 100k lines per pane; sending it all on every reload would be tens of MB.
 export const ATTACH_HISTORY_LINES = 5000;
 
-// `send-keys -H` takes one hex byte per argument; a paste goes out in slices of this many so no single command
-// line grows without bound (tmux parsed 4 KB in one piece on 3.3a; this stays well under).
+// One hex byte per `send-keys -H` argument; a paste is sliced this wide so no command line grows unbounded.
 const INPUT_CHUNK = 1024;
 
 const PANE_ID = /^%\d+$/;
 const WINDOW_ID = /^@\d+$/;
 const SESSION_ID = /^\$\d+$/;
 
-/* Ceiling on pane output held across one sync, and on keystrokes held until the first sync finds the pane.
- * Both windows are a few milliseconds of one round trip to tmux, so neither bound is ever approached in
- * practice; they are here so that a pane flooding through a sync that somehow stalls cannot grow this process
- * without limit. Past the cap the excess is dropped, which is what the whole of this used to do unconditionally. */
+// Ceiling on pane output held during a sync, and on keystrokes queued before the first pane is found; past the cap the
+// excess is dropped.
 const HELD_MAX_BYTES = 4_194_304;
 const QUEUED_INPUT_MAX = 256;
 
@@ -518,10 +446,8 @@ const hexOf = (bytes: Buffer): string => {
     return parts.join(" ");
 };
 
-/* Find the active pane in the client's current window, or in a named one — and WHOSE SESSION that window is in.
- * The session is asked for because tmux's `%…` notices are broadcast (see the notice handler below): a window id
- * arriving on this client is not necessarily one of ours, and `-t @<id>` resolves `#{session_id}` to the session
- * that window is linked into, which is the one thing that settles it. */
+// Finds the active pane in the current window or a named one, and whose session it is in: tmux notices are broadcast,
+// so a window id here isn't necessarily ours; `-t @<id>` resolves its real session.
 const activePaneCommand = (window: string | undefined): string =>
     window === undefined
         ? `display-message -p -F '#{session_id} #{pane_id} #{window_id}'`
@@ -533,8 +459,8 @@ export interface PaneLocation {
     readonly window: string;
 }
 
-// That command's answer, `$3 %7 @2`. Undefined when tmux had nothing to say about the target — a window that
-// closed under us answers with an error block, and an empty reply reads the same way.
+// That command's answer, `$3 %7 @2`. Undefined when tmux had nothing to say (a closed window errors, an empty reply
+// reads the same).
 export const parseLocation = (line: string): PaneLocation | undefined => {
     const [session = "", pane = "", window = ""] = line.trim().split(" ");
     if (!SESSION_ID.test(session) || !PANE_ID.test(pane) || !WINDOW_ID.test(window)) {
@@ -544,35 +470,22 @@ export const parseLocation = (line: string): PaneLocation | undefined => {
 };
 
 export const attachControlTerminal = (argv: readonly string[], size: { readonly cols: number; readonly rows: number }, sink: ControlTerminalSink): ControlTerminal => {
-    // The pane whose bytes go to the browser; undefined until the first sync has found it.
+    // Pane whose bytes go to the browser; undefined until the first sync finds it.
     let pane: string | undefined;
     let window: string | undefined;
-    /* THE SESSION THIS CLIENT IS ATTACHED TO, learned from the opening sync (which asks with no target, so tmux
-     * answers about the client's own session) and never changed afterwards: a tab attaches one session and stays
-     * on it. It exists because tmux's notices are broadcast, and following a stranger's window put another
-     * session's pane on the screen and this tab's keystrokes into it. */
+    // Learned once from the opening sync; a tab stays on that session, since tmux notices are broadcast.
     let session: string | undefined;
-    // Bumped by every sync and NEVER reset, so a number is never reused: a stale sync that finishes after a
-    // newer one started must fail this check, and resetting to zero let it pass and paint an outdated screen.
+    // Bumped every sync, never reset, so a stale sync finishing late can't be mistaken for the newest one.
     let generation = 0;
-    /* Pane output held while a sync is in flight, and the bytes in it.
-     *
-     * HELD, NOT DROPPED. The capture a sync sends the browser is the pane as of the moment tmux answered it,
-     * so output tmux emitted BEFORE that reply is already in it and must not be shown twice, while output after
-     * it is new and exists nowhere else. Dropping the lot loses the second kind, and the loss is not rare: one
-     * stdout chunk regularly carries the reply and the output that followed it, so a fresh session's first
-     * prompt — written in the milliseconds either side of the attach's own capture — lands in that window, and
-     * a replay that opens with RIS then leaves exactly what it wipes: a black pane with a cursor at the top
-     * left. `capture`'s cut (below) is what divides the two, at the instant the reply is parsed. */
+    // Output held while a sync is in flight; held, not dropped, since it may be new and exist nowhere else.
     let held: Buffer[] | undefined;
     let heldBytes = 0;
-    // Keystrokes that arrived before the first sync had found a pane to send them to; flushed by `locate`.
+    // Keystrokes typed before the first sync found a pane; flushed by `locate`.
     let queuedInput: Buffer[] | undefined = [];
     let closed = false;
 
-    /* `%session-window-changed $<session> @<window>`: a session's active window moved. Ours means a job's next
-     * run window or the agent's next command, and the tab follows it; anyone else's is news about a session this
-     * tab is not showing, and the session id is what tells the two apart (see the broadcast note below). */
+    // `%session-window-changed $<session> @<window>`: a session's active window moved. Follows only when the session
+    // matches ours; tmux broadcasts this to every client.
     const followWindow = (args: string): void => {
         const [inSession, next] = args.split(" ");
         if (inSession === session && next !== undefined && WINDOW_ID.test(next) && next !== window) {
@@ -580,9 +493,8 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         }
     };
 
-    /* `%window-pane-changed @<window> %<pane>`: a different pane became active inside a window (a split made
-     * from elsewhere). Broadcast the same way, but a window id is unique across the whole server, so one that
-     * matches the window we are showing is proof enough that this is ours. */
+    // `%window-pane-changed @<window> %<pane>`: a different pane became active in a window (a split elsewhere). A
+    // window id is unique server-wide, so a match to our window is proof enough.
     const followPane = (args: string): void => {
         const [inWindow, next] = args.split(" ");
         if (inWindow === window && next !== undefined && PANE_ID.test(next) && next !== pane) {
@@ -604,17 +516,8 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
             }
             sink.output(bytes);
         },
-        /* EVERY `%…` NOTICE IS BROADCAST TO EVERY CONTROL CLIENT ON THE SERVER, whatever session it is about:
-         * tmux's control_notify_* walk the whole client list and filter on "is a control client", never on which
-         * session the client is attached to. So the session id each notice carries is not decoration, it is the
-         * only thing that says whether the news is this tab's.
-         *
-         * Unfiltered, it was: one sandbox runs many sessions at once (every agent command is a new window in its
-         * `agent-*` session, every job command a new window in a `job-*` one), so any of them opening a window
-         * re-pointed EVERY open tab at that window — a reset and a replay of a stranger's pane, most often a
-         * shell that had just started and had nothing on it yet. That is the Checks tab going blank while its
-         * suite ran: nothing had gone wrong with the checks, the tab had been walked to somebody else's screen.
-         * Keystrokes went with it, since input is sent to the followed pane. */
+        // Every `%…` notice is broadcast to every control client regardless of session; the session id it carries is
+        // the only way to tell whether it is this tab's.
         onNotice: (name, args) => {
             if (name === "session-window-changed") {
                 followWindow(args);
@@ -628,7 +531,7 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         },
     });
 
-    // Keystrokes into the followed pane, as bytes, in slices no one command line grows past.
+    // Keystrokes into the followed pane, sliced so no single command line grows unbounded.
     const sendInput = (into: string, bytes: Buffer): void => {
         const commands: string[] = [];
         for (let at = 0; at < bytes.length; at += INPUT_CHUNK) {
@@ -639,8 +542,8 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         }
     };
 
-    // Which pane the browser should be showing: the active pane of the named window, or of the client's own.
-    // Finding it for the first time is also what releases anything typed before there was a pane to type into.
+    // Active pane of the named window, or the client's own when none is named. Finding it the first time also releases
+    // anything typed before there was a pane to type into.
     const locate = async (inWindow: string | undefined): Promise<void> => {
         const [located] = await Promise.all(client.send([activePaneCommand(inWindow)]));
         const found = parseLocation(located?.[0] ?? "");
@@ -648,18 +551,16 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
             throw new Error(`no active pane in ${inWindow ?? "the session"}`);
         }
         if (inWindow === undefined) {
-            // The opening sync, asked with no target: whatever session tmux answers about is the one this client
-            // attached, and the one it stays on. It is set here rather than read off `%session-changed` because
-            // this reply is the FIRST thing tmux sends back, so nothing can be followed before it is known.
+            // Opening sync asks with no target, so whichever session tmux answers about is the one this client stays
+            // on.
             session = found.session;
         } else if (found.session !== session) {
-            // A window in some other session. The notice filter turns these away already; this is the guarantee
-            // under it, and it also covers a window that was moved between sessions since the notice was sent.
+            // Window belongs to another session; the notice filter already turns these away, this backs it up.
             throw new Error(`window ${inWindow} is not in ${session ?? "this session"}`);
         }
         pane = found.pane;
         window = found.window;
-        // The pane is known now, so anything typed before it was is released here, in the order it was typed.
+        // Pane is known now: anything typed earlier is released here, in the order it was typed.
         const queued = queuedInput ?? [];
         queuedInput = undefined;
         for (const bytes of queued) {
@@ -667,26 +568,11 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         }
     };
 
-    /* The pane's screen as bytes for an empty xterm: its state and the capture(s) that state calls for, in ONE
-     * write, so tmux runs them back to back and the screen is the screen the state describes.
-     *
-     * WHICH capture is wanted is only known once the state is back, so all three are asked for and the two the
-     * state does not call for are thrown away. Asking after the state came back reads cheaper and is wrong: it
-     * puts a round trip between the two, and a pane that writes inside it (a shell reaching its first prompt,
-     * turning bracketed paste on) has those bytes in the capture while its modes are read from before them, so
-     * the replay draws a screen it then describes wrongly. That is not theory: CI attached at the instant a
-     * session was created, read `#{pane_current_command}` as `tmux` because the pane's process had been forked
-     * and had not yet exec'd its shell, and then captured a screen with the shell's prompt already on it.
-     *
-     * `-a` is the SAVED screen: an error unless the alternate screen is up, which is the answer rather than a
-     * failure. The alternate screen's own capture takes no `-S`: there is no history behind it, and asking for
-     * one reads the normal screen's instead. */
+    // State and all three captures go out in one write, since which capture is wanted is known only once the state
+    // returns. `-a` errors unless the alternate screen is up; the alternate capture takes no `-S`, it has no history.
     const capture = async (of: string, mine: number): Promise<Buffer> => {
         const history = `-S -${String(ATTACH_HISTORY_LINES)}`;
-        // Every reply is optional, and each is made so where it is created rather than where it is read: the
-        // `-a` capture rejects by design, and a client that ends mid-sync rejects ALL FOUR — one `await` on
-        // them would leave the other three rejected with nobody listening, which vitest and Node both call an
-        // unhandled rejection. A missing state line is the one that matters, and it throws below.
+        // Every reply is optional: a client ending mid-sync rejects all four, or one await unhandled-rejects the rest.
         const [stateLines, saved, normal, screen] = await Promise.all(
             client
                 .send(
@@ -696,11 +582,8 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
                         `capture-pane -p -e -J ${history} -t ${of}`,
                         `capture-pane -p -e -J -t ${of}`,
                     ],
-                    // THE CUT, and it has to be here rather than after the await: tmux's ordering says that
-                    // everything this client wrote before this reply is on the screen the capture just read,
-                    // and everything after it is not. Held output from before is therefore about to be drawn
-                    // by the replay and is discarded; from here on, what arrives is new, is kept, and is
-                    // flushed on top of the replay by `sync`. A newer sync owning `held` is left alone.
+                    // The cut: output before this reply is already in the capture and discarded; after it is new and
+                    // kept.
                     () => {
                         if (mine === generation) {
                             held = [];
@@ -720,9 +603,8 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         return synthesizeScreen(normal ?? [], undefined, state);
     };
 
-    /* Bring the browser to the pane as it is now: find the pane, read its state and screen together, draw them
-     * as one picture, and put whatever the pane wrote in the meantime on top of it. The state is read in the
-     * same write as the capture, so the two are one moment as far as tmux's own scheduling allows. */
+    // Finds the pane, reads its state and screen together, draws them as one picture, then puts whatever it wrote
+    // meanwhile on top. State and capture share one write so both are the same moment tmux allows.
     const sync = async (inWindow: string | undefined): Promise<void> => {
         const mine = ++generation;
         held = [];
@@ -732,13 +614,10 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
             await locate(inWindow);
             screen = await capture(pane ?? "", mine);
         } catch {
-            // The pane went away mid-sync (a window closing under us), or the client is ending: the next notice
-            // or the exit says what happened, and there is nothing to draw for this one. What was held is still
-            // flushed below — no capture covered it, so discarding it here would be losing real output.
+            // Pane gone mid-sync, or client ending: the next notice or exit explains it; held output still flushes.
         }
         if (mine !== generation) {
-            // A newer sync started while this one was in flight. It owns `held` and its capture covers this
-            // window too, so this screen is stale by construction: drawing it would undo the newer one.
+            // A newer sync started meanwhile; it owns `held` and covers this window, so this screen would be stale.
             return;
         }
         const rest = held ?? [];
@@ -755,9 +634,7 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
         }
     };
 
-    // The size first, so the initial replay is captured at the browser's width and re-wraps true; then the
-    // session's own active pane, which needs no window named. A client that ends before answering (the attach
-    // failed) rejects this, and the exit it ends with is the report.
+    // Size first, so the initial replay is captured at the browser's width; then the session's active pane.
     client.send([`refresh-client -C ${String(size.cols)},${String(size.rows)}`])[0]?.catch(() => undefined);
     void sync(undefined);
 
@@ -767,9 +644,7 @@ export const attachControlTerminal = (argv: readonly string[], size: { readonly 
                 return;
             }
             if (pane === undefined) {
-                // Typed before the first sync had found the pane — a real window, since a tab takes keyboard
-                // focus the moment it opens and the attach is a round trip to tmux away. Queued, because a
-                // terminal that silently eats the first thing you type into it reads as one that never opened.
+                // Typed before the first sync found a pane; queued, since eating the first keystroke reads as broken.
                 if (queuedInput !== undefined && queuedInput.length < QUEUED_INPUT_MAX) {
                     queuedInput.push(bytes);
                 }

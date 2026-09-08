@@ -1,27 +1,13 @@
-/* TEARDOWN AS STRUCTURE RATHER THAN AS A LIST SOMEBODY MAINTAINS.
- *
- * The daemon's shutdown was, for a long time, twenty-five `.stop()` calls in a row at the bottom of main.ts.
- * Nothing connected that list to the subsystems it was supposed to cover: adding a watcher, a poller or a
- * timer meant remembering to add a line, and forgetting cost nothing visible, the process was exiting anyway,
- * so a missed stop showed up only where it hurts, in the tests and the long-lived dev sandbox, as a handle
- * that keeps the event loop alive or a timer that fires against a torn-down service.
- *
- * A store inverts it. Whatever a subsystem needs undone is registered AT THE MOMENT IT IS CREATED, next to the
- * code that knows about it, and shutdown is one call that cannot skip anything. The list stops being a thing
- * to remember because it stops being a list.
- *
- * DISPOSING IS NOT ALLOWED TO BE PARTIAL. A store keeps going after a member throws and reports the failures
- * together at the end, because the alternative, the first bad `dispose()` aborting the rest, is how one
- * misbehaving subsystem leaves a container's ports bound and its child processes orphaned. Errors are not
- * swallowed either; they arrive as one AggregateError once everything that could be released has been. */
+// Teardown as a store rather than a maintained list: what needs undoing registers at creation, so shutdown is one call
+// that cannot skip anything. Disposal is never partial; a member that throws does not stop the rest, and failures
+// surface together as one AggregateError.
 
 export interface IDisposable {
     dispose(): void;
 }
 
-/* The escape hatch into the protocol for everything that already has its own word for stopping, a `close()`,
- * a `stop()`, a returned unsubscribe function, an interval handle. Wrapping at the registration site is what
- * lets a store hold subsystems that were never written to be disposables. */
+// Wraps anything with its own way to stop (`close()`, `stop()`, an unsubscribe function) as an `IDisposable`, so a
+// store can hold it.
 export const toDisposable = (fn: () => void): IDisposable => ({ dispose: fn });
 
 const disposeAll = (disposables: Iterable<IDisposable>): void => {
@@ -45,10 +31,8 @@ export class DisposableStore implements IDisposable {
     private readonly members = new Set<IDisposable>();
     private disposed = false;
 
-    /* Registering into an ALREADY-disposed store disposes the newcomer immediately rather than holding it.
-     * That case is real and it is not a caller error: an async boot step can land after a shutdown began, and
-     * the honest reading of "add this to the things that get cleaned up" when cleanup has happened is to clean
-     * it up. Holding it would leak; throwing would turn a benign race into a crash on the way out. */
+    // Registering into an already-disposed store disposes the newcomer immediately instead of holding it: an async boot
+    // step can land after shutdown began, and holding it would leak.
     add<T extends IDisposable>(disposable: T): T {
         if (this.disposed) {
             disposable.dispose();
@@ -58,14 +42,14 @@ export class DisposableStore implements IDisposable {
         return disposable;
     }
 
-    // Same, for the things that stop by being called. Returns nothing to register back: what a caller would do
-    // with the wrapper is delete it, and `deleteAndDispose` already covers that by identity.
+    // For things that stop by being called; returns nothing, since `deleteAndDispose` already covers removal by
+    // identity.
     push(fn: () => void): void {
         this.add(toDisposable(fn));
     }
 
-    // Release one member early, a terminal that closed, a watcher whose repo went away, so a long-lived
-    // store does not grow for the lifetime of the process.
+    // Releases one member early (a closed terminal, a watcher whose repo went away), so a long-lived store does not
+    // grow forever.
     deleteAndDispose(disposable: IDisposable): void {
         if (this.members.delete(disposable)) {
             disposable.dispose();
@@ -76,9 +60,8 @@ export class DisposableStore implements IDisposable {
         return this.members.size;
     }
 
-    /* Idempotent, and it empties before it disposes: a member whose `dispose()` reaches back into this store
-     * (a supervisor tearing down the children it registered) then finds nothing to recurse into, instead of
-     * iterating a set that is being mutated underneath it. */
+    // Idempotent, and empties before disposing: a member whose `dispose()` reaches back into this store finds nothing
+    // left to recurse into.
     dispose(): void {
         if (this.disposed) {
             return;
@@ -90,9 +73,8 @@ export class DisposableStore implements IDisposable {
     }
 }
 
-/* The base for a class that owns disposables: `this.register(...)` at construction, and its own `dispose()` is
- * inherited. Subclasses that need teardown of their own override `dispose` and call `super.dispose()`, the
- * store is the LAST thing released that way, so a subclass can still reach its own members while stopping. */
+// Base for a class that owns disposables via `this.register(...)`; a subclass overriding `dispose` must call
+// `super.dispose()` last, so it can still reach its own members while stopping.
 export abstract class Disposable implements IDisposable {
     protected readonly store = new DisposableStore();
 
@@ -105,10 +87,8 @@ export abstract class Disposable implements IDisposable {
     }
 }
 
-/* One slot holding at most one disposable, where assigning a new value releases the old one. This is the
- * shape of every "the current X" field in the daemon, the live watcher for the repo now open, the connection
- * for the account now selected, and writing it by hand is where the old value gets dropped without being
- * stopped, which is a leak that looks exactly like working code. */
+// One slot holding at most one disposable; assigning a new value disposes the old one first, the shape of every
+// "current X" field that would otherwise leak on reassignment.
 export class MutableDisposable<T extends IDisposable> implements IDisposable {
     private current: T | undefined;
     private disposed = false;

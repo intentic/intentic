@@ -4,39 +4,32 @@ import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../sett
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-/* THE CAPABILITY HANDLER of a peer door: one capability per peer, the id being its name. `apply` writes the
- * contributed skill pack and pushes the grant to the peer if it is up; the peer itself is connected out-of-band,
- * by running the card's one-liner on it or pasting its code into an extension, which enrolls over the door's
- * enroll route and dials back in.
- *
- * The pack is per PLATFORM (an OS, a browser family), data in an installed extension's
- * `contributes.capabilities`; the tool surface it wraps, the enrollment and the scope enforcement are core. A
- * peer's credential is its enrollment token, which lives on /history and never in the manifest: rotating it is
- * re-pairing at the far end, not an edit in /secrets. So: no secret. */
+// One capability per peer (id is its name): apply writes the contributed skill and pushes the grant if the peer is up.
+// The peer connects out-of-band (its one-liner, or code pasted into an extension). Its credential is an enrollment
+// token on /history, never the manifest: rotating means re-pairing, not a /secrets edit.
 
 export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly kind: "host" | "webext";
     readonly noun: string;
-    // Where the permissions are in force once pushed: "on that device", "in that browser".
+    // Where the permissions take effect once pushed: "on that device", "in that browser".
     readonly where: string;
-    // The `${tools}` note the contributed pack is rendered with: the tool surface and the rules for working there.
+    // The `${tools}` note the pack renders with: the tool surface and the rules for working there.
     readonly note: string;
     // What the owner is told to do at the far end while the peer has never connected.
     readonly pairHint: string;
-    // What the card says of an enrolled peer that is not holding a socket right now.
+    // What the card says of an enrolled peer not holding a socket right now.
     readonly awayHint: string;
     readonly added: (id: string) => string;
     readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "rename" | "revoke">;
     readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes">;
-    // Every field is a permission and none is secret: the card renders the grant back to the owner.
+    // Every field is a permission, none secret: the card renders the grant back to the owner.
     readonly echo: (config: Scopes) => Record<string, string | number | boolean>;
 }
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
     echo: (config) => spec.echo(config as Scopes),
-    /* The enrollment travels with the name, so a renamed peer is not one somebody has to walk over to and
-     * re-pair. Its live socket is cut instead: the far end is authenticated by a token this daemon still
-     * honours, and reconnecting is what makes it announce itself under the name it now has. */
+    // Enrollment travels with the name; no re-pairing needed. The live socket is cut instead, since the far end is
+    // authenticated by a token this daemon still honors, and reconnecting announces the new name.
     rename: {
         carry: async (ctx, from, to) => {
             await spec.store(ctx).rename(from, to);
@@ -59,9 +52,7 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
             yield { kind: "log", message: spec.added(id) };
             return;
         }
-        // An edit of the switches is a decision about what may happen at the far end RIGHT NOW, so it travels
-        // immediately rather than at the next reconnect. The peer is the enforcement point; this is the only
-        // thing that moves the boundary it enforces.
+        // Travels immediately, not at next reconnect: the peer enforces the boundary, and this is what moves it.
         const pushed = await spec.hub(ctx).pushScopes(id, scopes);
         yield {
             kind: "log",
@@ -70,8 +61,8 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
                 : `Saved. "${id}" is not connected; the new permissions apply the moment it reconnects.`,
         };
     },
-    // Four states, because the owner's next action differs in each: nothing applied yet, applied but never
-    // connected (pair it), enrolled but away (open the lid, open the browser), working.
+    // Four states, since the owner's next action differs: never applied, applied but never connected (pair it),
+    // enrolled but away, or working.
     status: async (ctx, id) => {
         if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
@@ -81,9 +72,8 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
         }
         return spec.hub(ctx).online(id) ? { state: "active" } : { state: "pending", detail: spec.awayHint };
     },
-    // Removing the capability revokes the peer's key and cuts its socket. What stays is the software installed
-    // over there, which only somebody at that keyboard can remove, and with its enrollment gone it can no
-    // longer reach this sandbox at all.
+    // Revokes the peer's key and cuts its socket; the software installed over there stays; only someone at that
+    // keyboard can remove it, and it can no longer reach this sandbox once revoked.
     remove: async (ctx, id) => {
         spec.hub(ctx).disconnect(id, `this ${spec.noun} was disconnected from the sandbox`);
         await spec.store(ctx).revoke(id);

@@ -19,12 +19,8 @@ import { hostProbesCli } from "./sandbox-run/host-probes.command.js";
 import { sandboxRunCommandCli } from "./sandbox-run/sandbox-run.command.js";
 import { secretsCommand } from "./secrets/secrets.command.js";
 
-// User-facing errors should read as a one-line message, not a JS stack trace, the CLI is driven by end users
-// (and by connect.sh inside the sandbox), so a thrown Error renders as "Command failed, <message>". Set
-// INTENTIC_DEBUG to keep the stack when chasing an unexpected failure. This overrides stricli's default
-// formatter, which prints `error.stack`. The failure is also recorded into the run log's exit footer,
-// stricli prints it on STDERR, which the run log's stdout tee never sees; without this a crashed run's log
-// reads exactly like a hung run's.
+// Renders a thrown Error as a one-line message instead of a stack trace (set INTENTIC_DEBUG to keep the
+// stack). Also records the failure to the run log, since stricli prints to stderr, which the log's stdout tee misses.
 const formatException = (exc: unknown): string => {
     const message = errorMessage(exc);
     recordRunFailure(message);
@@ -34,14 +30,7 @@ const formatException = (exc: unknown): string => {
     return message;
 };
 
-// The bin is a toolbox, not one tool: three command groups, each its own facet. `tunnel` mints the Cloudflare
-// tunnel that lets a sandbox deploy to a machine nothing can dial (connect.sh enrols one with `tunnel host`);
-// reaching the SANDBOX itself takes no command at all any more, its daemon dials the ingress from inside.
-// `deploy` is the bundled
-// deployment engine (one of many tools an agent can run, not part of the product); `scaffold` seeds app repos.
-// Leaf command files keep their own names for run-log/events output (e.g. `apply` still emits command:"apply"),
-// so grouping the routes is invisible to the daemon's apply-events tail. Each command lives in its own
-// src/<command>/<command>.command.ts.
+// Grouping routes doesn't rename leaf commands; each emits its own command name in run-log/events output.
 const tunnel = buildRouteMap({
     routes: {
         host: hostSshTunnel,
@@ -65,9 +54,7 @@ const deploy = buildRouteMap({
     docs: { brief: "The bundled deployment engine, declare intent, reconcile your own infrastructure" },
 });
 
-// The image speaking its own run contract (see sandbox-run.command.ts): connect.sh/recreate.sh execute what
-// this prints instead of hand-copying the docker-run shape. `hostProbes` is the same road in the other
-// direction, what the flow must ask its host before running the command.
+// sandbox-run prints the docker-run command connect.sh/recreate.sh execute; hostProbes is the reverse check.
 const sandbox = buildRouteMap({
     routes: {
         runCommand: sandboxRunCommandCli,

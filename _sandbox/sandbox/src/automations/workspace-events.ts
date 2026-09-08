@@ -2,37 +2,14 @@ import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { fireAutomation, firedBy, type WakeFn } from "./scheduler.js";
 
-// Workspace-triggered wakes, the CHORES. The daemon emits a WorkspaceEvent as the fleet works (an isolated
-// turn settled, an agent's work landed) and every enabled automation naming that event wakes with the event as
-// its payload. Producer and consumer are both the daemon, so unlike an `event` automation there is no webhook,
-// no token, and nothing outside the sandbox that can fire one.
-//
-// SERIAL, not fan-out, on two levels.
-//
-// Per chore, a FIFO queue: fireAutomation's own overlap guard DROPS concurrent fires, which is exactly wrong
-// here, five agents settling in a burst would silently lose four reviews. Waiting events COALESCE by agent
-// (a newer event for an agent already queued REPLACES it, because reviewing the same agent twice in a row pays
-// twice to be told the later answer), and past QUEUE_MAX distinct agents the oldest is dropped and LOGGED: a
-// chore this far behind will not catch up, and a silent cap would read as "everything got reviewed".
-//
-// Across chores, one shared chain. This used to be a correctness constraint — a chore's turn ran on /work, so
-// two at once were two agents editing and testing the same tree — and it is not any more: every wake works in a
-// worktree of its own (scheduler.ts). What survives is the reason that was always underneath it. A chore is
-// background work nobody asked for at this minute, and each one is a whole agent turn's worth of spend, CPU and
-// installed-dependency traffic; letting a burst of them run at once would have the fleet's unattended half
-// competing with the person actually sitting there. So they still wait their turn.
-//
-// A chore never fires on an event its OWN turn raised. Now that a chore settles like any other agent, it emits
-// `turn.settled` at the end, and a chore triggered on that event would otherwise answer its own echo forever
-// (scheduler.ts `firedBy`). Another chore's turn, and every ordinary agent's, is still fair game: reviewing
-// unattended work is most of what these are for.
+// Chores: automations triggered by a WorkspaceEvent the daemon both emits and consumes, no webhook or token involved.
+// Serial on two levels: a per-chore FIFO queue coalesces by agent (oldest dropped past QUEUE_MAX), and one shared chain
+// keeps every chore's turn from overlapping another's. Never fires on the `turn.settled` its own turn raises.
 
-// Distinct agents that may wait on one chore. Small on purpose: each entry is a whole agent turn's worth of
-// spend, and a backlog deeper than this is a signal to narrow the chore's trigger, not to queue harder.
+// Distinct agents that may wait on one chore; a deeper backlog means narrowing the trigger, not queuing harder.
 const QUEUE_MAX = 4;
 
-// The workspace-wide chore turn chain. Per-automation queues keep each chore's backlog fair and coalescible;
-// this is what keeps their TURNS from overlapping each other.
+// Workspace-wide chain keeping every chore's turn from overlapping another's, on top of each one's own queue.
 let turnChain: Promise<unknown> = Promise.resolve();
 const serially = <T>(task: () => Promise<T>): Promise<T> => {
     const next = turnChain.then(task, task);
@@ -51,11 +28,10 @@ const queues = new Map<string, Queue>();
 const matches = (id: string, trigger: Extract<Trigger, { kind: "workspace" }>, event: WorkspaceEvent): boolean =>
     trigger.event === event.event &&
     (trigger.repo === undefined || event.repos.some(({ repo }) => repo === trigger.repo)) &&
-    // Not its own echo, see the note at the top of this file.
     !firedBy(id, event.agentId);
 
-// Drain one automation's queue. Re-reads the manifest per event so an edit, a disable or a delete while the
-// backlog waits is honored, the same freshness rule listeners' batcher follows.
+// Drains one automation's queue, re-reading the manifest per event so an edit, disable or delete while the backlog
+// waits is honored.
 const pump = async (services: Services, id: string, wake: WakeFn): Promise<void> => {
     const queue = queues.get(id);
     if (queue === undefined || queue.running) {
@@ -77,8 +53,7 @@ const pump = async (services: Services, id: string, wake: WakeFn): Promise<void>
             );
         }
     } finally {
-        // Nothing awaits between the empty-queue check and here, so no event can arrive into a queue that has
-        // just stopped pumping.
+        // Nothing awaits between the empty-queue check and here, so no event can land in a just-stopped queue.
         queue.running = false;
         if (queue.waiting.length === 0) {
             queues.delete(id);
@@ -102,9 +77,8 @@ const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: Wa
     void pump(services, id, wake);
 };
 
-// Route one workspace event to every matching enabled chore. Returns the ids that matched (tests assert on it;
-// callers fire and forget). `wake` is INJECTED rather than imported: every emit site lives downstream of
-// agent.routes, and importing streamAgent here would close a cycle, the same reason turn-runs takes its TurnFn.
+// Routes one workspace event to every matching enabled chore, returning the matched ids. `wake` is injected rather than
+// imported, since importing streamAgent here would close a cycle through agent.routes.
 export const dispatchWorkspaceEvent = async (services: Services, event: WorkspaceEvent, wake: WakeFn): Promise<string[]> => {
     const matched: string[] = [];
     for (const automation of await services.automations.list()) {
@@ -114,9 +88,7 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
         matched.push(automation.id);
         enqueue(services, automation.id, event, wake);
     }
-    /* `deps.broken` exists to offer a fix, so a breakage nothing is armed for is said rather than swallowed,
-     * informed, never silently unprotected. Only this event: the turn-borne kinds fire on every turn and are
-     * routinely unclaimed, and an entry per unclaimed one would be the feed teaching the eye to skip it. */
+    // Only for deps.broken: turn-borne events are routinely unclaimed; logging each trains the eye to skip.
     if (event.event === "deps.broken" && matched.length === 0) {
         void services.activity
             .append({
@@ -131,8 +103,8 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
     return matched;
 };
 
-// Fire-and-forget wrapper for the emit sites, which all sit inside a turn's or a route's own lifecycle: a turn
-// must settle whether or not a chore is listening, so a dispatch failure is logged, never propagated.
+// Fire-and-forget wrapper for emit sites inside a turn's or route's own lifecycle: a dispatch failure is logged, never
+// propagated, since the turn must settle regardless.
 export const emitWorkspaceEvent = (services: Services, event: WorkspaceEvent, wake: WakeFn): void => {
     void dispatchWorkspaceEvent(services, event, wake).catch((error: unknown) =>
         services.logger.warn({ err: error, event: event.event }, "workspace event dispatch failed"),

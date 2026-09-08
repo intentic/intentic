@@ -3,65 +3,42 @@ import type { RegisteredViewer } from "../../../core-views/viewerRegistry";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { RAW_MAX_BYTES, resolveFile } from "../explorer/fileType";
 
-/* WHICH SURFACE OPENS THIS FILE, the one place the core's text resolver and the extensions' viewer registry
- * are put in order, and the reason FileViewer has no per-format branches left.
- *
- * The rule is the one VSCode's custom editors follow: an extension that CLAIMS a file extension wins, and the
- * core's answer is what a file falls back to when nothing claims it. So `.png` resolves to `binary` in
- * fileType.ts and to the viewers extension's `image` here, and to `binary` again the moment that extension is
- * switched off, with no code path anywhere that has to be told.
- *
- * Text is the exception in the other direction and stays first-class: `code` and `markdown` are not viewers,
- * they are the editor. Monaco, the edit buffers, the dirty state the tabs read, the hash-guarded save. An
- * extension may still claim a text extension (that is what makes `.svg` a picture with a Source toggle), and
- * when it does it gets the same deal as any other viewer: render-only, no editing.
- *
- * Kept out of fileType.ts because it is NOT pure, viewerForExtension reads reactive registry state, so this
- * re-resolves when an extension activates or retires. fileType.ts stays a unit-testable function of a path. */
+// Which surface opens a file: an extension that claims its extension wins, fileType.ts's answer is the fallback. Text
+// (code/markdown) stays the editable surface even when claimed; other viewers are render-only. Kept out of fileType.ts
+// because viewerForExtension reads reactive registry state, unlike that pure function.
 
-// Where the file's content comes from, and therefore what the surface is handed. `none` is a state with
-// nothing to fetch: no bytes, bytes we can't show, or more bytes than the raw route will serve.
+// What determines what the surface is handed; `empty`, `binary`, `too-large` and `locked` all mean nothing is fetched,
+// each for a different reason.
 export type OpenFile =
-    /* The core text surfaces. `big-text` is never RESOLVED, it is what FileViewer switches to once the daemon
-     * reports a size over the editable cap, but it lives in this union because it is one of the modes the
-     * viewer renders, and a mode the viewer can hold that the resolver cannot name would be worse. */
+    // `big-text` is never resolved directly; the viewer switches to it once the daemon reports an oversize file.
     | { readonly kind: "code" | "markdown" | "big-text"; readonly lang: string | undefined }
     // An extension viewer claimed this extension; `viewer.fetch` decides text / blob / streaming URL.
     | { readonly kind: "viewer"; readonly viewer: RegisteredViewer }
     | { readonly kind: "empty" | "binary" | "too-large" | "locked" };
 
-/* Can this file reach the viewer that claimed it? Only a `blob` viewer can be defeated by size: it is served
- * by /workspace/raw, which holds the whole answer in memory and 413s past MAX_RAW_BYTES, so a 40 MB .docx is
- * an honest "too large" rather than a render that fails halfway. `url` viewers stream byte ranges and have no
- * ceiling, a 2 GB recording is the case they exist for, and `text` viewers are bounded by the windowed read
- * the text routes already apply. */
+// Only a `blob` viewer can be defeated by size: /workspace/raw holds the whole answer in memory and 413s past the cap;
+// `url` and `text` viewers stream or window their reads instead.
 const oversizeForViewer = (viewer: RegisteredViewer, size: number | undefined): boolean =>
     viewer.fetch === `blob` && size !== undefined && size > RAW_MAX_BYTES;
 
-// The lowercased extension of a path, or "" for a dotfile / extensionless name, the key the registry is
-// indexed by. Matches fileType.ts's rule (dot > 0) so both sides agree on what ".gitignore" has for an
-// extension: nothing.
+// The lowercased extension of a path, or "" for a dotfile/extensionless name. Matches fileType.ts's rule (dot > 0), so
+// both agree `.gitignore` has no extension.
 const extensionOf = (path: string): string => {
     const name = path.slice(path.lastIndexOf(`/`) + 1).toLowerCase();
     const dot = name.lastIndexOf(`.`);
     return dot > 0 ? name.slice(dot + 1) : ``;
 };
 
-// Resolve how to open `path` given its byte size (undefined when unknown, the tree cap, or stat failed; we
-// then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
+// Resolve how to open `path` given its byte size; undefined (unknown, cap, or stat failure) proceeds optimistically,
+// leaving the post-read NUL check / daemon 413 to catch bad cases.
 export const resolveOpenFile = (path: string, size: number | undefined): OpenFile => {
-    /* The daemon keeps a handful of files to itself, the capability manifest's sign-ins, the owner record, the
-     * agents' provider homes (isLockedWorkspacePath). Answered FIRST, and from the path alone, because it is the
-     * one resolution that must not depend on anything arriving: the read is refused, so a viewer that had to try
-     * it first would open a tab and then close it in the reader's face, which is exactly what this state
-     * replaces. A restored tab resolves the same way before the tree has loaded. */
+    // Answered from the path alone, before anything else, so a locked file never opens a tab and closes it again.
     if (isLockedWorkspacePath(path)) {
         return { kind: `locked` };
     }
     const viewer = viewerForExtension(extensionOf(path));
     if (viewer !== undefined) {
-        // An empty file has nothing for a viewer to render, whatever the viewer is, checked before the viewer
-        // gets it so every format inherits the same honest answer instead of each one drawing a blank frame.
+        // Checked before the viewer gets the file, so every format reports empty the same way.
         if (size === 0) {
             return { kind: `empty` };
         }

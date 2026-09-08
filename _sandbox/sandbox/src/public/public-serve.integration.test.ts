@@ -6,9 +6,8 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { createPublicHandler } from "./public-serve.js";
 
-/* The outbox over real HTTP: the headers a stranger's browser actually receives, and the two protocol details
- * publishing depends on: conditional requests (a rebuilt file must not be served from a stale cache) and
- * ranges (a published screen recording has to seek). */
+// The outbox over real HTTP: the actual headers a stranger's browser gets, plus conditional requests (no stale cache)
+// and ranges (a recording can seek).
 
 const servers: http.Server[] = [];
 afterAll(async () => {
@@ -53,8 +52,7 @@ test("a published file is served with its type, nosniff, and noindex", async () 
     expect(response.body).toBe("hello");
     expect(response.headers["content-type"]).toBe("text/plain; charset=utf-8");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    // The hostname is unguessable, but a link pasted somewhere public can still be followed: sharing a file
-    // with one person must not put it in an index.
+    // The hostname is unguessable, but a shared link can still leak; noindex keeps it out of search anyway.
     expect(response.headers["x-robots-tag"]).toBe("noindex");
 });
 
@@ -64,7 +62,7 @@ test("an unknown type downloads instead of rendering", async () => {
     expect(response.headers["content-disposition"]).toBe("attachment");
 });
 
-// An SVG is a document that can carry script. Publishing a diagram must not also publish an execution context.
+// An SVG can carry script; publishing a diagram shouldn't also publish an execution context.
 test("an SVG is served under a CSP that leaves presentation and takes scripting", async () => {
     const port = await serve({ "diagram.svg": `<svg xmlns="http://www.w3.org/2000/svg"/>` });
     const response = await request(port, "/diagram.svg");
@@ -97,8 +95,7 @@ test("a byte range is a 206 with the requested slice and a content-range", async
     expect(response.headers["content-range"]).toBe("bytes 2-5/10");
 });
 
-// "bytes=-3" is the LAST three bytes: the one part of the grammar that reads backwards, and the one a
-// hand-rolled parser gets wrong.
+// `bytes=-3` means the last three bytes, the one part of the grammar that reads backwards.
 test("a suffix range returns the tail, not the head", async () => {
     const port = await serve({ "clip.txt": "0123456789" });
     const response = await request(port, "/clip.txt", { headers: { range: "bytes=-3" } });
@@ -119,16 +116,12 @@ test("the outbox is read-only from the internet", async () => {
     expect(response.headers.allow).toBe("GET, HEAD");
 });
 
-/* A viewer walking away mid-download is the ordinary case here (a paused video, a closed tab, a crawler that
- * gives up), and `pipe` wires up only the destination: the read descriptor stayed open every time, one per
- * request, on the daemon's one route with no auth in front of it and a 512 MB ceiling. That is a file table
- * anyone holding the link can exhaust by aborting the same request in a loop, and once it is exhausted
- * everything else in the container that opens a file fails. `pipeline` destroys both ends instead. */
+// `pipe` only wires the destination, leaving the read descriptor open on abort; on this no-auth, 512 MB route anyone
+// can exhaust the file table by looping aborts. `pipeline` destroys both ends.
 test("an aborted download does not leave the read descriptor open", async () => {
     const { port, root } = await servedRoot({ "big.bin": "x".repeat(16 * 1024 * 1024) });
     const published = join(root, "big.bin");
-    /* Descriptors pointing at THIS file, not the process's total. A process-wide count is racy here: vitest runs
-     * other files in the same process and they open their own, which would make this pass or fail on timing. */
+    // Counts fds for this file only; a process-wide count would be racy with vitest's other open files.
     const openHandles = async (): Promise<number> => {
         const fds = await readdir(`/proc/${process.pid}/fd`).catch(() => [] as string[]);
         const targets = await Promise.all(fds.map((fd) => readlink(`/proc/${process.pid}/fd/${fd}`).catch(() => "")));
@@ -148,12 +141,11 @@ test("an aborted download does not leave the read descriptor open", async () => 
         });
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
-    // With `pipe` this was twenty: one abandoned read per aborted request, none of which any later event closes.
+    // With `pipe`, this was twenty: one abandoned read per aborted request, closed by nothing.
     expect(await openHandles()).toBe(0);
 });
 
-// Every miss looks the same from outside, whatever the reason: the branded page the proxy serves, and nothing
-// that would let the outbox be probed for what it holds.
+// Every miss looks identical from outside; nothing here lets the outbox be probed for what it holds.
 test("a blocked file and a missing one are the same 404 page", async () => {
     const port = await serve({ ".env": "TOKEN=abc" });
     const blocked = await request(port, "/.env");

@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import { foreground, paneStates } from "./pane-state.js";
 
-// `tmux list-panes -a -F PANE_FORMAT`, one line per pane, so a multi-window session (every agent-* one:
-// bin/tmux-run opens a window per Bash command and keeps the finished ones under remain-on-exit) reports many.
-// `session_activity` is session-wide, so every line of a session repeats it; `pane_dead_status` is empty while
-// the pane lives.
+// One PANE_FORMAT line per pane, so a multi-window session reports many; session_activity repeats per line,
+// pane_dead_status is empty while alive.
 const ACTIVITY = 1_780_000_000;
 type Pane = [session: string, dead: 0 | 1, status: string, command: string];
 const listPanes = (...panes: Pane[]): string =>
@@ -39,38 +37,33 @@ test("the reported command is the session's last pane: single-pane panel-* sessi
     expect(states.get("panel-docker")?.command).toBe("zsh");
 });
 
-/* `liveCommand` IS THE ONE THE PANEL'S KILL CONFIRM READS, and the case below is exactly why it is not
- * `command`. An agent session mid-turn has the running pane in the MIDDLE of its list: bin/tmux-run keeps the
- * finished windows so their output stays readable, and tmux lists them after it. `command` takes the last pane
- * whatever state it is in, so it reads the corpse and the session looks idle while a build runs in it. */
+// liveCommand, not command, is what the kill confirm reads: an agent session's live pane can sit mid-list behind
+// finished ones, so `command` alone would read the corpse.
 test("the live command skips finished panes, wherever in the list they fall", () => {
     const states = paneStates(listPanes(["agent-1", 1, "0", ""], ["agent-1", 0, "", "pnpm"], ["agent-1", 1, "0", ""]));
     expect(states.get("agent-1")?.command).toBe("");
     expect(states.get("agent-1")?.liveCommand).toBe("pnpm");
 });
 
-// Nothing alive ⇒ nothing running, however loudly the last pane's epitaph names what used to be.
+// Nothing alive means nothing running, whatever the last pane's exit status names.
 test("a session whose every pane is dead has no live command", () => {
     expect(paneStates(listPanes(["job-checks", 1, "0", "vitest"], ["job-checks", 1, "1", "vitest"])).get("job-checks")?.liveCommand).toBeUndefined();
 });
 
-// An idle shell reports the shell itself: the daemon's `foreground` reads that as "not busy", which is what
-// keeps a plain close from asking a question about nothing.
+// An idle shell reports itself; foreground reads that as not busy, so a plain close asks nothing needless.
 test("an idle shell's live command is the shell", () => {
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "zsh"])).get("web-a1b2c3d4")?.liveCommand).toBe("zsh");
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "pnpm"])).get("web-a1b2c3d4")?.liveCommand).toBe("pnpm");
 });
 
-// The one reading the kill confirm, the strip's dot and the sampler's fingerprint all go through, which is the
-// whole reason it lives here rather than beside any one of them.
+// Shared by the kill confirm, the strip's dot, and the sampler's fingerprint; that's why it lives here.
 test("a session is busy with whatever is in front of its shell, and with nothing at an idle prompt", () => {
     expect(foreground("pnpm")).toBe("pnpm");
     expect(foreground("zsh")).toBeUndefined();
     expect(foreground(undefined)).toBeUndefined();
 });
 
-// The exit status of the LAST window is the exit status of the last command, which is the one the dead pane's
-// epitaph shows, and the only reason bin/tmux-run exits its runner with the command's own code.
+// The last window's exit status is the last command's, why bin/tmux-run exits with the command's own code.
 test("the exit status is the last window's, and absent while that pane still runs", () => {
     const finished = paneStates(listPanes(["job-infra-check", 1, "0", ""], ["job-infra-check", 1, "1", ""]));
     expect(finished.get("job-infra-check")?.exitCode).toBe(1);

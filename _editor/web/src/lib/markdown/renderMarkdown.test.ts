@@ -1,25 +1,17 @@
 // @vitest-environment jsdom
-//
-// DOMPurify needs a real document: without one it exposes no `sanitize` at all, so under the suite's default
-// `node` environment every render here threw into renderMarkdown's crash fallback and the assertions below
-// were really checking escaped raw markdown. jsdom rather than happy-dom because DOMPurify misbehaves badly
-// on the latter: it strips every tag and keeps <script> CONTENT, which would make these tests worse than
-// useless. This is the only file that needs a document; the rest of the suite stays on `node`.
+// Needs jsdom: DOMPurify has no `sanitize` under node, and happy-dom strips tags but keeps `<script>` content, worse
+// than nothing. Only this file needs a document; the rest of the suite stays on node.
 import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, type RenderedMarkdown, settledEnd } from "./renderMarkdown";
 
-/* A rendered document is a list of parts: prose runs as HTML, figures as data (see renderMarkdownParts). These
- * two read it the way the assertions below want to talk about it: what a reader would SEE, and which run is
- * which. `prose` is deliberately not the whole document: a figure has no html, and a test that stringified one
- * would be asserting on the fence source the surface no longer shows. */
+// A rendered document is a list of parts: prose runs as HTML, figures as data. These read it as a reader would see
+// it: which run is which. `prose` is not the whole document; a figure has no html.
 const prose = (parts: RenderedMarkdown): string => parts.flatMap((part) => (part.kind === `html` ? [part.html] : [])).join(``);
 const runs = (parts: RenderedMarkdown): number => parts.filter((part) => part.kind === `html`).length;
 
-// The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
-// return a string, whatever it's handed: the assistant bubble re-runs it on every partial-markdown delta, so a
-// single throw would blank the turn (the reported "undefined is not an object" crash class).
+// renderMarkdown must never throw and always returns a string, since the chat bubble re-runs it every delta.
 const INPUTS: unknown[] = [
     ``,
     `plain text`,
@@ -43,10 +35,8 @@ test("renderMarkdown never throws and always returns a string for any input", ()
     }
 });
 
-/* The placeholder the code renderer emits and the pattern that substitutes it are two halves of one seam, in
- * two different modules, joined across a round-trip through the sanitizer's DOM: these pin all three
- * together. Colour has not landed on a FIRST render (the grammar is imported on demand), which is exactly the
- * fallback state these assert; the describe below waits for it instead. */
+// The code-block placeholder and the pattern replacing it are two halves of one seam, joined through the sanitizer's
+// DOM. Colour hasn't landed on a first render (grammar loads on demand); that's the fallback state asserted here.
 describe(`code blocks`, () => {
     it(`substitutes a fenced block for the code-block markup, with its language label`, () => {
         const html = renderMarkdown("```ts\nconst a = 1;\n```");
@@ -66,8 +56,6 @@ describe(`code blocks`, () => {
         const html = renderMarkdown("```\nplain\n```");
         expect(html).toContain(`md-code`);
         expect(html).toContain(`plain`);
-        // Nothing to name it with, so nothing is emitted to name it: the controls are an overlay, and an
-        // empty chip in one would still be a box hanging over the code.
         expect(html).not.toContain(`md-code-lang`);
         expect(html).toContain(`aria-label="Copy code"`);
     });
@@ -84,23 +72,11 @@ describe(`code blocks`, () => {
     });
 });
 
-/* A fence info is what an author wrote, not a grammar id: a document names its dialect (`jsonc`), and a FIGURE
- * fence (figures.ts) names a picture, which reaches this renderer as a code block whenever the surface cannot
- * hold a component (one v-html string) or the body does not parse. Both bodies are JSON, so both are mapped onto
- * the grammar we ship rather than left grey. Colour is what proves the mapping: it appears only once a real
- * Shiki grammar has run over the block. */
+// A fence info is what an author wrote (`jsonc`), not a grammar id; a figure fence (figures.ts) reaches here as a
+// code block when it can't render as a component. Both map onto a shipped grammar; colour proves the mapping ran.
 describe(`fence infos mapped onto a shipped grammar`, () => {
-    /* Highlighting is asynchronous (the grammar is imported on demand) and lands by invalidating the render, so
-     * this re-renders until colour shows up: false means it never did.
-     *
-     * The wait bounds a HANG and does not measure that latency. What the FIRST of these pays for is the whole
-     * colour stack arriving cold on its own clock: Shiki's core, both themes, the grammar, and the throwaway
-     * line useHighlighter tokenizes to compile the grammar's rules. That is a fraction of a second idle and
-     * roughly ten times that on a runner with every core busy, which is what a full run is (vitest.config.ts),
-     * so a one-second wait was a latency measurement wearing a timeout's clothes: it passed alone and lost the
-     * race in the suite, reporting as "the json grammar did not colour" rather than as the contention it was.
-     * Sized like the rest of this package now, and still under `testTimeout`, so a grammar that genuinely never
-     * loads fails on the assertion that names it. */
+    // Highlighting loads asynchronously and lands via re-render; polls until colour shows or the deadline passes. Sized
+    // generous since the whole colour stack (Shiki core, themes, grammar) loads cold, still under `testTimeout`.
     const DEADLINE_MS = 10_000;
     const colours = async (source: string): Promise<boolean> => {
         let html = ``;
@@ -126,16 +102,14 @@ describe(`fence infos mapped onto a shipped grammar`, () => {
         expect(await colours('```stats\n{ "items": [{ "label": "Files", "value": "70" }] }\n```')).toBe(true);
     });
 
-    // The chip names what the author wrote, so a reader can tell which fence produced the block they are looking
-    // at: aliasing decides the grammar, never the label.
+    // Names the fence's own info string, not the resolved grammar: aliasing decides highlighting, never the label.
     it(`still names the fence's own info string`, () => {
         expect(renderMarkdown('```jsonc\n{ "a": 1 }\n```')).toContain(`>jsonc</span>`);
     });
 });
 
-/* A whole answer that is nothing but a block marker parses to markup with no text in it, and the bubble then
- * renders an empty box: the turn reads as if the model never replied. Observed with a Haiku turn whose entire
- * answer was "4."; these pin the fallback that shows the source instead, and the markup it must NOT swallow. */
+// A whole answer that is only a block marker (`4.`, `-`, `#`) parses to markup with no visible text; the bubble
+// renders an empty box. This pins the fallback that shows the source instead, without swallowing visible markup.
 describe(`markup that would render invisibly`, () => {
     it(`shows a bare ordered-list marker as the text it is`, () => {
         expect(renderMarkdown(`4.`)).toContain(`4.`);
@@ -164,9 +138,8 @@ describe(`markup that would render invisibly`, () => {
     });
 });
 
-/* Headings: ATX headers at every level the prose styles (h1–h4), plus h5/h6 which marked produces but
- * prose.css does not style. A heading with text in it must come through as its element, not as escaped
- * source, so the prose surface can style it and the outline can find it. */
+// Headings: ATX h1-h4 (styled) plus h5/h6 (marked produces, prose.css does not style). Heading text must come
+// through as its element, not escaped source, so the surface can style it and the outline can find it.
 describe(`headings`, () => {
     it(`renders ## as an h2`, () => {
         expect(renderMarkdown(`## Section`)).toContain(`<h2>`);
@@ -228,9 +201,8 @@ describe(`streaming split`, () => {
         expect(settledOf(`- item\n\n    continued body\n`)).toBe(``);
     });
 
-    /* The settled prefix and the still-writing tail are separate PARTS, and the first must come back
-     * byte-identical while it stands: an identical v-html string is what Vue skips patching, which is what
-     * leaves the DOM, and any text the user has selected in it: alone while the turn writes on. */
+    // Byte-identical prevents Vue from patching that v-html, preserving the DOM, and any text selected in it, while
+    // the tail keeps writing.
     it(`renders the settled part byte-identically across frames and only grows the tail`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const first = stream.render(`Done paragraph.\n\nStill wri`);
@@ -252,12 +224,8 @@ describe(`streaming split`, () => {
         expect(strip(prose(stream.render(text)))).toBe(strip(renderMarkdown(text)));
     });
 
-    /* The reason the split exists. Streaming a message one character at a time, the settled prefix must be
-     * re-parsed once per COMPLETED BLOCK, never once per frame: otherwise the cost of a turn is quadratic in
-     * its own length. Only the short tail may be re-parsed every frame.
-     *
-     * Asserted as an exact count rather than a bound: if the prefix memo is ever dropped, this jumps from
-     * frames + 3 to frames * 2 and fails loudly instead of quietly getting slower. */
+    // Re-parsing the settled prefix every frame would make a turn's cost quadratic in its length; only the tail
+    // re-parses per frame. An exact count means a dropped memo fails loudly instead of just getting slower.
     it(`re-parses the settled prefix once per completed block, not once per frame`, () => {
         const text = `Alpha paragraph.\n\nBeta paragraph.\n\nGamma paragraph.\n\nDelta tail`;
         const stream = createStreamingMarkdown(() => undefined);
@@ -265,8 +233,7 @@ describe(`streaming split`, () => {
         for (let end = 1; end <= text.length; end += 1) {
             stream.render(text.slice(0, end));
         }
-        // Three boundaries settle (each confirmed by the first character of the block after it), and every
-        // frame parses the tail.
+        // Three boundaries settle (each confirmed by the next block's first character); every frame parses the tail.
         expect(markdownParseCount() - before).toBe(text.length + 3);
     });
 
@@ -279,13 +246,8 @@ describe(`streaming split`, () => {
     });
 });
 
-/* FIGURES IN A TURN THAT IS STILL BEING WRITTEN. The transcript renders an answer as parts precisely so an
- * agent's ```mermaid draws in the chat and not only in the file it later saves, and a live turn is where that
- * has to hold, because a diagram is usually the last thing an answer contains and the turn it belongs to can
- * run for minutes after writing it.
- *
- * Whether mermaid can DRAW a given body is mermaid's own question, answered at mount (markdownMermaid.test.ts).
- * These pin the half this module owns: when a fence becomes a figure, and what happens to it as the text grows. */
+// A live turn renders figures as it streams, since a diagram is often the last thing written and the turn runs on after
+// it. Mermaid's own question is whether it can draw a body; this pins when a fence becomes a figure as the text grows.
 describe(`streaming a document with a figure in it`, () => {
     const DIAGRAM = '```mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n```';
 
@@ -293,25 +255,20 @@ describe(`streaming a document with a figure in it`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const parts = stream.render('Here it is.\n\n```mermaid\nflowchart LR\n    a["One"] -->');
         expect(parts.every((part) => part.kind === `html`)).toBe(true);
-        // The reader watches the source arrive, which is the honest thing to show while it is arriving.
         expect(prose(parts)).toContain(`flowchart LR`);
     });
 
-    /* The reason the TAIL is split into parts too. A diagram nothing follows never settles, so a tail left whole
-     * would hold it as arrow syntax until the turn ended, and an answer that ends on its diagram is the common
-     * case, not the corner one. */
+    // A closed fence with nothing after it would never settle, holding it as arrow syntax until the turn ends.
     it(`draws a closed fence the answer ends on, without waiting for a block after it`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const parts = stream.render(`Here it is.\n\n${DIAGRAM}`);
         expect(parts.filter((part) => part.kind === `figure`)).toHaveLength(1);
         expect(prose(parts)).toContain(`Here it is.`);
-        // The fence source is gone from the prose: the figure replaced it rather than joining it.
         expect(prose(parts)).not.toContain(`flowchart LR`);
     });
 
-    /* A figure comes back BY IDENTITY while its prefix stands, which is what keeps mermaid from redrawing on
-     * every frame of the turn: an unchanged prop is a component that never re-renders, never re-imports a
-     * megabyte of grammars, and never flashes its placeholder in the middle of an answer. */
+    // A figure comes back by identity while its prefix is unchanged, so mermaid never redraws, re-imports its
+    // grammars, or flashes its placeholder mid-answer.
     it(`hands back the same figure as the turn writes on`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const before = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nStill wri`);
@@ -321,7 +278,6 @@ describe(`streaming a document with a figure in it`, () => {
         expect(after.find((part) => part.kind === `figure`)).toBe(figure);
     });
 
-    // Prose either side of a diagram is its own run, and stays on its own side of it.
     it(`cuts the document into runs around the figure, in reading order`, () => {
         const stream = createStreamingMarkdown(() => undefined);
         const parts = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nTail`);
@@ -332,13 +288,8 @@ describe(`streaming a document with a figure in it`, () => {
     });
 });
 
-/* A document's colour must not cost a re-render per code block. Each landing highlight bumps the shared
- * `highlightVersion`, which invalidates every markdown computed that read it, so a per-highlight bump made a
- * document re-render once per block, each pass re-scheduling the next. Measured on a 1.9 MiB file with 3353
- * blocks (~500ms of script and 1283ms of layout per pass, all in microtasks), the tab never came back.
- *
- * Bounded two ways now, and this pins both: at most MAX_HIGHLIGHT_BLOCKS blocks of one document are scheduled,
- * and the bump waits for the batch to drain so the whole document re-renders once rather than N times. */
+// A shared `highlightVersion` bump invalidates every markdown computed reading it, so an unbatched bump re-renders
+// once per block. Bounded two ways: MAX_HIGHLIGHT_BLOCKS scheduled at most, and the bump waits for the batch to drain.
 describe(`code block highlighting is bounded`, () => {
     const doc = (blocks: number): string =>
         Array.from({ length: blocks }, (_, i) => `Prose ${i}\n\n\`\`\`ts\nexport const thing${i} = ${i};\n\`\`\`\n`).join(`\n`);
@@ -353,23 +304,17 @@ describe(`code block highlighting is bounded`, () => {
             },
             { flush: `sync` },
         );
-        // A timer only fires if the render loop actually yields: the storm ran entirely in microtasks and
-        // starved timers outright, so reaching this line at all is part of what's being asserted.
+        // A timer fires only once the loop yields; the storm ran in microtasks, so reaching here matters too.
         await new Promise((resolve) => setTimeout(resolve, 500));
         stop();
-        // One initial render, plus at most a couple as batches of colour settle. The storm was ~400.
+        // One initial render, plus at most a couple as colour batches settle.
         expect(renders).toBeLessThanOrEqual(5);
         expect(renders).toBeGreaterThan(0);
     });
 });
 
-/* The copy control, wired the way a prose surface wires it: one delegated listener on the container, bound to
- * the press AND the click, over markup that lives inside v-html.
- *
- * The regression these exist for: a click is only delivered to the button if the same element is under the
- * pointer at press and at release, and a streaming turn rewrites its markdown every animation frame. The
- * button pressed was gone before the mouse came up, so the click resolved to an ancestor and copying a block
- * out of an answer still being written did nothing at all. */
+// One delegated listener on the container, bound to press and click, over markup living inside v-html. Exists because a
+// streaming re-render can swap the pressed button before release, so a plain click handler would silently miss.
 describe(`code block copy`, () => {
     const surface = (html: string): HTMLElement => {
         const container = document.createElement(`div`);
@@ -381,7 +326,7 @@ describe(`code block copy`, () => {
         return container;
     };
 
-    // jsdom ships no clipboard at all. Resolves like a granted one, and records what a surface handed it.
+    // jsdom has no clipboard; this stub resolves like a granted one and records what was written.
     const written: string[] = [];
     beforeEach(() => {
         written.length = 0;
@@ -411,11 +356,11 @@ describe(`code block copy`, () => {
         const source = "```ts\nexport const streamed = 2;\n```";
         const container = surface(renderMarkdown(source));
         press(container.querySelector(`.md-code-copy`) as Element);
-        // The frame that lands between press and release: a new render, a whole new subtree.
+        // Simulates the render that lands between press and release: a whole new subtree.
         container.innerHTML = renderMarkdown(`${source}\n\nAnd the next sentence arrives.`);
         container.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await Promise.resolve();
-        // Once: the click that followed the press asked for the same text, which the copied state absorbs.
+        // Once: the trailing click asks for the same text again, absorbed by the already-copied state.
         expect(written).toEqual([`export const streamed = 2;`]);
     });
 
@@ -424,7 +369,7 @@ describe(`code block copy`, () => {
         const container = surface(renderMarkdown(source));
         press(container.querySelector(`.md-code-copy`) as Element);
         await Promise.resolve();
-        // The button element pressed is long gone by now in a live turn; what carries the state is the render.
+        // The pressed button is gone in a live turn; the render itself carries the copied state.
         const after = renderMarkdown(source);
         expect(after).toContain(`md-code-copied`);
         expect(after).toContain(`>Copied</button>`);
@@ -439,12 +384,8 @@ describe(`code block copy`, () => {
         expect(written).toEqual([]);
     });
 
-    /* ANOTHER REALM. Chrome refuses a clipboard write from a document that is not focused, silently, so a Copy
-     * button whose write goes through the module-global `navigator` does nothing at all whenever that global
-     * belongs to a different document than the button does. This app draws into realms of its own (the preview,
-     * the extension host), and a floating panel used to be one too, back when its DOM was teleported into a
-     * second window with the JS left behind. Hence: the write goes through the BUTTON's own window. An iframe
-     * stands in for that realm, being the one thing jsdom gives with a document and navigator of its own. */
+    // Chrome refuses a clipboard write from an unfocused document, so the module-global `navigator` fails when the
+    // button is in another realm. The write goes through the button's own window; an iframe stands in for that realm.
     it(`writes through the window the button lives in, not this realm's`, async () => {
         const frame = document.createElement(`iframe`);
         document.body.appendChild(frame);

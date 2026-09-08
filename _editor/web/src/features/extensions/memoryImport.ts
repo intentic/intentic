@@ -1,14 +1,11 @@
-/* "Import memory from other AI providers": the user runs IMPORT_PROMPT in their old assistant, pastes the
- * exported markdown back, and we merge it into the workspace's per-agent memory files. Cross-agentic. Claude
- * reads /work/CLAUDE.md (settingSources project memory), Codex/GPT reads /work/AGENTS.md (its working-dir doc);
- * both live at the workspace root, so the same block goes into each. Pure module (no Vue) so mergeMemory is
- * unit-tested directly; the dialog does the daemon I/O via useWorkspaceTree. */
+// Merges memory exported from another AI assistant into the workspace's per-agent memory files: Claude reads CLAUDE.md
+// (project memory), Codex/GPT reads AGENTS.md, both at the workspace root. Pure module so mergeMemory is unit-tested
+// directly; the dialog handles daemon I/O via useWorkspaceTree.
 
-// The two agents' native project-memory files at the workspace root. Both are written verbatim.
+// Native project-memory files for each agent, at the workspace root; written verbatim.
 export const MEMORY_FILES = [`CLAUDE.md`, `AGENTS.md`] as const;
 
-// Handed to the user to paste into their other AI assistant. Generic across providers (ChatGPT, Gemini, …);
-// the fixed headings give the merged block a predictable shape without per-provider prompts.
+// Pasted into the user's other AI assistant; fixed headings keep the merged block's shape provider-agnostic.
 export const IMPORT_PROMPT = `Export everything you know about me from our past conversations so I can bring it to another AI assistant.
 
 Preserve my wording verbatim where possible, especially for instructions and preferences. Write it as Markdown under these headings, in this order, and skip any that would be empty:
@@ -26,8 +23,8 @@ Output only the Markdown: no preamble or closing remarks.`;
 const START = `<!-- intentic:imported-memory:start -->`;
 const END = `<!-- intentic:imported-memory:end -->`;
 
-// Replace the managed block if present, else append it, so re-importing overwrites rather than duplicates,
-// and hand-written memory around the block is preserved.
+// Replaces the managed block if present, else appends it: re-importing overwrites instead of duplicating, and memory
+// outside the block is preserved.
 export const mergeMemory = (existing: string, imported: string): string => {
     const block = `${START}\n## Imported memory\n\n${imported.trim()}\n${END}`;
     const start = existing.indexOf(START);

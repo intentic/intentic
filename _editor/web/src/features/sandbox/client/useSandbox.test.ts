@@ -26,10 +26,8 @@ const summary = (id: string): SandboxSummary => ({
     localHostname: null,
 });
 
-// The sandbox list now lives in the shared query cache (useSandbox backs it with fetchQuery + a disabled
-// observer). Clear it between tests so each starts from an empty registry; refresh() forces a fetch past
-// staleTime so every test drives the mock. list() vs refresh() only differ in staleTime: the mutation
-// races below are identical either way, so the tests use refresh() to keep the network deterministic.
+// Sandbox list lives in the shared query cache; clear it each test so it starts empty. refresh() forces a
+// fetch past staleTime to keep the mocks deterministic.
 beforeEach(() => {
     queryClient.clear();
     vi.resetAllMocks();
@@ -40,11 +38,8 @@ describe(`sandbox list cache retention`, () => {
         const sandbox = useSandbox();
         listMock.mockResolvedValue({ sandboxes: [summary(`a`)] });
         await sandbox.refresh();
-        // fetchQuery-only: no observer keeps the entry alive, so in the browser anything short of Infinity
-        // lets the default 5-minute gc evict it while idle: the cache subscription then resets the mirror
-        // to [] and every daemon call fails with "isn't reachable yet" until a reload. The eviction itself
-        // can't be exercised here (TanStack's node default is already Infinity), so assert the explicit
-        // option that protects the browser.
+        // fetchQuery-only entry: nothing else keeps it alive, so anything short of Infinity lets the default gc evict
+        // it while idle. Asserts the explicit option that guards the browser.
         expect(queryClient.getQueryCache().find({ queryKey: [`sandbox`, `list`] })?.options.gcTime).toBe(Number.POSITIVE_INFINITY);
     });
 });
@@ -58,16 +53,15 @@ describe(`useSandbox list/mutation race`, () => {
         await sandbox.refresh();
         expect(sandbox.sandboxes.value).toEqual([a, b]);
 
-        // A background refresh() (the liveness loop) reads the server while `b` still exists: hold it open.
+        // Hold a background refresh() open while `b` still exists, to simulate a stale in-flight read.
         let resolveStale: (value: { sandboxes: SandboxSummary[] }) => void;
         listMock.mockImplementation(() => new Promise((resolve) => (resolveStale = resolve)));
         const stale = sandbox.refresh();
-        // The user's removal completes fully (delete resolves, `removing` clears) before the stale read lands.
+        // Let the user's removal complete fully before the stale read lands.
         vi.mocked(apiClient.sandbox.delete).mockResolvedValue({ ok: true });
         await sandbox.remove(b.id);
         expect(sandbox.sandboxes.value).toEqual([a]);
-        // The stale response lands last with pre-delete truth. remove()'s cancelQueries dropped that fetch, so
-        // its result is ignored (replaces the old generation guard) and `b` never comes back.
+        // cancelQueries drops the stale fetch, so its late response is ignored and `b` never comes back.
         resolveStale!({ sandboxes: [a, b] });
         await stale;
         expect(sandbox.sandboxes.value).toEqual([a]);
@@ -80,23 +74,19 @@ describe(`useSandbox list/mutation race`, () => {
         listMock.mockResolvedValue({ sandboxes: [a, b] });
         await sandbox.refresh();
 
-        // The owner-delete is slow (Cloudflare teardown): hold it open so `b` stays in `removing`.
+        // Hold delete open (slow teardown) so `b` stays in `removing`.
         let resolveDelete: (value: { ok: boolean }) => void;
         vi.mocked(apiClient.sandbox.delete).mockImplementation(() => new Promise((resolve) => (resolveDelete = resolve)));
         const removal = sandbox.remove(b.id);
-        // Optimistic: the row is gone before the API resolves.
         expect(sandbox.sandboxes.value).toEqual([a]);
-        // remove()'s cancelQueries adds a microtask hop before it calls delete: flush a macrotask so the
-        // (held-open) delete has actually started before we drive the mid-flight read below.
+        // Flush a macrotask so the held-open delete has actually started before driving the mid-flight read below.
         await new Promise((resolve) => setTimeout(resolve));
 
-        // A refresh() started AFTER the optimistic drop reads pre-delete server truth [a,b]; the queryFn's
-        // `removing` filter strips `b`, so it never reappears (no bogus atLimit upsell mid-removal).
+        // The queryFn's `removing` filter strips `b` from a pre-delete read, so it doesn't reappear.
         listMock.mockResolvedValue({ sandboxes: [a, b] });
         await sandbox.refresh();
         expect(sandbox.sandboxes.value).toEqual([a]);
 
-        // Once the delete resolves, `b` is gone server-side too.
         resolveDelete!({ ok: true });
         await removal;
         listMock.mockResolvedValue({ sandboxes: [a] });
@@ -116,15 +106,14 @@ describe(`reachable`, () => {
     });
 
     it(`goes true on a live stream to a daemon that reports nothing about its boot`, () => {
-        // The pre-boot-frame daemon, and the steady state of every current one: silence means ready.
+        // Silence about boot state means ready: true of the pre-boot-frame daemon and of every current one's steady
+        // state.
         signalConnection({ kind: `frame`, at: 0 });
         expect(useSandbox().reachable.value).toBe(true);
     });
 
     it(`stays false on a live stream to a daemon still converging`, () => {
-        /* The whole point of the second condition. The daemon brings its listeners up before its boot chain
-         * finishes, so this exact state (stream open, every data route parked on the readiness gate) used to
-         * read as "go" and fire a workspace's worth of queries into it at once. */
+        // The daemon brings its listeners up before its state has converged; a live stream alone is not ready.
         signalConnection({ kind: `frame`, at: 0 });
         setDaemonBoot({ ready: false, startedAt: 1_000, steps: [{ key: `registry`, label: `Loading conversations`, state: `running` }] });
         expect(useSandbox().reachable.value).toBe(false);
@@ -138,7 +127,7 @@ describe(`reachable`, () => {
     });
 
     it(`stays false for a ready daemon we have lost the stream to`, () => {
-        // Readiness is the daemon's fact, liveness is ours: a ready daemon behind a dead tunnel is not reachable.
+        // Readiness is the daemon's fact, liveness is ours: a dead stream still fails reachability.
         signalConnection({ kind: `frame`, at: 0 });
         setDaemonBoot({ ready: true, startedAt: 1_000, steps: [] });
         signalConnection({ kind: `failed`, failure: { kind: `network`, message: `gone` }, at: Date.now() });

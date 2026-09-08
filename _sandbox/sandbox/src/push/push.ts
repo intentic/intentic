@@ -6,32 +6,21 @@ import { sendRelay } from "./senders/relay.js";
 import type { SendOutcome } from "./senders/send.js";
 import { sendWebPush } from "./senders/webpush.js";
 
-/* Sending a notification to every device registered with this sandbox, browsers over web push, native
- * installs through the platform relay. The transports live in senders/ behind one outcome shape; this file
- * owns only the fan-out, the prune, and the two properties that matter more than any mechanics:
- *
- * 1. Never notify someone who is already looking. The daemon knows exactly who is connected and whether their
- *    tab is idle (presence.ts, fed by the /events stream), so a turn that finishes while the user is watching
- *    it finish sends nothing. Without this the feature is an irritation rather than a convenience.
- * 2. Never let a push failure touch the thing that triggered it. Every send is fire-and-forget from the
- *    caller's perspective: a turn must complete identically whether a push service is up, down, or slow. */
+// Fans out a notification to every registered device (browsers over web push, native installs through the relay);
+// transports live in senders/ behind one outcome shape.
+// 1. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream).
+// 2. A push failure never touches the caller: every send is fire-and-forget.
 
-// How many devices a send actually reached. The turn lifecycle ignores it, a missed notification is never
-// worth failing a turn over, but the settings page's test button has no other way to tell the user whether
-// the chain it claims to prove is intact, and a silent zero is precisely the failure it exists to catch.
+// How many devices a send reached; the turn lifecycle ignores it, but the test button needs it to catch a silent zero.
 export interface PushDelivery {
     readonly delivered: number;
     readonly failed: number;
 }
 
 export interface PushSender {
-    // Fan out to every registered device. Resolves once every send settles; never rejects, a failing device
-    // is a logged warning, since callers get no say in the outcome and nothing to retry with.
+    // Resolves once every send settles; never rejects, a failing device is only a logged warning.
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // The same, but skipped entirely when anyone is actively watching this sandbox, nobody wants a phone
-    // buzzing about a screen they are already looking at. This is what the turn lifecycle calls; `notify`
-    // stays available for the settings page's explicit "send a test" button, which must fire even though the
-    // user is by definition looking at the screen when they press it.
+    // Skipped while anyone is watching a screen; `notify` remains for the settings page's explicit test send.
     readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
 }
 
@@ -44,22 +33,19 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
             return NOTHING_SENT;
         }
         const webPush = sendWebPush(keys);
-        // Fan out, don't chain: each channel stands alone, and one that hangs or 500s must not hold up or
-        // abort the sends to every other device the user owns.
+        // Fans out independently: one channel that hangs or errors must not block sends to the others.
         const outcomes = await Promise.all(
             channels.map(async (channel) => {
                 const outcome: SendOutcome =
                     channel.kind === "webpush" ? await webPush(channel, notification) : await sendRelay(channel, notification);
                 const id = channelId(channel);
-                // A dead channel has exactly one correct response: forget the row. Retrying forever would be
-                // the bug, and keeping it would let the settings toggle keep claiming "on" for a device that
-                // can no longer be reached.
+                // A dead channel is dropped rather than retried, so the toggle stops claiming a device that can't be
+                // reached.
                 if (outcome.dead === true) {
                     await store.remove(id).catch(() => undefined);
                     logger.debug({ id, kind: channel.kind }, "push: dropped a channel we can no longer send to");
                 }
-                // Anything else is transient (a 5xx, a timeout). Warn and move on: there is nothing to retry
-                // against, and a missed notification is never worth failing the caller over.
+                // Any other failure is transient; log a warning and move on, not worth failing the caller over.
                 if (outcome.dead !== true && outcome.error !== undefined) {
                     logger.warn({ err: outcome.error, id, kind: channel.kind }, "push: send failed");
                 }

@@ -3,10 +3,9 @@ import { join } from "node:path";
 import type { WorkspaceDepEdge, WorkspaceDepType, WorkspaceGraph, WorkspacePackage } from "@intentic/sandbox-contract";
 import { parse } from "yaml";
 
-// The workspace package dependency graph of a pnpm monorepo, read straight from the filesystem:
-// pnpm-workspace.yaml's `packages` globs name the package dirs, each dir's package.json contributes a node,
-// and its dependency blocks contribute edges to other workspace packages. Edges match by the dep NAME being a
-// workspace package, a `workspace:` protocol check would miss catalog:/version-pinned intra-workspace refs.
+// Workspace package dependency graph of a pnpm monorepo, read straight from the filesystem: pnpm-workspace.yaml's globs
+// name package dirs, each package.json is a node, its dependency blocks are edges. Edges match by the dep name being a
+// workspace package; a `workspace:` protocol check would miss catalog:/version-pinned intra-workspace refs.
 
 type PackageManifest = { name?: unknown } & Record<string, unknown>;
 
@@ -16,10 +15,8 @@ const DEP_BLOCKS: readonly (readonly [string, WorkspaceDepType])[] = [
     ["peerDependencies", "peer"],
 ];
 
-// Expand one pnpm packages glob into repo-relative package dirs. Only the common shapes are supported: a
-// literal dir and a single trailing `/*` segment (readdir of the prefix). `**` is skipped, the monorepos this
-// product manages use flat `_dir/*` globs. Negations are the caller's (readWorkspaceManifests), because a
-// `!dir` line takes a directory OUT of what an earlier line let in, and the two have to be read together.
+// Expands one pnpm glob into repo-relative dirs; a literal dir or trailing `/*` only, `**` skipped. Negations are the
+// caller's: a `!dir` line must be read with the line it excludes from.
 const expandGlob = (repoDir: string, glob: string): string[] => {
     if (glob.includes("**")) {
         return [];
@@ -37,22 +34,13 @@ const expandGlob = (repoDir: string, glob: string): string[] => {
         .map((entry) => `${prefix}/${entry.name}`);
 };
 
-/* A `!dir` line in pnpm-workspace.yaml is pnpm's own way of saying a directory under a glob is NOT a
- * workspace package. This repository's two store shells (`_editor/ios-app`, `_editor/android-app`) are
- * exactly that: their dependencies are consumed by Xcode and by Bubblewrap's JDK on the machine that builds
- * them, and `pnpm install` here never installs them, by design. Reading the globs without their negations
- * therefore called those shells members, found their Capacitor dependencies "unresolved" after every install,
- * and reported the whole workspace `stale` forever: 1,044 installs restarted over twenty days, each rewriting
- * node_modules under running turns, for four packages that were never supposed to be there. Exact paths only,
- * the way the negations are written; a glob negation is a shape this reader does not know and would be a
- * package it wrongly keeps, which the drift detector then reports loudly rather than hides. */
+// A `!dir` line excludes a dir pnpm itself does not install (this repo's two store shells, built by Xcode/Bubblewrap).
+// Exact paths only: a glob negation is unknown here and would be wrongly kept.
 const negated = (globs: readonly string[]): Set<string> =>
     new Set(globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1).replace(/\/+$/, "")));
 
-// One workspace package as its manifest declares it, with the dir it was found in. Exported because the graph is
-// not the only reader of these files, the maintenance surface's signals need each package's engines and
-// dependency names, and two independent glob-expanders over one pnpm-workspace.yaml would be two chances to
-// disagree about what a package even is.
+// One workspace package as its manifest declares it, with its dir. Exported since other readers need each package's
+// engines and deps too; two glob-expanders over one file would risk disagreeing about what a package is.
 export interface WorkspaceManifest {
     readonly dir: string;
     readonly name: string;
@@ -61,7 +49,7 @@ export interface WorkspaceManifest {
 
 export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => {
     const workspaceFile = join(repoDir, "pnpm-workspace.yaml");
-    // Every caller must answer for any repo, monorepo or not, no workspace file simply means no packages.
+    // Every caller must answer for any repo, monorepo or not: no workspace file just means no packages.
     if (!existsSync(workspaceFile)) {
         return [];
     }
@@ -71,7 +59,7 @@ export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => 
     const seen = new Set<string>();
     for (const glob of globs.filter((entry) => !entry.startsWith("!"))) {
         for (const dir of expandGlob(repoDir, glob).filter((candidate) => !excluded.has(candidate))) {
-            // A dir without a parseable, named package.json isn't a workspace package (matches pnpm's view).
+            // A dir without a parseable, named package.json isn't a workspace package (matches pnpm's own view).
             let pkg: PackageManifest;
             try {
                 pkg = JSON.parse(readFileSync(join(repoDir, dir, "package.json"), "utf8")) as PackageManifest;

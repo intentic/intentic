@@ -6,11 +6,9 @@ import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
 import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
-// A turn EXECUTES as a detached daemon-side run: `run` starts it and acks with the run id; any number of
-// clients render it via `attach` (replay from a seq cursor, then live), the initiating window holds no
-// special stream, so a reload, a second window, or another device attaches identically. `reply` un-parks a
-// turn waiting on any interactive card (plan approval, clarifying questions, a per-tool permission prompt);
-// steer injects a user message into the running turn; stop hard-cancels it daemon-side.
+// A turn executes as a detached daemon-side run. `run` starts it, `attach` streams it to any number of clients
+// (replay then live, no special stream for the initiator), `reply` un-parks it, `steer` injects a message, `stop`
+// hard-cancels it.
 export const agentContract = {
     run: oc
         .route({
@@ -61,14 +59,7 @@ export const agentContract = {
         })
         .input(StopTurnSchema)
         .output(OkSchema),
-    /* Run the conversation's HELD turn again: the one a spent allowance refused, which the daemon kept whole.
-     * NOT_FOUND when it holds none (nothing was stranded, another turn has since superseded it, or the daemon
-     * restarted), which is what tells a client to fall back to saying something itself.
-     *
-     * Separate from `run` because it is a different act. `run` says something new; this repeats something already
-     * said, and the difference has to survive onto the wire or it cannot survive into the transcript: a repeat
-     * sent as a new turn is a new user message, and four presses against one spent allowance then read back, to
-     * the model as much as to the reader, as four things the user said and nobody answered. */
+    // NOT_FOUND when nothing is held (superseded, or the daemon restarted): the client should fall back to `run`.
     resume: oc
         .route({
             method: "POST",
@@ -79,9 +70,7 @@ export const agentContract = {
         })
         .input(ResumeTurnSchema)
         .output(StartedTurnSchema),
-    // Go back to a message: restore the workspace to that turn's checkpoint, drop the messages after it, and
-    // forget the provider session. CONFLICT while a turn is running, a restore cannot overwrite files an
-    // agent is editing. NOT_FOUND when that message has no checkpoint to go back to.
+    // CONFLICT while a turn is running; NOT_FOUND when the message has no checkpoint.
     rewind: oc
         .route({
             method: "POST",
@@ -92,8 +81,6 @@ export const agentContract = {
         })
         .input(RewindTurnSchema)
         .output(RewindResultSchema),
-    // The provider's slash commands as last published by one of its turns, so a conversation's `/` popover is
-    // populated before it has run one. The live `commands` frame stays authoritative for a running turn.
     commands: oc
         .route({
             method: "GET",
@@ -104,9 +91,6 @@ export const agentContract = {
         })
         .input(AgentCommandsQuerySchema)
         .output(AgentCommandsSchema),
-    // The last refusal per provider, as reported by whichever turn was refused (ProviderRefusalSchema). Read
-    // alongside the account listings by the surfaces that draw plan limits: the snapshot on an account row says
-    // how full its pools were when last polled, and this says whether one of them has since said no.
     refusals: oc
         .route({
             method: "GET",

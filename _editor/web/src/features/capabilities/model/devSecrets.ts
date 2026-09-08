@@ -3,21 +3,14 @@ import { isForticlientCiphertext } from "@intentic/sandbox-contract";
 import { devFillGet, devFillSet } from "../../setup/devFill";
 import { type FormValues, secretFields } from "./form";
 
-/* DEV AUTOFILL FOR THE CAPABILITY FORM, and nowhere else in it.
- *
- * Local development resets sandboxes and databases constantly, and every reset used to mean re-pasting the same
- * tokens into the same cards. This remembers the secret fields of an add that WORKED and offers them back, keyed
- * per card because field keys like `token` repeat across the catalog. Inert in production, where devFillGet
- * answers undefined and devFillSet does nothing.
- *
- * Kept apart from ./form because it reads the browser: the rules there are plain functions of their arguments,
- * and dragging localStorage into them would make every one of them need a DOM to be read or tested. */
+// Dev autofill for the capability form: remembers a card's secret fields after a successful add and
+// offers them back, keyed per card. Inert in production, where devFillGet/devFillSet are no-ops.
+// Kept apart from ./form, which stays pure functions with no browser access.
 
 const keyOf = (entry: CapabilityCatalogEntry, fieldKey: string): string => `capability.${entry.id}.${fieldKey}`;
 
-/* The remembered answers, as a patch over a freshly seeded form. A remembered value the daemon would NOW reject
- * is skipped, it was saved before the check existed, and silently re-offering it turns a convenience into a
- * confusing 400 on submit. */
+// Remembered answers applied as a patch over a freshly seeded form; a value the daemon would now
+// reject is skipped.
 export const rememberedSecrets = (entry: CapabilityCatalogEntry): FormValues => {
     const values: FormValues = {};
     for (const field of secretFields(entry)) {

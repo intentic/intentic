@@ -5,28 +5,9 @@ import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { runtimeInstallVisual } from "./environmentVisual";
 
-/* WHAT SESSIONS KEEP INSTALLING INTO A CONTAINER THAT FORGETS, and — new here — what you can do about it.
- *
- * This list is the daemon's cross-session memory: the install-steering hook records every image-scoped install
- * silently, the drift sweep corroborates it against the live filesystem, and the auto-drafter writes the
- * Dockerfile step for the ecosystems whose step follows from a package name alone. The ones it CANNOT write —
- * a pip package that might belong in a venv, a shell installer whose replay could carry anything — were then
- * "surfaced for a person", and the surface was eleven words and a session count with no action anywhere on it.
- * `chromium-headless-shell` sat on this card for six days: recorded twice, present in the container, agreed on
- * by both channels, and unfixable by any press. A list of problems with no verbs is a list nobody reads twice.
- *
- * SO EVERY ROW ENDS SOMEWHERE. It has a mechanical step → add it, and it joins the proposal above. It does not
- * → hand it to an agent with the tool, the ecosystem and the overlay rules already in the brief, because
- * "which of a venv, apt and pipx" is exactly the judgement a template cannot make and a turn can. Either way →
- * dismiss it, which until now was reachable only as a side effect of rejecting a whole proposal, so a
- * deliberate throwaway install (and anything a classifier bug invented) could not be got rid of at all.
- *
- * AND IT IS DRAWN IN THE TAB'S OWN LANGUAGE rather than in a paragraph of its own devising. The three sections
- * above are a labelled <RowGroup> of <DisclosureRow>s, each with a mark, a name, a mono annotation and its
- * evidence behind a chevron. This was a bold caption over a bare <ul> whose bullets ran `tool · 2 sessions ·
- * proposed` in three greys — a fourth visual language on a tab that had settled on one, sitting directly under
- * the strip that had just taught the reader what a row here looks like. The parallel is exact and it is the
- * point: where a contents row opens onto why a tool is in the image, this one opens onto why it is NOT. */
+// The daemon's cross-session record of what sessions install at runtime: auto-drafted into the proposal where a step
+// follows from the package name, surfaced here otherwise. Every row ends somewhere: add its step, hand the routing
+// judgement to an agent, or dismiss it.
 
 const { entries, canOperate, busy } = defineProps<{
     entries: readonly EnvironmentRecurring[];
@@ -45,35 +26,20 @@ const toggle = (tool: string): void => {
     open.value = next;
 };
 
-/* AN ANSWERED ROW LEAVES THE LIST — the half of "every row ends somewhere" the first pass got wrong. Dismissing
- * only sank the row to the bottom and greyed it, so the press said "I am content to keep installing this" and
- * the card answered by going on reporting it: `chromium-headless-shell`, still under a heading that reads
- * `1 item · Not in the image, so every rebuild loses them`, days after the owner had settled it and with the
- * whole Environment card staying up to carry it. A dismissal whose row does not go away is a mute button that
- * does not mute, and the list's count — the one number that says whether this section wants anything — could
- * only ever go up. The workspace's own dismissals page had this right already: what you have said no to stops
- * being drawn, or the surface becomes the nag strip people learn not to look at.
- *
- * IT DOES NOT VANISH WITHOUT TRACE EITHER. The tombstone it writes is permanent and invisible — nothing will
- * auto-draft a step for that tool again, ever — so a mis-click needs a way back, and hidden permanent state
- * needs somewhere to be seen. It FOLDS rather than disappears: the header carries `1 dismissed`, one quiet
- * press from the rows and their Undo. Out of the count, out of the way, still reachable. */
+// A dismissed entry folds out of the list and its count, not just greyed in place; the tombstone is permanent, so it
+// stays reachable behind the header's fold with an Undo.
 const revealed = ref(false);
 const byRecency = (left: EnvironmentRecurring, right: EnvironmentRecurring): number => right.lastAt - left.lastAt;
 const awaiting = computed(() => entries.filter((entry) => entry.declined !== true).toSorted(byRecency));
 const dismissed = computed(() => entries.filter((entry) => entry.declined === true).toSorted(byRecency));
-// Revealed rows go UNDER the ones still asking something: unfolding is a look at what you have answered, not a
-// re-sort of what you have not.
+// Revealed rows land after the ones still asking something; unfolding doesn't re-sort them.
 const shown = computed(() => (revealed.value ? [...awaiting.value, ...dismissed.value] : awaiting.value));
-// The count counts what still wants a decision, so it can reach zero. `undefined` rather than "0 items" when it
-// does: an empty count beside the label is the section saying nothing, which is the honest reading of a list
-// whose every entry has been answered.
+// undefined, not '0 items', once nothing is awaiting: an empty count is the section saying it's settled.
 const countLabel = computed(() =>
     awaiting.value.length === 0 ? undefined : `${awaiting.value.length} ${awaiting.value.length === 1 ? `item` : `items`}`,
 );
 
-/* Dismissing closes the row on its way out, so revealing the fold later opens on a list of headlines rather
- * than on whatever was expanded the moment it was answered. */
+// Dismissing also closes the row, so revealing the fold later opens on headlines, not whatever was expanded.
 const decide = (entry: EnvironmentRecurring, decision: `adopt` | `dismiss` | `restore`): void => {
     if (decision === `dismiss` && open.value.has(entry.tool)) {
         toggle(entry.tool);
@@ -81,23 +47,19 @@ const decide = (entry: EnvironmentRecurring, decision: `adopt` | `dismiss` | `re
     emit(`decide`, entry.tool, decision);
 };
 
-// Recurrence, in the words the ledger actually counts in: SESSIONS, not commands. A session that retried an
-// install five times needed the tool once, and "5 installs" would read as five separate needs.
+// Counts sessions, not install attempts: a session that retried an install several times still needed the tool once.
 const sessionsLabel = (entry: EnvironmentRecurring): string => (entry.sessions === 1 ? `1 session` : `${entry.sessions} sessions`);
 
-/* WHAT THE ROW SAYS ABOUT ITS OWN STATE, at most one badge, most actionable first. `live` is deliberately NOT
- * one of them: almost every row here is present right now (that is what corroboration means), so a badge for it
- * would be a tick on every line. It earns a place in the opened row's sentence instead, where it is the reason
- * the rebuild warning is not hypothetical. */
+// `live` isn't a badge: almost every row is currently present, so a badge for it would be a tick on every line; it
+// shows up in the opened row's sentence instead.
 const STATES = {
     drafted: { icon: `sparkles`, label: `proposed`, tone: `text-link` },
     declined: { icon: `eye-slash`, label: `dismissed`, tone: `text-subtle` },
 } as const;
 const stateOf = (entry: EnvironmentRecurring) => (entry.declined === true ? STATES.declined : entry.drafted === true ? STATES.drafted : undefined);
 
-/* WHY THIS ONE HAS NO BUTTON THAT WRITES THE STEP, said per ecosystem rather than as one shrug. The reason is
- * different in kind each time and it is what the reader needs in order to answer it themselves — or to judge
- * whether the agent's answer was right. */
+// Explains per ecosystem, not with one shrug: the reason a step can't be templated differs each time, and the reader
+// needs it to judge the agent's answer.
 const NO_STEP: Partial<Record<EnvironmentRecurring[`kind`], string>> = {
     pip: `Where a Python package belongs is a routing decision — a virtualenv, a Debian package, or pipx — and it is a fact about this workspace rather than about the package.`,
     pipx: `pipx installs into a per-tool virtualenv under the home directory, which a rebuild recreates empty; making it durable means deciding what it should become instead.`,
@@ -108,8 +70,8 @@ const NO_STEP: Partial<Record<EnvironmentRecurring[`kind`], string>> = {
 const noStep = (entry: EnvironmentRecurring): string =>
     NO_STEP[entry.kind] ?? `This ecosystem has no Dockerfile step that follows from a package name alone.`;
 
-// What the opened row leads with: the state it is in, in one sentence, because the badges are three words and
-// the difference between "proposed" and "dismissed" is what the reader is deciding between.
+// Leads with the row's state in one sentence: the badges are a word each, and proposed vs. dismissed is the actual
+// choice being read.
 const explanation = (entry: EnvironmentRecurring): string => {
     if (entry.declined === true) {
         return `Dismissed. Nothing will propose a step for it again, and sessions may go on installing it.`;
@@ -123,12 +85,8 @@ const explanation = (entry: EnvironmentRecurring): string => {
         : `${lost} Its Dockerfile step follows from the package name, so it can be added as it stands.`;
 };
 
-/* THE BRIEF THE AGENT GETS, written here rather than left to a chat message the owner has to compose. It
- * carries the three things the turn cannot recover on its own — which tool, which ecosystem, and that the
- * daemon has already watched this repeat — and it names the file to write, so two agents asked the same
- * question converge on one draft instead of appending near-duplicates. It deliberately does NOT assume the
- * answer is an image step: the whole reason this kind has no template is that the tool may belong somewhere
- * else entirely. */
+// Carries what the turn can't recover itself (tool, ecosystem, repeat count) and names the target file, so two agents
+// converge on one draft. Doesn't presume an image step: the tool may belong elsewhere.
 const brief = (entry: EnvironmentRecurring): string =>
     `This sandbox has installed \`${entry.tool}\` (${entry.kind}) at runtime in ${sessionsLabel(entry)}, so it is lost on every container rebuild. ` +
     `Work out where it actually belongs. If it belongs in the sandbox image, load the \`environment\` skill and write the overlay step as ` +
@@ -137,8 +95,7 @@ const brief = (entry: EnvironmentRecurring): string =>
 </script>
 
 <template>
-    <!-- `flat undivided`, exactly like the three sections above it: this list is already inside the Environment
-         card, and a bordered group here would draw a frame around a surface painted in the card's own colour. -->
+    <!-- `flat undivided`, like the sections above: this list is already inside the Environment card's own frame. -->
     <RowGroup
         flat
         undivided
@@ -146,10 +103,10 @@ const brief = (entry: EnvironmentRecurring): string =>
         :count="countLabel"
         :caption="awaiting.length ? `Not in the image, so every rebuild loses them.` : undefined"
     >
-        <!-- The fold, in the header rather than as a row under the list, because it is a fact ABOUT the list and
-             not another entry in it: a row here is a tool with a decision on it, and "2 dismissed" is neither.
-             `aria-pressed`, not `aria-expanded`: the only expandable things on this surface are the rows, and
-             the header press filters which of them are drawn rather than opening a region of its own. -->
+        <!--
+            The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. `aria-pressed`, not `aria-expanded`, since it
+            filters which rows are drawn rather than opening a region.
+        -->
         <template v-if="dismissed.length" #actions>
             <button
                 type="button"
@@ -178,21 +135,13 @@ const brief = (entry: EnvironmentRecurring): string =>
                     :idle="entry.declined === true"
                 />
             </template>
-            <!-- The same line as a contents row, with the same parts in the same order: the name, then the mono
-                 annotation that says what the name IS. A package name is a literal, so it takes the mono here
-                 that a product name in the sections above does not.
-
-                 THE NAME IS WHAT YIELDS, which is the opposite of the rows above and is right here. There, the
-                 name never shrinks because a SENTENCE after it can give up its whole width instead; this row has
-                 no sentence, so with both parts `shrink-0` the pair simply overflowed a card sharing its width
-                 with the chat column — and the part that ran off the end was the recurrence, which is the fact
-                 the row exists to report. `chromium-headless-shell` is also the longest thing on the line and
-                 the one a reader can still identify from its first half; `pip · 3 sessions` is neither. -->
+            <!--
+                Same line order as a contents row: name, then the mono annotation. Here the name yields instead of the annotation, since there's no
+                sentence to give up width, and clipping the recurrence would hide the fact this row exists to report.
+            -->
             <template #title>
                 <span class="flex min-w-0 items-center gap-3 overflow-hidden">
-                    <!-- `font-normal`, because mono at the row title's own weight is optically heavier than the
-                         sans names in the sections above and made this list — the quieter, unfinished one —
-                         the loudest thing on the tab. -->
+                    <!-- `font-normal`: mono at the row title's own weight reads louder than the sans names above it. -->
                     <span v-tooltip.bottom.overflow="entry.tool" class="min-w-0 truncate font-mono font-normal">{{ entry.tool }}</span>
                     <span class="shrink-0 font-mono text-2xs font-normal tabular-nums text-subtle">
                         {{ entry.kind }}<span class="text-muted"> · {{ sessionsLabel(entry) }}</span>
@@ -207,11 +156,10 @@ const brief = (entry: EnvironmentRecurring): string =>
             <template #below>
                 <div class="flex flex-col gap-3">
                     <p class="text-xs leading-relaxed text-muted">{{ explanation(entry) }}</p>
-                    <!-- The step itself, where there is one, in the same block a contents row uses for what it
-                         installs. It is what "Add to the image" would put in front of you, so showing it here is
-                         the difference between a button you can judge and one you have to trust — which is also
-                         why a DISMISSED row does not show it: nothing is going to add that step, and printing it
-                         under "what this would add" makes an answered row look like it is still asking. -->
+                    <!--
+                        Shows the exact step 'Add to the image' would apply, so the button can be judged, not trusted; hidden on a dismissed row so
+                        it doesn't look like it's still asking.
+                    -->
                     <Code
                         v-if="entry.step !== undefined && entry.declined !== true"
                         :code="entry.step"
@@ -219,9 +167,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                         :label="entry.drafted === true ? `What it adds to the proposal` : `What this would add`"
                         :clamp-lines="10"
                     />
-                    <!-- Verbs, and only the ones this row can honour. Quiet by design: the tab spends its one
-                         filled shape on the strip's pills, and these sit inside a row the reader has already
-                         opened on purpose, so they do not have to shout to be found. -->
+                    <!-- Quiet by design: the tab's one filled shape is the strip's pills, and these sit inside a row already opened on purpose. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <button
                             v-if="canOperate && entry.step !== undefined && entry.drafted !== true && entry.declined !== true"

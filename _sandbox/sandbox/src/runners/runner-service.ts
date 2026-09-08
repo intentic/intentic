@@ -22,11 +22,9 @@ import { parseDefinitionToml } from "../portability/definition.js";
 import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
-/* WHAT THIS RUNNER ANSWERS, the oRPC server on the socket it dialled out (the host router's inversion,
- * _devices/machine/src/device/router.ts). Everything of substance is a thin adapter onto machinery this daemon
- * already has: a turn is streamAgent, the same composition every local turn runs through, and a sync is
- * stock git against the parent's door (runner-sync.ts). That reuse IS the design: a remote turn behaves
- * like a local one because it is the same code, only dispatched from elsewhere. */
+// The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
+// adapter onto machinery this daemon already has: a turn is streamAgent, the same composition a local turn runs; a sync
+// is stock git against the parent's door. A remote turn behaves like a local one because it is the same code.
 
 // freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
 const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
@@ -35,20 +33,18 @@ const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
         cpus: cpus().length,
         memoryMb: Math.round(totalmem() / 1_048_576),
         freeDiskMb: disk === undefined ? 0 : Math.round((disk.bavail * disk.bsize) / 1_048_576),
-        // Normalized to the core count, so "1" reads as saturated on every machine size; the one-minute
-        // window answers the picker's actual question, "is it busy right now".
+        // Normalised to core count, so "1" means saturated on any machine size; answers "is it busy right now".
         load: cpus().length === 0 ? 0 : Math.round(((loadavg()[0] ?? 0) / cpus().length) * 100) / 100,
     };
 };
 
-// A sync's callback-reported lines as the stream the parent reads, on the shared pump (@intentic/base's
-// `narrate`). What is here is only this wire's terminal frame: one `done`, carrying the reason when it failed.
+// Turns a sync's callback lines into a stream via the shared `narrate` pump; only this wire's terminal `done` frame
+// lives here.
 const narrated = (run: (onLine: (line: string) => void) => Promise<void>): AsyncGenerator<RunnerSyncLine> =>
     narrate(run, (outcome): RunnerSyncLine => (outcome.ok ? { kind: "done", ok: true } : { kind: "done", ok: false, detail: outcome.error }));
 
-/* The dispatched turn as this daemon's own AgentTurn. Two refusals guard the translation: a provider or
- * harness this build does not know is answered as a readable error frame rather than a zod throw the parent
- * relays as a broken link, and an attachment path that escapes the workspace is refused outright. */
+// Translates a dispatched turn into this daemon's AgentTurn; an unknown provider/harness or an escaping attachment path
+// is refused, not thrown.
 const turnOf = (input: RunnerTurn): { turn?: AgentTurn; refusal?: string } => {
     const provider = AgentProviderSchema.safeParse(input.provider);
     const harness = AgentHarnessSchema.safeParse(input.harness);
@@ -64,8 +60,7 @@ const turnOf = (input: RunnerTurn): { turn?: AgentTurn; refusal?: string } => {
             prompt: input.prompt,
             agent: provider.data,
             harness: harness.data,
-            // The parent lands; this mirror's main tree is never the review surface, so work stays on the
-            // branch here regardless of the runner's own settings.
+            // The parent lands, never this mirror; work stays on the branch regardless of the runner's own settings.
             autoLand: false,
             ...(input.model !== undefined ? { model: input.model } : {}),
             ...(input.effort !== undefined ? { effort: input.effort } : {}),
@@ -84,15 +79,13 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         historyRoot: services.config.historyRoot,
         worktrees: services.agentWorktrees,
     };
-    // One live turn per conversation, the abort `interrupt` reaches for. streamAgent registers its own turn
-    // control too; this map is the link's handle on it without a detour through conversation lookups.
+    // One live turn per conversation, for `interrupt` to abort; the link's own handle, no conversation lookup.
     const running = new Map<string, AbortController>();
 
     const materializeAttachments = async (input: RunnerTurn): Promise<void> => {
         for (const file of input.attachments ?? []) {
             const target = join(services.workspace.root, file.path);
-            // The prompt names the workspace-relative path; a path that resolves outside the workspace is not
-            // an attachment but an attempt, and the whole turn is better refused than partially written.
+            // A path resolving outside the workspace is an attempt, not an attachment; the whole turn is refused.
             if (!normalize(target).startsWith(services.workspace.root)) {
                 throw new Error(`attachment path escapes the workspace: ${file.path}`);
             }
@@ -132,20 +125,11 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
             ),
         ),
         runTurn: os.runTurn.handler(({ input }) => runTurn(input)),
-        /* The user's answer, arriving from the parent (where the browser is) for a card THIS daemon raised.
-         * Applied by the same function a local answer takes, dismissal-ends-the-turn included, so a question
-         * closes identically wherever the turn happens to be running.
-         *
-         * A GATED CREDENTIAL'S RELEASE CANNOT COME THIS WAY, and that is a known gap rather than an oversight
-         * (README's honesty list). The relay carries the ANSWER and not the answerer: the identity was
-         * verified by the parent daemon against the parent's own roster, and this hop presents the runner
-         * enrollment's token, so there is nothing here this side could check a named approver against.
-         * `mayAnswer` therefore sees no caller and refuses, which is the fail-closed direction: a release card
-         * raised by a remote turn goes unanswered rather than being released by an unverified click. Closing
-         * it properly means carrying a signed statement of the verified identity across the hop. */
+        // Applied by the same function a local answer takes, so a question closes identically wherever it runs. A gated
+        // credential's release cannot come this way (a known gap): the hop carries no verified identity, so it fails
+        // closed.
         reply: os.reply.handler(async ({ input }) => ({ applied: (await applyReply(services, input)) === "settled" })),
-        // Composed HERE on purpose: the attachment note names absolute paths, and the only workspace those
-        // paths mean anything in is this one (turn-interactions.ts).
+        // Composed here deliberately: the attachment note names absolute paths meaningful only in this workspace.
         steer: os.steer.handler(({ input }) => {
             const composed = composeSteerText(services, input);
             if (composed.invalid !== undefined) {
@@ -153,9 +137,8 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
             }
             return { applied: applySteer(input.conversationId, composed.text) };
         }),
-        /* The parent pushing its settings onto this runner (the contract says why this is a REPLACE): parsed
-         * by the same strict reader every definition takes, so a malformed push fails with the field named
-         * instead of half-applying, and adopted through the settings store so the next turn reads it. */
+        // The parent's settings push (a REPLACE); parsed by the same strict reader as any definition, so a bad field
+        // fails named, not half-applied.
         applyDefinition: os.applyDefinition.handler(async ({ input }) => ({
             settings: await adoptDefinitionSettings(services, parseDefinitionToml(input.toml)),
         })),

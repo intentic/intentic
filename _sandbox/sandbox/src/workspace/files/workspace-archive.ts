@@ -8,8 +8,7 @@ import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "./workspace-files-upload.js";
 import { setWorkspaceMtime } from "./workspace-files.js";
 
-// A tar entry whose path climbs out of /work, the route answers 400 (same as the single-file upload's escape
-// guard), aborting the whole extraction rather than writing a partial tree outside the workspace.
+// A tar entry whose path escapes /work aborts the whole extraction with 400.
 export class PathEscapeError extends Error {
     constructor() {
         super("invalid path");
@@ -17,8 +16,7 @@ export class PathEscapeError extends Error {
 }
 
 
-// True when `path` already exists AND is a directory (false when absent or a file). Detects a file entry that
-// collides with an already-materialized directory, a symlink alias the browser packer can't filter out.
+// True when path exists and is a directory, false otherwise.
 const isDirectory = async (path: string): Promise<boolean> => {
     try {
         return (await stat(path)).isDirectory();
@@ -27,10 +25,7 @@ const isDirectory = async (path: string): Promise<boolean> => {
     }
 };
 
-// Stream a tar archive (a request body) into /work, materializing its tree entry-by-entry with the SAME guards as
-// the single-file upload: an escaping path aborts with 400, and a single shared byte budget spans the whole
-// archive (→ 413 via UploadTooLargeError). Nothing is buffered, each entry streams straight to disk, so a
-// multi-GB drop stays flat.
+// Streams a tar archive into /work under the same escape and byte-budget guards as single-file upload.
 export const extractTarToWorkspace = async (root: string, body: ReadableStream<Uint8Array>, limit = MAX_UPLOAD_BYTES): Promise<void> => {
     const ex = extract();
     let remaining = limit;
@@ -40,9 +35,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
         if (target === undefined) {
             throw new PathEscapeError();
         }
-        // The daemon's private state is not writable through the generic upload (see isControlPlanePath). Skip
-        // the entry rather than abort the extraction: a drop that happens to carry one
-        // must not cost the other ten thousand files.
+        // Skips writes into the daemon's private state instead of aborting the whole extraction.
         if (isControlPlanePath(root, target)) {
             await drain(stream);
             return;
@@ -54,19 +47,13 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
             await drain(stream);
             return;
         }
-        // A file entry whose path already IS a directory in /work is a symlink-following alias Chrome duplicated
-        // (the browser API can't flag symlinks, see intentic-app dropEntries.ts): the real subtree is already
-        // materialized by the sibling entries, so skip this duplicate rather than let createWriteStream(EISDIR) →
-        // non-recursive cleanup rm(ENOTEMPTY) abort the whole upload.
+        // A file entry whose path is already a directory is a symlink alias; skip it, don't fail the upload.
         if (await isDirectory(target)) {
             console.warn(`Skipping ${header.name}: a directory already exists there (symlink alias in the drop)`);
             await drain(stream);
             return;
         }
-        // Mirror-image alias: a parent segment of this path is already a FILE. Recursive mkdir is idempotent for
-        // existing dirs, so it only throws here on that collision. ENOTDIR when an ancestor segment is the file,
-        // EEXIST when the immediate parent is. Skip the entry either way (tar entry order is non-deterministic, so
-        // either collision direction can land).
+        // Skips the entry when a parent segment is already a file (ENOTDIR) or the parent itself is (EEXIST).
         try {
             await mkdir(dirname(target), { recursive: true });
         } catch (error) {
@@ -79,14 +66,13 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
             return;
         }
         remaining -= await writeStreamCounted(stream, target, () => remaining);
-        // Preserve the source mtime (the tar carries it) so a re-upload can skip this file by size+mtime.
+        // Preserves the entry's mtime; re-upload skip-by-size+mtime depends on it.
         if (header.mtime !== undefined) {
             await setWorkspaceMtime(target, header.mtime.getTime());
         }
     };
 
     const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>);
-    // No re-labelling: a plain workspace upload promises no particular archive format, so a decoder's own error
-    // is the honest answer and stands as thrown.
+    // Decoder errors surface unchanged; a workspace upload promises no particular archive format.
     await extractAll(source, ex, handleEntry);
 };

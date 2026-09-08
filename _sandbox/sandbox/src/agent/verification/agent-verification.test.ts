@@ -27,8 +27,7 @@ describe("command classification", () => {
         expect(classifyCommand(command)).toBeUndefined();
     });
 
-    // `echo test` must not read as a test run just because the word appears: the classifier keys on the
-    // command position, not on a substring anywhere in the line.
+    // Keys on command position, not a substring anywhere in the line, so `echo test` does not count as a test run.
     test("a check named only as an argument is not evidence", () => {
         expect(classifyCommand("echo test")).toBeUndefined();
         expect(classifyCommand("git commit -m 'add test'")).toBeUndefined();
@@ -43,7 +42,6 @@ describe("the ledger", () => {
         expect(ledger.verdict()).toBeUndefined();
     });
 
-    // The ordering case the counter exists for: verifying and THEN editing leaves the edits unproven.
     test("a passing check BEFORE the last edit does not", () => {
         const ledger = createVerificationLedger();
         ledger.noteCommand("pnpm test", true, "");
@@ -87,10 +85,6 @@ describe("the ledger", () => {
         expect(ledger.verdict()).toBeUndefined();
     });
 
-    /* The two readers want different answers from the same record, and conflating them broke a real case: a
-     * rule narrowed to `docs/**` could never fire, because the ledger had discarded the docs edit at the door
-     * before any condition could see it. Nothing asks for proof of a README; nothing pretends it wasn't
-     * written. */
     test("prose is remembered as edited even though no check is asked for it", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/docs/intro.md`);
@@ -98,8 +92,7 @@ describe("the ledger", () => {
         expect(ledger.verdict()).toBeUndefined();
     });
 
-    // The ordering question is about the last edit a check could SPEAK to: touching a README after a green
-    // suite has not invalidated it.
+    // "Last edit" means the last one a check could speak to; a README touch afterward does not reopen anything.
     test("a prose edit after a passing check does not reopen the verdict", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
@@ -109,9 +102,8 @@ describe("the ledger", () => {
     });
 });
 
-/* THE SAME LEDGER, FED FRAMES, which is the version every runtime can have: these are the shapes each adapter
- * normalizes to (agent/tool-calls.ts), so a case written here holds for a turn on any provider. The hook feeder
- * next door is the Claude Agent SDK's PostToolUse and reaches exactly one of six. */
+// Same ledger fed provider-normalized frames (agent/tool-calls.ts) instead of hook events, so a case proven here holds
+// for any provider.
 describe("the frame-fed ledger", () => {
     const editCall = (id: string, path: string, status: "completed" | "failed" = "completed"): AgentEvent => ({
         kind: "tool_call",
@@ -151,9 +143,7 @@ describe("the frame-fed ledger", () => {
         expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test src/a.test.ts" });
     });
 
-    /* ORDER IS THE WHOLE POINT, and the frame stream is the only place that still knows it: `pnpm test` and then
-     * three edits is a turn with no evidence for those edits, and it reads as verified under any scheme that
-     * only asks whether a test ran this turn. */
+    // Order matters, and the frame stream is the only place that still preserves it across tool calls.
     test("a check before the last edit proves nothing about it", () => {
         const ledger = createFrameLedger();
         ledger.note(shellCall("1", "pnpm test"));
@@ -162,8 +152,7 @@ describe("the frame-fed ledger", () => {
         expect(ledger.standing().state).toBe("unproven");
     });
 
-    // The exit code outranks the tool's own status: a suite that printed its failures and exited 1 is a
-    // `completed` tool call, because the TOOL worked.
+    // Exit code outranks the tool's own status: a suite that printed failures but exited 1 is still a completed call.
     test("a suite that exits non-zero is failing, whatever the tool call says", () => {
         const ledger = createFrameLedger();
         ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
@@ -172,17 +161,15 @@ describe("the frame-fed ledger", () => {
         expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test" });
     });
 
-    // A refused or failed edit changed nothing, so it is not work waiting for proof. The hook feeder gets this
-    // for free (PostToolUse only fires for a call that ran); here it is the reason a call is noted at its
-    // RESULT rather than when it opens.
+    // A refused or failed edit is not work to prove; noted at its result, not when it opens, since PostToolUse only
+    // fires for a call that ran.
     test("an edit that failed is not work to be proven", () => {
         const ledger = createFrameLedger();
         ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`, "failed"));
         expect(ledger.standing().state).toBe("no-code");
     });
 
-    // An ACP agent sends the change rather than the argument it came from, so a ledger reading only
-    // `locations` would watch a Zed-driven turn edit nothing.
+    // An ACP agent sends the change itself rather than the path it came from; reading only `locations` would miss it.
     test("an edit that carries only a structured diff still counts", () => {
         const ledger = createFrameLedger();
         ledger.note({

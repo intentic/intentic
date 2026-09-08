@@ -1,28 +1,13 @@
 // @vitest-environment jsdom
-//
-// The panel's REFACTOR AFFORDANCE, pressed rather than reasoned about. The arithmetic that picks each row's
-// archetype is covered in refactorAsk.test.ts; what this pins is the wiring the template owns and a unit test
-// cannot see: that the action exists once per hotspot row, that a key module with an ordinary surface offers
-// none, and that a press carries THAT row's composed prompt into a new agent. The row was a single button
-// before this: one cannot nest inside another, so the markup had to be restructured, and a regression there
-// looks like a panel that renders perfectly and does nothing.
+// Pins the refactor action's wiring: one per hotspot row, none for an ordinary key module, and a press carries
+// that row's own prompt. Arithmetic is covered in refactorAsk.test.ts.
 import { beforeAll, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic/api-contract";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-/* The mocks' state is hoisted rather than declared below the imports, so the component can be imported
- * statically: a vi.mock factory runs at the mocked module's first import, and with a static import of the panel
- * that happens while a module-scope `const` is still in its temporal dead zone. Held here it is initialised
- * first, and the panel's whole subtree loads during collection instead of inside a hook, where it was ~1s of a
- * hook budget (see vitest.config.ts).
- *
- * `matchMedia` comes from vitest.setup.ts: ui's useDevice reads it at module scope, and its matches:false keeps
- * the device DESKTOP, where the refactor action is hover-revealed. `started` is every prompt a press handed to
- * the fleet: the action itself
- * is covered in agentActions.test.ts, so the seam is mocked and this test says nothing about turns. One repo,
- * so the header renders its name rather than the Picker (a PrimeVue overlay this test has no use for). */
+// Hoisted so the static import avoids the TDZ; matchMedia stays false, keeping the device desktop.
 const mocked = vi.hoisted(() => {
     return { started: [] as string[], health: { value: undefined as WorkspaceHealth | undefined } };
 });
@@ -47,8 +32,7 @@ const mount = (): HTMLElement => {
 const NOW = Date.now();
 const DAY_MS = 86_400_000;
 
-// A report with one hotspot of each shape the panel can meet, and a key-module list holding a healthy
-// chokepoint beside a god module.
+// One hotspot of each shape, plus a key-module list with a healthy chokepoint beside a god module.
 const report: WorkspaceHealth = {
     repo: `root`,
     totals: { files: 400, symbols: 5_000, complexity: 3_600, hotspots: 42 },
@@ -57,8 +41,7 @@ const report: WorkspaceHealth = {
         { path: `src/legacy/parser.ts`, commits: 4, adds: 90, dels: 12, complexity: 180, score: 720, latestMs: NOW - 400 * DAY_MS },
         { path: `src/schemas.ts`, commits: 40, adds: 900, dels: 200, complexity: 12, score: 480, latestMs: NOW - 2 * DAY_MS },
     ],
-    // A peer group, because "wide" is measured against one: the median of these ordinary modules is what makes
-    // schemas.ts an outlier rather than just the largest of two.
+    // Peer group: median of these ordinary modules is what makes schemas.ts an outlier, not just the largest of two.
     modules: [
         { path: `src/index.ts`, exports: 4 },
         { path: `src/schemas.ts`, exports: 428 },
@@ -79,7 +62,7 @@ beforeAll(() => {
 it(`offers one refactor per hotspot row, and only the wide key module`, async () => {
     const el = mount();
     await nextTick();
-    // Three hotspots + the god module. index.ts exports four symbols: the shape you want, so no invitation.
+    // index.ts exports four symbols, an ordinary shape, so it gets no refactor invitation.
     expect(refactorButtons(el).map((button) => button.getAttribute(`aria-label`))).toEqual([
         `Refactor conversation.ts`,
         `Refactor parser.ts`,
@@ -93,7 +76,7 @@ it(`sends the pressed row's own prompt, and nothing else`, async () => {
     await nextTick();
     started.length = 0;
 
-    // The load-bearing hotspot: src/schemas.ts churns AND the import graph leans on it.
+    // src/schemas.ts churns and the import graph leans on it, hence two different asks below.
     refactorButtons(el)[2]!.click();
     expect(started).toHaveLength(1);
     expect(started[0]).toContain(`src/schemas.ts`);
@@ -112,7 +95,7 @@ it(`dims the row nobody has touched in a season instead of hiding it`, async () 
     const [live, dormant] = refactorButtons(el);
     expect(dormant!.className).toContain(`text-subtle`);
     expect(live!.className).not.toContain(`text-subtle`);
-    // The reason lives in the tooltip; the button still sends, because the git log is evidence, not a veto.
+    // Dimmed, not disabled: the button still sends, since the git log is evidence, not a veto.
     started.length = 0;
     dormant!.click();
     expect(started[0]).toContain(`src/legacy/parser.ts`);

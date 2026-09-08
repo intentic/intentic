@@ -2,8 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { type DesiredStateGraph, secretRef, type SecretSource } from "@intentic/graph";
 import { renderTemplate } from "../lib/templates.js";
 
-// The user-facing platform services that carry an admin login, mapped to a human label. Anything else with
-// a public `url` output (i.e. a deployment) is surfaced as a URL-only app environment.
+// User-facing platform services with an admin login; anything with a public `url` output is a URL-only app.
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
     forgejo: "Forgejo (git)",
     komodo: "Komodo (deploys)",
@@ -20,14 +19,12 @@ export interface AccessEntry {
     readonly label: string;
     readonly url: string;
     readonly username?: string;
-    // How the login password is provided. `value` is filled only for generated secrets (intentic owns them,
-    // so the user must be told); env secrets keep just the key, shown as a `$KEY` reference.
+    // Login password source; `value` is set only for generated secrets, env secrets keep just the `$KEY` reference.
     readonly password?: { readonly source: SecretSource; readonly key: string; readonly value?: string };
 }
 
-// Where the user logs into what they just provisioned: each platform service (with login) and each app
-// environment (URL only), derived from the artifact's inputs and the apply outputs already in hand. `env`
-// supplies the resolved value for generated passwords (intentic generated them, so it reports them).
+// Where the user logs into what they provisioned: each service (login) and app (URL only), from the artifact's
+// inputs and apply outputs. `env` supplies resolved values for generated passwords.
 export const collectAccess = (
     graph: DesiredStateGraph,
     outputs: Readonly<Record<string, Readonly<Record<string, unknown>>>>,
@@ -57,7 +54,7 @@ export const collectAccess = (
     return entries;
 };
 
-// stdout: generated passwords show the actual value (intentic picked it), env passwords a `$KEY` reference.
+// stdout: generated passwords show the actual value, env passwords a `$KEY` reference.
 const summaryPassword = (password: AccessEntry["password"]): string => {
     if (password === undefined) {
         return "";
@@ -81,8 +78,8 @@ export const formatAccessSummary = (entries: readonly AccessEntry[]): string => 
     return lines.join("\n");
 };
 
-// access.md is COMMITTED with the desired-state repo, so it stays value-free: generated passwords point to
-// the gitignored store, env passwords show the `$KEY` reference.
+// access.md is committed with the desired-state repo, so it stays value-free: generated passwords point to the
+// gitignored store, env passwords show the `$KEY` reference.
 const markdownPassword = (password: AccessEntry["password"]): string => {
     if (password === undefined) {
         return "";

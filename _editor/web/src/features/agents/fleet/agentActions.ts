@@ -15,66 +15,24 @@ import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../revie
 import { useAgents } from "./useAgents";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKeys";
 
-/* The fleet's mutations, addressed by agent id, the true source for both surfaces that invoke them: the
- * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
- * which act on whichever card was dropped and own no query at all. Land and discard are refused daemon-side
- * while the agent's turn is running: the worktree is that turn's live working state. */
+// The fleet's mutations, addressed by agent id: the shared source for the review panel's bindings and the board's
+// drag-to-act drops. Land and discard are refused daemon-side while the agent's turn is running, since the worktree is
+// that turn's live working state.
 
-/* WHICH SANDBOX AN AGENT IS IN, threaded through every mutation here as a trailing optional argument.
- *
- * `undefined` is the active one, which is what almost every call means and what every existing call site says
- * by omission. A value is the All-sandboxes board acting on a card whose agent lives in another box, which the
- * daemon layer already supports whole: the bearer store is keyed by sandbox id and the fetch policy takes its
- * target explicitly (sandboxAuthFetch), so this is an address, not a new capability.
- *
- * EVERY MUTATION HERE CROSSES EXCEPT THE ONE THAT STARTS A TURN. Land, discard, stop and request-land are
- * stateless calls about one agent id: the daemon does the work and answers, and nothing in this browser has to
- * be pointed anywhere for that to be true. `askAgentToResolve` is different in kind, it sends a MESSAGE, which
- * needs a Conversation, which is held by the chat singleton that sandboxScope resets on every switch. So it
- * takes no reach argument and never will: the board offers the crossing instead of a reply box that would
- * silently re-point the whole app. */
+// Threaded through every mutation as a trailing optional argument: undefined means the active sandbox, a value means
+// the wider board acting on another box's card. Every mutation crosses except `askAgentToResolve`, which sends a
+// message through the chat singleton and so never will.
 export type AgentReach = string | undefined;
 
 const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit): Promise<T> =>
     at === undefined ? sandboxJson<T>(path, init) : sandboxJsonAt<T>(at, path, init);
 
-// "New agent", as ONE action for every surface that offers it: the board's header button and its empty state,
-// the chat strip's "+", and the mobile strip's "+". They all mean the same thing, a fresh isolated
-// conversation, focused and ready to type into, so they must all do the same thing, whole. That is three
-// steps, and a surface that skips any of them reads as a press that did nothing:
-//   · summon the tab, in EVERY window (the fleet's draft card and the chat's tab are the same conversation
-//     under two skins, and the chat panel showing it may be another window's, see summon.ts)
-//   · put the caret in its composer, which is what makes the new tab visible as the thing you now type into
-//     (the summons' caret flag)
-//   · on mobile, go to it, there is no docked chat there, so the agent's own screen IS the result (and a "+"
-//     pressed from an agent's screen would otherwise leave the route pointing at the agent you just left)
-//
-// A press over an existing untouched draft summons THAT draft (useChat.draftConversation), the press is about
-// the caret and the focus, and a second empty draft has nothing to be. Only where the pressing window can SEE
-// that it is untouched, though: a window not drawing the chat mints a fresh one, since its copy of the strip
-// cannot tell an empty draft from one being typed into a window away. Every window converges on the same tab
-// either way: a receiving window holding its own untouched draft has it swept by the same write that seats the
-// summoned one.
-//
-// `prompt` is the same action with its first turn already written, what a surface holding a composed task
-// presses (the codebase-health panel's per-row refactor). It goes through `enqueue`, so it is an ORDINARY user
-// message: it sits in the transcript to be read and argued with, the caret is already in the composer to steer
-// it, and Stop works on it like anything else. Not awaited, enqueue's promise settles when the TURN does, and
-// the turn reports itself in the transcript (the same reason askAgentToResolve voids it). Enqueued HERE only,
-// never through the summons: an act happens once, in the window that was pressed, and reaches the other
-// windows as the daemon-side turn it becomes.
-//
-// Templates must therefore write `@click="startAgent()"`, not `@click="startAgent"`: Vue hands a bare handler
-// reference the MouseEvent, which would arrive here as the prompt and be sent to the agent as its first turn.
-// `actsAs` pins the fresh chat to a persona before anyone types into it, what the persona rail's rows press
-// (ChatPersonaRail). It rides THIS action rather than the rail setting `actsAs` on a draft it summoned itself,
-// for the reason the note above gives: a surface that assembles its own half of "new agent" is a surface that
-// will one day skip one of the three steps. Undefined is "anyone", which is also a real thing to press.
-// Returns the conversation it summoned, so a caller that has to keep pointing at the new chat (the persona
-// rail rings the one it opened) does not have to guess which one that was.
+// Routes to the active sandbox, or to a named one, matching `at`.
 export const startAgent = (prompt?: string, actsAs?: string): string => {
     const conversation = draftConversation();
-    // Before the summons, so every window that receives this tab receives it already pinned.
+    // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
+    // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it
+    // instead of minting a second one.
     conversation.actsAs.value = actsAs;
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
@@ -84,13 +42,9 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     return conversation.conversationId;
 };
 
-/* THE SAME PRESS WITH THE TURN WRITTEN BUT NOT SENT, what a surface offering a SUGGESTION does (the empty
- * board's starters). Every step of `startAgent` except the send, and that difference is the whole point: a
- * suggestion the user has not read yet is not a task they asked for, and leaving the text in the composer is
- * what makes it editable, which is the point of suggesting rather than doing.
- *
- * The composer it writes into is the focused chat when nothing has been sent there yet, so trying a second
- * suggestion REPLACES the first rather than opening a second tab (composingConversation). */
+// Same press as startAgent but without the send: a suggestion the user hasn't read isn't a task they asked for, so the
+// text stays in the composer, editable. Writes into the focused chat when nothing's been sent there, so a second
+// suggestion replaces the first rather than opening a new tab.
 export const composeAgent = (prompt: string): void => {
     const conversation = composingConversation();
     conversation.draft.value = prompt;
@@ -98,46 +52,22 @@ export const composeAgent = (prompt: string): void => {
     revealConversation(conversation);
 };
 
-// The navigation half of a summons, in the window that was pressed: mobile has no docked panel, so the agent's
-// own screen is where the summoned chat shows. Local on purpose, a background window navigating itself is a
-// route yanked out from under whoever returns to it. Shared with the suggested-session box
-// (sessionSuggestion.ts), which must land exactly where "New agent" does once accepted, or the two doors into
-// a fresh session open onto two different rooms.
+// The navigation half of a summons: mobile has no docked panel, so the agent's own screen is where the summoned chat
+// shows. Local only, since a background window navigating itself would yank the route from under whoever returns to it.
 export const revealConversation = (conversation: Conversation): void => {
     if (useDevice().mobile.value) {
         void router.push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
     }
 };
 
-/* The open conversation with this id, or none. The lookup every caller here was already doing inline, exported
- * for the one caller that has to do it BEFORE there is a conversation: a proposal whose id is derived from its
- * subject rather than drawn (sessionSuggestion.ts) is the same conversation every time the subject comes back,
- * and constructing a second object with that id would be two tabs writing one daemon session. */
+// The open conversation with this id, or none; exported for the one caller that needs it before a conversation exists
+// (sessionSuggestion.ts), so it derives the same id rather than minting a second daemon session.
 export const openConversation = (id: string): Conversation | undefined =>
     useChat().conversations.value.find((candidate) => candidate.conversationId === id);
 
-// Land: carry the agent's worktree branches into the main trees. The daemon preflights the whole frozen repo
-// composition, so a per-repo conflict refuses every write and every worktree keeps its delta. The user can
-// resolve (main-side), discard, or keep working. `merge` is what the conflict report offers once the user has
-// read it: the whole composition lands, with conflicted paths carrying markers to finish in place.
-//
-// The content-type is NOT optional. Without it `fetch` labels a string body `text/plain`, and the daemon's oRPC
-// handler then parses the body as a STRING rather than an object, at which point its compact-input codec
-// returns that string as the whole input and drops the `{id}` it took from the path, so every land was refused
-// as "Input validation failed" before it reached the handler. Silent for a long time because the land that
-// matters most is the automatic one at turn completion, which runs inside the daemon and never crosses this
-// seam; what broke was the two manual paths (the review panel's Land/Merge, and dropping a card on Finished),
-// and with them the only way an errored or conflicted agent could ever reach the Finished lane.
-//
-// `span` picks the rung the patch is measured from, and `cumulative` exists for exactly one case: work this
-// agent landed that the user has since discarded from the workspace. Every sha still says it landed, because
-// it did, so the default `outstanding` span is empty and would carry nothing at all; only a reading from the
-// branch's base can still see what is gone. Paths the tree already holds drop out of it per file, so a
-// cumulative land applies the missing part and re-applies nothing (AgentSpanSchema).
-//
-// `force` is the user overriding the turn guard: land while the agent is mid-write, half-finished work and
-// all. It is never a default and never inferred, the daemon lets a PARKED turn (a question, a permission
-// card) land without it, so the flag reaches the wire only from a press that showed the warning first.
+// Land: carries the agent's worktree branches into main; a conflict refuses every write. `span: cumulative` re-reads
+// from the branch's base for work already landed then discarded; `force` overrides the turn guard and must come only
+// from a press that showed the warning first.
 export const landAgent = (
     id: string,
     mode: LandMode = `check`,
@@ -146,37 +76,17 @@ export const landAgent = (
     at: AgentReach = undefined,
 ): Promise<LandResult> => agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }));
 
-// A collaborator's stand-in for the land they may not perform (the daemon floors `land` at maintainer): stamp
-// the ask on the agent so every maintainer's board wears it. The daemon's roster frame carries the result,
-// same delivery as every other card fact.
+// A collaborator's stand-in for a land they can't perform (the daemon floors `land` at maintainer): stamps the ask so
+// every maintainer's board wears it.
 export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>
     agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
 
-/* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
- *
- * Everything the other two options cost the user, this one doesn't. `merge` writes conflict markers into THEIR
- * checkout and makes them finish the merge by hand; discard throws the work away. The agent can do the same
- * merge in its own worktree, where a bad resolution costs nobody anything, and land's anchorOf already
- * re-anchors on the merge-base precisely so a rebased branch still lands exactly its own delta.
- *
- * It is an ordinary turn, not a new endpoint, and that is the point: the composed prompt lands in the
- * transcript as a user message the human can read and argue with, a turn already running takes it as steering,
- * and Stop works on it like any other. The loop then closes itself, a clean turn auto-lands (streamAgent),
- * and recordLanded clears the entry's conflicts, so the report this was raised from disappears on its own.
- *
- * The tab is opened, not assumed: the board's drop fires this for a card whose conversation this browser may
- * never have opened. `open` also marks it seen, which is right, the user is dealing with it.
- *
- * The report is re-read here rather than passed in, even though the review panel is holding one: the prompt is
- * a description of a CURRENT refusal, and the two callers know it to different degrees of freshness (the
- * board holds none at all). One cheap GET makes both of them right, and makes the daemon the only thing that
- * ever decides what the agent is told to fix. */
+// Hands a land conflict back to the agent to resolve in its own worktree, rather than making the user merge by hand or
+// discarding the work. An ordinary turn: it lands in the transcript, a running turn takes it as steering, and Stop
+// works on it like any other.
 
-/* Whether the turn actually went, and, when it didn't, the one sentence to say so. Two of the three answers
- * here are refusals, and both of them used to be silent `return`s: the caller got a resolved promise and drew
- * a card that was on its way to being fixed by nobody. The wording lives with the decision rather than at each
- * call site, so the board's notice strip and the review panel's error line can't come to explain the same
- * refusal two different ways. */
+// Whether the turn actually went, and, if not, the one sentence explaining why, so callers can't invent their own
+// wording.
 export type ResolveAsk = { readonly sent: true } | { readonly sent: false; readonly why: string };
 
 export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
@@ -186,27 +96,15 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
         open(agent);
     }
     const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
-    // A registered agent always has a tab by now (open() just made one); a card the roster has never heard of
-    // has no conversation to send to, and inventing one would start a turn on the wrong agent.
+    // A registered agent always has a tab by now (`open()` just made one); an unknown card has no conversation to send
+    // to.
     if (conversation === undefined) {
         return { sent: false, why: `That agent has no conversation left to send to.` };
     }
     const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
-    /* NOTHING FOR THE AGENT TO DO IS A REFUSAL, NOT A SEND, and the only guard that can be trusted, because it
-     * is made against a report the daemon RE-DERIVES at read time (land.ts outstandingConflicts): fetched
-     * fresh and classified fresh. A fresh fetch alone was not enough, the stored refusal's `workspace` rows
-     * outlive the uncommitted edits they name, and this guard kept refusing "commit or stash them" over a
-     * tree the user had long since committed.
-     *
-     * The review panel arrives here having already read the report and hidden its button when `mine` is empty
-     * (AgentConflictReport). The board cannot: the roster carries `status: "conflict"` and no blockers, so a
-     * card is armed on the fact of a refusal without knowing whose refusal it is. Both surfaces therefore ask
-     * the same question in the same place, once the report is in hand.
-     *
-     * Left ungated, a conflict held ENTIRELY by the user's own uncommitted edits sent the agent a prompt whose
-     * "What blocked the land:" section was empty, a turn spent telling it to rebase away nothing, ending in a
-     * land that refuses identically. The user's own half is the one thing a rebase provably cannot reach
-     * (conflictResolution.ts), so it is named here instead, in the terms of the fix that does work. */
+    // Refusing is not a send: the report is re-derived fresh at read time so a stale refusal can't reappear. The user's
+    // own uncommitted edits are the one thing a rebase can't reach, so they're named explicitly rather than sent to the
+    // agent as a task.
     const blockers = blockersOf(conflicts);
     if (agentBlockers(blockers).length === 0) {
         const yours = userBlockers(blockers).length;
@@ -218,11 +116,8 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
                     : `Nothing left for the agent to rebase, open it to see what the land reported.`,
         };
     }
-    // Dispatched, not awaited, `enqueue` runs the queue, and drainQueue awaits `send`, which does not settle
-    // until the TURN does. Awaiting it here would hold the caller's busy flag across a multi-minute rebase and
-    // set the panel's "resolving" state only once there was nothing left to resolve. `void` is what every
-    // other send in this app does (ChatPanel): the turn reports itself in the transcript, which is where its
-    // failures belong too, this function's own promise is about getting the message away.
+    // Dispatched, not awaited: `enqueue` doesn't settle until the turn does, and awaiting it here would hold the
+    // caller's busy flag across a multi-minute rebase.
     void conversation.enqueue(resolvePrompt(conflicts));
     return { sent: true };
 };
@@ -232,14 +127,8 @@ export const discardAgent = async (id: string, at: AgentReach = undefined): Prom
     await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
 };
 
-/* True cancel for an in-flight turn. An open, streaming tab owns the local transcript, so its own stop() runs
- * the whole path (muted "Stopped." notice → /agent/stop → abort the stream); a card whose conversation this
- * browser never opened has no tab to speak for it, so post the cancel straight to the daemon.
- *
- * A card in ANOTHER box never takes the first branch, and the reach is what decides that rather than the
- * absence of a tab: two sandboxes can hold the same conversation id (a workspace cloned onto a second machine,
- * an agent resumed there), so stopping whichever tab happened to match the id would cancel a turn in the box
- * the user is standing in. */
+// True cancel for an in-flight turn: an open streaming tab runs its own stop() path; otherwise post the cancel straight
+// to the daemon. A card in another box never takes the local branch, since the same id can exist in two sandboxes.
 export const stopAgent = async (id: string, at: AgentReach = undefined): Promise<void> => {
     const { conversations } = useChat();
     const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
@@ -250,23 +139,13 @@ export const stopAgent = async (id: string, at: AgentReach = undefined): Promise
     await agentJson(at, `/agent/stop`, jsonBody(`POST`, { conversationId: id }));
 };
 
-/* After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +
- * history, invalidate all three so every surface converges. Three disjoint caches, no ordering.
- *
- * The two workspace families are already `.every`, the prefix that crosses sandboxes, which is exactly right
- * here for a reason that only became true with the wider board: a land in ANOTHER box changes that box's
- * `/work`, and the ledger reading it is filed under that box's own key. The agent's diff is the one that has
- * to be aimed, since it is one entry belonging to one sandbox.
- *
- * The roster of the box that was acted on is re-read too, and only when there was one: the active sandbox's
- * stream frames its own roster within milliseconds, while another box's is a poll that would otherwise leave a
- * just-landed card sitting in Attention for up to its whole interval. */
+// After a land or discard, invalidate the agent's diff plus the workspace-wide changes and history caches so every
+// surface converges. The two workspace families use `.every` since a land in another box changes that box's own
+// `/work`.
 export const invalidateAgentAction = async (id: string, at: AgentReach = undefined): Promise<void> => {
     if (at !== undefined) {
         refreshAcross();
-        // ...and the changes ledger with it: landing into another box's /work is exactly the event that moves
-        // its uncommitted count, and that store polls slowly on purpose (changesAcross). Both re-reads are
-        // no-ops when nothing is subscribed to them.
+        // ...and the changes ledger too: landing into another box's /work is exactly what moves its uncommitted count.
         refreshChangesAcross();
     }
     await Promise.all([

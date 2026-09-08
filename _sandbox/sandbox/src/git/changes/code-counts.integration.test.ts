@@ -7,13 +7,8 @@ import { afterEach, expect, test } from "vitest";
 import { changedFiles } from "./changes.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./code-counts.js";
 
-/* AGAINST A REAL REPO AND THE REAL GRAMMARS, because both halves of this are things only the real thing can
- * answer: which blob git hands back for a spec, and which of a file's lines TextMate calls a comment. A test
- * with a fake git and a hand-rolled comment rule would pin neither.
- *
- * What is being pinned is the pairing as much as the arithmetic: each row's code-only count has to describe the
- * SAME comparison the diff it opens does, so the staged row counts index-vs-HEAD while the unstaged row beside
- * it counts worktree-vs-index, on the same path, in the same scan. */
+// Against a real repo and real grammars: which blob git returns, and which lines TextMate calls a comment.
+// Pins the pairing as much as the arithmetic: a row's code-only count must describe the same comparison its diff does.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -54,7 +49,6 @@ test("counts an edit as the code it added, leaving the comments to git's own num
 
     const { unstaged } = await counted(dir);
 
-    // Git sees three added lines; two of them are comment, so the reading a review shows is one.
     expect(unstaged).toEqual([{ path: "a.ts", status: "modified", additions: 3, deletions: 0, code: { additions: 1, deletions: 0 } }]);
 });
 
@@ -68,9 +62,7 @@ test("a change that is ALL comment counts as no code at all, which is what the b
     expect(unstaged[0]?.additions).toBe(1);
 });
 
-/* THE TWO SIDES OF ONE PATH ARE TWO DIFFERENT COMPARISONS, and each row's count has to describe its own: the
- * staged row is index-vs-HEAD, the unstaged row worktree-vs-index. A single count per path would put the same
- * pair of numbers on two rows whose diffs show different changes. */
+// Each row's count must describe its own comparison: staged is index-vs-HEAD, unstaged is worktree-vs-index.
 test("gives a partially staged file a count per side", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.ts"), `${["const a = 1;", "const b = 2;", "const c = 3;"].join("\n")}\n`);
@@ -95,8 +87,7 @@ test("reads a new file as the code it is, and a deleted one as the code it took 
     expect(row("a.ts")?.code).toEqual({ additions: 0, deletions: 2 });
 });
 
-// A file this build ships no grammar for has no code-only reading, and that is an answer: the row carries git's
-// numbers alone and the panel shows those, exactly as it does for bytes.
+// No grammar for a file type is a deliberate answer, not a gap: the row carries git's numbers alone.
 test("leaves a file it cannot read as code carrying git's numbers alone", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "notes.unknownext"), "one\ntwo\n");

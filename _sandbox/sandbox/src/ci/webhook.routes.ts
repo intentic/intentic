@@ -10,16 +10,9 @@ import { dispatchCiRun } from "./events.js";
 import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
 import { ciProjects } from "./projects.js";
 
-/* The public webhook receiver, the CI counterpart of /automations/{id}/fire (senders can't do Google ID
- * tokens), reached unauthenticated via app.ts's ciWebhookPath exception and gated by the per-sandbox secret
- * the reconciler registered: github signs the raw body with it (X-Hub-Signature-256), gitlab echoes it
- * verbatim (X-Gitlab-Token). One route serves both vendors; the payload names the project and the workspace
- * mapping (projects.ts) names the repo, a delivery for a project the workspace no longer maps to is
- * acknowledged and dropped, not an error, because the provider retries errors and there is nothing to retry.
- *
- * What a finished run MEANS, which of the four `ci` event types it is, is ci/events.ts, shared with the
- * poller that stands in for this route on a sandbox whose hooks could not be registered. This file is only the
- * vendor half: verify the sender, recognize the delivery, normalize it into a PipelineRun. */
+// Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
+// route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
+// and normalizes into a PipelineRun; what a finished run means is ci/events.ts, shared with the poller.
 
 interface GithubDelivery {
     readonly action?: string;
@@ -51,8 +44,7 @@ export const createCiWebhookRoute =
             return c.json({ error: "invalid payload" }, 400);
         }
 
-        // Which project the delivery speaks for + the vendor's run object, or nothing interesting: a ping, a
-        // requested/in_progress phase, an event kind the hook subscribes to that we don't consume.
+        // projectPath plus a run normalizer; undefined for a ping, an in-progress phase, or an unconsumed event.
         let projectPath: string | undefined;
         let author = { id: host, name: host };
         let toRun: ((project: { repo: string; project: string }) => PipelineRun) | undefined;
@@ -70,10 +62,7 @@ export const createCiWebhookRoute =
                 c.req.header("x-gitlab-event") === "Pipeline Hook" &&
                 delivery.object_attributes !== undefined &&
                 delivery.project !== undefined &&
-                // GitLab's Pipeline Hook fires at every phase, so this is the "it has finished" gate: a pipeline
-                // that is pending or going has nothing for the `ci` listeners downstream yet. Asked as "not in
-                // flight" rather than "not running", which is what it said while queued WAS running: since the
-                // two split, that spelling would have let every `pending` delivery through as a conclusion.
+                // Fires at every phase; gates on "not in flight", not "not running" since queued is neither.
                 !isPipelineInFlight(gitlabStatus(delivery.object_attributes.status))
             ) {
                 projectPath = delivery.project.path_with_namespace;

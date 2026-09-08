@@ -5,62 +5,15 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { TEST_FILE } from "@intentic/constants/assertion-measure";
 
-/* WOULD THIS TEST HAVE PASSED BEFORE THE CHANGE IT TESTS?
- *
- * A model writes a test, the test passes, and passing was the thing it was asked for — so nothing in the loop
- * objects. The failure this catches is the one where the test would have passed against the OLD code too: it
- * runs the new behaviour without depending on it, and it will keep passing when that behaviour breaks. It
- * type-checks, it lints, `pnpm verify` is green, and the suite has grown a test that can never fail.
- *
- * Nothing else here can see that. A linter reads the assertion's shape, and the shape of a weak assertion is the
- * shape of a strong one — a 22-key `toEqual` is over-specification or the exact contract depending on what the
- * function promises, which is not in the AST. Coverage says the line ran, not that anything checked it. The only
- * way to know a test detects a fault is to introduce one and watch.
- *
- * SO INTRODUCE THE ONE FAULT THAT IS ALREADY KNOWN. In an agent turn we know exactly which source files changed,
- * which makes "your change, reverted" a free mutant — the cheapest useful one there is. Serve those files' HEAD
- * contents in place of the working copies, re-run the test, and read one bit: if it still passes, it did not test
- * the change.
- *
- * NOTHING IS CHECKED OUT OVER THE WORKING TREE. The HEAD copies are served through a vite `load` hook, which
- * receives the resolved absolute path and can answer with different text — so the files on disk are never
- * touched. A hook that reverted source in place would be trading a whole turn's work against a lint-grade signal
- * the first time it crashed between the revert and the restore. The one thing written is a config file next to
- * the package's own, removed in a `finally` and overwritten by the next run if a crash ever leaves it behind.
- *
- * IT IS ASKED AT THE STOP, of every test file the turn touched, by the `verify-tests` built-in (agent-tests.ts,
- * rules/turn-ending.ts). It used to run inside a PostToolUse hook on the first edit of each test file, which
- * measured the first draft rather than the finished test, only where the edit tools could see the edit, and under
- * a 20-second budget sized to the agent's patience mid-turn. At the Stop the test is finished, the tree says
- * which files were touched whatever wrote them, and the moment already waits on a check that takes minutes.
- *
- * ONE RUNNER, SO ONE LANGUAGE. The mutant is served through a vite `load` hook, which is vitest's, so this can
- * only answer for a test vitest runs: a python suite the ratchet next door measures perfectly well gets no
- * answer from here, because `packageOf` finds no vitest config above it and every path out returns undefined.
- * That is the honest shape of it — a check that cannot run says nothing, rather than reporting a pass it never
- * observed — and it is what a pytest equivalent would have to replace, an import hook serving HEAD's modules,
- * not a flag on this one.
- *
- * IT REPORTS, IT NEVER BLOCKS, and that is not timidity — two entirely legitimate cases pass this check:
- *   a test written BEFORE its implementation, which is red right now and which the agent can already see;
- *   a pure refactor, where a test that keeps passing is the whole point of the exercise.
- * Telling those apart from a weak test needs intent, so the fact goes back as context and the model decides. A
- * gate here would fight correct work several times for every weak test it caught.
- *
- * SAME PACKAGE ONLY. A package's vitest run loads its own code from source, which is what the `load` hook can
- * swap; an import of another package resolves to that package's built output, where there is nothing to
- * intercept. Reporting on a cross-package change would be measuring the dist from the last build. */
+// Reverts this turn's changed source in one package to HEAD and reruns the test: if it still passes, the test didn't
+// test the change. Reports only, never blocks (a red TDD test or a passing refactor are fine); vitest-run only, same
+// package only, invoked at Stop by `verify-tests` via a vite `load` hook — nothing on disk changes.
 
 const exec = promisify(execFile);
 
-/* One package's suite for one file, at the Stop. 60s buys the slow packages a real answer where 20s (the old
- * mid-turn budget) gave up on them; the built-in caps how many files it asks about, so the worst case at this
- * moment is bounded by that cap times this. A timeout reads as "no answer" and says nothing, like every other
- * failure in this file, so the cost of giving up is a missed report and never a wrong one. */
+// A timeout is silence, like any other failure here, not a wrong report.
 const RUN_TIMEOUT_MS = 60_000;
-// What a package's own vitest config is called. Without one there is no suite to borrow settings from — jsdom,
-// setup files, the timeouts — and a generated config would run the test under different conditions than the
-// package does, which is a different measurement wearing this one's name.
+// Name of a package's own vitest config; without one there is no suite to borrow settings from.
 const PACKAGE_CONFIG = "vitest.config.ts";
 const GENERATED_CONFIG = ".intentic-head.vitest.config.mts";
 
@@ -71,15 +24,13 @@ const git = async (cwd: string, ...args: readonly string[]): Promise<string | un
         const { stdout } = await exec("git", [...args], { cwd, encoding: "utf8", timeout: 20_000, maxBuffer: 1 << 26 });
         return stdout;
     } catch {
-        // No repo, no HEAD, a path git does not know: all of them mean there is no baseline to compare against,
-        // which is silence rather than a finding.
+        // No repo, no HEAD, or an unrecognized path all mean no baseline: silence, not a finding.
         return undefined;
     }
 };
 
-/* The package a file belongs to: the nearest ancestor with a vitest config, stopping at the repo root. Walked
- * rather than looked up, because this has to work for any workspace layout and the daemon holds no package map
- * for repos that are not this one. */
+// Nearest ancestor with a vitest config, stopping at the repo root; walked since there is no package map for an
+// arbitrary workspace.
 export const packageOf = (file: string, repoRoot: string): string | undefined => {
     let directory = dirname(resolve(file));
     const root = resolve(repoRoot);
@@ -96,15 +47,8 @@ export const packageOf = (file: string, repoRoot: string): string | undefined =>
     return undefined;
 };
 
-/* The mutant set: source files, in THIS package, that the turn has changed.
- *
- * A test file is excluded on purpose, and it is the exclusion that matters. Reverting the tests too would ask
- * "do the old tests pass against the old code", which is a different question with a known answer, and it would
- * make every finding vacuous.
- *
- * Same package only, because a package's vitest run loads its own code from source — which is what the `load`
- * hook can swap — while an import of a sibling package resolves to that package's built output, where there is
- * nothing to intercept. Reporting on a cross-package change would be measuring the last build. */
+// Source files this turn changed within this package, excluding tests (reverting tests too would just re-ask "do old
+// tests pass old code") and cross-package files (their imports resolve to built output, not source).
 export const changedSourceIn = (diff: string, repoRoot: string, packageDir: string): readonly string[] =>
     diff
         .split("\n")
@@ -114,16 +58,12 @@ export const changedSourceIn = (diff: string, repoRoot: string, packageDir: stri
         .filter((file) => file.startsWith(packageDir + sep) && !TEST_FILE.test(file) && SOURCE_FILE.test(file));
 
 export interface TestStrengthDeps {
-    // The repository the turn is working in. Every path below is resolved against it, and git is run in it.
+    // Repo root every path below is resolved against; git also runs here.
     readonly repoRoot: string;
 }
 
-/* The generated config: the package's own, plus a `load` hook that answers with HEAD's text for the changed
- * files. `enforce: "pre"` so it runs before vite's own loader, and the plugin is repeated into each project
- * because a `projects` config does not inherit root plugins into its children.
- *
- * Written as `.mts` with no imports of its own beyond the package config, so nothing here depends on what is
- * resolvable from a temp directory. */
+// Package config plus a `load` hook swapping in HEAD's text for changed files, `enforce: "pre"` so it runs before
+// vite's own loader and repeated per project since `projects` don't inherit root plugins.
 const configSource = (packageDir: string, head: ReadonlyMap<string, string>): string => {
     const pairs = [...head].map(([live, copy]) => `[${JSON.stringify(live)}, ${JSON.stringify(copy)}]`).join(", ");
     return [
@@ -156,10 +96,8 @@ const configSource = (packageDir: string, head: ReadonlyMap<string, string>): st
     ].join("\n");
 };
 
-/* Runs the one test file against HEAD's source and answers whether it PASSED, which is the finding: the
- * repo-relative source files that were restored for the run. Undefined means no answer: nothing changed to
- * compare against, the package has no config, git could not produce a baseline, or the run itself broke. Every
- * one of those is silence. */
+// Runs one test file against HEAD's source; returns the repo-relative files that were reverted, or undefined for any
+// no-answer case (nothing changed, no config, no baseline, or the run itself broke).
 export const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps): Promise<readonly string[] | undefined> => {
     const packageDir = packageOf(testFile, deps.repoRoot);
     if (packageDir === undefined) {
@@ -180,8 +118,7 @@ export const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps
         const head = new Map<string, string>();
         for (const [index, file] of changed.entries()) {
             const text = await git(deps.repoRoot, "show", `HEAD:${relative(deps.repoRoot, file)}`);
-            // A file with no HEAD version is NEW in this turn. Leaving it out of the map is right: the test then
-            // imports a module that does not exist at HEAD, the run fails, and a failing run is not a finding.
+            // A missing HEAD version means the file is new; skip it so the run fails on the import, not a misreport.
             if (text === undefined) {
                 continue;
             }
@@ -201,8 +138,7 @@ export const passesAgainstHead = async (testFile: string, deps: TestStrengthDeps
                 maxBuffer: 1 << 26,
             });
         } catch {
-            // Non-zero: the test FAILED against HEAD, which is the healthy case and the common one. Also where a
-            // broken run lands, and the two are deliberately not told apart — both mean "no finding".
+            // Non-zero also covers a broken run; both mean no finding here, and are not told apart.
             return undefined;
         }
         return [...head.keys()].map((file) => relative(deps.repoRoot, file));

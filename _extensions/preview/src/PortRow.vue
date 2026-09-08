@@ -1,29 +1,8 @@
-<!-- ONE PORT, EXPLAINED. The row is three answers stacked in the order a reader asks them: which port, what is
-     it, and where did it come from: with the evidence behind those answers (the command line, the directory,
-     the pid) one click down rather than in their face.
-
-     It carries the raw argv at all, because somebody debugging a port genuinely needs it; it just stops being
-     the row's headline. That is the whole change: the same facts, ranked. A view that leads with
-     `node --report-on-fatalerror --report-directory=/history/logs /opt/sandbox/dist/main.js` has told the
-     reader nothing they can act on and has spent the row's most valuable line doing it.
-
-     Shared by both groups (the user's own services and the sandbox's internals) because a row that means the
-     same thing should look the same — and it now means that literally. There used to be a `muted` prop whose
-     entire job was to swap this row's action from the accent tier to the neutral one for the internals group,
-     which made "Preview" the only word in the app rendered as two different buttons on one screen: a pale
-     committing plaque three rows above a dark secondary one, same label, same verb, same consequence. The
-     de-emphasis that prop existed for is already stated where it belongs, on the group (`opacity-70` in
-     PortsView), so the row's own controls do not have to say it a second time in a vocabulary that is supposed
-     to mean rank.
-
-     THE EVIDENCE OPENS FROM A CHEVRON ON THE LEFT, like every other expandable row in the app. It used to open
-     from an `(i)` in the TRAILING cluster that turned into a `chevron-up`, and that was wrong three times over:
-     `(i)` is <InfoHint>'s glyph, which this view already uses thirty pixels higher in its own group header for
-     a hover card that toggles nothing; a morph carries no state a reader can scan a list for; and the trailing
-     cluster is where the VERBS live, so the toggle sat one mis-click from the button that publishes a port to
-     the public internet. <DisclosureRow> owns all of that now. `hit="pair"` because this row's description
-     already carries a control of its own (the terminal link), and a disclosure that swallowed it would make
-     "show me the command" and "take me to the terminal" the same press. -->
+<!--
+    One port, explained: which port, what it is, and where it came from, with the raw command line, directory and pid one click down. Evidence opens
+    from a leading chevron, like every other expandable row (<DisclosureRow>); `hit` is 'pair' since the description already carries its own control,
+    the terminal link.
+-->
 <script setup lang="ts">
 import { Button, DisclosureRow, type IconName, Icon, InfoTable, StatusBadge, ui } from "@intentic/extension-ui";
 import type { PortSummary } from "@intentic/sandbox-contract";

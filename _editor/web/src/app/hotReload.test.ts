@@ -2,13 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reloadOnHotUpdate } from "./hotReload";
 
-/* THE GUARD THAT KEEPS A SINGLETON SINGULAR IN DEV, and the reason it is not `hot.accept` alone.
- *
- * A hot update re-executes the changed module AND everything between it and the boundary that accepts for it.
- * `hot.accept` is called only for the boundary, so a singleton sitting UNDER one — which is where all of these
- * sit, they are what the chat's components import — is re-evaluated with no callback of ours ever running: two
- * channels, two stores, one window. The symptom is a popped-out chat that ignores the board until it is
- * reloaded by hand, so what is pinned here is the second evaluation, not the accept. */
+// Guards a dev-only singleton against Vite's hot update, which re-executes a changed module and everything up to
+// the accepting boundary. `hot.accept` fires only for the boundary, so a singleton sitting under one is silently
+// re-evaluated with no callback running (two stores, one window); this pins that second-evaluation case, not the
+// accept.
 
 // A module as Vite hands it over: its url, and a hot context if the dev server is there.
 const meta = (url: string, hot: ImportMeta["hot"]): ImportMeta => ({ url, hot }) as unknown as ImportMeta;
@@ -28,7 +25,7 @@ let reload: ReturnType<typeof vi.fn>;
 beforeEach(() => {
     globalThis.intenticSingletonModules = undefined;
     reload = vi.fn();
-    // jsdom refuses a real navigation, and the assertion is that this was CALLED.
+    // jsdom refuses a real navigation; the assertion is only that reload was called.
     Object.defineProperty(window, `location`, { configurable: true, value: { reload } });
 });
 
@@ -53,7 +50,7 @@ describe(`reloadOnHotUpdate`, () => {
         expect(accepted).toHaveLength(1);
     });
 
-    // The boundary case, which is all this used to cover: the file itself was edited.
+    // The boundary case: the file itself was edited.
     it(`reloads when the update is addressed to the module`, () => {
         const { context, accepted } = hotContext();
         reloadOnHotUpdate(meta(`/src/composables/chat/useChat.ts`, context));
@@ -63,9 +60,8 @@ describe(`reloadOnHotUpdate`, () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    /* THE CASE THIS FILE EXISTS FOR. Vite gives a re-executed module a `?t=` stamp and calls nobody: without
-     * this the window would carry two copies of the store from here on, and the notes from its other windows
-     * would land on the one the panel is not rendering. */
+    // The case this file exists for: a re-executed module gets a `?t=` stamp and no callback. Without this, the
+    // window ends up with two store instances, one of them never rendered.
     it(`reloads when the module is re-evaluated on the way to somebody else's boundary`, () => {
         reloadOnHotUpdate(meta(`/src/composables/chat/useChat.ts`, hotContext().context));
 
@@ -86,8 +82,8 @@ describe(`reloadOnHotUpdate`, () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    /* The record is on the WINDOW, not in this module, because this module is re-evaluated by the very updates
-     * it catches: a module-level Set would be replaced along with everything else and would remember nothing. */
+    // The record lives on the window, not this module: this module is re-evaluated by the very updates it catches, so
+    // a module-level Set would be replaced and remember nothing.
     it(`survives its own module being re-evaluated`, async () => {
         reloadOnHotUpdate(meta(`/src/composables/chat/useChat.ts`, hotContext().context));
 

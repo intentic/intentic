@@ -72,14 +72,13 @@ test("editor reaches exactly the agent-conversation surface: one conversation, n
     expect(controlScoped("editor", "POST", "/history/restore")).toBe(false);
     expect(controlScoped("editor", "DELETE", "/sessions/abc")).toBe(false);
     expect(controlScoped("editor", "GET", "/agent")).toBe(false);
-    // Deliberately NOT a rung on the ladder: an editor bridge has no business reading the board.
+    // Not a rung on the ladder: an editor bridge has no business reading the board.
     expect(controlScoped("editor", "GET", "/agents")).toBe(false);
 });
 
-/* `read` IS THE VIEWER TIER, held by a program: what the site's own example does (`GET /git/root/status` with a
- * control token) has to work, and so does every other read a viewer member makes. Pinned on the routes the
- * docs and a CI status script actually reach for, so a floor moved to maintainer for one of them shows up
- * here rather than as a 403 in somebody's pipeline. */
+// `read` is the viewer tier held by a program: every read a viewer member makes must work here too.
+// Pinned on the routes the docs and a CI script actually reach for, so a floor moved to maintainer shows up here, not
+// as a pipeline 403.
 test("read observes everything a viewer sees and mutates nothing", () => {
     expect(controlScoped("read", "GET", "/agents")).toBe(true);
     expect(controlScoped("read", "GET", "/agents/abc/diff")).toBe(true);
@@ -119,18 +118,15 @@ test("drive is the collaborator tier: it makes an agent work but cannot move cod
     expect(controlScoped("drive", "POST", "/agents/archive")).toBe(true);
     expect(controlScoped("drive", "POST", "/agents/unarchive")).toBe(true);
 
-    // The whole point of the rung below `land`.
-    /* Writing bytes straight into the shared tree is on the far side of that line, and it is the same act as
-     * the move below whichever door it uses, so `drive` no longer reaches the upload route. It briefly did:
-     * the route was collaborator-floored because a chat attachment travels through it, and a scope derived
-     * from that floor inherited the whole route with it. A grant is matched on method and path alone (it never
-     * sees the target), so there is no attachment-shaped slice of this route to hand a program, and a program
-     * composing a message with a file attached is not a thing that exists: the browser does that. */
+    // Writing bytes straight into the shared tree is the same act as landing, so `drive` doesn't reach the upload route
+    // either.
+    // A grant matches on method and path alone, never the target, so there's no attachment-shaped slice of this route
+    // to hand a program.
     expect(controlScoped("drive", "POST", "/workspace/upload")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/abc/land")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/abc/discard")).toBe(false);
     expect(controlScoped("drive", "POST", "/agents/purge")).toBe(false);
-    // Arming auto-land IS a landing decision, so it floors at maintainer and no token reaches it.
+    // Arming auto-land is a landing decision, so it floors at maintainer and no token reaches it.
     expect(controlScoped("drive", "POST", "/agents/abc/auto-land")).toBe(false);
     expect(controlScoped("drive", "POST", "/workspace/move")).toBe(false);
     expect(controlScoped("drive", "GET", "/secrets")).toBe(false);
@@ -147,7 +143,7 @@ test("land adds the irreversible half and still stops short of the owner-only su
     expect(controlScoped("land", "GET", "/agents")).toBe(true);
     expect(controlScoped("land", "GET", "/git/root/status")).toBe(true);
 
-    // Land is the ONLY maintainer-floored press a token holds: nothing else at that tier rides in with it.
+    // Land is the only maintainer-floored press a token holds; nothing else at that tier rides in with it.
     expect(controlScoped("land", "POST", "/agents/abc/auto-land")).toBe(false);
     expect(controlScoped("land", "POST", "/approvals")).toBe(false);
     expect(controlScoped("land", "POST", "/workspace/move")).toBe(false);
@@ -157,11 +153,10 @@ test("land adds the irreversible half and still stops short of the owner-only su
     expect(controlScoped("land", "POST", "/environment/approve")).toBe(false);
 });
 
-/* THE SURFACE NO TOKEN REACHES, asserted over the union so a NEW scope cannot quietly undercut it: adding one to
- * CONTROL_SCOPES puts it in this loop without anybody remembering to. Two kinds of route are here: the ones
- * whose floor already keeps them out (credentials, the environment, history), and the ones a VIEWER member may
- * open but a program must not: the roster, the session exchange, this daemon's own token list, the money and
- * the network. The second kind is what NEVER_PREFIXES exists for. */
+// The surface no token reaches, asserted over the union so a new scope can't quietly undercut it: adding one to
+// CONTROL_SCOPES puts it in this loop automatically.
+// Two kinds of route: ones already kept out by their floor, and ones a viewer member may open but a program must not
+// (roster, sessions, tokens, money, network).
 test("no scope reaches the sandbox's own trust surface: credentials, roster, sessions, tokens, money, network", () => {
     const forbidden: readonly (readonly [string, string])[] = [
         ["GET", "/secrets"],

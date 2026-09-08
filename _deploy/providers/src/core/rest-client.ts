@@ -1,30 +1,17 @@
-/* THE THREE THINGS EVERY FORGE ADAPTER IN HERE DOES THE SAME WAY. github-api.ts, gitlab-api.ts and
- * forgejo-api.ts are each a thin, stateless wrapper over one vendor's REST surface, and each had written the
- * same request shape out per call: bound the connection, treat a 404 as "not there" rather than as a failure,
- * turn any other non-2xx into an error that names what was asked.
- *
- * Fifteen hand-written copies of that is fifteen chances to differ, and they did — some threw with the
- * response body attached and some threw with only the status, so which of two identical-looking failures you
- * could actually diagnose depended on which endpoint it came from. The vendor's own words are the useful part
- * of a forge error ("secret scanning must be enabled", "you have exceeded a rate limit"), so they are always
- * carried here.
- *
- * `vendor` is only ever a label in an error message. Everything else — base urls, auth headers, which paths
- * exist — stays in the adapter, because that is the part that is genuinely per-forge. */
+// Shared REST wrapper for github-api.ts, gitlab-api.ts and forgejo-api.ts: bounds the connection, treats 404 as
+// absent rather than a failure, and turns any other non-2xx into an error carrying the vendor's response body.
+// `vendor` is only a label for error messages; base urls, auth headers and paths stay in each adapter.
 
-// undici's default headers timeout is ~5 minutes, which is long enough that a stalled connection reads as a
-// hung deploy rather than as a failed request. Every call here is a small JSON round trip to a forge.
+// Undici's ~5min default timeout would read a stalled connection as a hung deploy, not a failed request.
 const TIMEOUT_MS = 30_000;
 
 export interface RestClient {
-    /* A request that must succeed. Answers the parsed JSON body, or `undefined` for a 204 (the forges use it
-     * for deletes and for "accepted, nothing to say"). Throws on any non-2xx, 404 included: a caller reaching
-     * for this is asking about something it believes exists. */
+    // A request that must succeed: returns the parsed body, or undefined for a 204. Throws on any non-2xx, 404
+    // included, since a caller here believes the thing exists.
     readonly json: (url: string, init?: RequestInit) => Promise<unknown>;
-    /* A request whose subject may not exist. Answers the Response on 2xx and `undefined` on 404; throws on
-     * every other non-2xx, because "the token is not allowed to look" must never be read as "not there" —
-     * that mistake makes a provider create a duplicate of something it already owns. The Response rather than
-     * its body, so the caller can `.json()` it against its own schema or ignore it entirely (a delete). */
+    // A request whose subject may not exist: returns the Response on 2xx, undefined on 404, and throws on any other
+    // non-2xx so a permission error is never read as absent. Returns the Response itself so callers parse or discard
+    // it.
     readonly maybe: (url: string, init?: RequestInit) => Promise<Response | undefined>;
 }
 

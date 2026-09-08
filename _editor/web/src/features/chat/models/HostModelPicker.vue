@@ -4,15 +4,9 @@ import { computed } from "vue";
 import { dismissModelPick, modelRequest } from "./hostModelPicker";
 import HostPickerBody from "./HostPickerBody.vue";
 
-/* The app-global mount for the shell's own model picker when something outside the chat asks for one
- * (hostModelPicker.ts: today, an extension calling `api.models.pick()`). Mounted in App.vue rather than in a
- * shell, because the two shells would otherwise each need their own copy and neither is the natural owner: the
- * picker belongs to nothing on screen, it belongs to whoever asked.
- *
- * Same body as the composer's (HostPickerBody), in the app's standard touch swap: an anchored panel on desktop,
- * a sheet on mobile. ResponsiveOverlay owns that swap: including the stay-mounted rule the pair depends on,
- * which used to be spelled out here. The body is a component rather than markup repeated under each host: it
- * carries a footer now, and two copies of it are two places for the two surfaces to drift apart. */
+// App-global mount for the shell's own model picker when something outside the chat asks for one (hostModelPicker.ts).
+// Mounted in App.vue, not a shell, since the picker belongs to whoever asked, not to anything on screen. Same body as
+// the composer's (HostPickerBody), a component rather than repeated markup so the two surfaces can't drift apart.
 
 // One boolean over the request, so the overlay's own dismissal (pointerdown outside, Escape, the sheet's
 // backdrop) settles the promise rather than silently orphaning it. Every one of those gestures is a CANCEL, in

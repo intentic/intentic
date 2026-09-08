@@ -4,22 +4,12 @@ import { opt } from "../agent/run/opt.js";
 import { jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-/* THE OWNER'S STANDING ANSWER per engine, one small file in the workspace's config slice.
- *
- * WHY THE WORKSPACE AND NOT THE VOLUME, when the versions themselves are machine state: the policy is a
- * decision about the work, not about the box. "Pin Claude Code to 2.1.240 until the regression closes" and
- * "this repo tracks upstream's newest" are things a team decides once and should not have to rediscover on a
- * fresh sandbox, so the file travels (portability `carry` in the contract's WORKSPACE_STATE_FILES) while the
- * 300 MB binaries it selects stay behind, where they belong.
- *
- * THE DEFAULT IS BLESSED AND IT IS NOT WRITTEN DOWN. An engine with no entry reads as `{ kind: "blessed" }`,
- * so a workspace that has never opened the card has no file at all, and deleting the file is a full reset. */
+// The owner's standing channel choice per engine, one file in the workspace's config slice: a decision about the work,
+// not the machine, so it travels with the workspace (portability `carry`) while the binaries stay behind. Default is `{
+// kind: "blessed" }` and is never written down, so no file means every engine tracks blessed and deleting it is a full
+// reset.
 
-/* The file is `{ "engines": { "<id>": { "kind": … } } }`, the same shape as the blessed list it answers, so a
- * reader who opens one recognises the other. Keys are read as plain strings and then narrowed to the engines
- * this build knows, so a file written by a NEWER build (naming an engine that does not exist here yet) is READ
- * rather than rejected whole: the unknown entry is dropped, the known ones still apply, and json-file's
- * downgrade guard keeps the original bytes for the build that wrote them. */
+// Same shape as the blessed list; an unknown engine key from a newer build is dropped, not the file rejected.
 const EnginePolicyFileSchema = z.object({ engines: z.record(z.string(), EngineChannelSchema).optional() });
 
 interface EnginePolicyFile {
@@ -43,9 +33,8 @@ export const readEngineChannels = async (root: string): Promise<Partial<Record<E
 
 export const engineChannel = async (root: string, id: EngineId): Promise<EngineChannel> => (await readEngineChannels(root))[id] ?? DEFAULT_CHANNEL;
 
-/* Write one engine's channel. A `pinned` channel without a version is refused rather than stored: it would
- * read as "pin to nothing", and the resolver would have to invent a meaning for it — most likely the blessed
- * version, which is the one thing the owner has just said they do not want. */
+// A `pinned` channel with no version is refused, not stored; it would read as "pin to nothing" and force the resolver
+// to invent a meaning for it.
 export const setEngineChannel = async (root: string, id: EngineId, channel: EngineChannel): Promise<EngineChannel> => {
     if (channel.kind === "pinned" && (channel.version === undefined || channel.version === "")) {
         throw new Error("pinning an engine needs the version to pin it to");

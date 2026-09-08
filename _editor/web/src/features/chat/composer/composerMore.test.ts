@@ -1,7 +1,6 @@
-/* THE COMPOSER ROW'S ONE RULE, asserted as a table: a control is in the row when it is doing something to the
- * next send, and in the overflow when it is not. Written here rather than against a mounted pane because the
- * rule is the thing worth pinning, and because the two halves must never both be true, which is a property of
- * the table and not of any component that draws it. */
+// The composer row's one rule, asserted as a table: a control rides the row when it affects the next
+// send, otherwise it's in the overflow. Pinned here, not against a mounted pane, since the two halves
+// must never both be true.
 import { expect, it } from "vitest";
 import { type ComposerControlSituation, CONTROL_ORDER, DESCRIPTION_LIMIT, overflowRows, ridesRow } from "./composerMore";
 
@@ -30,9 +29,8 @@ it(`promotes each control into the row the moment it is set`, () => {
     expect(ridesRow(chat({ voiceAgent: true })).voice).toBe(true);
 });
 
-/* THE INVARIANT THE WHOLE THING RESTS ON. A control in both places is two entry points to one choice, and a
- * control in neither is a feature the app has quietly stopped offering: either would be the bug this rule is
- * most likely to grow. */
+// A control in both places is two entry points to one choice; in neither, a feature quietly stopped
+// offering itself. Either is the likely bug.
 it(`puts every offered control in exactly one of the two places`, () => {
     const situations = [
         PLAIN,
@@ -50,28 +48,26 @@ it(`puts every offered control in exactly one of the two places`, () => {
     }
 });
 
-/* A chat's default posture is its own, not a constant: an isolated chat runs unattended and a main-tree one
- * plans first (turnDefaults.startingMode), so the same mode is unremarkable on one and worth a chip on the
- * other. Comparing against one hard-coded mode would put a permanent chip on every chat of one kind. */
+// A chat's default posture is its own, not a constant (isolated runs unattended, main-tree plans
+// first), so the same mode can be unremarkable on one and a chip on the other.
 it(`reads the mode against this chat's own default, not a fixed one`, () => {
     expect(ridesRow(chat({ mode: `plan`, startingMode: `plan` })).mode).toBe(false);
     expect(ridesRow(chat({ mode: `bypassPermissions`, startingMode: `plan` })).mode).toBe(true);
 });
 
-// A running loop is set, so its badge stays in the row: that badge is also the loop's stop, and a stop behind a
-// menu would leave a loop spending with no way out but the fleet board.
+// A running loop's badge stays in the row: it's also the stop, with no other way out but the fleet board.
 it(`keeps a running loop in the row`, () => {
     expect(ridesRow(chat({ runThrough: `running` })).runThrough).toBe(true);
     expect(keys(chat({ runThrough: `running` }))).not.toContain(`runThrough`);
 });
 
-// A control this chat cannot have is in neither place: personas are one daemon's cards, and there is nothing to
-// place into until the chat has a transcript.
+// A control this chat can't have is in neither place: personas are one daemon's cards, voice needs a
+// transcript.
 it(`drops the controls this chat is not offered`, () => {
     const away = chat({ personaOffered: false, voiceOffered: false });
     expect(ridesRow(away)).toEqual({ mode: false, persona: false, runThrough: false, voice: false });
     expect(keys(away)).toEqual([`mode`, `runThrough`]);
-    // …and a persona set before the chat moved to another sandbox still doesn't get a chip: the send drops it.
+    // A persona set before the chat moved sandboxes still gets no chip: the send drops it.
     expect(ridesRow(chat({ personaOffered: false, persona: `ada` })).persona).toBe(false);
 });
 
@@ -84,10 +80,8 @@ it(`carries the current value and a sentence on every overflow row`, () => {
     expect(overflowRows(chat({ mode: `plan`, startingMode: `plan` }))[0]?.value).toBe(`Plan`);
 });
 
-/* THE ONE-LINE RULE, ASSERTED RATHER THAN TRUSTED. The menu's descriptions wrapped once already and doubled its
- * height; the strings are literals a few lines apart, so the only thing that keeps them short is something that
- * fails when they aren't. Checked across EVERY mode, since the mode row is the one whose text used to be
- * inherited from a picker written to a different brief. */
+// Asserted, not trusted: descriptions are literals a few lines apart, so only a failing check keeps
+// them short. Checked across every mode.
 it(`keeps every description to a single line`, () => {
     const modes = [`default`, `acceptEdits`, `plan`, `bypassPermissions`] as const;
     for (const mode of modes) {

@@ -11,61 +11,27 @@ import type { PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, type TunnelRegistry } from "./registry.js";
 import type { Revocation } from "./revocation.js";
 
-/* THE EDGE. One HTTP server doing two unrelated jobs on the same port, and which one a connection gets is
- * decided before anything else happens:
- *
- *   • an upgrade to INGRESS_TUNNEL_PATH is a SANDBOX registering itself — verify the grant, ask the platform
- *     whether the sandbox still exists, then hold the session
- *   • everything else is a BROWSER, routed to a registered tunnel by the Host header's own sandbox id — or,
- *     for a sandbox the platform runs on Fly, answered with a REPLAY that sends Fly's proxy to that
- *     sandbox's own app, so the bytes never come through here at all
- *
- * TWO LANES, ONE HOSTNAME SHAPE. A sandbox on somebody's own machine can only be reached through a tunnel it
- * dials, so for it this process IS the data path. A hosted sandbox is a Fly app in the same org, already on
- * the internet, and dials nothing: the edge's whole job for it is one routing decision. `fly-replay: app=…`
- * tells Fly's proxy to deliver this request to that app (across private networks, with no public address on
- * the target), and `fly-replay-cache` tells it to keep doing so for every request on this hostname for a
- * while without asking again — so in the steady state a hosted sandbox's traffic is browser → Fly → machine
- * and this process sees one request per hostname per cache TTL. The app is named after the id in the
- * hostname (`<prefix>-<id>`, hosted-pool.ts on the platform makes that true of pool-born machines too), so
- * the decision needs no state here and, when the platform cannot be asked, no platform either.
- *
- * The tunnel door is checked first and by PATH, never by host, because the edge's own hostname carries no
- * sandbox id: `ingress.<zone>` is a label under the same wildcard as every sandbox, and asking `hostOwnerId`
- * about it answers undefined. Checking the path first is what keeps the door reachable at the one name a
- * container can be told about before it has an identity.
- *
- * ROUTING IS PER REQUEST, NEVER PER CONNECTION, and the reason is TLS: the edge terminates one wildcard
- * certificate, and h2 browsers coalesce connections across every name it covers. One TCP connection can carry
- * `sandbox-a…` and `preview-x-b…` interleaved, so a connection has no single owner and routing it as if it did
- * would deliver one sandbox's requests to another. Every handler below reads the Host of the request in front
- * of it and nothing else.
- *
- * THE EDGE HOLDS NOTHING IT COULD LOSE. No database, no name claims, no accounts: the registry is a Map, and
- * a restart is answered by every container's own reconnect loop. That is what makes this process safe to
- * redeploy at any moment.
- *
- * SEVERAL OF THESE BEHIND ONE ADDRESS is the cluster (cluster.ts): a request whose sandbox this machine does
- * not hold is handed to the machine that does (forward.ts), once, and never back. Without a cluster wired in,
- * a local miss is a 502 — which is exactly the one-machine edge this was.
- */
+// One HTTP server, two jobs on one port, decided before anything else: an upgrade to INGRESS_TUNNEL_PATH is a sandbox
+// registering; everything else is a browser, routed by Host to a registered tunnel, or replayed via Fly for a hosted
+// sandbox with no tunnel to dial.
+// The tunnel door is checked by path, never by host, since the edge's own hostname carries no sandbox id; routing reads
+// the Host per request, never per connection, since h2 coalesces many hostnames onto one TLS connection.
+// Holds nothing durable: the registry is a Map, so a restart is just every container's reconnect loop; several of these
+// behind one address forward a local miss to the machine that holds it (cluster.ts), once.
 
 export interface IngressServerOptions {
-    // The platform's Ed25519 PUBLIC key (SPKI PEM). The edge can verify grants and can never mint one.
+    // Platform's Ed25519 public key (SPKI PEM); the edge verifies grants and can never mint one.
     readonly publicKey: string;
     readonly revocation: Revocation;
     readonly log: (event: Record<string, unknown>, message: string) => void;
     readonly registry?: TunnelRegistry;
-    // Where a locally-unknown sandbox may be found. Absent ⇒ one machine, and a miss is a 502.
+    // Where a locally-unknown sandbox may be found; absent means one machine, and a miss is a 502.
     readonly cluster?: Cluster;
     // For /health only: how many machines this one knows of.
     readonly peers?: PeerDiscovery;
     readonly instanceId?: string;
     readonly heartbeatIntervalMs?: number;
-    /* The app-name prefix of the platform's hosted sandboxes (`<prefix>-<id>`), which is also the switch:
-     * absent ⇒ no request is ever replayed, and a sandbox with no tunnel is simply not connected. Present ⇒
-     * a hostname no tunnel holds is replayed to that app unless the platform says the sandbox is a
-     * tunnel-lane one (revocation.ts lookup). */
+    // App-name prefix for hosted sandboxes (`<prefix>-<id>`); absent disables replay.
     readonly hostedAppPrefix?: string;
 }
 
@@ -76,20 +42,16 @@ export interface IngressServer {
     readonly close: () => Promise<void>;
 }
 
-// The leftmost DNS label, which is what a 502 names. It is the string the reader recognises — their sandbox's
-// address — where the bare 12-hex id is something they have never seen.
+// Leftmost DNS label, the address a person recognizes; used in a 502's body instead of the bare id.
 const labelOf = (host: string): string => host.split(`:`)[0]?.split(`.`)[0] ?? host;
 
-/* The peer's address, for a log line about a caller that failed the door. An `upgrade` listener is handed a
- * `Duplex` because node makes no promise about the transport — it is a TCP socket here and a TLS one behind a
- * terminator, and neither is guaranteed by the type. Ask, rather than assert: an address is a nicety in a
- * refusal message, and nothing about the refusal depends on having one. */
+// Peer address for a refusal log line; a `Duplex` isn't guaranteed to be a `Socket` behind a TLS terminator.
+// Asked rather than asserted, since an address is only a nicety in the message.
 const remoteAddressOf = (socket: Duplex): string | undefined => (socket instanceof Socket ? socket.remoteAddress : undefined);
 
-/* A response on a HIJACKED socket. Once an upgrade has been taken off the server, node will never write a
- * response for us, so anything said on it has to be a hand-written HTTP/1.1 head or the client waits for a
- * timeout with no idea why. `Connection: close` because there is no keep-alive to return to on a socket we
- * are done with. */
+// Writes a hand-written HTTP/1.1 response on a hijacked socket, since node won't write one after an upgrade leaves the
+// server.
+// `Connection: close`, since there's no keep-alive to return to.
 const answer = (socket: Duplex, status: number, reason: string, headers: Readonly<Record<string, string>>, body: string): void => {
     if (socket.destroyed) {
         return;
@@ -106,28 +68,22 @@ const answer = (socket: Duplex, status: number, reason: string, headers: Readonl
 
 const refuse = (socket: Duplex, status: number, reason: string, body: string): void => answer(socket, status, reason, {}, body);
 
-// ── The replay ──────────────────────────────────────────────────────────────────────────────────────────
+// The replay.
 
-/* How long Fly's proxy keeps sending a hostname's requests to the app this edge named, without asking again.
- * Long enough that the edge is off the path of everything a person does in one sitting; short enough that a
- * sandbox destroyed and re-made (hostedRestart on the platform builds a replacement under the same app name,
- * so even that is not a move) is followed within minutes rather than hours. Fly's floor is ten seconds. */
+// How long Fly's proxy reuses the replay decision per hostname before asking again; Fly's floor is ten seconds.
 export const REPLAY_CACHE_TTL_SECS = 300;
 
-/* The three headers that make Fly's proxy carry a request elsewhere: the target app; the pattern of
- * requests the decision covers, spelled with the hostname so it never leaks onto another sandbox's name (the
- * cache is keyed on the Host header, fly.toml); and for how long. Read by Fly's proxy and stripped: nothing
- * downstream sees them. */
+// The three headers that make Fly's proxy carry a request elsewhere: the target app, the hostname pattern the decision
+// covers, and the TTL.
+// Read and stripped by Fly's proxy; nothing downstream sees them.
 export const replayHeaders = (host: string, app: string): Readonly<Record<string, string>> => ({
     "fly-replay": `app=${app}`,
     "fly-replay-cache": `${host.split(`:`)[0] ?? host}/*`,
     "fly-replay-cache-ttl-secs": String(REPLAY_CACHE_TTL_SECS),
 });
 
-/* NO TUNNEL FOR THIS SANDBOX. 502 rather than 404 deliberately: the browser's availability flow reads any 5xx
- * as "the sandbox is unreachable" and drives the wake, while a 404 reads as "there is no such thing" and stops
- * it. The body names the label because this is the one edge error a person actually meets — a sandbox that is
- * asleep, still booting, or on a machine that was turned off. */
+// 502, not 404: the browser's availability flow reads any 5xx as unreachable and wakes it, while 404 stops it.
+// Names the label in the body, since this is the one edge error a person actually meets.
 const unreachable = (response: ServerResponse, host: string): void => {
     if (response.headersSent) {
         response.destroy();
@@ -140,13 +96,10 @@ const unreachable = (response: ServerResponse, host: string): void => {
 
 export const createIngressServer = (options: IngressServerOptions): IngressServer => {
     const registry = options.registry ?? createTunnelRegistry();
-    // noServer: this server owns its own upgrade handling — the tunnel door has to be told apart from a
-    // browser's WebSocket to a sandbox, and only the path can do that.
+    // noServer: this server handles its own upgrades, telling the tunnel door apart from a sandbox socket by path.
     const sockets = new WebSocketServer({ noServer: true });
 
-    /* THE EDGE'S OWN SURFACE: what answers on a host that names no sandbox. Deliberately tiny. `/health` is
-     * what a load balancer polls and what proves the process is up; everything else is a stray subdomain the
-     * wildcard also catches, and the honest answer to that is 404. */
+    // What answers on a host naming no sandbox: `/health` for a load balancer, else a 404 stray subdomain.
     const serveEdge = (request: IncomingMessage, response: ServerResponse): void => {
         const path = (request.url ?? `/`).split(`?`)[0];
         if (path === `/health`) {
@@ -159,16 +112,15 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
                     peers: options.peers?.current().length ?? 0,
                     // Ids this machine would forward rather than serve.
                     remote: options.cluster?.remoteCount() ?? 0,
-                    // Whether hosted sandboxes are replayed to their apps here, the one config fact a
-                    // deployment can get wrong without any tunnel looking different.
+                    // Whether hosted sandboxes are replayed here; a deployment fact easy to get wrong invisibly.
                     replay: options.hostedAppPrefix !== undefined,
                 }),
             );
             return;
         }
         if (path === INGRESS_TUNNEL_PATH) {
-            // The door exists, but this is not a knock. Says so rather than 404ing, because a container whose
-            // WebSocket library is misconfigured otherwise looks like it has the wrong address entirely.
+            // Door exists but isn't a websocket: 426, not 404, so a misconfigured client doesn't look like a wrong
+            // address.
             response.writeHead(426, { "content-type": `text/plain; charset=utf-8`, upgrade: `websocket` });
             response.end(`the tunnel door takes a websocket upgrade\n`);
             return;
@@ -177,19 +129,17 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         response.end(`no sandbox is named by this address\n`);
     };
 
-    /* WHERE A LOCAL MISS GOES. A request another machine already handed us carries the hop header, and a miss
-     * on it is final: the peer that forwarded believed we held the sandbox and was wrong, so answering 502 is
-     * what lets it forget that belief, and forwarding again is how a loop would start. A request straight
-     * from a browser asks the cluster, which either names the holder or has nothing to add. */
+    // A hop-marked request already failed here once; no further holder is looked up, so a miss on it is final.
+    // A browser's own request instead asks the cluster, which may name the holder or answer nothing.
     const holderFor = (sandboxId: string, request: IncomingMessage) =>
         request.headers[HOP_HEADER] === undefined ? options.cluster?.holder(sandboxId) : undefined;
 
-    // The hop header is the cluster's and stops here: a workspace's dev server never sees it.
+    // Hop header is internal to the cluster; a workspace's dev server must never see it.
     const stripHop = (request: IncomingMessage): void => {
         delete request.headers[HOP_HEADER];
     };
 
-    // A forward that failed to even reach the peer is a holder to forget; anything else was the peer's answer.
+    // A forward that never reached the peer means forgetting it as holder; anything else was the peer's own answer.
     const forgetIfGone = (sandboxId: string, error: Error): void => {
         if (error instanceof PeerUnreachable) {
             options.cluster?.forget(sandboxId);
@@ -197,17 +147,9 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
     };
 
-    /* WHERE A SANDBOX NOBODY HOLDS MAY BE SENT INSTEAD: the Fly app of a hosted sandbox, or nowhere.
-     *
-     * The platform is asked (cached) which lane the id is on. `tunnel` is definite: the box dials the edge
-     * and is simply not here, so the answer is the 502 the browser's wake flow already reads. `hosted` is a
-     * replay, to the app the platform named or, failing that, the one the naming rule implies. A platform
-     * that cannot be asked leaves the lane unknown, and unknown REPLAYS: a wrong replay costs the browser one
-     * proxy error for a sandbox that was unreachable anyway, a wrong refusal costs a working hosted sandbox
-     * its whole outage — the same fail-open the registration check makes, for the same reason.
-     *
-     * A request another machine already handed us is never replayed: the peer believed we held the tunnel,
-     * and the only honest answer to a belief that was wrong is the 502 that lets it forget. */
+    // Looks up which Fly app to replay to: `tunnel`, or an already-forwarded request, replays nowhere; `hosted` replays
+    // to the named or implied app; an unknown lane fails open to a replay.
+    // A hop-marked request is never replayed, since the peer that forwarded it already believed the tunnel was here.
     const replayTarget = async (sandboxId: string, request: IncomingMessage): Promise<string | undefined> => {
         if (options.hostedAppPrefix === undefined || request.headers[HOP_HEADER] !== undefined) {
             return undefined;
@@ -229,10 +171,9 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         const session = registry.lookup(sandboxId);
         if (session !== undefined) {
             stripHop(request);
-            /* The session reports failure by rejecting, and `headersSent` is what the rejection MEANS: nothing
-             * said to the browser yet, so the edge still owes it an answer; already answering, so the only
-             * honest signal left is a truncated body on a reset socket. `unreachable` reads the same flag, so
-             * both cases land in one call. */
+            // `headersSent` is what a rejection means: unset owes the browser an answer still, set means only a reset
+            // is left.
+            // `unreachable` reads the same flag, so both cases share one call.
             void session.forwardRequest(request, response).catch(() => unreachable(response, host));
             return;
         }
@@ -243,15 +184,15 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
                     unreachable(response, host);
                     return;
                 }
-                // The head is the whole answer: Fly's proxy reads the headers and replays the request it
-                // already holds, body and all. Nothing of this response reaches the browser.
+                // The head is the whole answer: Fly's proxy replays the request it holds; nothing here reaches the
+                // browser.
                 options.log({ sandboxId, app }, `replaying to the sandbox's app`);
                 response.writeHead(200, { ...replayHeaders(host, app), "content-length": `0` });
                 response.end();
             });
             return;
         }
-        // The same contract as the session's: a rejection before headers is our 502, after them a reset.
+        // Same contract as a session's: a rejection before headers is our 502, after them a reset.
         void forwardRequest(peer, request, response).catch((error: Error) => {
             forgetIfGone(sandboxId, error);
             unreachable(response, host);
@@ -264,8 +205,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             void acceptTunnel(request, socket, head);
             return;
         }
-        // A browser upgrading to a sandbox: a terminal, an agent stream, a dev server's HMR. Routed exactly
-        // like a request, because it is one until the far end accepts it.
+        // A browser upgrading to a sandbox (terminal, agent stream, HMR), routed like a request until accepted.
         const host = request.headers.host ?? ``;
         const sandboxId = hostOwnerId(host);
         if (sandboxId === undefined) {
@@ -275,8 +215,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         const session = registry.lookup(sandboxId);
         if (session !== undefined) {
             stripHop(request);
-            /* Nothing is written to the socket until the far end accepts the stream (see forwardUpgrade), so a
-             * rejection leaves it untouched and this can still answer on it rather than merely resetting it. */
+            // Nothing is written until the far end accepts, so a rejection can still be answered, not just reset.
             void session
                 .forwardUpgrade(request, socket, head)
                 .catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
@@ -289,9 +228,9 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
                     refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
                     return;
                 }
-                /* An upgrade is replayed by NOT upgrading: Fly's rule is that the app answering with the
-                 * replay headers must not negotiate the WebSocket itself, the target does. So the answer is
-                 * a plain head with the headers on it, and the 101 comes from the sandbox. */
+                // Replayed by not upgrading: the app answering with replay headers must not negotiate the WebSocket
+                // itself.
+                // A plain head carries the headers; the 101 comes from the sandbox.
                 options.log({ sandboxId, app }, `replaying an upgrade to the sandbox's app`);
                 answer(socket, 200, `OK`, replayHeaders(host, app), ``);
             });
@@ -303,9 +242,8 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         });
     };
 
-    /* A SANDBOX ARRIVING. Two gates, in this order and for different reasons: the signature is arithmetic and
-     * costs nothing, so it runs first and rejects every stranger before the platform is ever asked; the
-     * existence check is a network call and only happens for a caller that has already proved who it is. */
+    // Two gates in order: the signature check is free and rejects a stranger before the platform is ever asked.
+    // The existence check is a network call, run only for a caller that already proved who it is.
     const acceptTunnel = async (request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> => {
         const header = request.headers[INGRESS_GRANT_HEADER];
         const grant = Array.isArray(header) ? header[0] : header;
@@ -320,22 +258,19 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             refuse(socket, 403, `Forbidden`, `that sandbox no longer exists`);
             return;
         }
-        // The existence check is a round trip, and a client that gave up during it leaves a socket there is
-        // nothing left to upgrade.
+        // The existence check is a round trip; a client that gave up during it leaves nothing left to upgrade.
         if (socket.destroyed) {
             return;
         }
         sockets.handleUpgrade(request, socket, head, (ws) => void hold(claim.sandboxId, ws));
     };
 
-    /* HOLDING A REGISTERED TUNNEL for as long as its WebSocket lives. Everything here is torn down by the one
-     * `close` handler, because every way a tunnel can end — the container stopping, the heartbeat giving up,
-     * displacement by a newer dial, an h2 session erroring — arrives as the socket closing. One exit means the
-     * registry cannot be left holding a session whose transport is gone. */
+    // Holds a registered tunnel as long as its WebSocket lives; every way it can end (stop, dead heartbeat,
+    // displacement, error) arrives as the socket closing.
+    // One `close` handler tears everything down, so the registry can't be left holding a dead session.
     const hold = async (sandboxId: string, ws: WebSocket): Promise<void> => {
         const duplex = webSocketDuplex(ws);
-        // A stream error is the transport failing, which is the socket's business and never this process's:
-        // without a handler node raises it as an uncaught exception and takes every other sandbox with it.
+        // Unhandled, a stream error becomes an uncaught exception that takes every other sandbox down with it.
         duplex.on(`error`, () => ws.terminate());
         let session: IngressSession;
         try {
@@ -354,8 +289,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             ...(options.heartbeatIntervalMs === undefined ? {} : { intervalMs: options.heartbeatIntervalMs }),
         });
         ws.on(`pong`, () => heartbeat.saw());
-        // Any frame proves the peer is there. A tunnel carrying traffic is alive by definition, and demanding
-        // the pong specifically would kill busy sessions over one lost control frame.
+        // Any frame proves the peer is alive; requiring the pong alone would kill a busy session over one lost frame.
         ws.on(`message`, () => heartbeat.saw());
 
         const displaced = registry.register(sandboxId, { session, close: (code, reason) => ws.close(code, reason) });
@@ -371,12 +305,10 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
 
     const server = createServer(onRequest);
     server.on(`upgrade`, onUpgrade);
-    /* A malformed request head is the internet knocking, not an incident. Node's default is to destroy the
-     * socket, which is right; what is not right is the unhandled 'clientError' taking the process down with
-     * every tunnel on it. */
+    // A malformed request head is the internet knocking, not an incident; node's default (destroy the socket) is right.
+    // Left unhandled, `clientError` would take the whole process down with every tunnel on it.
     server.on(`clientError`, (_error, socket) => socket.destroy());
-    // The edge holds long-lived streams (agent turns, terminals, SSE) and must not cut them at node's default
-    // two-minute head/socket timeouts. The tunnel's own heartbeat is what notices a dead peer here.
+    // Long-lived streams must survive node's default two-minute timeouts; the heartbeat alone catches a dead peer.
     server.headersTimeout = 0;
     server.requestTimeout = 0;
     server.timeout = 0;
@@ -397,8 +329,8 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             new Promise<void>((resolve) => {
                 sockets.close();
                 server.close(() => resolve());
-                // Registered tunnels are long-lived by construction, so a graceful close would wait forever.
-                // The containers redial; that is what their loop is for.
+                // A tunnel is long-lived by construction; closing gracefully would wait forever, so containers redial
+                // instead.
                 for (const id of registry.ids()) {
                     registry.lookup(id)?.close();
                 }

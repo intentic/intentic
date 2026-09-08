@@ -1,13 +1,7 @@
-<!-- THE PLUGIN MARKETPLACE, resolved into the form below it.
-     Point this at a registry repository and it lists what that registry publishes; picking a row fills in the
-     url, commit and path the install form would otherwise ask a person to copy by hand.
-
-     PLUGINS ONLY, now. It used to serve the extension card too, and that was the whole of extension discovery in
-     this product: a collapsed block on a form, five clicks from the rail, presented as a way to pre-fill a text
-     field. Extensions have a surface of their own (the Sandbox screen's Discover row), and that card links to it
-     rather than growing a second, worse copy of it. What stays here is a genuinely different object: a plugin
-     loads into the agent rather than running in this browser, its registries are usually somebody else's, and
-     its install form is the one below. -->
+<!--
+    Lists what a plugin registry repository publishes; picking a row fills the url, commit and path fields of the install form below it. Plugins only
+    — extension discovery lives on the Sandbox screen's Discover row, not here.
+-->
 <script setup lang="ts">
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic/api-contract";
@@ -49,14 +43,12 @@ const browse = async (): Promise<void> => {
     }
 };
 
-// Only the rows this card can actually install: a registry serves plugins and extensions from one file, and
-// offering an extension row on the plugin form would pre-fill a config the daemon then refuses.
+// Only rows this card can install: a registry serves plugins and extensions from one file, and the daemon refuses a
+// mismatched kind.
 const entries = computed<RegistryEntry[]>(() => market.value?.plugins.filter((entry) => entry.kind === props.kind) ?? []);
 
-/* Why a row can't be clicked, in the words the reader needs: the button is disabled either way, and a disabled
- * row with no reason reads as a broken page. Blocked leads: it is the one case where the entry is fine
- * mechanically and the answer is still no. The sha rule bites only extensions (their code runs trusted in this
- * browser), so a plugin row pinned to a branch stays installable. */
+// Why a row can't be clicked, since a disabled row with no reason reads as broken. Blocked leads; the sha-pinned
+// rule bites only extensions, since their code runs trusted in this browser.
 const blockedReason = (entry: RegistryEntry): string | undefined => {
     if (entry.trust === `blocked`) {
         return entry.trustReason ?? `blocked`;
@@ -104,18 +96,24 @@ const pick = (entry: RegistryEntry): void => {
                         :disabled="blockedReason(entry) !== undefined"
                         @click="pick(entry)"
                     >
-                        <!-- The mark the registry carries, which for most rows is the extension's own initials: these
-                         are names nobody has seen before, and a column of marks is the only thing here that can
-                         be scanned without reading. -->
+                        <!--
+                            Registry's own mark (usually the extension's initials); a column of them is scannable
+                            without reading unfamiliar
+                            names.
+                        -->
                         <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
-                        <!-- Verified is the only badge: it is the one state a human asserted, and badging "listed"
-                         too would dress the honest default up as a review. -->
+                        <!--
+                            Verified is the only badge: the one state a human actually asserted, unlike the default
+                            "listed".
+                        -->
                         <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
                         <span class="font-medium text-content">{{ entry.name }}</span>
                         <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-                        <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned commit and found
-                         (or didn't) a thing that loads. Silent when there are no checks at all: absence of
-                         evidence is not a warning. -->
+                        <!--
+                            Evidence, not endorsement: the nightly scan re-checked this pinned commit and loaded it (or
+                            didn't); silent when
+                            there's no check at all.
+                        -->
                         <Icon
                             v-if="checksOk(entry)"
                             name="check"

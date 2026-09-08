@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
-//
-// jsdom because this picker's whole job is what it SAYS about a card before the message goes: which persona a
-// chat is about to speak as, and: the two the daemon then treats very differently, whether that persona can
-// actually reach an account, and what "no persona at all" means on the attended side of the line.
+// Pins what the picker says before a message goes: which persona speaks, whether it can reach an account, and what "no
+// persona" means on the attended side.
 import type { Persona } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
+// Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
 const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
@@ -23,8 +21,7 @@ vi.mock(`../../sandbox/personas/usePersonas`, () => ({
     }),
 }));
 
-// The "manage personas" rows are links to the personas page. The stub keeps their href, which is what the test
-// below checks: a spy on a push would no longer see them at all.
+// Router stub keeps real hrefs on "manage personas" links; a push spy wouldn't see them at all.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push: vi.fn() }) as never,
@@ -48,7 +45,7 @@ const events: (string | undefined)[] = [];
 const text = (element: HTMLElement): string => element.textContent ?? ``;
 const rowLabelled = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...element.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
-// The rows that GO somewhere are anchors, not buttons: that is the whole point of them.
+// Rows that navigate are anchors, not buttons.
 const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | undefined =>
     [...element.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(label));
 
@@ -64,9 +61,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* "Anyone" is a ROW and not the absence of one, because the empty pick means opposite things either side of
- * the attended line: a chat that names nobody keeps every account, while a wake that names nobody reaches
- * none. The composer is the attended side, and this row is the only place that gets said. */
+// "Anyone" is a row, not the absence of one: an empty pick means keep every account here, but reaches none on a wake.
 it(`offers anyone as a pick, and says what it means here`, () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const element = mount(`work`);
@@ -77,20 +72,18 @@ it(`offers anyone as a pick, and says what it means here`, () => {
     expect(events).toEqual([undefined]);
 });
 
-// The ordinary state of a freshly cloned workspace: the card is real, its accounts are not signed in yet. It
-// stays PICKABLE: the bound is still meaningful, but a picker that didn't mark it would read as ready.
+// Stays pickable though unsigned in: marking it prevents it from reading as ready when it isn't.
 it(`marks a persona whose every account is still signed out`, () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     expect(text(mount())).toContain(`not signed in yet`);
 
     connected.value = [`x-company`];
-    // One signed-in account is enough to act, so the mark must go: the turn simply reaches that one.
+    // One signed-in account is enough to act, so the mark clears.
     app?.unmount();
     expect(text(mount())).not.toContain(`not signed in yet`);
 });
 
-// The account ids under the name, because a persona exists precisely to tell `reddit-work` from
-// `reddit-personal` and a mark cannot.
+// Account ids distinguish reddit-work from reddit-personal; a bound mark alone can't.
 it(`names the accounts a card holds, and picks it by id`, () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     connected.value = [`reddit-work`, `x-company`];
@@ -102,8 +95,7 @@ it(`names the accounts a card holds, and picks it by id`, () => {
     expect(events).toEqual([`work`]);
 });
 
-// A bounded card says so where it is picked, in the contract's own words: the same phrase the personas page
-// puts on its row, so a card recognised there is the same card here.
+// Same phrase the personas page uses for a bounded card, so the two are recognizably the same card.
 it(`says how bounded a card is`, () => {
     personas.value = [
         {
@@ -115,13 +107,10 @@ it(`says how bounded a card is`, () => {
     expect(text(mount())).toContain(`Read-only`);
 });
 
-/* Nothing set up is the ordinary state of a new workspace, and the reason this feature was invisible: the
- * empty picker has to say what it means (this chat reaches everything) and offer the way to the page that
- * fixes it. */
 it(`explains the empty workspace and offers the way in`, () => {
     const element = mount();
 
     expect(text(element)).toContain(`No personas yet`);
-    // A real address, so the row can be hovered, copied and Ctrl/⌘-clicked like anything else that is a place.
+    // A real href, so the row can be hovered, copied, and opened in a new tab like any other link.
     expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
 });

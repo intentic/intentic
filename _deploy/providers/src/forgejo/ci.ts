@@ -9,29 +9,26 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's, commitFile + setRepoSecret go over an SSH port-forward to
-// Forgejo, like repo/forgejo-notify.
+// ssh targets the control-plane host; commitFile and setRepoSecret reach Forgejo over an SSH port-forward.
 const ciSchema = sshSchema.extend({
-    // The shared admin username (Forgejo + Komodo). adminPassword is the FORGEJO one this provider authes with;
-    // komodoPassword is the KOMODO one the workflow's notify step logs in with (stored as a repo secret).
+    // Shared admin username; adminPassword is Forgejo's, komodoPassword is Komodo's (stored as a repo secret).
     adminUser: z.string(),
     adminPassword: z.string(),
     komodoPassword: z.string(),
-    // The repo + registry namespace (a team's org, or the admin user when team-less). The admin still
-    // authenticates the git ops and the registry push (its packages token), since it owns the org.
+    // Repo + registry namespace: a team's org, or the admin user when team-less.
     owner: z.string(),
     repoName: z.string(),
-    // The env branch the workflow triggers on (production -> "main").
+    // Env branch the workflow triggers on (production -> "main").
     branch: z.string(),
-    // The Forgejo built-in registry authority (e.g. "127.0.0.1:3000"); image = registry/owner/repo:tag.
+    // Forgejo built-in registry authority (e.g. "127.0.0.1:3000"); image is registry/owner/repo:tag.
     registry: z.string(),
-    // The image tag = the environment name, so co-located environments publish to distinct tags.
+    // Image tag; the environment name, so co-located environments publish to distinct tags.
     tag: z.string(),
-    // The write:package token the Action logs into the registry with (set as the REGISTRY_TOKEN repo secret).
+    // write:package token the Action logs into the registry with; set as the REGISTRY_TOKEN repo secret.
     packagesToken: z.string(),
-    // Komodo's host-internal url the notify step logs into (the runner is --network host, so it reaches it).
+    // Komodo's host-internal url; reachable because the runner runs with --network host.
     komodoUrl: z.string(),
-    // The Komodo deployment id the notify step redeploys (auto_update polling is the backstop).
+    // Komodo deployment id the notify step redeploys; auto_update polling is the backstop.
     deployment: z.string(),
 });
 type CiInputs = z.infer<typeof ciSchema>;
@@ -41,10 +38,9 @@ const SECRET_REGISTRY = "REGISTRY_TOKEN";
 const workflowPath = (tag: string): string => `.forgejo/workflows/build-${tag}.yaml`;
 const DOCKERFILE_PATH = "Dockerfile";
 
-// The Forgejo Actions workflow: on a push to the env branch it builds the Dockerfile, pushes the image to the
-// Forgejo registry (registry/owner/repo:<env> + :<sha>), then logs into Komodo and triggers an immediate
-// Deploy. `${{ ... }}` are Forgejo expressions and `$JWT`/`$KOMODO_PASSWORD`/`$( )` are shell, kept literal;
-// only the resolve-time values (registry/branch/admin/komodoUrl/deployment) are interpolated here.
+// Forgejo Actions workflow: on push to the env branch, builds the Dockerfile, pushes to the Forgejo registry, then
+// logs into Komodo and triggers a Deploy. `${{ }}` are Forgejo expressions; `$JWT`/`$KOMODO_PASSWORD` are shell, kept
+// literal.
 const workflowYaml = (parsed: CiInputs): string => {
     const base = `${parsed.registry}/${parsed.owner}/${parsed.repoName}`;
     return [
@@ -80,11 +76,8 @@ const workflowYaml = (parsed: CiInputs): string => {
     ].join("\n");
 };
 
-// The app's CI/CD wiring: commits the build-and-deploy workflow into the repo and sets the registry-push +
-// Komodo-login secrets it consumes. Replaces the old Komodo Build, intentic no longer builds or deploys; a
-// developer push triggers this workflow which builds, pushes, and tells Komodo to redeploy. read keys off the
-// committed workflow file (the secrets cannot be read back, so they are re-set every apply, idempotently);
-// PENDING-guards on the ref'd Komodo url + packages token so a plan proceeds before the platform is up.
+// App's CI/CD wiring: commits the build-and-deploy workflow and sets the registry-push + Komodo-login secrets it
+// consumes. `read` keys off the committed workflow file, since secrets can't be read back and are re-set every apply.
 export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         if (hasPendingRef(inputs, "komodoUrl", "packagesToken")) {
@@ -129,11 +122,10 @@ export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExec
                 owner: parsed.owner,
                 name: parsed.repoName,
             };
-            // The packages token the Action pushes with, and the Komodo admin password the notify step logs in with.
+            // Packages token the Action pushes with, and the Komodo admin password the notify step logs in with.
             await api.setRepoSecret({ ...repo, secretName: SECRET_REGISTRY, data: parsed.packagesToken });
             await api.setRepoSecret({ ...repo, secretName: SECRET_KOMODO, data: parsed.komodoPassword });
-            // Seed a starter Dockerfile only when the repo has none, so the workflow's first run always has one to
-            // build; never clobber the author's real Dockerfile.
+            // Seeds a starter Dockerfile only when the repo has none; never clobbers the author's own Dockerfile.
             const dockerfile = await api.readFile({ ...repo, branch: parsed.branch, path: DOCKERFILE_PATH });
             if (dockerfile === undefined) {
                 await api.commitFile({
@@ -144,7 +136,7 @@ export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExec
                     message: "intentic: starter Dockerfile",
                 });
             }
-            // Commit the workflow LAST so its first run already sees the Dockerfile + secrets.
+            // Commits the workflow last, so its first run already sees the Dockerfile and secrets.
             await api.commitFile({
                 ...repo,
                 branch: parsed.branch,
@@ -165,8 +157,7 @@ export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExec
                 owner: parsed.owner,
                 name: parsed.repoName,
             };
-            // Drop the workflow file and the secrets it consumed. The repo itself may be pruned separately (its
-            // own provider), so every call here is idempotent on a 404.
+            // Drops the workflow file and its secrets; idempotent on a 404, since the repo may be pruned separately.
             await api.deleteFile({ ...repo, branch: parsed.branch, path: workflowPath(parsed.tag), message: "intentic: remove ci workflow" });
             await api.deleteRepoSecret({ ...repo, secretName: SECRET_REGISTRY });
             await api.deleteRepoSecret({ ...repo, secretName: SECRET_KOMODO });

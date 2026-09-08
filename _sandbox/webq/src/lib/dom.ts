@@ -1,8 +1,5 @@
-/* The one DOM this package speaks: parse5's default tree, plus the handful of helpers every stage
- * (pruning, markdown, link extraction) needs. parse5 rather than jsdom on purpose — webq is baked onto the
- * sandbox image inside the daemon's tree, so every dependency is pull size for every sandbox; parse5 is a
- * spec-compliant HTML parser and nothing else, and the traversal helpers below are the only "DOM API" the
- * pipeline actually uses. Scripts never execute: this tree is data. */
+// parse5's tree plus the traversal helpers every stage (pruning, markdown, links) needs; parse5 over jsdom since webq
+// ships baked into the sandbox image, and every dependency is pull size. Scripts never execute: this tree is data.
 import { type DefaultTreeAdapterMap, parse } from "parse5";
 
 export type Document = DefaultTreeAdapterMap["document"];
@@ -17,8 +14,7 @@ export const parseHtml = (html: string): Document => parse(html);
 
 export const attr = (el: Element, name: string): string | undefined => el.attrs.find((a) => a.name === name)?.value;
 
-// Tags whose text is never page content, skipped by every text walk (a <script>'s body is code even when
-// the tree keeps the node around for inspection).
+// Tags whose text is never page content; a <script>'s body is code, skipped by every text walk.
 const NON_CONTENT = new Set(["script", "style", "noscript", "template", "svg", "canvas"]);
 
 export const childElements = (el: Element): Element[] => el.childNodes.filter(isElement);
@@ -26,7 +22,7 @@ export const childElements = (el: Element): Element[] => el.childNodes.filter(is
 /** Depth-first visible text of a subtree, single-space normalized. */
 export const textOf = (node: Node): string => collectText(node).join(" ").replaceAll(/\s+/g, " ").trim();
 
-/** Raw text of a subtree with whitespace KEPT — what a <pre> means by its contents. */
+/** Raw text of a subtree with whitespace kept, what a <pre> means by its contents. */
 export const rawTextOf = (node: Node): string => collectText(node).join("");
 
 const collectText = (node: Node): string[] => {
@@ -61,7 +57,7 @@ export const walk = (node: Node, visit: (el: Element) => void): void => {
     }
 };
 
-// Package-private: the two callers below (bodyOf, metaOf) are the shape every consumer actually wants.
+// Package-private; bodyOf and metaOf are the shapes every consumer actually wants.
 const findFirst = (root: Node, match: (el: Element) => boolean): Element | undefined => {
     if (isElement(root) && match(root)) {
         return root;

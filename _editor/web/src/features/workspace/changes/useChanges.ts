@@ -27,38 +27,19 @@ import { resetEditBuffers } from "../files/useEditBuffers";
 import { usePushRun } from "../push/usePushRun";
 import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
 
-/* The Changes review. VSCode's SCM model over the workspace's real repos, including git's index: each repo
- * reports `staged` (index vs HEAD, what a bare commit would record) and `unstaged` (worktree vs index, plus
- * untracked), because a path can sit on both with different content. "root" (the /work repo itself) plus every
- * discovered repo under it, aggregated by the daemon's /git/changes.
- *
- * VSCode's model all the way down, which means STAGING IS THE SELECTION: `commitRepos` records the index and
- * nothing else. There is no partial commit here (or in the daemon) because git already has one mechanism for
- * choosing a commit's contents and a second one could only contradict it, so when the panel wants a subset,
- * it STAGES that subset and then records the index, which is the same answer said in git's own terms. Discard
- * restores the worktree from HEAD; the remote verbs sync it.
- *
- * No client-side watermark: the reviewed line IS the commit boundary, so every browser and device agrees.
- * Module-level singletons so the badge (shell), the panel, and the workspace agree. */
+// VSCode's SCM model over real repos: `staged` is index-vs-HEAD, `unstaged` is worktree-vs-index; a path can be on
+// both.
+// No partial commit — a subset is staged, then the whole index is recorded, since git has one selection mechanism
+// already.
+// No client watermark: the reviewed line is the commit boundary. Module-level singletons so badge, panel and workspace
+// agree.
 
-// A turn ending is when its work becomes reviewable, refresh the review set and the snapshot timeline so the
-// badge and panels surface it without a manual refresh. Counted across ALL conversations, not the active tab's
-// stream: a background tab's turn lands into the same tree, and watching only the focused one meant the panel
-// went stale for exactly the turns the user wasn't watching. Module scope (like sandboxScope.ts), NOT inside
-// useChanges(): a watch installed from a component dies with that component's effect scope, and the /setup
-// round-trip unmounts the shell that calls useChanges() first. `.every` because a background tab's turn can
-// have landed in another sandbox's tree, and only the family-wide prefix reaches it (see queryKeys).
+// Refreshes the review and timeline when any turn ends, across every conversation, not just the active tab's.
+// Kept at module scope, not inside useChanges(), since a watch there dies when the shell component unmounts.
 const { conversations } = useChat();
 const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.streaming.value).length);
-/* THROTTLED, because "a turn ended" is a per-AGENT event and the read it triggers is workspace-wide. One agent
- * finishing is one refresh either way, throttleTrailing runs the first call on the spot, so the common case
- * stays instant. Four or five agents working at once is where it mattered: their turns end continuously and
- * independently, and each ending fired its own full review scan (every repo, several git spawns each) on the
- * daemon's most contended path. They collapse into one refresh per window now, which is also all the daemon
- * would have served, it coalesces overlapping scans anyway, so the extra rounds bought staleness of zero.
- *
- * Same window as the file-watcher's own refresh (systemEvents), for the same reason: a second of staleness on a
- * review the user is not yet looking at is imperceptible, and it bounds the cost of a busy fleet. */
+// Throttled: several agents ending turns at once would otherwise trigger a rescan each, collapsed into one.
+// Same window as the file-watcher's own refresh (systemEvents).
 const TURN_END_REFRESH_MS = 1000;
 const refreshReviewable = throttleTrailing(() => {
     void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
@@ -70,28 +51,18 @@ watch(turnsRunning, (now, was) => {
     }
 });
 
-/* --- action state -------------------------------------------------------------------------------------------
- * Every mutation below reports through `runBatch`: one busy span for the whole batch, and any failure filed
- * under the SCOPE the user fired it from, a repo id for the per-repo verbs, COMMIT_SCOPE for the commit box
- * that spans them. Scoped, not panel-wide: a fetch that failed on `intentic` has nothing to say about `root`,
- * and the single shared error line this replaces rendered at the top of the panel naming neither the repo nor
- * the verb, so a failed fetch read as a stray red sentence with no visible cause.
- *
- * The verb is kept apart from git's words for the same reason. "Fetch failed" is what the user needs to read
- * first; `fatal: could not read Username for 'https://github.com'` is the detail underneath it. */
+// Every mutation here reports through runBatch: one busy span, and a failure filed under its own scope (a repo,
+// or COMMIT_SCOPE) rather than one shared panel-wide error line.
 export interface ActionFailure {
-    // The verb that failed, in the user's terms, "Fetch failed", "Discard failed".
+    // The verb that failed, in the user's terms ("Fetch failed", "Discard failed").
     readonly action: string;
     // git's own account of why, verbatim.
     readonly detail: string;
-    /* The settled run, for the one verb that IS a run: a push (usePushRun.ts). What the push flow's question
-     * reads to offer more than a line, the command, the terminal it ran in, who refused it, and the tail the
-     * proposed fix quotes. Absent for every other verb, which fails inside its own request. */
+    // The settled push run, when the verb was a push; absent for every other verb, which fails inside its own request.
     readonly run?: PushRun;
 }
 
-// A push that settled red, thrown out of its task so the batch below files it with its run attached, the
-// way every other verb's failure is filed with its message.
+// Thrown when a push settles red, so the batch below files its run alongside the failure message.
 class PushRefused extends Error {
     constructor(readonly run: PushRun) {
         super(refusalSummary(run));
@@ -109,16 +80,10 @@ interface ScopedTask {
 
 const actionBusy = ref(false);
 const failures = ref<ReadonlyMap<string, ActionFailure>>(new Map());
-// The signed-in member's tier on the active sandbox, read once for the whole module (useRole is computed over
-// the sandbox store, which is module-level too). What runBatch consults before it sends anything.
+// Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
 const { canShip } = useRole();
 
-/* THE REPOS THIS TAB IS COMMITTING RIGHT NOW, beside the daemon's own answer to the same question.
- *
- * Both halves are needed and neither is redundant. This one is instant, it is set before the request leaves,
- * so the button changes on the click rather than a round-trip later. The daemon's (on the changes response)
- * is the one that SURVIVES: a commit outlives the tab that fired it, so a reload, a second tab or a phone
- * learns about it from the daemon or not at all. Unioned at the read below. */
+// Repos this tab is committing right now, set before the request leaves; unioned with the daemon's own answer below.
 const committingHere = ref<readonly string[]>([]);
 
 const dismissFailure = (scope: string): void => {
@@ -130,41 +95,13 @@ const dismissFailure = (scope: string): void => {
     failures.value = next;
 };
 
-/* One busy span over a batch of per-scope tasks. A failure is filed against its own scope and the batch CARRIES
- * ON: the repos are independent, so aborting root's discard because intentic's remote is unreachable would
- * strand work the user asked for behind a failure they cannot act on. Re-entry while busy is a no-op, so a
- * double-click fires once. `settle` runs whatever happened, the cache must match the worktree even when only
- * half the batch landed.
- *
- * THE TASKS RUN AT ONCE, because every batch here is one task PER REPO and git cannot span repos: the daemon
- * holds a separate lock per repo and scans them concurrently already, so running them one after another only
- * ever added up their waits. A workspace-wide commit paid that sum in full, six repos, each a stage, a commit
- * and a re-read, the last one starting after the first five had finished, and the whole batch now costs the
- * slowest repo instead. Each task still files its own failure against its own scope, and a rejection cannot
- * escape the wrapper, so one repo failing neither cancels nor is cancelled by the others.
- *
- * THE SPAN COVERS THE WRITES, NOT THE REFRESH. Every button in the panel is disabled off this flag, and `settle`
- * is a refetch of the most expensive read the daemon serves, a workspace-wide rescan that measured seconds
- * under load. Holding the flag across it meant a commit that itself took under two seconds left the whole panel
- * dead for ten, with no spinner to say why; and because nothing on that refetch ever times out, a refresh that
- * never settled disabled the panel until the page was reloaded. That is the "I click Commit and nothing
- * happens" report, and the flag was the thing reporting it.
- *
- * So the refresh is fired and not awaited. Nothing waits on it: `settle`'s synchronous half (dropping edit
- * buffers) still runs before this returns, and the rows it refetches are stale-while-revalidate everywhere else
- * in the app already. The one door this could reopen, committing twice off rows that have not caught up, is
- * shut a second time by the commit box, which clears its message on success and needs one to arm the button. */
+// Runs per-scope tasks concurrently under one busy span; a failure is filed per scope without cancelling the rest.
+// `settle` runs unawaited, since holding busy across a slow rescan would freeze the panel with no explanation.
 const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>): Promise<void> => {
     if (actionBusy.value) {
         return;
     }
-    /* A MEMBER BELOW THE OPERATING TIER IS TOLD HERE, before anything is sent.
-     *
-     * Every verb in this panel — commit, discard, stage — is a change to the shared repos, which the daemon
-     * floors at maintainer (auth/role-floor.ts). Reviewing the diffs is a viewer's right and stays open; acting
-     * on them is not. Caught at the batch rather than per verb because this is the one door all of them pass
-     * through, and the refusal is filed as an ordinary per-scope failure, so it lands in the same place beside
-     * the same repo as any other refusal, instead of being a button that goes busy and then does nothing. */
+    // A member below maintainer tier is refused here, before anything is sent, filed as an ordinary per-scope failure.
     if (!canShip.value) {
         failures.value = new Map([
             ...failures.value,
@@ -176,8 +113,8 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
         return;
     }
     actionBusy.value = true;
-    // Clear every scope this batch touches up front rather than per task: several repos committing under the
-    // one COMMIT_SCOPE would otherwise have the second repo's start erase the first repo's failure.
+    // Clears every scope up front, not per task, so a second repo committing under COMMIT_SCOPE doesn't erase the
+    // first's failure.
     const scopes = new Set(tasks.map((task) => task.scope));
     failures.value = new Map([...failures.value].filter(([scope]) => !scopes.has(scope)));
     try {
@@ -200,25 +137,9 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
     void settle();
 };
 
-/* --- one row's diff -------------------------------------------------------------------------------------------
- * The diff of the ROW that was clicked, not of the file in general: `staged` is index-vs-HEAD, `unstaged` is
- * worktree-vs-index. A partially staged file has both, and they differ, showing one for the other would be a
- * quiet lie, so the side is required rather than defaulted.
- *
- * FILED UNDER THE CHANGE LIST'S OWN KEY, which is the whole freshness rule in one line: every invalidation that
- * refreshes the list drops the diffs with it, the panel's own verbs (below), an agent's write or a terminal's,
- * a ref moving (systemEvents), a turn ending (above), so a cached diff can never be staler than the row that
- * opened it. That is why `staleTime` is Infinity rather than a guessed number of seconds: time is not what makes
- * a diff wrong, a write is, and every write already lands here. During a streaming turn the list deliberately
- * stops refreshing (systemEvents) and these go stale with it, which is the honest behaviour, the rows and the
- * diffs they open describe the same moment either way.
- *
- * UNPERSISTED because a diff is two whole file texts and the warmer below reads one per changed file: see
- * queryPersistence for what putting that in the disk mirror costs. `gcTime` is the memory bound that follows,
- * warmed diffs nobody opened are collected a few minutes after the review moved on.
- *
- * Concurrent callers share one request (fetchQuery dedupes an in-flight fetch per key), which is what lets a
- * click land on a file the warmer is already reading and simply wait for that read instead of racing it. */
+// One row's diff: `side` is required since a partially staged file has different staged/unstaged content.
+// Filed under the change list's own key, so any invalidation that refreshes the list drops its diffs too —
+// staleTime is Infinity because only a write can make a diff wrong, not time. Unpersisted: two full file texts.
 const FILE_DIFF_GC_MS = 5 * 60 * 1000;
 
 export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
@@ -230,43 +151,29 @@ export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unkn
     path,
 ];
 
-/* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
- * that fetches it, see agentTranscriptQuery for what having those two halves separable cost. */
+// Named apart from the fetcher below so a background loader can be handed the query object directly.
 export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
     queryKey: fileDiffKey(repo, path, side),
     queryFn: (): Promise<FileDiffResponse> =>
         sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`),
     staleTime: Infinity,
     gcTime: FILE_DIFF_GC_MS,
-    // No retry, which is what this read has always done (it was a bare fetch) and what the loader needs it to
-    // keep doing: a daemon hiccup during a read-ahead would otherwise turn one quiet walk into four times the
-    // requests, which is the burst the pacing exists to avoid. A failure leaves nothing cached, so the click
-    // that follows asks again for real.
+    // No retry: a daemon hiccup during read-ahead would otherwise multiply requests; a failed read simply isn't cached.
     retry: false as const,
 });
 
-// Module-local: the loader takes the query above rather than a function that runs it, so the panel below is the
-// only caller left.
+// Wraps the query above in fetchQuery; the panel is the only caller, the loader uses the query object directly.
 const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
     queryClient.fetchQuery(fileDiffQuery(repo, path, side));
 
-// The review set itself, named apart from the composable that observes it so the background loader can warm
-// the same entry rather than a parallel one. `GIT_CHANGES.of()` is also the PREFIX every file diff
-// above is filed under, which is what makes one invalidation drop the list and its diffs together.
+// Named apart from the composable that reads it, so the loader can warm the same cache entry (also the diff keys'
+// shared prefix).
 export const changesKey = (): unknown[] => GIT_CHANGES.of();
 
 export const fetchChanges = (): Promise<GitChangesResponse> => sandboxJson<GitChangesResponse>(`/git/changes`);
 
-/* EVERY MUTATION IN THIS FILE GOES THROUGH HERE, and so does every agent review, because an agent's review is
- * that agent's branch measured AGAINST THIS TREE (agents/agent-changes.ts presentInMain): which of its files
- * your workspace is holding, and which of them your history has now taken. Committing a landing is what makes
- * its rows stop being differences; discarding one is what puts them back under "Land now". Neither moves a sha
- * anywhere, so nothing the agent's own surfaces watch could see it, and the review sat on its pre-commit answer
- * until something else happened to refetch it.
- *
- * Fired from the mutation rather than left to the file-watcher frame that follows it (systemEvents does the
- * same invalidation for writes this browser did not make): that one is throttled and skipped while a turn
- * streams, and the press the user just made should not wait on either. */
+// Invalidates the change list and every agent-diff query, since committing or discarding changes what an
+// agent's review reads even though no ref moved. Fired directly, not left to the throttled file-watcher pass.
 const invalidateChanges = (): Promise<void> =>
     Promise.all([
         queryClient.invalidateQueries({ queryKey: changesKey() }),
@@ -276,58 +183,24 @@ const invalidateChanges = (): Promise<void> =>
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
 
-/* A GROUP'S TARGET, on the wire. The repo is in the URL; what is left is the answer to "which of its changes",
- * and the two shapes are not interchangeable:
- *
- *   paths ⇒ rows a person picked. Enumerated, and therefore limited to rows the panel actually drew.
- *   scope ⇒ a description (a side, one conversation's landed files, both, or neither for the whole repo) that
- *           the daemon resolves against the repository itself.
- *
- * Every BULK verb here sends the second, and that is the fix for the thing this panel used to do to a large
- * change set: the review truncates past the daemon's per-repo budget (RepoChanges.truncated), so "Stage all"
- * built from rows meant "stage the five hundred you can see", and a directory overhaul had to be recorded five
- * hundred files at a time, one round of stage-and-commit per batch, with no way to reach the rest. A scope has
- * no such ceiling and costs one `git status` however many files answer to it. */
+// Two target shapes: `paths` are rows the user picked (limited to what's rendered); `scope` is a description
+// the daemon resolves itself. Bulk verbs send a scope, so a truncated review can still act on all of it.
 const targetBody = (target: GitTarget): Record<string, unknown> => ({
     ...(target.paths !== undefined ? { paths: target.paths } : {}),
     ...(target.scope !== undefined ? { scope: target.scope } : {}),
 });
 
-/* The commit's own answer, folded into the cached review set (the rule itself is spliceRepoChanges). Nothing is
- * written when the cache is empty: there is nothing to splice into, and seeding it here would paint a one-repo
- * review over a panel that has never loaded, the query's own fetch is what fills it.
- *
- * CANCEL FIRST, because a scan can be in flight right now and it started before the commit. The panel refetches
- * on every workspace-change batch and in this product an agent is usually writing, so a review read overlapping
- * a commit is ordinary rather than exotic, and one that resolves after this write lands re-paints the rows the
- * commit just removed, with data that was already stale when it was requested. Cancelling drops that answer
- * instead of letting it win on arrival; a scan that starts AFTER this reads a tree that already has the commit
- * in it, so only the overlap needs handling. */
+// Splices the commit's own answer into the cached review; a no-op when the cache is empty, since there's
+// nothing yet to splice into. Cancels any in-flight scan first, so a stale read can't overwrite it on arrival.
 const applyCommitResult = async (repo: string, result: CommitResult): Promise<void> => {
     const queryKey = changesKey();
     await queryClient.cancelQueries({ queryKey });
     queryClient.setQueryData<GitChangesResponse>(queryKey, (held) => (held === undefined ? held : spliceRepoChanges(held, repo, result)));
 };
 
-// Commit. git can't span repos, so each group gets its own real commit on its own branch, all sharing the
-// message. `stageFirst` is VSCode's "stage all and commit", for the case where nothing is staged yet, and the
-// group's target says HOW MUCH: an empty one is the whole repo, a scope is whatever it describes (the origin
-// filter's conversation, say). Either way the daemon stages inside the repo lock and then records the whole
-// index, never a partial commit, which is what keeps it honest about what the rows showed.
-//
-// Without `stageFirst` no target is sent at all: the index alone decides, and the panel's scope is the staged
-// repos.
-//
-// NO REFETCH ON THE HAPPY PATH, unlike every other verb here. Each commit answers with its own repo's rows and
-// they are spliced in as it lands, so by the time the batch is done the review is already correct, where the
-// workspace-wide rescan this replaces re-read every repo the commit never touched, on the daemon's most
-// contended path, while the user watched the rows they had just committed sit there. A REFUSED commit is the
-// one case with nothing to splice and a repo that may still have moved (`commit -a` stages before it commits),
-// so that alone falls back to the full read.
-//
-// MARKED WHILE IT RUNS, so the panel can say so. The daemon reports the same fact on every changes response and
-// the two are unioned at the read, this half is what makes the button change on the click instead of a
-// round-trip later, and the daemon's half is what a reloaded tab has instead of this one.
+// One real commit per group (git can't span repos); stageFirst stages the group's target first when nothing's staged
+// yet.
+// No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
 const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<void> => {
     committingHere.value = groups.map((group) => group.repo);
     try {
@@ -350,8 +223,8 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
     }
 };
 
-// Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with an empty
-// target discards the whole repo. Drop edit buffers + refresh the tree (the worktree changed under any open file).
+// Discards a selection: tracked content resets to HEAD, untracked files are deleted; an empty target discards the whole
+// repo.
 const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
     runBatch(
         groups.map((group) => ({
@@ -362,25 +235,15 @@ const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
             },
         })),
         () => {
-            // Stale buffers would silently resurrect discarded files on save. `.every` for the tree, its keys
-            // carry the focused scope before the appended sandbox id, so `.of()` would NOT prefix-match them
-            // (see queryKeys).
+            // Stale edit buffers would resurrect discarded files on save; `.every` since the tree's keys don't
+            // prefix-match under `.of()`.
             resetEditBuffers();
             return Promise.all([queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), invalidateChanges()]);
         },
     );
 
-/* END A HALTED MERGE, REBASE, CHERRY-PICK OR REVERT, the way out of a repo git will not otherwise act on.
- *
- * Nothing this app starts can leave a repo in that state: every git verb the daemon runs aborts itself on
- * failure. What lands here is what a TERMINAL left, an agent's rebase that stopped on a conflict, a `land` that
- * could not finish, which is exactly the case the panel could previously only describe, by listing conflicted
- * files with no account of why they were conflicted.
- *
- * The abort rewrites the worktree back to where the operation began, so it drops the edit buffers and refetches
- * the tree for the same reason discard does. Checkpointed daemon-side first: the conflict resolution being
- * thrown away is real work.
- */
+// Ends a halted merge/rebase/cherry-pick/revert left by a terminal; nothing this app runs leaves a repo in
+// that state. Checkpointed daemon-side first, since the discarded conflict resolution is real work.
 const abortOperation = (repo: string): Promise<void> =>
     runBatch(
         [
@@ -398,11 +261,8 @@ const abortOperation = (repo: string): Promise<void> =>
         },
     );
 
-// Index moves. The worktree is untouched, so unlike discard there is nothing to reset or re-read beyond the
-// review set itself, no buffer drop, no tree refetch.
-// A group whose target is an EMPTY path list is dropped: that is a selection nobody made, and sending it would
-// read as the whole-repo target on the wire. A group carrying a scope always goes, since a scope that matches
-// nothing is a fact only the daemon can establish.
+// Index-only move; the worktree is untouched, so unlike discard nothing needs resetting or refetching.
+// A group with an empty path list is dropped, since sending it would read as the whole-repo target.
 const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<void> =>
     runBatch(
         groups
@@ -417,27 +277,15 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
         invalidateChanges,
     );
 
-// Pull is the only sync verb that rewrites the worktree, so it is the only one that must drop the edit buffers
-// and refetch the tree: a buffer left open over a pulled-away file would save it straight back over the merge on
-// the next keystroke. fetch and push move refs the worktree never sees, so they need neither.
+// Pull is the only sync verb that touches the worktree, so only it resets buffers and refetches the tree.
+// Fetch and push move refs the worktree never sees, so they need neither.
 const afterPull = async (): Promise<void> => {
     resetEditBuffers();
     await queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
 };
 
-/* What MAKES ahead/behind trustworthy, over every repo the caller names, in one busy span. Each reports a
- * GitActionResult rather than throwing, so a credential failure surfaces as git's own reason filed against the
- * repo that raised it instead of a generic request error.
- *
- * IT TAKES A LIST because that is the scope the panel now asks in. Fetch used to hang off an individual repo
- * row, back when the Changes list carried a sync dashboard on every row; that interleaved a repo surface with a
- * file review, so the sync state moved up into the one block that owns "what is leaving this machine" and the
- * fetch went with it. There is one fetch control and its scope is every repo with a remote, which is also the
- * honest scope: the zero on a repo you did not fetch is exactly the stale claim this verb exists to refresh.
- *
- * NEITHER PULL NOR PUSH IS HERE. Both go through the panel's single sync door (usePushFlow's askSync, then
- * `syncAll` below), because a second way to reach a verb is a way around the pre-push check. A pull-only sync
- * passes that check straight through, so routing it there costs nothing. */
+// Fetches every repo with a remote in one busy span, each failing on its own GitActionResult rather than a
+// generic error. Pull and push route through the panel's sync door instead, so nothing bypasses the pre-push check.
 const fetchRepos = (repos: readonly string[]): Promise<void> =>
     runBatch(
         repos.map((repo) => ({
@@ -446,8 +294,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
             run: async (): Promise<void> => {
                 const result = await post<GitActionResult>(repo, `fetch`, {});
                 if (!result.ok) {
-                    // git's own reason, which the daemon already condensed to its verdict line. Empty falls
-                    // through to runBatch's fallback rather than being papered over with the verb again.
+                    // git's own condensed reason; empty falls through to runBatch's generic fallback message.
                     throw new Error(result.reason);
                 }
             },
@@ -455,25 +302,20 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
     );
 
-// The aggregate the panel's primary button fires once the commit box has nothing left to show: the commits you
-// just made are one labelled click from their remote, in the very place you committed them, instead of a muted
-// ↑N pill you had to know to hunt for on a repo row. git can't span remotes, so, exactly like commitRepos, this
-// is one real sync PER repo under a single busy span, each failure filed against its own repo row. Per repo the
-// order is pull-then-push: fast-forward the branch up to its upstream before sending local commits, so a push
-// can't be rejected for work we could have taken first. `pull`/`push` come straight off the row's ahead/behind,
-// so a repo that needs only one gets only one, and a set whose repos disagree still resolves each on its own.
+// One busy span with one real sync per repo (git can't span remotes); per repo, pull runs before push so a
+// push can't be rejected for commits it could have taken first. Flags come straight off each row's ahead/behind.
 export interface SyncTarget {
     readonly repo: string;
-    readonly pull: boolean; // behind its upstream, fast-forward it first
-    readonly push: boolean; // ahead, or a branch with no upstream yet, send (publishing it when unpublished) after
+    readonly pull: boolean; // True when behind upstream; fast-forwarded before any push.
+    readonly push: boolean; // True when ahead, or unpublished; sent (and published, if new) after any pull.
 }
 
 const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
     runBatch(
         targets.map((target) => ({
             scope: target.repo,
-            // Name the verb the repo actually needed, so a push-only repo that fails reads "Push failed", not a
-            // "Sync" it never attempted. The row's failure line stays as specific as the individual pills'.
+            // Names the verb the repo actually needed ("Push failed", not "Sync"), so a push-only failure isn't
+            // misnamed.
             action: `${target.pull && target.push ? `Sync` : target.push ? `Push` : `Pull`} failed`,
             run: async (): Promise<void> => {
                 if (target.pull) {
@@ -484,10 +326,8 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
                     await afterPull();
                 }
                 if (target.push) {
-                    /* The push is a RUN (usePushRun.ts): started and followed to its verdict rather than
-                     * awaited as one request, because it runs the repository's pre-push hook, minutes on a
-                     * workspace with a real gate. `passed` is the push having gone; anything else is filed
-                     * with the run itself, so the flow's question can show what git said and who said it. */
+                    // Followed as a run (usePushRun), not one request, since the pre-push hook can take minutes;
+                    // failures carry the run.
                     const pushed = await usePushRun(target.repo).start();
                     if (pushed.status !== `passed`) {
                         throw new PushRefused(pushed);
@@ -498,59 +338,37 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
     );
 
-/* How often to re-ask while SOMEONE ELSE'S commit is running, a second tab's, or this tab's own from before a
- * reload. The tab that fired the commit needs none of this: its own request answers with the committed rows and
- * splices them.
- *
- * It exists because the alternative is waiting on a ref moving. The panel learns about out-of-band git through
- * the ref watcher, which fires only when a ref actually MOVES, so a commit git refused, or one that turned out
- * to have nothing to record, moved nothing and the panel would have sat reading "Committing…" with no end. The
- * interval matches the ref feed's own refresh throttle, so this costs the daemon no more per second than a
- * workspace being written to already does, and it stops the moment the commit clears. */
+// Polls while another tab's (or this tab's pre-reload) commit is running — this tab's own splices in directly.
+// Needed since a refused or no-op commit moves no ref, so the ref watcher alone would never end "Committing…".
 const COMMIT_WATCH_MS = 1000;
 
 export function useChanges() {
     const { query, error } = useSandboxQuery({
         queryKey: changesKey(),
         queryFn: fetchChanges,
-        // Off the CACHED response rather than a computed, so this cannot close over the query it configures.
+        // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
             committingHere.value.length === 0 && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
     });
 
-    // `repos` also carries the repos git could NOT scan (empty change lists + a one-line `error`; the panel
-    // renders them as their own rows) and repos that are merely out of sync with their remote (clean tree,
-    // non-zero ahead/behind). They contribute 0 to `count`, which is what every badge wants, a torn or merely
-    // unpushed repo has no reviewable work, and the panel, the only consumer that iterates the list, splits
-    // them out itself.
+    // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
+    // both contribute 0 to `count` and the panel splits them into their own rows.
     const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
-    // Who the agent ids in `repo.origins` are, straight off the response. The panel does NOT resolve them
-    // against the fleet roster alone: that roster is the live board and drops archived agents, while a landing
-    // outlives the card, see OriginAgentSchema in the contract for why the identity rides the review instead.
+    // Agent identities come straight off the response, not the fleet roster, since the roster drops archived agents
+    // that a landing still names.
     const originAgents = computed<Readonly<Record<string, OriginAgent>>>(() => query.data.value?.originAgents ?? {});
-    // Every reviewable row, including conflicts (they block commits, the badge undercounting exactly the state
-    // that needs attention was a bug) and the rows the daemon truncated past its per-repo budget: the badge
-    // reports how much work EXISTS, not how much of it got shipped.
+    // Includes conflicts (they block every commit, so an undercount hides exactly the state needing attention)
+    // and rows truncated past the per-repo budget: the count is how much work exists, not how much shipped.
     const count = computed(() =>
         repos.value.reduce((total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + truncatedTotal(repo), 0),
     );
-    /* How much a plain Commit would record, across every repo: what the commit box reads out, and what decides
-     * whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act
-     * (each has its own remote and branch), so the panel reads `repo.remote` straight off the row, for the row
-     * pills and for the primary button's aggregate alike, which hands syncAll the resolved per-repo targets.
-     *
-     * The staged rows the daemon could not fit count too, because the COMMIT takes them: it records the index,
-     * not the listing. Off the rows alone this read "500 staged" beside a button about to record five thousand,
-     * which is the state a big overhaul lands in the moment you stage it. */
+    // What a plain Commit would record across every repo; decides the button's "Commit"/"Commit all" label.
+    // Includes truncated staged rows too, since the commit records the whole index, not just what's listed.
     const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + (repo.truncated?.staged ?? 0), 0));
-    // What a clean tree still owes its remotes, the other half of "is there anything to do here", which the
-    // count above deliberately says nothing about. See outgoingWork.ts for why it is outgoing-only.
+    // What a clean tree still owes its remotes — the count above says nothing about this half.
     const outgoing = computed(() => outgoingWork(repos.value));
-    /* Which repos have a commit RUNNING, this tab's, and anyone's. The union is the whole point: the local half
-     * answers on the click, the daemon's half answers after a reload and for a second tab, and a repo in either
-     * is one whose rows are being recorded right now. Rows the daemon reports as committing are still LISTED,
-     * they are genuinely still uncommitted until the commit returns, so the panel dims them and takes their
-     * verbs away rather than guessing them gone. */
+    // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
+    // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
     const committing = computed<readonly string[]>(() => [...new Set([...committingHere.value, ...(query.data.value?.committing ?? [])])]);
 
     return {

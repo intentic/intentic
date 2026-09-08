@@ -4,24 +4,13 @@ import { ref } from "vue";
 import { requestModelPick } from "./hostModelPicker";
 import { usePaneView } from "../panel/useChat-view";
 
-/* THE DOOR TO THE MODEL LIST, drawn by whichever strip has taken the composer's place.
- *
- * It is its own component because two different strips need it and they are mutually exclusive: the account
- * gate when this sandbox has nothing connected, and the trial strip once today's allowance is spent. Both are
- * standing in for a composer that is not rendered, so both need the same escape: the list, where every other
- * way to send lives, free ones included.
- *
- * IT OPENS THE SHELL'S PICKER, ANCHORED TO ITSELF. The composer's own picker hangs off the model pill, and that
- * pill does not exist while either strip is up: a desktop overlay with no anchor has nowhere to place itself.
- *
- * The answer is applied to THIS pane's conversation, which is what makes choosing a model here identical to
- * choosing one from the composer: a connected provider starts sending immediately, and a locked one points the
- * chat and leaves the handshake below. */
+// Stand-in for the composer's model picker when the composer itself is not rendered (account gate, trial-spent
+// strip): opens the shell's picker anchored to itself, and applies the answer to this pane's conversation, same
+// as a pick from the composer would.
 
 const view = usePaneView();
 
-// Button is a component, so the ref hands back its instance rather than an element; `$el` is its <button>, and
-// that element is what decides where the panel places itself and which window it opens in.
+// Button is a component; the ref is its instance, `$el` is the actual <button> element used as anchor.
 const listButton = ref<{ $el?: unknown }>();
 const chooseModel = async (): Promise<void> => {
     const anchor = listButton.value?.$el;

@@ -19,35 +19,21 @@ import { host } from "./host";
 import { isShotPath, storyDir, storyStanding } from "./runs";
 import { launchFailureOf, type LiveBrowser, type RunRow, type StoryOutcome } from "./useRuns";
 
-/* One run, story by story: the verdict, the walkthrough the agent wrote, and the screenshots it took at each
- * step. A story with no result yet shows the live session instead: the fleet already knows what it is doing,
- * and "still walking the page" is a truer answer than a blank row.
- *
- * WATCHING. While a session is live, its Chromium is streamed by the daemon (browser-sessions.ts attaches over
- * CDP on the agent's first browser call) into the shell's Browsers area, a tab per open page and a Take control
- * button. This row is the pointer at it: the reason a run is supervisable rather than merely reportable. The
- * button appears only for a session the daemon has actually listed; see useRuns' `browsers` for why it is never
- * derived and offered blind.
- *
- * SCREENSHOTS are the fiddly part. A report references them relatively (`![](shots/03-error.png)`) because that
- * is what makes the file readable on its own, in an editor or a terminal. The browser cannot load those: they
- * sit outside any served origin and reach it only through the daemon's authenticated /workspace/raw, which
- * means an object URL. And an object URL cannot be substituted into the markdown SOURCE, because the sanitizer
- * strips `blob:` from an img src (verified: DOMPurify's default URI allowlist has no blob scheme) while leaving
- * a relative path alone. So the swap happens AFTER sanitizing, imperatively on the rendered DOM, which is also
- * the only place the fetch can be lazy, one story at a time, instead of pulling every shot of every story. */
+// One run, story by story: verdict, walkthrough, and screenshots; a story with no result yet shows its live session
+// instead. Watch streams that session's Chromium into the Browsers area, shown only once the daemon actually lists it.
+// Screenshots, referenced relatively in the report markdown, resolve to authenticated object URLs after sanitizing, one
+// open story at a time.
 
 const { run, outcomes, browsers, loading, stop, retry } = defineProps<{
     run: RunRow;
     outcomes: Readonly<Record<string, StoryOutcome>>;
-    // Live browsers by conversationId: see useRuns.
+    // Live browsers by conversationId; see useRuns.
     browsers: Readonly<Record<string, LiveBrowser>>;
     loading: boolean;
-    // Ends one story's session. A fan-out of ten unattended sessions has to be stoppable from the surface that
-    // started it: sending someone to the Agents board to find the ten cards this view already knows about is
-    // the kind of errand that gets a run left running instead.
+    // Ends one story's session, callable from here rather than the Agents board, so a fan-out of unattended sessions
+    // can be stopped from the surface that started it.
     stop: (conversationId: string) => Promise<void>;
-    // Relaunches a story whose POST was refused before a fleet session existed.
+    // Relaunches a story whose request was refused before a fleet session ever existed.
     retry: (runId: string, slug: string) => Promise<void>;
 }>();
 
@@ -55,7 +41,7 @@ const api = host();
 const open = ref(new Set<string>());
 const failure = ref<string | undefined>(undefined);
 const retrying = ref(new Set<string>());
-// Object URLs by workspace path, minted once per shot and revoked together when this view goes away.
+// Object URLs by workspace path, minted once per shot and revoked together when this view unmounts.
 const shots = reactive<Record<string, string>>({});
 const reportEl = ref<Record<string, HTMLElement | undefined>>({});
 
@@ -79,15 +65,12 @@ const unstartedFailureOf = (slug: string): string | undefined =>
         ? launchFailureOf(run, slug)
         : undefined;
 
-/* WHY A STORY WAS NEVER WALKED: the session's own last words, which the fleet carries only while its card
- * still reads as failed. A run whose sessions were refused on their first request (a spent plan, an
- * organization with Claude Code switched off) reported itself here as a grey "error" and "No report was
- * written", so the one place the reason existed was a transcript nobody opens for a fan-out of ten. */
+// Why a story was never walked: the session's own last words, kept only while its card still reads as failed; without
+// this a refused session showed only a grey "error" with no reason reachable anywhere.
 const failureOf = (slug: string): string | undefined => agentOf(slug)?.failure ?? unstartedFailureOf(slug);
 
-/* This row's badge, the shared standing (runs.ts) with the two answers only a report can give: a run whose
- * artifacts are still being read, and a story whose session is not on the roster at all. Everything the stories
- * list also shows comes from the shared one, so the two surfaces cannot disagree about the same story again. */
+// This row's badge, sharing runs.ts's standing logic plus two report-only answers (still reading artifacts, or no
+// session on the roster), so this view and the stories list never disagree.
 const verdictBadge = (slug: string): { readonly label: string; readonly variant: StatusVariant } => {
     if (outcomes[slug]?.invalidResult === true) {
         return { label: `invalid result`, variant: `danger` };
@@ -106,10 +89,8 @@ const verdictBadge = (slug: string): { readonly label: string; readonly variant:
     return { label: agent.status, variant: `neutral` };
 };
 
-/* Both of these rows are PLACES: the agent's own session log, and the browser it drove, so both render as
- * real links (appLink): an address under the pointer, the browser's own menu on them, and Ctrl/⌘-click opening
- * one beside the report instead of on top of it. Each is only ever rendered where the id exists (`v-if`), so
- * the empty fallback is unreachable and merely spares the template a narrowing it cannot do. */
+// Both real links (appLink), so the address, its menu and Ctrl/Cmd-click all work; each renders only where its id
+// exists, so the empty fallback path is unreachable.
 const sessionLink = (slug: string) => {
     const id = conversationOf(slug);
     const path = id === undefined ? `/agents` : `/agents/${encodeURIComponent(id)}`;
@@ -121,7 +102,7 @@ const browserLink = (slug: string) => {
     return appLink(api.href(path), () => api.navigate(path));
 };
 
-// Live only: a settled session has nothing to stop, and the button would then be an offer to do nothing.
+// Live only: a settled session has nothing to stop, and the button would offer to do nothing.
 const isLive = (slug: string): boolean => {
     const status = agentOf(slug)?.status;
     return status === `running` || status === `awaiting`;
@@ -154,10 +135,8 @@ const relaunch = async (slug: string): Promise<void> => {
     }
 };
 
-/* The agent's live one-liner while there is no report to read. The page its browser is on comes FIRST when there
- * is one: during a walkthrough "on /checkout/payment" is the most informative thing anyone can be told in six
- * words, and it is the same fact the Watch button acts on. Otherwise the fleet's own "last tool, current todo",
- * so this view is never a worse version of the board. */
+// The agent's live one-liner when there's no report yet: the browser's own page first (the same fact the Watch button
+// acts on), else the fleet's last-tool/current-todo.
 const activityOf = (slug: string): string | undefined => {
     const url = browserOf(slug)?.url;
     if (url !== undefined && url !== ``) {
@@ -186,9 +165,8 @@ const blobFor = async (path: string): Promise<string | undefined> => {
     }
 };
 
-// Markdown's decorator runs after sanitization but before v-html inserts the fragment. Removing every image
-// outside the story-local convention here prevents a remote/absolute source from being fetched even briefly;
-// resolveShots later replaces the accepted relative sources with authenticated object URLs.
+// Runs after sanitizing but before v-html inserts the fragment, dropping every image outside the story-local convention
+// so a remote source is never even briefly fetched; resolveShots later fills the accepted ones in.
 const restrictReportImages = (fragment: DocumentFragment): void => {
     for (const image of fragment.querySelectorAll(`img`)) {
         const relative = (image.getAttribute(`src`) ?? ``).replace(/^\.\//, ``);
@@ -199,9 +177,8 @@ const restrictReportImages = (fragment: DocumentFragment): void => {
     }
 };
 
-/* Resolve the rendered report's relative <img> sources against the story's own run directory. Runs after every
- * render of an open story (flush: post, the v-html has to exist first) and is idempotent: only object URLs
- * minted below survive a later pass. restrictReportImages has already removed every untrusted source. */
+// Resolves the rendered report's relative <img> sources against the story's run directory, after every render of an
+// open story; idempotent, since only object URLs minted here survive a later pass.
 const resolveShots = (slug: string): void => {
     const container = reportEl.value[slug];
     if (container === undefined) {
@@ -244,9 +221,8 @@ onBeforeUnmount(() => {
 });
 
 const defects = computed(() => run.manifest.stories.flatMap((story) => outcomes[story.slug]?.result?.defects ?? []));
-// One line per address the run used: which app each group of stories was walked through. Read straight off the
-// manifest rather than re-derived from the stories: what was CHOSEN is the fact a report needs, and a run that
-// aimed two groups of one repo at two ports is unreadable a week later without it.
+// One line per address the run used, read off the manifest rather than re-derived from stories, since what was chosen
+// is the fact worth keeping when two groups were aimed at two ports.
 const addresses = computed(() => Object.entries(run.manifest.targets).map(([key, url]) => ({ key, url })));
 </script>
 
@@ -269,8 +245,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
         <Notice v-if="failure" :of="noticeOf(failure)" />
 
         <div class="overflow-hidden rounded-lg border border-line-subtle bg-card">
-            <!-- `body="drawer"`: a report is a document with its own measure and its own screenshots, not a
-                 fact hanging off the story's title. -->
+            <!-- A report has its own measure and its own screenshots; not a fact hanging off the story's title. -->
             <DisclosureRow
                 v-for="story in run.manifest.stories"
                 :key="story.slug"
@@ -284,9 +259,10 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <span class="block truncate font-normal">{{ story.title }}</span>
                 </template>
                 <template #description>
-                    <!-- The session's last words REPLACE the activity line for a story that died: a dead session
-                         has no activity left to report, and the row's one subordinate line is worth more spent
-                         on why it stopped than on the repo it belongs to. -->
+                    <!--
+                        The session's last words replace the activity line for a dead story: a dead session has no activity left, and why it stopped
+                        matters more here than the repo.
+                    -->
                     <span v-if="failureOf(story.slug)" class="block truncate text-danger" v-tooltip.top="failureOf(story.slug)">
                         {{ failureOf(story.slug) }}
                     </span>
@@ -296,9 +272,10 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                 </template>
                 <template #control>
                     <StatusBadge :variant="verdictBadge(story.slug).variant" :label="verdictBadge(story.slug).label" size="xs" />
-                    <!-- The supervision button. Only while the daemon lists this session's Chromium: it opens
-                         the Browsers area on the live screencast, where the view's own control offers the
-                         keyboard and mouse if the user wants to intervene. -->
+                    <!--
+                        Only while the daemon lists this session's Chromium; opens the Browsers area on the live screencast, with keyboard/mouse
+                        control if needed.
+                    -->
                     <Button v-if="browserOf(story.slug)" label="Watch" size="small" severity="secondary" as="a" v-bind="browserLink(story.slug)">
                         <template #icon><Icon name="eye" /></template>
                     </Button>
@@ -321,18 +298,18 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                 </template>
 
                 <template #below>
-                    <!-- The report is the artifact; everything else on this row is a summary of it. -->
-                    <!-- A measure, because this page is 72rem wide and a report is the longest prose in the
-                         extension: unbounded, its paragraphs ran past 150 characters a line. Only text takes the
-                         cap (see prose.css): the screenshots under it still get the full column, which is where
-                         the extra room is actually worth something. -->
+                    <!-- The report is the artifact; everything else on this row summarizes it. -->
+                    <!--
+                        Capped prose width (prose.css), since an unbounded 72rem page ran paragraphs past 150 characters; screenshots below keep the
+                        full column.
+                    -->
                     <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
                         <Markdown :source="outcomes[story.slug]?.report ?? ``" :decorate="restrictReportImages" />
                     </div>
-                    <!-- A story whose session DIED is the one case where there is something to read without a
-                         report, and it is the reader's whole answer: the provider's own sentence, in the alert
-                         the rest of this view uses for a failure. Sending them to the session for it (which is
-                         all this panel used to do) means opening a transcript whose only content is this line. -->
+                    <!--
+                        The one thing to read when a session died without a report: the provider's own failure sentence, instead of an
+                        otherwise-empty transcript.
+                    -->
                     <Notice
                         v-else-if="outcomes[story.slug]?.invalidResult"
                         :of="
@@ -341,7 +318,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                             )
                         "
                     />
-                    <!-- `?? ``` is for the compiler, not the reader: `failureOf` is a call, so the guard above cannot narrow it. -->
+                    <!-- For the compiler: `failureOf` is a call, so the v-else-if guard above can't narrow it. -->
                     <Notice v-else-if="failureOf(story.slug)" :of="noticeOf(failureOf(story.slug) ?? ``)" />
                     <div v-else :class="ui.emptyState()">
                         {{
@@ -351,14 +328,14 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                         }}
                     </div>
 
-                    <!-- The criteria matrix: the story's own promises, one verdict each, in the order they were
-                         authored. It is the one part of result.json the report's prose does not already say in
-                         order, and the reason the brief hands the agent a numbered list. -->
-                    <!-- The promises themselves, so at the reading size and the full content colour the design
-                         system reserves for text read in sentences: this matrix is the answer to the question
-                         the whole view exists for, and it was set two steps down and dimmed, as if it were the
-                         chrome around the answer rather than the answer. The agent's note stays quiet: that IS
-                         the annotation. -->
+                    <!--
+                        The story's own criteria, one verdict each, in authored order: the one part of result.json the report's prose doesn't already
+                        state in order.
+                    -->
+                    <!--
+                        At full reading size and colour, since this matrix answers the question the view exists for, not chrome around the answer;
+                        the agent's note stays quiet as its annotation.
+                    -->
                     <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-4 flex max-w-read flex-col gap-1.5">
                         <li
                             v-for="(criterion, index) in outcomes[story.slug]?.result?.criteria ?? []"

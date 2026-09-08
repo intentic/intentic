@@ -8,7 +8,7 @@ import { echoOf, parseLangs, rootRelativeAnchor, rootRelativePaths, type ScopeFl
 
 export type OutputMode = "text" | "json" | "ndjson";
 
-// Explicit flag beats env; both flags together is a usage error.
+// Explicit --json/--ndjson beats env; both flags together is a usage error.
 export const resolveMode = (flags: { json: boolean; ndjson: boolean }, envMode: OutputMode): OutputMode => {
     if (flags.json && flags.ndjson) {
         throw new Error("--json and --ndjson are mutually exclusive");
@@ -48,11 +48,11 @@ export const engineFromEnv = (featuresSpec?: string): ReturnType<typeof createEn
     });
 };
 
-// Verbs whose query is (or starts with) a workspace path, resolved like --in, not searched.
+// Verbs whose query is a workspace path, resolved like --in rather than searched.
 const PATH_QUERY_VERBS = new Set<Verb>(["outline", "context", "who"]);
 
-// `impact` is the one verb whose query is a LIST of paths rather than a single anchor, and an empty one is
-// meaningful (it means "read my uncommitted changes"), so it cannot go through the anchor resolver.
+// `impact`'s query is a list of paths, not a single anchor; an empty one means "read my uncommitted changes", so it
+// skips the anchor resolver.
 const resolveQuery = (verb: Verb, query: string, root: string): string => {
     if (verb === "impact") {
         return rootRelativePaths(
@@ -66,10 +66,8 @@ const resolveQuery = (verb: Verb, query: string, root: string): string => {
     return PATH_QUERY_VERBS.has(verb) ? rootRelativeAnchor(query, root) : query;
 };
 
-// The sandbox pins WORKSPACE_ROOT (to /work), but agent sessions run in per-conversation worktrees OUTSIDE the
-// pin, transcript mining showed every such session silently searching the main checkout instead of its own
-// tree, and every worktree path zero-hitting. A pin the caller is not inside points at the wrong code: re-root
-// at the enclosing git workspace, falling back to cwd itself (matching the unpinned default).
+// A pin the caller is outside points at the wrong code: re-root at the enclosing git workspace, falling back to cwd
+// (matching the unpinned default).
 export const workspaceRoot = (): string => {
     const config = loadConfig();
     const cwd = process.cwd();
@@ -85,9 +83,8 @@ export const workspaceRoot = (): string => {
     return cwd;
 };
 
-// The one executor every search verb goes through: build engine from env, resolve path frames to root-relative,
-// run, emit in the resolved mode, and set the grep-convention exit code (0 hits, 1 none; thrown errors become 2
-// in cli.ts).
+// The one executor every search verb goes through: builds the engine, resolves path frames, runs, emits in the resolved
+// mode, and sets the grep-convention exit code (thrown errors become 2 in cli.ts).
 export const runSearch = async (context: CommandContext, verb: Verb, query: string, rawFlags: SearchFlags, options: VerbOptions): Promise<void> => {
     const mode = resolveMode(rawFlags, loadConfig().intenticOutput);
     const root = workspaceRoot();
@@ -107,7 +104,7 @@ export const runSearch = async (context: CommandContext, verb: Verb, query: stri
 
 const VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast", "outline", "context", "recent", "log", "who"]);
 
-// Shell-like tokenizer for multi lines: whitespace-separated, "…"/'…' quoting, \" escapes inside double quotes.
+// Shell-like tokenizer for multi lines: splits on whitespace, honors "…"/'…' quoting and \" escapes in double quotes.
 const tokenize = (line: string): string[] => {
     const tokens: string[] = [];
     let current = "";
@@ -161,8 +158,8 @@ export interface MultiLine {
     readonly error?: string;
 }
 
-// Each multi line is a mini command: `<verb> <query…> [--lang ts,py] [--in dir] [--kind call] [--literal|--word|--case]`.
-// Anything unparseable becomes a per-section error, a flag must never be searched as literal text.
+// Each multi line is a mini command: `<verb> <query…> [--lang ts,py] [--in dir] [--kind call]
+// [--literal|--word|--case]`. Unparseable input becomes a per-section error; a flag is never searched as literal text.
 export const parseMultiLine = (line: string): MultiLine => {
     const tokens = tokenize(line);
     const first = tokens[0] ?? "";
@@ -181,7 +178,7 @@ export const parseMultiLine = (line: string): MultiLine => {
     let caseSensitive = false;
     for (let i = 0; i < rest.length; i += 1) {
         const token = rest[i]!;
-        // Anything dash-prefixed is a flag attempt, grep's single-dash flags must error, never be searched.
+        // Dash-prefixed tokens are flag attempts; grep's single-dash flags must error, never be searched as text.
         if (!/^-{1,2}[A-Za-z]/.test(token)) {
             queryParts.push(token);
             continue;
@@ -270,11 +267,8 @@ const readStdin = (): Promise<string> =>
         process.stdin.on("error", reject);
     });
 
-// `iq multi`: several queries, `<verb> <query> [flags]` or a bare auto-mode query, sharing one process spawn
-// and one --budget (split equally, min 150 tokens per section). Each query is an operand, or one per stdin line
-// when they are generated rather than typed; transcript mining found agents writing heredocs and temp files to
-// reach a batch, which is a shell round-trip for something that is just an argument list. Per-line flags merge
-// over the command-level ones (line wins). Exit 0 if any section hit, 1 if all empty.
+// `iq multi`: several queries sharing one process spawn and one --budget, split equally (min 150 tokens per section);
+// per-line flags override command-level ones. Exits 0 if any section hit, 1 if all empty.
 export const runMulti = async (context: CommandContext, flags: SearchFlags, queries: readonly string[], input?: string): Promise<void> => {
     const mode = resolveMode(flags, loadConfig().intenticOutput);
     const source = queries.length > 0 ? queries : ((input ?? (await readStdin())).split("\n") as readonly string[]);
@@ -290,8 +284,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
         const prefix = `[${i + 1}/${lines.length}]`;
         let parsed = parseMultiLine(line);
         if (parsed.error === undefined) {
-            // Path-frame resolution can reject a line (path outside the workspace), that is this line's error,
-            // never the batch's.
+            // A rejected path frame is this line's error, never the whole batch's.
             try {
                 parsed = {
                     ...parsed,

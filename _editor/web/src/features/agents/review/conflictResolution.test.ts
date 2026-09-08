@@ -3,10 +3,9 @@ import { describe, expect, it } from "vitest";
 import { ERRANDS, errandOf } from "../../chat/run/errands";
 import { agentBlockers, blockerLabel, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 
-/* The prompt is a UI artifact: it is what the panel's primary button DOES, so the parts of it that decide
- * whether the turn works are pinned here rather than left to review. Everything asserted below is something a
- * turn fails without: the commit that lets a rebase start, the self-discovery of the user's checkout, the
- * instruction not to resolve by dropping a side, and the fence around paths the agent cannot touch. */
+// The prompt is what the panel's primary button sends; only the parts a turn fails without are pinned here: the
+// commit-first step, main-branch self-discovery, keeping both sides, and the fence around paths the agent cannot
+// touch.
 
 const conflicts: readonly LandConflict[] = [
     {
@@ -36,8 +35,7 @@ describe(`blockers`, () => {
         expect(blockersOf([{ repo: `root`, clean: 0, paths: [] }])).toEqual([]);
     });
 
-    // The split IS the action ladder: a rebase in the agent's worktree can reach the first two causes and can
-    // never reach the third, so offering one button for all of them would promise something git refuses.
+    // The split mirrors the action ladder: a rebase can reach the first two causes, never the third.
     it(`gives the agent the causes a rebase can reach, and the user the one it cannot`, () => {
         const blockers = blockersOf(conflicts);
         expect(agentBlockers(blockers).map(blockerLabel)).toEqual([`src/auth/session.ts`, `assets/logo.png`, `docs/README.md`]);
@@ -61,12 +59,12 @@ describe(`resolvePrompt`, () => {
     it(`falls back to self-discovery when the report carries no branch: a detached main checkout has no name`, () => {
         expect(prompt).toContain(`git worktree list`);
         expect(prompt).toContain(`git rebase <branch>`);
-        // The escape hatch, so a rebase that goes badly has somewhere to go other than improvisation.
+        // Escape hatch for a rebase that goes wrong, rather than leaving the agent to improvise.
         expect(prompt).toContain(`git rebase --abort`);
     });
 
-    // `git worktree list` is one line per live agent: 65 of them in this workspace, and every conflicted
-    // session spent its opening calls on it. When the daemon read the name, the prompt says it.
+    // When the daemon can read the branch name, the prompt states it directly instead of pointing at `git worktree
+    // list`.
     it(`names the main line when the report carries it, and drops the listing the agent would have to read`, () => {
         const named = resolvePrompt([
             { repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }], mainBranch: `main` },
@@ -115,10 +113,9 @@ describe(`resolvePrompt`, () => {
         expect(prompt).toContain(`turn ends`);
     });
 
-    /* The transcript recognises this prompt as an ERRAND (the app's words, not the user's) by its opening
-     * paragraph, which is the only marker that survives a hydrate (errands.ts). Asserted on the composed
-     * prompt, so rewording the opening fails here rather than silently restoring the behaviour this replaced:
-     * a paragraph of machine prose pinned over the question the agent was actually asked. */
+    // The transcript recognizes this prompt as an ERRAND by its opening paragraph, the only marker that survives a
+    // hydrate (errands.ts). Asserted here so rewording the opening fails the test instead of silently breaking
+    // recognition.
     it(`reads back as the land-conflict errand, which is what keeps it from stealing the sticky prompt`, () => {
         expect(errandOf({ id: 1, role: `user`, text: prompt })).toBe(ERRANDS.landConflict);
     });

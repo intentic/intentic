@@ -7,22 +7,11 @@ import { opt } from "../run/opt.js";
 import type { VerificationStanding } from "../verification/agent-verification.js";
 import { bookLimitMove } from "./sibling-account.js";
 
-/* THE WAY ON FROM A SPENT ALLOWANCE, worked out once at the failure and read twice: by the frame that tells the
- * chat and the card what each press would cost and where a policy is already taking the turn, and by the held
- * entry the scheduler performs a booked move from (turn-resume.ts). One decision, so the two cannot disagree.
- *
- * WHAT IT MEASURES. `contextTokens` is what a press that keeps the session re-reads, on this account at the
- * reset or carried to another: the context as the last usage frame measured it, read cold because a prompt
- * cache is per account and expires in minutes. `handoffTokens` is what a press that opens a fresh session pays
- * instead: the capped record envelope (runtime-history.ts) plus the sandbox's measured brief (handoff-state.ts),
- * rendered here exactly as the fresh turn would render them, and counted at four characters a token, which is
- * the honest order of magnitude for prose and paths. Neither is a promise; both are the numbers the offer was
- * missing when it read "Continue" over a button that could cost a hundred thousand tokens or six.
- *
- * WHAT IT DECIDES. `move` is the owner's policy applied (sibling-account.ts bookLimitMove): the account with
- * room, and whether the session comes along. Absent means hold, or the appointment, exactly as before.
- *
- * Costs one transcript read and a handful of git statuses, on a failure path, once. */
+// Computed once at a spent-allowance failure and read by both the refusal frame and the scheduler's booked move, so the
+// two can't disagree. `contextTokens` costs continuing the same session (last measured context, re-read since the
+// prompt cache is per-account and short-lived); `handoffTokens` costs a fresh session (capped history + measured brief,
+// ~4 chars/token). `move` is the owner's policy (bookLimitMove): which account has room and whether the session
+// carries; absent means hold, as before.
 export interface LimitWay {
     readonly standing: VerificationStanding;
     readonly checklist?: readonly TodoItem[] | undefined;
@@ -36,7 +25,7 @@ const CHARS_PER_TOKEN = 4;
 export const limitWayOf = async (
     services: Services,
     params: {
-        // Undefined conversation ⇒ nothing is held and there is no way on to work out (the bench, a one-shot).
+        // Undefined conversation ⇒ nothing held, no way-on to work out (bench runs, one-shots).
         readonly turn: AgentTurn;
         readonly provider: AgentProvider;
         readonly model: string | undefined;

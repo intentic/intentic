@@ -4,20 +4,13 @@ import { basename, dirname, join } from "node:path";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope } from "../policy.js";
 
-/* Files on somebody's device. Reads are bounded by the roots; writes are bounded by the roots AND the write
- * switch, which is off by default, "connect my device" does not imply "edit my documents".
- *
- * THERE IS NO DELETE TOOL. Deleting is the one operation with no undo and no partial recovery, and an agent
- * that can delete is one bad inference away from a support ticket nobody can fix. `trash_file` moves the file
- * into a dated folder under ~/.intentic/host/trash instead, so "undo that" is a real instruction rather than a
- * apology. Emptying that folder is the user's business, on their own schedule.
- *
- * A rename, not a copy: within a filesystem it is atomic and instant even for a large file, and the fallback
- * (copy + unlink) is deliberately absent, a trash that spans filesystems would silently turn "moved" into
- * "duplicated and then really deleted", which is exactly the operation this tool exists to avoid. */
+// Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off
+// by default. There is no delete tool: `trash_file` moves the file under ~/.intentic/host/trash instead. A
+// rename, not a copy: the cross-filesystem fallback is deliberately absent, since it would silently turn
+// "moved" into "duplicated and then really deleted".
 
-// Anything larger is almost certainly not something a model should be reading whole (a database file, a video),
-// and a 200 MB string is a memory incident on a laptop rather than a useful answer.
+// Anything larger is almost certainly not something a model should be reading whole, and a 200 MB string is a
+// memory incident on a laptop rather than a useful answer.
 const MAX_READ_BYTES = 2_000_000;
 
 export const readTextFile = async (path: string, scopes: HostScopes): Promise<string> => {
@@ -41,8 +34,8 @@ export const writeTextFile = async (path: string, content: string, scopes: HostS
         () => false,
     );
     await writeFile(target, content, "utf8");
-    // Say which it was. "Wrote 40 lines to config.json" reads identically whether it created a file or replaced
-    // somebody's working configuration, and only one of those is worth mentioning to the user.
+    // Say which it was: "Wrote 40 lines to config.json" reads identically whether it created a file or replaced a
+    // working configuration, and only one of those is worth mentioning.
     return existed ? `Overwrote ${target} (${content.length} characters).` : `Created ${target} (${content.length} characters).`;
 };
 
@@ -62,8 +55,8 @@ export const listDirectory = async (path: string, scopes: HostScopes): Promise<D
             if (kind !== "file") {
                 return { name: entry.name, kind };
             }
-            // A stat per entry is affordable for a directory listing and turns "here are 400 names" into
-            // something the agent can reason about (which file is the recent one, which is the big one).
+            // A stat per entry is affordable for a directory listing and turns "here are 400 names" into something the
+            // agent can reason about.
             const info = await stat(join(target, entry.name)).catch(() => undefined);
             return info === undefined ? { name: entry.name, kind } : { name: entry.name, kind, size: info.size, modified: info.mtime.toISOString() };
         }),

@@ -7,23 +7,8 @@ import { useDesktopSync } from "./useDesktopSync";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import ScriptSourceSwitch from "../../capabilities/connect/ScriptSourceSwitch.vue";
 
-/* ADDING A DEVICE TO THIS SANDBOX. Pick a folder, click Enable, paste the one-liner it reveals on the machine
- * you want. That one-liner installs the resident agent and enrolls it, no Google sign-in on the laptop.
- *
- * ONE JOB, WHICH IS THE CHANGE. This card used to hold the whole subject: "Syncing from radarsu-rog", the folder
- * on that machine, a warning when it went quiet, and a "Disable sync" that revoked EVERY paired device at
- * once. All of it in the singular, under a list of the several devices that could disagree with it, because
- * the daemon published its enrollment list flattened into one holder and some names.
- *
- * Every one of those facts is per DEVICE, so every one of them is now a row in the Devices list above, with
- * its switches beside it: pause under the folder, mirroring under the ports, unpair and revoke on the machine.
- * What is left here is the one thing that genuinely belongs to the sandbox rather than to any device, because
- * it happens BEFORE there is a device to put it on: minting the pairing.
- *
- * Two enrollment modes still surface here: full "sync" (file sync + ports, single holder, owner-only) and
- * "mirror" (ports only, any number of machines). An owner can pick either — including mirroring a second
- * device while their first holds sync; a member only ever sees the mirror flow, matching what the daemon would
- * grant them. */
+// Mints a device pairing: pick a folder, click Enable, run the one-liner on the target machine. Two modes:
+// full sync (file sync + ports, single holder, owner-only) and mirror (ports only, any device).
 
 const { highlight = false } = defineProps<{ highlight?: boolean }>();
 
@@ -43,18 +28,11 @@ const {
     stop,
 } = useDesktopSync();
 
-/* WHETHER A DEVICE ALREADY HOLDS FILE SYNC, read off the LIST rather than off a status call of this card's
- * own. File sync is single-holder, so enrolling a second machine for it is a takeover, and the reader has to be
- * told whose. That fact used to arrive here as `syncingFrom` on /system/sync, which is the sandbox-level shape
- * this page stopped having; it is a property of one of the rows above, so it is read from there.
- *
- * Not polling: the list above this card is doing that already (same query, same cache), and a card deciding
- * which words to use is not a reason to reach out to somebody's laptop on a timer. */
+// Whether a device holds file sync, read off the already-fetched devices list (same query, no extra poll).
 const { devices } = useDevices({ poll: false });
 const holder = computed<Device | undefined>(() => devices.value.find((device) => device.sync?.mode === `sync`));
 
-// The owner's opt-in to the ports-only flow (skip file sync, or add a mirror machine while another holds sync).
-// Members don't need the toggle: portsOnly is forced for them.
+// Owner's opt-in to ports-only (skip file sync, or mirror while another holds sync); forced on for members.
 const mirrorOnly = ref(false);
 const portsOnly = computed(() => !canOperate.value || mirrorOnly.value);
 
@@ -68,10 +46,10 @@ const startMirror = (): void => {
     takeover.value = false;
 };
 
-// "What stays on your device" disclosure: collapsed by default, but always one click away before pasting.
+// "What stays on your device" disclosure: collapsed by default.
 const showFootprint = ref(false);
 
-// Brief ring when the user arrives here from the Workspace "Open in local editor" shortcut.
+// Brief ring when arriving via the Workspace "Open in local editor" shortcut.
 const ringing = ref(false);
 watch(
     () => highlight,
@@ -98,15 +76,12 @@ onUnmounted(stop);
     >
         <RowNote variant="block" class="flex flex-col gap-4">
             <template v-if="available">
-                <!-- WHAT THIS CARD IS FOR, in one line, because it no longer reports anything and a reader who
-                     arrives expecting the old status card should be told where that went. -->
+                <!-- States where status went, since this card no longer reports anything itself. -->
                 <p class="text-2xs text-subtle">
                     Pair another device with this sandbox. Anything already paired is a row in
                     <b>Devices</b> above, with its folder, its ports and its switches.
                 </p>
-                <!-- Taking file sync over from the machine that holds it. Offered only when one does, and it
-                     names it: this ends that device's sync, which is the whole reason it is opt-in rather
-                     than what Enable quietly does. -->
+                <!-- Names the device being taken over, since taking over ends its sync. -->
                 <p v-if="takeover" class="text-2xs text-warning">
                     This takes over from {{ holder?.label ?? "the other device" }}. Its file sync stops when you run the command below.
                 </p>
@@ -134,10 +109,10 @@ onUnmounted(stop);
                         >
                             <template #icon><Icon name="desktop" /></template>
                         </Button>
-                        <!-- WHAT ELSE THIS CARD CAN MINT, as links rather than a second row of buttons: each is
-                             a different enrollment, and only ever one of them is being set up at a time.
-                             Takeover appears only while a machine actually holds file sync, because it is
-                             meaningless otherwise and its warning names that machine. -->
+                        <!--
+                            Other mints are links, not buttons: only one enrollment is ever being set up at a time. Takeover shows only
+                            while a machine holds file sync.
+                        -->
                         <button
                             v-if="canOperate && !takeover && !mirrorOnly && holder"
                             type="button"
@@ -168,10 +143,10 @@ onUnmounted(stop);
                     </div>
                 </template>
                 <template v-else>
-                    <!-- Inside the desktop app, the no-terminal way leads: the app asks for the folder in a
-                         system dialog (no path to type, no ~ to expand) and runs the same script the command
-                         below runs. The command keeps its place underneath because the device being
-                         enrolled need not be this one. -->
+                    <!--
+                        Inside the desktop app the button opens a system folder dialog; the command below stays since the device
+                        being enrolled need not be this one.
+                    -->
                     <div v-if="desktopVersion() !== undefined && desktopLink !== undefined" class="flex flex-col gap-1.5">
                         <div>
                             <Button
@@ -202,9 +177,10 @@ onUnmounted(stop);
                             sandbox's dev servers on your localhost. No sign-in is needed.
                         </template>
                     </p>
-                    <!-- Both forms are on screen at once here, and the switch rewrites the pair, so it sits
-                         above them rather than beside either. The device being enrolled is by definition not
-                         the sandbox's own machine, and need not be the developer's. -->
+                    <!--
+                        Both forms share the switch above them since it rewrites the pair; the device being enrolled need not be
+                        this one either.
+                    -->
                     <ScriptSourceSwitch />
                     <Code :code="linuxCommand" lang="bash" label="Linux / macOS" :wrap="true" />
                     <Code :code="windowsCommand" lang="powershell" label="Windows (PowerShell)" :wrap="true" />
@@ -231,9 +207,10 @@ onUnmounted(stop);
                 </template>
             </template>
 
-            <!-- No SSH way in: a loopback/preview sandbox, or one reached over intentic's own tunnels, which carry
-                 web traffic only for now. Either way sync has nothing to ride, and saying so beats an Enable button
-                 whose one-liner would hang on the laptop. -->
+            <!--
+                No SSH way in on a loopback/preview sandbox or one behind intentic's own tunnels (web traffic only): sync
+                has nothing to ride.
+            -->
             <div v-else :class="ui.emptyState()">
                 Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.
             </div>

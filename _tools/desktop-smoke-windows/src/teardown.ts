@@ -1,14 +1,6 @@
-/* Putting the machine back, so the NEXT run meets a clean one.
- *
- * A snapshot-reset runner does not need this. Every other arrangement does, and the failure without it is
- * confusing rather than loud: the install tier's subject is a FIRST install, so a leftover from yesterday
- * makes today's run stop before it has installed anything, with a message about the snapshot that is only
- * correct on the machines that have one.
- *
- * It NEVER fails the job. A teardown that can go red gives a green run a way to turn red for something that
- * already worked, and there is nothing here whose failure is news: the app not being installed and the
- * container not existing are both the state this is trying to reach.
- */
+// Puts the machine back for the next run; a snapshot-reset runner doesn't need this, everything else does. Never fails
+// the job: nothing here is news, since the app not being installed or the container not existing are the states this is
+// trying to reach.
 
 import { LOCAL_PORT } from "@intentic/constants";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -20,20 +12,8 @@ import { sandboxContainerName, SANDBOX_CONTAINER_PREFIX } from "./parse.js";
 import { containersPublishing, findInstalledApp, removeContainer } from "./probe.js";
 import { powershell } from "./run.js";
 
-/* A SANDBOX OF THIS TIER'S UNDER SOME OTHER NAME, which is the one leftover removing today's container cannot
- * reach, and the one that breaks tier 3 permanently rather than once.
- *
- * The loopback port a browser dials is derived from the sandbox id, which is derived from the connect token —
- * and this tier's connect token is a CONSTANT (constants.ts). So every sandbox it has ever created, under every
- * hostname the tier has been written with, wants the same host port. Docker refuses a whole `docker run` whose
- * `-p` is taken, and `ic` answers that by retrying WITHOUT the shortcut (sandbox/connect.rs) rather than failing
- * the setup: the new sandbox comes up healthy and publishes nothing, while the older container keeps answering
- * on the port tier 3 derives. Everything up to the credential then passes against the wrong daemon, because a
- * stranger's sandbox is also reachable and also correctly gated.
- *
- * `--restart unless-stopped` is on every sandbox, so such a container outlives reboots and every later run.
- * Scoped to this product's own containers by name: whatever else holds that port is not something a test tier
- * may remove, and tier 3 names it instead. */
+// A stale sandbox under another name squats this tier's derived port (the connect token is a constant, so every run
+// wants the same one) and answers in today's place, since ic retries without -p. Removed by container-name prefix only.
 const removeSquatters = async (harness: Harness, keep: string): Promise<void> => {
     const sandboxId = sandboxIdFromToken(CONNECT_TOKEN);
     if (sandboxId === undefined) {
@@ -63,8 +43,7 @@ export const runTeardown = async (harness: Harness): Promise<void> => {
         return;
     }
     await uninstallSilently(installed.uninstallString);
-    // The registration outlives a failed uninstall, and a leftover one satisfies the install tier's own
-    // "is the scheme registered" assertion, which would then be passing on yesterday's evidence.
+    // A failed uninstall leaves the registration, satisfying the install tier's own assertion on stale evidence.
     await powershell(
         `$ErrorActionPreference='SilentlyContinue'
          Remove-Item -Recurse -Force 'Registry::HKEY_CURRENT_USER\\Software\\Classes\\intentic'`,

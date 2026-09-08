@@ -5,8 +5,7 @@ import type { WorkspacePins } from "../../dependencies/workspace-pins.js";
 import { syncHookOutput } from "../../testing.js";
 import { freshnessHooks, namesAddedByCommand, pinsInCommand, pinsInManifest, splitRange } from "./agent-freshness.js";
 
-// A registry that answers for exactly the packages named, and counts how often it is asked: not re-asking is
-// half of what makes this affordable to run in front of a tool call.
+// A registry that answers only for the packages named and counts how often it is asked.
 const registry = (answers: Record<string, Freshness>, asks: { count: number } = { count: 0 }): { resolve: FreshnessResolver; asks: { count: number } } => ({
     resolve: async (pinned: PinnedPackage) => {
         asks.count += 1;
@@ -34,7 +33,7 @@ const fire = async (
 const context = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
     (result?.hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
 
-/* ---- what counts as a version decision -------------------------------------------------------------- */
+// What counts as a version decision.
 
 test("a manifest's own version field is not a dependency, which was the loudest false positive when measured", () => {
     const body = JSON.stringify({ name: "app", version: "1.4.0", dependencies: { vue: "3.5.22" } });
@@ -88,7 +87,7 @@ test.each(["*", "latest", "^1.x", "github:vuejs/vue"])("a specifier with no read
     expect(splitRange(specifier)).toBeUndefined();
 });
 
-/* ---- the hook ---------------------------------------------------------------------------------------- */
+// The hook.
 
 test("off wires no hook at all, so a workspace that has not asked for this pays nothing", () => {
     expect(freshnessHooks("off", registry({}).resolve)).toEqual({});
@@ -104,9 +103,6 @@ test("a pin the registry has moved past is reported, with both versions named", 
     expect(said).toContain("1.125.0");
 });
 
-/* THE SENTENCE THAT KEEPS THIS FROM CHURNING A HEALTHY MANIFEST. Matching a version the workspace already
- * pins is the commonest reason to write something other than the newest, and it is a GOOD one; without this
- * the notice reads as "newer is better" and earns a diff nobody wanted. */
 test("the notice names the good reasons to keep an older version", async () => {
     const { resolve } = registry({ vue: behind("3.5.41") });
     const said = context(await fire(freshnessHooks("versions", resolve), "PreToolUse", { command: "pnpm add vue@3.5.22" }));
@@ -139,8 +135,6 @@ test("a package is named once per turn, however many times the file is edited", 
     expect(await fire(hooks, "PreToolUse", { file_path: "/work/app/package.json", content: body }, "Write")).toEqual({});
 });
 
-/* The catch-up pass. A cold lookup cannot be waited for in front of the call, so the same question is asked
- * again after it — and the `told` set is what stops that from repeating whatever the first pass said. */
 test("the PostToolUse pass reports what was too cold to answer before the call, and never repeats it", async () => {
     let ready = false;
     const resolve: FreshnessResolver = async () => (ready ? behind("0.151.0") : undefined);
@@ -152,11 +146,7 @@ test("the PostToolUse pass reports what was too cold to answer before the call, 
     expect(await fire(hooks, "PostToolUse", call)).toEqual({});
 });
 
-/* ---- what the workspace already pins ------------------------------------------------------------------
- *
- * The largest source of "behind" versions in the measured history was also the most legitimate one: a new
- * package inside a monorepo taking the version the rest of the tree uses. Reporting those would put the whole
- * catalog on screen every time somebody scaffolded a package, and is how this gets switched off. */
+// What the workspace already pins.
 
 const pins = (index: Record<string, string[]>): WorkspacePins => (ecosystem, name) => new Set(ecosystem === "npm" ? (index[name] ?? []) : []);
 
@@ -165,7 +155,6 @@ test("a version this workspace already uses is a decision it has made, not a sta
     const hooks = freshnessHooks("versions", resolve, pins({ typescript: ["5.9.3"] }));
     const body = JSON.stringify({ devDependencies: { typescript: "5.9.3" } });
     expect(await fire(hooks, "PreToolUse", { file_path: "/work/new-pkg/package.json", content: body }, "Write")).toEqual({});
-    // Suppressed BEFORE the lookup, so the quiet case costs no request either.
     expect(asks.count).toBe(0);
 });
 
@@ -183,7 +172,7 @@ test("a DIFFERENT version of a package the workspace pins is still reported", as
     expect(context(await fire(hooks, "PreToolUse", { file_path: "/work/new-pkg/package.json", content: body }, "Write"))).toContain("typescript");
 });
 
-/* ---- successors -------------------------------------------------------------------------------------- */
+// Successors.
 
 test("versions mode never names a successor, however abandoned the package is", async () => {
     const { resolve } = registry({ request: { latest: "2.88.2", gap: "patch", deprecated: "request has been deprecated" } });
@@ -197,8 +186,6 @@ test("full mode names the replacement for an abandoned package, once the registr
     expect(context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add request@2.88.2" }))).toContain("undici");
 });
 
-/* The bar that keeps the curated list from rotting silently: the daemon refuses to call something abandoned
- * on the list's say-so alone. An entry that stops being true stops being said. */
 test("an abandoned entry stays silent when the registry does not corroborate it", async () => {
     const { resolve } = registry({ request: behind("3.0.0") });
     expect(context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add request@2.88.2" }))).not.toContain("undici");
@@ -209,8 +196,6 @@ test("a superseded remark is made when the package is being added, where the cho
     expect(context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add moment" }))).toContain("date-fns");
 });
 
-/* A suggestion has no lookup behind it, so filing it under "checked against the registry" would be a small lie
- * — and the advice about taking the newer version means nothing when no version was in question. */
 test("a suggestion on its own never claims a registry was consulted", async () => {
     const { resolve } = registry({});
     const said = context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add moment" }));
@@ -225,8 +210,6 @@ test("when both have something to say they stay two sections", async () => {
     expect(said).toContain("date-fns");
 });
 
-/* Second-guessing a dependency the project already committed to is noise, and would be this feature's
- * fastest route to being switched off. A manifest is not the moment of the choice. */
 test("a superseded remark is never made about a version already sitting in a manifest", async () => {
     const { resolve } = registry({});
     const body = JSON.stringify({ dependencies: { moment: "2.29.4" } });

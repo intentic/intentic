@@ -7,30 +7,22 @@ import type { PanelSummary } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
 
-// apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
-// static core views (infrastructure/live-status/directory-ui). Register the packaged detects here so the
-// cross-extension rules (apps claims a monorepo, a fallback view is dropped when claimed) are exercised
-// against the same registry the shell composes. (The fallback rule's exemplar is a local registration below:
-// no first-party view ships as a fallback since the dev-server preview moved to the shell's Preview area.)
-// Views are what this file is about; `commands` and `viewers` are here because activate() is one function: an
-// extension that registers a command as well as a view must not fail to register the view.
+// Registers packaged extensions' detects against the same registry the shell composes, so cross-extension
+// rules (claiming, fallback) are exercised for real. `commands`/`viewers` stubs just keep activate() from throwing.
 const registerApi = {
     views: { register: (view: ViewRegistration) => registerView(`test`, view) },
     viewers: { register: (): Disposable => ({ dispose: () => {} }) },
-    // The tree's per-directory documents. Accepted and dropped: this file is about what the RAIL shows, and an
-    // activate() that reaches a registry the stub is missing stops there: taking the views under test with it.
+    // Accepted and dropped: this file is about the rail, not a broken registry stopping tested views.
     documents: { register: (): Disposable => ({ dispose: () => {} }) },
     commands: { register: (): Disposable => ({ dispose: () => {} }) },
 } as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
 acceptance.activate(registerApi, { extensionId: `intentic.acceptance`, subscriptions: [] });
-// Documentation too: the rail-order cases below need a listed rail view whose position was previously an accident
-// of the builtins array. Its activate() also starts a badge poll, which is harmless here: every read inside it is
-// guarded, so an unreachable host simply yields no badge.
+// The rail-order cases need a listed rail view whose position wasn't accidental; the badge poll is harmless.
 documentation.activate(registerApi, { extensionId: `intentic.documentation`, subscriptions: [] });
 
-// A PanelSummary with everything false: override only the facts a case exercises.
+// A PanelSummary with everything false; override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
     hasPanel: false,
     installed: true,
@@ -65,8 +57,8 @@ describe(`apps extension`, () => {
     });
 });
 
-// The `apps` extension's tile for a repo, whether it claims the repo (monorepo) or rides in props (vitest-only)
-//: keyed by the tile key, which is always the repo name. `idsFor` above only sees claiming tiles.
+// The `apps` extension's tile for a repo, whether it claims it (monorepo) or just rides in props
+// (vitest-only), keyed by the tile key (always the repo name). `idsFor` above only sees claiming tiles.
 const appsTile = (key: string, panels: PanelSummary[]) =>
     detectActivations(panels, []).find(({ extension, activation }) => extension.id === `apps` && activation.key === key)?.activation;
 const contributes = (id: string, key: string, panels: PanelSummary[]): boolean =>
@@ -102,11 +94,9 @@ describe(`apps extension, merged tests view`, () => {
     });
 });
 
-/* THE CLAIM RULE'S THREE POSITIONS, exercised against a local fallback view (no first-party view ships as one
- * any more: the dev-server preview moved to the shell's Preview area, but the rule stays for third-party
- * bundles): a claiming view suppresses a fallback for its repo, and an AUXILIARY view sets `activation.repo`
- * (so the directory panel renders it and the tree marks the dir manageable) yet leaves the fallback standing,
- * because it adds a surface beside the repo's main one instead of subsuming it. */
+// The claim rule's three positions: a claiming view suppresses a fallback for its repo; an auxiliary view
+// sets `activation.repo` but leaves the fallback standing, adding a surface beside the main one rather than subsuming
+// it.
 describe(`auxiliary views`, () => {
     const register = (id: string, extra: Partial<ViewRegistration>): Disposable =>
         registerView(`test`, {
@@ -139,10 +129,8 @@ describe(`auxiliary views`, () => {
     });
 });
 
-/* ACCEPTANCE is the workspace-scoped shape: ONE rail tile for the whole workspace, rooted at no repo, because a
- * user story is a promise about the product and a product is rarely one repository. That makes its detect a
- * question about the workspace ("is there anything here to test?") rather than about each repo in turn: the
- * opposite of every directory view above. */
+// Acceptance is workspace-scoped: one rail tile for the whole workspace, rooted at no repo, since a user
+// story is a promise about the product, not one repository. Its detect asks about the workspace, not each repo in turn.
 describe(`acceptance extension`, () => {
     const tiles = (panels: PanelSummary[]) => detectActivations(panels, []).filter(({ extension }) => extension.id === `acceptance`);
 
@@ -153,8 +141,8 @@ describe(`acceptance extension`, () => {
         expect(found[0]?.activation.repo).toBeUndefined();
     });
 
-    // The view is where stories are WRITTEN, so "a repo runs an app" is enough evidence to offer it: gating on
-    // stories alone would mean a workspace with none could never reach the surface that creates the first one.
+    // The view is where stories are written, so "a repo runs an app" is enough evidence to offer it: gating on
+    // stories alone would strand a workspace with none.
     it(`activates on a repo that only runs an app, so the first story can be authored`, () => {
         expect(tiles([panel({ repo: `site`, hasPanel: true })])).toHaveLength(1);
     });
@@ -163,7 +151,7 @@ describe(`acceptance extension`, () => {
         expect(tiles([panel({ repo: `docs` })])).toHaveLength(0);
     });
 
-    // Rooted at no repo ⇒ it claims none: a fallback view for a repo with stories still stands.
+    // Rooted at no repo means it claims none: a fallback view for a repo with stories still stands.
     it(`costs no repo its own surface`, () => {
         const fallback = registerView(`test`, {
             id: `stand-in`,
@@ -180,9 +168,8 @@ describe(`acceptance extension`, () => {
     });
 });
 
-// The registry outlives the host modules that write to it (it is their leaf dependency), so under a dev-server
-// hot reload an extension activates a SECOND time against the SAME registry. Appending there is what put a
-// duplicate of every icon on the rail.
+// The registry outlives the host modules that write to it, so a dev-server hot reload activates an
+// extension a second time against the same registry. Appending there is what put a duplicate of every icon on the rail.
 describe(`re-activation`, () => {
     const panels = [panel({ repo: `shop`, monorepo: true })];
 
@@ -210,10 +197,9 @@ describe(`re-activation`, () => {
     });
 });
 
-/* The rail's order is a product decision, and it used to be an accident: whatever order the core views and the
- * `builtins.ts` array happened to register in. That put Acceptance between Automations and Documentation, which
- * is not a sequence a user can infer from anything. RAIL_GROUPS now declares it: checked here rather than in a
- * surface because BOTH the desktop rail and the mobile menu render this list and must agree. */
+// The rail's order is a product decision, not an accident of registration order (Acceptance landed between
+// Automations and Documentation for no reason). RAIL_GROUPS declares it; checked here since the rail and mobile menu
+// must agree.
 describe(`rail order`, () => {
     const railIds = (): string[] =>
         detectActivations([panel({ repo: `demo`, hasPanel: true, userStories: true })], [])
@@ -224,16 +210,13 @@ describe(`rail order`, () => {
         const ids = railIds();
         const rank = (id: string): number => ids.indexOf(id);
         expect(rank(`acceptance`)).toBeGreaterThanOrEqual(0);
-        // Acceptance badges to fetch you; Documentation is read on your own initiative. The old table had this
-        // the other way round, on the theory that you read about a system before verifying it: true of a first
-        // afternoon, false of every day after.
+        // Acceptance badges to fetch you; Documentation is read on your own initiative, not before verifying a system.
         expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
     });
 
-    /* The regression that motivated the rewrite: `workflows` and `deployments` were added after the first table
-     * shipped and never listed in it, so the fall-through put the two NEWEST surfaces below every core view. A
-     * table that silently demotes what it does not mention is worse than no table, so every rail view a build
-     * compiles in has to appear in it. */
+    // The regression that motivated the rewrite: `workflows` and `deployments` were added after the first table
+    // shipped and never listed, so they fell through below every core view. Every compiled-in rail view must appear in
+    // it.
     it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
         const listed = new Set(RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id)));
         const capabilities: CapabilityFacts[] = [
@@ -250,18 +233,15 @@ describe(`rail order`, () => {
         expect(rail.filter((id) => !listed.has(id))).toEqual([]);
     });
 
-    /* THE TOP OF THE COLUMN IS THE SCARCE THING, and both of these were spent badly before. Checked on railRank
-     * rather than on a detected run because two of the four ids are core shell tiles, which contribute no
-     * activation: the table ranks them all the same way, which is the whole reason it names them. */
+    // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
+    // the four ids are core shell tiles that contribute no activation.
     it(`keeps the busy permanent pair adjacent, with nothing seated between them`, () => {
-        // Start a turn, then read what it did: the loop the rail exists to serve. Approvals and Workflows used to
-        // sit in between, and both are touched by the week rather than by the minute.
+        // Start a turn, read what it did: the loop the rail serves. Approvals/Workflows used to sit between them.
         expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
     });
 
     it(`seats configuration below everything that lights up`, () => {
-        // Workflows is a permanent tile that never badges: it held the third seat purely by having been filed
-        // beside Agents, and it belongs with the other thing you author once and leave alone.
+        // Workflows never badges; it held the third seat only by being filed beside Agents.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
         for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
@@ -274,7 +254,7 @@ describe(`rail order`, () => {
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
-        // A third-party extension appends; it cannot land itself between two first-party tiles by registering early.
+        // A third-party extension appends; it can't land between two first-party tiles by registering early.
         const stray = registerView(`test`, {
             id: `stray`,
             label: `Stray`,
@@ -288,9 +268,7 @@ describe(`rail order`, () => {
     });
 
     it(`keeps the seat table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
-        // Both are read off RAIL_GROUPS, so this can only fail by someone adding an id to one derived list and
-        // not the other: cheap to check, and the failure mode (a tile drawn under the wrong band's divider) is
-        // the kind that is noticed in a screenshot months later.
+        // Both are read off RAIL_GROUPS, so this fails only if an id is added to one derived list, not the other.
         for (const item of RAIL_GROUPS.flatMap((group) => group.items)) {
             expect(railRank(item.id)).toBeLessThan(RAIL_GROUPS.flatMap((group) => group.items).length);
             expect([`always`, `signal`]).toContain(seatPolicy(item.id));
@@ -308,9 +286,8 @@ describe(`rail order`, () => {
     });
 });
 
-/* WHICH TILES ARE ON THE COLUMN AT ALL. The rail's scarce resource is seats, not order: roughly nine fit above a
- * 945px viewport, and before this every extension that activated took one whether or not it had anything to say.
- * The rule is stated in registry.ts; this is it holding. */
+// Which tiles are on the column at all: the rail's scarce resource is seats, roughly nine fit above a
+// 945px viewport. The rule is stated in registry.ts; this is it holding.
 describe(`rail seats`, () => {
     const resting = { pinned: false, active: false };
 
@@ -318,14 +295,12 @@ describe(`rail seats`, () => {
         expect(railSeated({ id: `agents` }, resting)).toBe(true);
         expect(railSeated({ id: `workspace` }, resting)).toBe(true);
         expect(railSeated({ id: `chat` }, resting)).toBe(true);
-        // Preview's badge is an inventory ("2 running"), so if it were seated by badge it would be seated by a
-        // statistic. It holds its seat on the other half of the rule instead.
+        // Preview's badge is an inventory ("2 running"), not a claim; it holds its seat on the other half of the rule.
         expect(railSeated({ id: `preview` }, resting)).toBe(true);
     });
 
     it(`keeps a quiet queue off the rail, and seats it the moment it owes the owner something`, () => {
-        // The whole complaint this table answers: Approvals was permanent, so the rail carried a tile for an empty
-        // queue on every workspace, all day.
+        // The whole complaint this table answers: Approvals was permanent, carrying a tile for an empty queue all day.
         expect(railSeated({ id: `approvals` }, resting)).toBe(false);
         expect(railSeated({ id: `approvals`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
     });
@@ -338,8 +313,7 @@ describe(`rail seats`, () => {
     });
 
     it(`never retires the area the reader is standing in`, () => {
-        // Opened from More, an area with nothing to say would otherwise have no tile lit while its own view is
-        // on screen: the shell disowning where you are.
+        // Opened from More, a silent area would otherwise have no tile lit while its own view is on screen.
         expect(railSeated({ id: `automations` }, { pinned: false, active: true })).toBe(true);
     });
 
@@ -352,19 +326,16 @@ describe(`rail seats`, () => {
         const visiting = { pinned: false, active: true };
         // The case the label is for: opened from More, nothing else holding it up, gone when the reader leaves.
         expect(seatedOnlyByVisit({ id: `automations` }, visiting)).toBe(true);
-        // Everything with a second clause behind it keeps its seat after the visit, so there is nothing to warn
-        // about: a permanent area, a pinned one, and one seated by what it has to say.
+        // Everything with a second clause behind it keeps its seat after the visit: permanent, pinned, or badging.
         expect(seatedOnlyByVisit({ id: `workspace` }, visiting)).toBe(false);
         expect(seatedOnlyByVisit({ id: `automations` }, { pinned: true, active: true })).toBe(false);
         expect(seatedOnlyByVisit({ id: `approvals`, badge: { count: 3 } }, visiting)).toBe(false);
-        // And it is a claim about the tile you are ON: an area you are not standing in is either seated for a
-        // reason of its own or not seated at all.
+        // A claim about the tile you're ON: an area you aren't in is either seated for its own reason or not at all.
         expect(seatedOnlyByVisit({ id: `automations` }, resting)).toBe(false);
     });
 
     it(`says only-a-visit exactly where railSeated rests on the visit alone`, () => {
-        // The two are one rule read twice, so they are checked against each other rather than against a list
-        // copied out of the table: seated-with-the-visit and seated-without-it differ only for these tiles.
+        // The two are one rule read twice, checked against each other rather than a list copied from the table.
         const cases = [
             { id: `workspace` },
             { id: `automations` },
@@ -381,16 +352,14 @@ describe(`rail seats`, () => {
     });
 
     it(`gives an unlisted third-party view the same terms as a first-party one`, () => {
-        // Not `always`: a bundle must not be able to take one of nine seats by registering. It is seated exactly
-        // when it badges, like every listed `signal` view.
+        // Not `always`: a bundle can't take one of nine seats by registering; it's seated exactly when it badges.
         expect(seatPolicy(`some-third-party-view`)).toBe(`signal`);
         expect(railSeated({ id: `some-third-party-view` }, resting)).toBe(false);
         expect(railSeated({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
     });
 
     it(`spends permanent seats on the work loop and nowhere else`, () => {
-        // The count is the point: four is what fits above the fold with room left for the ones that light up. A
-        // fifth permanent tile is a product decision and should have to edit this number to happen.
+        // The count is the point: four fits above the fold, room for what lights up. A fifth means editing this.
         const permanent = RAIL_GROUPS.flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);

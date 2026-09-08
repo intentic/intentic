@@ -13,26 +13,15 @@ import { daemonUrl, dockerBuild, dockerRmi, startSandboxContainer, until } from 
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-// The Tier-2 daemon e2e: boot the REAL sandbox image (built from this repo's Dockerfile, the same artifact CI
-// publishes) in loopback mode and drive its HTTP surface exactly as the browser does, asserting only what the
-// in-memory app.test.ts cannot, the real container: bytes on the real /work fs, the real sshd handshake for
-// desktop sync, the real entrypoint/boot, and a real `docker build` of the composed environment overlay (the
-// harness plays the outside-executor role of recreate.sh). No Cloudflare, no Google, no Claude: the only
-// requirement is a Docker daemon. Gated behind INTENTIC_E2E like cli.e2e.test.ts; `pnpm e2e` sets it.
-//
-// SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead — for local debugging, and
-// NOT for the nightly, which builds from its own checkout. Pointing it at `:latest` there had this suite
-// asserting today's contract against the last image a green main published: 19 hours and one whole feature
-// behind, on a webhookToken the daemon in that image had never had (run 34053040446, nightly.yml says the rest).
-// No secrets: a Docker daemon is the whole requirement, so this tier runs on every nightly rather than waiting
-// on a credential. It is the one that always has something to say.
+// Tier-2 e2e: boots the real sandbox image and drives its HTTP surface, checking what app.test.ts's in-memory version
+// can't (real fs, sshd, boot, docker build). SANDBOX_E2E_IMAGE is for local debugging only, never the nightly.
 const tier = e2eTier("sandbox daemon end-to-end (real container, loopback)", { enabledBy: "INTENTIC_E2E" });
 
-// Non-empty so syncSshHostname derives (loopback still exposes the sync surface); the zone is a reserved TLD.
+// Non-empty so syncSshHostname derives even in loopback; the zone itself is a reserved TLD.
 const CONNECT_TOKEN = randomBytes(16).toString("base64url");
 const ZONE = "e2e.invalid";
 
-// A tiny in-memory tar (the same wire format the browser's packTar streams to /workspace/upload-archive).
+// A tiny in-memory tar, the same wire format the browser's packTar streams to /workspace/upload-archive.
 const tarBuffer = async (entries: { name: string; content: string }[]): Promise<Buffer> => {
     const archive = pack();
     for (const entry of entries) {
@@ -54,8 +43,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     let overlayBuilt = false;
 
     beforeAll(async () => {
-        // A zone is not what makes sync work any more (the transport rides the daemon's own surface), but it is
-        // what the preview/outbox hostnames derive from, so the box still boots with one.
+        // A zone no longer makes sync work (that rides the daemon's surface); it only seeds preview/outbox hostnames.
         container = await startSandboxContainer({ CONNECT_TOKEN, ZONE });
         base = daemonUrl(container);
         client = createORPCClient(new OpenAPILink(sandboxContract, { url: base }));
@@ -68,7 +56,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     }, 120_000);
 
-    // Read a file inside the container: the ground truth the HTTP responses claim to have written.
+    // Reads a file inside the container: the ground truth the HTTP responses claim to have written.
     const inContainer = async (...command: string[]): Promise<{ exitCode: number; output: string }> => {
         const { exitCode, output } = await container.exec(command);
         return { exitCode, output };
@@ -114,11 +102,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const archive = await tarBuffer([
             { name: "tree/a.txt", content: "alpha" },
             { name: "tree/sub/b.txt", content: "beta" },
-            // A dotfile the tree carries: there is no write floor on former-secret paths, so it lands like any
-            // other entry (workspace.routes.integration.test.ts pins the same contract in-memory).
+            // A dotfile: no write floor on former-secret paths, so it lands like any other entry.
             { name: "tree/.env", content: "SECRET=1" },
-            // The control plane is the floor that remains, and skipping it is per-entry: the rest of the drop
-            // still lands. A member who could post this one would own the sandbox.
+            // The control plane is the floor that remains; skipping it is per-entry, the rest of the drop still lands.
             { name: `${STATE_DIR}/identity/owner.json`, content: `{"email":"attacker@example.com"}` },
         ]);
         const response = await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: new Uint8Array(archive) });
@@ -127,7 +113,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await inContainer("cat", "/work/tree/a.txt")).output).toBe("alpha");
         expect((await inContainer("cat", "/work/tree/sub/b.txt")).output).toBe("beta");
         expect((await inContainer("cat", "/work/tree/.env")).output).toBe("SECRET=1");
-        // Absent (loopback binds no owner) or a real record: either way it is not the one the tar carried.
+        // Absent (loopback binds no owner) or real, either way not what the tar carried.
         expect((await inContainer("cat", "/work/.intentic/identity/owner.json")).output).not.toContain("attacker@example.com");
     }, 60_000);
 
@@ -145,8 +131,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(pair.token.length).toBeGreaterThan(20);
         expect(pair.expiresIn).toBeGreaterThan(0);
 
-        // Enroll machine A with the pairing token (in loopback the owner gate is open, so the token itself is
-        // exercised by unit tests; what only THIS suite proves is the enrolled key opening the real sshd).
+        // Enrolls machine A; only this suite proves the enrolled key actually opens the real sshd.
         const laptop = sshUtils.generateKeyPairSync("ed25519", { comment: "e2e-laptop" });
         const enroll = await fetch(`${base}/system/authorized-key`, {
             method: "POST",
@@ -154,20 +139,18 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             body: JSON.stringify({ key: laptop.public }),
         });
         expect(enroll.status).toBe(200);
-        // The credential the agent presents for everything it does: including the SSH transport it serves on
-        // loopback. No address comes back: the sandbox is reached at the URL the agent already has.
+        // The credential the agent presents for everything, including the SSH transport it serves on loopback.
         expect(((await enroll.json()) as { syncToken?: string }).syncToken).toEqual(expect.any(String));
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(laptop.public.trim());
 
         const status = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean; available?: boolean };
         expect(status.enrolled).toBe(true);
         expect(status.available).toBe(true);
-        // WHICH machine, and what it holds, is a fact about that device, so it is read off the device list:
-        // /system/sync stopped flattening the enrollment store into one holder's name (see SyncStatusSchema).
+        // Which machine and what it holds is read off the device list, not flattened onto one holder's name.
         const fleet = (await (await fetch(`${base}/system/devices`)).json()) as { devices: { sync?: { machine: string; mode: string } }[] };
         expect(fleet.devices.map((row) => row.sync)).toEqual([{ machine: "e2e-laptop", mode: "sync" }]);
 
-        // The enrolled key really opens the container's sshd: the transport Mutagen rides.
+        // The enrolled key really opens the container's sshd, the transport Mutagen rides.
         await new Promise<void>((resolve, reject) => {
             const connection = new SshClient();
             connection
@@ -179,7 +162,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                 .connect({ host: container.getHost(), port: container.getMappedPort(22), username: "root", privateKey: laptop.private });
         });
 
-        // A second machine without takeover is refused (423 names the holder); with the takeover header it wins.
+        // A second machine without takeover is refused (423 names the holder); the takeover header wins instead.
         const desktop = sshUtils.generateKeyPairSync("ed25519", { comment: "e2e-desktop" });
         const refused = await fetch(`${base}/system/authorized-key`, {
             method: "POST",
@@ -196,16 +179,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(takeover.status).toBe(200);
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(desktop.public.trim());
 
-        /* Revoke is PER DEVICE, addressed by the machine name the device list shows: there is no fleet-wide
-         * kill switch behind this route any more (app.ts spells out why). What only this tier can prove is the
-         * half a route test cannot: sshd's authorized_keys is DERIVED from the enrollment store, so dropping the
-         * row has to leave the real file empty, and the status has to follow it back to un-enrolled. */
+        // Revoke is per device, by machine name; authorized_keys derives from the store, so a dropped row empties it.
         expect((await fetch(`${base}/system/authorized-key/e2e-desktop`, { method: "DELETE" })).status).toBe(200);
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe("");
         const revoked = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean };
         expect(revoked.enrolled).toBe(false);
-        // The bare DELETE is the AGENT's self-revoke and carries its sync token: nobody's enrollment matches an
-        // absent one, so it is a 404 rather than the sandbox-wide clear this line used to be.
+        // The bare DELETE is the agent's self-revoke; nobody's enrollment matches an absent token, so it 404s.
         expect((await fetch(`${base}/system/authorized-key`, { method: "DELETE" })).status).toBe(404);
     }, 120_000);
 
@@ -219,8 +198,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const fireToken = listed?.webhookToken;
         expect(fireToken).toEqual(expect.any(String));
 
-        // Wrong token is refused; the real token fires and the wake is HELD, not run: the whole trigger path
-        // asserted without an agent turn.
+        // Wrong token is refused; the real token fires and the wake is held, not run.
         expect((await fetch(`${base}/automations/e2e-approval/fire?token=wrong`, { method: "POST" })).status).toBe(401);
         const fired = await fetch(`${base}/automations/e2e-approval/fire?token=${fireToken}`, { method: "POST", body: `{"hello":"e2e"}` });
         expect(fired.status).toBe(200);
@@ -288,9 +266,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     }, 60_000);
 
     it("capability → composed overlay → a real `docker build` of it against the published base image", async () => {
-        // The vpn capability carries a Dockerfile fragment + runtime directives AND supports remove (docker's
-        // deliberately doesn't). The stock container carries no VPN client, so the apply reports the rebuild
-        // that installs one rather than dialling: exactly the pre-rebuild path asserted below.
+        // vpn supports remove (unlike docker's own); the stock container has no VPN client, so apply reports a rebuild.
         const events: unknown[] = [];
         for await (const event of await client.capabilities.add({
             id: "office",
@@ -319,11 +295,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(approved.content).toContain("# intentic:runtime --cap-add=NET_ADMIN");
         expect(approved.hash).toBe(sha256Hex(approved.content));
 
-        // The outside-executor role: the overlay must actually build against the published :stable base.
+        // Outside-executor role: the overlay must actually build against the published :stable base.
         overlayBuilt = true;
         await dockerBuild(approved.content, overlayTag);
 
-        // Removing the last fragment-bearing capability recomposes the overlay away (stock sandbox again).
+        // Removing the last fragment-bearing capability recomposes the overlay away, back to stock.
         await client.capabilities.remove({ id: "office" });
         const recomposed = (await (await fetch(`${base}/environment`)).json()) as { approved?: unknown };
         expect(recomposed.approved).toBeUndefined();

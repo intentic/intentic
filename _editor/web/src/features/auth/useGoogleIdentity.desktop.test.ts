@@ -1,17 +1,12 @@
 // @vitest-environment jsdom
-//
-// THE HALF OF THE RULE THAT LIVES IN THE MECHANISM. signInSurfaces.test.ts holds every screen to offering the
-// browser hand-off inside the desktop app; this holds the layer beneath it to making that the ONLY thing a
-// screen can offer, so a surface added later inherits the answer instead of re-deriving it wrongly.
-//
-// Google refuses OAuth from an embedded webview and Identity Services is FedCM-based, which that webview does
-// not implement. Two consequences, and both used to be discovered the slow way by whoever was sitting in front
-// of the app: the button renders and does nothing, and the silent attempt behind it waits out a five-second
-// timer before admitting a failure that was certain from the first frame.
+// The mechanism-level half of the rule signInSurfaces.test.ts holds screens to: inside the desktop webview, the
+// browser hand-off must be the only option a screen can offer. Google refuses OAuth there and FedCM isn't
+// implemented, so an unguarded button renders and does nothing, and the silent attempt behind it stalls for five
+// seconds before failing.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-// A configured client id, overriding vitest.setup.ts's empty default: the refusal asserted below has to be
-// the posture rule talking, never "no client id was set". Assigned, not `??=`: the setup file ran first.
+// Configured client id, overriding vitest.setup.ts's empty default, so a refusal below is the posture rule, not a
+// missing client id. Assigned, not `??=`, since the setup file already ran.
 vi.hoisted(() => {
     globalThis.window.env = {
         production: false,
@@ -27,8 +22,7 @@ vi.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => desktop
 
 const { useGoogleIdentity } = await import("./useGoogleIdentity");
 
-// Google's script, as far as this module can tell: present and working, so a refusal here is the posture
-// rule talking and never a missing dependency.
+// Stands in for a working Google script, so any refusal is the posture rule, not a missing dependency.
 const prompt = vi.fn();
 const gisRenderButton = vi.fn();
 
@@ -50,8 +44,7 @@ it(`refuses to render Google's button inside the desktop app, even with Google's
     const rendered = await renderButton(document.createElement(`div`), true);
 
     expect(rendered).toBe(false);
-    // Not merely "returned false": it never asked. A button drawn into that window takes clicks and does
-    // nothing, which is worse than no button at all.
+    // Not merely false: it never even asked. A button that draws but does nothing is worse than no button.
     expect(gisRenderButton).not.toHaveBeenCalled();
 });
 
@@ -72,11 +65,11 @@ it(`raises the sign-in gate at once inside the desktop app rather than waiting o
         const { getIdToken, needsSignIn } = useGoogleIdentity();
 
         void getIdToken();
-        // Only the microtasks the mint's own awaits need; no clock is advanced, which is the assertion.
+        // Only the mint's own microtasks; no clock is advanced, which is the assertion.
         await vi.advanceTimersByTimeAsync(0);
 
         expect(needsSignIn.value).toBe(true);
-        // There is no prompt to make: asking Google in this window is the thing that cannot work.
+        // No prompt to make: asking Google here is exactly what can't work.
         expect(prompt).not.toHaveBeenCalled();
     } finally {
         vi.useRealTimers();

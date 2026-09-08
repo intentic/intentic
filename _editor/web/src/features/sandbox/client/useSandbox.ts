@@ -10,41 +10,28 @@ import { withConcurrency } from "../../../lib/concurrency";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "../live/connection";
 import { daemonReady } from "../overview/useDaemonBoot";
 
-/* The browser's view of the user's sandboxes, as a module-level singleton. A user can own several sandboxes and
- * be a member of others; the platform is the registry, each daemon announces its own URL + lastSeenAt, and the
- * browser only reads them (sandbox.list). `reachable` stays browser-owned (useSandboxLiveness's direct SSE probe
- * of the ACTIVE sandbox): it answers "can THIS browser reach it", which the registry can't know. */
+// Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
+// truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
+// can reach the active one.
 
-// The account-scoped key for the sandbox list in the shared query cache. Static (unlike sandboxKey, which
-// APPENDS the active id for per-sandbox daemon queries), this list is the registry of ALL sandboxes, and its
-// distinct `sandbox` prefix is what queryPersistence excludes from disk (the rows carry connect tokens).
+// Static key for the full list, excluded from disk by queryPersistence (rows carry connect tokens).
 const SANDBOX_LIST_KEY = [`sandbox`, `list`];
 
-// Ids with an in-flight remove(): a fetch that reads the server DURING the slow owner-delete teardown gets
-// pre-delete truth back, so the shared queryFn filters them until the removal settles, else the just-removed
-// row reappears (e.g. /setup's atLimit upsell for a sandbox being deleted). cancelQueries handles the local
-// write-ordering race; this Set handles the server-consistency window it can't.
+// Ids with an in-flight remove(); the queryFn filters them out since a fetch mid-teardown reads pre-delete truth.
 const removing = new Set<string>();
 
 const sandboxListQuery = {
     queryKey: SANDBOX_LIST_KEY,
     queryFn: async (): Promise<SandboxSummary[]> => (await apiClient.sandbox.list()).sandboxes.filter((sandbox) => !removing.has(sandbox.id)),
-    // The list only changes via local mutations (which write the cache directly) or a daemon's lastSeenAt/
-    // daemonUrl update (onboarding only, where refresh() forces fresh): 30s dedups the shell's per-navigation
-    // refetch with no staleness that matters.
+    // 30s dedups the shell's per-navigation refetch; the list only changes via local writes or a daemon announce.
     staleTime: 30_000,
-    // Observer-less entry (fetchQuery-only, mirrored via the cache subscription below): the default gcTime
-    // would evict it after 5 idle minutes, wiping daemonUrl mid-session and failing every daemon call with
-    // "isn't reachable yet". Pinned; logout still drops it via queryClient.clear().
+    // Pinned: the default gcTime would evict this observer-less entry after idle minutes and wipe daemonUrl
+    // mid-session.
     gcTime: Infinity,
 };
 
-// Every sandbox the user can reach (owned first, then shared). Fed ONLY by the query cache so the router guard,
-// liveness loop, and sandboxClient keep reading it synchronously (a plain getQueryData() has no Vue reactivity,
-// and useQuery can't run in those contexts). A QueryCache subscription. NOT a QueryObserver, which detaches on
-// queryClient.clear() at logout, mirrors the entry: it fires on fetchQuery success and on setQueryData
-// synchronously (the switcher's post-remove .length read is correct this tick), and resets to [] when the
-// cache is cleared. Scoped to our key by hash; other queries' events are a cheap string compare.
+// A QueryCache subscription, not a QueryObserver (which detaches on queryClient.clear() at logout): mirrors the
+// entry into a ref so callers outside a component setup can read it synchronously.
 const SANDBOX_LIST_HASH = hashKey(SANDBOX_LIST_KEY);
 const sandboxes = ref<SandboxSummary[]>([]);
 queryClient.getQueryCache().subscribe((event) => {
@@ -53,34 +40,20 @@ queryClient.getQueryCache().subscribe((event) => {
     }
 });
 
-// The ACTIVE daemon's connection, as one state machine value (see connection.ts) rather than a set of
-// booleans. Browser-owned: the platform's registry knows a sandbox exists and when it last announced itself,
-// but only this browser can answer "can *I* reach it right now", and only the stream can say why not.
-// Starts idle: the shell shows the connecting gate until the daemon actually answers, so a not-yet-ready
-// sandbox never renders a dead UI and a switch never shows the old sandbox as online.
+// Browser-owned connection state machine (see connection.ts); starts idle so a not-yet-ready sandbox never
+// renders as live.
 const connection = ref<ConnectionState>(initialConnection);
 
-// The single writer. Every transition goes through the pure reducer, so the sequencing rules (a heartbeat is
-// idempotent, a switch clears the outgoing cause, backoff resets on a healthy stream) live in one tested place
-// instead of being re-implemented at each assignment site.
+// Single writer: every transition goes through the pure reducer so the sequencing rules live in one place.
 export const signalConnection = (signal: ConnectionSignal): void => {
     connection.value = applyConnectionSignal(connection.value, signal);
 };
 
-/* Can this browser READ the active daemon right now, the gate on every daemon-backed query and on the rail's
- * inert-while-offline affordances. The one projection most callers want, and two facts rather than one.
- *
- * A live stream is not enough. The daemon brings its listeners up before the state they serve has converged
- * (its main.ts: listen first, converge behind the gate), so for the first seconds of a boot it answers /events
- * and parks everything else. Reading `online` as "go" meant every query fired into that gate at once, the
- * pending storm that made a fresh `dev-sandbox.sh` swap look hung, and made a workspace hydrated from the
- * persisted cache look operable while nothing it offered could work. So the daemon's own readiness (received
- * on the hello + boot frames, useDaemonBoot) is the second half, and the wait becomes a visible warm-up
- * instead of a workspace that silently does nothing. */
+// True only once the stream is live and the daemon reports ready; liveness alone precedes convergence.
 const reachable = computed(() => connection.value.phase === `online` && daemonReady.value);
 
 const active = computed(() => sandboxes.value.find((sandbox) => sandbox.id === activeSandboxId.value));
-// The active sandbox's public URL, what the sandbox client + liveness talk to. Undefined until one is bound.
+// The active sandbox's public URL; undefined until one is bound.
 const daemonUrl = computed(() => active.value?.daemonUrl ?? undefined);
 
 const persistActive = (id: string | undefined): void => {
@@ -92,7 +65,7 @@ const persistActive = (id: string | undefined): void => {
     storeValue(ACTIVE_KEY, id);
 };
 
-// Keep the active selection if it still exists, else fall back to the first sandbox. Shared by list/refresh.
+// Keeps the active selection if it still exists, else falls back to the first sandbox. Shared by list/refresh.
 const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
     if (activeSandboxId.value === undefined || !live.some((sandbox) => sandbox.id === activeSandboxId.value)) {
         persistActive(live[0]?.id);
@@ -100,37 +73,25 @@ const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
     return live;
 };
 
-// Load the user's sandboxes through the shared cache: concurrent callers (requireSetup + the liveness loop +
-// the switcher) coalesce to ONE request, and a call within staleTime serves cache with no round-trip.
+// Loads sandboxes through the shared cache: concurrent callers coalesce to one request, and a call within
+// staleTime serves from cache.
 const list = async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery(sandboxListQuery));
 
-// Force a fresh list regardless of staleTime, for callers that must observe just-changed server state:
-// onboarding polling (Setup), a just-accepted invite (AcceptInvite), and liveness recovery picking up a
-// restarted daemon's new daemonUrl. Single-flighted because those callers overlap by design (a reconnect
-// storm during onboarding is three of them at once) and `staleTime: 0` is precisely the instruction NOT to
-// let the cache dedupe them, so without a policy each one is its own platform round-trip.
+// Forces a fresh list past staleTime, single-flighted so overlapping callers (onboarding, invite accept,
+// liveness recovery) share one round-trip.
 const refresh = withConcurrency<void, SandboxSummary[]>(
     async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
     { mode: `singleFlight`, key: () => `sandbox.list` },
 );
 
-// Point the workspace at a different sandbox (persisted). Liveness re-probes the new daemon on the next tick,
-// sandboxScope re-scopes the client-side state, and sandboxScreen lands on the screen this window last had
-// open there.
+// Points the workspace at a different sandbox (persisted); liveness re-probes it, and sandboxScope/sandboxScreen
+// follow the new active id.
 const select = (id: string): void => {
     persistActive(id);
 };
 
-/* Mint a new sandbox, the entry point of the "add sandbox" flow.
- *
- * IT DOES NOT MAKE THE NEW ROW ACTIVE, and that omission is the point. /setup creates its row on arrival, before
- * the reader has agreed to anything (see Setup.vue's autoCreate), so pointing the workspace at it meant merely
- * OPENING the setup screen re-aimed the shell at a machine that does not exist: "Back to workspace" then landed
- * on a connecting gate for a daemon nobody had ever started, and the only way out was the switcher. The
- * selection now moves exactly where it always meant to, on the announce (check()) and on a successful attach
- * (connectDomain), both of which select the row themselves once it is a workspace.
- *
- * The caller holds the returned row, so nothing downstream needs the selection to find it. */
+// Mints a new sandbox; does not make it active. /setup creates the row before the reader has agreed to
+// anything, so selection moves only on announce or a successful attach.
 const create = async (name: string): Promise<SandboxSummary> => {
     const sandbox = await apiClient.sandbox.create({ name });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
@@ -138,10 +99,8 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
-/* The hosted lane, as the two moves that attach a machine to a sandbox and take it back off, the ROW is
- * made by `create` above like every other lane's, so switching lanes in the wizard moves a machine and never
- * the sandbox. Both write the returned row into the list cache the way `update` does, which is what repaints
- * the badge and the delete dialog's warning in the same tick. */
+// Attaches/detaches a hosted machine to an existing sandbox row (made by `create`); both write the returned row
+// into the list cache like `update` does.
 const hostedProvision = async (sandboxId: string): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.hostedProvision({ sandboxId });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
@@ -160,22 +119,11 @@ const hostedRelease = async (sandboxId: string): Promise<SandboxSummary> => {
     return updated;
 };
 
-/* THE WAKE REFLEX. A hosted sandbox's machine stops itself when nobody was around (the daemon's idle-stop),
- * so "the active sandbox is hosted and its daemon isn't answering on a network cause" almost always means
- * "asleep", and the fix is a platform call this browser can simply make. Fired from the connection state
- * rather than a screen, so every way of arriving at a sleeping sandbox (switcher, deep link, reload) wakes it
- * without any surface having to remember to. Throttled per sandbox; wake is idempotent (waking a running
- * machine is a no-op), so a wake raced with a boot costs nothing.
- *
- * ONE REFUSAL IS KEPT: the platform's PAYMENT_REQUIRED, the free lane's month being spent. Every other failure
- * is swallowed (the connection UI already narrates the outage, and the reflex retries on the next window), but
- * this one is not an outage, it is the one moment the hosted plan is deserved, and swallowing it left the
- * gate saying "isn't answering" over a machine the platform had declined to start. The refusal is per
- * sandbox and cleared by a wake that goes through (a fresh month, a plan bought in another tab), so the gate
- * that reads it stops saying so the moment it stops being true. */
+// Wakes a sleeping hosted sandbox on a network-shaped connection failure, from any path that lands on it.
+// PAYMENT_REQUIRED (spent hours) is the one refusal kept and shown rather than swallowed.
 const WAKE_THROTTLE_MS = 60_000;
 const wokeAt = new Map<string, number>();
-// The sandbox whose last wake the platform refused for spent hours, with the platform's own sentence.
+// The sandbox whose last wake the platform refused for spent hours, with its own message.
 const wakeRefused = ref<{ readonly sandboxId: string; readonly message: string } | undefined>(undefined);
 const recordWake = (sandboxId: string, outcome: unknown): void => {
     if (outcome instanceof ORPCError && outcome.code === `PAYMENT_REQUIRED`) {
@@ -192,8 +140,7 @@ watch(
         if (id === undefined || !hosted || state.failure === undefined) {
             return;
         }
-        // Network-shaped causes only: a 403 or a missing address is not a sleeping machine, and waking on it
-        // would spin the throttle for nothing.
+        // Network-shaped causes only; a 403 or a missing address is not a sleeping machine.
         if (state.failure.kind !== `network` && state.failure.kind !== `timeout` && state.failure.kind !== `closed`) {
             return;
         }
@@ -208,19 +155,11 @@ watch(
             .catch((error: unknown) => recordWake(id, error));
     },
 );
-// Whether the ACTIVE sandbox's last wake was refused for spent hours (the gate's question).
+// Whether the ACTIVE sandbox's last wake was refused for spent hours.
 const activeWakeRefused = computed(() => (wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined));
 
-// Rename a sandbox and/or set its switcher logo, `image: null` clears it (owner-only; the API enforces).
-// Writing the returned row into the list cache is what repaints the rail chip in the same tick as the hub's
-// own tile.
-//
-// The sandbox is NAMED by the caller rather than taken from the active selection, because the two are not the
-// same sandbox everywhere: /setup renames the row it just created while `reconcileActive` can still be moving
-// the selection off it (a just-created row is briefly absent from a server list read), and renaming whichever
-// sandbox happens to be selected would quietly rename a different one of the user's machines. The updated row
-// is handed back for the same reason: /setup holds its own reference to it, and everything the install command
-// derives from the name (the sync folder) would otherwise go on describing the old one.
+// Renames and/or re-logos a sandbox (owner-only; `image: null` clears it). Named explicitly rather than taken
+// from the active selection, since the two can differ mid-reconcile.
 const update = async (sandboxId: string, input: { name?: string; image?: string | null }): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.update({ sandboxId, ...input });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
@@ -230,8 +169,7 @@ const update = async (sandboxId: string, input: { name?: string; image?: string 
     return updated;
 };
 
-// Point a sandbox at a URL the owner runs it behind (setup's "I already have one running" path) and make it
-// active. The platform stamps lastSeenAt like an announce, so the returned row is immediately "connected".
+// Points a sandbox at a URL it runs behind and makes it active; the platform stamps lastSeenAt like an announce.
 const attach = async (id: string, url: string): Promise<void> => {
     const updated = await apiClient.sandbox.attach({ sandboxId: id, daemonUrl: url });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
@@ -241,28 +179,26 @@ const attach = async (id: string, url: string): Promise<void> => {
     persistActive(updated.id);
 };
 
-// Remove a sandbox from this account: owners drop the platform row + its intentic-provided tunnel (member
-// grants cascade), members drop their own grant. The local containers keep running, cleanup.sh's job.
+// Removes a sandbox from this account: owners drop the row and its tunnel, members drop their grant. Local
+// containers keep running.
 const remove = async (id: string): Promise<void> => {
     const previous = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY);
     const target = previous?.find((sandbox) => sandbox.id === id);
     if (target === undefined) {
         return;
     }
-    // Drop the row optimistically BEFORE the first await, so the switcher's synchronous empty-check sees it
-    // gone this tick; `removing` keeps any mid-teardown fetch from resurrecting it (see the queryFn filter).
+    // Drops the row optimistically before the first await, so the switcher's synchronous check sees it gone this tick.
     removing.add(id);
     queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.filter((sandbox) => sandbox.id !== id));
     if (activeSandboxId.value === id) {
         persistActive(queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY)?.[0]?.id);
     }
-    // Cancel any in-flight list() so its pre-delete result can't clobber the optimistic drop (replaces the old
-    // generation guard; the setQueryData above already moved the cancel-revert snapshot to the dropped row).
+    // Cancels any in-flight list() so its pre-delete result can't clobber the optimistic drop.
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
     try {
         await (target.role === `owner` ? apiClient.sandbox.delete({ sandboxId: id }) : apiClient.sandbox.leave({ sandboxId: id }));
     } catch (error) {
-        removing.delete(id); // clear first so the rollback can bring the row back
+        removing.delete(id); // clear first so the rollback below can restore the row
         queryClient.setQueryData(SANDBOX_LIST_KEY, previous); // failed removal: restore the pre-drop rows
         throw error;
     }

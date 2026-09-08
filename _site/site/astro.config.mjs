@@ -18,25 +18,15 @@ import { ogCard, ogFonts } from "./scripts/og-template.mjs";
 import { postPaths } from "./scripts/post-slugs.mjs";
 import { sourceFirstWorkspace } from "./scripts/source-first.mjs";
 
-// Absent when the Inter TTFs are not checked out; the OG integration is then left out entirely and BaseLayout
-// falls back to the static logo card, which is the same bargain the old in-house integration made.
+// Absent without the Inter TTFs checked out; OG then skips, BaseLayout falls back to the static logo.
 const ogFontFaces = ogFonts();
 const site = new URL(SITE_URL);
 
-// Dev serves paths with or without the trailing slash; builds keep "always" so canonical URLs
-// stay slashed and hosting normalizes requests.
+// Dev serves paths with or without the trailing slash; builds keep "always" so canonical URLs stay slashed.
 const isDev = process.argv.includes("dev");
 
-/* THE DOWNLOAD PATHS, IN DEV. /desktop/windows and its siblings are the worker's (worker.ts), and the worker
- * does not run under `astro dev`, so every download link on the site, including the button in the hero,
- * answered with this site's own 404 page on a developer's machine. That is the worst possible place for a
- * dead link to hide: it looks broken exactly where somebody is checking their work, and looks fine in the one
- * place nobody tests by hand.
- *
- * The path table is the worker's own, so the two cannot drift. The behaviour is the worker's minus the part
- * that needs the network: a locally staged installer is handed over as a real download, and everything else
- * goes to the releases page, which is also the worker's fallback when it cannot resolve a named asset, so a
- * developer sees a real destination rather than a stub. */
+// Worker.ts serves /desktop/* in production but not under `astro dev`, so this mirrors its path table (can't drift) and
+// behaviour there, minus the network fallback.
 const desktopDevRoutes = {
     name: "intentic:desktop-dev-routes",
     apply: "serve",
@@ -76,32 +66,11 @@ export default defineConfig({
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },
-        /* Source-first workspace resolution, same conditions tsconfig.astro.json sets for typechecking. Without
-         * these, Vite reads each package's default export (`dist/`), and /api is the first place a stale dist
-         * surfaces: sandbox-openapi pulls sandbox-contract at SSR time to generate the OpenAPI document, so a
-         * new file exported from index.ts but not yet emitted to dist is a full-page build error on every group
-         * page. The @intentic/src condition in each package's exports map is the resolver; these are what make
-         * Vite honor it.
-         *
-         * THEY DO NOT REACH EVERY ENVIRONMENT, which is why sourceFirstWorkspace() is in `plugins` above rather
-         * than this block being the whole rule. Astro gives `astro` and `prerender` conditions of their own and
-         * discards a `vite.environments.prerender` written here — and `prerender` is where /api is rendered, so
-         * the page this comment is about was reading `dist/` the entire time these conditions were set. The
-         * plugin states the rule as a resolver, which every environment runs. Keep both: this block is what the
-         * client bundle and the SSR graph use, and it is the shorter statement of the same intent. */
+        // Matches tsconfig.astro.json's `@intentic/src` condition; sourceFirstWorkspace() covers what this can't.
         resolve: {
             conditions: ["@intentic/src", "@intentic/src", "@intentic/src", "import", "module", "browser", "default"],
         },
-        /* The interactive demo (@intentic/demo) at DEMO_PATH. In production it is a BUILD output copied into
-         * this package's public/demo/, and the worker serves its history routes (worker.ts). Neither exists under
-         * `astro dev`: the demo isn't built, and public/demo/index.html (if someone did build it) would answer
-         * only its exact path, so the hero's iframe loaded /demo/ and got this site's 404 page.
-         *
-         * So in dev the demo is served by the demo, at its own dev server, through this proxy: the live app with
-         * HMR, its own SPA fallback, and no build step between an edit and the overlay. Run it alongside:
-         *     pnpm -C _site/demo dev
-         * Port from _site/demo/vite.config.ts (strictPort, so it is this or nothing). When it isn't running the
-         * proxy says so in the frame rather than failing as a bare gateway error. */
+        // Dev proxies /demo to its own dev server: run `pnpm -C _site/demo dev` (port from its vite.config.ts).
         server: isDev
             ? {
                   proxy: {
@@ -131,8 +100,8 @@ export default defineConfig({
     },
     integrations: [
         sitemap({
-            // The search index is an endpoint, not a page: it has no title, no content a reader could land on,
-            // and a crawler that fetches it learns the whole corpus twice.
+            // The search index is an endpoint, not a page: no title, nothing to land on; indexing it doubles the
+            // corpus.
             filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json"),
             changefreq: "monthly",
             priority: 0.7,
@@ -149,10 +118,7 @@ export default defineConfig({
                 return item;
             },
         }),
-        // Only the pages that ASKED for a per-page card get one. BaseLayout points og:image at the generated
-        // path when the page has metadata and at the static logo otherwise, and the integration hard-asserts
-        // that the tag and the file it wrote agree, so reading the page's own tag keeps that decision in one
-        // place instead of duplicating BaseLayout's condition here, where the two could drift apart.
+        // Only pages that asked get a card; the integration's file must match BaseLayout's og:image tag.
         ...(ogFontFaces === undefined
             ? []
             : [
@@ -168,42 +134,24 @@ export default defineConfig({
             details:
                 "intentic runs each coding agent in its own Docker sandbox, with the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. One free starter sandbox per account can instead be hosted by us on rented infrastructure, in which case that workspace lives on our provider's disk: see /privacy/ and /dpa/. Every page below is also served as Markdown at the same URL with a .md suffix.",
             sections: [
-                // /about/ sits under Overview rather than Optional: "who is behind this" is the question an
-                // answer engine most often has to resolve about a young domain, and the page is the answer.
+                // /about/ sits under Overview, not Optional: it answers "who's behind this" for a young domain.
                 { label: "Overview", paths: ["/", "/about/"] },
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
-                /* The guides, above Compare because they answer the question a reader has BEFORE they know
-                 * this product exists: "how do I run several agents at once", not "intentic or Conductor".
-                 * Each page opens with a standalone answer, so this section is the part of the site a model
-                 * can quote without needing the rest of it. */
+                // Guides sit above Compare: they answer what a reader asks before knowing this product exists.
                 { label: "Guides", paths: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))] },
                 { label: "Compare", paths: [compareHref(""), ...comparePages.map((page) => compareHref(page.slug))] },
-                /* The blog, after Compare and before Docs. It is the only shelf here whose pages ARGUE
-                 * something rather than describing the product, which is what makes it worth naming: a
-                 * model asked "what do these people think about X" has somewhere specific to look, instead
-                 * of inferring an opinion from a feature page that does not hold one. Unlisted pages fall
-                 * into a "More" section on their own, so this is about the label, not about inclusion. */
+                // The only shelf here whose pages argue a position, not describe the product; named for that reason.
                 { label: "Blog", paths: ["/blog/", ...postPaths()] },
                 { label: "Docs", paths: docsPages.map((page) => docsHref(page.id)) },
-                // The authoring book as its own section, not folded into Docs: an answer engine asked "how do I
-                // write an intentic extension" should be able to reach the eight pages that answer it without
-                // reading the seventeen that do not.
+                // Own section, not folded into Docs, so an extension-writing query need not wade through docs pages.
                 { label: "Extension API", paths: developersPages.map((page) => developersHref(page.id)) },
-                /* The wire API, as its own section and after the authoring one. A model asked what an intentic
-                 * sandbox can be told to DO has 37 pages here that answer it exactly, each one a route group
-                 * with its calls, their inputs and their answers, and none of that is derivable from the prose
-                 * sections above. It goes last of the content sections because it is the longest and the most
-                 * specific: a reader who needs it knows they need it. */
+                // Own section after the authoring one: route-group answers no prose derives; last as the most specific.
                 { label: "Sandbox HTTP API", paths: referencePages.map((page) => referenceHref(page.id)) },
                 { label: "Optional", paths: ["/privacy/", "/terms/", "/acceptable-use/", "/dpa/", "/subprocessors/"] },
             ],
         }),
-        /* The search index, rebuilt from the pages that were just written: it replaces the near-empty file the
-         * /search.json route emits in a build. Driven by the TREES, so a page no rail can reach is never indexed
-         * and the shelf a result names is the one the reader navigates by. All three books feed one index: a
-         * reader looking a word up should not have to know which of them documents it, and the generated book
-         * needs it most of all, because "which group holds the route that stops a turn" is exactly the question
-         * a reader arrives with and cannot answer from a rail of 37 labels. */
+        // Rebuilds the search index from the pages just written, driven by the trees so an unreachable page is never
+        // indexed. All three books feed one index, so a reader doesn't need to know which documents a term.
         docsSearch({
             pages: [docsBook, developersBook, referenceBook].flatMap((book) =>
                 bookPlacements(book).map(({ page, section }) => ({

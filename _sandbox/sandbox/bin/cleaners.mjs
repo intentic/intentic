@@ -1,18 +1,16 @@
-// The output-cleaner registry behind agent-output-filter. Each cleaner has a stable `id`; the active set is a
-// spec (INTENTIC_OUTPUT_CLEANERS) parsed the same way as iq's --features (allow-list / default-minus), so
-// cleaners can be flipped on/off and A/B benchmarked exactly like iq's retrieval stages. Plain .mjs (no build
-// step): imported by agent-output-filter and unit tests. Kept dependency-free (node builtins only) so the
-// filter never breaks.
+// Output-cleaner registry behind agent-output-filter. Each cleaner has a stable `id`; the active set is controlled by
+// the INTENTIC_OUTPUT_CLEANERS spec (allow-list / default-minus). Dependency-free (node builtins only) so the filter
+// never breaks; imported by agent-output-filter and its tests.
 
 import { createHash } from "node:crypto";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes. Always stripped (pure noise).
+// CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes; always stripped as noise.
 // eslint-disable-next-line no-control-regex
 export const ANSI = /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
 
-// A spinner/progress bar redraws one line with \r: keep only the final frame. Always applied (pure noise).
+// A spinner/progress bar redraws one line with \r: keep only the final frame. Always applied as noise.
 export const collapseCr = (line) => {
     const frames = line.split("\r");
     for (let i = frames.length - 1; i >= 0; i--) {
@@ -30,37 +28,21 @@ const strip = (id, match, patterns) => ({
     apply: (lines) => lines.filter((line) => !patterns.some((re) => re.test(line))),
 });
 
-/* A command word, not a filename that happens to contain it. `\bpnpm\b` reads `node_modules/.pnpm/@cursor+sdk`
- * and `':!pnpm-lock.yaml'` as pnpm runs, and `\bvitest\b` reads `cat _editor/web/vitest.setup.ts` as a test run:
- * over one ledger window that was 90 of 318 pnpm matches and 66 of 266 test matches, and on four of them the
- * stripper reached into output it was never written for and deleted 2 KB of it. It also corrupts the gaps
- * report, which asks "which high-volume commands did no handler claim": a command wrongly claimed is a handler
- * opportunity hidden.
- *
- * Anchored the way READ_COMMAND is, and for the same reason: what the match is offered may be the agent's line
- * or the launcher that wraps it (`nsenter … -- bash -c '…'`), so requiring a statement start is a coin flip on
- * quoting the model never chose. The lookbehind buys the only thing that anchor was for, that the word is not
- * the tail of a path or an identifier, while accepting the quote, the `&&` and the line start alike. `/` is in
- * the set on purpose: `/usr/bin/pnpm` is a real invocation, but excluding it costs one missed strip while
- * including it re-admits every store path. */
+// Matches the command word itself, not a filename containing it, even through a launcher's quoting. Lookbehind only
+// excludes being the tail of a path or identifier; `/` stays in so `/usr/bin/pnpm` still matches.
 const invocation = (word) => new RegExp(String.raw`(?<![\w.\-/])(?:${word})(?![\w.-])`);
 
-// What a line array would weigh once joined with newlines: measured without building the string, because the
-// pipeline measures it after EVERY stage and materialising a 500k-line capture per stage would cost more than
-// the cleaning does.
+// Weight of a line array joined with newlines, without building the string each stage.
 export const bodyBytes = (lines) => (lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1);
 
-// ---- shape cleaners: they read the output, not the command -------------------------------------------------
-// A command regex cannot see past `cd x && …`, and four out of five of an agent's commands are written that
-// way. So the two shapes carrying the most bytes are recognised in the TEXT instead. Each self-gates on what it
-// recognises and hands back the lines it was given when it recognises nothing, which is what makes it safe to
-// run on every success rather than behind a command match.
+// Shape cleaners read the text, not the command, since `cd x && …` defeats a command regex. Each self-gates, handing
+// back its input unchanged when it recognizes nothing, so it's safe to run on every success.
 
 const humanSize = (bytes) =>
     bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)}M` : bytes >= 1024 ? `${(bytes / 1024).toFixed(1)}K` : `${bytes}B`;
 
-// `-rwsr-xr-t` → `4755`. `s`/`t` mean the special bit AND execute, `S`/`T` the special bit alone; the leading
-// digit is emitted only when one is set, so the overwhelmingly common case stays three characters.
+// `-rwsr-xr-t` → `4755`: lower s/t means the special bit plus execute, upper S/T the special bit alone. Leading digit
+// only appears when a special bit is set.
 const EXECUTABLE = new Set(["x", "s", "t"]);
 const permsToOctal = (perms) => {
     const triad = (read, write, exec) => (perms[read] === "r" ? 4 : 0) + (perms[write] === "w" ? 2 : 0) + (EXECUTABLE.has(perms[exec]) ? 1 : 0);
@@ -69,9 +51,8 @@ const permsToOctal = (perms) => {
     return special > 0 ? `${special}${mode}` : mode;
 };
 
-// The date is the anchor, not a column index: an owner or group name containing a space shifts every column
-// left of the name and `ls` has no quoting to recover it from. Both GNU spellings are matched: the default
-// `Mon DD HH:MM` / `Mon DD  YYYY`, and `--time-style=long-iso`.
+// Anchors on the date, not a column index, since a name with a space shifts every column left of it. Matches both GNU
+// date spellings: the default and `--time-style=long-iso`.
 const LS_DATE = /\s(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})|\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2})\s/;
 const LS_MODE = /^[-dlbcps][rwxSsTt-]{9}[.+@]?$/;
 
@@ -87,16 +68,13 @@ const parseListingLine = (line) => {
     if (head.length < 4 || !LS_MODE.test(head[0])) {
         return undefined;
     }
-    // Size is the RIGHTMOST integer before the date: the link count is numeric too but comes first, and a device
-    // node's `166, 0` is no integer at all: those entries keep their name and lose only the size.
+    // Size is the rightmost integer before the date; the link count is numeric too but comes first.
     const size = head.reduceRight((found, token) => (found === undefined && /^\d+$/.test(token) ? Number(token) : found), undefined);
     return { mode: permsToOctal(head[0]), directory: head[0].startsWith("d"), size, name: line.slice(date.index + date[0].length) };
 };
 
-// `ls -l` spends ~50 bytes per entry on a link count, owner, group and timestamp the model asked nothing about.
-// Rewrite each entry to `<octal> <name>[/]  <size>`, drop the `total N` header and the `.`/`..` entries. Entry
-// ORDER is preserved: rtk sorts directories first, which it can afford because it re-runs `ls` itself; we only
-// see the output, and reordering it would silently destroy the answer to `ls -lt`.
+// Rewrites each entry to `<octal> <name>[/] <size>`, dropping the `total N` header and `.`/`..`. Order is preserved:
+// reordering would silently break `ls -lt`.
 const compactListing = (lines) => {
     let parsed = 0;
     const out = lines.flatMap((line) => {
@@ -120,19 +98,17 @@ const compactListing = (lines) => {
     return parsed === 0 ? lines : out;
 };
 
-// A run of bare paths is what `find`, `git ls-files`, `rg -l` and `ls -R | …` all emit, and a repo-wide run is
-// thousands of lines whose directory prefix repeats on nearly every one. Fold each run to one line per
-// directory: every NAME survives, only the repetition goes.
+// Bare-path runs (`find`, `git ls-files`, `rg -l`, `ls -R`) repeat their directory prefix on nearly every line; folded
+// to one line per directory, every name kept.
 const PATH_RUN_MIN = 10;
 const PATH_RUN_DIRS = 60;
 const PATH_RUN_NAMES = 40;
 
-// No whitespace (a listing line has plenty), no `:<digit>` (that is a `file:line:` diagnostic, not a path), and
-// nothing absurdly long. Deliberately strict: a run this misreads is a run folded into the wrong shape.
+// No whitespace (a listing has plenty), no `:<digit>` (a `file:line:` diagnostic, not a path), nothing absurdly long.
+// Strict on purpose: a misread here folds the wrong shape.
 const isPathLine = (line) => line !== "" && !/\s/.test(line) && !/:\d/.test(line) && line.length < 300;
 
-// The longest directory prefix every entry shares: a repo-wide `find` repeats it on all 393 lines, and it is
-// the single biggest thing in the output. Trimmed one whole segment at a time so the result is always a real
+// Longest directory prefix every entry shares, trimmed one whole segment at a time so the result is always a real
 // directory, never a truncated name.
 const sharedRoot = (directories) => {
     if (directories.length < 2) {
@@ -142,8 +118,7 @@ const sharedRoot = (directories) => {
     for (const directory of directories) {
         while (prefix !== "" && !directory.startsWith(prefix)) {
             const shorter = prefix.slice(0, prefix.lastIndexOf("/", prefix.length - 2) + 1);
-            // "/" has no shorter form to fall back to, and lastIndexOf would keep handing it back: a run mixing
-            // absolute and relative paths shares no root at all, and says so by terminating here.
+            // "/" has no shorter form; a run mixing absolute and relative paths shares no root, so this terminates.
             prefix = shorter === prefix ? "" : shorter;
         }
     }
@@ -201,26 +176,11 @@ const foldPathRuns = (lines) => {
     return out;
 };
 
-/* A grep hit repeats its file on every line, and a search that lands 40 times in one file pays for that path 40
- * times. `discover` has named `grep`/`rg` grouping the biggest remaining gap for a while: 1,523 search commands
- * in one ledger window carried 20 MB of raw output, and the ones that land between "a few hits" and the byte
- * cap are where the repetition sits, too small for `cap` to notice, too big to be free.
- *
- * So the path is said once and its later hits are indented under it. Nothing is summarised: every line number
- * and every matched line survives, which is what separates this from folding hits into a count. Measured over
- * 906 real search results pulled from the session corpus: 15.3% smaller, and a round-trip of all 906 recovers
- * every (file, line, content) triple exactly.
- *
- * CONSECUTIVE hits only, never a regroup: grep already emits its hits grouped by file, so gathering scattered
- * ones would buy another 0.9 points and pay for it by REORDERING the output, and a result whose line order is
- * not the tool's own is a worse thing to hand a reader than a repeated prefix.
- *
- * The first hit keeps its full `path:line:` spelling rather than becoming a bare header. It costs nothing (the
- * header would have cost a line of its own) and it leaves every group headed by an anchor that can be copied
- * straight into an editor, which is what a search result is mostly read for. */
+// A grep hit repeats its file on every line; said once, with later hits indented under it, losslessly. Only CONSECUTIVE
+// hits fold, never regrouped, preserving the tool's own order; the first hit keeps its full `path:line:` spelling.
 const HIT_LINE = /^([^\s:][^:]{0,240}):(\d+):(?:(\d+):)?(.*)$/;
-// A run has to be worth a fold, and a key has to be a filename. `Note:12:00` and a `12:34:56` timestamp parse as
-// `path:line:` perfectly well and are not hits; requiring a `/` or a `.` in the key is what tells them apart.
+// A timestamp like `12:34:56` parses as `path:line:` too; requiring a `/` or `.` in the key is what excludes it as a
+// hit.
 const HIT_RUN_MIN = 6;
 const isHitKey = (key) => key.includes("/") || key.includes(".");
 const parseHit = (line) => {
@@ -228,8 +188,8 @@ const parseHit = (line) => {
     return match !== null && isHitKey(match[1]) ? match : undefined;
 };
 
-// One run of hits, already known to be long enough: the first hit of each file keeps its path, the rest are
-// indented under it. `run` is uniform (every line parses), so this never has to re-check for a non-hit.
+// One run of hits, already long enough to fold: first hit of each file keeps its path, the rest indent under it. `run`
+// is uniform, so no need to re-check for a non-hit.
 const foldHitRun = (run) => {
     const folded = [];
     for (let start = 0; start < run.length; ) {
@@ -262,14 +222,8 @@ const foldHitRuns = (lines) => {
     return out;
 };
 
-// The registry: command-scoped cleaners (id ↔ command regex ↔ transform) and shape cleaners (no `match`, so
-// they are offered on every success and gate themselves on the text). Composable: every enabled cleaner that
-// applies runs, in array order.
-//
-// The strippers here are the ones a replay of 10,682 real agent commands showed removing bytes. The eight that
-// removed exactly zero over that corpus (npm, yarn, docker, git, pip, lint, gh, build) are gone: a stripper
-// that fires constantly and removes nothing is registry surface with a maintenance cost, a switch on the
-// settings page and no payer. Adding one back is three lines: `discover` says when a corpus asks for it.
+// Command-scoped cleaners (id + command regex + transform) and shape cleaners (no `match`, offered on every success);
+// composable, every enabled match runs in array order.
 const COMMAND_CLEANERS = [
     strip("pnpm", invocation(String.raw`pnpm`), [
         /^\s*Progress: /,
@@ -279,13 +233,12 @@ const COMMAND_CLEANERS = [
         /^Virtual store is at/,
         /^Lockfile is up to date/,
     ]),
-    // `apt-get` before `apt`: the alternation is ordered, and the trailing guard would otherwise reject the
-    // longer spelling at its own hyphen.
+    // `apt-get` before `apt`: ordered alternation, or the guard rejects the longer spelling at its hyphen.
     strip("apt", invocation(String.raw`apt-get|apt`), [
         /^(?:Get:|Hit:|Ign:|Fetched |Selecting |Preparing to unpack|Unpacking |Setting up |Processing triggers)/,
     ]),
-    // Test runners: on a green run (this only fires on exit 0) the per-test PASS lines are noise, drop them and
-    // keep the summary. Failures (exit ≠ 0) skip all command cleaners, so failing tests survive verbatim.
+    // Test runners: on a green run (exit 0) per-test PASS lines are noise, dropped, keeping the summary. Failures skip
+    // all command cleaners, so failing tests survive verbatim.
     strip("test", invocation(String.raw`vitest|jest|pytest|rspec|mocha|phpunit|go\s+test|cargo\s+test`), [
         /^\s*[✓√]\s/, // per-test pass (vitest/jest/mocha)
         /^--- PASS:/, // go test per-test
@@ -298,13 +251,12 @@ const COMMAND_CLEANERS = [
     { id: "hits", apply: foldHitRuns },
 ];
 
-// The full toggle vocabulary: every registry cleaner id, plus the global stages. `dedup` and `redact` run on all
-// output; `cap` is the head/tail truncation; `cache` collapses a command whose output is byte-identical to an
-// earlier run this session (applied in agent-output-filter, which owns the store).
+// Every registry cleaner id plus the global stages: dedup and redact run on all output, cap is head/tail truncation,
+// cache collapses an identical repeat (owned by agent-output-filter).
 export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "cap", "redact", "cache"];
 
-// Collapse a run of ≥3 identical consecutive lines to one line + a count marker. Lossless on distinct content:
-// only repetition is dropped, so it's safe on both success output and repeated failure lines (looping traces).
+// Collapses a run of 3+ identical consecutive lines to one line plus a count marker. Lossless on distinct content, so
+// it's safe on both success output and repeated failure traces.
 const dedupeRuns = (lines) => {
     const out = [];
     for (let i = 0; i < lines.length;) {
@@ -326,46 +278,23 @@ const dedupeRuns = (lines) => {
     return out;
 };
 
-// Mask common secret shapes before output reaches the model: defense-in-depth for an autonomous agent that
-// might echo env/config. Only secret-named assignments, AWS access keys, bearer tokens, URL creds.
-//
-// A secret-shaped NAME is not enough, because source code says "token" constantly. Matching on the name alone
-// masked `oauthToken === undefined` as `oauthToken =*** undefined` (a model cannot tell that from `!==`),
-// `let oauthToken: string` as `oauthToken: ***`, and `usage.inputTokens ?? 0` as `*** ?? 0`, silently, on
-// every read of the file through the shell. So the VALUE has to look like a credential too.
+// Masks common secret shapes before output reaches the model, as defense-in-depth. A secret-shaped NAME is not enough
+// (source often says "token" without holding one), so the VALUE must look like a credential too.
 const SECRET_NAME = String.raw`[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY)[A-Za-z0-9_]*`;
-// A single `=` or `:`, never `===`/`!==`/`=>`, that alone rules out every comparison and arrow function. The
-// optional closing quote is what covers a JSON config dump, where the key itself is quoted.
+// A single `=` or `:`, never `===`/`!==`/`=>`; optional closing quote covers a quoted JSON key.
 const ASSIGN = String.raw`["']?\s*[:=](?![=>])\s*`;
-// (`\x60` is a backtick: template-literal values are quoted too.)
+// `\x60` is a backtick: template-literal values are quoted too.
 const QUOTED_VALUE = String.raw`(["'\x60])([^"'\x60\n]{6,})\2`;
 // No `.` (property access) and not a call: `usage.inputTokens` and `computed(` are expressions, not values.
 const BARE_VALUE = String.raw`[\w+/=~-]{6,}(?![\w+/=~(-])`;
 
-/* WHAT A CREDENTIAL VALUE LOOKS LIKE, given that the NAME already matched.
- *
- * The name alone is not enough, because source code says "token" constantly: that much the pattern above
- * always knew. What it got wrong is the other half: it treated "≥6 characters carrying a digit" as
- * credential-shaped, and in a workspace whose subject matter IS tokens that fires on the data. Measured over
- * one day it masked 182 lines and caught zero secrets: `"cacheReadTokens":26170149` (breaking the JSON for
- * every reader downstream), `readonly inputTokens: 1234567`, `maxTokens: 200000`, `--max-tokens=131072`, and
- * every short fixture value in the test suite. Worse, the 6-character floor made the mask fire as a function of
- * MAGNITUDE, `"outputTokens": 94746` survived and the same field one order up did not, so it passed every
- * small test and only broke on production-scale numbers.
- *
- * The rule the original reached for is still the right one: a credential is MACHINE-GENERATED, so it carries
- * letters and digits together, and what it was missing is that three other things do too. So, in order of
- * confidence:
- *   1. A known issuer prefix is a credential at any length. `sk-`, `ghp_`, `AKIA`, `eyJ` and friends are
- *      unambiguous, and they are what actually leaks.
- *   2. Otherwise the value must be entropic AND none of the three shapes that fake it:
- *        · all digits: a count, and this workspace is made of them (`26170149`, `200_000`, `131072`);
- *        · a path, URL or `${template}`: `${STATE_DIR}/runner-token`, `/run/intentic/agent.token`;
- *        · SCREAMING_SNAKE: the NAME of a variable passed as a string, not its value.
- *   3. And it must be longer than a human would type, which is what separates a generated key from the
- *      fixture values the model needs to read (`"tok-abc-123"`, `"test-secret"`).
- * The deliberate gap is unchanged from the original: an all-lowercase handwritten passphrase reads exactly like
- * an identifier, and nothing in the text separates them. */
+// What counts as a credential once the NAME already matched: machine-generated values carry letters and digits
+// together, but so do plain counts and paths.
+//   1. A known issuer prefix (`sk-`, `ghp_`, `AKIA`, `eyJ`, …) is a credential at any length.
+//   2. Otherwise it must be entropic and not: all-digits, a path/URL/`${template}`, or SCREAMING_SNAKE (a name, not a
+//      value).
+//   3. And longer than a human would type, or it might be a fixture value like `"tok-abc-123"`.
+// The gap is deliberate: a handwritten passphrase reads exactly like an identifier.
 const ISSUER_PREFIX = /^(?:sk-|pk-|rk-|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abposr]-|AKIA|ASIA|eyJ|AIza|ya29\.|glpat-|dop_v1_|shpat_|SG\.|npm_)/;
 const NUMERIC_VALUE = /^[\d_,.]+$/;
 const STRUCTURAL_VALUE = /[\s/\\${}]/;
@@ -387,45 +316,20 @@ const SECRET_PATTERNS = [
         (match, assignment, quote, quoted, bare) => (looksLikeCredential(quoted ?? bare) ? `${assignment}${quote ?? ""}***${quote ?? ""}` : match),
     ],
     [/\bAKIA[0-9A-Z]{16}\b/g, "***"],
-    // Same rule for the bearer value: prose ("refuses every bearer token", "the bearer is valid") carries no
-    // digit, every real bearer does.
+    // Same rule for a bearer value: prose about tokens carries no digit, every real bearer token does.
     [/\b(Bearer\s+)(?=[\w.-]*\d)[\w.-]{8,}/gi, "$1***"],
     [/\b(https?:\/\/[^:@\s/]+:)[^@\s]+@/gi, "$1***@"],
 ];
-/* THE VALUES THIS SANDBOX ACTUALLY HOLDS: the half of redaction that does not have to guess.
- *
- * Everything above infers a credential from the NAME beside it, and that inference has a floor it cannot get
- * past: it only masks what somebody thought to call a token. Measured against the field names the capability
- * union itself declares secret, five of six shapes went straight through: `presharedKey`, an agent's `env`
- * block, a wireguard `config`, and any name a third-party connector invents (`pat`, `seed`). The name list can
- * always be extended and will always be behind.
- *
- * The daemon does not have to infer anything: it composes these values into the agent's environment every turn,
- * so it knows them exactly. Masking by value is therefore complete for everything stored, in any shape, under
- * any name, and it needs no upkeep when a connector adds a field. The name patterns STAY as the backstop, for
- * the credentials this sandbox does not store: one the agent minted mid-turn, one echoed by a remote command.
- *
- * A KNOWN value is masked TO ITS REFERENCE: `{{secret:name}}`, the same token the daemon's exits resolve
- * back to the value (src/secrets/secret-registry.ts is the naming's home; the vault's `<id>/<field>` and the
- * env/generated KEY are reproduced here because this filter runs without the daemon). The shape patterns
- * above keep the anonymous mask: they GUESS, and a guess must not mint a reference that resolves.
- *
- * Read straight off disk rather than passed in: the three files below are readable by anything running in
- * this container (daemon and agent are both root), so routing them through an env var or argv would add a
- * copy in /proc without adding a boundary. Cached per (path, mtime): this runs once per Bash command.
- *
- * A MULTI-LINE value (an ssh private key, a WireGuard conf) can never match a line-at-a-time replace, so each
- * of its lines is registered as its own target, to the anonymous mask, not the reference: a reference stands
- * for the WHOLE value, and stamping it per line would make the masked block resolve to N copies of the key.
- * Short fragments are dropped: a PEM's `-----BEGIN` header is not the secret, and masking an 8-character line
- * would blank ordinary output. */
+// Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; name patterns above are a
+// backstop only for a value not stored here. A known value masks to its reference (`{{secret:name}}`); a multi-line
+// value masks per line to the anonymous mask instead, since a reference stands for the whole value.
 const SECRET_VALUE_MIN = 12;
 const secretValueCache = new Map();
 
 const readIfChanged = (path, name) => {
     try {
-        // Open once, then inspect and read that descriptor. A path-level stat followed by a path-level read
-        // lets a replacement or symlink swap redirect the secret reader between the two operations.
+        // Opens once, then stats and reads that descriptor: a path-level stat then read would let a symlink swap
+        // redirect the reader in between.
         const descriptor = openSync(path, "r");
         try {
             const { mtimeMs, size } = fstatSync(descriptor);
@@ -446,11 +350,8 @@ const readIfChanged = (path, name) => {
     }
 };
 
-/* EVERY FORM ONE VALUE CAN ARRIVE IN: a mirror of src/secrets/secret-registry.ts surfaceForms, which is
- * where the reasoning lives. Duplicated rather than imported for the same reason the naming below is: this
- * filter runs as a standalone script with no daemon and no build step behind it. A secret that reached the
- * reader JSON-escaped or percent-encoded shares no run of text with the stored string, so registering only
- * the raw one hands it over intact. */
+// Every form a value can arrive in; mirrors src/secrets/secret-registry.ts surfaceForms (duplicated: this filter has no
+// daemon or build step). Only registering the raw form would miss a JSON-escaped or percent-encoded secret.
 export const surfaceForms = (value) => {
     const forms = [value];
     const jsonEscaped = JSON.stringify(value).slice(1, -1);
@@ -468,9 +369,9 @@ export const surfaceForms = (value) => {
     return forms;
 };
 
-// Every {target, replacement} worth masking out of one of the three files. The vault is {id: {field: value}}
-// (named `<id>/<field>`); .env is KEY=value lines and .secrets.json a flat {KEY: value} (named KEY). Read for
-// VALUES only: a key name is not a secret and masking it would blank prose.
+// Every {target, replacement} to mask, from one of three files: the vault is {id: {field: value}} (named
+// `<id>/<field>`), `.env` is KEY=value, `.secrets.json` is flat {KEY: value}. Reads only VALUES; a key name is not a
+// secret.
 const harvest = (text, path, name) => {
     const named = [];
     if (path.endsWith("capability-secrets.json")) {
@@ -506,8 +407,7 @@ const harvest = (text, path, name) => {
         }
     };
     for (const [reference, value] of named) {
-        // Trimmed first: the padding of a stored-with-whitespace value is never masked, so encoding it would
-        // register a target nothing can produce.
+        // Trimmed first: whitespace padding is never masked, so an untrimmed target would never match anything.
         for (const form of surfaceForms(value.trim())) {
             add(form, `{{secret:${reference}}}`);
         }
@@ -521,9 +421,8 @@ const harvest = (text, path, name) => {
     return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
 };
 
-/* Where the three stores live, from the same environment the daemon set for this turn. AGENT_AUTH_DIR is the
- * provider-credential root (off /work); unset (a dev daemon) puts it under .intentic/secrets/auth, which is where
- * composition.ts falls back to as well. */
+// Where the three stores live, from the daemon's own env for this turn. AGENT_AUTH_DIR is the provider-credential root;
+// unset falls back to .intentic/secrets/auth, matching composition.ts.
 export const secretValues = (env = process.env) => {
     const authRoot =
         env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== ""
@@ -537,10 +436,9 @@ export const secretValues = (env = process.env) => {
     ].toSorted((a, b) => b.target.length - a.target.length);
 };
 
-/* The same masking over a whole body, for the two paths that emit output WITHOUT running the pipeline: the
- * measurement holdout and the fail-open catch. Neither is a reason to hand over a credential: a control group
- * is still a tool result the model reads, and a filter that threw is the moment least worth trusting. Idempotent,
- * so running it after the pipeline has already masked a line costs a scan and changes nothing. */
+// Masks a whole body for the two paths that skip the pipeline: the holdout and the fail-open catch. Neither excuses
+// handing over a credential; idempotent, so re-running it after the pipeline already masked a line costs a scan and
+// changes nothing.
 export const redactText = (text, values = []) =>
     text
         .split("\n")
@@ -557,10 +455,9 @@ const redactLine = (line, values = []) => {
     return SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), masked);
 };
 
-// Parse the spec into the enabled set. Same grammar as iq's parseFeatures: allow-list if any token lacks "-"
-// ("git,pnpm" = only those), else default-minus ("-git" = all except). Empty/undefined = all on. UNLIKE iq's
-// version this is LENIENT: unknown tokens are ignored rather than thrown, because the filter must never break a
-// tool result over a typo'd setting (the daemon owns validation of what it writes).
+// Allow-list if any token lacks `-` ("git,pnpm" = only those), else default-minus ("-git" = all except);
+// empty/undefined = all on. Unlike iq's parseFeatures, unknown tokens are ignored rather than thrown, so a typo'd
+// setting can't break a tool result.
 export const parseCleaners = (spec) => {
     if (spec === undefined || spec.trim() === "") {
         return new Set(CLEANERS);
@@ -580,64 +477,35 @@ export const parseCleaners = (spec) => {
     return new Set(CLEANERS.filter((cleaner) => !disabled.has(cleaner)));
 };
 
-// Generic success cap (any command): outputs past MAX keep the first HEAD + last TAIL lines. Failures keep
-// everything up to FAIL_TAIL: errors usually live at the end.
+// Generic success cap: outputs past MAX keep the first HEAD and last TAIL lines. Failures keep everything up to
+// FAIL_TAIL, since errors live at the end.
 const HEAD = 30;
 const TAIL = 50;
 const MAX = 100;
 const FAIL_TAIL = 500;
 
-/* A LINE is not a unit of size, and counting them was a blind spot big enough to see in the ledger: 8.2% of all
- * raw bytes arrived in commands under the 100-line limit that the cap therefore never looked at. `grep -rn
- * --include=*.css` over minified CSS returns sixty lines and 130 KB; a `curl` of a JSON API returns one. The
- * budgets below are the same two policies as the line caps, priced in bytes: generous enough that ordinary
- * output never meets them (the 80-line log cap is ~6 KB of normal text, well under LOG_MAX_BYTES), so this
- * fires only on the long-line shapes the line cap cannot see. */
+// A line is not a unit of size: some commands return few lines of very long ones. These byte budgets are generous
+// enough that ordinary output never meets them, firing only on the long-line shapes the line cap can't see.
 const LOG_MAX_BYTES = 16_000;
 const READ_MAX_BYTES = 96_000;
 // Head/tail split of a byte budget mirrors the line cap's 30/50 bias toward the end, where a log's signal is.
 const BYTE_HEAD_SHARE = 0.375;
 
-// A deliberate read is not a log. `cat`, `sed -n 40,80p`, `awk NR>=…`, `git diff/show` on a path: the agent
-// named the exact bytes it wants, and a build log's shape (noise at both ends, signal at the end) does not
-// apply. Capping those at 100 lines is what makes reading a file through the shell WORSE than the Read tool,
-// and the transcripts show the loop it creates: a 248-line file arrives as 81 lines with its middle gone, and
-// the very next call re-reads the whole file through Read, paying for it twice. So a read gets the Read tool's
-// own ceiling, and overshoot is trimmed from the END (where a file read naturally stops) rather than the middle.
+// A deliberate read (`cat`, `sed -n`, `awk`, `git diff/show` on a path) is not a log's noise-at-both-ends shape, so it
+// gets the Read tool's own line ceiling instead of the log cap, trimmed from the end where a read naturally stops.
 const READ_MAX = 2000;
-/* Deliberately narrow on the RIGHT: `git log` without `-p` is history (a log, correctly capped), `git log -p`
- * is a read, and deliberately permissive on the LEFT, which is the correction of a real measured failure.
- *
- * This used to anchor at a shell-statement start (`^` or after `;&|`). What it is handed is not the shell
- * statement, though: it is the LAUNCHER line, `nsenter … -- bash -c '<what the model wrote>'`. So `cd x && cat
- * y` was recognised (the `&&` supplied an anchor) and a bare `cat y` was not (the char before it is a quote):
- * a coin flip on syntax the model had no reason to think mattered. Over one day that misread 88 of 93 shell
- * reads as logs and gutted the middle out of, among others, five reads of the workspace README.
- *
- * The lookbehind keeps the only thing the anchor was really buying: that `--concat`, `bobcat` and `x.cat` are
- * not the `cat` command, while accepting the quote, the `--`, and the statement start alike. The remaining
- * false positive is `<a log> | cat`, which grants a build log the read ceiling instead of the log cap. That
- * trade is deliberate: over-keeping a log costs tokens once, while gutting a file read costs the read AND the
- * re-read that follows it.
- *
- * `GIT_OPTIONS` before the verb because git's global options sit between the two words: `git --no-pager
- * diff` is the form the agent instructions here ask for, and without this it read as a log and had its middle
- * gutted: a 274-line diffstat came back as 81 lines. */
+// Narrow on the right: `git log` without `-p` is history, `git log -p` is a read. Permissive on the left: the
+// lookbehind only excludes being the tail of a path or identifier, accepting a quote, `--`, or statement start alike.
 
-/* Git's global options, as many as precede the verb. Two shapes, and only the first is obvious: a flag glued to
- * its value (`--no-pager`, `--git-dir=/x/.git`) is one `\S+` token, but SIX of them take their value as a
- * SEPARATE word, and `-\S+\s+` then stops at the value and never reaches the verb. `git -C <path> diff` is the
- * spelling every cross-worktree command in this workspace uses, and the ledger caught it being read as a log:
- * a 252 KB diff of `_sandbox` came back as 81 lines with the middle gone. The list is explicit rather than
- * "any flag may take a value", because guessing that would let `git -C . log --oneline` swallow `--oneline` and
- * match nothing, or worse, let a value that happens to read as a verb turn a log into a read. */
+// Git's global options before the verb, in two shapes: a flag glued to its value (`--no-pager`) is one token, but
+// several take the value as a separate word. The list is explicit rather than "any flag takes a value", which could
+// swallow the verb itself.
 const GIT_OPTIONS = String.raw`(?:(?:-[Cc]|--(?:git-dir|work-tree|namespace|exec-path|super-prefix))\s+\S+\s+|-\S+\s+)*`;
 const READ_COMMAND = new RegExp(
     String.raw`(?<![\w.-])(?:cat|bat|sed\s+-n|awk|git\s+${GIT_OPTIONS}(?:diff|show)\b|git\s+${GIT_OPTIONS}log\s+(?:[^;&|]*\s)?-p)\b`,
 );
 
-// Whole lines from the front of `source` until `budget` bytes are spent: a partial line would misrepresent the
-// output it came from, so the budget is spent in line-sized steps or not at all.
+// Takes whole lines until `budget` bytes are spent; a partial line would misrepresent the output it came from.
 const takeWithinBudget = (source, budget) => {
     const kept = [];
     let spent = 0;
@@ -651,9 +519,8 @@ const takeWithinBudget = (source, budget) => {
     return kept;
 };
 
-/* The cap as one decision: too many lines OR too many bytes, under whichever policy the command earned. Returns
- * the same array when nothing is over budget, so the caller can tell "did not fire" from "fired and removed
- * nothing": the distinction the stage ledger is built on. */
+// Caps on lines OR bytes, whichever policy the command earned. Returns the same array unchanged when nothing is over
+// budget, so the caller can tell "did not fire" from "fired and removed nothing".
 const capOutput = (lines, command) => {
     const isRead = READ_COMMAND.test(command);
     const maxLines = isRead ? READ_MAX : MAX;
@@ -667,37 +534,29 @@ const capOutput = (lines, command) => {
     if (bodyBytes(lines) <= maxBytes) {
         return lines;
     }
-    // Over budget on bytes inside the line limit ⇒ long lines. Take whole lines until the budget is spent, from
-    // the end for a read (where a file read naturally stops) and from both ends for a log.
+    // Over on bytes within the line limit means long lines: take from the end for a read, both ends for a log.
     if (isRead) {
         const head = takeWithinBudget(lines, maxBytes);
         return [...head, `… ${lines.length - head.length} more lines elided (${bodyBytes(lines)} bytes): narrow the range or use the Read tool …`];
     }
     const head = takeWithinBudget(lines, Math.round(maxBytes * BYTE_HEAD_SHARE));
     const tail = takeWithinBudget(lines.toReversed(), maxBytes - bodyBytes(head)).toReversed();
-    // A single line longer than the whole budget leaves both ends empty; keep the head of that one line rather
-    // than emitting nothing but a marker.
+    // A single line longer than the whole budget leaves both ends empty; keep its head rather than only a marker.
     if (head.length === 0 && tail.length === 0) {
         return [`${lines[0].slice(0, maxBytes)}… line truncated at ${maxBytes} bytes …`];
     }
     return [...head, `… ${lines.length - head.length - tail.length} lines elided (${bodyBytes(lines)} bytes) …`, ...tail];
 };
 
-// The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
-// matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.
-//
-// Returns the cleaned lines AND what each stage removed, in pipeline order: the per-mechanism attribution the
-// savings report is built on. It is sequential by construction (each stage is weighed against what reached it,
-// not against the raw capture), which is what makes the stages sum exactly to the total saving and lets them be
-// drawn as one stacked bar. The flip side, and the reason the UI must not label these "what turning this off
-// would save": a cleaner that runs before the cap is credited with lines the cap would have taken anyway.
+// Gated pipeline over ANSI/\r-cleaned lines: success runs matching command cleaners then the cap; failure keeps
+// everything but a generous tail. Stages are weighed sequentially, so they sum to the total saving — a cleaner before
+// the cap gets credit for lines the cap would have taken anyway.
 export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) => {
     const stages = [];
     let out = lines;
     let bytes = bodyBytes(lines);
-    // Weigh the result of one stage against what reached it, and record the difference under the stage's id.
-    // A stage that changed nothing still costs one pass; recording it (at 0) is what lets the report say a
-    // cleaner fired and was worth nothing, which is a different fact from it never having run.
+    // Weighs one stage against what reached it, recording the difference under its id — even 0, so the report can tell
+    // "fired and worth nothing" from "never ran".
     const ran = (id, next) => {
         out = next;
         const after = bodyBytes(out);
@@ -726,9 +585,7 @@ export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) =
             ran("dedup", dedupeRuns(out));
         }
         if (out.length > FAIL_TAIL) {
-            // Its own id, never folded into `cap`: this one is unconditional (errors are kept whatever the
-            // spec says), so crediting the `cap` toggle with it would put a number under a switch that did not
-            // produce it.
+            // Own id, never `cap`: this fires regardless of the spec, so `cap`'s toggle shouldn't get credit for it.
             ran("failtail", [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)]);
         }
     }
@@ -742,45 +599,30 @@ export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) =
     return { lines: out, stages };
 };
 
-// Which cleaners CLAIMED this command: recorded in filter-stats.jsonl, and the question `gaps` is built on
-// ("high-volume commands no handler claimed ⇒ where to write the next one"). Command-scoped only: a shape
-// cleaner claims nothing in advance, it decides from the output, so counting it here would make every command
-// look handled and empty the gaps list. What the shape cleaners were worth is in `stageBytes`.
+// Which cleaners CLAIMED this command, recorded for the `gaps` report. Command-scoped only: a shape cleaner decides
+// from the output, not in advance, so counting it here would make every command look handled.
 export const matchedCleaners = (command, enabled) =>
     COMMAND_CLEANERS.filter((cleaner) => cleaner.match !== undefined && enabled.has(cleaner.id) && cleaner.match.test(command)).map(
         (cleaner) => cleaner.id,
     );
 
-// ---- `cache` cleaner: collapse a byte-identical repeat of a command's output within one agent session ----
-// Agents re-run the same command (git status, pnpm test, tsc) across a turn; when the cleaned output is identical
-// to a previous run this session, the second one carries no new information. Replace it with a one-liner that
-// points at the reversible retrieval handle: the boost "result cache" idea applied to output tokens. Stateful,
-// so it lives here (agent-output-filter owns the store) rather than in the pure cleanLines pipeline.
+// cache: when a command's cleaned output repeats a previous run's byte-for-byte this session, replace it with a pointer
+// to the retrieval handle. Stateful, so agent-output-filter owns the store rather than the pure cleanLines pipeline.
 
-// Sentinel the collapse emits; agent-output-filter recognises it to record `cache` in the stat line's `matched`.
-// A PREFIX, not the whole line: the two collapses complete it differently ("a previous run this session" when
-// the same command repeats, "the output of `<cmd>` earlier this session" when a different one produced the
-// identical body), and attribution keys on what they share.
+// Sentinel the collapse emits; agent-output-filter matches on it to record `cache`. A prefix, not the whole line: the
+// two collapse messages complete it differently.
 export const CACHE_MARKER = "(output identical to ";
 
-/* A body has to be worth more than the pointer that replaces it, and small ones never are. The marker is ~130
- * bytes before it names anything, so collapsing a four-byte "OK" produced a result 400 bytes LONGER than the
- * output: over one ledger window that happened on 78 of 90 collapses, every one of them reverted by `guard`
- * (which throws away the rest of the pipeline's work with it).
- *
- * The floor is not only an accounting fix. Short bodies COLLIDE: "", "0", a bare status line are emitted by
- * commands with nothing to do with each other, and the cross-command back-reference then names one of them,
- * which is how a desktop-install verification came back as "identical to the output of `sleep 90; cat
- * /tmp/smoke-run1.log`". A pointer the reader cannot act on is worse than the bytes it saved. */
+// A body must be worth more than the ~130-byte marker, or collapsing it costs more than it saves. Short bodies also
+// COLLIDE across unrelated commands (`""`, `"0"`), naming the wrong one as the source.
 const CACHE_MIN_BYTES = 512;
-// The back-reference carries the earlier command; a long one balloons the very marker that is meant to be small.
+// The back-reference carries the earlier command; a long one balloons the marker meant to be small.
 const CACHE_COMMAND_MAX = 120;
 
 const hashText = (text) => createHash("sha1").update(text).digest("hex");
 
-// The per-session key: every command in one SDK session runs in a new tmux window (new pane id), so the pane-log
-// path differs per command: strip the trailing `-<pane>.log` to recover the shared `agent-<id>` session name.
-// undefined ⇒ no stable key (the cache then never hits, which is the safe/fail-open outcome).
+// Every command in a session runs in a new tmux window (new pane id), so this strips the trailing `-<pane>.log` to
+// recover the shared `agent-<id>` name. Undefined means no stable key, so the cache just never hits.
 export const sessionKeyFromLog = (logPath) => {
     if (logPath === undefined || logPath === "") {
         return undefined;
@@ -790,8 +632,8 @@ export const sessionKeyFromLog = (logPath) => {
     return match !== null && match[1] !== "" ? match[1] : undefined;
 };
 
-// A file-backed store of commandHash → bodyHash under <terminalsDir>/../output-cache/<sessionKey>.json. Read once,
-// rewritten on each miss. Fail-open on any I/O error (a missed collapse never breaks the tool result).
+// File-backed store of commandHash → bodyHash under <terminalsDir>/../output-cache/<sessionKey>.json, read once and
+// rewritten on each miss. Fail-open on I/O error.
 export const openCacheStore = (terminalsDir, sessionKey) => {
     const file = join(terminalsDir, "..", "output-cache", `${sessionKey}.json`);
     let map;
@@ -814,11 +656,11 @@ export const openCacheStore = (terminalsDir, sessionKey) => {
     };
 };
 
-// Pure given `store` (an object with lookup/record): on a hit return the collapse marker, else record and pass the
-// body through. Tests inject an in-memory Map-backed store to stay deterministic.
+// Pure given `store` (lookup/record): on a hit, returns the collapse marker; otherwise records and passes the body
+// through. Tests inject an in-memory store.
 export const collapseCached = (body, command, store, logPath) => {
-    // Below the floor there is nothing worth collapsing and nothing worth remembering: recording a colliding
-    // short body is what lets it be named as the "earlier command" for an unrelated one later.
+    // Below the floor, nothing is worth collapsing or remembering: recording a short body risks naming it as the
+    // "earlier command" for an unrelated one.
     if (body.length < CACHE_MIN_BYTES) {
         return { body, cached: false };
     }
@@ -829,23 +671,16 @@ export const collapseCached = (body, command, store, logPath) => {
     if (store.lookup(commandHash) === bodyHash) {
         return { body: `${CACHE_MARKER}a previous run this session${handle})`, cached: true };
     }
-    /* The other half of the same saving: this exact output already came back from a DIFFERENT command. Reading
-     * a file with `cat` and then with `sed -n`, re-running a suite through two spellings of the same script,
-     * `git diff` after a `git diff --stat` that changed nothing: each pays full price under a command-keyed
-     * cache, because the key it is keyed by is the thing that differed.
-     *
-     * Naming the earlier command is what makes the collapse safe to act on. "Duplicate output" alone leaves the
-     * model to guess WHICH earlier result this equals, and the guess is worth less than the tokens it saved;
-     * with the command named, the marker is a pointer into the transcript the model can actually follow. */
+    // The same output can come from a different command (reading a file two ways, two spellings of the same script);
+    // naming the earlier command lets the model act on the pointer instead of guessing which result it matches.
     const earlier = store.lookup(bodyKey);
     if (earlier !== undefined && earlier !== command) {
         const named = earlier.length > CACHE_COMMAND_MAX ? `${earlier.slice(0, CACHE_COMMAND_MAX)}…` : earlier;
         return { body: `${CACHE_MARKER}the output of \`${named}\` earlier this session${handle})`, cached: true };
     }
     store.record(commandHash, bodyHash);
-    // First writer of a body wins the back-reference: the earliest command is the one furthest up the
-    // transcript, so re-recording on every match would keep moving the pointer toward the reader and
-    // eventually name the call right above, which says nothing.
+    // First writer of a body wins the back-reference: re-recording on every match would keep moving the pointer toward
+    // the reader until it named the call right above.
     if (earlier === undefined) {
         store.record(bodyKey, command);
     }

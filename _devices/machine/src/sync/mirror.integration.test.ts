@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MirroredPort } from "./config.js";
 import type { ForwardExecutor } from "./mirror.js";
 
-// config.ts derives its paths from homedir() at import time, so point HOME at a throwaway dir BEFORE importing
-// (dynamic import, after the env is set): then machine.pid lands in temp, not the real ~/.intentic/machine.
+// config.ts reads homedir() at import time; HOME must point at a throwaway dir before the dynamic import below,
+// or machine.pid lands in the real ~/.intentic/machine.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "machine-mirror-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { runPidPath } = await import("../config.js");
@@ -18,7 +18,7 @@ const { fetchWorkspacePorts, reconcileForwards, retirePairingMirror, shouldAutoP
     await import("./mirror.js");
 const { readResidentPid, runForeground, stopResident } = await import("../resident.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
-// setup() creates ~/.intentic/machine when it writes the state; the pidfile test writes there directly, so make it first.
+// setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(runPidPath), { recursive: true });
 
 it("auto-pauses only after an hour of uninterrupted failed polls", () => {
@@ -65,8 +65,7 @@ const log = (): void => {};
 // Nothing else on this machine is mirroring: the single-pairing case, and the default for these tests.
 const unclaimed = new Map<number, string>();
 
-// Every row on the wire now carries what it IS as well as where it runs; the mirror ignores all three, but
-// the schema is strict so a fixture without them never parses.
+// The wire schema also carries title/purpose/origin, unused by the mirror but required to parse.
 const named = { title: "Vite dev server", purpose: "Started in one of your terminals.", origin: "terminal" as const };
 
 describe("fetchWorkspacePorts", () => {
@@ -103,7 +102,7 @@ describe("fetchWorkspacePorts", () => {
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("forbidden", { status: 403 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
-        // A 5xx (tunnel blip) must NOT read as revocation: the watcher retries those forever.
+        // A 5xx (tunnel blip) must not read as revocation; the watcher retries those forever.
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 })));
         const blip = await fetchWorkspacePorts("https://s.example.dev", "ist_old").catch((error: unknown) => error);
         expect(blip).toBeInstanceOf(Error);
@@ -116,8 +115,7 @@ describe("reconcileForwards (minimal-touch)", () => {
         const { executor, created, terminated } = fakeExecutor();
         const current: MirroredPort[] = [{ port: 3000, host: "127.0.0.1" }];
         const next = await reconcileForwards(executor, current, [ws(3000), ws(4321)], unclaimed, log);
-        // A row carried over keeps the baseline's own shape; only a freshly created one learns what is listening
-        // behind it, which is what labels the port in the machine report.
+        // A carried-over row keeps its own shape; only a freshly created one learns what is listening behind it.
         expect(next).toEqual([
             { port: 3000, host: "127.0.0.1" },
             { port: 4321, host: "127.0.0.1", command: "vite" },
@@ -153,9 +151,8 @@ describe("reconcileForwards (minimal-touch)", () => {
         expect(created).toEqual([]);
     });
 
-    /* Two sandboxes on one machine routinely serve the same dev-server port, and only one can own localhost:6480.
-     * The contest is decided here rather than by the OS probe, so the loser is told WHICH sandbox holds it, and
-     * critically, the winner's live forward is never terminated by the loser's pass. */
+    // Two sandboxes can serve the same dev-server port; only one owns localhost:6480. Decided here, not by the OS
+    // probe, so the loser is told which sandbox holds it and the winner's forward is never torn down.
     it("yields a port another pairing already mirrors, without disturbing it", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[6480, "sandbox-first.example.dev"]]);
@@ -166,8 +163,8 @@ describe("reconcileForwards (minimal-touch)", () => {
         expect(terminated).toEqual([7000]);
     });
 
-    // A port THIS pairing already mirrors is its own: a claim map naming it would otherwise make a pairing
-    // release the port it is already serving on the very next tick.
+    // A port this pairing already mirrors is its own; a claim map naming it must not make it release a port it's
+    // already serving.
     it("keeps its own established forward even if the port is claimed", async () => {
         const { executor, created, terminated } = fakeExecutor();
         const claimed = new Map([[3000, "sandbox-other.example.dev"]]);
@@ -193,10 +190,9 @@ describe("readResidentPid", () => {
     });
 });
 
-/* Two resident loops do real damage, not merely waste a process: each reconciles the same forwards from its own
- * baseline, so they take turns tearing down and recreating each other's sessions and drop live connections on a
- * loop. Only the detached starter used to check the pidfile, so every path that runs the loop DIRECTLY: a systemd
- * unit, a LaunchAgent, a hand-run `run --foreground`: could stack one on top of a resident copy. */
+// Two resident loops fight: each reconciles the same forwards from its own baseline, tearing down and recreating
+// each other's sessions. Every path that runs the loop directly (systemd unit, LaunchAgent, hand-run) must hit this
+// guard.
 describe("runForeground single-holder guard", () => {
     it("refuses when a live loop already holds the pidfile, before touching config or Mutagen", async () => {
         const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
@@ -209,8 +205,9 @@ describe("runForeground single-holder guard", () => {
             await writeFile(runPidPath, held);
             const said: string[] = [];
 
-            // Returning here is what proves the guard runs FIRST: everything past it reads config, dials
-            // sandboxes, and calls ensureMutagen(), which would try to download a release in a unit test.
+            // Proves the guard runs first: everything past it reads config, dials sandboxes, and calls ensureMutagen(),
+            // which
+            // would try to download a release here.
             await runForeground((message) => said.push(message));
 
             expect(said.join("\n")).toContain(`already running (pid ${pid})`);
@@ -221,15 +218,8 @@ describe("runForeground single-holder guard", () => {
         }
     });
 
-    /* THE OUTAGE THIS GUARD CAUSED, once, by believing a number. A pidfile outlives the boot that wrote it, and
-     * pids restart low and in roughly the same order every boot, so the watcher's own pid from yesterday is
-     * somebody else's transient process this morning. On 2026-08-29 a machine bugchecked in standby with the
-     * pidfile saying 232; the watcher came back as pid 216, probed 232, found an unrelated early-boot process
-     * wearing it, refused, and exited 0 (a refusal is deliberate, so a supervisor must not restart it into
-     * refusing again) — which meant `Restart=on-failure` never fired and file sync stayed off for hours.
-     *
-     * The stand-in here is genuinely ALIVE, exactly as pid 232 was. Only the boot stamp says the record is not
-     * about it. */
+    // A pidfile outlives the boot that wrote it, and pids restart low, so yesterday's watcher pid can be an unrelated
+    // process this morning; only the boot stamp says whether a live pid is really this loop's.
     it("starts when the pidfile is from an earlier boot, however alive that pid happens to be now", async () => {
         const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
         const pid = other.pid;
@@ -246,22 +236,15 @@ describe("runForeground single-holder guard", () => {
     });
 });
 
-/* THE NUMBER THAT DECIDES WHETHER SYNC COMES BACK. The loop is supervised by `Restart=on-failure` (a systemd
- * user unit, so a deliberate `systemctl --user stop` stays stopped), which means a clean exit is never restarted.
- * A signal is not a clean exit: it is something ELSE stopping this process, and the only kinds that should stay
- * stopped are the ones systemd itself initiates, which it already refuses to restart whatever the code says.
- *
- * Field failure: the watcher took a SIGTERM it never asked for, exited 0, and desktop sync was off for five
- * hours with both endpoints reading `Connected: No` and nothing restarting it. Exiting 0 here is what said
- * "someone meant this". */
+// Restart=on-failure never restarts a clean exit. A signal means something else stopped the process, so it must
+// exit non-zero, or a supervisor will never restart it.
 describe("signalExitCode", () => {
     it("reports a signal as a failure, so a supervisor restarts what it did not stop", () => {
         expect(signalExitCode("SIGTERM")).toBe(143);
         expect(signalExitCode("SIGINT")).toBe(130);
     });
 
-    // 128+signal, the shell's own convention, rather than a number of ours: a supervisor's logs and `$?` both
-    // read it as "terminated by SIGTERM" without anyone consulting this file.
+    // 128+signal is the shell's convention, so a supervisor's `$?` reads it correctly without consulting this file.
     it("uses 128 + the signal number", () => {
         expect(signalExitCode("SIGTERM")).toBe(128 + 15);
         expect(signalExitCode("SIGINT")).toBe(128 + 2);
@@ -270,9 +253,9 @@ describe("signalExitCode", () => {
 
 describe("stopResident", () => {
     it("returns only once the loop is GONE, not merely signalled", async () => {
-        // A loop shaped like the real one: it handles SIGTERM and takes a moment to wind down (the real one
-        // removes its pidfile first). An instantly-dying stand-in cannot tell "waited for it" from "signalled
-        // it and moved on", which is the whole property under test.
+        // Shaped like the real loop: handles SIGTERM and takes a moment to wind down. An instant-dying stand-in
+        // couldn't
+        // distinguish "waited for it" from "signalled and moved on".
         const resident = spawn(
             process.execPath,
             ["-e", 'process.on("SIGTERM", () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000); console.log("ready")'],
@@ -282,8 +265,8 @@ describe("stopResident", () => {
         if (pid === undefined || resident.stdout === null) {
             throw new Error("the stand-in loop didn't start");
         }
-        // Wait for its handler to be INSTALLED. Signalling a node process still booting kills it outright, which
-        // silently turns this into a test of an instantly-dying loop: one that passes either way.
+        // Waits for the handler to be installed: signalling a still-booting process kills it outright, silently turning
+        // this into a test that passes either way.
         await new Promise((ready) => resident.stdout?.once("data", ready));
         await writeFile(runPidPath, await pidFileBody(pid));
 
@@ -299,9 +282,7 @@ describe("stopResident", () => {
     });
 });
 
-/* Unpairing ONE sandbox must leave every other pairing on the machine mirroring. Tearing down all of this agent's
- * forwards on every setup is half of what broke a live pairing: the forwards were named for the other sandbox, the
- * config that replaced it named none of them, and Mutagen holds a released port's listener for good. */
+// Unpairing one sandbox must leave every other pairing on the machine mirroring.
 describe("retirePairingMirror", () => {
     it("terminates only the named sandbox's forwards, not a sibling pairing's, not a stranger's", async () => {
         const record = join(dirname(runPidPath), "terminated.txt");

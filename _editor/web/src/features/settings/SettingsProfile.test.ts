@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is an AFFORDANCE. The profile row is one identity strip: the avatar is a live
-// control at rest (camera overlay on hover), and rename is a compact pencil attached to the name rather than
-// a separate form with a Save row.
+// Needs jsdom: the profile row is a live-control affordance (hover camera overlay, inline rename) that a real DOM is
+// needed to assert on.
 import { vAction } from "@intentic/ui";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -17,8 +15,7 @@ vi.mock(`../auth/useAuth`, () => ({
 const fileToSquareDataUrl = vi.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
 vi.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 
-/* The plan chip's WORDS are pinned where they are derived (hostedHours.test.ts). Mocked here so this file stays
- * about the profile row's affordances, and so mounting it does not need a query client. */
+// Plan chip words are pinned in hostedHours.test.ts; mocked here to avoid needing a query client.
 const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
 vi.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
 
@@ -32,7 +29,7 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(SettingsProfile) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
-    // The real directive, not a stub: v-action REPLACES @click, so a stub leaves every control inert.
+    // The real directive, not a stub: v-action replaces @click, so a stub leaves every control inert.
     app.directive(`action`, vAction);
     app.mount(el);
     return el;
@@ -114,10 +111,8 @@ it(`sends the avatar without the name`, async () => {
     expect(updateProfile.mock.calls[0]?.[0]).not.toHaveProperty(`name`);
 });
 
-/* THE PLAN IS STATED, NOT OFFERED. This row is the account's identity strip, so the lane belongs on it — but as
- * a chip beside the name, never as somewhere to go. A link here would be the avatar-menu row this replaced
- * (docs/design/billing-view.md §8) in a different shape, and Billing is already a tab in the rail alongside. */
-// Found by the kit pill's own shape, not by the word, so the assertion on the word means something.
+// The plan renders as a chip beside the name, never a link: Billing already has its own tab.
+// Selected by the pill's shape, not its text, so the word assertion isn't circular.
 const chip = (el: HTMLElement): HTMLElement | undefined =>
     [...el.querySelectorAll<HTMLElement>(`span.rounded-full`)].find((s) => s.className.includes(`lowercase`));
 
@@ -133,7 +128,7 @@ it(`shows the chip only while the platform sells a plan`, async () => {
     const el = mount();
     expect(chip(el)?.textContent?.trim()).toBe(`hosted`);
 
-    // A platform that sells no plan answers `enabled: false`, and there is no lane to name (hostedHours.ts).
+    // No plan sold answers `enabled: false`; there's no lane to name (hostedHours.ts).
     planBadge.value = undefined;
     await nextTick();
     expect(chip(el)).toBeUndefined();

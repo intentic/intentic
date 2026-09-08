@@ -7,31 +7,15 @@ import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
 import { contentTypeForPath, MAX_RAW_BYTES } from "../../workspace/files/workspace-files-download.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 
-/* THE BYTES BEHIND A BINARY DIFF, /diff/raw, the sibling of /workspace/raw, and for the same reason: an image
- * is rendered from its bytes, and the JSON diff contract can only carry text. Every file-diff route in this
- * daemon reports `binary: true` and ships nothing for a PNG, which left every review surface in the browser
- * with the same dead end ("Binary file, no text diff to show.") over a file the workspace file view displays
- * without trouble. This route is what closes that gap: same auth, same 25 MiB cap, same content-type table.
- *
- * ONE ROUTE, FOUR SOURCES, because there are four places a diff comes from and a reviewer cannot tell them
- * apart, the Changes panel, an agent's review, a commit in the graph, a checkpoint, and a viewer that worked
- * in one of them would read as broken in the other three. `source` picks which, and each branch resolves the
- * SAME rev-specs its JSON counterpart reads (git/changes-diff.ts, agents.routes.ts, history.ts): a staged row is
- * HEAD↔index there, so it is HEAD↔index here, and the image never disagrees with the row it was opened from.
- *
- * The client sends no rev-spec and no directory, only the identifiers it already used to fetch the JSON diff.
- * Everything git is asked to resolve is built on this side, so the route's reach is exactly the four diffs the
- * contract already exposes.
- *
- * WHICH SIDES EXIST is the caller's business, not this route's: a row's status says it (an added file has no
- * before, a deleted one no after), so a side with no blob is a plain 404 rather than a negotiated shape. */
+// Bytes behind a binary diff (JSON diff can't carry them); sibling of /workspace/raw. Covers all four diff sources
+// (working/agent/commit/checkpoint), each resolving the same rev-specs as its JSON counterpart.
 
-// Where one side's bytes live: a blob at a rev-spec inside a git dir (bare dirs included, `git -C` reads those
-// too), or a file on disk, which is the worktree side of an uncommitted change and has no object yet.
+// Where one side's bytes live: a blob at a rev-spec in a git dir, or a file on disk (the worktree side, with no object
+// yet).
 type BlobLocation = { readonly dir: string; readonly spec: string } | { readonly file: string };
 
-// A refusal with the status the route answers it with, the four sources reject for the same handful of
-// reasons, and throwing keeps each resolution a straight line instead of a chain of early returns.
+// A refusal carrying the HTTP status to answer with; thrown so each resolution stays a straight line, not a chain of
+// early returns.
 class DiffRawError extends Error {
     constructor(
         readonly status: 400 | 404 | 413,
@@ -41,10 +25,9 @@ class DiffRawError extends Error {
     }
 }
 
-// Which of the two ends of the comparison is being asked for.
 type Which = "before" | "after";
 
-// `cat-file -s` prints a decimal byte count and nothing else, a buffer this size is already absurdly generous.
+// `cat-file -s` prints a decimal byte count only; this buffer size is generous for that.
 const SIZE_OUTPUT_BYTES = 64;
 
 const required = (value: string | null, name: string): string => {
@@ -54,9 +37,8 @@ const required = (value: string | null, name: string): string => {
     return value;
 };
 
-// A blob at a rev-spec. Sized first, so an oversized object is refused rather than buffered into the daemon's
-// heap, and so an ABSENT one (git exits non-zero) is the 404 a side the file never had deserves, rather than
-// an empty body the browser would render as a corrupt image.
+// Reads a blob at a rev-spec, sized first so an oversized object is refused before buffering, and a missing one (git
+// exits non-zero) 404s instead of returning an empty body.
 const readBlob = async (dir: string, spec: string): Promise<Buffer> => {
     const size = await gitBytes(dir, ["cat-file", "-s", spec], SIZE_OUTPUT_BYTES)
         .then((stdout) => Number(stdout.toString().trim()))
@@ -71,8 +53,7 @@ const readBlob = async (dir: string, spec: string): Promise<Buffer> => {
 };
 
 export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
-    // The worktree side, through the same file service /workspace/raw reads, the file is gone the moment the
-    // agent (or the user) deletes it, which is the other honest 404 here.
+    // The worktree side, via the same file service /workspace/raw reads; a deleted file 404s honestly.
     const readWorktreeFile = async (file: string): Promise<Buffer> => {
         const size = await services.files.size(file);
         if (size === undefined) {
@@ -88,9 +69,8 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         return bytes;
     };
 
-    // Deliberately NOT the git routes' `repoDir`: that one heals the repo's --separate-git-dir pointer, which is
-    // a WRITE, and this route only ever runs after its JSON sibling has already fetched (and healed) the same
-    // repo. A read route that repairs the thing it reads is a surprise nobody asked for.
+    // Not the git routes' `repoDir`: that one heals the --separate-git-dir pointer (a write), and this route only ever
+    // runs after its JSON sibling already did that.
     const repoDir = (repo: string): string => {
         if (repo === "root") {
             return services.workspace.root;
@@ -101,11 +81,8 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         return join(services.workspace.root, repo);
     };
 
-    // The two floors every file surface in this daemon applies: a path may not climb out of its repo, and it may
-    // not reach the daemon's control plane, for repo "root" that dir IS the workspace, so without the second
-    // check this route would be the way around isControlPlanePath. This route serves ONE side of a diff, so it
-    // carries the review carve-out with it (git.routes' guardDiffPath holds the reasoning): a tracked
-    // control-plane entry that the JSON diff will show must not 404 the moment it is a picture instead of text.
+    // Bars a path from leaving its repo or reaching the control plane, with the same review carve-out as git.routes'
+    // guardDiffPath: a tracked control-plane entry the JSON diff shows must not 404 as a picture.
     const guardPath = (dir: string, path: string): string => {
         const target = resolveWithin(dir, path);
         if (target === undefined) {
@@ -117,9 +94,8 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         return target;
     };
 
-    // Uncommitted work in a workspace repo, the Changes panel. The spec pairs mirror stagedFileDiff /
-    // unstagedFileDiff / conflictedFileDiff exactly, `:0:` being the index at stage 0 (an unmerged path has no
-    // stage 0, which is why a conflict reads HEAD instead).
+    // Uncommitted work (the Changes panel); mirrors stagedFileDiff/unstagedFileDiff/conflictedFileDiff's pairs exactly.
+    // `:0:` is the index at stage 0; a conflict has none, so it reads HEAD instead.
     const workingLocation = (query: URLSearchParams, path: string, which: Which): BlobLocation => {
         const dir = repoDir(required(query.get("repo"), "repo"));
         const file = guardPath(dir, path);
@@ -136,8 +112,8 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         throw new DiffRawError(400, "unknown side");
     };
 
-    // One agent's work against the base its review is listed against. Archived agents have no checkout left, so
-    // both sides are blobs read from the main repo, the same split agents.routes.ts makes for the JSON diff.
+    // An agent's work against its review base; archived agents have no checkout, so both sides come from blobs in the
+    // main repo, mirroring agents.routes.ts's split for the JSON diff.
     const agentLocation = (query: URLSearchParams, path: string, which: Which): BlobLocation => {
         const id = required(query.get("agent"), "agent");
         const repo = required(query.get("repo"), "repo");
@@ -162,23 +138,20 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
         return which === "before" ? { dir, spec: `${composed.base}:${path}` } : { file };
     };
 
-    // A commit in the graph, against its first parent, commitFileDiff's own pairing.
+    // A commit against its first parent, the same pairing commitFileDiff uses.
     const commitLocation = (query: URLSearchParams, path: string, which: Which): BlobLocation => {
         const dir = repoDir(required(query.get("repo"), "repo"));
         guardPath(dir, path);
         const sha = required(query.get("sha"), "sha");
-        // The one identifier that reaches git's rev-spec parser from the wire. Held to the contract's own sha
-        // shape (ShaSchema) so it can only ever name an object, never a `--flag` or a `..` range.
+        // Only wire value reaching git's rev-spec parser; held to ShaSchema so it can't be a `--flag` or `..` range.
         if (!/^[0-9a-f]{4,64}$/.test(sha)) {
             throw new DiffRawError(400, "invalid sha");
         }
         return { dir, spec: which === "before" ? `${sha}^:${path}` : `${sha}:${path}` };
     };
 
-    // Which diff the two identifiers name, and where in git that side of it lives. Every branch resolves the
-    // same pair its JSON counterpart does; checkpoints keep theirs inside history.ts, which owns the bare scope
-    // repos and the previous-VISIBLE-checkpoint rule that decides what a checkpoint is diffed against at all.
-    // undefined comes back only from there, and only for a side that checkpoint's file never had.
+    // Resolves where one side of the named diff lives; every branch mirrors its JSON counterpart's pairing. Checkpoints
+    // delegate to history.ts; undefined means that checkpoint's file never had this side.
     const locate = async (query: URLSearchParams, path: string, which: Which): Promise<BlobLocation | undefined> => {
         const source = query.get("source");
         if (source === "working") {
@@ -213,9 +186,7 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
 
             const bytes = "file" in located ? await readWorktreeFile(located.file) : await readBlob(located.dir, located.spec);
 
-            // Wrap in a fresh Uint8Array so the body type is exactly Uint8Array<ArrayBuffer> (a Buffer's backing
-            // is ArrayBufferLike, which Hono's body type rejects); bounded above, so the copy is cheap. The
-            // content type comes from the PATH, which is what tells an <img> from an <object> in the browser.
+            // Copied into a fresh Uint8Array: Hono rejects a Buffer's ArrayBufferLike backing.
             return c.body(new Uint8Array(bytes), 200, {
                 "Content-Type": contentTypeForPath(path),
                 "Content-Length": String(bytes.byteLength),

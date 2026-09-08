@@ -3,25 +3,14 @@ import { join, resolve } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* THE OPERATION A WORKTREE IS HALTED IN THE MIDDLE OF, and the way out of it.
- *
- * Every git verb this daemon runs itself aborts cleanly on failure (changes-commits.ts runOrAbort), so nothing the UI
- * starts can leave a repo mid-operation. What CAN is everything else: an agent running `git rebase` in a
- * terminal, a user in a shell, a `land` that hit a conflict. Those leave a worktree git refuses to do almost
- * anything with, no commit, no checkout, no clean diff, and until now no surface named the state or offered a
- * way out of it. The Changes panel would list the conflicted files without ever saying WHY they were conflicted.
- *
- * Git records these as marker files in the PER-WORKTREE git dir, which is also how `git status` reports them, so
- * this reads the same evidence git does rather than parsing its prose. */
+// The operation a worktree is halted in, and the way out. Only external actors (a terminal rebase, a user's shell, a
+// failed land) can leave one, since every verb this daemon runs itself self-aborts on failure. Reads the same
+// per-worktree marker files `git status` does.
 
 export type GitOperation = "merge" | "rebase" | "cherry-pick" | "revert";
 
-/* Whether the sequencer still holds QUEUED picks. The todo list is shared by cherry-pick and revert, which
- * distinguish themselves by the verb on each line, so the first real line names the operation.
- *
- * This exists because of a case the marker files alone get wrong: committing a resolved pick by hand clears
- * CHERRY_PICK_HEAD while leaving the rest of the sequence queued, and git goes on reporting a cherry-pick in
- * progress. A check that stopped at the markers would call that worktree clean and offer no abort. */
+// Whether the sequencer still holds queued picks; the shared todo list's first real line names cherry-pick vs revert.
+// Needed because committing a resolved pick by hand clears CHERRY_PICK_HEAD but leaves the rest queued.
 const queuedSequence = async (gitDir: string): Promise<GitOperation | undefined> => {
     try {
         const todo = await readFile(join(gitDir, "sequencer", "todo"), "utf8");
@@ -38,15 +27,8 @@ const queuedSequence = async (gitDir: string): Promise<GitOperation | undefined>
     }
 };
 
-// The per-worktree git dir. NOT the common dir. Every marker below is per worktree, which is what makes an
-// agent's linked worktree report its own halted state rather than the main checkout's.
-//
-// Read straight off the `.git` entry rather than asked of `rev-parse --git-dir`, because this runs for every
-// repo on every Changes scan and the spawn was a scan-wide multiplier for an answer the filesystem already
-// holds: every caller passes a checkout ROOT (the workspace repo dirs, an agent's worktree), where `.git` is
-// either the admin dir itself or a pointer FILE whose one line is the path (`gitdir: <path>`, what
-// repo-git-dirs.ts and worktree checkouts both write, and exactly what git's own discovery reads). No memo, so
-// nothing can go stale: a re-created checkout is re-read from its fresh pointer on the next call.
+// The per-worktree git dir (not the common dir), since every marker is per-worktree. Read straight off `.git` rather
+// than `rev-parse --git-dir`, avoiding a spawn per repo per scan; unmemoized, so nothing goes stale.
 const gitDirOf = async (dir: string): Promise<string | undefined> => {
     const entry = join(dir, ".git");
     try {
@@ -62,17 +44,15 @@ const gitDirOf = async (dir: string): Promise<string | undefined> => {
     }
 };
 
-// No git runner: every answer below comes from the filesystem, which is the whole point of the change above.
+// No git runner: every answer here comes straight from the filesystem.
 export const operationInProgress = async (dir: string): Promise<GitOperation | undefined> => {
     const gitDir = await gitDirOf(dir);
     if (gitDir === undefined) {
         return undefined;
     }
 
-    /* `rebase-merge` covers the interactive and merge backends; `rebase-apply` the patch backend, which
-     * `git am` SHARES. An `am` in progress is not a rebase and `git rebase --abort` is not what ends it, so the
-     * `applying` marker inside distinguishes them and we report nothing rather than offering an abort that
-     * would fail. */
+    // `rebase-merge` is the interactive/merge backend; `rebase-apply` is shared with `git am`. The `applying` marker
+    // inside tells them apart, since `rebase --abort` can't end an `am`.
     if (await pathExists(join(gitDir, "rebase-merge"))) {
         return "rebase";
     }
@@ -92,14 +72,12 @@ export const operationInProgress = async (dir: string): Promise<GitOperation | u
         return queued;
     }
 
-    /* Checked LAST, after the rebase markers, and that order matters: a rebase that stops on a
-     * conflicted merge commit writes MERGE_HEAD too, and there `git merge --abort` is not what ends the
-     * operation, `git rebase --abort` is. Reading MERGE_HEAD first would offer the wrong escape hatch. */
+    // Checked last: a rebase that stops on a conflicted merge commit also writes MERGE_HEAD, so checking it first would
+    // offer `merge --abort` instead of `rebase --abort`.
     return (await pathExists(join(gitDir, "MERGE_HEAD"))) ? "merge" : undefined;
 };
 
-// End the operation and return the worktree to where it started. Git's own `--abort` for each verb; the caller
-// has already established which one is in progress, and git's error propagates if it has since finished.
+// Git's own `--abort` for the given verb; the caller has already established which operation is in progress.
 export const abortOperation = async (dir: string, operation: GitOperation, git: GitRunner = defaultGit): Promise<void> => {
     await git(dir, [operation, "--abort"]);
 };

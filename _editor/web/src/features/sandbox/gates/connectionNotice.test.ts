@@ -10,7 +10,6 @@ const notice = (
 
 describe(`connectionNotice`, () => {
     it(`offers nothing to click while an ordinary first connect is in flight`, () => {
-        // Nothing is wrong yet. A "Reconnect" button here invites the user to fix what clears itself.
         const shown = notice(undefined);
         expect(shown.action).toBeUndefined();
         expect(shown.title).toContain(`laptop`);
@@ -21,7 +20,6 @@ describe(`connectionNotice`, () => {
     });
 
     it(`asks for a sign-in on 401 rather than blaming the sandbox`, () => {
-        // The sandbox is fine; the browser's token is not. Offering "Reconnect" would point at the wrong thing.
         const shown = notice(classifyFailure({ status: 401, message: `unauthorized` }));
         expect(shown.action?.kind).toBe(`signin`);
         expect(shown.body).toContain(`expired`);
@@ -45,11 +43,8 @@ describe(`connectionNotice`, () => {
     });
 });
 
-/* THE SCREEN THIS WAS REPORTED FOR. A hosted machine that boots and dies (or never comes back at all) leaves
- * the workspace on a spinner reading "Waiting for the sandbox to answer" with nothing on it to press, for as
- * long as the tab is open — while the browser's wake reflex fires into the dead box every minute. The setup
- * screen already knows how to say what the machine is doing and how to start it over, so past a minute this
- * gate stops calling it a wait and points there. */
+// A hosted machine that boots and dies leaves the workspace spinning with nothing to press, while the wake reflex
+// fires into it forever. Past a minute this gate stops calling it a wait and points at the setup screen instead.
 describe(`a machine the platform runs, that is not coming back`, () => {
     const dead = classifyFailure({ message: `failed to fetch` });
 
@@ -63,27 +58,21 @@ describe(`a machine the platform runs, that is not coming back`, () => {
         expect(shown.title).toContain(`laptop`);
     });
 
-    // Every network-shaped cause is the same fact about a box we run: a watchdog trip and a refused connect
-    // are two ways of observing "it is not answering", and only one of them may be told to keep waiting.
+    // A watchdog trip and a refused connect are the same fact for a box we run: not answering.
     it(`treats a silent stream and a closed one exactly like a refused connect`, () => {
         for (const failure of [classifyFailure({ watchdog: true, message: `silent` }), classifyFailure({ closed: true, message: `closed` })]) {
             expect(notice(failure, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS }).action?.kind).toBe(`setup`);
         }
     });
 
-    /* NEVER FOR SOMEBODY ELSE'S COMPUTER. A sandbox on the reader's own hardware is unreachable for reasons
-     * this browser cannot see or act on — a closed laptop, a paused container, a slow image pull — and the
-     * platform has nothing to say about it and nothing to restart. Guessing there would be an alarm about a
-     * machine we do not run. */
+    // Nothing here can tell a closed laptop from a slow pull, so guessing a cause would be inventing an alarm.
     it(`leaves a sandbox on the reader's own computer waiting, however long it takes`, () => {
         expect(notice(dead, { hostedMachine: false, outageMs: 60 * HOSTED_STUCK_AFTER_MS }).action).toBeUndefined();
     });
 });
 
-/* THE MONTH IS SPENT. The platform refused the wake (PAYMENT_REQUIRED) and the reflex kept that answer; before
- * it did, this screen said "isn't answering" and sent the reader to check a machine that was fine. The refusal
- * is not a wait, so it is said at once rather than after the minute, and it is addressed: the owner is offered
- * the plan, a guest is told whose hours they are and offered nothing to buy. */
+// The platform refused the wake (PAYMENT_REQUIRED), not a wait, said at once instead of after the minute. The
+// owner is offered the plan; a guest is told whose hours they are.
 describe(`a hosted machine whose owner's free hours are spent`, () => {
     const asleep = classifyFailure({ message: `failed to fetch` });
 
@@ -103,7 +92,6 @@ describe(`a hosted machine whose owner's free hours are spent`, () => {
         expect(shown.body).toContain(`owner`);
     });
 
-    // A refusal can only be about a machine the platform runs; on the reader's own computer the flag is noise.
     it(`means nothing for a sandbox on the reader's own computer`, () => {
         expect(notice(asleep, { hostedMachine: false, hoursSpent: true, owner: true }).action).toBeUndefined();
     });

@@ -2,27 +2,10 @@ import { createHmac, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
-/* A STAND-IN FOR STRIPE, the six calls the hosted plan makes and the three webhooks it listens for, so the money
- * path can be driven end to end with no account and no network: the platform's real Stripe client
- * (_platform/api/src/sandbox/hosted/hosted-plan-stripe.ts) is pointed here by `HOSTED_PLAN_STRIPE_API_URL`,
- * the real webhook route is what the events land on, and what runs under test is the request encoding, the
- * parsing, the mirror row, the entitlement and the Billing page, with nothing swapped out but the host.
- *
- * WHAT IT IS NOT: a test of Stripe. Its shapes are what Stripe's documentation says and what the platform's
- * client reads, and a drift on Stripe's side is invisible here by construction. The tier that catches that is
- * the gated one against Stripe's own test mode (hosted-plan-stripe.e2e.test.ts); this one exists so that
- * everything on OUR side of the wire runs on every merge request, and so a browser can walk from Subscribe to
- * "always on" without a card.
- *
- * TWO CONSUMERS, ONE SEAM. The api's hermetic tier runs the app in-process and hands webhooks to it as
- * `app.request`; the browser tier has the api in another process and posts to its https port. So delivery
- * is injected (`deliver`, a fetch-shaped function over a `Request`), and the checkout page waits a configured
- * moment before delivering `checkout.session.completed`, because in production the browser is back on the
- * Billing page before the webhook lands, and that gap (the page's polling) is one of the things to look at.
- *
- * The wire shapes follow Stripe's 2025-03-31.basil API version, where `current_period_end` lives on the
- * subscription ITEM and no longer on the subscription. That is the harder of the two shapes the client
- * accepts, and the one a new Stripe account is on. */
+// Stand-in for Stripe: the calls the hosted plan makes and the webhooks it listens for, so the money path runs end to
+// end with no real account. Not a test of Stripe itself; delivery is injected (`deliver`) so the in-process and browser
+// tiers share one seam. Wire shapes follow API 2025-03-31.basil: `current_period_end` lives on the item, not the
+// subscription.
 
 export interface FakeStripeOptions {
     /** What `Authorization: Bearer …` must carry. Anything else is refused the way Stripe refuses it. */
@@ -122,7 +105,7 @@ export const signStripePayload = (payload: string, secret: string, at: Date): st
     return `t=${t},v1=${createHmac("sha256", secret).update(`${t}.${payload}`).digest("hex")}`;
 };
 
-// ---- the wire ---------------------------------------------------------------------------------------------
+// the wire
 
 // Stripe's own refusal envelope, so the client's error reads "Stripe refused: …" here exactly as it would there.
 const refuse = (res: ServerResponse, status: number, message: string): void => {
@@ -162,8 +145,8 @@ const escapeHtml = (text: string): string => text.replace(/&/g, "&amp;").replace
 
 const form = (action: string, label: string): string => `<form method="post" action="${action}"><button type="submit">${label}</button></form>`;
 
-/* The subscription as Stripe's API answers it and as its events carry it: the basil shape, with the period on
- * the item. `latest_invoice` and the rest are absent on purpose, the client must not need them. */
+// Subscription in the basil wire shape (period on the item), as both the API and its events return it; fields like
+// `latest_invoice` are absent on purpose, since the client must not need them.
 const wireSubscription = (subscription: FakeSubscription): Record<string, unknown> => ({
     id: subscription.id,
     object: "subscription",
@@ -204,7 +187,7 @@ const checkoutRefusal = (params: Record<string, string>, customers: Map<string, 
     return undefined;
 };
 
-// ---- the routes -------------------------------------------------------------------------------------------
+// the routes
 
 interface Hit {
     readonly req: IncomingMessage;
@@ -388,8 +371,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 if (subscription === undefined) {
                     return refuse(hit.res, 404, `No such subscription: '${hit.match[1]}'`);
                 }
-                // Stripe cancels at once and, a moment later, tells the webhook. Told before answering here,
-                // so a test reads a settled world rather than racing the event.
+                // Stripe cancels at once and tells the webhook later; told first here so a test reads a settled world.
                 await update(subscription.id, { status: "canceled" });
                 json(hit.res, wireSubscription(subscription));
             }),
@@ -414,8 +396,8 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             }),
         },
 
-        // The hosted checkout page, what the browser lands on after `checkout`: Pay completes the session
-        // (the webhook follows the redirect by the configured delay, as in production), Back abandons it.
+        // Hosted checkout page the browser lands on: Pay completes the session (webhook follows the redirect after the
+        // configured delay, as in production); Back abandons it.
         {
             method: "GET",
             pattern: /^\/checkout\/([^/]+)$/,
@@ -448,8 +430,8 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             },
         },
 
-        // The billing portal, what the browser lands on after `portal`: cancel (at period end, as Stripe's
-        // does) or resume the live subscription, or return.
+        // Billing portal the browser lands on: cancel at period end (as Stripe's does) or resume the live subscription,
+        // or just return.
         {
             method: "GET",
             pattern: /^\/portal\/([^/]+)$/,

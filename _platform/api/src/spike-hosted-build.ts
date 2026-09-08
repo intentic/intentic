@@ -7,28 +7,14 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandb
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson } from "./sandbox/hosted/hosted-build-script.js";
 import { hostedInstanceId } from "./sandbox/hosted/hosted.js";
 
-/* `pnpm --filter @intentic/api spike:build`, the spike §4 of docs/hosted-overlay-rebuild-plan.md owes,
- * run instead of remembered. The design was written against Fly's DOCUMENTED shapes: the token mutation, a
- * machine booting its own app's registry path, `files` plus an entrypoint override on moby/buildkit, the exit
- * event on a stopped machine, and what a registry does with a moving tag. Every one of those is a guess until
- * something asks Fly, and the cost of a wrong guess is an owner watching a build that cannot work.
- *
- * So this asks, against a THROWAWAY APP it creates and destroys, using the platform's OWN functions rather
- * than a parallel transcript of flyctl commands. That is the point: a spike that exercises different code from
- * production verifies nothing about production. Every call below is the one hosted-build.ts makes.
- *
- * It spends real money (one or two builder machines for the length of a real overlay build) and it writes
- * nothing to the database. Read the summary it prints into §4 of the plan, replacing the questions with the
- * answers.
- *
- *   pnpm --filter @intentic/api spike:build [--keep] [--rootless] [--region iad] [--report-url URL]
- *
- *   --keep        leave the app standing at the end (to poke at it by hand). It is yours to delete.
- *   --rootless    also build with `<builderImage>-rootless`, question 6, roughly doubling the run.
- *   --region      where to build; defaults to config.hosted.region.
- *   --report-url  somewhere the builder's report can actually land (a request-bin URL). Without one the
- *                 report round trip is NOT exercised here: it needs a build row for its id, and this script
- *                 writes no rows. The route's own tests cover it; this covers everything around it. */
+// Validates hosted-build.ts's Fly assumptions against real Fly, using the platform's own functions against a throwaway
+// app it creates and destroys — a parallel implementation would verify nothing. Spends real money; writes nothing to
+// the database.
+// pnpm --filter @intentic/api spike:build [--keep] [--rootless] [--region iad] [--report-url URL]
+// --keep leave the app standing at the end
+// --rootless also build on `<builderImage>-rootless`, roughly doubling the run
+// --region where to build; defaults to config.hosted.region
+// --report-url where the builder's report can land; without it the report round trip isn't exercised here
 
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(`--${name}`);
@@ -52,10 +38,8 @@ const out = (line: string): void => {
 };
 const say = (message: unknown): string => (message instanceof Error ? message.message : String(message));
 
-/* THE ANSWERS, collected as they are learned and printed together at the end, because the interesting output
- * of a spike is the summary and not the two hundred lines of build log above it. Every question can end
- * `unanswered`: a probe that failed says why rather than taking the run down, so one bad answer never costs
- * the five good ones or leaves an app standing. */
+// Answers collected and printed together at the end; a failed probe answers `unanswered` with why, so one bad question
+// never costs the others.
 const answers = new Map<string, string>();
 const answer = (question: string, value: string): void => {
     answers.set(question, value);
@@ -70,11 +54,8 @@ const probe = async (question: string, what: string, run: () => Promise<string>)
     }
 };
 
-/* THE DOCKER REGISTRY V2 AUTH DANCE, which `docker login` hides and this script cannot. An unauthenticated
- * read answers 401 with a `WWW-Authenticate: Bearer realm=…,service=…,scope=…` challenge; the realm mints a
- * bearer against basic `x:<deploy token>`, Fly's fixed username; the retry carries it. Written out because
- * the questions about the registry (does the token reach it, does a moving tag free the old manifest, is a
- * manifest DELETE honoured) cannot be asked any other way. */
+// Registry v2 bearer auth `docker login` hides: an unauthenticated read's 401 challenge names a realm that mints a
+// token against Fly's fixed `x:<deploy token>` basic auth, and the retry carries it.
 const registryAuth = async (repo: string, deployToken: string, action: string): Promise<string> => {
     const challenge = await fetch(`https://registry.fly.io/v2/${repo}/tags/list`, { method: `GET` });
     const header = challenge.headers.get(`www-authenticate`) ?? ``;
@@ -114,11 +95,8 @@ const manifest = async (repo: string, reference: string, deployToken: string, me
     return { status: response.status, digest: response.headers.get(`docker-content-digest`) ?? `` };
 };
 
-/* A REALISTIC OVERLAY, which is what question 3 asks the wall time and the disk of: the official base pulled
- * whole, an apt install and a compile, exactly the shape §2.3 lints for (one official FROM, then RUN). The
- * first step also prints what question 5 wants and nothing else can answer: how much root disk a builder
- * actually has, and how big the guest really is. `marker` moves the tag on the second build without changing
- * anything else, so the two digests differ for the question about what a moving tag leaves behind. */
+// Realistic overlay: official base, apt install, a compile. First RUN step reports the builder's own disk and guest
+// size; `marker` changes only the tag between builds so the two digests can be compared.
 const probeOverlay = (marker: string): string =>
     [
         `FROM ${baseImage}`,
@@ -140,8 +118,8 @@ const repo = appName;
 const madeMachines: string[] = [];
 const mintedTokens: string[] = [];
 
-// Poll a machine to a state that costs nothing more, the reconcile's own reading of what has ended. Returns
-// the last detail seen either way, so a machine still running at the deadline is reported as exactly that.
+// Polls until a machine reaches a state that costs nothing more; returns the last detail either way, including one
+// still running at the deadline.
 const ENDED = new Set([`stopped`, `failed`, `destroyed`, `suspended`]);
 const waitForEnd = async (machineId: string, deadline: number): Promise<Awaited<ReturnType<typeof getMachineDetail>>> => {
     for (;;) {
@@ -155,8 +133,8 @@ const waitForEnd = async (machineId: string, deadline: number): Promise<Awaited<
     }
 };
 
-/* One builder, the way hosted-build.ts makes one: the same config composer, the same script, the same file
- * set, the same metadata stamp. Answers the wall time and what the machine's exit event said. */
+// One builder machine, built exactly as hosted-build.ts builds one (same composer, script, files, stamp); reports wall
+// time and the exit event.
 const runBuild = async (
     label: string,
     overlay: string,
@@ -226,8 +204,8 @@ try {
         });
         mintedTokens.push(minted.id);
         deployToken = minted.token;
-        // Proof the token reaches this app's own repository, before a build is spent finding out it does not.
-        // A repository with nothing pushed yet answers 404 THROUGH the auth, which is itself the answer.
+        // Confirms the token reaches this repo before a build is spent finding out; a 404 through auth is itself the
+        // answer.
         const reach = await manifest(repo, `env`, deployToken, `GET`).then(
             (result) => `the registry accepted it (manifest read answered HTTP ${result.status})`,
             (error: unknown) => `MINTED BUT THE REGISTRY REFUSED IT: ${say(error)}`,
@@ -271,9 +249,8 @@ try {
     });
 
     await probe(`4`, `the exit event still on a stopped builder, and force-destroying a running machine`, async () => {
-        // The reconcile's fallback for a builder that never reported reads the exit off the machine LONG after
-        // it stopped, so the question is not whether the code can parse an exit event but whether Fly still
-        // carries one by the time anybody asks.
+        // Tests whether Fly still carries the stopped builder's exit event by the time anyone asks — the reconcile's
+        // own fallback path for a builder that never reported.
         const stopped = await (firstBuilder === ``
             ? Promise.resolve(`no builder ran, so there was nothing to re-read`)
             : getMachineDetail(flyApiToken, appName, firstBuilder).then(
@@ -332,9 +309,8 @@ try {
 } catch (error) {
     out(`\nThe spike stopped early: ${say(error)}`);
 } finally {
-    // Teardown order is load-bearing: the last question is asked of the REGISTRY, with the deploy token, after
-    // the app is gone, so the token is revoked at the very end. Revoking first would answer it with a refusal
-    // that says nothing about whether the repository outlived its app.
+    // Deploy token is revoked last: revoking before asking the registry about the repository would refuse that question
+    // instead of answering it.
     if (flag(`keep`)) {
         out(`\n--keep: ${appName} is still standing with ${madeMachines.length} machine(s). Delete it yourself: fly apps destroy ${appName}`);
     } else {
@@ -342,8 +318,8 @@ try {
             () => out(`\nApp ${appName} destroyed.`),
             (error: unknown) => out(`\nCOULD NOT DESTROY ${appName}: ${say(error)} — delete it by hand, it is costing money.`),
         );
-        // The last question, and it can only be asked after the app is gone: does its registry repository go
-        // with it, or does the platform keep paying for images of sandboxes that no longer exist?
+        // Only askable after the app is gone: does the registry repository survive it, or does the platform keep paying
+        // for orphaned images?
         if (firstDigest !== `` && deployToken !== ``) {
             const after = await manifest(repo, `env`, deployToken, `GET`).then(
                 (result) =>

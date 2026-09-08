@@ -39,25 +39,11 @@ import {
     windowFor,
 } from "./usageChart";
 
-/* The Sandbox hub's "Usage" tab. It answers two questions with DIFFERENT SUBJECTS, and keeping them apart is
- * most of the design:
- *
- *   - What has this sandbox cost? Every figure is a projection of one durable source: the daemon's never-pruned
- *     spend ledger (usage/usage-store.ts), so a total can't shrink as the sandbox gets busier, which is exactly
- *     what the old activity-log aggregation did. Scoped by the filter row.
- *   - How much of your PLAN is left? Account-wide, provider-reported, unaffected by every filter above it, and
- *     not a share of the spend either: a Max plan's weekly pool has no dollar figure at all.
- *
- * So the plan-limit meters are their own section with their own subject stated in the label: an earlier version
- * of this tab put a bare "1%" under the spend tiles and invited reading it as a budget, on an account that was
- * really 98% through its week.
- *
- * The Savings section answers a third: what the token-reduction settings were WORTH over the same window. It
- * lives here rather than beside its switches on the Agent tab because a saving without a period is a lifetime
- * number that only grows and can be compared to nothing, and the window, the refresh and the provenance rules
- * this tab is built around are exactly what it needs. The switches keep their own one-line readouts.
- *
- * Cost and tokens stay two tiles for the same reason: unrelated scales, never one chart with two y-axes. */
+// The Usage tab answers three separate questions, kept visually distinct:
+//   - what has this sandbox cost (the never-pruned spend ledger, scoped by the filter row)
+//   - how much of your plan is left (account-wide, provider-reported, unaffected by the filters, no dollar figure)
+//   - what the token-reduction settings were worth over this window (its own section, needs a period to mean anything)
+// Cost and tokens stay separate tiles, never one chart with two y-axes: unrelated scales.
 
 const route = useRoute();
 const router = useRouter();
@@ -68,7 +54,7 @@ const usageNotice = computed<NoticeModel | undefined>(() =>
 );
 const { fleet } = useAgents();
 
-// ---- filters: one row, above everything, scoping everything -----------------------------------------------
+// filters: one row, above everything, scoping everything
 
 const preset = ref<RangePreset>(`30d`);
 const providerFilter = ref<string>(`all`);
@@ -95,19 +81,15 @@ const previous = computed(() => {
     return before === undefined ? undefined : inWindow(scoped.value, before);
 });
 
-/* Provider pills list every provider the LEDGER has ever seen, not just the current window: a filter whose
- * options appear and vanish as you change the date range is unusable.
- *
- * Folded by `providerGroup`, so the locally-run models are ONE pill however many cards ever served a turn. This
- * row is where the never-pruned ledger's cost lands hardest: a card deleted months ago still bills nothing and
- * still owns a pill, and a sandbox that tried four sets of weights had four of them, each labelled with a raw
- * `endpoint/<id>` provider id. */
+// Lists every provider the ledger has ever seen, not just this window, so options don't appear or vanish as the
+// range changes. Folded by `providerGroup` so every locally-run model is one pill, however many deleted cards still own
+// an id.
 const providerOptions = computed(() => [
     { label: `All providers`, value: `all` },
     ...providersIn(rows.value, providerGroup).map((provider) => ({ label: providerGroupLabel(provider), value: provider })),
 ]);
 
-// ---- the figures ------------------------------------------------------------------------------------------
+// the figures
 
 const totals = computed(() => totalsOf(current.value));
 const previousTotals = computed(() => (previous.value === undefined ? undefined : totalsOf(previous.value)));
@@ -119,8 +101,7 @@ const spendDelta = computed(() => deltaPercent(totals.value.costUsd, previousTot
 const turnsDelta = computed(() => deltaPercent(totals.value.turns, previousTotals.value?.turns));
 const tokensDelta = computed(() => deltaPercent(totalTokens(totals.value), previousTotals.value && totalTokens(previousTotals.value)));
 
-// A stat tile's delta is signed AND arrowed, so direction never rests on colour alone. On a cost screen up is
-// the direction that costs money: warning, not danger, which stays reserved for things that actually broke.
+// Signed and arrowed, never colour alone; up is `warning` (costs money), `danger` stays for real breakage.
 const deltaTone = (delta: number | undefined): string =>
     delta === undefined ? `text-subtle` : delta > 0 ? `text-warning` : delta < 0 ? `text-success` : `text-subtle`;
 const deltaArrow = (delta: number | undefined): string => (delta === undefined || delta === 0 ? `` : delta > 0 ? `↑` : `↓`);
@@ -128,9 +109,7 @@ const comparedTo = computed(() =>
     preset.value === `all` ? undefined : `vs previous ${RANGE_PRESETS.find((entry) => entry.value === preset.value)?.label.toLowerCase() ?? ``}`,
 );
 
-// Sparklines only on the counting tiles. A cache-hit RATE would have to plot 0% on every idle day, which reads
-// as "caching stopped working" rather than "nothing ran", and spend already has the full-resolution chart
-// below, so a second, coarser copy of it would just be redundant ink.
+// Only counting tiles: a rate would plot 0% on idle days (reads as broken); spend already has its own chart.
 const turnPoints = computed(() => sparkPoints(series.value.map((bucket) => bucket.totals.turns)));
 const tokenPoints = computed(() => sparkPoints(series.value.map((bucket) => totalTokens(bucket.totals))));
 
@@ -146,22 +125,19 @@ const byModel = computed(() =>
 const agentTitle = (id: string): string => fleet.value.find((agent) => agent.id === id)?.title ?? `${id.slice(0, 8)}…`;
 const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`, providerGroup));
 
-// ---- savings ------------------------------------------------------------------------------------------------
+// savings
 
-// Windowed daemon-side (unlike the spend rollup, which comes down whole): the ledgers behind it hold a row per
-// Bash command and a row per turn, so the browser slicing them itself would mean shipping both raw.
+// Windowed server-side, unlike the spend rollup: these ledgers are row-per-command, too raw to ship whole.
 const { savings } = useSavings(window);
 const composition = computed(() => (savings.value === undefined ? undefined : compositionOf(savings.value.input)));
-// A section that would only say "nothing yet" is not shown at all: every other panel on this tab is about
-// turns that ran, and an empty savings card on a sandbox that never enabled a cleaner is just furniture.
+// Hidden entirely rather than showing "nothing yet": furniture on a sandbox that never enabled a cleaner.
 const hasSavings = computed(
     () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.search !== undefined || savings.value?.map !== undefined,
 );
-// Which calendar these numbers are on, said next to them rather than left to the range picker above: a total
-// under a 7-day filter and the same total over all time are the same digits with different meanings.
+// States its own period beside the number, since the same digits mean different things under different ranges.
 const savingsPeriod = computed(() => (preset.value === `all` ? `all time` : `this range`));
 
-// ---- the table and the export -------------------------------------------------------------------------------
+// the table and the export
 
 const tableOpen = ref(false);
 const TABLE_LIMIT = 200;
@@ -185,8 +161,7 @@ const hasSpend = computed(() => current.value.length > 0);
     <div class="@container flex flex-col gap-6">
         <Notice v-if="usageNotice" :of="usageNotice" />
 
-        <!-- ONE filter row, above everything, scoping everything below it. Date first: it is the control every
-             reader reaches for. -->
+        <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <SegmentedControl v-model="preset" :options="RANGE_PRESETS" />
             <span class="h-4 w-px bg-line" />
@@ -206,14 +181,12 @@ const hasSpend = computed(() => current.value.length > 0);
             </button>
         </div>
 
-        <!-- A refetch holds the previous render at reduced opacity rather than swapping in skeletons: no
-             layout jump, and the numbers you were reading stay readable while the new ones land. -->
+        <!-- Refetch dims the previous render instead of swapping in skeletons: no layout jump, numbers stay readable. -->
         <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-            <!-- THE TILES AND THE CHART UNDER THEM, in their own grid at their own breakpoints. This tab's
-                 layout is its most recognisable feature: one hero figure, three tiles, a column chart, and
-                 the shape alone tells a returning reader they are in the right place while the ledger is still
-                 being summed. The figures are deliberately NOT stood in for at their real size: a big grey bar
-                 where a number goes reads as a number that failed to load. -->
+            <!--
+                Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger
+                sums. Not sized to the real figure though: a big grey bar there would read as a failed load, not a wait.
+            -->
             <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
                 <span class="sr-only">Reading the ledger…</span>
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4" aria-hidden="true">
@@ -241,21 +214,17 @@ const hasSpend = computed(() => current.value.length > 0);
                 </Card>
             </div>
 
-            <!-- `!isLoading`, not just "the outline isn't up": a ledger still being read has not yet earned the
-                 right to tell anyone they have never run an agent. -->
+            <!-- `!isLoading`, not just the outline: a still-reading ledger hasn't earned the right to say "never run". -->
             <p v-else-if="!isLoading && rows.length === 0" :class="ui.emptyState(`py-8`)">
                 No turns have been billed on this sandbox yet. Spend is recorded at the end of every turn: run an agent and this fills in.
             </p>
 
             <template v-else-if="!isLoading">
-                <!-- The hero and its supporting tiles. Spend is the one number this screen is about, so it is the
-                     only figure at hero size; the rest are stat tiles.
-                     Every figure is sized against ITS OWN tile (@container + cqi), not the viewport: the grid
-                     goes four-up at exactly the width where a four-figure amount stops fitting at 48px, so a
-                     viewport breakpoint measures the wrong thing and a fixed size is how "$36.62" came to hang
-                     out of its card. Each clamp's floor is a size the widest value that tile can hold still fits
-                     at, with `truncate` as the backstop for a locale that disagrees. `mt-auto` on the last line
-                     of each tile settles the footers onto one baseline however tall the grid stretches them. -->
+                <!--
+                    Spend alone is hero-sized, the rest are stat tiles. Sized against each tile (`@container`+cqi), not the
+                    viewport, since a viewport breakpoint measures the wrong thing for whether a figure fits; `truncate` backstops a disagreeing
+                    locale.
+                -->
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">
                     <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Spend</div>
@@ -302,10 +271,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
                 </div>
 
-                <!-- Plan limits. Its own section, and deliberately NOT phrased like the tiles above it: "$36
-                     spent here" and "98% of my plan's week is gone" are different questions with different
-                     subjects, and the tab used to invite reading the second as a share of the first. Its whole
-                     hierarchy lives in the panel: this tab only says where it goes. -->
+                <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
                 <PlanLimitsPanel />
 
                 <Card>
@@ -330,38 +296,20 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
                 </div>
 
-                <!-- SAVINGS: what the token-reduction settings were worth. Separate cards, never one ranking
-                     of all the mechanisms together: the first is measured (every command carries its own raw
-                     baseline, so the numbers are exact), the second is an experiment (a turn cannot be re-run
-                     unsteered, so it needs a control group, an n and a margin). Bars side by side would lend
-                     the experiment the first card's confidence. They are also different units of value: a
-                     saved tool-output token is saved again on every later request of the conversation, an
-                     output token is saved once but costs several times as much, which is why no card totals
-                     into another.
-
-                     Different subjects, but ONE shape: title, verdict, evidence, provenance, in that order and
-                     those positions (SavingsCard). The cards used to be written independently and had drifted
-                     apart: only the first led with a number, and the others opened with a paragraph of method
-                     where their answer should have been, so the row could not be scanned and every card had to
-                     be read to learn whether it said anything at all. The method text is not gone; it moved
-                     behind each title's (i), which is the altitude it belongs at.
-
-                     A CONTAINER grid, not a viewport one. This section sits behind the rail, the chat panel and
-                     the tab's padding, so `xl:grid-cols-3` was asking the window a question only the card knows
-                     the answer to, and getting 215px cards on a 1280px screen, at which width every label in
-                     them truncated. The breakpoints below are the widths where three, then two, cards still
-                     clear ~330px. Same reasoning as the stat tiles' cqi type, one level up. -->
+                <!--
+                    Separate cards, not one ranking: one is measured exactly, the other is an experiment needing a control and
+                    margin, mixing would lend it false confidence. Different units of value too (a saved tool token compounds, an output token
+                    doesn't), so none total into another; each shares one shape (SavingsCard) and the grid is container-based, not viewport.
+                -->
                 <section v-if="hasSavings" class="@container">
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
                         <span :class="ui.sectionLabel()">Token savings</span>
                     </div>
 
-                    <!-- items-start: a card with nothing to report stays short instead of being stretched to the
-                         tallest one's height and padded with the void that made this row look broken.
-                         Two columns ⇒ the composition card takes both rows of the left one and the two
-                         experiments stack beside it. They are the same shape as each other and roughly half its
-                         height, so the alternative (plain flow) parks the third card under the first and
-                         leaves a card-sized hole where the second one ended. -->
+                    <!--
+                        `items-start`: a short card stays short, not stretched to the tallest. Two columns: the composition card spans
+                        the left column's height, the two experiment cards stack beside it (plain flow would leave a gap under one).
+                    -->
                     <div class="grid items-start gap-3 @2xl:grid-cols-2">
                         <SavingsCard
                             title="Tool output → assistant"
@@ -380,10 +328,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
                             <p v-else :class="ui.emptyState()">No shell output was cleaned in this range.</p>
 
-                            <!-- The whole-pipeline counterfactual, and the only one on this card that isn't
-                                 sequential: the held-out commands were left raw at random, so this compares two
-                                 populations rather than attributing within one. One line, because it is a
-                                 second reading of the headline rather than a second subject. -->
+                            <!-- Whole-pipeline counterfactual (commands left raw at random), unlike the rest of this card's attribution. -->
                             <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
                                 Holdout control
                                 <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>: measured against
@@ -391,9 +336,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                 left raw at random.
                             </p>
 
-                            <!-- Provenance, never trailing the numbers: this card once sat on a ledger nothing
-                                 was writing any more, and a frozen figure reads exactly like a live one unless
-                                 its age is stated. -->
+                            <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
                             <template #footnote>
                                 {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }}
                                 <template v-if="savings?.input.updatedAt !== undefined"
@@ -404,8 +347,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     </div>
                 </section>
 
-                <!-- Not a nice-to-have: it is how anyone reconciles a number they distrust, and it is what
-                     discharges the palette's sub-3:1 fills. -->
+                <!-- How a distrusted number gets reconciled, and what discharges the palette's low-contrast fills. -->
                 <Card>
                     <div class="flex items-center justify-between gap-3">
                         <button type="button" class="flex cursor-pointer items-center gap-1.5 text-sm text-content" @click="tableOpen = !tableOpen">
@@ -436,11 +378,10 @@ const hasSpend = computed(() => current.value.length > 0);
                             <tbody class="tabular-nums text-muted">
                                 <tr v-for="(row, index) in tableRows.slice(0, TABLE_LIMIT)" :key="index" class="border-b border-line/50">
                                     <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
-                                    <!-- The swatch is the row's SERIES (so it matches the chart and legend the
-                                         reader just filtered with), the name is the CARD that billed it. This
-                                         is the reconciling surface: folding four local models into one word
-                                         here would hide which of them a figure came from, and the CSV below
-                                         carries the raw provider id for anyone going further. -->
+                                    <!--
+                                        Swatch is the series (matches the chart/legend), the name is the actual billing card: folding locals into one
+                                        word here would hide which one, unlike the chart above.
+                                    -->
                                     <td class="py-1.5 pr-3">
                                         <span class="flex items-center gap-1.5">
                                             <span

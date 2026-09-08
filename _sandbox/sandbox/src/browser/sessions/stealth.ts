@@ -3,24 +3,12 @@ import { dirname } from "node:path";
 import type { BrowserFingerprint } from "./fingerprint.js";
 import { statePath } from "../../workspace/layout/state-paths.js";
 
-/* The init script, run in every page before its own scripts. It closes the gap between what a browser on a
- * GPU-less server in a container reports and what the same browser on somebody's desk reports.
- *
- * Headed full Chromium under Xvfb already carries a real user agent, a real `window.chrome` and a real plugin
- * list, so this is a short list rather than a framework: the residual tells are the GPU (Xvfb has none, so
- * Chromium falls back to SwiftShader, which no desktop reports), the core count and memory of a server, and
- * the automation flag. The values come from fingerprint.ts, which derives ONE STABLE DEVICE per profile owner
- * from a per-sandbox secret. That is the whole difference from the hand-written constants this replaces: those
- * were identical in every install of this product, which made them a signature for it.
- *
- * Kept small and hand-written on purpose (no puppeteer-extra dependency). Every patch here has to be one a real
- * machine could produce; a lie that no hardware could tell is worse than the truth, because detectors weight
- * internal contradictions above unusual values. That is why the old `navigator.plugins = [1,2,3,4,5]` line is
- * gone: a plugin array of bare integers is not a shape any browser has ever returned, and headed Chromium
- * ships a real PDF viewer entry anyway, so the branch was only ever able to make things worse.
- *
- * Used by both launch paths, which SHARE a profile and must therefore agree: inline via `addInitScript` in the
- * owner's own login window, and on disk for @playwright/mcp's `--init-script`. */
+// Init script run before a page's own scripts; patches only the residual tells of a GPU-less container (WebGL
+// vendor/renderer, hardwareConcurrency, deviceMemory, navigator.webdriver) using the per-owner device from
+// fingerprint.ts.
+// Hand-written, no puppeteer-extra: every patched value must be one a real machine could produce, since an impossible
+// value is a stronger tell than an unusual one.
+// Shared by both launch paths (the owner's own login window and @playwright/mcp), which use one profile and must agree.
 export const stealthInit = (fingerprint: BrowserFingerprint): string => `(() => {
   const define = (target, prop, value) => {
     try { Object.defineProperty(target, prop, { get: () => value, configurable: true }); } catch {}
@@ -53,12 +41,11 @@ export const stealthInit = (fingerprint: BrowserFingerprint): string => `(() => 
 })();
 `;
 
-// One script per profile owner, because one device per profile owner. The name carries the owner for the same
-// reason the profile directory does: a shared file would hand every browser the first one's machine.
+// One script per profile owner, matching the profile dir; a shared file would leak one browser's device to all.
 const stealthScriptPath = (root: string, owner: string): string => statePath(root, ".intentic/local/browser/", `${owner}.stealth.js`);
 
-// Write the owner's script to disk (idempotent, rewritten every launch so a change to the derivation lands
-// without anyone clearing state) so @playwright/mcp can load it via `--init-script`; returns the path.
+// Rewrites the owner's script to disk on every launch, so a derivation change lands without clearing state; returns the
+// path for --init-script.
 export const ensureStealthScript = async (root: string, owner: string, fingerprint: BrowserFingerprint): Promise<string> => {
     const path = stealthScriptPath(root, owner);
     await mkdir(dirname(path), { recursive: true });

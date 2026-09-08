@@ -3,14 +3,11 @@ import { errorMessage } from "@intentic/ui/async";
 import { devFillGet, devFillSet } from "../setup/devFill";
 import { apiClient } from "../../lib/useApi";
 
-/* Cloudflare API token + zone discovery, shared by the onboarding Setup screen and the in-app "Connect
- * Cloudflare" step. The token is sent to the platform only for a request-scoped zone listing
- * (apiClient.sandbox.zones drops it); everything else here is local UI state. Bindings mirror what the
- * consumers render: cfToken/cfTokenValid, the discovered zones + selectedZone, and loading/error flags. */
+// Cloudflare API token and zone discovery, shared by the onboarding Setup screen and the in-app Connect Cloudflare
+// step. The token is sent to the platform only for a request-scoped zone listing (apiClient.sandbox.zones drops it);
+// everything else is local UI state.
 
-/* The .env key the token lands under in the sandbox. Exported because three files named it independently,
- * this module's dev-autofill slot, the connect step that writes it, and the field that collects it, and a
- * secret whose name is spelled in three places is one that gets written under two of them. */
+// The .env key the token lands under; exported so the three places that use it share one spelling.
 export const CF_TOKEN_KEY = `CLOUDFLARE_API_TOKEN`;
 
 // Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); just catches copy/paste slips.
@@ -51,8 +48,8 @@ export function useCloudflareZones() {
         }
     };
 
-    // Update the token and (debounced) discover its zones. Clearing the zone state first keeps callers
-    // locked while we re-check; stale in-flight responses are dropped by comparing the token they fired for.
+    // Updates the token and debounces zone discovery, clearing zone state first so callers stay locked while it
+    // re-checks. Stale in-flight responses are dropped by comparing the token they fired for.
     const setToken = (value: string): void => {
         cfToken.value = value;
         clearTimeout(zoneTimer);
@@ -63,8 +60,7 @@ export function useCloudflareZones() {
             zonesLoading.value = false;
             return;
         }
-        // Dev autofill persist (inert in prod). Setup's ride-the-command flow never hits a secrets mutation,
-        // so a valid token is remembered here, under the same key CloudflareConnect saves it as.
+        // Dev autofill persist (inert in prod), under the same key CloudflareConnect saves the token as.
         devFillSet(`secret.${CF_TOKEN_KEY}`, cfToken.value.trim());
         zonesLoading.value = true;
         zoneTimer = setTimeout(() => void loadZones(cfToken.value.trim()), 400);

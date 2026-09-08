@@ -4,12 +4,9 @@ import { ScopeError } from "../policy.js";
 import { fakeDesktop, fakeWindow } from "../testing.js";
 import { describeWindows, focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./apps.js";
 
-/* Operating applications, at the layer that decides what is allowed and what gets reported.
- *
- * The scope split is the thing worth pinning: seeing what is open and reading the clipboard are ways of LOOKING
- * (screen), focusing a window and setting the clipboard CHANGE what the machine is doing (control), and opening
- * an application starts a process (shell). Somebody will eventually be tempted to collapse these; these tests are
- * why they should not. */
+// Operating applications, at the layer that decides what is allowed and what gets reported. The scope split:
+// looking (windows, clipboard read) needs `screen`; changing (focus, clipboard write) needs `control`; opening
+// starts a process and needs `shell`.
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     shell: "on",
@@ -83,8 +80,8 @@ test("focus refuses an empty id with the sentence that says where ids come from"
     await expect(focusWindow(fake.desktop, "", scopes())).rejects.toThrow(/window list/);
 });
 
-/* The rendering is what the model reads to choose a window, so it carries the id it must pass back, the app and
- * title a person would recognise, and the geometry that makes "click the middle of it" arithmetic. */
+// The rendering is what the model reads to choose a window, so it carries the id it must pass back, the app
+// and title a person would recognise, and the geometry that makes "click the middle of it" arithmetic.
 test("the window list reads as something to choose from", () => {
     const rendered = describeWindows([
         fakeWindow({ id: "1", app: "code", title: "editor", focused: true }),

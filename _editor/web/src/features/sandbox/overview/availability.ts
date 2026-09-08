@@ -1,15 +1,11 @@
 import type { StatusVariant } from "@intentic/ui";
 import { isBlocked, type ConnectionState } from "../live/connection";
 
-/* TRANSPORT TRUTH IS NOT PRESENTATION TRUTH.
- *
- * `reachable` remains the exact answer request code needs: may a daemon call be made now? This projection is
- * the calmer answer a person needs: is there no workspace yet, is the daemon warming, is a previously-painted
- * workspace briefly stale, or has the wait lasted long enough to deserve a quiet explanation? Keeping that
- * split here prevents every surface from inventing its own "offline" threshold. */
+// `reachable` is the exact request-layer answer (may a daemon call be made now); this projection is the calmer UI
+// answer (no workspace yet, warming, briefly stale, or a wait long enough to explain). Keeps every surface from
+// inventing its own offline threshold.
 
-// The liveness watchdog has already allowed ten seconds of silence before a failure reaches this clock. Another
-// thirty seconds keeps ordinary CPU/GC/build stalls invisible while still naming a wait that has become real.
+// Added on top of the watchdog's own liveness allowance, so ordinary stalls don't read as an outage.
 export const SANDBOX_BUSY_AFTER_MS = 30_000;
 
 export type SandboxAvailability = "starting" | "warming" | "live" | "stale" | "busy" | "blocked";
@@ -20,8 +16,8 @@ export interface SandboxAvailabilityVisual {
     readonly dotClass: string;
 }
 
-// One spelling and one colour vocabulary everywhere the active sandbox is summarized. `stale` deliberately
-// looks live: a retry shorter than the busy threshold should cause no visible state change at all.
+// One label/color per state; `stale` deliberately reads as live, since a retry shorter than the busy threshold
+// shouldn't be visible.
 export const sandboxAvailabilityVisual = (availability: SandboxAvailability): SandboxAvailabilityVisual => {
     switch (availability) {
         case "live":
@@ -53,8 +49,7 @@ export const sandboxAvailability = (state: ConnectionState, ready: boolean, esta
     return "stale";
 };
 
-// Blocking the whole workspace is reserved for a first paint that cannot begin, or a condition waiting cannot
-// repair. A recovered transport may become reachable before its first tree response; that is a normal loading
-// state inside the view, not a reason to keep showing the connection screen.
+// Blocks only when nothing can be painted yet or the wait needs explaining; a still-warm reconnect can render a
+// normal loading state instead.
 export const sandboxRequiresGate = (reachable: boolean, established: boolean, availability: SandboxAvailability): boolean =>
     availability === "blocked" || (!reachable && !established);

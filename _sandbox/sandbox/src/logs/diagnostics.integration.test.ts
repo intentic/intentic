@@ -5,9 +5,8 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { readLogLines, readMetricSeries, TAIL_BUDGET_BYTES } from "./diagnostics.js";
 
-/* The filtered read, which is the whole difference between this and `tail daemon.log`. What each case pins is a
- * way the naive version misleads: oldest-first ordering, routine lines drowning real ones, and, the one that
- * matters most, an empty answer that means "I could not see that far back" reading as "nothing happened". */
+// Pins the ways a naive tail misleads: oldest-first order, routine lines drowning real ones, and an empty answer that
+// could mean the read did not reach far enough.
 
 const root = async (): Promise<string> => {
     const dir = mkdtempSync(join(tmpdir(), "diag-"));
@@ -31,7 +30,6 @@ test("warn is a floor: it returns warn and worse, and drops the routine lines ar
     ]);
 
     const result = await readLogLines(dir, { file: "daemon.log", level: "warn", limit: 10 });
-    // Newest first: a diagnostic reads downwards from what just happened.
     expect(result.lines.map((l) => l["message"])).toEqual(["turn failed", "host: heartbeat failed"]);
     expect(result.matched).toBe(2);
 });
@@ -40,8 +38,6 @@ test("an unclassifiable level is shown rather than dropped", async () => {
     const dir = await root();
     await write(dir, "daemon.log", [line({ level: "surprise", message: "who wrote this" })]);
 
-    // A line nobody can classify is exactly the one worth showing; silently filtering it is how a real problem
-    // becomes invisible to the tool that exists to find it.
     expect((await readLogLines(dir, { file: "daemon.log", level: "error", limit: 10 })).matched).toBe(1);
 });
 
@@ -77,7 +73,6 @@ test("limit cuts the answer and says how many it cut", async () => {
     );
 
     const result = await readLogLines(dir, { file: "daemon.log", level: "error", limit: 5 });
-    // The newest five, and the count says the rest exist: a truncated answer that looks complete is the bug.
     expect(result.lines.map((l) => l["message"])).toEqual(["e49", "e48", "e47", "e46", "e45"]);
     expect(result.matched).toBe(50);
 });
@@ -96,8 +91,6 @@ test("a torn line loses one line, never the read", async () => {
     expect(result.lines.map((l) => l["message"])).toEqual(["survivor"]);
 });
 
-/* THE DISTINCTION A READER CANNOT MAKE FOR THEMSELVES. An empty answer over a window the read could not reach
- * looks exactly like proof that nothing happened, and that is the direction the mistake is dangerous in. */
 test("a read that started mid-file says so when the window reaches past what it could see", async () => {
     const dir = await root();
     const filler = line({ level: "info", message: "x".repeat(2_000) });
@@ -108,7 +101,6 @@ test("a read that started mid-file says so when the window reaches past what it 
         Array.from({ length: count }, () => filler),
     );
 
-    // Asking about a window older than the tail: the answer is empty and the caller is told it is incomplete.
     const truncated = await readLogLines(dir, { file: "daemon.log", level: "error", sinceMs: Date.parse(AT(0)) - 3_600_000, limit: 10 });
     expect(truncated.windowTruncated).toBe(true);
 });
@@ -117,11 +109,10 @@ test("a window entirely inside what was read is never flagged as truncated", asy
     const dir = await root();
     const filler = line({ time: AT(0), level: "info", message: "x".repeat(2_000) });
     const count = Math.ceil(TAIL_BUDGET_BYTES / (filler.length + 1)) + 200;
-    // Enough old filler to force a mid-file read, then the recent line the query is actually about.
+    // Filler forces a mid-file read before the recent line the query targets.
     await write(dir, "daemon.log", [...Array.from({ length: count }, () => filler), line({ time: AT(10), level: "error", message: "recent" })]);
 
-    /* The file was cut, but the oldest line still visible is OLDER than the window asked for, so the cut cannot
-     * have hidden anything from this question. A warning that fires on complete answers is one nobody reads. */
+    // File is cut, but the oldest visible line predates the window asked for, so nothing in range was hidden.
     const complete = await readLogLines(dir, { file: "daemon.log", level: "error", sinceMs: Date.parse(AT(5)), limit: 10 });
     expect(complete.lines.map((l) => l["message"])).toEqual(["recent"]);
     expect(complete.windowTruncated).toBe(false);
@@ -140,7 +131,7 @@ test("a dotted path becomes a series with its own summary", async () => {
     ]);
 
     const series = await readMetricSeries(dir, { field: "window.eventLoop.delayP99Ms", limit: 10 });
-    // Oldest first: a series is plotted left-to-right in time, unlike a log.
+    // Series order is oldest-first, opposite of the newest-first log reads.
     expect(series.points.map((point) => point.value)).toEqual([20, 80, 50]);
     expect(series).toMatchObject({ min: 20, max: 80, mean: 50 });
 });
@@ -149,7 +140,6 @@ test("a path naming an object rather than a number counts as missing, so a typo 
     const dir = await root();
     await write(dir, "resource-metrics.jsonl", [sample(0, { window: { eventLoop: { delayP99Ms: 20 } } })]);
 
-    // The caller gets "no numeric values, 1 sample looked at" instead of a confidently empty series.
     const series = await readMetricSeries(dir, { field: "window.eventLoop", limit: 10 });
     expect(series).toMatchObject({ points: [], missing: 1 });
     expect(series.mean).toBeUndefined();
@@ -161,7 +151,6 @@ test("the series window is applied, and an empty window reports no summary rathe
 
     const series = await readMetricSeries(dir, { field: "daemon.memory.rssBytes", sinceMs: Date.parse(AT(30)), limit: 10 });
     expect(series.points).toEqual([]);
-    // Absent, not 0: a zero here would read as a measurement of an idle machine.
     expect(series.min).toBeUndefined();
 });
 

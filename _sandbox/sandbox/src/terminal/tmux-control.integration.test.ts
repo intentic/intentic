@@ -4,13 +4,11 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 import { attachControlTerminal, type ControlTerminal, spawnControlClient } from "./tmux-control.js";
 
-// @xterm/headless v6 ships as CommonJS whose named exports Node's ESM lexer can't detect (logs/pane-log-clean.ts
-// loads it the same way).
+// @xterm/headless v6 ships as CommonJS; Node's ESM lexer can't detect its named exports.
 const { Terminal } = createRequire(import.meta.url)("@xterm/headless") as typeof import("@xterm/headless");
 
-/* Against a REAL tmux (the suite's private server, src/testing/tmux-fence.ts), because the whole module is a
- * reading of one program's behaviour: what its control client says, in what order, and what its formats
- * report. Argv assertions would only restate the source; these prove the bytes a browser would get. */
+// Runs against a real tmux (src/testing/tmux-fence.ts): this module reads one program's behavior, not argv shapes, so
+// tests must prove the bytes a browser gets.
 
 const execFileAsync = promisify(execFile);
 const tmux = async (...args: string[]): Promise<string> => (await execFileAsync("tmux", args)).stdout.trim();
@@ -52,16 +50,8 @@ afterEach(async () => {
     }
 });
 
-// A plain `sh` rather than whatever $SHELL is here: deterministic prompt, no rc files, and it is what a fresh
-// session's argv can name (tmux ignores the command when `-A` finds the session already there).
-//
-// The session is CREATED first and attached to only once its shell has printed a prompt, because those are not
-// one moment. `new-session` answers when the pane's process has been FORKED; until it execs the shell, tmux
-// reports `#{pane_current_command}` as whatever that fork inherited — its own `tmux`, or the session's
-// default shell — and a replay taken there re-states the modes of a program that is not running yet. Attaching
-// into that window is racing the exec, not testing the module: CI lost the race and got an opening replay
-// carrying the shell's prompt and none of the shell's modes. The prompt IS the exec, so waiting for it is the
-// wait; the attach below still uses the production argv, which `-A` resolves to an attach.
+// Plain `sh`, not $SHELL, for a deterministic prompt with no rc files. The session is created and only attached once
+// its prompt appears; new-session returns before the shell execs, so an earlier attach would race it.
 const fresh = async (cols = 80, rows = 24): Promise<Harness> => {
     const name = `cm-${process.pid}-${String(sessions.length)}`;
     sessions.push(name);
@@ -80,13 +70,11 @@ const fresh = async (cols = 80, rows = 24): Promise<Harness> => {
 
 test("an attach opens with a reset-and-replay, then the pane's raw bytes follow, colour and UTF-8 intact", async () => {
     const h = await fresh();
-    // The opening screen: RIS, then the (near-empty) pane, then the cursor and the shell's modes.
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     expect(h.text()).toContain("\x1b[?2004h");
 
     h.terminal.input(Buffer.from("printf 'h\\303\\251llo \\033[31mred\\033[0m\\n'\r", "utf8"));
     await until(() => h.text().includes("\x1b[31mred\x1b[0m"), "the program's output");
-    // Raw: the SGR the program wrote, not a redraw of tmux's idea of it; the UTF-8 decoded whole.
     expect(h.text()).toContain("héllo \x1b[31mred\x1b[0m");
 });
 
@@ -105,23 +93,20 @@ test("a program on the alternate screen is replayed there on a fresh attach, wit
     const h = await fresh();
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
-    // Enter the alternate screen and ask for SGR mouse reporting by hand, as vim would, then sit in `cat`.
+    // Enters the alternate screen and asks for SGR mouse reporting by hand, then sits in `cat`.
     h.terminal.input(Buffer.from("printf '\\033[?1049h\\033[?1000h\\033[?1006hALT-SCREEN'; cat\r", "utf8"));
     await until(() => h.text().includes("ALT-SCREEN"), "the alternate screen");
 
-    // A second attach to the same session, as a reload would: the replay must land on the alternate screen.
+    // Second attach to the same session, models a reload.
     const again = open(["attach-session", "-t", `=${name}`]);
     opened.push(again);
     await until(() => again.text().includes("\x1b[?1049h"), "the second attach's replay");
     const replay = again.text();
     const alt = replay.indexOf("\x1b[?1049h");
-    // The normal screen first (the shell's echo of the command line, which spells ALT-SCREEN out literally),
-    // then the switch, then the alternate screen's own rows.
     expect(replay.slice(0, alt)).toContain("cat");
     expect(replay.indexOf("ALT-SCREEN", alt)).toBeGreaterThan(alt);
     expect(replay).toContain("\x1b[?1000h");
     expect(replay).toContain("\x1b[?1006h");
-    // And not the shell's bracketed paste: what is running is `cat`, not a prompt.
     expect(replay).not.toContain("\x1b[?2004h");
 });
 
@@ -135,16 +120,13 @@ test("a second replay puts history under the screen, and the resync does the sam
     h.terminal.resync();
     await until(() => h.text().length > before && h.text().slice(before).includes("line-8"), "the resync's replay");
     const replay = h.text().slice(before);
-    // Eight lines through a five-row pane: the first ones scrolled off the screen into history, and the replay
-    // carries them back, oldest first, so xterm's scrollback holds them.
+    // Eight lines through a five-row pane push the first ones into scrollback, oldest first.
     expect(replay.startsWith("\x1bc")).toBe(true);
     expect(replay.indexOf("line-1")).toBeLessThan(replay.indexOf("line-8"));
 });
 
-/* THE REPLAY IS THE SCREEN. Everything above checks that the right bytes are in the stream; this feeds a replay
- * to a terminal (xterm's headless core, the same emulator the browser runs) and compares what it shows with
- * what tmux shows: the visible rows, and the cursor, which is only right if `-J`'s rejoined lines re-wrapped
- * into exactly the rows tmux had them on. Long lines on a narrow pane, so that wrapping is what is tested. */
+// Feeds the replay to xterm's headless core (the same emulator the browser uses) and compares against tmux; long lines
+// on a narrow pane so wrapping is exercised too.
 test("a replay puts the same rows and the same cursor on an empty xterm that the pane has", async () => {
     const h = await fresh(40, 8);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
@@ -154,7 +136,7 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
         Buffer.from("for i in $(seq 1 12); do printf 'line-%02d-%s\\n' $i xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done\r", "utf8"),
     );
     await until(() => h.text().includes("line-12-"), "the loop's output");
-    // Let the prompt come back before reading either side.
+    // Waits for the prompt to return before either side is read.
     await until(() => false, "the prompt", 300).catch(() => undefined);
 
     const mark = h.text().length;
@@ -166,50 +148,44 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
     const xterm = new Terminal({ cols: 40, rows: 8, scrollback: 1000, allowProposedApi: true });
     await new Promise<void>((resolve) => xterm.write(replay, resolve));
     const buffer = xterm.buffer.active;
-    // Trailing spaces trimmed on both sides: a prompt's typed `# ` is a real cell to xterm and padding to
-    // capture-pane's reader, and neither is visible.
+    // Trailing spaces trimmed both sides: a typed `# ` is a real cell to xterm but padding to capture-pane, invisible
+    // either way.
     const shown = Array.from({ length: 8 }, (_, row) => (buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "").trimEnd());
 
     const tmuxScreen = (await tmux("capture-pane", "-p", "-t", `=${name}:`)).split("\n").map((line) => line.trimEnd());
     const [cursorX, cursorY] = (await tmux("display", "-p", "-t", `=${name}:`, "#{cursor_x} #{cursor_y}")).split(" ").map(Number);
     expect(shown).toEqual(tmuxScreen);
     expect([buffer.cursorX, buffer.cursorY]).toEqual([cursorX, cursorY]);
-    // And the scrollback holds what scrolled off: the first line is there, above the screen.
     expect(buffer.length).toBeGreaterThan(8);
     expect(buffer.getLine(0)?.translateToString(true)).toContain("for i in");
 });
 
-/* AND ONLY ITS OWN SESSION'S. tmux broadcasts `%session-window-changed` to EVERY control client on the server,
- * not just the ones attached to the session it is about, so a sandbox where anything else is working — every
- * agent command opens a window in its `agent-*` session, every job command one in a `job-*` session — used to
- * walk every open tab onto that window: a reset, then a replay of a stranger's pane, most often one that had
- * just started and had nothing on it yet. That is what a Checks tab going blank mid-run was. */
+// tmux broadcasts `%session-window-changed` to every control client on the server, not only ones attached to that
+// session, so a naive handler walks every tab onto a stranger's window.
 test("another session opening a window leaves this tab where it is", async () => {
     const h = await fresh(80, 6);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     h.terminal.input(Buffer.from("echo MY-OWN-WINDOW\r", "utf8"));
     await until(() => h.text().includes("MY-OWN-WINDOW"), "this session's output");
 
-    // A second session (any other work in the sandbox) makes its own new window the active one.
+    // Second session models unrelated work happening elsewhere in the sandbox.
     const other = `cm-other-${String(process.pid)}`;
     sessions.push(other);
     await tmux("new-session", "-d", "-s", other, "-c", "/tmp", "sh");
     const mark = h.text().length;
     await tmux("new-window", "-t", `=${other}:`, "-n", "run", "sh", "-c", "echo STRANGERS-WINDOW; sleep 30");
-    // Long enough that a sync would have landed (the replays above arrive in well under this).
+    // Long enough that a stray sync would have landed by now.
     await until(() => false, "any stray replay", 1500).catch(() => undefined);
 
-    // Nothing was sent, so nothing reset the browser's xterm and no stranger's pane reached it.
     expect(h.text().slice(mark)).toBe("");
-    // And this tab is still typing into its own pane.
     h.terminal.input(Buffer.from("echo STILL-MINE\r", "utf8"));
     await until(() => h.text().includes("STILL-MINE"), "this session's pane still taking input");
     expect(await tmux("capture-pane", "-p", "-t", `=${other}:run`)).toContain("STRANGERS-WINDOW");
 });
 
 test("attaching to a session that does not exist ends at once, with tmux's own words", async () => {
-    // A server with SOME session on it, so the answer is about this name and not "no sessions" from a server
-    // that is not running at all (the default `exit-empty` takes the fenced server down with its last session).
+    // Keeps a session alive on the server; tmux's exit-empty would otherwise take the server down before this attach
+    // runs.
     const other = await fresh();
     await until(() => other.text().includes("\x1bc"), "the other session's replay");
 
@@ -228,10 +204,8 @@ test("the session being killed from elsewhere is an exit, not a hang", async () 
     expect(h.exits[0]?.code).toBe(0);
 });
 
-/* The cut is what lets a sync tell "already in the capture" from "new since it", and it is only that if it is
- * drawn while the stdout chunk carrying the reply is STILL being walked: one chunk routinely holds a reply
- * block and the `%output` lines tmux wrote after it, and a promise continuation cannot run until the whole
- * chunk has been parsed, by which time the new output is indistinguishable from the old. */
+// One stdout chunk can hold a reply block and the `%output` lines written after it; the cut must land before the chunk
+// finishes parsing, or new output looks identical to old.
 test("a batch's cut lands before any continuation on its own promises", async () => {
     const h = await fresh();
     await until(() => h.text().includes("\x1bc"), "the initial replay");
@@ -251,9 +225,8 @@ test("a batch's cut lands before any continuation on its own promises", async ()
 });
 
 test("keystrokes that arrive before the attach has found the pane are queued, not swallowed", async () => {
-    // `fresh` hands the harness back in the same tick as the attach, before tmux has answered anything, so
-    // typing here is typing into a tab whose pane is not known yet. The panel takes keyboard focus the moment
-    // a tab opens, which is what makes that a window a real user hits rather than a contrived one.
+    // `fresh` returns before tmux has answered the attach, so typing here targets a pane not yet known; a tab takes
+    // focus the moment it opens, so this race is real.
     const h = await fresh();
     h.terminal.input(Buffer.from("echo TYPED-EARLY\r", "utf8"));
     await until(() => h.text().includes("TYPED-EARLY"), "the early keystrokes reaching the pane");
@@ -267,13 +240,12 @@ test("the tab follows the session's active window: a new window replays, its clo
     h.terminal.input(Buffer.from("echo FIRST-WINDOW\r", "utf8"));
     await until(() => h.text().includes("FIRST-WINDOW"), "the first window's output");
 
-    // A job's runner opens its next command as a new window (bin/tmux-run): the browser should now show that.
+    // Models a job runner opening its next command as a new window (bin/tmux-run).
     let mark = h.text().length;
     await tmux("new-window", "-t", `=${name}:`, "-n", "run", "sh", "-c", "echo SECOND-WINDOW; sleep 30");
     await until(() => h.text().slice(mark).includes("SECOND-WINDOW"), "the second window's replay");
     expect(h.text().slice(mark)).toContain("\x1bc");
 
-    // Its command ending closes the window, and the session's active window is the shell again.
     mark = h.text().length;
     await tmux("kill-window", "-t", `=${name}:run`);
     await until(() => h.text().slice(mark).includes("FIRST-WINDOW"), "the first window back");

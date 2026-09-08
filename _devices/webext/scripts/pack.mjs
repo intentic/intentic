@@ -3,24 +3,10 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
 
-/* THE ARTIFACT A STORE TAKES: dist/ as one zip.
- *
- * WRITTEN BY HAND rather than shelled out to `zip`, and the reason is the image this runs in: ci-base installs
- * curl, git, python3, make, g++, ripgrep, openssh-client, tmux and docker — no zip. A publish step that shelled
- * out would work on every developer's machine and fail in the one place it has to work, at the end of a
- * release, after everything else had already been tagged and published.
- *
- * The format is old and small enough to write correctly: per file a local header, deflated bytes and a CRC;
- * then a central directory naming every entry, and an end-of-central-directory record pointing at it. What is
- * deliberately NOT here: zip64 (the whole extension is under a megabyte), encryption, data descriptors, and
- * directory entries (a zip needs none, and Chrome ignores them).
- *
- * TIMESTAMPS ARE FIXED, which is what makes the artifact reproducible: the same dist produces the same bytes,
- * so a re-run of a publish uploads something identical rather than something merely equivalent. The DOS epoch
- * (1980-01-01) is the earliest a zip can express and carries no information anyway.
- *
- *   node _devices/webext/scripts/pack.mjs   → dist.zip beside dist/
- */
+// dist/ packed into dist.zip by hand, since this runs in a CI image with no `zip` binary. Skips zip64, encryption
+// and directory entries (the extension is under a megabyte); timestamps are fixed at the DOS epoch for reproducible
+// bytes.
+// node _devices/webext/scripts/pack.mjs → dist.zip beside dist/
 
 const here = import.meta.dirname;
 const root = join(here, "..");
@@ -54,9 +40,8 @@ const crc32 = (buffer) => {
 const DOS_TIME = 0;
 const DOS_DATE = 0x00_21; // 1980-01-01: the DOS epoch, and the only date a reproducible archive can honestly claim.
 
-// The two preview surfaces (scripts/preview.mjs) live in dist/ so their relative `popup.js` resolves, and
-// neither may reach a store. Named rather than pattern-matched, so the exclusion is two files rather than a
-// rule somebody's real asset can trip over.
+// Preview surfaces (preview.mjs) live in dist/ for their relative `popup.js` but must never reach a store; named
+// explicitly so no real asset can trip a pattern.
 const files = walk(dist).filter((path) => !["preview.html", "store-shot.html"].includes(relative(dist, path)));
 if (files.length === 0) {
     console.error(`nothing in ${dist}: run the build first`);
@@ -106,8 +91,8 @@ for (const path of files) {
     entry.writeUInt16LE(0, 32); // comment
     entry.writeUInt16LE(0, 34); // disk number
     entry.writeUInt16LE(0, 36); // internal attributes
-    // A regular 0644 file, in the high half of the field. `>>> 0` because JS bitwise arithmetic is SIGNED
-    // 32-bit and this shift lands past 2^31, which is a negative number the buffer writer refuses.
+    // A regular 0644 file in the high half of the field; `>>> 0` because JS bitwise math is signed 32-bit and this
+    // shift lands past 2^31.
     entry.writeUInt32LE((0o1_00_644 << 16) >>> 0, 38);
     entry.writeUInt32LE(offset, 42);
     central.push(entry, name);
@@ -127,6 +112,5 @@ end.writeUInt16LE(0, 20); // no archive comment
 
 const zip = Buffer.concat([...locals, directory, end]);
 writeFileSync(out, zip);
-// The digest is printed because a publish records what it uploaded, and "the same bytes" is a claim worth
-// being able to check afterwards.
+// Printed so a publish records what it uploaded; "the same bytes" is a claim worth being able to check later.
 console.log(`dist.zip: ${files.length} files, ${zip.length} bytes, sha256 ${createHash("sha256").update(zip).digest("hex")}`);

@@ -5,8 +5,7 @@ import { expect, test, vi } from "vitest";
 import { jsonFile } from "../../store/json-file.js";
 import { discoveredCatalog } from "./model-catalog.js";
 
-/* THE LADDER SIX PROVIDERS STAND ON. Each of them used to carry its own copy, so each of these properties had
- * six chances to be wrong; they are asserted once, here, over a catalog of bare ids. */
+// Pins the catalog properties every provider relies on, asserted once here over bare ids instead of per-provider.
 
 const storeAt = (path = join(mkdtempSync(join(tmpdir(), "model-catalog-")), "models.json")) => ({
     path,
@@ -42,9 +41,6 @@ test("a live answer is served, persisted, and then cached for the TTL", async ()
     expect(await store.file.read()).toEqual(["a", "b"]);
 });
 
-/* THE PROPERTY EVERY COPY COMMENTED AND ONLY THIS TEST CHECKS: a fallback answer is NOT cached, so the read
- * after it asks again. That is the difference between a sandbox that recovers the moment an account is
- * connected and one that shows a seeded row for the rest of the minute. */
 test("a seeded answer is not cached, so the next read retries the vendor", async () => {
     const discover = vi.fn(async () => []);
     const catalog = catalogOf(discover);
@@ -62,9 +58,7 @@ test("the persisted list outranks the seed floor once discovery goes quiet", asy
     expect(await offline.models()).toEqual({ models: ["real"], default: "real" });
 });
 
-/* Absent, not JSON, and JSON of a shape this build does not recognise all mean the same thing: nothing
- * remembered, so serve the floor. The third case is the ordinary aftermath of a rollback, and it must not be a
- * crash on the read path of a picker. */
+// The foreign-shaped case is the ordinary aftermath of a rollback; it must not crash the read path.
 test("an absent, unreadable or foreign-shaped file reads as nothing remembered", async () => {
     const store = storeAt();
     const catalog = catalogOf(async () => [], store);
@@ -78,8 +72,7 @@ test("an absent, unreadable or foreign-shaped file reads as nothing remembered",
     expect(await catalog.models()).toEqual({ models: ["seed"], default: "seed" });
 });
 
-// The self-heal path: what a turn proved (the vendor named it while rejecting something else) is persisted and
-// served at once, without waiting for a discovery that may never succeed on this account.
+// What a turn proved the vendor accepts is persisted and served at once, without waiting on discovery.
 test("record persists and serves immediately", async () => {
     const store = storeAt();
     const catalog = catalogOf(async () => [], store);
@@ -96,9 +89,8 @@ test("a rejecting vendor is a quiet fallback, not a thrown error", async () => {
     await expect(catalog.models()).rejects.toThrow("ECONNREFUSED");
 });
 
-/* `live` is the rung, made visible: the raw items when the answer in hand IS live, and nothing when it came
- * off the file or the floor. Cursor turns on this distinction — an effort tier it cannot translate from the
- * vendor's own parameter definitions is one it must not guess at. */
+// `live` exposes the raw items only when the in-hand answer is actually live, not from file or floor; Cursor relies on
+// this to avoid guessing at an untranslatable effort tier.
 test("live answers with the vendor's items only while a live answer is what is in hand", async () => {
     const store = storeAt();
     expect(await catalogOf(async () => [], store).live()).toBeUndefined();
@@ -107,8 +99,8 @@ test("live answers with the vendor's items only while a live answer is what is i
     expect(await catalog.live()).toEqual(["a"]);
 });
 
-// Disconnecting an account has to forget the cached answer too, or it keeps being offered for the rest of the
-// TTL after the credential is gone.
+// Disconnecting an account must forget the cached answer, or it's offered for the rest of the TTL after the credential
+// is gone.
 test("forget drops the cached answer", async () => {
     let available = ["live"];
     const catalog = catalogOf(async () => available);

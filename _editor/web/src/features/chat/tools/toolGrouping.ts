@@ -1,14 +1,10 @@
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { diffStat } from "./chatToolDiff";
 
-/* Consecutive tool calls that do exactly the same thing: 30 edits to the same file, a batch of reads against
- * one directory, are noise when each gets its own card. This module groups them into a single collapsed row
- * that shows the count and aggregated stats, expandable to the individual cards. The grouping is RENDERING
- * only: the transcript model stays flat, and a group unfolds to the same cards it would have shown ungrouped.
- *
- * A run of ≥3 consecutive calls with the same display name AND same target (the file / command the card's
- * header shows) collapses. Two is too few to justify the extra affordance, it saves one line at the cost of
- * a fold the user must open to see anything. */
+// Groups consecutive tool calls that do the same thing (30 edits to one file, a batch of reads) into one
+// collapsed row with a count and aggregated stats, expandable to the individual cards. Rendering only: the
+// transcript model stays flat. Collapses a run of 3+ with the same name and target; two is too few to justify
+// the fold.
 
 // The threshold below which consecutive same-type calls stay individual cards.
 const GROUP_THRESHOLD = 3;
@@ -62,8 +58,8 @@ export const groupConsecutiveTools = (tools: readonly TranscriptTool[]): readonl
     return result;
 };
 
-// Aggregated +/− across every tool in a group, for the collapsed header. Returns undefined when no tool
-// carries structured diffs (bash calls, reads, anything that isn't an edit).
+// Aggregated +/- across every tool in a group, for the collapsed header; undefined when nothing in the group
+// carries a structured diff.
 export const groupDiffSummary = (tools: readonly TranscriptTool[]): string | undefined => {
     let additions = 0;
     let deletions = 0;

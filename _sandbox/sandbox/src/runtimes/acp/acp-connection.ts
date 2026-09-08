@@ -15,14 +15,11 @@ import { decidePermission } from "./acp-permissions.js";
 import { createAcpTerminals } from "./acp-terminal.js";
 import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
 
-/* Pooled ACP connections, one warm subprocess per agent capability: spawned + initialized on first use, kept
- * across turns (ACP multiplexes sessions over one connection; cold-starting a Node/Rust agent per turn is
- * seconds of latency for nothing), reaped after idling, respawned lazily after an exit or a config change.
- * Turn-scoped behaviour (update routing, permission policy) binds per session id, the connection-level
- * handlers look the session up, so concurrent conversations on one agent never cross. */
+// One warm subprocess per agent capability, kept across turns since ACP multiplexes sessions over one connection;
+// reaped when idle, respawned after an exit or config change. Turn-scoped hooks bind per session id, so concurrent
+// conversations on one agent never cross.
 
-// A dead connection is respawned on the next acquire; sessions it served die with it (session/load or the
-// UI's session-not-found self-heal recovers).
+// A dead connection respawns on next acquire; its sessions die with it and recover via session/load.
 const INIT_TIMEOUT_MS = 15_000;
 const IDLE_REAP_MS = 15 * 60_000;
 
@@ -42,12 +39,9 @@ export const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T
 
 export interface TurnHooks {
     readonly onUpdate: (notification: SessionNotification) => void;
-    /* Answering can PARK: the owner's command rulebook may hold this call for approval, and the agent is meant
-     * to wait, which is what a JSON-RPC request is for (`ClientRequestHandler` returns `MaybePromise`). */
+    // Can park: the owner's rulebook may hold this call for approval while the agent waits on the response.
     readonly permission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
-    // The turn's terminal context: which tmux session its terminal/create commands run in (the conversation's
-    // agent-<id> session, the panel UX Claude's Bash gets), the cwd fallback, and the first-create signal
-    // (the adapter emits its {kind:"terminal", session} frame there). Absent ⇒ terminal requests are refused.
+    // Turn's tmux session, cwd and first-create signal for terminal requests; absent refuses them.
     readonly terminal?: {
         readonly session: string;
         readonly cwd: string;
@@ -60,18 +54,16 @@ export interface AcpConnection {
     readonly capabilities: AgentCapabilities;
     readonly alive: () => boolean;
     readonly stderrTail: () => string;
-    // Session ids this PROCESS has served (created or loaded), a resumed id absent here needs session/load.
+    // Session ids this process has served; one absent here needs session/load to resume.
     readonly sessions: Set<string>;
-    // Route one session's updates/permissions to a turn; returns the unbind. Also marks the connection busy
-    // (the idle reaper only fires with no bound turns).
+    // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;
     readonly kill: () => void;
 }
 
 export interface AcpConnections {
     readonly acquire: (id: string, config: AcpAgentConfig, cwd: string) => Promise<AcpConnection>;
-    // Kill + forget (capability removed). A live turn on it surfaces as an error frame, acceptable for an
-    // explicit owner action.
+    // Kills and forgets the connection; a live turn on it then errors, acceptable for an explicit removal.
     readonly drop: (id: string) => void;
 }
 
@@ -120,8 +112,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             logger.info({ agent: id, code }, "acp: agent process exited");
         });
 
-        // Terminal requests resolve their turn's context (tmux session + cwd) by ACP session id; a request
-        // outside any bound turn is refused, terminals only exist inside a running turn.
+        // Resolves a turn's tmux context by session id; refused if the session has no bound turn.
         const terminalContext = (sessionId: string): NonNullable<TurnHooks["terminal"]> => {
             const context = turns.get(sessionId)?.terminal;
             if (context === undefined) {
@@ -132,7 +123,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         const app = client({ name: "intentic" })
             .onRequest(methods.client.session.requestPermission, ({ params }) => {
                 const hooks = turns.get(params.sessionId);
-                // A request outside any bound turn (late arrival) gets the standing auto-allow policy.
+                // A late request with no bound turn falls back to the standing auto-allow policy.
                 return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", false);
             })
             .onNotification(methods.client.session.update, ({ params }) => {
@@ -169,15 +160,12 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             });
         const conn = app.connect(proc.stream);
 
-        // Guard initialize with a HARD timeout race. SDK request cancellation is cooperative, so a non-ACP
-        // binary that never answers would otherwise hang the acquire forever.
+        // Hard timeout: SDK cancellation is cooperative, so a non-answering binary would otherwise hang forever.
         const init = await withTimeout(
             conn.agent.request(methods.agent.initialize, {
                 protocolVersion: PROTOCOL_VERSION,
-                // fs is declined: the daemon has no unsaved editor buffers (disk is the source of truth), so
-                // agents fall back to their own direct file access inside the container. terminal rides the
-                // tmux substrate (acp-terminal.ts), advertised only where the wrapper exists, so a dev/CI
-                // daemon without tmux never invites calls it would run invisibly.
+                // fs declined: no unsaved editor buffers here. terminal is advertised only where the tmux wrapper
+                // exists.
                 clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: terminalRun.visible },
             }),
             INIT_TIMEOUT_MS,

@@ -1,33 +1,20 @@
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { contractRoutes, isAttachmentPath, routeNameForRequest, sandboxContract } from "@intentic/sandbox-contract";
 
-/* ROLE FLOORS, the minimum trust tier each route demands, in one table, consulted by the bearer middleware
- * right after the authorizer resolves the caller's role (auth.ts Caller).
- *
- * The tiers draw the product's three real fences rather than mirroring the nav: operating authority belongs to
- * maintainer and owner alike (credentials, landing, publishing, the raw terminal), driving agents is the
- * collaborator's whole grant, and everything below that is the viewer tier.
- *
- * The defaults are the part that matters: an unlisted read floors at viewer, an unlisted MUTATION floors at
- * maintainer, so forgetting to classify a new route can under-serve a collaborator but can never hand one a
- * new power. Only reads that are really the operator's (logs, usage) and the agent-driving mutations are named.
- *
- * One route's floor reads its TARGET as well as its name, and exactly one: the byte-upload route, where the
- * same address serves a message's attachment (the collaborator's) and a write into the shared workspace (the
- * operating tier's). See uploadFloor.
- *
- * These floors are a FLOOR, not the whole answer: operating routes also keep their in-route maintainer gates
- * where middleware-exempt access exists. Membership is the one owner-only surface. */
+// Role floors: the minimum trust tier each route demands, one table, consulted by the bearer middleware right after the
+// caller's role resolves.
+// Defaults matter: an unlisted read floors at viewer, an unlisted mutation floors at maintainer, so a misclassified
+// route can under-serve, never over-grant.
+// A floor, not the whole answer: operating routes still keep their own in-route maintainer gates; membership stays
+// owner-only.
 
 const ROUTES = contractRoutes(sandboxContract);
 
-// Whole groups where even the READ belongs to a higher tier than the method default would give.
+// Whole groups where even the read belongs to a higher tier than the method default would give.
 const PREFIX_FLOORS: readonly (readonly [string, MemberRole])[] = [
-    // Credentials belong to the operating tier. Maintainer is the highest revokable grant and intentionally has
-    // the owner's operating authority; ownership itself remains protected by the member-management gates.
+    // Credentials belong to the operating tier: maintainer is the highest revokable grant, short of owner.
     ["/secrets", "maintainer"],
-    // Connected services join the operating tier (they name accounts and reach, the map of what this sandbox
-    // can touch).
+    // Connected services join the operating tier: they name accounts and what this sandbox can reach.
     ["/capabilities", "maintainer"],
     // Daemon logs are the operator's diagnostic, not a stakeholder's feed.
     ["/logs", "maintainer"],
@@ -42,24 +29,21 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "system.presence": "viewer",
     // Opening a media file in the workspace view is a read; the ticket is strictly narrower than the bearer.
     "workspace.mediaTicket": "viewer",
-    /* Reporting that YOUR OWN page crashed. Below both defaults it would otherwise take: the `/logs` prefix is
-     * maintainer because reading the daemon's diagnostics is the operator's business, and an unlisted mutation
-     * floors at maintainer too. Neither applies to this one. The whole point is to hear from the browser that
-     * just broke, a viewer's browser breaks exactly as often as an owner's, and a viewer cannot raise their own
-     * role to tell anybody. Its blast radius is a capped append to a file of its own, plainly marked as a
-     * browser's word (logs/logs.routes.ts `report`), which is a smaller grant than the reads above it. */
+    // Reporting your own page crashed sits below both defaults on purpose: a viewer's browser breaks as often as an
+    // owner's, and they can't raise their own role to tell anyone.
+    // Its blast radius is a capped append to its own file, a smaller grant than the reads above it.
     "logs.report": "viewer",
-    // Driving agents, the collaborator grant. Work stays on isolated branches; what leaves the sandbox
-    // (land, discard, purge, approvals, the terminal) stays at the maintainer default.
+    // Driving agents, the collaborator grant.
+    // What leaves the sandbox (land, discard, purge, approvals, terminal) stays at the maintainer default.
     "agent.run": "collaborator",
     "agent.reply": "collaborator",
     "agent.steer": "collaborator",
     "agent.stop": "collaborator",
     "agent.rewind": "collaborator",
-    /* Resuming is starting the SAME turn again: the one a spent allowance or an outage cut short, with everything
-     * it originally carried. A tier that may start a turn and answer it but could not say "go on" after a
-     * refusal would leave every collaborator-driven automation one refusal from stuck. Auto-land is deliberately
-     * NOT here: arming it is a landing decision, and a collaborator's landings are requests. */
+    // Resuming is starting the same turn again (a spent allowance, an outage) with everything it originally carried;
+    // without it a collaborator-driven automation gets stuck on the first refusal.
+    // Auto-land is deliberately not here: arming it is a landing decision, and a collaborator's landings are only
+    // requests.
     "agent.resume": "collaborator",
     "agents.resumeAfterOutage": "collaborator",
     "agents.rename": "collaborator",
@@ -76,39 +60,26 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "system.usage": "maintainer",
 };
 
-/* THE ONE FLOOR THAT READS ITS TARGET, and the reason it has to.
- *
- * `/workspace/upload` is two acts wearing one address. Attaching a screenshot to a message is part of driving an
- * agent (the collaborator's grant) and lands at a known address, ATTACHMENTS_DIR. Saving a file in the explorer
- * is editing the shared workspace — the same act as move, copy, mkdir and delete, all of which floor at
- * maintainer. Floored at collaborator for the first, the route handed every member the second: a collaborator
- * could overwrite any file in the tree, then find the file they had just written impossible to rename or delete,
- * because its neighbours all sat a tier above. That asymmetry is what a member met first, and it read as the app
- * being broken rather than as a permission.
- *
- * So the address decides, and only for this route. `isAttachmentPath` folds `..` before matching, because the
- * path arrives in a query the caller wrote. A missing or non-attachment target gets the workspace floor, which
- * is the same answer its siblings give. */
+// /workspace/upload is two acts wearing one address: an attachment lands at ATTACHMENTS_DIR (collaborator's grant), but
+// any other target is editing the shared workspace like move/copy/delete (maintainer).
+// `isAttachmentPath` folds `..` before matching since the path arrives in a caller-written query; a missing or
+// non-attachment target gets the workspace floor.
 const uploadFloor = (target: string | undefined): MemberRole =>
     target !== undefined && isAttachmentPath(target) ? "collaborator" : "maintainer";
 
 // The hand-written (non-contract) routes that sit below the mutation default.
 const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
-    // Minting is deliberately cheap: each WebSocket upgrade floors its OWN redemption (ws-tickets.ts),
-    // the terminal at maintainer, the sign-in browser at owner.
+    // Minting is cheap: each upgrade floors its own redemption; terminal is maintainer, sign-in is owner.
     "/system/ws-ticket": "collaborator",
-    // Desktop pairing: the handler caps anyone below maintainer to port-mirror, so collaborators can mint
-    // a live-preview tunnel without touching the single-holder file-sync lock.
+    // Desktop pairing: below maintainer is capped to port-mirror, so collaborators can mint a preview tunnel.
     "/system/sync/pair": "collaborator",
-    // Giving up one's own grant must be reachable by every granted tier. The handler can remove only the
-    // verified caller, never another member or the owner.
+    // Giving up one's own grant is reachable by every tier; the handler removes only the verified caller.
     "/members/self": "viewer",
 };
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
-// `target` is the workspace path a byte-write addresses (the upload route's `?path=`), the only input any floor
-// reads beyond the method and the route. Absent for every other route, and for a caller that omitted it.
+// `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
 export const routeFloor = (method: string, path: string, target?: string): MemberRole => {
     const prefixed = PREFIX_FLOORS.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
     if (prefixed !== undefined) {

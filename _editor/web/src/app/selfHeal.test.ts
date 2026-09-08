@@ -1,26 +1,15 @@
 // @vitest-environment jsdom
-//
-// The last-line recovery: a crash inside the startup window reads as poisoned local state, so the app wipes
-// what this origin stored and reloads itself once: the mechanised version of the "clear site data" advice
-// that used to be the fix. These tests pin the once-ness (a crash that survives the clean slate must surface,
-// not loop) and the split across the reload (this page only MARKS the database wipe; the next boot performs
-// it before anything holds a connection open).
+// Last-line recovery: a crash inside the startup window reads as poisoned local state, so the app wipes what this
+// origin stored and reloads once. These tests pin the once-ness (a crash surviving the clean slate must surface,
+// not loop) and the split across the reload (this page only marks the database wipe; the next boot performs it).
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
-/* Static, and it is the graph's COMPILE this buys as much as the binding. Reporting a wipe reaches the daemon's
- * authenticated fetch, which drags the sandbox contract and vue-query in behind it, and compiling that cold
- * costs ~10s idle: charged to whichever test entered the graph first, out of the 20s a test is allowed
- * (vitest.config.ts), and on a runner with every core busy that is the whole budget. It duly passed alone and
- * lost the race in the suite. Up here it is the file's load instead, paid during collection and bounded by the
- * run, as in storageRule.test.ts and staleChunk.test.ts; the `load()` calls below then re-enter a warm graph.
- * The browser globals it reads at module scope are already in place: vitest.setup.ts installs them for the
- * package, before this file is loaded.
- *
- * The purge is also the half with no module state to reset (it reads a key and deletes what it finds), so the
- * last two tests drive this instance directly; only the healing half needs a fresh module per test. */
+// Hoisted to top level (like storageRule.test.ts, staleChunk.test.ts) so compiling the sandbox-contract/vue-query
+// graph it drags in is charged to file load, not a single test's budget. Only the healing half needs a fresh
+// module per test; the purge half has no module state to reset.
 import { purgeIfMarked } from "./selfHeal";
 
-// jsdom's window.location is unforgeable (see staleChunk.test.ts): the reload is observed through a replaced
-// global, resolved from the global scope at call time.
+// jsdom's `window.location` is unforgeable; the reload is observed through a replaced global, resolved at call
+// time.
 const reload = vi.fn();
 
 beforeAll(() => {

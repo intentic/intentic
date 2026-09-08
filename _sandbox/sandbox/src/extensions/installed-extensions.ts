@@ -11,8 +11,7 @@ import {
 } from "../capabilities/extension-dirs.js";
 import { readExtensionEnablement } from "./extension-enablement.js";
 
-// The daemon surface the extension enumerator needs, a structural subset of Services, so callers pass
-// `services` directly, and the narrow capability handler ctx passes a small adapter (it has the same fields).
+// Structural subset of Services the enumerator needs; callers pass `services` or a small adapter with the same fields.
 export interface ExtensionHost {
     readonly workspace: { readonly root: string };
     readonly files: { readonly read: (absPath: string) => Promise<string | undefined> };
@@ -20,30 +19,18 @@ export interface ExtensionHost {
     readonly config: { readonly extensionsDir: string };
 }
 
-/* The union of image-baked, git-installed and workspace extensions, the single enumerator every extension
- * consumer (agent plugin dirs, processes, settings, env, the list route) iterates, so a baked first-party
- * extension (ext-discord, ext-connectors) behaves identically to one a user cloned or one an agent wrote into
- * the workspace. Baked ones live under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout,
- * the iq-plugin precedent, no capability entry, not removable, present because they shipped in the image. The
- * web-builtin UI extensions bake their MANIFEST ONLY (the code is compiled into the web bundle). Workspace ones
- * live under .intentic/config/workspace-extensions/, one subdir per extension, consumed in place, no capability entry
- * and no install moment, which is why their parse failures are reported (extensionInventory) rather than
- * silently skipped. So every extension enumerates here and the Extensions tab is a complete list rather than a
- * view of one load path. */
+// Enumerates image-baked, git-installed, and workspace extensions as one list every consumer iterates.
+// Baked ones ship in the image (UI ones manifest-only); workspace ones report a parse failure instead of skipping it.
 
 export interface InstalledExtension {
-    // The routing handle: the capability entry id for a git-installed extension, or the manifest-derived
-    // publisher.name for a baked or workspace one (which have no capability entry).
+    // Routing handle: the capability entry id for a git-installed extension, else the manifest's publisher.name.
     readonly id: string;
     // The manifest's directory (config.path applied for git-installed).
     readonly dir: string;
     readonly manifest: ExtensionManifest;
-    // Where the code comes from, see ExtensionSummary. A workspace extension's dir is live-edited, so unlike
-    // the sha-pinned sources its code has no immutable identity (the bundle route hashes the bytes instead).
+    // Where the code comes from (ExtensionSummary); a live-edited workspace dir is hashed, not sha-pinned.
     readonly source: ExtensionSummary["source"];
-    // The owner's switch (extension-enablement.json). A disabled extension stays in THIS list, the Extensions
-    // tab needs its row to render the toggle, and drops out of enabledExtensions(), which is what every
-    // consumer that actually wires something up iterates.
+    // Owner's switch; a disabled extension stays listed (its row still renders) but drops from enabledExtensions().
     readonly enabled: boolean;
 }
 
@@ -69,11 +56,8 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
     return found;
 };
 
-/* The workspace-extension directories, and the ones that failed to be an extension. `taken` carries every
- * identity the other two sources already answer for, route ids AND manifest identities, because the switch and
- * the settings are keyed by publisher.name whatever the route id is, so a workspace extension can never shadow
- * a baked or installed one. The refusal is REPORTED, like a parse failure: with no install moment to reject it,
- * the list is where the author learns the id is the problem rather than the manifest. */
+// Workspace-extension directories, plus ones that failed to be one; `taken` holds every id other sources answer for.
+// A collision is reported like a parse failure, since there's no install moment to reject it at.
 const workspaceExtensions = async (
     services: ExtensionHost,
     enabledOf: (manifest: ExtensionManifest) => boolean,
@@ -110,33 +94,19 @@ const workspaceExtensions = async (
     return { extensions, invalid };
 };
 
-// Baked first (a baked id shadows a git-installed collision, install already rejects the collision, so this is
-// only a safety net), then the git-installed extension capabilities whose checkout still parses, then the
-// workspace extensions. Every row carries the owner's switch; nothing is filtered here (see enabledExtensions).
-// `invalid` is workspace-only by construction: the other sources were validated at bake or install time.
-/* THE EXTENSIONS WHOSE SWITCH IS FIXED ON, each is the sole control surface for an engine the daemon runs
- * regardless of any switch. Turning the page off would not stop the engine; it would only blind the owner to it:
- *   automations , the scheduler, the listeners and the approval queue fire turns (spend, edits) on their own.
- *   workflows   , a running workflow advances daemon-side, and its release-gate webhook answers CI, with the
- *                  page holding the only stop button.
- *   maintenance , the probe runner spends real machine time (audits hit the network, knip type-checks the
- *                  tree) on its own tick, and the panel is the only place that work is visible.
- * Keyed by manifest identity (publisher.name), the same key the enablement file uses. A CORE list on purpose,
- * never a manifest field: essentialness is a claim about the relationship between a daemon engine and its one
- * surface, and a field an extension could set on itself would be a pack making itself un-removable.
- *
- * Contrast approvals, which is NOT here though the daemon runs its executor on its own: that engine acts only on
- * items the owner already approved, so a hidden surface starves it rather than blinding anyone, fail-safe,
- * where these three fail-active. */
+// Baked first (a safety net; install already rejects the collision), then git-installed, then workspace.
+// Switch is fixed on for these three: each is the sole control surface for an engine the daemon runs regardless.
+// - automations: the scheduler, listeners and approval queue fire on their own.
+// - workflows: advances daemon-side; the page is its only stop button.
+// - maintenance: probes run on their own tick; the panel is the only visibility.
+// A core list, not a manifest field, so an extension cannot grant itself this. Approvals is fail-safe, not listed.
 export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows", "intentic.maintenance"]);
 
 export const extensionInventory = async (
     services: ExtensionHost,
 ): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
     const capabilities = await services.capabilities.list();
-    // Keyed by publisher.name, not the capability entry id, so the switch survives a remove/re-add. An
-    // essential extension reads enabled whatever the file says, a stale "false" written before the concept
-    // existed must not keep the scheduler's only window shut.
+    // Keyed by publisher.name so the switch survives remove/re-add; essential reads enabled despite a stale false.
     const enablement = await readExtensionEnablement(services.workspace.root);
     const enabledOf = (manifest: ExtensionManifest): boolean =>
         ESSENTIAL_EXTENSIONS.has(extensionIdOf(manifest)) || enablement[extensionIdOf(manifest)] !== false;
@@ -161,16 +131,13 @@ export const extensionInventory = async (
 
 export const installedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => (await extensionInventory(services)).extensions;
 
-/* What the daemon actually wires up. Only the Extensions tab (via the list route) wants the full set, a
- * disabled extension has to keep its row to keep its toggle. Everything below, and every consumer outside this
- * file, iterates THIS one, which is what makes the switch mean something: no agent plugin dir, no PATH entry,
- * no listener provider, no connector card, no env var, no autoStart process. */
+// What the daemon actually wires up; only the list route wants the full set (a disabled row still needs its toggle).
+// Every other consumer iterates this one: disabled means no plugin dir, PATH entry, listener, card, or env var.
 export const enabledExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> =>
     (await installedExtensions(services)).filter((extension) => extension.enabled);
 
-// The absolute dirs of installed extensions whose manifests contribute agent plugins, appended after
-// pluginDirsOf wherever the SDK's `plugins` option is built. contributes.agent.path is relative to the
-// extension root; the SDK's loader parses the internals (skills/agents/hooks/.mcp.json).
+// Absolute dirs of enabled extensions contributing agent plugins, appended after pluginDirsOf in the plugins option.
+// contributes.agent.path is relative to the extension root.
 export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<string[]> => {
     const dirs: string[] = [];
     for (const extension of await enabledExtensions(services)) {
@@ -183,8 +150,7 @@ export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<str
     return dirs;
 };
 
-// The absolute `bin` dirs of installed extensions that ship agent CLIs (contributes.bin), prepended to the
-// agent turn's PATH wherever the shell env is built, so a shipped tool (e.g. `discord-voice`) resolves by name.
+// Absolute `bin` dirs of enabled extensions shipping CLIs, prepended to the turn's PATH so a tool resolves by name.
 export const extensionBinDirsOf = async (services: ExtensionHost): Promise<string[]> => {
     const dirs: string[] = [];
     for (const extension of await enabledExtensions(services)) {
@@ -196,11 +162,8 @@ export const extensionBinDirsOf = async (services: ExtensionHost): Promise<strin
     return dirs;
 };
 
-// Every realtime-listener provider an ENABLED extension declares → the event types it emits
-// (contributes.listener), the gateway-backed sources, which is what the activity feed asks for and what the
-// listener routes serve a control surface under. Not the automations vocabulary: that is the trigger catalogue
-// (automations/catalog.ts), which also carries the daemon's own sources and keeps a disabled pack's row so the
-// automation standing on it stays readable.
+// Every realtime-listener provider an enabled extension declares, mapped to its event types; used by the activity feed.
+// Not automations' trigger catalogue (automations/catalog.ts), which also covers the daemon's own sources.
 export const listenerProvidersOf = async (services: ExtensionHost): Promise<Map<string, Set<string>>> => {
     const providers = new Map<string, Set<string>>();
     for (const extension of await enabledExtensions(services)) {

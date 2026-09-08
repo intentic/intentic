@@ -5,24 +5,14 @@ import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import { repoRoot } from "@intentic/constants/node";
 
-/* THE IMAGES THIS TIER RUNS, BUILT FROM THE BRANCH, not pulled as `:latest`.
- *
- * A gate that tests the last release is not a gate. So the api and the web SPA are built here from exactly the
- * same two Dockerfiles the release uses, with the push left off. That costs almost nothing to do honestly:
- * both files are pure `COPY` wrappers around a tree turbo has already built, so after any job that ran
- * `verify-platform` this is a cache replay and two short docker builds.
- *
- * It is a local image build rather than a bind-mount of the repository for one reason worth stating: mounting
- * this workspace's `node_modules` into a different base image is how prisma's native engines start failing for
- * reasons nobody can read, and the api's start-up runs prisma. The Dockerfiles already know how to assemble a
- * tree that works; borrowing them is cheaper than rediscovering why.
- */
+// Api and web images are built here from the release's own Dockerfiles, not pulled as `:latest`; both are COPY wrappers
+// around a turbo-built tree, so this is a cheap cache replay. Built as images, not bind-mounted, since mounting this
+// workspace's node_modules into a different base image breaks prisma's native engines.
 
 const run = promisify(execFile);
 const root = repoRoot(import.meta.url);
 
-// Local-only tags. No registry host, so nothing here can be pushed by accident and a `docker compose pull`
-// anywhere near this run skips them rather than asking Docker Hub for something that does not exist.
+// Local-only tags, no registry host, so nothing here can be pushed, and `docker compose pull` skips them.
 export const IMAGES = {
     api: `intentic-onboarding-api:local`,
     web: `intentic-onboarding-web:local`,
@@ -31,8 +21,7 @@ export const IMAGES = {
 
 const exec = async (command: string, args: string[], cwd: string, what: string): Promise<void> => {
     try {
-        // 20 minutes: a cold turbo cache builds the whole SPA here, and the ceiling exists to catch a hang
-        // rather than to measure a build. maxBuffer because vite is chatty and the default 1 MB truncates.
+        // Timeout catches a hang, not a measurement; maxBuffer is raised since vite's output exceeds the 1MB default.
         await run(command, args, { cwd, timeout: 20 * 60_000, maxBuffer: 64 * 1024 * 1024 });
     } catch (cause) {
         const message = errorMessage(cause);
@@ -40,12 +29,8 @@ const exec = async (command: string, args: string[], cwd: string, what: string):
     }
 };
 
-/* Build the images the shared world runs.
- *
- * `ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged. That is for iterating on a spec against a
- * world that has not changed; it is deliberately an opt-in, because a tier that skipped the build by default
- * would be a tier that silently tested yesterday's code.
- */
+// Builds the images the shared world runs. `ONBOARDING_SKIP_IMAGE_BUILD=1` reuses what's already tagged, for iterating
+// against an unchanged world; opt-in only, so the tier never silently tests yesterday's code.
 export const buildImages = async (): Promise<void> => {
     if (process.env[`ONBOARDING_SKIP_IMAGE_BUILD`] === `1`) {
         return;
@@ -59,8 +44,7 @@ export const buildImages = async (): Promise<void> => {
         `building the stand-in model`,
     );
 
-    // The workspace deps both apps COPY in. `docker:release` declares this as its `dependsOn`; running it
-    // explicitly is what lets the two builds below be pure COPYs of a tree that already exists.
+    // Workspace deps both apps COPY in; running it explicitly lets the builds below be pure COPYs.
     await exec(
         `pnpm`,
         [`turbo`, `run`, `build`, `--filter=@intentic/api`, `--filter=@intentic/web`],
@@ -68,8 +52,7 @@ export const buildImages = async (): Promise<void> => {
         `building the platform's api and web bundles`,
     );
 
-    /* The api's context is a PRUNED tree, a flat, symlink-free production install that the Dockerfile copies
-     * whole. `-f Dockerfile` is explicit because that tree carries its own copy of it. */
+    // Api's context is a pruned, flat production install; `-f Dockerfile` since that tree carries its own copy.
     const apiDir = join(root, `_platform/api`);
     await rm(join(apiDir, `deploy`), { recursive: true, force: true });
     await exec(`pnpm`, [`--filter=@intentic/api`, `deploy`, `--prod`, `./deploy`], apiDir, `pruning the api's production tree`);

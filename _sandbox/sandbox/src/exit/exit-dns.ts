@@ -1,22 +1,8 @@
 import { connect, type Socket } from "node:net";
 
-/* DNS over TCP, hand-rolled, for one reason: the query has to leave from the EXIT's address.
- *
- * Node's resolver cannot be told which source address to send from, and a lookup that goes out over the plain
- * uplink while the connection that follows goes out through Germany is a leak with teeth. It is not the IP
- * that leaks, the page still loads from the German address, it is that geo-aware CDNs and search engines route
- * on the RESOLVER's location, so the address says Berlin and the answers say wherever this sandbox is hosted.
- * That is the exact failure the feature is supposed to prevent, arriving silently.
- *
- * TCP rather than UDP because a TCP socket takes `localAddress` and a UDP one would need a bound port plus its
- * own retry logic, and every recursive resolver worth using serves DNS on TCP/53. One query, one connection,
- * no cache: a browser behind the proxy does its own caching, and a stale entry surviving a country switch is
- * worse than a few extra round trips.
- *
- * A/AAAA only, CNAMEs followed by reading the address records the server already put in the same answer, which
- * is what every recursive resolver returns. No zone walking, no EDNS, no DNSSEC: this resolves a hostname for
- * a proxied connection, it is not a resolver library.
- */
+// Hand-rolled DNS over TCP: queries must leave from the exit's own address, and Node's resolver cannot be told a source
+// address. TCP since only a TCP socket takes `localAddress`; one query per connection, no cache (the browser caches its
+// own). A/AAAA only, CNAMEs followed via records the server already returned.
 
 const DNS_PORT = 53;
 const QUERY_TIMEOUT_MS = 5_000;
@@ -24,8 +10,8 @@ const TYPE_A = 1;
 const TYPE_AAAA = 28;
 const CLASS_IN = 1;
 
-// A hostname as DNS wants it: each label length-prefixed, terminated by a zero length. Labels over 63 bytes
-// are illegal in DNS and rejected here rather than silently truncated into a different name.
+// Hostname as DNS wants it: each label length-prefixed, zero-terminated. Labels over 63 bytes are illegal and rejected
+// here, not silently truncated.
 export const encodeName = (host: string): Buffer => {
     const labels = host.replace(/\.$/, "").split(".");
     const parts: Buffer[] = [];
@@ -43,7 +29,7 @@ export const encodeName = (host: string): Buffer => {
 export const encodeQuery = (id: number, host: string, type: number): Buffer => {
     const header = Buffer.alloc(12);
     header.writeUInt16BE(id, 0);
-    // RD (recursion desired). Nothing else: no truncation games, no authoritative answer request.
+    // 0x0100 sets RD (recursion desired) only; no truncation flags, no authoritative-answer request.
     header.writeUInt16BE(0x0100, 2);
     header.writeUInt16BE(1, 4);
     const question = Buffer.concat([encodeName(host), Buffer.alloc(4)]);
@@ -52,8 +38,8 @@ export const encodeQuery = (id: number, host: string, type: number): Buffer => {
     return Buffer.concat([header, question]);
 };
 
-// Step over a name at `offset`, honouring compression pointers, and return where the record continues. Only
-// the LENGTH matters here (the names in answers are never needed), so this skips rather than decodes.
+// Steps over a name at `offset`, honouring compression pointers, and returns where the record continues. Only the
+// length matters, names in answers are never decoded.
 export const skipName = (message: Buffer, offset: number): number => {
     let at = offset;
     for (;;) {
@@ -64,7 +50,7 @@ export const skipName = (message: Buffer, offset: number): number => {
         if (length === 0) {
             return at + 1;
         }
-        // 0b11xxxxxx is a pointer: two bytes total and the name ends there.
+        // 0b11xxxxxx marks a pointer: two bytes total, and the name ends there.
         if ((length & 0xc0) === 0xc0) {
             return at + 2;
         }
@@ -72,16 +58,15 @@ export const skipName = (message: Buffer, offset: number): number => {
     }
 };
 
-// Every A/AAAA address in the answer section, in the order the server gave them (which is the order it wants
-// them tried). CNAME and everything else is stepped over: the addresses that matter are already in here.
+// Every A/AAAA address in the answer section, in the server's own order (the order it wants them tried). CNAME and
+// anything else is stepped over.
 export const decodeAnswers = (message: Buffer): string[] => {
     if (message.length < 12) {
         throw new Error("short DNS response");
     }
     const rcode = (message.readUInt16BE(2) & 0x0f) >>> 0;
     if (rcode !== 0) {
-        // 3 is NXDOMAIN, the only one worth naming: it means the host does not exist, not that the exit is
-        // broken, and a caller reporting it as a proxy fault would send someone hunting the wrong thing.
+        // 3 is NXDOMAIN: the host doesn't exist, not a broken exit; reporting it as a proxy fault misleads the caller.
         throw new Error(rcode === 3 ? "no such host" : `DNS server answered with error ${rcode}`);
     }
     const questions = message.readUInt16BE(4);
@@ -116,8 +101,8 @@ export const decodeAnswers = (message: Buffer): string[] => {
     return found;
 };
 
-// One query, one TCP connection, source-bound. The 2-byte length prefix is TCP DNS's framing; a response can
-// arrive across several segments, so the reader waits for the full declared length before parsing.
+// One query, one TCP connection, bound to the exit's source address. The 2-byte length prefix is TCP DNS framing; a
+// response can span several segments, so the reader waits for the full declared length.
 const askOnce = (server: string, localAddress: string | undefined, host: string, type: number): Promise<string[]> =>
     new Promise((resolve, reject) => {
         const query = encodeQuery(Math.floor(Math.random() * 0xffff), host, type);
@@ -160,17 +145,14 @@ const askOnce = (server: string, localAddress: string | undefined, host: string,
     });
 
 export interface ExitResolver {
-    // Resolvers to try in order. Public ones by default: an exit's own pushed resolver often belongs to the
-    // relay operator, which is exactly whose view of the world we are least interested in adopting.
+    // Resolvers to try in order; public ones by default, not an exit's pushed resolver (the operator's own view).
     readonly servers: readonly string[];
-    // The tunnel address queries leave from. Undefined for a provider that has no interface of its own (tor
-    // resolves at its exit and never comes through here).
+    // The tunnel address queries leave from; undefined when a provider has no interface (tor resolves at its exit).
     readonly localAddress?: string | undefined;
 }
 
-// Resolve a hostname through the exit. A4 first because it is what almost every destination wants and the
-// SOCKS reply is simpler for it; AAAA only when there is no A record at all. Every server is tried before the
-// lookup is called a failure, so one unreachable resolver is not an outage.
+// Resolves a hostname through the exit: A first (what most destinations want, and the simpler SOCKS reply), AAAA only
+// if no A record. Every server is tried before the lookup counts as failed.
 export const resolveThroughExit = async (resolver: ExitResolver, host: string): Promise<string> => {
     let last: Error | undefined;
     for (const server of resolver.servers) {
@@ -183,8 +165,8 @@ export const resolveThroughExit = async (resolver: ExitResolver, host: string): 
                 }
             } catch (error) {
                 last = error instanceof Error ? error : new Error(String(error));
-                // "no such host" is the destination's answer, not this resolver's failure: trying three more
-                // resolvers cannot make a name exist, and the wait is the caller's to pay.
+                // "no such host" is the destination's answer, not the resolver's fault; more resolvers won't make a
+                // name exist.
                 if (last.message === "no such host") {
                     throw last;
                 }

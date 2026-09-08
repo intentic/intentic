@@ -1,12 +1,8 @@
-/* The two rules `kb new` and `kb link` apply on the caller's behalf, separated from the command itself so they
- * can be tested without running a process, and so the command file stays a file that only ever runs. */
+// Rules `kb new` and `kb link` apply on the caller's behalf, split out so they're testable without running a process
+// and the command file only ever runs.
 
-/* `--link works_on=Intentic` → the header field `works_on: ["[[Intentic]]"]`.
- *
- * The brackets are ADDED rather than asked for. A relationship written without them is an ordinary string that
- * the graph cannot see, and that failure is invisible: the note looks right, the field is there, and the note
- * simply has no connections. Making the caller remember a syntax whose omission is silent is how a knowledge
- * base fills up with facts nothing can reach. */
+// `--link works_on=Intentic` becomes the header field `works_on: ["[[Intentic]]"]`; brackets are added since a plain
+// string is invisible to the graph, and the note silently gains no connection.
 export const linkFields = (pairs: readonly string[]): Map<string, string[]> => {
     const fields = new Map<string, string[]>();
     for (const pair of pairs) {
@@ -26,8 +22,8 @@ export const linkFields = (pairs: readonly string[]): Map<string, string[]> => {
 
 export const wikiLink = (target: string): string => (target.startsWith("[[") ? target : `[[${target}]]`);
 
-// A title as a filename. Deliberately lossy in one direction only: what comes out is always a safe path
-// segment, and the title itself is kept in the header, so nothing about the note depends on reading it back.
+// Title as a filename, lossy in one direction only: the slug is a safe path segment, and the title itself stays in the
+// header, so nothing reads the slug back.
 export const slugify = (title: string): string =>
     title
         .toLowerCase()

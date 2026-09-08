@@ -5,16 +5,9 @@ import { SANDBOX_INFO } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useEnvironment } from "../environment/useEnvironment";
 
-/* The sandbox daemon's self-report (/info): its running `version` and, once the daemon has checked GitHub,
- * the `latest` published release plus `updateAvailable`. ONE shared query (vue-query dedupes on the key) feeds
- * both the /sandbox hub card and the chip's attention list, mirroring useEnvironment. The update itself runs on
- * the host (the sandbox has no Docker socket), a button in the desktop app, a token-free one-liner in a
- * browser, both from HostRecreate.vue and both the same shape as the environment rebuild minus the hash (the
- * :stable base is trusted by its tag).
- *
- * `updateAvailable` is the whole of it: there is no per-version "don't tell me again" here, because there is
- * nothing left to silence. The fact wears a badge on the sandbox chip now, and a badge already goes quiet on
- * its own the moment it stops being true. */
+// Sandbox daemon's self-report (/info): running `version`, and once checked, `latest` and `updateAvailable`. One shared
+// query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
+// the sandbox; no per-version dismiss, since the fact just badges the chip and clears itself.
 
 const INFO_KEY = SANDBOX_INFO.of();
 
@@ -29,28 +22,16 @@ export function useSandboxVersion() {
     const installed = computed(() => info.value?.version);
     const latest = computed(() => info.value?.latest);
     const updateAvailable = computed(() => info.value?.updateAvailable === true);
-    // What the update contains, and how much of it didn't fit, the daemon caps the list (see MAX_UPDATE_NOTES)
-    // so a sandbox left alone for weeks gets a card rather than a scroll. Empty is the ordinary case for a
-    // release that changed nothing a user would notice, and the card simply omits the section.
+    // What the update contains; the daemon caps the list (see MAX_UPDATE_NOTES) and reports the overflow. Empty is
+    // ordinary for a release with nothing user-visible.
     const updateNotes = computed<readonly string[]>(() => info.value?.updateNotes ?? []);
     const moreUpdateNotes = computed(() => info.value?.moreUpdateNotes ?? 0);
-    // What the update TAKES AWAY, uncapped, unlike the notes: their presence is what turns the card from an
-    // offer into a warning that asks to be read before it hands over the command.
+    // What the update takes away, uncapped: their presence turns the card from an offer into a warning.
     const breakingNotes = computed<readonly string[]>(() => info.value?.breakingNotes ?? []);
 
-    /* WHETHER THE UPDATE HAS ALREADY BEEN DOWNLOADED, the fact that decides what taking it costs, and the one
-     * the card had no way to know until the host started saying so (see platform/staged-update.ts).
-     *
-     * An update is not one kind of work. Pulling the image and rebuilding the environment recipe are the
-     * minutes; the restart at the end is the seconds. The sandbox is up and serving through the first part, so
-     * a card that quotes the whole span as downtime is describing an outage that does not happen, and "a few
-     * minutes, this page loses the sandbox" is a completely different decision from "about half a minute",
-     * especially on a card that also says three agents are mid-turn.
-     *
-     * A staged update with no version on it still counts as ready: the version is a nicety the image may not
-     * report, and treating its absence as "nothing is staged" would throw away the whole benefit. What does
-     * NOT count is a staged update a newer release has overtaken since, applying that gives the older one,
-     * and `stagedBehind` is what lets the card say so instead of promising the newer one. */
+    // Whether the update is already downloaded, which decides what taking it costs (a restart, not a download). A
+    // staged update with no version still counts ready; one a newer release has overtaken doesn't (`stagedBehind` names
+    // it).
     const staged = computed(() => info.value?.staged);
     const updateStaged = computed(() => {
         const ready = staged.value;
@@ -58,19 +39,14 @@ export function useSandboxVersion() {
     });
     const stagedBehind = computed(() => (staged.value !== undefined && !updateStaged.value ? staged.value.version : undefined));
 
-    /* Which agent runtimes can serve a turn right now, keyed by AgentCapabilities.runtime, the daemon probes
-     * this off the turn path so a picker can say a subscription is missing BEFORE the user writes a prompt.
-     *
-     * `unknown` and absent both mean "not verified", and both are deliberately NOT rendered as a problem: the
-     * probe failing must never grey out a provider that in fact works. Only an explicit `unavailable` is worth
-     * showing, and it arrives with the sentence naming what to connect. */
+    // Whether a runtime can serve a turn right now. `unknown` or absent means unverified and is never shown as a
+    // problem; only an explicit `unavailable` is, with the daemon's own sentence.
     const runtimeIssue = (runtime: string): string | undefined => {
         const health = info.value?.runtimes?.[runtime];
         return health?.state === `unavailable` ? (health.detail ?? `This runtime can't serve a turn right now.`) : undefined;
     };
 
-    // Which sandbox a recreate would name, the container comes from /environment (the daemon returns it even
-    // without an overlay). HostRecreate turns this into a button in the desktop app and a command elsewhere.
+    // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
     return {
@@ -86,9 +62,8 @@ export function useSandboxVersion() {
         runtimeIssue,
         serverManaged,
         slug,
-        // The /info read is out. Everything above reads as "the sandbox didn't say" until it lands, which is
-        // indistinguishable from "the sandbox says nothing", so a surface that draws a block only when a fact
-        // is present needs this to tell the two apart.
+        // The /info read is still out; without this, "the sandbox hasn't said" looks identical to "the sandbox says
+        // nothing".
         isLoading: query.isLoading,
     };
 }

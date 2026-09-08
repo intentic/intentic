@@ -4,9 +4,8 @@ import type { Persona } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { effectScope, type EffectScope, ref } from "vue";
 
-/* THE COMPOSER'S HALF OF PERSONA ROUTING: when the daemon is asked, what the answer becomes on the composer, and
- * what a send does with it. The reading itself is the daemon's (persona-router.test.ts); here it is a mocked
- * call, so every claim is about the gates, the modes and the one-reading-per-text rule. */
+// Pins the composer's half of persona routing: what a mocked daemon answer becomes on screen, and what a send does with
+// it. Gates, modes, and one-reading-per-text are what this tests, not the daemon's own reading.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
@@ -26,7 +25,7 @@ vi.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`
 const { SEND_WAIT_MS, SETTLE_MS, usePersonaRoute } = await import("./personaRoute");
 type Chat = Parameters<typeof usePersonaRoute>[0] extends () => infer C ? C : never;
 
-// Only what routing reads and writes; a real Conversation drags a transcript and a stream behind it.
+// Only the fields routing reads and writes; a real Conversation drags a transcript and stream along.
 const wearModel = vi.fn();
 const chatWith = (over: Record<string, unknown> = {}): Chat =>
     ({
@@ -45,9 +44,8 @@ const settle = async (): Promise<void> => {
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
 };
 
-/* Each test's composables live in a scope that is stopped after it, as a pane's setup scope would be on
- * unmount: a watcher left running from an earlier test would wake on the next test's settings change and
- * spend the reading that test had queued for its own chat. */
+// Each test's composables run in a scope stopped afterward, as a pane's would be on unmount; a watcher left running
+// could otherwise fire on the next test's settings change.
 let scope: EffectScope;
 const route = (chat: Chat, draft: () => string): ReturnType<typeof usePersonaRoute> => scope.run(() => usePersonaRoute(() => chat, draft))!;
 
@@ -70,7 +68,6 @@ test("suggest is the default: a settled draft is read once, and the answer is of
     answer(`backend`, `The message reads like Backend's work.`);
     const routing = route(chat, () => draft.value);
 
-    // Nothing before the pause: a call per keystroke would be a small model call per keystroke.
     expect(sandboxJson).not.toHaveBeenCalled();
     await settle();
     expect(sandboxJson).toHaveBeenCalledTimes(1);
@@ -79,14 +76,11 @@ test("suggest is the default: a settled draft is read once, and the answer is of
 
     expect(routing.preview.value).toMatchObject({ kind: `suggest`, persona: { id: `backend` }, reason: `The message reads like Backend's work.` });
     expect(chat.actsAs.value).toBeUndefined();
-    // A send in suggest waits for nothing and applies nothing.
     expect(routing.beforeSend(draft.value)).toBeUndefined();
 
-    // The press puts the card on, and its ladder's head with it.
     routing.press();
     expect(chat.actsAs.value).toBe(`backend`);
     expect(wearModel).toHaveBeenCalledWith({ provider: `claude`, model: `claude-opus-5`, effort: `max` });
-    // …and the chip is gone: the pill says who the chat is now.
     expect(routing.preview.value).toBeUndefined();
 });
 
@@ -97,11 +91,10 @@ test("the same words are never read twice, and new words are read again after th
     const routing = route(chat, () => draft.value);
     await settle();
     expect(sandboxJson).toHaveBeenCalledTimes(1);
-    // Trailing whitespace is the same message.
+    // Trailing whitespace counts as the same message.
     draft.value = `please fix the login flow   `;
     await settle();
     expect(sandboxJson).toHaveBeenCalledTimes(1);
-    // More words: the earlier answer stays on the chip until the new one lands.
     draft.value = `please fix the login flow, and post about it`;
     answer(`social`);
     expect(routing.preview.value).toMatchObject({ persona: { id: `backend` } });
@@ -151,12 +144,10 @@ test("auto shows the card that will go on, the press declines it, and a pick by 
 
     routing.press();
     expect(routing.preview.value).toMatchObject({ kind: `held` });
-    // Held, a send waits for nothing and applies nothing.
     expect(routing.beforeSend(`please fix the login flow`)).toBeUndefined();
     routing.press();
     expect(routing.preview.value).toMatchObject({ kind: `route` });
 
-    // "Anyone" at the pill is a decision, and it stands: the chip does not come back.
     routing.byHand();
     expect(routing.preview.value).toMatchObject({ kind: `held` });
     expect(routing.beforeSend(`please fix the login flow`)).toBeUndefined();
@@ -166,7 +157,7 @@ test("auto applies the reading at send, waiting briefly for one still in flight"
     settings.value = { ...settings.value, personaRouting: `auto` };
     const chat = chatWith();
     const routing = route(chat, () => `please fix the login flow`);
-    // Sent before the draft settled: nothing has been asked yet, so the send asks now and waits for it.
+    // Sent immediately, before the draft settles, so beforeSend does the asking itself.
     let resolve!: (value: unknown) => void;
     sandboxJson.mockReturnValueOnce(new Promise((done) => (resolve = done)));
     const wait = routing.beforeSend(`please fix the login flow`);

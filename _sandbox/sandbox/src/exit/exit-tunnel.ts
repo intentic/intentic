@@ -3,38 +3,24 @@ import { exitInterface, exitProxyPort } from "./exit-paths.js";
 import { awaitInterfaceAddress, bareAddress, installExitRoute, removeExitRoute } from "./exit-routing.js";
 import { type SocksHandle, startSocks } from "./exit-socks.js";
 
-/* THE SHARED HALF OF EVERY TUNNEL-BASED PROVIDER. VPN Gate and WireGuard differ entirely in how they dial and
- * not at all in what happens once an interface exists: wait for its address, route that address into the
- * exit's private table, and publish a SOCKS proxy that binds outbound sockets to it.
- *
- * Tor uses none of this. It has no interface, no routing and its own SOCKS port, which is exactly why it is
- * the provider that needs no container privileges.
- */
+// The shared half of every tunnel-based provider: once an interface exists, wait for its address, route it into the
+// exit's private table, and publish a SOCKS proxy bound to it. Tor needs none of this: no interface, no routing, its
+// own SOCKS port, which is why it needs no container privileges.
 
-// Public resolvers, deliberately not the ones the tunnel pushes. A volunteer relay's own resolver is run by
-// the volunteer, and adopting it hands them every hostname the exit is asked for on top of the traffic they
-// already carry. These are queried FROM the tunnel address, so they see the exit, not this sandbox.
+// Not the tunnel's pushed resolver (the relay operator's own); queried from the tunnel address, so they see it.
 const PUBLIC_RESOLVERS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"] as const;
 
-// A tunnel that has not been assigned an address by now is not coming up. Shorter than the dial timeout on
-// purpose: by this point the client has already reported success, so the address is the only thing outstanding.
+// Shorter than the dial timeout: by now the client already reported success, so only the address is outstanding.
 const ADDRESS_TIMEOUT_MS = 30_000;
 
-/* Live proxies, by exit id. Daemon-process memory, and the one piece of this subsystem that is NOT read off
- * the machine, because a listening socket genuinely lives in this process and nowhere else.
- *
- * The consequence is handled rather than ignored: after a daemon restart the tunnel client may still be
- * running while its proxy is gone. `ensureProxy` is idempotent so the boot restore can re-publish it without
- * touching the tunnel, and `proxyBound` is what lets a probe report that gap as "starting" instead of
- * claiming an exit is up when nothing can reach it. */
+// Daemon-process memory, not read off the machine: a listening socket only exists here. After a restart the tunnel may
+// run while its proxy is gone; ensureProxy re-publishes it, and proxyBound reports that gap as starting, not up.
 const proxies = new Map<string, SocksHandle>();
 
 export const proxyBound = (id: string): boolean => proxies.has(id);
 
-/* Publish (or re-publish) the SOCKS proxy for an exit whose interface is already up. Idempotent: called on an
- * exit that already has one, it leaves it alone, which is what makes it safe for both a fresh start and a
- * post-restart repair. The routing is re-installed each time because it is equally idempotent and because a
- * re-dial to another server can hand back a different tunnel address. */
+// Publishes (or re-publishes) the SOCKS proxy for an interface already up; idempotent, safe for a fresh start or a
+// post-restart repair. Routing reinstalls every time too, since a re-dial can hand back a different address.
 export const ensureProxy = async (id: string): Promise<string> => {
     const name = exitInterface(id);
     const address = await awaitInterfaceAddress(name, ADDRESS_TIMEOUT_MS);
@@ -51,17 +37,15 @@ export const ensureProxy = async (id: string): Promise<string> => {
     return address;
 };
 
-// Drop the proxy and the routing, leaving the tunnel client itself to the driver. Split that way because a
-// country switch tears these down and puts them straight back up around a new dial, while the client's
-// lifecycle differs per provider.
+// Drops the proxy and routing, leaving the tunnel client to the driver: a country switch tears these down and rebuilds
+// them around a new dial, while the client's lifecycle differs per provider.
 export const dropProxy = async (id: string): Promise<void> => {
     await proxies.get(id)?.close();
     proxies.delete(id);
     await removeExitRoute(id);
 };
 
-// The tunnel's current address, or undefined when the interface is gone. Used by the drivers' `observe`,
-// which asks the outside world what it sees from exactly this address.
+// The tunnel's current address, or undefined once the interface is gone; used by a driver's `observe`.
 export const tunnelAddress = async (id: string): Promise<string | undefined> => {
     const address = await interfaceAddress(exitInterface(id));
     return address === undefined ? undefined : bareAddress(address);

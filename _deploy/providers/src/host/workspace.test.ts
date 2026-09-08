@@ -15,8 +15,7 @@ const fakeSsh = (
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            // Both image + tools-digest reads are `docker inspect`; distinguish by the label template (the
-            // run command also carries an `intentic.tools=` label, so this must stay inside the inspect branch).
+            // Both image and tools-digest reads are `docker inspect`; distinguish by the label in the command.
             if (command.includes("docker inspect")) {
                 return res(command.includes("intentic.tools") ? (opts.tools ?? "") : (opts.image ?? IMAGE));
             }
@@ -100,8 +99,7 @@ test("apply forwards the agent tools as base64 INTENTIC_AGENT_TOOLS + stamps the
     await createWorkspaceProvider(ssh.executor).apply({ ...inputs, tools: [TOOL] }, undefined, ctx());
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
     const encoded = /-e INTENTIC_AGENT_TOOLS=(\S+)/.exec(run)?.[1];
-    // Base64, which is the whole reason this variable exists: the tools ride encoded so their quotes and
-    // newlines never meet a shell. A raw JSON blob here would satisfy "something was captured" and fail in use.
+    // Base64 so the tools' quotes/newlines never meet a shell; raw JSON would pass while still failing in use.
     expect(encoded).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
     // The value round-trips: base64 → JSON → the resolved tools the agent connects to.
     expect(JSON.parse(Buffer.from(encoded as string, "base64").toString("utf8"))).toEqual([TOOL]);
@@ -123,9 +121,7 @@ test("diff updates when the agent tools change (digest drift), and is noop again
     // The digest apply stamps on the container is exactly what diff treats as a noop (no needless recreate).
     await provider.apply(withTools, undefined, ctx());
     const digest = /--label intentic\.tools=(\S+)/.exec(ssh.commands.find((c) => c.includes("docker run")) ?? "")?.[1];
-    // A non-empty token. The empty-string case is the one that matters: the line below feeds this straight back
-    // into `diff`, and an empty digest against an empty stored label compares equal, so the noop it asserts
-    // would hold for a container that was stamped with nothing at all.
+    // Must be non-empty: an empty digest would equal an empty stored label and falsely pass as noop.
     expect(digest).toMatch(/^\S+$/);
     expect(provider.diff(withTools, { outputs: {}, detail: { image: IMAGE, tools: digest as string } })).toEqual({ action: "noop" });
 });
@@ -136,15 +132,12 @@ test("apply ensures the network, then runs the sandbox unprivileged with interna
     expect(outputs).toEqual(OUTPUTS);
     expect(ssh.commands.some((c) => c.includes("docker network") && c.includes("intentic-workspace"))).toBe(true);
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
-    // Unprivileged by default: the HOST's docker socket is never mounted, no root override, and no
-    // privileges or devices without an overlay carrying runtime directives.
+    // Unprivileged by default: no docker socket, root override, or privileges without an overlay's directives.
     expect(run).not.toContain("--privileged");
     expect(run).not.toContain("--user root");
     expect(run).not.toContain("/var/run/docker.sock");
     expect(run).not.toContain("--device=");
-    // The ONE capability the base run carries: SYS_ADMIN, so the daemon can give each isolated agent turn its
-    // own mount namespace over the container's OWN filesystem (the sandbox's agents/isolation.ts). Scoped to
-    // this container; still no host reach. Every other capability stays overlay-gated.
+    // SYS_ADMIN is the only base capability, for per-turn mount namespaces; every other stays overlay-gated.
     expect(run).toContain("--cap-add=SYS_ADMIN");
     expect(run).not.toContain("--cap-add=NET_ADMIN");
     // Both ports bind the host's internal ip (the tunnel reaches them; the public interface does not).
@@ -185,14 +178,14 @@ test("apply with an overlay dockerfile builds it (base64 → stdin) BEFORE recre
     const encoded = /printf '%s' (\S+) \| base64 -d/.exec(ssh.commands[buildIndex] as string)?.[1];
     expect(Buffer.from(encoded as string, "base64").toString("utf8")).toBe(DOCKERFILE);
     expect(ssh.commands[buildIndex]).toContain(`-t ${ENV_IMAGE}`);
-    // The container runs the built image with the FULL hash the daemon reads back as applied.
+    // The container runs the built image with the full hash the daemon reads back as applied.
     const run = ssh.commands[runIndex] as string;
     expect(run).toContain(`-e SANDBOX_ENVIRONMENT_HASH=${DOCKERFILE_HASH}`);
     expect(run).toContain(`-e SANDBOX_IMAGE=${ENV_IMAGE}`);
     expect(run.endsWith(` ${ENV_IMAGE}`)).toBe(true);
     // The overlay's runtime directives become allowlisted docker flags.
     expect(run).toContain("--device=/dev/net/tun --cap-add=NET_ADMIN");
-    // rm + run ride ONE exec so an in-sandbox self-apply isn't killed between them.
+    // rm + run ride one exec so an in-sandbox self-apply isn't killed between them.
     expect(run).toContain(`docker rm -f ${CONTAINER}`);
 });
 

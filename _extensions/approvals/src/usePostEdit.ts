@@ -2,32 +2,11 @@ import type { ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-con
 import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { type PostEdit, postEdit } from "./postText";
 
-/* EDITING A POST IN PLACE, the state behind the pencil, kept out of the page so it can be tested without one.
- *
- * POSTS ONLY. The words of a post are the thing being approved, and a proposal one word off should not have to
- * be thrown away and re-asked for. An ACTION is different: its `details` are the agent's description of what it
- * will do and its `instructions` are its brief to itself, and an owner rewriting either is approving something
- * the agent never proposed. An action that is not right is rejected, and the agent asked again.
- *
- * IT SAVES AS YOU TYPE, and losing the Save button is the whole point rather than a side effect. The first
- * version had Save and Cancel appear under the post while the row's own Approve and Reject vanished, so a click
- * on the pencil rearranged four controls: you looked back at a row whose buttons had all moved and had to find
- * your place in it again. Nothing here is transactional enough to deserve that. A post file is not a form
- * submission, it is the post, sitting in a queue, unpublished until a separate decision, so typing into it
- * writes it, exactly as the acceptance panel writes a story (StoryRow.vue, which is where this pattern is from).
- * The row keeps every control it had, in the same place, and only the words become editable.
- *
- * A BASELINE, SO READING IS NEVER WRITING. `written` is what last reached the daemon; an edit that comes back
- * to where it started writes nothing, and opening a post to re-read it before approving never touches the file.
- * That is also what makes the debounce safe to keep short.
- *
- * FLUSH IS PART OF THE CONTRACT, not a tidy-up. The gap between the last keystroke and the write is exactly
- * where Approve lives, someone fixes a word and immediately approves, and a post published from the copy the
- * list is holding would go out with that word still wrong. Every path that leaves the editor goes through
- * `flush` first: closing it, opening another one, and the approve click itself. */
+// State behind the pencil, kept out of the page so it's testable without one. Posts only: an edited action would
+// approve something never proposed, so a bad one is rejected instead. Saves as typed, with a baseline so reading never
+// writes; every exit path (`close`, `open` another, approve) flushes first.
 
-// Long enough that ordinary typing is one write rather than thirty, short enough that the gap Approve has to
-// close is never something a person could get ahead of. The acceptance panel's number, for the same job.
+// Long enough that typing is one write, not thirty; short enough Approve can't outrun the save.
 const SAVE_AFTER_MS = 700;
 
 export interface PostEditState {
@@ -52,8 +31,7 @@ export const usePostEdit = (write: (post: PostApprovalSummary, changes: PostEdit
     const content = ref(``);
     const title = ref(``);
 
-    // The post as the daemon last had it, the comparison baseline, advanced on every successful write so a
-    // second flush with nothing new to say stays silent. Not a ref: no template reads it.
+    // Last state the daemon had; advances on every write so a second flush with nothing new stays silent.
     let baseline: PostApprovalSummary | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -68,8 +46,7 @@ export const usePostEdit = (write: (post: PostApprovalSummary, changes: PostEdit
             return;
         }
         const target = baseline;
-        // Advance the baseline BEFORE awaiting: a keystroke landing mid-write must be measured against what is
-        // on its way to disk, or the next flush re-sends the same change.
+        // Advanced before awaiting: a keystroke mid-write must compare against what's already on its way to disk.
         baseline = { ...target, ...changes };
         await write(target, changes);
     };
@@ -95,8 +72,7 @@ export const usePostEdit = (write: (post: PostApprovalSummary, changes: PostEdit
             clearTimeout(timer);
             timer = setTimeout(() => void flush(), SAVE_AFTER_MS);
         },
-        // Reading the field rather than the row is what keeps the footer's count honest while typing, it is
-        // the one fact on the row that has to move with the words, since it is the reason a post can fail.
+        // Reads the live field, not the row, so the footer's count moves with each keystroke, not the last save.
         liveLength: (post) => (editingId.value === post.id ? content.value.length : post.content.length),
         anyOpen: computed(() => editingId.value !== undefined),
     };

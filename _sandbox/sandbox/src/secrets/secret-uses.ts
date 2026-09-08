@@ -1,17 +1,9 @@
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* THE AUDIT TRAIL: one row per moment a stored secret actually LEFT, resolved into a shell command or typed
- * into a browser field. Substitution turns "the agent mentioned a secret" into "the agent spent one", and the
- * moment that happens must be visible somewhere the owner already looks; the secrets view joins these rows
- * onto its inventory as each entry's "last used".
- *
- * NEVER a value, and never the full command: the command text is reference-form by construction (resolution
- * is what fires the record), but it can name OTHER secrets and paths, `detail` keeps only the head of the
- * line, enough to answer "used where" without archiving the agent's shell history a second time.
- *
- * Capped, newest last. This is a "what happened recently" surface, not a ledger, the conversation transcript
- * remains the full record of what ran. */
+// One row per moment a stored secret actually left (resolved into a command, typed into a browser field), joined onto
+// the inventory as "last used". Never a value or the full command: `detail` keeps only the head of the line. Capped and
+// newest-last; the conversation transcript is the full record.
 
 const USE_CAP = 200;
 export const DETAIL_MAX = 80;
@@ -19,18 +11,11 @@ export const DETAIL_MAX = 80;
 const SecretUseSchema = z.object({
     // The registry name the reference carried, `CLOUDFLARE_API_TOKEN`, `reddit/password`.
     name: z.string(),
-    // Which exit spent it: resolved into a shell command, resolved into a JS run's script, or typed into a
-    // browser field.
+    // Which exit spent it: a shell command, a JS run's script, or a typed browser field.
     lane: z.enum(["shell", "code", "browser"]),
     // Where it went, in the reader's terms: the head of the agent's command line, or the page's host.
     detail: z.string().optional(),
-    /* WHO RELEASED IT, for a name the owner put behind a named approver (secrets/credential-gate.ts). An
-     * email, off the VERIFIED identity on the reply that released it, never off anything a click claimed —
-     * which is what makes this row an audit line rather than a decoration. Absent on an ungated use, which
-     * is nearly every row: a person is recorded only where a person was actually asked.
-     *
-     * Still never a value, and the rule this file opens with is unchanged: names, destinations and now the
-     * approver's address. */
+    // The verified email that released a gated use, never from an unverified click; absent on an ungated use.
     approvedBy: z.string().optional(),
     // Epoch ms, the store's clock, stamped at record time.
     at: z.number(),
@@ -59,8 +44,7 @@ export const fileSecretUses = (path: string): SecretUsesStore => {
     };
 };
 
-// The newest row per name, what the inventory join reads. Rows are appended in time order, so the last
-// mention wins by construction.
+// The newest row per name; rows are appended in time order, so the last one wins by construction.
 export const lastUseByName = (uses: readonly SecretUse[]): ReadonlyMap<string, SecretUse> => {
     const byName = new Map<string, SecretUse>();
     for (const use of uses) {

@@ -1,8 +1,6 @@
 import { expect, test } from "vitest";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
-// The two directions have to agree, because the daemon writes one and reads the other back: a skill saved on the
-// Skills surface is re-listed by parsing the very file the save composed.
 test("a composed skill round-trips through the parser", () => {
     const doc = skillDocument("release-notes", "Use when drafting release notes.", "# Notes\n\nRun `git log`.");
     expect(parseSkillFile(doc)).toEqual({
@@ -12,9 +10,8 @@ test("a composed skill round-trips through the parser", () => {
     });
 });
 
-/* The value that would silently change what the frontmatter MEANS. A description reading "Use when: the user asks"
- * is an ordinary sentence and a YAML mapping at the same time, and written bare it makes the whole block
- * unparseable, which reaches the user as a skill the agent never picks, with nothing on screen looking wrong. */
+// A colon makes a description read as a YAML mapping too; written bare, it makes the frontmatter unparseable, silently,
+// with no sign on screen that a skill just stopped loading.
 test("a description containing a colon survives composing and parsing", () => {
     const description = `Use when: the user asks for a "changelog" #now`;
     const parsed = parseSkillFile(skillDocument("notes", description, "body"));
@@ -27,8 +24,7 @@ test("a multi-line description is written as one line rather than a folded block
     expect(parseSkillFile(doc).description).toBe("First line. Second line.");
 });
 
-// Frontmatter written by hand or by another tool: an indented continuation is how a long description arrives, and
-// dropping it would truncate the one line the model routes on.
+// An indented continuation is how a hand-written frontmatter's long description arrives.
 test("an indented continuation line appends to the value above it", () => {
     const parsed = parseSkillFile(`---\nname: kb\ndescription: Use this\n  when the user asks about notes\n---\n\nBody here.\n`);
     expect(parsed).toEqual({ name: "kb", description: "Use this when the user asks about notes", body: "Body here.\n" });
@@ -39,17 +35,18 @@ test("a quoted value is unquoted, and unknown keys are ignored", () => {
     expect(parsed).toEqual({ name: "kb", description: "Notes", body: "Body" });
 });
 
-/* A file this cannot read still has to be listable: the Skills surface promises to show everything the agent is
- * carrying, so an unreadable frontmatter degrades to "no description" and the whole file as body, never to a
- * missing row. Three shapes reach here: no frontmatter, an unclosed fence, and an empty declaration. */
+// An unreadable frontmatter degrades to no description and the whole file as body, never a missing row. Three shapes
+// reach here:
+// no frontmatter
+// an unclosed fence
+// an empty declaration
 test("a file with no readable frontmatter parses as body-only", () => {
     expect(parseSkillFile(`# Just markdown\n`)).toEqual({ body: `# Just markdown\n` });
     expect(parseSkillFile(`---\nname: unterminated\n`)).toEqual({ body: `---\nname: unterminated\n` });
     expect(parseSkillFile(`---\n---\nBody`)).toEqual({ body: `Body` });
 });
 
-// An indented line before any key belongs to no field: it must not be attached to whatever was parsed last from
-// some earlier call, which is the bug a shared `last` across invocations would produce.
+// Guards against a shared `last` state leaking a continuation into whatever the previous call parsed.
 test("a continuation with nothing above it is dropped", () => {
     expect(parseSkillFile(`---\n  orphan\nname: kb\n---\nBody`)).toEqual({ name: "kb", body: "Body" });
 });

@@ -5,21 +5,11 @@ import { RPCHandler } from "@orpc/server/websocket";
 import { createWebExtRouter } from "./router.js";
 import { store } from "./store.js";
 
-/* THE ONE SOCKET, this browser's instance of the peer dial (sandbox-contract's peer-dial.ts owns the two-phase
- * socket, the handler-before-hello rule, the backoff ladder and the 1008 rule).
- *
- * WHAT IS DIFFERENT FROM THE MACHINE AGENT'S VERSION is the lifetime, and it decides the shape. An MV3 service
- * worker is not a process: Chrome kills it after ~30 seconds of inactivity and rebuilds it on the next event.
- * Three consequences, all of them visible below:
- *
- *   · WebSocket traffic counts as activity, and the sandbox heartbeats every 20 seconds, so an established
- *     link keeps its own worker alive. This is why the daemon's heartbeat is 20s and not the machine hub's 30.
- *   · A worker that dies anyway takes the socket with it. So the reconnect cannot live only in the loop's own
- *     retry — an alarm (main.ts) calls `ensureLink` on a timer, and a fresh worker re-dials from storage.
- *   · Nothing may be held in module state that matters. The token, the scopes and the pause switch are all in
- *     storage; what is here is only the live link, which is meaningless once the worker is gone. So the
- *     pairing is READ PER ATTEMPT: a code redeemed while the loop was waiting on its ladder dials the new
- *     sandbox, and a pairing forgotten in the meantime ends the loop. */
+// This browser's peer-dial socket (sandbox-contract/peer-dial.ts), shaped by the MV3 service worker's lifetime
+// (Chrome kills it after ~30s idle):
+// - WebSocket traffic + a 20s sandbox heartbeat keep an established link's worker alive.
+// - A dead worker takes the socket with it; an alarm (main.ts) redials on a timer instead.
+// - No durable state lives here: token, scopes, pause switch are all in storage; pairing is read fresh per attempt.
 
 let link: PeerLink | undefined;
 
@@ -27,9 +17,8 @@ export const linkState = (): "open" | "connecting" | "closed" => link?.state() ?
 
 const version = (): string => chrome.runtime.getManifest().version;
 
-/* Open the socket if it is not already open. Idempotent, and every entry point calls it: install, startup, the
- * keepalive alarm, and finishing a pairing. A connector whose reconnection depends on one clever place is a
- * connector that is offline whenever that place did not run. */
+// Opens the socket if not already open; idempotent, so every entry point (install, startup, the keepalive alarm,
+// finishing a pairing) can call it without coordinating.
 export const ensureLink = async (): Promise<void> => {
     if (link !== undefined && link.state() !== "closed") {
         return;
@@ -51,9 +40,8 @@ export const ensureLink = async (): Promise<void> => {
         silenceMs: peerLinkSilenceMs(WEBEXT_HEARTBEAT_MS),
         // Nothing reads a log here: the popup's activity list is written by the calls themselves.
         log: () => undefined,
-        /* The sandbox revoked this browser. Forgetting the pairing is the honest response: the token is now
-         * worthless, and a stored credential that cannot be used is a thing that looks connected in the popup
-         * and never will be. The line in the activity log is what tells the person why. */
+        // The sandbox revoked this browser: forgetting the pairing is honest, since a stored token that can't be used
+        // would look connected in the popup and never be. Logged so the person knows why.
         revoked: () => {
             void store.append({ at: Date.now(), tool: "connection", detail: "the sandbox revoked this browser", ok: false });
             void store.forgetSandbox();
@@ -61,8 +49,8 @@ export const ensureLink = async (): Promise<void> => {
     });
 };
 
-// Drop the connection now: the person unpaired, or the sandbox was forgotten. Deliberately does not clear
-// storage — the caller decides what "disconnect" means, and both callers mean different things by it.
+// Drops the connection now (unpaired, or sandbox forgotten); deliberately doesn't clear storage, since callers
+// mean different things by "disconnect".
 export const closeLink = (): void => {
     link?.stop("unpaired");
     link = undefined;

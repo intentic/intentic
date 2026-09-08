@@ -19,31 +19,9 @@ import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type 
 import { useTerminalFloating } from "./terminalFloating";
 import { postTurnControl } from "../chat/run/turnStream";
 
-/* THE terminal panel: mounted once in the shell, below every view. Each tab is a tmux-backed session in the
- * shared cache (composables/useTerminal): mounting re-appends the active tab's persistent host element,
- * unmounting only detaches it, so scrollback and running processes survive close, navigation, and reload.
- * Tabs arrange into split GROUPS (useTerminal.groups): one pill per group, one segment per session; the
- * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
- * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
- * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space opens the same menu
- * on its strip-wide rows alone: kill all, and pop the panel out into its own real window (like the chat
- * strip); the shell owns the teleport. In that window the bar stands up along the LEFT edge: a floating
- * terminal is a tall window, so pills belong on the axis that has room, the way VSCode moves its own terminal
- * list to the side once the panel is wide.
- *
- * The strip lists PLACES: the user's shells and their dev servers. The terminals WORK runs in (an agent's
- * Bash, a capability install) are records of something that already happened, so they tab only while someone is
- * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`); while they run
- * they are one click away in the toolbar's work-terminals popover. So the broom in this menu is not for THEM,
- * which is what the old one was and why it went: what still accumulates here is the user's own shells, each
- * opened for one command and left at a prompt. "Kill inactive terminals" clears exactly those, by the rule in
- * terminalSweep.ts (nothing running in it, quiet a while, or simply finished, and never the tab you are on),
- * and it says how many it has found before you click it. Every tab still gets the hover-×, and a RUNNING dev
- * server keeps its pill however quiet it is: it's a place you restart, not litter. Restart is shell-only (a
- * dev-server tab is re-run via Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves: they live
- * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
- * re-requesting the same session still refocuses. Height persists per storageKey; `resizable: false` pins the
- * panel to its container (the mobile route, and the floating window). */
+// Terminal panel, mounted once below every view: each tab is a tmux session in the shared cache, so scrollback survives
+// unmount, navigation, and reload. Tabs arrange into split groups (VSCode-style); Shift/Ctrl+click multi-selects pills,
+// right-click opens split/join/kill and rename/color/icon. Poppable into its own window, bar moving to the left edge.
 
 const {
     source,
@@ -55,8 +33,7 @@ const {
     source: TerminalTabsSource;
     storageKey: string;
     initial?: TerminalRequest;
-    // A session to relist as a tab without focusing it (the agent's live terminal: appears without hijacking
-    // the active tab). Distinct from `initial`, which focuses.
+    // Session to relist as a tab without focusing it (the agent's live terminal); distinct from `initial`.
     surfaced?: { readonly name: string };
     resizable?: boolean;
 }>();
@@ -65,68 +42,36 @@ const emit = defineEmits<{ close: [] }>();
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
 const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, splitTab, killTabs, restart } = tabs;
 
-/* WHAT THE PANEL SHOWS BEFORE IT KNOWS ANYTHING: the shapes of the strip this sandbox was left with.
- *
- * Opening the panel is instant and its terminals are one tunnel round trip away, so there is a moment with
- * nothing to draw. It used to be drawn as "No terminals open.": an answer to a question still in flight, taken
- * back the instant the list landed, and on a slow daemon it was the only thing a returning user saw. The
- * remembered arrangement is the honest alternative: it says how many pills were here and how wide each was,
- * which is exactly a skeleton's claim. Unlabelled and inert on purpose: WHICH terminals came back is the
- * daemon's to say, and a placeholder that named one would be a promise this panel cannot keep.
- *
- * Capped, because the shapes are decoration: a sandbox left with twenty splits should not spend two rows of the
- * strip on furniture. */
+// Skeleton of the strip's last-known shape while its list is in flight: unlabeled and inert, since which terminals
+// return is the daemon's to say. Capped so a heavily-split sandbox doesn't spend rows on decoration.
 const PLACEHOLDER_LIMIT = 6;
 const placeholders = computed(() =>
     answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : [],
 );
-// Restart kills the active session and opens a fresh web-* shell in its slot: meaningless for a dev-server
-// tab, which gets refresh instead.
+// Whether Restart applies: a fresh shell replaces a killed one; meaningless for a dev-server tab.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
 const floating = useTerminalFloating();
-// The bar turns into a left rail while the panel has a window of its own (see the component comment).
+// Bar becomes a left rail while the panel has its own floating window.
 const vertical = computed(() => floating.here.value);
 
-// Sessions FINISH through paths no client action fires: an agent's last Bash command exits, a dev server dies.
-// The strip lists imperatively (around spawns, kills, restarts and surfaces), so a tab would keep reading as
-// running: undimmed, and invisible to the sweep below, until the panel was reopened or refreshed by hand.
-// Observing the shared entry (the same one the rail's badge reads, and the one the strip's own relists write)
-// supplies the missing edge. Relisting only when the daemon's session set actually changes keeps it to one
-// reconcile per real change, and that relist is served from the cache it just reacted to rather than costing a
-// second request.
+// Sessions can finish with no client action; watching the shared list catches what imperative relists miss.
 const listed = useTerminalsQuery();
 watch(
     () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
-    // Absorbed: a dropped list is the strip's own to report and to ask again about, and a reaction nobody
-    // awaits is the one place a throw goes nowhere but the console.
+    // Absorbed: a dropped refresh is the strip's own to retry, and nothing here awaits this.
     () => void tabs.refresh().catch(() => undefined),
 );
 
-/* AND THE DAEMON COMING BACK IS ITSELF A RELIST: for an outage that outlasts asking again.
- *
- * A list refused on the way in re-asks a few times on its own (useTerminal's refresh), which covers the seconds
- * a resumed daemon takes to answer. An outage measured in minutes outlives that, and the watch above cannot end
- * it either: it reacts to the session set CHANGING, and a daemon nobody can reach reports no changes. So the
- * moment this one is reachable again, the strip asks once more: the cheapest possible answer to "was anything
- * running while we were cut off". */
+// Reachability regaining catches an outage longer than the refused-list retries cover, since an unreachable daemon
+// reports no session changes at all.
 watch(useSandbox().reachable, (isReachable) => {
     if (isReachable) {
         void tabs.refresh().catch(() => undefined);
     }
 });
 
-/* THE AGENT IS WAITING FOR YOU AT THIS TERMINAL: the answering end of the terminal handover
- * (sandbox terminal/terminal-help.ts), and the exact counterpart of the banner over the Browsers stage.
- *
- * The ask rides the terminals list, so it needs no state of its own here: whichever session the strip has
- * ACTIVE is the one whose banner shows, and it comes down when the daemon publishes the cleared flag: the
- * same push that raised it. That the banner follows the active tab rather than shouting from wherever it was
- * raised is the whole reason it belongs here: the thing the owner has to answer is the prompt in the pane
- * directly below it, and an ask floating over a different session's pane would be pointing at nothing.
- *
- * An ask on a tab that is NOT active still reaches the owner: the chat card and the phone notification both
- * carry it, and the card's button focuses this very tab.
- */
+// Terminal-handover ask: whichever tab is active shows the ask meant for that session, since the pane needing an answer
+// is the one right below it; a non-active ask still reaches the owner via chat and notification.
 const help = computed(() => listed.sessions.value.find((session) => session.name === activeName.value)?.help);
 const helpNote = ref(``);
 watch(activeName, () => (helpNote.value = ``));
@@ -136,15 +81,14 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
         return;
     }
     const note = helpNote.value.trim();
-    // `undefined`: this box. Terminals are sandbox-global and this panel is the active sandbox's, so the reply
-    // goes to the daemon holding the PTY that asked (see postTurnControl).
+    // `undefined`: replies go to this sandbox's own daemon, which is the one that raised the ask.
     await postTurnControl(undefined, `/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
     helpNote.value = ``;
 };
 
-// --- Tab strip: segments, numbering, cosmetics ------------------------------------------------
+// Tab strip: segments, numbering, cosmetics.
 const tabByName = computed(() => new Map(order.value.map((tab) => [tab.name, tab])));
-// Unlabeled shells show their 1-based position in the strip's reading order (across groups).
+// Unlabeled shells show their 1-based position in the strip's reading order across groups.
 const stripIndex = computed(() => {
     const index = new Map<string, number>();
     let position = 0;
@@ -156,14 +100,9 @@ const stripIndex = computed(() => {
     }
     return index;
 });
-// What the pop-out button says and is named, both directions: the same wording as the strip menu's row and the
-// palette's, with the chord when one is bound (withShortcut, shared with the chat strip's own button).
+// Pop-out button's label and tooltip, matching the strip menu and palette row wording.
 const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
-// The panel's dismissal, which is NOT a kill: the sessions are tmux facts on the sandbox and outlive every view
-// of them. It used to say "Close terminal" under a ×, the same glyph the pills carry for the one action that
-// DOES end a session, so the toolbar read as "kill everything". It now says what it does and leaves × to the
-// pills: docked, the panel drops back down to its dock (chevron-down, pointing where it goes); floating, there
-// is nothing to drop into and the press retires the window, which is the one place a × still tells the truth.
+// Dismissal, not a kill: sessions outlive every view; docked it hides the panel, floating it closes the window.
 const closeHint = computed(() =>
     withShortcut(
         floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
@@ -185,9 +124,7 @@ const segmentTooltip = (name: string): string | undefined => {
     if (tab.kind === `process`) {
         return `Background process: read-only logs`;
     }
-    // What it is running leads, whatever kind it is: on a crowded strip the label is a number and the command is
-    // the only thing that identifies the terminal to the person about to close it. The full command, untruncated
-    //: the pill clips it, and the tooltip is where the clipped end is meant to be readable.
+    // What's running leads, since on a crowded strip the command is the only thing naming the terminal to close.
     const doing = tab.command === undefined ? undefined : `Running ${tab.command}`;
     if (tab.kind === `agent`) {
         return doing ?? (tab.running === false ? `AI terminal, finished` : `AI terminal`);
@@ -198,15 +135,14 @@ const segmentTooltip = (name: string): string | undefined => {
     return doing ?? (tab.running === false ? `finished` : undefined);
 };
 
-// --- Multi-selection (VSCode's terminal list): Shift extends, Ctrl toggles, plain click activates ----------
-// Selection is per-GROUP (pills), keyed by each group's first session name; it only feeds the context menu's
-// mass actions (join / kill), so any structural change just clears it.
+// Multi-selection (VSCode-style): Shift extends, Ctrl toggles, click activates; selection is per-group, keyed by its
+// first session, feeding only the context menu's mass actions.
 const selectedKeys = ref<string[]>([]);
 const anchor = ref<number | undefined>(undefined);
 const groupKey = (group: string[]): string => group[0] ?? ``;
 const isSelected = (group: string[]): boolean => selectedKeys.value.includes(groupKey(group));
 const selectedGroups = computed(() => groups.value.filter((group) => isSelected(group)));
-// Flattened in strip order, so joined panes read the same left-to-right as the strip did.
+// Flattened in strip order, so a joined pane reads left-to-right as the strip did.
 const selectedNames = computed(() => selectedGroups.value.flat());
 const activeGroupIndex = computed(() => groups.value.findIndex((group) => activeName.value !== undefined && group.includes(activeName.value)));
 
@@ -228,41 +164,11 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
     switchTab(name);
 };
 
-// --- Killing ---------------------------------------------------------------------------------
-/* EVERY KILL COMES THROUGH HERE: the pill's ×, the menu's row, the chord, the mass actions, because a tmux
- * session that is killed is gone, and which gesture reached for it changes nothing about that.
- *
- * `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
- * lifecycle belongs to the processes popover (killing one there would be a no-op that lied about the count).
- *
- * TWO THINGS STOP A KILL, and they are different questions asked of the same set:
- *
- *   · BUSY, something is actually running in that session (`command`: "pnpm build", "vim"). This one stops a
- *     SINGLE × too, and it is the reason this section was rewritten. A single close used to go through in
- *     silence on the reasoning that the pill is under the pointer and named in the gesture: true of the pill,
- *     and no help at all about what is INSIDE it. The strip is a row of near-identical pills; the one beside
- *     the one you meant holds a build half an hour in, or an editor with unsaved buffers, and there is no undo
- *     for either. `running` could not have caught it: a shell reports `running: true` at a bare prompt just as
- *     it does mid-build, so a confirm keyed on that would have fired on every close and taught the user to
- *     click through it, which is worse than no confirm at all. The daemon now says what the pane is running
- *     (system.routes.ts `foreground`), so the dialog only appears when there is something to lose and can name
- *     it. An idle shell still closes on one click, exactly as before.
- *
- *   · BULK: more than one session at once, any of them live. The gesture names a count, not the terminals, so
- *     the dialog is where the user finds out which they are. The rule the other two strips already follow (the
- *     chat's "stop N running agents?", the workspace's unsaved-edits dialog).
- *
- * A background process's × merely hides its read-only log view, so it is never either.
- *
- * THE THIRD GESTURE IS THE SWEEP, and it is bulk by construction: "Kill 3 inactive terminals" names a count and
- * nothing else, so it always goes through the dialog, even for a set of one. Which three is a question only the
- * dialog can answer. */
+// Killing.
+// Every kill confirms when there's something to lose: a busy session, or two-or-more live ones at once.
 const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
-/* WHAT THE SWEEP WOULD TAKE, and the clock it ages a quiet shell by. `sweepNow` is stamped when a menu opens
- * and again when the row (or the palette command) fires, rather than ticked: the count is read at exactly those
- * moments, and a panel holding a wall clock open for a menu nobody has right-clicked would pay a re-render per
- * second for it. Re-stamping AT the gesture is also what keeps the number on the row and the kill it performs
- * the same answer. */
+// Sweep's clock, stamped when a menu opens or a sweep fires, not ticked, so the count and the kill agree without a
+// per-second re-render.
 const sweepNow = ref(Date.now());
 const inactive = computed(() => inactiveTerminals(order.value, { now: sweepNow.value, focused: activeName.value }));
 const sweepInactive = (): void => {
@@ -272,20 +178,17 @@ const sweepInactive = (): void => {
         true,
     );
 };
-// The set a dialog is standing over, and WHY it opened: a sweep asks a different question ("these have been
-// quiet") from a bulk kill ("these are running"), and only the gesture knows which.
+// What a dialog stands over: a sweep asks 'these are quiet', a bulk kill asks 'these are running'.
 const pendingKill = ref<{ names: string[]; inactive: boolean }>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
-// The tabs with work in them. `process` is excluded on its own terms: its × closes a view, not a session, so
-// a dev server's log tab never asks a question about a thing the click does not do.
+// Tabs with work in them; a process's × closes a view, not a session, so it never asks this question.
 const busyIn = (names: string[]): TerminalTab[] =>
     order.value.filter((tab) => names.includes(tab.name) && tab.kind !== `process` && tab.command !== undefined);
 const isBusy = (name: string): boolean => {
     const tab = tabByName.value.get(name);
     return tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
 };
-// What the dialog LISTS: the busy ones when that is why it opened, else the live ones a bulk kill is ending.
-// Never both: a mixed set would ask two questions in one list, and the busy ones are the answer that matters.
+// What the dialog lists: busy sessions if that's why it opened, else the live ones a kill ends; never both.
 const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value.names)));
 const pendingKillItems = computed(() => {
     const pending = pendingKill.value;
@@ -295,30 +198,26 @@ const pendingKillItems = computed(() => {
     if (pendingKillBusy.value.length > 0) {
         return pendingKillBusy.value;
     }
-    // A sweep lists EVERY terminal it takes, finished panes included: they are most of why its count is what it
-    // is, and dropping them here would leave a dialog quietly naming fewer terminals than the row promised.
+    // A sweep lists every terminal it takes, finished included, or the dialog would undercount the promise.
     return pending.inactive ? order.value.filter((tab) => pending.names.includes(tab.name)) : runningIn(pending.names);
 });
 const killHeader = computed(() => {
     const busy = pendingKillBusy.value;
     if (busy.length === 1) {
-        // The command IS the question: "Kill the terminal running pnpm build?" is answerable; "are you sure?"
-        // is not. Truncated because a pill's session can be running something with a very long name.
+        // The command IS the question; truncated since a session can be running something with a long name.
         return `Kill the terminal running ${(busy[0]?.command ?? ``).slice(0, 24)}?`;
     }
     if (busy.length > 1) {
         return `Kill ${busy.length} busy terminals?`;
     }
     const count = pendingKillItems.value.length;
-    // A sweep can hold no busy terminal at all (that is the rule it selects on) and it does hold dead ones, so
-    // it says what it is: "running terminals" would be a miscount as well as the wrong word.
+    // A sweep can hold no busy terminal and still hold dead ones, so it names itself 'inactive', not 'running'.
     if (pendingKill.value?.inactive === true) {
         return `Kill ${count} inactive ${count === 1 ? `terminal` : `terminals`}?`;
     }
     return count === 1 ? `Kill the running terminal?` : `Kill ${count} running terminals?`;
 });
-// How long the sweep's rule waits, said in the dialog rather than kept as a secret in the source: a row that
-// offers to kill three terminals owes the reader the sentence that picked them.
+// Sweep's quiet threshold, said in the dialog so a row that kills three terminals explains why.
 const QUIET_LABEL = `${Math.round(QUIET_MS / 60_000)} minutes`;
 const killBody = computed(() => {
     if (pendingKill.value?.inactive === true) {
@@ -332,9 +231,7 @@ const requestKill = (names: string[], sweep = false): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // Nothing running in any of them, and nothing bulk about the gesture: the click is the whole decision. A
-    // sweep never takes this road however harmless its set looks, because its row named a count rather than a
-    // terminal, and the dialog is the only place that turns one into the other.
+    // Nothing running and nothing bulk: the click is the whole decision; a sweep never takes this road regardless.
     if (!sweep && busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
         killTabs(names);
         selectedKeys.value = [];
@@ -351,11 +248,8 @@ const confirmKill = (): void => {
     pendingKill.value = undefined;
 };
 
-// --- Rename (inline, in the strip) -------------------------------------------------------------
-// The pill's label edits IN PLACE: the same gesture as a chat tab and a workspace-tree file, and for the same
-// reason: renaming is a one-field edit of something already on screen, so a modal that hides the strip it
-// renames is pure ceremony. Enter commits, Esc cancels, blur commits, and an EMPTY name clears the override
-// back to the default label (that's the reset, hence no silent-cancel-on-empty here).
+// Pill label edits in place, like a chat tab or workspace file: Enter commits, Esc cancels, blur commits, and an empty
+// name resets to the default.
 const renamingName = ref<string | undefined>(undefined);
 const renameDraft = ref(``);
 const beginRename = (name: string): void => {
@@ -366,7 +260,7 @@ const commitRename = (): void => {
     const name = renamingName.value;
     renamingName.value = undefined;
     if (name === undefined) {
-        return; // Enter already committed; the input's unmount blur must not commit again
+        return; // Enter already committed this; the unmount blur must not commit again.
     }
     const trimmed = renameDraft.value.trim();
     setTerminalMeta(name, { label: trimmed === `` ? undefined : trimmed });
@@ -374,18 +268,16 @@ const commitRename = (): void => {
 const cancelRename = (): void => {
     renamingName.value = undefined;
 };
-// Focus + select the field the moment it mounts (the @vue:mounted trick, see WorkspaceTree).
+// Focuses and selects the field the moment it mounts (the @vue:mounted trick).
 const focusRename = (vnode: VNode): void => {
     const el = vnode.el as HTMLInputElement;
     el.focus();
     el.select();
 };
-// The default label a cleared name falls back to: the input's placeholder, so "empty resets" is visible.
+// Fallback label a cleared name resets to; shown as the input's placeholder so 'empty resets' is visible.
 const defaultLabel = (name: string): string => tabByName.value.get(name)?.label ?? `Terminal ${stripIndex.value.get(name) ?? ``}`;
 
-// --- Color / icon (per-terminal overrides, terminalMeta) ---------------------------------------
-// These two stay in a dialog: a swatch grid is a picker, not a text field, and it has nowhere to live in a
-// 6px-tall pill.
+// Color/icon overrides live in a dialog: a swatch grid is a picker, not a text field, with nowhere to sit in a pill.
 const customize = ref<{ name: string; mode: `color` | `icon` } | undefined>(undefined);
 const openCustomize = (name: string, mode: `color` | `icon`): void => {
     customize.value = { name, mode };
@@ -409,11 +301,11 @@ const customizeHeader = computed(() =>
     customize.value === undefined ? `` : { color: `Terminal color`, icon: `Terminal icon` }[customize.value.mode],
 );
 
-// --- Context menu (right-click a pill) ---------------------------------------------------------
+// Context menu (right-click a pill).
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTarget = ref<{ groupIndex: number; name: string } | undefined>(undefined);
 const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void => {
-    // The sweep's clock, read at the moment its row is about to be drawn (see `sweepNow`).
+    // Sweep's clock, read the moment its row is about to be drawn.
     sweepNow.value = Date.now();
     const group = groups.value[groupIndex] ?? [];
     // Right-click outside the current selection retargets it (VSCode's list behavior).
@@ -425,16 +317,11 @@ const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void 
     menu.value?.show(event);
 };
 
-// The rows that name no particular pill: the strip-wide kills, the sweep, and the pop-out toggle. They tail
-// whichever branch of the pill menu is showing AND they are the whole of the menu a right-click on the bar's
-// empty space opens: the same pair of entry points the chat and workspace strips give their Close All. Each
-// row is absent when it would be a no-op, so the menu never offers one.
+// Rows naming no particular pill: strip-wide kills, the sweep, and pop-out; also the whole menu a right-click on empty
+// bar space opens. Each row is absent when it would be a no-op.
 const stripItems = computed<MenuItem[]>(() => {
     const items: MenuItem[] = [];
-    // The broom, above the kill-all it is the narrower version of: the two rows escalate in that order, and a
-    // count in the label is what makes the narrower one worth reaching for ("Kill 3 inactive terminals" tells
-    // you whether there is anything to tidy before you commit to finding out). Absent when it would find
-    // nothing, so a strip of shells you are actually using never offers to sweep them.
+    // Above kill-all as the narrower option; absent when there's nothing for it to find.
     if (killTabs !== undefined && inactive.value.length > 0) {
         items.push({
             label: `Kill ${inactive.value.length} inactive ${inactive.value.length === 1 ? `terminal` : `terminals`}`,
@@ -447,9 +334,7 @@ const stripItems = computed<MenuItem[]>(() => {
     }
     items.push(
         ...(items.length > 0 ? [{ separator: true }] : []),
-        // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the terminals work
-        // runs in tab here at all. It sits where the annoyance is felt: a right-click on the strip they were
-        // crowding, and writes the same preference as the work popover's footer and Settings → Appearance.
+        // The one checked row here: whether work terminals tab at all, same preference as the popover and Settings.
         {
             label: `Show work terminals`,
             checked: showWorkTerminals.value,
@@ -472,8 +357,7 @@ const menuItems = computed<MenuItem[]>(() => {
     }
     const { name } = target;
     const group = groups.value[target.groupIndex] ?? [name];
-    // A multi-selection gets the mass actions; a single pill gets the per-terminal ones. Each item carries its
-    // command's effective shortcut (commandShortcut) so the menu teaches the key: right-aligned via #item.
+    // Multi-selection gets mass actions, a single pill gets per-terminal ones, each showing its shortcut.
     if (selectedGroups.value.length > 1) {
         const names = selectedNames.value;
         const items: MenuItem[] = [
@@ -515,8 +399,7 @@ const menuItems = computed<MenuItem[]>(() => {
             {
                 label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`,
                 shortcut: commandShortcut(`terminal.kill`),
-                // Through requestKill like every other kill: a menu row aimed at a busy terminal is no more
-                // informed about what is inside it than the × is.
+                // Routed through requestKill like any kill; a menu row knows no more about a busy session than the ×.
                 command: () => requestKill([name]),
             },
         );
@@ -524,10 +407,8 @@ const menuItems = computed<MenuItem[]>(() => {
     return [...items, ...stripItems.value];
 });
 
-// --- Full scrollback ---------------------------------------------------------------------------
-// The pane's history as plain text, which is the only form of it the browser can select. `pending` is its own
-// state rather than a spinner over stale text: a capture of tens of thousands of lines crosses the tunnel, and
-// showing the PREVIOUS terminal's scrollback while the next one loads would be the worst possible lie here.
+// Pane's history as selectable plain text. `pending` is its own state, not a spinner over stale text, since showing the
+// previous terminal's scrollback while the next loads would be the worst lie here.
 const scrollback = ref<TerminalScrollback | undefined>(undefined);
 const scrollbackName = ref<string | undefined>(undefined);
 const scrollbackFailed = ref(false);
@@ -540,13 +421,12 @@ const openScrollback = async (name: string): Promise<void> => {
     scrollbackFailed.value = false;
     try {
         const captured = await fetchScrollback(name);
-        // Superseded while in flight: the dialog was closed, or another terminal was asked for.
+        // Superseded while in flight: the dialog closed, or another terminal was asked for.
         if (scrollbackName.value === name) {
             scrollback.value = captured;
         }
     } catch {
-        // The session ended between the right-click and the read, or the daemon went away. The dialog says so
-        // rather than sitting on a spinner forever.
+        // Session ended between the click and the read, or the daemon went away; say so rather than spin forever.
         if (scrollbackName.value === name) {
             scrollbackFailed.value = true;
         }
@@ -567,18 +447,11 @@ const copyScrollback = async (): Promise<void> => {
     }
 };
 
-// --- Context menu (right-click the GRID) -------------------------------------------------------
-// What a terminal owes a browser on a right-click: the clipboard verbs (a right-click on a word with nothing
-// selected selects the word first, xterm's rightClickSelectsWord, so Copy has something to copy), and the way
-// to the history beyond what the tab replayed on attach. tmux never sees the gesture: the browser's client is a
-// control-mode one (terminalSession.ts), so there is no tmux pane menu to draw over the output any more.
-//
-// It targets the session UNDER THE POINTER, not the focused one: in a split those differ, and a menu that
-// copied from the other pane would be a quiet wrong answer.
+// Grid right-click: clipboard verbs plus scrollback beyond what attach replayed; tmux never sees it, since the client
+// is control-mode. Targets the session under the pointer, not the focused one.
 const gridMenu = ref<{ show: (event: Event) => void } | undefined>();
 const gridTarget = ref<string | undefined>(undefined);
-// Sampled at open, not read live: `disabled` is evaluated as the menu renders, and xterm clears the selection
-// when the terminal loses focus to it.
+// Sampled at open, not read live: `disabled` renders once, and xterm clears selection losing focus.
 const gridHasSelection = ref(false);
 
 const onGridContextMenu = (event: MouseEvent): void => {
@@ -599,11 +472,8 @@ const gridItems = computed<MenuItem[]>(() => {
     if (name === undefined || session === undefined) {
         return [];
     }
-    // Copy and Paste carry no shortcut hint: Ctrl+Shift+C/V are the browser's own (DevTools, paste-as-text) and
-    // this panel deliberately binds neither: plain Ctrl+V already pastes, because it arrives as the textarea
-    // paste event xterm listens for.
-    // Both clipboard verbs hand the keyboard back to the terminal: the menu's click took it, and without the
-    // refocus the next keystroke lands nowhere (Paste's own refocus rides its async clipboard read).
+    // Copy/Paste carry no shortcut hint, since Ctrl+Shift+C/V are the browser's own and plain Ctrl+V already pastes.
+    // Both hand focus back to the terminal so the next keystroke doesn't land nowhere.
     const items: MenuItem[] = [
         {
             label: `Copy`,
@@ -623,25 +493,17 @@ const gridItems = computed<MenuItem[]>(() => {
     return items;
 });
 
-// --- Find (Ctrl+F) -----------------------------------------------------------------------------
-// xterm's search addon over the ACTIVE session's whole buffer, scrollback included, the way a local terminal
-// finds things: matches are painted in place and on the scrollbar's overview ruler, Enter walks them, the bar
-// says which of how many. Incremental as you type (the current match extends rather than jumping), and the
-// decorations come off when the bar closes or the active tab changes, a highlight left on a pane nobody is
-// searching is the kind of state that reads as a bug later. Bound to the chord every editor and VSCode's own
-// terminal use for it; the shell's readline forward-char on that key is the trade, and it is rebindable.
+// Ctrl+F over the active session's whole buffer, like a local terminal: matches paint in place and on the scrollbar,
+// Enter walks them. Decorations clear when the bar closes or the tab changes.
 const finding = ref(false);
 const findQuery = ref(``);
 const findInput = ref<HTMLInputElement>();
-// The addon's own count, with -1 for "more than it will count" (its 1000-match ceiling). Undefined until a
-// query has been run against the active session.
+// Addon's own match count, -1 past its 1000-match ceiling; undefined until a query has run.
 const findResults = ref<{ index: number; count: number } | undefined>(undefined);
-// The session whose decorations are up and whose result events are subscribed, so switching tabs mid-find
-// clears the one left behind before painting the one arrived at.
+// Session whose decorations are up and events bound, so switching tabs clears one before painting the next.
 let findBound: { search: { clearDecorations: () => void }; results: { dispose: () => void } } | undefined;
 
-// Yellow on the dark grid, the colour the terminal palette already uses for "look here"; the active match
-// saturates so the eye finds it among its siblings. Hex with alpha: xterm's decorations take CSS colour.
+// Yellow, the palette's 'look here' color; the active match saturates so it stands out among the rest.
 const FIND_DECORATIONS = {
     matchBackground: `#facc1540`,
     matchBorder: `#facc1580`,
@@ -711,7 +573,7 @@ const openFind = (): void => {
     }
 };
 
-// Esc, or the ×: the terminal gets the keyboard back, the highlights go.
+// Esc, or the ×: hands the keyboard back to the terminal and clears the highlights.
 const closeFind = (): void => {
     finding.value = false;
     unbindFind();
@@ -729,8 +591,7 @@ const findLabel = computed((): string => {
     return `${String(results.index + 1)} of ${results.count < 0 ? `many` : String(results.count)}`;
 });
 
-// A find follows the active tab: the highlights leave the pane that lost focus and the same query runs on the
-// one that gained it, which is what "find" means on a strip of terminals.
+// A find follows the active tab: highlights leave the one that lost focus, rerunning on the one that gained it.
 watch(activeName, () => {
     if (finding.value) {
         runFind(true);
@@ -738,10 +599,8 @@ watch(activeName, () => {
 });
 onBeforeUnmount(unbindFind);
 
-// --- Panel geometry ----------------------------------------------------------------------------
-// Persisted per surface. Height is clamped to a floor and ~80% of the viewport. There is no collapsed state:
-// the toolbar's × closes the panel outright, and closing already only unmounts it: every session keeps
-// streaming in the shared cache, so a second, half-shut state was a control that did the same thing worse.
+// Height persists per surface, clamped between a floor and ~80% of viewport. No collapsed state: the toolbar's ×
+// already unmounts without killing sessions.
 const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
 const DEFAULT_HEIGHT = 240;
 const MIN_HEIGHT = 96;
@@ -768,8 +627,7 @@ const setHeight = (px: number): void => {
     write(HEIGHT_KEY, String(height.value));
 };
 
-// Alt+PageDown/PageUp walk the strip in READING order: every session, splits included, not just one pill at a
-// time: wrapping at the ends. The chord is the shell-wide one; see the command entries below.
+// Alt+PageDown/Up walk every session in reading order, splits included, wrapping at the ends.
 const cycleTab = (delta: number): void => {
     const names = groups.value.flat();
     if (names.length < 2) {
@@ -783,34 +641,9 @@ const cycleTab = (delta: number): void => {
     }
 };
 
-// --- Palette commands + shortcuts --------------------------------------------------------------
-// Every strip action is also a registered command, so it lives in `>` (Ctrl+P) and on a shortcut. Registered
-// while THIS panel is mounted (the desktop shell and the mobile route are exclusive, so the ids can't
-// double-register) and disposed on unmount. Join and kill are selection-aware; the rest act on the focused
-// session.
-//
-// The commands split in two. The TAB family (kill, kill all, next/previous, rename) takes the shell-wide
-// chords the workspace's file tabs and the chat's strip also register (Ctrl+Shift+X, Ctrl+Shift+Backspace,
-// Alt+PageUp/PageDown, F2), each gated to a keystroke from inside THIS panel so focus decides which of the three
-// strips a press reaches (tabSurface.ts). One chord per verb beats three chords memorized, and it is what F2
-// has always done here. The panel's OWN verbs (split, unsplit, join) have no counterpart on the other strips,
-// so they keep private chords and stay ungated (splitting the focused terminal from the editor is useful).
-//
-// The chorded defaults are all Ctrl+Shift+<key>: the ONE modifier family that's safe here, for two independent
-// reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E…, SIGINT, EOF, reverse-search, readline
-// line-edits), and Shift makes a DISTINCT keydown, so createTerminalSession's handler swallows only the exact
-// bound chord and leaves the bare control code untouched; (2) it dodges Ctrl+Alt, which is AltGr on
-// Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal: the
-// trap the old Ctrl+Alt+{R,J,U} defaults fell into. Letters steer clear of the browser chords the page can't
-// intercept (Ctrl+Shift+{I,J,C}=DevTools, N=incognito, T=reopen tab, W=close window, C/V=terminal copy/paste),
-// and lean mnemonic: U=unsplit, G=group(join). Split keeps Ctrl+Shift+5 and New keeps
-// Ctrl+Shift+` (the VSCode/tmux muscle memory) matched by physical key (matchesChord's CODE_TO_KEY path), so
-// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Everything is rebindable
-// in Settings → Keybindings: per surface, so remapping Kill Terminal leaves Close Tab alone; the two cosmetic
-// pickers (color, icon) ship UNBOUND: a global chord for a rare "open a swatch grid" earns its keys the least,
-// so they stay palette- and menu-only, exactly as VSCode leaves them (double-click a tab renames without one).
-// "New Terminal" is NOT here: it registers globally (useShellCommands) so it works with the panel closed,
-// routed through useTerminalPanel's spawn hook.
+// Every strip action is a registered command, live only while this panel is mounted. Tab-family chords match the
+// workspace/chat strips, gated on this panel's focus; the panel's own verbs keep private, ungated chords. Defaults are
+// Ctrl+Shift+<key>, dodging bare Ctrl (the shell's) and Ctrl+Alt (AltGr); everything is rebindable per surface.
 let commandDisposables: readonly Disposable[] = [];
 const registerPanelCommands = (): void => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
@@ -818,16 +651,12 @@ const registerPanelCommands = (): void => {
             command: `terminal.rename`,
             title: `Rename Terminal`,
             icon: `pencil`,
-            // F2 (the rename key everywhere else in the app (the workspace tree's, the chat strip's)) gated to
-            // a keystroke that came from INSIDE this panel. Outside it the chord stays free (the tree renames
-            // its file, a full-screen TUI in another surface keeps F2), and inside it the gate is what makes
-            // xterm's key hook forward the press to the dispatcher instead of the PTY: a terminal app that wants
-            // its own F2 needs the binding remapped in Settings → Keybindings.
+            // F2, gated to a keystroke from inside this panel; outside it the chord stays free for other surfaces.
             keybinding: `F2`,
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 if (renamingName.value !== undefined) {
-                    return; // already editing (F2 lands in the field): restarting would wipe the draft
+                    return; // already editing (F2 lands in the field); restarting would wipe the draft
                 }
                 if (activeName.value !== undefined) {
                     beginRename(activeName.value);
@@ -878,8 +707,7 @@ const registerPanelCommands = (): void => {
             },
         },
         {
-            // Unbound by default, like the cosmetic pickers: flipping a preference is a once-in-a-while act, and
-            // it already has two clickable homes (the bar menu, the popover footer).
+            // Unbound by default, like the cosmetic pickers: already has two clickable homes.
             command: `terminal.toggleWorkTerminals`,
             title: `Toggle Work Terminals in Panel`,
             icon: `sparkles`,
@@ -891,8 +719,7 @@ const registerPanelCommands = (): void => {
             command: `terminal.find`,
             title: `Find in Terminal`,
             icon: `search`,
-            // Cmd+F on a Mac, Ctrl+F elsewhere, exactly VSCode's terminal find. Gated to a keystroke from inside
-            // this panel so the browser's page find keeps the chord everywhere else.
+            // Cmd+F on Mac, Ctrl+F elsewhere, gated to this panel so the page find keeps the chord elsewhere.
             keybinding: `Mod+F`,
             when: `tabSurface == 'terminal'`,
             handler: openFind,
@@ -933,10 +760,7 @@ const registerPanelCommands = (): void => {
             keybinding: `Ctrl+Shift+X`,
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
-                // A selection is what the chord aims at when there is one (the menu's mass row does the same);
-                // requestKill is what turns a busy session, or two or more live ones: into a confirm. The
-                // chord is the gesture with the LEAST aim of the three: it kills whatever happens to be focused,
-                // from a keyboard, without the pointer ever being over the pill.
+                // Selection first, else the focused session; the chord has the least aim of the three kill gestures.
                 if (selectedNames.value.length > 0) {
                     requestKill(selectedNames.value);
                     return;
@@ -958,20 +782,14 @@ const registerPanelCommands = (): void => {
             command: `terminal.killInactive`,
             title: `Kill Inactive Terminals`,
             icon: `trash`,
-            // Unbound by default, like the cosmetic pickers and the work-terminals toggle. Tidying is a
-            // once-in-a-while act, and any chord for it would live one slip away from the chord that kills the
-            // terminal you are typing in. The strip menu and the palette are its homes; Settings → Keybindings
-            // gives it a key for whoever sweeps often enough to want one.
+            // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
             handler: sweepInactive,
         });
     }
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 };
 
-// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows: sweep
-// the inactive ones, kill all, pop the panel out. It used to pop out on the spot, which turned a right-click
-// that merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on
-// the chat strip.
+// Right-click on empty bar space (not a pill or button) opens the strip-wide menu: sweep, kill all, pop out.
 const onBarContextMenu = (event: MouseEvent): void => {
     if (event.target instanceof Element && event.target.closest(`button, [data-term-tab]`) !== null) {
         return;
@@ -982,21 +800,18 @@ const onBarContextMenu = (event: MouseEvent): void => {
     menu.value?.show(event);
 };
 
-// --- Touch extra-keys row --------------------------------------------------------------------
-// A soft keyboard has no Esc/Tab/Ctrl/arrows; on coarse pointers a scrollable row supplies them, injecting
-// escape sequences straight into the active session. Desktop never renders it.
+// Touch extra-keys row: a soft keyboard has no Esc/Tab/Ctrl/arrows, so a scrollable row injects them directly. Desktop
+// never renders it.
 const { coarse } = useDevice();
 
-// The control code for a printable char (c → \x03, d → \x04, …); non-letters pass through.
+// Control code for a printable char (c to \x03, d to \x04, ...); non-letters pass through.
 const controlCode = (ch: string): string => {
     const code = ch.toUpperCase().charCodeAt(0);
     return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : ch;
 };
 
-// Ctrl is sticky: arm it, then the next printable keydown (from the soft keyboard) is sent as its control code
-//, the only reliable way to reach Ctrl+C/D/Z without a physical modifier. Best-effort: some Android keyboards
-// emit no usable keydown, in which case Ctrl just disarms on the next tap. ponytail: no visual affordance for
-// which key it will modify beyond the armed tint.
+// Ctrl arms, then the next printable keydown sends its control code, the only reliable way to reach Ctrl+C/D/Z with no
+// physical modifier.
 const ctrlArmed = ref(false);
 const onArmedKeydown = (event: KeyboardEvent): void => {
     if (event.key.length !== 1) {
@@ -1015,16 +830,9 @@ watch(ctrlArmed, (armed) => {
     }
 });
 
-/* ONE SHAPE FOR BOTH CALL SITES — the armed Ctrl toggle and the ten keys below it. A string in script rather
- * than a class in a stylesheet: the kit holds its own class lists this way (lib/ui.ts, rows/row.ts), so the
- * whole row stays inside the utility surface and there is still only one place to change the shape.
- *
- * 44px, not 36. These keys only exist on a coarse pointer (the row is `v-if="coarse"`), so there is no mouse to
- * keep a tighter size for, and they are the most repeatedly and quickly pressed controls the app has on a phone:
- * driving a shell is Tab, Tab, arrow, Ctrl-C, and every one of those is a key the soft keyboard could not offer.
- * They also sit at the very bottom of the screen, where thumb accuracy is worst. The row is theirs alone and
- * scrolls sideways, so the height costs nothing but the 8px it takes. The 0.6rem of padding is off the 0.25rem
- * spacing scale, so it is spelled as the rem it is rather than rounded onto a step it is not. */
+// One class string for both the Ctrl toggle and the keys below, matching the kit's own style (lib/ui.ts). 44px: these
+// only exist on a coarse pointer, the most repeatedly pressed controls the app has on a phone, at the screen's bottom
+// edge where thumb accuracy is worst.
 const KEY_CLASS = `inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-line bg-canvas px-[0.6rem] font-mono text-[0.8125rem] text-content active:bg-overlay`;
 
 const EXTRA_KEYS: readonly { label: string; data: string }[] = [
@@ -1039,35 +847,22 @@ const EXTRA_KEYS: readonly { label: string; data: string }[] = [
     { label: `←`, data: `\x1b[D` },
     { label: `→`, data: `\x1b[C` },
 ];
-// pointerdown (not click) with preventDefault: keep the xterm textarea focused so the soft keyboard stays up.
+// pointerdown, not click, with preventDefault: keeps the xterm textarea focused so the soft keyboard stays up.
 const pressKey = (data: string): void => tabs.sendInput(data);
 
 const container = ref<HTMLElement>();
 
-// The spawn-hook disposer. Registered synchronously at mount: ahead of the initial relist, not behind it:
-// attach() takes the container before it awaits anything, so the hook is usable the moment it is published,
-// and a relist that REJECTS (an unreachable daemon, or one whose session list predates the contract the app
-// parses it with) must not take "New Terminal" down with it. Behind the await, one bad list left the command a
-// no-op that opened the panel and never spawned anything, for as long as that panel lived.
+// Spawn-hook disposer, registered before the relist awaits, so a rejected list can't break 'New Terminal'.
 let disposeSpawn: (() => void) | undefined;
-// The panel is torn down and reopened by a plain v-if (Ctrl+`, the ×), so the initial relist can easily outlive
-// its own instance. Everything after that await has to check: running a dead instance's newTab opens a real
-// tmux session that no live panel will ever show.
+// Panel can be torn down and reopened by a v-if, so async code must check it's still live before acting.
 let live = true;
 
-/* WHAT THE PANEL IS WAITING FOR, and what it may say about it. `tabs.pending` is the wait itself: held until
- * the session is listed, however long that takes (useTerminal's focus), and this is the sentence that goes
- * with it, kept from the request that started the wait.
- *
- * The wait used to be a bounded race whose only vocabulary was the session name, so a push met a spinner over
- * `job-checks` and no way to find out what that was. Two things fix that: the request carries a title, and the
- * wait ADMITS DEFEAT out loud: `waited` below flips after a few seconds, the panel stops holding itself empty
- * for a tab that isn't coming, and says what it was waiting for instead of spinning on it forever. */
+// What the panel is waiting for and what it says about it: `tabs.pending` is the wait itself, held until the session
+// lists; `waited` flips after a delay so the panel admits defeat instead of spinning forever.
 const about = ref<TerminalRequest | undefined>(initial);
 const awaiting = computed(() => tabs.pending.value);
-// How long the panel holds itself empty for a session on its way. Long enough to cover a slow start under the
-// load the flow itself makes (a suite pins the sandbox, and the daemon answers in seconds), short enough that
-// nobody sits in front of a spinner wondering whether anything is happening at all.
+// How long the panel holds itself empty for an on-the-way session: long enough for a slow start, short enough to not
+// look stuck.
 const WAIT_MS = 6_000;
 const waited = ref(false);
 let waitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1083,17 +878,15 @@ watch(
     { immediate: true },
 );
 
-// What the panel says about itself while it has nothing to show. A caller that named what it started gets its
-// own sentence; everything else falls back to the session name, drawn as the id it is.
+// What the panel calls itself while empty: a caller's own sentence, else the session name as its id.
 const named = computed(() => awaiting.value ?? about.value?.name ?? ``);
 const emptyHint = computed(() => {
     if (awaiting.value !== undefined) {
-        // The wait is still standing: it has only stopped holding the panel empty. Saying so is the difference
-        // between "be patient" and the spinner that used to sit there with nothing behind it.
+        // The wait still stands; it only stopped holding the panel empty, unlike a bare spinner with nothing behind it.
         return `It hasn't appeared yet: the sandbox is probably still starting it. This panel keeps looking and shows it the moment it's listed.`;
     }
     if (answer.value === `refused`) {
-        // The one case where the panel knows it is not the sandbox that is empty, but the asking that failed.
+        // The one case where it's the asking that failed, not the sandbox that's empty.
         return `This sandbox didn't answer when asked what it was running. Anything already going is still going: try again from the refresh button.`;
     }
     return about.value === undefined
@@ -1101,15 +894,12 @@ const emptyHint = computed(() => {
         : `Nothing in this sandbox runs under that name, it was started outside it, or it has already stopped.`;
 });
 
-/* Take the request, and SPEND it. It stands in module state so that setting it can open a panel that isn't
- * mounted yet; left standing afterwards, the next panel to mount replayed it, which is how a terminal from a
- * push half an hour ago came back as "Opening job-checks…" over an empty panel. */
+// Takes the request and spends it: standing in module state lets it open a panel not yet mounted, but left standing it
+// would replay on the next mount, hours later.
 const openRequested = async (request: TerminalRequest): Promise<void> => {
     about.value = request;
     clearTerminalRequest();
-    // A list that dropped on the way is NOT a failed open: `focus` records the standing wait BEFORE it asks
-    // anything, so the tab still arrives whenever the session does. Absorbed because the alternative is an
-    // unhandled rejection out of a watcher, over a thing that is already recovering by itself.
+    // A dropped list isn't a failed open: focus records the wait first, so the tab still arrives when listed.
     await tabs.focus(request.name).catch(() => undefined);
 };
 
@@ -1117,30 +907,19 @@ onMounted(async () => {
     registerPanelCommands();
     const pane = container.value;
     if (pane === undefined) {
-        // Nothing to attach to, so nothing asked of this panel can be honoured. Both requests are MODULE state
-        // though, and one left standing is not held for its asker: it is handed to whatever unrelated thing
-        // mounts a panel next. So they are spent here, where they died.
+        // Nothing to attach to: both requests are module state, spent here rather than handed to the next mount.
         consumeSpawnRequest();
         clearTerminalRequest();
         return;
     }
-    // `initial` at mount means the panel was opened FOR that session (Start, Run tests, a capability install):
-    // attach skips the empty-panel shell for it, so the asked-for tab arrives alone instead of behind a stray
-    // `web-*` "1" that filled the second before the daemon's session existed.
+    // `initial` at mount means the panel opened FOR that session; attach skips the empty-panel shell for it.
     const attaching = tabs.attach(pane, initial?.name);
     if (newTab !== undefined) {
         disposeSpawn = registerTerminalSpawn(newTab);
     }
     const autoCreated = await attaching;
-    /* THE SPAWN REQUEST IS SPENT BY THIS MOUNT, WHATEVER THIS MOUNT MANAGES TO DO WITH IT, so it is read
-     * before any decision, never from behind a `&&` that can skip reading it.
-     *
-     * A "New Terminal" pressed with no panel mounted stands in module state until a panel takes it. Left there
-     * by a mount that raced a Ctrl+` (`live` false by the time we get here), it does not go back to that press:
-     * it lies in wait and opens a shell into whatever brings a panel up next, which is the stray "1" that
-     * turns up beside a push's checks, minutes or hours later.
-     *
-     * An empty panel's auto-created shell IS that terminal, so it is never opened twice. */
+    // Spends the spawn request regardless of outcome, read before any skippable branch: a raced press opens into
+    // whatever panel comes up next, and the auto-created empty-panel shell already IS that terminal.
     const spawnAsked = consumeSpawnRequest();
     if (live && newTab !== undefined && spawnAsked && !autoCreated) {
         newTab();
@@ -1161,8 +940,7 @@ onBeforeUnmount(() => {
     disposeSpawn?.();
     disposeSpawn = undefined;
 });
-// A parent-driven focus request (a row's terminal button while the panel is already open): a fresh object per
-// request, so the same session refocuses too.
+// Parent-driven focus (a row's button while already open): a fresh object re-focuses even the same session.
 watch(
     () => initial,
     (request) => {
@@ -1171,8 +949,7 @@ watch(
         }
     },
 );
-// A parent-driven surface request (the agent started running Bash): relist so the tab appears, without
-// focusing it. Only meaningful while the panel is mounted; a closed panel lists the session on its next open.
+// Parent-driven surface request (agent started Bash): relists without focusing; meaningless once closed.
 watch(
     () => surfaced,
     (request) => {
@@ -1182,16 +959,13 @@ watch(
     },
 );
 
-/* The seam's own model. This height is the one width-or-height in the app already held in SCREEN pixels rather
- * than app pixels (it is compared against window.innerHeight, and the terminal paints its own text from a
- * number), so unlike every other caller of <ResizeSeam> there is no conversion here: the seam and the store
- * speak the same unit. setHeight stays the authority on the bounds, and the seam is handed the same ones so a
- * drag stops at the limit instead of running past it and springing back. */
+// This height is the one dimension already in screen pixels (compared to innerHeight; the terminal paints from a
+// number), so unlike other ResizeSeam callers there's no unit conversion here.
 const seamHeight = computed<number>({
     get: () => height.value,
     set: setHeight,
 });
-// Read at render rather than stored: the cap is a share of a viewport that the reader can resize under it.
+// Read at render, not stored: the cap is a share of a viewport the reader can resize underneath it.
 const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </script>
 
@@ -1201,9 +975,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         :class="[vertical ? 'flex-row' : 'flex-col', { 'h-full': !resizable }]"
         :style="resizable ? { height: `${height}px` } : undefined"
     >
-        <!-- The seam rides the panel's TOP edge, in flow as the column's first item: its negative margin gives
-             back the height it takes, so it straddles the border above without costing the terminal a pixel.
-             `pane="after"` because the panel is BELOW the seam, which is what makes dragging upward grow it. -->
+        <!--
+            Seam rides the panel's top edge in flow; its negative margin gives back the height it takes. `pane="after"` since the panel is below it,
+            so dragging up grows it.
+        -->
         <ResizeSeam
             v-if="resizable"
             v-model="seamHeight"
@@ -1214,26 +989,17 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :reset="DEFAULT_HEIGHT"
             title="Drag to resize · double-click to reset"
         />
-        <!-- The bar: across the top when docked, down the left edge in the floating window (`vertical`). Same
-             pills, same toolbar, same right-click menu: only the axis differs. -->
+        <!-- Bar: across the top when docked, down the left edge floating (`vertical`); same pills, toolbar, and menu either way. -->
         <div
             class="flex shrink-0 gap-1 border-line bg-card"
             :class="vertical ? 'w-40 flex-col items-stretch border-r px-1 py-1.5' : 'items-center border-b px-2 py-0.5'"
             @contextmenu="onBarContextMenu"
         >
-            <!-- One pill per split GROUP, one segment per tmux session, styled like the editor's FileTabs: glyph
-                 (kind icon or the user's override, tinted by their color), label (or index), and, when the
-                 source manages sessions: a small × that appears on hover. Click switches (and focuses the
-                 clicked split); Shift/Ctrl+click multi-selects pills for the right-click mass actions; × kills
-                 that session; + opens a new one. A dimmed segment is an untracked session (a finished one-shot
-                 job's lingering shell, output in scrollback).
-
-                 Pills fill one row, then wrap to a second (the chat strip's rule): a sandbox with a dozen
-                 sessions used to push half of them off the right edge, where a tab you can't see is a tab you
-                 forget is running. Only past two rows (max-h-13, the cap) does the strip scroll: vertically,
-                 never sideways. One row leaves the bar at exactly its old height, so the terminal only gives up
-                 rows once there are genuinely more tabs than fit. Rows sit a touch further apart than pills in a
-                 row (gap-y-1 vs gap-x-0.5): stacked pill backgrounds need the separation to read as two rows. -->
+            <!--
+                One pill per split group, one segment per session, styled like FileTabs: glyph, label, and a hover ×. Click switches,
+                Shift/Ctrl+click multi-selects, × kills. Pills wrap after one row (never sideways) up to a two-row cap, so a tab stays visible
+                without pushing others off-screen.
+            -->
             <div
                 class="scrollbar-thin flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
                 :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
@@ -1274,9 +1040,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 "
                                 :style="segmentColor(name) === undefined ? undefined : { color: segmentColor(name) }"
                             />
-                            <!-- The label edits in place. The field sizes itself to the pill (a fixed w-24:
-                                 the strip must not jump as you type) and swallows the clicks it sits on, so a
-                                 caret drag isn't also a tab switch. -->
+                            <!--
+                                Sizes to the pill (fixed width, so the strip doesn't jump while typing) and swallows its own clicks so a caret drag
+                                isn't also a tab switch.
+                            -->
                             <input
                                 v-if="renamingName === name"
                                 v-model="renameDraft"
@@ -1293,13 +1060,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 @vue:mounted="focusRename"
                             />
                             <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
-                            <!-- WHAT IT IS RUNNING, on the pill, while it runs it. The confirm behind the × is
-                                 the net; this is the thing that means the user rarely reaches it, because a
-                                 mis-close starts with a strip of pills that all look alike and no way to tell
-                                 the shell you are done with from the one holding a build. The command sits in
-                                 mono beside the label (it is a program's name, not prose) and is dropped on the
-                                 horizontal strip once the pill is a split segment: there is no room, and the
-                                 dot alone still says "busy". Vertical pills are wide, so it stays. -->
+                            <!--
+                                What it's running, live, on the pill: the reason a mis-close is rare, since look-alike pills otherwise give no way to
+                                tell an idle shell from one mid-build. Dropped on a split segment (no room); the dot alone still says busy.
+                            -->
                             <span
                                 v-if="isBusy(name) && (vertical || group.length === 1)"
                                 class="min-w-0 max-w-24 shrink truncate font-mono text-[0.6rem] text-muted"
@@ -1320,9 +1084,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                         </div>
                     </template>
                 </div>
-                <!-- The strip this sandbox was left with, while its sessions are still on their way: one shape
-                     per remembered pill, as wide as that pill's splits made it. Inert and hidden from screen
-                     readers: it is a place being held, not a tab (see `placeholders`). -->
+                <!--
+                    Shape of the strip this sandbox was left with, before its sessions are known: one block per remembered pill, inert and hidden
+                    from screen readers since it names nothing yet.
+                -->
                 <div
                     v-for="(group, gi) in placeholders"
                     :key="`held-${gi}`"
@@ -1349,7 +1114,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <Icon name="plus" class="text-2xs" />
                 </button>
             </div>
-            <!-- The toolbar: trailing the pills across the top, wrapped under them in the rail. -->
+            <!-- Toolbar: trailing the pills across the top, wrapped under them in the rail. -->
             <div class="flex shrink-0 items-center gap-1" :class="vertical ? 'flex-wrap justify-center border-t border-line pt-1.5' : undefined">
                 <WorkTerminals />
                 <BackgroundProcesses />
@@ -1373,10 +1138,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 >
                     <Icon name="refresh" class="text-xs" />
                 </button>
-                <!-- Into its own window, and back. It was a right-click-the-strip menu row only: the same
-                     burial the chat's pop-out had, on a toolbar that has room to say it out loud. Beside the
-                     close × because both answer "where does this panel live", and it flips with the state so
-                     the one control is the whole round trip. -->
+                <!--
+                    Pop out into its own window, and back; was buried as a menu row only, now on the toolbar beside close since both answer 'where
+                    does this panel live'.
+                -->
                 <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
                     <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
@@ -1385,11 +1150,12 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 </button>
             </div>
         </div>
-        <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
+        <!-- Panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <!-- THE AGENT ASKED FOR HANDS. Between the strip and the pane: directly over the prompt the owner
-                 has to answer, and its buttons settle the parked request; it comes down on the daemon's own
-                 push, the same one that raised it. The mirror of the Browsers banner, deliberately. -->
+            <!--
+                Agent asking for hands: sits between strip and pane, directly over the prompt it's about; its buttons settle the request, and it
+                closes on the daemon's own push. Mirrors the Browsers banner.
+            -->
             <div v-if="help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
@@ -1411,13 +1177,15 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)"> Can't help now </Button>
                 </div>
             </div>
-            <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
-                 the pane (useTerminal's mount builds one .term-cell per split). The right-click is caught here
-                 rather than per cell because the cells are built imperatively: the handler reads which session
-                 it landed in off the cell's own dataset. -->
+            <!--
+                xterm sizes to this container; each split's fit observer fills its own cell. Right-click is caught here, not per cell, and reads
+                which session it landed in off the cell's dataset.
+            -->
             <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
-            <!-- FIND, over the pane's top-right corner (VSCode's placement), so the rows it highlights stay in
-                 view under it. Enter and Shift+Enter walk the matches; Esc hands the keyboard back. -->
+            <!--
+                Find sits over the pane's top-right corner (VSCode's placement) so highlighted rows stay visible under it. Enter/Shift+Enter walk
+                matches; Esc hands the keyboard back.
+            -->
             <div
                 v-if="finding"
                 class="absolute top-1 right-4 z-10 flex items-center gap-1 rounded-md border border-line bg-card px-1.5 py-1 shadow-md"
@@ -1452,12 +1220,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <Icon name="times" />
                 </button>
             </div>
-            <!-- NOTHING TO SHOW, SAID OUT LOUD. The panel opened FOR a session suppresses the empty-panel shell
-                 (see attach) because that session is normally seconds away, but a surface can ask for one that
-                 will never arrive: a dev server someone started outside this sandbox has no terminal here, and
-                 the button offering it left a black rectangle with no tabs, no message and no way to tell a slow
-                 start from a session that never existed. An OVERLAY rather than a v-if on the container: the
-                 container is the imperative mount target and must stay in the DOM at its real size. -->
+            <!--
+                Nothing to show, said explicitly: a panel opened FOR a session normally has it seconds away, but the target can simply not exist. An
+                overlay, not a v-if, since the container must stay mounted at its real size.
+            -->
             <div
                 v-if="order.length === 0 && awaiting !== undefined && !waited"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
@@ -1470,14 +1236,13 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                         >…</template
                     >
                 </p>
-                <!-- The command behind it. A check that opens a terminal by itself has to be able to say what
-                     it is running, or the panel is back to offering a session name as the whole explanation. -->
+                <!-- Command behind it, so a check that opened this terminal can say what it's running, not just its name. -->
                 <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
             </div>
-            <!-- THE UNKNOWN MOMENT, WEARING ITS OWN SHAPE. Between opening this sandbox's panel and its daemon
-                 saying what it runs there is nothing to show, and the state below ("No terminals open.") is an
-                 answer. Stating it here meant retracting it a beat later, and on a daemon still waking it was
-                 the only thing a returning user ever saw. -->
+            <!--
+                Unknown moment gets its own shape: between opening the panel and the daemon saying what it runs, there's nothing to show yet, which
+                is not the same claim as 'No terminals open.'
+            -->
             <div
                 v-else-if="order.length === 0 && answer === 'waiting'"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
@@ -1494,8 +1259,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <p v-else-if="about" class="text-sm text-muted">
                     <span class="font-mono text-content">{{ named }}</span> {{ awaiting === undefined ? `isn't running.` : `` }}
                 </p>
-                <!-- "Nothing runs here" and "this sandbox never told us" are different sentences, and only one
-                     of them is about the terminals. -->
+                <!-- 'Nothing runs here' and 'this sandbox never answered' are different sentences; only one is about the terminals. -->
                 <p v-else class="text-sm text-muted">{{ answer === "refused" ? `Couldn't reach this sandbox.` : `No terminals open.` }}</p>
                 <p class="max-w-md text-2xs text-subtle">{{ emptyHint }}</p>
                 <Button
@@ -1509,8 +1273,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <template #icon><Icon name="plus" class="text-2xs" /></template>
                 </Button>
             </div>
-            <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
-                 the soft keyboard stays up while the key is injected. -->
+            <!-- Touch extra-keys row (coarse pointers only); pointerdown.prevent keeps the terminal focused so the soft keyboard stays up. -->
             <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button
                     type="button"
@@ -1525,16 +1288,16 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             </div>
         </div>
 
-        <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered
-             into the floating window while the panel floats there. -->
+        <!-- Right-click pill menu: split/join/unsplit/kill plus per-terminal color/icon; rendered into the floating window while it floats. -->
         <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
 
-        <!-- Right-click INSIDE a terminal: the clipboard verbs and the deeper scrollback. -->
+        <!-- Right-click inside a terminal: clipboard verbs and the deeper scrollback. -->
         <ContextMenu ref="gridMenu" :model="gridItems" :min-width="12" />
 
-        <!-- The pane's history as selectable text, BEYOND what the live grid holds: an attach replays the last
-             few thousand lines into xterm, where the wheel, a drag and Ctrl+F already reach them; tmux keeps
-             far more, and this is where the rest is read, as real text with native selection. -->
+        <!--
+            Pane's history as selectable text, beyond what the live grid holds: attach replays only the last few thousand lines into xterm, and tmux
+            keeps far more.
+        -->
         <Modal
             :open="scrollbackName !== undefined"
             size="xl"
@@ -1542,8 +1305,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :header="scrollbackName === undefined ? '' : `Scrollback, ${segmentLabel(scrollbackName)}`"
             @update:open="closeScrollback"
         >
-            <!-- Lays out its own height (hence <Modal :scroll="false">): the <pre> below is the scroller, and a
-                 second one wrapped around it would put the "Copy all" row out of reach on a long scrollback. -->
+            <!--
+                Lays out its own height (`:scroll="false"`): the <pre> below is the scroller, so a second one around it wouldn't leave the Copy-all
+                row reachable.
+            -->
             <div class="flex h-panel-lg min-h-0 flex-col gap-2">
                 <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
                     <template v-if="scrollback">
@@ -1562,10 +1327,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             </div>
         </Modal>
 
-        <!-- The confirm a kill gets when there is something to lose: a terminal with work running in it (however
-             it was aimed at: ×, menu row, chord), or a bulk kill of sessions the gesture never named. Each row
-             carries what that terminal is DOING, because on a strip of numbered pills the command is the only
-             thing that tells the user which terminal this actually is. -->
+        <!--
+            Confirm shown only when there's something to lose: a busy session, or a bulk kill the gesture never named. Each row shows what that
+            terminal is doing, the only thing distinguishing look-alike pills.
+        -->
         <ConfirmDialog
             :open="pendingKill !== undefined"
             :header="killHeader"
@@ -1579,15 +1344,13 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
                 <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
                 <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
-                <!-- What made this one inactive: "finished", or how long since it last said anything. The row's
-                     label was a count, and this is where the count becomes checkable. -->
+                <!-- What made this one inactive: finished, or how long since it last said anything, making the row's count checkable. -->
                 <span v-else-if="pendingKill?.inactive" class="truncate text-xs text-muted">{{ inactiveReason(item, sweepNow) }}</span>
             </template>
             <p class="mt-3 text-xs text-muted">{{ killBody }}</p>
         </ConfirmDialog>
 
-        <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
-             swatch that clears the override. (Rename is inline in the strip, not here.) -->
+        <!-- One dialog for both pickers (color, icon); a leading default swatch clears the override. Rename stays inline in the strip. -->
         <Modal :open="customize !== undefined" size="sm" :header="customizeHeader" @update:open="customize = undefined">
             <template v-if="customize">
                 <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
@@ -1639,8 +1402,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </template>
 
 <style scoped>
-/* Split cells (built by useTerminal's mount, plain elements, hence :deep): equal flex columns with a hairline
-   between, and a top accent on the focused pane so keystroke routing is visible in a split. */
+/*
+ * Split cells (plain elements from useTerminal's mount, hence :deep): equal flex columns with a hairline between, and a
+ * top accent marking the focused pane in a split.
+ */
 .term-body :deep(.term-cell) {
     display: flex;
     flex: 1 1 0;

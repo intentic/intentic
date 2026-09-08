@@ -4,12 +4,9 @@ import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import { clickElement, fillElement, listTabs, openPage, readPage, snapshotPage } from "./browser.js";
 
-/* Browser control at the layer that decides what is allowed and what comes back.
- *
- * The scope split is the same rule the rest of the tools follow, and worth pinning here too: reading a page is
- * LOOKING (screen), clicking and typing CHANGE things (control), and opening may start a browser process
- * (shell). The other half worth pinning is that every action answers with the page AFTER it, which is what
- * makes a sequence of calls one step each instead of three. */
+// Browser control at the layer that decides what is allowed and what comes back. Same scope split as the other
+// tools: reading is `screen`, clicking/typing is `control`, opening is `shell`. Every action answers with the
+// page after it, so a sequence of calls is one step each.
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     shell: "on",
@@ -87,8 +84,8 @@ test("acting on a page needs the control grant, not the screen one", async () =>
     expect(calls).toEqual(["click e0"]);
 });
 
-/* The page after a click is a different page. Answering with it is what stops the agent either forgetting to
- * look or spending a whole round trip finding out what its own action did. */
+// The page after a click is a different page. Answering with it stops the agent either forgetting to look or
+// spending a round trip finding out what its own action did.
 test("every action answers with the page as it stands afterwards", async () => {
     const { web } = fakeBrowser();
     const clicked = await clickElement(web, "e0", scopes());

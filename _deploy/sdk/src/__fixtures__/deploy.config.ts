@@ -1,7 +1,6 @@
-// Test fixture: a representative authoring declaration, compiled and asserted against deploy.graph.ts.
-// The canonical user-facing example lives in /_tools/examples/deploy.config.ts; this copy exists only to pin the
-// compiled desired-state graph. In-repo we import relatively so it runs under vitest with no resolve
-// condition (a real consumer would `import { defineStack, env } from "@intentic/sdk"`).
+// Test fixture compiled and asserted against deploy.graph.ts; the canonical example lives in
+// /_tools/examples/deploy.config.ts. Imports relatively so it runs under vitest; a real consumer imports from
+// "@intentic/sdk".
 import { env } from "@intentic/graph";
 import { defineStack } from "../index.js";
 
@@ -22,9 +21,7 @@ export const graph = defineStack(
         const dev = i.want.user("dev", { username: "dev", email: "dev@example.com" });
         const squad = i.want.team("squad", { members: [dev], komodo: "execute" });
 
-        // What I want: an app shipped to two environments, owned by the `squad` team. The tool derives the
-        // Git+CI, deploy orchestrator, runner, repo (under the team's org), and routes on the host I declared,
-        // exposed through the Cloudflare account I declared.
+        // An app shipped to two environments, owned by squad; derives git+CI, deploy, runner, repo, and routes.
         i.want.app("my-app", {
             on: host,
             expose: cf,
@@ -35,6 +32,6 @@ export const graph = defineStack(
             },
         });
     },
-    // The CLI discovers this from the API token; the fixture pins it so the compiled graph is deterministic.
+    // The CLI normally discovers this from the API token; pinned here for a deterministic compiled graph.
     "example.com",
 );

@@ -1,11 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, toggleWrap } from "@intentic/ui/markdown";
 
-/* The formatting keys and Enter-on-a-list, as edits to markdown source. The code under test moved into the
- * design system with the surface it drives (`@intentic/ui/markdown`) and is exercised from here, beside the
- * block splitter's suite, which tests that package the same way. Each case is written the way it is pressed:
- * the `|` marks a caret and `[...]` a selection in the comment above it, and the assertion is what the file
- * becomes. */
+// Formatting keys and Enter-on-a-list, as edits to markdown source, tested from here beside the block splitter's suite.
+// Each case is written the way it is pressed: `|` marks a caret and `[...]` a selection above it, and the assertion is
+// what the text becomes.
 
 const sel = (text: string, word: string): [number, number] => [text.indexOf(word), text.indexOf(word) + word.length];
 
@@ -143,9 +141,8 @@ describe(`onListLine`, () => {
     });
 });
 
-/* ENTER ON A LIST. The affordance that lets a checklist be typed straight through, and the reason a story's
- * acceptance criteria can be a plain markdown list instead of a bespoke row editor with its own keyboard
- * layer. Each case is the press: the caret is at the end of the named line unless the test says otherwise. */
+// Enter on a list: the affordance that lets a checklist be typed straight through. Each case is the press, with the
+// caret at the end of the named line unless stated otherwise.
 describe(`continueList`, () => {
     // The caret at the end of the line holding `word`, which is where Enter continues from.
     const endOf = (text: string, word: string): number => {
@@ -185,15 +182,14 @@ describe(`continueList`, () => {
         const text = `- one\n- `;
         const ended = continueList(text, text.length);
         expect(ended?.edit.text).toBe(`- one\n`);
-        // The caret lands where the marker was, and `ended` is what tells the surface to open a block there:
-        // the empty line a writer wants next does not exist in markdown until they type into it.
+        // The caret lands where the marker was, and `ended` tells the surface to open a block there: the empty line
+        // does not exist in markdown until typed into.
         expect(ended?.edit.start).toBe(`- one\n`.length);
         expect(ended?.ended).toBe(true);
     });
 
-    /* THE NEWLINE GOES WITH THE MARKER, and this is the case that proves why. Leaving it behind puts a blank
-     * line INSIDE the list, which markdown reads as a loose list rather than as the end of one — so the block
-     * stayed a list, the caret stayed in it, and the next sentence typed joined the item above. */
+    // The newline goes with the marker: leaving it behind puts a blank line inside the list, which markdown reads as a
+    // loose list rather than the end of one.
     test(`takes the item's newline too, so what follows is not swallowed by the list`, () => {
         const text = `- one\n- \n- three`;
         expect(continueList(text, `- one\n- `.length)?.edit.text).toBe(`- one\n- three`);
@@ -213,8 +209,8 @@ describe(`continueList`, () => {
         expect(continueList(text, text.length)).toBeUndefined();
     });
 
-    /* Mid-item, Enter is a SPLIT and markdown has no way to say "half this item", so the key falls through to
-     * the surface's ordinary new-block behaviour rather than inventing one here. */
+    // Mid-item, Enter is a split and markdown has no way to say "half this item", so the key falls through to the
+    // surface's ordinary new-block behaviour.
     test(`leaves the caret mid-item alone`, () => {
         const text = `- a long item`;
         expect(continueList(text, text.indexOf(`long`))).toBeUndefined();

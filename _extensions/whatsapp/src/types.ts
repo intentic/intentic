@@ -1,14 +1,8 @@
-/* The slice of a WhatsApp message this extension reads, structurally. NOT baileys' generated proto types.
- * Shared by client.ts (which casts real protos to it at the boundary) and listener.ts (which normalizes it),
- * and deliberately import-free: everything except client.ts stays testable without baileys installed, because
- * the sandbox installs a new package's dependencies only after the turn that adds them.
- *
- * WhatsApp wraps a message's real content in protocol envelopes (disappearing chats, view-once) and splits the
- * "what was written" across per-kind fields, unwrapping and reading those is listener.ts's job; this file just
- * names the fields it does that with. */
+// Structural slice of a WhatsApp message, not baileys' generated proto types; shared by client.ts (casts protos to it)
+// and listener.ts (normalizes it). Import-free so it stays testable without baileys installed.
 
 export interface WaContextInfo {
-    // JIDs this message @mentions. In groups these may be @lid (hidden-number) identities, not phone JIDs.
+    // JIDs this message @mentions; in groups these may be @lid identities, not phone JIDs.
     readonly mentionedJid?: readonly string[];
     // The author of the message this one replies to.
     readonly participant?: string;
@@ -29,8 +23,7 @@ export interface WaMessageContent {
     readonly stickerMessage?: { readonly mimetype?: string };
     readonly locationMessage?: { readonly degreesLatitude?: number; readonly degreesLongitude?: number; readonly name?: string };
     readonly contactMessage?: { readonly displayName?: string };
-    // Envelope kinds: the real content sits one level down (or, for protocolMessage, there is none, edits,
-    // deletes and sync notices are bookkeeping, not messages).
+    // Envelope kinds: content sits one level down; protocolMessage and reactionMessage carry none.
     readonly ephemeralMessage?: { readonly message?: WaMessageContent };
     readonly viewOnceMessage?: { readonly message?: WaMessageContent };
     readonly viewOnceMessageV2?: { readonly message?: WaMessageContent };

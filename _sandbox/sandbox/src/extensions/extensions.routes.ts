@@ -29,17 +29,14 @@ import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 
-// Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
-// per-extension settings values. The web extension host boots from `list`; the bundle bytes ride the plain
-// /extensions/:id/bundle route in app.ts. A checkout whose manifest no longer parses is skipped from the list,
-// its capability row still shows status, and re-adding repairs it.
+// Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
+// A checkout whose manifest no longer parses is skipped here; its capability row still shows status until re-added.
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    // The same operating-tier gate the capabilities add route holds over installing an extension, because
-    // update, revert and unattended-update policy are the same decision: whose code runs here.
+    // Same operating-tier gate the add route holds over installing: update/revert/policy are the same decision.
     const authorizeOperator = async (context: OrpcContext): Promise<void> => {
         if (services.auth === undefined) {
             return;
@@ -50,8 +47,7 @@ export const createExtensionsRoutes = (services: Services) => {
             throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can do this" });
         }
     };
-    // Every id-addressed route resolves through here, against the FULL list, a disabled extension still
-    // answers for its settings and its process state, which is what lets the tab render its row.
+    // Every id-addressed route resolves here against the full list; a disabled extension still renders its row.
     const find = async (id: string): Promise<InstalledExtension> => {
         const extension = (await installedExtensions(services)).find((e) => e.id === id);
         if (extension === undefined) {
@@ -59,11 +55,8 @@ export const createExtensionsRoutes = (services: Services) => {
         }
         return extension;
     };
-    /* One row's `backend` field, only for a manifest that ships a server bundle. The per-extension answer
-     * (running / activation error / absent / incompatible) comes from the supervisor when it has one; while
-     * the host itself is between states (starting, restarting after an edit, stopped) the host's own state IS
-     * the row's answer, because "your backend is restarting" is the sentence the author needs. A disabled
-     * extension reports nothing: its switch is the explanation. */
+    // One row's `backend` field, only for a manifest with a server; the supervisor's state wins if present.
+    // Otherwise the host's own state (starting/restarting/stopped) answers; a disabled extension reports nothing.
     const backendStateOf = (extension: InstalledExtension): Pick<ExtensionSummary, "backend"> => {
         if (extension.manifest.server === undefined || !extension.enabled) {
             return {};
@@ -77,8 +70,7 @@ export const createExtensionsRoutes = (services: Services) => {
             backend: { state: host.state === "running" ? "stopped" : host.state, ...(host.detail !== undefined ? { detail: host.detail } : {}) },
         };
     };
-    // The extension + declared process a process route addresses; an undeclared name is NOT_FOUND (the
-    // manifest-honesty rule).
+    // Extension and declared process a process route addresses; an undeclared name answers NOT_FOUND.
     const processOf = async (id: string, name: string): Promise<{ extension: InstalledExtension; process: ProcessContribution }> => {
         const extension = await find(id);
         const process = (extension.manifest.contributes?.processes ?? []).find((declared) => declared.name === name);
@@ -89,27 +81,21 @@ export const createExtensionsRoutes = (services: Services) => {
     };
     return {
         list: i.list.handler(async () => {
-            // Reading the tab is what keeps a watched sandbox's registry comparison current: a stale one
-            // refreshes in the background (never on this request's clock) and pushes the list when it lands.
+            // Refreshes in the background if stale, never on this request's clock; the list updates when it lands.
             refreshUpdatesIfStale(services);
             const inventory = await extensionInventory(services);
-            // One read for the whole list: the ledger is a single file keyed by extension id, and the tab wants
-            // every row's figures at once. Same shape for the update records and the policies.
+            // One read for the whole list: each ledger is one file keyed by id, same shape for updates and policies.
             const usage = await readExtensionUsage(root);
             const updates = await readExtensionUpdateState(root);
             const policies = await readUpdatePolicies(root);
             const extensions: ExtensionSummary[] = [];
             for (const extension of inventory.extensions) {
-                // Only a git-installed extension has a code identity to report, its pinned HEAD. A baked one's
-                // identity is the shipped image, and a workspace one's dir is live-edited (the bundle route
-                // hashes the bytes it serves), so both get their source as a sentinel.
+                // A git-installed extension alone has a pinned HEAD; others use their source as a sentinel.
                 const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
-                // Keyed by publisher.name like the settings and the switch, not by the routing id, the ledger
-                // has to survive a remove/re-add, which is what an update to a git-installed extension IS.
+                // Keyed by publisher.name like settings and the switch, surviving a git install's remove/re-add.
                 const identity = extensionIdOf(extension.manifest);
                 const observed = usage[identity];
-                // The update lifecycle exists only for the source that HAS one: a git install. The record, the
-                // kept-previous checkout and the policy all join here so the row renders the whole story.
+                // Update lifecycle exists only for a git install; record, kept-previous checkout and policy join here.
                 const record = extension.source === "installed" ? updates.extensions[identity] : undefined;
                 const previous = extension.source === "installed" ? await previousVersionOf(services, extension.id, undefined) : undefined;
                 extensions.push({
@@ -119,8 +105,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     source: extension.source,
                     enabled: extension.enabled,
                     ...(ESSENTIAL_EXTENSIONS.has(identity) ? { essential: true } : {}),
-                    // Absent rather than empty when nothing has been observed: the row must be able to tell
-                    // "never exercised" from "exercised and uses none of these".
+                    // Absent, not empty, when unobserved: the row must tell never-exercised from exercised-but-unused.
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                     ...backendStateOf(extension),
                     ...(record?.update !== undefined ? { update: record.update } : {}),
@@ -138,10 +123,8 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         create: i.create.handler(async ({ input }) => {
             const id = `${input.publisher}.${input.name}`;
-            /* Both halves of "already taken", because they fail differently. An id collision would make the new
-             * extension unenumerable, workspace extensions never shadow a baked or installed one, so it would be
-             * written, listed as invalid, and never run. A directory collision is somebody's existing work, which
-             * may be sitting in `invalid` precisely because they are mid-edit on it. */
+            // "Already taken" fails two ways: an id collision leaves it unenumerable, never shadowing a baked one.
+            // A directory collision is somebody's existing work, possibly mid-edit and already sitting in `invalid`.
             const inventory = await extensionInventory(services);
             if (inventory.extensions.some((extension) => extension.id === id)) {
                 throw new ORPCError("CONFLICT", { message: `${id} is already installed here` });
@@ -155,8 +138,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 }
                 throw new ORPCError("CONFLICT", { message: `.intentic/config/workspace-extensions/${input.name} already exists` });
             }
-            // The same ping a file the owner wrote through the workspace routes sends, this is their edit, made
-            // on their behalf, and the history/commit machinery should see it as one.
+            // Same ping a workspace file write sends: this is the owner's edit, made on their behalf.
             services.history.notifyUserWrite();
             return { id, dir: `.intentic/config/workspace-extensions/${input.name}` };
         }),
@@ -181,8 +163,7 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         setSettings: i.setSettings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);
-            // Only declared keys persist, the manifest is the settings schema, the same honesty rule the host
-            // applies to runtime view/command registrations.
+            // Only declared keys persist; the manifest is the schema, the honesty rule views/commands also follow.
             const declared = manifest.contributes?.settings ?? [];
             const secretKeys = new Set(declared.filter((setting) => setting.secret === true).map((setting) => setting.key));
             const declaredKeys = new Set(declared.map((setting) => setting.key));
@@ -190,8 +171,7 @@ export const createExtensionsRoutes = (services: Services) => {
             if (undeclared.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: `undeclared setting keys: ${undeclared.join(", ")}` });
             }
-            // Merge, so a secret key absent from the payload keeps its stored value (the masked UI round-trips
-            // non-secret edits without resending secrets); an empty-string secret clears it.
+            // Merges: a secret key absent from the payload keeps its stored value (masked UI omits resending secrets).
             const stored = (await readAllExtensionSettings(root, services.extensionSecretVault))[extensionIdOf(manifest)] ?? {};
             const next = { ...stored };
             for (const key of declaredKeys) {
@@ -201,9 +181,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     delete next[key];
                 }
             }
-            /* The split lands here: declared-secret values go to the vault off /work, the rest to the tracked
-             * settings file. The read above was rehydrated, so `next` carries whole values and this is the only
-             * place that has to know which of them are credentials. */
+            // Split lands here: secret values go to the vault, the rest to the file; `next` holds rehydrated values.
             await writeExtensionSettings(root, services.extensionSecretVault, extensionIdOf(manifest), next, secretKeys, (id, keys) =>
                 services.logger.warn(`extension settings: "${id}" declares ${keys.join(`, `)} secret but stores a non-string`),
             );
@@ -212,11 +190,8 @@ export const createExtensionsRoutes = (services: Services) => {
         recordUsage: i.recordUsage.handler(async ({ input }) => {
             const installed = new Map((await installedExtensions(services)).map((extension) => [extension.id, extension]));
             const at = new Date().toISOString();
-            /* The manifest filters the batch, the same honesty rule settings follow. A report naming a route the
-             * manifest does not declare is not an error anyone can act on, it means the manifest changed while a
-             * browser was still running the previous one, so it is dropped rather than refused, and the sweep
-             * in the store drops what that browser had already recorded. A removed extension is the same stale
-             * browser case and its report is ignored, otherwise the browser would retry it forever. */
+            // Manifest filters the batch: an undeclared route is a stale browser's old manifest, dropped not refused.
+            // A removed extension's report is the same stale case, ignored, or the browser would retry it forever.
             await Promise.all(
                 Object.entries(input.reports).flatMap(([id, used]) => {
                     const extension = installed.get(id);
@@ -230,8 +205,7 @@ export const createExtensionsRoutes = (services: Services) => {
         readiness: i.readiness.handler(async ({ input }) => {
             const extension = await find(input.id);
             const usage = (await readExtensionUsage(root))[extensionIdOf(extension.manifest)];
-            // The extension's own directory, for a workspace or baked one that is where it sits, and for a
-            // git-installed one it is the checkout, which is what a publisher would push.
+            // Extension's directory: where it sits for workspace/baked, or the checkout for a git install.
             const checks = await extensionReadiness(extension, satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion), usage);
             return { checks };
         }),
@@ -246,9 +220,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
-        // Updating and reverting change the code that runs against the owner's repos and credentials, so like
-        // installing they are the owner's decision alone (mirrors the capabilities add route's gate; loopback
-        // mode has no auth and skips it like every other route).
+        // Update/revert change code against the owner's repos and credentials; gated like install, skipped loopback.
         applyUpdate: i.applyUpdate.handler(async ({ input, context }) => {
             await authorizeOperator(context);
             try {
@@ -267,7 +239,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
-        // The policy decides what may happen UNATTENDED, operating-tier gated for the same reason the verbs above are.
+        // Decides what may happen unattended; gated for the same reason as the verbs above.
         setUpdatePolicy: i.setUpdatePolicy.handler(async ({ input, context }) => {
             await authorizeOperator(context);
             const extension = await find(input.id);
@@ -282,20 +254,16 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
             const extension = await find(input.id);
-            /* The switch is fixed for a surface whose engine runs regardless (see ESSENTIAL_EXTENSIONS): the
-             * scheduler would keep firing turns with the one page that can see, stop or approve them gone. The
-             * tab draws these switches as fixed, so this refusal is the backstop for a caller that skipped it. */
+            // Switch is fixed for a surface whose engine runs regardless: the scheduler fires with nothing to stop it.
+            // The tab draws these switches as fixed; this refusal backstops a caller that skipped it.
             if (!input.enabled && ESSENTIAL_EXTENSIONS.has(extensionIdOf(extension.manifest))) {
                 throw new ORPCError("BAD_REQUEST", {
                     message: `${extensionIdOf(extension.manifest)} is the control surface for an engine that runs regardless, it cannot be switched off`,
                 });
             }
             await writeExtensionEnablement(root, extensionIdOf(extension.manifest), input.enabled);
-            /* The half of a flip that lands NOW: declared processes. Everything else the switch reaches is
-             * rebuilt on its own cadence and needs nothing here, the agent's plugin dirs and PATH are composed
-             * per turn (turn-plan.ts), connectors/env/listener providers are read per request, and an
-             * `environment` fragment is only in the image. The tab tells the owner which of those an extension
-             * actually has, so the delay is stated rather than discovered. */
+            // Only declared processes land now; everything else the switch reaches rebuilds on its own cadence.
+            // The tab states which of those an extension has, rather than leave the delay to be discovered.
             if (input.enabled) {
                 await startAutoStartProcesses(services, extension);
             } else {
@@ -303,11 +271,9 @@ export const createExtensionsRoutes = (services: Services) => {
                     services.serviceProcesses.stop(extensionProcessKey(input.id, process.name));
                 }
             }
-            // A listener extension's gateway is wanted only while its provider is (an enabled automation + a
-            // connected capability); the flip changes that answer in both directions.
+            // A listener gateway is wanted only while its provider is: an enabled automation, a connected capability.
             void reconcileListenerProcesses(services);
-            // The backend half converges the same way: the host restarts on the new enabled set, so a
-            // switched-off extension's /x namespace stops answering now rather than at the next boot.
+            // Backend converges the same way: the host restarts on the new set, so /x stops answering now, not later.
             services.extensionBackend.restart();
             return { ok: true } as const;
         }),
@@ -326,14 +292,11 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         processStart: i.processStart.handler(async ({ input }) => {
             const { extension, process } = await processOf(input.id, input.name);
-            // Stop and status stay reachable while disabled (a lingering process still needs killing); starting
-            // one would be the daemon running a contribution the owner switched off.
+            // Stop/status stay reachable while disabled (a lingering process needs killing); starting one would not.
             if (!extension.enabled) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "the extension is disabled" });
             }
-            // The autoStart path skips a runtime-less extension silently (nothing asked for it); a button press
-            // asked for it, so it gets the reason instead of a service the supervisor would respawn into the
-            // same module-not-found forever.
+            // autoStart skips a runtime-less extension silently; a button press gets the reason, not a respawn loop.
             if (await extensionRuntimeAbsent(extension)) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: `this extension's code is ${RUNTIME_ABSENT_DETAIL}` });
             }

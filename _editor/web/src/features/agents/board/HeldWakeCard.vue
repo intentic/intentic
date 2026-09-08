@@ -4,25 +4,20 @@ import type { AutomationApproval } from "@intentic/sandbox-contract";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import OriginMark from "../../../components/OriginMark.vue";
 
-/* A WAKE HELD AT THE DOOR: the approvals queue's row, drawn on the board. Like the workflow run it is an
- * agent card's SIBLING, not an agent card: there is no conversation yet, no branch, no transcript, the
- * session this row describes exists only if you press Approve. That is also why it lives in the Attention
- * lane and nowhere else: a hold's entire meaning is "waiting on you".
- *
- * Approve and Reject are on the card and not behind a hover, for the Stop button's reason: releasing a held
- * wake is the one thing a person comes to this row to do. The countdown names the other way out: a
- * `holdForSeconds` hold runs itself once the deadline passes on a quiet fleet, and a row that auto-runs
- * without ever saying so reads as the board acting on its own. */
+// Approvals-queue row drawn on the board, a sibling of an agent card, not one: no conversation exists until Approve is
+// pressed.
+// Attention lane only, since a hold means only "waiting on you".
+// Approve/Reject sit on the card, not behind hover, since releasing it is the whole point; the countdown names the
+// auto-run alternative so it doesn't look like the board acted on its own.
 
 const { entry } = defineProps<{ entry: AutomationApproval; busy?: boolean }>();
 const emit = defineEmits<{ approve: []; reject: [] }>();
 
-// The first line of what fired, as the card's body: the only thing that tells two holds of one automation
-// apart. A schedule hold has no payload; the automation id is then the whole story.
+// First line of what fired: distinguishes two holds of the same automation (which otherwise share no payload).
 const snippet = computed(() => entry.payload?.split("\n", 1)[0] ?? undefined);
 
-// A coarse clock (5s), only while a countdown is actually showing: the label's point is "this will run
-// itself", not the exact second, and a row without a deadline pays for no timer.
+// Coarse 5s clock, only while a countdown shows: the label only needs to say "this will run itself", not the exact
+// second.
 const now = ref(Date.now());
 let ticker: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
@@ -46,8 +41,7 @@ const autoRunLabel = computed(() => {
         :class="busy ? 'pointer-events-none opacity-60' : ''"
     >
         <div class="flex items-center gap-2.5">
-            <!-- The pause glyph where an agent card carries its identity tile: this row is a held wake, not a
-                 session: nothing is running behind it. -->
+            <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
             <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-warning/15">
                 <Icon name="pause" class="text-2xs text-warning" />
             </span>
@@ -60,11 +54,12 @@ const autoRunLabel = computed(() => {
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
                 {{ autoRunLabel ?? `waiting for you` }} · {{ timeAgo(entry.createdAt) }}
             </span>
-            <!-- TWO DECISIONS ABOUT WHAT AN AGENT IS ALLOWED TO DO, side by side, and they were the smallest
-                 pair of buttons on the board: 22px tall, which is under the WCAG 2.2 floor and a long way
-                 under a thumb. `touch-target` grows the tappable box to 44px on a coarse pointer without
-                 touching the pill, so the card keeps its density on a desk. `gap-2` on the row is what keeps
-                 the two overlays from meeting in the middle: a mis-tap here runs an automation. -->
+            <!--
+                Visually small (22px) buttons deciding what an agent may do; `touch-target` grows the tappable area to
+                44px on a coarse pointer without changing the visual size.
+                The row's gap keeps the two enlarged tap targets from overlapping, since a mis-tap here runs an
+                automation.
+            -->
             <Button
                 size="small"
                 severity="danger"

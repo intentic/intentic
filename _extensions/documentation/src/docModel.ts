@@ -1,53 +1,24 @@
 import type { FigureAccent } from "@intentic/extension-ui";
 
-/* THE DOCUMENT MODEL, and, more importantly, the line between what a model authors and what a tool computes.
- *
- * Three layers produce a document set, and keeping them apart is the entire design:
- *
- *   FACTS     , the package graph, sizes, revisions, which dirs exist, and now also every package's one-liner
- *                and anchors (read out of its README). Computed by `intentic-docs` (the bin tool this extension
- *                puts on the agent's PATH). Never authored, because a script gets them right for free and a
- *                model gets them plausibly wrong.
- *   JUDGEMENT , what a component is FOR, which packages form one, what to read first, what is surprising.
- *                Authored, as prose: a package's own `README.md`, and `repo.md` for the map. This is the only
- *                part that needs a model, and the only part worth reviewing.
- *   PRESENTATION, theme, layout, dark mode, dagre, responsive, a11y. Owned by the app. Nothing here carries a
- *                colour, a coordinate or a size.
- *
- * WHY THE PROSE IS NOT IN HERE. The obvious alternative is a fat JSON document with `responsibilities: string[]`
- * and `flows: [{ steps }]`. It was rejected: it forces every explanation into one predeclared shape, splits a
- * narrative from the figures that belong inside it, and turns an unreadable JSON diff into the review surface.
- * So the DOCUMENT is markdown (with typed figure fences, see @intentic/ui/markdown's figures.ts), and these
- * structures carry only what the app must READ rather than render: identity, the map, anchors, provenance.
- *
- * Every parser here is total. A document set is written by a model into a repo the owner then reads; a field
- * that arrives malformed must cost that field, never the page. */
+// Three layers: FACTS (computed by intentic-docs, never authored), JUDGEMENT (authored prose: READMEs and repo.md),
+// PRESENTATION (owned by the app). Prose lives in markdown, not JSON, so structures here carry only what the app must
+// read: identity, the map, anchors, provenance. Every parser is total; a malformed field costs itself, never the page.
 
-// ---- provenance: the one field that makes rot detectable ------------------------------------------------------
+// Provenance: the field that makes rot detectable.
 
-/* What the document was written against. `sourceRev` is the git revision of the DOCUMENTED DIRECTORY at
- * generation time, which is what makes "is this still true?" answerable at all: compare it to the dir's current
- * rev and the answer is a fact rather than a feeling.
- *
- * It is compared by the TOOL, not the browser. `GET /git/{repo}/log` takes only `{ repo, limit }`, no path
- * filter, so asking "what has touched this package since that rev" from the browser would cost one commit-diff
- * request per commit. `intentic-docs check` does it with one git call and writes the answer to index.json. */
+// `sourceRev` is the documented directory's git revision at generation time, compared by `intentic-docs check`, not the
+// browser, since a per-path history call would cost one request per commit.
 export interface DocProvenance {
     readonly generatedAt: number;
     readonly sourceRev: string;
-    // Which model wrote it. Display only, but it is the first thing anyone asks when a document reads oddly.
+    // Which model wrote it; display only, but the first thing asked when a document reads oddly.
     readonly model?: string;
 }
 
-// ---- repo.json: the map --------------------------------------------------------------------------------------
+// repo.json: the map.
 
-/* A LOGICAL component, the grouping of packages a reader actually thinks in ("the control plane", "the wire"),
- * which is the highest-value and least verifiable thing in the whole set. It is authored by the map phase before
- * any package is documented, and every package brief is handed its own component and this glossary, so 42
- * independently written documents share one vocabulary instead of inventing 42.
- *
- * `accent` pins the component to one of the palette's five categorical slots. Authored, and stable: assigning by
- * position would repaint every other component the moment one is added or dropped. */
+// A logical grouping of packages a reader thinks in, authored once by the map and shared by every package brief.
+// `accent` is a stable, authored slot; assigning by position would repaint every component when one changes.
 export interface DocComponent {
     readonly id: string;
     readonly name: string;
@@ -56,8 +27,7 @@ export interface DocComponent {
     readonly accent?: FigureAccent;
 }
 
-// A term this repo uses in a way an outsider would not guess. The map authors it once; the package briefs inline
-// it. Cheap, and it is most of what makes a set of documents read as one voice.
+// A term this repo uses in a way an outsider wouldn't guess; authored once by the map, inlined by every package brief.
 export interface DocTerm {
     readonly term: string;
     readonly means: string;
@@ -67,37 +37,28 @@ export interface RepoDoc {
     readonly repo: string;
     readonly components: readonly DocComponent[];
     readonly glossary: readonly DocTerm[];
-    // Package dirs in the order a newcomer should read them. Ordered, so it is a reading path and not a set.
+    // Package dirs in the order a newcomer should read them; ordered, a path not a set.
     readonly reading: readonly string[];
     readonly provenance: DocProvenance;
 }
 
-// ---- a package's page: its README, read as data ----------------------------------------------------------------
+// A package's page: its README, read as data.
 
-/* A file worth opening, and why, parsed by `intentic-docs` out of the README's `## Key files` section, never
- * authored as JSON. Anchors are the cheapest lie-detector in the system: `intentic-docs validate` checks that
- * every one still exists, and an anchor pointing at a deleted file is an unarguable "this page is out of date"
- * that no commit count can give you (a page can be behind and still true, or current and describe a file that
- * moved). They are also what the reader clicks. */
+// A file worth opening, parsed from the README's `## Key files`, never authored as JSON. `intentic-docs validate`
+// checks each still exists; a dead anchor is unarguable staleness that a commit count can't give you.
 export interface DocAnchor {
     readonly path: string;
     readonly line?: number;
     readonly what: string;
 }
 
-// ---- index.json: derived, never authored ---------------------------------------------------------------------
+// index.json: derived, never authored.
 
-/* One package's row in the generated index, and, since there is no per-package sidecar, everything the app
- * knows about a package that is not its prose. All of it is computed: the one-liner is the README's lead
- * sentence, the anchors are its key-files links, the measures come off the filesystem, and staleness is a git
- * comparison. Nothing here can be forgotten, because nothing here is written by hand.
- *
- * `stale` is the tool's verdict, with `reason` saying which check produced it, a reader who is told a page is
- * stale immediately asks why, and "commits landed since" and "it points at a file that is gone" call for
- * different actions. */
+// A package's row in the generated index: everything about it besides its prose, all computed (one-liner, anchors,
+// measures, staleness). `reason` says which check made `stale` true, since different causes call for different action.
 export interface DocIndexEntry {
     readonly dir: string;
-    // The package's own name (npm, cargo, …) when it has one; a dir with no manifest has only its path.
+    // The package's own name (npm, cargo, ...) when it has one; a dir with no manifest has only its path.
     readonly name?: string;
     readonly oneLiner: string;
     readonly component?: string;
@@ -106,7 +67,7 @@ export interface DocIndexEntry {
     readonly files: number;
     readonly loc: number;
     readonly hasTests: boolean;
-    // The last commit that touched the README, and when it landed, the page's date, without a field to bump.
+    // Last commit that touched the README, and when it landed; the page's date, with no field to bump.
     readonly readmeRev: string;
     readonly updatedAt: number;
     readonly stale: boolean;
@@ -115,28 +76,26 @@ export interface DocIndexEntry {
     readonly behind: number;
 }
 
-// One intra-repo dependency, for the neighbour figure. `dev` is a build/test-only edge, drawn weaker.
+// One intra-repo dependency, for the neighbour figure; `dev` marks a build/test-only edge, drawn weaker.
 export interface DocEdge {
     readonly from: string;
     readonly to: string;
     readonly dev: boolean;
 }
 
-/* The whole set's derived state. `orphans` are staged pages whose package is GONE; a PUBLISHED page cannot be
- * orphaned, because it lives inside the directory whose disappearance would orphan it, one whole class of rot
- * that the layout deletes rather than detects. */
+// The whole set's derived state. `orphans` are staged pages whose package is gone; a published page can't be orphaned,
+// since it lives inside that directory.
 export interface DocIndex {
     readonly repo: string;
     readonly generatedAt: number;
     readonly entries: readonly DocIndexEntry[];
     readonly edges: readonly DocEdge[];
     readonly orphans: readonly string[];
-    // Package dirs with no README at all. Coverage belongs in the view as a number, never on the rail as a
-    // badge, an undocumented count is lit every day, and a permanently lit badge teaches the eye to skip it.
+    // Package dirs with no README; shown as a number in the view, never as a rail badge, since it's lit every day.
     readonly undocumented: readonly string[];
 }
 
-// ---- total parsing -------------------------------------------------------------------------------------------
+// Total parsing.
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === `object` && value !== null && !Array.isArray(value);
 
@@ -157,9 +116,7 @@ const ACCENTS = new Set([`1`, `2`, `3`, `4`, `5`, `neutral`]);
 const accentOf = (value: unknown): FigureAccent | undefined =>
     typeof value === `string` && ACCENTS.has(value) ? (value as FigureAccent) : undefined;
 
-/* Provenance is REQUIRED, and a document without it does not parse. That is deliberate: provenance is the only
- * thing standing between this system and a pile of prose nobody can date, and a document that is allowed to omit
- * it is a document that will. */
+// Provenance is required; a document without it doesn't parse, since an optional date is a date that gets omitted.
 const provenanceOf = (value: unknown): DocProvenance | undefined => {
     if (!isRecord(value)) {
         return undefined;
@@ -295,8 +252,6 @@ export const parseDocIndex = (text: string): DocIndex | undefined => {
     };
 };
 
-/* Which component a package belongs to, from the map's side of the relation. The map declares
- * component → packages (that is the direction a human authors it in); every reader wants package → component,
- * and deriving it here means the file never holds the same fact twice. */
+// Inverts the map's authored component → packages relation into package → component, so the fact isn't stored twice.
 export const componentOfPackage = (doc: RepoDoc, dir: string): DocComponent | undefined =>
     doc.components.find((component) => component.packages.includes(dir));

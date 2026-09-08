@@ -1,30 +1,16 @@
 import { z } from "zod";
 import { ExtensionManifestSchema } from "./manifest.js";
 
-/* THE AUTHORING SCHEMA, what an editor reads to help someone write `intentic-extension.json`.
- *
- * A manifest was previously written by copying another extension's and guessing. Nothing told the author what a
- * field meant, because every explanation lived in a `//` comment in this package; and nothing told them when
- * they got one wrong, because zod STRIPS unknown keys at every level rather than refusing them. A misspelt
- * `viewers` was not an error, it was a viewer that never appeared, discovered at install, with the manifest
- * parsing perfectly.
- *
- * So: the same points, emitted as JSON Schema, with the descriptions that ride each one (contribution-point.ts)
- * arriving as hover text. Editors resolve `$schema` and give completion, documentation and a red squiggle on a
- * key nothing declares.
- *
- * STRICT HERE, LENIENT AT RUNTIME, and the asymmetry is the point. Authoring is where an unknown key is a typo
- * and should be shouted about. Runtime is where an unknown key is a manifest written for a NEWER host, which an
- * older daemon must go on installing with the point it doesn't understand ignored, refusing it outright would
- * make every addition to this list a breaking change. */
+// The authoring schema an editor reads for `intentic-extension.json`: the same points, emitted as JSON Schema, with
+// each contribution point's description (contribution-point.ts) arriving as hover text. Strict here
+// (`additionalProperties: false` throughout) though the runtime parse is lenient, since an unknown key here is a typo,
+// not a newer host's addition.
 
 // Where the published copy answers, so `$schema` in a manifest resolves for an author who has installed nothing.
 export const MANIFEST_SCHEMA_URL = "https://intentic.dev/intentic-extension.schema.json";
 
-/* `additionalProperties: false` on every object node, so a key nothing declares is flagged where it is typed.
- *
- * Skips a node that already carries `additionalProperties`, that is a `z.record`, whose whole shape is "any key,
- * this value" (a cli capability's `env`), and pinning it closed would reject every entry it exists to accept. */
+// Sets `additionalProperties: false` on every object node so an unknown key is flagged where it is typed. Skips a node
+// that already declares it or is a `z.record` (any key valid, e.g. a cli capability's `env`).
 const closeToUnknownKeys = (node: unknown): void => {
     if (Array.isArray(node)) {
         for (const item of node) {
@@ -44,8 +30,7 @@ const closeToUnknownKeys = (node: unknown): void => {
     }
 };
 
-/* The manifest schema as JSON Schema. `io: "input"` because this describes what an author WRITES, the shape
- * going in, before any refinement or default has been applied to it. */
+// The manifest schema as JSON Schema. `io: "input"` describes what an author writes, before any refinement or default.
 export const manifestJsonSchema = (): Record<string, unknown> => {
     const schema = z.toJSONSchema(ExtensionManifestSchema, { unrepresentable: "any", io: "input" }) as Record<string, unknown>;
     closeToUnknownKeys(schema);
@@ -57,6 +42,6 @@ export const manifestJsonSchema = (): Record<string, unknown> => {
     };
 };
 
-// The committed file's exact bytes, so the generator and the check that guards it cannot disagree about
-// formatting, four spaces and a trailing newline, the repo's shape for a committed generated document.
+// The committed file's exact bytes (four-space indent, trailing newline), so the generator and the check that guards it
+// can't disagree about formatting.
 export const serializeManifestJsonSchema = (schema: Record<string, unknown>): string => `${JSON.stringify(schema, undefined, 4)}\n`;

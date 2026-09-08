@@ -1,42 +1,10 @@
-/* TIER 1, does the artifact we are about to ship INSTALL, LAUNCH, and answer a deep link, on Windows?
- *
- * The direct counterpart of `_tools/desktop-smoke/smoke.sh`, in the same order a user meets the same things,
- * and it exists because the Windows installer is the one artifact in this repo that is cross-built on a Linux
- * runner and then executed for the first time on a customer's PC. Until this tier ran, the only automated look
- * inside the installer was `verify-desktop-bundle.sh` unpacking it with 7z, which proves the files are
- * in the archive and nothing at all about what happens when someone double-clicks it.
- *
- * NO DOCKER OR CREDENTIALS. The app and setup are pointed at loopback stand-ins; only the installer's own
- * WebView2 bootstrap may need the network. That is what makes this the tier that can gate every release.
- *
- * The four things no `cargo test` can tell you, and one Windows adds:
- *
- *   1. INSTALL. The NSIS installer runs to completion, unattended, on a machine where the app is not present,
- *      and Windows lists it afterwards. On a host with no WebView2 runtime this is also where the installer's
- *      bootstrapper has to fetch one, which is the step that makes a Server-based runner differ from a desktop.
- *   2. ON DISK. The executable, and the bundled `scripts/` the app spawns. Those scripts ARE the app's entire
- *      native capability; a launcher button whose script is missing fails only when a user presses it.
- *   3. REGISTRATION. `intentic://` resolves to a command, asserted BEFORE the app has ever run, because that
- *      is the one moment the INSTALLER's registration is what answers. The app rewrites it on first start, so
- *      every assertion made after a single launch tests the app's own handler and none of them tests the
- *      shipped one. That is exactly how a package that registers the scheme and then drops every link it wins
- *      can sit in a release: correct in the archive, correct once the app has run, dead for the user who just
- *      installed it and clicked "set up".
- *   4. THE DEEP LINK, TWICE. A link finds the app in one of two states and they share almost no mechanism.
- *      NOT RUNNING: the OS starts the app WITH the link in argv and the app has to notice it at startup, the
- *      first-time user's path, and the half that was broken on Linux while the other half passed on every
- *      build. RUNNING: the OS starts a second copy whose argv the single-instance plugin forwards to the first.
- *   5. UNINSTALL. Windows-only, and worth asserting because the app is MEANT to be running when it happens,
- *      it lives in the tray once its window is closed, and the installer carries a pre-uninstall hook whose
- *      whole job is to end it so the built-in check never raises a message box at someone who already told the
- *      machine to remove it. An uninstall that leaves the app running is a dialog nobody is there to answer.
- *
- * Assertions read WINDOWS, not a test hook, the app has none and should not grow one. The window appearing IS
- * the behaviour a user is promised. Which windows are the app's is decided by the PROGRAM that owns them, and
- * the title only ever says which of its two screens is up: the app shows one window and swaps screens through
- * it. Those are separate questions, and answering both with the title is how another program's window, a
- * browser reading the product's own docs is titled `Intentic …`, gets counted as the app's. See `appWindows`.
- */
+// Tier 1: does the Windows installer install, launch, and answer a deep link, with no Docker or credentials (loopback
+// stand-ins), so it can gate every release.
+// 1. install, including a WebView2 fetch on a runtime-less machine
+// 2. on disk: the executable and the scripts it spawns
+// 3. intentic:// registered before the app's first run, since the app rewrites it after
+// 4. the deep link, with the app not running and already running (different mechanisms)
+// 5. uninstall while the app is running (the ordinary state, since it lives in the tray)
 
 import type { WindowInfo } from "@intentic/desktop-automation";
 import { existsSync } from "node:fs";
@@ -48,28 +16,23 @@ import { prepareHermeticDesktop } from "./hermetic.js";
 import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windowTitles } from "./probe.js";
 
 export interface InstallTierOptions {
-    /** The `Intentic-<version>-x64-setup.exe` under test. */
+    /** The Intentic-<version>-x64-setup.exe under test. */
     readonly installer: string;
     /** When this is a release gate, the version Windows must read back from the installed candidate. */
     readonly expectedVersion: string | undefined;
-    /** Where the app's workspace window should point. A stub origin keeps this tier hermetic. */
+    /** Where the app's workspace window should point; a stub origin keeps this tier hermetic. */
     readonly appUrl: string | undefined;
-    /** Leave the app installed when the tier finishes, what tier 2 needs, since it runs the INSTALLED scripts. */
+    /** Leave the app installed when the tier finishes; tier 2 needs it, since it runs the installed scripts. */
     readonly keepInstalled: boolean;
 }
 
 const WINDOW_SETTLE_SECONDS = 60;
 const LINK_SECONDS = 45;
-// A cold first launch also initializes WebView2's user-data directory. The failed release reached the setup
-// screen just after the old 30-second deadline, while the already-warm second launch took under three seconds.
+// A cold first launch also initializes WebView2's user-data directory, which is slower than a warm one.
 const SCREEN_SECONDS = 60;
 
-/* The single-instance plugin's own window, which the app owns for its whole life and nobody ever sees: 15×15
- * pixels at the origin, kept mapped because handing a second launch's argv to the first is a window message.
- * Tauri names it after the bundle identifier, so this is derived rather than written down twice.
- *
- * It has to be named because the one-window rule counts the app's windows BY OWNING PROGRAM, and by that
- * measure a perfectly ordinary app is always showing two. What the rule means is windows a person can see. */
+// Single-instance plugin's own hidden window (15×15 at the origin), named so window counts by owning program can
+// exclude it.
 const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 
 /** One window's title and rectangle as a string, so a failed count can print what it counted. */
@@ -80,10 +43,8 @@ const describeWindows = async (): Promise<string> => {
     return titles.length === 0 ? `(no windows)` : titles.map((title) => `- ${title}`).join(`\n`);
 };
 
-/* Recorded only when it went wrong, because "a key was pressed" is not a promise made to anyone, every line
- * in this tier is something a user would see. What it prevents is the failure that reads as somebody else's:
- * a Return that never reached the dialog leaves the assertions below waiting out their deadlines, and their
- * wording ("the setup screen", "one window, not two") points at the app for a machine's refusal. */
+// Recorded only on refusal: a lost keystroke would otherwise leave later assertions timing out and reading as the app's
+// fault.
 const answer = (harness: Harness, refusal: string | undefined): void => {
     if (refusal !== undefined) {
         harness.fail(`the confirmation could not be answered`, refusal);
@@ -98,18 +59,14 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
 
     const hermetic = await prepareHermeticDesktop(options.appUrl);
     try {
-        // Recorded, never asserted. A machine with no runtime is a legitimate machine, the installer is configured
-        // to fetch one, but it changes what a launch failure means, and a log that does not say which kind of
-        // machine this was cannot tell those two apart afterwards.
+        // Recorded, not asserted: a missing runtime is legitimate, but changes what a launch failure means afterward.
         const runtimeBefore = await webView2();
         harness.section(`the machine, before`);
         harness.pass(`WebView2 runtime: ${runtimeBefore ?? `absent, the installer's bootstrapper has to fetch one`}`);
 
         const already = await findInstalledApp(PRODUCT_NAME);
         if (already !== undefined) {
-            // Not a failure to recover from: this tier's subject is a FIRST install, and an install over an existing
-            // one is a different code path with different assertions. Saying so is the useful thing, a runner whose
-            // snapshot did not reset is the likeliest cause, and it would otherwise show up as a puzzling pass.
+            // Not a failure to recover from: installing over an existing one is a different code path, unasserted here.
             harness.fail(
                 `${PRODUCT_NAME} ${already.version ?? ``} is already installed at ${already.installLocation}`,
                 `This tier asserts a FIRST install on a clean machine. Reset the runner's snapshot, or uninstall by hand:\n  ${already.uninstallString} /S`,
@@ -117,7 +74,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             return;
         }
 
-        // ── 1. install ────────────────────────────────────────────────────────────────────────────────────────
+        // 1. install
         harness.section(`install`);
         const install = await installSilently(options.installer);
         if (install.code === 0) {
@@ -144,7 +101,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             }
         }
 
-        // ── 2. what the install put on disk ──────────────────────────────────────────────────────────────────
+        // 2. on disk
         harness.section(`on disk`);
         const executable = await appExecutable(installed.installLocation);
         if (executable === undefined) {
@@ -152,13 +109,10 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             return;
         }
         harness.pass(`executable at ${executable}`);
-        // How every window assertion below finds the app's OWN windows, see `appWindows` for why not by title.
-        // Windows names a process after its executable's base name, so this is that name and nothing to keep in
-        // step by hand.
+        // Process name Windows derives from the executable's base name; window assertions match on this, not title.
         const app = basename(executable, `.exe`);
 
-        // The bundled scripts, which the bundle config copies out of the site's public tree. `verify-desktop-bundle.sh`
-        // proves the bundled BYTES match the source; this proves the install actually put them on the machine.
+        // verify-desktop-bundle.sh checks the bundled bytes match source; this checks the install actually placed them.
         const scripts = join(installed.installLocation, `scripts`);
         const shipped = [`connect.ps1`, `recreate.ps1`, `cleanup.ps1`];
         const missing = shipped.filter((script) => !existsSync(join(scripts, script)));
@@ -168,7 +122,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`the bundled scripts are not on disk after install: ${missing.join(`, `)}`);
         }
 
-        // ── 3. the registration a FRESH INSTALL has, before the app has ever run ─────────────────────────────
+        // 3. scheme registration, before first launch
         harness.section(`scheme registration, before first launch`);
         const registered = await schemeCommand(SCHEME);
         if (registered === undefined) {
@@ -182,9 +136,8 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`${SCHEME}:// resolves somewhere else: ${registered}`, `Expected a command under ${installed.installLocation}.`);
         }
 
-        // ── 4. the deep link a fresh install gets, with the app NOT running ──────────────────────────────────
-        // FIRST, and before any launch, for the reason section 3 states: one launch and it is the app's own
-        // registration under test rather than the installer's.
+        // 4. deep link, app not running (checked before any launch, so this is the installer's own registration, not
+        //    the app's).
         harness.section(`deep link, app not running`);
         await openLink(SETUP_LINK);
         if (
@@ -203,7 +156,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         await quitApp(executable);
         await harness.untilTrue(20, `the app closed`, async () => (await appWindows(app)).length === 0);
 
-        // ── 5. launch ────────────────────────────────────────────────────────────────────────────────────────
+        // 5. launch
         harness.section(`launch`);
         const launch = await launchApp(executable);
         if (launch.code !== 0) {
@@ -225,9 +178,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`the process exited during startup`, `Workspace origin was ${hermetic.appUrl}.`);
         }
 
-        // ── 6. the deep link, into the app that is already running ───────────────────────────────────────────
-        // Through the OS handler, not by calling the executable with an argument: this is the route a link takes
-        // from an external browser, and it exercises the registration and the single-instance forward together.
+        // 6. deep link, app running (the OS handler, exercising registration and the single-instance forward together).
         harness.section(`deep link, app running`);
         await openLink(SETUP_LINK);
         if (
@@ -243,27 +194,16 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.detail(await describeWindows());
         }
 
-        /* …IN THE WORKSPACE'S PLACE, not beside it. The whole window model as one assertion, and worth one
-         * because the failure it guards is invisible to every other assertion here: a setup screen that opens
-         * as a second window somewhere else satisfies the search above perfectly well, and what the user gets
-         * is an unasked-for window beside the one they were reading. That is exactly what shipped — the setup
-         * face was exempted from the swap and came up as a small window over the workspace — so onboarding,
-         * the one flow where a new user cannot yet tell which window is the product, was the one flow that put
-         * two of them on screen.
-         *
-         * COUNTED rather than measured, because the count IS the property. Two earlier versions of this
-         * assertion compared rectangles (equal, for a chromeless sheet across the workspace; then
-         * smaller-and-centred, for a dialog over it) and both could be satisfied while a second window was
-         * mapped, which is the thing being ruled out. Taken after the search above, so the swap has landed. */
+        // One window in the workspace's place, not a second one beside it: the actual regression, invisible to every
+        // other assertion here. Counted, not measured (a rectangle match could still pass with an extra window mapped).
         const visibleFaces = async (): Promise<WindowInfo[]> => (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
         const oneWindowShowingSetup = async (): Promise<boolean> => {
             const own = await visibleFaces();
             return own.length === 1 && own[0]!.title.includes(SETUP_TITLE);
         };
         if (!(await harness.untilTrue(15, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
-            /* WHAT WAS COUNTED, first: a list of every window on the desktop cannot say whether the extra one
-             * was the app's. Two of the app's own is the failure this exists for; one that is not the setup
-             * screen is the swap having gone the wrong way, and they need different fixes. */
+            // Own windows listed first: two of the app's own and one that isn't the setup screen are different
+            // failures.
             const own = await visibleFaces();
             harness.detail(own.length === 0 ? `the app showed no window` : own.map((window) => `- ${box(window)}`).join(`\n`));
             harness.detail(await describeWindows());
@@ -275,15 +215,14 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`the original instance died while handling the link`);
         }
 
-        // ── 7. uninstall ─────────────────────────────────────────────────────────────────────────────────────
+        // 7. uninstall
         if (options.keepInstalled) {
             harness.section(`left installed for the setup tier`);
             harness.pass(`${executable} stays on the machine`);
             return;
         }
 
-        // Deliberately WITHOUT quitting first: the app running is the ordinary state at uninstall time, and the
-        // pre-uninstall hook exists precisely for it.
+        // Deliberately not quit first: the app running is the ordinary state the pre-uninstall hook exists for.
         harness.section(`uninstall, with the app running`);
         const uninstall = await uninstallSilently(installed.uninstallString);
         if (uninstall.code === 0) {

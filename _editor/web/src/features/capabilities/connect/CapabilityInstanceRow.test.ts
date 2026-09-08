@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-//
-// THE ONE THING ON THIS ROW THAT IS READ OFF THE SCREEN AND TYPED SOMEWHERE ELSE: WhatsApp's link-a-device
-// code, transcribed into a phone standing next to the reader. It is pinned here because it went missing in the
-// least visible way possible: the daemon knew the code, the card was on screen, and the row simply had nowhere
-// to put it, so an owner who added WhatsApp was shown a connection badge and never a code at all.
+// WhatsApp's link-a-device code: the one thing on this row read off screen and typed elsewhere, pinned here since
+// it previously had nowhere to render.
 import PrimeVue from "primevue/config";
 import { expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
@@ -12,7 +9,7 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ConnectionState } from "../model/connections";
 import { IconStub } from "@intentic/ui/testing";
 
-// The row reaches for a router only through the rebuild hand-off, which none of these cases takes.
+// Row reaches a router only through the rebuild hand-off, which none of these cases takes.
 vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: () => undefined }), RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: CapabilityInstanceRow } = await import("./CapabilityInstanceRow.vue");
@@ -28,7 +25,7 @@ const render = (status: CapabilitySummary[`status`], state: ConnectionState = ST
         render: () => h(CapabilityInstanceRow, { entry: ENTRY, instance, state, facts: `+49 151 12345678` }),
     });
     app.use(PrimeVue);
-    // Globally registered in the real app; a bare span is all these assertions need of it.
+    // Globally registered in the real app; a bare span is enough for these assertions.
     app.component(`Icon`, IconStub);
     app.mount(el);
     const html = el.innerHTML;
@@ -46,8 +43,7 @@ it("sets the pairing code out where it can be read and copied, with the phone's 
     });
     expect(html).toContain(`ABCDEFGH`);
     expect(html).toContain(detail);
-    // The wide tracking IS the feature: it is what makes a run of eight characters transcribable by hand, so
-    // it is asserted rather than left to a class list nobody would notice going quiet.
+    // Wide tracking is what makes eight characters transcribable by hand, so it's asserted directly.
     expect(html).toContain(`tracking-[0.3em]`);
 });
 

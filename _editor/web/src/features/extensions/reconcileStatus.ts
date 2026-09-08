@@ -1,21 +1,15 @@
 import type { StatusVariant } from "@intentic/ui";
 import { readIntenticLines } from "../../lib/intenticStream";
 
-/* The shared reconcile-action vocabulary, used everywhere the resolve → plan → apply pipeline surfaces a
- * per-resource verdict: the live-status board (status.json statuses + a live `intentic deploy plan`), the infra
- * change preview (a pre-apply `intentic deploy plan`), and the live apply progress (the apply event stream). One
- * source of truth for the label text, badge variant, and node dot colour so the graph, the details panel, the
- * preview, and the progress list stay in lockstep. Its cross-extension home is here beside useWorkspaceState /
- * useDeployments, the other infra read-model pieces both extensions share. */
+// Shared reconcile-action vocabulary for the live-status board, the plan preview, and apply progress: one source of
+// truth for a verdict's label, badge variant, and dot colour so all three stay in lockstep.
 
-// Where a verdict is rendered decides its wording: the live board frames the gap between desired and reality
-// ("Drift"); a plan/apply frames what the run will do ("Update"). Same underlying action, two readings.
+// Where a verdict renders decides its wording: the live board frames it as drift from desired state ("Drift"), a
+// plan/apply frames it as an action ("Update").
 export type ReconcileContext = `live` | `plan`;
 
-// How one reconcile action reads on every surface at once. A row per action rather than a branch per surface:
-// the four readings below are four views of the SAME verdict, and splitting them into four if-chains is what
-// let a new action arrive with a label and no dot colour. `diff` and `prune` are the daemon's older spellings
-// of `update` and `delete` and share their rows verbatim.
+// One row per action, read by every surface, rather than a branch per surface. `diff` and `prune` are the daemon's
+// older spellings of `update` and `delete` and share their rows.
 interface Reading {
     readonly live: string;
     readonly plan: string;
@@ -29,9 +23,7 @@ const CREATE: Reading = { live: `to create`, plan: `create`, variant: `info`, do
 const UPDATE: Reading = { live: `drift`, plan: `update`, variant: `info`, dot: `bg-info`, gerund: `updating` };
 const REMOVE: Reading = { live: `to remove`, plan: `remove`, variant: `danger`, dot: `bg-danger`, gerund: `removing` };
 
-// An action nothing here recognises. Named rather than neutral: `unknown` is the daemon SAYING it could not
-// read the resource, which is worth its own muted treatment, while an action we simply have no row for is
-// still a change of some sort, so it keeps the info colouring and only its wording gives up.
+// `unknown` is the daemon's own signal; an unrecognised action keeps info colour, only its wording gives up.
 const UNREADABLE: Reading = { live: `unknown`, plan: `unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `working` };
 const UNRECOGNISED: Reading = { live: `unknown`, plan: `unknown`, variant: `info`, dot: `bg-info`, gerund: `working` };
 
@@ -51,27 +43,26 @@ export const statusLabel = (status: string, context: ReconcileContext = `live`):
 
 export const statusVariant = (status: string): StatusVariant => readingOf(status).variant;
 
-// The reconcile status as a dot color, the same semantics as statusVariant's DOT palette.
+// Same colour semantics as statusVariant, rendered as a dot.
 export const statusDot = (status: string): string => readingOf(status).dot;
 
 export const statusGerund = (status: string): string => readingOf(status).gerund;
 
-// One resource's verdict from an `intentic deploy plan` stream (kind:"node"): the resource id + its reconcile action.
+// One resource's verdict from an `intentic deploy plan` stream (kind:"node"): the resource id and its reconcile action.
 export interface PlanStep {
     readonly id: string;
     readonly action: string;
     readonly reason?: string;
 }
 
-// A live resource that exists but is absent from the desired graph (the plan `result` frame's orphan list),
-// what a subsequent `apply --yes` would remove.
+// A live resource absent from the desired graph (the plan `result` frame's orphan list); what `apply --yes` would
+// remove next.
 export interface PlanOrphan {
     readonly id: string;
     readonly type?: string;
 }
 
-// The daemon serializes orphans as { id, type } objects; tolerate a bare-string id too so a shape change can't
-// silently drop them (the previous string-only filter always yielded []).
+// Orphans serialize as { id, type }; tolerate a bare-string id too so a shape change can't silently drop them.
 const readOrphans = (value: unknown): PlanOrphan[] => {
     if (!Array.isArray(value)) {
         return [];
@@ -88,19 +79,16 @@ const readOrphans = (value: unknown): PlanOrphan[] => {
     });
 };
 
-// Live narration from a running plan: which node is being read (its kind:"node" state:"start" event) or the
-// last provider log line (the orphan scan narrates per provider; connect failures land here too), what a
-// consumer shows instead of a blank spinner, and what a stall watchdog re-arms on. `terminal` is the tmux
-// session the run executes in visibly (the stream's first frame), the caller surfaces its tab.
+// Live narration from a running plan: the node being read, the last provider log line, or the terminal session the run
+// is visible in. Rendered instead of a blank spinner, and rearms the stall watchdog.
 export interface PlanProgress {
     readonly node?: string;
     readonly log?: string;
     readonly terminal?: string;
 }
 
-// Reduce a daemon `intentic deploy plan` SSE stream (read + diff, no apply) to its per-resource verdicts + orphan list.
-// A terminal kind:"error" frame (a non-zero CLI exit, normalized by readIntenticLines) throws so the caller
-// surfaces the reason instead of showing an empty plan.
+// Reduces an `intentic deploy plan` SSE stream (read + diff, no apply) to per-resource verdicts and an orphan list. A
+// terminal kind:"error" frame throws, so the caller can surface the reason instead of an empty plan.
 export const readPlanSteps = async (
     body: ReadableStream<Uint8Array>,
     onProgress?: (progress: PlanProgress) => void,
@@ -137,8 +125,8 @@ export const readPlanSteps = async (
     return { steps, orphans };
 };
 
-// The one-line "does the last apply match the current desired state" pill. undefined before the first apply
-// (status.json's `converged` is absent), so callers render nothing.
+// Pill for whether the last apply matches desired state. Undefined before the first apply (`converged` absent in
+// status.json), so callers render nothing.
 export const convergedBadge = (converged: boolean | undefined): { label: string; variant: StatusVariant } | undefined => {
     if (converged === undefined) {
         return undefined;

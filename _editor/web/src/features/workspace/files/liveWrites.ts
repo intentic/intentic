@@ -1,28 +1,15 @@
 import type { ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 
-/* WHAT A MAIN-TREE TURN IS WRITING RIGHT NOW, the live counterpart of changeOrigins, which answers the same
- * question about work that has already landed. An isolated turn writes its own worktree and is nobody's
- * business here; a MAIN-TREE conversation writes the very files the Changes panel is about to commit, and
- * that is the one overlap worth a word to the user.
- *
- * The registry knows the turn exists, but deliberately does not persist its per-tool write locations. The live
- * stream does carry `locations` on every tool_call, already workspace-root-relative, so the paths are the
- * signal, and they arrive as the writes happen rather than after them.
- *
- * Deliberately BEST-EFFORT: a turn a different browser started and this one never
- * attached to leaves no trace here. That is affordable because nothing gates on this, it decorates a commit
- * the user may make either way, and the daemon's per-repo lock (git.routes.ts) is what actually keeps a
- * commit and an agent's land from interleaving. A missed advisory costs a word, not a repo. */
+// Live counterpart of changeOrigins: what a main-tree turn is writing right now (an isolated turn's worktree is
+// irrelevant here). Read from the live tool_call stream, not persisted; best-effort, since the daemon's per-repo lock
+// is the actual guard.
 
-// Tool categories that change the tree. `read`/`search`/`think` and friends touch nothing, and `execute` is
-// deliberately out: a Bash call reports no locations, so admitting it would mean warning about every repo or
-// none, and "none" is what a tool with no location can honestly claim.
+// Tools that change the tree; `execute` stays out, a Bash call reports no locations to honestly warn about.
 const WRITING_TOOLS: ReadonlySet<ToolKind> = new Set<ToolKind>([`edit`, `delete`, `move`]);
 
-// One turn's writes. Keyed by the turn's start rather than just the conversation, so the previous turn's paths
-// cannot linger into the next one: a conversation that starts writing again begins from an empty set the
-// moment its first write lands, instead of warning about a repo this turn hasn't touched yet.
+// One turn's writes, keyed by the turn's start (not just the conversation) so a new turn begins empty rather than
+// inheriting the last one's paths.
 interface TurnWrites {
     readonly startedAt: number;
     readonly paths: ReadonlySet<string>;
@@ -32,8 +19,8 @@ const byConversation = ref<Record<string, TurnWrites>>({});
 
 const NONE: ReadonlySet<string> = new Set();
 
-// Fold one tool call's locations into the conversation's set. Called for main-tree conversations only, the
-// caller owns that test, because it is the caller that knows where the turn runs.
+// Folds one tool call's locations into the conversation's set. Caller must ensure it's a main-tree conversation: only
+// it knows where the turn runs.
 export const recordTurnWrite = (
     conversationId: string,
     startedAt: number,
@@ -46,8 +33,7 @@ export const recordTurnWrite = (
     const paths = new Set(current?.startedAt === startedAt ? current.paths : []);
     const before = paths.size;
     for (const location of call.locations) {
-        // The wire contract is root-relative already; an explicit `./` lead is the one shape adapters still
-        // emit, and it would otherwise read as a repo directory literally named ".".
+        // Strips a leading `./`: some adapters still emit it, and it would read as a repo literally named ".".
         paths.add(location.path.startsWith(`./`) ? location.path.slice(2) : location.path);
     }
     if (current?.startedAt === startedAt && paths.size === before) {
@@ -56,8 +42,8 @@ export const recordTurnWrite = (
     byConversation.value = { ...byConversation.value, [conversationId]: { startedAt, paths } };
 };
 
-// The paths this conversation's CURRENT turn has written. `startedAt` is the turn identity the caller holds
-// (Conversation.turnStartedAt); undefined means no turn is running, which is no writes by definition.
+// Paths the conversation's current turn has written. `startedAt` is the turn identity (Conversation.turnStartedAt);
+// undefined means no turn running.
 export const turnWrites = (conversationId: string, startedAt: number | undefined): ReadonlySet<string> => {
     if (startedAt === undefined) {
         return NONE;
@@ -66,9 +52,8 @@ export const turnWrites = (conversationId: string, startedAt: number | undefined
     return current?.startedAt === startedAt ? current.paths : NONE;
 };
 
-// Which repo a root-relative path belongs to. Nested repos can nest further, so the LONGEST matching id wins,
-// a path under `apps/web` belongs to `apps/web`, not to `apps`. Everything else is the root repo, which is
-// also the honest answer for a path no repo claims: /work is itself a repo.
+// Which repo a path belongs to: longest matching id wins for nested repos (apps/web over apps). Unclaimed paths are the
+// root repo; /work is itself one.
 export const repoOfPath = (path: string, repos: ReadonlySet<string>): string => {
     let best = `root`;
     let bestLength = -1;

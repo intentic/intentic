@@ -54,13 +54,11 @@ export { extensionsContract } from "./contracts/extensions.contract.js";
 export { personasContract } from "./contracts/personas.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
-/* Deliberately NOT part of `sandboxContract` below: that map is the daemon's own HTTP surface, and this one is
- * spoken the other way round, over a connected device's WebSocket, with the MACHINE implementing it. */
+// Not part of `sandboxContract` below: spoken over a device's WebSocket, with the machine implementing it.
 export { hostContract } from "./contracts/host.contract.js";
-// The same inversion again, one layer in: spoken over the socket a BROWSER EXTENSION opened, with the
-// extension implementing it (contracts/webext.contract.ts).
+// Same inversion, spoken over a browser extension's socket, with the extension implementing it.
 export { webextContract } from "./contracts/webext.contract.js";
-// Same inversion, other direction of trust: spoken over a RUNNER's WebSocket, with the runner implementing it.
+// Same inversion again: spoken over a runner's WebSocket, with the runner implementing it.
 export { runnerContract } from "./contracts/runner.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
@@ -96,25 +94,14 @@ export * from "./text/mentions.js";
 export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";
 export * from "./policy/control-scopes.js";
-/* THE CONTAINER'S FIXED DIRECTORY LAYOUT, re-exported so extensions can reach it.
- *
- * The names are defined once in @intentic/constants, which sits at the bottom of the dependency graph. An
- * EXTENSION may not import that package, the boundary rule (.oxlintrc.json, _extensions/README.md) allows
- * only the SDK halves and this contract, so that an extension cannot couple itself to app or engine internals.
- * That rule is right, and it left extensions with no way to name the workspace root except by spelling it.
- *
- * Re-exporting here is what closes that gap without widening the boundary: the layout is exactly the kind of
- * thing this package already carries, shared vocabulary both sides of the wire must agree on, alongside the
- * state-file table below, and there is still one definition, in one place, that everything resolves to. */
+// The container's directory layout, re-exported since extensions can't import @intentic/constants directly.
 export { HISTORY_ROOT, HOST_STATE_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 export * from "./state/workspace-state.js";
 export * from "./state/runtime-state.js";
 export * from "./state/state-portability.js";
 export * from "./state/history-state.js";
-/* THE PROVIDER VOCABULARY, bottom-up: what each agentic loop can do (agent-runtimes), the one row-per-provider
- * table built on those records (provider-specs), and the shapes each surface reads that table in
- * (agent-catalog). Exported as three modules rather than folded into one, because the arrow between them only
- * points one way and saying so here is what stops it curling back. */
+// Provider vocabulary bottom-up: agent-runtimes, provider-specs, agent-catalog; three modules since the dependency
+// points one way.
 export * from "./models/agent-runtimes.js";
 export * from "./models/provider-specs.js";
 export * from "./models/agent-catalog.js";
@@ -142,13 +129,8 @@ export * from "./text/path-refs.js";
 export * from "./models/prompt-complexity.js";
 export * from "./policy/output-fields.js";
 export * from "./policy/approvals-execution.js";
-/* The wire shapes, one module per subject area, mirroring `contracts/` above: every request and response the
- * daemon speaks is declared in exactly one of them. Inputs that carry a `{param}` in their route path (repo /
- * id / name) merge the path param into the same flat object, oRPC fills the path placeholder from the matching
- * key and routes the rest to the body (POST/PUT) or query (GET).
- *
- * `schemas/internal.ts` is deliberately absent: it holds the id and ref primitives these modules are written
- * in, which are vocabulary rather than shapes either side of the wire sends. */
+// Wire shapes, one module per subject area, mirroring `contracts/`; a `{param}` in the route path merges into the same
+// flat object, split back into path/body/query. `schemas/internal.ts` is absent: it's vocabulary, not a wire shape.
 export * from "./schemas/activity.js";
 export * from "./schemas/agent.js";
 export * from "./schemas/agents.js";
@@ -209,9 +191,8 @@ export * from "./text/model-answer.js";
 export * from "./text/whisper.js";
 export * from "./text/workflow-faults.js";
 
-// The aggregated contract, implemented on the server by the per-domain route factories and consumed by the
-// browser's typed oRPC client (ContractRouterClient<typeof sandboxContract>). The wire paths it declares are
-// mounted at the sandbox root, so /health and /workspace/raw (plain Hono routes) sit alongside it.
+// The aggregated contract; implemented server-side by per-domain route factories, consumed by the browser's typed oRPC
+// client. Mounted at the sandbox root, alongside plain Hono routes like /health and /workspace/raw.
 export const sandboxContract = {
     accounts: accountsContract,
     activity: activityContract,
@@ -253,26 +234,21 @@ export const sandboxContract = {
     workflows: workflowsContract,
 };
 
-// Every route in THIS build of the contract, and the names the daemon advertises on its hello frame. Bound here
-// rather than in routes.ts so that module stays a pure function of whatever contract it is handed, importing
-// `sandboxContract` from there would close a load-time cycle back through this file. See routes.ts for why a
-// daemon advertises its route surface at all.
+// Every route in this build, and the names advertised on the hello frame; bound here, not in routes.ts, to avoid a
+// load-time cycle back through this file.
 export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxContract);
 export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
 
-/* And the SHAPE of each of those routes, advertised beside the names for the failure the names cannot describe:
- * a route both builds have, answering a payload only one of them expects. Computed once at module load, it
- * walks every contract schema through `z.toJSONSchema`, which is far too much work to repeat per connection and
- * exactly the kind of thing that never changes for the life of a process. See routes.ts. */
+// Each route's shape, for the failure names alone can't describe: a route both builds have, but whose payload only one
+// expects. Computed once at load, since it's too expensive to repeat per connection.
 export const SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> = routeShapes(sandboxContract);
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>
     routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);
 
-// The method and concrete path a TYPED call is about to put on the wire, bound to this build's route table.
-// Undefined when the procedure is not one this contract declares, which a typed caller cannot reach, the host
-// gate treats it as a refusal rather than assuming it is harmless.
+// The method and path a typed call is about to send, bound to this build's route table. Undefined for an undeclared
+// procedure; the host gate then refuses it rather than assuming it's harmless.
 export const sandboxRequestFor = (procedure: readonly string[], input: unknown): { method: string; path: string } | undefined => {
     const route = routeForProcedure(SANDBOX_ROUTES, procedure);
     return route === undefined ? undefined : { method: route.method, path: requestPathFor(route, input) };

@@ -13,23 +13,15 @@ import { computed } from "vue";
 import { host } from "./host";
 import { workflowRunsQuery } from "./runsQuery";
 
-/* The sandbox's workflow manifest (.intentic/config/workflows.json) and run ledger (.intentic/records/workflow-runs.json),
- * read/written through the daemon's /workflows routes. All daemon access goes through the host api.
- *
- * NOT POLLED. Both files are on the daemon's file-change push, the scheduler writes the ledger several times
- * per step, the watcher batches each write into a `workspaceChanged` frame, and the browser invalidates the
- * `workflows` / `workflow-runs` keys (core's WORKSPACE_STATE_FILES table; core owns those keys because the
- * fleet board reads them whether or not this extension is enabled). Between writes nothing about a run
- * changes, so there is nothing for an interval to discover, a poll here could only re-read the answer the
- * push already delivered, seconds later.
- */
+// Workflow manifest and run ledger, via the daemon's /workflows routes. Not polled: both files ride the daemon's
+// file-change push, which invalidates the `workflows`/`workflow-runs` keys directly, so there's nothing an interval
+// would discover between writes that the push hasn't already delivered.
 
 export function useWorkflows() {
     const api = host();
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.key(`workflows`);
-    // The ledger's read model, shared with the rail badge's background poll rather than written out again here:
-    // whichever of the two asks first fills the entry the other paints from (runsQuery.ts).
+    // Shared with the rail badge's poll; whichever asks first fills the entry the other paints from.
     const runs = workflowRunsQuery();
     const runsKey = runs.queryKey;
     const enabled = computed(() => api.sandbox.reachable());
@@ -46,8 +38,7 @@ export function useWorkflows() {
         await queryClient.invalidateQueries({ queryKey: runsKey });
     };
 
-    // Answers with the design as stored PLUS the gate's token when the design declares one: the designer has no
-    // other way to learn the URL it has to hand the pipeline (WorkflowSavedSchema).
+    // Response includes the gate token when one exists; it's the designer's only way to learn the URL.
     const save = useMutation({
         mutationFn: async ({ workflow, create }: { workflow: Workflow; create: boolean }): Promise<WorkflowSaved> =>
             WorkflowSavedSchema.parse(
@@ -59,7 +50,7 @@ export function useWorkflows() {
             ),
         onSuccess: invalidate,
     });
-    // A fresh gate token, the old one retired at once; every pipeline wired to the gate is re-taught.
+    // Mints a fresh token and retires the old one at once; every wired pipeline must be re-taught.
     const rotateGateToken = useMutation({
         mutationFn: async (id: string): Promise<DoorToken> =>
             DoorTokenSchema.parse(await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/gate/rotate`, { method: `POST` })),
@@ -69,12 +60,8 @@ export function useWorkflows() {
         mutationFn: (id: string) => api.sandbox.json(`/workflows/${encodeURIComponent(id)}`, { method: `DELETE` }),
         onSuccess: invalidate,
     });
-    // The daemon acks with the opened run and executes detached, so success here means "it started". The run
-    // that comes back is already complete as a graph, every step recorded `pending`, which is what lets the
-    // run view open on it immediately rather than on a spinner.
-    /* The request rides with the start, the sentence the user typed before pressing Run, which every step is
-     * handed on top of its own prompt (WorkflowRun.request). It is what makes a saved design a SHAPE you point
-     * at today's job rather than a document you edit to ask a question. */
+    // Success means started, not finished; steps come back `pending` so the run view opens immediately.
+    // `request` is what the user typed before Run, handed to every step on top of its own prompt.
     const start = useMutation({
         mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
             (await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/run`, {
@@ -92,10 +79,7 @@ export function useWorkflows() {
     return {
         workflows: computed<WorkflowSummary[]>(() => query.data.value ?? []),
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
-        // Whether the LEDGER has actually been read, as opposed to being empty or still in flight. Only a
-        // surface that has to tell "this run is not on the record" apart from "the record has not arrived"
-        // needs it, an empty `runs` means both, and guessing wrong accuses a link of being broken while it
-        // is still loading.
+        // Whether the ledger has actually loaded, since an empty `runs` means both that and still-loading.
         runsLoaded: runsQuery.isSuccess,
         error: computed(() => query.error.value?.message ?? runsQuery.error.value?.message),
         isLoading: query.isLoading,

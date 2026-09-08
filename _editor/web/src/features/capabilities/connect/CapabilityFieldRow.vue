@@ -1,8 +1,7 @@
-<!-- ONE FIELD OF A CAPABILITY'S FORM, in whichever of its two shapes the field earns (see inlineField(): a
-     switch or a short picker answers beside its label, everything else stacks), with the one line under the box
-     that says the most useful true thing right now. The page owns every decision (what is alarmed, what was
-     pasted, what a blob was read as) and hands the verdicts down as props; this component only draws them, so
-     the main fields and the Advanced group render one field the same way without the template existing twice. -->
+<!--
+    One field of a capability's form, laid out inline or stacked per inlineField(). The page computes every verdict (alarms, parsed values); this
+    component only renders what it is given.
+-->
 <script setup lang="ts">
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { SegmentedControl, StatusBadge, ui } from "@intentic/ui";

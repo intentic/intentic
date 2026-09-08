@@ -1,16 +1,4 @@
 // @vitest-environment jsdom
-//
-// ASKING A TURN AGAIN, DIFFERENTLY: asserted through the real composer and read off the DOM, because the whole
-// feature is an affordance and a mode on the conversation that no surface offers is worth nothing.
-//
-// THE ORDER OF EVENTS IS THE FEATURE. A pencil that rewound on the click would destroy the answer before the
-// user had decided what to say instead, and an edit abandoned half-way would have already spent it. So arming
-// commits nothing, the doomed turns stay on screen struck through for as long as it takes to retype the prompt,
-// and the SEND is the confirmation. Everything below is one of those three claims: what arming does (nothing),
-// what the box says while it is armed, and what the send finally spends.
-//
-// The conversation-level half: that the send rewinds before it enqueues, and sends nothing if the rewind is
-// refused: is pinned in conversation.test.ts. This file is about the composer.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -23,7 +11,9 @@ import { router } from "../../../router";
 import ChatPanel from "../panel/ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted chat surface needs: see chatPanelPanes.test.ts, which explains each.
+// Asserted through the real composer and DOM, since editing is a mode with no value unless a surface
+// offers it. Arming commits nothing (doomed turns stay struck through until retyped); Send is the
+// only thing that spends. The conversation-level rewind is pinned in conversation.test.ts.
 vi.hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
@@ -50,8 +40,7 @@ vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
-// Mocked ONLINE: unreachable, the whole footer yields to "Chat is available once your sandbox is connected" and
-// every assertion here would pass against a pane with no controls in it at all.
+// Import-time globals a mounted chat surface needs.
 vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
     const { computed } = await import(`vue`);
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
@@ -100,14 +89,10 @@ const button = (label: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll<HTMLButtonElement>(`button`)].find((element) => element.textContent?.trim().startsWith(label));
 const paneText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
-// The rows the transcript has struck through: what an armed edit would spend, drawn on the messages themselves.
+// Mocked online; unreachable would yield a footer with no controls, passing every assertion vacuously.
 const struck = (): number => document.querySelectorAll(`.chat-doomed`).length;
 
-/* A settled two-turn chat whose prompts the daemon still holds states for: the starting position an edit needs,
- * reached without going near the network. The checkpoint is what carries the anchor, and it arrives already
- * stamped: the daemon puts the saved point and the index a rewind addresses it by onto the row itself, on the
- * live turn's `checkpoint` frame and on the read that serves a replayed one. A message with no anchor has
- * nothing to put the files back to, so no edit is offered on it at all: the assistant rows below carry none. */
+// Rows the transcript has struck through: what an armed edit would spend.
 const editableChat = (): Conversation => {
     const conversation = useChat().active.value;
     conversation.restoreMessages([
@@ -135,8 +120,8 @@ afterEach(() => {
     providerAccounts.value = { ...providerAccounts.value, claude: [] };
 });
 
-/* ARMING COSTS NOTHING, which is the claim the whole design rests on: the transcript is whole, the daemon has
- * been asked for nothing, and the words are in the box waiting to be changed. */
+// A settled two-turn chat with checkpoint anchors already stamped on its rows, reached without the
+// network. A message with no anchor (the assistant rows) offers no edit.
 it(`loads the old prompt into the box and destroys nothing`, async () => {
     const conversation = editableChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
@@ -150,10 +135,8 @@ it(`loads the old prompt into the box and destroys nothing`, async () => {
     expect(enqueue).not.toHaveBeenCalled();
 });
 
-/* THE COUNT, in the two places it has to be. On the ROWS, because an edit aimed three prompts up spends however
- * much has happened since and that is precisely the quantity nobody holds in their head; and over the BOX,
- * because an edit aimed twenty turns back leaves nothing struck anywhere near the composer, and a box that has
- * silently changed what Send does with no mark on it is the trap this mode is arranged to avoid. */
+// Arming costs nothing: the transcript stays whole, the daemon is asked for nothing, and the old
+// words wait in the box.
 it(`strikes what the send would replace and names the cost over the box`, async () => {
     const conversation = editableChat();
     await mountPanel();
@@ -161,7 +144,8 @@ it(`strikes what the send would replace and names the cost over the box`, async 
     conversation.beginEdit(conversation.messages.value[0]!);
     await settle();
 
-    // The edited prompt and the three rows under it.
+    // The cost shows in two places: struck rows near the target, and a count over the box for an edit
+    // aimed further back where nothing is struck nearby.
     const droppedBelow = struck() - 1;
     expect(struck()).toBe(4);
     expect(paneText()).toContain(`Editing`);
@@ -188,8 +172,8 @@ it(`lifts the strikes and returns the displaced draft on cancel`, async () => {
     expect(conversation.messages.value).toHaveLength(4);
 });
 
-// Escape is the plainest way out of a mode, and it is free to mean that here precisely because leaving costs
-// nothing: there is no turn to stop and no transcript to put back.
+// Cancel keeps the promise that arming costs nothing: strikes lift and the composer restores whatever
+// the pencil displaced.
 it(`abandons the edit on Escape`, async () => {
     const conversation = editableChat();
     await mountPanel();
@@ -204,9 +188,7 @@ it(`abandons the edit on Escape`, async () => {
     expect(struck()).toBe(0);
 });
 
-/* THE SEND, which is the one press that spends anything, and it goes down submitEdit rather than the ordinary
- * send, because an edit appended to the end of the conversation would land after the very turns it was meant to
- * replace. */
+// Escape leaves free, since arming costs nothing: no turn to stop, no transcript to put back.
 it(`sends the replacement through the edit path, not as a new message`, async () => {
     const conversation = editableChat();
     const submitEdit = vi.spyOn(conversation, `submitEdit`).mockResolvedValue(true);
@@ -226,9 +208,8 @@ it(`sends the replacement through the edit path, not as a new message`, async ()
     expect(composer().value).toBe(``);
 });
 
-/* An edit replaces a prompt, so it needs one. An empty box would drop the turns and then ask nothing: a rewind
- * the user never asked for, wearing an edit's confirmation. Cancel is how an edit ends with nothing sent, and it
- * is on screen the whole time. */
+// Send goes down submitEdit, not the ordinary path, since appending at the end would land after the
+// turns it's meant to replace.
 it(`refuses to spend an edit on an empty box`, async () => {
     const conversation = editableChat();
     const submitEdit = vi.spyOn(conversation, `submitEdit`).mockResolvedValue(true);
@@ -246,10 +227,8 @@ it(`refuses to spend an edit on an empty box`, async () => {
     expect(conversation.editing.value).toEqual(expect.any(Object));
 });
 
-/* THE COMPOSER CANNOT PROMISE TWO THINGS AT ONCE. The agent's voice and the run-through badge's picks answer
- * the same question an edit does: what happens when I press Send, and submit() has to choose one of them. Any
- * arrangement where the loser stays lit is a composer showing a promise it will not keep, so arming an edit
- * clears them where the user can see it happen. */
+// An empty box would drop the turns and ask nothing, an unrequested rewind wearing an edit's
+// confirmation; Cancel is the way out.
 it(`clears the other things that rewrite what Send means`, async () => {
     const conversation = editableChat();
     conversation.workflowId.value = `wf-1`;
@@ -262,9 +241,8 @@ it(`clears the other things that rewrite what Send means`, async () => {
     expect(conversation.loopId.value).toBeUndefined();
 });
 
-/* THE ESCAPE HATCH FROM A DESTRUCTIVE ACT, offered where the doubt happens: half-way through retyping, having
- * just read the answer about to be thrown away. It forks at the same point and carries the half-written
- * replacement across, so changing your mind costs neither the answer nor the typing. */
+// Forks at the same point, carrying the half-written replacement across, so changing your mind costs
+// neither the old answer nor the new typing.
 it(`hands the half-typed replacement to a fork instead, keeping this chat whole`, async () => {
     const chat = useChat();
     const conversation = editableChat();
@@ -278,11 +256,11 @@ it(`hands the half-typed replacement to a fork instead, keeping this chat whole`
     button(`Keep both instead`)!.click();
     await settle();
 
-    // A second chat exists, holding the words that were being typed...
+    // A second chat exists, holding the words that were being typed.
     expect(chat.conversations.value).toHaveLength(2);
     const fork = chat.conversations.value.at(-1)!;
     expect(fork.draft.value).toBe(`ship it to staging first`);
-    // ...and this one is exactly as it was: every turn intact, nothing struck, no edit armed.
+    // This one is untouched: every turn intact, nothing struck, no edit armed.
     expect(conversation.messages.value).toHaveLength(4);
     expect(conversation.editing.value).toBeUndefined();
 });

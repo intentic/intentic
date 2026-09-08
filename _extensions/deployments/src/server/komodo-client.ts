@@ -1,19 +1,10 @@
-/* The Komodo Core API behind one client shape, authenticated with an API key PAIR (`x-api-key` +
- * `x-api-secret`) resolved per call from the `komodo` cli capability the route names.
- *
- * WHY THIS IS NOT _deploy/providers/src/komodo/komodo-api.ts. That one is the deploy ENGINE's client: it mints a
- * JWT by logging in as the local admin the engine itself provisioned, and its surface is deployment
- * reconciliation. This one serves a connection the USER made to a Komodo we know nothing about, with a
- * credential they pasted, and its surface is read + execute. Two different callers, two different auth
- * stories; sharing them would mean one module that logs in OR carries keys depending on who called it.
- *
- * `fetch` is injectable for tests, the CiClient/git-access precedent. Failures throw with Komodo's own status
- * and body tail, the caller decides whether that means "unreachable" (the overview, which degrades) or a
- * BAD_GATEWAY (the actions, where the vendor's words are the whole point). */
+// Komodo Core API behind one client shape, keyed per call with the user's pasted api-key pair. Distinct from
+// _deploy/providers' own Komodo client, which logs in as an admin it provisions itself. `fetch` is injectable for
+// tests; failures throw with Komodo's status and body, and the caller decides what that means.
 
 export type FetchFn = typeof fetch;
 
-// Komodo's own env var names, which are also this connector's (see _extensions/connectors).
+// Field names match Komodo's own env vars, which this connector reuses.
 export interface KomodoConnection {
     readonly capability: string;
     // No trailing slash, every path below is joined with one.
@@ -23,31 +14,14 @@ export interface KomodoConnection {
 }
 
 const BODY_TAIL = 300;
-// Bound a stalled connection: undici's default headers timeout is ~5 minutes, and a hung Komodo must read as
-// unreachable within the view's own patience, not hold a request open past it.
+// Bounds a stalled connection; undici's default timeout (~5 min) is far longer than the view's patience.
 const TIMEOUT_MS = 15_000;
 
-/* Node's fetch sends NO user-agent at all, and a Komodo behind Cloudflare answers that with 403 "error code:
- * 1010", the browser-integrity check refusing a client with no signature. Every read came back as a hard
- * failure and the board read as unreachable, for a Komodo that was perfectly healthy.
- *
- * Any value fixes it (verified against a live Cloudflare-fronted Komodo: absent → 403, curl/… → 200), so this
- * names us honestly rather than impersonating a browser. Worth keeping on every outbound call this daemon
- * makes to a user-hosted service for the same reason. */
+// A Cloudflare-fronted Komodo 403s a fetch with no user-agent at all; any value here avoids that.
 const USER_AGENT = "intentic-sandbox";
 
-/* POST {module}/{Operation} with the params object as the WHOLE body.
- *
- * Komodo Core's variant route reads the body as the params and re-wraps it itself
- * (`serde_json::from_value(json!({"type": variant, "params": <body>}))`), so a body of `{params: {...}}`
- * arrives as `params.params` and every required field reads as absent. That shipped, and it was invisible for
- * exactly as long as this client only called the no-argument lists: `ListStacks` has no required field, so the
- * doubly-wrapped body deserialized fine and the board rendered. Everything that takes an argument failed,
- * `GetStackLog` with "missing field `stack`", and, more quietly, every execute behind the row buttons.
- *
- * The other spelling. POST /{module} with a `{type, params}` envelope, is what _deploy/providers' engine
- * client uses. Both are correct; this one keeps the operation in the URL, where a stack trace and a proxy log
- * can both see it. */
+// POST {module}/{Operation} with `params` as the whole body: Komodo's route re-wraps it as `{type, params}` itself, so
+// wrapping it again here would make every required field read as absent.
 const call = async <T>(
     connection: KomodoConnection,
     fetchFn: FetchFn,
@@ -73,10 +47,9 @@ const call = async <T>(
     return response.json() as Promise<T>;
 };
 
-/* The raw shapes we consume, named as Komodo names them. Read loosely on purpose: every list item is
- * `{id, name, info}` with a per-type `info`, and Komodo adds fields to `info` release over release. Typing
- * only what we read (and leaving the rest to pass through unread) is what keeps a Komodo upgrade from
- * emptying this view, the alternative, a strict schema, turns every new field into an outage. */
+// Raw shapes we consume, named as Komodo names them. Typed loosely on purpose: Komodo adds fields to `info` release
+// over release, and typing only what we read keeps an upgrade from emptying this view instead of erroring on new
+// fields.
 
 export interface KomodoListItem<Info> {
     readonly id: string;
@@ -116,8 +89,7 @@ export interface KomodoServerInfo {
     };
 }
 
-// Komodo serializes an alert's mongo id as `{_id: {$oid}}` or a bare string depending on the path; both are
-// read, and an alert with neither still renders (its id only keys a list).
+// Komodo serializes an alert's mongo id as `{_id: {$oid}}` or a bare string, depending on the path; both are read.
 export interface KomodoAlert {
     readonly _id?: { readonly $oid?: string } | string;
     readonly ts?: number;
@@ -127,10 +99,8 @@ export interface KomodoAlert {
     readonly data?: { readonly type?: string; readonly data?: Record<string, unknown> };
 }
 
-/* Who the API key acts as. Komodo filters every list by the caller's permissions, so a key minted on a
- * service user with no grants gets a 200 and an EMPTY array, indistinguishable, from the response alone, from
- * a Komodo with nothing deployed. This is what lets the view tell those two apart instead of reporting the
- * second when the truth is the first. */
+// Who the API key acts as: Komodo filters every list by permission, so a key with no grants gets an empty array
+// indistinguishable from an empty Komodo. Lets the view tell those two apart.
 export interface KomodoViewer {
     readonly username: string;
     // Either flag means the key sees everything, so an empty board really is an empty board.
@@ -177,8 +147,7 @@ export const komodoClient = (connection: KomodoConnection, fetchFn: FetchFn = fe
         return { stdout: log.stdout ?? "", stderr: log.stderr ?? "" };
     },
     execute: async (operation, params) => {
-        // Execute returns an Update record describing the run; only the status matters here, the view
-        // refetches the overview, which is the authoritative answer to "did it work".
+        // Execute's Update record isn't read; the view refetches the overview for the authoritative answer.
         await call(connection, fetchFn, "execute", operation, params);
     },
 });

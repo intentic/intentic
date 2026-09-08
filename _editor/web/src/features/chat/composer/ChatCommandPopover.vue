@@ -4,16 +4,9 @@ import ComposerPopover from "./ComposerPopover.vue";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 
-/* The composer's `/` command picker: the provider's own slash commands, an ACP agent's available_commands,
- * or a Claude session's supportedCommands() (its built-ins plus the workspace's .claude/commands and any
- * plugin/skill commands). Same shell as the mention popover: the parent owns the keyboard flow and calls
- * move/pickActive.
- *
- * Rows only, and only when the parent has matches to show. It used to filter the list itself and answer an
- * empty result with "No command matches": a warning raised over prose, which is the case that needs no
- * warning at all: `/workspace view …` is a sentence, and a box telling the user it names no command reads as
- * an error over text that is about to send perfectly well. The parent owns the match now because it also has
- * to answer the harder question the popover never could, whether the draft will RUN as a command. */
+// The composer's `/` command picker; rows only, filtering owned by the parent (which also decides
+// whether the draft will run as a command). Same shell as the mention popover: the parent owns the
+// keyboard flow via move/pickActive.
 
 const props = defineProps<{ commands: readonly AgentCommand[] }>();
 const emit = defineEmits<{ pick: [name: string] }>();
@@ -46,20 +39,15 @@ defineExpose({ move, pickActive });
             :class="{ 'ui-row-select-on': index === activeIndex }"
             @mousedown.prevent="emit('pick', command.name)"
         >
-            <!-- Meta tier, one step under the body tier its sibling popovers use for a primary: this one is
-                 MONO, which at a given size reads wider and heavier than proportional text, so the step down
-                 is what makes it optically match the mention/model rows. Same rule as .chat-markdown code.
-                 Hierarchy against the hint/description beside it is carried by color, not size. -->
+            <!--
+                One tier below the sibling popovers' primary text, since mono reads wider/heavier at the same size
+                (same rule as .chat-markdown code).
+            -->
             <span class="shrink-0 font-mono text-2xs text-content">/{{ command.name }}</span>
-            <!-- BOUNDED, because argumentHint is the provider's string and nothing caps its length. It used to
-                 be shrink-0, which reads as "a hint is short" and is true of almost all of them ([path],
-                 [name], <model>) and false of the ones that spell a whole grammar: /auto-mode-setup's is 649px
-                 of flags, which took the entire row, sat flush against the card's border with no ellipsis to
-                 say it had been cut, and squeezed the description beside it to ZERO width — the row then names
-                 a command and does not say what it does. A CAP rather than a shrink: made shrinkable, the hint
-                 yields space proportionally and short ones lose characters too ([<target>] rendered as
-                 [<tar…), which is worse than the bug. shrink-0 keeps a hint at its natural width, and max-w
-                 clamps only the ones that would spend the description's half. -->
+            <!--
+                Capped, not shrunk: argumentHint is unbounded provider text. shrink-0 keeps short hints at natural
+                width; max-w only clamps the rare long ones that would crowd out the description.
+            -->
             <span v-if="command.hint" class="max-w-[45%] shrink-0 truncate font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>

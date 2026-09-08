@@ -1,19 +1,8 @@
 import { VOCABULARY_PATH } from "./vocabulary.js";
 
-/* WHAT A BRAND-NEW KNOWLEDGE BASE GETS, and deliberately only one note.
- *
- * Seeding example people and example projects would fill somebody's knowledge base with facts about nobody, and
- * every one of them would have to be found and deleted before the knowledge base said anything true. What a new knowledge base
- * actually lacks is not content but AGREEMENT, the handful of words it is going to use, and that is the one
- * thing worth writing for them, because it is also the thing neither the owner nor the agent can guess at
- * consistently on their own.
- *
- * It is prose, not config, because the agent reads it: "a decision is a choice we made and won't revisit
- * without cause" is the sentence that keeps `decision` from becoming a synonym for `note`, and no schema field
- * could carry it. Every word in it is editable, it is just a note, and the knowledge base it describes is just a folder.
- *
- * The examples are FENCED, so the knowledge base's own explanation of the link syntax does not fill the graph with links
- * to notes called "Intentic" that nobody wrote (see note.ts, which skips code when it scans for links). */
+// A brand-new knowledge base gets exactly one seed note: an agreed vocabulary, not example content that would need
+// cleaning up later. It's prose, since the agent reads it; its example links are fenced so they don't add real edges to
+// the graph.
 const STARTER_VOCABULARY = `---
 type: vocabulary
 types: [person, project, company, decision, meeting, term, source]
@@ -79,8 +68,7 @@ Came round to [[Why extensions]] eventually.
 A link to a note nobody has written yet is fine and deliberate: it is this knowledge base's to-do list.
 `;
 
-// One note, at the conventional path. A list rather than a single value because what a starter knowledge base should
-// contain is a judgement that may change, and the caller should not have to change shape when it does.
+// One note at the conventional path; a list since what a starter kb contains may change.
 export const starterNotes = (): readonly { readonly path: string; readonly content: string }[] => [
     { path: VOCABULARY_PATH, content: STARTER_VOCABULARY },
 ];

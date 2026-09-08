@@ -3,18 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { FleetAgent } from "./useAgents-fleet";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane } from "./useWorkflowRuns";
 
-// The same module-eval cuts the sibling suites make: these are pure functions, but importing them pulls the
-// composable's sandbox client and the fleet store behind it, and those read environment.ts's `window.env` at
-// import time. Nothing here touches either.
+// Importing these functions pulls in the sandbox client and fleet store, which read `window.env` at import time;
+// mocked here even though this file never touches them.
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 vi.mock("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: vi.fn() }));
 
-/* The grouping rule, on its own. These are the pure half of the run row: the half three surfaces share (the
- * board's lanes, the board's archive, the rail in a floating window) and the half that was getting the answer wrong,
- * so it is tested here rather than through any one of them.
- */
+// The grouping rule alone: the pure half of a run row shared by the board's lanes, the board's archive, and the
+// floating rail.
 
 const run = (runId: string, over: Partial<WorkflowRun> = {}): WorkflowRun =>
     ({
@@ -35,10 +32,7 @@ const agent = (id: string, runId?: string): FleetAgent =>
         ...(runId === undefined ? {} : { workflow: { runId, name: `Two models, one task`, step: `Claude's attempt`, index: 1, total: 3 } }),
     }) as FleetAgent;
 
-/* THE RULE ITSELF. It asks the LEDGER, not the surface, and the difference is every bug this replaced: a run
- * whose row a filter or a lane window had taken off screen used to release its conversations as loose cards,
- * so one job reported itself as five agents the moment you typed into the search box.
- */
+// Asks the ledger, not the surface: a run whose row is off-screen no longer releases its steps as loose cards.
 describe("insideRun", () => {
     const ledger = runIdsInLedger([run(`r1`), run(`r2`, { archivedAt: 9_000 })]);
 
@@ -51,15 +45,13 @@ describe("insideRun", () => {
         expect(insideRun(agent(`a3`), ledger)).toBe(false);
     });
 
-    /* The safety valve, and the reason this is not simply `agent.workflow !== undefined`: a run that has rolled
-     * off the ledger has no row anywhere, so nothing would be standing for its chats. Hiding work nothing else
-     * is showing is the one outcome worse than showing it twice. */
+    // Safety valve: a run rolled off the ledger has no row anywhere, so its steps must be shown rather than hidden.
     it("releases a step whose run has rolled off the ledger", () => {
         expect(insideRun(agent(`a4`, `gone`), ledger)).toBe(false);
     });
 });
 
-// What a query finds now that the steps cannot answer for themselves.
+// What a query finds now that steps can't answer for themselves.
 describe("runMatches", () => {
     const always = (): boolean => true;
     const never = (): boolean => false;
@@ -69,8 +61,7 @@ describe("runMatches", () => {
         expect(runMatches(run(`r1`, { request: `Write the greeting` }), `greeting`, [], never)).toBe(true);
     });
 
-    // The step half, asked through the board's own predicate, so a hit the daemon found in a step's transcript
-    // still surfaces, as the run it belongs to.
+    // Asked through the board's own predicate, so a hit in a step's transcript still surfaces as its run.
     it("matches through a step, and only that run's steps", () => {
         expect(runMatches(run(`r1`), `nothing`, [agent(`a1`, `r1`)], always)).toBe(true);
         expect(runMatches(run(`r1`), `nothing`, [agent(`a2`, `other`)], always)).toBe(false);
@@ -81,23 +72,22 @@ describe("runMatches", () => {
     });
 });
 
-// A run wears the same three lanes an agent does, and an ended one that nobody has to act on is Finished.
+// Same three lanes as an agent; an ended run nobody must act on is Finished.
 describe("laneOfRun", () => {
     it("files the two outcomes somebody has to do something about under attention", () => {
         expect(laneOfRun(run(`r1`, { state: `overspent` }))).toBe(`attention`);
         expect(laneOfRun(run(`r1`, { state: `error` }))).toBe(`attention`);
     });
 
-    // A step holding a question puts the RUN in attention, because the step has no card to hold it on.
+    // A step holding a question puts the run, not the step, in attention.
     it("inherits a step's claim on the user", () => {
         expect(laneOfRun(run(`r1`, { state: `running` }), true)).toBe(`attention`);
         expect(laneOfRun(run(`r1`, { state: `running` }))).toBe(`active`);
     });
 });
 
-/* The Finished cap. It is the CALLER's now: a capped run takes its steps into hiding with it, so the surface
- * that lifts the window for its agents has to lift it here in the same breath.
- */
+// The caller owns the Finished cap: a capped run hides its steps too, so the caller must lift the window here as
+// well.
 describe("runsInLane", () => {
     const finished = [run(`r1`), run(`r2`), run(`r3`)];
 

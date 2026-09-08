@@ -32,26 +32,15 @@ import { extensionProcessKey, processesDesired, reconcileListenerProcesses, star
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { installedExtensions } from "./installed-extensions.js";
 
-/* THE UPDATE LIFECYCLE for git-installed extensions, in one module because its five verbs share one fact base:
- *
- *   check   , compare each installed extension's pinned sha against the registry its install came from; a
- *              differing pinned row is an UPDATE, a `blocked` row is an ADVISORY. Nothing here touches code.
- *   preview , stage the offered sha in a throwaway clone and answer with the version story + the mechanical
- *              powers diff (extension-manifest's diffPowers): what a click would actually approve.
- *   apply   , the transaction: re-clone → validate → quiesce → swap (keeping the outgoing checkout one back)
- *              → restart → health-watch. Runs on the EXISTING capability config so a private-source token
- *              survives; the capability handler owns the staging/validation half.
- *   revert  , swap the kept-previous checkout back and repoint the capability's ref at what it holds. The
- *              swap is symmetric, so reverting a revert is redo.
- *   watch   , for a minute after a swap, check that what the new version declared actually came up. Written
- *              because validation catches broken and cannot catch wrong.
- *
- * The registry's own model bounds all of it: nothing auto-updates by default (the owner's per-extension policy
- * opts single extensions into the agent-prepared or auto rungs), and an advisory's automatic action is
- * DISABLING, the one direction that runs no new code and reverses with a click. */
+// Update lifecycle for git-installed extensions; five verbs share one fact base:
+// - check: compares the installed sha against the registry; a differing row is an update, a blocked row is an advisory.
+// - preview: stages the offered sha in a throwaway clone and reports the version and powers diff.
+// - apply: re-clone, validate, quiesce, swap (keeping the old checkout one back), restart, health-watch.
+// - revert: swaps the kept-previous checkout back; symmetric, so reverting a revert is redo.
+// - watch: probes for a minute after a swap that the new version actually came up.
+// Nothing auto-updates by default; an advisory's only automatic action is disabling, which reverses with a click.
 
-// ---- state: .intentic/records/extension-updates.json, keyed by the manifest identity (publisher.name) like the
-// settings and the switch, so records survive the remove/re-add that an update IS.
+// State: .intentic/records/extension-updates.json, keyed by the manifest identity, so records survive a remove/re-add.
 
 const RecordSchema = z.object({
     update: ExtensionUpdateSchema.optional(),
@@ -62,7 +51,7 @@ type UpdateRecord = z.infer<typeof RecordSchema>;
 const StateSchema = z.object({ checkedAt: z.string().optional(), extensions: z.record(z.string(), RecordSchema) });
 type UpdateState = z.infer<typeof StateSchema>;
 
-// Memoized per root for the reason extension-settings.ts spells out: the write queue lives on the file object.
+// Memoized per root: the write queue lives on the file object, so a fresh instance would drop concurrent writes.
 const stateFiles = new Map<string, JsonFile<UpdateState>>();
 const stateFile = (root: string): JsonFile<UpdateState> => {
     const path = statePath(root, ".intentic/records/extension-updates.json");
@@ -90,8 +79,7 @@ const patchRecord = async (root: string, identity: string, patch: (record: Updat
     });
 };
 
-// ---- policy: .intentic/config/extension-update-policy.json, same key. Absent means the safe posture: updates wait
-// for the owner (`notify`), advisories act (`auto-disable`), see ExtensionUpdatePolicySchema for the ladder.
+// Policy: .intentic/config/extension-update-policy.json; absent defaults to notify updates, auto-disable advisories.
 
 const PolicyFileSchema = z.record(
     z.string(),
@@ -129,7 +117,7 @@ export const writeUpdatePolicy = async (
     await policyFile(root).update((all) => ({ ...all, [identity]: { ...all[identity], ...patch } }));
 };
 
-// ---- the installed side of the comparison: every extension-kind capability whose checkout still parses.
+// Installed side of the comparison: every extension-kind capability whose checkout still parses.
 
 interface InstalledTarget {
     readonly id: string;
@@ -146,7 +134,7 @@ const installedTargets = async (services: Services): Promise<InstalledTarget[]> 
         }
         const config = capability.config;
         const manifest = await readExtensionManifest(extensionRootOf(extensionDir(services.workspace.root, capability.id), config.path));
-        // A rotted checkout has no identity to compare under; its capability row already reports the state.
+        // A rotted checkout has no identity to compare under; the capability row already reports that state.
         if (manifest !== undefined) {
             targets.push({ id: capability.id, config, identity: extensionIdOf(manifest), version: manifest.version });
         }
@@ -172,7 +160,7 @@ export const previousVersionOf = async (
     }
 };
 
-// ---- preview: what a click would approve, answered from a throwaway clone of the offered sha.
+// Preview: what a click would approve, answered from a throwaway clone of the offered sha.
 
 export interface UpdatePreview {
     readonly ref: string;
@@ -183,9 +171,8 @@ export interface UpdatePreview {
     readonly powers: PowersDiff;
 }
 
-// Which sha/pointer an update verb targets: an explicit ref wins; otherwise the recorded update. The recorded
-// row's url/path are used when they answer for that exact ref, updating follows the LISTING as it stands now
-// (a listing may repoint its source repo), and anything else falls back to the install's own pointer.
+// Resolves which sha/pointer an update verb targets: an explicit ref wins, else the recorded update.
+// Uses the recorded url/path only when they match that ref; otherwise falls back to the install's own pointer.
 const resolveTarget = (
     config: ExtensionConfig,
     recorded: ExtensionUpdate | undefined,
@@ -210,7 +197,7 @@ export const previewExtensionUpdate = async (services: Services, id: string, ref
     const identity = installed === undefined ? undefined : extensionIdOf(installed);
     const recorded = identity === undefined ? undefined : (await readExtensionUpdateState(root)).extensions[identity]?.update;
     const target = resolveTarget(config, recorded, refOverride);
-    // The same throwaway-read trade the registry browse makes: one clone, two files, cleaned up either way.
+    // Same throwaway-clone trade the registry browse makes: cloned, read, removed either way.
     const parent = extensionsRoot(root);
     const tmpName = `.${id}.preview`;
     const tmp = join(parent, tmpName);
@@ -236,8 +223,7 @@ export const previewExtensionUpdate = async (services: Services, id: string, ref
     }
 };
 
-// ---- apply: the transaction. One at a time per id, shared with nothing, the capabilities add route has its
-// own same-id guard, and an owner clicking Update twice deserves "wait" rather than interleaved clones.
+// Apply: the transaction, one at a time per id; a second click while one runs waits rather than interleaving clones.
 
 const applying = new Set<string>();
 
@@ -278,9 +264,7 @@ export const applyExtensionUpdate = async (
             void line;
         }
         await services.capabilities.upsert({ id, kind: "extension", config: nextConfig });
-        // The post-apply seam, exactly as the add route runs it: the new checkout's processes come up (the
-        // quiesce stopped the old ones, so this is a genuine cycle), the backend host reloads on the new set,
-        // and listener gateways converge.
+        // Post-apply seam, as the add route runs it: processes restart, the backend reloads, gateways converge.
         const now = (await installedExtensions(services)).find((extension) => extension.id === id);
         if (now !== undefined && now.enabled) {
             await startAutoStartProcesses(services, now);
@@ -306,8 +290,7 @@ export const applyExtensionUpdate = async (
     }
 };
 
-// ---- revert: the kept-previous checkout swaps back. Symmetric on purpose, the displaced version lands where
-// the previous one sat, so reverting a revert is redo, and the checkout an owner just left is never deleted.
+// Revert: swaps the kept-previous checkout back; symmetric, so reverting a revert is redo and nothing is ever deleted.
 
 export const revertExtensionUpdate = async (services: Services, id: string): Promise<{ ref: string }> => {
     const capability = await services.capabilities.get(id);
@@ -352,9 +335,7 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         }
         services.extensionBackend.restart();
         void reconcileListenerProcesses(services);
-        // The verdict that led here has served: clear the health record so the row stops alarming about a
-        // version that is no longer running. The next registry check re-badges the newer sha as an ordinary
-        // update, which is the honest state, it is available, and the owner has already once said no.
+        // Clears the health record; the next check re-lists the sha as an ordinary update instead of an alarm.
         await patchRecord(root, extensionIdOf(previousManifest), ({ health: _health, ...rest }) => rest);
         return { ref: previousRef };
     } finally {
@@ -362,9 +343,8 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
     }
 };
 
-// ---- health: for a minute after a swap, the daemon checks that what the new version declared actually came
-// up. Two probes, an early one so a crash-looping gateway is caught in seconds, and a final one that has
-// given a slow boot a fair chance. `autoRevert` is the auto rung's failure path.
+// Health: for a minute after a swap, checks that what the new version declared actually came up.
+// Two probes (early, then final) give a slow boot a fair chance; autoRevert is the auto rung's failure path.
 
 const EARLY_PROBE_MS = 15_000;
 const FINAL_PROBE_MS = 60_000;
@@ -391,7 +371,7 @@ const healthProblem = async (services: Services, id: string): Promise<string | u
     return undefined;
 };
 
-// Resolves once the watch is ARMED (the "watching" record is on disk), the probes themselves stay on timers.
+// Resolves once the watch is ARMED (the "watching" record is on disk); the probes themselves stay on timers.
 const watchExtensionHealth = (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
     const root = services.workspace.root;
     const record = (health: ExtensionHealth | undefined): Promise<void> =>
@@ -408,9 +388,7 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
         }
         if (problem !== undefined) {
             if (autoRevert) {
-                /* The auto rung's promise: an unattended update that fails its watch is rolled back unattended,
-                 * and the record says so instead of pretending the attempt never happened. A revert that itself
-                 * fails leaves the plain unhealthy verdict, the owner decides from there. */
+                // A failed watch auto-reverts and records that; a failed revert just leaves the unhealthy verdict.
                 try {
                     await revertExtensionUpdate(services, id);
                     await record({ state: "unhealthy", detail: problem, fromRef, at: new Date().toISOString(), autoReverted: true });
@@ -434,10 +412,8 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
     return armed;
 };
 
-// ---- the agent-prepared rung: the same diff-read the update card offers, run unprompted the moment the check
-// records a new sha, so the owner opens a finished account instead of starting one. The conversation is an
-// ordinary fleet entry (unattended, shared workspace, the brief itself orders a scratch clone), and the
-// update record links it.
+// Agent-prepared rung: runs the update card's diff-read unprompted the moment the check records a new sha.
+// An ordinary unattended fleet entry in a shared workspace; the update record links to it.
 
 let reviewSeq = 0;
 const reviewConversationId = (identity: string): string =>
@@ -456,8 +432,7 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
         prompt,
         conversationId,
         unattended: true,
-        // Which of the owner's model lists pays for this read (contract model-roles.ts): nobody is at a composer,
-        // and reviewing a diff of somebody else's extension is not the same job as fixing a red pipeline.
+        // Model list this read bills to (model-roles.ts); reviewing another author's diff isn't fixing a pipeline.
         runRole: `extension-review`,
         isolated: true,
         title: `Update review: ${target.identity} ${target.version} → ${update.version ?? update.ref.slice(0, 7)}`.slice(0, 80),
@@ -474,8 +449,7 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
     })().catch((error: unknown) => services.logger.warn({ err: error, extension: target.identity }, "extension update: agent review failed"));
 };
 
-// ---- the auto rung's gates, applied in the order that costs least: a listing nobody vouched for is refused
-// before any clone; the powers diff and the engines verdict come from the preview's staged read.
+// Auto rung's gates, cheapest first: an unverified listing is refused before any clone; the rest come from the preview.
 
 const autoUpdate = async (services: Services, target: InstalledTarget, update: ExtensionUpdate): Promise<void> => {
     let needsReview: string | undefined;
@@ -502,19 +476,14 @@ const autoUpdate = async (services: Services, target: InstalledTarget, update: E
     );
 };
 
-// ---- the check itself.
-
-// How stale a comparison may grow before the extensions list quietly refreshes it in the background. The
-// interval below is the ceiling for a sandbox nobody opens; this is the floor for one somebody is looking at.
+// STALE_MS bounds a page-view refresh; CHECK_INTERVAL_MS is the ceiling for a sandbox nobody opens.
 const STALE_MS = 6 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const inFlight = new Map<string, Promise<string>>();
 
-/* One pass: read every registry that answers for an installed extension (one clone per distinct registry, not
- * per extension), fold each row into an update/advisory record, enforce the advisory policy, then run the
- * update policies. An unreachable registry KEEPS the previous records, offline must not read as "no updates,
- * no advisories", and a delisted row clears them, because a registry that dropped the row asserts nothing. */
+// One pass: reads every registry an installed extension resolves to (one clone per registry, not per extension).
+// Folds each row into an update/advisory record. Unreachable keeps previous records; delisted clears them.
 export const checkExtensionUpdates = (services: Services): Promise<string> => {
     const root = services.workspace.root;
     const running = inFlight.get(root);
@@ -604,9 +573,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             }
             return { checkedAt: now, extensions: next };
         });
-        /* Enforcement happens after the state write so a crash between the two leaves the record (re-derived
-         * next check) rather than an action nothing explains. Auto-disable mirrors the setEnabled(false)
-         * route: switch, stop declared processes, converge gateways, reload the backend host. */
+        // Runs after the state write; a crash between the two leaves a re-derivable record (mirrors setEnabled(false)).
         for (const target of advisoriesToEnforce) {
             await writeExtensionEnablement(root, target.identity, false);
             const manifest = await readExtensionManifest(extensionRootOf(extensionDir(root, target.id), target.config.path));
@@ -638,8 +605,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
     return inFlight.get(root) ?? run;
 };
 
-// The extensions list calls this on every read: a fresh state answers instantly, a stale one refreshes in the
-// background, so opening the tab is what keeps a watched sandbox current, and nobody waits on a clone.
+// Called on every list read: a fresh state answers instantly; a stale one refreshes in the background, no waiting.
 export const refreshUpdatesIfStale = (services: Services): void => {
     void (async () => {
         const state = await readExtensionUpdateState(services.workspace.root);
@@ -650,8 +616,8 @@ export const refreshUpdatesIfStale = (services: Services): void => {
     })().catch((error: unknown) => services.logger.warn({ err: error }, "extension update check failed"));
 };
 
-// Boot wiring (main.ts): one comparison shortly after boot, delayed so it never competes with the boot path's
-// own git work, then daily, for the sandbox nobody opens. The list-read staleness refresh above is the floor.
+// Boot wiring (main.ts): one check shortly after boot, delayed to avoid the boot path's own git work, then daily.
+// The list-read staleness refresh above is the floor for a sandbox somebody is actually looking at.
 export const startExtensionUpdateWatch = (services: Services): { stop: () => void } => {
     const initial = setTimeout(() => refreshUpdatesIfStale(services), 60_000);
     initial.unref?.();

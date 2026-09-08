@@ -10,15 +10,9 @@ import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
 import { INSTALLABLE, installPanelKey, missingCount, type ProjectSetupStatus, startInstall, workspaceSetup } from "../layout/workspace-setup.js";
 
-/* Dependency maintenance has one owner. Every path that discovers drift or requests first-time setup feeds this
- * coordinator; none starts a package manager itself. The coordinator waits until manifest writes have actually
- * gone quiet, starts each visible install panel once, and watches those panels until they settle. It runs
- * BESIDE the agents: an install never holds a turn out, so a message sent into a repair starts immediately and
- * the install proceeds in its own terminal where anyone can watch it.
- *
- * Explicit setup requests are durable until the project is ready. Drift needs no durable queue, it is a fact
- * on disk and the startup scan rediscovers it, but its in-memory origin is retained so a land remains the
- * cause even when the filesystem watcher observes the same manifest a moment later. */
+// One coordinator owns dependency maintenance: every drift or setup path feeds it, none starts a package manager
+// itself. It waits for manifest writes to settle, then starts each install panel once, beside the agents rather than
+// blocking a turn. Drift's in-memory origin outlives a later watcher event, so credit doesn't shift.
 
 const DEFAULT_SETTLE_MS = 2_000;
 const DEFAULT_POLL_MS = 2_000;
@@ -113,19 +107,9 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     const causes = new Map<string, DependencyOrigin>();
     const listeners = new Set<(event: DependencyInstallStarted) => void>();
     const failureListeners = new Set<(event: DependencyInstallStartFailed) => void>();
-    // Only background observations may be a pass-wide default. A request or land is remembered per project;
-    // letting either become the fallback would attribute unrelated stale projects to whichever conversation
-    // happened to wake the coordinator at the same time.
+    // Only a background observation sets the fallback; a request or land is remembered per project only.
     let backgroundOrigin: Extract<DependencyOrigin, { kind: "external" | "startup" }> = { kind: "startup" };
-    /* AN INSTALL THAT RAN AND LEFT THE PROJECT BEHIND IS NOT RUN AGAIN ON THE SAME INPUTS. The pass below
-     * used to start an install for every `stale` project on every pass, and a project whose install cannot
-     * make it ready (a lockfile behind its manifest, a dependency pnpm will never install here) was therefore
-     * installed on every land, every pull and every watcher tick: measured, 1,044 failed installs in twenty
-     * days, 477 of them attributed to one conversation, each one rewriting node_modules underneath the turns
-     * reading it and each one an "install failed" row in the feed. What changes an install's outcome is its
-     * INPUTS, the manifests and the lockfile, so the coordinator remembers the inputs of the attempt that
-     * failed and stands down until one of them moves. Explicit requests are not held back: a person asking
-     * for a retry is a person who has read the panel. */
+    // Skips retrying a failed install until its manifest/lockfile inputs change; an explicit request bypasses this.
     const failedOn = new Map<string, string>();
     let quietAfter = 0;
     let settlingWorkspaceBurst = false;
@@ -135,15 +119,13 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
 
     const remember = (dir: string, origin: DependencyOrigin): void => {
         const current = causes.get(dir);
-        // Lower-priority observations cannot erase an attributed cause, but a newer cause at the same priority
-        // must replace the old one (two lands in the same project belong to the later land, not the first one
-        // that happened to find it stale).
+        // A lower-priority cause can't overwrite one attributed; an equal-priority one does, so the later land wins.
         if (current === undefined || originPriority(origin) >= originPriority(current)) {
             causes.set(dir, origin);
         }
     };
 
-    // The install's inputs, as one string: the size and mtime of every manifest and lockfile of the project.
+    // The install's inputs as one string: size and mtime of every manifest and lockfile in the project.
     const inputsOf = (dir: string): string =>
         ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb"]
             .map((file) => {
@@ -187,9 +169,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     const pass = async (): Promise<void> => {
         const [projects, requested] = await Promise.all([workspaceSetup(deps.workspace.root, deps.processes), requests.read()]);
         const known = new Map(projects.map((project) => [project.dir, project]));
-        // A ready project has fulfilled its request, including the crash window after an install finished but
-        // before this daemon could record that fact. A removed project cannot ever fulfil one. Clearing both
-        // here keeps the durable file a worklist rather than a history of old requests.
+        // A ready or removed project's request is cleared, keeping the durable file a worklist, not a history.
         await removeRequests(
             Object.keys(requested.projects).filter((dir) => {
                 const project = known.get(dir);
@@ -273,8 +253,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             return;
         }
         scheduled = true;
-        // One pass at a time, so two observations of the same drift cannot start the same install twice, but
-        // nothing outside this loop waits on it.
+        // One pass at a time: two observations of the same drift can't start the same install twice.
         void (async () => {
             while (dirty) {
                 if (stopped) {
@@ -359,10 +338,8 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             stopped = false;
             const unsubscribe = subscribe((paths) => {
                 const manifestChanged = paths.length === 0 || paths.some((path) => isManifest(basename(path)));
-                // A manifest is the event that arms the settle window. Once it does, every later workspace batch
-                // extends the quiet window: a checkout often writes package.json early and source files for
-                // seconds afterwards, and installing two seconds after the manifest alone would still run in
-                // the middle of that checkout. Before a manifest, ordinary source edits remain free.
+                // A manifest arms the settle window; later batches extend it, since source files can follow it by
+                // seconds.
                 if (!manifestChanged && !settlingWorkspaceBurst) {
                     return;
                 }

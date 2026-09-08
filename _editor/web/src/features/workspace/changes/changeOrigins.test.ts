@@ -60,9 +60,7 @@ describe(`originHue`, () => {
     });
 });
 
-/* WHICH COPY OF THE SENTENCE WINS. The first test is the one that matters in practice: the message is written
- * seconds after the land, and only the card is pushed when it is — a review that still says nothing must not be
- * allowed to answer over a card that does. */
+// Card's message wins over the review's; the review answers only once the card has nothing.
 describe(`landedMessage`, () => {
     const message = { subject: `fix: cascading markers` };
 
@@ -86,8 +84,7 @@ describe(`commitMessageOf`, () => {
         expect(commitMessageOf({ subject: `fix: cascading markers` })).toBe(`fix: cascading markers`);
     });
 
-    // git reads only the message's FINAL block as trailers, so both sentences share one paragraph — a blank
-    // line between them would demote the release note to body text and the harvest would never see it.
+    // git reads only the message's final block as trailers, so both notes must share one paragraph.
     test(`both notes ride one trailer block under the subject`, () => {
         expect(commitMessageOf({ subject: `feat: rework tabs`, note: `Tabs remember their scroll.`, breaking: `The old tab API is gone.` })).toBe(
             `feat: rework tabs\n\nRelease-Note: Tabs remember their scroll.\nBreaking-Note: The old tab API is gone.`,
@@ -105,16 +102,14 @@ describe(`commitMessageOf`, () => {
     });
 });
 
-// A draft mid-walk, as the roster carries one: opened at second 0, gemini asked at second 2. `NOW` is the
-// reader's clock, ten seconds in — the elapsed the in-flight line ticks against.
+// NOW is the reader's clock (12s); running() is a draft opened at 0 with gemini asked at 2s.
 const NOW = 12_000;
 const running = (steps: LandedMessageDraft[`steps`] = [{ provider: `gemini`, model: `gemini-3-flash`, status: `asking`, at: 2_000 }]) => ({
     startedAt: 0,
     steps,
 });
 
-/* EVERY WAY THE CLICK CAN COME BACK WITH NOTHING, and the words for each. They all looked identical before —
- * the list narrowed and the box did not move — which is the report this answers: "it doesn't tell me why". */
+// Every way the click can return with nothing filed, and the notice text for each.
 describe(`chipMessageNotice`, () => {
     const state = {
         label: `Review panel · audit`,
@@ -132,11 +127,6 @@ describe(`chipMessageNotice`, () => {
         expect(chipMessageNotice({ ...state, message: `fix: cascading markers` })).toBeUndefined();
     });
 
-    /* THE BOX SAYS WHAT IS HAPPENING; THE REPORT UNDER IT SAYS HOW IT IS GOING. This line used to carry the
-     * walk's newest step as well ("— Asking gemini-3-flash… 10s"), which printed the same words twice a
-     * centimetre apart: here, and as the last row of the report list directly below. The row below keeps them —
-     * it has the glyph, the aligned clock and the width — and this line keeps the one thing only it can say,
-     * which is whose message the box is waiting for. */
     test(`names whose message is coming, and leaves the step-by-step to the report below`, () => {
         const waiting = chipMessageNotice({ ...state, draft: running() });
         expect(waiting).toContain(state.label);
@@ -155,16 +145,12 @@ describe(`chipMessageNotice`, () => {
         expect(absent).not.toBe(chipMessageNotice({ ...state, draft: running() }));
     });
 
-    // A draft that ENDED without writing is the same answer — the step list under the box carries the details.
     test(`a failed draft reads as the absence, not as a wait`, () => {
         const absent = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } });
         expect(absent).toContain(state.label);
         expect(absent).toBe(chipMessageNotice(state));
     });
 
-    /* The refusal that is ABOUT THE USER, and the only one with a remedy in their hands — a box they typed in is
-     * never overwritten, so the chip's message waits outside it with nothing on screen to say so. That silence
-     * is what made a working feature read as a broken one. */
     test(`explains itself when the box is the user's, and says what to do about it`, () => {
         const blocked = chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true });
         expect(blocked).toContain(state.label);
@@ -176,8 +162,6 @@ describe(`chipMessageNotice`, () => {
         expect(blocked).toBe(chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true }));
     });
 
-    // A box the user owns over a session nothing was written for: the absence is the more fundamental answer,
-    // and offering to clear the box for a message that does not exist would be a lie.
     test(`falls back to the absence when neither the box nor the session has anything to file`, () => {
         expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(chipMessageNotice(state));
     });
@@ -189,9 +173,7 @@ describe(`chipMessageNotice`, () => {
     });
 });
 
-/* THE FULL REPORT, row by row — the walk's own record in the user's terms, split into the columns the panel
- * lays out. What each status earns is pinned here because these rows ARE the feature: the difference between a
- * minute-long mystery and a minute-long wait you can watch move. */
+// Row-by-row report of the draft walk, split into the columns the panel renders.
 describe(`draftReport`, () => {
     test(`no draft is no report: the one-line notice covers that case`, () => {
         expect(draftReport(undefined, NOW)).toEqual([]);
@@ -228,8 +210,6 @@ describe(`draftReport`, () => {
         expect(rows[2]?.status).toBe(`answered`);
     });
 
-    /* THE TOOLTIP IS THE ROW UNABRIDGED — the full model id, the verb spelled out and the vendor's whole
-     * sentence. Everything the columns shorten is one hover away, which is what makes shortening them safe. */
     test(`each row keeps its unabridged sentence for the tooltip`, () => {
         const rows = draftReport(
             {
@@ -258,9 +238,6 @@ describe(`draftReport`, () => {
         expect(skipped?.title).not.toBe(refused?.title);
     });
 
-    /* THE TWO COMPRESSIONS THAT BOUGHT THE ROW ITS WIDTH BACK. A vendor's refusal is a headline followed by the
-     * same advice on every rung, and a release stamp is nine characters the reader has no use for — between
-     * them they were most of a sidebar-wide line, which is why the fact itself never fit on one. */
     test(`drops the release stamp from the model and the boilerplate from the refusal`, () => {
         const rows = draftReport(
             {
@@ -289,7 +266,6 @@ describe(`draftReport`, () => {
         expect(asking?.elapsed).toBe(`2s`);
     });
 
-    // No em-dash to cut at, so the first sentence is the headline and the advice behind it goes to the tooltip.
     test(`cuts a reason at its first sentence when there is no dash to cut at`, () => {
         const rows = draftReport(
             {
@@ -304,13 +280,11 @@ describe(`draftReport`, () => {
         expect(rows[0]?.detail).toBe(reason.slice(0, reason.indexOf(`. `)));
     });
 
-    // The in-flight row ticks against the reader's clock — 62 seconds into a silent model, the report says so.
     test(`an in-flight ask shows its elapsed, minutes and all`, () => {
         const rows = draftReport(running([{ provider: `gemini`, model: `gemini-3-flash`, status: `asking`, at: 2_000 }]), 64_000);
         expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([[`asking`, `gemini-3-flash`, `1m 2s`]]);
     });
 
-    // The chain ran dry before any rung refused in words the steps carry — the report's own one-liner closes it.
     test(`a failure the steps don't explain gets the report's own reason as its last row`, () => {
         const reason = `No AI account is connected`;
         const rows = draftReport({ startedAt: 0, steps: [], outcome: `failed`, reason, finishedAt: 4_000 }, NOW);
@@ -320,8 +294,6 @@ describe(`draftReport`, () => {
         expect(rows[0]?.title).toBe(rows[0]?.detail);
     });
 
-    // A chain spent to the bottom already told each refusal in its own row — repeating the joined reasons
-    // under it would say less, not more.
     test(`a failure the steps already explain adds nothing under them`, () => {
         const rows = draftReport(
             {

@@ -5,14 +5,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached } from "./detached.js";
 
-/* The contract these cover is the one a user reads as a sentence: "connected in the background (pid N)". It was
- * false on Windows for every release that spawned the loop without `detached`: the pid was real, the process
- * was already gone, and the caller had no way to tell. So the test is not "which flags does it pass" (the flags
- * are the runtime's business and the reason they are right is measured, not asserted) but "does it hand back a
- * pid only when something is still running under it". */
+// Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
+// runtime's job).
 const logFile = (): string => join(mkdtempSync(join(tmpdir(), "detached-")), "loop.log");
 
-// A child that outlives the settle window without holding the test open any longer than it must.
+// A child that outlives the settle window without holding the test open longer than needed.
 const stayAlive = ["-e", "setTimeout(() => {}, 10_000)"];
 
 describe("spawnDetached", () => {
@@ -40,20 +37,12 @@ describe("spawnDetached", () => {
     });
 });
 
-/* WHAT A PID CANNOT SAY ON ITS OWN. A pidfile lives beside the agent's config, so it outlives the boot that
- * wrote it, while the number in it means nothing outside the process table of that boot: pids restart low and
- * are handed out in roughly the same order every time, so a loop's own pid from yesterday is somebody else's
- * transient process this morning.
- *
- * Field failure, 2026-08-29, and the reason the boot stamp exists: a machine bugchecked in standby, so nothing
- * ran the path that removes the pidfile. It still said 232. The sync watcher came back as pid 216, probed 232,
- * found an unrelated early-boot process wearing it, and refused to start. Refusing is a CHOICE, so it exits 0 by
- * design (a supervisor must not restart a watcher into refusing again every RestartSec), which is exactly why
- * `Restart=on-failure` never fired and desktop file sync stayed off until a person went looking. */
+// A pidfile's pid means nothing outside its own boot: numbers restart low and get reused, so it's paired with a boot
+// stamp.
 describe("livePid", () => {
     const pidFile = (): string => join(mkdtempSync(join(tmpdir(), "pidfile-")), "agent.pid");
 
-    // A live process, standing in for whoever holds the recycled number after a reboot.
+    // A live process, standing in for whoever holds a recycled pid after reboot.
     const alive = (): { pid: number; stop: () => void } => {
         const child = spawn(process.execPath, stayAlive, { detached: true, stdio: "ignore" });
         if (child.pid === undefined) {
@@ -91,7 +80,7 @@ describe("livePid", () => {
         const { pid, stop } = alive();
         writeFileSync(path, await pidFileBody(pid));
         stop();
-        // The kill is delivered, not awaited: give the process table a moment to catch up before probing it.
+        // Kill is not awaited; poll briefly until the process table catches up.
         for (let waited = 0; waited < 2_000 && isProcessAlive(pid); waited += 50) {
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
@@ -109,9 +98,8 @@ describe("livePid", () => {
         expect(await livePid(path)).toBeUndefined();
     });
 
-    /* THE NOTE, which is how a loop says WHICH BUILD is holding the file. Nothing else can: replacing the binary
-     * leaves the process running the code it started with, so without this a machine can hold a current agent and
-     * serve a months-old one with every readable version agreeing on the wrong number. */
+    // The note says which build wrote the file: swapping the binary doesn't change what a running process already
+    // reports of itself.
     it("carries back the note the writer stamped beside the pid", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
@@ -124,8 +112,7 @@ describe("livePid", () => {
         }
     });
 
-    // A writer that stamps nothing is not a writer that broke the file: the pid still answers, the note is simply
-    // not known, which is what an agent too old to stamp its build looks like to every reader.
+    // A record without a note isn't broken: it's what an agent too old to stamp its build looks like to a reader.
     it("answers a record with no note at all", async () => {
         const path = pidFile();
         const { pid, stop } = alive();

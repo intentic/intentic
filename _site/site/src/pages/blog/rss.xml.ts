@@ -2,21 +2,14 @@ import type { APIRoute } from "astro";
 import { ORG_NAME, SITE_URL } from "@intentic/site-content/site";
 import { blogHref, posts } from "../../lib/posts";
 
-/* THE FEED, hand-rolled rather than pulled from `@astrojs/rss`.
- *
- * It is thirty lines and it is the whole dependency: a package to build one XML document is a package to
- * update, audit and hold a lockfile entry for the rest of the site's life. The one genuinely fiddly part of
- * RSS is escaping, and that is `escape` below.
- *
- * DESCRIPTIONS, NOT BODIES. Each item carries the post's own one-line description and a link. A full-text
- * feed would put the whole post on somebody else's site, under their URL, competing with the canonical one —
- * and the reason to have a feed at all is to bring a reader back here. */
+// Hand-rolled feed, not `@astrojs/rss`: thirty lines is not worth a dependency, and escaping (below) is the only fiddly
+// part. Each item carries the post's description and a link, not the full body, so the feed brings readers back here
+// rather than hosting the post itself.
 
 const escape = (value: string): string =>
     value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 
-// RFC 822, which is what RSS wants and ISO 8601 is not. Dates are date-only in frontmatter, so every item
-// is stamped at midnight UTC: a feed reader sorts by day, which is the resolution a blog publishes at.
+// RFC 822: what RSS wants, not ISO 8601. Frontmatter dates are date-only, so every item is stamped at midnight UTC.
 const rfc822 = (date: string): string => new Date(`${date}T00:00:00Z`).toUTCString();
 
 export const GET: APIRoute = () => {

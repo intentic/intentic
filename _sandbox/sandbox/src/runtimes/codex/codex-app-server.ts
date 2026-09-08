@@ -4,16 +4,9 @@ import { whenAborted } from "../../abort.js";
 import { nsenterArgv } from "../../agents/worktrees/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
-/* THE CODEX CLIENT SURFACE INTENTIC ACTUALLY NEEDS.
- *
- * `codex app-server` publishes a generated protocol for rich clients, but vendoring its hundreds of generated
- * bindings would turn every Codex release into a repository-wide diff. This is the deliberately narrow boundary
- * the adapter consumes: the request fields Intentic sends and the item fields it renders. Unknown notifications
- * and item kinds pass by untouched, while malformed fields on a known kind fail at the process boundary instead
- * of becoming half-valid AgentEvents.
- *
- * The normalized event names are Intentic's provider-private vocabulary. Keeping them independent of JSON-RPC
- * makes the app-server process/client the one replaceable seam. */
+// Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated
+// protocol. Unknown notifications/item kinds pass through untouched; malformed fields on a known kind fail at the
+// boundary. Event names are Intentic's own vocabulary, independent of JSON-RPC.
 
 export type CodexSandboxMode = "read-only" | "danger-full-access";
 export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -21,13 +14,8 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export interface CodexThreadOptions {
     readonly workingDirectory: string;
     readonly sandboxMode: CodexSandboxMode;
-    /* `never` is the standing posture, and what every turn ran under before the command rulebook reached this
-     * runtime: Codex asks nothing and the container is the isolation boundary.
-     *
-     * `untrusted` is asked for ONLY when the owner's rules could refuse something (codex-agent.ts
-     * threadOptions), because it is the value that makes Codex raise
-     * `item/commandExecution/requestApproval` for commands rather than only on sandbox escalation, which
-     * `dangerFullAccess` never needs. It costs one in-process round-trip per command Codex asks about. */
+    // never is the standing posture (container is the isolation boundary); untrusted is asked only when the owner's
+    // rules could refuse something.
     readonly approvalPolicy: "never" | "untrusted";
     readonly model?: string;
     readonly modelReasoningEffort?: CodexReasoningEffort;
@@ -35,10 +23,8 @@ export interface CodexThreadOptions {
 
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
-// Where the app-server process is born: the pid holding the turn's mount namespace open, and the workspace root
-// as that namespace sees it. Present only on an isolated turn whose container could build one, everything the
-// app-server then forks (its shell, its browser servers) inherits the namespace, so /work IS the worktree for
-// all of it. Absent ⇒ spawned plainly here, cwd'd into whatever `options.workingDirectory` says.
+// Where the app-server process is born: the pid holding the turn's mount namespace, and the workspace root as it sees
+// it. Present only for an isolated turn; absent means spawned plainly, cwd'd into workingDirectory.
 export interface CodexNamespace {
     readonly pid: number;
     readonly cwd: string;
@@ -52,10 +38,8 @@ export interface CodexTurn {
     readonly modelProvider?: string;
     readonly config?: Readonly<Record<string, JsonValue>>;
     readonly options: CodexThreadOptions;
-    /* Mid-turn steering: each message pulled from here is delivered to the RUNNING turn as `turn/steer`. A plain
-     * per-turn iterable rather than the daemon's shared queue, codex's plan emulation runs two app-servers with
-     * a person's approval in between, and the phase that has closed must not be holding the queue open (see
-     * codex-agent.ts, which owns the one consumer and hands each phase a channel of its own). */
+    // Each message here delivers to the running turn as turn/steer; per-turn, not shared, since plan emulation runs two
+    // app-servers in sequence.
     readonly steering?: AsyncIterable<string>;
     readonly namespace?: CodexNamespace;
     readonly signal: AbortSignal;
@@ -112,16 +96,16 @@ interface CodexUsage {
     readonly reasoning_output_tokens: number;
 }
 
-// One skill the thread's cwd publishes (`skills/list`). Codex's answer to a slash command. `path` travels
-// because invoking one takes both halves: app-server's skill input is keyed by name AND directory.
+// One skill the thread's cwd publishes (skills/list), Codex's answer to a slash command. path travels too: invoking a
+// skill needs both name and directory.
 export interface CodexSkill {
     readonly name: string;
     readonly description: string;
     readonly path: string;
 }
 
-// One question from the experimental `item/tool/requestUserInput` server request. `options` is empty when Codex
-// asks something open-ended; `secret` marks an answer it wants withheld from the transcript.
+// One question from the experimental item/tool/requestUserInput request. options is empty for an open-ended question;
+// secret marks an answer withheld from the transcript.
 export interface CodexQuestion {
     readonly id: string;
     readonly header: string;
@@ -135,21 +119,16 @@ export type CodexEvent =
     | { readonly type: "turn.started" }
     | { readonly type: "item.started" | "item.updated" | "item.completed"; readonly item: CodexItem }
     | { readonly type: "commands"; readonly skills: readonly CodexSkill[] }
-    /* THE ONE SERVER-INITIATED REQUEST THIS CLIENT ANSWERS, handed over as an event so the answer travels the
-     * stream rather than a side channel: the consumer raises its card, waits for a person, and calls `respond`.
-     * The runner's loop is parked on that yield meanwhile, which is exactly right, app-server is blocked on the
-     * answer too, so nothing can arrive out of order while the card is open.
-     *
-     * `respond` takes one entry per question id; ids Codex did not ask about are ignored by it. */
+    // The one server-initiated request answered as an event, so the consumer raises a card, waits, and calls respond
+    // while the loop stays parked (app-server is blocked too). respond takes one entry per question id; others are
+    // ignored.
     | {
           readonly type: "user_input.requested";
           readonly questions: readonly CodexQuestion[];
           readonly respond: (answers: Readonly<Record<string, readonly string[]>>) => void;
       }
-    /* One command Codex is about to run and wants an answer on, from
-     * `item/commandExecution/requestApproval`. `command` is the text the classifier reads; `reason` is Codex's
-     * own words for why it asked, carried so a card can show them. `respond` takes the verdict, and the turn is
-     * blocked on it, which is what lets a hold park here the same way it parks a Bash hook. */
+    // A command Codex wants a verdict on (item/commandExecution/requestApproval). command is the classifier's text;
+    // reason is Codex's own words, shown on the card. respond blocks the turn, the same as a Bash hook's hold.
     | {
           readonly type: "command_approval.requested";
           readonly command: string;
@@ -159,10 +138,8 @@ export type CodexEvent =
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
     | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
     | { readonly type: "error"; readonly message: string }
-    /* The plan's own rate limits, as app-server pushes them (`account/rateLimits/updated`, its
-     * protocol/v2/account.rs): the same two windows the ChatGPT usage endpoint answers with, read off the
-     * turn's own stream at no cost. Passed through raw; usage/translator-usage.ts maps the snapshot, so the
-     * one reader of ChatGPT's window shape stays the one reader. */
+    // Rate limits pushed by app-server (account/rateLimits/updated), the same windows ChatGPT's usage endpoint answers
+    // with. Passed through raw; usage/translator-usage.ts is the one place that parses the snapshot shape.
     | { readonly type: "rate_limits"; readonly snapshot: unknown };
 
 export type CodexRunner = (turn: CodexTurn) => AsyncIterable<CodexEvent>;
@@ -264,8 +241,7 @@ const normalizeItem = (value: unknown): CodexItem | undefined => {
         if (!Array.isArray(rawChanges)) {
             throw new Error("Codex app-server sent invalid fileChange.changes");
         }
-        // Annotated because the `kind` guard below narrows a `string` to the three literals, and an object
-        // literal with no contextual type widens it straight back, the element type has to come from here.
+        // Return type is explicit: the guard below narrows a string, but an untyped literal would widen it back.
         const changes = rawChanges.map((entry, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
             const change = object(entry, `fileChange.changes[${index}]`);
             const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);
@@ -328,12 +304,8 @@ export interface AppServerNotification {
     readonly params: unknown;
 }
 
-/* WHAT ARRIVES FROM APP-SERVER, and why the two kinds share one queue: they are one ordered stream on the wire,
- * and splitting them would let a question card render after the tool call that comes next.
- *
- * Only the requests this client actually answers reach here. Everything else is refused the instant it arrives
- * (see HANDLED_REQUESTS) rather than queued for the loop: app-server can block on an answer BEFORE `turn/start`
- * returns, and a refusal that waits for the loop to start would deadlock the turn against itself. */
+// Notifications and requests share one queue: splitting them could render a question card after the next tool call.
+// Unhandled requests are refused on arrival (HANDLED_REQUESTS), since app-server can block before turn/start returns.
 export type AppServerMessage =
     | ({ readonly kind: "notification" } & AppServerNotification)
     | ({ readonly kind: "request"; readonly respond: (result: JsonValue) => void } & AppServerNotification);
@@ -345,19 +317,7 @@ export interface CodexAppServerConnection {
     readonly close: () => void;
 }
 
-/* The server-initiated requests Intentic answers. Anything else is refused on arrival with a JSON-RPC
- * "method not found", which is why this set and the loop below have to agree: a request Codex sends and nothing
- * answers is a wedged turn.
- *
- * The three approval requests are here because the owner's command rulebook needs a seam before a command runs,
- * and this is the only one Codex publishes (`item/commandExecution/requestApproval`, whose params carry the
- * command text). They arrive only when the turn asked for them: `approvalPolicy` is still `"never"` unless the
- * owner wrote rules, so an unconfigured workspace sees exactly what it always did (codex-agent.ts threadOptions).
- *
- * The other two ride along because turning approvals on turns on ALL of them: a file change or a permission
- * profile Codex asks about is accepted, which is the posture those calls already had under `never`. Only the
- * command class is judged. Shapes read off codex-cli 0.147's own generated schema
- * (`codex app-server generate-json-schema`), not guessed. */
+// Server-initiated requests Intentic answers; anything else gets a JSON-RPC method-not-found.
 const COMMAND_APPROVAL_REQUEST = "item/commandExecution/requestApproval";
 const FILE_CHANGE_APPROVAL_REQUEST = "item/fileChange/requestApproval";
 const PERMISSIONS_APPROVAL_REQUEST = "item/permissions/requestApproval";
@@ -438,14 +398,7 @@ const stdioConnector =
         if (binary === undefined) {
             throw new Error(CODEX_BINARY_MISSING);
         }
-        /* THE NAMESPACE IS ENTERED BY EXEC, not by supervision: nsenter execs app-server into the turn's anchor,
-         * so this stays a direct child, its pipes, its exit code and the kill on abort all reach the real
-         * process. Same seam and same reasoning as the Claude Code loop's spawn wrapper (agent.ts).
-         *
-         * The anchor's cwd wins over the turn's own working directory: it is the workspace root as the namespace
-         * sees it, which INSIDE is the conversation's worktree. A failure here fails the turn rather than falling
-         * back to the shared checkout, an agent quietly editing the main tree is what the namespace exists to
-         * prevent. */
+        // nsenter execs app-server into the turn's anchor, staying a direct child; its cwd wins over workingDirectory.
         const argv =
             turn.namespace === undefined
                 ? { command: binary, args: ["app-server", "--stdio"] }
@@ -536,8 +489,7 @@ const stdioConnector =
                 child.kill();
             }
         };
-        // `await binaryPath()` above is a filesystem lookup, so a turn stopped during it reaches here already
-        // aborted; a bare listener would never fire and this app-server would outlive the Stop that killed it.
+        // binaryPath() is async; a turn stopped during it arrives here already aborted, so a bare listener never fires.
         const unwatchAbort = whenAborted(turn.signal, abort);
 
         return {
@@ -610,15 +562,8 @@ const todoEvent = (value: unknown, turnId: string, turnIds: ReadonlySet<string>)
     return { type: "item.updated", item: { id: `plan-${turnId}`, type: "todo_list", items } };
 };
 
-/* THE SLASH COMMANDS CODEX ACTUALLY HAS: its skills, per working directory, as `skills/list` reports them.
- *
- * Disabled entries are dropped rather than shown greyed, the popover has no third state, and offering a name
- * that refuses to load is worse than not offering it. Deduplicated by name because the answer is per-cwd and
- * scoped (user, repo, system, admin), so one name can arrive several times; first wins, which is the same
- * precedence app-server itself applies when the model asks for it by name.
- *
- * The one-line blurb wins over the body when there is one: `description` is the whole SKILL.md front matter,
- * which is a paragraph written for a model, and the popover has a row. */
+// Codex's slash commands: skills/list, per cwd. Disabled entries are dropped; duplicate names keep the first. The
+// one-line blurb wins over description, a whole SKILL.md paragraph meant for a model.
 const skillsFrom = (result: unknown): readonly CodexSkill[] => {
     const data = object(result, "skills/list result")["data"];
     if (!Array.isArray(data)) {
@@ -655,14 +600,8 @@ const skillsFrom = (result: unknown): readonly CodexSkill[] => {
     return [...found.values()];
 };
 
-/* A `/command` prompt, resolved against the skills this thread published. The structured skill input is what
- * makes the popover real: app-server LOADS the skill, instead of the model reading a stray slash word and
- * guessing. Whatever follows the name rides on as the text of the message.
- *
- * Undefined for prose that merely starts with a slash (a path, `/etc/hosts`, this product's own vocabulary),
- * unmatched text is sent verbatim, because Codex parses no slash commands of its own and so cannot swallow it.
- * That is also what a plan turn gets: its prompt opens with the planning preamble, so the name is no longer
- * leading and reaches the model as the words the user typed rather than as a loaded skill. */
+// Resolves a /command prompt against the thread's published skills, so app-server loads the skill instead of the model
+// guessing. Undefined for a slash-prefixed path or a plan turn, whose preamble pushes the name out of lead position.
 const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly skill: CodexSkill; readonly text: string } | undefined => {
     const named = /^\/([^\s/]+)[ \t]*/.exec(prompt);
     if (named === null) {
@@ -672,15 +611,9 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
     return skill === undefined ? undefined : { skill, text: prompt.slice(named[0].length) };
 };
 
-// The questions on one `item/tool/requestUserInput` request. Undefined when it belongs to another turn on this
-// thread, nothing in this run can answer that, and its caller says so on the wire instead of asking a person.
-/* The one command on an `item/commandExecution/requestApproval`, or undefined when this request is not this
- * run's to answer (another turn's) or carries no command text to judge.
- *
- * `command` is optional in the schema, so a request without one is undefined here and the caller accepts it:
- * the alternative is refusing work over a field Codex chose not to send, and the gate is friction for
- * well-behaved commands rather than a boundary (sandbox-contract's command-classes.ts). Deliberately TOLERANT of everything
- * else in the payload: this runs on the turn path and a shape surprise must not throw the stream. */
+// Questions on an item/tool/requestUserInput request; undefined for another turn's, answered empty.
+// Command on an item/commandExecution/requestApproval, or undefined for another turn's request or one with no command
+// text. Tolerant of anything else in the payload, since a shape surprise here must not throw the turn.
 const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { readonly command: string; readonly reason?: string } | undefined => {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
         return undefined;
@@ -698,8 +631,8 @@ const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { read
     return { command, ...(typeof reason === "string" && reason.trim() !== "" ? { reason } : {}) };
 };
 
-// One command approval request, answered: the card when there is a command for the rulebook to judge, and the
-// standing yes when there is not. The reply travels on the frame, so the turn stays parked until a person picks.
+// Answers one command approval request: a card when there's a command to judge, else the standing yes. The reply rides
+// the frame, so the turn stays parked until a person picks.
 async function* commandApprovalFrames(
     notification: Extract<AppServerMessage, { kind: "request" }>,
     turnIds: ReadonlySet<string>,
@@ -749,9 +682,8 @@ const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly Cod
     });
 };
 
-// The turn a `turn/steer` landed on. Normally the turn that was already running. Codex interrupts the model
-// and resubmits with the steer folded in, but it answers with an id rather than nothing, so the id is read
-// rather than assumed: a steer that DID open a new turn would otherwise send every later frame to a dead id.
+// Turn a turn/steer landed on, normally the one already running. Read rather than assumed, since a steer that opened a
+// new turn would otherwise send later frames to a dead id.
 const steeredTurnId = (value: unknown): string => string(object(value, "turn/steer result"), "turnId", "turn/steer result");
 
 export const createCodexAppServerRunner = (connect: CodexAppServerConnector = stdioConnector()): CodexRunner =>
@@ -780,9 +712,8 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 yield { type: "thread.started", thread_id: threadId };
             }
 
-            /* The thread's own slash commands, read before the turn starts because the prompt may name one.
-             * Best-effort: a workspace with no skills answers with an empty list, and a build that does not
-             * publish them at all must not cost the turn, an empty popover is the cost of a failure here. */
+            // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure
+            // here.
             const skills = await connection
                 .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
                 .then(skillsFrom)
@@ -808,18 +739,13 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
                 }),
             );
-            /* WHICH TURN THIS RUN IS WATCHING. One id in the ordinary case; a steer answers with the id its
-             * message landed on, and both are kept because a superseded turn can still be completing while the
-             * one carrying the steer runs. The frames of every id in here belong to this run; only the LATEST
-             * one ends it, so a `turn/completed` for a turn a steer replaced cannot cut the stream short. */
+            // Turn ids this run watches; a steer adds one, since the old turn may keep completing, only the latest ends
+            // it.
             const turnIds = new Set([startedTurnId]);
             let turnId = startedTurnId;
 
-            /* MID-TURN STEERING. Best-effort by construction, the same posture as Pi's steer queue: the message
-             * is already in the user's transcript by the time it reaches here, and every way `turn/steer` can
-             * refuse is a race the user cannot see and cannot act on, the turn finished between the click and
-             * this call (`no_active_turn`), or a compaction owns the model for the moment (`non_steerable_*`).
-             * Failing the turn over one would replace a lost sentence with a lost turn. */
+            // Best-effort: turn/steer can refuse on a race the user can't see; failing the turn loses more than a
+            // message.
             const steering = turn.steering;
             if (steering !== undefined) {
                 void (async () => {
@@ -843,13 +769,8 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
             let usage: CodexUsage | undefined;
             for await (const notification of connection.messages) {
                 if (notification.kind === "request") {
-                    /* THE APPROVALS FIRST. `accept`/`decline` are the schema's own decision words; declining
-                     * lets the turn carry on (`cancel` would interrupt it, which is not what a refused command
-                     * means, the agent should hear no and choose something else).
-                     *
-                     * A request naming a turn this run is not watching is accepted rather than shown to anyone:
-                     * the same rule the question card follows, for the same reason (a superseded turn can still
-                     * be completing while the steered one runs). */
+                    // accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which
+                    // interrupts it.
                     if (notification.method === COMMAND_APPROVAL_REQUEST) {
                         yield* commandApprovalFrames(notification, turnIds);
                         continue;
@@ -859,8 +780,8 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                         continue;
                     }
                     if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
-                        // The profile Codex asked for, granted as asked: the container is the isolation boundary,
-                        // so narrowing it here would refuse work without protecting anything.
+                        // Grants the profile Codex asked for; the container is the isolation boundary, so narrowing
+                        // here protects nothing.
                         const params = object(notification.params, `${PERMISSIONS_APPROVAL_REQUEST} params`);
                         notification.respond({ permissions: (params["permissions"] ?? {}) as JsonValue });
                         continue;
@@ -897,8 +818,8 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     continue;
                 }
                 if (notification.method === "turn/plan/updated") {
-                    // Keyed by the turn this run STARTED, not the current one: a steer that opens a new turn must
-                    // keep updating the same checklist card rather than raising a second one beside it.
+                    // Keyed by the started turn, not the current one, so a steer that opens a new turn keeps the same
+                    // checklist.
                     const event = todoEvent(notification.params, startedTurnId, turnIds);
                     if (event !== undefined) {
                         yield event;
@@ -913,8 +834,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     continue;
                 }
                 if (notification.method === "account/rateLimits/updated") {
-                    // Account-wide rather than per turn, so no turn id to check: whatever this process is told
-                    // about the plan is about the plan this turn is spending.
+                    // Account-wide, not per turn, so there's no turn id to check here.
                     yield { type: "rate_limits", snapshot: object(notification.params, "account/rateLimits/updated params")["rateLimits"] };
                     continue;
                 }

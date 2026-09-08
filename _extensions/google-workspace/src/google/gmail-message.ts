@@ -1,11 +1,6 @@
-/* A GMAIL MESSAGE AS SOMETHING WORTH READING. The API hands back a recursive part tree with base64url bodies
- * and headers as an array of {name, value} pairs, and every consumer here, read, reply, the watcher's excerpt
- *, wants the same four things out of it: who, what it is about, the text, what is attached.
- *
- * THE TEXT IS `text/plain` WHERE THERE IS ONE, and a stripped `text/html` where there isn't. A great many
- * messages are html-only, and returning nothing for them would make the tool useless on exactly the mail
- * people get most (anything sent by a system). The stripping is deliberately crude, block tags become line
- * breaks, everything else goes, because the reader is a model summarizing prose, not a browser. */
+// A Gmail message as something worth reading: the API returns a recursive part tree with base64url bodies and
+// array-of-pairs headers, and every consumer here wants the same four things, who, subject, text, attachments. Text
+// prefers `text/plain`; a stripped `text/html` is the fallback, since many messages are html-only.
 
 export interface MessagePart {
     readonly partId?: string;
@@ -83,8 +78,7 @@ export const bodyText = (payload: MessagePart | undefined): string => {
     const plain: string[] = [];
     const html: string[] = [];
     walk(payload, (part) => {
-        // A part with a filename is an attachment even when its type is text/plain, a .txt someone sent is
-        // not the message.
+        // A filename makes a part an attachment even when its type is text/plain; a sent .txt isn't the message.
         if ((part.filename ?? "") !== "" || part.body?.data === undefined) {
             return;
         }
@@ -128,14 +122,14 @@ export const parseMessage = (message: GmailMessage): ParsedMessage => ({
     attachments: attachmentsOf(message.payload),
 });
 
-// The address out of a `Name <addr@host>` header, for a reply's To and for the watcher's author field.
+// The address out of a `Name <addr@host>` header, for a reply's To and the watcher's author field.
 export const addressOf = (header: string): string => /<([^>]+)>/.exec(header)?.[1]?.trim() ?? header.trim();
 
-// The display name, falling back to the address, what a person is called in a listing.
+// The display name, falling back to the address.
 export const nameOf = (header: string): string => {
     const named = /^\s*"?([^"<]*?)"?\s*</.exec(header)?.[1]?.trim();
     return named === undefined || named === "" ? addressOf(header) : named;
 };
 
-// A reply's subject: one "Re:" however many round trips it has been through.
+// One "Re:" however many round trips the subject has already been through.
 export const replySubject = (subject: string): string => (/^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`);

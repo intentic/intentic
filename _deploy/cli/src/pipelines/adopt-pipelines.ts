@@ -5,62 +5,50 @@ import type { ForgejoAdmin, ForgejoApi } from "@intentic/providers";
 import { renderTemplate } from "../lib/templates.js";
 import { collectSecrets } from "../secrets/secrets.js";
 
-// The repo Actions secrets the INTENT pipeline pushes the resolved artifact into the desired-state repo with
-// (HTTP Basic against Forgejo, the same scheme `adopt` pushes with). The token is the Forgejo admin password.
+// Repo Actions secrets the intent pipeline pushes the artifact with (HTTP Basic, admin password token).
 export const GIT_USER_SECRET = "INTENTIC_GIT_USER";
 export const GIT_TOKEN_SECRET = "INTENTIC_GIT_TOKEN";
 
-// The job env-var names the resolve pipeline binds those secrets to (and that the CLI reads): the resolve sync
-// authenticates its Forgejo secret PUTs with GIT_TOKEN (the admin password).
+// Job env-var names the resolve pipeline binds those secrets to; GIT_TOKEN also authenticates its secret PUTs.
 const GIT_USER_ENV = "GIT_USER";
 export const GIT_TOKEN_ENV = "GIT_TOKEN";
 
-// The package the pipelines install the CLI from. The intent/desired-state repos do not depend on the CLI
-// (only on @intentic/{sdk,graph}); the runner pulls it on demand via `pnpm dlx`, pinned to the adopting CLI's
-// own version so the pipeline runs the same intentic the operator bootstrapped with.
+// Package the pipelines install the CLI from, pinned to the adopting CLI's own version via `pnpm dlx`.
 const CLI_PACKAGE = "@intentic/cli";
-// The git ref the apply pipeline force-moves onto each SUCCESSFULLY-applied commit. The next apply diffs the
-// new artifact against the artifact at this tag (the last good state) to decide what to prune, so a failed
-// apply, which never reaches the tag step, never corrupts the prune baseline.
+// Git ref the apply pipeline force-moves onto each successfully-applied commit; next apply's prune baseline.
 const APPLIED_TAG = "intentic-applied";
 
 export const INTENT_WORKFLOW_PATH = ".forgejo/workflows/resolve.yaml";
 export const APPLY_WORKFLOW_PATH = ".forgejo/workflows/apply.yaml";
 
-// Forgejo rejects an Actions secret whose name starts with a reserved prefix (HTTP 400 "invalid secret
-// name"), so a generated key like FORGEJO_ADMIN_PASSWORD cannot be stored verbatim. Map such keys to an
-// INTENTIC_-prefixed STORE name; the workflow binds the original env-var name to this store name, so the CLI
-// still reads the real key. Used on both sides (the PUT and the `${{ secrets.* }}` reference) so they agree.
+// Forgejo rejects a reserved-prefix secret name; such keys store under an INTENTIC_-prefixed name instead.
 const RESERVED_SECRET_PREFIXES = ["GITHUB_", "GITEA_", "FORGEJO_"];
 export const forgejoSecretName = (key: string): string =>
     RESERVED_SECRET_PREFIXES.some((prefix) => key.startsWith(prefix)) ? `INTENTIC_${key}` : key;
 
 export interface PipelineInputs {
-    // The adopting CLI's version, baked into `pnpm dlx @intentic/cli@<version>` in both pipelines.
+    // Adopting CLI's version, baked into `pnpm dlx @intentic/cli@<version>` in both pipelines.
     readonly cliVersion: string;
-    // The Forgejo admin user, the repo owner and the git-push identity.
+    // Forgejo admin user, repo owner, and git-push identity.
     readonly user: string;
-    // The public git domain (git.<zone>); the REST + clone-url authority.
+    // Public git domain (git.<zone>); the REST + clone-url authority.
     readonly domain: string;
-    // The intent config the resolve pipeline reads and the artifact it writes (bare names within each repo).
+    // Intent config the resolve pipeline reads and the artifact it writes (bare names within each repo).
     readonly configFile: string;
     readonly artifactFile: string;
-    // The repo names under the admin owner.
+    // Repo names under the admin owner.
     readonly intentRepo: string;
     readonly desiredStateRepo: string;
-    // Every secret key the apply pipeline injects into the job env (the graph's env + generated secrets),
-    // `apply` resolves each from process.env, and the generated ones win over `.secrets.json` (env-first).
+    // Every secret key the apply pipeline injects into the job env, resolved from process.env when apply runs.
     readonly applySecretKeys: readonly string[];
-    // The generated secret key holding the Forgejo admin password; the apply pipeline pushes the applied-tag
-    // with it (admin Basic auth), so no separate git-push secret is needed on the desired-state repo.
+    // Generated secret key holding the Forgejo admin password; apply uses it to push the applied-tag.
     readonly forgejoPasswordKey: string;
 }
 
 const cloneUrl = (inputs: PipelineInputs, repo: string): string => `https://${inputs.domain}/${inputs.user}/${repo}.git`;
 
-// On a push that changes the authored config, resolve it into a fresh artifact and push that into the
-// desired-state repo (whose own pipeline then applies it). The desired-state clone/push authenticates with the
-// INTENTIC_GIT_* repo secrets via http.extraHeader, so credentials never touch .git/config.
+// On a push that changes the config, resolves a fresh artifact and pushes it to desired-state (which applies it). Auth
+// rides on INTENTIC_GIT_* secrets via http.extraHeader, never .git/config.
 export const intentWorkflowYaml = (inputs: PipelineInputs): string =>
     renderTemplate("workflows/resolve.yaml", {
         configFile: inputs.configFile,
@@ -76,9 +64,8 @@ export const intentWorkflowYaml = (inputs: PipelineInputs): string =>
         domain: inputs.domain,
     });
 
-// On a push that changes the artifact, apply it. Full history is fetched so the last successfully-applied
-// commit (tagged `intentic-applied`) can be read as the prune baseline. On success the tag is force-moved onto
-// the applied commit and pushed, so it always points at the last good state.
+// On a push that changes the artifact, applies it. Full history lets it diff against the intentic-applied tag (the
+// prune baseline), moving the tag on success.
 export const applyWorkflowYaml = (inputs: PipelineInputs): string =>
     renderTemplate("workflows/apply.yaml", {
         artifactFile: inputs.artifactFile,
@@ -90,23 +77,21 @@ export const applyWorkflowYaml = (inputs: PipelineInputs): string =>
         forgejoPasswordKey: inputs.forgejoPasswordKey,
     });
 
-// Write a workflow file into a local repo dir (creating .forgejo/workflows/), so `adopt`'s normal add/commit/
-// push carries it, no API commit, no extra trigger.
+// Writes a workflow file into a local repo dir so adopt's normal commit/push carries it, no API commit needed.
 export const writeWorkflow = async (repoDir: string, workflowPath: string, content: string): Promise<void> => {
     const full = join(repoDir, workflowPath);
     await mkdir(dirname(full), { recursive: true });
     await writeFile(full, content);
 };
 
-// Seed both control-plane repos with their pipelines, before the push that adopts them.
+// Seeds both control-plane repos with their pipelines, before the push that adopts them.
 export const writeControlPlaneWorkflows = async (intentDir: string, targetDir: string, inputs: PipelineInputs): Promise<void> => {
     await writeWorkflow(intentDir, INTENT_WORKFLOW_PATH, intentWorkflowYaml(inputs));
     await writeWorkflow(targetDir, APPLY_WORKFLOW_PATH, applyWorkflowYaml(inputs));
 };
 
-// Resolve the VALUES behind the graph's secrets, for pushing into Forgejo Actions: env keys from the loaded
-// process.env, generated keys from the .secrets.json map. A declared key with no value yet is simply absent,
-// the caller pushes what exists and `apply` fails loudly on the rest. Shared by `adopt` and `secrets push`.
+// Resolves the values behind the graph's secrets for pushing to Forgejo: env keys from process.env, generated keys from
+// .secrets.json. A key with no value yet is simply omitted.
 export const collectSecretValues = (
     graph: DesiredStateGraph,
     env: Readonly<Record<string, string | undefined>>,
@@ -129,7 +114,7 @@ export const collectSecretValues = (
     return values;
 };
 
-// Set a repo's Actions secrets from a name -> value map, after the repo exists (post-adopt push).
+// Sets a repo's Actions secrets from a name to value map, once the repo exists.
 export const setRepoSecrets = async (
     args: ForgejoAdmin & {
         readonly api: ForgejoApi;

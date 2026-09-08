@@ -4,10 +4,8 @@ import { expect, test } from "vitest";
 import { readTierReport } from "./tier-report.js";
 import type { UsageStore } from "./usage-store.js";
 
-/* THE TIER READOUT OVER LEDGER ROWS. What these pin is the arithmetic the settings row stands behind: which
- * rows count as judged, which as fast, where the money lands, and that the escalation read really is "the very
- * next row of the same conversation asked for a dearer rung than this one ran" — the one number that guards the
- * whole feature (docs/model-routing-design.md §4). */
+// Tier readout over ledger rows: which count as judged, which as fast, where the money lands, and that escalation means
+// the same conversation's very next row asking for a dearer rung (docs/model-routing-design.md §4).
 
 let stamp = 0;
 const row = (over: Partial<UsageTurn>): UsageTurn => {
@@ -31,8 +29,7 @@ const row = (over: Partial<UsageTurn>): UsageTurn => {
 const storeOf = (rows: UsageTurn[]): UsageStore => unstubbed<UsageStore>("usage", { turns: async () => rows });
 
 test("nothing judged in the window reads as absence, not as a report full of zeros", async () => {
-    // "Not measured" and "measured, found nothing" are different sentences, and the screen renders the first
-    // by rendering nothing.
+    // "Not measured" and "measured, found nothing" are different; the screen renders the first as nothing.
     const report = await readTierReport(storeOf([row({}), row({ costUsd: 3 })]), {});
 
     expect(report).toBeUndefined();
@@ -67,7 +64,7 @@ test("routed turns carry their own realized cost and leave the at-stake sum", as
 test("an escalation is the same conversation's very next row asking for a dearer rung than the fast turn ran", async () => {
     const report = await readTierReport(
         storeOf([
-            // Routed onto the cheap rung… and the user reached for the picker on the next message.
+            // Routed onto the cheap rung, then the user reached for the picker on the next message.
             row({ conversationId: "c1", tierScore: 0.2, tierRouted: true, model: "claude-haiku-4-5", modelRequested: "claude-opus-5" }),
             row({ conversationId: "c1", tierScore: 1, modelRequested: "claude-opus-5", model: "claude-opus-5" }),
             // A fast turn followed by the same model again is the weak positive, not a bump.
@@ -93,8 +90,8 @@ test("a bump after a STANDARD verdict is not held against the judge", async () =
 });
 
 test("the recorded verdict wins over the old derivation, because the cutoff is now the owner's to move", async () => {
-    // A row judged at the eager stop can sit well above the balanced cutoff and still have been called simple.
-    // Reading the score against one fixed number would report it as a turn the judge left alone.
+    // A row judged at the eager stop can sit above the balanced cutoff and still have been called simple; reading the
+    // score against one fixed number would misreport it as left alone.
     const report = await readTierReport(
         storeOf([
             row({ tierScore: 0.35, tierCeiling: 0.4, tierFast: true, costUsd: 0.2 }),
@@ -107,16 +104,16 @@ test("the recorded verdict wins over the old derivation, because the cutoff is n
 });
 
 test("a row from before the dial existed is read the way it was actually judged", async () => {
-    // No verdict and no ceiling means the balanced cutoff, which is what those rows were judged against, so the
-    // two eras stay one population instead of the older one quietly dropping out of the share.
+    // No verdict and no ceiling means the balanced cutoff, what those rows were judged against, so old and new stay one
+    // population.
     const report = await readTierReport(storeOf([row({ tierScore: 0.2 }), row({ tierScore: 0.3 })]), {});
 
     expect(report).toMatchObject({ judged: 2, fast: 1 });
 });
 
 test("denied counts the veto rows, and failed or cancelled turns leave every population", async () => {
-    // The same rule the experiments apply (turn-experiments.ts `measurable`): a turn that died measures
-    // nothing, and a burst of refusals must not read as a flood of simple turns.
+    // Same rule the experiments apply (turn-experiments.ts measurable): a dead turn measures nothing, so refusals don't
+    // read as simple turns.
     const report = await readTierReport(
         storeOf([
             row({ tierScore: 0.2, tierDenied: true, costUsd: 0.2 }),

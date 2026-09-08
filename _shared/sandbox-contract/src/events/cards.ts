@@ -2,13 +2,9 @@ import { z } from "zod";
 import { AgentProviderSchema } from "../schemas/agent.js";
 import { CredentialGateKindSchema, CredentialGateScopeSchema, CredentialLaneSchema } from "../schemas/secrets.js";
 
-/* THE CARDS A TURN RAISES, and how each one is answered. A card is the daemon asking the person something
- * mid-turn — approve this plan, answer this question, allow this tool, accept this priced run, connect this
- * capability, release this credential — and every one of them pauses the turn until a reply arrives on the
- * `POST /agent/reply` side channel.
- *
- * These are the SHAPES, shared by the three readers that must agree about them: the daemon that raises the
- * card, the browser that draws it, and the transcript that records how it was settled (transcript.ts). */
+// Cards a turn raises to ask the person something mid-turn; each pauses the turn until `POST /agent/reply` answers it.
+// Shapes shared by the daemon that raises them, the browser that draws them, and the transcript that records them
+// (transcript.ts).
 
 // One interactive question the agent asks via the `ask` tool (mirrors AskUserQuestion's input shape).
 export const AskOptionSchema = z.object({
@@ -26,25 +22,8 @@ export const AskQuestionSchema = z.object({
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
-/* THE PROGRAM A COMMAND CARD IS HOLDING, as the thing it is rather than as prose about it.
- *
- * It used to ride in `description`, the field every other permission ask fills with a sentence, which left the
- * card with no way to know it was holding four hundred characters of shell: it rendered them as a paragraph,
- * wrapped mid-flag, and the fragment that caused the hold was somewhere in the middle of it.
- *
- * `spans` is where the pattern match fired, computed by the classifier at the moment it did (contract's
- * command-classes.ts, matchCommand) and carried rather than re-derived: a browser that re-ran the patterns
- * would be a second classifier, and the day the two disagreed the card would be marking a fragment the daemon
- * never saw. Offsets are into `text` AFTER truncation, so they are always paintable.
- *
- * IT IS NOT A CLAIM ABOUT WHY THE CARD EXISTS, and the card no longer presents it as one. The reason is the
- * judge's sentence in the title; these are the fragments TRIAGE noticed, all of the matched classes' rather
- * than whichever sorts first — the card used to show one class's and label them "Stopped for", so a command
- * that cleaned a build directory on its way to publishing offered `rm -rf …` as its reason under a sentence
- * about npm. Under the hard rule the title DOES name a class, so there the marks are that class's alone.
- *
- * `language` is a Shiki grammar id, and the two are the two execution backends the gate reads (command-gate's
- * EXECUTION_SOURCES): a shell line and a script. */
+// The command a card is holding, as data rather than prose. `spans` is carried from the classifier's own match (never
+// re-derived), offset into `text` after truncation.
 export const ProgramAskSchema = z.object({
     text: z.string().describe("What would run."),
     language: z.enum(["bash", "javascript"]).describe("Which of the two backends it is written for, named as the grammar that colours it."),
@@ -61,20 +40,18 @@ export const ProgramAskSchema = z.object({
 });
 export type ProgramAsk = z.infer<typeof ProgramAskSchema>;
 
-// One per-tool permission prompt (the SDK's canUseTool callback, surfaced as a card). The daemon passes the
-// bridge's own rendered strings through rather than re-deriving them, so the prompt reads exactly as Claude
-// Code words it. `alwaysLabel` is present only when the SDK offered rules to persist, without it the card
-// shows allow-once / deny alone, because there is nothing an "always" answer could remember.
+// One per-tool permission prompt (SDK's canUseTool, surfaced as a card); the daemon passes the bridge's own rendered
+// strings through unchanged. `alwaysLabel` is present only when the SDK offered a rule to persist.
 export const PermissionAskSchema = z.object({
     toolName: z.string().describe("Which tool it wants to use."),
-    // "Claude wants to read foo.txt", the full prompt sentence, when the bridge rendered one.
+    // The whole prompt sentence, exactly as the runtime words it, when the bridge rendered one.
     title: z.string().optional().describe("The whole question, as a sentence, exactly as the runtime words it."),
     // Short noun phrase for the allow button ("Read file").
     displayName: z.string().optional().describe("A short phrase for the button, such as read file."),
     description: z.string().optional().describe("More about what it is asking for."),
     // Why the prompt fired ('rule' | 'mode' | 'classifier' | …), shown as the card's muted subline.
     reason: z.string().optional().describe("Why it is asking at all: a rule, the current mode, something that looked risky."),
-    // The file the request is about, when it is about one (workspace-root-relative).
+    // The file the request is about, when it is about one, workspace-root-relative.
     path: z.string().optional().describe("Which file it concerns, when it concerns one."),
     alwaysLabel: z
         .string()
@@ -85,15 +62,7 @@ export const PermissionAskSchema = z.object({
     program: ProgramAskSchema.optional().describe(
         "The program this card is holding, when the card is about one. Present on a command gate's card and absent on every other permission ask.",
     ),
-    /* THE JUDGE'S OWN SENTENCE, WHERE THE TITLE IS SOMEBODY ELSE'S. On an ordinary command card the sentence IS
-     * the title (the judge read the owner's policy and the program, and its account of why this needs asking is
-     * the only account there is), so this is left off rather than printing the same words twice. It carries the
-     * sentence on the two cards whose title says something the sentence cannot: the hard rule's, which names the
-     * consequence that stopped it, and a machine command's, which names the device.
-     *
-     * Written by the quick model from the program text and the policy, never by the agent being gated — a card
-     * whose persuasive half was authored by the thing it is stopping argues for its own approval, and the turns
-     * that raise cards are exactly the ones whose account of themselves may be a stranger's. */
+    // The judge's own sentence, present only when the title can't say it; never written by the agent being gated.
     explain: z
         .string()
         .optional()
@@ -103,11 +72,8 @@ export const PermissionAskSchema = z.object({
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
-/* ONE MISSING CAPABILITY, ASKED FOR, the card the daemon raises when the agent hits something this sandbox
- * is not connected to (capabilities/capability-offer.ts). `card` names the catalog card and `name` is that
- * card's own title, both resolved by the daemon from the catalog it validates the ask against, the model
- * that asked contributes `why` (its one line of rationale) and nothing else, which is what makes the card
- * impossible to misrepresent, and the click on it the only way anything gets connected. */
+// One missing capability asked for; `card`/`name` are resolved by the daemon from the catalog it validates against. The
+// model contributes only `why`, so the card can't misrepresent what's being connected.
 export const CapabilityOfferSchema = z.object({
     // The catalog card being asked for, and how the catalog itself titles it ("Notion", "GitHub", "Docker").
     card: z.string().describe("Which connection is being asked for."),
@@ -117,11 +83,8 @@ export const CapabilityOfferSchema = z.object({
 });
 export type CapabilityOffer = z.infer<typeof CapabilityOfferSchema>;
 
-/* ONE OUTBOUND USDC PAYMENT, OFFERED, the card the daemon raises when the agent asks to pay an x402
- * endpoint out of the sandbox wallet (wallet/payment-offer.ts). Every number on it is the daemon's own
- * arithmetic over the ENDPOINT's parsed challenge and the wallet's own ledger, the model that asked
- * contributes `why` (its one line of rationale) and nothing else, which is what makes the price on the card
- * impossible to misquote, and the click on it the only way the money can move. */
+// One outbound USDC payment offered; every number is the daemon's own arithmetic over the endpoint's challenge and the
+// wallet's ledger. The model contributes only `why`, so the price can't be misquoted.
 export const PaymentOfferSchema = z.object({
     // The paid resource, as the endpoint's challenge stated it.
     url: z.string().describe("What is being paid for."),
@@ -130,10 +93,9 @@ export const PaymentOfferSchema = z.object({
     payTo: z.string().describe("Where the money goes, taken verbatim from the endpoint's own demand."),
     network: z.string().describe("On which network."),
     asset: z.string().describe("In which token."),
-    // The token's display name ("USDC"), dollar-pegged, which is what lets every amount below read as USD.
+    // The token's display name ("USDC"), dollar-pegged, so every amount below reads as USD.
     assetName: z.string().describe("That token's name. It is pegged to the dollar, which is what lets every amount here read as dollars."),
-    // The exact price in display units ("0.10"), the x402 exact scheme has no ranges, so this is the whole
-    // spend, not a ceiling.
+    // The exact price; the x402 exact scheme has no ranges, so this is the whole spend, not a ceiling.
     amountUsd: z.string().describe("The exact price. Not a ceiling: this scheme has no ranges, so this is the whole spend."),
     // The wallet's meter as the daemon's ledger states it, what "spent today / cap" renders from.
     spentTodayUsd: z.string().describe("What has already gone out today."),
@@ -143,28 +105,14 @@ export const PaymentOfferSchema = z.object({
 });
 export type PaymentOffer = z.infer<typeof PaymentOfferSchema>;
 
-/* ONE GATED CREDENTIAL, ASKED FOR, the card the daemon raises when the agent reaches for a secret or a
- * connected account the owner put behind a named person (secrets/credential-gate.ts).
- *
- * Every field but `why` is the daemon's own: the subject and its approvers come off the gate policy the owner
- * wrote (which lives off the workspace, where the agent cannot edit it), the lane and detail come from the
- * exit that was about to spend the credential, and the scope is the policy's, not the asker's. The model
- * contributes one line of rationale and nothing else, which is what makes the card impossible to
- * misrepresent: a prompt-injected turn can ask for the production password and cannot make the card say it is
- * asking for the staging one.
- *
- * THE APPROVERS ARE ON THE CARD because the card is not addressed to "the owner" the way every other offer
- * here is — it is addressed to a LIST, the server checks the clicker's verified identity against it, and a
- * click from anybody else is refused with the card left standing. So the names have to be visible: a card
- * whose buttons do nothing for the person looking at it must say who it is waiting for. */
+// One gated credential asked for; every field but `why` is the daemon's own, off the gate policy and the exit that
+// would spend it. `approvers` are shown since the card addresses a named list, not the owner.
 export const CredentialOfferSchema = z.object({
     // The gate's subject: a secret's reference name (`DATABASE_URL`) or a capability id (`reddit`).
     subject: z.string().describe("Which credential is being asked for."),
     kind: CredentialGateKindSchema,
     lane: CredentialLaneSchema,
-    // Where it would go, in the reader's terms: the head of the agent's command line, the page's host, or the
-    // capability's own name. Reference-form by construction on the secret lanes (resolution is what fires the
-    // ask), so this can be shown without leaking anything.
+    // Where it would go, in the reader's terms; reference-form, never a value, so it can be shown safely.
     detail: z
         .string()
         .optional()
@@ -176,8 +124,7 @@ export const CredentialOfferSchema = z.object({
 });
 export type CredentialOffer = z.infer<typeof CredentialOfferSchema>;
 
-// One provider-advertised slash command, an ACP agent's available_commands entry, or a Claude Code session's
-// supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
+// One provider-advertised slash command (ACP's available_commands, or a Claude Code session's supportedCommands).
 // `hint` is the argument placeholder the popover shows after the name.
 export const AgentCommandSchema = z.object({
     name: z.string().describe("What to type, without the leading slash."),
@@ -186,7 +133,7 @@ export const AgentCommandSchema = z.object({
 });
 export type AgentCommand = z.infer<typeof AgentCommandSchema>;
 
-// GET /agent/commands, which provider's last-published list to read; absent = claude, matching AgentTurn.
+// GET /agent/commands: which provider's last-published list to read; absent means claude, matching AgentTurn.
 export const AgentCommandsQuerySchema = z.object({
     agent: AgentProviderSchema.optional().describe("Whose commands to read. Leave it out for Claude."),
 });
@@ -194,7 +141,7 @@ export const AgentCommandsSchema = z.object({
     commands: z.array(AgentCommandSchema).describe("The shortcut commands, as the provider last published them."),
 });
 
-// One TodoWrite/Task checklist item, surfaced live so the UI shows the agent's plan-of-work (Claude Code style).
+// One TodoWrite/Task checklist item, surfaced live so the UI shows the agent's plan-of-work.
 export const TodoItemSchema = z.object({
     content: z.string().describe("The item, as the agent wrote it."),
     status: z.enum(["pending", "in_progress", "completed"]).describe("Where it is."),
@@ -205,40 +152,32 @@ export const TodoItemSchema = z.object({
 });
 export type TodoItem = z.infer<typeof TodoItemSchema>;
 
-// Context-window fill for a conversation: how many tokens the latest request sent vs the model's window, so
-// the UI can warn as the chat nears auto-compaction. Per-conversation, unlike the account-wide usage above.
+// Context-window fill for a conversation: tokens the latest request sent vs. the model's window, so the UI can warn
+// near auto-compaction. Per-conversation, unlike the account-wide usage.
 export const ContextUsageSchema = z.object({
     tokens: z.number().describe("How much the latest request sent, all told."),
     contextWindow: z.number().describe("How much the model can hold. The gap between these two is how close the conversation is to being compacted."),
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
-// ACP-aligned tool taxonomy (Agent Client Protocol's ToolKind, verbatim): what a tool call *does*, driving
-// the card icon and the live-writes bookkeeping regardless of which backend named the tool.
+// ACP-aligned tool taxonomy (Agent Client Protocol's ToolKind, verbatim): what a tool call does, driving the card icon
+// regardless of which backend named the tool.
 export const ToolKindSchema = z.enum(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "other"]);
 export type ToolKind = z.infer<typeof ToolKindSchema>;
 
 export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
 export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>;
 
-// A file a tool call touches. Workspace-root-relative, forward-slash (the tree/file route space), adapters
-// normalize from the turn's cwd. `line` is 1-based.
+// A file a tool call touches. Workspace-root-relative, forward-slash; adapters normalize from the turn's cwd. `line` is
+// 1-based.
 export const ToolCallLocationSchema = z.object({
     path: z.string().describe("The file, as a workspace path, whatever directory the tool was run from."),
     line: z.number().optional().describe("Which line, counting from one."),
 });
 export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 
-// Structured tool output (ACP's ToolCallContent diff shape, verbatim). `diff` is hunk-level for Edit-style
-// tools (old_string/new_string) and whole-file for Write; an absent oldText means a new file / unknown
-// previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
-//
-// `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes. Browser screenshots
-// already live under .intentic/records/artifacts/browser, and provider-generated images are copied into
-// .intentic/records/artifacts/imagegen, so the client fetches either from /workspace/raw like any other file. Base64 on
-// the wire would bloat the event stream and every stored transcript to show bytes the workspace already serves;
-// the path also keeps the picture openable afterwards. Root-relative, forward-slash: the same route space as
-// ToolCallLocation.
+// Structured tool output (ACP's ToolCallContent, verbatim); `diff` is hunk-level for edits, whole-file for Write.
+// `image` is a workspace path, not bytes, so it stays openable without bloating the stream.
 export const ToolCallContentSchema = z.discriminatedUnion("type", [
     z.object({
         type: z.literal("text").describe("Plain output."),
@@ -262,21 +201,8 @@ export const ToolCallContentSchema = z.discriminatedUnion("type", [
 ]);
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
-/* WHAT A PARKED CARD IS ABOUT: the document the turn wrote and is now asking a question against.
- *
- * A card asks for a decision; until this it carried no SUBJECT. The commonest shape of a real decision is "I
- * analysed this and wrote it up, now choose", and the write-up went into a file whose card had already folded
- * itself into `Write · +135 −0` twenty tool calls back. So the reader was asked to choose between options
- * describing a document the chat had never shown them.
- *
- * Carried BY VALUE rather than as a path, for the same reason the diff on a tool call is: the bytes are already
- * in hand when the card is raised, a path would make the card's meaning depend on a file that keeps changing
- * under it, and a restored or published transcript has no workspace to go read. The path rides along anyway, so
- * a document past the wire cap still has somewhere to send the reader.
- *
- * Nothing is asked of the MODEL for this. It calls `ask` exactly as before; the daemon knows what the turn
- * wrote, because every write came past it as a frame (documents.ts decides which of them is a document). A
- * harness that can see the answer must not spend prompt on asking the model to repeat it. */
+// The document a parked card is asking about, carried by value: the bytes are already in hand, and a restored
+// transcript has no workspace to fetch a path from. `path` rides along for an overflow.
 export const CardDocumentSchema = z.object({
     path: z.string().describe("Where it lives, as a workspace path."),
     title: z.string().describe("What it is called: its opening heading, or its file name."),
@@ -286,16 +212,13 @@ export const CardDocumentSchema = z.object({
 });
 export type CardDocument = z.infer<typeof CardDocumentSchema>;
 
-/* ONE CARD'S OWN FIELDS, spelled once. Three readers carry the same card and must agree on what it is: the
- * frame that raises it (AgentEventSchema below), the journal entry that keeps a parked one across a restart
- * (ParkedCardSchema), and the record row that keeps it for good (TranscriptRowSchema's card fields). A shape
- * declared inline in each was three shapes with one name. */
+// One card's fields, spelled once: the raising frame, the parked-card journal entry, and the transcript row all share
+// this shape rather than declaring it three times.
 const REQUEST_ID = z.string().describe("What to send back when you answer.");
 export const planCard = {
     requestId: REQUEST_ID,
     text: z.string().describe("The plan itself."),
-    // Present when the adjacent plan prose POINTS at a document instead of being one: the model wrote the real
-    // plan to a file and summarised it there. Absent when the text already is the whole plan.
+    // Present when the plan prose points at a document; absent when the text already is the whole plan.
     document: CardDocumentSchema.optional().describe("The write-up this plan refers to, when the plan itself is a pointer to one."),
 };
 export const questionCard = {
@@ -304,21 +227,16 @@ export const questionCard = {
     document: CardDocumentSchema.optional().describe("The document this turn wrote and is asking about, so the choice can be read beside it."),
 };
 export const permissionCard = { requestId: REQUEST_ID };
-// The agent's browser needs a person: it parked mid-sign-in on something it cannot clear itself (a captcha,
-// a password it does not hold, a phone check). `session` names the browser session on /browsers, the card's
-// one action is going THERE, where the live stage and Take control already are; the Browsers banner and this
-// card resolve the same requestId. `account` is the capability the sign-in is for, so the card can say whose
-// login is stuck even after the browser has navigated somewhere unrecognizable.
+// The agent's browser is parked on something it can't clear itself (captcha, password, phone check). `session` names it
+// on /browsers; `account` says whose login is stuck.
 export const browserHelpCard = {
     requestId: z.string(),
     session: z.string(),
     account: z.string(),
     message: z.string(),
 };
-// The agent's TERMINAL needs a person: a command it started is sitting at a prompt it cannot answer (a
-// one-time password, a security-key touch, a confirm). `session` names the tmux session on the terminal
-// panel, the card's one action is going THERE, where the live pane and its prompt already are, which is
-// the same division of labour the browser card has with /browsers.
+// The agent's terminal is sitting at a prompt it can't answer (OTP, security-key touch, confirm). `session` names it on
+// the terminal panel, same division as the browser card.
 export const terminalHelpCard = {
     requestId: z.string(),
     session: z.string(),
@@ -328,9 +246,8 @@ export const capabilityOfferCard = { requestId: z.string(), offer: CapabilityOff
 export const paymentOfferCard = { requestId: z.string(), offer: PaymentOfferSchema };
 export const credentialOfferCard = { requestId: z.string(), offer: CredentialOfferSchema };
 
-/* HOW AN OFFER'S ACCEPTED HALF ENDED, the follow-up that lands on the card after the click. Each is the body of
- * the frame that reports it (`capability_outcome`, `payment_receipt`) and the field the record keeps it in,
- * one shape for both, so a receipt reopened tomorrow says exactly what the live card said. */
+// How an accepted capability offer ended, shared by the frame that reports it and the record that keeps it, so a
+// reopened receipt matches the live card.
 export const CapabilityOutcomeSchema = z.object({
     outcome: z.enum(["connected", "unfinished"]),
     id: z.string().optional(),
@@ -343,22 +260,16 @@ export const PaymentReceiptSchema = z.object({
     network: z.string().optional(),
 });
 export type PaymentReceipt = z.infer<typeof PaymentReceiptSchema>;
-/* WHO RELEASED A GATED CREDENTIAL, or that a person refused it. `released` carries the approver's own address,
- * read off the VERIFIED identity on the reply rather than off anything the click claimed, which is what makes
- * the row an audit line rather than a rendering. There is no receipt for a card nobody answered: `resolved`
- * already says so, and inventing "refused" for a deadline would put words in a person's mouth. */
+// Who released a gated credential, or that someone refused it. `released` carries the approver's verified identity, not
+// what the click claimed.
 export const CredentialReceiptSchema = z.object({
     outcome: z.enum(["released", "refused"]),
     approvedBy: z.string().optional(),
 });
 export type CredentialReceipt = z.infer<typeof CredentialReceiptSchema>;
 
-/* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
- * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
- * very same frames instead of ending the turn `interrupted`, the card the user was about to answer survives
- * the restart that killed the process holding it. The two handover cards are deliberately not among them:
- * `browser_help`'s Chromium and `terminal_help`'s waiting command both die with the container, so those parks
- * cannot be restored, only reported. */
+// The three cards a turn journal can restore verbatim after a daemon restart. `browser_help`/`terminal_help` are
+// excluded: their Chromium/waiting command dies with the container, so those can only be reported, not restored.
 export const PlanCardSchema = z.object({
     kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
     ...planCard,

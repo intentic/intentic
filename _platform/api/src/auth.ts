@@ -12,24 +12,18 @@ import type { PrismaClient } from "@intentic/prisma";
 
 export type Auth = ReturnType<typeof createAuth>;
 
-// The clickwrap version stamped on each account at sign-up (the login page's "By continuing you agree…"
-// notice), sourced from @intentic/constants, the SAME value intentic.dev renders its documents under, so the
-// two can't drift (bump it once in @intentic/constants).
+// The clickwrap version stamped at sign-up, sourced from @intentic/constants so it can't drift from the docs.
 const TERMS_VERSION = LEGAL_VERSION;
 
-// The Google OAuth token columns on Account, encrypted at rest (crypto.ts). Only fields present in the
-// write are touched. There is no decrypt path: the platform never calls Google's APIs with them.
+// Encrypts the Google OAuth token columns on Account (crypto.ts); only fields present in the write are touched.
 const encryptAccountTokens = (config: Config, account: { accessToken?: string | null; refreshToken?: string | null; idToken?: string | null }) => ({
     ...(typeof account.accessToken === `string` && { accessToken: encryptSecret(config, account.accessToken) }),
     ...(typeof account.refreshToken === `string` && { refreshToken: encryptSecret(config, account.refreshToken) }),
     ...(typeof account.idToken === `string` && { idToken: encryptSecret(config, account.idToken) }),
 });
 
-// Better Auth instance. The handler is mounted at /api/auth/** in app.ts; the browser calls it
-// directly at the API origin (apiUrl), so baseURL is the API origin. The SPA (webOrigin) is a
-// trusted origin so post-sign-in redirects back to it are allowed. localhost:47145 and the API's
-// :6480 are same-site, so the SameSite=Lax session cookie still rides cross-port. Both are https in dev
-// (the @intentic/localhost-https cert), which the Secure attribute on that cookie requires.
+// Mounted at /api/auth/** in app.ts; baseURL is the API origin, webOrigin is trusted for post-sign-in redirects. Dev's
+// mismatched ports are same-site over https, so the Secure, SameSite=Lax session cookie still rides cross-port.
 export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger) =>
     betterAuth({
         secret: config.betterAuth.secret,
@@ -49,11 +43,7 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
                 termsAcceptedAt: { type: `date`, required: false, input: false },
                 termsVersion: { type: `string`, required: false, input: false },
             },
-            // GDPR Art. 17: self-service account deletion (Settings → delete account). Google-only users have
-            // no password, so Better Auth requires a fresh session instead. The PrismaClient cascades remove
-            // sessions/accounts/sandboxes/grants with the user row. The hosted plan's Stripe subscription is
-            // NOT a row of ours and does not cascade: it is cancelled first, while the plan row still names
-            // it, or the deleted account keeps being charged (hosted-plan.ts).
+            // Cancels the Stripe subscription before the cascade removes the plan row: Stripe does not cascade with us.
             deleteUser: {
                 enabled: true,
                 beforeDelete: async (user) => {
@@ -62,15 +52,13 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
             },
         },
         databaseHooks: {
-            // Consent capture: stamp which clickwrap version the login page showed when the account was created.
+            // Stamps which clickwrap version the login page showed when the account was created.
             user: {
                 create: {
                     before: async (user) => ({ data: { ...user, termsAcceptedAt: new Date(), termsVersion: TERMS_VERSION } }),
                 },
-                // Trust boundary for Better Auth's built-in /update-user endpoint (Settings → profile): the browser
-                // sends { name, image } with image a small data URL, but nothing stops a raw client from PUTting
-                // megabytes, cap what may be persisted. Only fields present in THIS write are checked (an
-                // emailVerified update rides the same hook with neither field).
+                // Caps name length and avatar size on Better Auth's /update-user; only fields present in the write are
+                // checked.
                 update: {
                     before: async (user) => {
                         if (typeof user.name === `string` && (user.name.trim().length === 0 || user.name.length > 60)) {
@@ -87,30 +75,11 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
                 update: { before: async (account) => ({ data: { ...account, ...encryptAccountTokens(config, account) } }) },
             },
         },
-        /* The one-time token plugin is how a sign-in crosses from the user's real browser into the desktop
-         * app's webview (see the DesktopHandoff model). It is the library's own answer to "move this session
-         * to another user agent": GET /one-time-token/generate mints one for the caller's session, POST
-         * /one-time-token/verify spends it and answers with the session cookie, so the webview obtains its
-         * cookie through an ordinary HTTP round trip, and nothing hand-rolls a session or forges a cookie.
-         * Three minutes by default, which is the right order for a link the app opens the instant it arrives. */
+        // oneTimeToken mints a short-lived token so a sign-in can cross into the desktop app's webview.
         plugins: [
             oneTimeToken(),
-            /* ONE GOOGLE SIGN-IN FOR BOTH SIDES. The redirect flow above proves the user to THIS platform and
-             * leaves the browser holding nothing, so the sandbox, which authenticates the end user against
-             * Google itself, never against us, had to ask for Google a second time. People read that second
-             * ask as a bug, and some leave at it.
-             *
-             * This endpoint takes the Google ID token the BROWSER minted (POST /api/auth/one-tap/callback)
-             * and establishes the platform session from it. The browser keeps the same token for its sandbox,
-             * so one Google interaction now settles both. Audience is socialProviders.google.clientId, the
-             * same OAuth client the sandbox verifies against, which is what makes one token serve two
-             * verifiers (see .env.example: one client, the SPA as origin, the API as redirect URI).
-             *
-             * NOTHING ABOUT WHAT THE SANDBOX TRUSTS CHANGES HERE, and that is the point: the daemon still
-             * receives a Google-signed token it verifies against Google's JWKS, so a sandbox running an older,
-             * forked, or deliberately platform-distrusting build is unaffected. This platform is a second
-             * CONSUMER of that credential, never its issuer. The redirect flow stays as the fallback for any
-             * browser that cannot mint one. */
+            // Accepts the browser's own Google ID token, settling both this platform's and the sandbox's sign-in at
+            // once.
             oneTap(),
         ],
     });

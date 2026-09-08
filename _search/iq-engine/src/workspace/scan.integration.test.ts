@@ -26,53 +26,48 @@ test("sweep admits tracked-looking files and is path-sorted", () => {
 });
 
 test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always self-excludes the index dir", async () => {
-    expect(paths()).not.toContain("alpha/dist/decoy.js"); // .gitignore layer
-    expect(paths().some((path) => path.includes(".git/"))).toBe(false); // .git is a junk-ignored dir
-    // No security floor: a non-gitignore'd secret is indexed like any other file (role-based gating comes later).
+    expect(paths()).not.toContain("alpha/dist/decoy.js");
+    expect(paths().some((path) => path.includes(".git/"))).toBe(false);
+    // No security floor: a non-gitignore'd secret is indexed like any other file.
     expect(paths()).toContain(".env");
     expect(paths()).toContain(".env.example");
-    expect(paths().some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false); // index self-exclusion
+    expect(paths().some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false);
 
     const full = await sweep(root, true);
     const fullPaths = full.map((entry) => entry.path);
-    expect(fullPaths).toContain("alpha/dist/decoy.js"); // --ignored lifts .gitignore + junk dirs…
-    expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true); // …including .git now
-    expect(fullPaths.some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false); // …but never the index dir
+    expect(fullPaths).toContain("alpha/dist/decoy.js");
+    expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true);
+    expect(fullPaths.some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false);
 });
 
 test("the reference shelf is skipped by default and reachable via --ignored, like the junk layer", async () => {
     await mkdir(join(root, "refs/react/src"), { recursive: true });
     await writeFile(join(root, "refs/react/src/scheduler.ts"), "export const schedule = 1;\n");
     const swept = (await sweep(root, false)).map((entry) => entry.path);
-    // Consultation material must not outrank (or even sit beside) the workspace's own code in default search.
     expect(swept).not.toContain("refs/react/src/scheduler.ts");
-    // …but it is an attention boundary, not a floor: --ignored (and explicit path scoping with it) reaches it.
+    // An attention boundary, not a floor: --ignored reaches it.
     const full = (await sweep(root, true)).map((entry) => entry.path);
     expect(full).toContain("refs/react/src/scheduler.ts");
 });
 
-// Every repo in this workspace is a worktree whose real gitdir lives outside it, so `.git` is a POINTER FILE,
-// not a directory. It still has to sweep as git metadata: as content it leaks a host path from outside the
-// workspace, and its byte count changes whenever the worktree is re-pointed, which left the index permanently
-// reporting files behind that no pass could ever reconcile.
+// Every repo in this workspace is a worktree, so `.git` is a pointer file, not a directory; it must still sweep as git
+// metadata, since as content it would leak a host path and its size churns whenever the worktree re-points.
 test("a .git worktree pointer file is junk like a .git dir, and still liftable with --ignored", async () => {
     await mkdir(join(root, "gamma/src"), { recursive: true });
     await writeFile(join(root, "gamma/src/main.ts"), "export const main = 1;\n");
     await writeFile(join(root, "gamma/.git"), "gitdir: /elsewhere/gits/gamma\n");
     const swept = await sweep(root, false);
     expect(swept.map((entry) => entry.path)).not.toContain("gamma/.git");
-    expect(swept.map((entry) => entry.path)).toContain("gamma/src/main.ts"); // the repo around it stays searchable
-    // Ignoring the pointer must not un-name the repo it marks: churn, hotspots, recent, log and who all key off
-    // this, and they go silently blank for a repo whose entries carry no `repo`.
+    expect(swept.map((entry) => entry.path)).toContain("gamma/src/main.ts");
+    // churn, hotspots, recent, log and who all key off `repo`; an unattributed entry goes silently blank in each.
     expect(swept.find((entry) => entry.path === "gamma/src/main.ts")?.repo).toBe("gamma");
 
     const full = (await sweep(root, true)).map((entry) => entry.path);
-    expect(full).toContain("gamma/.git"); // junk, not floor — the same escape hatch a .git dir has
+    expect(full).toContain("gamma/.git");
 });
 
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
-    // The state dir is grouped, so the config folder has to exist before a manifest can be written into it:
-    // the fixture only makes the cache tree.
+    // The fixture only creates the cache tree, so config/ needs its own mkdir before writing a manifest into it.
     await mkdir(join(root, `${STATE_DIR}/config`), { recursive: true });
     await writeFile(join(root, `${STATE_DIR}/config/settings.json`), '{ "theme": "dark" }\n');
     const excluded = [
@@ -81,11 +76,9 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
         `${STATE_DIR}/records/artifacts/attachments/u1/brief.md`,
         `${STATE_DIR}/local/runtime/extensions/whatsapp/gateway.url`,
         `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
-        // A tree the state table has never heard of. The floor is an allow-list, so tomorrow's undeclared store
-        // is out of scope by construction rather than by somebody remembering to name it.
+        // An undeclared store; the allow-list excludes it by construction, not by being named.
         `${STATE_DIR}/some-future-store/state.bin`,
-        // A workspace can contain checkouts that are themselves intentic workspaces: their byproducts are no
-        // more searchable than the root's own.
+        // A nested checkout that is itself an intentic workspace; its byproducts are excluded too.
         "alpha/.intentic/local/cache/iq/index.db",
     ];
     await Promise.all(
@@ -98,9 +91,8 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
     for (const path of excluded) {
         expect(swept).not.toContain(path);
     }
-    // Manifests are user-authored config an agent is routinely asked to find and edit.
+    // Manifests are user-authored config, unlike the byproducts above.
     expect(swept).toContain(".intentic/config/settings.json");
-    // …and the floor holds with --ignored too, which lifts only the gitignore/junk layers.
     const full = (await sweep(root, true)).map((entry) => entry.path);
     for (const path of excluded) {
         expect(full).not.toContain(path);
@@ -123,14 +115,12 @@ test("filterScope narrows by path, lang, glob, and file class", () => {
     expect(filterScope(entries, { repo: "alpha" }).every((entry) => entry.path.startsWith("alpha/"))).toBe(true);
 });
 
-// A worktree, a submodule, and any --separate-git-dir repo (how the daemon versions the workspace root) carry a
-// `.git` POINTER FILE instead of a directory. Missing that left their files unattributed, and every git-backed
-// verb reads `repo`: churn, hotspots, recent, log, who.
+// A worktree, a submodule, or a --separate-git-dir repo all carry a `.git` pointer file instead of a directory; missing
+// that leaves files unattributed for every git-backed verb that reads `repo`.
 test("a .git pointer file bounds a repo exactly like a .git directory", async () => {
     await writeFile(join(root, "beta/.git"), "gitdir: /elsewhere/beta.git\n");
     const swept = await sweep(root, false);
     expect(swept.find((entry) => entry.path === "beta/app.py")?.repo).toBe("beta");
-    // Nested boundaries still win over the enclosing one, and unrepo'd files stay unattributed.
     expect(swept.find((entry) => entry.path === "alpha/src/widget.ts")?.repo).toBe("alpha");
     expect(swept.find((entry) => entry.path === "notes.md")?.repo).toBeUndefined();
 });

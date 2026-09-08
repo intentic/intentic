@@ -16,99 +16,48 @@ import type { TurnFn } from "../../loops/loop-runner.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { runnerSummaries } from "../../runners/runner-peer.js";
 
-/* SPAWN, STEER AND ANSWER FULL AGENTS FROM INSIDE A TURN, on ANY connected provider — the daemon-side engine
- * behind every door the supervision surface has (the Claude loop's MCP tools, Cursor's custom tools, the
- * `agents` CLI's routes).
- *
- * THE CHILD IS AN ORDINARY CONVERSATION, and that one decision is most of this module. It runs through the same
- * detached pump every composer turn does (turn-runs.ts), so it is watchable from any window, stoppable with the
- * same /agent/stop, transcribed by the same record, isolated in a worktree of its own, and served by whichever
- * provider adapter its spec names — which is the entire point: the spawning turn's own runtime is irrelevant,
- * because the child rides the same adapter registry the composer does. A Claude turn spawns Cursor's Composer
- * with the same call a Cursor turn would spawn Codex with.
- *
- * WHAT THIS MODULE ITSELF OWNS is therefore only what a conversation does not: the parentage (which turn
- * started it, how deep the chain is), the budgets, the child's life reported onto the parent's roster
- * (agent/subagents.ts, the `spawned` kind) by direct call at each move, and the ESCALATION LADDER — what a
- * parent may do about a child that stopped:
- *
- *   · a child parked on a QUESTION is the parent's to answer (`answer`): a question is a request for
- *     information, the parent often holds it, and the child's card carries the same requestId the ordinary
- *     reply route resolves;
- *   · a child parked on CONSENT — a permission hold, a plan approval — is the OWNER's alone. A parent that
- *     could approve its child's held commands would be a model approving its own dangerous actions through a
- *     proxy, so `answer` refuses those by kind and says whose they are. This distinction is the security
- *     spine of the whole surface;
- *   · a WORKING child can be steered (`send`), where its runtime takes mid-turn input;
- *   · a SETTLED child can be sent a follow-up (`send`), which runs a new turn on the child's own conversation,
- *     resuming the session its last turn reported, so refinement costs a message rather than a fresh child.
- *
- * THE BUDGETS ARE THE OWNER'S EXISTING ONES (SandboxSettings.subagentsAtOnce / subagentsPerTurn /
- * subagentDepth), enforced here in the daemon rather than handed to a harness as env, because a spawned child
- * gets the spawn door too, and a cap a model is merely told about is a cap a runaway chain never reads. A
- * follow-up turn spends the lifetime budget like a spawn does: it is a turn, and turns are what the budget
- * meters. The ledgers are in-memory like the roster's records and die with the daemon, which loses nothing
- * that matters: a daemon death also ends every child turn the ledgers were counting.
- *
- * A CHILD OUTLIVES ITS PARENT'S TURN on purpose: the spawn answers the moment the child is running, and the
- * parent supervises through `wait` — or walks away and leaves the child to finish as a conversation in its
- * own right, landing its work under the workspace's ordinary posture. */
+// Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
+// conversation on the same turn pump. A parked question is the parent's to answer; a permission or plan hold is the
+// owner's alone. A child outlives its parent's own turn.
 
-// How much of the child's closing text the spawn/wait surfaces carry inline. The full text is in the child's
-// own transcript; this is the roster row's answer to "what did it conclude".
+// Chars of the child's closing text kept inline on the roster row; the full text is in its own transcript.
 const REPORT_KEPT = 2_000;
 
 export interface ChildSpawnSpec {
     readonly prompt: string;
-    // One line for the roster row and the child conversation's title. Falls back to the prompt's head.
+    // Shown on the roster row and as the child's title; falls back to the prompt's head if omitted.
     readonly description?: string;
-    /* WHERE THE WORK RUNS, AND BOTH HALVES ARE REQUIRED. A child is a whole agent session against somebody's
-     * real allowance, started by a model rather than by a person at a composer, and a parent can start twenty of
-     * them in one turn. That combination is why neither half may be left blank: an unnamed provider used to fall
-     * to a `child-agent` model list and then to a hardcoded "claude", so the commonest way to spend an owner's
-     * Claude allowance twenty times over was to say nothing at all.
-     *
-     * BOTH, because a model id is only meaningful to the provider that vends it — half a pick would send a Codex
-     * id to Claude, which is the same reason every model pin in this product carries the pair (ModelPinSchema).
-     *
-     * Taken verbatim, never checked against a catalog. `spawn-catalog.ts` exists so the agent can SEE what is
-     * connected and what still has allowance, but it is advice: an installed ACP agent and a configured endpoint
-     * are legitimate providers that publish no catalog here, and refusing them would turn a discovery aid into a
-     * gate. What is enforced is that the parent says where the work goes, not that it picks from a list. */
+    // Required with `model`, taken verbatim; spawn-catalog.ts is advisory, not a gate.
     readonly provider: AgentProvider;
     readonly model: string;
     readonly harness?: AgentHarness;
     readonly effort?: string;
     readonly account?: string;
-    /* WHICH MACHINE THIS ONE RUNS ON, when the caller has an opinion: a runner's id, or "here" to pin it to
-     * this sandbox. Absent is the ordinary case and the point of the feature, the fleet scheduler picks
-     * (runners/runner-scheduler.ts), because nobody chooses a machine thirty times for one fan-out. */
+    // Runner id, or "here" to pin this sandbox; absent lets the fleet scheduler place it.
     readonly on?: string;
 }
 
 export interface ChildParent {
     readonly conversationId: string;
-    // The parent turn's tree as the daemon reaches it, the roster handle's cwd.
+    // Parent turn's working tree path, as the roster handle sees it.
     readonly cwd: string;
 }
 
 export type ChildSpawnResult =
-    // `id` is the child's conversation id, the roster record's id, and the wait tool's target, one string.
+    // `id` is the child's conversation id: also the roster record's id and the wait tool's target.
     { readonly ok: true; readonly id: string } | { readonly ok: false; readonly message: string };
 
 export type ChildActionResult = { readonly ok: true; readonly note?: string } | { readonly ok: false; readonly message: string };
 
-// The card a child is parked on right now, held so the parent can be handed the WHOLE question (a summary is
-// enough to say "it stopped"; answering needs the options), and so `answer` can enforce the kind rule.
+// Full card a child is parked on, not just a summary; lets `answer` show real options and enforce the kind rule.
 export interface PendingChildCard {
     readonly kind: "question" | "permission" | "plan";
     readonly requestId: string;
     readonly questions?: readonly AskQuestion[];
 }
 
-/* Everything the service knows about one child, keyed by its conversation id. `spec` and `sessionId` are what
- * a follow-up turn resumes with; `pending` is the escalation ladder's state. In-memory for the roster's
- * reason: every door must see the same ledger, and a daemon death ends the turns it was tracking. */
+// Everything known about one child, keyed by its conversation id. `spec`/`sessionId` are what a follow-up resumes with;
+// `pending` is the escalation ladder's state. In-memory: dies with the daemon.
 interface ChildRecord {
     readonly parent: string;
     readonly spec: ChildSpawnSpec;
@@ -116,51 +65,34 @@ interface ChildRecord {
     readonly cwd: string;
     sessionId: string | undefined;
     running: boolean;
-    // When `running` was last set: the companion (invariant.ts) compares this ledger with the turn path's own
-    // record of what is live, and needs to know a record's age to tell "not begun yet" from "never begun".
+    // When `running` was last set; invariant.ts compares this to tell a not-yet-started record from a stale one.
     startedAt: number;
     pending: PendingChildCard | undefined;
 }
 
 const kids = new Map<string, ChildRecord>();
 
-/* Parentage depth and spend, per conversation. `depth` is keyed by the CHILD's conversation id (a conversation
- * absent here is depth 0, a person's own); `spent` by the PARENT's, counting the child TURNS it has started,
- * live and lifetime. Module singletons for the roster's reason: the tool handler, the tests and the routes
- * must see the same ledgers. */
+// `depths` keyed by child id (absent = 0); `spent` keyed by parent id: live and lifetime child turn counts.
 const depths = new Map<string, number>();
 const spent = new Map<string, { live: number; total: number }>();
 
-/* WHICH CONVERSATIONS MAY REACH THE SUPERVISION SURFACE FROM OUTSIDE A TOOL CALL, the seam behind the `agents`
- * CLI (bin/agents → /children routes). The in-loop tools are gated at mount (turn-plan withholds them from a
- * persona without the delegate shelf and full agency); a CLI call arrives with no mount to gate, so the same
- * decision is recorded HERE, at plan time, as the ready-to-use supervisor itself: planTurn arms a conversation
- * whose persona qualifies, and the route uses exactly what was armed. Armed for the conversation's lifetime,
- * the life a backgrounded shell already has: `agents spawn` keeps working from a shell after the turn that
- * opened it ends. In-memory like the roster, and a daemon death disarms everything it kills. */
+// Conversations armed to use `/children` routes, which have no tool mount to gate; in-memory, per conversation.
 const armed = new Map<string, ChildSupervisor>();
 
-/** Record, at plan time, that this conversation's shell may supervise children — the exact object a tool call would use. */
+/** Records that this conversation's shell may supervise children; `supervisor` is the exact object a tool call uses. */
 export const armSupervisor = (conversationId: string, supervisor: ChildSupervisor): void => {
     armed.set(conversationId, supervisor);
 };
 
-/** The armed supervisor for a conversation, or undefined for one no qualifying turn ever planned. */
+/** The armed supervisor for a conversation, or undefined if none was armed. */
 export const supervisorFor = (conversationId: string): ChildSupervisor | undefined => armed.get(conversationId);
 
-/* IS THIS CONVERSATION SOMEBODY'S CHILD? Read off the depth ledger above, which is written for every spawn and
- * is the authoritative record of parentage; the `sub-` prefix on the id is a convenience for people reading
- * cards, not a fact to branch on.
- *
- * Asked by anything that would otherwise START A TURN on a conversation of its own accord (agent/verify-nudge.ts).
- * A child's turn ends and its record settles the moment its report reaches the parent; a turn started after
- * that runs for nobody, reports to nothing, and spends the owner's allowance doing it. Whatever a child left
- * unproven is already said where it can be acted on: it rides back with the report itself
- * (child-verification.ts) and it lands on the spend ledger. */
+// Whether this conversation is a spawned child, per the depth ledger (the `sub-` prefix is cosmetic, not
+// authoritative). Used to stop anything starting a turn on a child whose report already reached its parent.
 export const isSpawnedChild = (conversationId: string): boolean => depths.has(conversationId);
 
-/* Every child this daemon has a record of, for the companion (invariant.ts) that compares this ledger with the
- * turn path's record of what is live. Settled children stay on it, that is what a follow-up `send` resumes. */
+// Every child this daemon knows of, for invariant.ts to cross-check against live turns. Settled children stay listed
+// since a follow-up `send` resumes them.
 export const childLedger = (): readonly {
     readonly conversationId: string;
     readonly parent: string;
@@ -168,7 +100,7 @@ export const childLedger = (): readonly {
     readonly startedAt: number;
 }[] => [...kids].map(([conversationId, kid]) => ({ conversationId, parent: kid.parent, running: kid.running, startedAt: kid.startedAt }));
 
-// Tests drive the service through its real entry points, so they need a way back to empty between cases.
+// Clears the child, depth, spend and armed ledgers for a fresh test.
 export const resetChildrenForTest = (): void => {
     kids.clear();
     depths.clear();
@@ -176,14 +108,11 @@ export const resetChildrenForTest = (): void => {
     armed.clear();
 };
 
-// The provider's display label for the roster row ("Cursor", "Codex"); an id the catalog does not name (an
-// endpoint, an installed ACP agent) shows as itself, which is at least true.
+// Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
 const labelOf = (provider: AgentProvider): string => PROVIDERS.find((entry) => entry.value === provider)?.label ?? provider;
 
-/* What the child is waiting on, when a card parks its turn: the card itself, kind and all. The parent's
- * `wait` returns `blocked` with the summary riding the record, and the full card (options included, for a
- * question) rides the tool's own answer via pendingQuestionOf — which is the difference between a parent that
- * can ANSWER and one that can only report. */
+// What the child is parked on. `wait` gets only the summary; pendingQuestionOf exposes the full card so a parent can
+// answer, not just report.
 const pendingOf = (event: AgentEvent): { readonly card: PendingChildCard; readonly summary: string } | undefined => {
     if (event.kind === "question") {
         return {
@@ -203,16 +132,17 @@ const pendingOf = (event: AgentEvent): { readonly card: PendingChildCard; readon
     return undefined;
 };
 
-/** The question a blocked child is parked on, whole, for the wait surfaces to hand the parent. Undefined for a
- *  child parked on consent (whose card is the owner's, never a parent's) and for one not parked at all. */
+/**
+ * Full question a blocked child is parked on. Undefined if it is parked on a consent hold (the owner's, never the
+ * parent's) or not parked at all.
+ */
 export const pendingQuestionOf = (childId: string): PendingChildCard | undefined => {
     const pending = kids.get(childId)?.pending;
     return pending?.kind === "question" ? pending : undefined;
 };
 
-/* ONE CHILD TURN, pumped and reduced onto the roster — the shared engine under a spawn and a follow-up send.
- * Detached: the caller answers the moment the turn is running, and the pump folds even a thrown turn into an
- * error frame and a done. */
+// Pumps one child turn onto the roster; shared by spawn and follow-up send. Detached: returns once the turn is running,
+// and folds a throw into an error frame plus done.
 const runChildTurn = (
     services: Services,
     childId: string,
@@ -238,11 +168,8 @@ const runChildTurn = (
         let failure: string | undefined;
         try {
             for await (const event of run.frames()) {
-                /* WHAT THIS CHILD PROVED, off its own normalized frames, which is what makes the verdict hold
-                 * on a child running Codex, Cursor or Gemini rather than only where the Claude hooks reach
-                 * (child-verification.ts). Its OWN delegations count too, deliberately: a child that handed
-                 * the edit to a grandchild is still the agent whose report the parent will read, and the work
-                 * landed in its worktree either way. Before the branches below, several of which `continue`. */
+                // Normalized frames make this work across providers; a child's own sub-delegations still count as its
+                // proof.
                 noteChildWork(event, childId);
                 if (event.kind === "session") {
                     if (kid !== undefined) {
@@ -255,8 +182,7 @@ const runChildTurn = (
                     continue;
                 }
                 if (event.kind === "text_end" && event.parentToolUseId === undefined) {
-                    // The LAST closed bubble is the report: a turn's closing text is its answer, and the head
-                    // of everything it ever said is its greeting.
+                    // The last closed bubble is the report; earlier text is only a greeting.
                     report = bubble.trim() === "" ? report : bubble;
                     bubble = "";
                     continue;
@@ -312,21 +238,8 @@ const runChildTurn = (
     return { ok: true };
 };
 
-/* THE OWNER'S RULE AND THE TAINT FLOOR, consulted before every supervisor mutation — spawn, follow-up send,
- * steer, answer — because each one is the parent's judgment reaching a child that spends the owner's
- * accounts, and each door (harness tool, Cursor tool, CLI route) lands here.
- *
- * A HOLD ASKS, AND ONLY REFUSES WHERE THERE IS NOBODY TO ASK. It used to refuse unconditionally, on the
- * grounds that a call may arrive from a shell whose turn has already ended with nobody to raise a card to.
- * That is true of SOME doors and was applied to all of them, which made the commonest case by far — a live,
- * watched turn calling the supervision tool, with the owner sitting right there — indistinguishable from the
- * detached one: the model got a sentence telling it to go and ask in chat, the owner got nothing at all, and
- * the only way through was for the human to notice the refusal in a transcript and write an action rule.
- *
- * `commandRun` has always drawn this line properly for shell commands (a hold parks on a card; an unattended
- * turn gets the refusal and is told not to retry) and the wallet's payment offer does the same from a ROUTE,
- * which is the shape this needed: `turnRunOf` is what answers "is there a live stream to raise a card in",
- * and its absence is the real unattended case rather than a guess about which door was used. */
+// Consulted before every supervisor mutation (spawn, send, answer): the owner's action rules plus the taint floor. A
+// hold asks the owner rather than refusing outright, when there is a live turn to ask in.
 const admitSupervision = async (
     services: Services,
     parent: string,
@@ -349,9 +262,7 @@ const admitSupervision = async (
     return { ok: true };
 };
 
-// Which supervisor move is being held, so the card names what it would actually do. A card reading "start an
-// agent" over a call that only answers a question the child already asked is a card that gets denied for the
-// wrong reason.
+// Which supervisor move is held, so the card names the action truthfully rather than a generic one.
 type SupervisionMove = "spawn" | "send" | "answer";
 const MOVE_TITLE: Readonly<Record<SupervisionMove, string>> = {
     spawn: "Start a child agent",
@@ -360,16 +271,11 @@ const MOVE_TITLE: Readonly<Record<SupervisionMove, string>> = {
 };
 const MOVE_BUTTON: Readonly<Record<SupervisionMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
 
-/* How long a held supervisor call waits for an answer before giving up. The payment offer's own window, and
- * for its reason: long enough that somebody who stepped away can still come back to it, short enough that a
- * dead client does not hold a tool call open for the rest of the turn. */
+// Same window as the payment offer: long enough to return to, short enough not to hold the call open all turn.
 const SUPERVISION_DEADLINE_MS = 10 * 60_000;
 
-/* Raise the card and wait, or say why it could not be raised.
- *
- * THE REFUSALS ARE THREE DIFFERENT THINGS and are worded as three, because the model's next move differs and
- * because putting words in the owner's mouth is the specific failure to avoid: nobody to ask, asked and
- * nobody answered, asked and told no. Only the last one is the owner declining. */
+// Raises the card and waits, or says why it could not be raised. The three refusal messages differ because the model's
+// next move differs, and only one is the owner actually declining.
 const askOwner = async (
     services: Services,
     parent: string,
@@ -379,8 +285,7 @@ const askOwner = async (
 ): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
     const run = turnRunOf(parent);
     if (run === undefined || run.done) {
-        // The genuinely unattended door: a detached `agents` shell, or a turn that has already ended. There is
-        // no stream to draw a card in, so this is where the old sentence still belongs.
+        // No live turn to raise a card in: a detached `agents` shell, or one that already ended.
         return {
             ok: false,
             message:
@@ -393,9 +298,7 @@ const askOwner = async (
         { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
         parent,
     );
-    /* No `alwaysLabel`: the schema says to send one only when an "always" has something to remember, and
-     * nothing here persists a grant. Offering a button whose answer is silently downgraded to "once" would be
-     * the card lying about what it did. */
+    // No `alwaysLabel`: this call persists no grant, so there is nothing for "always" to remember.
     const raised: AgentEvent = {
         kind: "permission",
         requestId: id,
@@ -407,13 +310,11 @@ const askOwner = async (
     run.push(raised);
     services.agents.observe(parent, raised);
     const { reply, resolved } = await wait(AbortSignal.timeout(SUPERVISION_DEADLINE_MS));
-    // Every parked card owes the stream its resolution frame: it is what stops a client rendering the card as
-    // live, and the only honest account of how long the call was parked.
+    // Every parked card must get a resolution frame, or the client keeps rendering it as live.
     run.push(resolved);
     services.agents.observe(parent, resolved);
     if (reply.decision === "deny") {
-        // Told apart the payment offer's way: a resolved frame carrying no reply is the deadline or a dead
-        // client, and reading that as "declined" would put a refusal in the owner's mouth they never gave.
+        // A resolved frame with no reply is a timeout or dead client, not a decline; don't treat it as one.
         return resolved.reply === undefined
             ? {
                   ok: false,
@@ -427,28 +328,16 @@ const askOwner = async (
     return { ok: true };
 };
 
-/* THE FLOOR THAT COMPOSES DOWNWARD: a child on a runtime whose rulebook axis is "none" runs beyond every gate
- * this daemon has (no consult, no hold, no taint marking of its own), so the PARENT that started it and will
- * read its report has taken in content no policy could see. The parent's own turn bit engages, exactly as it
- * does for a fetched page — the safe direction, and the one the axis's own documentation promises. */
+// A child on a runtime with rulebook "none" has no gating of its own, so the parent's turn taints, the same as reading
+// a fetched page.
 const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: AgentHarness): void => {
     if (capabilitiesOf(provider, harness).rulebook === "none") {
         markConversationTaint(parent, `agent:${provider}`);
     }
 };
 
-/* The one budget check both doors share: may this parent put one more child turn in flight?
- *
- * READS AND RESERVES IN ONE SYNCHRONOUS STEP, which is the whole point of the shape. This used to hand its
- * snapshot of the ledger back to the caller, which wrote the increment much later, several statements and an
- * `await` past the check. Two spawns arriving together — two backgrounded `agents spawn` shells, two POSTs to
- * /children/spawn, two tool calls in one assistant block — both read `{live: 0}`, both passed a ceiling of
- * one, and both then wrote `{live: 1}`. So the cap admitted N children instead of one and the lifetime counter
- * recorded a single turn for all of them, which is the runaway this budget exists to stop, counted by a ledger
- * that could not see two of anything. Reading and writing with no await between them is what makes it a cap.
- *
- * `release` refunds a reservation whose turn never started. A turn that DID start gives its live seat back in
- * runChildTurn's finally instead; `total` is a lifetime count, so only a never-started turn ever refunds it. */
+// Reads and reserves the live/lifetime budget in one synchronous step so two concurrent spawns cannot both pass the
+// same check. `release` refunds only a reservation whose turn never started.
 const admitChildTurn = async (
     services: Services,
     parent: string,
@@ -473,27 +362,18 @@ const admitChildTurn = async (
     };
 };
 
-/* WHAT A CHILD RUNS ON: WHAT ITS PARENT SAID, AND THERE IS NO SECOND ANSWER.
- *
- * This used to fill a silence. A spawn with no `provider` fell to the owner's `child-agent` model list, and with
- * nothing written there, to a hardcoded "claude". Both were the sandbox choosing whose allowance a delegated
- * workstream spends while the agent doing the delegating never said — and a fan-out is exactly where that costs:
- * one parent can start twenty children in a turn, so a default nobody chose is twenty turns on a model nobody
- * picked, discovered on the bill. The pair is required at every door now (children.routes.ts, subagent-wait.ts's
- * spawn tool, `agents spawn`), so by the time a spec reaches here it has said where the work runs.
- *
- * THE HARNESS IS STILL A DEFAULT, and stays one: "native" means the provider's own agentic loop, which is what
- * the provider does if nobody says otherwise. It names no model, spends no allowance and picks no account —
- * there is nothing here for an owner to be surprised by. */
+// `provider` and `model` are required, with no fallback default. `harness` still defaults to "native" (the provider's
+// own loop), which spends no extra allowance and needs no account.
 const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider; readonly harness: AgentHarness; readonly model: string } => ({
     provider: spec.provider,
     harness: spec.harness ?? "native",
     model: spec.model,
 });
 
-/** Start a child agent and return the moment it is running. Refusals are ordinary states (a budget met, a
- *  depth exhausted), worded for the model that asked; a provider refusal (nothing connected) arrives later,
- *  as the child's own failure, exactly as it would arrive to a person at the composer. */
+/**
+ * Starts a child agent and returns once it is running. Budget/depth refusals come back immediately; a provider refusal
+ * (nothing connected) surfaces later as the child's own failure.
+ */
 export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec, turnFn: TurnFn): Promise<ChildSpawnResult> => {
     const settings = await services.sandboxSettings.get();
     const depth = (depths.get(parent.conversationId) ?? 0) + 1;
@@ -509,19 +389,11 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     if (!admitted.ok) {
         return admitted;
     }
-    /* THE SEAT IS CLAIMED, so from here every exit has to either hand it to a running turn or give it back.
-     * A turn that starts gives it back in runChildTurn's finally; anything else refunds below. The `finally` is
-     * what covers the paths nobody wrote deliberately: the reservation is now taken BEFORE this work rather
-     * than written after it (which is what made the cap atomic), so a throw in here would strand it, and a
-     * stranded live seat is permanent — it lowers `subagentsAtOnce` by one for the life of the conversation,
-     * and once enough accumulate the parent is refused forever over children that do not exist. */
+    // Seat is claimed here; every exit must hand it to a running turn or refund it, or the cap drops permanently.
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, harness);
-        /* WHERE THIS CHILD RUNS. The whole reason a person connects a second machine is that work like this
-         * spreads onto it without being asked to; so a spawn with no stated preference is placed by the
-         * scheduler, and one that named a machine gets it (or this sandbox, if that machine is not usable
-         * right now, which beats refusing work over a laptop that went to sleep). */
+        // No preference: the scheduler places it. A named machine gets it, or here if that machine is unusable.
         const placement =
             spec.on === "here"
                 ? undefined
@@ -530,8 +402,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
                       { inFlight: services.agents.inFlightByRunner() },
                       {
                           ...(spec.on !== undefined ? { asked: spec.on } : {}),
-                          // A child on a runtime whose credential cannot travel stays here unless somebody names a
-                          // machine themselves (credentialsTravel says which, and why).
+                          // A credential that cannot travel keeps the child here unless a machine is named explicitly.
                           travels: credentialsTravel(provider, harness),
                       },
                   ).runner;
@@ -541,18 +412,13 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             prompt: spec.prompt,
             conversationId: id,
             title: description.slice(0, 80),
-            // A worktree of its own, so parallel children (and the parent) never edit under each other. Landing
-            // keeps the workspace's ordinary posture: a child's finished work merges the way any turn's does.
+            // Own worktree, so parallel children and the parent never edit the same files; it lands like any turn's
+            // work.
             isolated: true,
             ...(placement !== undefined ? { placement: { kind: "runner" as const, id: placement } } : {}),
-            // Nobody is at a composer. This is what the flag means, and it also sets the safe persona floor: an
-            // unattended turn with no named persona speaks for no outside account.
+            // Nobody is at a composer; this also floors the persona so it speaks for no outside account.
             unattended: true,
-            /* NO `runRole`. There used to be a `child-agent` one here, named "for the record" though this turn
-             * already carries its own provider and model and so never reaches the role fill in turn-resume. A
-             * role that resolves nothing is not a record, it is a settings row telling an owner they can choose
-             * what children run on — while the parent's own pick, one line below, is what actually decides. The
-             * pick is the record. */
+            // No `runRole`: the parent's own provider and model pick decides, not a settings-row default.
             agent: provider,
             harness,
             model,
@@ -560,11 +426,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             ...(spec.account !== undefined ? { account: spec.account } : {}),
         };
         kids.set(id, {
-            /* The RESOLVED routing, not the spec's, so a follow-up steer reaches the same child on the same
-             * model. Only `harness` actually differs from what the caller sent now that the provider and the
-             * model are required (nothing is resolved for those any more, they are named or the spawn is
-             * refused) — but it is still written back whole rather than trusted to be identical, because the
-             * cost of the two drifting apart is a live child moved onto another model between its own turns. */
+            // Stores resolved routing, not the raw spec, so a follow-up reaches the same provider and model without
+            // drift.
             parent: parent.conversationId,
             spec: { ...spec, provider, harness, model },
             depth,
@@ -574,8 +437,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             startedAt: Date.now(),
             pending: undefined,
         });
-        /* The roster handle: the PARENT's conversation, which is what the record files under and what the wait
-         * tool matches on. The session/subagentsDir halves are the SDK children's concern and stay empty here. */
+        // Files under the parent's conversation, what `wait` matches; session/subagentsDir stay empty (SDK children
+        // only).
         const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: parent.cwd, sessionId: undefined, subagentsDir: undefined };
         openSpawnedChild(handle, {
             id,
@@ -590,7 +453,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
         if (!started.ok) {
             kids.delete(id);
             settleSpawnedChild(id, { failed: true, report: "", error: started.message });
-            // A fresh id colliding with a live run should be impossible; saying so beats pretending a child exists.
+            // A fresh id colliding with a live run should be impossible; report that rather than pretend the child
+            // exists.
             return { ok: false, message: "The child's conversation could not be started." };
         }
         depths.set(id, depth);
@@ -603,8 +467,10 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     }
 };
 
-/** Steer a working child, or send a settled one a follow-up turn on its own conversation, resuming the
- *  session its last turn reported. Only the parent that started a child may reach it. */
+/**
+ * Steers a working child, or sends a settled one a follow-up turn resuming its last reported session. Only the parent
+ * that started it may reach it.
+ */
 export const sendToChild = async (
     services: Services,
     parent: ChildParent,
@@ -622,9 +488,7 @@ export const sendToChild = async (
     }
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
     if (kid.running) {
-        /* Mid-turn, the only door is the runtime's own steering seam, the same one /agent/steer uses. A
-         * runtime without it cannot take words mid-turn, and pretending otherwise (queueing them somewhere
-         * the model never reads) is worse than saying so. */
+        // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
         return steerTurn(childId, message)
             ? { ok: true, note: "Steered: the message lands between its tool calls." }
             : { ok: false, message: "It is mid-turn on a runtime that takes no mid-turn input: wait for it to finish, then send again." };
@@ -633,8 +497,7 @@ export const sendToChild = async (
     if (!admitted.ok) {
         return admitted;
     }
-    // The seat is claimed: same handoff-or-refund rule as spawnChild, and the `finally` covers the same
-    // unwritten path — a throw between the claim and the running turn would strand it permanently.
+    // Seat is claimed; same handoff-or-refund rule as spawnChild covers a throw before the turn starts.
     let handedOff = false;
     try {
         const spec = kid.spec;
@@ -643,20 +506,16 @@ export const sendToChild = async (
             conversationId: childId,
             isolated: true,
             unattended: true,
-            // The spec holds the routing this child was STARTED on, and a follow-up turn re-uses it verbatim:
-            // re-resolving anything here would move a live child onto a different model between two of its own
-            // turns, which is the one thing a continuation must never do.
+            // Reuses the spec's routing verbatim, so a live child never moves onto a different model between turns.
             agent: spec.provider,
             model: spec.model,
             ...(spec.harness !== undefined ? { harness: spec.harness } : {}),
             ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
             ...(spec.account !== undefined ? { account: spec.account } : {}),
-            // The session its last turn reported, so the follow-up continues the child's own context. Absent (a
-            // turn that never reported one), the daemon seeds from the conversation's record instead, the
-            // ordinary reopened-conversation path.
+            // Session from the last turn's report; absent falls back to the ordinary reopened-conversation seed.
             ...(kid.sessionId !== undefined ? { sessionId: kid.sessionId } : {}),
         };
-        // Reopen the roster record: same id, fresh life, so the parent's wait and the area both see it working.
+        // Reopens the roster record under the same id with fresh state, so `wait` sees it running again.
         const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: kid.cwd, sessionId: undefined, subagentsDir: undefined };
         openSpawnedChild(handle, {
             id: childId,
@@ -684,9 +543,10 @@ export const sendToChild = async (
     }
 };
 
-/** Settle a child's QUESTION with the parent's picks — and only a question. A permission hold or a plan
- *  approval is the owner's consent gate: a parent that could approve its child's held commands would be a
- *  model approving its own dangerous actions through a proxy, so those refuse by kind, always. */
+/**
+ * Settles a child's question with the parent's picks, and only a question. A permission hold or plan approval is the
+ * owner's consent alone; a parent approving those would be a model approving its own actions.
+ */
 export const answerChild = async (
     services: Services,
     parent: ChildParent,
@@ -714,27 +574,18 @@ export const answerChild = async (
                     : "It is waiting on PLAN approval, which is the owner's consent to give, not a parent's. The owner answers it in their chat.",
         };
     }
-    // A child's question is answerable by whatever the parent turn decided, so there is no approver list on
-    // this card and only "was it still there" can come back (agent-requests.ts).
+    // Any answer the parent gives is valid; only whether the question still existed comes back.
     if (resolveRequest({ kind: "question", requestId: pending.requestId, answers }) !== "settled") {
         return { ok: false, message: "That question already settled." };
     }
     return { ok: true, note: "Answered: the child carries on with your picks." };
 };
 
-/* EVERYTHING A PARENT MAY DO ABOUT ITS CHILDREN, as one object — what the tool mounts consume and what
- * planTurn arms for the CLI's routes, so every door runs exactly the same decisions. Built by the route that
- * owns the turn generator (agent.routes.ts), the only module that can hand streamAgent down without a cycle. */
+// Everything a parent may do about its children, as one object shared by every door (tool mounts, CLI arm). Built by
+// the route that owns the turn generator, to avoid a dependency cycle.
 export interface ChildSupervisor {
     readonly spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
-    /* WHAT A SPAWN COULD NAME, read at call time (spawn-catalog.ts). It belongs on the supervisor rather than
-     * beside it because it is the other half of the spawn door: `provider` and `model` are required there, and a
-     * requirement whose answer lives somewhere the caller cannot reach is a trap. Every door that can spawn
-     * therefore has this by construction — the Claude loop's MCP tools, Cursor's custom tools and the `agents`
-     * CLI's routes all hold a supervisor, and none of them has to plumb a second dependency to ask.
-     *
-     * At CALL time, never snapshotted: an allowance moves while a turn runs, so a listing captured when the
-     * tools were mounted would describe pools that emptied since. */
+    // Read at call time, never snapshotted: an allowance can empty while a turn runs.
     readonly providers: () => Promise<readonly SpawnableProvider[]>;
     readonly send: (childId: string, message: string) => Promise<ChildActionResult>;
     readonly answer: (childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;

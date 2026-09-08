@@ -1,10 +1,5 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is WHAT A ROW SAYS. The tab drew a name, a reach and a badge, so a Windows laptop and
-// a Linux desktop with no sync agent on either rendered as two identical lines, and the pair of rows in the
-// report that prompted this were the same machine twice over. What is worth pinning is therefore not the
-// derivation (deviceFacts.test.ts has that) but that the row actually PUTS it on screen, next to the name, for a
-// device that has nothing else to show.
+// jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
@@ -12,43 +7,32 @@ import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
-// query (the UI barrel's useDevice). jsdom plus these two is the whole of it: see daemonRestart.test.ts, which
-// cuts the same edge.
+// Import chain touches the app's environment and a media query at module eval; jsdom covers both (see
+// daemonRestart.test.ts).
 
-/* ONE DESKTOP-SYNC ENROLLMENT ON A ROW. It replaced a `syncEnrolled: true` boolean, and the extra two fields are
- * the point: a row has to say WHICH half of sync this device holds (files and ports, or ports alone) and be
- * able to name the enrollment when the reader revokes it. `seenAt` is now, so these rows read as live: an
- * enrollment nobody has used is a warning, which is its own test below. */
+// One desktop-sync enrollment on a row: which half it holds, and a live `seenAt` so rows read as active by
+// default.
 const paired = (mode: `sync` | `mirror` = `sync`, machine = `laptop`): Device[`sync`] => ({ machine, mode, seenAt: Date.now() });
 
 const devices = ref<Device[]>([]);
-// The FIRST read, not the ten-second poll. Every test below is about a list that has already arrived, so this
-// stays false for them; the pair at the bottom drives it to pin what the tab may say before it has.
+// The first read, not the ten-second poll; tests below assume the list has already arrived.
 const devicesLoading = ref(false);
-/* THE MACHINE'S OWN CLI, RUN FROM A BUTTON, recorded rather than performed. The real one POSTs to the daemon,
- * which runs `intentic-machine sync mirror off` over the device connection; what is worth pinning on this side
- * is the three things the button decides: that it is offered at all, which way it points, and that what leaves
- * here names the row's OWN sandbox rather than every pairing on that machine. */
+// The machine's own CLI, run from a button, recorded rather than performed: pins that it's offered, which way
+// it points, and that it names the row's own sandbox.
 const mirrorCalls: { hostId: string; command: string; sandboxId?: string | undefined }[] = [];
-// What the machine answers. `ok: false` is a machine explaining itself (its "Run commands" switch is off, its
-// CLI exited non-zero) and reaches the row as words rather than as a throw, so a test can swap this and pin it.
+// What the machine answers; `ok: false` reaches the row as words rather than a throw.
 let mirrorAnswer: { ok: boolean; message: string } = { ok: true, message: `Port mirroring OFF for: work-abc` };
-// Which machine's enrollment was revoked. The sandbox-side door, so unlike the commands above it needs no
-// device connection at all: that is the whole reason it exists beside Unpair.
+// Which machine's enrollment was revoked; needs no device connection, unlike the commands above.
 const revokeCalls: string[] = [];
-/* THE ONE CONTROL HERE THAT STARTS A TURN rather than running a command, recorded the same way. The real one
- * summons a chat tab in every window, which this bare createApp has no client for; what is worth pinning is
- * that the button is offered at all and what it hands the agent, since nobody watches that prompt being made. */
+// The one control that starts a turn rather than a command, recorded the same way: pins that it's offered and
+// what it hands the agent.
 const startedTurns: string[] = [];
 vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
-/* THE CONTAINER VERBS, recorded the same way: which op left for which machine, and, for the one verb that
- * carries a payload, what the Resources form asked for. The real one streams the machine's own lines; what is
- * worth pinning here is that a click on the form's Apply leaves as the `reshape` op with ONLY what changed. */
+// Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
+// asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
 vi.mock(`./useDevices`, async () => {
-    // reportStale is a plain function of the row and the clock: real, so a row's staleness line is decided the
-    // way it is in the app rather than by this file's idea of it.
+    // reportStale is real, so a row's staleness reads the same rule the app uses.
     const real = await import(`./useDevices`);
     return {
         ...real,
@@ -67,29 +51,26 @@ vi.mock(`./useDevices`, async () => {
         },
     };
 });
-// The reader's tier. Revoking another device's access is the owner's, matching the daemon's own floor.
+// Revoking another device's access is owner-only, matching the daemon's own floor.
 const owner = ref(true);
 vi.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
-// `sandboxKey` is reached at module eval by the real useDevices above, which is why it is here as well as the
-// one hook the component calls.
+// sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
 vi.mock(`../client/useSandbox`, () => ({
     useSandbox: () => ({ daemonUrl: ref(undefined) }),
     sandboxKey: (name: string) => [name],
 }));
-/* The release this sandbox knows about. Mocked rather than left to the real /info query for the same reason
- * useDevices is: the subject is what a ROW says, and an agent's staleness is now part of that. A ref so a test
- * can set it to undefined and pin the case where the yardstick is missing. */
+// The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
+// staleness is part of that.
 const latest = ref<string | undefined>(`1.183.0`);
 vi.mock(`../overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
-/* The owner's switches for each connected device, which the row now reads so it can say "Manage sandboxes is
- * off" BEFORE a click rather than after the machine refuses one. Mocked because the real hook reaches for
- * vue-query's injected client, which this bare `createApp` has no plugin to provide. */
+// The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
+// real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; config: Record<string, string> }[]>([]);
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
-// The two cards below the list have their own daemon calls; this mounts the list and nothing else.
+// The two cards below the list have their own daemon calls; this mounts the list alone.
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-// A blocked machine's "open its permissions" is a link now, so the mock carries a stand-in for it.
+// A blocked machine's "open its permissions" is now a link, so the mock stubs one.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRoute: () => ({ query: {} }) as never,
@@ -97,10 +78,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
-/* HOW MANY TIMES THE LIST RE-DERIVES ITSELF, counted through the one function every derivation of a row passes
- * through. `agentStalled` is called from `rows` (once per machine) and from `tone`/`label` (again per machine,
- * and again per comparison the sort makes), so its call count is a direct read on whether the whole chain,
- * sandboxGroups included, has run. See the tick test at the bottom for why that is worth pinning. */
+// Counts how often the list re-derives, through the one function every row's derivation passes through
+// (agentStalled).
 let derivations = 0;
 vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
     const real = await importOriginal();
@@ -113,9 +92,8 @@ vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
     };
 });
 
-/* THIS SANDBOX'S RUNNERS ON A MACHINE, mocked for the reason the devices list is: the real hook is a
- * vue-query read, and this bare `createApp` has no plugin to provide a client. What the row draws from it is
- * the subject here. */
+// This sandbox's runners on a machine; mocked since the real hook is a vue-query read this bare app has no
+// client for.
 const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
     [],
 );
@@ -129,10 +107,8 @@ vi.mock(`./useRunners`, () => ({
 const { default: SandboxDevices } = await import("./SandboxDevices.vue");
 
 let app: App | undefined;
-/* A second mount inside one test retires the first, because only one app is tracked for teardown and a leaked
- * one is not inert: it stays subscribed to `devices`, so the next test's `devices.value = rows` re-renders it —
- * against DOM that afterEach already emptied. That surfaces as an unhandled rejection inside Vue's scheduler,
- * attributed to whichever test happened to be running, rather than to the one that mounted twice. */
+// A second mount retires the first: a leaked app stays subscribed to `devices` and re-renders against DOM
+// afterEach already emptied.
 const mount = (rows: Device[]): HTMLElement => {
     app?.unmount();
     document.body.innerHTML = ``;
@@ -142,15 +118,13 @@ const mount = (rows: Device[]): HTMLElement => {
     app = createApp({ render: () => h(SandboxDevices) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
-    // The confirmations (unpair, revoke, the container verbs) are PrimeVue Dialogs underneath, and they read the
-    // plugin's config while rendering.
+    // The confirmation dialogs are PrimeVue Dialogs and read the plugin's config while rendering.
     app.use(PrimeVue);
     app.mount(el);
     return el;
 };
 
-/* UNFOLDING A ROW. Both a device and a sandbox are drawn as one line with a disclosure over the whole of it:
- * the name IS the button, so a test opens one the way a reader does: by pressing the line that says its name. */
+// A device and a sandbox both disclose by pressing the line that names them.
 const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
 const openRow = async (el: HTMLElement, name: string): Promise<void> => {
     disclosures(el)
@@ -173,13 +147,10 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    // The app's clock is a module singleton, so a test that faked time hands the next one a frozen one.
+    // The app's clock is a module singleton; a test that faked time would hand the next one a frozen one.
     vi.useRealTimers();
 });
 
-/* The row from the report: a connected device, reachable, with no sync agent on it, so no report, and before
- * this nothing but its name. Everything asserted here was already known to the daemon while the row said none of
- * it. */
 it(`says what a device is when it has no report to show`, () => {
     const el = mount([
         {
@@ -203,12 +174,10 @@ it(`says what a device is when it has no report to show`, () => {
     expect(text).toContain(`Windows 11 Pro`);
     expect(text).toContain(`x64`);
     expect(text).toContain(`PowerShell 7`);
-    // The gap it had before is still said, because the OS does not answer it: this machine still has no agent.
+    // The OS doesn't answer the gap: this machine still has no agent.
     expect(text).toContain(`no agent`);
 });
 
-// A machine that never described itself still has to answer "Windows or Linux?": the card it was added with says
-// so, and that is true from the moment it is added and while it is asleep.
 it(`falls back to the platform, and ages a device that is not here`, () => {
     const el = mount([
         {
@@ -226,9 +195,7 @@ it(`falls back to the platform, and ages a device that is not here`, () => {
     expect(text).toContain(`last seen 3h ago`);
 });
 
-/* Sorting by name alone buried the one machine worth reading. The names here are chosen so that alphabetical
- * order is the exact opposite of the order that helps: a reader arriving at this tab wants the device actually
- * serving folders and ports, not three screens of "nothing to read from it right now" above it. */
+// Names chosen so alphabetical order is the exact opposite of the useful order.
 it(`puts the machines worth reading first`, () => {
     const report = (capturedAt: number): Device[`report`] => ({
         hostname: `host`,
@@ -252,9 +219,6 @@ it(`puts the machines worth reading first`, () => {
     expect(at(`b-quiet`)).toBeLessThan(at(`a-offline`));
 });
 
-/* The image is what Update changes, and one sandbox on a machine running something older than its neighbour was
- * invisible on a list that named only the container. It is now BEHIND the fold: the longest string on the row
- * and the least often read, so this pins that opening the row still reaches it. */
 it(`names the image each sandbox on the machine is running, once the row is open`, async () => {
     const el = mount([
         {
@@ -278,19 +242,12 @@ it(`names the image each sandbox on the machine is running, once the row is open
     expect(el.textContent ?? ``).toContain(`ghcr.io/intentic/sandbox:2.3.1`);
 });
 
-/* THE VERB ROW, WHICH IS NOW ONE ROW FOR TWO APPS. This tab and the desktop app's manager window drive the same
- * containers on the same machine and had grown different sets of buttons: this one had Restart and no log tail,
- * that one a log tail and no Restart, and neither offered the rollback both of their backends could already do.
- * The buttons come from the kit now (<SandboxVerbs>), so what is asserted here is what a reader of EITHER app
- * gets: pinned from this side because it is the side with a test runner, and it is the same component.
- *
- * A manageable row is a machine this sandbox can reach right now (`hostId`, `online`) whose group has a
- * container: the three conditions `manageable` names. */
+// The container verb buttons are shared with the desktop app's own manager window (<SandboxVerbs>), so what's
+// asserted here holds for both.
 const managed = (running: boolean): Device => ({
     key: `laptop`,
     label: `laptop`,
-    // A CONNECTED DEVICE AND NOTHING ELSE: no desktop-sync enrollment, which is what makes it the right
-    // fixture for the container verbs and for asserting that a machine with no enrollment offers no revoke.
+    // No desktop-sync enrollment: the right fixture for container verbs and for asserting no revoke without one.
     platform: `linux`,
     hostId: `host-1`,
     online: true,
@@ -305,35 +262,27 @@ const managed = (running: boolean): Device => ({
     },
 });
 
-/* Every control a row offers, by its label: anchors as well as buttons, because a control that GOES somewhere
- * is a link: the fix for a blocked machine is the capability card's own address, so it is hoverable, copyable
- * and Ctrl/⌘-clickable rather than a button that moves this tab. */
+// Every control by label, anchors included, since a control that goes somewhere is a link.
 const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a`)].map((control) => control.textContent?.trim() ?? ``);
 
-// Every switch granted: the state a row reaches once its device is connected AND permitted, which is what the
-// verb tests below are about. Without it the row correctly says which grant is missing instead.
+// Every switch granted: the state the verb tests below assume; without it the row states the missing grant
+// instead.
 const granted = (): void => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
 };
 
-/* ONE BUTTON ON THE ROW, AND THE REST BEHIND A MENU. All six used to sit on the line: four sandboxes on one
- * machine meant twenty-four controls in one weight, and the row's own NAME (the thing anybody scans for) was
- * the quietest object on the line it titled. The power verb is what people reach for, so it is what stays. */
 it(`puts one verb on the row and everything else behind a menu`, () => {
     granted();
     const el = mount([managed(true)]);
     const found = labels(el);
     expect(found).toContain(`Stop`);
-    // The overflow is a glyph, so it is named for assistive tech rather than in words on the row.
+    // The overflow menu is a glyph, named for assistive tech rather than in words on the row.
     expect(el.querySelector(`button[aria-label="More actions"]`)).not.toBeNull();
-    // The other six are one deliberate click away rather than sitting on the line.
     for (const verb of [`Restart`, `Update`, `Roll back`, `Resources…`, `Logs`, `Remove`]) {
         expect(found).not.toContain(verb);
     }
 });
 
-// Start replaces Stop rather than joining it: a stopped sandbox has nothing to stop, and a running one is not
-// started twice.
 it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
     granted();
     const found = labels(mount([managed(false)]));
@@ -341,13 +290,7 @@ it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
     expect(found).not.toContain(`Stop`);
 });
 
-/* WHAT IS IN THAT MENU, pinned as vocabulary rather than through PrimeVue's teleported overlay: the model is
- * what both apps read, and asserting it here is what stops the desktop window and this tab drifting into two
- * different sets again: the failure the shared kit exists to prevent.
- *
- * Restart is absent on a stopped sandbox for the same reason Stop is; Resources stays, because a share is a fact
- * about the container and a reshape brings a stopped one up on the new share; removal is separate from the rest
- * because it is the one thing here that nothing undoes, and the row draws it under a divider. */
+// Pinned as vocabulary rather than via the teleported overlay, since the model is what both apps read.
 it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(primaryVerb(true)).toBe(`stop`);
     expect(primaryVerb(false)).toBe(`start`);
@@ -355,15 +298,10 @@ it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(menuVerbs(false)).toEqual([`logs`, `resources`, `update`, `rollback`]);
 });
 
-/* ---- the sandbox's share of the machine, and the form that changes it -----------------------------------
- *
- * The machine agent reads each container's caps and privileges off `docker inspect` and the row says them once
- * opened; the Resources… verb opens the kit's form on them, and Apply leaves as the `reshape` op carrying only
- * what changed. Pinned through the tab rather than by mounting the form alone, because the wiring IS the
- * subject: which row's share the form opened on, and where its answer went. */
+// The sandbox's share of the machine, and the Resources form that changes it (reshape carries only what changed).
 const GIB = 1024 ** 3;
-// A connected, permitted machine whose one sandbox has a 12 GiB cap and four cores, privileged because the approved
-// environment demands it, and whose engine has 20 GiB and twelve cores to bound the form with.
+// A connected, permitted machine with a 12 GiB/4-core cap, privileged by the environment, and a 20 GiB/12-core
+// engine to bound the form.
 const shared = (): Device => {
     const row = managed(true);
     return {
@@ -381,7 +319,6 @@ const shared = (): Device => {
     };
 };
 
-// Behind the fold with the image, and in one line: the cap somebody set, the cores, the privilege.
 it(`says what a sandbox gets of the machine, once the row is open`, async () => {
     granted();
     const el = mount([shared()]);
@@ -390,18 +327,15 @@ it(`says what a sandbox gets of the machine, once the row is open`, async () => 
     expect(el.textContent ?? ``).toContain(`12 GiB · 4 CPUs · privileged`);
 });
 
-// Everything on screen, the teleported dialog and menu included: both mount at the end of <body>, past `el`.
+// Everything on screen, including the teleported dialog and menu (both mount past `el`).
 const everything = (): string => document.body.textContent ?? ``;
-// A menu row is a link named by the verb's own label (ContextMenu.vue); a dialog's button teleports past the
-// row's, so the LAST match is the one in the modal.
+// A menu row is a link named by the verb's label; a dialog's button teleports past the row's, so the last
+// match is the modal's.
 const menuRow = (label: string): HTMLAnchorElement | undefined =>
     [...document.body.querySelectorAll(`a`)].find((row) => (row.textContent ?? ``).trim() === label);
 const dialogButton = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === label);
 
-/* THE FORM, FROM THE MENU TO THE MACHINE. It opens on the container's own numbers, draws the environment's
- * privilege locked with the reason, refuses to apply until something changed, and what then leaves is the
- * `reshape` op with the one field that did, not a restatement of the whole form. */
 it(`opens the Resources form on the row's own share and sends only what changed, as a reshape`, async () => {
     granted();
     const el = mount([shared()]);
@@ -415,10 +349,9 @@ it(`opens the Resources form on the row's own share and sends only what changed,
     expect(memory).toHaveProperty(`value`, `12`);
     // The rails are the engine's: 20 GiB minus the 3 the host keeps.
     expect(everything()).toContain(`4 to 17 on this computer`);
-    // The environment's privilege is not the owner's to withdraw, and the switch says why.
+    // The environment's privilege isn't the owner's to withdraw, and the switch says why.
     expect(document.body.querySelector(`input[aria-label="Run privileged"]`)).toHaveProperty(`disabled`, true);
     expect(everything()).toContain(`approved environment requires this`);
-    // Nothing changed yet, so there is nothing the machine would accept.
     expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, true);
 
     memory!.value = `16`;
@@ -430,8 +363,6 @@ it(`opens the Resources form on the row's own share and sends only what changed,
     expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 16 } }]);
 });
 
-// A fully connected and permitted machine says nothing at all about connecting or permissions: the whole point
-// of the three lines below is that they are absent once there is nothing in the way.
 it(`says nothing about connecting a device that is already managing its sandboxes`, () => {
     granted();
     const text = mount([managed(true)]).textContent ?? ``;
@@ -440,10 +371,8 @@ it(`says nothing about connecting a device that is already managing its sandboxe
     expect(text).not.toContain(`Remove sandboxes from this device`);
 });
 
-/* THE ROW THE PARITY COMPLAINT WAS ABOUT. A machine paired by the desktop app is enrolled for desktop sync
- * alone, and that door never reports containers, so this tab drew folders and ports and an empty sandbox list
- * with no buttons on it, beside a desktop window managing those very containers. It said none of that, and
- * offered nothing. Now it says both, and the button goes to the card that closes the gap. */
+// A machine paired by the desktop app alone: that door never reports containers, so this row used to show an
+// empty sandbox list with no buttons.
 const syncOnly = (): Device => ({
     key: `laptop`,
     label: `laptop`,
@@ -452,7 +381,7 @@ const syncOnly = (): Device => ({
     report: {
         hostname: `laptop`,
         os: `win32`,
-        // Empty because the sync agent never fills it: the fact this whole message exists to explain.
+        // Empty because the sync agent never reports containers.
         sandboxes: [],
         pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `C:\\Users\\ada\\work`, mutagenStatus: `watching` }],
         ports: [],
@@ -466,21 +395,15 @@ it(`explains why a sync-only device has no sandbox buttons, and offers the fix`,
     const text = el.textContent ?? ``;
     expect(text).toContain(`Desktop sync carries folders and ports, never containers`);
     expect(labels(el)).toContain(`Connect this device`);
-    // No verbs, because there is no container to aim one at: the state being explained, not worked around.
     expect(labels(el)).not.toContain(`Restart`);
 });
 
-// A Mac is the hole this leaves: there is no card to connect one as a device, so the sentence still runs and
-// the button that would point nowhere does not.
 it(`explains the gap without a button when there is no card to connect the machine`, () => {
     const el = mount([{ ...syncOnly(), platform: `macos` }]);
     expect(el.textContent ?? ``).toContain(`Desktop sync carries folders and ports, never containers`);
     expect(labels(el)).not.toContain(`Connect this device`);
 });
 
-/* CONNECTED, AND STILL REFUSED. "Run commands" is enough to LIST a machine's containers, so the buttons appeared
- * on a row where every one of them would be turned down by the machine: a no the page could see coming and
- * said nothing about until it had already been clicked. */
 it(`names the switch a connected device is missing before anything is clicked`, () => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on` } }];
     const el = mount([managed(true)]);
@@ -488,8 +411,6 @@ it(`names the switch a connected device is missing before anything is clicked`, 
     expect(labels(el)).toContain(`Open its permissions`);
 });
 
-// Removal has a grant of its own, because nothing undoes it. A machine that can do everything else still says
-// which single button will not work.
 it(`names the removal switch on a machine that may do everything else`, () => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
     const text = mount([managed(true)]).textContent ?? ``;
@@ -497,11 +418,8 @@ it(`names the removal switch on a machine that may do everything else`, () => {
     expect(text).not.toContain(`Turn on "Manage sandboxes on this device"`);
 });
 
-/* --- FOLDING, AND WHAT A FOLDED LINE STILL HAS TO ANSWER ---------------------------------------------------
- *
- * The view drew every fact about every sandbox at once: one laptop with four of them filled the screen, and
- * three machines was a page nobody could scan. Folding is only an improvement if the closed line still answers
- * "is this one fine", so these pin both halves: what disappears, and what must not. */
+// Folding only helps if the closed line still answers "is this one fine"; these pin both what disappears and
+// what must not.
 const busyMachine = (): Device => ({
     key: `rog`,
     label: `radarsu-rog`,
@@ -531,9 +449,6 @@ const busyMachine = (): Device => ({
     },
 });
 
-/* THE NAME. Three sandboxes on this machine differ only by a blob of hex, and the readable name was sitting in
- * the folder path underneath the whole time. The exact id stays on the line beside it: it is the string somebody
- * types into a terminal, and a view that shows only the friendly name makes it unfindable. */
 it(`titles a sandbox by its folder rather than by a blob of hex`, () => {
     const text = mount([busyMachine()]).textContent ?? ``;
     expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
@@ -541,35 +456,25 @@ it(`titles a sandbox by its folder rather than by a blob of hex`, () => {
     expect(text).toContain(`sandbox-bce57bb9fe3b`);
 });
 
-// A folded row costs one line and still says how much is under it. The detail it hides is genuinely hidden,
-// which is the whole of the saving.
 it(`folds a sandbox to a line that still says what is under it`, () => {
     granted();
     const text = mount([busyMachine()]).textContent ?? ``;
     expect(text).toContain(`2 ports`);
-    // The rows that are fine keep their paths and images behind the fold.
     expect(text).not.toContain(`/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
     expect(text).not.toContain(`img:a`);
 });
 
-/* WHICH ROWS OPEN THEMSELVES: the ones somebody has to act on. Not merely stopped, plenty of sandboxes are
- * stopped on purpose, and unfolding every one of them hands back the wall this is folding away. */
 it(`opens the sandbox that wants something and leaves the rest folded`, () => {
     granted();
     const text = mount([busyMachine()]).textContent ?? ``;
-    // The contended port's row is open, so its folder and the sentence about the port are both on screen.
     expect(text).toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
     expect(text).toContain(`not on localhost`);
-    // The stopped one is not: being stopped is not an errand.
+    // Being stopped on purpose is not an errand, so that row stays folded.
     expect(text).not.toContain(`img:c`);
 });
 
-/* A CONFLICT IS THE STATE ON THIS TAB A READER IS LEAST EQUIPPED TO ACT ON: two copies of one file, both
- * edited, on two computers, one of which they are not sitting at. The row said "10 conflicts" and stopped —
- * a red number about somebody's own files, naming none of them, with nothing to press.
- *
- * The paths ride in the machine's own report now (sync/mutagen.ts conflictsFrom), so the three tests below are
- * the three things the badge could not say: what happened, which files, and what ends it. */
+// A conflict is the state a reader is least equipped to act on directly; the paths ride in the machine's own
+// report (sync/mutagen.ts conflictsFrom).
 const conflicted = (conflicts = 10): Device => {
     const machine = busyMachine();
     const report = machine.report!;
@@ -596,22 +501,17 @@ const conflicted = (conflicts = 10): Device => {
 
 it(`explains a conflict instead of counting it, and names the files it is about`, () => {
     const text = mount([conflicted()]).textContent ?? ``;
-    // The badge still summarises on the closed line, and the count is Mutagen's whole total.
+    // The badge still summarises on the closed line; the count is Mutagen's own total.
     expect(text).toContain(`10 conflicts`);
-    // What happened, what it costs, and what ends it: none of which a count carries.
     expect(text).toContain(`neither copy was overwritten`);
     expect(text).toContain(`Make the two copies match`);
-    // Which files, and which side did what, which is what decides which copy somebody keeps.
     expect(text).toContain(`.claude/settings.json`);
     expect(text).toContain(`changed on this device`);
     expect(text).toContain(`deleted on this device`);
-    // Two of ten described: the rest is counted rather than implied away.
+    // Two of ten shown; the rest is counted rather than implied away.
     expect(text).toContain(`and 8 more`);
 });
 
-/* THE ROW THAT HAS THE COUNT AND NOT THE LIST: an agent older than the field reports one and not the other,
- * which is every machine in the world on the day this ships. "…and 10 more" over an empty list is a sentence
- * about nothing, so what that row draws instead is why the list is missing and what would produce it. */
 it(`says why a list is missing rather than counting rows it does not have`, () => {
     const machine = conflicted();
     const report = machine.report!;
@@ -631,9 +531,7 @@ it(`says why a list is missing rather than counting rows it does not have`, () =
     expect(text).not.toContain(`and 10 more`);
 });
 
-/* The turn is the remedy, because choosing between two edited copies is judgement per file and a one-click
- * winner would be a one-click way to lose the losing side. What it is handed is the whole of the feature: an
- * agent that is not told the paths cannot open them. */
+// Choosing between two edited copies is per-file judgement, so the remedy is a turn, not a one-click winner.
 it(`offers a turn that can reach both copies, and hands it the paths`, () => {
     const el = mount([conflicted()]);
     expect(labels(el)).toContain(`Fix with agent`);
@@ -644,18 +542,12 @@ it(`offers a turn that can reach both copies, and hands it the paths`, () => {
     expect(startedTurns[0]).toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
 });
 
-/* AND NOT ON A MACHINE NOTHING CAN REACH, which is the same door every switch on this row uses: the agent
- * works that computer through its device tools, so a turn started against an asleep laptop would open with
- * "that machine is not reachable" and end there. What survives is the explanation and the paths, which is
- * exactly what somebody sitting AT the machine needs. */
 it(`keeps the explanation and drops the button when the machine is not reachable`, () => {
     const text = mount([{ ...conflicted(), online: false, gap: `offline` }]);
     expect(text.textContent ?? ``).toContain(`.claude/settings.json`);
     expect(labels(text)).not.toContain(`Fix with agent`);
 });
 
-// The machine's own line carries the same idea one level up, so a folded device still says how much is under
-// it and whether anything there wants attention.
 it(`folds a device to a line that counts what is under it`, async () => {
     const el = mount([busyMachine()]);
     await openRow(el, `radarsu-rog`);
@@ -665,18 +557,9 @@ it(`folds a device to a line that counts what is under it`, async () => {
     expect(text).toContain(`1 needs attention`);
 });
 
-/* AN OPEN DEVICE LIGHTS UP, THE WAY EVERY OTHER LIST IN THE HUB DOES, and that is what this pins: the tab
- * was reported as the one place where opening a row changed nothing but the arrow. Its machine rows were
- * hand-rolled, so they had none of <DisclosureRow>'s wash; they are that component now, and `bg-content/6` is
- * the app's one open tint rather than this file's idea of one.
- *
- * The `aria-controls` half rides along because the hand-rolled row never had it: `aria-expanded` alone tells a
- * screen reader a row is open and never says what opened, which is the half of the disclosure contract a
- * fourteenth spelling loses. Pinned as "the id resolves to an element" rather than as a string, since the id
- * itself is Vue's. */
+// The hand-rolled rows had none of <DisclosureRow>'s wash or its `aria-controls`; they're that component now.
 it(`lights an open device the way the rest of the hub does, and names the block it opened`, async () => {
     const el = mount([busyMachine()]);
-    // The one machine with a report opens itself, so the wash is on screen before anything is pressed.
     const washed = (): Element[] => [...el.querySelectorAll(`[class*="bg-content/6"]`)];
     expect(washed()).toHaveLength(1);
     expect(washed()[0]?.textContent ?? ``).toContain(`radarsu-rog`);
@@ -685,14 +568,10 @@ it(`lights an open device the way the rest of the hub does, and names the block 
     expect(toggle?.getAttribute(`aria-expanded`)).toBe(`true`);
     expect(el.querySelector(`#${toggle?.getAttribute(`aria-controls`) ?? `none`}`)).not.toBeNull();
 
-    // And goes out with it: a wash that outlived the open row would be a selection nobody made.
     await openRow(el, `radarsu-rog`);
     expect(washed()).toHaveLength(0);
 });
 
-/* THE FILTER. Twelve rows and no search meant looking for a port number was reading. It narrows MACHINES and
- * unfolds what matched rather than hiding rows inside a machine: a contended port is explained by naming the
- * sandbox that took it, and filtering that sandbox away would cut the link the explanation depends on. */
 it(`finds a machine by a port number and opens what matched`, async () => {
     const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
     const field = el.querySelector(`input`);
@@ -703,12 +582,9 @@ it(`finds a machine by a port number and opens what matched`, async () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`radarsu-rog`);
     expect(text).not.toContain(`other-pc`);
-    // The row that holds the port is unfolded, so the answer is on screen rather than one more click away.
     expect(text).toContain(`localhost:8788`);
 });
 
-// A filter that matched nothing says so where the rows would have been, rather than leaving a group that looks
-// like it has lost its contents.
 it(`says when a filter matched nothing`, async () => {
     const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
     const field = el.querySelector(`input`);
@@ -718,12 +594,8 @@ it(`says when a filter matched nothing`, async () => {
     expect(el.textContent ?? ``).toContain(`matches`);
 });
 
-/* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,
- * and this row said "desktop sync 0.1.0" throughout: true, and useless without the version it should have been.
- * Both halves are asserted: the fact, inside the door chip it is about, and the one command that resolves it.
- *
- * The version and the release that supersedes it are separate spans in that chip, so they are asserted separately
- * rather than as one string: what matters is that both reach the reader, not the whitespace between them. */
+// An agent five days behind a fix, with the row saying only its bare version throughout: true and useless
+// without what it should be.
 const behind = (): Device => ({
     key: `laptop`,
     label: `laptop`,
@@ -743,28 +615,22 @@ const behind = (): Device => ({
 it(`says when a device's agent is behind, and offers the update as a button`, () => {
     const el = mount([behind()]);
     const text = el.textContent ?? ``;
-    // The door and the version are separate chips now: the version belongs to the agent, not to the enrollment
-    // mode it used to be labelled with ("desktop sync 0.1.0" was intentic-machine's version all along).
+    // The door and the version are separate chips now: the version belongs to the agent, not the enrollment mode.
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`agent`);
     expect(text).toContain(`0.1.0`);
     expect(text).toContain(`1.183.0 available`);
-    /* NO BUTTON ON A SYNC-ONLY ROW, and that is not a gap: an update runs over the DEVICE connection, and this
-     * device has only ever been paired for sync. The fact is still stated, which is all this row could ever
-     * honestly do — a button that fails when taken is worse than the command it replaced. */
+    // No button on a sync-only row: an update runs over the device connection, which this device has never had.
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
-// And with that door open it is a button rather than a command to go and type, which is what this view printed
-// for its whole life while running four other verbs of the same CLI over the same socket.
+// With that door open it's a button instead of a command to type, replacing what this view printed for years.
 it(`offers the update as a button once the device is connected for commands`, () => {
     const el = mount([{ ...behind(), hostId: `host-1`, online: true }]);
     expect(labels(el)).toContain(`Update agent`);
     expect(el.textContent ?? ``).not.toContain(`intentic-machine upgrade`);
 });
 
-// A current agent gets neither: a row that nags at a machine with nothing to do is how people learn to read past
-// the line entirely.
 it(`says nothing about updating a device that is already current`, () => {
     const row = behind();
     const el = mount([{ ...row, report: { ...row.report!, agent: { ...row.report!.agent, installed: `1.183.0` } } }]);
@@ -775,16 +641,11 @@ it(`says nothing about updating a device that is already current`, () => {
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
-/* THE OTHER WAY A DEVICE IS BEHIND, and it is a DIFFERENT ERRAND from the one above: the binary on disk is
- * current and the loop serving it is not, because replacing a file does not touch a running process. A user who
- * upgraded watched the row keep printing the old number and reasonably concluded the update had not worked.
- *
- * The remedy is a restart, never a download — an update here would answer "already current, nothing to do" — so
- * the row must offer exactly one of the two buttons, and this asserts which. */
+// A different errand from an old binary: the file on disk is current but the running loop isn't, since
+// replacing a file doesn't touch a running process.
 it(`offers a restart, not an update, when the loop is behind the installed build`, () => {
     const row = behind();
-    // Connected as a device, because a restart travels over that door: a sync-only row STATES the skew on its
-    // chip and offers nothing, which is the honest answer when there is no way to press anything.
+    // A restart travels over the device connection; a sync-only row states the skew and offers nothing.
     const el = mount([
         {
             ...row,
@@ -801,8 +662,6 @@ it(`offers a restart, not an update, when the loop is behind the installed build
     expect(text).not.toContain(`intentic-machine run --stop`);
 });
 
-// A loop already on the installed build is left alone, for the same reason the chip is: a row that nags at a
-// machine with nothing to do is a row people learn to read past.
 it(`says nothing about restarting a device whose loop is on the installed build`, () => {
     const row = behind();
     const el = mount([
@@ -815,7 +674,6 @@ it(`says nothing about restarting a device whose loop is on the installed build`
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
-// And a sandbox that has never reached the registry has no yardstick, so it makes no claim about anyone's agent.
 it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     latest.value = undefined;
     const el = mount([behind()]);
@@ -826,35 +684,23 @@ it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
-/* THE PAIRING INVITATION IS A CLAIM ABOUT THE READER, and an unread list is not grounds for it. The empty state
- * says "no device is paired with this sandbox yet" and then tells them how to pair one, so the person it
- * reached first was the person who had already done it, on every cold load, until the list arrived and replaced
- * it with their laptop. An empty `devices` means that only once the read is done. */
+// The invitation is a claim about the reader; an empty `devices` means "no device paired" only once the read
+// has actually finished.
 it(`does not offer to pair a first device while the list is still being read`, () => {
     devicesLoading.value = true;
     expect(mount([]).textContent ?? ``).not.toContain(`No device is paired`);
 });
 
-// Deferred, not lost: once the read lands empty, the invitation is the right thing to say and is said.
 it(`offers to pair a first device once the read lands empty`, () => {
     devicesLoading.value = false;
     expect(mount([]).textContent ?? ``).toContain(`No device is paired`);
 });
 
-/* THE CLOCK MUST NOT REBUILD THE PAGE.
- *
- * Every derivation on this tab hangs off the app's one-second clock: `label` reads it, `sorted` sorts by `label`,
- * `rows` maps `sorted` and groups every machine's folders and ports, and `shown`, `tally`, `blocks` and the
- * auto-open set all read `rows`. So the entire list was rebuilt and re-rendered once a second, for data that
- * arrives every ten, on a page that can be left open all day. Nothing here needs finer time than the poll: both
- * facts read off the clock (a stale report, a stalled watcher) are thresholds a MINUTE wide.
- *
- * Pinned by counting derivations across three ticks INSIDE one quantised instant. A regression here is silent,
- * costs nothing anybody can point at, and is exactly the kind of thing a later edit reintroduces by reaching for
- * the raw clock because it is right there. */
+// Every derivation on this tab hangs off the app's one-second clock, so a regression here silently re-renders
+// the whole list every tick for data that arrives every ten.
 it(`does not re-derive the whole list on every tick of the app clock`, async () => {
     vi.useFakeTimers();
-    // A round instant, so three seconds of ticking cannot cross a bucket boundary and legitimately re-derive.
+    // A round instant, so three seconds of ticking can't cross a bucket boundary and legitimately re-derive.
     vi.setSystemTime(1_700_000_000_000);
     mount([managed(true), { ...managed(false), key: `desktop`, label: `desktop` }]);
     await nextTick();
@@ -867,12 +713,8 @@ it(`does not re-derive the whole list on every tick of the app clock`, async () 
     expect(derivations).toBe(derivedOnce);
 });
 
-/* ---- this sandbox's runners, under the machine that holds them ---- */
-
-/* THE SECOND KIND OF CONTAINER ON SOMEBODY'S DEVICE. The list above a runner's row is workspaces belonging
- * to a PERSON; a runner belongs to this sandbox, and the row exists so the machine that holds it can be told
- * to make or unmake one. Filtered by host, because the buttons are that machine's: a runner on another
- * device must not offer a Remove that would be sent to this one. */
+// A runner belongs to this sandbox, not to a person's workspace; filtered by host, since the buttons are that
+// machine's.
 it(`lists this sandbox's runners under the device holding them, with what that machine has to offer`, async () => {
     runnersList.value = [
         { id: `rig`, host: `host-1`, online: true, facts: { cpus: 16, memoryMb: 26_048, load: 0.25 } },
@@ -884,12 +726,9 @@ it(`lists this sandbox's runners under the device holding them, with what that m
     expect(text).toContain(`Runners for this sandbox`);
     expect(text).toContain(`rig`);
     expect(text).toContain(`16 cores`);
-    // A runner on a different machine belongs under that machine's row, never this one's.
     expect(text).not.toContain(`elsewhere`);
 });
 
-// A runner that is paired but whose machine is asleep keeps its row and says so: it is still this sandbox's
-// runner, and the fix is to wake the machine rather than to make another one.
 it(`keeps an offline runner's row and names the state rather than hiding it`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: false }];
     const el = mount([managed(true)]);
@@ -897,8 +736,6 @@ it(`keeps an offline runner's row and names the state rather than hiding it`, as
     expect(el.textContent ?? ``).toContain(`Offline`);
 });
 
-// A machine with none still shows where runners live and how to add one; the empty-state paragraph moved out
-// when the section header and Add runner button became enough to orient a first-time reader.
 it(`shows the runners section and add control on a machine that has none`, async () => {
     const el = mount([managed(true)]);
     await nextTick();
@@ -907,8 +744,6 @@ it(`shows the runners section and add control on a machine that has none`, async
     expect(text).toContain(`Add runner`);
 });
 
-/* DRIFT IS SAID ON THE ROW, with the button that ends it. A runner months behind the parent runs turns fine
- * until the day it does not, and then the failure reads as a link error rather than as an old machine. */
 it(`marks a runner whose build has drifted from this sandbox, and offers the update`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `outdated` }];
     const el = mount([managed(true)]);
@@ -918,8 +753,6 @@ it(`marks a runner whose build has drifted from this sandbox, and offers the upd
     expect(text).toContain(`Update`);
 });
 
-// A runner matching the parent says nothing about its build: a badge on every healthy row is noise, and the
-// update button on one is a click with nothing behind it.
 it(`says nothing about the build of a runner that matches`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `current` }];
     const el = mount([managed(true)]);
@@ -928,17 +761,9 @@ it(`says nothing about the build of a runner that matches`, async () => {
     expect(el.textContent ?? ``).not.toContain(`Update`);
 });
 
-/* ---- port mirroring, the switch on the user's OWN localhost ----
- *
- * The complaint this closes: a sandbox's dev server takes localhost:5173 on somebody's own desk, where their own
- * was going to go, and the only ways to stop it were to unpair the sandbox or revoke the enrollment, each of
- * which takes the file sync and the git bridge with it. "Not on my localhost today" had no expression anywhere.
- *
- * The switch lives on the MACHINE, because the localhost being written to is there, and it must hold while this
- * sandbox is asleep or unreachable. So this button does not set a flag here: it runs that machine's own CLI over
- * the device connection, which is why the tests below are about what LEAVES rather than about local state. */
-// `null` for "no device door", not `undefined`: an explicit `undefined` argument takes the default, which is
-// the opposite of what the sync-only test is asking for.
+// A sandbox's dev server can take a port on the user's own desk; the switch lives on the machine (it must hold
+// while the sandbox sleeps), so these buttons run that machine's CLI rather than set a local flag.
+// `null` means no device door; `undefined` would take the default instead.
 const mirrored = (state: `on` | `off`, door: { hostId: string; online: boolean } | null = { hostId: `host-1`, online: true }): Device => ({
     key: `laptop`,
     label: `laptop`,
@@ -950,34 +775,28 @@ const mirrored = (state: `on` | `off`, door: { hostId: string; online: boolean }
         os: `linux`,
         sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:a` }],
         pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: state }],
-        /* THE PORT IS CARRIED IN BOTH STATES ON PURPOSE. Once the switch is off the machine reports none, it
-         * tears its forwards down on the same tick it reads the flag, so a report holding both is the one-tick
-         * reading in between, and that is precisely the state whose row must not print `localhost:5173` at an
-         * address that no longer answers. */
+        // The port is carried in both states on purpose: the one-tick reading between the switch flipping and the
+        // machine tearing its forwards down.
         ports: [{ port: 5173, host: `127.0.0.1`, sandboxId: `work-abc`, state: `mirrored`, command: `node vite` }],
         agent: { running: true, installed: `1.183.0` },
         capturedAt: Date.now(),
     },
 });
 
-/* THE ROW THAT USED TO DRAW NOTHING. With mirroring off the machine reports no ports, and no ports rendered as
- * no ports line at all: identical to a sandbox serving nothing, which is how "why is localhost empty" became a
- * question with no answer on screen. */
+// With mirroring off the machine reports no ports, which used to render as no line at all — identical to a
+// sandbox serving nothing.
 it(`says a device was told to keep its localhost clear, and offers the way back`, async () => {
     const el = mount([mirrored(`off`)]);
     await openRow(el, `work`);
     const text = el.textContent ?? ``;
     expect(text).toContain(`isn't putting this sandbox's ports on its own localhost`);
-    // The switch points the other way, because the machine says it is already off.
     expect(labels(el)).toContain(`Start mirroring`);
     expect(labels(el)).not.toContain(`Stop mirroring`);
-    // And the stale address is suppressed rather than printed under the sentence contradicting it.
+    // Suppressed rather than printed under the sentence contradicting it.
     expect(text).not.toContain(`localhost:5173`);
 });
 
-/* WHAT LEAVES WHEN IT IS PRESSED. Bare, the machine's CLI acts on every sandbox it pairs, which is a reasonable
- * thing to want from a terminal and never what a button on one row should do to a colleague's pairing on the
- * same laptop. So the row's own sandbox id travels with the name. */
+// Bare, the machine's CLI acts on every sandbox it pairs; the button must travel with this row's own sandbox id.
 it(`takes this sandbox's ports off that device's localhost, and nobody else's`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
@@ -988,8 +807,7 @@ it(`takes this sandbox's ports off that device's localhost, and nobody else's`, 
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: `work-abc` }]);
 });
 
-/* THE CLI'S OWN SENTENCE, KEPT. It names the ports it actually took off localhost, which is more than this side
- * knows, and it is the same sentence the reader would have got from the terminal this button replaces. */
+// The CLI's own sentence is kept, naming more than this side knows.
 it(`shows the machine's own answer under the row that was pressed`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
@@ -999,8 +817,7 @@ it(`shows the machine's own answer under the row that was pressed`, async () => 
     expect(el.textContent ?? ``).toContain(`Port mirroring OFF for: work-abc`);
 });
 
-// A refusal is an ANSWER, not a crash: the machine's switches are its own, and it says which one to flip. It
-// arrives as the machine explaining itself rather than as this page reporting a failure.
+// A refusal is an answer, not a crash: it arrives as the machine explaining itself.
 it(`keeps the machine's words when it declines to do it`, async () => {
     mirrorAnswer = { ok: false, message: `Turn on "Run commands" for this device.` };
     const el = mount([mirrored(`on`)]);
@@ -1011,9 +828,8 @@ it(`keeps the machine's words when it declines to do it`, async () => {
     expect(el.textContent ?? ``).toContain(`Turn on "Run commands" for this device.`);
 });
 
-/* NO DOOR, NO BUTTON. Desktop sync carries the pairing and its state, so the row can still SAY mirroring is off,
- * but the switch travels over the device connection and there isn't one: a button that fails when taken is
- * worse than the CLI line it replaced. This is the "only if the sandbox has that device capability" rule. */
+// The row can still say mirroring is off, but the switch needs the device connection; a button that fails when
+// pressed is worse than no button.
 it(`states mirroring without offering the switch on a device it cannot run commands on`, async () => {
     const el = mount([mirrored(`off`, null)]);
     await openRow(el, `work`);
@@ -1021,10 +837,8 @@ it(`states mirroring without offering the switch on a device it cannot run comma
     expect(labels(el)).not.toContain(`Start mirroring`);
 });
 
-/* A SWITCH SOMEBODY THREW IS NOT A FAULT, pinned on the derivation both the folded line and the open-by-default
- * rule read. Mirroring off is a FACT: uncoloured, and it must not unfold the row forever to report the thing it
- * was just asked to do. The contended port alongside it is the one-tick reading again, and it must not warn
- * either, because "not on localhost" is exactly what was asked for. */
+// Mirroring off is a fact, not a fault: it must not unfold the row or warn, since that's exactly what was
+// asked for.
 it(`counts mirroring off as a fact rather than something to fix`, () => {
     const groups = sandboxGroups(
         [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `off` }],
@@ -1034,8 +848,7 @@ it(`counts mirroring off as a fact rather than something to fix`, () => {
     expect(groups.filter(groupNeedsAttention)).toEqual([]);
 });
 
-// And the same port with mirroring ON still warns, which is what stops the guard above from swallowing the
-// signal this view was built for: a dev server that never reached localhost because something else holds 5173.
+// The same port with mirroring on still warns, so the fact-not-fault rule above doesn't swallow a real signal.
 it(`still warns about a port that missed localhost while mirroring is on`, () => {
     const groups = sandboxGroups(
         [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `on` }],
@@ -1045,16 +858,9 @@ it(`still warns about a port that missed localhost while mirroring is on`, () =>
     expect(groups.filter(groupNeedsAttention)).toHaveLength(1);
 });
 
-/* ---- desktop sync, as a property of each DEVICE --------------------------------------------------------
- *
- * The change these pin: a card under this list used to hold the whole subject in the singular — one "Syncing
- * from radarsu-rog", one folder, one "Disable sync" that revoked EVERY paired device. The store underneath was
- * never that shape and the machine agent never was either (`intentic-machine sync pause --sandbox …`), so a
- * reader saw one sandbox-level claim above a list of the several devices that disagreed with it.
- *
- * Now each row states its own enrollment and carries its own switches. */
+// A card under this list used to hold the whole subject in the singular; now each row states its own enrollment.
 
-// A machine that only mirrors ports: no folder, no file sync, and it must not be described as syncing files.
+// A ports-only machine: no folder, no file sync, must never be described as syncing files.
 const mirrorOnly = (): Device => ({
     key: `colleague`,
     label: `colleague-pc`,
@@ -1075,14 +881,10 @@ it(`says which half of desktop sync each device holds`, () => {
     const text = mount([mirrored(`on`), mirrorOnly()]).textContent ?? ``;
     expect(text).toContain(`syncing files and ports`);
     expect(text).toContain(`mirroring ports`);
-    // The chip beside the name says it too, so a mirror machine is never labelled with the word that would send
-    // its owner looking for a folder that does not exist.
     expect(text).toContain(`ports only`);
 });
 
-/* AN ENROLLMENT NOBODY HAS USED IS A WARNING, not a green row. This is the failure that used to be invisible
- * everywhere at once: the record exists, so every surface read it as healthy, while nothing at all was reaching
- * that machine's folder. */
+// An unused enrollment used to read as healthy everywhere: the record exists, so every surface called it fine.
 it(`warns about a device whose enrollment has gone quiet`, () => {
     const row = mirrored(`on`);
     const text = mount([{ ...row, sync: { machine: `laptop`, mode: `sync` } }]).textContent ?? ``;
@@ -1095,9 +897,7 @@ it(`treats an enrollment last used hours ago as stopped`, () => {
     expect(text).toContain(`stopped`);
 });
 
-/* PAUSE HAD NO BUTTON AT ALL: the ports half of a pairing got a switch and the files half got a paragraph
- * naming a command to go and type, on the view built to replace that terminal. What leaves is the row's OWN
- * sandbox id, for the same reason mirroring's does: bare, the machine's CLI acts on every pairing it holds. */
+// Pause had no button before: the row's own sandbox id travels with the command, same as mirroring's.
 it(`pauses this pairing's file syncing, and nobody else's`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
@@ -1106,7 +906,7 @@ it(`pauses this pairing's file syncing, and nobody else's`, async () => {
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-pause`, sandboxId: `work-abc` }]);
 });
 
-// The label points whichever way the machine currently says, exactly as the mirroring switch does.
+// The label points whichever way the machine currently reports, like the mirroring switch.
 it(`offers Resume, and no Pause, on a pairing the machine reports as paused`, async () => {
     const row = mirrored(`on`);
     const paused = {
@@ -1119,18 +919,16 @@ it(`offers Resume, and no Pause, on a pairing the machine reports as paused`, as
     expect(labels(el)).not.toContain(`Pause syncing`);
 });
 
-// A mirror enrollment has no Mutagen session to pause, and the machine's own CLI says exactly that if asked.
-// Better to draw no button than one whose only possible answer is that sentence.
+// A mirror enrollment has no session to pause; better no button than one that always refuses.
 it(`does not offer to pause a device that only mirrors ports`, async () => {
     const el = mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]);
     await openRow(el, `work-abc`);
     expect(labels(el)).not.toContain(`Pause syncing`);
-    // Mirroring is still its to switch: that half is exactly what a mirror enrollment does.
+    // Mirroring is still switchable: that half is exactly what a mirror enrollment does.
     expect(labels(el)).toContain(`Stop mirroring`);
 });
 
-/* UNPAIRING ENDS A PAIRING THAT ONLY A FRESH ONE-LINER RE-MAKES, so it asks first — and it goes to the MACHINE,
- * which tears its own sessions down and self-revokes, rather than this side yanking the key underneath it. */
+// Ends a pairing only a fresh one-liner remakes, so it asks first and goes to the machine, which self-revokes.
 it(`asks before unpairing, then tells the machine to do it`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
@@ -1139,21 +937,18 @@ it(`asks before unpairing, then tells the machine to do it`, async () => {
     expect(mirrorCalls).toEqual([]);
     expect(document.body.textContent ?? ``).toContain(`stops syncing this sandbox's files`);
 
-    // The LAST match is the dialog's own button: it teleports to the end of <body>, so the row's button is first.
+    // The last match is the dialog's own button; it teleports to the end of <body>.
     [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === `Unpair`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-abc` }]);
 });
 
-/* CUTTING ONE DEVICE OFF, from its own row. The button this replaced revoked every paired device at once,
- * so this asserts both halves: that it asks, and that what leaves names ONE machine. */
+// Replaces a button that used to revoke every paired device at once.
 it(`revokes one device's access, naming that machine alone`, async () => {
     const el = mount([mirrored(`on`)]);
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Revoke access`))?.click();
     await nextTick();
     expect(revokeCalls).toEqual([]);
-    // The dialog is explicit that this is one device rather than the fleet, which is the assumption a reader
-    // arrives with after years of the old button.
     expect(document.body.textContent ?? ``).toContain(`every other paired device keeps syncing`);
 
     // The dialog's own confirm, which teleports past the row's button that opened it.
@@ -1162,35 +957,27 @@ it(`revokes one device's access, naming that machine alone`, async () => {
     expect(revokeCalls).toEqual([`laptop`]);
 });
 
-// It is the SANDBOX's own door, so unlike Unpair it is offered on a machine this sandbox cannot reach at all:
-// a laptop that is lost, wiped or permanently asleep is exactly the case it exists for.
+// This is the sandbox's own door, so it's offered even on a machine this sandbox can't reach at all.
 it(`offers to revoke a device that has no connection to run commands on`, () => {
     const el = mount([mirrored(`off`, null)]);
     expect(labels(el)).toContain(`Revoke access`);
     expect(labels(el)).not.toContain(`Unpair`);
 });
 
-// Owner-only, matching the daemon's floor: a member holds their own mirror enrollment and drops it from their
-// own machine, but ending somebody else's is not a collaboration feature.
+// Owner-only, matching the daemon's floor: a member only ever drops their own mirror enrollment.
 it(`does not offer the revoke to a member`, () => {
     owner.value = false;
     expect(labels(mount([mirrored(`on`)]))).not.toContain(`Revoke access`);
 });
 
-// A connected device that was never paired for sync has no enrollment to end, and a "Revoke access" on it
-// would be a button with nothing behind it.
 it(`says nothing about revoking a device that is not enrolled for sync`, () => {
     expect(labels(mount([managed(true)]))).not.toContain(`Revoke access`);
 });
 
-/* ---- the two halves, switched for the WHOLE device -----------------------------------------------------
- *
- * The pairing switches above answer "not this project on my localhost today". These answer "I'm working on
- * something else on this laptop", which is the one somebody actually reaches for: a device running four
- * sandboxes otherwise costs four clicks in four unfolded rows to say one thing. Same two commands, run bare,
- * which is exactly what they mean in a terminal. */
+// These answer "I'm working on something else on this laptop": the same two commands as the pairing switches,
+// run bare.
 
-// One device, two paired sandboxes, so "every sandbox this machine pairs" is a claim with something in it.
+// Two pairings, so "every sandbox this machine pairs" is a claim with something in it.
 const twoPairings = (first: Partial<Record<string, unknown>> = {}, second: Partial<Record<string, unknown>> = {}): Device => ({
     key: `rog`,
     label: `radarsu-rog`,
@@ -1212,7 +999,6 @@ const twoPairings = (first: Partial<Record<string, unknown>> = {}, second: Parti
     },
 });
 
-// The bare CLI form is the whole mechanism: no `--sandbox`, so the machine acts on every pairing it holds.
 it(`pauses file syncing for every sandbox on the device, with no sandbox named`, async () => {
     const el = mount([twoPairings()]);
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Pause all`)?.click();
@@ -1227,8 +1013,7 @@ it(`stops port mirroring for every sandbox on the device`, async () => {
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: undefined }]);
 });
 
-// A settled switch points the way out of where it is, so a machine the agent reports as fully paused offers the
-// resume and not the pause: the same rule the per-pairing buttons follow.
+// A settled switch points the way out of where it is, the same rule the per-pairing buttons follow.
 it(`points each switch whichever way the machine currently says`, () => {
     const el = mount([twoPairings({ paused: true, mirroring: `off` }, { paused: true, mirroring: `off` })]);
     const found = labels(el);
@@ -1239,10 +1024,8 @@ it(`points each switch whichever way the machine currently says`, () => {
     expect(el.textContent ?? ``).toContain(`paused`);
 });
 
-/* A MACHINE CAN BE IN NEITHER STATE, and that is not a wrinkle to hide: the per-pairing switches are exactly
- * what produces a laptop mirroring one sandbox and not another. A single button would have to pick a direction
- * for somebody who deliberately set two pairings differently, and whichever it picked would silently undo half
- * of what they arranged. So the row says which disagree and offers both ways. */
+// Per-pairing switches can leave a machine mixed; a single button would silently undo half of what was
+// deliberately set differently.
 it(`says which pairings disagree and offers both directions`, () => {
     const el = mount([twoPairings({ mirroring: `off` }, { mirroring: `on` })]);
     const text = el.textContent ?? ``;
@@ -1251,9 +1034,7 @@ it(`says which pairings disagree and offers both directions`, () => {
     expect(labels(el)).toContain(`Stop all`);
 });
 
-// File syncing is only a question where there IS one: a mirror enrollment has no Mutagen session to pause, so
-// its pairings are not counted either way and a device holding only mirrors draws no file-sync switch. Two
-// pairings, because a device-scoped switch over ONE of them is the pairing's own button in wider words.
+// A mirror enrollment has no session to pause, so it's never counted toward the file-sync switch.
 it(`draws no file-sync switch on a device that only mirrors ports`, () => {
     const row = mirrorOnly();
     const el = mount([
@@ -1273,18 +1054,14 @@ it(`draws no file-sync switch on a device that only mirrors ports`, () => {
     const found = labels(el);
     expect(found).not.toContain(`Pause all`);
     expect(found).not.toContain(`Resume all`);
-    // Mirroring is still switchable for the whole device: that half is exactly what a mirror enrollment does.
     expect(found).toContain(`Stop all`);
 });
 
-/* ONE PAIRING, NO DEVICE-SCOPED SWITCH, which is the rule this block was missing. Over a single sandbox these
- * buttons run the same command with the same effect as the ones inside that sandbox's own row, twenty pixels
- * away, wearing the wider and scarier label: "Stop all" and "Stop mirroring" were the same click, and nothing
- * on screen said so. Above one pairing the scope is real, and then the block also says how many. */
+// Over a single pairing these buttons would run the same command as that row's own, twenty pixels away, under
+// a wider and scarier label.
 it(`drops the device-scoped switches over a single pairing, and counts them above one`, () => {
     const one = labels(mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]));
     expect(one).not.toContain(`Stop all`);
-    // The narrower switch is still there, inside the pairing's own row, once opened.
     expect(one).toContain(`Revoke access`);
 
     const el = mount([twoPairings()]);
@@ -1292,8 +1069,6 @@ it(`drops the device-scoped switches over a single pairing, and counts them abov
     expect(el.textContent ?? ``).toContain(`all 2 sandboxes`);
 });
 
-/* NO DOOR, NO SWITCH — the same rule as the per-pairing buttons, and for the same reason: these run over the
- * device connection, and a button that fails when taken is worse than the CLI line it replaces. */
 it(`states the halves without offering the switches on a device it cannot run commands on`, () => {
     const row = twoPairings();
     const found = labels(mount([{ ...row, hostId: undefined, online: undefined }]));
@@ -1301,8 +1076,6 @@ it(`states the halves without offering the switches on a device it cannot run co
     expect(found).not.toContain(`Stop all`);
 });
 
-// And a device with nothing paired has nothing to switch: drawing the control would ask the machine about a
-// sandbox it has never heard of.
 it(`draws no switches on a connected device with no pairings`, () => {
     expect(labels(mount([managed(true)]))).not.toContain(`Stop all`);
 });

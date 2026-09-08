@@ -1,33 +1,7 @@
-<!-- THE APP'S RIGHT-CLICK MENU: PrimeVue's ContextMenu at this app's density, with the row every caller was
-     building by hand: a reserved gutter, the label, and the command's keyboard shortcut right-aligned.
-
-     Five surfaces had each written this out: the chat tab strip, the terminal pill bar, the workspace file
-     tabs, the file tree and the git graph, and three of them were byte-identical from the `pt` block through
-     the `#item` template. Their own comments said as much ("the same dense pt and shortcut-hint row the
-     workspace's file-tab menu uses"; "Dense pt matches the file tree's context menu"), which is a duplication
-     that had already been noticed twice and copied anyway.
-
-     THE GUTTER IS ALL-OR-NOTHING, per menu. A menu whose items carry icons or checkmarks reserves the column
-     on EVERY row, so labels line up whether or not a given row has one; a menu with neither reserves nothing
-     and sits flush. The terminal menu used to decide this per ROW (`v-if="'checked' in item"`), which meant
-     its two toggle rows were indented and its eight command rows were not: a ragged edge that read as a
-     rendering slip rather than as a grouping.
-
-     `minWidth` is in rem and per call site because these menus genuinely differ: the file tree's four short
-     verbs want 10rem, the terminal's "Kill 3 running terminals" wants 14. Everything else is fixed here, which
-     is the point.
-
-     A ROW THAT GOES SOMEWHERE IS A LINK, and that is what `url` on the item buys. PrimeVue's own markup puts
-     the click handler on the row's wrapper and leaves the `<a>` inside it hrefless, so a menu row that
-     navigated was an anchor in name only: no address in the status bar, no "Open link in new tab" in the
-     browser's own menu, no Ctrl/⌘-click, no middle-click, nothing to copy. Every destination in this app is a
-     real URL, so every row that names one now says so.
-
-     THE COMMAND STILL OWNS THE ORDINARY CLICK. `url` is the ADDRESS; `command` is what a plain click does:
-     usually a router push, plus whatever else the row has to tidy up (closing the popover it lives in). So a
-     plain click cancels the anchor's own navigation and lets the command run, and a MODIFIED click does the
-     exact opposite: the browser takes it, the command is held back so nothing navigates this tab underneath
-     the new one, and the menu closes. A row given `url` and no command is a plain link and behaves like one. -->
+<!--
+    The app's right-click menu: PrimeVue's ContextMenu at house density, with a reserved icon/check gutter that's all-or-nothing per menu. `url`
+    makes a row a real anchor (status bar, new-tab, middle-click); `command` still runs on a plain click, cancelling the anchor's own navigation.
+-->
 <script setup lang="ts">
 import PrimeContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";

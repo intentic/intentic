@@ -1,17 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* THE WINDOW THAT NEVER OPENED THE SETTINGS PAGE.
- *
- * A popped-out panel is a whole other window of the app (composables/floating.ts), and its route mounts one
- * panel: it has no reason to import the settings page, and so it used to have no reason to import `useSkin`
- * either, since that was reachable only from there. The
- * result was not a setting that lagged, it was a setting that did not exist in that window: nothing applied the
- * stored value and nothing was registered to hear it change. The skin still LOOKED right, because index.html's
- * anti-flash script writes `data-skin` from storage on every load, which is what made this read as "themes don't
- * sync" rather than as "the skin was never installed here".
- *
- * So these tests never import the settings page. They do what main.ts does, and nothing else. */
+// Never imports the settings page: calls installDocumentAppearance directly, mirroring main.ts, so a preference wired
+// only into that page's import graph would fail here too.
 
 const boot = () => import("./documentAppearance");
 const seam = () => import("@intentic/ui/preference");
@@ -35,8 +26,7 @@ describe(`installDocumentAppearance`, () => {
         installDocumentAppearance();
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
-        // The webfont is part of the look and only `useSkin` fetches it, so a window that never loaded it drew
-        // the skin in the app's own stack. This is the half the anti-flash script cannot do.
+        // Only useSkin fetches the webfont; its presence proves useSkin ran, not just the anti-flash markup.
         expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
     });
 
@@ -45,7 +35,6 @@ describe(`installDocumentAppearance`, () => {
         const { receivePreferenceChange } = await seam();
 
         installDocumentAppearance();
-        // What the settings page's Theme row writes, arriving from the window it was pressed in.
         receivePreferenceChange({ key: `ui-skin`, raw: `sanctum` });
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);

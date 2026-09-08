@@ -1,21 +1,8 @@
 import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 
-/* /docs: written for somebody USING intentic. The authoring book is api.ts, and the line between them is the
- * reader: a person installing an extension is doing an ordinary product task, a person writing one is not.
- *
- * SHELVED BY WHO IS READING, not by lifecycle stage. Sorting by stage ("Get started", "Guides", "Extend",
- * "API reference") put installing, understanding and maintaining on one shelf while a second swallowed half the
- * documentation in a flat list. Four questions actually bring people here, and they are questions about the
- * READER: I want to know what this is; I run the machine this thing lives on; I want to wire my own systems into
- * it; I do the day's work in it.
- *
- * WHY AN "INTEGRATIONS" SHELF. Three pages were answering one question: how does an outside thing get into this
- * sandbox?: from two different shelves. A connector, somebody else's extension and your own laptop are the same
- * decision made about three kinds of outsider, and a reader who has just wired up GitHub is the reader most
- * likely to want the other two.
- *
- * NO RUN EXCEEDS FIVE ROWS. A shelf a reader has to parse rather than scan is a wall at a different address, so
- * the one long shelf carries a sub-heading. */
+// /docs is written for someone using intentic, not authoring it (that's /developers). Sections are shelved by what the
+// reader is asking (what is this, running the machine, wiring outside systems in, daily work), not by lifecycle stage.
+// No shelf run exceeds five rows; a longer one takes a sub-heading.
 export const docsBook: Book = {
     id: "docs",
     label: "Docs",
@@ -51,10 +38,8 @@ export const docsBook: Book = {
                             },
                         },
                         {
-                            /* ON THE FIRST SHELF, because the words are relied on from the second page onwards.
-                             * "daemon" appeared 92 times across 14 pages and was defined nowhere; "land", "worktree"
-                             * and "harness" were each first used a shelf before the page that explains them, and
-                             * searching for "glossary" returned nothing at all. */
+                            // First shelf: later pages rely on these words (daemon, land, worktree, harness) from early
+                            // on.
                             id: "glossary",
                             title: "Glossary",
                             blurb: "Every word these docs use as if you knew it",
@@ -116,11 +101,7 @@ export const docsBook: Book = {
                     label: "Keep it",
                     items: [
                         {
-                            /* Retitled from "Updates & what never breaks". The old title was the page's ARGUMENT,
-                             * which is the right thing for a <title> and the wrong thing for a sidebar row: at the
-                             * rail's width it wrapped to two lines and pushed every row below it out of rhythm. The
-                             * promise it makes is still the meta description, where the reader deciding whether to
-                             * click actually reads it. */
+                            // Kept short so the rail row doesn't wrap; the promise lives in meta.description instead.
                             id: "updates",
                             title: "Updates & rollback",
                             blurb: "The promises every update keeps, and the way back",
@@ -143,11 +124,7 @@ export const docsBook: Book = {
                             },
                         },
                         {
-                            /* LAST ON THE SHELF THAT OWNS THE MACHINE, because that is where the failures are: Docker, a
-                             * tunnel, and somebody else's credentials. The docs had no such page at all: "troubleshoot"
-                             * and "not working" both returned nothing, and the agent-side symptoms on it are here
-                             * rather than on a second page because a reader who cannot tell which half broke is exactly
-                             * the reader who needs it. */
+                            // Includes agent-side symptoms too: a reader here often cannot tell which half broke.
                             id: "troubleshooting",
                             title: "Troubleshooting",
                             blurb: "What goes wrong, what causes it, what to do",
@@ -182,11 +159,8 @@ export const docsBook: Book = {
                             },
                         },
                         {
-                            /* THE INSTALLER'S HALF of the extension lifecycle, and a page that did not exist: browsing,
-                             * approving, updating and switching one off were written inside the page for AUTHORS, so
-                             * the reader doing the most common thing anyone does with an extension had to read a
-                             * publishing guide to find out what the install dialog was telling them. Building one is
-                             * the other half, and it lives in /developers. */
+                            // The installer's half of the extension lifecycle; building one is the other half, in
+                            // /developers.
                             id: "extensions",
                             title: "Extensions",
                             blurb: "Find one, read what it may touch, install and keep it",
@@ -255,11 +229,8 @@ export const docsBook: Book = {
                         },
                         {
                             id: "automations",
-                            /* NAMES ALL THREE, though it is the longest row in the rail. "Automations & workflows"
-                             * never said "loops", so a reader after "run this until it's green" had no reason to open
-                             * the one page that answers them, and loops are a third of it. It still sets on one line
-                             * at the rail's width; "Updates: what we promise never breaks" below is the length that
-                             * does not. */
+                            // Names all three (automations, workflows, loops); still the longest row, but fits on one
+                            // line.
                             title: "Automations, workflows & loops",
                             blurb: "Work that starts without you, multi-step runs, and repeating until it's right",
                             meta: {
@@ -283,10 +254,7 @@ export const docsBook: Book = {
                     ],
                 },
                 {
-                    /* The three pages that are not "how does this surface work" but "here is a whole thing someone
-                     * built out of the ones above". They read as a payoff and they were the reason the old Guides
-                     * shelf felt shapeless: a reader looking for how capabilities work had to step over an entire
-                     * company blueprint to reach it. */
+                    // Worked examples: a whole thing built from the pages above, not one surface explained alone.
                     label: "Worked examples",
                     items: [
                         {
@@ -340,9 +308,8 @@ export const docsBook: Book = {
     ],
 };
 
-/* Only what a consumer outside this module actually reads. Everything ELSE a page needs, such as the placement
- * of an id, its neighbours and the page itself, is asked of `book.ts` with `docsBook` in hand because the layout takes
- * the book as a prop and cannot know which of two per-book helper sets to call. */
+// What a consumer outside this module reads directly; placement, neighbours and page lookups go through book.ts with
+// docsBook.
 export const docsSections = docsBook.sections;
 export const docsPages = bookPages(docsBook);
 export const docsDestinations = bookDestinations(docsBook);

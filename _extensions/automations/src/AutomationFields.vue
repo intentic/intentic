@@ -20,45 +20,9 @@ import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
 import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
 
-/* EVERY FIELD OF AN AUTOMATION, once: rendered by the composer that creates one and by the row that edits one.
- *
- * The two used to be one, because editing did not exist: an automation could only be made, never changed, and
- * the fields lived inside the dialog that made it. Adding an editor meant either a second copy of forty fields
- * or this. A copy would have drifted on the first Front Desk setting anyone added to one and not the other, and
- * the half that drifted would be the half nobody had open while they were changing the other.
- *
- * So the STATE is a composable (useAutomationForm) and the MARKUP is this component, and the two callers differ
- * only in their chrome: a panel at the top of the list, or a panel inside the row.
- *
- * ── THREE FULL-WIDTH STEPS, WHICH IS THE THIRD LAYOUT THIS FORM HAS HAD AND THE FIRST THAT CANNOT DEFORM ─────
- *
- * It was a 44rem MODAL COLUMN: forty fields stacked, a Front Desk's eight of them scrolled past before the
- * Prompt was even reached. Then it was TWO COLUMNS, when creating and editing both moved to page width: "When"
- * beside "Then", which reads as the sentence it is — and which had one failure mode nobody could design out of
- * it. The two columns were made to end together, so the Prompt STRETCHED to whatever the trigger column
- * happened to be, and a Front Desk's trigger column is eight fields tall: the result was a 700-pixel black
- * rectangle holding two lines of text, next to a column of eight controls. Measured on the real form, that
- * rectangle was the largest single element on the page.
- *
- * The defect is not the stretching, it is the ASSUMPTION: that two questions of wildly different sizes should
- * be given the same box. They should not. So each step now takes the FULL WIDTH and exactly the height it
- * needs, in a label rail beside its content — the shape every settings surface in this app already uses:
- *
- *      When   ┃ [ Schedule | Webhook | Live | Workspace ]
- *   what wakes┃ the fields that trigger owns, flowed two-up where they are short
- *  ───────────┃──────────────────────────────────────────────────────────────────
- *      Then   ┃ the prompt, at the width of the page rather than half of it
- *  ───────────┃──────────────────────────────────────────────────────────────────
- *    Runs as  ┃ model · persona · approval, on screen rather than behind "Advanced"
- *
- * WHAT THIS BUYS, beyond the rectangle: the Prompt is the longest text in the product and now gets the whole
- * measure instead of half of it; a Front Desk's eight fields flow two-up into four rows instead of eight; and
- * the rail's three labels replace the ladder of eight uppercase field labels that the two-column version stacked
- * down its left edge. A schedule automation — the common case — is now SHORTER than it was.
- *
- * ADVANCED IS GONE, AND THAT IS THE POINT. It held four controls behind a fold that then had to open itself
- * whenever any of them was set, because "a pin you cannot see is a pin you will not remember making" — a fold
- * that is open whenever it matters is not a fold, it is a step, so it is drawn as one. */
+// Every field of an automation, rendered once by both the composer that creates one and the row that edits one; the
+// shared state lives in useAutomationForm. Three full-width steps (When, Then, Runs as) in a label rail, each sized to
+// its own content, rather than two columns forcing every step into the same box.
 
 const props = defineProps<{
     state: AutomationFormState;
@@ -88,13 +52,8 @@ const {
     modelsError,
 } = props.state;
 
-/* THE PERSONAS THIS SANDBOX CAN WEAR, for the "Runs as" picker below. Read here rather than passed in because
- * it is the same list for every automation and changes only when the owner edits it.
- *
- * NAMES ONLY. This picker used to badge every card with whether its accounts were signed in and print its
- * bounds underneath, which made a perfectly good persona look broken on the one surface where you are choosing
- * one: a card with no connected account still scopes the toolbox and the folders, and where it can post is a
- * fact the Personas page already tells. A picker's job here is to name the choices. */
+// Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
+// Names only: a card's connection status belongs on the Personas page, not here.
 const personaList = useQuery({
     queryKey: host().sandbox.key(`personas`),
     queryFn: () => host().sandbox.rpc.personas.list(),
@@ -102,25 +61,15 @@ const personaList = useQuery({
 });
 const personas = computed<readonly PickerOption[]>(() =>
     (personaList.data.value?.personas ?? [])
-        /* `face` is what makes the row a PERSON rather than a value: the picker draws this card's own derived
-         * character for it, in the row and again in the closed field, so choosing who an automation speaks as is
-         * the same act of recognition here as it is on the Personas page and in the chat. The card goes over
-         * whole rather than as a name because the label-or-id rule belongs to <PersonaFace>, not to this file. */
+        // `face` draws the same derived character used on the Personas page and in chat, so picking who an automation
+        // speaks as is the same act of recognition everywhere.
         .map((persona) => ({ value: persona.id, label: persona.label ?? persona.id, face: persona }))
         // Ordered, because a picker whose rows arrive in the file's order is a list you have to read twice.
         .toSorted((a, b) => a.label.localeCompare(b.label)),
 );
 
-/* The rows, blank first. Blank means something different on a Front Desk: a stranger writes those prompts, so
- * leaving it alone is filled in with the read-only front desk on save, and the row says which it is.
- *
- * A PIN WHOSE CARD IS GONE still has to appear, or the trigger renders empty and reads as "nobody", which is
- * the one other thing it could mean and behaves very differently: that one gets nothing at all.
- *
- * NEITHER OF THE BLANK ROW'S TWO MEANINGS IS A PERSON, so it wears a glyph while everything under it wears a
- * face, which is the whole of how a reader tells "no one in particular" from "this one" at a glance, without
- * reading either label. The missing card is a person who is GONE, so it keeps a face: greying the row is what
- * says it cannot be used, and drawing it as a category would hide that a name was pinned here at all. */
+// Blank means different things: a Front Desk fills it in as read-only at save, elsewhere it's nobody. A pinned persona
+// whose card is gone still gets a face, greyed, not a glyph, so it reads as gone, not unpinned.
 const personaOptions = computed<readonly PickerOption[]>(() => [
     isFrontDesk.value
         ? { value: ``, label: `Front desk`, description: `read-only`, icon: `globe` as const }
@@ -131,8 +80,7 @@ const personaOptions = computed<readonly PickerOption[]>(() => [
         : []),
 ]);
 
-// A CI trigger's delivery path, whether this will fire instantly, be polled, or never fire at all. Only
-// fetched while a CI trigger is on screen. See useCiDelivery.
+// CI's delivery path: instant, polled, or never; fetched only while a CI trigger is on screen.
 const isCi = computed(() => form.kind === `listener` && form.provider === `ci`);
 const { delivery } = useCiDelivery(
     isCi,
@@ -149,41 +97,32 @@ const DELIVERY_ICON = {
     none: `exclamation-triangle`,
 } as const;
 
-// Exposed so a submitting parent can send the user to the first field that needs fixing. The prompt is a
-// <ProseField> rather than a bare textarea, so what a caller wants (the element to put a caret in) is the
-// field inside it rather than the component.
+// Exposed so a submitting parent can focus the first invalid field; `promptInput` reaches inside `<ProseField>` to the
+// actual element, not the component.
 const nameInput = ref<HTMLInputElement>();
 const promptField = ref<InstanceType<typeof ProseField>>();
 const promptInput = computed(() => promptField.value?.field);
 defineExpose({ nameInput, promptInput });
 
-/* THE FOUR THINGS THAT CAN WAKE AN AGENT, as the app's own segmented control rather than as four cards this
- * file draws itself. They were 2×2 tinted buttons at `px-3 py-2`, which is the geometry of a primary action:
- * the loudest block in the form was the question "which kind", asked once and answered forever.
- *
- * EACH KEEPS ITS GLYPH, and that is not decoration: the same clock, bolt, live mark and eye are the tile on
- * every row of the list outside this form, so the picker teaches the vocabulary the list is written in. */
+// The app's segmented control, not four hand-drawn cards, so the loudest thing in the form isn't the trigger-kind
+// question. Each keeps its glyph, the same one the list outside this form uses for the row.
 const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon: IconName }[]>(() => [
     { value: `schedule`, label: `Schedule`, icon: `clock` },
     { value: `event`, label: `Webhook`, icon: `bolt` },
-    // A live source needs a gateway holding a connection open: no connected source, nothing to offer. It stays
-    // while THIS automation is one, so an existing row is never quietly re-pointed by its own editor.
+    // Needs a connected gateway; an already-Live automation keeps it listed so its editor can't re-point it.
     ...(liveSources.value.length > 0 || form.kind === `listener` ? [{ value: `listener` as const, label: `Live`, icon: `wifi` as const }] : []),
     { value: `workspace`, label: `Workspace`, icon: `eye` },
 ]);
 
-/* ONE SENTENCE PER KIND, under the picker, where four self-explaining button labels used to be ("Event
- * (webhook)", "Listen (live)", "This workspace"). A label that has to carry its own gloss in brackets is a
- * label doing a caption's job in a control's font. */
+// One caption sentence per trigger kind, shown under the picker instead of a label with its own gloss.
 const KIND_CAPTION: Record<TriggerKind, string> = {
     schedule: `On a clock, in this sandbox's own timezone.`,
     event: `When any outside system POSTs to its webhook URL, which is shown to you once it exists.`,
     listener: `The moment a connected service sends something. Nothing is polled: a gateway holds the connection open.`,
     workspace: `On a moment in this workspace's own work. No token and no URL: nothing outside the sandbox can fire it.`,
 };
-// A live trigger's caption names the SOURCE, because "a connected service" is the one thing a reader who has
-// already picked one does not need told. The Front Desk is not a service at all — it is a widget on the reader's
-// own site — so it says what actually happens.
+// Names the source directly, not "a connected service", since the reader just picked it; a Front Desk isn't a service,
+// so it says what actually happens.
 const whenCaption = computed<string>(() => {
     if (form.kind !== `listener`) {
         return KIND_CAPTION[form.kind];
@@ -193,8 +132,7 @@ const whenCaption = computed<string>(() => {
         : `The moment ${listenerSource.value.label} sends one of these. Nothing is polled: a gateway holds the connection open.`;
 });
 
-// The trigger kind, through the picker's model. Wrapped rather than bound straight to `form.kind` because
-// switching kind has a consequence (see `setKind`): a live trigger needs a source that is actually connected.
+// Wrapped, not bound straight to `form.kind`: switching to Live also has to pick a connected source.
 const kind = computed<TriggerKind>({
     get: () => form.kind,
     set: (next) => {
@@ -232,8 +170,7 @@ const ANTI_BOT_OPTIONS = [
     { value: `off`, label: `Off` },
 ] as const;
 
-// The moments a chore can wake on. Worded as the moment rather than the event id: the id is wire vocabulary,
-// and the two overlap enough (a clean turn auto-lands, firing both) that the difference has to read plainly.
+// Worded as the moment, not the wire event id, since two ids can fire on the same turn and read as one.
 const WORKSPACE_EVENTS = [
     { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn, including the ones that errored or conflicted.` },
     { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
@@ -245,28 +182,14 @@ const WORKSPACE_EVENTS = [
     { value: `deps.fixed`, label: `Checks recover`, hint: `A later land turned those failing checks green again.` },
 ] as const;
 
-/* WHAT THE WAKE RUNS ON: AN ORDERED LADDER, each rung a whole pick — provider, model, reasoning tier and
- * harness — through the app's own picker.
- *
- * IT WAS ONE CHIP, and before that four rows of chips. The chip was right about WHERE the choice is made (the
- * shell's picker: searchable across every provider at once, connected first, each account's plan drawn as a
- * ring) and wrong about how many answers an automation gets. One model meant one point of failure on the
- * surface least able to survive one: a chat refuses in front of somebody who can retry it, a wake at 3am
- * against a spent allowance simply does not happen, and nobody finds out until the morning.
- *
- * AND A BLANK IS NO LONGER A DEFAULT. It used to be — no model meant the provider resolved its own at wake
- * time, and behind that sat a sandbox-wide tier — which made the commonest way to configure an automation's
- * spend "say nothing and inherit whatever the chat was set to". The list is now required (`modelsError`), so
- * the picker is the one step of making an automation that cannot be skipped.
- *
- * ORDER IS THE MEANING: the daemon walks it at fire time and takes the first rung this sandbox can actually
- * start, so row 1 is the one you want and the rest are what catches it. */
+// An ordered ladder of picks, walked at fire time; row 1 is preferred, the rest catch it when that account has nothing
+// left. No longer defaultable: `modelsError` requires at least one.
 const rungs = computed(() =>
     form.models.map((pin) => {
         const described = host().models.describe({
             provider: pin.provider,
             model: pin.model,
-            // The account is shown against a rung only while it is unambiguous, see `accountPinnable`.
+            // Shown only while the account is unambiguous (`accountPinnable`).
             ...(accountPinnable.value && form.account !== `` ? { account: form.account } : {}),
             ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
             ...(pin.effort !== undefined ? { effort: pin.effort } : {}),
@@ -275,16 +198,12 @@ const rungs = computed(() =>
     }),
 );
 
-/* WHETHER AN ACCOUNT MAY BE PINNED AT ALL, which a ladder can take away. An account id is one provider's store
- * key — it is only meaningful beside that provider, the same way a model id is — so it can only be pinned while
- * every rung agrees about which provider that is. Cross providers and the pin would name an account the winning
- * rung's provider has never heard of, so the field is cleared and the daemon falls back to the connected account
- * with the most headroom, which is the better answer for unwatched work in any case. The scheduler applies the
- * identical rule, so what is stored and what is spent cannot disagree. */
+// An account id only means something beside its own provider, so it can only be pinned while every rung agrees on one;
+// crossing providers clears it, falling back to the connected account with the most headroom, same as the scheduler.
 const accountPinnable = computed(() => new Set(form.models.map((pin) => pin.provider)).size <= 1);
 
-// The picker hangs off the row that opened it: a popover on desktop, a sheet on mobile, the host decides. A
-// function ref rather than one shared element, because each rung is edited over its own row.
+// A function ref, not one shared element, since the picker anchors to whichever row opened it (popover or sheet; the
+// host decides).
 const rungEls = new Map<number, HTMLElement>();
 const bindRung = (index: number, el: unknown): void => {
     if (el instanceof HTMLElement) {
@@ -345,27 +264,23 @@ const editRung = async (index: number): Promise<void> => {
     }
     const pin = pinOf(next);
     form.models = index < form.models.length ? form.models.map((old, at) => (at === index ? pin : old)) : [...form.models, pin];
-    // The picker also settles the account, and it is the automation's rather than the rung's — but only while
-    // one provider owns the whole ladder (see `accountPinnable`), so it is dropped the moment that stops.
+    // The account is the automation's, not the rung's, kept only while one provider owns the whole ladder.
     form.account = accountPinnable.value ? (next.account ?? ``) : ``;
 };
 
-// A new rung is added by opening the picker on the slot past the end: there is no such thing as a half-chosen
-// entry, so nothing is appended until the picker actually settles on a model.
+// Opens the picker on the slot past the end; nothing is appended until it actually settles on a model.
 const addRung = (): Promise<void> => editRung(form.models.length);
 
 const removeRung = (index: number): void => {
     form.models = form.models.filter((_, at) => at !== index);
-    // Taking the last one out is the moment the requirement becomes relevant, so the message appears then
-    // rather than only when a save is refused.
+    // Marks touched here, so the required-model message appears now, not only when a save is refused.
     markTouched(`models`);
     if (!accountPinnable.value) {
         form.account = ``;
     }
 };
 
-// Order is what the daemon walks, so it is edited directly rather than by drag: one step per press, which is
-// also the only interaction that works the same on a phone.
+// Edited by one step per press, not drag, since order is what the daemon walks and a press works the same on a phone.
 const moveRung = (index: number, by: number): void => {
     const to = index + by;
     const moving = form.models[index];
@@ -385,8 +300,7 @@ const toggleDay = (day: number): void => {
     schedule.days.splice(at, 1);
 };
 
-// Switching source changes what an event IS, so the event filter cannot carry over: `pipeline_failed` is not a
-// thing Discord sends, and a filter no source matches is a row that never fires.
+// Clears the event filter on switch, since an old filter (e.g. `pipeline_failed`) may match nothing on the new source.
 const setProvider = (provider: string): void => {
     form.provider = provider;
     form.eventType = undefined;
@@ -394,13 +308,9 @@ const setProvider = (provider: string): void => {
 </script>
 
 <template>
-    <!-- THE RAIL AND ITS RULE, drawn once by the parent: `divide-y` puts a hairline BETWEEN steps and nowhere
-         else, which is the difference between three sections and three boxes. A border per section would draw a
-         line above the first one, where the panel's own header already is. -->
+    <!-- `divide-y` puts a hairline between steps only, not around each one, so the panel reads as three sections, not three boxes. -->
     <div class="@container flex flex-col divide-y divide-line-subtle">
-        <!-- The name IS the automation's identity: the daemon upserts on it, so retyping it while editing
-             would fork a second automation rather than rename this one. Absent once it exists; the row above
-             is already showing it. -->
+        <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one. Hidden once it exists. -->
         <section v-if="!nameLocked" class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">Name</span>
@@ -428,10 +338,10 @@ const setProvider = (provider: string): void => {
                 <span class="text-2xs text-subtle">What wakes the agent.</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <!-- CAPPED, not full-bleed. `stretch` divides whatever width it is given between its options,
-                     and at the page's measure that is four 240px slabs for four one-word labels — a control
-                     that looks like the form's primary action because it is the widest thing in it. At 42rem
-                     the four tabs are the size of the choice they carry. -->
+                <!--
+                    Capped at `max-w-2xl`, not full width: `stretch` would otherwise blow up four one-word tabs into slabs wider than the choice they
+                    represent.
+                -->
                 <SegmentedControl v-model="kind" :options="TRIGGER_TABS" stretch class="max-w-2xl" />
                 <p class="text-2xs text-subtle">{{ whenCaption }}</p>
 
@@ -464,11 +374,10 @@ const setProvider = (provider: string): void => {
                 </template>
 
                 <template v-if="form.kind === 'listener'">
-                    <!-- THE SOURCES, AS CHIPS RATHER THAN AS CARDS. They were `px-3 py-2` tinted blocks with a
-                         trailing check mark inside the lit one, which is three ways of saying "this one" where
-                         the kit's own chip says it in one — and the card wall grows with every pack installed,
-                         while a chip row wraps. The logo stays: it is how a reader finds Discord in a row of
-                         four without reading a word. -->
+                    <!--
+                        Chips, not cards: the kit's chip already says "this one" in one signal, and a chip row wraps where a card wall would just
+                        grow. The logo stays, so a reader finds Discord without reading a word.
+                    -->
                     <div class="ui-field">
                         <span class="ui-field-label">Source</span>
                         <div class="flex flex-wrap gap-1.5">
@@ -490,10 +399,10 @@ const setProvider = (provider: string): void => {
                         </div>
                     </div>
 
-                    <!-- A Front Desk is configured by WHERE it may be embedded and WHO may talk to it: the shared
-                         listener fields (events, mention, channel) say nothing about a widget, so they fold away.
-                         EIGHT FIELDS, FLOWED TWO-UP: at half the page they were eight rows and the reason the
-                         old layout's prompt had 700 pixels to fill. -->
+                    <!--
+                        A Front Desk is configured by where it embeds and who may talk to it, not the shared listener fields, which fold away. Eight
+                        fields flow two-up instead of stacking eight rows.
+                    -->
                     <div v-if="isFrontDesk" class="grid gap-3 @2xl:grid-cols-2">
                         <label class="ui-field @2xl:col-span-2">
                             <span class="ui-field-label">Allowed sites</span>
@@ -625,8 +534,7 @@ const setProvider = (provider: string): void => {
                             <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
                             <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="ui.input()" />
                         </label>
-                        <!-- The second narrowing axis, for the one source that has one: CI's branch. Without it,
-                             "wake me when CI fails" means every agent's branch as well as the one that ships. -->
+                        <!-- CI's own second narrowing axis (branch); without it, "wake on CI failure" means every agent's branch too. -->
                         <label v-if="branchField" class="ui-field">
                             <span class="ui-field-label">{{ branchField.label }}</span>
                             <input v-model="form.branch" :placeholder="branchField.placeholder" class="font-mono" :class="ui.input()" />
@@ -652,8 +560,7 @@ const setProvider = (provider: string): void => {
                             </button>
                         </div>
                     </div>
-                    <!-- The qualifier its frequency needs, on ONE wrapping row rather than stacked: at full
-                         width "Mon…Sun" and "At 09:00" sit side by side, which is also how they are spoken. -->
+                    <!-- One wrapping row, not stacked, since "Mon…Sun" and "At 09:00" are also spoken side by side. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <div v-if="schedule.freq === 'weekly'" class="flex flex-wrap gap-1.5">
                             <button
@@ -679,8 +586,7 @@ const setProvider = (provider: string): void => {
                             v-if="schedule.freq === 'daily' || schedule.freq === 'weekly' || schedule.freq === 'monthly'"
                             class="flex items-center gap-2 text-xs text-muted"
                         >
-                            <!-- Wide enough for a 12-hour locale: `w-28` fit "09:00" and the picker glyph, so every
-                                 en-US browser rendered "09:00 A" with the M clipped off. -->
+                            <!-- Wide enough for a 12-hour locale: `w-28` clipped the AM/PM suffix in en-US browsers. -->
                             At <input v-model="schedule.time" type="time" class="w-36" :class="ui.input()" />
                         </label>
                         <label v-if="schedule.freq === 'custom'" class="flex min-w-0 flex-col gap-1">
@@ -689,16 +595,15 @@ const setProvider = (provider: string): void => {
                         </label>
                     </div>
                     <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
-                    <!-- THE ONE THING THIS STEP OWES: proof. A cron is unreadable and a form that takes one
-                         without saying when it will fire is a form you cannot check your own answer against. -->
+                    <!-- Proof the cron does what it says: shows when it will actually fire next. -->
                     <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
                         <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatDateTime).join(" · ") }}</template>
                         <template v-else>{{ cronPreview.error }}</template>
                     </p>
-                    <!-- THE CLOCK ASKS, THE FLEET ANSWERS. A schedule whose evidence is this sandbox's own history
-                         (the dreaming session) is worth a turn only once enough has happened, and "enough" is
-                         sessions rather than nights. A due run short of the bar shows on the row as skipped, with
-                         the count, which is the automation working rather than failing. -->
+                    <!--
+                        Gates on sessions since the last wake, not elapsed time; a due run short of the bar shows as skipped, with the count, not as
+                        a failure.
+                    -->
                     <label class="flex flex-wrap items-center gap-2 text-xs text-muted">
                         Only once
                         <input
@@ -716,10 +621,10 @@ const setProvider = (provider: string): void => {
                     </p>
                 </template>
 
-                <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider
-                     webhook, or by polling when that webhook could not be registered. Which of the two, or
-                     neither, is the difference between a row that works and a row that silently never fires, so
-                     it is stated here rather than left to be discovered from an empty run history. -->
+                <!--
+                    CI has no held-open gateway: its events arrive by webhook, or by polling if that couldn't register. Stated here, or a silently
+                    dead row is only found from an empty run history.
+                -->
                 <p v-if="isCi && delivery" class="flex items-start gap-1.5 text-xs" :class="DELIVERY_TONE[delivery.state]">
                     <Icon :name="DELIVERY_ICON[delivery.state]" class="mt-0.5 shrink-0 text-2xs" />
                     <span>
@@ -735,25 +640,20 @@ const setProvider = (provider: string): void => {
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">Then</span>
                 <span class="text-2xs text-subtle">What it wakes with.</span>
-                <!-- The one field nothing validates, and the one that has to agree with the trigger above it: a
-                     briefing about Discord messages on a CI trigger is a wake that reads a payload it was never
-                     told about. So the rail says whose starting point the text is while it is still one. -->
+                <!--
+                    Unvalidated, but must agree with the trigger above (a Discord briefing on a CI trigger reads a payload it never gets); the rail
+                    names its starting point while it's still unedited.
+                -->
                 <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">Starter from {{ recipeNote }}.</span>
                 <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="mt-1 text-2xs text-subtle">
                     {{ listenerSource.label }}'s starter, yours to rewrite.
                 </span>
             </div>
             <label class="ui-field min-w-0 flex-1 cursor-text">
-                <!-- IT IS A WRITING SURFACE, not a form control. What goes in it is the longest text on this
-                     page by an order of magnitude: a briefing with numbered steps, the thing the whole
-                     automation turns on. So it is the same field the story editor writes into (<ProseField>),
-                     bare the way the acceptance panel wears it: no box, no fill, no seam — the page under the
-                     words is what says "write here", and focus lights the line being written rather than a
-                     rectangle around it. It grew a shell once, and the shell was the defect: the field sizes
-                     itself to its own text, so the box's floor stood taller than the field inside it and the
-                     focus tint — which belongs to the field — painted the first line and stopped.
-                     `-mx-2` pulls the field's own padding out to the column edge so the words, not the padding,
-                     align with everything above and below. `min-h-24` keeps an empty prompt worth clicking on. -->
+                <!--
+                    A writing surface, not a form control, using the same bare field the story editor does: no box, no fill, focus lights the line,
+                    not a rectangle. `-mx-2` aligns its text with the column; `min-h-24` keeps an empty prompt clickable.
+                -->
                 <ProseField
                     ref="promptField"
                     v-model="form.prompt"
@@ -765,8 +665,7 @@ const setProvider = (provider: string): void => {
                     <Icon name="exclamation-triangle" class="text-2xs" />
                     {{ promptError }}
                 </span>
-                <!-- A starter left over from another source, named with the swap beside it. Nothing may rewrite
-                     it — it is not the form's — but it is the one mismatch that can be pointed at. -->
+                <!-- A starter left over from a different source; not the form's to rewrite, but worth flagging with a way to swap it. -->
                 <p v-else-if="staleStarter" class="flex flex-wrap items-baseline gap-x-1.5 text-2xs text-warning">
                     <Icon name="exclamation-triangle" class="text-2xs" />
                     <span>This is {{ staleStarter.label }}'s starter, but {{ listenerSource.label }} sends a different payload.</span>
@@ -776,36 +675,34 @@ const setProvider = (provider: string): void => {
         </section>
 
         <!-- ── RUNS AS ───────────────────────────────────────────────────────────────────────────────────── -->
-        <!-- IT WAS "ADVANCED", and it was neither. These four decide who the agent IS when it reaches outside
-             this sandbox, whose subscription pays for the wake, and whether it may act unwatched — which are
-             the questions a reader of somebody else's automation most wants answered, and the ones a fold hides
-             by design. The fold also had to open itself whenever any of them was set, which is the shape of a
-             control that never wanted to be one. -->
+        <!--
+            Decides who the agent is outside the sandbox, what pays for the wake, and whether it can act unwatched: exactly what a reader of someone
+            else's automation most wants to see, so nothing here folds away.
+        -->
         <section class="flex flex-col gap-3 pt-4 @2xl:flex-row @2xl:gap-6">
-            <!-- "How", not "Runs as", and the rename is not cosmetic: the rail label sat two inches from a field
-                 labelled "Runs on", and one of them means "which subscription pays" while the other means "whose
-                 accounts it may speak through" — the exact mix-up the persona layer exists to prevent, invited
-                 by two labels that differ in one letter. When · Then · How also reads as the sentence the three
-                 steps are. -->
+            <!--
+                "How", not "Runs as": that label sat inches from a field called "Runs on", one letter apart and meaning different things (what pays
+                vs. whose accounts). Also completes the sentence When · Then · How.
+            -->
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">How</span>
                 <span class="text-2xs text-subtle">Who it runs as, and what pays for it.</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <!-- TWO PICKERS, ONE ROW. They are the same KIND of question — which model, which persona — and
-                     standing them side by side is also what keeps them from being read as one: "Runs on" is
-                     which subscription pays for the wake, "Runs as" is who it is when it reaches outside, and a
-                     stacked pair invited exactly the mix-up the persona layer exists to prevent. -->
+                <!--
+                    Side by side, not stacked, since stacking these two same-shaped pickers invited confusing what pays ("Runs on") with who it acts
+                    as ("Runs as").
+                -->
                 <div class="grid gap-3 @xl:grid-cols-2">
-                    <!-- THE LADDER, IN THE ORDER THE DAEMON WALKS IT. Row 1 is the one you want; the rest are
-                         what catches it when that account has nothing left, which on a surface nobody is
-                         watching is the difference between a quiet morning and a wake that never happened. -->
+                    <!--
+                        In the order the daemon walks it: row 1 is preferred, the rest catch it when that account is out, the difference between a
+                        quiet morning and a wake that never happened.
+                    -->
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">Runs on</span>
                         <div class="flex min-w-0 flex-col gap-1.5">
                             <div v-for="(label, index) in rungs" :key="index" class="flex min-w-0 items-center gap-1.5">
-                                <!-- The position, said as a number: it is the whole meaning of the row's place
-                                     in the list, and a list whose order matters has to show that it does. -->
+                                <!-- The number is the row's whole meaning: order matters here, so it has to be shown. -->
                                 <span class="w-3 shrink-0 text-right text-2xs text-subtle tabular-nums">{{ index + 1 }}</span>
                                 <button
                                     :ref="(el) => bindRung(index, el)"
@@ -818,10 +715,10 @@ const setProvider = (provider: string): void => {
                                     <span class="min-w-0 flex-1 truncate">{{ label }}</span>
                                     <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
                                 </button>
-                                <!-- The first row has nothing above it, so its button is INVISIBLE rather than
-                                     absent: dropping the element shortens that row's chip by the button's
-                                     width, and a vertical list whose first row ends further right than the
-                                     rest reads as a mistake rather than as "this one cannot move up". -->
+                                <!--
+                                    Invisible, not absent, on the first row: removing it would shorten that row's chip and misread as a layout
+                                    mistake.
+                                -->
                                 <button
                                     type="button"
                                     v-tooltip.top="`Try this one earlier`"
@@ -849,8 +746,7 @@ const setProvider = (provider: string): void => {
                                 {{ form.models.length === 0 ? `Pick a model` : `Add a fallback` }}
                             </button>
                         </div>
-                        <!-- The one field whose error is about spending rather than syntax, so it is said where
-                             it is answered rather than only on the disabled save button. -->
+                        <!-- Its error is about spending, not syntax, so it's shown here, not only on the disabled save button. -->
                         <p v-if="modelsError !== undefined && touched.has(`models`)" class="text-2xs text-danger">{{ modelsError }}</p>
                     </div>
                     <div class="ui-field min-w-0">
@@ -858,22 +754,18 @@ const setProvider = (provider: string): void => {
                         <Picker v-model="form.actsAs" :options="personaOptions" aria-label="Persona this automation runs as" class="w-full" />
                     </div>
                 </div>
-                <!-- The one sentence saving needs: on a Front Desk, leaving this blank does not mean "unbounded",
-                     it WRITES a read-only front-desk persona: a thing no control on screen shows. -->
+                <!-- Blank on a Front Desk isn't "unbounded": saving writes a read-only front-desk persona, which no control on screen shows. -->
                 <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     Strangers write these prompts, so saving adds a read-only front desk to your personas.
                 </p>
 
-                <!-- BOTH HANDS ON THE WHEEL, ON ONE LINE, because they compose and are read together: approval
-                     holds every fire for a click, the countdown holds it visibly and then starts by itself. -->
+                <!-- One line, since they compose: approval holds every fire for a click, the countdown holds it and starts by itself. -->
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">
                     <label class="flex items-center gap-2 text-xs text-content">
                         <ToggleSwitch v-model="form.requireApproval" aria-label="Require my approval before running" />
                         Require my approval before it runs
                     </label>
-                    <!-- THE CONFLICT IS ENFORCED, not narrated. Approval always beat the hold: a held run never
-                         started by itself while it was on, and the old form said so in a warning under a field
-                         it left editable, which is a rule you have to read to obey. Disabled, the field says it. -->
+                    <!-- Approval always beats the hold; disabled, the field enforces that itself instead of a warning you had to read. -->
                     <label class="flex items-center gap-2 text-xs" :class="form.requireApproval ? `text-subtle` : `text-content`">
                         Hold each run for
                         <input
@@ -889,17 +781,15 @@ const setProvider = (provider: string): void => {
                         seconds
                     </label>
                 </div>
-                <!-- The one place this caveat lands where it changes a decision. It is in the Front Desk docs, but
-                     nobody reads those while flipping a toggle, and a support chat that can never answer is not
-                     what "require my approval" sounds like. -->
+                <!-- Said here, not just in the docs, since "require my approval" doesn't sound like a chat that never answers. -->
                 <p v-if="form.requireApproval && isFrontDesk" class="-mt-1 text-2xs text-warning">
                     Visitors get no answer in the widget: approved replies land in your chat instead.
                 </p>
 
-                <!-- NARROW THIS FURTHER: raw tool names, folded away, and deliberately not how anyone is expected
-                     to answer this question. The persona above is the reusable answer; this is for the one job
-                     that needs less than its card, and it can only ever take away (the daemon applies both, and
-                     an allowlist cannot hand back a shelf the card switched off). -->
+                <!--
+                    Folded away since it's not the usual answer: the persona above is reusable, this only narrows one job further, and can never
+                    grant back what the persona's card switched off.
+                -->
                 <details v-if="form.actsAs !== ``" class="text-xs">
                     <summary class="cursor-pointer text-muted hover:text-content">Narrow this one job further</summary>
                     <div class="ui-field mt-2 max-w-sm">

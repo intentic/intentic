@@ -1,15 +1,11 @@
-/* Reading a daemon SSE/ndjson stream, the transport half of `sandbox.request().body`. The daemon emits SSE
- * frames (blank-line separated, each a `data: <JSON>` line, an oRPC event-iterator failure as `event: error`),
- * so consuming a streamed apply/plan/provision means reframing + JSON-parsing. Pure (ReadableStream in, async
- * records out), no deps, extensions bundle it; the shim path never touches it. */
+// Reads a daemon SSE/ndjson stream: reframes blank-line-separated `data: <JSON>` frames and parses each. Pure
+// (ReadableStream in, async records out), no deps.
 
-// A silent daemon, one that accepts the stream then sends nothing and never closes, would park reader.read()
-// forever, hanging the consumer. A live daemon heartbeats (≤1s) over the stream, so no bytes for this long means
-// the connection is dead: cancel the reader and end the generator instead of waiting indefinitely.
+// A live daemon heartbeats over the stream at least this often; no bytes for this long means the connection is dead.
 const SSE_IDLE_MS = 120_000;
 
-// Yields each raw SSE frame (the text between blank-line separators), reassembling frames split across chunks.
-// Ends (cancelling the reader) if the daemon goes silent past SSE_IDLE_MS, so a half-open stream can't hang.
+// Yields each raw SSE frame, reassembling frames split across chunks; ends (cancelling the reader) after SSE_IDLE_MS of
+// silence.
 async function* sseFrames(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -58,9 +54,8 @@ const dataOf = (frame: string): unknown => {
     }
 };
 
-// Reads a daemon stream as parsed ndjson records. An `event: error` frame is normalized to a
-// `{ kind: "error", message }` record so callers surface it and stop even when the daemon couldn't emit its
-// own error line; malformed frames are skipped.
+// Reads a daemon stream as parsed ndjson records. An `event: error` frame becomes a `{ kind: "error", message }`
+// record; malformed frames are skipped.
 export async function* readDaemonStream(body: ReadableStream<Uint8Array>): AsyncGenerator<Record<string, unknown>> {
     for await (const frame of sseFrames(body)) {
         const parsed = dataOf(frame);

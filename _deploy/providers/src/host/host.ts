@@ -8,12 +8,10 @@ import { sshExecutor } from "../core/ssh.js";
 type HostInputs = z.infer<typeof sshSchema>;
 const parse = (inputs: ResolvedInputs): HostInputs => parseInputs(sshSchema, inputs, "host");
 
-// Gather the host's facts over an open session. The host is OWNED infra, this verifies it is reachable
-// and Docker-ready and reads its addresses; it does not provision anything. internalIp is the default
-// route's source address; publicIp is the address we connect to (no third-party egress).
+// Gathers the host's facts over an open session: verifies it is reachable and Docker-ready, reads its addresses;
+// never provisions. internalIp is the default route's source address, publicIp is the address connected to.
 const gather = async (session: SshSession, address: string): Promise<Record<string, unknown>> => {
-    // Two independent read-only execs, concurrent channels on the one connection, so a plan pays one SSH
-    // round-trip per host instead of two. Docker's code is checked first to keep the error priority.
+    // Two independent execs, concurrent on one connection, so a plan pays one SSH round-trip per host.
     const [docker, route] = await Promise.all([
         session.exec("docker version --format '{{.Server.Version}}'"),
         session.exec("ip -4 -o route get 1.1.1.1 | awk '{print $7; exit}'"),
@@ -27,9 +25,8 @@ const gather = async (session: SshSession, address: string): Promise<Record<stri
     return { internalIp: route.stdout.trim(), publicIp: address };
 };
 
-// The host provider. read/apply both connect-and-gather; diff is always noop (an owned host has no
-// managed drift). read maps a connection failure to "not yet reachable" (undefined) so a plan can report
-// it without aborting; apply lets a connection failure propagate as the hard error for owned infra.
+// Host provider: read/apply both connect-and-gather; diff is always noop, an owned host has no managed drift.
+// `read` maps a connection failure to not-yet-reachable; `apply` lets it propagate as a hard error.
 export const createHostProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
@@ -56,8 +53,8 @@ export const createHostProvider = (executor: SshExecutor = sshExecutor): Provide
             await session.dispose();
         }
     },
-    // The host is OWNED infra, not provisioned by intentic, removing it from desired state never deletes the
-    // machine. Implemented as a logged no-op so prune treats it as handled rather than an unhandled orphan.
+    // Owned infra; removing it from desired state never deletes the machine. Logged no-op, so prune treats it as
+    // handled.
     delete: async (_inputs, ctx) => {
         ctx.log(`host "${ctx.id}" removed from desired state: owned infra is never torn down by intentic`);
     },

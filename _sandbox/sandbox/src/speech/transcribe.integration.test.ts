@@ -5,8 +5,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 
-/* The speech engine over its two injected seams (exec, model fetch): the same shape the Discord voice
- * transcriber proves its whisper conventions with (_extensions/discord/src/audio.test.ts). */
+// Speech engine over its two injected seams (exec, model fetch); the same shape the Discord voice transcriber pins its
+// whisper conventions with (_extensions/discord/src/audio.test.ts).
 
 const enoent: ExecFn = () => Promise.reject(Object.assign(new Error("spawn whisper-cli ENOENT"), { code: "ENOENT" }));
 
@@ -22,9 +22,8 @@ const rootWith = (model: boolean): string => {
 
 const noFetch = (): Promise<Blob | null> => Promise.reject(new Error("must not download"));
 
-// A model whose BYTES arrive under the test's control: the real download's shape, where the fetch resolves in
-// milliseconds and the stream then flows for minutes. A Blob that hands over all its bytes at once cannot show
-// what the browser sees during those minutes.
+// Model bytes arrive under the test's control, mirroring the real download: the fetch resolves quickly, then the stream
+// flows for minutes. A Blob handing over all its bytes at once can't show what the browser sees during that window.
 const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: () => void } => {
     let controller: ReadableStreamDefaultController<Uint8Array>;
     const stream = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) });
@@ -35,8 +34,8 @@ const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: 
     };
 };
 
-// What is on disk in the model's directory, by name: the staged download and the model itself are told apart
-// here exactly the way `stat` tells them apart in the engine.
+// What's on disk in the model's directory, by name: the staged download and the finished model are told apart the same
+// way `stat` does in the engine.
 const modelDir = (root: string): string => join(root, STATE_DIR, "local", "cache", "whisper");
 const bytesOnDisk = (root: string, name: string): number => {
     const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-large-v3-turbo.bin" : entry.endsWith(".part")));
@@ -47,7 +46,7 @@ test("whisperLanguage extracts the primary subtag and falls back to auto-detecti
     expect(whisperLanguage("en-US")).toBe("en");
     expect(whisperLanguage("pl")).toBe("pl");
     expect(whisperLanguage("zh-Hans-CN")).toBe("zh");
-    // Anything whisper-cli would choke on becomes an explicit `auto`, never an accidental English default.
+    // Anything whisper-cli would choke on becomes `auto`, never an accidental English default.
     expect(whisperLanguage(undefined)).toBe("auto");
     expect(whisperLanguage("")).toBe("auto");
     expect(whisperLanguage("x!")).toBe("auto");
@@ -72,11 +71,11 @@ test("a status poll on an absent model starts ONE download and reports ready onc
             return gate;
         },
     });
-    // Two polls while the download is in flight: the latch keeps it one download, not one per poll.
+    // The latch keeps concurrent polls to one download, not one per poll.
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     expect(fetches).toBe(1);
-    // Transcribing during the download is a race answered as "wait", not a request held open for minutes.
+    // Transcribing mid-download is answered as "wait," not held open for minutes.
     await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
     release(new Blob(["model bytes"]));
     await expect.poll(async () => (await speech.status()).model).toBe("ready");
@@ -93,9 +92,8 @@ test("a model still streaming in never reads ready: it takes its place only once
     });
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
 
-    // Bytes are landing. Grown in place, the model file would exist from the download's first moment and this
-    // poll would answer "ready": the browser would stop waiting, record, and meet a half-written model
-    // (whisper-cli: "failed to initialize whisper context"), which the composer can only word as "try again".
+    // Grown in place, the file would exist from the download's first byte and read as ready, letting the browser record
+    // against a half-written model it can only report as "try again".
     push(4096);
     await expect.poll(() => bytesOnDisk(root, "staged")).toBeGreaterThan(0);
     expect(bytesOnDisk(root, "model")).toBe(0);
@@ -104,7 +102,6 @@ test("a model still streaming in never reads ready: it takes its place only once
 
     finish();
     await expect.poll(async () => (await speech.status()).model).toBe("ready");
-    // Whole, in one move, with nothing staged left behind.
     expect(bytesOnDisk(root, "model")).toBe(4096);
     expect(bytesOnDisk(root, "staged")).toBe(0);
 });
@@ -121,19 +118,15 @@ test("a failed download does not poison later polls: the next status retries it"
         },
     });
     expect((await speech.status()).model).toBe("downloading");
-    // Wait out the failed attempt, then poll again: the latch must have cleared.
     await expect.poll(() => fetches).toBe(1);
     await expect.poll(async () => (await speech.status()).model, { timeout: 5000 }).toBe("ready");
     expect(fetches).toBe(2);
 });
 
 test("transcribe serializes whisper runs, passes the language explicitly, and answers silence as empty text", async () => {
-    /* Keyed by each utterance's OWN bytes rather than by the order whisper happens to be handed them. Both
-     * calls clear their pre-flight checks (an independent `stat` for the model each) before reaching the
-     * queue, so which one enters it first is the scheduler's business; on a loaded box that order flips.
-     * Order-keyed outputs turned that into a failure here, pointing at speech rather than at contention.
-     * Content-keyed ones also pin what order never could: that each caller gets ITS OWN utterance's text
-     * rather than merely whichever run finished in its place. */
+    // Outputs are keyed by each utterance's own bytes, not call order, since which of two ready calls enters the queue
+    // first is the scheduler's call and flips under load. This also pins that each caller gets its own utterance's
+    // text, not whichever run finished in its place.
     const outputs: Record<string, string> = { RIFF1: "first words", RIFF2: "[BLANK_AUDIO]" };
     const wavPaths: string[] = [];
     const wavBytes: string[] = [];
@@ -144,7 +137,7 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
             return { stdout: "usage: whisper-cli" };
         }
         expect(command).toBe("whisper-cli");
-        // whisper-cli defaults to -l en: the language must always be passed explicitly.
+        // whisper-cli defaults to `-l en`; the language must always be passed explicitly.
         expect(args).toContain("-l");
         expect(args[args.indexOf("-l") + 1]).toBe("pl");
         const wavPath = args[args.indexOf("-f") + 1];
@@ -162,9 +155,9 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
     };
     const speech = createSpeech({ workspaceRoot: rootWith(true), log: () => {}, exec, fetchModel: noFetch });
     const [first, second] = await Promise.all([speech.transcribe(Buffer.from("RIFF1"), "pl-PL"), speech.transcribe(Buffer.from("RIFF2"), "pl-PL")]);
-    expect(maxActive).toBe(1); // one whisper-cli at a time
+    expect(maxActive).toBe(1);
     expect(first).toBe("first words");
-    expect(second).toBe(""); // noise-only output is "nothing said", not an error
+    expect(second).toBe(""); // Noise-only output is "nothing said," not an error.
     expect(wavBytes.toSorted()).toEqual(["RIFF1", "RIFF2"]);
     expect(new Set(wavPaths.map(dirname)).size).toBe(2);
     expect(wavPaths.every((path) => !existsSync(dirname(path)))).toBe(true);

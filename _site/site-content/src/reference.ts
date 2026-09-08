@@ -1,42 +1,17 @@
 import { specShelves } from "@intentic/sandbox-openapi/groups";
 import { type Book, type BookPage, type BookSection, bookDestinations, bookHref, bookPages } from "./book";
 
-/* /api: every call a sandbox answers, for somebody writing a program against one.
- *
- * THE ONLY GENERATED BOOK ON THE SITE. /docs and /developers are trees somebody sat down and wrote; the
- * reference shelves below are BUILT from `@intentic/sandbox-openapi`, which is itself built from the wire
- * contract the daemon and its browser client both import. A route added to the contract is a page here on the
- * next build, described in the shapes it actually has, and there is no list anywhere that a reviewer has to
- * remember to update.
- *
- * WHY IT IS ITS OWN BOOK RATHER THAN A SHELF INSIDE /developers. The prose page at /developers/http said, and
- * was right to say, that it would not enumerate the routes because "the enumeration is what dates fastest".
- * That argument holds against a hand-written enumeration and collapses against a generated one, so the
- * enumeration now exists — but it is 269 calls across 39 groups, which is larger than the entire authoring
- * book it would have been filed inside. A shelf that outweighs its book is a book.
- *
- * The reader is different too, which is the site's own test for where a cut goes. /docs is for somebody using
- * intentic, /developers for somebody extending it, /api for somebody CALLING it: a script, a dashboard, another
- * agent. The middle reader writes a manifest; this one writes a request.
- *
- * FIVE HAND-WRITTEN PAGES OPEN IT, and they are the things no schema can state: where the sandbox is, which
- * credential a call carries, where input rides, what a failure looks like, and how a stream is read. Everything
- * after them is generated. The split is deliberate and visible in the rail: one shelf you read, seven you look
- * things up in.
- */
+// /api: every call a sandbox answers, for someone writing a program against one. Generated from
+// `@intentic/sandbox-openapi`, built from the wire contract: a route added there is a page here next build. Five
+// hand-written pages open it (location, credentials, request shape, failures, streams); the rest is generated.
 
 /** Today's shelves, resolved once: each carries its groups in the generator's own reading order. */
 const shelves = specShelves();
 
-/* The dates. A generated page has no authoring history to read one from, and `datePublished` is a real claim in
- * the structured data every page emits, so it cannot be omitted or invented per page. Both are the day this
- * book was published; the site takes `dateModified` from git, which for a generated page is the day its
- * generator last changed, and that is the honest answer. */
+// The day this book was published; dateModified comes from git, the day the generator itself last changed.
 const PUBLISHED = "2026-08-21";
 
-/* THE OPENING SHELF, and the one part of this book somebody writes by hand. Each of these answers a question a
- * reader has BEFORE any individual route makes sense, and none of them is answerable from a schema: a contract
- * knows a route's shape and knows nothing about where the sandbox lives or what a 409 means. */
+// The one hand-written shelf; each page answers something a schema can't (sandbox location, what a 409 means).
 const startHere: BookSection = {
     label: "Start here",
     icon: "flag",
@@ -94,10 +69,8 @@ const startHere: BookSection = {
                     blurb: "The long-lived feeds, and the frames each one sends",
                     meta: {
                         title: "Sandbox API streams · intentic",
-                        /* No count in this sentence, deliberately. The page itself counts the streaming routes
-                         * out of the contract, so a number written here would be a second answer to a question
-                         * that already has a generated one, and would be wrong the first time a route started
-                         * or stopped streaming. It was, within a day of being written. */
+                        // No route count here: the page counts them from the contract, so this text can't drift out of
+                        // sync.
                         description:
                             "Some routes answer a stream rather than a value: watching a turn, the sandbox event feed, the operations that take minutes. How to read one, frame by frame.",
                         datePublished: PUBLISHED,
@@ -108,8 +81,7 @@ const startHere: BookSection = {
     ],
 };
 
-// A search result cuts a description past 160 characters. The group's summary leads; the book's sentence
-// follows only where it fits. A summary that does not fit on its own is a content bug, so the build fails.
+// Search truncates past 160 chars; summary leads, the extra sentence appends only if it fits, else build fails.
 const DESCRIPTION_MAX = 160;
 const groupDescription = (group: { label: string; summary: string }): string => {
     const lead = `${group.summary.replace(/\.\s*$/u, "")}.`;
@@ -134,7 +106,7 @@ const groupPage = (group: { name: string; label: string; summary: string; descri
     },
 });
 
-// No shelf icons: the only thing that drew them was the bar menu this book used to be (see nav.ts).
+// No shelf icons here; nothing in this book's rail draws them.
 const referenceSections: BookSection[] = shelves.map(({ shelf, groups }) => ({
     label: shelf.label,
     // The shelf's first group: a nav row has to land on a real page, and a shelf heading is not one.
@@ -155,13 +127,8 @@ export function referenceHref(id: string): string {
     return bookHref(referenceBook, id);
 }
 
-/* THE ONE COLLISION THIS BOOK CAN HAVE, turned into a build failure rather than a silent shadowing.
- *
- * The five hand-written pages are real files under src/pages/api/; the 37 generated ones are one dynamic route.
- * Astro resolves a static file ahead of a dynamic one, so a contract group named `errors` or `streams` would
- * not 404 — it would quietly render the hand-written page in its place, and the group would vanish from the
- * site while remaining in the rail, the sitemap and the search index. That is precisely the failure a reader
- * cannot report, because from the outside it looks like a page that exists. */
+// A contract group whose name collides with a hand-written page id (Astro resolves static over dynamic) would silently
+// shadow it instead of 404ing. Caught here as a build failure.
 const handWritten = new Set(startHere.groups.flatMap((group) => group.items.map((page) => page.id)));
 const shadowed = shelves.flatMap(({ groups }) => groups.map((group) => group.name)).filter((name) => handWritten.has(name));
 if (shadowed.length > 0) {

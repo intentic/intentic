@@ -1,22 +1,13 @@
 // @vitest-environment jsdom
-//
-// Rendering, not parsing: figures.test.ts covers the fence vocabulary as data, and this file is the proof that a
-// document carrying those fences actually reaches the DOM as components, and, just as important, that a document
-// WITHOUT them still renders in the single-root shape every existing surface depends on.
-//
-// Mounted with plain Vue rather than @vue/test-utils, which this workspace does not depend on and which is not
-// worth adding for four assertions.
+// Rendering, not parsing: figures.test.ts covers the fence vocabulary as data; this file proves a document carrying
+// those fences reaches the DOM as components, and that a document without them still renders in the single-root shape
+// every surface depends on.
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
-/* Two jsdom gaps this file depends on, both filled for the whole package by vitest.setup.ts, which runs before
- * this file is loaded, where a beforeAll would run too late. Both are the environment's fault rather than the
- * code's, and left unstubbed they fail at import or mount time in a way that reads as a figure bug.
- *
- * `matchMedia`: the design-system barrel has import-time side effects (useDevice's `track` calls it while Picker's
- * module body evaluates), which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
- * component, so it pays the barrel's cost.
- * `ResizeObserver`: Vue Flow measures its container on mount, reached here through DagGraph. */
+// Two jsdom gaps this file depends on, both filled for the package by vitest.setup.ts before this file loads.
+// `matchMedia`: the design-system barrel has import-time side effects (useDevice, Picker). `ResizeObserver`: Vue Flow
+// measures its container on mount, reached through DagGraph.
 
 import { Markdown } from "@intentic/ui";
 
@@ -24,9 +15,8 @@ const render = (source: string): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
     const app = createApp({ render: () => h(Markdown, { source }) });
-    // The real app registers `v-tooltip` globally in installUi(); the kit's components (BarChart's truncated labels,
-    // DagGraph's node cards) assume it is there. Registered as a no-op rather than installing the whole design
-    // system, which would drag PrimeVue's theme in for a directive nothing here asserts on.
+    // The real app registers `v-tooltip` globally; registered here as a no-op instead of installing the whole design
+    // system, which would drag in PrimeVue's theme for a directive nothing here asserts on.
     app.directive(`tooltip`, {});
     app.mount(host);
     return host;
@@ -34,8 +24,8 @@ const render = (source: string): HTMLElement => {
 
 describe(`<Markdown> with figures`, () => {
     it(`renders a document with no figures as ONE element with no run wrappers`, () => {
-        // This is the safety property, not an optimisation: `.md-prose > :first-child` is a direct-child rule, so
-        // wrapping every chat bubble's prose in a run div would have shifted spacing across the whole app.
+        // This is a safety property, not an optimisation: `.md-prose > :first-child` is a direct-child rule, so
+        // wrapping plain prose in a run div would shift spacing across the whole app.
         const host = render(`## Title\n\nSome prose.`);
         const prose = host.querySelector(`.md-prose`);
         expect(prose).not.toBeNull();
@@ -68,22 +58,11 @@ describe(`<Markdown> with figures`, () => {
         expect(list?.textContent).toContain(`18 with tests`);
     });
 
-    /* A dag figure is asserted down to its FRAME and no further. Vue Flow refuses to lay out nodes in a container it
-     * measures as zero-sized ("The Vue Flow parent container needs a width and a height"), and jsdom reports zero for
-     * everything, so the node cards genuinely cannot render here, and asserting on them would be asserting on jsdom.
-     * What is checked is everything up to that boundary: the fence became a figure, it is captioned, and it mounted a
-     * graph with an explicit height. The node mapping itself is covered by typing plus figures.test.ts, and the
-     * rendering below it is DagGraph's, which the app already relies on elsewhere. */
-    // Awaited, unlike every other figure kind here: the dag is the one branch MarkdownFigure imports lazily, so
-    // it arrives a microtask after mount rather than with it (see DagFigure.vue for what that buys).
-    //
-    // The budget bounds a HANG; it does not measure that latency, which is a single SFC arriving off the module
-    // graph. `vi.waitFor` defaults to 1s: an idle machine's number, and the same one markdownMermaid.test.ts
-    // already had to raise for its own lazy import: a full run loads this package's 298 files while every other
-    // package's vitest runs beside it, and an import with every core busy costs roughly ten times its idle self.
-    // This assertion duly passed alone and lost the race in the suite. Kept under `testTimeout` (vitest.config.ts)
-    // so a genuine hang still fails on the assertion below, which names the selector that never arrived, rather
-    // than as a bare test timeout.
+    // A dag figure is asserted down to its frame and no further: Vue Flow refuses to lay out nodes in a container jsdom
+    // measures as zero-sized, so node cards genuinely cannot render here. What is checked: the fence became a figure,
+    // it is captioned, and it mounted a graph with an explicit height.
+    // Awaited, unlike other figure kinds: the dag is the one branch MarkdownFigure imports lazily, arriving a microtask
+    // after mount. The timeout bounds a hang; a busy CI runner can make the import itself take far longer than idle.
     it(`renders a dag figure as a captioned, explicitly sized graph frame`, async () => {
         const host = render(
             `\`\`\`dag\n{ "title": "The wire", "nodes": [{ "id": "web", "label": "Browser app", "note": "Vue" }, { "id": "daemon", "label": "Daemon" }], "edges": [{ "from": "web", "to": "daemon" }] }\n\`\`\``,

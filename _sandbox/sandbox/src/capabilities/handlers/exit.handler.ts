@@ -4,17 +4,9 @@ import { exitLink, startExit, stopExit } from "../../exit/exit-links.js";
 import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";
 import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 
-/* The `exit` capability: STORE a pool to come out of (which provider, a resting country, whether it comes up
- * on boot). Everything about starting, moving and rotating lives in the exit/ subsystem behind a per-provider
- * driver, the live surface is the /exit routes, and the handler's shape is the tunnel kind's
- * (tunnel/tunnel-handler.ts), so what is here is this kind's data.
- *
- * ONE FRAGMENT PER PROVIDER, not one for the kind, because the providers differ in the thing that costs the
- * user something. Tor needs a package and NOTHING ELSE: no tun device, no NET_ADMIN, no privilege disclosure
- * on the card, because it publishes a SOCKS port itself. VPN Gate and WireGuard build real tunnels and need
- * the shared tun privilege. Folding them into one fragment would charge every tor user a container privilege
- * they never use, which is exactly the kind of quiet over-ask a capability card exists to prevent.
- */
+// Stores a pool to come out of (provider, country, autostart); starting, rotating and moving live in exit/ behind a
+// per-provider driver. One fragment per provider, not per kind: tor needs no privilege (its own SOCKS port), but VPN
+// Gate/WireGuard need the shared tun privilege, folding them together would over-ask every tor user.
 
 const TOR_FRAGMENT = `# exit capability (tor): the Tor client. No runtime privileges accompany this on purpose — tor publishes its
 # own SOCKS port, so it needs no tun device and no NET_ADMIN, which makes a tor-only exit the cheapest and
@@ -88,14 +80,10 @@ browser whose address says Berlin and whose clock says New York is more conspicu
 export const exitHandler = tunnelHandler<ExitConfig>({
     kind: "exit",
     skill: { name: "geo", text: EXIT_SKILL },
-    // Only the bring-your-own arm carries a credential: the pasted confs hold private keys. tor and vpngate
-    // have no account at all, which is most of why they are here.
+    // Only wireguard carries a credential: a pasted conf holds a private key. tor/vpngate have no account at all.
     secret: (config) => ((config as ExitConfig).provider === "wireguard" ? "config" : undefined),
-    /* An explicit allowlist, never a spread of config, so the pasted WireGuard keys cannot reach the browser by
-     * being forgotten in a new field. Complete over the non-credential fields, which is the other half of that
-     * bargain: secret-fields.ts vaults the complement of this echo, so a field left out here is replaced in the
-     * manifest by the vault marker, and `country` is a two-letter code the marker does not satisfy, which would
-     * fail CapabilitySchema on the next read and take the whole entry out of the manifest. */
+    // An explicit allowlist, never a spread: a pasted key can't leak by being forgotten in a new field. The complement
+    // of this echo gets vaulted, so a left-out field like `country` fails CapabilitySchema instead.
     echo: (config) => {
         const exit = config as ExitConfig;
         return {
@@ -109,22 +97,18 @@ export const exitHandler = tunnelHandler<ExitConfig>({
         if (exit.provider === "tor") {
             return [TOR_FRAGMENT];
         }
-        // The tunnel-building providers, each with its own client plus the tun privilege shared byte-for-byte
-        // with the vpn kind (see net-privileges.ts).
+        // Tunnel-building providers: own client plus the tun privilege, shared byte-for-byte with the vpn kind.
         return [exit.provider === "vpngate" ? OPENVPN_FRAGMENT : WIREGUARD_FRAGMENT, TUN_PRIVILEGES_FRAGMENT];
     },
     driverOf: (config) => exitDrivers[config.provider],
     wanted: (config) => config.autoStart === "on",
-    // An exit's state is keyed by id (its state directory, its interface, its derived proxy port), and on a
-    // rename the proxy port MOVES with the name, which is the one consequence worth knowing: anything pointed
-    // at the old port has to be repointed.
+    // State keys off the id (state dir, interface, proxy port); a rename moves the port too, so anything pointed at the
+    // old one needs repointing.
     up: (entry) => startExit(entry, entry.config.country),
     down: stopExit,
     status: async (entry) => {
         const link = await exitLink(entry);
-        /* A country mismatch outranks the raw state, and this is the only place the grid can say so. An exit
-         * can be genuinely up and coming out of the wrong place, if it drifted after the start that verified
-         * it, and "active" would be a true statement about the tunnel and a misleading one about the sandbox. */
+        // A country mismatch outranks raw state: up but drifted to the wrong country since its verified start.
         if (link.state === "up" && link.country !== undefined && link.observedCountry !== undefined && link.observedCountry !== link.country) {
             return { state: "error", detail: `asked for ${link.country}, coming out of ${link.observedCountry}` };
         }

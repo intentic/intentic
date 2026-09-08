@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import { searchCameBackEmpty, searchNoticeHooks, walksTreeWithGrep } from "./agent-search.js";
 
-/* WHAT THESE TWO PREDICATES HAVE TO GET RIGHT is not the hit, it is the MISS. A notice that fires on a grep
- * filtering a log, or on an empty result that only looked empty because the search was redirected to a file,
- * teaches the agent that these sentences are noise, and the next one it needs goes unread with them. So the
- * silent cases carry as much weight here as the loud ones. */
+// These predicates are judged on the miss, not the hit: a notice firing on a filtering grep, or on an empty result that
+// was only redirected, teaches the agent to ignore the sentence.
 
 test("a recursive grep reading the filesystem is what earns the notice", () => {
     for (const command of [
@@ -29,9 +27,9 @@ test("a grep that is filtering, not walking, is left alone", () => {
         // no -r: reading one named file
         `grep -n "poster" src/listener.ts`,
         `grep -c "" /tmp/out.log`,
-        // the word appears, but as a search TERM rather than as the command
+        // the word appears, but as a search term rather than as the command
         `rg -n "grep -rn" docs`,
-        // the FLAG appears, but inside the pattern: this grep reads one named file and walks nothing
+        // the flag appears, but inside the pattern: this grep reads one named file and walks nothing
         `grep -n "foo -r bar" src/a.ts`,
         `grep -n 'usage: grep -R dir' README.md`,
     ]) {
@@ -64,9 +62,8 @@ const bashCall = (command: string, response: string) =>
 const contextOf = (result: unknown): string | undefined =>
     (result as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput?.additionalContext;
 
-/* ONCE PER TURN IS THE WHOLE ECONOMY OF THIS. 51.1% of corpus turns contain at least one repo-walking grep, a
- * median of 4 and a p90 of 15; capping at the first drops 8,236 firings to 1,275. A notice repeated fifteen
- * times in one turn is not fifteen times the steer, it is the reason the fifteenth goes unread. */
+// Once per turn is the whole economy here: a notice repeated many times in one turn is not amplified steering, it's the
+// reason later ones go unread.
 test("each notice is said once per turn, however many times it is earned", async () => {
     const { PostToolUse } = searchNoticeHooks(true);
     const fire = PostToolUse?.[0]?.hooks[0];
@@ -87,13 +84,12 @@ test("iq is named on an empty search only where its plugin is actually loaded", 
         throw new Error("expected a PostToolUse hook");
     }
     expect(contextOf(await on(call, undefined, { signal: new AbortController().signal }))).toContain("iq");
-    // The setting defaults off and carries a holdout arm; a notice that named iq anyway would jump the gate and
-    // put the tool in front of the control group that exists to run without it.
+    // Defaults off with a holdout arm; naming iq anyway would jump the gate ahead of the control group.
     expect(await off(call, undefined, { signal: new AbortController().signal })).toEqual({});
 });
 
-// The empty result is the ANSWER, and the notice has to say so rather than only offering the alternative:
-// an agent told "try iq" and nothing else rephrases the same dead pattern first.
+// The empty result is the answer itself, not just an offered alternative: telling an agent only "try iq" rephrases the
+// same dead pattern first.
 test("the empty-search notice keeps the negative signal, not just the escape hatch", async () => {
     const fire = searchNoticeHooks(true).PostToolUse?.[0]?.hooks[0];
     if (fire === undefined) {

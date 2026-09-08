@@ -4,37 +4,32 @@ import { plainText } from "@intentic/base/plain-text";
 import type { CiProject } from "./projects.js";
 import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
-/* The two vendors' pipeline APIs behind one client shape, keyed off the account a project mapped to
- * (projects.ts). Everything the CI surface does, the view's run list, rerun/cancel, the fix context's log
- * tails, and the webhook reconciler's hook CRUD, goes through here, so the vendor branch exists exactly once.
- * `fetch` is injectable for tests (the git-access GitAccessDeps precedent); failures throw with the vendor's
- * status + body tail and the caller decides what a failure means. */
+// Both vendors' pipeline APIs behind one client shape (CiClient), keyed off the account a project mapped to; the vendor
+// branch exists exactly once. `fetch` is injectable for tests; failures throw with the vendor's status and body tail.
 
 export type FetchFn = typeof fetch;
 
-// What the reconciler asks a vendor to deliver to: the daemon's public receiver + the per-sandbox secret
-// (github signs with it, gitlab echoes it as X-Gitlab-Token).
+// Delivery target: the daemon's public receiver plus the signing secret (github signs with it, gitlab echoes it as
+// X-Gitlab-Token).
 export interface HookSpec {
     readonly url: string;
     readonly secret: string;
 }
 
 export interface CiClient {
-    // Newest-first recent runs, normalized. `failedJobs` is NOT filled here, list calls are the hot path.
+    // Newest-first normalized runs; failedJobs is not filled here, list calls are the hot path.
     readonly listRuns: (project: CiProject, limit: number) => Promise<PipelineRun[]>;
     // Names of the run's failed jobs, the one-extra-call enrichment for failed runs.
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
     // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
-    // The failed jobs' log tails, concatenated and capped, the fix conversation's context. A runner prints for
-    // a terminal, so each log is reduced to plain text (plain-text.ts) before it is capped: the cap then buys
-    // failure rather than colour codes, and the prompt is readable to the human editing it.
+    // Failed jobs' log tails, concatenated and capped; each is reduced to plain text (plain-text.ts) first.
     readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
     readonly cancel: (project: CiProject, runId: number) => Promise<void>;
     // Idempotent: a hook already delivering to spec.url is left alone, otherwise one is created.
     readonly ensureHook: (project: CiProject, spec: HookSpec) => Promise<void>;
-    // Best-effort inverse, matched by delivery url (the KEY_TITLE-style fixed identity).
+    // Best-effort inverse; a hook is identified by its delivery url alone.
     readonly removeHook: (project: CiProject, url: string) => Promise<void>;
     readonly projectUrl: (project: CiProject) => string;
 }
@@ -56,22 +51,16 @@ const epoch = (iso: string | undefined | null): number => {
     return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-// Whether a run or job is over, which is the only case in which the span between two of its timestamps is a
-// DURATION. While it is still moving that span is elapsed-so-far, and while it is queued it is time spent
-// waiting for a runner: neither is what a reader takes "3m 12s" beside a pipeline to mean.
+// Whether a run/job is over; only then is the span between its timestamps a duration, not elapsed-so-far or queue wait.
 const isSettled = (status: PipelineStatus): boolean => !isPipelineInFlight(status);
 
 // ---- github: Actions workflow runs ----
 
-/* Actions' pre-run vocabulary, the words for "accepted, nothing is executing it": `queued` is the everyday one,
- * `waiting` is a job held for a deployment approval, and `requested`/`pending` are the moments before a job is
- * handed to a runner. Anything else non-terminal is `in_progress` or a word Actions has not shipped yet, and
- * reads as running: overstating a novel status as moving is the safer of the two mistakes, since it is the
- * reading this had for every status before queued existed. */
+// Pre-run states (accepted, not yet executing); an unrecognized non-terminal status reads as running.
 const GITHUB_QUEUED = new Set(["queued", "waiting", "requested", "pending"]);
 
-// A completed run's conclusion fans out into the three terminal buckets, with everything that means "did not
-// pass", failure, timed_out, startup_failure, action_required, reading as failed.
+// A completed run's conclusion maps to the three terminal buckets; anything meaning "did not pass" (failure, timed_out,
+// startup_failure, action_required) reads as failed.
 export const githubStatus = (status: string, conclusion: string | null | undefined): PipelineStatus => {
     if (status !== "completed") {
         return GITHUB_QUEUED.has(status) ? "queued" : "running";
@@ -101,15 +90,14 @@ export interface GithubRun {
     readonly created_at: string;
     readonly run_started_at?: string;
     readonly updated_at: string;
-    // Who set the run off. Present on both the runs list and the workflow_run webhook, so the view's avatar
-    // costs no extra call on either path. Actions' own UI credits this same actor.
+    // Who set the run off; present on the runs list and the webhook, so the avatar costs no extra call.
     readonly actor?: { readonly login?: string; readonly avatar_url?: string } | null;
     // push | pull_request | schedule | workflow_dispatch | …
     readonly event?: string;
 }
 
-// One workflow_run object → the normalized run, shared verbatim by the list call and the webhook receiver
-// (github's webhook carries the same object under `workflow_run`).
+// One workflow_run object -> the normalized run; shared by the list call and the webhook receiver (same object under
+// `workflow_run`).
 export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: GithubRun): PipelineRun => {
     const status = githubStatus(run.status, run.conclusion);
     const started = epoch(run.run_started_at ?? run.created_at);
@@ -135,23 +123,8 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
 const githubApi = (project: CiProject, path: string): string => `${project.account.apiBase}/repos/${project.project}${path}`;
 
 const githubClient = (fetchFn: FetchFn): CiClient => {
-    /* THE RUN'S OWN WORKFLOW FILE, at the commit it ran on, the only place the dependency graph exists (see
-     * workflowGraph.ts). Two hops, because the jobs endpoint knows neither which file it came from nor which
-     * revision of it: the run object carries `path` + `head_sha`, and contents serves that exact revision.
-     * Pinning to the sha matters more than it looks, reading HEAD instead would draw last week's run with
-     * this morning's graph, and be most wrong precisely when someone is looking at an old failure to see what
-     * changed.
-     *
-     * Undefined, never a throw, for every way this legitimately comes up empty: a token without `contents`
-     * (the CI scopes do not imply it), a private or since-deleted workflow, or a run started by a reusable
-     * workflow in another repository, whose `path` is `owner/repo/file@ref` and resolves nowhere here. The
-     * graph is an enrichment; failing to get it must never cost the caller the job list it came for.
-     *
-     * THE FILES IT CALLS COME TOO, when they live in this repository. A `uses: ./.github/workflows/release.yml`
-     * job reports one job per job of the called file, and without that file they can only be siblings; with it
-     * they are the chain they were written as. One extra request per called file, at the same sha, and a round
-     * per level of nesting, three requests on the workspace's own CI. A file that fails to fetch is simply not
-     * in the map, which is the same unfollowed call as one in another repository. */
+    // Resolves the run's workflow file at its exact sha, not HEAD, so an old run isn't drawn with the wrong graph.
+    // Undefined, never a throw, for any legitimate empty case; the graph is enrichment only.
     const fileAt = async (project: CiProject, path: string, ref: string): Promise<string | undefined> => {
         // `.raw` hands back the file itself; the default json media type would wrap it in base64.
         const file = await fetchFn(githubApi(project, `/contents/${path}?ref=${ref}`), {
@@ -218,10 +191,8 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
-        /* No `stage` is emitted: Actions has no stage concept. `needs` is, when the run's own workflow file can
-         * be read, see workflowGraph.ts for why the graph has to come from there, and note that the file is
-         * fetched ALONGSIDE the job list rather than after it, since only the name-matching needs both. When it
-         * cannot be read the jobs go out exactly as they always did and the view layers them off timestamps. */
+        // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
+        // fetched alongside the job list, not after; unreadable, jobs go out as before.
         allJobs: async (project, runId) => {
             const [listed, workflow] = await Promise.all([
                 json<{
@@ -260,11 +231,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 if (job.html_url !== null) {
                     result.webUrl = job.html_url;
                 }
-                /* A QUEUED JOB HAS NOT STARTED, whatever Actions says. Its `started_at` comes back set, to the
-                 * moment the RUN was queued rather than to anything this job did, so a job that has been waiting
-                 * an hour for an offline runner arrives looking like an hour of work in progress. Dropping it
-                 * here is what lets the view lay those jobs out as the trailing queued wave they are, and what
-                 * keeps a duration off a job that has done nothing. */
+                // started_at on a queued job is the run's queue time, not its own; drop it to avoid a false duration.
                 if (started > 0 && status !== "queued") {
                     result.startedAt = started;
                 }
@@ -285,8 +252,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 if (budget <= 0) {
                     break;
                 }
-                // The logs endpoint 302-redirects to a short-lived blob url; fetch follows it. A job whose log
-                // is already expired shouldn't sink the whole context, skip it and say so.
+                // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
                 const response = await fetchFn(githubApi(project, `/actions/jobs/${job.id}/logs`), { headers: githubHeaders(project.account.token) });
                 const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
                 const tail = text.slice(-budget);
@@ -330,10 +296,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
 
 // ---- gitlab: pipelines ----
 
-/* gitlab's single status string: the terminal states map straight across, and everything that has not been
- * picked up by a runner yet is queued. `manual` and `scheduled` belong there too, they are jobs waiting on a
- * person or a clock rather than on capacity, but "nothing is executing this" is the fact a reader needs and it
- * is the same fact. An unrecognized word reads as running, for the same reason it does on the github side. */
+// Pre-run states, including manual/scheduled (waiting on a person or clock); unrecognized reads as running.
 const GITLAB_QUEUED = new Set(["created", "waiting_for_resource", "preparing", "pending", "manual", "scheduled"]);
 
 export const gitlabStatus = (status: string): PipelineStatus => {
@@ -364,8 +327,8 @@ interface GitlabPipeline {
     readonly source?: string;
 }
 
-// A pipelines-list row names neither its commit nor its author, so listRuns joins both in. Everything here
-// rides on responses the vendor already hands us whole, see gitlabMeta below for where it comes from.
+// A pipelines-list row names neither its commit nor its author; listRuns joins both in from responses the vendor
+// already returns.
 export interface GitlabRunMeta {
     readonly title?: string;
     readonly authorName?: string;
@@ -373,15 +336,13 @@ export interface GitlabRunMeta {
     readonly trigger?: string;
 }
 
-// One pipelines-list row → the normalized run. The list carries no duration; a terminal pipeline's
-// created→updated span stands in, which measured within 7% of the vendor's own figure across a live sample,
-// the gap is queue time, so it isn't worth a per-run detail call. Webhook events carry the true one and
-// overwrite this in the cache. `meta` is the listRuns enrichment; absent still yields a valid run.
+// One pipelines-list row -> the normalized run; duration is the created-to-updated span (queue time included) until a
+// webhook overwrites it with the true one. `meta` is optional; absent still yields a valid run.
 export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline: GitlabPipeline, meta: GitlabRunMeta = {}): PipelineRun => {
     const status = gitlabStatus(pipeline.status);
     const created = epoch(pipeline.created_at);
     const updated = epoch(pipeline.updated_at);
-    // A named pipeline says more than a commit subject; fall back to the subject when it has no name.
+    // A named pipeline takes priority; fall back to the commit subject only when unnamed.
     const title = pipeline.name !== undefined && pipeline.name !== null && pipeline.name !== "" ? pipeline.name : meta.title;
     const trigger = pipeline.source ?? meta.trigger;
     return {
@@ -402,8 +363,8 @@ export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline
     };
 };
 
-// The Pipeline Hook payload's shape differs from the list row's (attributes nested, the true duration and
-// finished_at present, no web_url on older instances), its own normalizer, sharing the status mapping.
+// Pipeline Hook payload shape differs from the list row (attributes nested, true duration present, no web_url on older
+// instances); its own normalizer shares the status mapping.
 export interface GitlabPipelineHook {
     readonly object_attributes: {
         readonly id: number;
@@ -445,10 +406,7 @@ export const gitlabHookRun = (project: Pick<CiProject, "repo" | "project">, hook
 const gitlabApi = (project: CiProject, path: string): string => `${project.account.apiBase}/projects/${encodeURIComponent(project.project)}${path}`;
 const gitlabHeaders = (project: CiProject): Record<string, string> => ({ "PRIVATE-TOKEN": project.account.token });
 
-// The project-wide jobs feed is the cheap way to learn what a page of pipelines was about: every job carries
-// its pipeline's whole commit AND the user who triggered it. 100 jobs reached 28 distinct pipelines on a live
-// repo, every one of the 15 the view asks for. A job-dense repo will reach fewer, which is what the commits
-// fallback below is for.
+// Jobs scanned to backfill commit+author for a page of pipelines; a busy repo still needs the commits fallback.
 const GITLAB_JOB_SCAN = 100;
 // How far back the fallback commit join reaches when the jobs feed didn't cover everything.
 const GITLAB_COMMIT_SCAN = 100;
@@ -467,8 +425,7 @@ interface GitlabCommit {
 }
 
 const gitlabClient = (fetchFn: FetchFn): CiClient => {
-    // Enrichment never fails a listing: every catch here is a deliberate swallow, not a rethrow, a token
-    // scoped too narrowly to read jobs or commits still deserves its run list.
+    // Enrichment never fails the listing; every catch here is a deliberate swallow, not a rethrow.
     const metaFromJobs = async (project: CiProject): Promise<Map<number, GitlabRunMeta>> => {
         const byPipeline = new Map<number, GitlabRunMeta>();
         try {
@@ -482,8 +439,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 if (id === undefined || byPipeline.has(id)) {
                     continue;
                 }
-                // The triggering user, not the commit author, it's who both vendors' own UIs credit, and the
-                // one that arrives with a real avatar rather than an email to guess a gravatar from.
+                // Triggering user, not author: both UIs credit it, with a real avatar, not a gravatar guess.
                 const author = job.user?.name ?? job.user?.username;
                 byPipeline.set(id, {
                     ...(job.commit?.title !== undefined ? { title: job.commit.title } : {}),
@@ -498,9 +454,8 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
         return byPipeline;
     };
 
-    // Fallback for pipelines the jobs feed didn't reach. Cheaper data, a subject and an author name, no
-    // avatar, but one call, and only issued when something actually came back bare. `all` sweeps every ref,
-    // so a pipeline on a side branch resolves too.
+    // Fallback for pipelines the jobs feed missed; one call for subject+author, no avatar, issued only when something
+    // came back bare. `all` sweeps every ref, so a side-branch pipeline resolves too.
     const commitsBySha = async (project: CiProject): Promise<Map<string, GitlabCommit>> => {
         try {
             const commits = await json<GitlabCommit[]>(
@@ -534,9 +489,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 await fetchFn(gitlabApi(project, `/pipelines?per_page=${limit}`), { headers: gitlabHeaders(project) }),
                 "gitlab pipelines list",
             );
-            // A pipeline row names neither its commit nor its author, so the view would read "ref @ sha" for
-            // every run. One jobs call fills that in for the whole page; the commits call only follows if that
-            // left something bare. Both sit on the cache-miss backfill path rather than the poll.
+            // One jobs call fills in commit+author for the page; commits call follows only if something's still bare.
             const meta = await metaFromJobs(project);
             const bare = listed.filter((pipeline) => meta.get(pipeline.id)?.title === undefined);
             const commits = bare.length > 0 ? await commitsBySha(project) : new Map<string, GitlabCommit>();
@@ -553,8 +506,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             });
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
-        // `stage` is native here, so the view groups by it directly; the timestamps still ride along to order
-        // the stages by when they actually started.
+        // `stage` is native here; the view groups by it directly, timestamps only order stages by actual start.
         allJobs: async (project, runId) => {
             const listed = await json<
                 {

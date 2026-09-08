@@ -4,37 +4,18 @@ import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@int
 import { installLive } from "./drift.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-/* THE AUTO-DRAFTER: the daemon writing the overlay draft the model was told to write and, six cargo-xwin
- * reinstalls later, demonstrably never did.
- *
- * The draft pipeline downstream is untouched: a file lands in .intentic/config/environment.d/, the daemon folds
- * it into the one proposal the owner reviews, approval bakes it, a rebuild applies it. All this module decides
- * is WHEN a runtime install has earned a draft, and it demands three things at once:
- *
- *   RECURRENCE — a second distinct session installed it. One session is an experiment; two is a habit, and by
- *   the transcript record habits run to eight sessions before a person notices. The ledger survives container
- *   recreates, so "again, in a fresh container" is exactly what the count measures.
- *
- *   CORROBORATION — the live container actually has it (drift.ts). The ledger is command parsing and command
- *   parsing lies: an install inside `docker run` mutates a different filesystem, a failed install mutates
- *   nothing. What was never really installed here is never proposed.
- *
- *   A MECHANICAL TEMPLATE — only ecosystems whose Dockerfile step follows from the package name alone are
- *   drafted (apt, cargo, rustup targets, npm globals). A pip package is a routing decision (Debian package or
- *   venv), a curl|sh replay could embed anything its command line carried; those surface on the Environment
- *   card as recurring installs and wait for a person. Secrets never enter a draft by construction: templates
- *   take the TOOL NAME, never the recorded command — commands appear only in the comment, and the harness
- *   already masked any stored credential to its {{secret:…}} reference before the ledger saw them.
- *
- * A draft, once written, is FROZEN: synthesis skips existing files, so the proposal's hash does not chase the
- * recurrence count while the owner is reading it. Rejection tombstones the tool in the ledger (declinedAt) —
- * without that the next sweep would recreate the rejected draft, forever. An agent hand-writing a draft for a
- * declined tool remains free to: the tombstone gates only this module. */
+// Writes an overlay draft for a runtime install once it earns one; the pipeline downstream (environment.d/, review,
+// approval, rebuild) is untouched. A draft needs all three:
+// - recurrence: a second distinct session installed it, since one session alone might be an experiment.
+// - corroboration: the live container actually has it (drift.ts), since the ledger's own parsing can lie.
+// - a mechanical template: only ecosystems whose Dockerfile step follows from the package name alone (apt, cargo,
+//   rustup, npm); everything else waits for a person.
+// A written draft is frozen (synthesis skips existing files); rejection tombstones the tool so a sweep never recreates
+// it.
 
 export const AUTO_MARKER = "# intentic:auto";
 
-// A second distinct session is the earning line. The first install is free — it might be a one-off — and
-// waiting for a third would just re-run more of the waste this exists to end.
+// Second distinct session is the earning line; the first install alone might be a one-off.
 const MIN_SESSIONS = 2;
 
 interface WorkspaceFiles {
@@ -45,9 +26,8 @@ interface WorkspaceFiles {
     };
 }
 
-/* One Dockerfile step from a package name, per the overlay house rules (the environment skill's): apt carries
- * both cache mounts and keeps the lists, npm mounts its cache, cargo pins with --locked. Undefined = this kind
- * has no mechanical step and is surfaced instead of drafted. */
+// One Dockerfile step per package name; undefined means this kind has no mechanical step and is surfaced instead of
+// drafted.
 export const stepFor = (entry: Pick<RuntimeInstall, "tool" | "kind">): string | undefined => {
     switch (entry.kind) {
         case "apt":
@@ -63,15 +43,9 @@ export const stepFor = (entry: Pick<RuntimeInstall, "tool" | "kind">): string | 
             return `RUN rustup target add ${entry.tool}`;
         case "npm":
             return `RUN --mount=type=cache,target=/root/.npm \\\n    npm install -g ${entry.tool}`;
-        /* A PLAYWRIGHT BROWSER IS MECHANICAL, and leaving it out is what stranded `chromium-headless-shell` on
-         * the Environment card for a week: recorded in two sessions, present in the container, corroborated,
-         * and unfixable because nothing downstream could write its step. The gap is not incidental — the
-         * browser pack DELETES the headless shell (`rm -rf .../chromium_headless_shell-*`, browser.Dockerfile),
-         * because the daemon's own tools launch full headed Chromium, so a workspace whose e2e suite wants the
-         * shell reinstalls it every single container. That is precisely the loop the ledger exists to close.
-         *
-         * The ms-playwright cache is deliberately NOT mounted, for the reason the pack states: the browser is
-         * the payload, and a mounted cache is never committed to a layer. Only the npm side is cached. */
+        // Mechanical, since skipping it strands a real corroborated install: the browser pack deletes the headless
+        // shell, so a workspace needing it reinstalls every container. Its cache is not mounted; the download itself is
+        // the payload.
         case "playwright":
             return (
                 `# The browser cache is deliberately not mounted: the download IS the payload and has to land in\n` +
@@ -84,8 +58,8 @@ export const stepFor = (entry: Pick<RuntimeInstall, "tool" | "kind">): string | 
     }
 };
 
-// The tool as a filename: environment.d/<tool>.Dockerfile is also the convergence key two agents needing the
-// same tool meet on, so the mapping must be deterministic and boring.
+// Tool name as filename; environment.d/<tool>.Dockerfile is the key two agents needing the same tool converge on, so it
+// must be deterministic.
 export const draftFileName = (tool: string): string | undefined => {
     const name = tool
         .toLowerCase()
@@ -109,18 +83,17 @@ export const draftContent = (entry: RuntimeInstall, step: string): string => {
     );
 };
 
-// The same boundary class missingBinary uses: a tool name appearing INSIDE a longer word is not that tool.
-// Exported because readEnvironment applies the same test to keep already-baked tools off the recurring list.
+// Same word-boundary test missingBinary uses: a tool name inside a longer word does not count as a match. Exported so
+// readEnvironment can apply it too.
 export const named = (content: string, tool: string): boolean =>
     new RegExp(`(?:^|[^\\w.@+-])${tool.replace(/[.+]/g, "\\$&")}(?:[^\\w.@+-]|$)`).test(content);
 
 const draftsDirPath = (root: string): string => statePath(root, ".intentic/config/environment.d/");
 
-/* Write a draft for every ledger entry that has earned one. Returns the tools drafted this pass, for the
- * sweep's log line. Spawn-free given the drift snapshot — corroboration is stats against known paths — so the
- * sweep can run it right after the probe with nothing between them. */
+// Writes a draft for every ledger entry that has earned one; returns the tools drafted, for the sweep's log line.
+// Spawn-free (corroboration is just stat calls), so it can run right after the drift probe.
 export const synthesizeAutoDrafts = async (deps: WorkspaceFiles, ledger: RuntimeInstallsFile, drift: EnvironmentDrift): Promise<string[]> => {
-    // Already-baked and already-approved tools need no draft; both live in these two files by composition.
+    // Already-baked or already-approved tools need no draft; both live in these two files.
     const custom = (await deps.files.read(statePath(deps.workspace.root, ".intentic/config/environment.custom.Dockerfile"))) ?? "";
     const approved = (await deps.files.read(statePath(deps.workspace.root, ".intentic/local/environment.approved.Dockerfile"))) ?? "";
     const drafted: string[] = [];
@@ -134,8 +107,7 @@ export const synthesizeAutoDrafts = async (deps: WorkspaceFiles, ledger: Runtime
             continue;
         }
         const path = join(draftsDirPath(deps.workspace.root), file);
-        // An existing draft — this module's from an earlier pass, or an agent's own — is left exactly as it is:
-        // frozen content is what keeps the proposal hash stable under the owner's eyes.
+        // An existing draft, this module's or an agent's, is left untouched so the proposal hash stays stable.
         if ((await deps.files.read(path)) !== undefined) {
             continue;
         }
@@ -148,9 +120,8 @@ export const synthesizeAutoDrafts = async (deps: WorkspaceFiles, ledger: Runtime
     return drafted;
 };
 
-// The tools named by auto-written drafts currently on disk — what rejectEnvironment tombstones. Agent-written
-// drafts carry no marker and are deliberately not returned: rejecting those keeps today's meaning (the agent
-// may simply ask again); only the machine is told to stop repeating itself.
+// Tools named by auto-written drafts on disk, what rejectEnvironment tombstones; agent-written drafts carry no marker
+// and are excluded, so only the machine is told to stop repeating itself.
 export const autoDraftedTools = async (deps: WorkspaceFiles): Promise<string[]> => {
     const dir = draftsDirPath(deps.workspace.root);
     const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".Dockerfile"));

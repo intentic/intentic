@@ -5,10 +5,8 @@ import type { Services } from "../../composition.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";
 import { limitReopensAt } from "./limit-reset.js";
 
-/* ONE ANSWER FOR EVERY RUNTIME. The case that drove this is the native one: a Codex turn refused by a spent
- * ChatGPT plan whose reset was already on file, going out with no instant on the frame, so the chat offered a
- * five-second retry into a window hours from reopening. Every test here is about the frame being dressed the
- * same whichever loop ran the turn, and about the two places it is honest to answer nothing. */
+// Pins that the refusal frame's reopen time reads the same whichever runtime ran the turn, and the two cases where
+// answering nothing is the honest answer.
 
 const SECONDS = 1_700_000_000;
 
@@ -23,9 +21,7 @@ const services = (params: { readonly usage?: Record<string, UsageWindow[]>; read
     });
 
 test("a native Codex turn gets the translator's reset, which its own account key could never answer for", async () => {
-    /* THE BUG, in one case. A native routed turn names the subscription serving every turn of its provider
-     * ("codex-subscription"), not a connected account, so nothing is ever filed under that key and the
-     * per-account fallback returned undefined however fresh the quota reading was. */
+    // The account key names the shared subscription, not a connected account; the per-account fallback never finds it.
     const at = await limitReopensAt({
         services: services({ limit: { spent: 3, withHeadroom: 0, reopensAt: SECONDS + 7_200 } }),
         provider: `codex`,
@@ -48,8 +44,7 @@ test("a routed turn under the Claude Code harness, which names no account at all
 });
 
 test("a native Claude turn keeps reading its own account's snapshot", async () => {
-    // The path that already worked, pinned so unifying the others cannot quietly reroute it: Claude's windows are
-    // filed per connected account and the translator knows nothing about them.
+    // Pinned so unifying the others can't reroute this already-working path: Claude's windows are filed per account.
     const at = await limitReopensAt({
         services: services({ usage: { "acct-1": [{ kind: `seven_day`, utilization: 100, resetsAt: SECONDS + 3_600, gates: `all` }] } }),
         provider: `claude`,
@@ -75,8 +70,7 @@ test("the account's own snapshot wins over the pool when both can answer", async
 });
 
 test("says nothing for a provider that publishes no readable quota", async () => {
-    // Grok is deliberately absent from PLAN_LIMIT_PROVIDERS, so its pool reads empty and there is no instant to
-    // schedule against. The client keeps its retry ladder, which is the honest answer rather than a leftover.
+    // Grok is absent from PLAN_LIMIT_PROVIDERS, so its pool reads empty; the client just keeps its retry ladder.
     await expect(
         limitReopensAt({ services: services({ limit: { spent: 0, withHeadroom: 0 } }), provider: `grok`, model: `grok-4`, account: `xai` }),
     ).resolves.toBeUndefined();
@@ -88,8 +82,7 @@ test("says nothing for a runtime the translator does not serve", async () => {
 });
 
 test("withholds the reset while any account still has headroom", async () => {
-    // turnLimit's own rule, relied on here rather than re-derived: with room on file the quota is not what
-    // refused the turn, so naming a weekly reset would send the user away for days over a cooldown.
+    // turnLimit's rule: headroom on file means quota didn't refuse the turn, so a weekly reset would mislead.
     await expect(
         limitReopensAt({
             services: services({ limit: { spent: 30, withHeadroom: 1 } }),
@@ -101,8 +94,7 @@ test("withholds the reset while any account still has headroom", async () => {
 });
 
 test("a lookup that fails takes nothing with it", async () => {
-    // This dresses a frame describing a failure that already happened. Losing the refusal's own sentence to a
-    // broken management call would be strictly worse than losing the countdown.
+    // Losing the refusal's own message to a broken lookup would be worse than losing the countdown.
     await expect(
         limitReopensAt({
             services: services({

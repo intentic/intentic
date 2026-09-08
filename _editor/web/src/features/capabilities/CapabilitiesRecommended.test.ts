@@ -1,23 +1,14 @@
 // @vitest-environment jsdom
-//
-// WHAT THE WORKSPACE ASKS FOR, and the walk through it. Two claims are worth pinning here and neither is
-// cosmetic: that a recommendation arrives with the thing that was READ to make it (a claim nobody can check is
-// one nobody should act on), and that what the scan already knows is filled in: a wrong instance url is one of
-// the two ways connecting a repository host fails silently, and the scan has already answered it.
-//
-// WHERE the evidence has to be legible is the card, not the tile: the grid is a uniform strip of one-line tiles
-// where a recommendation is a glyph carrying its sentence, and opening the card, which is the step before
-// anything is connected: prints the claim and the artifact behind it verbatim, above the form.
+// Pins that a recommendation carries the evidence read to make it, and that scan-known answers (e.g. an instance
+// url) are pre-filled. The evidence is legible on the card, not the tile, since the grid stays one-line tiles.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { CapabilityRecommendation } from "@intentic/api-contract";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
-// module scope, environment.ts reads window.env and throws without it.
+// Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
-// Which card the page is on, and whether the setup walk is running: both read off the URL, so setting them
-// before mount is the whole of arranging a case. `` is the catalog itself.
+// Which card the page is on and whether the setup walk runs, both read off the URL; `` is the catalog itself.
 let card = ``;
 let setup: string | undefined;
 const push = vi.fn();
@@ -27,9 +18,8 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
-// The gitlab card is CONTRIBUTED, not static: the connectors manifest narrowed to what a card needs. Its
-// instance url is the field the scan can answer and the user should not have to.
-// The Extension card's signpost reads the registry cache for its two counts; nothing has browsed one here.
+// The gitlab card is contributed, not static, with its instance url as the field the scan can answer. The registry
+// cache backs the Extension card's counts; nothing here has browsed it.
 vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
@@ -82,8 +72,7 @@ vi.mock(`../terminal/useBackgroundProcesses`, () => ({
 vi.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
 }));
-/* The vpn card's rows are <VpnConnections>, which dials as well as lists, so this stub is the whole composable
- * rather than its list: `error` is read on every render, and a stub without it throws in the render function. */
+// VpnConnections dials as well as lists, so `error` must be present or the render throws.
 vi.mock(`../sandbox/devices/useVpn`, () => ({
     importForticlient: vi.fn(),
     useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
@@ -120,8 +109,8 @@ const mount = (): HTMLElement => {
                     h(`a`, slots["default"]?.()),
         }),
     );
-    // The real directive puts its sentence in a popover on hover; here it parks it on the element, which is how
-    // a test can ask what a glyph would say without driving a pointer.
+    // Real tooltip directive shows a popover on hover; this stub parks the text on the element so tests can read it
+    // without a pointer.
     app.directive(`tooltip`, { mounted: (node: HTMLElement, binding) => (node.dataset[`tooltip`] = String(binding.value)) });
     app.mount(el);
     return el;
@@ -137,14 +126,13 @@ it(`offers the whole set as one thing to do, and says what each one was read off
     const el = mount();
 
     expect(el.textContent).toContain(`2 capabilities your workspace asks for`);
-    // The badged tile still carries both: the claim and the artifact behind it, which is what makes it
-    // checkable: without spending the two lines that would make this tile taller than the ones beside it.
+    // Badged tile carries both the claim and its evidence, in the tooltip rather than two extra lines of tile height.
     const badge = el.querySelector(`[data-tooltip*="your repositories are hosted on your own GitLab"]`);
     expect(badge?.getAttribute(`data-tooltip`)).toContain(`api/.gitlab-ci.yml → git.acme.dev`);
 
     button(el, `Set them up`).click();
     await nextTick();
-    // Into the first card WITH the walk running, so the form knows it is a step and not a lone visit.
+    // Into the first card with the walk running, so the form knows it's a step, not a lone visit.
     expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { card: `gitlab` }, query: { setup: `recommended` } }));
 });
 
@@ -155,14 +143,14 @@ it(`fills in what the scan could read, and leaves the credential to the user`, a
     const el = mount();
     await nextTick();
 
-    // Open, above the form, before anything is connected: the claim and the file it was read from, in full.
+    // Claim and evidence file print in full above the form, before anything is connected.
     expect(el.textContent).toContain(`your repositories are hosted on your own GitLab`);
     expect(el.textContent).toContain(`api/.gitlab-ci.yml → git.acme.dev`);
 
     const inputs = [...el.querySelectorAll(`input`)];
-    // The instance the scan identified, not the card's gitlab.com default: the whole point of pre-filling.
+    // Pre-filled with the scan's instance, not the card's gitlab.com default.
     expect(inputs.some((input) => input.value === `https://git.acme.dev`)).toBe(true);
-    // The credential is the one thing this flow will not answer on the user's behalf.
+    // Credential is the one thing this flow won't fill in for the user.
     expect(inputs.filter((input) => input.type === `password`).every((input) => input.value === ``)).toBe(true);
     expect(el.textContent).toContain(`2 left`);
 });
@@ -178,6 +166,6 @@ it(`takes "not needed" as an answer and moves on rather than asking again`, asyn
 
     button(el, `Not needed`).click();
     await vi.waitFor(() => expect(dismiss).toHaveBeenCalledWith(`gitlab`));
-    // Straight on to the next in the queue, not back out to the grid the walk was started from.
+    // Moves straight to the next queued card, not back to the grid.
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { card: `docker` } })));
 });

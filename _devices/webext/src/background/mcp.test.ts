@@ -2,16 +2,9 @@ import { beforeEach, expect, test } from "vitest";
 import { handleMcpMessage } from "./mcp.js";
 import { store } from "./store.js";
 
-/* THE TOOL SURFACE, against a fake browser.
- *
- * What this is really testing is the checkpoint every page tool goes through: a call for a site nobody granted
- * must come back as a READABLE REFUSAL rather than an exception, must name the site, and must tell the agent
- * the one thing it can do about it. That path crosses four modules (mcp → tab-access → policy → audit) and is
- * the difference between an agent that says "ask them to allow github.com" and one that reports a broken
- * sandbox and retries.
- *
- * The fake is deliberately tiny and hand-written: it is a record of exactly which Chrome APIs the tools reach
- * for, so a tool that starts calling something new fails here until this file admits it. */
+// Tests the checkpoint every page tool goes through: a call for an unsanctioned site must come back as a readable
+// refusal naming the site and what to do about it, not an exception, crossing mcp → tab-access → policy → audit.
+// The fake is tiny and hand-written, so a tool reaching for a new Chrome API fails here until this file admits it.
 
 interface FakeTab {
     id: number;
@@ -120,9 +113,8 @@ test("a notification is not answered, and a malformed message does not throw", a
     expect(await handleMcpMessage("not a message", undefined)).toMatchObject({ error: { code: -32600 } });
 });
 
-/* Each switch on the card is enforced HERE, in the browser, and the refusal names the control to flip. The
- * screenshot one is worth its own test because it is the switch a page-permission check does not imply: the
- * tab was readable, and the pixels still are not. */
+// Each switch is enforced here, in the browser, naming the control to flip. Screenshot gets its own test since a
+// page-permission check doesn't imply it: the tab is readable but the pixels aren't.
 test("a switch that is off refuses by name, even on a site that is allowed", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });

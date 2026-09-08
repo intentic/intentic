@@ -1,31 +1,11 @@
-/* FOLLOWING AN IMPORTED NAME TO THE FILE THAT ACTUALLY DEFINES IT.
- *
- * This is the whole reason the bench measures anything real. A test that says
- *
- *     import { buildTurnPlan } from "@intentic/sandbox/agent";
- *
- * has not told you where `buildTurnPlan` lives. In a codebase with barrel files it has told you where the
- * FACADE lives, and the facade is a twelve-line re-export. Charge the agent for reading the facade and every
- * barrel in the repository looks free; charge it for the file that holds the definition and you are measuring
- * the thing an agent actually opens. The gap between those two answers is the difference between a metric that
- * rewards adding barrels and one that rewards putting code where it can be found.
- *
- * So: build the export table of every file once, then follow `export { x } from` and `export * from` edges
- * until a name lands on a real declaration. Deterministic, needs no type checker, and cheap enough to run over
- * the whole tree twice in a comparison.
- *
- * WHAT IT REFUSES TO GUESS. A name it cannot follow — resolved through a dependency, produced by a namespace
- * import, re-exported through a cycle — is returned UNRESOLVED and counted as such in the output. A resolver
- * that silently attributed those to the nearest plausible file would quietly move the headline number, which
- * is exactly the failure the Hermes campaign hit: its compat generator ranked candidate homes by path
- * proximity and pointed `kanban_db.connect` at a different database. Unresolved is a number to report, not a
- * hole to fill with a guess. */
+// Follows an imported name past barrel re-exports to the file that defines it, not the facade. Builds each file's
+// export table once, then follows `export { x } from` and `export * from` edges. A name it cannot follow is reported
+// unresolved, never guessed at.
 import { dirname, join, normalize } from "node:path";
 
 const EXTENSIONS = [".ts", ".mts", ".cts", ".tsx", ".vue", ".mjs", ".js"];
 
-/* Every workspace package's name → its directory, read from the package.json files git knows about. Built
- * once per run; a monorepo import is otherwise unresolvable without duplicating pnpm's algorithm. */
+// Workspace package name → directory, read from tracked package.json files; without it a monorepo import can't resolve.
 export const packageMap = (root, files, read) => {
     const map = new Map();
     for (const path of files) {
@@ -38,7 +18,7 @@ export const packageMap = (root, files, read) => {
                 map.set(parsed.name, dirname(path));
             }
         } catch {
-            // A package.json that does not parse is not a package this run can attribute anything to.
+            // An unparsable package.json is skipped, not attributed to a package.
         }
     }
     return map;
@@ -46,7 +26,7 @@ export const packageMap = (root, files, read) => {
 
 const candidates = (base) => {
     const out = [];
-    // `./foo.js` in TypeScript source means `./foo.ts` on disk: the ESM convention this repo writes in.
+    // `./foo.js` in source resolves to `./foo.ts` on disk, per this repo's ESM convention.
     const stripped = base.replace(/\.(m?)js$/u, "");
     for (const extension of EXTENSIONS) {
         out.push(stripped + extension);
@@ -58,8 +38,8 @@ const candidates = (base) => {
     return out;
 };
 
-/* One specifier, from one file, to a tracked path — or "" when it leaves the tree. Third-party imports
- * resolving to "" is correct and expected: `node:fs` is not a navigability cost this repository owns. */
+// Resolves one specifier from one file to a tracked path, or "" when it leaves the tree (expected for third-party
+// imports like `node:fs`).
 export const resolveSpecifier = (fromPath, specifier, known, packages) => {
     if (specifier.startsWith(".")) {
         const base = normalize(join(dirname(fromPath), specifier));
@@ -71,7 +51,7 @@ export const resolveSpecifier = (fromPath, specifier, known, packages) => {
         return "";
     }
 
-    // A workspace package, possibly with a subpath: `@intentic/sandbox/agent`.
+    // A workspace package, possibly with a subpath, e.g. `@intentic/sandbox/agent`.
     for (const [name, dir] of packages) {
         if (specifier !== name && !specifier.startsWith(`${name}/`)) {
             continue;
@@ -91,10 +71,8 @@ export const resolveSpecifier = (fromPath, specifier, known, packages) => {
     return "";
 };
 
-/* THE RESOLVER. `facts` is path → moduleFactsOf output; `defines` is path → Set of names declared there.
- *
- * Depth is bounded and a visited set breaks cycles, because barrel files re-exporting each other is common
- * and an unbounded follow would hang on it rather than reporting it. */
+// `facts` is path → moduleFactsOf output; `defines` is path → Set of names declared there. A depth cap and visited set
+// stop mutually re-exporting barrels from hanging the follow.
 export const makeResolver = ({ facts, defines, known, packages }) => {
     const memo = new Map();
 
@@ -128,8 +106,7 @@ export const makeResolver = ({ facts, defines, known, packages }) => {
             }
         }
 
-        // `export * from` — try each star target. Ambiguity is impossible in valid TypeScript (a duplicate
-        // name across two stars is an error), so the first hit is the answer.
+        // `export * from`: first star target to define the name wins; duplicates across stars are invalid TypeScript.
         for (const star of fileFacts.stars) {
             const next = resolveSpecifier(path, star, known, packages);
             if (next) {

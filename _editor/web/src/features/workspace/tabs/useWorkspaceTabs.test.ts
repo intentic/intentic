@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
-//
-// The strip is what the workspace comes back as. Until it was persisted, a reload kept only the URL's one
-// active file and dropped every other tab the session had opened, so this pins both halves: what a reload
-// restores, and what a diff (the one kind too big and too stale to store) does to the focus that named it.
+// Pins what a reload restores from persisted tab state, and what happens to focus when the tab that held it
+// (a diff) isn't stored.
 import { expect, it } from "vitest";
 import { nextTick } from "vue";
 
-// Both are read when the modules below load: the active sandbox keys the strip, and the strip is the state.
+// Read at module load: the active sandbox id keys the strip's storage key.
 const SANDBOX = `sb1`;
 const KEY = `intentic.workspaceTabs.${SANDBOX}`;
 localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
@@ -25,8 +23,7 @@ const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
 const { useEditBuffers } = await import("../files/useEditBuffers");
 const { documentTabId } = await import("../../../core-views/documentRegistry");
 
-// The git graph, as the strip identifies it: an extension's document tab about the /work root. Composed the way
-// the store composes it, so the tests pin the BEHAVIOUR rather than a spelling of the id.
+// Composed the same way the store composes it, so tests pin behaviour, not an id's exact spelling.
 const GIT_DOC = documentTabId(`git-history`, `log`, ``);
 
 const {
@@ -77,9 +74,6 @@ it(`persists an opened tab`, async () => {
     expect(stored().active).toBe(`README.md`);
 });
 
-// A diff carries both sides of the file as content and shows a comparison the agent has likely moved past by
-// the next load, so it is never stored, and the focus it held lands on its last surviving neighbour rather
-// than on a tab that won't be there.
 it(`leaves a diff out, and the focus it held with it`, async () => {
     openDiff(diffPayload(`src/main.ts`), `keep`);
     await nextTick();
@@ -97,8 +91,6 @@ it(`keeps a focus that was genuinely nothing`, async () => {
     expect(stored().active).toBeNull();
 });
 
-// The close family's undo: a mis-closed tab comes back WHERE it was, which is what separates "reopen" from
-// "open it again": a tab restored at the end of the strip would leave the user hunting for it.
 it(`reopens the last closed tab at the position it held, and focuses it`, () => {
     closeTabIds(new Set(tabs.value.filter((tab) => tab.kind === `diff`).map((tab) => tab.id)));
     selectTab(`src/main.ts`);
@@ -111,12 +103,10 @@ it(`reopens the last closed tab at the position it held, and focuses it`, () => 
 
     expect(tabs.value.map((tab) => tab.id)).toEqual(before);
     expect(activeId.value).toBe(`health:root`);
-    // The diff closed above is still on the stack, one entry below the graph tab just popped off it.
+    // The diff closed above is still on the stack, one entry below what reopenClosedTab just popped off it.
     expect(closedTabs.value).toHaveLength(1);
 });
 
-// One entry per CLOSE, so undoing a bulk close brings the whole strip back in order and in one press: the
-// action the user took is the unit they undo.
 it(`restores a whole bulk close in one press, in order and focused as it was`, () => {
     selectTab(`health:root`);
     closeTabIds(new Set(tabs.value.map((tab) => tab.id))); // Close All
@@ -140,9 +130,8 @@ it(`does nothing when nothing has been closed`, () => {
     expect(activeId.value).toBe(`README.md`);
 });
 
-/* The preview slot. Reading down the Changes list used to leave one pinned tab per file merely looked at, so a
- * row click now opens into a single slot that the next look takes over, and the gestures that mean "I want
- * this one" (a double-click on the tab or on the row) hand the tab over to the strip proper. */
+// Preview slot: a row click opens into one shared slot that the next look replaces; double-click (tab or row)
+// hands it to the strip proper.
 it(`replaces the previewed diff with the next one looked at, in its place`, () => {
     const kept = tabs.value.map((tab) => tab.id);
 
@@ -169,8 +158,6 @@ it(`hands the tab over on a double-click, and previews the next one beside it`, 
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`, promoted, activeId.value]);
 });
 
-// The other half of the same gesture: double-clicking the row re-opens the diff it is already previewing, and
-// that second open is the one asking to keep it: one tab, no slot.
 it(`releases the slot when the previewed row is re-opened to keep`, () => {
     openDiff(diffPayload(`src/c.ts`), `keep`);
 
@@ -185,8 +172,7 @@ it(`empties the slot when the preview tab is closed`, () => {
     expect(previewId.value).toBeNull();
 });
 
-/* The same slot, for the gesture it was really needed for: browsing FILES. A click in the explorer used to pin a
- * tab per file glanced at, so a folder read top to bottom left a strip nobody could find anything in. */
+// Same slot for browsing files: peeking one file takes over the slot from whichever file was peeked before.
 it(`gives a peeked file the slot, and the next peek takes its place`, () => {
     const kept = tabs.value.map((tab) => tab.id);
 
@@ -197,12 +183,11 @@ it(`gives a peeked file the slot, and the next peek takes its place`, () => {
 
     openFile(`src/peek-b.ts`, `preview`);
 
-    // In the outgoing preview's OWN position, so the slot stays put as the reader moves down the folder.
+    // Replaces at the outgoing preview's own position, so the slot doesn't move as peeks continue.
     expect(previewId.value).toBe(`src/peek-b.ts`);
     expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, `src/peek-b.ts`]);
 });
 
-// The double-click on the row, and the one on the tab: the second, deliberate open is the one asking to keep it.
 it(`keeps the peeked file when it is opened again to keep`, () => {
     openFile(`src/peek-b.ts`, `keep`);
 
@@ -210,8 +195,6 @@ it(`keeps the peeked file when it is opened again to keep`, () => {
     expect(tabs.value.filter((tab) => tab.id === `src/peek-b.ts`)).toHaveLength(1);
 });
 
-// A tab the user chose to keep is never demoted by a later look at it: a peek at a file already open would
-// otherwise hand its tab to the next peek and close the one they had deliberately pinned.
 it(`leaves an already-open tab where it stands when it is peeked at`, () => {
     openFile(`src/peek-c.ts`, `preview`);
     openFile(`src/peek-b.ts`, `preview`);
@@ -227,9 +210,7 @@ it(`stores the slot, so a session that ended mid-peek comes back mid-peek`, asyn
     expect(stored().preview).toBe(`src/peek-d.ts`);
 });
 
-/* A replaced preview gives up what a closed tab gives up. The editor seeds from the buffer before the file it
- * re-reads, so a peek left behind would come back as the text the file had the FIRST time: stale the moment an
- * agent touched it, and written back over the newer file on the next save. */
+// A stale buffer would seed the editor before the file re-reads, then overwrite it on save.
 it(`drops the replaced peek's text, so the file is re-read the next time it is opened`, () => {
     const { setBaseline, bufferOf } = useEditBuffers();
     openFile(`src/read-once.ts`, `preview`);
@@ -240,8 +221,7 @@ it(`drops the replaced peek's text, so the file is re-read the next time it is o
     expect(bufferOf(`src/read-once.ts`)).toBeUndefined();
 });
 
-// The third promotion gesture, beside the two double-clicks: typing into a preview keeps it, so the next peek
-// can never be what closes the user's own unsaved edit.
+// Third promotion gesture beside the two double-clicks: an edit must promote, or a peek could discard it.
 it(`keeps the previewed file the moment it is edited`, async () => {
     const { setBaseline, setBuffer } = useEditBuffers();
     openFile(`src/typed.ts`, `preview`);
@@ -252,8 +232,8 @@ it(`keeps the previewed file the moment it is edited`, async () => {
     expect(previewId.value).toBeNull();
 });
 
-/* THE SPLIT. Reading a commit is a list and a diff, and in one pane they take turns: every file clicked in the
- * git graph replaced the graph that named it. So a diff asked for by a DOCUMENT opens in the companion pane. */
+// Split: a diff opened from a document tab (e.g. git graph) goes to the companion pane, so the document stays on
+// screen instead of being replaced.
 const startFresh = (): void => {
     closeTabIds(new Set([...strip.value.main.tabs, ...strip.value.side.tabs].map((tab) => tab.id)));
     closedTabs.value = [];
@@ -273,8 +253,6 @@ it(`opens a document's diff beside it, leaving the document on screen`, () => {
     expect(splitOpen.value).toBe(true);
 });
 
-// The second file clicked arrives with the companion pane focused and a diff active, which is not a document,
-// so it lands where the first one did: one companion tab, replaced as the reader moves down the file list.
 it(`replaces the companion diff as the reader moves down the list`, () => {
     openDiff(diffPayload(`src/b.ts`), `preview`);
 
@@ -284,7 +262,6 @@ it(`replaces the companion diff as the reader moves down the list`, () => {
     expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([GIT_DOC]);
 });
 
-// Each pane owns a preview slot, so a peek in the companion cannot evict the document it was opened from.
 it(`peeks in the companion pane without touching the main pane's slot`, () => {
     expect(strip.value.side.preview).toBe(strip.value.side.active);
     expect(strip.value.main.preview).toBeNull();
@@ -298,7 +275,7 @@ it(`ends the split when the companion's last tab is closed, and hands the focus 
     expect(activeId.value).toBe(GIT_DOC);
 });
 
-// The explicit way in, for the pairings the store cannot guess: a README beside the code it describes.
+// Explicit split for pairings the store can't guess, e.g. a README beside the code it describes.
 it(`sends a tab to the side on request, and takes it back`, () => {
     startFresh();
     openFile(`src/left.ts`);
@@ -316,8 +293,7 @@ it(`sends a tab to the side on request, and takes it back`, () => {
     expect(splitOpen.value).toBe(false);
 });
 
-// A phone, or a workspace column with no room for two readable halves: the diff opens where the reader is,
-// exactly as it did before there were panes.
+// E.g. a phone, or a column too narrow for two readable halves.
 it(`opens a document's diff in place when a split is not allowed`, () => {
     startFresh();
     splitAllowed.value = false;
@@ -329,8 +305,7 @@ it(`opens a document's diff in place when a split is not allowed`, () => {
     expect(strip.value.main.tabs.map((tab) => tab.kind)).toEqual([`document`, `diff`]);
 });
 
-// The room for two panes goes away (the chat opens, the window narrows). The tabs are the reader's place, so
-// they fold back into one pane rather than being closed.
+// E.g. the chat opens, or the window narrows.
 it(`folds the companion pane back in when the room for two goes away`, () => {
     startFresh();
     openFile(`src/left.ts`);
@@ -344,8 +319,6 @@ it(`folds the companion pane back in when the room for two goes away`, () => {
     expect(activeId.value).toBe(`src/right.ts`);
 });
 
-// A split of real files survives a reload; a split holding only a diff does not, because no diff is stored, and
-// a restored empty column would be worse than the unsplit editor it comes back as.
 it(`stores the companion pane, and stores nothing when it holds only a diff`, async () => {
     startFresh();
     openFile(`src/left.ts`);

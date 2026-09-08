@@ -3,40 +3,27 @@ import type { Services } from "../../composition.js";
 import type { AdapterHealth } from "./adapter.js";
 import { allAdapters } from "./adapter-registry.js";
 
-/* CAN EACH RUNTIME SERVE A TURN, asked on a timer, answered from cache.
- *
- * The shape is platform/version-check.ts's, and for the same reason it gives: a probe reads a credential store
- * and may reach the translator, so putting it on a request path couples a hot route to whatever the network is
- * doing. The cache is read synchronously by /info; a cold cache answers "unknown", which every surface treats
- * as available-but-unverified rather than greying a provider out (see AdapterHealth.state).
- *
- * WHY IT IS WORTH HAVING AT ALL. Before this, a signed-out account or an absent subscription was discoverable
- * in exactly one way: write a prompt, pick a model, send, and read the failure. The refusal was always good,
- * planCodexTurn has said "Connect your ChatGPT subscription" for months, it just arrived after the user had
- * committed to a turn. The probes here ask the same question with nothing at stake, so the picker can say it
- * first. That is the whole feature; nothing here changes what a turn does. */
+// Whether each runtime can serve a turn, probed on a timer and answered from cache (platform/version-check.ts's shape),
+// so a slow probe never blocks a hot route. A cold cache reads as "unknown", treated as available-but-unverified
+// (AdapterHealth.state). Lets the picker warn about a signed-out account before a turn is sent, not after it fails.
 
 const REFRESH_MS = 5 * 60_000;
 
 export type RuntimeHealth = Readonly<Record<AgentCapabilities["runtime"], AdapterHealth>>;
 
-// Cold until the first sweep lands. Not seeded with "unknown" entries, an absent map and a map of unknowns
-// mean the same thing to every reader, and one of them cannot go stale.
+// Cold until the first sweep lands; not pre-seeded with "unknown" entries, since undefined and all-unknown already mean
+// the same thing to every reader.
 let cached: RuntimeHealth | undefined;
 
 export const runtimeHealth = (): RuntimeHealth | undefined => cached;
 
-/* One sweep across every adapter, concurrently, they touch different stores, and a slow account listing must
- * not delay the answer for the three runtimes that do not need it.
- *
- * Never throws. An adapter's own probe already answers "unknown" for a failure it can see; this guards the
- * ones it cannot (a probe that throws outright), because a background timer that can reject is a daemon that
- * logs an unhandled rejection every five minutes. */
+// Sweeps every adapter concurrently, since they touch different stores and a slow one must not delay the rest. Never
+// throws: guards against a probe that throws outright, not just one that already answers "unknown".
 const refreshRuntimeHealth = async (services: Services): Promise<void> => {
     const entries = await Promise.all(
         allAdapters().map(async (adapter) => {
-            // try/catch, not `.catch()`: an adapter that threw before returning a promise would have nothing to
-            // attach to and the throw would escape into this background timer, see adapter-registry's attempt.
+            // try/catch, not `.catch()`: a synchronous throw before the promise exists would have nothing to attach to
+            // and would escape into this timer.
             let health: AdapterHealth;
             try {
                 health = await adapter.health(services);
@@ -49,8 +36,8 @@ const refreshRuntimeHealth = async (services: Services): Promise<void> => {
     cached = Object.fromEntries(entries) as RuntimeHealth;
 };
 
-// Boot-time background sweep (main.ts): warm the cache now, then on an interval. Unref'd so it never holds the
-// event loop open, and started only at boot, tests that build the app directly never probe.
+// Boot-time sweep (main.ts): warms the cache immediately, then on an interval. Unref'd so it never holds the event loop
+// open; tests that build the app directly never call this.
 export const startRuntimeHealth = (services: Services): void => {
     const tick = (): void => {
         void refreshRuntimeHealth(services);

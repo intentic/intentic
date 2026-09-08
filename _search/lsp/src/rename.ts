@@ -5,14 +5,10 @@ import { findTsconfig } from "./checker.js";
 import { LspSession } from "./lsp-rpc.js";
 import { tsgoExePath } from "./tsgo.js";
 
-/* Project-wide rename, asked of the native compiler's language server, the same edit VS Code runs.
- *
- * The CLI names the symbol, not a position, so the position is recovered first: the server's own document
- * symbols give every declaration's name range, and the first one matching the requested name anchors the
- * rename. Symbols the outline does not carry (a parameter, a property in an object literal) fall back to a
- * lexical scan, every word-boundary occurrence of the name is offered to the server in order, and the first
- * position it agrees to rename from is the anchor. The server refusing every candidate is the honest failure:
- * nothing by that name can be renamed here. */
+// Project-wide rename via the native compiler's language server, the same edit VS Code runs.
+// The CLI names a symbol, not a position: the outline's first matching declaration anchors it, or else a lexical scan
+// offers word-boundary candidates in order.
+// The server refusing every candidate is the honest answer: nothing by that name can be renamed here.
 
 export interface RenameResult {
     readonly changedFiles: readonly string[];
@@ -20,7 +16,7 @@ export interface RenameResult {
 }
 
 const REQUEST_TIMEOUT_MS = 60_000;
-// A lexical scan of a name-dense file can offer many positions; past this many refusals the answer is clear.
+// Cap on lexical-scan candidates tried before giving up on a name-dense file.
 const MAX_CANDIDATES = 20;
 
 interface Position {
@@ -56,7 +52,7 @@ const LANGUAGE_IDS: Record<string, string> = {
     ".jsx": "javascriptreact",
 };
 
-// Positions in LSP are UTF-16 line/character pairs; JS strings are UTF-16, so both directions are plain counting.
+// LSP positions are UTF-16 line/character pairs; JS strings are UTF-16 too, so this is plain counting.
 const offsetOf = (text: string, position: Position): number => {
     let offset = 0;
     for (let line = 0; line < position.line; line += 1) {
@@ -79,11 +75,10 @@ const positionOf = (text: string, offset: number): Position => {
     return { line, character: offset - lineStart };
 };
 
-// Document order, declarations before their members, the anchor is the FIRST declaration by that name.
+// Document order, declarations before members; returns the first declaration matching `name`.
 const symbolPosition = (symbols: readonly DocumentSymbol[], name: string): Position | undefined => {
     for (const symbol of symbols) {
-        // The outline reports a property's name as declared; a quoted or computed one never string-matches, which
-        // is fine, the lexical fallback covers it.
+        // A quoted or computed property name won't string-match here; the lexical fallback covers it.
         if (symbol.name === name) {
             return symbol.selectionRange.start;
         }
@@ -95,8 +90,7 @@ const symbolPosition = (symbols: readonly DocumentSymbol[], name: string): Posit
     return undefined;
 };
 
-// Every word-boundary occurrence of the name, as positions, the candidates the server is asked to rename from
-// when the outline has no anchor to offer.
+// Word-boundary occurrences of `name`: candidates offered to the server when the outline has no anchor.
 const lexicalCandidates = (text: string, name: string): Position[] => {
     const positions: Position[] = [];
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -136,8 +130,8 @@ const applyToFile = (file: string, edits: readonly TextEdit[]): void => {
     writeFileSync(file, text);
 };
 
-// Rename every usage of the named symbol across its project and write each touched file. Throws when nothing
-// by that name can be renamed from this file.
+// Renames every usage of `symbol` across its project and writes each touched file.
+// Throws when nothing by that name can be renamed from `file`.
 export const rename = async (file: string, symbol: string, newName: string): Promise<RenameResult> => {
     const text = readFileSync(file, "utf8");
     const uri = pathToFileURL(file).href;

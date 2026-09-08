@@ -1,8 +1,5 @@
-// WHAT THE COLUMN LOOKED LIKE BEFORE: thirteen rows, six glyphs between them, eight of which were the same chain
-// link, so telling the Discord cheatsheet from the GitHub one meant reading the list rather than glancing down it.
-// What is pinned here is the two ways a mark ladder quietly stops earning that back: asking the skill's NAME for
-// something its owner already knows (a renamed connection then loses its brand), and honouring a slug that happens
-// to exist for an ordinary English word.
+// Marks must not be guessed from a skill's name: a renamed connection would lose its brand, and a slug that's
+// also an ordinary word (`linear`) must not borrow a logo it doesn't own.
 import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/api-contract";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
@@ -24,14 +21,13 @@ const skill = (name: string, origin: SkillOrigin, owner?: string): SkillSummary 
 const capability = (id: string, kind: string, config: Record<string, string> = {}): CapabilitySummary =>
     ({ id, kind, status: { state: `active` }, config }) as CapabilitySummary;
 
-// Only the halves the marks are read out of: the same partial-manifest fixture the extension facets test uses.
+// Only the manifest fields the marks read; matches the extension facets test's fixture.
 const extension = (name: string, manifest: Partial<ExtensionManifest>): ExtensionSummary =>
     ({ id: `intentic.${name}`, manifest: { publisher: `intentic`, name, version: `1.0.0`, ...manifest } }) as ExtensionSummary;
 
 const sources = (over: Partial<SkillSources> = {}): SkillSources => ({ capabilities: [], extensions: [], ...over });
 
-// The connectors extension's own cards, as they ship: a brand for Reddit, a glyph for the Windows PC (Microsoft's
-// mark is not in the icon set at all, which is exactly the case a name-keyed table cannot know about).
+// Real connectors cards: Reddit's brand, and a Windows PC glyph since Microsoft has no logo in the set.
 const connectors = extension(`connectors`, {
     contributes: {
         capabilities: [
@@ -42,8 +38,7 @@ const connectors = extension(`connectors`, {
 });
 
 it(`gives a connection the mark of the card it came from, whatever the owner named it`, () => {
-    // The instance is called `reddit-work` because its owner has two Reddit accounts. Nothing in that name is a
-    // brand, so this is the case the whole top tier exists for.
+    // Named `reddit-work`, not `reddit`; the mark must still come from the card, not the name.
     const visual = skillVisual(skill(`reddit-work`, `capability`, `reddit-work`), {
         capabilities: [capability(`reddit-work`, `browser`, { platform: `reddit` })],
         extensions: [connectors],
@@ -52,8 +47,7 @@ it(`gives a connection the mark of the card it came from, whatever the owner nam
 });
 
 it(`takes the card's glyph where the card itself has no brand to lend`, () => {
-    // A Windows PC named after the machine. Its card says `desktop`, which is a device, where the origin's
-    // fallback would have said "connection", i.e. what every other row on the list also says.
+    // Card says `desktop` (a device); the capability-origin fallback would otherwise say "connection".
     const visual = skillVisual(skill(`radarsu-omen`, `capability`, `radarsu-omen`), {
         capabilities: [capability(`radarsu-omen`, `host`, { platform: `windows` })],
         extensions: [connectors],
@@ -62,14 +56,13 @@ it(`takes the card's glyph where the card itself has no brand to lend`, () => {
 });
 
 it(`answers for a kind whose cards the platform ships itself`, () => {
-    // SSH has no contribution behind it and no discriminator: one static card, one glyph, and a skill from a
-    // remote machine should wear it rather than the generic link.
+    // SSH has one static card and glyph; a remote-machine skill should wear it, not the generic link icon.
     expect(skillVisual(skill(`ssh`, `capability`, `ops-box`), sources({ capabilities: [capability(`ops-box`, `ssh`)] })).icon).toBe(`server`);
 });
 
 it(`draws an extension's skills as the extension itself is drawn`, () => {
     const installed = [extension(`discord`, { logo: `discord` }), extension(`documentation`, { icon: `question-circle` })];
-    // Two extensions, two marks, where the origin glyph gave both of them the same slider.
+    // Origin glyph alone would give both the same icon; each must draw its own extension's mark.
     expect(skillVisual(skill(`discord`, `extension`, `discord`), sources({ extensions: installed })).logo).toBe(`discord`);
     expect(skillVisual(skill(`documenting`, `extension`, `documentation`), sources({ extensions: installed })).icon).toBe(`question-circle`);
 });
@@ -83,15 +76,13 @@ it(`falls back to the name when there is no owner to ask`, () => {
 });
 
 it(`never lends an ordinary word somebody's brand`, () => {
-    // `linear` IS a slug: the issue tracker, so honouring it would put a project-management logo on a maths
-    // skill and read as a fact. The glyph tier reads as "no brand for this one", which claims nothing.
+    // `linear` is also a real slug (the tracker); honoring it would put that brand on a maths skill.
     expect(skillVisual(skill(`linear-algebra`, `own`), sources()).logo).toBeUndefined();
 });
 
 it(`lands on the origin's own glyph only when nothing else recognises anything`, () => {
-    // A file somebody dropped in the folder, named after nothing. This is the one row whose origin is genuinely
-    // all there is to say about it.
+    // Named after nothing; origin is genuinely all there is to say about this row.
     expect(skillVisual(skill(`scratch`, `dropped`), sources())).toEqual({ icon: `file` });
-    // And a connection whose lists have not arrived yet: late, not absent, so it must not render as a hole.
+    // Sources not yet arrived; must render as the generic link icon, not a hole.
     expect(skillVisual(skill(`vendor-tool`, `capability`, `vendor-tool`), sources())).toEqual({ icon: `link` });
 });

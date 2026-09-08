@@ -1,20 +1,11 @@
 // @vitest-environment jsdom
-//
-// THE ONE SCREEN THAT MUST NEVER BE A DEAD END. This gate opens whenever the sandbox needs a Google
-// credential, and inside the desktop app it used to render Google's own button, which appears, is clickable,
-// and does nothing at all: Google refuses OAuth from an embedded webview and Identity Services is FedCM-based,
-// which that webview does not implement. A person who had just installed the app sat on this card clicking a
-// button that could never work, with only "Back to setup" as a way out.
-//
-// The login screen has always answered this by handing sign-in to the real browser; this gate had not. These
-// hold both halves: the app window gets the hand-off, an ordinary browser keeps Google's own button, and
-// neither one is ever offered the other's.
+// The desktop app's embedded webview can't complete Google sign-in (no FedCM support), so it hands off to the real
+// browser instead of rendering Google's own button; an ordinary browser keeps that button.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
-// environment.ts reads window.env and throws without it.
+// Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -82,7 +73,6 @@ it(`never renders Google's own button inside the desktop app`, async () => {
 
     await mount();
 
-    // It renders there and does nothing when clicked, which is indistinguishable from a broken app.
     expect(renderButton).not.toHaveBeenCalled();
 });
 

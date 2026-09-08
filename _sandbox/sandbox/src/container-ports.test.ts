@@ -4,20 +4,12 @@ import { packageRoot } from "@intentic/constants/node";
 import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
 import { expect, test } from "vitest";
 
-/* NO TWO FIXED BINDS IN THIS CONTAINER MAY SHARE A PORT, and the Dockerfile does not get to pick one.
- *
- * The translator's port lived here as a bare literal inside `ENV TRANSLATOR_URL=http://127.0.0.1:8788`. It was
- * the only fixed bind in the container not declared in @intentic/constants, so when the loopback listener was
- * added and took the number one above the daemon's, nothing compared them: 8788 twice, in two files, in two
- * languages. The daemon boots first and wins the bind, so cli-proxy-api died on arrival on every sandbox:
- * exit 0, its reason on stdout, restarted forever, and every routed (Codex/Grok/Kimi/Gemini) turn had no
- * translator to reach. Both halves of that are checked below: the values are distinct, and the image's baked
- * ports are the declared ones rather than literals free to drift back into each other.
- */
+// No two fixed in-container binds may share a port; declared ports (@intentic/constants) must be the single source, not
+// a literal in the Dockerfile.
 
 const DOCKERFILE = join(packageRoot(import.meta.url), "Dockerfile");
 
-// Keyed by the name so a failure says WHICH pair collided, not just that two numbers matched.
+// Keyed by name so a failure says which pair collided, not just that two numbers matched.
 const FIXED_PORTS = { DAEMON_PORT, PREVIEW_PORT, LOCAL_PORT, TRANSLATOR_PORT };
 
 test("every fixed in-container port is distinct", () => {
@@ -33,15 +25,12 @@ test("the image bakes the declared ports, not its own literals", async () => {
 
     expect(dockerfile).toContain(`SANDBOX_PORT=${DAEMON_PORT}`);
     expect(dockerfile).toContain(`TRANSLATOR_URL=http://127.0.0.1:${TRANSLATOR_PORT}`);
-    // The tunnel connector dials the daemon over the container network; the loopback listener is published to
-    // the host by the run contract (@intentic/sandbox-run), not by EXPOSE.
+    // Only the daemon needs EXPOSE; the loopback listener is published to the host by the run contract, not EXPOSE.
     expect(dockerfile).toMatch(new RegExp(`^EXPOSE .*\\b${DAEMON_PORT}\\b`, "m"));
 });
 
-// The discovery half: a FIFTH fixed bind, added to the image the way the translator's was, fails here without
-// anyone remembering this test exists. Both forms the image states a port in: an `ENV *_PORT=` assignment and
-// a loopback URL, must resolve to something declared. sshd's 22 is not matched by either: it is EXPOSEd and
-// bound by the entrypoint, never named as a daemon-family port.
+// Catches a fifth fixed bind added like the translator's was: an ENV *_PORT= assignment or a loopback URL must resolve
+// to a declared port. sshd's 22 matches neither form.
 test("no port literal in the image is undeclared", async () => {
     const dockerfile = await readFile(DOCKERFILE, "utf8");
     const declared = new Set(Object.values(FIXED_PORTS));

@@ -3,9 +3,8 @@ import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
 
-// The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only.
-// Living under historyRoot keeps it outside the agent's /work mount, so the agent can't read or rewrite its
-// own trail, the same placement rationale as workspace history.
+// The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only, kept outside the
+// agent's /work mount so the agent can't read or rewrite its own trail.
 
 // Prune to the newest KEEP_LINES once the file passes MAX_BYTES.
 const MAX_BYTES = 5_000_000;
@@ -20,8 +19,7 @@ export interface ActivityStore {
 
 export const fileActivityStore = (path: string): ActivityStore => {
     let queue: Promise<unknown> = Promise.resolve();
-    // Strictly monotonic `at`: Date.now() is ms-resolution, and equal stamps break
-    // newest-first ordering and the exclusive `before` cursor.
+    // Strictly monotonic `at`; equal ms-resolution stamps would break newest-first order and the `before` cursor.
     let lastAt = 0;
     const read = async (): Promise<ActivityEvent[]> => {
         let raw: string;
@@ -53,11 +51,11 @@ export const fileActivityStore = (path: string): ActivityStore => {
                 if ((await stat(path)).size <= MAX_BYTES) {
                     return;
                 }
-                // ponytail: whole-file prune on the write path, fine at a 5MB cap.
+                // Whole-file prune on the write path; fine at a 5MB cap.
                 const lines = (await readFile(path, "utf8")).split("\n").filter((line) => line !== "");
                 await writeFile(path, `${lines.slice(-KEEP_LINES).join("\n")}\n`);
             });
-            // A failed step surfaces to ITS caller; the chain itself never poisons later appends.
+            // A failed step surfaces to its caller; the chain itself never poisons later appends.
             queue = step.catch(() => undefined);
             return step;
         },

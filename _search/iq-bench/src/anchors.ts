@@ -2,19 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Anchor, QueryCase } from "./schema.js";
 
-/* A `def`/`sym` case names a symbol, so its ground truth is wherever the tree declares that symbol, a fact the
- * checkout already carries, and therefore one the dataset must not repeat. Repeating it made every such anchor
- * decay with the file: the intentic corpus IS this monorepo, and three of its seven def/sym anchors had already
- * slid off their recorded line (one of them clean out of its tolerance window). A stale anchor scores zero for
- * every config at once, which reads as a hard case rather than as a broken label, the failure is silent where
- * it matters most. Resolving instead reproduced all twelve hand-picked lines in the SHA-pinned repos exactly,
- * so nothing is lost by deriving what was previously typed in.
- *
- * Where the answer to a `q`/`find`/`refs` case is written stays a judgement call and stays in the dataset.
- */
+// A def/sym case's ground truth is wherever the checkout declares that symbol, derived rather than hand-typed: a
+// hard-coded line decays as the file changes and then fails silently, scoring zero everywhere rather than flagging a
+// broken label. q/find/refs answers stay hand-written in the dataset.
 
-// One declaration, in either language the corpora use. Anchored at the line start so a call, an import or a
-// mention inside a comment cannot pass for the definition.
+// One declaration, in either corpus language. Anchored at line start so a call, import or comment mention cannot pass
+// for the definition.
 const declarationOf = (symbol: string): RegExp =>
     new RegExp(
         String.raw`^\s*(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(?:const|let|var|function|class|interface|type|enum|def)\s+${symbol}\b`,
@@ -44,8 +37,7 @@ export const anchorsOf = (queryCase: QueryCase, root: string): readonly Anchor[]
     return queryCase.expected.map((anchor) => ({
         ...anchor,
         line: resolveDeclaration(root, anchor.file, queryCase.query),
-        // The declaration line is exact, so the window only has to absorb iq pointing at a decorator or a
-        // leading doc line rather than at the signature itself.
+        // Declaration line is exact; the window only absorbs iq landing on a decorator or leading doc line instead.
         tolerance: RESOLVED_TOLERANCE,
     }));
 };

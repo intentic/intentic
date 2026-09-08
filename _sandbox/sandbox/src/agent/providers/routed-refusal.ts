@@ -1,49 +1,26 @@
-/* WHY THE TRANSLATOR SAID NO, in the one case the harness cannot tell from an outage.
- *
- * A routed turn is the Claude Code loop pointed at the local CLIProxyAPI, which maps the request onto the
- * connected subscription. When the subscription does not cover the model, the upstream refuses with an
- * authentication error and the proxy files that credential as unusable FOR THAT MODEL; every later request is
- * answered `503 auth_unavailable` in about five milliseconds, forever.
- *
- * The harness sees a 5xx and does the right thing for the wrong situation: it rides it out. With the retry
- * watchdog on (harness-credentials.ts) that is eight attempts of backoff, roughly two minutes, and every one of
- * them is a five-millisecond refusal, so the entire wait is sleep. Then the daemon files it as a provider
- * outage and schedules a resume — for a turn that cannot come back. Measured on this sandbox: a Kimi K2.7
- * HighSpeed turn sat for fifty seconds before the user gave up, having produced no frame at all.
- *
- * The classification the SDK hands us throws away the only part that matters. `api_retry` carries a coarse
- * `error` word (`server_error`) and a status; the BODY, which names the plan and the model, never reaches it.
- * So this module goes and asks: one request to the same endpoint, whose answer for a refused model is instant
- * and free, and whose sentence is the vendor's own.
- *
- * ONE PROBE PER TURN, and only once the harness has already reported a retry: on a healthy endpoint this code
- * never runs, and when it does the request it makes is the cheapest one the wire allows. */
+// Distinguishes an auth refusal (a subscription that excludes the model, which the proxy then answers instantly and
+// forever) from a real outage; the harness sees both as a bare 5xx and retries either way. Reads the response body as
+// text, since the SDK's own classification discards it, and probes the endpoint for the vendor's actual sentence.
 
-// The refusal shapes that will not clear, from CLIProxyAPI's own vocabulary and the upstreams' underneath it.
-// A 5xx is otherwise exactly what it looks like — the provider having a bad minute — and must keep riding the
-// retry ladder, so this list is deliberately short and every entry names a fact about the CREDENTIAL or the
-// MODEL rather than about the moment.
+// Markers for refusals that won't clear on retry; each names the credential or model, not the moment.
 const TERMINAL_REFUSALS = [
-    // The proxy has no credential left that will serve this model: it disabled the one it had after the
-    // upstream refused it. The sentence that follows carries the upstream's own words.
+    // The proxy disabled the only credential that could serve this model; the upstream's words follow.
     "auth_unavailable",
     "no auth available",
-    // The upstream's refusal itself, seen on the first call before the proxy files the credential away.
+    // The upstream's own refusal, seen on the first call before the proxy files the credential away.
     "authentication_error",
     "authentication_failed",
-    // The plan does not include it, in the wording the vendors actually use.
+    // The plan doesn't include this model, in the vendors' own wording.
     "does not have access",
     "not have access to",
     "upgrade to higher-tier",
-    // The route exists and the model behind it does not, which no retry fixes either.
+    // The route exists but the model behind it doesn't; no retry fixes that.
     "unknown provider for model",
     "model_not_found",
 ] as const;
 
-/* The sentence to put in front of the user, or undefined when the body describes something a retry might still
- * outlast. Reads the body as TEXT rather than as a shape: it crosses two systems (the proxy wraps the
- * upstream's own error into its own envelope, and the envelope has changed shape across releases), and the one
- * thing every version keeps is the vendor's sentence inside it. */
+// The sentence to show the user, or undefined if a retry might still outlast this. Reads the body as text, not a fixed
+// shape, since the wrapping around the vendor's sentence changes across releases.
 export const routedRefusal = (body: string): string | undefined => {
     const haystack = body.toLowerCase();
     if (!TERMINAL_REFUSALS.some((marker) => haystack.includes(marker))) {
@@ -52,20 +29,11 @@ export const routedRefusal = (body: string): string | undefined => {
     return upstreamSentence(body) ?? body.trim().slice(0, REFUSAL_CHARS);
 };
 
-// How much of an unparseable body is worth quoting: enough for the vendor's sentence and its upgrade line,
-// short enough that a wall of JSON never becomes the error a user reads.
+// Long enough for the vendor's sentence, short enough that a JSON wall never becomes the shown error.
 const REFUSAL_CHARS = 400;
 
-/* The vendor's own sentence, dug out of whatever the proxy wrapped it in. Both layers use the same envelope
- * (`{"type":"error","error":{"message":…}}`), and the inner message is where the readable half lives:
- *
- *   auth_unavailable: no auth available (providers=kimi, model=kimi-k2.7-code-highspeed; last upstream error:
- *   authentication_error: Your current subscription does not have access to kimi-for-coding-highspeed.
- *   Upgrade to higher-tier Kimi Code plans.)
- *
- * What a person needs is the tail, from the upstream's own error onwards; the head is the proxy explaining its
- * bookkeeping. So the message is taken whole when it carries no upstream clause, and from the clause when it
- * does. Undefined when there is no JSON to read, and the caller quotes the body instead. */
+// Extracts the vendor's own sentence from the proxy's error envelope: the tail after 'last upstream error' when
+// present, else the whole message. Undefined when there's no JSON to read.
 const upstreamSentence = (body: string): string | undefined => {
     let message: string | undefined;
     try {
@@ -88,10 +56,8 @@ export interface RoutedEndpoint {
     readonly model: string;
 }
 
-/* A turn's routed endpoint, or undefined for one that has none. The three fields are set together by
- * harness-credentials (a routed provider is reached through a translator that maps model → upstream, so it has
- * no account default to fall back on), and this is where that "together" is enforced rather than re-asserted at
- * each reader: absent is exactly a native Claude turn, which has nothing to ask. */
+// A turn's routed endpoint, or undefined for a native Claude turn, which has nothing to ask. The three fields are set
+// together by harness-credentials.
 export const routedEndpointOf = (credentials: {
     readonly baseUrl?: string;
     readonly authToken?: string;
@@ -101,21 +67,14 @@ export const routedEndpointOf = (credentials: {
         ? undefined
         : { baseUrl: credentials.baseUrl, authToken: credentials.authToken, model: credentials.model };
 
-/* ASK THE ENDPOINT WHAT IT ACTUALLY SAYS. The smallest legal Messages request there is: one token of output,
- * one word of input, no tools and no system prompt, so a healthy endpoint answers in a second for a fraction
- * of a cent and a refusing one answers instantly for nothing.
- *
- * Non-throwing and undefined-on-doubt, on both counts deliberately: this runs inside a turn that is already
- * failing, and its only power is to END that turn sooner. A network error here, a timeout, a body it cannot
- * read — every one of them means "carry on as before", which is the behaviour that existed before this
- * function did. */
+// Smallest legal Messages request: one token out, one word in, no tools. Never throws; any failure to read an answer
+// just means carry on as before, since ending the turn sooner is this function's only power.
 export const probeRoutedEndpoint = async (
     endpoint: RoutedEndpoint,
     options: { readonly fetchFn?: typeof fetch; readonly signal?: AbortSignal; readonly timeoutMs?: number } = {},
 ): Promise<string | undefined> => {
     const fetchFn = options.fetchFn ?? fetch;
-    // Short, because the answer this is looking for comes back in milliseconds and anything slow enough to
-    // reach this deadline is by definition not the instant refusal it is hunting for.
+    // Short: the instant refusal this hunts for arrives in milliseconds; anything slower isn't it.
     const timeout = AbortSignal.timeout(options.timeoutMs ?? 10_000);
     const signal = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
     try {

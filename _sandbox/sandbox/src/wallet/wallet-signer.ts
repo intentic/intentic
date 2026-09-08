@@ -25,8 +25,7 @@ export const relayWalletEnsure = (config: Config, network: string): Promise<Rela
 export interface SignRequest {
     readonly network: string;
     readonly asset: string;
-    // The EIP-712 domain the token verifies against, off the challenge, relayed so the platform signs what
-    // the merchant's facilitator will actually check.
+    // The EIP-712 domain off the challenge, relayed so the platform signs what the facilitator will check.
     readonly domainName: string;
     readonly domainVersion: string;
     readonly authorization: TransferAuthorization;
@@ -35,7 +34,7 @@ export interface SignRequest {
     readonly host: string;
 }
 
-// POST /wallet/sign, one EIP-712 signature over one EIP-3009 transferWithAuthorization. Answers
-// {signature} or the platform's refusal (over a cap, unknown wallet, network mismatch), relayed verbatim.
+// POST /wallet/sign: one EIP-712 signature over one EIP-3009 transferWithAuthorization; answers `{signature}` or the
+// platform's refusal, relayed verbatim.
 export const relayWalletSign = (config: Config, request: SignRequest): Promise<RelayedAnswer> =>
     relayPlatform(config, "POST", "/wallet/sign", JSON.stringify(request));

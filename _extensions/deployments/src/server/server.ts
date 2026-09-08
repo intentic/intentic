@@ -11,28 +11,19 @@ import { repoLinks } from "./komodo-repos.js";
 import { fileKomodoStore, komodoStorePath } from "./komodo-store.js";
 import { plainText } from "@intentic/base/plain-text";
 
-/* The Deployments rail view's whole backend, over one connected `komodo` capability, ext-deployments' server
- * half, moved out of the daemon core. The credential still never reaches a browser: the backend reads it
- * through the daemon's connection route (declared in permissions.daemon, refused to any signed-in caller) and
- * dials Komodo from inside the sandbox, so the view's calls carry no key in either direction.
- *
- * The two halves behave differently on failure, on purpose:
- *   • `overview` DEGRADES. A Komodo that does not answer resolves with `reachable: false` and an empty board,
- *     because "we cannot see production" is a state to render, not an error that blanks the view. The rail
- *     reads that as a `warning`, never a `danger`.
- *   • the ACTIONS propagate. A refused deploy is an upstream answer the operator needs verbatim, so it becomes
- *     a BAD_GATEWAY carrying Komodo's own words. */
+// Deployments backend for one connected komodo capability. The credential never reaches the browser: the backend reads
+// it through the daemon's connection route and dials Komodo from inside the sandbox. The two halves fail differently,
+// on purpose:
+// overview degrades: an unreachable Komodo resolves `reachable: false`, rendered as a state, not an error
+// actions propagate: a refused action becomes a BAD_GATEWAY carrying Komodo's own words
 
-// How many log lines seed the view's inline tail. Komodo caps at 5000; 200 is enough to see a crash without
-// making the response something the browser has to scroll through to find the error.
+// Inline log tail length; Komodo caps at 5000, 200 is enough to see a crash without a huge response.
 const LOG_TAIL = 200;
-// How much of that tail rides into a fix conversation. The CI fix budget, for the same reason: enough to see
-// the actual error, small enough that the turn stays about fixing rather than reading.
+// Log tail bytes sent into a fix conversation: enough to see the error, small enough to stay about fixing.
 const FIX_LOG_BYTES = 24_000;
 const TITLE_MAX = 80;
 
-// The scheduler's mintConversationId recipe, for a conversation a CLICK opens: bounded, charset-safe, unique
-// per process.
+// Mirrors the scheduler's conversation id recipe: bounded, charset-safe, unique per process.
 let fixSeq = 0;
 const mintFixConversationId = (name: string, now: number): string =>
     `deploy-fix-${name.replaceAll(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)}-${now.toString(36)}${(fixSeq++).toString(36)}`;
@@ -45,10 +36,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     }
 };
 
-/* Which Komodo operation each action means, per resource kind. Stacks and deployments have parallel but
- * differently-named operations and differently-named params, which is exactly the kind of detail that should
- * exist once. `pull` is the only composite: pull the newest image, THEN deploy it, the routine version bump
- * that is four clicks in Komodo's own UI, as one. */
+// Komodo operation per action and kind; `pull` is the only composite, pull then deploy in order.
 const OPERATIONS = {
     deployment: {
         deploy: ["Deploy"],
@@ -70,9 +58,8 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
     const i = implement(komodoContract);
     const store = fileKomodoStore(komodoStorePath(api.workspaceRoot));
 
-    /* The daemon's connection read, resolved per call so a rotated key applies on the next click. The kind and
-     * provider are re-checked here: the route hands back whatever capability the id names, and dialling a
-     * non-Komodo capability's config at a Komodo would send somebody's OTHER credential to the wrong host. */
+    // Resolved per call so a rotated key applies immediately. Kind and provider are re-checked here, since the route
+    // hands back whatever capability the id names, and a non-Komodo one holds someone else's credential.
     const connect = async (capability: string): Promise<KomodoConnection> => {
         const connection = await api.daemon
             .json<{ kind: string; config: Record<string, string | undefined> }>(`/capabilities/${encodeURIComponent(capability)}/connection`)
@@ -84,9 +71,8 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         return { capability, baseUrl: url.replace(/\/+$/, ""), apiKey, apiSecret };
     };
 
-    // Re-resolve the resource per call rather than trusting the id a card was rendered with: a stale card must
-    // not act on something that has since been deleted or renamed. Also gives every action and the fix prompt
-    // the resource's live name and state without a second fetch.
+    // Re-resolves per call rather than trusting the id a card rendered with, so a stale card can't act on something
+    // deleted or renamed. Also hands every action and the fix prompt the resource's live name and state for free.
     const resolve = async (capability: string, kind: "deployment" | "stack", id: string): Promise<[KomodoConnection, DeployResource]> => {
         const connection = await connect(capability);
         const client = komodoClient(connection, fetchFn);
@@ -107,17 +93,14 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
             const client = komodoClient(connection, fetchFn);
             const seenAt = await store.seenAt(input.capability);
             const seen = seenAt === undefined ? {} : { seenAt };
-            // The repo half does not depend on Komodo answering. A workspace with a compose file and nothing
-            // linked yet is exactly the state where the owner most needs to see what this view is for, so it
-            // is computed outside the try and survives an unreachable Komodo (with no suggestions, since
-            // there are no stack names to suggest from).
+            // Computed outside the try, so it survives an unreachable Komodo (with no suggestions, since there are no
+            // stack names to draw from): a repo with nothing linked yet is exactly when the owner needs to see this
+            // section most.
             const scan = { root: api.workspaceRoot, read: readFileOrUndefined };
             const links = await store.links(input.capability);
             const repoDirs = await discoverRepoDirs(api.workspaceRoot);
             try {
-                // One fan-out. All five are independent reads, so a serial version would make the view five
-                // round-trips slower for nothing; Promise.all means one slow call bounds the response rather
-                // than summing with the others.
+                // One fan-out: five independent reads in parallel, so one slow call bounds the response, not the sum.
                 const [viewer, deployments, stacks, servers, alerts] = await Promise.all([
                     client.whoami(),
                     client.listDeployments(),
@@ -144,8 +127,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                     ...seen,
                 };
             } catch (error) {
-                // Degrade, don't throw: an unreachable Komodo is the single most important thing this view can
-                // say, and it can only say it by rendering.
+                // Degrades, doesn't throw: an unreachable Komodo can only say so by still rendering the view.
                 const reason = errorMessage(error);
                 api.log(`overview unreachable for "${input.capability}": ${reason}`);
                 return {
@@ -164,8 +146,8 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
             await store.link(input.capability, input.repo, input.stack);
             return { ok: true as const };
         }),
-        // The backend's clock, not the browser's: a device with a fast clock would otherwise stamp itself past
-        // breakages that have not happened yet and silence them before they arrive.
+        // Backend's clock, not the browser's, or a fast client clock could stamp itself past breakages that haven't
+        // happened yet.
         seen: i.seen.handler(async ({ input }) => {
             const at = Date.now();
             await store.markSeen(input.capability, at);
@@ -174,9 +156,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         action: i.action.handler(async ({ input }) => {
             const [connection, resource] = await resolve(input.capability, input.kind, input.id);
             const client = komodoClient(connection, fetchFn);
-            // `pull` is two operations and they must run in order, a parallel pull+deploy would race the
-            // image it is meant to be deploying.
-            // Komodo addresses a deployment by `deployment` and a stack by `stack`, each accepting id or name.
+            // `pull`'s two operations run in order to avoid racing the image; the param key is `deployment` or `stack`.
             for (const operation of OPERATIONS[input.kind][input.action]) {
                 await upstream(client.execute(operation, { [input.kind]: resource.name }));
             }
@@ -188,13 +168,12 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
         }),
         fix: i.fix.handler(async ({ input }) => {
             const [connection, resource] = await resolve(input.capability, input.kind, input.id);
-            // Best-effort: a resource whose logs cannot be read is often exactly the broken one, and the turn
-            // is still worth starting with the state and the name.
+            // Best-effort: the broken resource is often the one whose logs can't be read; still worth starting the
+            // turn.
             const log = await komodoClient(connection, fetchFn)
                 .logs(input.kind, resource.name, LOG_TAIL)
                 .catch(() => ({ stdout: "", stderr: "" }));
-            // A container's log is written for a terminal (an app's colour, a progress line rewriting itself), so
-            // it is reduced to plain text before the cap, the budget then buys failure, not escape codes.
+            // Reduced to plain text before the cap, so the byte budget buys failure detail, not terminal escape codes.
             const tail = plainText(`${log.stdout}\n${log.stderr}`).trim().slice(-FIX_LOG_BYTES);
             const where = resource.server === undefined ? "" : ` on ${resource.server}`;
             const prompt = [
@@ -204,12 +183,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                 ...(tail !== "" ? [`--- container log tail ---\n${tail}`] : []),
             ].join("\n\n");
             const conversationId = mintFixConversationId(resource.name, Date.now());
-            /* POST /agent, the same detached-run boundary the core route used to reach in-process, now as the
-             * declared daemon call it always morally was. Registering on the run map is what gives the fix an
-             * ordinary fleet card the UI can navigate to; `unattended` lets the sandbox's agent-run list answer
-             * for a click nobody chose a model for, unless they did, using the caret beside the button, in
-             * which case the pair and the tier it was picked at ride on here and the daemon's fill step leaves
-             * them alone. */
+            // Detached run with a fleet card; `unattended` defers to the default list unless a pick overrides it.
             await api.daemon
                 .json(`/agent`, {
                     method: "POST",

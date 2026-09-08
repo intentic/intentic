@@ -1,47 +1,30 @@
 #!/usr/bin/env node
-/* THE REPOSITORY'S OWN RULES ABOUT ITS WORKFLOWS, the ones no external linter encodes. actionlint says a
- * workflow is valid and zizmor says it is safe (lint-workflows.sh); what stays here is policy about THIS fleet
- * and THIS release, read by shape rather than listed, so a job added tomorrow is held to it for free.
- *
- * 1. THE FORK BOUNDARY. This repository is public and CI runs on runners that are not ephemeral, share one
- *    /ci-cache with `release`, and mount the host docker socket. A pull request from a fork therefore had a path
- *    to host root and, through a poisoned cache entry, into a published artifact. The boundary is that the fleet
- *    builds only branches pushed to this repository, and it takes BOTH this guard and the repo's
- *    approval-for-all-outside-contributors setting (docs/ci-runner.md). The safe set is grown to a fixpoint from
- *    the jobs that guard themselves: a skipped dependency skips its dependents, and `always()`/`!cancelled()`
- *    are the two ways to opt out of that, so a job using either has to read a safe parent's result or output.
- *
- * 2. A CALLED WORKFLOW STAYS INSIDE ITS CALLER'S CEILING. A reusable workflow can never hold more than the
- *    calling job grants, and Actions decides that BEFORE the run starts: a job in the callee naming a
- *    permission the caller's list omits is an invalid-workflow error, a `startup_failure` with no job, no log,
- *    and a message that names neither file.
- *
- * 3. A JOB THAT PUBLISHES WITH PROVENANCE RUNS ON A GITHUB-HOSTED RUNNER. npm builds the attestation's builder
- *    id out of the runner's own environment and its registry accepts only "github-hosted". From the fleet every
- *    publish packs the tarball, signs the bundle, writes it to the public transparency log, and THEN 422s.
- *    The flag is found by following the job's steps into the repository scripts they run.
- *
- * 4. NO WORKFLOW WAITS ON A TAG PUSH IT CAN NEVER SEE. semantic-release pushes this repository's `v*` tags with
- *    the built-in GITHUB_TOKEN, and GitHub starts NO workflow from an event that token created. `on: push: tags`
- *    here is a trigger that cannot fire, and a workflow behind it is dead code that reads exactly like a
- *    pipeline with nothing to do. WHEN TO DELETE THIS RULE: if the release ever pushes its tag with a GitHub App
- *    installation token or a PAT, the loop guard stops applying and `on: push: tags` becomes the simpler correct
- *    answer. Delete rule 4 together with that change. */
+// Repository-specific workflow policy no external linter encodes (actionlint checks validity, zizmor checks safety);
+// read by shape, not a list, so a new job is held to it for free.
+// 1. the fork boundary: self-hosted, non-ephemeral runners share a cache and the host docker socket, so a job reachable
+//    from a fork's pull request must gate on `head.repo.full_name == github.repository` (or a safe parent) — see
+//    docs/ci-runner.md
+// 2. a called reusable workflow can never hold a permission its caller doesn't grant; Actions fails this before any job
+//    starts
+// 3. a job publishing with npm provenance must run on a GitHub-hosted runner, since npm's registry accepts only that
+//    builder id
+// 4. no workflow triggers on `push: tags`, since semantic-release pushes tags with GITHUB_TOKEN and GitHub starts
+//    nothing from that token's events; dispatch it instead (delete this rule if the release ever tags with a different
+//    token)
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { root } from "./lib/repo.mjs";
 import { jobsOf, permissionsOf, stepsOf, workflowFiles, workflowText } from "./lib/workflows.mjs";
 
-/* ---- 1. the fork boundary ------------------------------------------------------------------------------ */
+// The fork boundary.
 const GUARD = "head.repo.full_name == github.repository";
 const PUSH_ONLY = "github.event_name == 'push'";
 
 const exposed = [];
 for (const file of workflowFiles()) {
     const text = workflowText(file);
-    // Only a workflow a fork can trigger at all. A `workflow_call` target runs under its caller's guard, and a
-    // schedule or a dispatch carries no fork's code.
+    // Only workflows a fork can trigger; `workflow_call`/schedule/dispatch carry no fork's code.
     if (!/^ {2}pull_request:\s*$/m.test(text)) {
         continue;
     }
@@ -70,7 +53,7 @@ for (const file of workflowFiles()) {
     }
 }
 
-/* ---- 2. the permission ceiling ------------------------------------------------------------------------- */
+// The permission ceiling.
 const RANK = { none: 0, read: 1, write: 2 };
 
 // The scopes a called workflow asks for beyond what its caller hands it, as [scope, asked, held].
@@ -109,7 +92,7 @@ for (const file of workflowFiles()) {
     }
 }
 
-/* ---- 3. provenance on the fleet ------------------------------------------------------------------------ */
+// Provenance on the fleet.
 const PROVENANCE = /npm publish[^\n]*--provenance/;
 
 const unattestable = [];
@@ -121,9 +104,8 @@ for (const file of workflowFiles()) {
             continue;
         }
         const block = steps.get(job.name) ?? "";
-        // A step rarely spells the publish itself: it names a script, and the script spells the flag. One hop
-        // into the shell scripts is enough for every publish path in this repository. Shell only: every publish
-        // here is a `.sh`, and following the `.mjs` a job runs would make this file match itself.
+        // A step rarely spells the publish itself; it names a script, and the script spells the flag. Shell only, since
+        // every publish here is a `.sh`.
         const scripts = [...block.matchAll(/_tools\/scripts\/[\w.-]+\.sh/g)].map(([path]) => path);
         const spelled = [block, ...scripts.filter((path) => existsSync(join(root, path))).map((path) => readFileSync(join(root, path), "utf8"))];
         if (spelled.some((where) => PROVENANCE.test(where))) {
@@ -136,7 +118,7 @@ for (const file of workflowFiles()) {
     }
 }
 
-/* ---- 4. the tag push that never arrives ---------------------------------------------------------------- */
+// The tag push that never arrives.
 const tagTriggered = [];
 for (const file of workflowFiles()) {
     const lines = workflowText(file).split("\n");
@@ -144,8 +126,7 @@ for (const file of workflowFiles()) {
     if (on === -1) {
         continue;
     }
-    // From `on:` to the next line that starts a top-level key. A blank line is inside the block; anything
-    // unindented ends it, comments at column 0 included: those sit between blocks here, never within one.
+    // From `on:` to the next unindented line; a column-0 comment sits between blocks, never inside one.
     let inPush = false;
     for (let i = on + 1; i < lines.length && !/^\S/.test(lines[i]); i++) {
         if (/^ {2}\S/.test(lines[i])) {

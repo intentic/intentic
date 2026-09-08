@@ -23,35 +23,12 @@ import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
 
-/* The sandbox hub: one home for everything about the active sandbox, reached from the rail's sandbox chip. The
- * selected section lives in the URL (/sandbox/<tab>) so a reload or a shared link reopens it; <HubLayout> owns
- * that resolution, the index column and the redirect, and this file owns only what is true of THIS hub, which
- * sections exist, how they group, and what renders in the body. Only the active section mounts (v-if chain),
- * which correctly drives each one's side-effecting lifecycles (desktop-sync start/stop, the agent's account
- * surface); the underlying composables are module singletons / vue-query caches, so remounting is cheap.
- *
- * The index is the hub's own sections FOLLOWED BY the extension-contributed ones (views on the `sandbox`
- * surface): a view whose subject is the box rather than the work belongs here, not in the rail's fixed icon
- * budget. A contributed section is routed by its activation key (/sandbox/logs) and rendered through
- * ExtensionView, so it shares the hub's page chrome: the contract is that a sandbox-surface view renders a
- * section BODY, the way the built-ins below do, not its own Page/PageHeader.
- *
- * THE GROUPS ARE THE HUB'S OWN, and the contributed views get one of their own at the end rather than being
- * filed into the three above. A view knows what it is for, but nothing in the extension API lets it say which
- * of this hub's groups it belongs to: Ports and Public would both sit under "Reach" if it could. Filing them
- * by guesswork would be the host inventing an answer the extension never gave; naming the group after where
- * they came from is the honest one, and it is also the fact a reader wants when a row they do not recognise
- * appears. Give the API a group and they can move. */
+// One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
+// mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections, then
+// extension-contributed `sandbox`-surface views, which render a body through ExtensionView rather than their own Page.
 
-/* ONE ROW FOR EXTENSIONS, and it used to be two. Finding one, installing it, managing it and switching it off
- * are one subject, and Discover sat directly under Extensions with the adjacency described as the point:
- * adjacency was the weaker form of the true thing, and the section owns both halves as pills now (see
- * SandboxExtensions.vue for what the split cost).
- *
- * Its badge is the number of installed extensions the registry has a newer commit for: the one fact in this
- * index that is looked FOR rather than looked at, and it now sits on the row that can act on it, which is the
- * clearest thing the merge bought. Info rather than warning: a newer commit is an offer, not a debt, and
- * nothing here updates itself. */
+// Extensions row covers finding, installing, managing and disabling as one. Badge counts installed extensions with a
+// newer registry commit; info, not warning, since nothing here auto-updates.
 const configurationRows = (updates: number): readonly HubTab[] => [
     { slug: `environment`, label: `Environment`, icon: `box` },
     { slug: `secrets`, label: `Secrets`, icon: `key` },
@@ -64,14 +41,9 @@ const configurationRows = (updates: number): readonly HubTab[] => [
     },
 ];
 const reachRows = (contendedPorts: number): readonly HubTab[] => [
-    /* Who may USE this box: members, invites, roles. `shield`, not `users`: Personas sits one row below and
-     * used to wear the neighbouring single-person glyph, so two user silhouettes in the same band were the
-     * same tile at rail size. */
+    // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
     { slug: `access`, label: `Access`, icon: `shield` },
-    /* Who this box IS when it acts outside: under Reach because that is the direction it points, and
-     * deliberately not under Configuration beside `agent`. Those two rows are one letter apart in English and
-     * opposite in consequence (which subscription pays for a turn, versus whose name is on what it posts), and
-     * neighbouring them is how someone eventually pins a nightly job to the right billing and the wrong Reddit. */
+    // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
     { slug: `personas`, label: `Personas`, icon: `user` },
     // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
     // enrollment this tab used to be named after is one property of one of them.
@@ -82,23 +54,10 @@ const reachRows = (contendedPorts: number): readonly HubTab[] => [
         badge: contendedPorts > 0 ? { count: contendedPorts, tone: `info` as const } : undefined,
     },
 ];
-/* WHAT THIS BOX IS, AND WHAT IT COSTS. There used to be a third row here, "Status", carrying a live count of
- * the dev servers and services that were up, and it is gone because every part of it was a second copy: the
- * dev servers are the Preview panel's subject (with start, stop and the actual page), Ports names the same
- * servers with what they expose, and a service-kind capability reporting `active` is a state badge its own row
- * on Capabilities already wears, next to the controls this list never had. What was left was a tab that read
- * "docker" on a healthy sandbox: the "Ready · Ready" pattern Overview deleted from itself for the same reason.
- *
- * Its badge went with it, and the badge is the sharper lesson. It was an INVENTORY drawn in the pill every
- * other badge in this app uses to mean "you owe this something": someone who saw "1 port couldn't be mirrored"
- * on the sandbox chip came in here, found the one badge in the index, followed it, and was told that docker is
- * active. Devices carries that errand now, and it is the only count left, because it is the only row in this
- * index a reader is ever looking FOR. Info rather than warning: a contended port breaks nothing (the sandbox
- * serves it fine, it just isn't on localhost). */
+// No live-status row or badge; Devices' contended-port count is the only thing here anyone looks for.
 const BOX_ROWS: readonly HubTab[] = [
     { slug: `overview`, label: `Overview`, icon: `info-circle` },
-    // A clock, not a bank card: this tab is the AI plans' allowances and when they reopen. The bank card is
-    // Settings ▸ Billing's, the one place in the app about money, and a reader looking for that clicked here.
+    // Clock, not a bank card: plan allowances and reopen time; billing itself lives in Settings ▸ Billing.
     { slug: `usage`, label: `Usage`, icon: `clock` },
 ];
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
@@ -106,23 +65,18 @@ const BUILT_IN = new Set([...BOX_ROWS, ...configurationRows(0), ...reachRows(0)]
 const DEFAULT = `overview`;
 
 const sandbox = useSandbox();
-/* Operating surfaces belong to the highest revokable grant as well as the owner. The daemon independently
- * enforces the same maintainer floor; this only keeps the index honest for lower roles. */
+// Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
 const { canShip } = useRole();
-// The one fact in this index that is looked FOR rather than looked at: the free /system/sync read the sandbox
-// chip already polls, so badging the row it belongs to costs no request.
+// The one count in this index anyone looks for; rides the /system/sync poll the sandbox chip already does, free.
 const { contendedPorts } = useSyncHealth();
 const { panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
-/* The Extensions row's count, read from whatever the registry cache already holds, `read: false`, so opening
- * this hub never causes the clone that browsing a registry is. See useRegistry for why the badge is deliberately
- * free rather than eager. */
+// Extensions row's count reads the cached registry only (`read: false`), never triggering a clone.
 const { entries: listedExtensions } = useRegistry({ read: false });
 const { extensions: installedExtensions } = useExtensions();
 const updatable = computed(() => updateCount(listedExtensions.value.map((entry) => toListing(entry, installedExtensions.value))));
 
-// A contributed activation's key IS its slug, so one colliding with a built-in section is dropped rather than
-// silently shadowed by the v-if chain below: the hub's own sections own their names.
+// A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>
     detectActivations(panels.value, capabilities.value).filter(
         ({ extension, activation }) => extension.surface === `sandbox` && !BUILT_IN.has(activation.key),
@@ -130,9 +84,8 @@ const contributed = computed<readonly ActiveExtension[]>(() =>
 );
 const extensionFor = (slug: string): ActiveExtension | undefined => contributed.value.find(({ activation }) => activation.key === slug);
 
-// The activation's own icon and badge, which the strip had no room to show. `icon` is an open string in the
-// public API, so an unknown name renders the icon set's fallback, and a view that named none gets the generic
-// glyph rather than leaving a hole in the column.
+// Activation's own icon and badge, no room for them in the rail strip. Unknown or missing icon falls back to the icon
+// set's generic glyph.
 const contributedRow = (active: ActiveExtension): HubTab => ({
     slug: active.activation.key,
     label: active.activation.title,
@@ -150,11 +103,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     {
         key: `reach`,
         label: `Reach`,
-        // Personas joins Devices behind the operating tier: choosing who this box IS when it acts outside is a
-        // configuration write like the ones on Secrets and Agent, and every control on that page (its own
-        // mutations and the settings it patches) floors at maintainer, so below it the page is a form that
-        // cannot be submitted. Access stays: giving up your OWN grant is every member's, and the roster's
-        // owner-only half is gated inside the page.
+        // Personas gates like Secrets/Agent, floored at maintainer; Access stays, revoking your own grant is anyone's.
         items: reachRows(contendedPorts.value.length).filter((tab) => (tab.slug !== `devices` && tab.slug !== `personas`) || canShip.value),
     },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
@@ -173,8 +122,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
             <SandboxDevices v-else-if="slug === `devices`" />
-            <!-- The extension-contributed sections, rendered with the same error boundary and lazy-view cache
-                 the rail's routed host uses. `ActiveExtension` is exactly ExtensionView's two props. -->
+            <!-- Extension-contributed sections, with the same error boundary and lazy-view cache the rail's routed host uses. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />
         </template>
     </HubLayout>

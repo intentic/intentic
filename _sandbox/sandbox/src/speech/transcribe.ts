@@ -10,38 +10,20 @@ import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contra
 import { downloadFile } from "@huggingface/hub";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-/* Composer voice input's transcription engine: whisper.cpp over WAV utterances the browser records and
- * segments itself (16kHz mono s16le, the page encodes exactly what whisper-cli reads, so this side never
- * decodes audio). The whisper-cli conventions here, the ENOENT provisioning probe, one run at a time, the
- * explicit language flag, the noise-annotation cleanup, mirror the Discord voice session's transcriber
- * (_extensions/discord/src/audio.ts), which proved them; the two stay separate because an extension's gateway
- * process and the daemon cannot share code.
- *
- * whisper-cli comes from the `whisper` feature pack (image-packs/whisper.Dockerfile, baked into the standard image
- * profile). On an image without it, `status` reports unprovisioned and the browser explains the one-time
- * rebuild instead of recording audio nobody can hear. */
+// whisper.cpp over WAV utterances the browser already segments (16kHz mono s16le; this side never decodes audio).
+// Mirrors the Discord voice transcriber's whisper conventions (_extensions/discord/src/audio.ts) in separate code,
+// since the extension's gateway process can't share code with the daemon. Ships in the `whisper` feature pack; an image
+// without it reports unprovisioned.
 
-// One multilingual model for every request: the language arrives per-utterance from the browser's locale, so
-// the English-specialized variants Discord picks per-connector-config would be wrong here. `large-v3-turbo`
-// over `small`, measured over 60 LibriSpeech test-other utterances (the deliberately hard set): 5.8% word
-// error down to 4.3%, a quarter of the remaining mistakes gone, which is the difference between dictation you
-// re-read and dictation you trust. It is paid for in CPU (~3.5× per utterance: 0.7× realtime on an idle
-// 16-core box and ~1.3× under load, so a 10s sentence lands in 7-13s) and in a 1.6GB first-use download
-// instead of 466MB. Full `large-v3` is NOT the next rung up, on a shared sample it scored no better while
-// running 2× slower again on a 3.1GB model, so turbo is the top of this curve rather than a midpoint on it.
+// One multilingual model for every request, since language arrives per-utterance from the browser's locale.
 const MODEL_FILE = "ggml-large-v3-turbo.bin";
 
-// whisper-cli uses 4 threads whatever the box has, which on a 16-core sandbox left most of the speedup on the
-// table: 11s of speech took 13.2s at 4 threads, 7.7s at 8, 6.7s at 16, the knee is 8, past which hyperthreads
-// contend for the same cores. Capped rather than uncapped because transcription shares the box with the agent
-// whose composer asked for it.
+// Capped at 8 regardless of core count; transcription shares the box with the requesting agent.
 const THREADS = Math.max(1, Math.min(8, availableParallelism()));
 
-// A composer utterance is capped browser-side at 1 minute; 16kHz mono s16le is 32,000 bytes/s, so 2 MiB
-// clears the longest legal utterance (+44B RIFF header) with room and refuses anything that isn't one.
+// Covers the longest legal utterance (1 min at 16kHz mono s16le) with headroom; refuses anything longer.
 export const MAX_UTTERANCE_WAV_BYTES = 2 * 1024 * 1024;
-// The backstop on a wedged whisper, not the budget for a normal one: a full-cap utterance transcribes in ~80s
-// at turbo's measured rate, and the browser's request dies at Cloudflare's ~100s origin cap long before this.
+// Backstop for a wedged run, not the normal budget; the browser's request dies at Cloudflare's cap first anyway.
 const TRANSCRIBE_TIMEOUT_MS = 120_000;
 
 export type ExecFn = (command: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
@@ -60,9 +42,8 @@ const whisperCliMissing = async (exec: ExecFn): Promise<boolean> => {
     }
 };
 
-// The browser sends its locale (`en-US`, `pl`); whisper-cli takes bare two-letter codes and defaults to `en`,
-// silently mangling other languages, so the primary subtag is extracted and anything unusable becomes
-// explicit auto-detection rather than an accidental English.
+// whisper-cli takes a bare two-letter code and silently defaults to `en`; the primary subtag is extracted, and anything
+// unusable becomes explicit `auto` rather than an accidental English.
 export const whisperLanguage = (locale: string | undefined): string => {
     const primary = (locale ?? "").trim().toLowerCase().split("-")[0] ?? "";
     return /^[a-z]{2,3}$/.test(primary) ? primary : "auto";
@@ -76,14 +57,16 @@ export interface SpeechStatus {
 }
 
 export interface Speech {
-    /** Where voice stands on this sandbox, and the download trigger: asking while the model is absent starts
-     * fetching it in the background, so the browser's "Preparing voice" poll is also what prepares it. */
+    /**
+     * Where voice stands on this sandbox; asking while the model is absent starts fetching it, so the polling itself is
+     * what prepares it.
+     */
     readonly status: () => Promise<SpeechStatus>;
-    /** One utterance's WAV → its text; empty string when whisper heard only silence/noise. */
+    /** One utterance's WAV to text; empty string when whisper heard only silence or noise. */
     readonly transcribe: (wav: Buffer, locale: string | undefined) => Promise<string>;
 }
 
-// The refusals the route answers with a status of their own, anything else is a plain 500.
+// Refusals the route answers with a status of their own; anything else is a plain 500.
 export class SpeechUnprovisionedError extends Error {
     constructor() {
         super("whisper-cli is not in this sandbox image: a one-time rebuild adds it");
@@ -99,24 +82,20 @@ export interface SpeechDeps {
     readonly workspaceRoot: string;
     readonly log: (message: string) => void;
     readonly exec?: ExecFn;
-    // The model fetch, injectable for tests. Defaults to HF's downloadFile, its CAS bridge 403s anonymous
-    // plain-HTTP fetches, so this speaks the Xet protocol rather than fetch().
+    // Injectable for tests; defaults to HF's downloadFile, since plain HTTP fetches get 403'd by the CAS bridge.
     readonly fetchModel?: (file: string) => Promise<Blob | null>;
 }
 
 export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchModel }: SpeechDeps): Speech => {
-    // Under cache/ because that is what the model IS: 1.6 GB re-downloadable by content, exactly what the
-    // cache entry's `derived` promises exports and the watcher. Its old top-level home is a retired dir.
+    // Under cache/, since the model is content-re-downloadable, like anything else the `derived` cache promises.
     const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
     const download = fetchModel ?? ((file: string) => downloadFile({ repo: WHISPER_MODEL_REPO, path: file }));
 
-    // The provisioning probe's answer, cached per process: the binary arrives via image rebuild, which
-    // restarts the daemon, so neither answer can go stale within one daemon's life.
+    // Cached per process: the binary only arrives via an image rebuild, which restarts the daemon anyway.
     let provisioned: Promise<boolean> | undefined;
     const isProvisioned = (): Promise<boolean> => (provisioned ??= whisperCliMissing(exec).then((missing) => !missing));
 
-    // One download, however many status polls and transcribes ask for it. Kept in the workspace volume, same
-    // directory Discord voice downloads into, so a model either feature fetched serves both.
+    // One download regardless of callers; shares Discord voice's download directory, so either fetch serves both.
     let downloading: Promise<void> | undefined;
     const modelReady = (): Promise<boolean> =>
         stat(modelPath).then(
@@ -134,14 +113,9 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                 throw new Error(`speech model download failed: ${WHISPER_MODEL_REPO} has no ${MODEL_FILE}`);
             }
             await mkdir(dirname(modelPath), { recursive: true });
-            // Stream straight to disk (~1.6GB, never buffer it), landing BESIDE the model and only then taking
-            // its place. Growing the real file in place is what broke voice: readiness is a bare stat, so the
-            // model read as "ready" the instant the empty file was created, the browser stopped waiting and
-            // started recording, and every utterance spoken over the remaining minutes of download met a
-            // half-written model, whisper-cli exits "failed to initialize whisper context" in 40ms and the
-            // composer could only say "try again". rename is atomic within the directory, so the model is
-            // either absent or whole. The staged name is unique per attempt because the Discord voice session
-            // downloads into this same directory and may be fetching this same file.
+            // Streamed to a uniquely-named staged file, then renamed atomically into place: readiness is a bare `stat`,
+            // so growing the real file in place would read ready mid-download. Staged names are unique per attempt,
+            // since Discord voice may fetch the same file into this directory concurrently.
             const staged = `${modelPath}.${randomUUID()}.part`;
             try {
                 // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
@@ -152,12 +126,12 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                 throw error;
             }
         })()).catch((error) => {
-            // A failed download must not poison every later attempt, clear the latch so the next ask retries.
+            // A failed download must not poison every later attempt; clearing the latch lets the next ask retry.
             downloading = undefined;
             throw error;
         });
 
-    // One whisper-cli run at a time, transcription is CPU-bound and the sandbox is small; utterances queue.
+    // One whisper-cli run at a time: transcription is CPU-bound and the sandbox is small; utterances queue.
     let queue: Promise<unknown> = Promise.resolve();
     const serialize = <T>(job: () => Promise<T>): Promise<T> => {
         const next = queue.then(job, job);
@@ -173,7 +147,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             if (await modelReady()) {
                 return { provisioned: true, model: "ready" };
             }
-            // Fire the download and answer immediately, the poll that asked is the poll that will see "ready".
+            // Fires the download and answers immediately; the poll that asked is the poll that will see "ready".
             ensureModel().catch((error) => log(`speech model download failed: ${String(error)}`));
             return { provisioned: true, model: "downloading" };
         },
@@ -181,19 +155,18 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             if (!(await isProvisioned())) {
                 throw new SpeechUnprovisionedError();
             }
-            // The browser only records after status said "ready", so an absent model here is a race (first-use
-            // download still running), answered as such rather than by holding the request open for minutes.
+            // Browser only records after status says "ready"; an absent model here is a race, answered as such.
             if (!(await modelReady())) {
                 throw new SpeechModelNotReadyError();
             }
             return serialize(async () => {
-                // A private directory created atomically keeps another local process from pre-creating the
-                // utterance path as a symlink. The file name can be fixed because the directory is unique.
+                // An atomically created private directory keeps another process from pre-creating the path as a
+                // symlink.
                 const wavDir = await mkdtemp(join(tmpdir(), "intentic-utterance-"));
                 const wavPath = join(wavDir, "utterance.wav");
                 try {
                     await writeFile(wavPath, wav, { mode: 0o600 });
-                    // whisper-cli defaults to -l en, silently mangling other languages, always pass one.
+                    // whisper-cli defaults to `-l en`, silently mangling other languages; always pass one explicitly.
                     const { stdout } = await exec(
                         "whisper-cli",
                         ["-m", modelPath, "-f", wavPath, "-l", whisperLanguage(locale), "-t", String(THREADS), "--no-timestamps", "--no-prints"],

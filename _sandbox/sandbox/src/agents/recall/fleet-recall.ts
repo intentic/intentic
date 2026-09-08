@@ -3,55 +3,32 @@ import type { Services } from "../../composition.js";
 import { agentRepoReview } from "../land/agent-changes.js";
 import { isIsolated, type PersistedAgent } from "../registry/agents-store.js";
 
-/* FLEET RECALL, the join behind `agents ls|show|find` (bin/agents, agents/fleet.routes.ts): everything one
- * conversation is, in one answer, for an agent that has a handle and nothing else.
- *
- * WHY THIS EXISTS, measured rather than assumed. Of the Claude sessions this workspace has run, one in seven
- * contains a run of shell calls hunting for another conversation — `ls /history`, `find`, a hand-written
- * `node -e` reducer over a three-megabyte agents.json, then a raw Read of a transcript file that is most of a
- * megabyte. Median three calls, and the worst of them thirty-five, before the first useful byte. Every one of
- * those rediscovers a layout the daemon has always known, because nothing ever told the model it existed:
- * the registry, the per-conversation record, the worktree, the phrase index. This module is the answer those
- * runs were assembling by hand, and the three verbs are what makes asking cheaper than searching.
- *
- * IT READS AND NEVER WRITES. Steering another conversation is `agents send`; landing, archiving and discarding
- * are the owner's presses on the board. That line is also why the routes over this module live in their own
- * namespace rather than opening `/agents` to the agent token (auth/grants.ts).
- *
- * SHAPES, NOT SENTENCES: everything here answers data. The CLI writes the capsule, because it is the half that
- * knows what a terminal is, and a caller passing `--json` gets exactly what the route said.
- */
+// The join behind `agents ls|show|find`: everything about one conversation in a single answer, from a handle alone.
+// Read-only; steering is `agents send`, landing, archiving and discarding are the board's own actions. Returns data,
+// not text; the CLI renders it.
 
 export type FleetRecallDeps = Pick<Services, "agents" | "agentWorktrees" | "transcripts" | "saidIndex">;
 
-/* HOW A HANDLE IS SPELLED, which is the whole ergonomic problem. The conversation in the screenshot that
- * started this had `fair-sage-ey2r` in hand — a worktree directory name — and could not turn it into anything,
- * because every surface that would have answered wanted a different spelling of the same conversation. So all
- * five spellings resolve, in the order below, first hit wins:
- *   · the conversation id itself, which is what the registry, the record and the worktree are all keyed on
- *   · the branch (`agent/fair-sage-ey2r`), which is what a `git branch -a` hands you
- *   · the runtime session id, which is what a provider's own store and `iq sessions` show
- *   · an unambiguous id prefix, which is what a half-remembered slug is
- *   · an unambiguous title substring, which is what a person remembers
- * Prefix and title are LAST on purpose: an exact identity must never lose to a fuzzy one, or a conversation
- * whose id is a prefix of another's becomes unreachable. */
+// Five spellings resolve to a handle, in this order, first hit wins, exact before fuzzy so an id is never shadowed by a
+// prefix:
+// - id
+// - branch (`agent/<id>`)
+// - session id
+// - unambiguous id prefix
+// - unambiguous title substring
 export type HandleResolution =
     | { readonly kind: "found"; readonly entry: PersistedAgent }
-    /* Several conversations answer to this spelling. Named rather than picked: choosing one silently is how a
-     * caller reads about the wrong agent and never finds out. */
+    // Several matches: named rather than picked silently, so a caller does not read about the wrong agent.
     | { readonly kind: "ambiguous"; readonly candidates: readonly PersistedAgent[] }
     | { readonly kind: "unknown" };
 
-// A handful is enough to choose from and short enough to read; a title word matching forty conversations is a
-// signal to search, not a list to print, and the CLI says so.
+// Cap on ambiguous candidates shown; more than this is a signal to search, not a list to print.
 const AMBIGUITY_LIMIT = 6;
 
 const foldOf = (text: string): string => text.toLowerCase();
 
-/* ONLY THE FIELDS THAT HAVE A VALUE. Two thirds of a registry entry is optional, and written out one ternary
- * per field the capsule builder became a wall of `x !== undefined ? {x} : {}` in which a wrong field name
- * would have read as ordinary. `exactOptionalPropertyTypes` is on, so an explicitly-undefined key is NOT the
- * same as an absent one — hence the return type strips undefined rather than settling for `Partial`. */
+// Keys with a defined value only; `exactOptionalPropertyTypes` makes an explicit `undefined` differ from an absent key,
+// so `Partial` will not do.
 type Present<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
 
 const present = <T extends object>(fields: T): Present<T> =>
@@ -63,22 +40,16 @@ const allEntries = (deps: FleetRecallDeps): PersistedAgent[] =>
         return entry === undefined ? [] : [entry];
     });
 
-/* THE THREE EXACT SPELLINGS, tried before either fuzzy one so that an identity can never lose to a guess: a
- * conversation whose id is a prefix of another's has to stay reachable by its own name.
- *
- * `agent/<id>` is the branch as git writes it, and the id is the rest of it. The session id is asked of the
- * REGISTRY's live view as well as the persisted column, because a conversation's first turn is flushed with
- * its session only at finish — so the column alone misses exactly the conversation most likely to be looked
- * up, the one running right now. */
+// The three exact spellings (id, `agent/<id>` branch, session id), tried before either fuzzy pass. Session id also
+// checks the live registry, since a running conversation's first turn has not flushed its session to the column yet.
 const exactly = (deps: FleetRecallDeps, entries: readonly PersistedAgent[], wanted: string): PersistedAgent | undefined =>
     deps.agents.entry(wanted) ??
     (wanted.startsWith("agent/") ? deps.agents.entry(wanted.slice("agent/".length)) : undefined) ??
     entries.find((entry) => entry.branch === wanted) ??
     entries.find((entry) => entry.sessionId === wanted || deps.agents.sessionIdOf(entry.id) === wanted);
 
-/* What a fuzzy pass concluded: one hit is the answer, several are NAMED rather than picked. Choosing silently
- * among them is how a caller reads about the wrong conversation and never finds out. Newest first, so a
- * truncated candidate list keeps the ones most likely to have been meant. */
+// Turns fuzzy candidates into a resolution: one hit is `found`, several are `ambiguous` and named rather than picked.
+// Ranked newest first before truncating to `AMBIGUITY_LIMIT`.
 const narrowed = (candidates: readonly PersistedAgent[]): HandleResolution | undefined => {
     const first = candidates[0];
     if (first === undefined) {
@@ -108,9 +79,8 @@ export const resolveHandle = (deps: FleetRecallDeps, handle: string): HandleReso
     );
 };
 
-/* ONE ROW OF THE ROSTER: what a caller needs to decide which conversation it meant, and nothing it would have
- * to scroll past to get there. Everything heavier — the diff, the record, the failure's own sentence — is one
- * `agents show` away and named as such. */
+// One roster row: enough to pick the right conversation without scrolling. Everything heavier (diff, record, failure
+// detail) is `agents show`.
 export interface FleetRow {
     readonly id: string;
     readonly title?: string;
@@ -121,19 +91,16 @@ export interface FleetRow {
     readonly turns?: number;
     readonly updatedAt: number;
     readonly archived: boolean;
-    // True while a turn is in flight on this conversation, which the persisted status cannot say: it carries
-    // `interrupted` for the whole of a running turn on purpose (agents-store.ts).
+    // True while a turn is in flight; `status` alone cannot say, it holds `interrupted` throughout a running turn.
     readonly running: boolean;
     readonly repos: readonly string[];
-    // Why this row is in a SEARCH answer, in the conversation's own words. Absent on a roster read, and absent
-    // in a search when the title was the match — the row already shows it.
+    // Why this row matched a search; absent on a roster read, and when the title itself was the match.
     readonly snippet?: MatchSnippet;
 }
 
 const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: MatchSnippet): FleetRow => ({
     id: entry.id,
-    // The PROJECTED status where there is one (the same reading the board publishes), so the CLI and the fleet
-    // view cannot disagree about the same conversation; the persisted one only for an entry off the roster.
+    // Projected status when available, matching the board, so the CLI and fleet view never disagree.
     status: deps.agents.get(entry.id)?.status ?? entry.status,
     provider: entry.provider,
     updatedAt: entry.updatedAt,
@@ -144,19 +111,16 @@ const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: MatchSnip
 });
 
 export interface RosterOptions {
-    // Include the archive. Off by default for the reason the board excludes it: a sandbox with a thousand
-    // retired conversations should not answer a "what is running" question with all of them.
+    // Include the archive; off by default, matching the board's live-only view.
     readonly all?: boolean;
     readonly limit?: number;
-    // Only conversations whose composition spans this repo, which is how "who else is in the extension" is
-    // asked in a monorepo workspace.
+    // Only conversations whose composition includes this repo.
     readonly repo?: string;
 }
 
 const ROSTER_LIMIT = 30;
 
-// The set a roster or a search answers over, newest activity first: live conversations, the archive only when
-// asked, and scoped to one repo of the composition where the caller named one.
+// Entries for a roster or search, newest activity first: live only unless `all`, scoped to `repo` when given.
 const scopedEntries = (deps: FleetRecallDeps, options: RosterOptions): PersistedAgent[] =>
     allEntries(deps)
         .filter((entry) => (options.all === true || entry.archivedAt === undefined) && (options.repo === undefined || entry.repos.some((repo) => repo.repo === options.repo)))
@@ -167,13 +131,8 @@ export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}):
         .slice(0, options.limit ?? ROSTER_LIMIT)
         .map((entry) => rowOf(deps, entry));
 
-/* WHICH CONVERSATIONS SAID THIS. One query for the whole fleet against the phrase index the daemon already
- * maintains (sessions/search-index.ts), never a read per conversation: on this workspace that is 1 900-odd
- * records and half a gigabyte of transcript, and the board's own filter learned the same lesson the expensive
- * way before the index existed.
- *
- * A TITLE MATCH COUNTS TOO and carries no snippet, the /agents/search rule: the title is already on the row,
- * and repeating it underneath spends the space that evidence wanted. */
+// Searches the fleet's phrase index once rather than per conversation. A title match counts too, with no snippet: the
+// title is already on the row.
 export const fleetSearch = async (deps: FleetRecallDeps, query: string, options: RosterOptions = {}): Promise<readonly FleetRow[]> => {
     const needle = foldOf(query);
     const said = await deps.saidIndex.search(query, "conversation", false);
@@ -187,10 +146,8 @@ export const fleetSearch = async (deps: FleetRecallDeps, query: string, options:
     return matched.slice(0, options.limit ?? ROSTER_LIMIT);
 };
 
-/* WHAT ONE REPO OF A CONVERSATION'S WORK LOOKS LIKE. `landed` is the registry's own one-way record of a delta
- * that reached the main tree, so "did this ever land" costs nothing; the counts come from git and are allowed
- * to be absent, a retired checkout and a branch that has since been pruned are ordinary states here, not
- * failures worth refusing the whole answer over. */
+// One repo of a conversation's work. `landed` is the registry's one-way flag, free to read; the counts come from git
+// and may be absent (a retired checkout, a pruned branch) without failing the whole answer.
 export interface FleetRepo {
     readonly repo: string;
     readonly base: string;
@@ -199,7 +156,7 @@ export interface FleetRepo {
     readonly files?: number;
     readonly additions?: number;
     readonly deletions?: number;
-    // What git said when it could not answer, so a caller reads a reason rather than a blank.
+    // Reason git could not answer, when the counts above are absent.
     readonly unavailable?: string;
 }
 
@@ -229,15 +186,8 @@ const repoStates = async (deps: FleetRecallDeps, entry: PersistedAgent, diff: bo
         }),
     );
 
-/* THE DIGEST, and the reason `agents show` is an answer rather than a pointer at 780 KB of JSONL.
- *
- * What a caller asking about another conversation actually wants is the shape of it: what it was asked, where
- * it got to, and how it ended. So: the opening prompts, which is the task; the last thing the agent said, which
- * is where it got to; and the last notice, which is how it stopped when it stopped badly. Whitespace collapsed
- * and each one clamped, because these ride in a capsule and an unclamped prompt is a screenful.
- *
- * The whole record is one flag away (`--transcript`), and the digest names it. That ordering is the budget: the
- * cheap answer first, the expensive one asked for by someone who read the cheap one and still wants more. */
+// The digest: opening prompts (the task), the last thing said (where it got to), and the last notice (how it ended),
+// each clamped. The full record is one flag away, `--transcript`.
 const DIGEST_CHARS = 240;
 const DIGEST_PROMPTS = 3;
 
@@ -262,7 +212,7 @@ const digestOf = (messages: readonly TranscriptRow[]): FleetDigest => {
     };
 };
 
-// One conversation, whole. Everything the hunt in the header was assembling by hand.
+// Everything about one conversation, assembled into a single answer.
 export interface FleetRecall extends FleetRow {
     readonly harness: string;
     readonly effort?: string;
@@ -287,7 +237,7 @@ export interface FleetRecall extends FleetRow {
 }
 
 export interface RecallOptions {
-    // Off skips the git spawns and answers from the registry alone: everything but the per-repo file counts.
+    // Off skips the git spawns; answers from the registry alone, without per-repo file counts.
     readonly diff?: boolean;
 }
 
@@ -314,8 +264,7 @@ export const fleetRecall = async (
         ...present({
             effort: entry.effort,
             account: entry.account,
-            // The live view, not the persisted column, for the running first turn the column has not been
-            // flushed with yet — which is the conversation most likely to be looked up.
+            // Live session id, not the persisted column, which lags for a running first turn.
             sessionId: deps.agents.sessionIdOf(entry.id),
             runner: entry.runner,
             worktree: entry.branch === undefined ? undefined : deps.agentWorktrees.conversationDir(entry.id),
@@ -332,13 +281,8 @@ export const fleetRecall = async (
     };
 };
 
-/* THE RECORD ITSELF, for the caller the digest did not satisfy. Bounded three ways and by default: the LAST
- * turns rather than the first (a conversation is looked up for where it got to far more often than for how it
- * opened), each row clamped, and `grep` narrowing to the rows that carry a phrase before any of that.
- *
- * Tool calls and thinking stay out. They are the bulk of a transcript and almost never the reason one
- * conversation reads another's: what is wanted is the exchange. A caller who genuinely needs the tool traffic
- * has the record's path in the same answer. */
+// The transcript itself, for what the digest did not cover: last messages first, each clamped, `grep` narrowing before
+// the limit. Excludes tool calls and thinking; the record's own path has those.
 export interface FleetMessage {
     readonly role: TranscriptRow["role"];
     readonly text: string;

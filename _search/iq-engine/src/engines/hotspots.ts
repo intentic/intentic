@@ -2,28 +2,22 @@ import type { IndexDb } from "../store/db.js";
 import type { FileEntry, RankedGroup } from "../types.js";
 import { churnOf, type ChurnOptions } from "./git.js";
 
-// `iq hotspots`, the files that are BOTH frequently changed and structurally tangled. Either signal alone
-// misleads: a churning config file is trivial, and a gnarly file nobody touches costs nobody anything. Their
-// product is where defects and reading time concentrate, and it is the one ranking neither the file tree nor
-// the dependency graph can produce.
-//
-// Churn comes from git (all of history unless --since narrows it); complexity was counted at index time
-// (indexer/complexity.ts). A file needs both to place: never-committed files and files with no branch points
-// (markdown, JSON, config) score zero and drop out, which is what makes the list read as "the code that matters".
+// `iq hotspots`: files both frequently changed and structurally complex, ranked by commits × complexity. Churn is git
+// history (or the --since window); complexity comes from index time; a file needs both to place.
 
 export interface HotspotOptions extends ChurnOptions {
     readonly pattern?: string;
 }
 
-// One ranked file, in numbers rather than a rendered line, the terminal verb formats these, and the daemon's
-// codebase-health panel plots them (engines/health.ts). One ranking, two presentations.
+// One ranked file as numbers; the terminal verb formats these into text and the health panel (engines/health.ts) plots
+// them.
 export interface HotspotFile {
     readonly path: string;
     readonly commits: number;
     readonly adds: number;
     readonly dels: number;
     readonly complexity: number;
-    // commits × complexity: the risk product the whole verb exists to rank by.
+    // commits × complexity, the risk product this ranks by.
     readonly score: number;
     readonly latestMs: number;
 }
@@ -37,7 +31,7 @@ export const rankHotspots = async (db: IndexDb, root: string, entries: readonly 
     return [...churn.entries()]
         .flatMap(([path, activity]) => {
             const cx = complexity.get(path) ?? 0;
-            // A file needs BOTH signals to place: no branch points, no risk product, no row.
+            // A file needs both signals to place: no branch points means no risk product, no row.
             if (cx === 0 || (pattern !== undefined && !path.toLowerCase().includes(pattern))) {
                 return [];
             }

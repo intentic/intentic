@@ -59,8 +59,6 @@ describe(`flyMachineConfig: the front door`, () => {
         volumeId: `vol_123`,
     };
 
-    /* A hosted machine is reached by a Fly replay from the edge, so the machine itself declares the service the
-     * proxy delivers to: the preview proxy, which already routes every hostname the sandbox answers to. */
     it(`declares the preview proxy as the one public service when the run names a hostname`, () => {
         const config = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } });
         expect(config.services).toHaveLength(1);
@@ -68,20 +66,18 @@ describe(`flyMachineConfig: the front door`, () => {
         expect(service.internal_port).toBe(PREVIEW_PORT);
         expect(service.ports.map((port) => port.port)).toEqual([443, 80]);
         expect(service.ports[0]!.handlers).toEqual([`tls`, `http`]);
-        // h2 to the browser: an app holding a stream per window cannot live inside HTTP/1.1's six per origin.
+        // h2 to the browser: a stream per window can't live inside HTTP/1.1's six-per-origin limit.
         expect(service.ports[0]!.tls_options?.alpn).toEqual([`h2`, `http/1.1`]);
         expect(service.ports[1]!.force_https).toBe(true);
     });
 
-    // Long-lived streams are the workload, so the proxy must count connections, not in-flight requests.
     it(`counts connections, not requests, so held streams cannot walk a healthy machine to its hard limit`, () => {
         const config = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } });
         expect(config.services![0]!.concurrency).toEqual(FRONT_DOOR_CONCURRENCY);
         expect(FRONT_DOOR_CONCURRENCY.type).toBe(`connections`);
     });
 
-    // Power stays the platform's (the hour meter is checked at wake) and the daemon's (idle-stop is its
-    // clean exit); the proxy neither starts nor stops anything.
+    // The platform's hour meter fires at wake; idle-stop is the daemon's own exit; the proxy does neither.
     it(`leaves starting and stopping to the platform and the daemon`, () => {
         const service = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } }).services![0]!;
         expect(service.autostart).toBe(false);
@@ -93,7 +89,7 @@ describe(`flyMachineConfig: the front door`, () => {
         const check = config.checks?.[`front-door`];
         expect(check?.port).toBe(PREVIEW_PORT);
         expect(check?.path).toBe(`/health`);
-        // Any other Host is a 404 from the preview proxy, by design: the header is what makes the check true.
+        // Any other Host is a 404 from the preview proxy by design; the header is what makes this check true.
         expect(check?.headers).toEqual([{ name: `Host`, values: [`sandbox-abcdef012345.sbx.test`] }]);
     });
 
@@ -114,8 +110,7 @@ describe(`flyMachineConfig: an overlay-built image`, () => {
         volumeId: `vol_123`,
     };
 
-    // The daemon derives "applied" from this hash against the approved file's, exactly as it does on a
-    // docker host recreated by ic; the base stays the official tag so a recompose keeps extending it.
+    // Derives "applied" from this hash against the approved file's, as on a docker host ic recreates.
     it(`stamps the approved overlay's hash beside the image pair`, () => {
         const hash = `a`.repeat(64);
         const config = flyMachineConfig({ ...run, environmentHash: hash });

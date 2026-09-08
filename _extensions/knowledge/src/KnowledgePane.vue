@@ -17,52 +17,14 @@ import { linkifyNoteRefs, toneOfType } from "./knowledgeNote";
 import NoteGraph from "./NoteGraph.vue";
 import { useNote, useNoteMutations } from "./useKnowledge";
 
-/* ONE KNOWLEDGE NOTE: what it is, what it says, and what it is connected to.
- *
- * The FRAME is <NoteEditor>'s: the action cluster, the delete confirmation, the error strip, and the one
- * surface the markdown is both read and written on. What is left here is what makes this a KNOWLEDGE note
- * rather than any other: the map, the head's facts, and the connections.
- *
- * TWO VIEWS, AND THERE USED TO BE THREE. The prose you read and the map of what it connects to are genuinely
- * different pictures of a note. The third was "Source: the raw markdown", and it is gone with the divergence
- * that made it necessary: the frame used to READ the note through a coloured source field, so seeing the file
- * and seeing the note were two different components, and a reader who wanted the markup had to leave the
- * document to get it. The frame now reads and writes on <MarkdownDocument>, where the markup is present the
- * whole time and revealed on whichever block holds the caret, so "Source" would have shown the same characters
- * in a worse typeface. Taking the file away with you is the Copy button beside it.
- *
- * THE SWITCH IS ONE WAY OUT OF THE NOTE, which is the shape the workspace's markdown viewer settled on and the
- * shape that fits on the header's row. A <SegmentedControl> spelling every view out is ~140px wide and could
- * not share a line with the note's name and the Copy/Edit/Delete cluster, so it had a row of its own under the
- * header: ~34px of every screenful, permanently, for a control pressed once a session.
- *
- * Reading is not one of the buttons because reading is not a destination: it is where the note IS, and the
- * toggle returns to it, which is why it turns into an eye while the map is on screen. Losing the word costs
- * discoverability, and that is bought back the way the viewer buys it, with a tooltip and an accessible name
- * that say what the press will DO rather than what the button is called.
- *
- * ── THE CONNECTIONS SIT WHERE THE QUESTION THEY ANSWER IS ASKED ───────────────────────────────────────────
- *
- * They used to be one bar under the whole pane, pinned outside the frame's scroller on the reasoning that they
- * are the reason this is a knowledge base rather than a folder and must never scroll away. The reasoning was
- * right and the pin was the wrong way to buy it: pinning them cost the note its length (the frame had to be
- * clamped for the bar to have somewhere to be pinned outside of), so the way to the next note was bought with
- * the ability to read this one. Split by the question each half answers, neither needs pinning:
- *
- *  · LINKS TO is part of what this note SAYS. It goes in the head, beside the facts: `employer: Acme` and
- *    `works_on → Storefront` are the same kind of claim, one written as a field and one as a link, and a reader
- *    scanning the head for "what is this thing" wants both in one place.
- *  · LINKED FROM is a see-also. It is the question you ask AFTER reading, nobody looks it up mid-sentence, and
- *    at the end of the note is exactly where the wikis this borrows the idea from put it.
- *
- * Each one is still a link with the relationship named, so following a chain is a click per step. */
+// One knowledge note: what it is, what it says, what it connects to. NoteEditor supplies the frame (actions, delete,
+// errors, the read/write surface); this adds the map toggle, the header's facts, and the links. Links-to sits in the
+// head beside the facts (the same kind of claim); linked-from is a see-also at the tail.
 
 const { path } = defineProps<{ path: string }>();
 const emit = defineEmits<{ open: [path: string]; filter: [path: string]; forgotten: [] }>();
 
-/* The in-progress edit, owned by the VIEW rather than this pane: a draft has to survive reading another note
- * and coming back, and this pane is reused as the selection moves. `undefined` means "not editing": one piece
- * of state for both, so an editor can never be open with nothing in it. */
+// Owned by the view, not this pane, so a draft survives leaving and returning; undefined means not editing.
 const draft = defineModel<string | undefined>(`draft`);
 
 const { note, error: noteError, isLoading } = useNote(toRef(() => path));
@@ -71,8 +33,7 @@ const { save, remove } = useNoteMutations();
 const raw = computed(() => note.value?.content ?? ``);
 const view = ref<`read` | `map`>(`read`);
 
-// Leaving the note puts the view back but never the draft: one is where you happened to be looking, the other
-// is the reader's unsaved words. The confirmation and the last error go with it, inside the composable.
+// Leaving resets the view but never the draft; the confirmation and last error live inside this composable.
 const {
     source,
     editing,
@@ -94,21 +55,17 @@ const {
     onRemoved: () => emit(`forgotten`),
 });
 
-// Editing lands on the note, because the note is what is being edited: the frame puts a caret in the document
-// already on screen rather than swapping in a different picture of it. The map steps aside for it, since a
-// draft the reader cannot see is a draft they will lose.
+// Edits happen on the note itself, in place, not a separate view; steps out of the map, since a draft you can't see is
+// one you'll lose.
 const edit = (): void => {
     startEdit();
     view.value = `read`;
 };
 
-// The header's plain facts, as a label→value block. `InfoTable` rather than a hand-rolled grid because keeping
-// the value column aligned across rows is the whole of it, and that is where a hand-roll drifts.
+// The header's facts as label→value rows; `InfoTable` keeps the value column aligned across them.
 const facts = computed<string[][]>(() => (note.value?.facts ?? []).map((fact) => [fact.key, fact.values.join(`, `)]));
 
-/* Resolution is the backend's answer, not a second set of rules here: every link this note holds arrived
- * already resolved, so the prose decorator is a lookup over that. A target that isn't in it is a note nobody
- * has written: drawn as unfinished rather than as a link that goes nowhere. */
+// Resolution is the backend's answer already; an unresolved target is unwritten, drawn unfinished, not broken.
 const resolved = computed(() => new Map((note.value?.linksTo ?? []).map((link) => [link.title, link.path])));
 const decorate = (fragment: DocumentFragment): void => linkifyNoteRefs(fragment, (target) => resolved.value.get(target));
 const onProseClick = (event: MouseEvent): void => {
@@ -121,9 +78,7 @@ const onProseClick = (event: MouseEvent): void => {
 </script>
 
 <template>
-    <!-- ONE ELEMENT NOW: the note IS the pane. The connections used to be a second, pinned under the frame,
-         which is what the clamp on this section existed to make room for; they are inside the note's own
-         document now (see the note above), so the frame is free to be as long as the note is. -->
+    <!-- One element: the note is the pane, so the frame's length is the note's, not clamped for another section. -->
     <NoteEditor
         v-model:source="source"
         v-model:confirming="confirming"
@@ -143,10 +98,7 @@ const onProseClick = (event: MouseEvent): void => {
         <template #lead>
             <Icon name="file" class="shrink-0 text-xs text-subtle" />
         </template>
-        <!-- WHAT KIND OF THING THIS IS, and nothing else. A badge sits beside the title on the header's one
-                 shrinking row, so every additional one is width taken off the note's NAME, and a note's tags are
-                 open-ended, so a well-tagged note here truncated its own title to a single letter. The kind is the
-                 one fact worth that trade; the tags moved to the meta line below, which wraps. -->
+        <!-- The type badge only: it costs width off the note's name on this row, and tags already live on the meta line. -->
         <template #badges>
             <StatusBadge v-if="note?.summary.type" :variant="toneOfType(note.summary.type) as StatusVariant" size="xs" :label="note.summary.type" />
         </template>
@@ -167,11 +119,7 @@ const onProseClick = (event: MouseEvent): void => {
             </template>
         </template>
 
-        <!-- THE MAP, on the header's own row and to the left of Copy/Edit/Delete: the caller's control goes
-                 first because it is about the note, where that cluster is about the FILE. One press away from
-                 reading and it remembers nothing, so there is no state here to get lost in. <NoteEditor> drops
-                 this whole slot while a draft is open, which is right: a button that threw the draft off screen
-                 is not one to offer somebody mid-sentence. -->
+        <!-- Left of Copy/Edit/Delete since it's about the note, not the file; hidden while a draft is open. -->
         <template #actions>
             <button
                 type="button"
@@ -190,11 +138,7 @@ const onProseClick = (event: MouseEvent): void => {
         <NoteGraph v-if="view === `map`" :path="path" @open="emit(`open`, $event)" />
 
         <template v-else>
-            <!-- THE HEAD: what this thing IS. The plain facts and the outbound links, together, because they are
-                 the same kind of claim written two ways: `employer: Acme` is a field and `works_on → Storefront`
-                 is a link, and a reader scanning for what a note is about wants neither of them at the far end
-                 of the prose. Padded by a wrapper rather than by the table, because horizontal padding on a
-                 <table> does not indent its cells: the labels sat flush against the panel's edge. -->
+            <!-- Facts and outbound links together, since a `<table>`'s own padding won't indent its cells (the wrapper does). -->
             <div v-if="facts.length > 0 || (note?.linksTo.length ?? 0) > 0" class="flex flex-col gap-2.5 px-5 pt-4">
                 <InfoTable v-if="facts.length > 0" :rows="facts" />
                 <div v-if="note && note.linksTo.length > 0" class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
@@ -224,9 +168,7 @@ const onProseClick = (event: MouseEvent): void => {
             />
             <p v-else class="px-5 py-4 text-xs text-subtle">No text yet: this note is its header.</p>
 
-            <!-- THE TAIL: a see-also. What ELSE mentions this note is the question a reader asks having finished
-                 it, so it sits where they finish, ruled off from the prose rather than boxed: a bordered card at
-                 the end of a document reads as a different document. -->
+            <!-- A see-also, ruled off rather than boxed: a bordered card at a document's end reads as a different document. -->
             <div
                 v-if="note && note.linkedFrom.length > 0"
                 class="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line-subtle px-5 py-3 text-xs"
@@ -238,8 +180,7 @@ const onProseClick = (event: MouseEvent): void => {
                         {{ link.title }}
                     </button>
                 </span>
-                <!-- "Everything about this note" is a different question from "what links to it", and it is the one
-                     a reader asks next: it re-aims the list beside the pane. -->
+                <!-- "Everything about this note" differs from "what links to it"; this re-aims the list beside the pane. -->
                 <button type="button" :class="ui.linkButton(`ml-auto shrink-0 text-2xs`)" @click="emit(`filter`, path)">
                     Show these in the list
                 </button>

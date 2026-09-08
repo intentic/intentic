@@ -50,10 +50,7 @@ test("an aborted turn answers cancelled; no options at all answers cancelled", a
     expect(await decidePermission(request("execute", []), "execute", false)).toEqual({ outcome: { outcome: "cancelled" } });
 });
 
-/* THE OWNER'S SAFETY POLICY, over the one seam ACP publishes. What is being checked is that a Codex/Grok/ACP
- * turn now reaches the SAME pipeline a Claude turn does: triage, the judge reading the owner's policy, and the
- * hard rule, none of which an ACP agent could see before. The judge itself is a stub here — whether a real
- * model reads a policy correctly is command-judge.test.ts's question, not this transport's. */
+// Exercises the safety-policy pipeline (triage, judge, hard rule) over ACP, matching the Claude path.
 const OPTIONS: Parameters<typeof request>[1] = [
     { optionId: "yes", kind: "allow_once" },
     { optionId: "no", kind: "reject_once" },
@@ -90,9 +87,6 @@ test("an unclassified command is allowed, so an ordinary turn is untouched", asy
     expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
 });
 
-/* An unconfigured workspace IS gated, because the hard rule (guard/actions.ts) holds the classes nothing undoes
- * whether or not anybody has written a policy. What that does not mean is that everything is held: a force-push
- * the judge allows runs, on this transport exactly as on the Claude one. */
 test("an unconfigured workspace is still gated, and still allows what the judge allows", async () => {
     const gate = gateWith("allow");
     expect(gate.enforcing).toBe(true);
@@ -100,16 +94,12 @@ test("an unconfigured workspace is still gated, and still allows what the judge 
     expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
 });
 
-// An agent that offers no way to say no cannot be refused, which is the limit `rulebook: "approval"` discloses.
 test("with no rejection option offered, the call is allowed rather than cancelling the turn", async () => {
     const gate = gateWith("refuse");
     const call = request("execute", [{ optionId: "yes", kind: "allow_once" }], { rawInput: { command: "git push --force origin main" } });
     expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
 });
 
-/* THE TAINT BIT REACHES ACP TOO, as a fact handed to the judge rather than as a floor applied behind it. That
- * is the whole change: what a turn having read a stranger's page MEANS is the owner's policy to decide, and this
- * asserts only that an ACP turn's judge is told the same thing a Claude turn's is. */
 test("the outside-content source is handed to the judge on this transport too", async () => {
     const seen: (string | undefined)[] = [];
     const gate = createCommandGate({
@@ -128,9 +118,6 @@ test("the outside-content source is handed to the judge on this transport too", 
     expect(seen).toEqual(["discord"]);
 });
 
-/* `title` is the last resort when an agent's rawInput carries no command field. Worth a test because it is the
- * difference between classifying most agents and classifying only the ones that happen to name a field the way
- * Claude Code does. */
 test("a command in the call's title is classified when rawInput carries none", async () => {
     const gate = gateWith("refuse");
     const call = request("execute", OPTIONS, { title: 'Run "rm -rf /work/intentic"' });
@@ -145,9 +132,6 @@ test("a hostile rawInput shape is survived rather than thrown on", async () => {
     }
 });
 
-/* An ATTENDED turn parks on a card, exactly as the Claude path does, and the agent waits on the JSON-RPC
- * request meanwhile. This is the behaviour that was impossible before: a hold on a non-Claude runtime had
- * nowhere to be raised. */
 test("an asked command raises a permission card and the call runs when the user allows it", async () => {
     const events: { kind: string; requestId?: string }[] = [];
     const gate = createCommandGate({
@@ -164,6 +148,5 @@ test("an asked command raises a permission card and the call runs when the user 
     const card = events.find((event) => event.kind === "permission");
     expect(resolveRequest({ kind: "permission", requestId: card?.requestId ?? "", decision: "once" })).toBe("settled");
     expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
-    // The card owes the stream its resolution frame, on this transport exactly as on the Claude one.
     expect(events.some((event) => event.kind === "resolved")).toBe(true);
 });

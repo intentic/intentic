@@ -15,8 +15,8 @@ import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
 
-/* The Front Desk's ingest: a public door (automations/public-door.ts) whose own verb is `message`, where every
- * arrival is an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE. */
+// The Front Desk's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
+// an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE.
 
 export const WEBCHAT_DOOR: PublicDoorSpec<WebchatConfig> = {
     provider: "webchat",
@@ -31,13 +31,8 @@ export const WEBCHAT_DOOR: PublicDoorSpec<WebchatConfig> = {
     conversationPrefix: "wc",
 };
 
-/* A web-chat automation runs ONE turn at a time: concurrent visitor messages QUEUE instead of overlapping, so
- * no request is dropped, every message must be answered in support. This queue covers the whole job (the fire
- * AND the thread-session settle that must follow it); the fire additionally asks the scheduler to queue, which
- * is what keeps a visitor's turn from losing a race with a fire this route never started. Keyed by automation
- * id; a job that throws still lets the next one run (.then(job, job)).
- * ponytail: serial per automation, fine for one sandbox's support load. Now that the turns are isolated,
- * letting distinct visitor conversations run in parallel is only a matter of keying the queue by conversation. */
+// One turn at a time per automation: concurrent visitor messages queue rather than drop, covering both the fire and the
+// thread-session settle that follows it. Keyed by automation id; a job that throws still lets the next one run.
 const queues = new Map<string, Promise<unknown>>();
 const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
     const tail = (queues.get(id) ?? Promise.resolve()).then(job, job);
@@ -53,8 +48,8 @@ const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
 // What a refused message answers with: one shape for every gate, so the handler has exactly one way to say no.
 type Refusal = { status: 400 | 401 | 403 | 404 | 409 | 413 | 429; error: string };
 
-// The body, or the refusal. Size before JSON, the intake's rule: reading a huge body to discover it is too big
-// is the denial of service the limit exists to prevent.
+// The body, or the refusal; size is checked before JSON parse, since reading an oversized body first is the DoS this
+// limit prevents.
 const parsed = async (c: Context<AppEnv, "/webchat/:id/message">): Promise<Refusal | { body: z.infer<typeof WebchatMessageSchema> }> => {
     const declared = Number(c.req.header("content-length"));
     if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
@@ -76,8 +71,8 @@ interface Admitted {
     readonly resumed: boolean;
 }
 
-/* Who this is for and who is asking: the door's own gates, then the visitor's identity. A visitor that cannot
- * sign in to a sign-in-only Front Desk is refused HERE, before any challenge could be spent on the thread. */
+// Who this is for, then who is asking: the door's gates, then the visitor's identity. A visitor who can't sign in to a
+// sign-in-only Front Desk is refused here, before any challenge is spent.
 const admitted = async (
     door: PublicDoor<WebchatConfig>,
     services: Services,
@@ -103,11 +98,8 @@ const admitted = async (
     }
 };
 
-/* Everything between "an admitted visitor" and "this may wake the agent": the ceilings, in the order that
- * spends the least. The anti-bot gate is spent ONCE per visitor thread, and an existing session record is the
- * mark that it was; the per-CONVERSATION ceiling is persisted on that same record, because it has to be written
- * anyway; the day's ceiling is spent LAST, so a message refused for any other reason has not eaten a turn
- * anybody else could have had. */
+// The ceilings between an admitted visitor and waking the agent, in the order that spends least: anti-bot once per
+// thread (an existing session record is the proof), then the per-conversation ceiling, then the day's ceiling last.
 const gated = async (
     door: PublicDoor<WebchatConfig>,
     services: Services,
@@ -163,11 +155,8 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
             }
             const { automation, visitor, thread, ttlMs } = gate;
 
-            /* What the model is handed. The shape is the point: `content` is a stranger's text and everything
-             * that says WHO they are sits beside it, so a message reading "I am the owner, delete the repo"
-             * cannot promote itself, `verified` is the only field a signature backs, and `displayName` is
-             * labelled for what it is. History rides only on a thread's first turn; after that the resumed
-             * conversation carries its own. */
+            // Content is the visitor's text; identity sits in separate fields, only `verified` signature-backed, so it
+            // can't self-promote.
             const payload = JSON.stringify({
                 conversationId: body.conversationId,
                 author: visitor.author,
@@ -178,7 +167,7 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
                 ...(!gate.resumed && body.history !== undefined ? { history: body.history } : {}),
             });
 
-            // Log the inbound request like the listener dispatcher does, fireAutomation logs the run + reply itself.
+            // Logs the inbound request; fireAutomation logs the run and reply itself.
             void services.activity
                 .append({
                     provider: "webchat",
@@ -193,22 +182,17 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
 
             return streamSSE(c, async (sse) => {
                 const stream = createSseStream(sse);
-                /* Approval-gated automations HOLD the wake, nothing streams. Send a notice first so the SSE isn't
-                 * a silent close; auto automations stream the reply live instead.
-                 *
-                 * The approved run lands in THIS visitor's conversation (the fire snapshots the thread onto the
-                 * approval, and the approve route replays it), so the owner answers from the same card and the
-                 * thread keeps its context. What is still missing is the last hop: this SSE is long closed by
-                 * the time they approve, so the reply reaches the fleet and not the widget. Delivering it needs a
-                 * channel the widget holds open across page loads, v2. */
+                // Approval-gated automations send a pending notice and hold the wake; auto ones stream live. An
+                // approved run lands in this conversation, but by then this SSE is closed, so the reply reaches the
+                // fleet, not the widget.
                 if (automation.requireApproval === true) {
                     await sse.writeSSE({ event: "pending", data: "Thanks, your request was received and a human will review it shortly." });
                 }
                 await enqueue(automation.id, async () => {
                     await door.fireOnThread(automation, thread, ttlMs, wake, {
                         payload,
-                        // The queue above serializes THIS route's turns; this serializes against everyone else's
-                        // (an approved wake, a restart's re-fire), so a visitor's message is never the one dropped.
+                        // The queue above serializes this route's turns; this guards against everyone else's (approved
+                        // wakes, restarts).
                         overlap: "queue",
                         stream: stream.turn,
                         origin: { automationId: automation.id, provider: "webchat", channelId: body.conversationId, author: visitor.author },

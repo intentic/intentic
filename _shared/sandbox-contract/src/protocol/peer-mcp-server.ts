@@ -1,45 +1,22 @@
 import { z } from "zod";
 import { MCP_PROTOCOL_VERSION } from "./host-protocol.js";
 
-/* THE MCP SERVER A PEER RUNS, on the peer, not in the sandbox.
- *
- * The sandbox's daemon forwards JSON-RPC verbatim and interprets none of it, so the tool table handed to this is
- * the entire tool surface: what a device or a browser can do is decided by the build installed on it, and a
- * peer that upgrades learns new tools without anything changing in the sandbox. That is the reason for the
- * split; the alternative (schemas in the daemon, execution on the peer) makes every new tool a coordinated
- * release of two products.
- *
- * The protocol implemented is the subset a Streamable HTTP client actually uses against a stateless server:
- * initialize, tools/list, tools/call, ping, and notifications (which get no reply). Anything else answers
- * "method not found", which is the correct JSON-RPC response and not an error worth logging.
- *
- * A FAILED TOOL IS NOT A FAILED CALL. Every error, a refused scope, a missing file, a command that exited 1, an
- * argument that does not typecheck, comes back as a normal result with isError, because that is what a model can
- * read and act on; a JSON-RPC error surfaces as a transport fault and invites a retry loop against a peer that
- * will refuse it exactly the same way the second time.
- *
- * EACH TOOL'S ARGUMENTS ARE DESCRIBED ONCE. The zod schema a tool is built with is what the model is shown
- * (`tools/list` publishes it as JSON Schema) AND what an arriving call is checked against, so the advertised
- * shape and the accepted one cannot drift, the failure mode of writing both by hand, where a renamed field
- * keeps validating and the model keeps being told about the old name. A handler receives its arguments typed. */
+// The MCP server a peer (device, browser) runs; the daemon forwards JSON-RPC verbatim, so the tool table here is the
+// whole surface. A failed tool returns isError, never a JSON-RPC error. Each tool's zod schema is both what tools/list
+// advertises and what a call is checked against.
 
 export interface McpTool<Ctx> {
     readonly name: string;
     readonly description: string;
-    // JSON Schema for `tools/list`, derived from the zod schema once at module load rather than per request.
+    // JSON Schema for `tools/list`, derived from the zod schema once at module load, not per request.
     readonly inputSchema: Record<string, unknown>;
     readonly call: (args: unknown, ctx: Ctx) => Promise<Record<string, unknown>>;
 }
 
 export const textResult = (text: string, isError = false): Record<string, unknown> => ({ content: [{ type: "text", text }], isError });
 
-/* One tool, from the only description of its arguments there is. The generic is what carries the schema's type
- * through to the handler's parameter; `McpTool` erases it again, because the dispatch table holds them all and
- * the parse is what re-establishes the type at the boundary. `Ctx` is what the peer hands every call beside
- * its arguments: a device's live grant, nothing for a browser.
- *
- * `$schema` is dropped: the enclosing tool entry already says what this document is, and MCP clients read the
- * keywords rather than the dialect declaration. */
+// Builds one tool from a single zod schema; the generic carries its type to the handler, and `McpTool` erases it again
+// since the dispatch table holds every tool. `$schema` is dropped from the JSON Schema output as redundant.
 export const tool = <Schema extends z.ZodType, Ctx>(spec: {
     readonly name: string;
     readonly description: string;
@@ -53,15 +30,14 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
         inputSchema,
         call: async (args, ctx) => {
             const parsed = spec.input.safeParse(args);
-            // Readable enough for a model to fix its own call: which field, and what was expected there.
+            // Readable enough for a model to fix its own call: which field, and what was expected.
             return parsed.success ? await spec.run(parsed.data, ctx) : textResult(z.prettifyError(parsed.error), true);
         },
     };
 };
 
-// What the peer's audit log is told about one call: the arguments verbatim (redaction is the peer's, it knows
-// which of its tools carry typed secrets), and how it ended. A tool that answered with isError is `ok: false`
-// with no message; one that threw carries what it said, and whether it was the peer's own refusal.
+// What the peer's audit log is told about one call: arguments verbatim (redaction is the peer's job) and how it ended.
+// isError is `ok: false` with no message; a throw carries its message and whether it was a refusal.
 export interface McpAuditEntry {
     readonly tool: string;
     readonly args: Record<string, unknown>;
@@ -72,21 +48,20 @@ export interface McpAuditEntry {
 export interface McpServerSpec<Ctx> {
     readonly serverInfo: () => { readonly name: string; readonly version: string };
     readonly tools: readonly McpTool<Ctx>[];
-    // The sentence for a tool this peer does not have, in the peer's own noun.
+    // Message for an unknown tool, phrased in the peer's own vocabulary.
     readonly noSuchTool: (name: string) => string;
-    // Whether a thrown error is this peer's own refusal (a switch that is off, a site that is not granted) as
-    // opposed to a tool that failed: the audit line says which.
+    // Whether a thrown error is the peer's own refusal (a disabled switch, an ungranted site) rather than a tool
+    // failure.
     readonly refused: (error: unknown) => boolean;
     readonly errorMessage: (error: unknown) => string;
-    // Every call, accepted or refused, once it has an outcome. Best-effort: a log that cannot be written must
-    // never fail the answer, so a rejection here is swallowed.
+    // Called with every outcome; best-effort, a logging failure here must never fail the answer.
     readonly audit: (entry: McpAuditEntry) => Promise<void> | void;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// Handle one JSON-RPC message. Returns the response, or undefined for a notification (nothing to answer). `ctx`
-// is read per call by the tool that runs, so a grant pushed mid-session takes effect on the very next call.
+// Handles one JSON-RPC message; returns undefined for a notification. `ctx` is read per call, so a grant pushed
+// mid-session takes effect on the next call.
 export const createMcpServer = <Ctx>(spec: McpServerSpec<Ctx>): ((message: unknown, ctx: Ctx) => Promise<Record<string, unknown> | undefined>) => {
     const byName = new Map(spec.tools.map((entry) => [entry.name, entry]));
     const listing = spec.tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
@@ -94,7 +69,7 @@ export const createMcpServer = <Ctx>(spec: McpServerSpec<Ctx>): ((message: unkno
         try {
             await spec.audit(entry);
         } catch {
-            // Deliberately silent: a record for a human, never a control.
+            // Silent: this log is for a human, never a control.
         }
     };
 

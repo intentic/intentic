@@ -4,19 +4,10 @@ import { INSTALL_SCRIPTS, INSTALL_SCRIPTS_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { describe, expect, it } from "vitest";
 
-/* THE FOUR INSTALLERS THAT PUT THIS AGENT ON A MACHINE, HELD TO WHAT LITTLE THEY STILL DO.
- *
- * `device.sh`, `sync.sh`, `device.ps1` and `sync.ps1` are bootstrap shims: they download an agent onto a
- * machine that has none — or has one that cannot take their handover — and exec `setup`. Every decision they
- * used to make — installed-vs-published, PATH, the Windows launcher — runs from `setup` itself now
- * (install.ts), so those rules are held by install.test.ts and the compiler rather than by string-matching
- * shell.
- *
- * What still has to exist twice per dialect (each file is handed to `curl | sh` or `irm | iex` as one
- * standalone string — no import, no dot-sourcing) is the bootstrap block, and what still goes quietly wrong
- * in a copy is the same short list as before: the tag-pinned URL that makes resuming safe, the resume itself,
- * and the probe that separates an agent from a captive portal's login page. The blocks are delimited by their
- * own marker comments, in both dialects, so the check is one rule for shell and PowerShell. */
+// The four installers that put this agent on a machine, held to what little they still do. Each dialect's
+// bootstrap block (curl|sh / irm|iex, standalone, no imports) still has to exist twice, and what goes wrong in
+// a copy is the same short list: the tag-pinned URL, the resume, the probe. Every other decision (install vs.
+// published, PATH, the Windows launcher) runs from `setup` (install.ts) instead.
 
 const START = `# ---- bootstrap the agent binary (identical in`;
 const END = `# ---- end of the agent binary bootstrap ----`;
@@ -26,7 +17,7 @@ const script = (key: keyof typeof INSTALL_SCRIPTS): { readonly path: string; rea
     return { path, text: readFileSync(path, "utf8") };
 };
 
-/** The marked block, or undefined when the script carries none — which is itself a failure for these four. */
+/** The marked block, or undefined when the script carries none, itself a failure for these four. */
 const bootstrapBlock = (text: string): string | undefined => {
     const start = text.indexOf(START);
     const end = text.indexOf(END);
@@ -78,10 +69,8 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
         ).toBe(bootstrapBlock(device?.text ?? ``));
     });
 
-    /* The three properties a first download owes the machine, stated as properties rather than as a diff: it
-     * resumes rather than restarts (95 MB on a flaky connection), it pins to the tag it resolved (so a resume
-     * can never splice two releases), and it runs what landed before installing it (the only proof a file is
-     * an agent rather than a captive portal's answer). */
+    // The three properties a first download owes the machine: it resumes rather than restarts, it pins to the tag
+    // it resolved (so a resume can never splice two releases), and it runs what landed before installing it.
     it(`download resumably, pinned to the resolved tag, and probe before installing`, () => {
         for (const { path, text } of both) {
             const block = bootstrapBlock(text) ?? ``;
@@ -91,14 +80,8 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
         }
     });
 
-    /* AND THE STAGED FILE HAS TO BE RUNNABLE BEFORE IT IS PROBED — the same requirement spelled differently per
-     * dialect, and missing from the PowerShell one for as long as the staging existed. sh needs the execute
-     * bit. PowerShell needs a name ending in `.exe`, because it resolves a command by EXTENSION: a path whose
-     * extension is not in PATHEXT is not a program to it, whatever the bytes are, so `& $part version` on
-     * `intentic-machine.exe.part-1.248.0` failed as an unrecognized command. The probe reported that as "no
-     * version" and the shim deleted a complete 83 MB download and blamed a captive portal — on the first
-     * machine that ever reached the download with an agent already installed, because the path only opens for
-     * an installed agent that cannot take the handover. */
+    // And the staged file has to be runnable before it is probed, spelled differently per dialect: sh needs the
+    // execute bit, PowerShell resolves a command by extension so the staged file needs a `.exe` name.
     it(`make the staged download runnable before probing it`, () => {
         for (const { path, text } of both) {
             expect(
@@ -108,16 +91,9 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
         }
     });
 
-    /* THE PROPERTY THAT SURVIVES A ROUTE RENAME, which is the one decision the shims cannot delegate: their
-     * handover is itself part of the agent's vocabulary, so an installed agent older than that vocabulary
-     * cannot take it — and the self-update that would have replaced it sits behind the very command it does
-     * not understand. `computer` -> `device` cost every already-paired machine exactly that: the card's own
-     * command answered "No command registered for `device`", and nothing short of deleting the binary by hand
-     * got past it.
-     *
-     * So each shim ASKS before it hands over — `<route> setup --help`, which prints a usage screen and
-     * connects nothing — and replaces an agent that cannot answer. The route is named once per file, above the
-     * block, because a probe and a handover that disagree is the same bug in a new hat. */
+    // The property that survives a route rename, the one decision the shims cannot delegate: their handover is
+    // itself part of the agent's vocabulary, so an installed agent older than that vocabulary cannot take it. Each
+    // shim asks first (`<route> setup --help`) and only replaces an agent that can answer.
     it(`ask whether the installed agent understands the handover, and name the route once`, () => {
         for (const { path, text } of both) {
             expect(bootstrapBlock(text) ?? ``, `${path} hands over without asking whether the installed agent understands it`).toContain(
@@ -128,11 +104,8 @@ describe.each(PAIRS)(`the $dialect installers`, (pair) => {
         }
     });
 
-    /* The property the shims exist for: the DECISIONS stay in the agent. A script that grows an
-     * installed-vs-published comparison, a force-download switch, or an npx fallback is a script on its way
-     * back to being four copies of install.ts in two dialects — the design this rewrite retired. The probe
-     * above is not that comparison: it asks whether an agent can take the handover, never which build is
-     * newer, and it is answered by running the agent rather than by reading a version out of it. */
+    // The property the shims exist for: decisions stay in the agent. The probe here only asks whether an agent can
+    // take the handover, never which build is newer.
     it(`leave every decision beyond the first download to \`setup\``, () => {
         for (const { path, text } of both) {
             expect(text, `${path} carries a force-download switch; deleting the installed binary is the way to force a reinstall`).not.toContain(

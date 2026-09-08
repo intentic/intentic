@@ -1,28 +1,16 @@
-<!-- WHICH SLICE OF THE QUEUE: the approvals view's index, and the reason the queue can stay one readable column.
-
-     The page was a single scroll with every section stacked down it, which is fine for a handful of posts on one
-     platform and unreadable the moment an agent is proposing across several: five sections deep in X posts is
-     five sections you scroll past to reach the one Reddit thread waiting on a yes. The rail is bounded by how
-     many platforms a workspace posts to, plus one row for actions: a handful, and a number that grows far slower
-     than the queue behind it.
-
-     IT NARROWS, IT DOES NOT SELECT. "All approvals" is where the page opens and where it returns to, because the
-     first question this queue answers is "is anything waiting on me anywhere". So <SplitView> folds it above the
-     body on a phone rather than covering it, and this swaps itself to a Picker at that width.
-
-     ONE NUMBER PER ROW: how many items the slice holds, so the row says how big the list it opens is, and what
-     is WAITING is its colour rather than a second number. Two numbers in a 16rem column read as "3 12" with
-     nothing saying which is which, and a reader scanning the rail wants one glance, not an arithmetic. Red where
-     something failed, amber where something wants a decision, quiet where the slice is on rails; the tooltip is
-     where the split is spelled out, because that is a question you ask of one row at a time. -->
+<!--
+    Platform navigation for the approvals queue, bounded by how many platforms a workspace posts to, not by queue length. Narrows the queue rather
+    than replacing it — 'All approvals' stays the default. Each row shows one count, its size; whether something is waiting is the row's colour, not
+    a second number.
+-->
 <script lang="ts">
 import type { IconName } from "@intentic/extension-ui";
 
 export interface ApprovalScope {
-    /** A platform id, `actions` for the action rows, and `` is the spelling of "everything": the URL simply omits the parameter. */
+    /** A platform id, `actions` for action rows; `` spells everything, so the URL omits the parameter. */
     readonly key: string;
     readonly label: string;
-    /** Brand slug from the posting capability's catalog entry; absent for a platform with no connector installed, and for actions. */
+    /** Brand slug from the posting capability's catalog; absent with no connector installed, or for actions. */
     readonly logo?: string;
     /** A glyph for the rows that are not a platform: everything, actions, held automations. */
     readonly icon?: IconName;
@@ -46,17 +34,15 @@ const { all, scopes } = defineProps<{
 
 const selected = defineModel<string>({ required: true });
 
-// Which slice you were last working through, kept across visits. Validated against the slices actually on
-// offer, so a platform that has since emptied cannot open the page on nothing.
+// Last slice worked, kept across visits, checked against current slices so an emptied one won't reopen blank.
 useRailMemory(`approvals.scope`, selected, () => scopes.map((scope) => scope.key));
 
-// One unlabelled group: a heading over the only group in the rail names a distinction that is not being made.
+// Single unlabelled group: a heading here would name a distinction the rail doesn't make.
 const groups = computed<NavGroup<ApprovalScope>[]>(() => [{ key: `scopes`, items: [...scopes] }]);
 
 const tone = (scope: ApprovalScope): string => (scope.failed > 0 ? `text-danger` : scope.waiting > 0 ? `text-warning` : ``);
 
-// What the number would say if it had room. Ordered the way the queue owes it: broken first, then waiting, then
-// the plain size of a slice that needs nothing.
+// Tooltip text for the row's number: failed first, then waiting, then the slice's plain size.
 const note = (scope: ApprovalScope): string => {
     const parts: string[] = [];
     if (scope.failed > 0) {
@@ -71,8 +57,7 @@ const note = (scope: ApprovalScope): string => {
 
 const { mobile } = useDevice();
 
-// The same model as options, with the row's number as the quiet right-hand annotation. The brand marks come
-// through the Picker's #icon slot: a platform's logo is not something the icon set has.
+// Same model as the rail, row number as a quiet description; brand marks come via the Picker's `#icon` slot.
 const options = computed<PickerOptions<string>>(() => [
     { options: [{ value: ``, label: all.label, description: String(all.total), icon: all.icon }] },
     {
@@ -93,8 +78,7 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
     </Picker>
 
     <NavRail v-else aria-label="Approval slices" :groups="groups">
-        <!-- Not a member of any group, so no grouping can push it out of reach: "all" is the state the rail
-             returns to, and a row you cannot get back to is a filter you cannot clear. -->
+        <!-- Ungrouped so it can't be pushed out of reach: this is the state the rail always returns to. -->
         <template #pinned>
             <Row
                 as="button"
@@ -111,9 +95,10 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
             </Row>
         </template>
 
-        <!-- The platform's own mark rather than a glyph: it is the same object the rows in the queue lead with,
-             so a slice and the posts inside it are recognised by the same thing. The actions row has no brand
-             and wears its glyph instead. -->
+        <!--
+            The platform's own brand mark, the same object its posts lead with, so a slice and its posts are recognised together. The actions row has
+            no brand, so it wears a glyph instead.
+        -->
         <template #row="{ item: scope }">
             <Row
                 :key="scope.key"

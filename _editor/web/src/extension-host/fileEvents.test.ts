@@ -2,9 +2,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, it, vi } from "vitest";
 import { emitFilesChanged, onFilesChanged } from "./fileEvents";
 
-/* The scoping rules behind `api.workspace.onDidChangeFiles`, which are the whole substance of this channel: the
- * fan-out is three lines, and every way it can be wrong is a way a badge either misses its own news or is woken
- * by somebody else's. */
+// Scoping rules for api.workspace.onDidChangeFiles: a subscriber must get exactly its own declared paths, no more, no
+// less.
 
 const disposables: { dispose: () => void }[] = [];
 const listen = (paths: readonly string[], listener: (paths: readonly string[]) => void): void => {
@@ -29,7 +28,7 @@ it(`wakes a subscriber only for writes under its own declared paths`, () => {
     expect(chores).not.toHaveBeenCalled();
 });
 
-// The trailing slash is what makes a directory entry a directory entry, on this side as much as on the daemon's.
+// A trailing slash marks a directory entry; it must not match a sibling file.
 it(`does not let a directory entry match a sibling file`, () => {
     const listener = vi.fn();
     listen([`${STATE_DIR}/config/approvals/`], listener);
@@ -48,10 +47,9 @@ it(`hands over only the matching paths, not the whole batch`, () => {
     expect(listener).toHaveBeenCalledWith([`${STATE_DIR}/config/approvals/one.json`]);
 });
 
-/* THE FRAME THAT MEANS THE MOST MUST NOT BE THE FRAME THAT DOES NOTHING. The daemon sends no path list at all
- * past its per-frame cap (a branch switch, a codegen run, a mass delete), and a reconnect reuses the same empty
- * batch to say "frames may have been lost". Matched against a prefix table, "no paths" matches nothing, so
- * exactly the largest changes would have gone unannounced. */
+// An empty batch means the daemon lost track of what changed (per-frame cap overflow, reconnect), not that nothing did.
+// It must wake every subscriber, since prefix matching against no paths would otherwise announce nothing for the
+// largest changes.
 it(`wakes every subscriber for its own paths when the batch says only "something, and we cannot say what"`, () => {
     const approvals = vi.fn();
     const chores = vi.fn();
@@ -64,7 +62,7 @@ it(`wakes every subscriber for its own paths when the batch says only "something
     expect(chores).toHaveBeenCalledWith([`${STATE_DIR}/records/chores/`]);
 });
 
-// An extension that declared no files claimed nothing, so it hears nothing, including from the empty batch.
+// An extension that declared no files hears nothing, including from the empty batch.
 it(`never wakes a subscriber that declared no files`, () => {
     const listener = vi.fn();
     listen([], listener);

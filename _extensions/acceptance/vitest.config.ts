@@ -5,20 +5,8 @@ import { INTEGRATION_SUITE, UNIT_SUITE } from "@intentic/testing/vitest";
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
-/* THE CONTRACT, FROM SOURCE, and it has to be an alias rather than the `@intentic/src` export condition every
- * workspace package publishes. A dependency vitest externalizes is resolved by NODE, which never sees Vite's
- * conditions, so the condition alone leaves these suites reading whatever `dist` happens to hold: a BUILD, not
- * the code beside them.
- *
- * That fails SILENTLY, which is why it is worth the comment here too. These suites parse their fixtures through
- * `PanelsListSchema` precisely so the shapes are real rather than invented, and a `z.object` strips keys it does
- * not know about. Against a stale build, every fixture field the contract had just gained was quietly deleted on
- * its way in, and the assertions then failed as though the code under test were wrong. Aliasing the package ROOT
- * (not its index) keeps the subpath entries resolving to source too. Same reasoning as _sandbox/sandbox/vitest.config.ts.
- *
- * ON EACH PROJECT, not at the top level: a project is its own Vite config, and a `resolve` stated once above
- * `projects` is silently ignored, which lands right back on the stale build described above. Same reasoning as
- * _search/iq/vitest.config.ts. */
+// Aliased to source, per project: `projects` ignores a top-level `resolve`, and a stale `dist` silently drops new
+// contract fields.
 const resolve = {
     alias: {
         "@intentic/extension-api": here(`../../_shared/extension-api/src`),

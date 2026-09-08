@@ -7,28 +7,12 @@ import { STATE_DIR } from "@intentic/constants";
 import { tokensOf } from "./env.js";
 import type { DerivedDoc } from "./derivers/deriver.js";
 
-/* THE SIDECAR: one markdown shadow per derivable workspace file, at a path any reader can predict from the
- * source path alone. `docs/spec.docx` shadows to `.intentic/local/cache/derived/docs/spec.docx.md` — a
- * mirrored tree rather than a content-addressed store, because the reader is an agent that knows the source
- * path and must find the shadow without an index.
- *
- * Under `.intentic/local/cache/` deliberately, that prefix already means three right things at once
- * (sandbox-contract's WORKSPACE_STATE_FILES): portability `derived` (an export never carries it, it re-derives),
- * the daemon's file watcher descent-ignores it (a sidecar write can never echo back as a workspace change and
- * re-trigger the derivation that wrote it), and the state janitor may reclaim it wholesale.
- *
- * Front matter is the shadow's provenance and its freshness in one place: the source path, the source's
- * content hash, the deriver stamp, when. A shadow is FRESH exactly when hash and stamp both still match —
- * an edited source or a bumped deriver each read as stale with no timestamp games (mtimes lie across git
- * checkouts; content hashes do not).
- *
- * THE SECURITY LINE, and the reason writes go through exactly one function: a sidecar is read back by a plain
- * `Read`, which wraps nothing — the daemon's untrusted-content envelope covers what the agent PULLS IN, never
- * workspace files. A docx that arrived from outside can spell `</untrusted-content>` or `<system-reminder>`
- * in its body, and a derivation that copied those bytes into a readable .md would hand a stranger the
- * harness's voice. So neutralization (@intentic/base/outside-text, the same folding the daemon's seams use)
- * is baked into the sidecar's bytes at write time, and the front matter names the provenance so the model
- * knows what it is reading. */
+// One markdown shadow per derivable file, at a predictable mirrored path under .intentic/local/cache/derived (portable,
+// watcher-ignored, janitor-reclaimable).
+// Front matter carries provenance and freshness: a shadow is fresh exactly when the source's content hash and the
+// deriver stamp both still match, never by mtime.
+// Writes go through exactly one function, since a sidecar is read back by a plain `Read` with no untrusted-content
+// wrapper, so neutralization must happen at write time.
 
 export const DERIVED_DIR = `${STATE_DIR}/local/cache/derived`;
 
@@ -50,8 +34,7 @@ export interface SidecarHead {
     readonly deriver: string | undefined;
 }
 
-// The two front-matter fields freshness reads, off the top of the file. Written by us, so the parse is a
-// line scan, not YAML; a sidecar that fails it (someone edited one by hand) simply reads as stale.
+// The two front-matter fields freshness reads; a line scan, so an edited-by-hand sidecar simply reads as stale.
 export const parseSidecarHead = (content: string): SidecarHead => {
     if (!content.startsWith("---\n")) {
         return { sha256: undefined, deriver: undefined };
@@ -65,7 +48,7 @@ export const parseSidecarHead = (content: string): SidecarHead => {
     return { sha256: field("sha256"), deriver: field("deriver") };
 };
 
-/** The body after the front matter fence — what `read` prints. Content without a fence is all body. */
+/** Body after the front matter fence — what `read` prints; content without a fence is all body. */
 export const sidecarBody = (content: string): string => {
     if (!content.startsWith("---\n")) {
         return content;
@@ -98,8 +81,10 @@ export interface WriteSidecarInput {
     readonly derivedAt: Date;
 }
 
-/** Compose and write one sidecar; answers the neutralized body and its token count. The ONE writer, so no
- * derived byte reaches disk without passing the neutralizer. */
+/**
+ * Composes and writes one sidecar, returning the neutralized body and its token count.
+ * The one writer, so no derived byte reaches disk without passing the neutralizer.
+ */
 export const writeSidecar = async (workspaceRoot: string, input: WriteSidecarInput): Promise<{ path: string; body: string; tokens: number }> => {
     const body = neutralizeOutsideText(input.doc.markdown);
     const title = input.doc.title === undefined ? undefined : neutralizeOutsideText(input.doc.title);

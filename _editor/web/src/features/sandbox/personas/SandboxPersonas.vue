@@ -27,63 +27,35 @@ import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
-/* THE PERSONAS this sandbox wears when it acts outside, and the one place a WHOLE card is written: the accounts
- * it speaks through, what it may do, where it works. (A folder's own personas can also be named and bounded from
- * the Workspace tree's row icon; that panel asks for a name and links here for the rest. Both write through
- * personaCard.ts.)
- *
- * A persona is NOT per-site. It is a person the outside world reads: "Work" holds its Reddit account AND its X
- * account AND whatever else belongs to that person, so one card can span every platform the owner signed into
- * under that name. That is the whole reason the layer exists: the accounts already live one-per-login in the
- * capability manifest, and what was missing was anything saying which of them are the same someone.
- *
- * It lives in the sandbox hub rather than beside the accounts on /capabilities because it is a property of the
- * BOX, shared by every chat and every automation in it, not a detail of one connection. The accounts page
- * answers "what is this sandbox signed into"; this answers "who is it".
- *
- * Under "Reach" and pointedly not under "Configuration", where the AI-account row lives: those two are one
- * letter apart in English and opposite in consequence, which subscription PAYS for a turn versus whose name is
- * on what it posts, and putting them in the same group is how someone eventually gets the billing right and
- * the Reddit wrong. */
+// The personas this sandbox wears when it acts outside: which accounts it speaks through, what it may do, where it
+// works. Not per-site: one card spans every platform under that name. Lives here, not on /capabilities, since it's a
+// property of the box; under "Reach", not "Configuration", since it's who acts, not what pays.
 
 const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
 const outline = useSandboxOutline(isLoading);
-// The list query reports a bare message; this page knows the user came to see their personas.
+// The list query reports a bare message; this page names what the user came here to read.
 const listNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your personas.`, detail: error.value },
 );
-// The accounts a card can name: the logged-in browser profiles, each carrying the brand of the site it is an
-// account of. One capability = one account, so a site the owner connected twice appears twice and exactly one
-// of them belongs on any given card.
+// Logged-in browser profiles, each carrying its site's brand; one capability per account, so a twice-connected site
+// appears twice.
 const { accounts, accountOf } = useBrowserAccounts();
 
-// The other three things a card grants by id: see grantablesFrom, shared with the Workspace tree's quick panel.
+// The other three things a card grants by id (see grantablesFrom), shared with the Workspace tree's quick panel.
 const { capabilities } = useCapabilities();
 const grantables = computed<PersonaGrantable[]>(() => grantablesFrom(capabilities.value));
 
-/* The marks a row shows for the accounts its card names: the fastest way to read that a persona spans two
- * sites, and the reason the row does not spell them out in a comma-joined line. An id the manifest has no
- * capability for still gets an entry: a card may name an account nobody has added HERE, and dropping it would
- * make the row claim a persona reaches less than it was written to. */
+// Marks for the accounts a card names; an id with no matching capability still gets one, so the row doesn't understate
+// what the persona reaches.
 const marks = (persona: Persona) => persona.capabilities.map((id) => ({ id, account: accountOf(id), signedIn: isConnected(id) }));
 
-/* Whether a card can act AT ALL right now. A persona naming three accounts with one signed in is still usable:
- * the turn simply reaches the one, so this marks only the persona that can reach nothing, which is every one
- * of them on a workspace someone has just cloned and the state a surface must not paint as working. */
+// Whether a card can act at all right now: one signed-in account among several is enough, so this only marks a persona
+// that can reach nothing.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
-/* ── The editor ──────────────────────────────────────────────────────────────────────────────────────────────
- *
- * AN ACCORDION OVER A SETTINGS OBJECT, and the two rules that follow from calling it that.
- *
- * A persona is settings, not a document: nine switches, two folder answers and a list of accounts, each of which
- * means something on its own. So an OPEN card writes as you change it: flip a switch and it is flipped, the way
- * every settings surface people already use behaves, and there is no Save button to leave a card half-decided
- * behind.
- *
- * The row is the disclosure. There is no pencil-to-edit mode: the thing you click to see a card is the thing you
- * click to change it, which is one affordance instead of two and the pattern the Environment tab already uses.
- * The NAME is not in the panel at all: it stays the row's own title, text until you click it (inlineRename). */
+// Accordion over a settings object: an open card writes as you change it (no Save button), and the row itself is the
+// disclosure, there's no separate edit affordance. The name stays the row's own title, text until clicked
+// (inlineRename).
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
 
@@ -92,19 +64,18 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     label: persona.label ?? persona.id,
     capabilities: [...persona.capabilities],
     ...powersDraftOf(persona),
-    // One folder or none, carried as a list because that is what the picker models either way.
+    // One folder or none, carried as a list, matching what the picker models either way.
     startIn: persona.workspace?.startIn === undefined ? [] : [persona.workspace.startIn],
     folders: [...(persona.workspace?.folders ?? [])],
     systemPromptMode: persona.systemPromptMode,
     brief: persona.brief ?? ``,
-    // Absent context is "every repository"; a list, even an empty one, is the card deciding.
+    // Absent context means every repository; a list, even empty, is the card deciding.
     carries: persona.context === undefined ? undefined : [...persona.context.repos],
     models: [...(persona.models ?? [])],
 });
 
-/* Changing the draft without the autosave below reading it as an edit: installing one on open, and writing a
- * committed rename back into it. Both are the app catching the draft UP to the truth, and a save fired for
- * either would be a write nobody asked for (and, on open, a write of every card the user merely looked at). */
+// Marks a draft change as not-an-edit (opening a card, or writing back a committed rename), so the autosave watcher
+// doesn't fire a write nobody asked for.
 let settling = false;
 const quietly = (mutate: () => void): void => {
     settling = true;
@@ -126,21 +97,9 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
-/* ── Making one ──────────────────────────────────────────────────────────────────────────────────────────────
- *
- * A NAME, AND NOTHING ELSE. Creating a persona used to open the whole editor with a Create button under it, so
- * the first thing this page ever asked a new user was thirty questions about a thing that did not exist yet:
- * which accounts it speaks through, nine permissions, two folders, a system prompt. Almost every answer is a
- * default, and the one that is not is the name.
- *
- * So it is one field. The card is written with the defaults the schema already means (full toolbox, whole
- * workspace, the sandbox's prompt: all of which it stores as ABSENT, so the committed file says nothing about
- * questions nobody was asked), and then the new card OPENS, which is where the rest is set at leisure with the
- * row's own title above it saying what is being edited.
- *
- * The name lives in its own ref rather than in a half-built draft: a draft with no `original` was a card that
- * did not exist wearing the type of one that did, and every field on it was optional-until-saved in a way the
- * editor had to keep re-checking. */
+// A name, and nothing else: the card is written with the schema's own defaults (stored as absent, so the file says
+// nothing about questions nobody was asked), then opens for the rest. The name lives in its own ref rather than a
+// half-built draft, since a draft with no `original` would need every field to be optional-until-saved.
 const newName = ref<string | undefined>(undefined);
 
 const startAdd = (): void => {
@@ -154,7 +113,7 @@ const cancelAdd = (): void => {
 };
 
 const newId = computed(() => personaSlug(newName.value ?? ``));
-// A new card may not land on a name already taken: saving would silently edit the other one instead.
+// A new card can't land on a name already taken; saving would silently edit the other one.
 const taken = computed(() => personas.value.some((persona) => persona.id === newId.value));
 const newValid = computed(() => newId.value !== `` && !taken.value);
 const nameHint = computed(() => {
@@ -164,13 +123,8 @@ const nameHint = computed(() => {
     return taken.value ? `You already have a persona called ${newId.value}.` : `Use letters or digits.`;
 });
 
-/* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, and one that limits nothing
- * stores no `workspace`, so the committed file stays a description of the DECISIONS somebody made rather than a
- * dump of every default, and a diff on it reads as the change it was.
- *
- * That is the same rule the label follows, applied to two objects instead of a field. The powers half lives in
- * personaCard.ts, because the tree's quick panel writes cards too and two copies of this rule is two answers to
- * "was anything actually decided here". */
+// Stores only what was decided: no `powers` for a card that grants everything, no `workspace` for one that limits
+// nothing. Same rule the label follows, shared with personaCard.ts since the quick panel writes cards too.
 const cardFrom = (state: PersonaDraft): Persona => {
     const id = state.original;
     const workspace = {
@@ -184,25 +138,21 @@ const cardFrom = (state: PersonaDraft): Persona => {
         capabilities: [...state.capabilities],
         ...(storedPowers(state) !== undefined ? { powers: storedPowers(state) } : {}),
         ...(Object.keys(workspace).length > 0 ? { workspace } : {}),
-        // Same rule as the two above: a card following the sandbox stores nothing, so the file says what was
-        // decided rather than restating a default nobody chose.
+        // Same rule: a card following the sandbox stores nothing, not a restated default.
         ...(state.systemPromptMode !== undefined ? { systemPromptMode: state.systemPromptMode } : {}),
         ...runsOn(state),
     };
 };
 
-/* THE FIFTH QUESTION'S HALF OF THE CARD, by the same rule: a brief nobody wrote, a card that carries everything
- * and a card with no ladder each store NOTHING, so the committed file holds the decisions and not the defaults. */
+// The fifth question's half of the card, same rule: an unset brief, full-carry, or empty ladder each store nothing.
 const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "models"> => ({
     ...(state.brief.trim() !== `` ? { brief: state.brief.trim() } : {}),
     ...(state.carries !== undefined ? { context: { repos: [...state.carries] } } : {}),
     ...(state.models.length > 0 ? { models: [...state.models] } : {}),
 });
 
-/* CREATE, THEN OPEN. The card is written with nothing on it but its name and an empty account list: every
- * other answer is a default the schema already means, and storing them would put a decision nobody made into a
- * tracked file. Then the new card opens, because "made a persona" and "now set it up" are one errand and the
- * editor is where the second half happens. */
+// Writes the card with just its name and an empty account list; every other field is a default the schema already
+// means. Then opens the new card, since "made a persona" and "now set it up" are one errand.
 const submit = async (): Promise<void> => {
     if (!newValid.value) {
         return;
@@ -213,8 +163,7 @@ const submit = async (): Promise<void> => {
     try {
         await save.mutateAsync({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         newName.value = undefined;
-        // Quietly, like any other open: the autosave watcher must not read a card being SHOWN as a card being
-        // edited and write back the row it just created.
+        // Quietly, like any other open, so the autosave watcher doesn't treat the card it just showed as an edit.
         quietly(() => {
             draft.value = draftOf({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         });
@@ -223,10 +172,8 @@ const submit = async (): Promise<void> => {
     }
 };
 
-/* The live half. Debounced because a folder picked from the tree and a switch flipped twice while deciding are
- * each several mutations of one intent, and a write per keystroke-equivalent would put a card's every
- * intermediate state into a tracked file. Long enough to coalesce a decision, short enough that the spinner
- * beside the name has stopped by the time attention moves on. */
+// Debounced, since several flips or a folder pick are one intent, not one write each; long enough to coalesce a
+// decision, short enough that the spinner has cleared by the time attention moves on.
 let pending: ReturnType<typeof setTimeout> | undefined;
 const persist = async (): Promise<void> => {
     const state = draft.value;
@@ -253,13 +200,9 @@ watch(
 );
 onBeforeUnmount(() => clearTimeout(pending));
 
-/* ── The name ────────────────────────────────────────────────────────────────────────────────────────────────
- * One state machine for the whole list rather than one per row: only ever one name is being typed, and a factory
- * inside a v-for would build (and throw away) one for every persona on every render.
- *
- * A rename writes the WHOLE card, because the save is an upsert, and it reads that card from the open draft
- * when there is one, so a rename lands on top of switches flipped a second ago rather than on the version the
- * list was last told about. The id is frozen either way: automations pin to it, so only the label moves. */
+// One rename state for the whole list, not one per row (a v-for factory would build and discard one on every render).
+// Writes the whole card (an upsert), reading from the open draft if there is one so a rename doesn't clobber a switch
+// flipped a moment ago; the id stays frozen.
 const renamingId = ref<string | undefined>(undefined);
 const renameTarget = computed(() => personas.value.find((persona) => persona.id === renamingId.value));
 const rename = createInlineRename(
@@ -284,11 +227,9 @@ const beginRename = (persona: Persona): void => {
     rename.begin();
 };
 
-/* ── Routing ─────────────────────────────────────────────────────────────────────────────────────────────────
- * Whether a new chat is matched to one of these cards from its first message (settings.personaRouting; the
- * daemon's persona-router.ts does the reading). It lives on THIS page rather than beside the model lists
- * because it is a fact about what personas do, and the sentence under each card (`brief`) is what the match
- * reads: someone deciding whether to switch it on is looking at the cards it would choose between. */
+// Whether a new chat is matched to a persona from its first message (settings.personaRouting; daemon's
+// persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the cards it would
+// choose between.
 const { settings, patch } = useSandboxSettings();
 const ROUTING = [
     { label: `Off`, value: `off` },
@@ -300,7 +241,7 @@ const setRouting = (value: string): void => {
     patch({ personaRouting: value as (typeof ROUTING)[number][`value`] });
 };
 
-// ── Removal ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Removal.
 const removing = ref<Persona | undefined>(undefined);
 const confirmRemove = async (): Promise<void> => {
     if (removing.value === undefined) {
@@ -313,16 +254,16 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <!-- One sentence. The rest of what a persona is: that it spans sites, that the names travel and the
-             logins don't: is shown by the surface itself rather than explained above it. -->
+        <!-- One sentence; the rest (spans sites, names travel not logins) is shown by the surface itself. -->
         <p class="mb-5 max-w-2xl text-sm text-muted">
             A persona is who this sandbox is when it works: the accounts it speaks through, what it may do, and where in the workspace it works. Point
             an automation at one and it runs inside those bounds.
         </p>
 
-        <!-- THE ONE SETTING ON THIS PAGE, above the list it governs. Three words rather than a switch, because the
-             middle one is the honest default: a persona takes accounts and repositories AWAY from a chat, and the
-             first time that happens it should happen because somebody pressed the chip. -->
+        <!--
+            The one setting on this page, above the list: three words, not a switch, since the honest default already takes accounts and repos away
+            from a chat only when someone chooses to.
+        -->
         <div v-if="settings !== undefined && personas.length > 0" class="mb-5 flex flex-wrap items-center justify-between gap-3">
             <span class="flex min-w-0 flex-col">
                 <span class="flex items-center gap-2 text-sm text-content">
@@ -339,11 +280,8 @@ const confirmRemove = async (): Promise<void> => {
         </div>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
-        <!-- The empty state below is a real one: it explains what NOT having a persona costs, so it must not
-             be shown to somebody who simply has not been told yet. The list's own shape stands in meanwhile. -->
-        <!-- The outline is a <RowGroup> like the list it stands in for, so it lands on the same tier by
-             construction. It used to state its own: the rows arrived compact, the placeholder had promised
-             comfortable ones, and the list visibly shrank as it landed. -->
+        <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
+        <!-- The outline is a <RowGroup> like the list itself, so it lands on the same tier as what it stands in for. -->
         <template v-if="isLoading">
             <RowGroup v-if="outline" label="Your personas">
                 <div role="status" aria-busy="true">
@@ -354,15 +292,12 @@ const confirmRemove = async (): Promise<void> => {
         </template>
 
         <template v-else>
-            <!-- NO ACCOUNTS CONNECTED IS NOT A PROBLEM WITH THIS PAGE. It used to open with a warning saying a
-                 persona needs one to speak through, which is not true: a card that names a folder and bounds
-                 what an agent may touch is a whole persona on its own, and most cards start that way. The way
-                 to connect an account is on the Capabilities page, where somebody who wants one is already
-                 headed; it does not have to be shouted from here. -->
+            <!-- No warning here for missing accounts: a card with none still bounds where an agent works, and connecting one is Capabilities' job. -->
 
-            <!-- NO PERSONAS AND NOTHING BEING WRITTEN gets a real empty state rather than a group with one line
-                 of apology in it. It says what is true right now: automations are mute, chats are unrestricted
-                , because that is the consequence someone is here to change, and offers the one action. -->
+            <!--
+                Real empty state, not a line of apology: states the actual consequence (automations mute, chats unrestricted) and offers the one
+                action.
+            -->
             <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
@@ -371,8 +306,7 @@ const confirmRemove = async (): Promise<void> => {
                         Until there is one, an automation you schedule can't post anywhere, and a chat reaches every account you've connected.
                     </span>
                 </div>
-                <!-- Never disabled on "you have no accounts". A card with none is a card that bounds where an
-                     agent works and what it may do, which is most of what a persona is for. -->
+                <!-- Never disabled for having no accounts: a card with none still bounds where an agent works. -->
                 <Button label="Add a persona" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
@@ -391,16 +325,10 @@ const confirmRemove = async (): Promise<void> => {
                     </Button>
                 </template>
 
-                <!-- THE ROW IS THE DISCLOSURE. Clicking it opens the card in place; there is no second
-                     affordance meaning the same thing, which is what the pencil used to be.
-
-                     `hit="pair"`, the same as every other openable row in the app (a port, a turn, a pipeline
-                     run, a manifest file). It cannot be `header` — the name is itself a control (click it to
-                     rename), and a <button> inside a <button> is invalid and unusable. `pair` costs nothing
-                     here: the whole row still opens on a press, the chevron-and-face pair is the <button> a
-                     keyboard tabs to, and <Row>'s headline guard is what lets the name go on renaming without
-                     also toggling the card. This row used to be the app's one `hit="row"`, which put the hover
-                     wash on the header alone — so an open card's wash stopped dead across the face. -->
+                <!--
+                    The row is the disclosure, no second affordance. `hit="pair"` since the name is its own control (a button inside a button is
+                    invalid); `Row`'s headline guard keeps renaming from also toggling the card.
+                -->
                 <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
@@ -409,31 +337,18 @@ const confirmRemove = async (): Promise<void> => {
                     :open="isOpen(persona)"
                     @update:open="toggleOpen(persona)"
                 >
-                    <!-- A persona is a person, so it gets a person's face in full colour (PersonaFace holds
-                         that). THE FACE IS A ROW'S MARK HERE, NOT A CARD'S SUBJECT: this is a record list, one
-                         tab along from the extensions and environment lists. The rail draws faces at 56 for its
-                         cards; a row's mark is the ROW TIER'S size, which is the same 22 those neighbouring
-                         lists give their BrandMarks.
-
-                         It used to be 32, under a comment claiming both 32 and 22 in one sentence — which is
-                         what a number typed at a call site turns into once two surfaces disagree. A round face
-                         does read a shade smaller than a square plate at the same box, and that is real, but
-                         paying for it costs a second number and a rule about when it applies, which is how 32
-                         got here. One size per tier, handed out as `mark`, nothing to remember.
-
-                         The disclosure arrow rides in front of the face, where a reader looks for one, rather
-                         than in the row's trailing cluster, which is where facts and actions live. It is
-                         <DisclosureRow>'s arrow now: this file drew a `chevron-down`/`chevron-right` swap, two
-                         files away another drew `chevron-right` + `rotate-90`, and they were the same control.
-                         It is also a real button now, so the face is where a keyboard gets in. -->
+                    <!--
+                        Face drawn at the row tier's size (`mark`, 22), matching neighbouring lists' BrandMarks, not the rail's 32-size cards. The
+                        disclosure arrow is <DisclosureRow>'s own now, not a hand-drawn chevron swap.
+                    -->
                     <template #lead="{ mark }">
                         <PersonaFace :persona :size="mark" />
                     </template>
 
-                    <!-- THE NAME READS AS A NAME until you ask to change it: click-to-rename, on the app's one
-                         inline-rename machine (enter commits, escape cancels, blur commits, unchanged is a
-                         silent cancel). An input parked here permanently would make a settings list look like a
-                         form and put a text box where every other row in the app has a title. -->
+                    <!--
+                        Click-to-rename on the app's inline-rename machine (Enter commits, Escape cancels, blur commits). A permanently visible input
+                        would make this settings list read as a form.
+                    -->
                     <template #title>
                         <input
                             v-if="rename.editing && renamingId === persona.id"
@@ -457,28 +372,21 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!-- Under the name: the card's own one-line brief when it has one, or a rename failure, the
-                         one moment the row has something else to say. Accounts live in the open card, and the
-                         marks on the right already say which platforms. The slot is omitted when there is
-                         neither so Row does not reserve a blank line for it. -->
+                    <!--
+                        Under the name: the card's own brief, or a rename failure, whichever applies; omitted entirely so Row doesn't reserve a blank
+                        line.
+                    -->
                     <template v-if="(rename.error !== undefined && renamingId === persona.id) || persona.brief !== undefined" #description>
                         <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
-                        <!-- The one line the card says about itself, and the line a new chat is matched on: worth
-                             the second line on the row, because it is the difference between six names and six
-                             jobs. -->
+                        <!-- The line a new chat is matched on; worth its own row line, since it's the difference between a name and a job. -->
                         <span v-else class="truncate">{{ persona.brief }}</span>
                     </template>
 
                     <template #meta>
-                        <!-- The sites this persona speaks on, as marks: two logos side by side say "spans
-                             platforms" faster than any wording under them can. A notch under the face that
-                             leads the row, because these are facts ABOUT the card, not the card itself.
-
-                             16, not the tier's 22: #meta is a `text-2xs` cluster by <Row>'s contract, and a mark
-                             drawn at the LEAD's size in it stops reading as a fact and starts competing with the
-                             face for the row's subject. It was 22 while the face was 32 — the same one-notch
-                             relationship, from when the face was a number this file chose. Same 16 <PersonaForm>
-                             gives the account marks in its own lines. -->
+                        <!--
+                            Marks say "spans platforms" faster than words could. 16, not the row tier's 22, since #meta is a smaller cluster by
+                            <Row>'s contract, and a lead-sized mark here would compete with the face.
+                        -->
                         <span v-if="persona.capabilities.length > 0" class="flex items-center gap-1">
                             <BrandMark
                                 v-for="mark in marks(persona)"
@@ -490,10 +398,7 @@ const confirmRemove = async (): Promise<void> => {
                                 :idle="!mark.signedIn"
                             />
                         </span>
-                        <!-- A card that has been bounded says so on its row. Which shelf is off is the form's
-                             business; what the LIST owes a reader scanning six cards is which of them are
-                             limited at all: that is the difference between "my Front Desk is safe" being a
-                             belief and being something they can see. -->
+                        <!-- A bounded card says so on its row; which shelf is off is the form's business, this is just whether any are. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>
                             Not signed in
@@ -501,8 +406,7 @@ const confirmRemove = async (): Promise<void> => {
                     </template>
 
                     <template #control>
-                        <!-- A card that writes as you change it owes you a sign that it did. Only while the
-                             write is in the air: a tick that lingers is a second thing to read on every row. -->
+                        <!-- Shown only while the write is in flight, since a lingering tick is one more thing to read on every row. -->
                         <Icon v-if="isOpen(persona) && save.isPending.value" name="spinner" spin class="text-2xs text-subtle" />
                         <button
                             type="button"
@@ -514,31 +418,25 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!-- The card opens INSIDE the row it belongs to, so there is never a form on screen whose
-                         subject you have to remember, and the name it would have asked for first is the row's
-                         own title, three lines up. No Save: an open card writes as it is changed.
-
-                         It used to need a `click.stop` wrapper, because the row is the disclosure and every
-                         switch flipped in here ALSO closed the card it belongs to. A `drawer` body is rendered
-                         outside the row's click handler, so there is nothing left to stop. -->
+                    <!--
+                        Opens inside the row it belongs to, so there's no separate form whose subject you'd have to remember; no `click.stop` needed
+                        since a `drawer` body renders outside the row's click handler.
+                    -->
                     <template #below>
                         <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </template>
                 </DisclosureRow>
 
-                <!-- MAKING ONE ASKS FOR A NAME AND NOTHING ELSE, at the tail of the group where the new row will
-                     appear. Everything else about a persona has a default worth keeping, and the card opens the
-                     moment it exists, so this is the one field between "I want a persona" and having one, rather
-                     than a form standing in front of thirty answers nobody has an opinion about yet. -->
+                <!--
+                    One field between wanting a persona and having one: everything else has a default worth keeping, and the card opens the moment it
+                    exists.
+                -->
                 <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block">
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-wrap items-center gap-2">
-                            <!-- The face the row above it will have, at the size those rows draw it: this line
-                                 becomes one of them the moment the name is committed. That promise is now kept by
-                                 construction — `mark` is the tier's, the same number the rows above read. -->
+                            <!-- The face this row will have once committed, drawn at the same tier size (`mark`) already. -->
                             <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="mark" />
-                            <!-- A name is three words. Capped, because an input stretched across the card reads
-                                 as a field expecting a paragraph. Enter commits it, like any single-field form. -->
+                            <!-- Capped width, since a name is a few words, not a paragraph; Enter commits, like a single-field form. -->
                             <input
                                 v-model="newName"
                                 :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
@@ -560,8 +458,7 @@ const confirmRemove = async (): Promise<void> => {
             </RowGroup>
         </template>
 
-        <!-- Removing a card takes away a persona, never an account: worth saying on the confirm, because the two
-             are easy to conflate and only one of them is undoable by clicking again. -->
+        <!-- Removing a persona, never an account, worth saying since only one of those is undoable by clicking again. -->
         <ConfirmDialog
             :open="removing !== undefined"
             :header="`Remove ${removing?.label ?? removing?.id}?`"

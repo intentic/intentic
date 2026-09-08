@@ -8,17 +8,10 @@ import { expect, test } from "vitest";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createGrokAgent, type GrokRunner, type GrokTurn } from "./grok-agent.js";
 
-/* THE HALF OF THE ADAPTER THAT TOUCHES DISK: an attached screenshot is read off the filesystem and sent to the
- * model as a PICTURE, rather than named in the prompt for the read tool to go and fetch.
- *
- * This runtime used to put every attachment in the prompt as a path and leave the fetching to the model. On the
- * Google backend that route was blocked outright (see geminiProviderConfig in opencode.ts) and the reply was
- * "I can't view the image"; even where it worked it was a round trip a screenshot does not need. Codex, Pi and
- * ACP have always split images out. Real files here because the split IS the file read: a fake would only
- * re-assert the code's own shape. Everything else (event mapping, plan flow, the self-heal) stays in the unit
- * suite next door. */
+// Exercises the real filesystem read behind attached images: needs actual files on disk, unlike the mocked runner in
+// grok-agent.test.ts.
 
-// Same fake runner the unit suite uses: one canned OpenCode Event list per invocation, capturing each turn.
+// One canned OpenCode Event list per invocation, capturing each turn.
 const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTurn[] } => {
     const calls: GrokTurn[] = [];
     const runner: GrokRunner = async function* (turn) {
@@ -30,8 +23,8 @@ const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTur
 
 const request = { prompt: "what is wrong with this screen?", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
-// `onPlan` schedules a decision for each plan frame AFTER the generator parks on the pending-plan bridge (the
-// yield suspends before wait() registers, hence the macrotask).
+// `onPlan` fires via `setTimeout` because the generator's yield suspends before `wait()` registers the pending-plan
+// bridge.
 const collect = async (
     agent: ReturnType<typeof createGrokAgent>,
     turnRequest: Parameters<ReturnType<typeof createGrokAgent>>[0],
@@ -48,7 +41,7 @@ const collect = async (
     return events;
 };
 
-// The eight bytes every PNG starts with: enough to be read, small enough to assert byte for byte.
+// Minimal valid PNG signature, enough to satisfy a real file read in the test.
 const PNG_HEADER = Buffer.from("89504e470d0a1a0a", "hex");
 
 test("attached images ride as native picture parts while other files stay referenced by path", async () => {
@@ -66,9 +59,8 @@ test("attached images ride as native picture parts while other files stay refere
     expect(turn.images).toEqual([
         { type: "file", mime: "image/png", filename: "shot.png", url: `data:image/png;base64,${PNG_HEADER.toString("base64")}` },
     ]);
-    // A PDF is still named in the prompt: the read tool handles those, and they are not what was broken.
     expect(turn.prompt).toContain(report);
-    // An image that will not open degrades into the same note rather than taking the turn down with it.
+    // An unreadable image degrades to a path note instead of failing the turn.
     expect(turn.prompt).toContain(missing);
     expect(turn.prompt).not.toContain(shot);
 
@@ -90,7 +82,6 @@ test("a plan turn sends attached images on the first planning message only: the 
     );
     await collect(createGrokAgent(runner), { ...request, permissionMode: "plan", attachments: [shot] }, () => ({ approve: true }));
 
-    // Plan then execute, both on the one session: re-sending would pay for the same screenshot twice.
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toHaveLength(1);
     expect(calls[1]!.images).toBeUndefined();

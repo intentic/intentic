@@ -1,12 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { changedSourceIn } from "./agent-test-strength.js";
 
-/* The decision logic that needs no disk: which changes count as the mutant. This is the half of the check that
- * can be wrong QUIETLY — the subprocess half fails loudly or not at all, since every error path in it returns
- * silence, but a filter that drops the wrong file produces a confident notice about the wrong thing.
- *
- * `packageOf` and the end-to-end path are in the integration suite next door, because both need a real
- * directory tree and the budget follows the kind of suite, not the kind of function. */
+// Which changed files count as the mutant; a wrong filter fails quietly, unlike the subprocess half. `packageOf` and
+// the end-to-end path live in the integration suite next door.
 
 describe(`which changes count as the mutant`, () => {
     const repo = `/repo`;
@@ -17,16 +13,13 @@ describe(`which changes count as the mutant`, () => {
         expect(changedSourceIn(diff, repo, pkg)).toEqual([`/repo/pkg/src/a.ts`, `/repo/pkg/src/b.vue`]);
     });
 
-    /* THE EXCLUSION THE WHOLE CHECK RESTS ON. Reverting the test files alongside the source would ask whether the
-     * OLD tests pass against the OLD code — always yes — and every run would report a finding. */
     test(`never treats a test file as part of the change`, () => {
         const diff = [`pkg/src/a.ts`, `pkg/src/a.test.ts`, `pkg/src/b.spec.tsx`, `pkg/src/c.integration.test.ts`].join(`\n`);
         expect(changedSourceIn(diff, repo, pkg)).toEqual([`/repo/pkg/src/a.ts`]);
     });
 
     test(`a package whose name merely prefixes this one is a different package`, () => {
-        // `/repo/pkg-tools/...` starts with `/repo/pkg` as a string. Comparing without the separator would pull a
-        // sibling's files into this package's run.
+        // Without the separator, `/repo/pkg-tools` would match as a prefix of `/repo/pkg`.
         expect(changedSourceIn(`pkg-tools/src/a.ts`, repo, pkg)).toEqual([]);
     });
 

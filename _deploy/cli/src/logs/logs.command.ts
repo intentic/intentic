@@ -10,14 +10,11 @@ import { withRunLog } from "../lib/run-log.js";
 
 const DEFAULT_TAIL = 200;
 
-// Node ids/types are interpolated into a host shell command, restrict them to the safe charset rather than
-// quote-escaping (real ids already match; anything else is not a resource we deployed).
+// Ids/types get interpolated into a shell command; restricted to a safe charset instead of escaping.
 const SAFE_NAME = /^[a-zA-Z0-9_.-]+$/;
 
-// The host-side fetch: compose stacks (forgejo/komodo/signoz/outline/…) keep their project at
-// /opt/intentic/<type>, everything docker-run directly (workspace, runner, backup, backing services) carries
-// an intentic.id label: <id> for direct runs, intentic-<type> for compose dashboards. `2>&1` folds each
-// container's stderr log stream into the tap.
+// Compose stacks keep their project at /opt/intentic/<type>; direct docker-run resources carry an intentic.id label (id
+// or intentic-<type>). Folds each container's stderr into the tap.
 const logsScript = (id: string, type: string, tail: number): string =>
     [
         `if [ -f /opt/intentic/${type}/compose.yaml ]; then`,
@@ -52,9 +49,7 @@ export const logsCommand = buildCommand({
         const dir = dirname(artifact);
         loadEnvFile(dir);
         const graph = await readArtifact(artifact);
-        // A resource has host logs iff it was deployed over SSH, its inputs carry the copied ssh block
-        // (state-resolver's sshOf). Komodo-managed app deployments keep runtime logs in Komodo by design:
-        // `intentic deploy deployments` deep-links there.
+        // Has host logs iff deployed over SSH (ssh block in inputs); Komodo-managed deployments log in Komodo instead.
         const loggable = Object.values(graph.resources).filter((node) => node.inputs["address"] !== undefined && node.inputs["sshKey"] !== undefined);
         if (id === undefined) {
             for (const node of loggable) {
@@ -73,8 +68,7 @@ export const logsCommand = buildCommand({
         if (!SAFE_NAME.test(node.id) || !SAFE_NAME.test(node.type)) {
             throw new Error(`resource id/type contains characters unsafe for a remote shell: "${node.id}" (type "${node.type}")`);
         }
-        // lenient: a $ref input that only resolves during apply must not block reading the ssh block, which
-        // is always literal (+ the sshKey $secret from the .env loaded above).
+        // lenient: a $ref that only resolves during apply must not block reading the ssh block, always literal here.
         const resolved = resolveInputs(node.inputs, createStore(), process.env, { lenient: true });
         const parsedSsh = sshSchema.safeParse(resolved);
         if (!parsedSsh.success) {
@@ -83,8 +77,7 @@ export const logsCommand = buildCommand({
         const ssh = createSshExecutor(createKnownHostsStore(dir));
         const session = await ssh.connect(sshTarget(parsedSsh.data));
         try {
-            // Stream chunks straight through the provider-log channel so text mode prints live and ndjson
-            // frames each line for a driving backend (the sandbox UI).
+            // Streams chunks through the log channel: text mode prints live, ndjson frames each line for a backend.
             let pending = "";
             const result = await session.exec(logsScript(node.id, node.type, flags.tail ?? DEFAULT_TAIL), (chunk) => {
                 pending += chunk;

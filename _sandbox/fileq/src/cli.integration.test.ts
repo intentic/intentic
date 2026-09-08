@@ -1,7 +1,7 @@
-/* The CLI end to end against a temp workspace: derive, freshness, read with budget, sweep with orphan
- * pruning, the ignore floor, and the security line (forged markers die in the sidecar's bytes). Driven
- * IN-PROCESS through the same `run(app, …)` seam cli.ts calls, with stdout captured by a spy — webq's
- * harness, for webq's reasons (no build artifact, no child process). */
+// CLI end-to-end against a temp workspace: derive, freshness, budgeted read, sweep with orphan pruning, the ignore
+// floor, and forged markers dying in the sidecar's bytes.
+// Driven in-process through the same `run(app, …)` seam cli.ts calls, stdout captured by a spy; no build artifact, no
+// child process.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,8 +87,7 @@ describe("derive", () => {
 });
 
 describe("read", () => {
-    // `read` resolves relative paths against the CALLER's cwd (an agent standing in a subdir), which in this
-    // suite is the package checkout — so the workspace files are named absolutely here.
+    // `read` resolves relative paths against the caller's cwd; workspace files are named absolutely here.
     it("prints a capsule, the content, and the sidecar path", async () => {
         const bodyLine = "A line worth reading.";
         writeFileSync(join(root, "notes.docx"), docxBytes("Notes", [bodyLine]));
@@ -120,9 +119,6 @@ describe("read", () => {
         expect(out).toContain("unsupported");
     });
 
-    // A corrupt file on the reference shelf did exactly this: the format was recognised by extension, the
-    // parser threw, and the outside-workspace path had no catch, so the agent got a stack trace instead of the
-    // one-line skip an in-workspace read gives.
     it("answers 1 with the reason, not a stack, for a corrupt file outside the workspace", async () => {
         const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
         writeFileSync(join(outside, "broken.ipynb"), "{ this is not json");

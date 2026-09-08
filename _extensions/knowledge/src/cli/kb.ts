@@ -8,19 +8,9 @@ import { type Drift, VOCABULARY_PATH, VOCABULARY_TYPE } from "../notes/vocabular
 import { type Args, flag, flagAll, has, number, parseArgs } from "./args.js";
 import { linkFields, slugify, wikiLink } from "./note-shape.js";
 
-/* `kb`, the knowledge base on the AGENT's path (contributes.bin), and the half of this extension that gets
- * used every turn rather than every so often.
- *
- * IT DRIVES THE SAME ENGINE THE PANEL DOES. One parser, one link resolver, one index, one set of tests over
- * them, so "what does the knowledge base say about Ada" has exactly one answer whether a person asked it or the agent
- * did. That is why this is built from the extension's TypeScript rather than hand-written as a second plain-ESM
- * implementation: a duplicated reader is a knowledge base that quietly disagrees with itself.
- *
- * WHAT THE AGENT NEEDS FROM AN ANSWER is a path it can open and a fact it can use, so every line here leads
- * with the note's path and the prose stays out of the way. `--json` is the same content for anything parsing it.
- *
- * Exit codes follow the workspace's search tool, because the agent already reasons in them: 0 found something,
- * 1 found nothing, 2 could not run. */
+// The `kb` CLI on the agent's PATH, driving the same parser/resolver/index the panel uses, so an answer can't disagree
+// with what the panel shows. Every line leads with the note's path; `--json` gives a program the same content. Exit
+// codes: 0 found, 1 nothing, 2 couldn't run.
 
 const USAGE = `kb, the knowledge base: notes, the things in them, and how they connect.
 
@@ -38,7 +28,7 @@ const USAGE = `kb, the knowledge base: notes, the things in them, and how they c
 A <name> is anything that names a note: its title, an alias, its filename or its path.
 Add --json to any of these. Knowledge folder: $KB_FOLDER (default "knowledge/" in the workspace).`;
 
-// ---- shaping an answer -------------------------------------------------------------------------------------
+// Shaping an answer.
 
 const chips = (note: ParsedNote): string =>
     [note.type, ...note.tags.map((tag) => `#${tag}`)].filter((chip) => chip !== undefined && chip !== "").join(" ");
@@ -65,7 +55,7 @@ const noteText = (note: ParsedNote, index: KnowledgeIndex, body: boolean): strin
         ...connections(note, index),
     ].join("\n");
 
-// The JSON shape of one note, the same facts the text form carries, for anything reading this with a program.
+// JSON shape of one note: the same facts the text form carries, for a program reading this.
 const noteJson = (note: ParsedNote, index: KnowledgeIndex): unknown => ({
     path: note.path,
     title: note.title,
@@ -79,7 +69,7 @@ const noteJson = (note: ParsedNote, index: KnowledgeIndex): unknown => ({
     modifiedAt: note.modifiedAt,
 });
 
-// ---- the verbs ---------------------------------------------------------------------------------------------
+// The verbs.
 
 interface Run {
     readonly args: Args;
@@ -92,8 +82,8 @@ const out = (value: string): void => {
 };
 const emit = (run: Run, json: unknown, text: string): void => out(run.json ? JSON.stringify(json, undefined, 2) : text);
 
-// Resolving a <name> is the one failure the agent must be able to act on, so it never resolves silently to
-// nothing: what was asked for is repeated back, with the closest names the knowledge base does hold.
+// Never resolves silently to nothing: a missing name is echoed back with the closest names the knowledge base does
+// hold.
 const findNote = (index: KnowledgeIndex, name: string): ParsedNote | { readonly missing: string; readonly near: readonly string[] } => {
     const found = index.resolve(name) ?? index.byPath.get(name);
     return found ?? { missing: name, near: search(index, { query: name, limit: 5 }).map((hit) => `${hit.title}  ${hit.path}`) };
@@ -166,8 +156,7 @@ const graphVerb = (run: Run, index: KnowledgeIndex): number => {
             `${view.nodes.length} notes within ${depth} ${depth === 1 ? "step" : "steps"} of ${view.focus}`,
             "",
             "notes:",
-            // Leading dots are how far out the note sits, so the shape of the neighbourhood is visible at a
-            // glance in a medium no picture survives.
+            // Leading dots show how far out a note sits, so the neighbourhood's shape reads at a glance.
             ...view.nodes.map(
                 (node) =>
                     `  ${node.depth === 0 ? "" : `${"·".repeat(node.depth)} `}${node.title}${node.type === undefined ? "" : `  (${node.type})`}  ${node.path}`,
@@ -184,8 +173,7 @@ const graphVerb = (run: Run, index: KnowledgeIndex): number => {
 const brokenLine = (link: BrokenLink): string => `  ${link.from} → [[${link.target}]]${link.relation === undefined ? "" : ` (${link.relation})`}`;
 const driftLine = (drift: Drift): string => `  ${drift.word}  ×${drift.uses}  ${drift.notes.join(" ")}`;
 
-// One named block of the report, or nothing at all when it is empty, so a clean knowledge base prints one line rather
-// than seven headings with nothing under them.
+// One named block, or nothing when it's empty, so a clean knowledge base prints one line, not seven empty headings.
 const section = (heading: string, lines: readonly string[]): string[] => (lines.length === 0 ? [] : ["", heading, ...lines]);
 
 const checkVerb = (run: Run, index: KnowledgeIndex): number => {
@@ -213,8 +201,7 @@ const checkVerb = (run: Run, index: KnowledgeIndex): number => {
     ];
     const tally = `${report.noteCount} notes, ${report.linkCount} links.`;
     emit(run, report, body.length === 0 ? `${tally} Nothing to fix.` : [tally, ...body].join("\n"));
-    // Never a failure exit: drift and unwritten notes are the knowledge base's to-do list, not a broken build, and an
-    // agent that read a non-zero code here would start "fixing" a knowledge base that is working as intended.
+    // Never a failure exit: drift and unwritten notes are the knowledge base's to-do list, not a broken build.
     return 0;
 };
 
@@ -243,7 +230,7 @@ const vocabVerb = (run: Run, index: KnowledgeIndex): number => {
     return 0;
 };
 
-// ---- the verbs that write ------------------------------------------------------------------------------------
+// The verbs that write.
 
 const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     const title = run.args.positionals.join(" ").trim();
@@ -252,8 +239,7 @@ const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
         return 2;
     }
     const type = flag(run.args, "type");
-    // Foldered by kind when there is one, flat when there isn't. No pluralising: "person/ada-lovelace.md" is
-    // predictable, and a rule that guessed "people" would guess wrong on the first word it had not met.
+    // Foldered by kind when given, flat otherwise; no pluralising, since a guessed plural is often wrong.
     const path = flag(run.args, "path") ?? `${type === undefined ? "" : `${type}/`}${slugify(title)}.md`;
     const existing = index.byPath.get(path);
     if (existing !== undefined) {
@@ -275,8 +261,7 @@ const newVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
     return 0;
 };
 
-// Rewrite one header field in place. The body and every other field are untouched, an edit to a fact must
-// never reflow somebody's prose or reorder the header they wrote.
+// Rewrites one header field in place; the body and every other field are untouched.
 const writeField = async (run: Run, index: KnowledgeIndex, name: string, field: string, values: readonly string[]): Promise<number> => {
     const found = findNote(index, name);
     if (!isNote(found)) {
@@ -317,14 +302,13 @@ const linkVerb = async (run: Run, index: KnowledgeIndex): Promise<number> => {
         emit(run, found, `no note named "${found.missing}".`);
         return 1;
     }
-    // Added to what is already there, deduped, a relationship holds several things, and the common call is
-    // "and this one too" rather than "replace them all" (that is what `kb set` is for).
+    // Added to what's already there, deduped; replacing outright is what `kb set` is for.
     const wanted = targets.map((target) => wikiLink(index.resolve(target)?.title ?? target));
     const merged = [...new Set([...(found.fields.get(relation) ?? []), ...wanted])];
     return writeField(run, index, found.path, relation, merged);
 };
 
-// ---- wiring ------------------------------------------------------------------------------------------------
+// Wiring.
 
 const workspaceRoot = (): string => process.env["WORKSPACE_ROOT"] ?? "/work";
 
@@ -337,7 +321,7 @@ const main = async (): Promise<number> => {
     const workspace = workspaceRoot();
     const root = knowledgeRoot(workspace, process.env["KB_FOLDER"] ?? (await configuredFolder(workspace)));
     const run: Run = { args, root, json: has(args, "json") };
-    // `new` is the one verb that must work on a knowledge base that does not exist yet, so it does not require notes.
+    // `new` is the only verb that must work on a knowledge base with no notes yet.
     const files = await readNotes(root);
     if (files.length === 0 && args.verb !== "new") {
         emit(run, { folder: root, notes: 0 }, `no notes yet in ${root}, kb new "Something" --type term starts one.`);
@@ -384,8 +368,7 @@ const main = async (): Promise<number> => {
     }
 };
 
-// A crash must still say which knowledge base and which verb, and must not look like "found nothing" (exit 1), an
-// agent acts very differently on those two.
+// A crash still names the knowledge base and verb, and exits 2, distinct from 1 (found nothing).
 main().then(
     (code) => {
         process.exitCode = code;

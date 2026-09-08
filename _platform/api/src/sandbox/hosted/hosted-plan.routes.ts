@@ -6,9 +6,8 @@ import type { Config } from "../../config.js";
 import { applySubscription, hostedPlanEnabled } from "./hosted-plan.js";
 import { type StripeGateway, stripeGateway, subscriptionIdOfEvent, verifyStripeSignature } from "./hosted-plan-stripe.js";
 
-/* The hosted plan's one non-browser route: Stripe's webhook, authenticated by its signature. The browser
- * half (state, checkout, portal) rides the oRPC contract (hosted-plan.orpc.ts). 404s entirely while the plan
- * is unconfigured, trial-style: a self-hosted platform that sells nothing has nothing here. */
+// The hosted plan's one non-browser route: Stripe's webhook, authenticated by its signature. The browser half (state,
+// checkout, portal) rides the oRPC contract (hosted-plan.orpc.ts). 404s entirely while the plan is unconfigured.
 
 export interface HostedPlanDeps {
     readonly config: Config;
@@ -20,12 +19,11 @@ export interface HostedPlanDeps {
 
 export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new Date() }: HostedPlanDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
-    // Lazy: built on the first webhook that needs it, so mounting the sub-app on a platform without a plan
-    // (every test config, most self-hosted ones) constructs nothing Stripe-shaped.
+    // Lazy: built on the first webhook that needs it, so a plan-less platform constructs nothing Stripe-shaped.
     const stripe = (): StripeGateway => gateway ?? stripeGateway(config.hostedPlan, fetch, now);
 
-    /* A completed subscription checkout names the buyer (client_reference_id) and the subscription, which is
-     * read fresh from Stripe rather than trusted off the event. Anything else shaped is not for us. */
+    // Names the buyer (client_reference_id) and the subscription; the subscription is read fresh from Stripe rather
+    // than trusted off the event. Anything else shaped is not for us.
     const onCheckoutCompleted = async (object: unknown): Promise<void> => {
         const session = z
             .object({ mode: z.literal(`subscription`), client_reference_id: z.string(), subscription: z.string() })
@@ -36,10 +34,8 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
         }
     };
 
-    /* A subscription that changed. The event's own copy of it is NOT what gets mirrored: Stripe delivers
-     * events in no particular order and says so, so a row that took whatever landed last could be rolled back
-     * to a state Stripe had already left. The event names the subscription, its state is read fresh, and the
-     * read's own moment is what the ordering guard compares (applySubscription). */
+    // Stripe delivers events out of order, so the event's own copy is never mirrored directly: the subscription is
+    // re-read fresh, and that read's own moment is what applySubscription's ordering guard compares.
     const onSubscriptionChanged = async (object: unknown): Promise<void> => {
         const id = subscriptionIdOfEvent(object);
         if (id !== undefined) {
@@ -48,9 +44,8 @@ export const hostedPlanHttpRoutes = ({ config, prisma, gateway, now = () => new 
         }
     };
 
-    /* Signature-authenticated against the RAW body; a plan that is enabled but has no webhook secret refuses
-     * everything with 400, that is a misconfiguration to surface, not to absorb. Unrecognized event types ack
-     * with 200 so Stripe stops retrying them. */
+    // Signature-authenticated against the raw body; a plan enabled with no webhook secret refuses everything with 400
+    // rather than absorbing it. Unrecognized event types still ack 200 so Stripe stops retrying.
     app.post(`/webhook`, async (c) => {
         if (!hostedPlanEnabled(config)) {
             return c.json({ error: `the hosted plan is not enabled on this platform` }, 404);

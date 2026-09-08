@@ -32,25 +32,9 @@ import { presenceActivity, presenceOthers } from "../../../shell/presence/usePre
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 
-/* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes, the
- * daemon's ENFORCED /members list (pushed first from the owner's browser, since the server can't reach the
- * daemon) then the platform invite record + email. sandboxJson throws on any non-2xx, so a grant the enforcer
- * never got is never recorded (fail closed). Members see a read-only view. "Here now" (live presence) shows for
- * everyone.
- *
- * TWO WRITES, TWO SENTENCES. They used to share one catch, so a platform-side failure read as "is the sandbox
- * online?": asked about a sandbox that had just answered the write immediately before. Each half now says what
- * it is: the daemon is the one that can be offline, and the platform is the one that records the invite.
- *
- * And the mail is the THIRD thing, which is not a failure at all: by the time it is attempted the invitee is
- * granted on the daemon and recorded here, so a send that was declined (no mail credentials, or a platform
- * whose own address only resolves on this machine) or refused comes back as an outcome plus the link. The owner
- * becomes the courier, which is the only thing that works at all when running the platform locally.
- *
- * EVERY GRANT IS A ROLE. The invite form asks which tier it is handing out (collaborator preselected: safe to
- * give without thinking, useful enough that nobody feels locked out), and each roster row re-grades in place
- * through the same two-write, daemon-first order as the grant itself. The words are deliberately "can…"
- * sentences: the tier model is taught here or nowhere. */
+// Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
+// platform's record + email, each with its own error. A declined or refused send isn't a failure, since the grant is
+// already recorded; the owner gets the link instead. Members get read-only; presence is for everyone.
 
 const { user } = useAuth();
 const sandbox = useSandbox();
@@ -61,19 +45,14 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const members = ref<InviteRecord[]>([]);
 const email = ref(``);
 
-/* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model: ONE
- * list, read by both controls that hand a tier out. The invite form and each roster row both use <Picker>:
- * the form puts it beside the address and Invite button (role is a refinement on who you're inviting, not a
- * step before you know the address); a roster row uses the ghost variant because the row already has an
- * address, a status pill and buttons on it. */
+// Tiers an invite can grant, nested order, shared by the invite form and every roster row's <Picker>.
 const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
     { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
         label: `Collaborator`,
         value: `collaborator`,
         icon: `users`,
-        // The clause about the files is the one people arrive without: a collaborator works THROUGH the agents,
-        // so the explorer stays a reading surface for them and every landing is a request.
+        // Files-through-agents is the clause people miss; collaborators land and publish only as requests.
         hint: `Can drive agents and review work. Files change through agents, not by hand; landing and publishing become requests.`,
     },
     {
@@ -88,18 +67,13 @@ const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
 const notice = ref<NoticeModel>();
 
-// The accept link the owner has to carry, whenever the mail didn't. Beside `notice` rather than inside it: a
-// link is markup (it wraps, it is selected, it is never shortened), which the plain-string model can't hold.
+// Accept link the owner carries when mail didn't; beside `notice`, not inside it, since a link is markup.
 const handover = ref<string>();
 
-/* THE OTHER DOORS, counted (useAccessInventory). Each is minted and copied where it is configured, an event
- * automation's row, a workflow's gate panel, the Pipelines view, and this tab does not duplicate any of that.
- * What it adds is the inventory: the answer to "what else can reach this sandbox without a person" in one
- * place, with the door named and the surface that manages it beside the count. Owner-only like the token
- * roster, because the counts are about the sandbox's own trust rather than about the work. */
+// Other doors, counted, not managed here; answers what else can reach the sandbox without a person.
 const { inventory, loading: inventoryLoading } = useAccessInventory();
 
-// The plural is spelled, not suffixed: "repositorys" is what a suffix rule wrote here once.
+// The plural is spelled, not suffixed, to avoid "repositorys".
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
 const webhooksLine = computed(() =>
@@ -123,8 +97,7 @@ const ciLine = computed(() => {
     return `${plural(repos.total, `repository`, `repositories`)} wired to a forge, ${repos.hooked} with a webhook the sandbox registered and signs with a per-sandbox secret. The rest are polled. Details on Pipelines.`;
 });
 
-// Both together, always: a link with no sentence over it is noise, and a sentence about a link that is no
-// longer shown is worse. Every action starts here.
+// Clears both together; a link with no sentence, or vice versa, is worse than neither.
 const clearNotice = (): void => {
     notice.value = undefined;
     handover.value = undefined;
@@ -134,27 +107,14 @@ const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 
-/* WHERE THIS ROSTER'S PILLS COME FROM, and the reason they are not written here any more. Five spans on this
- * tab each spelled out `rounded-full … px-1.5 py-0.5 text-2xs font-semibold` and each capitalised its word, so
- * Access was the one surface in the app whose chips read "Owner" and "Member" against the lowercase "pending",
- * "packing", "invalid" every other list draws — same shape, one weight heavier, and a capital nothing else
- * capitalises. <StatusBadge> owns the radius, the tint, the size and the casing (its header says so), which is
- * exactly the set of decisions a call site kept getting a little bit wrong.
- *
- * THE TONE IS THE SEVERITY RAMP, not a role palette. An accepted member is the ordinary case and stays quiet;
- * the two states that are WAITING on something — an invite not taken up, an invite that died — are the ones
- * worth colour in a list you scan for exceptions. `owner` is the only tinted constant, because it is the one
- * row on the roster that has no picker and no revoke button beside it. */
+// Tone is a severity ramp, not a role palette: accepted stays quiet; only the waiting states get colour.
 const STATUS: Record<InviteRecord["status"], { label: string; variant: StatusVariant; dot: boolean }> = {
     accepted: { label: `member`, variant: `neutral`, dot: false },
     pending: { label: `pending`, variant: `info`, dot: true },
     expired: { label: `expired`, variant: `danger`, dot: false },
 };
 
-/* THE FIRST READ ONLY, and only the one on mount. Every other call here follows a write whose response IS the
- * new roster, so the list is never blank across them: outlining a re-grade would flash a placeholder over rows
- * that are already correct. `listing` starts true because the fetch is armed in onMounted: starting it false
- * would paint one frame of "no members" first, which is the whole thing this is here to stop. */
+// True until the mount fetch lands; every later refresh rides a write's own response, never blank again.
 const listing = ref(true);
 
 const load = async (): Promise<void> => {
@@ -173,25 +133,20 @@ const load = async (): Promise<void> => {
     }
 };
 
-/* An owner's roster is a network read and looked blank until it landed: a page that opens claiming you have
- * invited nobody, on the tab whose subject is who else is in here. The rows below stand in for it meanwhile. */
+// Placeholder rows while the roster loads, so the tab doesn't open claiming nobody's invited.
 const outline = useSandboxOutline(listing);
 
-// The invite list is owner-only (the API 403s a member): only load it when the viewer owns this sandbox.
+// Invite list is owner-only (the API 403s a member); load only when the viewer owns this sandbox.
 onMounted(() => {
     if (isOwner.value) {
         void load();
         return;
     }
-    // A member never fetches, so nothing is pending for them: leaving this armed would outline a list that is
-    // never coming.
+    // A member never fetches; leaving `listing` true would outline a list that never arrives.
     listing.value = false;
 });
 
-/* What to say when the link did not travel by mail. Not an error: the person IS invited, on the daemon and in
- * the record, so the sentence is about the delivery, `detail` carries what the mail provider actually said,
- * and the way out is the link itself: shown below (selectable, and the one thing here that must never be
- * truncated) with a button that copies it. `sent` needs nothing said: the mail is the message. */
+// Not an error: already invited, just unreachable by mail; `sent` needs no entry here.
 const DELIVERY_NOTE: Record<Exclude<InviteDelivery, "sent">, string> = {
     unconfigured: `Invited. Email isn't set up on this platform, so send them this link yourself:`,
     "local-link": `Invited. This platform only answers on your own machine, so an emailed link would go nowhere. Send them this one yourself:`,
@@ -209,12 +164,7 @@ const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?:
                   detail: result.reason,
                   action: {
                       label: `Copy link`,
-                      /* Through the clicked button's own window: this panel can be popped out, and the
-                       * module-global clipboard there belongs to a document that isn't focused (clipboardOf).
-                       *
-                       * Best-effort on purpose. A platform served without TLS has no clipboard API at all, and
-                       * the copy is a convenience over a link that is already on screen to select, so a refusal
-                       * here must not become an error about an invite that succeeded. */
+                      // Uses the clicked element's own window; best-effort, so a refusal here isn't the invite failing.
                       run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
                   },
               };
@@ -229,9 +179,7 @@ const invite = async (): Promise<void> => {
     busy.value = true;
     clearNotice();
     try {
-        // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
-        // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent:
-        // and its own catch keeps that failure from being reported as anything else.
+        // Daemon push first, enforced; sandboxJson throws on non-2xx, so an unenforced grant is never recorded as sent.
         try {
             await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
                 `/members`,
@@ -247,8 +195,7 @@ const invite = async (): Promise<void> => {
         emailTouched.value = false;
         showDelivery(result);
     } catch (err) {
-        // The sandbox took the grant and the platform then refused to record it: resync so the roster shows
-        // whatever it actually holds rather than what this call assumed.
+        // Platform refused after the daemon granted; resync so the roster shows what's actually true.
         void load();
         notice.value = noticeFrom(err, `The sandbox granted access, but recording the invite failed.`);
     } finally {
@@ -274,31 +221,14 @@ const resend = async (target: string): Promise<void> => {
     }
 };
 
-/* "Signed-in browsers": A SECTION THAT CANNOT HAVE A LIST IN IT, and used to pretend otherwise.
- *
- * A sandbox session is a 30-day signed claim living in each browser's localStorage. The daemon VERIFIES it
- * rather than looking it up, which is what keeps every request a local HMAC instead of a database read, so
- * nothing is stored per session and no device roster exists to render, here or on the daemon. The heading is a
- * plural noun, so it read as an empty list: one lone red button under a title promising devices, which invites
- * exactly the wrong conclusion ("nothing is signed in, so this button is pointless") about the one control
- * that answers a lost laptop. Hiding the group when empty would hide it forever, and hide the kill switch at
- * precisely the moment it is needed: the device you cannot enumerate is the device you are worried about.
- *
- * So the group says what is true instead. THIS browser is one signed-in browser and the app can speak for it
- * (identity, and the pass expiry it holds in localStorage); the absence of the others is a fact with a reason
- * worth one row; and the kill switch keeps its place, now with the consequence spelled out beside it rather
- * than left to be discovered. Re-keying the daemon's signer IS the revocation, and it takes every browser with
- * it including this one: the next call 401s and re-establishes from the Google credential this tab already
- * holds, so the owner sees nothing. Members are signed out too and come back only if still on the list. */
+// No device roster can exist: a session is a signed claim the daemon verifies, not stored. The group says what's true:
+// this browser, why the rest are unlistable, and the switch's consequence.
 const revokingSessions = ref(false);
 const sessionsRevoked = ref(false);
-/* Armed before it fires, the same two-step inline confirm as account deletion. This signs out every person in
- * the sandbox, cannot be undone and cannot be aimed at one device, which is three reasons not to hang it on a
- * single click, and it sits one row under a roster whose own destructive buttons are per-member. */
+// Armed before firing: irreversible, signs out everyone, and can't be aimed at one device.
 const confirmingRevoke = ref(false);
 
-// What this browser's own pass is worth, said as a date rather than a countdown: it slides forward whenever
-// the session renews, so "expires Sep 24" is a fact about neglect ("if I stop opening this"), not a deadline.
+// A date, not a countdown: the expiry slides forward on renewal, so it reads as neglect risk, not a deadline.
 const thisBrowser = computed<string>(() => {
     const who = user.value?.email ?? `You`;
     const expires = sessionExpiresAt.value;
@@ -323,8 +253,7 @@ const revokeSessions = async (): Promise<void> => {
     }
 };
 
-// Re-grade a member: the same two-write, daemon-first order as the grant, because it IS one, the daemon's
-// list is what a role change must reach to mean anything, and it applies on the member's next request.
+// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request.
 const setRole = async (target: string, role: GrantedRole): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value) {
@@ -357,8 +286,7 @@ const revoke = async (target: string): Promise<void> => {
     busy.value = true;
     clearNotice();
     try {
-        // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
-        // dropped: a daemon that rejects/is offline surfaces an error instead of a member who still has access.
+        // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
         try {
             await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
         } catch (err) {
@@ -378,8 +306,7 @@ const revoke = async (target: string): Promise<void> => {
 <template>
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
-        <!-- The rows below are <Row>s now rather than three hand-drawn shapes at px-4 py-3 on a surface whose
-             own outline drew a different tier again. They take the group's, like every list in the app. -->
+        <!-- Rows use <Row>, taking the group's own tier, like every other list in the app. -->
         <RowGroup label="Access">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
@@ -392,12 +319,10 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                 </div>
                 <Row v-for="member in members" :key="member.email" icon="user" :title="member.email">
-                    <!-- WHERE IT WAS BEFORE THE ROW HAD SLOTS: the invite's state used to sit in `#control`,
-                         wedged between the role picker and the Revoke button. It is a FACT, not an action —
-                         nothing about it is pressable — and <Row> keeps the two apart on purpose (facts are
-                         muted, tabular and never focusable; actions carry their own hit area). In the right
-                         slot it also lands ahead of the controls, so the roster reads as one column of states
-                         down the list with the buttons ranged after it, instead of a pill hiding in a toolbar. -->
+                    <!--
+                        Status is a fact, not an action, so it's in #meta, not #control, muted and unfocusable; it also lands ahead of the buttons,
+                        keeping one column of states down the list.
+                    -->
                     <template #meta>
                         <StatusBadge
                             :variant="STATUS[member.status].variant"
@@ -407,10 +332,10 @@ const revoke = async (target: string): Promise<void> => {
                         />
                     </template>
                     <template #control>
-                        <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
-                         tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box:
-                         the row already has a framed address, a status pill and two buttons on it, and a
-                         second box among them read as a form field that had wandered into a list. -->
+                        <!--
+                            Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. Ghost, not boxed: the row
+                            already carries an address, a pill and two buttons.
+                        -->
                         <Picker
                             :model-value="member.role"
                             :options="ROLE_OPTIONS"
@@ -439,24 +364,15 @@ const revoke = async (target: string): Promise<void> => {
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
                 <RowNote variant="block">
                     <div class="flex flex-col gap-2">
-                        <!-- The link goes in the slot, not in the model: it must wrap rather than run out of the
-                         box, and it is the one thing on this card a person copies by hand. -->
+                        <!-- Link goes in the slot, not the model, so it wraps instead of overflowing; the one thing here copied by hand. -->
                         <Notice v-if="notice" :of="notice">
                             <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
                         </Notice>
                         <form class="flex flex-col gap-1.5" @submit.prevent="invite">
-                            <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
-                             is a refinement on that row. Collaborator preselected; the picker's own hints teach
-                             the model without sitting between two unrelated controls.
-
-                             AND ALL THREE ARE THE COMPACT TIER, which is what the surface asks for. This form is
-                             the footer of a LIST, under rows whose own controls are 26px, and it was drawn at the
-                             page size: a 38px field, a 38px picker and a 38px Invite standing in a group of
-                             compact rows, which is what made this the one tab in the app with big buttons on it.
-                             Size is the surface's answer, not the call site's (ui.ts), and `ui.inputSm` is the
-                             button's `small` one control over, so the three boxes line up to the pixel rather
-                             than sitting two apart. The picker takes `ui-field-sm` for the same reason: its
-                             bordered trigger IS `ui-field-box`, so it shrinks by the same rule. -->
+                            <!--
+                                Address first, role beside Invite, since inviting is the primary action and the tier a refinement. Sized to the
+                                list's compact tier (ui.inputSm/ui-field-sm) so the three controls align with the roster's own rows.
+                            -->
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 <input
                                     v-model="email"
@@ -513,18 +429,16 @@ const revoke = async (target: string): Promise<void> => {
             </template>
         </RowGroup>
 
-        <!-- PROGRAMS, after people: the tokens a CI job, a script or an editor bridge present instead of a
-             sign-in (ControlTokensSection). Every scope is mintable here, and every token against this sandbox is
-             listed here, whichever surface minted it. -->
+        <!--
+            Programs, after people: every scope is mintable here, and every token against this sandbox is listed here regardless of where it was
+            minted.
+        -->
         <ControlTokensSection />
 
-        <!-- The credential kill switch. Owner-only, and separate from the member list above on purpose: this
-             answers \"is anything still holding a way in\", not \"who is allowed in\".
-
-             THREE ROWS RATHER THAN A BARE BUTTON, because there is no fourth: the roster this heading implies
-             cannot exist (see the note in the script). The rows are the answers to the three questions asked in
-             the order the eye arrives at them: what IS signed in that I can see, why can't I see the rest, and
-             what exactly happens if I press this. -->
+        <!--
+            Credential kill switch, separate from the member list: answers "is anything still holding a way in", not "who's allowed in". Three rows,
+            not a bare button, since no roster can exist: what's signed in, why the rest aren't listed, and what pressing this does.
+        -->
         <RowGroup v-if="isOwner" label="Signed-in browsers">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" title="This browser" :description="thisBrowser">
@@ -541,8 +455,7 @@ const revoke = async (target: string): Promise<void> => {
             <Row icon="sign-out" tone="danger" title="Sign out everywhere">
                 <template #description>Revokes every pass. You stay signed in here; everyone else must sign in again.</template>
                 <template #control>
-                    <!-- Arming clears the last run's receipt: the row has one thing to say at a time, and
-                         "every browser has been signed out" under a live "are you sure?" is two. -->
+                    <!-- Clears the last run's receipt; the row says one thing at a time, not a stale result under a live confirm. -->
                     <Button
                         v-if="!confirmingRevoke"
                         label="Sign out all browsers"
@@ -577,8 +490,7 @@ const revoke = async (target: string): Promise<void> => {
             </Row>
         </RowGroup>
 
-        <!-- EVERY OTHER WAY IN, as an inventory: the doors a machine knocks on with a credential that is neither
-             a sign-in nor a control token. Counted here, managed where each lives. -->
+        <!-- Every other way in: doors a machine uses that are neither a sign-in nor a control token, counted here but managed where each lives. -->
         <RowGroup v-if="isOwner" label="Other ways in">
             <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <template v-else>
@@ -604,8 +516,7 @@ const revoke = async (target: string): Promise<void> => {
                     :title="member.name ?? member.email"
                     :description="presenceActivity(member)"
                 >
-                    <!-- The avatar is the row's mark, so it takes the row's mark size (32 was this file's own
-                         guess at it, against 22 on every other record list in the hub). -->
+                    <!-- Avatar takes the row's own mark size, not a guessed one. -->
                     <template #lead="{ mark }">
                         <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
                     </template>

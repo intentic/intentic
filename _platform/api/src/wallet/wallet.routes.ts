@@ -32,8 +32,7 @@ import { ensureWallet, NETWORKS } from "./wallet-store.js";
  *
  * Everything 404s when no custody provider is configured, the pool's pattern verbatim. */
 
-// USDC's six decimals, as bigint atomic units. Money arithmetic never touches a float here, the sandbox's
-// x402 module makes the same promise on its side, and the two agree because both go through these.
+// USDC's six decimals as bigint units; arithmetic never touches a float, matching the sandbox's x402 module.
 const ATOMIC_PER_USD = 1_000_000n;
 const USD_RE = /^\d+(\.\d{1,6})?$/;
 
@@ -69,10 +68,7 @@ const SignSchema = z.object({
     }),
 });
 
-// The authorization's own validity window, bounded here as well as at the daemon: a signature is a bearer
-// instrument until it expires, and one good for an hour is a different object from one good for five
-// minutes. Anything longer is refused rather than trimmed, silently signing something other than what was
-// asked for is worse than saying no.
+// Validity ceiling: a signature is a bearer instrument until it expires; too long is refused, never trimmed.
 const MAX_VALIDITY_S = 600;
 
 const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
@@ -80,7 +76,7 @@ const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
 export interface WalletDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
-    // Injectable so tests drive ensure/sign without a custody provider, the pool's gateway pattern.
+    // Injectable so tests drive ensure/sign without a real custody provider.
     readonly custody?: CustodyGateway;
     readonly now?: () => Date;
 }
@@ -89,8 +85,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
     const app = new Hono<{ Variables: { logger: Logger } }>();
     const gateway = (): CustodyGateway => custody ?? custodyGateway(config);
 
-    // 404-not-401 for an unknown token, the pool's reasoning verbatim: neither a probe nor a disabled
-    // feature should teach a caller which part was wrong.
+    // 404, not 401, for an unknown token: neither a probe nor a disabled feature should learn which part was wrong.
     const ownerOf = async (c: { req: { header: (name: string) => string | undefined } }): Promise<string | undefined> => {
         const token = c.req.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
@@ -129,9 +124,8 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         }
     });
 
-    /* ONE SIGNATURE, over one fully-specified transfer. Everything checked here is checked against this
-     * database rather than against anything the caller asserted: which wallet is the member's, what its
-     * caps are, what today already spent. The caller's own numbers are only ever used to REFUSE. */
+    // One signature over one fully-specified transfer; everything is checked against this database, never against what
+    // the caller asserted. The caller's numbers are only ever used to refuse.
     app.post(`/sign`, async (c) => {
         if (!walletEnabled(config)) {
             return c.json({ error: `wallet signing is not enabled on this platform` }, 404);
@@ -149,9 +143,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         if (known === undefined) {
             return c.json({ error: `this platform signs USDC on ${Object.keys(NETWORKS).join(`, `)} only` }, 400);
         }
-        // USDC-only, enforced against this table rather than against the token the caller named, a
-        // signature over some other contract's typed data is exactly what a compromised sandbox would ask
-        // for, and it is the one thing no cap would catch.
+        // Checked against this table, not the caller's claim; another contract is what a compromised sandbox wants.
         if (asset.toLowerCase() !== known.asset.toLowerCase()) {
             return c.json({ error: `this platform signs USDC transfers only (${known.asset} on ${network})` }, 400);
         }
@@ -159,13 +151,12 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         if (wallet === null) {
             return c.json({ error: `no wallet exists for this account on ${network}` }, 404);
         }
-        // The authorization must spend THIS wallet: `from` is the only field that decides whose money moves,
-        // and a mismatch is a caller asking us to sign for somebody else.
+        // `from` is the only field deciding whose money moves; a mismatch means signing for somebody else.
         if (authorization.from.toLowerCase() !== wallet.address.toLowerCase()) {
             return c.json({ error: `the authorization does not spend this account's wallet` }, 403);
         }
-        // The amount the caller states and the amount the authorization actually moves must agree, because
-        // the caps are checked against the former and the money follows the latter.
+        // Stated amount and the authorization's actual value must agree: caps check the former, money follows the
+        // latter.
         const value = BigInt(authorization.value);
         if (value !== usdToAtomic(amountUsd)) {
             return c.json({ error: `the stated amount and the authorization's value disagree` }, 400);
@@ -184,9 +175,8 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             return c.json({ error: `$${amountUsd} is over this wallet's per-payment ceiling of $${wallet.perPaymentMaxUsd}` }, 403);
         }
 
-        /* THE CAP, AND THE ROW, IN ONE TRANSACTION. The day's total is read and the new row written
-         * together, so two sandboxes (or two turns) racing the same remaining cap cannot both be told yes.
-         * Serializable is the right isolation precisely because the read decides the write. */
+        // Day's total is read and the new row written in one transaction, so two racing requests can't both be told
+        // yes; serializable isolation is right since the read decides the write.
         const day = utcDay(now());
         const cap = usdToAtomic(wallet.dailyCapUsd);
         let payment: { id: string };
@@ -209,11 +199,9 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             return c.json({ error: error instanceof Error ? error.message : `the daily cap check failed` }, 403);
         }
 
-        /* The typed data itself. EIP-3009's TransferWithAuthorization, in the token's own EIP-712 domain.
-         * `name`/`version` ride from the endpoint's challenge (relayed by the sandbox) because the domain
-         * must match what the token contract hashes, and the server publishing the price knows its token;
-         * `chainId`/`verifyingContract` come from THIS table, so a challenge cannot redirect the signature
-         * onto another chain or another contract. */
+        // EIP-3009 TransferWithAuthorization in the token's own domain. name/version come from the relayed challenge
+        // (the price-setter knows its token); chainId/verifyingContract come from this table, so a challenge can't
+        // redirect the signature.
         const typedData: TypedData = {
             domain: { name: domainName, version: domainVersion, chainId: known.chainId, verifyingContract: known.asset },
             primaryType: `TransferWithAuthorization`,
@@ -233,9 +221,8 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
             const signature = await gateway().signTypedData(wallet.providerWalletId, typedData);
             return c.json({ signature });
         } catch (error) {
-            /* The custody provider refused after the row was written. The row is DELETED rather than left
-             * as a phantom spend: no authorization exists, so nothing can ever settle against it, and
-             * leaving it would quietly eat the owner's daily cap for a payment that never happened. */
+            // Row is deleted, not left as a phantom spend: no authorization exists to ever settle it, and leaving it
+            // would eat the daily cap for a payment that never happened.
             await prisma.walletPayment.delete({ where: { id: payment.id } }).catch(() => undefined);
             c.get(`logger`)?.warn({ err: error }, `wallet sign failed`);
             return c.json({ error: error instanceof Error ? error.message : `the signature could not be produced` }, 502);

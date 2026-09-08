@@ -13,35 +13,23 @@ import { archToken, download } from "./sync/mutagen.js";
 import { assetUrl, realUpgradeExec, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
-/* EVERYTHING AN INSTALLER USED TO DECIDE, DECIDED HERE INSTEAD — once, in the language the tests run in.
- *
- * device.{sh,ps1} and sync.{sh,ps1} each carried a shell copy of the same block: compare the installed
- * agent's version against what GitHub publishes, download with resume, probe what landed, repair PATH, and on
- * Windows fetch the windowless launcher. Four copies in two dialects, held to each other by tests that
- * string-matched marked regions — a design whose safeguard was the admission it needed one. The scripts are
- * now bootstrap shims: they put a FIRST agent on a machine that has none, and exec `setup`. Every other
- * decision runs from this module, on every setup, so re-running a card's command still upgrades a machine —
- * the decision just exists in exactly one tested place.
- *
- * The order inside `prepareSetup` matters: self-update FIRST (so a fix to the repairs below reaches this very
- * run through the re-exec), then the environment repairs, which therefore always run from the newest agent. */
+// Everything an installer used to decide, decided here instead, once. device.{sh,ps1} and sync.{sh,ps1} are now
+// bootstrap shims: they put a first agent on a machine that has none and exec `setup`; every other decision
+// (version comparison, download, PATH, the Windows launcher) runs from this module on every setup. Self-update
+// runs first in `prepareSetup` so the repairs below always run from the newest agent.
 
-/* Set on the re-exec after a self-update, so the updated agent doesn't ask GitHub the question that was just
- * answered — and can never re-exec in a loop. Doubles as the escape hatch for a run that must not update. */
+// Set on the re-exec after a self-update, so the updated agent doesn't ask GitHub the question that was just
+// answered, and can never re-exec in a loop. Doubles as the escape hatch for a run that must not update.
 export const SELF_UPDATE_GUARD_ENV = "INTENTIC_MACHINE_NO_SELF_UPDATE";
 
-// How long to give a just-started loop to claim its pidfile before calling an upgrade a failure and rolling
-// back. It writes the file as its first act, so this is bounded by process startup, not by any work it does.
+// How long to give a just-started loop to claim its pidfile before calling an upgrade a failure. Bounded by
+// process startup, since the pidfile is its first act.
 const RESIDENT_START_TIMEOUT_MS = 10_000;
 const RESIDENT_START_POLL_MS = 200;
 
-/* Restart the loop and answer WHICH BUILD came up, which is the only answer that proves an upgrade landed: the
- * agent being replaced satisfies "a process is alive" exactly as well as the one replacing it.
- *
- * The wait is for the pidfile rather than for the build, because the two arrive together — the loop writes one
- * line, pid and build (resident.ts) — and a loop that never comes up must not spend the whole window being asked
- * a second question about a file that is not there. Undefined therefore covers both nothing started and it
- * started too slowly to say so, which are one situation to the caller. */
+// Restart the loop and answer which build came up, the only answer that proves an upgrade landed. Waits for
+// the pidfile rather than the build since the loop writes both together (resident.ts); undefined covers both
+// "nothing started" and "started too slowly to say so".
 const restartResident = async (): Promise<string | undefined> => {
     await reconcileResidency(() => undefined);
     await pollUntil(async () => (await readResidentPid()) !== undefined, { intervalMs: RESIDENT_START_POLL_MS, timeoutMs: RESIDENT_START_TIMEOUT_MS });
@@ -52,16 +40,16 @@ const restartResident = async (): Promise<string | undefined> => {
 // self-update below so the two cannot drift apart.
 export const machineUpgradeExec = (out: Log): UpgradeExec => realUpgradeExec(stopResident, restartResident, readResidentBuild, out);
 
-// Whether this process IS the installed agent — as opposed to a dev run (`node dist/cli.js`, AGENT_BIN) or a
-// binary somebody is trying out from Downloads. Only the installed agent self-updates or edits the machine.
+// Whether this process IS the installed agent, as opposed to a dev run or a binary somebody is trying from
+// Downloads. Only the installed agent self-updates or edits the machine.
 const runningAsInstalledAgent = async (): Promise<boolean> => {
     const from = await realpath(process.execPath).catch(() => undefined);
     const at = await realpath(agentPath).catch(() => undefined);
     return from !== undefined && from === at;
 };
 
-// The effects of the self-update, behind one seam, so the decision (the part worth getting right) is testable
-// without a network, a disk, or a process to replace.
+// The effects of the self-update, behind one seam, so the decision is testable without a network, a disk, or a
+// process to replace.
 export interface SelfUpdateIo {
     readonly installed: string;
     readonly installedAgent: () => Promise<boolean>;
@@ -69,12 +57,10 @@ export interface SelfUpdateIo {
     readonly reexec: (args: readonly string[]) => never;
 }
 
-/* SETUP MOVES THE MACHINE ONTO THE CURRENT AGENT BEFORE IT ENROLLS ANYTHING, which is what "re-running the
- * card's command upgrades a machine" now means. Cheap when current (one HEAD request, runUpgrade's own
- * short-circuit); on an actual update the new binary is downloaded, probed and swapped by the same machinery
- * `upgrade` runs, and then THE NEW AGENT re-runs this very command — so the setup that follows is always the
- * newest agent's. A failed update is a note, never a refusal: the pairing token in the argv expires in
- * minutes, and enrolling on a slightly older agent beats not enrolling at all. */
+// Setup moves the machine onto the current agent before it enrolls anything. Cheap when current; on an actual
+// update the new binary is swapped by the same machinery `upgrade` runs, and the new agent re-runs this very
+// command, so setup always runs on the newest agent. A failed update is a note, never a refusal: the pairing
+// token expires in minutes, and enrolling on a slightly older agent beats not enrolling.
 export const selfUpdateBeforeSetup = async (
     io: SelfUpdateIo,
     env: Record<string, string | undefined>,
@@ -85,7 +71,7 @@ export const selfUpdateBeforeSetup = async (
         return;
     }
     if (io.installed === DEV_VERSION) {
-        // A build made from source, deliberately, by whoever is running this — never replaced under them.
+        // A build made from source, deliberately, by whoever is running this: never replaced under them.
         return;
     }
     if (!(await io.installedAgent())) {
@@ -115,9 +101,9 @@ export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     },
 });
 
-/* `intentic-machine` ON THE USER'S PATH, repaired on every setup — so the commands the setup output names
- * (`intentic-machine status`, `… uninstall`) are real commands rather than a promise the installer could not
- * keep. POSIX gets a symlink into ~/.local/bin; Windows gets the bin dir appended to the per-user PATH. */
+// `intentic-machine` on the user's PATH, repaired on every setup, so the commands the setup output names are
+// real rather than a promise the installer couldn't keep. POSIX gets a symlink into ~/.local/bin; Windows gets
+// the bin dir appended to the per-user PATH.
 const posixPathRepair = async (out: Log): Promise<void> => {
     const linkDir = join(homedir(), ".local", "bin");
     const link = join(linkDir, "intentic-machine");
@@ -134,11 +120,9 @@ const posixPathRepair = async (out: Log): Promise<void> => {
     }
 };
 
-/* The per-user PATH with `folder` appended, or undefined when it is already there. Pure, because the rule it
- * carries was learned the hard way (device.ps1's history): the value must go back under the KIND it already
- * had — a REG_EXPAND_SZ written back as REG_SZ stops every %VAR%-style entry in somebody's PATH from
- * expanding, which is a far worse bug than a missing entry. The kind handling lives in the caller; this owns
- * membership (case-insensitive, as PowerShell's -contains compared) and joining. */
+// The per-user PATH with `folder` appended, or undefined when already there. The value must go back under the
+// kind it already had: a REG_EXPAND_SZ written back as REG_SZ stops every %VAR%-style entry from expanding.
+// Membership is case-insensitive, as PowerShell's -contains compares.
 export const addToWindowsPathValue = (stored: string, folder: string): string | undefined => {
     const entries = stored.split(";").filter((entry) => entry !== "");
     if (entries.some((entry) => entry.toLowerCase() === folder.toLowerCase())) {
@@ -147,9 +131,9 @@ export const addToWindowsPathValue = (stored: string, folder: string): string | 
     return [...entries, folder].join(";");
 };
 
-/* Explorer hands every terminal it starts a COPY of the environment, taken when Explorer itself started:
- * without this broadcast — the one the Control Panel's environment editor sends — the new PATH would reach
- * nothing until the next sign-in. SendMessageTimeout, so one wedged window cannot wedge a setup. */
+// Explorer hands every terminal it starts a copy of the environment taken at its own startup; without this
+// broadcast the new PATH reaches nothing until the next sign-in. SendMessageTimeout, so one wedged window
+// cannot wedge a setup.
 const WINDOWS_ENV_BROADCAST = [
     `$s='[DllImport("user32.dll",CharSet=CharSet.Auto)]public static extern IntPtr SendMessageTimeout(IntPtr w,uint m,UIntPtr wp,string lp,uint f,uint t,out UIntPtr r);'`,
     `Add-Type -Namespace Intentic -Name Native -MemberDefinition $s`,
@@ -157,9 +141,8 @@ const WINDOWS_ENV_BROADCAST = [
     `[void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff,0x1A,[UIntPtr]::Zero,'Environment',2,5000,[ref]$r)`,
 ].join(";");
 
-/* HKCU\Environment is read and written through reg.exe, which neither expands REG_EXPAND_SZ on query nor
- * changes a value's kind on add — the exact property [Environment]::SetEnvironmentVariable lacks (it stores
- * back as REG_SZ) and the reason the old installer edited the registry directly too. */
+// HKCU\Environment is read and written through reg.exe, which neither expands REG_EXPAND_SZ on query nor
+// changes a value's kind on add, the property [Environment]::SetEnvironmentVariable lacks.
 const readWindowsPath = (): { readonly kind: string; readonly stored: string } => {
     const query = spawnSync("reg", ["query", "HKCU\\Environment", "/v", "Path"], { encoding: "utf8", windowsHide: true, timeout: 15_000 });
     const match = query.status === 0 ? /^\s*Path\s+(REG_SZ|REG_EXPAND_SZ)\s+(.*)$/m.exec(query.stdout) : null;
@@ -195,12 +178,9 @@ const windowsPathRepair = (out: Log): void => {
     }
 };
 
-/* THE WINDOWLESS LAUNCHER, kept fresh beside the agent — the difference between a machine that quietly
- * reconnects at every boot and one that flashes a console window on the desktop while doing it. The agent
- * registers the stub at logon only when it finds it beside itself (@intentic/local-agent's autostart), so a
- * setup that skipped this would take the flashing window back with nobody noticing until the next reboot.
- * Download-then-swap, because the stub may be running at this very moment. Best-effort, and it says what its
- * absence costs: the connection is the job, the silence is the polish. */
+// The windowless launcher, kept fresh beside the agent: the difference between a quiet reconnect at every boot
+// and a console window flashing on the desktop. The agent only registers the stub at logon if it finds it
+// beside itself (@intentic/local-agent's autostart). Download-then-swap, since the stub may be running right now.
 export const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     if (process.platform !== "win32") {
         return;
@@ -222,9 +202,8 @@ export const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     }
 };
 
-/* What every `setup` runs before it enrolls anything: move onto the current agent (re-execing if it did),
- * then repair what the machine owes the user around the binary. The repairs run only when this process IS the
- * installed agent — a dev run must not edit anyone's PATH or registry. */
+// What every `setup` runs before it enrolls anything: move onto the current agent, then repair what the machine
+// owes the user around the binary. The repairs run only when this process IS the installed agent.
 export const prepareSetup = async (out: Log, args: readonly string[]): Promise<void> => {
     await selfUpdateBeforeSetup(realSelfUpdateIo(out), process.env, args, out);
     if (!(await runningAsInstalledAgent())) {

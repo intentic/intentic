@@ -1,21 +1,13 @@
 import { DesktopError } from "./types.js";
 
-/* ONE key vocabulary, rendered per backend.
- *
- * The alternative, letting callers pass whatever their platform's tool wants, makes every caller
- * platform-aware, which is the exact coupling this package exists to remove: a model that learned `ctrl+c` on
- * Linux would have to learn `^c` for Windows, and the first thing it would do on an unfamiliar machine is guess.
- * So the vocabulary is fixed here and the backends translate.
- *
- * It is X11's names, because they are the ones already written down in a thousand places and the ones a model
- * has most likely seen: `Return`, `Escape`, `BackSpace`, `Page_Up`, `ctrl+shift+t`. Common aliases are accepted
- * (Enter, Esc, Backspace, PageUp, cmd, win) so a caller reaching for the obvious word is not punished. */
+// One key vocabulary here; backends translate it. Uses X11 keysym names (Return, Escape, BackSpace...) with
+// common aliases accepted (Enter, Esc, Backspace, PageUp, cmd, win).
 
 export type Modifier = "ctrl" | "alt" | "shift" | "super";
 
 export interface Chord {
     readonly modifiers: readonly Modifier[];
-    // The non-modifier key, in this package's canonical spelling (X11 keysym names, or a single character).
+    // Canonical spelling: X11 keysym names, or a single character.
     readonly key: string;
 }
 
@@ -34,8 +26,7 @@ const MODIFIERS: Record<string, Modifier> = {
     meta: "super",
 };
 
-// Canonical spellings for the keys with more than one obvious name. Everything else (letters, digits,
-// punctuation, F-keys) passes through as typed, which is what both backends want.
+// Canonical spellings for keys with more than one common name; everything else passes through unchanged.
 const ALIASES: Record<string, string> = {
     enter: "Return",
     return: "Return",
@@ -63,10 +54,8 @@ const ALIASES: Record<string, string> = {
     pgdn: "Page_Down",
 };
 
-/* Split on "+", except when "+" IS the key: "ctrl++" is zoom-in in most applications, and a naive split reads its
- * key as empty. That case is spelled `<modifiers>++`, so it shows up as an empty LAST segment with a real one
- * before it, three parts for one modifier. A trailing separator with nothing to its left ("ctrl+") is not that;
- * it is a chord missing its key, and falls through to the error that says so. */
+// Splits on "+"; "ctrl++" is read as key "+" (three parts, last two empty), not a missing key. "ctrl+" alone is
+// missing its key and errors.
 const segments = (combo: string): string[] => {
     if (combo === "+") {
         return ["+"];
@@ -98,26 +87,24 @@ export const parseChord = (combo: string): Chord => {
     if (key === "") {
         throw new DesktopError(`"${combo}" has modifiers but no key.`);
     }
-    // A single character keeps its case (shift is a modifier, not capitalisation); a named key is canonicalised.
+    // A single character keeps its case; a named key is canonicalised via ALIASES.
     const canonical = key.length === 1 ? key : (ALIASES[key.toLowerCase()] ?? key);
     return { modifiers, key: canonical };
 };
 
-// xdotool speaks this vocabulary natively, it IS X11 keysyms, so rendering is joining it back up.
+// xdotool's vocabulary is X11 keysyms natively; this just rejoins the chord.
 export const xdotoolChord = (combo: string): string => {
     const chord = parseChord(combo);
     return [...chord.modifiers.map((modifier) => (modifier === "super" ? "super" : modifier)), chord.key].join("+");
 };
 
-// wtype's modifier flags are the same words; its key names are keysyms too, so only the shape differs.
+// wtype takes the same modifier words and keysym names, just shaped as flags.
 export const wtypeArgs = (combo: string): string[] => {
     const chord = parseChord(combo);
     return [...chord.modifiers.flatMap((modifier) => ["-M", modifier === "super" ? "logo" : modifier]), "-k", chord.key];
 };
 
-/* Windows virtual-key codes. The reason keys do NOT go through SendKeys on Windows, though text does: SendKeys
- * has no way to press the Windows key at all, so `super+e`, open Explorer, one of the most useful chords there
- * is, would be silently undeliverable. keybd_event with explicit VK codes can express every chord. */
+// SendKeys cannot press the Windows key, so key chords use keybd_event with VK codes instead of SendKeys.
 const VK: Record<string, number> = {
     ctrl: 0x11,
     alt: 0x12,
@@ -152,8 +139,7 @@ export const windowsChord = (combo: string): WindowsChord => {
     if (named !== undefined) {
         return { modifiers, key: named };
     }
-    // F1–F24 are contiguous from 0x70, letters and digits map to their ASCII code, the two families that would
-    // otherwise need forty table entries each.
+    // F1-F24 are contiguous from 0x70; letters and digits map to their ASCII code.
     const fkey = /^[fF](\d{1,2})$/.exec(chord.key);
     if (fkey?.[1] !== undefined) {
         const index = Number(fkey[1]);

@@ -42,8 +42,7 @@ describe(`moduleGroups`, () => {
         expect(groups[0]?.packaged).toBe(true);
     });
 
-    // Grouping is ON by default (useChangeGrouping), so this is what a Rust/Python/Go tree, or any repo with no
-    // package manifests at all, reads as: one unclaimed bucket the panels leave unnamed, which is the path list.
+    // Grouping defaults to on; this is what a manifest-less repo (no package files at all) renders as.
     it(`puts a manifest-less repo's every path in one unnamed bucket, in order`, () => {
         const bare = moduleGroups([`src/main.rs`, `Cargo.toml`, `docs/design.md`], (path) => path, [], `engine`);
         expect(bare).toHaveLength(1);
@@ -58,9 +57,7 @@ describe(`moduleGroups`, () => {
     });
 });
 
-/* The rule both review lists draw from. It is tested HERE rather than through either panel because that is the
- * point of it existing: the two used to answer these questions separately, and separately is how they came to
- * disagree. */
+// The rule both review lists share; tested here rather than through either panel.
 describe(`moduleView`, () => {
     const paths = [`_editor/web/src/main.ts`, `ARCHITECTURE.md`, `_editor/ui/src/Row.vue`];
 
@@ -70,17 +67,13 @@ describe(`moduleView`, () => {
         expect(view.buckets.map((bucket) => bucket.name)).toEqual([`@shop/web`, `shop`, `@shop/ui`]);
     });
 
-    // The case the whole `named` flag exists for: one bucket of files no package claims would print the repo's
-    // own name directly under the repo's own heading, saying nothing, so it says nothing, and its rows keep
-    // their paths.
+    // A lone unclaimed bucket would repeat the repo name as its own heading, so it stays unnamed.
     it(`leaves a lone unclaimed bucket unnamed`, () => {
         const view = moduleView([`src/main.rs`, `Cargo.toml`], (path) => path, [], `engine`, true);
         expect(view.named).toBe(false);
         expect(view.buckets).toHaveLength(1);
     });
 
-    // A repo that IS one package still earns its heading: the name is the package's, not the repo's, so it
-    // tells the reader something the heading above it did not.
     it(`heads a lone bucket that is a real package`, () => {
         const view = moduleView([`src/index.ts`], (path) => path, [{ dir: ``, name: `@shop/cli` }], `cli`, true);
         expect(view.named).toBe(true);

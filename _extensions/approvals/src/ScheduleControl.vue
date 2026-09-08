@@ -1,14 +1,7 @@
-<!-- WHEN AN ITEM GOES AHEAD: a sentence you read, and a date input only once you ask for one.
-
-     THIS REPLACES A COLUMN OF DATE PICKERS. Every row used to render a live `datetime-local`: the widest
-     and loudest control on the page, drawn even on done rows where it was empty and disabled, and stacked
-     directly above the Approve button it out-weighed. Rescheduling is the rarest thing anyone does on an
-     approval screen: the agent already proposed a time, so the resting state is one muted phrase and the
-     input is a click away. The pencil appears on the row's hover (Row is the `group`), which is how the
-     phrase advertises that it is editable without carrying chrome that says so permanently.
-
-     SIZE AND COLOUR ARE THE CALLER'S. No text-size class here, so the same control reads as body text under a
-     post being reviewed and as a small fact beside a scheduled one: the two placements it has. -->
+<!--
+    Shows an item's scheduled time as a sentence; the date input appears only once the row's hover pencil is pressed. No text-size class is set here
+    — size and colour are the caller's, since this renders both inside a review body and beside a scheduled item.
+-->
 <script setup lang="ts">
 import { ui, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, ref } from "vue";

@@ -4,12 +4,11 @@ import { useHighlighter } from "@intentic/ui";
 import { expect, test } from "vitest";
 import { snippetPieces, snippetWindow } from "./searchSnippet";
 
-// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import: hence
-// jsdom, and the stub vitest.setup.ts installs for every suite in the package. Nothing under test touches the DOM.
+// Needs jsdom: the @intentic/ui barrel (useHighlighter) touches window.matchMedia at import. Nothing under test
+// touches the DOM.
 
-// Colour is asserted against the REAL TypeScript grammar: the point of going through Shiki is that the spans
-// are the tokenizer's, so a hand-rolled fake would be testing nothing. tokenizeLine is what the component
-// reaches (through the cache in snippetTokens, which only adds scheduling).
+// Colours asserted against the real TypeScript grammar via Shiki's tokenizeLine, the same call snippetTokens' cache
+// wraps.
 const tokensFor = (text: string, lang = `typescript`): Promise<readonly { content: string; offset: number }[]> =>
     useHighlighter()
         .tokenizeLine(text, lang)
@@ -41,14 +40,12 @@ test(`snippetWindow drops indentation and moves the offsets with it`, () => {
 });
 
 test(`snippetWindow keeps every occurrence on the line`, () => {
-    // One row per LINE, so all of its matches have to travel with it: an editor marks each one.
     const snippet = snippetWindow(hit(`  own its own sandbox`, [2, 5], [10, 13]));
     expect(snippet.text).toBe(`own its own sandbox`);
     expect(spanTexts(snippet)).toEqual([`own`, `own`]);
 });
 
 test(`snippetWindow marks nothing when the daemon reported no offsets`, () => {
-    // A semantic or definition hit matched the line, not a span of it.
     const snippet = snippetWindow(hit(`  const answer = compute();`));
     expect(snippet.text).toBe(`const answer = compute();`);
     expect(snippet.spans).toEqual([]);
@@ -58,13 +55,12 @@ test(`snippetWindow cuts a far-right match into view and says so`, () => {
     const text = `${`x`.repeat(120)}needle after`;
     const snippet = snippetWindow(hit(text, [120, 126]));
     expect(snippet.elided).toBe(true);
-    // Only a short lead survives, so the match is inside the ~26 characters the default sidebar shows.
     expect(snippet.spans[0]?.start).toBe(6);
     expect(spanTexts(snippet)).toEqual([`needle`]);
 });
 
 test(`snippetWindow keeps the line's own lead when the match is near the front`, () => {
-    // 15 characters in, under the threshold: cutting here would cost the context that makes the row recognizable.
+    // Offset chosen just under the elision threshold, so the lead survives uncut.
     const snippet = snippetWindow(hit(`    export const answer = 1;`, [17, 23]));
     expect(snippet.elided).toBe(false);
     expect(snippet.text).toBe(`export const answer = 1;`);
@@ -78,8 +74,7 @@ test(`snippetWindow bounds a minified line`, () => {
 });
 
 test(`snippetWindow drops offsets that point past the line`, () => {
-    // The hit's offsets and its text can come from either side of a file edit: an empty span marks nothing
-    // rather than marking the wrong characters.
+    // Offsets can be stale relative to the text after an edit; an empty span beats marking the wrong characters.
     const snippet = snippetWindow(hit(`short`, [40, 90]));
     expect(snippet.spans).toEqual([]);
     expect(snippet.text).toBe(`short`);
@@ -96,19 +91,18 @@ test(`snippetPieces renders the whole snippet with no tokens, marking the match`
 test(`snippetPieces colours every piece and still marks exactly the match`, async () => {
     const snippet = snippetWindow(hit(`const test = 1;`, [6, 10]));
     const pieces = snippetPieces(snippet, await tokensFor(snippet.text));
-    // Nothing lost or duplicated by the two-ruler merge, and the mark is the daemon's span to the character.
     expect(rendered(pieces)).toBe(`const test = 1;`);
     expect(marked(pieces)).toBe(`test`);
-    // `const` is a keyword and `test` an identifier, so the row is genuinely coloured, not uniformly styled.
+    // `const` and `test` differ in kind, so distinct colours here mean real tokenization, not a uniform style.
     const colours = new Set(pieces.map((piece) => piece.style?.[`color`]));
     expect(colours.size).toBeGreaterThan(1);
     expect(colours.has(undefined)).toBe(false);
-    // Dark mode is the same tokens read through a CSS var, so every piece must carry one.
+    // Dark mode reads the same tokens through a CSS var; every piece must carry one.
     expect(pieces.every((piece) => piece.style?.[`--shiki-dark`] !== undefined)).toBe(true);
 });
 
 test(`snippetPieces splits a colour token that the match cuts through`, async () => {
-    // The match covers `ompu`, inside the single identifier token `compute`: one token, three pieces, one colour.
+    // Match covers `ompu` inside token `compute`: one token becomes three pieces, one colour.
     const snippet = snippetWindow(hit(`compute(1);`, [1, 5]));
     const pieces = snippetPieces(snippet, await tokensFor(snippet.text));
     expect(pieces.slice(0, 3).map((piece) => [piece.text, piece.hit])).toEqual([
@@ -122,13 +116,13 @@ test(`snippetPieces splits a colour token that the match cuts through`, async ()
 test(`snippetPieces keeps a match spanning several colour tokens whole`, async () => {
     const snippet = snippetWindow(hit(`export const test = 1;`, [7, 17]));
     const pieces = snippetPieces(snippet, await tokensFor(snippet.text));
-    // `const test` is a keyword plus an identifier: marked across the colour boundary, not merged over it.
+    // `const test` spans a keyword/identifier boundary; the mark crosses it without merging colours.
     expect(marked(pieces)).toBe(`const test`);
     expect(pieces.filter((piece) => piece.hit).length).toBeGreaterThan(1);
 });
 
 test(`snippetPieces marks every occurrence, each cut out of its own colour token`, async () => {
-    // Two matches inside one line and one of them inside a single identifier token: both marked, colour intact.
+    // Two `own` matches in one line, one inside a single identifier token; both marked, colours intact.
     const snippet = snippetWindow(hit(`const own = own + 1;`, [6, 9], [12, 15]));
     const pieces = snippetPieces(snippet, await tokensFor(snippet.text));
     expect(rendered(pieces)).toBe(`const own = own + 1;`);

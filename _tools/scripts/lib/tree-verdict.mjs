@@ -1,18 +1,6 @@
-/* ONE MEASUREMENT PER TREE. A verdict about a tree is recorded against a hash of the working tree it measured,
- * in the git dir every checkout of this repository shares (`intentic-push-verified`), and whoever asks next
- * about the same content replays it instead of measuring twice. Three writers and one reader: `pnpm verify`
- * writes a `verify` verdict (typecheck and tests, wherever it ran: the post-land check on the main tree, an
- * agent's own run in its worktree), verify-push.mjs writes a `push` verdict (typecheck, build and tests) and
- * reads both.
- *
- * KEYED BY CONTENT, NOT BY PLACE. The hash is `git write-tree` over a throwaway copy of the index with `add -A`
- * applied: tracked and untracked content, ignores honoured, ~20ms. A worktree's tree after a turn and the main
- * tree after that turn landed are the same content when nothing else was dirty in main, which is exactly the
- * case where re-measuring would be waste. An edit anywhere the suite could see invalidates it; an install under
- * node_modules does not, which is what the TTL is for.
- *
- * IN THE COMMON GIT DIR, so a verdict written from a linked worktree is readable from the primary checkout the
- * push happens in. Untracked by construction, per clone, gone with a re-clone. */
+// Caches a pass/fail verdict against a hash of the working tree's content (`git write-tree` over index+add -A), so
+// identical content is not re-measured. Stored in the common git dir (`intentic-push-verified`), shared across
+// worktrees; `pnpm verify` writes a `verify` verdict, verify-push.mjs writes `push` and reads both.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,8 +10,7 @@ import { git } from "./git.mjs";
 // A verdict older than this is re-measured even for an identical tree: node_modules is not in the hash.
 export const VERDICT_TTL_MS = 12 * 60 * 60_000;
 
-// A hash of the working tree's CONTENT. Undefined when git cannot answer (an unmerged index, a scratch dir
-// that cannot be made), which reads as "no verdict" and re-measures.
+// Hash of the working tree's content; `undefined` when git can't answer, which reads as "no verdict" and re-measures.
 export const treeHash = (root) => {
     const indexPath = git(root, "rev-parse", "--git-path", "index")?.trim();
     if (indexPath === undefined) {

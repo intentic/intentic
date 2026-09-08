@@ -2,8 +2,8 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { expect, test } from "vitest";
 import { containerUrlFix, expandPaste, normalizeFieldValue, wireguardSummary } from "./normalize";
 
-/* Repair before refusing: each case here is a thing a person actually pastes or types, and what the form now
- * does with it instead of objecting. */
+// Repair before refusing: each case is something a person actually pastes or types, and what the
+// form does with it.
 
 const card = (kind: CapabilityCatalogEntry["kind"], fields: CapabilityCatalogEntry["fields"]): CapabilityCatalogEntry => ({
     id: `card`,
@@ -18,7 +18,7 @@ test(`repairs what blur can repair: whitespace, ports, bare hosts`, () => {
     expect(normalizeFieldValue({ key: `token`, label: `Token`, secret: true }, `ghp_abc\n`)).toBe(`ghp_abc`);
     expect(normalizeFieldValue({ key: `port`, label: `Port` }, `10,443`)).toBe(`10443`);
     expect(normalizeFieldValue({ key: `url`, label: `URL` }, `github.com/o/r`)).toBe(`https://github.com/o/r`);
-    // The plainly-local hosts get http, because that is what a service on this machine actually speaks.
+    // Hosts that resolve locally get an http scheme, not https.
     expect(normalizeFieldValue({ key: `baseUrl`, label: `URL` }, `host.docker.internal:11434/v1`)).toBe(`http://host.docker.internal:11434/v1`);
     // A scheme already there is the user's answer, not ours to change.
     expect(normalizeFieldValue({ key: `url`, label: `URL` }, `http://example.com`)).toBe(`http://example.com`);
@@ -26,9 +26,8 @@ test(`repairs what blur can repair: whitespace, ports, bare hosts`, () => {
     expect(normalizeFieldValue({ key: `host`, label: `Host` }, `db.acme.dev`)).toBe(`db.acme.dev`);
 });
 
-/* The localhost trap: a URL in a capability's config is dialled FROM the sandbox, which is a container, so
- * localhost is the sandbox itself. The fix keeps everything but the host, scheme included: the service is
- * whatever it is, only its address was wrong. */
+// A URL in a capability's config is dialled from inside the sandbox container, so `localhost` means
+// the container itself; the fix rewrites only the host.
 test(`offers the container-reachable rewrite of a localhost URL`, () => {
     expect(containerUrlFix({ key: `baseUrl`, label: `URL` }, `http://localhost:11434/v1`)).toBe(`http://host.docker.internal:11434/v1`);
     expect(containerUrlFix({ key: `baseUrl`, label: `URL` }, `https://127.0.0.1:27124`)).toBe(`https://host.docker.internal:27124`);

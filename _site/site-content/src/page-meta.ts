@@ -14,10 +14,7 @@ export interface PageMeta {
     datePublished: string;
 }
 
-// Every indexable route, keyed by canonical path. The layout resolves title, description and
-// datePublished from here, so a page's <head>, its OpenGraph card, its JSON-LD and its markdown
-// mirror can't disagree. Both books' entries come straight from their trees; the landing page's
-// copy comes from the landing content it renders.
+// Every indexable route, keyed by canonical path; head, OpenGraph and JSON-LD all read from here.
 export const pageMeta: Record<string, PageMeta> = {
     "/": { ...landingContent.meta, datePublished: "2026-07-06" },
     "/privacy/": {
@@ -45,10 +42,7 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "Every provider we use to run the intentic platform, what each one does, where it processes data and under what safeguard.",
         datePublished: "2026-08-13",
     },
-    /* The attribution page. It had no entry here, so it inherited the fallback in BaseLayout: the brand line as
-     * its title and ORG_DESCRIPTION as its description, which at 285 characters is both truncated in a result
-     * and about a different page entirely. Every route in the sitemap needs a line in this table for exactly
-     * that reason. */
+    // Every sitemap route needs an entry here, or it falls back to BaseLayout's generic brand line.
     "/credits/": {
         title: "Credits · intentic",
         description:
@@ -56,50 +50,41 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-15",
     },
     "/about/": aboutMeta,
-    /* The blog's index. Only the INDEX is here: a post's title and description live in its own frontmatter,
-     * next to the words they describe, and `blog/[slug].astro` passes them to the layout directly. This
-     * table is for pages whose copy has nowhere else to be. */
+    // Only the blog index is here; a post's title/description live in its own frontmatter instead.
     "/blog/": {
         title: "The intentic blog",
         description: "What we have worked out about running a fleet of coding agents, and what we got wrong on the way. Releases are on the changelog.",
         datePublished: "2026-09-04",
     },
-    // The desktop app's download page. It is the answer to the objection the quickstart raises, so its
-    // description leads with what the app removes rather than what it is built with.
+    // Answers the quickstart's objection; description leads with what the app removes, not what it's built with.
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:
             "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox and handles updates.",
         datePublished: "2026-08-02",
     },
-    /* The rung decision, made before the sign-in. Its description names the three answers rather than the
-     * question, because the search it has to win is somebody asking whether this thing runs on their own
-     * machine or on ours — a doubt they form before they will click "Create your workspace", and the one the
-     * app's own setup screen cannot answer, being on the far side of a Google prompt. */
+    // Names the three answers, not the question: the doubt forms before sign-in, past where setup can reach.
     "/where-it-runs/": {
         title: "Where your intentic workspace runs",
         description:
             "Run your coding agents on our servers or on your own computer. What each costs, what it asks of you, and what the install does.",
         datePublished: "2026-08-29",
     },
-    /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
-     * Releases at build time (site/src/lib/changelog.ts): only the framing is authored here, exactly like the
-     * gallery below. The description says "what changed" rather than naming versions: the page is read by
-     * someone deciding whether to update, not by someone auditing a version history. */
+    // Entries come from GitHub Releases at build; description says what changed, not version numbers.
     "/changelog/": {
         title: "Changelog · intentic",
         description:
             "What's new in intentic: every release that changed something you'd notice, in plain language, newest first. Published straight from the release.",
         datePublished: "2026-08-10",
     },
-    // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
+    // The gallery's rows come from the registry repo at build time; only its framing is authored here.
     "/extensions/": {
         title: "Extensions · intentic",
         description:
             "Browse published intentic extensions. Each listing shows what it adds, who wrote it and the exact source commit you would install.",
         datePublished: "2026-08-01",
     },
-    // The title answers "intentic pricing" in the result itself. Reasoning in pricing.ts.
+    // The title answers "intentic pricing" directly, in the result itself.
     "/pricing/": {
         title: "Pricing · intentic is free. Bring your own AI plan",
         description:
@@ -110,8 +95,7 @@ export const pageMeta: Record<string, PageMeta> = {
     [guidesHref("")]: guidesIndex.meta,
     ...Object.fromEntries(docsPages.map((page) => [docsHref(page.id), page.meta])),
     ...Object.fromEntries(developersPages.map((page) => [developersHref(page.id), page.meta])),
-    // The API book, five authored pages and 37 generated ones. Its entries come from the tree exactly as the
-    // other two books' do, which is what keeps a generated page's <head> as real as an authored one's.
+    // Entries come from the tree like the other books, so its <head> is as real as an authored page's.
     ...Object.fromEntries(referencePages.map((page) => [referenceHref(page.id), page.meta])),
     ...Object.fromEntries(productPages.map((page) => [productHref(page.slug), page.meta])),
     ...Object.fromEntries(comparePages.map((page) => [compareHref(page.slug), page.meta])),

@@ -3,20 +3,9 @@ import { BrandMark, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 
-/* ONE PUBLISHED EXTENSION, as a card in a grid: the same tile the "+" catalog is read as, on purpose.
- *
- * It used to be a line in a 160px scrolling box: a mark, a name, five glyphs and a truncated description, all
- * on one row. That shape works for a list of things the reader already knows the names of, and these are the
- * opposite: names nobody has seen, written by people nobody has heard of, where the description IS the row's
- * content and the marks are the only thing that can be scanned. So: the catalog's tile, at the catalog's
- * density, because "what could I add" is the same question in both places and should not have two answers.
- *
- * THE PUBLISHER IS ON ITS OWN LINE, under the name. `radarsu.paperwork` is one string to the daemon and two
- * facts to a reader: what it is, and whose it is, and the second one is most of how a stranger's extension
- * gets trusted or skipped. Printed as one dotted token it reads as neither.
- *
- * THE BUTTON SAYS THE STATE. Install / Update / Installed / the reason it can't be: never a live-looking
- * control that does nothing, and never a dead one with no explanation. */
+// One published extension, drawn as the same tile the catalog uses, at the same density: for names nobody knows yet,
+// the description is the row's content, not a truncated afterthought. The publisher gets its own line (a separate trust
+// fact from the name), and the button always states its own state rather than sitting dead or lying.
 
 const { listing } = defineProps<{ listing: DiscoverListing }>();
 
@@ -29,9 +18,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
 </script>
 
 <template>
-    <!-- The WHOLE tile opens the listing, including when the listing can't be installed: a blocked row is the
-         one a reader most needs to be able to read, and hiding its detail behind a dead button would be the
-         second time this surface told them nothing. -->
+    <!-- The whole tile opens the listing, even when blocked: that's the row a reader most needs to read. -->
     <button
         type="button"
         class="flex h-full w-full flex-col gap-2.5 rounded-xl border border-line bg-card p-3.5 text-left transition-colors hover:border-line-strong hover:bg-overlay sm:p-4"
@@ -49,9 +36,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-x-1.5">
                     <span class="truncate text-sm font-semibold text-content">{{ name.title }}</span>
-                    <!-- Verified is the only trust badge that gets said out loud. Badging "listed" too would
-                         dress the honest default up as a review, which is the one thing this surface must not
-                         do: see the section captions above the grid. -->
+                    <!-- The only trust badge said out loud: badging 'listed' too would dress the honest default up as a review. -->
                     <Icon
                         v-if="listing.entry.trust === `verified`"
                         name="shield"
@@ -67,14 +52,11 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
             </div>
         </div>
 
-        <!-- Two lines, clamped. The tile is a quarter of a pane and a row is as tall as its tallest card, so one
-             author's paragraph must not inflate the three beside it. -->
+        <!-- Clamped to two lines: the tile is a quarter of a pane, and one author's paragraph can't inflate the row. -->
         <p v-if="listing.entry.description" class="line-clamp-2 text-2xs leading-relaxed text-muted">{{ listing.entry.description }}</p>
         <p v-else class="text-2xs text-subtle italic">No description published.</p>
 
-        <!-- The signal strip: evidence and popularity, glyph-first, each with its sentence on hover. Silent
-             where there is nothing to say: an absent scan is not a warning, and a listing with no stars is
-             every listing for its first few months. -->
+        <!-- Silent where there's nothing to say: an absent scan isn't a warning, and no stars just means a new listing. -->
         <div class="mt-auto flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 pt-0.5">
             <span
                 v-if="loads"
@@ -91,8 +73,7 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
             </span>
             <span v-if="listing.entry.version" class="shrink-0 text-2xs text-subtle">{{ listing.entry.version }}</span>
 
-            <!-- Right-aligned, always last, always the same place down the column: the one thing a reader
-                 scanning a grid of unfamiliar names is actually looking for is which ones they can act on. -->
+            <!-- Right-aligned and always last: the one thing a reader scanning unfamiliar names is looking for. -->
             <span class="ml-auto shrink-0">
                 <StatusBadge v-if="listing.state.kind === `installed`" size="xs" variant="success" :dot="true" label="installed" />
                 <StatusBadge v-else-if="listing.state.kind === `update`" size="xs" variant="info" label="update" />

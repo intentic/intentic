@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { readInputSavings } from "./filter-stats.js";
 
-// The savings report, read off the ledger agent-output-filter appends to. What is pinned here is the shape the
-// screen renders from: the stages summing to the whole saving, the reader's window applied on the ledger's own
-// calendar, and the un-cleaned commands grouped so the list names a handler worth writing.
+// Savings report read off the ledger agent-output-filter appends to. Pins: stages summing to the whole saving, the
+// window against the ledger's own calendar, and un-cleaned commands grouped by total cost.
 
 const tempDirs: string[] = [];
 const tempDir = async (): Promise<string> => {
@@ -37,21 +36,18 @@ test("reads the filter-stats ledger and dates it by the newest row", async () =>
     const savings = await readInputSavings(root, {});
     expect(savings.commands).toBe(2);
     expect(savings.savedPct).toBe(50);
-    // Attribution is in TOKENS and biggest first, which mechanism is worth the most, not which fired most
-    // often. `cap` ran on one command and outranks `pnpm`, which ran on one and saved less.
+    // perCleaner ranks by tokens saved, not by how often a mechanism fired.
     expect(savings.perCleaner).toEqual([
         { id: "git", commands: 1, savedTokens: 500 },
         { id: "cap", commands: 1, savedTokens: 250 },
         { id: "pnpm", commands: 1, savedTokens: 250 },
     ]);
-    // The newest row's OWN timestamp, not the file's mtime, which a prune rewrite would bump without a
-    // command having run.
+    // updatedAt is the newest row's own timestamp, not the file's mtime (a prune rewrite would bump that).
     expect(savings.updatedAt).toBe(5000);
 });
 
 test("attributes the stages to the whole saving, so the segments sum to raw − emitted", async () => {
-    // The identity the stacked bar stands on: every byte between raw and emitted belongs to some mechanism,
-    // including the ones with no switch (ansi) and the footer that ADDS bytes back.
+    // Every raw-to-emitted byte is attributed; footer's negative value adds bytes back, not removes them.
     const root = await ledgerRoot([
         { ts: 1000, command: "ls -la", rawBytes: 8000, emittedBytes: 2120, stageBytes: { ansi: 800, ls: 4000, cap: 1200, footer: -120 } },
     ]);
@@ -84,16 +80,15 @@ test("reports a zeroed, undated report when no command has been recorded", async
     });
 });
 
-/* The un-cleaned list, which is read for one purpose: which command is worth a new handler. That makes it a
- * question about a command across its runs, not about a single big run, so the rows are grouped, and the
- * ranking is by total. Ungrouped, one 60k outlier outranked a command costing 5k twenty times over. */
+// Gaps name which un-cleaned command is worth a new handler; grouped and ranked by total cost across runs, not by any
+// single run.
 test("groups un-cleaned commands, ranking them by what they cost in total", async () => {
     const root = await ledgerRoot([
         ...Array.from({ length: 4 }, () => ({ ts: 1000, command: "rg needle src", rawBytes: 20_000, emittedBytes: 20_000, matched: [] })),
         { ts: 1000, command: "curl -s https://example.com", rawBytes: 60_000, emittedBytes: 60_000, matched: [] },
-        // Below the per-run floor: a command that emits little is not a cleaner's job however often it runs.
+        // Below the per-run floor: emits too little to be worth a cleaner, however often it runs.
         ...Array.from({ length: 50 }, () => ({ ts: 1000, command: "git rev-parse HEAD", rawBytes: 41, emittedBytes: 41, matched: [] })),
-        // Matched a cleaner, so it is already handled and is not a gap.
+        // Matched a cleaner already, so it does not count as a gap.
         { ts: 1000, command: "pnpm install", rawBytes: 90_000, emittedBytes: 1000, matched: ["pnpm"] },
     ]);
     const savings = await readInputSavings(root, {});
@@ -103,7 +98,7 @@ test("groups un-cleaned commands, ranking them by what they cost in total", asyn
     ]);
 });
 
-// Held-out commands bypassed cleaning on purpose, so they are not evidence that a handler is missing.
+// heldOut commands skip cleaning on purpose; that is not evidence a handler is missing.
 test("leaves held-out commands out of the gaps", async () => {
     const root = await ledgerRoot([{ ts: 1000, command: "rg needle src", rawBytes: 20_000, emittedBytes: 20_000, matched: [], heldOut: true }]);
     expect((await readInputSavings(root, {})).gaps).toEqual([]);

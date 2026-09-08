@@ -1,15 +1,6 @@
-/* THE RECORDED PRODUCT'S OWN SCREENS, acme-shop, drawn as SVG.
- *
- * The demo has two surfaces that must show the visitor what the agents are LOOKING AT: the browser view's
- * screencast (an agent driving Chromium) and an acceptance run's report (the screenshots that agent took at each
- * step). Both are pictures of the same three pages, so the pages live here and the two callers differ only in
- * what they do with a frame, play it on a socket, or store it in the fixture's filesystem.
- *
- * SVG rather than captured PNGs, which is the whole reason this is affordable: five pages of plausible product UI
- * cost a few kilobytes of markup, weigh nothing in the bundle, and stay legible at any size they are given.
- *
- * Small on purpose: a page is a background, some blocks of text, a few cards and one cursor. Anything more and
- * this stops being a fixture and starts being a rendering engine. */
+// acme-shop's screens, drawn as SVG, shared by the browser view's screencast and an acceptance run's screenshots. SVG
+// keeps five pages at a few kilobytes, legible at any size. Kept small on purpose: a background, text, a few cards, one
+// cursor, nothing more.
 
 const WIDTH = 1280;
 const HEIGHT = 800;
@@ -22,8 +13,7 @@ const text = (x: number, y: number, body: string, options: { size?: number; fill
 const box = (x: number, y: number, width: number, height: number, fill: string, radius = 12, stroke = `none`): string =>
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="${fill}" stroke="${stroke}" />`;
 
-// The pointer the agent is driving. Drawn by the fixture because a screencast carries the real one in its
-// pixels, without it the page just changes by itself, which reads as a video rather than as something acting.
+// Pointer the agent drives; without it the page just changes by itself, reading as video, not action.
 const cursor = (x: number, y: number): string =>
     `<g transform="translate(${x} ${y})"><path d="M0 0 L0 18 L5 14 L8 21 L11 20 L8 13 L14 13 Z" fill="#111" stroke="#fff" stroke-width="1.2" /></g>`;
 
@@ -53,9 +43,7 @@ const planCard = (x: number, name: string, price: string, highlight: boolean): s
         .map((feature, index) => text(x + 32, 448 + index * 30, `· ${feature}`, { size: 14, fill: `#4a4744` }))
         .join(``)}`;
 
-// ---- the pricing page: the CTA the agent just wired ----------------------------------------------------------
-
-// Inside the highlighted plan card (378 + its 32px padding), which is where the CTA the agent just wired sits.
+// Inside the highlighted plan card (x=378 + 32px padding).
 const CTA_X = 410;
 const CTA_Y = 530;
 
@@ -86,8 +74,6 @@ export const pricingPage = (step: number): string => {
         )}${planCard(48, `Starter`, `$0`, false)}${planCard(378, `Growth`, `$49`, true)}${planCard(708, `Scale`, `$149`, false)}${cta}${spinner}${pointer}`,
     );
 };
-
-// ---- the Stripe checkout the session created ------------------------------------------------------------------
 
 export const checkoutPage = (step: number): string => {
     const typed = [``, `4242 4242 4242 4242`, `4242 4242 4242 4242`, `4242 4242 4242 4242`][step] ?? ``;
@@ -144,8 +130,6 @@ export const checkoutPage = (step: number): string => {
     );
 };
 
-// ---- the docs page the agent read the contract off -------------------------------------------------------------
-
 const DOC_LINES = [
     `POST /v1/checkout/sessions`,
     ``,
@@ -181,15 +165,8 @@ export const docsPage = (step: number): string =>
         ).join(``)}${cursor(700, 196 + step * 34)}`,
     );
 
-// ---- the cart, where the coupon story goes wrong ---------------------------------------------------------------
-
-/* The page an acceptance run failed on: a valid launch coupon typed into a field that rejects it. It exists
- * because a report whose every screenshot shows the happy path cannot show what a failing run is FOR, the
- * screenshot is the evidence, and the defect it evidences has to be visible in it.
- *
- * The summary's Discount line is never anything but a dash, in either frame: this page is drawn once before
- * Apply is pressed and once after the code came back refused, and a saving shown in either of them would
- * contradict the story its own screenshots are the evidence for. */
+// Page for the failed acceptance run: a valid coupon typed into a field that rejects it. Discount always shows a dash,
+// before and after Apply, since no discount is ever applied.
 export const cartPage = (options: { readonly coupon: string; readonly rejected: boolean }): string => {
     const field = `${text(760, 268, `Coupon code`, { size: 13, fill: `#6c6862` })}${box(760, 282, 300, 44, `#ffffff`, 8, options.rejected ? `#d64545` : `#dfe6ee`)}${text(
         776,

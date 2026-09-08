@@ -5,62 +5,33 @@ import { z } from "zod";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { type LevelName, type LogLineResult, readLogLines, readMetricSeries } from "./diagnostics.js";
 
-/* THE DIAGNOSTIC TOOLS, the read side of everything the daemon writes down.
- *
- * Measured over 728 real sessions, 91,094 tool calls: agents took 1,545 screenshots against 65 reads of a
- * console, opened daemon.log 150 times, the resource series 69, and the /logs route ZERO times, while building
- * 1,679 of their own /tmp/*.log files and adding 178 console.log lines to find out what was happening. The
- * daemon was not short of records. It was short of a way to ask them anything, so the cheapest route to an
- * answer was always to re-instrument the code and reproduce the bug.
- *
- * These four tools are that route made cheaper, and the reason they are tools rather than a documented file
- * path is discoverability: a path in a README is something an agent has to already know; a tool with a
- * description arrives in the prompt.
- *
- * WHY FILTERS AND NOT A TAIL. `tail -n 200 daemon.log` was always available and is worse than a print
- * statement: oldest-first, unfiltered, and in a file that is mostly routine. Every tool here takes a window and
- * returns newest-first, because "what went wrong in the last ten minutes" is the question actually being asked
- * every time.
- *
- * WHAT THEY DELIBERATELY CANNOT DO: write, delete, or reach outside historyRoot/logs and the spend ledger. A
- * turn must not be able to edit the record of what it did, which is the same rule that puts these files on the
- * /history volume outside the agent's /work mount in the first place. Secret masking is not this module's job
- * either: agent-redaction.ts masks every MCP tool result before the model sees it, so it is a property of the
- * conversation rather than of each tool. */
+// Read-only tools over what the daemon already recorded: cannot write, delete, or reach outside historyRoot/logs and
+// the spend ledger. Every tool takes a window and answers newest-first. Secret masking happens in agent-redaction.ts,
+// not here.
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 
-// Wide enough for a real incident, bounded so one call cannot return a megabyte of JSON into the context that
-// has to reason about it. A caller who hits the cap is told, and narrows.
+// Bounds one call's JSON payload; a caller that hits the cap is told and narrows.
 const MAX_LINES = 200;
 const DEFAULT_LINES = 40;
 const MAX_MINUTES = 7 * 24 * 60;
 
 export interface DiagnosticsToolDeps {
     readonly historyRoot: string;
-    /* The spend + outcome ledger, read for turn outcomes. Same store the cost panels project from.
-     *
-     * The STORE, not its `turns` member: mounting a tool must not dereference the thing it reads. Taking the
-     * method here binds it at plan time, so composing a turn would depend on a store the turn may never ask
-     * anything of, and every caller that builds a plan would have to supply one. */
+    // Turn-outcome ledger; kept as the store, not a bound `turns` call, so building a plan need not invoke it.
     readonly usage: Pick<UsageStore, "turns">;
     readonly now?: () => number;
 }
 
-/* A TURN THAT FINISHED ON WORK NOTHING CHECKED. Both states count, because both are a claim the record cannot
- * stand behind: "unproven" is nothing ran, "failing" is the last thing that ran did not pass, and a turn that
- * ended anyway on either has left something for a person to look at.
- *
- * "no-code" and absent are deliberately not here. The first is a turn a check could not have spoken to; the
- * second is a row from before this was recorded, or a turn the provider never answered, and counting an
- * unknown as a finding is how a filter comes to be distrusted. */
+// Turn's changes are unverified when nothing checked them (`unproven`) or the last check failed (`failing`). Excludes
+// `no-code` and absent verification: neither is evidence of a problem.
 const unproven = (row: UsageTurn): boolean => row.verification === "unproven" || row.verification === "failing";
 
 const sinceOf = (now: number, minutes: number | undefined): number | undefined =>
     minutes === undefined ? undefined : now - Math.min(minutes, MAX_MINUTES) * 60_000;
 
-// One log line as a single readable line of JSON. Not pretty-printed: forty six-deep objects at two spaces of
-// indent is most of a context window, and every field is already flat enough to scan.
+// Renders lines as single-line JSON, not pretty-printed: deep indentation would cost most of a context window and every
+// field is already flat enough to scan.
 const render = (result: LogLineResult, what: string): string => {
     if (result.lines.length === 0) {
         return result.windowTruncated
@@ -125,8 +96,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         ...(contains !== undefined ? { contains } : {}),
                         limit: limit ?? DEFAULT_LINES,
                     });
-                    // Named differently on purpose: these lines are a browser's account of itself, and a reader
-                    // who cannot tell that from the daemon's own account would eventually trust the wrong one.
+                    // Labeled "browser reports" so a browser's self-account reads as distinct from the daemon's own.
                     return ok(render(result, browser ? "browser reports" : "lines"));
                 },
             ),
@@ -181,9 +151,8 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                 async ({ sinceMinutes, conversationId, only, limit }) => {
                     const at = now();
                     const since = sinceOf(at, sinceMinutes);
-                    // The ledger windows by UTC day, so a minute-level window needs the day floor first and then
-                    // an exact filter on `at`. Reading the day whole and filtering is right: a day is at most a
-                    // few hundred rows.
+                    // Ledger windows by UTC day; fetch the day floor, then filter exactly on `at` for the minute-level
+                    // window.
                     const rows = await deps.usage.turns(since === undefined ? {} : { from: utcDay(since) });
                     const matching = rows.filter(
                         (row) =>
@@ -201,13 +170,11 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     const failed = matching.filter((row) => row.outcome === "error").length;
                     return ok(
                         [
-                            // Both counts, because they are different questions about the same rows and the
-                            // second one has no other way to be asked: a turn that failed announced itself, and
-                            // a turn that finished on work nothing checked looks exactly like a turn that
-                            // finished.
+                            // Both counts needed: unproven work looks identical to a finished turn unless counted
+                            // separately.
                             `${matching.length} turns, ${failed} failed, ${matching.filter(unproven).length} finished with unproven code changes. Newest ${shown.length} below.`,
-                            // `outcome` absent means the row predates outcome being recorded, which is not the
-                            // same as a turn that succeeded; say so rather than printing a guess.
+                            // Absent `outcome` predates the field; distinct from success, so it renders as
+                            // `unrecorded`.
                             "",
                             ...shown.map((row) =>
                                 JSON.stringify({
@@ -215,27 +182,26 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                                     outcome: row.outcome ?? "unrecorded",
                                     ...(row.errorCode !== undefined ? { errorCode: row.errorCode } : {}),
                                     ...(row.errorMessage !== undefined ? { error: row.errorMessage } : {}),
-                                    /* How the turn ENDED, past whether it failed. Absent on a row that predates
-                                     * this being recorded and on a turn the provider never answered, which is
-                                     * the honest reading: nothing was watched, so nothing is claimed. */
+                                    // Present only once something checked the turn; absent means nothing was watched,
+                                    // not that nothing was wrong.
                                     ...(row.verification !== undefined ? { verification: row.verification } : {}),
                                     ...(row.check !== undefined ? { check: row.check } : {}),
                                     ...(row.filesEdited !== undefined && row.filesEdited > 0 ? { filesEdited: row.filesEdited } : {}),
-                                    // Only when something is still open: a finished checklist is the ordinary
-                                    // case and would be a column of zeroes on every row.
+                                    // Included only when nonzero; a finished checklist is the common case and would
+                                    // just be a zero column.
                                     ...(row.checklistOpen !== undefined && row.checklistOpen > 0
                                         ? { checklistOpen: row.checklistOpen, checklistTotal: row.checklistTotal }
                                         : {}),
                                     ...(row.compactions !== undefined && row.compactions > 0 ? { compactions: row.compactions } : {}),
-                                    // As a fraction of the window, which is the readable form of the pair and
-                                    // the one that says "this turn ended against the wall".
+                                    // Reported as a percent of the context window, the readable signal that a turn ran
+                                    // out of room.
                                     ...(row.contextTokens !== undefined && row.contextWindow !== undefined && row.contextWindow > 0
                                         ? { contextPct: Math.round((row.contextTokens / row.contextWindow) * 100) }
                                         : {}),
                                     provider: row.provider,
                                     ...(row.model !== undefined ? { model: row.model } : {}),
-                                    // Only when it differs: printing it on every row would bury the rows where
-                                    // the difference is the answer.
+                                    // Included only when it differs from `model`; printing it always would bury the
+                                    // rows where it matters.
                                     ...(row.modelRequested !== undefined && row.modelRequested !== row.model ? { asked: row.modelRequested } : {}),
                                     harness: row.harness,
                                     ...(row.conversationId !== undefined ? { conversation: row.conversationId } : {}),

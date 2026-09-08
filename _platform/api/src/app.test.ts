@@ -6,8 +6,7 @@ import { testIngressConfig } from "./testing.js";
 import type { Logger } from "pino";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 
-// Full config with the intentic-provided path enabled; secrets.key empty so encrypt/decrypt pass through as
-// plaintext (the stored payload is plain JSON, tokens are plain strings).
+// secrets.key is empty: encrypt/decrypt pass through as plaintext (payload and tokens stay plain strings).
 const config = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
     betterAuth: { secret: `s` },
@@ -34,13 +33,12 @@ const claim = (prisma: PrismaClient) =>
 
 const parse = (text: string): Record<string, string> =>
     Object.fromEntries(text.split(`\n`).map((line) => [line.slice(0, line.indexOf(`=`)), line.slice(line.indexOf(`=`) + 1)]));
-// The sandbox's 12-hex id and public hostname for connect token `tok`, derived here rather than transcribed:
-// every party shares this digest (sandboxIdFromToken), and the point of the fabric swap is that it did not move.
+// The 12-hex id and hostname for connect token `tok`, derived via the shared digest (sandboxIdFromToken).
 const TUNNEL_ID = createHash(`sha256`).update(`tok`).digest(`hex`).slice(0, 12);
 const HOSTNAME = `sandbox-${TUNNEL_ID}.sbx.test`;
 
-// A minted setup code: the reachability grant was signed at mint (sandbox.setupCode) and stored IN the
-// payload, so the claim is a pure read: it hands the box the whole grant and calls no provider at all.
+// A minted setup code: the reachability grant was signed at mint and stored in the payload, so the claim is a pure
+// read.
 const intenticRow = () => ({
     id: `s1`,
     token: `tok`,
@@ -75,12 +73,9 @@ describe(`POST /setup/claim`, () => {
         expect(values[`SANDBOX_HOSTNAME`]).toBe(HOSTNAME);
         expect(values[`SYNC_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
         expect(values[`HOST_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
-        // Two independent one-shot credentials, never the same bytes: one enrolls a file-sync agent, the other a
-        // machine agent that can restart this sandbox, and a shared token would make redeeming either spend both.
+        // Two one-shot credentials must never share bytes: one enrolls file-sync, the other a machine agent.
         expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
-        // The claim's ONE write: the stamp that tells the setup wizard the pasted command reached a machine:
-        // and the previous run's setup report cleared with it, so a fixed-and-re-run machine never shows last
-        // time's failure over this run's progress. Nothing else about the row moves here.
+        // The claim's one write clears the prior setupReport too, so a re-run never shows last time's failure.
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
             data: { setupCodeClaimedAt: expect.any(Date), setupReport: Prisma.DbNull },
@@ -161,15 +156,14 @@ describe(`POST /sandbox/announce`, () => {
 
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
-        // `hosted` rides along because it is half of "did this platform hand this row a grant".
+        // `hosted` rides along because it is half of whether this platform handed this row a grant.
         expect(findUnique).toHaveBeenCalledWith({
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             include: { hosted: { select: { id: true } } },
         });
         expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
-            // The refusal record is cleared on the way through: it exists to describe a LIVE disagreement, and
-            // a sandbox just accepted at its proper address no longer has one.
+            // The refusal record clears here: a sandbox just accepted at its proper address no longer has one.
             data: { daemonUrl: `https://sandbox-abc.intentic.dev`, lastSeenAt: expect.any(Date), announceRefusal: Prisma.DbNull },
         });
     });
@@ -187,34 +181,22 @@ describe(`POST /sandbox/announce`, () => {
         expect(findUnique).not.toHaveBeenCalled();
     });
 
-    /* daemonUrl is what the browser sends the user's Google credential to, unprobed, so a connect token that
-     * could rewrite it would be trading a container-env secret for the owner's identity. It can't: the address
-     * is one we already know, from whichever half of setup established it. */
     it(`refuses a daemonUrl that isn't the address derived from the sandbox's own token`, async () => {
         const update = vi.fn().mockResolvedValue({});
-        /* A row this platform handed a grant to: the setup mint stored its claim payload, which is the record
-         * that says so now that no column does. Its address is therefore a pure derivation, known before boot. */
+        // setupPayload was stored by the setup mint, so the row's address is a pure derivation, known before boot.
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
         const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
         expect(res.status).toBe(409);
-        /* Neither the URL nor lastSeenAt moves: an unvetted address must not read as a live sandbox. What IS
-         * written is the disagreement itself, both halves of it: the refusal used to be a log line only, which
-         * is what made a mis-addressed sandbox look exactly like one that never started. */
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
             data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME } },
         });
 
-        // The address the platform would derive for this token, under the ingress's own zone.
         expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
     });
 
-    /* THE HOSTED LANE IS THE OTHER HALF of that record, and it has no setup payload: the platform composed its
-     * machine env directly. Its machine row is what says "this address is ours", and dropping it from the
-     * check would leave the one lane where the platform controls the whole box as the one lane whose announce
-     * was free-form. */
     it(`derives the address for a hosted sandbox too, off its machine row`, async () => {
         const update = vi.fn().mockResolvedValue({});
         const row = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: { id: `h1` } };
@@ -224,9 +206,6 @@ describe(`POST /sandbox/announce`, () => {
         expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
     });
 
-    /* AND WITH THE FABRIC OFF there is nothing to derive from: a self-hosted platform that signs no grants
-     * cannot know where anybody's sandbox lives, so a row it never provisioned pins on first announce as
-     * always. Asserted here because the ingress switch, not the row, is what turns the derivation on. */
     it(`derives nothing on a platform with no reachability fabric`, async () => {
         const update = vi.fn().mockResolvedValue({});
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
@@ -247,9 +226,6 @@ describe(`POST /sandbox/announce`, () => {
         expect(res.status).toBe(200);
     });
 
-    /* A row with neither record (attached by hand, or created before the hostname was stored) has nothing to
-     * check against. It learns the address on the first announce and holds it from then on, so the field is
-     * never free-form for longer than one write. */
     it(`pins on first announce when nothing on the row predicts the address`, async () => {
         const update = vi.fn().mockResolvedValue({});
         const bare = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null };
@@ -270,9 +246,8 @@ const bootReport = (prisma: PrismaClient, token: string | undefined, body: unkno
         body: JSON.stringify(body),
     });
 
-/* The announce's other half: whether the sandbox's PUBLIC address answers, as established by the box probing
- * itself. Separate from the announce because the two claims fail separately: the tunnel migration produced a
- * fleet that registered perfectly and served nobody, and nothing in the registry could tell them apart. */
+// Whether the sandbox's public address answers, established by the box probing itself; separate from announce since the
+// two can fail independently.
 describe(`POST /sandbox/boot-report`, () => {
     it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
         const update = vi.fn().mockResolvedValue({});
@@ -281,7 +256,7 @@ describe(`POST /sandbox/boot-report`, () => {
 
         const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `its tunnel has not come up.` });
         expect(res.status).toBe(200);
-        // Matched by the token's digest, exactly like the announce: the same secret, the same lookup.
+        // Matched by the token's digest, exactly like announce: the same secret, the same lookup.
         expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
@@ -289,7 +264,7 @@ describe(`POST /sandbox/boot-report`, () => {
                 bootReport: {
                     reach: `unreachable`,
                     detail: `its tunnel has not come up.`,
-                    // The platform's own clock: a box with a wrong one must not narrate from the past.
+                    // The platform's own clock; a box with a wrong one must not narrate from the past.
                     at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
                 },
             },
@@ -319,15 +294,11 @@ describe(`POST /sandbox/boot-report`, () => {
     });
 });
 
-// The connect-token host-tunnel mint (the in-sandbox infra panel's path). The CF provisioning itself is the
-// shared provisionHostSshTunnel (covered by cloudflare.test.ts); these lock the auth + guard paths that run
-// before any Cloudflare call.
+// The connect-token host-tunnel mint; provisioning itself is covered by cloudflare.test.ts, this locks the auth and
+// guard paths before any Cloudflare call.
 
-/* THE ONE-GOOGLE-SIGN-IN ENDPOINT. The browser mints a Google ID token, signs into the platform with it, and
- * keeps the same token for its sandbox, which is what removed the second Google ask. This holds the only
- * thing a unit test can hold about it usefully: that the route is MOUNTED and verifying. It was absent
- * entirely until the one-tap plugin was added, and a missing route is indistinguishable from a broken one
- * from the browser's side: both send the user down the redirect fallback, silently, forever. */
+// The one Google sign-in endpoint. Pins only that the route is mounted and verifying, the only thing a unit test can
+// usefully hold about it.
 describe(`POST /api/auth/one-tap/callback`, () => {
     const post = (idToken: string) =>
         createApp(
@@ -342,17 +313,14 @@ describe(`POST /api/auth/one-tap/callback`, () => {
 
     it(`is mounted, and refuses a token Google did not sign`, async () => {
         const response = await post(`not-a-google-token`);
-        // Anything but 404: a 404 is the plugin missing, which is the regression this exists to catch. The
-        // refusal itself is Google's verifier talking, and its exact status is that library's business.
+        // Anything but 404: a 404 is the plugin missing; the refusal's exact status is Google's verifier's business.
         expect(response.status).not.toBe(404);
         expect(response.status).toBeGreaterThanOrEqual(400);
     });
 });
 
-/* THE EDGE'S ONE QUESTION BACK, and the whole of revocation under this fabric. A grant carries no expiry — it
- * lives in a container's env for the container's life — so "this sandbox may no longer be reached" has to be
- * something the edge can ASK, and the registry is the only party that knows. 200/404, nothing else, and the
- * 404 is what makes deleting a sandbox the act that takes its address away. */
+// The edge's one question back: a grant carries no expiry, so revocation has to be something the edge can ask, and 404
+// is the only answer that matters.
 describe(`GET /api/reachability/:sandboxId`, () => {
     const ask = (prisma: PrismaClient, sandboxId: string) => createApp(config, prisma, logger).app.request(`/api/reachability/${sandboxId}`);
     const id = `abcdef012345`;
@@ -362,16 +330,10 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         const res = await ask(fakePrisma({ sandbox: { findUnique } }), id);
 
         expect(res.status).toBe(200);
-        /* The LOOKUP is the assertion, not just the status. The id is the leading twelve hex of `tokenDigest`,
-         * so the tempting version of this route is a prefix match on a column that already exists — and that
-         * cannot use the index under a default collation, making a fleet-wide restart a sequential scan per
-         * box. An equality on `tunnelId` is the point of the column. */
+        // The lookup is the assertion: a prefix match on the digest can't use the index (sequential scan per box).
         expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true, hosted: { select: { appName: true } } } });
     });
 
-    /* THE LANE IS THE OTHER HALF OF THE ANSWER. The edge asks this for a hostname no tunnel holds, and what it
-     * does next depends on it: a hosted sandbox is reached by replaying the request to its Fly app, a sandbox
-     * on somebody's own machine only by the tunnel it dials, so "no tunnel" there is simply "not connected". */
     it(`names the lane: a hosted sandbox's app to replay to, or the tunnel it must dial`, async () => {
         const hosted = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }), id);
         expect(await hosted.json()).toEqual({ ok: true, lane: `hosted`, app: `intentic-sbx-${id}` });
@@ -380,14 +342,11 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 
-    // Revocation: the row is gone, so the edge refuses the tunnel. Nothing else had to happen for that.
     it(`404s a sandbox that does not exist`, async () => {
         const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } }), id);
         expect(res.status).toBe(404);
     });
 
-    // A shape that is not an id cannot name a sandbox, so it is refused without asking the database — this
-    // door is unauthenticated, and the cheapest thing it can do with garbage is not touch Postgres.
     it(`404s anything that isn't a 12-hex id, without querying`, async () => {
         const findUnique = vi.fn();
         const prisma = fakePrisma({ sandbox: { findUnique } });
@@ -398,9 +357,6 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         expect(findUnique).not.toHaveBeenCalled();
     });
 
-    /* UNAUTHENTICATED ON PURPOSE, so this pins that it answers with no credential at all: what it discloses is
-     * whether a 12-hex id names a live sandbox, and that id is the leading label of every URL its owner has
-     * ever shared. Signing it would mean handing the edge a credential for a fact DNS already answers. */
     it(`answers with no credential presented`, async () => {
         const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(res.status).toBe(200);

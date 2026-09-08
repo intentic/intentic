@@ -3,16 +3,9 @@ import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge }
 import { ref } from "vue";
 import { useShares } from "./useShares";
 
-/* SHARED CONVERSATIONS: the owner's complete picture of which of their chats a stranger can read.
- *
- * Its own section above the published files, on the same reasoning that makes the file list what it is: the
- * outbox has no auth in front of it, so nothing about what is exposed may be a surprise. A conversation is the
- * most sensitive thing this workspace can publish, and it is also the one thing the file list could not
- * describe: a page and a folder of pictures say nothing about which chat they came from, how much of it
- * travelled, or when the snapshot was taken. Those three facts are the row.
- *
- * `sharedAt` is the load-bearing one, because a share is FROZEN: the date is not decoration, it is the line
- * between what a recipient can see and what is still private. Update moves it; nothing else does. */
+// Owner's complete picture of which chats a stranger can read: how current the snapshot is, how much travelled, and how
+// deep. `sharedAt` marks the freeze point; only Update moves it, so it is the line between what's public and what's
+// still private.
 
 const { shares, error, isLoading, update, remove } = useShares();
 
@@ -32,8 +25,7 @@ const act = async (id: string, action: (id: string) => Promise<unknown>): Promis
 };
 
 const DAY = 86_400_000;
-// Absolute once it is more than a day old, relative before that: the two ways this date gets read. "3h ago"
-// answers "is this current?"; a date answers "which version of the conversation did they see?".
+// Relative under a day old, absolute after: relative says how current, a date says which version was seen.
 const when = (at: number): string => {
     const ago = Date.now() - at;
     if (ago < 3_600_000) {
@@ -70,8 +62,7 @@ const when = (at: number): string => {
                         <Icon name="comments" class="shrink-0 text-subtle" />
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-xs font-medium text-content" :title="share.title">{{ share.title }}</p>
-                            <!-- What is behind the link, in the order it is asked about: how current, how much,
-                                 how deep. -->
+                            <!-- Order matters: how current, how much, how deep. -->
                             <p class="truncate text-2xs text-subtle">
                                 shared {{ when(share.sharedAt) }} · {{ share.messages }} message{{ share.messages === 1 ? `` : `s` }} ·
                                 {{ share.detail === "messages" ? "messages only" : "with the agent's work" }}
@@ -89,8 +80,7 @@ const when = (at: number): string => {
                             <Icon name="external-link" />
                         </a>
                         <CopyButton v-if="share.url" :text="share.url" label="Copy link" />
-                        <!-- Update, not "re-share": the link does not change, which is the whole point of
-                             having it: it is already in somebody's messages. -->
+                        <!-- Update, not re-share: the link stays the same, since it's already in someone's messages. -->
                         <Button
                             label="Update"
                             size="small"
@@ -112,8 +102,7 @@ const when = (at: number): string => {
                         </Button>
                     </div>
                     <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" :title="share.url">{{ share.url }}</span>
-                    <!-- A sandbox with no tunnel has nowhere to publish to, so the page exists and nothing can
-                         reach it. Worth saying on the row rather than leaving a share that looks fine. -->
+                    <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
                     <span v-else class="text-2xs text-danger">This sandbox has no public address, so this page can't be reached.</span>
                 </div>
             </div>

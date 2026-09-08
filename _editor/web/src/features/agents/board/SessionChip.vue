@@ -1,30 +1,10 @@
 <script setup lang="ts">
-/* THE SESSION'S NAME, wherever it is printed: the branch an isolated agent works on, which is also the name of
- * its worktree and the id in its page's address. One component so the string looks the same on every surface,
- * because it is the only thing joining this app to git, the disk and the CLI: a name you have to retype off the
- * screen is not an identifier, it is a picture of one.
- *
- * IT IS A LABEL BY DEFAULT, AND THAT IS THE POINT. The board's card is one press (focus the agent) and one drag
- * (move it to a lane), and this line sits in the middle of it. Made pressable, it became a small target for a
- * rare want (copying) parked in the path of the press people make all day, and it was hit by accident far
- * more often than on purpose. Copying moved to the card's right-click menu, where a once-in-a-while action does
- * not have to share a surface with an every-time one.
- *
- * `reveal` is the exception, and only on the agent's own page: there the chip opens the identity panel, which
- * is that page's subject rather than something in the way of it. The chevron is what marks it: a chip that
- * opens something has to look different from one that just says a name. That spelling prints the name WHOLE:
- * the detail page is the one surface whose subject is this agent, it has the width, and it is where somebody
- * goes when the exact string is what they came for.
- *
- * ── THE LABEL SPELLING IS ABBREVIATED, AND ONLY THE LABEL SPELLING ───────────────────────────────────────
- * The rule and the whole argument for it live in `sessionChip.ts`; in one line, the shared `agent/` prefix
- * goes and anything still over the budget loses its MIDDLE rather than its end. The CSS truncation stays
- * underneath as the last resort for a very narrow lane.
- *
- * AND THE WHOLE NAME IS ON HOVER. That reverses this file's earlier note ("no hover label on either spelling:
- * the label spells the name out already") and it is the same rule, not a new one: a hover label is wrong when
- * it repeats what is on screen and right when it completes it. The label no longer spells the name out, so it
- * now owes the reader the rest of it. */
+// The session's name (the branch an isolated agent works on, its worktree name, its page's id) printed identically
+// everywhere, since it's the only string linking this app to git, disk and CLI.
+// A label by default, not pressable: copying lives on the card's right-click menu instead, since a rare action in the
+// path of the frequent press/drag was hit by accident constantly.
+// `reveal` is the one exception (the agent's own page, opening its identity panel); its label spelling is abbreviated
+// (shared prefix dropped, overflow loses the middle) with the full name on hover.
 import { computed } from "vue";
 import { shortBranch } from "./sessionChip";
 

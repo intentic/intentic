@@ -13,7 +13,7 @@ const probesOf = (over: Partial<IdleStopProbes>): IdleStopProbes => ({
     ...over,
 });
 
-// The interval is a minute; advancing N minutes runs N checks (each awaited via the async timer API).
+// The interval is a minute, so advancing N minutes runs N checks.
 const minutes = async (count: number): Promise<void> => {
     for (let i = 0; i < count; i += 1) {
         await vi.advanceTimersByTimeAsync(60 * 1000);
@@ -76,12 +76,8 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    /* THE PROBE IS A SUBPROCESS, AND THE WORLD MOVES WHILE IT RUNS. Every test above resolves
-     * terminalActivityAt on an already-settled promise, so the check never actually suspends and the
-     * live probes it read a line earlier cannot go stale. Production's probe spawns `tmux list-panes`,
-     * which is milliseconds at best and seconds on the loaded box this feature exists for, and the
-     * verdict is reached on the far side of that await. Anything that becomes busy in between is
-     * invisible to the pass that is about to SIGTERM the daemon. */
+    // Simulates the terminal probe being an in-flight subprocess: unlike the other tests' already-settled promise, this
+    // lets something become busy while the check awaits it.
     const held = (): { probe: () => Promise<number>; settle: (at: number) => Promise<void> } => {
         let resolve: ((at: number) => void) | undefined;
         return {
@@ -102,7 +98,7 @@ describe("startIdleStop", () => {
         let connected = 0;
         const tmux = held();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ connected: () => connected, terminalActivityAt: tmux.probe }), stop);
-        // Five quiet minutes: the streak has outlasted the window, so this pass would stop the machine.
+        // Five quiet minutes: the streak has outlasted the window, so this pass would otherwise stop the machine.
         await minutes(5);
         // ...and while it is still waiting on tmux, somebody opens the workspace.
         connected = 1;

@@ -3,42 +3,20 @@ import type { AgentEvent } from "../events/agent-events.js";
 import { CARD_FIELDS, holdsCard, isAwaitingDecision, type TranscriptCards, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
 import { mentionedPathTokens } from "./mentions.js";
 
-/* THE FOLD: a turn's frames into the rows a conversation is made of, one rule, applied once.
- *
- * The daemon runs it live, frame by frame, as the turn streams (turn-runs.ts): what it produces is what every
- * attached window draws, patch by patch, and what the record keeps once the turn settles. A reopened chat
- * therefore shows what was on screen rather than a second arrangement of it, because there is no second
- * arrangement: the row a window watched being typed and the row the record holds are the same row, made by
- * the same code at the same moment.
- *
- * It used to run twice. The browser folded the live frames into its own bubbles, the daemon folded the same
- * frames at settlement into the record, and a third pass turned the record back into bubbles on reopen. Each
- * grew rules the others lacked, a card the record forgot, a steer the live view placed wrong, a notice only
- * the window that watched ever saw, and a change to one was a bug in the other until somebody noticed. This
- * is the one copy.
- *
- * `tag` names which stream of the log is being read: undefined is the main turn, a tool-call id is the
- * subagent that call spawned. Frames carrying THAT tag are the stream's own and land at top level; frames
- * carrying a different one belong to a child of this stream and nest under the card that spawned it, one
- * rule for both, which is what makes depth fall out for free: a subagent that itself delegates nests one
- * level further down, on the same pass, whichever level is being read.
- *
- * Rows are MUTATED in place and every patch carries a COPY of what it names. The mutation is what keeps a
- * result that lands turns after its call cheap, no second pass; the copy is what keeps a patch true to the
- * moment it was made rather than to whatever the row grew into by the time a slow reader took it. */
+// Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
+// screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
+// frames nest under the card that spawned them. Rows mutate in place; every patch carries a copy of what it names.
 
 export type TurnEnding = "settled" | "stopped";
 
-// Where a tool card lives, for the frames that reach it by id after it was drawn: its row, and the card it
-// nests under when it is a helper's own call.
+// Where a tool card lives: its row, and the parent card it nests under when it's a helper's own call.
 interface CardPlace {
     readonly tool: TranscriptTool;
     readonly row: number;
     readonly parent?: string;
 }
 
-// The keys a frame actually carries: an optional field a frame left out must not overwrite what an earlier
-// frame set, and a spread of the parsed frame would, with `undefined`.
+// Strips undefined fields, so spreading a partial frame never overwrites a field an earlier frame already set.
 const defined = <T extends object>(value: T): Partial<T> => Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as Partial<T>;
 
 const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTool => ({
@@ -51,8 +29,7 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTo
     ...(event.content !== undefined ? { content: event.content } : {}),
 });
 
-// Whether a bubble has anything in it: text, thinking, tools, a checklist or a card makes a row, and nothing
-// makes none.
+// Whether a bubble has any content: text, thinking, tools, todos, usage or a card; empty otherwise.
 const empty = (row: TranscriptRow): boolean =>
     row.text.length === 0 &&
     (row.thinking?.length ?? 0) === 0 &&
@@ -61,14 +38,8 @@ const empty = (row: TranscriptRow): boolean =>
     row.usage === undefined &&
     !holdsCard(row);
 
-/* What a landed delta did to the workspace's dependencies, as a clause the landed notice ends with, or nothing
- * at all, which is what almost every turn produces and what the reader should therefore never have to skip past.
- *
- * Written as a REPORT of something already done, not a request. The daemon started the install the moment the
- * tree changed (workspace/reconcile-deps.ts), so "installing" is the true tense and there is no decision left
- * for the reader to make; the button beside it opens the terminal it is running in, for whoever wants to watch.
- * The deferred wording is the one case that names a wait, because a workspace with other agents still running
- * genuinely has not started yet and saying otherwise would be a lie the terminal would immediately expose. */
+// Clause appended to the landed notice for a workspace dependency change, or empty when there is none. Reports the
+// install as already started, or queued when other agents are still running; never as a request.
 const dependencyLine = (deps: { missing: number; started: string[]; deferred: boolean } | undefined): string => {
     if (deps === undefined || deps.missing === 0) {
         return ``;
@@ -79,15 +50,8 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
         : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
-/* WHY THIS AGENT'S BRANCH JUST MOVED, the human's half of the rebase (daemon: agents/sync.ts).
- *
- * A conversation goes stale while its user commits around it, so the daemon rebases the branch onto the
- * current workspace. It is told, not asked: at the moment someone is answering their agent they have nothing
- * to decide this with, and the alternative to rebasing is not "stay safe", it is a land conflict half an hour
- * later. So this is one muted line with no button on it, the same weight as "Context compacted", and for the
- * same reason. The blocked half is the line that earns its keep: a rebase that would not apply was rolled
- * back, the agent is working from the older base, and the conflict report at the end of the turn is now
- * EXPECTED rather than a surprise. */
+// One line reporting the daemon's rebase of this agent's branch onto the current workspace; `blocked` names repos it
+// couldn't rebase, where the turn ran from an older base.
 const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
     const moved =
         sync.commits > 0
@@ -100,17 +64,14 @@ const syncLine = (sync: { commits: number; blocked: readonly string[] }): string
     return [moved, blocked].filter((line) => line !== undefined).join(` `);
 };
 
-// End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted changes (review = the
-// Changes panel), was HELD on the branch because auto-land is off, or conflicted and stayed safely in the
-// worktree. A landed delta that changed what the workspace depends on carries its reconcile too, the one
-// consequence of this turn the Changes panel cannot show, because it happened outside the diff.
+// Row for a finished turn: held on its branch, landed automatically, or conflicted. A landed turn that changed
+// dependencies appends dependencyLine, since the Changes diff can't show that.
 const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
     if (event.held === true) {
         return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.` };
     }
     if (!event.landed) {
-        // Named, not explained: the cause is per-FILE (your edits, a moved main line, a binary), and the review
-        // is where each one is spelled out with the action that fits it.
+        // Per-file cause (your edits, a moved main line, a binary) is spelled out in the review, not named here.
         const conflicts = event.conflicts ?? [];
         return {
             role: "notice",
@@ -119,9 +80,7 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
                 .join(`, `)}. Open the agent's review to see what blocked them and land from there.`,
         };
     }
-    // The moment-of-regret offer, on the LANDED notice only: the automatic behaviour just fired, and "stop
-    // doing that" is worth one press exactly now. An install that STARTED takes the slot instead: for as long
-    // as it runs, the one press worth offering is the terminal it is running in.
+    // noticeAction fires only here, right as the auto-behavior ran; an active install takes the slot instead.
     return {
         role: "notice",
         text: `Changes landed in your workspace: review them in the Changes panel.${dependencyLine(event.deps)}`,
@@ -129,10 +88,8 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
     };
 };
 
-/* WHAT HAPPENED TO THE TURN, written down: the provider's own sentence, and the one clause the daemon can add
- * about what comes next. The wait itself (a countdown to the allowance reopening, an outage's next attempt) is
- * the chat's to draw beside the composer, live; this row is the record of the moment, and reads the same live
- * and a week later. */
+// Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
+// drawn by the chat, not stored here.
 const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const { message, code } = event;
     switch (code) {
@@ -150,8 +107,7 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
                 : { role: "notice", text: `${message} Reconnect the account to pick this conversation back up.` };
         case "rate_limit":
             return { role: "notice", text: event.autoResume === "scheduled" ? `${message} This chat sends it again once the allowance comes back.` : message };
-        // Refused before anything ran: the words never reached the model, and the chat holds them for the
-        // user's own next send rather than flushing them into the same refusal.
+        // Refused before the model saw it; the composer holds the message so the user can resend it.
         case "claude-reauth":
         case "unknown-command":
         case "context-window-too-small":
@@ -165,13 +121,10 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
     }
 };
 
-/* The opening user row of a turn: what was typed, when, with what attached and what the daemon added. Built by
- * whoever holds the prompt (the daemon strips its own layers off it first, sessions/turn-transcript.ts), and
- * handed to the fold as the row it starts from. */
+// The turn's opening user row: text, timestamp, attachments, and whatever the daemon later stamps onto it (checkpoint,
+// notes).
 export const userRow = (text: string, sentAt: number, attachments: readonly string[]): TranscriptRow => {
-    /* Uploads only. A path @-mentioned inline in the text rides the same wire field (the composer sends both
-     * as attachments), and drawing it as a chip would show the reader the same path twice; an upload that the
-     * user ALSO happened to type the generated path of keeps its chip, because the chip is the thumbnail. */
+    // Drops an attachment already inline as an @-mention, unless it's a generated upload path (its own thumbnail).
     const inline = new Set(mentionedPathTokens(text));
     const chips = attachments.filter((path) => !inline.has(path) || path.includes(`/records/artifacts/attachments/`));
     return { role: "user", text, sentAt, ...(chips.length > 0 ? { attachments: chips } : {}) };
@@ -179,17 +132,14 @@ export const userRow = (text: string, sentAt: number, attachments: readonly stri
 
 export class TranscriptFold {
     readonly rows: TranscriptRow[] = [];
-    // The rows the user steered into the turn, by position: the daemon files each one's rewind state under it
-    // once the turn settles (agent/steer-anchors.ts), and only the fold knows where they landed.
+    // Row index of each user steer, in order; the daemon anchors rewind state to these once the turn settles.
     readonly steerRows: number[] = [];
-    // The open assistant bubble, by index, and it is always the LAST row: every other kind of row closes it
-    // first (pushRow), so a bubble that ends empty is dropped without moving anything above it.
+    // Index of the open assistant bubble; always the last row, since every other row kind closes it first.
     private bubble: number | undefined;
     private readonly cards = new Map<string, CardPlace>();
-    // requestId → the row holding the interactive card it names, for the frames that land on a card after it
-    // was raised: the reply that released it, a permission's late sentence, an offer's stream and receipt.
+    // requestId to the row holding its card, for frames landing on it later (a reply, a late sentence, a receipt).
     private readonly parked = new Map<string, number>();
-    // The turn's own opening user row, where the checkpoint and the daemon's notes land.
+    // The turn's opening user row, where the checkpoint and daemon notes land.
     private readonly opener: number | undefined;
 
     constructor(
@@ -203,7 +153,7 @@ export class TranscriptFold {
         this.opener = opener === -1 ? undefined : opener;
     }
 
-    /** Fold one frame in. What changed comes back as patches, in the order it changed. */
+    /** Folds one frame in; returns the patches it produced, in order. */
     apply(event: AgentEvent): TranscriptPatch[] {
         const parent = "parentToolUseId" in event ? event.parentToolUseId : undefined;
         if (parent !== this.tag) {
@@ -228,10 +178,7 @@ export class TranscriptFold {
                 return [...opened, { op: "thinking", index, text: event.text }];
             }
             case "text_end":
-                // The agent finished a block of prose: retire the bubble it was writing into, so what comes next,
-                // the tool calls that block introduced or the next block after they return, opens a fresh one
-                // below it. A block that wrote no prose has no boundary to draw: retiring on it would split a
-                // card away from the prose that reported it, which is a shape the user never saw.
+                // A block with no prose has no boundary; retiring here would split a card from its report.
                 if (this.bubble !== undefined && this.rows[this.bubble]!.text.length > 0) {
                     this.bubble = undefined;
                 }
@@ -245,9 +192,7 @@ export class TranscriptFold {
                 return [...opened, { op: "tool", index, tool: structuredClone(tool) }];
             }
             case "tool_call_update":
-                // Present fields REPLACE the prior value (snapshot semantics: Codex streams a command's growing
-                // output as whole snapshots), absent fields leave it unchanged. An update with no matching tool
-                // is dropped rather than shown loose.
+                // Present fields replace the prior value (snapshot semantics); an unmatched update drops.
                 return this.patchCard(event.id, (tool) => {
                     if (event.status !== undefined) {
                         tool.status = event.status;
@@ -260,15 +205,14 @@ export class TranscriptFold {
                     }
                 });
             case "subagent": {
-                // The call just started an AGENT. The frame's id IS the spawning call's, so it lands on that card.
+                // The frame's id is the spawning call's id, so the subagent record lands on that card.
                 const { kind: _kind, id, subagentKind, ...rest } = event;
                 return this.patchCard(id, (tool) => {
                     tool.subagent = { ...rest, kind: subagentKind, status: "running" };
                 });
             }
             case "subagent_update": {
-                // Present fields REPLACE, absent ones leave the child alone, the same snapshot semantics
-                // tool_call_update has: progress arrives many times and says only what moved.
+                // Present fields replace, absent ones leave the child alone, as in tool_call_update.
                 const { kind: _kind, id, ...patch } = event;
                 return this.patchCard(id, (tool) => {
                     if (tool.subagent !== undefined) {
@@ -282,9 +226,7 @@ export class TranscriptFold {
                 return [...opened, this.replace(index)];
             }
             case "usage": {
-                // End-of-turn accounting: onto the last assistant bubble rather than a fresh one, and the turn
-                // BOUNDARY, a steered conversation's stream can carry several turns, so the current bubble is
-                // retired and the next turn's frames open a fresh one below the steered user message.
+                // Lands on the last assistant bubble and closes it: a steered turn's stream can carry several turns.
                 const { kind: _kind, account: _account, cacheReadTokens: _read, cacheCreationTokens: _written, ...usage } = event;
                 const index = this.rows.findLastIndex((row) => row.role === "assistant");
                 const closed = this.closeBubble();
@@ -295,11 +237,7 @@ export class TranscriptFold {
                 return [...closed, this.replace(index)];
             }
             case "steer": {
-                /* THE USER SPOKE MID-TURN, their words, at the point in the stream the daemon took them: a row of
-                 * their own AND a boundary. The harness absorbs a steer between tool calls and the model keeps
-                 * writing with no `result` in between, so nothing else in the stream retires the open bubble:
-                 * what the agent says NEXT is its answer to this message, and left in the bubble above it the
-                 * answer printed over the question. */
+                // A steer also closes the bubble, or the next answer would print over it mid-call.
                 const patches = this.pushRow({
                     role: "user",
                     text: event.text,
@@ -310,8 +248,7 @@ export class TranscriptFold {
                 return patches;
             }
             case "checkpoint":
-                // The pre-turn workspace state's id, plus where this turn sits in the daemon's transcript, both
-                // anchored on the turn's user row, which is what the rewind affordance addresses it by.
+                // Anchors the pre-turn snapshot id and this turn's transcript position on its user row, for rewind.
                 return this.stampOpener((row) => {
                     row.checkpointId = event.id;
                     if (event.index !== undefined) {
@@ -319,8 +256,7 @@ export class TranscriptFold {
                     }
                 });
             case "preamble":
-                // What the daemon put in front of the model, as one collapsed row hung off the user's message.
-                // A frame with nothing in it is not a disclosure.
+                // Collapses the daemon's preamble notes onto the user row; an empty note list is not a disclosure.
                 return event.notes.length === 0 ? [] : this.stampOpener((row) => (row.notes = [...event.notes]));
             case "worktree":
                 return event.sync === undefined ? [] : this.pushRow({ role: "notice", text: syncLine(event.sync) });
@@ -329,25 +265,15 @@ export class TranscriptFold {
             case "compact":
                 return this.pushRow({ role: "notice", text: `Context compacted to free up space.` });
             case "error":
-                /* WHAT HAPPENED TO THE TURN, kept, and the frame whose absence made a refused session look broken
-                 * rather than refused: a provider that answers "your organization has disabled Claude subscription
-                 * access" sends this and no prose, so a fold of the two speakers alone ends on the user's message. */
+                // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 return this.pushRow(errorRow(event));
             case "tier":
-                /* THIS TURN RAN ON A CHEAPER MODEL THAN THE ONE ASKED FOR, written down for the same reason the
-                 * refusal above is: the answer below it is the cheap rung's answer, and a reader coming back
-                 * tomorrow has no other way to know which of their messages were served that way. Only a turn that
-                 * really moved: a verdict that changed nothing is machinery, not an event. The model is named by
-                 * ID, the only name this side has. `noticeAction` carries the one press the line offers, "keep
-                 * this chat on my pick". */
+                // Notes a turn served on a cheaper model than requested, only when it actually routed.
                 return event.routed && event.model !== undefined
                     ? this.pushRow({ role: "notice", text: `This turn looked simple, so it ran on ${event.model} instead of your pick.`, noticeAction: "tierHold" })
                     : [];
             case "plan": {
-                /* Current ExitPlanMode has no plan input: the completed prose block immediately before the call IS
-                 * the plan. The daemon repeats it on this frame so the card is self-contained; when that exact
-                 * block is the adjacent retired bubble, reclassify it into the card instead of drawing the same
-                 * markdown once as prose and again as a plan. A distinct intro remains its own bubble. */
+                // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);
                 const consumes =
                     this.bubble === undefined &&
@@ -399,9 +325,7 @@ export class TranscriptFold {
             case "credential_offer":
                 return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "resolved":
-                // The card above was released, and the frame says how. The window that answered already froze its
-                // own card the instant its reply was accepted (card-status.ts, the same derivation), so this is a
-                // no-op there and earns its keep on every other surface.
+                // Releases the card; the answering window already froze it locally, so this is a no-op there.
                 return this.patchParked(event.requestId, (row) => Object.assign(row, settledCards(row, event.reply)));
             case "capability_outcome":
                 return this.patchParked(event.requestId, (row) => {
@@ -429,7 +353,7 @@ export class TranscriptFold {
                         };
                     }
                 });
-            // Facts about the turn, not rows in it (TURN_FACT_KINDS): the run relays them as themselves.
+            // These carry facts about the turn, not rows in it; the run relays them as themselves.
             case "session":
             case "init":
             case "terminal":
@@ -446,15 +370,15 @@ export class TranscriptFold {
         }
     }
 
-    /** A row the daemon writes on the turn's behalf, a notice about a decision, the feedback that answered a
-     *  card, at the end of what has been said so far. */
+    /** Appends a daemon-authored row (a decision notice, card feedback) after everything said so far. */
     note(row: TranscriptRow): TranscriptPatch[] {
         return this.pushRow(row);
     }
 
-    /** The turn is over. The open bubble is closed, every card still waiting on an answer is frozen as nobody's
-     *  decision, and a turn the user stopped says so, all of it as rows, because all of it is what the reader
-     *  saw. */
+    /**
+     * Ends the turn: closes the open bubble, freezes every still-pending card as nobody's decision, and notes a user
+     * stop.
+     */
     finish(ending: TurnEnding): TranscriptPatch[] {
         const patches = this.closeBubble();
         for (const [index, row] of this.rows.entries()) {
@@ -469,11 +393,9 @@ export class TranscriptFold {
         return patches;
     }
 
-    /* A CHILD OF THIS STREAM. Its calls and its thinking hang off the card that spawned it; its PROSE does not,
-     * because a card has no place for prose and the child's report already arrives as that card's result
-     * content. Read at the child's own level (a fold tagged with its id) that prose is top-level and lands in
-     * full. A card this stream has never seen means the spawning call is not in the stream being read, so
-     * there is nothing to hang it off; dropping it is what keeps a nested level out of the level above it. */
+    // Routes a frame from a child stream onto the card that spawned it; its prose surfaces only when that child's own
+    // stream is read directly. A spawning call absent from this stream means there is nothing to nest under, so the
+    // frame is dropped.
     private applyChild(event: AgentEvent, parent: string | undefined): TranscriptPatch[] {
         const place = parent === undefined ? undefined : this.cards.get(parent);
         if (place === undefined || parent === undefined) {
@@ -493,8 +415,7 @@ export class TranscriptFold {
         return [];
     }
 
-    // The bubble the current frame writes to, allocating a fresh assistant row when the turn's bubble was
-    // retired (a finished block of prose, a card, the end of a turn).
+    // Returns the bubble frames write to, opening a fresh assistant row when the last one was retired.
     private open(): [number, TranscriptPatch[]] {
         if (this.bubble !== undefined) {
             return [this.bubble, []];
@@ -505,8 +426,8 @@ export class TranscriptFold {
         return [this.bubble, [{ op: "append", row: structuredClone(row) }]];
     }
 
-    // Retire the open bubble. One that ended empty is not a row: the empty text block a model can open before
-    // going straight to a tool has nothing to keep, and it is always the last row, so dropping it moves nothing.
+    // Retires the open bubble; one that ended empty is dropped rather than kept as a row, and it's always last so
+    // nothing above shifts.
     private closeBubble(): TranscriptPatch[] {
         const index = this.bubble;
         this.bubble = undefined;
@@ -520,18 +441,15 @@ export class TranscriptFold {
         return [{ op: "drop", index }];
     }
 
-    // A row that is not the open bubble: the bubble is closed first, so what follows lands BELOW what came
-    // before, and the new row is the last.
+    // Pushes a row that is not the open bubble; closes the bubble first so order stays: what came before, then this.
     private pushRow(row: TranscriptRow): TranscriptPatch[] {
         const closed = this.closeBubble();
         this.rows.push(row);
         return [...closed, { op: "append", row: structuredClone(row) }];
     }
 
-    /* A card takes the bubble that is open and closes it: the prose that led up to the ask stays above the card,
-     * and whatever the agent says once answered opens a fresh row beneath it. A bubble holding nothing but the
-     * card is still a row, where the card IS the bubble. `into` reuses a row already there (the plan's own
-     * prose) instead of opening one. */
+    // A card takes the open bubble and closes it; `into` reuses an existing row (a plan's own prose) instead of opening
+    // a new one.
     private park(requestId: string, cards: TranscriptCards, into?: number): TranscriptPatch[] {
         const [index, opened] = into === undefined ? this.open() : [into, []];
         Object.assign(this.rows[index]!, cards);
@@ -571,7 +489,7 @@ export class TranscriptFold {
     }
 }
 
-/** A whole turn at once: the opening rows, every frame, and how it ended. What a settled turn reads back as. */
+/** Folds a whole turn at once: opening rows, every frame, and how it ended; what a settled turn reads back as. */
 export const foldTurn = (opening: readonly TranscriptRow[], events: readonly AgentEvent[], ending: TurnEnding = "settled", tag?: string): TranscriptRow[] => {
     const fold = new TranscriptFold(opening, tag);
     for (const event of events) {
@@ -581,9 +499,10 @@ export const foldTurn = (opening: readonly TranscriptRow[], events: readonly Age
     return fold.rows;
 };
 
-/** Apply one patch to a list of rows, the client's half of the fold: what a patch names is what moves, and
- *  nothing else. `tool` upserts by id anywhere in the row's tree, so a helper's nested call and a top-level
- *  one are placed by the same rule. Returns a new list; the rows it did not touch keep their identity. */
+/**
+ * Applies one patch to a row list; only what the patch names moves. `tool` upserts by id anywhere in the tree,
+ * top-level or nested alike.
+ */
 export const applyTranscriptPatch = (rows: readonly TranscriptRow[], patch: TranscriptPatch): TranscriptRow[] => {
     switch (patch.op) {
         case "append":
@@ -601,9 +520,8 @@ export const applyTranscriptPatch = (rows: readonly TranscriptRow[], patch: Tran
     }
 };
 
-// Replace the tool with this id wherever it lives in the tree; failing that, add it under its parent, or at
-// the top level when it has none (or its parent is not here, a malformed stream, where dropping the call
-// would be worse than showing it loose).
+// Replaces the tool with this id anywhere in the tree, or appends it under `parent`, or at top level with no parent or
+// no match.
 export const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptTool, parent: string | undefined): TranscriptTool[] => {
     const replaced = mapTool(tools, tool.id, () => tool);
     if (replaced !== tools) {
@@ -618,8 +536,8 @@ export const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptToo
     return [...tools, tool];
 };
 
-// Apply `fn` to the tool with `id` anywhere in a row's tool tree. Returns the SAME array when the id isn't
-// present, so an unrelated row keeps its identity (and re-renders nothing).
+// Applies `fn` to the tool with `id` anywhere in the tree; returns the same array when absent, so an unrelated row's
+// identity is unchanged.
 export const mapTool = (tools: readonly TranscriptTool[], id: string, fn: (tool: TranscriptTool) => TranscriptTool): readonly TranscriptTool[] => {
     let changed = false;
     const next = tools.map((tool) => {
@@ -639,5 +557,5 @@ export const mapTool = (tools: readonly TranscriptTool[], id: string, fn: (tool:
     return changed ? next : tools;
 };
 
-// Which fields of a row are cards, exported beside the fold for readers that count rows by them.
+// Which row fields are cards, exported for readers that count rows by them.
 export const cardFieldsOf = (row: TranscriptRow): TranscriptCards => Object.fromEntries(CARD_FIELDS.flatMap((field) => (row[field] === undefined ? [] : [[field, row[field]]])));

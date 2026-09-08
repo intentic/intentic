@@ -4,10 +4,8 @@ import type { Config } from "../config.js";
 import { trialEnabled } from "../trial/trial-pool.js";
 import { DAY_MS } from "../durations.js";
 
-/* THE BILLS, BEFORE THE INVOICE: hosted machines and the warm pool (Fly), and the trial meter (Google
- * keys) — the two places the platform spends real money on users' behalf. Figures are computed against the
- * config knobs they are spent under (the hour ceiling, the pool size, the configured image, the daily
- * message allowance) so the panel renders promise vs. actual, not bare numbers. */
+// Hosted machines/pool (Fly) and the trial meter (Google keys): the two places the platform spends real money on users'
+// behalf. Figures are computed against the config knobs they are spent under, so the panel renders promise vs. actual.
 
 const TOP_OWNERS = 10;
 
@@ -20,7 +18,7 @@ export const adminCosts = async (prisma: PrismaClient, config: Config, now: () =
     const at = now();
     const month = utcMonthOf(at);
     const today = utcDayOf(at);
-    // The 7 UTC day keys ending today — TrialUsage/CreditSpend are keyed by these strings, not timestamps.
+    // The 7 UTC day keys ending today; TrialUsage/CreditSpend are keyed by these strings, not timestamps.
     const week = Array.from({ length: 7 }, (_, index) => utcDayOf(new Date(at.getTime() - (6 - index) * DAY_MS)));
 
     const [machines, awakeOrUncounted, idleWarned, monthAggregate, topSpenders, poolMachines, todayAggregate, weekRows] = await Promise.all([
@@ -29,12 +27,10 @@ export const adminCosts = async (prisma: PrismaClient, config: Config, now: () =
         prisma.hostedMachine.count({ where: { idleWarnedAt: { not: null } } }),
         prisma.hostedUsage.aggregate({ where: { month }, _sum: { minutes: true } }),
         prisma.hostedUsage.findMany({ where: { month }, orderBy: { minutes: `desc` }, take: TOP_OWNERS, select: { minutes: true, userId: true } }),
-        // The whole pool: bounded by regions × poolSize + strays by design, so reading the rows beats
-        // teaching the database three group-bys.
+        // The whole pool: bounded by regions × poolSize plus strays, so reading the rows beats three group-bys.
         prisma.hostedPoolMachine.findMany({ select: { region: true, state: true, image: true } }),
         prisma.trialUsage.aggregate({ where: { day: today }, _sum: { messages: true }, _count: { _all: true } }),
-        // A row per (user, day): the week's rows are bounded by trial users × 7 and carry everything the
-        // distinct counts and the model mix need.
+        // A row per (user, day): bounded by trial users × 7, carrying what the distinct counts and model mix need.
         prisma.trialUsage.findMany({ where: { day: { in: week } }, select: { userId: true, messages: true, lastModel: true } }),
     ]);
 
@@ -77,8 +73,8 @@ export const adminCosts = async (prisma: PrismaClient, config: Config, now: () =
             idleWarned,
             monthMinutes: monthAggregate._sum.minutes ?? 0,
             monthlyHoursCap: config.hosted.monthlyHours,
-            // Rows cascade with the user, so an unresolved email is only ever a mid-read deletion race —
-            // dropped rather than invented, the output schema promises real addresses.
+            // Rows cascade with the user; an unresolved email is a mid-read deletion race, dropped rather than
+            // invented.
             topOwners: topSpenders.flatMap((row) => {
                 const email = emailOf.get(row.userId);
                 return email === undefined ? [] : [{ email, minutes: row.minutes }];

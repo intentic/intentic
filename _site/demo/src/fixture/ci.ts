@@ -1,26 +1,8 @@
 import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
 
-/* THE PIPELINES BOARD: acme-shop's two repos on two different hosts, because that is the fact the view exists
- * to flatten, `web` on GitHub, `api` on GitLab, one board, one vocabulary. A visitor who runs both sees their
- * own situation; one who runs either sees theirs.
- *
- * The runs are a plausible afternoon on a HEALTHY workspace: one still going, five green behind it, and one
- * that broke. That balance is the honest picture of CI on a repo whose agents land reviewed work, and it is
- * what the board has to show, because a board that is mostly red teaches the reader that the product's output
- * does not pass, which is the opposite of the claim it sits under.
- *
- * The one failure is a MIXED run rather than a wholesale collapse: `test:integration` is red, everything
- * before it is green, and the deploy behind it is skipped. That is the shape a real break has, and it is the
- * only shape from which the row's fan-in and its "fix with agent" affordance mean anything.
- *
- * There is deliberately no REPEATED failure any more. The streak analysis (useFailureHistory) needs the same
- * job red in consecutive runs, and buying that costs a second red row plus a red banner across the top of the
- * board, a price the whole rest of the picture then pays. The analysis is exercised by its own unit tests
- * (ciStreaks.test.ts), which is where a rule belongs; this fixture's job is to be a truthful afternoon.
- *
- * Two shapes of job list, deliberately. GitLab reports a `stage` per job, so the api runs carry stages and the
- * row draws its circles from them; GitHub's jobs API has none, so the web runs carry only timestamps and the
- * view layers them into waves from overlapping runtimes. Both paths therefore render from this one fixture. */
+// acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,
+// five green, one mixed failure (`test:integration` red, deploy skipped). GitLab jobs carry a `stage`; GitHub's don't,
+// so the view layers them by overlapping timestamps.
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -74,7 +56,7 @@ const ciRuns = (now: number): PipelineRun[] => [
         createdAt: now - minutes(96),
         durationSeconds: 254,
     },
-    // THE ONE THAT BROKE, and the only red on the board.
+    // The only red run on the board.
     {
         repo: `api`,
         host: `gitlab`,
@@ -138,8 +120,7 @@ const ciRuns = (now: number): PipelineRun[] => [
     },
 ];
 
-/* One run's jobs, fetched when a row expands. Keyed by repo + the vendor's run id, the same pair rerun and
- * cancel address a run by, so a job list can't drift onto the wrong row. */
+// One run's jobs, fetched when a row expands; keyed by repo + the vendor's run id, same pair rerun/cancel use.
 const gitlabJobs = (base: number, failing: boolean): PipelineJob[] => [
     { name: `lint`, status: `success`, stage: `build`, startedAt: base, finishedAt: base + 41_000, durationSeconds: 41 },
     { name: `build`, status: `success`, stage: `build`, startedAt: base, finishedAt: base + 96_000, durationSeconds: 96 },
@@ -156,11 +137,8 @@ const gitlabJobs = (base: number, failing: boolean): PipelineJob[] => [
     { name: `deploy:staging`, status: failing ? `skipped` : `success`, stage: `deploy`, startedAt: base + 420_000, durationSeconds: 62 },
 ];
 
-/* A workflow that BRANCHES, because a straight line is the one shape the job graph cannot teach anything with.
- * `needs` is what the daemon resolves out of the real workflow file (sandbox: ci/workflowGraph.ts) and it is
- * what the graph is drawn from, fan-out from install, a matrix of e2e legs, and a deploy that waits on all of
- * them. The timestamps deliberately do NOT tell the same story: the legs here start one after another, so the
- * old wave layering would still render this as a queue. It branches because the workflow says so. */
+// Branching workflow: install fans out, e2e is a matrix, deploy waits on all of them, drawn from `needs`. Timestamps
+// run one after another on purpose, so the graph must use `needs`, not wave-layering, to render right.
 const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
     { name: `install`, status: `success`, needs: [], startedAt: base, finishedAt: base + 31_000, durationSeconds: 31 },
     { name: `typecheck`, status: `success`, needs: [`install`], startedAt: base + 33_000, finishedAt: base + 107_000, durationSeconds: 74 },
@@ -178,7 +156,7 @@ const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
     },
     { name: `e2e (firefox)`, status: `success`, needs: [`build`], startedAt: base + 226_000, finishedAt: base + 355_000, durationSeconds: 129 },
     { name: `bundle-size`, status: `success`, needs: [`build`], startedAt: base + 227_000, finishedAt: base + 275_000, durationSeconds: 48 },
-    // The whole point of the fan-in: one red leg and the deploy never happens.
+    // Fan-in: a single failing leg means the deploy step never runs.
     {
         name: `deploy preview`,
         status: failing ? `skipped` : `success`,
@@ -189,9 +167,8 @@ const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
     },
 ];
 
-/* A run still going has its jobs mid-flight, which is the one case the row's graph animates, and the one
- * where a declared graph earns its keep twice over, since the jobs that have not started yet have no
- * timestamps to be layered by at all. `deploy preview` is placed by what it waits on, not by when it ran. */
+// Jobs mid-flight for a running run; not-yet-started jobs have no timestamps to layer by, so the graph needs `needs`
+// here too. `deploy preview` is placed by what it waits on, not when it ran.
 const runningJobs = (base: number): PipelineJob[] => [
     { name: `install`, status: `success`, needs: [], startedAt: base, finishedAt: base + 29_000, durationSeconds: 29 },
     { name: `typecheck`, status: `success`, needs: [`install`], startedAt: base + 31_000, finishedAt: base + 99_000, durationSeconds: 68 },
@@ -201,9 +178,7 @@ const runningJobs = (base: number): PipelineJob[] => [
     { name: `e2e (chromium)`, status: `running`, needs: [`build`], startedAt: base + 213_000 },
     { name: `e2e (firefox)`, status: `running`, needs: [`build`], startedAt: base + 214_000 },
     { name: `bundle-size`, status: `running`, needs: [`build`], startedAt: base + 215_000 },
-    // QUEUED, not running: it has no start because it has not started, and it is behind three legs that have
-    // not finished. A spinner over it would say the deploy was under way while the e2e it waits on was still
-    // going, which is the reading `queued` exists to stop.
+    // queued, not running: a spinner here would wrongly suggest deploy started before its legs finished.
     { name: `deploy preview`, status: `queued`, needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`] },
 ];
 
@@ -219,8 +194,7 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
     return run.host === `gitlab` ? gitlabJobs(run.createdAt, failing) : githubJobs(run.createdAt, failing);
 };
 
-// The failure above is the newest word on its branch, so the rail badge a visitor arrives to is telling the
-// truth, and it stays lit for as long as that is the state, exactly as against a real daemon.
+// The failure is the newest run on its branch, so the rail badge stays lit truthfully.
 export const ciRunsResponse = (now: number): CiRunsResponse => ({
     repos: CI_REPOS,
     runs: ciRuns(now),

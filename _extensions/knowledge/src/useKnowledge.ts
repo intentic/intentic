@@ -14,14 +14,9 @@ import {
 } from "./contract";
 import { host } from "./host";
 
-/* The knowledge base, through this extension's OWN backend at its /x namespace, no `permissions.sandbox` entry, because
- * an extension's own backend is its own code. All daemon access goes through the host api, which injects auth
- * and scopes the cache per sandbox.
- *
- * EVERY QUERY KEY STARTS WITH `knowledge`, and that is functional rather than tidy: the manifest's
- * `contributes.files` declares `knowledge/` → invalidates `knowledge`, so when the agent writes a note with its
- * own file tools the daemon's watcher pushes the change and these queries refetch. The poll below is the
- * fallback for a knowledge base the owner has pointed somewhere else, where no static path could have been declared. */
+// Talks to this extension's own /x backend via the host api, which injects auth and scopes the cache per sandbox. Every
+// query key starts with `knowledge`, matching the manifest's `contributes.files` invalidation so a file write
+// refetches; polling covers a knowledge base folder moved outside that static path.
 
 const POLL_MS = 30_000;
 
@@ -49,13 +44,11 @@ export interface Filters {
     readonly q: string;
     readonly type: string | undefined;
     readonly tag: string | undefined;
-    // Set by following a "what else is about this" affordance rather than by typing.
+    // Set via a link affordance ('what else is about this'), never typed directly.
     readonly linkedTo: string | undefined;
 }
 
-/* THE LIST IS THE SEARCH, one route, whether or not anything has been typed. An empty query with no filters is
- * "every note, newest first", which is exactly what a browse surface wants, so there is no second code path for
- * browsing and no chance of the two disagreeing about what the knowledge base contains. */
+// One route for both browsing and search; an empty query with no filters returns every note, newest first.
 export function useSearch(filters: Ref<Filters>) {
     const api = host();
     const hits = useQuery({
@@ -76,8 +69,7 @@ export function useSearch(filters: Ref<Filters>) {
             ).hits,
         enabled: computed(() => api.sandbox.reachable()),
         refetchInterval: POLL_MS,
-        // The previous answer stays on screen while the next one is fetched: a list that blanks on every
-        // keystroke is a list nobody can aim at.
+        // Keeps the previous answer on screen while the next fetch runs.
         placeholderData: (previous) => previous,
     });
     return {
@@ -107,8 +99,7 @@ export function useGraph(path: Ref<string | undefined>, depth: Ref<number>, enab
     const graph = useQuery({
         queryKey: computed(() => api.sandbox.key(`knowledge`, `graph`, path.value ?? ``, String(depth.value))),
         queryFn: async () => GraphSchema.parse(await api.sandbox.json(`${KNOWLEDGE_BASE}/graph?${query({ focus: path.value, depth: depth.value })}`)),
-        // Only fetched once the map is actually being looked at, it is the most expensive answer here and the
-        // least often wanted.
+        // Fetched only once the map is actually viewed; the most expensive query here.
         enabled: computed(() => api.sandbox.reachable() && path.value !== undefined && enabled.value),
     });
     return {
@@ -121,9 +112,7 @@ export function useGraph(path: Ref<string | undefined>, depth: Ref<number>, enab
 export function useNoteMutations() {
     const api = host();
     const queryClient = useQueryClient();
-    // A write changes the note, its neighbours' backlinks, the counts and the map, everything under the one
-    // prefix. Invalidating the lot is right here: this is a hand edit, not a stream, and being certain the
-    // panel agrees with the folder is worth one extra round trip.
+    // Invalidates everything under `knowledge`: a write can change backlinks, counts and the map too.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: api.sandbox.key(`knowledge`) });
     const save = useMutation({
         mutationFn: ({ path, content }: { path: string; content: string }) =>
@@ -143,8 +132,7 @@ export function useNoteMutations() {
             }),
         onSuccess: () => void invalidate(),
     });
-    // Starting the knowledge base off, owner-pressed, from the empty state, never on a read. It answers with what it
-    // wrote so the panel can open the note rather than announce a success nobody can see.
+    // Owner-pressed from the empty state; answers with what it wrote so the panel can open it.
     const seed = useMutation({
         mutationFn: async () => SeedResultSchema.parse(await api.sandbox.json(`${KNOWLEDGE_BASE}/seed`, { method: `POST` })),
         onSuccess: () => void invalidate(),
@@ -152,8 +140,7 @@ export function useNoteMutations() {
     return { save, remove, seed };
 }
 
-// Everything the filter controls offer, read off the overview so the knowledge base's own words are the vocabulary,
-// never a hardcoded list that could disagree with what is in the folder.
+// Filter options come from the overview; never a hardcoded list that could drift from the folder.
 export const filterOptions = (overview: Overview | undefined): { types: readonly string[]; tags: readonly string[] } => ({
     types: (overview?.types ?? []).map((entry) => entry.name),
     tags: (overview?.tags ?? []).map((entry) => entry.name),

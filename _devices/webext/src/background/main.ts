@@ -6,18 +6,13 @@ import { store } from "./store.js";
 import { currentGrants } from "./tools/tab-access.js";
 import { refreshBadge } from "./tools/access.js";
 
-/* THE SERVICE WORKER'S ENTRY POINT: keep the socket up, and answer the popup.
- *
- * There is deliberately no state in this file. An MV3 worker is rebuilt from scratch every time Chrome decides
- * to run it, so the only durable things are storage and this handful of listeners, which Chrome re-registers by
- * re-executing this module. Anything that looked like a long-lived object here would be a bug that only shows
- * up after thirty idle seconds — the hardest kind of extension bug to find, because it never reproduces while
- * you are watching. */
+// The service worker's entry point: keeps the socket up and answers the popup. Deliberately holds no state,
+// since Chrome rebuilds this module from scratch on every run; only storage and these listeners survive. A
+// long-lived object here would be a bug invisible until thirty idle seconds pass.
 
-// The keepalive. Chrome's floor for a periodic alarm is one minute, which is far longer than the worker's idle
-// timeout — that is fine, and it is why this is a SAFETY NET rather than the mechanism: an open socket keeps
-// its own worker alive through the sandbox's 20-second heartbeat, and this is what re-dials after the gap when
-// it did not (a laptop that slept, a sandbox that restarted, a network that changed).
+// The keepalive: a safety net, not the mechanism. Chrome's 1-minute alarm floor is longer than the worker's idle
+// timeout, but an open socket's own heartbeat traffic keeps it alive; this re-dials after a gap (sleep, sandbox
+// restart, network change).
 const ALARM = "intentic-link";
 
 const wake = (): void => {
@@ -34,8 +29,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// A site the person revoked in Chrome's own settings rather than in this popup. The mode we kept for it is now
-// meaningless, and leaving it would mean re-granting the site later silently restored "read and act".
+// A site revoked in Chrome's own settings, not this popup: the mode kept for it is now meaningless, and leaving
+// it would silently restore "read and act" if re-granted.
 chrome.permissions.onRemoved.addListener((removed) => {
     for (const origin of removed.origins ?? []) {
         void store.forgetMode(origin);
@@ -55,8 +50,8 @@ const readState = async (): Promise<PopupState> => {
     return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log };
 };
 
-/* Redeem a pairing and dial. The host permission for the sandbox's own origin was already obtained by the
- * popup — a `fetch` from an extension needs one, and only a page with a user's click behind it can ask. */
+// Redeems a pairing and dials; the popup already obtained the host permission, since only a click-backed page
+// can ask for one.
 const pair = async (code: string): Promise<{ ok: boolean; message: string }> => {
     const pairing = parseWebextPairingCode(code);
     if (pairing === undefined) {
@@ -91,8 +86,9 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
         case "pair":
             return await pair(command.code);
         case "allow":
-            // The browser has already granted it (the popup asked, with a click behind it); this only files the
-            // read/act narrowing Chrome has no concept of, and clears the request that prompted it.
+            // The browser already granted this (the popup asked, click behind it); this only files the read/act
+            // narrowing
+            // Chrome has no concept of.
             await store.setMode(command.origin, command.mode);
             await store.setPending(undefined);
             await refreshBadge();
@@ -120,8 +116,9 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await refreshBadge();
             return { ok: true };
         case "offer": {
-            // From the sandbox's own page. Parked rather than redeemed: enrolling needs a host permission for
-            // that sandbox, which needs a click, which a page cannot supply on somebody's behalf.
+            // From the sandbox's own page; parked, not redeemed, since enrolling needs a host permission a page can't
+            // get
+            // without a click.
             const pairing = parseWebextPairingCode(command.code);
             if (pairing === undefined) {
                 return { ok: false };
@@ -141,6 +138,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     return true;
 });
 
-// The worker was just started by something other than install or startup (a message, an alarm, the socket).
-// Dialling here is what makes the very first tool call of a turn find a live connection instead of a race.
+// The worker may have just started for something other than install/startup (a message, alarm, socket); dialling
+// here avoids a race with the first tool call.
 wake();

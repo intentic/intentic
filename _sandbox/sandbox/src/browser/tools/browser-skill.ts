@@ -1,32 +1,17 @@
-// The CORE half of a browser capability: the note that teaches the agent to drive the one routed browser
-// server every account shares. What a platform IS, its card, its login URL, its cheatsheet, is data in an
-// installed extension's `contributes.capabilities` (see capabilities/contributions.ts), because that is the
-// part that varies. Chromium itself (+ Xvfb, its headed virtual display) is the `browser` feature pack
-// (image-packs/browser.Dockerfile): baked in the standard image, riding the environment overlay on a core one,
-// the handler resolves it via environment/packs.ts.
-//
-// ONE SKILL PER KIND OF THING, NEVER PER ACCOUNT. These templates used to render once per connected account,
-// one file per identity, one per account, each a clone of the same text with a different id, and the catalog
-// paid per clone: a near-identical description line in every prompt for every account, on top of the
-// per-account tool schemas the router has since collapsed (browser-tools.ts). Now the text teaches the
-// MACHINERY once, and which accounts exist is DATA: a rendered roster block inside the one skill, plus the
-// live `mcp__accounts__roster` tool. capabilities/account-skills.ts is the renderer.
+// Core skill for driving the routed browser; platform data (card, login, cheatsheet) is an extension's contribution.
+// Chromium and Xvfb are the `browser` feature pack (image-packs/browser.Dockerfile), resolved via environment/packs.ts.
+// One skill per kind, never per account: accounts are data, a roster block plus the live mcp__accounts__roster tool.
 
 import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
 
-/* A ROSTER'S SHARE OF THE CATALOG LINE: a few ids as triggers, then a count. Every skill's description is read
- * on every call of every session, and the `identities` line used to spell out sixteen ids WITH their e-mail
- * addresses, 836 characters (~210 tokens) of the prompt's skill listing spent on data the roster lines inside
- * the skill carry anyway. Four ids keep "act as radarsuspam3" routing here; the rest are one number, and the
- * body has them all. Shared with the group skills' "Connected accounts" tail (capabilities/account-skills.ts). */
+// How many roster ids show before collapsing to a count; shared with account-skills.ts's tail.
 const ROSTER_IDS_IN_DESCRIPTION = 4;
 export const rosterSummary = (ids: readonly string[]): string =>
     ids.length <= ROSTER_IDS_IN_DESCRIPTION
         ? ids.join(", ")
         : `${ids.slice(0, ROSTER_IDS_IN_DESCRIPTION).join(", ")} and ${ids.length - ROSTER_IDS_IN_DESCRIPTION} more`;
 
-// How to drive the routed browser well, shared by the identities skill and every platform skill, because the
-// mechanics of a snapshot and the publicness of a post do not depend on whose cookies the profile holds.
+// Shared driving guidance for identities and platform skills alike; same mechanics regardless of whose cookies.
 const DRIVING = `
 You drive REAL browsers through the \`browser\` server's Playwright tools (\`mcp__browser__browser_navigate\`,
 \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`,
@@ -39,8 +24,7 @@ screenshot when a page is visual or a snapshot is ambiguous. Work in small steps
 re-snapshot to confirm. Posts, replies, votes, follows and joins are REAL and public: confirm the exact
 target AND the exact account before you submit, and never carry a task from one account into another's calls.`;
 
-// The human-only escape hatch and the landing attestation, the tail of every playbook, identical on purpose:
-// where a sign-in gets stuck and how it is declared finished do not vary with how the account came to exist.
+// Shared tail of every playbook: how a stuck sign-in escalates and how it's declared done, regardless of origin.
 const STUCK_AND_DONE = `
 - Stuck on something only a person can clear: a captcha, a phone check, a password nobody stored? Call
   \`mcp__accounts__request_help\` with a precise ask. The owner sees your message over the live view of that
@@ -48,20 +32,10 @@ const STUCK_AND_DONE = `
 - Signed in and sure of it (you see the site as the account, not a login page)? Call
   \`mcp__accounts__mark_connected\` so future turns open this browser already authenticated.`;
 
-/* Substituted for a platform skill's `${tools}`, how to use the browser tools well and safely, plus the
- * connect playbook. Core, not per-platform data: the same lines duplicated into every pack are lines that
- * drift. ONE text for both kinds of account, because the kind is now a fact on the skill's roster line rather
- * than a fork in the template:
- *
- *   standalone, the account owns its profile, and connecting it walks the credential path (stored password,
- *                email codes read from whatever inbox is connected).
- *   identity-born, the account lives in its identity's browser beside the identity's own signed-in email, so
- *                "Continue with <provider>" is the preferred door and confirmation codes come from the narrow
- *                \`fetch_email_code\` tool rather than a whole inbox.
- *
- * The roster block (`${accounts}`) is not decoration: one site can be connected several times over
- * (reddit-work, reddit-personal), and the failure that follows from mixing them up, a post from the wrong
- * account, is public and not undoable. */
+// Substituted for a platform skill's `${tools}`: one text for both account kinds, since the kind is now a fact on the
+// roster line, not a template fork.
+// `${accounts}` matters because one site can be connected multiple times (reddit-work, reddit-personal), and posting
+// from the wrong one is public and permanent.
 export const browserToolsNote = (): string => `${DRIVING}
 
 THE ACCOUNTS ON THIS SKILL are listed above: each line is an \`account\` value the browser tools and every
@@ -86,10 +60,8 @@ playbook, in order of preference:
   else. For a standalone account, search whatever inbox is connected (the IMAP skill). Open confirmation links
   in the ACCOUNT'S OWN browser (the same \`account\` value), so they land in the right profile.${STUCK_AND_DONE}`;
 
-/* One identity's roster line and one account's, the DATA half of the skills, rendered wherever the converge
- * puts `${accounts}` (capabilities/account-skills.ts). The backticked id leading each line is deliberate and
- * relied on: it is the exact `account` value the tools take, and it is what the handlers' status probes
- * look for to say an entry's apply has landed. */
+// Roster line data for one identity or account, rendered into `${accounts}` (capabilities/account-skills.ts).
+// The leading backticked id is the exact `account` value tools take, and what status probes match on.
 const identityLine = (id: string, config: IdentityConfig): string => {
     const notes = [
         config.email,
@@ -112,15 +84,10 @@ export const accountSkillLine = (id: string, config: BrowserConfig, identityEmai
     return `- \`${id}\`: ${notes.join(" · ")}`;
 };
 
-/* THE IDENTITIES SKILL, one file for every someone this sandbox is online as, where there used to be a clone
- * per identity. A platform skill teaches a SITE; this teaches the identity machinery: whose browser an
- * identity is, which email it answers to, and what it may do about accounts that do not exist yet. It exists
- * even for an identity with no accounts at all, that is precisely the moment it matters, because the browser
- * tools it names are how the first account gets opened.
- *
- * The open-accounts guidance is decided per identity by its roster line, from the card's switch. Prose, not
- * enforcement, the `open_account` tool re-checks the switch on every call, but the honest skill keeps the
- * agent from walking into a refusal it was never going to get past. */
+// One skill for every identity this sandbox is online as: what browser it shares, which email it answers to, and what
+// it may do about accounts that don't exist yet.
+// Open-accounts guidance is prose per roster line; open_account re-checks the switch itself, this just avoids walking
+// the agent into a refusal.
 export const identitiesSkill = (identities: readonly { readonly id: string; readonly config: IdentityConfig }[]): string => {
     const ids = identities.map((identity) => identity.id);
     const anyOpen = identities.some((identity) => identity.config.openAccounts === "on");

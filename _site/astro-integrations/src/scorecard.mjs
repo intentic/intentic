@@ -1,15 +1,6 @@
 // @ts-check
-/* This repository's OpenSSF Scorecard score, read from the public API at build time.
- *
- * Same rule as git-stats.mjs, and for the same reason: a security score is exactly the kind of number that
- * gets typed into a page once and then quietly stops being true. This one is not ours to type at all: it is
- * computed by a workflow we do not control, from checks we do not choose, and published on an API anyone can
- * query. The page renders whatever that API says, or it renders nothing.
- *
- * Fails to null on every path: no network in the build sandbox, the workflow has not published yet, the API
- * is down, the shape changed. A trust section that renders a wrong number is worse than one that renders a
- * sentence without one, and a *security* number that is wrong in our favour is worse still.
- */
+// OpenSSF Scorecard for this repo, fetched from the public API at build time; fails to null on any error (no network,
+// unpublished, API down, shape change) rather than render a wrong security number.
 
 const API = `https://api.scorecard.dev/projects/github.com/intentic/intentic`;
 const TIMEOUT_MS = 5000;
@@ -22,7 +13,7 @@ const TIMEOUT_MS = 5000;
 let cached;
 
 /**
- * The published Scorecard for this repository, or null when it cannot be read.
+ * The published Scorecard for this repo, or null if unreadable.
  * @returns {Promise<Scorecard | null>}
  */
 export async function scorecard() {
@@ -37,8 +28,7 @@ export async function scorecard() {
             return cached;
         }
         const body = await response.json();
-        // `score` is 0-10 with one decimal. Anything else means the shape moved and the number is not ours
-        // to guess at.
+        // `score` is 0-10 with one decimal; any other shape is untrusted.
         if (typeof body?.score !== `number` || typeof body?.date !== `string`) {
             return cached;
         }
@@ -47,13 +37,11 @@ export async function scorecard() {
             checks: (body.checks ?? [])
                 .filter((check) => typeof check?.score === `number`)
                 .map((check) => ({ name: check.name, score: check.score })),
-            // The API answers with a full ISO timestamp; the page wants the day, the same shape gitStats
-            // gives `since`.
+            // API returns a full ISO timestamp; keep only the date portion.
             date: body.date.split(`T`)[0],
             url: `https://scorecard.dev/viewer/?uri=github.com/intentic/intentic`,
         };
     } catch {
-        // Left at null: see the header.
     }
     return cached;
 }

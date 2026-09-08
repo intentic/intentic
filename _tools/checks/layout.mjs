@@ -1,46 +1,7 @@
 #!/usr/bin/env node
-/* WHAT THE DIRECTORY TREE OWES AN AGENT THAT HAS TO FIND SOMETHING IN IT.
- *
- *   node _tools/checks/layout.mjs                  # every rule (and the ghost sweep below, which always runs)
- *   node _tools/checks/layout.mjs --prune          # the ghost sweep alone, for the callers that run before an install
- *   node _tools/checks/layout.mjs --write-baseline # adopt today's counts for the two ratcheted rules
- *
- * The measurement behind each rule is in docs/audits/directory-structure-audit.md, mined from 1,862 agent
- * conversations. The short version: an agent pays for structure in listings it cannot read, in names it
- * cannot tell apart, and in paths it guesses wrong. Six rules, each one a cost that was counted:
- *
- *   1. GHOSTS. A directory with nothing in it git would keep still shows up in `ls`, still gets listed, still
- *      gets guessed at. Seventeen of them existed the day this was written, left behind by renames — build
- *      output of packages that had already moved. This one is REPAIRED rather than reported (see the sweep
- *      below): nothing in git can remove a ghost, so a rule that only named it refused the same tree on every
- *      push until somebody typed the `rm -rf` by hand.
- *   2. FAN-OUT. A directory of 159 files answers a listing with 4,000 characters an agent has to read before
- *      it can do anything. 29 listings of `_editor/web` came back that big in one month.
- *   3. TWINS. `agent/` beside `agents/`: 84 sessions read both, most of them by accident. A pair like that is
- *      allowed only when both names are wire groups, because then the pair is the product's own vocabulary
- *      and the wire already forces both to exist.
- *   4. DIR = NAME. "A package's directory name is its unscoped npm name" is stated in ARCHITECTURE.md and was
- *      broken by 41 of 98 packages, which is how `@intentic/issue-sdk` came to live at `_sandbox/issue-widget`
- *      and be unfindable from either name.
- *   5. BASENAME COLLISIONS. Five files called `agent.ts`, eighteen called `host.ts`. An agent that guesses a
- *      path picks the wrong one of them; a human reading a diff cannot tell which was meant.
- *   6. DEAD NAMES. `_apps/` and `_libs/` were removed on 2026-08-09 and were still being typed 89 times in the
- *      month after. A dead name inside the tree is what keeps teaching them.
- *
- * TWO OF THE SIX ARE RATCHETED (fan-out, basename collisions) because they cannot be brought to zero in one
- * change: `_tools/checks/baselines/layout.json` records today's violators, an entry may only shrink or be
- * deleted, and anything not listed fails on its first offence. One is REPAIRED (ghosts). The other three are
- * absolute.
- *
- * A RATCHET FAILS ON GROWTH AND ONLY ON GROWTH. It used to fail the other way too, "the baseline allows 37, the
- * tree now has 36: lower it in the same change", so that the file kept describing the tree. With a dozen
- * conversations landing into one tree that rule turned every deletion into everyone else's red: an agent
- * removed one component, and every other agent's turn and the owner's next push were refused over a number in
- * a file none of them had touched, until somebody edited the shared baseline, and two of them editing it was a
- * merge conflict. So an entry the tree has beaten is TIGHTENED HERE, by this check, wherever the write can
- * become a commit, and merely reported everywhere else (lib/repo.mjs's `writesBaselines` decides which is
- * which). Nothing fails for having improved, and the ratchet still cannot slip, because it is this check that
- * lowers it. */
+// Checks directory layout an agent has to navigate: ghosts (repaired, not reported), fan-out, near-duplicate sibling
+// names, directory name vs npm name, basename collisions, and dead names. Fan-out and basename collisions are ratcheted
+// via `_tools/checks/baselines/layout.json`, which may only shrink.
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { finish } from "./lib/report.mjs";
@@ -52,7 +13,7 @@ const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
 
 const tracked = trackedFiles();
-// Direct files per directory, and the child directories of each: the two questions every rule below asks.
+// Direct file count and child directory set per directory; every rule below reads one of these two maps.
 const filesIn = new Map();
 const dirsIn = new Map();
 for (const path of tracked) {
@@ -65,22 +26,8 @@ for (const path of tracked) {
     }
 }
 
-/* ── 1. Ghosts ─────────────────────────────────────────────────────────────────────────────────────────────
- * A directory git has never heard of, at a depth where an agent orienting itself will see it: the parts and
- * their packages, and the modules inside a package's src/.
- *
- * "NEVER HEARD OF" MEANS NO TRACKED FILE AND NO UNTRACKED ONE IT WOULD NOT IGNORE. A land puts an agent's new
- * package in the owner's tree as files nobody has `git add`ed yet; by the tracked set alone that directory is a
- * ghost, and `--prune` would have deleted a turn's work. What makes a ghost is that everything under it is
- * IGNORED (dist, node_modules, .turbo, a tsbuildinfo) or nothing at all: the build output a rename leaves
- * around a directory that has no source left.
- *
- * THE ONE PLACE THIS CANNOT JUDGE is an agent's own worktree. A worktree checks out tracked files only, and
- * the isolation layer then mounts the main checkout's node_modules/dist over the same paths — which
- * re-creates the ghost's directory here, out of mounts that cannot be removed from inside the turn (removing
- * an overlay's root is what @intentic/constants/mirror-roots exists to forbid). So a ghost whose remaining
- * content is a live mount is reported as unjudgeable rather than failed: the tree that can fix it is the one
- * without the mounts, and that is where the rule bites. */
+// A directory with no tracked file and nothing untracked-and-unignored beneath it. One whose only remaining content is
+// a mount from the main checkout (an agent's worktree) is unjudgeable, not failed: it cannot remove an overlay's root.
 const mountTargets = (() => {
     try {
         return readFileSync("/proc/self/mountinfo", "utf8")
@@ -88,7 +35,7 @@ const mountTargets = (() => {
             .map((line) => line.split(" ")[4])
             .filter((target) => target !== undefined);
     } catch {
-        return []; // not Linux, or no procfs: every ghost is then judged, which is the stricter answer
+        return []; // Not Linux, or no procfs: treats every ghost as judged, the stricter answer.
     }
 })();
 const isMirrored = (dir) => mountTargets.some((target) => target.startsWith(`${join(root, dir)}/`));
@@ -121,29 +68,8 @@ for (const dir of ghostCandidates) {
 // A ghost inside another ghost is one removal, not two.
 const topGhosts = ghosts.filter((dir) => !ghosts.some((other) => dir.startsWith(`${other}/`)));
 
-/* A GHOST IS REPAIRED, NOT REPORTED. It used to be a failure with `rm -rf …` in the message, and that message
- * was the single most expensive line in this repository: ghosts are untracked by definition, so no commit can
- * remove one and no branch can carry the fix. They accumulate wherever a checkout outlives a rename — CI's
- * persistent runner workspaces (checkout there is `clean: false`, so a warm node_modules survives and a moved
- * package's old directory keeps its dist forever) and the owner's own tree, where every landed rename leaves
- * one. So the same tree went red on every push, the failure named a one-second `rm -rf`, and the agent sent
- * after it was working in a worktree where the isolation layer had mounted those paths back in and the failure
- * did not exist. Three separate changes added `--prune` in three separate places and the owner's tree still had
- * none.
- *
- * Deleting is safe because of the definition above: a ghost holds no tracked file and no untracked file git
- * would not ignore, so everything under it is build output (dist, node_modules, .turbo, a tsbuildinfo) or
- * nothing at all. A land's brand-new package, whose source nobody has `git add`ed yet, is untracked-but-not-
- * ignored and is therefore not a ghost — which is the bug the tracked-set-only version of this rule had, and
- * the reason the repair could not be turned on until `untrackedFiles` existed.
- *
- * MIRRORED GHOSTS STAY UNTOUCHED and stay unjudgeable: their remaining content is a mount of the main
- * checkout, removing an overlay's root is what @intentic/constants/mirror-roots exists to forbid, and the tree
- * that can fix them is the one without the mounts.
- *
- * `--prune` now means "repair and stop", for the two callers that run before an install rather than as a check:
- * CI's preflight, and the pnpm-setup composite (a stale directory with a node_modules in it is something the
- * install itself trips over, so it is cleared before pnpm runs, not after). */
+// Ghosts are removed, not reported: no commit can fix an untracked directory. Mirrored ghosts (worktree mounts of the
+// main checkout) are left alone; `--prune` repairs and exits, for callers that run before an install.
 const swept = [];
 for (const dir of topGhosts) {
     rmSync(join(root, dir), { recursive: true, force: true });
@@ -159,7 +85,7 @@ if (prune) {
     process.exit(0);
 }
 
-/* ── 2. Fan-out ───────────────────────────────────────────────────────────────────────────────────────────*/
+// Fan-out.
 const srcDirs = (pkg) => {
     const out = [];
     const walk = (dir) => {
@@ -184,15 +110,14 @@ for (const { name } of packages) {
     }
 }
 
-/* ── 3. Twins ─────────────────────────────────────────────────────────────────────────────────────────────
- * The wire groups are DISCOVERED from the contract files rather than listed, so this keeps working when the
- * contract package moves: a name the wire itself carries is vocabulary the tree is entitled to mirror. */
+// Twins. Wire groups are discovered from contract files rather than hardcoded, so a moved contract package doesn't
+// break this.
 const wireGroups = new Set(
     tracked
         .filter((path) => /\/contracts\/[^/]+\.contract\.ts$/.test(path))
         .map((path) => basename(path).replace(/\.contract\.ts$/, "")),
 );
-// Pairs kept for a reason that is not the wire's. Each entry is a decision, not an oversight.
+// Pairs excluded for a reason other than the wire; each entry names a deliberate exception.
 const TOLERATED_TWINS = new Map();
 const oneApart = (a, b) => {
     if (a.length === b.length) {
@@ -222,18 +147,16 @@ for (const [parent, children] of dirsIn) {
     }
 }
 
-/* ── 4. Directory name = unscoped package name ────────────────────────────────────────────────────────────
- * The `ext-` prefix is the one carve-out: it carries the extension lint boundary and the extension-host's
- * builtin list, so it lives in the npm name and not in the path. */
+// Directory name must equal the unscoped package name; the `ext-` prefix is a carve-out that lives in the npm name, not
+// the path.
 const nameMismatches = packages.flatMap(({ name, pkg }) => {
     const unscoped = String(pkg.name).replace(/^@[^/]+\//, "");
     const expected = name.startsWith("_extensions/") ? unscoped.replace(/^ext-/, "") : unscoped;
     return basename(name) === expected ? [] : [`${name} is package ${pkg.name}: the directory should be ${dirname(name)}/${expected}`];
 });
 
-/* ── 5. Basename collisions inside one package ────────────────────────────────────────────────────────────
- * The exemptions are the names whose whole job is to be repeated: a barrel, a runtime invariant, a manifest,
- * a route or handler file named after the group it serves, a test named after its subject. */
+// Basename collisions within one package; exemptions are names whose job is to repeat (a barrel, invariant.ts, a
+// manifest, a route/handler file, a test).
 const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|vitest\.config\.ts)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
 const collisions = new Map();
 for (const { name } of packages) {
@@ -246,10 +169,7 @@ for (const { name } of packages) {
         if (COLLISION_OK.test(file)) {
             continue;
         }
-        /* Case-INSENSITIVELY: a component's test and its composable's test, differing only in the first letter,
-         * are two files to git on Linux and ONE file to TypeScript, which refuses the whole program over it
-         * (TS1149), as does any checkout on a case-folding filesystem. A collision the compiler will not
-         * accept is the strongest kind there is; grouping the chat's pickers produced exactly one. */
+        // Case-insensitive: two files differing only by case are one to TypeScript (TS1149) on some filesystems.
         const key = file.toLowerCase();
         (seen.get(key) ?? seen.set(key, []).get(key)).push(path);
     }
@@ -259,35 +179,25 @@ for (const { name } of packages) {
     }
 }
 
-/* ── 6. Dead names ────────────────────────────────────────────────────────────────────────────────────────
- * Names this repository removed. The allowlist is not taste: each entry is a place where the string means
- * something OTHER than a path in this tree — the layout of a project this repo GENERATES or documents, or a
- * fixture standing in for somebody else's monorepo. Extend the patterns at every rename in the overhaul, and
- * the allowlist only with a reason of that kind. */
+// Dead names this repo removed. DEAD_NAME_OK exempts places where the string names somebody else's tree (a generated or
+// documented project, a fixture), not this one.
 const DEAD_NAMES = [
     { pattern: /(^|[^\w.-])_computers\//, why: "the part is _devices/" },
-    /* `_apps/` and `_libs/` ARE ALIVE, just not here. This repo generates projects that use them (scaffold,
-     * the deploy CLI's add-app), documents them (the workspace tree of a user's monorepo, iq's globs) and
-     * fixtures them in three dozen tests — a hundred mentions, every one of them correct. So the two names it
-     * removed from ITSELF on 2026-08-09 are caught in the one spelling that can only mean this tree: qualified
-     * by the repository directory. A rule that flagged the bare name would be red forever, and a rule that is
-     * red forever is a rule someone switches off. */
+    // `_apps/` and `_libs/` are still valid names outside this repo (generated projects, docs, fixtures), so only the
+    // qualified `intentic/_apps/` spelling is flagged.
     { pattern: /intentic\/_apps\//, why: "this repo's own _apps/ was removed on 2026-08-09" },
     { pattern: /intentic\/_libs\//, why: "this repo's own _libs/ was removed on 2026-08-09" },
-    /* The eleven packages that became the `_shared/` part: contracts and SDKs more than one part is written
-     * against. Unambiguous names — no generated project has them — so they are caught bare. */
+    // Packages that moved to `_shared/`; names are unambiguous (no generated project uses them), so matched bare.
     { pattern: /_sandbox\/(sandbox-contract|sandbox-openapi|sandbox-run|extension-api|extension-manifest|connector-runtime|registry|workspace-ignore)\b/, why: "moved to _shared/" },
     { pattern: /_editor\/extension-ui\b/, why: "moved to _shared/extension-ui" },
     { pattern: /_platform\/(api-contract|capability-catalog)\b/, why: "moved to _shared/" },
     { pattern: /_sandbox\/issue-widget\b/, why: "the directory is _sandbox/issue-sdk, after its npm name" },
-    /* One repository, one npm scope. The other two said which CI job ran a package and nothing else, which is
-     * not what a package's NAME is for. */
+    // One npm scope for the whole repo; the other two only ever named a CI job, not a package.
     { pattern: /@intentic-app\//, why: "every package is @intentic/*" },
     { pattern: /@intentic-dev\//, why: "every package is @intentic/*" },
 ];
 const DEAD_NAME_OK = new Map([
-    // Two fixtures whose stand-in user repo is itself called "intentic", so the qualified spelling above cannot
-    // tell them apart from this tree. Both are asserting on a SCAFFOLDED project's layout.
+    // Fixtures whose stand-in repo is also named intentic, indistinguishable by the qualified pattern.
     ["_sandbox/sandbox/src/panels/panel-upstream.test.ts", "fixture: a workspace repo named intentic with an _apps/ instance"],
     ["_extensions/documentation/src/brief.test.ts", "fixture: a workspace repo named intentic with a _libs/ package"],
     ["_tools/nav/baselines/", "recorded measurements of a tree that had those names"],
@@ -314,7 +224,7 @@ for (const path of tracked) {
     }
 }
 
-/* ── The two ratchets ─────────────────────────────────────────────────────────────────────────────────────*/
+// The two ratchets.
 const asObject = (map) => Object.fromEntries([...map].sort(([a], [b]) => a.localeCompare(b)));
 if (writeBaseline) {
     writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(fanOut), collisions: asObject(collisions) }, null, 4)}\n`);
@@ -323,9 +233,8 @@ if (writeBaseline) {
 }
 const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { fanOut: {}, collisions: {} };
 
-/* A ratcheted rule fails one way: a count that grew. An entry the tree has already beaten is TIGHTENED to what
- * the tree has (or dropped, at zero) rather than failed: the header says why. `tightened` is what changed, so
- * the run can say so, and the write below happens once for both rules. */
+// A ratcheted rule fails only on growth; an entry the tree has beaten is tightened to what it now has (or dropped, at
+// zero) instead of failing.
 const ratchet = (found, allowed, describe) => {
     const grown = [...found]
         .filter(([key, count]) => count > (allowed[key] ?? 0))

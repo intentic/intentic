@@ -1,8 +1,6 @@
-// How a tree row is drawn: which glyph, and, for the colourful/vivid explorer setups, which hue.
-// A file's CATEGORY is the source of truth: it drives the colour (text-file-* tokens) and the default
-// glyph. A few extensions/names override the glyph where the category's default loses useful signal
-// (a PDF still reads as a PDF). The tree colours uniformly in the "minimal" setup; category colour only
-// applies in "colorful"/"vivid".
+// Which glyph and colour a tree row draws. A file's category, not its extension directly, drives both; a few
+// extensions/names override the glyph where the category default loses signal. Category colour only shows in the
+// colorful/vivid explorer setups.
 import type { ExplorerStyle } from "./explorerStyle.js";
 import type { IconName } from "./iconSets.js";
 
@@ -173,8 +171,8 @@ export interface ExplorerTreatment {
     colorClass: string;
 }
 
-// Icon size steps up across the setups; the row font stays fixed. `slotClass` is a fixed-width centred
-// box so glyphs of different intrinsic widths occupy the same column and filenames line up.
+// Icon size steps up per setup; row font stays fixed. `slotClass` is a fixed-width box, so filenames stay aligned
+// despite differing glyph widths.
 const SIZE_CLASS: Record<ExplorerStyle, string> = {
     minimal: `text-2xs`,
     colorful: `text-xs`,
@@ -186,8 +184,8 @@ const SLOT_CLASS: Record<ExplorerStyle, string> = {
     vivid: `w-5`,
 };
 
-// The colour class for an entry under the active explorer setup. `ignored` entries always dim (the
-// tree's existing cue), regardless of setup. Shared by the tree and the open-file tabs.
+// Colour class for an entry under the active explorer setup. `ignored` entries always dim regardless of setup.
+// Shared by the tree and the open-file tabs.
 export const explorerColorClass = (style: ExplorerStyle, name: string, type: "file" | "dir", ignored: boolean | undefined): string => {
     if (ignored) {
         return `text-subtle`;

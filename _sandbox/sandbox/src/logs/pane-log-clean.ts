@@ -4,15 +4,11 @@ import { createRequire } from "node:module";
 import { StringDecoder } from "node:string_decoder";
 import type { Terminal as TerminalType } from "@xterm/headless";
 
-// A tmux pane's raw byte stream (piped by the pipe-pane log hooks in log-files.ts) is a live
-// terminal, not a text file: zsh's line editor + autosuggestions redraw the prompt on every
-// keystroke with cursor moves and erases, and apps repaint the same way. Stripping escapes leaves
-// that redraw noise concatenated into garbage, so instead we replay the stream through a headless
-// VT emulator and persist what the screen actually shows. One process per pane; it owns its log
-// file, rewriting the rendered buffer as output arrives.
+// Pane output (piped by log-files.ts's pipe-pane hooks) is a live terminal stream, not text: redraws and cursor moves
+// would concatenate into garbage if escapes were merely stripped. One process per pane replays it through a headless VT
+// emulator and persists the rendered screen.
 
-// @xterm/headless v6 ships as CommonJS whose named exports Node's ESM lexer can't detect, so a bare
-// `import { Terminal }` fails at runtime, load it through require and keep the type via the import.
+// @xterm/headless is CommonJS; ESM named-export detection fails, so it loads via require, typed via import.
 const { Terminal } = createRequire(import.meta.url)("@xterm/headless") as typeof import("@xterm/headless");
 
 const DEFAULT_COLS = 200;
@@ -21,10 +17,8 @@ const SCROLLBACK = 10_000;
 const FLUSH_DEBOUNCE_MS = 300;
 const FLUSH_MAX_MS = 2_000;
 
-// oh-my-zsh sets the tmux tab title with the screen sequence ESC k <title> (ST | BEL). xterm.js does
-// not recognise ESC k (probed: it renders <title> as screen text), so drop that one sequence before
-// the emulator sees it, everything else xterm parses correctly. Stateful because a title string, or
-// a lone trailing ESC, can straddle a chunk boundary. Non-title escapes pass through untouched.
+// Strips the ESC k <title> ST/BEL sequence oh-my-zsh uses for the tmux tab title; xterm.js doesn't recognize it and
+// renders it as text. Stateful: a title or a lone trailing ESC can straddle a chunk boundary.
 class TitleStripper {
     #inTitle = false;
     #pendingEsc = false;
@@ -68,8 +62,8 @@ class TitleStripper {
     }
 }
 
-// Renders the emulator's buffer (scrollback + viewport) to plain text, every line, trailing blanks
-// trimmed. Not addon-serialize: that re-emits SGR colour escapes, the very noise we are removing.
+// Renders the buffer (scrollback + viewport) to plain text, trailing blank lines trimmed. Not addon-serialize, which
+// re-emits SGR color escapes.
 const render = (term: TerminalType): string => {
     const buffer = term.buffer.active;
     const lines: string[] = [];

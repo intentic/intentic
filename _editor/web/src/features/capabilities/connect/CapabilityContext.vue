@@ -1,22 +1,7 @@
-<!-- EVERYTHING A CARD SAYS RATHER THAN ASKS: the credential guide, what applying it does to the sandbox, and
-     the card's own paragraph. One component because they are one job: reference material read WHILE the form
-     is filled in, and because the form column is the wrong home for all three.
-
-     It used to be only the guide that sat beside the form, and the other two were stacked INSIDE it: the
-     effects panel between the last field and the submit, the paragraph under that. Two consequences, both
-     visible on the cards people actually open. The form grew a scrollbar on any card with more than three
-     fields: Docker, GitHub, both devices, so the submit button was below the fold on the one screen whose
-     entire purpose is pressing it. And the right-hand column existed only for the cards whose catalog author
-     had written a `guide`, which left the other half of the catalog rendering a 36rem column of form against
-     36rem of empty page.
-
-     Moving all three here fixes both at once, and the second fix is the one that matters: EVERY card has
-     effects, so every card now has a second column. The layout stops being a fact about the copy someone
-     happened to write and becomes a fact about the screen.
-
-     ORDER IS BY WHEN IT IS NEEDED. The guide is read before the first keystroke (it is how you get the value
-     the first field wants), the effects before the last click (they are what the click agrees to), and the
-     card's paragraph is the aside that neither of those is: the caveat you want in view but never act on. -->
+<!--
+    Reference column beside a capability's form: the credential guide, what applying it does to the sandbox, and the card's own note. Ordered by when
+    it's needed — guide before the first field, effects before the submit, the card's note last.
+-->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry, CapabilityEffect } from "@intentic/capability-catalog";
 import CapabilityEffects from "./CapabilityEffects.vue";

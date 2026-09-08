@@ -1,24 +1,14 @@
 import { PLATFORM_SITE_ORIGIN, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 
-/* The two origins, from the one table that also holds them for the app and the sandbox. They are literals
- * there rather than here because the APP writes both into things it hands out — the install one-liners fetch
- * SITE_URL/connect, and a daemon's CORS is scoped to APP_URL — so the site is one of three readers, not the
- * owner. Re-exported under the site's own names because every page here says SITE_URL. */
+// Re-exported from the shared origin table; the site is a reader, not the owner (APP_URL feeds CORS).
 export const SITE_URL = PLATFORM_SITE_ORIGIN;
 export const APP_URL = PLATFORM_WEB_ORIGIN;
 // The platform API, for the pages that read a live figure from it in the browser.
 export const API_URL = "https://api.intentic.dev";
-// The interactive demo (@intentic/demo): the real app running against a recorded fixture instead of a
-// sandbox. It builds into this site's own public/, so it ships in one deploy. More importantly, the
-// hero's iframe is SAME-ORIGIN: a cross-origin frame gets partitioned storage, and the demo seeds credentials
-// into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
+// Relative, same-origin: the demo seeds localStorage before the app boots; cross-origin storage is partitioned.
 export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
-/* The brand line: the working stance in three beats. It names the ACTOR, in the app's own word for it,
- * "agent" is what the /agents board, the API and the docs call it without exception, because the pronoun
- * this replaced had no antecedent above the fold and left the stance without a subject. It still licenses
- * no second word for the machine: that is the **sandbox**, without exception, and prose that needs the host
- * machine says "laptop, desktop or VPS". See docs/marketing/messaging.md for the rule. */
+// Fixed nouns: "agent" for the actor, "sandbox" for the machine; the host machine is "laptop, desktop or VPS".
 export const ORG_TAGLINE = "You delegate. Agents work. You approve.";
 export const ORG_DESCRIPTION =
     "A workspace for coding agents. You delegate. Agents work. You approve. Each one works in a sandbox, in its own git worktree. It keeps running when you close the browser. Reopen from any device, steer the same fleet and review every change before it is merged. Free.";
@@ -30,21 +20,14 @@ export const githubUrl = "https://github.com/intentic/intentic";
 export const githubIssuesUrl = "https://github.com/intentic/intentic/issues";
 export const githubReleasesUrl = "https://github.com/intentic/intentic/releases";
 
-/* The community server. It is the fast, human channel, and the site is deliberate about which of the two it
- * offers where: a QUESTION goes here, a BUG goes to Issues. An invite link is the only address Discord has,
- * there is no stable /channels/ URL a stranger can open. So this is a permanent, non-expiring invite. */
+// Questions go here, bugs to Issues. Permanent, non-expiring invite: Discord has no stable /channels/ URL.
 export const discordUrl = "https://discord.gg/3veuzYp32T";
 
-/* The founder's public profiles. They are here rather than in about.ts because two consumers need them
- * and neither owns them: the visible link chips on /about/ and the landing band, and `sameAs` in the
- * Organization and Person schemas, which is how a search engine or an answer engine resolves "who is
- * behind this domain" to a person it already knows about. */
+// Shared by two consumers (the /about/ + landing chips, and the Person schema's `sameAs`); not in about.ts.
 export const githubProfileUrl = "https://github.com/radarsu";
 export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
 export const personalSiteUrl = "https://radarsu.com/";
 
-/* The org's official profiles, which is how a search or answer engine resolves this domain to an entity it
- * already knows. The Discord invite belongs here for the same reason the GitHub org does: it is a place this
- * project is, publicly, under its own name. */
+// Official profiles a search engine uses to resolve this domain; Discord belongs here like the GitHub org does.
 export const SAME_AS: readonly string[] = [orgUrl, githubUrl, discordUrl];
 export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl];

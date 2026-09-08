@@ -4,26 +4,20 @@ import { dirname, join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { parseIntenticLine } from "./intentic-runner.js";
 
-// The durable per-run apply event log. `intentic deploy apply` mirrors its ndjson lifecycle stream here (via the CLI's
-// INTENTIC_EVENTS_FILE sink) while the human-readable pane runs in the panel-infra-apply tmux session; the web
-// tails this file so per-resource apply progress survives a page refresh. Lives under historyRoot alongside
-// activity.jsonl, daemon-owned, outside the agent's reach and outside the desired-state repo (it is per-run
-// telemetry, never committed), and deliberately NOT under logs/, whose copy-truncate pruner would race a tail.
-// A single fixed path, truncated per run, so there is nothing to rotate.
+// Durable per-run apply event log; the CLI mirrors its ndjson stream here so a page refresh can resume the tail. Lives
+// under historyRoot (not logs/, whose pruner would race a tail); one fixed path, truncated per run.
 export const applyEventsPath = (historyRoot: string): string => join(historyRoot, "apply-events.ndjson");
 
-// Truncate the file and write the {kind:"start"} marker. Called BEFORE the run launches (and before the route
-// returns), so any reader that opens after the POST resolves sees a fresh file, never the previous run's
-// trailing {kind:"exit"} line.
+// Truncates the file and writes the start marker before the run launches, so any reader opening after resolves sees a
+// fresh file, never the previous run's trailing exit line.
 export const resetEventsFile = async (path: string): Promise<void> => {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${JSON.stringify({ kind: "start", startedAt: Date.now() })}\n`);
 };
 
-// Whether an event line ends the WHOLE apply job. The job command is `apply && adopt`, or the service
-// capability's `resolve && apply --yes && adopt`, so: any command's non-zero exit is terminal (`&&` stops the
-// chain), a clean exit is terminal only for adopt (it runs last) or for an untagged exit line (a
-// single-command file). Clean resolve/apply exits keep the tail open, the chain continues.
+// Whether an event line ends the whole job (`apply && adopt`, or `resolve && apply && adopt`). Any non-zero exit is
+// terminal; a clean exit is terminal only for adopt or an untagged line, resolve/apply's clean exits keep the tail
+// open.
 export const isTerminalExit = (line: IntenticLine): boolean => {
     if (line.kind !== "exit") {
         return false;
@@ -31,8 +25,8 @@ export const isTerminalExit = (line: IntenticLine): boolean => {
     return line["code"] !== 0 || line["command"] === "adopt" || line["command"] === undefined;
 };
 
-// Whether the event log records a run that started and has not terminally exited, the boot-time check that
-// keeps a daemon restart from sweeping a live apply session (main.ts adopts it instead).
+// Whether the log shows a run that started but has not terminally exited; the boot check that stops a restart from
+// sweeping a live apply.
 export const applyRunLive = async (path: string): Promise<boolean> => {
     let content: string;
     try {
@@ -56,37 +50,20 @@ export const applyRunLive = async (path: string): Promise<boolean> => {
     return started;
 };
 
-/* HOW THE TAIL WAITS, and the whole reason this is no longer a poll.
- *
- * A line appended to this file is a local write on a local filesystem, so the kernel can say so the moment it
- * happens. `fs.watch` is what asks it to. What stood here before was a stat every second, which put a delay of
- * up to a second in front of EVERY line: a hundred-resource apply spent a hundred of them waiting on a file that
- * had already been written, all of it in front of a progress bar somebody is watching.
- *
- * THE TIMEOUT STAYS, and it is not the poll wearing a hat, it is the two things no write will ever announce:
- *   • a job SIGKILLed without an {kind:"exit"} line, where nothing more will EVER be written, so a clock is the
- *     only thing that can notice;
- *   • the heartbeat frame that holds the held-open stream, and every tunnel and proxy in its path, open.
- * Both are the loop's own business rather than the file's, which is why they keep a clock and the data does not.
- *
- * A watcher that cannot be created, or that dies under us (an inotify limit, a filesystem with no change
- * notification, a file REPLACED rather than truncated), costs this tail its liveness and never its correctness:
- * falling back to the timeout alone is exactly the loop this replaced. */
+// fs.watch announces a write immediately, replacing a per-second poll. The timeout stays for what no write announces: a
+// SIGKILLed job with no exit line, and the heartbeat keeping the connection open.
 const IDLE_WAKE_MS = 1000;
 
 interface TailWaker {
-    /* Waits for the file's next write, for `idleWakeMs`, or for `signal` to abort, whichever lands first.
-     * Answers WHICH of them it was: true for a write, false for the clock or the abort. The caller heartbeats
-     * on false alone, so a stream that just delivered a line does not also send a keepalive. */
+    // Waits for the next write, the idle timeout, or an abort, whichever comes first; true only for a write. The caller
+    // heartbeats on false, never on a delivered line.
     readonly wait: (signal: AbortSignal, idleWakeMs: number) => Promise<boolean>;
     readonly close: () => void;
 }
 
 const tailWaker = (path: string): TailWaker => {
     let watcher: FSWatcher | undefined;
-    /* A write that landed while the loop was reading and yielding the last batch. Held as a flag rather than
-     * raced against, so the next wait returns at once instead of sleeping out the interval on news it already
-     * has, which is the one way an event-driven tail can still deliver a line late. */
+    // A write landed while the last batch was being read; held as a flag so the next wait returns immediately.
     let written = false;
     let wake: (() => void) | undefined;
     const drop = (): void => {
@@ -112,9 +89,8 @@ const tailWaker = (path: string): TailWaker => {
                 return true;
             }
             const wrote = await new Promise<boolean>((resolve) => {
-                // Removes its own abort listener, so a tail held open for the length of an apply cannot
-                // accumulate one per wait on a signal that only ever fires once. Never called before the
-                // timer below exists: every one of its three callers is asynchronous.
+                // Removes its abort listener so a long tail doesn't accumulate one per wait on a signal that only fires
+                // once.
                 const done = (byWrite: boolean): void => {
                     clearTimeout(timer);
                     signal.removeEventListener("abort", stopped);
@@ -133,9 +109,8 @@ const tailWaker = (path: string): TailWaker => {
     };
 };
 
-/* Split what has been read so far into whole events and the partial tail still waiting for its newline. Only
- * newline-terminated lines are parsed, and each CLI event is one atomic writeSync, so a torn write is held back
- * here rather than reaching parseIntenticLine as a half line. Blank and unparseable lines are dropped. */
+// Splits buffered text into whole events and the partial tail awaiting its newline; a torn write from an atomic
+// writeSync is held back rather than parsed half-formed.
 const drainLines = (buffer: string): { lines: IntenticLine[]; rest: string } => {
     const lines: IntenticLine[] = [];
     let rest = buffer;
@@ -151,20 +126,15 @@ const drainLines = (buffer: string): { lines: IntenticLine[]; rest: string } => 
     return { lines, rest };
 };
 
-// Tail an intentic events file: replay it from the start (so a refresh mid-run rebuilds the full view), then
-// follow appended lines live, woken by the write itself (tailWaker). Ends the stream on the line `isTerminal`
-// accepts (the apply job passes isTerminalExit, clean apply/resolve exits keep it open through the chain; a
-// check run ends on any exit); falls back to !isRunning() when the run died without writing one (SIGKILL). A
-// newer run truncating the file mid-tail (its size dropping below our read offset) also ends the stream, the
-// client reconnects and gets the new run from its own {kind:"start"}. Only newline-terminated lines are parsed
-// and each CLI event is one atomic writeSync, so a torn/partial line never reaches parseIntenticLine.
+// Replays from the start, then follows live, woken by the write. Ends when `isTerminal` accepts a line, or
+// `!isRunning()` catches a SIGKILL with no exit line; a truncated file also ends the stream, so the client reconnects
+// fresh.
 export async function* tailIntenticEvents(
     path: string,
     isTerminal: (line: IntenticLine) => boolean,
     isRunning: () => boolean,
     signal: AbortSignal | undefined,
-    // How long an idle tail waits before looking at the job's liveness and sending a keepalive. Injectable for
-    // the same reason the daemon's other loops take their interval: a test drives it instead of racing a clock.
+    // How long an idle tail waits before a liveness check and heartbeat; injectable so tests drive it, not a clock.
     idleWakeMs: number = IDLE_WAKE_MS,
 ): AsyncGenerator<IntenticLine> {
     const abort = signal ?? new AbortController().signal;
@@ -189,13 +159,8 @@ export async function* tailIntenticEvents(
                 if (!isRunning()) {
                     return;
                 }
-                /* Otherwise sleep until the file is written, the job's death is due a look, or the caller lets
-                 * go. An abort resolves this rather than throwing; the loop's own guard is what ends the tail.
-                 *
-                 * THE HEARTBEAT BELONGS TO THE TIMEOUT, NOT TO THE LOOP. Draining a batch also lands here with
-                 * nothing left to send, and that is not the same as being idle: keepaliving on it would bill a
-                 * chatty apply a frame per write, more than the poll this replaced ever sent. Silence is what
-                 * the far end needs reassuring about, so silence is what answers with a heartbeat. */
+                // Heartbeat belongs to the timeout, not the loop: an empty drain isn't idle and must not trigger one
+                // itself.
                 if (!(await waker.wait(abort, idleWakeMs))) {
                     yield { kind: "heartbeat" };
                 }

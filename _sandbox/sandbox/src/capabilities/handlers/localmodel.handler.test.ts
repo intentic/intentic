@@ -3,13 +3,11 @@ import { packFragment, readPack } from "../../environment/packs.js";
 import { estimatedModelMemory, serverCommand } from "./localmodel.handler.js";
 import { registry } from "../registry.js";
 
-// The environment-dependent paths (the download, the panel session, the health probe) are exercised
-// end-to-end; here we pin the contracts other code trusts, the docker.handler.test.ts split: the fragment's directive
-// (what the rebuild executors allowlist) and the echo (what the vault derives its complement from).
+// Pins two contracts other code trusts: the fragment's directive (what rebuild executors allowlist) and the echo (what
+// the vault derives its complement from).
 
 test("the CPU fragment is the llamacpp pack alone: nothing to rebuild where the base image bakes it", async () => {
-    // Pinned against the pack's own content and its presence against the stamp (docker.handler.test.ts explains why):
-    // a stamped standard image composes nothing at all, which is the rebuild-free add the card promises.
+    // Asserted against the pack's own content and the stamp, not the image the suite happens to run in.
     expect((await readPack("llamacpp"))!.content).toContain("llama-server");
     const engine = await packFragment("llamacpp");
     const fragment = await registry.localmodel.fragment?.({ model: "owner/repo/m.gguf", gpu: "off" });
@@ -18,10 +16,8 @@ test("the CPU fragment is the llamacpp pack alone: nothing to rebuild where the 
     expect(fragment ?? "").not.toContain("--gpus");
 });
 
-/* The GPU option's two halves, and only two, no toolkit and no nested runtime: llama-server runs directly in
- * this container, so the allowlisted directive (the docker card's own spelling) plus the CUDA build IS the
- * whole grant. The CUDA pack replaces the CPU binary at the same path, which is why the handler's command
- * line never forks on the build it got. */
+// Only two halves, no toolkit or nested runtime: llama-server runs directly in this container. The CUDA pack replaces
+// the CPU binary at the same path, so the command line never forks on which build it got.
 test("the gpu option adds the passthrough directive and the CUDA build", async () => {
     const fragment = (await registry.localmodel.fragment?.({ model: "owner/repo/m.gguf", gpu: "on" })) ?? "";
     expect(fragment).toContain("# intentic:runtime --gpus=all");
@@ -30,8 +26,8 @@ test("the gpu option adds the passthrough directive and the CUDA build", async (
     expect(fragment.includes("GGML_CUDA=ON")).toBe(cuda !== undefined);
 });
 
-// Off is the default and the absence is total, the docker rule: an overlay that never asked must not carry a
-// directive a host could refuse.
+// Off is the default and the absence is total: an overlay that never asked must not carry a directive a host could
+// refuse.
 test("gpu off leaves no directive in the fragment", async () => {
     const fragment = (await registry.localmodel.fragment?.({ model: "owner/repo/m.gguf" })) ?? "";
     expect(fragment).not.toContain("intentic:runtime");
@@ -58,9 +54,8 @@ test("the admission estimate accounts for weights, q8 KV cache and runtime headr
     expect(estimatedModelMemory(16_000_000_000, 98_304)).toBe(23_000_000_000);
 });
 
-// The echo is the vault's complement: nothing on this card is a credential (public weights, an unauthenticated
-// loopback server), so every field must echo, `url` included, the one an incomplete echo would silently vault
-// into a manifest entry that can never validate again (secret-fields.test.ts is the per-kind guard).
+// Every field must echo, `url` included: nothing here is a credential, and an incomplete echo would vault a field into
+// a manifest entry that can never validate again.
 test("the echo carries every field", () => {
     expect(
         registry.localmodel.echo(
@@ -81,8 +76,8 @@ test("the echo carries every field", () => {
     });
 });
 
-// The one hard refusal: a card that cannot name which bytes to fetch must not be stored gesturing at a
-// download nothing can perform. Soft everywhere else (missing binary, pending rebuild), those store.
+// The one hard refusal: a card that can't name which bytes to fetch must not be stored gesturing at a download nothing
+// can perform. Everywhere else (missing binary, pending rebuild) is soft and stores.
 test("apply refuses a custom model with no URL before anything is stored", async () => {
     const generator = registry.localmodel.apply({} as never, "m", { model: "custom", gpu: "off" });
     await expect(generator.next()).rejects.toThrow(/GGUF URL/);

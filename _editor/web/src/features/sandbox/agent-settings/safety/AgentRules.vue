@@ -11,28 +11,14 @@ import RuleForm from "./RuleForm.vue";
 import RulesInfo from "./RulesInfo.vue";
 import { momentOf, type RuleDraft } from "./ruleWords";
 
-/* EVERY OTHER STANDING INSTRUCTION: the rules that don't have a row of their own further up this tab.
- *
- * The bet this whole group makes is that a rule is a SENTENCE: at this moment, if this is true, do this. The
- * form (RuleForm.vue) asks for those three things in that order and nothing else, and a row here is that same
- * sentence read back: out of the same vocabulary (ruleWords.ts), not out of a second table that agrees with
- * the first until the day it doesn't. The moment a form here needs a fourth concept, the answer is an agent:
- * which is already one of the things a rule can do: rather than another field.
- *
- * A ROW IS SCANNED, NOT READ. What used to be one grey run-on sentence per rule is now typeset: the moment as
- * a chip, the command in the type a command is written in, the paths as the globs they are. A list of ten is
- * something you look down for the one you meant; a list of ten identical grey paragraphs is something you
- * read, and nobody does.
- *
- * ONE FORM, TWO JOBS. Editing a rule opens the same form in the row's place, keeping its id, which is what
- * the activity feed names and what the firing stamps are keyed by, so renaming a rule does not orphan its
- * history. Before this, changing a command meant deleting the rule and typing all of it again. */
+// Every standing instruction without a row of its own above. A rule is a sentence (moment, condition, action) from one
+// shared vocabulary (ruleWords.ts), same as RuleForm; a row typesets that sentence instead of one grey paragraph.
+// Editing keeps the rule's id, so history and firing stamps don't orphan.
 
 const { settings, listed, firings, upsert, remove, setEnabled, move, freeId } = useRules();
 const outline = useSandboxOutline(computed(() => settings.value === undefined));
 
-// Which row is a form right now: a rule's id while editing it, `undefined` otherwise. `adding` is its own flag
-// rather than a sentinel id, because a rule may legitimately be called anything.
+// Which row is a form: a rule's id while editing, undefined otherwise; `adding` is its own flag.
 const editingId = ref<string | undefined>();
 const adding = ref(false);
 const editing = computed(() => listed.value.find((rule) => rule.id === editingId.value));
@@ -52,17 +38,15 @@ const startEdit = (id: string): void => {
     editingId.value = id;
 };
 
-/* The form writes the words; identity and the switch stay here. A rule being edited keeps BOTH: a relabel
- * that minted a new id would hand the feed a new name for the same rule and leave its firing history behind,
- * and one that reset `enabled` would quietly turn a rule back on that the owner had turned off. */
+// Keeps the existing id and `enabled` on edit, so a relabel doesn't orphan its history or silently re-enable a disabled
+// rule.
 const saveDraft = (draft: RuleDraft): void => {
     const existing = editing.value;
     upsert({ id: existing?.id ?? freeId(draft.label), enabled: existing?.enabled ?? true, ...draft });
     close();
 };
 
-// The row's own menu. One instance for the list rather than one per row: they differ only in which rule they
-// are pointed at, and forty teleported overlays to show one is forty too many.
+// One menu instance for the whole list, not one per row; forty overlays would be forty too many.
 const menu = ref<InstanceType<typeof ContextMenu>>();
 const menuFor = ref<Rule | undefined>();
 
@@ -71,9 +55,7 @@ const openMenu = (event: Event, rule: Rule): void => {
     menu.value?.show(event);
 };
 
-/* Order is the priority at a deciding moment, so it has to be movable from the list that shows it. The two
- * moves are DISABLED at the ends rather than dropped from the menu: an item that vanishes reads as a bug, and
- * the ends are exactly where someone checks whether they can go further. */
+// Move up/down disable at the ends rather than disappearing: a vanished menu item reads as a bug.
 const menuModel = computed<MenuItem[]>(() => {
     const rule = menuFor.value;
     if (rule === undefined) {
@@ -89,15 +71,14 @@ const menuModel = computed<MenuItem[]>(() => {
     ];
 });
 
-// The three halves of the sentence's tail, each asked for separately so the row can typeset them differently:
-// a command is read as a command, an instruction is read as words.
+// The tail of the sentence, split by kind so each renders in its own style: a command as code, an instruction as words.
 const commandOf = (rule: Rule): string | undefined => (rule.action.kind === `command` ? rule.action.command : undefined);
 const textOf = (rule: Rule): string | undefined => (rule.action.kind === `instruct` ? rule.action.text : undefined);
 const verdictOf = (rule: Rule): string | undefined =>
     rule.action.kind === `verdict` ? (rule.action.verdict === `allow` ? `land the work` : `hold the work on its branch`) : undefined;
 
-// "Never" is a real answer and the one worth reading: a rule that has never done anything since it was written
-// is either wrong or aimed at something that has not happened yet, and both are worth a second look.
+// "Never fired" is worth reading: a rule that never fired is either wrong or aimed at something that hasn't happened
+// yet.
 const firedOf = (rule: Rule): string => {
     const at = firings.value[rule.id];
     return at === undefined ? `Never fired` : `Fired ${timeAgo(at, { days: true })}`;
@@ -109,7 +90,7 @@ const firedOf = (rule: Rule): string => {
         <template #info><RulesInfo /></template>
 
         <template v-for="rule in listed" :key="rule.id">
-            <!-- Editing happens where the rule sits, so the list never loses the place you were looking at. -->
+            <!-- Editing happens in place, so the list doesn't lose your position. -->
             <Row v-if="editingId === rule.id" icon="pencil" :title="rule.label">
                 <template #below>
                     <RuleForm :rule="rule" :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
@@ -134,8 +115,7 @@ const firedOf = (rule: Rule): string => {
                         <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate font-medium text-content">
                             {{ verdictOf(rule) }}
                         </span>
-                        <!-- The narrowing, as the globs it is. Written out rather than summarised as "2 paths":
-                             which paths is the whole question a reader has about a rule that has one. -->
+                        <!-- Paths shown as their globs, not a count: which paths is the whole question a reader has. -->
                         <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-muted">
                             <span class="shrink-0 text-subtle">only when touching</span>
                             <span
@@ -172,8 +152,7 @@ const firedOf = (rule: Rule): string => {
             </Row>
         </template>
 
-        <!-- Same read, same rule as the skills list above it: an unanswered /settings has no rules to show and
-             nothing true to say about their absence. -->
+        <!-- Same skeleton rule as the skills list above: nothing true to say while settings are unread. -->
         <div v-if="settings === undefined" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">Reading this sandbox's rules…</span>
@@ -188,7 +167,7 @@ const firedOf = (rule: Rule): string => {
             </template>
         </Row>
 
-        <!-- Hidden while a form is open, so there is only ever one rule being written at a time. -->
+        <!-- Hidden while a form is open, so only one rule is being written at a time. -->
         <Row v-else-if="editingId === undefined" as="button" icon="plus" interactive title="Add a rule" @click="startAdd" />
     </RowGroup>
 

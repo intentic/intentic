@@ -5,36 +5,30 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { loopRunning, runLoop, stopLoop } from "./loop-runner.js";
 
-/* The loop routes. Thin by design, the pump owns everything that happens after `start` acks, because a loop
- * outlives the request that began it by minutes or hours and there is nothing useful for a handler to await.
- */
+// Thin by design: the pump owns everything after `start` acks, since a loop outlives the request by minutes or hours.
 export const createLoopsRoutes = (services: Services) => {
     const i = implement(loopsContract).$context<OrpcContext>();
     return {
         list: i.list.handler(async () => ({ loops: await services.loops.list() })),
         start: i.start.handler(async ({ input }) => {
-            // Refused rather than queued: two pumps on one conversation would race the same worktree and the
-            // same turn mutex, and the loser would spend a whole turn finding that out.
+            // Refused, not queued: two pumps on one conversation would race the same worktree and turn mutex.
             if (loopRunning(input.conversationId)) {
                 throw new ORPCError("CONFLICT", { message: "This agent is already looping, stop that loop before starting another." });
             }
-            // A loop with nothing to produce and nothing to check cannot succeed; it can only run out of
-            // iterations. Refused here rather than left to fail slowly, because failing slowly costs money.
+            // No output and no check: a loop can only run out of iterations, refused here instead of failing slowly.
             if (!loopCanConverge(input)) {
                 throw new ORPCError("BAD_REQUEST", {
                     message: "This loop has no output and no check, so nothing could ever tell it it is finished.",
                 });
             }
             const record = await services.loops.start(input, Date.now());
-            // Detached, like every other route that starts a turn: the first iteration alone can take minutes,
-            // and the fleet card is where the loop is watched from.
+            // Detached like any turn-starting route: the first iteration can take minutes; watched from the fleet card.
             void runLoop(services, record, streamAgent);
             return record;
         }),
         stop: i.stop.handler(async ({ input }) => {
             if (!stopLoop(input.conversationId)) {
-                // A loop that is not running cannot be stopped, and saying so beats an `ok` that means nothing:
-                // the usual cause is that it already ended, which the row now shows.
+                // Not-running usually means it already ended, which the row shows; an empty `ok` would say nothing.
                 throw new ORPCError("NOT_FOUND", { message: "No loop is running on this agent." });
             }
             return { ok: true as const };
@@ -42,10 +36,8 @@ export const createLoopsRoutes = (services: Services) => {
 
         designs: i.designs.handler(async () => ({ designs: await services.loopDesigns.list() })),
         saveDesign: i.saveDesign.handler(async ({ input }) => {
-            /* The same refusal `start` makes, made at the moment of SAVING instead, which is the point of
-             * saving. An ad-hoc loop with no output and no check wastes one person's afternoon; a SAVED one
-             * that cannot converge is a trap left lying around for everybody who picks it afterwards, and every
-             * one of them pays a full run to discover it. */
+            // Same refusal as `start`, made at save time: a saved loop that can't converge is a trap left for everyone
+            // who picks it up, not just one run.
             if (!loopCanConverge(input.design)) {
                 throw new ORPCError("BAD_REQUEST", {
                     message: "This loop has no output and no check, so nothing could ever tell it it is finished.",

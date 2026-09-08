@@ -3,17 +3,9 @@ import { overviewOf, type KnowledgeIndex } from "./index-notes.js";
 import { factsOf, type ParsedNote } from "./note.js";
 import type { GraphView, SearchHit as EngineHit } from "./query.js";
 
-/* THE INDEX, AS THE WIRE DECLARES IT, the one place the engine's answers are turned into the contract's
- * shapes.
- *
- * Pure, and separate from the backend that usually calls it, because it has a second caller: the demo fixture,
- * which serves this extension's namespace in a browser with no sandbox behind it. Left inside server.ts, the
- * fixture would have had to re-derive backlinks, counts and the neighbourhood by hand, a second implementation
- * of the interesting half of this extension, shown to visitors as if it were the product.
- *
- * Every field is copied ACROSS rather than spread. The engine answers in readonly arrays and the contract is
- * declared in mutable ones, so a copy is needed either way, and being explicit about it means a field the
- * engine grows cannot arrive on the wire undeclared. */
+// Turns the engine's answers into the contract's wire shapes. Pure and separate from the backend, since the demo
+// fixture calls it too, without re-deriving backlinks and counts by hand. Fields are copied across explicitly so an
+// engine field can't reach the wire undeclared.
 
 export const summaryOf = (note: ParsedNote, index: KnowledgeIndex): NoteSummary => ({
     path: note.path,
@@ -27,8 +19,7 @@ export const summaryOf = (note: ParsedNote, index: KnowledgeIndex): NoteSummary 
     modifiedAt: note.modifiedAt,
 });
 
-// A connection, resolved for a reader: the panel renders a link, so it needs a destination and a name. An
-// unresolved target keeps its raw text as the name, "Charles Babbage (not written yet)" is a real answer.
+// A connection resolved for a reader: an unresolved target keeps its raw text as the display name.
 const outgoing = (index: KnowledgeIndex, path: string): NoteLink[] =>
     (index.outgoing.get(path) ?? []).map((edge) => ({
         relation: edge.relation,
@@ -71,8 +62,7 @@ export const graphOf = (view: GraphView): Graph => ({
     omitted: view.omitted,
 });
 
-// `folder` is workspace-relative, where the notes actually are, which is the one thing about this report the
-// index cannot know.
+// `folder` is workspace-relative; it's the one thing about this report the index itself can't know.
 export const overviewFor = (index: KnowledgeIndex, folder: string): Overview => {
     const report = overviewOf(index);
     return {

@@ -3,34 +3,24 @@ import { join } from "node:path";
 import { REPO_ROLES } from "@intentic/scaffold";
 import { IGNORED_DIRS, isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 
-// VSCode-style repo discovery: a repo is any directory under /work owning a `.git` entry, dir OR pointer file
-// (the daemon's own --separate-git-dir repos keep a pointer FILE in the worktree, as do git worktrees and
-// submodules). Repo ids are root-relative POSIX paths ("intent", "clients/foo"); the id doubles as the repo's
-// dir under the workspace root and as its wire {repo} name. The walk stops at the first .git boundary, a repo
-// nested inside another repo (a submodule, an embedded clone) belongs to its parent, exactly like git itself
-// sees it. The workspace root's own .git (the shadow "root" repo, git/root-repo.ts) is never a workspace repo.
+// A repo is any dir under /work with a `.git` entry (dir or pointer file, for worktrees/submodules); ids are
+// root-relative POSIX paths, doubling as the {repo} wire name.
+// The walk stops at the first `.git` boundary; a nested repo belongs to its parent, as git itself sees it.
+// The workspace root's own `.git` (the shadow root repo) is never a workspace repo.
 
-// "root" is the /work workspace repo's {repo} name (its git dir lives at /history/gits/root), a clone must
-// never collide with it, and a top-level dir the agent names "root" is skipped by discovery for the same reason.
-// The reference shelf (REFERENCE_DIR, workspace-ignore) is reserved too: a clone dropped there is consulted by
-// path, never a workspace repo. So is the outbox (PUBLIC_DIR) at the other end of the same convention, a folder
-// of published artifacts is not a project, and discovering it would earn it a sidebar entry and a setup nag.
+// Reserved {repo} names: role names, "root" (the workspace's own repo), the reference shelf, and the outbox.
 const RESERVED = new Set<string>([...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR]);
 // A safe path segment: starts alphanumeric, no separators or `..`.
 const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
-// Runaway guards for the recursive walk: repos deeper than this aren't discovered, and a pathological tree
-// (a giant unignored dir farm) stops scanning rather than stalling the daemon.
+// Guards a pathological tree: repos past this depth aren't discovered; a giant dir farm stops scanning.
 const MAX_DEPTH = 4;
 const MAX_DIRS = 10_000;
 
-// A single-segment name for a repo the DAEMON creates at the top level (clone route, monorepo capability),
-// reserved names stay unclaimable so role scaffolding and the "root" scope can't collide with a clone.
+// A top-level name for a daemon-created repo (clone, monorepo capability); reserved names stay unclaimable.
 export const isValidRepoName = (name: string): boolean => SEGMENT.test(name) && !RESERVED.has(name);
 
-// A wire {repo} id naming an EXISTING repo anywhere under the root: 1–4 safe segments (each structurally
-// excludes "..", empty parts, and absolute paths), so joining it under the root can never escape. Role names
-// pass, they are ordinary repos now, but "root" stays the workspace repo's own name, and nothing under the
-// reference shelf is a workspace repo (discovery never returns those, so no wire id may name one either).
+// A wire {repo} id naming an existing repo under root: 1-4 safe segments, so joining it under root can never escape.
+// "root" and the reference shelf are excluded; discovery never returns those, so no id may name one either.
 export const isValidRepoId = (id: string): boolean => {
     const segments = id.split("/");
     return (
@@ -51,8 +41,8 @@ export const hasGitEntry = async (dir: string): Promise<boolean> => {
     }
 };
 
-// Every repo under `root`, as sorted root-relative ids. Hidden dirs (.git, .intentic, browser profiles) and
-// junk dirs (node_modules, dist, …) are never descended into, same pruning as the tree walk and the watcher.
+// Every repo under root, as sorted root-relative ids.
+// Hidden and junk dirs are never descended into, matching the tree walk and watcher's pruning.
 export const discoverRepos = async (root: string): Promise<string[]> => {
     const repos: string[] = [];
     let visited = 0;

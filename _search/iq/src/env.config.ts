@@ -1,26 +1,22 @@
 import { type ConfigDefinition, env, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
-// Env-derived config (var names follow @puristic/env's camelToScreamingSnake): WORKSPACE_ROOT, INTENTIC_OUTPUT,
-// IQ_MODEL_DIR, IQ_RG_PATH, IQ_DEBUG. Flags always beat env (lib/flags.ts).
+// Env-derived config; var names follow @puristic/env's camelToScreamingSnake (WORKSPACE_ROOT, IQ_MODEL_DIR, …). Flags
+// beat env, see lib/flags.ts.
 const configSchema = z.object({
-    // The workspace to search; empty = current directory. The sandbox image pins this to /work.
+    // Workspace to search; empty means the current directory. Pinned to /work in the sandbox image.
     workspaceRoot: z.string().default(""),
-    // Output rendering when no --json/--ndjson flag is given: agent-facing text (default), one JSON document, or
-    // one JSON line per result group.
+    // Output mode when no --json/--ndjson flag given: text, one JSON document, or one JSON line per group.
     intenticOutput: z.enum(["text", "json", "ndjson"]).catch("text"),
-    // Baked embedding model dir; unset → natural-language queries degrade to keyword-expanded lexical search.
+    // Baked embedding model dir; unset degrades natural-language queries to keyword lexical search.
     iqModelDir: z.string().default(""),
     // Override the ripgrep binary resolved from PATH.
     iqRgPath: z.string().default(""),
     // Override ~/.claude for session recall (tests point this at a fixture dir).
     iqClaudeDir: z.string().default(""),
-    // Override the daemon's history volume, where the fleet registry naming each session's conversation lives.
-    // Empty = the sandbox's own (/history); outside a sandbox there is no such file and a listing simply has no
-    // conversations to name, which is the pre-existing behaviour.
+    // Override the daemon's history volume holding the fleet registry; empty is the sandbox's own.
     iqHistoryRoot: z.string().default(""),
-    // Retrieval-stage toggles for benchmarking (see parseFeatures): "bm25" = only BM25; "-rerank,-prf" = all
-    // stages except those. Empty = full pipeline. The --features flag overrides this.
+    // Retrieval-stage toggles for benchmarking: "bm25" alone, or "-x,-y" to exclude; empty runs the full pipeline.
     iqFeatures: z.string().default(""),
     // Keep the JS stack on a thrown error instead of the one-line message.
     iqDebug: z

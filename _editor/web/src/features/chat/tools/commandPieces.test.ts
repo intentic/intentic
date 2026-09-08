@@ -2,8 +2,8 @@ import type { CodeToken } from "@intentic/ui";
 import { describe, expect, it } from "vitest";
 import { commandLines, linePieces, splitLines } from "./commandPieces.js";
 
-// A stand-in for Shiki's output: the colour boundaries, without loading a grammar in a unit test. `htmlStyle`
-// is opaque to the merge, so any distinguishable value proves it survives the cut.
+// Stand-in for Shiki's output (colour boundaries) without loading a grammar; `htmlStyle` is opaque to the
+// merge, so any distinguishable value proves it survives.
 const tokensFor = (line: string, cuts: readonly number[]): CodeToken[] => {
     const bounds = [0, ...cuts, line.length];
     return bounds.slice(0, -1).map((start, index) => ({
@@ -30,7 +30,6 @@ describe(`splitLines`, () => {
 describe(`linePieces`, () => {
     const line = { text: `cat .env now`, start: 0 };
 
-    // With no grammar loaded the card still marks: the marks are the gate's and do not depend on colour.
     it(`marks without colour`, () => {
         const pieces = linePieces(line, [{ start: 4, end: 8 }], undefined);
         expect(texts(pieces)).toEqual([`cat `, `.env`, ` now`]);
@@ -38,9 +37,8 @@ describe(`linePieces`, () => {
         expect(pieces.every((piece) => piece.style === undefined)).toBe(true);
     });
 
-    /* THE MERGE ITSELF: a mark boundary inside a colour token cuts the token, and BOTH halves keep the colour
-     * while only one keeps the mark. Getting this wrong is how `@.env` comes out either uncoloured or marked
-     * whole, and the second is a card pointing at an argument rather than at a credential. */
+    // Getting this wrong shows `@.env` either uncoloured or marked whole — pointing at an argument, not the
+    // credential.
     it(`cuts a colour token at a mark edge and keeps the colour on both sides`, () => {
         // One token over the whole line, so any cut here has to come from the mark.
         const pieces = linePieces(line, [{ start: 4, end: 8 }], tokensFor(line.text, []));
@@ -64,7 +62,6 @@ describe(`linePieces`, () => {
         expect(texts(pieces).join(``)).toBe(two.text);
     });
 
-    // Spans are offsets into the WHOLE program; a line renders its own slice of them and nothing else.
     it(`rebases whole-program spans onto the line, and ignores the ones that miss it`, () => {
         const second = { text: `cat .env`, start: 9 };
         expect(markedText(linePieces(second, [{ start: 13, end: 17 }], undefined))).toEqual([`.env`]);
@@ -79,8 +76,6 @@ describe(`linePieces`, () => {
         expect(markedText(linePieces(second, span, undefined))).toEqual([`  /work`]);
     });
 
-    // Whatever the cuts, the pieces must reassemble into exactly the line: a merge that drops or duplicates a
-    // character is a card showing a command that is not the one about to run.
     it(`always reassembles into the original line`, () => {
         for (const spans of [[], [{ start: 0, end: 12 }], [{ start: 4, end: 8 }], [{ start: 3, end: 5 }, { start: 7, end: 9 }]]) {
             for (const cuts of [[], [4], [3, 8], [1, 4, 8, 11]]) {

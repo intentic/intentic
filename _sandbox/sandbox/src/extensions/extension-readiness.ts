@@ -5,19 +5,8 @@ import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intent
 import { extensionRead } from "../capabilities/extension-dirs.js";
 import type { InstalledExtension } from "./installed-extensions.js";
 
-/* IS THIS EXTENSION FIT TO PUBLISH, the checks that can be answered from the files alone, and the reason they
- * are worth answering before anybody else runs them.
- *
- * All four failures below are SILENT in the workspace and fatal once published, which is the whole argument for
- * a check: the author's own copy is loaded from a directory the daemon reads live, so a bundle that only works
- * because of how it is being loaded here looks perfect right up until it is a sha in someone else's sandbox.
- * These are the things a human had to verify by hand for the first four extensions ever published from here, and
- * a hand check that has to be repeated is a check that will eventually be skipped.
- *
- * DELIBERATELY NOT AN AGENT. Every question here has one right answer readable off the bytes, whether a file
- * exists, what a line imports, whether two version strings match. Handing that to a model would make a slower,
- * dearer, less certain version of a function, and would put a judgement call where there is none. The judgement
- * lives one layer up, in what an author does about a warning. */
+// Readiness checks answerable from the extension's files alone, run before publish (failures are silent until then).
+// Not model-based: each question has one answer readable off the bytes; the judgement is left to the author.
 
 export type ReadinessStatus = "pass" | "warn" | "fail";
 
@@ -30,9 +19,8 @@ export interface ReadinessCheck {
     readonly detail: string;
 }
 
-// Everything the manifest promises is on disk, gathered as (what it is → where it says it is) so a failure can
-// name both. A missing one is fatal at a different moment for each: the entry at activation, the bin at the
-// agent's next turn, the fragment at the next image build, all of them long after publication.
+// Gathers every file the manifest promises (what it is, where it says it is) so a failure can name it specifically.
+// Each is fatal at a different later moment: entry at activation, bin at the next turn, fragment at the next build.
 const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; readonly path: string }[] => {
     const promised: { what: string; path: string }[] = [];
     const contributes = manifest.contributes;
@@ -48,9 +36,7 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
     if (contributes?.environment !== undefined) {
         promised.push({ what: "image fragment", path: contributes.environment.fragment });
     }
-    /* A capability's `pack` promises no FILE — it names a feature pack that ships inside the image — so there is
-     * nothing in the checkout for this walk to find missing. A name no pack answers to is caught where the pack
-     * is resolved (environment/fragment-sources.ts), the only place that knows the pack list. */
+    // A capability's `pack` names a baked-in feature, not a file; an unknown name is caught in fragment-sources.ts.
     for (const capability of contributes?.capabilities ?? []) {
         if ("skill" in capability) {
             promised.push({ what: `skill for ${capability.id}`, path: capability.skill });
@@ -62,30 +48,11 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
     return promised;
 };
 
-/* THE SENTENCE EVERY SURFACE SAYS when an extension's manifest is here and its code is not. Kept in one place
- * because it is said in four (the connector card's status, the add that can't write a skill, the process route,
- * the check below) and four wordings of one fact is four chances to describe a different situation.
- *
- * Deliberately free of the word "rebuild": the trees behind these manifests arrive as a publish-time build
- * context, so the environment overlay, which is what "rebuild" means to this app, and what the web sends a
- * rebuild-worded status to, cannot install them. The only move is a sandbox on the standard image. */
+// The one message every surface shows for a missing extension code; avoids "rebuild", which cannot install it.
 export const RUNTIME_ABSENT_DETAIL = "not included in this image: ships with the standard sandbox image";
 
-/* IS THE EXTENSION'S CODE IN THIS IMAGE AT ALL, the same promised-paths question pathsCheck asks before
- * publication, asked at runtime, because the image split can now answer it "no" for an extension nobody has
- * done anything wrong to. The core image bakes the messaging extensions' MANIFESTS so their connector cards
- * exist in every image; the gateway trees behind them are the standard image's bake-only `messaging` pack.
- *
- * BAKED ONLY, and that restriction is the point. A git-installed checkout and a workspace directory hold files
- * the owner or the author put there, so a missing one is a rotted install or work in progress, pathsCheck
- * already reports that in their terms, and an author mid-build should still watch their own gateway try to
- * start and fail rather than be silently refused. Only an image-baked extension can be complete, correct and
- * still absent.
- *
- * The DECLARED files rather than the built ones, though a gateway's absent dist/ is the visible symptom: a pack
- * copies an extension's whole tree or none of it, so the tracked files answer the same question, and they
- * answer it the same way every time. Probing a build output would make a spawn gate that says yes or no
- * depending on whether anybody had run a build, the one thing a gate must never do. */
+// Runtime version of the paths check, scoped to builtin extensions: only those can be complete yet still absent here.
+// Checks the declared files, not build output, since a pack copies an extension's whole tree or none of it.
 export const extensionRuntimeAbsent = async (extension: InstalledExtension): Promise<boolean> => {
     if (extension.source !== "builtin") {
         return false;
@@ -108,9 +75,7 @@ const bundleCheck = async (dir: string, manifest: ExtensionManifest): Promise<Re
     if (source === undefined) {
         return { id, label, status: "fail", detail: `${manifest.entry} could not be read.` };
     }
-    /* The rule itself lives in @intentic/extension-manifest (bundleProblem) because a second judge applies it
-     * too: the registry scanner re-derives this exact answer cold, at each listed entry's pinned sha, every
-     * night. Two hand-rolled copies would drift the way the manifest schema and its published copy once did. */
+    // Rule lives in @intentic/extension-manifest (bundleProblem), re-derived independently by the registry scanner.
     const problem = bundleProblem(source);
     if (problem !== undefined) {
         return { id, label, status: "fail", detail: `It ${problem}.` };
@@ -130,9 +95,7 @@ const pathsCheck = async (extension: InstalledExtension): Promise<ReadinessCheck
         }
     }
     if (missing.length > 0) {
-        /* An image-baked extension is missing files because the IMAGE does not carry them, not because anyone
-         * forgot one, and there is nothing whoever is reading this can add. A warning rather than a failure for
-         * the same reason: the extension is fit to publish, it is simply not runnable HERE. */
+        // A builtin extension's missing files mean the image doesn't carry them, not a broken publish; warn, not fail.
         if (extension.source === "builtin") {
             return { id, label, status: "warn", detail: `This extension's code is ${RUNTIME_ABSENT_DETAIL}.` };
         }
@@ -145,8 +108,7 @@ const enginesCheck = (manifest: ExtensionManifest, satisfies: boolean): Readines
     id: "engines",
     label: "It runs on this version of the app",
     status: satisfies ? "pass" : "fail",
-    // Fatal rather than a warning: an extension whose range excludes the host it is published from will be
-    // reported incompatible by every app that installs it, which is a listing nobody can use.
+    // Fatal, not a warning: excluding the range's own publishing host reports incompatible everywhere it installs.
     detail: satisfies
         ? `Asks for ${manifest.engines.intentic}; this app is ${extensionApiVersion}.`
         : `Asks for ${manifest.engines.intentic}, but this app is ${extensionApiVersion}, it would not activate anywhere it was installed today.`,
@@ -160,8 +122,7 @@ const permissionsCheck = (manifest: ExtensionManifest, usage: Record<string, { c
         return { id, label, status: "pass", detail: "It asks for no daemon routes at all." };
     }
     if (usage === undefined) {
-        // Not a failure, and specifically not a pass either: an unexercised extension is the case where this
-        // check has nothing to say, and saying "fine" would be the check lying at the exact moment it matters.
+        // Neither pass nor fail: an unexercised extension gives nothing to say; "fine" would be a lie here.
         return {
             id,
             label,

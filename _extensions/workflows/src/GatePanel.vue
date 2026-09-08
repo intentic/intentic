@@ -4,30 +4,19 @@ import { GATE_DAILY_MAX_DEFAULT, type Workflow, type WorkflowGate } from "@inten
 import { computed } from "vue";
 import GateAccess from "./GateAccess.vue";
 
-/* THE GATE, AS A FORM: the designer's answer to "let my pipeline run this and read a verdict".
- *
- * The engine has been finished for a while (gate.routes.ts); what was missing was any way to declare one
- * without hand-editing the manifest. The form asks exactly what the schema asks and nothing else: which step
- * decides, which of its declared fields carries the decision, which values ship, and how many runs a day the
- * owner will pay for. The webhook token is deliberately NOT a field here, nor on the design at all: the daemon
- * mints it with the door on save and keeps it across edits (workflows.routes.ts), and hands it back beside the
- * saved design, so the panel only ever shows it, via <GateAccess>.
- *
- * Presence is the switch, so there is no enabled toggle to get out of sync with the token behind it: adding
- * the gate opens the door on the next save, removing it closes the door and revokes the URL with it. */
+// Form for a workflow's release gate: which step decides, which field carries the verdict, which values ship, and the
+// daily run cap. The webhook token isn't a field here; the daemon mints and returns it, and the panel only displays it
+// via <GateAccess>. Presence of `gate` is the on/off switch, with no separate enabled flag.
 
-// `gateToken` is what the designer's last save (or the list) answered for this design: the draft itself never
-// carries a credential, so the panel is handed it separately and renders it only once it exists.
+// From the last save or the list, never the draft; passed in separately and shown once it exists.
 const { workflow, gateToken } = defineProps<{ workflow: Workflow; gateToken?: string }>();
 const emit = defineEmits<{ patch: [gate: WorkflowGate | undefined] }>();
 
 const gate = computed(() => workflow.gate);
-// Only a step that declares output fields can carry a verdict: a validated field is the one part of a
-// session's answer that was checked rather than scraped out of prose, and pointing at one is the entire rule.
+// Only steps with declared JSON output fields can carry a verdict; anything else is unchecked prose.
 const eligible = computed(() => workflow.steps.filter((step) => step.output.kind === `json`));
 
-// The fields a gate may read on a given step: scalars only. A list has no reading as a release decision, and
-// offering one here just to refuse it in the fault line would be a form arguing with itself.
+// Scalar fields only; a list field has no reading as a pass/fail verdict.
 const fieldsOf = (stepId: string) => {
     const step = workflow.steps.find((entry) => entry.id === stepId);
     return step?.output.kind === `json` ? step.output.fields.filter((field) => field.type !== `string[]`) : [];
@@ -43,13 +32,12 @@ const add = (): void => {
     if (step === undefined) {
         return;
     }
-    // `pass` prefilled with the one value almost every verdict field means by it: editable, never invented
-    // on the wire: what is saved is exactly what this form shows.
+    // Prefills `pass` with the common verdict value; editable, and always exactly what's saved.
     emit(`patch`, { step: step.id, field: fieldsOf(step.id)[0]?.name ?? ``, pass: [`pass`] });
 };
 
-// Re-pointing the gate keeps the token on purpose (workflows.routes.ts round-trips it): the URL a pipeline
-// was taught must survive the step being renamed or the decision moving to a different field.
+// The token is kept when re-pointing the gate (workflows.routes.ts round-trips it), so a pipeline's URL survives a
+// renamed step or a different field.
 const setStep = (stepId: string | undefined): void => {
     if (gate.value !== undefined && stepId !== undefined) {
         emit(`patch`, { ...gate.value, step: stepId, field: fieldsOf(stepId)[0]?.name ?? `` });
@@ -60,8 +48,7 @@ const setField = (field: string | undefined): void => {
         emit(`patch`, { ...gate.value, field });
     }
 };
-// On change rather than on input: the value re-renders as `join(", ")`, and reformatting under a caret
-// mid-word is how a form fights its author.
+// Fires on change, not input: reformatting to `join(', ')` while typing would fight the caret mid-word.
 const setPass = (raw: string): void => {
     if (gate.value !== undefined) {
         emit(`patch`, {

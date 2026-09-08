@@ -1,13 +1,6 @@
-/* OKLCH ⇄ sRGB, the colour-space floor everything that COMPUTES a colour in this kit stands on.
- *
- * Two callers with the same need: brandColor.ts places a brand's mark against its own plate, and themeColor.ts
- * builds the whole app's ramps out of one picked colour. Both need the same three things, read a hex, move a
- * colour along one axis without disturbing the others, write a hex back, and both need them in OKLab rather
- * than HSL, because only there is lightness perceptual: raising HSL's `l` on a saturated blue swings the hue
- * visibly toward cyan, and a distance in it means one thing on a pale colour and another on a deep one.
- *
- * Hue is in DEGREES here, matching CSS's own oklch() notation, so a value read out of this file can be written
- * straight into a stylesheet and a value read out of a stylesheet needs no conversion coming in. */
+// Shared OKLCH/sRGB conversion used by brandColor.ts and themeColor.ts, both of which read a hex, move one axis
+// without disturbing the others, and write it back, in OKLab rather than HSL since only there is lightness
+// perceptual. Hue is in degrees, matching CSS's own oklch() notation.
 
 /** A colour in OKLCH: lightness 0–1, chroma (0 is grey, ~0.37 is the most sRGB holds), hue in degrees. */
 export interface Oklch {
@@ -25,7 +18,7 @@ const DEG = 180 / Math.PI;
 
 export const hexToRgb = (hex: string): readonly [number, number, number] | undefined => {
     const raw = hex.trim().replace(/^#/, ``);
-    // Both forms the wild serves: #rgb and #rrggbb.
+    // Accepts both #rgb and #rrggbb.
     const full = raw.length === 3 ? [...raw].map((c) => `${c}${c}`).join(``) : raw;
     if (!/^[0-9a-fA-F]{6}$/.test(full)) {
         return undefined;
@@ -46,7 +39,7 @@ const rgbToHex = (rgb: readonly [number, number, number]): string =>
         )
         .join(``)}`;
 
-// --- sRGB ⇄ OKLab. The matrices are Björn Ottosson's published constants.
+// sRGB to OKLab; matrices are Björn Ottosson's published constants.
 export const rgbToOklch = (rgb: readonly [number, number, number]): Oklch => {
     const [R, G, B] = [srgbToLinear(rgb[0]), srgbToLinear(rgb[1]), srgbToLinear(rgb[2])];
     const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
@@ -71,8 +64,7 @@ const oklchToRgb = ({ L, C, h }: Oklch): readonly [number, number, number] => {
     ] as const;
 };
 
-// A hair of slack, so a colour that lands on the edge of the gamut by float error is not treated as outside it
-// and mapped for nothing.
+// Small slack so float error at the gamut edge isn't treated as out-of-gamut.
 const inGamut = (rgb: readonly [number, number, number]): boolean => rgb.every((c) => c >= -1e-4 && c <= 1.0001);
 // Twenty halvings of the chroma range resolve far finer than the 8-bit channel this lands in.
 const GAMUT_STEPS = 20;
@@ -92,11 +84,8 @@ export const maxChroma = (L: number, h: number): number => {
     return fits;
 };
 
-/* Out of gamut, CHROMA is what gives way, never lightness, never hue. Clipping each channel at 0 and 1 (the
- * obvious move) yields LIGHTNESS quietly: the colour lands near the requested one, a little off the requested
- * hue, and short of whatever separation the caller was placing it for. Holding L and h and searching for the
- * chroma that fits is CSS Color 4's gamut mapping, and the same trade every browser makes for an
- * out-of-gamut oklch(), so a colour computed here and a colour written as CSS agree. */
+// Out of gamut, chroma gives way, never lightness or hue: clipping channels would silently shift both. This
+// matches CSS Color 4's own gamut mapping, so a colour computed here agrees with an out-of-gamut oklch() in CSS.
 export const oklchToHex = (colour: Oklch): string => {
     if (inGamut(oklchToRgb(colour))) {
         return rgbToHex(oklchToRgb(colour));
@@ -111,8 +100,8 @@ export const hexToOklch = (hex: string): Oklch | undefined => {
 };
 
 /**
- * The one spelling of a colour, `#rrggbb`, lowercase, so that two of them can be compared as strings.
- * Byte-exact: this expands and lowercases, it does not go near a colour space, so nothing rounds.
+ * Canonical `#rrggbb` lowercase spelling, for comparing two colours as strings. Byte-exact: expands and lowercases
+ * without touching the colour space, so nothing rounds.
  */
 export const canonicalHex = (hex: string): string | undefined => {
     const rgb = hexToRgb(hex);

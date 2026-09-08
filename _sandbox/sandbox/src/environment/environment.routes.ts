@@ -7,26 +7,21 @@ import { readEnvironmentContents } from "./contents.js";
 import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";
 
-/* The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile). Members see the state; only
- * the owner approves (copying it to the approved file) or rejects (deleting the proposal). The rebuild itself
- * runs OUTSIDE the container, recreate.sh locally, the workspace provider on a server, pinned to the approved
- * hash, so approval here never mutates the running sandbox. Plain Hono routes before the oRPC catch-all. */
+// The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile): members read it, only the owner
+// approves (copies it to the approved file) or rejects (deletes the proposal). The rebuild itself runs outside the
+// container, pinned to the approved hash, so approval here never mutates the running sandbox. Plain Hono routes, ahead
+// of the oRPC catch-all.
 
 export const createEnvironmentRoutes = (services: Services) => ({
     /** GET /environment */
     read: async (c: Context<AppEnv>): Promise<Response> => c.json(await readEnvironment(services)),
-    /* GET /environment/contents. The same sandbox read as CONTENTS rather than as a recipe, what it has, with
-     * each tool's version read back from the tool. A route of its own because it costs process spawns:
-     * /environment above is polled by the shell's rebuild banner and re-fetched on every write under
-     * .intentic/environment., and making that pay for forty version checks would be a tax on the whole app for
-     * one tab. `refresh` re-probes, which is what the card's refresh button is for, a tool installed
-     * mid-session is otherwise cached as missing. */
+    // The same sandbox read as contents, versions read back from the tool, rather than the recipe; split out since
+    // /environment is polled constantly and version probes would tax every tab. `refresh` avoids caching a mid-session
+    // install as missing.
     contents: async (c: Context<AppEnv>): Promise<Response> => {
         if (c.req.query("refresh") !== undefined) {
             clearVersionCache();
-            // The drift half of "it says X but I just changed it": re-probe now, not at the next idle tick.
-            // Not awaited — the sweep persists its snapshot and the watcher invalidates `environment`, so the
-            // card refetches when the answer lands rather than holding this response on a find walk.
+            // Not awaited: the sweep persists its own snapshot and the watcher refetches when the answer lands.
             void services.driftSweep.refresh();
         }
         return c.json(await readEnvironmentContents(services));
@@ -66,13 +61,8 @@ export const createEnvironmentRoutes = (services: Services) => ({
         await rejectEnvironment(services);
         return c.json(await readEnvironment(services));
     },
-    /* POST /environment/runtime-install. The owner answering ONE line of the runtime-install list, which until
-     * now had no answer at all: rejecting a whole proposal was the only route to a tombstone, so a recurring
-     * install nobody wanted baked went on being reported forever. `adopt` writes the tool's overlay draft on
-     * the spot (the sweep's recurrence and corroboration gates exist to justify a draft nobody asked for; this
-     * owner asked), `dismiss` tombstones it and takes its auto-draft with it, `restore` undoes that.
-     * Owner-gated for the reason approve is: it decides what gets built into the image every turn then runs
-     * on. */
+    // Owner decision on one recurring install: `adopt` writes its draft immediately, bypassing the sweep's gates since
+    // the owner asked; `dismiss` tombstones it and its auto-draft, `restore` undoes that. Owner-gated, like approve.
     runtimeInstall: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
         if (denied !== undefined) {

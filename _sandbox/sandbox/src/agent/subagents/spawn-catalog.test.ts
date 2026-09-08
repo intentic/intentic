@@ -3,22 +3,14 @@ import { expect, test } from "vitest";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { spawnableProviders, spawnCatalogText } from "./spawn-catalog.js";
 
-/* WHAT A PARENT MAY SPEND ON A CHILD, which the spawn door now requires it to name (children.ts): `provider`
- * and `model` are mandatory, so this listing is the half that makes the requirement fair.
- *
- * What is pinned here is the three states staying apart, because they call for different things next: a
- * measured pool with room (a number the caller can compare), a measured pool that is FULL (left out entirely —
- * the listing is what can actually run — with the provider's own renewal instant kept so the row can say when
- * it comes back), and NOTHING MEASURED, which is the honest answer for Cursor, for a user's own endpoint, and
- * for an account never polled. The last one is listed rather than dropped: "no reading" is not "no allowance",
- * and hiding a working provider behind a gap in our own bookkeeping is the failure mode this file exists to
- * avoid. */
+// Pins the three account states this listing must tell apart: measured with room, measured and full (excluded, but
+// keeps the reopen instant), and unmeasured (listed, since no reading isn't no allowance).
 
 const window = (over: Partial<UsageWindow> & Pick<UsageWindow, "kind">): UsageWindow => ({ utilization: 10, gates: "all", ...over });
 const usage = (...windows: UsageWindow[]): AccountUsage => ({ windows, measuredAt: 1_000 });
 
-// Claude connected with two accounts, and nothing else: `testProviderCatalogs` answers for every provider, so
-// readiness is what decides which rows appear at all.
+// Claude connected with two accounts and nothing else; testProviderCatalogs answers for every provider, so readiness
+// alone decides which rows appear.
 const claudeOnly = (accounts: Record<string, AccountUsage>) =>
     services({
         claudeStore: { list: async () => Object.keys(accounts).map((id) => ({ id, label: id })) as never },
@@ -34,7 +26,7 @@ test("reports the most headroom any one account has, and names only a pool the p
         }),
     );
     const claude = rows.find((row) => row.id === "claude");
-    // The BEST account answers: one account with room is enough to run the turn.
+    // The best account answers: one with room is enough to run the turn.
     expect(claude?.models[0]?.headroom).toEqual({ percentLeft: 60 });
     expect(claude?.spent).toBe(0);
 });
@@ -57,27 +49,25 @@ test("leaves out a model whose every account is at the cap, and keeps when it co
     const claude = rows.find((row) => row.id === "claude");
     expect(claude?.models).toEqual([]);
     expect(claude?.spent).toBe(1);
-    // The SOONEST of them, since any one pool reopening makes the provider spendable again.
+    // The soonest reopen wins, since any one pool reopening makes the provider spendable again.
     expect(claude?.reopensAt).toBe(4_000);
 });
 
 test("lists a model nothing measures rather than dropping it: no reading is not no allowance", async () => {
-    // An account on file with no windows at all is the unmeasured case, and it must not read as spent.
+    // An account on file with no windows at all is the unmeasured case; it must not read as spent.
     const rows = await spawnableProviders(claudeOnly({ never_polled: usage() }));
     const claude = rows.find((row) => row.id === "claude");
     expect(claude?.models).toEqual([{ id: "opus", label: "Opus" }]);
     expect(claude?.spent).toBe(0);
 });
 
-/* A COOLING credential is one the translator is routing around right now, whatever its last quota reading
- * says, so its headroom must not be advertised: a percentage taken off an account nothing can reach is worse
- * than no percentage at all. */
+// A cooling credential is being routed around right now, whatever its quota reading says, so its headroom must not be
+// advertised.
 test("does not count an account the proxy is routing around", async () => {
     const roomy = usage(window({ kind: "seven_day", label: "Weekly", gates: "all", utilization: 5 }));
     const composed = services({
         claudeStore: { list: async () => [] as never },
-        // Codex authenticates through the translator, so its readiness rung needs one configured before the row
-        // reaches the listing at all; the cooling flag is what this test is actually about.
+        // Codex authenticates through the translator, so a configured one is needed before the row appears at all.
         config: withTranslator,
         cliProxy: {
             ...codexConnectedProxy,
@@ -90,7 +80,7 @@ test("does not count an account the proxy is routing around", async () => {
         },
     });
     const codex = (await spawnableProviders(composed)).find((row) => row.id === "codex");
-    // Cooling counts as spent, so the model is out of the listing rather than shown with 95% left.
+    // Cooling counts as spent: the model drops from the listing rather than showing 95% left.
     expect(codex?.models).toEqual([]);
     expect(codex?.spent).toBe(1);
 });
@@ -109,7 +99,7 @@ test("renders each of the three states in its own words", () => {
         Date.now(),
     );
     expect(text).toContain("claude: opus (Weekly 60% left)");
-    // Unmetered is said as itself: Cursor publishes no quota, and inventing a number for it would be a lie.
+    // Unmetered is said as itself: Cursor publishes no quota, and inventing a number would be a lie.
     expect(text).toContain("cursor: auto (not metered)");
     expect(text).toContain("codex: every model is out of allowance, renews in about 3h");
 });

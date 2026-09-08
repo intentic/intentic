@@ -8,31 +8,25 @@ import { sshOf } from "../lib/ssh.js";
 import type { IngressPair } from "./route.js";
 import { exposeRoute, routeId } from "./route.js";
 
-// The backing catalog: each abstract capability mapped to the concrete resource its provider deploys, the
-// per-app binding resource that provisions an app's isolated credentials on it, the pinned image, and
-// whether instances of it route publicly. Adding a capability is one entry here plus a provider, the
-// authoring surface (i.want.database / cache) is unchanged. Auth / object-storage land in Phase 2.
+// Backing catalog: each capability maps to its resource type, per-app binding type, pinned image, and whether it
+// routes publicly. Adding a capability is one entry here plus a provider; the authoring surface is unchanged.
 interface BackingSpec {
     readonly type: ResourceType;
     readonly bindingType: ResourceType;
     readonly image: string;
-    // Whether an instance is exposed through Cloudflare. database/cache are internal-only (false): apps reach
-    // them over the host's internal ip, never a tunnel-routed hostname.
+    // Whether an instance routes through Cloudflare; database/cache stay internal-only.
     readonly routes: boolean;
 }
 
 const catalog: Readonly<Record<BackingCapability, BackingSpec>> = {
     database: { type: "postgres", bindingType: "postgres-database", image: IMAGES.postgres, routes: false },
     cache: { type: "valkey", bindingType: "valkey-namespace", image: IMAGES.valkey, routes: false },
-    // auth always routes (the OIDC issuer must be a public HTTPS URL browsers redirect to). object-storage is
-    // internal-only by default; it routes only when the author gives it a domain (for external/browser access).
+    // auth always routes (issuer must be a public HTTPS URL); object-storage routes only when given a domain.
     auth: { type: "authentik", bindingType: "authentik-client", image: IMAGES.authentik, routes: true },
     "object-storage": { type: "garage", bindingType: "garage-bucket", image: IMAGES.garage, routes: false },
 };
 
-// The env vars a binding injects into a consuming app's deployments, each mapping an env var name to the
-// output it reads off the per-app binding node. Spread before the author's env so an explicit override wins.
-// REDIS_URL is an alias of VALKEY_URL so libraries that default to it work without extra config.
+// Env vars a binding injects, spread before the author's env; REDIS_URL aliases VALKEY_URL.
 const envContract: Readonly<Record<BackingCapability, readonly (readonly [string, string])[]>> = {
     database: [["DATABASE_URL", "url"]],
     cache: [
@@ -52,21 +46,17 @@ const envContract: Readonly<Record<BackingCapability, readonly (readonly [string
     ],
 };
 
-// The generated admin secret key a backing instance and its binding nodes share (same key -> same value via
-// .secrets.json), so a binding can authenticate to the instance to mint per-app credentials. database/cache
-// authenticate the binding with this; auth shares a bootstrap API token (below); object-storage's binding
-// uses the local `garage` CLI (no shared secret needed).
+// Admin secret shared by an instance and its bindings (same key -> same value) to authenticate.
 const adminSecretKey = (capability: BackingCapability, instanceId: string): string =>
     secretKey(capability === "database" ? "POSTGRES_ADMIN_PASSWORD" : "VALKEY_ADMIN_PASSWORD", instanceId);
 
-// The bootstrap API token an Authentik instance mints on first boot and its per-app client bindings reuse to
-// call its API. Shared via .secrets.json (same key -> same value).
+// Bootstrap API token Authentik mints on first boot; per-app bindings reuse it via the shared secret key.
 const authBootstrapTokenKey = (instanceId: string): string => secretKey("AUTHENTIK_BOOTSTRAP_TOKEN", instanceId);
 
-// The capability-specific inputs an instance node carries beyond the shared base (ssh + internalIp +
-// publishPort + image). database/cache: a generated superuser/requirepass password. auth: Authentik's secret
-// key + bootstrap admin token/password + bundled Postgres password + the bundled pg/redis image pins + its
-// public domain. object-storage: Garage's RPC secret + admin token + S3 region (+ domain when exposed).
+// Capability-specific inputs beyond the shared base (ssh + internalIp + publishPort + image):
+// database/cache: a generated admin password.
+// auth: secret key, bootstrap token + password, bundled db password, pg/redis image pins, domain.
+// object-storage: region and, when exposed, domain.
 const instanceExtra = (intent: BackingIntent): Record<string, unknown> => {
     switch (intent.capability) {
         case "database":
@@ -83,9 +73,8 @@ const instanceExtra = (intent: BackingIntent): Record<string, unknown> => {
                 redisImage: IMAGES.valkey,
             };
         case "object-storage":
-            // The Garage CLI (the binding mints buckets/keys with it) talks to the local node over RPC, whose
-            // secret the provider generates host-side once (it needs 32 bytes / 64 hex, longer than a generated()
-            // value), so no admin token/RPC secret is threaded here. region is fixed; domain only when exposed.
+            // Garage's RPC secret is generated host-side (needs 64 hex, more than generated() gives), not threaded
+            // here.
             return {
                 region: "garage",
                 ...(intent.domain !== undefined ? { domain: intent.domain } : {}),
@@ -93,10 +82,8 @@ const instanceExtra = (intent: BackingIntent): Record<string, unknown> => {
     }
 };
 
-// A backing instance: one node deployed onto its host over SSH from a pinned image, with a deterministic host
-// port. The provider's apply blocks until healthy, so no readyWhen gate. When the capability routes (auth
-// always; object-storage when a domain is given) it also emits a Cloudflare route + ingress, aggregated onto
-// the host's tunnel by emit. apiToken authorizes the cf-route's DNS write.
+// One backing instance node deployed onto its host over SSH; apply blocks until healthy, so no readyWhen gate.
+// When the capability routes (auth always, object-storage with a domain) it also emits a Cloudflare route + ingress.
 export const resolveBacking = (intent: BackingIntent, host: HostInput, apiToken: SecretRef): { nodes: ResolvedNode[]; ingress: IngressPair[] } => {
     const spec = catalog[intent.capability];
     const node: ResolvedNode = {
@@ -128,16 +115,13 @@ export const resolveBacking = (intent: BackingIntent, host: HostInput, apiToken:
     return { nodes, ingress };
 };
 
-// The per-app binding node for one app consuming one backing instance: it provisions the app's isolated
-// sub-resource (Postgres database+role / Valkey ACL user / OIDC client / Garage bucket+key) on the instance
-// and produces the connection credentials injected into the app's deployments. Depends on the instance so it
-// runs once it is healthy. `appDomains` are the consuming app's environment domains, used to whitelist OIDC
-// redirect URIs (auth only).
+// Per-app binding node for one app consuming one backing instance: provisions its isolated sub-resource (db+role
+// / ACL user / OIDC client / bucket) and produces the injected connection credentials. `appDomains` whitelist
+// OIDC redirect URIs (auth only).
 export const resolveBinding = (appId: string, intent: BackingIntent, host: HostInput, appDomains: readonly string[]): ResolvedNode => {
     const spec = catalog[intent.capability];
     const id = bindingId(appId, intent.id);
-    // The instance to act on (its node id, stamped as the container's intentic.id label) + the SSH block to
-    // reach the host. Per-capability instance refs (host coordinates / url / endpoint) are added below.
+    // Instance to act on (its node id, the container's intentic.id label) + the SSH block to reach the host.
     const shared = { ...sshOf(host), instance: intent.id };
     const node = (inputs: Record<string, unknown>): ResolvedNode => ({ id, type: spec.bindingType, inputs, explicitDependsOn: [intent.id] });
     switch (intent.capability) {
@@ -151,8 +135,7 @@ export const resolveBinding = (appId: string, intent: BackingIntent, host: HostI
                 password: generated(secretKey("APP_DATABASE_PASSWORD", id)),
             });
         case "cache":
-            // A Valkey ACL user scoped to the app's key prefix; the binding needs the admin password to run
-            // ACL SETUSER (valkey-cli auths with requirepass).
+            // Valkey ACL user scoped to the app's key prefix; needs the admin password to run ACL SETUSER.
             return node({
                 ...shared,
                 instanceHost: makeRef<string>(intent.id, "internalHost"),
@@ -163,11 +146,7 @@ export const resolveBinding = (appId: string, intent: BackingIntent, host: HostI
                 keyPrefix: cacheUser(appId),
             });
         case "auth": {
-            // A per-app Authentik OAuth2 provider + application. Unlike the SSH bindings, this calls Authentik's
-            // REST API over HTTP at its PUBLIC url (like the Komodo deployment provider), so it carries no SSH
-            // block and depends on the instance's route being live. client_id/secret are generated and set on
-            // the provider, so outputs need no read-back; the issuer is https://<domain>/application/o/<slug>/.
-            // redirectDomains whitelist any path under each consuming app domain.
+            // Per-app Authentik client; calls Authentik's public API over HTTP, so it depends on the route being live.
             if (intent.domain === undefined || intent.expose === undefined) {
                 throw new Error(`auth backing "${intent.id}" must be exposed with a domain; declare it with i.want.auth({ expose, domain })`);
             }
@@ -187,8 +166,7 @@ export const resolveBinding = (appId: string, intent: BackingIntent, host: HostI
             };
         }
         case "object-storage":
-            // A per-app Garage bucket + access key, minted via the local `garage` CLI (docker exec). The
-            // endpoint injected into the app is the instance's host-internal S3 endpoint (apps reach it locally).
+            // Per-app Garage bucket + key minted via the local `garage` CLI; endpoint is host-internal.
             return node({
                 ...shared,
                 endpoint: makeRef<string>(intent.id, "internalEndpoint"),
@@ -198,8 +176,7 @@ export const resolveBinding = (appId: string, intent: BackingIntent, host: HostI
     }
 };
 
-// The env injection an app's deployments receive for one binding: each contract var as a ref to the binding
-// node's output. Used by resolveApp to merge into every deployment's env (before the author's own env).
+// Env injection for one binding: each contract var as a ref to the binding node's output.
 export const bindingEnv = (appId: string, intent: BackingIntent): Record<string, Ref<string>> => {
     const id = bindingId(appId, intent.id);
     const env: Record<string, Ref<string>> = {};

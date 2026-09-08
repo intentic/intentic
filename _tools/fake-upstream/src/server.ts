@@ -2,30 +2,13 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readBody, sendJson } from "./http.ts";
 
-/* A STAND-IN FOR THE MODEL THE FREE TRIAL SPENDS. Google's two surfaces, served locally, deterministically.
- *
- * The platform's trial is the one place this product sits on the command path, and until now nothing exercised
- * it end to end: `trial.routes.ts` was covered by unit tests with an injected `fetch`, which proves the routing
- * and proves nothing about the wire. This serves the wire. `TRIAL_BASE_URL` is already config and already
- * documented as "any OpenAI-compatible upstream", so pointing the platform here needs NO product change.
- *
- * It mirrors Google's URL SHAPE rather than inventing one, because the shape is relied on: `nativeModelsUrl`
- * derives the native listing by stripping a trailing `/openai` from the configured base, so a stand-in served
- * at some flat `/v1` would silently take the "upstream will not say what its models can do" branch and the
- * discovery path this exists to cover would never run. Base is `/v1beta/openai`; the native listing sits one
- * segment up at `/v1beta/models`, exactly as it does at Google.
- *
- * IT ENFORCES THE TWO DIALECTS, and that is the point of a fake that could otherwise have answered everything.
- * The compatibility shim reads `Authorization: Bearer`; Google's own surface beside it refuses a bearer outright
- * and wants `x-goog-api-key` (trial-pool.ts carries the account of the 401 that taught us). A stand-in that
- * accepted either would go green on precisely the mix-up that broke the catalog in the field, so each surface
- * here refuses the other's credential the way the real one does.
- */
+// Local stand-in for Google's two surfaces the free trial hits, serving the real wire instead of an injected fetch.
+// Mirrors Google's URL shape exactly (`/v1beta/openai` base, native listing one segment up) since nativeModelsUrl
+// derives it that way. Each surface refuses the other's credential, the mix-up this fake exists to catch.
 
-// What a caller reads back, so a test can assert the reply it saw in a browser came from here and nowhere else.
+// Lets a test prove a reply it saw in the browser came from here, not elsewhere.
 export const DEFAULT_REPLY = `Hello from the intentic test upstream.`;
-// Deliberately not a real Google id: anything reaching the real upstream with these is a misconfiguration we
-// want to see fail, not one that quietly works.
+// Not a real Google id on purpose: hitting the real upstream with this should fail loudly, not quietly work.
 export const DEFAULT_MODELS: readonly string[] = [`fake-flash-latest`];
 
 export interface FakeUpstreamOptions {
@@ -46,10 +29,8 @@ export interface FakeUpstream {
     close(): Promise<void>;
 }
 
-/* The credential each surface accepts, and the refusal each gives the OTHER one's.
- *
- * `undefined` means "answer normally". A string is the refusal message, returned as 401 in the same shape the
- * real surface uses, so a platform-side mix-up fails here with the sentence that names it. */
+// Credential each surface accepts, and the refusal for the other's. undefined answers normally; a string is the 401
+// message in the real surface's shape, naming the mix-up.
 const compatKey = (request: IncomingMessage): { key?: string; refusal?: string } => {
     const authorization = request.headers.authorization;
     if (authorization === undefined || !authorization.startsWith(`Bearer `)) {
@@ -59,8 +40,7 @@ const compatKey = (request: IncomingMessage): { key?: string; refusal?: string }
 };
 
 const nativeKey = (request: IncomingMessage): { key?: string; refusal?: string } => {
-    // Google's own answer to a bearer, and the reason `UpstreamAuth` exists: handed one it stops looking for an
-    // API key at all. Reproduced here so the platform sending the wrong dialect fails in a test, not in a picker.
+    // Google stops looking for an API key once handed a bearer; reproduced so the wrong dialect fails in a test.
     if (request.headers.authorization !== undefined) {
         return { refusal: `Expected OAuth 2 access token, the native surface takes x-goog-api-key, not a bearer` };
     }
@@ -91,8 +71,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
             const url = new URL(request.url ?? `/`, `http://localhost`);
             const route = `${request.method ?? `GET`} ${url.pathname}`;
 
-            // Google's native listing: the ONLY surface that says what a model can do, which is why the trial's
-            // catalog asks it before publishing anything.
+            // Only surface that says what a model can do; the trial's catalog asks it before publishing anything.
             if (route === `GET /v1beta/models`) {
                 const { key, refusal } = nativeKey(request);
                 if (refusal !== undefined || key === undefined) {
@@ -104,8 +83,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                 return sendJson(response, 200, {
                     models: models.map((id) => ({
                         name: `models/${id}`,
-                        // The capability the trial actually spends. Without it the platform reads the model as
-                        // one that cannot be chatted with and drops it, the filter this fake exists to feed.
+                        // Capability the trial actually spends; without it the platform drops the model as unchattable.
                         supportedGenerationMethods: [`generateContent`, `countTokens`],
                     })),
                 });
@@ -119,8 +97,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                 if (refuseKeys.has(key)) {
                     return sendJson(response, 429, { error: { message: `quota exceeded`, type: `rate_limit_error` } });
                 }
-                // Prefixed the way Google prefixes them, so the platform's `bareId` strip is exercised rather
-                // than bypassed by a fake that helpfully answered in the shape the platform wanted.
+                // Prefixed like Google, so the platform's bareId strip actually runs instead of being bypassed.
                 return sendJson(response, 200, { object: `list`, data: models.map((id) => ({ id: `models/${id}`, object: `model` })) });
             }
 
@@ -148,9 +125,8 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
                     });
                 }
-                /* Streamed as SSE, because the trial route pipes upstream's body straight through and the agent
-                 * on the far end reads frames. A fake that only ever answered plain JSON would leave the whole
-                 * streaming path, the one a user actually watches, uncovered. */
+                // SSE because the trial route pipes the body straight through to an agent reading frames; JSON-only
+                // here would leave the whole streaming path uncovered.
                 response.writeHead(200, { "content-type": `text/event-stream`, "cache-control": `no-cache`, connection: `keep-alive` });
                 response.write(chunk(model, { role: `assistant`, content: `` }, null));
                 response.write(chunk(model, { content: reply }, null));
@@ -159,8 +135,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                 return response.end();
             }
 
-            // Liveness, for whatever is waiting on this container. Unauthenticated on purpose: a readiness probe
-            // that needs a credential is a probe that reports the credential's health, not the server's.
+            // Unauthenticated on purpose: a readiness probe needing a credential tests the credential, not the server.
             if (route === `GET /health`) {
                 return sendJson(response, 200, { ok: true, models });
             }

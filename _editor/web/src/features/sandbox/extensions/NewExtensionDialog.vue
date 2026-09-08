@@ -3,28 +3,16 @@ import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 
-/* NEW EXTENSION: the whole form, because there is almost nothing to ask.
- *
- * What this creates is a RUNNING extension, not a project to set up: the daemon writes a manifest and one ESM
- * file that the host loads by its bytes, so there is no install, no build and no first-run failure to debug. That
- * is why the dialog asks for a name and stops. Every other decision an extension eventually needs: what it
- * draws, which files it watches, whether it may reach the daemon at all: is better made against something that
- * already runs than guessed at in a form, and is made by editing the two files this writes (or by asking an
- * agent to).
- *
- * THE PUBLISHER IS A FIELD, not a constant, because it is half of the identity the extension is installed under
- * everywhere (`publisher.name`), and after publication changing it is a rename rather than an edit. It defaults
- * to `workspace`: true of a draft that lives only here, and visibly not a real publisher, so anyone who intends
- * to publish has a reason to set theirs before the name is one people have installed. */
+// Creates a running extension, not a project: the dialog only asks for a name, and further decisions are made by
+// editing the two files it writes. Publisher defaults to `workspace`, a placeholder to replace before publishing
+// under a real identity.
 
 const open = defineModel<boolean>({ required: true });
-// `wish` is the author's own words, passed on untouched: the tab turns it into the agent's brief, because that
-// brief is about the contribution surface rather than about this form.
+// `wish` is the author's own words, untouched: the tab turns it into the agent's brief.
 const emit = defineEmits<{ created: [{ id: string; dir: string; wish: string }] }>();
 const { create } = defineProps<{ create: (publisher: string, name: string) => Promise<{ id: string; dir: string }> }>();
 
-// The same shape the manifest schema demands and the daemon re-checks: `name` becomes a directory, so a value
-// this rejects is one that could not be written anyway.
+// Mirrors the manifest schema's slug rule: `name` becomes a directory, so a rejected value can't be written.
 const SLUG = /^[a-z0-9][a-z0-9-]*$/u;
 
 const publisher = ref(`workspace`);
@@ -33,8 +21,7 @@ const wish = ref(``);
 const busy = ref(false);
 const failure = ref<NoticeModel>();
 
-// A second extension must not inherit the first one's name or the first one's brief, and a previous failure must
-// not greet a fresh open.
+// Resets name, wish and any previous failure so a second extension doesn't inherit the first one's state.
 watch(open, (shown) => {
     if (shown) {
         name.value = ``;
@@ -86,8 +73,7 @@ const submit = async (): Promise<void> => {
                     />
                 </label>
             </div>
-            <!-- Said once, under both fields, because the rule is the same for each and it is the only way to
-                 get this wrong: lower case, digits and hyphens, starting with a letter or digit. -->
+            <!-- States the rule once for both fields: lower case, digits and hyphens, starting with a letter or digit. -->
             <span class="text-2xs text-subtle">
                 Lower case, digits and hyphens.
                 <template v-if="ready"
@@ -96,9 +82,7 @@ const submit = async (): Promise<void> => {
                 >
             </span>
 
-            <!-- The field the whole feature is for. Optional, and last, because the two above are the only ones
-                 that must be right: an extension created with this empty is a working stub to edit by hand, and
-                 an extension created with it filled is one an agent starts on before the dialog has closed. -->
+            <!-- Optional, and last: empty leaves a stub to edit by hand, filled starts an agent on it before dialog closes. -->
             <label class="flex flex-col gap-1">
                 <span :class="ui.sectionLabel()">What should it do?</span>
                 <textarea v-model="wish" :class="ui.input()" rows="3" placeholder="show what shipped this week, read from the git log"></textarea>

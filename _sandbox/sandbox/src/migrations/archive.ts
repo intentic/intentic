@@ -6,27 +6,16 @@ import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
 
-/* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD, a gzipped tar of `~/.hermes` (or wherever the source tool
- * kept house), landed as a bounded in-memory file map the adapters can be PURE over.
- *
- * In memory rather than on disk, deliberately: the archive is a credential store (an .env, an auth.json), and
- * a temp file would be a second place those bytes live, with a lifetime somebody has to remember. A held map
- * dies with the daemon process and with the DELETE route, and nothing under /work or /history ever holds the
- * raw upload. What makes the map safe to hold is that it is BOUNDED, the caps below are not tuning, they are
- * the difference between "the user's config and notes" and "their session logs and SQLite", which the plan
- * refuses anyway and which would otherwise dominate the bytes.
- *
- * Decoder failures are the caller's fault and say so (a 400 at the route), exactly bundle-arrival.ts's split: gunzip
- * answers Z_DATA_ERROR for anything that is not gzip, tar-stream throws on a malformed member, and neither may
- * escape as a 500 the owner reads as "the sandbox broke". */
+// Reads a gzipped tar of a foreign home directory into a bounded in-memory file map adapters can be pure over. Held in
+// memory, not on disk: the archive is a credential store, and a temp file would be a second place those bytes live.
+// Decoder failures are the caller's fault (400), never a 500, matching bundle-arrival.ts.
 
 export class MigrationFormatError extends ArrivalFormatError {}
 
 export interface ForeignArchive {
     // Archive-relative, forward-slash, `./` stripped. Values are the raw bytes; adapters decode.
     readonly files: ReadonlyMap<string, Buffer>;
-    // What the reader declined to hold, as path prefixes/names, merged into the plan's `refused` so the owner
-    // sees the archive was read selectively rather than trusting that it all "made it".
+    // What the reader declined, merged into the plan's `refused` so the owner sees it wasn't read wholesale.
     readonly skipped: readonly string[];
 }
 
@@ -37,8 +26,7 @@ const normalize = (name: string): string | undefined => {
         .replaceAll("\\", "/")
         .split("/")
         .filter((part) => part !== "" && part !== ".");
-    // An absolute path or a `..` segment is an archive trying to name something outside itself. The map is
-    // keyed relatively so nothing could escape anyway, refusing keeps the skip list honest about the attempt.
+    // An absolute path or `..` is an escape attempt; refusing it keeps the skip list honest.
     if (name.startsWith("/") || parts.includes("..")) {
         return undefined;
     }
@@ -99,11 +87,8 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
     return { files, skipped: [...skipped].toSorted((left, right) => left.localeCompare(right)) };
 };
 
-/* Rebase the map onto the directory that holds `anchor`, the file that proves where the tool's home starts.
- * `tar czf setup.tar.gz -C ~ .hermes` puts everything under `.hermes/`; packing from inside the directory puts
- * `config.yaml` at the root; a GUI archiver adds its own folder. All three are the same setup, and making the
- * user re-pack over a prefix would be a formality dressed up as a format. Shortest match wins so a nested
- * lookalike (a skill that ships its own `config.yaml`) cannot claim the root from the real one. */
+// Rebases the map onto the directory holding `anchor`, so packing with -C, from inside it, or via a GUI archiver's own
+// folder all read the same. Shortest match wins, so a nested lookalike can't claim the root.
 export const rebaseArchive = (files: ReadonlyMap<string, Buffer>, anchor: string): ReadonlyMap<string, Buffer> | undefined => {
     const prefixes = [...files.keys()]
         .filter((path) => path === anchor || path.endsWith(`/${anchor}`))

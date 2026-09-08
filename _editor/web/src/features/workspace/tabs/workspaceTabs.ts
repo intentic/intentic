@@ -1,16 +1,15 @@
 import type { DiffPayload } from "@intentic/extension-api";
 
-/* Open items in the Workspace editor area. A tab is a filesystem file (the path is its identity) or a diff
- * (a synthetic id per diff source + file).
- * useWorkspaceTabs owns the list + active id; FileTabs.vue renders it; the Changes and History panels emit
- * diff payloads that Workspace.vue turns into diff tabs. A `directory` tab is a repository's management surface
- * (DirectoryOperator); a `health` tab is one repo's codebase-health report (CodebaseHealth.vue). A `document` tab is the open-ended
- * one: whatever an extension's document provider has to say about a DIRECTORY, its architecture page, its git
- * history, rendered by that provider beside the code it explains rather than in a routed area away from it;
- * see core-views/documentRegistry.ts. */
+// Open items in the Workspace editor area, rendered by FileTabs.vue and owned by useWorkspaceTabs (list + active id):
+// file → the path is its identity.
+// diff → a synthetic id per diff source + file, built from a Changes/History payload.
+// directory → a repository's management surface (DirectoryOperator).
+// health → one repo's codebase-health report (CodebaseHealth.vue).
+// document → open-ended: whatever an extension's document provider says about a directory (architecture, git
+// history), rendered beside the code it explains (documentRegistry.ts).
 
-// A jump to a line in the open file (a content-search match). `seq` makes every jump a fresh identity, so
-// re-clicking the SAME hit after scrolling away still re-reveals, a bare line number couldn't re-fire.
+// Jump to a line in the open file, from a content-search match. `seq` gives every jump a fresh identity, so
+// re-clicking the same hit still re-reveals it.
 export interface LineJump {
     readonly line: number;
     readonly seq: number;
@@ -18,9 +17,7 @@ export interface LineJump {
 
 export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
-    // Everything a diff payload carries except the two fields that only exist to BUILD the identity, `id` is
-    // what `key` + `scope` + `path` resolve to (see diffTabId), so keeping them beside it would be two spellings
-    // of the same fact.
+    // Diff payload minus `key`/`scope`: `id` already resolves them (diffTabId); keeping both duplicates one fact.
     | ({ readonly kind: "diff"; readonly id: string } & Omit<DiffPayload, "key" | "scope">)
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
     | { readonly kind: "health"; readonly id: string; readonly repo: string }
@@ -32,29 +29,21 @@ export type WorkspaceTab =
           readonly provider: string;
           // The directory the document explains, root-relative ("" = the workspace root).
           readonly path: string;
-          // The strip draws itself from these rather than from the provider, so a restored tab has a name and a
-          // glyph before its extension has activated, and still has them if that extension never comes back.
+          // Copied onto the tab, not read from the provider, so a restored tab has a label before activation.
           readonly title: string;
           readonly icon: string;
       };
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 
-/* THE EDITOR AREA IS TWO PANES, and it is two rather than N on purpose. The reading this exists for is one
- * document beside one file: a commit's changed-file list beside the diff it names, a README beside the code it
- * describes. A third column in the workspace pane (which already gives width to the explorer, and often to the
- * chat) is narrower than either half of a diff needs, so the split is a pair and the seam between them is the
- * only geometry there is.
- *
- * `side` is the companion. It exists only while it holds tabs: emptying it is how the split closes, and nothing
- * else has to remember that a split was ever open. */
+// Two panes, not N: this exists for one document beside one file, and a third column would be narrower than
+// either needs. `side` exists only while it holds tabs; emptying it is how a split closes.
 export type EditorPane = "main" | "side";
 
 export const otherPane = (pane: EditorPane): EditorPane => (pane === `main` ? `side` : `main`);
 
-// One pane's strip: its tabs in order, which of them is focused, and which one is merely being looked at (see
-// OpenMode). Each pane has a preview slot of its OWN: a peek in the companion pane must not replace the
-// document the reader is peeking FROM.
+// One pane's strip: tabs in order, the focused one, and the one merely being looked at. Each pane owns its
+// preview slot, so a companion-pane peek can't replace the document it was opened from.
 export interface PaneState {
     readonly tabs: readonly WorkspaceTab[];
     readonly active: string | null;
@@ -66,14 +55,9 @@ export type EditorStrip = Record<EditorPane, PaneState>;
 export const emptyPane = (): PaneState => ({ tabs: [], active: null, preview: null });
 export const emptyStrip = (): EditorStrip => ({ main: emptyPane(), side: emptyPane() });
 
-/* THE SPLIT HAS NO EMPTY HALF. Two rules, both of which exist so a pane can never sit there as a blank column
- * with a × the reader has to find:
- *
- *   the side empties  → the split is simply over, and the focus goes back to the pane that is left;
- *   the main empties  → the side takes its place (VSCode collapses the group the same way), rather than leaving
- *                       an empty column on the left of the thing being read.
- *
- * Applied after every close and every move, so no caller has to remember either one. */
+// The split has no empty half. Applied after every close and every move, so no caller has to remember either rule:
+// side empties → the split is over; focus returns to the remaining pane.
+// main empties → the side takes its place (VSCode collapses the group the same way).
 export const normalizeStrip = (strip: EditorStrip, focused: EditorPane): { strip: EditorStrip; focused: EditorPane } => {
     if (strip.side.tabs.length === 0) {
         return { strip: { main: strip.main, side: emptyPane() }, focused: `main` };
@@ -84,8 +68,8 @@ export const normalizeStrip = (strip: EditorStrip, focused: EditorPane): { strip
     return { strip, focused };
 };
 
-// Drop a set of ids from one pane. The active id only moves when it was one of the closed ones, falling back to
-// the last remaining tab (VSCode behaviour); a closed preview gives up the slot.
+// Drops ids from one pane. Active only moves if it was closed, falling back to the last remaining tab (VSCode);
+// a closed preview gives up its slot.
 const closeInPane = (pane: PaneState, close: ReadonlySet<string>): PaneState => {
     const tabs = pane.tabs.filter((tab) => !close.has(tab.id));
     return {
@@ -95,9 +79,8 @@ const closeInPane = (pane: PaneState, close: ReadonlySet<string>): PaneState => 
     };
 };
 
-// Close a set of tabs across BOTH panes (a single ×, "Close Others", "Close to the Right", "Close All"), then
-// normalize. Also reports which file paths need their edit buffer forgotten, the one part of a close the model
-// has no business doing (see useEditBuffers).
+// Closes tabs across both panes (a single ×, Close Others/Right/All), then normalizes. Also reports file paths
+// whose edit buffer needs forgetting.
 export const closeTabs = (
     strip: EditorStrip,
     focused: EditorPane,
@@ -116,12 +99,8 @@ export const paneOf = (strip: EditorStrip, id: string): EditorPane | undefined =
     return strip.side.tabs.some((tab) => tab.id === id) ? `side` : undefined;
 };
 
-/* Send a tab to the other pane ("Open to the Side", and the command behind it). It is a MOVE, not a copy: one
- * tab per id in the whole editor keeps every id-keyed thing in this view (the edit buffer, the diff stat, the
- * reveal) about one place on screen.
- *
- * The moved tab arrives focused and kept: asking for it in the other pane is a deliberate gesture, so it must
- * not land in a slot the next peek would take. */
+// Sends a tab to the other pane ("Open to the Side"). A move, not a copy: one tab per id keeps every id-keyed
+// thing (edit buffer, diff stat, reveal) tied to one place. Arrives focused and kept, never into the preview slot.
 export const moveTab = (strip: EditorStrip, id: string, to: EditorPane): { strip: EditorStrip; focused: EditorPane } => {
     const from = paneOf(strip, id);
     if (from === undefined || from === to) {
@@ -141,21 +120,12 @@ export const moveTab = (strip: EditorStrip, id: string, to: EditorPane): { strip
     return normalizeStrip(moved, to);
 };
 
-/* How an open treats the strip, decided by the GESTURE, not by the caller's opinion of the file.
- *
- * `preview` is the strip's single transient slot (VSCode's italic tab), for a look-at-this: a click in the
- * explorer, a search hit, a row in Changes. The NEXT preview takes its place, so reading through twenty files
- * leaves one tab behind instead of twenty nobody meant to keep.
- *
- * `keep` is an ordinary tab, the user asked for THIS file and it stays until they close it. Three gestures ask:
- * a double-click (on the row or on the tab), the tab menu's Keep Open, and typing into a previewed file. So does
- * every arrival from outside the explorer, a deep link, a file mention in the chat, Quick Open, because none of
- * those is browsing, and VSCode keeps those too. */
+// By gesture, not the file: `preview` is one transient slot (italic tab) the next look replaces; `keep` is an
+// ordinary tab, from a double-click, Keep Open, an edit, or any non-explorer arrival.
 export type OpenMode = "keep" | "preview";
 
-// Where a newly opened tab lands. One that is already open is refreshed in place, a diff's content moves on
-// between two looks, and re-opening must never stack a second tab for the same id. Otherwise it takes the
-// position of the tab it replaces (the outgoing preview, so the slot stays put), or the end of the strip.
+// Where a newly opened tab lands: an already-open id is refreshed in place, never stacked twice. Otherwise it
+// takes the replaced tab's position (the outgoing preview, so the slot stays put) or the end of the strip.
 export const placeTab = (tabs: readonly WorkspaceTab[], tab: WorkspaceTab, replaceId: string | null): readonly WorkspaceTab[] => {
     const open = tabs.findIndex((existing) => existing.id === tab.id);
     if (open !== -1) {

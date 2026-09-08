@@ -5,10 +5,8 @@ import { runHostedCanary } from "./hosted-canary.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { testIngressConfig } from "../../testing.js";
 
-/* WHAT THE CANARY IS FOR, in one sentence: the health sweep can see a machine go missing, and cannot see a
- * lane that is intact but no longer works. Production sat for days with six sandboxes provisioned and not one
- * daemon check-in among them, and nothing on the platform said a word, because from the inside that is
- * indistinguishable from six people who opened the page and wandered off. */
+// Catches a lane that's intact but broken: the health sweep only notices a machine going missing, not one that never
+// checks in at all.
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const nap = () => Promise.resolve();
@@ -40,8 +38,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         },
     }) as unknown as Config;
 
-// The canary's own sandbox row, and the announce it is waiting for: `lastSeenAt` is written by the daemon
-// checking in, so a fixture that sets it IS a machine that came up.
+// lastSeenAt is written by the daemon's check-in; setting it in a fixture means a machine that came up.
 const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) => {
     const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, tunnelId: `abcdef012345`, ownerId: `canary-user` };
     const prisma = {
@@ -77,16 +74,14 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
-// The whole provider surface one canary run touches: the hub's namespace and account, then Fly's cold build,
-// then the teardown.
+// Every provider surface one canary run touches: the hub's namespace/account, Fly's cold build, then teardown.
 const stubProviders = (over: { machine?: () => Response; starter?: () => Response } = {}) => {
     const calls: { method: string; url: string }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
         const method = init?.method ?? `GET`;
         const target = String(url);
         calls.push({ method, url: target });
-        // The starter site's preview address, asked through the edge the way a browser would (the daemon's
-        // preview-probe path); serving unless a test says otherwise.
+        // The starter's preview address, probed the way the daemon does; serves unless a test overrides it.
         if (target.includes(`/__intentic/preview-probe`)) {
             return Promise.resolve((over.starter ?? (() => json({ proxy: `intentic-preview`, target: `panel`, state: `serving` })))());
         }
@@ -115,8 +110,7 @@ const stubProviders = (over: { machine?: () => Response; starter?: () => Respons
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    // A capacity refusal is remembered for a few minutes, in the module rather than in any fixture: one case
-    // teaching the next that the provider is full would make the rest of this file describe a different world.
+    // Resets capacity memory (module-level, not fixture-level) so one test's refusal doesn't leak into the next.
     forgetProviderCapacity();
 });
 
@@ -126,19 +120,15 @@ describe(`the provisioning canary`, () => {
         const prisma = prismaWith(new Date());
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(true);
-        // Green means the whole thing a person meets: the daemon checked in AND the starter answered at its
-        // preview address, timed from the provision.
+        // Green requires both: the daemon checked in and the starter answered at its preview address.
         expect(result.starterServingInMs).toEqual(expect.any(Number));
         expect(calls.some((entry) => entry.url.startsWith(`https://preview-site--landing-`) && entry.url.includes(`/__intentic/preview-probe`))).toBe(
             true,
         );
-        // The teardown is not optional: a canary that leaks machines costs more than the outage it watches for.
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    /* THE OTHER FAILURE PEOPLE MET: a machine that checked in perfectly and opened on "site isn't running". The
-     * platform's rows and the announce both read healthy; only asking the starter's own address finds it. */
     it(`fails when the daemon checks in but the starter never serves`, async () => {
         stubProviders({ starter: () => json({ proxy: `intentic-preview`, target: `panel`, state: `starting` }) });
         const prisma = prismaWith(new Date());
@@ -150,8 +140,6 @@ describe(`the provisioning canary`, () => {
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
-    /* THE FAILURE THIS EXISTS TO CATCH: provisioning succeeds, Fly is happy, the row is written, and the
-     * daemon never speaks. Nothing else on the platform can tell that apart from an ordinary abandoned signup. */
     it(`fails when the machine is built but never checks in`, async () => {
         stubProviders();
         const prisma = prismaWith(null);
@@ -170,11 +158,6 @@ describe(`the provisioning canary`, () => {
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
-    /* A FULL LANE IS A DIFFERENT REPORT FROM A BROKEN ONE, and telling them apart is the whole value of this
-     * check: "provisioning is broken" about a platform that has merely run out of machines sends an operator
-     * looking for a fault that does not exist, and the refusal a reader would meet ("set it up on your own
-     * computer in the meantime") is the wrong half of the story to mail the person who can raise the
-     * allowance. This run is also what teaches the platform it is full, so the next one stands down. */
     it(`says the lane is out of machines in the operator's words, not the reader's`, async () => {
         stubProviders({ machine: () => json({ error: `You have reached the maximum number of machines for this app` }, 422) });
         const prisma = prismaWith(new Date());
@@ -184,9 +167,6 @@ describe(`the provisioning canary`, () => {
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
-    /* …and the run after it spends nothing at all. On a fleet at its ceiling the canary's machine and the next
-     * person's are the same machine, so a check that provisioned anyway would take somebody's sandbox to prove
-     * that sandboxes can be taken. */
     it(`stands down entirely while the lane is full`, async () => {
         const fetchSpy = vi.fn();
         vi.stubGlobal(`fetch`, fetchSpy);

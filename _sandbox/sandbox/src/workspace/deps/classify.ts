@@ -3,22 +3,17 @@ import { extname, join } from "node:path";
 import type { WorkspaceBucket, WorkspaceClassification, WorkspaceTree } from "@intentic/sandbox-contract";
 import { fileTypeFromFile } from "file-type";
 
-// Precise local mirror of a walked tree node. zod's recursive `get children()` degrades to Record<string,unknown>[]
-// when WorkspaceTreeEntry is emitted to a cross-package .d.ts, so the contract type is opaque to consumers, we
-// traverse against this instead and cast once at the entry point (walkWorkspaceTree is the source of this shape).
+// Local mirror of a walked tree node: zod's recursive `get children()` degrades to `Record<string, unknown>[]` in a
+// cross-package .d.ts, so we cast once at the entry point instead (walkWorkspaceTree is the source of this shape).
 type TreeNode = { name: string; path: string; type: "file" | "dir"; size?: number; ignored?: boolean; children?: TreeNode[] };
 
-// Deterministic, no-LLM workspace classifier, a 3-stage cascade (repo markers → magic bytes → extension/text
-// fallback) that sorts what the user dropped into /work into coarse buckets. It runs over the already-walked
-// WorkspaceTree (walkWorkspaceTree) and skips its `ignored` entries (node_modules, .git, .gitignore'd), so it only
-// ever classifies the tracked workspace and never traverses the disk a second time. Read-only: it proposes, it
-// never moves.
+// Deterministic, no-LLM workspace classifier: a 3-stage cascade (repo markers, magic bytes, extension/text fallback)
+// sorting /work into coarse buckets. Runs over the already-walked WorkspaceTree, skipping `ignored` entries, so it
+// never touches disk itself and only proposes, never moves anything.
 
 type Item = WorkspaceClassification["classifications"][number];
 
-// Stage 1, a directory holding any of these at its root is one repository unit; classify it and stop descending
-// (its contents belong to the repo, not the workspace). `.git` is a grayed `ignored` entry we skip, so detection
-// rides on the project manifests, which is the reliable signal anyway.
+// Stage 1: a directory holding any of these at its root is one repo unit, not descended into further.
 const REPO_MARKERS = new Set([
     "package.json",
     "go.mod",
@@ -44,8 +39,7 @@ const repoMarker = (children: readonly TreeNode[]): string | undefined => {
     return undefined;
 };
 
-// Stage 2, magic-byte MIME → bucket. Prefix classes cover the media families; the exact sets pin document and
-// archive containers (docx/xlsx/pptx resolve to their own OOXML mimes via file-type, not "application/zip").
+// Stage 2: magic-byte MIME to bucket; docx/xlsx/pptx resolve to OOXML mimes, not "application/zip".
 const DOC_MIMES = new Set([
     "application/pdf",
     "application/msword",
@@ -79,8 +73,7 @@ const mimeBucket = (mime: string): WorkspaceBucket | undefined => {
     return undefined;
 };
 
-// Stage 3, extension → bucket, for the many text-based formats magic bytes are blind to (.md, .csv, .svg have
-// no signature) and formats file-type doesn't sniff.
+// Stage 3: extension to bucket, for text formats magic bytes can't see (.md, .csv, .svg have no signature).
 const EXT_BUCKET: Record<string, WorkspaceBucket> = {
     ".pdf": "documents",
     ".doc": "documents",
@@ -118,8 +111,8 @@ const EXT_BUCKET: Record<string, WorkspaceBucket> = {
     ".bz2": "archives",
 };
 
-// Last-resort text sniff for extension-less, magic-less files (READMEs, notes): UTF-8-ish with no NUL and no
-// stray control bytes reads as a document; anything else is opaque binary → other.
+// Last-resort text sniff for extension-less, magic-less files: UTF-8-ish with no NUL or stray control bytes reads as a
+// document, otherwise it's opaque binary.
 const isProbablyText = async (abs: string): Promise<boolean> => {
     const fd = await open(abs, "r");
     try {
@@ -142,8 +135,7 @@ const isProbablyText = async (abs: string): Promise<boolean> => {
 const classifyFile = async (abs: string, path: string): Promise<Item> => {
     const magic = await fileTypeFromFile(abs);
     if (magic) {
-        // A recognized binary we don't bucket (e.g. application/wasm) is still "other", but keep the mime as the
-        // explainable reason.
+        // A recognized binary with no bucket (e.g. application/wasm) is still "other", keeping the mime as the reason.
         return { path, bucket: mimeBucket(magic.mime) ?? "other", reason: `magic:${magic.mime}` };
     }
     const ext = extname(path).toLowerCase();
@@ -157,14 +149,14 @@ const classifyFile = async (abs: string, path: string): Promise<Item> => {
     return { path, bucket: "other", reason: "unknown" };
 };
 
-// Classify a walked workspace tree. Repo dirs collapse to one entry (not descended); every other loose file gets
-// a bucket. `root` resolves the tree's root-relative paths back to absolute for the magic/text reads.
+// Classifies a walked tree: repo dirs collapse to one entry without descending, every other loose file gets a bucket.
+// `root` resolves root-relative paths back to absolute for magic/text reads.
 export const classifyWorkspace = async (root: string, tree: WorkspaceTree): Promise<WorkspaceClassification> => {
     const classifications: Item[] = [];
     const visit = async (entries: readonly TreeNode[]): Promise<void> => {
         for (const entry of entries) {
             if (entry.ignored) {
-                continue; // grayed (node_modules, .git, .gitignore'd), not part of the dropped workspace
+                continue; // Grayed (node_modules, .git, .gitignore'd): not part of the dropped workspace.
             }
             if (entry.type === "dir") {
                 const children = entry.children ?? [];

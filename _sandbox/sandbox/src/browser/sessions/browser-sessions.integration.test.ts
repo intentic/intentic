@@ -22,29 +22,18 @@ test("a browser tool's server and session name are derived the same way everywhe
     expect(browserServerOfTool("mcp__hashline__hashline_edit")).toBeUndefined();
     expect(browserServerOfTool("Bash")).toBeUndefined();
 
-    // Eight characters of the SDK session id: the same slice agentSessionName takes, so a conversation's
-    // shell and its browser are visibly the pair they are.
+    // Eight chars of the id, the same slice agentSessionName takes.
     expect(browserSessionName("abcd1234-5678-90ab-cdef-1234567890ab")).toBe("browser-abcd1234");
     expect(browserSessionName("!!!")).toBeUndefined();
 });
 
-/* THE SEAM NOTHING ELSE COVERS: that the browser the agent drives and the browser the daemon watches are the
- * same browser. Every part of it is real: the MCP spec this daemon builds, a Chromium it launches itself, the
- * PreToolUse hook the SDK would fire, and a CDP attach over the debugging port that spec asked for. Mocking any
- * of it would only prove the mock.
- *
- * The page is served from loopback so the test needs no network, and the whole thing stands down where the
- * image has no Chromium (a CI host that skipped the browser install), exactly as browser-tools.integration.test.ts does. */
+// Exercises the real seam: an actual MCP server, real Chromium, real CDP attach, no mocks.
+// Skips when the image has no Chromium installed.
 const SESSION_ID = "e2e11111-2222";
 const SESSION = "browser-e2e11111";
 
-/* Wait for something Chromium does on its own timetable: a paint lands, a tab appears, a frame arrives:
- * rather than sleeping a guess past it. Every wait below used to be a fixed sleep and the screencast's was the
- * one that lost: the high-resolution still is DEBOUNCED 400ms off the LAST motion frame, and capturing it makes
- * the page repaint, so the stream self-sustains on a ~550ms cycle with the first webp ~600ms in. That fits
- * inside a 1500ms sleep on an idle machine and does not when sixteen vitest workers and a second Chromium are
- * running, and the suite then reported a browser bug that was a stopwatch. The cap is generous and finite, so a
- * REAL regression still fails on the assertion that follows instead of hanging to the test timeout. */
+// Polls for a real event instead of sleeping a guess; capped so a real regression still fails on the assertion instead
+// of hanging to the timeout.
 const settle = async (until: () => boolean): Promise<void> => {
     for (let attempt = 0; attempt < 200 && !until(); attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -67,7 +56,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
     const url = `http://127.0.0.1:${(site.address() as { port: number }).port}/`;
 
     const child = spawn(web.command, web.args, { env: web.env, stdio: ["pipe", "pipe", "pipe"] });
-    // Minimal stdio JSON-RPC client: the MCP answers one line per message, correlated by id.
+    // Newline-delimited JSON-RPC over stdio, correlated by id.
     let buffered = "";
     const pending = new Map<number, (message: unknown) => void>();
     child.stdout.on("data", (chunk: Buffer) => {
@@ -98,19 +87,18 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         await call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1" } });
         child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
 
-        // What the SDK does: the PreToolUse hook fires with the tool name and session id, THEN the tool runs.
+        // PreToolUse fires with the tool name and session id before the tool runs.
         const hook = browserSessionHooks(ports).PreToolUse?.[0]?.hooks[0];
         const input = { hook_event_name: "PreToolUse", tool_name: "mcp__web__browser_navigate", session_id: SESSION_ID, tool_input: { url } };
         await hook?.(input as never, "t1", { signal: new AbortController().signal });
 
-        // The session exists from the hook alone: before Chromium has painted anything, which is what puts it
-        // on the rail at the start of a slow first navigation rather than after it.
+        // Session exists from the hook alone, before Chromium paints anything.
         expect(listBrowserSessions().map((session) => session.name)).toContain(SESSION);
 
         const navigate = await call("tools/call", { name: "browser_navigate", arguments: { url } });
         expect(navigate.result?.isError ?? false).toBe(false);
 
-        // The daemon's own attach sees the page the MCP created, and can stream it.
+        // Daemon's own attach sees the page the MCP created.
         const context = await browserSessionContext(SESSION);
         expect(context).toEqual(expect.any(Object));
         const formats: string[] = [];
@@ -122,24 +110,19 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
 
         const listed = listBrowserSessions().find((session) => session.name === SESSION);
         expect(listed?.running).toBe(true);
-        // The page's own account of itself, which is what the session's pill says.
         expect(listed?.label).toBe("Probe Page");
         expect(listed?.server).toBe("web");
-        // Motion frames while it paints, then (400ms after it settles) the high-resolution still that is what
-        // anyone actually reads. A stream that only ever sent jpeg would mean the settle capture never fired.
+        // jpeg frames while painting; webp only after it settles into a high-res still.
         expect(formats).toContain("jpeg");
         expect(formats).toContain("webp");
 
-        // ONE page so far, and it is the active one: the tab strip's first tab.
         expect(listed?.pages).toHaveLength(1);
         const first = listed?.pages[0];
         expect(first?.url).toBe(url);
         expect(first?.title).toBe("Probe Page");
         expect(first?.active).toBe(true);
 
-        // A second tab, opened the way the agent opens one. Both list, the NEW one is active (it is what the
-        // agent just drove), and the ids are distinct, which is what lets the strip tell them apart across a
-        // relist even though they are the same url.
+        // New tab becomes active; ids stay distinct across a relist even for the same url.
         const opened = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
         expect(opened.result?.isError ?? false).toBe(false);
         await settle(() => pagesOf() >= 2);
@@ -148,16 +131,13 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         expect(new Set(twoTabs?.pages.map((page) => page.id)).size).toBe(twoTabs?.pages.length);
         expect(twoTabs?.pages.filter((page) => page.active)).toHaveLength(1);
 
-        // Every listed page can be bound: that round trip (list an id → get a Page back) is the whole
-        // contract the view's tab strip rests on.
+        // list to bind round trip (id to Page) is the tab strip's whole contract.
         for (const page of twoTabs?.pages ?? []) {
             expect(browserSessionPage(SESSION, page.id)).toEqual(expect.any(Object));
         }
         expect(browserSessionPage(SESSION, "p-nope")).toBeUndefined();
 
-        /* PINNING: once the user picks a tab, a tab the agent opens next must not steal the picture. Without
-         * this the strip would be a lie: you would click a page, the agent would open another, and you would
-         * silently be watching something you never chose. */
+        // A tab the agent opens next must not steal the picture from one the owner pinned.
         const pinTarget = browserSessionPage(SESSION, twoTabs?.pages[0]?.id ?? "");
         expect(pinTarget).toEqual(expect.any(Object));
         const pinnedCast = await startScreencast(context!, () => {});
@@ -166,19 +146,16 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             const boundToFirst = pinnedCast.attached();
             const third = await call("tools/call", { name: "browser_tabs", arguments: { action: "new" } });
             expect(third.result?.isError ?? false).toBe(false);
-            // Wait for the tab to LAND rather than for a guess at how long that takes: the pin has proved
-            // nothing until there is a page the stream could have been stolen by.
+            // Waits for the third tab to actually land before checking the pin held.
             await settle(() => pagesOf() >= 3);
             expect(pagesOf()).toBeGreaterThanOrEqual(3);
-            // Same CDP session as before the new tab: the stream never moved.
+            // attached() equality here means the same CDP session; the stream didn't move.
             expect(pinnedCast.attached()).toBe(boundToFirst);
         } finally {
             await pinnedCast.stop();
         }
 
-        /* PAUSED MEANS SILENT. A view whose tab went to the background holds its binding but must stop costing
-         * tunnel bandwidth, and the only honest way to check that is to make the page repaint while paused and
-         * see nothing arrive. The navigation doubles as what the agent "ended on" for the assertions below. */
+        // Paused must hold the binding but emit nothing while backgrounded; this nav is the session's final page below.
         let whilePaused = 0;
         const pausedCast = await startScreencast(context!, () => {
             whilePaused += 1;
@@ -188,12 +165,11 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             whilePaused = 0;
             const repaint = await call("tools/call", { name: "browser_navigate", arguments: { url } });
             expect(repaint.result?.isError ?? false).toBe(false);
-            // The one wait here that stays a sleep, because "nothing arrived" has no arrival to wait for. It is
-            // also the one that cannot flake the way the others could: a slower machine sends FEWER frames, and
-            // fewer than none is not a thing.
+            // Sleep, not poll: there's no arrival to wait for, and a slow machine sending fewer frames still satisfies
+            // zero.
             await new Promise((resolve) => setTimeout(resolve, 1000));
             expect(whilePaused).toBe(0);
-            // And one frame away from coming back: no reconnect, no rebind.
+            // Unpausing needs no reconnect or rebind; the next frame just arrives.
             await pausedCast.setPaused(false);
             await settle(() => whilePaused > 0);
             expect(whilePaused).toBeGreaterThan(0);
@@ -201,17 +177,13 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
             await pausedCast.stop();
         }
 
-        // The kill route's half: closing the browser ends the session, and the row stays readable afterwards:
-        // including where the agent went, which is the point of keeping a finished session listable at all.
+        // Closing ends the session but keeps its row, including where the agent went, listable afterward.
         await closeBrowserSession(SESSION);
         const dead = listBrowserSessions().find((session) => session.name === SESSION);
         expect(dead?.running).toBe(false);
         expect(dead?.pages.length).toBeGreaterThanOrEqual(2);
         expect(dead?.finishedAt).toBeGreaterThan(0);
-        /* AND IT STILL SAYS WHERE IT ENDED. A finished session labels off the last page the agent DROVE, not off
-         * the live active slot: that slot is walked back by every closing page, and Chromium going away closes
-         * them all, so reading it here left every finished pill saying "web" at exactly the moment its label was
-         * the only thing left to tell two records apart. */
+        // A finished session's label is the last page it drove, not the active slot every closing page walks back.
         expect(dead?.label).toBe("Probe Page");
         expect(dead?.pages.filter((page) => page.active)).toHaveLength(1);
         // Nothing to bind once the Chromium is gone; the handles it still lists are dead.

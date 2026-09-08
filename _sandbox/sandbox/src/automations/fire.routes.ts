@@ -9,30 +9,18 @@ import { rateWindow } from "../store/rate-window.js";
 import { remoteIpOf } from "./public-door.js";
 import { fireAutomation, PAYLOAD_MAX } from "./scheduler.js";
 
-/* POST /automations/:id/fire. Webhook fire for event automations: external systems (GitHub/Sentry/monitors)
- * POST here to wake the agent, authenticated by the door's own token (auth/door-tokens.ts), as `?token=…`, the
- * one mechanism every webhook sender supports, or as `authorization: Bearer …` from a caller that can set a
- * header and so keep the credential out of every log between it and this daemon. Enforced ALWAYS (fail-closed
- * even in loopback, unlike /enroll: a door with no credential admits nobody), which is why the route is exempt
- * from the bearer middleware in app.ts. The body (any format, capped) reaches the guard as AUTOMATION_PAYLOAD
- * and is appended to the wake prompt. Responds immediately; the agent turn runs detached, exactly like a
- * scheduler fire.
- *
- * TWO CEILINGS, the same pair every public door has (public-door.ts, gate.routes.ts): a rate window per
- * automation and caller address, so a monitor that flaps cannot fire ten wakes a second, and a daily budget per
- * automation, because a rate bounds the minute without bounding the day and every wake is billed to the owner.
- * Both refuse BEFORE anything is spent, and the daily one is spent last so a call refused for another reason
- * has not eaten a turn. */
+// POST /automations/:id/fire wakes an event automation from a webhook, authenticated by the door token (`?token=` or
+// `Authorization: Bearer`) and enforced even in loopback, unlike /enroll. The body reaches the guard as
+// AUTOMATION_PAYLOAD; the route responds immediately while the agent turn runs detached.
 
-// Arrivals a minute per automation and caller before the door answers 429. Generous for a webhook that
-// legitimately bursts (a push fans out a few deliveries), tight against a loop.
+// Arrivals per minute, per automation and caller, before 429; generous for bursts, tight against a loop.
 const FIRE_RATE_MAX = 30;
 
 const window = rateWindow(60_000);
 const daily = dailyBudget();
 
-// The refusal a ceiling answers with, or nothing when the call is admitted. Rate first and budget last, so a
-// caller over the minute has not spent from the day.
+// Refusal message from the first ceiling hit, or undefined if admitted. Rate checked before budget, so a caller over
+// the minute never spends from the day.
 const ceilingRefusal = (id: string, dailyMax: number | undefined, ip: string | undefined, now: number): string | undefined => {
     if (window.limited(`${id}:${ip ?? "?"}`, FIRE_RATE_MAX, now)) {
         return "rate limited";
@@ -62,8 +50,7 @@ export const createAutomationFireRoute =
             return c.json({ error: refused }, 429);
         }
         const payload = await c.req.text();
-        // A webhook is an outside message too, so its wake opens a surfaced conversation like a Discord mention's
-        // does, the sender is a system, not a person, so the origin carries no author or channel.
+        // Webhook wakes surface like a Discord mention; origin has no author or channel since the sender is a system.
         void fireAutomation(services, automation, streamAgent, {
             ...(payload === "" ? {} : { payload }),
             origin: { automationId: automation.id, provider: "webhook" },

@@ -15,15 +15,8 @@ import {
 } from "@intentic/sandbox-run";
 import { buildCommand, type CommandContext } from "@stricli/core";
 
-/* HOW BIG THE MACHINE IS, read from where this verb happens to be standing.
- *
- * This CLI answers from inside a throwaway `docker run -i --rm` probe container that carries no --memory of its
- * own, so /proc/meminfo here reports the docker ENGINE's total: the WSL guest on Windows, the Docker Desktop VM
- * on macOS, the host itself on native Linux. In all three that is exactly the number the cap should be a share
- * of, and it costs no round-trip to the machine, because the flow was already going to start this container.
- *
- * Unreadable or unparseable means we could not measure, and localSandboxMemory() falls back to its constants
- * rather than sizing a cgroup off a guess. */
+// Reads the docker engine's memory from /proc/meminfo inside this throwaway probe container: the engine total is what a
+// share should be taken of. Unreadable means unmeasured; the caller falls back to its own constants.
 const engineMemoryBytes = (): number => {
     try {
         return Number(/^MemTotal:\s+(\d+) kB$/mu.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) * 1024;
@@ -32,8 +25,8 @@ const engineMemoryBytes = (): number => {
     }
 };
 
-// And how many cores it has, by the same argument: an uncapped probe sees the engine's own count, which is the
-// ceiling a CPU ask is held to. 0 when it cannot be read, which localSandboxCpus treats as "honour the ask as typed".
+// Same argument, for cores: an uncapped probe sees the engine's own count, the ceiling a CPU ask is held to. 0 when
+// unreadable, which the caller treats as "honour the ask as typed".
 const engineCpus = (): number => {
     try {
         return availableParallelism();
@@ -42,21 +35,7 @@ const engineCpus = (): number => {
     }
 };
 
-/* THE OWNER'S STANDING ASKS, seeded onto a container that does not carry them yet.
- *
- * Each of these lives ON the sandbox, in the contract's replay allowlist, so every recreate reads it back off the
- * container being replaced. But "said once" needs a first time, and a container that does not carry the value
- * has nowhere to be read from. So the runner hands it to this probe as a docker `-e`, exactly once, and the
- * image writes it onto the container it emits — which is what turns `SANDBOX_MEMORY=10g ic …` (or `ic sandbox
- * reshape`) into a standing cap rather than a one-run argument.
- *
- * Three answers, read off the probe's own environment, which carries nothing the runner did not put there:
- *   - absent    ⇒ replay whatever the old container carried (the ordinary recreate)
- *   - a value   ⇒ that value, replacing the old one — a fresh ask outranks what the container carried
- *   - empty     ⇒ CLEAR it: back to the derived cap, no CPU ceiling, no owner directives. The one shape only a
- *                 deliberate `reshape … default` produces; the runners never forward a blank from their own shell.
- * Merged BEFORE the allowlist filter so the winning value is re-emitted onto the new container like any other
- * replayed pair. */
+// Seeds owner asks from the probe's env onto the replayed pairs: absent keeps the old value, empty clears it.
 const SEEDED_ENV = ["SANDBOX_MEMORY", "SANDBOX_CPUS", HOST_RUNTIME_ENV] as const;
 export const seeded = (dumped: readonly (readonly [string, string])[], probeEnv: Readonly<Record<string, string | undefined>>): [string, string][] =>
     SEEDED_ENV.reduce<[string, string][]>(
@@ -71,9 +50,8 @@ export const seeded = (dumped: readonly (readonly [string, string])[], probeEnv:
         dumped.map(([name, value]) => [name, value]),
     );
 
-/* WHAT THE RUNNER DECIDED FOR THIS LAUNCH, off its flags: the four facts a recreate sets per run rather than
- * replaying (the contract's SandboxRun says why each is runner-set). Present only when the flag carried
- * something — an empty `--channel` would pin the sandbox to a channel named "" on the next update. */
+// The four facts a recreate sets per run rather than replaying (from its flags); included only when the flag actually
+// carried something.
 const runnerFacts = (flags: {
     environmentHash?: string;
     channel?: string;
@@ -85,27 +63,13 @@ const runnerFacts = (flags: {
         ...(given(flags.environmentHash) ? { environmentHash: flags.environmentHash } : {}),
         ...(given(flags.channel) ? { channel: flags.channel } : {}),
         ...(given(flags.previousImage) ? { previousImage: flags.previousImage } : {}),
-        // Decoded here and re-encoded by the emitter: the contract's `definition` field is the TOML text,
-        // so every caller (this CLI, the hosted provisioner) hands over the same thing.
+        // Decoded here, re-encoded by the emitter, so `definition` stays the same TOML text for every caller.
         ...(given(flags.definitionB64) ? { definition: Buffer.from(flags.definitionB64, "base64").toString("utf8") } : {}),
     };
 };
 
-/* THE RUN CONTRACT, SPOKEN BY THE IMAGE, `intentic sandbox run-command`.
- *
- * The sandbox creation scripts (connect.sh, recreate.sh, connect.ps1) are standalone curl|sh files: they can
- * import nothing, so for years they hand-copied the docker-run shape behind "keep in lockstep" comments, and
- * the lockstep broke (the SYS_ADMIN drift, see @intentic/sandbox-run). This verb is how they stop copying:
- * every flow already has the target image in hand (pulled, built, or local) and the image carries this CLI,
- * so the script asks THE IMAGE ITSELF what its run command is and executes the answer. The contract ships
- * with the image, a stale script still runs a new image correctly.
- *
- * Env rides stdin as printenv -0 output (NUL-framed. HOST_SSH_KEY is a multi-line key, line framing
- * re-splits it): a recreate pipes `docker exec <old> printenv -0` straight in, connect pipes the pairs its
- * wizard collected. Filtering to the replay allowlist happens here, in TS, where it is tested.
- *
- * Output is the complete `docker run …` line, shell-quoted (--format sh, the default), or the argv as JSON
- * for PowerShell to splat (--format json). Nothing else goes to stdout, the caller executes it verbatim. */
+// Lets curl|sh scripts ask the image for its run command instead of hand-copying it. Env rides stdin as NUL-framed
+// `printenv -0`; output is a quoted command line or a JSON argv.
 export const sandboxRunCommandCli = buildCommand<{
     slug: string;
     image: string;
@@ -187,22 +151,15 @@ export const sandboxRunCommandCli = buildCommand<{
         },
     },
     func(this: CommandContext, flags) {
-        // stdin carries NAME=VALUE pairs, NUL-framed; empty input means a fresh container with no env to carry.
-        // The runner's seeds (see `seeded`) are merged over it before the allowlist filter.
+        // stdin carries NUL-framed NAME=VALUE pairs (empty = a fresh container); the runner's seeds merge in first.
         const env = replayableEnv(seeded(parseNulEnv(readFileSync(0, "utf8")), process.env));
         const replayed = (name: string): string | undefined => env.find(([key]) => key === name)?.[1];
-        // The loopback shortcut's port derives from the sandbox id, which derives from the connect token this
-        // container is already being handed, so no flow computes an address, and a recreate reproduces the
-        // same port by replaying the same token. A run with no token (bare dev) publishes nothing.
+        // Loopback port derives from the connect token already on this container; no token means no publish.
         const sandboxId = sandboxIdFromToken(replayed("CONNECT_TOKEN") ?? "");
-        /* The local shape's ceilings, sized to this machine — or to the owner's own asks, replayed off the
-         * container being replaced, on a machine the derived share is wrong about. The hosted shape drops them
-         * entirely in the contract. Read from the ALLOWLISTED pairs, not the raw stdin dump, so each var has to
-         * earn its place in REPLAY_ENV to be honoured, and is re-emitted for the next recreate. */
+        // Sized to this machine or a replayed owner ask; read from allowlisted pairs so each var earns re-emission.
         const memory = localSandboxMemory(engineMemoryBytes(), replayed("SANDBOX_MEMORY"));
         const cpus = localSandboxCpus(engineCpus(), replayed("SANDBOX_CPUS"));
-        // The owner's own directives, from the same allowlist the overlay's are held to: a bad token stops the
-        // recreate by name here exactly as an overlay's would.
+        // Owner's directives share the overlay's allowlist: a bad token stops the recreate the same way.
         const hostRuntime = hostRuntimeOf(replayed(HOST_RUNTIME_ENV));
         const run = {
             names: sandboxNames(flags.slug),
@@ -216,8 +173,7 @@ export const sandboxRunCommandCli = buildCommand<{
             unsupported: (flags.unsupported ?? "").split(/\s+/).filter((token) => token !== ""),
             ...runnerFacts(flags),
             env,
-            // The caller hands the directive LINES through; extraction + allowlist validation both live in the
-            // contract, so a typo'd or smuggled token stops the recreate with its name.
+            // Directive lines pass through as-is; extraction and allowlist checks live in the contract.
             runtime: runtimeDirectivesOf(flags.runtime ?? ""),
             mounts: (flags.mounts ?? "").split("\n").filter((mount) => mount !== ""),
             dns: (flags.dns ?? "").split(/\s+/).filter((server) => server !== ""),

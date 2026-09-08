@@ -28,23 +28,15 @@ import { type RepoStanding, repoStandings, standingNote } from "./repoStandings"
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
 
-/* Pipelines: a DevOps-grade CI dashboard. A top-bar picker scopes the board to one repository or to all of them,
- * the summary counts ride the title row beside it, runs are grouped by repo, and each row auto-fetches its jobs
- * and renders an inline GitLab-style connected-circles pipeline graph. Clicking a stage circle pops over job
- * details; clicking the chevron expands a full horizontal job flow, which is where the runs on a branch's newest
- * commit start out: the ones still going, and the ones that failed there. */
+// A DevOps-grade CI dashboard: a top-bar picker scopes the board to one repository or all of them, counts ride the
+// title row, runs group by repo, and each row auto-fetches its jobs and renders an inline connected-circles graph. A
+// stage circle pops job details; the chevron expands the full job flow.
 
 const api = host();
 const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
 
-/* WHICH REPOSITORY THE BOARD IS SCOPED TO LIVES IN THE URL, so "is intentic red" is a link somebody can be sent.
- * Derived from the query rather than mirrored into a ref: one direction of flow, and Back/Forward work for free.
- * Absent means every repository, which is why it is `undefined` rather than a sentinel: the tidy URL is the one
- * you get by default.
- *
- * A selection the workspace no longer maps is not a scope. It resolves against the standings rather than being
- * trusted, so a repo that was disconnected since the link was made falls back to the whole board instead of
- * stranding it on a page about nothing. */
+// Repository scope lives in the URL query, not a mirrored ref, so it's linkable and Back/Forward work. A repo the
+// workspace no longer maps resolves against current standings and falls back to the whole board.
 const standings = computed(() => repoStandings(repos.value, runs.value));
 const scope = computed(() => standings.value.find((standing) => standing.repo.repo === api.route.query()[`repo`]));
 const scopeRepo = computed<string | undefined>({
@@ -52,45 +44,21 @@ const scopeRepo = computed<string | undefined>({
     set: (value) => api.route.setQuery({ repo: value }),
 });
 
-/* WHAT THE BOARD SPENDS A CARD ON. Under "all repositories", a repository with no runs and no webhook warning is
- * a rail row and nothing more: it has one sentence to say and it was saying it in a 112px bordered card, four of
- * which filled the whole first screen above the only repository that runs pipelines at all. A hook warning keeps
- * a runless repository in the body on purpose: it is the explanation for the silence, and hiding the answer
- * along with the question is how a board starts lying (repoStandings.ts has the full ranking).
- *
- * Ask for one repository and you get it whatever it has to say, empty state included: that is the answer to the
- * question you just asked, and it is where the "No runs yet" sentence now lives. */
+// Under 'all repositories', a runless repo with no hook warning is dropped from the body (rail row only); one with a
+// warning stays, to explain the silence. Scoping to one repository always shows it, empty state included.
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
 
-/* WHICH REPOSITORY THE BOARD SHOWS IS A CHOICE IN THE TOP BAR, not a column down the side of it.
- *
- * It was a 16rem rail listing every repository with a count beside it, on the reasoning that "is anything red
- * anywhere" is the first question a CI board answers and a column of counts answers it at a glance. What that
- * left out is what this board's body actually IS: a run's job graph, drawn left to right, and the widest thing
- * in the app. Sixteen rems of permanent chrome went on a choice made once a session, and the diagram it was
- * taking the width from had to be panned to be read. Documentation picks its repository from the top bar
- * already, so this is the app's one answer to "which repo am I looking at" rather than a second one.
- *
- * Nothing is lost with the column. ONE NUMBER PER ROW, still BROKEN BRANCHES (ciStreaks' rule, so a repository
- * three commits deep in one breakage says one and not three), now the picker row's own annotation, and still
- * absent in the silent group, where "0 failing" would be a claim about a repository nobody has heard from.
- * The sections below are ordered worst-first whatever is picked, and the sidebar badge still says a branch is
- * red wherever you are.
- *
- * The repositories with no runs at all are a LABELLED GROUP at the bottom rather than rows mixed into the list:
- * an empty repository and a healthy one both show nothing, and the heading is what tells them apart. */
+// Repository choice lives in the top bar, not a rail column, so the wide job-graph body isn't squeezed by permanent
+// chrome. The failing-branch count survives as the picker row's own annotation.
 const ALL_REPOS = ``;
 
 const repoOption = (standing: RepoStanding): PickerOption => ({
     value: standing.repo.repo,
     label: standing.repo.repo,
-    // The vendor glyph rather than a folder: which host a repository is on decides where its runs come from and
-    // where "open pipelines" lands, and it is free here, the sections below already carry it.
+    // Vendor glyph, not a folder: the host decides where runs come from and where 'open pipelines' lands.
     icon: standing.repo.host,
-    /* The whole standing, not just the count: a picker row has the width for it where a rail row had one number
-     * and a tint. `standingNote` leads with the failing branches, which is what makes it safe in a slot that
-     * TRUNCATES, the first clause is the one worth reading and it is the one that survives. */
+    // Full standing, not just a count; `standingNote` leads with failing branches, the part truncation keeps.
     description: standingNote(standing),
     mono: true,
 });
@@ -107,7 +75,7 @@ const repoOptions = computed<PickerOptions>(() => {
     ];
 });
 
-// Which jobs keep breaking: free of extra requests, since the rows already load these same job lists.
+// Which jobs keep breaking; no extra requests, the rows already load these same job lists.
 const { recurring } = useFailureHistory(scopedRuns);
 // job name → how many runs it has been failing, for the branch a given row belongs to.
 const recurringByBranch = computed(() => {
@@ -122,61 +90,30 @@ const recurringByBranch = computed(() => {
 });
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
-/* Which red rows still carry an open problem. The list is chronological, so without this every failure ever
- * recorded keeps a primary "Fix with agent": one branch breakage becomes six identical demands, and the run
- * that broke main an hour ago looks exactly like the one a green run closed yesterday. Same rule the rail badge
- * runs on (ciStreaks), applied to the rows instead of the tile. Read off every run rather than the scoped ones:
- * a branch's history is the same history whichever repository the reader happens to be looking at. */
+// Which red rows still carry an open problem, so only one gets a primary 'Fix with agent' per breakage. Read off every
+// run, not the scoped ones: a branch's history doesn't change with the repository filter.
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
-/* WHICH RED ROWS ALREADY HAVE AN AGENT ON THEM, and what became of it.
- *
- * A fourth cross-run fact, read off every run rather than the scoped ones for the same reason the three below
- * are: an agent working on a branch is working on it whichever repository the reader happens to be looking at.
- * The join is the derived conversation id (ciFixes.ts), so this costs one cheap daemon read and no bookkeeping.
- *
- * ASKED FOR ONLY WHEN THERE IS SOMETHING TO ASK ABOUT: no failed run, no fix to find, no request. */
+// Which red rows already have an agent, and its fate; read off every run for the same cross-run reason as above. Joined
+// by the derived conversation id (ciFixes.ts); only fetched when a run has actually failed.
 const anyFailed = computed(() => runs.value.some((run) => run.status === `failed`));
 const { fixes, invalidate: refreshFixes } = useCiFixes(anyFailed);
 const fixByRun = computed(() => fixesByRun(runs.value, fixes.value));
-// The branch's ongoing fix, for the rows that have none of their own: a fix is attached to a run, a breakage
-// belongs to a branch, and the newest red row is exactly the one that would otherwise offer a second agent for
-// work already in flight one row below it.
+// Branch's fix, for rows with none of their own; stops the newest red row offering a second agent.
 const fixByBranch = computed(() => branchFixes(fixByRun.value));
-// A row with an agent of its own says so itself, and is also the row every OTHER row on the branch is being
-// pointed at, so it never carries the pointer.
+// A row with its own agent never also carries the branch pointer to itself.
 const branchFixFor = (run: PipelineRun): CiFix | undefined => (fixByRun.value.has(run) ? undefined : fixByBranch.value.get(branchKey(run)));
 
-/* WHICH ROWS ARRIVE OPEN: what the branch's newest commit has to say that is not "fine", its runs still going
- * and the failures it left open (ciStreaks' `arrivesOpen`, which has the reasoning). Reading a board whose live
- * run is a strip of five circles means clicking it to see the graph that is the reason this view exists, and a
- * red row is the same bargain one moment later: what broke is a job in that graph. Off every run rather than the
- * scoped ones, for the same reason `open` is: a branch's head commit is the same commit whichever repository the
- * reader happens to be scoped to. */
+// Rows that default open: a branch's newest commit still running, or a failure it left open (`arrivesOpen`). Off every
+// run, not the scoped ones, for the same cross-repo reason as `open`.
 const autoOpen = computed(() => arrivesOpen(runs.value));
 
-/* THE WAY OUT TO THE VENDOR, per repo, and pointed at PIPELINES rather than at the project.
- *
- * The header action used to be one link per host ORIGIN: github.com, gitlab.com, which is the vendor's
- * front door and a level above everything this page shows. Nobody reading a CI board wants github.com; they
- * want the run list for the repo whose red row they are looking at. So the header carries one link per repo
- * and each lands on that repo's pipeline list, which is the same surface this view is a mirror of.
- *
- * Per repo and not per origin also fixes what the icons could say. Two links to two origins were two copies
- * of one vendor glyph; two links to two repos are told apart by their tooltip, which names the project.
- *
- * One link per repo IN THE BODY, not per repo in the workspace: a repository that has never run anything has an
- * empty page at the far end of that link, and the row of glyphs is the narrowest place on the screen to spend on
- * one. Narrowing the board to a single repository narrows this to a single link, which is the point.
- *
- * The ladder this completes, finest first: one run (PipelineRunRow's run.url) → this repo's pipelines (here)
- * → the repo itself (the group's #info line). Nothing generic at any rung. */
+// One link per repo, pointed at its pipeline list, not the vendor's front door or the project page. Completes a ladder:
+// one run's URL, this repo's pipelines, the repo itself (the group's #info line).
 const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/actions` : `${repo.url}/-/pipelines`);
 
-// ---- summary counts ----
-// Worst first, and `passed` is the one that renders at zero: a board whose whole tally is silent reads as a
-// broken view rather than as a quiet one.
+// Summary counts, worst first; `passed` renders even at zero, or a fully quiet board reads as broken rather than quiet.
 const counts = computed<TallyItem[]>(() => {
     const c = { queued: 0, running: 0, success: 0, failed: 0, other: 0 };
     for (const run of scopedRuns.value) {
@@ -195,9 +132,7 @@ const counts = computed<TallyItem[]>(() => {
     return [
         { label: `failed`, value: c.failed, variant: `danger` },
         { label: `running`, value: c.running, variant: `info` },
-        // Counted apart from `running` rather than beside it, which is the whole point: "4 running" over a board
-        // where nothing has a runner is the reading this line existed to prevent. Zero ⇒ no chip, so the tally
-        // only widens on a board that has something waiting, and reads exactly as before on one that does not.
+        // Kept separate from `running`: '4 running' must never silently include queued work. Zero shows no chip.
         { label: `queued`, value: c.queued, variant: `neutral` },
         { label: `passed`, value: c.success, variant: `success`, always: true },
         { label: `other`, value: c.other, variant: `neutral` },
@@ -212,28 +147,14 @@ const successRate = computed(() => {
     return Math.round((terminal.filter((r) => r.status === `success`).length / terminal.length) * 100);
 });
 
-/* WHERE THE TALLY GOES, and it is a measurement rather than a preference.
- *
- * On the TITLE ROW, because the vertical space it was costing is the scarcest thing on this page: the counts are
- * four short facts, the h1 beside them is one word, and the widest header in the app was still half empty while
- * a run's job graph, the thing this board exists to show, was pushed 40px further down every screen.
- *
- * It only fits there while the pane is wide enough for the title, the counts, the pass rate AND the repository
- * picker on one line: ~7rem + ~21rem + ~13rem, so 44rem, which is the same width <SplitView> folds at and not a
- * coincidence, both numbers are "is there room for two things side by side here". Under it the line goes back
- * above the list, where it costs a row and truncates nothing. Squeezing it into the header instead would take
- * the width out of the h1, which is the mobile complaint this app already has a page of (docs/mobile-ux-audit).
- *
- * Measured off the BODY, not the window: this view renders into the workspace column, which the reader can
- * shrink to half a screen with the chat panel open. The body and the header are the same width (this board has
- * no rail), so the element that can carry the observer answers for the one that cannot. */
+// On the title row when the pane fits title, counts, rate and picker together (44rem, the width <SplitView> folds at);
+// narrower, it moves above the list. Measured off the body, not the window: the body is what a ref can reach.
 const TALLY_AT_REM = 44;
 const body = ref<HTMLElement | undefined>(undefined);
 const narrowBoard = useNarrow(body, TALLY_AT_REM);
-// Nothing to orient by on a board with no runs at all, where the body's own sentence is the whole answer.
+// Hidden when there are no runs at all; the body's own empty-state sentence is the whole answer.
 const showTally = computed(() => isPending.value || scopedRuns.value.length > 0);
 
-// ---- actions ----
 const actionKey = (run: PipelineRun): string => `${run.host}:${run.project}:${run.runId}`;
 const busy = ref<string | undefined>();
 const actionError = ref<string | undefined>();
@@ -250,19 +171,15 @@ const act = async (run: PipelineRun, action: typeof rerun | typeof cancel): Prom
     }
 };
 
-// `pick` is set only when the reader used the caret beside this row's button: otherwise the daemon opens the
-// session on the sandbox's agent-run list, which is the ordinary path and the one that stays one click long.
+// `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
 const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promise<void> => {
     busy.value = actionKey(run);
     actionError.value = undefined;
     try {
         const { conversationId } = await fix.mutateAsync({ run, pick });
-        // So the row this reader comes back to says "Agent working" rather than offering to start what it just
-        // started. Not awaited: the navigation below is the point, and a roster read is not worth delaying it.
+        // Not awaited: navigation below is the point, so the row shows 'Agent working' without delaying it.
         void refreshFixes();
-        // The BOARD with the new card focused, not the agent's diff view: the turn started a second ago and has
-        // nothing to review yet, so what the user wants is to watch it work beside their other agents. `?focus`
-        // is the fleet's own deep link: it waits for the card to reach the roster, then selects and reveals it.
+        // Opens the fleet board, not the diff view: nothing to review yet. `?focus` waits for the roster.
         api.navigate(`/agents?focus=${encodeURIComponent(conversationId)}`);
     } catch (failure) {
         actionError.value = errorMessage(failure);
@@ -273,26 +190,22 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 </script>
 
 <template>
-    <!-- `scroll="page"`: the body here is a REPORT, not a document. `panes` earns its keep when a long document
-         sits beside a long index and losing your place in either costs you something; this index is a handful of
-         repositories, and the body is a list of runs that is read top-down once. Clamped, it put a scrollbar
-         inside a card inside a page, and the page's own scrollport had nothing to take. -->
+    <!-- `scroll="page"`: this body is a report read top-down once, not a document paired with an index worth preserving position in. -->
     <SplitView title="Pipelines" scroll="page" :scroll-key="scopeRepo">
-        <!-- HOW CI IS GOING, ON THE TITLE'S OWN LINE (see TALLY_AT_REM for why it is here and when it is not).
-             In the header's #info slot rather than beside the picker in #actions: it is a fact, not a control,
-             and the action cluster is `shrink-0`, so a tally in there would push the verbs off the pane instead
-             of wrapping. -->
+        <!--
+            In #info, not beside the picker in #actions: a fact, not a control, and the action cluster is `shrink-0`, so a tally there would push the
+            verbs off instead of wrapping.
+        -->
         <template #info>
-            <!-- `min-w-0 flex-1`: the tally is the item on this row that can give. Sized from its content it
-                 shares the squeeze with the h1 and takes a few characters off "Pipelines" (<PageHeader>'s own
-                 note); with a zero basis it takes only what the title, the picker and the repo links leave, and
-                 wraps a count onto a second line instead. The same trade <Row> makes for a run's stage graph. -->
+            <!--
+                `min-w-0 flex-1`: the tally is what gives here. Sized from content it would squeeze the h1's own title; zero-basis instead, it wraps
+                a count onto a second line first.
+            -->
             <PipelinesTally v-if="showTally && !narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="ml-1 min-w-0 flex-1" />
         </template>
 
         <template #actions>
-            <!-- Only where there is a choice to make: over one repository this would be a control pointing at the
-                 only thing on screen. -->
+            <!-- Only where there's a choice: over one repository this would point at the only thing on screen. -->
             <Picker
                 v-if="repos.length > 1"
                 :model-value="scopeRepo ?? ALL_REPOS"
@@ -302,8 +215,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                 placeholder="Repository"
                 @update:model-value="(next) => (scopeRepo = next === ALL_REPOS ? undefined : next)"
             />
-            <!-- No `hint`: the vendor is what the glyph already says, and the project is what the
-                 label already says. A hint here would only be the same fact a third time. -->
+            <!-- No `hint`: the glyph already names the vendor, the label already names the project. -->
             <PageAction
                 v-for="standing in sections"
                 :key="standing.repo.repo"
@@ -319,24 +231,22 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         </template>
 
         <template #detail>
-            <!-- No scroller and no `min-h-0 flex-1`: those are what a pane that must shrink inside a clamp asks
-                 for, and nothing clamps this now. The column is as tall as the runs in it.
-                 THE MEASURED ELEMENT: what this column is wide is what the header above it is wide, and it is
-                 the one of the two that a `ref` can reach (see TALLY_AT_REM). -->
+            <!--
+                No scroller or `min-h-0 flex-1`: nothing clamps this, so the column is as tall as its runs. The measured element: its width matches
+                the header's, and it's the one a `ref` can reach.
+            -->
             <div ref="body" class="flex flex-col">
-                <!-- Too narrow for the header to hold it: the orientation line goes back to being a line, above
-                     the list and ahead of the skeleton, so the wait and the board draw the same shape. -->
+                <!-- Too narrow for the header: the orientation line moves above the list, ahead of the skeleton, so the wait and the board match. -->
                 <PipelinesTally v-if="showTally && narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="mb-5" />
 
-                <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
-                     fetch. Show the board's shape rather than a bare page that is indistinguishable from "you have
-                     no repos connected". -->
+                <!--
+                    Also covers the window before the sandbox handshake unblocks the fetch. Shows the board's shape, not a page indistinguishable
+                    from 'no repos connected'.
+                -->
                 <PipelinesSkeleton v-if="isPending" />
 
                 <template v-else>
-                    <!-- ---- What keeps breaking ----
-                         Above the runs on purpose: on a repo that fails often the list answers "did it fail" (yes,
-                         again), while the thing worth acting on is WHICH job has been failing all along. -->
+                    <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
                     <div v-if="recurring.length > 0" class="mb-5 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
                         <div class="flex items-center gap-2">
                             <Icon name="exclamation-circle" class="text-sm text-danger" />
@@ -355,13 +265,14 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                         </div>
                     </div>
 
-                    <!-- ---- Per-repo sections, worst first ---- -->
+                    <!-- Per-repo sections, worst first. -->
                     <div class="flex flex-col gap-6">
                         <RowGroup v-for="standing in sections" :key="standing.repo.repo" :label="standing.repo.repo">
                             <template #info>
-                                <!-- The REPO itself, not its pipelines: the header action above already owns
-                                     that rung, and this line's job is to say which project the group is. Text and
-                                     destination agree: the words are the project path, the link is the project. -->
+                                <!--
+                                    Links to the repo itself, not its pipelines (the header action's rung); text and destination agree, both name the
+                                    project.
+                                -->
                                 <a
                                     :href="standing.repo.url"
                                     target="_blank"
@@ -374,8 +285,10 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                 </a>
                             </template>
 
-                            <!-- The reason is everyone's; the recipe (URL + the secret deliveries are signed with) is
-                                 attached by the daemon for a maintainer or the owner only, so it renders when it came. -->
+                            <!--
+                                Warning text is for everyone; the recipe (URL + signing secret) is attached only for a maintainer or the owner, so it
+                                renders only when present.
+                            -->
                             <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
                                 {{ standing.repo.hookWarning }}
                                 <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>
@@ -405,8 +318,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                             matching capability on the + page.
                         </p>
 
-                        <!-- Every connected repo is silent, so the body has nothing to group. Not the same page as
-                             "nothing is connected", and it must not read like it. -->
+                        <!-- Every connected repo is silent; distinct from 'nothing is connected' and must not read like it. -->
                         <p v-else-if="sections.length === 0" class="py-8 text-center text-sm text-muted">
                             No pipeline has run yet on {{ repos.length === 1 ? `this repo` : `any of the ${repos.length} connected repos` }}. Runs
                             land here as soon as one does.

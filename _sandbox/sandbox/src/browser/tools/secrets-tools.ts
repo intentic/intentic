@@ -6,30 +6,21 @@ import { type NamedSecret, secretReference } from "../../secrets/secret-registry
 import { browserAccountPage } from "../sessions/browser-sessions.js";
 import { focusedEditable } from "./accounts-tools.js";
 
-/* THE BROWSER EXIT: how a stored secret gets into a dashboard's form, a Grafana admin password into its
- * login, an API key into a service's settings page, without ever entering the model's context. The same
- * design rule as type_credential, widened from an account's own password to the sandbox's NAMED secrets: the
- * agent focuses the field with the browser tools, names the secret, and the daemon types the value over the
- * same CDP attach the /browsers view watches through.
- *
- * Deliberately ONLY the user-kept kinds (env, generated). A capability's credential already has its own lane
- *, type_credential for a browser account's password, the connector env vars for a CLI's token, and a tool
- * that would type ANY connector's credential into ANY page is exactly the confused deputy this machinery
- * exists not to build. The page's host is recorded on the use ledger, so "which secret went to which site" is
- * a question the Secrets view answers rather than a matter of trust. */
+// Types a stored secret into a focused browser field without entering the model's context, widened from
+// type_credential.
+// Only user-kept kinds (env, generated): a capability's own credential has its own lane, type_credential or env vars.
+// The page's host is recorded on the use ledger, so which secret went where is answered by the Secrets view.
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const fail = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
 
-// The policy in one place: only the user-kept kinds are typeable, whatever else the registry holds.
+// Only the user-kept kinds are typeable, whatever else the registry holds.
 export const typeableSecret = (registry: readonly NamedSecret[], name: string): NamedSecret | undefined =>
     registry.find((secret) => secret.name === name && (secret.source === "env" || secret.source === "generated"));
 
 export interface SecretsToolsDeps {
     readonly secrets: SecretAccess;
-    // The browsers this turn holds, as the same account→profile-owner map the router enforces with (plus
-    // `web`→`web` when the credential-free browser is up). The tool types only into a browser the turn could
-    // already drive, which is what scopes WHERE a value can land.
+    // Browsers this turn holds, the account-to-owner map the router enforces; scopes where a value can land.
     readonly accounts: Record<string, string>;
 }
 
@@ -75,15 +66,13 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                             return "the current page";
                         }
                     })();
-                    /* THE APPROVAL GATE, in front of the keystrokes rather than after them, which is the only
-                     * place it can be: a value typed into a page is gone the instant it lands, so there is no
-                     * "undo" a late refusal could reach. Asked with the HOST as its detail, because that is
-                     * what the person clicking needs to know — which site is about to receive it. */
+                    // Approval gate before the keystrokes, since a typed value can't be undone; asked with the host as
+                    // destination.
                     const released = await deps.secrets.release([name], "browser", host);
                     if ("refusal" in released) {
                         return fail(released.refusal);
                     }
-                    // Same human-ish cadence as type_credential, some forms listen for the key events.
+                    // Same human-ish cadence as type_credential; some forms listen for key events.
                     await page.keyboard.type(entry.value, { delay: 30 });
                     const approvedBy = released.approvedBy?.[name];
                     deps.secrets.used({ name, lane: "browser", detail: host, ...(approvedBy !== undefined ? { approvedBy } : {}) });

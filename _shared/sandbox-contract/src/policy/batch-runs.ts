@@ -1,90 +1,36 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { ModelRole } from "../models/model-roles.js";
 
-/* ONE BATCH RUN ENGINE, for every surface that fans an ISOLATED AGENT TURN out over a set of items and reads
- * the answers back off disk.
- *
- * Three packs had written this separately — acceptance (a run per story), maintenance (a run per chore, per
- * repository) and documentation (a run per package) — and the three copies agreed on every decision that
- * matters and drifted on every detail that does not: `SCAN_RUNS` was 10 in one and 30 in another, one minted
- * run ids with a per-process counter and one without (the one without could collide, and did, the moment a
- * surface started several runs inside a millisecond), and each spelled the reporting clause its own way, so an
- * agent's instructions for where to leave its answer depended on which screen started it.
- *
- * WHY THE CORE OWNS IT rather than one of them exporting it. A substrate is what other packs fire into, and a
- * pack can be switched off: a run engine that stops existing because somebody hid a screen is not an engine.
- * The reverse — a substrate living in one pack — is what produced the three copies, because reaching into
- * `acceptance` for a run id is a dependency no other pack wants and reinventing it is one afternoon.
- * `_extensions/README.md` states the rule; this is the second of the four substrates named there.
- *
- * WHAT A RUN IS, and the part that is load-bearing rather than incidental:
- *
- *  • IT IS BACKED BY FILES, never by a store a pack owns. `run.json` is written before the first turn starts
- *    and each agent writes its own result beside it. So a run survives archiving the fleet agents, discarding
- *    them, closing the browser and rebuilding the image, and a browser that was shut when a turn finished picks
- *    the answer up the next time it opens.
- *  • ITS CONVERSATION IDS ARE DERIVED, so joining a run to the fleet is a filter over `GET /agents` rather than
- *    bookkeeping that can drift. This is why none of these surfaces owns session machinery: the worktree, the
- *    live status, the cost, the transcript and the `/agents/<id>` page all already exist.
- *  • IT LIVES UNDER `.intentic`, which is outside every repo (the root repo excludes it) and is bound back in
- *    SHARED for isolated turns, so an agent writing its result from inside its own worktree writes into the
- *    same tree the browser reads: nothing to land, no git noise.
- *
- * The manifest and result SHAPES stay with the packs. A chore's outcome vocabulary and a story's criteria have
- * nothing to say to each other, and a substrate that tried to own both would be a union that grows a field per
- * screen. What is here is what all three do identically: where the files go, how the ids are made, how a
- * half-written file is survived, and what the agent is told about where to leave its answer. */
+// One batch run engine for every surface that fans an isolated agent turn out over items and reads results off disk.
+// Backed by files, not a pack's own store, with derived conversation ids that join the fleet via a GET /agents filter,
+// under .intentic. Manifest and result shapes stay with the packs; this owns only what all three need alike.
 
-/* WHERE ONE KIND OF RUN KEEPS ITS DIRECTORIES. Taken as the tail rather than composed from a pack id, because
- * the three existing layouts are not uniform and rewriting them would orphan every run already on disk:
- * acceptance keeps runs under `records/artifacts/acceptance`, maintenance under `records/chores/runs`. A path
- * is a fact about a tree that exists, not a naming opportunity. */
+// Where one kind of run keeps its directories: the tail, not composed from a pack id, since the existing on-disk
+// layouts (acceptance vs maintenance) are not uniform and rewriting them would orphan runs.
 export interface BatchRunKind {
     /* The directory holding this kind's run directories, workspace-relative, under the state dir. */
     readonly runsDir: string;
-    /* The conversation-id prefix, two or three characters. Every conversation this kind starts carries it, so a
-     * prefix filter over `GET /agents` is the join key and not merely a naming convention. */
+    // The conversation-id prefix (2-3 chars); every conversation this kind starts carries it as the join key.
     readonly prefix: string;
-    /* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be run: only
-     * recent runs carry news, and a workspace with hundreds of run directories must not spend a request per
-     * item to render a list or light a badge. One number per kind, shared by every reader of that kind, so a
-     * badge's idea of "recent" and a list's can never disagree. */
+    // How many runs deep a results reader goes; one shared number so a badge and a list never disagree on "recent".
     readonly scanRuns: number;
 }
 
-/* The conversation id's own regex is `^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$` — it lands in branch names and in
- * paths — so this is a hard ceiling rather than a style choice. */
+// Hard ceiling from the conversation id's own regex (it lands in branch names and paths), not a style choice.
 const CONVERSATION_ID_MAX = 64;
 
-/* `r` + a base-36 millisecond, zero-padded, + a per-process counter: sortable, ~10 characters, and readable
- * enough to match a directory to a moment. The clock is taken from the caller so this stays pure and testable.
- *
- * THE PADDING IS WHAT MAKES "SORTABLE" TRUE. Both copies this replaces claimed it and neither had it: a base-36
- * number is shorter when it is smaller, so a plain `toString(36)` sorts `r1a` after `rzz` the moment two ids
- * straddle a digit boundary. Today's milliseconds are all eight digits so nothing has gone wrong yet, and
- * nothing will until 2059 — which is exactly the kind of latent boundary that is cheap to remove now and
- * expensive to find later. Padded to the same width, the ids on disk are the length they already were.
- *
- * THE COUNTER IS NOT OPTIONAL, the other drift worth naming. A surface that fans out over items can get away
- * without one, because its ids differ by item; a surface where one run IS one item cannot, and "run this chore
- * in every repository" starts several inside the same millisecond. Both kinds share this function, so the
- * safe answer is the only answer, and it costs the id one character. */
+// `r` + a zero-padded base-36 millisecond + a per-process counter: padding keeps it sortable across a digit boundary,
+// and the counter is needed since a single-item-per-run surface can mint several within one millisecond.
 const TIME_DIGITS = 8;
 let sequence = 0;
 export const batchRunIdAt = (epochMs: number): string => `r${epochMs.toString(36).padStart(TIME_DIGITS, `0`)}${(sequence++).toString(36)}`;
 
-/* The fleet conversation id for one item of one run, or for a run that is a single item (omit `item`).
- *
- * THE RUN ID SURVIVES TRUNCATION and the item is what gets cut, because the run id is how a card is attributed
- * back to its run: lose that and a finished turn belongs to nothing. Callers that fan out must already have
- * made their item slugs unique by suffixing, and the suffix sits at the end — exactly where the cut lands — so
- * uniqueness holds only while the cut leaves it. In practice nothing is close: slugs are capped at 40 and run
- * ids are ~10, well inside 64. A trailing separator left by the cut is trimmed, because `xt-r5k2-` is a
- * conversation id the regex above would refuse. */
+// The fleet conversation id for one item of a run (or a single-item run, omitting item). The run id survives
+// truncation, since that's what attributes a card back to its run; a trailing separator left by the cut is trimmed.
 export const batchConversationId = (kind: BatchRunKind, runId: string, item?: string): string =>
     `${kind.prefix}-${runId}${item === undefined ? `` : `-${item}`}`.slice(0, CONVERSATION_ID_MAX).replace(/[-_]+$/u, ``);
 
-// Every conversation one kind starts, for the prefix filter over `GET /agents` that joins a run to the fleet.
+// Every conversation one kind starts, for the prefix filter over GET /agents that joins a run to the fleet.
 export const batchRunPrefix = (kind: BatchRunKind): string => `${kind.prefix}-`;
 
 // The directory holding one kind's run directories, workspace-relative. What a listing is asked for.
@@ -92,19 +38,14 @@ export const batchRunsDir = (kind: BatchRunKind): string => `${STATE_DIR}/${kind
 export const batchRunDir = (kind: BatchRunKind, runId: string): string => `${batchRunsDir(kind)}/${runId}`;
 export const batchRunManifestPath = (kind: BatchRunKind, runId: string): string => `${batchRunDir(kind, runId)}/run.json`;
 
-/* Where one item of a run leaves its files. A run whose items are the run itself (`item` omitted) writes
- * straight into the run directory, which is what maintenance already does and what keeps its `result.json`
- * beside its `run.json` rather than one pointless level down. */
+// Where one item of a run leaves its files; an item-less run (item omitted) writes straight into the run directory,
+// keeping result.json beside run.json rather than one level down.
 export const batchItemDir = (kind: BatchRunKind, runId: string, item?: string): string =>
     item === undefined ? batchRunDir(kind, runId) : `${batchRunDir(kind, runId)}/${item}`;
 export const batchResultPath = (kind: BatchRunKind, runId: string, item?: string): string => `${batchItemDir(kind, runId, item)}/result.json`;
 
-/* A FILE THAT IS HALF-WRITTEN, or written by a build whose shape has since changed, IS SKIPPED rather than
- * thrown on. One bad directory must not blank a whole history, and a run directory is written by an agent
- * mid-turn, so reading one that is not finished being written is ordinary rather than exceptional.
- *
- * The caller supplies the shape check, because the shape is the pack's. This owns only the two failure modes
- * every reader shares: text that is not JSON, and JSON that is not an object. */
+// A half-written file, or one from before the shape changed, is skipped rather than thrown on: reading a run mid-write
+// is ordinary here. The caller supplies the shape check; this owns only invalid or non-object JSON.
 export const parseBatchFile = <T>(text: string, shape: (value: Record<string, unknown>) => T | undefined): T | undefined => {
     try {
         const parsed: unknown = JSON.parse(text);
@@ -180,10 +121,7 @@ export const batchTurnBody = (params: {
     readonly prompt: string;
     readonly title: string;
     readonly conversationId: string;
-    /* WHICH JOB THIS IS, and therefore which of the owner's model lists pays for it (model-roles.ts). Required
-     * rather than optional, because every pack that reaches this function is one of the named roles and a
-     * default here would silently hand a new one somebody else's budget — which is exactly how one "agent runs"
-     * tier came to cover a documentation sweep and a red production pipeline. */
+    // Which job this is, and so which model list pays; required, so a pack can't silently inherit another's budget.
     readonly role: ModelRole;
     readonly pick?: BatchTurnPick | undefined;
     readonly extra?: Readonly<Record<string, unknown>> | undefined;

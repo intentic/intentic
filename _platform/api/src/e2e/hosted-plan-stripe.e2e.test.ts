@@ -3,18 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type StripeClientConfig, type StripeGateway, stripeGateway, subscriptionIdOfEvent } from "../sandbox/hosted/hosted-plan-stripe.js";
 import { DAY_MS } from "../durations.js";
 
-/* THE STRIPE CLIENT AGAINST STRIPE. Every other test of the money path, unit or hermetic, talks to shapes WE
- * wrote down: a hand-built payload, a stand-in that answers what the client expects. This is the one that asks
- * Stripe, and it exists for the failures the others cannot see: a request the API refuses (a parameter spelled
- * wrong in the form encoding), a response whose field moved under an API version (`current_period_end` left
- * the subscription for its item in 2025-03-31.basil), an event whose object no longer parses, and a billing
- * portal that has no default configuration saved, which is a go-live step, not a bug.
- *
- * Gated on a TEST-mode key and the test-mode price of the hosted plan, and nightly rather than per merge: it
- * creates a customer with Stripe's test card, subscribes it outside checkout (a checkout needs a browser and a
- * card form; the client's checkout call is exercised up to the URL it answers), drives the client's every
- * other call against that subscription, and deletes the customer, which ends whatever it left. A live key is
- * refused before anything is created. */
+// The one test that hits real Stripe: API refusals, fields moved under an API version, a missing portal config.
+// Nightly, gated on a test-mode key; creates and deletes a real customer and subscription outside checkout.
 const tier = e2eTier(`the Stripe client against Stripe's own test mode`, {
     enabledBy: `INTENTIC_E2E`,
     secrets: [`HOSTED_PLAN_E2E_STRIPE_SECRET_KEY`, `HOSTED_PLAN_E2E_STRIPE_PRICE_ID`],
@@ -28,9 +18,8 @@ interface StripeObject {
     readonly [key: string]: unknown;
 }
 
-/* The setup calls the client itself never makes (a customer with a card, a subscription outside checkout, the
- * cleanup, the event log), in Stripe's own form encoding. Kept apart from the gateway on purpose: the gateway
- * is what is under test, and it must not grow calls for the sake of its test. */
+// The setup calls the client itself never makes, in Stripe's own form encoding; kept apart so the gateway under test
+// does not grow calls for its own sake.
 const stripeCall = async (
     client: StripeClientConfig,
     method: `GET` | `POST` | `DELETE`,
@@ -72,8 +61,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         client = { stripeSecretKey: secretKey, stripeApiUrl: STRIPE_API_URL };
         gateway = stripeGateway(client);
 
-        // Stripe's always-succeeding test card, as the customer's default payment method, so the first invoice
-        // is paid on creation and the subscription is born active, the state a completed checkout leaves.
+        // Stripe's always-succeeding test card, as the default payment method, so the subscription is born active.
         const customer = await stripeCall(client, `POST`, `/customers`, {
             email: `e2e+${Date.now()}@intentic.dev`,
             name: `intentic hosted-plan e2e`,
@@ -86,7 +74,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     });
 
     afterAll(async () => {
-        // Deleting the customer cancels its subscriptions and is what keeps the test account clean.
+        // Deleting the customer cancels its subscriptions and keeps the test account clean.
         if (customerId !== undefined) {
             await stripeCall(client, `DELETE`, `/customers/${customerId}`);
         }
@@ -97,8 +85,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(read).toMatchObject({ id: subscriptionId, customer: customerId, status: `active`, cancelAtPeriodEnd: false, quantity: 1 });
         expect(read.itemId).toMatch(/^si_/);
         itemId = read.itemId;
-        // A period end Stripe actually stated, a month out, and not the client's "now" fallback for a shape
-        // it could not read: the fallback is what a moved field would produce, and it under-promises quietly.
+        // A period end Stripe actually stated, not the client's fallback for a shape it could not read.
         expect(read.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now() + 20 * DAY_MS);
     });
 
@@ -117,18 +104,14 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(returning.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
     });
 
-    /* A refusal here reading "No configuration provided and your test mode default configuration has not
-     * been created" is the go-live step this test exists to catch: Stripe Dashboard → Settings → Billing →
-     * Customer portal → Save, in test mode and in live mode both, with subscription updates OFF
-     * (docs/design/billing-view.md: the app's slot rule is the only one). */
+    // A refusal here (no test-mode portal configuration) is the go-live step this test exists to catch.
     it(`opens the billing portal for the customer`, async () => {
         const portal = await gateway.portalSession(customerId, RETURN_URL);
         expect(portal.url).toMatch(/^https:\/\/billing\.stripe\.com\//);
     });
 
     it(`names the subscription in the events Stripe actually emits, the way the webhook reads them`, async () => {
-        // The two quantity changes above each produced a customer.subscription.updated; the event log is
-        // eventually consistent, so it is asked until both are there.
+        // The event log is eventually consistent, so it is polled until both quantity changes show up.
         const objectsOfOurs = async (): Promise<unknown[]> => {
             const events = (await stripeCall(client, `GET`, `/events?type=customer.subscription.updated&limit=20`)) as StripeObject & {
                 data: { data: { object: StripeObject } }[];
@@ -137,7 +120,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         };
         await expect.poll(async () => (await objectsOfOurs()).length, { timeout: 30_000, interval: 2_000 }).toBeGreaterThanOrEqual(2);
         for (const object of await objectsOfOurs()) {
-            // The id is all the webhook takes off an event; the state is read fresh, which the first test covers.
+            // The id is all the webhook takes off an event; the state itself is read fresh.
             expect(subscriptionIdOfEvent(object)).toBe(subscriptionId);
         }
     });

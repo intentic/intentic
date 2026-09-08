@@ -28,8 +28,7 @@ test("a watch round-trips, is filed under its own id, and drops independently", 
     await journal.record(entryOf());
     await journal.record(entryOf({ id: "watch-2", note: "deploy", conversationId: "conv-2" }));
     expect((await journal.list()).map((entry) => entry.id).toSorted()).toEqual(["watch-1", "watch-2"]);
-    // Verbatim: a restore re-arms from exactly these fields, so a lossy round-trip is a watch that comes back
-    // watching something slightly different.
+    // Verbatim: a restore re-arms from exactly these fields, so a lossy round-trip changes what it watches.
     expect((await journal.list()).find((entry) => entry.id === "watch-1")).toEqual(entryOf());
 
     await journal.drop("watch-1");
@@ -47,9 +46,8 @@ test("re-recording the same id replaces it rather than leaving two", async () =>
     expect(await journal.list()).toEqual([entryOf({ note: "second" })]);
 });
 
-/* A FILE THAT WILL NOT PARSE IS SKIPPED, NEVER DELETED, the turn journal's rule and its reason: an entry
- * caught mid-write reads as garbage for an instant, and a lister that answered that by unlinking would destroy
- * the record of a watch that had only just armed. The cost of keeping it is one failed parse per boot. */
+// A file that will not parse is skipped, never deleted: an entry caught mid-write reads as garbage for an instant, and
+// deleting it would destroy a watch that had only just armed.
 test("skips unreadable and unrecognised files without losing the good ones", async () => {
     const dir = journalDir();
     const journal = fileWatchJournal(dir);

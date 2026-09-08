@@ -6,13 +6,11 @@ import type { OrpcContext } from "../app-env.js";
 
 export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore">;
 
-// How long a forced re-measure waits for the sweep: somebody is watching a spinner they started, so giving up
-// early would answer the question with the stale number the press was doubting. Bounded by the readers' own
-// timeouts, past which there is nothing left to wait for.
+// How long a forced re-measure waits for the sweep before returning the stale reading; bounded by the readers' own
+// timeouts.
 const FORCED_WAIT_MS = 9_000;
 
-// The spend ledger's read side. Read-only by design, rows are appended daemon-side at turn end, so the ledger
-// stays a trustworthy record of what was spent (the activity log's principle, applied to money).
+// The spend ledger's read side; rows are appended daemon-side at turn end, so this stays read-only.
 export const createUsageRoutes = (services: UsageRoutesDeps) => {
     const i = implement(usageContract).$context<OrpcContext>();
     return {

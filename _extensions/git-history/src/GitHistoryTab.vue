@@ -29,43 +29,28 @@ import { buildFileTree, flattenFileTree } from "./commitFileTree.js";
 import { computeGraphLayout, type GraphRow } from "./graphLayout.js";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 
-/* One repo's git-history graph: the committed side of the real-git story whose uncommitted side is the Changes
- * panel (this is NOT the Checkpoints safety timeline). A wide document, so it lives in the main editor area as a
- * tab (VSCode puts its SCM list in the sidebar and the graph in an editor tab; we mirror that). The lane
- * geometry is computed by graphLayout.ts; this file is the SVG mapping, the inline expandable commit detail
- * (click a row), and the commit context menu (right-click): VSCode "Git Graph" parity. Every write action is
- * auto-checkpointed daemon-side, so even a rebase / hard reset stays reversible from the Checkpoints timeline.
- *
- * The host binds `path` (a document provider renders per DIRECTORY), and the repo is what sits on it. There is
- * no repo switcher in here any more: the tree row IS the switcher, which is the whole point of the document
- * being per-directory rather than a single view with a dropdown inside it. */
+// One repo's git-history graph: the committed-side story (Changes panel is uncommitted, Checkpoints the safety
+// timeline). A tab in the main editor, mirroring VSCode's graph/SCM split; graphLayout.ts computes lanes, this file
+// draws the SVG, inline detail and the context menu. Per-directory, so the tree row is the switcher.
 
 const { path } = defineProps<{ path: string }>();
 
-// The provider only offers this document for a directory that IS a repo, so the fallback is unreachable in
-// practice: it exists so a tab restored against a repo that has since been deleted degrades to the root's
-// history rather than to a broken request.
+// Unreachable in practice; exists only so a deleted repo's restored tab degrades to root history.
 const repoRef = computed(() => repoAt(path) ?? `root`);
-// This tab's root: the element a clipboard write is reached through, so it lands in the window the reader is
-// actually looking at rather than the opener's (see clipboardOf).
+// This tab's root element, so a clipboard write lands in the window the reader is looking at, not the opener's.
 const rootEl = ref<HTMLElement>();
 const log = useGitLog(repoRef);
 const { commits, branch, loading, error, hasMore, fetchingMore, loadMore, commitFiles, commitFileDiff, workingFileDiff } = log;
-// A merge/rebase/cherry-pick/revert a TERMINAL left halted. Nothing this tab starts can cause one: every write
-// it makes aborts cleanly daemon-side, which is exactly why the graph has to say so when something else did.
+// A halted merge/rebase/cherry-pick/revert left by a terminal; nothing here causes one, but it must still show.
 const operation = useOperation(repoRef);
-/* The branch-level counterpart to the Checkpoints timeline: a checkpoint puts the FILES back, this puts the
- * BRANCH back. Offered in the header rather than behind a menu because the moment it is wanted: a rebase just
- * went somewhere unexpected: is the moment nobody wants to go looking for it. */
+// Branch-level counterpart to Checkpoints: restores the branch; in the header for when a rebase goes wrong.
 const undo = useUndo(repoRef);
-// The same branch state BranchSwitcher renders: one query key, so vue-query serves both from one request. The
-// tab needs it for the ref pills: which remotes exist, and the push/delete verbs behind a branch pill.
+// Same branch state BranchSwitcher renders, one query key; needed here for the ref pills' push/delete verbs.
 const branchState = useBranches(repoRef);
-// Hard for anything that rewrote files (a rebase, a reset, a pull), soft for a commit or an amend, whose content
-// is already in the tree and should stay there. The action itself says which it was.
+// Hard undo for anything that rewrote files, soft for a commit or amend whose content should stay in the tree.
 const runUndo = (): Promise<void> => undo.undo(undo.action.value?.changesWorkingTree === true);
 
-// Lane geometry. The gutter is laneCount columns wide; a node sits at the row's vertical center in its lane.
+// Lane geometry: the gutter is laneCount columns wide, a node centered vertically in its lane.
 const LANE_W = 14;
 const ROW_H = 28;
 const NODE_R = 3.5;
@@ -73,14 +58,8 @@ const LANE_COLORS = [`#3b82f6`, `#22c55e`, `#eab308`, `#ef4444`, `#a855f7`, `#06
 const laneColor = (index: number): string => LANE_COLORS[index % LANE_COLORS.length] ?? LANE_COLORS[0]!;
 const laneX = (lane: number): number => LANE_W / 2 + lane * LANE_W;
 
-/* ROW ZERO: THE UNCOMMITTED WORK. The graph is the committed side of the story and the Changes panel is the
- * uncommitted side, and until this row existed the newest thing in the repository was never the newest thing in
- * the graph.
- *
- * It goes through the LAYOUT as an ordinary commit parented to HEAD rather than being drawn above it as a
- * detached header, because that is what makes it connect: the lane geometry draws the line down to HEAD for
- * free, and the row sits in HEAD's own column instead of floating beside it. `WORKING` is a sha no object can
- * have, so nothing else in the graph can collide with it. */
+// Uncommitted work as an ordinary row parented to HEAD, not a detached header, so the lane layout connects it for free.
+// `WORKING` is a sha no real object can have.
 const WORKING = `working`;
 const working = useWorking(repoRef);
 const headSha = computed(() => commits.value.find((commit) => commit.head)?.sha);
@@ -100,16 +79,8 @@ const workingRow = computed<GitCommit | undefined>(() =>
               head: false,
           },
 );
-/* STASHES, drawn as what they are: commits that hang off the history rather than flowing down it.
- *
- * Each entry is spliced in DIRECTLY ABOVE the commit it was taken on, carrying only that commit as its parent:
- * its other parents (the index tree, and the untracked tree when `-u` was used) are not in the log and would be
- * dropped anyway. That placement is the whole trick: the existing lane algorithm then gives the stash a free
- * lane and its own colour, and draws its edge bending into the commit one row below. No special case in the
- * layout, and the picture is the true one: work set aside AT that commit.
- *
- * A stash whose parent commit is outside the fetched window is left out rather than floated: an edge to nothing
- * would read as a root commit, which is the one thing a stash is not. */
+// Stashes splice directly above the commit they were taken on, so the lane algorithm gives each a free lane with no
+// special case. One outside the fetched window is dropped, since an edgeless node would read as a root commit.
 const stashes = useStashes(repoRef);
 const stashRows = computed(() => {
     const inWindow = new Set(commits.value.map((commit) => commit.sha));
@@ -135,17 +106,11 @@ const stashRows = computed(() => {
     }
     return byParent;
 });
-// Which rows ARE stashes, by sha: the renderer needs it for the pill and the detail, and a Map keeps the
-// lookup out of the row loop.
+// Which rows are stashes, by sha, for the pill and detail; a Map keeps the lookup out of the row loop.
 const stashBySha = computed(() => new Map(stashes.stashes.value.map((entry) => [entry.sha, entry])));
 
-/* SEARCH NARROWS THE ROWS, and it narrows them BEFORE the layout runs, so the lanes are recomputed over what
- * is actually on screen rather than drawn for the full history and then hidden. Hiding rows would leave edges
- * running to commits that are no longer there, which reads as corruption rather than as a filter.
- *
- * It searches the pages that have been LOADED, which is the honest scope and the one the header states: a
- * server-side search over a hundred-thousand-commit history is a different feature (`git log --grep`) with
- * different semantics, and pretending a client-side filter is that would be worse than saying so. */
+// Narrows rows before the layout runs, since hiding them after would leave edges pointing at commits no longer there.
+// Searches only loaded pages; a full server-side search is a different feature.
 const search = ref(``);
 const words = computed(() => searchWords(search.value));
 const searching = computed(() => words.value.length > 0);
@@ -153,11 +118,8 @@ const matched = computed(() => (searching.value ? commits.value.filter((commit) 
 
 const rowCommits = computed<readonly GitCommit[]>(() => {
     const byParent = stashRows.value;
-    // A plain loop rather than a flatMap: almost no commit has a stash on it, and the map form would allocate a
-    // throwaway array for every one that does not.
-    // While searching, the synthetic rows are left out: neither the uncommitted work nor a stash is a commit
-    // the reader typed a query about, and keeping them pinned to the top of a filtered list would be two rows
-    // that never match and never go away.
+    // A plain loop, not flatMap, since almost no commit has a stash. Synthetic rows (working, stashes) are excluded
+    // while searching, since they'd never match and never leave a filtered list.
     const rows: GitCommit[] = workingRow.value === undefined || searching.value ? [] : [workingRow.value];
     for (const commit of matched.value) {
         if (!searching.value) {
@@ -175,32 +137,13 @@ const graphRows = computed(() =>
     layout.value.rows.map((row, index): { row: GraphRow; commit: GitCommit } => ({ row, commit: rowCommits.value[index]! })),
 );
 
-/* HOVER TO TRACE A BRANCH. In a graph more than two or three lanes wide, following one line down through the
- * merges it crosses is genuinely hard: the eye loses the colour among its neighbours. Hovering a row fades
- * everything that is not on that row's branch, which turns a search into a glance.
- *
- * Keyed by the branch COLOUR rather than by walking the parent graph, and that is exact rather than an
- * approximation: the layout already assigns one colour per branch for its whole descent (see graphLayout), so
- * "same colour" IS "same branch": including where the branch changes column, which is precisely where a reader
- * loses it.
- *
- * Reactive, not a class mutated onto queried DOM: the rows are already a `v-for` over computed state, so an
- * opacity bound to a ref is both less code and correct through re-renders, scrolling and virtualisation. It also
- * cannot leak a stale `dimmed` class onto a row that has since become something else.
- */
+// Hovering fades every branch but its own colour, via reactive state rather than a mutated DOM class.
 const hovered = ref<number | undefined>(undefined);
-// A row is dimmed when SOMETHING is hovered and it is not on that branch. Nothing hovered dims nothing, which is
-// the resting state and must cost no work.
+// Dimmed when something is hovered and not on that row's branch; nothing hovered costs nothing.
 const dimmed = (color: number): boolean => hovered.value !== undefined && hovered.value !== color;
 
-/* PULLING THE NEXT PAGE. An IntersectionObserver on a sentinel below the last row rather than a scroll
- * listener: it fires once when the row comes into view, costs nothing while it is off screen, and does not run
- * on every wheel event through a list that can be thousands of rows long.
- *
- * `rootMargin` starts the fetch a screenful early, so scrolling stays continuous instead of stopping at the
- * bottom to wait. The observer re-attaches when the sentinel element changes (it is `v-if`'d away on the last
- * page), and `fetchingMore` guards the re-entry an observer will otherwise fire while the request is in flight.
- */
+// IntersectionObserver on a sentinel, not a scroll listener, so it costs nothing off-screen and doesn't run per wheel
+// event. `rootMargin` starts the fetch a screenful early; `fetchingMore` guards re-entry mid-request.
 const sentinel = ref<HTMLElement | undefined>(undefined);
 let observer: IntersectionObserver | undefined;
 watch(sentinel, (element) => {
@@ -221,21 +164,13 @@ watch(sentinel, (element) => {
 });
 onScopeDispose(() => observer?.disconnect());
 
-// A ref decoration split into its kind, a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
+// A ref decoration split into its kind: a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
 const refBadge = (decoration: string): { tag: boolean; label: string } =>
     decoration.startsWith(`tag: `) ? { tag: true, label: decoration.slice(`tag: `.length) } : { tag: false, label: decoration };
 
-// --- inline expandable detail (accordion): one commit open at a time; its changed files load lazily ----------
+// Inline expandable detail: one commit open at a time, its files loaded lazily.
 const openSha = ref<string | undefined>(undefined);
-/* WHICH ROW THE PANE BESIDE THIS ONE IS SHOWING. With the diff open in the companion pane, both halves of the
- * reading are on screen at once, and a file list with nothing marked in it is then a list you have to re-find
- * your place in after every glance to the right. So the row that opened the diff wears the selection, exactly as
- * a row does in the Changes panel.
- *
- * Kept by sha AND path because the same path exists in every commit, and the graph is a list of commits: without
- * the sha, opening `README.md` in one commit would light up `README.md` in every other one the reader expands.
- * Local, not read back from the host: it says what THIS tab opened, which is the question the highlight answers,
- * and a tab the reader has since closed or replaced from elsewhere is not this list's business. */
+// Which row's diff the companion pane shows; kept by sha+path, since a path repeats across commits.
 const showing = ref<{ sha: string; path: string } | undefined>(undefined);
 const files = ref<readonly GitChange[]>([]);
 const filesLoading = ref(false);
@@ -259,8 +194,7 @@ watch(openSha, async (sha) => {
     if (sha === undefined) {
         return;
     }
-    // Row zero's files are already in hand: they came from the same scan the Changes panel renders, so there
-    // is nothing to fetch and nothing that can fail.
+    // Row zero's files are already in hand, from the same scan the Changes panel renders; nothing to fetch.
     if (sha === WORKING) {
         files.value = working.changes.value;
         return;
@@ -269,8 +203,7 @@ watch(openSha, async (sha) => {
     filesLoading.value = true;
     const stash = stashBySha.value.get(sha);
     try {
-        // A stash's diff spans three parent trees (tracked, index, untracked), which only `git stash show` knows
-        // how to read: hence its own route rather than the commit one.
+        // A stash's diff spans three parent trees, which only `git stash show` reads; hence its own route.
         const result = stash === undefined ? await commitFiles(sha) : await stashes.files(stash.ref);
         if (token === detailToken) {
             files.value = result.files;
@@ -291,11 +224,8 @@ const toggle = (sha: string): void => {
     openSha.value = openSha.value === sha ? undefined : sha;
 };
 
-/* The bytes behind a BINARY diff. The daemon's file-diff route ships text and can only FLAG an image
- * (`binary: true`), so the picture itself is fetched per side from /diff/raw, at this commit and its first
- * parent: the same pair the text diff compares. Which sides exist is read off git's status letter rather than
- * off the response: a binary diff ships no text to infer it from, an added file has no before, a deleted one no
- * after, and a rename's before side sits at a path this route cannot pair. */
+// Binary image bytes, fetched per side from /diff/raw since the text-diff route can only flag one (`binary: true`).
+// Which sides exist comes from git's status letter, not the response.
 const rawSides = (sha: string, change: GitChange): { beforeRaw?: string; afterRaw?: string } => {
     const side = (which: "before" | "after"): string =>
         `/diff/raw?${new URLSearchParams({ source: `commit`, repo: repoRef.value, sha, path: change.path, which }).toString()}`;
@@ -305,8 +235,8 @@ const rawSides = (sha: string, change: GitChange): { beforeRaw?: string; afterRa
     };
 };
 
-// Row zero's equivalent: the same route, a `working` source, and the git side the row came from, which is what
-// distinguishes a partially staged file's two halves.
+// Row zero's equivalent: the same route with a `working` source and the side the row came from, distinguishing a
+// partially staged file's two halves.
 const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: string; afterRaw?: string } => {
     const url = (which: "before" | "after"): string =>
         `/diff/raw?${new URLSearchParams({ source: `working`, repo: repoRef.value, side, path: change.path, which }).toString()}`;
@@ -316,22 +246,8 @@ const workingRawSides = (change: GitChange, side: GitDiffSide): { beforeRaw?: st
     };
 };
 
-/* The host owns the tab strip; this hands it a diff and the host puts it BESIDE this tab, in the editor's
- * companion pane, because this is a document with a file list in it: the graph stays on screen and the next file
- * clicked replaces the diff rather than the graph (see the host's EditorStrip).
- *
- * Which is also why a click is a PEEK and a double-click keeps: reading a commit means clicking every file in
- * it, and ten pinned tabs is what the strip's transient slot exists to prevent. Same grammar as the app's own
- * Changes panel, so one habit covers both lists.
- *
- * The tab opens on the CLICK, with `pending`, and its content lands under it: the reader's click has to change
- * something on screen immediately, or it reads as a click that missed and gets repeated. Everything the tab
- * needs to exist, its identity, its label, the status letter, the ± counts, is known here without asking git.
- *
- * Row zero opens a WORKING-TREE diff instead of a commit one, against the side the row came from: a partially
- * staged file's staged and unstaged halves are two different diffs, and opening whichever happened to be found
- * first would show the user the wrong one. Keyed `working:<repo>` so it is the same tab identity the app's own
- * Changes panel opens, which means clicking a file in either place focuses one tab rather than stacking two. */
+// Opens a diff beside the graph; click peeks (transient), double-click keeps the tab, same grammar as Changes. Row zero
+// opens a working-tree diff for its side, keyed `working:<repo>` to match Changes' own tab.
 const openFileDiff = (commit: GitCommit, change: GitChange, mode: "peek" | "keep" = `peek`): void => {
     const preview = mode === `peek`;
     showing.value = { sha: commit.sha, path: change.path };
@@ -367,18 +283,16 @@ const openFileDiff = (commit: GitCommit, change: GitChange, mode: "peek" | "keep
     void commitFileDiff(commit.sha, change.path).then((body) => host().workspace.fillDiff({ ...tab, ...body }));
 };
 
-/* Reached through this tab's root, not the module's `navigator`: a POPPED-OUT panel keeps its JS in the opener's
- * realm, whose document isn't focused, so an async clipboard write from there rejects and this catch swallowed
- * it: copying a SHA out of a popped-out history did nothing at all. See clipboardOf. */
+// Reached through this tab's root, not the module's `navigator`: a popped-out panel's document isn't focused, so a bare
+// clipboard write there would silently reject.
 const copy = (text: string): void =>
     void clipboardOf(rootEl.value)
         .writeText(text)
         .catch(() => undefined);
 
-// --- commit context menu + write actions (VSCode "Git Graph" parity) -----------------------------------------
+// Commit context menu and write actions (VSCode Git Graph parity).
 type ActionKind = "branch" | "tag" | "checkout" | "cherry-pick" | "revert" | "drop" | "merge" | "rebase" | "reset";
-// Header (dialog title), the confirm-button label, whether it needs a name input, and whether it's destructive
-// (shows the auto-checkpoint reassurance). The body text is per-commit, computed below.
+// Dialog header, confirm label, whether it needs a name, and whether it's destructive; body text computed below.
 const ACTIONS: Record<ActionKind, { header: string; confirm: string; needsName?: boolean; placeholder?: string; danger?: boolean }> = {
     branch: { header: `Create branch`, confirm: `Create`, needsName: true, placeholder: `branch-name` },
     tag: { header: `Add tag`, confirm: `Add tag`, needsName: true, placeholder: `tag-name` },
@@ -394,21 +308,18 @@ const ACTIONS: Record<ActionKind, { header: string; confirm: string; needsName?:
 const menu = ref<{ show: (event: Event) => void }>();
 const menuCommit = ref<GitCommit | undefined>(undefined);
 const openMenu = (event: Event, commit: GitCommit): void => {
-    // Row zero is not a commit: there is nothing to branch from, tag, cherry-pick or reset to. Its actions
-    // (stage, discard, commit) are the Changes panel's, and duplicating them here would be two places to do one
-    // thing with two different sets of confirmations.
+    // Row zero is not a commit; its actions (stage, discard, commit) belong to the Changes panel, not this menu.
     if (commit.sha === WORKING) {
         return;
     }
-    // A stash is not on any branch, so branching from it, resetting to it or rebasing onto it are all
-    // meaningless. Its own three verbs live on its pill instead.
+    // A stash is on no branch, so branch/reset/rebase verbs don't apply; its own three verbs live on its pill.
     if (stashBySha.value.has(commit.sha)) {
         return;
     }
     menuCommit.value = commit;
     menu.value?.show(event);
 };
-// Whether the first read has lasted long enough to be worth drawing: see useLoadingReveal.
+// Whether the first read has lasted long enough to be worth drawing.
 const outline = useLoadingReveal(
     computed(() => loading.value && commits.value.length === 0),
     computed(() => `git-history`),
@@ -420,8 +331,7 @@ const resetMode = ref<"soft" | "mixed" | "hard">(`mixed`);
 const acting = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
-// `target` lets the REF pill's menu drive the same dialogs the commit menu does, rather than the two growing
-// separate copies of the branch/tag flow.
+// `target` lets the ref pill's menu reuse these same dialogs, instead of a second copy of the branch/tag flow.
 const start = (kind: ActionKind, target?: GitCommit): void => {
     const commit = target ?? menuCommit.value;
     if (commit === undefined) {
@@ -461,17 +371,9 @@ const menuItems = computed<MenuItem[]>(() => {
     ];
 });
 
-/* WHAT A REF PILL CAN DO. The pills were inert labels: a branch name you could read and not act on, a tag you
- * could create from the commit menu and then never touch again. Right-clicking the thing you want to act on is
- * the gesture people already try, so the pills answer it.
- *
- * The verbs differ by KIND because the nouns do. A branch is a place you can go (checkout), publish (push) or
- * stop keeping (delete). A tag is a marker you publish or remove. A remote-tracking pill is somebody else's
- * branch, so its only local verb is checking out a copy of it: deleting it is their repository's business.
- *
- * Deliberately NOT drag-and-drop, which is where git-go takes this next: dropping a branch on a branch to merge
- * is a large surface with its own hold-to-reveal vocabulary, and in a workspace where most refs move because an
- * agent moved them, a gesture that acts on a stale pill is a worse failure than an extra click. */
+// Right-click a ref pill to act on it directly; verbs differ by kind (branch/tag/remote), since a remote pill is
+// somebody else's branch. Not drag-and-drop: a stale pill acting on a drop target is a worse failure than an extra
+// click.
 const refMenu = ref<{ show: (event: Event) => void }>();
 const refTarget = ref<{ decoration: string; commit: GitCommit } | undefined>(undefined);
 const openRefMenu = (event: Event, decoration: string, commit: GitCommit): void => {
@@ -479,12 +381,10 @@ const openRefMenu = (event: Event, decoration: string, commit: GitCommit): void 
     refMenu.value?.show(event);
 };
 
-// Which remotes this repo has, deduplicated: the set a tag can be pushed to, and what tells `origin/main`
-// apart from a local branch that happens to have a slash in its name.
+// Deduplicated remote names: what a tag can push to, and what tells `origin/main` apart from a slashed branch.
 const remoteNames = computed(() => [...new Set(branchState.remotes.value.map((entry) => entry.remote))]);
 
-// A decoration is a tag, a remote-tracking branch (`origin/main`) or a local branch: three different sets of
-// verbs, told apart the same way the pill's own styling tells them apart.
+// A decoration is a tag, a remote branch, or a local one; told apart the same way the pill's styling does.
 const refKind = (decoration: string): "tag" | "remote" | "local" => {
     if (refBadge(decoration).tag) {
         return `tag`;
@@ -501,8 +401,7 @@ const refMenuItems = computed<MenuItem[]>(() => {
     const kind = refKind(target.decoration);
     if (kind === `tag`) {
         return [
-            // One remote or several: with one it is a verb, with several it is a choice, and a submenu is the
-            // honest shape for "which remote" rather than picking one silently.
+            // One remote is a verb, several are a choice; a submenu names the choice rather than picking one silently.
             ...remoteNames.value.map((remote) => ({ label: `Push to ${remote}`, command: () => void log.pushTag(label, remote) })),
             { separator: true },
             { label: `Delete tag`, command: () => void log.deleteTag(label) },
@@ -510,8 +409,7 @@ const refMenuItems = computed<MenuItem[]>(() => {
         ];
     }
     if (kind === `remote`) {
-        // `git checkout <branch>` creates the tracking local branch when exactly one remote has the name, which
-        // is what a reader clicking a remote pill means.
+        // `git checkout <branch>` creates the tracking local branch when exactly one remote has that name.
         const local = target.decoration.slice(target.decoration.indexOf(`/`) + 1);
         return [{ label: `Checkout ${local}`, command: () => void log.checkout(local) }];
     }
@@ -550,8 +448,8 @@ const pendingBody = computed<string>(() => {
     }
 });
 
-// The result of a sequence/HEAD op is a GitActionResult (ok:false = a clean-apply conflict); a ref op resolves
-// to something without an `ok:false`. Anything thrown (git error) is caught below.
+// A sequence/HEAD op resolves to a GitActionResult (`ok:false` = a clean-apply conflict); a ref op never has that
+// shape.
 const isConflict = (result: unknown): boolean =>
     typeof result === `object` && result !== null && `ok` in result && (result as GitActionResult).ok === false;
 
@@ -610,13 +508,11 @@ const runPending = async (): Promise<void> => {
 
 <template>
     <div ref="rootEl" class="flex h-full min-h-0 flex-col bg-canvas text-content">
-        <!-- Header: checked-out branch · how many commits are drawn. Which repo this is lives on the tab. -->
+        <!-- Header: checked-out branch and how many commits are drawn; which repo this is lives on the tab. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card pl-1.5 pr-3">
-            <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
-                 no branch to show as a pill, but the switcher is still the way BACK onto one. -->
+            <!-- Checked-out branch with its switch/create/delete popover; detached HEAD shows no pill but keeps the switcher. -->
             <BranchSwitcher :repo="repoRef" />
-            <!-- How many rows are drawn, and, while searching: out of how many are loaded. Saying "of 300"
-                 rather than "of all" is the honest scope: this filters the pages that have been fetched. -->
+            <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
             <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
                 searching ? `${matched.length} of ${commits.length}` : commits.length
             }}</span>
@@ -644,8 +540,7 @@ const runPending = async (): Promise<void> => {
                     <Icon name="times" />
                 </button>
             </div>
-            <!-- Names the action it will undo, in git's own words on hover. Absent when there is nothing to walk
-                 back: a fresh branch, a detached HEAD, or a halted operation (which ends by aborting instead). -->
+            <!-- Names the action it would undo; absent for a fresh branch, detached HEAD, or a halted op that aborts instead. -->
             <Button
                 v-if="undo.label.value"
                 size="small"
@@ -668,10 +563,10 @@ const runPending = async (): Promise<void> => {
         <p v-if="stashes.actionError.value" class="shrink-0 px-3 py-1 text-2xs text-danger">{{ stashes.actionError.value }}</p>
         <p v-if="branchState.actionError.value" class="shrink-0 px-3 py-1 text-2xs text-danger">{{ branchState.actionError.value }}</p>
 
-        <!-- WHY THE GRAPH LOOKS WRONG. A halted rebase has replayed half its commits and left HEAD somewhere the
-             reader did not put it; without this the graph shows the aftermath and explains none of it. Git also
-             refuses almost every verb in this tab's menu until the operation ends, so the banner is what makes
-             those refusals legible instead of mysterious. -->
+        <!--
+            A halted rebase leaves HEAD somewhere unexpected with half its commits replayed; this explains the aftermath the graph alone doesn't. Git
+            also refuses most menu verbs until the operation ends, which this banner makes legible.
+        -->
         <div v-if="operation.operation.value" class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
             <div class="min-w-0 flex-1">
@@ -694,14 +589,12 @@ const runPending = async (): Promise<void> => {
             </Button>
         </div>
 
-        <!-- The graph: one row per commit (a per-row SVG gutter drawing lanes/edges/node, then metadata). Click a
-             row to expand its detail inline (accordion); right-click for the commit action menu. -->
+        <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. Click to expand detail inline, right-click for the action menu. -->
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
-            <!-- "Loading history…" was one small grey line standing in for a full-height graph, so the panel
-                 was empty in every way that shows and the whole log dropped in at once. The rows the log is
-                 about to draw stand in: the lane gutter on the left, the subject, and the author line under
-                 it. The gutter is a column of dots rather than lanes: the SHAPE of somebody's branch history
-                 is what this view exists to show, and it is the last thing to invent. -->
+            <!--
+                Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. The gutter is a column of plain
+                dots, not invented lanes, since the branch shape itself is what this view exists to show.
+            -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
                 <span class="sr-only">Reading this repository's history…</span>
                 <div v-for="row in outline ? 8 : 0" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
@@ -716,8 +609,7 @@ const runPending = async (): Promise<void> => {
             <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
                 No loaded commit matches. Scroll to load more of the history, then search again.
             </p>
-            <!-- A @container per row: which of the author/date/sha columns fit is a fact about the row, and this
-                 view is a workspace panel whose width the reader sets. -->
+            <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
             <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
                 <button
                     type="button"
@@ -730,8 +622,7 @@ const runPending = async (): Promise<void> => {
                     @mouseleave="hovered = undefined"
                 >
                     <svg :width="gutterWidth" :height="ROW_H" class="shrink-0" aria-hidden="true">
-                        <!-- Each segment fades on ITS OWN branch's colour rather than the row's, so a hovered
-                             branch stays lit through the rows of other branches it passes behind. -->
+                        <!-- Each segment fades by its own branch colour, not the row's, so a hovered branch stays lit behind others. -->
                         <line
                             v-for="(edge, index) in row.up"
                             :key="`u${index}`"
@@ -754,8 +645,7 @@ const runPending = async (): Promise<void> => {
                             :opacity="dimmed(edge.color) ? 0.25 : 1"
                             stroke-width="1.5"
                         />
-                        <!-- HOLLOW for row zero: it is not an object in the repository yet, and a filled dot
-                             would claim it is. Filled for a real commit, ringed for HEAD. -->
+                        <!-- Hollow for row zero, since it isn't a real object yet; filled for a commit, ringed for HEAD. -->
                         <circle
                             :cx="laneX(row.col)"
                             :cy="ROW_H / 2"
@@ -765,8 +655,7 @@ const runPending = async (): Promise<void> => {
                             stroke-width="1.5"
                         />
                     </svg>
-                    <!-- A stash wears its ref as a pill, the way a branch or tag does: it is a named thing you
-                         can act on, and the name (`stash@{0}`) is also the handle its verbs take. -->
+                    <!-- A stash wears its ref as a pill, like a branch or tag; the name is also the handle its verbs take. -->
                     <span
                         v-if="stashBySha.get(commit.sha)"
                         class="shrink-0 rounded bg-info/15 px-1 font-mono text-3xs text-info"
@@ -774,8 +663,7 @@ const runPending = async (): Promise<void> => {
                         >{{ stashBySha.get(commit.sha)!.ref }}</span
                     >
                     <span v-if="commit.head" class="shrink-0 rounded bg-primary-600/20 px-1 text-3xs font-semibold text-link">HEAD</span>
-                    <!-- Right-clickable: a pill is the thing you want to act on, so it answers the gesture
-                         rather than sending you to the commit's menu to find a verb about a ref. -->
+                    <!-- Right-clickable, so acting on a ref doesn't mean hunting for it in the commit's own menu. -->
                     <span
                         v-for="ref in commit.refs.slice(0, 3)"
                         :key="ref"
@@ -788,17 +676,14 @@ const runPending = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 truncate text-xs" :class="commit.sha === openSha ? 'text-content' : 'text-content/90'">{{
                         commit.subject
                     }}</span>
-                    <!-- Row zero has no author, no date and no sha: none of them exist yet. What it has instead
-                         is how much is uncommitted, and whether any of it is blocking. -->
+                    <!-- Row zero has no author, date or sha yet; instead it shows how much is uncommitted and whether any is blocking. -->
                     <template v-if="commit.sha === WORKING">
                         <span v-if="working.conflicted.value > 0" class="shrink-0 text-2xs text-danger"
                             >{{ working.conflicted.value }} conflicted</span
                         >
                         <span class="shrink-0 text-2xs text-subtle">{{ working.changes.value.length }} changed</span>
                     </template>
-                    <!-- A stash's three verbs, on the row rather than in a context menu: they are the only
-                         things you can do with one, and a menu for three items nobody would guess are hidden
-                         there is a menu nobody opens. `pop` is the common case, so it leads. -->
+                    <!-- A stash's three verbs sit on the row, not a menu nobody would open for them; Pop leads as the common case. -->
                     <template v-else-if="stashBySha.get(commit.sha)">
                         <span class="hidden shrink-0 text-2xs text-subtle @md:block">{{ timeAgo(commit.at) }}</span>
                         <span
@@ -834,12 +719,9 @@ const runPending = async (): Promise<void> => {
                     </template>
                 </button>
 
-                <!-- Inline detail (accordion): commit metadata + the files it changed (click one for a diff at
-                     that commit). Replaces the old bottom pane; the file list scrolls if it's long. -->
+                <!-- Inline detail: commit metadata and its changed files; click a file for a diff at that commit. -->
                 <div v-if="commit.sha === openSha" class="border-y border-line bg-card px-3 py-2">
-                    <!-- Row zero has no sha, no parents, no author and no date, so it opens straight into its
-                         file list. Everything it WOULD say lives in the Changes panel, which is where it can
-                         also be acted on. -->
+                    <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
                     <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
                         <dt class="text-subtle">Commit</dt>
                         <dd class="flex items-center gap-1 font-mono text-muted">
@@ -868,10 +750,10 @@ const runPending = async (): Promise<void> => {
                             <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
                                 {{ files.length }} changed {{ files.length === 1 ? "file" : "files" }}
                             </p>
-                            <!-- Changed files as a collapsible directory tree (compact folders), each file with
-                                 its +/- line stat; clicking a file peeks its diff at this commit in the pane
-                                 beside this one, double-clicking keeps that tab. The row stays marked while its
-                                 diff is the one on the right. -->
+                            <!--
+                                Collapsible directory tree of changed files; click peeks a diff beside this pane, double-click keeps the tab, and the
+                                row stays marked while showing.
+                            -->
                             <div class="scrollbar-thin max-h-64 overflow-auto">
                                 <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
                                     <button
@@ -908,8 +790,7 @@ const runPending = async (): Promise<void> => {
                     </div>
                 </div>
             </div>
-            <!-- The next page pulls itself in when this comes into view. Absent on the last page, which is
-                 also how the observer knows to stop. -->
+            <!-- Pulls in the next page when this comes into view; absent on the last page, which is how the observer knows to stop. -->
             <div v-if="hasMore" ref="sentinel" class="px-3 py-2 text-2xs text-subtle">
                 <Icon v-if="fetchingMore" name="spinner" class="mr-1 text-2xs" spin />{{
                     fetchingMore ? "Loading older commits…" : "Scroll for older commits"
@@ -919,12 +800,13 @@ const runPending = async (): Promise<void> => {
 
         <!-- Right-click commit menu (VSCode "Git Graph" parity), grouped with separators. -->
         <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
-        <!-- And the ref pills' own, whose verbs depend on whether the pill is a branch, a tag, or somebody
-             else's remote-tracking branch. -->
+        <!-- The ref pills' own menu, whose verbs depend on whether the pill is a branch, tag, or remote-tracking. -->
         <ContextMenu ref="refMenu" :model="refMenuItems" :min-width="14" />
 
-        <!-- One dialog for every action: a name input (branch/tag), a mode picker (reset), or a plain confirm.
-             Destructive ops carry the auto-checkpoint reassurance; a clean-apply conflict shows inline. -->
+        <!--
+            One dialog per action: a name input, a mode picker, or a plain confirm; destructive ones carry the checkpoint reassurance, a conflict
+            shows inline.
+        -->
         <Modal :open="pending !== undefined" size="sm" :header="pending ? ACTIONS[pending.kind].header : ''" @update:open="cancelAction">
             <template v-if="pending">
                 <p class="text-xs text-content">

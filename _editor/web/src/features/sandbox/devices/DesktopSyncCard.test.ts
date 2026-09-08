@@ -1,20 +1,11 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is WHAT THE CARD PUTS ON SCREEN, and what it no longer does is half of it.
-//
-// This card used to hold the whole of desktop sync in the singular: "Syncing from radarsu-rog", the folder on
-// that machine, a warning when it went quiet, and a Disable that revoked EVERY paired device from the corner
-// of a card people opened to READ their state. Desktop sync is a property of each DEVICE, so all of that is a
-// row in the Devices list above (SandboxDevices.test.ts pins it there). What is left here is the one job
-// that happens before there is a device to put anything on: minting a pairing.
+// jsdom because the subject is what the card puts on screen. The card used to hold all of desktop sync; that
+// moved to a row per device in the Devices list (SandboxDevices.test.ts). What is left is minting a pairing.
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-
-// What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
-// query (the UI barrel's useDevice), exactly as SandboxDevices.test.ts cuts the same edge.
 
 const canOperate = ref(true);
 const pairToken = ref<string | undefined>(undefined);
@@ -40,9 +31,8 @@ vi.mock(`./useDesktopSync`, () => ({
     }),
 }));
 
-/* WHETHER A DEVICE ALREADY HOLDS FILE SYNC, which the card now reads off the LIST rather than a status call of
- * its own. It is the one fact about other machines this card still needs, because file sync is single-holder and
- * enrolling a second machine for it is a takeover the reader has to be warned about by name. */
+// Whether a device already holds file sync, read off the devices list rather than a status call of its own:
+// file sync is single-holder, so enrolling a second machine is a takeover the reader must be warned about by name.
 const devices = ref<Device[]>([]);
 vi.mock(`./useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
@@ -84,8 +74,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// The card's one job, and the one-liner is the whole deliverable: a token nobody can paste is a token that did
-// nothing. (The e2e journey drives the same two blocks through a real daemon.)
+// The card's one job: a token nobody can paste is a token that did nothing.
 it(`reveals the agent one-liner once a pairing is minted`, () => {
     pairToken.value = `pair_abc`;
     pairMode.value = `sync`;
@@ -102,8 +91,8 @@ it(`mints a full sync pairing by default`, async () => {
     expect(enable).toHaveBeenCalledWith(`sync`);
 });
 
-// The ports-only flow, which is a different enrollment rather than a variant of the same one: no folder to pick,
-// and any number of machines may hold one at once.
+// The ports-only flow is a different enrollment, not a variant: no folder to pick, and any number of machines
+// may hold one at once.
 it(`mints a ports-only pairing and stops asking for a folder`, async () => {
     const el = mount();
     expect(el.querySelector(`#desktop-sync-folder`)).not.toBeNull();
@@ -113,8 +102,7 @@ it(`mints a ports-only pairing and stops asking for a folder`, async () => {
     expect(enable).toHaveBeenCalledWith(`mirror`);
 });
 
-// A member never sees the choice: the daemon would cap their pairing at mirror anyway, so offering file sync
-// would be a button whose answer contradicts its label.
+// A member never sees the choice: the daemon caps their pairing at mirror anyway.
 it(`offers a member the mirror flow alone`, () => {
     canOperate.value = false;
     mount();
@@ -122,9 +110,8 @@ it(`offers a member the mirror flow alone`, () => {
     expect(shown()).not.toContain(`Enable desktop sync`);
 });
 
-/* TAKEOVER IS OFFERED ONLY WHEN A MACHINE ACTUALLY HOLDS FILE SYNC, and it names it — that machine's sync stops,
- * which is the whole reason it is an opt-in rather than something Enable does quietly. The holder is read off
- * the devices list, so this is also what pins that the card stopped keeping its own idea of who is syncing. */
+// Takeover is offered only when a machine actually holds file sync, and names it, since taking over ends that
+// device's sync.
 it(`offers to take file sync over, naming the device that holds it`, async () => {
     devices.value = [holder(`radarsu-rog`)];
     mount();
@@ -137,17 +124,14 @@ it(`does not offer a takeover when no device holds file sync`, () => {
     expect(shown()).not.toContain(`Sync from a different device instead`);
 });
 
-// A mirror-only machine is not a file-sync holder, so it must not produce a takeover prompt: adding a second
-// mirror contends with nothing.
+// A mirror-only machine is not a file-sync holder, so it must not produce a takeover prompt.
 it(`does not treat a ports-only device as the sync holder`, () => {
     devices.value = [{ key: `colleague`, label: `colleague-pc`, sync: { machine: `colleague`, mode: `mirror`, seenAt: Date.now() } }];
     mount();
     expect(shown()).not.toContain(`Sync from a different device instead`);
 });
 
-/* WHERE THE STATUS WENT. A reader arriving with the old card in mind is told, once, rather than left hunting for
- * a "Syncing from" line that is now a row above. Cheap to say and it is the one navigational fact this card
- * still owes anybody. */
+// Told once, where the old "Syncing from" line used to be, rather than left for the reader to hunt for.
 it(`points at the list for devices that are already paired`, () => {
     mount();
     expect(shown()).toContain(`Anything already paired is a row in`);

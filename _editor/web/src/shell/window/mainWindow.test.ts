@@ -2,16 +2,8 @@
 import { effectScope } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/* A LINK PRESSED IN A POPPED-OUT PANEL GOES TO THE APP'S OWN WINDOW, and the popped-out one does not move.
- *
- * Every test here speaks in notes on the channel, the only thing windows exchange, so what is pinned is the
- * arrangement rather than any window's bookkeeping:
- *   · a window with the app in it says so, and says when its reader was last in it;
- *   · a floating window hands its errand to exactly one of them, addressed, never broadcast;
- *   · silence past the deadline means that window is gone, whatever took it, and the errand opens a new one.
- *
- * The channel is stood in for so the wire notes can be read: two real windows is the one thing a unit test
- * cannot have, and the notes ARE the contract between them. */
+// A link pressed in a popped-out panel goes to the window with the app in it, never itself; pinned via channel notes,
+// since a unit test can't have two real windows exchanging them.
 
 interface Note {
     readonly kind: string;
@@ -26,14 +18,13 @@ const posted: Note[] = [];
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(note: Note): void {
-        // This module's channel only: the panels' own arrangement rides another one (floating.ts) and its
-        // beats are not what is being read here.
+        // Filters to this module's channel; floating.ts's own channel is a separate instance, not captured here.
         if (this.name === `intentic.main-window`) {
             posted.push(note);
         }
     }
     addEventListener(): void {
-        // Notes arrive through receiveMainWindowNote, the same door the channel's listener uses.
+        // Notes arrive via receiveMainWindowNote directly, not through this listener.
     }
 }
 
@@ -42,24 +33,22 @@ vi.stubGlobal(`BroadcastChannel`, FakeChannel);
 const { claimFloating, receiveFloatingNote } = await import("./floating");
 const { handOffToMainWindow, receiveMainWindowNote, sendLinkToMainWindow, useMainWindow } = await import("./mainWindow");
 
-// A file the agent mentioned, as it rides the wire: unresolved, with the line and the checkout a URL cannot say.
+// A file mention as it rides the wire, including the line and scope a URL alone can't carry.
 const FILE = { kind: `file`, path: `src/foo.ts`, line: 42, scope: { agent: `c-1` } } as const;
 
-// This window is the popped-out chat: it holds the panel, so it is the one with nowhere to put a file.
+// Simulates the popped-out chat window, which has nowhere of its own to put a file.
 const popOut = (): (() => void) => {
     const scope = effectScope();
     scope.run(() => claimFloating(`chat`, vi.fn()));
     return () => scope.stop();
 };
 
-// A window with the app in it, saying so. `at` is when its reader was last in it.
+// Simulates a window with the app open, announcing itself; `at` is when its reader was last active there.
 const appWindow = (id: string, at = 1_000): void => receiveMainWindowNote({ kind: `here`, id, at });
 
 let open: ReturnType<typeof vi.fn>;
 
-// Every test starts far enough in the future that whatever the last one left, a window's claim, an errand on
-// the doorstep, is long since written off. The module's roster is what the whole file is about, so it is aged
-// out rather than reached into.
+// Advanced far past any prior test's claims and errands each run, so the module's roster starts effectively empty.
 let clock = 1_000_000;
 
 beforeEach(() => {
@@ -88,8 +77,6 @@ describe(`a link pressed in a popped-out panel`, () => {
         dock();
     });
 
-    /* Addressed rather than broadcast: two windows both deciding they were the right one would open the file
-     * twice and fight over the focus. The pick is the window the reader was last in. */
     it(`goes to the one the reader was last in`, () => {
         const dock = popOut();
         appWindow(`w-old`, 1_000);
@@ -119,18 +106,15 @@ describe(`with the app's window closed`, () => {
 
         expect(handOffToMainWindow(FILE)).toBe(true);
 
-        // Straight off the click, so the browser still counts the window as one the reader asked for.
         expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
         expect(posted.some((note) => note.kind === `errand`)).toBe(false);
 
-        // The window boots and says it is there: the errand was waiting on the doorstep for exactly this.
         appWindow(`w-new`, 1_000_000);
 
         expect(posted.at(-1)).toEqual({ kind: `errand`, to: `w-new`, errand: FILE });
         dock();
     });
 
-    // A route is a destination the URL can carry, so the window it opens simply boots there.
     it(`boots the new window straight at a route, with nothing left waiting`, () => {
         const dock = popOut();
 
@@ -142,7 +126,6 @@ describe(`with the app's window closed`, () => {
         dock();
     });
 
-    // A dock, a close, a crash and a killed window all arrive here as the same silence.
     it(`writes off a window that stopped saying it was there`, () => {
         const dock = popOut();
         appWindow(`w-1`);
@@ -166,8 +149,7 @@ describe(`with the app's window closed`, () => {
     });
 });
 
-/* ONE LISTENER FOR EVERY LINK IN THE WINDOW, caught on the way down. A popped-out panel draws a whole panel's
- * worth of links it does not own, so what is pinned here is which of them leave and which are left alone. */
+// Pins which links a popped-out panel intercepts and sends to the main window, and which it leaves alone.
 describe(`any link pressed in a popped-out panel`, () => {
     const click = (html: string, init: MouseEventInit = {}): { event: MouseEvent; root: HTMLElement } => {
         const root = document.createElement(`div`);
@@ -187,7 +169,6 @@ describe(`any link pressed in a popped-out panel`, () => {
         const { event } = click(`<a href="/capabilities/github">Open setup</a>`);
 
         expect(posted.at(-1)).toEqual({ kind: `errand`, to: `w-1`, errand: { kind: `route`, path: `/capabilities/github` } });
-        // Prevented, so the link's own handler (a RouterLink's, a card's) stands down and nothing pushes here.
         expect(event.defaultPrevented).toBe(true);
         dock();
     });
@@ -202,7 +183,6 @@ describe(`any link pressed in a popped-out panel`, () => {
         dock();
     });
 
-    // A file mention says more than an address does, and its own handler carries all of it to the same place.
     it(`leaves a file mention to the handler that knows its line`, () => {
         const dock = popOut();
         appWindow(`w-1`);
@@ -278,7 +258,6 @@ describe(`the window with the app in it`, () => {
         leave();
     });
 
-    /* An app with nothing popped out pays nothing for this: there is no window out there that could ask. */
     it(`says nothing while nothing is floating, and starts the moment something is`, () => {
         const leave = mount(vi.fn());
         expect(posted.some((note) => note.kind === `here`)).toBe(false);
@@ -289,7 +268,6 @@ describe(`the window with the app in it`, () => {
         leave();
     });
 
-    // In an ordinary window there is nothing to hand anything to: the caller is already home.
     it(`hands nothing off, because it is where links are supposed to land`, () => {
         expect(handOffToMainWindow(FILE)).toBe(false);
         expect(open).not.toHaveBeenCalled();

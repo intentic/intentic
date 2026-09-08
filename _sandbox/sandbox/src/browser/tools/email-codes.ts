@@ -2,23 +2,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract";
 
-/* THE NARROW KEY TO A MAILBOX, "the newest code or confirmation link this site just sent", and nothing else.
- *
- * An identity may link a mailbox (IdentityConfigSchema.mailbox → a connected IMAP entry), and this is the only
- * thing the accounts tools do with it. The alternative, telling the agent, in prose, to go search whatever
- * inbox is connected, hands it the whole mailbox to find six digits, and is also less reliable: the prose
- * names one particular connection and rots when the owner connected a different one. Here the daemon does the
- * reading, over the same `curl imaps://` the IMAP connector's own skill teaches (curl is in every image; a
- * proper IMAP client library would be a dependency for one verb), and the MODEL sees only what it asked for:
- * sender, subject, the codes, the links.
- *
- * WHAT COUNTS AS "FROM THIS SITE": the mail's sender or subject carries the site's name, the registrable label
- * of the host the agent is stuck on ("reddit" of www.reddit.com). Loose on purpose: verification mail comes
- * from noreply@redditmail.com and friends, so matching the full host would miss the very mail this exists for.
- *
- * WHAT COUNTS AS "JUST": a half-hour window. IMAP's SINCE is day-granular, so the search over-fetches a day and
- * the Date headers narrow it, signup mail arrives in seconds, but a retried form and a slow relay deserve
- * room, and anything older is some other day's mail that would only mislead. */
+// Narrow mailbox key: the newest code or link a site sent; read over the curl imaps:// the IMAP skill teaches.
+// "From this site" means sender or subject carries the site's label; loose, since verification comes from siblings.
+// "Just" means a half-hour window: SINCE is day-granular, so the search over-fetches a day and the Date header narrows
+// it.
 
 const run = promisify(execFile);
 
@@ -30,8 +17,8 @@ export interface Mailbox {
     readonly mailbox: string;
 }
 
-// The linked entry as a mailbox, when it is one: a cli capability whose config carries IMAP's shape (the imap
-// connector's fields). Undefined for anything else, the caller's "this identity links no readable mailbox".
+// Linked entry as a mailbox, when it's a cli capability shaped like the IMAP connector's config; undefined otherwise
+// (caller says "no readable mailbox").
 export const mailboxOf = (capability: Capability | undefined): Mailbox | undefined => {
     if (capability?.kind !== "cli") {
         return undefined;
@@ -46,8 +33,8 @@ export const mailboxOf = (capability: Capability | undefined): Mailbox | undefin
     return { host, port: config["port"] ?? "993", username, password, mailbox: config["mailbox"] ?? "INBOX" };
 };
 
-// The site's NAME out of a host or a platform slug: the registrable label, lowercased, "reddit" from
-// "www.reddit.com", "x" from "x.com", the slug itself when that is all we have.
+// Site's registrable label, lowercased: "reddit" from "www.reddit.com" or "x.com"; the slug itself when that's all
+// there is.
 export const siteToken = (site: string): string => {
     const host =
         site
@@ -58,7 +45,7 @@ export const siteToken = (site: string): string => {
     return (labels.length >= 2 ? labels.at(-2) : labels[0]) ?? site.toLowerCase();
 };
 
-// One fetched mail, already reduced to what the tool may say.
+// One fetched mail, reduced to what the tool may say.
 export interface MailMatch {
     readonly from: string;
     readonly subject: string;
@@ -67,7 +54,7 @@ export interface MailMatch {
     readonly links: readonly string[];
 }
 
-// `* SEARCH 101 103 108` → the UIDs, oldest-first as the server lists them.
+// `* SEARCH 101 103 108` to the UIDs, oldest-first as the server lists them.
 export const parseSearch = (output: string): number[] =>
     output
         .split("\n")
@@ -76,26 +63,21 @@ export const parseSearch = (output: string): number[] =>
         .map(Number)
         .filter((uid) => Number.isFinite(uid) && uid > 0);
 
-// Quoted-printable, undone loosely: soft line breaks first (they split codes and URLs mid-token), then the
-// =XX escapes. Loose because mail in the wild mislabels itself, decoding text that wasn't QP is harmless
-// (bare "=" followed by non-hex stays put), while not decoding text that was loses the link.
+// Undoes quoted-printable loosely: soft breaks first (they split tokens mid-word), then =XX escapes; a bare "=" before
+// non-hex is left alone.
 export const decodeQuotedPrintable = (text: string): string =>
     text.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
 
 const headerValue = (headers: string, name: string): string => {
-    // Unfold first (RFC 5322 continuation lines), then find the field.
+    // Unfolds RFC 5322 continuation lines first, then finds the field.
     const unfolded = headers.replace(/\r?\n[ \t]+/g, " ");
     const match = unfolded.match(new RegExp(`^${name}:\\s*(.*)$`, "im"));
     return match?.[1]?.trim() ?? "";
 };
 
-/* Codes: 4-8 digit runs, ranked by whether the words around them say "code". Subject first, "123456 is your
- * Reddit code" is the common shape, then body digits that sit near code-words, then bare body digits. Kept
- * as an ordered, deduped list so the first entry is the best guess and a wrong guess still leaves the rest. */
+// Codes rank subject digits first, then body digits near a code-word, then bare body digits; deduped, ordered.
 const CODE_WORDS = /\b(code|verification|verify|confirm|one[- ]?time|otp|pin|passcode)\b/i;
-// A run glued to more digits through -, /, : or . is a date, a price, an order number or a version, but a
-// full stop ENDING the sentence ("your code is 483920.") is prose, so the dot only disqualifies when digits
-// continue past it.
+// A run glued to more digits (-/:.) is a date, price or version; a sentence-ending full stop doesn't disqualify.
 const digitRuns = (text: string): string[] => text.match(/(?<![\d/.:-])\d{4,8}(?![\d/:-])(?!\.\d)/g) ?? [];
 export const extractCodes = (subject: string, body: string): string[] => {
     const near = (text: string): string[] =>
@@ -106,8 +88,7 @@ export const extractCodes = (subject: string, body: string): string[] => {
     return [...new Set([...digitRuns(subject), ...near(body), ...digitRuns(body)])];
 };
 
-/* Links: URLs that look like the mail's one job, confirmation-shaped words in the URL, or the site's own name
- * in its host, with the tracking noise (unsubscribe, preferences) dropped. Ordered and deduped like codes. */
+// Confirmation-shaped words or the site's name in the host; tracking noise (unsubscribe, preferences) dropped.
 const LINK_WORDS = /verif|confirm|activat|magic|onboard|welcome|signup|sign-up|register|auth|token|invite/i;
 const LINK_NOISE = /unsubscribe|preferences|privacy|terms|support|help\./i;
 export const extractLinks = (body: string, token: string): string[] => {
@@ -117,12 +98,12 @@ export const extractLinks = (body: string, token: string): string[] => {
     return [...new Set(confirming)];
 };
 
-// A mail is "from this site" when the site's name appears where the site would put it. From and subject only,
-// a BODY mentioning "reddit" is how a digest about Reddit impersonates a mail from it.
+// "From this site" means the name appears in From or Subject only; a body mention is how a digest impersonates real
+// mail.
 export const matchesSite = (from: string, subject: string, token: string): boolean =>
     from.toLowerCase().includes(token) || subject.toLowerCase().includes(token);
 
-// RFC 3501 SINCE date: day-granular, so start the search a day early and let Date headers do the narrowing.
+// RFC 3501 SINCE is day-granular; starts the search a day early and lets Date headers narrow it.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const imapSince = (now: Date): string => {
     const start = new Date(now.getTime() - 24 * 3_600_000);
@@ -130,12 +111,10 @@ export const imapSince = (now: Date): string => {
 };
 
 const WINDOW_MS = 30 * 60_000;
-// How many of the newest mails to actually read. A busy inbox gets constant mail; the one this tool wants
-// arrived seconds ago, so a dozen from the top is plenty and keeps the worst case bounded.
+// How many newest mails to read; a dozen bounds the worst case since the wanted mail arrives within seconds.
 const FETCH_LIMIT = 12;
 const CURL_TIMEOUT_MS = 20_000;
-// How much of a body to read: enough for any verification mail's text part, bounded so a newsletter with a
-// megabyte of markup cannot stall the turn.
+// How much of a body to read: enough for verification text, bounded against a newsletter's megabyte of markup.
 const BODY_BYTES = 16_384;
 
 const curl = async (mailbox: Mailbox, path: string, command?: string): Promise<string> => {
@@ -153,10 +132,8 @@ const curl = async (mailbox: Mailbox, path: string, command?: string): Promise<s
     return stdout;
 };
 
-/* The whole verb: search the window, read the newest few, return the newest mail that is from the site,
- * reduced to sender, subject, codes and links. Undefined when nothing in the window matches (the tool's "no
- * mail from this site yet, wait a moment and try again, or re-request the code"). Throws on transport
- * failures (bad credentials, unreachable host), which the tool surfaces as its error text. */
+// Searches the window, reads the newest few, returns the first mail from the site or undefined if none match.
+// Throws on transport failure (bad credentials, unreachable host), surfaced as the tool's error text.
 export const fetchEmailCode = async (mailbox: Mailbox, site: string, now: Date): Promise<MailMatch | undefined> => {
     const token = siteToken(site);
     const uids = parseSearch(await curl(mailbox, mailbox.mailbox, `UID SEARCH SINCE ${imapSince(now)}`));
@@ -171,8 +148,7 @@ export const fetchEmailCode = async (mailbox: Mailbox, site: string, now: Date):
         const dateHeader = headerValue(headers, "Date");
         const date = dateHeader === "" ? undefined : new Date(dateHeader);
         if (date !== undefined && !Number.isNaN(date.getTime()) && now.getTime() - date.getTime() > WINDOW_MS) {
-            // UIDs are allocation-ordered, so the first matching mail already outside the window means every
-            // older one is too, the site has sent nothing recent.
+            // UIDs are allocation-ordered: the first match outside the window means every older one is too.
             return undefined;
         }
         const body = decodeQuotedPrintable(await curl(mailbox, `${mailbox.mailbox};UID=${uid};SECTION=TEXT;PARTIAL=0-${BODY_BYTES}`));

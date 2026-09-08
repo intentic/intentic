@@ -6,21 +6,9 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useRole } from "../secrets/useRole";
 import { engineVisual } from "./engineVisual";
 
-/* THE AGENT ENGINES this sandbox runs, and where each one's version comes from.
- *
- * The card exists because that question used to have one answer for everybody: whatever the sandbox image
- * baked. When Anthropic raised the version floor a model requires, every sandbox in the fleet failed every
- * Claude turn until a new image reached it — an upstream event, an outage here, and nothing an owner could do
- * about it from inside their own box.
- *
- * So each row says three things and offers three actions. What is RUNNING (and whether it came from the image
- * or from the store on this machine's volume), what its CHANNEL would move it to, and what going BACK means.
- * Recommended is the default and means "a version this project's suite has run against"; latest takes upstream's
- * newest without waiting for anyone to recommend it; pinned holds one still. Nothing here downloads without a
- * click except what the channel already said to take.
- *
- * Owner-only, like the environment decisions above it: this installs code that every turn in this sandbox then
- * runs. A viewer still sees the versions, which is the half that answers "why did my turn fail". */
+// Agent engines this sandbox runs, and where each version comes from (the image bake vs. this machine's
+// store). Each row shows what's running, its channel (recommended/latest/pinned/image), and a revert.
+// Changing a channel is owner-only; a viewer still sees the running versions.
 
 const { canShip: canOperate } = useRole();
 const {

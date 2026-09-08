@@ -18,9 +18,8 @@ const repo = (fullName: string, over: Partial<GithubRepo> = {}): GithubRepo => (
 const manifest = (publisher: string, name: string, version = "1.0.0"): string =>
     JSON.stringify({ publisher, name, version, engines: { intentic: "^1.0.0" }, entry: "dist/extension.js" });
 
-/* A reader over in-memory fixtures. `manifests` models a branch copy only for tests proving it is ignored;
- * `files` is exact content at `${fullName}@${ref}:${path}`. Proposals and existing-listing checks both read the
- * latter now, because the source commit is resolved before a single manifest byte is trusted. */
+// In-memory GithubReader fixture: `manifests` models a branch copy for tests that expect it ignored; `files` holds
+// exact content at `${fullName}@${ref}:${path}`, which proposals and checks read instead.
 const fakeGithub = (config: {
     found?: GithubRepo[];
     repos?: Record<string, GithubRepo>;
@@ -87,15 +86,14 @@ describe(`scanRegistry`, () => {
                     name: `acme.incidents`,
                     stars: 40,
                     pushedAt: `2026-07-29T00:00:00Z`,
-                    // The pinned commit holds no manifest in this fixture, and the fact says so instead of
-                    // borrowing the branch's copy: the checks describe what an installer would get.
+                    // No manifest at the pinned commit here; checks reflect what an installer would see, not the branch
+                    // copy.
                     checks: { sha: sha(`a`), manifest: `no intentic-extension.json at the pinned commit`, bundle: `unchecked` },
                 },
             ],
         });
     });
 
-    // A listing that arrived by pull request has no obligation to carry the topic; its stars still count.
     it(`fetches facts for a listed repo the topic search never returned`, async () => {
         const result = await scanRegistry(
             file([{ name: `acme.quiet`, kind: `extension`, source: { source: `github`, repo: `acme/quiet`, sha: sha(`b`) } }]),
@@ -113,8 +111,6 @@ describe(`scanRegistry`, () => {
         ]);
     });
 
-    // The anti-squat rule: identity comes from the manifest, and a copied manifest collides with the listing
-    // it copied rather than quietly opening a pull request that looks legitimate.
     it(`refuses a repo claiming a publisher.name another repo already holds`, async () => {
         const result = await scanRegistry(
             file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
@@ -193,8 +189,7 @@ describe(`scanRegistry`, () => {
     });
 
     it(`re-derives the publishability checks at the PINNED sha, not at the branch`, async () => {
-        // The branch has moved on to a broken manifest; the pinned commit is fine. The checks must describe the
-        // commit installs follow: reading the branch here would report a working listing as broken.
+        // Branch manifest is broken; the pinned commit is fine and is what an installer would actually use.
         const result = await scanRegistry(
             file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
             fakeGithub({
@@ -212,9 +207,7 @@ describe(`scanRegistry`, () => {
     });
 
     it(`reports a pinned bundle that cannot load where it is installed`, async () => {
-        // The failure that is invisible to the author (their workspace loads the directory live) and fatal to
-        // every installer: a second file the blob-URL import can never resolve. Re-derived cold by the shared
-        // rule in @intentic/extension-manifest, so this judge and the daemon's readiness check cannot drift.
+        // A blob-URL load can't resolve a second file; installs fail though the author's own workspace still works.
         const result = await scanRegistry(
             file([{ name: `acme.incidents`, kind: `extension`, source: { source: `github`, repo: `acme/incidents`, sha: sha(`a`) } }]),
             fakeGithub({
@@ -245,7 +238,6 @@ describe(`scanRegistry`, () => {
         expect(result.facts.entries[0]?.checks?.bundle).toContain(`dist/extension.js`);
     });
 
-    // Never acted on automatically: a repo that went briefly private should come back to its listing.
     it(`warns about a listing whose source repo has vanished, and drops it from the facts`, async () => {
         const result = await scanRegistry(
             file([{ name: `acme.gone`, kind: `extension`, source: { source: `github`, repo: `acme/gone`, sha: sha(`d`) } }]),

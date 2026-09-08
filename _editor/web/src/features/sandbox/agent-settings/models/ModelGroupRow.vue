@@ -6,42 +6,22 @@ import AddModelButton from "./AddModelButton.vue";
 import type { PinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 
-/* ONE WHOLE GROUP OF JOBS AS A SINGLE ROW on Sandbox ▸ Agent ▸ Models: the Simple view of a block, against
- * <ModelRoleRow>'s Advanced one.
- *
- * WHY A SECOND SHAPE EXISTS AT ALL. The unit of the setting is the ROLE and that is not in question — it is
- * what lets somebody pin Opus to commit subjects without pinning it to every session title. But eighteen jobs
- * is eighteen rows, and the sentence most owners want is "these five, on this, in this order". They can say it
- * through the selection (tick, pick once), and even that is a gesture per visit. Collapsed, the group IS the
- * sentence: one list, one Add button, and the jobs named underneath it.
- *
- * IT IS A VIEW, NOT A SETTING. Nothing is stored per block; a change here writes THE SAME ordered list into
- * every role of the block, one patch, exactly as if it had been typed into each row (see AgentModels' own
- * `groupList`). That is why switching to Advanced can never surprise: what it shows is what this row wrote.
- *
- * WHAT IT DRAWS WHEN THE JOBS DISAGREE, which is the one case a collapsed view can lie about. The list is the
- * INTERSECTION — the entries every job in the block holds — so nothing here claims to be set on a job that
- * does not have it. The chip says so in two words, because a list that silently shows less than the setting
- * holds is the failure mode of every "simple" view ever built.
- *
- * AND THE JOBS ARE HANDED IN RATHER THAN READ OFF THE BLOCK, because a job can be switched off from another tab
- * (the safety judge, whose own feature has a switch on Safety). One this page cannot write to is not part of
- * what "one list for all of them" promises, so it is not counted here and not named — the page decides which
- * those are, and whatever it leaves out it explains in `#note`. */
+// Collapsed, one-row view of a job block (vs. <ModelRoleRow>'s per-job Advanced view); not a separate setting, it
+// writes the same list into every role of the block as one patch. When jobs disagree it shows their intersection and
+// flags "differs" rather than hiding the gap; `roles` is handed in since availability varies per job.
 
 const { block, roles, list, differs, disabled, loaded } = defineProps<{
-    /** The block being collapsed: its heading names the Add button, and its id words the empty chip. */
+    /** Block being collapsed; its heading names the Add button and its id words the empty chip. */
     block: ModelRoleBlock;
-    /** The jobs this row actually writes — the block's, minus any that cannot run right now. */
+    /** Jobs this row actually writes: the block's, minus any that can't run right now. */
     roles: readonly ModelRoleSpec[];
     /** The shared list over those jobs: reads what all of them hold, writes all of them. */
     list: PinnedList;
-    /** Whether the block's jobs hold different lists, so this row is showing less than the setting holds. */
+    /** Whether the block's jobs hold different lists (this row is then showing less than the full setting). */
     differs: boolean;
     /** Inert while the settings have not been read. */
     disabled: boolean;
-    /* Whether the settings have landed. The chip is a claim about what these jobs will DO, so it may not be
-     * drawn over a record nobody has read yet — <ModelRoleRow> says why at length. */
+    // Whether settings have landed; the chip claims what these jobs will do, so it can't draw before that's true.
     loaded: boolean;
 }>();
 
@@ -49,18 +29,14 @@ const emit = defineEmits<{ open: [number | undefined, HTMLElement] }>();
 
 const pinned = computed<boolean>(() => list.entries.value.length > 0);
 
-// What this row is. The count is the point of the view — it is how many jobs one press is about to write — so
-// it is in the title rather than in a badge beside the heading, where it used to sit saying nothing.
+// Count is the point (how many jobs one press writes), so it's in the title, not a separate badge.
 const title = computed<string>(() => `One list for all ${roles.length} jobs`);
 
-// And WHICH jobs, because a row that writes five settings owes their names: the group heading says what they
-// have in common, this says what they are.
+// Names which jobs, since a row writing several settings owes their names.
 const jobs = computed<string>(() => roles.map((role) => role.label).join(`, `));
 
-/* THE STATE, IN A WORD, and the three it can be. `jobs differ` outranks the other two: while it is true the
- * list on screen is a subset, so "off" (which means no job runs) would be a lie about the jobs holding models
- * of their own. The empty wordings are <ModelRoleRow>'s own, said for a whole block: a one-shot with no models
- * does not run at all, a whole session with none opens on the model the owner picked for their own chat. */
+// Three states; "jobs differ" outranks the others, since "off" would misstate jobs that do hold models of their own.
+// Empty-state wordings mirror <ModelRoleRow>'s, said for the whole block.
 const chip = computed<{ readonly label: string; readonly hint: string } | undefined>(() => {
     if (!loaded) {
         return undefined;
@@ -84,12 +60,12 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 </script>
 
 <template>
-    <!-- NOT A LABEL AND NOT SELECTABLE, unlike the job rows: there is nothing to tick here — the row IS the
-         whole group — so `#below` needs none of their `@click.stop` guarding either. -->
+    <!-- Not selectable like the job rows: this row is the whole group, so `#below` needs no click guarding. -->
     <Row :spine="pinned || $slots[`note`] !== undefined" :description="jobs">
-        <!-- ITS MARK IS THE SAME BOX THE JOB ROWS DRAW, sized from the tier's own `mark` rather than from a
-             number typed here, so the one text column does not step sideways when the view is switched.
-             `boxes` is the set's plural glyph — several of the same thing — which is what this row is. -->
+        <!--
+            Sized from the tier's own `mark`, not a literal number, so the text column doesn't shift between views. `boxes` is the plural glyph for a
+            set of jobs.
+        -->
         <template #lead="{ mark }">
             <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                 <Icon name="boxes" aria-hidden="true" class="text-sm text-subtle" />
@@ -104,8 +80,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
         </template>
 
         <template #control>
-            <!-- Named for the GROUP, because that is what the press writes: the accessible name is the only
-                 thing separating this button from the eighteen the Advanced view offers. -->
+            <!-- Named for the group: the accessible name is what distinguishes this button from the per-job ones. -->
             <AddModelButton
                 :label="`Add a model for every ${block.label.toLowerCase()} job`"
                 :disabled="disabled"
@@ -115,9 +90,10 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 
         <template v-if="pinned || $slots[`note`]" #below>
             <div class="flex flex-col gap-2">
-                <!-- The same list the rows draw, with the same four gestures: each one writes the whole order
-                     back into every job of the block. `noteThinking` for the one-shots, where reasoning costs
-                     latency a job meant to land while you are still looking may not want. -->
+                <!--
+                    Same list and gestures as the per-job rows; each write lands the whole order into every job in the block. `noteThinking` is set
+                    for one-shots, where reasoning adds latency to a job meant to land immediately.
+                -->
                 <ModelPinList
                     v-if="pinned"
                     :entries="list.entries.value"
@@ -126,8 +102,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
                     @remove="list.remove"
                     @edit="(index: number, anchor: HTMLElement) => emit(`open`, index, anchor)"
                 />
-                <!-- Whatever the page had to leave out of this row, in the page's own words: a count that says
-                     four over a block of five owes its reader the fifth. -->
+                <!-- Whatever the page left out of this row (e.g. a job excluded from the count), in the page's own words. -->
                 <slot name="note" />
             </div>
         </template>

@@ -3,10 +3,8 @@ import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
-/* The transcript route's body: `AgentTranscriptSchema`, the restored messages, plus the session they came from
- * AND what it is bound to. The binding is not decoration: a reopened tab decides whether its next message
- * resumes this session or starts a fresh one by comparing all three against its own picks, so a body carrying
- * the id alone leaves the chat unable to answer it (and the client refuses to guess). */
+// Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
+// needs all three to decide whether its next message resumes this session.
 interface AgentTranscript {
     readonly sessionId?: string;
     readonly provider?: AgentProvider;
@@ -15,26 +13,9 @@ interface AgentTranscript {
     readonly messages: readonly TranscriptRow[];
 }
 
-/* WHAT A FINISHED AGENT'S CHAT HOLDS. `/agents/{id}/transcript` is what the panel reads when a conversation is
- * opened rather than attached to, every agent on the board except the one mid-turn. Answering it with an empty
- * list made the board's central move ("open the agent") land on "Start a conversation with Claude Code", as if
- * the work on the card had happened somewhere else.
- *
- * The shape is the restored one (`TranscriptRow`), not the streaming one: prose, the thinking that preceded
- * it, and the tool cards that prose introduced, which is why a reopened chat redraws its cards with their
- * diffs instead of a flat wall of text. The diffs below are the SAME strings the review panel serves for these
- * paths (fixture/workspace.ts), because they are the same change seen from the other side: the transcript is
- * where it was decided, the review is where it is read.
- *
- * FOUR conversations are fixtured: the agent holding a finished delta, which is the one a visitor is steered
- * to open from the board, and one per persona, the chats the window opens holding (fixture/openChats.ts),
- * so the rail's Personas cut opens onto work rather than onto an empty pane. Anything else still answers an
- * empty transcript, and the panel's empty state is honest there: those cards are a roster, not a recording.
- *
- * The three persona chats read differently from the coding one ON PURPOSE. Nothing in them touches a file:
- * they are a support queue, a launch thread and a payouts reconciliation, done through the accounts the
- * persona carries. That contrast is the whole argument for personas being in a workspace for coding agents,
- * and it is made by what the transcripts DO rather than by a sentence anywhere claiming it. */
+// /agents/{id}/transcript returns the restored transcript for a finished agent; other cards return empty, honestly.
+// Diffs match the review panel's. Four are fixtured: one finished-delta agent, one per persona; persona chats touch no
+// files, only their accounts.
 
 const SCHEMA_BEFORE = `export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -162,9 +143,7 @@ const SOFT_DELETES: AgentTranscript = {
     ],
 };
 
-/* A PERSONA CHAT, recorded for the pop-out's people-first view. The browser capture is intentionally one
- * compact artifact with two frames: enough evidence to trust the autonomous work without turning the
- * conversation into an operations dashboard. */
+// Persona chat; browser capture is one compact artifact, enough evidence without becoming a dashboard.
 const MAYA_SUPPORT: AgentTranscript = {
     sessionId: `ses_01j9maya`,
     provider: `claude`,
@@ -204,10 +183,7 @@ const MAYA_SUPPORT: AgentTranscript = {
     ],
 };
 
-/* GROWTH'S CHAT. Shorter than Maya's and deliberately so: it is the second row of a list of people, read far
- * more often than it is opened, and its job when it IS opened is to be recognisably a different kind of work
- * from the one above it, writing, posted through this persona's own accounts, with the owner holding the
- * final word on what goes out. */
+// Shorter than Maya's on purpose: writing, posted through the persona's own accounts.
 const OWEN_LAUNCH: AgentTranscript = {
     sessionId: `ses_01j9owen`,
     provider: `claude`,
@@ -233,10 +209,7 @@ const OWEN_LAUNCH: AgentTranscript = {
     ],
 };
 
-/* OPERATIONS' CHAT. The third kind again: reading two systems that disagree and coming back with the ONE
- * number a person has to decide about. It ends on a question rather than a result, because that is what this
- * persona's work usually ends on, and because a list of people whose every chat is finished says the wrong
- * thing about what they are for. */
+// Ends on a question, not a result: not every persona chat should read as finished.
 const PRIYA_PAYOUTS: AgentTranscript = {
     sessionId: `ses_01j9priya`,
     provider: `claude`,

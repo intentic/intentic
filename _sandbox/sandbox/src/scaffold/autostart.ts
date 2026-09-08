@@ -8,29 +8,15 @@ import { jsonFile } from "../store/json-file.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 
-/* WHAT THIS WORKSPACE RUNS WHEN IT BOOTS, as a file the workspace carries rather than a fact the seed knew once.
- *
- * The starter site used to be started from inside the seed that copied it in, and only there. That made the
- * dev server a property of ONE boot: the first one, of a workspace that arrived empty. Every other boot of the
- * same box — a hosted machine woken after its idle stop, a pool volume the platform prepared ahead of demand,
- * a plain daemon restart — found the site on disk with nothing to say it should be running, and opened on
- * "isn't running" with a Start button. The product's first screen depended on which boot you happened to get.
- *
- * So the seed RECORDS what should run, here, and a boot step (main.ts `autostart`) starts whatever the file
- * names, every time. The file is workspace configuration in the ordinary sense: tracked by the root repo,
- * carried by an export, one entry per app instance (`<repo>/_apps/<app>`) with the dev command the app is
- * started with, the same `{pkg}` template `buildAppSpec` fills for the Start button. Starting is idempotent
- * (the process manager no-ops a key it already tracks), so the step is safe to run after a seed that started
- * nothing and after one that did.
- *
- * An entry whose folder is gone is skipped, not deleted: the user removing a repo is the user's business, and
- * an entry that outlives its app costs one log line per boot and nothing else. */
+// What this workspace runs on boot: one entry per `<repo>/_apps/<app>` with its dev command, so every boot restarts it,
+// not only the seed's first one. `autostart` (main.ts) starts what the file names and is idempotent; a missing folder
+// is skipped, not deleted.
 
 const AutostartAppSchema = z.object({
     // The repo directory under /work and the instance under its `_apps/`, the pair `appPanelKey` names.
     repo: z.string().min(1),
     app: z.string().min(1),
-    // The dev command template, `{pkg}` standing for the app package's real name (workspace/app-previews.ts).
+    // The dev command template; `{pkg}` stands for the app package's real name.
     dev: z.string().min(1),
 });
 const AutostartSchema = z.object({ apps: z.array(AutostartAppSchema) });
@@ -53,7 +39,7 @@ export const recordAutostart = async (root: string, entry: AutostartApp): Promis
     );
 };
 
-// The `pnpm --filter` target is the app package's REAL name, read off disk, never assumed from a template's scope.
+// Returns the `pnpm --filter` target: the app package's real name read from disk, not assumed from a template's scope.
 const packageName = (appDir: string): string | undefined => {
     try {
         return (JSON.parse(readFileSync(join(appDir, "package.json"), "utf8")) as { name?: string }).name;
@@ -67,14 +53,12 @@ export interface AutostartOutcome {
     readonly skipped: readonly { readonly key: string; readonly why: string }[];
 }
 
-// The three seams a boot step needs to put an app up: where the workspace is, what URL its previews answer
-// on, and the manager that runs it. Named rather than taken whole because this module hands `services` to
-// nothing (composition.ts "WHAT A MODULE SHOULD TAKE OF IT"), and a test of it should stand up three members.
+// The three dependencies a boot step needs: workspace root, preview URL/zone config, and the process manager. Picked
+// individually so a test only needs to stand up three members, not all of `Services`.
 export type AutostartDeps = Pick<Services, "config" | "processes" | "workspace">;
 
-/* Start everything the file names. Same spec builder, same zone and sandbox id as the Start button and the
- * apps routes, so a server this step starts is byte-for-byte the one a click would have started. Per-entry
- * failures are reported, never thrown: one app that cannot start must not keep the rest down. */
+// Starts everything the file names, using the same spec builder, zone and sandbox id as the Start button, so the result
+// matches a manual start. Per-entry failures are reported, not thrown, so one bad app does not block the rest.
 export const runAutostart = async (services: AutostartDeps): Promise<AutostartOutcome> => {
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);

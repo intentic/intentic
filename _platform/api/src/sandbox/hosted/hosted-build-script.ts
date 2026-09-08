@@ -1,21 +1,11 @@
-/* WHAT A BUILDER MACHINE RUNS, as one shell script the platform writes into it (hosted-build.ts puts it at
- * BUILD_PATHS.script through the machine config's `files` and makes it the entrypoint). The buildkit image
- * is Alpine with busybox, so everything here is busybox sh: no bash, no curl, no jq.
- *
- * Four steps, and the shape of each is a brake as much as a step:
- *   1. buildkitd up, on a unix socket, with no entitlements (no host network, no insecure security mode).
- *   2. `buildctl build` under `timeout`, so the machine stops itself at the platform's limit even when the
- *      platform is unreachable and cannot destroy it. The Dockerfile is the whole build context.
- *   3. The result is pushed to the sandbox app's own registry path under one moving tag, with the layer
- *      cache beside it; the image's digest lands in the metadata file.
- *   4. One report to the platform, authenticated by the build's secret: the exit code and digest in headers,
- *      the log's tail as the body, so nothing needs JSON-escaping in shell. Then exit with the build's code.
- *
- * The registry login is a file the platform wrote (BUILD_PATHS.dockerConfig): buildctl reads it as docker
- * would. Everything the script needs to know beyond that arrives as env, listed in `BUILD_ENV`. */
+// The builder's entrypoint script (written by hosted-build.ts); busybox sh only, no bash/curl/jq. Four steps:
+// 1. buildkitd up on a unix socket, no entitlements.
+// 2. `buildctl build` under `timeout`, Dockerfile as the whole build context.
+// 3. push to the sandbox app's own registry under one moving tag; digest lands in the metadata file.
+// 4. report exit code, digest, and log tail to the platform, then exit with the build's code.
 
 export const BUILD_PATHS = {
-    // The build context holds the Dockerfile and nothing else: `COPY . /x` copies a Dockerfile.
+    // Holds only the Dockerfile; `COPY . /x` copies just it.
     context: `/build/context`,
     dockerfile: `/build/context/Dockerfile`,
     script: `/build/run.sh`,
@@ -24,7 +14,7 @@ export const BUILD_PATHS = {
     metadata: `/build/meta.json`,
 } as const;
 
-// The env names the script reads, written by hosted-build.ts and nothing else.
+// Env names the script reads; written only by hosted-build.ts.
 export const BUILD_ENV = {
     image: `INTENTIC_BUILD_IMAGE`,
     cache: `INTENTIC_BUILD_CACHE`,
@@ -33,10 +23,10 @@ export const BUILD_ENV = {
     secret: `INTENTIC_BUILD_SECRET`,
 } as const;
 
-// How much of the log rides in the report. Enough to read a failed apt or compile; small enough to be a row.
+// Log bytes kept in the report: enough for a failed apt/compile, small enough for a row.
 export const LOG_TAIL_BYTES = 64 * 1024;
 
-// The headers the report carries beside its text body; the report route reads exactly these.
+// Headers the report carries beside its text body; the report route reads exactly these.
 export const REPORT_HEADERS = {
     secret: `x-intentic-build`,
     exitCode: `x-intentic-exit`,
@@ -94,7 +84,7 @@ export const buildScript = (): string =>
         ``,
     ].join(`\n`);
 
-// The registry login buildctl reads, docker's own file shape. Username is Fly's fixed `x`; the password is
-// the app-scoped deploy token minted for this build (fly-tokens.ts).
+// Registry login buildctl reads, in docker's config shape. Username is Fly's fixed `x`; password is the app-scoped
+// deploy token for this build (fly-tokens.ts).
 export const dockerConfigJson = (registry: string, token: string): string =>
     `${JSON.stringify({ auths: { [registry]: { auth: Buffer.from(`x:${token}`, `utf8`).toString(`base64`) } } })}\n`;

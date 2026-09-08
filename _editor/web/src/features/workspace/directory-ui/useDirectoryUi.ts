@@ -6,25 +6,12 @@ import { readFileWindow } from "../files/fileWindow";
 import { readIntenticLines } from "../../../lib/intenticStream";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 
-/* Directory-defined UI: a workspace directory ships its own interaction surface as a single self-contained
- * `<dir>/.intentic/ui/index.html` (inline JS/CSS). The parent reads that file through the SAME authed daemon
- * file route the tree uses, then renders it into a `<iframe sandbox="allow-scripts" srcdoc>`, an opaque origin
- * that can't read the parent DOM, cookies, or the Google/TOFU tokens sandboxClient holds.
- *
- * The UI talks to its sandbox ONLY through this postMessage bridge, which proxies the narrow allowlist in
- * directoryUiVerbs.ts. The parent runs the real call via sandboxClient, injecting auth on its side, so raw
- * tokens never cross the frame boundary, and anything off the allowlist is rejected.
- *
- * Wire protocol (iframe → parent):  { __intentic: true, id, verb, args }
- * Reply (parent → iframe):
- *   non-stream: { __intentic: true, id, ok: true, data } | { __intentic: true, id, ok: false, error }
- *   stream:     { __intentic: true, id, frame } … repeated, then { __intentic: true, id, done: true }
- *               (an error mid-stream arrives as { id, ok: false, error }). */
+// Directory-defined UI: a directory's self-contained `.intentic/ui/index.html`, read via the normal file route
+// and rendered into a sandboxed, opaque-origin iframe with no DOM/cookie/token access. Talks to its sandbox only
+// via postMessage, proxied through directoryUiVerbs.ts's allowlist so raw auth never crosses the frame.
 
-// Read a directory's UI document, or undefined when it declares none. dir is root-relative ("" = /work root);
-// the escape hatch when there's no UI is the normal file tree. Almost every directory a reader opens declares
-// none, which is exactly why the read answers absence instead of failing (see readFileWindow), this is the
-// most-asked "is it there?" question in the app.
+// Reads a directory's UI doc, or undefined when it declares none (dir is root-relative, "" = /work root).
+// Most directories declare none, so absence is a normal answer, not a failure — this is the tree's most-asked check.
 export const loadDirectoryUi = async (dir: string): Promise<string | undefined> => {
     const path = dir === `` ? `${STATE_DIR}/ui/index.html` : `${dir}/.intentic/ui/index.html`;
     try {
@@ -40,10 +27,8 @@ const init = (call: BridgeCall): RequestInit => ({
     ...(call.body !== undefined ? { headers: { "content-type": `application/json` }, body: call.body } : {}),
 });
 
-// Attach the bridge to a rendered iframe; returns a teardown. Messages are validated by SOURCE (event.source ===
-// the frame's window), not origin, a srcdoc/sandbox frame is an opaque "null" origin, so the origin string is
-// untrustworthy. Replies go straight to that frame's window, so targetOrigin "*" reaches only it (and carries no
-// secrets, just app/script output).
+// Validates messages by source (the iframe's own window), not origin — a sandboxed srcdoc frame's origin is
+// opaque "null". Replies target that window directly, so targetOrigin "*" is safe: it carries no secrets.
 export const createDirectoryUiBridge = (iframe: HTMLIFrameElement): (() => void) => {
     const onMessage = async (event: MessageEvent): Promise<void> => {
         const frame = iframe.contentWindow;

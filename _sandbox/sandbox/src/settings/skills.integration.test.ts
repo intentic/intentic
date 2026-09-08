@@ -7,8 +7,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { LSP_SKILL, listOwnSkills, ownSkillDir, readOwnSkill, reconcileSkills, removeOwnSkill, writeOwnSkill } from "./skills.js";
 
-// Minimal Services stub: the skill store reads workspace.root and goes through files.read/write (mirrored here
-// with real on-disk IO so the tests can assert what the agent's loader would actually find).
+// Minimal services stub with real on-disk IO, so assertions match what the agent's loader would actually find.
 const stubServices = (root: string): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -48,9 +47,7 @@ test("an unknown skill name is ignored (no registry entry, nothing written)", as
     await expect(stat(loadedPath(root, "does-not-exist"))).rejects.toThrow();
 });
 
-/* THE WHOLE POINT OF STORING OWN SKILLS SEPARATELY: switching one off must not delete what was written. Storing
- * them in the loaded folder would have made "off" and "gone" the same operation, which is the mistake this layout
- * exists to prevent, so this test asserts both halves, the copy disappearing AND the source surviving. */
+// Storing own skills separately from the loaded copy means switching one off deletes only the copy, never the source.
 test("an own skill is copied into the loaded folder when on, and only the copy goes when off", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
@@ -68,8 +65,8 @@ test("an own skill is copied into the loaded folder when on, and only the copy g
     });
 });
 
-// The reconciler reads own skills off disk on every pass rather than taking them as arguments, so that an edit
-// made out-of-band (by the agent's own file tools, mid-session) reaches the next turn.
+// Reconcile re-reads own skills from disk every pass, so an out-of-band edit (the agent's own file tools) reaches the
+// next turn.
 test("reconcile picks up an out-of-band edit to a stored skill", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
@@ -81,8 +78,6 @@ test("reconcile picks up an out-of-band edit to a stored skill", async () => {
     expect(await readFile(loadedPath(root, "notes"), "utf8")).toContain("Body two.");
 });
 
-// Deleting is the one operation that has to reach BOTH copies: leaving the loaded one behind would keep a deleted
-// skill in the agent's context until something else happened to reconcile it away.
 test("removing an own skill clears the stored copy and the loaded one together", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
@@ -95,8 +90,7 @@ test("removing an own skill clears the stored copy and the loaded one together",
     expect(await listOwnSkills(services)).toEqual([]);
 });
 
-// A directory with no readable SKILL.md is a half-written skill, not one that does nothing: listing it empty would
-// put a row with no description in front of the reader and imply the agent had been handed it.
+// A directory with no readable SKILL.md is half-written, not an empty skill; it's excluded rather than listed blank.
 test("a stored directory with no SKILL.md is not listed", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);

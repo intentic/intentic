@@ -20,7 +20,7 @@ import type { CapabilityHandler } from "../capability.js";
  * that strands money. */
 
 export const walletHandler: CapabilityHandler = {
-    // No secret: the config is an address and the owner's own policy numbers, all of it printable.
+    // No secret: the config is an address and the owner's own policy numbers, all printable.
     echo: (config) => {
         const wallet = config as WalletConfig;
         return {
@@ -33,8 +33,7 @@ export const walletHandler: CapabilityHandler = {
             ...(wallet.deny !== undefined ? { deny: wallet.deny } : {}),
         };
     },
-    // Nothing is keyed by the name: the ledger is the sandbox's, the wallet is the owner's, the CLI takes no
-    // id. The re-apply re-asks the platform, which answers the same address.
+    // Nothing is keyed by the name (the CLI takes no id); a re-apply re-asks the platform for the same address.
     rename: {},
     async *apply(ctx, id, config) {
         const wallet = config as WalletConfig;

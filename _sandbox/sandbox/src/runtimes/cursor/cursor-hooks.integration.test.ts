@@ -9,21 +9,14 @@ import type { CommandGate } from "../../guard/command-gate.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 
-/* CURSOR'S TURN HOOKS, END TO END: the script Cursor would spawn, run as a real child process, talking to the
- * real socket, over the real HTTP-over-Unix transport. Stubbing any of that would leave the one part most
- * likely to be wrong untested — both capability environment projection and the command rulebook rest on this
- * protocol between a generated script and a server.
- *
- * The one thing NOT exercised here is Cursor itself reading /etc/cursor/hooks.json, which no test in this
- * repository can reach. What is pinned instead is the file's content, so the shape Cursor is promised is the
- * shape it is given. */
+// Cursor's turn hooks end to end: the generated script runs as a real child process, not a stub. Cursor itself reading
+// /etc/cursor/hooks.json is the one part no test here can drive; the file's content is pinned instead.
 
 const exec = promisify(execFile);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
 let service: CursorHookService | undefined;
-// The enterprise hooks file is a fixed machine-global path in production. Pointed at a temp file here so the
-// suite neither depends on /etc being writable nor leaves a file behind on the machine that ran it.
+// Enterprise hooks file is machine-global in production; pointed at a temp file so the suite needs no /etc access.
 let hooksFile = "";
 beforeEach(() => {
     hooksFile = join(mkdtempSync(join(tmpdir(), "cursor-etc-")), "hooks.json");
@@ -43,7 +36,7 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
     return { service: created, dir };
 };
 
-// Run the generated script the way Cursor runs it: a child process, the payload on stdin, the answer on stdout.
+// Runs the generated script as Cursor would: a child process, payload on stdin, answer on stdout.
 const askHook = async (dir: string, mode: "gate" | "session-env", payload: unknown): Promise<unknown> => {
     const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
@@ -57,7 +50,7 @@ const askHook = async (dir: string, mode: "gate" | "session-env", payload: unkno
 const askGate = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "gate", payload);
 const askSessionEnv = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "session-env", payload);
 
-// A gate that refuses everything, with the sentence the model and the user are both supposed to receive.
+// A gate that denies every command with the given reason.
 const denying = (reason: string): CommandGate => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
@@ -79,8 +72,6 @@ test("a registered turn's denial reaches Cursor as a deny, with the reason in bo
 
     expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1", cwd: "/work" })).toEqual({
         permission: "deny",
-        // Both, and deliberately the same sentence: one is what the model reads so it can choose something
-        // else, the other is what the person sees.
         agent_message: "Deleting files needs your approval.",
         user_message: "Deleting files needs your approval.",
     });
@@ -119,17 +110,11 @@ test("retiring a turn removes its capability environment", async () => {
     expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({ env: {} });
 });
 
-/* THE CASE THAT MUST NOT BLOCK. This hook fires for every command Cursor runs anywhere on the machine,
- * including a cursor-agent the owner started by hand in their own terminal — which is the owner acting
- * directly, and is exactly the case the daemon has no turn registered for. Blocking those would make the
- * sandbox's agent policy break the owner's own work. */
 test("a consult from no known turn is allowed rather than refused", async () => {
     const { dir } = await started();
     expect(await askGate(dir, { command: "rm -rf /", conversation_id: "someone-elses-agent" })).toEqual({ permission: "allow" });
 });
 
-/* The fallback that is reasoning rather than guessing: with exactly one Cursor turn running, a consult that
- * arrives unlabelled can only have come from it, and answering it correctly beats waving it through. */
 test("an unlabelled consult is answered by the only turn running", async () => {
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: denying("no"), push: () => {} });
@@ -140,12 +125,9 @@ test("with two turns running there is nothing to reason from, so it allows", asy
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: denying("no"), push: () => {} });
     hooks.register({ conversationId: "agent-2", gate: denying("no"), push: () => {} });
-    // A card shown to the WRONG conversation is worse than an unenforced command that gets logged.
     expect(await askGate(dir, { command: "rm -rf build" })).toEqual({ permission: "allow" });
 });
 
-// A workspace with no rules and no taint pays nothing, not even the classification: the same short-circuit
-// every vendor-gated runtime takes.
 test("a turn whose gate enforces nothing short-circuits to allow", async () => {
     const { service: hooks, dir } = await started();
     const gate: CommandGate = {
@@ -166,14 +148,10 @@ test("retiring a turn stops it answering for its agent id", async () => {
     expect(await askGate(dir, { command: "rm -rf build", conversation_id: "agent-1" })).toEqual({ permission: "allow" });
 });
 
-/* THE CARD'S FRAMES REACH THE TURN THAT RAISED THEM. A hold parks inside the gate and yields a permission
- * frame on the way; the hook process is what Cursor is blocked on meanwhile, which is the whole difference
- * between this tier and the weaker "approval" one. */
 test("frames the gate yields are pushed to the turn's own stream", async () => {
     const { service: hooks, dir } = await started();
     const pushed: AgentEvent[] = [];
-    // The real card shape, not a stand-in: a fabricated one would have type-checked as `AgentEvent` through a
-    // cast and then pinned a frame no client can render.
+    // Real AgentEvent shape, not a cast-based stand-in a fake would slip through unnoticed.
     const card: AgentEvent = { kind: "permission", requestId: "r1", toolName: "Shell", displayName: "Run command", reason: "rule" };
     const gate: CommandGate = {
         enforcing: true,
@@ -187,8 +165,8 @@ test("frames the gate yields are pushed to the turn's own stream", async () => {
     expect(pushed).toEqual([card]);
 });
 
-// The script answers for itself when it cannot reach anyone, so a socket that has gone away costs a turn
-// nothing. `failClosed` in the hooks file covers the case this cannot: the script being unrunnable at all.
+// The script answers for itself when it can't reach anyone, so a dead socket costs a turn nothing; failClosed in the
+// hooks file covers the remaining case, the script itself being unrunnable.
 test("a script that cannot reach the daemon fails safely rather than hanging", async () => {
     const { service: hooks, dir } = await started();
     await hooks.close();
@@ -209,8 +187,6 @@ test("a payload that is not JSON is allowed rather than crashing the turn", asyn
     expect(JSON.parse(out)).toEqual({ permission: "allow" });
 });
 
-/* The one half no test here can drive: Cursor reading the file. So the file's CONTENT is pinned instead —
- * the schema version, both events, and each event's failure posture. */
 test("the hooks file promises exactly the shape Cursor is documented to read", async () => {
     const { dir } = await started();
     const script = join(dir, "intentic-command-gate.mjs");
@@ -227,8 +203,6 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
 
 test("restarting over a socket a dead daemon left behind still binds", async () => {
     const { service: hooks, dir } = await started();
-    // A hard kill leaves the socket file on disk, and listen() would fail EADDRINUSE on it forever. Removing
-    // it on start is the only way the gate ever comes back.
     hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
     const second = createCursorHookService(dir, logger);
     await expect(second.start()).resolves.toBeUndefined();

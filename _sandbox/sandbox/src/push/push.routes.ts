@@ -5,10 +5,9 @@ import type { OrpcContext } from "../app-env.js";
 
 export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
 
-// The device's half of push: read the VAPID public key (and whether THIS device is already registered),
-// register, unregister, and send a test. Registering is per-device, so every route that identifies one does
-// it by channelId, the endpoint a browser's push service minted, or the deviceId a native install's relay
-// registration minted. The daemon never invents that identity.
+// The device's half of push: read the VAPID public key and this device's registration state, register, unregister, send
+// a test. Every route identifies a device by channelId (a browser's endpoint or a native relay's deviceId); the daemon
+// never invents that identity.
 export const createPushRoutes = (services: PushRoutesDeps) => {
     const i = implement(pushContract).$context<OrpcContext>();
     return {
@@ -16,8 +15,8 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
             const [keys, channels] = await Promise.all([services.push.keys(), services.push.list()]);
             return {
                 publicKey: keys.publicKey,
-                // Answered for the asking device specifically: a granted permission with no row here would
-                // notify nothing, and the toggle must be able to tell those two states apart.
+                // Answered for the asking device specifically, so the toggle can tell "no row" apart from "granted but
+                // not notified".
                 subscribed: input.id !== undefined && channels.some((entry) => channelId(entry) === input.id),
             };
         }),
@@ -29,13 +28,9 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
             await services.push.remove(input.id);
             return { ok: true } as const;
         }),
-        // Deliberately `notify`, not `notifyIfAway`: the user is by definition looking at the screen when they
-        // press this, and a test that silently sends nothing would prove the opposite of what it claims.
-        //
-        // Which is also why it reports the delivery count and refuses to answer OK on a zero. The two ways this
-        // reaches nobody are the two the user cannot see and cannot tell apart from a working send that their
-        // OS quietly dropped: no row at all (this device never registered, or its row was pruned as dead), and
-        // a row every push service refused. Both used to return `{ ok: true }` to a page that then said nothing.
+        // Named `notify`, not `notifyIfAway`: pressing this test always sends, so a silent no-op would prove nothing.
+        // Reports the delivered count and refuses OK on zero, since "no row" and "every send refused" look identical
+        // otherwise.
         test: i.test.handler(async () => {
             const { delivered, failed } = await services.pushSender.notify({
                 title: "intentic",

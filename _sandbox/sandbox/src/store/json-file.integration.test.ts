@@ -10,8 +10,7 @@ const dirs: string[] = [];
 const tempFile = async (name = "state.json"): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-json-file-"));
     dirs.push(dir);
-    // Nested, so the mkdir-on-write path is exercised the way every real store uses it (.intentic/ rarely
-    // exists on a fresh workspace).
+    // Nested under STATE_DIR to exercise mkdir-on-write, since .intentic/ rarely exists on a fresh workspace.
     return join(dir, `${STATE_DIR}`, name);
 };
 afterEach(async () => {
@@ -29,25 +28,23 @@ test("an absent, unparseable, or schema-rejected file all read as the fallback",
     expect(await file.read()).toEqual([]);
 
     await file.update(() => [1, 2]);
-    // Truncated mid-write is what a non-atomic writer used to expose; it must still read as absent, not throw.
+    // Simulates a truncated mid-write; must read as absent, not throw.
     await writeFile(path, `[1, 2`);
     expect(await file.read()).toEqual([]);
 
-    // Well-formed JSON of the wrong shape: a file from a build whose schema has moved on.
+    // Well-formed JSON of the wrong shape, as if from a build whose schema has moved on.
     await writeFile(path, `{"not":"an array"}`);
     expect(await file.read()).toEqual([]);
 });
 
 test("an update never overwrites content it could not read: the bytes move aside first", async () => {
-    /* The downgrade sequence: a newer build wrote a shape this build's schema rejects, the user rolled back,
-     * and the first write after that used to replace the only copy of the newer state with fallback-derived
-     * emptiness: the store "reset", unrecoverably, exactly when a bad update had already cost the user once. */
+    // Simulates a rollback: a newer build's bytes are present but unparseable by this schema's version.
     const path = await tempFile();
     const file = numbers(path);
     await file.update(() => [0]);
     await writeFile(path, `{"from":"a newer build"}`);
 
-    // Reading alone moves nothing: read is side-effect-free, and the newer build may be back tomorrow.
+    // Reading alone moves nothing; the newer build's bytes are still there if it comes back.
     expect(await file.read()).toEqual([]);
     expect(await readFile(path, "utf8")).toBe(`{"from":"a newer build"}`);
 
@@ -55,7 +52,7 @@ test("an update never overwrites content it could not read: the bytes move aside
     expect(await file.read()).toEqual([1]);
     expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`{"from":"a newer build"}`);
 
-    // Not-JSON-at-all (a stray editor, a torn pre-atomic write) is protected the same way.
+    // Not-JSON-at-all is protected the same way.
     await writeFile(path, `[1, 2`);
     await file.update(() => [2]);
     expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`[1, 2`);
@@ -82,8 +79,7 @@ test("update round-trips through disk and returns what it wrote", async () => {
 });
 
 test("concurrent updates serialize instead of losing each other", async () => {
-    // THE lost-update bug: every one of these reads the same empty array and writes its own single entry when
-    // the read-modify-write isn't serialized, so only the last survives.
+    // Without serializing, every concurrent update reads the same empty array and only the last write survives.
     const file = numbers(await tempFile());
     await Promise.all(Array.from({ length: 20 }, (_, index) => file.update((current) => [...current, index])));
     expect(await file.read()).toEqual(Array.from({ length: 20 }, (_, index) => index));
@@ -101,8 +97,7 @@ test("an update that throws settles the queue, so the next one still runs", asyn
 });
 
 test("returning the current value unchanged skips the write", async () => {
-    // What makes read-or-init (a minted secret, a generated keypair) free after the first call: no file appears
-    // at all when nothing changed.
+    // No file is written at all when the update returns the value unchanged, which is what makes read-or-init free.
     const path = await tempFile();
     const file = numbers(path);
     expect(await file.update((current) => current)).toEqual([]);
@@ -110,8 +105,7 @@ test("returning the current value unchanged skips the write", async () => {
 });
 
 test("read-or-init mints exactly once under concurrent first use", async () => {
-    // The failure this shape exists to prevent: two concurrent callers each see "nothing stored yet" and each
-    // mint their own secret, after which one of them is authenticating against a value nothing has.
+    // Without this, concurrent first calls could each mint a secret, and one would authenticate against neither.
     const path = await tempFile();
     let minted = 0;
     const file = jsonFile<{ secret: string }>(path, {
@@ -138,6 +132,6 @@ test("writes leave no temp file behind, and apply the requested mode", async () 
     const path = await tempFile();
     const file = jsonFile<number[]>(path, { parse: (raw) => NumbersSchema.safeParse(raw).data, fallback: () => [], mode: 0o600 });
     await file.update(() => [1]);
-    // The rename target is the only entry: a leftover *.tmp would be a write that never completed its swap.
+    // Only the rename target should exist; a leftover *.tmp means the swap never completed.
     expect(await readdir(join(path, ".."))).toEqual([`state.json`]);
 });

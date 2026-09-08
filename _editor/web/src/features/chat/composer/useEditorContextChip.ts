@@ -4,17 +4,9 @@ import { useRoute } from "vue-router";
 import { useEditorSelection } from "../../workspace/files/useEditorSelection";
 import { useWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
 
-/* THE FILE YOU ARE LOOKING AT, offered to the next message as a chip over the composer: the live Monaco
- * selection, else the active file tab. OFF by default, the user clicks the chip to attach it (the inverse of
- * VSCode Claude Code's always-on injection).
- *
- * Gated on the Workspace being the area on screen. The chip's whole claim is "the file you are LOOKING AT", and
- * it reads two singletons (useWorkspaceTabs, useEditorSelection) that outlive the Workspace view, while the
- * chat pane is docked in the persistent shell beside whatever area is open. Off /workspace there is nothing the
- * user is looking at, so "this file" has no referent and the chip is a stale nag for a file they left behind
- * (worse in /agents, where the turn runs in the agent's worktree, not the /work tree the tab came from).
- * Route-gated rather than dismissible: it is self-correcting, walk back into the Workspace and the chip
- * returns, with nothing to undo. */
+// The file the user is looking at, offered to the next message as an opt-in chip: the live Monaco selection,
+// else the active file tab. Gated on the Workspace being the visible area, since both sources it reads
+// (useWorkspaceTabs, useEditorSelection) are singletons that outlive that view.
 
 // A prompt is not a place to paste a whole file.
 const SELECTION_CAP = 20_000;
@@ -46,9 +38,7 @@ export const useEditorContextChip = (): {
     });
 
     const include = ref(false);
-    // Attaching is an explicit per-file choice, a different file in the editor resets the opt-in, as does
-    // leaving the Workspace (the target goes undefined with the chip, so an opt-in can't outlive the chip that
-    // explained it and ride along invisibly into a later message).
+    // Attaching is a per-file opt-in; a different file or leaving the Workspace resets it.
     watch(
         () => target.value?.file,
         () => {

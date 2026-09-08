@@ -33,20 +33,16 @@ import {
 } from "../transcript/transcript";
 import type { AttachHead } from "../run/turnStream";
 
-// `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
-// sandbox stores sandboxRequest reaches for at import time). It keeps the half this file depends on: the daemon
-// puts its own sentence for a refusal on `message`, and reading it is the whole point of the path below.
-// WHERE each call was aimed, recorded beside WHAT it was: the reach is the one argument that decides which
-// daemon a conversation is talking to, and it is invisible in the path. Hoisted so the mock factory can see it.
+// sandboxError mocks the real one's refusal-message parsing, without sandboxClient's app-wide singletons. reachSpy
+// records which sandbox each call targeted, since that argument is invisible in the request path.
 const { reachSpy } = vi.hoisted(() => ({ reachSpy: vi.fn<(at: string | undefined, path: string) => void>() }));
 vi.mock("../../sandbox/client/sandboxClient", () => {
     const sandboxRequest = vi.fn();
     return {
         sandboxRequest,
-        /* The reach-aimed call, on the real client's terms: `undefined` is the active box, which is what all
-         * but the cross-sandbox tests mean. It delegates to the spy above so every existing assertion stays
-         * written against one mock per verb rather than two that would have to agree, and records the reach on
-         * the way through for the ones that are about it. */
+        // sandboxRequestVia on the real client's terms: `undefined` reach is the active box. Delegates to the shared
+        // spy
+        // and records the reach.
         sandboxRequestVia: (at: string | undefined, path: string, init?: RequestInit) => {
             reachSpy(at, path);
             return init === undefined ? sandboxRequest(path) : sandboxRequest(path, init);
@@ -59,29 +55,22 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 // Every path this conversation addressed at a given box, in order.
 const pathsAimedAt = (at: string | undefined): string[] => reachSpy.mock.calls.filter(([box]) => box === at).map(([, path]) => path);
 
-// A model-invalid error dynamically imports useChat-catalog to reload the provider's live catalog; stub it (and spy)
-// so the test doesn't pull in the whole chat store (router/sandbox side effects). vi.hoisted so the spy exists
-// when the hoisted vi.mock factory runs.
+// Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store. vi.hoisted so the
+// mock factory can see the spy.
 const { loadProviderModelsMock, loadTrialStatusMock } = vi.hoisted(() => ({
     loadProviderModelsMock: vi.fn(async () => {}),
     loadTrialStatusMock: vi.fn(async () => {}),
 }));
 vi.mock("../models/useChat-catalog", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
 
-// turnDefaults is a module singleton; reset the per-provider memory so tests stay order-independent. Grok's
-// default is loaded live (empty until then); a fresh test env has no loaded catalog.
-// BEFORE each, not only after: the FIRST test in the file used to run against whatever the module seeded
-// itself with, which is the one conversation in this suite whose selection didn't match the `settings` every
-// send passes, and the divider that reports a model swap reads exactly that difference.
+// turnDefaults is a module singleton; reseed before each test.
 const seedTurnDefaults = (): void => {
     turnDefaults.models.value = { claude: `opus`, codex: ``, grok: `` };
     turnDefaults.provider.value = `claude`;
 };
 
-/* The account switcher writes a SANDBOX-WIDE preference, not a per-conversation ref (selectAccount →
- * selectedAccountId), and with no account list loaded the remembered pick is authoritative
- * (rememberedAccountFor's own note): a switch made in one test would otherwise seed every conversation built
- * after it, and a session minted under no pick stops resuming for tests that never touched an account. */
+// selectAccount writes a sandbox-wide preference (selectedAccountId), not per-conversation; save and restore it so
+// one test's switch doesn't leak into the next.
 const accountPicks = { ...selectedAccountId.value };
 
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
@@ -106,34 +95,12 @@ afterEach(() => {
 const encoder = new TextEncoder();
 const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
 
-// Run ids, handed out across every fake daemon in one test (see sseResponse's `startTurn`), so a turn served by
-// the second fake a test installs is still a different RUN from the one the first served. Reset per test, so a
-// test that names an id names the same one however many ran before it.
+// Run id counter shared across every fake daemon in a test, so runs from different fakes get different ids; reset
+// each test.
 let runsMinted = 0;
 
-/* Serve the detached-run protocol the way the daemon does: POST /agent acks `{ run }` (the turn executes
- * daemon-side), POST /agent/attach streams the head (the run's rows so far), then the given events folded into
- * patches and facts by the daemon's own fold, then `end`. Control posts are answered as the daemon answers them:
- * a stop ends the stream with what it caught pending cancelled and the daemon's `Stopped.` line (or, landing
- * before the attach, ends the run the head opens on); a reply settles the card through the run's own `resolved`
- * frame, writes the daemon's line about the verdict, and lets the events behind the card carry on. A card the
- * events leave pending PARKS the stream, as the daemon's does, unless the events themselves resolve it.
- * `stayOpen` leaves the stream open after the events; aborting the request then errors it, mirroring fetch
- * cancellation.
- *
- * The fold is the contract's (transcript-fold.ts), the very one the daemon runs, so a test written as the
- * frames a provider produced exercises exactly the rows a window would be handed for them. The opening row is
- * built from the prompt the window POSTED, the way the daemon builds it (turn-transcript.ts openingRows).
- *
- * `head` overrides the run's identity, which a RESUMED run needs two of. `prompt`, because a resumed run opens
- * with a notice standing in for the repeated words rather than the words again, so the opening row is built
- * from it as the daemon builds it (a `rows` override supplies the opening rows outright). And `startedAt`,
- * because an adopted run's start is what its DURATION is measured from (endTurn → scheduleAutoContinue), so a
- * test about the auto-continue ladder pins it.
- *
- * A THUNK, not a value, because it is read per attach: a test that serves several runs off one implementation
- * would otherwise stamp them all with the instant the mock was installed, and a "run" that started thirty
- * seconds of fake time ago is one the ladder reads as having got somewhere. */
+// Mocks the daemon's turn protocol (ack, attach replay via TranscriptFold, stop/reply) for `sandboxRequest`.
+// `head`, a thunk read per attach, overrides a resumed run's id, prompt and start time.
 interface LiveRun {
     readonly controller: ReadableStreamDefaultController<Uint8Array>;
     readonly fold: TranscriptFold;
@@ -149,16 +116,11 @@ const sseResponse = (
     // A stop that landed after the ack and before the attach: the run is over by the time its head goes out.
     let stopRequested = false;
     let live: LiveRun | undefined;
-    /* ONE RUN PER TURN STARTED, each under its own id, because the id is what a window keys a run's rows by
-     * (transcriptState.attachRun): a second turn served under the first one's id RE-BASES onto its rows and
-     * replaces them, so a conversation that says two things would lose the first. A turn is started by a POST
-     * /agent or by the /agent/resume a press sends, which is exactly where the daemon opens a TurnRun of its
-     * own (turn-runs.ts, `crypto.randomUUID()` per run). Minted from a counter shared by every fake in the
-     * test, since the turns of one conversation are commonly served by more than one of them. */
+    // One run per turn started, each under its own id: a turn served under a prior run's id would rebase onto its
+    // rows and replace them.
     let runId = `r1`;
-    /* The run's fold, once an attach has served it. A SECOND attach to the SAME run (a reload, a dropped stream
-     * coming back) is handed the rows it has accumulated, which is what the daemon's head carries, rather than
-     * a replay of its events into a second copy of the answer. */
+    // The run's fold once served: a second attach to the same run gets its accumulated rows, not the events replayed
+    // again.
     let served: TranscriptFold | undefined;
     const startTurn = (): void => {
         runsMinted += 1;
@@ -204,9 +166,9 @@ const sseResponse = (
             requested = { prompt: String(body?.[`prompt`] ?? ``), attachments: (body?.[`attachments`] as string[] | undefined) ?? [] };
             return ok();
         }
-        /* The press re-runs the held turn, and the daemon runs it as a NEW turn on its own copy of the prompt
-         * (agent.routes `resume` → fireLimitResume). So the head that follows opens a run of its own, under the
-         * resume note the prompt now carries, rather than replacing the rows of the attempt that was refused. */
+        // Resume runs the held turn as a new turn on its own prompt copy; the head that follows opens its own run
+        // rather
+        // than replacing the refused attempt's rows.
         if (path === `/agent/resume`) {
             startTurn();
             return ok();
@@ -255,8 +217,7 @@ const sseResponse = (
                 : openingOf(overrides.prompt, startedAt));
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {
-                // Already served once: this attach is a re-attach to the same run, so its head carries the rows
-                // the run has reached and there is nothing left to fold in.
+                // Re-attach to a served run: the head already carries its rows, so nothing is left to fold in.
                 const replay = served === undefined;
                 const fold = served ?? new TranscriptFold(opening);
                 served = fold;
@@ -276,9 +237,8 @@ const sseResponse = (
     };
 };
 
-/* A run's opening rows, as the daemon builds them (turn-transcript.ts openingRows): a resumed run's prompt opens
- * with the notice that stands in for its repeated words, an answered park with the answer under a note, and any
- * other prompt with the words themselves. */
+// A run's opening rows, matching the daemon's openingRows (turn-transcript.ts): a resumed run opens on its notice,
+// an answered park opens on the answer under a note, otherwise the prompt itself.
 const openingOf = (prompt: string, sentAt: number, attachments: readonly string[] = []): TranscriptRow[] => {
     const resume = resumeDisclosure(prompt);
     if (resume?.kind === `notice`) {
@@ -297,9 +257,8 @@ const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: numb
     rows: overrides?.rows ?? openingOf(overrides?.prompt ?? `hi`, overrides?.startedAt ?? 0),
 });
 
-/* A run served a frame at a time, for the tests that hold the stream open and feed it by hand: the daemon's own
- * fold turns each provider event into the patches and facts a window receives, and `head()` is the run's rows
- * at that moment, which is what a re-attach is handed. */
+// Serves a run one frame at a time for tests that hold the stream open and feed it by hand; `head()` gives the
+// rows at that moment, as a re-attach would be handed.
 const liveRun = (
     overrides?: Parameters<typeof head>[0],
 ): { head: () => AttachHead; frames: (event: AgentEvent) => AttachFrame[]; ending: (ending: `settled` | `stopped`) => AttachFrame[] } => {
@@ -317,14 +276,13 @@ const liveRun = (
             }
             return frames;
         },
-        // How the daemon unwinds the run: the open bubble closed and every card it left pending frozen as
-        // nobody's decision, said as rows, which is what a window that pressed Stop is waiting for.
+        // Mirrors how the daemon unwinds a run: the open bubble closed and pending cards frozen as nobody's decision.
         ending: (ending) => patches(fold.finish(ending)),
     };
 };
 
-// A body delivering one chunk per pull, then closing, or erroring, which models a connection that drops
-// AFTER the chunks arrived (controller.error inside start() would discard still-queued chunks instead).
+// Delivers one chunk per pull, then closes or errors, modeling a drop after the chunks arrived (erroring in
+// `start()` would discard queued chunks).
 const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<Uint8Array> => {
     let next = 0;
     return new ReadableStream<Uint8Array>({
@@ -343,8 +301,8 @@ const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<
     });
 };
 
-// The parsed bodies of the turn STARTS among the mock's calls: attach/control posts interleave, so tests
-// assert on turn inputs through this instead of raw call indexes.
+// Parsed bodies of the turn-start (`/agent`) calls; attach/control posts interleave, so assert through this
+// rather than raw call indexes.
 const turnBodies = (): Record<string, unknown>[] =>
     sandboxRequestMock.mock.calls
         .filter(([path]) => path === `/agent`)
@@ -386,10 +344,6 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
-    /* A TAB WITH NO PIN IS SERVED BY WHICHEVER ACCOUNT HAS HEADROOM, and the session frame says which. That
-     * account becomes the tab's pin: the picker then highlights the account that actually ran rather than its
-     * first row, and the next send compares a pick that matches the session's binding, so it resumes instead of
-     * quietly opening a fresh session for want of a pick (Conversation.bindSession). */
     it(`adopts the account the daemon served an unpinned turn on, so the next send resumes the session`, async () => {
         const conversation = new Conversation(`c-unpinned`);
         expect(conversation.account.value).toBeUndefined();
@@ -401,8 +355,6 @@ describe(`Conversation`, () => {
         expect(conversation.account.value).toBe(`with-room`);
     });
 
-    // ...and a pin the user made is theirs: a session the daemon reports elsewhere is the switch they have not sent
-    // yet, and the divider is what says so.
     it(`leaves a pin the user made alone when the daemon reports the session on another account`, async () => {
         const conversation = new Conversation(`c-pinned`);
         conversation.account.value = `acct-1`;
@@ -414,24 +366,14 @@ describe(`Conversation`, () => {
         expect(conversation.account.value).toBe(`acct-1`);
     });
 
-    /* The buffer's whole reason for existing: a turn's render cost is set by how many times the transcript is
-     * WRITTEN, not by how many frames the daemon sent, so a burst has to cost what a single frame costs.
-     *
-     * Driven off a clock that never fires rather than the file's synchronous one, because a synchronous
-     * requestAnimationFrame applies each frame the instant it arrives: precisely the behaviour the buffer
-     * replaces, and would let this pass while measuring nothing.
-     *
-     * Tool calls rather than deltas, because a delta lands in the typewriter's buffer rather than in
-     * `messages`, so a stopped clock hides the very difference under test: text only reaches a bubble when
-     * the clock ticks, whether frames are buffered or not. A tool call changes the transcript on the spot,
-     * which is what makes the per-frame write visible. */
+    // Driven off a stalled clock rather than the file's synchronous RAF stub, and tool calls rather than deltas, since
+    // a delta only reaches `messages` when the clock ticks and would hide the difference under test.
     it(`applies a burst of frames in one write, so render cost does not scale with frame count`, async () => {
         const runWith = async (calls: number): Promise<{ writes: number; tools: number }> => {
             vi.stubGlobal(`requestAnimationFrame`, (): number => 0);
             const conversation = new Conversation(`c1`);
             let writes = 0;
-            // Counted on `messages` because that is what the renderer reads: every fire is a transcript
-            // re-render. `flush: sync` so the count is of writes, not of scheduler passes that batch them.
+            // messages is what the renderer reads; `flush: sync` counts actual writes, not batched scheduler passes.
             const stop = watch(conversation.messages, () => (writes += 1), { flush: `sync` });
             sandboxRequestMock.mockImplementation(
                 sseResponse([
@@ -453,8 +395,6 @@ describe(`Conversation`, () => {
         const few = await runWith(4);
         const many = await runWith(16);
 
-        // Four times the frames, the same number of renders, and every call still landed, so the fold that
-        // bought this is applying them rather than collapsing them.
         expect(many.writes).toBe(few.writes);
         expect(few.tools).toBe(4);
         expect(many.tools).toBe(16);
@@ -490,10 +430,8 @@ describe(`Conversation`, () => {
         conversation.selectProvider(`claude`);
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
 
-        /* A Codex thread must not resume as a Claude session: the switched turn drops the session id. It sends
-         * NOTHING in its place: seeding the replacement is the daemon's job, off its own record of this
-         * conversation (sessions/turn-transcript.ts → handoffHistory), so an omitted sessionId is the whole
-         * signal. This window's painted bubbles never ride the wire. */
+        // An omitted sessionId is the whole signal that this is a fresh session; the daemon reseeds the replacement
+        // itself.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
         await conversation.send(`second`, settings);
         const secondBody = turnBodies()[1]!;
@@ -518,7 +456,6 @@ describe(`Conversation`, () => {
         conversation.selectProvider(`claude`);
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
-        // Browsing the picker never destroyed the session: the next send still resumes it.
         await conversation.send(`second`, settings);
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
@@ -536,7 +473,6 @@ describe(`Conversation`, () => {
         expect(notice.text).toContain(`Switched to`);
         expect(notice.text).not.toContain(`fresh session`);
 
-        // …and the promise holds: the swapped turn resumes the same session, on the new model.
         await conversation.send(`second`, { ...settings, model: `haiku` });
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
@@ -545,8 +481,7 @@ describe(`Conversation`, () => {
 
     it(`says nothing about a model picked before the chat has run anything`, async () => {
         const conversation = new Conversation(`c1`);
-        // No turn has gone out, so no cache exists to lose and no allowance has been spent yet: a divider here
-        // would be announcing a cost that isn't there.
+        // No turn sent yet, so no cost exists for a divider to report.
         conversation.selectModel({ provider: `claude`, value: `haiku` });
         expect(conversation.messages.value).toEqual([]);
     });
@@ -558,8 +493,7 @@ describe(`Conversation`, () => {
 
         conversation.selectModel({ provider: `claude`, value: `haiku` });
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        // Browsing the picker and landing back where you started costs nothing, so it says nothing, the same
-        // rule the provider divider follows.
+        // Landing back on the original pick costs nothing, so it says nothing, the same rule as the provider divider.
         conversation.selectModel({ provider: `claude`, value: `opus` });
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
     });
@@ -571,8 +505,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-1` },
-                // The per-model pools a Claude plan publishes: the one fact in this product that can answer
-                // "what does picking this model cost" with the provider's own number instead of a guess.
+                // The per-model usage pools a Claude plan publishes, keyed by model.
                 {
                     kind: `account_usage`,
                     account: `acct-1`,
@@ -587,7 +520,7 @@ describe(`Conversation`, () => {
         await conversation.send(`first`, { ...settings, account: `acct-1` });
 
         conversation.selectModel({ provider: `claude`, value: `claude-opus-4-6` });
-        // The pool's own figure, rounded once by the same projection the meters draw from.
+        // Rounded once, by the same projection the usage meters use.
         expect(conversation.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
     });
 
@@ -597,14 +530,14 @@ describe(`Conversation`, () => {
         const turn = conversation.send(`go`, settings);
         await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
 
-        // A same-provider swap is allowed mid-stream (it retires nothing), but the transcript's tail belongs to
-        // the turn being typed into it: a divider there would read as part of the answer.
+        // Allowed mid-stream (retires nothing), but the transcript tail belongs to the streaming turn; a divider there
+        // would read as part of the answer.
         conversation.selectModel({ provider: `claude`, value: `haiku` });
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
         conversation.stop();
         await turn;
-        // Settled, the tail is the composer's again, and the line describes the message the user types next.
+        // Settled: the tail is the composer's again, so the notice now describes the next message.
         expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`Switched to`))).toBe(true);
     });
 
@@ -619,12 +552,8 @@ describe(`Conversation`, () => {
         await turn;
     });
 
-    /* THE ACCOUNT SWITCHER IS LIVE WHILE A CARD WAITS ON THE USER, which is the one place `streaming` was the
-     * wrong question to ask. A parked turn is streaming, the run is alive and the attach stream open, so the flag
-     * every mid-turn guard reads greyed the switcher out at exactly the moment it was worth reaching for: an
-     * allowance refused mid-conversation puts a card on screen, and "on an account that has headroom" is the
-     * answer to it. The write lands on the NEXT turn either way, the parked turn keeps the credential it spawned
-     * with, so nothing about the run in flight moves under it. */
+    // A parked turn is `streaming` too (the run is alive), so a mid-turn guard on that flag also blocked switching
+    // while waiting on a card; a refused allowance needs an account with headroom right then.
     it(`takes an account switch while a turn waits on a card, and holds its divider until the turn settles`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
@@ -642,15 +571,15 @@ describe(`Conversation`, () => {
 
         conversation.selectAccount(`with-room`);
         expect(conversation.account.value).toBe(`with-room`);
-        // Nothing drawn yet: the transcript's tail belongs to the card, so a line there would sit between the
-        // question and the answer to it.
+        // Nothing drawn yet: the tail belongs to the card; a divider there would sit between the question and the
+        // answer.
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
         conversation.stop();
         await turn;
 
-        // Settled, the tail is the composer's again, and the line describes what the next message does: a fresh
-        // session, because the account that minted this one is no longer the one serving the conversation.
+        // Settled: the tail is the composer's again; the notice says the next message starts a fresh session (a new
+        // account is serving).
         expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`fresh session`))).toBe(true);
 
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
@@ -660,9 +589,8 @@ describe(`Conversation`, () => {
         expect(`sessionId` in secondBody).toBe(false);
     });
 
-    // ...and refused while the model is actually working, which is what `generating` is for. Mid-answer there is
-    // no question on screen that a switch is the answer to, and the pill would name an account that is not paying
-    // for the turn the user is watching.
+    // `generating` is mid-answer with no card on screen; a switch there would name an account that isn't paying for
+    // the turn being watched.
     it(`ignores an account switch while the model is generating`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
@@ -709,15 +637,13 @@ describe(`Conversation`, () => {
         ]);
         expect(turns[0]!.folded.map((message) => message.id)).toEqual([3]);
         expect(turns[1]!.folded).toEqual([]);
-        // A turn that folded nothing shares the empty array rather than allocating one, which is what keeps
-        // the head bubble's `folded` prop stable across the rebuild `turnsOf` does on every frame.
+        // Empty `folded` arrays are shared, not allocated per turn, so the prop stays reference-stable across every
+        // rebuild `turnsOf` does.
         expect(turnsOf([{ id: 9, role: `user`, text: `hi` }])[0]!.folded).toBe(turns[1]!.folded);
     });
 
-    /* An errand is the app's own prompt, sent on the user's behalf (errands.ts): it must reach the agent as a
-     * real turn and must NOT take the pin off the request it serves. Written against the composed prompt
-     * rather than a hand-made string, so a reworded opening fails here instead of silently going back to
-     * pinning a paragraph of machine prose over the user's question. */
+    // An errand is the app's own prompt sent on the user's behalf (errands.ts); it must reach the agent as a real turn
+    // and keep the pin on the request it serves.
     it(`turnsOf folds an app errand into the turn it serves, whatever the daemon wrapped it in`, () => {
         const errand = resolvePrompt([{ repo: `root`, clean: 1, paths: [{ path: `a.ts`, reason: `diverged` }] }]);
         const messages: ChatMessage[] = [
@@ -725,7 +651,7 @@ describe(`Conversation`, () => {
             { id: 2, role: `assistant`, text: `done` },
             { id: 3, role: `user`, text: errand },
             { id: 4, role: `assistant`, text: `rebased` },
-            // The same errand as a turn the daemon restarted carries it behind a resume note.
+            // The same errand behind a resume note, as a daemon-restarted turn carries it.
             { id: 5, role: `user`, text: withResumeNote(errand, RESUME_NOTES.restart) },
         ];
         const turns = turnsOf(messages);
@@ -734,10 +660,8 @@ describe(`Conversation`, () => {
         expect(foldsIntoTurn(messages[3]!)).toBe(false);
     });
 
-    /* THE FORK MARK'S NUMBER, one per turn: what a fork taken at the end of that turn's answer inherits, which
-     * is also where the message below the line sits. The last turn's cut lands past the final message: the
-     * whole conversation, the one cut with nothing below it, and a trailing notice stays above the line with
-     * the turn it belongs to, so the cut still points at the next prompt (the row a rewind restores). */
+    // The fork mark is one per turn, at the boundary just past it; the last turn's cut lands past the final message,
+    // and a trailing notice stays with the turn it belongs to.
     it(`forkCutsOf hands every turn the boundary just past it`, () => {
         const messages: ChatMessage[] = [
             { id: 1, role: `user`, text: `hi` },
@@ -750,19 +674,13 @@ describe(`Conversation`, () => {
             [1, 3],
             [4, 5],
         ]);
-        // Every turn has one, the first included: a fork below the opening answer keeps that whole exchange.
+        // Every turn gets a cut, including the first: a fork below the opening answer keeps that whole exchange.
         expect(forkCutsOf(turnsOf(messages.slice(0, 2)))).toEqual(new Map([[1, 2]]));
         expect(forkCutsOf([])).toEqual(new Map());
     });
 
-    /* AND THE BOUNDARIES ONE-MARK-PER-TURN CANNOT REACH (cutsAboveOf). A turn is not one message: the ones it
-     * FOLDED sit inside it, so the mark at its close is a different line — it keeps everything the fold went on
-     * to produce, which is exactly what someone going back to their "keep going" means to drop. And the very
-     * first message has nothing above it, so it gets no mark: a fork glyph before the first turn read as
-     * "fork here" when there is no conversation above yet.
-     *
-     * Openers past the first are deliberately absent: their boundary IS the previous turn's close, and two
-     * marks on one line would be two controls doing one thing. */
+    // Covers boundaries a per-turn mark cannot reach: messages a turn folded (they sit inside it), and the first
+    // message, which has no mark since nothing precedes it.
     it(`cutsAboveOf covers the folded messages and the first, and nothing that already has a mark`, () => {
         const messages: ChatMessage[] = [
             { id: 1, role: `user`, text: `hi` },
@@ -773,28 +691,23 @@ describe(`Conversation`, () => {
             { id: 6, role: `assistant`, text: `done` },
         ];
         expect([...cutsAboveOf(turnsOf(messages))]).toEqual([
-            // The bare "continue", folded into turn 1 and two rows deep in it.
+            // 'continue' folded into turn 1, two rows deep.
             [3, 2],
         ]);
-        // Message 5 opens turn 2, so its boundary is turn 1's close mark (forkCutsOf) and it gets none here.
+        // Message 5 opens turn 2; its boundary is turn 1's close mark (forkCutsOf), not one here.
         expect(cutsAboveOf(turnsOf(messages)).has(5)).toBe(false);
-        // A transcript that opens on the agent's words (a restored history, a provider notice) has no first
-        // prompt to mark, and an assistant row is not a point anyone goes back TO.
+        // A transcript opening on the agent's words has no first prompt to mark; an assistant row is not a point to go
+        // back to.
         expect(cutsAboveOf(turnsOf(messages.slice(1)))).toEqual(new Map([[3, 1]]));
         expect(cutsAboveOf([])).toEqual(new Map());
     });
 
-    /* THE TRANSCRIPT'S DATE (dayMarksOf): a day named once, above the first turn sent on it. It is what the
-     * per-prompt stamp leans on to be five characters wide, so the rule that matters is that it fires on every
-     * change of day and on nothing else.
-     *
-     * Stamps are built from local wall-clock parts rather than UTC: the marker is the viewer's own day, so a
-     * fixture pinned to a UTC hour would land on either side of midnight depending on where the runner is. */
+    // Names a day once, above the first turn sent on it, firing on every day change and nothing else. Built from
+    // local wall-clock parts, not UTC, since the marker is the viewer's own day.
     it(`dayMarksOf names a day above the first turn sent on it and nowhere else`, () => {
         const at = (day: number, hour: number): number => new Date(2026, 7, day, hour).getTime();
         const turns = turnsOf([
-            // Opening frames with no stamp of their own: a restored history. They name no day and do not
-            // consume the first one either: the prompt below still carries the marker.
+            // Opening frames from a restored history carry no stamp; they don't consume the first day marker either.
             { id: 1, role: `assistant`, text: `restored` },
             { id: 2, role: `user`, text: `morning`, sentAt: at(10, 9) },
             { id: 3, role: `assistant`, text: `on it` },
@@ -828,10 +741,8 @@ describe(`Conversation`, () => {
         expect(isAcknowledgment({ id: 1, role: `assistant`, text: `continue` })).toBe(false);
     });
 
-    /* The posture is clamped at READ, like the effort scale one field up: a native Codex/Grok/ACP turn has an
-     * approval channel for nothing, so "Manual" left showing above one was a promise the runtime could not
-     * keep: it ran every tool call regardless. Clamping the pick instead would cost the user their choice the
-     * moment they browsed to another provider and back. */
+    // A native Codex/Grok/ACP turn has no approval channel, so a `Manual` pick would run every tool call regardless;
+    // clamp the effective posture (like effort), not the pick itself.
     it(`a permission mode the runtime can't hold reads as the one it runs, and the pick survives`, () => {
         const conversation = new Conversation(`c-modes`);
         conversation.modePick.value = `acceptEdits`;
@@ -839,14 +750,12 @@ describe(`Conversation`, () => {
         conversation.selectProvider(`codex`);
         expect(conversation.mode.value).toBe(`bypassPermissions`);
 
-        // Under the Claude Code harness the same provider IS the loop that honours modes, and the pick was
-        // never overwritten, so it comes back untouched.
+        // Claude Code honours modes directly; the pick was never overwritten, so it returns untouched.
         conversation.selectHarness(`claude-code`);
         expect(conversation.mode.value).toBe(`acceptEdits`);
         expect(conversation.capabilities.value.permissions).toBe(`modes`);
 
-        // And back: the native runtime reads as autonomous again, while `plan`, which every runtime has,
-        // emulated: rides through unchanged.
+        // Native reads as autonomous again; `plan`, which every runtime has (emulated or not), rides through unchanged.
         conversation.selectHarness(`native`);
         expect(conversation.mode.value).toBe(`bypassPermissions`);
         conversation.modePick.value = `plan`;
@@ -860,8 +769,7 @@ describe(`Conversation`, () => {
         expect(conversation.provider.value).toBe(`claude`);
         expect(conversation.model.value).toBe(`opus`);
 
-        // Pick a Claude alias + a Claude-only effort, then switch to Codex: the alias clears to the account
-        // default ('') and 'max' is clamped, so no Claude model can ride a Codex turn.
+        // Switching to Codex clears a Claude-only model to the account default and clamps a Claude-only effort.
         conversation.model.value = `haiku`;
         conversation.effortPick.value = `max`;
         conversation.selectProvider(`codex`);
@@ -892,12 +800,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
     });
 
-    /* THE PERSONA IS PART OF THE TURN, not of the conversation's opening, which is what makes "now act as Work
-     * and post this" one pick rather than a new chat. The daemon resolves the card per turn, so the pick is read
-     * at DELIVERY (turnSettings) and the same conversation can send one message as nobody and the next as Work.
-     *
-     * The first half matters as much as the second: an attended chat that names nobody must send no `actsAs` at
-     * all, because that absence is what keeps every connected account in reach. */
+    // The persona is resolved per turn (turnSettings), not fixed at conversation start, so one chat can send as
+    // nobody then as a named persona. An attended chat sends no `actsAs` at all.
     it(`sends the persona a turn is acting as, and nothing at all when the chat is nobody`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
@@ -1022,8 +926,8 @@ describe(`Conversation`, () => {
 
         await conversation.send(`fix the router`, settings);
 
-        // One bubble per prose block, each carrying the tools that ran after it: the transcript reads
-        // narration → cards → narration instead of every card hoisted above one glued-together paragraph.
+        // One bubble per prose block, carrying the tools that ran after it, so cards sit inline instead of all hoisted
+        // above one paragraph.
         const [, first, second, third] = conversation.messages.value;
         expect(conversation.messages.value).toHaveLength(4);
         expect(first).toMatchObject({ role: `assistant`, text: `Reading the router.` });
@@ -1092,13 +996,8 @@ describe(`Conversation`, () => {
         expect(second).toMatchObject({ role: `assistant`, text: `second answer`, thinking: `next`, usage: { costUsd: 0.2 } });
     });
 
-    /* THE ANSWER GOES BELOW THE QUESTION, and the frame this turns on is the whole reason a steer is written
-     * down by the daemon rather than by the window that sent it.
-     *
-     * The absorbed-mid-turn case is the one that used to be wrong, and it is the common one: the harness injects
-     * the message between tool calls and the model simply keeps writing, so NO `usage` arrives to retire the
-     * open bubble. With the bubble written locally at the end of the list, the reply typed into the bubble above
-     * it and printed over the words it was answering. */
+    // A steer absorbed mid-turn produces no `usage` boundary; the model just keeps writing, so the reply opens a new
+    // bubble below the steer rather than continuing the one above.
     it(`steers mid-turn: the message lands where the turn took it and the answer opens below it`, async () => {
         const conversation = new Conversation(`c1`);
         const run = liveRun({ prompt: `2+3?` });
@@ -1131,7 +1030,7 @@ describe(`Conversation`, () => {
         emit({ kind: `steer`, text: `2+6?`, sentAt: 1_767_225_600_000 });
         await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(3));
 
-        // Absorbed mid-turn: no usage boundary, the model just carries on, and its words open a bubble BELOW.
+        // Absorbed mid-turn: no usage boundary, so the model's words open a new bubble below.
         emit({ kind: `delta`, text: `8` });
         await vi.waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
         emit({ kind: `usage`, costUsd: 0.1 });
@@ -1150,7 +1049,6 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value[2]!.sentAt).toBe(1_767_225_600_000);
     });
 
-    // Every window rendering the run draws the steer, not only the one whose composer it was typed in.
     it(`draws a steer that another window sent, off the run's own frames`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -1203,8 +1101,8 @@ describe(`Conversation`, () => {
             attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
-        // The bubble carries the files too: the transcript shows what was actually handed over. Its chip is
-        // named from the path the frame carries, the same way a restored one is.
+        // The bubble carries the attachments too; the chip is named from the path the frame carries, as a restored one
+        // is.
         await vi.waitFor(() =>
             expect(conversation.messages.value.at(-1)).toMatchObject({
                 role: `user`,
@@ -1226,8 +1124,9 @@ describe(`Conversation`, () => {
                 c.enqueue(sseFrame(head()));
             },
         });
-        // A native codex/grok/ACP turn registers no steering queue, so the daemon answers NOT_FOUND: the
-        // message must survive that and go out on its own rather than vanishing.
+        // A native codex/grok/ACP turn has no steering queue, so the daemon answers 404; the message must survive and
+        // go
+        // out on its own.
         const followUp = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
         let attaches = 0;
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
@@ -1297,8 +1196,8 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         const followUp = sseResponse([{ kind: `done` }]);
         const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
-        // One fake per turn, and the whole turn goes to its own: the stop has to reach the run it is stopping,
-        // because a stop the daemon takes ends the run's stream and that ending is what the window waits for.
+        // One fake per turn: a stop must reach the run it's stopping, since the daemon ending that run's stream is what
+        // the window waits for.
         let turns = 0;
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/agent/steer`) {
@@ -1338,9 +1237,9 @@ describe(`Conversation`, () => {
         });
         sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/agent/stop`) {
-                /* The two halves of a stop, held apart, which is the whole of what this test is about: the
-                 * daemon cancels the run at once, so its stream ends and the window's attach is over, and only
-                 * CONFIRMS the release when the test lets it. */
+                // The stop's two halves held apart: the daemon cancels the run (ending the attach) at once, but only
+                // confirms
+                // /agent/stop when released.
                 void parked(path, init);
                 return stopped;
             }
@@ -1388,8 +1287,8 @@ describe(`Conversation`, () => {
         expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
         await turn;
 
-        // The verdict is the daemon's own line, and what the agent says next opens a fresh bubble under it
-        // rather than typing on into the card's.
+        // The verdict is the daemon's own line; what comes next opens a fresh bubble rather than typing into the
+        // card's.
         expect(conversation.messages.value.slice(1).map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `assistant`, text: `intro` },
             { role: `notice`, text: `Plan approved.` },
@@ -1399,8 +1298,8 @@ describe(`Conversation`, () => {
         expect(conversation.awaitingDecision.value).toBe(false);
     });
 
-    // The composer stages files against a pending plan card exactly as it does against a message; the reply has
-    // one text field, so they travel as `@`-paths and stay on the bubble the rejection leaves behind.
+    // Files staged against a plan card travel as `@`-paths in the reply's single text field, same as against a
+    // message.
     it(`sends a plan rejection's staged files as @-paths and keeps them on the feedback bubble`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
@@ -1427,7 +1326,7 @@ describe(`Conversation`, () => {
         });
     });
 
-    // A screenshot with nothing typed is a whole answer on its own: the branch the old text-only rule refused.
+    // A screenshot with nothing typed is a whole answer on its own.
     it(`sends an attachment-only plan rejection`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
@@ -1462,8 +1361,9 @@ describe(`Conversation`, () => {
 
         await conversation.send(`something big`, settings);
 
-        // The composer follows the running turn, but the pick the NEXT turn starts from is untouched: an agent
-        // that decides to plan must not cost the user the permissions they gave it.
+        // The composer follows the running turn, but the pick for the next turn is untouched; an agent entering plan
+        // mode
+        // must not cost the user their permissions.
         expect(conversation.liveMode.value).toBe(`plan`);
         expect(conversation.mode.value).toBe(`bypassPermissions`);
 
@@ -1504,8 +1404,9 @@ describe(`Conversation`, () => {
 
         const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
         expect(paths).toContain(`/agent/reply`);
-        // ONE request does both halves: the daemon ends the turn where the dismissal lands. A stop sent
-        // behind it is what flashed the board's Active lane between the two (see cancelQuestion).
+        // One request does both halves: the daemon ends the turn where the dismissal lands, with no separate stop
+        // behind
+        // it.
         expect(paths).not.toContain(`/agent/stop`);
         expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
         expect(conversation.streaming.value).toBe(false);
@@ -1551,15 +1452,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
-    /* ONE ANSWER PER CARD, HOWEVER FAST THE SECOND CLICK IS. This is the bug the whole press lock was built
-     * for, at the layer where a button cannot fix it: a card is one question wearing three buttons, so the
-     * user who presses Allow once and then, half a beat later, changes their mind and presses No, has pressed
-     * two live controls, both legitimately. Both replies used to go out. The daemon un-parks the turn on
-     * whichever lands first and answers the second with a 404, and the card reported that as "the turn may have
-     * ended" over a decision that had in fact landed perfectly.
-     *
-     * The second answer is dropped in silence rather than surfaced: it is not an error, it is a person
-     * clicking, and the card is about to show them what their first press decided. */
+    // A card answered twice in quick succession (allow then deny) must send one reply: the daemon un-parks on
+    // whichever lands first and 404s the second, dropped silently rather than surfaced as an error.
     it(`sends one reply for a card answered twice in the same breath, and shows no error for the second`, async () => {
         const conversation = new Conversation(`c1`);
         // A reply the test holds open, so both clicks land inside the window the round trip is in flight for.
@@ -1581,7 +1475,7 @@ describe(`Conversation`, () => {
         const card = conversation.messages.value.find((message) => message.permission !== undefined)!;
 
         const allow = conversation.decidePermission(card, `once`);
-        // Not awaited between the two: that is the whole point. The first reply has not come back yet.
+        // Not awaited between the two: the first reply has not come back yet.
         const deny = conversation.decidePermission(card, `deny`);
         release();
         await Promise.all([allow, deny]);
@@ -1589,15 +1483,14 @@ describe(`Conversation`, () => {
         const replies = sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`);
         expect(replies).toHaveLength(1);
         expect(conversation.error.value).toBeNull();
-        // The card reads as what the FIRST press said, and the turn carries on because that press was an allow.
+        // The card reads as the first press said (allow); the turn carries on.
         expect(conversation.messages.value.find((message) => message.permission !== undefined)?.permission?.status).toBe(`allowed`);
 
         conversation.stop();
         await turn;
     });
 
-    // And the other side of it: once a card's answer has come back, the next one is free to go out. The guard
-    // covers the window a reply is in flight for, not the card's whole life.
+    // The press-lock guard covers only the window a reply is in flight for, not a card's whole life.
     it(`lets a fresh card be answered after the one before it has landed`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -1626,10 +1519,8 @@ describe(`Conversation`, () => {
         await turn;
     });
 
-    /* THE RELEASE CARD. The one card here addressed to NAMED PEOPLE rather than to whoever is looking: the
-     * owner put this credential behind a list, and the daemon checks the verified identity on the reply. What
-     * this suite can pin is the chat's half — the card parks the turn, the click settles it, and the receipt
-     * that patches on names WHO released it, which is the only place that name ever appears. */
+    // The release card is addressed to named approvers, not whoever is looking; the daemon checks identity on reply.
+    // This suite pins only the chat half: park, settle, and the receipt naming who released it.
     it(`parks the turn on a release card; the click settles it and the receipt names who released it`, async () => {
         const conversation = new Conversation(`c1`);
         const offer = {
@@ -1675,10 +1566,8 @@ describe(`Conversation`, () => {
         expect(card.credentialOffer).toMatchObject({ status: `approved`, receipt: { outcome: `released`, approvedBy: `bob@corp.com` } });
     });
 
-    /* THE SETUP CARD. Connect does NOT predict the outcome: the owner still has the setup to do, so the card
-     * moves to `connecting` and the capability_outcome frame is what says how it ended, and "Not now" leaves
-     * the turn running: the agent was told to continue without the capability, which is work, not an ending.
-     * Both clicks travel the same /agent/reply side channel as every other card. */
+    // Connect does not predict the outcome: the card moves to `connecting` and a capability_outcome frame says how it
+    // ended. "Not now" leaves the turn running; both travel the same /agent/reply channel.
     it(`parks the turn on a capability card; Connect moves it to connecting and the outcome patches on`, async () => {
         const conversation = new Conversation(`c1`);
         const offer = { card: `notion`, name: `Notion`, why: `I'll create a page there for each research writeup` };
@@ -1758,19 +1647,16 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.map((message) => message.role)).toEqual([`user`, `notice`]);
     });
 
-    /* THE OFFER TO PICK A DEAD TURN BACK UP, and the line it is drawn on. An UNCODED failure is the daemon
-     * saying it has no name for what went wrong: the harness died, the agent stopped answering, which is the
-     * one shape where nothing needs fixing first and carrying on is simply the rest of the work. A NAMED code
-     * is the opposite by construction: it says what to go and repair, so an offer under it re-fails on the
-     * press and teaches the user the button lies. */
+    // An uncoded failure names nothing to fix, so continuing is simply the rest of the work. A named code means
+    // something needs fixing first, so no continue offer rides under it.
     it(`offers to continue after a failure nobody can act on, and never after one that names a fix`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete (error_during_execution)` }]));
         await conversation.send(`ship the parser`, settings);
         expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
 
-        // The next turn is the answer to the offer, whichever way the user gave it, so the offer stands down
-        // at the START of it rather than at its end, and cannot be pressed twice into two turns.
+        // The offer stands down at the start of the next turn, not its end, so it can't be pressed twice into two
+        // turns.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
         await conversation.send(CONTINUATIONS.plain, settings);
         expect(conversation.pickUp.value).toBeUndefined();
@@ -1783,8 +1669,6 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* THE SAME PRESS, LEFT ON. A chat that stops short five times in half an hour is five presses, and the
-     * fourth of them happens while nobody is at the keyboard, which is the whole point of arming this. */
     it(`continues itself after a turn that stopped short, once its wait is up`, async () => {
         vi.useFakeTimers();
         try {
@@ -1793,7 +1677,7 @@ describe(`Conversation`, () => {
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
             await conversation.send(`ship the parser`, settings);
 
-            // Scheduled, not sent: the wait is what makes the automation something a person can get in front of.
+            // Scheduled, not sent immediately: the wait gives a person a chance to intervene.
             expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
             expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
             expect(turnBodies()).toHaveLength(1);
@@ -1801,7 +1685,6 @@ describe(`Conversation`, () => {
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
             await vi.advanceTimersByTimeAsync(6_000);
 
-            // It said the sentence the button says, and the chat is running again with nobody having touched it.
             expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
             expect(conversation.autoContinueAt.value).toBeUndefined();
             expect(conversation.pickUp.value).toBeUndefined();
@@ -1810,8 +1693,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    // Armed while a stopped turn is already on screen, which is where the switch is offered: it takes that
-    // stop too. Waiting for the next one would leave the user pressing Continue anyway.
+    // Arming auto-continue in front of an already-stopped turn takes that stop too, rather than waiting for the next
+    // one.
     it(`takes the stop it was armed in front of`, async () => {
         vi.useFakeTimers();
         try {
@@ -1830,14 +1713,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* THE ONE ENDING IT MUST NEVER ANSWER. Stop is the user saying "not this": restarting the turn they just
-     * stopped is the exact opposite of what they asked for, and it is the same pick-up either way, so
-     * the difference has to be read off who ended it rather than off what was left behind.
-     *
-     * Waits for the agent's own text rather than for `streaming`, which goes true the instant the send opens and
-     * so was satisfied while the opening request was still in flight: a Stop landing there stops a turn the
-     * daemon never took, which is a different ending with its own test below ("stands the continue offer down").
-     * This one is about a turn that really is running. */
+    // A user Stop must never be auto-continued: it is the opposite of what they asked. Waits for the agent's own
+    // text, not `streaming` (true before the daemon has even taken the turn).
     it(`stays out of the way of a turn the user stopped`, async () => {
         vi.useFakeTimers();
         try {
@@ -1858,9 +1735,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* AND THE OTHER HALF OF LEAVING IT ON: knowing when to stop. Turns that die in seconds mean something is
-     * actually wrong, and the fastest way to make that expensive is to retry it unattended forever, so each
-     * wait is longer than the last, and after three the automation stands down and says why. */
+    // Turns that die in seconds mean something is actually wrong; retrying unattended forever would make that
+    // expensive, so each wait grows and it gives up after three, saying why.
     it(`backs off, then gives up and says so, when nothing it continues gets anywhere`, async () => {
         vi.useFakeTimers();
         try {
@@ -1876,7 +1752,7 @@ describe(`Conversation`, () => {
             }
             expect(waits).toEqual([5_000, 15_000, 45_000]);
 
-            // The fourth stop is the one it declines to answer: off, with a line saying so where the user reads.
+            // The fourth stop is declined: auto-continue turns itself off and says so.
             await conversation.send(CONTINUATIONS.plain, settings);
             expect(conversation.autoContinue.value).toBe(false);
             expect(conversation.autoContinueAt.value).toBeUndefined();
@@ -1889,8 +1765,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    // ...and a turn that ran long enough to have done some of the job starts the ladder over, so an all-night
-    // run of real turns keeps its short pauses however many times it is picked back up.
+    // A turn that ran long enough to get somewhere resets the backoff ladder, rather than growing the wait
+    // indefinitely.
     it(`resets the backoff after a turn that got somewhere`, async () => {
         vi.useFakeTimers();
         try {
@@ -1899,14 +1775,14 @@ describe(`Conversation`, () => {
             const instant = sseResponse([{ kind: `error`, message: `agent did not complete` }]);
             sandboxRequestMock.mockImplementation(instant);
             await conversation.send(`ship the parser`, settings);
-            // Exactly the wait, so the clock stands where the next one is scheduled from and the assertions below
-            // read the delay itself rather than the delay minus however far the test overshot.
+            // Advances exactly the scheduled wait, so the next delay is read precisely rather than
+            // delay-minus-overshoot.
             await vi.advanceTimersByTimeAsync(5_000);
             // The second stop is on the ladder's second rung, having bought nothing.
             expect(conversation.autoContinueAt.value! - Date.now()).toBe(15_000);
 
-            // A turn that spent a minute working before it stopped: the clock moves inside the request, which is
-            // the one seam a canned stream has for "this took a while".
+            // Moves the clock inside the request to simulate a turn that worked a while before stopping, the one seam a
+            // canned stream has for duration.
             sandboxRequestMock.mockImplementation((path, init) => {
                 if (path === `/agent`) {
                     vi.setSystemTime(Date.now() + 60_000);
@@ -1920,10 +1796,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* THE CASE THE WHOLE THING IS FOR: a tool the user refused, the agent stopped waiting to be told what to do,
-     * and the sentence that tells it. It has to name the refusal: a bare "continue" reads as "go on then, run
-     * it", which is how a declined command gets run on the second press, and it has to FOLD, so that pressing
-     * the button leaves the transcript exactly as pinned as typing the word did. */
+    // A bare "continue" after a denied tool reads as "run it anyway", so the continuation must name the refusal. It
+    // must also fold into the turn, so pressing it matches typing the words.
     it(`arms the continue offer when a denied tool stops the turn, with the sentence that names the refusal`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true }));
@@ -1944,8 +1818,7 @@ describe(`Conversation`, () => {
             CONTINUATIONS.plain,
         );
 
-        // Both sentences are nudges, not new instructions: they fold into the turn they continue, so the prompt
-        // that defines the work keeps the pin.
+        // Both continuation sentences fold into the turn, so the prompt defining the work keeps the pin.
         for (const sentence of Object.values(CONTINUATIONS)) {
             expect(foldsIntoTurn({ id: 1, role: `user`, text: sentence }), sentence).toBe(true);
         }
@@ -1959,8 +1832,8 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
         await conversation.send(`first`, settings);
 
-        // The agent lost the session inside its own process mid-turn: the daemon reseeds whatever it can see for
-        // itself, so this code reaches the client only for the one runtime whose sessions it cannot see.
+        // The daemon reseeds a lost session itself when it can; this path fires only for the one runtime whose sessions
+        // it can't see.
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `error`, code: `session-not-found`, message: `The agent restarted and cannot resume this chat's session.` },
@@ -1970,8 +1843,7 @@ describe(`Conversation`, () => {
         await conversation.send(`second`, settings);
 
         expect(conversation.session.value).toBeUndefined();
-        // The runtime's OWN sentence: this line used to state a cause it cannot know ("the sandbox was rebuilt or
-        // the session was deleted"), which was usually neither.
+        // Shows the runtime's own sentence rather than guessing a cause it cannot know.
         expect(conversation.messages.value.at(-1)).toMatchObject({
             role: `notice`,
             text: `The agent restarted and cannot resume this chat's session.`,
@@ -1979,8 +1851,8 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
 
-        // The next send starts fresh: no dead id on the wire. The conversation id is unchanged, so the daemon
-        // reseeds the replacement session from its own record of this same conversation; nothing rides up.
+        // The next send carries no dead session id; the daemon reseeds the replacement from its own record of this
+        // conversation.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
         await conversation.send(`third`, settings);
         const thirdBody = turnBodies()[2]!;
@@ -1994,17 +1866,16 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `grok`;
         conversation.model.value = `grok-code-fast-1`;
-        // The daemon self-heals a stale model in-turn (re-prompting with one xAI named), so this code now reaches
-        // the client only when that failed, xAI rejected the model AND named no alternative: a genuine error.
+        // Reaches the client only when the daemon's in-turn self-heal failed too: xAI rejected the model and named no
+        // alternative.
         const xaiMessage = `xAI returned no available models for your account.`;
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]));
         await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        // The server message surfaces as the red error ref, and as the daemon's own line in the transcript (the
-        // record keeps that one), and the catalog is reloaded so the picker reflects whatever the daemon last
-        // recorded.
+        // The daemon's message surfaces both as the error ref and as a transcript notice; the catalog reload refreshes
+        // the picker.
         expect(conversation.error.value).toBe(xaiMessage);
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: xaiMessage });
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`grok`);
@@ -2015,8 +1886,8 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `codex`;
         conversation.model.value = `gpt-5-codex`;
-        // Codex has no in-turn self-heal (OpenAI names no alternative), so the rejection always lands here; the
-        // reload repoints the picker, and this conversation's dead pinned id: to the daemon's live default.
+        // Codex has no in-turn self-heal, so the rejection always lands here; the reload repoints the picker to the
+        // daemon's live default.
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 {
@@ -2034,11 +1905,8 @@ describe(`Conversation`, () => {
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`codex`);
     });
 
-    /* A MODEL THE PLAN DOES NOT COVER, which is neither of the two above: nothing is misspelled, the vendor
-     * serves the model, and the subscription is not allowed to. The daemon files it and drops it from the
-     * catalog, so the reload here is what takes the dead row off this chat's picker; and the words are HELD,
-     * because the endpoint refused the request before a token was spent and nobody should retype a prompt over
-     * a billing tier. */
+    // A model the subscription plan doesn't cover, not a bad name or a dead provider; the daemon drops it from the
+    // catalog. The words are held since the endpoint refused before any token was spent.
     it(`holds the message and reloads the catalog when the plan does not cover the model`, async () => {
         loadProviderModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
@@ -2051,8 +1919,8 @@ describe(`Conversation`, () => {
 
         expect(conversation.error.value).toContain(`does not have access`);
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`kimi`);
-        // The prompt is back in the queue rather than sitting in the transcript as a message nothing will ever
-        // answer: the same bargain every refusal that ran nothing strikes.
+        // The prompt returns to the queue rather than sitting unanswered in the transcript, as any refusal that ran
+        // nothing does.
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`hi`]);
         expect(conversation.messages.value.some((message) => message.role === `user`)).toBe(false);
     });
@@ -2060,8 +1928,8 @@ describe(`Conversation`, () => {
     it(`renders a codex-advisory as a muted notice under the answer the turn actually produced`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `codex`;
-        // Codex warns when its pinned CLI has no metadata for a model the subscription already serves, then runs
-        // the turn anyway. The red line said the turn had failed, directly beneath its own answer.
+        // Codex warns when its CLI has no metadata for a model the subscription serves, then runs the turn anyway; this
+        // is not a failure.
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 {
@@ -2097,20 +1965,16 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    /* A spent allowance names its reset instant and leaves the turn PICKABLE from it. Nothing re-runs it: the
-     * allowance is the user's own budget, so the press is theirs to make, and a daemon old enough to still send
-     * an `autoResume` verdict on a rate_limit frame does not change that.
-     *
-     * The instant riding on the pick-up is the whole difference between this ending and the others. It is what
-     * lets the strip offer a countdown instead of either a button that re-fails or, as it used to be, nothing at
-     * all and a sentence telling the user to type the word themselves. */
+    // A spent allowance names its reset instant and leaves the turn pickable from it; nothing re-runs automatically
+    // even if the daemon sends an `autoResume` verdict.
     it(`names the reset instant on a usage limit, and leaves the turn pickable from it`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                // `available`: the daemon holds the turn and would fire at the reset, but this conversation has
-                // not asked it to. That is the shipped default, and the one the assertions below describe.
+                // `available`: the daemon would fire the held turn at reset, but this conversation hasn't armed that;
+                // this is the
+                // default.
                 { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` },
                 { kind: `done` },
             ]),
@@ -2119,11 +1983,10 @@ describe(`Conversation`, () => {
 
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
-        // The daemon's line says what happened. WHEN it reopens is the strip's countdown (pickUp.readyAt below):
-        // a clock only this window can read in the user's own time zone.
+        // The daemon's line says what happened; when it reopens is `pickUp.readyAt`, read in the viewer's own time
+        // zone.
         expect(notice.text).toBe(`Claude usage limit reached.`);
-        // No opt-out on the notice and nothing marked automatic: nothing has been armed, so there is no
-        // automation here to regret.
+        // No opt-out and nothing marked automatic: nothing is armed yet.
         expect(notice.noticeAction).toBeUndefined();
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.error.value).toBeNull();
@@ -2131,11 +1994,8 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: resetsAt * 1_000 });
     });
 
-    /* ARMED, THE SAME FAILURE IS AN APPOINTMENT RATHER THAN AN OFFER. `resumeAfterLimit` is off unless the user
-     * turns it on, because the allowance is their own budget; once it is, the daemon fires the held turn at the
-     * hour the provider published, and the chat has to say so rather than keep offering a press as though
-     * nothing were happening. `automatic` is the mark that says it, the same one an armed outage raises, and it
-     * is also what keeps the local auto-continue's hands off a turn something else is already bringing back. */
+    // Once armed, the daemon fires the held turn at the published reset hour, and the chat must say so instead of
+    // still offering a press. `automatic` marks it, same as an armed outage, and keeps local auto-continue's hands off.
     it(`reports a scheduled send when the conversation is armed for the reset`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
@@ -2165,9 +2025,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)!.text).toContain(`sends it again`);
     });
 
-    /* An allowance the daemon could not date (an unpolled pool, a provider that renamed its bucket) still gets
-     * the press, live: there is nothing to wait for that anyone can name, and the provider's own sentence
-     * already says to send again. A countdown to an instant we are guessing at would be worse than no clock. */
+    // An allowance the daemon can't date still offers the press immediately: there's nothing to wait for and the
+    // provider's own sentence already says to retry. A guessed countdown would be worse than none.
     it(`offers an undated usage limit straight away`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2178,15 +2037,6 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `limit` });
     });
 
-    /* THE PRESS ON A HELD TURN IS A RE-RUN, AND SAYS NOTHING, which is the whole of the fix these three tests
-     * exist for and the one thing every other spelling of "continue" got wrong.
-     *
-     * The bug: continuing could only mean sending a message, so the harness sent the only message that fits,
-     * "Continue". A chat bouncing off a spent allowance therefore recorded one user row per press, and the
-     * provider session underneath recorded worse, a CLI-materialized "Continue from where you left off." and a
-     * SYNTHETIC assistant turn reading "No response requested." above each one. The transcript this came from
-     * reached four presses in sixty-five seconds, so the request that finally got through carried twelve turns
-     * describing three refusals the model was never told about, four of them answers it had never given. */
     it(`re-runs the held turn on a press instead of appending anything to the chat`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2196,7 +2046,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
 
-        // The re-run's own run: the SAME words, behind the note saying why they are here again.
+        // The re-run's own run: the same words, behind a note explaining why they're back.
         sandboxRequestMock.mockImplementation(
             sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
                 head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
@@ -2206,15 +2056,13 @@ describe(`Conversation`, () => {
         await expect(conversation.continueTurn()).resolves.toBeUndefined();
 
         expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/resume`);
-        // No second turn STARTED. /agent is what saying something costs, and nothing was said.
+        // No second turn started: /agent is what saying something costs, and nothing was said.
         expect(turnBodies()).toHaveLength(1);
         // One user row, still their own words: the note came off and the bubble was reused, not repeated.
         expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
-    // ...and it stays one row however many times it is pressed against an allowance that keeps refusing, which is
-    // the ground truth this was written from: four presses, one question, and a transcript that read back as four.
     it(`keeps one user row through four presses against an allowance that keeps refusing`, async () => {
         const conversation = new Conversation(`c1`);
         const refuse = (prompt?: string): ReturnType<typeof sseResponse> =>
@@ -2235,9 +2083,8 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
     });
 
-    /* THE DAEMON IS NOT HOLDING IT AFTER ALL, which is what a restart between the refusal and the press looks
-     * like. The press must not become a dead button over it: saying "carry on" is what continuing meant before
-     * any of this and is still the honest move, so the fallback runs and the words go out as an ordinary turn. */
+    // If the daemon isn't actually holding the turn (a restart between refusal and press), the press must not become
+    // dead: it falls back to sending an ordinary "carry on" turn.
     it(`falls back to saying carry on when the held turn has gone`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2256,11 +2103,8 @@ describe(`Conversation`, () => {
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
     });
 
-    /* THE PRESS CARRIES WHO SERVES THE RE-RUN, which is the half of it that used to make the button useless in
-     * the case it exists for. A spent allowance is ONE account's refusal, so the move between the refusal and the
-     * press is the composer's account switcher, and a press that replayed the held turn's own account bounced off
-     * the same limit and reported it in the same words. Typing "Continue" by hand worked only because a send
-     * reads the composer's current selection, which is precisely what the press was ignoring. */
+    // A held re-run uses the composer's current account selection, not the account that got refused, since a spent
+    // allowance is one account's problem and the switcher is how the user moves off it.
     it(`re-runs the held turn on the account the composer has switched to`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2286,9 +2130,9 @@ describe(`Conversation`, () => {
             conversationId: `c1`,
             routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
         });
-        /* AND THE SESSION GOES WITH THE SWITCH. A provider session belongs to the credential that minted it, so
-         * the daemon opens a fresh one seeded from its own record: a window still pointing at s-1 would offer the
-         * next turn a session this conversation no longer runs on. */
+        // A session belongs to the credential that minted it; switching accounts drops it so the daemon can seed a
+        // fresh
+        // one.
         expect(conversation.session.value).toBeUndefined();
         // Still one turn and one user row: a press is the same request again, not a new message.
         expect(turnBodies()).toHaveLength(1);
@@ -2296,9 +2140,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
-    /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where an interval ladder
-     * alone gets it wrong: every rung before a quota reopens is a guaranteed failure, whatever its length. So the
-     * named instant is a floor under the wait, and an armed chat sleeps through the reset. */
+    // An interval ladder alone fails here: every rung before the quota reopens is a guaranteed miss. The named reset
+    // instant is a floor under the wait, so an armed chat sleeps through it.
     it(`waits for the reset before continuing itself through a spent allowance`, async () => {
         vi.useFakeTimers();
         try {
@@ -2324,12 +2167,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* A PROVIDER THAT CANNOT SAY WHEN ITS WINDOW REOPENS, the failure amber-forge exposed. Its harness spent
-     * more than thirty seconds internally retrying every refused request, so wall time reset the old ladder to
-     * five seconds after every turn. No model output was produced, but the chat treated waiting as progress and
-     * continued hot forever. A limit keeps its rung regardless of duration, grows through minutes and hours,
-     * and retains the standing instruction at a one-day ceiling instead of either hammering or silently giving
-     * up before a weekly allowance can reopen. */
+    // An unknown reset backs off by rung count regardless of how long each refusal takes, growing to a one-day
+    // ceiling instead of resetting on wall time or retrying forever.
     it(`backs an unknown usage reset off from seconds to a daily probe even when every refusal is slow`, async () => {
         vi.useFakeTimers();
         try {
@@ -2338,7 +2177,7 @@ describe(`Conversation`, () => {
             const refused = { kind: `error`, code: `rate_limit`, message: `Provider usage limit reached.` } as const;
             sandboxRequestMock.mockImplementation(
                 sseResponse([refused, { kind: `done` }], {
-                    // Slow refusal, not progress: this is the seam the old duration-only heuristic got wrong.
+                    // Slow refusal, not progress.
                     head: () => ({ startedAt: Date.now() - 60_000 }),
                 }),
             );
@@ -2367,10 +2206,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* THE AUTOMATION MAKES THE SAME PRESS, which matters more here than at the button: unattended, the short
-     * rungs fire three times against one stopped turn, and three appended "Continue"s IS the pile. An automation
-     * that re-runs instead costs refused requests without changing the transcript, then moves onto its minute
-     * and hour rungs. */
+    // Unattended, appending "Continue" on each short rung would pile up messages; re-running the held turn instead
+    // costs refused requests without touching the transcript.
     it(`re-runs the held turn when it continues itself, then moves beyond the short retry rungs`, async () => {
         vi.useFakeTimers();
         try {
@@ -2398,11 +2235,8 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* A PROVIDER OUTAGE, which reads like a limit hit and behaves nothing like one: no reset instant to aim at,
-     * an escalating wait instead of a fixed one, and a bounded number of tries. What must survive refactors is the
-     * severity: the turn is coming back, so a red line here would be reporting a failure the user never has to
-     * act on, and the fact that the wait names an instant, because a silently growing backoff with no clock is
-     * indistinguishable from nothing happening. */
+    // A provider outage reads like a limit but isn't: no reset instant, an escalating wait, bounded tries. Renders as
+    // a notice (the turn is coming back), with the wait naming an instant.
     it(`reads an outage as a wait with its own clock, not as a crash`, async () => {
         const conversation = new Conversation(`c1`);
         // Far-future so the re-attach probe this arms stays parked for the test's lifetime.
@@ -2432,10 +2266,8 @@ describe(`Conversation`, () => {
         conversation.abort();
     });
 
-    /* A ROTATED CREDENTIAL. The daemon re-mints and re-runs the turn within a scheduler pass, so this reads as a
-     * wait rather than a crash, but the wait has to be VISIBLE and, above all, WATCHED. Both were missing: the
-     * notice promised a continuation and nothing was armed to catch it, so the chat sat on this line while
-     * /agents reported the same agent working. */
+    // A rotated credential is re-minted and re-run by the daemon within a scheduler pass; the wait must be visible
+    // and armed to catch the resumption, not just promised.
     it(`reads a rotated credential as a wait it is actually watching`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2454,7 +2286,7 @@ describe(`Conversation`, () => {
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`being renewed`);
-        // The spinner: the line declares which wait it describes, and the conversation says the wait is on.
+        // The notice names which wait it describes (`noticeWait`), and the conversation tracks that the wait is on.
         expect(notice.noticeWait).toBe(`credentialRenewal`);
         expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toBeNull();
@@ -2463,9 +2295,8 @@ describe(`Conversation`, () => {
         conversation.abort();
     });
 
-    /* THE BUG THIS WHOLE PATH EXISTS FOR. Attach streams are pull: the daemon's resumed run reaches a window only
-     * if that window goes looking. Nothing did, so the chat kept showing the frame it died on while /agents
-     * reported the same agent working, and the only way back was reloading the browser. */
+    // Attach streams are pull: a resumed run only reaches a window that goes looking for it. The wait above must arm
+    // that reattach probe on its own.
     it(`goes looking for the resumed run and renders it, without the user doing anything`, async () => {
         vi.useFakeTimers();
         try {
@@ -2476,10 +2307,9 @@ describe(`Conversation`, () => {
             await conversation.send(`refactor the store`, settings);
             expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
 
-            // What the daemon started a moment later: the same request, behind the note saying why it re-ran:
-            // and a run of its OWN, because resuming starts a turn rather than reviving the one that died. That
-            // is what keeps the renewal notice above: it belongs to the run that failed, and only that run's own
-            // rows come off when this window attaches to a run it has already drawn.
+            // The resumed request runs behind the resume note, on its own run id; the renewal notice above stays since
+            // it
+            // belongs to the run that failed.
             sandboxRequestMock.mockImplementation(
                 sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
                     head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
@@ -2487,7 +2317,7 @@ describe(`Conversation`, () => {
             );
             await vi.advanceTimersByTimeAsync(2_000);
 
-            // The wait is over, and the resumed answer is in the transcript under the original question.
+            // The resumed answer lands under the original question once the wait ends.
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
             expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
                 { role: `user`, text: `refactor the store` },
@@ -2501,7 +2331,6 @@ describe(`Conversation`, () => {
         }
     });
 
-    // The other half of the promise: the spinner belongs to a turn that comes back, so a turn attaching stops it.
     it(`stops the renewal spinner when the resumed turn lands`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2515,8 +2344,8 @@ describe(`Conversation`, () => {
         expect(conversation.failures.credentialRenewal.value).toBeUndefined();
     });
 
-    // With nothing armed the daemon is telling us this turn is NOT coming back: the one case where the user
-    // really is needed. A spinner here would be a promise nothing was going to keep.
+    // With nothing armed, the turn is not coming back on its own; a spinner here would promise something that isn't
+    // happening.
     it(`asks for a reconnect when no renewal is armed`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.account.value = `acct-1`;
@@ -2541,8 +2370,7 @@ describe(`Conversation`, () => {
         );
         await conversation.send(`hello`, settings);
 
-        // The red line is now honest, and the words the user typed are back in the queue rather than lost with
-        // the turn, which is the part of this failure that was ever actually ours.
+        // The red line is honest here, and the typed words return to the queue rather than being lost.
         expect(conversation.error.value).toContain(`500`);
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.queued.value.some((message) => message.text === `hello`)).toBe(true);
@@ -2568,17 +2396,16 @@ describe(`Conversation`, () => {
         expect(loadTrialStatusMock).toHaveBeenCalledTimes(1);
     });
 
-    /* THE PRESS THAT COMPOUNDED ITSELF. A refused turn hands the words back to the queue, and the queue flushes
-     * as ONE message, so a chat bouncing off the same refusal turned the button into its own transcript: a real
-     * one reached "Continue\n\nContinue\n\nContinue\n\nContinue\n\nContinue\n\nContinue\n\nContinue", rendered as
-     * a single clamped bubble with a scrollbar, and that is what the agent read when a send finally landed. */
+    // A refused turn returns its words to the queue, which flushes as one message; repeated presses must retry that
+    // held message rather than stacking another copy in front of it.
     it(`retries the held nudge on a second Continue instead of stacking another copy of it`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `endpoint/free-trial`;
         const trialSettings = { ...settings, agent: `endpoint/free-trial` } as const;
         let turns = 0;
-        // Built once, not per call: a fake is a daemon holding a run, and one minted inside the implementation
-        // would never see the POST that started the turn it is about to serve the head of.
+        // Built once, not per call: a fake minted inside the mock implementation would miss the POST that started the
+        // run
+        // it serves.
         const refused = sseResponse([
             { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
             { kind: `done` },
@@ -2595,8 +2422,9 @@ describe(`Conversation`, () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
 
-        // Pressing it again is a RETRY of what is held, not a second thing to say: one message goes, and the
-        // queue does not grow while it keeps bouncing.
+        // A repeat press retries the held message rather than adding a second one; the queue doesn't grow while it
+        // keeps
+        // bouncing.
         await conversation.enqueue(`Continue`);
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(turnBodies()[1]).toMatchObject({ prompt: `Continue` });
@@ -2609,9 +2437,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
     });
 
-    /* THE OTHER DOOR ONTO THE SAME PILE. A press that lands WHILE the turn is failing is queued against a queue
-     * the flush has already emptied, so it is the words coming BACK that meet it, from the other side. Steering
-     * is refused here (the trial has no queue-and-steer), which is exactly when the two end up side by side. */
+    // A press landing while the turn is failing meets the words coming back from the other side, since the flush
+    // already emptied the queue by the time they return. Steering is refused here, so the two collide.
     it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
         const conversation = new Conversation(`c1`);
         const run = liveRun({ prompt: `Continue` });
@@ -2647,8 +2474,7 @@ describe(`Conversation`, () => {
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
     });
 
-    // Only a nudge behind a nudge: words that never left, plus a "go ahead", are two things the user said and
-    // the queue carries both.
+    // A held message plus a follow-up nudge are two separate things said; the queue carries both.
     it(`keeps a nudge written behind a real message that never left`, async () => {
         const conversation = new Conversation(`c1`);
         let turns = 0;
@@ -2691,15 +2517,15 @@ describe(`Conversation`, () => {
         // Nothing is armed, so no opt-out is offered: there is nothing to opt out of yet.
         expect(conversation.messages.value.at(-1)!.noticeAction).toBeUndefined();
 
-        // Arming THIS conversation arms the very turn that bounced, daemon-side; this reflects it. The notice
-        // says the scope out loud, because a press that starts something automatic owes its reader the blast
-        // radius: this one is one chat, and the sandbox-wide default is named as the separate thing it is.
+        // Arming this conversation arms the turn that bounced, daemon-side; the notice states the scope (this chat
+        // only,
+        // distinct from the sandbox-wide default).
         conversation.failures.armOutageResume();
         expect(conversation.failures.outageResume.value?.scheduled).toBe(true);
         expect(conversation.messages.value.at(-1)!.text).toContain(`Only this chat`);
 
-        // …and the way back out, in the same surface: the countdown stops, the offer comes back (the turn is
-        // still stranded and still re-armable), and the probe hunting the resume stands down with it.
+        // Disarming stops the countdown, restores the offer (still re-armable), and stands the resume-hunting probe
+        // down.
         const armed = conversation.messages.value.at(-1)!.text;
         conversation.failures.disarmOutageResume();
         expect(conversation.failures.outageResume.value?.scheduled).toBe(false);
@@ -2743,8 +2569,8 @@ describe(`Conversation`, () => {
         );
         await conversation.send(`hello`, settings);
 
-        // Keyed by the serving account (not the conversation) and carrying measuredAt, so the next /accounts
-        // load can tell this live reading from the daemon's persisted one.
+        // Keyed by the serving account, not the conversation, and stamped with `measuredAt` so a later load can tell it
+        // from the daemon's persisted reading.
         const stored = usageByAccount.value[`claude:acct-1`]!;
         expect(stored.windows).toEqual([
             { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000, gates: `all` },
@@ -2771,8 +2597,9 @@ describe(`Conversation`, () => {
     it(`does not let a rate_limit_info frame stand in for the account's headroom`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        // The gate signal names ONE window: whichever the provider treated as binding for that request. Writing
-        // it into the headroom map is how a weekly pool at 1% came to speak for an account at 98% on another.
+        // rate_limit_info names only the one window the provider treated as binding for that request; writing it into
+        // the
+        // headroom map would misattribute the account's overall usage.
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `rate_limit_info`, account: `acct-1`, status: `allowed`, utilization: 1, rateLimitType: `seven_day` },
@@ -2801,10 +2628,9 @@ describe(`Conversation`, () => {
     it(`stop() cancels the cards a parked turn was waiting on, so the composer isn't wedged on a dead run`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        /* Fed frame by frame rather than through sseResponse, which parks its stream on the first card the way
-         * the daemon parks a turn: what this is about is a run that left SEVERAL cards open, and what a stop
-         * does to all of them at once. The stop ends the stream through the run's own fold, as the daemon's
-         * does, so the cancellations arrive as the rows every window and the record read. */
+        // Fed frame by frame, parking the stream on the first card like the daemon parks a turn, so several cards can
+        // be
+        // open when stop cancels them all through the run's own fold.
         const run = liveRun({ prompt: `go` });
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
@@ -2877,10 +2703,8 @@ describe(`Conversation`, () => {
 
         // The fork carries the turns above the cut, then its own first turn and the answer to it.
         expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
-        /* The fork is a new conversation daemon-side: no session id rides. What rides instead is where it was
-         * cut from: two RECORD rows (the "first" prompt and the "one" answer), so the daemon copies that
-         * prefix of c1's record into c2's before running, and the fork seeds itself from there like any other
-         * conversation. The bubbles themselves never go up. */
+        // A fork is a new conversation daemon-side (no session id rides); it sends where it was cut from (`forkOf`,
+        // record row count), and the daemon copies that prefix before running. The bubbles themselves never go up.
         const body = turnBodies()[2]!;
         expect(`sessionId` in body).toBe(false);
         expect(`history` in body).toBe(false);
@@ -2896,12 +2720,8 @@ describe(`Conversation`, () => {
         expect(source.contextUsage.value).toMatchObject({ tokens: 500, contextWindow: 1000 });
     });
 
-    /* THE LINKAGE MUST OUTLIVE EVERYTHING SHORT OF THE ACK. Until the daemon accepts the fork's first turn,
-     * `pendingForkOf` is the only record anywhere that this conversation IS a fork, which is why it is a
-     * public ref the tab snapshot persists (a fork rebuilt after a reload, or hydrated in the popped window,
-     * must still name its source), and why a send refused at the door must not consume it. Both losses ended
-     * the same way in the field: the first send opened an ordinary empty conversation daemon-side, and a chat
-     * that LOOKED continued answered from nothing. */
+    // `pendingForkOf` is the only record that this conversation is a fork until the daemon acks its first turn; it is
+    // persisted in the tab snapshot and must survive a refused send rather than being spent.
     it(`keeps the fork linkage through a refused first send and spends it on the ack`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -2917,8 +2737,8 @@ describe(`Conversation`, () => {
         // Where the tab snapshot reads it (snapshotTab) and a rebuilt tab puts it back (restoreTab).
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
 
-        // Turned away at the door: nothing ran daemon-side, so the linkage is not spent, the words are held
-        // in the queue and the retry must still name the source.
+        // Refused at the door: nothing ran daemon-side, so the linkage isn't spent; the words are held and the retry
+        // still names the source.
         sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `nope` }), { status: 400 }));
         await fork.send(`carry on differently`, settings);
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
@@ -2958,11 +2778,8 @@ describe(`Conversation`, () => {
         expect(`history` in body).toBe(false);
     });
 
-    /* THE TWO KINDS OF NOTICE, and why a fork has to tell them apart. A notice this window drew (a provider
-     * switch, a rewind) exists nowhere in the daemon's record. One the daemon WROTE DOWN: a refused turn, a
-     * turn it resumed by itself: is a row of that record like any other, and counting it out told the daemon
-     * to copy fewer rows than the user had selected: the tail of the branch went missing, silently, for every
-     * conversation that had ever seen a provider error. */
+    // A notice this window drew (a provider switch, a rewind) exists nowhere in the daemon's record; one the daemon
+    // wrote (a refusal, a self-resume) is a record row like any other and must be counted.
     it(`a fork counts the notices the daemon recorded and skips the ones drawn locally`, async () => {
         const source = new Conversation(`c1`);
         source.restoreMessages([
@@ -3052,7 +2869,7 @@ describe(`Conversation`, () => {
             const body =
                 attaches === 1
                     ? chunkStream([first.head(), ...first.frames({ kind: `delta`, text: `partial` })], `error`)
-                    : // A NEWER turn is live by the time the tab reconnects: its rows must not land here.
+                    : // A newer turn is live by the time the tab reconnects: its rows must not land here.
                       chunkStream([other.head(), ...other.frames({ kind: `delta`, text: `other` }), { kind: `end` }], `close`);
             return Promise.resolve({ ok: true, body } as Response);
         });
@@ -3093,10 +2910,8 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
-    /* THE SEND'S OWN ROWS BELONG TO THE RUN the ack names, which is what makes re-attaching to a run this window
-     * STARTED idempotent, the way it is for one it merely found: the bubble opened for the typing indicator is
-     * the row the daemon's head replaces, and a later head for the same run replaces the run's rows again
-     * (transcriptState.attachRun) rather than drawing them under themselves. */
+    // A send's own bubble is the row the run's head later replaces, so re-attaching to a run this window started is
+    // idempotent, the same as for one it merely found (transcriptState.attachRun).
     it(`redraws a run its own send opened when attached to it again, rather than stacking a second copy`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
@@ -3114,9 +2929,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.map((message) => message.id)).toEqual(ids);
     });
 
-    /* THE CARDS A RECORD KEPT come back as the cards they were: the daemon's fold settles a card's status on the
-     * row itself (card-status.ts), live and in the record alike, so "answered, with these picks" reads
-     * identically live and a week later without this window deciding anything about it. */
+    // The daemon settles a card's status on the row itself (card-status.ts), live and in the record alike, so a
+    // restored card reads identically to a live one.
     it(`restores the cards a record kept, frozen with the decisions that settled them`, () => {
         const conversation = new Conversation(`c1`);
         const questions = [
@@ -3157,10 +2971,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value[1]?.todos).toEqual(todos);
     });
 
-    /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
-     * holds. A reload that lands mid-turn used to attach before the history was in place, so the chat came back
-     * showing only the message being answered, and the settle then persisted that stub over the local mirror.
-     * Attaching on top of an ALREADY-restored transcript is the shape hydrate now guarantees. */
+    // Attaching to a live run must add to a transcript already restored, not replace it.
     it(`reattach adds the live turn to the history already on screen instead of replacing it`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([
@@ -3179,8 +2990,8 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* The tail is only THIS run when it matches whole: a live "Continue" answering an earlier "Continue with the
-     * tests" must not swallow that turn. */
+    // The tail counts as this run only on a whole match; "Continue" must not swallow an earlier "Continue with the
+    // tests".
     it(`reattach appends when the transcript's last prompt only looks like the running one`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([
@@ -3198,10 +3009,8 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* A RUN THE DAEMON RESTARTED. Its prompt is the user's words behind a note explaining the interruption
-     * (RESUME_NOTES), and rendering the head verbatim put that machine prose into the transcript as a message the
-     * user had supposedly typed: directly under the copy they really did type. Stripped, it matches the bubble
-     * that is already there, so the resumed run continues under the original question. */
+    // A daemon-restarted run's prompt carries the user's words behind a resume note (RESUME_NOTES); stripped, it
+    // matches the existing bubble so the run continues under the original question.
     it(`reattach continues the original prompt when the daemon resumed the turn`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([{ role: `user`, text: `refactor the store` }]);
@@ -3220,14 +3029,8 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* THE ANSWER DRAWN TWICE. A sandbox restart while the turn was parked on a question cannot un-park the run
-     * that died with it, so the daemon starts a fresh one carrying the user's answer (RESUME_NOTES.answered) and
-     * this window renders it. Then the stream drops: a restart is exactly when one does, and the window
-     * attaches to that SAME run again.
-     *
-     * An attach replays its run from the first frame, and a resumed run's bubble deliberately keeps whatever sits
-     * under it, because normally that is the dead run's work. Here it was this run's own answer, so the whole
-     * thing landed a second time, verbatim, under the one bubble. */
+    // An attach replays a run from its first frame; a resumed park's bubble sits under whatever was already there, so
+    // reattaching to a run twice must redraw its answer, not duplicate it.
     it(`reattaching to a resumed park's run redraws its answer instead of stacking a second copy`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([{ role: `user`, text: `which shape should it be?` }]);
@@ -3241,16 +3044,15 @@ describe(`Conversation`, () => {
 
         expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `which shape should it be?` },
-            // The answer the daemon carried in, as its own bubble: words the transcript had never shown, and
-            // exactly one copy of what the run made of it.
+            // The answer the daemon carried in as its own bubble; the transcript hadn't shown it, and only one copy
+            // survives.
             { role: `user`, text: `The user answered: a mode of the board.` },
             { role: `assistant`, text: `That settles it.` },
         ]);
     });
 
-    /* The other resume shape, and why the reclaim goes by RUN rather than by position: a re-run's bubble sits
-     * above the work of the run that died, which nothing will ever redraw. Attaching twice has to take back this
-     * run's own answer and leave that alone: truncating to the bubble would take both. */
+    // Reclaiming by run rather than position: a re-run's bubble sits above the dead run's own work, so reattaching
+    // twice must replace only its own answer, not truncate to the bubble.
     it(`reattaching to a re-run replaces only its own answer, keeping the dead run's work above it`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.restoreMessages([
@@ -3342,9 +3144,8 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
-    /* The harness read the leading `/` as a command it doesn't have and discarded the rest of the message, so
-     * the model never saw it and the daemon's transcript has no user turn to restore: the bubble in this
-     * window is the only copy left. Same hold as a revoked credential, for the same reason: nothing ran. */
+    // The harness reads a leading `/` as an unknown command and discards the rest, so the model never sees it and the
+    // daemon has no record; this window's bubble is the only copy, held like a revoked credential.
     it(`holds the message when the harness ate it as an unknown slash command`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -3376,9 +3177,8 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
-    /* The model is too small to hold a turn of this loop and the daemon worked that out before sending, so the
-     * words are still only in this window. Held like the refusals above it, and muted like them: what the user
-     * acts on is the model picker sitting right over the held message, not a red line about a broken workspace. */
+    // The model is too small to hold the turn, and the daemon knows before sending, so the words stay in this
+    // window; held and muted like the refusals above.
     it(`holds the message when the model's own window cannot hold the turn`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -3408,15 +3208,8 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
-    /* THE REFUSAL THAT NEVER BECAME A TURN. The daemon turned the POST away at the door, so there is no error
-     * FRAME to classify and none of the machinery above ran, which is exactly how this path came to do neither
-     * of the two things every code up there does. What it left instead was a bare "Chat request failed (400)"
-     * naming nothing the user could fix, their words stranded in a transcript no daemon has a record of, and a
-     * conversation the fleet never registered: a card on the board with no archive, no discard and no drop.
-     *
-     * Both halves are asserted because either alone still strands them. The daemon's own sentence, because the
-     * status code is not a thing anybody can act on. And the words back in the QUEUE: held there, not flushed:
-     * a queue that re-sent itself would re-fail identically for as long as the cause stood. */
+    // A door-refused turn (no error frame) needs both halves handled explicitly: the daemon's own sentence surfaced
+    // as the error, and the words held in the queue rather than lost or re-sent blindly.
     it(`says why the daemon refused the turn, and takes the undelivered message back`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `invalid attachment path: ../../etc/passwd` }), { status: 400 }));
@@ -3441,8 +3234,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value).toEqual([]);
     });
 
-    // A 409 is the one refusal that keeps neither half: a turn IS running on this conversation, so these words
-    // are its to take as steering and the queue has to stay free to flush into it when it settles.
+    // A 409 means a turn is already running, so these words belong to it as steering; the queue must stay free to
+    // flush once it settles.
     it(`leaves the queue alone when the refusal is that a turn is already running`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `a turn is already running` }), { status: 409 }));
@@ -3464,14 +3257,8 @@ describe(`Conversation`, () => {
         expect(conversation.queued.value).toEqual([]);
     });
 
-    /* THE SEND THAT NEVER LEFT THE BUILDING: the one failure above that arrives as neither a status nor a frame,
-     * because the request itself never completed: an unreachable daemon, a dropped tunnel, an event loop stalled
-     * long enough for the fetch to die. It read as a mid-turn crash and was handled like one: a bare "Chat
-     * failed." and the words left sitting in the transcript, which is a message shown as SAID that no agent has
-     * ever seen, and the only copy of it anywhere.
-     *
-     * The attachment is the half that made this unrecoverable rather than merely annoying: text can be retyped
-     * from the screen, and a dropped file cannot. */
+    // A request that never completed (unreachable daemon, dropped tunnel) is neither a status nor a frame, and must
+    // not be treated as a mid-turn crash: the words return to the queue rather than sitting shown-but-unsent.
     it(`hands the words back when the request never reached the daemon`, async () => {
         const conversation = new Conversation(`c1`);
         const shot = { name: `setup.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/setup.png` };
@@ -3488,17 +3275,13 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value).toEqual([]);
     });
 
-    /* AND THE SAME SEND, STOPPED WHILE IT HUNG, which is the report this came from. A Stop arms the continue
-     * offer, and on a conversation the daemon never took there is nothing behind that press: it opens a fresh
-     * session whose first message is the word "Continue", collects the new-conversation preamble with it, and the
-     * agent answers that there is nothing to continue while the user's real message sits above it, undelivered.
-     *
-     * So both halves are asserted: the offer stands down, and the words come back. */
+    // A Stop on a send that never became a turn must not arm the continue offer: nothing is behind it to resume, and
+    // it must not open a fresh session on the bare word "Continue".
     it(`stands the continue offer down when the stopped send never became a turn`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation((path, init) => {
-            // No run to cancel, because the send never became one: the daemon says so, and that refusal is what
-            // sends the stop back to this window to draw and to hand the words over.
+            // No run to cancel since the send never became one; the daemon's 404 is what sends the stop back to this
+            // window.
             if (path === `/agent/stop`) {
                 return Promise.resolve({ ok: false, status: 404 } as Response);
             }
@@ -3553,8 +3336,8 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    // A reconnect mints a NEW account id. Leaving the old one on the session ref would read as a deliberate
-    // account switch and retire a session that resumes perfectly well: the user reconnected to carry on.
+    // A reconnect mints a new account id; leaving the old one on the session ref would read as a deliberate switch
+    // and retire a session that still resumes fine.
     it(`keeps the session resumable across a reconnect`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
@@ -3588,9 +3371,9 @@ describe(`Conversation`, () => {
     });
 
     it(`reattach replays an already-answered question card as decided, not as a live prompt`, async () => {
-        // The bug this guards: a reload replays the run from seq 0, so the card is rebuilt from its own frame:
-        // and without the resolution frame it came back pending, offering Submit on a requestId the daemon had
-        // already resolved, underneath a transcript that had visibly moved on.
+        // A reload replays the run from seq 0, rebuilding the card from its own frame; without the resolution frame
+        // too,
+        // it comes back pending and offers Submit on an already-resolved requestId.
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
         sandboxRequestMock.mockImplementation(
@@ -3667,8 +3450,8 @@ describe(`Conversation`, () => {
         expect(new Set(conversation.messages.value.map((message) => message.id)).size).toBe(2);
     });
 
-    // The daemon recovers a turn's attached files from the stored prompt's note; the redrawn bubble shows
-    // them as chips again (named by file), not as the injected protocol text.
+    // Attachments are recovered from the stored prompt's note; the redrawn bubble shows them as named chips, not the
+    // injected protocol text.
     it(`redraws a restored message's attachments as chips`, () => {
         const conversation = new Conversation(`c1`);
 
@@ -3683,9 +3466,8 @@ describe(`Conversation`, () => {
         });
     });
 
-    // A restored tab already carries its own posture from the tab snapshot. loadTranscript's history-menu
-    // defaults would move an isolated agent's next turn onto the main tree: the worktree it has been working
-    // in for the whole conversation.
+    // A restored tab already carries its posture from the tab snapshot; history-menu defaults must not move an
+    // isolated agent's next turn off its own worktree.
     it(`leaves an isolated conversation's posture alone when its transcript is restored`, () => {
         const conversation = new Conversation(`c1`);
         conversation.isolated.value = true;
@@ -3698,17 +3480,12 @@ describe(`Conversation`, () => {
     });
 });
 
-/* THE CLOCK'S FALLBACK. The transcript is revealed on this window's frames, and a browser gives none to a
- * window that is minimized or fully occluded, so an armed clock waiting on a frame that never comes would be a
- * conversation that has gone deaf for the rest of the session. Which is what "the chat stopped reacting" was,
- * for a longer reason that no longer exists: a floating panel used to be drawn by the app's tab, so the clock
- * ran on the frames of the window BEHIND the one being read. The panel renders itself now
- * (composables/floating.ts); the fallback below is what remains, and it is worth pinning. */
+// A minimized or fully occluded window gets no requestAnimationFrame; the clock needs a fallback timer so the
+// transcript doesn't go stale in it.
 describe(`the transcript's clock`, () => {
     it(`applies frames on its own timer when the window never delivers one`, async () => {
         const conversation = new Conversation(`c-parked`);
-        // Frames requested and never delivered: a minimized window, which the clock's own fallback timer is the
-        // whole reason for, since an armed clock waiting on a frame that never comes is a deaf conversation.
+        // Frames requested but never delivered, as with a minimized window.
         vi.stubGlobal(`requestAnimationFrame`, () => 0);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
 
@@ -3720,9 +3497,8 @@ describe(`the transcript's clock`, () => {
         await turn;
     });
 
-    /* The rewind's one genuine hazard: the DAEMON's transcript index and the BUBBLE's position are different
-     * numbers, and they diverge the moment a local notice is drawn. Sending the bubble position would restore
-     * a different turn than the one clicked and drop a different set of messages. */
+    // The daemon's transcript index and the bubble's position are different numbers that diverge once a local notice
+    // is drawn; rewinding must use the daemon's index, not the bubble's.
     it(`rewinds by the daemon's transcript index and truncates by the bubble's, then drops the session`, async () => {
         const conversation = new Conversation(`c-rewind`);
         sandboxRequestMock.mockImplementation(
@@ -3746,10 +3522,8 @@ describe(`the transcript's clock`, () => {
         const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
         expect(path).toBe(`/agent/rewind`);
         expect(JSON.parse(init!.body as string)).toEqual({ conversationId: `c-rewind`, index: 0 });
-        /* Everything from the rewound message on is gone, and the next send starts a fresh provider thread.
-         * What stands in its place is the line saying so: a transcript that merely stopped two messages short
-         * looks exactly like one that was always that length, and the workspace having moved with it is the
-         * part nothing else on screen would ever mention. */
+        // Everything from the rewound message on is gone and the session drops; the notice is the only place that says
+        // so, including that the workspace moved too.
         expect(conversation.messages.value).toEqual([
             expect.objectContaining({ role: `notice`, text: `Went back to here, 2 messages dropped and the files restored to this point.` }),
         ]);
@@ -3774,12 +3548,8 @@ describe(`the transcript's clock`, () => {
     });
 });
 
-/* ASKING A TURN AGAIN, DIFFERENTLY (Conversation.beginEdit / cancelEdit / submitEdit).
- *
- * THE WHOLE FEATURE IS THE ORDER OF EVENTS, so that is what these assert. Arming destroys nothing and sends
- * nothing: that is what buys cancel its promise of costing nothing, and what lets the transcript keep drawing
- * the doomed turns while the replacement is being typed. Only the send spends the rewind, and only if the
- * rewind lands does anything go out. */
+// Conversation.beginEdit/cancelEdit/submitEdit: editing a sent message. Arming destroys and sends nothing, so
+// cancel costs nothing; only submit spends the rewind, and only if it lands does anything go out.
 describe(`Conversation editing a sent message`, () => {
     // One turn, checkpointed, with the session live: the state every edit starts from.
     const settled = async (id: string): Promise<Conversation> => {
@@ -3804,16 +3574,14 @@ describe(`Conversation editing a sent message`, () => {
 
         expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(true);
 
-        // The old words are in the box, the transcript is exactly as it was, and the daemon has not been asked
-        // for anything at all: there is nothing yet to undo.
+        // Old words are in the box, the transcript untouched, and the daemon never asked: nothing yet to undo.
         expect(conversation.draft.value).toBe(`frist`);
         expect(conversation.messages.value).toEqual(before);
         expect(conversation.session.value).toEqual(expect.any(Object));
         expect(sandboxRequestMock).not.toHaveBeenCalled();
     });
 
-    // Entering an edit must not eat a half-written message: the one thing on this screen the app cannot
-    // recover (see `unsent`).
+    // Entering an edit must not eat a half-written draft, the one thing here the app cannot recover (see `unsent`).
     it(`gives the displaced draft back on cancel`, async () => {
         const conversation = await settled(`c-edit-cancel`);
         conversation.draft.value = `something half-written`;
@@ -3831,16 +3599,16 @@ describe(`Conversation editing a sent message`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi` }, { kind: `done` }]));
         await conversation.send(`first`, settings);
 
-        // No checkpoint frame, so no anchor: the files could not come back, and an edit that kept today's files
-        // would start the replacement turn on the very work it was meant to discard.
+        // No checkpoint means no anchor: files can't be restored, so an edit here would start the replacement on the
+        // work
+        // it should discard.
         expect(conversation.messages.value[0]?.rewindIndex).toBeUndefined();
         expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(false);
         expect(conversation.editing.value).toBeUndefined();
     });
 
-    /* THE SEND, and the order that survives a failure between its halves: rewind first, send only if it landed.
-     * Backwards, the replacement would go out against a workspace still holding the turns it was meant to
-     * replace, and the rewind behind it would then cut the transcript out from under a running turn. */
+    // The rewind must go first and the send only if it lands; reversed, the replacement would run against a workspace
+    // still holding the discarded turns.
     it(`rewinds to the message and sends the replacement in its place`, async () => {
         const conversation = await settled(`c-edit-send`);
         conversation.beginEdit(conversation.messages.value[0]!);
@@ -3859,9 +3627,9 @@ describe(`Conversation editing a sent message`, () => {
         expect(calls[0]).toBe(`/agent/rewind`);
         expect(calls.slice(1).some((path) => path !== `/agent/rewind`)).toBe(true);
         expect(conversation.editing.value).toBeUndefined();
-        /* The line between them names the EDIT rather than the rewind underneath it. Same mechanism, different
-         * sentence: "went back to here" over a prompt the reader is re-asking describes the machinery and
-         * leaves the transcript looking like a rewind and a fresh prompt that happened to land together. */
+        // The notice names the edit, not the rewind underneath it, so it doesn't read as an unrelated rewind plus a
+        // fresh
+        // prompt.
         expect(conversation.messages.value[0]).toMatchObject({
             role: `notice`,
             text: `Edited this message, 2 messages dropped and the files restored to this point.`,
@@ -3869,8 +3637,8 @@ describe(`Conversation editing a sent message`, () => {
         expect(conversation.messages.value[1]).toMatchObject({ role: `user`, text: `first` });
     });
 
-    // A refused rewind (a turn is running, the checkpoint is gone) leaves the chat untouched with its reason on
-    // screen, and the edit still armed, so the press works the moment the turn ends.
+    // A refused rewind leaves the chat untouched, its reason shown, and the edit still armed so the press works once
+    // the turn ends.
     it(`sends nothing and stays armed when the rewind is refused`, async () => {
         const conversation = await settled(`c-edit-refused`);
         conversation.beginEdit(conversation.messages.value[0]!);
@@ -3884,11 +3652,8 @@ describe(`Conversation editing a sent message`, () => {
         expect(conversation.error.value).toContain(`running a turn`);
     });
 
-    /* THE ID TRAP, asserted so it cannot come back. Message ids restart from zero on every transcript rebuild,
-     * so a replayed record hands the SAME ids to entirely different messages, and an edit that resolved by id
-     * alone would sail straight through and replace whichever turn had inherited its number. Disarming on the
-     * replacement is the guard (see `editing`); the failure it prevents is silent, which is why this test looks
-     * for the mode being gone rather than for an error. */
+    // Message ids restart from zero on every rebuild, so a replayed record can hand the same id to a different
+    // message; an edit resolved by id alone would silently replace the wrong turn.
     it(`disarms when the transcript underneath it is replaced wholesale`, async () => {
         const conversation = await settled(`c-edit-replaced`);
         conversation.beginEdit(conversation.messages.value[0]!);
@@ -3904,8 +3669,7 @@ describe(`Conversation editing a sent message`, () => {
         expect(conversation.messages.value).toEqual([expect.objectContaining({ text: `a different conversation entirely` })]);
     });
 
-    // The same guard on the other path that replaces a transcript: a plain rewind renumbers everything that
-    // survives it, so an edit armed on one of the survivors cannot be left pointing into it.
+    // A plain rewind also renumbers every surviving message, so an armed edit must disarm here too.
     it(`disarms when a plain rewind renumbers the messages under it`, async () => {
         const conversation = await settled(`c-edit-rewound`);
         conversation.beginEdit(conversation.messages.value[0]!);
@@ -3921,9 +3685,8 @@ describe(`Conversation editing a sent message`, () => {
     });
 });
 
-/* SPEAKING AS THE AGENT (Conversation.placeAsAgent): the tab's half of agents.place. The daemon appends the
- * row to its record and forgets the provider session; these check the tab then agrees on both halves, and that
- * a refusal moves NOTHING: a bubble drawn for a row the record never took would be the transcript lying. */
+// Conversation.placeAsAgent: the tab's half of agents.place. The daemon appends the row and drops the provider
+// session; a refusal must move nothing here either.
 describe(`Conversation placeAsAgent`, () => {
     it(`appends a marked agent bubble and drops the session, so the next send starts a fresh thread`, async () => {
         const conversation = new Conversation(`c-place`);
@@ -3959,10 +3722,8 @@ describe(`Conversation placeAsAgent`, () => {
         expect(conversation.error.value).toContain(`running a turn`);
     });
 
-    /* A CHANNEL conversation's place can be refused because the CHANNEL was unreachable: the daemon carries a
-     * placed line out to the Discord/Slack/Telegram thread it answers before appending, and refuses the whole
-     * place when it cannot. Its sentence is the only thing that says which audience missed the message, so the
-     * tab surfaces it verbatim rather than a generic "could not place". */
+    // A channel conversation's place can fail because the channel itself is unreachable; the daemon's sentence is the
+    // only thing naming which audience missed it, so it surfaces verbatim.
     it(`surfaces the daemon's sentence when the channel delivery is refused`, async () => {
         const conversation = new Conversation(`c-place-channel`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
@@ -3989,9 +3750,8 @@ describe(`Conversation placeAsAgent`, () => {
     });
 });
 
-/* WHEN EACH MESSAGE WAS SENT (ChatMessage.sentAt): the stamp the bubble shows on hover. Three sources, and the
- * point of the group is that they agree: a turn sent here, a turn already running when this tab arrived, and a
- * turn read back out of the daemon's record all say the hour the user actually pressed send. */
+// ChatMessage.sentAt: the hover stamp. Three sources (sent here, already running on attach, restored from the
+// record) must agree on the hour the user actually pressed send.
 describe(`Conversation sent time`, () => {
     it(`stamps a message the user sends here with the moment it was sent`, async () => {
         const conversation = new Conversation(`c1`);
@@ -4003,13 +3763,14 @@ describe(`Conversation sent time`, () => {
         const sentAt = conversation.messages.value[0]?.sentAt;
         expect(sentAt).toBeGreaterThanOrEqual(before);
         expect(sentAt).toBeLessThanOrEqual(Date.now());
-        // Only the user's row. Nothing in the stream says when a given block of the answer was written, and a
-        // bubble stamped with a time it has no claim to is worse than one that says nothing.
+        // Only the user's row gets a stamp; nothing in the stream says when part of the answer was written, and a
+        // guessed
+        // time is worse than none.
         expect(conversation.messages.value[1]?.sentAt).toBeUndefined();
     });
 
-    // A turn that has been running since before this tab attached: a reload, a second window. Its bubble is
-    // drawn now and was sent then, so it takes the RUN's start rather than the moment its reader turned up.
+    // A turn already running before this tab attached is drawn now but was sent then, so its bubble takes the run's
+    // start time, not the attach moment.
     it(`takes the running turn's own start for a bubble drawn on reattach`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -4021,8 +3782,8 @@ describe(`Conversation sent time`, () => {
         expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `refactor the parser`, sentAt: 1234 });
     });
 
-    // Reopened tomorrow, the same message keeps the hour it was typed at: the daemon wrote it down beside the
-    // words (TranscriptRow.sentAt), and a redraw from the record must not re-date the conversation.
+    // The daemon writes `sentAt` beside the words (TranscriptRow.sentAt); a redraw from the record must not re-date
+    // them.
     it(`keeps the daemon's stamp when a stored transcript is restored`, () => {
         const conversation = new Conversation(`c1`);
 
@@ -4034,13 +3795,8 @@ describe(`Conversation sent time`, () => {
         expect(conversation.messages.value.map((message) => message.sentAt)).toEqual([1_767_225_600_000, undefined]);
     });
 
-    /* A CONVERSATION THAT LIVES IN ANOTHER SANDBOX. One field decides the whole correspondence
-     * (Conversation.box), and the property worth pinning is that NO leg of it is left pointing at the box this
-     * browser happens to be showing: a send that crossed while its attach did not would start a turn nobody
-     * ever sees, and a stop that stayed home would report success over a turn still running.
-     *
-     * Written against the reach rather than the path, because that argument is the entire difference between
-     * the two cases and it is invisible in a URL. */
+    // Conversation.box: a conversation homed in another sandbox. No leg (send/attach/stop) may point at the wrong
+    // box. Asserted against the reach argument, since that's invisible in the path itself.
     describe(`homed in another sandbox`, () => {
         const remote = (): Conversation => {
             const conversation = new Conversation(`c-elsewhere`);
@@ -4058,9 +3814,8 @@ describe(`Conversation sent time`, () => {
             expect(pathsAimedAt(undefined)).toEqual([]);
         });
 
-        /* THE ACK IS ITS REGISTRATION. `registered` normally latches on a roster frame, and this browser
-         * streams one sandbox, so without this the tab would stay a "draft" for good and draw a phantom
-         * New-agent card beside the real one the All-sandboxes read brings back for it. */
+        // `registered` normally latches on a roster frame; this browser streams only one sandbox, so without the ack
+        // fallback a remote tab would stay a draft forever and show a phantom New-agent card.
         it(`counts as registered from the daemon's ack, since no roster frame here will ever say so`, async () => {
             const conversation = remote();
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
@@ -4070,8 +3825,7 @@ describe(`Conversation sent time`, () => {
             expect(conversation.registered.value).toBe(true);
         });
 
-        // …and a conversation in THIS box keeps the roster-frame latch: the ack is not evidence of a registry
-        // entry when there is a stream that says so properly.
+        // A local conversation keeps the roster-frame latch; the ack alone isn't evidence when a proper stream exists.
         it(`leaves a local conversation's registration to the roster`, async () => {
             const conversation = new Conversation(`c-here`);
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
@@ -4098,12 +3852,9 @@ describe(`Conversation sent time`, () => {
     });
 });
 
-/* PAGING BACK THROUGH A CONVERSATION LONGER THAN ONE WINDOW.
- *
- * The daemon answers a transcript read with the most recent turns and says where they start
- * (sessions/transcript-record.ts): a 400-turn conversation used to arrive whole, 3.74 MB of it, for every tab
- * that opened it and every card the board warmed behind it. What the chat owes in return is a way back through
- * the rest that cannot cost the reader what is already on screen. */
+// Paging back through a conversation longer than one window. The daemon answers a transcript read with the most
+// recent turns and says where they start (sessions/transcript-record.ts); paging back must not cost what's
+// already on screen.
 describe(`older history`, () => {
     // The daemon's answer to `GET /agents/{id}/transcript?before=N`, as the fetch layer reads it.
     const olderPage = (messages: readonly TranscriptRow[], from: number, more: boolean): Response =>
@@ -4144,9 +3895,8 @@ describe(`older history`, () => {
         expect(pathsAimedAt(undefined)).toEqual([`/agents/c1/transcript?before=40`]);
     });
 
-    /* Ids are identity here, never order, and a prepended page must not hand an older bubble the id of one
-     * already on screen: a patch from a turn streaming into this same transcript addresses messages by id, and
-     * a collision would apply the live turn's words to a message from last week. */
+    // Ids are identity, not order; a prepended page must not hand an older bubble the id of one already on screen,
+    // since a live patch addresses messages by id and a collision would misapply it.
     it(`gives the arriving rows ids of their own`, async () => {
         const conversation = opened();
         const standing = conversation.messages.value.map((message) => message.id);
@@ -4182,8 +3932,8 @@ describe(`older history`, () => {
         expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `turn 20`, `answer 20`]);
     });
 
-    /* A failed read costs nothing. The reader asked for this by hand over a transcript they are looking at, so
-     * the transcript stays exactly as it was and the offer stands: the retry is the same press again. */
+    // A failed read costs nothing: the transcript stays as it was and the offer stands, so retrying is the same press
+    // again.
     it(`leaves the transcript and the offer alone when the read fails`, async () => {
         const conversation = opened();
         sandboxRequestMock.mockRejectedValue(new Error(`tunnel closed`));
@@ -4196,9 +3946,8 @@ describe(`older history`, () => {
         expect(conversation.loadingOlder.value).toBe(false);
     });
 
-    /* A REDRAW REPLACES THE WINDOW, so the cursor has to move with it. A rewind or a runtime handoff hands the
-     * chat a fresh page; a `historyFrom` left over from the old one would fetch rows that no longer sit above
-     * anything on screen. */
+    // A redraw (rewind, runtime handoff) replaces the window, so the cursor must move with it; a stale `historyFrom`
+    // would fetch rows that no longer sit above anything on screen.
     it(`re-aims the cursor when the transcript is redrawn under it`, () => {
         const conversation = opened();
         conversation.restoreMessages([{ role: `user`, text: `only turn` }], { from: 0, more: false });
@@ -4206,8 +3955,8 @@ describe(`older history`, () => {
         expect(conversation.historyMore.value).toBe(false);
     });
 
-    // A caller with no page to report (the local mirror, a fork's inherited rows) cannot vouch for where its
-    // rows sit, and says so by leaving the cursor at "this is all of it" rather than keeping a stale one.
+    // A caller with no page to report can't vouch for where its rows sit, so the cursor reads "this is all of it"
+    // rather than a stale one.
     it(`drops the cursor for a redraw that cannot say where its rows sit`, () => {
         const conversation = opened();
         conversation.restoreMessages([{ role: `user`, text: `from the mirror` }]);

@@ -26,9 +26,6 @@ describe("fileTranscriptRecord", () => {
         expect(await record.read("c2")).toEqual([]);
     });
 
-    /* A BRANCH opens as a copy of the conversation it was cut from: the one opening history nothing but a copy
-     * could supply, since the branch is a conversation nothing else knows about yet. Copying it is what lets a
-     * branch seed a switched session and read back in full, instead of appearing to begin at the edit. */
     it("opens a branch with the source's first rows and leaves the source alone", async () => {
         const record = fileTranscriptRecord(await dir());
         await record.append("c1", [{ role: "user", text: "one" }, said("first")]);
@@ -67,17 +64,8 @@ describe("fileTranscriptRecord", () => {
     });
 });
 
-/* THE DISCOVERY GUARD.
- *
- * "The chat opens empty" kept coming back because the transcript was re-derived from whatever store the
- * PROVIDER kept, so every provider/harness pair was its own chance to have no reader, no key, or no store at
- * all, and codex/grok native and ACP never had one. The fix is that a turn's own frames are the transcript, and
- * this is the test that keeps it true: it drives every pair the catalog can produce through the same fold the
- * daemon runs as the turn streams, and demands a readable conversation out the other end.
- *
- * By SHAPE, not by a list: PROVIDERS × HARNESSES is read from the catalog, so a provider added tomorrow is
- * covered the day it is added. If this fails for a new pair, that pair's turns are not reaching the record: the
- * answer is to make them, never to special-case the read. */
+// Drives every provider×harness pair (read from the PROVIDERS/HARNESSES catalog, not a hardcoded list) through the fold
+// the daemon runs live, and demands a readable transcript out the other end.
 describe("every provider records a readable transcript", () => {
     const turn = { prompt: "do the thing" };
     const events: AgentEvent[] = [

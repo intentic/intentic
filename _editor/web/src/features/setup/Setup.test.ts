@@ -1,29 +1,15 @@
 // @vitest-environment jsdom
-//
-// WHAT SETUP ASKS FOR ON ARRIVAL, which is the whole subject: nothing. Step 1 used to be a form, an empty field
-// and a Create button that stayed dead until a word was typed, and the word bought nothing, since a name only
-// tells sandboxes apart in a switcher the visitor has not seen yet. Naming is not on this page at all any more,
-// in any form: no field, no pencil, nothing to press to grow one. It belongs in the workspace, where there are
-// several machines to tell apart. These mount the real page and read the first frame: that a sandbox exists
-// without anyone naming it, and that arriving on one already made does NOT make a second.
-//
-// AND THE MACHINE IS NOT ASKED FOR EITHER. The page answers off the surface it is read on (setupArrival.ts):
-// a browser gets a machine of ours started for it on arrival, the desktop app installs on the computer it is
-// running on, and the picker is what is left for the arrivals neither answer fits. So most tests below mount
-// into a world where the platform hosts NOTHING (the default `hostedOffer`), which is the one that leaves the
-// command lane on screen; the ones about the picker say so by asking for it (`?machine=`, `?elsewhere=1`).
+// Pins that setup asks for neither a name (moved to the workspace) nor a machine (decided by surface, setupArrival.ts).
+// Defaults to a platform that hosts nothing, the world that leaves the command lane on screen.
 import type { SandboxSummary } from "@intentic/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see Capabilities.test.ts): ui's useDevice reads matchMedia at
-// module scope, environment.ts reads window.env and throws without it.
+// Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
 const push = vi.fn();
-// The URL the page was opened with. Empty unless a test sets it: the query carries where the reader came
-// FROM (`?sandbox=` resumes one, `?machine=` names a rung already chosen on the public site), so it is an
-// arrival fact and every test that does not set it describes a cold, linkless visit.
+// Query string the page was opened with; unset means a cold, linkless visit.
 const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -34,41 +20,33 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
             },
         }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
-    // "Back to workspace" is a link now, and the real one resolves its href out of a router this bare mount
-    // never installs.
+    // RouterLink stub: the real component resolves its href from a router this bare mount never installs.
     RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
-// The device the page is read on: desktop unless a test flips it. The phone default is behavior of its own
-// (the hosted rung takes it whenever one is offered); every other test below describes the desktop page.
+// Desktop unless a test flips it; the phone default is its own behavior (auto-picks the hosted rung).
 const mobileDevice = ref(false);
 vi.mock(import(`@intentic/ui`), async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
         useDevice: (() => ({ ...actual.useDevice(), mobile: mobileDevice })) as typeof actual.useDevice,
-        // The command block, minus its highlighter. Shiki loads grammars asynchronously and none of the tests
-        // below are about syntax colouring: they are about whether the command is on screen at all, which a
-        // <pre> answers exactly as well and in one tick.
+        // Stubbed without Shiki's async highlighter; tests only check whether the command renders.
         Code: defineComponent({ props: { code: String }, render: () => null }) as unknown as typeof actual.Code,
     };
 });
 
-// The sandbox registry, as the page sees it. `sandboxes` is what the auto-name counts against, `list` is the
-// read on mount, and `create` is the one write this page makes to the row itself.
+// sandboxes feeds the auto-name count, list is the mount-time read, create is this page's one write.
 const sandboxes = ref<SandboxSummary[]>([]);
 const list = vi.fn<() => Promise<SandboxSummary[]>>();
 const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
 const hostedProvision = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
-// The 3s poll's read. Named (rather than inline) because the wait card is driven entirely by what it returns:
-// what the sandbox has said about its own boot, and whether we have been refusing its check-ins.
+// The 3s poll's read; the wait card is driven entirely by what it returns.
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
 // The discard rule's one observable act: leaving without committing deletes the draft this page minted.
 const remove = vi.fn<(id: string) => Promise<void>>();
-// `activeSandboxId` and `reachable` are not this page's own reads: they are the chat store's, which arrives in
-// this graph because finishing setup now HANDS OVER to a chat (see `enterWorkspace`). The store reads them at
-// module scope, so leaving them out is an import-time crash rather than a missing feature.
+// activeSandboxId/reachable belong to the chat store, read at module scope; omitting them crashes the import.
 vi.mock(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
@@ -85,17 +63,13 @@ vi.mock(`../sandbox/client/useSandbox`, () => ({
     }),
 }));
 
-// The mint never settles, so step 3 stays locked and these tests stay about step 1: no command, no highlighter.
-// The hosted offer answers "not on this platform" unless a test says otherwise: the classic lanes' tests must
-// keep describing the world without the hosted rung.
+// Mint never settles, keeping step 3 locked; hostedOffer defaults to false so classic lanes stay hosted-free.
 type Minted = { code: string; hostname: string; expiresAt: string };
 const setupCode = vi.fn<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
 const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
-// The platform hands out addresses unless a test says otherwise: that is the world every lane below assumes,
-// and the one where a mint that never settles is a WAIT rather than a promise that was never on offer.
+// Address minting is on by default; the world every lane below assumes unless a test says otherwise.
 const addressOffer = vi.fn().mockResolvedValue({ enabled: true });
-// The wait's two extra calls: the machine's power state (polled while waiting) and the restart its failures
-// offer. Both answer harmlessly by default: a wait that cannot ask falls back to its plain step list.
+// Power poll and restart default harmlessly; a wait that can't ask falls back to its plain step list.
 const hostedStatus = vi.fn().mockResolvedValue({ machine: `unknown` });
 const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
 vi.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart } } }));
@@ -131,7 +105,7 @@ vi.mock(import(`../../app/environments/desktop`), async (importOriginal) => ({
     desktopVersion: () => undefined,
     openDesktopLink: vi.fn(),
 }));
-// Steps 2-3's own surfaces: separate components with their own concerns, and none of them step 1's.
+// Steps 2-3's own components, stubbed out: none of their concerns belong to step 1's tests.
 vi.mock(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -163,8 +137,7 @@ const mount = async (): Promise<HTMLElement> => {
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
-    // The mount read (list + the hosted offer) and the create it decides on are several awaits deep: a
-    // macrotask flushes the whole chained sequence where a fixed count of ticks kept going stale.
+    // A macrotask flush: the mount's chained awaits (list, then the hosted offer) outrun a fixed tick count.
     await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
@@ -172,29 +145,23 @@ const mount = async (): Promise<HTMLElement> => {
     return el;
 };
 
-// A button whose whole label is this word: the "is there a Create button gating step 1" question, asked
-// precisely. Substring matching answers it wrongly, because the rungs are prose about a machine rather than
-// controls standing between the reader and their sandbox, and a rung's own words can contain a button's.
+// Exact label match: substring matching would false-positive on rung prose containing a button's words.
 const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
 
-// The same question for a button that is an <a>: a download is a navigation, so the installer offer is a link
-// wearing a button's clothes, and asking for a <button> would answer "no such control" about one on screen.
+// Same question for an <a>: a download is a navigation, so the installer offer is a link, not a button.
 const linkLabelled = (text: string): HTMLAnchorElement | undefined =>
     [...document.querySelectorAll(`a`)].find((link) => link.textContent?.trim() === text);
 
-// Anything on the page whose whole text is this: the leaf that holds a value, rather than every ancestor that
-// contains it. Used to ask WHERE something is, which is a question about one element and not about a subtree.
+// The leaf holding this exact text, not any ancestor containing it — for asking where something sits.
 const nodeWithText = (text: string): Element =>
     [...document.querySelectorAll(`*`)].find((node) => node.children.length === 0 && node.textContent?.trim() === text)!;
 
-// Does it sit after the rung picker in the page's own order? The picker is the landmark this page is measured
-// against: what a stranger reads BEFORE the only choice on it is what decides whether they reach the choice.
+// Whether the text follows the picker in document order: what a reader meets before the one choice.
 const afterThePicker = (text: string): boolean =>
     (document.querySelector(`[role="radiogroup"]`)!.compareDocumentPosition(nodeWithText(text)) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
-// A settled mint, so the run card gets past its lock and renders the thing the reader came for. The tests that
-// predate this one deliberately leave the mint hanging, which is what keeps them about step 1.
+// A settled mint, so the run card clears its lock; earlier tests leave the mint hanging on purpose.
 const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.dev`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
 
 beforeEach(() => {
@@ -220,8 +187,7 @@ beforeEach(() => {
     push.mockReset();
 });
 
-// Leaving the page, the way every exit does it: the discard rule hangs off the unmount, so the tests below
-// have to actually take the page down rather than assert on a flag.
+// Every exit path: the discard rule hangs off unmount, so tests must actually unmount to trigger it.
 const leave = (): void => {
     app?.unmount();
     app = undefined;
@@ -234,9 +200,6 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-// The regression this file is named for: a fresh account gets a sandbox by arriving, and is never shown a field.
-// Asserted by SHAPE rather than against the label the field used to wear: there is nothing to type into on this
-// page, and no control that grows one, whatever such a thing would be called.
 it(`creates the sandbox on arrival, with no name asked for`, async () => {
     const el = await mount();
     expect(create).toHaveBeenCalledWith(`workspace`);
@@ -245,13 +208,7 @@ it(`creates the sandbox on arrival, with no name asked for`, async () => {
     expect([...el.querySelectorAll(`button`)].some((button) => /name/i.test(button.getAttribute(`aria-label`) ?? ``))).toBe(false);
 });
 
-/* THE DRAFT RULE: the price of creating on arrival, paid back.
- *
- * Creating the row before anything is asked for is what makes the first frame useful (the address mint needs a
- * row to hang off), and it used to be charged to the reader's switcher: opening this screen and going straight
- * back left a sandbox in their list, wearing a "Setup" chip, that they never asked to make. Looking at a thing
- * must not create it. So the row is a draft until an ACT says otherwise, and leaving without one deletes it:
- * the platform row and the tunnel the mint bought with it. */
+// A draft until an act says otherwise: discarding removes the platform row and the mint's tunnel too.
 it(`discards the sandbox it made when the reader leaves without committing`, async () => {
     await mount();
     expect(create).toHaveBeenCalledWith(`workspace`);
@@ -259,9 +216,7 @@ it(`discards the sandbox it made when the reader leaves without committing`, asy
     expect(remove).toHaveBeenCalledWith(`new`);
 });
 
-// …and the acts that keep it are acts, never guesses. A machine exists now: there is hardware behind this row,
-// and deleting it on the way past would be throwing away the thing the reader just started. In a browser the
-// act is the ARRIVAL itself, which is what starting a machine for somebody means.
+// In a browser, arrival itself is the committing act, since a machine now exists behind the row.
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     await mount();
@@ -270,9 +225,6 @@ it(`keeps the sandbox once a machine has been started for it`, async () => {
     expect(remove).not.toHaveBeenCalled();
 });
 
-/* AND A RESUMED SANDBOX IS NEVER A DRAFT. It predates the visit: somebody made it on purpose and came back to
- * it, so leaving is setting it aside, not abandoning something that was created behind their back. Getting
- * this wrong would delete the very row the page was opened to finish. */
 it(`never discards a sandbox it merely resumed`, async () => {
     const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
     sandboxes.value = [unfinished];
@@ -283,11 +235,6 @@ it(`never discards a sandbox it merely resumed`, async () => {
     expect(remove).not.toHaveBeenCalled();
 });
 
-/* THE FIRST FRAME, WHICH USED TO BE AN ERROR SCREEN. "No row, and not creating one" is the shape of a create
- * that FAILED, and it is also the shape of every visit before the arrival read has answered, so the card
- * opened on "Try again" and corrected itself a round-trip later. In the desktop app, where this page IS the
- * window that just opened, that read as an error flashing on launch. Nothing is claimed until something is
- * known. */
 it(`says nothing about the sandbox until the arrival read answers`, async () => {
     let answer: (rows: SandboxSummary[]) => void = () => {};
     list.mockReset().mockImplementation(async () => new Promise<SandboxSummary[]>((resolve) => (answer = resolve)));
@@ -300,7 +247,7 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     await nextTick();
     expect(buttonLabelled(`Try again`)).toBeUndefined();
     expect(el.textContent).not.toContain(`Connect it by domain`);
-    // …and once it does answer, the page is itself again: a row, and the address being minted for it.
+    // Once it answers: a row now exists, and its address begins minting.
     answer([]);
     await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve));
@@ -308,8 +255,6 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     expect(el.textContent).toContain(`Preparing your intentic domain`);
 });
 
-// "Add sandbox" from a shell that already has one: the default counts past the names the account holds rather
-// than colliding with them.
 it(`numbers the next sandbox instead of colliding with the first`, async () => {
     const existing = sandboxRow({ id: `s1`, name: `workspace`, lastSeenAt: `2026-08-06T00:00:00.000Z` });
     sandboxes.value = [existing];
@@ -318,26 +263,19 @@ it(`numbers the next sandbox instead of colliding with the first`, async () => {
     expect(create).toHaveBeenCalledWith(`workspace-2`);
 });
 
-// Leaving mid-setup and coming back is normal, and it must not pile up rows: the unfinished sandbox is resumed.
 it(`resumes an unfinished sandbox rather than making a second`, async () => {
     const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
     sandboxes.value = [unfinished];
     list.mockResolvedValue([unfinished]);
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
-    /* …AND SAYS NOTHING ABOUT IT, because nothing has happened to this row. It exists only because this page
-     * makes one on arrival, and every ordinary second visit lands here: a reload, a tab reopened, `/` bouncing
-     * off requireSetup — and above all the DESKTOP APP, whose webview loads the SPA at `/` and is redirected
-     * here on its first frame. "Picking up where you left off: nothing has run yet. Use a new sandbox instead."
-     * was therefore the first sentence the app showed a person who had been signed up for thirty seconds,
-     * telling them they had a past here and offering to throw away the only sandbox they had. */
+    // No "picking up where you left off" messaging yet: nothing has happened to this row since it was minted.
     expect(el.textContent).not.toContain(`Picking up where you left off`);
     expect(el.textContent).not.toContain(`Use a new sandbox instead`);
 });
 
 it(`does say where you left off once something has actually happened to the sandbox`, async () => {
-    // A machine redeemed the code: the command demonstrably ran somewhere, so this IS an errand in progress
-    // and the offer to start over is a real one.
+    // setupCodeClaimedAt means the command ran somewhere: a real errand in progress, worth an offer to start over.
     const started = sandboxRow({ id: `s1`, name: `my-laptop`, setupCodeClaimedAt: new Date().toISOString() });
     sandboxes.value = [started];
     list.mockResolvedValue([started]);
@@ -346,34 +284,23 @@ it(`does say where you left off once something has actually happened to the sand
     expect(el.textContent).toContain(`Use a new sandbox instead`);
 });
 
-/* IN A BROWSER, THE MACHINE IS OURS AND IT IS ALREADY STARTING. This is the change the whole arrival exists
- * for: a browser has no machine to offer, everything it could do to the reader's computer needs a terminal or
- * an installer first, and the platform can hand them a working sandbox in seconds. So the page does that and
- * shows them the boot, rather than opening on a picker they signed up ninety seconds ago to be shown. */
 it(`starts a machine of ours for a browser, on arrival`, async () => {
-    // Not `…Once`: the offer is the account's remaining allowance, and the page asks again every time it
-    // spends or hands back a machine. A platform that hosts goes on hosting between two reads of it.
+    // Not `…Once`: the page re-reads the allowance every time it spends or hands back a machine.
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The row is created the ordinary way: the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
     await nextTick();
-    // The wait names its steps rather than asserting one sentence at every problem: see hostedWait.ts.
+    // The wait names each step rather than a single generic sentence.
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).toContain(`Putting it on the internet`);
-    // Nothing was asked, so nothing is on screen to answer: no picker, and no button to press to begin.
+    // Nothing was asked: no picker on screen, no button to press to begin.
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
 
-/* …ONLY FOR A ROW THIS ARRIVAL MADE, WHICH IS THE HALF THAT WAS MISSING. Opening /setup mints a row; closing
- * the tab leaves it behind, untouched and permanent. Every later visit then found something that looked
- * exactly like a first arrival and started a real machine on the platform's provider for it, spending the
- * account's one free allowance with no click anywhere. Reproduced on the live product: an account whose only
- * sandbox was an abandoned draft from a fortnight earlier was handed a machine by nothing but opening
- * app.intentic.dev, and — because a row with hardware attached is no longer a discardable draft — it stayed.
- * A found row gets the picker instead: the same rung, one labelled click, saying what it will do. */
+// Only a row this arrival made gets an automatic machine; a found row gets the picker instead.
 it(`starts nothing for a sandbox it found rather than made`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const abandoned = sandboxRow({ id: `s1`, name: `workspace` });
@@ -382,18 +309,13 @@ it(`starts nothing for a sandbox it found rather than made`, async () => {
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
     expect(hostedProvision).not.toHaveBeenCalled();
-    // …and the rung is on the picker, unchosen, rather than folded away behind a machine already booting.
+    // The rung sits on the picker, unchosen — not folded away behind a machine already booting.
     const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
     expect(rungs.map((card) => card.getAttribute(`aria-checked`))).toEqual([`false`, `true`]);
     expect(rungs[0]?.textContent).toContain(`Start instantly`);
 });
 
-/* THE DAY THE FLEET FILLS UP. Our provider gives this platform a finite number of machines, and when they are
- * all in use the arrival's zero-click machine is a promise nothing can keep. Before this, the page tried
- * anyway: the reader's very first screen was a red card carrying Fly's own sentence about an app they had
- * never heard of, over a Try again button that could not work until an operator raised a quota. So the offer
- * carries the fact (`full`), the arrival stops, the rung wears it instead of a price, and the card says the
- * one useful thing there is to say — the other rung runs it on your own computer, today, with no limits. */
+// A full fleet is `full` on the offer, not a thrown error; the rung states it and points at the other lane.
 it(`starts nothing, and offers the other rung, when the platform is out of machines`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, full: true });
     const el = await mount();
@@ -403,14 +325,12 @@ it(`starts nothing, and offers the other rung, when the platform is out of machi
     rungs[0]?.click();
     await nextTick();
     expect(el.textContent).toContain(`We're out of machines right now`);
-    // …and no button that would just fail: the way through is the rung beside it, and a re-read for later.
+    // No button that would just fail; the way through is the other rung, plus a later re-read.
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
     expect(buttonLabelled(`Set it up on my own computer`)?.tagName).toBe(`BUTTON`);
 });
 
-/* …AND THE OTHER ANSWER IS ONE LINE AWAY, never a support article. A page that decided for the reader owes
- * them the rung it did not take in plain sight; revealing it starts and destroys nothing, because a reader
- * opening it to READ what the alternative is has not chosen it yet. */
+// Opening the alternative is just reading it: nothing starts or releases until it's chosen.
 it(`offers the rung it did not take, without taking it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
@@ -424,11 +344,7 @@ it(`offers the rung it did not take, without taking it`, async () => {
     expect(hostedRelease).not.toHaveBeenCalled();
 });
 
-/* THE MASTHEAD MUST NOT ASK A QUESTION THE PAGE ANSWERED. "Pick where it runs" is written for somebody in
- * front of the picker, and since the arrival started answering for itself most readers are not: it stood over
- * a machine already booting, putting a decision to a reader four inches above the card taking it. Keyed on
- * the picker being DRAWN rather than on the arrival, so it also covers the platform with one rung and
- * therefore no picker. */
+// Keyed on whether the picker is drawn, not on the arrival itself, so a single-rung platform is covered too.
 it(`says what is happening rather than asking, when the arrival answered`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
@@ -445,8 +361,7 @@ it(`asks where it runs only while the picker is on screen`, async () => {
     expect(el.textContent).toContain(`Pick where it runs`);
 });
 
-/* A PHONE IS A BROWSER, and gets the same answer for a stronger version of the same reason: it is the one
- * surface with no way at all to run a sandbox on the machine reading the page. */
+// A phone has no way to run a sandbox locally either, so it gets the same automatic machine.
 it(`starts a machine for a phone too`, async () => {
     mobileDevice.value = true;
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
@@ -456,11 +371,7 @@ it(`starts a machine for a phone too`, async () => {
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
 
-/* A RUNG ALREADY CHOSEN, off `?machine=`: the public site's /where-it-runs cards link through it. That page
- * has the room to say what each rung costs and asks of you, which this one does not and should not; the
- * price of the split is that a click there has to survive the trip. It outranks the arrival's own answer in
- * BOTH directions, so "set up on my computer" opens that step instead of starting a machine nobody asked
- * for, and the picker is back because a reader who chose is a reader who is choosing. */
+// ?machine= outranks the arrival's own decision in both directions: chosen beats automatic either way.
 it(`opens on the rung the reader chose before arriving, and starts nothing`, async () => {
     query.value = { machine: `mine` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
@@ -471,9 +382,7 @@ it(`opens on the rung the reader chose before arriving, and starts nothing`, asy
     expect(hostedProvision).not.toHaveBeenCalled();
 });
 
-// …and it outranks the DEVICE default, which is only ever a guess at what this reader can finish. A phone on
-// `?machine=mine` is somebody reading on their phone about the desktop they are sitting at, and handing the
-// command to that machine is a step this page already has.
+// ?machine= also outranks the phone default: reading on a phone about your own desktop is a real case.
 it(`lets a chosen rung override the phone default`, async () => {
     query.value = { machine: `mine` };
     mobileDevice.value = true;
@@ -483,11 +392,7 @@ it(`lets a chosen rung override the phone default`, async () => {
     expect(rungs.find((card) => card.textContent?.includes(`My own computer`))?.getAttribute(`aria-checked`)).toBe(`true`);
 });
 
-/* A LINK FOR A RUNG THIS PLATFORM DOES NOT OFFER IS IGNORED, not honoured into a dead step. The site is
- * cached and its cards are the same HTML for every platform; a self-hoster who hosts nothing would otherwise
- * land arrivals on a machine that is never coming, from a link they cannot edit. With the hosted rung gone
- * there is one thing left on offer, so there is no picker either: a picker over one rung is a card
- * describing the only answer, which is what the step under it already is. */
+// An unavailable ?machine= is ignored, not honored; with one rung left there's no picker either.
 it(`ignores a rung the platform is not offering`, async () => {
     query.value = { machine: `hosted` };
     hostedOffer.mockResolvedValue({ enabled: false, remaining: 0 });
@@ -498,28 +403,20 @@ it(`ignores a rung the platform is not offering`, async () => {
     await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
 });
 
-/* THE HOSTNAME IS NOT THE FIRST THING A STRANGER READS. It used to be the second line of the card that opens
- * the page: a hex address nobody typed, nobody can parse and nobody is deciding, with an advanced escape
- * hatch ("Use a different address") beside it, above the only choice on the page. It is a consequence of the
- * rung, so it reports itself on the card the rung chose, next to the command that carries it. */
+// The hostname is a consequence of the chosen rung, so it renders on that rung's own card.
 it(`reports the address on the run card rather than above the choice`, async () => {
-    // A reader who is choosing, since the question is where the address sits RELATIVE to the choice: the
-    // arrivals that answer for themselves have no picker to measure against.
+    // Needs a picker to measure against, so this test picks a rung explicitly (?machine=mine).
     query.value = { machine: `mine` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
     await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
-    // Both the address and the way off it are read by somebody who has already picked a rung: neither is
-    // something a stranger has to get past to reach the choice.
+    // Both the address and its escape hatch sit after the picker: a stranger reaches the choice first.
     expect(afterThePicker(MINTED.hostname)).toBe(true);
     expect(afterThePicker(`Use a different address`)).toBe(true);
 });
 
-/* THE OWN-COMPUTER LANE LEADS WITH AN INSTALLER wherever we ship a build for the machine reading the page.
- * `curl … | sudo sh` was this lane's opening move, preselected and above the fold, which exposes the reader
- * who is scared of it and protects the one who isn't. The command is a labelled click away, and the reader who
- * wants it is the one reader guaranteed to recognise the link. */
+// Leads with the installer wherever one ships; the command stays one labelled click away, not gone.
 it(`offers the app first on a machine we ship a build for, with the command one click away`, async () => {
     desktopInstaller.mockReturnValue({ platform: `windows`, label: `Windows`, href: `https://intentic.dev/desktop/windows` });
     setupCode.mockResolvedValue(MINTED);
@@ -529,11 +426,10 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     // Nothing about a terminal on the first frame, not the paste instruction, not the `sudo` switch.
     expect(el.textContent).not.toContain(`Paste it into a terminal`);
     expect(el.textContent).not.toContain(`I already have Docker`);
-    // …and the wait under it names the move it is actually waiting on.
+    // The wait under it also names the move it's actually waiting on.
     expect(el.textContent).toContain(`Nothing runs until you install the app above`);
 
-    // The alternatives are NAMED on screen rather than folded behind a question ("Prefer a terminal?"), and the
-    // one that opens the command says what it opens.
+    // Alternatives are named on screen, not behind a question; the opener that reveals the command says so.
     expect(el.textContent).toContain(`Other ways to set up`);
     const showCommand = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Show the command`);
     showCommand!.click();
@@ -541,8 +437,7 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     expect(el.textContent).toContain(`Paste it into a terminal`);
 });
 
-// …and where there is none (macOS today) the command stays the path. A button pointing at a downloads page
-// with nothing on it for you is worse than the pipe it would displace.
+// No build means no button: a download page with nothing for you is worse than the pipe it replaces.
 it(`keeps the command first where there is no build for the reader's machine`, async () => {
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
@@ -554,15 +449,11 @@ it(`keeps the command first where there is no build for the reader's machine`, a
     await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
     expect(linkLabelled(`Download for Windows`)).toBeUndefined();
     expect(linkLabelled(`Download for Linux`)).toBeUndefined();
-    // Nothing to offer as an alternative here: the command IS the path, so the row of other ways is absent
-    // rather than pointing at what is already on screen.
+    // No alternatives row here: the command is already the one path on screen.
     expect(el.textContent).not.toContain(`Other ways to set up`);
 });
 
-/* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first
- * run, AND must not hide why: the sandbox that was already created carries on into the command lane with the
- * reason on the step. The silent version of this (bounce lanes, wipe the message) is what made the page
- * read as broken. */
+// A refused provision must not strand the run or hide why (spent allowance, capacity, misconfiguration).
 it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
@@ -573,16 +464,12 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     expect(remove).not.toHaveBeenCalled();
     // The way out is the same button, now saying what pressing it would be.
     expect(buttonLabelled(`Try again`)).toEqual(expect.any(Object));
-    /* AND THE PICKER IS BACK. The arrival's answer was refused, so the reader is the one who has to answer
-     * now, and the rung they can actually take must be beside the reason rather than behind a link that
-     * reads like an aside. */
+    // Refusal brings the picker back: the reader must answer now, with the working rung beside the reason.
     const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
     expect(rungs).toHaveLength(2);
     expect(rungs.find((card) => card.textContent?.includes(`My own computer`))).toEqual(expect.any(Object));
 });
 
-// A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is:
-// the wait card, never a command to run for a machine nobody has to touch.
 it(`resumes a hosted sandbox onto the wait card, not the command lane`, async () => {
     const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
@@ -593,13 +480,8 @@ it(`resumes a hosted sandbox onto the wait card, not the command lane`, async ()
     expect(el.textContent).toContain(`Starting the machine`);
 });
 
-/* WHAT THE WAIT SAYS WHEN IT GOES WRONG, which is the reason any of this exists. The card used to show one
- * sentence ("Starting your machine") to a machine that never booted, a sandbox nobody could reach, and a
- * sandbox we were refusing every time it spoke. People sat through a wedged tunnel because nothing on screen
- * distinguished it from a slow boot.
- *
- * The refused check-in is the shape a half-migrated sandbox takes: alive, talking, and turned away every time.
- * Waiting can never fix it, so the card has to say so and offer the one thing that can. */
+// A refused check-in means alive but turned away, not slow to boot; waiting alone can't fix it, so the card must say so
+// and offer a way out.
 it(`names a refused check-in on the wait card, with a way out`, async () => {
     const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
@@ -613,7 +495,7 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     await vi.advanceTimersByTimeAsync(3_000);
     await vi.waitFor(() => expect(el.textContent).toContain(`old.example.dev`));
     expect(el.textContent).toContain(`sandbox-abc.sbx.test`);
-    // …and the step list is gone: a list still ticking beside "here is what broke" argues with itself.
+    // The step list disappears here: a ticking list beside a failure message would contradict it.
     expect(el.textContent).not.toContain(`Putting it on the internet`);
 
     // The address is built into this machine, so the way out is a new one rather than another boot.
@@ -624,11 +506,9 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     expect(hostedRestart).not.toHaveBeenCalled();
 });
 
-/* THE LADDER IS CARDS, AND A SWITCH MOVES A MACHINE: NOT THE SANDBOX. Picking another rung on a hosted
- * sandbox hands its machine back and keeps the row: same id, same name, no delete-and-recreate. */
+// A switch moves the machine, never the sandbox: same id, same name, no delete-and-recreate.
 it(`offers the rungs as readable cards, each stating its trade`, async () => {
-    // `?elsewhere=1`: the link the desktop app's requirements screen offers when THIS computer cannot run
-    // it, and the one arrival that shows the picker without starting anything.
+    // ?elsewhere=1: the desktop app's escape hatch; shows the picker without starting anything automatically.
     query.value = { elsewhere: `1` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
@@ -641,16 +521,11 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
     // Whose machine the instant one is stays on the card: the title sells the speed, the note says where it runs.
     expect(cards[0]?.textContent).toContain(`Runs on our servers`);
     expect(cards[1]?.textContent).toContain(`One pasted command`);
-    // What the reader's own machine actually wins over the free one, said where the choice is made rather
-    // than discovered in week three.
+    // What the reader's own machine wins over the free one, stated where the choice is made, not discovered later.
     expect(cards[1]?.textContent).toContain(`no limits`);
 });
 
-/* THE FREE LANE'S PRICE IS ON ITS CARD, AND SO IS WHAT HAPPENS AFTER IT. "Free" alone, in the place a reader
- * looks for the cost, is the version of this that has to be corrected later, and so is a ceiling with no
- * answer to "and then?", which is the question a price is read to settle.
- * The sentences that go with it are NOT on the card: two rungs of small print, side by side, is not a
- * picker. They follow the selection, one rung's worth at a time. */
+// Ceiling and what follows show on the card; the small print follows selection, not both rungs upfront.
 it(`states the hour ceiling and what follows it on the hosted card, with the small print beside the button`, async () => {
     query.value = { elsewhere: `1` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
@@ -659,14 +534,13 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     expect(hosted?.textContent).toContain(`40h a month, always on with the plan`);
     hosted!.click();
     await nextTick();
-    // The card stays three lines: what this machine's disk is, the reader reads where they commit to it.
+    // Card stays three lines; the disk's fate is read where the reader commits, not on the card itself.
     expect(hosted?.textContent).not.toContain(`back it up`);
     expect(el.textContent).toContain(`don't back it up`);
     expect(el.textContent).toContain(`it's removed`);
 });
 
-/* AN OWNER ON THE PLAN IS NOT TOLD "FREE". Comped or paying, their card says what they have: always on. The
- * bare "Free · ready in seconds" is for a platform with no ceiling at all, and only there. */
+// Bare "Free · ready in seconds" is reserved for a platform with no ceiling at all.
 it(`says always on, not free, on the hosted card of an owner on the plan`, async () => {
     query.value = { elsewhere: `1` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, plan: true });
@@ -676,7 +550,6 @@ it(`says always on, not free, on the hosted card of an owner on the plan`, async
     expect(hosted?.textContent).not.toContain(`Free`);
 });
 
-// A member has no ceiling, so a member is shown none: the absence of the block is the whole contract.
 it(`says nothing about hours to someone they do not apply to`, async () => {
     query.value = { elsewhere: `1` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
@@ -696,8 +569,7 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     await nextTick();
     const mine = (): HTMLButtonElement =>
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`)) as HTMLButtonElement;
-    // The rungs are disabled while the machine is being made AND while the allowance that made it is re-read:
-    // clicked before that settles, this does nothing, which is what the card is saying by being greyed out.
+    // Rungs disable while the machine is made and the allowance re-read; clicking before that settles does nothing.
     await vi.waitFor(() => expect(mine().disabled).toBe(false));
     mine().click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
@@ -705,11 +577,7 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     expect(remove).not.toHaveBeenCalled();
 });
 
-/* …AND THE RUNG IT CAME OFF IS STILL TAKEABLE. The allowance is the server's count of the machines this
- * account holds, and it used to be read once on arrival and never again, so a reader who resumed a hosted
- * sandbox (allowance spent, on that very machine) and then tried another rung was left in front of a page
- * that still counted the machine it had just handed back: the rung they had come off sat disabled under
- * "Already using yours", naming a machine that no longer existed, with no way back but a reload. */
+// Allowance is the server's live machine count; it must be re-read after release, not just on arrival.
 it(`offers the hosted rung again once its machine has been handed back`, async () => {
     const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
     sandboxes.value = [hosted];
@@ -726,31 +594,23 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
     expect(el.textContent).not.toContain(`Already using yours`);
 });
 
-/* A PLATFORM THAT HANDS OUT NO ADDRESSES SAYS SO, IN THE FIRST FRAME. This is the state that read as the page
- * being broken: the mint 404s (its tunnel fabric is a deployment choice, and self-hosters leave it off), and
- * the page took that as nothing at all: it had already offered the rungs that need an address, so they
- * flashed and vanished, over an address line that spun on "Preparing your intentic domain…" for as long as
- * anyone was willing to watch. Nothing is minted here and nothing is offered that cannot be delivered. */
+// A 404 on the mint means nothing is offered; say so immediately rather than flashing rungs that can't work.
 it(`states what an addressless platform can do, without spinning and without opening a form`, async () => {
     addressOffer.mockResolvedValueOnce({ enabled: false });
     const el = await mount();
     // Not asked for: the code the platform has already said it will not mint.
     expect(setupCode).not.toHaveBeenCalled();
     expect(el.textContent).not.toContain(`Preparing your intentic domain`);
-    // No rungs to retract: the ladder was never drawn, because there was never more than one thing on offer.
+    // No rungs to retract: the ladder was never drawn since there was only ever one thing on offer.
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
     // The fact, stated as a fact about the deployment.
     expect(el.textContent).toContain(`doesn't start sandboxes or hand out addresses`);
-    /* AND THE READER IS NOT PUT IN FRONT OF A FORM TO PROVE IT. This used to switch to the attach lane on
-     * their behalf, which is right for somebody already running a sandbox and unanswerable for the fresh
-     * account that is most of who arrives here. The lane is one labelled click away and never taken for them. */
+    // Never auto-switches to the attach lane; it stays one labelled click away.
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.textContent).toContain(`Already running a sandbox somewhere?`);
 });
 
-/* THE FAILURE THAT USED TO LOOK IDENTICAL TO THE ONE ABOVE. Both offer reads throwing said nothing whatever
- * about the platform, and the page recorded it as "provisions nothing" and moved the reader to the domain
- * form — so one dropped request reframed the product as something you supply the infrastructure for. */
+// A failed read isn't proof of "provisions nothing"; that verdict needs an actual answer, not silence.
 it(`offers a retry, not a verdict, when the offers could not be read at all`, async () => {
     addressOffer.mockRejectedValueOnce(new Error(`network`));
     hostedOffer.mockRejectedValueOnce(new Error(`network`));
@@ -761,8 +621,7 @@ it(`offers a retry, not a verdict, when the offers could not be read at all`, as
     expect(buttonLabelled(`Try again`)?.disabled).toBe(false);
 });
 
-/* …but a 404 IS an answer. A platform too old to carry the route, or one with the feature switched off, really
- * does provision nothing, and saying so is correct rather than a guess. */
+// A 404, unlike a dropped request, really does mean the platform provisions nothing.
 it(`treats a missing offer route as an answer rather than a lost read`, async () => {
     addressOffer.mockRejectedValueOnce(Object.assign(new Error(`nope`), { code: `NOT_FOUND` }));
     hostedOffer.mockRejectedValueOnce(Object.assign(new Error(`nope`), { code: `NOT_FOUND` }));
@@ -771,9 +630,7 @@ it(`treats a missing offer route as an answer rather than a lost read`, async ()
     expect(el.textContent).not.toContain(`couldn't reach the platform`);
 });
 
-/* The hosted lane survives an addressless platform: its machine is born holding its own tunnel, so it is the
- * one lane that never needed a mint. The reader stays on the provision spine: with no ladder, since there is
- * nothing left to choose between: rather than being sent to attach a sandbox they do not have. */
+// Hosted machines are born holding their own tunnel, so this lane needs no mint at all.
 it(`keeps the hosted lane when the platform hosts but mints no addresses`, async () => {
     addressOffer.mockResolvedValue({ enabled: false });
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
@@ -782,13 +639,11 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
-    // …and nothing points at the rung this platform cannot deliver: there is no command to paste.
+    // Nothing points at the rung this platform can't deliver: there's no command to paste.
     expect(el.textContent).not.toContain(`Other ways to set up`);
 });
 
-/* …and when that hosted machine is already spent, the rung is offered but not TAKEABLE, which is the same
- * nothing as having no rungs at all. It gets its own sentence rather than the addressless one, because the
- * remedy is specific and good news: the machine exists, it is just busy being another sandbox. */
+// A spent allowance gets its own message, not the addressless one: the machine exists, it's just busy elsewhere.
 it(`names the spent allowance instead of a missing fabric`, async () => {
     addressOffer.mockResolvedValueOnce({ enabled: false });
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 0 });

@@ -6,25 +6,17 @@ import { RULE_FIRINGS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
-/* THE RULE TABLE, from the screen's side, one place that knows how a row becomes a rule, so no surface has to
- * hand-assemble one.
- *
- * The three rows with their own place on the Agent tab ("Verify before finishing", "Check before you push",
- * "Land finished work automatically") are ORDINARY RULES with well-known ids. That is the whole trick: the row
- * is a nicer way to write one rule, not a different mechanism sitting beside the table. It means the toggle and
- * the list can never disagree, and it means a user who outgrows a row can see exactly what it wrote.
- *
- * The rules live in the sandbox settings object, so everything here rides useSandboxSettings' one read, one
- * optimistic write and one "the daemon dropped a field" warning rather than adding a second of each. */
+// One place that turns a row into a rule, so no surface hand-assembles one. The three rows with a dedicated place on
+// the Agent tab are ordinary rules with well-known ids, so the toggle and the list can never disagree. Rules live in
+// the sandbox settings object, riding useSandboxSettings' read and write.
 
 const FIRINGS_KEY = RULE_FIRINGS.of();
 
 export function useRules() {
     const { settings, patch } = useSandboxSettings();
 
-    // When each rule last did something. Its own read because a firing is not an edit, folding it into the
-    // settings object would make every push a settings write, with a background job racing the owner's own
-    // config.
+    // Its own read: a firing isn't an edit, and folding it into settings would turn every push into a write racing the
+    // owner's own config.
     const { query: firingsQuery } = useSandboxQuery({
         queryKey: FIRINGS_KEY,
         queryFn: async (): Promise<RuleFirings> => RuleFiringsSchema.parse(await sandboxJson(`/settings/rule-firings`)),
@@ -35,11 +27,8 @@ export function useRules() {
 
     const byId = (id: string): Rule | undefined => rules.value.find((rule) => rule.id === id);
 
-    /* Write one rule, creating it if this is the first time. Position matters, the list order IS the priority
-     * at a deciding moment, so an existing rule is replaced IN PLACE and a new one goes on the end.
-     *
-     * The three named rows all come through here, which is why turning "Verify before finishing" off and on
-     * again cannot silently move it below a rule the user put above it. */
+    // Replaces an existing rule in place and appends a new one, since list order is the decision priority; toggling a
+    // named row can't silently reorder it.
     const upsert = (rule: Rule): void => {
         const at = rules.value.findIndex((existing) => existing.id === rule.id);
         patch({ rules: at === -1 ? [...rules.value, rule] : rules.value.map((existing, index) => (index === at ? rule : existing)) });
@@ -54,9 +43,8 @@ export function useRules() {
         }
     };
 
-    // Move a rule one place up or down. Only meaningful at a deciding moment, where first-match wins, but the
-    // list is one list, and a control that appeared and vanished depending on a rule's moment would read as a
-    // bug rather than as a distinction.
+    // Only meaningful at a first-match moment, but shown regardless: hiding it per-moment would read as a bug, not a
+    // distinction.
     const move = (id: string, by: -1 | 1): void => {
         const at = rules.value.findIndex((rule) => rule.id === id);
         const to = at + by;
@@ -71,9 +59,7 @@ export function useRules() {
         }
     };
 
-    // A free id from a label, so the add flow never asks the user for one. Suffixed until it is unused: an id
-    // is what the activity feed names and what the firing stamps are keyed by, so a collision would quietly
-    // merge two rules' histories.
+    // Suffixes until unique: an id is what firing stamps are keyed by, so a collision would merge two rules' histories.
     const freeId = (label: string): string => {
         const base =
             label
@@ -100,7 +86,7 @@ export function useRules() {
         setEnabled,
         move,
         freeId,
-        // What the general list shows: everything without a row of its own further up the page.
+        // Everything without a dedicated row further up the page.
         listed: computed<Rule[]>(() => rules.value.filter((rule) => !Object.values(NAMED_RULES).includes(rule.id as never))),
     };
 }

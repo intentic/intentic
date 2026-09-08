@@ -1,17 +1,6 @@
-/* THE LEGAL DOCUMENTS rendered at /privacy, /terms, /acceptable-use, /dpa and /subprocessors, and linked from
- * the platform's sign-in page. LEGAL_VERSION is the clickwrap version users accept at sign-in; bump it on any
- * material change (intentic-app stamps the accepted version on the user record).
- *
- * THESE ARE WRITTEN AGAINST THE CODE, and that is the only reason they can be this specific. Every window,
- * region, size and data category below was read out of the implementation, the retention sweep, the hosted
- * provisioner's region pick, the trial's per-account meter, the hosted plan's Stripe wiring, the analytics client's
- * own configuration (web/src/composables/analytics.ts, desktop-app/src/analytics.ts), rather than guessed at
- * from what a service like this usually does. The corollary is a maintenance duty: a change to any of those
- * makes a sentence here false, and a false privacy statement is a regulatory problem rather than stale copy.
- *
- * NOTE: drafted from the code-verified data flows. A Polish lawyer must review these before the hosted lane
- * opens to the public, in particular the liability caps (the operator is a sole trader with unlimited
- * personal liability) and the DPA, which is a contract the operator offers rather than merely a disclosure. */
+// Legal docs for /privacy, /terms, /acceptable-use, /dpa and /subprocessors. LEGAL_VERSION is the clickwrap version
+// accepted at sign-in; bump it on any material change. Every specific below is read from the implementation, so a code
+// change can make a sentence here false; not yet lawyer-reviewed for the hosted lane.
 
 import {
     LEGAL_CONTACT_EMAIL,
@@ -22,7 +11,6 @@ import {
     LEGAL_VERSION,
     PLATFORM_HOSTING_LOCATION,
 } from "@intentic/constants";
-// Re-exported so this package's existing consumers keep importing them from @intentic/site-content.
 export { LEGAL_CONTACT_EMAIL, LEGAL_VERSION };
 
 export interface LegalTable {
@@ -43,9 +31,8 @@ export interface LegalDoc {
     sections: LegalSection[];
 }
 
-/* The operator's identification, assembled from whatever is actually filled in. EU e-commerce law wants the
- * name, the address and the registration number published; the constants ship with the last two blank, and a
- * missing clause is dropped rather than rendered as an empty promise, see the note on those constants. */
+// Assembles the operator's identity from whatever is filled in. EU e-commerce law wants name, address and registration
+// number; a blank one is dropped, not shown empty.
 const operatorIdentity = (): string => {
     const parts = [`${LEGAL_ENTITY_NAME}, a sole trader established in ${LEGAL_ENTITY_COUNTRY}`];
     if (LEGAL_ENTITY_ADDRESS !== ``) {
@@ -471,10 +458,7 @@ export const dpaDoc: LegalDoc = {
     ],
 };
 
-/* Third-party works whose licences ask for credit. Persona avatars use the Adventurer style, a set of
- * illustrated face components drawn by Lisa Wischofsky and remixed by DiceBear under CC BY 4.0, which
- * requires "appropriate credit" and a link to the licence. This page satisfies that, and is the single
- * place to add future attributions if another dependency asks for one. */
+// Third-party works whose licences require credit; add future attributions here.
 export const creditsDoc: LegalDoc = {
     title: "Credits",
     intro: "intentic uses the following open-source works that ask to be credited.",

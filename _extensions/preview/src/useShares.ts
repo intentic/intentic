@@ -3,16 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* CONVERSATIONS PUBLISHED AS PAGES, via the daemon's /share routes, the outbox's other half.
- *
- * Deliberately NOT part of `usePublic`, which observes a directory: the outbox is an ordinary folder, so that
- * query has to answer to whatever an agent writes into it, and it is pushed by the file watcher for exactly
- * that reason. A share is the opposite kind of thing, it exists because someone pressed Share, and the list
- * of them is the daemon's own index rather than a reading of the filesystem. So this query moves when an
- * action moves it, and nothing else can put a row in it.
- *
- * (The pages themselves are filtered OUT of the public file list for the same reason: they are managed here,
- * with a title and a date and an Update, not as a hundred rows of assets.) */
+// Conversations published as pages, via the daemon's /share routes, the outbox's other half. Not part of `usePublic`: a
+// share exists only because someone pressed Share, so this is the daemon's own index, moved by actions here rather than
+// a filesystem read. Share pages are filtered out of the public file list for the same reason.
 
 const post = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
 
@@ -28,7 +21,7 @@ export function useShares() {
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
-    // Re-take the snapshot behind a link that has already been sent, same id, same address, later state.
+    // Re-takes the snapshot behind an already-sent link: same id, same address, later state.
     const update = useMutation({
         mutationFn: async (id: string) => api.sandbox.json<SharedConversation>(`/share/update`, post({ id })),
         onSuccess: () => void invalidate(),

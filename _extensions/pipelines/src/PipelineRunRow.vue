@@ -25,31 +25,25 @@ import { pipelineStages } from "./pipelineDag";
 import { formatDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
 
-/* One pipeline run row. It fetches its own jobs on mount so the inline stage circles are there to read
- * without a click, and expands into the full job DAG. Stages are derived once here and handed to both
- * renderers. The parent owns the action callbacks. */
+// One pipeline run row: fetches its own jobs on mount so the stage circles are readable without a click, and expands
+// into the full job DAG. Stages are derived once here and handed to both renderers; the parent owns the action
+// callbacks.
 
 const props = defineProps<{
     run: PipelineRun;
     busy: string | undefined;
-    // Job name → consecutive runs it has been failing on this branch. Lifted to the view because it is a fact
-    // ACROSS runs, which no single row can see.
+    // Job name to consecutive failing runs; lifted to the view, a fact no single row can see.
     recurring: ReadonlyMap<string, number>;
-    // Whether this failure is the branch's open problem, and: if a later run went green, which one closed it.
-    // Both are cross-run facts too, and together they set how loudly the row asks to be fixed.
+    // Whether this is the branch's open failure, and which run closed it, if any; sets how loud the row is.
     open: boolean;
     superseded: PipelineRun | undefined;
-    // Whether this row's graph should be on screen without a click: this run is still going on the newest commit
-    // its branch has, or it is a failure that commit left open (ciStreaks' `arrivesOpen`, one head-commit rule
-    // per half). A third cross-run fact, and a DEFAULT, not a state.
+    // Default-open when still running on the branch's newest commit, or a failure it left open (`arrivesOpen`).
     autoOpen: boolean;
-    /* THE AGENT THIS ROW ALREADY SENT, if it did (ciFixes.ts): the fleet card for the conversation whose id is
-     * derived from this very run. It is what turns the button into a report, and it is the reason the row can
-     * stop offering to start what is already running. */
+    // This row's own agent, if any (ciFixes.ts): its conversation id derives from this run. Turns the button into a
+    // report instead of an offer to start.
     fix: AgentSummary | undefined;
-    /* …and the one working on ANOTHER run of the same branch, for a row that has no agent of its own. A fix is
-     * attached to a run; a breakage belongs to a branch, so without this the newest red row would cheerfully
-     * offer a second agent for work already in flight one row down. Only ever set when `fix` is not. */
+    // Another run's agent working the same branch, for a row with none of its own; only set when `fix` isn't, so a red
+    // row can't offer a second agent for work already in flight.
     branchFix: CiFix | undefined;
 }>();
 const emit = defineEmits<{
@@ -58,43 +52,28 @@ const emit = defineEmits<{
     fix: [run: PipelineRun, pick: AgentRunChoice | undefined];
 }>();
 
-// vue-query caches per queryKey, so each row owns its own entry and remounts are free.
+// vue-query caches per queryKey; each row owns its own entry, so remounts are free.
 const runRef = computed(() => props.run);
 const { jobs, isLoading: jobsLoading } = useRunJobs(runRef);
 const stages = computed(() => pipelineStages(jobs.value));
 
-/* A LIVE RUN AND A FRESH BREAKAGE OPEN THEMSELVES, and `autoOpen` is a seed rather than a binding on purpose.
- *
- * A row is keyed by its run (PipelinesView's `actionKey`), so this instance is created once, when the run first
- * appears in the list, and the 30s poll behind the board re-renders it without touching this ref again. That is
- * the whole mechanism, and it is what makes the cases come out right: a pipeline that starts while the board is
- * open arrives as a NEW row and opens on the same rule, and so does one that is already failed when it lands
- * (a backfill, or a run that began and broke between two polls); a row the reader closed stays closed, because
- * nothing re-applies the default, and going red later does not re-open what they shut; and a run that FINISHES
- * under the reader keeps its graph on screen, because a bound `open` would collapse it at the exact moment it
- * says whether it passed. */
+// Seeded once from `autoOpen`, not bound: the row is keyed by its run (PipelinesView's `actionKey`), so later polls
+// re-render it without resetting this. A closed row stays closed; a run finishing mid-view keeps its graph open.
 const expanded = ref(props.autoOpen);
 const fullscreen = ref(false);
 
-// The run's identity for the parent's in-flight action tracking. A row instance is keyed to one run, so this
-// never has to recompute.
+// Run's identity for the parent's in-flight action tracking; the row is keyed to one run.
 const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 
 const tone = computed(() => STATUS_TONE[props.run.status]);
-// Queued or going: the two states with something left to stop, and so the two that keep Cancel rather than Re-run.
+// Queued or going: the two states with something left to stop, so Cancel shows instead of Re-run.
 const inFlight = computed(() => isPipelineInFlight(props.run.status));
 const duration = computed(() => formatDuration(props.run.durationSeconds));
-// The commit subject is the headline. Without one, the vendor's own name for an unnamed pipeline: its id:
-// beats repeating the branch and sha that the line below already carries.
+// Commit subject, or else the run's own id: repeating the branch/sha below would be redundant.
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));
-/* WHICH MODEL THIS ROW'S FIX WILL SPEND, and the caret that re-points it for this failure alone. Seeded from
- * the sandbox's agent-run list, which is also what the daemon will resolve if nobody touches it: asked of the
- * host rather than read here, so the two cannot disagree about what a click costs.
- *
- * Per ROW rather than per view: the choice belongs to the failure you are looking at, and the whole reason to
- * reach for a bigger model is that this particular one beat the standing order. Cleared once the run has
- * started, so the next fix on the same row opens on the standing list again. */
+// Per-row model choice for this failure's fix, seeded via the host so button and daemon agree on cost. Cleared once
+// started, so the next fix reopens on the standing list.
 const fixModel = useAgentRunPick(() => host().models, `pipeline-fix`);
 
 const api = host();
@@ -103,28 +82,23 @@ const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => 
     // The plain click opens the conversation in the docked chat panel rather than navigating away.
     appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
 
-/* WHAT BECAME OF THIS ROW'S OWN AGENT, read once and used twice: the chip that replaces the button, and the
- * button's label when there is nothing left to report. */
+// This row's own agent's fate, read once: drives the chip that replaces the button and its label when there's nothing
+// left to report.
 const fixState = computed(() => {
     const agent = props.fix;
     return agent === undefined ? undefined : { ...fixStance(agent), link: agentLink(agent.id) };
 });
-// The branch's agent for a row that has none of its own, drawn in the same slot: its stance, because "ongoing"
-// covers a turn that is running and one parked on a question, and a spinner over the second would be a lie.
+// Branch's agent for a row with none of its own, in the same slot; its stance distinguishes a running turn from one
+// parked on a question.
 const branchState = computed(() => {
     const other = props.branchFix;
     return other === undefined ? undefined : { run: other.run, stance: fixStance(other.agent), link: agentLink(other.agent.id) };
 });
-// A landed fix hands the row's weight to Re-run: the fix is in the workspace, and what is left is proving it.
+// A landed fix hands the row's weight to Re-run: it's in the workspace, proving it is what's left.
 const proven = computed(() => fixState.value?.kind === `landed`);
 
-/* WHY THE BUTTON IS QUIET, for a demoted one: a Fix button at Re-run's weight reads as broken otherwise. The
- * three reasons differ enough to be worth different words. A superseded failure is over; a failure behind the
- * head of an open breakage is very much alive, just not the run to start from; and a branch that already has
- * an agent on it wants that agent opened, not a second one started beside it.
- *
- * What it will SPEND is no longer part of this sentence: the caret beside it says that, and says it in one
- * place for every surface in the app that starts an agent. */
+// Why the button is quiet: superseded (failure is over), behind a newer open failure (not the run to fix), or a branch
+// agent already exists. The caret, not this text, says what a fix will spend.
 const demoted = computed<string | undefined>(() => {
     if (props.branchFix !== undefined) {
         return `An agent is already working on ${props.run.branch}, started from run #${props.branchFix.run.runId}: open that one before starting a second.`;
@@ -136,30 +110,25 @@ const demoted = computed<string | undefined>(() => {
         ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
         : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
 });
-// Loud only on the branch's open failure, and only while nobody is already on it.
+// Loud only on the branch's open failure, while no agent is already on it.
 const loud = computed(() => props.open && props.branchFix === undefined);
 
-// What the agent has spent, at the precision the number deserves: a sub-cent turn still shows something.
+// Precision matches the amount: a sub-cent turn still shows something.
 const spend = computed<string | undefined>(() => {
     const usd = props.fix?.costUsd;
     return usd === undefined || usd === 0 ? undefined : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`;
 });
-// What it has written, when it has written anything: the size of the diff is the question "Fix ready" raises,
-// and the one a file count cannot answer.
+// Diff size, not just a file count, answers the question 'Fix ready' actually raises.
 const fixDiff = computed(() => {
     const diff = props.fix?.diff;
     return diff === undefined || diff.files === 0 ? undefined : diff;
 });
 
-/* THE AGENT'S OWN CLOCK AT THE WIDTH A CHIP HAS FOR IT: a live turn timed from its start, a settled one from
- * when it last did anything, either way one token beside the state's word. `timeAgo` is the same reading in the
- * words a sentence wants — "12m ago", and an absolute timestamp past a day, three times this chip's whole
- * width — so it stays in the tooltip, where there is room for it. */
+// Agent's age at chip width: one short token, not `timeAgo`'s sentence-length reading (which stays in the tooltip).
 const compactAge = (at: number): string => {
     const minutes = Math.floor((Date.now() - at) / 60_000);
     if (minutes < 60) {
-        // `<1m` rather than `now`, which beside a state's word says the wrong thing twice over: "Agent working
-        // now" reads as a redundancy and "Fix ready now" as an invitation.
+        // `<1m`, not `now`: 'Agent working now' reads redundant, 'Fix ready now' reads like an invitation.
         return minutes < 1 ? `<1m` : `${minutes}m`;
     }
     const hours = Math.floor(minutes / 60);
@@ -177,9 +146,8 @@ const fixSince = computed<string | undefined>(() => {
     }
     return agent.startedAt === undefined ? timeAgo(agent.updatedAt) : `started ${timeAgo(agent.startedAt)}`;
 });
-/* WHAT THE CHIP ABBREVIATES, SPELLED OUT, for the tooltip and for the screen reader that gets no width at all.
- * The model's name and the file count live only here: naming them costs more of a scanned row than either is
- * worth, while "$0.42" and "+40 −12" say the same things in a third of the pixels. */
+// Spells out what the chip abbreviates, for the tooltip and screen reader. Model name and file count live only here;
+// the chip's numbers say the same in fewer pixels.
 const fixFacts = computed<string | undefined>(() => {
     const agent = props.fix;
     const state = fixState.value;
@@ -193,10 +161,10 @@ const fixFacts = computed<string | undefined>(() => {
             .join(` · `) || undefined
     );
 });
-// Age, spend, and diff on the chip while a fix is still in play; once it is landed the label is the whole report.
+// Age, spend and diff show while a fix is in play; once landed, the label is the whole report.
 const showFixChipMeta = computed(() => fixState.value !== undefined && fixState.value.kind !== `landed`);
-// Why the chip says what it says and what pressing it does (fixStance's hint), then the facts behind the
-// numbers on it. Parenthesised rather than run on, because the hint is a sentence and this is a list.
+// Hint (fixStance's) followed by the facts behind the chip's numbers, parenthesised: the hint is a sentence, this is a
+// list.
 const fixDetail = computed<string | undefined>(() => {
     const state = fixState.value;
     if (state === undefined) {
@@ -204,8 +172,7 @@ const fixDetail = computed<string | undefined>(() => {
     }
     return fixFacts.value === undefined ? state.hint : `${state.hint} (${fixFacts.value})`;
 });
-// The chip in words. An `aria-label` REPLACES what is read, so the abbreviations on it ("3m", "+40 −12") never
-// reach a screen reader: this is where that reader gets the same facts said out loud.
+// The chip in words: an `aria-label` replaces what's read, so a screen reader never gets the abbreviations directly.
 const fixAria = computed<string | undefined>(() => {
     const state = fixState.value;
     if (state === undefined) {
@@ -214,8 +181,8 @@ const fixAria = computed<string | undefined>(() => {
     return `Fix agent: ${state.label.toLowerCase()}${fixFacts.value === undefined ? `` : `, ${fixFacts.value}`} — open the conversation`;
 });
 
-// One flowing line rather than a list: the tooltip renders as text into a clamped strip, so a newline is a
-// space and a third sentence falls off the bottom. What happened leads; why the button is quiet follows.
+// One flowing line: the tooltip clamps as text, so a newline is just a space. What happened leads; why the button is
+// quiet follows.
 const startHint = computed<string | undefined>(
     () => [fixState.value?.retry === true ? fixDetail.value : undefined, demoted.value].filter((part) => part !== undefined).join(` `) || undefined,
 );
@@ -227,17 +194,11 @@ const startFix = (): void => {
 </script>
 
 <template>
-    <!-- THE DISCLOSURE MOVED TO THE LEFT EDGE. It was a bare `chevron-down` rotated 180° at the far right of the
-         verb cluster, with no `aria-expanded` and a `title` for a label — the ports list's mistake in a
-         different costume: a navigation control filed among Cancel, Re-run and "Fix with agent".
-
-         `hit="pair"` because this row's headline is a LINK to the run on the vendor; swallowing it into the
-         disclosure would make "show me the jobs" and "leave the app" the same press. `wideControl` because the
-         trailing cluster is a SET (a stage graph, a time, two buttons) that has to be allowed to take a second
-         line rather than squeeze the commit subject to nothing — see <Row>'s own note on the prop. -->
-    <!-- A @container, so what the agent chip can afford to say is measured against THIS ROW rather than the
-         window: this board renders into a pane the reader can halve with the chat panel, and the money and the
-         diff are the two facts that go first when it does. -->
+    <!--
+        `hit="pair"`: the headline is a link to the vendor; swallowing it into the disclosure would conflate opening jobs with leaving the app.
+        `wide-control`: the trailing cluster (graph, time, two buttons) may wrap to a second line rather than crowd the subject.
+    -->
+    <!-- @container: the chip's content is measured against this row, not the window, which the chat panel can halve. -->
     <DisclosureRow class="@container border-l-4" :class="tone.rowBorder" hit="pair" body="drawer" wide-control v-model:open="expanded">
         <template #lead>
             <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
@@ -256,9 +217,7 @@ const startFix = (): void => {
                     {{ headline }}
                 </a>
                 <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
-                <!-- Qualifies the verdict, so it sits with it: the run failed, and the branch has recovered
-                         since. Links to the green rather than just naming it: checking whether the job that
-                         failed here even ran there is the one way to catch a "pass" that only skipped it. -->
+                <!-- Links to the later green run, not just naming it, so a reader can check the failed job actually ran there and wasn't skipped. -->
                 <a
                     v-if="superseded"
                     :href="superseded.url"
@@ -294,23 +253,25 @@ const startFix = (): void => {
         </template>
 
         <template #control>
-            <!-- The stages and what you can do about them. They wrap between themselves as well, because the
-                 alternative is the stage circles being squeezed to a sliver by two buttons that refuse to shrink:
-                 and the circles are what the row is FOR. `ml-auto` + `justify-end` keeps them to the right of
-                 whichever line they land on. -->
+            <!--
+                Stages and actions both wrap, or two buttons that refuse to shrink squeeze the circles the row exists to show.
+                `ml-auto`+`justify-end` keeps them right-aligned either way.
+            -->
             <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
-                <!-- Inline stage graph. `basis-0` with a floor of ~three circles, because the graph is the one
-                     item here that can give: sized from its content it would count its full length toward the
-                     wrap and break a row that had room for it, and with no floor at all it would be squeezed to
-                     a sliver by two buttons that never shrink. So it asks for three circles, takes its natural
-                     width when the line has it (`max-w-max`), and scrolls when a twelve-stage run has more. -->
-                <!-- The padding is the hover scale's headroom: a transformed element counts toward the
-                     container's scrollable overflow, and the box is otherwise exactly the circles' size, so
-                     `hover:scale-110` poked a pixel past it on both axes and flashed both scrollbars. -->
+                <!--
+                    `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. Takes its
+                    natural width when the line has room (`max-w-max`), scrolls past that.
+                -->
+                <!--
+                    Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both
+                    scrollbars.
+                -->
                 <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
                     <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
-                    <!-- Same circles-and-connectors geometry as the real graph, so the row does not re-flow around
-                         it when the jobs land. Three is the guess; the count is what we are waiting to learn. -->
+                    <!--
+                        Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. Three is a placeholder
+                        guess.
+                    -->
                     <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
                         <template v-for="i in 3" :key="i">
                             <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
@@ -325,10 +286,10 @@ const startFix = (): void => {
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
-                        <!-- THE BRANCH'S AGENT, for a row that has none of its own. The button beside it demotes
-                             and says why in a tooltip, which is an instruction nobody can act on: this is the
-                             press that carries it out. Neutral rather than the state's own colour — it is not
-                             this run's agent, and a row that lit up for somebody else's would read as its own. -->
+                        <!--
+                            Branch's agent, for a row with none of its own; the demoted button's tooltip only explains, this is the press that acts
+                            on it. Neutral colour: it isn't this run's own agent.
+                        -->
                         <a
                             v-if="branchState"
                             v-bind="branchState.link"
@@ -339,17 +300,10 @@ const startFix = (): void => {
                             <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
                             Agent on branch
                         </a>
-                        <!-- ONE SLOT FOR THE AGENT, whichever half of its life the row is looking at. The board
-                             could only ever say "Fix with agent", including to the reader whose agent was at that
-                             moment parked on a question nobody would ever see; so the same slot reports instead as
-                             soon as there is something to report (fixStance.ts owns the words).
-
-                             It stays a state even on a run that has since gone green: a rerun keeps the vendor's
-                             run id, and an agent still working on the failure it USED to have is worth saying.
-
-                             IT CARRIES THE REPORT while a fix is still in play: age, spend, and diff on the chip,
-                             model and file count in the tooltip. Once landed, the label alone — the work is in the
-                             workspace and Re-run is the next move. -->
+                        <!--
+                            One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). Stays even after the run goes
+                            green: a rerun keeps the vendor's run id. Carries the full report while in play; once landed, only the label remains.
+                        -->
                         <a
                             v-if="fixState !== undefined && !fixState.retry"
                             v-bind="fixState.link"
@@ -371,15 +325,10 @@ const startFix = (): void => {
                                 :deletions="fixDiff.deletions"
                             />
                         </a>
-                        <!-- Primary only on the branch's open failure, and only while no agent is already on that
-                             branch. Every other red row keeps the same action at Re-run's weight: a log entry, not
-                             a demand, while the vendor's own re-runs and skipped jobs mean a green above is
-                             evidence, not proof, so the action stays one click away.
-
-                             "Try again" is the same press on a fix that ENDED: the conversation id is derived from
-                             the run, so it carries on in that conversation, on its branch, rather than opening a
-                             rival agent beside it. The caret matters most here, an agent that just failed is the
-                             one case where reaching for a bigger model is the whole point. -->
+                        <!--
+                            Primary only on the branch's open failure with no agent already on it; every other red row stays at Re-run's weight. 'Try
+                            again' continues the same conversation (id derives from the run) rather than starting a rival agent.
+                        -->
                         <AgentRunButton
                             v-else-if="run.status === `failed`"
                             :label="fixState?.retry === true ? `Try again` : `Fix with agent`"
@@ -391,9 +340,10 @@ const startFix = (): void => {
                             :hint="startHint"
                             @run="startFix"
                         />
-                        <!-- Cancel is offered for a QUEUED run as well as a going one: a pipeline waiting on a
-                             runner that is not coming is the case where the button is most wanted, and both
-                             forges accept the call before anything has started. -->
+                        <!--
+                            Offered for a queued run too: waiting on a runner that never comes is exactly when Cancel is wanted, and both forges
+                            accept it pre-start.
+                        -->
                         <Button
                             v-if="inFlight"
                             label="Cancel"
@@ -404,9 +354,10 @@ const startFix = (): void => {
                             :disabled="busy !== undefined"
                             @click="emit(`cancel`, run)"
                         />
-                        <!-- THE LAST RUNG OF THE LADDER. Fix → review → land → prove it, and once the fix is in the
-                             workspace the useful press on a still-red row is this one, so it takes the weight the
-                             Fix button has just given up. Nothing else on the board knows enough to say that. -->
+                        <!--
+                            Last rung: fix, review, land, prove it. Takes the weight the Fix button gives up once the fix has landed in the
+                            workspace.
+                        -->
                         <Button
                             v-else
                             label="Re-run"
@@ -423,11 +374,7 @@ const startFix = (): void => {
             </div>
         </template>
 
-        <!-- Expanded: the run's job graph, AND NOTHING ABOVE IT. There used to be a line of agent facts here —
-             the state again, its age, the model, the spend, the diff, a link into the conversation — and every
-             one of those now rides the chip on the header line or its tooltip. It was the same report twice, and
-             the copy that stood between an opened row and the diagram it was opened for was the one paying for
-             itself in the only currency this board is short of. -->
+        <!-- Expanded shows only the job graph: the agent facts it once repeated here now live entirely on the header chip. -->
         <template #below>
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
                 <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
@@ -456,10 +403,10 @@ const startFix = (): void => {
 
             <p v-else class="py-2 text-xs text-muted">No job details available for this run.</p>
 
-            <!-- THE SAME GRAPH, GIVEN THE WINDOW. A run wide enough to need panning inside a row is exactly the
-                 one worth reading whole, and the band in a list of rows can never be that. Its own component
-                 instance, so the trace pinned in the small one does not follow you in and the pan you leave
-                 behind is still there when you close. -->
+            <!--
+                Same graph, given the window: worth reading whole exactly when panning inside the row would be needed. A separate instance, so its
+                pin and pan stay independent of the inline one.
+            -->
             <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
                 <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
             </Modal>

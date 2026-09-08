@@ -1,7 +1,6 @@
-// The desired-state intermediate representation for intentic-deploy. This layer is product-agnostic:
-// it defines refs, secrets, readiness, and the serializable graph, but knows nothing about which kinds
-// of resource exist. A resource node's `type` is an opaque `string` here, the resolver layer owns the
-// closed vocabulary of kinds and guarantees only valid ones are emitted.
+// The desired-state intermediate representation for intentic-deploy: refs, secrets, readiness, and the
+// serializable graph. A resource node's `type` is an opaque string; the resolver layer owns the closed vocabulary
+// of kinds.
 
 export interface Ref<T> {
     readonly kind: "ref";
@@ -10,8 +9,7 @@ export interface Ref<T> {
     readonly __type?: T;
 }
 
-// Where a secret's value comes from: "env", supplied by the user in the environment; "generated",
-// intentic creates and persists it (admin credentials for services intentic itself provisions).
+// Where a secret's value comes from: "env" (user-supplied) or "generated" (intentic creates and persists it).
 export type SecretSource = "env" | "generated";
 
 export interface SecretRef {
@@ -66,9 +64,8 @@ export interface ResourceNode {
     readonly readyWhen?: SerializedReadiness;
 }
 
-// A rename: the resource previously addressed as `from` is the same resource now addressed as `to`. Authored
-// when a node id changes, consumed once before reconcile to re-stamp the live resource in place (preserving
-// its data) rather than orphaning the old id and creating the new one from scratch.
+// A rename: the resource previously addressed as `from` is the same resource now addressed as `to`. Consumed once
+// before reconcile to re-stamp the live resource in place rather than orphaning and recreating it.
 export interface Move {
     readonly from: string;
     readonly to: string;
@@ -77,6 +74,6 @@ export interface Move {
 export interface DesiredStateGraph {
     readonly version: 1;
     readonly resources: Readonly<Record<string, ResourceNode>>;
-    // Renames to reconcile before this apply. Optional: most artifacts have none.
+    // Renames to reconcile before this apply.
     readonly moved?: readonly Move[];
 }

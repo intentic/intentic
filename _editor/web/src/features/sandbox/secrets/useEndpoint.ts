@@ -4,50 +4,20 @@ import { shortcutAnswer, useLocalShortcut } from "../devices/localShortcut";
 import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../client/streamBudget";
 import { useSandbox } from "../client/useSandbox";
 
-/* THE TRANSPORT half of "where is the sandbox", as a module-level singleton, the counterpart to
- * `useSandbox().daemonUrl`, which stays the sandbox's public IDENTITY.
- *
- * That split is the whole point. `daemonUrl` was doing two jobs: it is what every daemon call is appended to,
- * AND it is what the switcher reads a slug off, the infra panel derives a Cloudflare zone from, desktop sync
- * names a folder after, and the editor-bridge snippet pastes into a config that runs on some machine we
- * cannot identify. Swapping it to a loopback address to make calls faster would silently corrupt all five.
- * So calls move to `daemonBase` and identity stays put; the two differ only when the shortcut is in use.
- *
- * Resolution is deliberately NOT on the critical path. The tunnel is known-good and serves from the first
- * paint; the local probe runs in the background and, when it qualifies, the base changes under callers that
- * read it per request (which is all of them, see sandboxRpc's url()/headers() hooks). The stream is the one
- * caller holding a base for a long time, so useSandboxLiveness watches for the change and reconnects. */
+// Transport half of `useSandbox`: calls resolve through `daemonBase` here, while `daemonUrl` remains the sandbox's
+// identity used elsewhere. Resolution stays off the critical path: the tunnel serves first paint, and a background
+// probe swaps callers' base once a local address qualifies.
 
-// The resolved endpoint per sandbox id. In memory only: a stale choice must not outlive the session that
-// observed it (the laptop that moves from the desk to a train is the case), and a reload's re-probe costs one
-// loopback request. Chrome remembers its Local Network Access grant per origin, so it is not a fresh prompt.
+// Resolved endpoint per sandbox id, kept in memory only; a reload re-probes cheaply (LNA grant persists).
 const endpoints = ref<Record<string, Endpoint>>({});
-/* Sandboxes whose local shortcut was tried and demoted, and WHEN, because a demotion has to expire.
- *
- * A demotion means "this stopped working while we were on it", and re-probing on the next tick would flap
- * between two addresses, so it has to stand for a while. It used to stand for the whole session, which made
- * every cause permanent regardless of how temporary it was: the machine sleeping, docker restarting, wifi
- * dropping for a moment. All of those heal on their own within seconds, and the tab stayed on the tunnel until
- * someone thought to reload it, paying a round trip to a Cloudflare edge and back for a daemon one hop away.
- *
- * So it expires instead, on a backoff. A shortcut that keeps failing backs off toward the cap and stops
- * costing anything to retry. What makes the retry cheap is that `selectEndpoint` PROBES before it adopts
- * (endpoint.ts, identity-checked against /health), so a local address that is still broken is rejected without
- * a connection being moved onto it: the expiry risks one probe, not one outage.
- *
- * Expiry is PERMISSION to probe again, not a probe: `resolve` runs on each connect attempt
- * (useSandboxLiveness), so the shortcut returns at the next reconnect after the cooldown rather than on a
- * timer of its own. That is the case worth healing anyway. The failures that demote are network-shaped, and a
- * network that has changed is reconnecting regardless, which is exactly when this is asked again. A tunnel
- * stream that never breaks keeps the sandbox on the tunnel, and deliberately retargeting a healthy connection
- * to chase a shortcut is the flapping this backoff exists to prevent. */
+// A demotion expires on a backoff that doubles per consecutive failure and caps at `DEMOTION_MAX_MS`; expiry
+// permits the next reconnect's probe, it does not trigger one itself.
 const DEMOTION_BASE_MS = 60_000;
 const DEMOTION_MAX_MS = 30 * 60_000;
 
 interface Demotion {
     readonly at: number;
-    // Consecutive demotions, which is what the backoff is a function of. Cleared by `reset`, the user's own
-    // "try again", never by an expiry: expiring is what earns the NEXT attempt, not a clean slate.
+    // Consecutive demotions the backoff is based on; cleared only by `reset`, never by an expiry.
     readonly streak: number;
 }
 
@@ -61,71 +31,46 @@ const demotionHolds = (sandboxId: string, now: number): boolean => {
     const cooldown = Math.min(DEMOTION_BASE_MS * 2 ** (entry.streak - 1), DEMOTION_MAX_MS);
     return now - entry.at < cooldown;
 };
-// One in-flight resolve per sandbox, so a switch that wakes several consumers still probes once.
+// One in-flight resolve per sandbox: concurrent callers await it instead of starting their own.
 const resolving = new Map<string, Promise<void>>();
 
 const { active, activeSandboxId, daemonUrl } = useSandbox();
 const { ask } = useLocalShortcut();
 
-/* The base every daemon call is appended to: the resolved endpoint when there is one, else the public URL.
- * Falling back to the tunnel rather than to `undefined` is what keeps resolution off the critical path, a
- * call made before the probe lands is not delayed or dropped, just not accelerated. */
+// Base every daemon call is appended to: the resolved endpoint if present, else the public URL. Falling back
+// rather than blocking is what keeps resolution off the critical path.
 const daemonBase = computed<string | undefined>(() => {
     const id = activeSandboxId.value;
     const resolved = id === undefined ? undefined : endpoints.value[id];
     return resolved?.base ?? daemonUrl.value;
 });
 
-// Is the active sandbox being reached over the loopback shortcut? Read by the connection driver (to know that
-// a failure is worth demoting rather than backing off) and by the connection detail the shell renders.
+// Whether the active sandbox is reached over the loopback shortcut; read by the connection driver (to gate
+// demotion) and the shell's connection detail.
 const usingLocal = computed(() => {
     const id = activeSandboxId.value;
     const kind = id === undefined ? undefined : endpoints.value[id]?.kind;
-    // Either loopback form, what makes a failure worth demoting is that a known-good address remains, and
-    // that is equally true whichever of the two we happened to qualify.
+    // Either loopback variant counts: what matters for demotion is that a known-good address remains.
     return kind === `local` || kind === `local-insecure`;
 });
 
-/* IS THIS WINDOW ON THE ONE TRANSPORT THAT CANNOT MULTIPLEX, and therefore worth telling the user about?
- *
- * Every other state is an implementation detail nobody needs narrated: h2 on the shortcut and h2/h3 on the
- * tunnel differ in latency, not in what the app can do. This one differs in what the app can DO — six
- * connections per origin, shared across every window, against an app that holds one for each window's live
- * feed and one per streaming agent. Agents lag, and the cause is invisible from the outside: the daemon is
- * healthy, its log is silent, and the requests that never arrive leave no trace anywhere.
- *
- * Since the plain address now ranks BELOW the tunnel, being here means nothing multiplexed could be reached at
- * all, which is very nearly a synonym for "this machine is offline". That is what makes it worth one line on
- * screen rather than a diagnostic: it is a state the user can recognise and usually fix. */
+// True when only the plain, non-multiplexing address is reachable: the browser's six-connections-per-origin
+// ceiling then silently starves agents, so this is surfaced to the user rather than left as a diagnostic.
 const degradedTransport = computed(() => {
     const id = activeSandboxId.value;
     return id !== undefined && endpoints.value[id]?.kind === `local-insecure`;
 });
 
-/* How many long-lived streams this ORIGIN may hold at once, which only the TRANSPORT can answer, h2 multiplexes
- * them onto one connection, plain http/1.1 spends a whole connection each and a browser has six per origin.
- * Read live (not snapshotted) because the endpoint resolves in the background and can change under a stream
- * that is already open, which is this module's whole design. See streamBudget.ts for what happens without it.
- *
- * All three hooks are wired here because this module is the only one that knows the transport: how many permits
- * there are, which socket pool they ration (the base, so two windows on two sandboxes ration separately), and
- * what to do with a window that does not fit. */
+// Stream capacity depends on the transport (h2 multiplexes; http/1.1 spends one of six per-origin connections
+// each), read live since the endpoint can change mid-stream. All three stream hooks live here because this module alone
+// knows the transport.
 setStreamCapacity((stream) => {
     const id = activeSandboxId.value;
     return streamPermits(id === undefined ? undefined : endpoints.value[id]?.kind, stream);
 });
 setStreamScope(() => daemonBase.value ?? `unaddressed`);
-/* A window with more streams than this transport can carry ASKS AGAIN, immediately, rather than waiting out
- * the rest of the promotion interval.
- *
- * It used to demote to the tunnel, which was right while the plain address ranked above it: the window was
- * there by preference, so preferring something else was the repair. It is not right now that it ranks last.
- * Reaching it means every multiplexed address was probed and none answered, so a demotion would point the
- * window at an address just established to be dead and cost it the whole backoff before it could come back.
- *
- * Re-probing says the true thing instead: "this is not enough, is anything better up yet?". If the network
- * came back, the tunnel answers and every queued stream opens at once. If it did not, the plain address is
- * re-adopted and the streams simply wait, which is the honest outcome of running five agents offline. */
+// On overflow, re-probes immediately instead of demoting: reaching this state means every multiplexed address
+// already failed, so demoting would spend a backoff on an address just proven dead.
 setStreamOverflow(() => {
     const id = activeSandboxId.value;
     if (id !== undefined) {
@@ -133,12 +78,11 @@ setStreamOverflow(() => {
     }
 });
 
-// When each sandbox's current answer was arrived at, so a provisional one can be aged out (endpoint.ts's
-// `settledEndpoint` owns the rule). Cleared with the answer itself, never read for anything else.
+// When each sandbox's endpoint resolved; `settledEndpoint` (endpoint.ts) ages a provisional one out with it.
 const resolvedAt = new Map<string, number>();
 
-/* Qualify the active sandbox's fastest working address. Safe to call on every reconnect AND on every frame:
- * it returns immediately once the sandbox has an answer worth keeping, and coalesces concurrent callers. */
+// Qualifies the active sandbox's fastest address; safe to call on every reconnect or frame since it short-circuits
+// once settled and coalesces concurrent callers.
 const resolve = async (): Promise<void> => {
     const id = activeSandboxId.value;
     const url = daemonUrl.value;
@@ -154,19 +98,11 @@ const resolve = async (): Promise<void> => {
     ) {
         return;
     }
-    /* Nothing to qualify: the platform put this sandbox's machine somewhere this browser demonstrably is not
-     * (endpoint.ts), so the probe could only spend a Local Network Access prompt on an address that will never
-     * answer. Checked HERE as well as inside `candidatesFor`, that call would correctly return the tunnel
-     * alone, but only after this module had already decided to ask the user about a shortcut that does not
-     * exist for them. */
+    // Avoids asking about a shortcut that cannot exist for this browser; also checked inside `candidatesFor`.
     if (!couldBeOnThisMachine(sandbox)) {
         return;
     }
-    /* The probe is the app's only reach for the machine this browser runs on, and a browser that gates that
-     * interrupts with a permission dialog the first time it happens. So the BROWSER is asked what it thinks
-     * (loopbackPermission.ts) and, only where it would raise that dialog, the user is asked first in the app's
-     * own words — this returns without probing until the answer is yes and the notice calls back in
-     * (localShortcut.ts). Awaited here rather than sooner so the cheap gates above still cost nothing. */
+    // Returns without probing until loopback permission is allowed (localShortcut.ts, loopbackPermission.ts).
     const answer = await shortcutAnswer(id);
     if (answer !== `allowed`) {
         if (answer === `unasked`) {
@@ -184,15 +120,12 @@ const resolve = async (): Promise<void> => {
             // Null on a member's row: no id to derive a loopback candidate from, so the tunnel it is (endpoint.ts).
             token: sandbox.token ?? undefined,
             hosted: sandbox.hosted,
-            // Forwarded, never recomputed: the platform owns the certificate's zone and this row is where it
-            // says so (endpoint.ts Addressing).
+            // Forwarded, never recomputed: the platform owns the certificate zone (endpoint.ts Addressing).
             localHostname: sandbox.localHostname,
         });
-        // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
-        // we probed FOR, never under whatever is active now, is what keeps it off the wrong sandbox.
+        // Written under the id probed for, not whatever is active now, in case the sandbox switched mid-probe.
         if (!demotionHolds(id, Date.now())) {
-            // Stamped even when the answer is the same one: a re-probe that found the certificate still
-            // missing has to buy another interval, or the next frame would probe again immediately.
+            // Stamped even when the answer is unchanged, so a still-missing certificate still buys another interval.
             resolvedAt.set(id, Date.now());
             endpoints.value = { ...endpoints.value, [id]: endpoint };
         }
@@ -201,10 +134,8 @@ const resolve = async (): Promise<void> => {
     return attempt;
 };
 
-/* Fall back to the tunnel for now. Called when a call fails while the local endpoint is in use, docker
- * restarted, the machine slept, the user is now on a different network than the container. The tunnel is
- * known-good, so this is a repair, not an outage, and it lasts only as long as the backoff above: every one
- * of those causes is temporary, so the shortcut is owed another probe once it has had time to right itself. */
+// Falls back to the tunnel after a local-endpoint failure (docker restart, sleep, network change). Treated as a
+// temporary repair: the backoff above re-admits the shortcut once it heals.
 const demote = (sandboxId: string): void => {
     demoted.set(sandboxId, { at: Date.now(), streak: (demoted.get(sandboxId)?.streak ?? 0) + 1 });
     const rest = { ...endpoints.value };
@@ -213,34 +144,15 @@ const demote = (sandboxId: string): void => {
     endpoints.value = rest;
 };
 
-/* DEMOTE ONLY IF THE SHORTCUT IS ACTUALLY GONE, for the caller that cannot tell the difference on its own.
- *
- * A BROKEN STREAM IS NOT A BROKEN TRANSPORT, and conflating them is what makes a window flap. The liveness
- * stream tears down for reasons that have nothing to do with the address it is on: the daemon misses a few
- * heartbeats because it is busy (its watchdog is 10s against a ~2s beat, and a sandbox running agents does
- * thousands of git operations a minute), a turn saturates it, an upload blocks the loop. Every one of those
- * threw, and every throw demoted the loopback and moved the whole window to the tunnel — which reaches THE
- * SAME BUSY DAEMON, one internet round trip further away, so the stream breaks again there, and the window
- * spends its life alternating between an address that answers in milliseconds and one that answers in
- * seconds or 502s. From the outside that is a workspace flickering between "connected" and "busy" for no
- * visible reason, with the network panel showing h2 and tunnel requests interleaved.
- *
- * So the shortcut is asked before it is abandoned. `probeEndpoint` is the same identity-checked /health the
- * resolver qualifies with, bounded and cheap (single-digit milliseconds on a loopback that is up), so the
- * question costs nothing next to the reconnect that is happening anyway. It answers ⇒ the address is fine and
- * the failure belongs to the stream, so the caller retries where it is. It does not ⇒ this is one of the
- * causes demotion was written for (docker restarted, the machine slept, the browser moved networks) and the
- * fallback is exactly right.
- *
- * Returns whether it demoted, because the caller's next move differs: a demotion is a retarget (reconnect at
- * once against a new address), a refusal is an ordinary failure (back off, retry the same one). */
+// Probes before demoting: a broken stream does not always mean a broken address, and demoting on every failure
+// flaps the window between two paths to the same busy daemon. Returns whether it demoted, since the caller's retry
+// differs either way.
 const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
     const endpoint = endpoints.value[sandboxId];
     const sandbox = active.value;
     const token = sandbox?.token ?? undefined;
     if (endpoint === undefined || token === undefined || token === ``) {
-        // Nothing resolved to check, or no token to check it against: keep the old unconditional behaviour
-        // rather than inventing a verdict from missing evidence.
+        // No endpoint or token to check against: demotes unconditionally rather than guessing.
         demote(sandboxId);
         return true;
     }
@@ -251,10 +163,8 @@ const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
     return true;
 };
 
-// Re-open the question of the shortcut for a sandbox: a switch away and back is the user's own "try again"
-// for one demoted earlier in the session, and the machine they are on may have changed since. Only the
-// demotion is cleared, an endpoint already resolved and working is left exactly as it is, so a switch costs
-// no probe and no reconnect in the ordinary case.
+// Clears only the demotion, not any already-resolved endpoint, so switching sandboxes costs no probe or reconnect
+// unless one was pending.
 const reset = (sandboxId: string): void => {
     demoted.delete(sandboxId);
 };

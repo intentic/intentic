@@ -5,55 +5,33 @@ import type { Conversation } from "../session/conversation";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useRunners } from "../../sandbox/devices/useRunners";
 
-/* WHERE THIS CONVERSATION RUNS. Three kinds of answer, in one list, because they are one question:
- *
- *   This sandbox      the workspace on screen, on the machine it lives on.
- *   A runner          a container of its own on another of your computers, running THIS sandbox's workspace
- *                     (docs/remote-runners-plan.md). What moves is whose CPU and memory the turn spends.
- *   Another sandbox   a different workspace, on a different machine, with its own files, its own connected
- *                     accounts and its own agents. What moves is the WORK's address.
- *
- * The third one is why this menu exists at all now. Starting work in another box used to mean switching the
- * whole app to it first, which tears down the chat, the editor, the tree, the fleet and every extension
- * (sandboxScope) to answer "also do this over there", and lands you somewhere you did not want to be. The turn
- * is a detached run on a daemon and every window is only a renderer of it (turnStream), so the browser can
- * simply address another daemon: the tab stays here, streams from there, and steers and stops there too.
- *
- * WHAT THE THIRD ONE COSTS, and the composer says it at each control rather than in a banner: the workspace
- * around the message is still this box's, so a remote conversation does not carry this box's open file, its
- * @-mention completions, its personas or its account pick. The provider and model do cross, and the target
- * daemon serves the turn on its own credentials (turnRequest.ts spells out each omission).
- *
- * OFFERED ONLY BEFORE THE FIRST TURN. Placement is part of a conversation's identity: the daemon latches it
- * with the branch on the first turn, and the box that holds the record, the worktree and the session is the
- * only one that can run the next turn. So once it has run, this reads rather than asks, and the way to work
- * somewhere else is a new agent, which is one click away.
- *
- * An OFFLINE runner and an unanswering sandbox are both listed and neither is selectable: they are still
- * yours, their machine is simply asleep or unreachable, and offering them would only produce a turn that comes
- * back saying so. */
+// Where this conversation runs — three answers to one question:
+//
+// - This sandbox: the workspace on screen, on its own machine
+// - A runner: a container on another of your computers, running this sandbox's workspace (only CPU/memory moves)
+// - Another sandbox: a different workspace and machine entirely (the work's address moves)
+//
+// A remote conversation doesn't carry this box's open file, mentions, personas or account pick (turnRequest.ts
+// spells out each omission); provider and model still cross. Offered only before the first turn, since placement
+// latches with the branch then (Conversation.registered) and that box is the only one that can continue it.
+// Offline runners and unreachable sandboxes are listed but not selectable.
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 const { runners } = useRunners();
 
-/* THE OTHER BOXES ARE READ WHILE THIS MENU IS OPEN AND NOT A MOMENT LONGER, the switcher popover's rule, for
- * the switcher popover's reason: this store polls every sandbox the account owns, and a control that is
- * mounted only while a reader is looking at it is exactly the subscriber it was written for. What it buys is
- * the one thing this list cannot fake, whether a box would answer a turn sent to it right now. */
+// Other boxes are read only while this menu is open, the switcher popover's own rule: this store polls every
+// sandbox the account owns, so mounting only while watched is exactly what it's for.
 onUnmounted(watchOtherBoxes());
 
 const picked = computed(() => conversation.box.value);
 const pickedRunner = computed(() => conversation.runner.value);
-// The board has known this conversation ⇒ its placement is settled (Conversation.registered latches on the
-// first roster frame, or on the daemon's ack for a box this browser does not stream). A draft is the whole
-// window in which this control means anything.
+// The board seeing this conversation settles its placement (Conversation.registered); a draft is the window.
 const settled = computed(() => conversation.registered.value);
 
-/* What the row says under the name. An OUTDATED runner is still offered, and says so: it runs turns, it is
- * simply behind this sandbox's build, and the choice between "run it there now" and "update it first" is the
- * user's (the Devices view has the button). */
+// The row's line under the name: an outdated runner is still offered and says so — it still runs turns, and
+// updating first vs. running now is the user's call (Devices has the button).
 const detail = (runner: { online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
     if (!runner.online) {
         return `Offline — wake that machine to use it`;
@@ -62,8 +40,7 @@ const detail = (runner: { online: boolean; parity: string; facts?: { cpus: numbe
     return runner.parity === `outdated` ? `${load} · older build than this sandbox` : load;
 };
 
-// A box that has never answered is not offered: a turn posted to a daemon that is not there fails at the door,
-// and "it may be asleep" is a better thing to read before the press than after it.
+// A box that's never answered isn't offered: a turn posted to an absent daemon fails at the door.
 const answering = (box: BoxFleet): boolean => box.state === `ready`;
 
 const boxDetail = (box: BoxFleet): string =>
@@ -73,8 +50,7 @@ const boxDetail = (box: BoxFleet): string =>
           ? `Checking whether it's awake…`
           : `Not answering — it may be asleep`;
 
-// Where it ended up, in the words the row that chose it used. Named from the roster rather than from anything
-// stored on the conversation, so a box renamed since keeps this sentence true.
+// Named from the roster, not from anything stored on the conversation, so a later rename stays true.
 const placedAt = computed(() => {
     if (picked.value !== undefined) {
         return `in “${boxNameOf.value.get(picked.value) ?? `another sandbox`}”`;
@@ -86,9 +62,8 @@ const place = (at: { box?: string; runner?: string }): void => {
     if (settled.value) {
         return;
     }
-    /* THE TWO AXES ARE ONE CHOICE, so each pick clears the other. A runner belongs to the sandbox that paired
-     * it, so "that runner, but in the other box" is not a thing that exists: the id would name nothing there,
-     * and the body builder drops it anyway (turnRequest.ts). One list, one answer. */
+    // The two axes are one choice, so each pick clears the other: a runner belongs to the sandbox that paired it, and
+    // "that runner in another box" names nothing there.
     conversation.box.value = at.box;
     conversation.runner.value = at.runner;
     emit(`selected`);
@@ -126,10 +101,10 @@ const place = (at: { box?: string; runner?: string }): void => {
             </span>
         </button>
 
-        <!-- The other workspaces on this account. A heading rather than a bare run of rows: the two above are
-             this sandbox and its own machines, and these are somewhere else entirely, which is a bigger step
-             than the gap between two rows can say. Absent on an account with one sandbox, where it would be a
-             heading over nothing. -->
+        <!--
+            Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a
+            single-sandbox account.
+        -->
         <template v-if="otherBoxes.length > 0">
             <p class="mt-1 px-2.5 pb-0.5 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle">Other sandboxes</p>
             <button
@@ -147,8 +122,10 @@ const place = (at: { box?: string; runner?: string }): void => {
                     <span class="text-2xs text-subtle">{{ boxDetail(box) }}</span>
                 </span>
             </button>
-            <!-- Said once, under the rows it is about, rather than on each of them: what a turn over there is
-                 served by. It is the whole difference between this section and the two above it. -->
+            <!--
+                Said once under the section, not per row: the whole difference from this sandbox and its runners is what a
+                remote turn is served by.
+            -->
             <p v-if="!settled" class="px-2.5 py-1 text-2xs text-subtle">
                 The turn runs there and streams back into this tab. It uses that sandbox's files and accounts, so this box's open file,
                 @-mentions and personas stay behind.

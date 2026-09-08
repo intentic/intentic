@@ -4,12 +4,8 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { listPublicFiles, resolvePublicFile } from "./public-files.js";
 
-/* The outbox's guards, against a real directory: every one of these is a way a file that should not have been
- * on the public internet could have got there.
- *
- * `resolvePublicFile` takes its root as an argument rather than deriving it, which is what lets these run
- * against a temp dir. The 404 assertions are all identical on purpose: a stranger gets the same answer whatever
- * the reason, and the reason is only ever readable from `listPublicFiles`, which is the owner's view. */
+// The outbox's guards against a real directory; resolvePublicFile takes its root as an argument so these run against a
+// temp dir. Every refusal 404s identically to a stranger; the reason is only visible via listPublicFiles.
 
 const outbox = async (files: Record<string, string>): Promise<string> => {
     const root = await mkdtemp(join(tmpdir(), "outbox-"));
@@ -48,8 +44,7 @@ test("traversal out of the outbox is refused however it is spelled", async () =>
     }
 });
 
-// The one way a path INSIDE the outbox addresses bytes outside it. Caught by re-checking the realpath, not the
-// requested path, which is why containment is checked twice in resolvePublicFile.
+// Caught by checking the realpath, not the requested path; containment in resolvePublicFile is checked twice for this.
 test("a symlink pointing outside the outbox is refused", async () => {
     const root = await outbox({ "ok.txt": "fine" });
     const secret = join(root, "..", `escape-${process.pid}.txt`);
@@ -59,10 +54,8 @@ test("a symlink pointing outside the outbox is refused", async () => {
     expect(await served(root, "/ok.txt")).toBe(true);
 });
 
-/* The other half of that: a symlink whose target is also INSIDE the outbox passes containment, so the name
- * rules are what has to catch it, and they only do if they read the resolved name. Judging the requested one
- * meant `/.env` was refused while `/logo.png -> .env` was served, and the requested extension also decided what
- * got sniffed, so a link named `.png` opted its bytes out of rule 5 as well. */
+// A same-outbox symlink passes containment, so the name rules must judge the resolved name, not the requested one, or
+// `/logo.png -> .env` would serve and its extension would pick the wrong sniff rule too.
 test("a symlink to a blocked file inside the outbox is refused under its innocent name", async () => {
     const root = await outbox({
         ".env": "CLOUDFLARE_API_TOKEN=abc123supersecret",
@@ -71,13 +64,13 @@ test("a symlink to a blocked file inside the outbox is refused under its innocen
     });
     await symlink(join(root, ".env"), join(root, "logo.png"));
     await symlink(join(root, "server.pem"), join(root, "readme.txt"));
-    // A PNG is not sniffed at all, which is exactly why the name had to be the resolved one.
+    // A PNG isn't sniffed at all, which is exactly why the resolved name has to be the one judged.
     expect(await served(root, "/logo.png")).toBe(false);
     expect(await served(root, "/readme.txt")).toBe(false);
     expect(await served(root, "/ok.txt")).toBe(true);
 });
 
-// A symlink between two servable files is not a trick, and still resolves to the type of the bytes it names.
+// A symlink between two servable files resolves to the type of the bytes it names.
 test("a symlink to an ordinary file is served", async () => {
     const root = await outbox({ "v2/index.html": "<h1>hi</h1>" });
     await symlink(join(root, "v2", "index.html"), join(root, "latest.html"));
@@ -113,9 +106,8 @@ test("contents matching a known token format are refused even under an innocent 
     }
 });
 
-/* The deliberate NON-guard, and the reason the sniff is only high-precision patterns: a generic
- * "secret-ish word followed by a long value" rule fires on all of this, and a publisher whose ordinary page is
- * refused for no visible reason stops trusting the feature entirely. */
+// Deliberately not a guard: a generic "secret-ish word near a long value" rule would fire on all of this, and a
+// publisher whose ordinary page gets refused stops trusting the feature.
 test("prose and public config that merely mention secrets are served", async () => {
     const root = await outbox({
         "docs.html": `<form><label>password</label><input name="password" type="password"></form>`,
@@ -136,7 +128,7 @@ test("an absent outbox answers exactly like a missing file: publishing is simply
     expect(await resolvePublicFile(join(tmpdir(), "no-such-outbox-dir"), "/anything.txt")).toMatchObject({ kind: "refused", status: 404 });
 });
 
-// The owner's view is the one that explains itself: every file, with the reason the guards refused it.
+// The owner's view explains itself: every file, with the reason it was refused.
 test("the listing reports blocked files with their reason rather than hiding them", async () => {
     const root = await outbox({ "ok.txt": "fine", ".env": "TOKEN=abc", "server.pem": "x", "leak.txt": "ghp_abcdefghijklmnopqrstuvwxyz0123" });
     const listed = await listPublicFiles(root);
@@ -149,9 +141,8 @@ test("the listing reports blocked files with their reason rather than hiding the
     });
 });
 
-/* The owner's view has to agree with the serve path about symlinks, or it promises links that 404 and hides the
- * ones that would have leaked. `escapes` is the reason for a link whose bytes are outside the outbox: the type
- * declared it from the start and nothing produced it until the listing started resolving. */
+// The listing must agree with the serve path on symlinks, or it promises links that 404 and hides ones that would have
+// leaked. `escapes` names a link whose bytes land outside the outbox.
 test("the listing judges a symlink by its target, and names the one that leaves the outbox", async () => {
     const root = await outbox({ ".env": "TOKEN=abc", "ok.txt": "fine" });
     const outside = join(root, "..", `escape-${process.pid}.txt`);

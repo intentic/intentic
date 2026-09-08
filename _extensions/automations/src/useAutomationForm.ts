@@ -5,37 +5,22 @@ import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
 import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
 
-/* ONE automation form, for both the thing that creates automations and the thing that edits them.
- *
- * It lives here rather than inside the create dialog because there are now two callers and the fields are the
- * expensive part to keep honest: a Front Desk's origins are validated against what the daemon actually compares,
- * a cron is previewed against the same parser that will fire it, and the Advanced block knows which providers
- * have a harness to choose. A second copy of that for editing would be a second place to get it wrong, and the
- * one that got it wrong would be the one nobody re-read.
- *
- * `load` and `build` are deliberately inverse: `build` decides which fields are omitted when they carry a
- * default (an absent `agent` MEANS claude), and `load` has to put the user back in front of the same form that
- * produced the record, so a save that changes nothing must round-trip to an identical automation. */
+// One automation form for the create dialog and the edit dialog. `load` and `build` are inverse: `build` omits fields
+// at their default, `load` reconstructs the same form so an unchanged save round-trips to an identical automation.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
 
-/* WHAT A PROMPT WAS WRITTEN FOR. The kind, plus, for a listener, the source, because that is the granularity
- * at which the payload changes: Discord delivers `mentioned` and a channelId, CI delivers a branch, a sha and
- * failedJobs, and a briefing written for one describes nothing that arrives from the other. Exported because the
- * create dialog compares its picked template against it. */
+// What a prompt was written for: kind, plus source for a listener since payload shape differs per source (Discord's
+// mentioned+channelId vs CI's branch/sha/failedJobs). Exported for the create dialog's template comparison.
 export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provider?: string }): string =>
     trigger.kind === `listener` ? `listener:${trigger.provider}` : trigger.kind;
 
-/* THE FORM'S OWN TEXT, and both halves now arrive from the daemon's catalogue rather than from a table in this
- * package, which is why they are computed per call instead of being module constants. A template contributed
- * by a pack installed five minutes ago has to count as "text the form put here" exactly as a built-in one does,
- * or the first source change after picking it would refuse to replace a prompt the user never wrote. */
+// The form's own text (starters and templates) now comes from the daemon's catalogue, so it's computed per call rather
+// than a module constant; a just-installed pack's template must count as form-owned text too.
 export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[]>, templates: ComputedRef<readonly AutomationTemplate[]>) {
-    /* TEXT THE FORM PUT IN THE BOX, rather than the user, a live source's starter, a template's prompt, or
-     * nothing typed yet. Compared verbatim, and that is the whole test: one keystroke makes the prompt the
-     * user's and nothing here rewrites it again. */
+    // Text the form put in the box (starter or template prompt); compared verbatim to detect a user edit.
     const templatePrompts = computed(() => new Set<string>(templates.value.map((template) => template.prompt)));
     const formGuards = computed(
         () => new Set<string>([``, ...templates.value.flatMap((template) => (template.guard === undefined ? [] : [template.guard]))]),
@@ -44,43 +29,21 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     const form = reactive({
         kind: `schedule` as TriggerKind,
         id: ``,
-        /* CARRIED, NOT EDITED. A guard is a shell command that decides whether a wake happens at all, and the
-         * form no longer offers a box for one: hand-authoring shell in a settings fold is a support ticket in
-         * waiting, and the person writing "wake me when the queue is non-empty" was better served by writing it
-         * in the prompt. The FIELD stays because the shipped chores are built on it, "wakes only on findings"
-         * is a guard running knip and exiting 1 when it is clean, so a chore picked from the gallery has to
-         * reach `build` with its own guard intact rather than saved as a nightly sweep that wakes regardless. */
+        // No UI for this: kept only so gallery chores (e.g. knip-based guards) still reach `build` intact.
         guard: ``,
         prompt: ``,
-        /* WHAT THIS AUTOMATION RUNS ON, best first, AND IT MAY NOT BE EMPTY. This replaced three fields — a
-         * provider, a harness and a bare model string — whose shared answer for "not set" was a default: a
-         * sandbox-wide model role, and behind that whatever the owner's chat happened to be set to. An
-         * automation is the one thing here that spends an allowance with nobody in the room, on a schedule set
-         * once and rarely re-read, so a default is the wrong shape for it and `canSave` refuses an empty list.
-         *
-         * A LADDER because unwatched work is exactly where a spent account costs most: a chat refuses in front
-         * of somebody who can retry, a 3am wake simply does not happen. Each rung carries its own provider,
-         * model, effort, thinking, speed and harness (ModelPin), which is what folded the three old fields into
-         * one and made the tier sayable per automation at all. */
+        // Replaces provider/harness/model; each rung is a full ModelPin, and the list must never be empty.
         models: [] as ModelPin[],
-        // The pinned provider account, by its daemon-minted id. Blank ⇒ absent ⇒ the provider's first account,
-        // which is what every automation made before this field existed keeps doing.
+        // Pinned account by its daemon-minted id; blank ⇒ absent ⇒ the provider's first account.
         account: ``,
-        /* Which of the sandbox's named personas this wake RUNS AS, its accounts, its toolbox, and where in the
-         * workspace it works, in one choice. Blank is strict about accounts and permissive about tools: the
-         * daemon reads an unpinned unattended wake as reaching no logged-in account at all, and as keeping the
-         * full toolbox. See the picker's own note for why those two defaults point opposite ways. */
+        // Persona this wake runs as; blank means no logged-in account but the full toolbox.
         actsAs: ``,
-        /* NARROW THIS ONE JOB below its persona, raw tool names, comma-separated, and empty in the ordinary
-         * case. Held as the typed string rather than an array because it is an <input>: splitting on save is one
-         * place, where splitting on every keystroke would fight the person typing a comma. */
+        // Comma-separated tool names narrowing the persona; held as typed string, not array, split only at save.
         allowedTools: ``,
         requireApproval: false,
         // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
         holdForSeconds: 0,
-        // A schedule's bar. 0 = every occurrence fires; positive = a due run fires only once this many new
-        // sessions have been run since the last wake, and is recorded as skipped (saying how far off it is)
-        // until then. Schedule only: nothing else has a "since last time" worth counting sessions against.
+        // Schedule's session bar: 0 fires every occurrence; positive skips until that many new sessions have run.
         afterSessions: 0,
         provider: `discord`,
         channelId: ``,
@@ -90,8 +53,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         branch: ``,
         workspaceEvent: `turn.settled` as WorkspaceEventKind,
         repo: ``,
-        // Front Desk, `origins` is edited as one line per site because that is how people hold a short allowlist
-        // in their head; it is split on save.
+        // Edited as one line per site, split into a list on save.
         origins: ``,
         access: `public` as `public` | `google`,
         googleClientId: ``,
@@ -99,11 +61,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         turnstileSiteKey: ``,
         turnstileSecret: ``,
         greeting: ``,
-        // Blank ⇒ the daemon's WEBCHAT_DAILY_MAX_DEFAULT. Held as a string because it is an <input>: an empty
-        // box has to stay distinguishable from a typed 0, which the schema rejects anyway.
+        // Blank ⇒ daemon's WEBCHAT_DAILY_MAX_DEFAULT; held as a string so an empty box differs from a typed 0.
         dailyMessageMax: ``,
-        // Round-tripped rather than re-derived: a chore on a clock is indistinguishable from an external poll by
-        // its trigger, so losing this on edit would move the row to the other shelf.
+        // Round-tripped, not re-derived: a clock-based chore looks identical to an external poll trigger-wise.
         chore: false,
     });
     const schedule = reactive(defaultSchedule());
@@ -113,9 +73,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     const isFrontDesk = computed(() => form.kind === `listener` && form.provider === `webchat`);
     const listenerSource = computed(() => listenerSourceOf(sources.value, form.provider, form.eventType));
 
-    // The picked source's second narrowing axis, when it has one (only CI does). Drives both the extra input
-    // and whether `build` writes the field at all, switching source must not leave a branch on a Discord
-    // trigger, where the daemon would match it against a message that has no branch and never fire.
+    // Drives the branch input and whether `build` writes it; undefined when the source has no branch axis.
     const branchField = computed(() => (form.kind === `listener` ? listenerSource.value.branchField : undefined));
     const liveSources = computed(() => sources.value.filter((source) => source.available));
     const visibleSources = computed(() =>
@@ -124,8 +82,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             : [listenerSource.value, ...liveSources.value.filter((source) => source.provider !== form.provider)],
     );
 
-    // The typed ceiling, or undefined for "leave it to the default". Anything not a positive integer reads as
-    // blank, the schema would reject it, and a silently-dropped field beats a save that fails on a keystroke.
+    // Typed ceiling, or undefined to leave the default; anything not a positive integer reads as blank.
     const dailyMessageMax = computed<number | undefined>(() => {
         const typed = Number(form.dailyMessageMax.trim());
         return form.dailyMessageMax.trim() !== `` && Number.isInteger(typed) && typed > 0 ? typed : undefined;
@@ -139,8 +96,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     );
 
     const effectiveCron = computed(() => cronOf(schedule));
-    // The schedule trigger's two halves, the clock and the bar, read into the form and written back out. One
-    // place each way, because a template and a stored row both carry the same trigger.
+    // Schedule trigger's two halves (clock, bar) read into the form and written back by one function each way.
     const loadSchedule = (trigger: { readonly cron: string; readonly afterSessions?: number }): void => {
         Object.assign(schedule, parseCron(trigger.cron));
         form.afterSessions = trigger.afterSessions ?? 0;
@@ -151,8 +107,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         ...(form.afterSessions > 0 ? { afterSessions: form.afterSessions } : {}),
     });
 
-    // A croner instance without a callback never schedules, it's just a queryable pattern here.
-    // ponytail: preview uses the browser's timezone while the daemon fires in the sandbox's, same as the row's `next`.
+    // A callback-less Cron is only a queryable pattern; preview uses the browser's timezone, not the sandbox's.
     const cronPreview = computed<{ runs: number[] } | { error: string } | undefined>(() => {
         const cron = effectiveCron.value;
         if (form.kind !== `schedule` || cron === undefined) {
@@ -168,8 +123,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
 
     /* ---- the prompt follows the trigger ---- */
 
-    // The starting point for whatever is picked right now. Only a live source has one: every other trigger's
-    // payload is whatever its sender POSTs, and no starter can describe that.
+    // Only a live source has a starter; other triggers' payloads come from the sender, not a template.
     const starterPrompt = computed<string | undefined>(() => (form.kind === `listener` ? listenerSource.value.starterPrompt : undefined));
     const formPrompts = computed(
         () =>
@@ -179,15 +133,10 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             ]),
     );
 
-    /* Which trigger the prompt now in the box was written for. Both directions below stamp it, because filling
-     * the form from a template, or from a stored automation, sets the trigger and the prompt in one go, and
-     * without the stamp that reads as a trigger change and the template's own text is the first thing rewritten. */
+    // Stamped together with the trigger; otherwise the assignment itself reads as a trigger change.
     let promptFor = triggerKey(form);
 
-    /* A starter is only true for the trigger it was written for, so it FOLLOWS the trigger while it is still the
-     * form's to write. Seeding it once (which is what this used to do, on the trigger cards alone) is how a CI
-     * automation ends up briefed on Discord messages: every other field re-renders for the new source, events,
-     * channel, branch, and the prompt, the one field nothing validates, keeps the old source's text. */
+    // A starter follows the trigger only while it stays true; nothing validates the prompt itself.
     watch(
         () => triggerKey(form),
         (key) => {
@@ -195,8 +144,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
                 return;
             }
             form.prompt = starterPrompt.value ?? ``;
-            // A template's GUARD came with its prompt and goes with it: a jq over .intentic/config/approvals/ left behind on
-            // a Discord listener is a row that never fires and never says why.
+            // A guard leaves with its prompt; a stale guard on another trigger silently blocks every firing.
             if (formGuards.value.has(form.guard)) {
                 form.guard = ``;
             }
@@ -204,10 +152,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         },
     );
 
-    /* The prompt is verbatim ANOTHER source's starter: an automation made before the prompt followed the trigger,
-     * or one whose prompt was edited and whose source then changed. Nothing may rewrite it, it is not the form's
-     *, but it is the one mismatch that can be named, so the form offers the swap instead of leaving a Discord
-     * briefing on a CI trigger to be discovered from a confused run at 3 a.m. */
+    // True when the prompt is verbatim another source's starter (pre-existing or after a source change); offers a swap
+    // instead of silently rewriting.
     const staleStarter = computed<AvailableSource | undefined>(() => {
         if (form.kind !== `listener` || form.prompt === starterPrompt.value) {
             return undefined;
@@ -215,7 +161,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return sources.value.find((source) => source.starterPrompt === form.prompt);
     });
 
-    // Take the picked source's starter by hand, and hand the prompt back to the form, so it keeps following.
+    // Applies the current source's starter and re-stamps promptFor so it keeps following.
     const applyStarter = (): void => {
         form.prompt = starterPrompt.value ?? ``;
         promptFor = triggerKey(form);
@@ -229,8 +175,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         touched.add(`name`);
         touched.add(`prompt`);
         touched.add(`origins`);
-        // The ladder belongs on this list like any other required field: without it a save refused for an
-        // empty one is a disabled button with the reason nowhere on screen.
+        // Required like the other touched fields, so an empty ladder's refusal has a visible reason.
         touched.add(`models`);
     };
 
@@ -245,8 +190,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return undefined;
     });
     const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? `Prompt is required.` : undefined));
-    // An origin must be exactly what a browser puts in the Origin header, scheme + host, no path, because that
-    // is what the daemon compares against. Saying so at the point of typing beats a 403 the visitor sees.
+    // Must match exactly what a browser sends in the Origin header: scheme + host, no path, since that's what the
+    // daemon compares.
     const originsError = computed<string | undefined>(() => {
         if (!isFrontDesk.value) {
             return undefined;
@@ -258,11 +203,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return bad === undefined ? undefined : `"${bad}" isn't an origin, use scheme + host only, e.g. https://example.com`;
     });
 
-    /* THE ONE FIELD WHOSE ERROR IS ABOUT SPENDING RATHER THAN SYNTAX. An automation runs against a real
-     * allowance with nobody in the room, so it names the models it may spend or it does not exist: there is no
-     * sandbox-wide tier behind it and no composer pick to inherit. Enforced here as well as in the schema
-     * because a refusal at save time is a sentence the person can act on, where a schema rejection at load time
-     * is an automation that quietly stopped existing. */
+    // The one error about spending rather than syntax: no sandbox-wide tier to fall back on, so an empty ladder must
+    // refuse. Enforced here too, not just in the schema, so the refusal happens at save with an actionable message.
     const modelsError = computed<string | undefined>(() =>
         form.models.length === 0 ? `Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.` : undefined,
     );
@@ -285,10 +227,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             id: ``,
             guard: ``,
             prompt: ``,
-            /* EMPTY, AND A TEMPLATE DOES NOT FILL IT. A gallery template is written before this sandbox exists
-             * and cannot know which providers its owner has connected, so any model it named would be a guess
-             * that either fails at fire time or spends an account the owner meant for something else. The
-             * picker is the one required step of making an automation, which is the point of the field. */
+            // Empty: a template can't know which providers this sandbox has connected, so it never fills this.
             models: [],
             account: ``,
             actsAs: ``,
@@ -317,12 +256,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         touched.clear();
     };
 
-    /* Prefill from a template. Only the fields a template actually carries, everything else keeps its default,
-     * so picking a template twice can't accumulate state from the first pick.
-     *
-     * `chore` is carried, never inferred from the trigger: a nightly dependency sweep and a nightly Stripe poll
-     * are both `schedule`, and only one of them is about this codebase. It is the same flag the created
-     * automation stores, which is what decides the shelf it lands on. */
+    // Prefills only the fields a template carries; everything else resets first, so picking twice can't accumulate
+    // state. `chore` is carried, not inferred: a schedule trigger alone can't tell a dependency sweep from an external
+    // poll.
     const loadTemplate = (template: AutomationTemplate): void => {
         reset();
         form.kind = template.trigger.kind;
@@ -341,12 +277,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         if (template.trigger.kind === `workspace`) {
             form.workspaceEvent = template.trigger.event;
         }
-        // The template's prompt WAS written for the trigger it just set, so this is not a trigger change.
+        // The template's prompt was written for the trigger it just set, so this isn't a trigger change.
         promptFor = triggerKey(form);
     };
 
-    // Put the user in front of the form that produced this record. The inverse of `build`, see the note at the
-    // top: a save that changes nothing must round-trip to an identical automation.
+    // Puts the user back in front of the form that produced this record, the inverse of `build`: a save that changes
+    // nothing must round-trip identically.
     const load = (automation: AutomationSummary | Automation): void => {
         reset();
         original = AutomationSchema.parse(automation);
@@ -355,8 +291,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.id = automation.id;
         form.guard = automation.guard ?? ``;
         form.prompt = automation.prompt;
-        // Copied, never aliased: the ladder is edited in place by the picker, and sharing the array with the
-        // stored record would let a cancelled edit still change what round-trips out of `build`.
+        // Copied, not aliased: the picker edits in place, and a cancelled edit must not touch the stored record.
         form.models = automation.models.map((pin) => ({ ...pin }));
         form.account = automation.account ?? ``;
         form.actsAs = automation.actsAs ?? ``;
@@ -377,7 +312,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             form.mentioned = trigger.mentioned === true;
             form.channelId = trigger.channelId ?? ``;
             form.branch = trigger.branch ?? ``;
-            // One per line, which is how the textarea presents them and how they were typed in the first place.
+            // One per line, matching how the textarea presents and how they were typed.
             form.origins = (trigger.allowedOrigins ?? []).join(`\n`);
         }
         const webchat = automation.webchat;
@@ -386,15 +321,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             form.googleClientId = webchat.googleClientId ?? ``;
             form.antiBot = webchat.antiBot ?? `off`;
             form.turnstileSiteKey = webchat.turnstileSiteKey ?? ``;
-            // A stored secret never comes back from the daemon in readable form, so an empty box here means
-            // "unchanged", not "cleared", see `build`.
+            // A stored secret never comes back readable, so an empty box here means unchanged, not cleared.
             form.turnstileSecret = webchat.turnstileSecret ?? ``;
             form.greeting = webchat.greeting ?? ``;
             form.dailyMessageMax = webchat.dailyMessageMax === undefined ? `` : String(webchat.dailyMessageMax);
         }
-        // This prompt is the OWNER's, written for the trigger it is stored with, so opening the editor is not a
-        // trigger change either. Changing the source from in here still re-writes a prompt nobody has touched
-        // since a template wrote it, and never one that was typed.
+        // This prompt is the owner's, stored with this trigger, so opening the editor isn't a trigger change either.
         promptFor = triggerKey(form);
     };
 
@@ -432,10 +364,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return webchat;
     };
 
-    // The record to upsert. The editor owns the fields it exposes and carries every opaque field from the loaded
-    // record through untouched. The enabled state never changes as a side effect of editing some other field,
-    // and the webhook token is not on the record at all: the daemon keeps it with the door and keeps it across
-    // every re-post, so nothing here has to carry it.
+    // Record to upsert: keeps every opaque field from the loaded record, overwriting only what the editor exposes.
+    // Enabled never changes as a side effect; the webhook token stays at the daemon's door, never here.
     const build = (): Automation => {
         const trigger: Automation["trigger"] =
             form.kind === `schedule`
@@ -457,16 +387,13 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
                           // The Front Desk's admission list lives on the trigger, beside the provider it gates.
                           ...(isFrontDesk.value ? { allowedOrigins: originList.value } : {}),
                       };
-        // Start with the stored record so a field added to the contract is preserved until the editor explicitly
-        // owns it. The assignments below are the complete set this form does own, including clearing defaults.
+        // Starts from the stored record, so a newly added contract field survives until explicitly owned.
         const automation: Automation = {
             ...original,
             id: form.id.trim(),
             trigger,
             prompt: form.prompt,
-            // The ladder, copied out the way it was copied in rather than aliased, so a later edit of the form
-            // cannot reach back into a record already handed to the caller. Required by the schema and refused
-            // empty by `canSave`, so unlike its neighbours below there is no absent case to write.
+            // Copied, not aliased, so a later form edit can't reach a record already handed to the caller.
             models: form.models.map((pin) => ({ ...pin })),
             enabled: original?.enabled ?? true,
         };
@@ -475,29 +402,22 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } else {
             automation.guard = form.guard.trim();
         }
-        /* THE ACCOUNT PIN, AND THE LADDER CAN TAKE IT AWAY.
-         *
-         * Blank ⇒ absent ⇒ the connected account with the most headroom, which is the right answer for
-         * unwatched work anyway. What is new is the second way to reach absent: an account id is one provider's
-         * store key, only meaningful beside that provider (the same reason a model id is), so it can only be
-         * pinned while every rung of the ladder agrees about which provider that is. Cross providers and the pin
-         * would name an account the winning rung's provider has never heard of, failing at 3am on a credential
-         * error. The scheduler drops it on the identical rule, so what is stored and what is spent agree. */
+        // Blank ⇒ absent ⇒ the account with the most headroom. An account id only makes sense for a single provider, so
+        // a ladder spanning providers clears the pin instead of naming an account the wrong provider has never heard
+        // of.
         const oneProvider = new Set(form.models.map((pin) => pin.provider)).size <= 1;
         if (form.account === `` || !oneProvider) {
             delete automation.account;
         } else {
             automation.account = form.account;
         }
-        // Blank ⇒ absent ⇒ no outward accounts at all (see the form state's note), the one field here whose
-        // default is to take something away rather than to leave it unspecified.
+        // Blank ⇒ absent ⇒ no outward accounts at all; the one field here whose default takes something away.
         if (form.actsAs === ``) {
             delete automation.actsAs;
         } else {
             automation.actsAs = form.actsAs;
         }
-        // Empty ⇒ absent ⇒ whatever the persona allows. A list here is applied ON TOP of the card, so it can
-        // only ever narrow, which is why the field is offered at all and why it needs no validation against it.
+        // Empty ⇒ absent ⇒ whatever the persona allows; a list here only narrows, never widens, the toolbox.
         const narrowed = form.allowedTools
             .split(`,`)
             .map((name) => name.trim())
@@ -525,15 +445,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         }
         if (isFrontDesk.value) {
             automation.webchat = webchatOf();
-            /* A FRONT DESK THAT NAMED NO PERSONA GETS THE FRONT DESK, the read-only card, which the daemon writes
-             * on save if the workspace has not got one yet (nothing is seeded; personas/front-desk.ts).
-             *
-             * A Front Desk is driven by a stranger and runs with nobody watching, so it is the one automation whose
-             * bounds cannot be left to the prompt's wording. It used to carry a hidden four-tool allowlist for
-             * exactly that reason; naming a persona does the same job in a place the owner can SEE, edit, and
-             * reuse. The owner's own choice always stands, a Front Desk deliberately pointed at a card with more
-             * powers is a decision they made on a visible field, so this fills a blank rather than overriding an
-             * answer. */
+            // A Front Desk with no persona gets FRONT_DESK_PERSONA, written by the daemon on save if the workspace
+            // lacks one yet. Only fills a blank: an owner's own choice of a stronger persona stands.
             if (automation.actsAs === undefined) {
                 automation.actsAs = FRONT_DESK_PERSONA;
             }

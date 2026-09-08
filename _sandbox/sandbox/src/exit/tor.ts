@@ -21,34 +21,23 @@ import {
 } from "./exit-paths.js";
 import { writeSelection } from "./exit-state.js";
 
-/* TOR AS A GEO EXIT, and the reason it is the free default rather than a curiosity.
- *
- * It is the only free service that actually answers the question this feature asks. Measured against the Tor
- * Project's own directory: ~3,250 running exit relays across 52 countries, 28 of them with enough relays to
- * be worth choosing. No account, no credentials, no payment. Country selection is a config line and a new
- * address is a control-port signal, both applied to a running process in under a second.
- *
- * And it needs NO container privileges at all. Tor publishes a SOCKS port itself, so there is no tun device,
- * no routing table and no `ip rule` in this driver, which means a sandbox that only ever uses tor never asks
- * its owner for NET_ADMIN. That is worth more than it sounds: it makes the cheap path also the safe one.
- *
- * What it costs, and the skill says so plainly: a large share of the web blocks Tor exits outright, and the
- * bandwidth is donated by volunteers, so it is for reading a page from somewhere else, not for bulk crawling.
- */
+// Tor is the free default: no account or payment, country selection is a config line, a new address is a control-port
+// signal, both applied in under a second.
+// Needs no container privileges: tor publishes its own SOCKS port, no tun device, no routing table, no `ip rule`, so a
+// tor-only sandbox never asks for NET_ADMIN.
+// The cost: a large share of the web blocks Tor exits outright, and the bandwidth is donated, so this is for reading a
+// page, not bulk crawling.
 
-// Bootstrapping over a hostile-ish network takes a while on a cold consensus. Generous, and it fails with the
-// log's own tail rather than a bare timeout.
+// Generous: bootstrapping on a cold consensus takes a while; failure carries the log's own tail.
 const BOOTSTRAP_TIMEOUT_MS = 120_000;
-// Tor rate-limits NEWNYM to one per 10s; asking faster is silently ignored, which would read as "rotate did
-// nothing" rather than "you asked too soon". Waiting is the honest fix.
+// Tor rate-limits NEWNYM to one per 10s and silently ignores an early ask; waiting is the honest fix.
 const NEWNYM_COOLDOWN_MS = 11_000;
 const CONTROL_TIMEOUT_MS = 10_000;
 const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 const ONIONOO_URL = "https://onionoo.torproject.org/details?type=relay&flag=Exit&running=true&fields=country,exit_probability";
 
-// Tor's country syntax. StrictNodes makes it a requirement rather than a preference: without it Tor treats
-// ExitNodes as a hint and will happily leave from somewhere else, which is the one outcome this feature must
-// never produce silently.
+// StrictNodes makes country a requirement, not a preference: without it tor treats ExitNodes as a hint and may leave
+// from elsewhere, unnoticed.
 export const exitNodesLine = (country: string | undefined): string =>
     country === undefined ? "" : `ExitNodes {${country.toLowerCase()}}\nStrictNodes 1\n`;
 
@@ -60,8 +49,7 @@ export const torrc = (id: string, country: string | undefined): string =>
         `CookieAuthFile ${torCookiePath(id)}`,
         `DataDirectory ${torDataDir(id)}`,
         `Log notice file ${logPath(id)}`,
-        // A client, never a relay: this sandbox carries nobody else's traffic, which is both the polite and
-        // the safe posture (an exit relay's address answers for whatever leaves it).
+        // A client, never a relay: an exit relay's address answers for whatever leaves it.
         "ClientOnly 1",
         "SocksPolicy accept 127.0.0.1/32",
         "SocksPolicy reject *",
@@ -71,9 +59,8 @@ export const torrc = (id: string, country: string | undefined): string =>
         .join("\n")
         .concat("\n");
 
-/* One control-port conversation: authenticate with the cookie tor wrote, run the commands, hang up. A fresh
- * connection per call rather than a held one because the daemon outlives any single tor process and a socket
- * kept across a restart is a socket to nothing. */
+// One control-port conversation: authenticate with tor's own cookie, run the commands, hang up. A fresh connection per
+// call, since the daemon outlives any single tor process.
 const control = (id: string, commands: readonly string[]): Promise<string> =>
     new Promise((resolve, reject) => {
         void (async () => {
@@ -112,9 +99,8 @@ const control = (id: string, commands: readonly string[]): Promise<string> =>
                     return;
                 }
                 output += text;
-                // Every reply line that is not "250" is tor telling us the command was wrong or impossible,
-                // and it is worth surfacing verbatim: "551 Couldn't set ExitNodes" is the message a user needs
-                // when a country has no exits at all.
+                // Any non-"250" reply is tor rejecting the command; surfaced verbatim since it names what a country
+                // lacks.
                 const bad = output.split("\r\n").find((line) => /^[45]\d\d/.test(line));
                 if (bad !== undefined) {
                     done(new Error(`tor refused: ${bad.trim()}`));
@@ -128,12 +114,11 @@ const control = (id: string, commands: readonly string[]): Promise<string> =>
         })();
     });
 
-// This driver's two constants (where the pidfile is, what must still be running) bound to the shared pair.
+// This driver's pidfile/process-name pair, bound to the shared liveness check.
 const livePid = (id: string): Promise<number | undefined> => livePidOf(pidPath(id), "tor");
 
-// Bootstrapped, per tor's own log. Reading the log rather than polling the SOCKS port because the port opens
-// early and accepts connections that then hang: "the proxy is listening" and "tor can build a circuit" are
-// different facts and only the second one means the exit works.
+// Reads the log rather than polling SOCKS: the port opens and accepts connections before tor can actually build a
+// circuit.
 const awaitBootstrap = async (id: string): Promise<void> => {
     const deadline = Date.now() + BOOTSTRAP_TIMEOUT_MS;
     for (;;) {
@@ -151,9 +136,8 @@ const awaitBootstrap = async (id: string): Promise<void> => {
     }
 };
 
-// The exit-relay census, off the Tor Project's own directory. `share` is exit probability, which is the number
-// that matters: relay COUNT alone would rank the United States first on 1,171 low-bandwidth relays when the
-// Netherlands carries three times the traffic on half as many.
+// The exit-relay census, off the Tor Project's own directory. Ranked by exit probability, not relay count: a country
+// can run many low-bandwidth relays and still carry a small share of traffic.
 const fetchCatalog = async (): Promise<ExitPoint[] | undefined> => {
     const response = await fetch(ONIONOO_URL, { signal: AbortSignal.timeout(20_000) }).catch(() => undefined);
     if (response === undefined || !response.ok) {
@@ -174,9 +158,7 @@ const fetchCatalog = async (): Promise<ExitPoint[] | undefined> => {
         counts.set(code, (counts.get(code) ?? 0) + 1);
         shares.set(code, (shares.get(code) ?? 0) + (relay.exit_probability ?? 0));
     }
-    /* Re-shared and re-sorted: rankCountries splits by relay COUNT, which is the wrong axis for tor. The
-     * United States runs 1,171 mostly-slow relays and carries under a tenth of exit traffic; the Netherlands
-     * carries three times as much on half as many. Exit probability is what a user actually feels. */
+    // rankCountries sorts by relay count; re-sorted here by exit probability, the axis a user actually feels.
     const shared: ExitPoint[] = rankCountries(counts).map((point) => ({
         country: point.country,
         countryName: point.countryName,
@@ -196,7 +178,7 @@ const cachedCatalog = async (): Promise<{ countries: readonly ExitPoint[]; live:
     }
     const fresh = await fetchCatalog();
     if (fresh === undefined) {
-        // A cache past its TTL still beats the baked list: it is this network, just a few hours stale.
+        // A cache past its TTL still beats the baked list: it's this network, only a few hours stale.
         return cached === undefined ? { countries: TOR_FALLBACK, live: false } : { countries: cached.countries, live: false };
     }
     await mkdir(exitDir(), { recursive: true, mode: 0o700 }).catch(() => undefined);
@@ -215,8 +197,7 @@ const launch = async (id: string, country: string | undefined): Promise<void> =>
             throw new Error("tor could not be started");
         }
         await writeFile(pidPath(id), String(child.pid), { mode: 0o600 });
-        // Detached and unref'd: tor outlives the turn that started it, and the daemon must not hold a handle
-        // that keeps its event loop alive or inherit its exit.
+        // Detached and unref'd: tor outlives the turn that started it; the daemon must not hold its event loop open.
         child.unref();
     } finally {
         await handle.close();
@@ -225,16 +206,14 @@ const launch = async (id: string, country: string | undefined): Promise<void> =>
 
 const halt = (id: string): Promise<void> => haltClient(pidPath(id), "tor");
 
-// Where tor is currently aimed, then aim it somewhere else. SETCONF alone is not enough: it governs circuits
-// built from now on, and existing ones keep their exits, so NEWNYM has to follow or the next request comes out
-// of the old country and the observation (rightly) fails the switch.
+// SETCONF alone isn't enough: it governs circuits built from now on, and existing ones keep their exit, so NEWNYM must
+// follow or the next request comes out of the old country.
 const aim = async (id: string, country: string | undefined): Promise<void> => {
     await control(id, [
         country === undefined ? "RESETCONF ExitNodes\r\nRESETCONF StrictNodes" : `SETCONF ExitNodes="{${country.toLowerCase()}}" StrictNodes=1`,
         "SIGNAL NEWNYM",
     ]);
-    // The torrc is rewritten too, so a tor restarted by the boot restore comes up where it was last aimed
-    // rather than back at the manifest's resting country.
+    // Rewritten too, so a tor restarted by the boot restore comes up aimed where it last was.
     await writeFile(torrcPath(id), torrc(id, country), { mode: 0o600 }).catch(() => undefined);
 };
 
@@ -250,8 +229,7 @@ export const torDriver: ExitDriver = {
     async *start(id, config, country): AsyncGenerator<IntenticLine> {
         const wanted = country ?? config.country;
         if ((await livePid(id)) !== undefined) {
-            // Already running: this is a MOVE, not a second tor. Cheap, and the reason a country switch on an
-            // established exit is a second rather than a fresh bootstrap.
+            // Already running: this is a move, not a second tor, and cheap, unlike a fresh bootstrap.
             yield { kind: "log", message: `Re-aiming ${id}${wanted === undefined ? " (any country)" : ` at ${wanted}`}…` };
             await aim(id, wanted);
             await writeSelection(id, { country: wanted });
@@ -270,8 +248,7 @@ export const torDriver: ExitDriver = {
         }
         yield { kind: "log", message: "Asking tor for fresh circuits…" };
         await control(id, ["SIGNAL NEWNYM"]);
-        // Tor accepts NEWNYM at most every 10s and drops the rest silently, so the wait is what makes a
-        // second rotate mean anything. Also gives the new circuits time to be built before the check.
+        // Tor silently drops a NEWNYM asked within 10s of the last; the wait makes a second rotate mean anything.
         await sleep(NEWNYM_COOLDOWN_MS);
     },
     stop: async (id) => {
@@ -283,7 +260,7 @@ export const torDriver: ExitDriver = {
                 return { state: "unavailable" };
             }
             const log = await logTail(logPath(id), 4);
-            // A log with content and no process is a start that failed; the reason is worth carrying up.
+            // A log with content and no live process is a failed start; the reason is worth carrying up.
             return log === "" ? { state: "down" } : { state: "failed", detail: log.split("\n").at(-1) };
         }
         const log = await readFile(logPath(id), "utf8").catch(() => "");

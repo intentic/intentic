@@ -8,17 +8,11 @@ import { jsonBody } from "../../sandbox/client/jsonBody";
 import type { FleetAgent } from "./useAgents-fleet";
 import { markSeen, registry } from "./useAgents-registry";
 
-/* WHAT ONE CARD CAN BE TOLD TO DO: the per-agent writes (a rename, a posture override, a stranded turn sent
- * again, a watch disarmed) and opening its chat. Each optimistic write stamps the roster entry IN PLACE and
- * reverts against the CURRENT roster on refusal; see the fingerprint note in useAgents-registry for why that
- * in-place write is what every surface repaints on, and why it self-heals. */
+// What one card can be told to do: per-agent writes (rename, posture override, resend, disarm a watch) and opening its
+// chat. Each optimistic write stamps the roster entry in place and reverts against the current roster on refusal.
 
-// Rename an agent: sync the open conversation's title ref first (docked tab, detail header, and the
-// localStorage tab snapshot all follow it), then write the registry through the daemon. A card with no
-// registry entry is a draft, its title lives client-side and rides the next turn body, but the POST still
-// fires best-effort to cover the send→first-roster-frame window where the entry exists but hasn't painted.
-// Registered agents update optimistically; on failure both sides revert (re-resolved against the CURRENT
-// roster, an SSE frame may have replaced it mid-flight) and the error propagates to the caller's inline UI.
+// Renames sync the open conversation's title ref first, then write the registry through the daemon. A card with no
+// registry entry updates client-side only, best-effort posted to cover the send-to-first-roster-frame window.
 export const rename = async (id: string, title: string): Promise<void> => {
     const trimmed = title.trim();
     const { conversations } = useChat();
@@ -40,7 +34,7 @@ export const rename = async (id: string, title: string): Promise<void> => {
         const summary = await post();
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
-        // Revert on whatever the roster holds NOW, an SSE frame may have replaced the array (and `previous`).
+        // Revert on whatever the roster holds now: an SSE frame may have replaced the array (and `previous`).
         const target = registry.value.find((agent) => agent.id === id);
         if (target !== undefined) {
             target.title = revertTitle;
@@ -52,11 +46,8 @@ export const rename = async (id: string, title: string): Promise<void> => {
     }
 };
 
-// Set or clear (null ⇒ inherit the sandbox setting) an agent's auto-land override, whether ITS clean turns
-// keep applying to the workspace at completion, or wait on the branch for a deliberate Land. Same optimistic
-// grammar as rename: the registry entry flips in place (every surface stating the posture repaints on the
-// tick of the click), the daemon's summary replaces it, and a failure reverts against the CURRENT roster and
-// propagates for the caller's inline reporting.
+// Sets or clears (null: inherit the sandbox setting) whether this agent's clean turns auto-land or wait for a
+// deliberate Land. Same optimistic grammar as rename.
 export const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.autoLand;
@@ -75,11 +66,8 @@ export const setAutoLand = async (id: string, autoLand: boolean | null): Promise
     }
 };
 
-/* Set or clear (null ⇒ inherit the sandbox setting) THIS conversation's outage-resume override, whether a
- * turn the model provider killed is picked back up by itself. Identical optimistic grammar to setAutoLand
- * above, and deliberately a sibling of it rather than a call into settings: the press this serves is made
- * inside one chat about one dead turn, and writing the sandbox-wide toggle for it, which is what used to
- * happen, armed every other agent on the board without ever saying so. */
+// Sets or clears this conversation's outage-resume override; deliberately a sibling of setAutoLand rather than a
+// settings call, since the press is about one dead turn, not the sandbox-wide default.
 export const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.resumeAfterOutage;
@@ -101,14 +89,9 @@ export const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolea
     }
 };
 
-/* The same override for the blocker that comes back on a clock: whether the turn a spent allowance refused is
- * sent again by itself when the window reopens. Same optimistic grammar as its neighbour above, and the same
- * scope argument, one card's press speaks for one card.
- *
- * The press this serves is on the BOARD as well as in the chat, which is the one thing that differs and the
- * reason it matters: an outage is over in minutes and is met by whoever is in the room, while an allowance
- * reopens hours later, so the person deciding is usually looking at a lane of stranded cards rather than at the
- * transcript of any one of them. */
+// The same override for a clock-based blocker: whether a spent-allowance refusal resends itself when the window
+// reopens. Reachable from the board too, since the person deciding is often looking at a lane of stranded cards rather
+// than one transcript.
 export const setResumeAfterLimit = async (id: string, resumeAfterLimit: boolean | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.resumeAfterLimit;
@@ -130,9 +113,8 @@ export const setResumeAfterLimit = async (id: string, resumeAfterLimit: boolean 
     }
 };
 
-/* The third posture of the same grammar: whether a spent allowance MOVES this conversation's held turn to another
- * account of the same provider with room, the moment the refusal lands (SandboxSettings.moveAfterLimit has the
- * policy and what a move costs). Same optimistic write, same one-card scope. */
+// The third posture of the same grammar: whether a spent allowance moves this conversation's held turn to another
+// account with room, the moment the refusal lands.
 export const setMoveAfterLimit = async (id: string, moveAfterLimit: boolean | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.moveAfterLimit;
@@ -151,28 +133,16 @@ export const setMoveAfterLimit = async (id: string, moveAfterLimit: boolean | nu
     }
 };
 
-/* SEND A STRANDED TURN AGAIN, the board's half of the chat's pick-up strip: the daemon is still holding the
- * turn a spent allowance refused, so this re-RUNS that turn rather than appending a message saying "carry on"
- * (agent.contract's `resume`, and events.ts's `held` for the transcript full of the word "Continue" that
- * argument was won with).
- *
- * NOT optimistic, unlike its neighbours above. Those write a posture, where the honest thing to show while the
- * request is in flight is the value the user just chose; this starts a TURN, and the card that says so is the
- * one the daemon frames a moment later. Guessing would put a running card on the board over a request that may
- * yet answer NOT_FOUND, which is exactly what a hold lost to a daemon restart does. */
+// Sends a stranded turn again by re-running it, rather than appending a "carry on" message. Not optimistic, unlike its
+// neighbours: this starts a turn, and guessing would show a running card over a request that may still answer
+// NOT_FOUND.
 export const resumeHeldTurn = async (id: string): Promise<void> => {
     await sandboxJson<{ run: string }>(`/agent/resume`, jsonBody(`POST`, { conversationId: id }));
 };
 
-/* DISARM EVERY OUTSIDE CONDITION THIS CONVERSATION IS PARKED ON (AgentSummary.watches), the user's way out of
- * an arrangement the agent entered into on their behalf.
- *
- * Optimistic like its two neighbours above, and for a sharper reason than symmetry: this press moves the card
- * across the board. Dropping the watches is what takes the conversation out of Active (agentStatus.laneOf), so
- * a press that waited on the round trip would leave the card sitting in the lane it was pressed out of, wearing
- * a readout that says it is still waiting. Reverted the same way if the daemon refuses, since a card that
- * quietly stopped mentioning a watch that is still armed is the exact failure this whole feature exists to
- * remove. */
+// Disarms every outside condition this conversation is parked on. Optimistic, since dropping the watches is what moves
+// the card out of Active; a press that waited for the round trip would leave the card sitting in the lane it was
+// pressed out of.
 export const stopWatching = async (id: string): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.watches;
@@ -191,9 +161,8 @@ export const stopWatching = async (id: string): Promise<void> => {
     }
 };
 
-// Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
-// cards and client-only draft cards both route through it.
-// A card, as the seed every window can rebuild its tab from (useChat.agentTabOf takes it from here).
+// Opens or focuses an agent's tab and marks it seen; takes just the identity fields so registry cards and client-only
+// draft cards both route through it.
 export const agentSeed = (
     agent: Pick<
         FleetAgent,
@@ -217,24 +186,18 @@ export const agentSeed = (
     id: agent.id,
     provider: agent.provider,
     harness: agent.harness,
-    // The box the card came from, so a tab opened for an agent in another sandbox is addressed there rather
-    // than asking this daemon about a conversation it has never heard of (AgentTabSeed.sandboxId).
+    // The box the card came from, so a tab for an agent in another sandbox is addressed there rather than asked of this
+    // daemon.
     ...(agent.sandboxId !== undefined ? { sandboxId: agent.sandboxId } : {}),
     ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
-    /* A client-only card, a draft, a refused send, a turn the daemon has not filed yet, is NOT a
-     * registered conversation, and claiming so here would erase the card under the click and pin the empty
-     * tab open past the focus-leave sweep.
-     *
-     * The erasure is not hypothetical: while a sent-but-unfiled turn reported the wire's `running`, this
-     * read it as registered and latched the tab, and the card left the board on the very click meant to open
-     * it, the drafts half skips a registered conversation and the registry has no entry to draw instead, so
-     * the agent was on no lane at all until a reload re-derived it. See `starting` in agentStatus.ts. */
+    // A client-only card (a draft, a refused send, an unfiled turn) is not a registered conversation; claiming so here
+    // erases the card under the click and pins the empty tab open past the focus-leave sweep.
     registered: !unregistered(agent.status),
     ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
     ...(agent.title !== undefined ? { title: agent.title } : {}),
     ...(agent.account !== undefined ? { account: agent.account } : {}),
-    // The settings this agent's turns ran under, so the composer opens describing THIS agent rather than
-    // the last pick made in some other tab. Absent on a draft, it has run nothing to describe.
+    // The settings this agent's turns ran under, so the composer describes this agent, not the last pick made
+    // elsewhere.
     ...(agent.model !== undefined ? { model: agent.model } : {}),
     ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
     ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
@@ -243,16 +206,8 @@ export const agentSeed = (
     ...(agent.tierHold !== undefined ? { tierHold: agent.tierHold } : {}),
 });
 
-/* Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's (the
- * chat can be floating in a window of its own), so the reveal is broadcast and every window, this one included,
- * applies the same thing (summon.ts).
- *
- * A PLAIN CLICK ON A CARD IS A LOOK (`peek`), the mode the workspace editor opens a file in when you single-click
- * it in the tree: the tab lives while you are reading it and is swept the moment you point at something else, so
- * skimming a lane of forty agents costs the chat one tab rather than forty. The gestures that mean more than a
- * look, opening the review, sending it a message, giving it a column, say `keep`, which is the default here on
- * purpose: a caller that has not thought about it is doing something deliberate. What a peek promises is only
- * possible because closing a chat's tab destroys nothing (see Conversation.peek). */
+// Opening a card is a summons, not a store call, since the chat panel showing it may be another window's. A plain click
+// is a look (`peek`), swept the moment you point elsewhere; anything more deliberate says `keep`, the default.
 export const open = (agent: Parameters<typeof agentSeed>[0], mode: "peek" | "keep" = `keep`): void => {
     const seed = agentSeed(agent);
     summonChat({ kind: `reveal`, verb: `show`, entries: [agentTabOf(seed)], focus: seed.id, caret: false, peek: mode === `peek` });

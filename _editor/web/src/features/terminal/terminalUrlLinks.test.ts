@@ -1,17 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { findUrls, type RowAt, runStart } from "./terminalUrlLinks";
 
-/* The stitching rules ARE the contract here: too strict and a wrapped OAuth URL stays a dead link (the bug
- * this exists to fix), too loose and the prose under a URL gets swallowed into it. Rows are given as plain
- * right-trimmed strings: exactly what the provider's cell read hands the scan. */
+// Pins the stitching rules on plain, right-trimmed row strings, exactly what the buffer-cell read hands the scan.
 
 const rows =
     (...lines: string[]): RowAt =>
     (row) =>
         lines[row];
 
-// A `claude` login panel: prose, then the OAuth URL hard-wrapped at the panel's narrower width (real newlines,
-// every continuation indented), then the prompt underneath.
+// claude's login panel: prose, then the OAuth URL hard-wrapped at the panel's width, then the prompt.
 const OAUTH_LINES = [
     `Browser didn't open? Use the url below to sign in:`,
     `  https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9&`,
@@ -45,7 +42,6 @@ describe(`findUrls`, () => {
     });
 
     it(`stops at the prose under a URL rather than swallowing it`, () => {
-        // The row below reaches the URL's end but has interior spaces: it is a sentence, not a fragment.
         const [span] = findUrls(rows(`https://example.com/authorize?code=true&`, `Waiting for authentication...`), 0, 0);
         expect(span?.url).toBe(`https://example.com/authorize?code=true&`);
         expect(span?.endRow).toBe(0);
@@ -57,7 +53,6 @@ describe(`findUrls`, () => {
     });
 
     it(`does not continue a URL that has anything after it on its row`, () => {
-        // It doesn't reach the row's end, so the solid run below is unrelated output.
         const [span] = findUrls(rows(`see https://example.com/a (docs)`, `unrelated-solid-run`), 0, 0);
         expect(span?.url).toBe(`https://example.com/a`);
         expect(span?.endRow).toBe(0);
@@ -83,11 +78,10 @@ describe(`findUrls`, () => {
     });
 
     it(`rejects a match the browser would not open as the row shows it`, () => {
-        // Unparseable, and (matching xterm's own rule) a host the parser would rewrite before opening (an
-        // IDN becomes punycode), so a link never goes somewhere other than the row reads.
+        // Unparseable, or a host that would be rewritten before opening (an IDN to punycode), never opens as shown.
         expect(findUrls(rows(`https://[bad`), 0, 0)).toEqual([]);
         expect(findUrls(rows(`https://例え.jp/x`), 0, 0)).toEqual([]);
-        // Userinfo survives, though: `origin` drops it, so the check spells the shown form out.
+        // Userinfo survives: `origin` drops it, so the check spells out the shown form.
         expect(findUrls(rows(`https://user:pw@example.com/x`), 0, 0)[0]?.url).toBe(`https://user:pw@example.com/x`);
     });
 
@@ -102,7 +96,7 @@ describe(`findUrls`, () => {
 describe(`runStart`, () => {
     it(`walks up from a mid-URL fragment to the row the URL starts on`, () => {
         const rowAt = rows(...OAUTH_LINES);
-        // Hovering any fragment must reach row 1: the prose above it is where the walk stops.
+        // Any hovered fragment walks back to row 1, the prose line that stops it.
         expect(runStart(rowAt, 4)).toBe(0);
         expect(runStart(rowAt, 2)).toBe(0);
     });

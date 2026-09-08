@@ -1,17 +1,14 @@
 import type { IntentSet } from "./intent.js";
 
-// The abstract capabilities an intent requires, independent of which concrete option fills them. The
-// need resolver derives these from apps; the catalog maps each to the options that can satisfy it.
+// The abstract capabilities an intent requires, independent of which concrete option fills them.
 export type Capability = "source-control" | "docker-registry" | "infra-control" | "deployment-target" | "domain";
 
-// Which plane a capability belongs to. Control = the deploy machinery (git, registry, orchestration);
-// application = what serves the app (its runtime target and public domain). Orthogonal to scope below.
+// Which plane a capability belongs to: control (deploy machinery) or application (what serves the app).
+// Orthogonal to scope.
 export type Plane = "control" | "application";
 
-// One required capability at one scope, on one plane. Control-plane capabilities (source-control,
-// docker-registry, infra-control) are scoped to the control-plane host, one platform shared across
-// all hosts. Deployment-target is host-scoped (one per host with apps/services). Domain is
-// cloud-scoped (one per Cloudflare account).
+// One required capability at one scope, on one plane. Control-plane capabilities are scoped to the control-plane
+// host; deployment-target is host-scoped; domain is cloud-scoped.
 export interface Need {
     readonly capability: Capability;
     readonly scope: string;
@@ -26,18 +23,16 @@ const planeOf: Readonly<Record<Capability, Plane>> = {
     domain: "application",
 };
 
-// The control-plane capabilities: one git/CI/deploy stack shared across all hosts. Scoped to the
-// control-plane host. Separate from deployment-target, which is per host.
+// The control-plane capabilities: one git/CI/deploy stack shared across all hosts, scoped to the control-plane
+// host.
 const controlPlaneCapabilities: readonly Capability[] = ["source-control", "docker-registry", "infra-control"];
 
-// The control-plane host: the first declared host that has apps, falling back to the first declared
-// host (for services-only intents). Returns undefined when no hosts are declared.
+// The control-plane host: the first declared host that has apps, falling back to the first declared host.
 export const controlPlaneHostId = (intent: IntentSet): string | undefined =>
     (intent.hosts.find((h) => intent.apps.some((a) => a.on === h.id)) ?? intent.hosts[0])?.id;
 
-// What an intent requires: any apps/services mean the derived control-plane host needs control-plane
-// capabilities, each host with apps/services needs a deployment target, and the Cloudflare account
-// needs a domain. Validates that every app/service references a declared host.
+// What an intent requires: apps/services mean the derived control-plane host needs control-plane capabilities,
+// each host with apps/services needs a deployment target, and the Cloudflare account needs a domain.
 export const resolveNeeds = (intent: IntentSet): Need[] => {
     if (intent.apps.length === 0 && intent.services.length === 0 && intent.workspaces.length === 0 && intent.backings.length === 0) {
         return [];
@@ -58,8 +53,7 @@ export const resolveNeeds = (intent: IntentSet): Need[] => {
             throw new Error(`app/service/workspace/backing targets undeclared host "${hostId}"; declare it with i.have.host`);
         }
     }
-    // A workspace's agent tools must reference declared services (the state resolver further checks the
-    // service kind exposes an MCP endpoint, which needs the catalog it owns).
+    // A workspace's agent tools must reference declared services.
     const serviceIds = new Set(intent.services.map((service) => service.id));
     for (const workspace of intent.workspaces) {
         for (const toolId of workspace.tools ?? []) {

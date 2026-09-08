@@ -1,16 +1,11 @@
-/* WHY A WORKFLOW GRAPH IS NOT RUNNABLE, the rules that `WorkflowSchema` cannot state, because each of them is
- * about the graph rather than about one field.
- *
- * A rule per function, so the reason a graph is refused reads as one sentence in one place. They are
- * concatenated in the order the user meets them: what is wrong with the ids, then what is wrong with each step,
- * then what is wrong BETWEEN steps.
- */
+// Rules a workflow graph fails that WorkflowSchema can't express, one function per rule, since each is about the graph
+// rather than one field. Concatenated in the order a user meets them: ids, then each step, then between steps.
 
 import { duplicateOutputFieldNames } from "../policy/output-fields.js";
 import type { Workflow, WorkflowStep } from "../schemas/workflows.js";
 
-// One id, one node: the scheduler keys needs, runs and the drawn graph by it, so a repeat makes the same node
-// mean two things.
+// One id, one node: the scheduler keys needs, runs and the drawn graph by it, so a repeated id makes one node mean two
+// things.
 const duplicateIdFaults = (steps: readonly WorkflowStep[]): string[] => {
     const seen = new Set<string>();
     const faults: string[] = [];
@@ -23,11 +18,9 @@ const duplicateIdFaults = (steps: readonly WorkflowStep[]): string[] => {
     return faults;
 };
 
-// A step that continues a session needs exactly one session to continue. Zero (a root) has nothing to carry on
-// from; two would have to pick, and picking silently is how a workflow quietly drops half its context.
+// A step continuing a session needs exactly one to continue: zero is a root, two would have to silently pick which.
 const continuesOneSession = (step: WorkflowStep): boolean => step.handoff === "continue" && step.needs.length === 1;
 
-// What is wrong with this step on its own, given the ids the workflow actually has.
 const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
     const faults = step.needs
         .filter((need) => !ids.has(need))
@@ -49,26 +42,12 @@ const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
             ),
         );
     }
-    /* A STEP THAT DECLARES NOTHING IS NOT A FAULT, it is the ordinary step, and this used to refuse it.
-     *
-     * The rule was borrowed from loops (`loopCanConverge`), where it is right: a LOOP is started to repeat
-     * until something is true, so one with nothing to produce and nothing to check has no reason to run twice
-     * and the dialog is correct to grey out its button. A STEP is not started to repeat. It is one agent
-     * session with a job, and the job being done is the turn ending, which is exactly what the loop machinery
-     * already does with it (loop-stop's `readDocument` answers `done` for a `none` output, so iteration 1 is
-     * the only iteration).
-     *
-     * Keeping the rule here forced every step to declare an output or a check before the graph would save, and
-     * the cheapest way to satisfy it was a `claim`, which buys a verdict file nobody reads, a page of contract
-     * in the prompt, and a way for a step that did the work to fail for not having described it.
-     */
+    // A step declaring no output is not a fault, unlike a loop; it just ends when the turn does.
     return faults;
 };
 
-/* Two steps continuing the SAME session is the one graph that is legal on paper and broken in practice: both
- * would run on one conversation, in parallel, against one worktree and one turn mutex, so they would serialize
- * on a lock neither knows about and the second would inherit a session the first had moved on. A predecessor
- * can be continued once; anything else that needs its result takes it as a handover. */
+// Two steps continuing the same session would run in parallel against one worktree and turn mutex; only one may
+// continue a given predecessor, others must take a handover.
 const sharedContinuationFaults = (steps: readonly WorkflowStep[]): string[] => {
     const continued = new Map<string, string[]>();
     for (const step of steps.filter(continuesOneSession)) {
@@ -82,8 +61,8 @@ const sharedContinuationFaults = (steps: readonly WorkflowStep[]): string[] => {
         .map(([parent, titles]) => `${titles.map((title) => `"${title}"`).join(" and ")} all continue "${parent}"'s session; only one step can.`);
 };
 
-// Cycles, by walking every path from every root. A workflow with a cycle has steps that can never start, and the
-// scheduler would simply wait forever on them rather than saying so.
+// Finds cycles by walking every path from every root; the scheduler would otherwise wait forever on steps that can
+// never start.
 const cycleFaults = (steps: readonly WorkflowStep[]): string[] => {
     const needsById = new Map(steps.map((step) => [step.id, step.needs]));
     const state = new Map<string, "open" | "closed">();
@@ -110,15 +89,8 @@ const cycleFaults = (steps: readonly WorkflowStep[]): string[] => {
     return faults;
 };
 
-/* A GATE THAT CANNOT BE ANSWERED. Every rule here is about the gate against the GRAPH, which is why none of
- * them can live in the schema, and all of them fail the same expensive way if unchecked: the run spends its
- * whole fan-out of sessions and then answers `blocked`, on every commit, for a reason nobody sees until they
- * go reading the daemon's log.
- *
- * The `string[]` refusal is the least obvious and the most worth having. A release decision is one value
- * compared against a list of values that ship; a field holding several has no such reading, and the one the
- * gate would fall into (join them and compare the string) is a rule nobody wrote down and nobody could guess.
- */
+// Gate-against-graph rules that can't live in the schema; unchecked, a run pays for its whole fan-out before failing
+// every commit. A field holding a list has no reading as a release decision, so it is refused outright.
 const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     const { gate } = workflow;
     if (gate === undefined) {
@@ -138,20 +110,16 @@ const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     if (field.type === "string[]") {
         return [`The gate reads "${gate.field}", which is a list: a release decision has to be one value.`];
     }
-    // The schema refuses this on save (pass is min(1)), but the designer edits drafts the schema never sees,
-    // and an empty allowlist is a gate no run could ever answer "pass", which deserves a sentence, not a save error.
+    // Schema requires pass.length >= 1 only at save; a live-edited draft can still have an empty allowlist.
     if (gate.pass.length === 0) {
         return [`The gate names no passing values, so no run could ever ship.`];
     }
-    // A field the step may legally omit is a gate that answers `blocked` whenever it does, which is a release
-    // stuck on a technicality rather than on the product.
+    // An optional field's gate would block on the one run where the model chose not to write it.
     return field.required ? [] : [`The gate reads "${gate.field}", which "${step.title}" declares optional, it has to be required.`];
 };
 
-/* Why the graph is not runnable, as a list of sentences. Empty ⇒ it is. Shared by the save route (which
- * refuses) and the designer (which shows them under the canvas as you type), because a rule enforced only
- * daemon-side is a rule the user meets as a failed save with no idea which node is wrong.
- */
+// All faults that make a graph unrunnable, empty when there are none. Shared by the save route and the designer, so the
+// same rule surfaces the same way in both.
 export const workflowFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     const ids = new Set(workflow.steps.map((step) => step.id));
     return [
@@ -163,16 +131,8 @@ export const workflowFaults = (workflow: Pick<Workflow, "steps" | "gate">): stri
     ];
 };
 
-/* WHAT ONLY A RUN CAN BE WRONG ABOUT, kept apart from the rules above because it is not about the graph, and
- * the graph is what gets SAVED. A design whose steps take their goal and instruction from the request is a
- * perfectly good design; it is only unrunnable on the particular run that forgot to bring one.
- *
- * Which is why this cannot be a save-time rule and must not become one: refusing to save such a workflow would
- * outlaw the entire point of a workflow being a SHAPE. The check belongs at the two doors that start runs, the
- * run route and the gate's webhook, and it has to be there rather than left to fail later, because "later"
- * means every session in the fan-out has already been paid for before anyone finds out the model was handed an
- * empty instruction.
- */
+// Faults only a run reveals, not a save: a design that takes goal/instruction from the request is fine to save, only
+// unrunnable without one. Checked at both doors that start a run, before sessions are opened.
 export const workflowRunFaults = (workflow: Pick<Workflow, "steps">, request: string | undefined): string[] => {
     if (request !== undefined && request.trim() !== "") {
         return [];

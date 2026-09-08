@@ -1,26 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-/* A thin typed client for the Stripe operations the hosted plan needs: a subscription checkout, the billing
- * portal, one subscription read, a cancel, a quantity change, and webhook signature verification. Hand-rolled
- * over fetch rather than the Stripe SDK, the stripe-api.ts precedent in the deploy engine: the platform's
- * CLAUDE.md model is "as few dependencies as the job allows", and the job here is six endpoints with stable
- * shapes. Injectable fetch for tests, like the trial pool's upstream.
- *
- * THE ADDRESS IS CONFIG TOO (`hostedPlan.stripeApiUrl`), and that is what lets the money path be tested as a
- * whole rather than module by module: the hermetic and browser tiers point this very client at a stand-in
- * that speaks Stripe's shapes (@intentic/testing/stripe-fake), so what runs under test is the request
- * encoding below, the parsing, the webhook, the mirror row and the page, with nothing swapped out but the
- * host. Production never sets it. */
+// Thin typed client for the six Stripe operations the hosted plan needs, hand-rolled over fetch rather than the SDK
+// (fewer dependencies). The host is config (hostedPlan.stripeApiUrl), never set in production, so tests point this same
+// client at a stand-in (@intentic/testing/stripe-fake) and exercise the whole money path.
 
-// What the client needs of the plan's config: the key it signs with and the host it talks to.
+// What the client needs from the plan's config: the signing key and the host to talk to.
 export interface StripeClientConfig {
     readonly stripeSecretKey: string;
     readonly stripeApiUrl: string;
 }
 
-/* WHY A REFUSAL HAPPENED, NOT MERELY THAT ONE DID. Every non-2xx from Stripe carries `{ error: { message } }`,
- * and that message is written for a person to act on; a dump of the response body names nothing. */
+// Why a refusal happened, not just that one did: Stripe's `{ error: { message } }` is meant for a person to act on.
 class StripeError extends Error {}
 
 const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
@@ -31,14 +22,14 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
     try {
         said = RefusalSchema.parse(JSON.parse(body)).error.message;
     } catch {
-        // Not Stripe's envelope, a proxy's HTML error page, a truncated body. Keep the raw evidence instead.
+        // Not Stripe's envelope (a proxy's HTML page, a truncated body); keep the raw evidence instead.
         said = undefined;
     }
     return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`);
 };
 
-// Stripe's request encoding is application/x-www-form-urlencoded with bracketed nesting; the plan only ever
-// needs one level of it, spelled literally at the call sites below.
+// Stripe encodes requests as x-www-form-urlencoded with bracketed nesting; the plan needs only one level, spelled
+// literally at each call site.
 const send = async (
     fetchFn: typeof fetch,
     client: StripeClientConfig,
@@ -74,13 +65,8 @@ const get = async (fetchFn: typeof fetch, client: StripeClientConfig, path: stri
 
 const SessionSchema = z.object({ url: z.url() });
 
-/* The subscription fields the plan mirror needs. `current_period_end` sits top-level on older API versions
- * and on the items on newer ones, read both, prefer the top. A subscription somehow carrying neither still
- * parses; the caller falls back to "now", which under-promises rather than inventing a date.
- *
- * `cancel_at_period_end` is what the portal's cancel sets while `status` stays active; without it the mirror
- * told people who had just cancelled that they would renew. The first item's id and quantity are the slot
- * count and the handle a slot change is addressed to (docs/design/billing-view.md). */
+// current_period_end sits top-level or on the first item (top preferred; missing falls back to `now`).
+// cancel_at_period_end tracks the portal's cancel; the item's id/quantity are the slot count and change target.
 const SubscriptionSchema = z.object({
     id: z.string(),
     customer: z.string(),
@@ -100,9 +86,9 @@ export interface StripeSubscription {
     readonly status: string;
     readonly currentPeriodEnd: Date;
     readonly cancelAtPeriodEnd: boolean;
-    // The one subscription item, empty when Stripe's answer carried none (a webhook's trimmed object).
+    // The one subscription item's id, empty when Stripe's answer carried none (a trimmed webhook object).
     readonly itemId: string;
-    // How many hosted sandboxes the plan covers. A subscription without a readable quantity is one slot.
+    // Hosted sandboxes the plan covers; a subscription without a readable quantity is one slot.
     readonly quantity: number;
 }
 
@@ -121,9 +107,8 @@ const toSubscription = (raw: unknown, now: () => Date): StripeSubscription => {
     };
 };
 
-// The subscription a webhook event is about (data.object), by id alone: its state is read fresh rather than
-// taken off the event (hosted-plan.routes.ts says why). Undefined for an object of some other shape, which
-// the route treats as "not for us" rather than an error.
+// The subscription id a webhook event names; state is re-read fresh rather than trusted off the event. Undefined for
+// any other object shape, read as not for us.
 const EventSubscriptionSchema = z.object({ id: z.string(), object: z.literal(`subscription`) });
 
 export const subscriptionIdOfEvent = (raw: unknown): string | undefined => {
@@ -132,11 +117,8 @@ export const subscriptionIdOfEvent = (raw: unknown): string | undefined => {
 };
 
 export interface StripeGateway {
-    /* A subscription-mode Checkout Session; the answer is the URL to send the browser to.
-     * `clientReferenceId` is the platform's user id, it comes back on checkout.session.completed and is the
-     * only join between a Stripe customer and a platform account. `customer` is the account's existing Stripe
-     * customer when it has one (a resubscriber), so one person is one customer with one invoice history
-     * rather than a new customer per checkout. */
+    // A subscription-mode Checkout Session; answers the browser's redirect URL. clientReferenceId is the platform's
+    // user id; customer addresses an existing Stripe customer for one invoice history.
     readonly checkoutSession: (opts: {
         readonly priceId: string;
         readonly clientReferenceId: string;
@@ -145,16 +127,16 @@ export interface StripeGateway {
         readonly successUrl: string;
         readonly cancelUrl: string;
     }) => Promise<{ url: string }>;
-    // A Billing Portal session for an existing customer, where cancel/payment-method changes happen, so the
-    // platform never grows its own subscription-management UI.
+    // Billing Portal session for an existing customer (cancel/payment-method changes), so the platform needs no
+    // subscription-management UI of its own.
     readonly portalSession: (customerId: string, returnUrl: string) => Promise<{ url: string }>;
-    // One subscription, read fresh, the webhook handler pulls this after checkout completes.
+    // One subscription, read fresh; the webhook handler pulls this after checkout completes.
     readonly subscription: (id: string) => Promise<StripeSubscription>;
-    // Cancel at once, the account is being deleted and there is nobody left to bill. Stripe answers the
-    // subscription in its final state.
+    // Cancels at once, for an account being deleted with nobody left to bill; answers the subscription in its final
+    // state.
     readonly cancelSubscription: (id: string) => Promise<StripeSubscription>;
-    // Set the one item's quantity (the slot count) with Stripe's default proration, so a slot added mid-month
-    // costs the rest of the month and a slot removed credits it. Answers the subscription as it now stands.
+    // Sets the one item's quantity (slot count) with Stripe's default proration, so a mid-month change is prorated;
+    // answers the subscription as it now stands.
     readonly setQuantity: (id: string, itemId: string, quantity: number) => Promise<StripeSubscription>;
 }
 
@@ -187,10 +169,10 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
         ),
 });
 
-// How far a webhook's timestamp may sit from now. Stripe's own recommended replay window.
+// How far a webhook's timestamp may drift from now; Stripe's own recommended replay window.
 const SIGNATURE_TOLERANCE_S = 300;
 
-// The header's `k=v` pairs, several values per key (secret rotation puts two v1 entries on one header).
+// The header's k=v pairs, several values per key (secret rotation puts two v1 entries on one header).
 const parseSignatureHeader = (header: string): Map<string, string[]> => {
     const parts = new Map<string, string[]>();
     for (const piece of header.split(`,`)) {
@@ -208,9 +190,8 @@ const sameDigest = (candidate: string, expected: string): boolean => {
     return a.length === b.length && timingSafeEqual(a, b);
 };
 
-/* Verify a Stripe-Signature header against the RAW request body: v1 = HMAC-SHA256(secret, "{t}.{payload}").
- * Several v1 entries are legal (secret rotation); any match passes. Constant-time compare, and the timestamp
- * tolerance is what makes a captured request expire instead of replaying forever. */
+// Verifies a Stripe-Signature header against the raw body: v1 = HMAC-SHA256(secret, `{t}.{payload}`); any of several v1
+// entries may match. Constant-time compare; the timestamp tolerance stops a captured request from replaying forever.
 export const verifyStripeSignature = (payload: string, header: string | undefined, secret: string, now: () => Date = () => new Date()): boolean => {
     if (header === undefined || secret === ``) {
         return false;

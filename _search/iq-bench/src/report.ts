@@ -41,8 +41,8 @@ const configTable = (rows: readonly CaseRow[]): string => {
 
 const LOSS_ROWS_CAP = 10;
 
-// Paired per-case comparison of every config against `full`, the decision view. Means at small N invite
-// over-reading; a stage's fate is decided by win/loss direction and the sign test, plus its recall/token cost.
+// Paired per-case comparison of every config against `full`; a stage's fate is decided by win/loss direction and the
+// sign test, not means at small N.
 const configVsFull = (rows: readonly CaseRow[]): string => {
     const fullByCase = new Map(
         rows.flatMap((row) => (row.config === "full" && row.score !== undefined ? [[`${row.repo}/${row.caseId}`, row.score] as const] : [])),
@@ -176,8 +176,8 @@ const pairedBlock = (label: string, pairs: ReadonlyArray<{ a: RunRecord; b: RunR
     return lines;
 };
 
-// Hard rule: runs are grouped per vendor+model and only within-model deltas are stated, never cross-model
-// absolute comparisons (different tokenizers, pricing, scaffolds).
+// Runs are grouped per vendor+model; only within-model deltas are stated, never cross-model absolute comparisons
+// (different tokenizers, pricing, scaffolds).
 export const renderAgentsReport = (records: readonly RunRecord[]): string => {
     if (records.length === 0) {
         return "# iq agent benchmark (tier 2)\n\nNo runs recorded.";
@@ -230,13 +230,12 @@ export const renderAgentsReport = (records: readonly RunRecord[]): string => {
 
 const mean = (values: readonly number[]): number | undefined => (values.length === 0 ? undefined : values.reduce((sum, value) => sum + value, 0) / values.length);
 
-// Paired on (sha, seed): every strategy saw exactly the same cases, so a win is a win on the same question.
+// Paired on (sha, seed): every strategy saw the same cases, so a win is a win on the same question.
 const impactVs = (rows: readonly ImpactRow[], challenger: string, baseline: string): string => {
     const keyed = (name: string): Map<string, ImpactRow> => new Map(rows.filter((row) => row.strategy === name).map((row) => [`${row.sha}:${row.seed}`, row]));
     const left = keyed(challenger);
     const right = keyed(baseline);
-    // A name that matches no rows used to render 0/0/0, which reads as a measured tie rather than a wiring
-    // mistake. It is the same class of bug as a thrown tool call scoring as a win, and it stays loud.
+    // A name matching no rows now errors loudly instead of rendering a misleading 0/0/0 tie.
     if (left.size === 0 || right.size === 0) {
         return `| ${challenger} vs ${baseline} | **no rows: strategy name does not exist** | | | |`;
     }

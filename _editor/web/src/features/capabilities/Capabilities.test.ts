@@ -1,30 +1,24 @@
 // @vitest-environment jsdom
-//
-// The FortiClient import is an AFFORDANCE, and the thing worth pinning is which one it offers. It used to be a
-// four-row textarea: the file FortiClient writes had to be found, opened in something, selected and copied out
-// before this page could do anything with it: enough steps that re-typing a gateway by hand was the faster
-// path, which is the same as the import not existing. So these mount the real card and DROP A FILE on it.
+// The FortiClient import is an affordance worth pinning: these tests mount the real card and drop a file on it,
+// since anything short of that (finding, opening, copying the config by hand) is slow enough to make re-typing a
+// gateway the faster path.
 import { expect, it, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 
-// The import-time globals a mounted view needs (see startAgent.test.ts): ui's useDevice reads matchMedia at
-// module scope, environment.ts reads window.env and throws without it.
+// Mounting reads matchMedia (useDevice) and window.env (environment.ts) at module scope; see startAgent.test.ts.
 
-// The page is URL-driven; the vpn card is what this file is about, so the route names it and nothing navigates.
-// The empty `query` is not padding: the rail's slice and the grid's filter are read off it, so a route without
-// one is a route vue-router never hands out. Partial, because the real router module is pulled in transitively
-// and still has to build itself.
+// URL-driven: the route names the vpn card and nothing navigates. Empty `query` isn't padding, the rail and grid
+// filter read off it, so a route without one is one vue-router never hands out.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRoute: () => ({ params: { card: `vpn` }, query: {} }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
 }));
 
-// Everything the page reads from the daemon, stubbed to an empty-but-settled sandbox: no capabilities added, no
-// extensions contributing cards, no tunnels up. The vpn card itself comes from the static catalog, so it is
-// present regardless: the card, its form and the import block are the whole subject.
+// Stubbed to an empty-but-settled sandbox (no capabilities, no extension cards, no tunnels); the vpn card comes
+// from the static catalog regardless, so it, its form, and the import block are the whole subject.
 vi.mock(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         hasCapability: () => true,
@@ -42,8 +36,8 @@ vi.mock(`./connect/useCapabilities`, () => ({
 vi.mock(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-// The Extension card's signpost reads the registry cache for its two counts. Empty here: the sentence renders
-// without them, which is exactly the state a first visit is in.
+// The Extension card's signpost reads two counts from here; empty renders the sentence without them, a first-visit
+// state.
 vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 vi.mock(`../terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
@@ -55,11 +49,10 @@ vi.mock(`../composables/sandbox/useHostConnect`, () => ({
 vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
-// The one daemon call the import makes. It takes XML and returns connections, so what the spy RECEIVES is the
-// proof the file was read here rather than handed over as a name the daemon could never open.
+// The one daemon call the import makes; what the spy receives (XML, not a filename) proves the file was actually
+// read here.
 const importForticlient = vi.fn<(xml: string) => Promise<ForticlientConnection[]>>();
-// The whole composable, not its list: the vpn card's rows are <VpnConnections>, which dials as well as lists,
-// and reads `error` on every render.
+// The whole composable, not just its list: <VpnConnections> both dials and lists, reading `error` on every render.
 vi.mock(`../sandbox/devices/useVpn`, () => ({
     importForticlient: (xml: string) => importForticlient(xml),
     useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
@@ -82,7 +75,7 @@ const mount = (): HTMLElement => {
     document.body.append(el);
     const app = createApp({ render: () => h(Capabilities) });
     app.component(`Icon`, IconStub);
-    // Registered app-wide by the router plugin in the real app, which this mount deliberately does without.
+    // Registered app-wide by the router plugin in the real app, which this mount deliberately skips.
     app.component(
         `RouterLink`,
         defineComponent({
@@ -97,16 +90,15 @@ const mount = (): HTMLElement => {
     return el;
 };
 
-// The zone is the only thing in the import block that can be dropped on, and it says what it wants in words.
+// The only droppable element in the import block; it names what it wants in words.
 const dropZone = (el: HTMLElement): HTMLButtonElement =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Drop the configuration file here`))!;
-// Everything the import section renders, and nothing the vpn FORM does: that form has a textarea of its own
-// (the WireGuard config field), so "no textarea" is only a true statement about this block. Anchored on the
-// file field rather than the zone: the zone relabels itself as it reads, and this has to resolve either way.
+// Everything the import section renders, not the vpn form (which has its own WireGuard textarea); anchored on the
+// file input rather than the zone, since the zone relabels itself as it reads.
 const importBlock = (el: HTMLElement): HTMLElement => el.querySelector<HTMLInputElement>(`input[type="file"]`)!.parentElement!;
 
-// jsdom has no DragEvent, and `dataTransfer` is not assignable on a plain Event: define it, which is all the
-// handler reads. `size`, likewise, is read-only on a real File and is what the refusal below turns on.
+// jsdom has no DragEvent and `dataTransfer` isn't assignable on a plain Event, so it's defined directly; `size` is
+// likewise read-only on a real File and is what the refusal test relies on.
 const dropFile = async (el: HTMLElement, file: File): Promise<void> => {
     const event = new Event(`drop`, { bubbles: true, cancelable: true });
     Object.defineProperty(event, `dataTransfer`, { value: { files: [file], types: [`Files`] } });
@@ -126,8 +118,7 @@ it(`reads a dropped configuration and lists its connections, with nothing to pas
     const el = mount();
 
     expect(dropZone(el)).toEqual(expect.any(Object));
-    // The paste lane is GONE, not merely deprioritised: a textarea left beside the zone is the step this
-    // change exists to remove, quietly still on offer.
+    // The paste lane is gone, not just deprioritised: no textarea sits beside the zone as a quiet fallback.
     expect(importBlock(el).querySelector(`textarea`)).toBeNull();
 
     await dropFile(el, configFile(`<forticlient_configuration/>`));

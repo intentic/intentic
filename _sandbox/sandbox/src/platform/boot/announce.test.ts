@@ -1,8 +1,8 @@
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Drive each register attempt's outcome from a queue: { status } acks with that HTTP code, { err: true }
-// simulates a transport failure. request() returns a fake ClientRequest whose .end() fires the outcome.
+// Each register attempt's outcome comes off a queue: `{ status }` acks with that code, `{ err: true }` simulates a
+// transport failure.
 const outcomes: Array<{ status?: number; err?: boolean }> = [];
 const requestMock = vi.fn((_url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
     const req = new EventEmitter() as EventEmitter & { end: () => void };
@@ -34,8 +34,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-// The request goes out synchronously; the VERDICT lands a microtask later (the post is awaited). Nothing about
-// the retry schedule changed with that: these just let the resolution happen before reading status().
+// Request fires synchronously; the verdict lands a microtask later (the post is awaited), so this drains before reading
+// status().
 const settle = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
@@ -47,7 +47,6 @@ describe("createAnnouncer", () => {
         createAnnouncer(config, logger).start();
 
         expect(requestMock).toHaveBeenCalledTimes(1);
-        // No reschedule after an ack: minutes later, still exactly one request.
         vi.advanceTimersByTime(120_000);
         expect(requestMock).toHaveBeenCalledTimes(1);
     });
@@ -57,7 +56,7 @@ describe("createAnnouncer", () => {
         createAnnouncer(config, logger).start();
         expect(requestMock).toHaveBeenCalledTimes(1);
 
-        // Backoff is 2s for the first retry; it then acks and never fires again.
+        // First retry backs off 2s, then acks and never fires again.
         await vi.advanceTimersByTimeAsync(2_000);
         expect(requestMock).toHaveBeenCalledTimes(2);
         await vi.advanceTimersByTimeAsync(120_000);
@@ -69,15 +68,15 @@ describe("createAnnouncer", () => {
             outcomes.push({ err: true });
         }
         createAnnouncer(config, logger).start();
-        // Well past the 10-minute give-up bound: the retry loop must terminate, not run forever.
+        // 20 minutes is well past the 10-minute give-up bound; the retry loop must actually stop.
         await vi.advanceTimersByTimeAsync(20 * 60_000);
         const settled = requestMock.mock.calls.length;
         await vi.advanceTimersByTimeAsync(20 * 60_000);
         expect(requestMock).toHaveBeenCalledTimes(settled);
     });
 
-    /* status() is what /health serves and what ic's postflight/doctor read: the container→platform link is
-     * observable nowhere else, so each verdict below is a sentence a user actually sees. */
+    // status() is what /health serves and ic's postflight/doctor read; each verdict below is a sentence a user actually
+    // sees.
     describe("status", () => {
         it("is off until started: a headless run has nothing to register with", () => {
             expect(createAnnouncer(config, logger).status()).toEqual({ state: "off" });
@@ -100,7 +99,7 @@ describe("createAnnouncer", () => {
             expect(rejected.state).toBe("rejected");
             expect(rejected.detail).toContain("HTTP 409");
             expect(rejected.retrying).toBe(true);
-            // The retry acks and the verdict moves on.
+            // Retry succeeds; the verdict moves from rejected to registered.
             await vi.advanceTimersByTimeAsync(2_000);
             expect(announcer.status().state).toBe("registered");
         });

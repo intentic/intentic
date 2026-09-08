@@ -8,27 +8,16 @@ import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 
-/* The Intentic sandboxes running on THIS machine, the supervisor's tools.
- *
- * A sandbox can never see its siblings by itself (its docker socket is deliberately not mounted), so "what runs
- * on this device, and start that one back up" can only be answered here, by the machine's own agent. These
- * tools are what lets the user delegate the machine's fleet to one sandbox: named operations enforced by the
- * `sandboxes` switch, instead of whatever a model improvises through a full shell.
- *
- * The scopes split by what the action DOES (the apps.ts rule): listing is a way of seeing and is subsumed by
- * EITHER grant, a shell could run `docker ps` itself, and a manager that may not look at what it manages is not
- * a coherent grant. Start/stop/restart change what the machine is doing, and take only the `sandboxes` switch.
- * Removal is the one that takes a switch of its own: everything else here is undone by doing it again.
- *
- * The three flows that swap or delete a container are NOT reimplemented here. They live in the `ic` CLI, which
- * every door onto this machine already runs, the pasted one-liner, the desktop app's buttons and a hand-typed
- * `ic` are one implementation, and this is the fourth caller of it rather than a second copy. That is the same
- * argument the desktop app makes for spawning the scripts instead of porting them into Rust. */
+// The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
+// isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
+// split by what the action does: listing is a way of seeing (either grant), start/stop/restart take
+// `sandboxes`, removal takes its own switch. The swap/remove flows run through the `ic` CLI rather than being
+// reimplemented, one implementation for every door onto this machine.
 
 const exec = promisify(execFile);
 
 // Long enough for `docker stop`'s grace period plus a slow disk; a docker CLI that takes longer than this is a
-// machine in trouble, and the tool is better off saying so than holding the call open.
+// machine in trouble.
 const DOCKER_TIMEOUT_MS = 120_000;
 
 const PREFIX = "intentic-sandbox-";
@@ -41,7 +30,7 @@ export interface DockerRow {
 }
 
 // Docker's own `--format '{{json .}}'` gives one JSON object per line; anything that is not one is a warning or
-// a banner riding along, and is skipped rather than thrown on.
+// banner riding along, skipped rather than thrown on.
 export const rowsFrom = (stdout: string): DockerRow[] =>
     stdout
         .split(/\r?\n/)
@@ -56,9 +45,9 @@ export const rowsFrom = (stdout: string): DockerRow[] =>
             }
         });
 
-/* A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own subdomain
- * may legitimately BE `tunnel-something`, so a name is only a sidecar when the workspace container it would
- * belong to actually exists. The same rule the desktop app applies natively; nothing here guesses. */
+// A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own subdomain
+// may legitimately BE `tunnel-something`, so a name is only a sidecar when the workspace container it would
+// belong to actually exists.
 export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
     const isSidecar = (name: string): boolean => {
         const slug = name.startsWith(TUNNEL_PREFIX) ? name.slice(TUNNEL_PREFIX.length) : undefined;
@@ -70,8 +59,9 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
             const slug = row.names.slice(PREFIX.length);
             const tunnel = rows.find((candidate) => candidate.names === `${TUNNEL_PREFIX}${slug}`);
             const sandbox: DeviceSandbox = { slug, container: row.names, running: row.state === "running", image: row.image };
-            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` KEY,
-            // absent and false are different facts (reached over the user's own proxy vs. tunnel down).
+            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` key: absent
+            // and
+            // false are different facts.
             if (tunnel !== undefined) {
                 sandbox.tunnelRunning = tunnel.state === "running";
             }
@@ -79,10 +69,8 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
         });
 };
 
-/* `windowsHide` here and on every other spawn in this agent: the connection loop runs detached, which on Windows
- * means it has no console of its own, and a console child of a console-less process is handed a BRAND-NEW
- * console, window and all. Without the flag, every `docker ps` behind a sandbox listing would flash a black
- * window on the user's desktop. */
+// `windowsHide` here and on every other spawn in this agent: the connection loop runs detached with no console
+// of its own, and a console child of a console-less process gets a brand-new console, window and all.
 const docker = async (args: readonly string[]): Promise<string> => {
     const { stdout } = await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") {
@@ -93,8 +81,7 @@ const docker = async (args: readonly string[]): Promise<string> => {
     return stdout;
 };
 
-// Exported for the auto-prepare tick (../auto-prepare.ts), the machine's own reader of its fleet: one
-// producer of "what runs on me", whoever is asking.
+// Exported for the auto-prepare tick (../auto-prepare.ts): one producer of "what runs on me", whoever is asking.
 export const fleet = async (): Promise<DeviceSandbox[]> =>
     sandboxesFrom(rowsFrom(await docker(["ps", "-a", "--filter", `name=^${PREFIX}`, "--format", "{{json .}}"])));
 
@@ -106,12 +93,10 @@ const envOf = (env: unknown, name: string): string | undefined =>
 
 const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\s+/).filter((token) => token !== "");
 
-/* ONE CONTAINER'S SHARE OF THE MACHINE, read off its `docker inspect` object. Pure, so the reading of
- * docker's shape is asserted without a daemon: `Memory` and `NanoCpus` are 0 for "unbounded" (absent here,
- * because 0 GiB is not a cap anyone set), a GPU is a DeviceRequest for the nvidia driver or the `gpu`
- * capability (both spellings docker writes for `--gpus`), and WHO asked for which directive is the pair of
- * env stamps the run contract leaves on the container (SANDBOX_RUNTIME the owner's, SANDBOX_OVERLAY_RUNTIME
- * the approved environment's). Anything unreadable reads as its default rather than as a guess. */
+// One container's share of the machine, read off its `docker inspect` object. `Memory`/`NanoCpus` are 0 for
+// "unbounded" (absent here), a GPU is a DeviceRequest for the nvidia driver or the `gpu` capability, and which
+// directive is whose is the pair of env stamps the run contract leaves on the container (SANDBOX_RUNTIME the
+// owner's, SANDBOX_OVERLAY_RUNTIME the approved environment's).
 // A docker limit field: a positive number is a cap, 0 (docker's "unbounded") and anything else is none.
 const capOf = (value: unknown): number | undefined => (typeof value === "number" && value > 0 ? value : undefined);
 
@@ -142,14 +127,10 @@ export const resourcesFrom = (inspected: unknown): SandboxResources | undefined 
     };
 };
 
-/* The fleet WITH each container's share of the machine: one `docker inspect` for all of them on top of the
- * `docker ps` above, which is why it is a second reader rather than the default one. `fleet()` answers "which
- * slug is this" for every op and the auto-prepare tick, none of which need a HostConfig; this is for the
- * listing a person or a model reads, where the caps and privileges are the point.
- *
- * A container that vanished between the two calls makes `docker inspect` exit non-zero with the OTHERS still
- * on stdout, so the partial answer is kept rather than thrown away — a row with no `resources` is honest;
- * a listing that failed because one sandbox was being removed is not. */
+// The fleet WITH each container's share of the machine: one `docker inspect` on top of the `docker ps` above.
+// `fleet()` answers "which slug is this" for every op, none of which need a HostConfig; this is for the listing
+// a person or model reads, where the caps and privileges are the point. A container that vanished between the
+// two calls makes `docker inspect` exit non-zero with the others still on stdout, so the partial answer is kept.
 export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
     const boxes = await fleet();
     if (boxes.length === 0) {
@@ -185,15 +166,13 @@ export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
     });
 };
 
-/* WHICH SLUGS AN `ic` FLOW IS TOUCHING RIGHT NOW, in this process. The background auto-prepare tick reads it
- * so a timer never starts a pull under an update someone is watching stream; the flows below write it. Only
- * advisory, and only one-way on purpose: a PERSON's click is never made to wait on the timer's work — the
- * flows race benignly (docker serialises the layer pulls, and ic's already-current check clears a staged
- * record the click made stale), so the set exists to keep the timer polite, not to lock anything. */
+// Which slugs an `ic` flow is touching right now, in this process. The background auto-prepare tick reads it so
+// a timer never starts a pull under an update someone is watching stream. Only advisory: a person's click never
+// waits on the timer's work, and the flows race benignly.
 export const icInFlight = new Set<string>();
 
 // The answer is the JSON itself: the daemon's Devices view reads it verbatim (device-reports.ts), and a model
-// reads keys as well as prose. One producer for both is what stops the tab and the tool from drifting.
+// reads keys as well as prose.
 export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
@@ -202,13 +181,12 @@ export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
 };
 
 // The ops themselves, in the one place that spells them: the MCP tool advertises this schema to the model and
-// checks an arriving call against it, so a name added here is offered and accepted in the same commit.
+// checks an arriving call against it.
 export const SandboxOpSchema = z.enum(["start", "stop", "restart"]);
 export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
-/* WHICH CONTAINER THE SLUG MEANS, or the machine's own answer that it means none, one lookup for every op,
- * because a wrong slug deserves the same sentence whichever button sent it, and because a flow that will take
- * minutes is owed the refusal NOW rather than after an image pull. */
+// Which container the slug means, or the machine's own answer that it means none: one lookup for every op, so a
+// wrong slug gets the same sentence whichever button sent it, and so a flow that will take minutes is refused now.
 const find = async (slug: string): Promise<DeviceSandbox> => {
     const boxes = await fleet();
     const target = boxes.find((box) => box.slug === slug);
@@ -230,26 +208,19 @@ export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostSco
     return `${verb} sandbox "${slug}"${sidecar.length === 0 ? "" : " and its tunnel"}.`;
 };
 
-/* ---- the flows that run `ic` ---- */
+// ---- the flows that run `ic` ----
 
-/* A swap is not a delete: update/rollback move the container onto another image and rebuild re-applies the
- * owner-approved overlay, all of them keeping /work and /history. Removal is the separate verb below.
- *
- * `prepare` is the odd one and belongs here anyway: it runs the SAME `ic` flow, over the same minutes, with
- * the same output to narrate, it just stops before the container is touched, downloading and building the
- * next update so that the update itself is a restart rather than a wait. Grouping it with the swaps is what
- * keeps one implementation of "run `ic`, stream what it says". */
+// A swap is not a delete: update/rollback move the container onto another image and rebuild re-applies the
+// owner-approved overlay, all keeping /work and /history. `prepare` runs the same flow but stops before the
+// container is touched, so the update that follows is a restart rather than a wait.
 export const SandboxSwapSchema = z.enum(["prepare", "update", "rebuild", "rollback"]);
 export type SandboxSwap = z.infer<typeof SandboxSwapSchema>;
 
-/* Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install writes
- * under the home and symlinks ~/.local/bin, and Windows only ever has the profile copy. PATH is the last resort
- * rather than the first, for the reason the desktop app states about the sync agent, a developer's global copy
- * would answer on the machine where this was written and nothing would answer on a real user's.
- *
- * The separator is chosen from the TARGET platform rather than taken from `node:path`, which would use the one
- * the process is running on. This agent's Windows spelling is asserted from a Linux runner (there is no Windows
- * box in the loop until a user's), so a function that quietly answers in the host's dialect cannot be checked. */
+// Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install
+// writes under the home and symlinks ~/.local/bin, Windows only ever has the profile copy. PATH is the last
+// resort, since a developer's global copy would answer here and nothing would answer on a real user's machine.
+// The separator is chosen from the target platform, not from `node:path`, so the Windows spelling can be
+// asserted from a Linux runner.
 export const icCandidates = (platform: NodeJS.Platform, home: string | undefined): string[] => {
     if (platform === "win32") {
         return [...(home === undefined ? [] : [`${home}\\.intentic\\ic\\bin\\ic.exe`]), "ic.exe"];
@@ -257,11 +228,9 @@ export const icCandidates = (platform: NodeJS.Platform, home: string | undefined
     return [...(home === undefined ? [] : [`${home}/.intentic/ic/bin/ic`]), "/usr/local/bin/ic", "ic"];
 };
 
-/* The argv for each swap, which is the part worth asserting without a machine: `rebuild` takes the approved
- * overlay's digest as a REQUIRED second positional (it is the trust anchor, only content that still hashes to
- * what the owner reviewed is ever built), while update and rollback take the slug alone. Getting this wrong is
- * silent: an argument in the wrong position binds to a different parameter and fails much later as something
- * else. The same class of risk the desktop crate's own argv tests exist for. */
+// The argv for each swap: `rebuild` takes the approved overlay's digest as a required second positional (the
+// trust anchor), while update and rollback take the slug alone. An argument in the wrong position binds to a
+// different parameter and fails silently, much later, as something else.
 export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undefined): string[] => {
     if (swap === "rebuild") {
         if (hash === undefined || hash === "") {
@@ -273,18 +242,16 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 };
 
 // Removal confirms itself: there is no terminal on this end, so `ic`'s own "are you sure" would hang forever.
-// The consent happened in the browser, on a card that named what is lost.
+// Consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
-/* The RESHAPE argv, the dialog's answer spelled the way `ic sandbox reshape` takes it: a cap as `<n>g` /
- * `<n>`, `null` as ic's `default` (back to the derived share; every core), a switch as an explicit on/off.
- * Nothing is interpreted here — what a valid cap is belongs to the run contract inside the image, which is
- * where a bad one is refused by name. The one rule this side keeps is ic's own: a reshape with nothing to
- * change is refused before anything is spawned, because it would be a restart for nothing. */
-// A cap's flag value: absent ⇒ no flag, null ⇒ ic's `default`, a number ⇒ spelled the way ic takes it.
+// The reshape argv, spelled the way `ic sandbox reshape` takes it: a cap as `<n>g`/`<n>`, `null` as ic's
+// `default`, a switch as an explicit on/off. Nothing is interpreted here; a reshape with nothing to change is
+// refused before anything is spawned.
+// A cap's flag value: absent means no flag, null means ic's `default`, a number is spelled the way ic takes it.
 const capFlag = (value: number | null | undefined, spell: (value: number) => string): string | undefined =>
     value === undefined ? undefined : value === null ? "default" : spell(value);
-// A switch's flag value: absent ⇒ no flag, otherwise the explicit word ic requires (a bare flag could only add).
+// A switch's flag value: absent means no flag, otherwise the explicit word ic requires (a bare flag could only add).
 const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? "on" : "off");
 
 export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined): string[] => {
@@ -301,20 +268,18 @@ export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined
     return ["sandbox", "reshape", slug, ...given];
 };
 
-/* The parent sandbox's SHAPE, riding along on runner-up so the container starts as its twin: a settings-only
- * definition the runner boots with, and the parent's approved overlay with the sha256 that pins it. All
- * optional — a bare-image runner still runs turns — and file-based below because the overlay is a Dockerfile
- * and the definition is TOML, neither of which belongs on a process command line. */
+// The parent sandbox's shape, riding along on runner-up so the container starts as its twin: a settings-only
+// definition, and the approved overlay pinned to its hash. All optional, and file-based because the overlay is
+// a Dockerfile and the definition is TOML, neither of which belongs on a command line.
 export interface RunnerShapeFiles {
     readonly definitionFile?: string;
     readonly overlayFile?: string;
     readonly environmentHash?: string;
 }
 
-/* The argv for the two RUNNER ops (a sandbox-image container that belongs to a parent sandbox rather than to
- * a person). Asserted without a machine for icSwapArgs' reason, and with one extra worth stating: the pairing
- * is single-use and short-lived, so an argv that dropped it produces a container that boots, dials, is
- * refused, and sits there looking like a network problem. */
+// The argv for the two runner ops (a sandbox-image container that belongs to a parent sandbox rather than a
+// person). The pairing is single-use and short-lived; an argv that dropped it produces a container that boots,
+// dials, is refused, and looks like a network problem.
 export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, parentUrl: string | undefined, pair: string | undefined, shape: RunnerShapeFiles = {}): string[] => {
     if (op === "runner-remove") {
         return ["runner", "remove", name, "-y"];
@@ -323,7 +288,7 @@ export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, pa
         throw new Error(`starting a runner needs the parent sandbox's address and a pairing, and this request carried ${parentUrl ? "no pairing" : "neither"}.`);
     }
     // Both or neither, `ic`'s own rule restated where the argv is built: the hash is the trust anchor for the
-    // overlay bytes, and an overlay riding without it would ask the machine to build unreviewed content.
+    // overlay bytes.
     if ((shape.overlayFile === undefined) !== (shape.environmentHash === undefined)) {
         throw new Error(`an overlay travels with the hash that pins it, and this request carried ${shape.overlayFile === undefined ? "only the hash" : "only the overlay"}.`);
     }
@@ -340,12 +305,9 @@ export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, pa
     ];
 };
 
-/* Start or remove a runner on this device.
- *
- * BOTH RIDE THE `sandboxes` SWITCH, removal included, and that is the one place this differs from a person's
- * sandbox. The removal switch exists because a sandbox is somebody's workspace and deleting it is undone by
- * nothing; a runner's /work is a MIRROR of the parent's git, so what dies with it is a checkout the parent can
- * hand back. The owner who allowed sandbox containers here allowed this one too. */
+// Start or remove a runner on this device. Both ride the `sandboxes` switch, removal included: a runner's
+// /work is a mirror of the parent's git, so what dies with it is a checkout the parent can hand back, unlike a
+// person's sandbox.
 export const runnerFlow = async (
     op: "runner-up" | "runner-remove",
     name: string,
@@ -356,10 +318,9 @@ export const runnerFlow = async (
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    /* The definition and overlay arrive as TEXT on the flow and reach `ic` as files: a Dockerfile on a command
-     * line is unreadable in every log that quotes it, and the hash check `ic` runs wants bytes on disk anyway.
-     * A private temp dir per flow, removed when the run ends either way — nothing here is secret (settings and
-     * an owner-approved Dockerfile), but a machine is not a place to accumulate other sandboxes' droppings. */
+    // The definition and overlay arrive as text on the flow and reach `ic` as files: a Dockerfile on a command line
+    // is unreadable in every log that quotes it, and the hash check `ic` runs wants bytes on disk anyway. A private
+    // temp dir per flow, removed when the run ends either way.
     const dir = op === "runner-up" && (shape.definition !== undefined || shape.overlay !== undefined) ? await mkdtemp(join(tmpdir(), "intentic-runner-")) : undefined;
     try {
         const withDefinition = dir !== undefined && shape.definition !== undefined;
@@ -375,8 +336,8 @@ export const runnerFlow = async (
             ...(withOverlay ? { overlayFile: join(dir, "overlay.Dockerfile") } : {}),
             ...(withOverlay && shape.overlayHash !== undefined ? { environmentHash: shape.overlayHash } : {}),
         };
-        // Built first, so a request missing its pairing (or an overlay missing its hash) is refused before
-        // anything is spawned.
+        // Built first, so a request missing its pairing (or an overlay missing its hash) is refused before anything is
+        // spawned.
         const args = icRunnerArgs(op, name, parentUrl, pair, files);
         const { code, output } = await runIc(args, onLine);
         if (code !== 0) {
@@ -392,12 +353,9 @@ export const runnerFlow = async (
     }
 };
 
-/* An `ic` run, narrated as it goes. Every line it prints is handed to `onLine` the moment it arrives, which is
- * what lets the browser show progress on an operation that takes minutes, and the same lines are collected for
- * the callers that want one answer at the end (an MCP tool result). Both streams go to one place on purpose:
- * `ic` writes progress to stdout and diagnostics to stderr, and the failure detail is always in the second.
- * Exported for the auto-prepare tick, which is the fifth caller of `ic` and must not become the second
- * implementation of finding and running it. */
+// An `ic` run, narrated as it goes. Every line is handed to `onLine` the moment it arrives, and the same lines
+// are collected for callers that want one answer at the end. Both streams go to one place: `ic` writes progress
+// to stdout and diagnostics to stderr. Exported for the auto-prepare tick.
 export const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
     const candidates = icCandidates(process.platform, homedir());
     const lines: string[] = [];
@@ -415,8 +373,9 @@ export const runIc = async (args: readonly string[], onLine: (line: string) => v
             let missing = false;
             child.stdout.setEncoding("utf8").on("data", emit);
             child.stderr.setEncoding("utf8").on("data", emit);
-            // ENOENT here means THIS candidate is not installed, not that the run failed, fall through to the
-            // next one. Any other spawn error is a real failure and is reported as the run's own.
+            // ENOENT here means this candidate is not installed, not that the run failed: fall through to the next one.
+            // Any
+            // other spawn error is a real failure and is reported as the run's own.
             child.on("error", (error: NodeJS.ErrnoException) => {
                 missing = error.code === "ENOENT";
                 if (!missing) {
@@ -448,7 +407,7 @@ export const swapSandbox = async (
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     // Built before the fleet is read, so a rebuild with no digest is refused instantly rather than after a docker
-    // round trip, the argument was already wrong when it arrived.
+    // round trip.
     const args = icSwapArgs(swap, slug, hash);
     await find(slug);
     icInFlight.add(slug);
@@ -462,8 +421,8 @@ export const swapSandbox = async (
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this device.\n\n${output}`);
     }
-    // `prepare` gets its own sentence because it is the one that did NOT move the sandbox: saying "files were
-    // kept" about a container that was never touched would describe a swap that has not happened yet.
+    // `prepare` gets its own sentence because it did NOT move the sandbox: saying "files were kept" about a
+    // container that was never touched would describe a swap that hasn't happened yet.
     if (swap === "prepare") {
         return `The next update for "${slug}" is downloaded and built. Applying it is now a short restart.`;
     }
@@ -471,11 +430,9 @@ export const swapSandbox = async (
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;
 };
 
-/* Change a sandbox's share of this machine, or its privileges — `ic sandbox reshape`, the same `ic` door as
- * the swaps and narrated the same way. It rides the `sandboxes` switch, like the swaps and unlike removal,
- * because it is undone by doing it again: every value it changes is a `docker run` flag the next reshape sets
- * back. The privileges it can grant are real, which is why the ask is a closed form (two caps, two switches)
- * rather than flags: nothing a model or a browser sends here reaches docker as text. */
+// Change a sandbox's share of this machine, or its privileges, over the same `ic` door as the swaps. Rides
+// `sandboxes`, not the removal switch, since every value it changes is undone by the next reshape. The ask is a
+// closed form (two caps, two switches) rather than flags, so nothing reaches docker as text.
 export const reshapeSandbox = async (
     slug: string,
     ask: SandboxResourcesAsk | undefined,
@@ -515,24 +472,16 @@ export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (l
     return `Removed sandbox "${slug}" and everything in it.`;
 };
 
-/* How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why
- * something is wrong, so the tail is what matters; the cap is there because this answer crosses a WebSocket that
- * also carries everything else the machine is doing.
- *
- * Both are exported because the MCP tool's schema is built from them, the ceiling is a rule the model is TOLD,
- * in the same sentence that the rule is enforced by, so a bigger tail comes back as "the maximum is 2000"
- * rather than as 2000 lines quietly presented as the 9000 that were asked for. */
+// How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why
+// something is wrong, so the tail matters; the cap exists because the answer crosses a WebSocket that also
+// carries everything else the machine is doing. Both are exported so the MCP tool's schema is built from the
+// same numbers it is enforced by.
 export const DEFAULT_LOG_LINES = 200;
 export const MAX_LOG_LINES = 2_000;
 
-/* The container's own log. Gated like `list_sandboxes`, it is a way of SEEING what you already manage, and a
- * shell on this machine could run `docker logs` itself, so either grant answers it.
- *
- * Both streams, because a container that died wrote its reason to stderr. `--timestamps` is deliberately off:
- * the daemon stamps its own lines, and docker's wall-clock prefix on every row is mostly noise in a tail.
- *
- * Raw and possibly empty: the two readers phrase "it has said nothing" differently, a model wants a sentence,
- * and the Devices view wants the count for its own, so neither is written into the reading itself. */
+// The container's own log, gated like `list_sandboxes` since it's a way of seeing what you already manage. Both
+// streams, since a container that died wrote its reason to stderr. `--timestamps` is off: the daemon stamps its
+// own lines. Raw and possibly empty, since the two readers phrase "it has said nothing" differently.
 const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
@@ -551,13 +500,9 @@ export const sandboxLogs = async (slug: string, lines: number | undefined, scope
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;
 };
 
-/* THE SAME READING, AS A FLOW, the Devices view's Logs button, which travels the machine door every other
- * button on that row travels.
- *
- * It is the one op there that changes nothing, and it needs no separate route for exactly the reason the others
- * share one: the stream's shape is already "many lines, then an outcome", which is what a log tail is. The lines
- * arrive as the view's own run log, so a container too broken to answer anything else still gets read from the
- * same button, on the same row, in both apps. */
+// The same reading, as a flow: the Devices view's Logs button, travelling the machine door every other button
+// on that row travels. It changes nothing, and needs no separate route since the stream's shape is already
+// "many lines, then an outcome".
 export const tailSandboxLogs = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
     const lines = (await readLogs(slug, DEFAULT_LOG_LINES, scopes)).split(/\r?\n/).filter((line) => line !== "");
     for (const line of lines) {

@@ -1,42 +1,24 @@
-/* The comparison shelf: "how does intentic compare to X?", answered honestly and once per X.
- *
- * A feature matrix where every row is a tick for us is the fastest way to lose the
- * credibility the rest of the site is built on. So the shelf is organised around a fact that is true and
- * disarming: MOST of the tools people name are not competitors. The agent CLIs are harnesses this product
- * runs; the editors keep working through desktop sync; the assistants do a different job on the same
- * hardware; the local orchestrators share the instinct and intentic goes a layer deeper; only the cloud
- * platforms are a real either/or.
- *
- * Since these first shipped the field has CONVERGED: Cursor, Claude Code, Conductor and others grew their
- * own cloud or background agents, so "we have agents and they don't" is no longer true anywhere. What stays
- * true is the pair of axes the hub is built on: whose machine the agent runs on, and how much of its
- * environment you can change. Every page is written to those.
- *
- * Accuracy rules, because these describe other people's products and those products move weekly:
- * - Quote their own words for what they are (`theirPitch`), and link `url` so a reader can check.
- * - Every fact was re-verified against the vendor's own live site on the datePublished below.
- * - No invented numbers; where a vendor does not state something (a licence, a price), the page does not either.
- * - Every table carries rows that go the other way (`theirs`). A table with no losing rows is one nobody believes.
- * - `sources` names the vendor's OWN documentation, and every entry was opened rather than guessed at from a
- *   naming pattern. A row describing their isolation, automation or review behaviour has to be readable in one
- *   of them, or the row does not exist: a comparison page is the easiest page on any site to quietly fabricate.
- */
+// The comparison shelf: how intentic compares to X, answered once per X and organised by family since most named tools
+// are not competitors.
+// - Quote their own words (`theirPitch`) and link `url`.
+// - Re-verify every fact against the vendor's live site as of `datePublished`.
+// - No invented numbers; omit what a vendor does not state.
+// - Every table includes rows that go the other way (`theirs`).
+// - `sources` lists only vendor documentation that was actually opened.
 
 export const compareHref = (slug: string): string => (slug ? `/compare/${slug}/` : `/compare/`);
 
-// Re-verified against every vendor's live site on this date. These products ship fast; this is a snapshot.
+// Date the comparison data was last verified against each vendor's live site.
 const PUBLISHED = "2026-08-09";
 
-/* When the cited documentation was last opened and read. Separate from PUBLISHED because the two decay at
- * different rates and a reader deserves both: PUBLISHED is when the argument was written, this is when the
- * evidence under it was last checked. Bump it only after actually re-reading every `sources` entry. */
+// When `sources` were last opened; bump only after re-reading every entry, separately from PUBLISHED.
 const VERIFIED = "2026-08-18";
 
 /** One kind of tool people confuse this product with: the unit the hub is organised in. */
 export interface CompareFamily {
     id: string;
     label: string;
-    /** The verdict for the whole bucket, in three or four words. It is the thing to remember. */
+    /** The verdict for the whole bucket, in three or four words. */
     verdict: string;
     body: string;
     /** Named so the hub answers for tools that will never have a page of their own. */
@@ -49,7 +31,7 @@ export interface CompareRow {
     label: string;
     intentic: string;
     them: string;
-    /** Set where the row goes the other way. These rows are why the table is worth reading. */
+    /** Set where the row goes the other way. */
     theirs?: boolean;
 }
 
@@ -74,7 +56,7 @@ export interface ComparePage {
     theirPitch: string;
     /** The answer, before any table. One or two lines: if a reader stops here they should still have it. */
     verdict: string[];
-    /** Where the two overlap. Written generously: it earns the right to the contrast. */
+    /** Where the two overlap; keep it generous. */
     overlap: CompareSection;
     /** The one or two distinctions that survive the table. Kept short; the table carries the detail. */
     differences: CompareSection[];
@@ -83,10 +65,7 @@ export interface ComparePage {
     together?: CompareSection;
     /** The case for them. A real recommendation, not a strawman. */
     pickThem: string;
-    /* THE VENDOR'S OWN PAGES, NAMED. `url` is their front door, which is marketing; these are the documents a
-     * reader checks a claim against, and every one of them was opened rather than guessed at. A comparison
-     * that cites nothing is asking to be taken on faith, which is the one thing this shelf refuses to do
-     * anywhere else. It is also what stops the page going quietly stale: a dead link is a visible failure. */
+    // Vendor's own documentation (not `url`, their front door); each entry was actually opened, not guessed at.
     sources: { label: string; url: string }[];
     meta: { title: string; description: string; datePublished: string };
 }
@@ -1065,14 +1044,12 @@ export const comparePages: ComparePage[] = [
 
 export const comparePage = (slug: string): ComparePage | undefined => comparePages.find((page) => page.slug === slug);
 
-/** The day every page's cited sources were last opened. Rendered on each comparison, so the age is the reader's to judge. */
+/** Day every page's cited sources were last opened; rendered on each comparison. */
 export const compareVerifiedOn = VERIFIED;
 
 export const familyPages = (id: string): ComparePage[] => comparePages.filter((page) => page.family === id);
 
-/* The hub's own copy. It leads with the taxonomy rather than with us, because the reader's question is
- * "which of these things are you" and answering it first is what makes the rest credible. The two axes are
- * the ones that survived the field converging on parallel and cloud agents. */
+// The hub's own copy: leads with the taxonomy (which of these you are) before the pitch.
 export const compareIndex = {
     eyebrow: "Compare",
     heading: "See where intentic fits.",

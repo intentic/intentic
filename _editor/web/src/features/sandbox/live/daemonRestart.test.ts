@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from "vitest";
 
-// The stream router's import chain reaches the app's environment read at module eval; jsdom plus this is the
-// whole of what it wants (see useChat.test.ts, which cuts the same edge).
+// Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-// The same edges useAgents.test.ts cuts, for the same reason: the fleet store sits behind the app shell, and
-// this file's subject is one wire between the stream router and that store: nothing here wants a browser.
+// Mocks the router, analytics and sandbox client so only the wire between the stream router and the fleet store is
+// exercised.
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
 vi.mock("../client/useSandbox", async () => {
@@ -23,18 +22,8 @@ import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { sandboxJson } from "../client/sandboxClient";
 import { applySystemEvent } from "./systemEvents";
 
-/* A DAEMON THAT RESTARTED IS A NEW REVISION LINE, and a browser tab outlives many of them.
- *
- * The fleet roster is versioned by a counter the daemon keeps in its own memory: it starts at 0 and is bumped
- * per published change, so a rebuild, an update or a crash hands the next connection numbers far below the
- * high-water mark this tab is holding. `setAgents` drops those as out-of-order, which is right within one
- * daemon and catastrophic across two: the board freezes at the instant before the restart, agents started
- * since never appear, and only a reload clears it.
- *
- * The stream's failure path reset the line, but that is one of four ways a stream ends and a REBUILD takes
- * another (the loopback listener dies with the container and the client demotes to the tunnel). So the reset
- * moved to the hello frame, which every connection begins with, whichever way the last one ended, and that is
- * what these hold it to. */
+// A daemon restart resets the roster's revision counter; `setAgents` drops anything below this tab's mark, and the
+// reset lives on the hello frame since a rebuild demotes the client without the stream's failure path.
 const SANDBOX = `sbx-1`;
 
 const summary = (id: string, updatedAt: number): AgentSummary => ({
@@ -48,8 +37,7 @@ const summary = (id: string, updatedAt: number): AgentSummary => ({
 
 const hello = (): void => applySystemEvent({ kind: `hello`, workspaceId: `workspace`, build: `build-1` }, SANDBOX);
 const roster = (agents: AgentSummary[], rev: number): void => applySystemEvent({ kind: `agents`, agents, rev }, SANDBOX);
-// The roster's own cards. The board also carries the chat's client-only draft (an untouched "New agent" tab
-// is a card before it is an agent), which is not what a revision line is about.
+// The roster's own cards, excluding the chat's client-only draft (a card before it's an agent).
 const ids = (): string[] =>
     useAgents()
         .fleet.value.filter((agent) => agent.status !== `draft`)
@@ -72,11 +60,7 @@ it(`takes the roster of a daemon that started counting again`, () => {
 
 it(`ignores a roster read answering for the daemon it has already left`, async () => {
     setAgents([summary(`a1`, 1_000)], 800);
-    /* Two reads are in play, and they answer for two different daemons. The first is the stale one this test
-     * is about; the second is the hello's own held-wakes pull (systemEvents), issued on the line the hello just
-     * opened, so it answers with the NEW daemon's numbering, which starts low. Both are held open and both are
-     * released, because a single resolver slot would be overwritten by the second read and leave the first
-     * awaiting forever. */
+    // Two reads answer for two daemons: the stale one under test, and the hello's own pull on the new line.
     const answers: (() => void)[] = [];
     vi.mocked(sandboxJson).mockImplementation(
         async () =>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filterOutput } from "./agent-output-filter.mjs";
 
-// filterOutput returns the result AND its per-mechanism attribution; these assertions are about the result.
+// run() reads only `.out`; `stagesOf` is for tests that check the per-mechanism attribution.
 const run = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "" } = {}) => filterOutput(raw, command, exit, duration, log).out;
 const stagesOf = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "" } = {}) => filterOutput(raw, command, exit, duration, log).stages;
 
@@ -23,7 +23,6 @@ describe("filterOutput", () => {
         expect(out).toContain("added 100 packages in 2s");
         expect(out).not.toContain("Progress:");
         expect(out).toContain("--- [exit 0, 1s] 7 lines filtered to 1");
-        // Six lines of progress spam is not something anyone goes back for; the handle is priced separately.
         expect(out).not.toContain("retrieve-output");
     });
 
@@ -56,7 +55,6 @@ describe("filterOutput", () => {
         expect(out).not.toContain("line 50\n");
         expect(out).toContain("… 100 earlier lines elided …");
         expect(out).toContain("line 599");
-        // 300 lines on failure passes untouched.
         const short = `${raw.split("\n").slice(0, 300).join("\n")}\n`;
         expect(run(short, { exit: "2" })).toBe(short);
     });
@@ -75,9 +73,6 @@ describe("filterOutput", () => {
         expect(out).not.toContain("retrieve-output");
     });
 
-    // The attribution the savings report is built on. Two properties matter and neither is about any single
-    // mechanism: every byte between raw and emitted is accounted for by SOME stage, and the footer is on the
-    // ledger as the cost it is rather than quietly netted out of the savings it bought.
     it("attributes every byte between raw and emitted to a stage", () => {
         const raw = `\x1b[32m${Array.from({ length: 6 }, (_, i) => `Progress: resolved ${i}00, reused 0, downloaded 0, added 0`).join("\n")}\x1b[0m\nadded 100 packages in 2s\n`;
         const { out, stages } = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log");
@@ -93,11 +88,8 @@ describe("filterOutput", () => {
         expect(footer.saved).toBeLessThan(0);
     });
 
-    // The guard is the accounting's edge case as well as its safety net: when it hands the raw capture back, the
-    // stages must sum to zero, or the ledger would book a saving the model never received.
     it("books nothing when the guard returns the raw capture", () => {
-        // Three one-character lines: dedup's own "… (2 more identical lines)" marker is five times the output it
-        // replaces. Collapsing repetition is nearly always a win and here it is not, which is what `guard` is for.
+        // Three one-char lines: dedup's marker text would be longer than the output it replaces, tripping guard.
         const raw = "a\na\na\n";
         const { out, stages } = filterOutput(raw, "cat flags.txt", "0", "1", "/logs/terminals/agent-abc-%1.log");
         expect(out).toBe(raw);

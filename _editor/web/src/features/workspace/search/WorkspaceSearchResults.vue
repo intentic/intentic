@@ -7,27 +7,14 @@ import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
 
-/* Workspace search results for the explorer sidebar: a count line, then file header rows + indented hit rows
- * (line number + snippet, syntax-coloured, with every matched span <mark>ed from the daemon's char offsets:
- * semantic hits report none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a
- * header, which stands in for its first hit) opens the file at that line. Same dense row styling and
- * roving-tabindex keyboard nav as WorkspaceTree, minus the tree logic: the list is flat.
- *
- * VIRTUALIZED, and that is load-bearing rather than an optimisation. A one-word query in a monorepo answers
- * with a couple of thousand rows; building them all meant asking the highlighter to tokenize a couple of
- * thousand distinct lines, which overflowed its LRU, which meant the batch that invalidated the list left some
- * of those rows uncoloured, which re-rendered the list, which re-scheduled exactly the overflow: a loop that
- * never converged and never yielded, so the tab took no input again. Measured on `test` here: 1331 lines
- * scheduled, then 731 rescheduled per round, forever. A window of what is on screen is what makes the row count
- * stop mattering; the LRU is now comfortably larger than a screenful, so nothing evicts under it.
- *
- * A snippet's colour comes from the file's own grammar: the same extension→language resolution the editor
- * uses (codeLangForPath), so a row reads the way the file it points at will. The pieces, and why they are
- * pieces rather than Shiki's HTML, are searchSnippet.ts. */
+// Workspace search results for the explorer sidebar: file header rows plus indented match rows, styled and
+// keyboard-navigable like WorkspaceTree but flat. Virtualization is load-bearing: colouring every row overflows the
+// highlighter's LRU and the re-render loop never converges, so only the visible window is painted. A row's colour
+// comes from the file's own grammar (codeLangForPath); marked spans are pieces from searchSnippet.ts, not v-html.
 
 const { groups, total, files, partial, truncated, searching, pending, loadingMore, error, note, query } = defineProps<{
     groups: readonly WorkspaceSearchGroup[];
-    // Across the WHOLE match set, not just the page below: the panel says how much there is, then shows what fits.
+    // Total across the whole match set, not just what's rendered below.
     total: number;
     files: number;
     // Whether `total` is a floor: some file had more matches than the engine keeps per file.
@@ -37,18 +24,14 @@ const { groups, total, files, partial, truncated, searching, pending, loadingMor
     pending: boolean;
     loadingMore: boolean;
     error?: string;
-    // What the engine did that the query didn't ask for (an unparseable regex rerun as literal text, …).
+    // What the engine did that the query didn't ask for, such as rerunning an unparseable regex as literal text.
     note?: string;
     query: string;
 }>();
-// The mode rides along because it is the GESTURE that decides it (see workspaceTabs' OpenMode): a click is a
-// look, so it lands in the strip's one transient slot and the next hit clicked takes that slot over; a
-// double-click asks to keep the tab. Reading down a result list used to pin a tab per line looked at.
+// Mode follows the gesture: click previews, double-click keeps the tab.
 const emit = defineEmits<{ openMatch: [path: string, line: number, mode: OpenMode]; loadMore: [] }>();
 
-/* One row height for both kinds, as the editor this is modelled on uses: it is what lets the window be index
- * arithmetic instead of a measurement pass, and a search list is scanned rather than read, so uniform rows are
- * also the right look. Overscan covers the rows a scroll reveals before the next frame runs. */
+// Uniform row height enables index arithmetic; overscan covers rows revealed before the next paint.
 const ROW_H = 22;
 const OVERSCAN = 8;
 // How far the Load-more control extends the scroll surface past the last row.
@@ -58,8 +41,7 @@ type ResultRow =
     | { key: string; index: number; kind: "file"; group: WorkspaceSearchGroup }
     | { key: string; index: number; kind: "match"; path: string; lang: string | undefined; hit: WorkspaceSearchHit };
 
-// Every row the result set has, as descriptors only: cheap enough to rebuild per result set at any length.
-// Nothing here touches the highlighter; that happens for the window below.
+// Row descriptors only, cheap to rebuild at any result-set size; nothing here touches the highlighter.
 const rows = computed<ResultRow[]>(() => {
     const list: ResultRow[] = [];
     for (const group of groups) {
@@ -73,8 +55,7 @@ const rows = computed<ResultRow[]>(() => {
     return list;
 });
 
-/* Roving tabindex over all rows, headers included: declared here because the window below has to keep the
- * keyboard's row rendered whether or not it is on screen. */
+// Roving tabindex over all rows, headers included; the window keeps the focused row rendered even off-screen.
 const lead = ref<string | null>(null);
 const rowEls = new Map<string, HTMLElement>();
 const keys = computed(() => rows.value.map((row) => row.key));
@@ -102,8 +83,7 @@ const paint = (row: ResultRow): PaintedRow => {
     return { row, elided: snippet.elided, pieces: snippetPieces(snippet, snippetTokens(snippet.text, row.lang)) };
 };
 
-/* What is actually rendered, and the only rows whose colour is ever requested. The keyboard's row is kept in
- * even when scrolled out of the window, so tabbing back into the list has somewhere to land. */
+// Rows actually rendered, and the only ones ever coloured; the focused row stays in even when off-screen.
 const visible = computed<PaintedRow[]>(() => {
     const painted = rows.value.slice(firstIndex.value, lastIndex.value).map(paint);
     const focused = leadIndex.value;
@@ -139,19 +119,11 @@ watch(
     },
 );
 
-/* "Matches", not "results": a row here is a matching LINE with all of its occurrences marked, which is also
- * what the engine counts, so the number is the number of rows the search found, and saying "results" would
- * promise the editor's per-occurrence count.
- *
- * The "+" is the search admitting that BOTH numbers are floors, and it has two causes now. One is the per-file
- * cap: some file had more matches than the engine keeps from any single file. The other is the scan's own
- * ceiling, which stops a broad query once it has more rows than this panel could show, and that one bounds the
- * FILE count as well: files past the ceiling were never opened, so there are at least this many, not exactly
- * this many. Marking only the matches would have been the more precise-looking of the two lies. */
+// `total` and `files` count matching lines, not occurrences, the engine's own unit; the trailing `+` flags a floor,
+// either the per-file cap or the scan's row ceiling on broad queries.
 const shown = computed(() => groups.reduce((sum, group) => sum + group.hits.length, 0));
 const summary = computed(() => {
-    // The "+" belongs to the NUMBER, not the noun: it says the count is a floor, and "4,211 matches+" reads as
-    // a typo where "4,211+ matches" reads as the fact.
+    // The `+` sits on the number, not the noun (`4,211+ matches`, not `4,211 matches+`).
     const floor = partial ? `+` : ``;
     const matches = `${total.toLocaleString()}${floor} ${total === 1 && !partial ? `match` : `matches`}`;
     const scope = `${matches} in ${files.toLocaleString()}${floor} ${files === 1 && !partial ? `file` : `files`}`;
@@ -177,8 +149,7 @@ const setRowEl = (key: string, el: unknown): void => {
         rowEls.delete(key);
     }
 };
-// Scroll first, then focus: with a window, the row a key press moves to may not be mounted yet, and .focus() on
-// an element that doesn't exist silently does nothing.
+// Scrolls before focusing: the target row may not be mounted in a virtualized list yet, so focus() would no-op.
 const focusIndex = async (index: number): Promise<void> => {
     const row = rows.value[index];
     if (row === undefined) {
@@ -213,8 +184,7 @@ const onKeydown = (event: KeyboardEvent): void => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- Pinned above the list: the count is the answer to "did that find anything", and scrolling it away
-             costs the reader the one number they came for. -->
+        <!-- Pinned above the list: the match count is the one number a searcher comes back to check. -->
         <p v-if="rows.length > 0" class="shrink-0 px-2 pt-1 pb-1 text-2xs text-subtle">{{ summary }}</p>
         <p
             v-if="note"
@@ -230,8 +200,7 @@ const onKeydown = (event: KeyboardEvent): void => {
             @scroll.passive="onScroll"
             @keydown="onKeydown"
         >
-            <!-- The full list's height, so the scrollbar tells the truth about how much there is; the rows
-                 inside are only the ones on screen, each placed at its own index. -->
+            <!-- Full-list height keeps the scrollbar honest; only on-screen rows render, each at its own index. -->
             <div class="relative" :style="{ height: `${rows.length * ROW_H + (truncated ? FOOTER_H : 0)}px` }">
                 <template v-for="painted in visible" :key="painted.row.key">
                     <button
@@ -249,8 +218,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         <Icon :name="iconForEntry(basename(painted.row.group.path), 'file', false)" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 truncate text-content/90">{{ basename(painted.row.group.path) }}</span>
                         <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ parentDir(painted.row.group.path) }}</span>
-                        <!-- "+" where the engine stopped counting this file's matches, for the same reason the
-                             summary carries one. -->
+                        <!-- `+` marks a file where the engine stopped counting its matches, same as the summary's `+`. -->
                         <span class="shrink-0 rounded-full bg-overlay px-1.5 text-2xs text-muted"
                             >{{ painted.row.group.hits.length }}{{ painted.row.group.capped ? `+` : `` }}</span
                         >
@@ -268,8 +236,10 @@ const onKeydown = (event: KeyboardEvent): void => {
                         @focus="lead = painted.row.key"
                     >
                         <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ painted.row.hit.line }}</span>
-                        <!-- One <span> per colour token, with the matched run as a <mark>: see searchSnippet.ts. The
-                             leading ellipsis says the line was cut to bring a far-right match into view. -->
+                        <!--
+                            One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). A leading ellipsis marks a line
+                            cut to bring a far-right match into view.
+                        -->
                         <span class="ws-snippet min-w-0 flex-1 truncate font-mono text-xs text-content/90"
                             ><span v-if="painted.elided" class="text-subtle">…</span
                             ><template v-for="(piece, index) in painted.pieces" :key="index"
@@ -279,8 +249,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         >
                     </button>
                 </template>
-                <!-- The rest of the match set is one request away, and asking for it is the reader's call: each
-                     page is a fresh search of the workspace, not a slice of something already held. -->
+                <!-- Each page is a fresh workspace search, not a slice already held in memory. -->
                 <button
                     v-if="truncated"
                     type="button"
@@ -306,17 +275,18 @@ const onKeydown = (event: KeyboardEvent): void => {
 </template>
 
 <style scoped>
-/* Shiki hands each token an inline light colour plus a `--shiki-dark` custom property, so dark mode is a pure
- * CSS flip keyed off the app's [data-mode]: no re-tokenizing on theme toggle. !important because the light
- * colour it overrides is an inline style. Identical to how the app's code blocks do it (ui styles/code.css);
- * on an uncoloured piece the var is unset, which leaves `color` inheriting the row's own. */
+/*
+ * Shiki sets an inline light colour plus a `--shiki-dark` custom property; dark mode is a pure CSS override, no
+ * re-tokenizing. `!important` beats the inline light colour; an uncoloured piece leaves `color` inherited from the row.
+ */
 [data-mode="dark"] .ws-snippet span,
 [data-mode="dark"] .ws-snippet mark {
     color: var(--shiki-dark) !important;
 }
-/* The match keeps its syntax colour and takes a tinted plate behind it: recolouring the text would cost the
- * one signal the colour just bought. The negative margin pays for the padding, so marking a run doesn't shift
- * the characters after it. */
+/*
+ * Match keeps its syntax colour; only a tinted background is added, since recolouring would lose that signal.
+ * Negative margin offsets the padding so marking a run doesn't shift later characters.
+ */
 mark {
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     color: inherit;

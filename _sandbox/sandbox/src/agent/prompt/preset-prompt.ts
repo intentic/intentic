@@ -3,34 +3,17 @@ import type { AddressInfo } from "node:net";
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
-/* CLAUDE CODE'S OWN SYSTEM PROMPT, READ OUT OF THE CLI THAT IS INSTALLED, not transcribed into this repo.
- *
- * The settings page lets the owner REPLACE the system prompt, and a replace-only editor is a trap unless they
- * can see what they are replacing and get back to it. Neither the SDK nor the CLI exposes the preset text
- * (`systemPrompt: {preset: 'claude_code'}` is a flag the CLI expands on its way to the API, and the `init`
- * message carries tool names and versions but no prompt), so the only source that cannot go stale is the
- * request the CLI actually builds.
- *
- * So: stand up a loopback endpoint, point the CLI's ANTHROPIC_BASE_URL at it, and run one throwaway turn. The
- * first /v1/messages carries the fully expanded system prompt; we keep it and answer with a canned stream so
- * the CLI finishes instead of retrying. Nothing reaches Anthropic, no credential is used (the token is a
- * placeholder), no tokens are billed, and the answer is fabricated locally, which also means the owner can
- * read the default before connecting any account at all.
- *
- * The alternative was shipping a copy of the prompt in this repo. That copy would be wrong the first time the
- * image bumped the CLI, and wrong silently: the page would show a prompt the agent hadn't run in months. */
+// Claude Code's system prompt, captured from a real CLI request rather than transcribed here, since neither the SDK nor
+// the CLI exposes the preset text directly. A loopback endpoint intercepts one throwaway turn's first request and
+// answers with a canned stream; nothing reaches Anthropic and no credential is used.
 
-// One capture per daemon process. The prompt only changes when the CLI does, and the CLI changes when the
-// image is rebuilt, which restarts the daemon. So there is no invalidation to get wrong.
+// One capture per daemon process: the prompt only changes when the CLI does, which restarts the daemon.
 let cached: BuiltinPromptText | undefined;
 
-// The CLI opens the system array with a billing/telemetry line rather than prompt text. It is not part of what
-// the owner is replacing, so it is dropped from the text (its cc_version is a fallback for the CLI version,
-// which the init message normally supplies first).
+// A billing/telemetry line, not prompt text; dropped since the owner isn't replacing it.
 const BILLING_PREFIX = "x-anthropic-billing-header:";
 
-// A minimal Anthropic streaming answer. The CLI needs a well-formed message to consider the turn finished; the
-// content is irrelevant because nothing reads it, the capture already happened on the request.
+// Minimal well-formed reply so the CLI considers the turn finished; content is irrelevant, nothing reads it.
 const CANNED_STREAM = [
     [
         "message_start",
@@ -56,8 +39,8 @@ const CANNED_STREAM = [
     .map(([event, data]) => `event: ${event as string}\ndata: ${JSON.stringify(data)}\n\n`)
     .join("");
 
-// The Anthropic `system` param is either a plain string or an array of text blocks; join the blocks the way the
-// model reads them and drop the billing line.
+// Anthropic `system` is a string or an array of text blocks; joins them as the model reads them, minus the billing
+// line.
 const promptTextOf = (system: unknown): string | undefined => {
     if (typeof system === "string") {
         return system;
@@ -72,7 +55,7 @@ const promptTextOf = (system: unknown): string | undefined => {
     return text === "" ? undefined : text;
 };
 
-// A capture that never sees a request would otherwise hang the settings page on a CLI that failed to start.
+// Bounds the capture so a CLI that never sends a request does not hang the settings page.
 const CAPTURE_TIMEOUT_MS = 60_000;
 
 export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText> => {
@@ -86,12 +69,11 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
         request.on("data", (chunk: Buffer) => chunks.push(chunk));
         request.on("end", () => {
             if (text === undefined) {
-                // A malformed body is not worth failing on, the capture simply hasn't happened yet, and the
-                // timeout below is what reports a probe that never produces one.
+                // A malformed body is not worth failing on; the timeout below reports a probe that never captures one.
                 try {
                     text = promptTextOf((JSON.parse(Buffer.concat(chunks).toString()) as { system?: unknown }).system);
                 } catch {
-                    /* not the messages call */
+                    // Not the messages call; ignored.
                 }
             }
             response.writeHead(200, { "content-type": "text/event-stream" });
@@ -107,15 +89,12 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
         options: {
             cwd,
             abortController: abort,
-            // The probe must describe a BARE Claude Code turn, so the text is the preset itself and not this
-            // workspace's memory files, skills or tools leaking into what we present as "Claude's default".
+            // Bare Claude Code only: no memory files, skills, or tools leaking into Claude's default.
             settingSources: [],
             allowedTools: [],
             maxTurns: 1,
             thinking: { type: "disabled" },
-            // excludeDynamicSections keeps the cwd, git status and memory paths OUT: they are this sandbox's
-            // state, not Claude's prompt, and a user editing a copy of the default should not inherit a frozen
-            // snapshot of what their repo looked like the day they clicked the button.
+            // Excludes cwd, git status, memory: sandbox state, not the prompt, so a copy won't go stale.
             systemPrompt: { type: "preset", preset: "claude_code", excludeDynamicSections: true },
             env: { ...process.env, IS_SANDBOX: "1", ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`, ANTHROPIC_AUTH_TOKEN: "preset-probe" },
         },

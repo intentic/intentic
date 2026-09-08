@@ -4,14 +4,10 @@ import { expect, test } from "vitest";
 import { PersistedAgentSchema, type PersistedAgent } from "../registry/agents-store.js";
 import { fleetMessages, fleetRecall, fleetRoster, resolveHandle, type FleetRecallDeps } from "./fleet-recall.js";
 
-/* HANDLE RESOLUTION is what this surface is for. The conversation that prompted it had `fair-sage-ey2r` in
- * hand — a worktree directory name — and burned thirty-five tool calls failing to turn it into anything,
- * because every surface that could have answered wanted a different spelling of the same conversation. So the
- * five spellings are pinned here, along with the ORDER between them, which is the part a later edit can break
- * without breaking anything that looks like a test: an exact identity must never lose to a fuzzy one. */
+// Pins the five spellings a handle can resolve through (id, branch, session id, prefix, title) and their order: an
+// exact identity always wins over a fuzzy match.
 
-// Through the schema, not around it: a fixture built by hand drifts from the shape the registry actually
-// stores the moment a field is added, and parse() is the same gate the store puts every loaded entry through.
+// Built through the schema, not by hand, so a fixture cannot drift from what the store actually persists.
 const agentOf = (fields: Partial<PersistedAgent> & Pick<PersistedAgent, "id">): PersistedAgent =>
     PersistedAgentSchema.parse({
         provider: "claude",
@@ -26,8 +22,7 @@ const agentOf = (fields: Partial<PersistedAgent> & Pick<PersistedAgent, "id">): 
         ...fields,
     });
 
-// The seam the module actually uses, over a fixed roster. Only the registry half is exercised by resolution;
-// the transcript and worktree halves answer for the capsule tests below.
+// Fixture over a fixed roster; only the registry half matters for resolution, the rest serves the digest tests below.
 const depsOver = (entries: readonly PersistedAgent[], messages: Record<string, TranscriptRow[]> = {}): FleetRecallDeps =>
     ({
         agents: {
@@ -60,17 +55,13 @@ test("every spelling of a conversation resolves to it: id, branch, session id, p
     expect(resolveHandle(deps, "fair-sage-ey2r")).toMatchObject({ entry: { id: "fair-sage-ey2r" } });
     expect(resolveHandle(deps, "agent/fair-sage-ey2r")).toMatchObject({ entry: { id: "fair-sage-ey2r" } });
     expect(resolveHandle(deps, "b3366e2e")).toMatchObject({ entry: { id: "fair-sage-ey2r" } });
-    // A prefix nobody else shares, and words out of a title, both land on the one conversation that has them.
     expect(resolveHandle(deps, "clear-marsh")).toMatchObject({ entry: { id: "clear-marsh-8c46" } });
     expect(resolveHandle(deps, "npm publish")).toMatchObject({ entry: { id: "clear-marsh-8c46" } });
-    // Case is not part of a title match: a handle is typed from memory.
+    // Case-insensitive: a handle is typed from memory.
     expect(resolveHandle(deps, "NPM PUBLISH")).toMatchObject({ entry: { id: "clear-marsh-8c46" } });
 });
 
-/* THE ORDER, and it is load-bearing rather than tidy: `fair-sage-ey2r` is BOTH an exact id and a prefix of
- * nothing else, but if the fuzzy passes ran first a roster holding `fair-sage-ey2r` and `fair-sage-ey2r-2`
- * would make the shorter id unreachable by its own name — the conversation would answer "ambiguous" to the
- * one spelling that is unambiguous by construction. */
+// Fixture adds `fair-sage-ey2r-2`, a prefix match for the same id, to make ordering matter.
 test("an exact identity wins over a prefix that also matches it", () => {
     const deps = depsOver([...ROSTER, agentOf({ id: "fair-sage-ey2r-2", title: "a later branch", updatedAt: 400 })]);
     expect(resolveHandle(deps, "fair-sage-ey2r")).toMatchObject({ kind: "found", entry: { id: "fair-sage-ey2r" } });
@@ -79,7 +70,7 @@ test("an exact identity wins over a prefix that also matches it", () => {
 test("a handle several conversations answer to is named, never picked", () => {
     const resolved = resolveHandle(depsOver(ROSTER), "fair-sage");
     expect(resolved.kind).toBe("ambiguous");
-    // Newest first, so a truncated list keeps what the caller most likely meant.
+    // Candidates come back newest first.
     expect(resolved.kind === "ambiguous" ? resolved.candidates.map((entry) => entry.id) : []).toEqual(["fair-sage-ey2r", "fair-sage-other"]);
 });
 
@@ -88,25 +79,18 @@ test("a handle nothing answers to is unknown, and so is an empty one", () => {
     expect(resolveHandle(depsOver(ROSTER), "   ").kind).toBe("unknown");
 });
 
-// The roster is a page of the fleet, newest activity first, and the archive is off it by default for the
-// board's own reason: a workspace with a thousand retired conversations must still answer "what is happening".
 test("the roster is newest first, live only, and takes a limit", () => {
     const deps = depsOver([...ROSTER, agentOf({ id: "retired-one", title: "long done", updatedAt: 500, archivedAt: 500 })]);
     expect(fleetRoster(deps).map((row) => row.id)).toEqual(["fair-sage-ey2r", "fair-sage-other", "clear-marsh-8c46"]);
     expect(fleetRoster(deps, { all: true }).map((row) => row.id)[0]).toBe("retired-one");
     expect(fleetRoster(deps, { limit: 1 }).map((row) => row.id)).toEqual(["fair-sage-ey2r"]);
-    // A repo filter narrows to the conversations whose composition spans it, which is how a monorepo asks
-    // "who else is in here".
+    // Repo filter narrows to conversations whose composition includes it.
     const spanning = depsOver([agentOf({ id: "in-ext", repos: [{ repo: "extensions/pipelines", base: "b".repeat(40) }] }), ...ROSTER]);
     expect(fleetRoster(spanning, { repo: "extensions/pipelines" }).map((row) => row.id)).toEqual(["in-ext"]);
 });
 
 const row = (role: TranscriptRow["role"], text: string): TranscriptRow => ({ role, text });
 
-/* THE DIGEST is the whole economy of `agents show`: it is what makes one call cheaper than the hunt it
- * replaces. So what it keeps is pinned — the opening prompts (the task), the last thing the agent said (where
- * it got to), the last notice (how it ended when it ended badly) — and so is the clamping, because an
- * unclamped prompt is a screenful and the point was to spend less than a screenful. */
 test("the digest keeps the opening prompts, the last word and the last notice, each clamped", async () => {
     const long = "x".repeat(400);
     const deps = depsOver(ROSTER, {
@@ -122,15 +106,14 @@ test("the digest keeps the opening prompts, the last word and the last notice, e
     });
     const recall = await fleetRecall(deps, ROSTER[0] as PersistedAgent, HISTORY_ROOT, { diff: false });
     expect(recall.digest.messages).toBe(7);
-    // Whitespace collapsed, three prompts at most, and the fourth is behind --transcript rather than in here.
+    // Whitespace collapsed; at most three prompts, the fourth is available only via --transcript.
     expect(recall.digest.asked).toEqual(["fix the autoopen bug", "second ask", "third ask"]);
     expect(recall.digest.lastSaid?.endsWith("…")).toBe(true);
     expect(recall.digest.lastSaid?.length).toBe(240);
     expect(recall.digest.lastNotice).toBe("Claude usage limit reached.");
-    // The pointers the hunt was assembling by hand: where the branch is checked out, and where the record is.
     expect(recall.worktree).toBe(`${HISTORY_ROOT}/worktrees/fair-sage-ey2r`);
     expect(recall.record).toBe(`${HISTORY_ROOT}/transcripts/fair-sage-ey2r.jsonl`);
-    // `diff: false` is the registry-only answer: the landed fact is free, the git counts are not asked for.
+    // `diff: false` skips the git counts; only the registry's landed fact is used.
     expect(recall.repoStates).toEqual([{ repo: "root", base: "a".repeat(40), landed: false }]);
 });
 
@@ -139,8 +122,6 @@ test("a conversation with no record digests to nothing rather than failing", asy
     expect(recall.digest).toEqual({ messages: 0, asked: [] });
 });
 
-/* THE RECORD ITSELF answers the LAST turns by default, not the first: a conversation is looked up for where
- * it got to far more often than for how it opened, and the opening is already in the digest above it. */
 test("the transcript answers the last messages, and grep narrows before the limit does", async () => {
     const deps = depsOver(ROSTER, {
         "fair-sage-ey2r": [row("user", "one autoopen"), row("assistant", "two"), row("user", "three autoopen"), row("assistant", "four"), row("user", "five")],
@@ -151,6 +132,6 @@ test("the transcript answers the last messages, and grep narrows before the limi
     const grepped = await fleetMessages(deps, ROSTER[0] as PersistedAgent, { grep: "autoopen" });
     expect(grepped.total).toBe(2);
     expect(grepped.messages.map((message) => message.text)).toEqual(["one autoopen", "three autoopen"]);
-    // The index rides along, so a caller reading a tail knows where in the record it sits.
+    // `at` is the message's absolute index in the full record.
     expect(grepped.messages.map((message) => message.at)).toEqual([0, 2]);
 });

@@ -1,25 +1,14 @@
-/* THE MEASURING BEHIND `bench:guidance`, kept apart from the printing so it can be imported by a test: a
- * module that scanned a whole corpus on import could not be. guidance-stats.ts says what this is for and how
- * to read what it returns; this file is the arithmetic.
- *
- * SCOPE. Claude Code transcripts only. Codex, Grok, Gemini, Cursor, Pi and ACP turns keep their own history
- * elsewhere, so every share computed here is a share OF THE CLAUDE ARM.
- */
+// The measuring behind bench:guidance, kept separate from printing so a test can import it; guidance-stats.ts explains
+// what this is for. Claude Code transcripts only: every share here is a share of the Claude arm.
 
 import { readFileSync } from "node:fs";
-// The PRODUCTION classifiers, not a copy of them: `walksTreeWithGrep` is the same predicate the search-hygiene
-// hook fires on, so the figure quoted for SEARCH_GUIDANCE cannot drift away from the notice it argues for.
 import { agentCommand } from "../src/agent/providers/agent-installs.js";
 import { walksTreeWithGrep } from "../src/agent/verification/agent-search.js";
 import { transcriptFiles } from "./transcripts.js";
 
-/* ---- the corpus ------------------------------------------------------------------------------------------
- *
- * One JSONL per session. An assistant line carries `tool_use` blocks; the matching `tool_result` arrives on a
- * later user line under the same id. THE STREAM SPLITS ONE MODEL RESPONSE ACROSS SEVERAL LINES, one block each,
- * so "how many tools did this response ask for" is a question about `requestId` and not about lines: count
- * lines and every response in the corpus looks single-call. A user line with NO tool_result on it is a real
- * prompt, and that is the only turn boundary the format has. */
+// One JSONL per session. A response can split across several lines (one tool_use block per line, matched to its
+// tool_result by id), so counting lines undercounts calls per response; a user line with no tool_result is the real
+// turn boundary.
 
 interface Call {
     readonly name: string;
@@ -29,19 +18,16 @@ interface Call {
     readonly bytes: number;
     readonly text: string;
     readonly isError: boolean;
-    // Wall time the model waited. Undefined when either stamp is missing, rather than 0: a missing duration
-    // must not read as a fast call once these are summed into hours.
+    // Wall time the model waited; undefined, not 0, when a stamp is missing, so it doesn't read as fast once summed.
     readonly durationMs: number | undefined;
-    // The two stamps behind it, kept so a caller can measure the OTHER half of a round trip: the gap between
-    // one result landing and the next call being asked for, which is the model's own thinking time.
+    // The two stamps behind duration, so a caller can measure the model's own thinking time between calls.
     readonly askedAt: number | undefined;
     readonly answeredAt: number | undefined;
     readonly structuredPatch: readonly { newStart?: number; newLines?: number }[] | undefined;
 }
 
-/* As much of the line format as anything here reads. Everything is optional because a transcript is somebody
- * else's file: a line from an older CLI, a replayed line, or a shape that lands next release must skip rather
- * than throw, since one bad line would otherwise cost the whole corpus. */
+// As much of the line format as anything here reads; every field is optional since a transcript is somebody else's
+// file, and one bad line must skip rather than cost the whole corpus.
 interface ToolUseBlock {
     readonly type: "tool_use";
     readonly id: string;
@@ -65,8 +51,8 @@ interface TranscriptEvent {
     readonly toolUseResult?: { readonly structuredPatch?: readonly { readonly newStart?: number; readonly newLines?: number }[] };
 }
 
-// Only text is content the model read. A non-text block (an image) contributes nothing rather than a synthetic
-// "[image]", which would be counted as characters the model was billed for reading.
+// Only text counts as content the model read; a non-text block (an image) contributes nothing rather than a synthetic
+// count.
 const resultText = (content: unknown): string => {
     if (typeof content === "string") {
         return content;
@@ -80,9 +66,8 @@ const resultText = (content: unknown): string => {
     return "";
 };
 
-// Completed calls of one session, in the order their results arrived, which is the order the model read them.
-// A call whose result never arrived (a turn killed mid-flight) is skipped: there is nothing to measure, and
-// counting it would inflate every denominator here.
+// Completed calls of one session, in result-arrival order; a call whose result never arrived (killed mid-flight) is
+// skipped rather than inflating every denominator.
 function* readCalls(file: string): Generator<Call> {
     const pending = new Map<string, Omit<Call, "bytes" | "text" | "isError" | "durationMs" | "structuredPatch" | "answeredAt">>();
     const responseIds = new Map<string, number>();
@@ -101,8 +86,7 @@ function* readCalls(file: string): Generator<Call> {
             continue;
         }
         if (event.type === "assistant") {
-            // One id per model RESPONSE. The stream splits a response across lines, so it has to come from the
-            // request rather than the line: `requestId`, with `message.id` for a replayed line that lacks one.
+            // One id per model response (`requestId`, or `message.id` for a replay), since a response can span lines.
             const key = String(event.requestId ?? event.message?.id ?? event.uuid);
             if (!responseIds.has(key)) {
                 responseIds.set(key, responseIds.size);
@@ -149,7 +133,7 @@ function* readCalls(file: string): Generator<Call> {
     }
 }
 
-/* ---- accumulators ---------------------------------------------------------------------------------------- */
+// Accumulators.
 
 const median = (values: number[]): number => {
     if (values.length === 0) {
@@ -164,27 +148,19 @@ const bump = (counts: Record<string, number>, key: string, by = 1): void => {
     counts[key] = (counts[key] ?? 0) + by;
 };
 
-/* Landing just under the 120s default Bash timeout is the tell that the agent is budgeting around the harness
- * rather than waiting on anything. Counted two ways because the original figure does not say which it meant,
- * and they no longer agree: by the sleep the agent WROTE, and by how long the call actually SAT (a `sleep 60`
- * behind a slow command reaches the same place without being hand-tuned to it). */
+// Landing just under the 120s default Bash timeout signals budgeting around the harness, not real work; counted both by
+// the sleep argument and by actual duration, since they can disagree.
 const justUnderBashTimeout = (sleptSeconds: number, durationMs: number): { byArgument: number; byDuration: number } => ({
     byArgument: sleptSeconds >= 105 && sleptSeconds < 120 ? 1 : 0,
     byDuration: durationMs >= 105_000 && durationMs < 120_000 ? 1 : 0,
 });
 
-/* A TURN SENT AFTER A TOOL THAT IS NOT THERE, which is what the CHECKLIST_GUIDANCE figures below missed for two
- * weeks. The deferred tools are named in the prompt and loaded on demand, so when the CLI stops shipping one the
- * only trace is this sentence in a tool_result: the block keeps advertising it, the model keeps asking, and the
- * call counts beside it just quietly go to zero. Counted here so the two read together. */
+// A turn sent after a deferred tool that no longer exists; the only trace is this sentence in a tool_result.
 const TOOL_SEARCH_MISS = "No matching deferred tools found";
 const CHECKLIST_VERB = /^Task(Create|Get|Update|List)$/;
 
-/* Which bucket a call falls in. "checklist" is a miss on a query that named nothing BUT checklist verbs, which
- * is the harness's own doing: CHECKLIST_GUIDANCE sent the turn and the tools were not there. "other" is a miss
- * on anything else, which is mostly the model guessing at an MCP name that is loaded rather than deferred, and
- * nobody's bug. "" is every other call in the corpus, bucketed rather than branched on so the accounting costs
- * the scan loop no decision of its own. */
+// Which bucket a miss falls in: "checklist" named only checklist verbs (the harness's own doing), "other" is the model
+// guessing at a loaded-not-deferred name, "" is everything else.
 const deferredMissKind = (call: Call): string => {
     if (call.name !== "ToolSearch" || !call.text.includes(TOOL_SEARCH_MISS)) {
         return "";
@@ -201,19 +177,14 @@ const deferredMissKind = (call: Call): string => {
     return asked.length > 0 && asked.every((name) => CHECKLIST_VERB.test(name)) ? "checklist" : "other";
 };
 
-/* THE FIGURES THAT TELL THE TWO ZEROS APART. A checklist the model declined to keep and a checklist the CLI
- * stopped shipping both read as three zeros in the block below; only these separate them, and the second is the
- * one that happened (see CHECKLIST_ENV in src/agent/run/agent.ts). Anything but 0 on the first line means turns are
- * being sent after tools that do not exist, whatever the call counts beside it say. The second line is the model
- * guessing at a name, mostly an MCP server that is loaded rather than deferred: noise, and here so a rise in the
- * first cannot be waved away as more of it. */
+// Separates a checklist the model declined from one the CLI stopped shipping; the second line is model noise, kept so a
+// rise in the first can't be waved away.
 const emptySearchFigures = (tools: Record<string, number>, misses: Record<string, number>): Record<string, string | number> => ({
     deadChecklistSearches: `${misses["checklist"] ?? 0} of ${tools["ToolSearch"] ?? 0} ToolSearch calls`,
     otherEmptySearches: misses["other"] ?? 0,
 });
 
-// A Read's byte window, so a re-read can be told from a read of somewhere else in the same file. Claude Code's
-// own default cap when the model names neither bound.
+// A Read's byte window, telling a re-read from a read elsewhere; the CLI's own default when no bound is named.
 const DEFAULT_READ_LIMIT = 2000;
 const readRange = (input: Record<string, unknown>): [number, number] => {
     const offset = typeof input["offset"] === "number" ? input["offset"] : 1;
@@ -234,8 +205,7 @@ export const guidanceStats = (root: string) => {
     let singleCall = 0;
     let orientingRunCalls = 0;
     let orientingRunMs = 0;
-    // How long the MODEL took to ask for the next thing, measured from the moment the previous result landed.
-    // Distinct from a tool's own execution time, and the number that makes a wasted round trip expensive.
+    // How the model took to ask for the next thing, from the last result landing, not a tool's own execution time.
     const roundTripMs: number[] = [];
 
     // search
@@ -270,11 +240,9 @@ export const guidanceStats = (root: string) => {
         sessions += 1;
         const readCount = new Map<string, number>();
         const written = new Map<string, { hunks: [number, number][] | undefined }>();
-        // Response indices restart at 0 in every session, so they are only unique WITHIN a file. Counting them
-        // in one corpus-wide map collapsed 98k responses onto 1.1k keys and reported 103 calls per response.
+        // Response indices restart at 0 per session, so they're unique only within a file, not the whole corpus.
         let open: { size: number; orienting: boolean; ms: number } | undefined;
-        // A run of consecutive single-call responses that only READ: where batching is free by construction,
-        // and where the corpus says it does not happen.
+        // A run of consecutive single-call responses that only read: where batching is free by construction.
         let runCalls = 0;
         let runMs = 0;
         const closeRun = (): void => {
@@ -285,8 +253,8 @@ export const guidanceStats = (root: string) => {
             runCalls = 0;
             runMs = 0;
         };
-        // A response is judged once it is COMPLETE, on its own single call: judging it as the next call arrives
-        // tested the previous response's size against the next response's tool name.
+        // A response is judged complete on its own single call; judging it as the next call arrives would compare
+        // against the wrong response.
         const closeResponse = (): void => {
             if (open === undefined) {
                 return;
@@ -321,10 +289,7 @@ export const guidanceStats = (root: string) => {
             }
             lastAnsweredAt = call.answeredAt;
 
-            // A response is "orienting" when it asked for exactly one thing and that thing only READ: a
-            // Read/Grep/Glob, or a Bash the production search classifier says walks the tree. Bash is in
-            // deliberately, because most orientation in this corpus IS a shell command, and a definition that
-            // leaves it out measures a rarer situation than the one the guidance names.
+            // "Orienting": exactly one call, and it only reads (Read/Grep/Glob, or a Bash that walks the tree).
             if (call.responseIndex !== lastResponse) {
                 closeResponse();
                 lastResponse = call.responseIndex;
@@ -389,8 +354,8 @@ export const guidanceStats = (root: string) => {
                 if (seen > 0) {
                     reReads += 1;
                 }
-                // The decomposition that decides whether a re-read is waste. Only the last two are the thing
-                // the guidance names; a read of a DIFFERENT part of a file this turn edited is ordinary work.
+                // Which re-read is waste: overlapping or re-reading an edited file; elsewhere in the file is ordinary
+                // work.
                 const edit = written.get(path);
                 if (edit !== undefined) {
                     const [start, end] = readRange(call.input);
@@ -408,8 +373,7 @@ export const guidanceStats = (root: string) => {
                 }
             }
         }
-        // The session's last response is complete once its file is: without this it is never counted, and a
-        // run it would have extended is never closed.
+        // The session's last response closes with its file, or it's never counted and its run never closes.
         closeResponse();
         closeRun();
     }
@@ -429,9 +393,8 @@ export const guidanceStats = (root: string) => {
             orientingRunLatency: hours(orientingRunMs),
         },
         SEARCH_GUIDANCE: {
-            // The block's latency/bytes figures came from REPLAYING 60 patterns against this repo, which is a
-            // different measurement from anything a transcript holds: what the corpus stores is the output the
-            // model was shown, already trimmed by the output filter. Only the call counts are checkable here.
+            // Latency and byte figures came from replaying patterns against this repo; only call counts are checkable
+            // here.
             claimed: "42% of Bash shells out to grep (25,445 calls) vs 1.1% rg (670)",
             bashCalls: bash,
             treeWalkingGrep: `${treeGrep} (${percent(treeGrep, bash)})`,
@@ -453,12 +416,11 @@ export const guidanceStats = (root: string) => {
             reads,
             reReads: `${reReads} (${percent(reReads, reads)})`,
             worstPathReads,
-            // Two different costs, and the block's "~9s" is the second one. A Read EXECUTES in milliseconds;
-            // what a wasted re-read really buys is the round trip, the model's own time composing the next ask.
+            // Two different costs: the block's "~9s" is the round trip, the model's thinking time, not a Read's
+            // execution.
             readExecutionMedianMs: median(readMs),
             modelRoundTripMedianMs: median(roundTripMs),
-            // The half the block's closing sentence actually names, split out from the re-reads that are just
-            // the agent paging through a file it happens to have edited.
+            // The half the block's closing sentence names, split from re-reads that just page through an edited file.
             confirmingReadBacks: `${confirming} calls, ~${Math.round(confirmingBytes / 4).toLocaleString()} tok`,
             breakdown: reReadClass,
         },

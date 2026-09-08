@@ -89,7 +89,7 @@ test("Vue SFC extraction: script-block symbols land on their real file lines", (
     const symbols = extractSymbols("_extensions/repo-apps/src/DependenciesView.vue", "vue", VUE);
     const byName = new Map(symbols.map((symbol) => [symbol.name, symbol]));
     expect(byName.get("barOf")?.kind).toBe("fn");
-    // `computed(...)` is a call, so the declarator reads as a value: same as it would in a .ts file.
+    // `computed(...)` is a call, so its declarator reads as a value, same as in a .ts file.
     expect(byName.get("legend")?.kind).toBe("const");
     expect(byName.get("props")?.kind).toBe("const");
     expect(symbols.every((symbol) => !symbol.heuristic)).toBe(true);
@@ -100,12 +100,9 @@ test("Vue SFC extraction: script-block symbols land on their real file lines", (
 
 test("Vue SFC extraction: script-setup locals are indexed but not exported", () => {
     const byName = new Map(extractSymbols("app/Widget.vue", "vue", VUE).map((symbol) => [symbol.name, symbol]));
-    // Indexed, so `iq def barOf` finds it inside the component… asserted against the whole extracted set, so a
-    // failure prints the names that WERE found, which is the difference between "the extractor skipped this
-    // one" and "the extractor read the block under a different name".
+    // Asserted against the whole set so a failure prints the names actually found, not just a boolean miss.
     expect([...byName.keys()]).toEqual(expect.arrayContaining(["barOf", "pick"]));
-    // …but a component's locals are not its API, and claiming otherwise turns every large component into a fake
-    // hub in the map's reference graph (`step`, `busy`, `error` match everywhere).
+    // A component's locals are not its API; treating them as exported makes it a reference-graph hub.
     expect(byName.get("barOf")?.exported).toBe(false);
     expect(byName.get("legend")?.exported).toBe(false);
 });
@@ -132,25 +129,19 @@ const local = 1;
     expect(byName.get("local")?.line).toBe(6);
 });
 
-/* A DESTRUCTURING DECLARATOR IS NOT A DEFINITION, and reading its name field as a name is how 481 pattern-shaped
- * rows reached a real index: `{ app }`, `[logPath, pattern]`, and, from every `.vue` written in this repo's own
- * style: the whole multi-line `defineProps` destructure. Each one then surfaced as an `iq def` candidate and
- * annotated ordinary hits `⟨in { app } (const)⟩`, and the 31 that spanned lines went further: the graph stage
- * hands an anchor name to ripgrep as a search pattern, which rejects a newline and takes the entire query with
- * it. Two natural-language searches a day died that way, after the embedder and reranker had already been paid.
- */
+// A destructuring declarator's name field is not a definition name (`{ app }`, `[a, b]`, a multi-line defineProps
+// pattern); indexing it let a newline-bearing name reach ripgrep as a search pattern, which fails outright.
 test("declarators: a destructuring pattern is not indexed as a symbol", () => {
     const names = (source: string): string[] => extractSymbols("app/x.ts", "ts", source).map((symbol) => symbol.name);
     expect(names(`const { app } = start();`)).toEqual([]);
     expect(names(`const [logPath, pattern] = process.argv.slice(2);`)).toEqual([]);
     // The shape that carried a newline into a regex.
     expect(names(`const {\n    names,\n    heading = "Widgets",\n} = defineProps<{ names: string[] }>();`)).toEqual([]);
-    // …while the ordinary declarator beside it is untouched.
+    // The ordinary declarator beside it is untouched.
     expect(names(`const { app } = start();\nexport const widgetCount = 3;`)).toEqual(["widgetCount"]);
 });
 
-// Whatever the extractors do next, a name the graph stage cannot search for must not reach it: every symbol
-// the table offers as an anchor has to be a single token.
+// Every symbol offered as an anchor must be a single searchable token; the graph stage cannot search for anything else.
 test("declarators: every extracted name is a single searchable token", () => {
     const sfc = `<script setup lang="ts">
 const {

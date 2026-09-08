@@ -5,74 +5,38 @@ import { z } from "zod";
 import { localTolerantFetch } from "../platform/tls/local-tls.js";
 import { endpointHeaders, unversionedBase, versionedBase } from "./endpoint-config.js";
 
-/* WHAT AN ENDPOINT SERVES, read from the server itself, and from nowhere else.
- *
- * Every other provider's catalog ends in a compile-time seed floor, because we know who Anthropic and xAI are and
- * roughly what they publish. Here we know nothing: the server is whatever the user pointed us at. So the ladder
- * is one rung shorter, live discovery, then the last list this endpoint answered with, and its bottom is an
- * EMPTY catalog, which is the honest report that the server has never told us anything. Inventing a floor would
- * mean offering models that may not exist on this particular server, and a picker row that 404s on send is worse
- * than a row that is absent.
- *
- * The persisted rung is not a nicety: the translator's config is rendered from these lists (translator.ts), and
- * the daemon renders it at boot and on every proxy restart. Without a last-known-good on disk, a model server
- * that happens to be down at that moment would take the user's working endpoint out of the config entirely, and
- * it would stay out until something asked again.
- *
- * Ordering is compareUnrankedModelIds, as for every OpenAI-compatible catalog: these endpoints publish a SET in
- * registry order, so the id-derived rule is the only thing that puts the frontier model at the head, and the
- * head is what a fresh conversation seeds. */
+// Reads what an endpoint serves from the server itself, with no compile-time seed floor: live discovery, then the last
+// persisted list, then an empty catalog, never an invented one. Persisted because the translator renders its config
+// from this list at boot; ordering is compareUnrankedModelIds since these endpoints publish an unranked set.
 
 export interface EndpointCatalog {
-    // This endpoint's models, newest/strongest first. `default` is "" exactly when `models` is empty.
+    // This endpoint's models, newest/strongest first; default is "" exactly when models is empty.
     readonly models: (id: string, config: EndpointConfig) => Promise<{ models: Model[]; default: string }>;
-    // Drop an endpoint's cache + persisted list, its config changed, or it was removed.
+    // Drops an endpoint's cache and persisted list, since its config changed or it was removed.
     readonly forget: (id: string) => Promise<void>;
 }
 
-// Short, because the whole point of a self-configured endpoint is that the user is iterating on it: pulling a
-// new model into Ollama and not seeing it for an hour reads as the integration being broken.
+// Short: a self-configured endpoint is one the user is actively iterating on, an hour's lag reads as broken.
 const MODELS_TTL_MS = 60_000;
-// A model server on the docker host answers in milliseconds; one across the internet may not. Long enough for a
-// cold gateway, short enough that a dead endpoint doesn't hold up the translator render at boot.
+// Long enough for a cold remote gateway, short enough that a dead endpoint doesn't hold up the boot render.
 const DISCOVERY_TIMEOUT_MS = 10_000;
 
-// The non-chat rows an inference server lists beside its chat models. Same filter the Kimi catalog applies, for
-// the same reason: an embedding model in the picker is a row whose every turn fails.
+// Non-chat rows to exclude from the picker, same filter and reason as the Kimi catalog: a chat turn against them fails.
 const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|audio|rerank|moderation|image-generation)/i.test(model.id);
 
-/* Both protocols answer `GET {base}/v1/models` with `{data: [{id, …}]}`. OpenAI's shape, which Anthropic's own
- * REST catalog also follows (adding `display_name`). So one reader covers both, and a server that publishes a
- * display name gets a named row while one that publishes bare ids renders label-only. Nothing here is curated:
- * whatever the server says about a model is what the picker shows. */
+// Both protocols answer GET {base}/v1/models the same; a display_name gets a named row, otherwise label-only.
 const ModelsResponseSchema = z.object({
     data: z.array(
         z.object({
             id: z.string().min(1),
             display_name: z.string().optional(),
-            // vLLM's own field, published per row because one vLLM process can serve several models. Where it is
-            // there it beats the server-wide probe below, being the number for THIS model.
+            // vLLM's per-row field; beats the server-wide probe below when present.
             max_model_len: z.number().positive().optional(),
         }),
     ),
 });
 
-/* WHAT THIS SERVER WILL ACTUALLY ACCEPT IN ONE REQUEST, asked of the server, because it is the only party that
- * knows and the only party that enforces it.
- *
- * llama.cpp's `/props` reports `default_generation_settings.n_ctx`: the window one slot has, after the
- * `--ctx-size` flag has been divided by the parallel slots and clamped to the KV cache the machine could
- * allocate. That is the number its 400 quotes when a request is too big, and it is routinely a fraction of
- * what the weights were trained for, so the GGUF's `n_ctx_train` (which the same server publishes on
- * /v1/models) is deliberately NOT read: it describes what the model could hold, not what this process will take.
- *
- * OUTSIDE /v1 on purpose. `/props` sits at the server root, where llama.cpp puts its own non-OpenAI routes, so
- * this is the one endpoint read that unversions the base rather than versioning it.
- *
- * A server that has no such route answers 404 and this returns undefined, which is the honest answer for every
- * gateway that publishes nothing: unknown, and nothing downstream gates on unknown. The cost of asking is one
- * request per discovery (a minute's TTL, concurrent with the models read), which is nothing on the loopback
- * where local models live and a rounding error on a remote one. */
+// llama.cpp's per-slot window, not the weights' context; 404 means unknown, read outside /v1 at server-root.
 const PropsSchema = z.object({
     default_generation_settings: z.object({ n_ctx: z.number().positive().optional() }).optional(),
     n_ctx: z.number().positive().optional(),
@@ -90,23 +54,15 @@ const servedWindow = async (config: EndpointConfig, fetchImpl: typeof fetch): Pr
     return parsed.success ? (parsed.data.default_generation_settings?.n_ctx ?? parsed.data.n_ctx) : undefined;
 };
 
-/* WHAT TO CALL A MODEL WHOSE SERVER PUBLISHED NO NAME. The id is what turns dial, so it is never touched; this
- * is only the row's text.
- *
- * A bare id stands as it is. A PATH-SHAPED one does not: llama-server names the model by the weights file it
- * loaded, which for a sandbox-run local model is an absolute cache path, so the picker's row read
- * "/work/.intentic/local/cache/models/…" truncated to nothing a person could tell two models apart by. The
- * last segment is the part that names the model, and the `.gguf` suffix is a fact about the file, not about the
- * model, so both go. A repo-qualified id ("meta-llama/Llama-3-8B") lands on the same rule and reads better for
- * it: the owner is not what distinguishes one row from the next either. */
+// The row's label, never the id: a bare id stands as-is, a path-shaped one (llama-server's weights path) keeps only the
+// last segment, minus .gguf.
 const labelFor = (id: string): string => {
     const name = (id.split("/").at(-1) ?? "").replace(/\.gguf$/i, "");
     return name === "" ? id : name;
 };
 
 const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<Model[]> => {
-    // Both reads at once: the window probe is independent of what the catalog says, and a server that answers
-    // neither should cost one timeout rather than two.
+    // Both reads at once: the window probe is independent of the models list, so silence costs one timeout.
     const [response, window] = await Promise.all([
         fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
             headers: endpointHeaders(config),
@@ -123,9 +79,7 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
     }
     return parsed.data.data.map((entry) => {
         const model: Model = { id: entry.id, label: entry.display_name ?? labelFor(entry.id) };
-        // The row's own number first (vLLM publishes per model), then the server-wide one (llama.cpp serves one
-        // model per process, so its answer describes every row it lists). Set rather than spread: the field is
-        // absent when neither said anything, and absent is what "unknown" is read as downstream.
+        // Row's own number first (vLLM), then the server-wide one (llama.cpp); absent means unknown downstream.
         const contextWindow = entry.max_model_len ?? window;
         if (contextWindow !== undefined) {
             model.contextWindow = contextWindow;
@@ -139,20 +93,14 @@ const ordered = (models: readonly Model[]): { models: Model[]; default: string }
     return { models: list, default: list[0]?.id ?? "" };
 };
 
-/* `fetchImpl` is injectable for the reason every catalog here injects it: the real read reaches whatever URL the
- * test's fixture names, and a test that merely omits a config would otherwise hit a live server on the machine
- * running it.
- *
- * Its DEFAULT tolerates a self-signed certificate on localhost and nowhere else (../platform/local-tls.ts),
- * because two of the endpoints this probes are local by construction: a model server on the docker host, and
- * the free trial pointed at a platform being developed on the same machine. Plain fetch refuses both, and the
- * refusal arrives here as an empty catalog, indistinguishable from a server that published nothing. */
+// fetchImpl is injectable so a test never reaches a live server; its default tolerates a self-signed cert on localhost
+// only, since local model servers and a dev-platform trial live there.
 export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetch = localTolerantFetch): EndpointCatalog => {
     const cache = new Map<string, { value: { models: Model[]; default: string }; expiresAt: number }>();
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 
-    // Parsed through the wire schema rather than trusted, the file outlives builds, so a record written by an
-    // older daemon (or a truncated write) must read as "nothing known", never reach the picker half-formed.
+    // Parsed through the schema, not trusted: a record from an older daemon or a truncated write reads as nothing
+    // known, never half-formed.
     const readPersisted = async (id: string): Promise<Model[]> => {
         try {
             const parsed = z.array(ModelSchema).safeParse(JSON.parse(await readFile(persistPath(id), "utf8")));
@@ -176,8 +124,7 @@ export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetc
                 cache.set(id, { value, expiresAt: Date.now() + MODELS_TTL_MS });
                 return value;
             }
-            // Uncached, so the next read re-probes rather than pinning a stale list for a minute after the server
-            // comes back, the same rule claude-models.ts applies to its own degraded rung.
+            // Uncached, so the next read re-probes instead of pinning a stale list.
             return ordered(await readPersisted(id));
         },
         forget: async (id) => {

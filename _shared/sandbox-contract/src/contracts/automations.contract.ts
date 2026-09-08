@@ -10,12 +10,8 @@ import {
 } from "../schemas/automations.js";
 import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 
-// The sandbox's automations manifest (scheduled agent wake-ups). `list` returns each automation with its recent
-// runs + next fire time. `upsert` adds or edits by id (nothing to provision, the scheduler picks it up on its
-// next poll); `setEnabled` changes only the switch, so a list-row action never has to reconstruct the record.
-// `remove` deletes.
-// The `pending*` routes are the owner's approval queue: a `requireApproval` automation holds each fire here
-// instead of waking; `approve` runs the held wake, `reject` drops it.
+// Automations manifest (scheduled agent wake-ups); `pending*` is the owner's approval queue for wakes a
+// `requireApproval` automation holds instead of firing directly.
 export const automationsContract = {
     list: oc
         .route({
@@ -25,10 +21,6 @@ export const automationsContract = {
             description: "Every automation with its recent runs and when it fires next.",
         })
         .output(AutomationsListSchema),
-    /* WHAT CAN WAKE AN AGENT HERE, and what to start from, the daemon's own sources and templates merged with
-     * every installed extension's. The composer's entire vocabulary, so that adding a trigger to an area is a
-     * change to that area and to nothing else. `upsert` below validates against the same merge, which is what
-     * keeps the surface and the daemon from disagreeing about what is allowed. */
     catalog: oc
         .route({
             method: "GET",
@@ -65,9 +57,6 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(OkSchema),
-    /* Mint a new credential for the automation's door, the event webhook's token or the bug intake's key, and
-     * retire the old one in the same breath. The one answer to a leaked URL that does not involve deleting the
-     * automation and re-teaching every caller its id. */
     rotateToken: oc
         .route({
             method: "POST",
@@ -78,25 +67,7 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(DoorTokenSchema),
-    /* Fire one automation NOW, by hand, the answer to "I wrote a 3 a.m. cron and I have no way to try it".
-     * It runs the SAME path the real trigger runs, down to the worktree the wake works in, because a test-fire
-     * that stands somewhere else proves nothing about the fire it is standing in for. The guard runs too
-     * ("skipped by guard" is the most useful thing this can report); only the approval gate is skipped, since
-     * pressing the button IS the owner's approval.
-     *
-     * Owner-explicit, so a DISABLED automation fires as well, trying a prompt before switching it on is the
-     * main reason to press this, and unlike the /automations/{id}/fire webhook there is no outside sender here to
-     * fail closed against.
-     *
-     * NOT FOR A LISTENER, which is the one trigger whose fire is nothing without the thing that fired it. A
-     * listener's prompt is a brief about handling the events riding with it, and by hand there are none, so the
-     * button could only ever produce an agent told to handle events, handed none, asking where they went. Worse,
-     * that pointless run took the automation's turn: a real mention arriving while it ran had to wait behind it.
-     * Refused here rather than hidden in the UI alone, because the honest answer to "how do I test this" is to
-     * send the bot a message, which costs nothing and tests the whole path.
-     *
-     * Acks immediately with the turn detached, like /fire and `approve`: the guard alone may take a minute, and
-     * the run history (with the session that makes it openable) is where the outcome lands. */
+    // Skips only the approval gate, since pressing this button is the owner's approval.
     run: oc
         .route({
             method: "POST",

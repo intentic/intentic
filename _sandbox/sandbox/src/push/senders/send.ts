@@ -1,23 +1,20 @@
 import type { PushChannel, PushNotification } from "@intentic/sandbox-contract";
 
-/* What every transport owes the fan-out in push.ts: one settled verdict per channel, never a rejection.
- * `dead` is the one distinction that changes daemon state, it means this channel can NEVER be sent to again
- * and the only correct response is to forget the row. Everything else is a transient the caller logs and
- * moves past, because a missed notification is never worth failing a turn over. */
+// What every transport owes push.ts's fan-out: one settled verdict per channel, never a rejection.
+// `dead` means this channel can never be sent to again and the row must be forgotten; anything else is a transient to
+// log and move past.
 
 export interface SendOutcome {
     readonly delivered: boolean;
-    // Permanently unreachable, the caller prunes the row. Retrying forever would be the bug, and keeping it
-    // would let the settings toggle keep claiming "on" for a device that can no longer be reached.
+    // Permanently unreachable; the caller prunes the row instead of retrying forever.
     readonly dead?: boolean;
-    // The transient's cause, for the log line. Mutually exclusive with `dead`, a dead row needs no autopsy.
+    // The transient's cause, for the log line; mutually exclusive with `dead`.
     readonly error?: unknown;
 }
 
 export type ChannelSend<C extends PushChannel = PushChannel> = (channel: C, notification: PushNotification) => Promise<SendOutcome>;
 
-// The statuses both transports treat as permanent, by shared convention:
-//   404/410, the device is gone: app uninstalled, permission revoked, endpoint rotated.
-//   403    , the credential presented can never work again (a retired VAPID key, a revoked relay secret).
-// The relay answers with the same codes precisely so one set decides prunes everywhere.
+// Statuses both transports treat as permanent:
+// 404/410: the device is gone (uninstalled, permission revoked, endpoint rotated).
+// 403: the credential can never work again (retired VAPID key, revoked relay secret).
 export const DEAD = new Set([403, 404, 410]);

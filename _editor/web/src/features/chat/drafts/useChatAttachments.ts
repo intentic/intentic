@@ -8,15 +8,9 @@ import type { PendingAttachment } from "../session/conversation";
 import type { ChatAttachment } from "../transcript/transcript";
 import { uuid } from "../../../lib/uuid";
 
-/* FILES STAGED FOR THE NEXT TURN, the chips over the composer, and the three ways they get there: the paperclip
- * (a file dialog the pane opens), a paste, and a drop.
- *
- * Per-tab like the draft: `attachments` is this pane's conversation's, so a mid-upload tab switch leaves the
- * chip on the chat it was staged for. The upload closure keeps pointing at the entry rather than at the list,
- * which is what makes that true.
- *
- * ponytail: abandoned drafts orphan their uploads in .intentic/records/artifacts/attachments (visible and
- * deletable in the workspace tree); a daemon-side sweep of stale dirs is the upgrade path if they pile up. */
+// Files staged for the next turn: the composer chips, arriving via paperclip dialog, paste, or drop. Per-tab like the
+// draft, since the upload closure keeps pointing at its own entry rather than the list. Abandoned uploads orphan files
+// under .intentic/records/artifacts/attachments, visible and deletable in the workspace tree.
 
 export const useChatAttachments = (composer: {
     /** This pane's conversation's staged files. */
@@ -25,13 +19,10 @@ export const useChatAttachments = (composer: {
     readonly reachable: Ref<boolean>;
     /** No account, no turn to attach them to. */
     readonly connected: Ref<boolean>;
-    /** Which sandbox's disk these bytes belong on: this pane's conversation's box, undefined for the active
-     * one. The path staged here is what the prompt tells that daemon to read, so an upload that landed in the
-     * wrong box would produce a turn asking for a file that is not there. */
+    /** Which sandbox's disk these bytes live on; undefined means the active one. */
     readonly at: Ref<string | undefined>;
 }) => {
-    // Depth counter (enter/leave fire per descendant) drives the drop ring on this pane. Per PANE rather than
-    // per panel: with several open, a dropped screenshot belongs to the chat it was dropped on.
+    // Depth counter (enter/leave fire per descendant) drives the drop ring on this pane, not the whole panel.
     const dragDepth = ref(0);
     const takesFiles = (): boolean => composer.reachable.value && composer.connected.value;
 
@@ -40,9 +31,7 @@ export const useChatAttachments = (composer: {
             return;
         }
         const controller = new AbortController();
-        // reactive() explicitly: entries are mutated through this reference (progress ticks), not via the
-        // array ref's proxy, so the raw object wouldn't trigger updates. The entry lands on the tab active at
-        // attach time and this closure keeps pointing at it, so a mid-upload tab switch updates the right chip.
+        // reactive() explicitly: entries mutate through this reference (progress ticks), not the array ref's proxy.
         const previewUrl = file.type.startsWith(`image/`) ? URL.createObjectURL(file) : undefined;
         const entry = reactive<PendingAttachment>({
             id: uuid(),
@@ -53,10 +42,7 @@ export const useChatAttachments = (composer: {
             progress: 0,
             ...(previewUrl === undefined ? {} : { previewUrl }),
         });
-        /* …and the same URL filed under the path, which is how every bubble this file ends up in gets its thumb
-         * without asking the daemon for bytes this window is holding (attachmentPreviews). The message cannot
-         * carry it: a mid-turn message is drawn from the run's own frame log, where an attachment is a path and
-         * nothing else, so a pasted screenshot rendered as a grey `image.png` chip in the sender's own chat. */
+        // Filed under the path too (attachmentPreviews), since a mid-turn message carries only a path, not a thumbnail.
         if (previewUrl !== undefined) {
             rememberPreview(entry.path, previewUrl);
         }
@@ -84,13 +70,13 @@ export const useChatAttachments = (composer: {
         remove: (attachment: PendingAttachment): void => {
             attachment.controller?.abort();
             if (attachment.previewUrl !== undefined) {
-                // Both halves, or the cache goes on handing out a URL pointing at nothing.
+                // Both halves; otherwise the cache keeps handing out a URL pointing at nothing.
                 forgetPreview(attachment.path);
                 URL.revokeObjectURL(attachment.previewUrl);
             }
             if (attachment.status === `done`) {
-                // Fire-and-forget: drop the uploaded uuid dir; on failure the orphan stays visible in the
-                // workspace tree, deletable there.
+                // Fire-and-forget: drop the uploaded dir; a failure leaves the orphan visible and deletable in the
+                // tree.
                 const dir = attachment.path.slice(0, attachment.path.lastIndexOf(`/`));
                 sandboxJsonVia(composer.at.value, `/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
             }
@@ -120,19 +106,16 @@ export const useChatAttachments = (composer: {
             if (!takesFiles() || event.dataTransfer === null) {
                 return;
             }
-            // collectDroppedFiles must be called synchronously in the drop handler (drag-store validity window).
-            // A dropped folder is walked but attached flat, chat attachments carry no directory structure.
+            // Must run synchronously in the drop handler; a dropped folder is walked but attached flat.
             void collectDroppedFiles(event.dataTransfer).then(({ files }) => {
                 for (const dropped of files) {
                     attach(dropped.file);
                 }
             });
         },
-        /* The staged chips as the message carries them: upload metadata, and nothing else. The thumbnail is NOT
-         * copied on, because a message is not where a thumbnail can live: the same message is re-drawn from the
-         * daemon's own record on every hydrate and from the run's frame log when it is sent mid-turn, and
-         * neither of those carries an object URL from this page. It is filed under the PATH instead
-         * (rememberPreview), where every one of those redraws finds it. */
+        // The staged chips as the message carries them: upload metadata only, no thumbnail. A message is re-drawn from
+        // the
+        // daemon or the run's frame log, neither carrying an object URL; the thumbnail is filed under the path instead.
         snapshot: (): ChatAttachment[] => composer.attachments.value.map(({ name, path }): ChatAttachment => ({ name, path })),
     };
 };

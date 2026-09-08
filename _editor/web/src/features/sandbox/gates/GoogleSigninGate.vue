@@ -7,18 +7,9 @@ import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { useSandbox } from "../client/useSandbox";
 import { desktopVersion, signInThroughBrowser } from "../../../app/environments/desktop";
 
-/* The browser→sandbox sign-in surface. useGoogleIdentity raises `needsSignIn` whenever a Google ID token is
- * needed; this overlay then offers the way to mint one. A credential resolves the awaiting sandbox call
- * automatically; "Back to setup" instead settles the awaiting mint and leaves for the setup screen.
- * Presentational over the composable: no token ever touches the platform.
- *
- * TWO SURFACES, BECAUSE GOOGLE'S BUTTON IS DEAD IN THE DESKTOP APP'S WINDOW. Google refuses OAuth from an
- * embedded webview and Identity Services is FedCM-based, which that webview does not implement, so the
- * button rendered here fine and did NOTHING when clicked, on the one screen standing between a fresh install
- * and a working workspace. The login screen has always answered this by handing sign-in to the real browser
- * (environments/desktop.ts); this gate had not, and the same hole was open here every time the sandbox needed
- * Google again: a month away, an account switch, an adopted token that expired before a daemon existed to
- * spend it on. Same link, same round trip: the app signs in outside, comes back, and adopts the credential. */
+// The sign-in overlay: useGoogleIdentity raises `needsSignIn` when a token is needed, and this offers the way to
+// mint one; no token touches the platform here. Two surfaces, since Google's button does nothing inside the
+// desktop app's webview: that window hands off to the real browser and adopts the credential on return.
 
 const { needsSignIn, renderButton, cancelSignIn } = useGoogleIdentity();
 const { user } = useAuth();
@@ -29,14 +20,7 @@ const { scheme } = useTheme();
 const btn = ref<HTMLElement>();
 const desktop = computed(() => desktopVersion() !== undefined);
 
-/* Render Google's own button into the gate each time it opens: the v-if recreates the container, so the ref
- * updates and this re-runs (flush: post, after DOM update) to mount a fresh button onto the live element.
- * Depends on the color scheme too, so toggling theme while the gate is open re-renders it in the right theme.
- *
- * The CONTAINER is what this watches, not just the flag. Watching the flag alone assumed the gate was always
- * mounted before anything raised it: true when a mint starts from a click, false when one is already in
- * flight as this component mounts (a reload lands mid-establish). In that ordering the flag never changed, so
- * nothing ever rendered and the card came up empty: a sign-in gate with no way to sign in. */
+// Watches the container itself, not just the flag: a mint already in flight when mounted never toggles it.
 watch(
     [needsSignIn, scheme, btn],
     () => {
@@ -47,13 +31,11 @@ watch(
     { flush: `post` },
 );
 
-/* Sign in the only way this window can. The app opens the platform's page in the default browser and returns
- * over its deep link, which reloads this SPA at the completion route, so the mint currently awaiting here
- * goes with the page rather than being resolved, and the adopted credential answers the call that follows. */
+// Opens the platform's sign-in page in the default browser; the deep-link return reloads this SPA, abandoning the
+// mint awaited here, and the adopted credential answers the call that follows instead.
 const signInOutside = (): void => signInThroughBrowser();
 
-// Instead of signing in: settle the awaiting mint and return to setup for the active sandbox (the registry
-// keeps its daemon-reported address: there is nothing to sever).
+// Settles the awaiting mint and returns to setup instead of signing in; nothing needs severing.
 const backToSetup = async (): Promise<void> => {
     cancelSignIn();
     const active = sandbox.activeSandboxId.value;
@@ -77,9 +59,7 @@ const backToSetup = async (): Promise<void> => {
                         >.
                     </template>
                 </p>
-                <!-- Inside the desktop app Google's own button renders and then does nothing when clicked, so
-                     that window gets the hand-off to the real browser instead: the same one the login screen
-                     offers there, and the only sign-in this webview can actually complete. -->
+                <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
                 <Button
                     v-if="desktop"
                     label="Continue with Google in your browser"
@@ -89,8 +69,7 @@ const backToSetup = async (): Promise<void> => {
                 >
                     <template #icon><Icon name="google" /></template>
                 </Button>
-                <!-- color-scheme:light matches Google's light-scheme button iframe so the browser paints no
-                     opaque (white) canvas behind it; the button stays dark via its theme param. -->
+                <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
                 <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
                 <button type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">Back to setup</button>
             </div>

@@ -23,8 +23,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         ...overrides,
     }) as OrpcContext;
 
-// A platform WITH mail credentials: the only way to reach the two outcomes that exist once a send is
-// attempted (refused) or deliberately skipped (a link nobody else could open).
+// A platform with mail credentials: the only way to reach the refused or deliberately-skipped outcomes.
 const mailConfig = (webOrigin: string) =>
     ({
         webOrigin,
@@ -86,15 +85,12 @@ describe(`invite routes`, () => {
                 expiresAt: `2099-01-01T00:00:00.000Z`,
             },
         ]);
-        // No mail credentials in this context: the invite still stands and the link comes back for the owner
-        // to carry. `delivery` is the whole point: the caller must be able to tell that apart from a send.
+        // No mail credentials: the invite still stands and the link comes back for the owner to carry instead.
         expect(result.delivery).toBe(`unconfigured`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
     });
 
-    /* THE MAIL IS NOT THE GRANT. Both tests below cover the same regression from opposite ends: a send that
-     * fails used to throw out of the handler, so the browser got a 500 over a roster that already showed the
-     * person pending: reported to the user as "is the sandbox online?" about a sandbox that was fine. */
+    // A failed send must not throw: it would 500 the request over a roster that already shows the person pending.
     it(`invite.create survives a refused email and hands back the link`, async () => {
         const findMany = vi.fn().mockResolvedValue([]);
         const prisma = fakePrisma({
@@ -114,13 +110,9 @@ describe(`invite routes`, () => {
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(result.delivery).toBe(`refused`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
-        // WHAT THE PROVIDER SAID, carried to the owner. Without it the card can only say "the email was
-        // refused", which is where three rounds of "why is it failing" came from: the answer existed the
-        // whole time, in a console on somebody else's machine.
+        // The provider's own error, carried to the owner rather than left in a server-side log.
         expect(result.reason).toContain(`422`);
-        // And it is still an incident on the server even though the request succeeded. What was logged matters
-        // as much as that something was: the recipient and the provider's own error are the two things the
-        // console needs to be worth reading, and a bare "error was called" survives losing either.
+        // Still an incident on the server; the recipient and the provider's error are what make the log worth reading.
         expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.anything(), to: `guest@example.com` }), expect.any(String));
         vi.unstubAllGlobals();
     });

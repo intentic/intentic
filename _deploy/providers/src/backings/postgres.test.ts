@@ -7,18 +7,15 @@ const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code
 
 const IMAGE = "postgres:17.6-alpine@sha256:aaaa";
 
-// Drives the postgres instance provider over SSH: the pg_isready probe reports readiness, docker inspect
-// reports the running image, and docker compose up can be made to fail.
+// Drives the postgres instance provider over SSH: the pg_isready probe reports readiness, docker inspect reports
+// the running image, and docker compose up can be made to fail.
 const fakeSsh = (opts: { ready?: boolean; upFails?: boolean; image?: string } = {}): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
-            /* Ordered matchers, first hit answers. Two orderings are load-bearing: a file write is matched
-             * BEFORE the probe, because the compose template embeds `pg_isready` in its own healthcheck and
-             * the heredoc writing it would otherwise read as a failing readiness probe (and an apply whose
-             * config write fails now throws, as it should); and the labels inspect before the plain one,
-             * because the image read is the same command with a different --format. */
+            // Ordered matchers, first hit answers; a file write is matched before the probe since the compose template
+            // embeds `pg_isready` in its own healthcheck.
             const answers: readonly (readonly [RegExp, () => SshResult])[] = [
                 [/^(?:mkdir -p|cat >|test -f)/u, () => res("")],
                 [/pg_isready/u, () => res("", opts.ready ? 0 : 1)],
@@ -79,7 +76,7 @@ test("instance apply writes compose with the pinned image + the published port m
     expect(
         ssh.commands.some((c) => c.includes("cat > /opt/intentic/postgres/db/compose.yaml") && c.includes(IMAGE) && c.includes('"40123:5432"')),
     ).toBe(true);
-    // The superuser password is written write-once into the .env (test -f guard), not inlined into compose.
+    // The superuser password is written write-once into the .env, not inlined into compose.
     expect(ssh.commands.some((c) => c.includes("test -f /opt/intentic/postgres/db/.env") && c.includes("POSTGRES_PASSWORD"))).toBe(true);
     expect(ssh.commands.some((c) => c.includes("docker compose") && c.includes("up -d"))).toBe(true);
 });
@@ -93,7 +90,7 @@ test("instance apply throws when docker compose up exits non-zero", async () => 
 // --- The per-app binding provider (postgres-database) ---
 
 // Drives the binding provider: docker ps locates the instance container; psql SELECTs report whether the
-// role/database already exist (keyed off the SQL text), and writes succeed.
+// role/database already exist (keyed off the SQL text).
 const bindingSsh = (opts: { container?: boolean; roleExists?: boolean; dbExists?: boolean } = {}): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {

@@ -8,32 +8,20 @@ import { changeEpochOf } from "../changes/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
 import CodeView from "./CodeView.vue";
 
-/* The read-only, WINDOWED surface for text too big to hold as an editable buffer: a build log, a data dump, a
- * generated bundle. It exists because the alternative was a dead end: over the cap the viewer used to offer
- * nothing but Download, and Download went to /workspace/raw, which 413s above 25MB. A 120MB log could not be
- * read and could not be saved.
- *
- * The editor is not the constraint here (Monaco builds a 120MB, 1M-line model in ~150ms and types in 2ms):
- * the daemon and the wire are, so text arrives one window at a time: the head to begin with, `Load more` for
- * the next slice, and `Follow` to jump to the end and stay there.
- *
- * Following appends ONLY the bytes that were added since the last read. That is the whole point: the editable
- * path re-reads the file on every change epoch, which for a log an agent or a build is still writing means the
- * whole file, four times a second, forever. */
+// Read-only, windowed surface for text too big for an editable buffer (a build log, data dump, generated bundle).
+// Monaco itself can hold 120MB; the daemon and wire can't, so text arrives one window at a time (head, `Load more`,
+// `Follow`). Following appends only the bytes added since the last read, not a full re-read on every change.
 
-// `first` is the window the dispatcher already fetched to learn the file's size: reusing it means opening a
-// huge file costs exactly one read, not two.
+// `first`: window the dispatcher already fetched for the file's size; reusing it saves a second read.
 const { path, first, lang } = defineProps<{ path: string; first: WorkspaceFileWindow; lang?: string }>();
 const emit = defineEmits<{ download: [] }>();
 
-/* How much text the view keeps while following. Appending forever would grow the model without bound over a
- * long-running log; past this it reseeds from the tail, which is the part a follower is reading anyway. */
+// Text kept while following; past this it reseeds from the tail instead of growing the model unbounded.
 const RETAIN_BYTES = 24 * 1024 * 1024;
 
-// The text CodeView is mounted/reseeded with. Appends after that go through its exposed append(), which keeps
-// the reader's scroll position where setValue() would have thrown it away.
+// Text CodeView mounts/reseeds with; later appends go through its append(), which preserves scroll position.
 const seed = ref(first.content);
-// The byte range currently shown, and the newest size we have seen (a growing file reports it on every read).
+// Byte range currently shown, and the newest size seen (a growing file reports it on every read).
 const start = ref(first.offset);
 const end = ref(first.offset + first.bytes);
 const size = ref(first.size);
@@ -42,8 +30,7 @@ const busy = ref(false);
 const error = ref<string | null>(null);
 const view = ref<InstanceType<typeof CodeView>>();
 
-// One in-flight window at a time, aborted on unmount: a follow tick that arrives while the last one is still
-// running is dropped rather than queued, because the next tick will read from wherever this one lands.
+// One in-flight window at a time; an overlapping tick is dropped, not queued, since the next one reads fresh.
 let inFlight: AbortController | undefined;
 onBeforeUnmount(() => inFlight?.abort());
 
@@ -64,8 +51,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
     busy.value = true;
     try {
         const window = await readFileWindow(path, { offset, limit, signal: controller.signal });
-        // Deleted while being followed: the honest thing to say, and the view keeps whatever it already holds
-        // rather than blanking a log the reader may still be reading.
+        // Deleted while being followed: view keeps what it already holds rather than blanking on the reader.
         if (!window.present) {
             error.value = `That file is no longer there.`;
             return undefined;
@@ -85,7 +71,7 @@ const read = async (offset: number, limit?: number): Promise<WorkspaceFileWindow
     }
 };
 
-// Replace what's shown with `window` (a tail jump, or a reseed after the file rotated or grew past RETAIN_BYTES).
+// Replaces what's shown with `window`: a tail jump, or a reseed after rotation or past RETAIN_BYTES.
 const reseed = (window: WorkspaceFileWindow): void => {
     seed.value = window.content;
     start.value = window.offset;
@@ -93,8 +79,8 @@ const reseed = (window: WorkspaceFileWindow): void => {
     size.value = window.size;
 };
 
-// Start over from one end of the file: its tail while following, otherwise its head. Used when what we hold
-// stopped being true (the file rotated) or grew past what the view retains.
+// Starts over from one end of the file (tail if following, else head), when what's held is stale (rotated) or
+// past retention.
 const restartFrom = async (offset: number): Promise<void> => {
     const window = await read(offset);
     if (window !== undefined) {
@@ -108,8 +94,7 @@ const loadMore = async (): Promise<void> => {
     if (window === undefined) {
         return;
     }
-    // The file shrank below where we were reading: rotated, or rewritten from scratch. Nothing we hold is
-    // still true, so read one end of the new file instead of appending to the old one's text.
+    // File shrank below the read point (rotated/rewritten): restart from an end instead of appending stale text.
     if (window.size < end.value) {
         await restartFrom(following.value ? -FILE_WINDOW_BYTES : 0);
         return;
@@ -138,9 +123,8 @@ const toggleFollow = async (): Promise<void> => {
     view.value?.revealEnd();
 };
 
-/* The file changed on disk. Only a follower reads anything: a windowed view is a snapshot of a range the user
- * asked for, and re-reading it on every write is what made an open log a per-batch full re-read. A follow tick
- * fetches from `end`: the appended bytes and nothing else, and is dropped while one is already running. */
+// File changed on disk: only a follower re-reads, since a windowed view is a snapshot the user asked for, not
+// something to refetch on every write. Fetches only the appended bytes from `end`; dropped if one is already running.
 watch(
     () => changeEpochOf(path),
     async () => {
@@ -183,8 +167,10 @@ watch(
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow
             </Button>
-            <!-- Only when a download would actually work: /workspace/raw serves to RAW_MAX_BYTES and 413s above
-                 it, and a button whose whole job is to fail is worse than no button: reading is covered here. -->
+            <!--
+                Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is
+                to fail is worse than none.
+            -->
             <Button
                 v-if="size <= RAW_MAX_BYTES"
                 size="small"

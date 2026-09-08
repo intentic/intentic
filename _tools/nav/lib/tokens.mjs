@@ -1,41 +1,8 @@
-/* WHAT A FILE COSTS AN AGENT TO READ, IN TOKENS, WITHOUT A TOKENIZER DEPENDENCY.
- *
- * Every navigability number in this harness is denominated in tokens, because that is the thing an agent
- * actually pays and the thing a context window is measured in. Lines are a proxy that breaks exactly when it
- * matters: strip a file's comments and it loses lines while every remaining line gets DENSER, so the file
- * shrinks and a fixed read window gets more expensive at the same time. Both effects are real and they pull in
- * opposite directions. A line count cannot see that; a token count can.
- *
- * WHY AN ESTIMATOR AND NOT tiktoken. This repository has no tokenizer in its dependency graph and this harness
- * is not worth adding one to the lockfile for. So the default is a segment estimator, and `NAV_TOKENIZER=real`
- * switches to `gpt-tokenizer` when someone has installed it. Which one produced a number is recorded in every
- * output file, and `compare` refuses to diff two runs that used different ones.
- *
- * WHY AN ESTIMATOR IS ENOUGH HERE, stated plainly so nobody over-reads these numbers. This harness exists to
- * compare a tree against ITSELF before and after a refactor. A systematic bias that applies equally to both
- * sides cancels in the delta, which is the number anyone acts on. What must NOT cancel is sensitivity to token
- * density, and a character-driven estimator has that by construction: denser lines cost more per line. Treat
- * an absolute figure here as "the right order of magnitude"; treat a delta as real.
- *
- * HOW IT ESTIMATES. Byte-count divided by a constant is the usual shortcut and it is bad at code, because code
- * is mostly short identifiers and punctuation, which BPE merges very differently from prose. This splits the
- * text the way a code BPE roughly does and counts the pieces:
- *
- *   identifiers   split at camelCase and `_` boundaries; each sub-word is one token up to ~7 characters,
- *                 then one more per 6 after that (BPE holds whole common words, chops rare long ones)
- *   punctuation   one token each, except the ~40 digraphs that every code vocabulary carries as one
- *   indentation   a run of spaces merges: 4 spaces is about one token, not four
- *   strings       counted as their contents, which is prose, at prose density
- *
- * HOW ACCURATE, honestly. Nobody has diffed this against o200k_base on this repository, because installing a
- * tokenizer to find out is the dependency this file exists to avoid. What IS checked, by `nav calibrate`, is
- * that the characters-per-token ratio it produces sits in the 3.2–4.2 band that real code BPE lands in; a run
- * outside that band is a bug in the estimator, not a finding about the code. If you want the real number,
- * `npm i gpt-tokenizer` somewhere on NODE_PATH and set `NAV_TOKENIZER=real` — every output file records which
- * counter produced it and `compare` refuses to diff across the two. */
+// Costs are tokens, not lines: stripping comments shrinks line count while densifying what remains, which lines can't
+// see. A character-driven estimator, calibrated (`nav calibrate`) to stay within real BPE's characters-per-token band;
+// an absolute count is order-of-magnitude, a delta is real.
 
-// Digraphs and trigraphs a code vocabulary carries whole. Not exhaustive and does not need to be: each one
-// this misses costs one extra estimated token on a line that has hundreds.
+// Digraphs/trigraphs a code vocabulary carries as one token; not exhaustive, missing one costs one token.
 const GLUED = new Set([
     "=>",
     "==",
@@ -84,12 +51,10 @@ const GLUED = new Set([
     "^=",
 ]);
 
-// One identifier sub-word. BPE holds common short words whole; long or unusual ones get chopped into pieces of
-// roughly six characters. The exact cut point matters far less than being length-sensitive at all.
+// One identifier sub-word: short ones are one token, longer ones chop into ~6-char pieces, mimicking BPE.
 const subWordTokens = (word) => (word.length <= 7 ? 1 : 1 + Math.ceil((word.length - 7) / 6));
 
-// camelCase / PascalCase / snake_case / SCREAMING_CASE all split into the pieces a vocabulary actually holds.
-// `getUserById` is three tokens, not one, and not eleven.
+// Splits camelCase/PascalCase/snake_case/SCREAMING_CASE into vocabulary-sized pieces (`getUserById` → 3, not 1 or 11).
 const splitIdentifier = (identifier) =>
     identifier
         .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -97,8 +62,7 @@ const splitIdentifier = (identifier) =>
         .split(/[\s_$]+/u)
         .filter(Boolean);
 
-/* The estimator. One pass, no allocation per character, no regex backtracking: this runs over a million lines
- * of source in a couple of seconds and is called once per file per run. */
+// The estimator: one linear pass, no per-character allocation, no regex backtracking.
 export const estimateTokens = (text) => {
     let tokens = 0;
     let index = 0;
@@ -107,9 +71,7 @@ export const estimateTokens = (text) => {
     while (index < length) {
         const char = text[index];
 
-        // A run of horizontal whitespace. Indentation is the common case and BPE merges it hard: four spaces
-        // is one token, eight is two. A single space between words is usually absorbed into the next token,
-        // so a run of one costs nothing on its own.
+        // Horizontal whitespace run: merges like BPE indentation (4 spaces ≈ 1 token); a lone space costs nothing.
         if (char === " " || char === "\t") {
             let run = 0;
             while (index < length && (text[index] === " " || text[index] === "\t")) {
@@ -120,7 +82,7 @@ export const estimateTokens = (text) => {
             continue;
         }
 
-        // Newlines are their own token, and a blank-line run merges the way indentation does.
+        // A newline run merges the same way an indentation run does, one token per two newlines.
         if (char === "\n" || char === "\r") {
             let run = 0;
             while (index < length && (text[index] === "\n" || text[index] === "\r")) {
@@ -177,8 +139,7 @@ export const estimateTokens = (text) => {
     return tokens;
 };
 
-/* The real thing, when it is installed. Loaded lazily and by name so a checkout without it never pays an
- * import error: this is an opt-in upgrade, not a dependency. */
+// The real tokenizer, loaded lazily and by name so a checkout without it never hits an import error.
 let realEncoder;
 const loadReal = async () => {
     if (realEncoder !== undefined) {
@@ -193,8 +154,8 @@ const loadReal = async () => {
     return realEncoder;
 };
 
-/* Pick a counter for this run. Returns the function AND the label that goes in the output file, because a
- * number whose tokenizer is unrecorded cannot be compared against anything later. */
+// Picks a counter for this run; returns the function and the label recorded in the output, so a number's tokenizer is
+// always known later.
 export const tokenCounter = async () => {
     if (process.env.NAV_TOKENIZER === "real") {
         const real = await loadReal();

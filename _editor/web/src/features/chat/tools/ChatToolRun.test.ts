@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
-//
-// jsdom because what this component IS is what it renders: a turn's whole run of tool calls reduced to one
-// mark, and the same rows the shown mode draws once that mark is opened. Both halves are render decisions:
-// neither throws when it goes wrong, it just draws the wrong thing.
+// Pins render behavior of ChatToolRun: a run collapsed to one mark and count, and the same rows the shown mode
+// draws once opened. Needs jsdom since both are render decisions, not throws.
 import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 
-// Same runtime globals ChatToolCard's suite stands up, and for the same reason: the import chain reads
-// window.matchMedia and window.env at module load, and jsdom provides neither.
+// Same runtime globals as ChatToolCard's suite (window.matchMedia, window.env), absent in jsdom.
 
 const { default: ChatToolRun } = await import("./ChatToolRun.vue");
 
@@ -30,9 +27,8 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* Closing a run is a <Transition>, so the calls leave with the reveal rather than on the tick that shut it:
- * they are gone once it has run, which is what "closed" means to a reader. jsdom reports no transition
- * duration, so Vue finishes the leave on the next frames rather than after any real 160ms. */
+// Closing is a `<Transition>`, so calls leave with the reveal, not the tick that shut it; jsdom has no real
+// duration, so this waits two animation frames instead of 160ms.
 const settle = async (): Promise<void> => {
     await nextTick();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -72,7 +68,7 @@ describe(`ChatToolRun`, () => {
 
         mark.click();
         await settle();
-        // Dropped, not merely hidden: a transcript holds hundreds of runs and a closed one costs no DOM.
+        // Dropped from the DOM, not merely hidden.
         expect(element.textContent).not.toContain(`a.ts`);
         expect(mark.getAttribute(`aria-expanded`)).toBe(`false`);
     });
@@ -93,7 +89,7 @@ describe(`ChatToolRun`, () => {
     it(`spins while the turn is live, and only while it is live`, () => {
         const running = [read(`a.ts`), tool({ category: `execute`, name: `Bash`, status: `in_progress` })];
         expect(mount(running, true).querySelector(`[data-spin]`)).not.toBeNull();
-        // The same frozen run, replayed from history: a mark that kept spinning would claim it is still going.
+        // Same run, replayed from history (live=false).
         expect(mount(running, false).querySelector(`[data-spin]`)).toBeNull();
     });
 

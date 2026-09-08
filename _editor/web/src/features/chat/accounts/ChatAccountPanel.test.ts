@@ -1,19 +1,7 @@
 // @vitest-environment jsdom
-//
-/* THE STRIP ABOVE THE COMPOSER WHEN THIS CHAT HAS NOTHING TO SEND WITH, and the three states that decide what
- * it says. Each has a way of going wrong that a user notices immediately.
- *
- * It used to be a PITCH: a card headlined "Try free with Google" with the four subscriptions under it, shown
- * here and, at twice the size, in the middle of the empty agents board. So a brand-new user's first screen was
- * a sign-in wall, right after they had signed in with Google. That is what these tests hold shut: the strip
- * names what this chat is pointed at and opens the model list, and it pitches nothing.
- *
- * And it does not speak too early. "You have nothing connected" is TWO reads, the accounts and the endpoints,
- * and the endpoints land later. Voting on the accounts alone is what painted a wall over a free trial that was
- * already on its way.
- *
- * Nor does it speak for a state that is not its own: a spent free trial cannot send either, but it IS connected,
- * and this strip saying otherwise put two contradicting sentences on screen at once. */
+// The strip above the composer when this chat has nothing to send; it never pitches, only names what
+// to connect. It waits for both the account and endpoint reads before saying "not connected", and
+// stays quiet for a spent trial, which is connected but out of allowance.
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -29,8 +17,7 @@ const selectModel = vi.fn();
 const startConnect = vi.fn();
 const connectTranslator = vi.fn();
 
-// The two reads the panel's "is this settled" question is made of, mocked where they live so `accessKnown`
-// itself is the real computed under test.
+// The two reads `accessKnown` needs, mocked at their source so `accessKnown` itself runs unmocked.
 vi.mock(`./providerAccounts`, async (importOriginal) => ({
     ...(await importOriginal<object>()),
     accountsLoaded,
@@ -40,8 +27,7 @@ vi.mock(`./providerCatalog`, async (importOriginal) => ({
     endpointsLoaded,
 }));
 
-// The pane's view, which the real panel injects from its ChatPane: mounted bare here, so it is handed over.
-// The connect surface underneath it reads the live handshake off the same store, so the flows come along.
+// The pane's view the real panel injects from ChatPane; mounted bare here and handed over directly.
 vi.mock(`../run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
@@ -116,17 +102,15 @@ it(`names what this chat is pointed at, and pitches nothing`, () => {
     const element = mount();
 
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
-    // The pitch that used to live here, in the words a new user actually read.
     expect(element.textContent).not.toContain(`Try free with Google`);
     expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
-    // What is offered instead: the list, plus this provider's own sign-in for whoever pointed the chat here.
+    // What is offered instead: the model list, plus this provider's own sign-in.
     expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
     expect(buttonNamed(element, `Connect Claude subscription`)).toEqual(expect.any(Object));
 });
 
-/* THE GAP THAT PUT A WALL IN FRONT OF EVERY NEW USER. The account reads come back off the daemon in one hop;
- * the endpoints take a capability read, a catalog fetch each and a round-trip to the platform. In between, a
- * fresh sandbox looks exactly like a sandbox with nothing in it, and the free trial is one of those endpoints. */
+// Accounts resolve in one hop; endpoints take a capability read, a catalog fetch, and a round-trip,
+// so a fresh sandbox looks briefly empty even with a trial available.
 it(`says nothing about connections until BOTH halves of the picture have landed`, async () => {
     accountsLoaded.value = false;
     endpointsLoaded.value = false;
@@ -135,7 +119,7 @@ it(`says nothing about connections until BOTH halves of the picture have landed`
     expect(element.textContent).toContain(`Checking`);
     expect(element.textContent).not.toContain(`isn't connected`);
 
-    // The accounts land first, as they do in the app. This is the moment the old gate spoke; this one waits.
+    // Accounts land first, as they do in the app; this gate still waits for endpoints too.
     accountsLoaded.value = true;
     await nextTick();
     expect(element.textContent).toContain(`Checking`);
@@ -146,9 +130,8 @@ it(`says nothing about connections until BOTH halves of the picture have landed`
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
 });
 
-// The list is where every free option lives, so reaching it is this strip's main job. It opens the SHELL's
-// picker, anchored to its own button: the composer is not rendered while this strip is up, so the model pill a
-// composer-side picker would hang off does not exist.
+// Opens the shell's model picker, anchored to its own button, since the composer (and its own pill)
+// isn't rendered while this strip is up.
 it(`opens the model list, anchored to its own button`, async () => {
     const element = mount();
 
@@ -159,14 +142,14 @@ it(`opens the model list, anchored to its own button`, async () => {
     expect(modelRequest.value?.anchor).toBe(press);
     expect(modelRequest.value?.provider).toBe(`claude`);
 
-    // A picked row is applied to THIS pane's conversation, so choosing here is choosing from the composer.
+    // A picked row applies to this pane's own conversation.
     settleModelPick({ provider: `gemini`, model: `gemini-3-pro`, label: `Gemini 3 Pro` });
     await nextTick();
     expect(selectModel).toHaveBeenCalledWith({ provider: `gemini`, value: `gemini-3-pro` });
 });
 
-// Picking a locked model points the chat at it, so the sign-in has to be finishable from the chat it was
-// started for. It takes the whole strip: a line reading "not connected" over a live sign-in argues with itself.
+// Picking a locked model starts its sign-in in place; a live sign-in takes the whole strip rather
+// than sitting under a "not connected" line.
 it(`runs the sign-in in place, and puts the line back when it is abandoned`, async () => {
     const element = mount();
 
@@ -183,8 +166,8 @@ it(`runs the sign-in in place, and puts the line back when it is abandoned`, asy
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
 });
 
-// Google authenticates through the bundled translator rather than a daemon-stored account: the same split the
-// daemon makes, so the one press starts the right handshake.
+// Google authenticates through the bundled translator, not a daemon-stored account; one press starts
+// the matching handshake.
 it(`starts the routed handshake for a provider that authenticates through the translator`, () => {
     provider.value = `gemini`;
     const element = mount();
@@ -195,11 +178,8 @@ it(`starts the routed handshake for a provider that authenticates through the tr
     expect(startConnect).not.toHaveBeenCalled();
 });
 
-/* TWO STRIPS, TWO CONTRADICTING SENTENCES, one screen. A spent trial cannot send, so this gate went up saying
- * "Free trial isn't connected in this sandbox" directly above the trial strip's "Free trial used up for today".
- * One of those is false and the other is the answer, and a user reading both learns only that the product does
- * not know which. The gate reports MISSING CONNECTIONS; a metered provider that ran out is not one, so it stands
- * down and the strip that owns the state says it once. */
+// A spent trial is connected but out of allowance, not missing a connection, so this gate stands down
+// and lets the trial strip say so once.
 it(`stands down for a spent trial instead of calling it unconnected`, () => {
     provider.value = TRIAL_PROVIDER;
     trialStatus.value = { available: true, allowance: 20, used: 20, remaining: 0, health: `healthy` };
@@ -207,8 +187,7 @@ it(`stands down for a spent trial instead of calling it unconnected`, () => {
     expect(mount().textContent).toBe(``);
 });
 
-// The trial the platform has NOT confirmed is a different fact and still this gate's to report: nothing is
-// serving this chat, and standing down there would leave the pane silent about a chat that cannot send at all.
+// An unconfirmed trial is a missing connection, unlike a spent one, so this gate still reports it.
 it(`still speaks when the trial is absent rather than spent`, () => {
     provider.value = TRIAL_PROVIDER;
 

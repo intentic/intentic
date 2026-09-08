@@ -14,64 +14,40 @@ import type { WebExtHub, WebExtStore } from "../webext/webext-peer.js";
 import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
-// The narrow slice of the daemon a capability handler may touch, deliberately no agent/auth/sessions surface.
-// The three scaffolder closures wrap the existing whole-Services helpers so a handler can trigger them without
-// holding Services itself. Shell work goes through `terminalRun` into the handler's `job-capability-<id>`
-// session (terminal-session.ts capabilityJobSession), the handler yields {kind:"terminal", session} first,
-// gated on terminalRun.visible, so the web surfaces the real commands (see system/terminal-run.ts for the
-// principle). `infraApply` is the service handler's path onto the ONE panel-infra-apply job.
+// Narrow slice of the daemon a handler may touch, no agent/auth/sessions; scaffolder closures wrap Services helpers.
+// Shell work goes through terminalRun into job-capability-<id>; infraApply is the path onto the one panel-infra-apply
+// job.
 export interface CapabilityCtx {
     readonly logger: Services["logger"];
     readonly workspace: Services["workspace"];
     readonly git: Services["git"];
     readonly files: Services["files"];
     readonly terminalRun: Services["terminalRun"];
-    // The tmux-riding managed processes (dockerd, local model servers) start/stop via the panel manager.
+    // Tmux-riding managed processes (dockerd, local model servers), start/stop via the panel manager.
     readonly panels: ManagedProcesses;
-    // Extension-declared background processes are supervised daemon children (processes/service-processes.ts).
+    // Extension-declared background processes, supervised as daemon children (processes/service-processes.ts).
     readonly serviceProcesses: Services["serviceProcesses"];
     readonly infraApply: {
-        // Launch `intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt` (resolveFirst) as the shared
-        // one-shot tmux job; false when one is already running (the caller must not tail a foreign run).
+        // Launches the deploy resolve/apply/adopt one-shot tmux job; false if one is already running.
         readonly start: (options?: { readonly resolveFirst?: true }) => Promise<boolean>;
         readonly running: () => boolean;
-        // Tail the job's durable events file to its terminal exit (isTerminalExit semantics).
+        // Tails the job's durable events file to its terminal exit.
         readonly events: () => AsyncGenerator<IntenticLine>;
     };
     readonly config: ConfigStore;
     readonly capabilities: CapabilitiesStore;
-    // The user's own connected devices. Both are passed whole rather than narrowed: the hub IS the handler's
-    // subject (a scope edit has to reach a live machine while the user is still looking at the card), and the
-    // store's enrollment state is the difference between "added" and "actually connected", which is the only
-    // thing this kind's status can usefully say.
+    // User's own devices, passed whole: the hub is the live subject, the store's enrollment is the only status here.
     readonly hosts: HostStore;
     readonly hostHub: HostHub;
-    // The same pair for the user's own browsers, passed whole for the same two reasons: the hub IS the
-    // handler's subject (a switch edited on the card has to reach a live browser while the owner is still
-    // looking at it), and the store's enrollment state is the difference between "added" and "actually paired",
-    // which is the only thing this kind's status can usefully say.
+    // Same pair for the user's browsers, same reason: hub is the live subject, store enrollment is the status.
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
-    // What a configured model API actually serves, the endpoint kind's apply AND status are both this probe, and
-    // it is the same catalog the picker and the translator reconciler read, so a card can never claim a model
-    // list the turn path would disagree with.
+    // What a configured model API serves; the same catalog the picker and translator read, so a card can't disagree
+    // with it.
     readonly endpointModels: EndpointCatalog;
-    /* REBUILD THE TRANSLATOR'S ROUTING TABLE FROM THE LIVE CATALOG, for the one kind whose model list is
-     * knowably WRONG at the moment the route syncs it.
-     *
-     * The routes sync on add/update/rename/remove, which is every moment a user-added endpoint changes: that
-     * kind points at a server the user already has running, so the catalog read at add time is the truth. A
-     * local model is the opposite by construction, the add starts a multi-gigabyte download and returns, so at
-     * add time the entry serves nothing, the sync writes `models: []`, and that empty list IS the routing
-     * table until something says otherwise. Nothing did, so every turn on a local model was refused with
-     * "unknown provider for model" while its server sat healthy on loopback.
-     *
-     * So the handler that started the server owns the correction, and this is its reach: the job waits for the
-     * server to actually serve, then calls this. Non-throwing like the sync it wraps, a proxy that is absent or
-     * mid-restart re-renders the same entries from the same catalog at its next start. */
+    // Rebuilds the translator's table once a local model's server serves (add time writes an empty model list).
     readonly syncEndpoints: () => Promise<void>;
-    // The image-baked extensions dir (services.config.extensionsDir), lets the cli handler build the connector
-    // registry (installedExtensions) from the narrow ctx without holding Services.
+    // Image-baked extensions dir; lets the cli handler build the connector registry without holding Services.
     readonly extensionsDir: string;
     // Create-or-fetch the owner's platform wallet for its address (wallet/wallet-signer.ts), the wallet
     // handler's whole platform reach, closure-wrapped so it stays testable. The caps are not this side's to send.
@@ -81,42 +57,19 @@ export interface CapabilityCtx {
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
 }
 
-// A capability kind's behaviour. `apply` is idempotent and streams progress (mcp/integration emit one frame;
-// devops/service stream real work). `status` is a fast, non-blocking probe. A kind with no `remove` can't be
-// torn down (devops). `requires` lists kinds that must already be active (checked at the route before apply).
-/* `fragment` is a code-versioned Dockerfile fragment (RUN/ENV + optional "# intentic:runtime <flag>" directive
- * lines) this ENTRY bakes into the composed environment overlay, resolved per entry (the config decides),
- * deduped by exact content at compose time. Fragments must be self-contained: install and purge their own
- * build deps, never rely on another fragment's layers. A handler whose payload is a feature pack resolves it
- * through environment/packs.ts (async, the pack file and the base image's stamp are both reads), which
- * returns nothing when the running base already bakes the pack.
- *
- * SEVERAL fragments may be returned, and the reason is the dedupe rule above rather than tidiness. Two kinds
- * that need the SAME container privilege (vpn and exit both want /dev/net/tun + NET_ADMIN) must emit that
- * directive as a byte-identical block, or the set keeps both copies and the recreate hands `docker run` the
- * same --device twice. Returning [tools, privileges] lets the privileged half be literally one shared string
- * (handlers/net-privileges.ts) while each kind installs its own packages, and lets a kind ask for the
- * privilege only in the configurations that actually need it. */
-/* WHAT RENAMING A CONNECTION OF THIS KIND TAKES.
- *
- * A capability's id is not a label, it is the agent's HANDLE for the thing: the name of its skill file, the
- * suffix on its env vars, the alias `ssh <name>` resolves, the directory its browser profile lives in. So a
- * rename is a migration, and every kind has to say what its own costs. Required for the same reason `echo` is:
- * the answer differs per kind and a forgotten default is the kind of thing nobody notices until a rename has
- * quietly signed somebody out of every account in a browser profile.
- *
- * `carry` moves what the old name keyed and `apply` cannot re-derive; the route then re-runs `apply` under the
- * new name, which is how everything DERIVED (a skill file, an ssh config block, a tunnel's conf) gets rewritten.
- * A kind whose apply would re-FETCH rather than re-derive, the git checkouts, sets `reapply: false` and moves
- * its directory in `carry` instead. */
+// A capability kind's behavior: apply is idempotent and streams progress, status is a fast non-blocking probe.
+// A kind with no remove can't be torn down (devops); requires lists kinds checked as already active before apply.
+// fragment: a code-versioned Dockerfile fragment this entry bakes in, deduped by exact content; must be self-contained.
+// Several may return so two kinds needing the same privilege (vpn, exit: /dev/net/tun) share a byte-identical block.
+// A capability's id is the agent's handle for it (skill file, env suffix, ssh alias, profile dir); rename is a
+// migration.
+// carry moves state apply can't re-derive; apply re-runs under the new name, unless reapply:false moves it in carry.
 export interface CapabilityRename {
-    /* Why this kind's name cannot change, the route stops and says exactly this. For the capabilities whose
-     * name is part of what they ARE: the scaffolders named their repos after it, the one-per-sandbox cards
-     * never had a name to choose. Their equivalent of a rename is removing and adding. */
+    // Why this kind's name can't change (one-per-sandbox cards, a repo named after it): remove and add instead.
     readonly refuse?: string;
-    /** Move the state the old name keyed. Runs before the re-apply, so a moved profile is in place for it. */
+    /** Moves the state the old name keyed, before the re-apply so a moved profile is in place for it. */
     readonly carry?: (ctx: CapabilityCtx, from: string, to: string, config: unknown) => Promise<void>;
-    /** Re-run `apply` under the new name. Default true, false only where apply is an install, not a write. */
+    /** Re-runs apply under the new name; default true, false only when apply installs rather than writes. */
     readonly reapply?: boolean;
 }
 
@@ -126,24 +79,15 @@ export interface CapabilityHandler {
     readonly apply: (ctx: CapabilityCtx, id: string, config: unknown) => AsyncGenerator<IntenticLine>;
     readonly status: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<CapabilityStatus>;
     readonly remove?: (ctx: CapabilityCtx, id: string, config: unknown) => Promise<void>;
-    /* The config key holding this kind's secret, absent when it carries none (a kind with no credential, or one
-     * whose credential lives outside the manifest entirely). Drives the /secrets inventory, which capabilities
-     * appear there, what reveal reads, what setSecret merges. `connectors` is the resolved connector registry: a
-     * cli capability's secret key is DATA in its connector, not a fact this daemon knows.
-     *
-     * Here rather than in a central switch because it is a fact ABOUT ONE KIND, and the switch was the third
-     * place a new kind had to be remembered, the two before it (apply, status) are right here. */
+    // Config key holding this kind's secret, absent if it has none; drives the /secrets inventory (reveal, setSecret).
     readonly secret?: (config: unknown, connectors: Map<string, ResolvedContribution>) => string | undefined;
-    // The non-secret echo of a config for the list summary (an mcp token becomes hasToken). Required, not
-    // optional: "what of this may the browser see" is a question every kind has to answer out loud, and a
-    // forgotten default is how a credential reaches a browser by omission.
+    // Non-secret echo of a config for the list summary (e.g. an mcp token becomes hasToken); required, not optional.
     readonly echo: (config: unknown, connectors: Map<string, ResolvedContribution>) => Record<string, string | number | boolean>;
-    // What a rename of this kind moves, or why it can't happen, see CapabilityRename. Required, not optional:
-    // the safe default differs per kind, and the unsafe ones fail silently.
+    // What a rename of this kind moves, or why not (CapabilityRename); required, the safe default differs per kind.
     readonly rename: CapabilityRename;
 }
 
-// Build the handler context from the full Services, wrapping the existing scaffolders as session-scoped closures.
+// Builds the handler context from full Services, wrapping the existing scaffolders as session-scoped closures.
 export const capabilityCtx = (services: Services): CapabilityCtx => {
     const config = createConfigStore(services);
     return {

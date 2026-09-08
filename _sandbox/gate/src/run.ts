@@ -1,38 +1,22 @@
-/* THE RUN DOOR, AS PURE FUNCTIONS: a pipeline starts an agent turn in the sandbox with a control token, waits
- * for it to settle, and maps how it ended onto an exit code, what gate.ts is to the release gate.
- *
- * It is a different exchange from the gate's, and deliberately not a third URL shape. A gate and a webhook are
- * DOORS: routes the daemon opens to a caller with no identity, each with its own minted token in its URL. This
- * is the API itself, reached with a control token the owner minted on Sandbox → Access at `drive` scope (or
- * `land`, to merge as well), presented as `x-intentic-control`. So the caller names the sandbox's own address,
- * not a door, and what it can do there is exactly what the token's scope reaches (auth/control-tokens.ts).
- *
- * THREE CALLS. `POST /agent` starts an isolated turn on a fresh conversation and answers at once, the work runs
- * in the sandbox whether or not anybody stays connected; `GET /agents/{id}` is polled until the card settles;
- * `POST /agents/{id}/land` merges the branch when asked and allowed. Polling rather than attaching to the
- * stream, because a CI step wants the ending and not the transcript, and a poll survives a dropped connection
- * where a stream would have to be reattached with a cursor.
- *
- * Zero dependencies, like gate.ts and for its reason: this runs cold under `npx` on every pipeline of every team.
- * The two answers it reads (the started turn, the agent summary) are checked by hand against the fields it
- * needs, and run.test.ts holds those readers against the contract package's own schemas. */
+// Starts an agent turn with a control token, polls until it settles, and maps the ending to an exit code. Three calls:
+// POST /agent starts it, GET /agents/{id} is polled (survives a dropped connection where streaming would not), POST
+// /agents/{id}/land merges. Zero dependencies, so readers are checked by hand against run.test.ts's contract schemas.
 
 export const RUN_WAIT_DEFAULT_S = 1800;
-// How often the card is asked whether it has settled. A turn is minutes; five seconds is invisible against it.
+// How often the card is polled for settlement; five seconds is invisible against a turn that runs minutes.
 export const RUN_POLL_MS = 5_000;
 
 export interface RunCall {
-    // The sandbox's own address, `https://sandbox-….intentic.dev`, no path.
+    // The sandbox's own address, e.g. https://sandbox-….intentic.dev, no path.
     readonly origin: string;
     readonly token: string;
     readonly prompt: string;
-    // The conversation the turn opens (fresh) or continues. Derived from the CI run by default, so re-running a
-    // job continues its own conversation rather than starting a rival one.
+    // The conversation the turn opens or continues; a re-run of the same CI job continues its own by default.
     readonly conversationId: string;
-    // Which agent runs it (`claude`, `codex`, …); absent takes the sandbox's default.
+    // Which agent runs it (claude, codex, …); absent takes the sandbox's default.
     readonly agent?: string;
     readonly waitS: number;
-    // Merge the branch into the main tree when the turn completes. Needs a `land`-scoped token.
+    // Merge the branch into the main tree when the turn completes; needs a land-scoped token.
     readonly land: boolean;
 }
 
@@ -41,15 +25,15 @@ export type RunStatus = "completed" | "parked" | "failed" | "timeout";
 export interface RunOutcome {
     readonly status: RunStatus;
     readonly conversationId: string;
-    // The branch the isolated turn worked on, `agent/<conversationId>`, absent for a turn that never began.
+    // The branch the isolated turn worked on, agent/<conversationId>; absent for a turn that never began.
     readonly branch?: string;
-    // The card's own account: what it was called, or the sentence it failed on, or which card it parked on.
+    // The card's own account: what it was called, the sentence it failed on, or which card it parked on.
     readonly summary: string;
     // Whether the land was applied whole; absent when none was asked for or the turn did not complete.
     readonly landed?: boolean;
 }
 
-// The body `POST /agent` takes (AgentTurnSchema, the fields a CI caller has any business setting).
+// The body POST /agent takes (AgentTurnSchema, the fields a CI caller may set).
 export const runRequestBody = (call: RunCall): Record<string, unknown> => ({
     prompt: call.prompt,
     conversationId: call.conversationId,
@@ -58,8 +42,8 @@ export const runRequestBody = (call: RunCall): Record<string, unknown> => ({
     ...(call.agent === undefined ? {} : { agent: call.agent }),
 });
 
-/* The conversation a CI run speaks in: one per workflow run and attempt, so a re-run of the same job
- * continues its own conversation, and two jobs of one run do not collide. Outside a runner, a random one. */
+// One conversation per workflow run and attempt, so a re-run continues it and two jobs of one run do not collide;
+// outside a runner, a random id.
 export const conversationIdFor = (env: Readonly<Record<string, string | undefined>>, random: () => string): string => {
     const runId = env["GITHUB_RUN_ID"] ?? "";
     if (runId === "") {
@@ -71,7 +55,7 @@ export const conversationIdFor = (env: Readonly<Record<string, string | undefine
     return `ci-${runId}-${attempt}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64);
 };
 
-// The agent card as this reads it (AgentSummarySchema's `status`, `title`, `failure`, `branch`, `attention`).
+// The agent card as this reads it (AgentSummarySchema's status, title, failure, branch, attention).
 export interface AgentCard {
     readonly status: string;
     readonly title?: string;
@@ -80,7 +64,7 @@ export interface AgentCard {
     readonly attention?: Readonly<Record<string, boolean>>;
 }
 
-// Undefined means the body was not a card at all (a proxy's error page), which is an exchange failure.
+// Undefined means the body was not a card at all (a proxy's error page), an exchange failure.
 export const readCard = (body: unknown): AgentCard | undefined => {
     if (typeof body !== "object" || body === null) {
         return undefined;
@@ -98,15 +82,11 @@ export const readCard = (body: unknown): AgentCard | undefined => {
     };
 };
 
-// The statuses under which the turn is still doing something; anything else is a settled card.
+// Statuses under which the turn is still doing something; anything else is a settled card.
 const IN_FLIGHT = new Set(["running", "stopping", "dismissing", "resuming"]);
 
-/* How a settled card ended, or undefined while it is still going.
- *
- * `awaiting` is the card parked on a person (a plan, a question, a permission, a spend): nobody in a pipeline
- * can answer it, so it is an ending here, one the step fails on with a pointer at the app rather than waits
- * on until the job's own timeout does the failing. `ready` is a turn that finished with work to land, which is
- * the completed case for a step that does not land and the moment to land for one that does. */
+// `awaiting` settles as parked: a pipeline cannot answer a card waiting on a person, so this ends the step rather than
+// stall until the job's own timeout does. Other terminal statuses: failed (error, interrupted, conflict) or completed.
 export const settledOf = (card: AgentCard): RunStatus | undefined => {
     if (IN_FLIGHT.has(card.status)) {
         return undefined;
@@ -137,11 +117,10 @@ export const summaryOfCard = (card: AgentCard, status: RunStatus): string => {
     return card.title ?? "The agent finished.";
 };
 
-// The step's exit: done 0; parked and failed 1 (the product needs a person); timeout 2 (the wiring's problem:
-// the agent is still working and the deadline, not the work, decided).
+// done 0; parked/failed 1 (needs a person); timeout 2 (deadline decided, not the work, which keeps running).
 export const exitOfRun = (status: RunStatus): number => (status === "completed" ? 0 : status === "timeout" ? 2 : 1);
 
-// ---- the CLI's own argument shape: `intentic-gate run …` ----
+// The CLI's own argument shape: `intentic-gate run …`.
 
 export type ParsedRun = { kind: "call"; call: RunCall } | { kind: "help" } | { kind: "error"; message: string };
 
@@ -164,7 +143,7 @@ options:
 exit codes:  0 completed · 1 parked on a person, or failed · 2 the exchange itself failed, or the turn
 was still running at the deadline (it keeps working in the sandbox).`;
 
-// The options that take a value, scanned by name so the parser below is a table and a loop rather than a ladder.
+// Options that take a value, scanned by name so the parser is a table and a loop rather than a ladder.
 const VALUE_OPTIONS: ReadonlySet<string> = new Set(["--url", "--token", "--agent", "--conversation", "--wait"]);
 
 interface ScannedRun {
@@ -211,7 +190,7 @@ const waitOf = (raw: string | undefined): number | { readonly error: string } =>
     return Number.isInteger(numeric) && numeric >= 0 ? numeric : { error: `--wait needs a whole number, not "${raw}"` };
 };
 
-// Where and as whom: the option first, the environment second, and the sentence that says which one is missing.
+// Where and as whom: the option first, the environment second, and the sentence naming which one is missing.
 const addressOf = (
     scanned: ScannedRun,
     env: Readonly<Record<string, string | undefined>>,
@@ -267,7 +246,7 @@ export const originOf = (url: string): string | undefined => {
     }
 };
 
-// ---- the exchange itself, with its two effects injected so the CLI and the action share it and a test drives it ----
+// The exchange itself, with its effects injected so both the CLI and the action share it, and a test can drive it.
 
 export interface RunDeps {
     readonly fetch: (
@@ -278,13 +257,12 @@ export interface RunDeps {
     readonly now: () => number;
 }
 
-// Something other than an ending: the wiring failed (a refused token, an unreachable sandbox, an answer that
-// was not a card). Reported with the daemon's own sentence when it had one.
+// Something other than an ending: the wiring failed (a refused token, an unreachable sandbox, a body that was not a
+// card). Reported with the daemon's own sentence when it had one.
 export class RunExchangeError extends Error {}
 
-/* The daemon's own sentence when it has one ({"error": ...}), the raw body when it does not (a proxy or a
- * tunnel answered, and then the raw body is the only clue there is). Exported because the GitHub Action reads
- * the same failures from the same daemon: two readings of one error shape is two things to keep in step. */
+// The daemon's own sentence when it has one, the raw body when it does not (a proxy or tunnel answered). Exported so
+// the GitHub Action reads the same failures the same way.
 export const detailOf = (text: string): string => {
     try {
         const body = JSON.parse(text) as { error?: unknown };
@@ -318,8 +296,8 @@ const answerOf = async (
     }
 };
 
-/* Start the turn, wait for the card to settle, land if asked. Throws RunExchangeError for anything that is not
- * an ending of the agent's own; every ending, including a timeout, comes back as an outcome. */
+// Starts the turn, waits for the card to settle, lands if asked. Throws RunExchangeError for anything but an ending of
+// the agent's own; even a timeout comes back as an outcome.
 export const runExchange = async (call: RunCall, deps: RunDeps): Promise<RunOutcome> => {
     const cardUrl = `${call.origin}/agents/${encodeURIComponent(call.conversationId)}`;
     await answerOf(deps, "the agent", `${call.origin}/agent`, {

@@ -8,7 +8,7 @@ import type { PeerHub } from "./peer-hub.js";
 import { createPeerRoutes } from "./peer-routes.js";
 import type { PeerStore } from "./peer-store.js";
 
-// The two files a door keeps on /history, spelled the way the doors spell them (peer.ts says why).
+// The two files a door keeps on /history, spelled the way the doors spell them.
 const peerFiles =
     (stem: string) =>
     (root: string): { enrollments: string; consumed: string } => ({
@@ -16,10 +16,8 @@ const peerFiles =
         consumed: join(root, `${stem}-pair-consumed.json`),
     });
 
-/* The agent's door onto a peer. Mounted on a bare Hono rather than the whole daemon: the route touches exactly
- * three services, and what is worth pinning here is its DECISIONS, who may knock, what an offline peer looks
- * like to a model, and that the daemon forwards without interpreting — plus the two hooks a door may add, a
- * judgement before a call leaves and a seal on what comes back, exercised as the deps they are. */
+// Peer MCP routes, mounted on a bare Hono; pins the door's decisions (who may knock, what an offline peer looks like,
+// verbatim forwarding) plus its two hooks (judgement before a call, seal on the answer).
 
 const BRIDGE = "bridge-token";
 
@@ -94,7 +92,7 @@ test("a request is forwarded verbatim and its answer returned unchanged", async 
     expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 9, result: { tools: [{ name: "run_command" }] } });
 });
 
-// A notification has nothing to answer; replying to one is a protocol violation the MCP client reports as noise.
+// A notification has nothing to answer; replying is a protocol violation the MCP client reports as noise.
 test("a notification is delivered and answered 202 with no body", async () => {
     const mcp = vi.fn(async () => undefined);
     const response = await post(routeFor({ mcp }), { jsonrpc: "2.0", method: "notifications/initialized" });
@@ -102,9 +100,6 @@ test("a notification is delivered and answered 202 with no body", async () => {
     expect(mcp).toHaveBeenCalledTimes(1);
 });
 
-/* The behaviour this route exists to get right: laptops sleep, and a sleeping laptop is a normal state. As a
- * JSON-RPC error the model reads "this device is asleep" and says so; as an HTTP 503 it surfaces as a broken
- * MCP transport and invites a retry loop. */
 test("an offline peer answers as a readable JSON-RPC error, not an HTTP failure", async () => {
     const app = routeFor({
         mcp: async () => {
@@ -116,8 +111,6 @@ test("an offline peer answers as a readable JSON-RPC error, not an HTTP failure"
     expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 4, error: { code: -32000, message: `"laptop" is not connected right now` } });
 });
 
-/* A turn loads its MCP servers up front, and personal devices are asleep half the time. If the handshake went
- * to the peer, an asleep laptop would drop out of the turn entirely: the agent would not know it exists. */
 test("an asleep peer still completes the handshake under the door's server name and its last build", async () => {
     const mcp = vi.fn();
     const response = await post(routeFor({ online: false, mcp }), { jsonrpc: "2.0", id: 1, method: "initialize" });
@@ -147,8 +140,6 @@ test("a live tools/list is remembered, which is what makes the offline answer po
     expect(app.remembered).toEqual([{ tools: [{ name: "screenshot" }] }]);
 });
 
-// Calling a tool is about the PEER, not the connection: it goes to the peer and comes back as the readable
-// "asleep" answer, never a locally invented result.
 test("a tool call on an asleep peer is not answered locally", async () => {
     const mcp = vi.fn(async () => {
         throw new Error("is not connected right now");
@@ -157,8 +148,6 @@ test("a tool call on an asleep peer is not answered locally", async () => {
     expect(mcp).toHaveBeenCalledTimes(1);
 });
 
-/* THE JUDGEMENT HOOK. A refusal travels back as an ordinary tool RESULT rather than a JSON-RPC error, so the
- * model reads the sentence and tells the owner what happened; and the call never reaches the peer. */
 test("a call the door's judgement stops is answered as a refusing tool result and never forwarded", async () => {
     const mcp = vi.fn();
     const app = routeFor({ mcp, beforeCall: async (payload) => ((payload as { id?: number }).id === 7 ? { refusal: "Held for the owner." } : undefined) });
@@ -167,8 +156,7 @@ test("a call the door's judgement stops is answered as a refusing tool result an
     expect(mcp).not.toHaveBeenCalled();
 });
 
-/* THE SEAL HOOK, applied to a `tools/call` answer by tool name and to nothing else: the tool list is the peer's
- * own account of itself, and sealing it would wrap the schema the model reads its tools from. */
+// Not applied to a tool list: that's the peer's own account of itself, not something to wrap.
 test("a tool call's answer goes through the door's seal, under the tool's name; a tool list does not", async () => {
     const sealAnswer = vi.fn((id: string, tool: string, answer: unknown) => ({ sealed: `${id}:${tool}`, answer }));
     const app = routeFor({ mcp: async () => ({ jsonrpc: "2.0", id: 1, result: { content: [] } }), sealAnswer });

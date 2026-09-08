@@ -1,23 +1,11 @@
 import { STATE_DIR } from "@intentic/constants";
 import { cartPage, checkoutPage, pricingPage } from "./storefront";
 
-/* ACCEPTANCE, RECORDED, acme-shop's user stories and the run that walked three of them through the app.
- *
- * Everything this surface shows is FILES, which is the whole reason it can be fixtured at all: the stories are
- * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/records/artifacts/acceptance/` holding
- * one manifest plus a result, a report and its screenshots per story. So this module contributes paths and
- * bodies to the recording's filesystem (workspace.ts) and nothing else, no route, no state, no special case in
- * the daemon. The extension walks the same directories it would walk against a real sandbox.
- *
- * THE RUN IS DELIBERATELY MIXED: one story passed, one failed with a defect, one was blocked before it could be
- * judged, and a fourth story has never been run at all. A recording where everything is green shows none of the
- * distinctions this surface exists to make, `blocked` is not `fail`, and "never tested" is not "passing".
- *
- * The screenshots are the same storefront pages the agent's browser view plays (storefront.ts), stored as files
- * the report references relatively, which is exactly how a real run's shots reach the report. */
+// acme-shop's acceptance stories and a run through three of them, contributed purely as files under
+// `docs/user-stories/**` and `.intentic/records/artifacts/acceptance/` (workspace.ts), no route or special case. The
+// run is intentionally mixed (pass, fail, blocked, never run) so every verdict distinction shows.
 
-// The story files, repo-relative under each repo's docs/user-stories. A file is one story: one test session, one
-// agent, one report. Subdirectories are groups, and a group is what an address is resolved per.
+// Story files, repo-relative under docs/user-stories/**; subdirectories are groups an address resolves per.
 const BUY_A_PLAN = `# Buy a plan
 
 A visitor picks the Growth plan on the pricing page and pays with a card. This is the path the whole storefront
@@ -78,9 +66,7 @@ several times. The subscription must be created once regardless.
 - [ ] An event with a bad signature is refused with 400 and logged
 `;
 
-/* The repo's own note to whoever tests it, `docs/user-stories/.acceptance.md`, inlined into every brief. It
- * exists so a repository can tune the instructions without forking the extension, and the demo carries one
- * because it is the difference between a generic tester and one that knows the test card and the seeded login. */
+// Repo's own note to testers, `docs/user-stories/.acceptance.md`, inlined into every brief.
 const WEB_BRIEF = `Use the seeded account **ada@acme.dev** / \`demo-password\` wherever a story needs someone signed in.
 
 Stripe is in test mode: pay with 4242 4242 4242 4242, any future expiry, any CVC. Never use a real card, and
@@ -90,12 +76,9 @@ The storefront is deliberately slow on first paint (the plans are fetched). Wait
 clicking anything, or you will report a bug that is only a race in the test.
 `;
 
-// ---- the run ---------------------------------------------------------------------------------------------
-
 const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
 
-// The stories that run covered, the slug is what `slugOf` derives from the filename, and the conversation id is
-// `xt-<runId>-<slug>`. Both are stored in the manifest rather than re-derived, exactly as a real run stores them.
+// Slug is what `slugOf` derives from the filename; conversation id is `xt-<runId>-<slug>`.
 const RUN_STORIES = [
     { slug: `01-buy-a-plan`, repo: `web`, group: `checkout`, path: `web/docs/user-stories/checkout/01-buy-a-plan.md`, title: `Buy a plan` },
     {
@@ -162,9 +145,8 @@ POST /signup → 500  TypeError: Cannot read properties of undefined (reading 'p
 \`\`\`
 `;
 
-/* Every file this surface contributes to the recording, built once at page load so the run reads as "42 minutes
- * ago" whenever the visitor arrives. The seen file is deliberately ABSENT: the rail badge is meant to be lit
- * when the demo opens, because a failure nobody has acknowledged is exactly what it is for. */
+// Files this surface contributes to the recording, built once at load so age reads relative to `now`. No seen file: the
+// rail badge should start lit, as an unacknowledged failure would leave it.
 export const acceptanceFiles = (now: number): [string, string][] => {
     const createdAt = now - 42 * 60_000;
     const runId = `r${createdAt.toString(36)}`;
@@ -172,7 +154,7 @@ export const acceptanceFiles = (now: number): [string, string][] => {
     const manifest = {
         runId,
         createdAt,
-        // Per story GROUP, which is what a target is resolved per: both groups here are the same dev server.
+        // Keyed by story group; both groups here share the same dev server.
         targets: { "web/checkout": `http://localhost:5173`, "web/account": `http://localhost:5173` },
         provider: `claude`,
         model: `claude-sonnet-5`,

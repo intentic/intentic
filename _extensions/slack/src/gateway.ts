@@ -2,12 +2,9 @@ import { runConnectorGateway } from "@intentic/connector-runtime";
 import { closeSlackConnection, FatalSlackError, openSlackConnection, slackConnection, slackConnections } from "./client.js";
 import { createSlackListener, deliverToChannel } from "./listener.js";
 
-// The Slack gateway process: a baked extension's autoStart process (contributes.processes). It reconciles one
-// Socket Mode connection per configured app against the daemon's /listeners/slack/state, dispatches every
-// inbound message (painting mention replies back into the thread), and reports its liveness. The daemon holds
-// no Slack connection, this does. The reconcile/status/health/shutdown shell is the shared connector runtime;
-// what's here is only what Slack IS: an app+bot token pair is a connection, and a revoked token or uninstalled
-// app is fatal until fixed on the dashboard side.
+// Slack gateway process (autoStart, contributes.processes): reconciles one socket per app against
+// /listeners/slack/state; the daemon itself holds no Slack connection. The shared connector runtime handles
+// reconcile/status/health/shutdown; this file is Slack-specific: a token pair is a connection, a revoked one is fatal.
 
 export interface SlackConnectorConfig {
     readonly provider: string;
@@ -24,8 +21,7 @@ void runConnectorGateway<SlackConnectorConfig, string>({
         return {
             desired: (connectors) =>
                 connectors.filter(({ config }) => config.appToken !== "" && config.botToken !== "").map(({ id, config }) => [id, config] as const),
-            // Both tokens identify the connection: a bot-token rotation must reconnect even though the app
-            // token is unchanged, because the Web API half of the connection is built from it.
+            // Both tokens key the connection: a bot-token rotation must reconnect even with the same app token.
             keyOf: (config) => `${config.appToken}\u0000${config.botToken}`,
             open: async (id, config) => {
                 const connection = await openSlackConnection(config.appToken, config.botToken);
@@ -35,8 +31,7 @@ void runConnectorGateway<SlackConnectorConfig, string>({
             close: async (id, appToken) => closeSlackConnection(appToken),
             alive: (id, appToken) => slackConnection(appToken) !== undefined,
             fatal: (error) => (error instanceof FatalSlackError ? error.message : undefined),
-            // The daemon's outbound door: a message the owner placed in a channel conversation, posted through
-            // whichever connected app the channel accepts (shell route /deliver).
+            // Outbound door: a channel message posted through whichever connected app accepts that channel.
             deliver: (channelId, text) => deliverToChannel(slackConnections(), channelId, text),
         };
     },

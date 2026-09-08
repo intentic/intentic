@@ -6,17 +6,12 @@ import { useAsyncAction } from "./useAsyncAction.js";
 import { groupBranches } from "./groupBranches.js";
 import { useRefRefresh } from "./useRefRefresh.js";
 
-// The wait between "has the push settled yet" reads, the workspace's own cadence for the same question.
+// Interval between push-settled reads.
 const PUSH_POLL_MS = 700;
 
-/* One repo's local branches, the graph header's switcher. Parameterized by a reactive repo so the query
- * re-keys when the caller swaps repos (the same shape useGitLog takes).
- *
- * Every verb refreshes the branch list AND the log, because both render ref decorations. Nothing here drops the
- * app's edit buffers on checkout the way the in-app predecessor did: a save is guarded by its baseline hash
- * daemon-side (the write 409s when the file moved under it) and the file viewer keeps an unsaved buffer and
- * offers Reload, so the swap is already safe. What the reset bought was quiet, no "changed on disk" notice per
- * file, and that belongs on the ref push, where it also covers an agent switching branches in a terminal. */
+// One repo's local branches for the switcher header; re-keys when `repo` changes. Every write refreshes both the branch
+// list and the log, since both render ref decorations. Checkout no longer resets edit buffers: saves are
+// baseline-guarded daemon-side, and the file viewer offers Reload.
 
 export function useBranches(repo: Ref<string>) {
     const api = host();
@@ -28,20 +23,18 @@ export function useBranches(repo: Ref<string>) {
         queryFn: () => api.sandbox.rpc.git.branches({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
-    // Ahead/behind and the checked-out branch both move with the refs, and most of those moves are the
-    // agent's rather than this switcher's.
+    // Ahead/behind and the checked-out branch move with refs, mostly the agent's doing rather than this switcher's.
     useRefRefresh(repo, [`branches`]);
 
     const branches = computed<readonly GitBranch[]>(() => query.data.value?.branches ?? []);
     const remotes = computed<readonly GitRemoteBranch[]>(() => query.data.value?.remotes ?? []);
-    // `main` and `origin/main` are one line of work; the switcher shows one row for them rather than two peers
-    // the reader has to tell apart by a prefix. See groupBranches for why they pair by name.
+    // `main` and `origin/main` render as one row instead of two peers to tell apart by a prefix.
     const groups = computed(() => groupBranches(branches.value, remotes.value));
     const current = computed(() => branches.value.find((branch) => branch.current));
 
     const { busy, error: actionError, run } = useAsyncAction();
 
-    // The branch list and the graph's decorations, two disjoint caches, no ordering between them.
+    // Invalidates the branch list and the graph's ref decorations, two disjoint caches with no ordering between them.
     const invalidateRefs = (): Promise<unknown> =>
         Promise.all([
             queryClient.invalidateQueries({ queryKey: branchesKey.value }),
@@ -54,23 +47,16 @@ export function useBranches(repo: Ref<string>) {
             await invalidateRefs();
         }, `Checkout failed. Commit, stage or discard your changes first.`);
 
-    // `start` defaults to HEAD daemon-side. `checkout` makes this "new branch from here", the switcher's
-    // primary gesture; without it the branch is created and HEAD stays put.
+    // `start` defaults to HEAD daemon-side. `checkout` makes this "new branch from here"; without it the branch is
+    // created and HEAD stays put.
     const create = (name: string, options: { start?: string; checkout?: boolean } = {}): Promise<void> =>
         run(async () => {
             await api.sandbox.rpc.git.createBranchAt({ repo: repo.value, name, ...options });
             await invalidateRefs();
         }, `Could not create that branch.`);
 
-    /* Publish a branch. Named explicitly rather than pushing HEAD, because the pill the user right-clicked is the
-     * branch they meant, which is not always the one checked out. The daemon resolves which REMOTE from that
-     * branch's own upstream (or the configured default when it has none), so this never has to guess.
-     *
-     * THE PUSH IS A RUN (git.contract.ts push): it starts at once and is followed to its verdict, because it
-     * runs the repository's pre-push hook, minutes on a workspace with a real gate, and a request held open
-     * that long dies before git does. The output is a terminal the workspace can open; this pill only needs
-     * the verdict. A refused push is a value, not a throw: "no upstream yet", "would not fast-forward" and "no
-     * permission" are all ordinary answers a pill should report rather than blow up on. */
+    // Pushes the named branch, not HEAD; the daemon resolves the remote from its upstream. Followed as a run since the
+    // pre-push hook can take minutes; a refusal is a caught reason, not a throw.
     const push = (name: string): Promise<void> =>
         run(async () => {
             await api.sandbox.rpc.git.push({ repo: repo.value, branch: name });
@@ -81,8 +67,8 @@ export function useBranches(repo: Ref<string>) {
             await invalidateRefs();
         }, `Could not push that branch.`);
 
-    // git refuses to drop a branch whose commits are nowhere else; `force` is the caller's deliberate retry
-    // after seeing that refusal, never something this composable decides on its own.
+    // git refuses to delete a branch with commits nowhere else; `force` is the caller's deliberate retry after that
+    // refusal.
     const remove = (name: string, force = false): Promise<void> =>
         run(
             async () => {

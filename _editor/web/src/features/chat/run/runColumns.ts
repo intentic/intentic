@@ -4,40 +4,20 @@ import { workflowDag } from "@intentic/ext-workflows";
 import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
 import { type RunColumn, type RunSession, sessionOf } from "./chatRun";
 
-/* THE DIAGRAM'S COLUMNS, the one part of the run machinery that needs the dag layout, split from chatRun so
- * the run STATE stays importable from anywhere (the summons channel reaches it from every window) without
- * dragging the UI component library into that module graph. Only the diagram draws columns, and only it
- * imports this. */
+// The diagram's columns: split from chatRun so run state stays importable everywhere (the summons channel reaches it
+// from every window) without dragging in the UI/dag layout library. Only the diagram imports this.
 
-/* THE NODE GEOMETRY, here rather than in the diagram component, because two things have to agree about it: the graph
- * the user clicks and the columns this file computes from the same layout. A node size passed to one and not
- * the other would put the seam between columns somewhere nobody can see.
- */
+// Shared with the diagram component: the graph the user clicks and the columns computed here must agree on node size,
+// or the seam between columns would land where nobody can see it.
 export const RUN_NODE_WIDTH = 216;
 export const RUN_NODE_HEIGHT = 62;
 
-/* WHICH STEP STATES HAVE A SESSION BEHIND THEM, and the distinction the diagram was getting wrong.
- *
- * `skipped` is the one that matters and the one that looks like it should qualify: it is not a step that ran
- * and failed, it is a step that NEVER STARTED because something upstream did not finish. Its conversation id
- * is derived (wf-<run>-<step>) and written into the record before the run begins, so it exists as a string
- * long before, and, for a skipped step, forever without, anything opening it. Treating those ids as sessions
- * is why clicking most of a failed run's diagram did nothing at all: every node offered a chat that had never
- * been created, the fleet had no card for it, and the click resolved to an empty set in silence.
- *
- * `pending` is the same fact one step earlier. Everything else, running, done, failed, stopped, took at
- * least one turn, which means a transcript.
- */
+// `skipped` and `pending` steps have no session, however real their derived conversation id looks: `skipped` never
+// started (something upstream didn't finish), so opening it offered a chat that was never created.
 const ran = (state: WorkflowStepRun["state"]): boolean => state !== `pending` && state !== `skipped`;
 
-/* The run's steps grouped into the columns the diagram DRAWS, keyed by step id.
- *
- * Grouped on the laid-out x rather than on dependency depth, and the difference is not academic: dagre ranks
- * with network simplex, so a step whose only dependency finished three columns back is drawn beside the work
- * it feeds and not beside the work it waited for. Computing "depth" here instead would be a second opinion
- * about a picture the user is looking at, and the first time the two disagreed the click would open a column
- * other than the one under the pointer.
- */
+// Grouped by the laid-out x position, not dependency depth: dagre may draw a step beside the work it feeds rather than
+// the work it waited for, and a second opinion on depth would disagree with the picture the user clicked.
 export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
     const { nodes, edges } = workflowDag(run.workflow, run);
     const { nodes: positions } = layoutDag(nodes as readonly DagNode<never>[], edges, {
@@ -53,8 +33,7 @@ export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
     const live = new Map(run.steps.filter((step) => ran(step.state)).map((step) => [step.stepId, step.conversationId]));
     const columns = new Map<string, RunColumn>();
     for (const stepIds of byX.values()) {
-        // A `continue` step shares its predecessor's conversation, so a column holding both must not open the
-        // same chat twice, the pane set is a set, and asking for two of one would silently be one.
+        // A `continue` step shares its predecessor's conversation; a column must not offer that chat twice.
         const seen = new Set<string>();
         const sessions = stepIds.flatMap((id): RunSession[] => {
             const conversationId = live.get(id);

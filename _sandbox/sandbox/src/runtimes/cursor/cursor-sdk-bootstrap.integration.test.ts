@@ -3,19 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
-// Model the deployed tree, where prepare-image-trees.sh has pruned this dependency. The packed fixture the
-// explicit install writes below is a file-URL import and therefore remains visible.
+// Models the deployed tree, where prepare-image-trees.sh prunes this dependency; the packed fixture below is a file-URL
+// import and stays visible.
 vi.mock("@cursor/sdk", () => {
     throw new Error("pruned from the published image");
 });
 
 const { ensureCursorSdk, forgetCursorSdk } = await import("./cursor-sdk.js");
 
-/* The install writes into the ENGINE STORE now, where every other agent runtime's versions live, so the
- * fixture is written where a real `npm install --prefix` would have put it. That move is the point of the
- * change this suite covers: a Cursor bootstrap is no longer a private path with its own prefix, it is one
- * engine install like any other, and what it leaves behind is visible, revertable and version-pinned on the
- * Environment card. */
+// Writes into the engine store, same as every other runtime's versions, not a private prefix; what it leaves behind is
+// visible, revertible and version-pinned.
 const writeSdk = (root: string, version: string): void => {
     const pkgDir = join(root, "cursor", "versions", version, "node_modules", "@cursor", "sdk");
     mkdirSync(pkgDir, { recursive: true });
@@ -23,12 +20,12 @@ const writeSdk = (root: string, version: string): void => {
     writeFileSync(join(pkgDir, "esm.js"), "export class Agent {}\nexport class Cursor {}\n");
 };
 
-// A store of its own per case, so an activation in one is invisible to the next. The suite-wide fence
-// (src/testing/engine-fence.ts) already keeps all of this off the machine's real store.
+// A store of its own per case, so one case's activation is invisible to the next; the suite-wide fence
+// (engine-fence.ts) keeps all of it off the real store.
 const emptyStore = (name: string): string => {
     const root = mkdtempSync(join(tmpdir(), name));
     process.env["INTENTIC_ENGINES_DIR"] = root;
-    // No pack prefix either: the point of these cases is the published image, which carries neither.
+    // No pack prefix either: these cases model the published image, which carries neither.
     process.env["INTENTIC_CURSOR_SDK_DIR"] = mkdtempSync(join(tmpdir(), `${name}-nopack-`));
     forgetCursorSdk();
     return root;
@@ -43,9 +40,7 @@ test("an explicit connect installs the pack's pinned version into the engine sto
     const store = emptyStore("cursor-bootstrap-");
     const { activateVersion } = await import("../../engines/engine-store.js");
 
-    /* The install is faked, the ACTIVATION is real: what this asserts is that ensureCursorSdk asks for the
-     * pack's pinned version and then loads what the store now points at, which is the whole contract between
-     * this bootstrap and the engine machinery. */
+    // Install is faked, activation is real: proves this asks for the pinned version, loads the store's answer.
     const install = vi.fn(async (id: "cursor", version: string) => {
         expect(id).toBe("cursor");
         expect(version).toMatch(/^\d+\.\d+\.\d+$/);
@@ -60,7 +55,6 @@ test("an explicit connect installs the pack's pinned version into the engine sto
     expect(install).toHaveBeenCalledOnce();
     expect(sdk.Agent).toBeTypeOf("function");
     expect(sdk.Cursor).toBeTypeOf("function");
-    // Once landed, another tab reuses the module instead of launching a second package install.
     await ensureCursorSdk(install);
     expect(install).toHaveBeenCalledOnce();
 });
@@ -85,8 +79,6 @@ test("a failed bootstrap can be retried", async () => {
     expect(install).toHaveBeenCalledOnce();
 });
 
-// An install that reports failure is reported as one rather than being read as "the runtime is not here":
-// the two states are a retry and a rebuild, and telling them apart is the whole reason the outcome is checked.
 test("a refused install surfaces the store's reason", async () => {
     emptyStore("cursor-bootstrap-refused-");
     await expect(

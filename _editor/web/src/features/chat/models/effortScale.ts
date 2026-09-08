@@ -1,42 +1,22 @@
 import { type AgentProvider, type CatalogOption, effortAllowed, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
 import { providerModels } from "../accounts/providerCatalog";
 
-/* WHICH REASONING TIERS A MODEL OFFERS, AND WHAT A PICK RUNS AT ON IT. A tier scale is a property of the MODEL,
- * not of the provider. Kimi K2.7 stops at 'high' where Kimi K3 runs to 'max', Claude's own scale loses 'max' the
- * moment thinking is switched OFF, so a pick made on one model is routinely off-scale on the next. Both halves
- * of the answer live here: what the segments OFFER, and what a selection actually RUNS at.
- *
- * Read at every use (the composer's segments, Conversation.effort) rather than written back over the user's
- * pick, so a trip through a smaller model never ratchets the choice down. */
+// Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
+// (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, Conversation.effort) rather than
+// written back, so a smaller model never ratchets the pick down.
 
 const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
 
-// Every reasoning tier any provider has, weakest first. Only an ORDER, nothing is offered because it appears
-// here; it is what lets a clamp say "the strongest tier this model has that is no stronger than the pick".
+// Every tier any provider has, weakest first; an order only, not an offer.
 const EFFORT_SCALE: readonly string[] = [`minimal`, `low`, `medium`, `high`, `xhigh`, `max`];
 
-/* The scale a model is offered on when its provider published none: the four tiers every runtime has
- * historically accepted, and DELIBERATELY NOT 'max'.
- *
- * The top rung is one a provider has to claim for itself. It used to sit in this list for everybody and be taken
- * away again by a filter that believed only Claude had it — right about Codex for the wrong reason, and wrong
- * about every catalog that publishes 'max' honestly (Kimi K3, a Cursor dial, an endpoint's thinking levels),
- * whose own top rung was unreachable in the picker that had just read it.
- *
- * CLAUDE'S FLOOR IS THE LONGER ONE, and it is the same compile-time claim about the same vendor that this repo
- * already keeps (CLAUDE_SEED_MODELS): Anthropic's effort scale runs to 'max'. Without it a Claude row the live
- * catalog described nothing about — a family whose tier the CLI publishes no alias for, or any model read before
- * the catalog answers — would be told it stops at X-High, which is the tier going missing all over again. */
+// Default floor tiers, deliberately without 'max' (a provider must claim it); Claude's is the exception.
 const STATIC_EFFORTS: readonly string[] = [`low`, `medium`, `high`, `xhigh`];
 const CLAUDE_EFFORTS: readonly string[] = [...STATIC_EFFORTS, `max`];
 const floorFor = (provider: AgentProvider): readonly string[] => (provider === `claude` ? CLAUDE_EFFORTS : STATIC_EFFORTS);
 
-// Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
-// them (Claude's, Kimi's and Cursor's catalogs carry each model's supported levels), else the provider's floor
-// above. Model-aware so a release with a different scale adjusts the picker with no code change. `thinking` is
-// this selection's setting where it HAS one and undefined where nothing was pinned, which is a third state and
-// not a synonym for off: it is what every run button sends, and effortAllowed reads it that way.
-// Empty only for an ACP provider, which owns its own reasoning settings and has no scale to offer.
+// Reasoning levels for a provider+model: live catalog tiers when reported, else the floor. `thinking` undefined is a
+// third state (unpinned, not off); empty only for an ACP provider.
 export const effortsFor = (provider: AgentProvider, modelId: string | undefined, thinking: boolean | undefined): CatalogOption[] => {
     if (!NATIVE_PROVIDERS.includes(provider as NativeProvider)) {
         return [];
@@ -46,10 +26,8 @@ export const effortsFor = (provider: AgentProvider, modelId: string | undefined,
     return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
 };
 
-// The tier a selection actually RUNS at for a provider+model+thinking triple: the pick itself when that model
-// offers it, else the strongest weaker tier it does offer (the weakest it has, if the pick is below all of
-// them). An off-scale effort both leaves the composer's segments with nothing lit and sends a tier the runtime
-// never accepted.
+// The tier a selection actually runs at: the pick itself if offered, else the strongest weaker tier the model has (or
+// its weakest). An off-scale effort lights no segment and sends a tier the runtime never accepted.
 export const clampEffort = (effort: string, provider: AgentProvider, modelId: string | undefined, thinking: boolean | undefined): string => {
     const offered = effortsFor(provider, modelId, thinking).map((option) => option.value);
     if (offered.length === 0 || offered.includes(effort)) {
@@ -60,12 +38,8 @@ export const clampEffort = (effort: string, provider: AgentProvider, modelId: st
     return ranked.findLast((value) => EFFORT_SCALE.indexOf(value) <= wanted) ?? ranked[0]!;
 };
 
-/* WHAT TO CALL THE TIER A SELECTION RUNS AT, the two rules above read as one word: clamp to what this model
- * actually offers, then name the rung. Undefined for a selection that pinned no tier, which is a state its own
- * caller words ("Default" beside a meter, nothing at all on a run button), not a word this file invents.
- *
- * Shared because three surfaces now name the same fact and none of them holds the scale: the settings row beside
- * a pinned entry, the caret on every run button, and the extension API's `describe`. */
+// Label for the tier a selection runs at: clamp first, then name the rung. Undefined for a pick with no tier pinned.
+// Shared since the settings row, every run button, and the extension API all name the same fact.
 export const effortLabelOf = (
     effort: string | undefined,
     provider: AgentProvider,

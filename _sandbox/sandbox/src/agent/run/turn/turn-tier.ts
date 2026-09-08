@@ -11,57 +11,25 @@ import {
 import type { Services } from "../../../composition.js";
 import { splitAttachments } from "../../prompt/attachment-note.js";
 
-/* AUTOMATIC TIER SELECTION, daemon side: the one place a turn is judged and, when the owner has asked for it,
- * quietly moved onto a cheaper rung of the provider it is already on.
- *
- * The split is the same one role-model.ts and run-role-model.ts already make. The CONTRACT owns the rule
- * (prompt-complexity.ts judges the words, fast-tier.ts names the cheaper model), because a settings row has to
- * be able to say what a turn will run on before it runs; this file owns the facts only the daemon holds — what
- * the settings say, what the provider's catalog publishes, and what the previous turn in this conversation was
- * judged to be.
- *
- * IT SITS ABOVE THE PROVIDER SPLIT, in planTurn, which is the one function every session start in the sandbox
- * passes through: the chat, an automation wake, a Front Desk message, a workflow step, a loop iteration. One
- * placement, so a runtime added tomorrow inherits the behaviour rather than having to opt into it, and so a
- * surface can never route by accident on one runtime and not on another.
- *
- * NOTHING HERE COSTS A CALL, and in the default mode nothing here costs an I/O either. The judge is a pure
- * function over the turn's own words, and the catalog read that Auto needs happens ONLY when the owner has
- * switched routing on AND this particular turn was judged cheap, which is a small fraction of a small fraction.
- * A mechanism that exists to save money must not spend any to decide. */
+// Judges a turn and, when auto-tier is on, moves it to a cheaper model. The contract judges the words and names the
+// model (prompt-complexity.ts, fast-tier.ts); this file supplies settings, catalog and the previous turn's verdict.
+// Costs no I/O unless routing is on and the turn is judged cheap.
 
-// The three states of settings.autoTier, named here so the reader of a branch does not have to remember which
-// string means which. "shadow" is the default: judge everything, record everything, route nothing.
+// The three states of settings.autoTier; "shadow" judges and records but never routes.
 const JUDGING = new Set(["shadow", "on"]);
 
 export interface TurnTier {
     readonly verdict: ComplexityVerdict;
-    /* The cheaper model this turn resolves to, or undefined for "run what the user picked", which is every turn
-     * in shadow mode, every turn judged standard, and every turn whose provider publishes nothing cheaper than
-     * the pick. Three different reasons, one answer, deliberately: the caller's job is to honour a substitution
-     * or not, and the ledger keeps the reasons apart (score, rules, tierRouted, tierDenied).
-     *
-     * When `held` is set the model is still named but MUST NOT run: the user vetoed the substitution
-     * (AgentTurn.tierHold) and the name is kept so the chat can say what the veto declined, which is what makes
-     * the control legible rather than superstitious. */
+    // The cheaper model, or undefined to keep the pick; if `held` is set it must not run (the veto named it).
     readonly model?: string;
-    // The turn carried the user's veto and a substitution would otherwise have happened. The strongest
-    // calibration label the ledger gets (UsageTurn.tierDenied); never set when there was nothing to veto.
+    // Set when the turn carried a veto that would otherwise have triggered a substitution (UsageTurn.tierDenied).
     readonly held?: boolean;
 }
 
 const isNative = (provider: AgentProvider): provider is NativeProvider => (NATIVE_PROVIDERS as readonly string[]).includes(provider);
 
-/* AUTO'S CANDIDATE LIST: what this provider publishes, or nothing.
- *
- * Native providers only. An `endpoint` provider is somebody's own model server: this repo cannot see its bill,
- * and reaching for whichever of its rows happens to carry the cheapest-sounding word is the same overreach
- * role-model.ts already refuses when it seats an endpoint last in Auto. A PIN on an endpoint model still
- * works, because a pin is the owner saying they know what that row costs, which is exactly the fact missing
- * here. Empty is a legal answer and resolves, through fastTierModel, to no downgrade at all.
- *
- * A catalog read that fails is not a reason to fail a turn: the whole feature is optional and the fallback is
- * the model the user asked for, which is never wrong, only dearer. */
+// Native providers only; an endpoint provider's cost isn't visible here (a pin on one still works). Empty is legal and
+// resolves to no downgrade; a failed catalog read falls back to the model the user picked.
 const catalogFor = async (services: Services, provider: AgentProvider): Promise<readonly string[]> => {
     if (!isNative(provider)) {
         return [];
@@ -74,15 +42,8 @@ const catalogFor = async (services: Services, provider: AgentProvider): Promise<
     }
 };
 
-/* JUDGE THIS TURN, and say what to do about it.
- *
- * `lastTier` is the previous turn's VERDICT in this conversation (AgentSummary.tier), which is the only thing
- * here that can see past the words of a follow-up: "now do the same for the other file" is nine easy words
- * carrying the whole weight of the task before them. Absent for an opening message, which is correct — a fresh
- * conversation has no history to be deceived about.
- *
- * Undefined out means the judge did not run at all ("off"), which the ledger records as absence rather than as
- * a score of zero: a turn nobody judged and a turn judged trivial are not the same row. */
+// Judges this turn using the previous turn's verdict (`lastTier`, absent for an opening message) as the only memory of
+// context. Undefined out means the judge did not run at all, recorded as absence, not a score of zero.
 export const turnTier = async (
     services: Services,
     input: AgentTurn,
@@ -90,9 +51,7 @@ export const turnTier = async (
         readonly settings: SandboxSettings;
         readonly provider: AgentProvider;
         readonly lastTier: "fast" | "standard" | undefined;
-        /* The user's standing veto, resolved by the CALLER because only it can see both halves: the turn's own
-         * flag (a composer sends its toggle every turn) and the registry entry's persisted one (an automation
-         * or an older client sends nothing, and the conversation's choice must hold anyway). */
+        // The user's standing veto, resolved by the caller from the turn's flag and the registry's persisted one.
         readonly hold: boolean;
     },
 ): Promise<TurnTier | undefined> => {
@@ -106,18 +65,13 @@ export const turnTier = async (
         hasImages: splitAttachments(attachments).images.length > 0,
         editorContext: input.editorContext !== undefined,
         unattended: input.unattended === true,
-        // The starting posture only. An agent that moves itself into plan mode mid-turn has already been given
-        // a model, and a turn cannot change model under its own feet.
+        // Starting posture only: a turn cannot change model once it has moved itself into plan mode.
         planMode: input.permissionMode === "plan",
         afterHardTurn: context.lastTier === "standard",
-        // The owner's one dial. Read from settings here rather than defaulted in the judge, so the row this
-        // turn writes records the cutoff that was actually in force when it ran.
+        // Read from settings here so the row this turn writes records the cutoff actually in force.
         eagerness: context.settings.autoTierEagerness,
     });
-    /* SHADOW STOPS HERE, and stopping here is the entire point of the mode: the verdict is recorded against
-     * what the turn really cost, and the turn runs on exactly the model it would have without this file. That
-     * is what turns the weights in prompt-complexity.ts from a hypothesis into something fittable, and it is
-     * why the cutoff is not a number anyone had to guess in advance. */
+    // Shadow mode always returns here: the verdict is recorded but the turn runs on the model it would have anyway.
     if (context.settings.autoTier !== "on" || verdict.tier !== "fast" || input.model === undefined) {
         return { verdict };
     }
@@ -130,9 +84,6 @@ export const turnTier = async (
     if (model === undefined) {
         return { verdict };
     }
-    /* THE VETO, honoured after the substitution is resolved rather than before, on purpose: the model is still
-     * named so the chat can say what was declined, and the catalog read it costs is spent only on the turns
-     * where the veto actually stood between a fast verdict and a cheaper model, which is the one population the
-     * calibration ledger wants labelled (UsageTurn.tierDenied). */
+    // Veto is honoured after resolving the substitution, spending its cost only on turns actually overridden.
     return context.hold ? { verdict, model, held: true } : { verdict, model };
 };

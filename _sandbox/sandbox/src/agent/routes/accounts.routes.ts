@@ -6,23 +6,15 @@ import type { OrpcContext } from "../../app-env.js";
 import type { AccountDoor } from "../providers/provider-module.js";
 import { PROVIDER_MODULES } from "../providers/provider-registry.js";
 
-/* ONE ROUTE FAMILY FOR EVERY ACCOUNT THE SANDBOX HOLDS ITSELF, with the provider in the path (accounts.contract.ts
- * says why). Each provider's mechanism is its module's door (provider-module.ts AccountDoor); what is here is
- * the part every door shares: which provider was asked for, and how a door's answers become the wire's.
- *
- * THE SIGN-IN'S FAILURES SPLIT IN TWO, and which half a failure lands in is not a detail: `start` answers as
- * soon as there is a page to open, so everything before that (a vendor that will not begin a flow, an estate
- * id that names nothing) is this route's 412 with the door's own sentence, while everything after it (the
- * approval, the poll, the mint) happens behind the answer and lands as a log line and no new account. That is
- * why the card watches the account list rather than a promise. */
+// One route family for every account this sandbox holds itself, provider in the path. `start` answers once there's a
+// page to open; anything after surfaces only as a later account-list change.
 export type AccountDoors = Partial<Record<NativeProvider, AccountDoor>>;
 
-// Every module's door, built once: a door holds the attempts still open, so two of them would be two sets of
-// handshakes that cannot finish each other's sign-ins.
+// Built once per module: a door holds attempts still open, so a second one would split handshakes.
 export const accountDoors = (services: Services): AccountDoors =>
     Object.fromEntries(PROVIDER_MODULES.flatMap((module) => (module.accounts === undefined ? [] : [[module.id, module.accounts(services)]])));
 
-// A door's own refusal, in its own words, as the wire's precondition failure. An ORPCError passes through.
+// A door's own refusal becomes the wire's precondition failure; an ORPCError passes through untouched.
 const attempted = async <T>(run: () => Promise<T>): Promise<T> => {
     try {
         return await run();

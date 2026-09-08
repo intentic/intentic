@@ -1,39 +1,6 @@
-/* THE DAEMON'S WIRE SURFACE AS ONE OPENAPI 3.1 DOCUMENT, generated from the contract both sides already
- * import, never hand-maintained.
- *
- * WHY THIS EXISTS AT ALL. The prose page at /developers/http deliberately refused to enumerate the routes,
- * and gave the right reason: "the enumeration is what dates fastest". That reason argues against a
- * HAND-WRITTEN enumeration; it argues for this one. `sandboxContract` already carries every route's method,
- * path, input shape and output shape, so the enumeration is a build output, and the thing that dates cannot
- * date: a route added to the contract is in this document the moment it lands, described in the shapes it
- * actually has.
- *
- * WHAT IS AUTHORED AND WHAT IS DERIVED, because mixing those up is how a generated document starts lying.
- * Derived: every path, method, operation id, parameter, request body and response shape. Authored: the 37
- * group paragraphs (groups.ts), the two credentials (security.ts), and the info block below. Nothing authored
- * describes an individual route — route prose lives on `oc.route({ summary, description })` in the contract
- * itself, so it travels with the code it describes and shows up here for free.
- *
- * THERE IS NO COMMITTED COPY, and that is a deliberate reversal of what contract-lock.ts does next door.
- *
- * The lock exists because a zod schema is DEEP and SHARED: a field's type changing three levels down inside a
- * schema six contracts import is invisible in the diff of the line that changed it, so the surface needs a
- * second, comparable document. A route is neither deep nor shared. Adding one is a single line in a single
- * contract file, and its method, path and shapes are all right there in the diff a reviewer is already
- * reading. There is nothing a committed document would surface that the contract diff does not.
- *
- * Against that: pretty-printed, this document is 2 MB and about 70,000 lines, and contract-lock.ts already
- * ruled on exactly this trade for exactly this repo — "pretty-printed, the lock is a 35k-line wall nobody
- * scrolls". Committing a wall three times that size, rewritten in bulk whenever a shared schema gains a field,
- * would cost every contract change a diff nobody can read in exchange for review coverage the lock already
- * provides.
- *
- * So the document is a BUILD OUTPUT. The site generates it during its own build and serves it at
- * /api/openapi.json for anyone who wants to point their own tooling at it, and drift is not tested for because
- * it is not possible: there is one copy and it is made from the code every time. What spec.test.ts guards
- * instead is that the generation is total (every contract route reaches the document), correctly grouped, and
- * deterministic.
- */
+// The daemon's wire surface as one OpenAPI 3.1 document, generated from the contract, never hand-maintained: derived
+// fields come from sandboxContract; authored ones (groups.ts, security.ts) do not. No committed copy: a route's diff
+// already shows fully in the contract's own diff, unlike a deep, shared zod schema.
 
 import { sandboxContract } from "@intentic/sandbox-contract";
 import { OpenAPIGenerator } from "@orpc/openapi";
@@ -41,9 +8,7 @@ import { zodConverter } from "./converter.js";
 import { SPEC_GROUPS, specGroup, specTags } from "./groups.js";
 import { securityRequirement, securitySchemes } from "./security.js";
 
-/* The loopback name, not a hostname anybody else's sandbox answers on. A sandbox is reached at a per-workspace
- * address the platform hands out, so there IS no single server URL to publish: a variable is the honest shape,
- * and the default is the one address that is true on every machine. */
+// Loopback name, not a hostname anybody else answers on; a sandbox has a per-workspace address instead.
 const SERVERS = [
     {
         url: "{sandbox}",
@@ -67,21 +32,11 @@ const DESCRIPTION = [
     "One route is open: `GET /health`. It is not in this document because it is not part of the contract — it exists so a script can tell a live sandbox from a dead port, and it deliberately checks nothing.",
 ].join("\n");
 
-/** Every contract group in the order groups.ts lays down, paired with the operation ids that belong to it. */
+/** A single operation's group label, read from the leading segment of its id (`agent.run` → `agent`). */
 const operationGroup = (operationId: string): string | undefined => specGroup(operationId.split(".")[0] ?? "")?.label;
 
-/* THE DOCUMENT, TYPED AS MUCH AS IT IS WORTH TYPING, and no further.
- *
- * The generator hands back a bag of unknowns. Returning that verbatim made every reader — the tests here, the
- * reference pages next door — re-declare the same handful of fields for itself and reach for a cast to read
- * them, which is three copies of one shape that can disagree, and a cast is exactly the thing that stops
- * disagreeing loudly.
- *
- * So the fields anything actually READS are named here, once. Everything below an operation stays `unknown`:
- * a schema is JSON Schema in full generality, this package converts rather than interprets it, and a partial
- * interface over it would be a claim about shapes the contract is free to grow tomorrow. The line is drawn at
- * exactly the point where this package stops knowing more than the specification does.
- */
+// Only the fields anything reads, named once instead of three call sites re-declaring and casting. A `schema` stays
+// `unknown`: this package converts JSON Schema, it does not interpret it.
 export interface SpecOperation {
     operationId?: string;
     summary?: string;
@@ -105,11 +60,8 @@ export interface SandboxSpecDocument {
     components: { securitySchemes: Record<string, unknown> };
 }
 
-/* PATHS IN EDITORIAL ORDER. The generator walks the contract object, so its output order is the order the
- * contract's own keys happen to sit in — which is neither alphabetical nor useful, and would make the diff of
- * an unrelated contract reshuffle look like a surface change. Rebuilding the object in the order groups.ts
- * declares makes the document's order a decision rather than an accident, and a stable one: two runs of the
- * same code are byte-identical, so a diff of openapi.json is a diff of the contract. */
+// The generator's raw order follows the contract object's own key order, arbitrary and diff-noisy; rebuilds it in
+// groups.ts's order so two runs are byte-identical.
 const inGroupOrder = (paths: Record<string, SpecPathItem>): Record<string, SpecPathItem> => {
     const rank = new Map(SPEC_GROUPS.map((group, index) => [group.label, index]));
     const keyed = Object.entries(paths).map(([path, item], index) => {
@@ -117,22 +69,12 @@ const inGroupOrder = (paths: Record<string, SpecPathItem>): Record<string, SpecP
         const label = first?.operationId === undefined ? undefined : operationGroup(first.operationId);
         return { path, item, rank: label === undefined ? Number.MAX_SAFE_INTEGER : (rank.get(label) ?? Number.MAX_SAFE_INTEGER), index };
     });
-    // Ties keep the contract's own order within a group, which is the order the routes were written in and
-    // reads as intended (list before create before delete) far more often than sorting would.
+    // Ties keep the contract's own order within a group (list before create before delete).
     keyed.sort((a, b) => a.rank - b.rank || a.index - b.index);
     return Object.fromEntries(keyed.map((entry) => [entry.path, entry.item]));
 };
 
-/* `info.version` IS A CONSTANT, and deliberately not the release version.
- *
- * This surface is unversioned by design. A released app plane serves every user's sandbox, whatever image they
- * last pulled, so the browser talking to a daemon is routinely NEWER than it — and the daemon's answer to that
- * is to ADVERTISE the routes it implements (the /events hello frame) rather than to declare a version either
- * side compares. There is no "v2" to move to and no version a caller should branch on.
- *
- * Stamping the release version here would therefore buy a reader nothing and cost the repo a churned 356 KB
- * file on every release, with the whole diff being one line at the top. The route list is the version.
- */
+// Unversioned by design: the daemon advertises the routes it implements instead of a version to branch on.
 const VERSION = "1";
 
 /** The OpenAPI 3.1 document for the sandbox daemon. */
@@ -151,9 +93,7 @@ export const sandboxSpec = async (): Promise<SandboxSpecDocument> => {
 
     const paths = (generated.paths ?? {}) as Record<string, SpecPathItem>;
 
-    /* TAGS, ASSIGNED FROM THE OPERATION ID rather than from the path. The path would be wrong for the two
-     * routes that do not live under their group's prefix: `system.info` is at /info and `system.events` is at
-     * /events, so a path-derived tag would file the daemon's own identity route under a group called "info". */
+    // Tags come from operationId, not path: system.info/system.events break the group-prefix pattern.
     for (const item of Object.values(paths)) {
         for (const operation of Object.values(item)) {
             if (operation.operationId === undefined) {
@@ -166,10 +106,7 @@ export const sandboxSpec = async (): Promise<SandboxSpecDocument> => {
         }
     }
 
-    /* The one cast, and it is the boundary this whole interface exists to hold. The generator's own return type
-     * is a bag of optionals, because a generator has to allow for a caller that asked for none of this; what
-     * comes back HERE is the document assembled two lines up, with every field the interface names supplied by
-     * the call above or by this object. Widening once here is what keeps every reader downstream from casting. */
+    // The one cast this interface exists to justify: the object below supplies every field it names.
     return {
         ...(generated as unknown as SandboxSpecDocument),
         paths: inGroupOrder(paths),
@@ -180,8 +117,5 @@ export const sandboxSpec = async (): Promise<SandboxSpecDocument> => {
     };
 };
 
-/* MINIFIED, because the only readers are machines. This is what the site writes to /api/openapi.json for
- * someone pointing their own tooling at the daemon; the reference pages render from the object, not from this
- * string. Nothing diffs it, so the 2 MB that indentation costs would buy a reader nothing — and a person who
- * does want to read it has the reference pages, which is the whole point of them. */
+// Minified: the only readers are machines (served at /api/openapi.json); a person reads the reference pages instead.
 export const serializeSpec = (spec: SandboxSpecDocument): string => JSON.stringify(spec);

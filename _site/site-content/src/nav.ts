@@ -7,23 +7,9 @@ import { productHref, productPages } from "./product";
 import { referenceDestinations, referenceHref } from "./reference";
 import { DEMO_PATH, discordUrl } from "./site";
 
-/* The site's navigation, as data. One source for the bar, the phone overlay and the footer's menus.
- *
- * The bar is spent on the buyer's path (Features, Docs, Resources, Pricing, About); every builder destination
- * lives in one Developers menu. It used to run seven labels, four of them for somebody extending the product,
- * while the guides, the blog and the comparisons had no bar presence at all (docs/site-audit-2026-09.md).
- *
- * Compare is a row inside Resources, not a tab: a tab would introduce a field of rivals before the doubt
- * exists, a row is read only by someone who opened the menu looking for this kind of page.
- *
- * Download is the deliberate omission. The app is not a way INTO the product: both roads end at the same
- * signed-in workspace, and what it replaces is one step, the terminal command that puts a sandbox on your
- * machine. A permanent tab beside "Create your workspace" offers two openings where there is one, and most
- * of the people who take it are first-timers clicking the most concrete-sounding word in the bar: a longer
- * road to the same place, a binary to install before they know what it is for, and on a Mac no build at all.
- * It lives where the need is instead: the Resources column of the footer, and the band of the home page that
- * asks for a terminal, beside the command.
- */
+// Site navigation as data: one source for the bar, phone overlay and footer menus. The bar holds only the buyer's path
+// (Features, Docs, Resources, Pricing, About); everything for a builder lives in Developers. Compare is a Resources
+// row, not a tab; Download is deliberately omitted, since the app is not a separate way in.
 
 export interface MenuItem {
     label: string;
@@ -32,11 +18,7 @@ export interface MenuItem {
     description?: string;
     /** Icon key drawn to the left of the label, resolved by the site's `navIcons`. */
     icon?: string;
-    /**
-     * Every page this row stands for, so the surfaces that draw it can mark it while the reader is on any of
-     * them — not only on the one page its href happens to point at. Carried by the rows derived from a book,
-     * where a row is a SHELF (see `bookDestinations`); absent on rows that are simply one page.
-     */
+    /** Every page this row stands for, marked current from any of them, not just its href (book rows only). */
     covers?: string[];
     external?: boolean;
     /** Previewed in the panel's rail while this row is hovered. Product rows only. */
@@ -61,20 +43,11 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-/* Every feature page as a menu row, in the shelf's own order: five verbs (Run, Connect, Automate, Review,
- * Host) rather than a list of surfaces, so the menu reads as what you DO with a fleet, not the furniture any
- * editor has. Each row's label is its page's slug, so the word in the menu is the word in the address bar.
- *
- * ONE COLUMN, no group labels: a verb is its own grouping, so the run/environment/extend headers that once
- * sorted seven surfaces would be more scaffolding than the rows under them. What the menu is FOR is the
- * preview rail beside it: a visitor who has installed nothing seeing the real surfaces. EVERY row carries a
- * shot, including the diagram-led one: a row without a picture does not blank the rail, it leaves the row
- * above still showing, which is how Automate spent a while illustrated by the capabilities catalog. */
+// Feature pages as menu rows, one column, no group labels; each label is its page's slug. Every row carries a shot
+// (even Automate's diagram), so the preview rail never falls back to the row above's picture.
 const productItems = (): MenuItem[] =>
     productPages.map((page) => {
-        /* The row's own preview where it has one, the page hero otherwise. A hero is framed for a page column
-         * and the rail is a 16:10 box, so three of the five pages carry a capture shot for the box instead,
-         * see `menuShot` in product.ts for which, and why the other two don't need one. */
+        // Falls back to the page hero when there's no menuShot; a hero fits a page column, not the rail's 16:10 box.
         const shot = page.menuShot ?? (page.hero && { name: page.hero.name, alt: page.hero.alt });
         return {
             label: page.navLabel,
@@ -87,20 +60,11 @@ const productItems = (): MenuItem[] =>
 
 export const navEntries: NavEntry[] = [
     {
-        /* "Features", not "Product": the site's own copy says free and open source, MIT on GitHub, platform
-         * included, and a bar that then says "Product" is reading from a SaaS vendor's script beside it.
-         *
-         * AND THE PATH SAYS IT TOO. The label and the URL used to disagree, "Features" over /product/, "Run"
-         * over /product/orchestrate/, on the theory that a label is a word while a URL is a promise already
-         * linked to. That gets the trade backwards: a URL is also read, and a visitor who clicks Run and lands
-         * on "orchestrate" has been handed a second vocabulary to learn for no benefit. The old paths are
-         * forwarded (see worker.ts), so the links other people made still arrive. */
+        // Named "Features", not "Product": the copy is open source, not a vendor's script. Label and path now agree.
         type: "menu",
         label: "Features",
         prefixes: ["/features"],
-        // The extension gallery is NOT a row here: it is a row of the Developers menu, which is where the
-        // rest of the extension story lives, and a destination in two neighbouring menus teaches the reader
-        // that the bar has no shape.
+        // Extension gallery is a Developers row, not here; no destination sits in two neighbouring menus.
         sections: [{ items: productItems() }],
         action: { label: "Try the demo workspace", href: DEMO_PATH },
     },
@@ -108,14 +72,12 @@ export const navEntries: NavEntry[] = [
         type: "menu",
         label: "Docs",
         prefixes: ["/docs"],
-        // One unlabelled column of four destinations: see docsDestinations for why this is not the tree.
+        // One unlabelled column of four destinations (not the full docs tree).
         sections: [{ items: [...docsDestinations] }],
-        // Changelog is a Resources row now, and a destination should not sit in two neighbouring menus.
+        // Changelog is a Resources row now; a destination shouldn't sit in two neighbouring menus.
         action: { label: "Troubleshooting", href: docsHref("troubleshooting") },
     },
-    /* Resources: what a visitor reads while making up their mind, in the order it is read: guides before they
-     * know the product exists, blog and comparisons once they do, changelog after installing, community when
-     * a page did not answer. Blog posts are markdown files this module cannot read, so that row has no `covers`. */
+    // Resources, ordered as read: guides, blog/compare, changelog, community. No `covers` on blog (markdown).
     {
         type: "menu",
         label: "Resources",
@@ -161,10 +123,7 @@ export const navEntries: NavEntry[] = [
         ],
         action: { label: "The blog by RSS", href: "/blog/rss.xml", external: true },
     },
-    /* Developers: everything for somebody building ON intentic. It was three bar labels (Developers, API,
-     * Extensions); all three readers have already decided to build and will open a menu. The API and the
-     * gallery are one row each pointing at an index: the /api/ shelf tree is the rail on the /api/ pages
-     * themselves. */
+    // Everything for someone building on intentic; API and gallery are one row each, with their own rail on /api/.
     {
         type: "menu",
         label: "Developers",
@@ -191,17 +150,14 @@ export const navEntries: NavEntry[] = [
         ],
         action: { label: "Download the OpenAPI document", href: `${referenceHref("")}openapi.json` },
     },
-    // "Pricing" is the highest-intent click on a developer-tool site; a visitor who finds no link assumes
-    // the price is hidden. The page says "free". Decision 2026-09-06, landing-blueprint.md.
+    // Highest-intent click on a dev-tool site; a visitor who finds no pricing link assumes it's hidden.
     {
         type: "link",
         label: "Pricing",
         href: "/pricing/",
         prefix: "/pricing",
     },
-    // Last of the text links, where a bar conventionally keeps it, and in the bar at all because "who is
-    // behind this?" is a question about TRUST, and the reader with it is deciding whether to run a container
-    // on their own machine and hand it real credentials. That reader will not go looking in the footer.
+    // In the bar, not just the footer: trust matters before running a container with real credentials.
     {
         type: "link",
         label: "About",

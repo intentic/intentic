@@ -3,77 +3,31 @@ import { storedKeys, storedValue, storeValue } from "../../../lib/browserStorage
 import { activeSandboxId } from "../overview/activeSandbox";
 import { loopbackPermission } from "./loopbackPermission";
 
-/* WHETHER THIS BROWSER MAY REACH FOR A SANDBOX RUNNING ON THIS DEVICE, asked in the app's own words, once,
- * before the browser asks in its own.
- *
- * The loopback shortcut (endpoint.ts) is the only thing in this app that touches the machine the browser runs
- * on, and Chrome now gates that behind a Local Network Access permission. Left alone, that dialog arrives
- * unasked-for at first paint, says the app wants to access devices on the user's local network, and names no
- * benefit whatsoever. The honest reading, by someone who requested none of it, is that the app is looking
- * around their machine.
- *
- * It is not. It fetches one address, on a port derived from their own sandbox's connect token, and adopts what
- * answers only if it names that sandbox. But none of that is on screen, and a permission dialog is the worst
- * possible place to learn what a feature is for. So the app states the benefit first, in one sentence, and
- * reaches for the address only after a yes, which means the browser's dialog, when it comes, is the answer to
- * a question the user has just been asked rather than an interruption they cannot place.
- *
- * WHICH MAKES THIS MODULE THE RECORD OF A CONVERSATION, NOT THE STATE OF A PERMISSION. Chrome owns the
- * permission and is asked for it directly (loopbackPermission.ts); what is kept here is what the USER told this
- * app, which only decides anything while the browser is still at `prompt`. A browser that has no such
- * permission, or already holds the grant, is never asked by us at all — there is no dialog to explain.
- *
- * THE TWO ANSWERS ARE REMEMBERED AT DIFFERENT SCOPES, because they answer different questions.
- *
- * A yes is about this BROWSER. It is the same grant Chrome itself keeps per origin, so once given, every
- * sandbox may use the shortcut and nothing asks again, asking a second time would be asking for something we
- * already have.
- *
- * A no is about THIS SANDBOX. The real question underneath is "is this one on this device", and for a
- * sandbox on a colleague's desktop the answer is a permanent no that should never be raised again. But it is
- * not permanent for the USER: the day they set a new sandbox up on the laptop in front of them, the answer
- * changes, and scoping the no to the sandbox is what lets that day arrive on its own, no settings page to
- * find, and no re-prompting about the sandbox they already said no to. */
+// Whether this browser may reach a sandbox on the user's own device, asked in the app's own words before
+// Chrome's dialog does. States the benefit first so that dialog, when it comes, answers a question already
+// asked. A record of what the user was told, not of the permission itself; it decides nothing once Chrome is
+// past `prompt`.
 
-// This browser's yes. One key, no sandbox in it: the permission it stands for is the origin's, not a
-// sandbox's.
+// This browser's yes: one key, no sandbox in it, since the grant is the origin's.
 const ALLOWED_KEY = `intentic.localShortcut`;
-// One key per sandbox that was refused. A prefix rather than a list so a refusal is a single independent
-// write, and a sandbox that is deleted leaves one dead key instead of corrupting a shared value.
+// One key per refused sandbox; a prefix keeps each refusal an independent write.
 const DECLINED_PREFIX = `intentic.localShortcut.declined.`;
 
 const allowed = ref(storedValue(ALLOWED_KEY) === `yes`);
 const declined = ref<ReadonlySet<string>>(new Set(storedKeys(DECLINED_PREFIX).map((key) => key.slice(DECLINED_PREFIX.length))));
 
-/* The sandbox the question was raised for, if any. One at a time and never queued: the question is as much
- * about this browser as about the sandbox, so a second copy behind the first would be the same question twice.
- */
+// The sandbox the question was raised for, if any. One at a time: the question is as much about this browser
+// as about the sandbox, so a second one queued behind would repeat it.
 const asking = ref<string | undefined>(undefined);
 
-/* …and what is actually ASKABLE, which is the same thing only while that sandbox is the one on screen. A
- * switch away strands the question, the user is now looking at another sandbox, and a card asking to speed up
- * something they have navigated off is a card about nothing. It is dropped rather than re-pointed: whether the
- * sandbox they switched TO is worth asking about is the probe's call, and it makes it on arrival. */
+// Askable only while that sandbox is still active; a switch away drops the question rather than re-pointing
+// it, since a card about the sandbox just left is a card about nothing.
 const question = computed(() => (asking.value === activeSandboxId.value ? asking.value : undefined));
 
 export type ShortcutAnswer = "unasked" | "allowed" | "declined";
 
-/* MAY THIS BROWSER REACH FOR THIS SANDBOX — the browser's own answer first, and only then the two stored above.
- *
- * The ordering is a precedence of authorities rather than a chain of conditions. Chrome owns the permission;
- * what this module keeps is a record of a conversation about it, and a record can go stale in ways the thing it
- * describes cannot.
- *
- *   • `denied` ends it. The user has told Chrome no, in Chrome's own words, and the app has nothing to add: it
- *     cannot re-ask, and probing would spend requests on an address the browser refuses. Read as a decline so
- *     the caller falls to the tunnel exactly as it would for a sandbox on somebody else's desk.
- *   • `granted` and `ungated` are the same answer to the caller — nothing is in the way — and they outrank a
- *     stored no for the same reason the browser-wide yes always has: a permission that has genuinely been given
- *     (or one that was never needed) is not overridden by a note about which machine a sandbox was on.
- *   • `prompt` is the only state the card was ever for, and there the stored answers decide, unchanged.
- *
- * Asynchronous because the Permissions API is, which is why the caller is `resolve` (useEndpoint.ts) rather
- * than anything rendering: this is a question asked on a reconnect, never on a frame. */
+// Browser's own answer first: `denied` ends it, `granted`/`ungated` outrank a stored no, and only at `prompt`
+// do the stored answers decide. Async because the Permissions API is; called on reconnect, not on a frame.
 export const shortcutAnswer = async (sandboxId: string): Promise<ShortcutAnswer> => {
     const browser = await loopbackPermission();
     if (browser === `denied`) {
@@ -86,24 +40,20 @@ export const shortcutAnswer = async (sandboxId: string): Promise<ShortcutAnswer>
 };
 
 export function useLocalShortcut() {
-    // Raise the question for a sandbox. Callers gate on `shortcutAnswer` first, so this never re-asks something
-    // already answered; it is separate from the answer so the probe stays the only thing that decides WHEN.
+    // Raises the question; callers gate on shortcutAnswer first so this never re-asks something already answered.
     const ask = (sandboxId: string): void => {
         asking.value = sandboxId;
     };
 
-    /* Yes, kept for the browser, because that is the scope of the permission it is really about. The caller
-     * re-runs the probe: the sandbox the question was raised for is still the active one, and making the user
-     * wait for a reconnect to feel the speed-up they just agreed to would waste the only moment they are
-     * thinking about it. */
+    // Kept for the browser, matching the permission's own scope. The caller re-probes immediately rather than
+    // waiting for the next reconnect.
     const allow = (): void => {
         allowed.value = true;
         storeValue(ALLOWED_KEY, `yes`);
         asking.value = undefined;
     };
 
-    // No, kept for this sandbox only (see the header). Nothing is retried and nothing degrades: the tunnel is
-    // the address every sandbox already had.
+    // Kept for this sandbox only; nothing is retried, since the tunnel is the address every sandbox already had.
     const decline = (sandboxId: string): void => {
         declined.value = new Set([...declined.value, sandboxId]);
         storeValue(`${DECLINED_PREFIX}${sandboxId}`, `yes`);

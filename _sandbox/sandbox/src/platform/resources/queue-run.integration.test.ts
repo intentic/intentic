@@ -4,17 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
-/* WHAT bin/queue-run PROMISES, checked against real processes and a real kernel lock.
- *
- * The policy half (which commands are heavy) is a pure function with its own unit tests; this file is about
- * the half that cannot be faked, because the whole reason the slot is an `flock` on an inherited descriptor
- * rather than a counter in the daemon is what happens to processes that DON'T exit politely. A killed command,
- * a command whose parent is gone, a daemon restarted underneath a running suite: each of those releases its
- * slot only if the kernel is the thing releasing it, and only a real process can show that.
- *
- * Timings are deliberately coarse (a 300ms body against a 1s poll) so a loaded runner cannot fail this on
- * latency: every assertion is about ORDER and COUNT, never about how long something took. Where a test needs
- * two bodies to be running AT ONCE, they rendezvous through the log rather than through a sleep — see `body`. */
+// Exercises real processes and a real flock, not the pure policy (tested elsewhere): what happens to a slot when a
+// process doesn't exit politely. Timings are coarse; assertions are on order and count, never on latency.
 
 const QUEUE_RUN = join(import.meta.dirname, "../../../bin/queue-run");
 
@@ -24,8 +15,7 @@ interface Run {
     readonly stderr: string;
 }
 
-// `bash <path>`, not the path itself: the file is mode 644 in git and only becomes executable when the
-// Dockerfile copies it with --chmod=755, so running it directly would pass or fail on a checkout's file mode.
+// `bash <path>`, not the path itself: it's mode 644 in git, executable only after the Dockerfile's chmod.
 const queueRun = (dir: string, args: readonly string[], command: string, pathPrefix?: string): Promise<Run> =>
     new Promise((resolve) => {
         const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", command], {
@@ -45,9 +35,7 @@ const queueRun = (dir: string, args: readonly string[], command: string, pathPre
 
 const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "queue-run-"));
 
-/* The peak number of bodies running at once, replayed from a log each body brackets itself in. `>>` of one
- * short line is a single atomic append on Linux, which is what makes this readable after the fact rather than
- * needing the test to watch live. */
+// Peak concurrency, replayed from `+`/`-` marks each body appends; a one-line `>>` append is atomic on Linux.
 const peakConcurrency = async (log: string): Promise<number> => {
     const marks = (await readFile(log, "utf8")).split("\n").filter((line) => line === "+" || line === "-");
     let running = 0;
@@ -59,29 +47,8 @@ const peakConcurrency = async (log: string): Promise<number> => {
     return peak;
 };
 
-/* A body that brackets itself in the log, and — where the test is about bodies overlapping — WAITS INSIDE THE
- * BRACKET until `together` of them have started.
- *
- * That wait is what makes the peak a fact about the queue instead of a fact about the runner. With a plain
- * sleep, two bodies overlap only if the second process reaches its first line before the first one's sleep is
- * over, so "these two ran at once" is really an assertion that a fork+exec beat 300ms — the latency assertion
- * this file's header says it does not make. Measured on this box: two children of the same Promise.all start
- * within 9ms of each other on an idle machine, 84ms at load 69, and 313ms at load 180 — past the body, at which
- * point the marks read +,-,+,- and the peak is 1 with nothing whatsoever contended. That is the shape that
- * failed on CI, where this suite runs beside 490-odd other files.
- *
- * The wait is bounded, so it weakens nothing: a body kept out by a slot that should not have held it waits out
- * the bound, leaves alone, and the peak stays at 1 — the failure the test is there to report. The `sleep` after
- * the rendezvous is the other half, the window in which a limit that is NOT enforced shows up as a peak above
- * what was asked for.
- *
- * THE BOUND IS THIRTY SECONDS AND NOT FIVE, which is the whole of one CI failure. `separate pools do not
- * contend` reported a peak of 1 on a green tree: both bodies were admitted, as the queue promises, but the
- * second process did not reach its first line inside the old five-second bound, so the first gave up waiting
- * for it and the marks read +,-,+,-. That is the bound being an assertion about how fast a loaded runner forks,
- * which is the one assertion this file's header says it does not make. Raising it costs nothing on a machine
- * that is not loaded — the loop breaks on the count, not on the clock, so the fast path is unchanged — and the
- * only thing a longer bound can do to a REAL failure is make the suite take half a minute to report it. */
+// A body waits inside its bracket until `together` have started, making overlap a fact about the queue, not about
+// fork+exec speed; the bound is generous so it costs nothing when unloaded.
 const RENDEZVOUS_SECONDS = 30;
 const POLL_SECONDS = 0.05;
 const body = (log: string, { together = 1, ms = 300 }: { together?: number; ms?: number } = {}): string =>
@@ -89,17 +56,8 @@ const body = (log: string, { together = 1, ms = 300 }: { together?: number; ms?:
     `for _ in $(seq 1 ${Math.round(RENDEZVOUS_SECONDS / POLL_SECONDS)}); do [ "$(grep -c '^+$' ${log})" -ge ${together} ] && break; sleep ${POLL_SECONDS}; done; ` +
     `sleep ${ms / 1000}; echo - >> ${log}`;
 
-/* A process that HOLDS the pool's only slot, which does not return until it demonstrably does.
- *
- * The three tests below need a slot already taken before they ask for it, and each used to spawn a holder and
- * sleep 400ms. That sleep is a guess about how long bash takes to start and `flock` to be granted, and on a
- * loaded runner it is the wrong guess: `runs anyway once the deadline passes` failed on CI with an EMPTY
- * stderr, which is what the waiter prints when it never had to wait — the holder had not taken the slot yet, so
- * the waiter walked straight in and the test asked a question about waiting that nothing had answered.
- *
- * The marker is written by the held COMMAND, so it appears only after queue-run has the lock and exec'd: there
- * is no window in which the file exists and the slot is not held. Bounded, and a bound that expires is an
- * explicit failure rather than a confusing assertion further down. */
+// Blocks until the held command's marker file exists, not until spawn returns, so a slot is provably taken before use.
+// A bound that expires throws rather than silently proceeding untested.
 const holdSlot = async (queue: string, args: readonly string[], seconds: number): Promise<ChildProcess> => {
     const held = join(queue, "held");
     const child = spawn("bash", [QUEUE_RUN, ...args, "--", "bash", "-c", `echo held > ${held}; sleep ${seconds}`], {
@@ -127,9 +85,7 @@ test("runs the command, passing through its output and its real exit code", asyn
 test("holds the pool to its limit, and every queued command still runs", async () => {
     const queue = await dir();
     const log = join(queue, "marks");
-    // Five at once against two slots: the assertion that matters is that the sixth thing the box is asked to
-    // do never becomes the third thing it is doing — and that two of them DO get to run together, which is the
-    // half a limit of one would also satisfy.
+    // Five requests against two slots: the sixth must never run third, and two must run together.
     const runs = await Promise.all(
         Array.from({ length: 5 }, () => queueRun(queue, ["--pool", "p", "--limit", "2"], body(log, { together: 2 }))),
     );
@@ -148,8 +104,7 @@ test("a limit of one serialises completely", async () => {
 test("separate pools do not contend", async () => {
     const queue = await dir();
     const log = join(queue, "marks");
-    // Two pools of one each must overlap; if they did not, the pool name would be decoration and a workspace
-    // could not give its type checks a budget separate from its tests.
+    // Two pools of one each must overlap, or the pool name is decoration.
     const runs = await Promise.all([
         queueRun(queue, ["--pool", "a", "--limit", "1"], body(log, { together: 2 })),
         queueRun(queue, ["--pool", "b", "--limit", "1"], body(log, { together: 2 })),
@@ -171,16 +126,13 @@ test("a command that fails still frees its slot", async () => {
 
 test("a KILLED command frees its slot, which is the case a lease would get wrong", async () => {
     const queue = await dir();
-    /* The reason the slot is a kernel lock. A daemon-side counter releases on a callback the killed process
-     * never reaches, so this slot would stay held until some TTL expired — and the sandbox would be one slot
-     * poorer for every command anyone ever interrupted. */
     const killed = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 30);
     killed.kill("SIGKILL");
     await new Promise((resolve) => killed.on("close", resolve));
 
     const after = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "5"], "echo free");
     expect(after.stdout.trim()).toBe("free");
-    // It got the slot rather than timing out into it: the deadline notice is what a leaked slot would print.
+    // Got the slot rather than timing out into it; a leaked slot would print the deadline notice.
     expect(after.stderr).not.toContain("starting anyway");
 });
 
@@ -188,8 +140,6 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
     const queue = await dir();
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1"], 10);
     try {
-        /* A queue that can block forever turns one stuck suite into a dead sandbox. The command runs, says in
-         * the pane that it gave up waiting, and the exit code is still the command's own. */
         const waited = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "2"], "echo ran; exit 4");
         expect(waited.stdout.trim()).toBe("ran");
         expect(waited.code).toBe(4);
@@ -202,11 +152,9 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
 
 test("says in the pane that it is waiting, then that it started", async () => {
     const queue = await dir();
-    // Long enough that the holder is still in the slot when the second command asks for it and polls once at
-    // INTENTIC_QUEUE_POLL=1, and short enough that the test waits that out rather than the full deadline: the
-    // old 1.5s was measured against a 400ms sleep, and once the wait became a rendezvous it had no margin left.
+    // Long enough that the holder still holds when the second command polls; short enough not to wait out the full
+    // deadline.
     const holder = await holdSlot(queue, ["--pool", "p", "--limit", "1", "--label", "vitest"], 5);
-    // The person watching a pane where nothing is happening is owed a reason; silence here reads as a hang.
     const second = await queueRun(queue, ["--pool", "p", "--limit", "1", "--wait", "30", "--label", "vitest"], "echo second");
     expect(second.stderr).toContain('pool "p"');
     expect(second.stderr).toContain("vitest");
@@ -215,8 +163,7 @@ test("says in the pane that it is waiting, then that it started", async () => {
     holder.kill("SIGKILL");
 });
 
-/* FAIL OPEN, the property that decides whether this wrapper is safe to put in front of every heavy command an
- * agent runs. None of these inputs is one the daemon should produce; all of them must still run the command. */
+// None of these malformed inputs should come from the daemon; every one must still run the command.
 test.each([
     ["a bad limit", ["--pool", "p", "--limit", "not-a-number"]],
     ["a bad deadline", ["--pool", "p", "--limit", "1", "--wait", "abc"]],
@@ -243,24 +190,15 @@ test("an empty command line is not an error", async () => {
 
 test("the slot survives exec, so the lock covers the command and not the wrapper", async () => {
     const queue = await dir();
-    /* The bug this pins: bash marks `{var}>`-allocated descriptors close-on-exec, so an implementation using
-     * that form drops the lock at the exec and every command runs holding nothing — a queue that reports
-     * success while enforcing no limit at all. A limit of one with a body long enough to overlap is the
-     * cheapest way to notice. */
+    // The lock must survive exec: `{var}>`-allocated descriptors close on exec and would silently drop it.
     const log = join(queue, "marks");
     const runs = await Promise.all(Array.from({ length: 4 }, () => queueRun(queue, ["--pool", "p", "--limit", "1"], body(log, { ms: 400 }))));
     expect(runs.every((run) => run.code === 0)).toBe(true);
     expect(await peakConcurrency(log)).toBe(1);
 });
 
-/* THE MEMORY HALF OF THE GATE (item 4 of the original finding): waitForMemoryHeadroom used to have exactly one
- * caller, the pre-push check, while the commands that actually pinned the box were the ones an already-admitted
- * turn ran in the middle of itself. bin/memory-gate is that same policy as a command, and these tests are about
- * the WIRING — that queue-run calls it, in the right order, with what it was told, and that not one of its
- * failure modes can cost the command. The policy itself is a pure function tested in memory-admission.test.ts.
- *
- * A stub on PATH rather than the real binary: the real one reads this container's live cgroup, so asserting on
- * its verdict would be asserting on how busy the box happens to be. */
+// Tests the wiring to bin/memory-gate (order, args, failure tolerance), not the policy itself
+// (memory-admission.test.ts). A stub avoids asserting on this container's real cgroup state.
 const stubGate = async (script: string): Promise<string> => {
     const bin = await mkdtemp(join(tmpdir(), "queue-bin-"));
     await writeFile(join(bin, "memory-gate"), `#!/usr/bin/env bash\n${script}\n`, { mode: 0o755 });

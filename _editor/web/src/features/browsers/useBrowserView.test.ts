@@ -1,20 +1,17 @@
 // @vitest-environment jsdom
-//
-// WHAT REACHES THE REMOTE PAGE, and (just as much) what does not. The view forwards input only while the user
-// has taken control, so every handler here has two answers, and the paste one exists because a sign-in is the
-// case where typing is not a substitute: the Chromium being watched keeps its own clipboard inside the sandbox,
-// which nothing on the user's machine can write to.
+// The view forwards input only while the user has taken control, so every handler here has two answers; paste
+// exists separately since the remote Chromium's clipboard is inside the sandbox, unreachable from the user's
+// machine.
 import { expect, test, vi } from "vitest";
 import { effectScope, ref } from "vue";
 
-// The ticket mint is an HTTP round trip through the whole sandbox-session stack; the socket's URL is all this
-// suite needs from it.
+// The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
 vi.mock(`../sandbox/client/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
 
-// A socket that records what the view puts on the wire, and can answer back. Open from the start: this suite is
-// about the handlers, not about the connect dance.
+// Records what the view puts on the wire and can answer back; open from the start, since this suite is about the
+// handlers, not the connect dance.
 class FakeSocket {
     static readonly OPEN = 1;
     readonly readyState = FakeSocket.OPEN;
@@ -32,18 +29,18 @@ class FakeSocket {
     deliver(message: object): void {
         this.listeners.get(`message`)?.({ data: JSON.stringify(message) });
     }
-    // A PICTURE from the daemon, which is binary: one format byte then the image (the daemon's encodeFrame).
+    // A picture from the daemon, binary: one format byte then the image (the daemon's encodeFrame).
     deliverFrame(bytes: readonly number[]): void {
         this.listeners.get(`message`)?.({ data: new Uint8Array(bytes).buffer });
     }
 }
 
-// The picture surface, sized so the remote viewport maps onto it 1:1 and a click's coordinates are the ones
-// asserted below rather than the output of the letterbox arithmetic (viewportCoords has its own suite).
+// Sized so the remote viewport maps 1:1 onto it, so a click's coordinates are exactly what's asserted, not
+// letterbox arithmetic (viewportCoords has its own suite).
 const stage = (): HTMLElement => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 800 }) }) as unknown as HTMLElement;
 
-// A pointer event as the host browser reports it: only the fields the view reads, defaulted to "nothing held,
-// no modifier, not a repeat click" so each test states just the part it is about.
+// A pointer event as the host reports it: only the fields the view reads, defaulted to nothing held/no
+// modifier/no repeat, so each test states just its own part.
 const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
     ({
         clientX: 100,
@@ -59,7 +56,7 @@ const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
         ...over,
     }) as unknown as MouseEvent;
 
-// A keydown as the host browser reports it: only the fields the view reads.
+// A keydown as the host reports it: only the fields the view reads.
 const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): KeyboardEvent =>
     ({
         key,
@@ -95,10 +92,8 @@ const connected = async (): Promise<{
     const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
     // connect() awaits the ticket before it constructs anything.
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
-    /* THE GEOMETRY COMES OFF THE WIRE, so a test that wants coordinates it can read has to say what the picture
-     * is — exactly as the daemon does before it sends one. The two paths have different shapes (the whole
-     * window on video, the page alone on frames), which is why nothing assumes either. `stage()` below is this
-     * same size, so the letterbox arithmetic is the identity and a click lands where it was aimed. */
+    // Geometry comes off the wire, so a test needing readable coordinates must say what the picture is, as the daemon
+    // does. `stage()` matches this size, so the letterbox arithmetic is the identity and a click lands where aimed.
     sockets[0]!.deliver({ type: `ready`, kind: `frames`, width: 1280, height: 800 });
     return { view, wire: () => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown), socket: () => sockets[0]! };
 };
@@ -110,8 +105,8 @@ test("a paste from the user's own machine arrives as text the remote page can re
     view.onPaste(pasteOf(`correct horse battery staple`));
     expect(wire()).toContainEqual({ type: `text`, text: `correct horse battery staple` });
 
-    // Ctrl/Cmd+V itself must stay with the HOST browser: swallowing it is what stops the paste event above
-    // from ever being generated, and the remote clipboard it would reach is not the user's.
+    // Ctrl/Cmd+V must stay with the host: swallowing it would stop the paste event from ever firing, and the remote
+    // clipboard it would reach isn't the user's.
     const chord = { key: `v`, ctrlKey: true, metaKey: false, altKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent;
     view.onKeyDown(chord);
     expect(chord.preventDefault).not.toHaveBeenCalled();
@@ -126,14 +121,13 @@ test("nothing is pasted into a browser the user is only watching", async () => {
 test("a clipboard with no text in it sends no keystroke at all", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
-    // An image or a file: real paste events, with nothing this wire can carry.
+    // An image or file: a real paste event with nothing this wire can carry.
     view.onPaste(pasteOf(``));
     expect(wire().filter((message) => (message as { type?: string }).type === `text`)).toHaveLength(0);
 });
 
-/* THE CHORD THAT USED TO ESCAPE. Ctrl+A reached the app AROUND the picture, where it selected the whole of
- * Intentic rather than the field being looked at: the giveaway that the view had the user's attention and not
- * their keyboard. Both halves are asserted: it goes on the wire WITH its modifier, and the host never sees it. */
+// Ctrl+A used to reach the app around the picture, selecting everything instead of the field being looked at. Both
+// halves asserted: it reaches the page with its modifier, and the host never sees it.
 test("select-all reaches the page instead of the app around it", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
@@ -149,14 +143,13 @@ test("nothing is typed into a browser the user is only watching", async () => {
     const chord = press(`a`, { ctrl: true });
     view.onKeyDown(chord);
     expect(wire()).toHaveLength(0);
-    // And it stays the host's, so a watcher's own select-all still works the way it always did.
+    // Stays the host's, so a watcher's own select-all still works as it always did.
     expect(chord.preventDefault).not.toHaveBeenCalled();
 });
 
-/* COPY HAS TO CROSS THE GAP. The remote Chromium's clipboard lives in the sandbox, so a copy that only reached
- * it is one the user can never paste anywhere. The ORDER is the load-bearing part: the selection is read back
- * before the chord is allowed through, because the same path carries Ctrl+X, which would otherwise delete the
- * text on its way to being read. */
+// The remote clipboard lives in the sandbox, so copy has to cross to the user's own. Order matters: the selection
+// is read back before the chord is let through, since the same path also carries Ctrl+X, which would delete the
+// text first.
 test("copying puts the remote page's selection on the user's own clipboard, then lets the chord through", async () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
@@ -165,7 +158,7 @@ test("copying puts the remote page's selection on the user's own clipboard, then
 
     view.onKeyDown(press(`x`, { ctrl: true }));
     expect(wire()).toContainEqual({ type: `selection` });
-    // Nothing has been cut yet: the page is still holding the text this is about to read.
+    // Nothing cut yet: the page still holds the text this is about to read.
     expect(wire()).not.toContainEqual({ type: `key`, key: `x`, ctrl: true });
 
     socket().deliver({ type: `selection`, text: `one-time 314159` });
@@ -173,11 +166,8 @@ test("copying puts the remote page's selection on the user's own clipboard, then
     await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `x`, ctrl: true }));
 });
 
-/* THE FIELD THAT MADE A DRAG A DRAG, and whose absence made every one of them a hover.
- *
- * Chromium decides whether a move is part of a drag from the buttons currently HELD, not from whatever the last
- * press said. A move that reports none is a move with the mouse up, so press-move-release selected no text,
- * moved no slider and drew on no canvas — the whole gesture was delivered as a click and a wander. */
+// Chromium decides a drag from the buttons currently held, not the last press; a move reporting none is a move
+// with the mouse up, so press-move-release selected and dragged nothing.
 test("a move made with the button down says so, which is what makes it a drag", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
@@ -189,8 +179,8 @@ test("a move made with the button down says so, which is what makes it a drag", 
     expect(wire()).toContainEqual({ type: `mouse`, action: `move`, x: 900, y: 200, buttons: 1 });
 });
 
-// Double-click-to-select-a-word and triple-click-to-select-a-line are the browser's own count reaching the page.
-// Sending 1 every time turned both into a series of unrelated single clicks.
+// Double/triple-click-to-select are the browser's own count reaching the page; sending 1 every time turned them
+// into unrelated single clicks.
 test("a double click arrives as one, not as two single clicks", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
@@ -200,7 +190,7 @@ test("a double click arrives as one, not as two single clicks", async () => {
     expect(wire()).toContainEqual({ type: `mouse`, action: `down`, x: 100, y: 200, button: 0, buttons: 1, clickCount: 2 });
 });
 
-// Ctrl+click opens a link in a new tab, Shift+click extends a selection. Neither reached the page at all.
+// Ctrl+click opens a link in a new tab, Shift+click extends a selection; neither reached the page before.
 test("a modifier held over the picture reaches the page with the click", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
@@ -220,8 +210,8 @@ test("a modifier held over the picture reaches the page with the click", async (
     });
 });
 
-// A Mac's ⌘ means nothing to the Linux Chromium at the far end, so it travels as the ctrl it stands for — the
-// same translation keyIntent makes for the keyboard half.
+// A Mac's Cmd means nothing to the Linux Chromium at the far end, so it travels as the ctrl it stands for, the same
+// translation keyIntent makes for the keyboard.
 test("a Mac's command key travels as the ctrl it stands for", async () => {
     const { view, wire } = await connected();
     view.driving.value = true;
@@ -231,7 +221,7 @@ test("a Mac's command key travels as the ctrl it stands for", async () => {
     expect(wire()).toContainEqual({ type: `mouse`, action: `down`, x: 100, y: 200, button: 0, buttons: 1, clickCount: 1, ctrl: true });
 });
 
-// Watching must stay watching: a pointer over a page the agent is filling in changes nothing about it.
+// Watching stays watching: a pointer over a page the agent is filling in changes nothing.
 test("no pointer event reaches a browser the user is only watching", async () => {
     const { view, wire } = await connected();
     const surface = stage();
@@ -243,9 +233,9 @@ test("no pointer event reaches a browser the user is only watching", async () =>
     expect(wire()).toHaveLength(0);
 });
 
-/* A PICTURE IS BINARY NOW, one format byte then the image, because base64 inside JSON cost a third of the wire
- * and a fresh multi-hundred-kilobyte string per frame. The tag byte is what lets one socket carry both a cheap
- * jpeg while the page moves and a sharp webp once it settles. */
+// A picture is binary now, one format byte then the image, since base64 in JSON cost a third of the wire and a
+// fresh giant string per frame. The tag byte lets one socket carry a cheap jpeg while moving and a sharp webp once
+// settled.
 test("a frame arrives as bytes, and its tag byte decides how it is read", async () => {
     const made: string[] = [];
     vi.stubGlobal(`URL`, {
@@ -267,10 +257,8 @@ test("a frame arrives as bytes, and its tag byte decides how it is read", async 
     expect(made).toEqual([`image/webp`, `image/jpeg`]);
 });
 
-/* THE VIDEO PATH, which is what a browser with a display of its own actually sends. `ready` is what selects it,
- * and it carries the geometry AND the codec — the codec because the daemon reads it out of its own stream
- * rather than agreeing it in advance, and the geometry because the video is the whole WINDOW where a frame is
- * the page alone. A client that assumed either would put every click in the wrong place. */
+// The video path a browser with its own display sends; `ready` carries both codec (read from the daemon's own
+// stream) and geometry (the whole window, not just the page), since assuming either would misplace every click.
 test("a video stream is announced by its ready, and the geometry it brings is what clicks are measured against", async () => {
     const decoded: { codec?: string; chunks: { key: boolean; bytes: number[] }[] } = { chunks: [] };
     vi.stubGlobal(
@@ -312,8 +300,7 @@ test("a video stream is announced by its ready, and the geometry it brings is wh
     expect(view.frame.value).toBeUndefined();
 });
 
-// A browser with no decoder cannot show this, and there is no second implementation to fall back to. Saying so
-// beats a permanently black rectangle that looks like a browser which stopped painting.
+// No decoder means no fallback; saying so beats a permanently black rectangle that looks like a stopped browser.
 test("a client that cannot decode video says so instead of showing nothing", async () => {
     vi.stubGlobal(`VideoDecoder`, undefined);
     const { view, socket } = await connected();
@@ -324,8 +311,8 @@ test("a client that cannot decode video says so instead of showing nothing", asy
     expect(view.frame.value).toBeUndefined();
 });
 
-/* THE SHAPE THE POINTER TAKES, which no frame can carry: a screencast is the page's compositor surface, and
- * Chromium draws the cursor above it, in the window. Without this the arrow stayed an arrow over every link. */
+// No frame carries pointer shape: a screencast is just the compositor surface, and Chromium draws the cursor in
+// its own window. Without this the arrow never changed over a link.
 test("the pointer takes the shape the remote page would give it", async () => {
     const { view, socket } = await connected();
     expect(view.cursor.value).toBe(`default`);
@@ -334,8 +321,8 @@ test("the pointer takes the shape the remote page would give it", async () => {
     expect(view.cursor.value).toBe(`pointer`);
 });
 
-// A copy over a page with nothing selected must not leave stale text on the clipboard, and must still let the
-// page have its chord, in case the site binds Ctrl+C itself.
+// A copy over nothing selected must not leave stale text on the clipboard, and must still let the page have its
+// chord, in case the site binds Ctrl+C itself.
 test("copying an empty selection writes nothing", async () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });

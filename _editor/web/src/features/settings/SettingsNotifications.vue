@@ -4,28 +4,15 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { usePushNotifications } from "../../push/usePushNotifications";
 
-/* Notifications: whether this sandbox may reach you when you are not looking at it.
- *
- * Two things are worth being explicit about on this page, because both surprise people:
- *   - it is PER DEVICE. A registration belongs to the browser or phone that created it, so enabling here says
- *     nothing about any other device. The copy says so rather than letting the toggle imply an account-wide
- *     setting.
- *   - nothing is sent while you are watching. The daemon suppresses a notification whenever any tab on this
- *     sandbox is present and not idle, which is the difference between useful and irritating.
- *
- * Both live in the footnote UNDER the group, not as rows inside it. A <Row> with a title, a description and no
- * #control is visually indistinguishable from a setting whose switch failed to render, so caveats phrased as
- * rows get read as bugs. Everything on the bordered surface does something; everything that only explains sits
- * outside it, in the small muted type a grouped list already uses for footnotes. */
+// Whether this sandbox may reach you when you're not looking at it. Per-device: enabling here does not affect other
+// devices, and the daemon suppresses sends while any tab on this sandbox is open and active. Shown as a footnote under
+// the group, not as rows, since a control-less Row reads as broken.
 
 const { state, busy, error, delivered, canToggle, enable, disable, sendTest } = usePushNotifications();
 
 const enabled = computed(() => state.value === `on`);
 
-// What a successful test proves, said in the only terms that help when nothing appears on screen: the daemon
-// did its half. That leaves exactly one suspect: this device's own notification settings (Focus/Do Not
-// Disturb, or the browser muted at OS level), which is worth naming, because it is the one place the page
-// cannot see and the user can. The plural matters: other browsers you enabled also got it.
+// Proves only the daemon's half; a missing notification points to this device's own notification settings.
 const sent = computed(() => {
     if (delivered.value === undefined) {
         return undefined;
@@ -36,8 +23,7 @@ const sent = computed(() => {
 
 const toggle = (next: boolean): void => void (next ? enable() : disable());
 
-// One line per genuinely different situation. `denied` is the important one: the page cannot re-prompt after a
-// block, so telling the user to flip the toggle again would be advice that cannot work.
+// One line per distinct state; `denied` matters since the page cannot re-prompt after a block.
 const status = computed(() => {
     switch (state.value) {
         case `unsupported`:

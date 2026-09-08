@@ -2,13 +2,11 @@ import { expect, test, vi } from "vitest";
 import { capacityCounts, matchAccounts } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
 
-/* The two derivations that let the model picker's footer survive a POOL rather than a handful of accounts: the
- * line a folded list states in place of its rows, and the filter that finds one row inside an opened fold.
- *
- * Both are pure, and both are the reason folding is not just hiding: a fold that dropped the readings would make
- * the footer smaller and less useful at once. */
+// The two derivations behind a folded account list: the summary line a fold states in place of its
+// rows, and the filter that finds one row inside it. Both pure functions.
 
-// pickerAccounts reaches useChat for the live account lists; stub its side-effecting seams so the import is inert.
+// pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
+// stays inert.
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 vi.mock("./useChat-accounts", () => ({
     accountsOf: vi.fn(() => []),
@@ -32,8 +30,7 @@ const row = (label: string, percent?: number, subtitle?: string) => ({
 });
 
 test("bands a pool by account count, worst first: the one figure that survives folding", () => {
-    // 90 and 75 are the shared thresholds (SPENT_PERCENT / TIGHT_PERCENT), so the footer's summary and the Usage
-    // tab's capacity bar cannot call the same account by two different names.
+    // 90/75 are the shared thresholds, so this summary and the Usage tab's bar agree on the same account.
     const counts = capacityCounts(`claude`, [row(`a`, 12), row(`b`, 80), row(`c`, 95), row(`d`, 40)]);
     expect(counts.map((count) => [count.band, count.count])).toEqual([
         [`spent`, 1],
@@ -49,8 +46,7 @@ test("counts a never-measured account as unread rather than as room: unknown is 
 });
 
 test("says nothing at all for a plan that publishes no limits, rather than reporting it as a degree of fullness", () => {
-    // SuperGrok publishes no pools: every row bands as `none`, which the capacity line drops entirely, the
-    // disclosure then carries the count alone.
+    // SuperGrok publishes no pools; every row bands as `none` and the capacity line drops it entirely.
     expect(capacityCounts(`grok`, [row(`a`), row(`b`)])).toEqual([]);
 });
 

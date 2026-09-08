@@ -19,22 +19,17 @@ import { computed, type ComputedRef, ref } from "vue";
  * ends it explicitly once a run has been started. Anything stickier would be a second place to configure the
  * standing model, disagreeing with Sandbox ▸ Agent ▸ Models with nothing on screen to say which one won. */
 
-// What the run is going to open on, as the app names it. Structural on purpose, the shell's ModelChoice and an
-// extension's PickedModel are both this, and neither package can see the other's type.
+// What the run opens on; structural, since the shell's ModelChoice and an extension's PickedModel are both this.
 export interface AgentRunChoice {
     readonly provider: string;
     readonly model: string;
     readonly label: string;
     readonly account?: string | undefined;
     readonly harness?: string | undefined;
-    /* HOW HARD IT THINKS, the second half of what a run costs and the second thing the caret can re-point. It
-     * rides here rather than being left to the daemon for the reason the model does: the pinned entry's own
-     * effort is applied only to a turn that named NO model (turn-resume.ts), so a run the caret re-pointed and
-     * this did not carry would quietly drop to the provider's default tier. Absent ⇒ nothing chosen, and the
-     * turn goes out without one. */
+    // How hard it thinks, applied only to a turn that names no model, so a re-pointed run must carry it
+    // explicitly or silently drop to the provider's default tier.
     readonly effort?: string | undefined;
-    // What the app calls that tier ("X-High"), for the button, since only the host holds the scale. Absent
-    // whenever `effort` is.
+    // What the app calls that tier, since only the host holds the scale; absent whenever `effort` is.
     readonly effortLabel?: string | undefined;
     /* THE OTHER TWO KNOBS THE PICKER NOW OFFERS A RUN, and they ride for exactly the reason the tier does. A
      * `max` pick beside thinking left unset is a different turn from one beside thinking OFF (the daemon reads
@@ -103,7 +98,8 @@ export interface ModelPicking {
 }
 
 export interface AgentRunPicker {
-    // What the next run opens on, the user's pick if they made one, else the sandbox's standing list.
+    // Names the job this button starts, the key the sandbox lists models by. A plain string, since an
+    // unknown role falls back to the composer's own model rather than crashing.
     readonly model: ComputedRef<AgentRunChoice>;
     // Whether that would start a DIFFERENT run from the sandbox's standing order. The button shows the model
     // only when it is: a control that names the standing setting on every row of a list is noise, and one that
@@ -122,10 +118,7 @@ export interface AgentRunPicker {
     readonly clear: () => void;
 }
 
-/* `role` names the job this button starts, which is what the sandbox keys its model lists by. A plain string
- * rather than the contract's union, for the reason every other id crossing this boundary is one: the kit is
- * loaded by extensions that cannot see the daemon's types, and an unknown role is answered by the host with the
- * composer's own model — the same floor an unpinned one gets — rather than by a crash in somebody's panel. */
+// Back to the standing setting, called once a run starts, so the next press doesn't inherit this pick.
 export function useAgentRunPick(models: () => ModelPicking, role: string): AgentRunPicker {
     const picked = ref<AgentRunChoice | undefined>(undefined);
     const standing = computed<AgentRunChoice>(() => models().agentRun(role));

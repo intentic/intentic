@@ -1,16 +1,8 @@
 import type { Marketplace } from "@intentic/api-contract";
 
-/* THE REGISTRY THE DEMO BROWSES, what the Sandbox screen's Discover row shows.
- *
- * The real thing is a git repository the daemon clones; there is no daemon here, so this stands in for the two
- * JSON files it would have read, already joined into the browse shape. Every row is a real published extension
- * except where a state needs one that does not exist yet.
- *
- * IT IS BUILT TO SHOW EVERY STATE, because that is what a demo of this surface is for. A catalogue where all
- * eight rows are green installable listings would hide the half of the design that matters: the honest default
- * ("nobody read this"), the row that is blocked and stays visible anyway, and the one that cannot be installed
- * in a click because its author never pinned a commit. A visitor should be able to see what this page says
- * when the news is bad. */
+// Registry for the Sandbox screen's Discover row: stands in for the two JSON files a real daemon would clone and read.
+// Built to show every state the surface distinguishes (installed, blocked but still listed, unpinnable), not an
+// all-green catalogue.
 
 const sha = (seed: string): string => seed.repeat(40).slice(0, 40);
 const securityReview = (repo: string, commit: string, path?: string) => ({
@@ -29,8 +21,7 @@ const securityReview = (repo: string, commit: string, path?: string) => ({
     },
 });
 
-// Yesterday-ish, in the shape the scanner writes. Fixed strings rather than computed dates: the demo is built
-// once and a "last pushed" that drifts with the visitor's clock is a fact nobody asserted.
+// Fixed timestamp, not computed: a 'last pushed' shouldn't drift with the visitor's clock.
 const PUSHED = `2026-07-28T09:14:00.000Z`;
 
 export const demoRegistry = (): Marketplace => ({
@@ -94,7 +85,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`5b17f40bca49dd2a29c88ccf32b7215d`), manifest: `ok`, bundle: `ok` },
         },
-        // Premium, the creator-pool listing, badged before the click on both surfaces.
+        // Premium creator-pool listing, badged before the click on both surfaces.
         {
             name: `northbound.oncall`,
             kind: `extension`,
@@ -109,8 +100,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`77aa10ce4b2f9d0e6c8b13f5a4d92e07`), manifest: `ok`, bundle: `ok` },
         },
-        // Already here: the demo sandbox runs the knowledge extension, so this row reads "installed" rather than
-        // offering to add a second copy of something the visitor already has.
+        // Demo sandbox already runs this extension, so the row reads installed, not offered again.
         {
             name: `intentic.knowledge`,
             kind: `extension`,
@@ -126,8 +116,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`b41c9e75d208af36e5107cb92da4f8e3`), manifest: `ok`, bundle: `ok` },
         },
-        /* A listing whose author never pinned a commit. It reads, it links out, and it cannot be installed in a
-         * click, which is the pressure that makes authors pin, and is worth a visitor seeing stated. */
+        // Author never pinned a commit: it reads and links out but can't install in one click.
         {
             name: `hollowpeak.timesheets`,
             kind: `extension`,
@@ -140,8 +129,7 @@ export const demoRegistry = (): Marketplace => ({
             stars: 3,
             pushedAt: PUSHED,
         },
-        /* Blocked, and STILL LISTED. Deleting the row would hide it from people browsing and tell the people who
-         * already installed it nothing, which is backwards, they are the ones at risk. */
+        // Blocked but still listed: removing it would hide the warning from people who already installed it.
         {
             name: `driftwood.autocommit`,
             kind: `extension`,

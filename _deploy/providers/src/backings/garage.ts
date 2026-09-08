@@ -6,7 +6,7 @@ import type { SshExecutor, SshSession } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
 
 const KIND = "garage";
-// The garage binary path inside the dxflrs/garage image (its entrypoint), invoked for status + bootstrap.
+// The garage binary path inside the dxflrs/garage image (its entrypoint).
 const BIN = "/garage";
 
 const garageSchema = backingSchema.extend({
@@ -20,8 +20,7 @@ type GarageInputs = z.infer<typeof garageSchema>;
 const internalEndpoint = (parsed: GarageInputs): string => `http://${parsed.internalIp}:${parsed.publishPort}`;
 
 // Single-node Garage: SQLite metadata, replication_factor 1, S3 API on 3900 (published), RPC on 3901
-// (in-container; the CLI reaches it locally). The RPC secret is read from a host-written file so compose.yaml
-// stays rewritable for image-pin bumps. Stamped intentic.id=<id> so the binding can docker-exec the CLI.
+// (in-container). The RPC secret is read from a host-written file so compose.yaml stays rewritable for bumps.
 const composeYaml = (parsed: GarageInputs, id: string, hash: string): string =>
     [
         "services:",
@@ -54,7 +53,7 @@ const garageToml = (parsed: GarageInputs): string =>
     ].join("\n");
 
 // Assign the single node a layout role on first boot (idempotent: skip once it already holds one). Without a
-// layout, Garage refuses bucket/key operations, so the binding would fail.
+// layout, Garage refuses bucket/key operations.
 const ensureLayout = async (session: SshSession, id: string): Promise<void> => {
     const cid = await containerId(session, id);
     const nodeId = (await session.exec(`docker exec ${cid} ${BIN} node id -q`)).stdout.trim().split("@")[0] ?? "";
@@ -69,9 +68,7 @@ const ensureLayout = async (session: SshSession, id: string): Promise<void> => {
     await session.exec(`docker exec ${cid} ${BIN} layout apply --version 1`);
 };
 
-// A Garage object-storage backing instance (i.want.objectStorage). read returns the resource once the
-// container answers `garage status`; diff drives an image-pin bump; apply is idempotent (compose up -d
-// reconciles, the volumes persist, the layout bootstrap is guarded). Per-app buckets are the binding's job.
+// A Garage object-storage backing instance (i.want.objectStorage). Per-app buckets are the binding's job.
 export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createBackingProvider(
         {
@@ -83,8 +80,9 @@ export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provi
                 endpoint: parsed.domain !== undefined ? `https://${parsed.domain}` : internalEndpoint(parsed),
             }),
             files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash), "garage.toml": garageToml(parsed) }),
-            // The RPC secret is 32 bytes of host-generated hex, written once: it is baked into the cluster's
-            // identity, so a rewrite would leave the node unable to talk to itself.
+            // The RPC secret is 32 bytes of host-generated hex, written once: it is baked into the cluster's identity,
+            // so a
+            // rewrite would leave the node unable to talk to itself.
             prepare: async (session, _parsed, dir) => {
                 await session.exec(`test -f ${dir}/rpc_secret || { openssl rand -hex 32 > ${dir}/rpc_secret && chmod 600 ${dir}/rpc_secret; }`);
             },

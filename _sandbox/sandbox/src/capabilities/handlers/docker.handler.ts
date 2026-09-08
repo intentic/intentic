@@ -7,39 +7,21 @@ import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/san
 import { packFragment } from "../../environment/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
-// The in-sandbox Docker Engine. The base image bakes Docker + Compose, but the engine stays dormant, and the
-// container unprivileged, until this capability is added: its fragment is a single `--privileged` runtime
-// directive the rebuild executors translate into the docker run flag (allowlisted there, see recreate.sh / the
-// workspace provider), and dockerd runs as the visible panel-docker tmux session, started by `apply` once the
-// container is privileged and restored on boot (startDockerdIfEnabled). The HOST's Docker socket is never
-// mounted, so the agent's containers live inside this nested engine. No remove, deliberately: the engine's
-// state (/var/lib/docker) and whatever runs on it make a silent de-privilege more destructive than useful.
-// The daemon runs as root, so no sudo is involved.
+// In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
+// `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
+// boot. No remove: de-privileging live engine state is too destructive to do silently.
 
 const exec = promisify(execFile);
 
-// The panel key behind the visible dockerd session (panel-docker), shared with main.ts's boot adopt.
+// Panel key for the dockerd session; must match what main.ts's boot adopt uses.
 export const DOCKER_PANEL_KEY = "docker";
 
-// The privilege half of the fragment, always present: baking this directive into the overlay is what records
-// the owner's privilege grant (and what flips the derived environment state to "rebuild required"). The ENGINE
-// half is the docker feature pack (image-packs/docker.Dockerfile), resolved per compose: nothing when the running
-// base image bakes it (the standard image does), the install itself on a core image.
+// Always present; the engine half is the docker pack, composed only when the base image lacks it.
 const DOCKER_DIRECTIVE = `# docker capability: this directive grants dockerd the privileges it needs
 # (translated to a --privileged run by the allowlisted rebuild executors).
 # intentic:runtime --privileged`;
 
-/* The GPU option's half of the fragment (config.gpu === "on"). Two layers have to line up for `docker run
- * --gpus` to work INSIDE this container, and neither implies the other:
- *   - the outer run needs --gpus=all, which is what the directive line asks the rebuild executors for. That
- *     injects the host's driver libraries and /dev/nvidia* into this container.
- *   - the NESTED dockerd needs its own nvidia runtime registered, which is what the toolkit + `nvidia-ctk
- *     runtime configure` below does. Without it the agent's `docker compose up` on a GPU stack fails with
- *     `could not select device driver "nvidia"` inside a container that can see the GPU perfectly well.
- * The second is the one nobody expects, because on an ordinary machine installing the toolkit is the whole job.
- *
- * nvidia-ctk writes /etc/docker/daemon.json at BUILD time rather than the handler doing it at apply time: the
- * file has to be there before dockerd starts, and boot restore starts dockerd without going through apply. */
+// Writes daemon.json's nvidia runtime at build time; boot restore starts dockerd without running apply.
 const GPU_FRAGMENT = `# docker capability, gpu option: the host's NVIDIA GPUs, passed through to the nested engine.
 # The toolkit registers the nvidia runtime with the dockerd that runs INSIDE this container: the outer
 # --gpus below only gets the devices as far as this container's own /dev.
@@ -54,28 +36,14 @@ RUN install -m 0755 -d /etc/apt/keyrings \\
 RUN nvidia-ctk runtime configure --runtime=docker
 # intentic:runtime --gpus=all`;
 
-// Whether this entry asked for GPU passthrough. The config is the OWNER'S ASK, not a fact about the host, what
-// actually happened to the ask is SANDBOX_GPU (see gpuState).
+// The owner's ask, not a fact about the host; what actually happened is SANDBOX_GPU (gpuState).
 const gpuAsked = (config: unknown): boolean => (config as DockerConfig | undefined)?.gpu === "on";
 
-/* --- The ENGINE family: options dockerd reads, not the image --------------------------------------------
- *
- * These land in /etc/docker/daemon.json and take effect on a dockerd restart, seconds, no rebuild, no new
- * image. That is the whole reason they are a separate family from `gpu` (DockerConfigSchema explains the
- * split): asking someone to rebuild a container for a registry mirror would be charging five minutes for a
- * value the daemon re-reads every time it starts.
- *
- * MERGED into whatever is already in the file, never written over it. The GPU fragment's `nvidia-ctk runtime
- * configure` writes its `runtimes.nvidia` entry into this same file at BUILD time, so a wholesale write here
- * would silently un-register the nvidia runtime, turning the GPU option off from inside, with no diff and no
- * message, the first time somebody set a registry mirror. Owning exactly our keys is also what makes clearing
- * a field work: a key we no longer want is deleted rather than left behind to outlive the form. */
+// Where engine options (mirrors, pools) live; dockerd re-reads this on restart, no rebuild needed.
 const DAEMON_JSON = "/etc/docker/daemon.json";
 
-/* One CIDR → docker's `default-address-pools` entry. `size` is the prefix each container network gets carved
- * at, and 24 (254 usable addresses) is docker's own default shape; a pool declared smaller than that carves at
- * its own prefix instead, so a /26 yields one network rather than an impossible request. Undefined for
- * anything that isn't a CIDR, the form validates, but a manifest edited by hand must not take dockerd down. */
+// Parses one CIDR into docker's `default-address-pools` shape; carves at /24 (docker's default) unless the pool itself
+// is smaller. Undefined for anything that isn't a valid CIDR, so a hand-edited manifest can't take dockerd down.
 export const addressPoolOf = (cidr: string | undefined): { base: string; size: number } | undefined => {
     const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/.exec((cidr ?? "").trim());
     if (match?.[1] === undefined || match[2] === undefined) {
@@ -88,11 +56,11 @@ export const addressPoolOf = (cidr: string | undefined): { base: string; size: n
     return { base: `${match[1]}/${prefix}`, size: Math.max(prefix, 24) };
 };
 
-// Registries arrive as one field because people paste them as a list; commas and whitespace both separate.
+// One field split into entries: commas and whitespace both separate, since people paste this as a list.
 const registryList = (value: string | undefined): string[] => (value ?? "").split(/[\s,]+/).filter((entry) => entry !== "");
 
-/* The daemon.json this config wants, given what the file already holds. Pure, so the merge rules, ours win,
- * ours disappear when cleared, everything else is untouched, are testable without a docker daemon. */
+// Pure merge: config's fields overwrite, a cleared field deletes its key, everything else (including the GPU option's
+// runtimes.nvidia, written at build time) is left alone.
 export const withEngineSettings = (current: Record<string, unknown>, config: unknown): Record<string, unknown> => {
     const docker = config as DockerConfig | undefined;
     const next = { ...current };
@@ -113,8 +81,8 @@ export const withEngineSettings = (current: Record<string, unknown>, config: unk
     return next;
 };
 
-// A daemon.json that is missing, empty or corrupt reads as {}, the merge then writes a clean file, which is
-// the only useful response to any of the three.
+// Missing, empty or corrupt all read as {}; the merge then writes back a clean file, the only useful response to any of
+// the three.
 const readDaemonJson = async (): Promise<Record<string, unknown>> => {
     const raw = await readFile(DAEMON_JSON, "utf8").catch(() => "");
     try {
@@ -125,7 +93,7 @@ const readDaemonJson = async (): Promise<Record<string, unknown>> => {
     }
 };
 
-// `docker info` succeeds only when dockerd is up and answering.
+// `docker info` succeeds only when dockerd is up and answering requests.
 const dockerUp = async (): Promise<boolean> =>
     exec("docker", ["info"]).then(
         () => true,
@@ -139,29 +107,16 @@ const cliMissing = async (): Promise<boolean> =>
         (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
     );
 
-// Was this container run --privileged? CAP_SYS_MODULE is the sentinel, because --privileged is the only thing
-// that grants it: SANDBOX_CAPABILITIES gives EVERY sandbox SYS_ADMIN + SYS_PTRACE (turn isolation needs its own
-// mount namespace), and the only other runtime directive an overlay may carry is the vpn's NET_ADMIN.
-//
-// On the HOSTED flavor (SANDBOX_VM=1, a microVM booting this image) root holds the full capability set, so
-// this probe answers true without any directive, which is exactly right: the machine IS privileged, dockerd
-// starts the moment the capability is enabled, and no rebuild is ever asked for. The engine's state survives
-// the VM's ephemeral rootfs because the entrypoint's VM mode points data-root at the volume (daemon.json).
-//
-// Reading SYS_ADMIN instead, which this probe did until it was measured, is true in every sandbox, privileged
-// or not. So "rebuild required" was unreachable: an unprivileged sandbox with the capability added reported
-// `error: dockerd not running`, and apply() spent 30s waiting on a dockerd that had already died. Unprivileged,
-// dockerd gets as far as the network controller and then fails on the three things only --privileged supplies:
-// a writable /sys/fs/cgroup, NET_ADMIN for the bridge + iptables, and seccomp relief for runc's keyctl.
-// Bit 16 = CAP_SYS_MODULE.
+// Bit 16 (CAP_SYS_MODULE) is the sentinel: only --privileged grants it, unlike SYS_ADMIN/SYS_PTRACE which every sandbox
+// already has. Hosted VM root holds the full set, so this correctly reads true with no directive.
 export const isPrivileged = (procStatus: string): boolean => {
     const hex = /^CapEff:\s*([0-9a-fA-F]+)$/m.exec(procStatus)?.[1];
     return hex !== undefined && (BigInt(`0x${hex}`) & (1n << 16n)) !== 0n;
 };
 const privileged = async (): Promise<boolean> => isPrivileged(await readFile("/proc/self/status", "utf8").catch(() => ""));
 
-// Start dockerd as the persistent panel-docker session and wait for it to answer. False on timeout, the
-// startup output stays in the panel's terminal either way.
+// Starts dockerd as the panel-docker session and waits for it to answer; false on timeout (output stays in the panel
+// terminal either way).
 const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
     await ctx.panels.start(DOCKER_PANEL_KEY, { command: "dockerd", cwd: ctx.workspace.root });
     if (await pollUntil(dockerUp, { intervalMs: 1_000, timeoutMs: 30_000 })) {
@@ -172,21 +127,15 @@ const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
     return false;
 };
 
-/* Bring /etc/docker/daemon.json in line with the engine options, and restart dockerd if that changed anything.
- * Returns what to tell the user, or undefined when the file already said what the config says, the ordinary
- * case on every apply that only touched the GPU switch, and the reason this compares instead of always
- * writing: restarting dockerd stops whatever the agent has running on it, which is far too rude to do on an
- * apply that changed nothing.
- *
- * Best-effort by design. dockerd not running yet (pre-rebuild, or mid-boot) is not a failure: the file is what
- * matters, and the next start reads it. */
+// Syncs daemon.json to the engine options and restarts dockerd only if that changed something (restarting stops
+// whatever's running on it). Best-effort: dockerd not running yet is not a failure, the next start reads the file.
 const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise<string | undefined> => {
     const current = await readDaemonJson();
     const next = withEngineSettings(current, config);
     if (JSON.stringify(next) === JSON.stringify(current)) {
         return undefined;
     }
-    // node's writeFile, not ctx.files: that service is the WORKSPACE's, and /etc is not the workspace.
+    // node's writeFile, not ctx.files: that service is scoped to the workspace, and /etc isn't in it.
     await writeFile(DAEMON_JSON, `${JSON.stringify(next, null, 4)}\n`);
     if (!(await dockerUp())) {
         return "Engine settings saved: they apply when the Docker Engine starts.";
@@ -197,36 +146,22 @@ const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise
         : "Engine settings saved, but dockerd did not come back within 30s, check the panel-docker terminal.";
 };
 
-/* WHAT BECAME OF THE GPU ASK, the runner's answer, stamped as SANDBOX_GPU by the run contract, because from
- * in here the three outcomes are one missing device:
- *   undefined     the running container predates the ask, the overlay carrying it hasn't been built yet.
- *   "all"         the flag rode; the devices should be here.
- *   "unsupported" the host's docker has no nvidia runtime, so the flag was dropped and the sandbox started
- *                 without it. Nothing a rebuild fixes, the fix is on the host, or on another host.
- * Read per call rather than cached at import: nothing else in this handler pretends a container's env can
- * change, but a test setting it and a status probe reading it should not need to agree about module order. */
+// SANDBOX_GPU, the runner's answer to the ask, read fresh each call so tests need not fight module order:
+//   undefined the container predates the ask (not rebuilt yet)
+//   "all" the flag rode; devices should be present
+//   "unsupported" host docker has no nvidia runtime; no rebuild fixes it
 const gpuState = (): string | undefined => process.env["SANDBOX_GPU"];
 
-// Do the GPUs actually answer? `nvidia-smi -L` lists them and is what the toolkit injects alongside the
-// devices, so it fails exactly when the passthrough didn't really happen, a driver/toolkit version mismatch
-// on the host being the case that survives every check before this one.
+// `nvidia-smi -L` lists the GPUs the toolkit injects; it fails exactly when passthrough didn't really happen (a host
+// driver/toolkit mismatch, the case every earlier check missed).
 const gpuVisible = async (): Promise<boolean> =>
     exec("nvidia-smi", ["-L"]).then(
         () => true,
         () => false,
     );
 
-/* WHAT THE OPTIONS HAVE TO SAY, each naming itself. The engine's own state is a separate question, answered
- * separately below: an engine can be up with a GPU missing, and a card that says only "active" or only
- * "dockerd not running" leaves the user to find out which of the two they're in.
- *
- * A LIST rather than one answer, because options are independent and the honest report of two broken things
- * is two sentences. `status` picks the worst to put on its single line, but it prefixes the option's name, so
- * "which one" is answerable without opening anything. Every entry names its option first for that reason.
- *
- * "unsupported" is the state this whole design exists to make legible, and it is deliberately `error`, not
- * `pending`: pending renders as a spinner and a rebuild button, and no amount of rebuilding puts a GPU in a
- * machine that has none. */
+// Per-option status, separate from the engine's own state (up, but a GPU may still be missing). A list, since each
+// option names itself; `unsupported` is `error`, not `pending`: no rebuild adds a missing GPU.
 const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
     if (!gpuAsked(config)) {
         return [];
@@ -241,13 +176,12 @@ const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
     return (await gpuVisible()) ? [] : [{ state: "error", detail: "GPU access: passed through but no device answers, check the host's driver" }];
 };
 
-// An error outranks a pending: of two things to say on one line, the one that will never fix itself wins.
+// Error beats pending: only one fact fits on the status line.
 const worst = (statuses: readonly CapabilityStatus[]): CapabilityStatus | undefined =>
     statuses.find((status) => status.state === "error") ?? statuses[0];
 
-// What an apply owes the user about the options, on EVERY path where the engine is up, including the one
-// where it was already running, which is the ordinary path for someone who just changed a switch and whose
-// only feedback would otherwise be "the Docker Engine is already running".
+// Reports each option's status on every path where the engine is up, including one already running, so a switch flip
+// gets feedback beyond "already running".
 const reportOptions = async function* (config: unknown): AsyncGenerator<IntenticLine> {
     for (const status of await optionStatuses(config)) {
         yield { kind: "log", message: `${status.detail}.` };
@@ -255,13 +189,9 @@ const reportOptions = async function* (config: unknown): AsyncGenerator<Intentic
 };
 
 export const dockerHandler: CapabilityHandler = {
-    // The engine is a part of the sandbox that is either on or off, not an account you hold one of, its card
-    // never asks for a name, so there is none to change.
     rename: { refuse: "Docker is part of the sandbox itself, not a connection you name." },
-    // The ASKS, not their outcomes, a summary field is what the browser may see of the config, and what
-    // became of an ask belongs in `optionStatuses`. The engine options echo as present/absent rather than by
-    // value: nothing here is a secret, but a card that re-opens knowing WHICH fields are set is all the
-    // instance strip needs, and the form re-reads the values from the manifest anyway.
+    // Echoes the asks, not their outcomes (those are `optionStatuses`). Engine options echo present/absent, not their
+    // value: nothing here is secret, but the form re-reads values from the manifest anyway.
     echo: (config) => {
         const docker = config as DockerConfig | undefined;
         return {
@@ -271,9 +201,8 @@ export const dockerHandler: CapabilityHandler = {
             addressPool: docker?.addressPool ?? "",
         };
     },
-    // ONLY the image family may be read here: a fragment is the thing whose hash decides whether the owner is
-    // asked to rebuild, so an engine option leaking into it would charge a rebuild for a value dockerd rereads
-    // on restart (DockerConfigSchema makes the argument).
+    // Only the image family belongs here: the fragment's hash decides whether a rebuild is asked for, and an engine
+    // option leaking in would charge one for a value dockerd rereads live.
     fragment: async (config) => {
         const engine = await packFragment("docker");
         const directive = gpuAsked(config) ? `${DOCKER_DIRECTIVE}\n${GPU_FRAGMENT}` : DOCKER_DIRECTIVE;
@@ -281,9 +210,7 @@ export const dockerHandler: CapabilityHandler = {
     },
     async *apply(ctx, id, config) {
         if (await cliMissing()) {
-            // Two worlds have no docker CLI: a bare dev run (nothing to do, the engine exists in a real
-            // sandbox) and a core image (the docker pack rides the overlay, same rebuild that grants the
-            // privilege). /opt/sandbox is the in-image sentinel: only the baked daemon tree lives there.
+            // /opt/sandbox exists only in a real image, telling a dev run from a core image awaiting rebuild.
             yield existsSync("/opt/sandbox")
                 ? {
                       kind: "log" as const,
@@ -294,7 +221,7 @@ export const dockerHandler: CapabilityHandler = {
         }
         if (await dockerUp()) {
             yield { kind: "log", message: "The Docker Engine is already running." };
-            // Before the option report, because this is the branch that can CHANGE what the options say.
+            // Runs before the option report: this branch is the one that can change what the options say.
             const engine = await applyEngineSettings(ctx, config);
             if (engine !== undefined) {
                 yield { kind: "log", message: engine };
@@ -302,9 +229,7 @@ export const dockerHandler: CapabilityHandler = {
             yield* reportOptions(config);
             return;
         }
-        // Pre-rebuild bootstrap: the add must still land in the manifest (that's what puts the directive into
-        // the overlay), so an unprivileged container is a soft outcome, not a failure. The engine settings are
-        // still written, the file outlives this container, and the dockerd that eventually starts reads it.
+        // Unprivileged is a soft outcome: the add still lands in the manifest, and the file outlives this container.
         if (!(await privileged())) {
             await applyEngineSettings(ctx, config);
             yield {
@@ -322,8 +247,8 @@ export const dockerHandler: CapabilityHandler = {
         }
         yield { kind: "log", message: "dockerd did not become ready within 30s, check the panel-docker terminal." };
     },
-    // The engine's own state first, an option caveat on a card that reads "active" is a caveat; on one that
-    // reads "dockerd not running" it is noise in front of the thing actually broken.
+    // Engine state first: an option caveat matters on a card that reads active, but is noise in front of one that reads
+    // dockerd not running.
     status: async (ctx, _id, config) => {
         if (await dockerUp()) {
             return worst(await optionStatuses(config)) ?? { state: "active" };
@@ -338,9 +263,8 @@ export const dockerHandler: CapabilityHandler = {
     },
 };
 
-// Boot restore (beside reconnectVpns): dockerd dies with the container while the manifest survives on /work,
-// bring it back when a docker capability is enabled. Best-effort: a failure lands in the panel-docker terminal
-// and the daemon log, never the boot path.
+// Boot restore: dockerd dies with the container while the manifest survives on /work; restarts it if a docker
+// capability is enabled. Best-effort: a failure lands in the panel-docker terminal and daemon log, never the boot path.
 export const startDockerdIfEnabled = async (ctx: CapabilityCtx): Promise<void> => {
     if (!(await ctx.capabilities.list()).some((capability) => capability.kind === "docker")) {
         return;

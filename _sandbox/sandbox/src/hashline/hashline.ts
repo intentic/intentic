@@ -1,17 +1,15 @@
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-// Hash-anchored editing ("hashline"). A read tags each line with a short content hash and the whole file with an
-// anchor; an edit references those tags and echoes the anchor. Two payoffs over str_replace-style edits: the
-// model points at tags instead of retyping the lines it keeps (far fewer output tokens), and an edit whose anchor
-// no longer matches the file, i.e. the file changed since it was read, is rejected instead of corrupting it.
+// Hash-anchored editing: a read tags each line with a short content hash plus a whole-file anchor; an edit references
+// those tags and echoes the anchor. Cuts output tokens versus str_replace (the model points at tags, not full lines)
+// and rejects an edit whose anchor no longer matches instead of corrupting the file.
 
 const short = (input: string, length: number): string => sha256Hex(input).slice(0, length);
 
 // Whole-file anchor: changes on any byte change, so a mismatch at edit time means the read is stale.
 export const fileAnchor = (content: string): string => short(content, 8);
 
-// Per-line tag over the line plus its neighbours, so two identical lines in different places tag differently,
-// the tag is the stable handle the model anchors an edit to.
+// Tag over a line plus its neighbours, so two identical lines in different places tag differently.
 const lineTag = (prev: string, line: string, next: string): string => short(`${prev}\n${line}\n${next}`, 4);
 
 interface Split {
@@ -19,7 +17,7 @@ interface Split {
     readonly trailingNewline: boolean;
 }
 
-// Split into real content lines, remembering a trailing newline so a round-trip through join() is byte-exact.
+// Splits into content lines, remembering a trailing newline so a round-trip through join() is byte-exact.
 const splitLines = (content: string): Split => {
     if (content === "") {
         return { lines: [], trailingNewline: false };
@@ -32,7 +30,7 @@ const join = (lines: readonly string[], trailingNewline: boolean): string => `${
 
 const tagsOf = (lines: readonly string[]): string[] => lines.map((line, i) => lineTag(lines[i - 1] ?? "", line, lines[i + 1] ?? ""));
 
-// The read view the model anchors edits against: an anchor header it echoes back, then `<tag> <n>│<text>` per line.
+// Read view the model anchors edits against: an anchor header to echo back, then `<tag> <n>│<text>` per line.
 export const renderForRead = (content: string): string => {
     const { lines } = splitLines(content);
     const header = `anchor ${fileAnchor(content)} · ${lines.length} line(s): pass this anchor and the line tags to hashline_edit`;
@@ -43,13 +41,13 @@ export const renderForRead = (content: string): string => {
     return `${header}\n${lines.map((line, i) => `${tags[i]} ${i + 1}│${line}`).join("\n")}`;
 };
 
-// One anchored edit. Tags come from a hashline_read of the same file; "^" anchors an insert at the top of the file.
+// One anchored edit; tags come from a hashline_read of the same file. "^" anchors an insert at the top.
 export type HashlineOp =
     | { readonly op: "replace"; readonly from: string; readonly to?: string; readonly lines: readonly string[] }
     | { readonly op: "insert"; readonly after: string; readonly lines: readonly string[] }
     | { readonly op: "delete"; readonly from: string; readonly to?: string };
 
-// Resolve a tag to its one line index; a missing or ambiguous tag is a hard error (the model re-reads to recover).
+// Resolves a tag to its line index; a missing or ambiguous tag errors, so the model re-reads to recover.
 const resolveTag = (tag: string, tags: readonly string[]): number => {
     const matches = tags.flatMap((candidate, index) => (candidate === tag ? [index] : []));
     if (matches[0] === undefined) {
@@ -67,8 +65,8 @@ interface Replacement {
     readonly lines: readonly string[];
 }
 
-// Apply the ops to `content`, refusing a stale edit up front. Ranges must not overlap; inserts may not land inside
-// a replaced/deleted range. Rebuilds the file in one pass rather than splicing, so no op shifts another's indices.
+// Applies ops to `content`, refusing a stale edit up front. Ranges must not overlap, and an insert may not land inside
+// a replaced/deleted range; rebuilt in one pass so no op shifts another's indices.
 export const applyEdit = (content: string, anchor: string, ops: readonly HashlineOp[]): string => {
     const actual = fileAnchor(content);
     if (anchor !== actual) {

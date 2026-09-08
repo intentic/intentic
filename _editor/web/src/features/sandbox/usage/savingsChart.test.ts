@@ -2,15 +2,13 @@ import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/
 import { describe, expect, it } from "vitest";
 import { compositionOf, meanLabel, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
 
-// The composition bar's one invariant: its segments are a decomposition of the raw output, so they sum to it
-// exactly. Everything else on the card is read against that: a stack whose parts don't add up to the whole is
-// not a budget, it's a picture.
+// Composition segments must sum exactly to the raw output; everything else on the card is read against that
+// identity.
 
 const report = (overrides: Partial<InputSavings> = {}): InputSavings => ({
     commands: 10,
     rawTokens: 10_000,
-    // 10_000 raw − 7_900 removed + 100 of footers added back. The fixture holds the identity the daemon's
-    // aggregation guarantees, because that identity is what the chart is a picture of.
+    // 10_000 raw - 7_900 removed + 100 footer added back: the identity the daemon's aggregation guarantees.
     emittedTokens: 2200,
     savedPct: 78,
     perCleaner: [
@@ -29,8 +27,7 @@ describe(`compositionOf`, () => {
         const { segments, rawTokens } = compositionOf(report());
         expect(segments.reduce((sum, segment) => sum + segment.tokens, 0)).toBe(rawTokens);
         expect(segments.at(-1)?.key).toBe(`reached`);
-        // Raw − everything the mechanisms removed, which is exactly the emitted total minus the footers the
-        // filter added back: the reason the footer is disclosed separately instead of stacked.
+        // 2100 = raw minus everything removed, i.e. emitted minus the footer added back.
         expect(segments.at(-1)?.tokens).toBe(2100);
     });
 
@@ -43,7 +40,7 @@ describe(`compositionOf`, () => {
     it(`folds the tail past the palette's width rather than inventing colours`, () => {
         const perCleaner = Array.from({ length: 9 }, (_, index) => ({ id: `c${index}`, commands: 1, savedTokens: 900 - index * 100 }));
         const { segments } = compositionOf(report({ perCleaner, rawTokens: 10_000 }));
-        // Five named mechanisms, one fold, one residual.
+        // 5 named + 1 folded "other" + 1 reached = 7 segments.
         expect(segments).toHaveLength(7);
         expect(segments[5]).toMatchObject({ key: `other`, label: `4 more` });
     });
@@ -59,14 +56,13 @@ describe(`stageLabel`, () => {
     it(`names the mechanisms with no switch, so a reader can tell those from ones that aren't listed`, () => {
         expect(stageLabel(`ansi`)).toBe(`terminal escapes`);
         expect(stageLabel(`cap`)).toBe(`head/tail cap`);
-        // An id from a newer daemon than this browser: shown as itself rather than dropped.
+        // Unknown id (newer daemon than this browser) shown as itself, not dropped.
         expect(stageLabel(`brand-new`)).toBe(`brand-new`);
     });
 });
 
-// The three savings cards are only scannable if every one of them puts an ANSWER in the headline slot: a
-// figure when there is one, a word when there isn't. So the states a card can be in are enumerated here rather
-// than trusted to three templates that drifted apart once already.
+// Every headline slot must show an answer: a figure or a word. Pins each state a card can be in rather than
+// trusting three templates to agree.
 
 const reading = (overrides: Partial<TurnMetricReading> = {}): TurnMetricReading => ({
     metric: `searchCalls`,
@@ -94,17 +90,14 @@ describe(`verdictsOf`, () => {
         expect(headlineOf([reading({ deltaPct: 7, marginPct: 3 })])).toMatchObject({ value: `↑7%`, tone: `content` });
     });
 
-    /* SEARCHES, NOT COST, and in whole ones. The teaching changes searching, so searching is the quantity that
-     * can see it; cost per turn mostly reports which arm had drawn the bigger jobs. A mean difference carries a
-     * spare decimal, and a fifth of a search is not something anybody avoided. */
     it(`scores the search experiment in searches, rounded to ones a turn could actually have run`, () => {
         const verdict = headlineOf([reading({ metric: `searchCalls`, deltaPct: -48, marginPct: 9, saved: 91.4 })]);
         expect(verdict.unit).toBe(`searches per turn`);
         expect(verdict.detail).toBe(`±9pp (95%) · ~91 searches saved in this range`);
     });
 
-    // Two readings, one coin flip: the headline counts every search, the second only the ones before the turn
-    // opened a file. Both come back, in the order the daemon put them in: a screen must not have to sort them.
+    // searchCalls counts every search; openingSearches only those before the first file. Order follows the daemon's
+    // list.
     it(`returns every reading an experiment carries, headline first`, () => {
         const verdicts = verdictsOf(
             experiment([
@@ -120,7 +113,7 @@ describe(`verdictsOf`, () => {
     it(`answers "Measuring" in the same slot a delta would take, and says what it is still short of`, () => {
         const verdict = headlineOf([reading()]);
         expect(verdict).toMatchObject({ value: `Measuring`, tone: `muted` });
-        // The shorter arm is the control's 14, against a threshold of 30.
+        // Shortfall = 30 - 14 (the control arm's turns).
         expect(verdict.detail).toBe(`needs 30 turns per arm, 16 more on the shorter one`);
     });
 
@@ -131,16 +124,13 @@ describe(`verdictsOf`, () => {
         expect(verdict.detail).toBe(`needs 30 conversations per arm, 19 more on the shorter one`);
     });
 
-    /* MEASURED, NO EFFECT: its own verdict, because the reader's next move differs from "Measuring". */
     it(`says so when the arms are big enough and the effect still isn't resolvable`, () => {
         const verdict = headlineOf([reading({ off: { turns: 31, mean: 6.4 }, marginPct: 35.1 })]);
         expect(verdict).toMatchObject({ value: `No effect`, unit: `measurable in searches per turn`, tone: `muted` });
         expect(verdict.detail).toBe(`±35.1pp (95%) · keep collecting`);
     });
 
-    /* "Keep collecting" is not advice a reader can act on: three more days and three more years look the same
-     * in it. The estimate is coarse and says so by being an order of magnitude, but it is the difference between
-     * waiting and changing the holdout. */
+    // Rounded to an order of magnitude (5_800 -> 5.8K): coarse, but distinguishes waiting from changing the holdout.
     it(`says how much more control data a withheld delta would need`, () => {
         const verdict = headlineOf([reading({ off: { turns: 31, mean: 6.4 }, marginPct: 35.1, controlTurnsNeeded: 5_800 })]);
         expect(verdict).toMatchObject({ value: `No effect`, tone: `muted` });
@@ -153,16 +143,14 @@ describe(`verdictsOf`, () => {
     });
 });
 
-// The bars carry the arms' own units, and the two experiments' units are not interchangeable: a chart that
-// labelled searches as characters would be a picture of the wrong quantity.
+// Units are not interchangeable between experiments; mislabeling one as another's unit pictures the wrong quantity.
 describe(`meanLabel`, () => {
     it(`prints searches to the tenth`, () => {
         expect(meanLabel(reading(), 3.2)).toBe(`3.2 searches/turn`);
         expect(meanLabel(reading({ metric: `openingSearches` }), 1.5)).toBe(`1.5 searches/turn`);
     });
 
-    /* The map's arms are not searches and must not be drawn as if they were: it is judged on the listings a
-     * conversation opens with, and on how far it walked before the file it edited. */
+    // The map is judged on opening listings and calls before the target file, not searches.
     it(`prints the map's own quantities`, () => {
         expect(meanLabel(reading({ metric: `openingListings` }), 0.3)).toBe(`0.3 listings/turn`);
         expect(meanLabel(reading({ metric: `callsBeforeTarget` }), 4)).toBe(`4 calls`);
@@ -180,8 +168,6 @@ describe(`the map's verdicts`, () => {
         expect(verdicts.also[0]?.unit).toBe(`calls before the file it edits`);
     });
 
-    // The shortfall sentence counts in the unit the arms were randomized in, so an experiment read on opening
-    // turns says so rather than borrowing the word "turns" from a mechanism sampled differently.
     it(`counts what it still needs in opening turns`, () => {
         const verdict = verdictsOf(
             experiment([reading({ metric: `openingListings`, on: { turns: 12, mean: 0.3 }, off: { turns: 8, mean: 0.5 } })], {

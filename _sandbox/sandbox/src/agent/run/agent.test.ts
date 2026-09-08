@@ -10,8 +10,7 @@ import { SteeringQueue } from "../anchors/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 
-// Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage: tests exercise only the fields
-// runAgent reads), so the agent loop is verified without the SDK, a binary, or network.
+// Fake QueryFn yielding canned SDK messages; runAgent reads only the fields exercised here.
 const fakeQuery = (...messages: unknown[]): QueryFn =>
     async function* () {
         for (const message of messages) {
@@ -45,8 +44,8 @@ const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn
     return events;
 };
 
-// browserOutputDir present: the shape of a browser-carrying turn (the standard image's ordinary case), its
-// absence is the core-image signal that strips the browser guidance, asserted in system-prompt.test.ts.
+// browserOutputDir present is a browser-carrying turn; its absence is the core-image signal that strips browser
+// guidance.
 const request = {
     prompt: "add a /ping route",
     cwd: WORKSPACE_ROOT,
@@ -54,10 +53,8 @@ const request = {
     browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
 };
 
-// Bash routing through bin/tmux-run is decided by whether the wrapper is baked into the image, so a suite run
-// INSIDE that image sees a `terminal` frame these event-shape assertions never asked for. Every case below states
-// the mode it means: "0" for the shapes that predate tmux routing; agent-terminal-frame.test.ts owns the enabled
-// path. Left to the host, the same test asserts different things in an image, a dev checkout, and CI.
+// Forces the pre-tmux event shape: bash routing depends on whether the image bakes in the tmux wrapper
+// (agent-terminal-frame.test.ts covers the enabled path).
 const withoutTmux = (): void => {
     vi.stubEnv("INTENTIC_AGENT_TMUX", "0");
 };
@@ -143,7 +140,7 @@ test("each prose block closes with text_end, before the tool calls that block in
                 event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Reading the router." } },
             },
             { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 0 } },
-            // The tool_use block's own start/stop must not close a prose bubble: only a text block's does.
+            // Only a text block's content_block_stop closes a prose bubble, not a tool_use block's.
             { type: "stream_event", session_id: "s1", event: { type: "content_block_start", index: 1, content_block: { type: "tool_use" } } },
             { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 1 } },
             { type: "assistant", session_id: "s1", message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "ls" } }] } },
@@ -169,8 +166,8 @@ test("each prose block closes with text_end, before the tool calls that block in
 });
 
 test("a subagent's prose block closes its own bubble, not the parent turn's", async () => {
-    // Both streams number their blocks from 0, so a shared index would let the subagent's stop retire the
-    // parent's still-open block. The boundary is keyed per agent precisely to make this ordering hold.
+    // Parent and subagent streams both index blocks from 0; the boundary is keyed per agent so a shared index can't
+    // retire the wrong one.
     const events = await collect(
         request,
         fakeQuery(
@@ -224,18 +221,7 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
 });
 
-/* THE ABSENCE IS THE LOAD-BEARING HALF. The three delegation ceilings are read inside the CLI, and each has its
- * own default there: one of which (the nesting cap) the CLI resolves from its own remote config rather than a
- * constant. So a turn that says nothing must set nothing: emitting today's default back as an env var would pin
- * a number that is meant to be able to move, and it would do it for every sandbox that never opened the group.
- * turn-plan.ts is what decides "the owner moved this"; this asserts the half of the deal that lives here.
- *
- * "SETS NOTHING" IS MEASURED AGAINST THE AMBIENT ENVIRONMENT, not against undefined, because the turn's env is
- * `{...process.env, …}` by design (the agent's shell needs the machine's environment). Asserting undefined
- * asserted something else entirely, that the MACHINE has no such variable, which is true on CI and false in any
- * sandbox that happens to set one: this suite then failed on the developer's box and passed in the pipeline,
- * which is the ambient-reading failure AGENTS.md names. Derived from process.env rather than transcribed, so it
- * holds either way and still catches the only thing it is here to catch, this code adding a ceiling of its own. */
+// Compares against the ambient env, not undefined: a turn's env spreads `{...process.env, …}`.
 const ambient = (name: string): string | undefined => process.env[name];
 
 test("the delegation ceilings reach the CLI only where the turn names one", async () => {
@@ -250,7 +236,7 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"));
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"));
 
-    // Each is independent: a raised concurrency cap must not drag the other two into the environment with it.
+    // Each ceiling is independent: raising one must not add env vars for the other two.
     await collect({ ...request, subagentsAtOnce: 50 }, capture);
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("50");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"));
@@ -262,10 +248,8 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe("5");
 });
 
-/* THE OTHER HALF OF THE CHECKLIST IS THE PROMPT, which is why one test asserts both. Claude Code 2.1.233 hides
- * the Task verbs (and TodoWrite with them) from every model this sandbox runs, while CHECKLIST_GUIDANCE keeps
- * telling each turn to ToolSearch for them: 259 turns walked into "No matching deferred tools found" before
- * anyone noticed, because each half looks correct on its own. Deleting either one alone has to fail here. */
+// Claude Code hides the Task* tools unless CLAUDE_CODE_ENABLE_TASKS is set, while CHECKLIST_GUIDANCE still tells the
+// model to look for them; both halves are asserted together.
 test("every turn pins the checklist tools on, and says so in the prompt it pins them for", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -274,18 +258,15 @@ test("every turn pins the checklist tools on, and says so in the prompt it pins 
     };
 
     await collect(request, capture);
-    // Unconditional, unlike the ceilings above: the model-version gate they answer moves without warning, so a
-    // turn that says nothing is a turn with no checklist.
+    // Set unconditionally: the model-version gate behind this can move without warning.
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_ENABLE_TODO_TOOLS"]).toBe("1");
-    // Which half of the family: Task*, the one the prompt names and task-checklist.ts can parse.
+    // Enables the Task* half of the tool family, the one the prompt names and task-checklist.ts parses.
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_ENABLE_TASKS"]).toBe("1");
     expect(captured.at(-1)?.systemPrompt as string).toContain("select:TaskCreate,TaskUpdate,TaskList");
 });
 
-/* The env token is a SNAPSHOT taken at spawn: a turn that outlives it, or one caught by an account-wide
- * revocation, which kills tokens that still look valid by the clock: used to die mid-work with
- * "Failed to authenticate. API Error: 401 ...". getOAuthToken is how the CLI asks for a replacement and
- * carries on, and it is the option the VSCode extension's equivalent machinery stands in for. */
+// The env token is a snapshot at spawn; getOAuthToken lets the SDK request a fresh one if the turn outlives it or the
+// account is revoked mid-turn.
 test("a native Claude turn hands the SDK a way to re-mint its token mid-turn", async () => {
     const captured: OauthRecoveryOptions[] = [];
     const capture: QueryFn = async function* (args) {
@@ -297,8 +278,8 @@ test("a native Claude turn hands the SDK a way to re-mint its token mid-turn", a
     await collect({ ...request, oauthToken: "tok-1", refreshOauthToken }, capture);
     expect(await captured.at(-1)?.getOAuthToken?.({ signal: new AbortController().signal })).toBe("tok-2");
 
-    // A routed turn authenticates with the translator's own bearer, and the container-env fallback has no
-    // refresh token behind it: neither has anything to re-mint, so neither offers the callback.
+    // A routed turn and the container-env fallback have no refresh token to re-mint, so neither gets a getOAuthToken
+    // callback.
     await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", refreshOauthToken }, capture);
     expect(captured.at(-1)?.getOAuthToken).toBeUndefined();
 
@@ -313,9 +294,7 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // A routed turn (codex/grok under the Claude Code harness) carries baseUrl + authToken. The Anthropic
-    // subscription token must NEVER leave for a foreign endpoint: even if an oauthToken is also present, baseUrl
-    // wins and CLAUDE_CODE_OAUTH_TOKEN is dropped.
+    // baseUrl always wins over oauthToken: the Anthropic subscription token must never reach a foreign endpoint.
     await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", oauthToken: "tok-xyz", model: "gpt-5-codex" }, capture);
     expect(captured.at(-1)?.env?.["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
     expect(captured.at(-1)?.env?.["ANTHROPIC_AUTH_TOKEN"]).toBe("router-key");
@@ -323,8 +302,8 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
     expect(captured.at(-1)?.model).toBe("gpt-5-codex");
 });
 
-// What the turn hands the SDK. The composition RULES are system-prompt.test.ts's; what matters here is that
-// the runner reaches for them at all, and that both shapes survive the trip into the options object.
+// Prompt composition rules live in system-prompt.test.ts; this only checks that runAgent forwards both prompt shapes
+// into the SDK options.
 test("a request with no mode runs Intentic's prompt, and each mode reaches the SDK in its own shape", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -332,9 +311,7 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // An absent mode is the PRODUCT default, not "whatever the SDK does": a caller that builds a request by hand
-    // (the bench) must get the same agent the app ships. And the model has to be TOLD the widgets exist:
-    // otherwise it writes "A) … B) …" as prose.
+    // An absent mode is the product default: a request built by hand must get the same agent the app ships.
     await collect(request, capture);
     const intentic = captured.at(-1)?.systemPrompt as string;
     expect(intentic).toMatch(/Intentic agent/i);
@@ -351,15 +328,13 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
     const withAppend = captured.at(-1)?.systemPrompt as { append: string };
     expect(withAppend.append).toBe(`${preset.append}\n\n## Delegating\nUse codex exec.`);
 
-    // A custom prompt is handed over as a bare STRING, which is how the SDK is told to drop the preset. Its
-    // arrival must take the harness guidance with it: the owner replaced the prompt, not merely prefixed it.
+    // A custom prompt replaces the harness prompt entirely (sent as a bare string), not merely prefixes it.
     await collect({ ...request, systemPromptMode: "custom", systemPrompt: "You are a release-notes writer." }, capture);
     expect(captured.at(-1)?.systemPrompt).toBe("You are a release-notes writer.");
 });
 
-// Two producers register PreToolUse:Bash: the tmux wrapper and the install steer. Merged with a plain object
-// spread the second silently wins the key and the first never fires, taking the live terminal panel with it.
-// (Driven directly: tmuxRunEnabled() needs /usr/local/bin/tmux-run, which exists in the image, not on a host.)
+// Two producers register PreToolUse:Bash; a plain object spread would let the second overwrite the first. Needs
+// /usr/local/bin/tmux-run (image-only, not on a host).
 test("hook sets are concatenated per event, not overwritten", () => {
     const a = { PreToolUse: [{ matcher: "Bash", hooks: [] }], PostToolUse: [{ matcher: "Edit", hooks: [] }] };
     const b = { PreToolUse: [{ matcher: "Bash", hooks: [] }] };
@@ -387,20 +362,16 @@ test("every turn wires the ui ask server, the AskUserQuestion alias, and the per
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // The autonomous posture is the one the composer defaults away from plan mode into: it used to get no
-    // question tool at all, which is why the model fell back to prose options.
     await collect(request, capture);
     expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
-    // Two aliases now: the ask card's, and the JS execution backend's plain name (execution/js-tool.ts).
+    // Two aliases: the ask card's AskUserQuestion and the JS execution backend's Code (execution/js-tool.ts).
     expect(captured.at(-1)?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask", Code: "mcp__code__run" });
     expect(captured.at(-1)?.canUseTool).toBeTypeOf("function");
     expect(captured.at(-1)?.permissionMode).toBe("bypassPermissions");
     expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(true);
 });
 
-/* The JS execution backend mounts from its own request field, and ONLY from it: no plan (a card that switched
- * it off, a runtime that doesn't host it: turn-plan decides both) means no server, which is the absence the
- * persona layer promises. */
+// The code server mounts only when the request carries a jsExecution field; no plan means no server.
 test("the code server rides the jsExecution field: present with a plan, absent without one", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -433,8 +404,8 @@ test("the request's tools become remote http MCP servers alongside the ui server
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
     expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
     expect(captured.at(-1)?.permissionMode).toBe("plan");
-    // The flag rides every launch: it legalises bypassPermissions without activating it, and a plan turn
-    // NEEDS it: approval setModes to POST_PLAN_MODE, which the CLI refuses on a session launched without it.
+    // Set on every launch, not only bypassPermissions turns: a plan approval later sets mode to bypassPermissions,
+    // which the CLI refuses without this flag at launch.
     expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(true);
 });
 
@@ -452,8 +423,8 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
     expect(captured.at(-1)?.plugins).toBeUndefined();
 });
 
-// Drive the permission gate end-to-end: the fake query calls `canUseTool` mid-stream, the test answers the card
-// the way the browser does (POST /agent/reply → resolveRequest), and the gate's decision comes back to assert on.
+// Drives the permission gate end-to-end: canUseTool is called mid-stream and answered as the browser would
+// (resolveRequest), returning the gate's decision.
 type DecidableCard = Extract<AgentEvent, { kind: "permission" | "plan" }>;
 
 const decide = async (
@@ -469,10 +440,7 @@ const decide = async (
         if (call.prose !== undefined) {
             yield* proseBlock(call.prose);
         }
-        /* The assistant message carrying the tool_use block, drained BEFORE the gate is asked, because that is
-         * the order the real SDK delivers in: Query.readMessages enqueues the message and only then dispatches
-         * the un-awaited can_use_tool control request. Any turn-scoped handle the gate reads has therefore
-         * already seen this frame, and a fake that skips it hides exactly that class of bug. */
+        // Yielded before the gate call, matching real SDK order (message enqueued before canUseTool dispatches).
         yield {
             type: "assistant",
             message: { content: [{ type: "tool_use", id: `call-${call.tool}`, name: call.tool, input: call.input ?? {} }] },
@@ -504,8 +472,8 @@ test("'always' grants the whole tool for the session, alongside whatever the SDK
     );
 
     expect(card).toMatchObject({ kind: "permission", toolName: "Bash", alwaysLabel: "Don't ask again for Bash" });
-    // The SDK's own suggestion is command-scoped: the next command would ask again, so the tool-wide rule the
-    // button's wording promises rides with it.
+    // The SDK's suggestion is command-scoped; 'always' additionally adds a tool-wide allow rule so the next command
+    // doesn't re-ask.
     expect(result).toMatchObject({
         behavior: "allow",
         decisionClassification: "user_permanent",
@@ -525,8 +493,8 @@ test("a card with no SDK suggestions still offers 'always', and 'once' persists 
 });
 
 test("a decided card is recorded in the frame log, so a replay freezes it instead of re-offering it", async () => {
-    // The turn's frames are what a reload replays and what a second window renders. A card whose answer never
-    // entered the log comes back live there: buttons on a requestId this daemon no longer holds.
+    // The frame log is what a reload replays; a decided card missing from it comes back live, with buttons on a
+    // requestId the daemon no longer holds.
     const { card, frames } = await decide({ ...request, permissionMode: "default" }, { tool: "WebFetch" }, (event) => ({
         kind: "permission",
         requestId: event.requestId,
@@ -536,22 +504,19 @@ test("a decided card is recorded in the frame log, so a replay freezes it instea
     expect(frames.filter((frame) => frame.kind === "resolved")).toEqual([
         { kind: "resolved", requestId: card.requestId, reply: { kind: "permission", requestId: card.requestId, decision: "once" } },
     ]);
-    // ...and it lands after the card it settles, so replaying in order never freezes a card that isn't there yet.
+    // The resolved frame lands after the card it settles, so replay never shows it before the card exists.
     expect(frames.findIndex((frame) => frame.kind === "resolved")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "permission"));
 });
 
 test("an approved plan executes with permissions bypassed, whatever the turn planned from", async () => {
     const approve = (event: DecidableCard): AgentReply => ({ kind: "plan", requestId: event.requestId, approve: true });
 
-    /* Approving is the user reading what the agent intends to do and saying yes to all of it, so the posture the
-     * turn PLANNED from is not a ceiling on the plan it approved, and the container is the isolation boundary
-     * either way. The shape this replaces restored the starting posture and floored a plan-mode turn on
-     * 'acceptEdits', so approving a plan in the mode the user picked TO SEE ONE bought them a permission card
-     * for `git log`. */
+    // Approving a plan always executes with permissions bypassed, whatever mode the turn planned from; the container is
+    // the isolation boundary either way.
     for (const permissionMode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
         const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", prose: "# Plan" }, approve);
         expect(result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
-        // ...and the composer's pill hears about it, so it never claims the turn is still planning.
+        // The mode frame tells the composer's pill the turn is no longer planning.
         expect(frames).toContainEqual({ kind: "mode", mode: "bypassPermissions" });
     }
 });
@@ -568,8 +533,7 @@ test("ExitPlanMode uses the adjacent prose as its plan because the current SDK c
 });
 
 test("ExitPlanMode refuses to raise an empty approval card", async () => {
-    // `null` because that is what the SDK's own signature says canUseTool resolves to, the same widening the
-    // `decide` helper above makes for the same call.
+    // `null` matches the SDK's own canUseTool return type, as widened by the `decide` helper above.
     let result: PermissionResult | null | undefined;
     const frames = await collect({ ...request, permissionMode: "plan" }, async function* (args) {
         result = await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
@@ -583,13 +547,8 @@ test("ExitPlanMode refuses to raise an empty approval card", async () => {
     expect(frames.some((frame) => frame.kind === "plan")).toBe(false);
 });
 
-/* THE REBASE A CARD SETTLES INTO. A plan approval is the longest park of the three cards and the one followed
- * by the most writing, so the branch is put back on today's main line before the agent starts building against
- * a tree it planned from. The route owns the git; these cases own WHEN it is asked for, which is the part that
- * can quietly go wrong: fire on a rejection and the daemon rewrites a branch whose turn the user just stopped;
- * fire under a running command and the ground moves beneath a build nobody is watching. */
-// The one thing the route hands back: the summary line the reader gets. The model is told nothing, a rebase it
-// hears about is a rebase it goes and verifies, and a clean one never had anything to find (turn-preamble.ts).
+// Plan approval rebases onto today's main line before the agent builds; these tests own WHEN the rebase fires.
+// Shape of what resync returns: only the summary line is exposed to the reader.
 const parkedSync = { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } };
 
 test("an approved plan rebases the branch and announces it to the transcript alone", async () => {
@@ -610,16 +569,16 @@ test("an approved plan rebases the branch and announces it to the transcript alo
     );
 
     expect(calls).toBe(1);
-    // The transcript hears it where it happened: after the card it settles, not at the top of the turn.
+    // The worktree frame lands after the card it settles, not at the top of the turn.
     expect(frames.filter((frame) => frame.kind === "worktree")).toEqual([parkedSync]);
     expect(frames.findIndex((frame) => frame.kind === "worktree")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "resolved"));
-    // Nothing is disclosed to the reader as words the model was given, because it was given none...
+    // No preamble frame: the model was given no words about the rebase to relay.
     expect(frames.some((frame) => frame.kind === "preamble")).toBe(false);
-    // ...and the steering queue, the only channel an approved plan has back to the model, stays empty.
+    // The steering queue, the only channel back to the model here, stays empty.
     expect(steering.delivered).toBe(0);
 });
 
-// A rejected plan stops the turn. Rewriting the branch there moves work the user just declined to continue.
+// A rejected plan must not rebase: that would move work the user just declined.
 test("a rejected plan leaves the branch alone", async () => {
     withoutTmux();
     let calls = 0;
@@ -638,7 +597,7 @@ test("a rejected plan leaves the branch alone", async () => {
     expect(calls).toBe(0);
 });
 
-// A branch already on today's main line is the ordinary answer: no frame, and nothing said to anyone.
+// A branch already current gets no worktree frame and no steering message.
 test("an approved plan on a current branch says nothing", async () => {
     withoutTmux();
     const steering = new SteeringQueue();
@@ -652,10 +611,8 @@ test("an approved plan on a current branch says nothing", async () => {
     expect(steering.delivered).toBe(0);
 });
 
-/* THE QUIET-WORKTREE GATE, subagent half. The model is parked on the card; its children are not, and a
- * subagent does its own editing. Rebasing under one swaps files mid-read and sweeps a half-written file into
- * the commit the rebase takes first: the two failures that do not announce themselves, which is the whole
- * reason this pass is worth skipping rather than forcing. (The shell half is agent-terminals.integration.test.) */
+// A running subagent edits files on its own; rebasing under it can swap files mid-read or sweep a half-written file
+// into the commit, so the rebase waits until it settles.
 test("a subagent still running holds the rebase off", async () => {
     withoutTmux();
     resetSubagents();
@@ -681,7 +638,7 @@ test("a subagent still running holds the rebase off", async () => {
     );
 
     expect(calls).toBe(0);
-    // Settled, and the same approval now takes the rebase it just skipped.
+    // Once the subagent settles, the same approval takes the rebase it skipped before.
     noteSubagentTask(
         { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
         { subtype: "task_updated", task_id: "task-park", patch: { status: "completed" } },
@@ -702,10 +659,8 @@ test("a subagent still running holds the rebase off", async () => {
     expect(calls).toBe(1);
 });
 
-/* The answer outranks the rebase: asserted against a resync that THROWS rather than one that behaves, because
- * the harness does not own that callback and a card must not die from a side channel. The person has already
- * clicked: a git fault reaching this far would come back to them as a plan approval that did not take, losing
- * the one thing the exchange was for to report a branch that simply stayed where it was. */
+// A plan approval must succeed even when resync throws: a git failure must not turn the user's answer into a failure or
+// an unrebased branch reported as approved.
 test("a plan approval survives a sync that fails", async () => {
     withoutTmux();
     const { result } = await decide(
@@ -723,8 +678,8 @@ test("a plan approval survives a sync that fails", async () => {
     expect(result).toMatchObject({ behavior: "allow", updatedPermissions: [{ type: "setMode", mode: "bypassPermissions" }] });
 });
 
-// The permission card is deliberately NOT a sync point: its tool call was computed against the tree as it was,
-// and moving a file under an approved Edit turns the user's "yes" into a failure they authored.
+// A permission answer never resyncs: the tool call was computed against the tree as it was; moving files under an
+// approved Edit would break it.
 test("a permission answer never moves the branch", async () => {
     withoutTmux();
     let calls = 0;
@@ -744,8 +699,7 @@ test("a permission answer never moves the branch", async () => {
     expect(calls).toBe(0);
 });
 
-/* A loop that ran out of iterations is not a loop that broke, and the frame says which. Uncoded, both landed on
- * the ledger as an unclassified failure — the one shape nothing downstream knows how to handle. */
+// Hitting the iteration cap is coded as 'turn-cap', distinct from an unclassified failure downstream can't handle.
 test("a turn that hits the iteration cap becomes a coded error followed by done", async () => {
     const events = await collect(request, fakeQuery({ type: "result", subtype: "error_max_turns", session_id: "s" }));
     expect(events).toEqual([
@@ -782,15 +736,8 @@ test("a non-rate-limit assistant error with no explanation falls back to its bar
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: unknown" }, { kind: "done" }]);
 });
 
-/* A SEAT THE ORGANIZATION TOOK AWAY: the failure that had no code at all, and so left no trace anywhere but the
- * chat that provoked it. It arrives as an `unknown` category carrying Anthropic's own prose, matching neither the
- * usage-limit prefixes nor the CLI's "Failed to authenticate", so it fell through to a bare uncoded error: no
- * refusal was filed against the account, and the picker went on drawing a fresh green ring over an account that
- * refused every turn (its token authenticates and its plan publishes pools throughout).
- *
- * Its own code rather than claude-token-refused, which is the branch it sits directly above: that one arms a
- * re-mint-and-re-run, and no token this daemon can mint restores a seat. Coding it there would have spent a
- * retry, failed identically, and ended by asking the user to reconnect an account that was never disconnected. */
+// An org-disabled Claude Code seat is coded claude-not-entitled, not claude-token-refused: no re-minted token restores
+// a revoked seat.
 test("a revoked Claude Code seat is coded as its own refusal, not as a credential to re-mint", async () => {
     const seat =
         "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
@@ -801,17 +748,8 @@ test("a revoked Claude Code seat is coded as its own refusal, not as a credentia
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "claude-not-entitled", message: seat }, { kind: "done" }]);
 });
 
-/* A SPENT PLAN THAT ARRIVES DRESSED AS A DEAD CREDENTIAL: the routed providers' version of the seat above,
- * sitting directly above the same branch and for the same reason.
- *
- * Kimi refuses a spent Kimi Code plan with `403 You've reached your usage limit for this billing cycle`, and a
- * 403 is what the CLI prints its "Failed to authenticate" prefix over. So it satisfied isAuthFailureText and
- * went out as a refused credential, which the client answers with the reconnect banner: a fix for a condition
- * the user does not have. The account authenticates perfectly; its quota is simply gone until the cycle turns,
- * and no reconnect brings that back.
- *
- * Coded as the limit it is, carrying the provider's OWN sentence (which names the remedy: buy more, or wait)
- * rather than the canned Claude line, because on a routed turn Anthropic had no part in the refusal. */
+// A routed provider's spent-plan 403 matches the CLI's own auth-failure prefix; coded rate_limit rather than a
+// credential to reconnect, keeping the provider's sentence.
 test("a routed provider's spent plan is coded as a limit, not as a credential to reconnect", async () => {
     const kimi =
         "Failed to authenticate. API Error: 403 You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle.";
@@ -822,8 +760,7 @@ test("a routed provider's spent plan is coded as a limit, not as a credential to
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "rate_limit", message: kimi }, { kind: "done" }]);
 });
 
-// The branch below it still stands: a token that was actually revoked says nothing about an allowance, and must
-// keep arming the re-mint-and-resume rather than parking the turn on a reset that is never coming.
+// A genuinely revoked token still needs re-minting, not a rate-limit reset that will never arrive.
 test("a genuinely revoked credential still reads as one to re-mint", async () => {
     const revoked = "Failed to authenticate. API Error: 401 OAuth access token has been revoked";
     const events = await collect(
@@ -837,11 +774,8 @@ test("a genuinely revoked credential still reads as one to re-mint", async () =>
     ]);
 });
 
-/* THE PROVIDER'S OWN FAILURES, read from the CATEGORY rather than the sentence. The harness files every 5xx, every
- * 529 at capacity and every dropped socket as `server_error`, and a pre-retry capacity refusal as `overloaded`;
- * both mean the request is worth making again, which is the one claim the auto-resume has to be right about. The
- * wording changes with every CLI release, so classifying on it would break silently: these two tests are what
- * pins that. */
+// 5xx/socket failures (server_error) and pre-retry capacity refusals (overloaded) are both coded provider-outage,
+// classified by category rather than wording that changes across CLI releases.
 test("a server_error is coded as a provider outage, keeping the provider's own sentence", async () => {
     const outage = "API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment.";
     const events = await collect(
@@ -851,11 +785,8 @@ test("a server_error is coded as a provider outage, keeping the provider's own s
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "provider-outage", message: outage }, { kind: "done" }]);
 });
 
-/* THE ONE 4xx THAT JOINS THEM, and the exception is deliberate: every other 4xx stays uncoded because
- * re-sending a malformed request on a timer is a loop. This one names a parameter no request from this sandbox
- * carries (the provider's own cache-retention default, or one a proxy added), so there is nothing of the user's
- * to fix and the next send goes through: an outage in everything but its status code. It killed a long routed
- * turn, uncoded, with no resume and nothing for the user to act on. */
+// The only 4xx coded as an outage: it names a parameter this client never sends, so retrying is safe, unlike other 4xx
+// which would loop.
 test("a refused parameter nothing here sends is coded as an outage, though it arrives as a 400", async () => {
     const refusal =
         'API Error: 400 {"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
@@ -865,7 +796,7 @@ test("a refused parameter nothing here sends is coded as an outage, though it ar
     );
     const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
     expect(failure?.code).toBe("provider-outage");
-    // The provider's own sentence survives: our clause only adds the fact the reader cannot check themselves.
+    // The provider's sentence is kept verbatim; only the fact the reader can't check is added.
     expect(failure?.message).toMatch(/prompt_cache_retention.*not supported/i);
 });
 
@@ -878,9 +809,8 @@ test("a 529 at capacity is the same condition as a 500: one code covers both", a
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "provider-outage", message: overloaded }, { kind: "done" }]);
 });
 
-// The turn is still alive here: the harness lost a request and is retrying it in place. It surfaces because the
-// retry budget is long enough (CLAUDE_CODE_RETRY_WATCHDOG) that the silence would otherwise read as a hang, and
-// the user's answer to a hang is Stop, which is the only thing that loses the work.
+// An in-turn retry is a live turn, not a hang: surfaced as a waiting status so the user doesn't Stop it and lose the
+// work mid-retry.
 test("an in-turn retry surfaces as a waiting status with its own next-attempt clock, not an error", async () => {
     const events = await collect(
         request,
@@ -897,14 +827,14 @@ test("an in-turn retry surfaces as a waiting status with its own next-attempt cl
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        // 300 is the harness's budget; 8 is the one the daemon will honour, and the wire carries the honoured one.
+        // 300 is the harness's retry budget; the daemon honours only 8, and the wire reports the honoured number.
         { kind: "provider_retry", attempt: 3, maxAttempts: 8, nextAttemptAt: expect.any(Number), status: 529 },
         { kind: "done" },
     ]);
 });
 
-// A transport failure never got a response, so there is no status to name: the frame carries the wait alone
-// rather than inventing a code the client would render as if the provider had spoken.
+// A transport failure has no HTTP status; the frame omits it rather than inventing one the client would render as if
+// the provider had answered.
 test("a retry with no HTTP status behind it omits the status instead of faking one", async () => {
     const events = await collect(
         request,
@@ -926,10 +856,8 @@ test("a retry with no HTTP status behind it omits the status instead of faking o
     ]);
 });
 
-/* THE STORM THAT IS NOT CLEARING. The harness would keep asking three hundred times, which for a provider that
- * refuses every request is a card in the Active lane under a "Working…" spinner for the rest of the afternoon.
- * The turn ends on the provider's own condition instead, which is what puts the waiting in the hands of the
- * breaker and the resume scheduler, and the card where a reader can see it. */
+// Past the in-turn retry bound the turn ends as an outage instead of spinning through all 300 harness retries; the
+// breaker and resume scheduler take over from there.
 test("a retry storm past the in-turn bound ends the turn as an outage rather than spinning on", async () => {
     const events = await collect(
         request,
@@ -944,8 +872,7 @@ test("a retry storm past the in-turn bound ends the turn as an outage rather tha
                 error_status: 500,
                 error: "server_error",
             },
-            // Never reached: the stream is over, which is the whole point, the CLI is not left retrying behind a
-            // card that has already settled.
+            // Never reached: the stream ends here, so the CLI isn't left retrying behind a card that already settled.
             { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
         ),
     );
@@ -1060,7 +987,7 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
                     error_status: 429,
                     error: "rate_limit",
                 },
-                // Returning on the retry closes the SDK iterator; the exhausted turn does not keep spinning.
+                // Returning on the retry closes the SDK iterator so the exhausted turn stops instead of spinning.
                 { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
             ),
         );
@@ -1079,14 +1006,7 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
     }
 });
 
-/* THE ROUTED HALF OF THE SAME FRAME, and the reason `allowance` exists at all.
- *
- * A Google turn runs Claude Opus through Antigravity on the Claude Code harness, so everything the harness says
- * about the 429 is about the wrong vendor: it names Anthropic, and `retry_delay_ms` is the SDK's own
- * 620ms-and-doubling backoff rather than anything the provider said. Reading that as an instant is what put
- * "Resets 5:32 PM" (the moment of the failure) under a Google weekly quota that was five days out. Three
- * things are asserted here: the delay is IGNORED (the recorded quota wins), the vendor is the one that refused,
- * and the sentence names the POOL and the fleet rather than an "account" no routed turn has. */
+// Routed 429s must use the recorded vendor quota's reset, not the SDK's own backoff delay.
 const retryFrame = { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, error_status: 429 } as const;
 
 test("a routed usage-limit retry names the vendor that refused and takes its reset from that vendor's quota, not the harness backoff", async () => {
@@ -1118,12 +1038,8 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
     }
 });
 
-/* A REFUSAL WITH HEADROOM STILL ON FILE IS NOT A SPENT PLAN, and this is the frame that stopped claiming it was.
- *
- * CLIProxyAPI balances across every credential it holds, so one account with room means the pool is not what
- * refused the turn: every credential was merely cooling, which a transient upstream error does for a minute.
- * The old frame answered that with a weekly reset days out, sending the user away over a condition that had
- * already cleared. No reset, and a sentence that says which condition it is. */
+// A refusal with headroom still on an account is a cooldown, not a spent pool: CLIProxyAPI balances across credentials,
+// so one cooling account isn't exhaustion.
 test("a routed refusal with an account still holding headroom reads as a cooldown, not a spent allowance", async () => {
     const vendor = "Google";
     const pool = "Claude and GPT models";
@@ -1142,8 +1058,8 @@ test("a routed refusal with an account still holding headroom reads as a cooldow
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
-// Nothing on file beats a number we made up: the client renders a limit with no reset as a plain notice, which
-// is honest, where `now + backoff` reads as "already reset" and invites an immediate retry into a closed window.
+// With no quota reading on file, no reset time is invented; `now + backoff` would read as already-reset and invite a
+// retry into a still-closed window.
 test("a routed usage-limit retry with no quota reading on file carries no reset at all", async () => {
     const events = await collect(
         { ...request, allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 0, withHeadroom: 0 }) } },
@@ -1156,10 +1072,8 @@ test("a routed usage-limit retry with no quota reading on file carries no reset 
     ]);
 });
 
-/* THE TRANSLATOR'S OWN ANSWER, on the one path that still holds it. A terminal assistant refusal carries the
- * API's body, and CLIProxyAPI's is a model_cooldown JSON naming `reset_seconds` off its own scheduler: the one
- * number that separates a credential cooling for 40 seconds from a weekly wall. It beats the recorded snapshot,
- * which is a poll up to five minutes stale and cannot tell those two apart at all. */
+// A translator's own model_cooldown reset_seconds (from its scheduler) overrides the recorded quota snapshot, which can
+// be stale.
 test("a routed refusal takes the translator's own reset_seconds over the recorded quota", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
@@ -1202,9 +1116,8 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
     }
 });
 
-// The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what
-// happened ("You've hit your session limit · resets …"). The sentence is kept: it names the reset, our canned
-// line doesn't, but the code makes it the same condition as the assistant-error rate_limit above.
+// A mid-session limit can arrive under a non-rate_limit category with only its sentence saying so; coded rate_limit but
+// keeping that sentence, since it names the reset ours doesn't.
 test("a usage-limit sentence under another error category is classified as rate_limit, keeping its own text", async () => {
     const limitText = "You've hit your session limit · resets 1:40pm (UTC)";
     const events = await collect(
@@ -1214,8 +1127,8 @@ test("a usage-limit sentence under another error category is classified as rate_
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "rate_limit", message: limitText }, { kind: "done" }]);
 });
 
-// 'unknown' is the SDK's catch-all for every 4xx, so the category names nothing the user can fix; the API's own
-// sentence rides in the synthetic message's text block and is the whole value of the frame.
+// 'unknown' is the SDK's catch-all for every 4xx; the API's own sentence in the text block is the only useful part of
+// the frame.
 test("an API error surfaces the API's own sentence, not the SDK's error category", async () => {
     const apiError = "API Error: 400 output_config.effort 'max' is not supported when thinking is disabled on this model.";
     const events = await collect(
@@ -1246,10 +1159,10 @@ test("a rate_limit_event with only a status omits the optional usage fields", as
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "rate_limit_info", status: "allowed" }, { kind: "done" }]);
 });
 
-// The turn ran on a stored account's OAuth token, so its plan limits are readable at settle.
+// The turn ran on a stored account's OAuth token, so plan limits are readable at settle.
 const oauthRequest = { ...request, oauthToken: "oat-1" };
-// A fake of the OAuth usage endpoint: the daemon reads it directly because the CLI only reports rate limits
-// for a profile it signed in itself, which a token-authenticated daemon turn never is.
+// Fakes the OAuth usage endpoint; the daemon reads it directly since the CLI reports rate limits only for a profile it
+// signed in itself.
 const usageEndpoint = (body: unknown, ok = true): typeof fetch =>
     (() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch;
 
@@ -1264,8 +1177,7 @@ test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was 
             seven_day_opus: { utilization: null, resets_at: null },
         }),
     );
-    // Both pools ride out side by side, each named: this is the whole point, a 1% pool must never be able to
-    // stand in for a 98% one. ISO reset instants become epoch SECONDS, the unit the rest of the wire uses.
+    // Pools are reported separately so a 1% pool never stands in for a 98% one; resets convert to epoch seconds.
     expect(events).toEqual([
         {
             kind: "account_usage",
@@ -1279,8 +1191,7 @@ test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was 
 });
 
 test("a turn with no plan limits to read yields no account_usage frame at all", async () => {
-    // An empty window list would read as "measured, and you have no limits": the opposite of unknown.
-    // The endpoint refusing the credential (an API key has no plan):
+    // An empty list would misread as 'no limits'; here the endpoint refuses the credential (no plan).
     const refused = await collect(oauthRequest, fakeQuery({ type: "result", subtype: "success" }), usageEndpoint({}, false));
     expect(refused).toEqual([{ kind: "done" }]);
 
@@ -1380,8 +1291,8 @@ test("a steering queue switches the turn to streaming input: initial prompt, the
 });
 
 test("a steered stream survives each turn's result: the queued message's own turn keeps streaming", async () => {
-    // The SDK emits one result PER TURN on a streaming input, and a steered message the running turn can't
-    // absorb runs as its own follow-up turn: its frames must reach the client instead of dying at result #1.
+    // The SDK emits one result per turn on streaming input; a steered message the running turn can't absorb runs its
+    // own follow-up turn, whose frames must still reach the client.
     const steering = new SteeringQueue();
     steering.push("and 2+6?");
     const events = await collect(
@@ -1407,8 +1318,7 @@ test("after the last result a steered stream settles: the grace window closes th
     const steering = new SteeringQueue();
     steering.push("absorbed mid-turn");
     const drained: string[] = [];
-    // Like the real SDK, the stream stays open after its result, waiting on the input stream; only the input
-    // ending (the grace window closing the queue) lets it finish.
+    // Like the real SDK, the stream stays open after its result until the grace window closes the input queue.
     const sdkLike: QueryFn = async function* (args) {
         yield { type: "result", subtype: "success" } as SDKMessage;
         for await (const message of args.prompt as AsyncIterable<SDKUserMessage>) {
@@ -1421,16 +1331,8 @@ test("after the last result a steered stream settles: the grace window closes th
     expect(steering.push("too late")).toBe(false);
 });
 
-/* THE TURN THAT SAID "I'LL COME BACK WITH RESULTS", and the boundary that used to kill it. A backgrounded
- * child lives inside the turn's CLI process, so ending the stream at the first result took every running
- * child with it: 14 agents dead the moment the parent finished its sentence. The stream is held open
- * instead: the child settles, the CLI injects its task notification, and the wake turn's frames arrive on
- * this same stream like a steered follow-up.
- *
- * `local_agent` IS THE SPELLING, and it is the point of this test as much as the hold is. The level signal
- * carries the CLI's raw discriminant, and while these fakes said `"subagent"` the suite passed against a
- * vocabulary that does not exist: in production every backgrounded agent fell through the hold and died at
- * its parent's first result, which is the bug this pins. */
+// A backgrounded child (task_type local_agent) keeps the stream open past the parent's first result until its wake
+// turn's frames arrive, instead of ending the stream and killing the child.
 test("a result with a backgrounded child in flight holds the stream open for the wake turn", async () => {
     resetSubagents();
     const events = await collect(
@@ -1452,8 +1354,8 @@ test("a result with a backgrounded child in flight holds the stream open for the
                 tasks: [{ task_id: "task-1", task_type: "local_agent", description: "audit chapter 4" }],
             },
             { type: "result", subtype: "success", total_cost_usd: 0.1 },
-            // Minutes later the child settles: its report lands, the level empties, and the CLI wakes the
-            // model with the injected notification: a main-thread turn that must reach the client in full.
+            // When the child settles, the CLI wakes the model with an injected notification; that follow-up turn must
+            // reach the client in full.
             {
                 type: "system",
                 subtype: "task_notification",
@@ -1480,10 +1382,8 @@ test("a result with a backgrounded child in flight holds the stream open for the
     ]);
 });
 
-/* WHERE "BACKGROUND" COMES FROM, since it does not come from the SDK. `is_backgrounded` rides a task_updated
- * patch that never arrives, so the Agent tool call itself carries the fact, and it has to reach the frame that
- * ANNOUNCES the child, because no later frame has a field for it. The block streams ahead of the task_started
- * that opens the record, which is exactly why the mark is laid before there is a record to mark. */
+// is_backgrounded never arrives as a task_updated patch, so the Agent call's own run_in_background field must reach the
+// frame that announces the child.
 test("the Agent call's run_in_background reaches the frame that announces the child", async () => {
     resetSubagents();
     const events = await collect(
@@ -1518,9 +1418,8 @@ test("the Agent call's run_in_background reaches the frame that announces the ch
     });
 });
 
-// The other way a hold can end: every child settled and no wake turn announced itself within the grace
-// window: closing the input is what lets the stream drain, exactly like the steered settle above. The
-// child's own report still made it out before the end.
+// If every child settles with no wake turn inside the grace window, closing the input drains the stream, as with a
+// steered settle; the child's report still arrives first.
 test("children settled with no wake turn: the grace window closes the input so the stream drains", async () => {
     resetSubagents();
     const steering = new SteeringQueue();
@@ -1568,9 +1467,8 @@ test("children settled with no wake turn: the grace window closes the input so t
     expect(steering.push("too late")).toBe(false);
 });
 
-// A backgrounded shell survives the turn on its own: it runs in the turn's tmux session, which the daemon
-// owns, and holding on one would keep a turn spinning for as long as a dev server runs. Only in-process
-// children move the boundary; this stream ends at its result, and the trailing frame proves it was not held.
+// A backgrounded shell runs in the daemon's own tmux session and outlives the turn on its own; only in-process children
+// (agents) hold the stream open.
 test("a backgrounded shell does not hold the turn open", async () => {
     const events = await collect(
         request,
@@ -1588,10 +1486,8 @@ test("a backgrounded shell does not hold the turn open", async () => {
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
 });
 
-/* A TASK TYPE NOBODY HAS HEARD OF IS WAITED ON, which is the direction this boundary has to fail in. The set
- * next door names what may be abandoned rather than what must be kept, precisely so that the SDK adding a kind
- * of in-process work costs a turn that looks busy a moment too long instead of a fan-out of agents killed with
- * nothing said about it. The trailing frame is the proof: it only arrives on a stream still being read. */
+// An unrecognised background task type holds the stream open by default (the allow-list names only what may be
+// abandoned), so a new SDK task kind fails safe.
 test("an unrecognised background task type holds the turn open rather than being abandoned", async () => {
     const events = await collect(
         request,
@@ -1609,19 +1505,16 @@ test("an unrecognised background task type holds the turn open rather than being
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "delta", text: "still here" }, { kind: "done" }]);
 });
 
-/* THE SWALLOWED PROMPT. A resume that wakes to its own stale background-task notifications classifies the
- * whole run as a notification wake: the prompt is dequeued into the dying run, never answered, and the run
- * results instantly: subtype success, num_turns 0, not one frame of work. To the user that is a sent message
- * producing nothing at all. The recovery is the one they perform by hand (say it again) done here through
- * the steering queue, whose follow-up turn runs in the same process. */
+// A resume that wakes to its own stale background-task notification can dequeue the prompt into a run that ends
+// instantly (num_turns 0) unanswered; it is redelivered via the steering queue in the same process.
 test("an instant empty result redelivers the prompt instead of ending the turn on nothing", async () => {
     const drained: string[] = [];
     const swallowing: QueryFn = async function* (args) {
         const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
-        // The prompt is dequeued into the dying run and never answered...
+        // Dequeued into the dying run and left unanswered.
         drained.push(String((await input.next()).value?.message.content));
         yield { type: "result", subtype: "success", num_turns: 0, usage: { input_tokens: 0, output_tokens: 0 } } as SDKMessage;
-        // ...and its redelivered copy runs as a follow-up turn in the same process.
+        // Its redelivered copy runs as a follow-up turn in the same process.
         drained.push(String((await input.next()).value?.message.content));
         yield {
             type: "stream_event",
@@ -1765,9 +1658,8 @@ test("a stream with no command list publishes no commands frame", async () => {
     expect(events.some((event) => event.kind === "commands")).toBe(false);
 });
 
-/* A command the CLI answers ITSELF bypasses the model, so nothing else on the stream carries what it said.
- * Dropping this message (which the translation did) made every such command look broken: the turn ended with
- * the user's own echo and silence, whatever the command had actually replied. */
+// A CLI-answered command bypasses the model entirely; its local_command_output message is the only thing on the stream
+// carrying what it said.
 test("output from a locally-answered command reaches the transcript as assistant text", async () => {
     const events = await collect(
         request,
@@ -1786,9 +1678,8 @@ test("output from a locally-answered command reaches the transcript as assistant
     expect(events).toContainEqual({ kind: "text_end" });
 });
 
-/* The one local-command answer that means the message was thrown away rather than acted on: the CLI claimed
- * the leading `/`, found no such command, and discarded the rest. Coded, not narrated: the client holds the
- * text back rather than leaving the user to notice the silence and retype (conversation.ts). */
+// An unknown command discards the message after claiming the leading '/'; coded as an error rather than left silent, so
+// the client can tell the user to retype.
 test("an unknown command is an error the client can act on, naming the token that ate the message", async () => {
     const events = await collect(
         request,
@@ -1806,7 +1697,7 @@ test("an unknown command is an error the client can act on, naming the token tha
     const error = events.find((event) => event.kind === "error");
     expect(error?.code).toBe("unknown-command");
     expect(error?.message).toContain("/workspace");
-    // No assistant bubble for it: "Unknown command" is not something the agent said.
+    // No assistant bubble for it: 'Unknown command' is not something the agent said.
     expect(events.some((event) => event.kind === "delta")).toBe(false);
 });
 
@@ -1823,15 +1714,8 @@ test("a failing supportedCommands never breaks the turn", async () => {
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
-/* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks: the harness's own word for that
- * state is `sdk_opt_in_required`, so a turn that wants it has to say so in the inline settings object, and a
- * turn that doesn't must say NOTHING rather than `false`: the flag layer sits above the user's own
- * settings.json, so writing false there would override an opt-in the owner made for themselves on turns this
- * composer never expressed an opinion about.
- *
- * `fastModePerSessionOptIn` is the half that keeps the bill honest. Without it the harness persists the choice
- * to the settings file, which in this container is shared by every conversation, every automation and every
- * front desk turn, so one chat's toggle would quietly move all of them onto fast-mode pricing. */
+// Fast mode needs an explicit ask, never `false` (which would override the user's own settings.json);
+// fastModePerSessionOptIn keeps a turn's opt-in from persisting to the shared settings file.
 test("fast speed is asked for per session, and only by the turn that wanted it", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -1842,15 +1726,14 @@ test("fast speed is asked for per session, and only by the turn that wanted it",
     await collect({ ...request, fast: true }, capture);
     expect(captured.at(-1)?.settings).toMatchObject({ fastMode: true, fastModePerSessionOptIn: true });
 
-    // Not `{fastMode: false}`, an absent ask must leave the lower-precedence settings layers alone.
+    // Not `{fastMode: false}`: an absent ask must leave the lower-precedence settings layers alone.
     await collect(request, capture);
     expect(captured.at(-1)?.settings).not.toHaveProperty("fastMode");
     expect(captured.at(-1)?.settings).not.toHaveProperty("fastModePerSessionOptIn");
 });
 
-/* THE CLI'S OWN SKILLS THAT OPEN ONTO NOTHING HERE (HEADLESS_SETTINGS): `loop`, `schedule`, `keybindings-help`
- * and `update-config` describe an interactive process this harness does not run, so they are hidden on every
- * turn through the same flag layer, and MERGED with the fast-mode ask rather than replaced by it. */
+// loop, schedule, keybindings-help and update-config assume an interactive process this harness doesn't run, so they're
+// hidden every turn and merged with, not replaced by, the fast-mode settings.
 test("the bundled CLI-only skills are hidden from the model on every turn, fast or not", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -1866,18 +1749,15 @@ test("the bundled CLI-only skills are hidden from the model on every turn, fast 
     expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, fastMode: true, fastModePerSessionOptIn: true });
 });
 
-/* WHAT SPEED THE TURN ACTUALLY RAN AT, which is the half that makes the toggle above safe to ship. Fast mode
- * declines silently and for a lot of reasons the composer cannot see (the plan, the model, the pool, the
- * endpoint), so asking for it and not getting it is otherwise indistinguishable from getting it: same frames,
- * same text, a bill that differs by 2x. */
+// Fast mode can decline silently for reasons the composer can't see (plan, model, pool, endpoint); without this frame,
+// asking and not getting it looks identical to getting it despite a different bill.
 test("the speed the harness served is reported once, and again only when it changes", async () => {
     withoutTmux();
     const events = await collect(
         request,
         fakeQuery(
             { type: "system", subtype: "init", session_id: "s", model: "opus", fast_mode_state: "on" },
-            // The settled result agrees with init: no second frame, because a notice that repeats itself is
-            // one the user learns to stop reading.
+            // No second frame when the result agrees with init; a repeated notice trains the user to ignore it.
             { type: "result", subtype: "success", result: "ok", fast_mode_state: "on" },
         ),
     );
@@ -1902,9 +1782,8 @@ test("a turn that drops into cooldown mid-flight says so", async () => {
     ]);
 });
 
-/* The reason moves on its own, and the move is the informative half: `init` can answer "off, still checking"
- * and the result then names the actual blocker. De-duplicating on the STATE alone would swallow that second
- * frame and leave the user with a permanent "confirming…" for a turn that had long since been refused. */
+// The reason can change independently of state (init: 'still checking', result: the actual blocker); de-duplicating on
+// state alone would swallow that update.
 test("a reason that arrives after the state is still reported", async () => {
     withoutTmux();
     const events = await collect(
@@ -1921,8 +1800,8 @@ test("a reason that arrives after the state is still reported", async () => {
     ]);
 });
 
-// A harness that reports nothing about speed yields no frame at all: an absent answer is not "off", and
-// rendering one would put a notice under every turn on every runtime that never had fast mode to begin with.
+// No speed frame at all when the harness says nothing about it; absent isn't 'off', and rendering one would notice-spam
+// runtimes without fast mode.
 test("a harness that says nothing about speed produces no frame", async () => {
     withoutTmux();
     const events = await collect(
@@ -1933,31 +1812,26 @@ test("a harness that says nothing about speed produces no frame", async () => {
     expect(events.some((event) => event.kind === "fast_mode")).toBe(false);
 });
 
-/* WHAT A CARD IS ABOUT, attached by the daemon rather than asked of the model.
- *
- * The commonest real question an agent asks is "I looked into this and wrote it up, now choose", and the
- * write-up goes into a file whose card folds itself into `Write · +135 −0` well up the scroll. Every frame the
- * turn produced came past the daemon, so the document is already in hand when the card is raised; asking the
- * model to repeat it into the question would spend context on every ask and duplicate a document that then
- * drifts from the file. */
+// A question or plan card can carry a document the turn already wrote, attached by the daemon rather than described by
+// the model.
 
-// The `ask` tool as the CLI reaches it: through the SDK server's own registry, so a rename or a drop fails here
-// rather than quietly leaving the model without the tool. `_registeredTools` is private to McpServer, hence the cast.
+// Reaches the `ask` tool through the SDK server's own tool registry (`_registeredTools`, private hence the cast), the
+// same path the CLI uses.
 const askTool = (options: Options): ((args: unknown) => Promise<unknown>) => {
     const server = options.mcpServers?.["ui"] as { instance: unknown } | undefined;
     const registry = server?.instance as unknown as {
         _registeredTools: Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>;
     };
     const registered = registry?.["_registeredTools"]?.["ask"];
-    // Named against the tools that ARE registered, so a rename shows up as the list it is missing from rather
-    // than as a TypeError on the line below.
+    // Asserts against the registered tool list first, so a rename fails here with the list rather than as a TypeError
+    // below.
     expect(Object.keys(registry?.["_registeredTools"] ?? {}), "no ask tool on the ui server").toContain("ask");
     return (args) => registered!.handler(args, {});
 };
 
 const QUESTIONS = [{ question: "How much of the fix?", header: "Scope", multiSelect: false, options: [{ label: "All", description: "…" }] }];
 
-// A turn that writes `path` (as the model spells it), settles that call with `outcome`, then asks a question.
+// Writes `path` (as the model spells it), settles the write with `outcome`, then asks a question.
 const askAfterWriting = async (path: string, markdown: string, outcome: { is_error?: boolean } = {}): Promise<AgentEvent[]> => {
     withoutTmux();
     const frames: AgentEvent[] = [];
@@ -1996,24 +1870,23 @@ test("a question asked after a write-up carries the document, resolved onto the 
     });
 });
 
-// A Write's content is known when the call is MADE, and the call can still be refused or fail. A card offering
-// the reader a document that was never written, as the thing they are being asked about, reads as fact.
+// A Write can still fail after being called; the question card must not attach a document that was never actually
+// written.
 test("a question carries nothing when the write it would be about failed", async () => {
     const frames = await askAfterWriting("docs/findings.md", "# Findings", { is_error: true });
 
     expect(frames.find((frame) => frame.kind === "question")?.document).toBeUndefined();
 });
 
-// Code is not a write-up. The question card is for the thing the turn wrote FOR THE READER.
+// Only a write-up for the reader attaches; ordinary source code written along the way does not.
 test("a question after an ordinary source write carries nothing", async () => {
     const frames = await askAfterWriting("src/poll.ts", "export const poll = 1;");
 
     expect(frames.find((frame) => frame.kind === "question")?.document).toBeUndefined();
 });
 
-/* A PLAN CARD IS THE SAME PROBLEM ONE SURFACE ALONG. A model that wrote the real plan to a file and summarised
- * it in the prose before ExitPlanMode is asking for a yes to a document the card never showed; one whose prose
- * is already the complete plan needs nothing attached. The longer of the two is the plan. */
+// If the written file is the real plan and the prose just summarises it, the card attaches the file; if the prose
+// already is the complete plan, nothing attaches.
 const planAfterWriting = async (markdown: string, plan: string | undefined, path = "docs/plan.md"): Promise<AgentEvent[]> => {
     withoutTmux();
     const frames: AgentEvent[] = [];

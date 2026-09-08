@@ -4,67 +4,44 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { JsonFile } from "../../store/json-file.js";
 import type { MintedStore } from "./minted-credentials.js";
 
-/* WHAT A MINTED PROVIDER SERVES, read from the vendor's own OpenAI-compatible `/models` with a connected
- * account's key, on the shared ladder (live → the last list this estate answered with → a compile-time floor).
- *
- * THE FLOOR EXISTS HERE AND NOT FOR AN `endpoint` CAPABILITY, and the difference is knowledge. An endpoint is
- * whatever server the user pointed us at, so inventing models for it would mean offering rows that may not
- * exist on that particular box. Here we know exactly whose API this is, so a fresh sandbox whose sign-in landed
- * ten seconds ago can offer the right two rows instead of a spinner, and the very next read replaces them with
- * whatever the account can actually reach.
- *
- * THE CATALOG IS READ OVER THE OPENAI SURFACE WHILE TURNS RUN ON THE ANTHROPIC ONE, and that is not an
- * inconsistency to tidy away: both vendors publish `GET …/models` on their OpenAI-compatible root and neither
- * publishes a catalog on the Messages endpoint. The two roots are held together on the estate they belong to
- * (MintedVariant's `anthropicBase` and `catalogBase`) precisely so nobody has to remember that one is read and
- * the other dialled.
- *
- * ONE CATALOG PER ESTATE, NOT PER PROVIDER, which is the one thing this file learned the hard way from Z.ai
- * having two. A key minted on api.z.ai cannot read open.bigmodel.cn's list and vice versa: pointing one cache at
- * one provider would serve a mainland plan the international estate's models, and every turn on a row it offered
- * would be refused by the host that never had that model. So the store is filtered to the accounts of THIS
- * estate, and a provider that holds two of them holds two of these. */
+// What a minted provider serves, read from the vendor's OpenAI-compatible /models with a connected account's key, on
+// the shared discovery ladder (live, last-answered, compile-time floor). Catalog reads use the OpenAI surface
+// (`catalogBase`) while turns run on the Anthropic one (`anthropicBase`); one catalog per estate, not per provider,
+// since a key minted on one of Z.ai's two estates can't read the other's list.
 
-// The OpenAI catalog shape both vendors answer with. `display_name` is not in OpenAI's own schema; it is read
-// where a vendor sends it (Anthropic's REST catalog does) and its absence renders a label-only row, which is
-// the honest answer rather than a name invented here.
+// display_name isn't part of OpenAI's schema; read where a vendor sends it, its absence renders a label-only row rather
+// than an invented name.
 const ModelsResponseSchema = z.object({
     data: z.array(z.object({ id: z.string().min(1), display_name: z.string().optional() })),
 });
 
-// Short, because a minted provider's catalog moves when the vendor ships, not when the user edits something, and
-// a minute is what every other provider's catalog here uses.
+// Short: a minted provider's catalog moves when the vendor ships, not when the user edits anything.
 const MODELS_TTL_MS = 60_000;
-// A vendor API across the internet, not a model server on the docker host. Long enough for a cold edge, short
-// enough that an outage does not hold a picker open.
+// A vendor API across the internet, not a model server on the docker host. Long enough for a cold edge, short enough
+// that an outage does not hold a picker open.
 const DISCOVERY_TIMEOUT_MS = 10_000;
 
-// The non-chat rows a vendor lists beside its chat models. Same filter the Kimi and endpoint catalogs apply,
-// for the same reason: an embedding model in the picker is a row whose every turn fails.
+// Non-chat rows a vendor lists beside its chat models; an embedding/etc. model in the picker is a row whose every turn
+// fails.
 const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|audio|rerank|moderation|image-generation)/i.test(model.id);
 
-/* WHAT TO CALL A MODEL WHOSE VENDOR PUBLISHED NO NAME. The id is what turns dial, so it is never touched; this
- * is only the row's text. A repo-qualified id keeps its last segment, because the owner is not what
- * distinguishes one row from the next. */
+// Label for a model with no vendor-published name; the id itself is never touched. A repo-qualified id keeps only its
+// last segment.
 const labelFor = (id: string): string => (id.split("/").at(-1) ?? "") || id;
 
-/* CLIProxyAPI publishes a set in registry order and so do these vendors: `/models` hands ids back in whatever
- * order the registry iterated, which is not a preference. So the order is derived from the ids
- * (compareUnrankedModelIds), which puts the frontier generation first, and the head of that list is the model a
- * fresh conversation opens on. */
+// /models returns ids in registry iteration order, not a preference, so the order is derived from the ids instead
+// (compareUnrankedModelIds, frontier generation first); the head is what a fresh conversation opens on.
 const toCatalog = (models: readonly Model[], seed: readonly Model[]): { models: Model[]; default: string } => {
     const list = models.filter(isChatModel).toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
-    // Never empty by construction: the ladder only renders this with a live list, the persisted list, or the
-    // seed, and the seed is non-empty for every minted provider (asserted by the registry's own test). The
-    // fallback is here so a filter that removed every row cannot produce a default nothing serves.
+    // Never empty: the ladder only calls this with a live, persisted, or seed list, and the seed is non-empty for every
+    // provider. The fallback covers a filter that removed every row.
     const ordered = list.length > 0 ? list : [...seed];
     return { models: ordered, default: ordered[0]?.id ?? "" };
 };
 
 export interface MintedCatalog {
     readonly models: () => Promise<{ models: Model[]; default: string }>;
-    // Drop the cached answer. Called when an account of this provider is connected or disconnected, so the
-    // picker stops offering a catalog read with a credential that is gone (or misses one that just arrived).
+    // Drops the cached answer; called on connect/disconnect so the picker doesn't serve a stale credential's catalog.
     readonly forget: () => void;
 }
 
@@ -73,8 +50,7 @@ export const createMintedCatalog = (input: {
     readonly variant: MintedVariant;
     readonly store: Pick<MintedStore, "credentials">;
     readonly seed: readonly Model[];
-    // The last-known-good list. A vendor blip at boot must not empty a working picker, and unlike the local
-    // translator these APIs are a network away, so the file rung genuinely earns its place here.
+    // Last-known-good list; a vendor blip must not empty a working picker, and these APIs are a real network away.
     readonly file: JsonFile<Model[]>;
     readonly fetchImpl?: typeof fetch;
 }): MintedCatalog => {
@@ -82,10 +58,8 @@ export const createMintedCatalog = (input: {
     const { variant } = input;
 
     const discover = async (): Promise<Model[]> => {
-        // No credential for THIS estate, no catalog: the ladder reads an empty list as "nothing usable right
-        // now", caches nothing, and renders the persisted list or the seed. Which is exactly right for a
-        // provider nobody has connected — the picker shows what it WOULD serve, under a badge saying what it
-        // costs to unlock.
+        // No credential for this estate ⇒ empty list, which the ladder reads as nothing usable and renders the
+        // persisted list or seed instead, so an unconnected provider still shows what it would serve.
         const credentials = await input.store.credentials();
         const key = credentials.find((account) => account.variant === variant.id)?.apiKey;
         if (key === undefined) {

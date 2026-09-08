@@ -18,8 +18,7 @@ interface PlanFlags {
     readonly target?: string;
 }
 
-// Whole-command backstop under the per-operation deadlines (ssh readyTimeout/keepalive, fetch timeouts): a
-// plan that somehow still exceeds this fails naming its last activity instead of wedging the caller forever.
+// Whole-command backstop under the per-op deadlines; a plan that exceeds it fails naming its last activity.
 const PLAN_DEADLINE_MS = 5 * 60_000;
 
 export const planCommand = buildCommand<PlanFlags>({
@@ -38,9 +37,7 @@ export const planCommand = buildCommand<PlanFlags>({
     async func(this: CommandContext, flags: PlanFlags) {
         const redactor = createRedactor();
         const config = loadConfig();
-        // Renders to the pane (human text) AND, when the daemon points INTENTIC_EVENTS_FILE at a per-run file,
-        // mirrors the events as ndjson so the web tails structured progress (the check flow's plan step). Both
-        // sinks share the one redactor, so a value registered by redactor.add below is masked in both.
+        // Renders to the pane and, if INTENTIC_EVENTS_FILE is set, mirrors ndjson events; both share one redactor.
         const primary = createOutput(redactor.wrap(withRunLog(this.process.stdout, "plan")), config.intenticOutput);
         const eventsSink = config.intenticEventsFile === "" ? undefined : createEventsFileSink(config.intenticEventsFile, "plan");
         const out = eventsSink === undefined ? primary : teeOutput(primary, createOutput(redactor.wrap(eventsSink), "ndjson"));
@@ -54,8 +51,7 @@ export const planCommand = buildCommand<PlanFlags>({
             .filter((id) => id !== "");
         const graph = targets === undefined ? full : subgraph(full, targets);
         const ssh = createSshExecutor(createKnownHostsStore(dir));
-        // Track what the plan is doing so the deadline error below can NAME the stuck spot; node starts come
-        // from the engine's events, the orphan scan narrates through log.
+        // Tracks the stuck spot for the deadline error: node starts come from engine events, the orphan scan via log.
         let lastActivity = "loading generated secrets";
         const onEvent: typeof out.onEvent = (event) => {
             if (event.kind === "node" && event.state === "start") {
@@ -70,8 +66,7 @@ export const planCommand = buildCommand<PlanFlags>({
             out.log(message);
         };
         const work = async (): Promise<void> => {
-            // Read-only command: read generated secrets from the host-authoritative store (no backfill, plan never
-            // mutates a store), falling back to the local cache when the host is unreachable.
+            // Read-only: reads generated secrets from the host store (no backfill), falling back to the local cache.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, log), collectSecrets(graph).generated, process.env);
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
             const engineConfig = { providers: createProviders({ ssh }), log, onEvent };
@@ -79,9 +74,7 @@ export const planCommand = buildCommand<PlanFlags>({
             for (const step of outcome.steps) {
                 out.text(`${step.action}\t${step.type}\t${step.id}${step.reason !== undefined ? `\t(${step.reason})` : ""}`);
             }
-            // The collection scan: live stamped resources absent from the graph. Entries carry delete inputs
-            // (connection secrets), strip to (id, type) before they reach any output. Against a targeted
-            // subgraph every untargeted declared resource would read as an orphan, so the scan is skipped.
+            // Collection scan: strips delete-input secrets to (id, type); skipped for a subgraph (false orphans).
             let orphans: { id: string; type: string }[] = [];
             if (targets === undefined) {
                 orphans = (await collectOrphans(graph, engineConfig)).map(({ id, type }) => ({ id, type }));
@@ -93,8 +86,7 @@ export const planCommand = buildCommand<PlanFlags>({
             }
             out.result({ steps: outcome.steps, orphans });
         };
-        // The deadline rejects and the command exits non-zero (stricli renders the error); the raced work is
-        // abandoned, its transports die with the process. unref keeps a fast plan from being held open.
+        // Deadline rejects and exits non-zero; the raced work is abandoned. unref keeps a fast plan from blocking.
         let deadline: NodeJS.Timeout | undefined;
         try {
             await Promise.race([
@@ -109,12 +101,9 @@ export const planCommand = buildCommand<PlanFlags>({
             ]);
         } finally {
             clearTimeout(deadline);
-            // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too, a throw must not eat output.
+            // Flushes buffered secret-prefix bytes so the last line isn't dropped; runs on the error path too.
             redactor.flush();
-            // Tear down the executor's cloudflared forwarders. Without this the forwarder child keeps the
-            // event loop alive FOREVER after out.result(), the CLI never exits (cli.ts has no process.exit),
-            // the daemon's SSE never closes, and every preview "stalls" 120s after its last frame.
+            // Tears down cloudflared forwarders; otherwise the event loop never exits and previews stall after.
             await ssh.dispose?.();
         }
     },

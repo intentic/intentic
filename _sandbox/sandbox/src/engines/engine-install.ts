@@ -9,36 +9,19 @@ import { engineDescriptor, type EngineDescriptor } from "./engine-descriptors.js
 import { activateVersion, collectGarbage, engineDir, engineVersionDir, installedVersions, quarantineVersion } from "./engine-store.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
 
-/* GETTING A VERSION ONTO THE VOLUME, and refusing to let it serve turns until it has answered for itself.
- *
- * DOWNLOADING IS npm's JOB, not this file's. `npm install --prefix` already resolves the package's
- * platform-specific optional dependency for THIS cpu and libc, verifies every tarball against the registry's
- * integrity hash, and retries a flaky network — reimplementing that here would be a second, worse npm whose
- * bugs would be ours. It is also exactly what image-packs/cursor.Dockerfile and cursor-sdk.ts's bootstrap already do,
- * so the store's copy and the pack's copy of a package are produced by the same command.
- *
- * WHAT THIS FILE ADDS is the question npm cannot answer: does this version still work with THIS daemon? A
- * download that finishes is not a version that runs — a platform package can be missing for the running
- * architecture, a binary can fail to exec against the image's glibc, and an SDK can drop an export the daemon
- * calls. Each of those would otherwise surface deep inside a turn, on every turn, until somebody noticed. So an
- * installed prefix is verified (engine-descriptors.ts) BEFORE the pointer moves, and a failure quarantines the
- * version rather than leaving it to be retried on the next check.
- *
- * NOTHING IS EVER UPGRADED IN PLACE. The install lands in a temp directory beside the store, and only a
- * complete, verified prefix is renamed into `versions/<version>`. A crash halfway leaves a temp directory and a
- * store nobody's turn ever noticed. */
+// Gets a version onto the volume and refuses to serve it until verified; downloading is npm's job, this file only asks
+// whether the version still works with this daemon. Installs to a temp prefix and renames into `versions/<version>`
+// only when complete and verified: nothing is upgraded in place.
 
 const execFileAsync = promisify(execFile);
 
-// A 300 MB platform binary over a home connection, with npm's own retries inside it. Long, because the failure
-// mode of being too short is a version that installs fine on the second try and looks broken on the first.
+// Long enough for a large download plus npm's own retries; too short looks broken on the first try.
 const INSTALL_TIMEOUT_MS = 15 * 60_000;
 const MAX_BUFFER = 8 * 1024 * 1024;
 
 export type EngineInstallOutcome =
     | { readonly ok: true; readonly version: string; readonly reused: boolean }
-    // `quarantined` distinguishes "this version is bad" from "the download failed": only the first is a
-    // standing refusal, the second is worth retrying on the next check.
+    // `quarantined` separates a bad version (standing refusal) from a failed download (worth retrying).
     | { readonly ok: false; readonly version: string; readonly reason: string; readonly quarantined: boolean };
 
 const npmInstall = async (descriptor: EngineDescriptor, version: string, prefix: string): Promise<void> => {
@@ -53,8 +36,7 @@ const npmInstall = async (descriptor: EngineDescriptor, version: string, prefix:
             prefix,
             "--no-save",
             "--no-package-lock",
-            // Neither says anything about a single pinned install, and both cost a network round trip on a
-            // path whose whole point is to be the fast way to move an engine.
+            // Neither matters for a single pinned install; both cost a network round trip on the fast path.
             "--no-audit",
             "--no-fund",
             `${descriptor.source.package}@${version}`,
@@ -63,9 +45,8 @@ const npmInstall = async (descriptor: EngineDescriptor, version: string, prefix:
     );
 };
 
-/* The one engine published as a release asset rather than to npm. Downloaded whole, unpacked, and reduced to
- * the single binary the descriptor names: the archive also carries configs and docs that would otherwise sit
- * in the store forever, and the pack it mirrors keeps nothing else either. */
+// The one engine published as a release asset, not npm. Downloaded whole, unpacked, and reduced to just the named
+// binary; the archive's configs and docs would otherwise sit in the store forever.
 const releaseInstall = async (descriptor: EngineDescriptor, version: string, prefix: string): Promise<void> => {
     if (descriptor.source.kind !== "github-release") {
         throw new Error(`${descriptor.id} is not a release engine`);
@@ -108,17 +89,13 @@ const findFile = async (dir: string, name: string): Promise<string | undefined> 
     return undefined;
 };
 
-// One install per engine at a time, so two tabs pressing Update (or a check racing a click) do one download
-// and share its answer. A failed one clears, so Retry really retries instead of inheriting a rejection.
+// One install per engine at a time; concurrent callers share the answer, and failures clear so Retry retries.
 const installing = new Map<EngineId, Promise<EngineInstallOutcome>>();
 
 export const isEngineInstalling = (id: EngineId): boolean => installing.has(id);
 
-/* Put a version on the volume and make it the one turns use, or say why not.
- *
- * The order is the whole design: download → verify → move the pointer. Nothing between those steps can leave
- * the sandbox running a version that has not answered `--version` (or, for an in-process engine, an import),
- * and every failure path leaves the previous answer — usually the image's copy — serving turns. */
+// Puts a version on the volume and makes it the one turns use, or says why not. Order is download, verify, move the
+// pointer; every failure path leaves the previous version (usually the image's copy) serving turns.
 export const installEngine = (id: EngineId, version: string): Promise<EngineInstallOutcome> => {
     const inFlight = installing.get(id);
     if (inFlight !== undefined) {
@@ -145,9 +122,7 @@ const installOnce = async (id: EngineId, version: string): Promise<EngineInstall
             throw error;
         });
     }
-    /* Verified even when the directory was already there: "installed" and "works" are different claims, and the
-     * copy on disk may predate a container whose architecture or libc has since changed under it (a volume
-     * moved between machines, an image rebased). Re-asking costs one `--version` and closes that gap. */
+    // Verified even when already installed: "on disk" and "works" differ after an arch or libc change.
     const problem = await descriptor.verify(target);
     if (problem !== undefined) {
         await quarantineVersion(id, version, problem, new Date().toISOString());
@@ -162,8 +137,8 @@ const installOnce = async (id: EngineId, version: string): Promise<EngineInstall
     return { ok: true, version, reused };
 };
 
-// The download half, into a temp prefix on the store's own filesystem so the rename into place cannot cross a
-// device. Returns the staged prefix; the caller owns moving or removing it.
+// Downloads into a temp prefix on the store's own filesystem, so the later rename cannot cross a device. Returns the
+// staged prefix; the caller owns moving or removing it.
 const stage = async (
     descriptor: EngineDescriptor,
     version: string,
@@ -176,8 +151,7 @@ const stage = async (
         return { ok: true, prefix };
     } catch (error) {
         await rm(prefix, { recursive: true, force: true });
-        // Not quarantined: a 404, a timeout or a full disk says nothing about the version itself, and the next
-        // check should be free to try again.
+        // Not quarantined: a 404, timeout, or full disk says nothing about the version; retry freely next time.
         return { ok: false, version, reason: errorMessage(error), quarantined: false };
     }
 };

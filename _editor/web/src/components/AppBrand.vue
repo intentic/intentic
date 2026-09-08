@@ -1,19 +1,7 @@
-<!-- THE PRODUCT'S OWN MARK, AND THE ONE PLACE IT IS DRAWN. The lotus and the word beside it, identical to the
-     drawing the marketing pages carry (site: src/components/Lotus.astro and the `.brand` block in Nav.astro),
-     so the page somebody signs in on is visibly the page they just came from.
-
-     IT REPLACES A PNG WORDMARK THAT WAS TWO BRANDS AGO. Every entry screen in the app — sign in, join, accept
-     an invite, connect a machine, approve a run, first-run setup, desktop auth — carried the same orange
-     letterform bitmap, filed under eight different call sites, so correcting the brand meant finding all eight.
-     One component instead: the mark is drawn, not fetched, so it takes the page's own colour, stays sharp at
-     any size and on any screen, and costs no request on the one page a visitor waits on.
-
-     TWO SHAPES, because the entry pages need both and they are the same object: `lockup` is mark plus word and
-     is what a page leads with; `mark` is the flower alone, for a row that already says the name in text.
-
-     THE WORD IS SET IN THE BRAND FACE with the app's sans behind it, and it is deliberately NOT given the
-     site's glow: a marketing header is looked at, a sign-in form is worked through, and a lit wordmark over a
-     form pulls the eye away from the field the page exists to collect. -->
+<!--
+    The product's mark (lotus plus wordmark), drawn as SVG so it stays sharp at any size. `lockup` renders mark and word; `mark` is the flower alone.
+    Set in the brand face, without the marketing site's glow.
+-->
 <script setup lang="ts">
 withDefaults(
     defineProps<{

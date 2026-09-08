@@ -5,10 +5,9 @@ import { type PlanStep, statusDot } from "../../features/extensions/reconcileSta
 import SecretField from "../../features/capabilities/connect/SecretField.vue";
 import type { usePlanPreview } from "./usePlanPreview";
 
-/* The pre-apply review: what applying the current wants WOULD do to the infra, grouped by verb (create /
- * update / remove) so a long plan scans as three counted sections instead of a per-resource chain (a want
- * stages here, it doesn't deploy). Reads the usePlanPreview instance InfraDeclare owns; folds in the
- * missing-secrets checklist that gates resolve → plan. */
+// Pre-apply review: what the current wants would do, grouped by verb (create/update/remove) into three
+// counted sections rather than one per-resource chain. Stages only, doesn't deploy. Reads the usePlanPreview
+// instance InfraDeclare owns; folds in the missing-secrets checklist gating resolve to plan.
 const { preview } = defineProps<{ preview: ReturnType<typeof usePlanPreview> }>();
 const { running, ran, stale, error, steps, orphans, activity, missingSecrets, awaitingSecrets } = preview;
 // Same bargain as the apply card: the plan run says what broke, the view says what was being asked for.
@@ -16,8 +15,7 @@ const previewNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't work out what would change.`, detail: error.value },
 );
 
-// The three things a plan can do, in the order a reviewer cares: additions, changes, removals. Each section
-// keys on a canonical action so statusDot stays the one color vocabulary.
+// The three verbs a plan can do, in reviewer order; keys a canonical action so statusDot stays one vocabulary.
 const SECTIONS = [
     { action: `create`, matches: [`create`], label: `to create` },
     { action: `update`, matches: [`update`, `diff`], label: `to update` },
@@ -30,9 +28,8 @@ interface ChangeSection {
     readonly steps: readonly PlanStep[];
 }
 
-// Bucket the plan's non-noop steps + orphans (as deletes) by action; empty buckets drop out. Dedupe by id
-// within a bucket: a resource can arrive both as a prune step and in the result frame's orphan list. Orphans
-// are the only authoritative "to remove": the declared/live rollup can't see a want that was removed but is
+// Buckets non-noop steps and orphans (as deletes) by action, deduped by id (a resource can be both a prune
+// step and an orphan). Orphans are the only authoritative removals: the rollup can't see a want that's removed but
 // still running.
 const sections = computed<ChangeSection[]>(() => {
     const all: PlanStep[] = [
@@ -92,7 +89,7 @@ const hasChanges = computed(() => sections.value.length > 0);
 
         <Notice v-else-if="previewNotice" :of="previewNotice" />
 
-        <!-- Live narration of the run (which node is being checked) + a way OUT: never a dead-end spinner. -->
+        <!-- Live narration of the run (which node is being checked) plus a way out: never a dead-end spinner. -->
         <div v-else-if="running" class="flex items-center justify-between gap-2">
             <p class="flex min-w-0 items-center gap-2 text-sm text-muted">
                 <Icon name="spinner" spin class="shrink-0 text-info" />
@@ -103,8 +100,7 @@ const hasChanges = computed(() => sections.value.length > 0);
 
         <template v-else-if="ran">
             <div v-if="hasChanges" class="flex flex-col gap-2">
-                <!-- One section per verb: the header IS the summary (dot + count + verb), rows are just ids:
-                     no per-row badge repetition. Big sections (e.g. a mass remove) start collapsed. -->
+                <!-- One section per verb: the header is the summary (dot + count + verb); big sections start collapsed. -->
                 <details v-for="section in sections" :key="section.action" class="group" :open="section.steps.length <= 8">
                     <summary class="flex cursor-pointer list-none items-center gap-2 py-0.5 [&::-webkit-details-marker]:hidden">
                         <Icon name="chevron-right" class="text-xs text-subtle transition-transform group-open:rotate-90" />

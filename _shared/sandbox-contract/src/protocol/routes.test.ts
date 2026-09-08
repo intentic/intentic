@@ -14,7 +14,7 @@ const fixture = {
     },
 };
 
-// A contract whose one route carries real schemas, so a shape can actually change between "builds".
+// A contract whose one route carries real schemas, so its shape can change between builds.
 const shaped = (output: z.ZodType) => ({ vpn: { list: oc.route({ method: "GET", path: "/vpn" }).output(output) } });
 
 describe(`contractRoutes`, () => {
@@ -77,8 +77,6 @@ describe(`routeShapes`, () => {
     it(`changes the fingerprint when a field is added`, () => {
         const before = routeShapes(shaped(z.object({ a: z.string() })))[`vpn.list`];
         const after = routeShapes(shaped(z.object({ a: z.string(), b: z.number() })))[`vpn.list`];
-        // A fingerprint is a string, and saying so is what makes the line below mean something: with `before`
-        // undefined and `after` a real shape, "they differ" is true for the wrong reason.
         expect(before).toEqual(expect.any(String));
         expect(after).not.toBe(before);
     });
@@ -96,8 +94,7 @@ describe(`routeShapes`, () => {
     });
 
     it(`reads a defaulted field differently on the way in than on the way out`, () => {
-        // `.default()` makes a field optional going in and required coming out: the same declaration, two
-        // wire shapes. Reading both directions the same way would call them identical.
+        // `.default()` makes a field optional on input, required on output: same declaration, two shapes.
         const one = z.object({ a: z.string().default(`x`) });
         const asOutput = routeShapes(shaped(one))[`vpn.list`];
         const asInput = routeShapes({ vpn: { list: oc.route({ method: "GET", path: "/vpn" }).input(one) } })[`vpn.list`];
@@ -106,8 +103,8 @@ describe(`routeShapes`, () => {
     });
 
     it(`treats a route declaring no schemas as a shape of its own`, () => {
-        // Not a special case: "this route carries nothing" is a real shape, and a build that later gives it an
-        // output has genuinely changed it. All three fixture routes declare nothing, so all three agree.
+        // All three fixture routes declare nothing, so all three share one shape; giving one an output later is a real
+        // change.
         const shapes = routeShapes(fixture);
         expect(Object.keys(shapes).toSorted()).toEqual([`system.killTerminal`, `vpn.connect`, `vpn.list`]);
         expect(new Set(Object.values(shapes)).size).toBe(1);
@@ -115,10 +112,8 @@ describe(`routeShapes`, () => {
     });
 
     it(`omits a route whose shape cannot be expressed rather than failing the walk`, () => {
-        // An oRPC event iterator wraps its output in an opaque type with no schema underneath. The route keeps
-        // its NAME (it is still advertised as existing) and simply carries no shape, which reads downstream as
-        // "assume compatible". The two neighbours still get fingerprinted, which is the part that matters: one
-        // unexpressable route must not cost the whole walk.
+        // An oRPC event iterator wraps its output in an opaque type with no schema, so `watch` here keeps its name but
+        // no shape.
         const withStream = {
             vpn: {
                 list: fixture.vpn.list,
@@ -137,15 +132,13 @@ describe(`routeShapes`, () => {
 describe(`the real sandbox contract`, () => {
     it(`fingerprints all but the streaming routes`, () => {
         const unshaped = SANDBOX_ROUTE_NAMES.filter((name) => !(name in SANDBOX_ROUTE_SHAPES));
-        // oRPC wraps an event iterator's output in an opaque type with no schema under it, so these eleven
-        // cannot be fingerprinted and are assumed compatible. Named rather than counted: a NEW entry here is
-        // a route that quietly lost its shape check, which is worth failing a test over.
+        // oRPC gives an event iterator's output no schema, so these can't be fingerprinted; named rather than counted
+        // so a new one added here fails the test.
         expect(unshaped.toSorted()).toEqual([
             `agent.attach`,
             `capabilities.add`,
-            // The three geo-exit moves, streaming for the same reason vpn.connect does: bringing an exit up
-            // pulls a catalog, dials, and then verifies the address it landed on, which is tens of seconds on
-            // the free providers and can fail with something the user has to read at each step.
+            // The three exit moves stream since bringing an exit up dials and verifies over tens of seconds, failing at
+            // any step.
             `exit.rotate`,
             `exit.start`,
             `exit.use`,
@@ -153,8 +146,8 @@ describe(`the real sandbox contract`, () => {
             `intentic.run`,
             `system.events`,
             `system.manageDeviceSandbox`,
-            // The device's own agent updating or restarting itself: minutes of download and swap, and the
-            // stream dies with the process it is reporting on, so the lines have to arrive as they happen.
+            // The device agent updates or restarts itself; the stream dies with the process, so lines arrive as they
+            // happen.
             `system.runDeviceAgentFlow`,
             `vpn.connect`,
         ]);
@@ -171,8 +164,7 @@ describe(`the real sandbox contract`, () => {
     });
 
     it(`covers every oc.route in the contract`, () => {
-        // Guards the walk against a future contract nesting deeper than group → procedure, which would
-        // silently advertise fewer routes than the daemon serves.
+        // Guards against a contract nesting deeper than group → procedure, which would silently under-report routes.
         expect(SANDBOX_ROUTES.length).toBeGreaterThan(100);
     });
 

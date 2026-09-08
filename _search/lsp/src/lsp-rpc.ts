@@ -1,13 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
-/* A minimal LSP-over-stdio client, just enough protocol to hold one short conversation with the native
- * compiler's language server (`tsgo --lsp`) and hang up. Used by rename, which needs the server's
- * project-wide view for the one question the batch compiler cannot answer: "every location this symbol is
- * used, with the edits that move it".
- *
- * Deliberately not a language-server HOST: nothing stays running, nothing watches files, and server-initiated
- * requests are answered with nulls, the session exists for one request chain and is torn down with the
- * process. */
+// Minimal LSP-over-stdio client, enough protocol to hold one short conversation with `tsgo --lsp` and hang up.
+// Not a language-server host: nothing stays running or watches files; server-initiated requests get null answers.
 
 interface Pending {
     resolve: (result: unknown) => void;
@@ -79,8 +73,7 @@ export class LspSession {
             }
             return;
         }
-        // A server-initiated request (configuration, capability registration): answered with null so the
-        // conversation can continue. Notifications need no answer at all.
+        // A server-initiated request gets a null answer so the conversation continues; notifications need none.
         if (id !== undefined && typeof message["method"] === "string") {
             this.send({ jsonrpc: "2.0", id, result: null });
         }

@@ -1,12 +1,5 @@
-/* THE NAV MENU'S ICONS, one line drawing per menu row.
- *
- * The rows come from the data layer (`site-content`), which names an icon by a short key rather than carrying
- * SVG: markup is a presentation concern and lives here, next to the components that draw it. A row whose key is
- * missing here simply draws no icon, so a new row is never a build break.
- *
- * All are stroke drawings on a 24×24 grid (the Lucide grammar): no fills, so the one `stroke: currentColor` the
- * component sets colours every one of them, and they light with the label on hover. Keep new entries to the same
- * grammar or they will not sit with the rest. */
+// Nav menu icons, keyed by short name (data layer names one, markup lives here); a missing key just draws nothing. All
+// stroke drawings on a 24x24 grid (Lucide grammar); new entries must match or they will not sit with the rest.
 export const NAV_ICONS: Record<string, string> = {
     // ── Features ────────────────────────────────────────────────────────────
     play: '<polygon points="6 3 20 12 6 21 6 3"/>',
@@ -38,8 +31,6 @@ export const NAV_ICONS: Record<string, string> = {
     "circle-dollar-sign": '<circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>',
     coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
 
-    /* The wire API's one row. There used to be eight of these, one per shelf of the /api/ book, because that
-       book was a menu of its own shelves; it is a single row of Developers now (nav.ts), so the other seven
-       drawings went with the menu that was the only thing reading them. */
+    // The wire API's one nav row now (nav.ts).
     network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
 };

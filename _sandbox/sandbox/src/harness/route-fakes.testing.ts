@@ -7,13 +7,10 @@ import type { ManagedProcesses } from "../processes/managed-processes.js";
 import type { ServiceProcesses, ServiceStatus } from "../processes/service-processes.js";
 import { workspacePaths } from "../workspace/workspace.js";
 
-/* The route harness's recording fakes: the two process supervisors, the history and files seams with every
- * member inert unless a suite overrides it, and a temp workspace for the suites that drive repo discovery.
- * `services` (route-services.testing.ts) composes the inert ones. Not part of the build (tsconfig excludes
- * `*.testing.ts`), type-checked with the tests (tsconfig.test.json). */
+// Route harness's recording fakes: the two process supervisors, inert history/files seams a test overrides selectively,
+// and a temp workspace for repo-discovery suites. `services` composes the inert ones.
 
-// The service supervisor's fake, same recording shape as fakeProcesses below: seeded keys read as running
-// services on the seeded port.
+// Same recording shape as fakeProcesses; seeded keys read as running services on the seeded port.
 export const fakeServiceProcesses = (
     ports: Record<string, number> = {},
 ): ServiceProcesses & { started: { key: string; cwd: string }[]; stopped: string[] } => {
@@ -57,7 +54,7 @@ export const fakeProcesses = (
             },
             running: (repo) => repo in ports,
             portOf: (repo) => ports[repo],
-            // A stubbed panel is never mid-start: the routes drop the field, which is also the common case.
+            // A stubbed panel is never mid-start; routes drop the field, which is also the common case.
             launchOf: () => undefined,
             stopAll: () => {},
         }),
@@ -65,8 +62,8 @@ export const fakeProcesses = (
     );
 };
 
-// A temp workspace on disk (repo discovery reads it): each entry names a repo, a dir owning a .git, role and
-// clone alike, and whether it gets an operator/ panel (a package.json with a dev script).
+// A temp workspace on disk for repo discovery: each entry is a repo dir with a `.git`, optionally an operator/ panel
+// (package.json with a dev script).
 export const tempWorkspace = (repos: { name: string; panel?: boolean }[]): ReturnType<typeof workspacePaths> => {
     const root = mkdtempSync(join(tmpdir(), "panels-"));
     for (const repo of repos) {

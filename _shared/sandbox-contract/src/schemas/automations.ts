@@ -4,76 +4,44 @@ import { AgentOriginSchema, ModelPinSchema } from "./agent.js";
 import { AgentSummarySchema } from "./agents.js";
 import { entryId } from "./internal.js";
 import { IssuesConfigSchema } from "./issues.js";
-// An automation wakes the agent autonomously: the daemon's scheduler fires each enabled automation on its
-// trigger, runs the optional guard command (a shell command in the workspace; non-zero exit skips the wake),
-// then runs one agent turn with the prompt. The manifest is user config; run history is daemon-recorded.
+// An automation wakes the agent: the daemon fires each enabled one on its trigger, runs the optional guard command
+// (non-zero exit skips the wake), then runs one turn with the prompt. The manifest is user config; run history is
+// daemon-recorded.
 
-// `schedule` fires on its cron; `event` fires when an external system POSTs /automations/{id}/fire (a plain
-// Hono route, webhook bodies are arbitrary). The webhook's own auth is a token the daemon mints and keeps OUTSIDE
-// this manifest (.intentic/secrets/doors.json): the manifest is versioned and readable by every agent turn and
-// every viewer, which is no place for a credential. The listed record carries it (`webhookToken` on the summary)
-// for a maintainer or the owner only, so their UI can render the copyable URL.
-// `listener` fires from a realtime source's connection to the provider (an extension's gateway process holds
-// it, e.g. Discord), no cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒
-// every channel the bot can read. eventType narrows to one kind of event (a Discord message, a live voice
-// utterance batch, or a finished voice transcript); absent ⇒ all event kinds the source emits. mentioned
-// narrows message events to those that @mention one of the workspace's bots or reply to a bot's message;
-// absent ⇒ all messages. `provider` and `eventType` are open strings, a realtime source is now extension-
-// declared (contributes.listener), so the daemon validates a listener trigger at upsert against `webchat` ∪ the
-// installed extensions' declared providers/events rather than a hardcoded enum here.
-// `webchat` is the exception: it has no gateway. An embeddable widget POSTs a visitor's message to
-// /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
-// allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary, no secret
-// token can live in a browser.
-// `ci` is the other gateway-less source: the daemon's own pipeline receiver (ci/events.ts) dispatches it from a
-// provider webhook, or from the REST poller on a sandbox whose hooks could not be registered. Its channelId is
-// the workspace repo, and `branch` is its SECOND narrowing axis, a fleet pushes a branch per agent, so a
-// pipeline trigger that can only say "this repo" says "every agent's every failure".
-// `workspace` fires from the sandbox's OWN codebase instead of the outside world, see WorkspaceEventKindSchema.
+// schedule: fires on its cron
+// event: fires when an external system POSTs /automations/{id}/fire; its auth token lives outside the manifest
+// (.intentic/secrets/doors.json), never in this versioned, widely-readable file
+// listener: fires from a realtime source's own connection (an extension's gateway), no cron, no token, never reachable
+// via /fire. `channelId`/`eventType`/`mentioned` narrow it; absent means unfiltered. `provider`/`eventType` are open
+// strings validated at upsert against installed extensions' declared vocabulary
+// webchat: the exception with no gateway; a widget POSTs to /webchat/<id>/message, and its abuse boundary is
+// allowedOrigins plus a rate limit, since no secret can live in a browser
+// ci: the daemon's own pipeline receiver; `channelId` is the workspace repo, `branch` narrows further since a fleet
+// pushes one branch per agent
+// workspace: fires from the sandbox's own codebase (WorkspaceEventKindSchema)
 
-// What the daemon emits as the fleet works, and what a `workspace` trigger names. These are the events a code
-// CHORE runs on (continuous review, post-land checks): the daemon is both producer and consumer, so unlike
-// `event` there is no token and no route, nothing outside the sandbox can reach them.
-//
-// The two OVERLAP on the common path: a clean turn auto-lands, firing both. A chore should name exactly one.
-// `turn.settled` fires once per isolated turn whatever its outcome, so it also covers the errored and
-// conflicted turns most worth a second pair of eyes, and it fires while the user is still looking at the diff,
-// before they decide to land. `agent.landed` fires only when work actually reached the main tree, including an
-// explicit Land from the review panel long after the turn ended.
-//
-// The `deps.*` pair fires from the dependency verifier (workspace/verify-deps.ts) rather than a turn: after a
-// land drifts dependencies, the daemon installs them and runs the tree's own checks, and these are that chain's
-// EDGES, `deps.broken` when the checks go red after a landed change, `deps.fixed` when a later land turns them
-// green again. Edges, not states, on the ci-events precedent (pipeline_broken): a tree that is red and stays
-// red emits nothing, so a fix chore is woken by the breakage, never by the standing colour.
+// What the daemon emits as the fleet works, for a code chore to react to; no token or route, since only the daemon
+// reads these.
+// turn.settled: fires once per isolated turn regardless of outcome, while the diff is still on screen
+// agent.landed: fires only once work reaches the main tree, including a later manual Land
+// deps.broken/deps.fixed: edges from the dependency verifier around a landed change, not standing states, so a chore
+// wakes on the transition, never on a tree that stays red
 export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed", "deps.broken", "deps.fixed"]);
 export type WorkspaceEventKind = z.infer<typeof WorkspaceEventKindSchema>;
-// The payload a workspace-triggered wake carries: one JSON object, in $AUTOMATION_PAYLOAD for the guard and
-// appended to the prompt for the turn.
-//
-// `repos` names the change to look at as an OPEN span, `git -C <dir> diff <from>`, with no upper bound. Each
-// `from` is where that repo stood before the turn (its last landed tip, or the base it branched from); the
-// other end is deliberately the working tree rather than a sha, because a turn that ERRORED left its work
-// uncommitted in the worktree and a commit-to-commit span would report it as nothing at all. `dir` is that
-// repo's dir inside the agent's own checkout, so a chore reads the agent's work without touching /work.
-//
-// No diffstat rides along on purpose: the registry's counts are refreshed at land, so an errored or conflicted
-// turn would carry stale numbers, and a guard that wants a size threshold gets the true one from
-// `git -C <dir> diff --numstat <from>` for the price of one spawn.
+// Payload of a workspace-triggered wake, delivered as JSON in $AUTOMATION_PAYLOAD and appended to the prompt.
+// `repos[].from` is each repo's state before the turn; the span runs to the working tree, not a commit, so an errored
+// turn's uncommitted work still shows.
 export const WorkspaceEventSchema = z.object({
     event: WorkspaceEventKindSchema,
     agentId: z.string(),
     title: z.string().optional(),
     branch: z.string(),
-    // `ready` is a clean turn whose delta was HELD on the branch (auto-land off), for a chore, the moment
-    // before the user's deliberate Land, which is exactly when a pre-land review wants to run.
+    // `ready` is a clean turn held on the branch (auto-land off): the moment right before a deliberate Land, when a
+    // pre-land review wants to run.
     outcome: z.enum(["landed", "conflict", "ready", "idle", "error"]),
     repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
-    /* The `deps.*` events' own facts, absent on every turn-borne event. What a fix chore needs to start
-     * without rediscovering it: which project broke, the exact command that judged it, how it exited, and the
-     * tail of its output, bounded, because the payload rides a prompt and a guard's environment, and the full
-     * log is one attach away in the project's `--verify` terminal panel. `attempt` counts consecutive red
-     * verifies since the last green, so a guard can cap retries in one visible line of shell. */
+    // Present only for `deps.*` events: which project broke, the command and exit code, a bounded log tail, and
+    // `attempt` counting consecutive reds since the last green.
     deps: z
         .object({
             project: z.string(),
@@ -89,13 +57,8 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("schedule").describe("On a clock."),
         cron: z.string().min(1).describe("When, in cron notation."),
-        /* THE CLOCK ASKS, THE FLEET ANSWERS. A schedule whose evidence is the sandbox's own history (the
-         * dreaming session) is worth a turn only once enough has happened, and "enough" is sessions rather than
-         * days: a week of one-line questions is not a week of evidence, and thirty busy hours can be. With this
-         * set, a due occurrence fires only if at least this many conversations somebody started have been
-         * opened since the newest conversation this automation itself opened; short of that the run is recorded
-         * as skipped, saying how far off it is (automations/scheduler.ts, the sessions gate). Absent ⇒ every
-         * occurrence fires. */
+        // Fires only once at least this many other sessions have started since this automation's last wake; a due run
+        // short of that is recorded as skipped.
         afterSessions: z
             .number()
             .int()
@@ -105,10 +68,7 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
     z.object({
         kind: z.literal("event").describe("When something calls its webhook."),
-        /* Calls per UTC day, across every caller. A webhook is a paid door reachable with no person in the loop
-         * (a monitor that flaps fires it every minute), and a leaked URL is unlimited agent turns until somebody
-         * notices. Absent ⇒ FIRE_DAILY_MAX_DEFAULT, never uncapped, for the reason the gate's ceiling is not
-         * optional either. */
+        // Calls per UTC day across every caller; absent falls back to FIRE_DAILY_MAX_DEFAULT, never uncapped.
         dailyMax: z
             .number()
             .int()
@@ -128,10 +88,8 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
             .min(1)
             .optional()
             .describe("Narrow it to one branch, for the sources that have branches. Absent means every branch of the repositories it matches."),
-        /* The two gateway-less browser sources, `webchat` and `issues`: the website origins allowed to POST to
-         * the public endpoint. Absent/empty ⇒ none admitted, on both. One field rather than one per source,
-         * because it is the same question asked of the same header by the same kind of caller, and an intake
-         * whose allowlist lived somewhere else would be a second gate to keep in step with the first. */
+        // Shared by webchat and issues, the two gateway-less browser sources; one field since both ask the same
+        // question of the same header.
         allowedOrigins: z
             .array(z.string())
             .optional()
@@ -145,33 +103,24 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
-/* The Front Desk widget's settings, everything about the embeddable chat that isn't the automation's prompt.
- * Present only on `webchat` listener automations; the trigger keeps `allowedOrigins` because that one is the
- * admission gate the message route reads, not a rendering choice.
- *
- * Split deliberately into what the WIDGET may read (title/greeting/accent/position/access/googleClientId/
- * turnstileSiteKey, all public by construction, they ship to a stranger's browser) and what only the daemon
- * may read (turnstileSecret). GET /webchat/<id>/config serves the first group by naming it, never by omitting
- * the second: a field added here is invisible to the widget until it is listed there. */
+// The Front Desk widget's settings, present only on `webchat` listener automations. Split into what the widget itself
+// may read (public by construction) and what only the daemon may (turnstileSecret); GET /webchat/<id>/config serves the
+// first group by naming it, never by omitting the second.
 export const WebchatConfigSchema = z.object({
-    // `public` admits anyone; `google` refuses a message that carries no verifiable Google ID token. Absent ⇒
-    // public, a Front Desk with no access setting is the anonymous support box it looks like.
+    // `public` admits anyone; `google` requires a verifiable Google ID token. Absent means public.
     access: z
         .enum(["public", "google"])
         .optional()
         .describe("Who may write to it. Absent means anyone, which is the anonymous support box it looks like."),
-    // Ask an anonymous visitor for a display name before the first message. Cosmetic: the name is typed, so it
-    // reaches the model as untrusted `displayName`, never as identity.
+    // Cosmetic: the typed name reaches the model as untrusted `displayName`, never as identity.
     requireName: z
         .boolean()
         .optional()
         .describe(
             "Ask a visitor for a name first. Cosmetic: the name is typed, so it reaches the model as something a stranger said, never as identity.",
         ),
-    /* The bot ceiling. `turnstile` is Cloudflare's (invisible, needs the site's own keys); `pow` is a
-     * hashcash-style challenge the daemon issues and the widget solves in a worker, so a site with no
-     * Cloudflare account still has something. Absent ⇒ off: the origin allowlist and the rate limit are then
-     * the whole boundary, which is the right default for an internal or invite-only page. */
+    // `turnstile` needs Cloudflare's own keys; `pow` is a hashcash puzzle the daemon issues itself. Absent leaves the
+    // origin allowlist and rate limit as the whole boundary.
     antiBot: z
         .enum(["turnstile", "pow"])
         .optional()
@@ -180,20 +129,16 @@ export const WebchatConfigSchema = z.object({
         ),
     turnstileSiteKey: z.string().optional().describe("The public half of those keys, which ships to the visitor's browser."),
     turnstileSecret: z.string().optional().describe("The private half, which the sandbox keeps and the widget never sees."),
-    // The site's OWN Google OAuth web client id. It cannot be intentic's: Google Identity Services only issues
-    // a token to an authorized JavaScript origin, and intentic's client can't list every customer domain.
+    // The site's own client id, not ours: Google only issues a token to an authorized origin, and no client can list
+    // every customer's domain.
     googleClientId: z
         .string()
         .optional()
         .describe(
             "The site's own sign-in client id. It cannot be ours: a sign-in is only issued to an approved origin, and no single client can list every customer's domain.",
         ),
-    /* Widget chrome. `position` picks the launcher corner.
-     *
-     * `accent` is a HEX colour, not any CSS colour, because the widget derives values from its channels rather
-     * than just painting it: a glyph step for the scheme, a 14% wash for the send button, a bubble edge, a focus
-     * ring, and the label that goes on top (see webchat-widget's styles.ts). A colour we cannot read is a widget
-     * with half its accent silently missing, so the unreadable case is rejected here instead. */
+    // Widget chrome; `accent` must be a hex colour, not any CSS colour, since the widget derives a scheme, a button
+    // wash and a focus ring from its channels, and an unreadable value would leave half the accent missing.
     title: z.string().max(80).optional(),
     greeting: z.string().max(500).optional(),
     accent: z
@@ -201,42 +146,25 @@ export const WebchatConfigSchema = z.object({
         .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "accent must be a hex colour, e.g. #e47100")
         .optional(),
     position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]).optional(),
-    /* Two ceilings on top of the route's fixed per-minute window, because a public endpoint's real exposure is
-     * cost, not request rate: `dailyMessageMax` caps the whole automation per UTC day, `conversationMessageMax`
-     * caps one visitor thread for its lifetime.
-     *
-     * `dailyMessageMax` absent ⇒ WEBCHAT_DAILY_MAX_DEFAULT, not uncapped. Every message here is an agent turn
-     * billed to the owner, and the per-minute window bounds the RATE without bounding the DAY, twenty a minute,
-     * sustained, is tens of thousands of turns before anyone notices. A Front Desk nobody configured should not be
-     * able to spend that, so the safe number is the one you get for free and the owner raises it deliberately.
-     * `conversationMessageMax` stays optional-means-uncapped: it is per visitor thread, which the daily ceiling
-     * already bounds in aggregate. */
+    // Two ceilings beyond the route's per-minute window, since a public endpoint's real exposure is cost, not rate:
+    // `dailyMessageMax` (absent falls back to WEBCHAT_DAILY_MAX_DEFAULT) caps the automation per UTC day,
+    // `conversationMessageMax` caps one visitor thread and stays uncapped by default.
     dailyMessageMax: z.number().int().positive().optional(),
     conversationMessageMax: z.number().int().positive().optional(),
-    // (WEBCHAT_DAILY_MAX_DEFAULT, below the schema, is the number `dailyMessageMax` falls back to.)
-    // How long a visitor thread keeps resuming the same conversation before the next message starts a fresh
-    // one. Absent ⇒ WEBCHAT_SESSION_TTL_MS (the daemon's default).
+    // How long a visitor thread resumes the same conversation before a new message starts a fresh one; absent uses the
+    // daemon's own default.
     sessionTtlMinutes: z.number().int().positive().optional(),
 });
 export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
-/* The daily agent-turn ceiling a Front Desk gets when its owner sets none. Lives here rather than beside the
- * route that enforces it because both ends need the number: the daemon to apply it, and the automation editor
- * to show the owner what they are already protected by (an invisible limit is one people hit and file as a bug).
- *
- * 200 is chosen to be irrelevant to real support traffic and decisive against a script. A Front Desk answering
- * two hundred questions in one UTC day is a busy one; a scripted flood reaches that in ten seconds and then
- * stops costing anything. */
+// Default daily agent-turn ceiling for an unconfigured Front Desk; high enough for real traffic, low enough to blunt a
+// script.
 export const WEBCHAT_DAILY_MAX_DEFAULT = 200;
-/* ---- the widget wire: three shapes GET /webchat/<id>/config, GET …/challenge and POST …/message speak ----
- *
- * They live here, beside the stored config they derive from, because the Front Desk widget is a SECOND client of
- * this daemon, a bundle running on a stranger's page, and the reason this package exists is that both ends of
- * a wire read one definition. The widget imports these as types only (`import type`), so zod never reaches a
- * visitor's browser. */
+// The widget wire: the shapes GET /webchat/<id>/config, GET .../challenge and POST .../message speak, living beside the
+// config they derive from since the widget is a second client of this daemon. Imported as types only, so zod never
+// reaches a visitor's browser.
 
-// What the widget is told about itself. Fully RESOLVED, every default is applied daemon-side, so the widget
-// carries no fallback logic and one place decides what an unset field means. Everything here is public by
-// construction: it ships to any browser that can reach the endpoint from an allowed origin.
+// What the widget is told about itself, fully resolved daemon-side so it carries no fallback logic. Everything here is
+// public by construction: it ships to any browser reaching the endpoint from an allowed origin.
 export const WebchatPublicConfigSchema = z.object({
     automationId: z.string(),
     title: z.string(),
@@ -245,35 +173,29 @@ export const WebchatPublicConfigSchema = z.object({
     position: z.enum(["top-right", "top-left", "bottom-right", "bottom-left"]),
     access: z.enum(["public", "google"]),
     requireName: z.boolean(),
-    // "off" is spelled out rather than left absent: the widget branches on this, and a missing field that means
-    // "no challenge" is the kind of default that turns one serialization bug into an open door.
+    // "off" is spelled out, not left absent, so a serialization bug can't silently read as "no challenge".
     antiBot: z.enum(["turnstile", "pow", "off"]),
     turnstileSiteKey: z.string().optional(),
     googleClientId: z.string().optional(),
 });
 export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
-/* A proof-of-work challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` starts with `difficulty` zero
- * bits. ONE shape for every public door (the Front Desk issues it per visitor conversation and spends it on the
- * first message; the bug intake per reporter, on a written report), and one solver on the embeds' side
- * (embed.ts, which declares the same two fields without zod). */
+// A proof-of-work challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` starts with `difficulty` zero bits. One
+// shape for every public door (Front Desk, bug intake), and one matching solver, embed.ts.
 export const PowChallengeSchema = z.object({ salt: z.string(), difficulty: z.number().int().positive() });
 export type PowChallenge = z.infer<typeof PowChallengeSchema>;
-// One visitor message. `conversationId` is the widget's own localStorage id, it threads the visitor's messages
-// into ONE sandbox conversation, so it is the thread key, not a secret (anyone can mint one; the origin
-// allowlist, the challenge and the rate limit are the gate).
+// One visitor message; `conversationId` is the widget's own localStorage id, a thread key rather than a secret — the
+// origin allowlist, challenge and rate limit are the gate.
 export const WebchatMessageSchema = z.object({
     conversationId: z.string().min(1).max(200),
     content: z.string().min(1),
-    // What the visitor TYPED as their name. Never identity, it reaches the model tagged as unverified, and a
-    // signed-in visitor's verified name comes from the ID token instead.
+    // What the visitor typed as a name; never identity, tagged unverified for the model.
     displayName: z.string().max(200).optional(),
     // A Google ID token from the site's own client id, verified daemon-side against Google's JWKS.
     idToken: z.string().optional(),
     // The anti-bot answer, whichever kind the config asked for. Checked once per conversation, not per message.
     turnstileToken: z.string().optional(),
     powNonce: z.string().optional(),
-    // The widget's own transcript, sent ONLY on the first message of a thread, after that the sandbox
-    // conversation resumes and carries its own context.
+    // Sent only on a thread's first message; after that the sandbox's own conversation carries context.
     history: z
         .array(z.object({ author: z.string().optional(), content: z.string() }))
         .max(50)
@@ -283,8 +205,8 @@ export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
 export const AutomationSchema = z.object({
     id: entryId.describe("The automation's id."),
     trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),
-    // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
-    // For a trigger that arrived with one, its environment carries `AUTOMATION_PAYLOAD`.
+    // Runs in the workspace root before waking; exit 0 wakes, non-zero is recorded as "skipped". Sees
+    // `AUTOMATION_PAYLOAD` when the trigger carried one.
     guard: z
         .string()
         .min(1)
@@ -295,45 +217,22 @@ export const AutomationSchema = z.object({
     prompt: z.string().min(1).describe("What the woken agent is told."),
     // The Front Desk widget's settings, `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional().describe("Settings for the public chat widget, for an automation that answers visitors."),
-    // The bug intake's settings, `issues` listener automations only, ignored on every other trigger. Its own
-    // field rather than a shared "public endpoint" bag: the two sources answer different questions (a chat's
-    // greeting and access model, an intake's dedup ceiling and ingest key) and a union of both would be a
-    // schema where most fields are wrong for whichever source is reading it.
+    // Bug intake settings, `issues` triggers only; its own field rather than a shared bag, since a chat's and an
+    // intake's fields mostly don't overlap.
     issues: IssuesConfigSchema.optional().describe(
         "Settings for the bug reporter, for an automation that takes crash reports from your own sites and apps.",
     ),
-    /* NARROW THIS ONE JOB FURTHER than the persona it runs as, raw tool names, and the escape hatch under the
-     * shelves rather than the way anyone is expected to answer this question.
-     *
-     * The persona (`actsAs` below) is where a session's toolbox is decided now, because the answer is worth
-     * reusing: the same bounds apply to the chat, the workflow and the Front Desk that name the same card. This
-     * stays for the job that needs LESS than its persona allows, and only less, which is a rule the composer
-     * enforces rather than a convention: an edit here can never hand back a shelf the persona switched off. */
+    // Narrows this job's toolbox further than its persona allows; the composer enforces that it can only remove, never
+    // restore, a shelf the persona switched off.
     allowedTools: z
         .array(z.string().min(1))
         .optional()
         .describe(
             "Narrow the woken turn to these tools. For one driven by an outside message this list is the real boundary, because prompt wording is only advice and an empty toolbox is not.",
         ),
-    /* WHAT THIS ONE WAKE RUNS ON, ITS OWN ORDERED LADDER, AND THERE IS NO ANSWER IF IT IS EMPTY.
-     *
-     * This replaced three optional fields (`agent`, `harness`, `model`) whose shared answer for "not set" was a
-     * sandbox-wide tier: a single `automation-wake` model role standing behind every automation in the manifest,
-     * and behind that the model the owner happened to have chosen in their composer. Both are DEFAULTS, and a
-     * default is the wrong shape for this job specifically. An automation is the one thing here that spends an
-     * allowance with nobody in the room, on a schedule the owner set once and does not re-read: a nightly sweep
-     * silently inheriting whatever the chat was set to last Tuesday is a bill arriving from a decision nobody
-     * made. So the ladder is REQUIRED, at least one rung, and an automation that names none cannot be saved.
-     *
-     * A LADDER RATHER THAN ONE PIN, for the reason every other model list in this product is one (see
-     * models/model-roles.ts): the interesting failure is not a wrong model, it is a connected model that will not
-     * answer TODAY because the morning's chat spent its allowance. Unwatched work is where that costs most — a
-     * chat refuses in front of somebody who can retry it, a 3am wake just does not happen. Walked in order at
-     * fire time, stopping at the first rung this sandbox can actually start.
-     *
-     * EACH RUNG IS A WHOLE PIN, which is what folded the three old fields in: provider, model, effort, thinking,
-     * speed and harness travel together, because a model id means nothing without the provider that vends it and
-     * a reasoning tier means nothing without the model it is a tier OF. */
+    // Required ordered ladder (replaces separate agent/harness/model fields): an automation spends real money
+    // unwatched, so it must name what it spends rather than inherit a chat's default. Walked in order at fire time to
+    // the first rung that can start; each rung is a whole pin (provider+model+effort+harness together).
     models: z
         .array(ModelPinSchema)
         .min(1)
@@ -341,37 +240,19 @@ export const AutomationSchema = z.object({
         .describe(
             "Which models this automation may run on, best first. Required, and nothing is chosen for you: work that fires while nobody is watching spends a real allowance, so it names the models it spends rather than inheriting one. Tried in order, so a spent account does not silently stop the job.",
         ),
-    /* Which connected account of that provider serves the wake; absent ⇒ the provider's first account, exactly
-     * as for a chat turn (AgentTurnSchema.account).
-     *
-     * An automation needs this more than a chat does, and for a reason a chat never meets: nobody is watching.
-     * A sandbox holds several accounts side by side, and when the first one is out of headroom, or belongs to
-     * an organization that has disabled the plan, every fire of every automation errors against it until a
-     * human happens to read the row. Pinning the wake to an account that can actually run is the difference
-     * between "my nightly sweep is quiet" and a Front Desk that turns visitors away all day. */
+    // Absent means the provider's first account; pinning matters more here than for a chat, since nobody is watching to
+    // notice a stuck one.
     account: z.string().optional().describe("Which account pays for it."),
-    /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs, read its note for why this is not
-     * spelled `account`, which is the field directly above and means who PAYS).
-     *
-     * Absent ⇒ the wake reaches NO logged-in account at all. That is the one place this whole layer stops being
-     * a convenience and becomes a boundary, and it is deliberately the strictest default in the schema: an
-     * automation fires with nobody at the composer, on a prompt that, for a Front Desk, a stranger helped write.
-     * `allowedTools` above already carries this exact reasoning for tools; an unrepeatable public post deserves
-     * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
-     * can see. */
+    // Absent means the wake reaches no logged-in account at all, the strictest default here, since nobody is at the
+    // composer when it fires.
     actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
-    // When true, a fire doesn't wake the agent, it's held in the approvals queue until the owner approves.
+    // Held in the approvals queue rather than run; only a person releases it.
     requireApproval: z.boolean().optional().describe("Hold every fire for a person instead of running it. Only a person can release one of those."),
-    /* The middle ground between firing instantly and requiring a click: the fire is held in the same approvals
-     * queue, visibly, and the daemon runs it ITSELF once the hold has elapsed AND no agent turn is live, the
-     * owner's window to cancel or start it early, with silence as consent. What a fix chore wants: time to see
-     * "checks broke, a fix is about to start" without a standing decision to make. `requireApproval` wins when
-     * both are set, an explicit "ask me" must never quietly become "unless I'm slow". */
+    // Held visibly in the approvals queue and run by the daemon itself once the hold elapses with no live turn;
+    // `requireApproval`, if also set, always wins.
     holdForSeconds: z.number().optional().describe("Hold each fire this long before running it anyway, which is a delay rather than a decision."),
-    // A code CHORE: maintenance of THIS codebase rather than a reaction to the outside world. Purely a
-    // classification, the daemon fires a chore exactly like any other automation, but it cannot be derived
-    // from the trigger, which is why it is stored: a nightly `pnpm audit` sweep and a nightly Stripe poll are
-    // both `schedule`, and belong on different shelves. Absent ⇒ an ordinary automation.
+    // Pure classification: the trigger alone can't tell a code chore from an ordinary schedule, so this is stored
+    // rather than derived.
     chore: z
         .boolean()
         .optional()
@@ -379,9 +260,8 @@ export const AutomationSchema = z.object({
     enabled: z.boolean().describe("Whether it fires at all."),
 });
 export type Automation = z.infer<typeof AutomationSchema>;
-// A wake held for owner approval (.intentic/records/approvals/<id>.json, one file per held wake). It snapshots the
-// trigger payload so an approved run replays exactly what fired, even across a daemon restart. The id is minted
-// by the daemon (an entryId-safe filename).
+// A wake held for owner approval (.intentic/records/approvals/<id>.json); snapshots the trigger payload so an approved
+// run replays exactly what fired, even across a daemon restart.
 export const AutomationApprovalSchema = z.object({
     id: entryId.describe("This waiting item's own id, which approving and rejecting take."),
     automationId: z.string().describe("Which automation it came from."),
@@ -392,20 +272,13 @@ export const AutomationApprovalSchema = z.object({
         .describe(
             "What set it off, kept whole so an approved wake carries the same thing it would have had. Absent for one on a schedule, which carries nothing.",
         ),
-    // The provenance + title the held wake would have opened its conversation with, snapshotted alongside the
-    // payload so an approved external wake surfaces on the fleet exactly as an auto one would have.
+    // Snapshotted alongside the payload so an approved wake surfaces on the fleet exactly as an automatic one would.
     origin: AgentOriginSchema.optional().describe(
         "Where the message came from, kept alongside the payload so an approved wake appears on the board exactly as an automatic one would have.",
     ),
     title: z.string().optional().describe("What the conversation would be called."),
-    /* The CONTINUING THREAD this wake belonged to, when it had one, the conversation the dispatcher had
-     * already opened for it and the provider session that conversation last ran on.
-     *
-     * Snapshotted for the same reason the payload is, and it is the half that was missing: without it an
-     * approved wake fell through to minting a fresh conversation, so a Front Desk visitor's chat became one card
-     * per approved message instead of the single thread the dispatcher had opened for them, a second worktree
-     * each time, and an agent that met the visitor again on every turn. Absent for a schedule or a webhook,
-     * which own no thread. */
+    // The thread this wake belongs to, so approving continues it rather than minting a fresh conversation per approved
+    // message.
     conversationId: z
         .string()
         .optional()
@@ -414,9 +287,8 @@ export const AutomationApprovalSchema = z.object({
         ),
     sessionId: z.string().optional().describe("The provider session that thread last ran on."),
     createdAt: z.number().describe("When it started waiting, in milliseconds."),
-    /* Epoch ms after which the daemon may run this wake itself (a `holdForSeconds` hold), the countdown the
-     * row renders, and the deadline the scheduler's tick checks against. Absent on a `requireApproval` hold,
-     * which only the owner may release. */
+    // When the daemon may run this itself, for a `holdForSeconds` hold; absent for a `requireApproval` hold, which only
+    // the owner releases.
     autoRunAt: z
         .number()
         .optional()
@@ -425,13 +297,9 @@ export const AutomationApprovalSchema = z.object({
         ),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
-// `rev` is the registry revision this roster was read at, a counter the daemon bumps on every registry change.
-// It is what makes the browser's optimistic writes safe: the fleet is published as full snapshots (last frame
-// wins), so without an ordering stamp a roster READ before a mutation but delivered after it silently puts the
-// mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
-// pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
-// `held` is the approvals queue projected onto the board, the wakes waiting at the door, so "needs you" sits
-// beside "running" instead of in a page nobody opens. Defaulted so an older daemon's roster still parses.
+// `rev` is the registry revision this roster was read at: fleet snapshots are last-frame-wins, so the browser drops any
+// roster older than the newest it applied and holds a pending change until a roster past `rev` arrives. `held` is the
+// approvals queue projected onto the board, defaulted for an older daemon's roster.
 export const AgentsListSchema = z.object({
     agents: z.array(AgentSummarySchema).describe("The conversations."),
     rev: z
@@ -451,27 +319,25 @@ export const AutomationApprovalsListSchema = z.object({ approvals: z.array(Autom
 export const AutomationApprovalIdParamSchema = z.object({ id: z.string().describe("Which waiting item.") });
 export const AutomationRunSchema = z.object({
     at: z.number(),
-    // skipped = the guard said no; error = the guard passed but the agent turn surfaced an error; interrupted =
-    // the daemon died mid-wake, so the run reached no outcome of its own (see agent/turn-journal.ts). Without
-    // that last one an interrupted fire records NOTHING and simply vanishes from the row's history, which reads
-    // as "it never fired", the one reading a 3 a.m. automation must not be given.
+    // skipped: the guard said no
+    // error: the guard passed but the turn errored
+    // interrupted: the daemon died mid-wake; without this value an interrupted fire vanishes from history and reads as
+    // never having fired
     outcome: z.enum(["completed", "skipped", "error", "interrupted"]),
     detail: z.string().optional(),
-    // The stable conversation opened by the wake, so the row can open the provider-neutral agent transcript.
     // Absent only for a run skipped before a conversation was needed.
     conversationId: z.string().optional(),
 });
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
-// The list row: the stored automation + its recent runs + the next scheduled fire (absent when disabled).
-// The event webhook's daily ceiling when the trigger names none. Generous enough for a busy monitor, small
-// enough that a leaked URL is a bad day rather than a bad month.
+// The list row: the stored automation plus its recent runs and next scheduled fire (absent when disabled). Default
+// daily ceiling for an event trigger naming none: generous for a busy monitor, small enough that a leak is a bad day,
+// not a bad month.
 export const FIRE_DAILY_MAX_DEFAULT = 200;
 export const AutomationSummarySchema = AutomationSchema.extend({
     runs: z.array(AutomationRunSchema),
     nextRun: z.number().optional(),
-    /* THE DOOR'S CREDENTIALS, attached by the daemon for a maintainer or the owner and for nobody else: not a
-     * viewer, and never a program holding a control token. They live in the secrets store rather than in the
-     * manifest above, so this is the only road they travel, and it is the one a person copies a URL from. */
+    // Door credentials, attached for a maintainer or owner only, never a viewer or a control-token program; kept in the
+    // secrets store, not the manifest.
     webhookToken: z
         .string()
         .optional()
@@ -485,29 +351,12 @@ export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
-/* ---- the automation catalogue: everything that can wake an agent here, and what to start from ----
- *
- * ONE ANSWER TO ONE QUESTION, and that is the whole reason it exists. The composer used to carry a hand-written
- * list of every source and every template. CI, Komodo, Sentry, Stripe, email, the website widget, the chore
- * book, while the daemon's upsert carried a SECOND hand-written list of the providers it would accept. Two
- * lists, edited in different packages, disagreeing was a matter of time; and every area that gained something
- * worth waking on had to edit the automations surface to say so, which is the dependency pointing backwards.
- *
- * Now the daemon merges what IT emits with what every installed extension declares, and serves the result. The
- * composer draws whatever comes back and knows the name of nothing; `upsert` validates against the same merge.
- * An area gains a trigger by declaring it, and the surface it appears on does not change.
- *
- * WHERE A SOURCE IS DECLARED IS WHERE ITS EVENTS COME FROM, `webchat` and `ci` are the daemon's own (it holds
- * the widget endpoint and the pipeline webhook receiver), every other one belongs to the extension whose
- * gateway or backend dispatches it.
- *
- * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, because the source's starter and the template's prompt
- * describe the same payload, and one payload described in two packages is two descriptions to keep in step. A
- * template on the generic `event` webhook has no source to sit beside, so it goes with the pack carrying the
- * capability card it names, which is the same pack the user connected to make it work at all. */
+// The automation catalogue: everything that can wake an agent, and what to start from. The daemon merges what it emits
+// with what every installed extension declares, so an area gains a trigger by declaring it rather than editing this
+// surface. `webchat`/`ci` are the daemon's own sources; a template sits beside the source whose payload it describes,
+// or beside its capability's pack if it fires on the generic `event` webhook.
 
-// A source's per-source narrowing field, as the generic editor draws it. Absent ⇒ the editor offers no such
-// filter rather than inventing one the provider has no meaning for.
+// Absent means the editor offers no such filter, rather than inventing one meaningless to the provider.
 const TriggerFieldSchema = z.object({ label: z.string().min(1), placeholder: z.string().min(1), hint: z.string().min(1).optional() });
 export const TriggerSourceSchema = z.object({
     // The slug a listener trigger fires on (Trigger.provider).
@@ -524,24 +373,18 @@ export const TriggerSourceSchema = z.object({
     mentionLabel: z.string().min(1).optional(),
     // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.
     starterPrompt: z.string().min(1).optional(),
-    /* Capability providers that make this source WORK, any one of them connected is enough (a CI trigger rides
-     * github or gitlab). Empty ⇒ nothing to connect, the source is usable as it stands. Availability is computed
-     * in the browser rather than served, because the browser's capability facts are pushed live and a served
-     * boolean would be stale between polls. */
+    // Any one connected capability is enough; computed client-side, since capability facts are pushed live and a served
+    // boolean would go stale between polls.
     requires: z.array(z.string().min(1)).default([]),
-    /* Whether the extension declaring this is switched ON. Disabled ones are still listed, and that is the
-     * point: a stored automation must stay readable and editable while the pack that supplied its provider is
-     * off, showing the real label instead of degrading to a bare slug. */
+    // Whether the declaring extension is on; disabled ones stay listed so a stored automation using it stays readable
+    // and editable.
     enabled: z.boolean(),
 });
 export type TriggerSource = z.infer<typeof TriggerSourceSchema>;
-/* HOW A TEMPLATE IS OFFERED. Absent ⇒ it lives in the create dialog's gallery, where you go once you know what
- * you want. The two named forms are for what a user would never think to go looking for:
- *   create   , a shelf card on the page that makes the automation in one click, switched off, ready to read.
- *               The chores are all of these: upkeep nobody opens an automations page hunting for.
- *   configure, a shelf card that opens the dialog PREFILLED, for a template that cannot work unconfigured (a
- *               Front Desk with no allowed sites admits nobody, and a row that silently does nothing is worse
- *               than a form). */
+// Absent means it lives in the create dialog's gallery. The two named forms are for what a user wouldn't think to look
+// for:
+// create: a shelf card that makes the automation in one click, switched off, ready to read (every chore is this)
+// configure: a shelf card that opens the dialog prefilled, for a template that can't work unconfigured
 export const TemplateOfferSchema = z.enum(["create", "configure"]);
 export const AutomationTemplateSchema = z.object({
     // Prefills the automation name, so it is also what "does one of these already exist" is asked by.
@@ -565,11 +408,8 @@ export const AutomationTemplateSchema = z.object({
     // trigger beside it for context.
     description: z.string().min(1).optional(),
     offer: TemplateOfferSchema.optional(),
-    /* WHETHER THE AUTOMATION THIS MAKES WATCHES THIS CODEBASE, the flag the created record stores, which is
-     * what puts its row on the chores shelf rather than among the integrations.
-     *
-     * Carried rather than inferred from the trigger, because a nightly dependency sweep and a nightly Stripe
-     * poll are both `schedule` and only one of them is about your code. */
+    // Whether the created automation watches this codebase, carried since the trigger alone can't distinguish a chore
+    // from an ordinary schedule.
     chore: z.boolean().optional(),
 });
 export type AutomationTemplate = z.infer<typeof AutomationTemplateSchema>;

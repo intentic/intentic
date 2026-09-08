@@ -8,8 +8,7 @@ const card = (id: string, capabilities: readonly string[], extra: Partial<Person
     ...extra,
 });
 
-// Powers as the FILE may carry them: partial, with the schema filling the rest, which is exactly what a
-// hand-edited card looks like and what the resolver parses.
+// Powers as the file may carry them: partial, with the schema filling the rest.
 const powers = (partial: Record<string, unknown>): PersonaPowers => PersonaPowersSchema.parse(partial);
 
 const browser = (id: string): Capability => ({ id, kind: "browser", config: { platform: "reddit" } });
@@ -32,24 +31,20 @@ const mcp = (id: string): Capability => ({ id, kind: "mcp", config: { url: "http
 
 const CAST = [card("work", ["reddit-work", "x-work"]), card("personal", ["reddit-personal"])];
 
-// The suffix scheme cli-env.ts uses, restated for the test rather than imported, so a change to it fails HERE
-// as well as there: this is the rule that decides whether a token stays in an unrelated persona's shell.
+// Suffix scheme cli-env.ts uses, restated rather than imported so a drift there fails here too.
 const suffix = (id: string): string => id.toUpperCase().replaceAll("-", "_");
 
-// ── Accounts: the half that predates the shelves ────────────────────────────────────────────────────────────
+// Accounts: the half that predates the shelves
 
-// The permissive half of the rule: a person is at the composer, so nothing is taken away.
 test("an attended turn that names no persona keeps every account", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: false });
     expect(persona.reason).toBe("attended-open");
     expect(persona.allows(browser("reddit-work"))).toBe(true);
     expect(persona.allows(browser("reddit-personal"))).toBe(true);
-    // Even an account no card mentions: "everything" means the manifest, not the persona list.
+    // "Everything" means the whole manifest, even an account no persona names.
     expect(persona.allows(browser("npmjs"))).toBe(true);
 });
 
-/* The strict half, and the whole reason this layer is in the kernel rather than in a prompt. A wake fires with
- * nobody watching; the one thing that must not happen is it reaching a logged-in account by saying nothing. */
 test("an unattended wake that names no persona reaches no account at all", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
     expect(persona.reason).toBe("unattended-unpinned");
@@ -64,7 +59,6 @@ test("a named persona is narrowed to exactly its own accounts, attended or not",
         expect(persona.persona?.id).toBe("work");
         expect(persona.allows(browser("reddit-work"))).toBe(true);
         expect(persona.allows(browser("x-work"))).toBe(true);
-        // The other persona's account is absent even though it is connected and this turn could see it a moment ago.
         expect(persona.allows(browser("reddit-personal"))).toBe(false);
     }
 });
@@ -75,42 +69,37 @@ test("a persona with an empty card allows nothing, which is not the same as nami
     expect(persona.allows(browser("reddit-work"))).toBe(false);
 });
 
-/* An identity is MORE credential than any single account: its browser holds the email session and every
- * account born from it, so it rides the account rules exactly: named on the card to be granted, and the first
- * thing an unattended unpinned wake loses. A blanket pass-through here (the default arm) would hand a nightly
- * job the strongest browser in the sandbox by omission. */
+// An identity is more credential than any account: it follows the same rule, named to be granted, first thing an
+// unpinned wake loses. A blanket pass-through would hand a nightly job the sandbox's strongest browser.
 test("identities count as accounts: card-named when pinned, gone entirely when an unpinned wake fires", () => {
     const identity: Capability = { id: "main", kind: "identity", config: { email: "me@gmail.com", openAccounts: "off" } };
     const cast = [card("outward", ["main", "reddit-work"])];
     expect(turnPersona({ personas: cast, actsAs: "outward", unattended: true }).allows(identity)).toBe(true);
-    // A card that names only accounts born from it does NOT get the identity itself.
+    // A card naming only accounts born from an identity does not get the identity itself.
     expect(turnPersona({ personas: [card("narrow", ["reddit-work"])], actsAs: "narrow", unattended: false }).allows(identity)).toBe(false);
     expect(turnPersona({ personas: cast, actsAs: undefined, unattended: true }).allows(identity)).toBe(false);
     expect(turnPersona({ personas: cast, actsAs: undefined, unattended: false }).allows(identity)).toBe(true);
 });
 
-// ── Powers: permissive by default, and the one case where that flips ────────────────────────────────────────
+// Powers: permissive by default, and the one case where that flips
 
-/* The decision this whole layer rests on, stated as a test because it is the one an owner would notice being
- * broken: an automation that has never heard of personas keeps working exactly as it did. Defaulting powers to
- * nothing would have been a migration dressed as a security default. */
+// An automation that has never heard of personas keeps working exactly as before; defaulting powers to nothing would be
+// a migration dressed as a security default.
 test("an unpinned wake keeps the full toolbox even though it has lost every account", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
     expect(persona.powers.files).toBe("write");
     expect(persona.powers.shell).toBe(true);
-    // Both execution backends: the JS backend defaults open like every other shelf.
+    // `code` is the JS execution backend; defaults open like every other shelf.
     expect(persona.powers.code).toBe(true);
     expect(personaDisallowedTools(persona, [])).toEqual([]);
-    // Connectors, devices and MCP connections all pass, because "absent" means "every one of them".
+    // Connectors, devices and MCP all pass too: absent means every one of them.
     expect(persona.allows(connector("github"))).toBe(true);
     expect(persona.allows(device("laptop"))).toBe(true);
     expect(persona.allows(mcp("linear"))).toBe(true);
 });
 
-/* Naming a card that isn't there must FAIL CLOSED: on BOTH halves, and the tools half is the one with teeth.
- * A Front Desk pinned to a read-only card would otherwise regain a shell the moment somebody deleted that card,
- * with anonymous visitors driving it. A missing card is ordinary (a workspace cloned before its personas were
- * committed, a card renamed on one side only), not a corruption, so this is a state to fail loudly in. */
+// A missing card fails closed on both accounts and tools, not just accounts: otherwise a Front Desk pinned to a deleted
+// card would regain a shell for anonymous visitors. A missing card is ordinary, not corruption.
 test("naming a persona no card carries denies everything: accounts and tools alike", () => {
     const persona = turnPersona({ personas: CAST, actsAs: "studio", unattended: false });
     expect(persona.reason).toBe("unknown-persona");
@@ -118,7 +107,7 @@ test("naming a persona no card carries denies everything: accounts and tools ali
     expect(persona.allows(browser("reddit-work"))).toBe(false);
     expect(persona.allows(connector("github"))).toBe(false);
     expect(persona.powers.shell).toBe(false);
-    // Both execution backends fail closed: the JS backend is then never mounted (turn-plan reads this field).
+    // Both execution backends fail closed here too.
     expect(persona.powers.code).toBe(false);
     expect(personaDisallowedTools(persona, [])).toContain("Bash");
     expect(personaDisallowedTools(persona, [])).toContain("Read");
@@ -133,7 +122,6 @@ test("a card's shelves become the tools taken out of the turn", () => {
         unattended: true,
     });
     const denied = personaDisallowedTools(persona, []);
-    // Reading survives; changing, running, fetching and delegating do not.
     expect(denied).not.toContain("Read");
     expect(denied).toEqual(expect.arrayContaining(["Edit", "Write", "Bash", "WebFetch", "Agent"]));
 });
@@ -143,18 +131,15 @@ test("files: none takes the reading tools away too", () => {
     expect(personaDisallowedTools(persona, [])).toEqual(expect.arrayContaining(["Read", "Grep", "Glob", "Edit", "Write"]));
 });
 
-// ── The skill of a capability this turn cannot reach ────────────────────────────────────────────────────────
+// The skill of a capability this turn cannot reach
 
-/* Skill files are written once per workspace, so a turn discovers every account's instructions whether or not
- * it may use that account. An unattended publish turn read the Reddit skill, went after tools that were never
- * mounted for it, found none, and reported the ACCOUNT as disconnected: failing two approved posts over a
- * login that was connected the whole time. The instructions have to go with the tools. */
+// Skill files are written once per workspace, so a turn can read an account's instructions even without its tools. The
+// instructions must be denied with the tools, or a disabled account reads as a broken login instead of hidden.
 test("an unattended wake loses the skills of the accounts it lost", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
     const denied = personaDisallowedTools(persona, [browser("reddit-work"), connector("github")]);
     expect(denied).toContain("Skill(reddit-work)");
-    // The connector survives: an unpinned wake keeps everything that is not an account, so its cheatsheet is
-    // still usable and hiding it would take away a working tool.
+    // The connector's skill survives: it isn't an account, and hiding it would remove a still-working tool.
     expect(denied).not.toContain("Skill(github)");
 });
 
@@ -162,14 +147,11 @@ test("a card keeps its own accounts' skills and loses everyone else's", () => {
     const persona = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     const denied = personaDisallowedTools(persona, [browser("reddit-work"), browser("reddit-personal"), browser("npmjs")]);
     expect(denied).not.toContain("Skill(reddit-work)");
-    // Both of these: one belongs to another card, one to no card at all. Same answer, this turn cannot post
-    // from either, so it should not be reading how.
+    // Same answer either way: one belongs to another card, one to none, but this turn can act on neither.
     expect(denied).toEqual(expect.arrayContaining(["Skill(reddit-personal)", "Skill(npmjs)"]));
 });
 
 test("every denied kind loses its skill, not just accounts", () => {
-    // A cheatsheet whose credential was stripped from the shell, and a device whose server was never
-    // mounted, are unusable in exactly the way an account's browser is.
     const persona = turnPersona({
         personas: [card("narrow", ["github"], { powers: powers({ connectors: ["github"], devices: [], mcp: [] }) })],
         actsAs: "narrow",
@@ -180,10 +162,9 @@ test("every denied kind loses its skill, not just accounts", () => {
     expect(denied).toEqual(expect.arrayContaining(["Skill(linear)", "Skill(laptop)", "Skill(notion)"]));
 });
 
-// ── The manifest, narrowed once ─────────────────────────────────────────────────────────────────────────────
+// The manifest, narrowed once
 
-/* Kinds the card has no opinion about pass straight through. Narrowing those would break unrelated work every
- * time a turn wore a persona, and (worse) would silently deny a capability kind added tomorrow. */
+// Narrowing kinds the card has no opinion about would silently deny any capability kind added later.
 test("a card filters accounts, connectors, devices and MCP; other kinds pass through", () => {
     const installed: Capability[] = [
         browser("reddit-work"),
@@ -200,8 +181,7 @@ test("a card filters accounts, connectors, devices and MCP; other kinds pass thr
         unattended: true,
     });
     const visible = personaCapabilities(installed, persona);
-    // The agent runtime survives: a persona that could switch off the runtime serving its own turn is a card
-    // that can only confuse.
+    // The agent runtime itself always passes: a persona that could switch off its own runtime would only confuse.
     expect(visible.map((capability) => capability.id)).toEqual(["reddit-work", "github", "pi"]);
 });
 
@@ -211,8 +191,7 @@ test("an unpinned wake keeps its non-account capabilities while losing every log
     expect(visible.map((capability) => capability.id)).toEqual(["linear"]);
 });
 
-/* An ungranted connector's credentials leave the shell's environment entirely, rather than staying in it with
- * an instruction not to look, which is the difference between this being a fence and being advice. */
+// Removed entirely, not merely told not to use: the difference between a fence and advice.
 test("an ungranted connector's credentials are removed from the shell environment", () => {
     const installed = [connector("github"), connector("komodo")];
     const cliEnv = {
@@ -225,15 +204,14 @@ test("an ungranted connector's credentials are removed from the shell environmen
     expect(personaCliEnv(cliEnv, installed, persona, suffix)).toEqual({ GITHUB_TOKEN_GITHUB: "gh-secret", PATH: "/usr/bin" });
 });
 
-// The environment carries more than connector credentials: the PATH that makes extension CLIs resolve, an
-// extension's own settings, so a card granting everything must hand it back untouched rather than rebuilt.
+// Environment holds more than credentials (PATH, extension settings); granting everything returns it untouched.
 test("a card that grants every connector leaves the environment exactly as it was", () => {
     const cliEnv = { GITHUB_TOKEN_GITHUB: "gh-secret", PATH: "/usr/bin" };
     const persona = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     expect(personaCliEnv(cliEnv, [connector("github")], persona, suffix)).toBe(cliEnv);
 });
 
-// ── What the turn is told ───────────────────────────────────────────────────────────────────────────────────
+// What the turn is told
 
 test("the note names the persona and says its accounts are the only ones", () => {
     const label = "Work Reddit";
@@ -248,8 +226,7 @@ test("the note names the persona and says its accounts are the only ones", () =>
     expect(note?.length).toBeGreaterThan(label.length);
 });
 
-/* The one card whose wording is the PRODUCT's (a public web chat's desk) gets it from the daemon rather than
- * from a field on the card, so this is what proves the guidance still reaches the turn that needs it. */
+// Front Desk's manner comes from the daemon, not a card field; this proves the guidance reaches the turn.
 test("the front desk's own manner rides its note, and no other card's", () => {
     const desk = personaNote(turnPersona({ personas: [card(FRONT_DESK_PERSONA, [])], actsAs: FRONT_DESK_PERSONA, unattended: true }));
     const work = personaNote(turnPersona({ personas: CAST, actsAs: "work", unattended: true }));
@@ -257,9 +234,8 @@ test("the front desk's own manner rides its note, and no other card's", () => {
     expect(desk).not.toEqual(work);
 });
 
-/* The folder limit IS narrated, unlike the shelves, and the asymmetry is deliberate: a tool that is absent
- * teaches by being absent, while a refusal on a path arrives mid-task and reads as a broken tool unless the
- * agent already knows where it is expected to work. */
+// Folder limits are narrated, unlike tool shelves: an absent tool teaches by being absent, but a path refusal mid-task
+// reads as broken unless the agent already knows where it may work.
 test("the note names the folders the persona works in", () => {
     const note = personaNote(
         turnPersona({
@@ -271,23 +247,20 @@ test("the note names the folders the persona works in", () => {
     expect(note).toContain("apps/web, packages/ui");
 });
 
-// Nothing to narrate when nothing changed: an open attended turn is the status quo, and a turn with no accounts
-// is better served by the tools being absent than by a paragraph about their absence.
+// Nothing to narrate when nothing changed: tools missing is enough, without a paragraph about it.
 test("no note for an open attended turn, nor for an unpinned wake", () => {
     expect(personaNote(turnPersona({ personas: CAST, actsAs: undefined, unattended: false }))).toBeUndefined();
     expect(personaNote(turnPersona({ personas: CAST, actsAs: undefined, unattended: true }))).toBeUndefined();
 });
 
-// ── The prompt: the fourth question the card answers ─────────────────────────────────────────────────────────
+// The prompt: the fourth question the card answers
 
-/* THE SANDBOX'S ANSWER IS THE DEFAULT, and stays the answer for every card written before the field existed:
- * which on a real workspace is all of them. The field is absent rather than spelling "inherit", so this is also
- * the case that proves an untouched card changes nothing. */
+// Sandbox's answer is the default; absent rather than spelling "inherit", so an old card changes nothing.
 const SETTINGS = { systemPromptMode: "intentic", systemPrompt: "" } as const;
 
 test("a card that says nothing about the prompt runs on the sandbox's", () => {
     expect(personaPrompt(card("work", []), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
-    // And so does a turn wearing no card at all.
+    // Same for a turn wearing no card at all.
     expect(personaPrompt(undefined, undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox text." })).toEqual({
         mode: "custom",
         systemPrompt: "Sandbox text.",
@@ -302,28 +275,23 @@ test("a card with its own prompt replaces the sandbox's, text and all", () => {
     });
 });
 
-/* A CARD PINNED TO A BUILT-IN BASE CARRIES NO TEXT, and must not inherit the sandbox's: a persona set to
- * "claude" while the sandbox is on a custom prompt would otherwise run Claude's preset with the owner's
- * unrelated replacement still sitting in the field the composer reads under "custom". */
+// A built-in base carries no text and must not inherit the sandbox's custom prompt, or a "claude" persona would run
+// Claude's preset while the composer's custom field still shows the sandbox's unrelated text.
 test("a card on a built-in base takes the base and none of the sandbox's text", () => {
     expect(
         personaPrompt(card("work", [], { systemPromptMode: "claude" }), undefined, { systemPromptMode: "custom", systemPrompt: "Sandbox." }),
     ).toEqual({ mode: "claude", systemPrompt: "" });
 });
 
-/* HALF-MADE IS NOT EMPTY. Picking "custom" and not yet writing anything is somebody mid-edit, and running that
- * turn on a blank system prompt would be obeying a decision nobody finished making. */
+// Custom with nothing written yet is mid-edit, not a decision to run on a blank prompt.
 test("custom with nothing written yet falls back to the sandbox", () => {
     expect(personaPrompt(card("desk", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
 });
 
-// ── The card is a static context ───────────────────────────────────────────────────────────────────────────
+// The card is a static context
 
-/* EVERYTHING A TURN IS TOLD OR DENIED BECAUSE OF ITS CARD IS A FUNCTION OF THE CARD ALONE. That is what makes a
- * persona a static context: two conversations wearing one card open on the same note, the same tool set and
- * the same prompt placement, so a provider's prompt cache serves the second from the first, and it is why the
- * design routes a chat onto a card rather than composing a context per session (contract schemas/personas.ts).
- * Pinned here so a field that varies per turn can never quietly join the persona-derived prefix. */
+// A card's effects are a pure function of the card alone: two turns wearing the same card must produce the identical
+// note, tool set and prompt placement, so a provider's prompt cache can serve one from the other.
 test("two turns wearing one card get identical persona-derived context, and a different card gets a different one", () => {
     const backend: Persona = { id: "backend", label: "Backend", capabilities: ["github-work"], powers: powers({ shell: false }), workspace: { folders: ["api"] } };
     const cast = [...CAST, backend];

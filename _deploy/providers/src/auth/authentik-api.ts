@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
 
-// The slice of Authentik's REST API the per-app OIDC client binding uses, injected so the provider is
-// unit-testable with a fake; the default `authentikApi` below talks to an Authentik server over native fetch
-// with the bootstrap token (Bearer). Authentik models an OIDC client as an OAuth2 *Provider* (carrying the
-// client_id/secret + redirect URIs) linked to an *Application* (carrying the public slug). Both are keyed by
-// the app slug so create-or-update is idempotent. The exact v3 JSON shapes are confirmed at integration time;
-// only the fields we read are validated.
+// The slice of Authentik's REST API the per-app OIDC client binding uses. Authentik models an OIDC client as an
+// OAuth2 Provider (client_id/secret + redirects) linked to an Application (public slug); both keyed by slug so
+// create-or-update is idempotent.
 export interface AuthentikClientSpec {
     readonly baseUrl: string;
     readonly token: string;
@@ -35,7 +32,7 @@ const call = async (method: string, baseUrl: string, token: string, path: string
         method,
         headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
+        // Bound a stalled connection (undici's default headers timeout is much longer).
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {

@@ -13,8 +13,7 @@ import { commitRootBaseline, commitWorktreeRemainder, ensureLocalRootRepo, ensur
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 
-// These assertions only care that the tree is clean overall, which side a change would have landed on is
-// changes.integration.test.ts's subject, not this file's.
+// Checks staged and unstaged together; which side a change lands on is not this file's concern.
 const bothSides = async (dir: string): Promise<unknown[]> => {
     const { staged, unstaged } = await changedFiles(dir);
     return [...staged, ...unstaged];
@@ -46,30 +45,13 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // Pointer file in the worktree, real git dir on the history volume, excludes converged from the
-    // discovered repo set.
     expect(await readFile(join(work, ".git"), "utf8")).toBe(`gitdir: ${join(historyRoot, "gits", "root")}\n`);
     expect(await readFile(join(historyRoot, "gits", "root", "info", "exclude"), "utf8")).toBe(`${rootExcludes(["intent"]).join("\n")}\n`);
-    // The baseline commit captured the loose file but neither the repo dir nor .intentic/.
     expect(await sh(work, "ls-files")).toBe("notes.md");
     expect(await bothSides(work)).toEqual([]);
     expect(await sh(work, "config", "--get", ROOT_BASELINE_CONFIG)).toBe(await sh(work, "rev-parse", "HEAD"));
 });
 
-/* THE HOLES IN THE .intentic WALL, checked against real git rather than reasoned about.
- *
- * The owner's CONFIGURATION is committed on purpose: a persona or an automation should be addable in a pull
- * request and visible in `git log`, while the credentials, ledgers and transcripts beside it must never be. The
- * rule turns on a single character of git syntax: the exclude names the directory's CONTENTS (`/.intentic/*`)
- * rather than the directory, because git does not descend into an excluded directory and a `!` negation under
- * one re-includes nothing at all. Get that wrong in the safe direction and settings silently never commit; get
- * it wrong in the other and the next baseline commits the owner's provider tokens. Neither failure announces
- * itself, so the assertion is on git's own answer.
- *
- * The directory carve-out (environment.d/) is here for the same reason: re-including a DIRECTORY is what lets
- * git walk into it, and it is the negation whose trailing slash has to survive the mapping in history.ts:
- * checked here on the NESTED case too (an extension is a directory inside a carved-out directory), because that
- * is the shape a `*` glob written one level too shallow would silently drop. */
 test("the baseline commits the config slice and still refuses every credential and ledger beside it", async () => {
     const { work, historyRoot } = await tempBase();
     await mkdir(join(work, `${STATE_DIR}`, "local", "browser", "reddit-work"), { recursive: true });
@@ -80,32 +62,25 @@ test("the baseline commits the config slice and still refuses every credential a
     await mkdir(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "records", "approvals"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "identity"), { recursive: true });
-    // Configuration: every one of these decides how the sandbox behaves, and each is `versioned` in the contract.
+    // Config files: expected to end up tracked.
     await writeFile(join(work, `${STATE_DIR}`, "config", "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
     await writeFile(join(work, `${STATE_DIR}`, "config", "settings.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "automations.json"), "[]\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "environment.custom.Dockerfile"), "RUN echo hi\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "environment.d", "rust.Dockerfile"), "RUN rustup\n");
-    /* What the AGENT authored on its own initiative: tracked for a different reason than the config above it:
-     * not "the owner decided this" but "the sandbox did this outward, and it must be readable, revertible and
-     * attributable". The extension is the nested-directory case, and its manifest is what decides how far its
-     * code may reach, so the two files together are the whole review. */
+    // Agent-authored files: also expected to end up tracked.
     await writeFile(join(work, `${STATE_DIR}`, "config", "approvals", "reddit-launch.json"), `{"kind":"post","platform":"reddit","status":"proposed"}\n`);
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
-    // A CONSUMED QUEUE beside them, and the counterexample that keeps the line honest: a held wake is removed the
-    // moment it is answered, so tracking it would commit an add and a delete about a decision recorded elsewhere.
+    // Consumed queue entry: expected to stay untracked.
     await writeFile(join(work, `${STATE_DIR}`, "records", "approvals", "wake-1.json"), "{}\n");
-    /* WHAT THIS SANDBOX IS CONNECTED TO: tracked, and the entry that reads most like a credential without being
-     * one. The values are in the vault off /work and the manifest keeps the shape (an id, a kind, an address);
-     * granting a connected device shell access is a decision, and it belongs in the same review as the rules
-     * that decide how the agent behaves. */
+    // Capabilities: reads like a credential but is tracked (values live in the vault, not here).
     await writeFile(join(work, `${STATE_DIR}`, "config", "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
-    // Credentials and identity: never tracked, whatever else changes.
+    // Credentials and identity: expected to stay untracked.
     await writeFile(join(work, `${STATE_DIR}`, "identity", "owner.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "secrets", "auth", "claude", "token.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "local", "browser", "reddit-work", "Cookies"), "secret\n");
-    // Ledgers and bulk, `carry`, holding no secret, and still out: they are machine noise in a human's review.
+    // Ledgers: hold no secret but still expected to stay untracked.
     await writeFile(join(work, `${STATE_DIR}`, "records", "workflow-runs.json"), "[]\n");
     await writeFile(join(work, `${STATE_DIR}`, "records", "loops.json"), "[]\n");
     await writeFile(join(work, `${STATE_DIR}`, "records", "sessions", "claude", "turn.jsonl"), "{}\n");
@@ -113,7 +88,6 @@ test("the baseline commits the config slice and still refuses every credential a
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // Exactly the tracked slice out of that directory: both directory carve-outs included, nothing else.
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
         ".intentic/config/approvals/reddit-launch.json",
         ".intentic/config/automations.json",
@@ -125,7 +99,6 @@ test("the baseline commits the config slice and still refuses every credential a
         ".intentic/config/workspace-extensions/rail-demo/extension.js",
         ".intentic/config/workspace-extensions/rail-demo/intentic-extension.json",
     ]);
-    // Nothing left over: the credentials and ledgers are IGNORED, not merely uncommitted-and-pending.
     expect(await bothSides(work)).toEqual([]);
 });
 
@@ -133,7 +106,6 @@ test("daemon-owned skill files converged before the baseline read clean", async 
     const { work, historyRoot } = await tempBase();
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
-    // The boot sequence converges .agents skills (e.g. the approvals skill) BEFORE committing the baseline.
     await mkdir(join(work, ".agents", "skills", "approvals"), { recursive: true });
     await writeFile(join(work, ".agents", "skills", "approvals", "SKILL.md"), "converged\n");
     await commitRootBaseline(workspacePaths(work));
@@ -142,9 +114,8 @@ test("daemon-owned skill files converged before the baseline read clean", async 
     expect(await bothSides(work)).toEqual([]);
 });
 
-// A repo dir that reached root's index: the shape the exclude list can no longer act on. `add -f` is how it
-// happens for real: a clone staged before the derived exclude list caught up with it, or an agent's own forced
-// add, committed by whoever reviewed the workspace next.
+// Simulates a repo dir that reached root's index (`add -f`): a clone staged before the exclude list caught up, or an
+// agent's forced add.
 const trackNestedRepo = async (work: string, repo: string): Promise<void> => {
     await sh(work, "add", "-f", "-A", "--", repo);
     await sh(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "fix: migration");
@@ -158,8 +129,7 @@ const nestedRepo = async (work: string, repo: string): Promise<string> => {
     await sh(dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one");
     return dir;
 };
-// The shape that froze a conversation: `git init` and nothing committed yet, so the dir is an embedded repo
-// with an unborn HEAD and no sha for root to record a gitlink from.
+// `git init` with nothing committed: an embedded repo with unborn HEAD, no sha for root to gitlink from.
 const unbornRepo = async (work: string, repo: string): Promise<string> => {
     const dir = join(work, repo);
     await mkdir(dir, { recursive: true });
@@ -180,17 +150,14 @@ test("a nested repo tracked in root's index is untracked and the removal committ
     await commitRootBaseline(workspacePaths(work));
     await trackNestedRepo(work, "intent");
     const head = await commitInNested(nested);
-    // The bug: excluding a path git already tracks does nothing, so the nested HEAD move surfaces in root.
     expect(await bothSides(work)).toMatchObject([{ path: "intent", status: "modified" }]);
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
 
-    // Gone from the index AND from the commit, so no later HEAD move can bring it back.
     expect(await sh(work, "ls-files")).toBe("");
     expect(await sh(work, "ls-tree", "--name-only", "HEAD")).toBe("");
     expect(await bothSides(work)).toEqual([]);
     expect(await sh(work, "log", "--format=%s")).toBe("chore: untrack nested repositories\nfix: migration\nInitialize workspace");
-    // The repo itself is untouched: same checkout, same HEAD.
     expect(await sh(nested, "rev-parse", "HEAD")).toBe(head);
     expect(await readFile(join(nested, "app.ts"), "utf8")).toBe("v2\n");
 });
@@ -207,12 +174,11 @@ test("untracking a nested repo leaves the user's own staged work staged, and out
 
     await ensureRootRepo(workspacePaths(work), historyRoot);
 
-    // Still staged, and the housekeeping commit recorded only the removal.
     expect(await sh(work, "diff", "--cached", "--name-only")).toBe("notes.md");
     expect(await sh(work, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent");
 });
 
-// A conversation's own checkout of root, the shape agents/worktrees.ts creates it in.
+// A conversation's own checkout of root, same shape as an agent worktree.
 const agentWorktree = async (work: string, branch: string): Promise<string> => {
     const dir = join(dirname(work), branch);
     await sh(work, "worktree", "add", "-q", "-b", branch, dir);
@@ -224,8 +190,7 @@ test("a conversation's root worktree stages a nested repo but never commits one"
     await ensureRootRepo(workspacePaths(work), historyRoot);
     await commitRootBaseline(workspacePaths(work));
     const worktree = await agentWorktree(work, "agent-one");
-    // A repo the derived exclude list cannot name: the agent cloned it into its own tree, so the main checkout
-    // discovery reads has never seen it.
+    // Cloned inside the agent's own tree; the main-checkout exclude discovery never saw it.
     await nestedRepo(worktree, "intent");
     await writeFile(join(worktree, "notes.md"), "agent work\n");
 
@@ -233,14 +198,9 @@ test("a conversation's root worktree stages a nested repo but never commits one"
 
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
     expect(await sh(worktree, "ls-files")).toBe("notes.md");
-    // The checkout is untouched: the repo is still there, still its own.
     expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
 });
 
-/* A repo the agent init'ed and has NOT COMMITTED IN, which is what an agent scaffolding a new one looks like
- * for as long as it takes to write the files. Default `add -A` dies on it ("does not have a commit checked
- * out") and stages NOTHING, so the whole remainder was lost and the exception took the land, the archive and
- * the next turn's rebase down with it, leaving a card stamped error that pressing continue only reproduced. */
 test("an unborn nested repo costs its own gitlink and nothing else: the rest of the remainder still commits", async () => {
     const { work, historyRoot } = await tempBase();
     await ensureRootRepo(workspacePaths(work), historyRoot);
@@ -251,10 +211,8 @@ test("an unborn nested repo costs its own gitlink and nothing else: the rest of 
 
     expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
 
-    // The turn's own file is on the branch; the unborn repo reached neither the index nor the commit.
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
     expect(await sh(worktree, "ls-files")).toBe("notes.md");
-    // And it is still sitting in the checkout, its own repo, untouched.
     expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
     expect(await sh(join(worktree, "intent"), "status", "--porcelain")).toBe("?? app.ts");
 });
@@ -277,8 +235,6 @@ test("a nested repo a past turn committed is dropped, and the review's span come
     await commitRootBaseline(workspacePaths(work));
     const worktree = await agentWorktree(work, "agent-one");
     const nested = await nestedRepo(worktree, "intent");
-    // The bug as the branch already carries it: a one-line `+1` add for the repo, back on every land as the
-    // repo's own HEAD moves.
     await trackNestedRepo(worktree, "intent");
     await commitInNested(nested);
     expect(await sh(worktree, "diff", "--name-only", "main")).toBe("intent");
@@ -286,7 +242,6 @@ test("a nested repo a past turn committed is dropped, and the review's span come
     await writeFile(join(worktree, "notes.md"), "agent work\n");
     expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
 
-    // Added and removed inside this branch, so anchor→tip (what the agent's review reads) has no row for it.
     expect(await sh(worktree, "diff", "--name-only", "main")).toBe("notes.md");
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent\nA\tnotes.md");
 });
@@ -314,8 +269,7 @@ test("re-ensure is idempotent and heals a deleted .git pointer without a new bas
     expect(await sh(work, "log", "--format=%s")).toBe("Initialize workspace");
 });
 
-// A gitlink DECLARED in .gitmodules is the user's own submodule, not the accident the convergence exists to
-// undo: see strayGitlinks. `git submodule add` needs the file protocol re-allowed (git 2.38 closed it).
+// Needs `protocol.file.allow=always`: git 2.38 blocks the local file protocol by default.
 const declareSubmodule = async (work: string, source: string, path: string): Promise<void> => {
     await sh(work, "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, path);
     await sh(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "feat: add submodule");
@@ -333,7 +287,6 @@ test("a declared submodule survives the untrack convergence; a stray gitlink bes
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
 
-    // The submodule keeps its gitlink and its .gitmodules line; the stray is gone from index and commit.
     expect(await sh(work, "ls-files")).toBe(".gitmodules\nlib");
     expect(await sh(work, "ls-tree", "--name-only", "HEAD")).toBe(".gitmodules\nlib");
 });
@@ -355,7 +308,7 @@ test("a conversation's root worktree commit spares declared submodules too", asy
     expect(listed).not.toContain("stray");
 });
 
-// --- the LOCAL profile's ensure: the folder is the user's own ---
+// The local profile's ensure: the folder is the user's own.
 
 test("local ensure of a folder that is not a repo inits in-tree, excludes state, and takes a baseline", async () => {
     const { work } = await tempBase();
@@ -365,9 +318,7 @@ test("local ensure of a folder that is not a repo inits in-tree, excludes state,
     expect(await ensureLocalRootRepo(workspacePaths(work))).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // A real in-tree git dir: nothing relocated, no pointer file.
     expect(await sh(work, "rev-parse", "--git-dir")).toBe(".git");
-    // The discovered nested repo and the daemon's own furniture stay out of the baseline.
     expect(await sh(work, "ls-files")).toBe("notes.md");
     const excludes = await readFile(join(work, ".git", "info", "exclude"), "utf8");
     expect(excludes).toContain("/service/");
@@ -383,7 +334,6 @@ test("local ensure takes an existing repo exactly as it stands, appending only t
     expect(await ensureLocalRootRepo(workspacePaths(dir))).toBe(false);
     expect(await ensureLocalRootRepo(workspacePaths(dir))).toBe(false);
 
-    // No init, no commit, no reshaping, and the user's own exclude lines survive, grown once.
     expect(await sh(dir, "rev-parse", "HEAD")).toBe(head);
     expect(await sh(dir, "log", "--format=%s")).toBe("one");
     const excludes = await readFile(join(dir, ".git", "info", "exclude"), "utf8");

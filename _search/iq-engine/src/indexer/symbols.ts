@@ -51,16 +51,7 @@ const declaratorRows = (path: string, lang: string, root: SgNode): SymbolRow[] =
         if (statementParent !== "program" && statementParent !== "export_statement") {
             continue;
         }
-        /* An identifier, or nothing. A declarator's name field is also where a DESTRUCTURING PATTERN lives, and
-         * `.text()` on one yields the pattern source rather than a name, `{ app }`, `[logPath, pattern]`, and
-         * in a `.vue` the whole multi-line `defineProps` destructure. 481 of those were in the index, 31 of them
-         * spanning lines, and every consumer of the symbol table was worse for it: `iq def` offered them as
-         * definitions, hits annotated themselves `⟨in { app } (const)⟩`, and the graph stage fed one to ripgrep
-         * as a pattern and killed the query outright.
-         *
-         * Skipped rather than expanded into the names it binds. Those are re-binds and imports (`app`,
-         * `version`, `utils`), not what anyone means by the symbol defined here, and the statement is already
-         * indexed as a chunk, so nothing becomes unfindable by dropping it. */
+        // A declarator's name field may be a pattern (`{ app }`), not an identifier; skipped, not expanded into names.
         const nameNode = declarator.field("name");
         if (nameNode === null || nameNode.kind() !== "identifier") {
             continue;
@@ -104,14 +95,8 @@ const heuristicSymbols = (path: string, content: string): SymbolRow[] => {
     return rows;
 };
 
-// An SFC's symbols come from its <script> blocks, parsed as TypeScript and shifted back onto their real file
-// lines, so `def`/`sym`/`outline` can see inside a component.
-//
-// A `<script setup>` body has no `export` statements, so nearly everything here reads as internal, which is
-// accurate, and deliberately kept that way. Marking top-level declarations "exported" on the theory that a
-// component's script is its public shape was tried and reverted: a component's locals are ordinary words
-// (`step`, `busy`, `error`), so it turned every large component into a fake hub in the map's reference graph.
-// A component is a consumer, not a definition site, and the export flag should say so.
+// An SFC's symbols come from its <script> blocks, shifted onto real file lines. Script-setup locals stay unexported: a
+// component's script is a consumer, not a definition, so exporting locals would fake a reference-graph hub.
 const sfcSymbols = (path: string, content: string): SymbolRow[] => {
     const rows: SymbolRow[] = [];
     for (const block of scriptBlocksOf(content)) {

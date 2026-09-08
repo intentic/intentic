@@ -9,17 +9,12 @@ import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { SECRETS, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { describeProvisionError } from "./provisionError";
 
-/* The pre-apply change preview: run `intentic deploy resolve` then `intentic deploy plan` in the sandbox (read + diff, nothing
- * mutated) and expose what the next apply WOULD do, per-resource create/update/remove + orphans, so adding a
- * want stages a reviewable pending change instead of silently deploying. Owns the missing-secrets gate lifted
- * out of InfraDeclare: resolve names the env secrets the intent requires, and any unset one pauses BEFORE plan
- * (plan reads live infra over SSH and needs them), surfacing a checklist the user fills before continuing.
- * Every run is CANCELLABLE (the abort reaches the daemon, which kills the CLI child) and watched by a stall
- * watchdog re-armed per received line, a dead stream trips it and surfaces as an error naming the last
- * activity, never as an eternal spinner. Instantiated once in InfraDeclare; everything goes THROUGH the sandbox. */
+// Runs `intentic deploy resolve` then `plan` in the sandbox (read+diff, nothing mutated), exposing
+// per-resource create/update/remove plus orphans. Pauses before plan on missing env secrets (resolve reports
+// them, plan needs them live), surfacing a checklist first. Cancellable, with a stall watchdog naming the last
+// activity.
 
-// No line for this long = the stream is dead (every operation under the CLI is deadline-bounded and plan
-// narrates per node/provider, so a healthy run emits far more often).
+// No line for this long means the stream is dead; a healthy run narrates far more often than this.
 const STALL_MS = 120_000;
 
 export function usePlanPreview() {
@@ -29,16 +24,14 @@ export function usePlanPreview() {
 
     const running = ref(false);
     const ran = ref(false);
-    // A preview reflects a specific inventory; any add/remove marks it stale so a plan is never shown against
-    // mutated wants. Starts stale, nothing has been previewed yet.
+    // Any add/remove marks a preview stale, so a plan is never shown against mutated wants; starts stale.
     const stale = ref(true);
     const error = ref<string | undefined>(undefined);
     const steps = ref<PlanStep[]>([]);
     const orphans = ref<PlanOrphan[]>([]);
-    // What the run is doing right now ("Checking web.production…", "orphan scan: komodo"), shown instead of a
-    // blank spinner, and the detail a stall error names.
+    // What the run is doing right now, shown instead of a blank spinner; also the detail a stall error names.
     const activity = ref<string | undefined>(undefined);
-    // The env-secret keys the last resolve reported the intent REQUIRES; the unset ones gate plan (and apply).
+    // The env-secret keys the last resolve reported as required; the unset ones gate plan (and apply).
     const requiredEnv = ref<string[]>([]);
     const missingSecrets = computed(() => requiredEnv.value.filter((key) => !hasKey(key)));
     // resolve finished but required secrets were missing: paused before plan, waiting on the user's checklist.
@@ -55,12 +48,12 @@ export function usePlanPreview() {
         stale.value = true;
     };
 
-    // Abort the in-flight run: the fetch body drops, and the daemon kills the CLI child on the same signal.
+    // Aborts the in-flight run; the daemon kills the CLI child on the same signal.
     const cancel = (): void => {
         controller?.abort(new DOMException(`preview cancelled`, `AbortError`));
     };
 
-    // resolve (SSE) → rewrites desired-state.json + reports the required env secrets. Throws on a kind:"error".
+    // resolve (SSE): rewrites desired-state.json and reports required env secrets. Throws on kind:"error".
     const resolve = async (signal: AbortSignal): Promise<void> => {
         activity.value = `Resolving your configuration…`;
         const response = await sandboxRequest(`/intentic`, {
@@ -74,13 +67,11 @@ export function usePlanPreview() {
             throw new Error(detail?.error ?? `Resolve failed (${response.status}).`);
         }
         for await (const line of readIntenticLines(response.body)) {
-            // Heartbeats only prove the daemon's tail is alive, not the CLI, arming on them would neuter the
-            // watchdog's "last activity" honesty.
+            // Heartbeats only prove the daemon's tail is alive, not the CLI; arming on them would neuter the watchdog.
             if (line[`kind`] !== `heartbeat`) {
                 armStall();
             }
-            // The run executes visibly in a tmux session (the stream's first frame names it), open its tab so
-            // the user watches the actual command (user-clicked → openFocused, the apply precedent).
+            // The run executes visibly in a tmux session; open its tab so the user watches the actual command.
             if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
                 openFocused(line[`session`]);
             }
@@ -92,13 +83,12 @@ export function usePlanPreview() {
                 throw new Error(typeof message === `string` ? message : `Resolve failed.`);
             }
         }
-        // resolve rewrote desired-state.json and named its secrets, refresh both the graph read-model and the
-        // secrets query (the SSH key is written out-of-band at host-enroll, so the gate must read fresh keys).
+        // Refreshes the graph and secrets queries after resolve rewrote desired-state.json and named its secrets.
         await queryClient.refetchQueries({ queryKey: SECRETS.of() });
         void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
     };
 
-    // plan (SSE) → per-resource create/update/noop verdicts + the orphan list, narrating as it reads.
+    // plan (SSE): per-resource create/update/noop verdicts plus the orphan list, narrating as it reads.
     const runPlan = async (signal: AbortSignal): Promise<void> => {
         activity.value = `Reading your live infrastructure…`;
         const response = await sandboxRequest(`/intentic`, {
@@ -114,8 +104,7 @@ export function usePlanPreview() {
         const result = await readPlanSteps(response.body, (progress) => {
             armStall();
             if (progress.terminal !== undefined) {
-                // The plan runs visibly in the check session, open its tab (continueAfterSecrets runs plan
-                // without a preceding resolve, so this frame is plan's own surfacing too).
+                // The plan runs visibly in the check session; open its tab (own surfacing when resolve was skipped).
                 openFocused(progress.terminal);
             } else if (progress.node !== undefined) {
                 activity.value = `Checking ${progress.node}…`;
@@ -127,8 +116,8 @@ export function usePlanPreview() {
         orphans.value = result.orphans;
     };
 
-    // Shared run wrapper: fresh controller + watchdog, cancelled runs end quietly (no error, the user chose
-    // to stop), a tripped watchdog names the last activity, everything else is humanized.
+    // Shared run wrapper: fresh controller and watchdog. Cancelled runs end quietly; a tripped watchdog names
+    // the last activity; everything else is humanized.
     const guarded = async (work: (signal: AbortSignal) => Promise<void>): Promise<void> => {
         if (running.value) {
             return;
@@ -143,7 +132,7 @@ export function usePlanPreview() {
         } catch (err) {
             const reason = controller.signal.aborted ? (controller.signal.reason as unknown) : err;
             if (reason instanceof DOMException && reason.name === `AbortError`) {
-                return; // cancelled by the user, not an error, the preview simply stays stale.
+                return; // cancelled by the user, not an error; the preview simply stays stale.
             }
             if (reason instanceof DOMException && reason.name === `TimeoutError`) {
                 error.value = `The preview stalled, last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
@@ -158,8 +147,8 @@ export function usePlanPreview() {
         }
     };
 
-    // The full preview: resolve, then (unless required secrets are still missing) plan. A missing secret pauses
-    // at the checklist, the same gate apply uses, until continueAfterSecrets resumes at plan.
+    // The full preview: resolve, then plan unless required secrets are still missing. A missing secret pauses
+    // at the checklist until continueAfterSecrets resumes.
     const run = (): Promise<void> =>
         guarded(async (signal) => {
             await resolve(signal);
@@ -172,8 +161,8 @@ export function usePlanPreview() {
             stale.value = false;
         });
 
-    // Resume at plan once the checklist cleared the missing secrets (SecretField writes invalidate the secrets
-    // query, so missingSecrets recomputes reactively).
+    // Resumes at plan once the checklist clears the missing secrets (a secret write invalidates the query, so
+    // missingSecrets recomputes).
     const continueAfterSecrets = (): Promise<void> => {
         if (missingSecrets.value.length > 0) {
             return Promise.resolve();

@@ -1,19 +1,15 @@
 // @vitest-environment jsdom
-//
-// THE LADDER, AS THE COMPONENT ACTUALLY CLIMBS IT. brandMark.test.ts asserts what the artwork gate ACCEPTS;
-// this asserts what <BrandMark> then DRAWS, which is the half a passing gate cannot promise on its own: a tier
-// that resolves and is never reached looks identical, from the gate's side, to one that works.
-//
-// Mounted with plain Vue rather than @vue/test-utils, as ReviewStat.test.ts and markdownFigures.test.ts do.
+// The ladder as the component actually climbs it: brandMark.test.ts asserts what the artwork gate accepts, this asserts
+// what <BrandMark> then draws, which a passing gate cannot promise on its own.
 import { BrandMark } from "@intentic/ui";
 import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;
 
-/* The tiers as a caller supplies them. Spelled out rather than taken as a loose bag, because `h()` checks what
- * it is handed against the component's own props, so a typo in a tier name here would otherwise mount a mark
- * that declares nothing and quietly assert the fallback it was meant to be testing the absence of. */
+// The tiers as a caller supplies them, spelled out rather than a loose bag: `h()` checks props against the component's
+// own, so a typo here would mount a mark declaring nothing and silently assert the fallback it was meant to test the
+// absence of.
 interface MarkProps {
     readonly name: string;
     readonly art?: string;
@@ -22,9 +18,9 @@ interface MarkProps {
     readonly flush?: boolean;
 }
 
-/* No network, ever. The brand tier fetches, and a suite that reached a CDN would be slow when it worked and red
- * on a train: the same argument extensionMarks.test.ts makes for not checking slugs at all. Stubbed to never
- * resolve rather than to fail, so the "art beats logo" case cannot pass merely because the fetch lost a race. */
+// No network, ever: the brand tier fetches, and a suite that reached a CDN would be slow when it worked and red on a
+// train. Stubbed to never resolve rather than fail, so "art beats logo" cannot pass merely because the fetch lost a
+// race.
 const mount = async (props: MarkProps): Promise<HTMLElement> => {
     globalThis.fetch = (() => new Promise(() => {})) as typeof fetch;
     const host = document.createElement(`div`);
@@ -62,10 +58,9 @@ describe(`BrandMark tiers`, () => {
         expect(host.textContent?.trim()).toBe(`IE`);
     });
 
-    /* WHICH TIER DRAWS AND WHICH SHAPE IT DRAWS IN ARE INDEPENDENT, and this is here because the two arrived
-     * from different branches and met for the first time in a merge. `flush` governs the outline: the caller's
-     * card already has a border, so the mark drops its own, and it must have no opinion at all about artwork.
-     * Folding either into the other reads as a tidy-up and silently costs a whole shape somebody asks for. */
+    // Which tier draws and which shape it draws in are independent, arrived at from different branches that met in a
+    // merge. `flush` governs only the outline; folding it into tier selection would silently cost a whole shape
+    // somebody asks for.
     it(`still draws artwork as a flush band, where the outline belongs to the card around it`, async () => {
         const host = await mount({ name: `intentic.example`, art: MARK, flush: true });
         const box = host.firstElementChild;

@@ -5,83 +5,42 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGate, consultWith, vendorSubject } from "../../guard/command-gate.js";
 
-/* THE OWNER'S COMMAND RULEBOOK, ENFORCED INSIDE CURSOR'S OWN LOOP. This is what earns the `rulebook: "hooks"`
- * row in the capability record, and it is the only foreign runtime in this repo that reaches that tier.
- *
- * Cursor runs a `beforeShellExecution` hook before every command its shell tool executes, and takes back
- * `{ permission: "allow" | "deny", user_message, agent_message }`. That alone would be worth the weaker
- * "approval" tier. What makes it the full one is that the hook is a PROCESS WE WROTE: it can sit there, not
- * answering, while a permission card waits on a person, and Cursor is simply blocked on a script it started.
- * A vendor approval channel with a clock on it (OpenCode's) cannot do that, which is why that one is
- * "refuse-only" and this is not.
- *
- * THE SHAPE, and why it is a socket rather than a spool. The codex signal hook writes JSON files into a
- * directory because it is telling the daemon something; this one has to ASK and wait for the answer, so it
- * needs a round trip. A Unix domain socket under the auth root gives that with no port, no route on the
- * daemon's public contract, and filesystem permissions as the whole access-control story.
- *
- * ONE SOCKET FOR THE DAEMON'S LIFE, not one per turn, because the hooks file that names it is machine-global
- * (see below) and a static file cannot name a per-turn path. Turns register themselves against it and the
- * payload's `conversation_id` routes each consult back to the right one.
- *
- * WHY /etc/cursor, which is the ENTERPRISE layer. Cursor reads hooks from four places: /etc/cursor/hooks.json
- * (enterprise), ~/.cursor/hooks.json (user), the workspace's own .cursor/hooks.json (project), and — worth
- * knowing — ~/.claude/settings.json, whose Claude Code hooks it also honours. The enterprise layer is the
- * right one and the other three are each wrong in their own way: the project file belongs to the user's
- * repository and writing to it would show up in their diff; the user file is theirs; and the Claude one is
- * written by this daemon for a different runtime, whose hook scripts speak Claude Code's protocol and would
- * be handed Cursor's. So the turn asks for `settingSources: ["mdm", "project"]` and this file is the "mdm". */
+// Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution: the hook is a process this
+// daemon wrote, so it can hold the answer while a card waits on a person, unlike a clocked vendor approval channel.
+// Lives at /etc/cursor/hooks.json, the enterprise layer, not ~/.cursor or the workspace's own.
 
-/* Where Cursor looks for the machine-wide hooks file on Linux, from its own path table. Not configurable by
- * CURSOR, which is most of why the enterprise layer is the right one to own: it is a fixed location no
- * workspace and no user can move.
- *
- * The env override exists for the suite rather than for production, and the reason is the ambient-machine trap
- * AGENTS.md names: a test that really wrote /etc/cursor/hooks.json would assert one thing on a runner where
- * /etc is unwritable and the opposite inside a root container, and it would leave a machine-global file behind
- * either way. Pointing it at a temp dir is what lets the suite state the mode it means. */
+// Fixed by Cursor, not configurable; the one location no workspace or user can move. The env override is test-only: it
+// points the suite at a temp dir instead of writing a real machine-global file.
 const enterpriseHooksPath = (): string => process.env["INTENTIC_CURSOR_HOOKS_FILE"] ?? "/etc/cursor/hooks.json";
 const GATE_SCRIPT_NAME = "intentic-command-gate.mjs";
 
-/* One live turn's hook context. Registered for as long as the turn runs, looked up by whichever id the hook
- * payload carries. `push` is the turn's own event sink, so the permission card lands in the conversation that
- * raised it rather than anywhere else. */
+// One live turn's hook context, registered for as long as the turn runs and looked up by the payload's id. `push` is
+// this turn's own event sink, so a permission card lands in the right conversation.
 export interface CursorGateTurn {
-    // Cursor's id for the agent this turn is running on, the correlation key the payload carries back.
+    // Cursor's id for this turn's agent; the correlation key the hook payload carries back.
     readonly conversationId: string;
-    // Capability credentials and persona values projected into this turn, never the daemon's ambient env.
+    // Capability credentials and persona values for this turn, never the daemon's ambient env.
     readonly cliEnv?: Record<string, string>;
     readonly gate: CommandGate;
     readonly push: (event: AgentEvent) => void;
 }
 
 export interface CursorHookService {
-    // Open the socket and write the hooks file + gate script. Idempotent; called once at boot.
+    // Opens the socket and writes the hooks file and gate script; idempotent, called once at boot.
     readonly start: () => Promise<void>;
-    // Register a live turn, and the function that retires it. Always retire in a `finally`: a turn left
-    // registered would keep answering for an agent id that is no longer running.
+    // Registers a live turn and returns its retire function; always call retire in a finally, or a gone turn keeps
+    // answering.
     readonly register: (turn: CursorGateTurn) => () => void;
-    // Whether the gate is actually wired, so a turn can say honestly whether its rules are in force.
+    // Whether the gate is actually wired, so a turn can report honestly whether its rules are enforced.
     readonly ready: () => boolean;
-    // The socket, the script that names it, and the hooks file that names the script: the three links the
-    // companion (invariant.ts) re-reads, because each is a path another daemon can overwrite after `ready`.
+    // The socket, the script naming it, and the hooks file naming the script: the three links invariant.ts re-reads,
+    // since another daemon can overwrite any of them after ready.
     readonly paths: () => { readonly socket: string; readonly script: string; readonly hooks: string };
     readonly close: () => Promise<void>;
 }
 
-/* The hook itself. Node rather than a shell script, for one reason that decides it: this has to speak HTTP
- * over a Unix socket and read a JSON body back, and `node` is the one interpreter guaranteed to be in the
- * image (the daemon is running on it), where `curl` is a build-time tool that need not survive into the
- * runtime layer.
- *
- * FAILURE POSTURE. Environment lookup fails empty; the command gate fails open, and every path does so
- * silently. The latter fires for every command Cursor runs anywhere on the machine, including a
- * `cursor-agent` the owner started by hand in their own terminal — which is the owner acting directly, not an
- * agent acting for them, and is exactly the case the daemon has no turn registered for. Blocking those would
- * make the sandbox's own agent policy break the owner's manual work. A deny only ever comes from the daemon
- * actually saying deny.
- *
- * `failClosed` in the hooks entry still guards the case this cannot: the script itself being unrunnable. */
+// Node, not a shell script: it speaks HTTP over a Unix socket, and node, unlike curl, is guaranteed to be in the image.
+// Every failure path answers allow silently, since an unregistered call is usually the owner's own manual run.
 const gateScript = (socketPath: string): string =>
     [
         `// managed by intentic: overwritten on daemon boot (src/cursor/cursor-hooks.ts).`,
@@ -126,19 +85,8 @@ const gateScript = (socketPath: string): string =>
         ``,
     ].join("\n");
 
-/* The hooks file. `sessionStart` projects the exact turn's capability environment into Cursor's session;
- * `beforeShellExecution` enforces the command rulebook. The remaining omissions are deliberate.
- *
- * `beforeMCPExecution` would gate the MCP tools, but those are the daemon's OWN servers on this runtime (the
- * browser stack and the host callbacks it registers), already fenced where they are built, so gating them here
- * would be asking the owner about a call the daemon made on their behalf. `beforeReadFile` and `afterFileEdit`
- * belong to a file-access policy this repo does not have, and wiring a hook with nothing behind it costs a
- * process per file read. `afterShellExecution` is the one that looks useful and is not: its return value is
- * discarded upstream, which is exactly why the `secrets` axis reads "none" for this runtime.
- *
- * `failClosed` because this is a security gate and the script above already handles every case where allowing
- * is right. What is left for it to catch is the script being unrunnable at all, and a sandbox whose gate
- * cannot start should not be running unreviewed commands. */
+// sessionStart projects the turn's env; beforeShellExecution enforces the rulebook. afterShellExecution is skipped, its
+// return value is discarded upstream, which is why the secrets axis reads "none" here.
 const hooksJson = (scriptPath: string): string =>
     `${JSON.stringify(
         {
@@ -152,8 +100,8 @@ const hooksJson = (scriptPath: string): string =>
         4,
     )}\n`;
 
-// What Cursor sends the hook. Only the three fields this reads are named; the payload carries more (model,
-// generation_id, workspace roots) and none of it changes the verdict.
+// Only the three fields this reads are named; the payload carries more (model, generation_id, workspace roots) and none
+// of it changes the verdict.
 interface GateRequest {
     readonly command?: unknown;
     readonly conversation_id?: unknown;
@@ -172,11 +120,9 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
     const turns = new Map<string, CursorGateTurn>();
     let server: Server | undefined;
 
-    /* WHICH TURN IS ASKING. The id is the honest answer and the fallback is not a guess dressed up as one:
-     * when the daemon has exactly one Cursor turn running, a consult that arrives unlabelled can only have
-     * come from it, and answering it correctly is better than waving it through. Two or more running, and
-     * there is nothing to reason from, so it goes through the allow path with a line in the log — a wrong
-     * card, shown to the wrong conversation, is worse than an unenforced command that gets logged. */
+    // With exactly one live turn, an unlabelled consult can only be from it. With two or more, there's nothing to
+    // reason from, so it allows and logs: a wrong card in the wrong conversation is worse than an unenforced, logged
+    // command.
     const turnFor = (conversationId: string | undefined): CursorGateTurn | undefined => {
         if (conversationId !== undefined) {
             const exact = turns.get(conversationId);
@@ -199,25 +145,21 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         if (command === undefined || turn === undefined) {
             return { permission: "allow" };
         }
-        // `enforcing` is the same short-circuit every vendor-gated runtime takes: a workspace with no rules and
-        // no taint pays nothing, not even the classification.
+        // Same short-circuit other vendor-gated runtimes take: no rules or taint costs nothing, not even classifying.
         if (!turn.gate.enforcing) {
             return { permission: "allow" };
         }
-        // Named for Cursor's own tool so the card, the transcript entry and the runtime agree on what ran.
+        // Named for Cursor's own tool, so the card, transcript and runtime all agree on what ran.
         const outcome = await consultWith(turn.gate, command, vendorSubject("Shell"), turn.push);
         if (outcome.allow) {
             return { permission: "allow" };
         }
-        // Both messages, and deliberately the same sentence: `agent_message` is what the model is told so it
-        // can choose something else, `user_message` is what the person sees. Splitting them would mean writing
-        // the refusal twice, and the gate already phrases it for a reader.
+        // Same sentence for both fields: the gate already phrases the refusal; splitting would mean writing it twice.
         return { permission: "deny", agent_message: outcome.reason, user_message: outcome.reason };
     };
 
-    /* Credentials never use the command gate's single-live-turn fallback. A sessionStart hook can also come
-     * from an owner's hand-run Cursor process, and handing that unrelated session the only Intentic turn's
-     * environment would cross the capability boundary. No exact id means no environment. */
+    // Never uses the gate's single-live-turn fallback: a sessionStart hook can come from an owner's own hand-run Cursor
+    // process, and handing it a turn's environment would cross the capability boundary. No exact id, no environment.
     const environmentFor = (payload: SessionStartRequest): { env: Record<string, string> } => {
         const conversationId = asString(payload.conversation_id);
         if (conversationId === undefined) {
@@ -232,13 +174,10 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                 return;
             }
             await mkdir(socketDir, { recursive: true });
-            // A socket left behind by a daemon that did not shut down cleanly would make listen() fail with
-            // EADDRINUSE forever. Nothing else owns this path, so removing it is safe and is the only way the
-            // gate comes back after a hard kill.
+            // An unclean shutdown can leave the socket behind, failing listen() forever; nothing else owns this path.
             await rm(socketPath, { force: true });
             const created = createServer((request, response) => {
-                // Who is listening: the companion's probe (invariant.ts), so a socket path this daemon believes
-                // is its own can be told from one a second daemon on the same auth root has since re-bound.
+                // Lets invariant.ts's probe tell this daemon's socket from one a second daemon has since re-bound.
                 if (request.url === "/identity") {
                     response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ pid: process.pid }));
                     return;
@@ -266,10 +205,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                                 .end(JSON.stringify(environmentFor(payload as SessionStartRequest)));
                             return;
                         }
-                        // A gate that throws must not leave Cursor waiting on a socket forever: the script's own
-                        // timeout would eventually fire, but the turn would have stalled for it. Answering
-                        // `allow` on an internal error matches the guard's own "never be the reason a turn
-                        // breaks" posture for this transport.
+                        // Answers allow on error, rather than stall the turn for the script's own timeout.
                         const verdict = await verdictFor(payload as GateRequest).catch((error: unknown) => {
                             logger.error({ err: error }, "cursor: command gate failed, allowing the command");
                             return { permission: "allow" as const };
@@ -285,16 +221,12 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
                     settle();
                 });
             });
-            // Owner-only: the socket IS the authority to answer a permission card, so anything that can write
-            // to it can allow a command the owner's rules would have denied.
+            // Owner-only: anything that can write to this socket can allow a command the owner's rules would deny.
             await chmod(socketPath, 0o600);
             server = created;
 
             await writeFile(scriptPath, gateScript(socketPath), { mode: 0o755 });
-            // The one write outside the sandbox's own state tree, and the reason is in the header: this path is
-            // Cursor's fixed enterprise layer and is not configurable. Best-effort, because a container without
-            // write access to /etc is a real deployment and the right answer there is a turn that says its
-            // rules are unenforced, not a daemon that refuses to boot.
+            // Best-effort: a container without /etc access is real; answer is unenforced rules, not refusing to boot.
             const hooksPath = enterpriseHooksPath();
             await mkdir(dirname(hooksPath), { recursive: true })
                 .then(() => writeFile(hooksPath, hooksJson(scriptPath), { mode: 0o644 }))

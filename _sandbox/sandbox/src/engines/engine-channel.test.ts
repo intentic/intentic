@@ -2,12 +2,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { blessedList, blessedListReadAt, forgetBlessedList, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import type { EngineState } from "./engine-store.js";
 
-/* WHICH VERSION A CHANNEL ASKS FOR, and what happens when the answers cannot be reached.
- *
- * Every read here is over the network in production, so every case stubs it: what is being pinned is the
- * policy, not npm. The one rule that matters more than the rest is the last pair — an unreachable list or
- * registry must leave a sandbox running exactly what it runs now, because an update mechanism that can break a
- * working sandbox by being offline is worse than no update mechanism at all. */
+// Pins channel-selection policy against stubbed network responses, not real npm; an unreachable list or registry must
+// leave a sandbox running its current version.
 
 const CLEAN: EngineState = { quarantined: [] };
 
@@ -50,18 +46,14 @@ test("the latest channel takes upstream's own newest", async () => {
     expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBe("0.3.260");
 });
 
-/* A version this daemon has already installed and refused is not offered again. Without this, an upstream that
- * publishes a broken `latest` produces a card asking for the same failed download forever, and a daily check
- * that keeps performing it. */
 test("a version already refused here is not offered again", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: "0.3.257" } } })));
     const refused: EngineState = { quarantined: [{ version: "0.3.257", reason: "would not launch", at: "2026-09-01T00:00:00.000Z" }] };
     expect(await targetVersion("claude", { kind: "blessed" }, refused)).toBeUndefined();
 });
 
-/* THE FLOOR IS STATED IN THE CLI'S VOCABULARY AND THE REGISTRY IN npm's. Anthropic ships sdk 0.3.N as Claude
- * Code 2.1.N, so a floor of 2.1.251 selects 0.3.251 — and the ordinary comparison, which would answer "no
- * published version is at or above 2.1.251", is exactly the bug this mapping exists to prevent. */
+// Claude Code ships sdk 0.3.N as CLI version 2.1.N, so a floor of 2.1.251 maps to npm version 0.3.251, not a numeric
+// comparison against 2.1.251.
 test("a CLI-versioned floor selects the lowest npm version that ships it", async () => {
     vi.stubGlobal(
         "fetch",
@@ -82,8 +74,6 @@ test("the smallest step is taken, not the newest release", async () => {
     expect(await lowestSatisfying("opencode", "1.2.0")).toBe("1.2.0");
 });
 
-/* A LIST THAT WAS READ ONCE STANDS WHEN GITHUB IS DOWN. The alternative — forgetting what is blessed because a
- * refresh failed — turns somebody else's outage into this sandbox falling off its channel. */
 test("a failed refresh keeps the last list that was read", async () => {
     const fetchMock = vi
         .fn()
@@ -102,8 +92,6 @@ test("an unreachable list is not a version, and says so by having no read time",
     expect(await targetVersion("claude", { kind: "blessed" }, CLEAN)).toBeUndefined();
 });
 
-// The conditional request is the reason this can run hourly on every sandbox without being rude: after the
-// first read the list is asked for with its etag and answers 304 nearly every time.
 test("a re-read is conditional on the etag it already holds", async () => {
     const fetchMock = vi
         .fn()
@@ -118,8 +106,7 @@ test("a re-read is conditional on the etag it already holds", async () => {
     expect((await blessedList())?.entries.claude?.blessed).toBe("0.3.257");
 });
 
-// A rewritten or half-published list reads as no list rather than as a version: whatever it would have named
-// is code every turn in the sandbox then runs.
+// A list that fails to parse reads as absent, not as a version to run.
 test("a list that does not parse is ignored", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: 257 } } })));
     expect(await blessedList()).toBeUndefined();

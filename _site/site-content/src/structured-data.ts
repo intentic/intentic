@@ -2,13 +2,9 @@ import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
 import { creatorRole } from "./about";
 import { APP_URL, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
 
-// One JSON-LD graph per page instead of a pile of standalone documents: every entity is declared once,
-// under a stable @id, and everything else points at it. Consumers (Google, and any LLM reading the page)
-// then resolve "the publisher" to the same node as "the organization" rather than reconciling two
-// differently-shaped copies of it.
-//
-// @ids are anchored on the canonical origin: SITE_URL + "/". So they match the <link rel="canonical">
-// exactly. A page's own nodes hang off its URL: <url>#webpage, <url>#breadcrumb, <url>#article.
+// One JSON-LD graph per page: each entity is declared once under a stable @id, so publisher and organization resolve to
+// the same node rather than duplicating. @ids anchor on SITE_URL + "/", matching <link rel="canonical">; a page's own
+// nodes hang off its URL (#webpage, #breadcrumb, #article).
 
 const ORIGIN = `${SITE_URL}/`;
 const ORG_ID = `${ORIGIN}#organization`;
@@ -41,10 +37,7 @@ export interface PageGraphOptions {
     breadcrumbs?: BreadcrumbEntry[];
     /** Renders the page as an article alongside its WebPage: for documentation. */
     article?: boolean;
-    /* WHICH KIND of article, when there is one. Documentation is a TechArticle and that is what almost
-     * every article page here is, so it stays the default. A blog post is a BlogPosting: dated, written by
-     * a person, part of a Blog — a different thing to a reference page that happens to be prose, and the
-     * type is how a search engine knows which of the two it has. */
+    // Which kind, when article is set: TechArticle by default, BlogPosting for a dated post.
     articleType?: "TechArticle" | "BlogPosting";
     /** Present ⇒ the page node is a FAQPage carrying these as its mainEntity. */
     faq?: FaqEntry[];
@@ -67,9 +60,8 @@ function organizationNode() {
     };
 }
 
-/* The founder, with the profiles that make him checkable. `sameAs` is the part that matters: it is how a
- * search or answer engine resolves this Person to one it already has a file on, which is the whole point
- * of a trust section: the claim is not "trust me", it is "here is who I am, go look". */
+// The founder, with profiles that make him checkable. `sameAs` lets a search or answer engine resolve this Person to
+// one it already knows.
 function founderNode() {
     return {
         "@type": "Person",
@@ -108,13 +100,9 @@ function breadcrumbNode(url: string, trail: BreadcrumbEntry[]) {
     };
 }
 
-/**
- * The page's own nodes, in graph form. FAQPage is a subclass of WebPage, so a page with questions is
- * typed FAQPage outright rather than carrying a second, near-duplicate node for the same URL.
- */
-/* The article a prose page also is, hung off that page's WebPage node rather than standing alone: the same
- * URL is one page with two aspects, not two documents. TechArticle for documentation, BlogPosting for a
- * post; everything else about the node is identical, which is why one function makes both. */
+/** FAQPage is a subclass of WebPage; a page with questions is typed FAQPage outright, not a duplicate node. */
+// The article aspect of a page, hung off its WebPage node: one URL is one page with two aspects, not two documents.
+// TechArticle or BlogPosting; everything else about the node is identical.
 function articleNode(opts: PageGraphOptions, url: string, pageId: string) {
     return {
         "@type": opts.articleType ?? "TechArticle",
@@ -176,9 +164,8 @@ export function buildPageGraph(opts: PageGraphOptions) {
 }
 
 /**
- * `/about/` as a ProfilePage about the founder. It is a distinct type from WebPage because the page's
- * subject is a person rather than the product, which is what tells an answer engine that the entity
- * behind this domain is the one already described at those `sameAs` URLs.
+ * /about/ as a ProfilePage, not a WebPage: its subject is the founder, which tells an answer engine the entity behind
+ * this domain is the one at `sameAs`.
  */
 export function buildProfilePageSchema(path: string) {
     return {
@@ -207,8 +194,7 @@ export function buildSoftwareAppSchema() {
             availability: "https://schema.org/InStock",
             description: "Free and MIT open source: unlimited sandboxes, with every capability, the agent and automations included.",
         },
-        // Ordered the way the landing page argues: run many in parallel, on your hardware, nothing
-        // landing unread, then the reasons those agents are any good.
+        // Ordered like the landing page argues: parallel, your hardware, nothing lands unread, then why it's good.
         featureList: [
             "Run a fleet of coding agents in parallel, one isolated git worktree each",
             "One Docker sandbox for many agents, on hardware you choose",

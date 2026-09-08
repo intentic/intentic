@@ -12,14 +12,8 @@ import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import { createPrepushCheck } from "./prepush.js";
 
-/* The check touches sandboxSettings, workspace, logger, the terminal runner and the two bookkeeping stores;
- * `unstubbed` keeps the fake that small. Nothing is persisted: the run lives in the returned object.
- *
- * Every test here says what it wants as a COMMAND and a TIMEOUT, which is what a pre-push check is about, and
- * the fixture turns that into the rule the daemon actually reads (`rulesOf`). Writing rule literals in thirty
- * places would have buried each test's actual subject under four lines of scaffolding, and the settings the
- * fake hands back are still the schema's own defaults with the rule table on top, so nothing here can pass off
- * a two-key subset as the whole settings object.  */
+// Fixtures use `unstubbed` so the fake is only what a test touches; nothing persists. Tests state a command and
+// timeout; rulesOf turns that into the rule table, layered onto the schema's real defaults.
 const SETTINGS = SandboxSettingsSchema.parse({});
 
 interface Knobs {
@@ -29,8 +23,7 @@ interface Knobs {
 
 const DEFAULTS: Knobs = { prepushCommand: "exit 0", prepushTimeoutMs: 60_000 };
 
-// An empty command means the check is OFF, and off is an EMPTY TABLE rather than a rule with a blank command:
-// the same thing clearing the settings row does.
+// An empty command means off; off is an empty rule table, the same as clearing the settings row.
 const rulesOf = ({ prepushCommand, prepushTimeoutMs }: Knobs): SandboxSettings["rules"] =>
     prepushCommand === ""
         ? []
@@ -46,24 +39,14 @@ const rulesOf = ({ prepushCommand, prepushTimeoutMs }: Knobs): SandboxSettings["
 
 const execFileAsync = promisify(execFile);
 
-/* THE RUNNER SEAM. terminal-run.ts owns the shell, the tmux window and the kill, and bin/tmux-run.test.sh owns
- * proving that much works, so what is left under test here is the DECISIONS this module makes about a run. The
- * stand-in is therefore a real `bash -c` child holding the runner's contract exactly: a non-zero exit is a
- * RESULT, while an abort or a command that could not be started at all THROWS. It merges the two streams, because
- * what the real runner hands back is a capture of the PANE, and a suite's failure summary is as likely to arrive
- * on stderr as on stdout.
- *
- * The real runner is deliberately not used: it decides `visible` by looking for the image's tmux wrapper, so on a
- * machine that has one these tests would open real tmux sessions, and on a machine that hasn't they would cover
- * only the other half of the module. */
+// A real `bash -c` child matching the runner's contract: non-zero exit is a result; an abort or unstartable command
+// throws. Not the real runner, whose `visible` depends on the machine having a tmux wrapper.
 const fakeRunner = (visible: boolean, count: () => void, starts = true): TerminalRunner =>
     unstubbed<TerminalRunner>("terminalRun", {
         visible,
         tryRun: async (_session, command, options) => {
             count();
-            // The real runner says so as the command leaves its queue and its tmux window is made, which is
-            // what the check waits for before it will name a terminal to anyone. `starts: false` stands for the
-            // window before that: the command is the daemon's business, but it is in no terminal yet.
+            // onStarted fires once the tmux window exists; `starts: false` means queued but not yet in a terminal.
             if (starts) {
                 options.onStarted?.();
             }
@@ -86,16 +69,14 @@ const fakeRunner = (visible: boolean, count: () => void, starts = true): Termina
 interface Fakes {
     readonly services: Services;
     readonly settings: { current: SandboxSettings };
-    // Every away-notification the check sent. A verdict the user is not standing in front of is the whole
-    // reason this subsystem is allowed to interrupt anyone, so which runs send one is worth asserting.
+    // Every away-notification the check sent; asserting which runs send one is the point of this subsystem.
     readonly notified: () => readonly string[];
-    // How many times the command has actually run: the "one suite at a time" assertion counts executions, not
-    // results, because refusing a second run is precisely a claim about how often one was started.
+    // Executions, not results; the one-suite-at-a-time claim is about how often a run started.
     readonly runs: () => number;
 }
 
-// `visible` stands in for the sandbox having the tmux wrapper, and `root` for the working tree the check runs on:
-// a `root` that does not exist is how the one genuinely unstartable command below is written.
+// `visible` stands in for the tmux wrapper; `root` for the working tree, and a missing one is how the
+// unstartable-command test is written.
 const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string; starts?: boolean } = {}): Fakes => {
     const { visible = true, starts = true, root = mkdtempSync(join(tmpdir(), "prepush-")), ...knobs } = over;
     const settings = { current: { ...SETTINGS, rules: rulesOf({ ...DEFAULTS, ...knobs }) } };
@@ -118,24 +99,19 @@ const fakeServices = (over: Partial<Knobs> & { visible?: boolean; root?: string;
             },
             starts,
         ),
-        // Both are fire-and-forget bookkeeping the check must never be blocked by, so the fakes only have to
-        // exist. What they RECORD is asserted where it is the subject (rules/rules.test.ts, and the feed's own
-        // tests) rather than in every run this file drives.
+        // Fire-and-forget bookkeeping the check must never block on; the fakes only need to exist.
         ruleFirings: unstubbed<Services["ruleFirings"]>("ruleFirings", { stamp: async () => {} }),
         activity: unstubbed<Services["activity"]>("activity", { append: async () => {} }),
     });
     return { services, settings, runs: () => runs, notified: () => notified };
 };
 
-/* REAL timers throughout: deliberately, and it is worth saying why rather than leaving the next person to
- * rediscover it. This drives a real child process, and faking timers around one splits the clock from the event
- * loop: `advanceTimersByTime` fast-forwards the watchdog but a spawned shell still exits on the real one, so the
- * fake-timer version of these tests raced its own children AND poisoned the tests after it. */
+// Real timers throughout: this drives a real child process, and faking them would split the clock from the event loop
+// the child actually runs on.
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/* THE RACE THE ROUTE'S `await` EXISTS FOR: the caller polls `state` the instant `run` resolves, so `run` must
- * not resolve before the run is visible. Resolving early handed that first poll an `idle`, which the push dialog
- * reads as "already settled" and closes itself over a check it never waited for. */
+// The caller polls `state` the instant `run` resolves; resolving early would hand it a stale `idle`, and the push
+// dialog would treat the check as already settled.
 test("run resolves only once the run is visible to state", async () => {
     const { services } = fakeServices({ prepushCommand: "sleep 2; exit 0" });
     const check = createPrepushCheck(services);
@@ -143,25 +119,18 @@ test("run resolves only once the run is visible to state", async () => {
     expect((await check.state()).status).toBe("running");
 });
 
-/* THE OUTPUT IS THE TERMINAL'S. `state` is also what tells the browser WHERE to watch, so a running check names
- * its session: a panel opening on the verdict would be a terminal shown to a user who no longer needs one.
- * Nothing accumulates here in the meantime: a dialog re-printing a captured tail is exactly the surface this
- * replaced. */
+// `state` also tells the browser where to watch; a running check names its session but accumulates no output.
 test("a running check names its terminal and carries no output of its own", async () => {
     const { services } = fakeServices({ prepushCommand: "echo working; sleep 2" });
     const check = createPrepushCheck(services);
     await check.run();
-    // Polled rather than read once: the memory gate holds the spawn behind a headroom reading, so the
-    // terminal is named a beat after the run is first visible — which is exactly how the dialog consumes it.
+    // Polled, not read once: a memory gate delays the spawn, so the terminal name lags visibility by a beat.
     await vi.waitFor(async () => expect((await check.state()).session).toBe(CHECKS_SESSION), SETTLES);
     expect((await check.state()).output).toBe("");
 });
 
-/* THE REPORTED BUG. `session` is not a label: it is the instruction the app acts on by opening its terminal
- * panel on that name, immediately. Published before the command was in a terminal (it can sit in the session's
- * queue behind another check), it sent the panel to a tmux session that did not exist: a spinner over an empty
- * panel, while the suite it named ran somewhere the user never got shown. So a check that has not reached its
- * terminal names none, and the app has nothing to open until there is something to see. */
+// `session` is an instruction: naming one opens the app's terminal panel on it immediately. Naming a session before its
+// tmux window exists would open an empty panel.
 test("a check that has not reached its terminal yet names none", async () => {
     const { services } = fakeServices({ prepushCommand: "sleep 2", starts: false });
     const check = createPrepushCheck(services);
@@ -171,8 +140,7 @@ test("a check that has not reached its terminal yet names none", async () => {
     expect(state.session).toBeUndefined();
 });
 
-// No tmux wrapper ⇒ the runner falls back to an invisible shell, so there is no tab to send anyone to. Naming one
-// anyway would send the browser after a session that is never going to be listed.
+// No tmux wrapper means an invisible shell; naming a session would send the browser somewhere never listed.
 test("a sandbox without the tmux wrapper names no terminal", async () => {
     const { services } = fakeServices({ prepushCommand: "exit 0", visible: false });
     const check = createPrepushCheck(services);
@@ -189,7 +157,7 @@ test("a zero exit is a passed result", async () => {
     expect((await check.state()).exitCode).toBe(0);
 });
 
-// The output a settled run keeps has ONE reader: the fix the dialog proposes when the suite goes red.
+// The output a settled run keeps has one reader: the fix-turn prompt the dialog proposes on red.
 test("a non-zero exit is a failed result carrying the output", async () => {
     const { services } = fakeServices({ prepushCommand: "echo boom >&2; exit 3" });
     const check = createPrepushCheck(services);
@@ -201,10 +169,8 @@ test("a non-zero exit is a failed result carrying the output", async () => {
     expect(state.output).toContain("boom");
 });
 
-/* The suite printed for a terminal: a test runner colours its verdict and rewrites its progress line, and the
- * output's one reader is a PROMPT: a message the user edits in the composer and a model reads. Escape codes
- * quoted into that arrive as `[2m` litter with the failure buried in it, so what the run keeps is what the
- * screen showed. */
+// The output's one reader is a prompt a model reads; raw escape codes (`[2m`) would litter it, so what's kept is what
+// the screen showed, not the terminal's own bytes.
 test("the output a failure carries is plain text, not the terminal's own bytes", async () => {
     const { services } = fakeServices({ prepushCommand: String.raw`printf '\033[31mboom\033[0m\n1/2\r2/2 done\n'; exit 1` });
     const check = createPrepushCheck(services);
@@ -214,8 +180,7 @@ test("the output a failure carries is plain text, not the terminal's own bytes",
     expect(output).toBe("boom\n2/2 done\n");
 });
 
-// The cap is what keeps a fix turn seeded from a red run about fixing rather than scrolling: the whole of the
-// output is in the pane (and its log) for anyone who wants it.
+// The cap keeps a fix turn about fixing, not scrolling; the full output stays in the pane and its log.
 test("the output a failure carries is capped to its tail", async () => {
     const { services } = fakeServices({ prepushCommand: "yes 0123456789 | head -n 5000; exit 1" });
     const check = createPrepushCheck(services);
@@ -223,17 +188,15 @@ test("the output a failure carries is capped to its tail", async () => {
     await vi.waitFor(async () => expect((await check.state()).status).toBe("failed"), SETTLES);
     const { output } = await check.state();
     expect(output.length).toBe(24_000);
-    // The TAIL, so the last thing the command printed is the last thing the prompt shows.
+    // The tail: the last thing the command printed is the last thing the prompt shows.
     expect(output.endsWith("0123456789\n")).toBe(true);
 });
 
-// Two suites at once would fight over the same tree, the same ports and the same CPU, and the second would
-// answer about a tree the first is still changing.
+// Two suites at once would fight over the same tree, ports, and CPU.
 test("a second run while one is going starts nothing", async () => {
     const { services, runs } = fakeServices({ prepushCommand: "sleep 1; exit 0" });
     const check = createPrepushCheck(services);
-    // Two in the SAME TICK, which is the case `running` alone cannot guard: reading the settings is an await, so
-    // both calls would find no run in flight and start a suite each.
+    // Same-tick calls both see no run in flight (reading settings awaits), so `running` alone can't guard this.
     await Promise.all([check.run(), check.run()]);
     await vi.waitFor(async () => expect((await check.state()).status).toBe("running"), SETTLES);
     await check.run();
@@ -241,12 +204,10 @@ test("a second run while one is going starts nothing", async () => {
     expect(runs()).toBe(1);
 });
 
-/* The guard this module exists for: a check that outruns its ceiling must be LOUD, never a pass and never a
- * silent skip, and never filed as the user cancelling, which is the confusion the two flags exist to prevent.
- * Both kills are the same abort, so this module is the only thing that can say which of them happened. */
+// Both a timeout and a cancel kill the same abort; only this module knows which happened, so it must say so rather than
+// reading either as the other.
 test("a check that outruns the timeout is failed and timedOut, never cancelled", async () => {
-    // Below the schema's own 60s floor, which only guards what a user can type: the fake reads the field
-    // directly, and a real ceiling would make this test take a minute to assert a branch that takes 150ms.
+    // Below the schema's 60s floor (that only bounds user input); the fake reads the field directly.
     const { services } = fakeServices({ prepushCommand: "sleep 30", prepushTimeoutMs: 150 });
     const check = createPrepushCheck(services);
     await check.run();
@@ -254,8 +215,7 @@ test("a check that outruns the timeout is failed and timedOut, never cancelled",
     expect((await check.state()).timedOut).toBe(true);
 });
 
-// A cancel must not read as a failure: nothing was learned about the code, and a "tests failed" notice over a
-// run the user stopped themselves would be the check lying about its own evidence.
+// A cancel isn't a failure: nothing was learned about the code the user chose to stop.
 test("a cancelled run is cancelled, not failed", async () => {
     const { services } = fakeServices({ prepushCommand: "sleep 30" });
     const check = createPrepushCheck(services);
@@ -265,9 +225,8 @@ test("a cancelled run is cancelled, not failed", async () => {
     await vi.waitFor(async () => expect((await check.state()).status).toBe("cancelled"), SETTLES);
 });
 
-/* WHO GETS INTERRUPTED. The user is expected to start a push and go and do something else, so a red verdict has
- * to travel to them; the two outcomes that leave a push standing unsent are the only ones that qualify. A pass
- * is not news: the push simply goes, and a cancel was their own hand on the button. */
+// Only outcomes that leave the push unsent are worth interrupting for; a pass just goes through, and a cancel was the
+// user's own hand.
 test("a red verdict notifies devices; a pass and a cancel say nothing", async () => {
     const red = fakeServices({ prepushCommand: "exit 1" });
     const redCheck = createPrepushCheck(red.services);
@@ -290,8 +249,7 @@ test("a red verdict notifies devices; a pass and a cancel say nothing", async ()
     expect(stopped.notified()).toEqual([]);
 });
 
-// A suite killed by its own ceiling is the loudest case there is: the push is held on a check that never
-// finished, and the wording has to say that rather than "failed", which would send the user hunting a test.
+// A timeout must say so, not 'failed', or the user goes hunting a test that never ran.
 test("a timed-out check notifies as a timeout", async () => {
     const { services, notified } = fakeServices({ prepushCommand: "sleep 30", prepushTimeoutMs: 150 });
     const check = createPrepushCheck(services);
@@ -300,8 +258,7 @@ test("a timed-out check notifies as a timeout", async () => {
     expect(notified()).toEqual(["Checks timed out"]);
 });
 
-// A command the shell cannot find is the shell's own 127: a FAILED run whose output names the problem, which is
-// what keeps it distinguishable from the `error` below.
+// A command the shell can't find is the shell's own 127: a failed run, distinct from the `error` case below.
 test("a command the shell cannot find is a failure whose output says so", async () => {
     const { services } = fakeServices({ prepushCommand: "definitely-not-a-real-binary-xyz" });
     const check = createPrepushCheck(services);
@@ -312,9 +269,8 @@ test("a command the shell cannot find is a failure whose output says so", async 
     expect(state.output).toContain("not found");
 });
 
-/* An unstartable command is `error`, not `failed`, and the distinction is the whole reason the status exists: a
- * failed check means the code is broken and an agent can fix it, while this means the SETTING, or the tree it was
- * pointed at: is wrong. Seeding a fix turn from it would send an agent hunting a bug that isn't there. */
+// `failed` means the code is broken and fixable; `error` means the setting or tree is wrong, so seeding a fix turn from
+// it would send an agent hunting a bug that isn't there.
 test("a command that could not be started at all is an error, not a failure", async () => {
     const { services } = fakeServices({ prepushCommand: "exit 0", root: "/definitely/not/a/directory" });
     const check = createPrepushCheck(services);
@@ -322,12 +278,11 @@ test("a command that could not be started at all is an error, not a failure", as
     await vi.waitFor(async () => expect((await check.state()).status).not.toBe("running"), SETTLES);
     const state = await check.state();
     expect(state.status).toBe("error");
-    // It names the command, because what is broken is the thing the user typed rather than anything it ran.
+    // Names the command: what's broken is what the user typed, not anything it ran.
     expect(state.output).toContain("exit 0");
 });
 
-// Clearing the command turns the check off, and a result from before that must not go on gating a push: the
-// user would be answering a dialog about a check nobody can run any more.
+// Clearing the command turns the check off; a stale result must not keep gating a push.
 test("clearing the command reports idle, whatever the last run concluded", async () => {
     const { services, settings } = fakeServices({ prepushCommand: "exit 1" });
     const check = createPrepushCheck(services);
@@ -337,7 +292,7 @@ test("clearing the command reports idle, whatever the last run concluded", async
     expect(await check.state()).toEqual({ status: "idle", command: "", output: "" });
 });
 
-// The same race from the other side: the setting was cleared between the click and the request reaching here.
+// The setting was cleared between the click and the request reaching here.
 test("run with no command configured starts nothing", async () => {
     const { services, runs } = fakeServices({ prepushCommand: "" });
     const check = createPrepushCheck(services);

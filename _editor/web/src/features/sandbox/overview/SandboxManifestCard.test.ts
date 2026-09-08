@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-//
-// jsdom because the subject is HOW MUCH IS ON SCREEN, and this card has been wrong about that twice: it opened
-// with three sentences of preamble before naming the file, and it carried a "1 to fix" badge — a count of a list
-// standing beside the list, alarming enough to notice and too vague to act on. Both read as fine in the source
-// and as a block of amber text on the screen, which is what a rendered assertion is for.
+// Pins that a collapsed row shows only a file name and a status tag, no preamble or complaint count.
+// jsdom: mounts the component tree and reads rendered text.
 import { STATE_DIR } from "@intentic/constants";
 import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
@@ -52,8 +49,7 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-// The row's own chevron. Every assertion about the opened state goes through it, because the diagnosis and the
-// buttons are deliberately behind it: a collapsed row is a name and a tag and nothing else.
+// Opens the row via its chevron; the diagnosis and buttons only exist once it's open.
 const open = async (el: HTMLElement): Promise<void> => {
     el.querySelector<HTMLElement>(`[aria-expanded="false"]`)?.click();
     await nextTick();
@@ -69,8 +65,6 @@ it(`says nothing while every manifest reads clean`, () => {
 it(`is a name and a tag until somebody asks for more`, () => {
     const text = mount(SKEW).textContent ?? ``;
 
-    // The whole default state: which file, how bad. Not the directory it shares with every other reported
-    // manifest, not the diagnosis, not the instruction, and not a count of complaints.
     expect(text).toContain(`settings.json`);
     expect(text).toContain(`using defaults`);
     expect(text).not.toContain(`${STATE_DIR}/config/settings.json`);
@@ -93,15 +87,11 @@ it(`opens the file from its name, without opening the row`, () => {
     const el = mount([{ kind: `unknownKey`, detail: `skils`, suggestion: `skills` }]);
     const name = [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(`settings.json`));
     name?.click();
-    // The remaining way out for everything a button can't do: the file, in the editor. The full path is what
-    // gets opened, and what a hover reports.
     expect(opened).toHaveBeenCalledWith(SETTINGS);
     expect(name?.title).toBe(SETTINGS);
 });
 
 it(`keeps the repair behind the chevron, like everything else on the row`, () => {
-    // The buttons are detail. A card that showed them collapsed would be offering an irreversible-looking
-    // action to somebody who has not yet read which key it is about.
     const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
     expect(pressable(el, `Remove it`)).toBeUndefined();
 });
@@ -111,7 +101,6 @@ it(`takes the stray key out from the row itself`, async () => {
     await open(el);
 
     pressable(el, `Remove it`)?.click();
-    // No `to`: a removal, of exactly the key the line named, in the file the row is titled with.
     expect(repair).toHaveBeenCalledWith({ path: SETTINGS, key: `contextShelf` });
 });
 
@@ -124,8 +113,6 @@ it(`sends the guess as a rename, carrying the value across`, async () => {
 });
 
 it(`says why a repair did not happen, where it was asked for`, async () => {
-    // The daemon's refusals are races with the reader's own editor ("already fixed"), and a button that
-    // visibly does nothing is the exact failure this card exists to report.
     repair.mockRejectedValueOnce(new Error(`"contextShelf" is not in .intentic/config/settings.json any more`));
     const el = mount([{ kind: `unknownKey`, detail: `contextShelf` }]);
     await open(el);
@@ -143,8 +130,6 @@ it(`says nothing at all when a repair works`, async () => {
     pressable(el, `Remove it`)?.click();
     await nextTick();
     await nextTick();
-    // The row going away IS the confirmation: the write moves the file, the watcher invalidates, the daemon
-    // re-reads. A success banner would announce something the reader is already watching happen.
     expect(repair).toHaveBeenCalledTimes(1);
     expect(el.textContent).not.toMatch(/couldn't/i);
 });

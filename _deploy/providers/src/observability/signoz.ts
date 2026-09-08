@@ -7,9 +7,7 @@ const signozSchema = serviceSchema.extend({
     // The dashboard admin SignOz authenticates by email; intentic generates the password and reports it.
     adminUser: z.string(),
     adminPassword: z.string(),
-    // The fully-pinned images for the stack, inlined into the compose YAML so a bump recreates the changed
-    // service on the next apply; read observes each running image and diff drives it. The telemetrystore
-    // migrator runs from the otel-collector image, so it has no pin of its own.
+    // Fully-pinned images inlined into compose.yaml so a bump recreates on apply; the migrator reuses otelImage.
     clickhouseImage: z.string(),
     signozImage: z.string(),
     otelImage: z.string(),
@@ -18,22 +16,16 @@ const signozSchema = serviceSchema.extend({
 type SignozInputs = z.infer<typeof signozSchema>;
 
 const UI_PORT = 8080;
-// OTLP ingest published on the host: gRPC 4317 + HTTP 4318. Apps reach the HTTP port through the service's
-// `otlpEndpoint` output (http://<internalIp>:4318); it is host-internal, never tunnel-routed.
+// OTLP ingest on the host (gRPC 4317, HTTP 4318); reached via `otlpEndpoint`, host-internal, never tunneled.
 const OTLP_GRPC_PORT = 4317;
 const OTLP_HTTP_PORT = 4318;
-// The histogram-quantile UDF release the init step fetches into ClickHouse's user_scripts (SigNoz needs it
-// for percentile queries); pinned to the version SigNoz's v0.129 reference uses.
+// histogram-quantile UDF release the init step fetches; pinned to SigNoz's v0.129 reference version.
 const HISTOGRAM_QUANTILE_VERSION = "v0.0.1";
 
 const internalUrl = (parsed: SignozInputs): string => `http://${parsed.internalIp}:${UI_PORT}`;
 
-// The SigNoz v0.129 reference stack, faithfully reproduced: a separate ZooKeeper for ClickHouse coordination,
-// an init step that fetches the histogram-quantile UDF, ClickHouse (stock image + a config.d cluster drop-in
-// + the UDF function file), the telemetrystore migrator (bootstrap + sync + async, from the otel image), the
-// SigNoz server, and the OTel collector. Image refs are the pinned inputs inlined into the YAML so a bump
-// recreates the changed service on the next `up -d`. Per-service config + the JWT secret are mounted from
-// the files ensureFiles writes beside it.
+// SigNoz v0.129 reference stack: ZooKeeper, ClickHouse (+ config.d drop-in + UDF), the telemetrystore migrator,
+// the SigNoz server, and the OTel collector. Image refs are inlined so a bump recreates the service on `up -d`.
 const composeYaml = (parsed: SignozInputs, id: string, hash: string): string =>
     [
         "services:",
@@ -124,8 +116,8 @@ const composeYaml = (parsed: SignozInputs, id: string, hash: string): string =>
         "",
     ].join("\n");
 
-// Downloads the histogram-quantile UDF binary for the host architecture into ClickHouse's user_scripts dir.
-// A mounted file (not a compose command), so normal `$( )` works without compose `$$` escaping.
+// Downloads the histogram-quantile UDF binary for the host architecture; a mounted file, so `$( )` needs no compose
+// `$$` escaping.
 const initScript = (): string =>
     [
         "#!/bin/bash",
@@ -142,9 +134,8 @@ const initScript = (): string =>
         "",
     ].join("\n");
 
-// A config.d drop-in over the stock ClickHouse image: the ZooKeeper coordinates, the single-shard "cluster"
-// SigNoz's migrator targets (with macros for the Replicated tables), and the UDF wiring (user_scripts path +
-// the custom-function file), so the histogramQuantile function loads regardless of the image's default glob.
+// config.d drop-in over stock ClickHouse: ZooKeeper coordinates, the single-shard "cluster" the migrator targets,
+// and UDF wiring, so histogramQuantile loads regardless of the image's default glob.
 const clusterXml = (): string =>
     [
         "<clickhouse>",
@@ -180,8 +171,8 @@ const customFunctionXml = (): string =>
 // The OpAMP manager endpoint the collector connects to (SigNoz serves it on 4320).
 const opampConfig = (): string => "server_endpoint: ws://signoz:4320/v1/opamp\n";
 
-// The OTel collector pipeline config, verbatim from SigNoz's v0.129 reference (deploy/docker/
-// otel-collector-config.yaml), the exporters/connectors the v0.144 collector + the SigNoz server expect.
+// OTel collector pipeline config, verbatim from SigNoz's v0.129 reference; exporters/connectors the collector and
+// server expect.
 const otelCollectorConfig = (): string =>
     [
         "connectors:",
@@ -302,8 +293,8 @@ const otelCollectorConfig = (): string =>
         "",
     ].join("\n");
 
-// Seed the dashboard's first admin via SigNoz's register API, FROM THE HOST over SSH. Best-effort and
-// idempotent: once a user exists SigNoz rejects re-registration, which we log and ignore rather than fail.
+// Seeds the dashboard's first admin via SigNoz's register API from the host; logs and ignores a rejection once one
+// exists.
 const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (message: string) => void): Promise<void> => {
     const body = JSON.stringify({ name: "intentic", orgName: "intentic", email: parsed.adminUser, password: parsed.adminPassword });
     const result = await session.exec(
@@ -314,17 +305,9 @@ const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (messag
     }
 };
 
-/* SigNoz (observability) as a co-located ZooKeeper + ClickHouse + migrator + query/UI + OTLP-collector compose
- * stack on the host, mirroring SigNoz's v0.129 reference. read returns the resource only when the UI is up (so
- * a noop re-derives the deterministic url/internalUrl/otlpEndpoint) and surfaces the running images; diff
- * recreates a service on an image-pin bump. apply is idempotent: `docker compose up -d` reconciles the stack,
- * the named volumes persist, and the admin seed tolerates an existing account.
- *
- * The skeleton is the catalog's own factory. This provider predated it and carried a hand-written copy, which
- * is how it ended up the one stack whose config writes were unchecked (a failed `cat >` surfaced later as
- * compose's "no such file") — the two things it needed that the factory lacked were a second output and a
- * post-health hook, and both are now knobs the whole catalog can use.
- */
+// SigNoz as a co-located ZooKeeper + ClickHouse + migrator + UI + OTel-collector compose stack, mirroring SigNoz's
+// v0.129 reference. `read` gates on the UI being up; `diff` recreates on an image-pin bump; the admin seed tolerates an
+// existing account.
 export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createComposeServiceProvider(
         {
@@ -341,13 +324,11 @@ export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provi
                 "otel-collector-config.yaml": otelCollectorConfig(),
                 "otel-collector-opamp-config.yaml": opampConfig(),
             }),
-            // Generated host-side and write-once: it signs the dashboard's sessions, so re-keying it would log
-            // every user out on each apply.
+            // Generated host-side and write-once; re-keying it would log every dashboard user out.
             env: () => [{ key: "SIGNOZ_TOKENIZER_JWT_SECRET" }],
             // Apps send telemetry straight to the host-internal OTLP port rather than through the tunnel.
             extraOutputs: (parsed) => ({ otlpEndpoint: `http://${parsed.internalIp}:${OTLP_HTTP_PORT}` }),
-            // The one-shot init-clickhouse + telemetrystore-migrator exit, so they never show as running; the
-            // migrator's image tracks the otel collector's, so diffing the collector covers it.
+            // init-clickhouse and the migrator exit, so they're excluded; the migrator's image tracks otel-collector's.
             images: (parsed) => ({
                 zookeeper: parsed.zookeeperImage,
                 clickhouse: parsed.clickhouseImage,

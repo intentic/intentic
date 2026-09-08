@@ -4,26 +4,10 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { RunEvent } from "../desktop";
 import type { ProgressView } from "../setupPlan";
 
-/* WHAT AN INSTALL LOOKS LIKE WHILE IT RUNS: the plan, where in it we are, and how much is left.
- *
- * This replaced a single line and a disclosure: the last thing the script said, and the log behind it. That
- * is enough to READ a run and nothing like enough to WAIT through one, because the two questions somebody
- * sitting in front of a four-minute image pull actually has (is it stuck, and how long) were both
- * unanswerable from it. An install is the one screen in this app where the user has nothing to do but
- * decide whether to keep waiting, and every affordance a real installer has exists to make that decision
- * for them.
- *
- * So: the whole plan is drawn before anything starts (setupPlan.ts), the current step names itself and
- * carries the script's own words underneath, and the bar is weighted by how long each step takes rather than
- * how many there are: a step counter alone would sit at "6 of 9" through the longest part of the install
- * and then finish three steps in four seconds.
- *
- * The log is still here, still behind a disclosure, and still opens ITSELF on failure: a run that stopped has
- * said why on stderr, and hiding that behind a click is how a stuck user ends up with nothing to paste into a
- * support thread. */
+// Shows the full plan up front (setupPlan.ts), the current step's own detail, and a bar weighted by each step's
+// typical duration rather than step count. The log stays collapsed but opens itself on failure.
 
-/* `awaiting` is the run that stopped ON PURPOSE, waiting for the requirements card above to be answered. The
- * card owns that conversation; this component only needs to know not to call it a crash. */
+// `awaiting` is a deliberate stop for the requirements card above; this component just must not call it a crash.
 const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; awaiting?: boolean }>();
 
 const open = ref(false);
@@ -31,31 +15,15 @@ const logEnd = ref<HTMLElement | undefined>(undefined);
 
 const lines = computed(() => props.events.flatMap((event) => (event.kind === `line` ? [event] : [])));
 const exit = computed(() => props.events.find((event) => event.kind === `exit`));
-/* A NON-ZERO EXIT IS NOT AUTOMATICALLY A FAILURE, and this component was the last place that still thought so.
- *
- * The first pass of every Windows install that needs anything ends non-zero by design — it reports what it
- * would change and stops. App.vue already knows that and withholds the error box; here the exit code alone
- * drove a `Stopped` heading and a danger-red bar. The result was the screen calling its own two-pass consent
- * flow a crash: red bar, "Stopped", 4%, directly above a card politely asking for one click. */
+// A non-zero exit isn't automatically a failure: a Windows install's first pass exits non-zero by design (it
+// reports what it would change and stops), which App.vue also accounts for.
 const failed = computed(() => !props.awaiting && exit.value?.kind === `exit` && !exit.value.ok);
 
-/* PowerShell's ERROR RECORD, which is four lines of furniture around one line of meaning:
- *
- *     connect.ps1 : could not redeem the setup code at … (405 Method Not Allowed) - refresh …   ← the message
- *     At C:\…\connect.ps1:160 char:73
- *     + ... redeem the setup code at $PlatformUrl ($($_.Exception.Message)) - ref ...
- *     +                              ~~~~~~~~~~~~~~~~~~~~~
- *         + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
- *         + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,connect.ps1
- *
- * The source excerpt and the caret are for someone debugging the script; CategoryInfo and
- * FullyQualifiedErrorId name the .NET exception type, which is `WriteErrorException` for every error the
- * script raises on purpose and so says nothing about this one. Left in, they are the LAST lines, so a
- * "show me the end of stderr" rule shows the four that cannot help and hides the one that can, which is
- * exactly what a user meets on a failed setup. */
+// Filters PowerShell's error-record furniture (source excerpt, CategoryInfo, FullyQualifiedErrorId) so a "last N
+// lines of stderr" rule shows the actual message, not boilerplate.
 const isPowerShellDecoration = (text: string): boolean => /^\s*\+ /.test(text) || /^At .+:\d+ char:\d+$/.test(text);
 
-// The failure's own words. stderr carries what went wrong; the checklist above already says where.
+// Shows only the failure's own words: what went wrong, not where (the checklist covers that).
 const failure = computed(() =>
     lines.value
         .filter((line) => line.stream === `stderr` && line.text.trim() !== `` && !isPowerShellDecoration(line.text))
@@ -64,8 +32,7 @@ const failure = computed(() =>
         .join(`\n`),
 );
 
-// `immediate`, so a card that MOUNTS on a run that already failed opens the log too: closing the overlay
-// and coming back is the ordinary way to arrive at one, and it is exactly the reader who needs the detail.
+// immediate: a card mounting on an already-failed run opens the log too, not just future failures.
 watch(
     failed,
     (value) => {
@@ -89,13 +56,10 @@ watch(
 
 <template>
     <div class="flex flex-col gap-3">
-        <!-- THE BAR, AND THE TWO NUMBERS EITHER SIDE OF IT. The percentage answers "is it moving", the
-             estimate answers "should I wait": the two questions the old single line could not. -->
+        <!-- Percentage answers "is it moving"; the estimate answers "should I wait". -->
         <div class="flex flex-col gap-1.5">
             <div class="flex items-baseline gap-2 text-2xs">
-                <!-- Three headings, not two: a run that stopped for an ANSWER is neither working nor broken,
-                     and the estimate is meaningless while nothing is running, so it goes rather than counting
-                     down against a clock the user controls. -->
+                <!-- Three headings, not two: a run awaiting an answer is neither working nor broken. -->
                 <span class="flex-1 font-medium text-content">{{
                     awaiting ? `Waiting for you` : failed ? `Stopped` : (view.position ?? `Starting…`)
                 }}</span>
@@ -113,8 +77,7 @@ watch(
             </div>
         </div>
 
-        <!-- THE PLAN, DRAWN IN FULL FROM THE FIRST FRAME. Steps that will not happen on this machine were
-             never in it, so nothing here is ever crossed out or skipped: what you see is what will run. -->
+        <!-- Steps that won't run on this machine were never in the plan; nothing here is crossed out or skipped. -->
         <ol class="flex flex-col gap-1">
             <li v-for="step in view.steps" :key="step.phase" class="flex items-start gap-2 text-2xs">
                 <span class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
@@ -127,9 +90,7 @@ watch(
                     <span :class="step.state === `running` ? 'text-content' : step.state === `done` ? 'text-muted' : 'text-subtle'">
                         {{ step.label }}
                     </span>
-                    <!-- The script's own sentence, under the step it belongs to. This is where the things
-                         only the script knows land, which image, how big, and "accept Docker's first-run
-                         dialog if it shows", which is an instruction and not decoration. -->
+                    <!-- The script's own detail line for this step, which may be an instruction, not just decoration. -->
                     <span v-if="step.detail" class="block truncate text-subtle">{{ step.detail }}</span>
                 </span>
             </li>
@@ -149,8 +110,7 @@ watch(
             </button>
         </div>
 
-        <!-- Monospace and unstyled: this is the script's output, and re-formatting it would make it something
-             the user cannot match against what the same command prints in a terminal. -->
+        <!-- Monospace and unstyled, so it matches what the same command prints in a terminal. -->
         <pre
             v-if="open"
             class="max-h-64 overflow-auto rounded-md border border-line bg-canvas p-2 font-mono text-2xs leading-relaxed text-muted"
